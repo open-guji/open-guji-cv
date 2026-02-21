@@ -1,0 +1,42 @@
+[33mConnectivity check to the model hoster has been skipped because `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` is enabled.[0m
+INFO: Could not find files for the given pattern(s).
+D:\workspace\open-guji-cv\venv\Lib\site-packages\paddle\utils\cpp_extension\extension_utils.py:718: UserWarning: No ccache found. Please be aware that recompiling all source files may be required. You can download and install ccache from: https://github.com/ccache/ccache/blob/master/doc/INSTALL.md
+  warnings.warn(warning_message)
+[32mCreating model: ('PP-OCRv5_server_det', None)[0m
+[32mModel files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\lisdp\.paddlex\official_models\PP-OCRv5_server_det`.[0m
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0219 23:01:40.338528 37756 onednn_context.cc:81] oneDNN v3.6.2
+[32mCreating model: ('PP-OCRv5_server_rec', None)[0m
+[32mModel files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\lisdp\.paddlex\official_models\PP-OCRv5_server_rec`.[0m
+Found 1 image(s) to process.
+
+============================================================
+Processing: 06064237.cn_0003.jpg
+============================================================
+  Running PaddleOCR...
+  Extracted 144 characters.
+  Analyzing positions...
+
+  --- Analysis Summary ---
+  Image size: 2309 x 3117
+  Total characters: 144
+  Avg char size: 171.9 x 106.0
+  Detected layout: mixed / grid
+  Columns: 10 (avg 14.4 chars/col)
+  Rows: 10 (avg 14.4 chars/row)
+
+  --- Columns (reading order) ---
+    Col  0 (x= 1901.9,  11 chars): 欽定四庫全書簡明目録一
+    Col  1 (x= 1794.5,   1 chars): 1
+    Col  2 (x= 1675.0,   2 chars): 聖諭
+    Col  3 (x= 1475.3,  19 chars): 乾隆三十九年七月二十五日大學士于敏中等
+    Col  4 (x= 1215.0,   2 chars): 奉1
+    Col  5 (x= 1061.0,  20 chars): 諭音四庫全書庭總目於經史子集内分應刻應抄
+    Col  6 (x=  881.6,  30 chars): 及應存b-書名三項各條下俱經撰有—一提-二要-將二二一中書原
+    Col  7 (x=  683.1,  33 chars): 委撮舉犬凡-并二詳-著書一人世1-1次爵里—可1以一一覽—了一…然
+    Col  8 (x=  440.5,  23 chars): 較之崇文總目+范羅8-既廣體例加詳自應如此辨理
+    Col  9 (x=  296.7,   3 chars): 1D行
+
+  Character data saved to: 06064237.cn_0003_chars.json
+Annotated image saved to: D:\workspace\open-guji-cv\06064237.cn_0003_annotated.jpg
+
