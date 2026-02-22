@@ -167,7 +167,7 @@ AVG         0.900    0.596    0.200
 | 编号 | 分析器 | 问题 | 影响书籍 | 严重度 | 状态 |
 |------|--------|------|---------|--------|------|
 | P1 | InterferenceAnalyzer | **spine_shadow 严重误报** — 旧算法只看单步梯度跳变，扫描边缘就能触发 | book1, book2, book5 | 🔴 高 | ✅ 已修复 |
-| P2 | PageLayoutAnalyzer | **book5 page_type 误判** — 有白色页边距时宽高比失效，0.666 < 0.9 被判为 cut_half | book5 | 🔴 高 | 待修 |
+| P2 | PageLayoutAnalyzer | ~~**book5 page_type 误判**~~ — 经核实 book5 README 明确标注"已剪切"，检测结果 cut_half 是正确的 | book5 | ~~🔴 高~~ | ✅ 非问题 |
 | P3 | ColorModeAnalyzer | **background_color 偏差** — 淡红→orange，淡黄→orange，HSV 色调映射边界不准 | book3, book4 | 🟡 中 | 待修 |
 | P4 | ColorModeAnalyzer | **border_color 逻辑简陋** — 没有独立检测边框区域颜色，用硬编码规则 `bg_color if bg_color != "yellow" else "black"` | book3, book4 | 🟡 中 | 待修 |
 | P5 | InterferenceAnalyzer | **stains 漏检** — book4 平均分 0.4 未过 0.5 阈值 | book4 | 🟡 中 | 待修 |
@@ -200,15 +200,35 @@ AVG         0.900    0.596    0.200
 | book4 | spine_shadow (avg=1.000) | spine_shadow (avg=1.000) | 有书脊阴影 | ✅ 正确保留 |
 | book5 | spine_shadow (avg=0.900) | 无 (avg=0.000) | 白色页边距（非书脊） | ✅ 修正 |
 
-#### P2: book5 page_type 误判修正
-**文件**: `guji_preprocess/analyzers/page_layout.py`
+#### P2: book5 page_type 误判 ✅ 非问题
+经核实 book5 的 README 明确标注"筒子页剪切：已剪切 奇数页为右半页 偶数页为左半页"。
+原始分析中错误地认为 book5 是未剪切整页，实际检测结果 `cut_half` 是**正确的**。
+证据：book5 的左右白色页边距在奇偶页之间交替（奇数页右侧宽、左侧窄；偶数页相反），
+这是典型的已剪切筒子页特征。
 
-**根因**: book5 是未剪切整页但有大面积白色页边距，导致实际内容区域的宽高比被稀释。
+#### P0: 页边距裁切预处理 ✅ 已完成
+**文件**: `guji_preprocess/preprocessors/crop_margin.py`
 
-**方案**:
-1. 在判断宽高比之前，先检测白色页边距区域
-2. 裁掉边距后重新计算内容区域的宽高比
-3. 或者增加中线对称性检测的权重——在模糊地带（0.9~1.1 之间）和白色页边距场景下，用对称性作为主要判据
+**需求**: 所有后续分析和预处理都应在去除页边距/扫描背景后进行，否则边缘特征（边框检测、颜色分析等）会被干扰。
+
+**算法**: 利用行/列标准差区分"内容区"（高方差）和"背景区"（低方差），裁剪到内容区外边界（即边框外缘）。
+1. 计算每列的像素标准差，自适应阈值（中间1/3区域中位数×0.25，最低8）
+2. 从两端向内扫描，找到标准差超过阈值的位置 → 左右边界
+3. 在内容列范围内计算每行标准差 → 上下边界
+4. 加 3px padding 保护边框不被裁切
+
+**改动**:
+- `crop_margin.py`: 重写算法，`is_needed()` 改为始终返回 True
+- `preprocessors/__init__.py`: CropMargin 移到 SplitPage 之前（先裁切再拆页）
+
+**测试结果**:
+| 书籍 | 裁切情况 | 判定 |
+|------|---------|------|
+| book1 | 四周 ~137px 白色扫描背景去除，边框完整 | ✅ |
+| book2 | 左右 ~240-320px 白色背景去除，上下因页而异 | ✅ |
+| book3 | 几乎不裁（0-5px），无页边距正确保持原样 | ✅ |
+| book4 | 三面 ~120px 黑色填充去除，剪切侧保留(left=0) | ✅ |
+| book5 | 三面大白色背景去除，奇偶页左右交替正确 | ✅ |
 
 ### 🟡 中优先级
 

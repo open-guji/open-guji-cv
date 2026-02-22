@@ -17,30 +17,25 @@ class SplitPagePreprocessor(BasePreprocessor):
     """将未剪切的筒子页拆分为左右两半页。
 
     检测中线位置（版心/书口），然后沿中线切分。
-    中线检测方法：
-    1. 对灰度图做垂直投影（每列像素均值）
-    2. 在图像中央区域寻找暗值峰（版心界栏通常最暗）
+    返回命名子图列表：[("right", 右半页), ("left", 左半页)]。
+    古籍从右往左读，右半页在前。
     """
 
     name = "split_page"
-    priority = 10  # 最先执行
+    priority = 10
 
     @classmethod
     def is_needed(cls, profile: BookProfile) -> bool:
         return profile.is_uncut
 
     def process(self, image: np.ndarray, profile: BookProfile
-                ) -> list[np.ndarray]:
-        h, w = image.shape[:2]
+                ) -> list[tuple[str, np.ndarray]]:
         center_x = self._find_center_line(image)
 
-        # 切分为左右两半
-        left_half = image[:, :center_x].copy()
         right_half = image[:, center_x:].copy()
+        left_half = image[:, :center_x].copy()
 
-        # 返回右半页（奇数页）在前，左半页（偶数页）在后
-        # 古籍从右往左读，右半页是正面
-        return [right_half, left_half]
+        return [("right", right_half), ("left", left_half)]
 
     def _find_center_line(self, image: np.ndarray) -> int:
         """检测中线（版心）位置。"""

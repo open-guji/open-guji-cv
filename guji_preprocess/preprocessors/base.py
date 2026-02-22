@@ -16,6 +16,11 @@ class BasePreprocessor(ABC):
 
     每个预处理器负责一项特定的图像预处理操作。
     Pipeline 根据 BookProfile 决定启用哪些预处理器。
+
+    process() 返回值约定：
+    - 单张 np.ndarray：一对一处理，保持原文件名
+    - list[tuple[str, np.ndarray]]：一对多拆分，每个元素为 (后缀名, 图像)
+      例如 [("right", img1), ("left", img2)] → 生成 {stem}_right.png, {stem}_left.png
     """
 
     name: str = "base"
@@ -31,7 +36,7 @@ class BasePreprocessor(ABC):
 
     @abstractmethod
     def process(self, image: np.ndarray, profile: BookProfile
-                ) -> np.ndarray | list[np.ndarray]:
+                ) -> np.ndarray | list[tuple[str, np.ndarray]]:
         """处理单张图片。
 
         Args:
@@ -39,7 +44,6 @@ class BasePreprocessor(ABC):
             profile: 当前书的版式特征
 
         Returns:
-            处理后的图像。如果返回 list，表示一张图被拆分为多张
-            （如筒子页拆分），后续预处理器将对每张子图分别执行。
+            处理后的图像（单张），或命名子图列表用于拆分。
         """
         ...
