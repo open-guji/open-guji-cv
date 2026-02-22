@@ -21,6 +21,8 @@ from .preprocessors import STEPS, StepDef
 from .detectors.lines import LineDetector
 from .detectors.borders import BorderDetector
 from .detectors.columns import ColumnDetector
+from .detectors.ocr_detector import OcrDetector
+from .detectors.char_grid import CharGridDetector
 from .utils.image_io import imread, imwrite
 
 
@@ -268,9 +270,166 @@ class GujiPipeline:
 
         return results
 
+    # ─── Phase 3: 字符网格检测 ──────────────────────────────
+
+    def detect_char_grid(self, book_name: str,
+                         profile: BookProfile | None = None) -> None:
+        """Phase 3: 对已完成 Phase 2 的图片做字符网格检测。
+
+        读取 phase2_layout/ 中的 JSON 和 s6_binarize/ 中的图片，
+        输出到 phase3_char_grid/ 目录。
+        """
+        out_dir = self.output_dir / book_name
+        layout_dir = out_dir / "phase2_layout"
+        binarize_dir = out_dir / "s6_binarize"
+        char_grid_dir = out_dir / "phase3_char_grid"
+        char_grid_dir.mkdir(parents=True, exist_ok=True)
+
+        # 加载 profile
+        if profile is None:
+            profile_path = out_dir / "profile.json"
+            if profile_path.exists():
+                profile = BookProfile.load(profile_path)
+            else:
+                print(f"未找到 profile.json: {profile_path}")
+                return
+
+        # 初始化检测器（延迟加载 OCR 模型）
+        ocr_detector = OcrDetector()
+        char_grid_detector = CharGridDetector(ocr_detector)
+
+        # 查找所有 layout JSON
+        layout_files = sorted(layout_dir.glob("*_layout.json"))
+        if not layout_files:
+            print(f"未找到 layout JSON: {layout_dir}")
+            return
+
+        print(f"\nPhase 3 字符网格检测: {len(layout_files)} 张图片")
+
+        for layout_path in layout_files:
+            # 推断图片文件名: 1_layout.json → 1.png
+            stem = layout_path.stem.replace("_layout", "")
+            img_path = binarize_dir / f"{stem}.png"
+            if not img_path.exists():
+                # 尝试 jpg
+                img_path = binarize_dir / f"{stem}.jpg"
+            if not img_path.exists():
+                print(f"  跳过 {stem}: 找不到对应图片")
+                continue
+
+            print(f"  处理 {stem}...", end=" ", flush=True)
+
+            # 加载图片和 layout
+            image = imread(str(img_path))
+            if image is None:
+                print("读取失败")
+                continue
+
+            with open(layout_path, "r", encoding="utf-8") as f:
+                layout = json.load(f)
+
+            # 执行字符网格检测
+            result = char_grid_detector.detect(image, layout, profile)
+
+            # 保存 JSON
+            json_path = char_grid_dir / f"{stem}_char_grid.json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+
+            # 生成可视化
+            vis_img = self._draw_char_grid(image, result)
+            vis_path = char_grid_dir / f"{stem}_annotated.png"
+            imwrite(str(vis_path), vis_img)
+
+            n_chars = sum(
+                sum(1 for c in col["cells"] if c["type"] == "char")
+                for col in result["columns"]
+            )
+            n_empty = sum(
+                sum(1 for c in col["cells"] if c["type"] == "empty")
+                for col in result["columns"]
+            )
+            n_margin = sum(
+                sum(1 for c in col["cells"] if c["type"] == "margin")
+                for col in result["columns"]
+            )
+            print(f"检测到 {n_chars} 字, {n_empty} 空格, {n_margin} 边距")
+
+        print(f"Phase 3 完成！输出: {char_grid_dir}")
+
+    def _draw_char_grid(self, image: np.ndarray, result: dict) -> np.ndarray:
+        """在图像上绘制字符网格可视化。
+
+        三种颜色：
+        - 绿色: char（有文字的字符格）
+        - 灰色: empty（空白字符格）
+        - 蓝色: margin（边距格，不占字符数）
+
+        char/empty 格子右上角标注索引号（1-21）。
+        """
+        if len(image.shape) == 2:
+            vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            vis = image.copy()
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.35
+        font_thickness = 1
+
+        # 第一遍：画格子分隔线
+        for col in result["columns"]:
+            left_x = int(col["left_x"])
+            right_x = int(col["right_x"])
+
+            # 列的左右竖线（每列画一次）
+            cells = col["cells"]
+            if cells:
+                col_y_top = int(cells[0]["y_top"])
+                col_y_bot = int(cells[-1]["y_bottom"])
+                cv2.line(vis, (left_x, col_y_top), (left_x, col_y_bot), (0, 200, 0), 1)
+                cv2.line(vis, (right_x, col_y_top), (right_x, col_y_bot), (0, 200, 0), 1)
+
+            for cell in cells:
+                y_top = int(cell["y_top"])
+                y_bottom = int(cell["y_bottom"])
+                cell_type = cell.get("type", "char")
+
+                if cell_type == "margin":
+                    color = (200, 150, 0)
+                elif cell_type == "empty":
+                    color = (180, 180, 180)
+                else:
+                    color = (0, 200, 0)
+
+                # 每个格子的顶线（粗线，作为分隔标记）和底线
+                cv2.line(vis, (left_x, y_top), (right_x, y_top), color, 2)
+                cv2.line(vis, (left_x, y_bottom), (right_x, y_bottom), color, 1)
+
+        # 第二遍：画所有标号（确保在框线之上）
+        for col in result["columns"]:
+            right_x = int(col["right_x"])
+
+            for cell in col["cells"]:
+                y_bottom = int(cell["y_bottom"])
+                cell_type = cell.get("type", "char")
+
+                if cell_type in ("char", "empty") and "index" in cell:
+                    label = str(cell["index"] + 1)
+                    label_color = (0, 200, 0) if cell_type == "char" else (180, 180, 180)
+                    (tw, th), _ = cv2.getTextSize(label, font, font_scale, font_thickness)
+                    tx = right_x - tw - 1
+                    ty = y_bottom - 2
+                    bg_top = y_bottom - th - 4
+                    cv2.rectangle(vis, (tx - 1, bg_top), (right_x, y_bottom),
+                                  (255, 255, 255), -1)
+                    cv2.putText(vis, label, (tx, ty), font, font_scale,
+                                label_color, font_thickness, cv2.LINE_AA)
+
+        return vis
+
     def _detect_layout(self, image: np.ndarray,
                        profile: BookProfile) -> dict:
-        """版面检测（Phase 3）。"""
+        """版面检测（Phase 2）。"""
         lsd_data = self.line_detector.detect(image)
 
         img_w = lsd_data["image_size"]["width"]

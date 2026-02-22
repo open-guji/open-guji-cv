@@ -1,4 +1,4 @@
-"""自适应二值化预处理器：根据颜色模式选择最佳二值化策略。"""
+"""自适应二值化预处理器：根据颜色模式选择最佳二值化策略，并去除小噪点。"""
 
 from __future__ import annotations
 
@@ -14,15 +14,20 @@ if TYPE_CHECKING:
 
 
 class BinarizePreprocessor(BasePreprocessor):
-    """自适应二值化。
+    """自适应二值化 + 噪点去除。
 
     根据 BookProfile 的 color_mode 选择策略：
     - 黑白图像：直接使用 Otsu 全局阈值或自适应阈值
     - 彩色图像：先提取文字通道（基于底色信息），再二值化
+
+    最后通过连通域分析去除面积过小的噪点。
     """
 
     name = "binarize"
     priority = 50
+
+    # 噪点去除参数
+    NOISE_MAX_AREA = 10  # 面积 <= 此值的黑色连通域视为噪点并移除
 
     @classmethod
     def is_needed(cls, profile: BookProfile) -> bool:
@@ -30,9 +35,14 @@ class BinarizePreprocessor(BasePreprocessor):
 
     def process(self, image: np.ndarray, profile: BookProfile) -> np.ndarray:
         if profile.is_colored:
-            return self._binarize_colored(image, profile)
+            binary = self._binarize_colored(image, profile)
         else:
-            return self._binarize_bw(image)
+            binary = self._binarize_bw(image)
+
+        # TODO: 去噪容易误删有用内容，暂时禁用
+        # binary = self._remove_small_noise(binary)
+
+        return binary
 
     def _binarize_bw(self, image: np.ndarray) -> np.ndarray:
         """黑白图像二值化。"""
@@ -80,3 +90,25 @@ class BinarizePreprocessor(BasePreprocessor):
         result = 255 - text_mask
 
         return result
+
+    def _remove_small_noise(self, binary: np.ndarray) -> np.ndarray:
+        """通过连通域分析去除面积过小的噪点。
+
+        binary: 255=背景(白), 0=前景(黑)
+        面积 <= NOISE_MAX_AREA 的黑色连通域被置为白色(255)。
+        """
+        # 反转：connectedComponents 检测白色(255)连通域，
+        # 所以先反转让前景(黑色噪点/文字)变成255
+        inv = cv2.bitwise_not(binary)
+
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            inv, connectivity=8)
+
+        # label 0 是背景（原图白色区域），从 label 1 开始检查
+        for label_id in range(1, num_labels):
+            area = stats[label_id, cv2.CC_STAT_AREA]
+            if area <= self.NOISE_MAX_AREA:
+                # 将该小连通域在原图中置为白色（背景）
+                binary[labels == label_id] = 255
+
+        return binary

@@ -1,6 +1,6 @@
 """长直线增强预处理器。
 
-检测图像中的长直线（边框线、界行线），补全断续、统一线宽。
+检测图像中的长直线（边框线、界行线），整条复原。
 只增强覆盖率高的长线，不影响文字笔画。
 """
 
@@ -27,10 +27,11 @@ if TYPE_CHECKING:
 
 
 class EnhanceLinesPreprocessor(BasePreprocessor):
-    """长直线增强：断续补全 + 线宽统一。
+    """长直线增强：找到长直线后整条复原。
 
     只增强覆盖率 >= MIN_COVERAGE 的长直线（边框线、界行线），
     不触碰文字笔画中的短线段。
+    区分外边框（较粗）和内界行（较细）分别处理。
     """
 
     name = "enhance_lines"
@@ -46,8 +47,8 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
 
     # 增强参数
     MIN_COVERAGE = 0.5       # 最小覆盖率
-    WIDTH_THIN_RATIO = 0.7   # 低于目标宽度的 70% 视为过细
-    SCAN_MARGIN = 20         # 法线方向最大搜索范围（像素）
+    SCAN_MARGIN = 10         # 法线方向最大搜索范围（像素）—— 减小以避免碰到文字
+    WIDTH_CAP = 15           # 单次线宽测量上限（排除文字干扰）
 
     @classmethod
     def is_needed(cls, profile: BookProfile) -> bool:
@@ -61,9 +62,6 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
         # Otsu 二值化：0=前景(线条), 255=背景
         _, binary = cv2.threshold(gray, 0, 255,
                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # 确保线条是 0（黑色），背景是 255（白色）
-        # 如果均值 > 127，说明多数像素是白色背景，Otsu 结果正确
-        # 否则需要反转
         if np.mean(binary) < 127:
             binary = cv2.bitwise_not(binary)
 
@@ -88,17 +86,19 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
         if not long_h and not long_v:
             return image
 
-        # 4. 测量线条颜色（取线段覆盖区域的中位灰度值）
+        # 4. 测量线条颜色
         line_color = self._estimate_line_color(gray, binary)
 
         # 5. 创建增强掩码（255=不改，line_color=需要填充）
         mask = np.full_like(gray, 255, dtype=np.uint8)
 
-        # 6. 对每条长线增强
+        # 6. 对每条长线：测量实际线宽，然后整条复原
         for cluster in long_h:
-            self._enhance_line(binary, mask, cluster, "h", w, h, line_color)
+            self._restore_full_line(binary, mask, cluster, "h",
+                                    w, h, line_color)
         for cluster in long_v:
-            self._enhance_line(binary, mask, cluster, "v", w, h, line_color)
+            self._restore_full_line(binary, mask, cluster, "v",
+                                    w, h, line_color)
 
         # 7. 合成：取原图和掩码中更暗的像素（只加粗不变细）
         if len(image.shape) == 3:
@@ -160,68 +160,65 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
             return 0
         return int(np.median(fg_pixels))
 
-    # ─── 单条线增强 ───────────────────────────────────────────
+    # ─── 整条复原 ─────────────────────────────────────────────
 
-    def _enhance_line(self, binary: np.ndarray, mask: np.ndarray,
-                      cluster: dict, axis: str,
-                      img_w: int, img_h: int,
-                      line_color: int) -> None:
-        """增强一条长线：批量扫描线宽 → 补全 gap → 统一粗细。"""
+    def _restore_full_line(self, binary: np.ndarray, mask: np.ndarray,
+                           cluster: dict, axis: str,
+                           img_w: int, img_h: int,
+                           line_color: int) -> None:
+        """整条复原一条长直线。
+
+        1. 沿拟合直线采样，测量实际线宽（排除异常值）
+        2. 取稳健的目标线宽（中位数）
+        3. 沿拟合直线全程绘制该宽度的线
+        """
         slope = cluster["slope"]
         intercept = cluster["intercept"]
         span = img_w if axis == "h" else img_h
         cross_dim = img_h if axis == "h" else img_w
-        margin = self.SCAN_MARGIN
 
-        # 向量化计算所有位置的中心坐标
+        # 全程坐标
         coords = np.arange(span)
         centers = slope * coords + intercept
+
+        # 测量实际线宽（用于确定目标宽度）
         center_ints = np.rint(centers).astype(np.int32)
+        measured = self._measure_widths_robust(
+            binary, coords, center_ints, axis, cross_dim)
 
-        # 批量扫描线宽
-        measured_widths = self._measure_widths_batch(
-            binary, coords, center_ints, axis, cross_dim, margin)
+        # 取有效测量的中位线宽
+        valid = measured[(measured > 0) & (measured <= self.WIDTH_CAP)]
+        if len(valid) == 0:
+            # 没有合理的测量，用 LSD 报告的平均宽度
+            target_width = max(int(round(cluster["avg_width"])), 2)
+        else:
+            target_width = max(int(np.median(valid)), 2)
 
-        # 计算目标线宽
-        covered = measured_widths[measured_widths > 0]
-        if len(covered) == 0:
-            return
-        target_width = max(int(np.median(covered)), 1)
         half_w = target_width / 2.0
-        thin_threshold = target_width * self.WIDTH_THIN_RATIO
 
-        # 找出需要增强的位置（gap 或过细）
-        need_enhance = (measured_widths == 0) | (
-            (measured_widths > 0) & (measured_widths < thin_threshold))
-        enhance_coords = coords[need_enhance]
-        enhance_centers = centers[need_enhance]
+        # 整条画线：沿拟合直线全程绘制
+        self._draw_full_line(mask, coords, centers, axis,
+                             half_w, line_color, cross_dim)
 
-        if len(enhance_coords) == 0:
-            return
+    def _measure_widths_robust(self, binary: np.ndarray,
+                               coords: np.ndarray,
+                               center_ints: np.ndarray,
+                               axis: str,
+                               cross_dim: int) -> np.ndarray:
+        """稳健的线宽测量。
 
-        # 批量绘制增强掩码
-        self._draw_line_strip(mask, enhance_coords, enhance_centers,
-                              axis, half_w, line_color, cross_dim)
-
-    def _measure_widths_batch(self, binary: np.ndarray,
-                              coords: np.ndarray,
-                              center_ints: np.ndarray,
-                              axis: str, cross_dim: int,
-                              margin: int) -> np.ndarray:
-        """批量测量每个主轴坐标处的线宽。
-
-        binary: 0=前景(线条), 255=背景
-        返回 int32 数组，每个元素是对应位置的线宽。
+        只在拟合中心附近很小范围内搜索，避免碰到文字。
+        超过 WIDTH_CAP 的测量视为异常（碰到了文字笔画）。
         """
         span = len(coords)
         result = np.zeros(span, dtype=np.int32)
         img_h, img_w = binary.shape
+        margin = self.SCAN_MARGIN
 
         for i in range(span):
             coord = int(coords[i])
             c_int = int(center_ints[i])
 
-            # 边界检查
             if c_int < 0 or c_int >= cross_dim:
                 continue
 
@@ -237,12 +234,11 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
             y_center = c_int
             col_len = len(col)
 
-            # 检查中心是否是前景
             if y_center < 0 or y_center >= col_len:
                 continue
 
             if col[y_center] != 0:
-                # 中心不是黑色，向附近搜索最近的黑色像素
+                # 中心不是黑色，在小范围内搜索
                 found = False
                 for offset in range(1, margin + 1):
                     for sign in (-1, 1):
@@ -256,7 +252,7 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
                 if not found:
                     continue
 
-            # 从 y_center 向两侧扩展
+            # 从 y_center 向两侧扩展（但限制在 margin 范围内）
             lo = y_center
             while lo > 0 and col[lo - 1] == 0 and y_center - lo < margin:
                 lo -= 1
@@ -264,17 +260,18 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
             while hi < col_len - 1 and col[hi + 1] == 0 and hi - y_center < margin:
                 hi += 1
 
-            result[i] = hi - lo + 1
+            width = hi - lo + 1
+            result[i] = width
 
         return result
 
     @staticmethod
-    def _draw_line_strip(mask: np.ndarray,
-                         coords: np.ndarray,
-                         centers: np.ndarray,
-                         axis: str, half_width: float,
-                         color: int, cross_dim: int) -> None:
-        """批量在 mask 上绘制一系列横截面。"""
+    def _draw_full_line(mask: np.ndarray,
+                        coords: np.ndarray,
+                        centers: np.ndarray,
+                        axis: str, half_width: float,
+                        color: int, cross_dim: int) -> None:
+        """沿拟合直线全程绘制，整条复原。"""
         img_h, img_w = mask.shape
         lo_arr = np.clip(np.rint(centers - half_width).astype(np.int32),
                          0, cross_dim - 1)
@@ -290,7 +287,6 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
 
             if axis == "h":
                 if 0 <= coord < img_w:
-                    # mask[lo:hi+1, coord] = min(existing, color)
                     slc = mask[lo:hi + 1, coord]
                     np.minimum(slc, color, out=slc)
             else:

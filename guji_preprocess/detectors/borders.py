@@ -92,4 +92,28 @@ class BorderDetector:
                     "detected": detected_cols,
                 }
 
+        # 列编号：从右到左、从 1 开始（古籍竖排阅读顺序）
+        # border_detect.py 底层按 x 坐标从左到右生成 index 0,1,2,...
+        # 这里反转编号使最右列为 1，最左列为 N
+        self._renumber_columns_rtl(result)
+
         return result
+
+    @staticmethod
+    def _renumber_columns_rtl(result: dict) -> None:
+        """将列编号从左到右(0-based)改为从右到左(1-based)。
+
+        古籍竖排文字从右往左阅读，第 1 列在最右侧。
+        列的物理位置（left_x, right_x）不变，只改 index。
+        column_dividers 的顺序也反转以与列编号对应。
+        """
+        columns = result.get("columns", [])
+        if not columns:
+            return
+
+        n = len(columns)
+        for col in columns:
+            col["index"] = n - col["index"]  # 0→N, 1→N-1, ..., N-1→1
+
+        # 按新编号排序（1, 2, 3, ...），即物理位置从右到左
+        columns.sort(key=lambda c: c["index"])

@@ -269,8 +269,11 @@ def _cluster_pos_at(cluster, coord):
 
 def _find_border_pair(clusters, side, frame_span, img_dim,
                       min_coverage_ratio=0.3, layer_max_dist=80,
-                      edge_margin=10):
-    """在一侧（min/max 方向）寻找双层边框。"""
+                      edge_margin=10, slope_max_diff=0.02):
+    """在一侧（min/max 方向）寻找双层边框。
+
+    内层必须满足：与外层距离 <= layer_max_dist 且 slope 差 <= slope_max_diff。
+    """
     candidates = [c for c in clusters
                   if c["total_length"] >= frame_span * min_coverage_ratio]
 
@@ -283,6 +286,10 @@ def _find_border_pair(clusters, side, frame_span, img_dim,
             if c["avg_width"] < 2.0 or c["line_count"] <= 1:
                 return True
         return False
+
+    def _slope_compatible(outer_c, inner_c):
+        """内层 slope 应与外层基本一致。"""
+        return abs(inner_c["slope"] - outer_c["slope"]) <= slope_max_diff
 
     if side == "min":
         outer = None
@@ -303,6 +310,8 @@ def _find_border_pair(clusters, side, frame_span, img_dim,
             if dist > layer_max_dist:
                 break
             if _is_edge_artifact(c):
+                continue
+            if not _slope_compatible(outer, c):
                 continue
             inner = c
             break
@@ -327,6 +336,8 @@ def _find_border_pair(clusters, side, frame_span, img_dim,
             if dist > layer_max_dist:
                 break
             if _is_edge_artifact(c):
+                continue
+            if not _slope_compatible(outer, c):
                 continue
             inner = c
             break
