@@ -454,6 +454,20 @@ class GujiPipeline:
                     cv2.putText(vis, label, (tx, ty), font, font_scale,
                                 label_color, font_thickness, cv2.LINE_AA)
 
+        # 第三遍：标注夹注区域（橙色边框 + "JZ" 标签）
+        for col in result["columns"]:
+            if col.get("has_jiazhu") and col.get("jiazhu_ranges"):
+                lx = int(col["left_x"])
+                rx = int(col["right_x"])
+                for jz in col["jiazhu_ranges"]:
+                    jz_top = int(jz["y_top"])
+                    jz_bot = int(jz["y_bottom"])
+                    cv2.rectangle(vis, (lx - 1, jz_top),
+                                  (rx + 1, jz_bot),
+                                  (0, 165, 255), 2)
+                    cv2.putText(vis, "JZ", (lx + 2, jz_top + 14),
+                                font, 0.45, (0, 165, 255), 1, cv2.LINE_AA)
+
         return vis
 
     def _detect_layout(self, image: np.ndarray,
@@ -760,11 +774,15 @@ class GujiPipeline:
 
                 characters.append(ch)
 
-            columns.append({
+            col_data = {
                 "col_index": col["index"] - 1,
                 "position": {"left_x": left_x, "right_x": right_x},
                 "characters": characters,
-            })
+            }
+            if col.get("has_jiazhu"):
+                col_data["has_jiazhu"] = True
+                col_data["jiazhu_ranges"] = col.get("jiazhu_ranges")
+            columns.append(col_data)
 
         # --- 组装 ---
         # 推断图片文件名后缀（优先 jpg）
@@ -845,6 +863,20 @@ class GujiPipeline:
                                   (255, 255, 255), -1)
                     cv2.putText(vis, label, (tx, ty), font, font_scale,
                                 label_color, font_thickness, cv2.LINE_AA)
+
+        # 第三遍：标注夹注区域（橙色边框 + "JZ" 标签）
+        for col in result["columns"]:
+            if col.get("has_jiazhu") and col.get("jiazhu_ranges"):
+                lx = int(col["left_x"])
+                rx = int(col["right_x"])
+                for jz in col["jiazhu_ranges"]:
+                    jz_top = int(jz["y_top"])
+                    jz_bot = int(jz["y_bottom"])
+                    cv2.rectangle(vis, (lx - 1, jz_top),
+                                  (rx + 1, jz_bot),
+                                  (0, 165, 255), 2)
+                    cv2.putText(vis, "JZ", (lx + 2, jz_top + 14),
+                                font, 0.45, (0, 165, 255), 1, cv2.LINE_AA)
 
         return vis
 

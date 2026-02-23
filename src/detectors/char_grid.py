@@ -37,6 +37,11 @@ class CharGridDetector:
     CHAR_HEIGHT_MIN_RATIO = 0.7
     CHAR_HEIGHT_MAX_RATIO = 1.3
 
+    # 夹注检测参数
+    MIN_JIAZHU_ROWS = 3            # 最少连续双峰区域数才认定为夹注段
+    JIAZHU_GAP_THRESHOLD = 0.5     # 谷底均值 < min(左,右)均值 × 此比率视为有间隙
+    JIAZHU_WINDOW_SIZE = 5         # 滑动窗口大小（区域数）
+
     def __init__(self, ocr_detector: OcrDetector | None = None):
         self.ocr = ocr_detector or OcrDetector()
 
@@ -84,6 +89,23 @@ class CharGridDetector:
             # Step 1: 投影法分割字符区域
             regions = self._projection_segment(col_gray, theoretical_char_h)
 
+            # Step 1.5: 夹注区域检测（在局部坐标下进行）
+            col_width = x2 - x1
+            jiazhu_ranges = self._detect_jiazhu_regions(
+                col_gray, regions, col_width, theoretical_char_h)
+
+            # 记录夹注的全图 y 坐标（坐标转换之前取值）
+            jiazhu_info = None
+            if jiazhu_ranges:
+                jiazhu_info = []
+                for jz_start, jz_end in jiazhu_ranges:
+                    jiazhu_info.append({
+                        "region_start": jz_start,
+                        "region_end": jz_end,
+                        "y_top": int(y1 + regions[jz_start][0]),
+                        "y_bottom": int(y1 + regions[jz_end][1]),
+                    })
+
             # Step 2: 局部坐标 → 全图坐标（确保 Python int）
             regions = [(int(y1 + r_top), int(y1 + r_bot)) for r_top, r_bot in regions]
 
@@ -100,13 +122,17 @@ class CharGridDetector:
             if char_h > 0:
                 all_char_heights.append(char_h)
 
-            result_columns.append({
+            col_result = {
                 "index": col_idx,
                 "left_x": left_x,
                 "right_x": right_x,
                 "ocr_text": ocr_text,
                 "cells": cells,
-            })
+            }
+            if jiazhu_info is not None:
+                col_result["has_jiazhu"] = True
+                col_result["jiazhu_ranges"] = jiazhu_info
+            result_columns.append(col_result)
 
         avg_char_h = float(np.mean(all_char_heights)) if all_char_heights else 0.0
 
@@ -150,6 +176,181 @@ class CharGridDetector:
                 refined.append((start, end))
 
         return refined
+
+    # ─── 夹注检测 ─────────────────────────────────────────
+
+    def _detect_jiazhu_regions(
+        self,
+        col_gray: np.ndarray,
+        regions: list[tuple[int, int]],
+        col_width: int,
+        theoretical_char_h: float,
+    ) -> list[tuple[int, int]]:
+        """检测列中的所有夹注区域（支持多段交替）。
+
+        两阶段检测：
+        1. 全列垂直投影：若整列呈双峰分布，标记所有区域为夹注
+        2. 滑动窗口：对连续 N 个区域覆盖的 y 范围做垂直投影双峰检测
+
+        核心原理：夹注的两个子列字符交错排列，单个投影区域只包含
+        一侧字符的墨迹。必须合并多个区域（或整列）的垂直投影，
+        才能看到左右两侧的双峰分布。
+
+        Args:
+            col_gray: 列的灰度图像（局部坐标系）
+            regions: 投影分割结果，局部坐标 [(y_start, y_end), ...]
+            col_width: 列的像素宽度
+            theoretical_char_h: 正文的理论字高（像素）
+
+        Returns:
+            list of (start_region_idx, end_region_idx)，inclusive
+            空列表表示此列无夹注
+        """
+        if len(regions) < self.MIN_JIAZHU_ROWS:
+            return []
+
+        # 额外内缩以排除列边缘的界行线
+        border_pad = max(4, int(col_width * 0.05))
+        x_start = border_pad
+        x_end = col_width - border_pad
+        eff_w = x_end - x_start
+        if eff_w < 20:
+            return []
+
+        # ── 阶段 1: 全列垂直投影检测 ──
+        col_h = col_gray.shape[0]
+        col_trimmed = col_gray[:, x_start:x_end]
+        full_vproj = np.sum(col_trimmed < 128, axis=0).astype(float)
+        if self._check_dual_peak(full_vproj, eff_w, col_h):
+            return [(0, len(regions) - 1)]
+
+        # ── 阶段 2: 滑动窗口检测 ──
+        is_jiazhu = [False] * len(regions)
+        ws = min(self.JIAZHU_WINDOW_SIZE, len(regions))
+
+        for win_start in range(len(regions) - ws + 1):
+            if all(is_jiazhu[win_start:win_start + ws]):
+                continue
+
+            y_top = regions[win_start][0]
+            y_bot = regions[win_start + ws - 1][1]
+            window_img = col_gray[y_top:y_bot, x_start:x_end]
+            v_proj = np.sum(window_img < 128, axis=0).astype(float)
+            win_h = y_bot - y_top
+
+            if self._check_dual_peak(v_proj, eff_w, win_h):
+                for k in range(win_start, win_start + ws):
+                    is_jiazhu[k] = True
+
+        # 连续 True 段合并，>= MIN_JIAZHU_ROWS 才认定
+        jiazhu_ranges: list[tuple[int, int]] = []
+        i = 0
+        while i < len(is_jiazhu):
+            if is_jiazhu[i]:
+                start = i
+                while i < len(is_jiazhu) and is_jiazhu[i]:
+                    i += 1
+                if (i - start) >= self.MIN_JIAZHU_ROWS:
+                    jiazhu_ranges.append((start, i - 1))  # inclusive
+            else:
+                i += 1
+
+        return jiazhu_ranges
+
+    def _check_dual_peak(
+        self,
+        v_proj: np.ndarray,
+        eff_w: int,
+        img_height: int,
+    ) -> bool:
+        """检查垂直投影是否呈双峰分布（夹注特征）。
+
+        预处理：抑制列边缘的界行线及其衰减尾部，防止假阳性。
+        动态谷底搜索：迭代寻找最深谷底，检查两侧是否各有显著墨迹峰。
+        """
+        global_mean = float(np.mean(v_proj))
+        if global_mean < 1.0:
+            return False
+
+        # ── 预处理：抑制边缘界行线 ──
+        # 用中间区域的中位数估算背景水平，高于 3 倍背景的边缘像素归零
+        v_clean = v_proj.copy()
+        mid_s = eff_w // 4
+        mid_e = eff_w * 3 // 4
+        if mid_e > mid_s:
+            background = float(np.median(v_clean[mid_s:mid_e]))
+        else:
+            background = global_mean
+        tail_thresh = max(background * 3, img_height * 0.15)
+
+        # 从左边缘向内扫描并抑制
+        i = 0
+        while i < eff_w // 4 and v_clean[i] > tail_thresh:
+            v_clean[i] = 0
+            i += 1
+        # 从右边缘向内扫描并抑制
+        i = eff_w - 1
+        while i > eff_w * 3 // 4 and v_clean[i] > tail_thresh:
+            v_clean[i] = 0
+            i -= 1
+
+        # 抑制后重新计算均值
+        global_mean = float(np.mean(v_clean))
+        if global_mean < 1.0:
+            return False
+
+        valley_half = max(2, eff_w // 40)
+        min_ink = max(2, global_mean * 0.1)
+        min_active = max(3, int(eff_w * 0.04))
+
+        # ── 迭代式谷底搜索 ──
+        working = v_clean.copy()
+        mask_radius = max(5, eff_w // 10)
+
+        for _ in range(3):
+            if np.max(working) < 1.0:
+                break
+
+            valley_x = int(np.argmin(working))
+
+            v_start = max(0, valley_x - valley_half)
+            v_end = min(eff_w, valley_x + valley_half + 1)
+            valley_mean = float(np.mean(v_clean[v_start:v_end]))
+
+            left_zone = v_clean[:v_start]
+            right_zone = v_clean[v_end:]
+
+            if len(left_zone) < 3 or len(right_zone) < 3:
+                m_start = max(0, valley_x - mask_radius)
+                m_end = min(eff_w, valley_x + mask_radius)
+                working[m_start:m_end] = np.max(working)
+                continue
+
+            left_mean = float(np.mean(left_zone))
+            right_mean = float(np.mean(right_zone))
+            side_max = max(left_mean, right_mean)
+
+            if side_max < 1.0:
+                break
+
+            # 两侧都需有显著墨迹（排除单侧文字 / 空白区边缘）
+            if (left_mean >= side_max * 0.15
+                    and right_mean >= side_max * 0.15):
+                side_min = min(left_mean, right_mean)
+                if valley_mean < side_min * self.JIAZHU_GAP_THRESHOLD:
+                    # 峰宽度检查
+                    left_active = int(np.sum(left_zone > min_ink))
+                    right_active = int(np.sum(right_zone > min_ink))
+                    if (left_active >= min_active
+                            and right_active >= min_active):
+                        return True
+
+            # 当前谷底不满足条件，遮蔽后重试下一个
+            m_start = max(0, valley_x - mask_radius)
+            m_end = min(eff_w, valley_x + mask_radius)
+            working[m_start:m_end] = np.max(working)
+
+        return False
 
     @staticmethod
     def _find_continuous_regions(
