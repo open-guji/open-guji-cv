@@ -9,12 +9,14 @@
 
 ### Phase 1: 夹注区域检测（支持多段）
 
-- [ ] 实现 `_detect_jiazhu_regions(col_gray, regions, col_width, theoretical_char_h)` 方法
+- [x] 实现 `_detect_jiazhu_regions(col_gray, regions, col_width, theoretical_char_h)` 方法
   - 逐区域分析垂直投影（双峰检测）
   - 找出所有连续的双峰区域段（每段 >= 3 个区域）
   - **返回多段**：`[(start1, end1), (start2, end2), ...]`，空列表表示无夹注
   - 支持一列内正文和夹注多次交替
-- [ ] 用 book6 的 v01_023 和 v01_024 手动验证检测准确性
+  - 额外边缘裁剪 + 峰宽检查防止界行线误判
+- [x] 用 book6 的 v01_024-026 手动验证检测准确性
+- [x] book1 回归测试（10 页全部无误判）
 
 ### Phase 2: 子列拆分
 
