@@ -301,17 +301,25 @@ class CharGridDetector:
 
         valley_half = max(2, eff_w // 40)
         min_ink = max(2, global_mean * 0.1)
-        min_active = max(3, int(eff_w * 0.04))
+        min_active = max(5, int(eff_w * 0.15))
 
         # ── 迭代式谷底搜索 ──
         working = v_clean.copy()
         mask_radius = max(5, eff_w // 10)
+        
+        # 限制谷底搜索范围为正中间 20%，因为夹注的真实间隙必须在列的正中间
+        # 如果范围太大，会把列的左右边缘空白误当成谷底
+        mid = eff_w // 2
+        search_radius = max(5, eff_w // 10)
+        search_start = max(0, mid - search_radius)
+        search_end = min(eff_w, mid + search_radius)
 
         for _ in range(3):
-            if np.max(working) < 1.0:
+            search_zone = working[search_start:search_end]
+            if len(search_zone) == 0 or np.max(search_zone) < 1.0:
                 break
 
-            valley_x = int(np.argmin(working))
+            valley_x = search_start + int(np.argmin(search_zone))
 
             v_start = max(0, valley_x - valley_half)
             v_end = min(eff_w, valley_x + valley_half + 1)
@@ -334,11 +342,14 @@ class CharGridDetector:
                 break
 
             # 两侧都需有显著墨迹（排除单侧文字 / 空白区边缘）
-            if (left_mean >= side_max * 0.15
-                    and right_mean >= side_max * 0.15):
+            # 夹注要求左右两边都是密集的文字，且密度应该相似，所以平衡阈值提高到 0.45
+            if (left_mean >= side_max * 0.45
+                    and right_mean >= side_max * 0.45):
                 side_min = min(left_mean, right_mean)
-                if valley_mean < side_min * self.JIAZHU_GAP_THRESHOLD:
-                    # 峰宽度检查
+                # JIAZHU_GAP_THRESHOLD 为类属性，缺省改低（更严）
+                gap_thresh = min(0.3, self.JIAZHU_GAP_THRESHOLD) 
+                if valley_mean < side_min * gap_thresh:
+                    # 峰宽度检查：两边应该都有足够宽度的墨迹
                     left_active = int(np.sum(left_zone > min_ink))
                     right_active = int(np.sum(right_zone > min_ink))
                     if (left_active >= min_active

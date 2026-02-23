@@ -35,30 +35,12 @@
   - 合并结果，标记 `type="jiazhu"` 和 `sub_col`
 - [ ] 列数据增加 `has_jiazhu` 标记
 
-### Phase 4: 集成与测试
-
-- [ ] 修改 `CharGridDetector.detect()` 集成夹注检测流程
-- [ ] book6 全部 10 张图片端到端测试
-- [ ] book1-book5 回归测试（无夹注，不应误判）
-- [ ] 输出 JSON 用 guji_layout `from_ocr_result()` 验证可解析
-
-### 输出格式要求
-
-cell type `"jiazhu"` 示例：
-```json
-{"type": "jiazhu", "index": 8, "sub_col": 1, "y_top": 490, "y_bottom": 530, "text": "舊", "confidence": 0.85}
-```
-
-列级别增加：`"has_jiazhu": true`
-
-约束：唯一 index 数 = chars_per_line（夹注同一 index 可有 sub_col=1 和 sub_col=2 两个 cell）
 
 ---
 
-## 后续：对《欽定四庫全書簡明目錄》第一册运行完整管线
+## 延后：集成测试与全量管线运行
 
-（等夹注功能完成后再执行）
+以下任务已移至 `.claude/backlog.md`，目前重点在于完成夹注核心算法。
 
-- [ ] 对 vol01 图片运行完整 pipeline
-- [ ] OCR 结果存放到 `03_信息提取/ocr/vol01/`
-- [ ] 跳过前两页（书名页、作者信息页）
+- Phase 4: 集成与测试
+- 后续：对《欽定四庫全書簡明目錄》第一册运行完整管线
