@@ -154,7 +154,7 @@ python -m src run data/book1/ --range 3-6 --format combined --clean
 
 | 文件 | 说明 |
 |------|------|
-| `{stem}.json` | char_grid 检测结果（列、字符位置、OCR 文字） |
+| `{stem}.json` | 标准格式检测结果（对齐 guji_layout，含 border、columns、characters） |
 | `{stem}_preprocessed.png` | 预处理后的二值化图片（供后续 OCR 使用） |
 | `{stem}_annotated.png` | 合并标注图（边框 + 列线 + 字符格子 + 序号） |
 

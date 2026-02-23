@@ -587,7 +587,8 @@ class GujiPipeline:
 
         # 整理最终输出：每张图生成三个文件
         out_dir = self.output_dir / book_name
-        self._collect_results(out_dir, preprocess_filter)
+        self._collect_results(out_dir, profile=profile,
+                              name_filter=preprocess_filter)
 
         # 可选: 合并输出
         if output_format == "combined":
@@ -601,10 +602,11 @@ class GujiPipeline:
         print(f"全部完成！输出: {out_dir / 'results'}")
 
     def _collect_results(self, out_dir: Path,
+                         profile: BookProfile | None = None,
                          name_filter: set[str] | None = None) -> None:
         """整理最终输出：每张图片生成三个文件到 results/ 目录。
 
-        1. {stem}.json          — char_grid 检测结果
+        1. {stem}.json          — 标准格式检测结果（对齐 guji_layout）
         2. {stem}_preprocessed.png — 预处理后图片（供后续 OCR 使用）
         3. {stem}_annotated.png — 合并标注图（列线 + 字符格子 + 序号）
         """
@@ -616,6 +618,10 @@ class GujiPipeline:
         binarize_dir = self._find_final_preprocess_dir(out_dir)
         layout_dir = out_dir / "phase2_layout"
         char_grid_dir = out_dir / "phase3_char_grid"
+
+        # 加载 profile（用于 border_style 等信息）
+        if profile is None:
+            profile = self._load_profile_from_output(out_dir)
 
         # 以 char_grid JSON 为主索引
         grid_files = sorted(char_grid_dir.glob("*_char_grid.json"))
@@ -631,8 +637,22 @@ class GujiPipeline:
         for gf in grid_files:
             stem = gf.stem.replace("_char_grid", "")
 
-            # 1. JSON: 复制 char_grid
-            shutil.copy2(gf, results_dir / f"{stem}.json")
+            # 加载 char_grid 和 layout
+            with open(gf, "r", encoding="utf-8") as f:
+                char_grid = json.load(f)
+
+            layout_path = layout_dir / f"{stem}_layout.json"
+            layout = None
+            if layout_path.exists():
+                with open(layout_path, "r", encoding="utf-8") as f:
+                    layout = json.load(f)
+
+            # 1. JSON: 转换为标准格式
+            result_json = self._format_result_json(
+                stem, char_grid, layout, profile)
+            json_path = results_dir / f"{stem}.json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(result_json, f, ensure_ascii=False, indent=2)
 
             # 2. 预处理图片
             for ext in (".png", ".jpg", ".jpeg"):
@@ -642,8 +662,7 @@ class GujiPipeline:
                     break
 
             # 3. 合并标注图（layout + char_grid 画在预处理图上）
-            layout_path = layout_dir / f"{stem}_layout.json"
-            if binarize_dir and layout_path.exists():
+            if binarize_dir and layout:
                 img_path = None
                 for ext in (".png", ".jpg", ".jpeg"):
                     candidate = binarize_dir / f"{stem}{ext}"
@@ -654,16 +673,124 @@ class GujiPipeline:
                 if img_path:
                     image = imread(str(img_path))
                     if image is not None:
-                        with open(layout_path, "r", encoding="utf-8") as f:
-                            layout = json.load(f)
-                        with open(gf, "r", encoding="utf-8") as f:
-                            char_grid = json.load(f)
                         vis = self._draw_combined(image, layout, char_grid)
                         imwrite(str(results_dir / f"{stem}_annotated.png"), vis)
 
             print(f"  {stem}: json + preprocessed + annotated")
 
         print(f"输出目录: {results_dir}")
+
+    @staticmethod
+    def _format_result_json(stem: str, char_grid: dict,
+                            layout: dict | None,
+                            profile: BookProfile | None) -> dict:
+        """将内部 char_grid + layout 数据转换为标准输出格式。
+
+        对齐 guji_layout 的 OCR 输入规范：
+        - col_index 0-based
+        - position 嵌套结构
+        - characters 替代 cells
+        - 包含 border 信息
+        """
+        img_size = char_grid["image_size"]
+
+        # --- border ---
+        border = None
+        if layout:
+            borders = layout.get("borders", {})
+            inner_frame = borders.get("inner_frame", {})
+            outer_frame = borders.get("outer_frame", {})
+
+            def _extract_rect(frame: dict, key: str = "intercept") -> dict:
+                """从 frame 中提取 top/bottom/left/right 值。"""
+                rect = {}
+                for side in ("top", "bottom", "left", "right"):
+                    side_data = frame.get(side)
+                    if side_data and key in side_data:
+                        rect[side] = round(side_data[key], 2)
+                    else:
+                        rect[side] = 0.0
+                return rect
+
+            def _extract_outer_rect(frame: dict) -> dict:
+                """从 outer_frame 中提取外框值（每边取 outer 层）。"""
+                rect = {}
+                for side in ("top", "bottom", "left", "right"):
+                    side_data = frame.get(side, {})
+                    outer = side_data.get("outer")
+                    if outer and "intercept" in outer:
+                        rect[side] = round(outer["intercept"], 2)
+                    elif side_data.get("inner") and "intercept" in side_data["inner"]:
+                        # 如果没有 outer 层，退回到 inner
+                        rect[side] = round(side_data["inner"]["intercept"], 2)
+                    else:
+                        rect[side] = 0.0
+                return rect
+
+            border = {
+                "style": profile.border_style if profile else "double",
+                "outer": _extract_outer_rect(outer_frame),
+                "inner": _extract_rect(inner_frame),
+            }
+
+        # --- columns ---
+        columns = []
+        for col in char_grid["columns"]:
+            left_x = round(col["left_x"], 2)
+            right_x = round(col["right_x"], 2)
+            center_x = round((col["left_x"] + col["right_x"]) / 2, 2)
+
+            characters = []
+            for cell in col["cells"]:
+                if cell["type"] == "margin":
+                    continue
+
+                ch = {
+                    "char": cell.get("text") or "",
+                    "row_index": cell["index"],
+                    "position": {
+                        "x": center_x,
+                        "y_top": cell["y_top"],
+                        "y_bottom": cell["y_bottom"],
+                    },
+                    "type": "normal" if cell["type"] == "char" else "empty",
+                }
+                if cell["type"] == "char" and cell.get("confidence") is not None:
+                    ch["confidence"] = cell["confidence"]
+
+                characters.append(ch)
+
+            columns.append({
+                "col_index": col["index"] - 1,
+                "position": {"left_x": left_x, "right_x": right_x},
+                "characters": characters,
+            })
+
+        # --- 组装 ---
+        # 推断图片文件名后缀（优先 jpg）
+        img_file = f"{stem}.jpg"
+
+        result = {
+            "page_id": stem,
+            "image": {
+                "file": img_file,
+                "width": img_size["width"],
+                "height": img_size["height"],
+            },
+            "layout": {
+                "lines_per_page": profile.lines_per_page if profile else len(columns),
+                "chars_per_line": char_grid.get("chars_per_line"),
+                "char_height": char_grid.get("char_height_estimated"),
+                "writing_direction": "rtl_vertical",
+            },
+        }
+
+        if border:
+            result["border"] = border
+
+        result["columns"] = columns
+
+        return result
 
     def _draw_combined(self, image: np.ndarray, layout: dict,
                        char_grid: dict) -> np.ndarray:
@@ -724,17 +851,20 @@ class GujiPipeline:
     def _write_combined_result(self, out_dir: Path,
                                book_name: str,
                                profile: BookProfile) -> None:
-        """将所有页面的 char_grid 结果合并为一个 JSON 文件。"""
-        char_grid_dir = out_dir / "phase3_char_grid"
-        grid_files = sorted(char_grid_dir.glob("*_char_grid.json"))
+        """将所有页面的结果合并为一个 JSON 文件。
+
+        从 results/ 目录读取已格式化的 JSON（标准格式）。
+        """
+        results_dir = out_dir / "results"
+        result_files = sorted(
+            f for f in results_dir.glob("*.json")
+            if not f.stem.endswith("_char_grid")
+        )
 
         pages = []
-        for gf in grid_files:
-            with open(gf, "r", encoding="utf-8") as f:
-                pages.append({
-                    "page": gf.stem.replace("_char_grid", ""),
-                    "char_grid": json.load(f),
-                })
+        for rf in result_files:
+            with open(rf, "r", encoding="utf-8") as f:
+                pages.append(json.load(f))
 
         result = {
             "book": book_name,
