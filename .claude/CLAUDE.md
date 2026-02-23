@@ -7,7 +7,8 @@
 古籍图像 OCR 分析项目，使用 PaddleOCR 对古籍扫描图片进行逐字识别和位置分析。
 
 ---
-系统设计 查看 .claude/doc/system_design.md
+**CLI 使用文档：** 查看 .claude/doc/cli_usage.md
+系统设计： 查看 .claude/doc/system_design.md
 技术细节： 查看 .claude/doc/technical_learning.md
 
 ----
