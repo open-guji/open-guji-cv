@@ -22,6 +22,7 @@ class BookProfile:
         border_style: 边框样式，"double"（双层：外粗内细）或 "single"
         border_wear: 边框磨损程度，"light" / "medium" / "heavy"
         interferences: 干扰项列表，如 ["spine_shadow", "stains", "white_margin", "page_number"]
+        skip_pages: 需要跳过的页码列表（按文件名末尾数字匹配），如 [1, 2] 跳过书名页和作者页
         chars_per_line: 每行字数，None 表示不固定
         has_marginal_notes: 是否有夹注
         auto_detected: True 表示自动检测生成，False 表示手动指定
@@ -44,6 +45,9 @@ class BookProfile:
 
     # ─── 干扰项 ───
     interferences: list[str] = field(default_factory=list)
+
+    # ─── 跳过页面 ───
+    skip_pages: list[int] = field(default_factory=list)
 
     # ─── 文字 ───
     chars_per_line: int | None = 21

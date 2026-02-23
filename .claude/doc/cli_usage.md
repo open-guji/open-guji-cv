@@ -16,16 +16,45 @@ src/                     # Python 包（包名通过 python -m src 调用）
 border_detect.py         # 边框聚类核心函数（被 src 内部模块依赖，不可删除）
 ```
 
-## CLI 命令
-
-通过 `python -m src` 调用，需要先设置环境变量：
+## 环境变量
 
 ```bash
 export PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 export PYTHONIOENCODING=utf-8
 ```
 
-### analyze — 分析版式特征
+## CLI 命令总览
+
+```
+python -m src [-o OUTPUT] <command> [args]
+
+命令:
+  analyze        Phase 1:   分析版式特征 → profile.json
+  preprocess     Phase 1.5: 预处理 s1~s6
+  detect-layout  Phase 2:   版面检测（边框/列）
+  detect-grid    Phase 3:   字符网格检测
+  run            完整管线:   Phase 1 → 1.5 → 2 → 3
+  show-profile   工具:       显示 BookProfile
+```
+
+### 全局选项
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `-o, --output` | `output` | 输出根目录 |
+
+### 通用选项（preprocess / detect-layout / detect-grid / run）
+
+| 选项 | 说明 |
+|------|------|
+| `--profile PATH` | 指定 profile.json 路径（默认自动查找） |
+| `--range RANGE` | 指定处理的图片范围，如 `3-6`、`1,3,5`、`003-006` |
+
+---
+
+## 各阶段命令
+
+### analyze — Phase 1: 分析版式特征
 
 ```bash
 python -m src analyze <book_folder>
@@ -36,25 +65,98 @@ python -m src analyze data/book1/
 
 输出：`<book_folder>/profile.json`
 
-### process — 预处理整本书
+### preprocess — Phase 1.5: 预处理
 
 ```bash
-# 处理整本书（自动加载或生成 profile）
-python -m src process data/book1/
+# 整本书模式：执行 s1~s6 步骤化预处理
+python -m src preprocess data/book1/
+python -m src preprocess data/book1/ --profile path/to/profile.json
 
-# 指定 profile
-python -m src process data/book1/ --profile path/to/profile.json
+# 只处理第 3~6 张
+python -m src preprocess data/book1/ --range 3-6
+
+# 单图模式：预处理 + Phase 2 版面检测
+python -m src preprocess data/book1/3.png
 
 # 指定输出目录
-python -m src -o my_output process data/book1/
-
-# 处理单张图片（需要同目录有 profile.json）
-python -m src process data/book1/3.png
+python -m src -o my_output preprocess data/book1/
 ```
 
 **整本书模式** 执行 s1~s6 步骤化预处理，输出到 `output/<book_name>/`。
 
-**单图模式** 执行预处理 + Phase 2 版面检测，返回 ProcessResult。
+**单图模式** 执行预处理 + Phase 2 版面检测，保存预处理图片和 layout JSON。
+
+> `process` 是 `preprocess` 的向后兼容别名，用法完全相同。
+
+### detect-layout — Phase 2: 版面检测
+
+```bash
+# 整本书模式：读取预处理输出，批量检测版面
+python -m src detect-layout data/book1/
+python -m src detect-layout data/book1/ --range 1-5
+
+# 单图模式：对一张图片直接做版面检测
+python -m src detect-layout output/book1/s6_binarize/1.png
+```
+
+**整本书模式** 从 `output/<book_name>/` 中读取最终预处理结果（通常是 `s6_binarize/`），输出到 `phase2_layout/`：
+- `{stem}_layout.json` — 边框和列结构数据
+- `{stem}_annotated.png` — 可视化标注图
+
+**单图模式** 对指定图片执行版面检测，输出到 `output/<parent_name>/`。
+
+**前置条件**：需要先运行 `preprocess`。
+
+### detect-grid — Phase 3: 字符网格检测
+
+```bash
+# 整本书模式：读取 Phase 2 结果，批量检测字符网格
+python -m src detect-grid data/book1/
+python -m src detect-grid data/book1/ --range 3-6
+
+# 单图模式：需要指定 layout JSON
+python -m src detect-grid output/book1/s6_binarize/1.png --layout output/book1/phase2_layout/1_layout.json
+```
+
+**整本书模式** 从 `output/<book_name>/phase2_layout/` 和预处理输出读取，输出到 `phase3_char_grid/`：
+- `{stem}_char_grid.json` — 字符网格数据
+- `{stem}_annotated.png` — 可视化标注图
+
+**前置条件**：需要先运行 `preprocess` + `detect-layout`。
+
+### run — 完整管线
+
+```bash
+# 从头到尾执行所有阶段
+python -m src run data/book1/
+
+# 只处理第 3~6 张图片
+python -m src run data/book1/ --range 3-6
+
+# 合并输出为单个 JSON
+python -m src run data/book1/ --format combined
+
+# 完成后清理中间文件
+python -m src run data/book1/ --clean
+
+# 全部选项
+python -m src run data/book1/ --range 3-6 --format combined --clean
+```
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `--profile` | 自动检测 | 指定 profile.json 路径 |
+| `--range` | 全部 | 指定处理的图片范围（如 `3-6` 或 `1,3,5`） |
+| `--format` | `char_grid` | 输出格式：`char_grid`（分页）或 `combined`（合并为 `book_result.json`） |
+| `--clean` | 不清理 | 完成后删除中间文件夹 |
+
+**`run` 每张图片输出三个最终文件到 `results/`：**
+
+| 文件 | 说明 |
+|------|------|
+| `{stem}.json` | char_grid 检测结果（列、字符位置、OCR 文字） |
+| `{stem}_preprocessed.png` | 预处理后的二值化图片（供后续 OCR 使用） |
+| `{stem}_annotated.png` | 合并标注图（边框 + 列线 + 字符格子 + 序号） |
 
 ### show-profile — 显示 BookProfile
 
@@ -67,11 +169,15 @@ python -m src show-profile data/book1/profile.json
 
 ---
 
-## 全局选项
+## 阶段与命令对应关系
 
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `-o, --output` | `output` | 输出根目录 |
+| 阶段 | 命令 | 输入 | 输出 |
+|------|------|------|------|
+| Phase 1 | `analyze` | 原始图片文件夹 | `profile.json` |
+| Phase 1.5 | `preprocess` | 原始图片文件夹 | `s1~s6` 步骤文件夹 + `manifest.json` |
+| Phase 2 | `detect-layout` | 预处理后图片 | `phase2_layout/`（JSON + 标注图） |
+| Phase 3 | `detect-grid` | 预处理图片 + layout JSON | `phase3_char_grid/`（JSON + 标注图） |
+| 全部 | `run` | 原始图片文件夹 | `results/`（JSON + 预处理图 + 标注图） |
 
 ---
 
@@ -92,63 +198,6 @@ python -m src show-profile data/book1/profile.json
 
 ---
 
-## Phase 2 — 版面检测
-
-Phase 2 检测边框和列结构，目前 **没有独立的 CLI 命令**，需要通过 Python API 调用：
-
-```python
-import sys; sys.path.insert(0, '.')
-from src.pipeline import GujiPipeline
-
-pipeline = GujiPipeline(output_dir="output")
-
-# 方式 1：通过 preprocess() 自动执行（含预处理 + 版面检测）
-from src.profile import BookProfile
-profile = BookProfile.load("data/book1/profile.json")
-results = pipeline.preprocess("output/book1/s6_binarize/1.png", profile)
-# results[0].layout 包含版面结构
-
-# 方式 2：直接调用内部方法
-from src.utils.image_io import imread
-image = imread("output/book1/s6_binarize/1.png")
-layout = pipeline._detect_layout(image, profile)
-```
-
-输出结构（layout dict）：
-
-```json
-{
-  "lsd_summary": { ... },
-  "borders": {
-    "inner_frame": { "top": {...}, "bottom": {...}, "left": {...}, "right": {...} },
-    "columns": [...]
-  },
-  "columns": {
-    "columns": [
-      {"index": 1, "left_x": 751.9, "right_x": 851.8},
-      ...
-    ]
-  }
-}
-```
-
-## Phase 3 — 字符网格检测
-
-**前置条件**：需要 `output/<book>/s6_binarize/` 和 `output/<book>/phase2_layout/` 目录。
-
-```python
-from src.pipeline import GujiPipeline
-
-pipeline = GujiPipeline(output_dir="output")
-pipeline.detect_char_grid("book1")
-```
-
-读取 `phase2_layout/` 中的 layout JSON 和 `s6_binarize/` 中的图片，输出到 `phase3_char_grid/`：
-- `{stem}_char_grid.json` — 字符网格数据
-- `{stem}_annotated.png` — 可视化标注图
-
----
-
 ## 输出目录结构
 
 ```
@@ -159,12 +208,17 @@ output/<book_name>/
 ├── s3_enhance_lines/
 ├── s4_deskew/
 ├── s6_binarize/              # 最终二值化图像
-├── phase2_layout/            # 版面检测结果
-│   ├── 1_layout.json
-│   └── 1_annotated.png
-└── phase3_char_grid/         # 字符网格检测结果
-    ├── 1_char_grid.json
-    └── 1_annotated.png
+├── phase2_layout/            # Phase 2 版面检测结果
+│   ├── {stem}_layout.json
+│   └── {stem}_annotated.png
+├── phase3_char_grid/         # Phase 3 字符网格检测结果
+│   ├── {stem}_char_grid.json
+│   └── {stem}_annotated.png
+├── results/                  # run 命令最终输出（每张图 3 个文件）
+│   ├── {stem}.json               # char_grid 结果
+│   ├── {stem}_preprocessed.png   # 预处理图片
+│   └── {stem}_annotated.png      # 合并标注图
+└── book_result.json          # --format combined 时生成
 ```
 
 ---
@@ -182,6 +236,7 @@ output/<book_name>/
   "border_style": "double",        // "double" | "single"
   "border_wear": "medium",         // "light" | "medium" | "heavy"
   "interferences": [],             // ["spine_shadow", "stains", "white_margin", "page_number"]
+  "skip_pages": [1, 2],            // 跳过的页码（按文件名末尾数字匹配），如书名页、作者页
   "chars_per_line": 21,            // 每行字数，null 表示不固定
   "has_marginal_notes": false,
   "auto_detected": true,
@@ -192,6 +247,7 @@ output/<book_name>/
 关键字段对预处理的影响：
 - `page_type == "uncut_full"` → 执行 s5 拆分
 - `"spine_shadow" in interferences` → 执行 s1 裁切书脊
+- `skip_pages` → 预处理和分析时跳过指定页码（如书名页 [1]、作者页 [2]）
 - `chars_per_line` → Phase 3 每列的网格槽位数
 
 ---
@@ -208,11 +264,25 @@ pipeline = GujiPipeline(output_dir="output")
 # Phase 1: 分析
 profile = pipeline.analyze("data/book1/")
 
-# 预处理整本书（s1~s6）
+# Phase 1.5: 预处理整本书（s1~s6）
 pipeline.process_book("data/book1/", profile=profile)
 
-# Phase 3: 字符网格（需要先有 phase2_layout/）
+# Phase 1.5: 只处理指定图片
+pipeline.process_book("data/book1/", profile=profile,
+                      name_filter={"v01_003", "v01_004"})
+
+# Phase 2: 版面检测（批量）
+pipeline.detect_layout_book("book1", profile=profile)
+
+# Phase 3: 字符网格（批量）
 pipeline.detect_char_grid("book1", profile=profile)
+
+# 完整管线
+pipeline.run_all("data/book1/", output_format="combined", clean=True)
+
+# 完整管线：只处理指定图片
+pipeline.run_all("data/book1/",
+                 name_filter={"v01_003", "v01_004", "v01_005", "v01_006"})
 
 # 手动创建 profile
 profile = BookProfile(

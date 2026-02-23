@@ -60,10 +60,12 @@ class GujiPipeline:
 
     # ─── s0: 书级分析 ─────────────────────────────────────────
 
-    def analyze(self, book_folder: str, max_samples: int = 10) -> BookProfile:
+    def analyze(self, book_folder: str, max_samples: int = 10,
+                skip_pages: list[int] | None = None) -> BookProfile:
         """分析一本书的版式特征，生成 BookProfile。"""
         folder = Path(book_folder)
-        image_paths = self._find_images(folder, max_count=max_samples)
+        image_paths = self._find_images(folder, max_count=max_samples,
+                                        skip_pages=skip_pages)
 
         if not image_paths:
             print(f"未找到图片: {folder}")
@@ -106,11 +108,15 @@ class GujiPipeline:
     # ─── 步骤化预处理 ─────────────────────────────────────────
 
     def process_book(self, book_folder: str,
-                     profile: BookProfile | None = None) -> None:
+                     profile: BookProfile | None = None,
+                     name_filter: set[str] | None = None) -> None:
         """完整流程：分析 + 步骤化预处理整本书。
 
         每个步骤的输出保存到独立文件夹（s1_crop_spine/, s2_crop_border/, ...）。
         跳过的步骤不产生文件夹，下游步骤自动从最近的上游输出读取。
+
+        Args:
+            name_filter: 只处理 stem 在此集合中的图片
         """
         folder = Path(book_folder)
         book_name = folder.name
@@ -132,11 +138,27 @@ class GujiPipeline:
         manifest_executed = []
         manifest_skipped = []
 
+        # 当有 name_filter 时，后续步骤需要匹配派生文件名（如 split 产生的 _left/_right）
+        current_filter = name_filter
+
+        # 只在第一个步骤（读原始目录）时应用 skip_pages，后续步骤读的是已过滤的输出
+        skip_pages_for_first = profile.skip_pages if profile.skip_pages else None
+
         for step in STEPS:
             if step.is_needed(profile):
                 step_dir = out_dir / step.folder_name
-                n_images = self._run_step(step, current_dir, step_dir, profile)
+                n_images = self._run_step(step, current_dir, step_dir, profile,
+                                          name_filter=current_filter,
+                                          skip_pages=skip_pages_for_first)
                 current_dir = step_dir
+                skip_pages_for_first = None  # 后续步骤不再需要 skip_pages
+                # split 步骤会生成 stem_left / stem_right，更新 filter
+                if current_filter is not None and step.name == "split":
+                    current_filter = {
+                        f"{s}_{suffix}"
+                        for s in current_filter
+                        for suffix in ("left", "right")
+                    }
                 manifest_executed.append({
                     "number": step.number,
                     "name": step.name,
@@ -169,7 +191,9 @@ class GujiPipeline:
         print(f"  最终结果: {final_folder}/")
 
     def _run_step(self, step: StepDef, input_dir: Path,
-                  output_dir: Path, profile: BookProfile) -> int:
+                  output_dir: Path, profile: BookProfile,
+                  name_filter: set[str] | None = None,
+                  skip_pages: list[int] | None = None) -> int:
         """执行单个预处理步骤：读取 input_dir 中的图片，处理后写入 output_dir。
 
         Returns:
@@ -177,7 +201,8 @@ class GujiPipeline:
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         preprocessor = step.create_preprocessor()
-        image_paths = self._find_images(input_dir)
+        image_paths = self._find_images(input_dir, name_filter=name_filter,
+                                        skip_pages=skip_pages)
         n_output = 0
 
         for img_path in image_paths:
@@ -273,7 +298,8 @@ class GujiPipeline:
     # ─── Phase 3: 字符网格检测 ──────────────────────────────
 
     def detect_char_grid(self, book_name: str,
-                         profile: BookProfile | None = None) -> None:
+                         profile: BookProfile | None = None,
+                         name_filter: set[str] | None = None) -> None:
         """Phase 3: 对已完成 Phase 2 的图片做字符网格检测。
 
         读取 phase2_layout/ 中的 JSON 和 s6_binarize/ 中的图片，
@@ -281,7 +307,7 @@ class GujiPipeline:
         """
         out_dir = self.output_dir / book_name
         layout_dir = out_dir / "phase2_layout"
-        binarize_dir = out_dir / "s6_binarize"
+        binarize_dir = self._find_final_preprocess_dir(out_dir) or (out_dir / "s6_binarize")
         char_grid_dir = out_dir / "phase3_char_grid"
         char_grid_dir.mkdir(parents=True, exist_ok=True)
 
@@ -300,6 +326,9 @@ class GujiPipeline:
 
         # 查找所有 layout JSON
         layout_files = sorted(layout_dir.glob("*_layout.json"))
+        if name_filter is not None:
+            layout_files = [f for f in layout_files
+                            if f.stem.replace("_layout", "") in name_filter]
         if not layout_files:
             print(f"未找到 layout JSON: {layout_dir}")
             return
@@ -445,17 +474,403 @@ class GujiPipeline:
             "columns": column_result,
         }
 
+    # ─── Phase 2: 版面检测（批量） ────────────────────────────
+
+    def detect_layout_book(self, book_name: str,
+                           profile: BookProfile | None = None,
+                           name_filter: set[str] | None = None) -> None:
+        """Phase 2: 对已完成预处理的图片做版面检测。
+
+        读取最终预处理输出目录中的图片，输出到 phase2_layout/ 目录。
+        """
+        out_dir = self.output_dir / book_name
+
+        # 确定输入目录
+        binarize_dir = self._find_final_preprocess_dir(out_dir)
+        if not binarize_dir or not binarize_dir.exists():
+            print(f"未找到预处理输出目录，请先运行 preprocess 命令")
+            return
+
+        layout_dir = out_dir / "phase2_layout"
+        layout_dir.mkdir(parents=True, exist_ok=True)
+
+        # 加载 profile
+        if profile is None:
+            profile = self._load_profile_from_output(out_dir)
+            if profile is None:
+                return
+
+        image_paths = self._find_images(binarize_dir, name_filter=name_filter)
+        if not image_paths:
+            print(f"未找到图片: {binarize_dir}")
+            return
+
+        print(f"\nPhase 2 版面检测: {len(image_paths)} 张图片")
+
+        for img_path in image_paths:
+            stem = img_path.stem
+            print(f"  处理 {stem}...", end=" ", flush=True)
+
+            image = imread(str(img_path))
+            if image is None:
+                print("读取失败")
+                continue
+
+            layout = self._detect_layout(image, profile)
+
+            # 保存 layout JSON
+            json_path = layout_dir / f"{stem}_layout.json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(layout, f, ensure_ascii=False, indent=2)
+
+            # 生成可视化
+            vis_img = self._draw_layout(image, layout)
+            vis_path = layout_dir / f"{stem}_annotated.png"
+            imwrite(str(vis_path), vis_img)
+
+            n_cols = len(layout.get("columns", {}).get("columns", []))
+            print(f"检测到 {n_cols} 列")
+
+        print(f"Phase 2 完成！输出: {layout_dir}")
+
+    def detect_char_grid_single(self, image_path: str,
+                                layout: dict,
+                                profile: BookProfile) -> dict:
+        """Phase 3: 对单张图片做字符网格检测。"""
+        image = imread(image_path)
+        if image is None:
+            print(f"  无法读取图片: {image_path}")
+            return {}
+
+        ocr_detector = OcrDetector()
+        char_grid_detector = CharGridDetector(ocr_detector)
+        return char_grid_detector.detect(image, layout, profile)
+
+    # ─── 完整管线 ─────────────────────────────────────────────
+
+    def run_all(self, book_folder: str,
+                profile: BookProfile | None = None,
+                output_format: str = "char_grid",
+                clean: bool = False,
+                name_filter: set[str] | None = None) -> None:
+        """完整管线：Phase 1 → 1.5 → 2 → 3。"""
+        folder = Path(book_folder)
+        book_name = folder.name
+
+        n_info = f"（{len(name_filter)} 张）" if name_filter else ""
+        print(f"{'=' * 60}")
+        print(f"完整管线: {book_name} {n_info}")
+        print(f"{'=' * 60}")
+
+        # Phase 1: 分析（始终用全部样本）
+        profile = self._load_or_analyze(folder, profile)
+
+        # Phase 1.5: 预处理
+        self.process_book(str(folder), profile=profile, name_filter=name_filter)
+
+        # name_filter 在 split 后可能变化，计算预处理后的实际 filter
+        preprocess_filter = name_filter
+        if name_filter and profile.is_uncut:
+            preprocess_filter = {
+                f"{s}_{suffix}"
+                for s in name_filter
+                for suffix in ("left", "right")
+            }
+
+        # Phase 2: 版面检测
+        self.detect_layout_book(book_name, profile=profile,
+                                name_filter=preprocess_filter)
+
+        # Phase 3: 字符网格
+        self.detect_char_grid(book_name, profile=profile,
+                              name_filter=preprocess_filter)
+
+        # 整理最终输出：每张图生成三个文件
+        out_dir = self.output_dir / book_name
+        self._collect_results(out_dir, preprocess_filter)
+
+        # 可选: 合并输出
+        if output_format == "combined":
+            self._write_combined_result(out_dir, book_name, profile)
+
+        # 可选: 清理中间文件
+        if clean:
+            self._clean_intermediate(out_dir)
+
+        print(f"\n{'=' * 60}")
+        print(f"全部完成！输出: {out_dir / 'results'}")
+
+    def _collect_results(self, out_dir: Path,
+                         name_filter: set[str] | None = None) -> None:
+        """整理最终输出：每张图片生成三个文件到 results/ 目录。
+
+        1. {stem}.json          — char_grid 检测结果
+        2. {stem}_preprocessed.png — 预处理后图片（供后续 OCR 使用）
+        3. {stem}_annotated.png — 合并标注图（列线 + 字符格子 + 序号）
+        """
+        import shutil
+
+        results_dir = out_dir / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+
+        binarize_dir = self._find_final_preprocess_dir(out_dir)
+        layout_dir = out_dir / "phase2_layout"
+        char_grid_dir = out_dir / "phase3_char_grid"
+
+        # 以 char_grid JSON 为主索引
+        grid_files = sorted(char_grid_dir.glob("*_char_grid.json"))
+        if name_filter is not None:
+            grid_files = [f for f in grid_files
+                          if f.stem.replace("_char_grid", "") in name_filter]
+
+        if not grid_files:
+            return
+
+        print(f"\n整理输出: {len(grid_files)} 张图片 → results/")
+
+        for gf in grid_files:
+            stem = gf.stem.replace("_char_grid", "")
+
+            # 1. JSON: 复制 char_grid
+            shutil.copy2(gf, results_dir / f"{stem}.json")
+
+            # 2. 预处理图片
+            for ext in (".png", ".jpg", ".jpeg"):
+                src_img = binarize_dir / f"{stem}{ext}"
+                if src_img.exists():
+                    shutil.copy2(src_img, results_dir / f"{stem}_preprocessed{ext}")
+                    break
+
+            # 3. 合并标注图（layout + char_grid 画在预处理图上）
+            layout_path = layout_dir / f"{stem}_layout.json"
+            if binarize_dir and layout_path.exists():
+                img_path = None
+                for ext in (".png", ".jpg", ".jpeg"):
+                    candidate = binarize_dir / f"{stem}{ext}"
+                    if candidate.exists():
+                        img_path = candidate
+                        break
+
+                if img_path:
+                    image = imread(str(img_path))
+                    if image is not None:
+                        with open(layout_path, "r", encoding="utf-8") as f:
+                            layout = json.load(f)
+                        with open(gf, "r", encoding="utf-8") as f:
+                            char_grid = json.load(f)
+                        vis = self._draw_combined(image, layout, char_grid)
+                        imwrite(str(results_dir / f"{stem}_annotated.png"), vis)
+
+            print(f"  {stem}: json + preprocessed + annotated")
+
+        print(f"输出目录: {results_dir}")
+
+    def _draw_combined(self, image: np.ndarray, layout: dict,
+                       char_grid: dict) -> np.ndarray:
+        """在预处理图上绘制合并标注：列边框（Phase 2）+ 字符格子（Phase 3）。"""
+        # 先画 layout（红色边框 + 绿色列线）
+        vis = self._draw_layout(image, layout)
+        # 再画 char_grid（格子 + 序号），直接在 vis 上叠加
+        vis = self._draw_char_grid_on(vis, char_grid)
+        return vis
+
+    def _draw_char_grid_on(self, vis: np.ndarray, result: dict) -> np.ndarray:
+        """在已有彩色图像上绘制字符网格（不做灰度转换）。"""
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.35
+        font_thickness = 1
+
+        for col in result["columns"]:
+            left_x = int(col["left_x"])
+            right_x = int(col["right_x"])
+
+            for cell in col["cells"]:
+                y_top = int(cell["y_top"])
+                y_bottom = int(cell["y_bottom"])
+                cell_type = cell.get("type", "char")
+
+                if cell_type == "margin":
+                    color = (200, 150, 0)
+                elif cell_type == "empty":
+                    color = (180, 180, 180)
+                else:
+                    color = (0, 200, 0)
+
+                cv2.line(vis, (left_x, y_top), (right_x, y_top), color, 2)
+                cv2.line(vis, (left_x, y_bottom), (right_x, y_bottom), color, 1)
+
+        # 标号
+        for col in result["columns"]:
+            right_x = int(col["right_x"])
+
+            for cell in col["cells"]:
+                y_bottom = int(cell["y_bottom"])
+                cell_type = cell.get("type", "char")
+
+                if cell_type in ("char", "empty") and "index" in cell:
+                    label = str(cell["index"] + 1)
+                    label_color = (0, 200, 0) if cell_type == "char" else (180, 180, 180)
+                    (tw, th), _ = cv2.getTextSize(label, font, font_scale, font_thickness)
+                    tx = right_x - tw - 1
+                    ty = y_bottom - 2
+                    bg_top = y_bottom - th - 4
+                    cv2.rectangle(vis, (tx - 1, bg_top), (right_x, y_bottom),
+                                  (255, 255, 255), -1)
+                    cv2.putText(vis, label, (tx, ty), font, font_scale,
+                                label_color, font_thickness, cv2.LINE_AA)
+
+        return vis
+
+    def _write_combined_result(self, out_dir: Path,
+                               book_name: str,
+                               profile: BookProfile) -> None:
+        """将所有页面的 char_grid 结果合并为一个 JSON 文件。"""
+        char_grid_dir = out_dir / "phase3_char_grid"
+        grid_files = sorted(char_grid_dir.glob("*_char_grid.json"))
+
+        pages = []
+        for gf in grid_files:
+            with open(gf, "r", encoding="utf-8") as f:
+                pages.append({
+                    "page": gf.stem.replace("_char_grid", ""),
+                    "char_grid": json.load(f),
+                })
+
+        result = {
+            "book": book_name,
+            "profile": profile.to_dict(),
+            "pages": pages,
+        }
+
+        result_path = out_dir / "book_result.json"
+        with open(result_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"  合并结果: {result_path}")
+
+    def _clean_intermediate(self, out_dir: Path) -> None:
+        """清理中间步骤文件夹，只保留最终结果。"""
+        import shutil
+        keep = {"profile.json", "manifest.json",
+                "phase3_char_grid", "book_result.json"}
+        for item in out_dir.iterdir():
+            if item.name not in keep:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                    print(f"  清理: {item.name}/")
+
+    # ─── 可视化 ───────────────────────────────────────────────
+
+    def _draw_layout(self, image: np.ndarray, layout: dict) -> np.ndarray:
+        """在图像上绘制版面检测可视化。
+
+        - 红色: 内边框（top/bottom/left/right）
+        - 绿色: 列分隔线 + 列编号
+        """
+        if len(image.shape) == 2:
+            vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            vis = image.copy()
+
+        h, w = vis.shape[:2]
+        borders = layout.get("borders", {})
+        inner_frame = borders.get("inner_frame", {})
+
+        # 绘制内边框（红色）
+        for side_name in ("top", "bottom", "left", "right"):
+            side = inner_frame.get(side_name)
+            if not side:
+                continue
+            slope = side.get("slope", 0)
+            intercept = side.get("intercept", 0)
+            if side_name in ("top", "bottom"):
+                # 水平线: y = slope * x + intercept
+                y1 = int(slope * 0 + intercept)
+                y2 = int(slope * w + intercept)
+                cv2.line(vis, (0, y1), (w, y2), (0, 0, 255), 2)
+            else:
+                # 垂直线: x = slope * y + intercept
+                x1 = int(slope * 0 + intercept)
+                x2 = int(slope * h + intercept)
+                cv2.line(vis, (x1, 0), (x2, h), (0, 0, 200), 2)
+
+        # 绘制列（绿色）
+        columns = layout.get("columns", {}).get("columns", [])
+        col_top = int(inner_frame.get("top", {}).get("intercept", 0))
+        col_bottom = int(inner_frame.get("bottom", {}).get("intercept", h))
+
+        for col in columns:
+            left_x = int(col["left_x"])
+            right_x = int(col["right_x"])
+            cv2.line(vis, (left_x, col_top), (left_x, col_bottom),
+                     (0, 200, 0), 1)
+            cv2.line(vis, (right_x, col_top), (right_x, col_bottom),
+                     (0, 200, 0), 1)
+
+            # 列编号
+            cx = (left_x + right_x) // 2
+            cv2.putText(vis, str(col["index"]),
+                        (cx - 5, col_top - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 0), 1)
+
+        return vis
+
     # ─── 工具方法 ─────────────────────────────────────────────
 
+    def _find_final_preprocess_dir(self, out_dir: Path) -> Path | None:
+        """从 manifest.json 确定最终预处理输出目录。"""
+        manifest_path = out_dir / "manifest.json"
+        if manifest_path.exists():
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            final = manifest.get("final_output", "")
+            if final:
+                return out_dir / final
+
+        # 回退：按步骤号降序查找存在的目录
+        for step_num in [6, 5, 4, 3, 2, 1]:
+            candidates = list(out_dir.glob(f"s{step_num}_*"))
+            if candidates:
+                return candidates[0]
+        return None
+
+    def _load_profile_from_output(self, out_dir: Path) -> BookProfile | None:
+        """从输出目录加载 profile.json。"""
+        profile_path = out_dir / "profile.json"
+        if profile_path.exists():
+            return BookProfile.load(profile_path)
+        print(f"未找到 profile.json: {profile_path}")
+        return None
+
     @staticmethod
-    def _find_images(folder: Path, max_count: int | None = None) -> list[Path]:
-        """在文件夹中查找图片文件。"""
+    def _find_images(folder: Path, max_count: int | None = None,
+                     name_filter: set[str] | None = None,
+                     skip_pages: list[int] | None = None) -> list[Path]:
+        """在文件夹中查找图片文件。
+
+        Args:
+            folder: 图片目录
+            max_count: 最多返回的图片数
+            name_filter: 只保留 stem 在此集合中的图片（如 {"v01_003", "v01_004"}）
+            skip_pages: 跳过页码列表，按文件名末尾数字匹配（如 [1, 2]）
+        """
+        import re
         skip_suffixes = {"_lsd", "_borders", "_annotated", "_preprocessed"}
         images = sorted(
             f for f in folder.iterdir()
             if f.suffix.lower() in IMAGE_EXTENSIONS
             and not any(f.stem.endswith(s) for s in skip_suffixes)
         )
+        if skip_pages:
+            skip_set = set(skip_pages)
+            filtered = []
+            for f in images:
+                nums = re.findall(r'\d+', f.stem)
+                if nums and int(nums[-1]) in skip_set:
+                    continue
+                filtered.append(f)
+            images = filtered
+        if name_filter is not None:
+            images = [f for f in images if f.stem in name_filter]
         if max_count is not None:
             images = images[:max_count]
         return images
