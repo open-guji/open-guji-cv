@@ -94,44 +94,50 @@ class CharGridDetector:
             jiazhu_ranges = self._detect_jiazhu_regions(
                 col_gray, regions, col_width, theoretical_char_h)
 
-            # 记录夹注的全图 y 坐标（坐标转换之前取值）
-            jiazhu_info = None
-            if jiazhu_ranges:
-                jiazhu_info = []
-                for jz_start, jz_end in jiazhu_ranges:
-                    jiazhu_info.append({
-                        "region_start": jz_start,
-                        "region_end": jz_end,
-                        "y_top": int(y1 + regions[jz_start][0]),
-                        "y_bottom": int(y1 + regions[jz_end][1]),
-                    })
-
-            # Step 2: 局部坐标 → 全图坐标（确保 Python int）
-            regions = [(int(y1 + r_top), int(y1 + r_bot)) for r_top, r_bot in regions]
-
-            # Step 3: OCR 识别整列文字（含每字位置）
             col_image = image[y1:y2, x1:x2]
-            ocr_text, word_boxes = self._ocr_column_words(col_image, y1)
 
-            # Step 4: 构建字符网格
-            cells, char_h = self._build_char_grid(
-                regions, ocr_text, word_boxes,
-                col_top, col_bottom, expected_chars,
-                theoretical_char_h)
+            if jiazhu_ranges:
+                # ── 含夹注的列：按段处理 ──
+                cells, ocr_text, jiazhu_info = self._build_jiazhu_column(
+                    col_gray, col_image, regions, jiazhu_ranges,
+                    col_top, col_bottom, expected_chars,
+                    theoretical_char_h, y1, col_width)
 
-            if char_h > 0:
-                all_char_heights.append(char_h)
+                col_result = {
+                    "index": col_idx,
+                    "left_x": left_x,
+                    "right_x": right_x,
+                    "ocr_text": ocr_text,
+                    "cells": cells,
+                    "has_jiazhu": True,
+                    "jiazhu_ranges": jiazhu_info,
+                }
+            else:
+                # ── 普通列：现有逻辑不变 ──
+                # 局部坐标 → 全图坐标
+                regions = [(int(y1 + r_top), int(y1 + r_bot))
+                           for r_top, r_bot in regions]
 
-            col_result = {
-                "index": col_idx,
-                "left_x": left_x,
-                "right_x": right_x,
-                "ocr_text": ocr_text,
-                "cells": cells,
-            }
-            if jiazhu_info is not None:
-                col_result["has_jiazhu"] = True
-                col_result["jiazhu_ranges"] = jiazhu_info
+                # OCR 识别整列文字
+                ocr_text, word_boxes = self._ocr_column_words(col_image, y1)
+
+                # 构建字符网格
+                cells, char_h = self._build_char_grid(
+                    regions, ocr_text, word_boxes,
+                    col_top, col_bottom, expected_chars,
+                    theoretical_char_h)
+
+                if char_h > 0:
+                    all_char_heights.append(char_h)
+
+                col_result = {
+                    "index": col_idx,
+                    "left_x": left_x,
+                    "right_x": right_x,
+                    "ocr_text": ocr_text,
+                    "cells": cells,
+                }
+
             result_columns.append(col_result)
 
         avg_char_h = float(np.mean(all_char_heights)) if all_char_heights else 0.0
@@ -363,6 +369,73 @@ class CharGridDetector:
 
         return False
 
+    def _split_jiazhu_subcols(
+        self,
+        col_gray: np.ndarray,
+        jiazhu_y_top: int,
+        jiazhu_y_bottom: int,
+        col_width: int,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        """将夹注区域图像拆分为左右两个子列。
+
+        在夹注区域的中间 30% 范围内找垂直投影最小值作为分割线。
+
+        Args:
+            col_gray: 列灰度图像（局部坐标）
+            jiazhu_y_top: 夹注区域顶部 y（局部坐标）
+            jiazhu_y_bottom: 夹注区域底部 y（局部坐标）
+            col_width: 列宽度
+
+        Returns:
+            (left_sub, right_sub, split_x):
+                left_sub: 左子列图像（sub_col=2，后读）
+                right_sub: 右子列图像（sub_col=1，先读）
+                split_x: 分割线的 x 坐标（局部）
+        """
+        jiazhu_img = col_gray[jiazhu_y_top:jiazhu_y_bottom, :]
+        v_proj = np.sum(jiazhu_img < 128, axis=0).astype(float)
+
+        # 在列宽中间 30% 范围内找投影最小值
+        mid = col_width // 2
+        search_start = max(0, int(mid * 0.7))
+        search_end = min(col_width, int(mid * 1.3))
+        if search_end <= search_start:
+            search_start, search_end = mid - 5, mid + 5
+        split_x = search_start + int(np.argmin(v_proj[search_start:search_end]))
+
+        # 古籍竖排阅读顺序：右→左
+        # 图片中 split_x 右侧（x大）= sub_col 1（先读）
+        # 图片中 split_x 左侧（x小）= sub_col 2（后读）
+        left_sub = col_gray[jiazhu_y_top:jiazhu_y_bottom, :split_x]
+        right_sub = col_gray[jiazhu_y_top:jiazhu_y_bottom, split_x:]
+
+        return left_sub, right_sub, split_x
+
+    @staticmethod
+    def _segment_column(
+        regions: list[tuple[int, int]],
+        jiazhu_ranges: list[tuple[int, int]],
+    ) -> list[tuple[str, list[int]]]:
+        """将投影区域分为正文段和夹注段的交替序列。
+
+        Args:
+            regions: 投影分割区域列表
+            jiazhu_ranges: 夹注区域索引范围列表 [(start, end), ...]，inclusive
+
+        Returns:
+            [("normal", [idx, ...]), ("jiazhu", [idx, ...]), ...] 交替序列
+        """
+        segments: list[tuple[str, list[int]]] = []
+        prev_end = 0
+        for jz_start, jz_end in sorted(jiazhu_ranges):
+            if prev_end < jz_start:
+                segments.append(("normal", list(range(prev_end, jz_start))))
+            segments.append(("jiazhu", list(range(jz_start, jz_end + 1))))
+            prev_end = jz_end + 1
+        if prev_end < len(regions):
+            segments.append(("normal", list(range(prev_end, len(regions)))))
+        return segments
+
     @staticmethod
     def _find_continuous_regions(
         is_text: np.ndarray,
@@ -480,6 +553,220 @@ class CharGridDetector:
 
         ocr_text = "".join(w.text for w in global_words)
         return ocr_text, global_words
+
+    # ─── 夹注列构建 ────────────────────────────────────────
+
+    def _build_jiazhu_column(
+        self,
+        col_gray: np.ndarray,
+        col_image: np.ndarray,
+        regions: list[tuple[int, int]],
+        jiazhu_ranges: list[tuple[int, int]],
+        col_top: float,
+        col_bottom: float,
+        expected_chars: int,
+        theoretical_char_h: float,
+        y_offset: int,
+        col_width: int,
+    ) -> tuple[list[dict], str, list[dict]]:
+        """处理含夹注的列：多段正文/夹注交替合并。
+
+        对正文段：整段 OCR + 按区域逐字匹配。
+        对夹注段：拆分子列 → 各子列投影分割 + OCR → 交织合并。
+
+        Args:
+            col_gray: 列灰度图（局部坐标）
+            col_image: 列彩色图（局部坐标，用于 OCR）
+            regions: 投影分割区域（局部坐标）
+            jiazhu_ranges: 夹注区域索引范围 [(start, end), ...]，inclusive
+            col_top: 列顶部 y（全图坐标）
+            col_bottom: 列底部 y（全图坐标）
+            expected_chars: 每列预期字符数
+            theoretical_char_h: 正文理论字高
+            y_offset: 局部坐标到全图坐标的 y 偏移
+            col_width: 列宽度（像素）
+
+        Returns:
+            (cells, ocr_text, jiazhu_info):
+                cells: 合并后的 cell 列表
+                ocr_text: 拼接的 OCR 文字
+                jiazhu_info: 夹注区域信息列表（含 split_x）
+        """
+        segments = self._segment_column(regions, jiazhu_ranges)
+        final_cells: list[dict] = []
+        all_ocr_text: list[str] = []
+        slot_idx = 0
+        jiazhu_info: list[dict] = []
+
+        for seg_type, region_indices in segments:
+            seg_regions = [regions[i] for i in region_indices]
+
+            if seg_type == "normal":
+                # ── 正文段 ──
+                # 裁剪段区域的图像做 OCR
+                seg_y_top = seg_regions[0][0]
+                seg_y_bot = seg_regions[-1][1]
+                seg_image = col_image[seg_y_top:seg_y_bot, :]
+                seg_text, seg_words = self._ocr_column_words(
+                    seg_image, y_offset + seg_y_top)
+
+                all_ocr_text.append(seg_text)
+
+                # 逐区域匹配 OCR 文字
+                # 将 seg_words 按 center_y 分配给最近的 region
+                char_list = ([w.text for w in seg_words] if seg_words
+                             else list(seg_text))
+                char_idx = 0
+
+                for r_top, r_bot in seg_regions:
+                    text_char = (char_list[char_idx]
+                                 if char_idx < len(char_list) else None)
+                    if text_char is not None:
+                        char_idx += 1
+
+                    final_cells.append({
+                        "type": "char" if text_char else "empty",
+                        "index": slot_idx,
+                        "y_top": round(float(r_top + y_offset), 2),
+                        "y_bottom": round(float(r_bot + y_offset), 2),
+                        "text": text_char,
+                        "confidence": 1.0 if text_char else 0.0,
+                    })
+                    slot_idx += 1
+
+            else:
+                # ── 夹注段 ──
+                jz_y_top = seg_regions[0][0]
+                jz_y_bot = seg_regions[-1][1]
+
+                left_sub, right_sub, split_x = self._split_jiazhu_subcols(
+                    col_gray, jz_y_top, jz_y_bot, col_width)
+
+                # 记录夹注区域信息（含 split_x）
+                jiazhu_info.append({
+                    "region_start": region_indices[0],
+                    "region_end": region_indices[-1],
+                    "y_top": int(y_offset + jz_y_top),
+                    "y_bottom": int(y_offset + jz_y_bot),
+                    "split_x": int(split_x),
+                })
+
+                # 夹注字高约为正文的 60-70%
+                jiazhu_char_h = theoretical_char_h * 0.65
+
+                # 右子列（sub_col=1，先读）
+                right_cells = self._ocr_subcol(
+                    right_sub, col_image[jz_y_top:jz_y_bot, split_x:],
+                    jiazhu_char_h, y_offset + jz_y_top)
+
+                # 左子列（sub_col=2，后读）
+                left_cells = self._ocr_subcol(
+                    left_sub, col_image[jz_y_top:jz_y_bot, :split_x],
+                    jiazhu_char_h, y_offset + jz_y_top)
+
+                all_ocr_text.append(
+                    "".join(c.get("text", "") or "" for c in right_cells))
+                all_ocr_text.append(
+                    "".join(c.get("text", "") or "" for c in left_cells))
+
+                # 按行交织合并：同一 index 的右(sub_col=1)和左(sub_col=2)
+                n_rows = max(len(right_cells), len(left_cells))
+                for i in range(n_rows):
+                    idx = slot_idx + i
+                    if i < len(right_cells):
+                        cell = right_cells[i]
+                        cell.update(type="jiazhu", index=idx, sub_col=1)
+                        final_cells.append(cell)
+                    if i < len(left_cells):
+                        cell = left_cells[i]
+                        cell.update(type="jiazhu", index=idx, sub_col=2)
+                        final_cells.append(cell)
+                slot_idx += n_rows
+
+        # 添加 margin（首尾与 col_top/col_bottom 的间隙）
+        col_height = col_bottom - col_top
+        char_h = col_height / expected_chars if expected_chars > 0 else theoretical_char_h
+        margin_max = char_h * self.MARGIN_MAX_RATIO
+
+        if final_cells:
+            first_top = final_cells[0]["y_top"]
+            last_bot = final_cells[-1]["y_bottom"]
+
+            top_gap = first_top - col_top
+            if top_gap > 1:
+                if top_gap <= margin_max:
+                    final_cells.insert(0, {
+                        "type": "margin",
+                        "y_top": round(col_top, 2),
+                        "y_bottom": round(first_top, 2),
+                    })
+                else:
+                    final_cells[0]["y_top"] = round(col_top, 2)
+
+            bot_gap = col_bottom - last_bot
+            if bot_gap > 1:
+                if bot_gap <= margin_max:
+                    final_cells.append({
+                        "type": "margin",
+                        "y_top": round(last_bot, 2),
+                        "y_bottom": round(col_bottom, 2),
+                    })
+                else:
+                    final_cells[-1]["y_bottom"] = round(col_bottom, 2)
+
+        ocr_text = "".join(all_ocr_text)
+        return final_cells, ocr_text, jiazhu_info
+
+    def _ocr_subcol(
+        self,
+        sub_gray: np.ndarray,
+        sub_image: np.ndarray,
+        jiazhu_char_h: float,
+        y_offset: float,
+    ) -> list[dict]:
+        """对单个夹注子列做投影分割 + OCR + 逐区域匹配。
+
+        Args:
+            sub_gray: 子列灰度图
+            sub_image: 子列彩色图（用于 OCR）
+            jiazhu_char_h: 夹注理论字高
+            y_offset: 子列顶部在全图中的 y 坐标
+
+        Returns:
+            cell 列表（无 index，由调用方设置）
+        """
+        if sub_gray.shape[0] < 5 or sub_gray.shape[1] < 5:
+            return []
+
+        # 投影分割
+        sub_regions = self._projection_segment(sub_gray, jiazhu_char_h)
+        if not sub_regions:
+            return []
+
+        # OCR
+        sub_text, sub_words = self._ocr_column_words(sub_image, y_offset)
+
+        # 逐区域匹配
+        char_list = ([w.text for w in sub_words] if sub_words
+                     else list(sub_text))
+        char_idx = 0
+        cells: list[dict] = []
+
+        for r_top, r_bot in sub_regions:
+            text_char = (char_list[char_idx]
+                         if char_idx < len(char_list) else None)
+            if text_char is not None:
+                char_idx += 1
+
+            cells.append({
+                "type": "char" if text_char else "empty",
+                "y_top": round(float(r_top + y_offset), 2),
+                "y_bottom": round(float(r_bot + y_offset), 2),
+                "text": text_char,
+                "confidence": 1.0 if text_char else 0.0,
+            })
+
+        return cells
 
     # ─── 网格构建 ──────────────────────────────────────────
 

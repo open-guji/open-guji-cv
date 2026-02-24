@@ -389,85 +389,20 @@ class GujiPipeline:
     def _draw_char_grid(self, image: np.ndarray, result: dict) -> np.ndarray:
         """在图像上绘制字符网格可视化。
 
-        三种颜色：
+        四种颜色：
         - 绿色: char（有文字的字符格）
+        - 橙色: jiazhu（夹注字符格）
         - 灰色: empty（空白字符格）
         - 蓝色: margin（边距格，不占字符数）
 
-        char/empty 格子右上角标注索引号（1-21）。
+        char/empty/jiazhu 格子右上角标注索引号。
         """
         if len(image.shape) == 2:
             vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         else:
             vis = image.copy()
 
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.35
-        font_thickness = 1
-
-        # 第一遍：画格子分隔线
-        for col in result["columns"]:
-            left_x = int(col["left_x"])
-            right_x = int(col["right_x"])
-
-            # 列的左右竖线（每列画一次）
-            cells = col["cells"]
-            if cells:
-                col_y_top = int(cells[0]["y_top"])
-                col_y_bot = int(cells[-1]["y_bottom"])
-                cv2.line(vis, (left_x, col_y_top), (left_x, col_y_bot), (0, 200, 0), 1)
-                cv2.line(vis, (right_x, col_y_top), (right_x, col_y_bot), (0, 200, 0), 1)
-
-            for cell in cells:
-                y_top = int(cell["y_top"])
-                y_bottom = int(cell["y_bottom"])
-                cell_type = cell.get("type", "char")
-
-                if cell_type == "margin":
-                    color = (200, 150, 0)
-                elif cell_type == "empty":
-                    color = (180, 180, 180)
-                else:
-                    color = (0, 200, 0)
-
-                # 每个格子的顶线（粗线，作为分隔标记）和底线
-                cv2.line(vis, (left_x, y_top), (right_x, y_top), color, 2)
-                cv2.line(vis, (left_x, y_bottom), (right_x, y_bottom), color, 1)
-
-        # 第二遍：画所有标号（确保在框线之上）
-        for col in result["columns"]:
-            right_x = int(col["right_x"])
-
-            for cell in col["cells"]:
-                y_bottom = int(cell["y_bottom"])
-                cell_type = cell.get("type", "char")
-
-                if cell_type in ("char", "empty") and "index" in cell:
-                    label = str(cell["index"] + 1)
-                    label_color = (0, 200, 0) if cell_type == "char" else (180, 180, 180)
-                    (tw, th), _ = cv2.getTextSize(label, font, font_scale, font_thickness)
-                    tx = right_x - tw - 1
-                    ty = y_bottom - 2
-                    bg_top = y_bottom - th - 4
-                    cv2.rectangle(vis, (tx - 1, bg_top), (right_x, y_bottom),
-                                  (255, 255, 255), -1)
-                    cv2.putText(vis, label, (tx, ty), font, font_scale,
-                                label_color, font_thickness, cv2.LINE_AA)
-
-        # 第三遍：标注夹注区域（橙色边框 + "JZ" 标签）
-        for col in result["columns"]:
-            if col.get("has_jiazhu") and col.get("jiazhu_ranges"):
-                lx = int(col["left_x"])
-                rx = int(col["right_x"])
-                for jz in col["jiazhu_ranges"]:
-                    jz_top = int(jz["y_top"])
-                    jz_bot = int(jz["y_bottom"])
-                    cv2.rectangle(vis, (lx - 1, jz_top),
-                                  (rx + 1, jz_bot),
-                                  (0, 165, 255), 2)
-                    cv2.putText(vis, "JZ", (lx + 2, jz_top + 14),
-                                font, 0.45, (0, 165, 255), 1, cv2.LINE_AA)
-
+        self._draw_char_grid_cells(vis, result)
         return vis
 
     def _detect_layout(self, image: np.ndarray,
@@ -759,6 +694,14 @@ class GujiPipeline:
                 if cell["type"] == "margin":
                     continue
 
+                cell_type = cell["type"]
+                if cell_type == "jiazhu":
+                    out_type = "jiazhu"
+                elif cell_type == "char":
+                    out_type = "normal"
+                else:
+                    out_type = "empty"
+
                 ch = {
                     "char": cell.get("text") or "",
                     "row_index": cell["index"],
@@ -767,10 +710,12 @@ class GujiPipeline:
                         "y_top": cell["y_top"],
                         "y_bottom": cell["y_bottom"],
                     },
-                    "type": "normal" if cell["type"] == "char" else "empty",
+                    "type": out_type,
                 }
-                if cell["type"] == "char" and cell.get("confidence") is not None:
+                if cell_type in ("char", "jiazhu") and cell.get("confidence") is not None:
                     ch["confidence"] = cell["confidence"]
+                if cell.get("sub_col") is not None:
+                    ch["sub_col"] = cell["sub_col"]
 
                 characters.append(ch)
 
@@ -821,15 +766,38 @@ class GujiPipeline:
 
     def _draw_char_grid_on(self, vis: np.ndarray, result: dict) -> np.ndarray:
         """在已有彩色图像上绘制字符网格（不做灰度转换）。"""
+        self._draw_char_grid_cells(vis, result)
+        return vis
+
+    @staticmethod
+    def _draw_char_grid_cells(vis: np.ndarray, result: dict) -> None:
+        """在彩色图像上绘制字符网格格子、标号和夹注标注。
+
+        四种颜色：
+        - 绿色 (0,200,0): char
+        - 橙色 (0,165,255): jiazhu
+        - 灰色 (180,180,180): empty
+        - 青蓝 (200,150,0): margin
+        """
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.35
         font_thickness = 1
 
+        # 第一遍：画格子分隔线
         for col in result["columns"]:
             left_x = int(col["left_x"])
             right_x = int(col["right_x"])
 
-            for cell in col["cells"]:
+            cells = col["cells"]
+            if cells:
+                col_y_top = int(cells[0]["y_top"])
+                col_y_bot = int(cells[-1]["y_bottom"])
+                cv2.line(vis, (left_x, col_y_top), (left_x, col_y_bot),
+                         (0, 200, 0), 1)
+                cv2.line(vis, (right_x, col_y_top), (right_x, col_y_bot),
+                         (0, 200, 0), 1)
+
+            for cell in cells:
                 y_top = int(cell["y_top"])
                 y_bottom = int(cell["y_bottom"])
                 cell_type = cell.get("type", "char")
@@ -838,13 +806,16 @@ class GujiPipeline:
                     color = (200, 150, 0)
                 elif cell_type == "empty":
                     color = (180, 180, 180)
+                elif cell_type == "jiazhu":
+                    color = (0, 165, 255)  # 橙色
                 else:
                     color = (0, 200, 0)
 
                 cv2.line(vis, (left_x, y_top), (right_x, y_top), color, 2)
-                cv2.line(vis, (left_x, y_bottom), (right_x, y_bottom), color, 1)
+                cv2.line(vis, (left_x, y_bottom), (right_x, y_bottom),
+                         color, 1)
 
-        # 标号
+        # 第二遍：画标号
         for col in result["columns"]:
             right_x = int(col["right_x"])
 
@@ -852,10 +823,22 @@ class GujiPipeline:
                 y_bottom = int(cell["y_bottom"])
                 cell_type = cell.get("type", "char")
 
-                if cell_type in ("char", "empty") and "index" in cell:
-                    label = str(cell["index"] + 1)
-                    label_color = (0, 200, 0) if cell_type == "char" else (180, 180, 180)
-                    (tw, th), _ = cv2.getTextSize(label, font, font_scale, font_thickness)
+                if cell_type in ("char", "empty", "jiazhu") and "index" in cell:
+                    sub_col = cell.get("sub_col")
+                    if sub_col is not None:
+                        label = f"{cell['index'] + 1}.{sub_col}"
+                    else:
+                        label = str(cell["index"] + 1)
+
+                    if cell_type == "jiazhu":
+                        label_color = (0, 165, 255)
+                    elif cell_type == "char":
+                        label_color = (0, 200, 0)
+                    else:
+                        label_color = (180, 180, 180)
+
+                    (tw, th), _ = cv2.getTextSize(
+                        label, font, font_scale, font_thickness)
                     tx = right_x - tw - 1
                     ty = y_bottom - 2
                     bg_top = y_bottom - th - 4
@@ -864,7 +847,7 @@ class GujiPipeline:
                     cv2.putText(vis, label, (tx, ty), font, font_scale,
                                 label_color, font_thickness, cv2.LINE_AA)
 
-        # 第三遍：标注夹注区域（橙色边框 + "JZ" 标签）
+        # 第三遍：标注夹注区域（橙色边框 + 分割线 + "JZ" 标签）
         for col in result["columns"]:
             if col.get("has_jiazhu") and col.get("jiazhu_ranges"):
                 lx = int(col["left_x"])
@@ -878,7 +861,13 @@ class GujiPipeline:
                     cv2.putText(vis, "JZ", (lx + 2, jz_top + 14),
                                 font, 0.45, (0, 165, 255), 1, cv2.LINE_AA)
 
-        return vis
+                    # 画分割线（虚线效果：短线段）
+                    if "split_x" in jz:
+                        sx = lx + int(jz["split_x"])
+                        for y in range(jz_top, jz_bot, 6):
+                            y_end = min(y + 3, jz_bot)
+                            cv2.line(vis, (sx, y), (sx, y_end),
+                                     (0, 165, 255), 1)
 
     def _write_combined_result(self, out_dir: Path,
                                book_name: str,

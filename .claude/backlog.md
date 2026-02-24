@@ -1,29 +1,14 @@
 # Backlog
 
-> 状态：低优先级 (2026-02-22)
+> 状态：低优先级 (2026-02-23)
 
-## 集成与测试
+## OCR 精度优化
 
-- [ ] 修改 `CharGridDetector.detect()` 集成夹注检测流程
-- [ ] book6 全部 10 张图片端到端测试
-- [ ] book1-book5 回归测试（无夹注，不应误判）
-- [ ] 输出 JSON 用 guji_layout `from_ocr_result()` 验证可解析
+- [ ] 针对古籍字体微调 PaddleOCR 参数（text_det_thresh、text_det_box_thresh）
+- [ ] 评估是否需要对特定字体训练自定义识别模型
+- [ ] 处理模糊、墨迹扩散等低质量图片的特殊策略
 
-### 输出格式要求
+## 更多古籍适配
 
-cell type `"jiazhu"` 示例：
-```json
-{"type": "jiazhu", "index": 8, "sub_col": 1, "y_top": 490, "y_bottom": 530, "text": "舊", "confidence": 0.85}
-```
-
-列级别增加：`"has_jiazhu": true`
-
----
-
-## 全册运行
-
-（等夹注功能完成后再考虑恢复）
-
-- [ ] 对《欽定四庫全書簡明目錄》vol01 图片运行完整 pipeline
-- [ ] OCR 结果存放到 `03_信息提取/ocr/vol01/`
-- [ ] 跳过前两页（书名页、作者信息页）
+- [ ] 支持更多版式类型（眉批、侧批等）
+- [ ] 支持彩色古籍图片（朱批、彩色印章）
