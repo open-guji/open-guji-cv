@@ -37,8 +37,11 @@ class CharGridDetector:
     CHAR_HEIGHT_MIN_RATIO = 0.7
     CHAR_HEIGHT_MAX_RATIO = 1.3
 
+    # 列宽过滤
+    MIN_COL_WIDTH = 30             # 列像素宽度低于此值时视为无效列
+
     # 夹注检测参数
-    MIN_JIAZHU_ROWS = 3            # 最少连续双峰区域数才认定为夹注段
+    MIN_JIAZHU_ROWS = 2            # 最少连续双峰区域数才认定为夹注段
     JIAZHU_GAP_THRESHOLD = 0.5     # 谷底均值 < min(左,右)均值 × 此比率视为有间隙
     JIAZHU_WINDOW_SIZE = 5         # 滑动窗口大小（区域数）
 
@@ -79,7 +82,9 @@ class CharGridDetector:
             y1 = max(0, int(col_top))
             y2 = min(h, int(col_bottom))
 
-            if x2 <= x1 or y2 <= y1:
+            if x2 <= x1 or y2 <= y1 or (x2 - x1) < self.MIN_COL_WIDTH:
+                print(f"  [WARN] col {col_idx}: img_w={w}, x1={x1}, x2={x2}, "
+                      f"left_x={left_x:.0f}, right_x={right_x:.0f} -> empty_column")
                 result_columns.append(self._empty_column(
                     col_idx, left_x, right_x, col_top, col_bottom, expected_chars))
                 continue
@@ -113,7 +118,7 @@ class CharGridDetector:
                     "jiazhu_ranges": jiazhu_info,
                 }
             else:
-                # ── 普通列：现有逻辑不变 ──
+                # ── 普通列 ──
                 # 局部坐标 → 全图坐标
                 regions = [(int(y1 + r_top), int(y1 + r_bot))
                            for r_top, r_bot in regions]
@@ -134,9 +139,9 @@ class CharGridDetector:
                     "index": col_idx,
                     "left_x": left_x,
                     "right_x": right_x,
-                    "ocr_text": ocr_text,
-                    "cells": cells,
-                }
+                        "ocr_text": ocr_text,
+                        "cells": cells,
+                    }
 
             result_columns.append(col_result)
 
@@ -287,7 +292,7 @@ class CharGridDetector:
             background = float(np.median(v_clean[mid_s:mid_e]))
         else:
             background = global_mean
-        tail_thresh = max(background * 3, img_height * 0.15)
+        tail_thresh = max(background * 3, min(img_height * 0.15, eff_w * 1.0))
 
         # 从左边缘向内扫描并抑制
         i = 0
@@ -313,10 +318,9 @@ class CharGridDetector:
         working = v_clean.copy()
         mask_radius = max(5, eff_w // 10)
         
-        # 限制谷底搜索范围为正中间 20%，因为夹注的真实间隙必须在列的正中间
-        # 如果范围太大，会把列的左右边缘空白误当成谷底
+        # 搜索范围为中间 40%，容纳版面偏差和不等宽夹注
         mid = eff_w // 2
-        search_radius = max(5, eff_w // 10)
+        search_radius = max(10, eff_w // 5)
         search_start = max(0, mid - search_radius)
         search_end = min(eff_w, mid + search_radius)
 
@@ -348,9 +352,9 @@ class CharGridDetector:
                 break
 
             # 两侧都需有显著墨迹（排除单侧文字 / 空白区边缘）
-            # 夹注要求左右两边都是密集的文字，且密度应该相似，所以平衡阈值提高到 0.45
-            if (left_mean >= side_max * 0.45
-                    and right_mean >= side_max * 0.45):
+            # 允许两侧密度差 2.9 倍，适应夹注中书名/注释字数不对称
+            if (left_mean >= side_max * 0.35
+                    and right_mean >= side_max * 0.35):
                 side_min = min(left_mean, right_mean)
                 # JIAZHU_GAP_THRESHOLD 为类属性，缺省改低（更严）
                 gap_thresh = min(0.3, self.JIAZHU_GAP_THRESHOLD) 
@@ -358,8 +362,11 @@ class CharGridDetector:
                     # 峰宽度检查：两边应该都有足够宽度的墨迹
                     left_active = int(np.sum(left_zone > min_ink))
                     right_active = int(np.sum(right_zone > min_ink))
+                    # 谷底位置检查：必须在有效宽度的 30%-70% 之间
+                    valley_ratio = valley_x / eff_w if eff_w > 0 else 0.5
                     if (left_active >= min_active
-                            and right_active >= min_active):
+                            and right_active >= min_active
+                            and 0.30 <= valley_ratio <= 0.70):
                         return True
 
             # 当前谷底不满足条件，遮蔽后重试下一个
@@ -1137,6 +1144,29 @@ class CharGridDetector:
         for c in cells:
             if c["y_bottom"] < c["y_top"]:
                 c["y_bottom"] = c["y_top"]
+
+    @staticmethod
+    def _has_significant_overlap(
+        cells: list[dict],
+        theoretical_char_h: float,
+    ) -> bool:
+        """检查 char 类型 cells 是否有显著 y 坐标重叠。
+
+        若相邻 char 的 y 坐标重叠超过理论字高的 30%，
+        说明该列可能是夹注漏检，应回退到夹注处理路径。
+        """
+        chars = sorted(
+            [c for c in cells if c["type"] == "char"],
+            key=lambda c: c["y_top"],
+        )
+        if len(chars) < 2:
+            return False
+        threshold = theoretical_char_h * 0.3
+        for i in range(len(chars) - 1):
+            overlap = chars[i]["y_bottom"] - chars[i + 1]["y_top"]
+            if overlap > threshold:
+                return True
+        return False
 
     def _estimate_char_height_from_regions(
         self,
