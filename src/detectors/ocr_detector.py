@@ -45,6 +45,20 @@ class OcrDetector:
         """延迟加载 PaddleOCR 模型。"""
         if self._ocr is not None:
             return
+        # Windows + paddlepaddle-gpu 需要在 import paddle 前注册 nvidia DLL 目录
+        import os, sys
+        if sys.platform == "win32":
+            import site as _site
+            sp = _site.getsitepackages()
+            for sp_dir in sp:
+                nv = os.path.join(sp_dir, "nvidia")
+                if os.path.isdir(nv):
+                    for sub in os.listdir(nv):
+                        for d in ("bin", "lib"):
+                            dp = os.path.join(nv, sub, d)
+                            if os.path.isdir(dp):
+                                os.add_dll_directory(dp)
+                    break
         from paddleocr import PaddleOCR
         self._ocr = PaddleOCR(
             use_doc_orientation_classify=False,
@@ -53,6 +67,7 @@ class OcrDetector:
             lang="ch",
             text_det_thresh=0.3,
             text_det_box_thresh=0.5,
+            device="gpu",
         )
 
     def detect_chars(self, image: np.ndarray) -> list[CharBox]:
