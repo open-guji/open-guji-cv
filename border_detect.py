@@ -404,6 +404,35 @@ def detect_borders(lsd_data, img_width, img_height,
     inner_left_slope = _get_inner_slope(left_pair, 0.0)
     inner_right_slope = _get_inner_slope(right_pair, 0.0)
 
+    # ── Sanity check: 上下边框不应重叠 ──
+    if inner_bottom - inner_top < img_height * 0.3:
+        print(f"  [WARN] 上下边框异常: top={inner_top:.1f}, bottom={inner_bottom:.1f}, "
+              f"差={inner_bottom - inner_top:.1f} < {img_height * 0.3:.1f}")
+        _top_cand = [c for c in h_clusters
+                     if c["intercept"] < img_height * 0.15
+                     and c["total_length"] >= h_span * 0.05]
+        _bot_cand = [c for c in h_clusters
+                     if c["intercept"] > img_height * 0.85
+                     and c["total_length"] >= h_span * 0.05]
+
+        if _top_cand:
+            best_top = max(_top_cand, key=lambda c: c["total_length"])
+            inner_top = best_top["intercept"]
+            inner_top_slope = best_top["slope"]
+            if top_pair["outer"] is None or top_pair["outer"]["intercept"] > img_height * 0.5:
+                top_pair = {"outer": best_top, "inner": None}
+                frame_top = best_top["intercept"]
+
+        if _bot_cand:
+            best_bot = max(_bot_cand, key=lambda c: c["total_length"])
+            inner_bottom = best_bot["intercept"]
+            inner_bottom_slope = best_bot["slope"]
+            if bottom_pair["outer"] is None or bottom_pair["outer"]["intercept"] < img_height * 0.5:
+                bottom_pair = {"outer": best_bot, "inner": None}
+                frame_bottom = best_bot["intercept"]
+
+        print(f"  [WARN] 修正后: top={inner_top:.1f}, bottom={inner_bottom:.1f}")
+
     # ── 第三步：识别内部列间界栏 ──
     print(f"\n  --- 列间界栏检测 ---")
     border_intercepts = set()
