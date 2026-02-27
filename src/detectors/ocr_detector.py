@@ -64,7 +64,7 @@ class OcrDetector:
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
-            lang="ch",
+            lang="chinese_cht",
             text_det_thresh=0.3,
             text_det_box_thresh=0.5,
             device="gpu",

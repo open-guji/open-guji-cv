@@ -545,7 +545,7 @@ class CharGridDetector:
             best = max(boxes, key=lambda b: b.confidence)
             return best.text, []
 
-        # 转换坐标到全图坐标
+        # 转换坐标到全图坐标，同时做简→繁转换
         global_words = []
         for w in words:
             global_words.append(WordBox(
