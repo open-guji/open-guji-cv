@@ -67,6 +67,7 @@ class BorderDetector:
         max_gap = self.max_gap
         min_coverage = self.min_coverage_ratio
         layer_max_dist = self.layer_max_dist
+        expected_cols = None
 
         if profile is not None:
             # 磨损严重时放宽容差
@@ -74,12 +75,14 @@ class BorderDetector:
                 pos_tol *= 1.3
                 max_gap *= 1.5
                 min_coverage *= 0.7
+            expected_cols = profile.lines_per_page
 
         result = _detect_borders_raw(
             lsd_data, img_width, img_height,
             pos_tol=pos_tol, max_gap=max_gap,
             min_coverage_ratio=min_coverage,
             layer_max_dist=layer_max_dist,
+            expected_cols=expected_cols,
         )
 
         # 如果有先验行数信息，验证检测到的列数
