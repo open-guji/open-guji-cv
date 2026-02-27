@@ -264,6 +264,31 @@ def _cluster_pos_at(cluster, coord):
     return cluster["slope"] * coord + cluster["intercept"]
 
 
+# ─── 结构线判定 ──────────────────────────────────────────────────
+
+
+def _is_structural_line(c, frame_span, min_coverage_ratio):
+    """判断 cluster 是否为结构线（边框或界栏），而非字符投影。
+
+    通道1：传统覆盖率（总长度 / 跨度 >= min_coverage_ratio）
+    通道2：高 merge_ratio（多条 LSD 线段合并为少数连续段）
+        真正的边框线即使磨损，其 LSD 线段也会密集合并（merge_ratio 高），
+        而字符笔画投影是零散独立的短段（merge_ratio 低）。
+    """
+    coverage = c["total_length"] / frame_span if frame_span > 0 else 0
+    seg_count = len(c["segments"])
+    merge_ratio = c["line_count"] / seg_count if seg_count > 0 else 0
+    max_seg = max((e - s) for s, e in c["segments"]) if c["segments"] else 0
+
+    # 通道1：传统覆盖率
+    if coverage >= min_coverage_ratio:
+        return True
+    # 通道2：高 merge_ratio = 真正的独立直线（即使覆盖率低）
+    if merge_ratio >= 5 and max_seg >= 100 and c["line_count"] >= 5:
+        return True
+    return False
+
+
 # ─── 双层边框检测 ─────────────────────────────────────────────────
 
 
@@ -275,7 +300,7 @@ def _find_border_pair(clusters, side, frame_span, img_dim,
     内层必须满足：与外层距离 <= layer_max_dist 且 slope 差 <= slope_max_diff。
     """
     candidates = [c for c in clusters
-                  if c["total_length"] >= frame_span * min_coverage_ratio]
+                  if _is_structural_line(c, frame_span, min_coverage_ratio)]
 
     if not candidates:
         return {"outer": None, "inner": None}
@@ -345,12 +370,214 @@ def _find_border_pair(clusters, side, frame_span, img_dim,
     return {"outer": outer, "inner": inner}
 
 
+# ─── 缺失边框恢复 ────────────────────────────────────────────────
+
+
+def _try_recover_faint_border(v_clusters, columns, column_dividers,
+                               inner_left, inner_right,
+                               inner_left_slope, inner_right_slope,
+                               left_pair, right_pair,
+                               img_width, inner_height, min_coverage_ratio,
+                               expected_cols):
+    """列数不足时，尝试在左/右空白区域恢复模糊的边框线。
+
+    筒子页右页 → 右边可能有空白（需向右寻找边框）
+    筒子页左页 → 左边可能有空白（需向左寻找边框）
+
+    策略：
+    1. 计算现有列的平均宽度
+    2. 分别在左侧（0 ~ inner_left）和右侧（inner_right ~ img_width）
+       搜索结构线候选
+    3. 选择使新列宽度最接近平均宽度的候选
+    4. 将原边框降级为列间界栏，用候选线作为新边框
+    """
+    if not columns:
+        return None
+
+    missing = expected_cols - len(columns)
+    if missing <= 0:
+        return None
+
+    widths = [col["width"] for col in columns]
+    mean_width = float(np.mean(widths))
+
+    # 收集已用于边框的 intercept，避免重复
+    border_intercepts = set()
+    for pair in [left_pair, right_pair]:
+        for key in ["outer", "inner"]:
+            if pair[key] is not None:
+                border_intercepts.add(pair[key]["intercept"])
+
+    best_side = None  # "left" or "right"
+    best_candidate = None
+    best_width_diff = float("inf")
+
+    # ── 右侧搜索：inner_right 到 img_width ──
+    for vc in v_clusters:
+        intercept = vc["intercept"]
+        if intercept <= inner_right + 10:
+            continue
+        if intercept > img_width - 5:
+            continue
+        if intercept in border_intercepts:
+            continue
+        if not _is_structural_line(vc, inner_height, min_coverage_ratio):
+            continue
+        new_col_width = intercept - inner_right
+        width_diff = abs(new_col_width - mean_width)
+        if new_col_width < mean_width * 0.5 or new_col_width > mean_width * 1.5:
+            continue
+        if width_diff < best_width_diff:
+            best_width_diff = width_diff
+            best_candidate = vc
+            best_side = "right"
+
+    # ── 左侧搜索：0 到 inner_left ──
+    for vc in v_clusters:
+        intercept = vc["intercept"]
+        if intercept >= inner_left - 10:
+            continue
+        if intercept < 5:
+            continue
+        if intercept in border_intercepts:
+            continue
+        if not _is_structural_line(vc, inner_height, min_coverage_ratio):
+            continue
+        new_col_width = inner_left - intercept
+        width_diff = abs(new_col_width - mean_width)
+        if new_col_width < mean_width * 0.5 or new_col_width > mean_width * 1.5:
+            continue
+        if width_diff < best_width_diff:
+            best_width_diff = width_diff
+            best_candidate = vc
+            best_side = "left"
+
+    # ── 备选策略：均宽推断 ──
+    # 当没有结构线候选、但列宽高度一致时，用均宽推算边框位置
+    if best_candidate is None:
+        cv = float(np.std(widths) / mean_width) if mean_width > 0 else 1.0
+        if cv >= 0.10:
+            return None  # 列宽不够均匀，不适合推断
+
+        # 尝试右侧推断
+        pred_right = inner_right + mean_width
+        # 尝试左侧推断
+        pred_left = inner_left - mean_width
+
+        right_ok = 10 < pred_right < img_width - 5
+        left_ok = 5 < pred_left < img_width - 10
+
+        if right_ok and left_ok:
+            # 两侧都可能，选择空白更大的一侧
+            right_margin = img_width - inner_right
+            left_margin = inner_left
+            if right_margin >= left_margin:
+                best_side = "right"
+            else:
+                best_side = "left"
+        elif right_ok:
+            best_side = "right"
+        elif left_ok:
+            best_side = "left"
+        else:
+            return None
+
+        if best_side == "right":
+            new_intercept = pred_right
+            print(f"  [恢复] 均宽推断右边框: x≈{new_intercept:.1f}, "
+                  f"均宽={mean_width:.1f}, CV={cv:.3f}")
+        else:
+            new_intercept = pred_left
+            print(f"  [恢复] 均宽推断左边框: x≈{new_intercept:.1f}, "
+                  f"均宽={mean_width:.1f}, CV={cv:.3f}")
+
+    else:
+        seg_count = len(best_candidate["segments"])
+        merge_ratio = (best_candidate["line_count"] / seg_count
+                       if seg_count > 0 else 0)
+        coverage = best_candidate["total_length"] / inner_height if inner_height > 0 else 0
+        new_intercept = best_candidate["intercept"]
+        best_side = best_side  # already set
+
+    if best_side == "right":
+        new_col_width = new_intercept - inner_right
+        if best_candidate is not None:
+            print(f"  [恢复] 在右侧找到模糊边框: x≈{new_intercept:.1f}, "
+                  f"coverage={coverage:.1%}, merge_ratio={merge_ratio:.1f}, "
+                  f"新列宽={new_col_width:.1f} (均宽={mean_width:.1f})")
+
+        # 原来的右边框降级为列间界栏
+        old_right_cluster = right_pair.get("inner") or right_pair.get("outer")
+        if old_right_cluster is not None:
+            old_coverage = old_right_cluster["total_length"] / inner_height
+            max_seg_len = (max((e - s) for s, e in old_right_cluster["segments"])
+                          if old_right_cluster["segments"] else 0)
+            column_dividers.append({
+                **old_right_cluster,
+                "coverage": float(old_coverage),
+                "max_seg_len": float(max_seg_len),
+                "max_seg_coverage": float(max_seg_len / inner_height) if inner_height > 0 else 0,
+            })
+            column_dividers.sort(key=lambda cd: cd["intercept"])
+
+        # 更新右边框
+        right_pair = {"outer": best_candidate, "inner": None}
+        inner_right = new_intercept
+        inner_right_slope = (best_candidate["slope"] if best_candidate is not None
+                             else inner_right_slope)
+
+    else:  # left
+        new_col_width = inner_left - new_intercept
+        if best_candidate is not None:
+            print(f"  [恢复] 在左侧找到模糊边框: x≈{new_intercept:.1f}, "
+                  f"coverage={coverage:.1%}, merge_ratio={merge_ratio:.1f}, "
+                  f"新列宽={new_col_width:.1f} (均宽={mean_width:.1f})")
+
+        # 原来的左边框降级为列间界栏
+        old_left_cluster = left_pair.get("inner") or left_pair.get("outer")
+        if old_left_cluster is not None:
+            old_coverage = old_left_cluster["total_length"] / inner_height
+            max_seg_len = (max((e - s) for s, e in old_left_cluster["segments"])
+                          if old_left_cluster["segments"] else 0)
+            column_dividers.append({
+                **old_left_cluster,
+                "coverage": float(old_coverage),
+                "max_seg_len": float(max_seg_len),
+                "max_seg_coverage": float(max_seg_len / inner_height) if inner_height > 0 else 0,
+            })
+            column_dividers.sort(key=lambda cd: cd["intercept"])
+
+        # 更新左边框
+        left_pair = {"outer": best_candidate, "inner": None}
+        inner_left = new_intercept
+        inner_left_slope = (best_candidate["slope"] if best_candidate is not None
+                            else inner_left_slope)
+
+    # 重建列区域
+    div_intercepts = sorted([inner_left] +
+                            [cd["intercept"] for cd in column_dividers] +
+                            [inner_right])
+    columns = []
+    for i in range(len(div_intercepts) - 1):
+        lx = div_intercepts[i]
+        rx = div_intercepts[i + 1]
+        columns.append({
+            "index": i,
+            "left_x": float(lx),
+            "right_x": float(rx),
+            "width": float(rx - lx),
+        })
+
+    return (inner_left, inner_right, inner_left_slope, inner_right_slope,
+            left_pair, right_pair, column_dividers, columns)
+
+
 # ─── 主检测逻辑 ──────────────────────────────────────────────────
 
 
 def detect_borders(lsd_data, img_width, img_height,
                    pos_tol=15, max_gap=60, min_coverage_ratio=0.3,
-                   layer_max_dist=80):
+                   layer_max_dist=80, expected_cols=None):
     """从 LSD 数据中识别边框结构。"""
     all_lines = lsd_data["lines"]
     h_lines = [ln for ln in all_lines if ln["type"] == "horizontal"]
@@ -458,10 +685,15 @@ def detect_borders(lsd_data, img_width, img_height,
         coverage = vc["total_length"] / inner_height
         max_seg_len = max((e - s) for s, e in vc["segments"]) if vc["segments"] else 0
         max_seg_coverage = max_seg_len / inner_height
-        if coverage < 0.30 and max_seg_coverage < 0.20:
-            continue
-        if max_seg_coverage < 0.10:
-            continue
+        # 用 merge_ratio 判断是否为独立直线（磨损界栏也能通过）
+        seg_count = len(vc["segments"])
+        merge_ratio = vc["line_count"] / seg_count if seg_count > 0 else 0
+        is_structural = merge_ratio >= 5 and vc["line_count"] >= 5
+        if not is_structural:
+            if coverage < 0.30 and max_seg_coverage < 0.20:
+                continue
+            if max_seg_coverage < 0.10:
+                continue
         # 界栏的 slope 不应太大（> ~2° 就很可疑）
         if abs(vc["slope"]) > 0.04:
             continue
@@ -498,6 +730,71 @@ def detect_borders(lsd_data, img_width, img_height,
         })
 
     print(f"\n  版面共 {len(columns)} 列")
+
+    # ── 第 4.5 步：过滤因伪界栏产生的窄列 ──
+    # 如果某列宽度远小于中位列宽，说明是一条伪界栏把正常列劈成了
+    # 一个极窄列和一个稍窄列。移除对应界栏即可恢复。
+    if len(columns) >= 3:
+        widths = [col["width"] for col in columns]
+        median_w = float(np.median(widths))
+        narrow_threshold = median_w * 0.3  # 低于中位宽 30% 即为异常窄
+        narrow_cols = [col for col in columns if col["width"] < narrow_threshold]
+        if narrow_cols:
+            # 窄列是由一条伪界栏紧贴真界栏/边框产生的。
+            # 只移除窄列两侧中**较弱**的那条界栏。
+            div_map = {cd["intercept"]: cd for cd in column_dividers}
+            remove_dividers = set()
+            for nc in narrow_cols:
+                left_cd = div_map.get(nc["left_x"])
+                right_cd = div_map.get(nc["right_x"])
+                if left_cd and right_cd:
+                    # 两侧都是界栏：移除覆盖率较低的那条
+                    left_cov = left_cd.get("coverage", left_cd["total_length"])
+                    right_cov = right_cd.get("coverage", right_cd["total_length"])
+                    if left_cov <= right_cov:
+                        remove_dividers.add(nc["left_x"])
+                    else:
+                        remove_dividers.add(nc["right_x"])
+                elif left_cd:
+                    remove_dividers.add(nc["left_x"])
+                elif right_cd:
+                    remove_dividers.add(nc["right_x"])
+                # 两侧都不是界栏（即都是边框），不处理
+            if remove_dividers:
+                removed_count = len(remove_dividers)
+                column_dividers = [cd for cd in column_dividers
+                                   if cd["intercept"] not in remove_dividers]
+                # 重新构建列
+                div_intercepts = sorted(
+                    [inner_left] +
+                    [cd["intercept"] for cd in column_dividers] +
+                    [inner_right])
+                columns = []
+                for i in range(len(div_intercepts) - 1):
+                    lx = div_intercepts[i]
+                    rx = div_intercepts[i + 1]
+                    columns.append({
+                        "index": i,
+                        "left_x": float(lx),
+                        "right_x": float(rx),
+                        "width": float(rx - lx),
+                    })
+                print(f"  [窄列过滤] 移除 {removed_count} 条伪界栏 "
+                      f"(threshold={narrow_threshold:.0f}px)，"
+                      f"修正为 {len(columns)} 列")
+
+    # ── 第五步：列数不足时尝试恢复缺失边框 ──
+    if expected_cols is not None and len(columns) < expected_cols:
+        recovered = _try_recover_faint_border(
+            v_clusters, columns, column_dividers,
+            inner_left, inner_right, inner_left_slope, inner_right_slope,
+            left_pair, right_pair,
+            img_width, inner_height, min_coverage_ratio,
+            expected_cols)
+        if recovered is not None:
+            (inner_left, inner_right, inner_left_slope, inner_right_slope,
+             left_pair, right_pair, column_dividers, columns) = recovered
+            print(f"  [恢复] 修正后版面共 {len(columns)} 列")
 
     # ── 组装结果 ──
     result = {
