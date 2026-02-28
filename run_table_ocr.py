@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--det-box-thresh", type=float, default=None, help="文本检测框阈值")
     args = parser.parse_args()
 
-    from src.detectors.table_detector import (
+    from open_guji_cv.detectors.table_detector import (
         TableDetector, YEAR_CHARS, WEEKDAY_CHARS, ASTRO_CHARS,
     )
 
