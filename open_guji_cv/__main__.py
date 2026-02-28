@@ -112,13 +112,19 @@ def cmd_extract(args):
     book_name = path.name
     steps = args.steps
 
+    step_labels = {"layout": "版面检测", "grid": "字符网格+OCR", "all": "版面检测 + 字符网格+OCR"}
+    print(f"{'=' * 60}")
+    print(f"extract: {book_name}  [{step_labels[steps]}]")
+    print(f"{'=' * 60}")
+
     if steps in ("layout", "all"):
-        print(f"[extract] Phase 2 版面检测 ...")
         pipeline.detect_layout_book(book_name, profile=profile, name_filter=name_filter)
 
     if steps in ("grid", "all"):
-        print(f"[extract] Phase 3 字符网格检测 ...")
         pipeline.detect_char_grid(book_name, profile=profile, name_filter=name_filter)
+
+    print(f"\n{'=' * 60}")
+    print(f"extract 完成！")
 
 
 def cmd_run(args):
