@@ -333,31 +333,32 @@ class GujiPipeline:
             print(f"未找到 layout JSON: {layout_dir}")
             return
 
-        print(f"\nPhase 3 字符网格检测: {len(layout_files)} 张图片")
+        total = len(layout_files)
+        print(f"\nPhase 3 字符网格检测: 共 {total} 张图片（含 OCR，耗时较长）")
+
+        report_every = max(1, total // 10)  # 每 10% 汇总一次
+        done = 0
 
         for layout_path in layout_files:
             # 推断图片文件名: 1_layout.json → 1.png
             stem = layout_path.stem.replace("_layout", "")
             img_path = binarize_dir / f"{stem}.png"
             if not img_path.exists():
-                # 尝试 jpg
                 img_path = binarize_dir / f"{stem}.jpg"
             if not img_path.exists():
                 print(f"  跳过 {stem}: 找不到对应图片")
                 continue
 
-            print(f"  处理 {stem}...", end=" ", flush=True)
-
             # 加载图片和 layout
             image = imread(str(img_path))
             if image is None:
-                print("读取失败")
+                print(f"  [{done}/{total}] {stem}: 读取失败")
                 continue
 
             with open(layout_path, "r", encoding="utf-8") as f:
                 layout = json.load(f)
 
-            # 执行字符网格检测
+            # 执行字符网格检测（OCR 在此触发，是主要耗时点）
             result = char_grid_detector.detect(image, layout, profile)
 
             # 保存 JSON
@@ -378,13 +379,14 @@ class GujiPipeline:
                 sum(1 for c in col["cells"] if c["type"] == "empty")
                 for col in result["columns"]
             )
-            n_margin = sum(
-                sum(1 for c in col["cells"] if c["type"] == "margin")
-                for col in result["columns"]
-            )
-            print(f"检测到 {n_chars} 字, {n_empty} 空格, {n_margin} 边距")
+            done += 1
 
-        print(f"Phase 3 完成！输出: {char_grid_dir}")
+            # 每张都打一行（图片少时）；图片多时只在 10% 节点打
+            if total <= 20 or done % report_every == 0 or done == total:
+                pct = done * 100 // total
+                print(f"  [{done}/{total}] {pct:3d}%  {stem} → {n_chars} 字 / {n_empty} 空")
+
+        print(f"Phase 3 完成！共处理 {done} 张，输出: {char_grid_dir}")
 
     def _draw_char_grid(self, image: np.ndarray, result: dict) -> np.ndarray:
         """在图像上绘制字符网格可视化。
@@ -454,15 +456,18 @@ class GujiPipeline:
             print(f"未找到图片: {binarize_dir}")
             return
 
-        print(f"\nPhase 2 版面检测: {len(image_paths)} 张图片")
+        total = len(image_paths)
+        print(f"\nPhase 2 版面检测: 共 {total} 张图片")
+
+        report_every = max(1, total // 10)  # 每 10% 汇总一次
+        done = 0
 
         for img_path in image_paths:
             stem = img_path.stem
-            print(f"  处理 {stem}...", end=" ", flush=True)
 
             image = imread(str(img_path))
             if image is None:
-                print("读取失败")
+                print(f"  [{done}/{total}] {stem}: 读取失败")
                 continue
 
             layout = self._detect_layout(image, profile)
@@ -478,9 +483,14 @@ class GujiPipeline:
             imwrite(str(vis_path), vis_img)
 
             n_cols = len(layout.get("columns", {}).get("columns", []))
-            print(f"检测到 {n_cols} 列")
+            done += 1
 
-        print(f"Phase 2 完成！输出: {layout_dir}")
+            # 每张都打一行（图片少时）；图片多时只在 10% 节点打
+            if total <= 20 or done % report_every == 0 or done == total:
+                pct = done * 100 // total
+                print(f"  [{done}/{total}] {pct:3d}%  {stem} → {n_cols} 列")
+
+        print(f"Phase 2 完成！共处理 {done} 张，输出: {layout_dir}")
 
     def detect_char_grid_single(self, image_path: str,
                                 layout: dict,
