@@ -12,9 +12,9 @@ from pathlib import Path
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from src.profile import BookProfile
-from src.preprocessors import get_preprocessors
-from src.detectors.lines import LineDetector
+from open_guji_cv.profile import BookProfile
+from open_guji_cv.preprocessors import get_preprocessors
+from open_guji_cv.detectors.lines import LineDetector
 from border_detect import cluster_lines
 
 PROFILE = BookProfile.from_dict({

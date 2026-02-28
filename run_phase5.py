@@ -36,32 +36,39 @@ os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.profile import BookProfile
-from src.pipeline import GujiPipeline
-from src.detectors.ocr_detector import OcrDetector
-from src.detectors.char_grid import CharGridDetector
-from src.utils.image_io import imread
+from open_guji_cv.profile import BookProfile
+from open_guji_cv.pipeline import GujiPipeline
+from open_guji_cv.detectors.ocr_detector import OcrDetector
+from open_guji_cv.detectors.char_grid import CharGridDetector
+from open_guji_cv.utils.image_io import imread
 
 # ─── 路径配置 ──────────────────────────────────────────────
 
 WSL_BASE = Path("//wsl.localhost/Ubuntu/home/lishaodong/workspace/guji-resource")
-BOOK_NAME = "欽定四庫全書簡明目錄·文淵閣本"
-IMAGES_BASE = WSL_BASE / BOOK_NAME / "01_初始化" / "images"
-CLASSIFY_BASE = WSL_BASE / BOOK_NAME / "03_信息提取"
-OUTPUT_BASE = WSL_BASE / BOOK_NAME / "03_信息提取" / "ocr"
 
-# 册号到目录名的映射
+def _find_book_dir() -> Path:
+    """通过 iterdir 找到书目目录，避免字面量编码问题。"""
+    for d in WSL_BASE.iterdir():
+        if "\u6587\u6df5\u95a3\u672c" in d.name and "backup" not in d.name:
+            return d
+    raise FileNotFoundError(f"未找到书目目录: {WSL_BASE}")
+
+BOOK_DIR = _find_book_dir()
+IMAGES_BASE = BOOK_DIR / "02_prep" / "images"
+OUTPUT_BASE = BOOK_DIR / "03_extract" / "ocr"
+
+# 册号到 vol 目录名的映射
 CE_DIR_NAMES = {
-    1:  "06064237.cn",
-    2:  "06064238.cn",
-    3:  "06064239.cn",
-    4:  "06064240.cn",
-    5:  "06064241.cn",
-    6:  "06064242.cn",
-    7:  "06064243.cn",
-    8:  "06064244.cn",
-    9:  "06064245.cn",
-    10: "06064246.cn",
+    1:  "vol01",
+    2:  "vol02",
+    3:  "vol03",
+    4:  "vol04",
+    5:  "vol05",
+    6:  "vol06",
+    7:  "vol07",
+    8:  "vol08",
+    9:  "vol09",
+    10: "vol10",
 }
 
 # 固定 profile（所有册通用）
@@ -77,36 +84,17 @@ BOOK_PROFILE = BookProfile.from_dict({
 
 
 def load_skip_pages(ce_num: int) -> set[int]:
-    """读取 ce0X_page_layout.json，返回需要跳过的页码集合。
+    """返回需要跳过的页码集合（封面/书名页）。
 
-    规则（Phase 5.1）：
-    - 只跳过 cover, title_page（封面/书名页，非标准版式）
-    - 其他所有页面（preface, toc, blank, content, volume_start 等）都要处理
-    - 空白页检测到无内容时输出空 columns 的 JSON
+    新目录结构下暂无 page_layout 分类文件，返回空集（全部页面处理）。
     """
-    classify_path = CLASSIFY_BASE / f"ce{ce_num:02d}_page_layout.json"
-    if not classify_path.exists():
-        print(f"  警告: 未找到分类文件 {classify_path}，所有页面视为需处理")
-        return set()
-
-    with open(classify_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    classifications = data.get("classifications", [])
-    # 只跳过封面和书名页
-    skip_types = {"cover", "title_page"}
-    skip_pages = {item["page"] for item in classifications
-                  if item.get("type") in skip_types}
-
-    print(f"  分类文件: 跳过页={skip_pages}")
-
-    return skip_pages
+    return set()
 
 
 def get_image_paths(ce_num: int) -> list[tuple[int, Path]]:
     """获取册图片列表，返回 [(page_index, path), ...] 按页码排序。"""
     dir_name = CE_DIR_NAMES[ce_num]
-    img_dir = IMAGES_BASE / dir_name / "images"
+    img_dir = IMAGES_BASE / dir_name
     if not img_dir.exists():
         print(f"  错误: 图片目录不存在: {img_dir}")
         return []
@@ -115,7 +103,7 @@ def get_image_paths(ce_num: int) -> list[tuple[int, Path]]:
     for f in sorted(img_dir.iterdir()):
         if f.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
             continue
-        # 从文件名提取页码：06064237.cn_0001.jpg -> 1
+        # 从文件名提取页码：v03_001.jpg -> 1
         try:
             page_num = int(f.stem.split("_")[-1])
             result.append((page_num, f))
@@ -184,7 +172,8 @@ def build_output_json(page_index: int, char_grid: dict) -> dict:
 
 def run_ce(ce_num: int, pipeline: GujiPipeline,
            char_grid_detector: CharGridDetector,
-           page_filter: set[int] | None = None) -> int:
+           page_filter: set[int] | None = None,
+           page_width: int | None = None) -> int:
     """对一册运行 OCR，返回处理的页数。
 
     Args:
@@ -192,6 +181,7 @@ def run_ce(ce_num: int, pipeline: GujiPipeline,
         pipeline: GujiPipeline 实例（用于预处理和版面检测）
         char_grid_detector: CharGridDetector 实例
         page_filter: 如果指定，只处理这些页码
+        page_width: 页码零填充宽度（None 时自动按总页数决定）
     """
     print(f"\n{'='*60}")
     print(f"册 {ce_num} ({CE_DIR_NAMES[ce_num]})")
@@ -201,7 +191,7 @@ def run_ce(ce_num: int, pipeline: GujiPipeline,
     skip_pages = load_skip_pages(ce_num)
 
     # 预处理器（只创建一次，无状态，可复用）
-    from src.preprocessors import get_preprocessors
+    from open_guji_cv.preprocessors import get_preprocessors
     preprocessors = get_preprocessors(BOOK_PROFILE)
 
     # 获取图片列表
@@ -210,10 +200,12 @@ def run_ce(ce_num: int, pipeline: GujiPipeline,
         print("  未找到图片，跳过")
         return 0
 
-    print(f"  图片总数: {len(img_list)}")
+    total_pages = max((idx for idx, _ in img_list), default=0)
+    pw = page_width if page_width is not None else len(str(total_pages))
+    print(f"  图片总数: {len(img_list)}，页码宽度: {pw}")
 
     # 确定输出目录
-    out_dir = OUTPUT_BASE / f"ce{ce_num:02d}"
+    out_dir = OUTPUT_BASE / CE_DIR_NAMES[ce_num]
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_processed = 0
@@ -230,13 +222,13 @@ def run_ce(ce_num: int, pipeline: GujiPipeline,
             continue
 
         # 输出文件
-        out_path = out_dir / f"page{page_idx:03d}.json"
+        out_path = out_dir / f"page{page_idx:0{pw}d}.json"
         if out_path.exists():
-            print(f"  page {page_idx:03d}: 已存在，跳过")
+            print(f"  page {page_idx:0{pw}d}: 已存在，跳过")
             n_processed += 1
             continue
 
-        print(f"  page {page_idx:03d}: {img_path.name}...", end=" ", flush=True)
+        print(f"  page {page_idx:0{pw}d}: {img_path.name}...", end=" ", flush=True)
 
         # 读取图片（WSL UNC 路径需用 open+frombuffer 读取）
         try:
@@ -340,6 +332,8 @@ def main():
                         help="册号: '1', '2-5', '1,3', 'all'")
     parser.add_argument("--pages", default=None,
                         help="页码范围（调试用）: '24-30', '25,27'")
+    parser.add_argument("--page-width", type=int, default=None,
+                        help="页码零填充宽度（默认: 自动按总页数决定，如90页→2位，1200页→4位）")
     args = parser.parse_args()
 
     ce_list = parse_ce_arg(args.ce)
@@ -357,7 +351,8 @@ def main():
 
     total = 0
     for ce_num in ce_list:
-        n = run_ce(ce_num, pipeline, char_grid_detector, page_filter)
+        n = run_ce(ce_num, pipeline, char_grid_detector, page_filter,
+                   page_width=args.page_width)
         total += n
 
     print(f"\n{'='*60}")

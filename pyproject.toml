@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "open-guji-cv"
+version = "0.1.0"
+description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["ocr", "classical-chinese", "ancient-books", "image-processing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# ── 核心依赖（不含 paddle，因为 GPU/CPU 版本不同）──────────────────────
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python-headless>=4.8",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# CPU 模式：pip install open-guji-cv[cpu]
+cpu = [
+    "paddlepaddle>=3.0.0b2",
+    "paddleocr>=2.8.0",
+]
+# GPU 模式：先手动 pip install paddlepaddle-gpu，再 pip install open-guji-cv[gpu]
+# 详见 install_gpu.sh / install_gpu.bat
+gpu = [
+    "paddleocr>=2.8.0",
+]
+# 开发依赖：pip install open-guji-cv[dev]
+dev = [
+    "pytest>=7.0",
+    "build>=1.0",
+    "twine>=4.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+# python -m open_guji_cv 的 CLI 包装
+guji-cv = "open_guji_cv.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/your-org/open-guji-cv"
+Issues = "https://github.com/your-org/open-guji-cv/issues"
+
+# ── 包发现 ──────────────────────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["open_guji_cv*"]
+exclude = ["venv*", "output*", "data*", ".claude*"]
+
+[tool.setuptools.package-data]
+open_guji_cv = ["py.typed"]
