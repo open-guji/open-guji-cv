@@ -10,6 +10,7 @@
 **CLI 使用文档：** 查看 .claude/doc/cli_usage.md
 系统设计： 查看 .claude/doc/system_design.md
 技术细节： 查看 .claude/doc/technical_learning.md
+表格 Cell 输出格式： 查看 .claude/doc/table_cell_format.md
 
 ----
 测试数据：
