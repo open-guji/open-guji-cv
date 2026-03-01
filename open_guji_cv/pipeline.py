@@ -109,7 +109,9 @@ class GujiPipeline:
 
     def process_book(self, book_folder: str,
                      profile: BookProfile | None = None,
-                     name_filter: set[str] | None = None) -> None:
+                     name_filter: set[str] | None = None,
+                     keep_intermediate: bool = True,
+                     intermediate_dir: str | None = None) -> None:
         """完整流程：分析 + 步骤化预处理整本书。
 
         每个步骤的输出保存到独立文件夹（s1_crop_spine/, s2_crop_border/, ...）。
@@ -117,7 +119,11 @@ class GujiPipeline:
 
         Args:
             name_filter: 只处理 stem 在此集合中的图片
+            keep_intermediate: 是否保留中间步骤输出（默认 True 向后兼容）
+            intermediate_dir: 中间步骤输出目录（需配合 keep_intermediate=True）
         """
+        import shutil
+
         folder = Path(book_folder)
         book_name = folder.name
 
@@ -174,21 +180,66 @@ class GujiPipeline:
                 })
                 print(f"  s{step.number} {step.name}: 跳过 ({self._skip_reason(step, profile)})")
 
-        # ── 保存 manifest.json ──
+        # ── 后处理：整理输出 ──
         final_folder = manifest_executed[-1]["folder"] if manifest_executed else ""
+        final_output_value = final_folder  # manifest 中记录的 final_output 值
+
+        if not keep_intermediate and manifest_executed:
+            # 将最终步骤的图片复制到输出根目录，删除中间步骤文件夹
+            final_step_dir = out_dir / final_folder
+            if final_step_dir.exists():
+                for img in sorted(final_step_dir.iterdir()):
+                    if img.suffix.lower() in IMAGE_EXTENSIONS:
+                        shutil.copy2(img, out_dir / img.name)
+                # 删除所有步骤文件夹
+                for step_info in manifest_executed:
+                    step_dir = out_dir / step_info["folder"]
+                    if step_dir.exists():
+                        shutil.rmtree(step_dir)
+            final_output_value = "."
+            print(f"  已整理最终图片到输出根目录，中间步骤已删除")
+
+        elif keep_intermediate and intermediate_dir and manifest_executed:
+            # 将中间步骤移动到指定目录，最终图片复制到输出根目录
+            inter_book = Path(intermediate_dir) / book_name
+            inter_book.mkdir(parents=True, exist_ok=True)
+            final_step_dir = out_dir / final_folder
+            if final_step_dir.exists():
+                # 复制最终图片到输出根目录
+                for img in sorted(final_step_dir.iterdir()):
+                    if img.suffix.lower() in IMAGE_EXTENSIONS:
+                        shutil.copy2(img, out_dir / img.name)
+                # 移动所有步骤文件夹到中间目录
+                for step_info in manifest_executed:
+                    step_dir = out_dir / step_info["folder"]
+                    if step_dir.exists():
+                        target = inter_book / step_info["folder"]
+                        if target.exists():
+                            shutil.rmtree(target)
+                        shutil.move(str(step_dir), str(target))
+            final_output_value = "."
+            print(f"  最终图片已整理到输出根目录")
+            print(f"  中间步骤已移动到: {inter_book}")
+
+        # ── 保存 manifest.json ──
         manifest = {
             "book": book_name,
             "profile": "profile.json",
             "steps_executed": manifest_executed,
             "steps_skipped": manifest_skipped,
-            "final_output": final_folder,
+            "final_output": final_output_value,
         }
+        if keep_intermediate and intermediate_dir:
+            manifest["intermediate_dir"] = str(Path(intermediate_dir) / book_name)
         manifest_path = out_dir / "manifest.json"
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
         print(f"\n完成！输出目录: {out_dir}")
-        print(f"  最终结果: {final_folder}/")
+        if final_output_value == ".":
+            print(f"  最终结果: 输出根目录")
+        else:
+            print(f"  最终结果: {final_output_value}/")
 
     def _run_step(self, step: StepDef, input_dir: Path,
                   output_dir: Path, profile: BookProfile,
@@ -984,8 +1035,16 @@ class GujiPipeline:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
             final = manifest.get("final_output", "")
+            if final == ".":
+                return out_dir  # 图片直接在输出根目录
             if final:
                 return out_dir / final
+
+        # 回退：检查输出根目录是否直接包含图片
+        root_images = [f for f in out_dir.iterdir()
+                       if f.suffix.lower() in IMAGE_EXTENSIONS]
+        if root_images:
+            return out_dir
 
         # 回退：按步骤号降序查找存在的目录
         for step_num in [6, 5, 4, 3, 2, 1]:

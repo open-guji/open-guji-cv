@@ -91,7 +91,11 @@ def cmd_preprocess(args):
     pipeline = GujiPipeline(output_dir=args.output)
     profile = BookProfile.load(args.profile) if args.profile else None
     name_filter = _parse_range(getattr(args, 'range', None), path)
-    pipeline.process_book(str(path), profile=profile, name_filter=name_filter)
+    keep_intermediate = getattr(args, 'keep_intermediate', False)
+    intermediate_dir = getattr(args, 'intermediate_dir', None)
+    pipeline.process_book(str(path), profile=profile, name_filter=name_filter,
+                          keep_intermediate=keep_intermediate,
+                          intermediate_dir=intermediate_dir)
 
 
 def cmd_extract(args):
@@ -197,6 +201,10 @@ def main():
     p = sub.add_parser("preprocess",
                        help="图像预处理（裁剪 / 增强 / 二值化）")
     p.add_argument("path", help="古籍文件夹路径")
+    p.add_argument("--keep-intermediate", action="store_true",
+                   help="保留中间步骤输出（默认只保留最终结果）")
+    p.add_argument("--intermediate-dir", default=None,
+                   help="中间步骤输出目录（需配合 --keep-intermediate）")
     _add_common_args(p)
 
     # ── extract ──────────────────────────────────────────
