@@ -104,28 +104,44 @@ def cmd_extract(args):
     --steps layout  只做 Phase 2 版面检测
     --steps grid    只做 Phase 3 字符网格（需先有 layout）
     --steps all     两步都做（默认）
+
+    当 --input-dir 指定时，从该目录读取预处理图片（而非 -o/<book_name>/），
+    输出仍写到 -o/<book_name>/ 下。适用于输入和输出分离的场景。
     """
     path = Path(args.path)
     if not path.is_dir():
         print(f"extract 需要古籍文件夹路径: {path}")
         sys.exit(1)
 
+    input_dir = Path(args.input_dir) if args.input_dir else None
+    if input_dir and not input_dir.is_dir():
+        print(f"输入目录不存在: {input_dir}")
+        sys.exit(1)
+
+    # 当指定 --input-dir 时，用 path.name 作为 book_name（用于输出子目录名）
     pipeline = GujiPipeline(output_dir=args.output)
     profile = BookProfile.load(args.profile) if args.profile else None
-    name_filter = _parse_range(getattr(args, 'range', None), path)
+    # --range 过滤基于实际图片目录
+    range_dir = input_dir if input_dir else path
+    name_filter = _parse_range(getattr(args, 'range', None), range_dir)
     book_name = path.name
     steps = args.steps
 
     step_labels = {"layout": "版面检测", "grid": "字符网格+OCR", "all": "版面检测 + 字符网格+OCR"}
     print(f"{'=' * 60}")
     print(f"extract: {book_name}  [{step_labels[steps]}]")
+    if input_dir:
+        print(f"  输入: {input_dir}")
+        print(f"  输出: {Path(args.output) / book_name}")
     print(f"{'=' * 60}")
 
     if steps in ("layout", "all"):
-        pipeline.detect_layout_book(book_name, profile=profile, name_filter=name_filter)
+        pipeline.detect_layout_book(book_name, profile=profile,
+                                    name_filter=name_filter, input_dir=input_dir)
 
     if steps in ("grid", "all"):
-        pipeline.detect_char_grid(book_name, profile=profile, name_filter=name_filter)
+        pipeline.detect_char_grid(book_name, profile=profile,
+                                  name_filter=name_filter, input_dir=input_dir)
 
     print(f"\n{'=' * 60}")
     print(f"extract 完成！")
@@ -210,7 +226,9 @@ def main():
     # ── extract ──────────────────────────────────────────
     p = sub.add_parser("extract",
                        help="版面 + 字符检测，输出结构化 JSON")
-    p.add_argument("path", help="古籍文件夹路径")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--input-dir", default=None,
+                   help="输入图片目录（默认从 -o/<book_name>/ 下查找预处理结果）")
     p.add_argument("--steps", choices=["layout", "grid", "all"],
                    default="all",
                    help="子步骤：layout=版面检测，grid=字符网格，all=全部（默认）")

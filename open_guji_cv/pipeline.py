@@ -350,26 +350,38 @@ class GujiPipeline:
 
     def detect_char_grid(self, book_name: str,
                          profile: BookProfile | None = None,
-                         name_filter: set[str] | None = None) -> None:
+                         name_filter: set[str] | None = None,
+                         input_dir: Path | str | None = None) -> None:
         """Phase 3: 对已完成 Phase 2 的图片做字符网格检测。
 
-        读取 phase2_layout/ 中的 JSON 和 s6_binarize/ 中的图片，
-        输出到 phase3_char_grid/ 目录。
+        读取 phase2_layout/ 中的 JSON 和图片，输出到 phase3_char_grid/ 目录。
+
+        Args:
+            input_dir: 输入图片目录。若指定，从该目录读取图片，
+                       而非从 output_dir/book_name 下查找预处理结果。
         """
         out_dir = self.output_dir / book_name
         layout_dir = out_dir / "phase2_layout"
-        binarize_dir = self._find_final_preprocess_dir(out_dir) or (out_dir / "s6_binarize")
+        if input_dir is not None:
+            binarize_dir = Path(input_dir)
+        else:
+            binarize_dir = self._find_final_preprocess_dir(out_dir) or (out_dir / "s6_binarize")
         char_grid_dir = out_dir / "phase3_char_grid"
         char_grid_dir.mkdir(parents=True, exist_ok=True)
 
-        # 加载 profile
+        # 加载 profile: 优先从输入目录找，再从输出目录找
         if profile is None:
-            profile_path = out_dir / "profile.json"
-            if profile_path.exists():
-                profile = BookProfile.load(profile_path)
-            else:
-                print(f"未找到 profile.json: {profile_path}")
-                return
+            if input_dir is not None:
+                profile_path = Path(input_dir) / "profile.json"
+                if profile_path.exists():
+                    profile = BookProfile.load(profile_path)
+            if profile is None:
+                profile_path = out_dir / "profile.json"
+                if profile_path.exists():
+                    profile = BookProfile.load(profile_path)
+                else:
+                    print(f"未找到 profile.json")
+                    return
 
         # 初始化检测器（延迟加载 OCR 模型）
         ocr_detector = OcrDetector()
@@ -480,15 +492,23 @@ class GujiPipeline:
 
     def detect_layout_book(self, book_name: str,
                            profile: BookProfile | None = None,
-                           name_filter: set[str] | None = None) -> None:
+                           name_filter: set[str] | None = None,
+                           input_dir: Path | str | None = None) -> None:
         """Phase 2: 对已完成预处理的图片做版面检测。
 
         读取最终预处理输出目录中的图片，输出到 phase2_layout/ 目录。
+
+        Args:
+            input_dir: 输入图片目录。若指定，直接从该目录读取图片，
+                       而非从 output_dir/book_name 下查找预处理结果。
         """
         out_dir = self.output_dir / book_name
 
         # 确定输入目录
-        binarize_dir = self._find_final_preprocess_dir(out_dir)
+        if input_dir is not None:
+            binarize_dir = Path(input_dir)
+        else:
+            binarize_dir = self._find_final_preprocess_dir(out_dir)
         if not binarize_dir or not binarize_dir.exists():
             print(f"未找到预处理输出目录，请先运行 preprocess 命令")
             return
@@ -496,9 +516,14 @@ class GujiPipeline:
         layout_dir = out_dir / "phase2_layout"
         layout_dir.mkdir(parents=True, exist_ok=True)
 
-        # 加载 profile
+        # 加载 profile: 优先从输入目录找，再从输出目录找
         if profile is None:
-            profile = self._load_profile_from_output(out_dir)
+            if input_dir is not None:
+                profile_path = Path(input_dir) / "profile.json"
+                if profile_path.exists():
+                    profile = BookProfile.load(profile_path)
+            if profile is None:
+                profile = self._load_profile_from_output(out_dir)
             if profile is None:
                 return
 
