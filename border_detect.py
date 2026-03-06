@@ -658,6 +658,31 @@ def detect_borders(lsd_data, img_width, img_height,
                 bottom_pair = {"outer": best_bot, "inner": None}
                 frame_bottom = best_bot["intercept"]
 
+        # ── 仍未修正：用竖线段端点推断上下边框 ──
+        if inner_bottom - inner_top < img_height * 0.3 and v_clusters:
+            print(f"  [WARN] 水平线修正失败，从竖线端点推断上下边框")
+            # 收集所有足够长的竖线段的 y 范围
+            v_y_mins = []
+            v_y_maxs = []
+            for vc in v_clusters:
+                if vc["total_length"] < img_height * 0.3:
+                    continue
+                for seg_start, seg_end in vc["segments"]:
+                    v_y_mins.append(seg_start)
+                    v_y_maxs.append(seg_end)
+            if v_y_mins and v_y_maxs:
+                inferred_top = float(np.median(v_y_mins))
+                inferred_bot = float(np.median(v_y_maxs))
+                if inferred_bot - inferred_top > img_height * 0.3:
+                    inner_top = inferred_top
+                    inner_bottom = inferred_bot
+                    inner_top_slope = 0.0
+                    inner_bottom_slope = 0.0
+                    frame_top = inferred_top
+                    frame_bottom = inferred_bot
+                    top_pair = {"outer": None, "inner": None}
+                    bottom_pair = {"outer": None, "inner": None}
+
         print(f"  [WARN] 修正后: top={inner_top:.1f}, bottom={inner_bottom:.1f}")
 
     # ── 第三步：识别内部列间界栏 ──
