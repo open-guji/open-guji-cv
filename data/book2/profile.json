@@ -4,16 +4,22 @@
   "text_color": "black",
   "border_color": "black",
   "page_type": "uncut_full",
-  "lines_per_page": 9,
+  "lines_per_page": 8,
   "border_style": "double",
   "border_wear": "medium",
   "interferences": [],
-  "chars_per_line": 21,
-  "has_marginal_notes": false,
+  "skip_pages": [],
+  "skip_steps": [],
+  "chars_per_line": null,
+  "has_marginal_notes": true,
   "auto_detected": true,
   "detection_confidence": {
     "color_mode": 1.0,
     "page_type": 1.0,
-    "lines_per_page": 0.5
+    "lines_per_page": 1.0,
+    "border_style": 0.5,
+    "border_wear": 0.74,
+    "chars_per_line": 0.3,
+    "has_marginal_notes": 0.7
   }
 }

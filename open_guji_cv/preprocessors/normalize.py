@@ -58,16 +58,19 @@ class NormalizePreprocessor(BasePreprocessor):
         # 测量原图的投影法角度作为基线
         skew_angle = self._detect_skew(image)
 
-        # 优先尝试透视校正
+        # 优先尝试透视校正（同时完成校正+裁切到边框）
         result = self._perspective_correct(image)
         if result is not None:
-            # 验证：校正后投影法残余角度是否改善
+            # 透视校正成功即采用：它不仅校正倾斜，还裁切到边框区域
+            # 校正后残余角度验证仅在原图有明显倾斜时才需要
+            if abs(skew_angle) < self.MIN_CORRECTION_ANGLE:
+                return result  # 原图已正，透视校正主要用于裁切
             after_angle = abs(self._detect_skew(result))
-            if after_angle < abs(skew_angle):
+            if after_angle <= abs(skew_angle):
                 return result
-            # 透视校正没改善，回退到旋转
+            # 透视校正使倾斜变糟，回退
 
-        # 回退到投影法旋转
+        # 回退到投影法旋转（不裁切）
         if abs(skew_angle) < self.MIN_CORRECTION_ANGLE:
             return image
         if abs(skew_angle) > self.MAX_CORRECTION_ANGLE:
@@ -155,38 +158,21 @@ class NormalizePreprocessor(BasePreprocessor):
             return None
 
         # 目标矩形尺寸（边框区域映射后的大小）
-        frame_w = max(self._dist(tl, tr), self._dist(bl, br))
-        frame_h = max(self._dist(tl, bl), self._dist(tr, br))
+        frame_w = int(max(self._dist(tl, tr), self._dist(bl, br)))
+        frame_h = int(max(self._dist(tl, bl), self._dist(tr, br)))
 
-        # 边框的目标位置：保留和原图中相同的相对偏移
-        # 即 tl 映射后仍在原 tl 像素坐标附近，不裁掉边框外的内容
-        # 先用 tl 作为锚点
-        ox = float(tl[0])  # 边框左上角在原图中的 x
-        oy = float(tl[1])  # 边框左上角在原图中的 y
-
+        # 边框直接映射到 (0,0) 为原点的矩形
+        # 输出图像 = 边框区域，黑边/邻页残留/书脊阴影全部裁掉
         dst_pts = np.array([
-            [ox, oy],
-            [ox + frame_w, oy],
-            [ox + frame_w, oy + frame_h],
-            [ox, oy + frame_h],
+            [0, 0],
+            [frame_w, 0],
+            [frame_w, frame_h],
+            [0, frame_h],
         ], dtype=np.float32)
 
         M = cv2.getPerspectiveTransform(src_pts, dst_pts)
 
-        # 计算变换后原图四角的位置，确定完整输出尺寸
-        img_corners = np.array([[0, 0], [w, 0], [w, h], [0, h]],
-                               dtype=np.float32).reshape(-1, 1, 2)
-        transformed_corners = cv2.perspectiveTransform(img_corners, M)
-        tc = transformed_corners.reshape(-1, 2)
-
-        # 输出尺寸包含所有变换后的像素
-        out_w = int(np.ceil(tc[:, 0].max()))
-        out_h = int(np.ceil(tc[:, 1].max()))
-        # 确保至少和原图一样大
-        out_w = max(out_w, w)
-        out_h = max(out_h, h)
-
-        corrected = cv2.warpPerspective(image, M, (out_w, out_h),
+        corrected = cv2.warpPerspective(image, M, (frame_w, frame_h),
                                         flags=cv2.INTER_LINEAR,
                                         borderMode=cv2.BORDER_REPLICATE)
         return corrected

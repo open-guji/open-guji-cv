@@ -6,17 +6,23 @@
   "page_type": "cut_half",
   "lines_per_page": 8,
   "border_style": "double",
-  "border_wear": "medium",
+  "border_wear": "heavy",
   "interferences": [
     "white_margin"
   ],
-  "chars_per_line": 21,
+  "skip_pages": [],
+  "skip_steps": [],
+  "chars_per_line": 15,
   "has_marginal_notes": false,
   "auto_detected": true,
   "detection_confidence": {
     "color_mode": 1.0,
     "page_type": 1.0,
-    "lines_per_page": 0.5,
-    "white_margin": 0.5962142133430186
+    "lines_per_page": 0.7,
+    "white_margin": 0.5962142133430186,
+    "border_style": 0.6,
+    "border_wear": 1.0,
+    "chars_per_line": 0.6,
+    "has_marginal_notes": 1.0
   }
 }

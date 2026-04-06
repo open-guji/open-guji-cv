@@ -17,7 +17,7 @@ import numpy as np
 
 from .profile import BookProfile
 from .analyzers import get_all_analyzers
-from .preprocessors import STEPS, StepDef
+from .preprocessors import STEPS, StepDef, get_steps
 from .detectors.lines import LineDetector
 from .detectors.borders import BorderDetector
 from .detectors.columns import ColumnDetector
@@ -150,7 +150,7 @@ class GujiPipeline:
         # 只在第一个步骤（读原始目录）时应用 skip_pages，后续步骤读的是已过滤的输出
         skip_pages_for_first = profile.skip_pages if profile.skip_pages else None
 
-        for step in STEPS:
+        for step in get_steps(profile):
             if step.is_needed(profile):
                 step_dir = out_dir / step.folder_name
                 n_images = self._run_step(step, current_dir, step_dir, profile,
@@ -254,6 +254,11 @@ class GujiPipeline:
         preprocessor = step.create_preprocessor()
         image_paths = self._find_images(input_dir, name_filter=name_filter,
                                         skip_pages=skip_pages)
+
+        # 需要跨页面信息的预处理器（如水印去除）在此初始化
+        if hasattr(preprocessor, 'setup'):
+            preprocessor.setup(image_paths, profile)
+
         n_output = 0
 
         for img_path in image_paths:
@@ -295,10 +300,14 @@ class GujiPipeline:
     @staticmethod
     def _skip_reason(step: StepDef, profile: BookProfile) -> str:
         """生成步骤跳过的原因说明。"""
+        if step.name in profile.skip_steps:
+            return "skip_steps"
         if step.name == "crop_spine":
             return "无书脊阴影"
         if step.name == "split":
             return f"page_type={profile.page_type}"
+        if step.name == "binarize":
+            return "彩色图片"
         return "条件不满足"
 
     # ─── 向后兼容：单图预处理 ─────────────────────────────────

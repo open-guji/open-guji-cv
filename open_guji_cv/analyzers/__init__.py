@@ -4,12 +4,16 @@ from .base import BaseAnalyzer
 from .color_mode import ColorModeAnalyzer
 from .page_layout import PageLayoutAnalyzer
 from .interference import InterferenceAnalyzer
+from .border_style import BorderAnalyzer
+from .text_layout import TextLayoutAnalyzer
 
 # 分析器注册表：按顺序执行
 ANALYZERS: list[type[BaseAnalyzer]] = [
     ColorModeAnalyzer,
     PageLayoutAnalyzer,
     InterferenceAnalyzer,
+    BorderAnalyzer,
+    TextLayoutAnalyzer,
 ]
 
 
@@ -23,6 +27,8 @@ __all__ = [
     "ColorModeAnalyzer",
     "PageLayoutAnalyzer",
     "InterferenceAnalyzer",
+    "BorderAnalyzer",
+    "TextLayoutAnalyzer",
     "ANALYZERS",
     "get_all_analyzers",
 ]

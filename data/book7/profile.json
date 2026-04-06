@@ -3,11 +3,14 @@
   "background_color": null,
   "text_color": "black",
   "border_color": "black",
-  "page_type": "cut_half",
-  "lines_per_page": 8,
+  "page_type": "table",
+  "lines_per_page": 0,
   "border_style": "double",
   "border_wear": "medium",
-  "interferences": [],
+  "interferences": [
+    "spine_shadow",
+    "white_margin"
+  ],
   "skip_pages": [],
   "skip_steps": [],
   "chars_per_line": null,
@@ -16,10 +19,12 @@
   "detection_confidence": {
     "color_mode": 1.0,
     "page_type": 1.0,
-    "lines_per_page": 1.0,
-    "border_style": 0.9,
-    "border_wear": 0.71,
+    "lines_per_page": 0.0,
+    "spine_shadow": 0.7,
+    "white_margin": 0.6089737181995469,
+    "border_style": 1.0,
+    "border_wear": 0.64,
     "chars_per_line": 0.3,
-    "has_marginal_notes": 1.0
+    "has_marginal_notes": 0.9
   }
 }

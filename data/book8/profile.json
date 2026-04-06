@@ -3,8 +3,8 @@
   "background_color": "orange",
   "text_color": "black",
   "border_color": "orange",
-  "page_type": "cut_half",
-  "lines_per_page": 11,
+  "page_type": "spread",
+  "lines_per_page": 12,
   "border_style": "double",
   "border_wear": "light",
   "interferences": [
@@ -13,16 +13,16 @@
   "skip_pages": [],
   "skip_steps": [],
   "chars_per_line": null,
-  "has_marginal_notes": false,
+  "has_marginal_notes": true,
   "auto_detected": true,
   "detection_confidence": {
     "color_mode": 1.0,
     "page_type": 1.0,
     "lines_per_page": 0.8,
-    "spine_shadow": 1.0,
+    "spine_shadow": 0.8,
     "border_style": 1.0,
-    "border_wear": 0.94,
+    "border_wear": 1.0,
     "chars_per_line": 0.3,
-    "has_marginal_notes": 0.9
+    "has_marginal_notes": 0.7
   }
 }
