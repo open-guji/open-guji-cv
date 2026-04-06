@@ -9,12 +9,17 @@
   "border_wear": "medium",
   "interferences": [],
   "skip_pages": [],
-  "chars_per_line": 21,
+  "skip_steps": [],
+  "chars_per_line": null,
   "has_marginal_notes": false,
   "auto_detected": true,
   "detection_confidence": {
     "color_mode": 1.0,
     "page_type": 1.0,
-    "lines_per_page": 0.5
+    "lines_per_page": 1.0,
+    "border_style": 1.0,
+    "border_wear": 0.75,
+    "chars_per_line": 0.3,
+    "has_marginal_notes": 0.9
   }
 }

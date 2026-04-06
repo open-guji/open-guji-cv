@@ -17,7 +17,8 @@ class BookProfile:
         background_color: 底色描述，如 "red", "yellow", None（无底色/白底）
         text_color: 文字颜色，通常为 "black"
         border_color: 边框颜色，如 "black", "red"
-        page_type: "cut_half"（已剪切半页）或 "uncut_full"（未剪切整页）
+        page_type: "cut_half"（已剪切半页）、"uncut_full"（未剪切筒子页）
+                   或 "spread"（对开拍照/扫描，两页平摊，中间有中缝）
         lines_per_page: 每半页的行数（如 8 或 9）
         border_style: 边框样式，"double"（双层：外粗内细）或 "single"
         border_wear: 边框磨损程度，"light" / "medium" / "heavy"
@@ -46,8 +47,9 @@ class BookProfile:
     # ─── 干扰项 ───
     interferences: list[str] = field(default_factory=list)
 
-    # ─── 跳过页面 ───
+    # ─── 跳过页面 / 步骤 ───
     skip_pages: list[int] = field(default_factory=list)
+    skip_steps: list[str] = field(default_factory=list)  # 跳过的预处理步骤名，如 ["enhance_lines", "binarize"]
 
     # ─── 文字 ───
     chars_per_line: int | None = 21
@@ -99,6 +101,18 @@ class BookProfile:
     @property
     def is_uncut(self) -> bool:
         return self.page_type == "uncut_full"
+
+    @property
+    def is_spread(self) -> bool:
+        return self.page_type == "spread"
+
+    @property
+    def is_table(self) -> bool:
+        return self.page_type == "table"
+
+    @property
+    def needs_split(self) -> bool:
+        return self.page_type in ("uncut_full", "spread")
 
     @property
     def has_spine_shadow(self) -> bool:

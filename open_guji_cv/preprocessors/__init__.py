@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from .base import BasePreprocessor
-from .crop_spine import CropSpinePreprocessor
 from .crop_margin import CropMarginPreprocessor
 from .enhance_lines import EnhanceLinesPreprocessor
 from .normalize import NormalizePreprocessor
 from .split_page import SplitPagePreprocessor
 from .binarize import BinarizePreprocessor
+from .remove_watermark import RemoveWatermarkPreprocessor
 
 if TYPE_CHECKING:
     from ..profile import BookProfile
@@ -34,33 +34,60 @@ class StepDef:
         return f"s{self.number}_{self.name}"
 
     def is_needed(self, profile: BookProfile) -> bool:
+        if self.name in profile.skip_steps:
+            return False
         return self.condition(profile)
 
     def create_preprocessor(self) -> BasePreprocessor:
         return self.preprocessor_cls()
 
 
-# ── 步骤注册表：按执行顺序排列 ──
-# s1: 裁书脊阴影（条件：检测到书脊阴影）
-# s2: 裁到边框（始终执行）
-# s3: 长直线增强（始终执行，断续补全+线宽统一）
-# s4: 倾斜校正（始终执行，内部判断是否需要旋转）
-# s5: 拆分半页（条件：未剪切筒子页）
-# s6: 二值化（始终执行）
+# ── 步骤注册表 ──
+#
+# 三种 pipeline 布局（由 page_type 决定）：
+#
+# cut_half（已裁半页）：校正 → 裁切 → 增强 → 二值化
+# uncut_full（筒子页）：校正 → 裁切 → 增强 → 拆分 → 二值化
+# spread（对开拍照）：  拆分 → 校正 → 裁切 → 增强 → 二值化
+#
+# 设计原则：
+# 1. 校正（deskew）最先做，确保边框线横平竖直，后续步骤都更简单
+# 2. 裁切（crop）一步完成：去除黑边、邻页残留、天头地脚，裁到正文区
+#    原来的 crop_spine 不再需要——邻页残留和书脊阴影都在边框线外面，
+#    统一裁到边框线即可去掉
+# 3. spread 先拆分，因为中缝是最显著的特征
 
+# 默认步骤表（cut_half / uncut_full 共用）
 STEPS: list[StepDef] = [
-    StepDef(1, "crop_spine",     CropSpinePreprocessor,     lambda p: p.has_spine_shadow),
-    StepDef(2, "crop_border",    CropMarginPreprocessor,    lambda p: True),
-    StepDef(3, "enhance_lines",  EnhanceLinesPreprocessor,  lambda p: True),
-    StepDef(4, "deskew",         NormalizePreprocessor,     lambda p: True),
+    StepDef(1, "remove_watermark", RemoveWatermarkPreprocessor, lambda p: "watermark" in p.interferences),
+    StepDef(2, "deskew",         NormalizePreprocessor,     lambda p: True),
+    StepDef(3, "crop",           CropMarginPreprocessor,    lambda p: True),
+    StepDef(4, "enhance_lines",  EnhanceLinesPreprocessor,  lambda p: True),
     StepDef(5, "split",          SplitPagePreprocessor,     lambda p: p.is_uncut),
-    StepDef(6, "binarize",       BinarizePreprocessor,      lambda p: True),
+    StepDef(6, "binarize",       BinarizePreprocessor,      lambda p: not p.is_colored),
 ]
+
+# spread 模式步骤表：先拆分，再逐半页处理
+STEPS_SPREAD: list[StepDef] = [
+    StepDef(1, "remove_watermark", RemoveWatermarkPreprocessor, lambda p: "watermark" in p.interferences),
+    StepDef(2, "split",          SplitPagePreprocessor,     lambda p: True),
+    StepDef(3, "deskew",         NormalizePreprocessor,     lambda p: True),
+    StepDef(4, "crop",           CropMarginPreprocessor,    lambda p: True),
+    StepDef(5, "enhance_lines",  EnhanceLinesPreprocessor,  lambda p: True),
+    StepDef(6, "binarize",       BinarizePreprocessor,      lambda p: not p.is_colored),
+]
+
+
+def get_steps(profile: BookProfile) -> list[StepDef]:
+    """根据 BookProfile 获取步骤列表。"""
+    if profile.is_spread:
+        return STEPS_SPREAD
+    return STEPS
 
 
 def get_active_steps(profile: BookProfile) -> list[StepDef]:
     """根据 BookProfile 获取需要执行的步骤列表。"""
-    return [s for s in STEPS if s.is_needed(profile)]
+    return [s for s in get_steps(profile) if s.is_needed(profile)]
 
 
 # ── 向后兼容 ──
@@ -82,10 +109,10 @@ __all__ = [
     "get_active_steps",
     "SplitPagePreprocessor",
     "CropMarginPreprocessor",
-    "CropSpinePreprocessor",
     "EnhanceLinesPreprocessor",
     "BinarizePreprocessor",
     "NormalizePreprocessor",
+    "RemoveWatermarkPreprocessor",
     "PREPROCESSORS",
     "get_preprocessors",
 ]
