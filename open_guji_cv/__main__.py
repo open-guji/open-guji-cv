@@ -1,9 +1,12 @@
 """CLI 入口：python -m open_guji_cv <command> [args]
 
-三大步骤：
-    analyze    <folder>   分析版式特征 → profile.json
-    preprocess <folder>   图像预处理（裁剪 / 增强 / 二值化）
-    extract    <folder>   版面 + 字符检测，输出结构化 JSON
+切分：
+    cut            <folder>  检测切分类型并执行切分 → cut.json + 切分后图片
+
+分析：
+    recognize-profile <folder>  分析版式特征 → profile.json
+    preprocess <folder>         图像预处理（裁剪 / 增强 / 二值化）
+    extract    <folder>         版面 + 字符检测，输出结构化 JSON
 
 一键运行：
     run        <folder>   依次执行以上三步
@@ -74,7 +77,81 @@ def _parse_range(range_str: str | None, folder: Path) -> set[str] | None:
 
 # ─── 命令处理函数 ──────────────────────────────────────────
 
-def cmd_analyze(args):
+def cmd_cut(args):
+    """检测切分类型并执行切分。
+
+    输出：
+    - cut.json: {"cut_type": "none"|"vertical_cut"|"horizontal_cut"}
+    - 如果需要切分，生成切分后的图片文件：
+      - vertical_cut: <name>_left.png, <name>_right.png
+      - horizontal_cut: <name>_top.png, <name>_bottom.png
+    """
+    import cv2
+    from .analyzers.cut_type import CutTypeAnalyzer
+
+    path = Path(args.path)
+    if not path.is_dir():
+        print(f"cut 需要古籍文件夹路径: {path}")
+        sys.exit(1)
+
+    # 加载图片
+    images = []
+    image_files = []
+    for f in sorted(path.iterdir()):
+        if f.suffix.lower() in IMAGE_EXTENSIONS:
+            img = cv2.imread(str(f))
+            if img is not None:
+                images.append(img)
+                image_files.append(f)
+
+    if not images:
+        print(f"未找到图片: {path}")
+        sys.exit(1)
+
+    # 检测切分类型
+    analyzer = CutTypeAnalyzer()
+    result = analyzer.analyze(images)
+    cut_type = result["cut_type"]
+    confidence = result.get("_confidence", {}).get("cut_type", 0)
+
+    # 保存 cut.json
+    cut_data = {"cut_type": cut_type}
+    cut_json_path = path / "cut.json"
+    with open(cut_json_path, "w", encoding="utf-8") as f:
+        json.dump(cut_data, f, ensure_ascii=False, indent=2)
+
+    print(f"切分类型: {cut_type} (置信度: {confidence:.2f})")
+    print(f"保存: {cut_json_path}")
+
+    # 执行切分
+    if cut_type == "none":
+        print("无需切分")
+        return
+
+    output_dir = Path(args.output) / path.name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for img, img_file in zip(images, image_files):
+        stem = img_file.stem
+        h, w = img.shape[:2]
+
+        if cut_type == "vertical_cut":
+            mid_x = w // 2
+            left = img[:, :mid_x]
+            right = img[:, mid_x:]
+            cv2.imwrite(str(output_dir / f"{stem}_left.png"), left)
+            cv2.imwrite(str(output_dir / f"{stem}_right.png"), right)
+        elif cut_type == "horizontal_cut":
+            mid_y = h // 2
+            top = img[:mid_y, :]
+            bottom = img[mid_y:, :]
+            cv2.imwrite(str(output_dir / f"{stem}_top.png"), top)
+            cv2.imwrite(str(output_dir / f"{stem}_bottom.png"), bottom)
+
+    print(f"切分完成: {len(image_files)} 张 -> {output_dir}")
+
+
+def cmd_recognize_profile(args):
     """分析版式特征，生成 profile.json。"""
     pipeline = GujiPipeline(output_dir=args.output)
     profile = pipeline.analyze(args.path)
@@ -197,7 +274,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
-  python -m open_guji_cv analyze data/book1/
+  python -m open_guji_cv recognize-profile data/book1/
   python -m open_guji_cv preprocess data/book1/ --range 1-5
   python -m open_guji_cv extract data/book1/ --steps layout
   python -m open_guji_cv extract data/book1/
@@ -208,9 +285,15 @@ def main():
 
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
-    # ── analyze ──────────────────────────────────────────
-    p = sub.add_parser("analyze",
-                       help="分析版式特征 → profile.json")
+    # ── cut ──────────────────────────────────────────────
+    p = sub.add_parser("cut",
+                       help="检测切分类型并执行切分 → cut.json")
+    p.add_argument("path", help="古籍文件夹路径")
+
+    # ── recognize-profile ─────────────────────────────────
+    p = sub.add_parser("recognize-profile",
+                       help="分析版式特征 → profile.json",
+                       aliases=["analyze"])
     p.add_argument("path", help="古籍文件夹路径")
 
     # ── preprocess ───────────────────────────────────────
@@ -253,11 +336,13 @@ def main():
     args = parser.parse_args()
 
     commands = {
-        "analyze":      cmd_analyze,
-        "preprocess":   cmd_preprocess,
-        "extract":      cmd_extract,
-        "run":          cmd_run,
-        "show-profile": cmd_show_profile,
+        "cut":               cmd_cut,
+        "recognize-profile": cmd_recognize_profile,
+        "analyze":           cmd_recognize_profile,  # 兼容别名
+        "preprocess":        cmd_preprocess,
+        "extract":           cmd_extract,
+        "run":               cmd_run,
+        "show-profile":      cmd_show_profile,
     }
 
     handler = commands.get(args.command)
