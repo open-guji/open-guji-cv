@@ -1,0 +1,74 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: windows.exe
+          - os: macos-latest
+            suffix: macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build executable
+        run: python packaging/build.py
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          cd dist
+          for f in guji-cv-*; do
+            base="${f%.*}"
+            ext="${f##*.}"
+            if [ "$ext" = "$f" ]; then
+              mv "$f" "${base}-${{ matrix.suffix }}"
+            else
+              mv "$f" "${base}-${{ matrix.suffix }}"
+            fi
+          done
+          ls -la guji-cv-*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: guji-cv-ui-${{ matrix.suffix }}
+          path: dist/guji-cv-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

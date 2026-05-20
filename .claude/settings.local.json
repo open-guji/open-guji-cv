@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "Bash(done)"
+    ],
+    "additionalDirectories": [
+      "D:\\workspace",
+      "\\\\wsl.localhost\\Ubuntu\\home\\lishaodong\\workspace"
+    ]
+  },
+  "defaultMode": "bypassPermissions"
+}
