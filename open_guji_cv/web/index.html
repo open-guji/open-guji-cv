@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>古籍 CV 工具台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; height: 100vh; display: flex; flex-direction: column; }
+
+/* Header */
+header { background: #1a1a2e; color: #fff; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 48px; flex-shrink: 0; }
+header h1 { font-size: 17px; font-weight: 500; }
+.tabs { display: flex; height: 48px; }
+.tab { padding: 0 20px; display: flex; align-items: center; font-size: 13px; cursor: pointer; color: #aaa; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; }
+.tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
+.tab.active { color: #fff; border-bottom-color: #1677ff; }
+
+/* Main */
+.main { flex: 1; overflow: hidden; }
+.tab-content { display: none; height: 100%; overflow-y: auto; padding: 20px; }
+.tab-content.active { display: block; }
+
+/* Cards */
+.card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.card h3 { font-size: 14px; color: #666; margin-bottom: 12px; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+
+/* Form elements */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+.field input, .field select { width: 100%; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
+.field input:focus, .field select:focus { outline: none; border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
+.field-row { display: flex; gap: 8px; align-items: flex-end; }
+.field-row .field { flex: 1; }
+.field-row .btn { flex-shrink: 0; margin-bottom: 14px; }
+
+.radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.radio-item { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid #d9d9d9; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s; }
+.radio-item:hover { border-color: #1677ff; }
+.radio-item.selected { border-color: #1677ff; background: #e8f4ff; color: #1677ff; }
+.radio-item .cmd-desc { font-size: 11px; color: #999; margin-top: 2px; }
+
+.btn { padding: 8px 20px; border-radius: 4px; font-size: 13px; cursor: pointer; border: 1px solid #d9d9d9; background: #fff; transition: all 0.15s; }
+.btn:hover { border-color: #1677ff; color: #1677ff; }
+.btn-primary { background: #1677ff; color: #fff; border-color: #1677ff; font-size: 14px; padding: 10px 32px; }
+.btn-primary:hover { background: #4096ff; }
+.btn-primary:disabled { background: #a0c4ff; cursor: not-allowed; }
+.btn-danger { color: #ff4d4f; border-color: #ff4d4f; }
+.btn-danger:hover { background: #fff2f0; }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+
+/* Preview strip */
+.preview-strip { display: flex; gap: 6px; padding: 8px 0; overflow-x: auto; }
+.preview-strip img { height: 60px; border-radius: 3px; border: 1px solid #eee; cursor: pointer; }
+.preview-strip img:hover { border-color: #1677ff; }
+
+/* Progress */
+.progress-bar { height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.progress-fill { height: 100%; background: #1677ff; transition: width 0.3s; border-radius: 3px; }
+.progress-text { font-size: 12px; color: #888; }
+.phase-text { font-size: 13px; color: #1677ff; font-weight: 500; margin-bottom: 4px; }
+
+/* Log */
+.log-panel { background: #1e1e2e; color: #ccc; font-family: "Cascadia Code", "Consolas", monospace; font-size: 12px; line-height: 1.6; padding: 12px; border-radius: 6px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+.log-line-info { color: #888; }
+.log-line-error { color: #ff6b6b; }
+
+/* File browser */
+.file-tree { font-size: 13px; }
+.file-entry { display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; border-radius: 4px; }
+.file-entry:hover { background: #f0f7ff; }
+.file-entry.active { background: #e3f0ff; }
+.file-icon { width: 16px; text-align: center; color: #888; }
+.file-name { flex: 1; }
+.file-size { font-size: 11px; color: #aaa; }
+
+.breadcrumb { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #888; margin-bottom: 8px; flex-wrap: wrap; }
+.breadcrumb span { cursor: pointer; color: #1677ff; }
+.breadcrumb span:hover { text-decoration: underline; }
+
+/* JSON viewer */
+.json-viewer { background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; line-height: 1.5; max-height: 500px; overflow: auto; white-space: pre-wrap; }
+.json-key { color: #1677ff; }
+.json-string { color: #52c41a; }
+.json-number { color: #fa8c16; }
+.json-bool { color: #722ed1; }
+.json-null { color: #999; }
+
+/* Image viewer */
+.image-viewer { text-align: center; }
+.image-viewer img { max-width: 100%; max-height: 70vh; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.image-nav { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0; }
+.image-nav .btn { min-width: 36px; }
+.view-modes { display: flex; gap: 4px; justify-content: center; margin-bottom: 12px; }
+.view-mode { padding: 4px 12px; font-size: 12px; border: 1px solid #d9d9d9; border-radius: 4px; cursor: pointer; background: #fff; }
+.view-mode.active { background: #1677ff; color: #fff; border-color: #1677ff; }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.compare-grid img { width: 100%; border-radius: 4px; }
+.compare-label { font-size: 11px; color: #888; text-align: center; margin-bottom: 4px; }
+
+/* Folder picker modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: #fff; border-radius: 10px; width: 500px; max-height: 70vh; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+.modal-header { padding: 14px 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 15px; }
+.modal-body { flex: 1; overflow-y: auto; padding: 12px; }
+.modal-footer { padding: 12px 16px; border-top: 1px solid #eee; text-align: right; }
+
+.status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.status-running { background: #e6f7ff; color: #1677ff; }
+.status-completed { background: #f6ffed; color: #52c41a; }
+.status-failed { background: #fff2f0; color: #ff4d4f; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>古籍 CV 工具台</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('setup')">配置</button>
+    <button class="tab" onclick="switchTab('run')">运行</button>
+    <button class="tab" onclick="switchTab('output')">输出</button>
+    <button class="tab" onclick="switchTab('images')">图片</button>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Tab 1: 配置 -->
+  <div class="tab-content active" id="tab-setup">
+    <div class="card">
+      <h3>输入文件夹</h3>
+      <div class="field-row">
+        <div class="field"><input id="inputPath" placeholder="选择包含古籍图片的文件夹..." readonly></div>
+        <button class="btn" onclick="openBrowser('input')">浏览...</button>
+      </div>
+      <div id="inputPreview"></div>
+    </div>
+
+    <div class="card">
+      <h3>输出文件夹</h3>
+      <div class="field-row">
+        <div class="field"><input id="outputPath" placeholder="选择输出目录..." readonly></div>
+        <button class="btn" onclick="openBrowser('output')">浏览...</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>命令</h3>
+      <div class="radio-group" id="commandGroup"></div>
+    </div>
+
+    <div class="card" id="optionsCard" style="display:none">
+      <h3>选项</h3>
+      <div id="optionsForm"></div>
+    </div>
+
+    <div style="text-align:center; padding: 16px;">
+      <button class="btn btn-primary" id="startBtn" onclick="startJob()" disabled>开始执行</button>
+    </div>
+  </div>
+
+  <!-- Tab 2: 运行 -->
+  <div class="tab-content" id="tab-run">
+    <div class="card" id="runStatus">
+      <p style="color:#999; text-align:center; padding:40px;">尚未运行任何任务</p>
+    </div>
+  </div>
+
+  <!-- Tab 3: 输出 -->
+  <div class="tab-content" id="tab-output">
+    <div class="card" id="outputBrowser">
+      <p style="color:#999; text-align:center; padding:40px;">运行完成后在此浏览输出文件</p>
+    </div>
+  </div>
+
+  <!-- Tab 4: 图片 -->
+  <div class="tab-content" id="tab-images">
+    <div class="card" id="imageViewer">
+      <p style="color:#999; text-align:center; padding:40px;">选择输出文件夹中的图片目录开始浏览</p>
+    </div>
+  </div>
+</div>
+
+<!-- Folder picker modal -->
+<div class="modal-overlay" id="browserModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>选择文件夹</h3>
+      <button class="btn btn-sm" onclick="closeBrowser()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="breadcrumb" id="browserBreadcrumb"></div>
+      <div class="file-tree" id="browserTree"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeBrowser()" style="margin-right:8px">取消</button>
+      <button class="btn btn-primary btn-sm" id="browserSelectBtn" onclick="selectFolder()">选择此文件夹</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let commands = [];
+let selectedCommand = null;
+let currentJobId = null;
+let eventSource = null;
+let browserTarget = null;  // 'input' or 'output'
+let browserCurrentPath = '';
+
+// ===== Init =====
+async function init() {
+  const res = await fetch(`${API}/api/defaults`);
+  const data = await res.json();
+  commands = data.commands;
+  document.getElementById('outputPath').value = data.default_output;
+  renderCommands();
+}
+
+// ===== Tabs =====
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
+  // Find tab button by text content
+  document.querySelectorAll('.tab').forEach(t => {
+    const map = {'配置':'setup','运行':'run','输出':'output','图片':'images'};
+    if (map[t.textContent] === name) t.classList.add('active');
+  });
+}
+
+// ===== Commands =====
+function renderCommands() {
+  const group = document.getElementById('commandGroup');
+  group.innerHTML = commands.map(c => `
+    <div class="radio-item" onclick="selectCommand('${c.id}')" id="cmd-${c.id}">
+      <div>
+        <div>${c.name}</div>
+        <div class="cmd-desc">${c.description}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectCommand(id) {
+  selectedCommand = commands.find(c => c.id === id);
+  document.querySelectorAll('.radio-item').forEach(r => r.classList.remove('selected'));
+  document.getElementById(`cmd-${id}`).classList.add('selected');
+  renderOptions();
+  updateStartBtn();
+}
+
+function renderOptions() {
+  const card = document.getElementById('optionsCard');
+  const form = document.getElementById('optionsForm');
+  if (!selectedCommand || !selectedCommand.options.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+  form.innerHTML = selectedCommand.options.map(opt => {
+    if (opt.type === 'select') {
+      const options = opt.choices.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+      return `<div class="field"><label>${opt.label}</label><select id="opt-${opt.id}">${options}</select></div>`;
+    }
+    if (opt.type === 'file') {
+      return `<div class="field-row"><div class="field"><label>${opt.label}</label><input id="opt-${opt.id}" placeholder="可选"></div><button class="btn btn-sm" onclick="openBrowser('opt-${opt.id}')">浏览</button></div>`;
+    }
+    return `<div class="field"><label>${opt.label}</label><input id="opt-${opt.id}" placeholder="${opt.placeholder || ''}"></div>`;
+  }).join('');
+}
+
+function updateStartBtn() {
+  const btn = document.getElementById('startBtn');
+  btn.disabled = !selectedCommand || !document.getElementById('inputPath').value;
+}
+
+// ===== Folder Browser =====
+function openBrowser(target) {
+  browserTarget = target;
+  const modal = document.getElementById('browserModal');
+  modal.classList.add('open');
+  // Start from current path or drives
+  const currentVal = target === 'input' ? document.getElementById('inputPath').value :
+                     target === 'output' ? document.getElementById('outputPath').value : '';
+  browseTo(currentVal || '');
+}
+
+function closeBrowser() {
+  document.getElementById('browserModal').classList.remove('open');
+}
+
+async function browseTo(path) {
+  browserCurrentPath = path;
+  const res = await fetch(`${API}/api/browse?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+
+  // Breadcrumb
+  const bc = document.getElementById('browserBreadcrumb');
+  if (data.current) {
+    const parts = data.current.replace(/\\/g, '/').split('/').filter(Boolean);
+    let accumulated = '';
+    bc.innerHTML = `<span onclick="browseTo('')">磁盘</span> /`;
+    for (const part of parts) {
+      accumulated += part + '/';
+      const p = accumulated;
+      bc.innerHTML += ` <span onclick="browseTo('${p.replace(/'/g, "\\'")}')">${part}</span> /`;
+    }
+  } else {
+    bc.innerHTML = '<span>选择磁盘</span>';
+  }
+
+  // Tree
+  const tree = document.getElementById('browserTree');
+  tree.innerHTML = '';
+
+  // Parent dir
+  if (data.parent) {
+    tree.innerHTML += `<div class="file-entry" onclick="browseTo('${data.parent.replace(/\\/g,'/').replace(/'/g,"\\'")}')">
+      <span class="file-icon">&#128281;</span><span class="file-name">..</span></div>`;
+  }
+
+  for (const e of data.entries) {
+    if (e.type === 'drive') {
+      tree.innerHTML += `<div class="file-entry" onclick="browseTo('${e.name}')">
+        <span class="file-icon">&#128187;</span><span class="file-name">${e.name}</span></div>`;
+    } else if (e.type === 'dir') {
+      const full = (data.current ? data.current.replace(/\\/g,'/').replace(/\/$/, '') + '/' : '') + e.name;
+      tree.innerHTML += `<div class="file-entry" onclick="browseTo('${full.replace(/'/g,"\\'")}')">
+        <span class="file-icon">&#128193;</span><span class="file-name">${e.name}</span></div>`;
+    } else {
+      const ext = e.ext || '';
+      const isImg = ['.png','.jpg','.jpeg'].includes(ext);
+      const icon = isImg ? '&#128444;' : ext === '.json' ? '&#128196;' : '&#128196;';
+      tree.innerHTML += `<div class="file-entry">
+        <span class="file-icon">${icon}</span><span class="file-name">${e.name}</span>
+        <span class="file-size">${formatSize(e.size)}</span></div>`;
+    }
+  }
+}
+
+function selectFolder() {
+  const path = browserCurrentPath;
+  if (!path) return;
+  if (browserTarget === 'input') {
+    document.getElementById('inputPath').value = path;
+    previewInput(path);
+  } else if (browserTarget === 'output') {
+    document.getElementById('outputPath').value = path;
+  } else if (browserTarget.startsWith('opt-')) {
+    document.getElementById(browserTarget).value = path;
+  }
+  closeBrowser();
+  updateStartBtn();
+}
+
+async function previewInput(path) {
+  const res = await fetch(`${API}/api/files?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  const div = document.getElementById('inputPreview');
+  if (data.entries) {
+    const images = data.entries.filter(e => ['.png','.jpg','.jpeg'].includes(e.ext));
+    if (images.length) {
+      div.innerHTML = `<div style="font-size:12px;color:#888;margin:4px 0">找到 ${images.length} 张图片</div>
+        <div class="preview-strip">${images.slice(0, 10).map(img => {
+          const full = path.replace(/\\/g,'/').replace(/\/$/, '') + '/' + img.name;
+          return `<img src="${API}/api/file?path=${encodeURIComponent(full)}" title="${img.name}">`;
+        }).join('')}${images.length > 10 ? `<span style="padding:20px;color:#999">+${images.length-10} more</span>` : ''}</div>`;
+    } else {
+      div.innerHTML = '<div style="font-size:12px;color:#fa8c16;margin:4px 0">未找到图片文件</div>';
+    }
+  }
+}
+
+// ===== Job Execution =====
+async function startJob() {
+  if (!selectedCommand) return;
+  const inputPath = document.getElementById('inputPath').value;
+  const outputPath = document.getElementById('outputPath').value;
+
+  const options = {};
+  if (selectedCommand.options) {
+    for (const opt of selectedCommand.options) {
+      const el = document.getElementById(`opt-${opt.id}`);
+      if (el && el.value) options[opt.id] = el.value;
+    }
+  }
+
+  const res = await fetch(`${API}/api/run`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      command: selectedCommand.id,
+      input_path: inputPath,
+      output_path: outputPath,
+      options,
+    }),
+  });
+  const data = await res.json();
+  currentJobId = data.job_id;
+
+  switchTab('run');
+  connectSSE(data.job_id);
+}
+
+function connectSSE(jobId) {
+  if (eventSource) eventSource.close();
+
+  const panel = document.getElementById('runStatus');
+  panel.innerHTML = `
+    <div class="phase-text" id="phaseText">启动中...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText"></div>
+    <div class="log-panel" id="logPanel"></div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn btn-danger btn-sm" id="cancelBtn" onclick="cancelJob()">取消</button>
+    </div>
+  `;
+
+  eventSource = new EventSource(`${API}/api/progress/${jobId}`);
+  eventSource.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const log = document.getElementById('logPanel');
+
+    if (d.type === 'stdout' || d.type === 'info' || d.type === 'error') {
+      const cls = d.type === 'error' ? 'log-line-error' : d.type === 'info' ? 'log-line-info' : '';
+      log.innerHTML += `<div class="${cls}">${escapeHtml(d.line)}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    if (d.type === 'progress') {
+      if (d.phase) document.getElementById('phaseText').textContent = d.phase;
+      if (d.pct !== undefined) {
+        document.getElementById('progressFill').style.width = d.pct + '%';
+        document.getElementById('progressText').textContent =
+          d.done && d.total ? `${d.done} / ${d.total} (${d.pct}%)` : `${d.pct}%`;
+      }
+    }
+
+    if (d.type === 'complete') {
+      eventSource.close();
+      eventSource = null;
+      const badge = d.status === 'completed' ? '<span class="status-badge status-completed">完成</span>' :
+                    d.status === 'failed' ? '<span class="status-badge status-failed">失败</span>' :
+                    '<span class="status-badge status-running">已取消</span>';
+      document.getElementById('phaseText').innerHTML = `${badge} 耗时 ${d.duration}s`;
+      document.getElementById('progressFill').style.width = '100%';
+      document.getElementById('cancelBtn').style.display = 'none';
+
+      if (d.status === 'completed' && d.output_dir) {
+        loadOutputBrowser(d.output_dir);
+      }
+    }
+  };
+
+  eventSource.onerror = () => {
+    eventSource.close();
+    eventSource = null;
+  };
+}
+
+async function cancelJob() {
+  if (!currentJobId) return;
+  await fetch(`${API}/api/jobs/${currentJobId}/cancel`, {method: 'POST'});
+}
+
+// ===== Output Browser =====
+async function loadOutputBrowser(path) {
+  switchTab('output');
+  const panel = document.getElementById('outputBrowser');
+  const res = await fetch(`${API}/api/files?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+
+  if (data.type !== 'dir') {
+    panel.innerHTML = '<p style="color:#999">输出目录不存在</p>';
+    return;
+  }
+
+  let html = `<div class="breadcrumb" id="outputBreadcrumb"></div>`;
+  html += `<div id="outputFileList"></div>`;
+  html += `<div id="outputFileContent" style="margin-top:16px"></div>`;
+  panel.innerHTML = html;
+
+  renderOutputDir(path, data);
+}
+
+function renderOutputDir(path, data) {
+  // Breadcrumb
+  const bc = document.getElementById('outputBreadcrumb');
+  const parts = path.replace(/\\/g,'/').split('/').filter(Boolean);
+  let acc = '';
+  bc.innerHTML = parts.map(p => {
+    acc += p + '/';
+    const a = acc;
+    return `<span onclick="navigateOutput('${a.replace(/'/g,"\\'")}')">${p}</span>`;
+  }).join(' / ');
+
+  // File list
+  const list = document.getElementById('outputFileList');
+  list.innerHTML = '';
+
+  if (data.parent || parts.length > 1) {
+    const parent = path.replace(/\\/g,'/').replace(/\/[^/]+\/?$/, '');
+    list.innerHTML += `<div class="file-entry" onclick="navigateOutput('${parent.replace(/'/g,"\\'")}')">
+      <span class="file-icon">&#128281;</span><span class="file-name">..</span></div>`;
+  }
+
+  for (const e of data.entries) {
+    const full = path.replace(/\\/g,'/').replace(/\/$/, '') + '/' + e.name;
+    if (e.type === 'dir') {
+      list.innerHTML += `<div class="file-entry" onclick="navigateOutput('${full.replace(/'/g,"\\'")}')">
+        <span class="file-icon">&#128193;</span><span class="file-name">${e.name}/</span></div>`;
+    } else {
+      const isImg = ['.png','.jpg','.jpeg'].includes(e.ext);
+      const isJson = e.ext === '.json';
+      const icon = isImg ? '&#128444;' : isJson ? '&#128196;' : '&#128196;';
+      const onclick = isJson ? `viewJson('${full.replace(/'/g,"\\'")}')` :
+                      isImg ? `viewImage('${full.replace(/'/g,"\\'")}')` : '';
+      list.innerHTML += `<div class="file-entry" onclick="${onclick}">
+        <span class="file-icon">${icon}</span><span class="file-name">${e.name}</span>
+        <span class="file-size">${formatSize(e.size)}</span></div>`;
+    }
+  }
+}
+
+async function navigateOutput(path) {
+  const res = await fetch(`${API}/api/files?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  if (data.type === 'dir') {
+    renderOutputDir(path, data);
+    document.getElementById('outputFileContent').innerHTML = '';
+  }
+}
+
+async function viewJson(path) {
+  const res = await fetch(`${API}/api/file?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  const content = document.getElementById('outputFileContent');
+  content.innerHTML = `<h3 style="font-size:13px;color:#666;margin-bottom:8px">${path.split('/').pop()}</h3>
+    <div class="json-viewer">${highlightJson(JSON.stringify(data, null, 2))}</div>`;
+}
+
+function viewImage(path) {
+  switchTab('images');
+  const panel = document.getElementById('imageViewer');
+  panel.innerHTML = `<div class="image-viewer">
+    <img src="${API}/api/file?path=${encodeURIComponent(path)}">
+    <p style="font-size:12px;color:#888;margin-top:8px">${path.split('/').pop()}</p>
+  </div>`;
+}
+
+// ===== Utilities =====
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightJson(str) {
+  return str.replace(/(".*?")(\s*:)?/g, (match, key, colon) => {
+    if (colon) return `<span class="json-key">${escapeHtml(key)}</span>${colon}`;
+    return `<span class="json-string">${escapeHtml(key)}</span>`;
+  }).replace(/\b(\d+\.?\d*)\b/g, '<span class="json-number">$1</span>')
+    .replace(/\b(true|false)\b/g, '<span class="json-bool">$1</span>')
+    .replace(/\bnull\b/g, '<span class="json-null">null</span>');
+}
+
+init();
+</script>
+</body>
+</html>
