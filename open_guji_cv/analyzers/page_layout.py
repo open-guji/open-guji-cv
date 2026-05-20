@@ -396,7 +396,12 @@ class PageLayoutAnalyzer(BaseAnalyzer):
 
     def _count_lines_with_ruling(self, img: np.ndarray,
                                   is_full: bool = False) -> tuple[int | None, bool]:
-        """检测行数，同时返回是否找到了形态学栏线。"""
+        """检测行数，同时返回是否找到了形态学栏线。
+
+        策略：morph 为主，proj 为 fallback。
+        1. 先尝试 morph（检测栏线）
+        2. morph 失败时（无栏线/低分辨率）回退到 proj（检测文字密度峰）
+        """
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
         h, w = gray.shape
 
@@ -405,136 +410,52 @@ class PageLayoutAnalyzer(BaseAnalyzer):
             gray = gray[:, x_start:]
             h, w = gray.shape
 
-        y0 = int(h * 0.2)
-        y1 = int(h * 0.8)
+        y0 = int(h * 0.10)
+        y1 = int(h * 0.90)
         roi = gray[y0:y1, :]
         rh = y1 - y0
 
         _, bw = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        result_a = self._morph_line_count(bw, rh, w)
-        result_b = self._proj_line_count(bw, rh, w)
-        result_c = self._cc_line_count(bw, rh, w) if w < 800 else None  # CC 仅低分辨率
+        result = self._morph_line_count(bw, rh, w)
+        has_ruling = result is not None
 
-        has_ruling = result_a is not None
+        if result is None:
+            result = self._proj_line_count(bw, rh, w)
 
-        # 收集所有有效结果
-        candidates = []
-        if result_a is not None:
-            candidates.append(('morph', result_a))
-        if result_b is not None:
-            candidates.append(('proj', result_b))
-        if result_c is not None:
-            candidates.append(('cc', result_c))
-
-        if not candidates:
-            return None, has_ruling
-
-        if len(candidates) == 1:
-            return candidates[0][1], has_ruling
-
-        values = [v for _, v in candidates]
-
-        # 如果有两个或以上方法结果接近（±1），取它们的众数
-        from collections import Counter
-        close_groups = []
-        for v in values:
-            close_groups.extend([v - 1, v, v + 1])
-        counter = Counter(close_groups)
-        best_val, best_count = counter.most_common(1)[0]
-        if best_count >= 2:
-            # 取最接近这个值的实际检测值
-            closest = min(values, key=lambda x: abs(x - best_val))
-            return closest, has_ruling
-
-        # morph 和 proj 双峰检查（proj = morph * 2）
-        if result_a is not None and result_b is not None:
-            if result_a >= 4 and result_b > 0 and abs(result_a * 2 - result_b) <= 1:
-                return result_a, has_ruling
-
-        # 取中位数
-        return int(np.median(values)), has_ruling
+        return result, has_ruling
 
     def _morph_line_count(self, bw: np.ndarray, rh: int, w: int) -> int | None:
-        """形态学方法：提取界行 → 用峰数推算行数。
+        """形态学方法：提取栏线竖线 → 用间距推算行数。
 
-        尝试多个 kernel 大小，取检测到最多峰的结果（更充分的检测）。
+        多尺度扫描：从严格到宽松尝试不同 kernel 高度和 min_dist，
+        取峰数最多的结果（检测到越多峰，过滤后越准确）。
         """
         best_peaks = []
-        for div, min_v_ratio in [(4, 0.1), (5, 0.1), (7, 0.06)]:
+
+        for div, min_v_ratio in [(4, 0.10), (5, 0.10), (7, 0.06), (10, 0.04)]:
             v_kernel_len = max(rh // div, 15)
             v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, v_kernel_len))
             v_lines = cv2.morphologyEx(bw, cv2.MORPH_OPEN, v_kernel)
             v_proj = np.sum(v_lines, axis=0) / 255
-
             min_v = rh * min_v_ratio
-            min_dist = max(w // 30, 3)
-            peaks = self._find_peaks(v_proj, min_v, min_dist)
 
-            if len(peaks) > len(best_peaks):
-                best_peaks = peaks
+            # 尝试两种 min_dist：宽松的（捕捉双边框）和标准的
+            for md in [max(w // 50, 3), max(w // 30, 3)]:
+                peaks = self._find_peaks(v_proj, min_v, md)
+                if len(peaks) > len(best_peaks):
+                    best_peaks = peaks
 
-        if len(best_peaks) >= 3:
-            return self._spacing_based_count(best_peaks, w)
-        return None
-
-    def _cc_line_count(self, bw: np.ndarray, rh: int, w: int) -> int | None:
-        """连通分量聚类法：通过字符中心 x 坐标聚类推算列数。
-
-        适用于低分辨率图片，作为投影法的补充。
-        """
-        margin_x = int(w * 0.08)
-        margin_y = int(rh * 0.05)
-        roi = bw[margin_y:rh - margin_y, margin_x:w - margin_x]
-        rh2, rw2 = roi.shape
-
-        if rh2 < 30 or rw2 < 30:
+        if len(best_peaks) < 4:
             return None
 
-        n_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(roi, connectivity=8)
-
-        min_area = rh2 * rw2 * 0.0003
-        max_area = rh2 * rw2 * 0.015
-
-        cx_list = []
-        for j in range(1, n_labels):
-            area = stats[j, cv2.CC_STAT_AREA]
-            bw_w = stats[j, cv2.CC_STAT_WIDTH]
-            bw_h = stats[j, cv2.CC_STAT_HEIGHT]
-            if area < min_area or area > max_area:
-                continue
-            if max(bw_w, bw_h) / max(min(bw_w, bw_h), 1) > 5:
-                continue
-            cx_list.append(centroids[j][0])
-
-        if len(cx_list) < 10:
-            return None
-
-        # 直方图聚类
-        bin_width = max(rw2 // 30, 8)
-        n_bins = rw2 // bin_width
-        if n_bins < 3:
-            return None
-
-        hist, _ = np.histogram(cx_list, bins=n_bins, range=(0, rw2))
-        threshold = np.max(hist) * 0.3
-
-        # 计算列数（连续高值 bin 为一列）
-        in_cluster = False
-        clusters = 0
-        for v in hist:
-            if v > threshold:
-                if not in_cluster:
-                    clusters += 1
-                    in_cluster = True
-            else:
-                in_cluster = False
-
-        if 3 <= clusters <= 15:
-            return clusters
-        return None
+        return self._peaks_to_line_count(best_peaks, w)
 
     def _proj_line_count(self, bw: np.ndarray, rh: int, w: int) -> int | None:
+        """投影法 fallback：通过文字密度峰检测列数。
+
+        仅当 morph 失败时使用（无栏线 / 低分辨率）。
+        """
         col_proj = np.sum(bw, axis=0).astype(np.float64) / 255
         kernel_size = max(w // 80, 3)
         if kernel_size % 2 == 0:
@@ -546,50 +467,62 @@ class PageLayoutAnalyzer(BaseAnalyzer):
         min_dist = max(w // 20, 5)
         peaks = self._find_peaks(col_smooth, min_peak, min_dist)
 
-        if len(peaks) >= 4:
-            return self._spacing_based_count(peaks, w)
+        if len(peaks) < 4:
+            return None
 
-        return None
+        return self._peaks_to_line_count(peaks, w)
 
-    def _spacing_based_count(self, peaks: list[int], total_width: int) -> int | None:
-        """基于峰值间距和数量推算行数。
+    def _peaks_to_line_count(self, peaks: list[int], total_width: int) -> int | None:
+        """从峰列表推算行数。
 
-        两种估算取较大值（避免因漏检峰而低估）：
-        1. 过滤后的 peaks 数 - 1
-        2. content_width / median_spacing（覆盖漏检的峰）
+        策略：找出正文栏线的典型间距，排除边框/版心的异常间距，
+        用正文区域宽度 / 典型间距 估算行数。
+
+        关键：正文栏线间距是最常出现的间距范围，
+        边框双线间距远小于它，版心到首栏的间距远大于它。
         """
-        if len(peaks) < 2:
+        if len(peaks) < 3:
             return None
 
-        spacings = [peaks[i + 1] - peaks[i] for i in range(len(peaks) - 1)]
-        if not spacings:
+        n = len(peaks)
+        spacings = [peaks[i + 1] - peaks[i] for i in range(n - 1)]
+
+        # 用直方图找最常见的间距范围（正文间距的众数）
+        sp_arr = np.array(spacings, dtype=float)
+        # bin 宽度 = 总宽度的 3%（自适应）
+        bin_w = max(total_width * 0.03, 10)
+        max_sp = max(spacings)
+        n_bins = max(int(max_sp / bin_w) + 1, 3)
+        hist, bin_edges = np.histogram(sp_arr, bins=n_bins, range=(0, max_sp + bin_w))
+
+        # 找最高的 bin → 正文间距的中心
+        best_bin = int(np.argmax(hist))
+        text_center = (bin_edges[best_bin] + bin_edges[best_bin + 1]) / 2
+
+        # 正文间距范围：中心 ±40%
+        lo = text_center * 0.6
+        hi = text_center * 1.4
+
+        # 收集所有在正文间距范围内的间距，重新计算中位数
+        text_spacings = [sp for sp in spacings if lo <= sp <= hi]
+        if len(text_spacings) < 2:
+            return None
+        text_spacing = float(np.median(text_spacings))
+
+        # 找正文区域的边界（第一个和最后一个正文间距对应的峰）
+        first_idx = None
+        last_idx = None
+        for i, sp in enumerate(spacings):
+            if lo <= sp <= hi:
+                if first_idx is None:
+                    first_idx = i
+                last_idx = i + 1  # 右峰索引
+
+        if first_idx is None:
             return None
 
-        median_spacing = np.median(spacings)
-        if median_spacing < 5:
-            return None
-
-        # 过滤首尾异常间距（版心或边框导致的额外峰）
-        filtered_peaks = list(peaks)
-        if len(spacings) >= 3:
-            if spacings[0] > median_spacing * 1.8:
-                filtered_peaks = filtered_peaks[1:]
-            spacings2 = [filtered_peaks[i + 1] - filtered_peaks[i] for i in range(len(filtered_peaks) - 1)]
-            if spacings2 and spacings2[-1] > median_spacing * 1.8:
-                filtered_peaks = filtered_peaks[:-1]
-
-        if len(filtered_peaks) < 2:
-            return None
-
-        # 方法1：峰数 - 1
-        count_by_peaks = len(filtered_peaks) - 1
-
-        # 方法2：间距法
-        content_width = filtered_peaks[-1] - filtered_peaks[0]
-        count_by_spacing = round(content_width / median_spacing)
-
-        # 取较大值（避免因边缘峰漏检而低估）
-        estimated = max(count_by_peaks, count_by_spacing)
+        content_width = peaks[last_idx] - peaks[first_idx]
+        estimated = round(content_width / text_spacing)
 
         if 3 <= estimated <= 15:
             return estimated
