@@ -151,6 +151,64 @@ def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
     return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
 
 
+def fit_page_grid(projs: list[np.ndarray], n_chars: int,
+                  full_widths: list[float] | None = None,
+                  cell_step: float = 0.5, phase_step: int = 2
+                  ) -> tuple[float, float]:
+    """页级刚性网格拟合：在全部文字列的聚合投影上搜索 (相位, 格高)。
+
+    刻本整版先划栏格再上字：**格高固定、跨列统一**；列首/列尾的空格
+    占格位但无墨——因此网格必须锚定栏格证据（聚合投影的周期结构），
+    而非单列的内容范围（抬头空格列按内容锚定会整体错位一格）。
+
+    Returns:
+        (phase, cell_h): 网格首线位置与固定格高。
+    """
+    page = np.sum(projs, axis=0)
+    L = len(page)
+    if page.sum() < 1:
+        return 0.0, L / n_chars
+    fw = float(sum(full_widths)) if full_widths else None
+    top, bottom = content_range(page, min_run=0.25 * L / n_chars,
+                                max_fill=0.8 * fw if fw else None)
+    base = (bottom - top) / n_chars
+    smooth = _smooth(page, base)
+
+    best = (float(top), base)
+    best_cost = float("inf")
+    for cell_h in np.arange(base * 0.92, base * 1.08, cell_step):
+        span = cell_h * n_chars
+        # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头
+        p_lo = max(0.0, top - 1.2 * cell_h)
+        p_hi = min(top + 1.2 * cell_h, max(p_lo, L - span))
+        for phase in np.arange(p_lo, p_hi + phase_step, phase_step):
+            cost = _grid_cost(smooth, phase, cell_h, n_chars)
+            if cost < best_cost:
+                best_cost = cost
+                best = (float(phase), float(cell_h))
+    return best
+
+
+def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
+                 n_chars: int, micro: float = 0.12,
+                 phase_step: int = 1) -> list[float]:
+    """单列刚性网格：格高固定，相位在页面相位 ±micro×格高 内微调。
+
+    微调只容忍板歪/扫描形变；空列/稀疏列信号弱时代价面平坦，
+    平局偏向页面相位（刻本栏格跨列统一）。"""
+    L = len(proj)
+    smooth = _smooth(proj, cell_h)
+    r = micro * cell_h
+    best_phase, best_cost = max(0.0, page_phase), float("inf")
+    for phase in np.arange(max(0.0, page_phase - r),
+                           page_phase + r + phase_step, phase_step):
+        cost = _grid_cost(smooth, phase, cell_h, n_chars) \
+            + 1e-3 * abs(phase - page_phase) / cell_h * max(1.0, smooth.mean())
+        if cost < best_cost:
+            best_cost, best_phase = cost, float(phase)
+    return [best_phase + cell_h * k for k in range(n_chars + 1)]
+
+
 def dp_boundaries(proj: np.ndarray, cell_h: float, n_chars: int,
                   phase_prior: float | None = None,
                   elastic: float = 0.15, step: int = 2,
@@ -357,35 +415,16 @@ class GridSegmenter:
             crop = image[y1:y2, x1:x2]
             text_cols.append((col_result, crop, column_projection(crop)))
 
-        # 两级网格模型：**页级共享字高 + 每列独立相位**。
-        # 字高由整版刻制决定、全页一致（密列独立拟合取中位数，稳健）；
-        # 相位（行起点）写刻本每列有自然浮动（可达半字），必须逐列拟合；
-        # 稀疏列（职名页/空列）相位信号弱，回退到页面中位相位。
+        # 刚性网格模型：刻本整版先划栏格再上字，**格高固定、跨列统一**；
+        # 列首/列尾空格占格位但无墨（判空处理），网格锚定栏格周期证据
+        # （页级聚合投影），绝不按单列内容范围锚定——抬头空格列会错一格。
+        # 每列仅允许相位 ±0.12 格微调（板歪/扫描形变），格高不变。
         if text_cols:
-            inks = [float(p.sum()) for _, _, p in text_cols]
-            median_ink = float(np.median([v for v in inks if v > 0]) or 0)
-            dense = [(cr, crop, p) for (cr, crop, p), v in zip(text_cols, inks)
-                     if median_ink and v >= 0.3 * median_ink]
-            dense_ids = {id(cr) for cr, _, _ in dense}
-            if dense:
-                heights = [fit_global_grid(p, n,
-                                           full_width=crop.shape[1])[1]
-                           for _, crop, p in dense]
-                cell_h = float(np.median(heights))
-            else:
-                cell_h = (y2 - y1) / n
-            bounds_of: dict[int, list[float]] = {}
-            for cr, crop, proj in dense:
-                bounds_of[id(cr)] = dp_boundaries(
-                    proj, cell_h, n, full_width=crop.shape[1])
-            median_phase = float(np.median(
-                [b[0] for b in bounds_of.values()])) if bounds_of else 0.0
+            page_phase, cell_h = fit_page_grid(
+                [p for _, _, p in text_cols], n,
+                full_widths=[crop.shape[1] for _, crop, _ in text_cols])
             for col_result, crop, proj in text_cols:
-                bounds = bounds_of.get(id(col_result))
-                if bounds is None:   # 稀疏列：锚定页面中位相位
-                    bounds = dp_boundaries(proj, cell_h, n,
-                                           phase_prior=median_phase,
-                                           full_width=crop.shape[1])
+                bounds = rigid_bounds(proj, page_phase, cell_h, n)
                 cells = cells_from_bounds(crop, bounds, self.params)
                 for c in cells:   # 局部 → 全图坐标
                     c["y_top"] += y1
