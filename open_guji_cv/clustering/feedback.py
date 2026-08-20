@@ -1,12 +1,17 @@
-"""M7 反馈更新：标签事件流重放 + 聚类阈值标定。
+"""M7 反馈更新：标签事件流重放 + 阈值标定 + 字形库入库 + 用字习惯统计。
 
 labels.jsonl（只追加）是唯一真源，当前标注状态 = 重放事件流。
 事件类型：confirm / relabel / split / merge / mark（见设计文档 9.3）。
+
+run_update() 是 CLI `update` 命令的实现：消费标签，更新四类下游资产
+（字形库 / 聚类阈值 / variant_prefs / 确认语料），全部显式批处理。
 """
 
 from __future__ import annotations
 
+import itertools
 import json
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -129,3 +134,172 @@ def calibrate_threshold(same_scores: np.ndarray, diff_scores: np.ndarray,
         best = {"theta_high": 1.0, "same_recall": 0.0, "impurity": 0.0,
                 "n_same": len(same_scores), "n_diff": len(diff_scores)}
     return best
+
+
+# ── update 批处理（CLI `update` 命令的实现）───────────────
+
+def derive_truth(state: LabelState, cluster_members: dict[str, list[str]]
+                 ) -> dict[str, str]:
+    """标注状态 → instance_id → 精确字形 真值表。"""
+    truth: dict[str, str] = {}
+    for cid, members in cluster_members.items():
+        for iid in members:
+            label = state.label_of(iid, cid)
+            if label:
+                truth[iid] = label
+    truth.update(state.instance_labels)
+    return truth
+
+
+def _sample_pairs(groups: list[list[int]], max_pairs: int,
+                  rng: random.Random) -> list[tuple[int, int]]:
+    """从若干同组下标列表中抽样组内对。"""
+    pairs: list[tuple[int, int]] = []
+    for g in groups:
+        pairs.extend(itertools.combinations(g, 2))
+    rng.shuffle(pairs)
+    return pairs[:max_pairs]
+
+
+def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
+               edition_tag: str | None = None,
+               calibrate: bool = True, max_pairs: int = 300,
+               seed: int = 7) -> dict:
+    """消费 labels.jsonl，更新字形库 / 阈值 / variant_prefs / 确认语料。"""
+    from .extractor import load_index
+    from .glyph_library import GlyphLibrary
+    from .ids import parse_id, reading_order_key
+    from .variants import VariantMap
+    from .verify import verify_pair
+
+    book_dir = Path(book_out_dir)
+    book = book_dir.name
+    edition = edition_tag or book
+    store_dir = Path(glyph_store_dir)
+    rng = random.Random(seed)
+    variant_map = VariantMap.load()
+
+    events = load_events(book_dir / "phase7_review" / "labels.jsonl")
+    if not events:
+        raise FileNotFoundError(
+            f"没有标签事件: {book_dir / 'phase7_review' / 'labels.jsonl'}"
+            "（请先运行 review 完成一轮审查）")
+    state = replay_events(events)
+
+    instances = load_index(book_dir / "phase4_chars")
+    pos_of = {inst.id: k for k, inst in enumerate(instances)}
+    with open(book_dir / "phase5_clusters" / "clusters.json",
+              encoding="utf-8") as f:
+        clusters = json.load(f)["clusters"]
+    cluster_members = {c["cluster_id"]: c["members"] for c in clusters}
+    reps_of = {c["cluster_id"]: c["reps"] for c in clusters}
+
+    npz = np.load(book_dir / "phase5_clusters" / "features.npz")
+    patches = npz["patches"]
+
+    truth = derive_truth(state, cluster_members)
+    summary: dict = {"events": len(events), "labeled_instances": len(truth)}
+
+    # 1) 字形库入库：每个已确认簇 root 取 medoid 图块
+    lib = GlyphLibrary(store_dir)
+    added = skipped = 0
+    for cid, members in cluster_members.items():
+        root = state.merged_into.get(cid, cid)
+        char = state.cluster_labels.get(root)
+        if not char:
+            continue
+        valid = [m for m in members
+                 if state.label_of(m, cid) == char and m in pos_of]
+        if not valid:
+            continue
+        medoid_id = next((r for r in reps_of.get(cid, []) if r in valid),
+                         valid[0])
+        patch = patches[pos_of[medoid_id]]
+        # 去重：库中已有同字同版且配准判 same 的条目则跳过
+        dup = any(h.verdict == "same" and h.char == char
+                  for h in lib.query(patch, edition_hint=edition, k=3))
+        if dup:
+            skipped += 1
+            continue
+        lib.add(char, variant_map.semantic(char), patch,
+                book=book, edition_tag=edition,
+                n_confirmed=len(valid), source_instances=valid)
+        added += 1
+    lib.save()
+    summary["glyphs_added"] = added
+    summary["glyphs_skipped_dup"] = skipped
+
+    # 2) 阈值标定：same 对来自同标签簇内，diff 对来自异标签簇间 + split 对
+    if calibrate:
+        by_char: dict[str, list[int]] = {}
+        for iid, char in truth.items():
+            if iid in pos_of:
+                by_char.setdefault(char, []).append(pos_of[iid])
+        same_pairs = _sample_pairs(list(by_char.values()), max_pairs, rng)
+
+        diff_pairs: list[tuple[int, int]] = []
+        chars = list(by_char)
+        for a_i in range(len(chars)):
+            for b_i in range(a_i + 1, len(chars)):
+                a = rng.choice(by_char[chars[a_i]])
+                b = rng.choice(by_char[chars[b_i]])
+                diff_pairs.append((a, b))
+        # split 产生的异类对（移出成员 vs 原簇 medoid）——最有价值的难例
+        for cid, moved_id in state.diff_pairs:
+            root = state.merged_into.get(cid, cid)
+            reps = [r for r in reps_of.get(cid, []) if r in pos_of]
+            if reps and moved_id in pos_of:
+                diff_pairs.append((pos_of[reps[0]], pos_of[moved_id]))
+        rng.shuffle(diff_pairs)
+        diff_pairs = diff_pairs[:max_pairs]
+
+        if same_pairs and diff_pairs:
+            same_scores = np.array([verify_pair(patches[a], patches[b]).f1
+                                    for a, b in same_pairs])
+            diff_scores = np.array([verify_pair(patches[a], patches[b]).f1
+                                    for a, b in diff_pairs])
+            calib = calibrate_threshold(same_scores, diff_scores)
+            calib["book"] = book
+            calib["n_same_pairs"] = len(same_pairs)
+            calib["n_diff_pairs"] = len(diff_pairs)
+            calib_dir = store_dir / "calib"
+            calib_dir.mkdir(parents=True, exist_ok=True)
+            with open(calib_dir / "thresholds.json", "w",
+                      encoding="utf-8") as f:
+                json.dump(calib, f, ensure_ascii=False, indent=2)
+            summary["calibration"] = calib
+        else:
+            summary["calibration"] = "样本不足，跳过"
+
+    # 3) variant_prefs：本书的异体字用字习惯（语义字 → 实际用形分布）
+    prefs: dict[str, dict[str, int]] = {}
+    for char in truth.values():
+        sem = variant_map.semantic(char)
+        prefs.setdefault(sem, {})
+        prefs[sem][char] = prefs[sem].get(char, 0) + 1
+    prefs_dir = store_dir / "lm" / "variant_prefs"
+    prefs_dir.mkdir(parents=True, exist_ok=True)
+    with open(prefs_dir / f"{edition}.json", "w", encoding="utf-8") as f:
+        json.dump(prefs, f, ensure_ascii=False, indent=2)
+    summary["variant_prefs"] = {k: v for k, v in prefs.items()
+                                if len(v) > 1}   # 只汇报有多形体的
+
+    # 4) 确认语料导出（语义层）：只导出全列已确认的列
+    by_col: dict[tuple, list] = {}
+    for inst in instances:
+        by_col.setdefault((inst.page, inst.col), []).append(inst)
+    lines: list[str] = []
+    for key in sorted(by_col,
+                      key=lambda k: (reading_order_key(
+                          parse_id(by_col[k][0].id))[0], k[1])):
+        col_insts = sorted(by_col[key], key=lambda i: i.idx)
+        chars = [truth.get(i.id) for i in col_insts]
+        if all(chars):
+            lines.append(variant_map.normalize_text("".join(chars)))
+    corpus_dir = store_dir / "lm" / "corpus_confirmed"
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    (corpus_dir / f"{book}.txt").write_text("\n".join(lines),
+                                            encoding="utf-8")
+    summary["corpus_columns"] = len(lines)
+
+    return summary
