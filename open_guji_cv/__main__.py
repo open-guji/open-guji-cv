@@ -14,6 +14,12 @@ Web 界面：
 一键运行：
     run        <folder>   依次执行以上三步
 
+字符聚类识别（刻本，Phase 4~6，详见 .claude/doc/char_clustering_design.md）：
+    chars      <folder>   M1 字符提取 → phase4_chars/
+    cluster    <folder>   M2+M3 保守聚类 → phase5_clusters/
+    label      <folder>   M4+M5 候选生成 + 上下文排序 → phase6_labels/
+    review     <folder>   人工审查 Web 界面（P3 里程碑，暂未实现）
+
 工具：
     show-profile <path>   显示 BookProfile
 """
@@ -252,6 +258,83 @@ def cmd_run(args):
     )
 
 
+def _book_out_dir(args) -> Path:
+    """聚类命令的书输出目录：-o/<book_name>/。path 仅用于取书名。"""
+    return Path(args.output) / Path(args.path).name
+
+
+def cmd_chars(args):
+    """M1 字符提取：phase3 网格 → phase4_chars/ 单字图块数据集。"""
+    from .clustering.extractor import CharExtractor
+
+    extractor = CharExtractor(padding_ratio=args.padding)
+    source_dir = Path(args.input_dir) if args.input_dir else None
+    name_filter = None
+    if getattr(args, "range", None):
+        book_dir = Path(args.path)
+        if book_dir.is_dir():
+            name_filter = _parse_range(args.range, book_dir)
+    meta = extractor.run_book(_book_out_dir(args), source_dir=source_dir,
+                              name_filter=name_filter)
+    print(f"字符提取完成: {meta['stats']}")
+
+
+def cmd_cluster(args):
+    """M2+M3 保守聚类：phase4_chars/ → phase5_clusters/。"""
+    from .clustering.clusterer import ClusterParams, ConservativeClusterer
+
+    params = ClusterParams(feature=args.feature,
+                           theta_high=args.theta_high,
+                           knn_k=args.knn_k)
+    clusterer = ConservativeClusterer(params)
+    clusterer.run_book(_book_out_dir(args), montage=not args.no_montage)
+
+
+def cmd_label(args):
+    """M4+M5：候选生成 + 上下文排序 → phase6_labels/。"""
+    from .clustering.candidates import (CandidateGenerator, GlyphKnnSource,
+                                        OcrSource, PriorSource)
+    from .clustering.labeling import build_lm, rank_book
+    from .clustering.variants import VariantMap
+
+    variant_map = VariantMap.load(args.variants)
+    book_out_dir = _book_out_dir(args)
+
+    sources = []
+    for name in args.sources.split(","):
+        name = name.strip()
+        if name == "prior":
+            sources.append(PriorSource())
+        elif name == "ocr":
+            sources.append(OcrSource())
+        elif name == "glyph":
+            from .clustering.glyph_library import GlyphLibrary
+            sources.append(GlyphKnnSource(
+                GlyphLibrary(args.glyph_store),
+                edition_hint=args.edition))
+        else:
+            print(f"未知候选来源: {name}（可选: prior,ocr,glyph）")
+            sys.exit(1)
+
+    print(f"候选生成（来源: {[s.name for s in sources]}）...")
+    CandidateGenerator(sources, variant_map).run_book(book_out_dir)
+
+    print("上下文排序 ...")
+    lm = build_lm(args.lm_model, args.lm_corpus, variant_map)
+    stats = rank_book(book_out_dir, lm, variant_map)
+    print(f"完成: {stats}，输出: {book_out_dir / 'phase6_labels'}")
+
+
+def cmd_review(args):
+    """人工审查 Web 界面（P3 里程碑）。"""
+    print("review 界面尚未实现（P3 里程碑）。")
+    print("当前可直接查看:")
+    out = _book_out_dir(args) / "phase6_labels"
+    print(f"  可疑队列: {out / 'suspects.json'}")
+    print(f"  簇蒙太奇: {_book_out_dir(args) / 'phase5_clusters' / 'montage'}/")
+    sys.exit(1)
+
+
 def cmd_show_profile(args):
     """显示 BookProfile。"""
     path = Path(args.path)
@@ -342,6 +425,49 @@ def main():
                    help="完成后删除中间文件")
     _add_common_args(p)
 
+    # ── chars（M1 字符提取）──────────────────────────────
+    p = sub.add_parser("chars",
+                       help="M1 字符提取 → phase4_chars/（需先 extract）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--input-dir", default=None,
+                   help="页面图目录（默认自动解析 s5_split/s4_deskew/s6_binarize）")
+    p.add_argument("--padding", type=float, default=0.08,
+                   help="bbox 外扩比例（默认 0.08）")
+    p.add_argument("--range", default=None, help="处理范围（如 3-6 或 1,3,5）")
+
+    # ── cluster（M2+M3 保守聚类）─────────────────────────
+    p = sub.add_parser("cluster",
+                       help="M2+M3 保守聚类 → phase5_clusters/（需先 chars）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--feature", default="hog", choices=["raw", "hog"],
+                   help="特征后端（默认 hog）")
+    p.add_argument("--theta-high", type=float, default=0.80,
+                   help="合并阈值（默认 0.80，可由标定更新）")
+    p.add_argument("--knn-k", type=int, default=10,
+                   help="近邻候选数（默认 10）")
+    p.add_argument("--no-montage", action="store_true",
+                   help="不生成簇蒙太奇图")
+
+    # ── label（M4+M5 候选+排序）──────────────────────────
+    p = sub.add_parser("label",
+                       help="M4+M5 候选生成 + 上下文排序 → phase6_labels/（需先 cluster）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--sources", default="prior",
+                   help="候选来源，逗号分隔：prior,ocr,glyph（默认 prior）")
+    p.add_argument("--glyph-store", default="glyph_store",
+                   help="字形库目录（来源含 glyph 时使用）")
+    p.add_argument("--edition", default=None,
+                   help="书版提示 edition_tag（同版书检索优先）")
+    p.add_argument("--variants", default=None,
+                   help="异体字映射表路径（默认 config/dicts/variants.tsv）")
+    p.add_argument("--lm-model", default=None, help="已训练的 n-gram 模型路径")
+    p.add_argument("--lm-corpus", default=None,
+                   help="语料目录（*.txt，现场训练 n-gram；与 --lm-model 二选一）")
+
+    # ── review（P3 占位）─────────────────────────────────
+    p = sub.add_parser("review", help="人工审查 Web 界面（暂未实现）")
+    p.add_argument("path", help="古籍文件夹路径")
+
     # ── show-profile ─────────────────────────────────────
     p = sub.add_parser("show-profile",
                        help="显示 BookProfile")
@@ -357,6 +483,10 @@ def main():
         "preprocess":        cmd_preprocess,
         "extract":           cmd_extract,
         "run":               cmd_run,
+        "chars":             cmd_chars,
+        "cluster":           cmd_cluster,
+        "label":             cmd_label,
+        "review":            cmd_review,
         "show-profile":      cmd_show_profile,
     }
 
