@@ -281,6 +281,26 @@ def cmd_chars(args):
     print(f"字符提取完成: {meta['stats']}")
 
 
+def cmd_segment(args):
+    """刻本严格网格切分（Phase 3 替代，无 OCR）→ phase3_char_grid/。"""
+    from .clustering.grid_segment import GridSegmenter
+
+    profile_path = Path(args.path) / "profile.json"
+    chars_per_line = args.chars_per_line
+    if chars_per_line is None and profile_path.exists():
+        prof = BookProfile.load(profile_path)
+        chars_per_line = prof.chars_per_line
+    if not chars_per_line:
+        print("请用 --chars-per-line 指定每行字数（刻本先验）")
+        sys.exit(1)
+
+    seg = GridSegmenter(chars_per_line,
+                        empty_ink_ratio=args.empty_ink_ratio)
+    source_dir = Path(args.input_dir) if args.input_dir else None
+    meta = seg.run_book(_book_out_dir(args), source_dir=source_dir)
+    print(f"网格切分完成: {meta['stats']}")
+
+
 def cmd_cluster(args):
     """M2+M3 保守聚类：phase4_chars/ → phase5_clusters/。"""
     from .clustering.clusterer import ClusterParams, ConservativeClusterer
@@ -464,6 +484,16 @@ def main():
                    help="bbox 外扩比例（默认 0.08）")
     p.add_argument("--range", default=None, help="处理范围（如 3-6 或 1,3,5）")
 
+    # ── segment（刻本网格切分）───────────────────────────
+    p = sub.add_parser("segment",
+                       help="刻本严格网格切分（Phase 3 替代，无 OCR，需先 extract --steps layout）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--chars-per-line", type=int, default=None,
+                   help="每行字数（默认读 profile.json）")
+    p.add_argument("--empty-ink-ratio", type=float, default=0.02,
+                   help="判空墨迹覆盖率阈值（默认 0.02）")
+    p.add_argument("--input-dir", default=None, help="页面图目录")
+
     # ── cluster（M2+M3 保守聚类）─────────────────────────
     p = sub.add_parser("cluster",
                        help="M2+M3 保守聚类 → phase5_clusters/（需先 chars）")
@@ -534,6 +564,7 @@ def main():
         "preprocess":        cmd_preprocess,
         "extract":           cmd_extract,
         "run":               cmd_run,
+        "segment":           cmd_segment,
         "chars":             cmd_chars,
         "cluster":           cmd_cluster,
         "label":             cmd_label,
