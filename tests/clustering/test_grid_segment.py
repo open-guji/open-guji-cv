@@ -110,6 +110,55 @@ def test_page_shared_grid_aligns_sparse_column():
         assert abs(dense_cells[i]["y_top"] - sparse_cells[i]["y_top"]) < 6
 
 
+def test_leading_blank_cells_keep_grid_anchor():
+    """抬头空格：列首 2 格空时网格仍锚定页面栏格，不按内容上移。
+
+    刻本栏格固定，空格占格位——若网格按该列内容顶端锚定，
+    整列会错位两格（"乾隆…"抬头列的真实场景）。
+    """
+    n, cell_h = 8, 60
+    page_h = n * cell_h + 40
+    page = np.full((page_h, 260), 235, dtype=np.uint8)
+    frame_top, frame_bottom = 20, 20 + n * cell_h
+    cols = [(200, 250), (130, 180), (60, 110)]
+    for ci, (lx, rx) in enumerate(cols):
+        start = 2 if ci == 1 else 0   # 中间列抬头空 2 格
+        for i in range(start, n):
+            y0 = frame_top + i * cell_h + 10
+            page[y0:y0 + 40, lx + 8:rx - 8] = 25
+    layout = {"borders": {"inner_frame": {
+                  "top": {"intercept": frame_top},
+                  "bottom": {"intercept": frame_bottom}}},
+              "columns": {"columns": [
+                  {"index": k + 1, "left_x": float(lx), "right_x": float(rx)}
+                  for k, (lx, rx) in enumerate(cols)]}}
+    result = GridSegmenter(chars_per_line=n).segment_page(page, layout)
+    cols_out = {c["index"]: c for c in result["columns"]}
+    blank_col = [c for c in cols_out[2]["cells"] if c["type"] != "margin"]
+    # 前 2 格 empty，后 6 格 char，且与满列同格线对齐
+    assert [c["type"] for c in blank_col] == ["empty"] * 2 + ["char"] * 6
+    full_col = [c for c in cols_out[1]["cells"] if c["type"] != "margin"]
+    for a, b in zip(blank_col, full_col):
+        assert abs(a["y_top"] - b["y_top"]) < 6
+
+
+def test_rigid_grid_uniform_cell_height():
+    """刚性网格：格高固定——所有格高度一致（±步长误差）。"""
+    n = 8
+    col = _make_column(n, jitter=5)
+    page = np.full((col.shape[0] + 40, 140, ), 235, dtype=np.uint8)
+    page[20:20 + col.shape[0], 45:45 + col.shape[1]] = col
+    layout = {"borders": {"inner_frame": {
+                  "top": {"intercept": 20},
+                  "bottom": {"intercept": 20 + col.shape[0]}}},
+              "columns": {"columns": [
+                  {"index": 1, "left_x": 40.0, "right_x": 100.0}]}}
+    result = GridSegmenter(chars_per_line=n).segment_page(page, layout)
+    cells = [c for c in result["columns"][0]["cells"] if c["type"] != "margin"]
+    heights = [c["y_bottom"] - c["y_top"] for c in cells]
+    assert max(heights) - min(heights) < 1e-6
+
+
 def test_segment_page_contract_and_narrow_column_filter():
     """整页：正常列出 cells；窄列（版心缝）标记 skipped。"""
     n = 6
