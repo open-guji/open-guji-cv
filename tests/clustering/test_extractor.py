@@ -48,8 +48,9 @@ def test_padding_and_bounds():
         # bbox 在图内
         assert 0 <= x0 < x1 <= page.shape[1]
         assert 0 <= y0 < y1 <= page.shape[0]
-        # bbox 比原 cell 宽（有 padding）
-        assert (x1 - x0) > inst.width
+        # 垂直外扩（笔画出头）；水平内缩（列边界即界行，不裹进来）
+        assert (y1 - y0) > inst.height
+        assert (x1 - x0) < inst.width
         assert patch.shape == (int(round(y1)) - int(round(y0)),
                                int(round(x1)) - int(round(x0)))
 
