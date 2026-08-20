@@ -24,8 +24,10 @@ from .ids import make_id
 PADDING_RATIO = 0.08
 MIN_INK_RATIO = 0.01
 
-# 灰度源目录解析顺序：越靠前的越接近原始灰度（信息保留最多）
-SOURCE_DIR_CANDIDATES = ("s5_split", "s4_deskew", "s6_binarize")
+# 灰度源目录解析顺序：越靠前的越接近原始灰度（信息保留最多）。
+# 注意：只有与 Phase 2/3 检测坐标系同尺寸的步骤才能入选
+# （s3_crop 裁剪之后的步骤同尺寸；s4_enhance_lines 有画线增强，不作字形源）。
+SOURCE_DIR_CANDIDATES = ("s5_split", "s4_deskew", "s3_crop", "s6_binarize")
 
 
 @dataclass
@@ -103,10 +105,12 @@ class CharExtractor:
                 y_bottom = float(cell["y_bottom"])
                 cell_h = y_bottom - y_top
 
+                # 垂直方向外扩（笔画出头）；水平方向内缩——列边界即界行位置，
+                # 外扩会把界行竖线裹进图块，污染归一化的质心与外接框。
                 pad_y = cell_h * self.padding_ratio
-                pad_x = col_w * self.padding_ratio
-                x0 = max(0.0, left_x - pad_x)
-                x1 = min(float(img_w), right_x + pad_x)
+                shrink_x = min(col_w * 0.03, 4.0)
+                x0 = max(0.0, left_x + shrink_x)
+                x1 = min(float(img_w), right_x - shrink_x)
                 y0 = max(0.0, y_top - pad_y)
                 y1 = min(float(img_h), y_bottom + pad_y)
 
