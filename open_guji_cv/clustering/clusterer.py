@@ -74,6 +74,23 @@ class ClusterResult:
         }
 
 
+def has_through_vline(patch: np.ndarray, min_h: float = 0.7,
+                      max_w: float = 0.15) -> bool:
+    """归一图块内是否有"独立窄高组件"（高 ≥ min_h×S 且宽 ≤ max_w×S）。
+
+    界行/边框被裹进图块时表现为与字形分离的细长竖条；
+    "中/串"类字的通高竖笔与主体连通，组件宽度大，不会误伤。
+    命中 → 列边界错位嫌疑，隔离出合并流程。"""
+    import cv2
+    s = patch.shape[0]
+    n, _, stats, _ = cv2.connectedComponentsWithStats(patch, connectivity=8)
+    for i in range(1, n):
+        _, _, bw, bh, _ = stats[i]
+        if bh >= min_h * s and bw <= max_w * s:
+            return True
+    return False
+
+
 class _UnionFind:
     def __init__(self, n: int):
         self.parent = list(range(n))
@@ -99,7 +116,13 @@ class ConservativeClusterer:
     # ── 纯函数核心 ────────────────────────────────────────
 
     def cluster(self, patches: np.ndarray, feats: np.ndarray,
-                hw_ratio: np.ndarray, ink_ratio: np.ndarray) -> ClusterResult:
+                hw_ratio: np.ndarray, ink_ratio: np.ndarray,
+                quarantine: np.ndarray | None = None) -> ClusterResult:
+        """quarantine[i]=True 的图块被隔离：不建候选边、强制单例。
+
+        典型来源：图块内有贯穿竖线（列边界错位把界行裹进图块）——
+        字被线切残后残形趋同，不同字可能互聚，必须排除出合并流程，
+        以单例流向审查队列。"""
         p = self.params
         n = len(patches)
         rng = random.Random(p.seed)
@@ -111,6 +134,8 @@ class ConservativeClusterer:
             np.floor(ink_ratio / INK_BUCKET).astype(int),
         ], axis=1)
         for i, key in enumerate(map(tuple, keys)):
+            if quarantine is not None and quarantine[i]:
+                continue
             buckets.setdefault(key, []).append(i)
 
         # 2. 块内 kNN（含相邻桶）建候选边
@@ -250,8 +275,13 @@ class ConservativeClusterer:
         print(f"提取特征（{self.params.feature}）...")
         feats = get_feature(self.params.feature).extract(patches)
 
+        quarantine = np.array([has_through_vline(p) for p in patches])
+        n_q = int(quarantine.sum())
+        if n_q:
+            print(f"隔离含贯穿竖线的图块 {n_q} 个（列边界错位嫌疑，强制单例）")
+
         print("聚类 ...")
-        result = self.cluster(patches, feats, hw, ink)
+        result = self.cluster(patches, feats, hw, ink, quarantine=quarantine)
 
         out_dir = book_out_dir / "phase5_clusters"
         out_dir.mkdir(parents=True, exist_ok=True)

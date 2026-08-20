@@ -39,42 +39,187 @@ class GridParams:
     search_ratio: float = SEARCH_RATIO
 
 
-def column_projection(col_gray: np.ndarray) -> np.ndarray:
-    """列区域的水平投影（每行黑像素数）。输入灰度或二值图。"""
+def column_projection(col_gray: np.ndarray,
+                      line_frac: float = 0.3) -> np.ndarray:
+    """列区域的水平投影（每行黑像素数）。输入灰度或二值图。
+
+    先用竖直开运算剔除长竖线（边框/界行残留：连续贯穿 ≥ line_frac×列高；
+    字的竖笔最长 ~1 字高，绝不会被误剔）——竖线给每行加常量偏置，
+    会把字间谷填平，淹没网格拟合的相位信号。只减线像素，同 x 的文字保留。"""
     binary = (col_gray < BINARY_THRESHOLD).astype(np.uint8)
-    return binary.sum(axis=1).astype(np.float64)
+    k = max(3, int(binary.shape[0] * line_frac))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, k))
+    vlines = cv2.dilate(cv2.erode(binary, kernel), kernel)
+    cleaned = binary & (1 - vlines)
+    return cleaned.sum(axis=1).astype(np.float64)
+
+
+def content_range(proj: np.ndarray, rel_thresh: float = 0.05,
+                  min_run: float = 0.0,
+                  max_fill: float | None = None) -> tuple[int, int]:
+    """投影的实际内容范围 [top, bottom)。
+
+    版面检测的 inner_frame 常有偏差（裁进空白或裁掉首末字），网格必须
+    摊在文字实际占据的范围上，否则整体相位偏移。
+
+    min_run > 0 时，首尾的**短游程**（连续非零段长 < min_run）被忽略——
+    边框横线（3~10 行）和贴边残迹是短游程，文字块是 ~字高 的长游程；
+    比"单行接近满宽"判据稳健（"一"类横笔也能占满列宽，但它属于长游程）。
+    空投影返回全范围。
+    """
+    if proj.max() <= 0:
+        return 0, len(proj)
+    # 参考值用非零 90 分位而非 max —— max 会被边框线尖峰抬高，
+    # 连带阈值过高/过低都失真
+    ref = float(np.percentile(proj[proj > 0], 90))
+    mask = proj > max(ref * rel_thresh, 1.0)
+    idx = np.nonzero(mask)[0]
+    if min_run <= 1:
+        return int(idx[0]), int(idx[-1]) + 1
+    # 游程分解
+    splits = np.nonzero(np.diff(idx) > 1)[0]
+    starts = np.concatenate([[idx[0]], idx[splits + 1]])
+    ends = np.concatenate([idx[splits] + 1, [idx[-1] + 1]])
+    runs = [(int(s), int(e)) for s, e in zip(starts, ends)]
+
+    def _is_junk(run: tuple[int, int]) -> bool:
+        s, e = run
+        if e - s < min_run:
+            return True   # 短游程：边框线/贴边残迹
+        if max_fill is not None and float(np.median(proj[s:e])) > max_fill:
+            return True   # 近满宽实心块：扫描黑边/粗边框，文字远达不到
+        return False
+
+    while len(runs) > 1 and _is_junk(runs[0]):
+        runs.pop(0)
+    while len(runs) > 1 and _is_junk(runs[-1]):
+        runs.pop()
+    return runs[0][0], runs[-1][1]
 
 
 def fit_global_grid(proj: np.ndarray, n_chars: int,
-                    scales: np.ndarray = SCALES) -> tuple[float, float]:
-    """全局网格拟合：搜索 (偏移 δ, 伸缩 s) 使 n_chars+1 条网格线的
-    投影值之和最小（线落在字间空隙处）。
+                    scales: np.ndarray = SCALES,
+                    full_width: float | None = None) -> tuple[float, float]:
+    """全局网格拟合：搜索 (偏移 δ, 伸缩 s) 使网格线落在投影谷、
+    格中心落在投影峰。
+
+    cost = mean(proj[网格线]) − 0.5 · mean(proj[格中心])
+    —— 排版紧凑、谷很浅时，峰项仍提供可靠的相位信息。
+    网格严格限制在内容范围内（不允许线出界"作弊"降 cost）。
 
     Returns:
-        (offset, cell_h): 首线位置与格高。
+        (offset, cell_h): 首线位置与格高（proj 坐标系）。
     """
     L = len(proj)
-    base_h = L / n_chars
-    # 投影平滑，避免单像素毛刺主导
-    kernel = max(3, int(base_h * 0.08)) | 1
-    smooth = np.convolve(proj, np.ones(kernel) / kernel, mode="same")
+    top, bottom = content_range(
+        proj, min_run=0.25 * L / n_chars,
+        max_fill=0.8 * full_width if full_width else None)
+    span_max = bottom - top
+    base_h = span_max / n_chars
+    smooth = _smooth(proj, base_h)
 
-    best = (0.0, base_h)
+    best = (float(top), base_h)
     best_cost = float("inf")
     for s in scales:
         cell_h = base_h * s
         span = cell_h * n_chars
-        max_off = L - span
-        offsets = np.linspace(min(0.0, max_off), max(0.0, max_off),
-                              num=15) if abs(max_off) > 1e-6 else [0.0]
+        max_off = span_max - span
+        if max_off < -1e-6:      # 网格比内容还长：不合法
+            continue
+        offsets = top + np.linspace(0.0, max(0.0, max_off), num=15)
         for off in offsets:
-            lines = off + cell_h * np.arange(n_chars + 1)
-            idx = np.clip(np.round(lines).astype(int), 0, L - 1)
-            cost = float(smooth[idx].sum())
+            cost = _grid_cost(smooth, off, cell_h, n_chars)
             if cost < best_cost:
                 best_cost = cost
                 best = (float(off), float(cell_h))
     return best
+
+
+def _smooth(proj: np.ndarray, cell_h: float) -> np.ndarray:
+    kernel = max(3, int(cell_h * 0.08)) | 1
+    return np.convolve(proj, np.ones(kernel) / kernel, mode="same")
+
+
+def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
+               n_chars: int) -> float:
+    """网格代价：线落谷（小） − 0.5×格中心落峰（大）。"""
+    L = len(smooth)
+    li = np.clip(np.round(off + cell_h * np.arange(n_chars + 1)).astype(int),
+                 0, L - 1)
+    ci = np.clip(np.round(off + cell_h * (np.arange(n_chars) + 0.5)).astype(int),
+                 0, L - 1)
+    return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
+
+
+def dp_boundaries(proj: np.ndarray, cell_h: float, n_chars: int,
+                  phase_prior: float | None = None,
+                  elastic: float = 0.15, step: int = 2,
+                  beta: float = 1.0,
+                  full_width: float | None = None) -> list[float]:
+    """弹性网格动态规划：全局最优地选 n_chars+1 条网格线。
+
+    写刻本手写上版，字距列内局部不均——刚性等距网格误差沿列累积。
+    DP 保持"恰好 N 格"硬约束，允许每格高度在 ±elastic 内伸缩：
+
+        cost = Σ smooth[线] − 0.5·Σ smooth[格中心]
+             + β·mean(smooth)·Σ ((格高−cell_h)/(elastic·cell_h))²
+
+    phase_prior 给定时（稀疏列，如职名页），首线锚定在先验相位附近，
+    末线由 N×cell_h 推算——弱信号列跟随页面主流相位。
+    """
+    L = len(proj)
+    smooth = _smooth(proj, cell_h)
+    ys = np.arange(0, L, step)
+    M = len(ys)
+    line_cost = smooth[ys]
+    d_lo = max(1, int((1.0 - elastic) * cell_h / step))
+    d_hi = max(d_lo, int(np.ceil((1.0 + elastic) * cell_h / step)))
+    pen_scale = beta * max(1.0, float(smooth.mean()))
+
+    top, bottom = content_range(
+        proj, min_run=0.25 * cell_h,
+        max_fill=0.8 * full_width if full_width else None)
+    if phase_prior is not None:
+        s_lo, s_hi = phase_prior - 0.3 * cell_h, phase_prior + 0.3 * cell_h
+        e_lo = phase_prior + n_chars * cell_h - 0.5 * cell_h
+        e_hi = phase_prior + n_chars * cell_h + 0.5 * cell_h
+    else:
+        # 首末窗口各放宽到 2 格：content_range 只是粗定位（长游程可能
+        # 混入边框/黑角），格中心峰项会驱动 DP 覆盖真实文字而非空白
+        s_lo, s_hi = top - 0.5 * cell_h, top + 1.5 * cell_h
+        e_lo, e_hi = bottom - 1.5 * cell_h, bottom + 0.5 * cell_h
+
+    INF = 1e18
+    dp = np.where((ys >= s_lo) & (ys <= s_hi), line_cost, INF)
+    if phase_prior is not None:
+        # 平局时偏向先验相位（零信号列锚定页面主流网格，而非窗口边缘）
+        dp = dp + 1e-3 * pen_scale * np.abs(ys - phase_prior) / cell_h
+    back = np.zeros((n_chars, M), dtype=np.int32)
+    for k in range(n_chars):
+        ndp = np.full(M, INF)
+        nb = np.zeros(M, dtype=np.int32)
+        for d in range(d_lo, d_hi + 1):
+            if d >= M:
+                break
+            h = d * step
+            pen = pen_scale * ((h - cell_h) / (elastic * cell_h)) ** 2
+            mid = np.clip((ys[d:] - h // 2), 0, L - 1)
+            cand = dp[:-d] + line_cost[d:] - 0.5 * smooth[mid] + pen
+            better = cand < ndp[d:]
+            ndp[d:][better] = cand[better]
+            nb[d:][better] = np.arange(M - d)[better]
+        dp, back[k] = ndp, nb
+
+    end_mask = (ys >= e_lo) & (ys <= e_hi) & (dp < INF)
+    dp_end = np.where(end_mask, dp, INF)
+    if not np.isfinite(dp_end.min()) or dp_end.min() >= INF:
+        dp_end = dp   # 末端约束不可满足时放开（严重残页兜底）
+    j = int(np.argmin(dp_end))
+    bounds = [float(ys[j])]
+    for k in range(n_chars - 1, -1, -1):
+        j = int(back[k][j])
+        bounds.append(float(ys[j]))
+    return list(reversed(bounds))
 
 
 def refine_boundaries(proj: np.ndarray, offset: float, cell_h: float,
@@ -88,15 +233,16 @@ def refine_boundaries(proj: np.ndarray, offset: float, cell_h: float,
     kernel = max(3, int(cell_h * 0.08)) | 1
     smooth = np.convolve(proj, np.ones(kernel) / kernel, mode="same")
 
-    lines = [offset + cell_h * k for k in range(n_chars + 1)]
+    lines = [min(max(offset + cell_h * k, 0.0), float(L))
+             for k in range(n_chars + 1)]
     refined = [lines[0]]
     for k in range(1, n_chars):
         y = lines[k]
         r = cell_h * search_ratio
-        lo = max(int(y - r), int(refined[-1] + 0.6 * cell_h))
+        lo = max(int(y - r), int(refined[-1] + 0.6 * cell_h), 0)
         hi = min(int(y + r), L - 1)
         if hi <= lo:
-            refined.append(max(y, refined[-1] + 0.6 * cell_h))
+            refined.append(min(max(y, refined[-1] + 0.6 * cell_h), float(L)))
             continue
         window = smooth[lo:hi + 1]
         # 同值谷取离先验位置最近者
@@ -108,22 +254,12 @@ def refine_boundaries(proj: np.ndarray, offset: float, cell_h: float,
     return refined
 
 
-def segment_column(col_gray: np.ndarray, n_chars: int,
-                   params: GridParams) -> list[dict]:
-    """单列切分 → cells（局部 y 坐标，调用方负责平移到全图）。"""
-    proj = column_projection(col_gray)
-    if proj.sum() < 1:   # 整列空白
-        L = len(proj)
-        cell = L / n_chars
-        return [{"type": "empty", "index": i,
-                 "y_top": i * cell, "y_bottom": (i + 1) * cell,
-                 "text": None, "confidence": 0.0} for i in range(n_chars)]
-
-    offset, cell_h = fit_global_grid(proj, n_chars)
-    bounds = refine_boundaries(proj, offset, cell_h, n_chars,
-                               params.search_ratio)
-
+def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
+                      params: GridParams) -> list[dict]:
+    """按给定网格线产出 cells（局部 y 坐标）。"""
+    n_chars = len(bounds) - 1
     w = col_gray.shape[1]
+    L = col_gray.shape[0]
     cells: list[dict] = []
     if bounds[0] > 0.5:
         cells.append({"type": "margin", "y_top": 0.0, "y_bottom": bounds[0]})
@@ -139,11 +275,34 @@ def segment_column(col_gray: np.ndarray, n_chars: int,
             cells.append({"type": "char", "index": i,
                           "y_top": y0, "y_bottom": y1,
                           "text": None, "confidence": 0.0})
-    L = len(proj)
     if bounds[-1] < L - 0.5:
         cells.append({"type": "margin", "y_top": bounds[-1],
                       "y_bottom": float(L)})
     return cells
+
+
+def segment_column(col_gray: np.ndarray, n_chars: int, params: GridParams,
+                   shared_grid: tuple[float, float] | None = None) -> list[dict]:
+    """单列切分 → cells（局部 y 坐标）。
+
+    shared_grid=(offset, cell_h) 给定时从页面级共享网格出发做小范围微调
+    （刻本整版同刻、跨列行对齐，稀疏列跟随全页网格不漂移）；
+    缺省时独立拟合本列（单列场景/测试用）。
+    """
+    proj = column_projection(col_gray)
+    L = len(proj)
+    if shared_grid is not None:
+        offset, cell_h = shared_grid
+        bounds = dp_boundaries(proj, cell_h, n_chars, phase_prior=offset)
+    elif proj.sum() < 1:   # 独立模式下的整列空白：均分
+        cell = L / n_chars
+        return [{"type": "empty", "index": i,
+                 "y_top": i * cell, "y_bottom": (i + 1) * cell,
+                 "text": None, "confidence": 0.0} for i in range(n_chars)]
+    else:
+        _, cell_h = fit_global_grid(proj, n_chars)
+        bounds = dp_boundaries(proj, cell_h, n_chars)
+    return cells_from_bounds(col_gray, bounds, params)
 
 
 class GridSegmenter:
@@ -174,26 +333,64 @@ class GridSegmenter:
         widths = [c["right_x"] - c["left_x"] for c in columns_info]
         median_w = float(np.median(widths)) if widths else 0.0
 
+        # 纵向外扩一格：inner_frame 检测偏差可接近一个字高，外扩不足会
+        # 裁掉首/末字；网格真实范围由投影内容决定（content_range 会剔除
+        # 外扩带进来的边框线短游程）。
+        pad = int((col_bottom - col_top) / n) if col_bottom > col_top else 0
+        y1 = max(0, int(col_top) - pad)
+        y2 = min(h, int(col_bottom) + pad)
+
+        # 第一遍：收集文字列裁切与投影
+        text_cols: list[tuple[dict, np.ndarray, np.ndarray]] = []
         result_columns = []
         for col in columns_info:
             left_x, right_x = float(col["left_x"]), float(col["right_x"])
             col_w = right_x - left_x
             col_result = {"index": col["index"], "left_x": left_x,
                           "right_x": right_x, "ocr_text": "", "cells": []}
-            y1 = max(0, int(col_top))
-            y2 = min(h, int(col_bottom))
+            result_columns.append(col_result)
             x1 = max(0, int(left_x) + 2)
             x2 = min(w, int(right_x) - 2)
             if col_w < median_w * MIN_COL_WIDTH_RATIO or x2 <= x1 or y2 <= y1:
                 col_result["skipped"] = "non_text_column"
-                result_columns.append(col_result)
                 continue
-            cells = segment_column(image[y1:y2, x1:x2], n, self.params)
-            for c in cells:   # 局部 → 全图坐标
-                c["y_top"] += y1
-                c["y_bottom"] += y1
-            col_result["cells"] = cells
-            result_columns.append(col_result)
+            crop = image[y1:y2, x1:x2]
+            text_cols.append((col_result, crop, column_projection(crop)))
+
+        # 两级网格模型：**页级共享字高 + 每列独立相位**。
+        # 字高由整版刻制决定、全页一致（密列独立拟合取中位数，稳健）；
+        # 相位（行起点）写刻本每列有自然浮动（可达半字），必须逐列拟合；
+        # 稀疏列（职名页/空列）相位信号弱，回退到页面中位相位。
+        if text_cols:
+            inks = [float(p.sum()) for _, _, p in text_cols]
+            median_ink = float(np.median([v for v in inks if v > 0]) or 0)
+            dense = [(cr, crop, p) for (cr, crop, p), v in zip(text_cols, inks)
+                     if median_ink and v >= 0.3 * median_ink]
+            dense_ids = {id(cr) for cr, _, _ in dense}
+            if dense:
+                heights = [fit_global_grid(p, n,
+                                           full_width=crop.shape[1])[1]
+                           for _, crop, p in dense]
+                cell_h = float(np.median(heights))
+            else:
+                cell_h = (y2 - y1) / n
+            bounds_of: dict[int, list[float]] = {}
+            for cr, crop, proj in dense:
+                bounds_of[id(cr)] = dp_boundaries(
+                    proj, cell_h, n, full_width=crop.shape[1])
+            median_phase = float(np.median(
+                [b[0] for b in bounds_of.values()])) if bounds_of else 0.0
+            for col_result, crop, proj in text_cols:
+                bounds = bounds_of.get(id(col_result))
+                if bounds is None:   # 稀疏列：锚定页面中位相位
+                    bounds = dp_boundaries(proj, cell_h, n,
+                                           phase_prior=median_phase,
+                                           full_width=crop.shape[1])
+                cells = cells_from_bounds(crop, bounds, self.params)
+                for c in cells:   # 局部 → 全图坐标
+                    c["y_top"] += y1
+                    c["y_bottom"] += y1
+                col_result["cells"] = cells
 
         return {
             "image_size": {"width": w, "height": h},
