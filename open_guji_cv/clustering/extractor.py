@@ -213,10 +213,12 @@ class CharExtractor:
     def _resolve_source_dir(book_out_dir: Path) -> Path:
         for name in SOURCE_DIR_CANDIDATES:
             d = book_out_dir / name
-            if d.is_dir() and any(d.glob("*.png")):
+            if d.is_dir() and any(f for ext in ("*.png", "*.tif", "*.tiff")
+                                  for f in d.glob(ext)):
                 return d
         # 兜底：预处理用了 --clean 时最终图直接在书目录下
-        if any(book_out_dir.glob("*.png")):
+        if any(f for ext in ("*.png", "*.tif", "*.tiff")
+               for f in book_out_dir.glob(ext)):
             return book_out_dir
         raise FileNotFoundError(
             f"未找到页面图目录（尝试了 {SOURCE_DIR_CANDIDATES}），"
@@ -224,7 +226,7 @@ class CharExtractor:
 
     @staticmethod
     def _find_page_image(src: Path, page: str) -> Path | None:
-        for ext in (".png", ".jpg", ".jpeg"):
+        for ext in (".png", ".jpg", ".jpeg", ".tif", ".tiff"):
             p = src / f"{page}{ext}"
             if p.exists():
                 return p
