@@ -18,7 +18,9 @@ Web 界面：
     chars      <folder>   M1 字符提取 → phase4_chars/
     cluster    <folder>   M2+M3 保守聚类 → phase5_clusters/
     label      <folder>   M4+M5 候选生成 + 上下文排序 → phase6_labels/
-    review     <folder>   人工审查 Web 界面（P3 里程碑，暂未实现）
+    review     <folder>   M6 人工审查 Web 界面 → phase7_review/labels.jsonl
+    update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
+    bench      <target>   合成数据集基准评测（verify / cluster）
 
 工具：
     show-profile <path>   显示 BookProfile
@@ -326,13 +328,40 @@ def cmd_label(args):
 
 
 def cmd_review(args):
-    """人工审查 Web 界面（P3 里程碑）。"""
-    print("review 界面尚未实现（P3 里程碑）。")
-    print("当前可直接查看:")
-    out = _book_out_dir(args) / "phase6_labels"
-    print(f"  可疑队列: {out / 'suspects.json'}")
-    print(f"  簇蒙太奇: {_book_out_dir(args) / 'phase5_clusters' / 'montage'}/")
-    sys.exit(1)
+    """M6 人工审查 Web 界面：可疑队列 / 簇视图 / 上下文视图。"""
+    from .clustering.review.server import start_review_server
+
+    book_out_dir = _book_out_dir(args)
+    if not (book_out_dir / "phase5_clusters" / "clusters.json").exists():
+        print(f"未找到聚类结果，请先运行: python -m open_guji_cv cluster {args.path}")
+        sys.exit(1)
+    start_review_server(book_out_dir, port=args.port,
+                        open_browser=not args.no_browser)
+
+
+def cmd_update(args):
+    """M7 反馈更新：消费 labels.jsonl → 字形库/阈值/用字习惯/语料。"""
+    from .clustering.feedback import run_update
+
+    summary = run_update(_book_out_dir(args), args.glyph_store,
+                         edition_tag=args.edition,
+                         calibrate=not args.no_calibrate)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
+def cmd_bench(args):
+    """合成数据集 benchmark → benchmarks/results/ JSON 报告。"""
+    from .clustering.bench import BENCHES, write_report
+
+    fn = BENCHES[args.target]
+    kwargs = {"n_chars": args.n_chars, "n_per_char": args.n_per_char,
+              "wear": args.wear, "seed": args.seed}
+    if args.target == "cluster":
+        kwargs["feature"] = args.feature
+    report = fn(**kwargs)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    path = write_report(report, args.out)
+    print(f"报告: {path}")
 
 
 def cmd_show_profile(args):
@@ -464,9 +493,31 @@ def main():
     p.add_argument("--lm-corpus", default=None,
                    help="语料目录（*.txt，现场训练 n-gram；与 --lm-model 二选一）")
 
-    # ── review（P3 占位）─────────────────────────────────
-    p = sub.add_parser("review", help="人工审查 Web 界面（暂未实现）")
-    p.add_argument("path", help="古籍文件夹路径")
+    # ── review（M6 审查界面）─────────────────────────────
+    p = sub.add_parser("review",
+                       help="M6 人工审查 Web 界面（需先 cluster/label）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--port", type=int, default=8633, help="端口号（默认 8633）")
+    p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+
+    # ── update（M7 反馈更新）─────────────────────────────
+    p = sub.add_parser("update",
+                       help="M7 消费审查标签 → 字形库/阈值标定/用字习惯/语料")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--glyph-store", default="glyph_store", help="字形库目录")
+    p.add_argument("--edition", default=None,
+                   help="书版 edition_tag（默认=书名；同版多书标同 tag）")
+    p.add_argument("--no-calibrate", action="store_true", help="跳过阈值标定")
+
+    # ── bench（基准评测）─────────────────────────────────
+    p = sub.add_parser("bench", help="合成数据集 benchmark → JSON 报告")
+    p.add_argument("target", choices=["verify", "cluster"], help="评测目标")
+    p.add_argument("--n-chars", type=int, default=50, help="字表大小")
+    p.add_argument("--n-per-char", type=int, default=10, help="每字实例数")
+    p.add_argument("--wear", type=float, default=0.5, help="磨损强度 0~1")
+    p.add_argument("--feature", default="hog", choices=["raw", "hog"])
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--out", default="benchmarks/results", help="报告输出目录")
 
     # ── show-profile ─────────────────────────────────────
     p = sub.add_parser("show-profile",
@@ -487,6 +538,8 @@ def main():
         "cluster":           cmd_cluster,
         "label":             cmd_label,
         "review":            cmd_review,
+        "update":            cmd_update,
+        "bench":             cmd_bench,
         "show-profile":      cmd_show_profile,
     }
 

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>字符聚类审查</title>
+<style>
+  :root { --bg:#f5f2ea; --panel:#fff; --line:#d8d2c4; --ink:#2b2620;
+          --accent:#8a5a2b; --ok:#2e7d32; --warn:#b26a00; --bad:#c62828; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 14px/1.5 "Noto Sans SC", sans-serif;
+         background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:16px; align-items:baseline; padding:10px 16px;
+           background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; }
+  #summary { color:#6b6355; font-size:13px; }
+  main { display:grid; grid-template-columns: 300px 1fr; height: calc(100vh - 45px); }
+  #queue { overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); }
+  #queue .item { padding:8px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  #queue .item:hover, #queue .item.active { background:#f0e9d8; }
+  .gain { float:right; color:var(--accent); font-weight:600; }
+  .reasons { font-size:12px; color:var(--warn); }
+  #filter { width:100%; padding:6px 12px; border:none;
+            border-bottom:1px solid var(--line); background:#faf7f0; }
+  #detail { overflow-y:auto; padding:16px; }
+  .cands { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .cand { padding:6px 14px; border:1px solid var(--line); border-radius:6px;
+          background:var(--panel); cursor:pointer; font-size:20px; }
+  .cand:hover { border-color:var(--accent); }
+  .cand small { display:block; font-size:11px; color:#6b6355; text-align:center; }
+  .cand .variant { color:var(--warn); font-size:11px; }
+  #freeform { font-size:18px; width:70px; padding:4px 8px; }
+  button { padding:6px 12px; border:1px solid var(--line); border-radius:6px;
+           background:var(--panel); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.danger { color:var(--bad); border-color:var(--bad); }
+  #grid { display:grid; grid-template-columns:repeat(auto-fill, 72px); gap:6px; margin-top:12px; }
+  .tile { width:72px; text-align:center; cursor:pointer; position:relative; }
+  .tile img { width:64px; height:64px; border:2px solid var(--line);
+              border-radius:4px; background:#fff; }
+  .tile.selected img { border-color:var(--bad); }
+  .tile.removed img { opacity:.3; }
+  .tile small { display:block; font-size:10px; color:#6b6355;
+                white-space:nowrap; overflow:hidden; }
+  #ctx { margin-top:14px; padding:10px; background:var(--panel);
+         border:1px solid var(--line); border-radius:6px; display:none; }
+  #ctx .strip { display:flex; gap:4px; align-items:center; }
+  #ctx .strip .c { text-align:center; }
+  #ctx .strip img { width:48px; height:48px; border:1px solid var(--line); background:#fff; }
+  #ctx .strip .target img { border:2px solid var(--accent); }
+  .label-tag { display:inline-block; padding:2px 10px; background:var(--ok);
+               color:#fff; border-radius:4px; font-size:16px; }
+  .neighbors a { margin-right:8px; }
+  #toast { position:fixed; bottom:16px; right:16px; padding:10px 16px;
+           background:var(--ink); color:#fff; border-radius:6px;
+           opacity:0; transition:opacity .3s; }
+</style>
+</head>
+<body>
+<header>
+  <h1>字符聚类审查</h1>
+  <span id="summary">加载中…</span>
+</header>
+<main>
+  <aside id="queue-panel">
+    <select id="filter">
+      <option value="">全部原因</option>
+      <option value="cluster_inconsistent">簇内不一致（优先）</option>
+      <option value="lm_ocr_conflict">LM/OCR 分歧</option>
+      <option value="low_margin">低置信</option>
+      <option value="singleton">单例簇</option>
+      <option value="unsure_pair">潜在并簇</option>
+    </select>
+    <div id="queue"></div>
+  </aside>
+  <section id="detail"><p>← 从左侧队列选择一个簇开始审查。</p></section>
+</main>
+<div id="toast"></div>
+
+<script>
+let current = null;          // 当前簇详情
+let selected = new Set();    // 拆簇选中的成员
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.style.opacity = 1;
+  setTimeout(() => t.style.opacity = 0, 1600);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+
+async function loadSummary() {
+  const s = await api("/api/summary");
+  $("#summary").textContent =
+    `${s.book} ｜ 簇 ${s.labeled_clusters}/${s.n_clusters} 已确认 ｜ ` +
+    `实例 ${s.labeled_instances}/${s.n_instances} 已覆盖 ｜ 可疑 ${s.n_suspects}`;
+}
+
+async function loadQueue() {
+  const reason = $("#filter").value;
+  const data = await api("/api/queue?limit=100" + (reason ? "&reason=" + reason : ""));
+  const box = $("#queue");
+  box.innerHTML = "";
+  for (const e of data.queue) {
+    const div = document.createElement("div");
+    div.className = "item" + (current && current.cluster_id === e.cluster_id ? " active" : "");
+    const cand = e.candidates && e.candidates[0] ? e.candidates[0].char : (e.best || "?");
+    div.innerHTML = `<span class="gain">${e.expected_gain}</span>` +
+      `<b style="font-size:18px">${esc(cand)}</b> ` +
+      `<span>${esc(e.cluster_id)} · ${e.size} 例</span>` +
+      `<div class="reasons">${e.reasons.map(esc).join(" · ")}</div>`;
+    div.onclick = () => openCluster(e.cluster_id);
+    box.appendChild(div);
+  }
+  if (!data.queue.length)
+    box.innerHTML = "<div class='item'>队列已清空 🎉</div>";
+}
+
+async function openCluster(cid) {
+  current = await api("/api/cluster/" + cid);
+  selected = new Set();
+  render();
+  loadQueue();
+}
+
+function render() {
+  const c = current;
+  const label = c.label
+    ? `<span class="label-tag">${esc(c.label)}</span>`
+    : "<i>未确认</i>";
+  const cands = c.candidates.map(k => {
+    const variant = k.char !== k.semantic
+      ? `<span class="variant">→${esc(k.semantic)}</span>` : "";
+    const unc = k.surface_uncertain ? " ⚠" : "";
+    return `<div class="cand" onclick="confirmChar('${esc(k.char)}')">` +
+      `${esc(k.char)}${unc}<small>${(k.p * 100).toFixed(0)}% ${variant}</small></div>`;
+  }).join("");
+  const neighbors = (c.unsure_neighbors || []).map(n =>
+    `<a href="#" onclick="openCluster('${esc(n)}');return false">${esc(n)}</a>` +
+    `<button onclick="mergeWith('${esc(n)}')">并簇</button>`
+  ).join(" ");
+  const tiles = c.members.map(m => {
+    const cls = "tile" + (selected.has(m.id) ? " selected" : "")
+                       + (m.removed ? " removed" : "");
+    return `<div class="${cls}" data-id="${esc(m.id)}">` +
+      `<img src="/img/patch/${encodeURIComponent(m.id)}" ` +
+      `onclick="toggleTile('${esc(m.id)}')" ` +
+      `oncontextmenu="showContext(event,'${esc(m.id)}')">` +
+      `<small>${esc(m.page)}:${m.col}:${m.idx}${m.label ? " " + esc(m.label) : ""}</small></div>`;
+  }).join("");
+
+  $("#detail").innerHTML = `
+    <h2 style="margin:0 0 4px">${esc(c.cluster_id)}
+      <small style="font-weight:normal">${c.size} 例 · cohesion ${c.cohesion ?? "-"}</small>
+      &nbsp;${label}</h2>
+    <div>候选（点击即确认全簇；⚠=字形待定，→ 后为正字注记）：</div>
+    <div class="cands">${cands}
+      <div class="cand"><input id="freeform" placeholder="其他字" maxlength="2">
+        <small><button class="primary" onclick="confirmFree()">确认</button></small></div>
+    </div>
+    <div>
+      <button class="danger" onclick="splitSelected()">✂ 移出选中 (${selected.size})</button>
+      <button onclick="markSelected('damaged')">残损</button>
+      <button onclick="markSelected('illegible')">不可辨</button>
+      ${neighbors ? "｜ 潜在同类: " + neighbors : ""}
+    </div>
+    <div style="font-size:12px;color:#6b6355;margin-top:4px">
+      左键选中/取消（拆簇用）；右键查看上下文。</div>
+    <div id="grid">${tiles}</div>
+    <div id="ctx"></div>`;
+}
+
+function toggleTile(id) {
+  if (selected.has(id)) selected.delete(id); else selected.add(id);
+  render();
+}
+
+async function showContext(ev, id) {
+  ev.preventDefault();
+  const ctx = await api("/api/context/" + encodeURIComponent(id));
+  const strip = ctx.neighbors.map(n =>
+    `<div class="c ${n.is_target ? "target" : ""}">` +
+    `<img src="/img/patch/${encodeURIComponent(n.id)}">` +
+    `<div>${esc(n.best || "·")}</div></div>`).join("");
+  const box = $("#ctx");
+  box.style.display = "block";
+  box.innerHTML = `<b>${esc(id)}</b>（${esc(ctx.page)} 第 ${ctx.col} 列，上下文自上而下）` +
+    `<div class="strip">${strip}</div>`;
+}
+
+async function post(event, msg) {
+  try {
+    await api("/api/event", {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(event)});
+    toast(msg);
+    await openCluster(current.cluster_id);
+    loadSummary();
+  } catch (e) { toast("失败: " + e.message); }
+}
+
+function confirmChar(ch) {
+  post({op: "confirm", cluster: current.cluster_id, char: ch, scope: "cluster"},
+       `已确认 ${current.cluster_id} = ${ch}`);
+}
+function confirmFree() {
+  const ch = $("#freeform").value.trim();
+  if (ch) confirmChar(ch);
+}
+function splitSelected() {
+  if (!selected.size) return toast("先左键选中要移出的成员");
+  post({op: "split", cluster: current.cluster_id, moved: [...selected],
+        reason: "different_char"}, `已移出 ${selected.size} 个成员`);
+}
+function markSelected(flag) {
+  if (!selected.size) return toast("先左键选中成员");
+  [...selected].forEach(id => post({op: "mark", instance: id, flag}, "已标记"));
+}
+function mergeWith(other) {
+  post({op: "merge", clusters: [current.cluster_id, other]},
+       `已合并 ${other} → ${current.cluster_id}`);
+}
+
+$("#filter").onchange = loadQueue;
+loadSummary(); loadQueue();
+</script>
+</body>
+</html>
