@@ -71,6 +71,45 @@ def test_blank_column_all_empty():
     assert len(cells) == 8
 
 
+def test_page_shared_grid_aligns_sparse_column():
+    """整版同刻先验：稀疏列（只有 1 个字）跟随全页网格，不独立漂移。
+
+    构造带 offset=25 网格的密列 ×2 + 稀疏列 ×1（仅第 3 格有字）。
+    稀疏列若独立拟合会把唯一的字放进错误的格；共享网格下它必须
+    与密列同格线，且唯一的字落在 index=3。
+    """
+    n, cell_h, width, off = 8, 60, 50, 25
+    page_h = n * cell_h + 80
+    page = np.full((page_h, 300), 235, dtype=np.uint8)
+    frame_top, frame_bottom = 10, 10 + n * cell_h + off + 5
+    cols = [(240, 290), (170, 220), (100, 150)]   # 右→左：密、密、稀
+    for ci, (lx, rx) in enumerate(cols):
+        for i in range(n):
+            if ci == 2 and i != 3:
+                continue
+            y0 = frame_top + off + i * cell_h + 10
+            page[y0:y0 + 40, lx + 8:rx - 8] = 25
+    layout = {"borders": {"inner_frame": {
+                  "top": {"intercept": frame_top},
+                  "bottom": {"intercept": frame_bottom}}},
+              "columns": {"columns": [
+                  {"index": k + 1, "left_x": float(lx), "right_x": float(rx)}
+                  for k, (lx, rx) in enumerate(cols)]}}
+    result = GridSegmenter(chars_per_line=n).segment_page(page, layout)
+    cols_out = {c["index"]: c for c in result["columns"]}
+
+    sparse = [c for c in cols_out[3]["cells"] if c["type"] == "char"]
+    assert len(sparse) == 1
+    assert sparse[0]["index"] == 3
+    # 稀疏列与密列的网格线一致（同 index 的格 y_top 相差 < 6px）
+    dense_cells = {c["index"]: c for c in cols_out[1]["cells"]
+                   if c["type"] != "margin"}
+    sparse_cells = {c["index"]: c for c in cols_out[3]["cells"]
+                    if c["type"] != "margin"}
+    for i in range(n):
+        assert abs(dense_cells[i]["y_top"] - sparse_cells[i]["y_top"]) < 6
+
+
 def test_segment_page_contract_and_narrow_column_filter():
     """整页：正常列出 cells；窄列（版心缝）标记 skipped。"""
     n = 6
@@ -96,5 +135,7 @@ def test_segment_page_contract_and_narrow_column_filter():
     for idx in (1, 3):
         chars = [c for c in cols[idx]["cells"] if c["type"] == "char"]
         assert len(chars) == n
-        # 全图坐标：cells 落在 inner_frame 范围内
-        assert all(20 - 1 <= c["y_top"] <= 20 + n * 60 + 1 for c in chars)
+        # 全图坐标：cells 落在 inner_frame 外扩半格的范围内
+        # （纵向裁切外扩半格容忍边框检测偏差，实际范围由投影内容决定）
+        pad = 60 // 2 + 2
+        assert all(20 - pad <= c["y_top"] <= 20 + n * 60 + pad for c in chars)
