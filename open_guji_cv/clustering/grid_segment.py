@@ -396,7 +396,11 @@ class GridSegmenter:
 
     # ── 纯函数核心 ────────────────────────────────────────
 
-    def segment_page(self, image: np.ndarray, layout: dict) -> dict:
+    def segment_page(self, image: np.ndarray, layout: dict,
+                     grid_override: dict | None = None) -> dict:
+        """grid_override 给定时跳过本页拟合，用书级共享网格参数
+        （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
+        相位以本页 inner_frame 为基准换算）——弱信号页专用。"""
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         h, w = image.shape[:2]
@@ -406,31 +410,47 @@ class GridSegmenter:
         inner = borders.get("inner_frame", {})
         col_top = inner.get("top", {}).get("intercept", 0)
         col_bottom = inner.get("bottom", {}).get("intercept", h)
+        frame_left = inner.get("left", {}).get("intercept", 0)
 
+        grid_meta: dict = {}
         if self.n_cols:
             # 列网格拟合：列宽/列距与行网格同为刻本刚性先验，
             # 页级拟合一个 (相位, 列距)，替代 Phase 2 的自由列检测
             # （自由检测会劈裂/粘连列，切残的字残形趋同致跨字污染）。
             vproj = page_column_projection(image)
-            cx0, period = fit_page_grid([vproj], self.n_cols,
-                                        full_widths=[image.shape[0]])
-            # 列格 = 文字带 + 界行缝（完整周期）。文字带在周期内的位置
-            # 同样刚性固定：逐列格测文字带左右内缩，取页面中位统一应用
-            # ——否则图块裹进界行，下游竖线隔离会误伤大半字符。
-            insets: list[tuple[float, float]] = []
-            for k in range(self.n_cols):
-                s, e = int(cx0 + period * k), int(cx0 + period * (k + 1))
-                seg = vproj[max(0, s):min(len(vproj), e)]
-                if len(seg) < 4 or seg.sum() < 1:
-                    continue
-                t, b = content_range(seg, min_run=0.1 * period)
-                if b - t >= 0.4 * period:      # 空列/噪声段不计入
-                    insets.append((float(t), float(len(seg) - b)))
-            if insets:
-                inset_l = float(np.median([a for a, _ in insets]))
-                inset_r = float(np.median([b for _, b in insets]))
+            page_ink = float(vproj.sum())
+            if grid_override:
+                # 书级共享网格（刻本整书同版式）：弱信号页（空白余纸、
+                # 稀疏职名页）自身拟合不可靠，跟随书级中位参数，
+                # 相位以本页边框为基准换算。
+                period = grid_override["period"]
+                cx0 = frame_left + grid_override["col_phase_rel"]
+                inset_l = grid_override["inset_l"]
+                inset_r = grid_override["inset_r"]
             else:
-                inset_l = inset_r = period * 0.08
+                cx0, period = fit_page_grid([vproj], self.n_cols,
+                                            full_widths=[image.shape[0]])
+                # 列格 = 文字带 + 界行缝（完整周期）。文字带在周期内的
+                # 位置同样刚性固定：逐列格测文字带左右内缩，取页面中位
+                # 统一应用——否则图块裹进界行，竖线隔离会误伤大半字符。
+                insets: list[tuple[float, float]] = []
+                for k in range(self.n_cols):
+                    s, e = int(cx0 + period * k), int(cx0 + period * (k + 1))
+                    seg = vproj[max(0, s):min(len(vproj), e)]
+                    if len(seg) < 4 or seg.sum() < 1:
+                        continue
+                    t, b = content_range(seg, min_run=0.1 * period)
+                    if b - t >= 0.4 * period:      # 空列/噪声段不计入
+                        insets.append((float(t), float(len(seg) - b)))
+                if insets:
+                    inset_l = float(np.median([a for a, _ in insets]))
+                    inset_r = float(np.median([b for _, b in insets]))
+                else:
+                    inset_l = inset_r = period * 0.08
+            grid_meta = {"page_ink": page_ink, "period": float(period),
+                         "col_phase_rel": float(cx0 - frame_left),
+                         "inset_l": float(inset_l),
+                         "inset_r": float(inset_r)}
             columns_info = [
                 {"index": self.n_cols - k,     # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
@@ -473,9 +493,16 @@ class GridSegmenter:
         # （页级聚合投影），绝不按单列内容范围锚定——抬头空格列会错一格。
         # 每列仅允许相位 ±0.12 格微调（板歪/扫描形变），格高不变。
         if text_cols:
-            page_phase, cell_h = fit_page_grid(
-                [p for _, _, p in text_cols], n,
-                full_widths=[crop.shape[1] for _, crop, _ in text_cols])
+            if grid_override:
+                cell_h = grid_override["cell_h"]
+                # row_phase_rel 以 frame_top 为基准 → 换算到 crop 坐标
+                page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
+            else:
+                page_phase, cell_h = fit_page_grid(
+                    [p for _, _, p in text_cols], n,
+                    full_widths=[crop.shape[1] for _, crop, _ in text_cols])
+            grid_meta.update({"cell_h": float(cell_h),
+                              "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
                 bounds = rigid_bounds(proj, page_phase, cell_h, n)
                 cells = cells_from_bounds(crop, bounds, self.params)
@@ -488,6 +515,7 @@ class GridSegmenter:
             "image_size": {"width": w, "height": h},
             "chars_per_line": n,
             "segmenter": "grid_strict",
+            "grid": grid_meta,
             "columns": result_columns,
         }
 
@@ -512,7 +540,9 @@ class GridSegmenter:
         out_dir = book_out_dir / "phase3_char_grid"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        n_pages = n_chars = n_empty = 0
+        # ── Pass 1: 逐页独立拟合，收集网格参数与墨量 ──
+        results: dict[str, dict] = {}
+        pages: list[tuple[str, Path, dict]] = []
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
             img_path = CharExtractor._find_page_image(src, stem)
@@ -524,7 +554,62 @@ class GridSegmenter:
                 continue
             with open(lf, encoding="utf-8") as f:
                 layout = json.load(f)
-            result = self.segment_page(image, layout)
+            pages.append((stem, img_path, layout))   # 不缓存像素，弱页重读
+            results[stem] = self.segment_page(image, layout)
+
+        # ── Pass 2: 书级共享网格校正弱信号页 ──
+        # 刻本整书同版式：列距/字高/相位（相对边框）全书一致。
+        # 空白余纸页、稀疏职名页自身拟合不可靠（相位骑到界行/乱套），
+        # 用**强信号页的中位参数**重建其网格。
+        n_weak = 0
+        if self.n_cols and len(pages) >= 5:
+            inks = {s: r["grid"].get("page_ink", 0.0)
+                    for s, r in results.items() if r.get("grid")}
+            median_ink = float(np.median(list(inks.values()))) if inks else 0.0
+            strong = [s for s, v in inks.items() if v >= 0.5 * median_ink]
+            if strong and median_ink > 0:
+                keys = ("period", "col_phase_rel", "inset_l",
+                        "inset_r", "cell_h", "row_phase_rel")
+                override = {
+                    key: float(np.median(
+                        [results[s]["grid"][key] for s in strong
+                         if key in results[s]["grid"]]))
+                    for key in keys}
+
+                def _deviant(g: dict) -> bool:
+                    """网格参数偏离书级中位 → 该页拟合失败。
+
+                    刻本整书同版式，period/cell_h/相位理应一致；
+                    稀疏页（职名页）墨量正常但信号弱，拟合会跑飞——
+                    参数一致性本身就是失败检测器。"""
+                    if not all(k in g for k in keys):
+                        return True
+                    return (abs(g["period"] - override["period"])
+                            > 0.03 * override["period"]
+                            or abs(g["cell_h"] - override["cell_h"])
+                            > 0.03 * override["cell_h"]
+                            or abs(g["col_phase_rel"] - override["col_phase_rel"])
+                            > 0.25 * override["period"]
+                            or abs(g["row_phase_rel"] - override["row_phase_rel"])
+                            > 0.6 * override["cell_h"])
+
+                weak = {s for s, v in inks.items()
+                        if v < 0.3 * median_ink
+                        or _deviant(results[s]["grid"])}
+                for stem, img_path, layout in pages:
+                    if stem in weak:
+                        image = imread(str(img_path))
+                        if image is None:
+                            continue
+                        results[stem] = self.segment_page(
+                            image, layout, grid_override=override)
+                        n_weak += 1
+                if n_weak:
+                    print(f"  书级网格校正弱信号页 {n_weak} 张")
+
+        n_pages = n_chars = n_empty = 0
+        for stem, _, _ in pages:
+            result = results[stem]
             with open(out_dir / f"{stem}_char_grid.json", "w",
                       encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
@@ -535,14 +620,13 @@ class GridSegmenter:
             n_chars += pc
             n_empty += pe
             n_pages += 1
-            print(f"  {stem}: {pc} 字 / {pe} 空")
 
         meta = {"segmenter": "grid_strict",
                 "params": {"chars_per_line": self.params.chars_per_line,
                            "empty_ink_ratio": self.params.empty_ink_ratio,
                            "search_ratio": self.params.search_ratio},
                 "stats": {"pages": n_pages, "chars": n_chars,
-                          "empty": n_empty}}
+                          "empty": n_empty, "weak_pages": n_weak}}
         with open(out_dir / "grid_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         return meta
