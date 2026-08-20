@@ -159,6 +159,59 @@ def test_rigid_grid_uniform_cell_height():
     assert max(heights) - min(heights) < 1e-6
 
 
+def test_column_grid_fitting():
+    """列网格拟合（n_cols 模式）：不依赖 layout 列，自动定位文字带。
+
+    合成页：3 个等距文字列 + 列间界行竖线 + 上下边框横线；
+    其中中间列抬头空 3 格。断言：3 列全找到、边界落在文字带
+    （不含界行）、空格判 empty、跨列同格线。
+    """
+    n_chars, cell_h, n_cols = 6, 60, 3
+    period, text_w = 90, 60
+    H, W = n_chars * cell_h + 60, n_cols * period + 60
+    page = np.full((H, W), 235, dtype=np.uint8)
+    frame_top = 30
+    x0 = 30
+    for k in range(n_cols):
+        lx = x0 + k * period + (period - text_w) // 2
+        start = 3 if k == 1 else 0
+        for i in range(start, n_chars):
+            y0 = frame_top + i * cell_h + 10
+            page[y0:y0 + 40, lx + 6:lx + text_w - 6] = 25
+        # 界行竖线（列格右边界处）
+        page[frame_top:frame_top + n_chars * cell_h,
+             x0 + (k + 1) * period - 1:x0 + (k + 1) * period + 1] = 25
+    # 上下边框横线
+    page[frame_top - 6:frame_top - 3, x0:x0 + n_cols * period] = 25
+    page[frame_top + n_chars * cell_h + 3:frame_top + n_chars * cell_h + 6,
+         x0:x0 + n_cols * period] = 25
+
+    layout = {"borders": {"inner_frame": {
+                  "top": {"intercept": frame_top},
+                  "bottom": {"intercept": frame_top + n_chars * cell_h}}}}
+    seg = GridSegmenter(chars_per_line=n_chars, n_cols=n_cols)
+    result = seg.segment_page(page, layout)
+    cols = [c for c in result["columns"] if not c.get("skipped")]
+    assert len(cols) == n_cols
+    # 列边界落在文字带内侧（不裹界行）：界行 x 不在 [left_x, right_x]
+    for k, c in enumerate(sorted(cols, key=lambda c: c["left_x"])):
+        rule_x = x0 + (k + 1) * period
+        assert c["right_x"] < rule_x - 1
+        # 文字带定位精度 ±20px（缝内相位自由度）；下游提取内缩 +
+        # 归一化稳健外接框可吸收
+        lx = x0 + k * period + (period - text_w) // 2
+        assert abs(c["left_x"] - lx) < 20
+        assert abs(c["right_x"] - (lx + text_w)) < 20
+    # 中间列抬头 3 空格 + 跨列同格线
+    mid = sorted(cols, key=lambda c: c["left_x"])[1]
+    cells = [c for c in mid["cells"] if c["type"] != "margin"]
+    assert [c["type"] for c in cells] == ["empty"] * 3 + ["char"] * 3
+    first = sorted(cols, key=lambda c: c["left_x"])[0]
+    fcells = [c for c in first["cells"] if c["type"] != "margin"]
+    for a, b in zip(cells, fcells):
+        assert abs(a["y_top"] - b["y_top"]) < 6
+
+
 def test_segment_page_contract_and_narrow_column_filter():
     """整页：正常列出 cells；窄列（版心缝）标记 skipped。"""
     n = 6

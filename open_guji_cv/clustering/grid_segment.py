@@ -113,7 +113,7 @@ def fit_global_grid(proj: np.ndarray, n_chars: int,
     L = len(proj)
     top, bottom = content_range(
         proj, min_run=0.25 * L / n_chars,
-        max_fill=0.8 * full_width if full_width else None)
+        max_fill=0.9 * full_width if full_width else None)
     span_max = bottom - top
     base_h = span_max / n_chars
     smooth = _smooth(proj, base_h)
@@ -151,6 +151,26 @@ def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
     return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
 
 
+def page_column_projection(gray: np.ndarray, line_frac: float = 0.3
+                           ) -> np.ndarray:
+    """整页垂直投影（每 x 的黑像素数），供列网格拟合。
+
+    先剔两类长线：竖直长线（界行/边框竖线——它们在垂直投影上是假峰，
+    恰好位于列边界处）与水平长线（边框横线——给每 x 加常量偏置）。
+    剔完后投影呈现纯净的周期结构：文字列=台地、列间缝=谷，
+    与行方向的字/空隙结构同构，谷/峰代价模型可直接复用。"""
+    binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
+    h, w = binary.shape
+    kv = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(3, int(h * line_frac))))
+    vlines = cv2.dilate(cv2.erode(binary, kv), kv)
+    kh = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(3, int(w * line_frac)), 1))
+    hlines = cv2.dilate(cv2.erode(binary, kh), kh)
+    cleaned = binary & (1 - vlines) & (1 - hlines)
+    return cleaned.sum(axis=0).astype(np.float64)
+
+
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
                   full_widths: list[float] | None = None,
                   cell_step: float = 0.5, phase_step: int = 2
@@ -170,7 +190,7 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         return 0.0, L / n_chars
     fw = float(sum(full_widths)) if full_widths else None
     top, bottom = content_range(page, min_run=0.25 * L / n_chars,
-                                max_fill=0.8 * fw if fw else None)
+                                max_fill=0.9 * fw if fw else None)
     base = (bottom - top) / n_chars
     smooth = _smooth(page, base)
 
@@ -236,7 +256,7 @@ def dp_boundaries(proj: np.ndarray, cell_h: float, n_chars: int,
 
     top, bottom = content_range(
         proj, min_run=0.25 * cell_h,
-        max_fill=0.8 * full_width if full_width else None)
+        max_fill=0.9 * full_width if full_width else None)
     if phase_prior is not None:
         s_lo, s_hi = phase_prior - 0.3 * cell_h, phase_prior + 0.3 * cell_h
         e_lo = phase_prior + n_chars * cell_h - 0.5 * cell_h
@@ -366,10 +386,13 @@ def segment_column(col_gray: np.ndarray, n_chars: int, params: GridParams,
 class GridSegmenter:
     """刻本网格切分器：phase2 layout + 页面图 → char_grid JSON。"""
 
-    def __init__(self, chars_per_line: int,
+    def __init__(self, chars_per_line: int, n_cols: int | None = None,
                  empty_ink_ratio: float = EMPTY_INK_RATIO,
                  search_ratio: float = SEARCH_RATIO):
+        """n_cols 给定时启用列网格拟合（每半页列数，profile.lines_per_page），
+        不再依赖 Phase 2 的列检测结果；None 时沿用 layout 的列。"""
         self.params = GridParams(chars_per_line, empty_ink_ratio, search_ratio)
+        self.n_cols = n_cols
 
     # ── 纯函数核心 ────────────────────────────────────────
 
@@ -384,8 +407,38 @@ class GridSegmenter:
         col_top = inner.get("top", {}).get("intercept", 0)
         col_bottom = inner.get("bottom", {}).get("intercept", h)
 
-        columns_info = layout.get("columns", {}).get("columns", []) \
-            or borders.get("columns", [])
+        if self.n_cols:
+            # 列网格拟合：列宽/列距与行网格同为刻本刚性先验，
+            # 页级拟合一个 (相位, 列距)，替代 Phase 2 的自由列检测
+            # （自由检测会劈裂/粘连列，切残的字残形趋同致跨字污染）。
+            vproj = page_column_projection(image)
+            cx0, period = fit_page_grid([vproj], self.n_cols,
+                                        full_widths=[image.shape[0]])
+            # 列格 = 文字带 + 界行缝（完整周期）。文字带在周期内的位置
+            # 同样刚性固定：逐列格测文字带左右内缩，取页面中位统一应用
+            # ——否则图块裹进界行，下游竖线隔离会误伤大半字符。
+            insets: list[tuple[float, float]] = []
+            for k in range(self.n_cols):
+                s, e = int(cx0 + period * k), int(cx0 + period * (k + 1))
+                seg = vproj[max(0, s):min(len(vproj), e)]
+                if len(seg) < 4 or seg.sum() < 1:
+                    continue
+                t, b = content_range(seg, min_run=0.1 * period)
+                if b - t >= 0.4 * period:      # 空列/噪声段不计入
+                    insets.append((float(t), float(len(seg) - b)))
+            if insets:
+                inset_l = float(np.median([a for a, _ in insets]))
+                inset_r = float(np.median([b for _, b in insets]))
+            else:
+                inset_l = inset_r = period * 0.08
+            columns_info = [
+                {"index": self.n_cols - k,     # 从右到左编号，最右列=1
+                 "left_x": cx0 + period * k + inset_l,
+                 "right_x": cx0 + period * (k + 1) - inset_r}
+                for k in range(self.n_cols)]
+        else:
+            columns_info = layout.get("columns", {}).get("columns", []) \
+                or borders.get("columns", [])
 
         # 刻本文字列宽度一致：过滤版心/界行缝等窄列
         widths = [c["right_x"] - c["left_x"] for c in columns_info]

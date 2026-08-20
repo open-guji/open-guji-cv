@@ -287,14 +287,17 @@ def cmd_segment(args):
 
     profile_path = Path(args.path) / "profile.json"
     chars_per_line = args.chars_per_line
-    if chars_per_line is None and profile_path.exists():
+    n_cols = args.cols
+    if profile_path.exists():
         prof = BookProfile.load(profile_path)
-        chars_per_line = prof.chars_per_line
+        chars_per_line = chars_per_line or prof.chars_per_line
+        n_cols = n_cols if n_cols is not None else prof.lines_per_page
     if not chars_per_line:
         print("请用 --chars-per-line 指定每行字数（刻本先验）")
         sys.exit(1)
 
     seg = GridSegmenter(chars_per_line,
+                        n_cols=n_cols or None,
                         empty_ink_ratio=args.empty_ink_ratio)
     source_dir = Path(args.input_dir) if args.input_dir else None
     meta = seg.run_book(_book_out_dir(args), source_dir=source_dir)
@@ -490,6 +493,9 @@ def main():
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--chars-per-line", type=int, default=None,
                    help="每行字数（默认读 profile.json）")
+    p.add_argument("--cols", type=int, default=None,
+                   help="每半页列数，启用列网格拟合（默认读 profile 的 "
+                        "lines_per_page；传 0 禁用，沿用 Phase 2 列检测）")
     p.add_argument("--empty-ink-ratio", type=float, default=0.02,
                    help="判空墨迹覆盖率阈值（默认 0.02）")
     p.add_argument("--input-dir", default=None, help="页面图目录")
