@@ -151,14 +151,17 @@ def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
     return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
 
 
-def page_column_projection(gray: np.ndarray, line_frac: float = 0.3
-                           ) -> np.ndarray:
+def page_column_projection(gray: np.ndarray, line_frac: float = 0.3,
+                           return_rule_xs: bool = False):
     """整页垂直投影（每 x 的黑像素数），供列网格拟合。
 
     先剔两类长线：竖直长线（界行/边框竖线——它们在垂直投影上是假峰，
     恰好位于列边界处）与水平长线（边框横线——给每 x 加常量偏置）。
     剔完后投影呈现纯净的周期结构：文字列=台地、列间缝=谷，
-    与行方向的字/空隙结构同构，谷/峰代价模型可直接复用。"""
+    与行方向的字/空隙结构同构，谷/峰代价模型可直接复用。
+
+    return_rule_xs=True 时额外返回界行/边框竖线所在的 x 布尔掩码
+    ——供列拟合质量评估（界行应落在列格之间，落入列内即拟合失败）。"""
     binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
     h, w = binary.shape
     kv = cv2.getStructuringElement(
@@ -168,7 +171,10 @@ def page_column_projection(gray: np.ndarray, line_frac: float = 0.3
         cv2.MORPH_RECT, (max(3, int(w * line_frac)), 1))
     hlines = cv2.dilate(cv2.erode(binary, kh), kh)
     cleaned = binary & (1 - vlines) & (1 - hlines)
-    return cleaned.sum(axis=0).astype(np.float64)
+    proj = cleaned.sum(axis=0).astype(np.float64)
+    if return_rule_xs:
+        return proj, vlines.any(axis=0)
+    return proj
 
 
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
@@ -417,7 +423,8 @@ class GridSegmenter:
             # 列网格拟合：列宽/列距与行网格同为刻本刚性先验，
             # 页级拟合一个 (相位, 列距)，替代 Phase 2 的自由列检测
             # （自由检测会劈裂/粘连列，切残的字残形趋同致跨字污染）。
-            vproj = page_column_projection(image)
+            vproj, rule_xs = page_column_projection(image,
+                                                    return_rule_xs=True)
             page_ink = float(vproj.sum())
             if grid_override:
                 # 书级共享网格（刻本整书同版式）：弱信号页（空白余纸、
@@ -447,15 +454,25 @@ class GridSegmenter:
                     inset_r = float(np.median([b for _, b in insets]))
                 else:
                     inset_l = inset_r = period * 0.08
-            grid_meta = {"page_ink": page_ink, "period": float(period),
-                         "col_phase_rel": float(cx0 - frame_left),
-                         "inset_l": float(inset_l),
-                         "inset_r": float(inset_r)}
             columns_info = [
                 {"index": self.n_cols - k,     # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
                  "right_x": cx0 + period * (k + 1) - inset_r}
                 for k in range(self.n_cols)]
+            # 列拟合质量：界行竖线落入列格内部的比例。拟合正确时
+            # 界行全在列格之间的缝里；错位半周期则大量进入列内——
+            # 这正是下游"图块裹线被隔离"的直接前因。
+            in_col = total_rule = 0
+            for c in columns_info:
+                lo, hi = int(c["left_x"]) + 3, int(c["right_x"]) - 3
+                if hi > lo:
+                    in_col += int(rule_xs[lo:hi].sum())
+            total_rule = max(1, int(rule_xs.sum()))
+            grid_meta = {"page_ink": page_ink, "period": float(period),
+                         "col_phase_rel": float(cx0 - frame_left),
+                         "inset_l": float(inset_l),
+                         "inset_r": float(inset_r),
+                         "rule_in_col": round(in_col / total_rule, 4)}
         else:
             columns_info = layout.get("columns", {}).get("columns", []) \
                 or borders.get("columns", [])
@@ -576,34 +593,27 @@ class GridSegmenter:
                          if key in results[s]["grid"]]))
                     for key in keys}
 
-                def _deviant(g: dict) -> bool:
-                    """网格参数偏离书级中位 → 该页拟合失败。
-
-                    刻本整书同版式，period/cell_h/相位理应一致；
-                    稀疏页（职名页）墨量正常但信号弱，拟合会跑飞——
-                    参数一致性本身就是失败检测器。"""
-                    if not all(k in g for k in keys):
-                        return True
-                    return (abs(g["period"] - override["period"])
-                            > 0.03 * override["period"]
-                            or abs(g["cell_h"] - override["cell_h"])
-                            > 0.03 * override["cell_h"]
-                            or abs(g["col_phase_rel"] - override["col_phase_rel"])
-                            > 0.25 * override["period"]
-                            or abs(g["row_phase_rel"] - override["row_phase_rel"])
-                            > 0.6 * override["cell_h"])
-
+                # 失败判据（直接质量信号，不用参数偏离——相位的边框基准
+                # 页间天然抖动，偏离判据会把好页错判失败并套上不准的中位）:
+                # 1) 墨量过低: 空白余纸页, 纯界行上拟合乱套;
+                # 2) rule_in_col 高: 界行竖线大量落入列格内部 = 列相位错.
                 weak = {s for s, v in inks.items()
                         if v < 0.3 * median_ink
-                        or _deviant(results[s]["grid"])}
+                        or results[s]["grid"].get("rule_in_col", 0) > 0.2}
                 for stem, img_path, layout in pages:
                     if stem in weak:
                         image = imread(str(img_path))
                         if image is None:
                             continue
-                        results[stem] = self.segment_page(
+                        redone = self.segment_page(
                             image, layout, grid_override=override)
-                        n_weak += 1
+                        # 择优：校正绝不允许把页面改差（书级相位的边框
+                        # 基准对个别页也可能不准）
+                        old_q = results[stem]["grid"].get("rule_in_col", 1.0)
+                        new_q = redone["grid"].get("rule_in_col", 1.0)
+                        if new_q <= old_q:
+                            results[stem] = redone
+                            n_weak += 1
                 if n_weak:
                     print(f"  书级网格校正弱信号页 {n_weak} 张")
 
