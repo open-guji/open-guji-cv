@@ -11,6 +11,7 @@
 系统设计： 查看 .claude/doc/system_design.md
 技术细节： 查看 .claude/doc/technical_learning.md
 表格 Cell 输出格式： 查看 .claude/doc/table_cell_format.md
+字符聚类设计（刻本）： 查看 .claude/doc/char_clustering_design.md
 
 ----
 测试数据：
