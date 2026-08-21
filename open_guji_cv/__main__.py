@@ -18,6 +18,8 @@ Web 界面：
     chars      <folder>   M1 字符提取 → phase4_chars/
     cluster    <folder>   M2+M3 保守聚类 → phase5_clusters/
     label      <folder>   M4+M5 候选生成 + 上下文排序 → phase6_labels/
+    refine     <folder>   M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）
+    bench-ocr  <folder>   多 OCR 引擎黄金集准确率对比
     review     <folder>   M6 人工审查 Web 界面 → phase7_review/labels.jsonl
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
     bench      <target>   合成数据集基准评测（verify / cluster）
@@ -361,6 +363,30 @@ def cmd_label(args):
     print(f"完成: {stats}，输出: {book_out_dir / 'phase6_labels'}")
 
 
+def cmd_refine(args):
+    """M5+ 上下文自动修正：簇级边缘化 + 同书自举 n-gram，迭代重解码。"""
+    from .clustering.context_refine import refine_book
+
+    report = refine_book(_book_out_dir(args), rounds=args.rounds,
+                         lm_order=args.lm_order, use_lm=args.with_lm)
+    print(json.dumps(report, ensure_ascii=False, indent=1))
+
+
+def cmd_bench_ocr(args):
+    """多 OCR 引擎在黄金集上的准确率对比。"""
+    from .clustering.ocr_bench import run_bench
+
+    r = run_bench(_book_out_dir(args), args.engines.split(","),
+                  limit=args.limit, mode=args.goldset)
+    print(f"黄金集[{r['goldset_mode']}] {r['goldset_size']} 簇 / "
+          f"{r['goldset_instances']} 实例")
+    print(f"{'引擎':<18}{'top1':>9}{'topk':>9}{'加权':>9}{'字/秒':>9}")
+    for k, v in r["engines"].items():
+        print(f"{k:<18}{v.get('top1', 0):>9.1%}{v.get('topk', 0):>9.1%}"
+              f"{v.get('top1_weighted', 0):>9.1%}"
+              f"{v.get('chars_per_sec', 0):>9}")
+
+
 def cmd_review(args):
     """M6 人工审查 Web 界面：可疑队列 / 簇视图 / 上下文视图。"""
     from .clustering.review.server import start_review_server
@@ -544,6 +570,27 @@ def main():
     p.add_argument("--lm-corpus", default=None,
                    help="语料目录（*.txt，现场训练 n-gram；与 --lm-model 二选一）")
 
+    # ── refine（M5+ 上下文自动修正）──────────────────────
+    p = sub.add_parser("refine",
+                       help="M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--rounds", type=int, default=2, help="迭代轮数（默认 2）")
+    p.add_argument("--lm-order", type=int, default=3, help="n-gram 阶数")
+    p.add_argument("--with-lm", action="store_true",
+                   help="启用同书自举 n-gram（默认关闭：实测在缺乏外部"
+                        "语料时净有害，见 context_refine 模块文档）")
+
+    # ── bench-ocr（多引擎对比）───────────────────────────
+    p = sub.add_parser("bench-ocr", help="多 OCR 引擎黄金集准确率对比")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--engines", default="rapidocr,tesseract:chi_tra",
+                   help="引擎列表，逗号分隔：rapidocr / rapidocr-raw / "
+                        "tesseract:chi_tra / tesseract:chi_sim")
+    p.add_argument("--goldset", default="vlm_only",
+                   choices=["vlm_only", "consensus"],
+                   help="黄金集模式；跨引擎对比须用 vlm_only（无偏）")
+    p.add_argument("--limit", type=int, default=None, help="只测前 N 个")
+
     # ── review（M6 审查界面）─────────────────────────────
     p = sub.add_parser("review",
                        help="M6 人工审查 Web 界面（需先 cluster/label）")
@@ -589,6 +636,8 @@ def main():
         "chars":             cmd_chars,
         "cluster":           cmd_cluster,
         "label":             cmd_label,
+        "refine":            cmd_refine,
+        "bench-ocr":         cmd_bench_ocr,
         "review":            cmd_review,
         "update":            cmd_update,
         "bench":             cmd_bench,
