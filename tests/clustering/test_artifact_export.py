@@ -113,10 +113,10 @@ def test_extract_events_bare_jsonl():
 
 
 def test_render_html_autosave_wiring(synth_book):
-    """自动保存链路：publish 调用 + labels.jsonl 恢复 + localStorage 备份。"""
+    """自动保存链路：publish 调用 + 恢复 fetch + localStorage 备份。"""
     page = render_html(build_batch(synth_book, limit=3))
-    assert "publish({'labels.jsonl'" in page
-    assert "fetch('labels.jsonl')" in page
+    assert "ns.publish({'labels.txt'" in page
+    assert "fetch('labels.txt')" in page
     assert "localStorage" in page
     assert "save-status" in page
 
@@ -135,3 +135,24 @@ def test_events_carry_members_for_remap(synth_book):
     assert all(e["members"] for e in batch["entries"])
     page = render_html(batch)
     assert "data-members=" in page
+
+
+def test_publish_uses_inferable_extension_and_type(synth_book):
+    """保存文件名必须用平台能推断类型的副檔名并显式给 contentType。
+
+    回归：用过 labels.jsonl —— 平台推断不出类型，publish 被判
+    invalid_content 直接拒绝，整批审查静默丢失。
+    """
+    page = render_html(build_batch(synth_book, limit=3))
+    assert "'labels.txt'" in page
+    assert "contentType: 'text/plain'" in page
+    assert "publish({'labels.jsonl'" not in page
+    assert "fetch('labels.txt')" in page
+
+
+def test_save_failure_is_loud(synth_book):
+    """保存失效必须显眼并带错误码（上一轮灰色小字导致用户没察觉）。"""
+    page = render_html(build_batch(synth_book, limit=3))
+    assert "儲存被拒（" in page          # 错误码进入提示
+    assert 'data-bad' in page            # 触发红底样式
+    assert '#save-status[data-bad="1"]' in page

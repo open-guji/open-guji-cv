@@ -10,9 +10,11 @@
 
 持久化三层保险（页面内实现）：
     1. artifact 能力 files-publish：每次操作后防抖 3s 调
-       ``artifact.publish({"labels.jsonl": 日志})`` 发布数据文件新版本
-       （经典 Artifact 无手势自动保存——live-doc 才有；本视图不重载）。
-       重开页面时 fetch("labels.jsonl") 恢复并重放卡片状态；
+       ``artifact.publish({"labels.txt": {content, contentType}})`` 发布
+       数据文件新版本（经典 Artifact 无手势自动保存——live-doc 才有；
+       本视图不重载）。重开页面时 fetch("labels.txt") 恢复并重放卡片状态。
+       **副檔名必须是平台能推断类型的**：用过 .jsonl，平台推断不出类型
+       直接判 invalid_content，整批审查静默丢失（第二批 400 簇的教训）；
     2. localStorage 崩溃备份：每次操作同步写入，恢复时与已发布日志按
        (batch,seq) 合并，多出的自动补发布；
     3. downloads 一键下载 + 事件日志可见可复制：任何托管环境下的兜底。
@@ -205,6 +207,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
   display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:baseline}
 .top h1{font-size:1.05rem;margin:0;letter-spacing:.12em}
 .top .prog{color:var(--muted);font-variant-numeric:tabular-nums}
+#save-status[data-bad="1"]{color:var(--seal-ink);background:var(--bad);
+  padding:.1rem .5rem;border-radius:3px;font-size:.8rem}
 .top button{font:inherit;font-size:.85rem;background:none;color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .6rem;cursor:pointer}
 .top button[data-on="1"]{background:var(--seal);color:var(--seal-ink);border-color:var(--seal)}
@@ -297,12 +301,19 @@ _JS = """
       try { return JSON.parse(l.slice('GUJI-EVENT '.length)); }
       catch(e){ return null; }
     }).filter(Boolean); }
-  function status(msg){
+  function status(msg, bad){
     var el = document.getElementById('save-status');
-    if(el) el.textContent = msg; }
+    if(!el) return;
+    el.textContent = msg;
+    el.setAttribute('data-bad', bad ? '1' : '0'); }
+  function fail(why){
+    // 儲存失效必須顯眼：上一輪失敗時提示是灰色小字，用戶沒看見，
+    // 整批審查白做。現在紅底常駐並直接說怎麼救。
+    disabled = true;
+    status(why + ' — 請點「匯出審查記錄」複製後貼回對話', true); }
 
   // ── 持久化：经典 Artifact 无手势自动保存，必须显式 publish ──
-  // 三层：files-publish（labels.jsonl 数据文件，本视图不重载）
+  // 三层：files-publish（labels.txt 数据文件，本视图不重载）
   //     + localStorage 崩溃备份 + 页面底部可复制日志
   var nsPromise = (window.claude && window.claude.use)
     ? window.claude.use('artifact').catch(function(){ return null; })
@@ -312,21 +323,25 @@ _JS = """
     try { localStorage.setItem(LSKEY, log.textContent); } catch(e){} }
   function publishNow(){
     nsPromise.then(function(ns){
-      if(!ns || disabled){
-        status('自動儲存不可用：請複製底部日誌或點「下載」'); return; }
+      if(!ns){ fail('此視圖未授予儲存能力'); return; }
+      if(disabled) return;
       status('儲存中…');
-      ns.publish({'labels.jsonl': log.textContent}).then(function(){
-        unsaved = false; status('已儲存 ' + lines().length + ' 條');
-      }).catch(function(e){
-        var c = e && e.code;
-        if(c === 'rate_limited'){
-          status('儲存排隊中…'); setTimeout(publishNow, 30000); }
-        else if(c === 'upstream_error'){
-          setTimeout(publishNow, 4000 + Math.random() * 3000); }
-        else if(c === 'conflict'){ saveLocal(); }
-        else { disabled = true;
-          status('自動儲存不可用：請複製底部日誌或點「下載」'); }
-      });
+      // 檔名副檔名必須是平台能推斷類型的（.jsonl 不在清單裡，會被判
+      // invalid_content 而整個關掉自動儲存）——用 .txt 並顯式給類型。
+      ns.publish({'labels.txt': {content: log.textContent,
+                                 contentType: 'text/plain'}})
+        .then(function(){
+          unsaved = false; disabled = false;
+          status('已儲存 ' + lines().length + ' 條');
+        }).catch(function(e){
+          var c = (e && e.code) || 'unknown';
+          if(c === 'rate_limited'){
+            status('儲存排隊中…'); setTimeout(publishNow, 30000); }
+          else if(c === 'upstream_error'){
+            setTimeout(publishNow, 4000 + Math.random() * 3000); }
+          else if(c === 'conflict'){ saveLocal(); }
+          else { fail('儲存被拒（' + c + '）'); }
+        });
     }); }
   function schedulePublish(){
     unsaved = true; status('未儲存…');
@@ -347,7 +362,7 @@ _JS = """
     log.textContent += 'GUJI-EVENT ' + JSON.stringify(ev) + '\\n';
     saveLocal(); schedulePublish(); progress(); }
 
-  // ── 恢复：已发布的 labels.jsonl + localStorage 备份，按 seq 合并重放 ──
+  // ── 恢复：已发布的 labels.txt + localStorage 备份，按 seq 合并重放 ──
   function cardOf(cid){
     for(var i = 0, cs = list.children; i < cs.length; i++)
       if(cs[i].getAttribute && cs[i].getAttribute('data-cid') === cid)
@@ -367,7 +382,7 @@ _JS = """
       else { card.setAttribute('data-state', 'flag');
         chosen.textContent = FLAGS[ev.flag] || ev.flag; } } }
   function restore(){
-    fetch('labels.jsonl')
+    fetch('labels.txt')
       .then(function(r){ return r.ok ? r.text() : ''; })
       .catch(function(){ return ''; })
       .then(function(saved){
@@ -463,7 +478,7 @@ _JS = """
       .map(function(l){ return l.slice('GUJI-EVENT '.length); }).join('\\n');
     if(!lines){ status('還沒有審查記錄'); return; }
     if(!dlNs){ selectLog('此處無法下載：日誌已全選，按 Ctrl/Cmd+C 複製'); return; }
-    dlNs.save({filename: BATCH + '.labels.jsonl', data: lines})
+    dlNs.save({filename: BATCH + '.labels.txt', data: lines})
       .then(function(){ status('已下載 ' + lines.split('\\n').length + ' 條'); })
       .catch(function(){
         selectLog('下載被拒絕：日誌已全選，按 Ctrl/Cmd+C 複製'); }); });
