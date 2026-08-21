@@ -71,8 +71,39 @@ def traditional_variants(char: str) -> list[str]:
     输出简体说明字表覆盖不足，真实字形应是对应的繁体之一。
     这是**扩展候选**而非合并异体字：各繁体形式各自独立计票，
     最终字形仍由人工审查确认。
+
+    **自身即合法繁体形式的字不做替换**：opencc 表中"卷→卷 捲"、
+    "万→萬 万"这类条目，简体字本身也是通行繁体字形（"卷"在刻本中
+    就写作"卷"），替换成另一形式反而引入错误。保守起见返回空。
     """
-    return [t for t in _load_s2t().get(char, []) if t != char]
+    forms = _load_s2t().get(char, [])
+    if not forms or char in forms:
+        return []
+    return forms
+
+
+def props_from_votes(votes: dict[str, float], source: str,
+                     s2t: bool = True, top_k: int = 5) -> list["Proposal"]:
+    """字→票数 → Proposal 列表（含简→繁扩展）。
+
+    OCR 类来源共用：归一化票数为置信度，简体输出扩展为繁体候选
+    （繁体主候选 0.7、一简多繁次形 0.2、原简体降权保留 0.1）。
+    """
+    total = sum(votes.values())
+    if not total:
+        return []
+    props: list[Proposal] = []
+    for c, v in sorted(votes.items(), key=lambda x: -x[1])[:top_k]:
+        p = v / total
+        trad = traditional_variants(c) if s2t else []
+        if trad:
+            for i, t in enumerate(trad):
+                props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
+                                      source, surface_uncertain=True))
+            props.append(Proposal(c, p * 0.1, source, surface_uncertain=True))
+        else:
+            props.append(Proposal(c, p, source, surface_uncertain=True))
+    return props
 
 
 class CandidateSource:
@@ -91,28 +122,15 @@ class PriorSource(CandidateSource):
 
     name = "prior"
 
+    def __init__(self, s2t: bool = True):
+        self.s2t = s2t
+
     def propose(self, rep_patches, members) -> list[Proposal]:
         votes: dict[str, float] = {}
         for m in members:
             if m.ocr_text:
                 votes[m.ocr_text] = votes.get(m.ocr_text, 0.0) + max(m.ocr_confidence, 0.1)
-        total = sum(votes.values())
-        if not total:
-            return []
-        props: list[Proposal] = []
-        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
-            p = v / total
-            trad = traditional_variants(c) if self.s2t else []
-            if trad:
-                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
-                for i, t in enumerate(trad):
-                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
-                                          self.name, surface_uncertain=True))
-                props.append(Proposal(c, p * 0.1, self.name,
-                                      surface_uncertain=True))
-            else:
-                props.append(Proposal(c, p, self.name, surface_uncertain=True))
-        return props
+        return props_from_votes(votes, self.name, self.s2t)
 
 
 class GlyphKnnSource(CandidateSource):
@@ -145,8 +163,9 @@ class OcrSource(CandidateSource):
 
     name = "ocr"
 
-    def __init__(self):
+    def __init__(self, s2t: bool = True):
         self._detector = None
+        self.s2t = s2t
 
     def _ensure(self):
         if self._detector is None:
@@ -169,23 +188,7 @@ class OcrSource(CandidateSource):
             if best.text:
                 ch = best.text[0]      # 单字图块只取首字
                 votes[ch] = votes.get(ch, 0.0) + best.confidence
-        total = sum(votes.values())
-        if not total:
-            return []
-        props: list[Proposal] = []
-        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
-            p = v / total
-            trad = traditional_variants(c) if self.s2t else []
-            if trad:
-                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
-                for i, t in enumerate(trad):
-                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
-                                          self.name, surface_uncertain=True))
-                props.append(Proposal(c, p * 0.1, self.name,
-                                      surface_uncertain=True))
-            else:
-                props.append(Proposal(c, p, self.name, surface_uncertain=True))
-        return props
+        return props_from_votes(votes, self.name, self.s2t)
 
 
 def fuse_candidates(proposals: list[Proposal], variant_map: VariantMap,
@@ -232,6 +235,7 @@ class CandidateGenerator:
         inst_by_id = {i.id: i for i in load_index(phase4)}
 
         out: list[dict] = []
+        failures: dict[str, int] = {}
         total = len(clusters["clusters"])
         for n, c in enumerate(clusters["clusters"], 1):
             members = [inst_by_id[m] for m in c["members"] if m in inst_by_id]
@@ -249,7 +253,11 @@ class CandidateGenerator:
                 try:
                     proposals.extend(source.propose(rep_patches, members))
                 except Exception as e:   # 单簇失败不中断全书
-                    print(f"  {c['cluster_id']} 来源 {source.name} 失败: {e}")
+                    n_fail = failures.get(source.name, 0) + 1
+                    failures[source.name] = n_fail
+                    if n_fail <= 3:      # 只详报前几次，避免刷屏
+                        print(f"  {c['cluster_id']} 来源 {source.name} 失败: "
+                              f"{type(e).__name__}: {e}")
             out.append({
                 "cluster_id": c["cluster_id"],
                 "size": c["size"],
@@ -258,9 +266,17 @@ class CandidateGenerator:
             if n % 200 == 0 or n == total:
                 print(f"  候选生成 [{n}/{total}]")
 
+        # 失败汇总：高失败率几乎必然是编程错误而非数据问题，必须显式告警
+        for name, n in failures.items():
+            rate = n / max(1, total)
+            level = "错误" if rate > 0.5 else "警告"
+            print(f"  [{level}] 来源 {name} 在 {n}/{total} 个簇上失败 "
+                  f"({rate*100:.0f}%)")
+
         phase6 = book_out_dir / "phase6_labels"
         phase6.mkdir(parents=True, exist_ok=True)
-        payload = {"sources": [s.name for s in self.sources], "clusters": out}
+        payload = {"sources": [s.name for s in self.sources], "clusters": out,
+                   "source_failures": failures}
         with open(phase6 / "candidates.json", "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return payload
@@ -333,23 +349,7 @@ class RapidOcrSource(CandidateSource):
                 ch = self._clean(res[0][0])
                 if ch:
                     votes[ch] = votes.get(ch, 0.0) + float(res[0][1])
-        total = sum(votes.values())
-        if not total:
-            return []
-        props: list[Proposal] = []
-        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
-            p = v / total
-            trad = traditional_variants(c) if self.s2t else []
-            if trad:
-                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
-                for i, t in enumerate(trad):
-                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
-                                          self.name, surface_uncertain=True))
-                props.append(Proposal(c, p * 0.1, self.name,
-                                      surface_uncertain=True))
-            else:
-                props.append(Proposal(c, p, self.name, surface_uncertain=True))
-        return props
+        return props_from_votes(votes, self.name, self.s2t)
 
 
 class VlmSeedSource(CandidateSource):

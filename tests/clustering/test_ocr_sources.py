@@ -92,7 +92,7 @@ def test_traditional_variants():
     from open_guji_cv.clustering.candidates import traditional_variants as tv
     assert tv("内") == ["內"]
     assert tv("为") == ["爲"]        # 刻本用"爲"而非"為"
-    assert tv("万") == ["萬"]        # 一简多繁只取非自身项
+    assert tv("万") == []            # "万"自身即合法繁体形式 → 不替换
     assert tv("書") == []            # 本身是繁体
     assert tv("之") == []            # 简繁同形
 
@@ -118,3 +118,50 @@ def test_rapidocr_s2t_expansion(monkeypatch):
     src2 = RapidOcrSource(s2t=False, votes=1)
     src2._engine = FakeEngine()
     assert [p.char for p in src2.propose([np.zeros((32, 32), np.uint8)], [])] == ["内"]
+
+
+def test_traditional_variants_keeps_self_valid_forms():
+    """自身即合法繁体的字不替换：卷≠捲、万≠萬、后≠後。
+
+    opencc 表里 "卷→卷 捲" 这类条目，简体字本身也是通行繁体字形，
+    替换会引入错误（book9 实测："十二卷"曾被误转成"十二捲"）。
+    """
+    pytest.importorskip("opencc")
+    from open_guji_cv.clustering.candidates import traditional_variants as tv
+    for ch in ["卷", "万", "丑", "余", "党", "后", "里"]:
+        assert tv(ch) == [], f"{ch} 自身是合法繁体，不应替换"
+    # 真简体仍然扩展
+    assert tv("内") == ["內"]
+    assert tv("群") == ["羣"]
+
+
+def test_all_ocr_sources_have_s2t_attribute():
+    """回归：PriorSource / OcrSource / RapidOcrSource 都须支持 s2t。
+
+    曾因批量改写把 self.s2t 插进没有该属性的类，AttributeError 被
+    CandidateGenerator 的 try/except 静默吞掉，候选静悄悄变空。
+    """
+    from open_guji_cv.clustering.candidates import (OcrSource, PriorSource,
+                                                    props_from_votes)
+    for cls in (PriorSource, OcrSource, RapidOcrSource):
+        assert hasattr(cls(), "s2t"), f"{cls.__name__} 缺少 s2t"
+    props = props_from_votes({"内": 1.0}, "prior")
+    assert props[0].char == "內"
+
+
+def test_generator_reports_source_failures(synth_book, capsys):
+    """来源全面失败必须显式告警，不能静默产出空候选。"""
+    from open_guji_cv.clustering.candidates import (CandidateGenerator,
+                                                    CandidateSource)
+
+    class BrokenSource(CandidateSource):
+        name = "broken"
+
+        def propose(self, rep_patches, members):
+            raise RuntimeError("boom")
+
+    payload = CandidateGenerator([BrokenSource()],
+                                 VariantMap({})).run_book(synth_book)
+    assert payload["source_failures"]["broken"] > 0
+    out = capsys.readouterr().out
+    assert "[错误]" in out and "broken" in out
