@@ -1,7 +1,9 @@
 """M7 反馈更新：标签事件流重放 + 阈值标定 + 字形库入库 + 用字习惯统计。
 
 labels.jsonl（只追加）是唯一真源，当前标注状态 = 重放事件流。
-事件类型：confirm / relabel / split / merge / mark（见设计文档 9.3）。
+事件类型：confirm / relabel / split / merge / mark / flag（见设计文档 9.3）。
+flag 为簇级问题标记：impure（不同字混簇）/ truncated（截断不完整）/
+contaminated（边框或邻字混入）/ not_text（非文字）。
 
 run_update() 是 CLI `update` 命令的实现：消费标签，更新四类下游资产
 （字形库 / 聚类阈值 / variant_prefs / 确认语料），全部显式批处理。
@@ -29,8 +31,11 @@ class LabelState:
     removed: dict[str, set[str]] = field(default_factory=dict)
     # 合并组：cluster_id -> 代表簇 id
     merged_into: dict[str, str] = field(default_factory=dict)
-    # instance_id -> 标记（damaged / empty / illegible）
+    # instance_id -> 标记（damaged / empty / illegible / uncertain）
     marks: dict[str, str] = field(default_factory=dict)
+    # cluster_id -> 簇级问题标记（impure 不同字混簇 / truncated 截断 /
+    # contaminated 边框或邻字混入 / not_text 非文字）
+    cluster_flags: dict[str, str] = field(default_factory=dict)
     # 人工发现的异类对（split 产生），用于阈值标定与回归集
     diff_pairs: list[tuple[str, str]] = field(default_factory=list)
 
@@ -73,6 +78,11 @@ def replay_events(events: list[dict]) -> LabelState:
                 state.cluster_labels.pop(cid, None)
         elif op == "mark":
             state.marks[ev["instance"]] = ev["flag"]
+        elif op == "flag":
+            if ev["flag"] == "clear":
+                state.cluster_flags.pop(ev["cluster"], None)
+            else:
+                state.cluster_flags[ev["cluster"]] = ev["flag"]
     return state
 
 
@@ -301,5 +311,15 @@ def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
     (corpus_dir / f"{book}.txt").write_text("\n".join(lines),
                                             encoding="utf-8")
     summary["corpus_columns"] = len(lines)
+
+    # 5) 簇级问题标记汇总：切分/聚类缺陷清单，供 Phase 3 参数迭代
+    if state.cluster_flags:
+        by_flag: dict[str, list[str]] = {}
+        for cid, flag in sorted(state.cluster_flags.items()):
+            by_flag.setdefault(flag, []).append(cid)
+        flags_path = book_dir / "phase7_review" / "flags.json"
+        with open(flags_path, "w", encoding="utf-8") as f:
+            json.dump(by_flag, f, ensure_ascii=False, indent=2)
+        summary["cluster_flags"] = {k: len(v) for k, v in by_flag.items()}
 
     return summary

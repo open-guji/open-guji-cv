@@ -177,6 +177,13 @@ function render() {
       <button class="danger" onclick="splitSelected()">✂ 移出选中 (${selected.size})</button>
       <button onclick="markSelected('damaged')">残损</button>
       <button onclick="markSelected('illegible')">不可辨</button>
+      ｜ 问题：
+      ${c.size >= 2 ? `<button onclick="flagCluster('impure')">不同字混簇</button>` : ""}
+      <button onclick="flagCluster('truncated')">截断</button>
+      <button onclick="flagCluster('contaminated')">混入边框/邻字</button>
+      <button onclick="flagCluster('not_text')">非文字</button>
+      ${c.flag ? `<b style="color:var(--warn)">已标: ${esc(c.flag)}</b>
+        <button onclick="flagCluster('clear')">清除</button>` : ""}
       ${neighbors ? "｜ 潜在同类: " + neighbors : ""}
     </div>
     <div style="font-size:12px;color:#6b6355;margin-top:4px">
@@ -254,6 +261,10 @@ function splitSelected() {
 function markSelected(flag) {
   if (!selected.size) return toast("先左键选中成员");
   [...selected].forEach(id => post({op: "mark", instance: id, flag}, "已标记"));
+}
+function flagCluster(flag) {
+  post({op: "flag", cluster: current.cluster_id, flag},
+       flag === "clear" ? "已清除问题标记" : "已标问题");
 }
 function mergeWith(other) {
   post({op: "merge", clusters: [current.cluster_id, other]},
