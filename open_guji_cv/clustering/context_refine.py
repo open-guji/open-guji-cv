@@ -136,11 +136,20 @@ def apply_cluster_prior(candidates: dict[str, list[dict]],
 def refine_book(book_out_dir: str | Path, rounds: int = 2,
                 lm_order: int = 3, variant_map: VariantMap | None = None,
                 verbose: bool = True, use_lm: bool = False,
-                use_cluster_prior: bool = True, write: bool = True) -> dict:
+                use_cluster_prior: bool = True, write: bool = True,
+                external_corpus: str | Path | None = None) -> dict:
     """自动上下文修正主流程（IO 壳）。
 
     每轮：训练自举 LM → 全书重解码 → 簇级边缘化 → 回灌候选。
     输出 phase6_labels/ 的更新版本 + refine_report.json。
+
+    external_corpus 给定时（目录或单文件，UTF-8 古文文本）：
+    - 语义层：用外部语料训练 CharNgramLM（M5 设计的正途——自举语料
+      15% 噪声已被消融证明有害，外部整理本才是干净信号），首轮即生效；
+    - 字形层：统计语料的**本版用字习惯**（同一正字的各表面形频次，
+      如本版用「爲」不用「為」），对候选做同语义组内的概率再分配。
+      这不违反字形层自治：只在 OCR 已给出的候选之间挑，绝不发明字形。
+      实测「為→爲」一类系统性表面形错误占对齐错误的 ~5%。
     """
     book = Path(book_out_dir)
     phase6 = book / "phase6_labels"
@@ -163,6 +172,60 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
 
     report = {"rounds": []}
     lm = UniformLM()
+    surface_freq: dict[str, int] = {}
+    if external_corpus:
+        segs: list[str] = []
+        cp = Path(external_corpus)
+        files = sorted(cp.glob("**/*.txt")) if cp.is_dir() else [cp]
+        for f in files:
+            raw = f.read_text(encoding="utf-8")
+            for ch in raw:
+                if "\u4e00" <= ch <= "\u9fff" or "\u3400" <= ch <= "\u4dbf":
+                    surface_freq[ch] = surface_freq.get(ch, 0) + 1
+            segs += [vm.normalize_text(seg) for seg in raw.split("\n") if seg.strip()]
+        lm = CharNgramLM(order=lm_order)
+        lm.train(segs)
+        if verbose:
+            print(f"  外部语料 {len(segs)} 段 / "
+                  f"{sum(len(x) for x in segs)} 字，词表 {len(lm.vocab)}")
+        # 语义 → 本版表面形频次（识别本版用「爲」不用「為」这类习惯）
+        sem_surface: dict[str, dict[str, int]] = defaultdict(dict)
+        for ch, n in surface_freq.items():
+            sem_surface[vm.semantic(ch)][ch] = n
+        # 表面形偏好：同语义组内按语料频次再分配候选概率（平滑 +1）。
+        # 组里若缺语料中该语义的**主形**（如候选只有「為」而本版通篇用
+        # 「爲」——opencc 单映射根本不产「爲」候选），先把主形补入组内
+        # 再分配：语料即本版用字证据，不算发明字形。
+        n_adj = n_ins = 0
+        for cid, cands in candidates.items():
+            by_sem: dict[str, list[dict]] = defaultdict(list)
+            for c in cands:
+                by_sem[c.get("semantic", c["char"])].append(c)
+            changed = False
+            for sem, group in by_sem.items():
+                forms = sem_surface.get(sem, {})
+                if forms:
+                    main = max(forms, key=forms.get)
+                    if (forms[main] >= 5
+                            and all(c["char"] != main for c in group)):
+                        ins = {"char": main, "semantic": sem, "p": 0.0,
+                               "sources": ["corpus_pref"],
+                               "surface_uncertain": False}
+                        group.append(ins)
+                        cands.append(ins)
+                        n_ins += 1
+                if len(group) < 2:
+                    continue
+                mass = sum(c["p"] for c in group)
+                w = [surface_freq.get(c["char"], 0) + 1 for c in group]
+                tw = sum(w)
+                for c, wk in zip(group, w):
+                    c["p"] = round(mass * wk / tw, 6)
+                n_adj += 1
+                changed = True
+            cands.sort(key=lambda c: -c["p"])
+        if verbose and n_adj:
+            print(f"  本版用字习惯：调整 {n_adj} 组，补入主形候选 {n_ins} 个")
     results = []
     for rnd in range(rounds + 1):
         results = []
@@ -204,7 +267,8 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
             cpost = cluster_marginalize(results, cluster_of)
             candidates = apply_cluster_prior(candidates, cpost)
         # 自举语料 → 训练下一轮 LM
-        corpus = bootstrap_corpus(results, vm) if use_lm else []
+        corpus = (bootstrap_corpus(results, vm)
+                  if use_lm and not external_corpus else [])
         if corpus:
             lm = CharNgramLM(order=lm_order)
             lm.train(corpus)

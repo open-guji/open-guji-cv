@@ -371,7 +371,8 @@ def cmd_refine(args):
     from .clustering.context_refine import refine_book
 
     report = refine_book(_book_out_dir(args), rounds=args.rounds,
-                         lm_order=args.lm_order, use_lm=args.with_lm)
+                         lm_order=args.lm_order, use_lm=args.with_lm,
+                         external_corpus=args.corpus)
     print(json.dumps(report, ensure_ascii=False, indent=1))
 
 
@@ -639,6 +640,8 @@ def main():
     p.add_argument("--with-lm", action="store_true",
                    help="启用同书自举 n-gram（默认关闭：实测在缺乏外部"
                         "语料时净有害，见 context_refine 模块文档）")
+    p.add_argument("--corpus", default=None,
+                   help="外部古文语料（目录或 txt）：真 LM + 本版用字习惯")
 
     # ── bench-ocr（多引擎对比）───────────────────────────
     p = sub.add_parser("bench-ocr", help="多 OCR 引擎黄金集准确率对比")
