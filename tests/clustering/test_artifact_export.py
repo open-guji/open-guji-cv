@@ -79,3 +79,24 @@ def test_ingest_roundtrip_and_dedupe(synth_book):
     # labels.jsonl 事件保留 batch/seq 供追溯
     evs = load_events(s2.labels_path)
     assert any(e.get("batch") == "t1" and e.get("seq") == 1 for e in evs)
+
+
+def test_flag_buttons_and_ingest(synth_book):
+    """问题按钮渲染 + flag 事件回收。"""
+    batch = build_batch(synth_book, limit=5)
+    page = render_html(batch)
+    for flag in ("truncated", "contaminated", "not_text"):
+        assert f'data-flag="{flag}"' in page
+    # impure 仅多成员簇显示
+    multi = [e for e in batch["entries"] if e["size"] >= 2]
+    if not multi:
+        assert 'data-flag="impure"' not in page
+
+    s = ReviewSession(synth_book)
+    cid = batch["entries"][0]["cluster_id"]
+    text = ('GUJI-EVENT '
+            + json.dumps({"op": "flag", "cluster": cid,
+                          "flag": "contaminated", "batch": "tf", "seq": 1}))
+    r = ingest_events(synth_book, text)
+    assert r["new"] == 1 and not r["errors"]
+    assert ReviewSession(synth_book).cluster_detail(cid)["flag"] == "contaminated"

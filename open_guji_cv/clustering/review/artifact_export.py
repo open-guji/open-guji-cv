@@ -127,6 +127,25 @@ def _render_full(ctx: dict) -> str:
     return "".join(cols)
 
 
+# 簇级问题标记（与 review.state.CLUSTER_FLAGS 对齐）
+FLAG_BUTTONS = [
+    ("impure",       "不同字混簇", True),    # 仅多成员簇显示
+    ("truncated",    "截斷",       False),
+    ("contaminated", "混入邊框/鄰字", False),
+    ("not_text",     "非文字",     False),
+]
+
+
+def _render_flags(entry: dict) -> str:
+    out = []
+    for flag, label, multi_only in FLAG_BUTTONS:
+        if multi_only and entry["size"] < 2:
+            continue
+        out.append(f'<button type="button" class="flag" data-flag="{flag}" '
+                   f'data-label="{_esc(label)}">{_esc(label)}</button>')
+    return "".join(out)
+
+
 def _render_card(entry: dict) -> str:
     cid = _esc(entry["cluster_id"])
     imgs = "".join(
@@ -146,6 +165,7 @@ def _render_card(entry: dict) -> str:
 <span class="other"><input class="other-in" maxlength="4" placeholder="其他字">
 <button type="button" class="other-ok">確定</button></span>
 <button type="button" class="doubt" data-inst="{_esc(entry["rep"])}">存疑</button></div>
+<div class="flags"><span class="ctx-label">問題</span>{_render_flags(entry)}</div>
 <div class="ctx"><span class="ctx-label">同列</span>
 <span class="ctx-compact">{_render_compact(entry["ctx_compact"])}</span>
 <details class="ctx-more"><summary>±3 列全文</summary>
@@ -157,19 +177,19 @@ _CSS = """
 :root{
   --paper:#faf6ee; --card:#fffdf8; --ink:#2b2620; --muted:#8a7f6e;
   --line:#e3dbc9; --seal:#a63b2a; --seal-ink:#fff6ee;
-  --done:#3d7a4f; --doubt:#8a6d1f; --hl:#f3e9d2;
+  --done:#3d7a4f; --doubt:#8a6d1f; --bad:#8a4238; --hl:#f3e9d2;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --paper:#1d1a15; --card:#26221b; --ink:#e8e0d0; --muted:#9a8f7c;
     --line:#3a342a; --seal:#d0715e; --seal-ink:#2b1512;
-    --done:#7fba8f; --doubt:#cfae4e; --hl:#3b3527;
+    --done:#7fba8f; --doubt:#cfae4e; --bad:#cf8377; --hl:#3b3527;
   }
 }
 :root[data-theme="dark"]{
   --paper:#1d1a15; --card:#26221b; --ink:#e8e0d0; --muted:#9a8f7c;
   --line:#3a342a; --seal:#d0715e; --seal-ink:#2b1512;
-  --done:#7fba8f; --doubt:#cfae4e; --hl:#3b3527;
+  --done:#7fba8f; --doubt:#cfae4e; --bad:#cf8377; --hl:#3b3527;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);
@@ -196,9 +216,11 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .card>header .reopen{display:none;margin-left:auto}
 .card>header .skip{margin-left:0}
 .card[data-state="done"]>header .reopen,
-.card[data-state="doubt"]>header .reopen{display:inline-block}
+.card[data-state="doubt"]>header .reopen,
+.card[data-state="flag"]>header .reopen{display:inline-block}
 .card[data-state="done"]>header .skip,
-.card[data-state="doubt"]>header .skip{display:none}
+.card[data-state="doubt"]>header .skip,
+.card[data-state="flag"]>header .skip{display:none}
 .row{display:flex;gap:1rem;padding:.7rem .8rem;flex-wrap:wrap}
 .patches{display:flex;gap:.35rem;align-items:flex-start;flex-wrap:wrap;max-width:14rem}
 .patches img{width:3.2rem;height:3.2rem;object-fit:contain;
@@ -219,6 +241,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .other-ok,.doubt{font:inherit;font-size:.85rem;background:none;color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .55rem;cursor:pointer}
 .doubt{color:var(--doubt);border-color:var(--doubt)}
+.flags{display:flex;gap:.4rem;align-items:baseline;flex-wrap:wrap}
+.flag{font:inherit;font-size:.78rem;background:none;color:var(--muted);
+  border:1px dashed var(--line);border-radius:3px;padding:.1rem .5rem;cursor:pointer}
+.flag:hover,.flag:focus-visible{color:var(--bad);border-color:var(--bad)}
 .ctx{font-size:1rem;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
 .ctx-label{font-size:.72rem;color:var(--muted);letter-spacing:.15em}
 .ctx-compact .nb{margin:0 .06em}
@@ -232,9 +258,11 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .vcol.tcol{color:inherit}
 .vcol:not(.tcol){color:var(--muted)}
 .card[data-state="done"] .row,.card[data-state="doubt"] .row,
-.card[data-state="skip"] .row{display:none}
+.card[data-state="flag"] .row,.card[data-state="skip"] .row{display:none}
 .card[data-state="done"]{border-left:3px solid var(--done)}
 .card[data-state="doubt"]{border-left:3px solid var(--doubt)}
+.card[data-state="flag"]{border-left:3px solid var(--bad)}
+.card[data-state="flag"] .chosen{color:var(--bad);font-size:.85rem}
 .card[data-state="skip"]{opacity:.55}
 .list[data-local-filter="open"] .card:not([data-state="open"]):not([data-state="skip"]){display:none}
 .list[data-local-filter="done"] .card[data-state="open"],
@@ -265,7 +293,7 @@ _JS = """
     progress(); }
   function progress(){
     var done = list.querySelectorAll(
-      '[data-state="done"],[data-state="doubt"]').length;
+      '[data-state="done"],[data-state="doubt"],[data-state="flag"]').length;
     var total = list.querySelectorAll('.card').length;
     document.getElementById('prog').textContent =
       done + ' / ' + total + ' 簇 · ' + events() + ' 條記錄'; }
@@ -285,8 +313,16 @@ _JS = """
       emit({op:'mark', instance: btn.getAttribute('data-inst'), flag:'uncertain'});
       card.querySelector('[data-slot="chosen"]').textContent = '疑';
       setState(card, 'doubt'); }
+    else if(btn.classList.contains('flag')){
+      emit({op:'flag', cluster: card.getAttribute('data-cid'),
+            flag: btn.getAttribute('data-flag')});
+      card.querySelector('[data-slot="chosen"]').textContent =
+        btn.getAttribute('data-label');
+      setState(card, 'flag'); }
     else if(btn.classList.contains('skip')) setState(card, 'skip');
     else if(btn.classList.contains('reopen')){
+      if(card.getAttribute('data-state') === 'flag')
+        emit({op:'flag', cluster: card.getAttribute('data-cid'), flag:'clear'});
       card.querySelector('[data-slot="chosen"]').textContent = '';
       setState(card, 'open'); }
     else if(btn.hasAttribute('data-f')){

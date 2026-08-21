@@ -13,7 +13,15 @@ from pathlib import Path
 from ..extractor import CharInstance, load_index
 from ..feedback import LabelState, append_event, load_events, replay_events
 
-VALID_OPS = {"confirm", "relabel", "split", "merge", "mark"}
+VALID_OPS = {"confirm", "relabel", "split", "merge", "mark", "flag"}
+
+# 簇级问题标记（flag 事件的 flag 字段取值）
+CLUSTER_FLAGS = {
+    "impure":       "不同字混簇",
+    "truncated":    "文字截斷",
+    "contaminated": "混入邊框/鄰字",
+    "not_text":     "非文字",
+}
 
 
 class ReviewSession:
@@ -68,8 +76,11 @@ class ReviewSession:
         op = event.get("op")
         if op not in VALID_OPS:
             raise ValueError(f"未知事件类型: {op!r}")
-        if op in ("confirm", "split") and event.get("cluster") not in self.clusters:
+        if op in ("confirm", "split", "flag") and event.get("cluster") not in self.clusters:
             raise ValueError(f"未知簇: {event.get('cluster')!r}")
+        if op == "flag" and event.get("flag") not in (*CLUSTER_FLAGS, "clear"):
+            raise ValueError(f"未知簇标记: {event.get('flag')!r}"
+                             f"（可选: {sorted(CLUSTER_FLAGS)}）")
         if op in ("relabel", "mark") and event.get("instance") not in self.instances:
             raise ValueError(f"未知实例: {event.get('instance')!r}")
         if op == "merge":
@@ -101,6 +112,7 @@ class ReviewSession:
             "labeled_clusters": labeled,
             "labeled_instances": labeled_instances,
             "n_suspects": len(self.suspects),
+            "flagged_clusters": len(self.state.cluster_flags),
             "n_events": len(load_events(self.labels_path)),
         }
 
@@ -122,6 +134,8 @@ class ReviewSession:
             root = self.state.merged_into.get(cid, cid)
             if self.state.cluster_labels.get(root):
                 continue   # 已确认的簇不再进队列
+            if self.state.cluster_flags.get(cid):
+                continue   # 已标问题的簇不再进队列（转入缺陷清单）
             entry = by_cluster.setdefault(cid, {
                 "cluster_id": cid,
                 "size": self.clusters[cid]["size"],
@@ -168,6 +182,7 @@ class ReviewSession:
             "size": c["size"],
             "cohesion": c.get("cohesion"),
             "label": self.state.cluster_labels.get(root),
+            "flag": self.state.cluster_flags.get(cluster_id),
             "candidates": self.candidates.get(cluster_id, []),
             "unsure_neighbors": c.get("unsure_neighbors", []),
             "members": members,

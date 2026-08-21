@@ -858,6 +858,11 @@ GitHub Pages 备选：同一 HTML 提交进仓库任意分支即可静态托管�
 
 - 每簇一卡：成员图块（≤4 + 计数）、候选按钮（字 + 概率 + →语义注记）、
   "其他字"输入、存疑、稍後（纯视觉收起，不产生事件）；
+- 問題按钮行（簇级 flag 事件，用户反馈新增）：不同字混簇 impure（仅
+  多成员簇显示）/ 截斷 truncated / 混入邊框鄰字 contaminated / 非文字
+  not_text；"改"离开 flag 态时自动发 flag:clear 撤销。flag 簇退出审查
+  队列，update 时汇总为 phase7_review/flags.json 缺陷清单（供 Phase 3
+  切分参数迭代）；本地 SPA 同步加同组按钮，两端事件模型一致；
 - 上下文：同列 ±3 字内联（目标朱框），`<details>` 展开 ±3 列全文竖排
   （flex 纵向堆叠实现——**不用 writing-mode**：Google Fonts 子集常剥
   vmtx 竖排度量，实测 span 行进高度塌缩为 2px）；

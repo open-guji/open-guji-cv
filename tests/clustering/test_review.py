@@ -221,3 +221,22 @@ def test_user_review_interaction_flow(synth_book):
         assert all(e["cluster_id"] != target["cluster_id"] for e in queue2)
     finally:
         server.shutdown()
+
+
+def test_flag_cluster_lifecycle(synth_book):
+    """簇级问题标记：入队排除 → 详情可见 → clear 恢复。"""
+    s = ReviewSession(synth_book)
+    cid = s.queue()[0]["cluster_id"]
+    s.post_event({"op": "flag", "cluster": cid, "flag": "truncated"})
+    assert s.cluster_detail(cid)["flag"] == "truncated"
+    assert all(e["cluster_id"] != cid for e in s.queue())
+    assert s.summary()["flagged_clusters"] == 1
+    # 清除后重新入队
+    s.post_event({"op": "flag", "cluster": cid, "flag": "clear"})
+    assert s.cluster_detail(cid)["flag"] is None
+    assert any(e["cluster_id"] == cid for e in s.queue())
+    # 非法取值/未知簇
+    with pytest.raises(ValueError):
+        s.post_event({"op": "flag", "cluster": cid, "flag": "nope"})
+    with pytest.raises(ValueError):
+        s.post_event({"op": "flag", "cluster": "c99999", "flag": "impure"})
