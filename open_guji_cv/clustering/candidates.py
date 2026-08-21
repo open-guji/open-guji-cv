@@ -35,6 +35,46 @@ class Proposal:
     surface_uncertain: bool = False   # OCR 字表可能不含该异体字形
 
 
+# ── 简→繁候选扩展（OCR 字表偏差修正）────────────────────
+
+_S2T_TABLE: dict[str, list[str]] | None = None
+
+
+def _load_s2t() -> dict[str, list[str]]:
+    """加载 opencc 的 STCharacters（简 → [繁...]，含一简多繁）。
+
+    opencc 不可用时返回空表（该修正静默跳过）。
+    """
+    global _S2T_TABLE
+    if _S2T_TABLE is not None:
+        return _S2T_TABLE
+    table: dict[str, list[str]] = {}
+    try:
+        import opencc, os
+        path = os.path.join(os.path.dirname(opencc.__file__),
+                            "dictionary", "STCharacters.txt")
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    table[parts[0]] = parts[1:]
+    except Exception:
+        pass
+    _S2T_TABLE = table
+    return table
+
+
+def traditional_variants(char: str) -> list[str]:
+    """简体字 → 对应繁体形式列表（一简多繁全给）；非简体返回 []。
+
+    刻本古籍不可能出现简体字形——OCR（PP-OCR 等简体中文模型）
+    输出简体说明字表覆盖不足，真实字形应是对应的繁体之一。
+    这是**扩展候选**而非合并异体字：各繁体形式各自独立计票，
+    最终字形仍由人工审查确认。
+    """
+    return [t for t in _load_s2t().get(char, []) if t != char]
+
+
 class CandidateSource:
     """候选来源基类。"""
 
@@ -59,8 +99,20 @@ class PriorSource(CandidateSource):
         total = sum(votes.values())
         if not total:
             return []
-        return [Proposal(c, v / total, self.name, surface_uncertain=True)
-                for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]]
+        props: list[Proposal] = []
+        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
+            p = v / total
+            trad = traditional_variants(c) if self.s2t else []
+            if trad:
+                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
+                for i, t in enumerate(trad):
+                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
+                                          self.name, surface_uncertain=True))
+                props.append(Proposal(c, p * 0.1, self.name,
+                                      surface_uncertain=True))
+            else:
+                props.append(Proposal(c, p, self.name, surface_uncertain=True))
+        return props
 
 
 class GlyphKnnSource(CandidateSource):
@@ -120,8 +172,20 @@ class OcrSource(CandidateSource):
         total = sum(votes.values())
         if not total:
             return []
-        return [Proposal(c, v / total, self.name, surface_uncertain=True)
-                for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]]
+        props: list[Proposal] = []
+        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
+            p = v / total
+            trad = traditional_variants(c) if self.s2t else []
+            if trad:
+                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
+                for i, t in enumerate(trad):
+                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
+                                          self.name, surface_uncertain=True))
+                props.append(Proposal(c, p * 0.1, self.name,
+                                      surface_uncertain=True))
+            else:
+                props.append(Proposal(c, p, self.name, surface_uncertain=True))
+        return props
 
 
 def fuse_candidates(proposals: list[Proposal], variant_map: VariantMap,
@@ -210,6 +274,9 @@ class RapidOcrSource(CandidateSource):
 
     top-k 通过**增强投票**获得（设计文档 M4 的回退方案）：对图块做
     多种轻微变换分别识别，按加权频次汇总，天然反映识别稳定性。
+
+    PP-OCR 是简体中文模型，对繁体刻本有系统性简体偏差（内/检/谕/则…），
+    故默认开启 s2t：简体输出扩展为对应繁体候选（见 traditional_variants）。
     """
 
     name = "ocr"
@@ -217,10 +284,11 @@ class RapidOcrSource(CandidateSource):
     # 古籍单字识别的常见噪声：标点、拉丁字母数字（"一"→"1" 之类）
     _NOISE = set(" \t　“”‘’\"'`.,，。、·;；:：!！?？()（）[]【】{}<>《》-—_=+*/\\|~^$#@%&")
 
-    def __init__(self, scale: float = 3.0, votes: int = 3):
+    def __init__(self, scale: float = 3.0, votes: int = 3, s2t: bool = True):
         self._engine = None
         self.scale = scale
         self.votes = votes
+        self.s2t = s2t     # 简体输出 → 繁体候选（刻本必为繁体）
 
     def _ensure(self):
         if self._engine is None:
@@ -268,8 +336,20 @@ class RapidOcrSource(CandidateSource):
         total = sum(votes.values())
         if not total:
             return []
-        return [Proposal(c, v / total, self.name, surface_uncertain=True)
-                for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]]
+        props: list[Proposal] = []
+        for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]:
+            p = v / total
+            trad = traditional_variants(c) if self.s2t else []
+            if trad:
+                # 刻本无简体：繁体形式才是真实字形，原简体输出降权保留
+                for i, t in enumerate(trad):
+                    props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
+                                          self.name, surface_uncertain=True))
+                props.append(Proposal(c, p * 0.1, self.name,
+                                      surface_uncertain=True))
+            else:
+                props.append(Proposal(c, p, self.name, surface_uncertain=True))
+        return props
 
 
 class VlmSeedSource(CandidateSource):
