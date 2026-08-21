@@ -24,7 +24,7 @@ Web 界面：
     review-export <folder>  导出审查批次为自包含 HTML（Artifact/GitHub Pages）
     review-ingest <folder>  回收页面审查事件 → labels.jsonl
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
-    glyph-db   <action>   M8 跨书字形数据库（import / stats）
+    glyph-db   <action>   M8 跨书字形数据库（import / stats / export / rebuild）
     bench      <target>   合成数据集基准评测（verify / cluster）
 
 工具：
@@ -433,7 +433,16 @@ def cmd_glyph_db(args):
 
     db = GlyphDB(Path(args.store) / "glyphdb.sqlite")
     try:
-        if args.action == "import":
+        if args.action == "export":
+            from .clustering.glyph_db import export_store
+            summary = export_store(db, args.store)
+        elif args.action == "rebuild":
+            from .clustering.glyph_db import rebuild_from_store
+            db.close()
+            summary = rebuild_from_store(args.store,
+                                         Path(args.store) / "glyphdb.sqlite")
+            db = None
+        elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
             meta = {"collection": args.collection,
@@ -446,7 +455,8 @@ def cmd_glyph_db(args):
             summary = db.stats()
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 def cmd_update(args):
@@ -665,7 +675,8 @@ def main():
 
     # ── glyph-db（M8 跨书字形数据库）─────────────────────
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
-    p.add_argument("action", choices=["import", "stats"])
+    p.add_argument("action",
+                   choices=["import", "stats", "export", "rebuild"])
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default="glyph_store", help="字形库目录")
     p.add_argument("--edition", default=None, help="版本 edition_tag（默认=书名）")

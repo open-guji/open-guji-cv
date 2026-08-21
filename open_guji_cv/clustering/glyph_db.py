@@ -24,14 +24,15 @@ import numpy as np
 
 from .extractor import load_index
 from .feedback import load_events, remap_events, replay_events
-from .normalize import skeletonize
+from .features import DEFAULT_FEATURE, get_feature
+from .normalize import normalize_patch, skeletonize
 from .variants import VariantMap
 from .verify import verify_pair
 
 K_MIN = 3            # 低於 → glyph 標 sparse
 K_MAX = 12           # 每字形類 exemplar 上限（該版總數 ≤ 上限則全留）
 DUP_F1 = 0.95        # 近重複判定
-ALGO_VERSIONS = {"norm": "n1", "skeleton": "s1", "feat_hog": "hog1"}
+ALGO_VERSIONS = {"norm": "n1", "skeleton": "s1", "feat": "f1"}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
@@ -139,7 +140,13 @@ class DBHit:
 
 
 class GlyphDB:
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path,
+                 feature_backend: str = DEFAULT_FEATURE):
+        # 特徵後端由庫自持：入庫一律用本庫後端重算，不沿用各書聚類時
+        # 用的後端——否則 raw(256維) 的書混進 hog(1764維) 的庫，
+        # 檢索時維度對不上（而且錯得無聲無息）。
+        self.feature_name = feature_backend
+        self._feature = get_feature(feature_backend)
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
@@ -296,8 +303,7 @@ class GlyphDB:
             for iid, role in chosen:
                 cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
                             (gid, iid, role, _now()))
-                self._write_derived(cur, iid, patches[pos_of[iid]],
-                                    feats[pos_of[iid]])
+                self._write_derived(cur, iid, patches[pos_of[iid]])
                 n_ex += 1
 
         n_pairs = self._extract_pairs(cur, state, members_of, reps_of,
@@ -344,14 +350,19 @@ class GlyphDB:
             out.append((ids[k], role))
         return out
 
-    def _write_derived(self, cur, iid, norm_patch, feat) -> None:
+    def _feat_kind(self) -> str:
+        return f"feat_{self.feature_name}"
+
+    def _write_derived(self, cur, iid, norm_patch) -> None:
+        feat = self._feature.extract(norm_patch[None, ...])[0]
         rows = [
             (iid, "norm", ALGO_VERSIONS["norm"], _png(norm_patch)),
             (iid, "skeleton", ALGO_VERSIONS["skeleton"],
              _png(skeletonize(norm_patch))),
-            (iid, "feat_hog", ALGO_VERSIONS["feat_hog"],
-             feat.astype(np.float32).tobytes()),
+            (self._feat_kind(), ALGO_VERSIONS["feat"], feat),
         ]
+        rows[2] = (iid, self._feat_kind(), ALGO_VERSIONS["feat"],
+                   feat.astype(np.float32).tobytes())
         cur.executemany("INSERT OR REPLACE INTO derived VALUES (?,?,?,?)",
                         rows)
 
@@ -393,19 +404,24 @@ class GlyphDB:
 
     # ── 檢索 ─────────────────────────────────────────────
 
-    def query(self, norm_patch: np.ndarray, feat: np.ndarray,
+    def query(self, norm_patch: np.ndarray,
               edition_hint: str | None = None, k: int = 5) -> list[DBHit]:
-        """exemplar 特徵 kNN 粗排 → verify_pair 精驗。"""
+        """exemplar 特徵 kNN 粗排 → verify_pair 精驗。
+
+        特徵由庫內部按自持後端計算——調用方只需給歸一化圖塊，
+        不必知道（也不會弄錯）特徵後端。
+        """
+        feat = self._feature.extract(norm_patch[None, ...])[0]
         cur = self.conn.cursor()
         sql = """SELECT g.char, g.edition_tag, g.status, e.instance_id, d.data
                  FROM exemplars e
                  JOIN glyphs g ON g.glyph_id = e.glyph_id
                  JOIN derived d ON d.instance_id = e.instance_id
-                   AND d.kind = 'feat_hog'"""
-        args: tuple = ()
+                   AND d.kind = ?"""
+        args: tuple = (self._feat_kind(),)
         if edition_hint:
             sql += " WHERE g.edition_tag = ?"
-            args = (edition_hint,)
+            args = args + (edition_hint,)
         rows = cur.execute(sql, args).fetchall()
         if not rows:
             return []
@@ -452,3 +468,175 @@ class GlyphDB:
             "pairs": by_rel,
             "db_bytes": self.db_path.stat().st_size,
         }
+
+
+# ── 導出 / 重建（持久化）────────────────────────────────
+#
+# 容器是臨時的，SQLite 檔本身不能當長期存放處。真源改為 **Git 可追蹤的
+# 導出目錄**，SQLite 降級為可隨時重建的索引：
+#
+#   glyph_store/                 ← 提交進倉庫，這是真源
+#     sources.jsonl  glyphs.jsonl  exemplars.jsonl  pairs.jsonl
+#     events/<source>.jsonl
+#     instances/<source>.jsonl   ← 只含已標註/代表實例的元數據
+#     patches/<safe_id>.png      ← 只含上述實例的原始字形
+#   glyphdb.sqlite               ← 不提交，rebuild 生成
+#
+# 不導出的東西及理由：未標註實例（34MB 圖塊，無積累價值，可從掃描件
+# 重跑得到）、derived（norm/skeleton/feat 都是原始圖的純函數，帶
+# algo_version 重算即可——算法升級時反而必須重算）、cluster_members
+# （聚類是可重跑的過程）。
+
+EXPORT_TABLES = ("sources", "glyphs", "exemplars", "pairs")
+
+
+def _safe(instance_id: str) -> str:
+    return instance_id.replace(":", "_")
+
+
+def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
+    """SQLite → Git 友好的文本 + PNG 目錄（冪等覆寫）。"""
+    out = Path(out_dir)
+    (out / "events").mkdir(parents=True, exist_ok=True)
+    (out / "instances").mkdir(parents=True, exist_ok=True)
+    (out / "patches").mkdir(parents=True, exist_ok=True)
+    cur = db.conn.cursor()
+    cur.row_factory = sqlite3.Row
+    counts: dict[str, int] = {}
+
+    def dump(path: Path, rows, key=None) -> int:
+        recs = [dict(r) for r in rows]
+        if key:
+            recs.sort(key=key)
+        with open(path, "w", encoding="utf-8") as f:
+            for r in recs:
+                f.write(json.dumps(r, ensure_ascii=False,
+                                   sort_keys=True) + "\n")
+        return len(recs)
+
+    counts["sources"] = dump(
+        out / "sources.jsonl",
+        cur.execute("SELECT * FROM sources ORDER BY source_id"))
+    # glyph_id 是本地自增代理鍵，導出時剔除——重建時按
+    # (edition_tag, char) 重新分配，跨機器/跨克隆才不會衝突
+    counts["glyphs"] = dump(
+        out / "glyphs.jsonl",
+        [{k: v for k, v in dict(r).items() if k != "glyph_id"}
+         for r in cur.execute(
+             "SELECT * FROM glyphs ORDER BY edition_tag, char")])
+    counts["exemplars"] = dump(
+        out / "exemplars.jsonl",
+        [{"edition_tag": r["edition_tag"], "char": r["char"],
+          "instance_id": r["instance_id"], "role": r["role"],
+          "added_at": r["added_at"]}
+         for r in cur.execute(
+             """SELECT g.edition_tag, g.char, e.instance_id, e.role, e.added_at
+                FROM exemplars e JOIN glyphs g ON g.glyph_id = e.glyph_id
+                ORDER BY g.edition_tag, g.char, e.instance_id""")])
+    counts["pairs"] = dump(
+        out / "pairs.jsonl",
+        cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
+
+    # 事件與實例按書分檔：一本書一個檔，審查增量只動一個檔
+    n_ev = n_inst = n_png = 0
+    for (src,) in db.conn.execute("SELECT source_id FROM sources ORDER BY 1"):
+        n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
+            "SELECT source_id, batch, seq, ts, op, payload FROM events "
+            "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
+        rows = cur.execute(
+            """SELECT * FROM instances WHERE source_id=? AND (label IS NOT NULL
+                 OR instance_id IN (SELECT instance_id FROM exemplars))
+               ORDER BY instance_id""", (src,)).fetchall()
+        meta = []
+        for r in rows:
+            d = dict(r)
+            png = d.pop("patch_png")
+            (out / "patches" / f"{_safe(d['instance_id'])}.png").write_bytes(png)
+            n_png += 1
+            meta.append(d)
+        n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
+    counts.update(events=n_ev, instances=n_inst, patches=n_png)
+
+    # 統計不含 glyphdb.sqlite——它是可重建索引，不進版本控制
+    counts["bytes"] = sum(f.stat().st_size for f in out.rglob("*")
+                          if f.is_file() and f.suffix != ".sqlite")
+    (out / "README.md").write_text(
+        "# 字形庫（真源）\n\n"
+        "本目錄是跨書字形庫的**持久真源**，隨倉庫版本管理。\n"
+        "`glyphdb.sqlite` 是可重建的索引，不納入版本控制。\n\n"
+        "```\npython -m open_guji_cv glyph-db rebuild --store glyph_store\n```\n\n"
+        "未導出：未標註實例的圖塊（可從掃描件重跑）、派生表示\n"
+        "（norm/skeleton/feat 是原始圖的純函數，算法升級時必須重算）、\n"
+        "聚類成員（過程資產）。\n",
+        encoding="utf-8")
+    return counts
+
+
+def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
+                       feature_backend: str = DEFAULT_FEATURE) -> dict:
+    """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。"""
+    store = Path(store_dir)
+    db_file = Path(db_path)
+    if db_file.exists():
+        db_file.unlink()
+    db = GlyphDB(db_file, feature_backend=feature_backend)
+    cur = db.conn.cursor()
+
+    def read(path: Path):
+        if not path.exists():
+            return []
+        with open(path, encoding="utf-8") as f:
+            return [json.loads(l) for l in f if l.strip()]
+
+    for r in read(store / "sources.jsonl"):
+        cols = ",".join(r)
+        cur.execute(f"INSERT OR REPLACE INTO sources ({cols}) "
+                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+    n_inst = n_der = 0
+    for meta_file in sorted((store / "instances").glob("*.jsonl")):
+        for r in read(meta_file):
+            png = store / "patches" / f"{_safe(r['instance_id'])}.png"
+            if not png.exists():
+                continue
+            raw = png.read_bytes()
+            r = {**r, "patch_png": raw}
+            cols = ",".join(r)
+            cur.execute(f"INSERT OR REPLACE INTO instances ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})",
+                        tuple(r.values()))
+            n_inst += 1
+            # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）
+            gray = cv2.imdecode(np.frombuffer(raw, np.uint8),
+                                cv2.IMREAD_GRAYSCALE)
+            db._write_derived(cur, r["instance_id"], normalize_patch(gray))
+            n_der += 3
+    for f in sorted((store / "events").glob("*.jsonl")):
+        for r in read(f):
+            cur.execute("INSERT OR IGNORE INTO events "
+                        "(source_id, batch, seq, ts, op, payload) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (r["source_id"], r.get("batch"), r.get("seq"),
+                         r.get("ts"), r.get("op"), r.get("payload")))
+    for r in read(store / "glyphs.jsonl"):
+        cols = ",".join(r)
+        cur.execute(f"INSERT OR REPLACE INTO glyphs ({cols}) "
+                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+    n_ex = 0
+    for r in read(store / "exemplars.jsonl"):
+        row = cur.execute(
+            "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
+            (r["edition_tag"], r["char"])).fetchone()
+        if row is None:
+            continue
+        cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
+                    (row[0], r["instance_id"], r["role"], r["added_at"]))
+        n_ex += 1
+    for r in read(store / "pairs.jsonl"):
+        cols = ",".join(r)
+        cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
+                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+    db.conn.commit()
+    stats = db.stats()
+    db.close()
+    return {"instances": n_inst, "derived_recomputed": n_der,
+            "exemplars": n_ex, **stats}

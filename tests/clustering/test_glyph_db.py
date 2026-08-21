@@ -105,9 +105,57 @@ def test_query_hits_confirmed_char(db, synth_book):
     pos = {i.id: k for k, i in
            enumerate(load_index(synth_book / "phase4_chars"))}
     k = pos[big["members"][0]]
-    hits = db.query(npz["patches"][k], npz["feats"][k], edition_hint="ed1")
+    hits = db.query(npz["patches"][k], edition_hint="ed1")
     assert hits and hits[0].char == "甲"
     assert hits[0].f1 > 0.6
     # 异版提示查不到（分域隔离）
-    assert db.query(npz["patches"][k], npz["feats"][k],
-                    edition_hint="other") == []
+    assert db.query(npz["patches"][k], edition_hint="other") == []
+
+
+def test_export_rebuild_roundtrip(db, synth_book, tmp_path):
+    """导出到 Git 友好目录 → 重建 SQLite，知识与检索能力完全保留。"""
+    from open_guji_cv.clustering.glyph_db import (export_store,
+                                                  rebuild_from_store)
+    big, _ = _prepare_labels(synth_book)
+    db.import_book(synth_book, edition_tag="ed1",
+                   source_meta={"collection": "測試叢書"})
+    before = db.stats()
+
+    store = tmp_path / "store"
+    exported = export_store(db, store)
+    assert exported["glyphs"] == 2 and exported["patches"] >= 2
+    # 只导出已标注/代表实例的图，未标注的不进真源
+    assert exported["instances"] < before["instances"]
+    assert (store / "glyphs.jsonl").exists()
+    assert (store / "README.md").exists()
+
+    rebuilt = rebuild_from_store(store, tmp_path / "new.sqlite")
+    assert rebuilt["glyphs"] == before["glyphs"]
+    assert rebuilt["pairs"] == before["pairs"]
+    assert rebuilt["exemplars"] == before["exemplars"]
+    assert rebuilt["events"] == before["events"]
+
+    # 重建后仍能检索命中
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    db2 = GlyphDB(tmp_path / "new.sqlite")
+    try:
+        npz = np.load(synth_book / "phase5_clusters" / "features.npz")
+        pos = {i.id: k for k, i in
+               enumerate(load_index(synth_book / "phase4_chars"))}
+        k = pos[big["members"][0]]
+        hits = db2.query(npz["patches"][k], edition_hint="ed1")
+        assert hits and hits[0].char == "甲"
+    finally:
+        db2.close()
+
+
+def test_export_is_deterministic(db, synth_book, tmp_path):
+    """两次导出字节一致——否则每次提交都是无意义 diff。"""
+    from open_guji_cv.clustering.glyph_db import export_store
+    _prepare_labels(synth_book)
+    db.import_book(synth_book, edition_tag="ed1")
+    a, b = tmp_path / "a", tmp_path / "b"
+    export_store(db, a)
+    export_store(db, b)
+    for f in sorted(a.rglob("*.jsonl")):
+        assert f.read_bytes() == (b / f.relative_to(a)).read_bytes(), f.name
