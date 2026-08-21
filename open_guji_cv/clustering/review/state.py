@@ -104,8 +104,14 @@ class ReviewSession:
             "n_events": len(load_events(self.labels_path)),
         }
 
-    def queue(self, reason: str | None = None, limit: int = 50) -> list[dict]:
-        """审查队列：suspects 按簇聚合，预期收益降序，跳过已标注簇。"""
+    def queue(self, reason: str | None = None, limit: int = 50,
+              sort: str = "gain") -> list[dict]:
+        """审查队列：suspects 按簇聚合，跳过已标注簇。
+
+        sort:
+        - "gain"（默认）：预期收益（簇大小×不确定度）降序——先审大簇；
+        - "low_conf"：候选首选置信度升序——先审最没把握的簇。
+        """
         by_cluster: dict[str, dict] = {}
         for s in self.suspects:
             cid = s.get("cluster")
@@ -123,11 +129,18 @@ class ReviewSession:
                 "best": s.get("best")})
             entry["reasons"].update(s["reasons"])
             entry["expected_gain"] += s.get("expected_gain", 0.0)
-        out = sorted(by_cluster.values(), key=lambda e: -e["expected_gain"])
-        for e in out:
+        for e in by_cluster.values():
             e["reasons"] = sorted(e["reasons"])
             e["expected_gain"] = round(e["expected_gain"], 2)
-            e["candidates"] = self.candidates.get(e["cluster_id"], [])[:3]
+            cands = self.candidates.get(e["cluster_id"], [])
+            e["candidates"] = cands[:3]
+            e["top_p"] = cands[0]["p"] if cands else 0.0
+        if sort == "low_conf":
+            out = sorted(by_cluster.values(),
+                         key=lambda e: (e["top_p"], -e["size"]))
+        else:
+            out = sorted(by_cluster.values(),
+                         key=lambda e: -e["expected_gain"])
         return out[:limit]
 
     def cluster_detail(self, cluster_id: str) -> dict:
@@ -160,28 +173,57 @@ class ReviewSession:
             "members": members,
         }
 
-    def context(self, instance_id: str, window: int = 3) -> dict:
-        """上下文视图：同列前后 window 个实例（含各自当前最优字）。"""
+    def _slot_info(self, i, target_id: str) -> dict:
+        r = self.ranked.get(i.id, {})
+        cid = self.cluster_of.get(i.id)
+        return {"id": i.id, "idx": i.idx,
+                "is_target": i.id == target_id,
+                "best": self.state.label_of(i.id, cid) or r.get("best")}
+
+    def context(self, instance_id: str, mode: str = "compact",
+                window: int = 3, col_window: int = 3) -> dict:
+        """上下文视图，两种模式：
+
+        - "compact"：同列目标字上下各 window 个（共 ≤2·window+1=7 字），
+          快速核对相邻字；
+        - "full"：目标列 + 前后各 col_window 列的**完整列内容**，
+          按阅读顺序（列从右到左）组织——看整段文意。
+        """
         inst = self.instances.get(instance_id)
         if inst is None:
             raise KeyError(instance_id)
+
+        if mode == "full":
+            cols_out = []
+            for col in range(inst.col - col_window,
+                             inst.col + col_window + 1):
+                col_insts = sorted(
+                    (i for i in self.instances.values()
+                     if i.page == inst.page and i.col == col),
+                    key=lambda i: i.idx)
+                if not col_insts:
+                    continue
+                cols_out.append({
+                    "col": col,
+                    "is_target_col": col == inst.col,
+                    "chars": [self._slot_info(i, instance_id)
+                              for i in col_insts],
+                })
+            # 阅读顺序：列号升序 = 从右到左
+            cols_out.sort(key=lambda c: c["col"])
+            return {"id": instance_id, "page": inst.page, "col": inst.col,
+                    "mode": "full", "columns": cols_out}
+
         col_insts = sorted(
             (i for i in self.instances.values()
              if i.page == inst.page and i.col == inst.col),
             key=lambda i: i.idx)
         pos = next(k for k, i in enumerate(col_insts) if i.id == instance_id)
         lo = max(0, pos - window)
-        neighbors = []
-        for i in col_insts[lo:pos + window + 1]:
-            r = self.ranked.get(i.id, {})
-            cid = self.cluster_of.get(i.id)
-            neighbors.append({
-                "id": i.id, "idx": i.idx,
-                "is_target": i.id == instance_id,
-                "best": self.state.label_of(i.id, cid) or r.get("best"),
-            })
+        neighbors = [self._slot_info(i, instance_id)
+                     for i in col_insts[lo:pos + window + 1]]
         return {"id": instance_id, "page": inst.page, "col": inst.col,
-                "neighbors": neighbors}
+                "mode": "compact", "neighbors": neighbors}
 
     # ── 图块路径解析（HTTP 层用）─────────────────────────
 

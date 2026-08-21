@@ -131,3 +131,93 @@ def test_http_roundtrip(synth_book):
         assert exc.value.code == 400
     finally:
         server.shutdown()
+
+
+def test_queue_low_conf_sort(synth_book):
+    """低置信排序：候选首选置信度升序（先审最没把握的簇）。"""
+    s = ReviewSession(synth_book)
+    q = s.queue(sort="low_conf")
+    assert q, "应有可疑簇"
+    ps = [e["top_p"] for e in q]
+    assert ps == sorted(ps)
+    assert all("top_p" in e and "candidates" in e for e in q)
+
+
+def test_context_compact_seven_chars(synth_book):
+    """简略模式：目标字上下各 3，最多 7 字，自上而下有序。"""
+    s = ReviewSession(synth_book)
+    iid = next(i for i in s.instances if i.endswith(":1:3"))
+    ctx = s.context(iid, mode="compact", window=3)
+    assert ctx["mode"] == "compact"
+    assert len(ctx["neighbors"]) <= 7
+    assert sum(n["is_target"] for n in ctx["neighbors"]) == 1
+    idxs = [n["idx"] for n in ctx["neighbors"]]
+    assert idxs == sorted(idxs)
+
+
+def test_context_full_three_cols_each_side(synth_book):
+    """完整模式：目标列 + 前后各 3 列的完整内容，列号升序（=从右到左）。"""
+    s = ReviewSession(synth_book)
+    # 中间列（合成书 3 列，取第 2 列保证两侧都有列）
+    iid = next(i for i in s.instances if ":2:" in i)
+    ctx = s.context(iid, mode="full", col_window=3)
+    assert ctx["mode"] == "full"
+    cols = ctx["columns"]
+    assert [c["col"] for c in cols] == sorted(c["col"] for c in cols)
+    assert sum(c["is_target_col"] for c in cols) == 1
+    target_col = next(c for c in cols if c["is_target_col"])
+    # 完整列：包含该列全部实例
+    n_col = sum(1 for i in s.instances.values()
+                if i.page == s.instances[iid].page
+                and i.col == s.instances[iid].col)
+    assert len(target_col["chars"]) == n_col
+    assert sum(n["is_target"] for n in target_col["chars"]) == 1
+
+
+def test_user_review_interaction_flow(synth_book):
+    """端到端用户交互流（HTTP）：低置信队列 → 簇详情（候选可见）→
+    简略上下文 → 完整上下文 → 确认 → 队列移除该簇。"""
+    session = ReviewSession(synth_book)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(session))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{port}"
+    try:
+        def get(path):
+            with urllib.request.urlopen(base + path, timeout=5) as r:
+                return json.loads(r.read())
+
+        # 1. 用户选"按置信度"排序拉队列
+        queue = get("/api/queue?sort=low_conf&limit=10")["queue"]
+        assert queue
+        target = queue[0]
+        assert "candidates" in target          # 队列项直接可见候选
+
+        # 2. 打开簇：看到全部候选与成员
+        detail = get(f"/api/cluster/{target['cluster_id']}")
+        assert detail["candidates"] is not None
+        iid = detail["members"][0]["id"]
+
+        # 3. 简略上下文（±3 字）
+        ctx = get(f"/api/context/{urllib.request.quote(iid)}?mode=compact")
+        assert ctx["mode"] == "compact" and len(ctx["neighbors"]) <= 7
+
+        # 4. 完整上下文（±3 列）
+        ctx = get(f"/api/context/{urllib.request.quote(iid)}?mode=full")
+        assert ctx["mode"] == "full" and ctx["columns"]
+
+        # 5. 确认标签
+        req = urllib.request.Request(
+            base + "/api/event", method="POST",
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({"op": "confirm",
+                             "cluster": target["cluster_id"],
+                             "char": "丁"}).encode())
+        with urllib.request.urlopen(req, timeout=5) as r:
+            assert json.loads(r.read())["ok"]
+
+        # 6. 已确认簇从队列消失
+        queue2 = get("/api/queue?sort=low_conf&limit=50")["queue"]
+        assert all(e["cluster_id"] != target["cluster_id"] for e in queue2)
+    finally:
+        server.shutdown()
