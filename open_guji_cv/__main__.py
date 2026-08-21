@@ -21,6 +21,8 @@ Web 界面：
     refine     <folder>   M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）
     bench-ocr  <folder>   多 OCR 引擎黄金集准确率对比
     review     <folder>   M6 人工审查 Web 界面 → phase7_review/labels.jsonl
+    review-export <folder>  导出审查批次为自包含 HTML（Artifact/GitHub Pages）
+    review-ingest <folder>  回收页面审查事件 → labels.jsonl
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
     bench      <target>   合成数据集基准评测（verify / cluster）
 
@@ -399,6 +401,31 @@ def cmd_review(args):
                         open_browser=not args.no_browser)
 
 
+def cmd_review_export(args):
+    """无命令行审查：导出自包含 HTML 批次（Artifact / GitHub Pages）。"""
+    from .clustering.review.artifact_export import export_batch
+
+    book_out_dir = _book_out_dir(args)
+    if not (book_out_dir / "phase5_clusters" / "clusters.json").exists():
+        print(f"未找到聚类结果，请先运行: python -m open_guji_cv cluster {args.path}")
+        sys.exit(1)
+    out = export_batch(book_out_dir, out_path=args.out,
+                       limit=args.limit, sort=args.sort, title=args.title)
+    size = out.stat().st_size
+    print(f"批次页面: {out}  ({size / 1e6:.1f} MB)")
+
+
+def cmd_review_ingest(args):
+    """无命令行审查：从保存后的页面/粘贴文本回收事件 → labels.jsonl。"""
+    from .clustering.review.artifact_export import ingest_events
+
+    text = Path(args.file).read_text(encoding="utf-8")
+    summary = ingest_events(_book_out_dir(args), text)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if summary["new"]:
+        print(f"下一步: python -m open_guji_cv update {args.path}")
+
+
 def cmd_update(args):
     """M7 反馈更新：消费 labels.jsonl → 字形库/阈值/用字习惯/语料。"""
     from .clustering.feedback import run_update
@@ -598,6 +625,21 @@ def main():
     p.add_argument("--port", type=int, default=8633, help="端口号（默认 8633）")
     p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
 
+    # ── review-export / review-ingest（无命令行审查）─────
+    p = sub.add_parser("review-export",
+                       help="导出审查批次为自包含 HTML（Artifact/GitHub Pages）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--limit", type=int, default=400, help="批次簇数上限")
+    p.add_argument("--sort", default="gain", choices=["gain", "low_conf"],
+                   help="排序：gain=预期收益降序 / low_conf=置信度升序")
+    p.add_argument("--out", default=None, help="输出 HTML 路径")
+    p.add_argument("--title", default=None, help="页面标题")
+
+    p = sub.add_parser("review-ingest",
+                       help="从保存后的审查页面/粘贴文本回收事件 → labels.jsonl")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--file", required=True, help="含 GUJI-EVENT 行的文本/HTML 文件")
+
     # ── update（M7 反馈更新）─────────────────────────────
     p = sub.add_parser("update",
                        help="M7 消费审查标签 → 字形库/阈值标定/用字习惯/语料")
@@ -639,6 +681,8 @@ def main():
         "refine":            cmd_refine,
         "bench-ocr":         cmd_bench_ocr,
         "review":            cmd_review,
+        "review-export":     cmd_review_export,
+        "review-ingest":     cmd_review_ingest,
         "update":            cmd_update,
         "bench":             cmd_bench,
         "show-profile":      cmd_show_profile,

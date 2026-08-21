@@ -801,3 +801,74 @@ use_cluster_prior=, write=False)`），设计假设必须用数据检验——
 | PaddleOCR 内部 API 变动（top-k 提取） | PaddleTopK 单独隔离 + fixture 离线测试 + 增强投票回退方案 |
 | OCR 字表不含生僻异体字 → 首轮只能给出正字候选 | 候选标 `surface_uncertain`，精确字形由人工审查定；确认一次即入字形库，同版书后续由 kNN 直接命中精确形体；`variant_prefs` 用字习惯先验进一步降低复发 |
 | 手写体上版的刻本（如 book1"手写体"）字形一致性弱于宋体刻本 | 聚类阈值按书标定；一致性差时系统自动退化为"小簇+多审查"，正确性不受损 |
+
+## 17. 无命令行审查工作流（review-export / review-ingest）
+
+用户场景：只能通过 Claude Code 远程会话工作，无法开终端、无法访问
+`review` 命令起的本地 HTTP 服务。方案：**审查批次静态化 + 事件行回收**，
+实现在 `review/artifact_export.py`。
+
+### 17.1 架构
+
+```
+Claude 会话                     用户（浏览器，零安装）
+──────────────                 ──────────────────────
+review-export                   打开页面点击审查：
+  → 自包含 HTML 批次              点候选字=confirm；其他字；存疑=mark
+  （top-N 可疑簇，图块内嵌         每次点击把 GUJI-EVENT {json} 行
+   base64，±3字/±3列上下文）       追加进页面内 <pre id=guji-log>
+  → 发布为 Claude Artifact
+     （live-doc：点击产生的 DOM
+      变化自动保存）
+                     ↓
+review-ingest ← WebFetch 读回保存后的页面
+  → 解析 GUJI-EVENT 行，(batch,seq) 去重
+  → 逐条 ReviewSession.post_event 校验 → labels.jsonl
+update → 字形库/阈值/用字习惯/语料（原 M7 闭环）
+```
+
+### 17.2 持久化三层保险
+
+1. **Artifact live-doc**（首选）：声明 `capabilities: {artifact:{}}`，
+   用户手势产生的 DOM 变化（事件日志、卡片状态）被自动保存为共享文档；
+   Claude 之后 WebFetch 该 URL 即可回收，用户全程零配置。
+2. **downloads 能力**：Artifact 环境下"下載 labels.jsonl"按钮直接导出
+   事件文件（能力探测 `window.claude?.use`，静态托管时按钮隐藏）。
+3. **可见事件日志**：页面底部 `<pre>` 可全选复制贴回对话——任何托管
+   环境（含 GitHub Pages）下都成立的兜底。
+
+GitHub Pages 备选：同一 HTML 提交进仓库任意分支即可静态托管（页面无
+外部依赖），但静态页无法写回仓库——回收只能走第 3 层（复制粘贴）或
+浏览器端 GitHub API + 用户 PAT（未实现：PAT 管理成本高，Artifact 路径
+已覆盖需求）。
+
+### 17.3 事件行格式与幂等
+
+`GUJI-EVENT {"op":"confirm","cluster":"c00192","char":"林",
+"batch":"book9all-gain-400-79701896","seq":3,"ts":"..."}`
+
+- 与 labels.jsonl 事件同构（confirm / mark[flag=uncertain]），额外带
+  `batch`（书-排序-簇数-簇集哈希）+ 页内自增 `seq` 供去重；
+- `ingest_events` 对 (batch,seq) 幂等——重复回收同一页面安全；
+- 改判 = 再点一次其他候选（追加新 confirm，重放后发覆盖先发）；
+- 解析容错：从任意文本（HTML 原文 / WebFetch markdown 转写 / 粘贴片段）
+  按行正则提取，坏行静默跳过。
+
+### 17.4 批次页面 UI
+
+- 每簇一卡：成员图块（≤4 + 计数）、候选按钮（字 + 概率 + →语义注记）、
+  "其他字"输入、存疑、稍後（纯视觉收起，不产生事件）；
+- 上下文：同列 ±3 字内联（目标朱框），`<details>` 展开 ±3 列全文竖排
+  （flex 纵向堆叠实现——**不用 writing-mode**：Google Fonts 子集常剥
+  vmtx 竖排度量，实测 span 行进高度塌缩为 2px）；
+- 筛选（全部/未審/已審）为 per-viewer 状态，存于 `data-local-filter`；
+- 纸墨主题（米纸/墨字/朱砂点），亮暗三态 token（bare :root + prefers
+  guard + data-theme 覆盖）。
+
+### 17.5 验证
+
+- 单测 5 项（tests/clustering/test_artifact_export.py）：批次构建、
+  自包含渲染（含主题三态、能力探测守卫）、文件导出、容错解析、
+  回收往返 + 幂等 + 未知簇计入 errors 不中断；
+- 真实数据：book9all top-400（gain 排序）批次 2.3 MB（16 MB 限制内），
+  Playwright 无头点击验证事件行生成、进度更新、竖排上下文渲染。
