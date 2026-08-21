@@ -29,7 +29,10 @@ BINARY_THRESHOLD = 128
 EMPTY_INK_RATIO = 0.02     # 格内墨迹覆盖率低于此 → empty
 MIN_COL_WIDTH_RATIO = 0.5  # 列宽低于中位列宽的此比例 → 非文字列（版心/界行缝），跳过
 SEARCH_RATIO = 0.3         # 逐线微调搜索半径（× 格高）
-CELL_H_TOL = 0.10          # 页格高偏离全书共识超此比例 → 判定锁错，强制重拟
+CELL_H_TOL = 0.05          # 页格高偏离全书共识超此比例 → 判定锁错，强制重拟
+                           # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
+STRADDLE_OK = 0.50         # 骑线比（格线墨/格心墨）高于此 → 尝试相位重扫
+STRADDLE_GAIN = 0.10       # 重扫至少好这么多才接受（never-make-worse）
 SCALES = np.linspace(0.96, 1.04, 9)
 
 
@@ -251,6 +254,91 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
     return [best_phase + cell_h * k for k in range(n_chars + 1)]
 
 
+def straddle_score(image: np.ndarray, result: dict) -> float:
+    """骑线比：网格线上的墨 / 格中心的墨（逐列取中位）。
+
+    这是切分质量的**直接**度量——字骑在格线上时线上墨接近格心墨
+    （比值→1），对齐良好时线落字间空隙（比值→0.2±）。实测全书
+    中位 0.38，骑线页 >0.8。"""
+    if image.ndim == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    cell_h = result.get("grid", {}).get("cell_h") or 100.0
+    ratios = []
+    for col in result.get("columns", []):
+        cells = [c for c in col.get("cells", []) if c.get("type") != "margin"]
+        if not cells:
+            continue
+        x0 = int(col["left_x"]) + 2
+        x1 = int(col["right_x"]) - 2
+        if x1 - x0 < 8:
+            continue
+        crop = image[:, x0:x1]
+        if crop.size == 0:
+            continue
+        sm = _smooth(column_projection(crop), cell_h)
+        if sm.sum() < 1:
+            continue
+        L = len(sm)
+        lines = [int(c["y_top"]) for c in cells] + [int(cells[-1]["y_bottom"])]
+        centers = [int((c["y_top"] + c["y_bottom"]) / 2) for c in cells]
+        lv = float(np.mean([sm[min(max(y, 0), L - 1)] for y in lines]))
+        cv_ = float(np.mean([sm[min(max(y, 0), L - 1)] for y in centers]))
+        if cv_ > 1:
+            ratios.append(lv / cv_)
+    return float(np.median(ratios)) if ratios else 0.0
+
+
+def sweep_row_phase(image: np.ndarray, result: dict, cell_h: float,
+                    n_steps: int = 32) -> tuple[float, float]:
+    """全周期扫描行相位，返回 (最优首线全图 y, 该相位的骑线比)。
+
+    直接优化骑线度量本身。相位**不能**跟随书级中位：实测相位相对
+    版框全书并不一致（对齐良好页之间 σ≈0.45 格）——只能本页自扫。
+    稀疏页（职名/目录）的谷-峰代价欠定正是原相位错拟的根源，
+    骑线比对这类页仍然判别明确（字在格心 vs 骑线是硬事实）。"""
+    if image.ndim == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    cols = []
+    for col in result.get("columns", []):
+        cells = [c for c in col.get("cells", []) if c.get("type") != "margin"]
+        if not cells:
+            continue
+        x0, x1 = int(col["left_x"]) + 2, int(col["right_x"]) - 2
+        if x1 - x0 < 8:
+            continue
+        crop = image[:, x0:x1]
+        if crop.size == 0:
+            continue
+        sm = _smooth(column_projection(crop), cell_h)
+        if sm.sum() >= 1:
+            cols.append(sm)
+    if not cols:
+        return 0.0, float("inf")
+    first = min(float(c["cells"][0]["y_top"]) if c.get("cells") else 0.0
+                for c in result["columns"]
+                if any(x.get("type") != "margin" for x in c.get("cells", [])))
+    n = sum(1 for c in result["columns"][0].get("cells", [])
+            if c.get("type") != "margin") or 21
+    best_y, best_score = first, float("inf")
+    for delta in np.linspace(-0.5, 0.5, n_steps, endpoint=False) * cell_h:
+        y0 = first + delta
+        ratios = []
+        for sm in cols:
+            L = len(sm)
+            lines = np.clip(np.round(y0 + cell_h * np.arange(n + 1)).astype(int),
+                            0, L - 1)
+            centers = np.clip(
+                np.round(y0 + cell_h * (np.arange(n) + 0.5)).astype(int),
+                0, L - 1)
+            cv_ = float(sm[centers].mean())
+            if cv_ > 1:
+                ratios.append(float(sm[lines].mean()) / cv_)
+        score = float(np.median(ratios)) if ratios else float("inf")
+        if score < best_score:
+            best_score, best_y = score, float(y0)
+    return best_y, best_score
+
+
 def dp_boundaries(proj: np.ndarray, cell_h: float, n_chars: int,
                   phase_prior: float | None = None,
                   elastic: float = 0.15, step: int = 2,
@@ -381,6 +469,104 @@ def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
     return cells
 
 
+SPREAD_PITCH = 1.4         # 列内组件中位间距超此倍格高 → 判定"拉开列"
+
+
+def _merged_components(col_bin: np.ndarray, cell_h: float
+                       ) -> list[tuple[float, float, float]]:
+    """列内合并连通体：返回 [(y_center, y_min, y_max)]，按 y 升序。
+
+    同字的多部件（上下结构、断笔）按间距 < 0.5 格合并；
+    过滤噪点与贯穿线（高 > 1.6 格 = 界行）。"""
+    n, _, stats, cent = cv2.connectedComponentsWithStats(col_bin, 8)
+    parts = []
+    for (x, y, w, h, area), (cx, cy) in zip(stats[1:], cent[1:]):
+        if area < cell_h * 2.5 or h > 1.6 * cell_h or h < 6:
+            continue
+        parts.append((float(y), float(y + h)))
+    parts.sort()
+    merged: list[list[float]] = []
+    for y0, y1 in parts:
+        if merged and y0 - merged[-1][1] < 0.35 * cell_h:
+            merged[-1][1] = max(merged[-1][1], y1)
+        else:
+            merged.append([y0, y1])
+    return [((a + b) / 2, a, b) for a, b in merged]
+
+
+def cells_from_components(col_gray: np.ndarray, page_phase: float,
+                          cell_h: float, n_chars: int,
+                          params: GridParams) -> list[dict] | None:
+    """拉开列（职名/奉旨列名）的组件锚定混合切分。
+
+    职名页排版：官衔字**均匀拉开**（实测字距 3.4~3.7 格，非整数倍，
+    不在 21 字网格上，任何行相位都无法避免腰斩），列尾人名却是
+    ~0.9 格**密排**。混合处理：
+    - 字状组件（高 ≤1.55 格）→ 独立成格（bbox 外扩 padding）；
+    - 密排段组件（高 1.55~8 格，人名等）→ 段内按 ~0.95 格均分；
+    - idx = 组件中心映射到最近网格位并保持严格递增（id 稳定有序）。
+
+    触发条件（证据不足返回 None 走刚性网格）：合并组件 ≥3、
+    组件中心间距中至少 2 个 > 2.2 格、组件总数 ≤ 12。
+    密排正文列组件会连成大段且间距小，绝不会误触发。"""
+    col_bin = (col_gray < BINARY_THRESHOLD).astype(np.uint8)
+    comps = _merged_components(col_bin, cell_h)
+    if len(comps) < 3 or len(comps) > 12:
+        return None
+    # 碎屑（< 0.3 格高：版框残迹、贴边墨点）丢弃而非否决整列——
+    # p108 职名列曾因列顶一条 0.09 格的框线残迹被一票否决。
+    # 局限：拉开列里真正的"一"字也会被当碎屑丢掉（官衔中几乎不出现）。
+    comps = [c for c in comps if (c[2] - c[1]) >= 0.3 * cell_h]
+    if len(comps) < 3:
+        return None
+    centers = [c[0] for c in comps]
+    gaps = np.diff(centers)
+    if int((gaps > 2.2 * cell_h).sum()) < 2:
+        return None
+    heights = [(b - a) for _, a, b in comps]
+    if not all(h <= 8.0 * cell_h for h in heights):
+        return None
+    L = col_gray.shape[0]
+    pad = 0.10 * cell_h
+    boxes: list[tuple[float, float]] = []      # 每格 (y0, y1)
+    for cy, a, b in comps:
+        h = b - a
+        if h <= 1.55 * cell_h:                 # 单字组件
+            boxes.append((max(0.0, a - pad), min(float(L), b + pad)))
+        else:                                   # 密排段：内部均分
+            n_sub = max(1, int(round(h / (cell_h * 0.95))))
+            step = h / n_sub
+            for k in range(n_sub):
+                boxes.append((max(0.0, a + k * step - pad * 0.5),
+                              min(float(L), a + (k + 1) * step + pad * 0.5)))
+    if len(boxes) > n_chars:
+        return None
+    cells: list[dict] = []
+    used: set[int] = set()
+    prev = -1
+    for y0, y1 in boxes:
+        cy = (y0 + y1) / 2
+        idx = int(round((cy - page_phase - 0.5 * cell_h) / cell_h))
+        idx = min(max(idx, prev + 1), n_chars - 1)
+        while idx in used and idx < n_chars - 1:
+            idx += 1
+        used.add(idx)
+        prev = idx
+        cells.append({"type": "char", "index": idx,
+                      "y_top": y0, "y_bottom": y1,
+                      "text": None, "confidence": 0.0})
+    for i in range(n_chars):
+        if i not in used:
+            y0 = page_phase + cell_h * i
+            y1 = y0 + cell_h
+            if 0 <= y0 and y1 <= L:
+                cells.append({"type": "empty", "index": i,
+                              "y_top": y0, "y_bottom": y1,
+                              "text": None, "confidence": 0.0})
+    cells.sort(key=lambda c: c["index"])
+    return cells
+
+
 def segment_column(col_gray: np.ndarray, n_chars: int, params: GridParams,
                    shared_grid: tuple[float, float] | None = None) -> list[dict]:
     """单列切分 → cells（局部 y 坐标）。
@@ -420,14 +606,20 @@ class GridSegmenter:
 
     def segment_page(self, image: np.ndarray, layout: dict,
                      grid_override: dict | None = None,
-                     cell_h_prior: float | None = None) -> dict:
+                     cell_h_prior: float | None = None,
+                     row_phase_abs: float | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
         相位以本页 inner_frame 为基准换算）——弱信号页专用。
 
         cell_h_prior 给定时只固定行格高（书级共识），相位仍按本页投影
         重搜——格高锁错（谐波/稀疏页）的页专用：这类页列网格正常，
-        相位也是本页自身的，不该跟随书级中位。"""
+        相位也是本页自身的，不该跟随书级中位。
+
+        row_phase_abs 给定时行相位钉死为该值（全图 y 坐标的网格首线），
+        供骑线重扫（Pass 2c）择优后回填——注意**不能**跟随书级中位相位：
+        实测相位相对版框全书并不一致（版框检测基准页间漂移），
+        对齐良好的页之间相位标准差高达 0.45 格。"""
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         h, w = image.shape[:2]
@@ -531,7 +723,10 @@ class GridSegmenter:
         # （页级聚合投影），绝不按单列内容范围锚定——抬头空格列会错一格。
         # 每列仅允许相位 ±0.12 格微调（板歪/扫描形变），格高不变。
         if text_cols:
-            if grid_override:
+            if row_phase_abs is not None:
+                cell_h = cell_h_prior or (col_bottom - col_top) / n
+                page_phase = float(row_phase_abs) - y1
+            elif grid_override:
                 cell_h = grid_override["cell_h"]
                 # row_phase_rel 以 frame_top 为基准 → 换算到 crop 坐标
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
@@ -543,8 +738,14 @@ class GridSegmenter:
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
-                bounds = rigid_bounds(proj, page_phase, cell_h, n)
-                cells = cells_from_bounds(crop, bounds, self.params)
+                # 拉开列（职名页官衔，字距 ~3.5 格非整数倍）优先组件锚定
+                cells = cells_from_components(crop, page_phase, cell_h, n,
+                                              self.params)
+                if cells is None:
+                    bounds = rigid_bounds(proj, page_phase, cell_h, n)
+                    cells = cells_from_bounds(crop, bounds, self.params)
+                else:
+                    col_result["spread_col"] = True
                 for c in cells:   # 局部 → 全图坐标
                     c["y_top"] += y1
                     c["y_bottom"] += y1
@@ -627,7 +828,36 @@ class GridSegmenter:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
 
-        # ── Pass 2b: 书级共享网格校正弱信号页 ──
+        # ── Pass 2b: 行相位骑线重扫 ──
+        # 直接质量信号：骑线比（straddle_score）。稀疏页（职名/目录）
+        # 谷-峰代价欠定导致相位错拟半格，字被上下腰斩——batch2 人工
+        # 反馈 31 例 truncated 全部源于此。相位不能跟随书级中位
+        # （相对版框不一致，见 sweep_row_phase 注），本页全周期自扫，
+        # 骑线比至少改善 STRADDLE_GAIN 才接受。
+        n_phase_fix = 0
+        if cell_hs and len(cell_hs) >= 5:
+            for stem, img_path, layout in pages:
+                res = results[stem]
+                if not res.get("grid", {}).get("cell_h"):
+                    continue
+                image = imread(str(img_path))
+                if image is None:
+                    continue
+                cur = straddle_score(image, res)
+                if cur <= STRADDLE_OK:
+                    continue
+                y_best, sc_best = sweep_row_phase(image, res, consensus_h)
+                if sc_best < cur - STRADDLE_GAIN:
+                    redone = self.segment_page(image, layout,
+                                               cell_h_prior=consensus_h,
+                                               row_phase_abs=y_best)
+                    if straddle_score(image, redone) < cur - STRADDLE_GAIN:
+                        results[stem] = redone
+                        n_phase_fix += 1
+            if n_phase_fix:
+                print(f"  行相位骑线重扫修正 {n_phase_fix} 张")
+
+        # ── Pass 2c: 书级共享网格校正弱信号页 ──
         # 刻本整书同版式：列距/字高/相位（相对边框）全书一致。
         # 空白余纸页、稀疏职名页自身拟合不可靠（相位骑到界行/乱套），
         # 用**强信号页的中位参数**重建其网格。
@@ -664,7 +894,11 @@ class GridSegmenter:
                         # 基准对个别页也可能不准）
                         old_q = results[stem]["grid"].get("rule_in_col", 1.0)
                         new_q = redone["grid"].get("rule_in_col", 1.0)
-                        if new_q <= old_q:
+                        # rule_in_col 只度量列相位；行相位跟随书级中位曾把
+                        # 多页字腰斩（相对版框不一致）——骑线比不得恶化
+                        if new_q <= old_q and (
+                                straddle_score(image, redone)
+                                <= straddle_score(image, results[stem]) + 0.05):
                             results[stem] = redone
                             n_weak += 1
                 if n_weak:
@@ -690,7 +924,8 @@ class GridSegmenter:
                            "search_ratio": self.params.search_ratio},
                 "stats": {"pages": n_pages, "chars": n_chars,
                           "empty": n_empty, "weak_pages": n_weak,
-                          "row_fixed_pages": n_row_fix}}
+                          "row_fixed_pages": n_row_fix,
+                          "phase_fixed_pages": n_phase_fix}}
         with open(out_dir / "grid_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         return meta
