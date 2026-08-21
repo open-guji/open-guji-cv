@@ -8,3 +8,7 @@ build/
 # 字形库 SQLite 索引（可由 glyph_store/ 重建，不入版本控制）
 glyph_store/glyphdb.sqlite
 *.sqlite-journal
+
+# 全本扫描件（体积大，不入库；清单与下载器入库）
+data_full/*
+!data_full/zongmu_manifest.json
