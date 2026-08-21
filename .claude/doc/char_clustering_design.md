@@ -1016,3 +1016,71 @@ Playwright 实测三条失效路径：publish 悬挂 → 20s 后红底
 `\n` 必须写成 `\\n`，否则 Python 先解释成真换行，插进 JS 字符串即
 `Invalid or unexpected token`，整个脚本不执行（页面看起来正常但毫无
 反应）。已加 `test_js_has_no_unterminated_string` 守门。
+
+## 19. 字形數據庫（GlyphDB，M8 升級）
+
+目標：把 OCR 結果與人工反饋**跨書累積**——下一本書直接借力，且支持
+反復重訓。取代 M8 的 jsonl 字形庫（保留其「只進確認字形、兩級檢索」
+的原則），升級為 SQLite 單檔 `glyph_store/glyphdb.sqlite`。
+
+### 19.1 設計原則
+
+1. **原始字形是唯一不可變真源**。歸一化圖、骨架、特徵都是派生物，
+   帶 `algo_version`，算法改進後 bump 版本重生成——這就是「反復訓練」
+   的基礎：任何時候都能從原始圖塊重新出發。
+2. **字形層與語義層分離**（沿用全局約束）：`char` 存精確異體字形，
+   `semantic` 只是檢索/語言模型用的正字註記；缺 Unicode 碼位的字形
+   留 `ids`（表意文字描述序列）位置。
+3. **字形隨版本變**：glyphs 表按 `edition_tag` 分域，同字不同版永不
+   合併（武英殿的「爲」和別本的「爲」是兩個字形類）。
+4. **簇號不入資產**。聚類是可重跑的過程，簇掛在 cluster_run 下；
+   可累積的標註只掛實例 id（永久穩定）。
+5. **事件溯源**。用戶反饋 append-only 入 events 表（batch,seq 冪等），
+   當前標註狀態=重放，與 labels.jsonl 完全同構、可互導。
+
+### 19.2 表結構（9 表）
+
+| 表 | 鍵 | 內容 | 理由 |
+|---|---|---|---|
+| sources | source_id | 叢書、書名、冊次、edition_tag、**字體** script_style、刊刻年代、版式（列數/字數）、pipeline_version | 字體/叢書是冊級屬性，歸一化避免 3 萬行重複 |
+| instances | instance_id (book:page:col:idx) | 位置（頁/列/字序）、bbox、**原始字形 PNG blob**、ink_ratio、quality_flags、label、label_status、label_confidence、semantic、unicode_cp、ids | 一字一行；label_status 區分 confirmed（用戶）/propagated（簇傳播）/auto（機器，不入訓練） |
+| derived | (instance_id, kind, algo_version) | kind=norm/**skeleton**/feat_hog…，data blob | 派生物版本化；只為 exemplar 和已標註實例存，其餘按需重算 |
+| events | (source_id, batch, seq) 唯一 | op/payload JSON/ts | 反饋事件鏡像，冪等入庫 |
+| cluster_runs | run_id | source_id、params、stats | 聚類過程資產 |
+| cluster_members | (run_id, instance_id) | cluster_id | 簇號限定在 run 作用域內 |
+| glyphs | (edition_tag, char) 唯一 | semantic、unicode_cp、ids、status(sparse/stable)、n_confirmed | 跨書字形類 |
+| exemplars | (glyph_id, instance_id) | role=medoid/diverse/boundary | 「不要太多不要太少」的落點（見 19.3） |
+| pairs | (inst_a, inst_b, relation) 唯一 | relation=same/diff、origin=confirm_same/split/impure_flag | 跨書累積的閾值標定金集——18.3 的難負樣本自然歸宿 |
+
+### 19.3 Exemplar 政策（同簇字不要太多也不要太少）
+
+- **下限** K_MIN=3：不足時 glyph 標 `sparse`，kNN 命中降權
+  （單例無法估計類內方差，閾值不可靠）；
+- **上限** K_MAX=12（常用字）：全留 337 個「一」只會拖慢檢索並讓
+  訓練集偏向高頻字；該 edition 內總數 ≤ K_MAX 的（罕見字/異體字）
+  **全留**；
+- **選法**：medoid 起步 → 特徵空間最遠點採樣（FPS，覆蓋墨色深淺、
+  磨損程度的變體）→ 近重複剔除（verify f1>0.95 視為重複）；
+- **邊界例優先**：曾被用戶改判/split/標 impure 的實例 role=boundary
+  強制保留——它們是最有訓練價值的難例。
+
+### 19.4 應用場景 → 查詢路徑
+
+1. **新書冷啟動**：新書字塊 → exemplar 特徵 kNN 粗排 → verify_pair
+   精驗。同 edition 命中＝精確字形直接定；異 edition 命中只作語義
+   候選（字形須人工確認一次後入庫）。
+2. **每書收尾**（update 擴展）：events/instances/exemplars/pairs 入庫。
+3. **閾值標定**：pairs 表跨書累積 same/diff 分數分布 → per-edition θ。
+4. **單字模型微調導出**：label_status∈{confirmed,propagated} 的實例
+   按字頻均衡採樣（高頻截頂、罕見全留），輸出 (norm_patch, char)。
+5. **異體字研究**：by semantic 列全部字形類；跨 edition 對比用字。
+6. **variant_prefs / LM 語料**：從 instances 重建，不再單獨落盤。
+7. **切分回溯**：quality_flags + flag 事件按 source 聚合 → Phase 3
+   參數迭代清單。
+8. **edition 識別**：新書前幾頁對各 edition 的 kNN 命中率即匹配信號。
+
+### 19.5 存儲量估算
+
+整書 3 萬字：原始 PNG blob ~30MB；derived 只存 exemplar+已標註
+（~千級實例 × norm/skeleton/feat ≈ 10MB）；其餘表皆為文本行。
+單書 <50MB，SQLite 舒適區。

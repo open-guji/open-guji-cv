@@ -1,0 +1,113 @@
+"""GlyphDB 跨书字形数据库测试。"""
+
+import json
+
+import numpy as np
+import pytest
+
+from open_guji_cv.clustering.extractor import load_index
+from open_guji_cv.clustering.feedback import append_event
+from open_guji_cv.clustering.glyph_db import GlyphDB, K_MIN
+from open_guji_cv.clustering.review.state import ReviewSession
+
+
+@pytest.fixture()
+def db(tmp_path):
+    d = GlyphDB(tmp_path / "glyphdb.sqlite")
+    yield d
+    d.close()
+
+
+def _prepare_labels(synth_book):
+    """合成书上补反馈：确认最大两簇 + 一个 impure 标记（幂等：只写一次）。"""
+    s = ReviewSession(synth_book)
+    ordered = sorted(s.clusters.values(), key=lambda c: -c["size"])
+    big, second = ordered[0], ordered[1]
+    lp = s.labels_path
+    if not s.state.cluster_labels:                    # module 级共享，防重复追加
+        append_event(lp, {"op": "confirm", "cluster": big["cluster_id"],
+                          "char": "甲", "members": big["members"]})
+        append_event(lp, {"op": "confirm", "cluster": second["cluster_id"],
+                          "char": "乙", "members": second["members"]})
+        if len(ordered) > 2 and ordered[2]["size"] >= 2:
+            append_event(lp, {"op": "flag",
+                              "cluster": ordered[2]["cluster_id"],
+                              "flag": "impure",
+                              "members": ordered[2]["members"]})
+    return big, second
+
+
+def test_import_book_populates_tables(db, synth_book):
+    big, _ = _prepare_labels(synth_book)
+    summary = db.import_book(synth_book, edition_tag="ed1",
+                             source_meta={"collection": "測試叢書",
+                                          "script_style": "宋體刻"})
+    assert summary["instances"] == 36
+    assert summary["labeled"] >= big["size"]
+    assert summary["glyphs"] == 2                     # 甲、乙
+    st = db.stats()
+    assert st["instances"] == 36
+    assert st["pairs"].get("same", 0) > 0
+    cur = db.conn.cursor()
+    row = cur.execute("SELECT collection, script_style, edition_tag "
+                      "FROM sources").fetchone()
+    assert row == ("測試叢書", "宋體刻", "ed1")
+    # 派生物齐备：norm + 骨架 + 特征
+    kinds = {k for (k,) in cur.execute("SELECT DISTINCT kind FROM derived")}
+    assert kinds == {"norm", "skeleton", "feat_hog"}
+    # 语义与码位
+    ch, cp = cur.execute("SELECT char, unicode_cp FROM glyphs "
+                         "WHERE char='甲'").fetchone()
+    assert cp == ord("甲")
+
+
+def test_import_idempotent(db, synth_book):
+    _prepare_labels(synth_book)
+    s1 = db.import_book(synth_book, edition_tag="ed1")
+    s2 = db.import_book(synth_book, edition_tag="ed1")
+    assert s2["events_new"] == 0                      # 事件冪等
+    assert s2["pairs_new"] == 0                       # 对冪等
+    st = db.stats()
+    assert st["instances"] == 36                      # 无重复行
+
+
+def test_exemplar_cap_and_min(db, synth_book):
+    big, _ = _prepare_labels(synth_book)
+    db.import_book(synth_book, edition_tag="ed1", k_max=4)
+    cur = db.conn.cursor()
+    for (gid, char, status, n_conf) in cur.execute(
+            "SELECT glyph_id, char, status, n_confirmed FROM glyphs"):
+        n_ex = cur.execute("SELECT COUNT(*) FROM exemplars WHERE glyph_id=?",
+                           (gid,)).fetchone()[0]
+        assert n_ex <= 4                              # 上限
+        assert n_ex >= min(n_conf, 1)
+        if n_conf < K_MIN:
+            assert status == "sparse"
+        roles = {r for (r,) in cur.execute(
+            "SELECT role FROM exemplars WHERE glyph_id=?", (gid,))}
+        assert "medoid" in roles                      # 必有代表
+
+
+def test_impure_flag_becomes_diff_pairs(db, synth_book):
+    _prepare_labels(synth_book)
+    db.import_book(synth_book, edition_tag="ed1")
+    st = db.stats()
+    s = ReviewSession(synth_book)
+    if s.state.cluster_flags:                         # 合成书有 ≥3 个多成员簇时
+        assert st["pairs"].get("diff", 0) > 0
+
+
+def test_query_hits_confirmed_char(db, synth_book):
+    big, _ = _prepare_labels(synth_book)
+    db.import_book(synth_book, edition_tag="ed1")
+    # 用确认簇一个成员的归一化图/特征查询
+    npz = np.load(synth_book / "phase5_clusters" / "features.npz")
+    pos = {i.id: k for k, i in
+           enumerate(load_index(synth_book / "phase4_chars"))}
+    k = pos[big["members"][0]]
+    hits = db.query(npz["patches"][k], npz["feats"][k], edition_hint="ed1")
+    assert hits and hits[0].char == "甲"
+    assert hits[0].f1 > 0.6
+    # 异版提示查不到（分域隔离）
+    assert db.query(npz["patches"][k], npz["feats"][k],
+                    edition_hint="other") == []
