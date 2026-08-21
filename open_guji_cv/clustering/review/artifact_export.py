@@ -9,10 +9,13 @@
            解析 ``GUJI-EVENT {json}`` 行，去重后追加进 labels.jsonl。
 
 持久化三层保险（页面内实现）：
-    1. Artifact live-doc：用户点击产生的 DOM 变化（事件日志 <pre>）被自动
-       保存，Claude 之后用 WebFetch 读回页面即可回收；
-    2. downloads 能力（仅 Artifact 环境）：一键下载 labels.jsonl；
-    3. 事件日志可见可复制：任何托管环境下用户都能全选复制贴回对话。
+    1. artifact 能力 files-publish：每次操作后防抖 3s 调
+       ``artifact.publish({"labels.jsonl": 日志})`` 发布数据文件新版本
+       （经典 Artifact 无手势自动保存——live-doc 才有；本视图不重载）。
+       重开页面时 fetch("labels.jsonl") 恢复并重放卡片状态；
+    2. localStorage 崩溃备份：每次操作同步写入，恢复时与已发布日志按
+       (batch,seq) 合并，多出的自动补发布；
+    3. downloads 一键下载 + 事件日志可见可复制：任何托管环境下的兜底。
 
 事件行格式（与 labels.jsonl 同构，额外带 batch/seq 供去重）：
     GUJI-EVENT {"op":"confirm","cluster":"c00192","char":"林",
@@ -281,8 +284,52 @@ _JS = """
 (function(){
   var log = document.getElementById('guji-log');
   var list = document.getElementById('list');
+  var FLAGS = {impure:'不同字混簇', truncated:'截斷',
+               contaminated:'混入邊框/鄰字', not_text:'非文字'};
+  var LSKEY = 'guji:' + BATCH;
+
+  function lines(){ return log.textContent.match(/GUJI-EVENT .*/g) || []; }
   function events(){
-    return (log.textContent.match(/GUJI-EVENT .*/g) || []).length; }
+    return lines().map(function(l){
+      try { return JSON.parse(l.slice('GUJI-EVENT '.length)); }
+      catch(e){ return null; }
+    }).filter(Boolean); }
+  function status(msg){
+    var el = document.getElementById('save-status');
+    if(el) el.textContent = msg; }
+
+  // ── 持久化：经典 Artifact 无手势自动保存，必须显式 publish ──
+  // 三层：files-publish（labels.jsonl 数据文件，本视图不重载）
+  //     + localStorage 崩溃备份 + 页面底部可复制日志
+  var nsPromise = (window.claude && window.claude.use)
+    ? window.claude.use('artifact').catch(function(){ return null; })
+    : Promise.resolve(null);
+  var pubTimer = 0, disabled = false, unsaved = false;
+  function saveLocal(){
+    try { localStorage.setItem(LSKEY, log.textContent); } catch(e){} }
+  function publishNow(){
+    nsPromise.then(function(ns){
+      if(!ns || disabled){
+        status('自動儲存不可用：請複製底部日誌或點「下載」'); return; }
+      status('儲存中…');
+      ns.publish({'labels.jsonl': log.textContent}).then(function(){
+        unsaved = false; status('已儲存 ' + lines().length + ' 條');
+      }).catch(function(e){
+        var c = e && e.code;
+        if(c === 'rate_limited'){
+          status('儲存排隊中…'); setTimeout(publishNow, 30000); }
+        else if(c === 'upstream_error'){
+          setTimeout(publishNow, 4000 + Math.random() * 3000); }
+        else if(c === 'conflict'){ saveLocal(); }
+        else { disabled = true;
+          status('自動儲存不可用：請複製底部日誌或點「下載」'); }
+      });
+    }); }
+  function schedulePublish(){
+    unsaved = true; status('未儲存…');
+    clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 3000); }
+  window.addEventListener('beforeunload', function(){ saveLocal(); });
+
   function seqNext(){
     var n = parseInt(log.getAttribute('data-seq') || '0', 10) + 1;
     log.setAttribute('data-seq', String(n)); return n; }
@@ -290,13 +337,62 @@ _JS = """
     ev.batch = BATCH; ev.seq = seqNext();
     ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
     log.textContent += 'GUJI-EVENT ' + JSON.stringify(ev) + '\\n';
-    progress(); }
+    saveLocal(); schedulePublish(); progress(); }
+
+  // ── 恢复：已发布的 labels.jsonl + localStorage 备份，按 seq 合并重放 ──
+  function cardOf(cid){
+    for(var i = 0, cs = list.children; i < cs.length; i++)
+      if(cs[i].getAttribute && cs[i].getAttribute('data-cid') === cid)
+        return cs[i];
+    return null; }
+  function applyVisual(ev){
+    var card = ev.cluster ? cardOf(ev.cluster) : null;
+    if(!card) return;
+    var chosen = card.querySelector('[data-slot="chosen"]');
+    if(ev.op === 'confirm'){
+      card.setAttribute('data-state', 'done'); chosen.textContent = ev.char; }
+    else if(ev.op === 'mark'){
+      card.setAttribute('data-state', 'doubt'); chosen.textContent = '疑'; }
+    else if(ev.op === 'flag'){
+      if(ev.flag === 'clear'){
+        card.setAttribute('data-state', 'open'); chosen.textContent = ''; }
+      else { card.setAttribute('data-state', 'flag');
+        chosen.textContent = FLAGS[ev.flag] || ev.flag; } } }
+  function restore(){
+    fetch('labels.jsonl')
+      .then(function(r){ return r.ok ? r.text() : ''; })
+      .catch(function(){ return ''; })
+      .then(function(saved){
+        var localTxt = '';
+        try { localTxt = localStorage.getItem(LSKEY) || ''; } catch(e){}
+        var seen = {}, merged = [], extra = 0;
+        function add(l, isLocal){
+          try { var ev = JSON.parse(l.slice('GUJI-EVENT '.length)); }
+          catch(e){ return; }
+          var key = ev.batch + '#' + ev.seq;
+          if(seen[key]) return;
+          seen[key] = 1; merged.push(l);
+          if(isLocal) extra++; }
+        (saved.match(/GUJI-EVENT .*/g) || []).forEach(function(l){ add(l, 0); });
+        (localTxt.match(/GUJI-EVENT .*/g) || []).forEach(function(l){ add(l, 1); });
+        if(merged.length){
+          log.textContent = merged.join('\\n') + '\\n';
+          var mx = 0;
+          events().forEach(function(ev){
+            if(ev.batch === BATCH && ev.seq > mx) mx = ev.seq; });
+          log.setAttribute('data-seq', String(mx));
+          events().forEach(applyVisual);
+        }
+        progress();
+        if(extra) schedulePublish();
+        else if(merged.length) status('已儲存 ' + merged.length + ' 條');
+      }); }
   function progress(){
     var done = list.querySelectorAll(
       '[data-state="done"],[data-state="doubt"],[data-state="flag"]').length;
     var total = list.querySelectorAll('.card').length;
     document.getElementById('prog').textContent =
-      done + ' / ' + total + ' 簇 · ' + events() + ' 條記錄'; }
+      done + ' / ' + total + ' 簇 · ' + lines().length + ' 條記錄'; }
   function setState(card, s){ card.setAttribute('data-state', s); progress(); }
   function choose(card, ch){
     ch = (ch || '').trim(); if(!ch) return;
@@ -310,7 +406,8 @@ _JS = """
     else if(btn.classList.contains('other-ok'))
       choose(card, card.querySelector('.other-in').value);
     else if(btn.classList.contains('doubt')){
-      emit({op:'mark', instance: btn.getAttribute('data-inst'), flag:'uncertain'});
+      emit({op:'mark', instance: btn.getAttribute('data-inst'),
+            cluster: card.getAttribute('data-cid'), flag:'uncertain'});
       card.querySelector('[data-slot="chosen"]').textContent = '疑';
       setState(card, 'doubt'); }
     else if(btn.classList.contains('flag')){
@@ -334,7 +431,7 @@ _JS = """
     if(e.key === 'Enter' && e.target.classList &&
        e.target.classList.contains('other-in')){
       choose(e.target.closest('.card'), e.target.value); }});
-  progress();
+  restore();
   var dlBtn = document.getElementById('dl');
   if(window.claude && window.claude.use){
     window.claude.use('downloads').then(function(dl){
@@ -363,6 +460,7 @@ def render_html(batch: dict, title: str | None = None) -> str:
 <header class="top">
 <h1>{_esc(title)}</h1>
 <span class="prog" id="prog">0 / {n} 簇</span>
+<span class="prog" id="save-status"></span>
 <button type="button" data-f="all" data-on="1">全部</button>
 <button type="button" data-f="open" data-on="0">未審</button>
 <button type="button" data-f="done" data-on="0">已審</button>
@@ -372,8 +470,9 @@ def render_html(batch: dict, title: str | None = None) -> str:
 {cards}
 </main>
 <footer class="foot">
-<p class="hint">點候選字確認；不在候選中則填「其他字」；拿不準點「存疑」。
-所有操作即時保存，隨時可以離開再回來。</p>
+<p class="hint">點候選字確認；不在候選中則填「其他字」；拿不準點「存疑」；
+切分或聚類有問題點「問題」行按鈕。每次操作後約 3 秒自動儲存
+（右上角顯示狀態）；若顯示不可用，請點「下載」或複製底部日誌貼回對話。</p>
 <details><summary>事件日誌（審查記錄，可全選複製）</summary>
 <pre class="log" id="guji-log" data-seq="0" data-batch="{_esc(batch["batch_id"])}"></pre>
 </details>
@@ -396,10 +495,16 @@ def export_batch(book_out_dir: str | Path, out_path: str | Path | None = None,
 
 # ── 事件回收 ─────────────────────────────────────────────
 
-def extract_events(text: str) -> list[dict]:
-    """从任意文本（保存后的页面 HTML / WebFetch 转写 / 粘贴内容）提取事件。
+_KNOWN_OPS = {"confirm", "relabel", "split", "merge", "mark", "flag"}
 
-    容错：只认 ``GUJI-EVENT {json}`` 行，无法解析的行静默跳过。
+
+def extract_events(text: str) -> list[dict]:
+    """从任意文本提取审查事件，两种行格式都认：
+
+    - ``GUJI-EVENT {json}``（页面日志 / WebFetch 转写 / 粘贴片段）；
+    - 裸 JSONL 行（「下載 labels.jsonl」导出的文件，无前缀）。
+
+    无法解析的行静默跳过。
     """
     out = []
     for m in EVENT_RE.finditer(text):
@@ -407,7 +512,19 @@ def extract_events(text: str) -> list[dict]:
             ev = json.loads(m.group(1))
         except json.JSONDecodeError:
             continue
-        if isinstance(ev, dict) and ev.get("op"):
+        if isinstance(ev, dict) and ev.get("op") in _KNOWN_OPS:
+            out.append(ev)
+    if out:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(ev, dict) and ev.get("op") in _KNOWN_OPS:
             out.append(ev)
     return out
 
