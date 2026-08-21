@@ -116,3 +116,14 @@ def test_refine_defaults_to_cluster_prior_only():
     sig = inspect.signature(refine_book)
     assert sig.parameters["use_lm"].default is False
     assert sig.parameters["use_cluster_prior"].default is True
+
+
+def test_refine_with_external_corpus(synth_book, tmp_path):
+    """外部语料路径：真 LM 训练 + 本版用字主形补入，流程完整不炸。"""
+    from open_guji_cv.clustering.context_refine import refine_book
+    corpus = tmp_path / "ref.txt"
+    corpus.write_text("甲乙丙丁戊\n" * 30, encoding="utf-8")
+    report = refine_book(synth_book, rounds=1, use_lm=True,
+                         external_corpus=corpus, verbose=False, write=False)
+    assert report["rounds"][-1]["lm"] == "ngram"
+    assert report["rounds"][-1]["known"] == 36
