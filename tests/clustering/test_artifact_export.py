@@ -100,3 +100,22 @@ def test_flag_buttons_and_ingest(synth_book):
     r = ingest_events(synth_book, text)
     assert r["new"] == 1 and not r["errors"]
     assert ReviewSession(synth_book).cluster_detail(cid)["flag"] == "contaminated"
+
+
+def test_extract_events_bare_jsonl():
+    """下載按钮导出的裸 JSONL（无 GUJI-EVENT 前缀）也能解析。"""
+    text = ('{"op":"confirm","cluster":"c1","char":"甲","batch":"b","seq":1}\n'
+            '不是json的行\n'
+            '{"op":"flag","cluster":"c2","flag":"not_text","batch":"b","seq":2}\n'
+            '{"note":"没有op字段"}\n')
+    evs = extract_events(text)
+    assert [e["op"] for e in evs] == ["confirm", "flag"]
+
+
+def test_render_html_autosave_wiring(synth_book):
+    """自动保存链路：publish 调用 + labels.jsonl 恢复 + localStorage 备份。"""
+    page = render_html(build_batch(synth_book, limit=3))
+    assert "publish({'labels.jsonl'" in page
+    assert "fetch('labels.jsonl')" in page
+    assert "localStorage" in page
+    assert "save-status" in page
