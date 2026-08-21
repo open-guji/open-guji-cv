@@ -56,9 +56,13 @@ def pick_file(meta: dict, prefer: str) -> dict | None:
         return max(cands, key=lambda f: int(f.get("size", 0))) if cands else None
     if prefer == "pdf":
         order = [lambda f: f["name"].endswith(".pdf"),
-                 lambda f: f["name"].endswith("_jp2.zip")]
+                 lambda f: f["name"].endswith("_cnbook.zip")]
     else:
-        order = [lambda f: f["name"].endswith("_jp2.zip"),
+        # CADAL 中文书 item 无 jp2：原始扫描在 _cnbook.zip（信息量最大，
+        # book9 管线即用其中 tif），其次处理版 _tif.zip
+        order = [lambda f: f["name"].endswith("_cnbook.zip"),
+                 lambda f: f["name"].endswith("_tif.zip"),
+                 lambda f: f["name"].endswith("_jp2.zip"),
                  lambda f: f["name"].endswith("_jp2.tar"),
                  lambda f: f["name"].endswith(".pdf")]
     for pred in order:
