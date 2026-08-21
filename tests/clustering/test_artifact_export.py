@@ -185,3 +185,27 @@ def test_js_has_no_unterminated_string(synth_book):
     bad = [i for i, line in enumerate(_JS.split("\n"), 1)
            if (line.count("'") - line.count("\\'")) % 2]
     assert not bad, f"第 {bad} 行单引号未闭合"
+
+
+def test_multi_book_batch_keys_and_dispatch(synth_book, tmp_path):
+    """多册批次：DOM 键含册前缀防重号；事件按 book 分派回收。"""
+    batch = build_batch([synth_book, synth_book], limit=6)
+    assert batch["books"] == [synth_book.name]      # 同一册两次 → 去重后一册
+    page = render_html(batch)
+    assert f'data-book="{synth_book.name}"' in page
+    assert f'data-cid="{synth_book.name}|' in page
+    assert "ev.book = parts[0]" in page             # JS 拆册
+
+    # 外册事件不应被本册收下
+    s = ReviewSession(synth_book)
+    cid = next(iter(s.clusters))
+    text = "\n".join([
+        "GUJI-EVENT " + json.dumps({"op": "confirm", "cluster": cid,
+                                    "char": "甲", "book": synth_book.name,
+                                    "batch": "mb", "seq": 1}),
+        "GUJI-EVENT " + json.dumps({"op": "confirm", "cluster": "cXXX",
+                                    "char": "乙", "book": "other_book",
+                                    "batch": "mb", "seq": 2}),
+    ])
+    r = ingest_events(synth_book, text)
+    assert r["new"] == 1 and r["other_books"] == 1 and not r["errors"]
