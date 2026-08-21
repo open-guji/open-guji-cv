@@ -381,14 +381,21 @@ class GlyphDB:
             for m in moved:
                 if reps and m in pos_of:
                     put(reps[0], m, "diff", "split")
-        # diff：impure 簇內兩兩
+        # diff：impure 簇內兩兩（截頂 15 對/簇——错绑到大簇时
+        # C(n,2) 会生成上万毒化对，见 feedback.remap_events 法定人数注）
         for cid, flag in state.cluster_flags.items():
             if flag != "impure":
                 continue
             ms = [m for m in members_of.get(cid, []) if m in pos_of]
+            got = 0
             for i in range(len(ms)):
+                if got >= 15:
+                    break
                 for j in range(i + 1, len(ms)):
+                    if got >= 15:
+                        break
                     put(ms[i], ms[j], "diff", "impure_flag")
+                    got += 1
         # same：確認簇內兩兩（截頂 6 對/簇）
         for cid, char in state.cluster_labels.items():
             ms = [m for m in members_of.get(cid, [])
