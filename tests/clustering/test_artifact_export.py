@@ -119,3 +119,19 @@ def test_render_html_autosave_wiring(synth_book):
     assert "fetch('labels.jsonl')" in page
     assert "localStorage" in page
     assert "save-status" in page
+
+
+def test_export_button_always_visible_with_fallback(synth_book):
+    """导出按钮始终可见；能力不可用时退回「全选日志供复制」。"""
+    page = render_html(build_batch(synth_book, limit=3))
+    assert 'id="dl"' in page and 'id="dl" hidden' not in page
+    assert "selectLog" in page          # 兜底路径存在
+    assert "Ctrl/Cmd+C" in page
+
+
+def test_events_carry_members_for_remap(synth_book):
+    """簇级事件带成员实例 id，重跑聚类后可重绑。"""
+    batch = build_batch(synth_book, limit=3)
+    assert all(e["members"] for e in batch["entries"])
+    page = render_html(batch)
+    assert "data-members=" in page

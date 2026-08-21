@@ -440,19 +440,33 @@ _JS = """
        e.target.classList.contains('other-in')){
       choose(e.target.closest('.card'), e.target.value); }});
   restore();
+
+  // ── 导出：能力可用则存文件，不可用则退回「展开日志并全选」──
+  // 按钮始终可见：之前仅在能力就绪时才显形，能力不可用的视图里
+  // 用户看不到任何导出入口，等于没有兜底。
   var dlBtn = document.getElementById('dl');
+  var dlNs = null;
   if(window.claude && window.claude.use){
-    window.claude.use('downloads').then(function(dl){
-      if(!dl) return;
-      dlBtn.hidden = false;
-      dlBtn.addEventListener('click', function(){
-        var lines = (log.textContent.match(/GUJI-EVENT (.*)/g) || [])
-          .map(function(l){ return l.slice('GUJI-EVENT '.length); })
-          .join('\\n');
-        dl.save({filename: BATCH + '.labels.jsonl', data: lines})
-          .catch(function(){}); });
-    }).catch(function(){});
-  }
+    window.claude.use('downloads').then(function(dl){ dlNs = dl; })
+      .catch(function(){}); }
+  function selectLog(msg){
+    var det = log.closest('details');
+    if(det) det.open = true;
+    log.scrollIntoView({block:'center'});
+    try {
+      var r = document.createRange(); r.selectNodeContents(log);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    } catch(e){}
+    status(msg); }
+  dlBtn.addEventListener('click', function(){
+    var lines = (log.textContent.match(/GUJI-EVENT (.*)/g) || [])
+      .map(function(l){ return l.slice('GUJI-EVENT '.length); }).join('\\n');
+    if(!lines){ status('還沒有審查記錄'); return; }
+    if(!dlNs){ selectLog('此處無法下載：日誌已全選，按 Ctrl/Cmd+C 複製'); return; }
+    dlNs.save({filename: BATCH + '.labels.jsonl', data: lines})
+      .then(function(){ status('已下載 ' + lines.split('\\n').length + ' 條'); })
+      .catch(function(){
+        selectLog('下載被拒絕：日誌已全選，按 Ctrl/Cmd+C 複製'); }); });
 })();
 """
 
@@ -472,7 +486,7 @@ def render_html(batch: dict, title: str | None = None) -> str:
 <button type="button" data-f="all" data-on="1">全部</button>
 <button type="button" data-f="open" data-on="0">未審</button>
 <button type="button" data-f="done" data-on="0">已審</button>
-<button type="button" id="dl" hidden>下載 labels.jsonl</button>
+<button type="button" id="dl">匯出審查記錄</button>
 </header>
 <main class="list" id="list" data-local-filter="all">
 {cards}
@@ -480,7 +494,8 @@ def render_html(batch: dict, title: str | None = None) -> str:
 <footer class="foot">
 <p class="hint">點候選字確認；不在候選中則填「其他字」；拿不準點「存疑」；
 切分或聚類有問題點「問題」行按鈕。每次操作後約 3 秒自動儲存
-（右上角顯示狀態）；若顯示不可用，請點「下載」或複製底部日誌貼回對話。</p>
+（右上角顯示狀態）；若顯示不可用，點「匯出審查記錄」——能下載就存檔，
+不能下載會自動全選日誌，按 Ctrl/Cmd+C 複製貼回對話即可。</p>
 <details><summary>事件日誌（審查記錄，可全選複製）</summary>
 <pre class="log" id="guji-log" data-seq="0" data-batch="{_esc(batch["batch_id"])}"></pre>
 </details>
