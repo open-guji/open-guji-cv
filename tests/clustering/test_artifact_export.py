@@ -153,6 +153,35 @@ def test_publish_uses_inferable_extension_and_type(synth_book):
 def test_save_failure_is_loud(synth_book):
     """保存失效必须显眼并带错误码（上一轮灰色小字导致用户没察觉）。"""
     page = render_html(build_batch(synth_book, limit=3))
-    assert "儲存被拒（" in page          # 错误码进入提示
+    assert "自動儲存失效（" in page      # 错误码进入提示
     assert 'data-bad' in page            # 触发红底样式
     assert '#save-status[data-bad="1"]' in page
+
+
+def test_no_unsettled_promise_can_hang_status(synth_book):
+    """平台 promise 永不落地时必须超时报错，不能停在中间态。
+
+    回归：用户看到「未儲存」卡死——publish 的 promise 悬着，
+    状态机没有任何出口。
+    """
+    page = render_html(build_batch(synth_book, limit=3))
+    assert "withTimeout" in page
+    assert "publish_timeout" not in page      # 由 tag 参数拼出，不硬编码
+    assert "'publish')" in page and "'use')" in page
+
+
+def test_copy_is_primary_path(synth_book):
+    """复制不依赖任何平台能力，且未导出记录要醒目。"""
+    page = render_html(build_batch(synth_book, limit=3))
+    assert 'id="copybar"' in page
+    assert "navigator.clipboard" in page
+    assert "條未匯出" in page
+    assert '#copybar[data-pending="1"]' in page
+
+
+def test_js_has_no_unterminated_string(synth_book):
+    """JS 字面量不得含真换行（Python 三引号里 \n 未转义会写坏脚本）。"""
+    from open_guji_cv.clustering.review.artifact_export import _JS
+    bad = [i for i, line in enumerate(_JS.split("\n"), 1)
+           if (line.count("'") - line.count("\\'")) % 2]
+    assert not bad, f"第 {bad} 行单引号未闭合"
