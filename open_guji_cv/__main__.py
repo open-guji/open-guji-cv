@@ -274,7 +274,8 @@ def cmd_chars(args):
     """M1 字符提取：phase3 网格 → phase4_chars/ 单字图块数据集。"""
     from .clustering.extractor import CharExtractor
 
-    extractor = CharExtractor(padding_ratio=args.padding)
+    extractor = CharExtractor(padding_ratio=args.padding,
+                              strategy=args.strategy)
     source_dir = Path(args.input_dir) if args.input_dir else None
     name_filter = None
     if getattr(args, "range", None):
@@ -474,6 +475,22 @@ def cmd_update(args):
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
+def cmd_seg_bench(args):
+    """格内净化 benchmark：各归属算法在同一批样本上的可复现对比。"""
+    import json as _json
+    from .clustering.seg_eval import STRATEGIES, format_report, run_dataset
+
+    names = args.strategies.split(",") if args.strategies else None
+    strategies = ({k: STRATEGIES[k] for k in names} if names else None)
+    report = run_dataset(Path(args.samples), strategies)
+    print(f"样本 {report['n_cases']} 组")
+    print(format_report(report))
+    if args.out:
+        Path(args.out).write_text(_json.dumps(report, ensure_ascii=False,
+                                              indent=2), encoding="utf-8")
+        print(f"→ {args.out}")
+
+
 def cmd_bench(args):
     """合成数据集 benchmark → benchmarks/results/ JSON 报告。"""
     from .clustering.bench import BENCHES, write_report
@@ -587,6 +604,10 @@ def main():
                    help="页面图目录（默认自动解析 s5_split/s4_deskew/s6_binarize）")
     p.add_argument("--padding", type=float, default=0.08,
                    help="bbox 外扩比例（默认 0.08）")
+    p.add_argument("--strategy", default="component_owner",
+                   choices=("component_owner", "padding_box"),
+                   help="格内墨迹归属算法（默认列级连通体归属；"
+                        "padding_box 为旧的裁框做法，供对照与回滚）")
     p.add_argument("--range", default=None, help="处理范围（如 3-6 或 1,3,5）")
 
     # ── segment（刻本网格切分）───────────────────────────
@@ -705,6 +726,13 @@ def main():
     p.add_argument("--no-calibrate", action="store_true", help="跳过阈值标定")
 
     # ── bench（基准评测）─────────────────────────────────
+    p = sub.add_parser("seg-bench",
+                       help="格内净化 benchmark（多归属算法对比）")
+    p.add_argument("samples", help="样本目录（每个子目录含 strip/gold/case.json）")
+    p.add_argument("--strategies", default=None,
+                   help="逗号分隔的策略名，默认全跑")
+    p.add_argument("--out", default=None, help="报告写入 JSON 路径")
+
     p = sub.add_parser("bench", help="合成数据集 benchmark → JSON 报告")
     p.add_argument("target", choices=["verify", "cluster"], help="评测目标")
     p.add_argument("--n-chars", type=int, default=50, help="字表大小")
@@ -730,6 +758,7 @@ def main():
         "extract":           cmd_extract,
         "run":               cmd_run,
         "segment":           cmd_segment,
+        "seg-bench":         cmd_seg_bench,
         "chars":             cmd_chars,
         "cluster":           cmd_cluster,
         "label":             cmd_label,
