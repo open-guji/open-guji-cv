@@ -209,6 +209,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .top .prog{color:var(--muted);font-variant-numeric:tabular-nums}
 #save-status[data-bad="1"]{color:var(--seal-ink);background:var(--bad);
   padding:.1rem .5rem;border-radius:3px;font-size:.8rem}
+#copybar[data-pending="1"]{background:var(--doubt);color:var(--seal-ink);
+  border-color:var(--doubt);font-weight:600}
 .top button{font:inherit;font-size:.85rem;background:none;color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .6rem;cursor:pointer}
 .top button[data-on="1"]{background:var(--seal);color:var(--seal-ink);border-color:var(--seal)}
@@ -310,29 +312,61 @@ _JS = """
     // 儲存失效必須顯眼：上一輪失敗時提示是灰色小字，用戶沒看見，
     // 整批審查白做。現在紅底常駐並直接說怎麼救。
     disabled = true;
-    status(why + ' — 請點「匯出審查記錄」複製後貼回對話', true); }
+    status(why + ' — 記錄仍在本機，請點上方「複製記錄」貼回對話', true); }
 
-  // ── 持久化：经典 Artifact 无手势自动保存，必须显式 publish ──
-  // 三层：files-publish（labels.txt 数据文件，本视图不重载）
-  //     + localStorage 崩溃备份 + 页面底部可复制日志
+  // ── 持久化 ──
+  // 主路径是**複製**：本機備份 + 一鍵複製，不依赖任何平台能力。
+  // 伺服器保存（files-publish）只是加分项——它已连续两轮静默失效
+  // （首轮根本没调；次轮 .jsonl 副檔名被判 invalid_content），
+  // 因此绝不能再让它当唯一出路，也绝不能让它无声地悬着。
+  var pubTimer = 0, disabled = false;
+
+  function withTimeout(pr, ms, tag){
+    // 平台 promise 若永不落地，状态会永远停在「儲存中…」——上一轮
+    // 用户看到的正是卡住的中间态。一律加超时，失败要能被看见。
+    return new Promise(function(res, rej){
+      var done = false;
+      var t = setTimeout(function(){
+        if(!done){ done = true; rej({code: tag + '_timeout'}); } }, ms);
+      pr.then(function(v){ if(!done){ done=true; clearTimeout(t); res(v); } },
+              function(e){ if(!done){ done=true; clearTimeout(t); rej(e); } });
+    }); }
+
   var nsPromise = (window.claude && window.claude.use)
-    ? window.claude.use('artifact').catch(function(){ return null; })
+    ? withTimeout(window.claude.use('artifact'), 15000, 'use')
+        .catch(function(){ return null; })
     : Promise.resolve(null);
-  var pubTimer = 0, disabled = false, unsaved = false;
+
   function saveLocal(){
     try { localStorage.setItem(LSKEY, log.textContent); } catch(e){} }
+  function exportedCount(){
+    try { return parseInt(localStorage.getItem(LSKEY + ':exported') || '0', 10); }
+    catch(e){ return 0; } }
+  function markExported(n){
+    try { localStorage.setItem(LSKEY + ':exported', String(n)); } catch(e){}
+    refreshBar(); }
+
+  function refreshBar(){
+    var n = lines().length, pending = n - exportedCount();
+    var bar = document.getElementById('copybar');
+    if(!bar) return;
+    bar.textContent = pending > 0
+      ? '複製 ' + n + ' 條記錄（' + pending + ' 條未匯出）'
+      : (n ? '複製 ' + n + ' 條記錄' : '尚無記錄');
+    bar.setAttribute('data-pending', pending > 0 ? '1' : '0'); }
+
   function publishNow(){
+    if(disabled) return;
     nsPromise.then(function(ns){
-      if(!ns){ fail('此視圖未授予儲存能力'); return; }
-      if(disabled) return;
+      if(!ns){ fail('此視圖無自動儲存'); return; }
       status('儲存中…');
-      // 檔名副檔名必須是平台能推斷類型的（.jsonl 不在清單裡，會被判
-      // invalid_content 而整個關掉自動儲存）——用 .txt 並顯式給類型。
-      ns.publish({'labels.txt': {content: log.textContent,
-                                 contentType: 'text/plain'}})
+      // 副檔名必須是平台能推斷類型的（.jsonl 不在清單裡 → invalid_content），
+      // 用 .txt 並顯式給類型，雙保險。
+      withTimeout(ns.publish({'labels.txt': {content: log.textContent,
+                                             contentType: 'text/plain'}}),
+                  20000, 'publish')
         .then(function(){
-          unsaved = false; disabled = false;
-          status('已儲存 ' + lines().length + ' 條');
+          disabled = false; status('已儲存 ' + lines().length + ' 條');
         }).catch(function(e){
           var c = (e && e.code) || 'unknown';
           if(c === 'rate_limited'){
@@ -340,11 +374,11 @@ _JS = """
           else if(c === 'upstream_error'){
             setTimeout(publishNow, 4000 + Math.random() * 3000); }
           else if(c === 'conflict'){ saveLocal(); }
-          else { fail('儲存被拒（' + c + '）'); }
+          else { fail('自動儲存失效（' + c + '）'); }
         });
     }); }
   function schedulePublish(){
-    unsaved = true; status('未儲存…');
+    status('未儲存…');
     clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 3000); }
   window.addEventListener('beforeunload', function(){ saveLocal(); });
 
@@ -360,7 +394,7 @@ _JS = """
     ev.batch = BATCH; ev.seq = seqNext();
     ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
     log.textContent += 'GUJI-EVENT ' + JSON.stringify(ev) + '\\n';
-    saveLocal(); schedulePublish(); progress(); }
+    saveLocal(); schedulePublish(); progress(); refreshBar(); }
 
   // ── 恢复：已发布的 labels.txt + localStorage 备份，按 seq 合并重放 ──
   function cardOf(cid){
@@ -455,15 +489,15 @@ _JS = """
        e.target.classList.contains('other-in')){
       choose(e.target.closest('.card'), e.target.value); }});
   restore();
+  refreshBar();
 
-  // ── 导出：能力可用则存文件，不可用则退回「展开日志并全选」──
-  // 按钮始终可见：之前仅在能力就绪时才显形，能力不可用的视图里
-  // 用户看不到任何导出入口，等于没有兜底。
-  var dlBtn = document.getElementById('dl');
+  // ── 匯出：主路徑，永遠可用 ──
+  // 先試剪貼板，失敗則展開日誌全選讓用戶自行複製；能力可用時
+  // 額外提供存檔。順序刻意如此：複製不依賴任何平台能力。
   var dlNs = null;
   if(window.claude && window.claude.use){
-    window.claude.use('downloads').then(function(dl){ dlNs = dl; })
-      .catch(function(){}); }
+    withTimeout(window.claude.use('downloads'), 15000, 'use')
+      .then(function(dl){ dlNs = dl; }).catch(function(){}); }
   function selectLog(msg){
     var det = log.closest('details');
     if(det) det.open = true;
@@ -473,13 +507,27 @@ _JS = """
       var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     } catch(e){}
     status(msg); }
-  dlBtn.addEventListener('click', function(){
-    var lines = (log.textContent.match(/GUJI-EVENT (.*)/g) || [])
-      .map(function(l){ return l.slice('GUJI-EVENT '.length); }).join('\\n');
-    if(!lines){ status('還沒有審查記錄'); return; }
+  function payload(){
+    return (log.textContent.match(/GUJI-EVENT (.*)/g) || [])
+      .map(function(l){ return l.slice('GUJI-EVENT '.length); }).join('\\n'); }
+  document.getElementById('copybar').addEventListener('click', function(){
+    var text = payload();
+    if(!text){ status('還沒有審查記錄'); return; }
+    var n = lines().length;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        markExported(n); status('已複製 ' + n + ' 條，貼回對話即可');
+      }).catch(function(){
+        selectLog('已全選 ' + n + ' 條：按 Ctrl/Cmd+C 複製'); });
+    } else {
+      selectLog('已全選 ' + n + ' 條：按 Ctrl/Cmd+C 複製'); } });
+  document.getElementById('dl').addEventListener('click', function(){
+    var text = payload();
+    if(!text){ status('還沒有審查記錄'); return; }
     if(!dlNs){ selectLog('此處無法下載：日誌已全選，按 Ctrl/Cmd+C 複製'); return; }
-    dlNs.save({filename: BATCH + '.labels.txt', data: lines})
-      .then(function(){ status('已下載 ' + lines.split('\\n').length + ' 條'); })
+    dlNs.save({filename: BATCH + '.labels.txt', data: text})
+      .then(function(){ markExported(lines().length);
+                        status('已下載 ' + lines().length + ' 條'); })
       .catch(function(){
         selectLog('下載被拒絕：日誌已全選，按 Ctrl/Cmd+C 複製'); }); });
 })();
@@ -501,7 +549,8 @@ def render_html(batch: dict, title: str | None = None) -> str:
 <button type="button" data-f="all" data-on="1">全部</button>
 <button type="button" data-f="open" data-on="0">未審</button>
 <button type="button" data-f="done" data-on="0">已審</button>
-<button type="button" id="dl">匯出審查記錄</button>
+<button type="button" id="copybar" data-pending="0">尚無記錄</button>
+<button type="button" id="dl">下載存檔</button>
 </header>
 <main class="list" id="list" data-local-filter="all">
 {cards}
@@ -509,8 +558,8 @@ def render_html(batch: dict, title: str | None = None) -> str:
 <footer class="foot">
 <p class="hint">點候選字確認；不在候選中則填「其他字」；拿不準點「存疑」；
 切分或聚類有問題點「問題」行按鈕。每次操作後約 3 秒自動儲存
-（右上角顯示狀態）；若顯示不可用，點「匯出審查記錄」——能下載就存檔，
-不能下載會自動全選日誌，按 Ctrl/Cmd+C 複製貼回對話即可。</p>
+記錄即時存在本機，關頁重開會自動恢復。<b>審完請點頂部「複製記錄」並貼回對話</b>
+——這條路徑不依賴任何平台功能，永遠有效；自動儲存成功與否只影響方便程度。</p>
 <details><summary>事件日誌（審查記錄，可全選複製）</summary>
 <pre class="log" id="guji-log" data-seq="0" data-batch="{_esc(batch["batch_id"])}"></pre>
 </details>
