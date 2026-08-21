@@ -73,28 +73,21 @@ def pick_file(meta: dict, prefer: str) -> dict | None:
 
 
 def download(url: str, dest: Path, expect_size: int, retries: int = 3) -> None:
+    """curl 下载（-L 跟随 IA 302 到存储节点，-C - 断点续传）。
+
+    urllib 经代理跟随跨主机 302 时会 Connection reset（且无 UA 易被
+    IA 掐断）；环境里 curl 对代理/CA 的配置最完善，直接复用。"""
+    import subprocess
     tmp = dest.with_suffix(dest.suffix + ".part")
-    for k in range(retries):
-        try:
-            pos = tmp.stat().st_size if tmp.exists() else 0
-            if pos >= expect_size > 0:
-                break
-            req = urllib.request.Request(url)
-            if pos:
-                req.add_header("Range", f"bytes={pos}-")
-            with urllib.request.urlopen(req, timeout=120) as r, \
-                    open(tmp, "ab" if pos else "wb") as f:
-                while True:
-                    chunk = r.read(1 << 20)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            break
-        except Exception as e:
-            print(f"    重试 {k + 1}/{retries}: {e}")
-            time.sleep(10 * (k + 1))
-    else:
-        raise RuntimeError(f"下载失败: {url}")
+    cmd = ["curl", "-sS", "-L", "-C", "-", "--retry", str(retries),
+           "--retry-delay", "5", "-m", "1800",
+           "-A", "open-guji-cv/1.0 (batch scan fetch; contact via github)",
+           "-o", str(tmp), url]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"curl 失败({r.returncode}): {r.stderr.strip()[:200]}")
+    if expect_size and tmp.stat().st_size != expect_size:
+        raise RuntimeError(f"大小不符: {tmp.stat().st_size} != {expect_size}")
     tmp.rename(dest)
 
 
