@@ -62,6 +62,10 @@
 </header>
 <main>
   <aside id="queue-panel">
+    <select id="sort" style="width:100%;padding:6px 12px;border:none;border-bottom:1px solid var(--line);background:#faf7f0">
+      <option value="gain">按预期收益（先审大簇）</option>
+      <option value="low_conf">按置信度（先审最没把握的）</option>
+    </select>
     <select id="filter">
       <option value="">全部原因</option>
       <option value="cluster_inconsistent">簇内不一致（优先）</option>
@@ -106,16 +110,19 @@ async function loadSummary() {
 
 async function loadQueue() {
   const reason = $("#filter").value;
-  const data = await api("/api/queue?limit=100" + (reason ? "&reason=" + reason : ""));
+  const sort = $("#sort").value;
+  const data = await api("/api/queue?limit=100&sort=" + sort +
+                         (reason ? "&reason=" + reason : ""));
   const box = $("#queue");
   box.innerHTML = "";
   for (const e of data.queue) {
     const div = document.createElement("div");
     div.className = "item" + (current && current.cluster_id === e.cluster_id ? " active" : "");
     const cand = e.candidates && e.candidates[0] ? e.candidates[0].char : (e.best || "?");
+    const conf = e.top_p ? ` <span style="color:#999">${(e.top_p*100).toFixed(0)}%</span>` : "";
     div.innerHTML = `<span class="gain">${e.expected_gain}</span>` +
       `<b style="font-size:18px">${esc(cand)}</b> ` +
-      `<span>${esc(e.cluster_id)} · ${e.size} 例</span>` +
+      `<span>${esc(e.cluster_id)} · ${e.size} 例${conf}</span>` +
       `<div class="reasons">${e.reasons.map(esc).join(" · ")}</div>`;
     div.onclick = () => openCluster(e.cluster_id);
     box.appendChild(div);
@@ -183,17 +190,41 @@ function toggleTile(id) {
   render();
 }
 
-async function showContext(ev, id) {
-  ev.preventDefault();
-  const ctx = await api("/api/context/" + encodeURIComponent(id));
-  const strip = ctx.neighbors.map(n =>
-    `<div class="c ${n.is_target ? "target" : ""}">` +
-    `<img src="/img/patch/${encodeURIComponent(n.id)}">` +
-    `<div>${esc(n.best || "·")}</div></div>`).join("");
+let ctxId = null;
+async function showContext(ev, id, mode) {
+  if (ev) ev.preventDefault();
+  ctxId = id;
+  mode = mode || "compact";
+  const ctx = await api("/api/context/" + encodeURIComponent(id) +
+                        "?mode=" + mode);
   const box = $("#ctx");
   box.style.display = "block";
-  box.innerHTML = `<b>${esc(id)}</b>（${esc(ctx.page)} 第 ${ctx.col} 列，上下文自上而下）` +
-    `<div class="strip">${strip}</div>`;
+  const tabs = `<span style="float:right">
+    <button onclick="showContext(null,'${esc(id)}','compact')"
+      ${mode==="compact"?"class='primary'":""}>简略±3字</button>
+    <button onclick="showContext(null,'${esc(id)}','full')"
+      ${mode==="full"?"class='primary'":""}>完整±3列</button></span>`;
+  if (mode === "full") {
+    // 竖排阅读顺序：列号小=右。从右往左排布各列，列内自上而下
+    const colsHtml = ctx.columns.slice().reverse().map(c => {
+      const cells = c.chars.map(n =>
+        `<div class="c ${n.is_target ? "target" : ""}" title="${esc(n.id)}">` +
+        `<img src="/img/patch/${encodeURIComponent(n.id)}">` +
+        `<div>${esc(n.best || "·")}</div></div>`).join("");
+      return `<div style="display:flex;flex-direction:column;gap:2px;` +
+        `padding:0 3px;${c.is_target_col ? "background:#f6edd8;border-radius:6px;" : ""}">` +
+        `<small style="text-align:center;color:#999">列${c.col}</small>${cells}</div>`;
+    }).join("");
+    box.innerHTML = tabs + `<b>${esc(id)}</b>（${esc(ctx.page)}，完整上下文，右→左）` +
+      `<div style="display:flex;gap:4px;overflow-x:auto;margin-top:6px">${colsHtml}</div>`;
+  } else {
+    const strip = ctx.neighbors.map(n =>
+      `<div class="c ${n.is_target ? "target" : ""}">` +
+      `<img src="/img/patch/${encodeURIComponent(n.id)}">` +
+      `<div>${esc(n.best || "·")}</div></div>`).join("");
+    box.innerHTML = tabs + `<b>${esc(id)}</b>（${esc(ctx.page)} 第 ${ctx.col} 列，自上而下共 ${ctx.neighbors.length} 字）` +
+      `<div class="strip">${strip}</div>`;
+  }
 }
 
 async function post(event, msg) {
@@ -230,6 +261,7 @@ function mergeWith(other) {
 }
 
 $("#filter").onchange = loadQueue;
+$("#sort").onchange = loadQueue;
 loadSummary(); loadQueue();
 </script>
 </body>

@@ -24,7 +24,8 @@ from .extractor import CharInstance, load_index
 from .variants import VariantMap
 
 # 各来源的融合权重（可靠性先验）
-SOURCE_WEIGHTS = {"glyph_knn": 3.0, "vlm": 2.0, "ocr": 1.5, "prior": 1.0}
+SOURCE_WEIGHTS = {"glyph_knn": 3.0, "vlm": 2.0, "ocr": 1.5,
+                  "prior": 1.0, "tess": 0.5}
 
 
 @dataclass
@@ -329,73 +330,98 @@ class CandidateGenerator:
 
 
 class RapidOcrSource(CandidateSource):
-    """RapidOCR（PP-OCRv4 ONNX）单字识别。
+    """RapidOCR（PP-OCRv4 ONNX）单字识别，**CTC top-k** 输出。
 
-    模型随 pip 包分发、无需联网下载，是无 GPU/无模型源环境下
-    OcrSource 的等价替代；识别的是同一套 PP-OCR 权重。
+    模型随 pip 包分发、无需联网下载。不走封装的 top-1 接口，而是直接
+    读 rec 模型的 CTC softmax（T×C 概率矩阵），取主导时间步的 top-k
+    ——设计文档 M4 的 "PaddleTopK" 方案。黄金集实测（book9, n=434）：
+    top-1 85.2% → top-5+s2t 扩展召回 94.0%，为上下文修正提供了
+    "正确答案在候选里"的前提。
 
-    top-k 通过**增强投票**获得（设计文档 M4 的回退方案）：对图块做
-    多种轻微变换分别识别，按加权频次汇总，天然反映识别稳定性。
-
-    PP-OCR 是简体中文模型，对繁体刻本有系统性简体偏差（内/检/谕/则…），
-    故默认开启 s2t：简体输出扩展为对应繁体候选（见 traditional_variants）。
+    PP-OCR 是简体中文模型（字典 6625 字，无繁体扩展区），对繁体刻本
+    有系统性简体偏差，故默认开启 s2t 扩展（见 traditional_candidates）。
     """
 
     name = "ocr"
 
-    # 古籍单字识别的常见噪声：标点、拉丁字母数字（"一"→"1" 之类）
-    _NOISE = set(" \t　“”‘’\"'`.,，。、·;；:：!！?？()（）[]【】{}<>《》-—_=+*/\\|~^$#@%&")
-
-    def __init__(self, scale: float = 3.0, votes: int = 3, s2t: bool = True):
+    def __init__(self, scale: float = 3.0, s2t: bool = True, topk: int = 5):
         self._engine = None
         self.scale = scale
-        self.votes = votes
-        self.s2t = s2t     # 简体输出 → 繁体候选（刻本必为繁体）
+        self.s2t = s2t
+        self.topk = topk
 
     def _ensure(self):
         if self._engine is None:
             from rapidocr_onnxruntime import RapidOCR
             self._engine = RapidOCR()
 
-    @classmethod
-    def _clean(cls, text: str) -> str:
-        """取首个 CJK 字符（丢弃标点/字母数字噪声）。"""
-        for ch in text:
-            if ch in cls._NOISE or ch.isascii():
-                continue
-            return ch
-        return ""
-
-    def _variants(self, patch: np.ndarray):
-        """增强变体：原图 + 轻微缩放/平移，用于投票。"""
+    def rec_topk(self, patch: np.ndarray) -> list[tuple[str, float]]:
+        """单字图块 → CTC 主导时间步的 top-k (char, prob)。"""
+        rec = self._engine.text_rec
         img = patch
         if img.ndim == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        big = cv2.resize(img, None, fx=self.scale, fy=self.scale,
+        img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
                          interpolation=cv2.INTER_CUBIC)
-        yield big
-        if self.votes > 1:
-            h, w = big.shape[:2]
-            pad = int(min(h, w) * 0.08)
-            yield cv2.copyMakeBorder(big, pad, pad, pad, pad,
-                                     cv2.BORDER_CONSTANT, value=(255, 255, 255))
-        if self.votes > 2:
-            yield cv2.resize(big, None, fx=0.8, fy=0.8,
-                             interpolation=cv2.INTER_AREA)
+        _, im_h, im_w = rec.rec_image_shape[:3]
+        norm = rec.resize_norm_img(img, im_w / im_h)
+        preds = rec.session(norm[None].astype(np.float32))[0][0]   # (T, C)
+        chars = rec.postprocess_op.character                        # [0]=blank
+        non_blank = preds[:, 1:]
+        t = int(np.unravel_index(np.argmax(non_blank), non_blank.shape)[0])
+        order = np.argsort(-preds[t])
+        out: list[tuple[str, float]] = []
+        for i in order:
+            if i == 0:            # blank
+                continue
+            ch = chars[i] if i < len(chars) else ""
+            if ch and not ch.isascii():
+                out.append((ch, float(preds[t][i])))
+            if len(out) >= self.topk:
+                break
+        return out
 
     def propose(self, rep_patches, members) -> list[Proposal]:
         self._ensure()
         votes: dict[str, float] = {}
         for patch in rep_patches:
-            for img in self._variants(patch):
-                res, _ = self._engine(img, use_det=False, use_cls=False,
-                                      use_rec=True)
-                if not res:
-                    continue
-                ch = self._clean(res[0][0])
-                if ch:
-                    votes[ch] = votes.get(ch, 0.0) + float(res[0][1])
-        return props_from_votes(votes, self.name, self.s2t)
+            for ch, p in self.rec_topk(patch):
+                votes[ch] = votes.get(ch, 0.0) + p
+        return props_from_votes(votes, self.name, self.s2t,
+                                top_k=self.topk)
+
+
+class TesseractSource(CandidateSource):
+    """Tesseract 5 chi_tra 补充候选源（低权重兜底）。
+
+    黄金集实测 top-1 仅 52.8%，但错误模式与 PP-OCR 不同：能救回
+    rapidocr 错误中的 8.8%。**只宜作补充候选，绝不平权**
+    （平权投票把整体从 85.2% 拖到 82.0%）——融合权重见 SOURCE_WEIGHTS。
+    """
+
+    name = "tess"
+
+    def __init__(self, lang: str = "chi_tra", scale: float = 3.0):
+        self.lang = lang
+        self.scale = scale
+
+    def propose(self, rep_patches, members) -> list[Proposal]:
+        import pytesseract
+        from PIL import Image
+        votes: dict[str, float] = {}
+        for patch in rep_patches:
+            img = patch
+            if img.ndim == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
+                             interpolation=cv2.INTER_CUBIC)
+            txt = pytesseract.image_to_string(
+                Image.fromarray(img), lang=self.lang,
+                config="--psm 10").strip().replace(" ", "")
+            for ch in txt[:1]:
+                if not ch.isascii():
+                    votes[ch] = votes.get(ch, 0.0) + 1.0
+        return props_from_votes(votes, self.name, s2t=False)
 
 
 class VlmSeedSource(CandidateSource):

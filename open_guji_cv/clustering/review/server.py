@@ -74,12 +74,15 @@ def make_handler(session: ReviewSession):
             if parts == ["queue"]:
                 reason = query.get("reason", [None])[0]
                 limit = int(query.get("limit", ["50"])[0])
+                sort = query.get("sort", ["gain"])[0]
                 return self._send_json(
-                    {"queue": session.queue(reason=reason, limit=limit)})
+                    {"queue": session.queue(reason=reason, limit=limit,
+                                            sort=sort)})
             if len(parts) == 2 and parts[0] == "cluster":
                 return self._send_json(session.cluster_detail(parts[1]))
             if len(parts) == 2 and parts[0] == "context":
-                return self._send_json(session.context(parts[1]))
+                mode = query.get("mode", ["compact"])[0]
+                return self._send_json(session.context(parts[1], mode=mode))
             self._not_found()
 
         def _img(self, parts: list[str]):

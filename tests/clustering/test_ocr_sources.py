@@ -12,15 +12,15 @@ from open_guji_cv.clustering.variants import VariantMap
 CJK_FONT = "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"
 
 
-def test_clean_strips_noise():
-    """OCR 常见噪声：标点、拉丁字母数字 —— 取首个 CJK 字符。"""
-    clean = RapidOcrSource._clean
-    assert clean("書") == "書"
-    assert clean("“臣") == "臣"        # 前置引号
-    assert clean("1") == ""            # "一"被误识为数字 → 丢弃
-    assert clean("a文b") == "文"
-    assert clean("") == ""
-    assert clean("，。") == ""
+def test_rec_topk_filters_ascii_and_blank():
+    """CTC top-k 输出只含 CJK：blank 与 ASCII（数字/标点）被过滤。"""
+    pytest.importorskip("rapidocr_onnxruntime")
+    src = RapidOcrSource()
+    src._ensure()
+    img = np.full((64, 64), 255, np.uint8)   # 空白图也不奔溃
+    out = src.rec_topk(img)
+    assert all(not ch.isascii() for ch, _ in out)
+    assert len(out) <= src.topk
 
 
 def test_rapidocr_recognizes_rendered_char(tmp_path):
@@ -34,7 +34,7 @@ def test_rapidocr_recognizes_rendered_char(tmp_path):
     img = Image.new("L", (96, 96), 255)
     ImageDraw.Draw(img).text((10, 4), "文", fill=0,
                              font=ImageFont.truetype(CJK_FONT, 72))
-    src = RapidOcrSource(votes=1)
+    src = RapidOcrSource()
     props = src.propose([np.asarray(img)], [])
     assert props, "应给出候选"
     assert props[0].char == "文"
@@ -100,13 +100,9 @@ def test_traditional_variants():
 def test_rapidocr_s2t_expansion(monkeypatch):
     """OCR 输出简体时，繁体候选权重高于原简体输出。"""
     pytest.importorskip("opencc")
-    src = RapidOcrSource(s2t=True, votes=1)
-
-    class FakeEngine:
-        def __call__(self, img, **kw):
-            return [["内", 0.9]], None
-
-    src._engine = FakeEngine()
+    src = RapidOcrSource(s2t=True)
+    src._engine = object()   # 跳过真实加载
+    monkeypatch.setattr(src, "rec_topk", lambda patch: [("内", 0.9)])
     props = src.propose([np.zeros((32, 32), np.uint8)], [])
     chars = [p.char for p in props]
     assert chars[0] == "內"                 # 繁体首选
@@ -114,10 +110,29 @@ def test_rapidocr_s2t_expansion(monkeypatch):
     assert props[0].p > props[-1].p
     assert all(p.surface_uncertain for p in props)
 
-    # 关闭时原样输出
-    src2 = RapidOcrSource(s2t=False, votes=1)
-    src2._engine = FakeEngine()
+    src2 = RapidOcrSource(s2t=False)
+    src2._engine = object()
+    monkeypatch.setattr(src2, "rec_topk", lambda patch: [("内", 0.9)])
     assert [p.char for p in src2.propose([np.zeros((32, 32), np.uint8)], [])] == ["内"]
+
+
+def test_rapidocr_ctc_topk_multiple_candidates():
+    """真 top-k：形近字场景应给出多个候选（正确答案进候选列表）。"""
+    pytest.importorskip("rapidocr_onnxruntime")
+    from PIL import Image, ImageDraw, ImageFont
+    import os
+    if not os.path.exists(CJK_FONT):
+        pytest.skip("无 CJK 字体")
+    img = Image.new("L", (96, 96), 255)
+    ImageDraw.Draw(img).text((10, 4), "文", fill=0,
+                             font=ImageFont.truetype(CJK_FONT, 72))
+    src = RapidOcrSource(topk=5)
+    src._ensure()
+    out = src.rec_topk(np.asarray(img))
+    assert out[0][0] == "文"
+    assert len(out) >= 2                     # 不止 top-1
+    ps = [p for _, p in out]
+    assert ps == sorted(ps, reverse=True)    # 概率降序
 
 
 def test_traditional_variants_keeps_self_valid_forms():
