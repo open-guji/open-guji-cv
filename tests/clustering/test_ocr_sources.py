@@ -185,3 +185,18 @@ def test_traditional_candidates_grading():
     wan = dict(tc("万"))
     assert wan["万"] > wan["萬"] > 0.2                # "顧万"可由上下文改判"萬"
     assert abs(sum(wan.values()) - 1.0) < 1e-6
+
+
+def test_residual_simplified_ignores_self_valid_forms():
+    """质量检查判据：只报无歧义简体，不误报一简多繁的自身合法形。
+
+    book9 全书实测教训：用 `s2t(ch) != ch` 判据报出 178 个"残留简体"，
+    人工看图发现是"云/干/里/范/游/于/斗/卷"等古籍本字（子云、干支、
+    里巷、范姓、游覽、于姓、星斗、十二卷）——假警报。
+    """
+    pytest.importorskip("opencc")
+    from open_guji_cv.clustering.candidates import residual_simplified
+    # 古籍本字 + 纯繁体：不该报
+    assert residual_simplified("云干里范游于斗卷萬書之") == {}
+    # 无歧义简体：该报
+    assert residual_simplified("内检群内") == {"内": 2, "检": 1, "群": 1}
