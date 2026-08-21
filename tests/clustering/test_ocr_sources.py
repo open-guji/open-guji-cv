@@ -165,3 +165,23 @@ def test_generator_reports_source_failures(synth_book, capsys):
     assert payload["source_failures"]["broken"] > 0
     out = capsys.readouterr().out
     assert "[错误]" in out and "broken" in out
+
+
+def test_traditional_candidates_grading():
+    """三档分级：非简体原样 / 纯简体转繁 / 自身合法繁体给平级多候选。"""
+    pytest.importorskip("opencc")
+    from open_guji_cv.clustering.candidates import traditional_candidates as tc
+
+    assert tc("書") == [("書", 1.0)]                 # 非简体：原样
+
+    inner = dict(tc("内"))                            # 纯简体：繁体主候选
+    assert inner["內"] > inner["内"]
+    assert abs(sum(inner.values()) - 1.0) < 1e-6
+
+    # 自身即合法繁体：原字仍首选，另一形式作平级候选（不能二元替换）
+    juan = dict(tc("卷"))
+    assert set(juan) == {"卷", "捲"}
+    assert juan["卷"] > juan["捲"] > 0.2              # 两者都在候选中
+    wan = dict(tc("万"))
+    assert wan["万"] > wan["萬"] > 0.2                # "顧万"可由上下文改判"萬"
+    assert abs(sum(wan.values()) - 1.0) < 1e-6
