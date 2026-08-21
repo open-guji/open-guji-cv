@@ -10,3 +10,7 @@ Pillow>=10.0
 # GPU 版请运行 install_gpu.bat 或 install_gpu.sh
 paddlepaddle>=3.0.0b2
 paddleocr>=2.8.0
+
+# 轻量 OCR（可选）：PP-OCRv4 ONNX，模型随包分发，无需联网下载模型
+# 适用于无 GPU 或无法访问 paddle 模型源的环境
+rapidocr-onnxruntime>=1.3

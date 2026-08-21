@@ -332,13 +332,24 @@ def cmd_label(args):
             sources.append(PriorSource())
         elif name == "ocr":
             sources.append(OcrSource())
+        elif name == "rapidocr":
+            from .clustering.candidates import RapidOcrSource
+            sources.append(RapidOcrSource())
+        elif name == "vlm":
+            from .clustering.candidates import VlmSeedSource
+            if not args.vlm_seed:
+                print("来源 vlm 需要 --vlm-seed 指定种子目录")
+                sys.exit(1)
+            sources.append(VlmSeedSource(
+                args.vlm_seed,
+                book_out_dir / "phase5_clusters" / "clusters.json"))
         elif name == "glyph":
             from .clustering.glyph_library import GlyphLibrary
             sources.append(GlyphKnnSource(
                 GlyphLibrary(args.glyph_store),
                 edition_hint=args.edition))
         else:
-            print(f"未知候选来源: {name}（可选: prior,ocr,glyph）")
+            print(f"未知候选来源: {name}（可选: prior,ocr,rapidocr,vlm,glyph）")
             sys.exit(1)
 
     print(f"候选生成（来源: {[s.name for s in sources]}）...")
@@ -518,9 +529,13 @@ def main():
                        help="M4+M5 候选生成 + 上下文排序 → phase6_labels/（需先 cluster）")
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--sources", default="prior",
-                   help="候选来源，逗号分隔：prior,ocr,glyph（默认 prior）")
+                   help="候选来源，逗号分隔：prior,ocr,rapidocr,vlm,glyph（默认 prior）；"
+                        "rapidocr=PP-OCRv4 ONNX，模型随包分发无需下载")
     p.add_argument("--glyph-store", default="glyph_store",
                    help="字形库目录（来源含 glyph 时使用）")
+    p.add_argument("--vlm-seed", default=None,
+                   help="VLM 识别种子目录（来源含 vlm 时使用，"
+                        "含 mapping.json + recognitions.json）")
     p.add_argument("--edition", default=None,
                    help="书版提示 edition_tag（同版书检索优先）")
     p.add_argument("--variants", default=None,
