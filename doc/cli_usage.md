@@ -245,3 +245,29 @@ profile = BookProfile(
 )
 profile.save("my_profile.json")
 ```
+
+---
+
+## chars —— 单字图块提取（格内净化）
+
+```bash
+python -m open_guji_cv chars data/book9/                          # 默认列级连通体归属
+python -m open_guji_cv chars data/book9/ --strategy padding_box    # 旧的裁框做法（对照/回滚）
+```
+
+| `--strategy` | 说明 |
+|--------------|------|
+| `component_owner`（默认）| 列级连通体归属：界行与邻字残余抹白，顶部分离部件（高/卞/示）保留 |
+| `padding_box` | 按格线裁框 + 固定纵向外扩，框内墨迹全收 |
+
+## seg-bench —— 格内净化 benchmark
+
+```bash
+python -m open_guji_cv seg-bench <samples_dir>
+python -m open_guji_cv seg-bench <samples_dir> --strategies padding_box,component_owner --out report.json
+```
+
+样本目录见 `open-guji-dataset/char-segmentation/cells/samples`，
+每个子目录含 `strip.png` / `gold.png` / `case.json`。
+指标：`keep_recall`（本字墨迹保住比例）、`drop_precision`（留下的墨中本字占比），
+外加关键子集 `detached_top`（顶部部件与主体不连通的字）单独报分。
