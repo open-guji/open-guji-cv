@@ -118,6 +118,13 @@ def remap_events(events: list[dict],
             out.append(ev)
             continue
         best = max(votes, key=lambda k: (votes[k], k))
+        # 法定人数：得票成员不足原成员半数 → 事件失效，保留原簇号
+        # （原簇号已不存在，重放时自然无效）。宁可失效也不错绑——
+        # 实测一个 impure 标记曾错绑到 140 人大簇，生成 9742 个
+        # 「同字对」毒化标定金集。
+        if votes[best] < max(2, 0.5 * len(members)):
+            out.append(ev)
+            continue
         if best != cid:
             ev = {**ev, "cluster": best, "remapped_from": cid}
             n_remapped += 1
@@ -312,9 +319,15 @@ def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
             if flag != "impure":
                 continue
             ms = [m for m in cluster_members.get(cid, []) if m in pos_of]
+            per_cluster = 0
             for a_i in range(len(ms)):
+                if per_cluster >= 15:
+                    break
                 for b_i in range(a_i + 1, len(ms)):
+                    if per_cluster >= 15:
+                        break
                     hard_diff.append((pos_of[ms[a_i]], pos_of[ms[b_i]]))
+                    per_cluster += 1
         rng.shuffle(diff_pairs)
         # 难例不参与截断采样：数量少且信息量最高，必须全部进入标定
         diff_pairs = hard_diff + diff_pairs[:max(0, max_pairs - len(hard_diff))]

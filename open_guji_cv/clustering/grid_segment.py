@@ -442,6 +442,40 @@ def refine_boundaries(proj: np.ndarray, offset: float, cell_h: float,
     return refined
 
 
+def _junk_free_ink(cell_gray: np.ndarray) -> float:
+    """格内去「界行竖线段 + 贴边框横线」后的墨量占比（判空用）。
+
+    界行竖线段与版框横线的墨量足以骗过朴素判空（0.05~0.15 ≫ 0.02），
+    batch3 人工反馈 147 例 not_text 大多如此。剔除规则：
+    - 竖直长线（≥0.55 格高）整体剔——字的竖笔不会纵贯半格以上还落单；
+    - 水平长线（≥0.55 格宽）仅当**贴边**（组件 y 中心在格高 22% 以外
+      边带）才剔——版框线贴格顶/格底，「一」的横笔在格中央。
+    实测：真值垃圾 48% 直接判空，用户确认真字/截断半字 0 误杀。"""
+    b = (cell_gray < BINARY_THRESHOLD).astype(np.uint8)
+    h, w = b.shape
+    if h < 6 or w < 6:
+        return float(b.sum()) / max(1, b.size)
+    kv = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(3, int(h * 0.55))))
+    vl = cv2.dilate(cv2.erode(b, kv), kv)
+    # 竖线还须**窄**（≤12% 格宽）：界行 4~8px / 格宽 110px ≈ 5%，
+    # 字的竖笔虽长但更宽且带弯曲——不加宽度条件会误剔理想化直笔
+    nv, labv, statsv, _ = cv2.connectedComponentsWithStats(vl, 8)
+    vl_narrow = np.zeros_like(vl)
+    for k in range(1, nv):
+        if statsv[k][2] <= max(6, 0.12 * w):
+            vl_narrow[labv == k] = 1
+    kh = cv2.getStructuringElement(cv2.MORPH_RECT, (max(3, int(w * 0.55)), 1))
+    hl = cv2.dilate(cv2.erode(b, kh), kh)
+    n, lab, statsh, cent = cv2.connectedComponentsWithStats(hl, 8)
+    hl_edge = np.zeros_like(hl)
+    for k in range(1, n):
+        cy = cent[k][1] / h
+        if (cy < 0.22 or cy > 0.78) and statsh[k][3] <= max(6, 0.15 * h):
+            hl_edge[lab == k] = 1
+    clean = b & (1 - vl_narrow) & (1 - hl_edge)
+    return float(clean.sum()) / b.size
+
+
 def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
                       params: GridParams) -> list[dict]:
     """按给定网格线产出 cells（局部 y 坐标）。"""
@@ -453,8 +487,7 @@ def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
         cells.append({"type": "margin", "y_top": 0.0, "y_bottom": bounds[0]})
     for i in range(n_chars):
         y0, y1 = bounds[i], bounds[i + 1]
-        seg = (col_gray[int(y0):int(y1)] < BINARY_THRESHOLD)
-        ink = float(seg.sum()) / max(1.0, (y1 - y0) * w)
+        ink = _junk_free_ink(col_gray[int(y0):int(y1)])
         if ink < params.empty_ink_ratio:
             cells.append({"type": "empty", "index": i,
                           "y_top": y0, "y_bottom": y1,
@@ -552,7 +585,9 @@ def cells_from_components(col_gray: np.ndarray, page_phase: float,
             idx += 1
         used.add(idx)
         prev = idx
-        cells.append({"type": "char", "index": idx,
+        kind = ("char" if _junk_free_ink(col_gray[int(y0):int(y1)])
+                >= params.empty_ink_ratio else "empty")
+        cells.append({"type": kind, "index": idx,
                       "y_top": y0, "y_bottom": y1,
                       "text": None, "confidence": 0.0})
     for i in range(n_chars):

@@ -111,3 +111,16 @@ def test_impure_flag_feeds_hard_negatives(synth_book, tmp_path):
     summary = run_update(synth_book, tmp_path / "store")
     n = big["size"]
     assert summary["hard_diff_pairs"] == n * (n - 1) // 2
+
+
+def test_remap_requires_quorum():
+    """重绑法定人数：得票不足原成员半数 → 保留原簇号（事件失效）。"""
+    from open_guji_cv.clustering.feedback import remap_events
+    ev = {"op": "flag", "cluster": "cOLD", "flag": "impure",
+          "members": ["a", "b", "c", "d", "e", "f"]}
+    # 6 成员只有 2 个还在，且都落在大簇 cBIG → 不足半数，拒绑
+    out, n = remap_events([ev], {"a": "cBIG", "b": "cBIG"})
+    assert n == 0 and out[0]["cluster"] == "cOLD"
+    # 4/6 落在同簇 → 过半，重绑
+    out, n = remap_events([ev], {m: "cNEW" for m in "abcd"})
+    assert n == 1 and out[0]["cluster"] == "cNEW"
