@@ -23,6 +23,7 @@ from .ids import make_id
 
 PADDING_RATIO = 0.08
 MIN_INK_RATIO = 0.01
+RULE_LINE_FRAC = 0.6       # 贯穿格位的线状墨迹占比超此 → 标 rule_like（仅提示）
 
 # 灰度源目录解析顺序：越靠前的越接近原始灰度（信息保留最多）。
 # 注意：只有与 Phase 2/3 检测坐标系同尺寸的步骤才能入选
@@ -56,6 +57,33 @@ class CharInstance:
         d = json.loads(line)
         d["bbox"] = tuple(d["bbox"])
         return cls(**d)
+
+
+def _rule_line_fraction(gray: np.ndarray) -> float:
+    """墨迹中「贯穿整个格位的细直线」所占比例。
+
+    界行竖线与版框横线渗入空格位时，连通体会从格位一端通到另一端且
+    在另一维度极细；正常字符受字距约束，笔画不会贯穿整格。图块存的是
+    完整格位（含 8% 纵向外扩），几何信息完好——判定必须在这里做，
+    归一化之后细线被各向异性拉伸，证据就没了。
+    """
+    if gray.size == 0:
+        return 0.0
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 0, 255,
+                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    total = int(np.count_nonzero(binary))
+    if total < 10:
+        return 0.0
+    h, w = binary.shape
+    n, _, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    line_area = 0
+    for x, y, cw, ch, area in stats[1:]:
+        if (ch >= 0.95 * h and cw <= 0.25 * w) or \
+           (cw >= 0.95 * w and ch <= 0.20 * h):
+            line_area += int(area)
+    return line_area / total
 
 
 def _patch_ink_ratio(gray: np.ndarray) -> float:
@@ -124,6 +152,11 @@ class CharExtractor:
                 flags: list[str] = []
                 if ink < self.min_ink_ratio:
                     flags.append("suspect_empty")
+                if _rule_line_fraction(patch) >= RULE_LINE_FRAC:
+                    # 格内墨迹主要是贯穿格位的直线（界行/版框渗入空格位）。
+                    # 只作提示不作删除：真「一」的横笔也可能贯穿格宽，
+                    # 实测二者分布重叠，阈值须由人工审查反馈标定。
+                    flags.append("rule_like")
                 # 切分异常提示：字块长宽比离谱（粘连/切半）
                 aspect = cell_h / max(col_w, 1e-6)
                 if aspect > 1.8 or aspect < 0.3:

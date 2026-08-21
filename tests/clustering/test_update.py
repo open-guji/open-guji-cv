@@ -87,3 +87,27 @@ def test_bench_reports(tmp_path):
     path = write_report(rc, tmp_path / "results")
     assert path.exists()
     assert json.loads(path.read_text(encoding="utf-8"))["module"] == "cluster"
+
+
+def test_impure_flag_feeds_hard_negatives(synth_book, tmp_path):
+    """impure 簇标记 → 簇内成员对进入标定的难负样本（不被采样截断）。"""
+    import json
+    from open_guji_cv.clustering.feedback import append_event, run_update
+    from open_guji_cv.clustering.review.state import ReviewSession
+
+    s = ReviewSession(synth_book)
+    multi = [c for c in s.clusters.values() if c["size"] >= 2]
+    if not multi:
+        pytest.skip("合成书没有多成员簇")
+    big = max(multi, key=lambda c: c["size"])
+    labels = s.labels_path
+    # 至少要有确认标签，标定才会启动（same 对来源）
+    for cid, ch in [(c["cluster_id"], ch) for c, ch in
+                    zip(sorted(s.clusters.values(),
+                               key=lambda c: -c["size"])[:3], "甲乙丙")]:
+        append_event(labels, {"op": "confirm", "cluster": cid, "char": ch})
+    append_event(labels, {"op": "flag", "cluster": big["cluster_id"],
+                          "flag": "impure"})
+    summary = run_update(synth_book, tmp_path / "store")
+    n = big["size"]
+    assert summary["hard_diff_pairs"] == n * (n - 1) // 2

@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..extractor import CharInstance, load_index
-from ..feedback import LabelState, append_event, load_events, replay_events
+from ..feedback import (LabelState, append_event, load_events, remap_events,
+                        replay_events)
 
 VALID_OPS = {"confirm", "relabel", "split", "merge", "mark", "flag"}
 
@@ -67,7 +68,13 @@ class ReviewSession:
             with open(suspects_path, encoding="utf-8") as f:
                 self.suspects = json.load(f)["suspects"]
 
-        self.state: LabelState = replay_events(load_events(self.labels_path))
+        self.state, self.n_remapped = self._replay()
+
+    def _replay(self) -> tuple[LabelState, int]:
+        """重放事件流；簇 id 先按成员实例重绑到当前聚类。"""
+        events, n = remap_events(load_events(self.labels_path),
+                                 self.cluster_of)
+        return replay_events(events), n
 
     # ── 事件 ─────────────────────────────────────────────
 
@@ -92,8 +99,14 @@ class ReviewSession:
 
         full = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 **event}
+        # 簇级事件带上当时的成员实例 id：簇 id 会随重跑聚类变号，
+        # 实例 id 永久稳定，重绑时靠它把标注迁移到新簇（见 remap_events）
+        if op in ("confirm", "split", "flag") and "members" not in full:
+            c = self.clusters.get(full.get("cluster"))
+            if c:
+                full["members"] = list(c["members"])
         append_event(self.labels_path, full)
-        self.state = replay_events(load_events(self.labels_path))
+        self.state, self.n_remapped = self._replay()
         return full
 
     # ── API 数据组装 ─────────────────────────────────────

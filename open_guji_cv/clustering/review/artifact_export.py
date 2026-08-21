@@ -33,7 +33,7 @@ import json
 import re
 from pathlib import Path
 
-from ..feedback import load_events
+from ..feedback import load_events, remap_events
 from .state import ReviewSession
 
 EVENT_RE = re.compile(r"GUJI-EVENT\s+(\{.*\})")
@@ -72,6 +72,8 @@ def build_batch(book_out_dir: str | Path, limit: int = 400,
             "cluster_id": cid,
             "size": detail["size"],
             "rep": rep,
+            # 成员实例 id：簇 id 会随重跑聚类变号，回收时靠成员重绑
+            "members": [m["id"] for m in members],
             "candidates": (detail["candidates"] or [])[:max_candidates],
             "patches": patches,
             "n_more": max(0, len(members) - max_members),
@@ -156,7 +158,8 @@ def _render_card(entry: dict) -> str:
         f'title="{_esc(p["id"])}">' for p in entry["patches"])
     more = (f'<span class="more">+{entry["n_more"]}</span>'
             if entry["n_more"] else "")
-    return f"""<article class="card" data-cid="{cid}" data-state="open">
+    members = ",".join(entry.get("members", []))
+    return f"""<article class="card" data-cid="{cid}" data-members="{_esc(members)}" data-state="open">
 <header><span class="cid">{cid}</span><span class="sz">×{entry["size"]}</span>
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button>
@@ -334,6 +337,11 @@ _JS = """
     var n = parseInt(log.getAttribute('data-seq') || '0', 10) + 1;
     log.setAttribute('data-seq', String(n)); return n; }
   function emit(ev){
+    if(ev.cluster && !ev.members){
+      var card = cardOf(ev.cluster);
+      var ms = card && card.getAttribute('data-members');
+      if(ms) ev.members = ms.split(',');   // 簇 id 会变，成员实例 id 不变
+    }
     ev.batch = BATCH; ev.seq = seqNext();
     ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
     log.textContent += 'GUJI-EVENT ' + JSON.stringify(ev) + '\\n';
@@ -539,7 +547,10 @@ def ingest_events(book_out_dir: str | Path, text: str) -> dict:
     existing = {(e.get("batch"), e.get("seq"))
                 for e in load_events(session.labels_path)
                 if e.get("batch") is not None and e.get("seq") is not None}
-    parsed = extract_events(text)
+    # 批次页面导出后若重跑过聚类，簇 id 已变号——按事件携带的成员实例
+    # 重绑到当前聚类，否则校验会全部判为「未知簇」
+    parsed, n_remapped = remap_events(extract_events(text),
+                                      session.cluster_of)
     new = dup = 0
     errors: list[str] = []
     for ev in parsed:
@@ -555,5 +566,5 @@ def ingest_events(book_out_dir: str | Path, text: str) -> dict:
             new += 1
         except (ValueError, KeyError) as e:
             errors.append(f"{ev.get('op')}/{ev.get('cluster') or ev.get('instance')}: {e}")
-    return {"parsed": len(parsed), "new": new,
-            "duplicate": dup, "errors": errors}
+    return {"parsed": len(parsed), "new": new, "duplicate": dup,
+            "remapped": n_remapped, "errors": errors}

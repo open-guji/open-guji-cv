@@ -29,6 +29,7 @@ BINARY_THRESHOLD = 128
 EMPTY_INK_RATIO = 0.02     # 格内墨迹覆盖率低于此 → empty
 MIN_COL_WIDTH_RATIO = 0.5  # 列宽低于中位列宽的此比例 → 非文字列（版心/界行缝），跳过
 SEARCH_RATIO = 0.3         # 逐线微调搜索半径（× 格高）
+CELL_H_TOL = 0.10          # 页格高偏离全书共识超此比例 → 判定锁错，强制重拟
 SCALES = np.linspace(0.96, 1.04, 9)
 
 
@@ -179,7 +180,8 @@ def page_column_projection(gray: np.ndarray, line_frac: float = 0.3,
 
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
                   full_widths: list[float] | None = None,
-                  cell_step: float = 0.5, phase_step: int = 2
+                  cell_step: float = 0.5, phase_step: int = 2,
+                  cell_h_fixed: float | None = None
                   ) -> tuple[float, float]:
     """页级刚性网格拟合：在全部文字列的聚合投影上搜索 (相位, 格高)。
 
@@ -187,26 +189,40 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
     占格位但无墨——因此网格必须锚定栏格证据（聚合投影的周期结构），
     而非单列的内容范围（抬头空格列按内容锚定会整体错位一格）。
 
+    Args:
+        cell_h_fixed: 给定时格高不再搜索（书级共识值），只搜相位。
+            自由拟合的格高基准 `base=(bottom-top)/n_chars` 假设列是满的，
+            稀疏页（目录、职名）与谐波锁定页会得到 1/2、1/3 的伪解，
+            ±8% 的搜索窗永远跳不出去——格高只能由全书刚性先验给定。
+
     Returns:
         (phase, cell_h): 网格首线位置与固定格高。
     """
     page = np.sum(projs, axis=0)
     L = len(page)
     if page.sum() < 1:
-        return 0.0, L / n_chars
+        return 0.0, float(cell_h_fixed or L / n_chars)
     fw = float(sum(full_widths)) if full_widths else None
     top, bottom = content_range(page, min_run=0.25 * L / n_chars,
                                 max_fill=0.9 * fw if fw else None)
-    base = (bottom - top) / n_chars
+    base = float(cell_h_fixed) if cell_h_fixed else (bottom - top) / n_chars
     smooth = _smooth(page, base)
+
+    if cell_h_fixed:
+        cell_hs = [float(cell_h_fixed)]
+    else:
+        cell_hs = list(np.arange(base * 0.92, base * 1.08, cell_step))
 
     best = (float(top), base)
     best_cost = float("inf")
-    for cell_h in np.arange(base * 0.92, base * 1.08, cell_step):
+    for cell_h in cell_hs:
         span = cell_h * n_chars
-        # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头
+        # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头。
+        # 格高固定时不再按 L-span 收窄上界——共识格高下整版可能略高于
+        # 裁切后的页面（末格出界由 cells_from_bounds 裁掉）。
         p_lo = max(0.0, top - 1.2 * cell_h)
-        p_hi = min(top + 1.2 * cell_h, max(p_lo, L - span))
+        p_hi = top + 1.2 * cell_h if cell_h_fixed \
+            else min(top + 1.2 * cell_h, max(p_lo, L - span))
         for phase in np.arange(p_lo, p_hi + phase_step, phase_step):
             cost = _grid_cost(smooth, phase, cell_h, n_chars)
             if cost < best_cost:
@@ -403,10 +419,15 @@ class GridSegmenter:
     # ── 纯函数核心 ────────────────────────────────────────
 
     def segment_page(self, image: np.ndarray, layout: dict,
-                     grid_override: dict | None = None) -> dict:
+                     grid_override: dict | None = None,
+                     cell_h_prior: float | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
-        相位以本页 inner_frame 为基准换算）——弱信号页专用。"""
+        相位以本页 inner_frame 为基准换算）——弱信号页专用。
+
+        cell_h_prior 给定时只固定行格高（书级共识），相位仍按本页投影
+        重搜——格高锁错（谐波/稀疏页）的页专用：这类页列网格正常，
+        相位也是本页自身的，不该跟随书级中位。"""
         if image.ndim == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         h, w = image.shape[:2]
@@ -517,7 +538,8 @@ class GridSegmenter:
             else:
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
-                    full_widths=[crop.shape[1] for _, crop, _ in text_cols])
+                    full_widths=[crop.shape[1] for _, crop, _ in text_cols],
+                    cell_h_fixed=cell_h_prior)
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
@@ -574,7 +596,38 @@ class GridSegmenter:
             pages.append((stem, img_path, layout))   # 不缓存像素，弱页重读
             results[stem] = self.segment_page(image, layout)
 
-        # ── Pass 2: 书级共享网格校正弱信号页 ──
+        # ── Pass 2a: 书级格高共识，校正格高锁错的页 ──
+        # 刻本全书同版：格高是**物理刚性常量**，一页不可能是别页的 1/2。
+        # 自由拟合的基准 base=(bottom-top)/n_chars 假设列满，稀疏页
+        # （目录/职名）与密排页的谐波锁定都会落到 1/2、1/3 的伪解上，
+        # ±8% 搜索窗跳不出来。这类页列网格与墨量都正常，现有"弱页"
+        # 判据（低墨量 / rule_in_col 高）完全抓不到——必须用格高本身判。
+        n_row_fix = 0
+        cell_hs = [r["grid"]["cell_h"] for r in results.values()
+                   if r.get("grid", {}).get("cell_h")]
+        if len(cell_hs) >= 5:
+            consensus_h = float(np.median(cell_hs))
+            off_grid = [s for s, r in results.items()
+                        if r.get("grid", {}).get("cell_h")
+                        and abs(r["grid"]["cell_h"] - consensus_h)
+                        > CELL_H_TOL * consensus_h]
+            for stem, img_path, layout in pages:
+                if stem not in off_grid:
+                    continue
+                image = imread(str(img_path))
+                if image is None:
+                    continue
+                # 格高偏离共识本身即失败证据（物理上不可能），无需择优
+                # 门控——rule_in_col 度量的是列相位，对行格高无判别力，
+                # 且这些页它已经是 0，任何门控都会一律拒绝校正。
+                results[stem] = self.segment_page(
+                    image, layout, cell_h_prior=consensus_h)
+                n_row_fix += 1
+            if n_row_fix:
+                print(f"  书级格高共识 {consensus_h:.1f}px，"
+                      f"校正格高锁错页 {n_row_fix} 张")
+
+        # ── Pass 2b: 书级共享网格校正弱信号页 ──
         # 刻本整书同版式：列距/字高/相位（相对边框）全书一致。
         # 空白余纸页、稀疏职名页自身拟合不可靠（相位骑到界行/乱套），
         # 用**强信号页的中位参数**重建其网格。
@@ -636,7 +689,8 @@ class GridSegmenter:
                            "empty_ink_ratio": self.params.empty_ink_ratio,
                            "search_ratio": self.params.search_ratio},
                 "stats": {"pages": n_pages, "chars": n_chars,
-                          "empty": n_empty, "weak_pages": n_weak}}
+                          "empty": n_empty, "weak_pages": n_weak,
+                          "row_fixed_pages": n_row_fix}}
         with open(out_dir / "grid_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         return meta

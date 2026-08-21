@@ -86,6 +86,45 @@ def replay_events(events: list[dict]) -> LabelState:
     return state
 
 
+def remap_events(events: list[dict],
+                 cluster_of: dict[str, str]) -> tuple[list[dict], int]:
+    """把事件里的簇 id 重绑到当前聚类。
+
+    簇 id 由聚类过程生成，重跑聚类（改阈值、修切分）后会整体变号，
+    而实例 id（book:page:col:idx）永久稳定。因此簇级事件写入时会带上
+    当时的成员实例列表，这里按成员在当前聚类中的归属投票取多数簇。
+
+    Args:
+        cluster_of: instance_id → cluster_id（当前聚类）。
+
+    Returns:
+        (重绑后的事件流, 被重绑的事件数)。成员信息缺失或全部成员都已
+        不在当前聚类中的事件原样保留（由调用方的校验决定其去留）。
+    """
+    out: list[dict] = []
+    n_remapped = 0
+    for ev in events:
+        cid = ev.get("cluster")
+        members = ev.get("members")
+        if not cid or not members:
+            out.append(ev)
+            continue
+        votes: dict[str, int] = {}
+        for m in members:
+            new = cluster_of.get(m)
+            if new:
+                votes[new] = votes.get(new, 0) + 1
+        if not votes:
+            out.append(ev)
+            continue
+        best = max(votes, key=lambda k: (votes[k], k))
+        if best != cid:
+            ev = {**ev, "cluster": best, "remapped_from": cid}
+            n_remapped += 1
+        out.append(ev)
+    return out, n_remapped
+
+
 def load_events(labels_path: Path) -> list[dict]:
     path = Path(labels_path)
     if not path.exists():
@@ -194,8 +233,6 @@ def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
         raise FileNotFoundError(
             f"没有标签事件: {book_dir / 'phase7_review' / 'labels.jsonl'}"
             "（请先运行 review 完成一轮审查）")
-    state = replay_events(events)
-
     instances = load_index(book_dir / "phase4_chars")
     pos_of = {inst.id: k for k, inst in enumerate(instances)}
     with open(book_dir / "phase5_clusters" / "clusters.json",
@@ -204,11 +241,17 @@ def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
     cluster_members = {c["cluster_id"]: c["members"] for c in clusters}
     reps_of = {c["cluster_id"]: c["reps"] for c in clusters}
 
+    # 簇 id 随重跑聚类变号 → 先按事件记录的成员实例重绑（见 remap_events）
+    cluster_of = {m: cid for cid, ms in cluster_members.items() for m in ms}
+    events, n_remapped = remap_events(events, cluster_of)
+    state = replay_events(events)
+
     npz = np.load(book_dir / "phase5_clusters" / "features.npz")
     patches = npz["patches"]
 
     truth = derive_truth(state, cluster_members)
-    summary: dict = {"events": len(events), "labeled_instances": len(truth)}
+    summary: dict = {"events": len(events), "labeled_instances": len(truth),
+                     "remapped_events": n_remapped}
 
     # 1) 字形库入库：每个已确认簇 root 取 medoid 图块
     lib = GlyphLibrary(store_dir)
@@ -260,8 +303,22 @@ def run_update(book_out_dir: str | Path, glyph_store_dir: str | Path,
             reps = [r for r in reps_of.get(cid, []) if r in pos_of]
             if reps and moved_id in pos_of:
                 diff_pairs.append((pos_of[reps[0]], pos_of[moved_id]))
+        # impure 标记（人工判定「不同字混进同簇」）——同样是难负样本，
+        # 且比 split 更省事：用户点一下即可。簇内两两皆为异类对。
+        # 缺了它，diff 对全是随机易分对（f1 很低），标定出的阈值会
+        # 荒谬地偏低（实测 0.565，而真实混簇的 f1 在 0.73 附近）。
+        hard_diff: list[tuple[int, int]] = []
+        for cid, flag in state.cluster_flags.items():
+            if flag != "impure":
+                continue
+            ms = [m for m in cluster_members.get(cid, []) if m in pos_of]
+            for a_i in range(len(ms)):
+                for b_i in range(a_i + 1, len(ms)):
+                    hard_diff.append((pos_of[ms[a_i]], pos_of[ms[b_i]]))
         rng.shuffle(diff_pairs)
-        diff_pairs = diff_pairs[:max_pairs]
+        # 难例不参与截断采样：数量少且信息量最高，必须全部进入标定
+        diff_pairs = hard_diff + diff_pairs[:max(0, max_pairs - len(hard_diff))]
+        summary["hard_diff_pairs"] = len(hard_diff)
 
         if same_pairs and diff_pairs:
             same_scores = np.array([verify_pair(patches[a], patches[b]).f1
