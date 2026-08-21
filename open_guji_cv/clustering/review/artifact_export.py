@@ -43,52 +43,72 @@ EVENT_RE = re.compile(r"GUJI-EVENT\s+(\{.*\})")
 # ── 批次构建 ─────────────────────────────────────────────
 
 
-def build_batch(book_out_dir: str | Path, limit: int = 400,
+def build_batch(book_out_dir, limit: int = 400,
                 sort: str = "gain", max_members: int = 4,
                 max_candidates: int = 5) -> dict:
     """从审查会话取 top-N 可疑簇，装配成可序列化批次。
 
+    book_out_dir 可以是单个书目录，也可以是**多个书目录的列表**——
+    多册合并成一个批次页面时，各册按队列收益归并后统一取前 limit 个，
+    审查精力自动流向最需要的册。簇 id 在册间会重号（都是 c00001…），
+    页面内一律用 "book|cluster" 作 DOM 键；事件带 book 字段，回收时
+    按册分派（instance id 本身也带册前缀，是最后一道保险）。
+
     每簇：候选（含语义注记）、成员图块 base64、代表实例的
     简略（±3 字）与完整（±3 列）文本上下文。
     """
-    session = ReviewSession(book_out_dir)
-    queue = session.queue(sort=sort, limit=limit)
+    dirs = ([book_out_dir] if isinstance(book_out_dir, (str, Path))
+            else list(book_out_dir))
     entries = []
-    for q in queue:
-        cid = q["cluster_id"]
-        detail = session.cluster_detail(cid)
-        members = [m for m in detail["members"] if not m["removed"]]
-        patches = []
-        for m in members[:max_members]:
-            p = session.patch_file(m["id"])
-            if p is None:
+    for d in dirs:
+        session = ReviewSession(d)
+        book = Path(d).name
+        for q in session.queue(sort=sort, limit=limit):
+            cid = q["cluster_id"]
+            detail = session.cluster_detail(cid)
+            members = [m for m in detail["members"] if not m["removed"]]
+            patches = []
+            for m in members[:max_members]:
+                pf = session.patch_file(m["id"])
+                if pf is None:
+                    continue
+                patches.append({
+                    "id": m["id"],
+                    "b64": base64.b64encode(pf.read_bytes()).decode("ascii"),
+                })
+            if not patches:
                 continue
-            patches.append({
-                "id": m["id"],
-                "b64": base64.b64encode(p.read_bytes()).decode("ascii"),
+            rep = patches[0]["id"]
+            entries.append({
+                "book": book,
+                "cluster_id": cid,
+                "size": detail["size"],
+                "gain": q.get("expected_gain", 0.0),
+                "top_p": q.get("top_p", 0.0),
+                "rep": rep,
+                # 成员实例 id：簇 id 会随重跑聚类变号，回收时靠成员重绑
+                "members": [m["id"] for m in members],
+                "candidates": (detail["candidates"] or [])[:max_candidates],
+                "patches": patches,
+                "n_more": max(0, len(members) - max_members),
+                "ctx_compact": session.context(rep, mode="compact"),
+                "ctx_full": session.context(rep, mode="full"),
             })
-        if not patches:
-            continue
-        rep = patches[0]["id"]
-        entries.append({
-            "cluster_id": cid,
-            "size": detail["size"],
-            "rep": rep,
-            # 成员实例 id：簇 id 会随重跑聚类变号，回收时靠成员重绑
-            "members": [m["id"] for m in members],
-            "candidates": (detail["candidates"] or [])[:max_candidates],
-            "patches": patches,
-            "n_more": max(0, len(members) - max_members),
-            "ctx_compact": session.context(rep, mode="compact"),
-            "ctx_full": session.context(rep, mode="full"),
-        })
-    cids = ",".join(e["cluster_id"] for e in entries)
-    digest = hashlib.sha1(cids.encode()).hexdigest()[:8]
-    book = Path(book_out_dir).name
+    # 多册归并：按同一把尺子重排后统一截顶
+    if sort == "low_conf":
+        entries.sort(key=lambda e: (e["top_p"], -e["size"]))
+    else:
+        entries.sort(key=lambda e: -e["gain"])
+    entries = entries[:limit]
+    keys = ",".join(f'{e["book"]}|{e["cluster_id"]}' for e in entries)
+    digest = hashlib.sha1(keys.encode()).hexdigest()[:8]
+    books = sorted({e["book"] for e in entries}) or [Path(d).name for d in dirs]
+    name = books[0] if len(books) == 1 else f"{len(books)}books"
     return {
-        "book": book,
+        "book": name,
+        "books": books,
         "sort": sort,
-        "batch_id": f"{book}-{sort}-{len(entries)}-{digest}",
+        "batch_id": f"{name}-{sort}-{len(entries)}-{digest}",
         "entries": entries,
     }
 
@@ -161,8 +181,10 @@ def _render_card(entry: dict) -> str:
     more = (f'<span class="more">+{entry["n_more"]}</span>'
             if entry["n_more"] else "")
     members = ",".join(entry.get("members", []))
-    return f"""<article class="card" data-cid="{cid}" data-members="{_esc(members)}" data-state="open">
-<header><span class="cid">{cid}</span><span class="sz">×{entry["size"]}</span>
+    book = _esc(entry.get("book", ""))
+    key = f"{book}|{cid}"
+    return f"""<article class="card" data-cid="{key}" data-book="{book}" data-members="{_esc(members)}" data-state="open">
+<header><span class="cid">{book} {cid}</span><span class="sz">×{entry["size"]}</span>
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button>
 <button type="button" class="skip">稍後</button></header>
@@ -391,6 +413,11 @@ _JS = """
       var ms = card && card.getAttribute('data-members');
       if(ms) ev.members = ms.split(',');   // 簇 id 会变，成员实例 id 不变
     }
+    if(ev.cluster && ev.cluster.indexOf('|') > 0){
+      // 多册批次：DOM 键是 book|cluster，事件里拆成两个字段
+      var parts = ev.cluster.split('|');
+      ev.book = parts[0]; ev.cluster = parts.slice(1).join('|');
+    }
     ev.batch = BATCH; ev.seq = seqNext();
     ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
     log.textContent += 'GUJI-EVENT ' + JSON.stringify(ev) + '\\n';
@@ -568,13 +595,14 @@ def render_html(batch: dict, title: str | None = None) -> str:
 """
 
 
-def export_batch(book_out_dir: str | Path, out_path: str | Path | None = None,
+def export_batch(book_out_dir, out_path: str | Path | None = None,
                  limit: int = 400, sort: str = "gain",
                  title: str | None = None) -> Path:
-    book_out_dir = Path(book_out_dir)
+    first = Path(book_out_dir if isinstance(book_out_dir, (str, Path))
+                 else list(book_out_dir)[0])
     batch = build_batch(book_out_dir, limit=limit, sort=sort)
     out = (Path(out_path) if out_path
-           else book_out_dir / "phase7_review" / f'{batch["batch_id"]}.html')
+           else first / "phase7_review" / f'{batch["batch_id"]}.html')
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_html(batch, title=title), encoding="utf-8")
     return out
@@ -623,13 +651,21 @@ def ingest_events(book_out_dir: str | Path, text: str) -> dict:
     不中断），与本地审查界面产生的事件完全同构。
     """
     session = ReviewSession(book_out_dir)
+    book = Path(book_out_dir).name
     existing = {(e.get("batch"), e.get("seq"))
                 for e in load_events(session.labels_path)
                 if e.get("batch") is not None and e.get("seq") is not None}
+    # 多册批次：事件带 book 字段，只收属于本册的（无 book 字段的老事件
+    # 一律收下，向后兼容单册批次）
+    mine, n_other = [], 0
+    for ev in extract_events(text):
+        if ev.get("book") and ev["book"] != book:
+            n_other += 1
+            continue
+        mine.append(ev)
     # 批次页面导出后若重跑过聚类，簇 id 已变号——按事件携带的成员实例
     # 重绑到当前聚类，否则校验会全部判为「未知簇」
-    parsed, n_remapped = remap_events(extract_events(text),
-                                      session.cluster_of)
+    parsed, n_remapped = remap_events(mine, session.cluster_of)
     new = dup = 0
     errors: list[str] = []
     for ev in parsed:
@@ -645,5 +681,6 @@ def ingest_events(book_out_dir: str | Path, text: str) -> dict:
             new += 1
         except (ValueError, KeyError) as e:
             errors.append(f"{ev.get('op')}/{ev.get('cluster') or ev.get('instance')}: {e}")
-    return {"parsed": len(parsed), "new": new, "duplicate": dup,
-            "remapped": n_remapped, "errors": errors}
+    return {"book": book, "parsed": len(parsed), "new": new,
+            "duplicate": dup, "remapped": n_remapped,
+            "other_books": n_other, "errors": errors}

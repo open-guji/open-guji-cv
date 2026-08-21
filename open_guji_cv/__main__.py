@@ -411,7 +411,8 @@ def cmd_review_export(args):
     if not (book_out_dir / "phase5_clusters" / "clusters.json").exists():
         print(f"未找到聚类结果，请先运行: python -m open_guji_cv cluster {args.path}")
         sys.exit(1)
-    out = export_batch(book_out_dir, out_path=args.out,
+    extra = [Path(args.output) / Path(x).name for x in (args.also or [])]
+    out = export_batch([book_out_dir] + extra, out_path=args.out,
                        limit=args.limit, sort=args.sort, title=args.title)
     size = out.stat().st_size
     print(f"批次页面: {out}  ({size / 1e6:.1f} MB)")
@@ -422,8 +423,11 @@ def cmd_review_ingest(args):
     from .clustering.review.artifact_export import ingest_events
 
     text = Path(args.file).read_text(encoding="utf-8")
-    summary = ingest_events(_book_out_dir(args), text)
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    books = [_book_out_dir(args)] + [Path(args.output) / Path(x).name
+                                     for x in (args.also or [])]
+    summary = [ingest_events(b, text) for b in books]
+    print(json.dumps(summary if len(summary) > 1 else summary[0],
+                     ensure_ascii=False, indent=2))
     if summary["new"]:
         print(f"下一步: python -m open_guji_cv update {args.path}")
 
@@ -670,11 +674,15 @@ def main():
                    help="排序：gain=预期收益降序 / low_conf=置信度升序")
     p.add_argument("--out", default=None, help="输出 HTML 路径")
     p.add_argument("--title", default=None, help="页面标题")
+    p.add_argument("--also", nargs="*", default=None,
+                   help="并入批次的其他书目录（多册合并审查）")
 
     p = sub.add_parser("review-ingest",
                        help="从保存后的审查页面/粘贴文本回收事件 → labels.jsonl")
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--file", required=True, help="含 GUJI-EVENT 行的文本/HTML 文件")
+    p.add_argument("--also", nargs="*", default=None,
+                   help="一并回收的其他书目录（多册批次）")
 
     # ── glyph-db（M8 跨书字形数据库）─────────────────────
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
