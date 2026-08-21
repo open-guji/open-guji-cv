@@ -84,3 +84,37 @@ def test_fusion_prefers_agreement():
     assert out[0]["char"] == "內"
     assert set(out[0]["sources"]) == {"vlm", "ocr"}
     assert out[0]["p"] > out[1]["p"]
+
+
+def test_traditional_variants():
+    """简→繁扩展：刻本不可能有简体，OCR 简体输出应扩展为繁体候选。"""
+    pytest.importorskip("opencc")
+    from open_guji_cv.clustering.candidates import traditional_variants as tv
+    assert tv("内") == ["內"]
+    assert tv("为") == ["爲"]        # 刻本用"爲"而非"為"
+    assert tv("万") == ["萬"]        # 一简多繁只取非自身项
+    assert tv("書") == []            # 本身是繁体
+    assert tv("之") == []            # 简繁同形
+
+
+def test_rapidocr_s2t_expansion(monkeypatch):
+    """OCR 输出简体时，繁体候选权重高于原简体输出。"""
+    pytest.importorskip("opencc")
+    src = RapidOcrSource(s2t=True, votes=1)
+
+    class FakeEngine:
+        def __call__(self, img, **kw):
+            return [["内", 0.9]], None
+
+    src._engine = FakeEngine()
+    props = src.propose([np.zeros((32, 32), np.uint8)], [])
+    chars = [p.char for p in props]
+    assert chars[0] == "內"                 # 繁体首选
+    assert "内" in chars                    # 原输出保留为低权候选
+    assert props[0].p > props[-1].p
+    assert all(p.surface_uncertain for p in props)
+
+    # 关闭时原样输出
+    src2 = RapidOcrSource(s2t=False, votes=1)
+    src2._engine = FakeEngine()
+    assert [p.char for p in src2.propose([np.zeros((32, 32), np.uint8)], [])] == ["内"]
