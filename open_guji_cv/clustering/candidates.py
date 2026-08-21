@@ -130,6 +130,28 @@ def props_from_votes(votes: dict[str, float], source: str,
     return props
 
 
+def residual_simplified(chars) -> dict[str, int]:
+    """质量检查：统计**纯简体**残留（真正的 OCR 字表偏差）。
+
+    判据不能用 `opencc.s2t(ch) != ch`——那会把"云/干/里/范/游/于/斗/卷"
+    这类**一简多繁且自身合法**的字全部误报为简体，而它们在古籍中
+    正是本字（子云、干支、里巷、范姓、游覽、于姓、星斗、十二卷）。
+    只有 char 不在自身繁体列表中的才是无歧义简体。
+
+    Args:
+        chars: 字符可迭代对象（如全书识别结果）。
+    Returns:
+        {纯简体字: 出现次数}，空表示无残留。
+    """
+    table = _load_s2t()
+    out: dict[str, int] = {}
+    for ch in chars:
+        forms = table.get(ch)
+        if forms and ch not in forms:
+            out[ch] = out.get(ch, 0) + 1
+    return out
+
+
 class CandidateSource:
     """候选来源基类。"""
 
