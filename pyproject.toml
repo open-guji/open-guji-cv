@@ -38,6 +38,11 @@ cpu = [
 gpu = [
     "paddleocr>=2.8.0",
 ]
+# 轻量 OCR：PP-OCRv4 的 ONNX 版，模型随包分发（无需联网下载模型），
+# 无 GPU / 无法访问模型源的环境用这个跑 label --sources rapidocr
+onnx = [
+    "rapidocr-onnxruntime>=1.3",
+]
 # 开发依赖：pip install open-guji-cv[dev]
 dev = [
     "pytest>=7.0",

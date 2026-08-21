@@ -2,7 +2,8 @@
 
 候选来源（按可靠性）：
 - glyph_knn : 字形库 kNN + 配准精验（人工确认过的字形，命中即高置信）
-- ocr       : PaddleOCR 对簇代表图块的单字识别（延迟加载，无 paddle 环境可不选）
+- vlm       : 视觉语言模型识别种子（vlm_assist 产物；强在字形整体与异体字）
+- ocr       : PaddleOCR / RapidOCR 对簇代表图块的单字识别
 - prior     : Phase 3 整列 OCR 对位字的簇内投票（弱先验，无额外依赖）
 
 字形层原则：候选按精确字形独立计票，异体字绝不合并；
@@ -23,7 +24,7 @@ from .extractor import CharInstance, load_index
 from .variants import VariantMap
 
 # 各来源的融合权重（可靠性先验）
-SOURCE_WEIGHTS = {"glyph_knn": 3.0, "ocr": 1.5, "prior": 1.0}
+SOURCE_WEIGHTS = {"glyph_knn": 3.0, "vlm": 2.0, "ocr": 1.5, "prior": 1.0}
 
 
 @dataclass
@@ -199,3 +200,113 @@ class CandidateGenerator:
         with open(phase6 / "candidates.json", "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return payload
+
+
+class RapidOcrSource(CandidateSource):
+    """RapidOCR（PP-OCRv4 ONNX）单字识别。
+
+    模型随 pip 包分发、无需联网下载，是无 GPU/无模型源环境下
+    OcrSource 的等价替代；识别的是同一套 PP-OCR 权重。
+
+    top-k 通过**增强投票**获得（设计文档 M4 的回退方案）：对图块做
+    多种轻微变换分别识别，按加权频次汇总，天然反映识别稳定性。
+    """
+
+    name = "ocr"
+
+    # 古籍单字识别的常见噪声：标点、拉丁字母数字（"一"→"1" 之类）
+    _NOISE = set(" \t　“”‘’\"'`.,，。、·;；:：!！?？()（）[]【】{}<>《》-—_=+*/\\|~^$#@%&")
+
+    def __init__(self, scale: float = 3.0, votes: int = 3):
+        self._engine = None
+        self.scale = scale
+        self.votes = votes
+
+    def _ensure(self):
+        if self._engine is None:
+            from rapidocr_onnxruntime import RapidOCR
+            self._engine = RapidOCR()
+
+    @classmethod
+    def _clean(cls, text: str) -> str:
+        """取首个 CJK 字符（丢弃标点/字母数字噪声）。"""
+        for ch in text:
+            if ch in cls._NOISE or ch.isascii():
+                continue
+            return ch
+        return ""
+
+    def _variants(self, patch: np.ndarray):
+        """增强变体：原图 + 轻微缩放/平移，用于投票。"""
+        img = patch
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        big = cv2.resize(img, None, fx=self.scale, fy=self.scale,
+                         interpolation=cv2.INTER_CUBIC)
+        yield big
+        if self.votes > 1:
+            h, w = big.shape[:2]
+            pad = int(min(h, w) * 0.08)
+            yield cv2.copyMakeBorder(big, pad, pad, pad, pad,
+                                     cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        if self.votes > 2:
+            yield cv2.resize(big, None, fx=0.8, fy=0.8,
+                             interpolation=cv2.INTER_AREA)
+
+    def propose(self, rep_patches, members) -> list[Proposal]:
+        self._ensure()
+        votes: dict[str, float] = {}
+        for patch in rep_patches:
+            for img in self._variants(patch):
+                res, _ = self._engine(img, use_det=False, use_cls=False,
+                                      use_rec=True)
+                if not res:
+                    continue
+                ch = self._clean(res[0][0])
+                if ch:
+                    votes[ch] = votes.get(ch, 0.0) + float(res[0][1])
+        total = sum(votes.values())
+        if not total:
+            return []
+        return [Proposal(c, v / total, self.name, surface_uncertain=True)
+                for c, v in sorted(votes.items(), key=lambda x: -x[1])[:5]]
+
+
+class VlmSeedSource(CandidateSource):
+    """视觉语言模型（VLM）识别种子。
+
+    读 vlm_assist 产出的 mapping.json + recognitions.json，按簇提供候选。
+    与 OCR 是互补来源：VLM 强在字形整体理解与繁体/异体字，OCR 强在
+    高频常用字的稳定性——两者分歧的簇自然浮上审查队列。
+
+    propose() 只拿得到成员元数据，故内部建 instance_id → spec 索引。
+    """
+
+    name = "vlm"
+
+    def __init__(self, seed_dir: str | Path, clusters_json: str | Path):
+        from .vlm_assist import parse_spec
+        self._parse = parse_spec
+        seed = Path(seed_dir)
+        with open(seed / "mapping.json", encoding="utf-8") as f:
+            mapping = json.load(f)
+        with open(seed / "recognitions.json", encoding="utf-8") as f:
+            recs = json.load(f)
+        with open(clusters_json, encoding="utf-8") as f:
+            members_of = {c["cluster_id"]: c["members"]
+                          for c in json.load(f)["clusters"]}
+        self._spec_by_instance: dict[str, str | None] = {}
+        for bname, bmap in mapping.items():
+            brec = recs.get(bname, {})
+            for num, info in bmap.items():
+                spec = brec.get(num)
+                for iid in members_of.get(info["cluster"], []):
+                    self._spec_by_instance[iid] = spec
+
+    def propose(self, rep_patches, members) -> list[Proposal]:
+        for m in members:
+            if m.id in self._spec_by_instance:
+                return [Proposal(ch, p, self.name, surface_uncertain=unc)
+                        for ch, p, unc in self._parse(
+                            self._spec_by_instance[m.id])]
+        return []
