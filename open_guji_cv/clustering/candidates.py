@@ -82,6 +82,35 @@ def traditional_variants(char: str) -> list[str]:
     return forms
 
 
+def traditional_candidates(char: str) -> list[tuple[str, float]]:
+    """OCR 输出的字 → [(候选字形, 相对权重)]，权重和为 1。
+
+    三种情形（都不做"合并"，只是给出候选让上下文/人工裁决）：
+    - 非简体字（書/之）：原样，权重 1.0
+    - 纯简体字（内/检/群）：繁体为主候选（唯一形式 0.9；一简多繁时
+      主形 0.7、次形分 0.2），原简体输出降权保留 0.1
+      （刻本几乎不可能是简体，但不武断排除）
+    - 自身即合法繁体（卷/万/后/里）：原字仍为首选 0.55，其他繁体形式
+      作**平级候选**分 0.45 —— "卷"该留"卷"、"万"可能是"萬"，
+      二元替换必错其一，交给上下文与人工。
+    """
+    forms = _load_s2t().get(char, [])
+    if not forms:
+        return [(char, 1.0)]
+    if char in forms:
+        others = [f for f in forms if f != char]
+        if not others:
+            return [(char, 1.0)]
+        w = 0.45 / len(others)
+        return [(char, 0.55)] + [(f, w) for f in others]
+    rest = forms[1:]
+    if rest:                     # 一简多繁：主形 0.7，次形分 0.2
+        out = [(forms[0], 0.7)] + [(f, 0.2 / len(rest)) for f in rest]
+    else:                        # 唯一繁体形式：独得 0.9
+        out = [(forms[0], 0.9)]
+    return out + [(char, 0.1)]   # 原简体输出降权兜底
+
+
 def props_from_votes(votes: dict[str, float], source: str,
                      s2t: bool = True, top_k: int = 5) -> list["Proposal"]:
     """字→票数 → Proposal 列表（含简→繁扩展）。
@@ -95,14 +124,9 @@ def props_from_votes(votes: dict[str, float], source: str,
     props: list[Proposal] = []
     for c, v in sorted(votes.items(), key=lambda x: -x[1])[:top_k]:
         p = v / total
-        trad = traditional_variants(c) if s2t else []
-        if trad:
-            for i, t in enumerate(trad):
-                props.append(Proposal(t, p * (0.7 if i == 0 else 0.2),
-                                      source, surface_uncertain=True))
-            props.append(Proposal(c, p * 0.1, source, surface_uncertain=True))
-        else:
-            props.append(Proposal(c, p, source, surface_uncertain=True))
+        forms = traditional_candidates(c) if s2t else [(c, 1.0)]
+        for ch, w in forms:
+            props.append(Proposal(ch, p * w, source, surface_uncertain=True))
     return props
 
 
