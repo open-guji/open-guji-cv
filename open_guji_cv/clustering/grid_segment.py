@@ -31,6 +31,9 @@ MIN_COL_WIDTH_RATIO = 0.5  # 列宽低于中位列宽的此比例 → 非文字�
 SEARCH_RATIO = 0.3         # 逐线微调搜索半径（× 格高）
 CELL_H_TOL = 0.05          # 页格高偏离全书共识超此比例 → 判定锁错，强制重拟
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
+PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
+                           # 实测列距 5~95 分位只有 174~186px（±3%），是物理
+                           # 刚性常量；拟歪的页会掉到 152~157，差 15%
 STRADDLE_OK = 0.50         # 骑线比（格线墨/格心墨）高于此 → 尝试相位重扫
 STRADDLE_GAIN = 0.10       # 重扫至少好这么多才接受（never-make-worse）
 SCALES = np.linspace(0.96, 1.04, 9)
@@ -50,6 +53,8 @@ RULE_MERGE_GAP = 4         # x 相距不超过此的高覆盖列并成同一条�
 MIN_RULES_TO_SNAP = 3      # 至少检出这么多条界行才敢拿它定列相位
 RULE_MIN_HALF = 3.0        # 界行半宽下限（实测宽度中位 5px）
 RULE_CLEARANCE = 3.0       # 列框离界行再留的余量
+RULE_PERIOD_TOL = 0.06     # 界行量出的列距偏离先验超此 → 判为量错（缺条界行
+                           # 会把中位间距顶到 2 倍），弃用，保留先验
 
 
 @dataclass
@@ -207,10 +212,34 @@ def _rule_in_col(segs: list[tuple[int, int]],
     return n / len(segs)
 
 
+def _period_from_rules(centers: np.ndarray, prior: float) -> float:
+    """由界行间距直接量列距；量出来不像话就退回先验。
+
+    相邻间距取**中位数**（对缺条界行免疫），再按整数序号做一次最小二乘
+    精修。缺得多时中位数会顶到 2 倍周期上，所以用刻本的刚性先验兜底：
+    偏离先验超过 RULE_PERIOD_TOL 就判为量错，不要。
+    """
+    if len(centers) < MIN_RULES_TO_SNAP + 1:
+        return prior
+    d = np.diff(np.sort(centers))
+    d = d[d > prior * 0.4]
+    if len(d) == 0:
+        return prior
+    p0 = float(np.median(d))
+    if abs(p0 - prior) > RULE_PERIOD_TOL * prior:
+        return prior
+    k = np.round((centers - centers.min()) / p0)
+    if len(np.unique(k)) < MIN_RULES_TO_SNAP:
+        return prior
+    a = np.vstack([k, np.ones_like(k)]).T
+    p = float(np.linalg.lstsq(a, centers, rcond=None)[0][0])
+    return p if abs(p - prior) <= RULE_PERIOD_TOL * prior else prior
+
+
 def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
                           cx0: float, period: float, n_cols: int,
                           inset_l: float, inset_r: float
-                          ) -> tuple[float, float, float]:
+                          ) -> tuple[float, float, float, float]:
     """用界行把列相位钉死，返回 (cx0, inset_l, inset_r)。
 
     为什么要这一步：列相位原先只能从**文字投影**间接拟合，稀疏页、
@@ -226,10 +255,15 @@ def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
     择优返回：只有当界行落入列内的比例真的下降才采纳——实测 204 页里
     193 页采纳，总体从 0.136 降到 0.050。
     """
+    period_in = period
     segs = rule_segments(gray)
     if len(segs) < MIN_RULES_TO_SNAP:
-        return cx0, inset_l, inset_r
+        return cx0, period, inset_l, inset_r
     centers = np.array([(a + b) / 2 for a, b in segs])
+    # 界行不只定相位，也直接定**列距**——相邻界行之间就是一个列格。
+    # 投影拟合的列距可以差 3~4%（刚好卡在书级容差里），9 列累积漂 60px，
+    # 足够把界行圈进列框，而这时**换多少相位都救不回来**。
+    period = _period_from_rules(centers, period)
     ang = (centers - cx0) / period * 2 * np.pi
     delta = float(np.arctan2(np.sin(ang).mean(), np.cos(ang).mean())
                   / (2 * np.pi) * period)
@@ -240,10 +274,10 @@ def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
     # 实测：只挪相位不重量内缩，首列左边界反而从偏 12px 变成偏 23px）。
     new_cx0 = cx0 + delta
     new_l, new_r = measure_insets(vproj, new_cx0, period, n_cols)
-    cand = (new_cx0, max(new_l, half), max(new_r, half))
-    old = _rule_in_col(segs, _comb(cx0, period, n_cols, inset_l, inset_r))
-    new = _rule_in_col(segs, _comb(cand[0], period, n_cols, cand[1], cand[2]))
-    return cand if new <= old else (cx0, inset_l, inset_r)
+    cand = (new_cx0, period, max(new_l, half), max(new_r, half))
+    old = _rule_in_col(segs, _comb(cx0, period_in, n_cols, inset_l, inset_r))
+    new = _rule_in_col(segs, _comb(cand[0], cand[1], n_cols, cand[2], cand[3]))
+    return cand if new <= old else (cx0, period_in, inset_l, inset_r)
 
 
 def column_projection(col_gray: np.ndarray,
@@ -281,6 +315,11 @@ def content_range(proj: np.ndarray, rel_thresh: float = 0.05,
     ref = float(np.percentile(proj[proj > 0], 90))
     mask = proj > max(ref * rel_thresh, 1.0)
     idx = np.nonzero(mask)[0]
+    if idx.size == 0:
+        # 有墨但全在阈值（≥1）以下：整段只有零星单像素。当作"没有内容"，
+        # 返回全范围而不是崩——proj.max()>0 挡不住这种情况，实测换了列距
+        # 之后就有列格切出这样的切片。
+        return 0, len(proj)
     if min_run <= 1:
         return int(idx[0]), int(idx[-1]) + 1
     # 游程分解
@@ -1003,7 +1042,8 @@ class GridSegmenter:
                      grid_override: dict | None = None,
                      cell_h_prior: float | None = None,
                      row_phase_abs: float | None = None,
-                     shear_override: float | None = None) -> dict:
+                     shear_override: float | None = None,
+                     period_prior: float | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
         相位以本页 inner_frame 为基准换算）——弱信号页专用。
@@ -1058,10 +1098,15 @@ class GridSegmenter:
             else:
                 cx0, period = fit_page_grid([vproj], self.n_cols,
                                             full_widths=[image.shape[0]])
+                if period_prior:
+                    # 列距是**书级刚性常量**（实测 5~95 分位 174~186px），
+                    # 一页不可能比别页窄 15%。拟歪的页只需换回共识列距，
+                    # 相位随后由界行吸附重新钉。
+                    period = float(period_prior)
                 inset_l, inset_r = measure_insets(vproj, cx0, period,
                                                   self.n_cols)
             # 界行是列边界的直接证据（摆正之后才看得见），拿它把相位钉死
-            cx0, inset_l, inset_r = snap_columns_to_rules(
+            cx0, period, inset_l, inset_r = snap_columns_to_rules(
                 image, vproj, cx0, period, self.n_cols, inset_l, inset_r)
             columns_info = [
                 {"index": self.n_cols - k,     # 从右到左编号，最右列=1
@@ -1232,6 +1277,40 @@ class GridSegmenter:
             if n_row_fix:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
+
+        # ── Pass 2a2: 书级列距共识，校正列距拟错的页 ──
+        # 与格高同理：列距也是物理刚性常量（同一版反复刷印）。实测全书
+        # 5~95 分位只有 174~186px，拟歪的页会掉到 152~157——差 15%，
+        # 界行必然被列框圈进去，且**换多少相位都救不回来**（周期错了，
+        # 误差沿列号线性累积）。这类页墨量正常，旧的「弱信号页」判据
+        # 抓不到，只能用列距本身判。
+        n_period_fix = 0
+        periods = [r["grid"]["period"] for r in results.values()
+                   if r.get("grid", {}).get("period")]
+        if self.n_cols and len(periods) >= 5:
+            consensus_p = float(np.median(periods))
+            off = [s2 for s2, r in results.items()
+                   if r.get("grid", {}).get("period")
+                   and abs(r["grid"]["period"] - consensus_p)
+                   > PERIOD_TOL * consensus_p]
+            for stem, img_path, layout in pages:
+                if stem not in off:
+                    continue
+                image = imread(str(img_path))
+                if image is None:
+                    continue
+                redone = self.segment_page(
+                    image, layout, period_prior=consensus_p,
+                    shear_override=results[stem]["grid"].get("shear", 0.0))
+                # 择优：列距偏离本身已是失败证据，但相位仍可能没救回来，
+                # 所以仍按 rule_in_col 把关，绝不允许改差
+                if redone["grid"].get("rule_in_col", 1.0) <= \
+                        results[stem]["grid"].get("rule_in_col", 1.0):
+                    results[stem] = redone
+                    n_period_fix += 1
+            if n_period_fix:
+                print(f"  书级列距共识 {consensus_p:.1f}px，"
+                      f"校正列距拟错页 {n_period_fix} 张")
 
         # ── Pass 2b: 行相位骑线重扫 ──
         # 直接质量信号：骑线比（straddle_score）。稀疏页（职名/目录）
