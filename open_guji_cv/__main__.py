@@ -350,9 +350,20 @@ def cmd_label(args):
                 args.vlm_seed,
                 book_out_dir / "phase5_clusters" / "clusters.json"))
         elif name == "glyph":
-            from .clustering.glyph_library import GlyphLibrary
+            # GlyphDB（M8 升级，见 glyph_db.py）取代了早期的 GlyphLibrary
+            # JSONL 直读：glyph_store/glyphs.jsonl 的 schema 已改过（如
+            # 'ids' 字段），GlyphLibrary 按旧 schema 解析会直接抛异常。
+            # GlyphDB.query() 签名与 GlyphKnnSource 需要的完全一致
+            # （返回带 char/f1/verdict 的命中），SQLite 索引缺失时
+            # 从 Git 真源（store 目录）现场重建一次即可。
+            from .clustering.glyph_db import GlyphDB, rebuild_from_store
+            store = Path(args.glyph_store)
+            db_path = store / "glyphdb.sqlite"
+            if not db_path.exists():
+                print(f"字形库索引缺失，从 {store} 重建 ...")
+                rebuild_from_store(store, db_path)
             sources.append(GlyphKnnSource(
-                GlyphLibrary(args.glyph_store),
+                GlyphDB(db_path),
                 edition_hint=args.edition))
         else:
             print(f"未知候选来源: {name}（可选: prior,ocr,rapidocr,vlm,glyph）")
