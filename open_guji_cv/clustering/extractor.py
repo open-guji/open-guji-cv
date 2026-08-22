@@ -39,6 +39,8 @@ FRAME_BAR_N = 2            # 满宽横条达此条数 → 版框而非「一」
 # ── 缺陷自检：疑似层阈值（有误报，进人工审查队列）──────────────
 WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此 → 疑似跨列
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
+SIDE_PROBE = 12            # 向列框左右各探这么多像素，看横条是否继续
+SIDE_INK_T = 0.25          # 探针带内墨量占比超此算「还在走」
 
 # 灰度源目录解析顺序：越靠前的越接近原始灰度（信息保留最多）。
 # 注意：只有与 Phase 2/3 检测坐标系同尺寸的步骤才能入选
@@ -72,6 +74,22 @@ class CharInstance:
         d = json.loads(line)
         d["bbox"] = tuple(d["bbox"])
         return cls(**d)
+
+
+def _deshear(gray: np.ndarray, tan_t: float) -> np.ndarray:
+    """与 grid_segment.deshear 同一变换（以纵向中点为不动点）。
+
+    放在这里而不 import，是为了保持 extractor 不反向依赖 grid_segment
+    （grid_segment 已经 import 了 extractor，反过来 import 会成环）。
+    两处必须一致，改一处就要改另一处——回归测试 test_deshear_matches
+    钉住这一点。
+    """
+    if not tan_t:
+        return gray
+    h, w = gray.shape[:2]
+    m = np.float32([[1, -tan_t, tan_t * h / 2], [0, 1, 0]])
+    return cv2.warpAffine(gray, m, (w, h), flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=255)
 
 
 def _defect_features(gray: np.ndarray) -> dict:
@@ -134,6 +152,39 @@ def _defect_features(gray: np.ndarray) -> dict:
             reach = max(reach, s1)
         out["x_gap"] = gap / w
     return out
+
+
+def _bar_crosses_column(page: np.ndarray, patch: np.ndarray,
+                        x0: int, x1: int, y0: int) -> bool:
+    """图块里的满宽扁横条是否**越出列外继续走**——那就是版框/界行横线。
+
+    单条满宽扁横条本身分不清是版框横线还是「一」字：形状一模一样
+    （实测两者的 w/W、h/H、厚度变异都重叠）。真正的区别在列**之外**：
+    版框横线横穿整版，「一」字停在本列文字带里。所以判据只能到页级去
+    取证——看同一批行在列框左右两侧还有没有墨。
+    """
+    if page.size == 0 or patch.size == 0:
+        return False
+    ph, pw = patch.shape[:2]
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    total = max(1, int(binary.sum()))
+    for i in range(1, n):
+        cx, cy, cw, ch, area = stats[i]
+        if not (cw >= FRAME_BAR_W * pw and ch <= FRAME_BAR_H * ph
+                and area >= 0.02 * total):
+            continue
+        rows = slice(y0 + cy, y0 + cy + ch)
+        left = page[rows, max(0, x0 - SIDE_PROBE):max(0, x0)]
+        right = page[rows, min(page.shape[1], x1):
+                     min(page.shape[1], x1 + SIDE_PROBE)]
+        if left.size == 0 or right.size == 0:
+            continue
+        lo = (left < BINARY_THRESHOLD_PATCH).mean()
+        ro = (right < BINARY_THRESHOLD_PATCH).mean()
+        if lo > SIDE_INK_T and ro > SIDE_INK_T:
+            return True          # 左右都还在走 → 横穿整版
+    return False
 
 
 def _defect_flags(gray: np.ndarray) -> list[str]:
@@ -539,6 +590,12 @@ class CharExtractor:
         """
         if page_img.ndim == 3:
             page_img = cv2.cvtColor(page_img, cv2.COLOR_BGR2GRAY)
+        # grid 的坐标在**去错切帧**里。segment 把界行摆正之后才定的列，
+        # 这里必须做同样的变换再裁，否则列框会整体错位；顺带图块也就
+        # 跟着摆正了，对下游归一化与识别只有好处。
+        shear = float(grid.get("grid", {}).get("shear", 0.0) or 0.0)
+        if shear:
+            page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
         results: list[tuple[CharInstance, np.ndarray]] = []
 
@@ -607,6 +664,11 @@ class CharExtractor:
                 # 旧的 rule_like（单条满宽扁横条即报）已退休——它把 5 个
                 # 干净的「一」字全判成了线，改由 frame_bars 数到 2 条才报。
                 flags.extend(_defect_flags(patch))
+                # 单条满宽扁横条形状上分不清版框横线与「一」字，只能到
+                # 页级取证：看它在列框外还继不继续走。
+                if "frame_bars" not in flags and _bar_crosses_column(
+                        page_img, patch, int(x0), int(x1), int(py0)):
+                    flags.append("frame_bars")
                 # 切分异常提示：字块长宽比离谱（粘连/切半）
                 aspect = cell_h / max(col_w, 1e-6)
                 if aspect > 1.8 or aspect < 0.3:

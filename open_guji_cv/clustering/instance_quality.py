@@ -37,6 +37,15 @@ SCHEMA_VERSION = 1
 QUALITIES = ("clean", "contaminated", "truncated", "not_text")
 DEFECTS = ("contaminated", "truncated", "not_text")
 
+# flag 分两层，用途不同，必须分开报：
+#   确定层 成因明确、实测零误报 → 下游可以**直接自动处理**（剥掉界行、
+#          丢弃版框格位），不必惊动人；
+#   疑似层 用召回换精确 → 只用于把图块送进**人工审查队列**。
+# 把两层合成一个「检出率」会同时掩盖两件事：确定层能不能免检地用，
+# 以及审查队列会被多少噪声灌满。
+CERTAIN_FLAGS = ("rule_bar", "edge_blob", "frame_bars")
+SUSPECT_FLAGS = ("wide_gap", "boundary_ink", "suspect_empty", "bad_seg")
+
 
 @dataclass
 class InstanceQuality:
@@ -99,6 +108,20 @@ def evaluate_self_detection(gold: list[InstanceQuality],
             "n_flagged": n_flagged,
             "rate": round(n_flagged / len(items), 4),
         }
+    layers = {}
+    for name, keep in (("certain", CERTAIN_FLAGS), ("all", None)):
+        sub = {k: ([f for f in v if f in keep] if keep else v)
+               for k, v in flags_by_key.items()}
+        d = [g for g in gold if g.quality in DEFECTS]
+        c = [g for g in gold if g.quality == "clean"]
+        tp = sum(1 for g in d if sub.get(g.key))
+        fp = sum(1 for g in c if sub.get(g.key))
+        layers[name] = {
+            "defect_recall": round(tp / len(d), 4) if d else 0.0,
+            "flag_precision": round(tp / (tp + fp), 4) if tp + fp else 0.0,
+            "false_alarm_rate": round(fp / len(c), 4) if c else 0.0,
+        }
+
     n_defect = sum(per_class[q]["n"] for q in DEFECTS if q in per_class)
     n_defect_flagged = sum(per_class[q]["n_flagged"]
                            for q in DEFECTS if q in per_class)
@@ -114,6 +137,7 @@ def evaluate_self_detection(gold: list[InstanceQuality],
                             if clean["n"] else 0.0,
         "n_defect": n_defect,
         "n_clean": clean["n"],
+        "layers": layers,
     }
 
 
@@ -129,4 +153,17 @@ def format_report(report: dict) -> str:
             f"标记精确率 {report['flag_precision']:.0%}",
             f"正例误报率 {report['false_alarm_rate']:.0%}"
             f"（{report['n_clean']} 个正例）"]
+    lay = report.get("layers")
+    if lay:
+        out += ["", "【分层】两层用途不同，不能只看合并数字",
+                f"  确定层（{'/'.join(CERTAIN_FLAGS)}）"
+                f"  召回 {lay['certain']['defect_recall']:>4.0%}"
+                f"  精确 {lay['certain']['flag_precision']:>4.0%}"
+                f"  误报 {lay['certain']['false_alarm_rate']:>4.0%}"
+                "   → 可直接自动处理",
+                f"  ＋疑似层（{'/'.join(SUSPECT_FLAGS[:2])} 等）"
+                f"  召回 {lay['all']['defect_recall']:>4.0%}"
+                f"  精确 {lay['all']['flag_precision']:>4.0%}"
+                f"  误报 {lay['all']['false_alarm_rate']:>4.0%}"
+                "   → 送人工审查"]
     return "\n".join(out)

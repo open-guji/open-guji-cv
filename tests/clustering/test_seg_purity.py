@@ -327,3 +327,57 @@ def test_run_book_clears_stale_patches(tmp_path):
                 encoding="utf-8").splitlines()}
     on_disk = {f"patches/1/{p.name}" for p in stale.glob("*.png")}
     assert on_disk == live, f"磁盘上有 index 之外的图块: {on_disk - live}"
+
+
+# ── 版框横线 vs「一」字：形状分不清，只能到页级取证 ────────
+
+def _page_with_bar(cross: bool, W=400, H=300, x0=150, x1=250, y=140):
+    """造一页：列框 [x0,x1] 里有一条满宽扁横条。
+    cross=True 时横条横穿整版（版框横线），False 时只在列内（「一」字）。
+    """
+    import numpy as np
+    page = np.full((H, W), 255, np.uint8)
+    a, b = (0, W) if cross else (x0 + 4, x1 - 4)
+    page[y:y + 10, a:b] = 0
+    return page
+
+
+def test_bar_crossing_the_column_is_a_frame_line():
+    from open_guji_cv.clustering.extractor import _bar_crosses_column
+    page = _page_with_bar(cross=True)
+    patch = page[100:200, 150:250]
+    assert _bar_crosses_column(page, patch, 150, 250, 100)
+
+
+def test_bar_confined_to_the_column_is_the_character_yi():
+    from open_guji_cv.clustering.extractor import _bar_crosses_column
+    page = _page_with_bar(cross=False)
+    patch = page[100:200, 150:250]
+    assert not _bar_crosses_column(page, patch, 150, 250, 100)
+
+
+def test_bar_crossing_only_one_side_is_not_a_frame_line():
+    """只有一侧继续走的，可能是邻字笔画搭过来，不能就判版框。"""
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _bar_crosses_column
+    page = np.full((300, 400), 255, np.uint8)
+    page[140:150, 0:246] = 0            # 只往左穿出去
+    patch = page[100:200, 150:250]
+    assert not _bar_crosses_column(page, patch, 150, 250, 100)
+
+
+def test_extract_page_flags_a_cell_sitting_on_the_frame_line():
+    import numpy as np
+    from open_guji_cv.clustering.extractor import CharExtractor
+    page = np.full((300, 400), 235, np.uint8)
+    page[40:100, 170:230] = 25          # 第 1 格：正常的字
+    page[190:202, 0:400] = 25           # 第 2 格：整版横穿的版框横线
+    grid = {"columns": [{"index": 1, "left_x": 150.0, "right_x": 250.0,
+                         "cells": [{"type": "char", "index": 0,
+                                    "y_top": 30.0, "y_bottom": 130.0},
+                                   {"type": "char", "index": 1,
+                                    "y_top": 150.0, "y_bottom": 250.0}]}]}
+    flags = {i.idx: i.flags for i, _ in CharExtractor().extract_page(
+        page, grid, "b", "1")}
+    assert "frame_bars" in flags.get(1, []), flags
+    assert "frame_bars" not in flags.get(0, []), flags
