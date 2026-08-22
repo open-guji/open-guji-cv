@@ -241,3 +241,80 @@ def test_segment_page_contract_and_narrow_column_filter():
         # （纵向裁切外扩半格容忍边框检测偏差，实际范围由投影内容决定）
         pad = 60 // 2 + 2
         assert all(20 - pad <= c["y_top"] <= 20 + n * 60 + pad for c in chars)
+
+
+# ── cells_from_components / _split_dense_segment：拉开列 + 压缩超载列 ──
+
+from open_guji_cv.clustering.grid_segment import (  # noqa: E402
+    GridParams, cells_from_components, _split_dense_segment)
+
+
+def _compressed_group(n_sub_chars, char_h, gap, width=50, pad=6):
+    """一段"压缩标题"：多个小字紧挨着（间隙小于合并阈值），整体是一个
+    连通体，但内部仍有墨量谷点——_split_dense_segment 应该切得出来。"""
+    h = n_sub_chars * (char_h + gap) - gap
+    seg = np.full((h, width), 235, dtype=np.uint8)
+    y = 0
+    for _ in range(n_sub_chars):
+        seg[y:y + char_h, pad:width - pad] = 25
+        y += char_h + gap
+    return seg
+
+
+def test_split_dense_segment_finds_compressed_characters():
+    """压缩段（字间隙小于合并阈值）内部仍能按谷点切出正确字数。"""
+    cell_h = 60.0
+    seg = _compressed_group(n_sub_chars=6, char_h=20, gap=8)
+    boxes = _split_dense_segment(seg, 0.0, float(seg.shape[0]), cell_h)
+    assert len(boxes) == 6
+
+
+def test_split_dense_segment_falls_back_when_no_valleys():
+    """真连笔（内部无墨量谷点）时按格高均分兜底，不比旧行为差。"""
+    cell_h = 60.0
+    h = int(3 * cell_h)
+    seg = np.full((h, 50), 25, dtype=np.uint8)   # 通体是墨，没有任何谷
+    boxes = _split_dense_segment(seg, 0.0, float(h), cell_h)
+    assert len(boxes) == 3                        # 按 0.95×格高均分
+
+
+def _spread_and_overflow_column(cell_h=60.0, width=50):
+    """合成一列：既有拉开的官衔字，又有一段压缩标题（子字符数超过
+    n_chars）——用来验证超载列不再被 len(boxes) > n_chars 一票否决。"""
+    n_chars = 9
+    L = int(15 * cell_h)
+    col = np.full((L, width), 235, dtype=np.uint8)
+
+    def put_char(y0, h=int(0.9 * cell_h)):
+        col[y0:y0 + h, 6:width - 6] = 25
+
+    # 3 个拉开的单字（官衔），彼此间隙 > 2.2 格
+    put_char(int(0.2 * cell_h))
+    put_char(int(3.0 * cell_h))
+    put_char(int(6.0 * cell_h))
+    # 一段压缩标题：11 个小字紧密排列（单字 ~0.5 格，仍比 min_h 大），
+    # 子字符总数 11 > n_chars(9)
+    group_top = int(9.0 * cell_h)
+    group = _compressed_group(n_sub_chars=11, char_h=25, gap=5, width=width)
+    col[group_top:group_top + group.shape[0], :] = group
+    return col, n_chars
+
+
+def test_cells_from_components_supports_overflow_column():
+    """超载列（真实字数 > n_chars）不再被打回刚性网格，格数就是真实字数。"""
+    cell_h = 60.0
+    col, n_chars = _spread_and_overflow_column(cell_h)
+    params = GridParams(n_chars, 0.02, 0.5)
+    cells = cells_from_components(col, cell_h, n_chars, params)
+    assert cells is not None
+    assert len(cells) > n_chars                  # 3 拉开字 + 11 压缩字 = 14
+    assert [c["index"] for c in cells] == list(range(len(cells)))
+    assert all(c["type"] == "char" for c in cells)
+
+
+def test_cells_from_components_still_rejects_dense_normal_column():
+    """密排正文列（组件少、间隙都小）依旧不触发，走刚性网格。"""
+    cell_h = 60.0
+    col = _make_column(n_chars=9, cell_h=int(cell_h))
+    params = GridParams(9, 0.02, 0.5)
+    assert cells_from_components(col, cell_h, 9, params) is None
