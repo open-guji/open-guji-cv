@@ -1,0 +1,132 @@
+"""单字图块的切分质量：标注格式 + 自检能力评测。
+
+这一步测什么
+------------
+列切分成单字之后，图块可能有三类毛病（与人工审查用的标记词一致）：
+
+- `contaminated` 混入了不属于本字的墨——界行竖线、版框、上下邻字的残余；
+- `truncated`    本字的墨被切掉了一部分；
+- `not_text`     这个格位根本不是字（版框角、整条横线、空格位）。
+
+`clean` 是四类里的正例。
+
+为什么按「墨迹」判而不是按「框」判
+----------------------------------
+图块多裁一点空白**不算失败**——空白不影响下游归一化与识别。所以质量
+判定只看墨：混入=多了别人的墨，截断=少了自己的墨，与外接框大小无关。
+逐像素的细粒度指标（keep_recall / drop_precision）在合成数据集
+`char-segmentation/cells` 上跑，那里能造出逐像素金标；本数据集是**真实
+图块**，人工按上述四类给实例级标签，两者互补。
+
+评测的是「自检」而非「切分」
+----------------------------
+人工标签描述的是**当前**输出的质量，重跑切分后标签就不再对应，无法用作
+可自动重跑的回归基准。真正能自动化、也真正有用的问题是：**管线能不能
+自己发现这些坏图块**，把它们送进人工审查队列。所以指标是逐类的检出率
+与误报率，被测对象是 CharInstance.flags。
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+SCHEMA_VERSION = 1
+
+QUALITIES = ("clean", "contaminated", "truncated", "not_text")
+DEFECTS = ("contaminated", "truncated", "not_text")
+
+
+@dataclass
+class InstanceQuality:
+    """一个单字图块的质量标注。"""
+    book: str
+    page: str
+    col: int
+    idx: int
+    quality: str
+    layout: str = "rigid"          # 所在列的列型（rigid|elastic），分层用
+    seed: str | None = None        # 抽样来源，用于说明采样偏置
+    label_origin: str = "human"
+    schema_version: int = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if self.quality not in QUALITIES:
+            raise ValueError(f"未知质量标签 {self.quality!r}，应为 {QUALITIES}")
+
+    @property
+    def key(self) -> str:
+        return f"{self.page}:{self.col}:{self.idx}"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "InstanceQuality":
+        d = dict(d)
+        d.pop("schema_version", None)
+        return cls(**d)
+
+
+def load_dataset(path: str | Path) -> list[InstanceQuality]:
+    rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [InstanceQuality.from_dict(r) for r in rows]
+
+
+def save_dataset(items: list[InstanceQuality], path: str | Path) -> None:
+    Path(path).write_text(
+        json.dumps([i.to_dict() for i in items], ensure_ascii=False, indent=1),
+        encoding="utf-8")
+
+
+def evaluate_self_detection(gold: list[InstanceQuality],
+                            flags_by_key: dict[str, list[str]]) -> dict:
+    """管线自检能力：坏图块能否被 flags 标出，好图块会不会被误报。
+
+    flags_by_key: {"page:col:idx": [flag, ...]}，取自 CharInstance.flags。
+    只要有任意 flag 就算「被标记」——驱动人工审查的是有没有进队列，
+    而不是标了哪个具体原因。
+    """
+    per_class: dict[str, dict] = {}
+    for q in QUALITIES:
+        items = [g for g in gold if g.quality == q]
+        if not items:
+            continue
+        n_flagged = sum(1 for g in items if flags_by_key.get(g.key))
+        per_class[q] = {
+            "n": len(items),
+            "n_flagged": n_flagged,
+            "rate": round(n_flagged / len(items), 4),
+        }
+    n_defect = sum(per_class[q]["n"] for q in DEFECTS if q in per_class)
+    n_defect_flagged = sum(per_class[q]["n_flagged"]
+                           for q in DEFECTS if q in per_class)
+    clean = per_class.get("clean", {"n": 0, "n_flagged": 0})
+    tp, fp = n_defect_flagged, clean["n_flagged"]
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / n_defect if n_defect else 0.0
+    return {
+        "per_class": per_class,
+        "defect_recall": round(recall, 4),
+        "flag_precision": round(precision, 4),
+        "false_alarm_rate": round(clean["n_flagged"] / clean["n"], 4)
+                            if clean["n"] else 0.0,
+        "n_defect": n_defect,
+        "n_clean": clean["n"],
+    }
+
+
+def format_report(report: dict) -> str:
+    out = ["【逐类检出率】"]
+    for q, v in report["per_class"].items():
+        tag = "缺陷" if q in DEFECTS else "正例"
+        out.append(f"  {q:<13}({tag}) n={v['n']:>3}  被标记 {v['n_flagged']:>3}"
+                   f"  {v['rate']:>6.0%}")
+    out += ["",
+            f"缺陷检出率 {report['defect_recall']:.0%}"
+            f"（{report['n_defect']} 个缺陷）",
+            f"标记精确率 {report['flag_precision']:.0%}",
+            f"正例误报率 {report['false_alarm_rate']:.0%}"
+            f"（{report['n_clean']} 个正例）"]
+    return "\n".join(out)
