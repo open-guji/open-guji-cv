@@ -527,21 +527,96 @@ def _merged_components(col_bin: np.ndarray, cell_h: float
     return [((a + b) / 2, a, b) for a, b in merged]
 
 
-def cells_from_components(col_gray: np.ndarray, page_phase: float,
-                          cell_h: float, n_chars: int,
+DENSE_SPLIT_MIN_H = 0.35    # 密排段切分：子字符最小高度（× 格高）
+DENSE_SPLIT_VALLEY = 0.35   # 谷点判据：局部极小值 ≤ 段自身峰值的这个比例
+OVERFLOW_CAP_RATIO = 3.0    # 单列格数硬上限（× n_chars），防噪声爆炸
+
+
+def _split_dense_segment(col_gray: np.ndarray, a: float, b: float,
+                         cell_h: float) -> list[tuple[float, float]]:
+    """密排/压缩段内按墨迹谷点切分，不假定子字符等高。
+
+    职名页标题过长时，刻工会把字压小塞进同一列高度——按标准格高猜
+    这段有几个字必然低估（压缩后单字高度小于格高：实测一段 23 字的
+    压缩标题按格高只猜出 15 字，导致整列因"格数超限"被打回刚性网格，
+    23 字摊进 9 格，好几个字挤一格）。
+
+    改用这段自己的行投影找局部墨量谷点：不管字被压缩到多小，真实字
+    与字之间总有一处墨量低谷，谷点数 + 1 就是真实字数——不依赖任何
+    绝对尺寸假设，一次性覆盖"拉开的人名段"（原逻辑已覆盖）和"压缩的
+    超长标题段"（新增）。找不到清晰谷点（真·连笔）时按 0.95×格高
+    均分兜底，不比原逻辑更差。
+    """
+    seg = col_gray[int(round(a)):int(round(b))]
+    h = b - a
+    proj = column_projection(seg)
+    min_h = DENSE_SPLIT_MIN_H * cell_h
+
+    def even_fallback() -> list[tuple[float, float]]:
+        n_sub = max(1, int(round(h / (cell_h * 0.95))))
+        step = h / n_sub
+        return [(a + k * step, a + (k + 1) * step) for k in range(n_sub)]
+
+    if proj.sum() < 1:
+        return even_fallback()
+    win = max(3, int(cell_h * 0.10)) | 1
+    sm = np.convolve(proj, np.ones(win) / win, mode="same")
+    peak = float(sm.max())
+    if peak <= 0:
+        return even_fallback()
+    # 谷点：每一段"低于阈值"的连续区间取其最小值点，而不是逐点找局部
+    # 极小值——后者对间距设下限会把压缩到比 min_h 还密的真实字距一并
+    # 挡掉（实测把 11 字的压缩段只切出 6 段）；不设下限又会让平坦谷底
+    # 上的每个像素都各算一个"局部极小"。按阈值分段取一个代表点两个
+    # 问题一起解决，间距过近的伪谷交给下面的 merged_bounds 按 min_h 合并。
+    below = sm < DENSE_SPLIT_VALLEY * peak
+    valleys: list[int] = []
+    i = 1
+    while i < len(sm) - 1:
+        if below[i]:
+            j = i
+            while j < len(sm) - 1 and below[j]:
+                j += 1
+            valleys.append(i + int(np.argmin(sm[i:j])))
+            i = j
+        else:
+            i += 1
+    bounds = [0.0] + [float(v) for v in valleys] + [float(len(sm))]
+    merged_bounds = [bounds[0]]
+    for x in bounds[1:]:
+        if x - merged_bounds[-1] >= min_h:
+            merged_bounds.append(x)
+        else:
+            merged_bounds[-1] = x          # 太窄的切段并回前一段
+    if merged_bounds[-1] < bounds[-1]:
+        merged_bounds[-1] = bounds[-1]
+    if len(merged_bounds) < 3:             # 切不出像样的谷 → 均分兜底
+        return even_fallback()
+    return [(a + merged_bounds[i], a + merged_bounds[i + 1])
+            for i in range(len(merged_bounds) - 1)]
+
+
+def cells_from_components(col_gray: np.ndarray, cell_h: float, n_chars: int,
                           params: GridParams) -> list[dict] | None:
     """拉开列（职名/奉旨列名）的组件锚定混合切分。
 
-    职名页排版：官衔字**均匀拉开**（实测字距 3.4~3.7 格，非整数倍，
-    不在 21 字网格上，任何行相位都无法避免腰斩），列尾人名却是
-    ~0.9 格**密排**。混合处理：
-    - 字状组件（高 ≤1.55 格）→ 独立成格（bbox 外扩 padding）；
-    - 密排段组件（高 1.55~8 格，人名等）→ 段内按 ~0.95 格均分；
-    - idx = 组件中心映射到最近网格位并保持严格递增（id 稳定有序）。
+    职名页排版有两种偏离刚性网格的方式，处理都基于同一套组件分析：
+    - 官衔字**拉开**（字距 3.4~3.7 格，非整数倍，任何行相位都躲不开
+      腰斩）——单字组件（高 ≤1.55 格）独立成格；
+    - 标题过长时刻工把字**压缩**塞进同一列高度，格数因此**超过**
+      n_chars——密排/压缩段组件（高 >1.55 格）按内部墨迹谷点切分
+      （见 _split_dense_segment），而非假定子字符等于标准格高。
+
+    idx 不再映射到 0..n_chars-1 的刚性网格位——超载列的字数本就超过
+    n_chars，映射必然产生碰撞（实测把 23 字的列砸扁成 9 格）。组件
+    已经是按 y 升序的真实阅读顺序，直接顺序编号即可，格数就是真实
+    字数，不再向 n_chars 补齐空位。
 
     触发条件（证据不足返回 None 走刚性网格）：合并组件 ≥3、
-    组件中心间距中至少 2 个 > 2.2 格、组件总数 ≤ 12。
-    密排正文列组件会连成大段且间距小，绝不会误触发。"""
+    组件中心间距中至少 2 个 > 2.2 格、组件总数 ≤ 12、单个组件不超过
+    8 格高。密排正文列组件会连成大段且间距小，绝不会误触发——这四条
+    本身没变，变的只是"触发之后怎么切"。
+    """
     col_bin = (col_gray < BINARY_THRESHOLD).astype(np.uint8)
     comps = _merged_components(col_bin, cell_h)
     if len(comps) < 3 or len(comps) > 12:
@@ -561,44 +636,24 @@ def cells_from_components(col_gray: np.ndarray, page_phase: float,
         return None
     L = col_gray.shape[0]
     pad = 0.10 * cell_h
-    boxes: list[tuple[float, float]] = []      # 每格 (y0, y1)
+    boxes: list[tuple[float, float]] = []      # 每格 (y0, y1)，已按 y 升序
     for cy, a, b in comps:
         h = b - a
         if h <= 1.55 * cell_h:                 # 单字组件
             boxes.append((max(0.0, a - pad), min(float(L), b + pad)))
-        else:                                   # 密排段：内部均分
-            n_sub = max(1, int(round(h / (cell_h * 0.95))))
-            step = h / n_sub
-            for k in range(n_sub):
-                boxes.append((max(0.0, a + k * step - pad * 0.5),
-                              min(float(L), a + (k + 1) * step + pad * 0.5)))
-    if len(boxes) > n_chars:
-        return None
+        else:                                   # 密排/压缩段：谷点切分
+            for sa, sb in _split_dense_segment(col_gray, a, b, cell_h):
+                boxes.append((max(0.0, sa - pad * 0.5),
+                              min(float(L), sb + pad * 0.5)))
+    if len(boxes) > OVERFLOW_CAP_RATIO * n_chars:
+        return None                            # 谷点也切不出数——噪声，放弃
     cells: list[dict] = []
-    used: set[int] = set()
-    prev = -1
-    for y0, y1 in boxes:
-        cy = (y0 + y1) / 2
-        idx = int(round((cy - page_phase - 0.5 * cell_h) / cell_h))
-        idx = min(max(idx, prev + 1), n_chars - 1)
-        while idx in used and idx < n_chars - 1:
-            idx += 1
-        used.add(idx)
-        prev = idx
+    for idx, (y0, y1) in enumerate(boxes):
         kind = ("char" if _junk_free_ink(col_gray[int(y0):int(y1)])
                 >= params.empty_ink_ratio else "empty")
         cells.append({"type": kind, "index": idx,
                       "y_top": y0, "y_bottom": y1,
                       "text": None, "confidence": 0.0})
-    for i in range(n_chars):
-        if i not in used:
-            y0 = page_phase + cell_h * i
-            y1 = y0 + cell_h
-            if 0 <= y0 and y1 <= L:
-                cells.append({"type": "empty", "index": i,
-                              "y_top": y0, "y_bottom": y1,
-                              "text": None, "confidence": 0.0})
-    cells.sort(key=lambda c: c["index"])
     return cells
 
 
@@ -774,8 +829,7 @@ class GridSegmenter:
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
                 # 拉开列（职名页官衔，字距 ~3.5 格非整数倍）优先组件锚定
-                cells = cells_from_components(crop, page_phase, cell_h, n,
-                                              self.params)
+                cells = cells_from_components(crop, cell_h, n, self.params)
                 if cells is None:
                     bounds = rigid_bounds(proj, page_phase, cell_h, n)
                     cells = cells_from_bounds(crop, bounds, self.params)
