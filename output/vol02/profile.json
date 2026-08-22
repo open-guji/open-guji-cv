@@ -1,0 +1,34 @@
+{
+  "layout": "cut_half",
+  "banxin_position": "right",
+  "content_format": "regular",
+  "font_type": "printed",
+  "lines_per_page": 9,
+  "fixed_chars_per_line": false,
+  "chars_per_line": null,
+  "has_marginal_notes": false,
+  "color_mode": "bw",
+  "background_color": "white",
+  "text_color": "black",
+  "border_color": "black",
+  "border_style": "single",
+  "border_wear": "heavy",
+  "interferences": [
+    "margin"
+  ],
+  "margin_color": "white",
+  "skip_pages": [],
+  "skip_steps": [],
+  "auto_detected": true,
+  "detection_confidence": {
+    "color_mode": 1.0,
+    "layout": 1.0,
+    "lines_per_page": 0.87,
+    "margin": 0.7636873757943576,
+    "border_style": 0.75,
+    "border_wear": 0.93,
+    "chars_per_line": 0.3,
+    "has_marginal_notes": 1.0,
+    "font_type": 1.0
+  }
+}
