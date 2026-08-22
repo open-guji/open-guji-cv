@@ -32,7 +32,7 @@ def test_roundtrip(tmp_path):
 def test_defect_recall_counts_all_three_defect_classes():
     gold = [_iq("1", "contaminated"), _iq("2", "truncated"),
             _iq("3", "not_text"), _iq("4", "clean")]
-    flags = {"1:1:0": ["rule_like"], "2:1:0": [], "3:1:0": ["suspect_empty"],
+    flags = {"1:1:0": ["rule_bar"], "2:1:0": [], "3:1:0": ["suspect_empty"],
              "4:1:0": []}
     r = evaluate_self_detection(gold, flags)
     assert r["n_defect"] == 3
@@ -43,7 +43,7 @@ def test_defect_recall_counts_all_three_defect_classes():
 
 def test_false_alarm_counted_and_lowers_precision():
     gold = [_iq("1", "contaminated"), _iq("2", "clean")]
-    flags = {"1:1:0": ["bad_seg"], "2:1:0": ["rule_like"]}
+    flags = {"1:1:0": ["bad_seg"], "2:1:0": ["rule_bar"]}
     r = evaluate_self_detection(gold, flags)
     assert r["false_alarm_rate"] == 1.0
     assert r["flag_precision"] == 0.5
