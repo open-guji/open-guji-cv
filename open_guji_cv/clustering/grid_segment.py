@@ -56,6 +56,16 @@ RULE_MIN_HALF = 3.0        # 界行半宽下限（实测宽度中位 5px）
 RULE_CLEARANCE = 3.0       # 列框离界行再留的余量
 RULE_PERIOD_TOL = 0.06     # 界行量出的列距偏离先验超此 → 判为量错（缺条界行
                            # 会把中位间距顶到 2 倍），弃用，保留先验
+CELL_COV_STOP = 0.10       # 图块横向外扩时，撞到竖线覆盖率高于此的 x 就停。
+                           # 文字笔画过不了半带高的竖直开运算（带内实测 ≈0），
+                           # 界行/版框则是 0.2~1.0；0.05~0.15 之间结果不变
+CELL_RULE_CLEARANCE = 4.0  # 停下之后再往回让这么多像素，躲开线的毛边
+CELL_FENCE_BANDS = 6       # 围栏用的覆盖率**分带**统计：整页统计对斜/弯的界行
+                           # 是瞎的（墨摊到二三十个 x 上，每个都不到 0.2），
+                           # 分带后同一条线在每带里都是直的，取各带最内侧
+CELL_FENCE_LINE_FRAC = 0.45  # 带内竖直开运算的长度比例。带高约 1/6 页高（≈3 个
+                           # 字高），0.45 ≈ 1.4 个字高——字的竖笔够不着
+CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
@@ -90,6 +100,34 @@ def _vline_cov(binary: np.ndarray, line_frac: float = 0.3) -> np.ndarray:
     k = cv2.getStructuringElement(
         cv2.MORPH_RECT, (1, max(3, int(h * line_frac))))
     return cv2.dilate(cv2.erode(binary, k), k).sum(axis=0) / h
+
+
+def _vline_cov_banded(binary: np.ndarray,
+                      n_bands: int = CELL_FENCE_BANDS,
+                      line_frac: float = CELL_FENCE_LINE_FRAC) -> np.ndarray:
+    """逐 x 的竖线覆盖率，**分带取最大**——斜线/弯线也拦得住。
+
+    整页统计（_vline_cov）要求一条竖直连续段跨 0.3 页高。界行只要斜或弯
+    个几像素，同一条线的墨就被摊到二三十个 x 上，每个 x 都过不了阈值，
+    整页 cov 就是一片 0：拿它当围栏，裁切边会直接穿过界行。而在 1/6 页高
+    的带里，同一条线几乎是直的，覆盖率照样接近 1。各带取 max 得到的是这
+    条线**最往里探**的那个位置，正是裁切要躲开的边界。
+
+    实测（vol01，24605 个字格）：整页围栏 rule_bar 代理 0.94%，
+    分带围栏 0.43%，而被裁掉笔画的比例反而更低。
+    """
+    h = binary.shape[0]
+    out = np.zeros(binary.shape[1], dtype=float)
+    for i in range(n_bands):
+        a, b = h * i // n_bands, h * (i + 1) // n_bands
+        if b - a < 3:
+            continue
+        k = cv2.getStructuringElement(
+            cv2.MORPH_RECT, (1, max(3, int((b - a) * line_frac))))
+        seg = binary[a:b]
+        out = np.maximum(out,
+                         cv2.dilate(cv2.erode(seg, k), k).sum(axis=0) / (b - a))
+    return out
 
 
 def rule_evidence(gray: np.ndarray, line_frac: float = 0.3) -> float:
@@ -284,6 +322,79 @@ def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
     old = _rule_in_col(segs, _comb(cx0, period_in, n_cols, inset_l, inset_r))
     new = _rule_in_col(segs, _comb(cand[0], cand[1], n_cols, cand[2], cand[3]))
     return cand if new <= old else (cx0, period_in, inset_l, inset_r)
+
+
+def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
+                           n_cols: int, inset_l: float, inset_r: float
+                           ) -> list[tuple[float, float]]:
+    """图块的横向裁切边：从文字带往外扩，扩到**撞上竖线结构**为止。
+
+    为什么不按文字带裁
+    ------------------
+    文字带是「正常居中字」的范围。职名列的「臣」是小字、贴着界行写：横向
+    中心落在列格的 0.78 处、只占 0.43 列宽，右缘越出文字带中位 15px（最多
+    31px）。实测 vol01 全书 24605 个字格，按文字带裁有 **17.8% 的字被切掉
+    笔画**，「臣」形字格更是 79.7% 被切、中位切掉 336 个像素。而且这种损失
+    是**静默**的——切下来的图块自己看不出缺了一块，没有任何 flag 报警。
+
+    为什么不能用固定余量
+    --------------------
+    实测界行内缘伸进列格中位 4.9px、95 分位 19.6px，而「臣」的外缘离列格
+    边界中位只有 10.0px、10 分位就是 0px：两个分布重叠，固定阈值只能在两害
+    之间选一个——余量 9px 时 21% 的图块裹进界行、44% 的「臣」被切；余量
+    15px 时裹线降到 8.7%，切字涨到 68%。
+
+    做法：拿竖线覆盖率当围栏
+    ------------------------
+    从文字带边缘一格一格往外走，覆盖率一超过 CELL_COV_STOP 就停，再退
+    CELL_RULE_CLEARANCE 个像素。文字笔画过不了半带高的竖直开运算（带内实测
+    ≈0），界行和版框则是 0.2~1.0，两者在这个量上不重叠。两个细节缺一不可：
+
+    - 覆盖率必须**分带**统计（_vline_cov_banded）。整页统计对斜/弯的界行
+      是瞎的，围栏形同虚设——离线对比 rule_bar 代理 0.94% vs 分带 0.43%。
+    - 只有**撞到墙**（或这一侧本来就检出了界行）才敢扩。一路走到列格边界
+      都没碰到东西，说明这一侧没有分隔物，再扩就是往邻列的墨里扩。
+
+    最外两列挨着的是**版框**：双边框加磨损，实测是一条 40px 宽、覆盖率在
+    0.0~0.4 之间忽高忽低的乱带（vol01/33 右侧 1636~1685），实心核心只占最
+    外面 12px。贴着检出的界行裁会把外侧那一大片一起圈进来，而一格一格走的
+    围栏在乱带外面就停住了。
+
+    取 min/max 保证本函数**只放宽、不收紧**图块。实测（vol01 全书 24605 个
+    字格，端到端跑完 segment+chars）：被切掉笔画的字格 44.8% → 9.2%，
+    「臣」形字格 79.7% → 35.1%，而 rule_bar 只从 47 块动到 53 块（都是
+    0.2%）、无标记块 67.7% → 67.0%——救回大量字形，几乎不付代价。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    cov = _vline_cov_banded((gray < BINARY_THRESHOLD).astype(np.uint8))
+    w = len(cov)
+    centers = [(a + b) / 2 for a, b in rule_segments(gray)]
+    tol = period * CELL_RULE_TOL
+    # 文字带本身也先内缩一点：界行正好压在带边上时，这一点点就是全部的余量
+    shrink = min(max(period - inset_l - inset_r, 0.0) * 0.03, 4.0)
+    out: list[tuple[float, float]] = []
+    for k in range(n_cols):
+        bl, br = cx0 + period * k, cx0 + period * (k + 1)
+        lo = cx0 + period * k + inset_l + shrink
+        hi = cx0 + period * (k + 1) - inset_r - shrink
+        x = int(round(lo))
+        while x - 1 >= bl and x - 1 >= 0 and cov[x - 1] <= CELL_COV_STOP:
+            x -= 1
+        if (x - 1 >= 0 and cov[x - 1] > CELL_COV_STOP) \
+                or any(abs(c - bl) <= tol for c in centers):
+            lo = min(lo, max(bl, x + CELL_RULE_CLEARANCE))
+        x = int(round(hi))
+        while x + 1 <= br and x + 1 < w and cov[x + 1] <= CELL_COV_STOP:
+            x += 1
+        if (x + 1 < w and cov[x + 1] > CELL_COV_STOP) \
+                or any(abs(c - br) <= tol for c in centers):
+            hi = max(hi, min(br, x - CELL_RULE_CLEARANCE))
+        if hi - lo < period * 0.2:            # 证据自相矛盾 → 退回文字带
+            lo = cx0 + period * k + inset_l
+            hi = cx0 + period * (k + 1) - inset_r
+        out.append((float(lo), float(hi)))
+    return out
 
 
 def column_projection(col_gray: np.ndarray,
@@ -1146,10 +1257,18 @@ class GridSegmenter:
                     inset_l = float(inset_prior[0])
                 if inset_r < inset_prior[1] * INSET_TOL:
                     inset_r = float(inset_prior[1])
+            # left_x/right_x 是**文字带**（正常居中字的范围，网格拟合用）；
+            # cell_left_x/cell_right_x 是**图块裁切边**（贴着实测界行内缘，
+            # 量不到界行则退回文字带）。两者都要给下游：职名列的「臣」写在
+            # 文字带之外的留白里，按文字带裁会被切掉；见 cell_bounds_from_rules。
+            cell_bounds = cell_bounds_from_rules(image, cx0, period, n_cols,
+                                                 inset_l, inset_r)
             columns_info = [
                 {"index": n_cols - k,          # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
-                 "right_x": cx0 + period * (k + 1) - inset_r}
+                 "right_x": cx0 + period * (k + 1) - inset_r,
+                 "cell_left_x": cell_bounds[k][0],
+                 "cell_right_x": cell_bounds[k][1]}
                 for k in range(n_cols)]
             # 列拟合质量：界行竖线落入列格内部的比例。拟合正确时
             # 界行全在列格之间的缝里；错位半周期则大量进入列内——
@@ -1193,6 +1312,9 @@ class GridSegmenter:
             col_w = right_x - left_x
             col_result = {"index": col["index"], "left_x": left_x,
                           "right_x": right_x, "ocr_text": "", "cells": []}
+            if col.get("cell_left_x") is not None:
+                col_result["cell_left_x"] = float(col["cell_left_x"])
+                col_result["cell_right_x"] = float(col["cell_right_x"])
             result_columns.append(col_result)
             x1 = max(0, int(left_x) + 2)
             x2 = min(w, int(right_x) - 2)

@@ -639,11 +639,19 @@ class CharExtractor:
             heights = [float(c["y_bottom"]) - float(c["y_top"]) for c in cells]
             cell_h_ref = float(np.median(heights))
 
-            # 水平方向内缩——列边界即界行位置；纵向条带覆盖全部格位并留出
-            # 出头笔画的余量，界行竖线要整条进条带才认得出「高且窄」。
-            shrink_x = min(col_w * 0.03, 4.0)
-            sx0 = int(round(max(0.0, left_x + shrink_x)))
-            sx1 = int(round(min(float(img_w), right_x - shrink_x)))
+            # 条带按切分给出的**裁切边**裁，不按文字带裁。文字带是「正常居中
+            # 字」的范围，而职名列的「臣」是小字、贴着界行写：横向中心在列格
+            # 的 0.78 处、只占 0.43 列宽，右缘越出文字带中位 15px（最多 31px）。
+            # 按文字带裁会把它切掉——这类横向截断占标注集里截断实例的一半。
+            # 裁切边由 grid_segment.cell_bounds_from_rules 逐条按实测界行定：
+            # 量到界行就贴着界行内缘外扩，量不到就等于文字带（即旧行为）。
+            gl = col.get("cell_left_x")
+            gr = col.get("cell_right_x")
+            if gl is None or gr is None:          # 老的切分产物没有这两个字段
+                shrink_x = min(col_w * 0.03, 4.0)
+                gl, gr = left_x + shrink_x, right_x - shrink_x
+            sx0 = int(round(max(0.0, float(gl))))
+            sx1 = int(round(min(float(img_w), float(gr))))
             pad_y = cell_h_ref * self.padding_ratio
             sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),

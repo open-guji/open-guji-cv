@@ -917,3 +917,49 @@ def test_later_passes_keep_the_corrected_cell_height(tmp_path):
     med = float(np.median(hs))
     off = [x for x in hs if abs(x - med) > 0.05 * med]
     assert not off, f"格高偏离共识的页: {off}（共识 {med:.1f}）"
+
+
+# ── 图块裁切边（按界行外扩，救回贴着界行写的小字）──────────
+
+def test_banded_cov_sees_a_tilted_rule_that_page_cov_misses():
+    """整页覆盖率对斜界行是瞎的——围栏必须分带统计，否则形同虚设。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import (
+        BINARY_THRESHOLD, CELL_COV_STOP, _vline_cov, _vline_cov_banded)
+    g = _ruled_page(0.012)
+    b = (g < BINARY_THRESHOLD).astype(np.uint8)
+    # 整页统计：斜线的墨被摊开，围栏根本拦不住
+    assert _vline_cov(b).max() < 3 * CELL_COV_STOP
+    # 分带统计：同一条线在带内几乎是直的，稳稳高过阈值
+    assert _vline_cov_banded(b).max() > 5 * CELL_COV_STOP
+
+
+def test_cell_bounds_widen_up_to_the_rule_but_not_into_it():
+    """裁切边该一直扩到界行跟前——文字带白留的内缩正是小字写字的地方。"""
+    from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
+    g = _ruled_page(0.0, w=900, period=180)
+    # 列格 [180,360]，文字带留 40px 内缩；界行在 180 与 360 上，线宽 2px
+    bounds = cell_bounds_from_rules(g, 180.0, 180.0, 3, 40.0, 40.0)
+    lo, hi = bounds[0]
+    assert lo < 220.0 and hi > 320.0, bounds     # 确实往外扩了
+    assert lo > 181.0 and hi < 359.0, bounds     # 但没碰到界行
+
+
+def test_cell_bounds_never_narrower_than_the_text_band():
+    """只放宽不收紧：没有界行可依时必须原样退回旧的文字带裁法。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
+    blank = np.full((1600, 900), 255, np.uint8)
+    (lo, hi), = cell_bounds_from_rules(blank, 180.0, 180.0, 1, 40.0, 40.0)
+    assert lo >= 220.0 - 4.0 and hi <= 320.0 + 4.0, (lo, hi)
+
+
+def test_cell_bounds_stay_outside_a_worn_double_frame():
+    """最外列挨着的是版框：双边框加磨损是一条乱带，围栏要停在乱带外面。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
+    g = _ruled_page(0.0, w=900, period=180)
+    g[:, 360:366] = 0        # 实心内框线
+    g[:1200, 372:378] = 0    # 磨掉一截的外框线（覆盖率 0.75，检不出实心核心）
+    (lo, hi), = cell_bounds_from_rules(g, 180.0, 180.0, 1, 40.0, 40.0)
+    assert hi <= 360.0, hi
