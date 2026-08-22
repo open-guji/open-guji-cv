@@ -1,0 +1,26 @@
+{
+ "rounds": [
+  {
+   "round": 0,
+   "lm": "ngram",
+   "known": 29851,
+   "high_conf": 29205,
+   "suspects": 5240
+  },
+  {
+   "round": 1,
+   "lm": "ngram",
+   "known": 29851,
+   "high_conf": 29273,
+   "suspects": 1227
+  },
+  {
+   "round": 2,
+   "lm": "ngram",
+   "known": 29851,
+   "high_conf": 29277,
+   "suspects": 1049
+  }
+ ],
+ "final": null
+}
