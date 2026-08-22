@@ -145,3 +145,185 @@ def test_seg_eval_scores_and_ranks(tmp_path):
 def test_all_strategies_registered():
     assert set(seg_eval.STRATEGIES) >= {"padding_box", "gap_threshold",
                                         "component_owner"}
+
+
+# ── boundary_ink：切分缺陷自检 ────────────────────────────
+
+def _patch(ink_rows, H=100, W=60):
+    import numpy as np
+    g = np.full((H, W), 255, np.uint8)
+    for a, b in ink_rows:
+        g[a:b, 15:45] = 0
+    return g
+
+
+def test_boundary_ink_zero_when_char_sits_inside_cell():
+    from open_guji_cv.clustering.extractor import _boundary_ink_frac
+    assert _boundary_ink_frac(_patch([(30, 70)])) == 0.0
+
+
+def test_boundary_ink_immune_to_extra_whitespace():
+    """多裁空白不得判失败——这正是「只看墨不看框」的要求。"""
+    from open_guji_cv.clustering.extractor import _boundary_ink_frac
+    tight = _patch([(30, 70)], H=100)
+    padded = _patch([(60, 100)], H=160)      # 同样的字，上下多留 60px 空白
+    assert _boundary_ink_frac(tight) == 0.0
+    assert _boundary_ink_frac(padded) == 0.0
+
+
+def test_boundary_ink_fires_on_neighbor_residue():
+    from open_guji_cv.clustering.extractor import (BOUNDARY_INK_T,
+                                                   _boundary_ink_frac)
+    # 本字居中 + 顶部一条邻字残余
+    assert _boundary_ink_frac(_patch([(0, 6), (30, 70)])) > BOUNDARY_INK_T
+
+
+def test_boundary_ink_fires_on_truncated_char():
+    from open_guji_cv.clustering.extractor import (BOUNDARY_INK_T,
+                                                   _boundary_ink_frac)
+    # 字被切在下边界上
+    assert _boundary_ink_frac(_patch([(60, 100)])) > BOUNDARY_INK_T
+
+
+def test_boundary_ink_empty_patch_is_zero():
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _boundary_ink_frac
+    assert _boundary_ink_frac(np.full((50, 40), 255, np.uint8)) == 0.0
+
+
+def test_extract_page_emits_boundary_ink_flag():
+    import numpy as np
+    from open_guji_cv.clustering.extractor import CharExtractor
+    # 一列两格，第 2 格的字紧贴格顶（模拟上邻字残余/截断）
+    page = np.full((300, 120), 235, np.uint8)
+    page[20:80, 30:90] = 25          # 第 1 格：居中
+    page[100:112, 30:90] = 25        # 第 2 格：紧贴顶部
+    page[150:190, 30:90] = 25
+    grid = {"columns": [{"index": 1, "left_x": 20.0, "right_x": 100.0,
+                         "cells": [
+                             {"type": "char", "index": 0, "y_top": 10.0,
+                              "y_bottom": 100.0},
+                             {"type": "char", "index": 1, "y_top": 100.0,
+                              "y_bottom": 200.0}]}]}
+    res = CharExtractor().extract_page(page, grid, "b", "1")
+    flags = {i.idx: i.flags for i, _ in res}
+    assert "boundary_ink" in flags.get(1, []), flags
+
+
+# ── 分层缺陷自检：确定层按成因分开标 ──────────────────────
+
+def _blank(H=100, W=60):
+    import numpy as np
+    return np.full((H, W), 255, np.uint8)
+
+
+def test_rule_bar_fires_on_interior_vertical_line():
+    """混入的界行竖线**不一定贴边**——实测 x/W 从 0.08 到 0.96 都有。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank()
+    g[30:70, 25:45] = 0          # 字身
+    g[0:100, 8:12] = 0           # 满高细竖线，位于图块内部 x/W≈0.13
+    assert "rule_bar" in _defect_flags(g)
+
+
+def test_rule_bar_ignores_thick_stroke_attached_to_char():
+    """满高的竖笔只要连在字身上就不是界行——竖线的特征是「独立」。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank()
+    g[0:100, 28:32] = 0          # 满高竖笔
+    g[45:55, 20:40] = 0          # 与之相连的横笔 → 同一个连通体
+    assert "rule_bar" not in _defect_flags(g)
+
+
+def test_edge_blob_fires_only_when_component_wholly_in_band():
+    """「整体落在边缘带内」才算邻字残余；顶天立地的高字不该被冤枉。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    residue = _blank()
+    residue[30:70, 20:40] = 0
+    residue[0:8, 15:45] = 0      # 独立的一小条，整体在上边缘带内
+    assert "edge_blob" in _defect_flags(residue)
+
+    tall = _blank()
+    tall[2:98, 20:40] = 0        # 一个顶天立地的高字，墨确实进了边缘带
+    assert "edge_blob" not in _defect_flags(tall)
+
+
+def test_frame_bars_needs_two_bars_so_yi_stays_clean():
+    """单条满宽扁横条是「一」字本身；版框总是成对出现。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    yi = _blank()
+    yi[48:56, 2:58] = 0
+    assert "frame_bars" not in _defect_flags(yi)
+
+    frame = _blank()
+    frame[20:28, 0:60] = 0
+    frame[70:78, 0:60] = 0
+    assert "frame_bars" in _defect_flags(frame)
+
+
+def test_wide_gap_flags_cross_column_patch():
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank(W=120)
+    g[30:70, 5:35] = 0           # 左列的墨
+    g[30:70, 85:115] = 0         # 右列的墨，中间空一大截
+    assert "wide_gap" in _defect_flags(g)
+
+
+def test_defect_flags_clean_char_has_none():
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank()
+    g[30:70, 20:40] = 0
+    assert _defect_flags(g) == []
+
+
+def test_defect_flags_immune_to_extra_whitespace():
+    """多裁空白仍然不得判失败——分层之后这条性质必须保持。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    tight = _blank(H=100)
+    tight[30:70, 20:40] = 0
+    padded = _blank(H=200)
+    padded[80:120, 20:40] = 0    # 同一个字，上下各多留 50px
+    assert _defect_flags(tight) == []
+    assert _defect_flags(padded) == []
+
+
+def test_defect_flags_empty_patch_is_quiet():
+    from open_guji_cv.clustering.extractor import _defect_flags
+    assert _defect_flags(_blank()) == []
+
+
+def test_run_book_clears_stale_patches(tmp_path):
+    """重跑必须清掉上一次的残留图块。
+
+    否则旧图块仍躺在磁盘上、却不在新 index.jsonl 里，按 page:col:idx
+    对标的人工标签会对上**过期图块**——实测一次重跑留下 2456 个孤儿，
+    直接测出了自相矛盾的报告。
+    """
+    import json
+    import numpy as np
+    import cv2
+    from open_guji_cv.clustering.extractor import CharExtractor
+
+    book = tmp_path / "vol"
+    (book / "phase3_char_grid").mkdir(parents=True)
+    (book / "s3_crop").mkdir(parents=True)
+    page = np.full((300, 120), 235, np.uint8)
+    page[20:80, 30:90] = 25
+    cv2.imwrite(str(book / "s3_crop" / "1.png"), page)
+    (book / "phase3_char_grid" / "1_char_grid.json").write_text(json.dumps(
+        {"columns": [{"index": 1, "left_x": 20.0, "right_x": 100.0,
+                      "cells": [{"type": "char", "index": 0,
+                                 "y_top": 10.0, "y_bottom": 100.0}]}]}),
+        encoding="utf-8")
+
+    stale = book / "phase4_chars" / "patches" / "1"
+    stale.mkdir(parents=True)
+    (stale / "1_99.png").write_bytes(b"stale")     # 上一次切分留下的孤儿
+
+    CharExtractor().run_book(book, source_dir=book / "s3_crop")
+
+    live = {json.loads(l)["patch_path"] for l in
+            (book / "phase4_chars" / "index.jsonl").read_text(
+                encoding="utf-8").splitlines()}
+    on_disk = {f"patches/1/{p.name}" for p in stale.glob("*.png")}
+    assert on_disk == live, f"磁盘上有 index 之外的图块: {on_disk - live}"
