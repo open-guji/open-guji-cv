@@ -24,6 +24,7 @@ import numpy as np
 
 from ..utils.image_io import imread
 from .extractor import CharExtractor
+from .page_type import classify_page_type
 
 BINARY_THRESHOLD = 128
 EMPTY_INK_RATIO = 0.02     # 格内墨迹覆盖率低于此 → empty
@@ -1233,6 +1234,7 @@ class GridSegmenter:
         # ── Pass 1: 逐页独立拟合，收集网格参数与墨量 ──
         results: dict[str, dict] = {}
         pages: list[tuple[str, Path, dict]] = []
+        skipped_pages: list[tuple[str, str]] = []
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
             img_path = CharExtractor._find_page_image(src, stem)
@@ -1244,8 +1246,25 @@ class GridSegmenter:
                 continue
             with open(lf, encoding="utf-8") as f:
                 layout = json.load(f)
+            # 页型闸门：封面/书签/空白页没有正文栏格，套网格是无中生有。
+            # 实测不加闸门时 vol01/2（书签页）被切成 126 个块、bad_seg 94%，
+            # vol01/158（近空白页）格高锁到 37.8px、切出 0 个字。
+            # 判不准时默认走网格——误跳过一页正文是丢真数据，代价远大于
+            # 多切一页废页（判据与余量见 page_type.classify_page_type）。
+            ptype, policy = classify_page_type(
+                image if image.ndim == 2
+                else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
+            if policy == "skip":
+                results[stem] = {"image_size": {"width": int(image.shape[1]),
+                                                "height": int(image.shape[0])},
+                                 "page_type": ptype, "skipped": "page_type",
+                                 "grid": {}, "columns": []}
+                skipped_pages.append((stem, ptype))
+                continue
             pages.append((stem, img_path, layout))   # 不缓存像素，弱页重读
-            results[stem] = self.segment_page(image, layout)
+            r = self.segment_page(image, layout)
+            r["page_type"] = ptype
+            results[stem] = r
 
         # ── Pass 2a: 书级格高共识，校正格高锁错的页 ──
         # 刻本全书同版：格高是**物理刚性常量**，一页不可能是别页的 1/2。
@@ -1405,6 +1424,16 @@ class GridSegmenter:
             n_empty += pe
             n_pages += 1
 
+        # 跳过的页也要落盘：下游据此知道"这一页有意不切"，而不是产物缺失
+        for stem, ptype in skipped_pages:
+            with open(out_dir / f"{stem}_char_grid.json", "w",
+                      encoding="utf-8") as f:
+                json.dump(results[stem], f, ensure_ascii=False, indent=2)
+        if skipped_pages:
+            from collections import Counter as _C
+            kinds = dict(_C(t for _, t in skipped_pages))
+            print(f"  页型闸门跳过 {len(skipped_pages)} 页: {kinds}")
+
         meta = {"segmenter": "grid_strict",
                 "params": {"chars_per_line": self.params.chars_per_line,
                            "empty_ink_ratio": self.params.empty_ink_ratio,
@@ -1412,7 +1441,11 @@ class GridSegmenter:
                 "stats": {"pages": n_pages, "chars": n_chars,
                           "empty": n_empty, "weak_pages": n_weak,
                           "row_fixed_pages": n_row_fix,
-                          "phase_fixed_pages": n_phase_fix}}
+                          "phase_fixed_pages": n_phase_fix,
+                          "skipped_pages": len(skipped_pages),
+                          "skipped_kinds": dict(__import__("collections")
+                                                .Counter(t for _, t
+                                                         in skipped_pages))}}
         with open(out_dir / "grid_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         return meta

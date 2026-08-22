@@ -624,3 +624,112 @@ def test_geometry_residual_tilt_drops_to_zero_after_correct_deshear():
     g = _geom([0.01] * 4, [200, 380, 560, 740])
     assert compare_page(g, [], shear=0.01)["residual_tilt"] < 0.01
     assert compare_page(g, [], shear=0.0)["residual_tilt"] > 10
+
+
+# ── 页型闸门 ──────────────────────────────────────────────
+
+def _blank_page(h=2400, w=1700):
+    """近空白页：只有界行竖线，几乎无字。"""
+    import numpy as np
+    g = np.full((h, w), 245, np.uint8)
+    for k in range(1, 10):
+        g[60:h - 60, k * 180 - 2:k * 180 + 2] = 20
+    g[300:340, 900:940] = 20            # 一两个字
+    return g
+
+
+def _cover_page(h=2400, w=1700):
+    """封面：页中一个双线大框，框内大字。"""
+    import cv2
+    import numpy as np
+    g = np.full((h, w), 245, np.uint8)
+    cv2.rectangle(g, (700, 200), (1000, 1500), 20, 6)
+    cv2.rectangle(g, (715, 215), (985, 1485), 20, 3)
+    for i in range(4):                  # 四个大字
+        cv2.rectangle(g, (760, 300 + i * 280), (940, 300 + i * 280 + 220), 20, 26)
+    return g
+
+
+def _label_page(h=2400, w=1700):
+    """书签：页侧一条窄长框，其余整页留白。"""
+    import cv2
+    import numpy as np
+    g = np.full((h, w), 245, np.uint8)
+    cv2.rectangle(g, (1400, 120), (1520, 2280), 20, 5)
+    for i in range(18):
+        g[180 + i * 118:180 + i * 118 + 70, 1430:1490] = 20
+    return g
+
+
+def _body_page(h=2400, w=1700):
+    """正文：九列密排。"""
+    import numpy as np
+    g = np.full((h, w), 245, np.uint8)
+    for k in range(9):
+        x = 90 + k * 180
+        for i in range(21):
+            y = 80 + i * 110
+            g[y:y + 88, x:x + 140] = 20
+        g[60:h - 60, x - 12:x - 8] = 20
+    return g
+
+
+def test_page_type_gate_skips_blank_cover_label():
+    from open_guji_cv.clustering.page_type import classify_page_type
+    assert classify_page_type(_blank_page())[1] == "skip"
+    assert classify_page_type(_cover_page())[1] == "skip"
+    assert classify_page_type(_label_page())[1] == "skip"
+
+
+def test_page_type_gate_keeps_body():
+    from open_guji_cv.clustering.page_type import classify_page_type
+    assert classify_page_type(_body_page()) == ("body", "standard")
+
+
+def test_page_type_gate_defaults_to_standard_when_unsure():
+    """判不准要走网格——误跳过一页正文是丢真数据，比多切一页废页严重。"""
+    import numpy as np
+    from open_guji_cv.clustering.page_type import classify_page_type
+    noisy = np.full((2400, 1700), 245, np.uint8)
+    rng = np.random.default_rng(0)
+    ys, xs = rng.integers(0, 2400, 4000), rng.integers(0, 1700, 4000)
+    for y, x in zip(ys, xs):
+        noisy[y:y + 30, x:x + 30] = 20
+    assert classify_page_type(noisy)[1] == "standard"
+
+
+def test_policy_of_covers_every_type():
+    from open_guji_cv.clustering.page_type import PAGE_TYPES, policy_of
+    for t in PAGE_TYPES:
+        assert policy_of(t) in ("skip", "custom", "standard", None)
+    assert policy_of("uncertain") is None
+
+
+def test_run_book_writes_a_skipped_grid_for_non_text_pages(tmp_path):
+    """跳过的页也要落盘，下游据此知道「有意不切」，而不是产物缺失。"""
+    import json
+
+    import cv2
+
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+
+    book = tmp_path / "vol"
+    (book / "phase2_layout").mkdir(parents=True)
+    (book / "s3_crop").mkdir(parents=True)
+    cv2.imwrite(str(book / "s3_crop" / "1.png"), _label_page())
+    cv2.imwrite(str(book / "s3_crop" / "2.png"), _body_page())
+    for stem in ("1", "2"):
+        (book / "phase2_layout" / f"{stem}_layout.json").write_text(json.dumps(
+            {"borders": {"inner_frame": {"top": {"intercept": 60},
+                                         "bottom": {"intercept": 2340}}}}),
+            encoding="utf-8")
+
+    meta = GridSegmenter(chars_per_line=21, n_cols=9).run_book(
+        book, source_dir=book / "s3_crop")
+    assert meta["stats"]["skipped_pages"] == 1
+    g1 = json.loads((book / "phase3_char_grid" / "1_char_grid.json")
+                    .read_text(encoding="utf-8"))
+    assert g1["skipped"] == "page_type" and g1["columns"] == []
+    g2 = json.loads((book / "phase3_char_grid" / "2_char_grid.json")
+                    .read_text(encoding="utf-8"))
+    assert g2["columns"], "正文页不该被跳过"

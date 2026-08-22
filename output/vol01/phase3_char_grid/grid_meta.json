@@ -6,11 +6,17 @@
     "search_ratio": 0.3
   },
   "stats": {
-    "pages": 206,
-    "chars": 24816,
-    "empty": 9476,
-    "weak_pages": 7,
-    "row_fixed_pages": 52,
-    "phase_fixed_pages": 13
+    "pages": 201,
+    "chars": 24681,
+    "empty": 8933,
+    "weak_pages": 6,
+    "row_fixed_pages": 50,
+    "phase_fixed_pages": 12,
+    "skipped_pages": 5,
+    "skipped_kinds": {
+      "blank": 3,
+      "cover": 1,
+      "label": 1
+    }
   }
 }
