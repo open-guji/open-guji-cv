@@ -35,12 +35,215 @@ STRADDLE_OK = 0.50         # 骑线比（格线墨/格心墨）高于此 → 尝
 STRADDLE_GAIN = 0.10       # 重扫至少好这么多才接受（never-make-worse）
 SCALES = np.linspace(0.96, 1.04, 9)
 
+# ── 残余错切（界行竖线不竖）────────────────────────────────
+# deskew 把**横线**摆平了，竖线却仍可能斜着走：实测二者最佳旋正角能差
+# 0.95°，说明这不是没转够的旋转，而是纸张/扫描造成的真错切。界行斜着
+# 走一页要横向漂移 20~30px（周期才 180px），而列框是**竖直矩形**，跟不
+# 上——于是要么框裹进界行，要么让出漂移量把字裁窄。所以列拟合之前先把
+# 竖线摆正。
+SHEAR_MAX_TAN = 0.02       # 搜索范围 ±dx/dy（0.02 ≈ 1.15°）
+SHEAR_CANDIDATES = 21      # 候选个数
+SHEAR_SCALE = 0.5          # 搜索在半尺寸图上做（省一半时间，精度足够）
+SHEAR_MIN_GAIN = 1.05      # 界行证据至少提升这么多才纠正（never-make-worse）
+RULE_COV_T = 0.5           # 竖直长线覆盖率高于此才算「界行证据」
+RULE_MERGE_GAP = 4         # x 相距不超过此的高覆盖列并成同一条界行
+MIN_RULES_TO_SNAP = 3      # 至少检出这么多条界行才敢拿它定列相位
+RULE_MIN_HALF = 3.0        # 界行半宽下限（实测宽度中位 5px）
+RULE_CLEARANCE = 3.0       # 列框离界行再留的余量
+
 
 @dataclass
 class GridParams:
     chars_per_line: int
     empty_ink_ratio: float = EMPTY_INK_RATIO
     search_ratio: float = SEARCH_RATIO
+
+
+def deshear(gray: np.ndarray, tan_t: float) -> np.ndarray:
+    """按 dx/dy = tan_t 做水平错切，把斜着走的竖线摆正。
+
+    以**页面纵向中点**为不动点（x' = x - t·(y - h/2)），这样列的中点坐标
+    不变，页级相位与 Phase 2 的边框量在中高度上仍然可比。
+    """
+    if not tan_t:
+        return gray
+    h, w = gray.shape[:2]
+    m = np.float32([[1, -tan_t, tan_t * h / 2], [0, 1, 0]])
+    return cv2.warpAffine(gray, m, (w, h), flags=cv2.INTER_LINEAR,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=255)
+
+
+def _vline_cov(binary: np.ndarray, line_frac: float = 0.3) -> np.ndarray:
+    """逐 x 的「竖直长线」覆盖率：开运算留下够长的竖直连续段。"""
+    h = binary.shape[0]
+    k = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(3, int(h * line_frac))))
+    return cv2.dilate(cv2.erode(binary, k), k).sum(axis=0) / h
+
+
+def rule_evidence(gray: np.ndarray, line_frac: float = 0.3) -> float:
+    """界行证据强度：竖直长线覆盖率里高覆盖部分的总和。
+
+    竖线摆正时，同一条界行的墨全落在同一个 x 上，覆盖率逼近 1；斜着走
+    时被摊到二三十个 x 上，每个都只有 0.1~0.2，这个和就塌下去。因此它
+    可以直接当错切校正的目标函数——不需要先把界行找出来。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    cov = _vline_cov((gray < BINARY_THRESHOLD).astype(np.uint8), line_frac)
+    return float(cov[cov > RULE_COV_T].sum())
+
+
+def _deshear_bin(binary: np.ndarray, tan_t: float) -> np.ndarray:
+    """二值图版的错切：最近邻 + 背景补 0，保持严格二值。"""
+    h, w = binary.shape[:2]
+    m = np.float32([[1, -tan_t, tan_t * h / 2], [0, 1, 0]])
+    return cv2.warpAffine(binary, m, (w, h), flags=cv2.INTER_NEAREST,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
+def estimate_shear(gray: np.ndarray) -> float:
+    """估计页面残余错切量 dx/dy；没把握就返回 0。
+
+    直接以界行证据为目标搜索，并要求相对不校正至少提升 SHEAR_MIN_GAIN
+    倍才采纳——**绝不允许把页面改差**。实测 80 页：界行证据合计提升
+    1.47×，变差的页 0 张，最坏的几页从「一条界行都检不出」变成检出
+    40~50 个高覆盖列。
+
+    用页面自身的界行来定，而不用 Phase 2 边框的 `left.slope`：后者左右
+    两边就能差 3 倍（页 55：左 0.0116、右 0.0033），边框墨少且常残损，
+    而界行是整页反复出现的同一条几何证据。
+
+    先二值化再降采样，且降采样用**最大池化**而不是面积平均——界行只有
+    2~3px 宽，面积平均会把它拉成灰的、直接掉到二值阈值以下，等于把要
+    找的证据先擦掉了（实测这么做时所有候选的得分齐齐归零）。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
+    step = int(round(1 / SHEAR_SCALE))
+    if step > 1:
+        binary = cv2.dilate(binary, np.ones((step, step), np.uint8))
+        binary = binary[::step, ::step]
+
+    def score(b: np.ndarray) -> float:
+        cov = _vline_cov(b)
+        return float(cov[cov > RULE_COV_T].sum())
+
+    best_t, best_s = 0.0, score(binary) * SHEAR_MIN_GAIN
+    for t in np.linspace(-SHEAR_MAX_TAN, SHEAR_MAX_TAN, SHEAR_CANDIDATES):
+        if t == 0.0:
+            continue
+        sc = score(_deshear_bin(binary, float(t)))
+        if sc > best_s:
+            best_t, best_s = float(t), sc
+    if not best_t:
+        return 0.0
+    # 搜索在降采样图上做，最终得复核一遍**全尺寸**：半尺寸赢不等于全尺寸
+    # 也赢（实测 80 页里有 1 页如此）。never-make-worse 要在真正用的那个
+    # 分辨率上成立才算数。
+    if rule_evidence(deshear(gray, best_t)) <= rule_evidence(gray):
+        return 0.0
+    return best_t
+
+
+def rule_segments(gray: np.ndarray) -> list[tuple[int, int]]:
+    """页面上「竖直长线」的 x 区间（界行/版框竖线）。
+
+    必须在**去错切帧**里调用——斜着走的界行覆盖率只有 0.1~0.2，
+    根本过不了 RULE_COV_T。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    cov = _vline_cov((gray < BINARY_THRESHOLD).astype(np.uint8))
+    xs = np.where(cov > RULE_COV_T)[0]
+    if len(xs) == 0:
+        return []
+    segs, start, prev = [], int(xs[0]), int(xs[0])
+    for x in xs[1:]:
+        if x - prev > RULE_MERGE_GAP:
+            segs.append((start, prev))
+            start = int(x)
+        prev = int(x)
+    segs.append((start, prev))
+    return segs
+
+
+def measure_insets(vproj: np.ndarray, cx0: float, period: float,
+                   n_cols: int) -> tuple[float, float]:
+    """逐列格量文字带相对列格的左右内缩，取页面中位统一应用。
+
+    列格 = 文字带 + 界行缝（完整周期）。文字带在周期内的位置同样刚性
+    固定，所以中位数是有意义的；不这么做图块就会裹进界行。
+    """
+    insets: list[tuple[float, float]] = []
+    for k in range(n_cols):
+        s, e = int(cx0 + period * k), int(cx0 + period * (k + 1))
+        seg = vproj[max(0, s):min(len(vproj), e)]
+        if len(seg) < 4 or seg.sum() < 1:
+            continue
+        t, b = content_range(seg, min_run=0.1 * period)
+        if b - t >= 0.4 * period:          # 空列/噪声段不计入
+            insets.append((float(t), float(len(seg) - b)))
+    if not insets:
+        return period * 0.08, period * 0.08
+    return (float(np.median([a for a, _ in insets])),
+            float(np.median([b for _, b in insets])))
+
+
+def _comb(cx0: float, period: float, n_cols: int,
+          inset_l: float, inset_r: float) -> list[tuple[float, float]]:
+    return [(cx0 + period * k + inset_l, cx0 + period * (k + 1) - inset_r)
+            for k in range(n_cols)]
+
+
+def _rule_in_col(segs: list[tuple[int, int]],
+                 cols: list[tuple[float, float]]) -> float:
+    """界行落进列框内部的比例——列相位对不对的直接度量。"""
+    if not segs:
+        return 0.0
+    n = sum(1 for a, b in segs
+            if any(l + 3 <= (a + b) / 2 <= r - 3 for l, r in cols))
+    return n / len(segs)
+
+
+def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
+                          cx0: float, period: float, n_cols: int,
+                          inset_l: float, inset_r: float
+                          ) -> tuple[float, float, float]:
+    """用界行把列相位钉死，返回 (cx0, inset_l, inset_r)。
+
+    为什么要这一步：列相位原先只能从**文字投影**间接拟合，稀疏页、
+    长短不齐的职名页上谷-峰代价欠定，拟出来的相位可以整体偏十几二十
+    像素——正好把界行圈进列框。而界行本身是版上刻出来的列分隔，是
+    列边界的**直接证据**，只是过去被残余错切糊掉了看不见（见
+    estimate_shear）；摆正之后就该拿它定相位。
+
+    做法：界行相对列格起点的偏移取**环形**平均（列格是周期结构，
+    偏移只在模 period 意义下有定义，普通平均会被跨周期的样本拉飞），
+    把列格起点挪到界行上；内缩再保证至少盖住界行半宽 + 余量。
+
+    择优返回：只有当界行落入列内的比例真的下降才采纳——实测 204 页里
+    193 页采纳，总体从 0.136 降到 0.050。
+    """
+    segs = rule_segments(gray)
+    if len(segs) < MIN_RULES_TO_SNAP:
+        return cx0, inset_l, inset_r
+    centers = np.array([(a + b) / 2 for a, b in segs])
+    ang = (centers - cx0) / period * 2 * np.pi
+    delta = float(np.arctan2(np.sin(ang).mean(), np.cos(ang).mean())
+                  / (2 * np.pi) * period)
+    half = max(float(np.median([b - a + 1 for a, b in segs])) / 2,
+               RULE_MIN_HALF) + RULE_CLEARANCE
+    # 相位一动，原来的内缩就作废了——它是在旧相位下逐格量出来的。
+    # 必须在新相位下重量一遍，否则会把旧相位的误差原样搬过来（合成页上
+    # 实测：只挪相位不重量内缩，首列左边界反而从偏 12px 变成偏 23px）。
+    new_cx0 = cx0 + delta
+    new_l, new_r = measure_insets(vproj, new_cx0, period, n_cols)
+    cand = (new_cx0, max(new_l, half), max(new_r, half))
+    old = _rule_in_col(segs, _comb(cx0, period, n_cols, inset_l, inset_r))
+    new = _rule_in_col(segs, _comb(cand[0], period, n_cols, cand[1], cand[2]))
+    return cand if new <= old else (cx0, inset_l, inset_r)
 
 
 def column_projection(col_gray: np.ndarray,
@@ -262,6 +465,9 @@ def straddle_score(image: np.ndarray, result: dict) -> float:
     中位 0.38，骑线页 >0.8。"""
     if image.ndim == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # result 里的坐标在**去错切帧**，量图必须先摆到同一帧，否则列框会
+    # 整体错位、骑线比失去意义
+    image = deshear(image, result.get("grid", {}).get("shear", 0.0))
     cell_h = result.get("grid", {}).get("cell_h") or 100.0
     ratios = []
     for col in result.get("columns", []):
@@ -298,6 +504,7 @@ def sweep_row_phase(image: np.ndarray, result: dict, cell_h: float,
     骑线比对这类页仍然判别明确（字在格心 vs 骑线是硬事实）。"""
     if image.ndim == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image = deshear(image, result.get("grid", {}).get("shear", 0.0))
     cols = []
     for col in result.get("columns", []):
         cells = [c for c in col.get("cells", []) if c.get("type") != "margin"]
@@ -795,7 +1002,8 @@ class GridSegmenter:
     def segment_page(self, image: np.ndarray, layout: dict,
                      grid_override: dict | None = None,
                      cell_h_prior: float | None = None,
-                     row_phase_abs: float | None = None) -> dict:
+                     row_phase_abs: float | None = None,
+                     shear_override: float | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
         相位以本页 inner_frame 为基准换算）——弱信号页专用。
@@ -813,13 +1021,25 @@ class GridSegmenter:
         h, w = image.shape[:2]
         n = self.params.chars_per_line
 
+        # 先把斜着走的界行摆正，再谈列在哪：列框是竖直矩形，界行斜着走
+        # 一页要漂 20~30px（周期才 180px），不摆正就只能二选一——框裹进
+        # 界行，或让出漂移量把字裁窄。之后的一切坐标都在**去错切帧**里，
+        # 通过 grid.shear 传给下游（chars 会做同样的变换再裁图块）。
+        shear = shear_override if shear_override is not None \
+            else estimate_shear(image)
+        if shear:
+            image = deshear(image, shear)
+
         borders = layout.get("borders", {})
         inner = borders.get("inner_frame", {})
         col_top = inner.get("top", {}).get("intercept", 0)
         col_bottom = inner.get("bottom", {}).get("intercept", h)
-        frame_left = inner.get("left", {}).get("intercept", 0)
+        # 边框竖线取**中高度**的 x：去错切以纵向中点为不动点，中高度的 x
+        # 不受变换影响，而 intercept（y=0 处的 x）会被整条线的斜率带偏。
+        frame_left = (inner.get("left", {}).get("intercept", 0)
+                      + inner.get("left", {}).get("slope", 0.0) * h / 2)
 
-        grid_meta: dict = {}
+        grid_meta: dict = {"shear": round(float(shear), 5)}
         if self.n_cols:
             # 列网格拟合：列宽/列距与行网格同为刻本刚性先验，
             # 页级拟合一个 (相位, 列距)，替代 Phase 2 的自由列检测
@@ -838,23 +1058,11 @@ class GridSegmenter:
             else:
                 cx0, period = fit_page_grid([vproj], self.n_cols,
                                             full_widths=[image.shape[0]])
-                # 列格 = 文字带 + 界行缝（完整周期）。文字带在周期内的
-                # 位置同样刚性固定：逐列格测文字带左右内缩，取页面中位
-                # 统一应用——否则图块裹进界行，竖线隔离会误伤大半字符。
-                insets: list[tuple[float, float]] = []
-                for k in range(self.n_cols):
-                    s, e = int(cx0 + period * k), int(cx0 + period * (k + 1))
-                    seg = vproj[max(0, s):min(len(vproj), e)]
-                    if len(seg) < 4 or seg.sum() < 1:
-                        continue
-                    t, b = content_range(seg, min_run=0.1 * period)
-                    if b - t >= 0.4 * period:      # 空列/噪声段不计入
-                        insets.append((float(t), float(len(seg) - b)))
-                if insets:
-                    inset_l = float(np.median([a for a, _ in insets]))
-                    inset_r = float(np.median([b for _, b in insets]))
-                else:
-                    inset_l = inset_r = period * 0.08
+                inset_l, inset_r = measure_insets(vproj, cx0, period,
+                                                  self.n_cols)
+            # 界行是列边界的直接证据（摆正之后才看得见），拿它把相位钉死
+            cx0, inset_l, inset_r = snap_columns_to_rules(
+                image, vproj, cx0, period, self.n_cols, inset_l, inset_r)
             columns_info = [
                 {"index": self.n_cols - k,     # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
@@ -869,7 +1077,8 @@ class GridSegmenter:
                 if hi > lo:
                     in_col += int(rule_xs[lo:hi].sum())
             total_rule = max(1, int(rule_xs.sum()))
-            grid_meta = {"page_ink": page_ink, "period": float(period),
+            grid_meta = {"shear": grid_meta["shear"],
+                         "page_ink": page_ink, "period": float(period),
                          "col_phase_rel": float(cx0 - frame_left),
                          "inset_l": float(inset_l),
                          "inset_r": float(inset_r),
@@ -1044,9 +1253,10 @@ class GridSegmenter:
                     continue
                 y_best, sc_best = sweep_row_phase(image, res, consensus_h)
                 if sc_best < cur - STRADDLE_GAIN:
-                    redone = self.segment_page(image, layout,
-                                               cell_h_prior=consensus_h,
-                                               row_phase_abs=y_best)
+                    redone = self.segment_page(
+                        image, layout, cell_h_prior=consensus_h,
+                        row_phase_abs=y_best,
+                        shear_override=res["grid"].get("shear", 0.0))
                     if straddle_score(image, redone) < cur - STRADDLE_GAIN:
                         results[stem] = redone
                         n_phase_fix += 1
@@ -1085,7 +1295,9 @@ class GridSegmenter:
                         if image is None:
                             continue
                         redone = self.segment_page(
-                            image, layout, grid_override=override)
+                            image, layout, grid_override=override,
+                            shear_override=results[stem]["grid"].get(
+                                "shear", 0.0))
                         # 择优：校正绝不允许把页面改差（书级相位的边框
                         # 基准对个别页也可能不准）
                         old_q = results[stem]["grid"].get("rule_in_col", 1.0)

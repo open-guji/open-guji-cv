@@ -6,192 +6,193 @@
   "chars_per_line": 21,
   "segmenter": "grid_strict",
   "grid": {
-    "page_ink": 630721.0,
-    "period": 181.61111111111111,
-    "col_phase_rel": -6.123852438827328,
-    "inset_l": 5.0,
-    "inset_r": 10.0,
-    "rule_in_col": 0.5686,
-    "cell_h": 110.4347619047619,
-    "row_phase_rel": -11.0682373046875
+    "shear": 0.008,
+    "page_ink": 565679.0,
+    "period": 181.89777777777778,
+    "col_phase_rel": -47.22301463777255,
+    "inset_l": 28.0,
+    "inset_r": 34.0,
+    "rule_in_col": 0.0,
+    "cell_h": 109.66952380952381,
+    "row_phase_rel": -9.0682373046875
   },
   "columns": [
     {
       "index": 9,
-      "left_x": 59.0,
-      "right_x": 225.61111111111111,
+      "left_x": 59.78240409410323,
+      "right_x": 179.680181871881,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 811.7478285714286
+          "y_bottom": 814.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 811.7478285714286,
-          "y_bottom": 922.1825904761904,
+          "y_top": 814.8396571428572,
+          "y_bottom": 924.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 922.1825904761904,
-          "y_bottom": 1032.6173523809523,
+          "y_top": 924.5091809523809,
+          "y_bottom": 1034.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1032.6173523809523,
-          "y_bottom": 1143.0521142857142,
+          "y_top": 1034.1787047619048,
+          "y_bottom": 1143.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 1143.0521142857142,
-          "y_bottom": 1253.486876190476,
+          "y_top": 1143.8482285714285,
+          "y_bottom": 1253.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 1253.486876190476,
-          "y_bottom": 1363.921638095238,
+          "y_top": 1253.5177523809525,
+          "y_bottom": 1363.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 1363.921638095238,
-          "y_bottom": 1474.3564000000001,
+          "y_top": 1363.187276190476,
+          "y_bottom": 1472.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 6,
-          "y_top": 1474.3564000000001,
-          "y_bottom": 1584.7911619047618,
+          "y_top": 1472.8568,
+          "y_bottom": 1582.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 7,
-          "y_top": 1584.7911619047618,
-          "y_bottom": 1695.225923809524,
+          "y_top": 1582.526323809524,
+          "y_bottom": 1692.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1695.225923809524,
-          "y_bottom": 1805.6606857142856,
+          "y_top": 1692.1958476190475,
+          "y_bottom": 1801.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1805.6606857142856,
-          "y_bottom": 1916.0954476190475,
+          "y_top": 1801.8653714285715,
+          "y_bottom": 1911.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1916.0954476190475,
-          "y_bottom": 2026.5302095238094,
+          "y_top": 1911.534895238095,
+          "y_bottom": 2021.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2026.5302095238094,
-          "y_bottom": 2136.9649714285715,
+          "y_top": 2021.204419047619,
+          "y_bottom": 2130.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2136.9649714285715,
-          "y_bottom": 2247.399733333333,
+          "y_top": 2130.8739428571425,
+          "y_bottom": 2240.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2247.399733333333,
-          "y_bottom": 2357.834495238095,
+          "y_top": 2240.5434666666665,
+          "y_bottom": 2350.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2357.834495238095,
-          "y_bottom": 2468.269257142857,
+          "y_top": 2350.2129904761905,
+          "y_bottom": 2459.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2468.269257142857,
-          "y_bottom": 2578.704019047619,
+          "y_top": 2459.882514285714,
+          "y_bottom": 2569.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2578.704019047619,
-          "y_bottom": 2689.138780952381,
+          "y_top": 2569.552038095238,
+          "y_bottom": 2679.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2689.138780952381,
-          "y_bottom": 2799.5735428571425,
+          "y_top": 2679.221561904762,
+          "y_bottom": 2788.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2799.5735428571425,
-          "y_bottom": 2910.0083047619046,
+          "y_top": 2788.8910857142855,
+          "y_bottom": 2898.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2910.0083047619046,
-          "y_bottom": 3020.4430666666667,
+          "y_top": 2898.5606095238095,
+          "y_bottom": 3008.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3020.4430666666667,
-          "y_bottom": 3130.877828571429,
+          "y_top": 3008.230133333333,
+          "y_bottom": 3117.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -200,180 +201,180 @@
     },
     {
       "index": 8,
-      "left_x": 240.61111111111111,
-      "right_x": 407.22222222222223,
+      "left_x": 241.680181871881,
+      "right_x": 361.5779596496588,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 814.7478285714286
+          "y_bottom": 819.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 814.7478285714286,
-          "y_bottom": 925.1825904761904,
+          "y_top": 819.8396571428572,
+          "y_bottom": 929.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 925.1825904761904,
-          "y_bottom": 1035.6173523809523,
+          "y_top": 929.5091809523809,
+          "y_bottom": 1039.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1035.6173523809523,
-          "y_bottom": 1146.0521142857142,
+          "y_top": 1039.1787047619048,
+          "y_bottom": 1148.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 1146.0521142857142,
-          "y_bottom": 1256.486876190476,
+          "y_top": 1148.8482285714285,
+          "y_bottom": 1258.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 1256.486876190476,
-          "y_bottom": 1366.921638095238,
+          "y_top": 1258.5177523809525,
+          "y_bottom": 1368.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 1366.921638095238,
-          "y_bottom": 1477.3564000000001,
+          "y_top": 1368.187276190476,
+          "y_bottom": 1477.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 6,
-          "y_top": 1477.3564000000001,
-          "y_bottom": 1587.7911619047618,
+          "y_top": 1477.8568,
+          "y_bottom": 1587.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 7,
-          "y_top": 1587.7911619047618,
-          "y_bottom": 1698.225923809524,
+          "y_top": 1587.526323809524,
+          "y_bottom": 1697.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1698.225923809524,
-          "y_bottom": 1808.6606857142856,
+          "y_top": 1697.1958476190475,
+          "y_bottom": 1806.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1808.6606857142856,
-          "y_bottom": 1919.0954476190475,
+          "y_top": 1806.8653714285715,
+          "y_bottom": 1916.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1919.0954476190475,
-          "y_bottom": 2029.5302095238094,
+          "y_top": 1916.534895238095,
+          "y_bottom": 2026.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2029.5302095238094,
-          "y_bottom": 2139.9649714285715,
+          "y_top": 2026.204419047619,
+          "y_bottom": 2135.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2139.9649714285715,
-          "y_bottom": 2250.399733333333,
+          "y_top": 2135.8739428571425,
+          "y_bottom": 2245.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2250.399733333333,
-          "y_bottom": 2360.834495238095,
+          "y_top": 2245.5434666666665,
+          "y_bottom": 2355.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2360.834495238095,
-          "y_bottom": 2471.269257142857,
+          "y_top": 2355.2129904761905,
+          "y_bottom": 2464.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2471.269257142857,
-          "y_bottom": 2581.704019047619,
+          "y_top": 2464.882514285714,
+          "y_bottom": 2574.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2581.704019047619,
-          "y_bottom": 2692.138780952381,
+          "y_top": 2574.552038095238,
+          "y_bottom": 2684.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2692.138780952381,
-          "y_bottom": 2802.5735428571425,
+          "y_top": 2684.221561904762,
+          "y_bottom": 2793.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2802.5735428571425,
-          "y_bottom": 2913.0083047619046,
+          "y_top": 2793.8910857142855,
+          "y_bottom": 2903.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2913.0083047619046,
-          "y_bottom": 3023.4430666666667,
+          "y_top": 2903.5606095238095,
+          "y_bottom": 3013.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3023.4430666666667,
-          "y_bottom": 3133.877828571429,
+          "y_top": 3013.230133333333,
+          "y_bottom": 3122.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -382,180 +383,180 @@
     },
     {
       "index": 7,
-      "left_x": 422.22222222222223,
-      "right_x": 588.8333333333334,
+      "left_x": 423.5779596496588,
+      "right_x": 543.4757374274366,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 817.7478285714286
+          "y_bottom": 820.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 817.7478285714286,
-          "y_bottom": 928.1825904761904,
+          "y_top": 820.8396571428572,
+          "y_bottom": 930.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 928.1825904761904,
-          "y_bottom": 1038.6173523809523,
+          "y_top": 930.5091809523809,
+          "y_bottom": 1040.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1038.6173523809523,
-          "y_bottom": 1149.0521142857142,
+          "y_top": 1040.1787047619048,
+          "y_bottom": 1149.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 1149.0521142857142,
-          "y_bottom": 1259.486876190476,
+          "y_top": 1149.8482285714285,
+          "y_bottom": 1259.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 1259.486876190476,
-          "y_bottom": 1369.921638095238,
+          "y_top": 1259.5177523809525,
+          "y_bottom": 1369.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 1369.921638095238,
-          "y_bottom": 1480.3564000000001,
+          "y_top": 1369.187276190476,
+          "y_bottom": 1478.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 6,
-          "y_top": 1480.3564000000001,
-          "y_bottom": 1590.7911619047618,
+          "y_top": 1478.8568,
+          "y_bottom": 1588.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 7,
-          "y_top": 1590.7911619047618,
-          "y_bottom": 1701.225923809524,
+          "y_top": 1588.526323809524,
+          "y_bottom": 1698.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1701.225923809524,
-          "y_bottom": 1811.6606857142856,
+          "y_top": 1698.1958476190475,
+          "y_bottom": 1807.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1811.6606857142856,
-          "y_bottom": 1922.0954476190475,
+          "y_top": 1807.8653714285715,
+          "y_bottom": 1917.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1922.0954476190475,
-          "y_bottom": 2032.5302095238094,
+          "y_top": 1917.534895238095,
+          "y_bottom": 2027.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2032.5302095238094,
-          "y_bottom": 2142.9649714285715,
+          "y_top": 2027.204419047619,
+          "y_bottom": 2136.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2142.9649714285715,
-          "y_bottom": 2253.399733333333,
+          "y_top": 2136.8739428571425,
+          "y_bottom": 2246.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2253.399733333333,
-          "y_bottom": 2363.834495238095,
+          "y_top": 2246.5434666666665,
+          "y_bottom": 2356.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2363.834495238095,
-          "y_bottom": 2474.269257142857,
+          "y_top": 2356.2129904761905,
+          "y_bottom": 2465.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2474.269257142857,
-          "y_bottom": 2584.704019047619,
+          "y_top": 2465.882514285714,
+          "y_bottom": 2575.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2584.704019047619,
-          "y_bottom": 2695.138780952381,
+          "y_top": 2575.552038095238,
+          "y_bottom": 2685.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2695.138780952381,
-          "y_bottom": 2805.5735428571425,
+          "y_top": 2685.221561904762,
+          "y_bottom": 2794.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2805.5735428571425,
-          "y_bottom": 2916.0083047619046,
+          "y_top": 2794.8910857142855,
+          "y_bottom": 2904.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2916.0083047619046,
-          "y_bottom": 3026.4430666666667,
+          "y_top": 2904.5606095238095,
+          "y_bottom": 3014.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3026.4430666666667,
-          "y_bottom": 3136.877828571429,
+          "y_top": 3014.230133333333,
+          "y_bottom": 3123.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -564,180 +565,180 @@
     },
     {
       "index": 6,
-      "left_x": 603.8333333333334,
-      "right_x": 770.4444444444445,
+      "left_x": 605.4757374274366,
+      "right_x": 725.3735152052143,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 817.7478285714286
+          "y_bottom": 820.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 817.7478285714286,
-          "y_bottom": 928.1825904761904,
+          "y_top": 820.8396571428572,
+          "y_bottom": 930.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 928.1825904761904,
-          "y_bottom": 1038.6173523809523,
+          "y_top": 930.5091809523809,
+          "y_bottom": 1040.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1038.6173523809523,
-          "y_bottom": 1149.0521142857142,
+          "y_top": 1040.1787047619048,
+          "y_bottom": 1149.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 1149.0521142857142,
-          "y_bottom": 1259.486876190476,
+          "y_top": 1149.8482285714285,
+          "y_bottom": 1259.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 1259.486876190476,
-          "y_bottom": 1369.921638095238,
+          "y_top": 1259.5177523809525,
+          "y_bottom": 1369.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 1369.921638095238,
-          "y_bottom": 1480.3564000000001,
+          "y_top": 1369.187276190476,
+          "y_bottom": 1478.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 6,
-          "y_top": 1480.3564000000001,
-          "y_bottom": 1590.7911619047618,
+          "y_top": 1478.8568,
+          "y_bottom": 1588.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 7,
-          "y_top": 1590.7911619047618,
-          "y_bottom": 1701.225923809524,
+          "y_top": 1588.526323809524,
+          "y_bottom": 1698.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1701.225923809524,
-          "y_bottom": 1811.6606857142856,
+          "y_top": 1698.1958476190475,
+          "y_bottom": 1807.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1811.6606857142856,
-          "y_bottom": 1922.0954476190475,
+          "y_top": 1807.8653714285715,
+          "y_bottom": 1917.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1922.0954476190475,
-          "y_bottom": 2032.5302095238094,
+          "y_top": 1917.534895238095,
+          "y_bottom": 2027.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2032.5302095238094,
-          "y_bottom": 2142.9649714285715,
+          "y_top": 2027.204419047619,
+          "y_bottom": 2136.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2142.9649714285715,
-          "y_bottom": 2253.399733333333,
+          "y_top": 2136.8739428571425,
+          "y_bottom": 2246.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2253.399733333333,
-          "y_bottom": 2363.834495238095,
+          "y_top": 2246.5434666666665,
+          "y_bottom": 2356.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2363.834495238095,
-          "y_bottom": 2474.269257142857,
+          "y_top": 2356.2129904761905,
+          "y_bottom": 2465.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2474.269257142857,
-          "y_bottom": 2584.704019047619,
+          "y_top": 2465.882514285714,
+          "y_bottom": 2575.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2584.704019047619,
-          "y_bottom": 2695.138780952381,
+          "y_top": 2575.552038095238,
+          "y_bottom": 2685.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2695.138780952381,
-          "y_bottom": 2805.5735428571425,
+          "y_top": 2685.221561904762,
+          "y_bottom": 2794.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2805.5735428571425,
-          "y_bottom": 2916.0083047619046,
+          "y_top": 2794.8910857142855,
+          "y_bottom": 2904.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2916.0083047619046,
-          "y_bottom": 3026.4430666666667,
+          "y_top": 2904.5606095238095,
+          "y_bottom": 3014.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3026.4430666666667,
-          "y_bottom": 3136.877828571429,
+          "y_top": 3014.230133333333,
+          "y_bottom": 3123.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -746,180 +747,180 @@
     },
     {
       "index": 5,
-      "left_x": 785.4444444444445,
-      "right_x": 952.0555555555555,
+      "left_x": 787.3735152052143,
+      "right_x": 907.271292982992,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 819.7478285714286
+          "y_bottom": 821.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 819.7478285714286,
-          "y_bottom": 930.1825904761904,
+          "y_top": 821.8396571428572,
+          "y_bottom": 931.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 930.1825904761904,
-          "y_bottom": 1040.6173523809523,
+          "y_top": 931.5091809523809,
+          "y_bottom": 1041.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1040.6173523809523,
-          "y_bottom": 1151.0521142857142,
+          "y_top": 1041.1787047619048,
+          "y_bottom": 1150.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 1151.0521142857142,
-          "y_bottom": 1261.486876190476,
+          "y_top": 1150.8482285714285,
+          "y_bottom": 1260.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 1261.486876190476,
-          "y_bottom": 1371.921638095238,
+          "y_top": 1260.5177523809525,
+          "y_bottom": 1370.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 1371.921638095238,
-          "y_bottom": 1482.3564000000001,
+          "y_top": 1370.187276190476,
+          "y_bottom": 1479.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 6,
-          "y_top": 1482.3564000000001,
-          "y_bottom": 1592.7911619047618,
+          "y_top": 1479.8568,
+          "y_bottom": 1589.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 7,
-          "y_top": 1592.7911619047618,
-          "y_bottom": 1703.225923809524,
+          "y_top": 1589.526323809524,
+          "y_bottom": 1699.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1703.225923809524,
-          "y_bottom": 1813.6606857142856,
+          "y_top": 1699.1958476190475,
+          "y_bottom": 1808.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1813.6606857142856,
-          "y_bottom": 1924.0954476190475,
+          "y_top": 1808.8653714285715,
+          "y_bottom": 1918.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1924.0954476190475,
-          "y_bottom": 2034.5302095238094,
+          "y_top": 1918.534895238095,
+          "y_bottom": 2028.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2034.5302095238094,
-          "y_bottom": 2144.9649714285715,
+          "y_top": 2028.204419047619,
+          "y_bottom": 2137.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2144.9649714285715,
-          "y_bottom": 2255.399733333333,
+          "y_top": 2137.8739428571425,
+          "y_bottom": 2247.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2255.399733333333,
-          "y_bottom": 2365.834495238095,
+          "y_top": 2247.5434666666665,
+          "y_bottom": 2357.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2365.834495238095,
-          "y_bottom": 2476.269257142857,
+          "y_top": 2357.2129904761905,
+          "y_bottom": 2466.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2476.269257142857,
-          "y_bottom": 2586.704019047619,
+          "y_top": 2466.882514285714,
+          "y_bottom": 2576.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2586.704019047619,
-          "y_bottom": 2697.138780952381,
+          "y_top": 2576.552038095238,
+          "y_bottom": 2686.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2697.138780952381,
-          "y_bottom": 2807.5735428571425,
+          "y_top": 2686.221561904762,
+          "y_bottom": 2795.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2807.5735428571425,
-          "y_bottom": 2918.0083047619046,
+          "y_top": 2795.8910857142855,
+          "y_bottom": 2905.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2918.0083047619046,
-          "y_bottom": 3028.4430666666667,
+          "y_top": 2905.5606095238095,
+          "y_bottom": 3015.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3028.4430666666667,
-          "y_bottom": 3138.877828571429,
+          "y_top": 3015.230133333333,
+          "y_bottom": 3124.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -928,180 +929,180 @@
     },
     {
       "index": 4,
-      "left_x": 967.0555555555555,
-      "right_x": 1133.6666666666667,
+      "left_x": 969.271292982992,
+      "right_x": 1089.16907076077,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 824.7478285714286
+          "y_bottom": 825.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 824.7478285714286,
-          "y_bottom": 935.1825904761904,
+          "y_top": 825.8396571428572,
+          "y_bottom": 935.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 935.1825904761904,
-          "y_bottom": 1045.6173523809523,
+          "y_top": 935.5091809523809,
+          "y_bottom": 1045.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1045.6173523809523,
-          "y_bottom": 1156.0521142857142,
+          "y_top": 1045.1787047619048,
+          "y_bottom": 1154.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 3,
-          "y_top": 1156.0521142857142,
-          "y_bottom": 1266.486876190476,
+          "y_top": 1154.8482285714285,
+          "y_bottom": 1264.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 4,
-          "y_top": 1266.486876190476,
-          "y_bottom": 1376.921638095238,
+          "y_top": 1264.5177523809525,
+          "y_bottom": 1374.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 5,
-          "y_top": 1376.921638095238,
-          "y_bottom": 1487.3564000000001,
+          "y_top": 1374.187276190476,
+          "y_bottom": 1483.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 6,
-          "y_top": 1487.3564000000001,
-          "y_bottom": 1597.7911619047618,
+          "y_top": 1483.8568,
+          "y_bottom": 1593.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 7,
-          "y_top": 1597.7911619047618,
-          "y_bottom": 1708.225923809524,
+          "y_top": 1593.526323809524,
+          "y_bottom": 1703.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1708.225923809524,
-          "y_bottom": 1818.6606857142856,
+          "y_top": 1703.1958476190475,
+          "y_bottom": 1812.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1818.6606857142856,
-          "y_bottom": 1929.0954476190475,
+          "y_top": 1812.8653714285715,
+          "y_bottom": 1922.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1929.0954476190475,
-          "y_bottom": 2039.5302095238094,
+          "y_top": 1922.534895238095,
+          "y_bottom": 2032.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2039.5302095238094,
-          "y_bottom": 2149.9649714285715,
+          "y_top": 2032.204419047619,
+          "y_bottom": 2141.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2149.9649714285715,
-          "y_bottom": 2260.399733333333,
+          "y_top": 2141.8739428571425,
+          "y_bottom": 2251.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2260.399733333333,
-          "y_bottom": 2370.834495238095,
+          "y_top": 2251.5434666666665,
+          "y_bottom": 2361.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2370.834495238095,
-          "y_bottom": 2481.269257142857,
+          "y_top": 2361.2129904761905,
+          "y_bottom": 2470.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2481.269257142857,
-          "y_bottom": 2591.704019047619,
+          "y_top": 2470.882514285714,
+          "y_bottom": 2580.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2591.704019047619,
-          "y_bottom": 2702.138780952381,
+          "y_top": 2580.552038095238,
+          "y_bottom": 2690.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2702.138780952381,
-          "y_bottom": 2812.5735428571425,
+          "y_top": 2690.221561904762,
+          "y_bottom": 2799.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2812.5735428571425,
-          "y_bottom": 2923.0083047619046,
+          "y_top": 2799.8910857142855,
+          "y_bottom": 2909.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2923.0083047619046,
-          "y_bottom": 3033.4430666666667,
+          "y_top": 2909.5606095238095,
+          "y_bottom": 3019.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3033.4430666666667,
-          "y_bottom": 3143.877828571429,
+          "y_top": 3019.230133333333,
+          "y_bottom": 3128.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -1110,180 +1111,180 @@
     },
     {
       "index": 3,
-      "left_x": 1148.6666666666667,
-      "right_x": 1315.2777777777778,
+      "left_x": 1151.16907076077,
+      "right_x": 1271.0668485385477,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 803.7478285714286
+          "y_bottom": 818.8396571428572
         },
         {
           "type": "empty",
           "index": 0,
-          "y_top": 803.7478285714286,
-          "y_bottom": 914.1825904761905,
+          "y_top": 818.8396571428572,
+          "y_bottom": 928.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 1,
-          "y_top": 914.1825904761905,
-          "y_bottom": 1024.6173523809523,
+          "y_top": 928.5091809523809,
+          "y_bottom": 1038.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 2,
-          "y_top": 1024.6173523809523,
-          "y_bottom": 1135.0521142857142,
+          "y_top": 1038.1787047619048,
+          "y_bottom": 1147.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 3,
-          "y_top": 1135.0521142857142,
-          "y_bottom": 1245.486876190476,
+          "y_top": 1147.8482285714285,
+          "y_bottom": 1257.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 4,
-          "y_top": 1245.486876190476,
-          "y_bottom": 1355.921638095238,
+          "y_top": 1257.5177523809525,
+          "y_bottom": 1367.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 5,
-          "y_top": 1355.921638095238,
-          "y_bottom": 1466.3564000000001,
+          "y_top": 1367.187276190476,
+          "y_bottom": 1476.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 6,
-          "y_top": 1466.3564000000001,
-          "y_bottom": 1576.7911619047618,
+          "y_top": 1476.8568,
+          "y_bottom": 1586.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 7,
-          "y_top": 1576.7911619047618,
-          "y_bottom": 1687.225923809524,
+          "y_top": 1586.526323809524,
+          "y_bottom": 1696.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1687.225923809524,
-          "y_bottom": 1797.6606857142856,
+          "y_top": 1696.1958476190475,
+          "y_bottom": 1805.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1797.6606857142856,
-          "y_bottom": 1908.0954476190475,
+          "y_top": 1805.8653714285715,
+          "y_bottom": 1915.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1908.0954476190475,
-          "y_bottom": 2018.5302095238094,
+          "y_top": 1915.534895238095,
+          "y_bottom": 2025.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2018.5302095238094,
-          "y_bottom": 2128.9649714285715,
+          "y_top": 2025.204419047619,
+          "y_bottom": 2134.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2128.9649714285715,
-          "y_bottom": 2239.399733333333,
+          "y_top": 2134.8739428571425,
+          "y_bottom": 2244.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2239.399733333333,
-          "y_bottom": 2349.834495238095,
+          "y_top": 2244.5434666666665,
+          "y_bottom": 2354.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2349.834495238095,
-          "y_bottom": 2460.269257142857,
+          "y_top": 2354.2129904761905,
+          "y_bottom": 2463.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2460.269257142857,
-          "y_bottom": 2570.704019047619,
+          "y_top": 2463.882514285714,
+          "y_bottom": 2573.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2570.704019047619,
-          "y_bottom": 2681.138780952381,
+          "y_top": 2573.552038095238,
+          "y_bottom": 2683.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2681.138780952381,
-          "y_bottom": 2791.5735428571425,
+          "y_top": 2683.221561904762,
+          "y_bottom": 2792.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2791.5735428571425,
-          "y_bottom": 2902.0083047619046,
+          "y_top": 2792.8910857142855,
+          "y_bottom": 2902.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2902.0083047619046,
-          "y_bottom": 3012.4430666666667,
+          "y_top": 2902.5606095238095,
+          "y_bottom": 3012.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3012.4430666666667,
-          "y_bottom": 3122.877828571429,
+          "y_top": 3012.230133333333,
+          "y_bottom": 3121.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -1292,180 +1293,180 @@
     },
     {
       "index": 2,
-      "left_x": 1330.2777777777778,
-      "right_x": 1496.888888888889,
+      "left_x": 1333.0668485385477,
+      "right_x": 1452.9646263163254,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 803.7478285714286
+          "y_bottom": 832.8396571428572
         },
         {
           "type": "empty",
           "index": 0,
-          "y_top": 803.7478285714286,
-          "y_bottom": 914.1825904761905,
+          "y_top": 832.8396571428572,
+          "y_bottom": 942.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 1,
-          "y_top": 914.1825904761905,
-          "y_bottom": 1024.6173523809523,
+          "y_top": 942.5091809523809,
+          "y_bottom": 1052.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 2,
-          "y_top": 1024.6173523809523,
-          "y_bottom": 1135.0521142857142,
+          "y_top": 1052.1787047619048,
+          "y_bottom": 1161.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 3,
-          "y_top": 1135.0521142857142,
-          "y_bottom": 1245.486876190476,
+          "y_top": 1161.8482285714285,
+          "y_bottom": 1271.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 4,
-          "y_top": 1245.486876190476,
-          "y_bottom": 1355.921638095238,
+          "y_top": 1271.5177523809525,
+          "y_bottom": 1381.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 5,
-          "y_top": 1355.921638095238,
-          "y_bottom": 1466.3564000000001,
+          "y_top": 1381.187276190476,
+          "y_bottom": 1490.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 6,
-          "y_top": 1466.3564000000001,
-          "y_bottom": 1576.7911619047618,
+          "y_top": 1490.8568,
+          "y_bottom": 1600.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 7,
-          "y_top": 1576.7911619047618,
-          "y_bottom": 1687.225923809524,
+          "y_top": 1600.526323809524,
+          "y_bottom": 1710.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1687.225923809524,
-          "y_bottom": 1797.6606857142856,
+          "y_top": 1710.1958476190475,
+          "y_bottom": 1819.8653714285713,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1797.6606857142856,
-          "y_bottom": 1908.0954476190475,
+          "y_top": 1819.8653714285713,
+          "y_bottom": 1929.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1908.0954476190475,
-          "y_bottom": 2018.5302095238094,
+          "y_top": 1929.534895238095,
+          "y_bottom": 2039.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2018.5302095238094,
-          "y_bottom": 2128.9649714285715,
+          "y_top": 2039.204419047619,
+          "y_bottom": 2148.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2128.9649714285715,
-          "y_bottom": 2239.399733333333,
+          "y_top": 2148.8739428571425,
+          "y_bottom": 2258.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2239.399733333333,
-          "y_bottom": 2349.834495238095,
+          "y_top": 2258.5434666666665,
+          "y_bottom": 2368.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2349.834495238095,
-          "y_bottom": 2460.269257142857,
+          "y_top": 2368.2129904761905,
+          "y_bottom": 2477.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2460.269257142857,
-          "y_bottom": 2570.704019047619,
+          "y_top": 2477.882514285714,
+          "y_bottom": 2587.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2570.704019047619,
-          "y_bottom": 2681.138780952381,
+          "y_top": 2587.552038095238,
+          "y_bottom": 2697.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2681.138780952381,
-          "y_bottom": 2791.5735428571425,
+          "y_top": 2697.221561904762,
+          "y_bottom": 2806.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2791.5735428571425,
-          "y_bottom": 2902.0083047619046,
+          "y_top": 2806.8910857142855,
+          "y_bottom": 2916.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2902.0083047619046,
-          "y_bottom": 3012.4430666666667,
+          "y_top": 2916.5606095238095,
+          "y_bottom": 3026.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3012.4430666666667,
-          "y_bottom": 3122.877828571429,
+          "y_top": 3026.230133333333,
+          "y_bottom": 3135.899657142857,
           "text": null,
           "confidence": 0.0
         }
@@ -1474,180 +1475,180 @@
     },
     {
       "index": 1,
-      "left_x": 1511.888888888889,
-      "right_x": 1678.5,
+      "left_x": 1514.9646263163254,
+      "right_x": 1634.862404094103,
       "ocr_text": "",
       "cells": [
         {
           "type": "margin",
           "y_top": 789.0,
-          "y_bottom": 820.7478285714286
+          "y_bottom": 822.8396571428572
         },
         {
           "type": "char",
           "index": 0,
-          "y_top": 820.7478285714286,
-          "y_bottom": 931.1825904761904,
+          "y_top": 822.8396571428572,
+          "y_bottom": 932.5091809523809,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 1,
-          "y_top": 931.1825904761904,
-          "y_bottom": 1041.6173523809523,
+          "y_top": 932.5091809523809,
+          "y_bottom": 1042.1787047619048,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 1041.6173523809523,
-          "y_bottom": 1152.0521142857142,
+          "y_top": 1042.1787047619048,
+          "y_bottom": 1151.8482285714285,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 3,
-          "y_top": 1152.0521142857142,
-          "y_bottom": 1262.486876190476,
+          "y_top": 1151.8482285714285,
+          "y_bottom": 1261.5177523809525,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 4,
-          "y_top": 1262.486876190476,
-          "y_bottom": 1372.921638095238,
+          "y_top": 1261.5177523809525,
+          "y_bottom": 1371.187276190476,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 5,
-          "y_top": 1372.921638095238,
-          "y_bottom": 1483.3564000000001,
+          "y_top": 1371.187276190476,
+          "y_bottom": 1480.8568,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 6,
-          "y_top": 1483.3564000000001,
-          "y_bottom": 1593.7911619047618,
+          "y_top": 1480.8568,
+          "y_bottom": 1590.526323809524,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 7,
-          "y_top": 1593.7911619047618,
-          "y_bottom": 1704.225923809524,
+          "y_top": 1590.526323809524,
+          "y_bottom": 1700.1958476190475,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 8,
-          "y_top": 1704.225923809524,
-          "y_bottom": 1814.6606857142856,
+          "y_top": 1700.1958476190475,
+          "y_bottom": 1809.8653714285715,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 9,
-          "y_top": 1814.6606857142856,
-          "y_bottom": 1925.0954476190475,
+          "y_top": 1809.8653714285715,
+          "y_bottom": 1919.534895238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 10,
-          "y_top": 1925.0954476190475,
-          "y_bottom": 2035.5302095238094,
+          "y_top": 1919.534895238095,
+          "y_bottom": 2029.204419047619,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 11,
-          "y_top": 2035.5302095238094,
-          "y_bottom": 2145.9649714285715,
+          "y_top": 2029.204419047619,
+          "y_bottom": 2138.8739428571425,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 12,
-          "y_top": 2145.9649714285715,
-          "y_bottom": 2256.399733333333,
+          "y_top": 2138.8739428571425,
+          "y_bottom": 2248.5434666666665,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 13,
-          "y_top": 2256.399733333333,
-          "y_bottom": 2366.834495238095,
+          "y_top": 2248.5434666666665,
+          "y_bottom": 2358.2129904761905,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 14,
-          "y_top": 2366.834495238095,
-          "y_bottom": 2477.269257142857,
+          "y_top": 2358.2129904761905,
+          "y_bottom": 2467.882514285714,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 15,
-          "y_top": 2477.269257142857,
-          "y_bottom": 2587.704019047619,
+          "y_top": 2467.882514285714,
+          "y_bottom": 2577.552038095238,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 16,
-          "y_top": 2587.704019047619,
-          "y_bottom": 2698.138780952381,
+          "y_top": 2577.552038095238,
+          "y_bottom": 2687.221561904762,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 17,
-          "y_top": 2698.138780952381,
-          "y_bottom": 2808.5735428571425,
+          "y_top": 2687.221561904762,
+          "y_bottom": 2796.8910857142855,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 18,
-          "y_top": 2808.5735428571425,
-          "y_bottom": 2919.0083047619046,
+          "y_top": 2796.8910857142855,
+          "y_bottom": 2906.5606095238095,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 19,
-          "y_top": 2919.0083047619046,
-          "y_bottom": 3029.4430666666667,
+          "y_top": 2906.5606095238095,
+          "y_bottom": 3016.230133333333,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "empty",
           "index": 20,
-          "y_top": 3029.4430666666667,
-          "y_bottom": 3139.877828571429,
+          "y_top": 3016.230133333333,
+          "y_bottom": 3125.899657142857,
           "text": null,
           "confidence": 0.0
         }
