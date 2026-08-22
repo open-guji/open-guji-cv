@@ -1,0 +1,43 @@
+{
+  "book": "vol01",
+  "profile": "profile.json",
+  "steps_executed": [
+    {
+      "number": 2,
+      "name": "deskew",
+      "folder": "s2_deskew",
+      "images": 206
+    },
+    {
+      "number": 3,
+      "name": "crop",
+      "folder": "s3_crop",
+      "images": 206
+    },
+    {
+      "number": 4,
+      "name": "enhance_lines",
+      "folder": "s4_enhance_lines",
+      "images": 206
+    },
+    {
+      "number": 6,
+      "name": "binarize",
+      "folder": "s6_binarize",
+      "images": 206
+    }
+  ],
+  "steps_skipped": [
+    {
+      "number": 1,
+      "name": "remove_watermark",
+      "reason": "条件不满足"
+    },
+    {
+      "number": 5,
+      "name": "split",
+      "reason": "page_type=cut_half"
+    }
+  ],
+  "final_output": "."
+}
