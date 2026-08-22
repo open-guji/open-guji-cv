@@ -596,6 +596,104 @@ def _split_dense_segment(col_gray: np.ndarray, a: float, b: float,
             for i in range(len(merged_bounds) - 1)]
 
 
+# ── 列型判别：先分类，再分别切分 ────────────────────────
+
+LAYOUT_MID_LO = 0.25       # 格墨量占比落在 [LO, HI] 视为"半格"
+LAYOUT_MID_HI = 0.75
+LAYOUT_MID_T = 0.20        # 半格比例超此 → 压缩型弹性
+LAYOUT_RUN_T = 2           # 连续占位段长度中位数低于此 → 拉开型弹性
+LAYOUT_FILL_T = 0.5        # 格墨量占比超此算"占位"
+
+
+def column_occupancy(col_gray: np.ndarray, page_phase: float,
+                     cell_h: float) -> tuple[float, float]:
+    """列相对**书级刚性格线**的占位形态，返回 (连续段长度中位数, 半格比例)。
+
+    这两个量把三类列分开，而单看"间距有多大"分不开（实测间距 AUC 仅
+    0.61，是所有候选特征里最弱的一个，偏偏旧触发用的就是它）：
+
+      正文密排   连续段长 ~20，半格比例 ~0.05
+      目录稀疏   连续段长 ~4（「卷一百四十八」连着六个字），半格 ~0.05
+      职名拉开   连续段长 1（字被拉开到 ~3.5 格，格格孤立）
+      长题压缩   连续段长虽长，但一格挤进两个字 → 半格比例高
+
+    关键是目录与职名的区分：两者都"字少、间距大"，但目录的字是**连续
+    成段**的，职名的字是**逐格孤立**的。
+    """
+    proj = column_projection(col_gray)
+    ink = np.flatnonzero(proj > 0)
+    if ink.size < 3:
+        return 0.0, 0.0
+    y0, y1, L = int(ink[0]), int(ink[-1]), len(proj)
+    occ: list[float] = []
+    k = 0
+    while True:
+        a = page_phase + cell_h * k
+        if a > y1:
+            break
+        b = a + cell_h
+        if b >= y0:
+            lo, hi = max(0, int(a)), min(L, int(b))
+            if hi > lo:
+                occ.append(float((proj[lo:hi] > 0).mean()))
+        k += 1
+        if k > 200:
+            break
+    if not occ:
+        return 0.0, 0.0
+    arr = np.array(occ)
+    mid = float(((arr > LAYOUT_MID_LO) & (arr < LAYOUT_MID_HI)).mean())
+    runs, run = [], 0
+    for f in arr > LAYOUT_FILL_T:
+        if f:
+            run += 1
+        elif run:
+            runs.append(run); run = 0
+    if run:
+        runs.append(run)
+    return (float(np.median(runs)) if runs else 0.0), mid
+
+
+def component_spread_trigger(col_gray: np.ndarray, cell_h: float,
+                             col_w: float) -> bool:
+    """旧的组件间距触发：职名页召回好（实测精确率 1.00 / 召回 0.82），
+    但会把目录页的稀疏列一并误报——所以只拿它当**候选生成**，
+    最终由 classify_column_layout 里的占位形态否决。"""
+    comps = _merged_components((col_gray < BINARY_THRESHOLD).astype(np.uint8),
+                               cell_h)
+    if len(comps) < 3 or len(comps) > 12:
+        return False
+    comps = [c for c in comps if (c[2] - c[1]) >= 0.3 * cell_h]
+    if len(comps) < 3:
+        return False
+    gaps = np.diff([c[0] for c in comps])
+    if int((gaps > 2.2 * cell_h).sum()) < 2:
+        return False
+    return all((b - a) <= 8.0 * cell_h for _, a, b in comps)
+
+
+def classify_column_layout(col_gray: np.ndarray, page_phase: float,
+                           cell_h: float, col_w: float) -> str:
+    """列型判别：rigid（字距 = 1×格高）| elastic（字距 ≠ 1×格高）。
+
+    规则在 36 页 322 列的人工金标上标定（open-guji-dataset/column-layout），
+    页级二折交叉验证 F1 0.837±0.072，对照旧的纯间距触发 0.773：
+
+      elastic ⇔ 连续段长 ≤1                          （拉开型，逐格孤立）
+             ∨ (组件间距触发 ∧ ¬(连续段长 ≥2 ∧ 半格比例 <0.20))
+                                                     （压缩型；括号内是
+                                                       目录页的形态，否决之）
+    """
+    run_med, mid_frac = column_occupancy(col_gray, page_phase, cell_h)
+    if run_med <= 1.0 and run_med > 0.0:
+        return "elastic"
+    if component_spread_trigger(col_gray, cell_h, col_w):
+        toc_like = run_med >= LAYOUT_RUN_T and mid_frac < LAYOUT_MID_T
+        if not toc_like:
+            return "elastic"
+    return "rigid"
+
+
 def cells_from_components(col_gray: np.ndarray, cell_h: float, n_chars: int,
                           params: GridParams) -> list[dict] | None:
     """拉开列（职名/奉旨列名）的组件锚定混合切分。
@@ -828,9 +926,18 @@ class GridSegmenter:
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
-                # 拉开列（职名页官衔，字距 ~3.5 格非整数倍）优先组件锚定
-                cells = cells_from_components(crop, cell_h, n, self.params)
+                # 先判列型，再分别切分。原先是「先试弹性切分、证据不足
+                # 退回刚性」的隐式回退：判错了下游无从发现，实测把 63 列
+                # 目录页里的 26 列误当职名页拉开列切坏。
+                layout = classify_column_layout(
+                    crop, page_phase, cell_h, float(crop.shape[1]))
+                col_result["layout"] = layout
+                cells = None
+                if layout == "elastic":
+                    cells = cells_from_components(crop, cell_h, n, self.params)
                 if cells is None:
+                    if layout == "elastic":
+                        col_result["layout"] = "rigid"   # 判弹性但切不出 → 据实回落
                     bounds = rigid_bounds(proj, page_phase, cell_h, n)
                     cells = cells_from_bounds(crop, bounds, self.params)
                 else:

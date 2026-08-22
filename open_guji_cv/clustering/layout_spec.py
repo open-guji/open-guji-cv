@@ -130,7 +130,9 @@ def from_char_grid(grid: dict, book: str, page: str,
                    **meta) -> PageLayout:
     """phase3 网格 JSON → PageLayout（管线当前判断的快照）。
 
-    列型取 `spread_col` 标记；有墨字位数取 type == "char" 的格数。
+    列型优先取显式的 `layout` 字段；老的切分结果没有该字段时，退回按
+    `spread_col` 标记推断（保持对历史产物的可读性）。有墨字位数取
+    type == "char" 的格数。
     这是**预测**，不是金标——金标由人工标注产生，两者用同一格式，
     才能直接逐列比对。
     """
@@ -143,7 +145,8 @@ def from_char_grid(grid: dict, book: str, page: str,
             index=int(c["index"]),
             left_x=float(c["left_x"]),
             right_x=float(c["right_x"]),
-            layout="elastic" if c.get("spread_col") else "rigid",
+            layout=c.get("layout")
+                   or ("elastic" if c.get("spread_col") else "rigid"),
             n_chars=sum(1 for x in cells if x.get("type") == "char"),
         ))
     cols.sort(key=lambda c: -c.index)
