@@ -41,6 +41,9 @@ WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
 SIDE_PROBE = 12            # 向列框左右各探这么多像素，看横条是否继续
 SIDE_INK_T = 0.25          # 探针带内墨量占比超此算「还在走」
+OFF_CENTER_T = 0.15        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
+                           # 标注集里 clean 最大 0.088、truncated 0.148~0.339；
+                           # 全书命中 3.4%(vol01)/1.4%(vol02)，目视 15/18 属实
 
 # 灰度源目录解析顺序：越靠前的越接近原始灰度（信息保留最多）。
 # 注意：只有与 Phase 2/3 检测坐标系同尺寸的步骤才能入选
@@ -187,6 +190,29 @@ def _bar_crosses_column(page: np.ndarray, patch: np.ndarray,
     return False
 
 
+def _off_center_frac(gray: np.ndarray) -> float:
+    """墨的**横向重心**偏离格心的比例 —— 横向截断的判据。
+
+    为什么用重心而不是边缘墨量：`boundary_ink` 只看上下带，抓得到纵向
+    截断；横向被切时字整个被推到格位一侧，边缘墨量未必高，但重心明显偏。
+    实测标注集里 clean 的偏移最大 0.088，横向截断的 6 个实例是
+    0.148~0.339，没有重叠。
+
+    局限：空格位里若只剩一小块残墨，重心也会偏——那类由 suspect_empty /
+    frame_bars 覆盖，本判据只放在**疑似层**，不单独下结论。
+    """
+    if gray.size == 0:
+        return 0.0
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    binary = gray < BINARY_THRESHOLD_PATCH
+    cols = np.nonzero(binary.any(axis=0))[0]
+    if len(cols) == 0:
+        return 0.0
+    w = binary.shape[1]
+    return float(abs(cols.mean() - w / 2) / w)
+
+
 def _defect_flags(gray: np.ndarray) -> list[str]:
     """图块缺陷自检，分「确定」「疑似」两层输出 flag。
 
@@ -205,6 +231,8 @@ def _defect_flags(gray: np.ndarray) -> list[str]:
         flags.append("frame_bars")          # 版框横线，非文字
     if f["x_gap"] > WIDE_GAP_T:
         flags.append("wide_gap")            # 疑似跨列
+    if _off_center_frac(gray) > OFF_CENTER_T:
+        flags.append("off_center")          # 疑似横向截断
     if _boundary_ink_frac(gray) > BOUNDARY_INK_T:
         flags.append("boundary_ink")        # 疑似：边缘带见墨
     return flags

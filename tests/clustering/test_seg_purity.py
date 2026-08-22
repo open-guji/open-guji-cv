@@ -381,3 +381,43 @@ def test_extract_page_flags_a_cell_sitting_on_the_frame_line():
         page, grid, "b", "1")}
     assert "frame_bars" in flags.get(1, []), flags
     assert "frame_bars" not in flags.get(0, []), flags
+
+
+# ── 横向截断：墨的重心偏离格心 ────────────────────────────
+
+def test_off_center_fires_when_the_glyph_sits_at_the_edge():
+    """横向被切时字整个被推到格位一侧——边缘墨量未必高，但重心明显偏。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank(H=120, W=120)
+    g[30:90, 84:118] = 0            # 字只剩右边一条
+    assert "off_center" in _defect_flags(g)
+
+
+def test_off_center_quiet_on_a_centred_glyph():
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank(H=120, W=120)
+    g[30:90, 32:88] = 0
+    assert "off_center" not in _defect_flags(g)
+
+
+def test_off_center_quiet_on_a_centred_narrow_stroke():
+    """窄字（一、卜）居中放着不该报——判据是**偏心**，不是窄。"""
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = _blank(H=120, W=120)
+    g[56:64, 50:70] = 0
+    assert "off_center" not in _defect_flags(g)
+
+
+def test_off_center_immune_to_extra_whitespace():
+    """左右多裁等量空白不改变重心相对位置。"""
+    from open_guji_cv.clustering.extractor import _off_center_frac
+    import numpy as np
+    tight = np.full((120, 120), 255, np.uint8); tight[30:90, 40:80] = 0
+    padded = np.full((120, 200), 255, np.uint8); padded[30:90, 80:120] = 0
+    assert abs(_off_center_frac(tight) - _off_center_frac(padded)) < 0.01
+
+
+def test_off_center_empty_patch_is_zero():
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _off_center_frac
+    assert _off_center_frac(np.full((60, 60), 255, np.uint8)) == 0.0

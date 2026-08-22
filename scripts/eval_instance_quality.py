@@ -27,7 +27,9 @@ def main() -> None:
             return
         for line in p.read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
-            flags[f"{r['page']}:{r['col']}:{r['idx']}"] = r.get("flags") or []
+            # 键要带册名：数据集收了两册之后，只用 page:col:idx 会撞车
+            flags[f"{book}/{r['page']}:{r['col']}:{r['idx']}"] = \
+                r.get("flags") or []
 
     report = evaluate_self_detection(gold, flags)
     print(format_report(report))

@@ -73,10 +73,19 @@ LABELS: dict[str, list[str]] = {
     # 本批样本仍无截断实例（上一轮起就没有）。这不代表全书没有，只说明
     # 这 63 个样本覆盖不到，需另行抽样补充。
     "truncated": [
-        # 第五轮转入：界行不混了，但那一格的格高只有 59px（书级 114），
-        # 只切到「學」的下半。这是本数据集**第一个**截断实例——此前连续
-        # 三轮都没有，截断检测能力终于有样本可验。
+        # 第五轮转入：那一格只切到「學」的下半。本数据集第一个截断实例。
         "168:2:6",
+        # 第六轮补样（2026-08）：专为「截断」这一类补的，抽样线索是
+        # 「**本字自己的**连通体越出格外的比例」——只保留主体（≥65%）在
+        # 本格内的连通体，邻字不计。全书 5826 个有实质墨的格里该量中位
+        # 0.009、99 分位 0.291；下面几个都在 0.32~0.35。
+        # 前两个是同一种**系统性**失败：职名列的「臣」坐在格位右缘、
+        # 一半在框外，不是随机噪声。
+        "95:1:17",        # 「臣」半个在框外（右缘）
+        "109:9:5",        # 同上
+        "105:5:2",        # 只切到「鍾」的上半
+        "vol02/185:4:20",  # 「朱」左下笔画在框外
+        "vol02/17:8:9",   # 「隋」上半被切
     ],
     # 版框角/整条横线/空格位，根本不是字
     "not_text": [
@@ -88,7 +97,15 @@ LABELS: dict[str, list[str]] = {
     ],
 }
 
-BOOK = "vol01"
+DEFAULT_BOOK = "vol01"
+
+
+def split_key(k: str) -> tuple[str, str]:
+    """键可写成 "page:col:idx"（默认 vol01）或 "vol02/page:col:idx"。"""
+    if "/" in k:
+        book, rest = k.split("/", 1)
+        return book, rest
+    return DEFAULT_BOOK, k
 
 
 def main() -> None:
@@ -103,11 +120,14 @@ def main() -> None:
         for s in json.loads(Path(args.sample_meta).read_text(encoding="utf-8")):
             meta[f"{s['page']}:{s['col']}:{s['idx']}"] = s
 
-    index = {}
-    idx_path = Path("output") / BOOK / "phase4_chars" / "index.jsonl"
-    for line in idx_path.read_text(encoding="utf-8").splitlines():
-        r = json.loads(line)
-        index[f"{r['page']}:{r['col']}:{r['idx']}"] = r
+    index: dict[tuple[str, str], dict] = {}
+    for book in ("vol01", "vol02"):
+        idx_path = Path("output") / book / "phase4_chars" / "index.jsonl"
+        if not idx_path.exists():
+            continue
+        for line in idx_path.read_text(encoding="utf-8").splitlines():
+            r = json.loads(line)
+            index[(book, f"{r['page']}:{r['col']}:{r['idx']}")] = r
 
     out = Path(args.out)
     (out / "patches").mkdir(parents=True, exist_ok=True)
@@ -115,19 +135,22 @@ def main() -> None:
     items: list[InstanceQuality] = []
     for quality, keys in LABELS.items():
         for k in keys:
-            if k not in index:
+            book, rest = split_key(k)
+            if (book, rest) not in index:
                 print(f"跳过 {k}（当前切分结果中不存在）")
                 continue
-            page, col, idx = k.split(":")
+            page, col, idx = rest.split(":")
             m = meta.get(k, {})
             items.append(InstanceQuality(
-                book=BOOK, page=page, col=int(col), idx=int(idx),
+                book=book, page=page, col=int(col), idx=int(idx),
                 quality=quality, layout=m.get("layout", "rigid"),
                 seed=m.get("seed")))
-            src = Path("output") / BOOK / "phase4_chars" / index[k]["patch_path"]
+            rec = index[(book, rest)]
+            src = Path("output") / book / "phase4_chars" / rec["patch_path"]
             img = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
             if img is not None:
-                cv2.imwrite(str(out / "patches" / f"{page}_{col}_{idx}.png"), img)
+                cv2.imwrite(str(out / "patches"
+                                / f"{book}_{page}_{col}_{idx}.png"), img)
 
     save_dataset(items, out / "expected.json")
     from collections import Counter

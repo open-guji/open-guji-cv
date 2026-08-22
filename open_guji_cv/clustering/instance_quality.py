@@ -44,7 +44,8 @@ DEFECTS = ("contaminated", "truncated", "not_text")
 # 把两层合成一个「检出率」会同时掩盖两件事：确定层能不能免检地用，
 # 以及审查队列会被多少噪声灌满。
 CERTAIN_FLAGS = ("rule_bar", "edge_blob", "frame_bars")
-SUSPECT_FLAGS = ("wide_gap", "boundary_ink", "suspect_empty", "bad_seg")
+SUSPECT_FLAGS = ("wide_gap", "boundary_ink", "off_center",
+                 "suspect_empty", "bad_seg")
 
 
 @dataclass
@@ -66,7 +67,8 @@ class InstanceQuality:
 
     @property
     def key(self) -> str:
-        return f"{self.page}:{self.col}:{self.idx}"
+        """跨册唯一。数据集收了两册之后，只用 page:col:idx 会撞车。"""
+        return f"{self.book}/{self.page}:{self.col}:{self.idx}"
 
     def to_dict(self) -> dict:
         return asdict(self)
