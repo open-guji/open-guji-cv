@@ -7,9 +7,11 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": 0.02,
+    "narrow_page": false,
+    "n_cols_used": 9,
     "page_ink": 495841.0,
     "period": 187.46308016877643,
-    "col_phase_rel": 7.597107684355848,
+    "col_phase_rel": 7.597107684355862,
     "inset_l": 33.0,
     "inset_r": 29.0,
     "rule_in_col": 0.0,
@@ -19,7 +21,7 @@
   "columns": [
     {
       "index": 9,
-      "left_x": 99.16800738106852,
+      "left_x": 99.16800738106853,
       "right_x": 224.63108754984495,
       "ocr_text": "",
       "cells": [

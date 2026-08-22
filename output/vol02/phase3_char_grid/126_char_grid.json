@@ -7,6 +7,8 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": 0.004,
+    "narrow_page": false,
+    "n_cols_used": 9,
     "page_ink": 736404.0,
     "period": 187.0913978494624,
     "col_phase_rel": -5.059825332046302,

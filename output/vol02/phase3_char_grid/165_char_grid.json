@@ -7,9 +7,11 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": 0.0,
+    "narrow_page": false,
+    "n_cols_used": 9,
     "page_ink": 582502.0,
     "period": 183.83083333333346,
-    "col_phase_rel": -2.3199109828267597,
+    "col_phase_rel": -2.3199109828267455,
     "inset_l": 32.0,
     "inset_r": 28.0,
     "rule_in_col": 0.0,
@@ -19,8 +21,8 @@
   "columns": [
     {
       "index": 9,
-      "left_x": 36.31821847412901,
-      "right_x": 160.14905180746246,
+      "left_x": 36.318218474129026,
+      "right_x": 160.14905180746248,
       "ocr_text": "",
       "cells": [
         {
@@ -206,7 +208,7 @@
     },
     {
       "index": 8,
-      "left_x": 220.14905180746246,
+      "left_x": 220.14905180746248,
       "right_x": 343.97988514079594,
       "ocr_text": "",
       "cells": [

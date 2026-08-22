@@ -733,3 +733,90 @@ def test_run_book_writes_a_skipped_grid_for_non_text_pages(tmp_path):
     g2 = json.loads((book / "phase3_char_grid" / "2_char_grid.json")
                     .read_text(encoding="utf-8"))
     assert g2["columns"], "正文页不该被跳过"
+
+
+# ── 列梳子必须落在页面内 ──────────────────────────────────
+
+def _sparse_tail_page(h=2000, w=1700, period=185, n_cols=9, n_text=4):
+    """卷尾页：右侧几列有字，左侧整片是**空列**（有界行、无字）。
+
+    这正是原先的失败场景——相位由文字带的 content_range 锚定，左边整片
+    空列被当成「没有内容」跳过，梳子于是从版面中间起步。
+    """
+    import numpy as np
+    g = np.full((h, w), 245, np.uint8)
+    for k in range(n_cols + 1):
+        x = 10 + k * period
+        if x < w:
+            g[40:h - 40, x - 2:x + 2] = 20
+    for k in range(n_cols - n_text, n_cols):     # 只有最右边几列有字
+        x = 10 + k * period + 30
+        for i in range(14):
+            g[70 + i * 130:70 + i * 130 + 100, x:x + 120] = 20
+    return g
+
+
+def test_comb_stays_inside_the_page_on_a_sparse_tail_page():
+    """左侧整片空列时梳子也不许跑到版面中间去。
+
+    传 period_prior 把列距钉死，好让这条测试**只测相位**——合成页只有 4 列
+    有字，列距自由拟合会锁到谐波上（实测拟成 78.5，真值 185），那是另一个
+    问题（真书靠书级列距共识兜住，单页测试里没有）。
+    """
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    page = _sparse_tail_page()
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    res = GridSegmenter(chars_per_line=14, n_cols=9).segment_page(
+        page, layout, period_prior=185.0)
+    cols = [c for c in res["columns"] if not c.get("skipped")]
+    assert len(cols) == 9, f"应切出 9 列，实得 {len(cols)}"
+    assert min(c["left_x"] for c in cols) < 120, "梳子起点跑到版面中间了"
+    assert max(c["right_x"] for c in cols) <= page.shape[1] + 5
+
+
+def test_narrow_page_is_flagged_not_forced():
+    """页面装不下 n_cols 列 → 标记，不硬凑（硬凑会把 8 列摊到 9 个框上）。"""
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    narrow = _sparse_tail_page(w=1480, n_cols=8, n_text=8)   # 只有 8 列的宽度
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    res = GridSegmenter(chars_per_line=14, n_cols=9).segment_page(
+        narrow, layout, period_prior=185.0)
+    assert res["grid"]["narrow_page"] is True
+    # 按装得下的列数切，不硬凑 9——硬凑会把 8 列文字摊到 9 个框上
+    assert res["grid"]["n_cols_used"] == 8
+    assert len([c for c in res["columns"] if not c.get("skipped")]) == 8
+
+
+def test_normal_page_is_not_flagged_narrow():
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    page = _sparse_tail_page()
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    res = GridSegmenter(chars_per_line=14, n_cols=9).segment_page(
+        page, layout, period_prior=185.0)
+    assert res["grid"]["narrow_page"] is False
+
+
+def test_outside_ink_catches_a_column_left_out_of_the_grid():
+    """外侧漏墨：列框之外还剩多少字墨——判「整列被排除在网格外」的直接量。"""
+    from open_guji_cv.clustering.geometry_eval import outside_ink
+    page = _sparse_tail_page()
+    full = [(10.0 + k * 185 + 20, 10.0 + (k + 1) * 185 - 20) for k in range(9)]
+    l, r = outside_ink(page, full)
+    assert l + r < 0.02, (l, r)
+    # 少覆盖最右那一列 → 右侧漏墨明显
+    l2, r2 = outside_ink(page, full[:-1])
+    assert r2 > 0.15, (l2, r2)
+
+
+def test_outside_ink_ignores_the_gaps_between_columns():
+    """只算最外侧之外，不算列间缝——缝里本来就有笔画外溢与内缩留白。"""
+    from open_guji_cv.clustering.geometry_eval import outside_ink
+    page = _sparse_tail_page()
+    full = [(10.0 + k * 185 + 20, 10.0 + (k + 1) * 185 - 20) for k in range(9)]
+    # 中间各列缩窄 → 缝变得很宽，但最外侧边界不动
+    narrowed = [full[0]] + [(a + 45, b - 45) for a, b in full[1:-1]] + [full[-1]]
+    l, r = outside_ink(page, narrowed)
+    assert l + r < 0.02, (l, r)

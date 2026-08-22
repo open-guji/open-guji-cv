@@ -7,9 +7,11 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": 0.0,
+    "narrow_page": true,
+    "n_cols_used": 8,
     "page_ink": 597507.0,
     "period": 186.61666666666673,
-    "col_phase_rel": -2.655662107686979,
+    "col_phase_rel": -2.6556621076869646,
     "inset_l": 28.0,
     "inset_r": 29.5,
     "rule_in_col": 0.0,
@@ -18,9 +20,9 @@
   },
   "columns": [
     {
-      "index": 9,
-      "left_x": 60.70022431167988,
-      "right_x": 189.8168909783466,
+      "index": 8,
+      "left_x": 60.7002243116799,
+      "right_x": 189.81689097834663,
       "ocr_text": "",
       "cells": [
         {
@@ -200,8 +202,8 @@
       "layout": "rigid"
     },
     {
-      "index": 8,
-      "left_x": 247.3168909783466,
+      "index": 7,
+      "left_x": 247.31689097834663,
       "right_x": 376.43355764501337,
       "ocr_text": "",
       "cells": [
@@ -387,7 +389,7 @@
       "layout": "rigid"
     },
     {
-      "index": 7,
+      "index": 6,
       "left_x": 433.93355764501337,
       "right_x": 563.05022431168,
       "ocr_text": "",
@@ -574,7 +576,7 @@
       "layout": "rigid"
     },
     {
-      "index": 6,
+      "index": 5,
       "left_x": 620.55022431168,
       "right_x": 749.6668909783468,
       "ocr_text": "",
@@ -761,7 +763,7 @@
       "layout": "rigid"
     },
     {
-      "index": 5,
+      "index": 4,
       "left_x": 807.1668909783468,
       "right_x": 936.2835576450136,
       "ocr_text": "",
@@ -948,7 +950,7 @@
       "layout": "rigid"
     },
     {
-      "index": 4,
+      "index": 3,
       "left_x": 993.7835576450136,
       "right_x": 1122.9002243116802,
       "ocr_text": "",
@@ -1135,7 +1137,7 @@
       "layout": "rigid"
     },
     {
-      "index": 3,
+      "index": 2,
       "left_x": 1180.4002243116802,
       "right_x": 1309.516890978347,
       "ocr_text": "",
@@ -1322,7 +1324,7 @@
       "layout": "rigid"
     },
     {
-      "index": 2,
+      "index": 1,
       "left_x": 1367.016890978347,
       "right_x": 1496.1335576450138,
       "ocr_text": "",
@@ -1507,14 +1509,6 @@
         }
       ],
       "layout": "rigid"
-    },
-    {
-      "index": 1,
-      "left_x": 1553.6335576450138,
-      "right_x": 1682.7502243116805,
-      "ocr_text": "",
-      "cells": [],
-      "skipped": "non_text_column"
     }
   ]
 }

@@ -7,9 +7,11 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": -0.002,
+    "narrow_page": true,
+    "n_cols_used": 8,
     "page_ink": 271793.0,
     "period": 184.55201698513807,
-    "col_phase_rel": -0.7387102372724179,
+    "col_phase_rel": -0.7387102372724712,
     "inset_l": 29.0,
     "inset_r": 31.5,
     "rule_in_col": 0.0,
@@ -18,9 +20,9 @@
   },
   "columns": [
     {
-      "index": 9,
-      "left_x": 46.22240380417253,
-      "right_x": 170.2744207893106,
+      "index": 8,
+      "left_x": 46.22240380417247,
+      "right_x": 170.27442078931054,
       "ocr_text": "",
       "cells": [
         {
@@ -205,9 +207,9 @@
       "layout": "rigid"
     },
     {
-      "index": 8,
-      "left_x": 230.7744207893106,
-      "right_x": 354.82643777444866,
+      "index": 7,
+      "left_x": 230.77442078931054,
+      "right_x": 354.8264377744486,
       "ocr_text": "",
       "cells": [
         {
@@ -392,8 +394,8 @@
       "layout": "rigid"
     },
     {
-      "index": 7,
-      "left_x": 415.32643777444866,
+      "index": 6,
+      "left_x": 415.3264377744486,
       "right_x": 539.3784547595867,
       "ocr_text": "",
       "cells": [
@@ -579,7 +581,7 @@
       "layout": "rigid"
     },
     {
-      "index": 6,
+      "index": 5,
       "left_x": 599.8784547595867,
       "right_x": 723.9304717447247,
       "ocr_text": "",
@@ -766,7 +768,7 @@
       "layout": "rigid"
     },
     {
-      "index": 5,
+      "index": 4,
       "left_x": 784.4304717447247,
       "right_x": 908.4824887298628,
       "ocr_text": "",
@@ -953,7 +955,7 @@
       "layout": "rigid"
     },
     {
-      "index": 4,
+      "index": 3,
       "left_x": 968.9824887298628,
       "right_x": 1093.034505715001,
       "ocr_text": "",
@@ -1140,7 +1142,7 @@
       "layout": "rigid"
     },
     {
-      "index": 3,
+      "index": 2,
       "left_x": 1153.534505715001,
       "right_x": 1277.5865227001389,
       "ocr_text": "",
@@ -1327,7 +1329,7 @@
       "layout": "rigid"
     },
     {
-      "index": 2,
+      "index": 1,
       "left_x": 1338.0865227001389,
       "right_x": 1462.138539685277,
       "ocr_text": "",
@@ -1512,14 +1514,6 @@
         }
       ],
       "layout": "rigid"
-    },
-    {
-      "index": 1,
-      "left_x": 1522.638539685277,
-      "right_x": 1646.6905566704152,
-      "ocr_text": "",
-      "cells": [],
-      "skipped": "non_text_column"
     }
   ]
 }

@@ -7,9 +7,11 @@
   "segmenter": "grid_strict",
   "grid": {
     "shear": 0.0,
+    "narrow_page": true,
+    "n_cols_used": 8,
     "page_ink": 349448.0,
     "period": 186.75000000000003,
-    "col_phase_rel": -14.943444633162269,
+    "col_phase_rel": -14.943444633162295,
     "inset_l": 36.0,
     "inset_r": 12.5,
     "rule_in_col": 0.0,
@@ -18,9 +20,9 @@
   },
   "columns": [
     {
-      "index": 9,
-      "left_x": 48.00126073308965,
-      "right_x": 186.25126073308968,
+      "index": 8,
+      "left_x": 48.00126073308962,
+      "right_x": 186.25126073308965,
       "ocr_text": "",
       "cells": [
         {
@@ -108,8 +110,8 @@
       "spread_col": true
     },
     {
-      "index": 8,
-      "left_x": 234.75126073308968,
+      "index": 7,
+      "left_x": 234.75126073308965,
       "right_x": 373.0012607330897,
       "ocr_text": "",
       "cells": [
@@ -190,7 +192,7 @@
       "spread_col": true
     },
     {
-      "index": 7,
+      "index": 6,
       "left_x": 421.5012607330897,
       "right_x": 559.7512607330898,
       "ocr_text": "",
@@ -272,7 +274,7 @@
       "spread_col": true
     },
     {
-      "index": 6,
+      "index": 5,
       "left_x": 608.2512607330898,
       "right_x": 746.5012607330898,
       "ocr_text": "",
@@ -346,7 +348,7 @@
       "spread_col": true
     },
     {
-      "index": 5,
+      "index": 4,
       "left_x": 795.0012607330898,
       "right_x": 933.2512607330898,
       "ocr_text": "",
@@ -436,7 +438,7 @@
       "spread_col": true
     },
     {
-      "index": 4,
+      "index": 3,
       "left_x": 981.7512607330898,
       "right_x": 1120.0012607330898,
       "ocr_text": "",
@@ -623,7 +625,7 @@
       "layout": "rigid"
     },
     {
-      "index": 3,
+      "index": 2,
       "left_x": 1168.5012607330898,
       "right_x": 1306.7512607330898,
       "ocr_text": "",
@@ -705,7 +707,7 @@
       "spread_col": true
     },
     {
-      "index": 2,
+      "index": 1,
       "left_x": 1355.2512607330898,
       "right_x": 1493.5012607330898,
       "ocr_text": "",
@@ -890,14 +892,6 @@
         }
       ],
       "layout": "rigid"
-    },
-    {
-      "index": 1,
-      "left_x": 1542.0012607330898,
-      "right_x": 1680.2512607330898,
-      "ocr_text": "",
-      "cells": [],
-      "skipped": "non_text_column"
     }
   ]
 }
