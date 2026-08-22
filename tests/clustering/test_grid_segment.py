@@ -820,3 +820,100 @@ def test_outside_ink_ignores_the_gaps_between_columns():
     narrowed = [full[0]] + [(a + 45, b - 45) for a, b in full[1:-1]] + [full[-1]]
     l, r = outside_ink(page, narrowed)
     assert l + r < 0.02, (l, r)
+
+
+# ── 书级内缩共识 ──────────────────────────────────────────
+
+def test_inset_prior_rescues_a_collapsed_inset():
+    """内缩塌掉时用书级共识兜住——列框贴着界行走就会把界行圈进去。
+
+    实测全书 inset_l 中位 32.5px，却有 69 页塌到 <15px；那些页
+    rule_in_col 均值 0.083，内缩正常的页只有 0.006，差 14 倍。
+    """
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    # 造一页：文字几乎占满列格（内缩会被量成接近 0）
+    n_cols, period, h, w = 9, 185, 2000, 9 * 185 + 20
+    page = np.full((h, w), 245, np.uint8)
+    for k in range(n_cols + 1):
+        x = 10 + k * period
+        if x < w:
+            page[40:h - 40, x - 2:x + 2] = 20
+    for k in range(n_cols):
+        x = 10 + k * period + 6           # 文字带几乎贴着界行
+        for i in range(14):
+            page[70 + i * 130:70 + i * 130 + 100, x:x + period - 12] = 20
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
+    free = seg.segment_page(page, layout, period_prior=float(period))
+    forced = seg.segment_page(page, layout, period_prior=float(period),
+                              inset_prior=(32.0, 31.0))
+    assert forced["grid"]["inset_l"] >= 32.0
+    assert forced["grid"]["rule_in_col"] <= free["grid"]["rule_in_col"]
+
+
+def test_inset_prior_leaves_a_healthy_inset_alone():
+    """内缩量得正常就别动——共识只是兜底，不是覆盖。"""
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    n_cols, period, h, w = 9, 185, 2000, 9 * 185 + 20
+    page = np.full((h, w), 245, np.uint8)
+    for k in range(n_cols + 1):
+        x = 10 + k * period
+        if x < w:
+            page[40:h - 40, x - 2:x + 2] = 20
+    for k in range(n_cols):
+        x = 10 + k * period + 40          # 文字带离界行很远，内缩本来就大
+        for i in range(14):
+            page[70 + i * 130:70 + i * 130 + 100, x:x + period - 80] = 20
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
+    a = seg.segment_page(page, layout, period_prior=float(period))
+    b = seg.segment_page(page, layout, period_prior=float(period),
+                         inset_prior=(10.0, 10.0))
+    assert abs(a["grid"]["inset_l"] - b["grid"]["inset_l"]) < 1e-6
+
+
+def test_later_passes_keep_the_corrected_cell_height(tmp_path):
+    """后续 pass 重跑时必须带上已修好的行格高。
+
+    实测漏带这个参数时，格高坏掉的页从 3 张涨到 17 张——行网格被重新
+    自由拟合、又锁回谐波（页 168 整页格高 59px，书级共识是 113.7）。
+    """
+    import json
+
+    import cv2
+
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+
+    book = tmp_path / "vol"
+    (book / "phase2_layout").mkdir(parents=True)
+    (book / "s3_crop").mkdir(parents=True)
+    n_chars, cell_h, period, n_cols = 12, 130, 185, 9
+    h, w = n_chars * cell_h + 120, n_cols * period + 20
+    for stem in [str(i) for i in range(1, 8)]:
+        page = np.full((h, w), 245, np.uint8)
+        for k in range(n_cols + 1):
+            x = 10 + k * period
+            if x < w:
+                page[50:h - 50, x - 2:x + 2] = 20
+        for k in range(n_cols):
+            x = 10 + k * period + 32
+            for i in range(n_chars):
+                y = 60 + i * cell_h + 12
+                page[y:y + cell_h - 30, x:x + period - 64] = 20
+        cv2.imwrite(str(book / "s3_crop" / f"{stem}.png"), page)
+        (book / "phase2_layout" / f"{stem}_layout.json").write_text(json.dumps(
+            {"borders": {"inner_frame": {"top": {"intercept": 60},
+                                         "bottom": {"intercept": 60 + n_chars * cell_h}}}}),
+            encoding="utf-8")
+    GridSegmenter(chars_per_line=n_chars, n_cols=n_cols).run_book(
+        book, source_dir=book / "s3_crop")
+    hs = []
+    for f in (book / "phase3_char_grid").glob("*_char_grid.json"):
+        g = json.loads(f.read_text(encoding="utf-8"))
+        if g.get("grid", {}).get("cell_h"):
+            hs.append(g["grid"]["cell_h"])
+    med = float(np.median(hs))
+    off = [x for x in hs if abs(x - med) > 0.05 * med]
+    assert not off, f"格高偏离共识的页: {off}（共识 {med:.1f}）"

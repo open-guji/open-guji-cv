@@ -58,6 +58,9 @@ RULE_PERIOD_TOL = 0.06     # 界行量出的列距偏离先验超此 → 判为�
                            # 会把中位间距顶到 2 倍），弃用，保留先验
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
+INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
+                           # 实测 inset_l 中位 32.5px，但有 69 页塌到 <15px，
+                           # 那些页 rule_in_col 均值 0.083、其余页才 0.006
 
 
 @dataclass
@@ -1046,7 +1049,8 @@ class GridSegmenter:
                      cell_h_prior: float | None = None,
                      row_phase_abs: float | None = None,
                      shear_override: float | None = None,
-                     period_prior: float | None = None) -> dict:
+                     period_prior: float | None = None,
+                     inset_prior: tuple[float, float] | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
         相位以本页 inner_frame 为基准换算）——弱信号页专用。
@@ -1132,6 +1136,16 @@ class GridSegmenter:
             # 界行吸附管一个列距以内的精调，两者互补。
             cx0, period, inset_l, inset_r = snap_columns_to_rules(
                 image, vproj, cx0, period, n_cols, inset_l, inset_r)
+            if inset_prior:
+                # 文字带在列格内的位置是**书级刚性常量**（整版先划栏格再上字），
+                # 和格高、列距同理。逐页量出来的内缩在稀疏页上会塌到 0~6px，
+                # 列框于是贴着界行走、把界行圈进去——实测内缩塌掉的 69 页
+                # rule_in_col 均值 0.083，内缩正常的页只有 0.006，差 14 倍。
+                # 放在界行吸附**之后**：吸附会按新相位重量一遍内缩，早设会被覆盖。
+                if inset_l < inset_prior[0] * INSET_TOL:
+                    inset_l = float(inset_prior[0])
+                if inset_r < inset_prior[1] * INSET_TOL:
+                    inset_r = float(inset_prior[1])
             columns_info = [
                 {"index": n_cols - k,          # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
@@ -1300,6 +1314,10 @@ class GridSegmenter:
         # ±8% 搜索窗跳不出来。这类页列网格与墨量都正常，现有"弱页"
         # 判据（低墨量 / rule_in_col 高）完全抓不到——必须用格高本身判。
         n_row_fix = 0
+        # 后续各 pass 会**重跑** segment_page，必须把这里修好的行格高带上，
+        # 否则行网格会被重新自由拟合、再次锁到谐波上。实测漏带这个参数时
+        # 格高坏掉的页从 3 张涨到 17 张（页 168 整页格高 59px = 书级 113.7 的一半）。
+        row_prior: dict[str, float] = {}
         cell_hs = [r["grid"]["cell_h"] for r in results.values()
                    if r.get("grid", {}).get("cell_h")]
         if len(cell_hs) >= 5:
@@ -1319,6 +1337,7 @@ class GridSegmenter:
                 # 且这些页它已经是 0，任何门控都会一律拒绝校正。
                 results[stem] = self.segment_page(
                     image, layout, cell_h_prior=consensus_h)
+                row_prior[stem] = consensus_h
                 n_row_fix += 1
             if n_row_fix:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
@@ -1347,6 +1366,10 @@ class GridSegmenter:
                     continue
                 redone = self.segment_page(
                     image, layout, period_prior=consensus_p,
+                    # 这两个 pass 只改**列**参数，行网格不该重新拟合——
+                    # 原样带过去（Pass 2a 修过的用修后的值）
+                    cell_h_prior=(row_prior.get(stem)
+                                  or results[stem]["grid"].get("cell_h")),
                     shear_override=results[stem]["grid"].get("shear", 0.0))
                 # 择优：列距偏离本身已是失败证据，但相位仍可能没救回来，
                 # 所以仍按 rule_in_col 把关，绝不允许改差
@@ -1357,6 +1380,47 @@ class GridSegmenter:
             if n_period_fix:
                 print(f"  书级列距共识 {consensus_p:.1f}px，"
                       f"校正列距拟错页 {n_period_fix} 张")
+
+        # ── Pass 2a3: 书级内缩共识，校正内缩塌掉的页 ──
+        # 与格高、列距同理：文字带在列格内的位置是物理刚性常量（整版先划
+        # 栏格再上字）。但内缩是**逐页从投影量**出来的，稀疏页（目录/职名）
+        # 的列格切片里内容范围量不准，会塌到 0~6px——列框于是贴着界行走。
+        # 实测全书 inset_l 中位 32.5px，却有 69 页塌到 <15px，那些页
+        # rule_in_col 均值 0.083、内缩正常的页只有 0.006，差 14 倍。
+        n_inset_fix = 0
+        if self.n_cols:
+            ils = [r["grid"]["inset_l"] for r in results.values()
+                   if r.get("grid", {}).get("inset_l") is not None]
+            irs = [r["grid"]["inset_r"] for r in results.values()
+                   if r.get("grid", {}).get("inset_r") is not None]
+            if len(ils) >= 5:
+                prior = (float(np.median(ils)), float(np.median(irs)))
+                off = [s2 for s2, r in results.items()
+                       if r.get("grid", {}).get("period")
+                       and (r["grid"]["inset_l"] < prior[0] * INSET_TOL
+                            or r["grid"]["inset_r"] < prior[1] * INSET_TOL)]
+                for stem, img_path, layout in pages:
+                    if stem not in off:
+                        continue
+                    image = imread(str(img_path))
+                    if image is None:
+                        continue
+                    redone = self.segment_page(
+                        image, layout, inset_prior=prior,
+                        # 这两个 pass 只改**列**参数，行网格不该重新拟合——
+                    # 原样带过去（Pass 2a 修过的用修后的值）
+                    cell_h_prior=(row_prior.get(stem)
+                                  or results[stem]["grid"].get("cell_h")),
+                        shear_override=results[stem]["grid"].get("shear", 0.0))
+                    # 择优：内缩塌掉本身即失败证据，但仍按 rule_in_col 把关
+                    if redone["grid"].get("rule_in_col", 1.0) <= \
+                            results[stem]["grid"].get("rule_in_col", 1.0):
+                        redone["page_type"] = results[stem].get("page_type")
+                        results[stem] = redone
+                        n_inset_fix += 1
+                if n_inset_fix:
+                    print(f"  书级内缩共识 ({prior[0]:.0f},{prior[1]:.0f})px，"
+                          f"校正内缩塌掉页 {n_inset_fix} 张")
 
         # ── Pass 2b: 行相位骑线重扫 ──
         # 直接质量信号：骑线比（straddle_score）。稀疏页（职名/目录）
@@ -1469,6 +1533,7 @@ class GridSegmenter:
                           "empty": n_empty, "weak_pages": n_weak,
                           "row_fixed_pages": n_row_fix,
                           "phase_fixed_pages": n_phase_fix,
+                          "inset_fixed_pages": n_inset_fix,
                           "skipped_pages": len(skipped_pages),
                           "skipped_kinds": dict(__import__("collections")
                                                 .Counter(t for _, t
