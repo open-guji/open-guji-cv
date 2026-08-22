@@ -388,6 +388,45 @@ def cmd_refine(args):
     print(json.dumps(report, ensure_ascii=False, indent=1))
 
 
+def cmd_eval_align(args):
+    """参考文本对齐评测：真实字准确率（非"汉字率"），多册可合并计。"""
+    from .clustering.align_eval import evaluate_books, top_confusions, build_ngram_index
+    from pathlib import Path as _Path
+
+    books = args.books or [args.path]
+    text_dirs = {b: Path(args.output) / b / "phase6_labels" / "text" for b in books}
+    missing = [b for b, d in text_dirs.items() if not d.is_dir()]
+    if missing:
+        print(f"缺少转写文本，请先跑 label/refine: {missing}")
+        sys.exit(1)
+
+    report = evaluate_books(text_dirs, args.corpus)
+    for name, b in report["books"].items():
+        print(f"{name}: 对齐 {b['n_anchored']}/{b['n_pages']} 页，"
+              f"{b['total_matched']}/{b['total_chars']} 字，"
+              f"准确率 {b['accuracy']:.2%}")
+    o = report["overall"]
+    print(f"合计: {o['total_matched']}/{o['total_chars']} 字，"
+          f"准确率 {o['accuracy']:.2%}")
+
+    if args.confusions:
+        corpus = Path(args.corpus).read_text(encoding="utf-8")
+        index = build_ngram_index(corpus)
+        merged: dict[str, int] = {}
+        for d in text_dirs.values():
+            for k, n in top_confusions(d, corpus, index, top_k=args.confusions):
+                merged[k] = merged.get(k, 0) + n
+        top = sorted(merged.items(), key=lambda x: -x[1])[:args.confusions]
+        print(f"\n混淆头部（转写→参考，仅计等长替换）：")
+        for k, n in top:
+            print(f"  {k} ×{n}")
+
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=1),
+                                  encoding="utf-8")
+        print(f"→ {args.out}")
+
+
 def cmd_bench_ocr(args):
     """多 OCR 引擎在黄金集上的准确率对比。"""
     from .clustering.ocr_bench import run_bench
@@ -680,6 +719,16 @@ def main():
                    help="外部古文语料（目录或 txt）：真 LM + 本版用字习惯")
 
     # ── bench-ocr（多引擎对比）───────────────────────────
+    p = sub.add_parser("eval-align",
+                       help="参考文本对齐评测：真实字准确率（需先 label/refine）")
+    p.add_argument("path", help="古籍文件夹路径（单册时用；多册见 --books）")
+    p.add_argument("--corpus", required=True, help="整理本参考文本路径")
+    p.add_argument("--books", nargs="*", default=None,
+                   help="多册合并评测（覆盖 path），如 vol01 vol02")
+    p.add_argument("--confusions", type=int, default=0,
+                   help="报告混淆头部 top-N（0=不报）")
+    p.add_argument("--out", default=None, help="报告写入 JSON 路径")
+
     p = sub.add_parser("bench-ocr", help="多 OCR 引擎黄金集准确率对比")
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--engines", default="rapidocr,tesseract:chi_tra",
@@ -774,6 +823,7 @@ def main():
         "cluster":           cmd_cluster,
         "label":             cmd_label,
         "refine":            cmd_refine,
+        "eval-align":        cmd_eval_align,
         "bench-ocr":         cmd_bench_ocr,
         "review":            cmd_review,
         "review-export":     cmd_review_export,
