@@ -1,6 +1,5 @@
 venv/
 __pycache__/
-output/
 .claude/
 dist/
 build/
@@ -9,6 +8,7 @@ build/
 glyph_store/glyphdb.sqlite
 *.sqlite-journal
 
-# 全本扫描件（体积大，不入库；清单与下载器入库）
-data_full/*
-!data_full/zongmu_manifest.json
+# output/、data_full/ 曾经 gitignore，但容器重置会把它们连同耗时的
+# 下载/切分/聚类结果一起清空（archive.org 常被组织策略拦截，重下不一定
+# 能立刻做到）。改为入库，代价是仓库变大，但避免每次重来。
+# 唯一仍不入库的是可从 glyph_store/ 一键重建的 SQLite 索引（见上）。
