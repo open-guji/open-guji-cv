@@ -1,0 +1,16 @@
+{
+  "segmenter": "grid_strict",
+  "params": {
+    "chars_per_line": 21,
+    "empty_ink_ratio": 0.02,
+    "search_ratio": 0.3
+  },
+  "stats": {
+    "pages": 188,
+    "chars": 29851,
+    "empty": 5614,
+    "weak_pages": 4,
+    "row_fixed_pages": 35,
+    "phase_fixed_pages": 7
+  }
+}

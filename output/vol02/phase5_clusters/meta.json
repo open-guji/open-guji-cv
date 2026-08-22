@@ -1,0 +1,19 @@
+{
+  "params": {
+    "feature": "hog",
+    "theta_high": 0.8,
+    "theta_low": 0.62,
+    "diff_blob_ratio": 0.06,
+    "knn_k": 10,
+    "cross_check_k": 3,
+    "n_reps": 5,
+    "seed": 7
+  },
+  "stats": {
+    "n_instances": 29851,
+    "n_clusters": 26507,
+    "singleton_ratio": 0.9386,
+    "max_cluster_size": 135,
+    "n_verify_calls": 198772
+  }
+}
