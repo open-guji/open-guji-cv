@@ -95,6 +95,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -152,6 +153,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -201,6 +203,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -290,6 +293,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -355,6 +359,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -541,7 +546,8 @@
           "y_top": 2442.370742857143,
           "y_bottom": 2461.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 3,
@@ -727,7 +733,8 @@
           "y_top": 2445.370742857143,
           "y_bottom": 2461.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 2,
@@ -913,7 +920,8 @@
           "y_top": 2445.370742857143,
           "y_bottom": 2461.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 1,
@@ -1099,7 +1107,8 @@
           "y_top": 2436.370742857143,
           "y_bottom": 2461.0
         }
-      ]
+      ],
+      "layout": "rigid"
     }
   ]
 }

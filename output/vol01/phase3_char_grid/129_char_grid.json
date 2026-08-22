@@ -195,7 +195,8 @@
           "text": null,
           "confidence": 0.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 8,
@@ -284,6 +285,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -389,6 +391,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -570,7 +573,8 @@
           "text": null,
           "confidence": 0.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 5,
@@ -667,6 +671,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -848,7 +853,8 @@
           "text": null,
           "confidence": 0.0
         }
-      ]
+      ],
+      "layout": "rigid"
     },
     {
       "index": 3,
@@ -921,6 +927,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -1018,6 +1025,7 @@
           "confidence": 0.0
         }
       ],
+      "layout": "elastic",
       "spread_col": true
     },
     {
@@ -1199,7 +1207,8 @@
           "text": null,
           "confidence": 0.0
         }
-      ]
+      ],
+      "layout": "rigid"
     }
   ]
 }
