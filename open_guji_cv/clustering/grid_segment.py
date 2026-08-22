@@ -56,6 +56,8 @@ RULE_MIN_HALF = 3.0        # 界行半宽下限（实测宽度中位 5px）
 RULE_CLEARANCE = 3.0       # 列框离界行再留的余量
 RULE_PERIOD_TOL = 0.06     # 界行量出的列距偏离先验超此 → 判为量错（缺条界行
                            # 会把中位间距顶到 2 倍），弃用，保留先验
+NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
+                           # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
 
 
 @dataclass
@@ -1106,14 +1108,35 @@ class GridSegmenter:
                     period = float(period_prior)
                 inset_l, inset_r = measure_insets(vproj, cx0, period,
                                                   self.n_cols)
-            # 界行是列边界的直接证据（摆正之后才看得见），拿它把相位钉死
+            # 列梳子的起点自由度只有 W - 跨度 这么多——列数与列距都是刚性
+            # 先验，梳子整体必须落在页面内。原先相位由 fit_page_grid 按
+            # **文字带的 content_range** 锚定，而 content_range 会把长度不足
+            # 的游程当噪声跳过：卷尾页左侧整片**空列**（有界行、无字）正好
+            # 是这种情况，于是梳子从版面中间起步——实测 vol02/38 起点落在
+            # x=981（图宽 1714），末 5 列全部出图；vol01/164 偏右 1.1 个列距，
+            # 把最左边那列真有字的列排除在外。
+            n_cols = self.n_cols
+            narrow = period * n_cols > w + period * NARROW_TOL
+            if narrow:
+                # 页面装不下 n_cols 列 —— 实测这类页被上游裁掉了一整列：
+                # 图宽 1460~1530（正常 1696，差一个列距），且**图上真的只有
+                # 8 条文字带**（正常页 9 条）。既然那一列在图上就不存在，
+                # 就按装得下的列数切；硬凑 n_cols 会把 8 列文字摊到 9 个框
+                # 上，全部错位。真正该修的是上游裁切，这里只如实反映 + 标记。
+                n_cols = max(1, int((w + period * NARROW_TOL) // period))
+            span = period * n_cols
+            cx0 = float((w - span) / 2) if span > w \
+                else float(min(max(cx0, 0.0), w - span))
+            # 界行是列边界的直接证据（摆正之后才看得见），拿它把相位钉死。
+            # 放在夹逼之后：夹逼只管"别跑出页面"（误差可达几个列距），
+            # 界行吸附管一个列距以内的精调，两者互补。
             cx0, period, inset_l, inset_r = snap_columns_to_rules(
-                image, vproj, cx0, period, self.n_cols, inset_l, inset_r)
+                image, vproj, cx0, period, n_cols, inset_l, inset_r)
             columns_info = [
-                {"index": self.n_cols - k,     # 从右到左编号，最右列=1
+                {"index": n_cols - k,          # 从右到左编号，最右列=1
                  "left_x": cx0 + period * k + inset_l,
                  "right_x": cx0 + period * (k + 1) - inset_r}
-                for k in range(self.n_cols)]
+                for k in range(n_cols)]
             # 列拟合质量：界行竖线落入列格内部的比例。拟合正确时
             # 界行全在列格之间的缝里；错位半周期则大量进入列内——
             # 这正是下游"图块裹线被隔离"的直接前因。
@@ -1124,6 +1147,10 @@ class GridSegmenter:
                     in_col += int(rule_xs[lo:hi].sum())
             total_rule = max(1, int(rule_xs.sum()))
             grid_meta = {"shear": grid_meta["shear"],
+                         # 页面装不下 n_cols 列 → 上游裁切少了一列，
+                         # 这里只标记不硬凑（硬凑会把 8 列文字摊到 9 个框上）
+                         "narrow_page": bool(narrow),
+                         "n_cols_used": int(n_cols),
                          "page_ink": page_ink, "period": float(period),
                          "col_phase_rel": float(cx0 - frame_left),
                          "inset_l": float(inset_l),
