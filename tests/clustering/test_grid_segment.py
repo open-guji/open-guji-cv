@@ -427,14 +427,14 @@ def test_snap_moves_column_phase_onto_the_rules():
     from open_guji_cv.clustering.grid_segment import snap_columns_to_rules
     g = _ruled_page(0.0, w=900, period=180)
     # 故意把列格起点偏 40px，列框就会把界行圈进去
-    cx0, il, ir = snap_columns_to_rules(g, _vproj(g), 180 - 40, 180.0, 4, 12.0, 12.0)
+    cx0, per, il, ir = snap_columns_to_rules(g, _vproj(g), 180 - 40, 180.0, 4, 12.0, 12.0)
     assert abs(((cx0 - 180) + 90) % 180 - 90) < 6, cx0
 
 
 def test_snap_widens_inset_to_clear_the_rule():
     from open_guji_cv.clustering.grid_segment import snap_columns_to_rules
     g = _ruled_page(0.0, w=900, period=180)
-    _, il, ir = snap_columns_to_rules(g, _vproj(g), 180.0, 180.0, 4, 0.0, 0.0)
+    _, _p, il, ir = snap_columns_to_rules(g, _vproj(g), 180.0, 180.0, 4, 0.0, 0.0)
     assert il >= 3.0 and ir >= 3.0, (il, ir)
 
 
@@ -443,7 +443,7 @@ def test_snap_is_a_noop_without_enough_rules():
     from open_guji_cv.clustering.grid_segment import snap_columns_to_rules
     blank = np.full((1600, 900), 255, np.uint8)
     assert snap_columns_to_rules(blank, _vproj(blank), 7.0, 180.0, 4, 11.0, 13.0) \
-        == (7.0, 11.0, 13.0)
+        == (7.0, 180.0, 11.0, 13.0)
 
 
 def test_snap_never_makes_it_worse():
@@ -454,8 +454,8 @@ def test_snap_never_makes_it_worse():
     g = _ruled_page(0.0, w=900, period=180)
     segs = rule_segments(g)
     before = _rule_in_col(segs, _comb(180.0, 180.0, 4, 12.0, 12.0))
-    cx0, il, ir = snap_columns_to_rules(g, _vproj(g), 180.0, 180.0, 4, 12.0, 12.0)
-    assert _rule_in_col(segs, _comb(cx0, 180.0, 4, il, ir)) <= before
+    cx0, per, il, ir = snap_columns_to_rules(g, _vproj(g), 180.0, 180.0, 4, 12.0, 12.0)
+    assert _rule_in_col(segs, _comb(cx0, per, 4, il, ir)) <= before
 
 
 
@@ -495,3 +495,132 @@ def test_column_geometry_at_real_column_count():
         # 两侧界行都不许落进列框
         for r in (x0 + k * period, x0 + (k + 1) * period):
             assert not (c["left_x"] <= r <= c["right_x"]), (k, r)
+
+
+def test_period_prior_overrides_a_bad_page_fit():
+    """列距是书级刚性常量：给了共识值就不许再用本页拟出来的歪值。
+
+    实测全书列距 5~95 分位只有 174~186px，拟歪的页掉到 152~157——差 15%，
+    界行必然被圈进列框，而且**换多少相位都救不回来**：周期错了，误差沿
+    列号线性累积。
+    """
+    n_chars, n_cols, period, text_w = 6, 9, 90, 60
+    H, W = n_chars * 60 + 60, n_cols * period + 60
+    page = np.full((H, W), 235, np.uint8)
+    frame_top, x0 = 30, 30
+    for k in range(n_cols):
+        lx = x0 + k * period + (period - text_w) // 2
+        for i in range(n_chars):
+            y = frame_top + i * 60 + 10
+            page[y:y + 40, lx + 6:lx + text_w - 6] = 25
+        page[frame_top:frame_top + n_chars * 60,
+             x0 + (k + 1) * period - 1:x0 + (k + 1) * period + 1] = 25
+    layout = {"borders": {"inner_frame": {
+        "top": {"intercept": frame_top},
+        "bottom": {"intercept": frame_top + n_chars * 60}}}}
+    seg = GridSegmenter(chars_per_line=n_chars, n_cols=n_cols)
+    free = seg.segment_page(page, layout)
+    forced = seg.segment_page(page, layout, period_prior=float(period))
+    assert abs(forced["grid"]["period"] - period) < 1.0
+    # 共识列距下界行不进列框
+    assert forced["grid"]["rule_in_col"] <= free["grid"]["rule_in_col"]
+
+
+def test_period_from_rules_beats_a_wrong_prior():
+    """界行间距直接给出列距，先验拟歪了要能纠回来。"""
+    from open_guji_cv.clustering.grid_segment import _period_from_rules
+    centers = np.array([180.0, 360.0, 540.0, 720.0, 900.0])
+    assert abs(_period_from_rules(centers, 174.0) - 180.0) < 1.0
+
+
+def test_period_from_rules_rejects_a_doubled_reading():
+    """缺条界行会把中位间距顶到 2 倍——超出刚性先验容差就该弃用。"""
+    from open_guji_cv.clustering.grid_segment import _period_from_rules
+    centers = np.array([180.0, 540.0, 900.0, 1260.0, 1620.0])   # 每隔一条
+    assert _period_from_rules(centers, 180.0) == 180.0
+
+
+def test_period_from_rules_falls_back_without_enough_rules():
+    from open_guji_cv.clustering.grid_segment import _period_from_rules
+    assert _period_from_rules(np.array([180.0, 360.0]), 177.0) == 177.0
+
+
+def test_content_range_survives_all_ink_below_threshold():
+    """有墨但全是零星单像素时不许崩——proj.max()>0 挡不住这种切片。"""
+    from open_guji_cv.clustering.grid_segment import content_range
+    proj = np.zeros(60); proj[[3, 20, 41]] = 1.0
+    assert content_range(proj, min_run=8) == (0, 60)
+
+
+# ── 版面几何金标 ──────────────────────────────────────────
+
+def _geom(slopes, xs0, h=2000.0):
+    """按给定的逐条斜率造一页金标。"""
+    from open_guji_cv.clustering.page_geometry import PageGeometry, RuleLine
+    ys = [h * 0.16, h * 0.5, h * 0.84]
+    rules = []
+    for x0, s in zip(xs0, slopes):
+        rules.append(RuleLine(x_top=x0 + s * (ys[0] - h / 2),
+                              x_mid=x0,
+                              x_bot=x0 + s * (ys[2] - h / 2)))
+    return PageGeometry(book="b", page="1",
+                        image_size={"width": 1800, "height": int(h)},
+                        band_ys=ys, rules=rules, n_cols=9)
+
+
+def test_geometry_shear_is_the_common_slope():
+    g = _geom([0.01] * 6, [200, 380, 560, 740, 920, 1100])
+    assert abs(g.shear() - 0.01) < 1e-6
+
+
+def test_geometry_parallel_rules_have_no_projective_component():
+    """错切下所有界行平行 → 射影分量为 0。"""
+    g = _geom([0.01] * 6, [200, 380, 560, 740, 920, 1100])
+    assert abs(g.projective_span()) < 1e-6
+
+
+def test_geometry_converging_rules_show_a_projective_component():
+    """射影下界行收敛于灭点 → 斜率随 x 线性变化。"""
+    xs = [200, 380, 560, 740, 920, 1100]
+    g = _geom([0.002 * i for i in range(6)], xs)
+    assert g.projective_span() > 0.008
+
+
+def test_geometry_separates_projective_from_random_scatter():
+    """随机抖动不该被算成射影——两者必须分得开。"""
+    xs = [200, 380, 560, 740, 920, 1100]
+    jitter = [0.010, 0.006, 0.011, 0.005, 0.012, 0.007]   # 无趋势
+    g = _geom(jitter, xs)
+    assert abs(g.projective_span()) < 0.006
+    assert g.slope_scatter() > 0.002
+
+
+def test_geometry_period_survives_a_missing_rule():
+    g = _geom([0.0] * 5, [200, 380, 740, 920, 1100])      # 缺 560
+    assert abs(g.period() - 180) < 1.0
+
+
+def test_geometry_eval_counts_rules_inside_column_boxes():
+    from open_guji_cv.clustering.geometry_eval import compare_page
+    g = _geom([0.0] * 4, [200, 380, 560, 740])
+    clear = [(210.0, 370.0), (390.0, 550.0), (570.0, 730.0)]
+    assert compare_page(g, clear)["rule_in_col"] == 0.0
+    swallow = [(190.0, 370.0), (370.0, 550.0), (550.0, 730.0)]
+    assert compare_page(g, swallow)["rule_in_col"] > 0.4
+
+
+def test_geometry_eval_applies_the_declared_shear():
+    """管线声明了错切量，评测必须把金标点摆到同一帧再比。"""
+    from open_guji_cv.clustering.geometry_eval import compare_page
+    # 斜率取 0.03：±20px 的漂移才够探进 20px 宽的列间缝，小了测不出东西
+    g = _geom([0.03] * 4, [200, 380, 560, 740])
+    cols = [(210.0, 370.0), (390.0, 550.0), (570.0, 730.0)]
+    assert compare_page(g, cols, shear=0.03)["rule_in_col"] == 0.0
+    assert compare_page(g, cols, shear=0.0)["rule_in_col"] > 0.0
+
+
+def test_geometry_residual_tilt_drops_to_zero_after_correct_deshear():
+    from open_guji_cv.clustering.geometry_eval import compare_page
+    g = _geom([0.01] * 4, [200, 380, 560, 740])
+    assert compare_page(g, [], shear=0.01)["residual_tilt"] < 0.01
+    assert compare_page(g, [], shear=0.0)["residual_tilt"] > 10
