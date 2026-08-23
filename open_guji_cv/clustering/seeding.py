@@ -36,13 +36,13 @@ from pathlib import Path
 import cv2
 
 from .align_eval import build_ngram_index
-from .align_label import (carrier_slots, clean_labels, label_book,
+from .align_label import (carrier_slots, clean_labels, is_han, label_book,
                           page_reference)
 from .crop_quality import assess_crop
 from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
-from .normalize import normalize_patch
+from .normalize import normalize_patch, sauvola_binarize
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
@@ -133,6 +133,41 @@ def judge_doubts(ocr: dict | None, align: dict | None, tier: str,
     if align and align.get("op") == "replace":
         doubts.append(DOUBT_REPLACE_ALIGN)
     return doubts
+
+
+BLANK_INK_RATIO = 0.01   # R1：去噪（<6px 组件不计）后墨量占比低于此 = 空白格
+#                          校准：1198 个已定真字实例抽样最低 0.0846（8 倍余量）
+NONCHAR_OCR_PROB = 0.30  # R2：列尾格 OCR 置信低于此（或非汉字）算垃圾输出
+
+
+def detect_nonchar(gray: "np.ndarray", ocr: dict | None,
+                   ref_char: str | None, is_tail: bool,
+                   page_anchored: bool) -> str | None:
+    """空白/非字自动探测（六轮实审后加）。返回原因或 None。
+
+    校准依据：用户前几页手标的 16 条非字**全部**是列尾格 + 整理本对不上
+    + OCR 垃圾输出（低置信/非汉字/幻觉字）；其中 6 条纯空白。规则对
+    1198 个已定真字实例验证零误杀。
+
+    - R1 **blank**：Sauvola 二值 + 去噪后墨量 < BLANK_INK_RATIO。
+      任何位置都适用（真字抽样最低 8.5%，8 倍余量）；
+    - R2 **tail_junk**：锚定页的列尾格 + 无整理本参考 + OCR 非汉字或
+      prob < NONCHAR_OCR_PROB —— 版框线/残带占格的典型形态。只在
+      **锚定页**启用：整理本对不上是判据的一半，没锚定就没这道安全网
+      （「一」与框线形状上判不准，是记档的粘连盲区，靠的就是语料）。
+    """
+    binary = sauvola_binarize(gray)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    ink = sum(int(stats[i, cv2.CC_STAT_AREA]) for i in range(1, n)
+              if stats[i, cv2.CC_STAT_AREA] >= 6)
+    if ink / binary.size < BLANK_INK_RATIO:
+        return "blank"
+    if is_tail and page_anchored and ref_char is None:
+        och = (ocr or {}).get("char")
+        if not och or not is_han(och) \
+                or (ocr or {}).get("prob", 0.0) < NONCHAR_OCR_PROB:
+            return "tail_junk"
+    return None
 
 
 def admission_decision(ocr: dict | None, align_char: str | None,
@@ -332,11 +367,36 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
         for page in todo:
             n_auto = n_pending = 0
             page_recs = by_page[page]
+            refs = ref_by_page.get(page, {})
+            page_anchored = any(v[0] for v in refs.values())
+            tail_idx: dict[int, int] = {}
+            for r in page_recs:
+                tail_idx[r.col] = max(tail_idx.get(r.col, -1), r.idx)
             for rec in page_recs:
                 gray = cv2.imread(str(root / rec.patch_path),
                                   cv2.IMREAD_GRAYSCALE)
                 if gray is None:
                     summary["n_missing_patch"] += 1
+                    continue
+                c0 = carrier.get(rec.id)
+                ocr0 = ({"char": c0["char"], "prob": float(c0.get("prob", 0.0))}
+                        if c0 and c0.get("char") else None)
+                nonchar = detect_nonchar(
+                    gray, ocr0, refs.get((rec.col, rec.idx), (None, ""))[0],
+                    is_tail=(rec.idx == tail_idx[rec.col]),
+                    page_anchored=page_anchored)
+                if nonchar:
+                    # 空白/版框格：自动判非字，不进审查也不进库（审计行照落）
+                    item = SeedItem(instance_id=rec.id, book=book, page=page,
+                                    col=rec.col, idx=rec.idx,
+                                    patch_path=rec.patch_path, tier="degraded",
+                                    ocr=ocr0, status=STATUS_NOT_A_CHAR,
+                                    note=f"auto:{nonchar}",
+                                    context=slot_context(page, rec.col, rec.idx))
+                    qf.write(item.to_json() + "\n")
+                    summary["n_auto_nonchar"] = summary.get(
+                        "n_auto_nonchar", 0) + 1
+                    n_auto += 1
                     continue
                 q = assess_crop(gray, margins=margins_of(rec))
                 tier = "clean" if q.tier == "clean" else "degraded"
@@ -521,7 +581,13 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
         for iid in order:
             f.write(items[iid].to_json() + "\n")
 
-    # progress：pending = 仍待裁决（pending_review + skipped）
+    _refresh_progress_pending(seed_dir, items)
+    return {"events": len(events), **dict(n)}
+
+
+def _refresh_progress_pending(seed_dir: Path,
+                              items: dict[str, SeedItem]) -> None:
+    """progress：pending = 仍待裁决（pending_review + skipped）。"""
     progress = _load_progress(seed_dir)
     open_by_page: Counter = Counter()
     for it in items.values():
@@ -531,4 +597,62 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
         st["pending"] = open_by_page.get(page, 0)
     all_pages = sorted(progress.get("pages", {}), key=_page_key)
     _save_progress(seed_dir, progress, all_pages)
-    return {"events": len(events), **dict(n)}
+
+
+def scrub_nonchar(book_out_dir: str | Path) -> dict:
+    """对既有队列的待审行复扫空白/非字（detect_nonchar 加规则后回填存量）。
+
+    只动 pending_review / skipped 行：命中 → status=not_a_char、
+    note=auto:{reason}；不进库不删行（审计保留）。队列整文件重写，幂等。
+    """
+    book_out_dir = Path(book_out_dir)
+    root = book_out_dir / "phase4_chars"
+    seed_dir = book_out_dir / SEED_DIR
+    queue_path = seed_dir / "queue.jsonl"
+    if not queue_path.exists():
+        raise FileNotFoundError(f"队列不存在: {queue_path}（先跑 seed）")
+
+    order: list[str] = []
+    items: dict[str, SeedItem] = {}
+    for line in queue_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        it = SeedItem.from_json(line)
+        if it.instance_id not in items:
+            order.append(it.instance_id)
+        items[it.instance_id] = it
+
+    tail_idx: dict[tuple[str, int], int] = {}
+    page_anchored: dict[str, bool] = {}
+    for it in items.values():
+        k = (it.page, it.col)
+        tail_idx[k] = max(tail_idx.get(k, -1), it.idx)
+        if (it.context or {}).get("ref_char"):
+            page_anchored[it.page] = True
+
+    n = Counter()
+    for it in items.values():
+        if it.status not in (STATUS_PENDING, STATUS_SKIPPED):
+            continue
+        gray = cv2.imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            n["missing_patch"] += 1
+            continue
+        reason = detect_nonchar(
+            gray, it.ocr, (it.context or {}).get("ref_char"),
+            is_tail=(it.idx == tail_idx[(it.page, it.col)]),
+            page_anchored=page_anchored.get(it.page, False))
+        if reason:
+            it.status = STATUS_NOT_A_CHAR
+            it.note = f"auto:{reason}"
+            it.decided_char = None
+            it.provenance = None
+            n[f"auto_{reason}"] += 1
+        else:
+            n["kept"] += 1
+
+    with open(queue_path, "w", encoding="utf-8") as f:
+        for iid in order:
+            f.write(items[iid].to_json() + "\n")
+    _refresh_progress_pending(seed_dir, items)
+    return dict(n)

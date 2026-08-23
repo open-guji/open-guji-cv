@@ -496,6 +496,14 @@ def cmd_seed_ingest(args):
     print(json.dumps(summary, ensure_ascii=False, indent=1))
 
 
+def cmd_seed_scrub(args):
+    """对既有种子队列的待审行复扫空白/非字（新增检测规则后回填存量）。"""
+    from .clustering.seeding import scrub_nonchar
+
+    print(json.dumps(scrub_nonchar(_book_out_dir(args)),
+                     ensure_ascii=False, indent=1))
+
+
 def cmd_refine(args):
     """M5+ 上下文自动修正：簇级边缘化 + 同书自举 n-gram，迭代重解码。"""
     from .clustering.context_refine import refine_book
@@ -864,6 +872,10 @@ def main():
     p.add_argument("--edition", default=None,
                    help="edition_tag（默认=书名；同版多书标同 tag）")
 
+    p = sub.add_parser("seed-scrub",
+                       help="对种子队列待审行复扫空白/非字（规则升级后回填存量）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+
     p = sub.add_parser("seed-ingest",
                        help="回收种子审查事件（GUJI-SEED-EVENT）→ human 进库")
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
@@ -999,6 +1011,7 @@ def main():
         "label":             cmd_label,
         "recognize":         cmd_recognize,
         "seed":              cmd_seed,
+        "seed-scrub":        cmd_seed_scrub,
         "seed-ingest":       cmd_seed_ingest,
         "refine":            cmd_refine,
         "eval-align":        cmd_eval_align,
