@@ -1,0 +1,122 @@
+"""align_label.py 单测：对齐标签必须落在正确的实例上，错位一格就算失败。"""
+
+import json
+
+from open_guji_cv.clustering.align_eval import build_ngram_index
+from open_guji_cv.clustering.align_label import (index_structure, label_book,
+                                                 label_page, page_slots,
+                                                 summarize)
+
+CORPUS = ("欽定四庫全書總目卷首一聖諭乾隆三十七年正月初四日奉上諭朕稽古右文"
+          "聿資治理幾餘典學日有孜孜因思策府縹緗載籍極博其鉅者羽翼經訓垂範方來")
+
+
+def _slots(text, col=1):
+    return [(col, i, ch) for i, ch in enumerate(text)]
+
+
+def test_equal_block_labels_every_instance():
+    text = CORPUS[10:40]
+    labels, anchored = label_page("7", _slots(text), "tb", CORPUS,
+                                  build_ngram_index(CORPUS))
+    assert anchored
+    assert len(labels) == len(text)
+    assert [x.char for x in labels] == list(text)
+    assert [x.instance_id for x in labels] == [f"tb:7:1:{i}" for i in range(len(text))]
+    assert {x.op for x in labels} == {"equal"}
+
+
+def test_replace_takes_gold_from_corpus_not_from_transcription():
+    """转写错的位置正是最有价值的标注——金标取语料字，不取转写字。"""
+    text = list(CORPUS[10:40])
+    text[5] = "傅"          # 制造一个单字转写错误
+    labels, _ = label_page("7", _slots("".join(text)), "tb", CORPUS,
+                           build_ngram_index(CORPUS))
+    wrong = [x for x in labels if x.op == "replace"]
+    assert len(wrong) == 1
+    assert wrong[0].instance_id == "tb:7:1:5"
+    assert wrong[0].hyp == "傅"
+    assert wrong[0].char == CORPUS[15]   # 金标来自语料
+
+
+def test_insertion_segment_is_dropped_not_forced():
+    """多切一个格（插入一个字）：错位段整段丢弃，后半页不能整体偏一格。"""
+    text = CORPUS[10:40]
+    spliced = text[:12] + "囗" + text[12:]
+    labels, _ = label_page("7", _slots(spliced), "tb", CORPUS,
+                           build_ngram_index(CORPUS))
+    got = {x.instance_id: x.char for x in labels}
+    assert "tb:7:1:12" not in got                      # 多出来的格没有标签
+    for i in range(13, len(spliced)):                  # 后半页仍然对得上
+        assert got[f"tb:7:1:{i}"] == spliced[i]
+
+
+def test_unanchorable_page_yields_nothing():
+    labels, anchored = label_page("7", _slots("一二三四五六七八九十"), "tb",
+                                  CORPUS, build_ngram_index(CORPUS))
+    assert not anchored and labels == []
+
+
+def _write_book(tmp_path, ranked_slots, index_slots):
+    book = tmp_path / "tb"
+    (book / "phase4_chars").mkdir(parents=True)
+    (book / "phase6_labels").mkdir(parents=True)
+    (book / "phase6_labels" / "ranked.json").write_text(json.dumps({
+        "results": [{"id": f"tb:7:{c}:{i}", "best": ch}
+                    for c, i, ch in ranked_slots]}), encoding="utf-8")
+    with open(book / "phase4_chars" / "index.jsonl", "w", encoding="utf-8") as f:
+        for c, i, _ in index_slots:
+            f.write(json.dumps({"page": "7", "col": c, "idx": i}) + "\n")
+    return book
+
+
+def test_structure_drift_drops_the_whole_page(tmp_path):
+    """转写产自更早一次切分（这一列多了一格）→ 整页丢弃，绝不硬配。"""
+    text = CORPUS[10:40]
+    ranked = _slots(text)
+    drifted = ranked + [(1, len(text), "囗")]        # 当前切分多切了一格
+    book = _write_book(tmp_path, ranked, drifted)
+    labels, stats = label_book("tb", book, _corpus_file(tmp_path))
+    assert labels == []
+    assert stats[0].structure_ok is False
+    assert summarize(stats)["n_anchored"] == 0
+
+
+def test_structure_match_passes(tmp_path):
+    text = CORPUS[10:40]
+    book = _write_book(tmp_path, _slots(text), _slots(text))
+    labels, stats = label_book("tb", book, _corpus_file(tmp_path))
+    assert len(labels) == len(text)
+    s = summarize(stats)
+    assert s["n_structure_ok"] == 1 and s["n_labeled"] == len(text)
+
+
+def test_page_filter_and_index_structure(tmp_path):
+    text = CORPUS[10:40]
+    book = _write_book(tmp_path, _slots(text), _slots(text))
+    labels, _ = label_book("tb", book, _corpus_file(tmp_path), pages={"999"})
+    assert labels == []
+    assert index_structure(book / "phase4_chars" / "index.jsonl") == {
+        "7": [(1, i) for i in range(len(text))]}
+
+
+def test_renumbered_column_is_drift_even_at_equal_count(tmp_path):
+    """格数相同但 idx 起点变了，也是漂：编号对不上，标签会挂到别的实例上。"""
+    text = CORPUS[10:40]
+    ranked = _slots(text)
+    renumbered = [(c, i + 1, ch) for c, i, ch in ranked]
+    book = _write_book(tmp_path, ranked, renumbered)
+    labels, stats = label_book("tb", book, _corpus_file(tmp_path))
+    assert labels == [] and stats[0].structure_ok is False
+
+
+def test_page_slots_orders_by_column_then_index():
+    ranked = [{"id": "tb:7:2:1", "best": "乙"}, {"id": "tb:7:1:0", "best": "甲"},
+              {"id": "tb:7:2:0", "best": "丙"}]
+    assert page_slots(ranked)["7"] == [(1, 0, "甲"), (2, 0, "丙"), (2, 1, "乙")]
+
+
+def _corpus_file(tmp_path):
+    p = tmp_path / "corpus.txt"
+    p.write_text(CORPUS, encoding="utf-8")
+    return p
