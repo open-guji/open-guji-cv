@@ -31,6 +31,29 @@ EMPTY_INK_RATIO = 0.02     # 格内墨迹覆盖率低于此 → empty
 MIN_COL_WIDTH_RATIO = 0.5  # 列宽低于中位列宽的此比例 → 非文字列（版心/界行缝），跳过
 SEARCH_RATIO = 0.3         # 逐线微调搜索半径（× 格高）
 CELL_H_TOL = 0.05          # 页格高偏离全书共识超此比例 → 判定锁错，强制重拟
+# ── 书级格高由「实测字距」定 ─────────────────────────────
+# 刻本一格一字，所以**字距就是格高**——这是可以直接量的物理常量。
+# 而投影拟合的基准是 (文字带高)/n_chars，文字带由 content_range 划定，
+# 它会把首末字探出去的那点笔画当短游程剔掉，于是格高被系统性低估：
+# 实测 vol01 低 1.0%、vol02 低 1.7%。21 格累积下来漂 0.21 / 0.36 格，
+# 正好对上末格的字下出头 0.19~0.39 格——列两端的字因此被格线切掉。
+PITCH_MIN_SEGS = 8         # 一列至少这么多个单字墨段才拿来量字距
+PITCH_MIN_COLS = 40        # 全书至少这么多列量得出字距，才敢用它定格高
+PITCH_MAX_DEV = 0.08       # 实测字距偏离投影共识超此 → 判为量错，不用
+PITCH_SEARCH = 0.10        # 字距候选的搜索半径（× 先验）。窗要窄到把 2 倍
+                           # 谐波挡在外面，宽到覆盖投影拟合的系统偏差
+PITCH_STEP = 0.2           # 候选步长（px）
+PITCH_MIN_R = 0.75         # 最佳候选的相位集中度下限，低于此说明这列不刚性
+# ── 格线逐条吸附到字间空隙 ────────────────────────────────
+# 格高定死、相位也拟好之后，单条格线仍会落在笔画上：刻工排字有微偏，
+# 字身大小也不一。分隔线本来就该落在字与字之间的空隙里，而「这一行有
+# 多少墨」是可以直接量的——所以逐条格线在小范围内滑到局部墨谷。
+# 个别字上下确实相连（本来就没有空隙），那时谷底墨量仍高，保持原位不动。
+SNAP_RANGE = 0.10          # 每条格线的滑动半径（× 格高）。再大就会滑到
+                           # 邻格的空隙上去，把一个字整个让给隔壁
+SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于此说明这里
+                           # 根本没有空隙，保持刚性位置
+SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
 PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
                            # 实测列距 5~95 分位只有 174~186px（±3%），是物理
@@ -540,6 +563,72 @@ def page_column_projection(gray: np.ndarray, line_frac: float = 0.3,
     return proj
 
 
+def column_pitch(proj: np.ndarray, prior: float,
+                 ink_t: float) -> float | None:
+    """量一列的**字距**：在 ±10% 的候选里挑「中心点相位最集中」的那个。
+
+    为什么不用「间距的中位数」：列里总有空格位，间距会混进 2×、3×，
+    中位数被它们带偏。
+
+    为什么不用「给中心配整数格号再拟斜率」：**它对先验敏感**。先验偏
+    3% 时，列末的格号会配错一位，斜率被带偏——实测这么做把 vol02 的
+    格高从真值 110.6 推到 112.6（偏 +1.8%），末格反而更容易吃到版框。
+    量物理常量的估计量必须对先验不敏感。
+
+    环形集中度对先验只依赖搜索窗：候选 p 下把每个中心折算成相位
+    2π·y/p，中心都落在格线上时这些相位聚成一束（|均值| → 1），
+    p 不对就散开。实测先验故意给 ±6%，估出来的值只差 0.1%。
+
+    返回 None 的情况：单字墨段少于 PITCH_MIN_SEGS、或最佳候选的集中度
+    低于 PITCH_MIN_R（这列本来就不是刚性的）。
+    """
+    on = proj > ink_t
+    segs: list[tuple[int, int]] = []
+    start = None
+    for j, v in enumerate(on):
+        if v and start is None:
+            start = j
+        elif not v and start is not None:
+            segs.append((start, j)); start = None
+    if start is not None:
+        segs.append((start, len(on)))
+    # 只要**单字**段：太短是碎屑，太长是上下字粘连
+    segs = [(a, b) for a, b in segs if 0.35 * prior < b - a < 1.5 * prior]
+    if len(segs) < PITCH_MIN_SEGS:
+        return None
+    c = np.array([(a + b) / 2 for a, b in segs], dtype=float)
+    best_p, best_r = None, -1.0
+    for p in np.arange(prior * (1 - PITCH_SEARCH), prior * (1 + PITCH_SEARCH),
+                       PITCH_STEP):
+        r = float(abs(np.exp(1j * 2 * np.pi * c / p).mean()))
+        if r > best_r:
+            best_p, best_r = float(p), r
+    return best_p if best_r >= PITCH_MIN_R else None
+
+
+def measure_page_pitch(gray: np.ndarray, result: dict) -> list[float]:
+    """一页里所有刚性列量出的字距。"""
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    cell_h = result.get("grid", {}).get("cell_h")
+    if not cell_h:
+        return []
+    binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
+    out: list[float] = []
+    for col in result.get("columns", []):
+        if col.get("layout") != "rigid" or col.get("cell_left_x") is None:
+            continue
+        x0 = int(round(col["cell_left_x"])); x1 = int(round(col["cell_right_x"]))
+        x0, x1 = max(0, x0), min(binary.shape[1], x1)
+        if x1 - x0 < 20:
+            continue
+        p = column_pitch(binary[:, x0:x1].sum(axis=1).astype(float),
+                         float(cell_h), 0.02 * (x1 - x0))
+        if p:
+            out.append(p)
+    return out
+
+
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
                   full_widths: list[float] | None = None,
                   cell_step: float = 0.5, phase_step: int = 2,
@@ -593,10 +682,61 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
     return best
 
 
+def snap_bounds_to_gaps(proj: np.ndarray, bounds: list[float],
+                        cell_h: float) -> list[float]:
+    """逐条格线滑到**字间空隙**（局部墨谷）。
+
+    等距格线只保证「格高对」，不保证每一条线都落在空隙里：刻工排字有
+    微偏、字身大小不一，一条线偏个七八像素就从笔画上切过去。而「这一行
+    有多少墨」是可以直接量的，谷底就是该切的地方。
+
+    三条约束：
+
+    - **滑动半径只有 SNAP_RANGE×格高。** 再大就会滑到邻格的空隙上，
+      等于把一个字整个让给隔壁——那是比切一刀更严重的错误。
+    - **没有谷就不滑。** 上下两字真的连在一起时（谷底墨量仍高于相邻两格
+      平均墨量的 SNAP_VALLEY_T），保持刚性位置：宁可在原处切一刀，也不要
+      滑到别处去切。这类「必须带墨的分隔线」由下游 `_split_touching`
+      在颈部处理。
+    - **平局偏向原位。** 整段空白时谷底到处都是 0，取离刚性位置最近的那个。
+
+    首末两条线同样吸附——版框与首/末字之间也有一道小空隙，让线落进去，
+    首末字才不会被切掉（实测末格的字下出头中位 0.19 格）。
+    """
+    if len(bounds) < 2 or cell_h <= 0:
+        return bounds
+    k = max(1, int(SNAP_SMOOTH))
+    sm = np.convolve(np.asarray(proj, dtype=float),
+                     np.ones(k) / k, mode="same")
+    L = len(sm)
+    r = max(1, int(round(SNAP_RANGE * cell_h)))
+    out: list[float] = []
+    for i, b in enumerate(bounds):
+        bi = int(round(b))
+        lo, hi = max(0, bi - r), min(L, bi + r + 1)
+        if hi - lo < 3:
+            out.append(float(b)); continue
+        win = sm[lo:hi]
+        # 参考墨量：这条线两侧各半格（没有相邻格时用有的那一侧）
+        a0 = max(0, bi - int(cell_h * 0.5)); a1 = min(L, bi + int(cell_h * 0.5))
+        ref = float(sm[a0:a1].mean()) if a1 > a0 else 0.0
+        m = float(win.min())
+        if ref > 0 and m > SNAP_VALLEY_T * ref:
+            out.append(float(b)); continue          # 这里本来就没有空隙
+        cand = np.flatnonzero(win <= m + 1e-9) + lo
+        out.append(float(cand[np.argmin(np.abs(cand - bi))]))
+    # 保序：吸附半径 < 半格，正常不会交叉；真交叉了就退回原位
+    for i in range(1, len(out)):
+        if out[i] <= out[i - 1]:
+            return list(bounds)
+    return out
+
+
 def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
                  n_chars: int, micro: float = 0.12,
-                 phase_step: int = 1) -> list[float]:
-    """单列刚性网格：格高固定，相位在页面相位 ±micro×格高 内微调。
+                 phase_step: int = 1, snap: bool = True) -> list[float]:
+    """单列刚性网格：格高固定，相位在页面相位 ±micro×格高 内微调，
+    再把每条格线**逐条**吸附到字间空隙（见 snap_bounds_to_gaps）。
 
     微调只容忍板歪/扫描形变；空列/稀疏列信号弱时代价面平坦，
     平局偏向页面相位（刻本栏格跨列统一）。"""
@@ -610,7 +750,8 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
             + 1e-3 * abs(phase - page_phase) / cell_h * max(1.0, smooth.mean())
         if cost < best_cost:
             best_cost, best_phase = cost, float(phase)
-    return [best_phase + cell_h * k for k in range(n_chars + 1)]
+    bounds = [best_phase + cell_h * k for k in range(n_chars + 1)]
+    return snap_bounds_to_gaps(proj, bounds, cell_h) if snap else bounds
 
 
 def straddle_score(image: np.ndarray, result: dict) -> float:
@@ -1409,6 +1550,7 @@ class GridSegmenter:
         results: dict[str, dict] = {}
         pages: list[tuple[str, Path, dict]] = []
         skipped_pages: list[tuple[str, str]] = []
+        pitches: list[float] = []
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
             img_path = CharExtractor._find_page_image(src, stem)
@@ -1439,6 +1581,26 @@ class GridSegmenter:
             r = self.segment_page(image, layout)
             r["page_type"] = ptype
             results[stem] = r
+            pitches.extend(measure_page_pitch(
+                image if image.ndim == 2
+                else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), r))
+
+        # ── Pass 2a0: 书级格高改由**实测字距**定 ──
+        # 刻本一格一字，字距就是格高，可以直接量；而投影拟合的基准
+        # (文字带高)/n_chars 系统性偏低——content_range 会把首末字探出去的
+        # 那点笔画当短游程剔掉。实测低 1.0%(vol01) / 1.7%(vol02)，21 格累积
+        # 漂 0.21 / 0.36 格，正好对上末格的字下出头 0.19~0.39 格。
+        # 只在证据够、且与投影共识差得不离谱时采用（量错宁可不用）。
+        pitch_h = None
+        fit_hs = [r["grid"]["cell_h"] for r in results.values()
+                  if r.get("grid", {}).get("cell_h")]
+        if len(pitches) >= PITCH_MIN_COLS and fit_hs:
+            cand = float(np.median(pitches))
+            fit_med = float(np.median(fit_hs))
+            if abs(cand - fit_med) <= PITCH_MAX_DEV * fit_med:
+                pitch_h = cand
+                print(f"  书级格高改由实测字距定：{fit_med:.2f} → {cand:.2f}px"
+                      f"（{len(pitches)} 列，+{(cand / fit_med - 1) * 100:.1f}%）")
 
         # ── Pass 2a: 书级格高共识，校正格高锁错的页 ──
         # 刻本全书同版：格高是**物理刚性常量**，一页不可能是别页的 1/2。
@@ -1454,11 +1616,17 @@ class GridSegmenter:
         cell_hs = [r["grid"]["cell_h"] for r in results.values()
                    if r.get("grid", {}).get("cell_h")]
         if len(cell_hs) >= 5:
-            consensus_h = float(np.median(cell_hs))
-            off_grid = [s for s, r in results.items()
-                        if r.get("grid", {}).get("cell_h")
-                        and abs(r["grid"]["cell_h"] - consensus_h)
-                        > CELL_H_TOL * consensus_h]
+            consensus_h = pitch_h or float(np.median(cell_hs))
+            if pitch_h:
+                # 字距定的格高与每一页原来的拟合值都差 1~2%，不是只有
+                # 「锁错的页」要改——全书都得按新格高重扫。
+                off_grid = [s for s, r in results.items()
+                            if r.get("grid", {}).get("cell_h")]
+            else:
+                off_grid = [s for s, r in results.items()
+                            if r.get("grid", {}).get("cell_h")
+                            and abs(r["grid"]["cell_h"] - consensus_h)
+                            > CELL_H_TOL * consensus_h]
             for stem, img_path, layout in pages:
                 if stem not in off_grid:
                     continue
