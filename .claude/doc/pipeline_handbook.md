@@ -445,7 +445,18 @@ file`，与代码无关），跑测试必须加 `--capture=no`。
 
 ---
 
-## 6. 提交规范
+## 6. 全流程运行与耗时
+
+```bash
+bash scripts/run_pipeline.sh          # 两册并行，逐阶段计时，≈15 分钟墙钟
+```
+
+单册各阶段实测（vol01）：segment 482s / chars 62s / cluster 318s / label 7s。
+热点构成与优化记录见 char_clustering_design.md「全流程耗时画像」。
+量耗时**别用产物 mtime 推**——多轮重跑会把时间戳搅在一起（实测把 5 分钟
+的聚类推成了 34 分钟）。
+
+## 7. 提交规范
 
 - 只在指定分支开发（本项目：`claude/ancient-text-char-clustering-*`）。
 - 提交信息写**测出来的数字**，不写形容词；变差的地方也要写。
