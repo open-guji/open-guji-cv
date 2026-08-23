@@ -219,8 +219,12 @@ vol01/90、93（职名页，非正文，按当前策略可以缓）。出路多�
 **G3/G4/G5 合并重设计（字形库优先的增量识别）**见
 [glyph_db_first_design.md](glyph_db_first_design.md)：不再先聚簇再定字，
 每个新图块先与已验证字形库匹配，完美匹配直接继承 Unicode，不完美走
-候选+OCR+上下文；可行性已在金标分片上模拟（覆盖 16~24%、匹配精度
-≈100%、随库增长）。落地顺序见其 §7。
+候选+OCR+上下文。进度（其 §7）：P3 归一化修复 ✅、`match.py`
+（GlyphMatcher + never-match 护栏 + `recognize` CLI）✅、
+`scripts/eval_db_match.py` 两协议基线 ✅（覆盖 10~22%、硬约束门
+（语义层 + 记账豁免）三协议全过、真错配 0）；下一步是 unsure/diff
+分支接线与准入阈标定，以及首批进库协议（其 §3.5：OCR×整理本双信号 +
+人工审查逐页推进）对应的审查 UI 改造。
 
 **G3/G4（归一化/聚类）的后续待办与所需数据**单独记在
 [g3g4_error_analysis.md](g3g4_error_analysis.md) §4：unsure 审查队列

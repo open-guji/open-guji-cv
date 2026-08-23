@@ -180,12 +180,28 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
 
 ## 7. 落地顺序（每步可量）
 
-1. **P3 归一化修复先行**（吃笔画 bug 毒化库，模拟中唯一的真·形匹配
-   隐患）——golden 补样（二/三/之/亦）→ 修 shallow_tb/贴边判据 → 回归门。
-2. `match.py`：kNN + verify_pair_cov 三档 + never-match 表 + 证据记录
-   （~200 行，全部复用现有件）；`recognize` CLI。
-3. 库匹配基准脚本（模拟协议正式化进 scripts/eval_db_match.py），
-   两协议基线入库。
+1. **✅ P3 归一化修复先行**（2026-08-23 晚落成，记录见
+   g3g4_error_analysis.md §7）：golden 补样（101~107）→
+   `remove_edge_specks` 重写 → 回归门 33/33、clean 层缺陷清零；
+   聚类基准 vol02 一/二 错并消失（purity 0.99967）。
+2. **✅ `match.py`**：`GlyphMatcher`（kNN + verify_pair_cov 三档 +
+   never-match 表 + same 档冲突降档 + 逐实例证据 `MatchResult`）；
+   `NEVER_MATCH_FAMILIES` 成为家族名单的单一事实源（build 脚本引用）；
+   `recognize` CLI（第一段：匹配库 → phase8_match/matches.jsonl，
+   unsure/diff 只落证据待第 4 步接线）；单测 7 条。
+3. **✅ `scripts/eval_db_match.py`**：两协议基线（2026-08-23 晚，
+   护栏生效，与 §1 的裸模拟不同——护栏把形近家族的完美命中降档进
+   unsure，覆盖率让利换 precision 兜底）：
+
+   | 协议 | 覆盖率(后半段) | 字形精度 | 语义精度 | 护栏拦截 |
+   |---|---|---|---|---|
+   | vol01 册内增量 | 10.4% (13.3%) | 0.9968* | 0.9968* | never_match 31 |
+   | vol02 册内增量 | 16.7% (20.3%) | **1.0000** | **1.0000** | never_match 12 + conflict 1 |
+   | vol02 ← 库=vol01 | 22.0% (23.1%) | 0.9985 | **1.0000** | never_match 58 + conflict 1 |
+
+   *vol01 唯一错配 = 已记账金标标签错（羣/詳，KNOWN_GOLD_ISSUES 豁免
+   进门不豁免数字）；跨册的字形层 0.9985 = 注/註 异体字形（语义层
+   正确）。**硬约束门（计门精度 ≥0.999）三协议全过，真错配 0。**
 4. unsure/diff 分支接 GlyphKnnSource+RapidOcrSource+refine（现有代码
    重编排）；context-margin 准入阈在 context-correction 集上标定。
 5. 与 cluster→label 流水在同一分片上对完整对比，赢了切主干。
