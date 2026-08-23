@@ -85,7 +85,9 @@ def _pointer_page(queue_path: Path, by_page: dict[str, list]) -> str | None:
         d = json.loads(prog.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
-    for key in ("current_page", "page", "next_page"):
+    # 契约（seed_queue.py）：进度指针字段为 pointer（流程侧 seeding.py
+    # 维护，指向最早未 done 的页）；其余键名保留为向后兼容探测。
+    for key in ("pointer", "current_page", "page", "next_page"):
         v = d.get(key)
         if v is not None and str(v) in by_page:
             return str(v)

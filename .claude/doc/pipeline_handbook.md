@@ -219,12 +219,14 @@ vol01/90、93（职名页，非正文，按当前策略可以缓）。出路多�
 **G3/G4/G5 合并重设计（字形库优先的增量识别）**见
 [glyph_db_first_design.md](glyph_db_first_design.md)：不再先聚簇再定字，
 每个新图块先与已验证字形库匹配，完美匹配直接继承 Unicode，不完美走
-候选+OCR+上下文。进度（其 §7）：P3 归一化修复 ✅、`match.py`
-（GlyphMatcher + never-match 护栏 + `recognize` CLI）✅、
-`scripts/eval_db_match.py` 两协议基线 ✅（覆盖 10~22%、硬约束门
-（语义层 + 记账豁免）三协议全过、真错配 0）；下一步是 unsure/diff
-分支接线与准入阈标定，以及首批进库协议（其 §3.5：OCR×整理本双信号 +
-人工审查逐页推进）对应的审查 UI 改造。
+候选+OCR+上下文。进度（其 §7/§7.1）：P3 归一化修复 ✅、`match.py` + `recognize` CLI ✅、
+`eval_db_match.py` 两协议基线 ✅（same 档覆盖 10~22%、计门精度门全过、
+真错配 0）、unsure/diff 分支 + margin≥0.99 准入阈 ✅（端到端覆盖
+vol02 册内 30.6% / 跨册 40.5%，精度 1.0000/0.9984）、§3.5 进库协议
+✅（`seed`/`seed-ingest` 命令 + 种子审查页面 + `seed_queue.py` 契约；
+vol01 前 5 页实测 auto 进库 71.5%）。剩：与 cluster→label 流水对比
+（§7 第 5 步）、weak_single 阈待 char-ocr 集标定、OCR-only 分支
+（匕/七类）立门。
 
 **G3/G4（归一化/聚类）的后续待办与所需数据**单独记在
 [g3g4_error_analysis.md](g3g4_error_analysis.md) §4：unsure 审查队列

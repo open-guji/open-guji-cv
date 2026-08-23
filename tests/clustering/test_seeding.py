@@ -1,0 +1,330 @@
+"""seeding.py 单测：六条疑问判定、双信号零疑问自动进库、ingest 幂等、
+断点续跑。全部用合成微型书（构造手法参考 test_align_label / test_match），
+不依赖真实 output/ 数据。
+
+fixture 一次搭好 7 页合成书并跑一遍 seed_book（module 级，跑一次全模块
+断言）；ingest / resume 的测试放在只读断言之后，避免共享状态互踩。
+"""
+
+import json
+import random
+
+import cv2
+import numpy as np
+import pytest
+
+from open_guji_cv.clustering.glyph_db import GlyphDB
+from open_guji_cv.clustering.seed_queue import (DOUBT_DB_INCONSISTENT,
+                                                DOUBT_DEGRADED_CROP,
+                                                DOUBT_NEAR_FORM,
+                                                DOUBT_REPLACE_ALIGN,
+                                                DOUBT_SIGNAL_CONFLICT,
+                                                DOUBT_WEAK_SINGLE,
+                                                STATUS_AUTO, STATUS_CONFIRMED,
+                                                STATUS_NOT_A_CHAR,
+                                                STATUS_PENDING,
+                                                STATUS_SKIPPED, SeedItem,
+                                                parse_seed_events)
+from open_guji_cv.clustering.seeding import ingest_decisions, seed_book
+from open_guji_cv.clustering.synth import synthetic_glyph
+
+# ── 合成书设计（每页一列；页文本 = 语料连续片段）──────────────────────
+# 1: 全部双信号一致零疑问 → 全页自动进库
+# 2: idx10 载体给错字「馬」（真字 致）→ signal_conflict + replace_align
+# 3: idx9 载体给异体「珎」（真字 珍，测试 variants 表归一）→ 仅 replace_align
+# 4: idx6 是形近家族字「大」→ near_form
+# 5: idx0「弔」库里预置了完全不同形状的刻例 → db_inconsistent
+# 6: idx3 图块手工造残留（碰边伸进核心区）→ degraded_crop
+# 7: 页文本不在语料里（锚定失败，无对齐）→ weak_single / 单信号高置信
+PAGES = {
+    "1": "天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏",
+    "2": "閏餘成歲律呂調陽雲騰致雨露結為霜金生麗水玉出崑岡",
+    "3": "劍號巨闕珠稱夜光果珍李柰菜重芥薑海鹹河淡鱗潛羽翔",
+    "4": "龍師火帝鳥官大皇始制文字乃服衣裳推位讓國有虞陶唐",
+    "5": "弔民伐罪周發殷湯愛育黎首臣伏戎羌",
+    "6": "遐邇壹體率賓歸王鳴鳳在樹白駒食場",
+    "7": "化被草木賴及萬方",          # 不进语料 → 整页无对齐
+}
+CORPUS_PAGES = ("1", "2", "3", "4", "5", "6")
+ALTERED = {("2", 10): "馬", ("3", 9): "珎"}      # 载体（OCR）故意给的字
+PROBS = {("7", 1): 0.30}                          # 低置信槽位
+EMPTY_OCR = {("7", 2)}                            # OCR 空识别槽位
+DEGRADED = {("6", 3)}                             # 手工残留图块
+BOOK = "tb"
+
+
+def _glyph(ch: str) -> np.ndarray:
+    return synthetic_glyph(random.Random(ord(ch)))        # 64×64 {0,1}
+
+
+def _patch(ch: str) -> np.ndarray:
+    """80×80 灰度图块：64×64 字形居中，四周 8px padding，干净不碰边。"""
+    canvas = np.full((80, 80), 245, dtype=np.uint8)
+    region = canvas[8:72, 8:72]
+    region[_glyph(ch) > 0] = 20
+    return canvas
+
+
+def _degraded_patch() -> np.ndarray:
+    """主体方块（不碰边）+ 从左边界伸进核心区的残带 → residue/degraded。"""
+    canvas = np.full((80, 80), 245, dtype=np.uint8)
+    canvas[25:55, 30:60] = 20
+    canvas[36:45, 0:14] = 20
+    return canvas
+
+
+def _square_norm() -> np.ndarray:
+    """与任何笔画字形都对不上的库内刻例（制造 db_inconsistent）。"""
+    sq = np.zeros((64, 64), dtype=np.uint8)
+    sq[12:52, 12:52] = 1
+    return sq
+
+
+def build_book(root):
+    """phase4_chars（index.jsonl + 图块）+ OCR 载体 + 语料 + 异体表。"""
+    book_dir = root / BOOK
+    chars_dir = book_dir / "phase4_chars"
+    (chars_dir / "patches").mkdir(parents=True)
+
+    index_lines, carrier_lines = [], []
+    for page, text in PAGES.items():
+        for i, gold in enumerate(text):
+            iid = f"{BOOK}:{page}:1:{i}"
+            rel = f"patches/{page}_{i}.png"
+            img = _degraded_patch() if (page, i) in DEGRADED else _patch(gold)
+            cv2.imwrite(str(chars_dir / rel), img)
+            index_lines.append(json.dumps(
+                {"id": iid, "book": BOOK, "page": page, "col": 1, "idx": i,
+                 "bbox": [0, 0, 80, 80], "cell_type": "char",
+                 "ocr_text": None, "ocr_confidence": 0.0, "patch_path": rel,
+                 "ink_ratio": 0.2, "height": 64, "width": 64, "flags": []},
+                ensure_ascii=False))
+            ocr_char = "" if (page, i) in EMPTY_OCR \
+                else ALTERED.get((page, i), gold)
+            carrier_lines.append(json.dumps(
+                {"id": iid, "char": ocr_char,
+                 "prob": PROBS.get((page, i), 0.92)}, ensure_ascii=False))
+    (chars_dir / "index.jsonl").write_text(
+        "".join(x + "\n" for x in index_lines), encoding="utf-8")
+    (chars_dir / "ocr_carrier.jsonl").write_text(
+        "".join(x + "\n" for x in carrier_lines), encoding="utf-8")
+
+    corpus_path = root / "corpus.txt"
+    corpus_path.write_text("\n".join(PAGES[p] for p in CORPUS_PAGES),
+                           encoding="utf-8")
+    variants_path = root / "variants.tsv"
+    variants_path.write_text("珎\t珍\n", encoding="utf-8")
+    return book_dir, corpus_path, variants_path
+
+
+@pytest.fixture(scope="module")
+def seeded(tmp_path_factory):
+    root = tmp_path_factory.mktemp("seedbook")
+    book_dir, corpus_path, variants_path = build_book(root)
+    db = GlyphDB(root / "glyph.db")
+    # 预置库：一个与真实「弔」字形完全不同的已验证刻例（人工 provenance）
+    sq = _square_norm()
+    png = cv2.imencode(".png", (255 - sq * 255).astype(np.uint8))[1].tobytes()
+    assert db.admit_instance("pre:9:1:1", "弔", png, sq, provenance="human")
+    summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+    yield {"root": root, "book_dir": book_dir, "db": db, "summary": summary,
+           "corpus": corpus_path, "variants": variants_path}
+    db.close()
+
+
+def _queue(seeded) -> dict[str, SeedItem]:
+    path = seeded["book_dir"] / "phase9_seed" / "queue.jsonl"
+    out: dict[str, SeedItem] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            it = SeedItem.from_json(line)
+            out[it.instance_id] = it
+    return out
+
+
+def _admitted_ids(db) -> set[str]:
+    return {r[0] for r in db.conn.execute(
+        "SELECT instance_id FROM admissions").fetchall()}
+
+
+# ── 双信号一致零疑问 → 自动进库 ──────────────────────────────────────
+
+def test_auto_admit_dual_signal_zero_doubt(seeded):
+    q = _queue(seeded)
+    admitted = _admitted_ids(seeded["db"])
+    for i, ch in enumerate(PAGES["1"]):
+        it = q[f"{BOOK}:1:1:{i}"]
+        assert it.status == STATUS_AUTO and it.doubts == []
+        assert it.decided_char == ch and it.provenance == "align"
+        assert it.tier == "clean"
+        assert it.instance_id in admitted            # 真进了库
+    # 审计行带完整证据：ocr / align / match 都在
+    it = q[f"{BOOK}:1:1:0"]
+    assert it.ocr["char"] == "天" and it.align == {"char": "天", "op": "equal"}
+    assert it.match is not None and "verdict" in it.match
+
+
+def test_admission_evidence_recorded(seeded):
+    row = seeded["db"].conn.execute(
+        "SELECT provenance, evidence FROM admissions WHERE instance_id=?",
+        (f"{BOOK}:1:1:0",)).fetchone()
+    assert row[0] == "align"
+    ev = json.loads(row[1])
+    assert ev["ocr"]["char"] == "天" and ev["align"]["op"] == "equal"
+    assert "match" in ev
+
+
+# ── 六条疑问判定 ─────────────────────────────────────────────────────
+
+def test_doubt_signal_conflict(seeded):
+    it = _queue(seeded)[f"{BOOK}:2:1:10"]           # 载体「馬」 vs 语料「致」
+    assert it.status == STATUS_PENDING
+    assert DOUBT_SIGNAL_CONFLICT in it.doubts
+    assert DOUBT_REPLACE_ALIGN in it.doubts         # replace 位天然也命中 6
+    assert it.ocr["char"] == "馬" and it.align == {"char": "致", "op": "replace"}
+    assert it.proposed == "致"                      # 拟进库字取语料侧
+    assert it.instance_id not in _admitted_ids(seeded["db"])
+
+
+def test_doubt_replace_align_alone_when_semantically_equal(seeded):
+    """异体（珎→珍 语义同字）不算双信号打架，但 replace 位仍须人审。"""
+    it = _queue(seeded)[f"{BOOK}:3:1:9"]
+    assert it.status == STATUS_PENDING
+    assert it.doubts == [DOUBT_REPLACE_ALIGN]
+    assert it.ocr["char"] == "珎" and it.align["char"] == "珍"
+
+
+def test_doubt_weak_single(seeded):
+    q = _queue(seeded)
+    low = q[f"{BOOK}:7:1:1"]                         # 无对齐 + prob 0.30
+    empty = q[f"{BOOK}:7:1:2"]                       # 无对齐 + OCR 空识别
+    for it in (low, empty):
+        assert it.status == STATUS_PENDING
+        assert DOUBT_WEAK_SINGLE in it.doubts
+        assert it.align is None
+    assert empty.ocr is None and empty.proposed is None
+
+
+def test_single_signal_high_prob_still_pending(seeded):
+    """单信号高置信：六条全不命中，但双信号不齐 → 仍 pending，不自动进库。"""
+    it = _queue(seeded)[f"{BOOK}:7:1:0"]
+    assert it.status == STATUS_PENDING and it.doubts == []
+    assert it.note == "single_signal"
+    assert it.instance_id not in _admitted_ids(seeded["db"])
+
+
+def test_doubt_degraded_crop(seeded):
+    it = _queue(seeded)[f"{BOOK}:6:1:3"]
+    assert it.status == STATUS_PENDING
+    assert it.tier == "degraded"
+    assert it.doubts == [DOUBT_DEGRADED_CROP]        # 双信号一致，只有图块疑问
+
+
+def test_doubt_near_form(seeded):
+    it = _queue(seeded)[f"{BOOK}:4:1:6"]             # 「大」∈ 大/太 家族
+    assert it.status == STATUS_PENDING
+    assert it.doubts == [DOUBT_NEAR_FORM]
+
+
+def test_doubt_db_inconsistent(seeded):
+    """库里已有「弔」但形状对不上（verify 全 diff）→ 库内不自洽。"""
+    it = _queue(seeded)[f"{BOOK}:5:1:0"]
+    assert it.status == STATUS_PENDING
+    assert DOUBT_DB_INCONSISTENT in it.doubts
+    assert it.proposed == "弔"
+
+
+def test_summary_counts(seeded):
+    s = seeded["summary"]
+    n_slots = sum(len(t) for t in PAGES.values())
+    assert s["n_slots"] == n_slots
+    assert s["n_auto"] + s["n_pending"] == n_slots
+    # 预期 pending：2:10 / 3:9 / 4:6 / 5:0 / 6:3 + 第 7 页整页（8 格）
+    assert s["n_pending"] == 5 + len(PAGES["7"])
+    assert s["doubt_counts"][DOUBT_WEAK_SINGLE] == 2
+    assert s["pages_processed"] == len(PAGES)
+
+
+# ── 断点续跑 ─────────────────────────────────────────────────────────
+
+def test_resume_skips_done_pages(seeded):
+    progress = json.loads(
+        (seeded["book_dir"] / "phase9_seed" / "progress.json")
+        .read_text(encoding="utf-8"))
+    assert all(st["done"] for st in progress["pages"].values())
+    assert progress["pointer"] is None
+
+    before = len(_queue(seeded))
+    s2 = seed_book(seeded["book_dir"], seeded["db"], seeded["corpus"],
+                   variants=seeded["variants"])
+    assert s2["pages_processed"] == 0
+    assert s2["pages_skipped_done"] == len(PAGES)
+    assert len(_queue(seeded)) == before             # 队列没有重复行
+
+
+def test_max_pages_limits_this_run(tmp_path):
+    book_dir, corpus_path, variants_path = build_book(tmp_path)
+    db = GlyphDB(tmp_path / "g.db")
+    try:
+        s1 = seed_book(book_dir, db, corpus_path, variants=variants_path,
+                       max_pages=2)
+        assert s1["pages_processed"] == 2
+        progress = json.loads(
+            (book_dir / "phase9_seed" / "progress.json")
+            .read_text(encoding="utf-8"))
+        assert progress["pointer"] == "3"            # 推进指针指向下一页
+        s2 = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert s2["pages_skipped_done"] == 2
+        assert s2["pages_processed"] == len(PAGES) - 2
+    finally:
+        db.close()
+
+
+# ── 决策回收（放最后：会改写共享 fixture 的队列状态）──────────────────
+
+def test_ingest_decisions_and_idempotency(seeded):
+    db = seeded["db"]
+    text = "\n".join([
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:2:1:10", '
+        '"char": "致", "batch": "b1", "seq": 1}',
+        'GUJI-SEED-EVENT {"op": "not_a_char", "instance_id": "tb:6:1:3", '
+        '"batch": "b1", "seq": 2}',
+        'GUJI-SEED-EVENT {"op": "skip", "instance_id": "tb:7:1:0", '
+        '"batch": "b1", "seq": 3}',
+    ])
+    events = parse_seed_events(text)
+    assert len(events) == 3
+
+    r1 = ingest_decisions(seeded["book_dir"], db, events)
+    assert r1["admitted"] == 1
+    q = _queue(seeded)
+    assert q["tb:2:1:10"].status == STATUS_CONFIRMED
+    assert q["tb:2:1:10"].decided_char == "致"
+    assert q["tb:2:1:10"].provenance == "human"
+    assert q["tb:6:1:3"].status == STATUS_NOT_A_CHAR
+    assert q["tb:7:1:0"].status == STATUS_SKIPPED
+    row = db.conn.execute(
+        "SELECT provenance FROM admissions WHERE instance_id='tb:2:1:10'"
+    ).fetchone()
+    assert row == ("human",)
+
+    # 幂等：重复回收同一批事件，不重复进库、状态不变
+    n_before = db.conn.execute("SELECT COUNT(*) FROM admissions").fetchone()[0]
+    r2 = ingest_decisions(seeded["book_dir"], db, events)
+    assert r2.get("admitted", 0) == 0 and r2["already_admitted"] == 1
+    assert db.conn.execute(
+        "SELECT COUNT(*) FROM admissions").fetchone()[0] == n_before
+    q2 = _queue(seeded)
+    assert q2["tb:2:1:10"].status == STATUS_CONFIRMED
+    assert q2["tb:6:1:3"].status == STATUS_NOT_A_CHAR
+
+    # not_a_char / skip 不进库
+    admitted = _admitted_ids(db)
+    assert "tb:6:1:3" not in admitted and "tb:7:1:0" not in admitted
+
+    # progress 的 pending 随裁决下降（第 2 页清零）
+    progress = json.loads(
+        (seeded["book_dir"] / "phase9_seed" / "progress.json")
+        .read_text(encoding="utf-8"))
+    assert progress["pages"]["2"]["pending"] == 0
+    assert progress["pages"]["7"]["pending"] == len(PAGES["7"])  # skip 留队列

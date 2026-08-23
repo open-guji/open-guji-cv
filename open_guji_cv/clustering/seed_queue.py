@@ -18,6 +18,24 @@
     seed-ingest（流程侧）
       回收事件 → confirmed 的以 human provenance 进库；rejected/
       not_a_char 记档不进库；每页清完推进 progress.json
+
+集成澄清（2026-08-23，两侧首轮实现后定案）：
+
+- **免审的判据是 status，不是 doubts 空**：单信号高置信（无对齐字、
+  OCR prob ≥ 阈）六条疑问全不命中但双信号不齐 → 仍
+  ``status=pending_review``（doubts=[], note="single_signal"）。
+  只有 ``status=auto_admitted`` 才是免审进库。
+- **事件应用纪律**：同一 instance_id 的多条事件按 seq 升序应用、
+  后到覆盖（页面撤销 confirm 时发 skip 事件把字位退回队列）。
+  已进库实例的再改判只更新队列行、不重写库（admissions 幂等闸）；
+  库条目改判走设计 §3 的重放机制，将来需要时另加 amend 语义。
+- **progress.json 字段**：``pages: {页号: {total, auto, pending, done}}``
+  + ``pointer``（最早未 done 的页号，全部完成为 null）+ ``book`` +
+  ``updated_at``。页面侧按 pointer 取缺省页。
+- **auto_admitted 与 pending 同落 queue.jsonl**（审计与全书推进度
+  同一口径），页面侧只出 pending_review/skipped。
+- ``ocr.topk`` 元素为 ``[char, prob]`` 双元列表（与 match.candidates
+  的 ``[char, cov]`` 同构）。
 """
 
 from __future__ import annotations

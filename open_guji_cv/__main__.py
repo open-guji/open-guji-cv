@@ -23,6 +23,8 @@ Web 界面：
     review     <folder>   M6 人工审查 Web 界面 → phase7_review/labels.jsonl
     review-export <folder>  导出审查批次为自包含 HTML（Artifact/GitHub Pages）
     review-ingest <folder>  回收页面审查事件 → labels.jsonl
+    seed       <folder>   逐页进库（种子）：双信号+六条疑问判定 → phase9_seed/
+    seed-ingest <folder>  回收种子审查事件 → human 进库 + 队列状态更新
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
     glyph-db   <action>   M8 跨书字形数据库（import / stats / export / rebuild）
     bench      <target>   合成数据集基准评测（verify / cluster）
@@ -439,6 +441,61 @@ def cmd_recognize(args):
     print(json.dumps(summary, ensure_ascii=False))
 
 
+def cmd_seed(args):
+    """逐页进库（种子，设计 §3.5）：双信号 + 六条疑问判定 → phase9_seed/。
+
+    双信号一致零疑问 → align provenance 直接进库；其余进审查队列
+    （queue.jsonl），等 seed-ingest 回收裁决。断点续跑按页粒度。
+    """
+    from .clustering.glyph_db import GlyphDB
+    from .clustering.seeding import seed_book
+
+    book_out_dir = _book_out_dir(args)
+    pages = None
+    if args.pages == "body":
+        gold_path = Path(args.page_type)
+        if not gold_path.exists():
+            print(f"页型金标不存在: {gold_path}（--pages all 可跳过正文筛选）")
+            sys.exit(1)
+        gold = json.loads(gold_path.read_text(encoding="utf-8"))
+        book = book_out_dir.name
+        pages = {g["page"] for g in gold
+                 if g["book"] == book and g["page_type"] == "body"}
+        if not pages:
+            print(f"金标里没有 {book} 的正文页")
+            sys.exit(1)
+
+    db = GlyphDB(args.db)
+    try:
+        summary = seed_book(book_out_dir, db, args.corpus, pages=pages,
+                            carrier_path=args.ocr_carrier,
+                            max_pages=args.max_pages,
+                            prob_threshold=args.prob_threshold,
+                            edition=args.edition)
+    finally:
+        db.close()
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+
+
+def cmd_seed_ingest(args):
+    """回收种子审查事件（GUJI-SEED-EVENT 行）→ human 进库 + 队列更新。"""
+    from .clustering.glyph_db import GlyphDB
+    from .clustering.seed_queue import parse_seed_events
+    from .clustering.seeding import ingest_decisions
+
+    events = parse_seed_events(Path(args.events).read_text(encoding="utf-8"))
+    if not events:
+        print("文件里没有可用的 GUJI-SEED-EVENT 行")
+        sys.exit(1)
+    db = GlyphDB(args.db)
+    try:
+        summary = ingest_decisions(_book_out_dir(args), db, events,
+                                   edition=args.edition)
+    finally:
+        db.close()
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+
+
 def cmd_refine(args):
     """M5+ 上下文自动修正：簇级边缘化 + 同书自举 n-gram，迭代重解码。"""
     from .clustering.context_refine import refine_book
@@ -786,6 +843,35 @@ def main():
     p.add_argument("--edition", default=None, help="限定 edition_tag（同版匹配）")
     p.add_argument("--knn-k", type=int, default=10, help="近邻候选数（默认 10）")
 
+    # ── seed / seed-ingest（逐页进库，设计 §3.5）─────────
+    p = sub.add_parser("seed",
+                       help="逐页进库（种子）：双信号+六条疑问判定 → "
+                            "phase9_seed/（需先 chars + OCR 载体）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", required=True, help="GlyphDB SQLite 路径")
+    p.add_argument("--corpus", required=True, help="整理本参考文本路径")
+    p.add_argument("--pages", default="body", choices=["body", "all"],
+                   help="body=只跑金标正文页（默认）；all=索引里的全部页")
+    p.add_argument("--page-type",
+                   default="../open-guji-dataset/page-type/expected.json",
+                   help="页型金标路径（--pages body 时使用）")
+    p.add_argument("--ocr-carrier", default=None,
+                   help="OCR 载体 jsonl（默认 phase4_chars/ocr_carrier.jsonl）")
+    p.add_argument("--max-pages", type=int, default=None,
+                   help="本次最多处理的页数（断点续跑分批推进用）")
+    p.add_argument("--prob-threshold", type=float, default=0.85,
+                   help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
+    p.add_argument("--edition", default=None,
+                   help="edition_tag（默认=书名；同版多书标同 tag）")
+
+    p = sub.add_parser("seed-ingest",
+                       help="回收种子审查事件（GUJI-SEED-EVENT）→ human 进库")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", required=True, help="GlyphDB SQLite 路径")
+    p.add_argument("--events", required=True,
+                   help="含 GUJI-SEED-EVENT 行的文本/HTML 文件")
+    p.add_argument("--edition", default=None, help="edition_tag（默认=书名）")
+
     # ── refine（M5+ 上下文自动修正）──────────────────────
     p = sub.add_parser("refine",
                        help="M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）")
@@ -912,6 +998,8 @@ def main():
         "cluster":           cmd_cluster,
         "label":             cmd_label,
         "recognize":         cmd_recognize,
+        "seed":              cmd_seed,
+        "seed-ingest":       cmd_seed_ingest,
         "refine":            cmd_refine,
         "eval-align":        cmd_eval_align,
         "bench-ocr":         cmd_bench_ocr,

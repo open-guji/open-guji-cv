@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS pairs (
     created_at TEXT NOT NULL,
     PRIMARY KEY (inst_a, inst_b, relation)
 );
+CREATE TABLE IF NOT EXISTS admissions (
+    -- 逐实例准入审计（种子协议 §3.5）：provenance + 完整判定证据。
+    -- 主键即幂等闸：同一实例只准入一次，重复事件/重跑不重复进库。
+    instance_id TEXT PRIMARY KEY,
+    char TEXT NOT NULL,
+    provenance TEXT NOT NULL,
+    evidence TEXT,
+    admitted_at TEXT NOT NULL
+);
 """
 
 
@@ -408,6 +417,77 @@ class GlyphDB:
                     put(ms[i], ms[j], "same", "confirm_same")
                     got += 1
         return n
+
+    # ── 單實例準入（種子協議 §3.5）───────────────────────
+
+    def admit_instance(self, instance_id: str, char: str, patch_png: bytes,
+                       norm: np.ndarray, *, provenance: str,
+                       evidence: dict | None = None,
+                       edition_tag: str | None = None,
+                       page: str = "", col: int = 0, idx: int = 0,
+                       bbox: list | None = None,
+                       ink_ratio: float | None = None,
+                       width: float | None = None,
+                       height: float | None = None,
+                       semantic: str | None = None) -> bool:
+        """單個已裁決實例進庫（逐頁種子流程用，區別於 import_book 全量）。
+
+        寫入：原始圖塊（真源）、派生表示（norm/skeleton/feat）、glyph
+        條目（n_confirmed 累加）、exemplar（role='seed'，逐實例可檢索）、
+        admissions 審計行（provenance + evidence JSON——設計 §3 紀律 1：
+        逐實例證據，不做盲傳播；改判時憑它重放）。
+
+        冪等：同一 instance_id 第二次調用直接返回 False，什麼都不寫。
+        """
+        cur = self.conn.cursor()
+        if cur.execute("SELECT 1 FROM admissions WHERE instance_id=?",
+                       (instance_id,)).fetchone():
+            return False
+        source_id = instance_id.split(":")[0]
+        edition = edition_tag or source_id
+        cur.execute(
+            "INSERT OR IGNORE INTO sources (source_id, edition_tag, created_at)"
+            " VALUES (?,?,?)", (source_id, edition, _now()))
+        sem = semantic or char
+        cp = ord(char) if len(char) == 1 else None
+        cur.execute(
+            """INSERT INTO instances (instance_id, source_id, page, col, idx,
+                 bbox, patch_png, ink_ratio, width, height, quality_flags,
+                 label, label_status, label_confidence, semantic, unicode_cp,
+                 ids, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(instance_id) DO UPDATE SET
+                 label=excluded.label,
+                 label_status=excluded.label_status,
+                 semantic=excluded.semantic,
+                 unicode_cp=excluded.unicode_cp,
+                 updated_at=excluded.updated_at""",
+            (instance_id, source_id, page, col, idx,
+             json.dumps(bbox) if bbox is not None else None, patch_png,
+             ink_ratio, width, height, None,
+             char, provenance, 1.0, sem, cp, None, _now()))
+        self._write_derived(cur, instance_id, norm)
+        cur.execute(
+            f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
+                  ids, status, n_confirmed, updated_at)
+                VALUES (?,?,?,?,?,'sparse',1,?)
+                ON CONFLICT(edition_tag, char) DO UPDATE SET
+                  n_confirmed = n_confirmed + 1,
+                  status = CASE WHEN n_confirmed + 1 >= {K_MIN}
+                           THEN 'stable' ELSE status END,
+                  updated_at=excluded.updated_at""",
+            (edition, char, sem, cp, None, _now()))
+        gid = cur.execute(
+            "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
+            (edition, char)).fetchone()[0]
+        cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
+                    (gid, instance_id, "seed", _now()))
+        cur.execute("INSERT INTO admissions VALUES (?,?,?,?,?)",
+                    (instance_id, char, provenance,
+                     json.dumps(evidence, ensure_ascii=False)
+                     if evidence is not None else None, _now()))
+        self.conn.commit()
+        return True
 
     # ── 檢索 ─────────────────────────────────────────────
 
