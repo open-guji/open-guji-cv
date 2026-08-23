@@ -403,3 +403,36 @@ def test_context_crosses_columns(seeded):
     # 合成书每页只有 1 列 → 无邻列，prev/next 不出现（守拙不造假上下文）
     it = q["tb:2:1:0"]
     assert it.context and "prev_ocr" not in (it.context or {})
+
+
+def test_detect_nonchar_rules():
+    """空白/非字自动探测：R1 blank 任意位置；R2 tail_junk 只在锚定页。"""
+    import numpy as np
+    from open_guji_cv.clustering.seeding import detect_nonchar
+
+    blank = np.full((80, 80), 245, dtype=np.uint8)          # 纯空白
+    speck = blank.copy(); speck[40:42, 40:42] = 20          # 仅噪点（<6px）
+    char = _patch("文")                                      # 真字
+    bar = np.full((80, 80), 245, dtype=np.uint8)
+    bar[70:76, 0:80] = 20                                    # 版框横线
+
+    # R1：空白/纯噪点 → blank，位置无关
+    assert detect_nonchar(blank, None, None, False, True) == "blank"
+    assert detect_nonchar(speck, {"char": "司", "prob": 0.01},
+                          None, True, True) == "blank"
+    # 真字永不判 blank
+    assert detect_nonchar(char, None, None, False, True) is None
+    # R2：锚定页列尾 + 无参考 + OCR 垃圾 → tail_junk
+    assert detect_nonchar(bar, {"char": "—", "prob": 0.5},
+                          None, True, True) == "tail_junk"
+    assert detect_nonchar(bar, {"char": "的", "prob": 0.02},
+                          None, True, True) == "tail_junk"
+    # 安全网：非列尾 / 未锚定 / 有参考字 / OCR 高置信汉字 → 不判
+    assert detect_nonchar(bar, {"char": "—", "prob": 0.5},
+                          None, False, True) is None
+    assert detect_nonchar(bar, {"char": "—", "prob": 0.5},
+                          None, True, False) is None
+    assert detect_nonchar(bar, {"char": "—", "prob": 0.5},
+                          "一", True, True) is None
+    assert detect_nonchar(bar, {"char": "一", "prob": 0.9},
+                          None, True, True) is None
