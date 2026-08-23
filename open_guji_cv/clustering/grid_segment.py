@@ -524,7 +524,17 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
             rows.append([float(ya), float(yb), float(blo), float(bhi)])
         spread = max(max(r[2] for r in rows) - min(r[2] for r in rows),
                      max(r[3] for r in rows) - min(r[3] for r in rows))
-        band_out.append(rows if spread > CELL_BOW_T else None)
+        if spread > CELL_BOW_T:
+            band_out.append(rows)
+            # 弯边界的扁平裁切边改为逐带边界的**外包络**：整体 max-cov 的
+            # 墙是所有带的并集、停在最靠内的那一堵，比逐带的墙保守——条带
+            # 若仍按它裁，掩蔽只能删像素、加不回来，逐带围栏就白算了
+            # （第一版集成实测 p151 截断纹丝不动，正是这一步漏了）。
+            # 包络放宽的部分全部落在某条带的墙外，由 cell_bands 掩蔽兜住。
+            out[-1] = (float(min(r[2] for r in rows)),
+                       float(max(r[3] for r in rows)))
+        else:
+            band_out.append(None)
     return out, band_out
 
 
