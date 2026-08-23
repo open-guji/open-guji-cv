@@ -34,6 +34,7 @@ MIN_VOTES = 5          # 最高票偏移的绝对票数下限
 MIN_VOTE_FRAC = 0.15   # 或者：最高票占可投票 n-gram 总数的比例达到此值
 MIN_DOMINANCE = 2.0    # 或者：最高票是次高票的这么多倍（次高=0 时自动通过）
 WINDOW_PAD = 60        # 对齐窗口在页文本长度基础上的余量（容纳漏字/多字）
+POOL_RADIUS = 3        # 相邻偏移合并半径：一次漏字/多字只把偏移挪 1~2 位
 
 
 @dataclass
@@ -60,15 +61,21 @@ def anchor_page(text: str, corpus_index: dict[str, list[int]],
 
     双重判据，任一成立即接受（都要求先过 MIN_VOTES 绝对下限）：
 
-    - **占比**：最高票占全部可投票 n-gram 的比例达标。适用于页内有一处
-      漏字/多字的情况——切分错误让后半页整体错位几个字符，票会分裂到
-      两个相邻偏移（例如 40 票 vs 31 票），彼此都不构成"优势"，但各自
-      占比仍够高，说明这就是同一页的两段真对齐，不是伪命中；
+    - **占比**：最高票占全部可投票 n-gram 的比例达标。适用于识别质量好、
+      成功窗口密集的页面；
     - **优势**：最高票是次高票的数倍。适用于单字错误率偏高、成功窗口
       占比因此走低的页面——只要没有第二个候选偏移能与之抗衡，占比再
       低也是可靠锚点（伪命中会在各偏移间近乎均匀打散，凑不出优势）。
 
     只看其中一条都会误杀另一类页面，两条曾各自验证过对方漏掉的例子。
+
+    **投票先按 ±POOL_RADIUS 合并成簇再比。** 页内有一处漏字/多字时，
+    前后两半的偏移差 1~2 位，票会劈成相邻的两堆（实测 book9/2 是
+    14 票 vs 13 票）——那本是同一个锚点的两半，孤立比较却让它们互相
+    "抵消"：占比各自不达标、优势又互相压制，整页被判定不到位。实测
+    book9 十页里有三页因此被误杀（2/4/7），合并后全部回收，页面对齐率
+    6/10 → 9/10。真正的伪命中会在各偏移间近乎均匀打散，合并半径 3 位
+    凑不出一堆。
     """
     if len(text) < gram:
         return None
@@ -79,16 +86,25 @@ def anchor_page(text: str, corpus_index: dict[str, list[int]],
             votes[pos - i] += 1
     if not votes:
         return None
-    top = votes.most_common(2)
-    offset, n_votes = top[0]
+    peak = votes.most_common(1)[0][0]
+    near = [o for o in votes if abs(o - peak) <= POOL_RADIUS]
+    n_votes = sum(votes[o] for o in near)
     if n_votes < MIN_VOTES:
         return None
-    runner_up = top[1][1] if len(top) > 1 else 0
+    # 次高票同样按簇算：孤立地取第二名会把「同一锚点的另一半票」误当竞争者
+    rest = {o: v for o, v in votes.items() if abs(o - peak) > POOL_RADIUS}
+    runner_up = 0
+    if rest:
+        peak2 = max(rest, key=rest.get)
+        runner_up = sum(v for o, v in rest.items()
+                        if abs(o - peak2) <= POOL_RADIUS)
     by_frac = n_votes >= MIN_VOTE_FRAC * n_grams
     by_dominance = runner_up == 0 or n_votes >= MIN_DOMINANCE * runner_up
     if not (by_frac or by_dominance):
         return None
-    return offset
+    # 取簇内最小偏移：窗口宁可起得早一点，右侧有 WINDOW_PAD 兜住长度差；
+    # 起得晚会把页首几个字挤出窗口，那几个字会被整段判为不可对齐。
+    return min(near)
 
 
 def index_lookup(index: dict[str, list[int]], gram: str) -> list[int]:

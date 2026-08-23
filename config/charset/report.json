@@ -1,0 +1,57 @@
+{
+  "sources": {
+    "unihan": 102998,
+    "font:FS001": 27809,
+    "font:FS002": 61504,
+    "font:*": 89109,
+    "ocr": 6280,
+    "corpus": 4637
+  },
+  "corpus_types": 4637,
+  "corpus_tokens": 341241,
+  "variant_groups": 2008,
+  "variant_entries_auto": 2724,
+  "variant_entries_hand": 10,
+  "coverage": {
+    "unihan": {
+      "charset_size": 102998,
+      "corpus_oov_types": 0,
+      "corpus_oov_type_rate": 0.0,
+      "corpus_oov_tokens": 0,
+      "corpus_oov_token_rate": 0.0,
+      "top_oov": ""
+    },
+    "font:FS001": {
+      "charset_size": 27809,
+      "corpus_oov_types": 44,
+      "corpus_oov_type_rate": 0.0095,
+      "corpus_oov_tokens": 75,
+      "corpus_oov_token_rate": 0.0002,
+      "top_oov": "𠈁𠏉𣌾𦁐𤱑𧝎𦊨𮬻𦒿𦐖𠷓𲄳𤇴𤇍𪐴𣱁𢦤𦯳𣕕𥳽𥮥𧝞𮙥𤄊𣻎𩣡𣵠𥊍𠷣𮊁"
+    },
+    "font:FS002": {
+      "charset_size": 61504,
+      "corpus_oov_types": 4594,
+      "corpus_oov_type_rate": 0.9907,
+      "corpus_oov_tokens": 341167,
+      "corpus_oov_token_rate": 0.9998,
+      "top_oov": "之以其爲書不而一本於有卷所十傳說經易文者人子也二義則大是亦禮"
+    },
+    "font:*": {
+      "charset_size": 89109,
+      "corpus_oov_types": 1,
+      "corpus_oov_type_rate": 0.0002,
+      "corpus_oov_tokens": 1,
+      "corpus_oov_token_rate": 0.0,
+      "top_oov": "𲄳"
+    },
+    "ocr": {
+      "charset_size": 6280,
+      "corpus_oov_types": 1858,
+      "corpus_oov_type_rate": 0.4007,
+      "corpus_oov_tokens": 37637,
+      "corpus_oov_token_rate": 0.1103,
+      "top_oov": "說則謂論諸採稱編葢別釋註撫異從舉雖頗詳辭誤吳詞並廟畧猶盡繫喪"
+    }
+  }
+}
