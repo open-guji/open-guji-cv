@@ -127,13 +127,10 @@ def test_build_batch_follows_progress_pointer(seed_book):
 def test_build_batch_images_decode(seed_book):
     batch = build_seed_batch(seed_book, _queue(seed_book), page=4)
     e = batch["entries"][0]
-    for key in ("patch_b64", "norm_b64"):
-        raw = base64.b64decode(e[key])
-        assert raw[:4] == b"\x89PNG", f"{key} 不是合法 PNG"
-    # 归一图确实是 normalize 的输出尺寸（64×64）
-    arr = cv2.imdecode(np.frombuffer(base64.b64decode(e["norm_b64"]),
-                                     np.uint8), cv2.IMREAD_GRAYSCALE)
-    assert arr.shape == (64, 64)
+    raw = base64.b64decode(e["patch_b64"])
+    assert raw[:4] == b"\x89PNG", "patch_b64 不是合法 PNG"
+    # 三轮起不再放归一图（实审反馈：对人眼定字没有用）
+    assert "norm_b64" not in e
 
 
 def test_build_batch_doubt_labels_complete(seed_book):
@@ -284,3 +281,21 @@ def test_render_html_label_only_toggle(seed_book):
     assert "ev.admit = false" in page
     assert "'b' || e.key === 'B'" in page
     assert "data-noadmit" in page
+
+
+def test_context_strip_crosses_columns():
+    """列首字：上下文条用上一列末尾补足窗口，邻列字带 adj 样式与界标。"""
+    from open_guji_cv.clustering.review.seed_export import _render_context
+    e = {"context": {
+        "col_ocr": "甲乙丙丁戊己庚辛壬癸子丑", "col_ref": "甲乙丙丁戊己庚辛壬癸子丑",
+        "pos": 0, "ref_char": "甲", "ref_op": "equal",
+        "prev_ocr": "金木水火土", "prev_ref": "金木水火土",
+        "next_ocr": "春夏秋冬", "next_ref": "春夏秋冬"}}
+    html_out = _render_context(e)
+    assert 'class="adj"' in html_out and 'class="colbrk"' in html_out
+    assert "土" in html_out                      # 上一列末字接上了
+    assert "春" not in html_out                  # 列首不需要下一列
+    # 列尾字：反向
+    e["context"]["pos"] = 11
+    html_out = _render_context(e)
+    assert "春" in html_out and "土" not in html_out

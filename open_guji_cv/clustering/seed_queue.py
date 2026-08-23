@@ -10,6 +10,10 @@
       每页逐字位：OCR 载体 × 整理本对齐 双信号 + 六条疑问判定
         无疑问 → 直接进库（align provenance），也落一条 auto_admitted
                  记录（审计用）
+        强信号通道（三轮实审后加）：OCR prob ≥ strong_prob（默认
+                 0.995）且与整理本一致（过闸对齐或免闸参考）时，
+                 degraded_crop 单独不拦、直接进库（note=strong_dual）；
+                 near_form / db_inconsistent 仍拦
         有疑问 → SeedItem(status=pending_review) 进 queue.jsonl
     审查页面（页面侧）
       按页读 queue.jsonl 的 pending_review 项 → 用户单键裁决 →
@@ -99,6 +103,8 @@ class SeedItem:
     #   pos:     当前字在列中的位置（0 起，供高亮）
     #   ref_char/ref_op: 本字位的整理本参考字与对齐 op（参考≠金标：
     #            免闸对齐噪声大，页面须与过闸的 align 字段区分展示）
+    #   prev_ocr/prev_ref: 上一列末 ≤5 字（三轮加：列首字的上下文要
+    #            接上一列）；next_ocr/next_ref: 下一列首 ≤5 字（列尾同理）
     status: str = STATUS_PENDING
     decided_char: str | None = None  # confirmed/rejected 后的最终字
     provenance: str | None = None    # 进库时的 provenance: align | human
