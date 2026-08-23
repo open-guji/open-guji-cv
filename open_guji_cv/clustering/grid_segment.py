@@ -16,6 +16,9 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1412,6 +1415,93 @@ def segment_column(col_gray: np.ndarray, n_chars: int, params: GridParams,
     return cells_from_bounds(col_gray, bounds, params)
 
 
+# ── 页级并行 ──────────────────────────────────────────────
+# run_book 各 pass 的逐页循环彼此独立（读图→拟合→返回 dict，页间无
+# 状态），是全流程最大的耗时（Pass 1 + Pass 2a 合计 ~384s/482s）。
+# 并行只改执行顺序不改任何计算：所有共识/门控/择优判断都留在父进程，
+# 且按输入顺序收集结果——产物必须与串行逐字节等价（验证法见
+# handbook §6）。
+
+
+def _n_workers() -> int:
+    """页级并行度。GUJI_WORKERS 优先（run_pipeline.sh 多册并行时给每册
+    分核，避免 2 册 × 满核在 4 核机上互相挤），未设则用满核。"""
+    env = os.environ.get("GUJI_WORKERS", "").strip()
+    if env:
+        return max(1, int(env))
+    return max(1, os.cpu_count() or 1)
+
+
+def _wk_init() -> None:
+    # 工作进程各占一核；OpenCV 内部线程池在进程池之上只会互相挤占，
+    # 进池后收成单线程。
+    cv2.setNumThreads(1)
+
+
+def _pmap(fn, jobs: list[tuple]) -> list:
+    """按输入顺序返回 [fn(*job) for job in jobs]，进程池并行。
+    并行度 <=1 或只有一个任务时原地串行，行为与旧实现完全一致。
+
+    必须用 spawn 不能用 fork：父进程跑过 cv2 之后自带 OpenCV 线程池，
+    fork 只复制调用线程、锁状态照抄，子进程一碰 cv2 就死锁在 futex 上
+    （实测在 pytest 里 100% 复现，父子全部挂起、负载归零）。spawn 子进
+    程干净起步，代价是重新 import 本模块（~1s/池，相对每 pass 几十秒
+    的并行收益可忽略）。"""
+    n = min(_n_workers(), len(jobs))
+    if n <= 1:
+        return [fn(*j) for j in jobs]
+    ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=n, mp_context=ctx,
+                             initializer=_wk_init) as ex:
+        return list(ex.map(fn, *zip(*jobs), chunksize=1))
+
+
+def _job_pass1(seg: "GridSegmenter", img_path: str, layout: dict):
+    """Pass 1 单页：读图 → 页型闸门 → 整页拟合 → 量字距。"""
+    image = imread(img_path)
+    if image is None:
+        return None
+    gray = image if image.ndim == 2 \
+        else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ptype, policy = classify_page_type(gray)
+    if policy == "skip":
+        return {"skip": True, "ptype": ptype,
+                "width": int(image.shape[1]), "height": int(image.shape[0])}
+    r = seg.segment_page(image, layout)
+    return {"skip": False, "ptype": ptype, "r": r,
+            "pitches": measure_page_pitch(gray, r)}
+
+
+def _job_refit(seg: "GridSegmenter", img_path: str, layout: dict, kw: dict):
+    """共识校正 pass 的单页重扫（Pass 2a/2a2/2a3 共用）；择优在父进程。"""
+    image = imread(img_path)
+    if image is None:
+        return None
+    return seg.segment_page(image, layout, **kw)
+
+
+def _job_phase(seg: "GridSegmenter", img_path: str, layout: dict, res: dict,
+               consensus_h: float, col_p, ins_p):
+    """Pass 2b 单页：骑线评分 → 全周期相位自扫 → 择优重切。
+    判据（骑线比对比）只依赖本页，可整段搬进工作进程。"""
+    image = imread(img_path)
+    if image is None:
+        return None
+    cur = straddle_score(image, res)
+    if cur <= STRADDLE_OK:
+        return None
+    y_best, sc_best = sweep_row_phase(image, res, consensus_h)
+    if sc_best >= cur - STRADDLE_GAIN:
+        return None
+    redone = seg.segment_page(
+        image, layout, cell_h_prior=consensus_h, row_phase_abs=y_best,
+        period_prior=col_p, inset_prior=ins_p,
+        shear_override=res["grid"].get("shear", 0.0))
+    if straddle_score(image, redone) < cur - STRADDLE_GAIN:
+        return redone
+    return None
+
+
 class GridSegmenter:
     """刻本网格切分器：phase2 layout + 页面图 → char_grid JSON。"""
 
@@ -1682,40 +1772,40 @@ class GridSegmenter:
         # 已经踩过一次坑（Pass 2a3 保留到了一个 None），治本是把页型放在
         # results 之外，写盘前统一盖章。
         ptypes: dict[str, str] = {}
+        loaded: list[tuple[str, Path, dict]] = []
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
             img_path = CharExtractor._find_page_image(src, stem)
             if img_path is None:
                 print(f"  跳过 {stem}: 找不到页面图")
                 continue
-            image = imread(str(img_path))
-            if image is None:
-                continue
             with open(lf, encoding="utf-8") as f:
                 layout = json.load(f)
-            # 页型闸门：封面/书签/空白页没有正文栏格，套网格是无中生有。
-            # 实测不加闸门时 vol01/2（书签页）被切成 126 个块、bad_seg 94%，
-            # vol01/158（近空白页）格高锁到 37.8px、切出 0 个字。
-            # 判不准时默认走网格——误跳过一页正文是丢真数据，代价远大于
-            # 多切一页废页（判据与余量见 page_type.classify_page_type）。
-            ptype, policy = classify_page_type(
-                image if image.ndim == 2
-                else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
-            if policy == "skip":
-                results[stem] = {"image_size": {"width": int(image.shape[1]),
-                                                "height": int(image.shape[0])},
-                                 "page_type": ptype, "skipped": "page_type",
+            loaded.append((stem, img_path, layout))
+        # 页型闸门在 _job_pass1 里：封面/书签/空白页没有正文栏格，套网格
+        # 是无中生有。实测不加闸门时 vol01/2（书签页）被切成 126 个块、
+        # bad_seg 94%，vol01/158（近空白页）格高锁到 37.8px、切出 0 个字。
+        # 判不准时默认走网格——误跳过一页正文是丢真数据，代价远大于
+        # 多切一页废页（判据与余量见 page_type.classify_page_type）。
+        outs = _pmap(_job_pass1,
+                     [(self, str(p), lo) for _, p, lo in loaded])
+        for (stem, img_path, layout), out in zip(loaded, outs):
+            if out is None:
+                continue
+            if out["skip"]:
+                results[stem] = {"image_size": {"width": out["width"],
+                                                "height": out["height"]},
+                                 "page_type": out["ptype"],
+                                 "skipped": "page_type",
                                  "grid": {}, "columns": []}
-                skipped_pages.append((stem, ptype))
+                skipped_pages.append((stem, out["ptype"]))
                 continue
             pages.append((stem, img_path, layout))   # 不缓存像素，弱页重读
-            r = self.segment_page(image, layout)
-            r["page_type"] = ptype
-            ptypes[stem] = ptype
+            r = out["r"]
+            r["page_type"] = out["ptype"]
+            ptypes[stem] = out["ptype"]
             results[stem] = r
-            pitches.extend(measure_page_pitch(
-                image if image.ndim == 2
-                else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), r))
+            pitches.extend(out["pitches"])
 
         # ── Pass 2a0: 书级格高改由**实测字距**定 ──
         # 刻本一格一字，字距就是格高，可以直接量；而投影拟合的基准
@@ -1766,20 +1856,23 @@ class GridSegmenter:
                             if r.get("grid", {}).get("cell_h")
                             and abs(r["grid"]["cell_h"] - consensus_h)
                             > CELL_H_TOL * consensus_h]
-            for stem, img_path, layout in pages:
-                if stem not in off_grid:
+            off_set = set(off_grid)
+            todo = [pg for pg in pages if pg[0] in off_set]
+            # 格高偏离共识本身即失败证据（物理上不可能），无需择优
+            # 门控——rule_in_col 度量的是列相位，对行格高无判别力，
+            # 且这些页它已经是 0，任何门控都会一律拒绝校正。
+            # 错切在 Pass 1 已估过且与格高无关，带上省掉 21 个候选
+            # 角度的重估（实测 0.25s/页；本 pass 重扫全书，省 ~50s/册）
+            outs = _pmap(_job_refit,
+                         [(self, str(p), lo,
+                           {"cell_h_prior": consensus_h,
+                            "shear_override":
+                                results[s]["grid"].get("shear", 0.0)})
+                          for s, p, lo in todo])
+            for (stem, _, _), redone in zip(todo, outs):
+                if redone is None:
                     continue
-                image = imread(str(img_path))
-                if image is None:
-                    continue
-                # 格高偏离共识本身即失败证据（物理上不可能），无需择优
-                # 门控——rule_in_col 度量的是列相位，对行格高无判别力，
-                # 且这些页它已经是 0，任何门控都会一律拒绝校正。
-                results[stem] = self.segment_page(
-                    image, layout, cell_h_prior=consensus_h,
-                    # 错切在 Pass 1 已估过且与格高无关，带上省掉 21 个候选
-                    # 角度的重估（实测 0.25s/页；本 pass 重扫全书，省 ~50s/册）
-                    shear_override=results[stem]["grid"].get("shear", 0.0))
+                results[stem] = redone
                 row_prior[stem] = consensus_h
                 n_row_fix += 1
             if n_row_fix:
@@ -1804,19 +1897,22 @@ class GridSegmenter:
                         # 直接质量信号也能触发：参数全在容差内、页面却报告
                         # 竖线落在列框里（见 RULE_IN_COL_T 的注释）
                         or r["grid"].get("rule_in_col", 0) > RULE_IN_COL_T)]
-            for stem, img_path, layout in pages:
-                if stem not in off:
+            off_set = set(off)
+            todo = [pg for pg in pages if pg[0] in off_set]
+            # 这两个 pass 只改**列**参数，行网格不该重新拟合——
+            # 原样带过去（Pass 2a 修过的用修后的值）
+            outs = _pmap(_job_refit,
+                         [(self, str(p), lo,
+                           {"period_prior": consensus_p,
+                            "cell_h_prior":
+                                (row_prior.get(s)
+                                 or results[s]["grid"].get("cell_h")),
+                            "shear_override":
+                                results[s]["grid"].get("shear", 0.0)})
+                          for s, p, lo in todo])
+            for (stem, _, _), redone in zip(todo, outs):
+                if redone is None:
                     continue
-                image = imread(str(img_path))
-                if image is None:
-                    continue
-                redone = self.segment_page(
-                    image, layout, period_prior=consensus_p,
-                    # 这两个 pass 只改**列**参数，行网格不该重新拟合——
-                    # 原样带过去（Pass 2a 修过的用修后的值）
-                    cell_h_prior=(row_prior.get(stem)
-                                  or results[stem]["grid"].get("cell_h")),
-                    shear_override=results[stem]["grid"].get("shear", 0.0))
                 # 择优：列距偏离本身已是失败证据，但相位仍可能没救回来，
                 # 所以仍按 rule_in_col 把关，绝不允许改差
                 if redone["grid"].get("rule_in_col", 1.0) <= \
@@ -1853,20 +1949,23 @@ class GridSegmenter:
                                 <= prior[0] * INSET_TOL_HI
                                 and prior[1] * INSET_TOL <= r["grid"]["inset_r"]
                                 <= prior[1] * INSET_TOL_HI)]
-                for stem, img_path, layout in pages:
-                    if stem not in off:
+                off_set = set(off)
+                todo = [pg for pg in pages if pg[0] in off_set]
+                # 这两个 pass 只改**列**参数，行网格不该重新拟合——
+                # 原样带过去（Pass 2a 修过的用修后的值）
+                outs = _pmap(_job_refit,
+                             [(self, str(p), lo,
+                               {"inset_prior": prior,
+                                "period_prior": col_prior.get(s),
+                                "cell_h_prior":
+                                    (row_prior.get(s)
+                                     or results[s]["grid"].get("cell_h")),
+                                "shear_override":
+                                    results[s]["grid"].get("shear", 0.0)})
+                              for s, p, lo in todo])
+                for (stem, _, _), redone in zip(todo, outs):
+                    if redone is None:
                         continue
-                    image = imread(str(img_path))
-                    if image is None:
-                        continue
-                    redone = self.segment_page(
-                        image, layout, inset_prior=prior,
-                        period_prior=col_prior.get(stem),
-                        # 这两个 pass 只改**列**参数，行网格不该重新拟合——
-                    # 原样带过去（Pass 2a 修过的用修后的值）
-                    cell_h_prior=(row_prior.get(stem)
-                                  or results[stem]["grid"].get("cell_h")),
-                        shear_override=results[stem]["grid"].get("shear", 0.0))
                     # 择优：内缩塌掉本身即失败证据，但仍按 rule_in_col 把关
                     if redone["grid"].get("rule_in_col", 1.0) <= \
                             results[stem]["grid"].get("rule_in_col", 1.0):
@@ -1885,27 +1984,16 @@ class GridSegmenter:
         # 骑线比至少改善 STRADDLE_GAIN 才接受。
         n_phase_fix = 0
         if cell_hs and len(cell_hs) >= 5:
-            for stem, img_path, layout in pages:
-                res = results[stem]
-                if not res.get("grid", {}).get("cell_h"):
-                    continue
-                image = imread(str(img_path))
-                if image is None:
-                    continue
-                cur = straddle_score(image, res)
-                if cur <= STRADDLE_OK:
-                    continue
-                y_best, sc_best = sweep_row_phase(image, res, consensus_h)
-                if sc_best < cur - STRADDLE_GAIN:
-                    redone = self.segment_page(
-                        image, layout, cell_h_prior=consensus_h,
-                        row_phase_abs=y_best,
-                        period_prior=col_prior.get(stem),
-                        inset_prior=ins_prior.get(stem),
-                        shear_override=res["grid"].get("shear", 0.0))
-                    if straddle_score(image, redone) < cur - STRADDLE_GAIN:
-                        results[stem] = redone
-                        n_phase_fix += 1
+            todo = [pg for pg in pages
+                    if results[pg[0]].get("grid", {}).get("cell_h")]
+            outs = _pmap(_job_phase,
+                         [(self, str(p), lo, results[s], consensus_h,
+                           col_prior.get(s), ins_prior.get(s))
+                          for s, p, lo in todo])
+            for (stem, _, _), redone in zip(todo, outs):
+                if redone is not None:
+                    results[stem] = redone
+                    n_phase_fix += 1
             if n_phase_fix:
                 print(f"  行相位骑线重扫修正 {n_phase_fix} 张")
 

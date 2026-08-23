@@ -20,6 +20,7 @@ import numpy as np
 
 from ..utils.image_io import imread, imwrite
 from .ids import make_id
+from .normalize import NORM_SIZE, normalize_patch
 
 BINARY_THRESHOLD_PATCH = 128
 PADDING_RATIO = 0.08
@@ -869,6 +870,12 @@ class CharExtractor:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         n_pages = n_chars = n_flagged = 0
+        # 归一化缓存：cluster 阶段要把每个图块 imread 回来再归一化
+        # （实测 81s/册）；图块此刻就在内存里，顺手归一化存成 npz，
+        # cluster 直接查缓存、缺了再 imread 兜底（PNG 无损，两条路
+        # 逐像素等价——已实测验证）。
+        norm_ids: list[str] = []
+        norm_arrs: list[np.ndarray] = []
         index_path = out_dir / "index.jsonl"
         with open(index_path, "w", encoding="utf-8") as index_f:
             for gf in grid_files:
@@ -896,10 +903,19 @@ class CharExtractor:
                 for inst, patch in self.extract_page(page_img, grid, book, page):
                     imwrite(str(out_dir / inst.patch_path), patch)
                     index_f.write(inst.to_json() + "\n")
+                    norm_ids.append(inst.patch_path)
+                    norm_arrs.append(normalize_patch(patch))
                     n_chars += 1
                     if inst.flags:
                         n_flagged += 1
                 n_pages += 1
+
+        np.savez_compressed(
+            out_dir / "normalized.npz",
+            ids=np.array(norm_ids),
+            patches=(np.stack(norm_arrs) if norm_arrs
+                     else np.zeros((0, NORM_SIZE, NORM_SIZE), dtype=np.uint8)),
+            norm_size=np.int64(NORM_SIZE))
 
         meta = {
             "book": book,

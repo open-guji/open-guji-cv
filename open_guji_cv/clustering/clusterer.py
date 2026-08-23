@@ -11,7 +11,10 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
+import os
 import random
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -114,6 +117,62 @@ class _UnionFind:
             self.parent[rb] = ra
 
 
+# ── 候选边验证的并行预计算 ────────────────────────────────
+# verify 是 cluster 阶段的大头（实测 190s/318s，~19 万对）。候选对之间
+# 彼此独立且 verify_pair* 是纯函数，可以并行**预填缓存**；合并阶段的
+# 跨簇随机抽查对必须保持串行——它们由 rng 顺序决定，动了顺序就动了
+# 结果。进程上下文必须用 spawn 不能用 fork（父进程的 OpenCV 线程池
+# 会让 fork 子进程死锁在 futex，见 grid_segment._pmap 注），patches
+# 经 initializer 每 worker 传一次（~120MB 压到 1s 级，均摊可忽略）。
+_VP_PATCHES = None
+_VP_PARAMS = None
+
+
+def _vp_init(patches: np.ndarray, params: "ClusterParams") -> None:
+    global _VP_PATCHES, _VP_PARAMS
+    _VP_PATCHES, _VP_PARAMS = patches, params
+
+
+def _vp_chunk(chunk: list[tuple[int, int]]) -> list:
+    p = _VP_PARAMS
+    out = []
+    for i, j in chunk:
+        if p.verify_method == "coverage":
+            out.append(verify_pair_cov(
+                _VP_PATCHES[i], _VP_PATCHES[j],
+                cov_high=p.cov_high, cov_low=p.cov_low,
+                miss_wmax=p.miss_wmax))
+        else:
+            out.append(verify_pair(
+                _VP_PATCHES[i], _VP_PATCHES[j],
+                theta_high=p.theta_high, theta_low=p.theta_low,
+                diff_blob_ratio=p.diff_blob_ratio))
+    return out
+
+
+def _verify_parallel(pairs: list[tuple[int, int]], patches: np.ndarray,
+                     params: "ClusterParams") -> dict[tuple[int, int], object]:
+    """并行算好 pairs 的 verdict。对数太少或单核时返回空缓存，
+    调用方按需串行算——行为与旧实现完全一致。"""
+    env = os.environ.get("GUJI_WORKERS", "").strip()
+    n_workers = max(1, int(env)) if env else max(1, os.cpu_count() or 1)
+    if n_workers <= 1 or len(pairs) < 2000:
+        return {}
+    chunk_sz = max(1, len(pairs) // (n_workers * 16))
+    chunks = [pairs[k:k + chunk_sz]
+              for k in range(0, len(pairs), chunk_sz)]
+    ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx,
+                             initializer=_vp_init,
+                             initargs=(patches, params)) as ex:
+        outs = list(ex.map(_vp_chunk, chunks))
+    cache: dict[tuple[int, int], object] = {}
+    for chunk, verdicts in zip(chunks, outs):
+        for pair, v in zip(chunk, verdicts):
+            cache[pair] = v
+    return cache
+
+
 class ConservativeClusterer:
     """保守聚类器。patches: (N, S, S) uint8 {0,1} 归一二值图。"""
 
@@ -163,8 +222,9 @@ class ConservativeClusterer:
                     if i != j:
                         candidate_pairs.add((min(i, int(j)), max(i, int(j))))
 
-        # 3. 配准验证候选边
-        verdict_cache: dict[tuple[int, int], object] = {}
+        # 3. 配准验证候选边（候选对并行预填缓存；抽查对仍串行按需算）
+        verdict_cache: dict[tuple[int, int], object] = _verify_parallel(
+            sorted(candidate_pairs), patches, p)
 
         def _verify(i: int, j: int):
             key = (min(i, j), max(i, j))
@@ -274,16 +334,38 @@ class ConservativeClusterer:
             raise FileNotFoundError(f"phase4_chars 为空: {phase4}")
 
         print(f"归一化 {len(instances)} 个图块 ...")
+        # chars 阶段顺手写的归一化缓存（extractor.run_book）：命中直接用，
+        # 缺失/尺寸不符逐块 imread 兜底。PNG 无损，两条路逐像素等价。
+        norm_row: dict[str, int] = {}
+        norm_arr = None
+        npz_path = phase4 / "normalized.npz"
+        if npz_path.exists():
+            try:
+                z = np.load(npz_path)
+                if int(z["norm_size"]) == NORM_SIZE:
+                    norm_arr = z["patches"]
+                    norm_row = {str(k): r for r, k in enumerate(z["ids"])}
+            except Exception as e:
+                print(f"  归一化缓存读取失败，退回逐块归一化: {e}")
+                norm_row, norm_arr = {}, None
+        n_hit = 0
         patches = np.zeros((len(instances), NORM_SIZE, NORM_SIZE), dtype=np.uint8)
         hw = np.ones(len(instances), dtype=np.float64)
         ink = np.zeros(len(instances), dtype=np.float64)
         for i, inst in enumerate(instances):
-            img = imread(str(phase4 / inst.patch_path))
-            if img is None:
-                continue
-            patches[i] = normalize_patch(img)
+            row = norm_row.get(inst.patch_path)
+            if row is not None:
+                patches[i] = norm_arr[row]
+                n_hit += 1
+            else:
+                img = imread(str(phase4 / inst.patch_path))
+                if img is None:
+                    continue
+                patches[i] = normalize_patch(img)
             hw[i] = inst.height / max(inst.width, 1e-6)
             ink[i] = inst.ink_ratio
+        if n_hit:
+            print(f"  归一化缓存命中 {n_hit}/{len(instances)}")
 
         print(f"提取特征（{self.params.feature}）...")
         feats = get_feature(self.params.feature).extract(patches)
