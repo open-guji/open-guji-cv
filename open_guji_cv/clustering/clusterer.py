@@ -21,7 +21,8 @@ from ..utils.image_io import imread, imwrite
 from .extractor import CharInstance, load_index
 from .features import DEFAULT_FEATURE, get_feature
 from .normalize import NORM_SIZE, normalize_patch
-from .verify import THETA_HIGH, THETA_LOW, DIFF_BLOB_RATIO, verify_pair
+from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO, MISS_WMAX,
+                     THETA_HIGH, THETA_LOW, verify_pair, verify_pair_cov)
 
 KNN_K = 10
 CROSS_CHECK_K = 3
@@ -33,6 +34,12 @@ INK_BUCKET = 0.08      # ink_ratio 分桶宽度
 @dataclass
 class ClusterParams:
     feature: str = DEFAULT_FEATURE
+    # coverage（默认）：有界位移覆盖率判据，操作点见 verify.py 与
+    # g3g4_error_analysis.md。overlap：旧配准 F1 判据，保留作对照。
+    verify_method: str = "coverage"
+    cov_high: float = COV_HIGH
+    cov_low: float = COV_LOW
+    miss_wmax: float = MISS_WMAX
     theta_high: float = THETA_HIGH
     theta_low: float = THETA_LOW
     diff_blob_ratio: float = DIFF_BLOB_RATIO
@@ -162,10 +169,16 @@ class ConservativeClusterer:
         def _verify(i: int, j: int):
             key = (min(i, j), max(i, j))
             if key not in verdict_cache:
-                verdict_cache[key] = verify_pair(
-                    patches[key[0]], patches[key[1]],
-                    theta_high=p.theta_high, theta_low=p.theta_low,
-                    diff_blob_ratio=p.diff_blob_ratio)
+                if p.verify_method == "coverage":
+                    verdict_cache[key] = verify_pair_cov(
+                        patches[key[0]], patches[key[1]],
+                        cov_high=p.cov_high, cov_low=p.cov_low,
+                        miss_wmax=p.miss_wmax)
+                else:
+                    verdict_cache[key] = verify_pair(
+                        patches[key[0]], patches[key[1]],
+                        theta_high=p.theta_high, theta_low=p.theta_low,
+                        diff_blob_ratio=p.diff_blob_ratio)
             return verdict_cache[key]
 
         same_edges: list[tuple[float, int, int]] = []

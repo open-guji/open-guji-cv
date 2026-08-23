@@ -70,7 +70,7 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | F | 格内净化 | `chars` | 图块像素归属 | `char-segmentation/cells`（60 合成）| 逐像素金标，见 `seg-bench` |
 | G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（62 真实，第九轮）| 缺陷检出 100%，确定层零误报，误报 11% |
 | H | 归一化 | `normalize` | 归一图块 | `char-normalization`（32，双层）| 回归门 28/28；clean 层 19 样本 0 缺陷，degraded 层 4 缺陷已记账 |
-| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6197 实例）| purity 0.999 达标但单例率 93~95%；冻结在 23ee9a5（见其 README 的迁移前置条件）|
+| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6197 实例）| coverage 判据（2026-08-23 起默认）：purity 0.999/1.0/1.0，碎片率 2.80/3.58/2.92；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**0**，框架）| 待建 |
 | K | 上下文纠正 | `refine` | 定字 | `context-correction`（**0**，框架）| 待建 |
 | L | 参考校对 | `collate` | 对齐 | `collation`（**0**，框架）| 规划中 |
