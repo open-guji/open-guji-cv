@@ -893,6 +893,15 @@ def _merged_components(col_bin: np.ndarray, cell_h: float
 DENSE_SPLIT_MIN_H = 0.35    # 密排段切分：子字符最小高度（× 格高）
 DENSE_SPLIT_VALLEY = 0.35   # 谷点判据：局部极小值 ≤ 段自身峰值的这个比例
 OVERFLOW_CAP_RATIO = 3.0    # 单列格数硬上限（× n_chars），防噪声爆炸
+# 组件锚定切分的**可行性**闸门（不是列型判据——列型由 classify_column_layout
+# 定；这里只管「组件证据够不够撑起一次切分」）。原先这两个数是 12 / 2.2×格高
+# 的**间距触发**，那是在 3.5 格拉开的职名列上定的，把 2 格拉开的官衔列全挡在
+# 外面：判了 elastic 却切不出来 → 据实回落刚性 → 一个字被格线腰斩成两块。
+# 实测 vol01/121 第 1 列字距 1.95 格、13 个组件，两条都不满足。
+COMP_MAX = 30               # 组件数上限：正文密排列合并后远超此数
+COMP_MIN = 3                # 少于此谈不上「一列」
+COMP_MAX_H = 8.0            # 单组件高度上限（× 格高），超此是粘连/线条
+COMP_JUNK_H = 0.3           # 低于此格高的组件当碎屑丢弃
 
 
 def _split_dense_segment(col_gray: np.ndarray, a: float, b: float,
@@ -1073,27 +1082,29 @@ def cells_from_components(col_gray: np.ndarray, cell_h: float, n_chars: int,
     已经是按 y 升序的真实阅读顺序，直接顺序编号即可，格数就是真实
     字数，不再向 n_chars 补齐空位。
 
-    触发条件（证据不足返回 None 走刚性网格）：合并组件 ≥3、
-    组件中心间距中至少 2 个 > 2.2 格、组件总数 ≤ 12、单个组件不超过
-    8 格高。密排正文列组件会连成大段且间距小，绝不会误触发——这四条
-    本身没变，变的只是"触发之后怎么切"。
+    **闸门只管可行性，不再重判列型。** 列型已由 classify_column_layout 定；
+    这里若再用一套「像不像拉开列」的阈值否决它，被否的列会据实回落刚性——
+    而它本来就不该走刚性。原先的闸门（组件数 ≤12、至少 2 个中心间距 >2.2 格）
+    是在 3.5 格拉开的职名列上定的，把 2 格拉开的官衔列整类挡在门外：实测
+    vol01/121 第 1 列字距 1.95 格、13 个组件，两条都不满足，于是 13 个字被
+    刚性格线切成 19 块（其中 4 块是空的、3 块是半个字）。
+
+    现在只保留三条**输出是否可用**的条件：组件数落在 [COMP_MIN, COMP_MAX]、
+    单组件不超过 COMP_MAX_H 格高（更高的是粘连或线条）、切出的格数不超过
+    OVERFLOW_CAP_RATIO × n_chars。
     """
     col_bin = (col_gray < BINARY_THRESHOLD).astype(np.uint8)
     comps = _merged_components(col_bin, cell_h)
-    if len(comps) < 3 or len(comps) > 12:
+    if len(comps) < COMP_MIN or len(comps) > COMP_MAX:
         return None
     # 碎屑（< 0.3 格高：版框残迹、贴边墨点）丢弃而非否决整列——
     # p108 职名列曾因列顶一条 0.09 格的框线残迹被一票否决。
     # 局限：拉开列里真正的"一"字也会被当碎屑丢掉（官衔中几乎不出现）。
-    comps = [c for c in comps if (c[2] - c[1]) >= 0.3 * cell_h]
-    if len(comps) < 3:
-        return None
-    centers = [c[0] for c in comps]
-    gaps = np.diff(centers)
-    if int((gaps > 2.2 * cell_h).sum()) < 2:
+    comps = [c for c in comps if (c[2] - c[1]) >= COMP_JUNK_H * cell_h]
+    if len(comps) < COMP_MIN:
         return None
     heights = [(b - a) for _, a, b in comps]
-    if not all(h <= 8.0 * cell_h for h in heights):
+    if not all(h <= COMP_MAX_H * cell_h for h in heights):
         return None
     L = col_gray.shape[0]
     pad = 0.10 * cell_h
