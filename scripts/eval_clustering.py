@@ -73,6 +73,10 @@ def main() -> None:
     ap.add_argument("--clusters", default=None,
                     help="端到端模式：管线的 phase5_clusters/clusters.json")
     ap.add_argument("--feature", default=None, help="覆盖分片记录的特征后端")
+    ap.add_argument("--verify-method", default=None,
+                    choices=["coverage", "overlap"], help="覆盖默认判据")
+    ap.add_argument("--cov-high", type=float, default=None)
+    ap.add_argument("--miss-wmax", type=float, default=None)
     ap.add_argument("--theta-high", type=float, default=None)
     ap.add_argument("--out", default=None, help="报告 JSON 路径")
     args = ap.parse_args()
@@ -89,6 +93,12 @@ def main() -> None:
     for shard_dir in shards:
         data = load_shard(shard_dir)
         params = ClusterParams(feature=args.feature or data.get("feature_backend", "hog"))
+        if args.verify_method is not None:
+            params.verify_method = args.verify_method
+        if args.cov_high is not None:
+            params.cov_high = args.cov_high
+        if args.miss_wmax is not None:
+            params.miss_wmax = args.miss_wmax
         if args.theta_high is not None:
             params.theta_high = args.theta_high
 

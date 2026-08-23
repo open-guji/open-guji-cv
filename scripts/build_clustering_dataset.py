@@ -130,6 +130,36 @@ def pick_pages(labels, max_instances: int, seed: int) -> set[str]:
 
 # ── 难例对 ──────────────────────────────────────────────────────────
 
+# 聚类实测漏网的形近家族（g3g4_error_analysis.md：在 coverage 判据较宽松的
+# 操作点下真实发生过错并的字对）。进永久回归：verify 判据每次改动，这些
+# `diff` 对都必须保持不同簇。线索来源是**聚类自己的失败记录**，与转写混淆
+# 表互补——两者都独立于当前判据的打分。
+CLUSTER_LEAK_FAMILIES = [
+    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
+    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
+    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"),
+]
+MAX_LEAK_PAIRS_PER_FAMILY = 3
+
+
+def leak_diff_pairs(labels) -> list[dict]:
+    """漏网家族 → `diff` 难例对。两端只取 `equal` 实例（标签最干净）。"""
+    by_char: dict[str, list[str]] = defaultdict(list)
+    for x in labels:
+        if x.op == "equal":
+            by_char[x.char].append(x.instance_id)
+    for v in by_char.values():
+        v.sort()
+    out = []
+    for c1, c2 in CLUSTER_LEAK_FAMILIES:
+        a_ids, b_ids = by_char.get(c1, []), by_char.get(c2, [])
+        for k in range(min(MAX_LEAK_PAIRS_PER_FAMILY, len(a_ids), len(b_ids))):
+            out.append({"a": a_ids[k], "b": b_ids[k], "relation": "diff",
+                        "origin": "cluster_leak",
+                        "note": f"聚类实测漏网家族 {c1}/{c2}"})
+    return out
+
+
 def confusion_diff_pairs(labels, limit: int = MAX_CONFUSION_PAIRS) -> list[dict]:
     """`diff` 难例对：转写把 A 认成了 B → 取一个真 A、一个真 B，判定不得同簇。
 
@@ -236,8 +266,18 @@ def build_align_shard(book: str, out_dir: Path, output_root: Path,
 
     have = {i["instance_id"] for i in instances}
     pairs = [p for p in (confusion_diff_pairs(picked)
-                         + ink_extreme_same_pairs(picked, ink_of))
+                         + ink_extreme_same_pairs(picked, ink_of)
+                         + leak_diff_pairs(picked))
              if p["a"] in have and p["b"] in have]
+    # 同一对实例可能同时来自混淆表与漏网表，去重（保留先出现的）
+    seen_ab, uniq_pairs = set(), []
+    for p in pairs:
+        key = (p["a"], p["b"]) if p["a"] < p["b"] else (p["b"], p["a"])
+        if key in seen_ab:
+            continue
+        seen_ab.add(key)
+        uniq_pairs.append(p)
+    pairs = uniq_pairs
 
     expected = {
         "source_item": SOURCE_ITEM,
