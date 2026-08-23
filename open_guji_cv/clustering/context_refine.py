@@ -32,11 +32,11 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
-from .context_rank import (Slot, SlotCandidate, beam_search,
+from .context_rank import (LAMBDA, Slot, SlotCandidate, beam_search,
                            check_cluster_consistency)
 from .extractor import load_index
 from .ids import parse_id, reading_order_key
-from .lm import CharNgramLM, UniformLM
+from .lm import CharNgramLM, InterpolatedLM, UniformLM, train_ngram
 from .variants import VariantMap
 
 MIN_SEG_LEN = 3          # 自举语料的最短连续高置信段
@@ -137,7 +137,10 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
                 lm_order: int = 3, variant_map: VariantMap | None = None,
                 verbose: bool = True, use_lm: bool = False,
                 use_cluster_prior: bool = True, write: bool = True,
-                external_corpus: str | Path | None = None) -> dict:
+                external_corpus: str | Path | None = None,
+                general_corpus: str | Path | None = None,
+                general_weight: float = 0.1,
+                lam: float = LAMBDA) -> dict:
     """自动上下文修正主流程（IO 壳）。
 
     每轮：训练自举 LM → 全书重解码 → 簇级边缘化 → 回灌候选。
@@ -150,6 +153,21 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
       如本版用「爲」不用「為」），对候选做同语义组内的概率再分配。
       这不违反字形层自治：只在 OCR 已给出的候选之间挑，绝不发明字形。
       实测「為→爲」一类系统性表面形错误占对齐错误的 ~5%。
+
+    general_corpus 给定时再叠一个**通用古文语料**分量，与本书语料线性
+    插值（本书权重 ``1 - general_weight``）。context-correction 测试集
+    实测（book9，1404 槽位，λ=0.65）：
+
+    | 通用语料 | 只用通用 | 只用本书 | 混合(本书 0.9) |
+    |---|---|---|---|
+    | 诏令奏议/政书/职官 500 万字 | +1.21% | +1.71% | **+2.14%** |
+    | 儒藏/易藏 500 万字 | +0.00% | +1.71% | +1.64% |
+
+    **通用语料的体裁必须对得上**：本书卷首是上谕公文，拿经解语料当
+    通用分量一点用没有，拿诏令奏议才有用。别只看「语料够不够大」。
+
+    **用字习惯只统计 external_corpus，不统计 general_corpus**：那是
+    「本版写爲还是為」的证据，混进通用语料会被别版的习惯冲掉。
     """
     book = Path(book_out_dir)
     phase6 = book / "phase6_labels"
@@ -172,7 +190,21 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
 
     report = {"rounds": []}
     lm = UniformLM()
+    book_lm: CharNgramLM | None = None
+    general_lm: CharNgramLM | None = None
     surface_freq: dict[str, int] = {}
+    if general_corpus:
+        gsegs: list[str] = []
+        gp = Path(general_corpus)
+        for f in (sorted(gp.glob("**/*.txt")) if gp.is_dir() else [gp]):
+            raw = f.read_text(encoding="utf-8")
+            gsegs += [vm.normalize_text(x) for x in raw.split("\n") if x.strip()]
+        # 通用语料动辄千万字，高阶计数绝大多数是 hapax：剪掉省内存且几乎
+        # 不损信息（低阶不剪，回退链的兜底全靠它）
+        general_lm = train_ngram(gsegs, lm_order, min_count=2)
+        if verbose:
+            print(f"  通用语料 {len(gsegs)} 段 / "
+                  f"{sum(len(x) for x in gsegs)} 字，词表 {len(general_lm.vocab)}")
     if external_corpus:
         segs: list[str] = []
         cp = Path(external_corpus)
@@ -183,11 +215,12 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
                 if "\u4e00" <= ch <= "\u9fff" or "\u3400" <= ch <= "\u4dbf":
                     surface_freq[ch] = surface_freq.get(ch, 0) + 1
             segs += [vm.normalize_text(seg) for seg in raw.split("\n") if seg.strip()]
-        lm = CharNgramLM(order=lm_order)
-        lm.train(segs)
+        book_lm = CharNgramLM(order=lm_order)
+        book_lm.train(segs)
+        lm = book_lm
         if verbose:
-            print(f"  外部语料 {len(segs)} 段 / "
-                  f"{sum(len(x) for x in segs)} 字，词表 {len(lm.vocab)}")
+            print(f"  本书语料 {len(segs)} 段 / "
+                  f"{sum(len(x) for x in segs)} 字，词表 {len(book_lm.vocab)}")
         # 语义 → 本版表面形频次（识别本版用「爲」不用「為」这类习惯）
         sem_surface: dict[str, dict[str, int]] = defaultdict(dict)
         for ch, n in surface_freq.items():
@@ -226,6 +259,14 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
             cands.sort(key=lambda c: -c["p"])
         if verbose and n_adj:
             print(f"  本版用字习惯：调整 {n_adj} 组，补入主形候选 {n_ins} 个")
+    if general_lm is not None:
+        comps = [(general_lm, general_weight)]
+        if book_lm is not None:
+            comps.append((book_lm, 1.0 - general_weight))
+        lm = InterpolatedLM(comps)
+        if verbose:
+            print(f"  LM 混合: {lm.name}")
+
     results = []
     for rnd in range(rounds + 1):
         results = []
@@ -240,7 +281,7 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
                       for d in candidates.get(cid, [])]
                 slots.append(Slot(instance_id=inst.id, cluster_id=cid,
                                   candidates=cs, flags=list(inst.flags)))
-            res = beam_search(slots, lm)
+            res = beam_search(slots, lm, lam=lam)
             results.extend(res)
             cols: dict[int, list] = defaultdict(list)
             for inst, r in zip(insts, res):
@@ -251,7 +292,7 @@ def refine_book(book_out_dir: str | Path, rounds: int = 2,
         known = sum(1 for r in results if r.best != "<unk>")
         conf = sum(1 for r in results
                    if r.posterior and r.posterior[0][1] >= 0.9)
-        stats = {"round": rnd, "lm": lm.name, "known": known,
+        stats = {"round": rnd, "lm": lm.name, "lam": lam, "known": known,
                  "high_conf": conf,
                  "suspects": sum(1 for r in results if r.suspect_reasons)}
         report["rounds"].append(stats)
