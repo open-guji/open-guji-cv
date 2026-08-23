@@ -6,12 +6,33 @@
 ## 项目概述
 古籍图像 OCR 分析项目，使用 PaddleOCR 对古籍扫描图片进行逐字识别和位置分析。
 
+## 当前策略（2026-08 起）
+**只优化正文页。** 目录、职名、序跋、牌记等非正文版式先放着——各有各的
+排版规矩，混在一起调参会互相牵扯。指标一律按「正文/非正文」分开报。
+正文页由 `open-guji-dataset/page-type` 金标里 `page_type == "body"` 筛出
+（vol01 296 页 / vol02 **全书 186 页**）；管线自己目前**分不出来**
+（`classify_page_type` 把 roster/toc/edict 都归 body），这本身是待办。
+
 ---
-**CLI 使用文档：** 查看 .claude/doc/cli_usage.md
-系统设计： 查看 .claude/doc/system_design.md
-技术细节： 查看 .claude/doc/technical_learning.md
-表格 Cell 输出格式： 查看 .claude/doc/table_cell_format.md
-字符聚类设计（刻本）： 查看 .claude/doc/char_clustering_design.md
+## 文档
+
+**先看这份 → [.claude/doc/pipeline_handbook.md](doc/pipeline_handbook.md)**
+分步现状、各步的测试集在哪、哪些步骤能并行、以及踩过的坑。接手任何一步
+之前都应该先读它。
+
+| 文档 | 内容 |
+|---|---|
+| [pipeline_handbook.md](doc/pipeline_handbook.md) | **总入口**：分步现状 / 并行分工 / 量法 / 踩过的坑 |
+| [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）|
+| [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
+| [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
+| [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |
+| [technical_learning.md](doc/technical_learning.md) | PaddleOCR 版本/环境坑 |
+| s1~s6_*.md | 各预处理步骤 |
+| [jiazhu_detection.md](doc/jiazhu_detection.md) / [edge_border_analysis.md](doc/edge_border_analysis.md) | 夹注检测 / 边框分析 |
+
+数据集与评测在隔壁仓库 `open-guji-dataset`，入口见其
+`doc/making-datasets.md`（怎么定义和准备一个测试集）。
 
 ----
 测试数据：
