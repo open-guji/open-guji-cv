@@ -356,3 +356,42 @@ def test_ingest_label_only_and_last_wins(seeded):
 
     admitted = _admitted_ids(db)
     assert "tb:3:1:9" not in admitted and "tb:7:1:1" not in admitted
+
+
+def test_admission_decision_strong_dual():
+    """强信号通道：OCR ≥ 阈且与整理本一致 → degraded 单独不拦；
+    near_form/db_inconsistent 仍拦；低于阈不走通道。"""
+    from open_guji_cv.clustering.seed_queue import (DOUBT_DB_INCONSISTENT,
+                                                    DOUBT_DEGRADED_CROP,
+                                                    DOUBT_NEAR_FORM)
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap({})
+    hi = {"char": "文", "prob": 0.997}
+    lo = {"char": "文", "prob": 0.92}
+    # 常规：双信号零疑问
+    assert admission_decision(lo, "文", None, [], vmap) == (True, False)
+    # 强信号压过 degraded（对齐版 / 免闸参考版都行）
+    assert admission_decision(hi, "文", None, [DOUBT_DEGRADED_CROP],
+                              vmap) == (True, True)
+    assert admission_decision(hi, None, "文", [DOUBT_DEGRADED_CROP],
+                              vmap) == (True, True)
+    # 低置信不走通道；混入 near_form/db_inconsistent 仍拦
+    assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
+                              vmap)[0] is False
+    assert admission_decision(hi, "文", None,
+                              [DOUBT_DEGRADED_CROP, DOUBT_NEAR_FORM],
+                              vmap)[0] is False
+    assert admission_decision(hi, None, "文", [DOUBT_DB_INCONSISTENT],
+                              vmap)[0] is False
+    # 与整理本不一致 / 无整理本 → 不进
+    assert admission_decision(hi, None, "又", [], vmap)[0] is False
+    assert admission_decision(hi, None, None, [], vmap)[0] is False
+
+
+def test_context_crosses_columns(seeded):
+    """列首/列尾的上下文接邻列（prev_/next_ 字段）。"""
+    q = _queue(seeded)
+    # 合成书每页只有 1 列 → 无邻列，prev/next 不出现（守拙不造假上下文）
+    it = q["tb:2:1:0"]
+    assert it.context and "prev_ocr" not in (it.context or {})

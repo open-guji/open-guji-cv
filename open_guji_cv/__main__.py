@@ -471,6 +471,7 @@ def cmd_seed(args):
                             carrier_path=args.ocr_carrier,
                             max_pages=args.max_pages,
                             prob_threshold=args.prob_threshold,
+                            strong_prob=args.strong_prob,
                             edition=args.edition)
     finally:
         db.close()
@@ -861,6 +862,9 @@ def main():
                    help="本次最多处理的页数（断点续跑分批推进用）")
     p.add_argument("--prob-threshold", type=float, default=0.85,
                    help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
+    p.add_argument("--strong-prob", type=float, default=0.995,
+                   help="强信号阈：OCR prob ≥ 此值且与整理本一致时 "
+                        "degraded 疑问不再拦、直接进库（默认 0.995）")
     p.add_argument("--edition", default=None,
                    help="edition_tag（默认=书名；同版多书标同 tag）")
 

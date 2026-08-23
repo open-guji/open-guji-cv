@@ -6,14 +6,15 @@
 本模块**不**私加契约字段。
 
     导出   build_seed_batch() + render_seed_html()  →  单文件 HTML
-           （原图 + normalize_patch 归一图都内嵌 base64，页面不回管线拿数据）
+           （原图内嵌 base64，页面不回管线拿数据；三轮起不再放归一图——
+           实审反馈：对人眼定字没有用）
     回收   ingest_seed_events()  →  薄封装 seed_queue.parse_seed_events；
            写库（human provenance 进库）由流程侧 seed-ingest 负责。
 
-持久化沿用 artifact_export 的三层保险（教训原样继承）：
-    1. artifact files-publish 防抖发布 —— 副檔名必须用 **.txt**（.jsonl 会被
-       平台判 invalid_content 静默丢整批）；
-    2. localStorage 崩溃备份，恢复时按 (batch,seq) 与已发布日志合并；
+持久化三层保险（二轮改整页 publish 后的形态）：
+    1. 整页 publish(html)：日志内嵌页面自身随快照发布（files 形式对
+       单文件经典 artifact 拒 capability_disabled，首轮实测教训）；
+    2. localStorage 崩溃备份，恢复时按 (batch,seq) 与页内嵌日志合并；
     3. 复制/下载兜底：不依赖任何平台能力，永远可用。
 """
 
@@ -25,10 +26,6 @@ import html
 import json
 from pathlib import Path
 
-import cv2
-import numpy as np
-
-from ..normalize import normalize_patch
 from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
@@ -102,19 +99,6 @@ def _png_b64(path: Path) -> str | None:
         return None
 
 
-def _norm_b64(path: Path) -> str | None:
-    """现场跑 normalize_patch，归一二值图编码成 PNG（墨=黑、底=白）。"""
-    gray = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        return None
-    norm = normalize_patch(gray)
-    img = ((1 - norm) * 255).astype(np.uint8)
-    ok, buf = cv2.imencode(".png", img)
-    if not ok:
-        return None
-    return base64.b64encode(buf.tobytes()).decode("ascii")
-
-
 def _assemble_choices(item: SeedItem) -> list[dict]:
     """把各证据源的候选合成一个去重有序列表（数字键按此顺序 1..9）。
 
@@ -158,9 +142,9 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
     """从 queue.jsonl 读待审条目，按页组织成可序列化批次。
 
     page 选单页（str/int 均可）；缺省取推进指针所在页（progress.json），
-    没有指针就取页号最小的仍有待审条目的页。每条含原图 + 归一图 base64、
-    OCR 候选、对齐字、疑问码说明、库内候选——审查所需信息全在批次里，
-    页面不回管线拿数据。
+    没有指针就取页号最小的仍有待审条目的页。每条含原图 base64、
+    OCR 候选、对齐字、疑问码说明、库内候选、跨列上下文——审查所需
+    信息全在批次里，页面不回管线拿数据。
     """
     book_dir = Path(book_out_dir)
     queue_path = Path(queue_path)
@@ -200,7 +184,6 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
             "col": it.col, "idx": it.idx, "tier": it.tier,
             "status": it.status,
             "patch_b64": _png_b64(patch),
-            "norm_b64": _norm_b64(patch),
             "choices": _assemble_choices(it),
             "ocr": it.ocr,
             "align": it.align,
@@ -333,7 +316,9 @@ def _render_context(e: dict) -> str:
     """竖排上下文条：该列 OCR 载体文与整理本参考文并排，当前字高亮。
 
     只开窗 pos±_CTX_WIN（整列可能 20 字，全部竖排比图块还高）；
-    截断端加「⋮」。列文按古籍阅读序自上而下（writing-mode 竖排）。
+    截断端加「⋮」。当前字在列首/列尾时，用邻列文补足窗口（三轮实审
+    反馈）：上一列末尾接在前、下一列开头接在后，邻列字弱化显示并以
+    「▔/▁」界标隔开（古籍阅读序：上一列尾 → 本列 → 下一列首）。
     """
     ctx = e.get("context") or {}
     col_ocr, col_ref, pos = ctx.get("col_ocr"), ctx.get("col_ref"), ctx.get("pos")
@@ -341,24 +326,37 @@ def _render_context(e: dict) -> str:
         return ""
     lo = max(0, pos - _CTX_WIN)
     hi = min(len(col_ocr), pos + _CTX_WIN + 1)
+    need_before = _CTX_WIN - (pos - lo)          # 列首吃不满的窗口量
+    need_after = _CTX_WIN - (hi - 1 - pos)       # 列尾吃不满的窗口量
 
-    def vline(text: str | None, label: str) -> str:
+    def vline(text: str | None, prev: str | None, nxt: str | None,
+              label: str) -> str:
         if not text:
             return ""
         chars = []
-        if lo > 0:
+        if need_before > 0 and prev:
+            for ch in prev[-need_before:]:
+                chars.append(f'<span class="adj">{_esc(ch)}</span>')
+            chars.append('<span class="colbrk">▔</span>')
+        elif lo > 0:
             chars.append('<span class="ell">⋮</span>')
         for i in range(lo, min(hi, len(text))):
             ch = _esc(text[i])
             chars.append(f'<b class="cur">{ch}</b>' if i == pos
                          else f'<span>{ch}</span>')
-        if hi < len(text):
+        if need_after > 0 and nxt:
+            chars.append('<span class="colbrk">▁</span>')
+            for ch in nxt[:need_after]:
+                chars.append(f'<span class="adj">{_esc(ch)}</span>')
+        elif hi < len(text):
             chars.append('<span class="ell">⋮</span>')
         return (f'<div class="vline"><span class="vlab">{label}</span>'
                 f'<div class="vtxt">{"".join(chars)}</div></div>')
 
-    return (f'<div class="ctx">{vline(col_ocr, "OCR")}'
-            f'{vline(col_ref, "整理本")}</div>')
+    return ('<div class="ctx">'
+            + vline(col_ocr, ctx.get("prev_ocr"), ctx.get("next_ocr"), "OCR")
+            + vline(col_ref, ctx.get("prev_ref"), ctx.get("next_ref"), "整理本")
+            + '</div>')
 
 
 def _render_seed_card(e: dict) -> str:
@@ -374,7 +372,7 @@ def _render_seed_card(e: dict) -> str:
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
-<div class="imgs">{_img(e["patch_b64"], "orig", "原图")}{_img(e["norm_b64"], "norm", "归一")}{_render_context(e)}</div>
+<div class="imgs">{_img(e["patch_b64"], "orig", "原图")}{_render_context(e)}</div>
 <div class="main">
 <div class="cands">{choices}
 <span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
@@ -473,6 +471,8 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   color:var(--ink);padding:.35rem .15rem;min-height:7.5rem}
 .vtxt .cur{color:var(--seal);background:var(--hl);border-radius:2px}
 .vtxt .ell{color:var(--muted)}
+.vtxt .adj{color:var(--muted);opacity:.75}
+.vtxt .colbrk{color:var(--muted);font-size:.6em;letter-spacing:0}
 .other{display:inline-flex;gap:.3rem}
 .other-in{font:inherit;font-size:1.1rem;width:5em;background:var(--paper);
   color:var(--ink);border:1px solid var(--line);border-radius:3px;

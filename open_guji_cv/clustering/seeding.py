@@ -135,6 +135,39 @@ def judge_doubts(ocr: dict | None, align: dict | None, tier: str,
     return doubts
 
 
+DEFAULT_STRONG_PROB = 0.995   # 「OCR 100%」强信号阈（显示层四舍五入到 100%）
+
+
+def admission_decision(ocr: dict | None, align_char: str | None,
+                       ref_char: str | None, doubts: list[str],
+                       vmap: VariantMap,
+                       strong_prob: float = DEFAULT_STRONG_PROB,
+                       ) -> tuple[bool, bool]:
+    """进库裁决：返回 (可自动进库, 是否走了强信号通道)。
+
+    - 常规通道：双信号一致（OCR × 过闸对齐）且六条疑问全不命中；
+    - **强信号通道**（首两页实审后加）：OCR prob ≥ strong_prob 且与
+      整理本一致（过闸对齐字，或无对齐时的免闸参考字）时，
+      **degraded_crop 单独不再拦**——实审校准：这类字位人工全数照准，
+      机器分级的残留线索在双 100% 信号面前误报居多。
+      near_form / db_inconsistent 仍然拦（形近与库不自洽正是毒化库的
+      两条路，字对了字形也可能骑在两字之间）；signal_conflict /
+      weak_single / replace_align 与强信号在逻辑上互斥，无需另判。
+    """
+    ocr_char = ocr["char"] if ocr else None
+    dual = (ocr_char is not None and align_char is not None
+            and vmap.semantic(ocr_char) == vmap.semantic(align_char))
+    if dual and not doubts:
+        return True, False
+    corpus_char = align_char if align_char is not None else ref_char
+    strong = (ocr is not None and ocr.get("prob", 0.0) >= strong_prob
+              and ocr_char is not None and corpus_char is not None
+              and vmap.semantic(ocr_char) == vmap.semantic(corpus_char))
+    if strong and all(d == DOUBT_DEGRADED_CROP for d in doubts):
+        return True, True
+    return False, False
+
+
 # ── progress.json ────────────────────────────────────────────────────
 
 def _load_progress(seed_dir: Path) -> dict:
@@ -165,6 +198,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               carrier_path: str | Path | None = None,
               max_pages: int | None = None,
               prob_threshold: float = DEFAULT_PROB_THRESHOLD,
+              strong_prob: float = DEFAULT_STRONG_PROB,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -247,19 +281,36 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             cols[col].append((idx, ch))
         cols_by_page[p] = {c: sorted(v) for c, v in cols.items()}
 
-    def slot_context(page: str, col: int, idx: int) -> dict | None:
-        cols = cols_by_page.get(page) or {}
-        entries = cols.get(col)
+    def _col_strings(page: str, col: int) -> tuple[str, str] | None:
+        entries = (cols_by_page.get(page) or {}).get(col)
         if not entries:
             return None
         refs = ref_by_page.get(page, {})
-        col_ocr = "".join(ch for _, ch in entries)
-        col_ref = "".join((refs.get((col, i), (None, ""))[0] or "·")
-                          for i, _ in entries)
+        ocr_s = "".join(ch for _, ch in entries)
+        ref_s = "".join((refs.get((col, i), (None, ""))[0] or "·")
+                        for i, _ in entries)
+        return ocr_s, ref_s
+
+    def slot_context(page: str, col: int, idx: int) -> dict | None:
+        cur = _col_strings(page, col)
+        if cur is None:
+            return None
+        entries = cols_by_page[page][col]
+        refs = ref_by_page.get(page, {})
+        col_ocr, col_ref = cur
         pos = next((n for n, (i, _) in enumerate(entries) if i == idx), None)
         ref_char, ref_op = refs.get((col, idx), (None, ""))
-        return {"col_ocr": col_ocr, "col_ref": col_ref, "pos": pos,
-                "ref_char": ref_char, "ref_op": ref_op or None}
+        out = {"col_ocr": col_ocr, "col_ref": col_ref, "pos": pos,
+               "ref_char": ref_char, "ref_op": ref_op or None}
+        # 跨列上下文：列首/列尾的字要接上邻列（古籍阅读序：上一列尾 →
+        # 本列 → 下一列首）。只截端部 5 字，页面按需取用。
+        prev = _col_strings(page, col - 1)
+        if prev:
+            out["prev_ocr"], out["prev_ref"] = prev[0][-5:], prev[1][-5:]
+        nxt = _col_strings(page, col + 1)
+        if nxt:
+            out["next_ocr"], out["next_ref"] = nxt[0][:5], nxt[1][:5]
+        return out
 
     # 当前库 → 内存匹配器（本轮进库实例增量累加）
     matcher, db_chars = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
@@ -301,21 +352,28 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
 
                 doubts = judge_doubts(ocr, align, tier, proposed, mr,
                                       db_chars, vmap, prob_threshold)
-                dual_ok = (ocr is not None and al is not None
-                           and vmap.semantic(ocr["char"]) ==
-                           vmap.semantic(al.char))
+                ctx = slot_context(page, rec.col, rec.idx)
+                admit_ok, strong = admission_decision(
+                    ocr, al.char if al else None,
+                    (ctx or {}).get("ref_char"), doubts, vmap, strong_prob)
+                if admit_ok and proposed is None:
+                    proposed = ocr["char"] if ocr else None
 
                 item = SeedItem(instance_id=rec.id, book=book, page=page,
                                 col=rec.col, idx=rec.idx,
                                 patch_path=rec.patch_path, tier=tier,
                                 ocr=ocr, align=align, proposed=proposed,
                                 doubts=doubts, match=mr.to_dict(),
-                                context=slot_context(page, rec.col, rec.idx))
-                if dual_ok and not doubts:
-                    # 双信号一致零疑问 → align provenance 直接进库
+                                context=ctx)
+                if admit_ok and proposed:
+                    # 双信号一致（常规零疑问 / 强信号通道）→ align 进库
                     evidence = {"match": mr.to_dict(), "ocr": ocr,
                                 "align": align, "tier": tier,
                                 "crop": q.to_dict()}
+                    if strong:
+                        evidence["strong_dual"] = True
+                        evidence["ref"] = {"char": (ctx or {}).get("ref_char"),
+                                           "op": (ctx or {}).get("ref_op")}
                     admitted = db.admit_instance(
                         rec.id, proposed, (root / rec.patch_path).read_bytes(),
                         norm, provenance="align", evidence=evidence,
@@ -330,6 +388,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     item.status = STATUS_AUTO
                     item.decided_char = proposed
                     item.provenance = "align"
+                    if strong:
+                        item.note = "strong_dual"
+                        summary["n_auto_strong"] = summary.get(
+                            "n_auto_strong", 0) + 1
                     n_auto += 1
                 else:
                     item.status = STATUS_PENDING
