@@ -108,6 +108,16 @@ RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 
                            # 合成页 420px 高时只剩 0.53 个字高，文字块自己就被当成
                            # 界行了。列距是版面自身的尺度，字的竖笔最长约 1 个字高
                            # （≈0.6 列距），1.2 倍列距留了一倍余量
+RULE_RELAX_RUN_PERIOD = 0.8  # 放宽档竖线游程 = 此倍数 × 列距（≈145px）。磨损
+                           # 断裂的界行残段实测 122~197px，够不着严格档的 1.2 倍
+                           # （vol02/119 col7 右侧界行因此「无墙不敢扩」，整列越带
+                           # 的字被切）；而单字竖笔最长 ≈0.5 列距（90px），0.8 倍
+                           # 仍留 60% 余量，字迹冒充不了
+CELL_COV_STOP_RELAX = 0.30  # 放宽档的覆盖率门槛。结构弱（游程短）就要求量足：
+                           # 放宽档带高 ≈246px、开运算核 ≈145px，能活下来的游程
+                           # 覆盖率天然 ≥0.59，字迹开运算后带内 ≈0——放宽档只用于
+                           # 「允许外扩/在哪停」，且墙只放宽不收紧
+                           # （hi=max(hi0,·)），最坏也退回现状
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 CELL_BOW_T = 3.0           # 各带围栏彼此相差超过此像素 → 这条边界是弯的，
                            # 额外输出逐带裁切边（cell_bands），图块按带掩蔽
@@ -472,21 +482,37 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     run = period * RULE_MIN_RUN_PERIOD
-    covs, spans = _vline_cov_bands((gray < BINARY_THRESHOLD).astype(np.uint8),
-                                   run)
-    cov = covs.max(axis=0)
-    w = len(cov)
+    binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
+    covs, spans = _vline_cov_bands(binary, run)
+    # 放宽档：磨损断裂的界行残段（实测 122~197px）够不着严格档 1.2×列距，
+    # 「无墙不敢扩」会拒绝外扩、切掉越出文字带的字（vol02/119 col7 整列）。
+    # 放宽档用**自己的更细带划分**（带高 1.7×0.8×列距 ≈ 246px）：弯的界行
+    # 在粗带里墨摊开、每个 x 都不够游程，细带里同一段线更直（vol02/151
+    # 全页左墙在 6 条粗带下全部拒扩）。门槛相应抬高（结构弱要量足）。
+    run_rel = period * RULE_RELAX_RUN_PERIOD
+    covs_rel, spans_rel = _vline_cov_bands(binary, run_rel)
+    # 对齐到严格档的带：每条严格带取与之重叠的放宽带的最大覆盖率
+    rel_aligned = np.stack([
+        covs_rel[[i for i, (ra, rb) in enumerate(spans_rel)
+                  if not (rb <= a or ra >= b)]].max(axis=0)
+        for a, b in spans])
+    stops = (covs > CELL_COV_STOP) | (rel_aligned > CELL_COV_STOP_RELAX)
+    stop_any = stops.any(axis=0)
+    w = stops.shape[1]
+    # 界行中心：放宽档检出的也算「这一侧有分隔物」的证据——界行弯到列格
+    # 名义边界之外时，走到边界都撞不上墙，只能靠 near_* 放行扩到边界
     centers = [(a + b) / 2 for a, b in rule_segments(gray, run)]
+    centers += [(a + b) / 2 for a, b in rule_segments(gray, run_rel)]
     tol = period * CELL_RULE_TOL
     # 文字带本身也先内缩一点：界行正好压在带边上时，这一点点就是全部的余量
     shrink = min(max(period - inset_l - inset_r, 0.0) * 0.03, 4.0)
 
-    def walk(cov_row, start, stop_at, step):
+    def walk(stop_row, start, stop_at, step):
         x = int(round(start))
         while 0 <= x + step < w and (x + step - stop_at) * step < 0 \
-                and cov_row[x + step] <= CELL_COV_STOP:
+                and not stop_row[x + step]:
             x += step
-        hit = 0 <= x + step < w and cov_row[x + step] > CELL_COV_STOP
+        hit = 0 <= x + step < w and bool(stop_row[x + step])
         return x, hit
 
     out: list[tuple[float, float]] = []
@@ -497,10 +523,10 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         hi0 = cx0 + period * (k + 1) - inset_r - shrink
         near_l = any(abs(c - bl) <= tol for c in centers)
         near_r = any(abs(c - br) <= tol for c in centers)
-        x, hit = walk(cov, lo0, bl, -1)
+        x, hit = walk(stop_any, lo0, bl, -1)
         lo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) if (hit or near_l) \
             else lo0
-        x, hit = walk(cov, hi0, br, +1)
+        x, hit = walk(stop_any, hi0, br, +1)
         hi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) if (hit or near_r) \
             else hi0
         if hi - lo < period * 0.2:            # 证据自相矛盾 → 退回文字带
@@ -515,11 +541,11 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         # 保持原有的扁平表示。
         rows: list[list[float]] = []
         for bi, (ya, yb) in enumerate(spans):
-            crow = covs[bi]
-            x, hit = walk(crow, lo0, bl, -1)
+            srow = stops[bi]
+            x, hit = walk(srow, lo0, bl, -1)
             blo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) \
                 if (hit or near_l) else lo
-            x, hit = walk(crow, hi0, br, +1)
+            x, hit = walk(srow, hi0, br, +1)
             bhi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) \
                 if (hit or near_r) else hi
             if bhi - blo < period * 0.2:
