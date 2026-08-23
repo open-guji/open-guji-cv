@@ -415,7 +415,8 @@ def test_admission_decision_match_ref():
 
 
 def test_admission_decision_match_solo():
-    """十轮定案：无整理本锚定时，库内形状验证 cov ≥ 0.98 单独放行。"""
+    """十轮定案（十一轮上调 0.99）：无整理本锚定时，库内形状验证
+    cov ≥ 0.99 单独放行。"""
     from open_guji_cv.clustering.seed_queue import (DOUBT_NEAR_FORM,
                                                     DOUBT_WEAK_SINGLE)
     from open_guji_cv.clustering.seeding import admission_decision
@@ -428,40 +429,40 @@ def test_admission_decision_match_solo():
                               ) == (True, "match_solo")
     # unsure 带（char None）但顶部候选 cov 过阈也放行——OCR 空识别也不碍
     assert admission_decision(None, None, None, [DOUBT_WEAK_SINGLE], vmap,
-                              match_candidates=[("文", 0.985)]
+                              match_candidates=[("文", 0.995)]
                               ) == (True, "match_solo")
-    # cov 差一点 → 不进
+    # cov 差一点（旧阈 0.98 放行档）→ 不进
     assert admission_decision(lo, None, None, [], vmap,
-                              match_candidates=[("文", 0.975)])[0] is False
+                              match_candidates=[("文", 0.985)])[0] is False
     # 有整理本参照的字位不走本通道（归 match_ref / 人审管）
     assert admission_decision(lo, None, "文", [DOUBT_WEAK_SINGLE], vmap,
                               match_candidates=[("文", 1.0)])[0] is False
     # 护栏触发（never_match/conflict）→ 禁
     assert admission_decision(lo, None, None, [], vmap,
-                              match_candidates=[("日", 0.99), ("曰", 0.97)],
+                              match_candidates=[("日", 0.995), ("曰", 0.97)],
                               match_guard="never_match")[0] is False
-    # 不同语义的对手也到 0.98 档 → 形近存疑，禁
+    # 不同语义的对手也到阈档 → 形近存疑，禁
     assert admission_decision(lo, None, None, [], vmap,
-                              match_candidates=[("文", 0.99), ("又", 0.981)]
+                              match_candidates=[("文", 0.995), ("又", 0.991)]
                               )[0] is False
     # 同语义异体不算对手（珎/珍 都到档也放行，取 cov 最高形）
     vm2 = VariantMap({"珎": "珍"})
     assert admission_decision(lo, None, None, [], vm2,
-                              match_candidates=[("珎", 0.99), ("珍", 0.981)]
+                              match_candidates=[("珎", 0.995), ("珍", 0.991)]
                               ) == (True, "match_solo")
     # near_form 仍拦
     assert admission_decision(lo, None, None, [DOUBT_NEAR_FORM], vmap,
-                              match_candidates=[("文", 0.99)])[0] is False
+                              match_candidates=[("文", 0.995)])[0] is False
     # 残差窗防线（揀/棟 实锤）：wmax 超阈 + OCR 不背书 → 禁；
     # OCR 字符背书（偏旁读对）则放行；wmax 达标本来就行
     assert admission_decision(lo, None, None, [], vmap,
-                              match_candidates=[("棟", 0.981)],
+                              match_candidates=[("棟", 0.991)],
                               match_wmax=13.0)[0] is False
     assert admission_decision({"char": "棟", "prob": 0.5}, None, None, [],
-                              vmap, match_candidates=[("棟", 0.981)],
+                              vmap, match_candidates=[("棟", 0.991)],
                               match_wmax=13.0) == (True, "match_solo")
     assert admission_decision(lo, None, None, [], vmap,
-                              match_candidates=[("棟", 0.981)],
+                              match_candidates=[("棟", 0.991)],
                               match_wmax=12.0) == (True, "match_solo")
 
 
