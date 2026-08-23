@@ -1141,11 +1141,15 @@ def test_later_passes_keep_the_corrected_period(tmp_path):
             json.dumps(layout), encoding="utf-8")
     seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
     seg.run_book(out, source_dir=src)
-    periods = [json.loads((out / "phase3_char_grid" / f"{i}_char_grid.json")
-                          .read_text(encoding="utf-8"))["grid"]["period"]
-               for i in range(8)]
+    grids = [json.loads((out / "phase3_char_grid" / f"{i}_char_grid.json")
+                        .read_text(encoding="utf-8")) for i in range(8)]
+    periods = [g["grid"]["period"] for g in grids]
     med = float(np.median(periods))
     assert max(abs(p - med) for p in periods) <= 0.06 * med, periods
+    # 页型必须每页都在：后续 pass 整体替换 results 时曾把它丢掉
+    # （实测一轮里 69 页写盘成 None）
+    assert all(g.get("page_type") for g in grids), \
+        [g.get("page_type") for g in grids]
 
 
 def test_period_from_rules_survives_a_worn_frame_cluster():
