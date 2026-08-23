@@ -32,7 +32,13 @@ DEFECT_BAND = 0.18         # 判「整体落在上/下边缘带内」用的带�
 RULE_BAR_H = 0.90          # 竖线连通体的最小高度占比
 RULE_BAR_W = 0.10          # 竖线连通体的最大宽度占比
 RULE_BAR_INK = 0.02        # 竖线墨量占全图块墨量的下限
-EDGE_BLOB_INK = 0.03       # 边缘带整体连通体的墨量下限
+EDGE_BLOB_INK = 0.03
+EDGE_BLOB_GAP = 0.10       # 带内连通体离本字主体的纵向间隙超此（× 图块高）
+                           # 才算邻字残余。残余隔着整条字间空白（实测 87:1:18
+                           # 的真残余 +0.206），本字自己的分离部件贴着主体
+                           # （「冬」的下两点 +0.015、其余 clean 全为负值=重叠）。
+                           # 没有这一条，格线吸附收紧图块后「冬」的两点整体
+                           # 落进底部带，被误判成残余——确定层零误报因此失守       # 边缘带整体连通体的墨量下限
 FRAME_BAR_W = 0.85         # 横条连通体的最小宽度占比
 FRAME_BAR_H = 0.30         # 横条连通体的最大高度占比
 FRAME_BAR_N = 2            # 满宽横条达此条数 → 版框而非「一」
@@ -136,12 +142,18 @@ def _defect_features(gray: np.ndarray) -> dict:
     h, w = binary.shape
     band = max(2, int(h * DEFECT_BAND))
     n, _, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    # 本字主体 = 最大连通体；带内块要与它隔开足够远才算邻字残余
+    main = int(np.argmax(stats[1:, 4])) + 1 if n > 1 else 0
+    m_y0 = int(stats[main][1]) if main else 0
+    m_y1 = m_y0 + int(stats[main][3]) if main else h
     spans: list[tuple[int, int]] = []
-    for cx, cy, cw, ch, area in stats[1:]:
+    for k, (cx, cy, cw, ch, area) in enumerate(stats[1:], start=1):
         frac = area / total
         if ch >= RULE_BAR_H * h and cw <= RULE_BAR_W * w:
             out["rule_bar"] = max(out["rule_bar"], frac)
-        if cy + ch <= band or cy >= h - band:
+        gap = (m_y0 - (cy + ch)) if cy + ch <= band else (cy - m_y1)
+        if k != main and (cy + ch <= band or cy >= h - band) \
+                and gap > EDGE_BLOB_GAP * h:
             out["edge_blob"] = max(out["edge_blob"], frac)
         if cw >= FRAME_BAR_W * w and ch <= FRAME_BAR_H * h and frac >= 0.02:
             out["frame_bars"] += 1

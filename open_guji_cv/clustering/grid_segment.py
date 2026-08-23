@@ -56,6 +56,15 @@ SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于
 SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
 PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
+RULE_IN_COL_T = 0.05       # rule_in_col 超此 → 页面自己报了「竖线落在列框里」，
+                           # 即便所有参数都在共识容差内也要按共识先验重扫一次。
+                           # 实测 vol01/94：列距 177.6 离共识 184.7 只差 3.8%
+                           # （在 PERIOD_TOL 内，参数触发抓不到），界行实测间距
+                           # 却是 186.5、rule_in_col 0.18——直接质量信号必须能
+                           # 自己触发校正，不能只当择优门控用。重扫仍按
+                           # never-make-worse 择优：折痕/粗界行造成的报警
+                           # （vol02/163 一条穿过文字列的折痕）refit 不会更好，
+                           # 门控自然拒掉，页面原样保留
                            # 实测列距 5~95 分位只有 174~186px（±3%），是物理
                            # 刚性常量；拟歪的页会掉到 152~157，差 15%
 STRADDLE_OK = 0.50         # 骑线比（格线墨/格心墨）高于此 → 尝试相位重扫
@@ -328,7 +337,21 @@ def _period_from_rules(centers: np.ndarray, prior: float) -> float:
     """
     if len(centers) < MIN_RULES_TO_SNAP + 1:
         return prior
-    d = np.diff(np.sort(centers))
+    # 磨损的版框/双边框会给同一条物理线出好几个中心（实测 vol01/94 左框
+    # 出了 9/25/38/47 四个），全被指到同一个格号，把最小二乘的斜率拉出
+    # 容差、整个测量被弃用——而弃用后保留的先验恰恰是错的。先把靠得近的
+    # 中心并成一个（0.3×先验以内视为同一条线）。
+    centers = np.sort(np.asarray(centers, dtype=float))
+    merged: list[list[float]] = [[centers[0]]]
+    for c in centers[1:]:
+        if c - merged[-1][-1] <= 0.3 * prior:
+            merged[-1].append(c)
+        else:
+            merged.append([c])
+    centers = np.array([float(np.mean(g)) for g in merged])
+    if len(centers) < MIN_RULES_TO_SNAP + 1:
+        return prior
+    d = np.diff(centers)
     d = d[d > prior * 0.4]
     if len(d) == 0:
         return prior
@@ -1707,8 +1730,11 @@ class GridSegmenter:
             consensus_p = float(np.median(periods))
             off = [s2 for s2, r in results.items()
                    if r.get("grid", {}).get("period")
-                   and abs(r["grid"]["period"] - consensus_p)
-                   > PERIOD_TOL * consensus_p]
+                   and (abs(r["grid"]["period"] - consensus_p)
+                        > PERIOD_TOL * consensus_p
+                        # 直接质量信号也能触发：参数全在容差内、页面却报告
+                        # 竖线落在列框里（见 RULE_IN_COL_T 的注释）
+                        or r["grid"].get("rule_in_col", 0) > RULE_IN_COL_T)]
             for stem, img_path, layout in pages:
                 if stem not in off:
                     continue

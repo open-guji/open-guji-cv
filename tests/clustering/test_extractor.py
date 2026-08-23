@@ -72,3 +72,27 @@ def test_instance_json_roundtrip():
     inst, _ = CharExtractor().extract_page(page, grid, "b", "1")[0]
     restored = CharInstance.from_json(inst.to_json())
     assert restored == inst
+
+
+def test_edge_blob_spares_a_detached_part_of_the_character():
+    """「冬」的下两点整体落在底部带内、但贴着主体——那是本字，不是残余。
+
+    格线吸附收紧图块后这类部件常顶到边缘带；没有间隙条件时它被误判，
+    确定层的零误报因此失守（实测 vol01/10:2:6）。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _defect_features
+    g = np.full((140, 150), 255, np.uint8)
+    g[20:110, 20:130] = 0                 # 主体
+    g[114:132, 60:90] = 0                 # 分离部件：距主体 4px（0.03h），在底部带内
+    assert _defect_features(g)["edge_blob"] == 0.0
+
+
+def test_edge_blob_still_fires_on_a_far_neighbor_residue():
+    """真残余隔着整条字间空白（实测 +0.206×图块高），必须仍然报。"""
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _defect_features
+    g = np.full((140, 150), 255, np.uint8)
+    g[40:105, 20:130] = 0                 # 主体
+    g[2:18, 40:110] = 0                   # 顶部残余：距主体 22px（0.16h）
+    assert _defect_features(g)["edge_blob"] > 0.03
