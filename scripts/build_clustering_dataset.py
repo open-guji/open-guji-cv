@@ -138,7 +138,10 @@ def pick_pages(labels, max_instances: int, seed: int) -> set[str]:
 CLUSTER_LEAK_FAMILIES = [
     ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
     ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"),
+    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"), ("彖", "象"),
+    # 彖/象：502fa04 轮实测混簇（易类文本 彖曰/象曰 都高频）。注意 彖 在
+    # PP-OCR 字表之外（G5 的 1.20% 结构性天花板名单），OCR 载体永远发不出
+    # equal 的 彖 实例，这对在载体升级前不会物化——名单先挂上。
 ]
 MAX_LEAK_PAIRS_PER_FAMILY = 3
 
@@ -476,8 +479,13 @@ def main() -> None:
                 if g["book"] == book and g["page_type"] == "body"}
         out_dir = dataset / "samples" / name
         out_dir.mkdir(parents=True, exist_ok=True)
-        carrier = (Path(args.carrier_dir) / f"carrier_{book}.jsonl"
-                   if args.carrier_dir else None)
+        if args.carrier_dir:
+            carrier = Path(args.carrier_dir) / f"carrier_{book}.jsonl"
+        else:
+            # 默认找产物目录里的载体（build_ocr_carrier.py 的推荐落点：
+            # 与 phase4 同目录，materialize_rev 会连带取到，天然同版）
+            default = output_root / book / "phase4_chars" / "ocr_carrier.jsonl"
+            carrier = default if default.exists() else None
         st = build_align_shard(book, out_dir, output_root, Path(args.corpus),
                                body, args.max_instances, args.seed, commit,
                                carrier=carrier)
