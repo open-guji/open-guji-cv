@@ -10,14 +10,13 @@
       每页逐字位：OCR 载体 × 整理本对齐 双信号 + 六条疑问判定
         无疑问 → 直接进库（align provenance），也落一条 auto_admitted
                  记录（审计用）
-        强信号通道（三轮实审后加）：OCR prob ≥ strong_prob（默认
-                 0.995）且与整理本一致（过闸对齐或免闸参考）时，
-                 degraded_crop 单独不拦、直接进库（note=strong_dual）；
-                 near_form / db_inconsistent 仍拦
-        三重信号通道（四轮实审后加）：库完美匹配（verify same）继承的
-                 字与 OCR（≥ triple_prob，默认 0.90）、整理本三方同字
-                 → 直接进库（note=triple）。never-match 护栏在匹配层
-                 已把形近家族降档，本通道触不到它们
+        库×整理本通道（五轮实审定型；此前 OCR prob 的 strong_dual/
+                 triple 通道已废——OCR 置信度校准不可靠，只供候选）：
+                 库完美匹配（verify same，cov≥0.992）继承的字与整理本
+                 （过闸对齐或免闸参考）同字 → 直接进库
+                 （note=match_ref），degraded_crop 单独不拦；
+                 near_form / db_inconsistent 仍拦。never-match 护栏在
+                 匹配层已把形近家族降档，本通道触不到它们
         有疑问 → SeedItem(status=pending_review) 进 queue.jsonl
     审查页面（页面侧）
       按页读 queue.jsonl 的 pending_review 项 → 用户单键裁决 →
