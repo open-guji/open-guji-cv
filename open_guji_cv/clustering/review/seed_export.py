@@ -43,6 +43,42 @@ _DOUBT_NO = {code: i + 1 for i, code in enumerate(ALL_DOUBTS)}
 
 MAX_HOTKEYS = 9          # 数字键 1..9 直选的候选上限（多余候选仍可点击）
 
+# 同形/近形字组：同一卡的候选里出现同组两个不同的字时，按钮上加注
+# 读音/用例提示——日/曰 在按钮字号下肉眼根本分不出（vol01:10:9:10
+# 实审教训：裘曰修之曰 vs OCR 的日）。组表含 never-match 家族 + 三胞胎。
+_CONFUSABLE_GROUPS: list[tuple[str, ...]] = [
+    ("日", "曰"), ("己", "已", "巳"), ("大", "太"), ("未", "末"),
+    ("人", "入"), ("間", "問"), ("匕", "七"), ("諭", "論"), ("遺", "還"),
+    ("圓", "圖"), ("候", "侯"), ("曾", "會"), ("面", "而"), ("夬", "夫"),
+    ("彖", "象"), ("王", "玉"), ("干", "千", "于"), ("土", "士"),
+]
+_CONFUSABLE_HINTS: dict[str, str] = {
+    "日": "rì 日月", "曰": "yuē 子曰", "己": "jǐ 自己", "已": "yǐ 已經",
+    "巳": "sì 巳時", "大": "dà 大小", "太": "tài 太上", "未": "wèi 未來",
+    "末": "mò 末尾", "人": "rén 人民", "入": "rù 出入", "間": "jiān 中間",
+    "問": "wèn 問答", "匕": "bǐ 匕首", "七": "qī 七八", "諭": "yù 上諭",
+    "論": "lùn 議論", "遺": "yí 遺失", "還": "huán 歸還", "圓": "yuán 圓形",
+    "圖": "tú 圖書", "候": "hòu 時候", "侯": "hóu 諸侯", "曾": "céng 曾經",
+    "會": "huì 會議", "面": "miàn 面目", "而": "ér 而且", "夬": "guài 卦名",
+    "夫": "fū 大夫", "彖": "tuàn 彖曰", "象": "xiàng 象曰", "王": "wáng 帝王",
+    "玉": "yù 玉石", "干": "gān 干支", "千": "qiān 千百", "于": "yú 于是",
+    "土": "tǔ 土地", "士": "shì 士人",
+}
+_GROUP_OF: dict[str, int] = {}
+for _gi, _grp in enumerate(_CONFUSABLE_GROUPS):
+    for _c in _grp:
+        _GROUP_OF[_c] = _gi
+
+
+def _confusable_hints_for(chars: list[str]) -> dict[str, str]:
+    """候选字列表 → 需要加注的 {字: 提示}（同组出现 ≥2 个不同字才注）。"""
+    from collections import Counter
+    groups = Counter(_GROUP_OF[c] for c in set(chars) if c in _GROUP_OF)
+    need = {g for g, n in groups.items() if n >= 2}
+    return {c: _CONFUSABLE_HINTS.get(c, f"U+{ord(c):04X}")
+            for c in set(chars)
+            if c in _GROUP_OF and _GROUP_OF[c] in need}
+
 
 # ── 批次装配 ─────────────────────────────────────────────
 
@@ -232,9 +268,11 @@ def _img(b64: str | None, cls: str, cap: str) -> str:
             f'<figcaption>{_esc(cap)}</figcaption></figure>')
 
 
-def _render_choice(i: int, c: dict) -> str:
+def _render_choice(i: int, c: dict, hint: str | None = None) -> str:
     key = (f'<kbd>{i + 1}</kbd>' if i < MAX_HOTKEYS else "")
     tags = []
+    if hint:
+        tags.append(f'<span class="tag t-hint">{_esc(hint)}</span>')
     if c.get("proposed"):
         tags.append('<span class="tag t-prop">拟</span>')
     if c.get("ref_op"):
@@ -365,7 +403,9 @@ def _render_seed_card(e: dict) -> str:
             if e["tier"] == "degraded" else "")
     skipped = (' <span class="tag t-skip">上批跳过</span>'
                if e["status"] == STATUS_SKIPPED else "")
-    choices = "".join(_render_choice(i, c) for i, c in enumerate(e["choices"]))
+    hints = _confusable_hints_for([c["char"] for c in e["choices"]])
+    choices = "".join(_render_choice(i, c, hint=hints.get(c["char"]))
+                      for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
 <span class="pos">第{e["col"]}列第{e["idx"]}字</span>{tier}{skipped}
@@ -460,6 +500,7 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 .t-rep,.t-skip{color:var(--doubt);border-color:var(--doubt)}
 .t-ocr,.t-db{color:var(--muted)}
 .t-ref{color:var(--seal);border-color:var(--seal)}
+.t-hint{color:var(--doubt);border-color:var(--doubt);font-weight:600}
 .chip.big{font-size:1.3rem}
 .ctx{display:flex;gap:.35rem;align-items:flex-start}
 .vline{display:flex;flex-direction:column;align-items:center;gap:.25rem}
