@@ -865,9 +865,10 @@ def main():
     p.add_argument("--context-margin", type=float, default=0.70,
                    help="上下文通道的 margin 准入阈（用户实审 303 条裁决"
                         "重标定：≥0.70 全对；默认 0.70）")
-    p.add_argument("--match-solo-cov", type=float, default=0.98,
+    p.add_argument("--match-solo-cov", type=float, default=0.99,
                    help="库匹配单独通道的 cov 阈：无整理本锚定时，库内"
-                        "形状验证 cov ≥ 此值直接进库（默认 0.98）")
+                        "形状验证 cov ≥ 此值直接进库（默认 0.99；0.98 "
+                        "首日即出压线错例 揀/棟，用户裁定收紧）")
     p.add_argument("--pages", default="body", choices=["body", "all"],
                    help="body=只跑金标正文页（默认）；all=索引里的全部页")
     p.add_argument("--page-type",

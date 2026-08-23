@@ -71,10 +71,11 @@ SEED_DIR = "phase9_seed"
 # 另有单候选防护（见 context 通道注释）兜底。
 DEFAULT_CONTEXT_MARGIN = 0.70
 
-# match_solo 通道（十轮用户定案）：无整理本锚定时，库内形状验证
-# cov ≥ 此阈单独放行（same 档 0.992 之下留一小段——同字异刻的正常
-# 波动带；护栏与形近防线见 admission_decision docstring）。
-MATCH_SOLO_COV = 0.98
+# match_solo 通道（十轮用户定案，十一轮上调）：无整理本锚定时，
+# 库内形状验证 cov ≥ 此阈单独放行。初值 0.98 首日即出一例压线错
+# （揀/棟 0.9802），用户裁定收紧到 0.99（约让出四成通道量换稳）；
+# 护栏与形近防线见 admission_decision docstring。
+MATCH_SOLO_COV = 0.99
 
 
 def _now() -> str:
@@ -212,7 +213,7 @@ def admission_decision(ocr: dict | None, align_char: str | None,
       天然触不到形近字；
     - **库匹配单独通道（match_solo）**：无整理本可参照时（奏折/上谕
       页，corpus_char 为 None），库内形状验证 cov ≥ solo_cov（默认
-      0.98，十轮用户定案）单独放行——库里的条目都是已验证的，同字
+      0.99，见 MATCH_SOLO_COV 注释）单独放行——库里的条目都是已验证的，同字
       同刻工的覆盖率天然到这个档。防线：护栏（never_match/conflict）
       触发即禁；候选里有**不同语义**的字也到 0.98 档 → 形近存疑，禁；
       残差窗 wmax 超 MISS_WMAX（偏旁之差的典型形态）时需 OCR 字符
