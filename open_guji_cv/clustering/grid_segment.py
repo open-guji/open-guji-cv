@@ -813,6 +813,53 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
 
     best = (float(top), base)
     best_cost = float("inf")
+    # 盖不住的内容要付钱。谷/峰代价对「整体错开 k 格」的解族近乎无感：
+    # 相位以上的真字没有线去碰、页外的线剪裁到空白处，都不进代价——
+    # 实测 vol01/66 书级格高差 0.013px 就让相位在两族解之间翻转，坏解
+    # 把网格整体压低 2 格、顶部两行真字落在网格外、丢 11 个字；vol01/65
+    # 的旧产物就长期锁在这种坏解上（相位 403、末两格悬在页外空转）。
+    # 惩罚 = 网格跨度外（留 0.5 格出头余量：末格字下探、首格字上冒是
+    # 正常现象）的墨量 ÷ 格高——量纲与谷/峰项同阶但对整格错开是
+    # 压倒性的；半格以内的细对齐仍由谷/峰项主导。
+    # 两道防误伤，缺一不可（都是实测踩出来的）：
+    # 1) **两端各让开 1/4 格保护带**：content_range 已剔短游程废墨，但上
+    #    边框横杠与首行字连成一个长游程时它分不开（vol02/17 实测 top 直
+    #    接落在横杠上），贴边小段里的墨不可信。第一版不设保护带，vol01
+    #    有 56 页被拉高一格去「盖住」顶部废墨、净丢 129 个字。带宽只能
+    #    1/4 格：半格会把末行字的出头证据也吃掉，1 格错位就分不出了。
+    # 2) **逐列算、取中位**：聚合投影会让一列非规范的墨压过多数列——
+    #    vol02/17 卷首页的题名列顶格写、高出正文一行，聚合惩罚为了盖住
+    #    这一个字把 8 列正文的末行全甩掉。刻本栏格跨列统一，相位由多数
+    #    列的证据定（与全书「列间共识」原则同构）；跨全列的坏证据（边框
+    #    横杠人人有份，中位滤不掉）由保护带兜住。
+    # 代价是「只错开一格」的解族分不出——保护带正好吃掉一行——这类页
+    # 回到谷/峰代价的原判（与历史产物一致）；错开 ≥2 格的病（vol01/65
+    # 长期锁坏解、66 一触即翻）保护带外仍有整行真字墨，惩罚决定性。
+    # 3) **每行墨量门槛**：保护带外仍可能有跨列的低强度渗墨/晕染
+    #    （vol02/17 实测 ~4 墨/行/列，真字行是它的 20 倍），行墨低于该列
+    #    内容区 75 分位的 15% 就不算「没盖住的内容」。
+    csums = []
+    for p in projs:
+        seg = p[int(top):int(bottom)]
+        nz = seg[seg > 0]
+        thr = 0.15 * float(np.percentile(nz, 75)) if nz.size else 0.0
+        masked = np.where(p >= thr, p, 0.0)
+        csums.append(np.concatenate([[0.0], np.cumsum(masked)]))
+
+    def _uncovered(phase: float, span: float, g: float) -> float:
+        lo1, hi1 = top + g, phase - g
+        lo2, hi2 = phase + span + g, bottom - g
+        vals = []
+        for cs in csums:
+            v = 0.0
+            for a, b in ((lo1, hi1), (lo2, hi2)):
+                a = int(np.clip(round(a), top + g, bottom - g))
+                b = int(np.clip(round(b), top + g, bottom - g))
+                if b > a:
+                    v += float(cs[b] - cs[a])
+            vals.append(v)
+        return float(np.median(vals))
+
     for cell_h in cell_hs:
         span = cell_h * n_chars
         # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头。
@@ -822,7 +869,11 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         p_hi = top + 1.2 * cell_h if cell_h_fixed \
             else min(top + 1.2 * cell_h, max(p_lo, L - span))
         for phase in np.arange(p_lo, p_hi + phase_step, phase_step):
-            cost = _grid_cost(smooth, phase, cell_h, n_chars)
+            # 中位是列数一半的量级，聚合(smooth=各列之和)是全列量级，
+            # 补上列数因子让惩罚与谷/峰项同纲
+            uncovered = _uncovered(phase, span, 0.25 * cell_h) * len(csums)
+            cost = _grid_cost(smooth, phase, cell_h, n_chars) \
+                + uncovered / cell_h
             if cost < best_cost:
                 best_cost = cost
                 best = (float(phase), float(cell_h))
