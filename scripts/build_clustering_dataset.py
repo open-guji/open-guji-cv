@@ -23,6 +23,18 @@
 （making-datasets.md 第一步）。features.npz 不存——特征是冻结图的纯函数，
 存了反而多一份会过期的副本。
 
+**--pipeline-rev**：本数据集必须从 `PIPELINE_REV` 那一版产物重建——上游在
+a435d7b 重跑了全部切分（格高改由实测字距定），但 phase6 转写没重跑，而且
+「格高一变，page:col:idx 指向的字本身就换了人」（instances 第九轮重标的
+实测结论），结构指纹相同也保证不了字没换。所以旧转写对新图块做对齐 =
+系统性错标。重建时脚本自动从 git 取那一版的 phase4/phase6；要迁到新切分，
+必须先在新 phase4 上重跑 label/refine，再改这个常量。
+
+**tier 分层**（2026-08 起）：每个实例在**原始图块**上跑 `crop_quality`
+分成 clean（完整、无残留）/ degraded（有残留或被切）。算法目标分两档：
+干净层 purity 是硬约束里的硬约束；退化层单独报，能不崩、可标记即可。
+分级不能在冻结的归一图上做——那已经过了归一化自己的清理，量不出输入的脏。
+
 用法：
     python scripts/build_clustering_dataset.py --dataset ../open-guji-dataset/char-clustering
 """
@@ -33,6 +45,7 @@ import argparse
 import json
 import random
 import subprocess
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -41,19 +54,45 @@ import numpy as np
 
 from open_guji_cv.clustering.align_label import (BLANK_INK, clean_labels,
                                                  label_book, summarize)
+from open_guji_cv.clustering.crop_quality import assess_crop
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch)
 
 SOURCE_ITEM = "06061300.cn"        # 武英殿刻本《欽定四庫全書總目》卷首（page-type 同源）
+PIPELINE_REV = "23ee9a518"         # 冻结的上游产物版本（见文件头 --pipeline-rev）
 FEATURE_BACKEND = "hog"
 MAX_CONFUSION_PAIRS = 40
 MAX_INK_PAIRS = 40
+def materialize_rev(rev: str, books: tuple[str, ...] = ("vol01", "vol02")) -> Path:
+    """从 git 把 rev 那一版的 phase4/phase6 铺到临时目录，返回 output 根。"""
+    root = Path(tempfile.gettempdir()) / f"guji-output-{rev}"
+    marker = root / ".complete"
+    if marker.exists():
+        return root / "output"
+    root.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for b in books:
+        paths += [f"output/{b}/phase4_chars", f"output/{b}/phase6_labels"]
+    subprocess.run(f"git archive {rev} {' '.join(paths)} | tar -x -C {root}",
+                   shell=True, check=True)
+    marker.touch()
+    return root / "output"
+
+
 def git_commit() -> str:
     try:
         return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
                                        text=True).strip()
     except Exception:                                    # pragma: no cover
         return "unknown"
+
+
+def margins_of(rec: dict) -> tuple[int, int]:
+    """核心区（bbox 去 padding）到图块边缘的像素距离，量 tier 用。"""
+    bh = rec["bbox"][3] - rec["bbox"][1]
+    bw = rec["bbox"][2] - rec["bbox"][0]
+    return (max(0, int(round((bh - rec["height"]) / 2))),
+            max(0, int(round((bw - rec["width"]) / 2))))
 
 
 def crop_name(instance_id: str) -> str:
@@ -186,12 +225,14 @@ def build_align_shard(book: str, out_dir: Path, output_root: Path,
             continue
         name = crop_name(x.instance_id)
         save_norm(gray, crops / name)
+        q = assess_crop(gray, margins=margins_of(rec))
         instances.append({"instance_id": x.instance_id, "crop": f"crops/{name}",
                           "char": x.char, "label_origin": "align",
                           "align_op": x.op, "align_run": x.op_run,
                           "page": x.page, "ink_ratio": rec["ink_ratio"],
                           # 粗分块要用的原始纵横比：归一图是正方形，问不出来
-                          "hw_ratio": round(rec["height"] / max(rec["width"], 1e-6), 4)})
+                          "hw_ratio": round(rec["height"] / max(rec["width"], 1e-6), 4),
+                          "tier": q.tier, "tier_detail": q.to_dict()})
 
     have = {i["instance_id"] for i in instances}
     pairs = [p for p in (confusion_diff_pairs(picked)
@@ -221,7 +262,9 @@ def build_align_shard(book: str, out_dir: Path, output_root: Path,
             "n_chars": len({i["char"] for i in instances}),
             "n_equal": sum(1 for i in instances if i["align_op"] == "equal"),
             "n_replace": sum(1 for i in instances if i["align_op"] == "replace"),
-            "n_hard_pairs": len(pairs)}
+            "n_hard_pairs": len(pairs),
+            "tiers": {t: sum(1 for i in instances if i["tier"] == t)
+                      for t in ("clean", "degraded", "empty")}}
 
 
 # ── 人工层复核表（2026-08-23，逐张目视 94/94）─────────────────────
@@ -291,11 +334,15 @@ def build_human_shard(out_dir: Path, store: Path, commit: str) -> dict:
             n_relabeled += 1
         name = crop_name(iid)
         save_norm(gray, crops / name)
+        bbox = json.loads(r["bbox"]) if isinstance(r["bbox"], str) else r["bbox"]
+        q = assess_crop(gray, margins=margins_of(
+            {"bbox": bbox, "height": r["height"], "width": r["width"]}))
         instances.append({"instance_id": iid, "crop": f"crops/{name}",
                           "char": char, "label_origin": "human",
                           "label_status": status,
                           "page": r["page"], "ink_ratio": r["ink_ratio"],
-                          "hw_ratio": round(r["height"] / max(r["width"], 1e-6), 4)})
+                          "hw_ratio": round(r["height"] / max(r["width"], 1e-6), 4),
+                          "tier": q.tier, "tier_detail": q.to_dict()})
 
     char_of = {i["instance_id"]: i["char"] for i in instances}
     pairs, dropped, flipped = [], 0, 0
@@ -339,7 +386,9 @@ def build_human_shard(out_dir: Path, store: Path, commit: str) -> dict:
             "n_chars": len({i["char"] for i in instances}),
             "n_hard_pairs": len(pairs), "n_pairs_dropped_no_image": dropped,
             "review": {"n_seen": len(records), "n_relabeled": n_relabeled,
-                       "n_dropped": len(DROP), "n_pairs_flipped_to_diff": flipped}}
+                       "n_dropped": len(DROP), "n_pairs_flipped_to_diff": flipped},
+            "tiers": {t: sum(1 for i in instances if i["tier"] == t)
+                      for t in ("clean", "degraded", "empty")}}
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -354,7 +403,9 @@ def write_info(out_dir: Path, info: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default="../open-guji-dataset/char-clustering")
-    ap.add_argument("--output", default="output", help="管线产物根目录")
+    ap.add_argument("--pipeline-rev", default=PIPELINE_REV,
+                    help="从 git 的这一版取 phase4/phase6（transcription 与切分必须同版）；"
+                         "传空串则用工作区 output/")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--page-type", default="../open-guji-dataset/page-type/expected.json")
     ap.add_argument("--glyph-store", default="glyph_store")
@@ -363,8 +414,12 @@ def main() -> None:
     args = ap.parse_args()
 
     dataset = Path(args.dataset)
-    output_root = Path(args.output)
-    commit = git_commit()
+    if args.pipeline_rev:
+        output_root = materialize_rev(args.pipeline_rev)
+        commit = args.pipeline_rev
+    else:
+        output_root = Path("output")
+        commit = git_commit()
     page_gold = json.loads(Path(args.page_type).read_text(encoding="utf-8"))
 
     report = {"pipeline_version": commit, "shards": []}

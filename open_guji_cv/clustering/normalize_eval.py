@@ -75,9 +75,10 @@ class SampleResult:
     skeleton_endpoint_delta: int
     passed: bool
     reasons: list[str]
+    tier: str = "unknown"       # clean | degraded（见 crop_quality / 数据集 README）
 
     def to_dict(self) -> dict:
-        return {"sample": self.sample, "status": self.status,
+        return {"sample": self.sample, "status": self.status, "tier": self.tier,
                 "pixel_diff_ratio": round(self.pixel_diff_ratio, 6),
                 "binary_iou": round(self.binary_iou, 6),
                 "skeleton_endpoint_delta": self.skeleton_endpoint_delta,
@@ -115,13 +116,28 @@ def check_sample(sample_dir: Path, produced: np.ndarray,
         reasons.append(f"skeleton_endpoint_delta {delta} > {max_delta}")
 
     return SampleResult(sample_dir.name, spec.get("status", "verified"),
-                        pdr, iou, delta, not reasons, reasons)
+                        pdr, iou, delta, not reasons, reasons,
+                        spec.get("tier", "unknown"))
 
 
 def summarize(results: list[SampleResult]) -> dict:
-    """回归门只卡 verified 层；缺陷层单独报，别混进门里。"""
+    """回归门只卡 verified 层；缺陷层单独报，别混进门里。
+
+    另按 tier（clean/degraded）分层计数：clean 层的 known_defect 是 P0
+    信号（算法在干净数据上都不对），degraded 层的缺陷是记账后的待办。
+    """
     verified = [r for r in results if r.status == "verified"]
     defects = [r for r in results if r.status == "known_defect"]
+    by_tier = {}
+    for t in sorted({r.tier for r in results}):
+        sub = [r for r in results if r.tier == t]
+        by_tier[t] = {
+            "n": len(sub),
+            "verified": sum(1 for r in sub if r.status == "verified"),
+            "known_defect": sum(1 for r in sub if r.status == "known_defect"),
+            "gate_passed": sum(1 for r in sub
+                               if r.status == "verified" and r.passed),
+        }
     return {
         "gate": {
             "n": len(verified),
@@ -134,6 +150,7 @@ def summarize(results: list[SampleResult]) -> dict:
             "unchanged": sum(1 for r in defects if r.passed),
             "changed": [r.to_dict() for r in defects if not r.passed],
         },
+        "by_tier": by_tier,
         "n_samples": len(results),
     }
 
@@ -141,6 +158,9 @@ def summarize(results: list[SampleResult]) -> dict:
 def format_report(report: dict) -> str:
     g = report["gate"]
     lines = [f"回归门：{g['passed']}/{g['n']} 通过" + ("" if g["ok"] else "  ← 失败")]
+    for t, b in report.get("by_tier", {}).items():
+        lines.append(f"  [{t}] {b['n']} 样本：verified {b['verified']}"
+                     f"（过门 {b['gate_passed']}）known_defect {b['known_defect']}")
     for f in g["failed"]:
         lines.append(f"  ✗ {f['sample']}: {'; '.join(f['reasons'])}")
     d = report["known_defect"]

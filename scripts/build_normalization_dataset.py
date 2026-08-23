@@ -1,16 +1,27 @@
 """生成归一化 golden 回归集（open-guji-dataset/char-normalization）。
 
-golden 是**当前归一化的输出，逐张目视确认之后**才冻结的。确认这一步不能省：
-不看就冻，等于把当前的缺陷焊成金标，以后修好了反而报「回归失败」。
-所以本脚本产出两层（见 `VERDICTS`）：
+**双层结构**（2026-08 起）：上游切分做不到完美，图块天然分两类，归一化的
+目标也分两档——
 
-- `verified`：目视确认输出正确 → 进严格回归门；
-- `known_defect`：输出本身就是错的 → 只记录当前行为，不进门。
+| tier | 定义 | 对算法的要求 |
+|---|---|---|
+| `clean` | 字完整、无外来残留 | **必须做得非常好**：缺陷零容忍 |
+| `degraded` | 有邻字/界行残留，或本字被切 | 能不崩、残留尽量去掉；缺陷记账、按优先级修 |
 
-**抽样线索全部来自归一化之外**（making-datasets.md 第四步第 4 条：线索不能
-就是判据）：`ink_ratio` 与 `flags` 是 extractor 的量，`human_*` 那一档直接取
-char-segmentation/instances 的人工标签。归一化好不好，用它自己的中间量去
-挑样本就是自证。
+分层判据是 `crop_quality.assess_crop`（在原始图块上用 Otsu + 连通体结构量
+「完整性 / 残留」，与归一化的 Sauvola 不同源；对 instances 人工金标校准：
+缺陷检出 5/7、clean 误报 2/55），**最终 tier 以逐张目视为准**——机器分级
+只是抽样线索，`TIER_OVERRIDE` 记录目视改判。
+
+golden 仍是**当前归一化输出，逐张目视确认后**冻结，分两种状态：
+
+- `verified`：输出正确 → 进严格回归门；
+- `known_defect`：输出错了 → 只记录当前行为，不进门（把错的输出冻成
+  golden 等于把缺陷焊死）。clean 层出现 known_defect 是 P0 信号。
+
+产物取自**工作区当前 output/**（a435d7b 之后的新切分）。本集不需要对齐
+金标字——归一化回归只看像素，字义无关；样本是不是真字由逐张目视把关
+（不是字的进 `DROP`）。
 
     python scripts/build_normalization_dataset.py --dataset ../open-guji-dataset/char-normalization
 """
@@ -26,45 +37,51 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from open_guji_cv.clustering.align_label import clean_labels, label_book
+from open_guji_cv.clustering.crop_quality import assess_crop
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch,
                                                skeletonize)
 
 SOURCE_ITEM = "06061300.cn"
-PER_CUE = 6
 TOLERANCE = {"pixel_diff_ratio": 0.01, "binary_iou_min": 0.98,
              "skeleton_endpoint_delta_max": 2}
 
-# ── 目视确认结果（2026-08-23，35/35 逐张看「原图 | 归一图 | 骨架」）──────
+# ── 目视确认结果（2026-08-23，40/40 逐张看「原图 | 归一图 | 骨架」）──────
 #
-# 判据只有一条：**归一化有没有做它该做的事**（去残余 / 居中缩放 / 笔宽归一）。
-# 输入本身是坏切分（跨列、纵向吃进邻字、被腰斩）不算归一化的错——那是
-# char-segmentation 的账，这里只把当前行为锁住，理由记在 NOTES 里。
-#
-# 改判定只改这两张表。
-VERDICTS: dict[str, str] = {
-    "024": "界行竖线没去掉。实测这条竖条 x=133 w=6 h=123/132（高占 93%），"
-           "但左右都不贴边（x+bw=139 < 146）——remove_edge_specks 的 vline "
-           "判据要求 `x==0 or x+bw>=w`，内缩 7px 就整条漏网，归一图里它成了"
-           "独立的一竖，外接框被撑宽、字被压窄。",
-    "025": "轻微：邻字残点未去，归一图下方留了一个孤立小点。"
-           "点在字的外接框内，没撑大 bbox，对聚类影响小，但按「去残余」的"
-           "职责这是没做到。",
-    "031": "邻字残画没去：金标字是「一」，图块上半还留着邻字底部的两笔，"
-           "归一化把三笔一起当本字缩放，「一」被压到下半——这类是"
-           "外接框被残余撑大的典型。",
+# 判据：**归一化有没有做它该做的事**（去残余 / 居中缩放 / 笔宽归一）。
+# 输入本身是坏切分不算归一化的错，但会记进 NOTES 说明测的是什么。
+# 改判定只改这几张表。
+VERDICTS: dict[str, str] = {           # sample_id -> 缺陷说明（进 known_defect 层）
+    # 四个都在退化层；clean 层零缺陷。共同点：残留**不贴图块边缘**时
+    # remove_edge_specks 完全够不着——它只删贴边组件。
+    "022": "邻列字残片（左缘一条竖向笔画带）未去，golden 里原样保留。",
+    "026": "版框横线横穿图块中部（不贴上下边），未去；字的残半与横线并存。",
+    "032": "底部横线残留未去（疑与「重」底横粘连，粘连是分级判据的已知盲区，"
+           "也是去残余的难点）。",
+    "033": "邻字「一」整笔在图块下部核心区内，未去。",
 }
-
-# 输入本身有缺陷、归一化无从判断的样本：进回归门，但要说清楚测的是什么。
-NOTES: dict[str, str] = {
-    "032": "输入跨列（左「土」右「自」分属两列，char-segmentation 已人工标为 "
-           "contaminated）。归一化没有拆字的职责，此样本只锁定当前行为。",
-    "033": "输入纵向吃进了下一个字。同上，只锁定当前行为。",
-    "035": "输入被腰斩（人工标 truncated）。归一化对残字照常处理即为正确。",
+NOTES: dict[str, str] = {              # sample_id -> 输入本身的说明（仍进回归门）
+    "020": "跨列图块：相邻两列的字各占一半。归一化没有拆列的职责，仅锁定行为；"
+           "该修的是切分。",
+    "021": "跨列图块，同上。",
+    "025": "输入被切（truncated）：只切到字的右半。归一化照常处理即为正确。",
+    "027": "输入被切（truncated），照常处理即正确。",
+    "028": "输入被切（truncated，边缘 76px 压边），照常处理即正确。",
+    "029": "输入底部笔画压边（轻度截断），照常处理即正确。",
+    "034": "跨列图块（左「文」右「大」各半，instances 人工标 contaminated），"
+           "仅锁定行为。",
 }
-
-COVER_OVERRIDE: dict[str, list[str]] = {}   # sample_id -> 目视确认的 cover 标签
+DROP: dict[str, str] = {               # sample_id 占位 -> 目视发现不是字，剔除
+    "018": "四个字各一角拼在一格（跨列跨行），不是单字",
+    "024": "版框横线块 + 噪点，不是字",
+    "030": "近空格位，只有一道笔画残迹，不是字",
+}
+TIER_OVERRIDE: dict[str, str] = {      # sample_id -> 目视改判的 tier
+    # 两个都是分级判据的同一类误报：本字自己的部件不与主体连通、又恰好
+    # 压到图块边界，被当成「碰边的外来物」。目视均为完整干净的字。
+    "019": "clean",
+    "023": "clean",
+}
 
 
 def git_commit() -> str:
@@ -85,83 +102,96 @@ def load_index(book: str, output_root: Path) -> list[dict]:
     return rows
 
 
+def margins_of(rec: dict) -> tuple[int, int]:
+    bh = rec["bbox"][3] - rec["bbox"][1]
+    bw = rec["bbox"][2] - rec["bbox"][0]
+    return (max(0, int(round((bh - rec["height"]) / 2))),
+            max(0, int(round((bw - rec["width"]) / 2))))
+
+
 def ink_darkness(gray: np.ndarray) -> float:
     """墨色深浅 = **墨迹像素**的平均灰度（Otsu 分出墨迹）。越小越黑。
 
-    量「着墨浓淡」不能用 `ink_ratio`——那是墨**覆盖比例**，笔画少的字天然低。
-    第一轮就栽在这上面：ink_ratio 最低的 6 个样本 5 个是「一」「二」「三」，
-    量到的是笔画数。第二轮改用「最暗 15% 像素的均值」还是不行：笔画少的字
-    这 15% 里混着一半背景，照样被算成「淡」（捞上来 子/七/于/士/元）。
-    只对墨迹像素求均值才与笔画数无关。
-
-    用 Otsu 而不是归一化里的 Sauvola：抽样线索不能与被测判据同源。
+    量「着墨浓淡」不能用 `ink_ratio`——那是墨**覆盖比例**，笔画少的字天然低
+    （第一版捞上来全是「一」「二」「三」）；「最暗 15% 像素均值」也不行——
+    笔画少的字这 15% 里混着一半背景。只对墨迹像素求均值才与笔画数无关。
     """
     thr, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    ink = gray[gray < thr]
+    ink = gray[gray <= thr]
     return float(ink.mean()) if ink.size else 255.0
 
 
-def pick(rows: list[dict], cue: str, n: int, seed: int,
-         patch_root: Path, sample_pool: int = 400) -> list[dict]:
-    """按线索挑样本。线索都是归一化之外的量（extractor 的 flags / 原图灰度）。
-
-    所有档次都先要求**这一格有对齐金标字**（调用方已过滤）：不加这条，
-    `rule_bar` / `edge_blob` 捞上来的全是纯版框横条与空格位——第一轮 18 个
-    带 flag 的样本里 11 个根本不是字。测「字块带残余怎么归一化」，
-    样本得先是个字。
-    """
+def assessed(rows: list[dict], patch_root: Path, pool: int, seed: int):
+    """随机取 pool 个实例并跑 crop_quality，返回 [(rec, gray, quality)]。"""
     rng = random.Random(seed)
-    clean = [r for r in rows if not r["flags"]]
+    rows = [r for r in rows if r["cell_type"] == "char"]
+    rng.shuffle(rows)
+    out = []
+    for r in rows:
+        if len(out) >= pool:
+            break
+        gray = cv2.imread(str(patch_root / r["patch_path"]), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            continue
+        out.append((r, gray, assess_crop(gray, margins=margins_of(r))))
+    return out
+
+
+def pick(pool, cue: str, n: int):
+    """从 assessed 池子里按线索挑。clean 档全部要求机器分级 clean。"""
+    if cue == "typical":
+        cand = [(r, g, q) for r, g, q in pool
+                if q.tier == "clean" and not r["flags"]
+                and 0.10 <= r["ink_ratio"] <= 0.22]
+        return cand[:n]
     if cue in ("ink_heavy", "ink_light"):
-        pool = [r for r in clean if r["ink_ratio"] >= 0.12]   # 排除笔画极少的字
-        rng.shuffle(pool)
-        pool = pool[:sample_pool]
-        scored = []
-        for r in pool:
-            g = cv2.imread(str(patch_root / r["patch_path"]), cv2.IMREAD_GRAYSCALE)
-            if g is not None:
-                scored.append((ink_darkness(g), r))
-        scored.sort(key=lambda t: t[0])
-        return [r for _, r in (scored[:n] if cue == "ink_heavy" else scored[-n:])]
-    if cue == "border_residue":
-        pool = [r for r in rows if {"rule_bar", "frame_bars"} & set(r["flags"])]
-    elif cue == "neighbor_intrusion":
-        pool = [r for r in rows if "edge_blob" in r["flags"]]
-    elif cue == "typical":
-        pool = [r for r in clean if 0.10 <= r["ink_ratio"] <= 0.22]
-    else:
-        raise ValueError(cue)
-    rng.shuffle(pool)
-    return pool[:n]
+        cand = [(r, g, q) for r, g, q in pool
+                if q.tier == "clean" and not r["flags"] and r["ink_ratio"] >= 0.12]
+        cand.sort(key=lambda t: ink_darkness(t[1]))
+        return cand[:n] if cue == "ink_heavy" else cand[-n:]
+    if cue == "residue":
+        cand = [(r, g, q) for r, g, q in pool if q.residue]
+        cand.sort(key=lambda t: -t[2].foreign_core_px)     # 残留最重的优先
+        return cand[:n]
+    if cue == "truncated":
+        cand = [(r, g, q) for r, g, q in pool if q.truncated and not q.residue]
+        cand.sort(key=lambda t: -t[2].edge_ink_px)
+        return cand[:n]
+    if cue == "flagged":
+        # extractor 确定层 flag（rule_bar/frame_bars/edge_blob）：与 crop_quality
+        # 不同源的第二条退化线索，防止退化层只覆盖自家判据认得出的那种脏
+        cand = [(r, g, q) for r, g, q in pool
+                if {"rule_bar", "frame_bars", "edge_blob"} & set(r["flags"])]
+        return cand[:n]
+    raise ValueError(cue)
 
 
-def human_seeds(instances_gold: Path, book_rows: dict[str, list[dict]],
-                n: int) -> list[tuple[dict, str]]:
-    """char-segmentation/instances 的人工标签：最硬的一档独立线索。"""
+def human_seeds(instances_gold: Path, rows_by_book, patch_roots, n: int):
+    """char-segmentation/instances 的人工缺陷标签：最硬的退化层线索。"""
     gold = json.loads(instances_gold.read_text(encoding="utf-8"))
-    by_id = {f"{b}:{r['page']}:{r['col']}:{r['idx']}": r
-             for b, rows in book_rows.items() for r in rows}
+    by_id = {f"{b}:{r['page']}:{r['col']}:{r['idx']}": (b, r)
+             for b, rows in rows_by_book.items() for r in rows}
     out = []
     for g in gold:
         if g["quality"] not in ("contaminated", "truncated"):
             continue
-        key = f"{g['book']}:{g['page']}:{g['col']}:{g['idx']}"
-        rec = by_id.get(key)
-        if rec is not None:
-            out.append((rec, g["quality"]))
+        hit = by_id.get(f"{g['book']}:{g['page']}:{g['col']}:{g['idx']}")
+        if hit is None:
+            continue
+        b, r = hit
+        gray = cv2.imread(str(patch_roots[b] / r["patch_path"]),
+                          cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            continue
+        out.append((r, gray, assess_crop(gray, margins=margins_of(r)), b,
+                    f"human_{g['quality']}"))
     return out[:n]
 
 
-def write_sample(out_dir: Path, rec: dict, book: str, output_root: Path,
-                 cover: list[str], cue: str, commit: str,
-                 char: str | None = None) -> dict:
-    gray = cv2.imread(str(output_root / book / "phase4_chars" / rec["patch_path"]),
-                      cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        raise FileNotFoundError(rec["patch_path"])
+def write_sample(out_dir: Path, rec: dict, gray, quality, book: str,
+                 tier: str, cue: str, commit: str) -> dict:
     norm = normalize_patch(gray)
     skel = skeletonize(norm)
-
     out_dir.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out_dir / "input.png"), gray)
     cv2.imwrite(str(out_dir / "golden.png"), norm * 255)
@@ -179,15 +209,16 @@ def write_sample(out_dir: Path, rec: dict, book: str, output_root: Path,
         "golden": "golden.png",
         "golden_skeleton": "golden_skeleton.png",
         "tolerance": dict(TOLERANCE),
-        "cover": COVER_OVERRIDE.get(sid, cover),
-        "char": char,                     # 仅供人工检视，不参与指标
+        "tier": TIER_OVERRIDE.get(sid, tier),
+        "tier_detail": quality.to_dict(),
+        "char": None,                     # 像素回归不看字义
         "status": "known_defect" if defect else "verified",
         "sampling_cue": cue,
         "extractor_flags": rec["flags"],
         "ink_ratio": rec["ink_ratio"],
         "norm_params": {"size": NORM_SIZE, "margin_ratio": MARGIN_RATIO,
                         "noise_area": NOISE_AREA, "stroke_width": 3},
-        "schema_version": 1,
+        "schema_version": 2,
     }
     if defect:
         expected["defect"] = defect
@@ -198,22 +229,14 @@ def write_sample(out_dir: Path, rec: dict, book: str, output_root: Path,
     (out_dir / "info.json").write_text(json.dumps({
         "id": sid, "source": SOURCE_ITEM, "source_item": SOURCE_ITEM,
         "book": book, "instance_id": rec["id"],
-        "description": f"{cue} 线索抽样；flags={rec['flags']}；"
-                       f"ink_ratio={rec['ink_ratio']}",
-        "tags": [cue, book] + expected["cover"],
+        "description": f"tier={expected['tier']}；线索 {cue}；flags={rec['flags']}",
+        "tags": [expected["tier"], cue, book],
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     return expected
 
 
-CUE_COVER = {
-    "ink_heavy": ["ink_heavy"],
-    "ink_light": ["ink_light", "broken_stroke"],
-    "border_residue": ["border_residue"],
-    "neighbor_intrusion": ["neighbor_intrusion"],
-    "typical": [],
-    "human_contaminated": ["border_residue", "neighbor_intrusion"],
-    "human_truncated": ["broken_stroke"],
-}
+CLEAN_CUES = (("typical", 3), ("ink_heavy", 3), ("ink_light", 3))
+DEGRADED_CUES = (("residue", 3), ("truncated", 3), ("flagged", 2))
 
 
 def main() -> None:
@@ -223,8 +246,7 @@ def main() -> None:
     ap.add_argument("--page-type", default="../open-guji-dataset/page-type/expected.json")
     ap.add_argument("--instances-gold",
                     default="../open-guji-dataset/char-segmentation/instances/expected.json")
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
-    ap.add_argument("--per-cue", type=int, default=PER_CUE)
+    ap.add_argument("--pool", type=int, default=500, help="每册随机评估池大小")
     ap.add_argument("--seed", type=int, default=11)
     args = ap.parse_args()
 
@@ -233,59 +255,71 @@ def main() -> None:
     commit = git_commit()
     page_gold = json.loads(Path(args.page_type).read_text(encoding="utf-8"))
 
-    rows_by_book, char_of, all_by_book = {}, {}, {}
+    rows_by_book, pools, patch_roots = {}, {}, {}
     for book in ("vol01", "vol02"):
         body = {g["page"] for g in page_gold
                 if g["book"] == book and g["page_type"] == "body"}
-        index = {r["id"]: r for r in load_index(book, output_root)}
-        # human_* 那一档不要求有对齐金标：人工的 contaminated/truncated 标签
-        # 本身就证明了那一格是个（带残余或被切残的）字。
-        all_by_book[book] = [r for r in index.values()
-                             if r["page"] in body and r["cell_type"] == "char"]
-        labels, _ = clean_labels(
-            label_book(book, output_root / book, Path(args.corpus), pages=body)[0],
-            index)
-        char_of.update({x.instance_id: x.char for x in labels})
-        rows_by_book[book] = [index[x.instance_id] for x in labels
-                              if index[x.instance_id]["cell_type"] == "char"]
+        rows_by_book[book] = [r for r in load_index(book, output_root)
+                              if r["page"] in body]
+        patch_roots[book] = output_root / book / "phase4_chars"
+        pools[book] = assessed(rows_by_book[book], patch_roots[book],
+                               args.pool, args.seed)
 
-    picked: list[tuple[dict, str, str]] = []       # (记录, 册, 线索)
-    for cue in ("typical", "ink_heavy", "ink_light",
-                "border_residue", "neighbor_intrusion"):
-        for book in ("vol01", "vol02"):            # 两册均分，别只测一册
-            half = args.per_cue // 2
-            patch_root = output_root / book / "phase4_chars"
-            for rec in pick(rows_by_book[book], cue, half, args.seed, patch_root):
-                picked.append((rec, book, cue))
-
+    picked = []                            # (rec, gray, quality, book, tier, cue)
+    for cue, per_book in CLEAN_CUES:
+        for book in ("vol01", "vol02"):
+            for r, g, q in pick(pools[book], cue, per_book):
+                picked.append((r, g, q, book, "clean", cue))
+    for cue, per_book in DEGRADED_CUES:
+        for book in ("vol01", "vol02"):
+            for r, g, q in pick(pools[book], cue, per_book):
+                picked.append((r, g, q, book, "degraded", cue))
     gold_path = Path(args.instances_gold)
     if gold_path.exists():
-        for rec, quality in human_seeds(gold_path, all_by_book, args.per_cue):
-            picked.append((rec, rec["book"], f"human_{quality}"))
+        for r, g, q, book, cue in human_seeds(gold_path, rows_by_book,
+                                              patch_roots, 6):
+            picked.append((r, g, q, book, "degraded", cue))
+
+    # 去重（human seeds 可能与线索抽样撞车）
+    seen, uniq = set(), []
+    for item in picked:
+        if item[0]["id"] in seen:
+            continue
+        seen.add(item[0]["id"])
+        uniq.append(item)
 
     samples_dir = dataset / "samples"
-    for old in sorted(samples_dir.glob("[0-9][0-9][0-9]")):
-        if old.name != "000-example":
+    samples_dir.mkdir(parents=True, exist_ok=True)
+    for old in sorted(samples_dir.iterdir()):
+        if old.is_dir():
             for f in old.iterdir():
                 f.unlink()
             old.rmdir()
 
     written = []
-    for n, (rec, book, cue) in enumerate(picked, start=1):
-        out_dir = samples_dir / f"{n:03d}"
-        written.append(write_sample(out_dir, rec, book, output_root,
-                                    CUE_COVER.get(cue, []), cue, commit,
-                                    char_of.get(rec["id"])))
+    n = 0
+    for rec, gray, quality, book, tier, cue in uniq:
+        n += 1
+        sid = f"{n:03d}"
+        if sid in DROP:
+            continue
+        written.append(write_sample(samples_dir / sid, rec, gray, quality,
+                                    book, tier, cue, commit))
 
     summary = {
         "pipeline_version": commit,
         "n_samples": len(written),
         "n_verified": sum(1 for w in written if w["status"] == "verified"),
         "n_known_defect": sum(1 for w in written if w["status"] == "known_defect"),
+        "by_tier": {t: sum(1 for w in written if w["tier"] == t)
+                    for t in ("clean", "degraded")},
         "by_cue": {c: sum(1 for w in written if w["sampling_cue"] == c)
                    for c in sorted({w["sampling_cue"] for w in written})},
         "by_book": {b: sum(1 for w in written if w["book"] == b)
                     for b in sorted({w["book"] for w in written})},
+        "defects_by_tier": {t: sum(1 for w in written
+                                   if w["tier"] == t and w["status"] == "known_defect")
+                            for t in ("clean", "degraded")},
     }
     (dataset / "build_report.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
