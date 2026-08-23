@@ -412,6 +412,32 @@ def build_human_shard(out_dir: Path, store: Path, commit: str) -> dict:
                       "origin": f"human/{p['origin']}"
                                 + ("+review-correction" if rel != p["relation"] else "")})
 
+    # 漏网家族对（人工标签是三个分片里最干净的两端）。P3 轮实锤：
+    # 151:8:3(論)×40:2:4(諭) 对级 same（cov=0.9987, wmax=1）在新旧归一图上
+    # 都成立——此前 human 分片 purity 1.0 只是合并顺序的运气。钉死进回归。
+    by_char_h: dict[str, list[str]] = defaultdict(list)
+    for i in instances:
+        by_char_h[i["char"]].append(i["instance_id"])
+    seen_pairs = {frozenset((p["a"], p["b"])) for p in pairs}
+    pinned = [("book9all:151:8:3", "book9all:40:2:4",
+               "諭/論 对级漏网实锤（cov=0.9987, wmax=1，穿透完美档）"),
+              ("book9all:151:8:3", "book9all:43:5:19",
+               "諭/論 对级漏网实锤（cov=0.9930, wmax=9）")]
+    for a, b, note in pinned:
+        if a in char_of and b in char_of and frozenset((a, b)) not in seen_pairs:
+            seen_pairs.add(frozenset((a, b)))
+            pairs.append({"a": a, "b": b, "relation": "diff",
+                          "origin": "cluster_leak", "note": note})
+    for c1, c2 in CLUSTER_LEAK_FAMILIES:
+        a_ids, b_ids = sorted(by_char_h.get(c1, [])), sorted(by_char_h.get(c2, []))
+        for k in range(min(MAX_LEAK_PAIRS_PER_FAMILY, len(a_ids), len(b_ids))):
+            if frozenset((a_ids[k], b_ids[k])) in seen_pairs:
+                continue
+            seen_pairs.add(frozenset((a_ids[k], b_ids[k])))
+            pairs.append({"a": a_ids[k], "b": b_ids[k], "relation": "diff",
+                          "origin": "cluster_leak",
+                          "note": f"聚类实测漏网家族 {c1}/{c2}"})
+
     expected = {
         "source_item": SOURCE_ITEM,
         "book": "book9all",
@@ -483,9 +509,17 @@ def main() -> None:
             carrier = Path(args.carrier_dir) / f"carrier_{book}.jsonl"
         else:
             # 默认找产物目录里的载体（build_ocr_carrier.py 的推荐落点：
-            # 与 phase4 同目录，materialize_rev 会连带取到，天然同版）
-            default = output_root / book / "phase4_chars" / "ocr_carrier.jsonl"
-            carrier = default if default.exists() else None
+            # 与 phase4 同目录，materialize_rev 会连带取到，天然同版）。
+            # 载体入库晚于 PIPELINE_REV 时 archive 里没有 → 回落工作区
+            # output/（载体本来就是对 PIPELINE_REV 的切分构建的）。
+            carrier = None
+            for cand in (output_root / book / "phase4_chars" / "ocr_carrier.jsonl",
+                         Path("output") / book / "phase4_chars" / "ocr_carrier.jsonl"):
+                if cand.exists():
+                    carrier = cand
+                    break
+            if carrier is None:
+                print(f"  警告：{book} 无 OCR 载体，回落 phase6 转写（可能全 <unk>）")
         st = build_align_shard(book, out_dir, output_root, Path(args.corpus),
                                body, args.max_instances, args.seed, commit,
                                carrier=carrier)

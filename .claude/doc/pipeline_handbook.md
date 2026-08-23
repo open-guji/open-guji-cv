@@ -69,8 +69,8 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | E | 行列识别 | `segment` | 逐列 `layout` + `cells` | `column-layout`（36 页 289 计分列）| 列型准确率 93.8%，elastic F1 0.91 |
 | F | 格内净化 | `chars` | 图块像素归属 | `char-segmentation/cells`（60 合成）| 逐像素金标，见 `seg-bench` |
 | G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（91 真实，第十二轮）| 缺陷检出 100%，确定层零误报，误报 25%（含 boundary_ink 超采偏置）|
-| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（32，双层）| 回归门 28/28；clean 层 19 样本 0 缺陷，degraded 层 4 缺陷已记账 |
-| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6197 实例）| coverage 判据（2026-08-23 起默认）：purity 0.999/1.0/1.0，碎片率 2.80/3.58/2.92；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md）|
+| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（37，双层）| 回归门 33/33；clean 层 24 样本 **0 缺陷**（P3 修掉吃笔画 P0），degraded 层 4 缺陷已记账（厚残留，归切分层）|
+| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6177 实例）| coverage 判据（2026-08-23 起默认）：purity 0.99967/0.99967/0.98901，碎片率 2.99/3.45/3.00；human 分片的 諭/論 为对级漏网（never-match 家族靶子）；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md §7）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**1404 实例**）| top1 88.75%，字表上界 99.29% |
 | K | 上下文纠正 | `refine` | 定字 | `context-correction`（**1404 槽位**）| 基线 89.32%，混合 LM +2.14% |
 | L | 参考校对 | `collate` | 对齐 | `collation`（**0**，框架）| 规划中 |

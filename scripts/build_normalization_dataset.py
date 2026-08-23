@@ -46,23 +46,31 @@ SOURCE_ITEM = "06061300.cn"
 TOLERANCE = {"pixel_diff_ratio": 0.01, "binary_iou_min": 0.98,
              "skeleton_endpoint_delta_max": 2}
 
-# ── 目视确认结果（2026-08-23，对 502fa04 新切分产物重验）──────────────
+# ── 目视确认结果（2026-08-23，P3 归一化重写后重验）────────────────────
 #
 # 判据：**归一化有没有做它该做的事**（去残余 / 居中缩放 / 笔宽归一）。
 # 输入本身是坏切分不算归一化的错，但会记进 NOTES 说明测的是什么。
 # 改判定只改这几张表。上游切分每次重跑，四张表必须清空重验。
+#
+# P3 重验记录：101（clean 层 P0，shallow_tb 吃「二」底横）已由
+# remove_edge_specks 重写修复，golden 重冻为两横齐全的正确输出；
+# 029/035 输出随之微变（多保笔画/少删碎片），目视确认仍正确。
 VERDICTS: dict[str, str] = {           # sample_id -> 缺陷说明（进 known_defect 层）
-    # 四个同根因（与上一轮一致）：残留不贴图块边缘时 remove_edge_specks
-    # 够不着。036 最典型：界行竖线**贯穿字身**但不贴左右边，整条留下。
-    "031": "「指」下方两条版框横线（不贴下边）未去，golden 原样保留。",
-    "033": "字底部的邻行残带未去（输入本身被切 + 残带，残带是可去的那部分）。",
-    "034": "「造」下方一条横线（邻格边线，不贴边）未去。",
-    "036": "贯穿「妙」的界行竖线：中位不贴左右边，vline 判据够不着，整条留下。",
+    # 四个同根因：残留**厚**（版框线在这些实例里 6px+ 超细线上限）或与
+    # 字身连通（036 竖线贯穿「妙」= 同一连通域）。新守拙判据故意不删厚
+    # 组件——厚块归属是切分层（component_owner）的职责，归一化层删它必然
+    # 带上误杀本字笔画的风险（101 的教训）。留待切分层解决。
+    "031": "「指」下方两条版框横线未去（厚横线，超细线档）。",
+    "033": "字底部的邻行残带未去（厚残带；输入本身被切 + 残带）。",
+    "034": "「造」下方一条横线（邻格边线）未去（厚横线）。",
+    "036": "贯穿「妙」的界行竖线与字身连通成一个组件，组件级判据原理上够不着。",
 }
 NOTES: dict[str, str] = {              # sample_id -> 输入本身的说明（仍进回归门）
     "025": "「美」底横压边（轻度截断），照常处理即正确。",
     "027": "顶部截断的密字，照常处理即正确。",
-    "035": "「易」顶部被切（instances 人工标 contaminated），照常处理即正确。",
+    "029": "列尾残带格（flagged 线索）：P3 后多去掉左侧一条细碎片，仍正确。",
+    "035": "「易」顶部被切（instances 人工标 contaminated）。P3 后保留了上邻字"
+           "厚残角「¬」（守拙不删厚块）但左下撇更完整——净收益为正，判正确。",
 }
 DROP: dict[str, str] = {               # sample_id 占位 -> 目视发现不是字，剔除
     # 全部是列尾格（idx 18~20）：版框线/邻行残带占格。该由页型/切分层拦，
@@ -79,6 +87,22 @@ TIER_OVERRIDE: dict[str, str] = {      # sample_id -> 目视改判的 tier
     # frame_bars flag 命中但目视完整干净（「撫」，框线在 padding 带外缘）
     "030": "clean",
 }
+
+# ── 定向防护样本（P3：修「删组件」类规则前必须有的反例，glyph_db_first
+# 设计 §7 第 1 步）。id 固定、附加在常规抽样之后（编号 101 起），
+# 上游重跑后若实例消失要重新选。
+# 覆盖两类误杀风险 + 一个实锤缺陷：
+#   平行横画（二/三：非主体的横也是本字笔画）、游离点画（之/亦/文）、
+#   vol02:157:2:4 = shallow_tb 吃掉「二」底横的确诊实例。
+TARGETED: list[tuple[str, str, str]] = [   # (instance_id, tier, 说明)
+    ("vol02:157:2:4", "clean", "曾被 shallow_tb 吃掉底横的「二」（P3 已修）"),
+    ("vol01:15:1:1",  "clean", "二（平行横画防误杀）"),
+    ("vol01:4:1:15",  "clean", "三"),
+    ("vol01:4:2:4",   "clean", "之（游离点画）"),
+    ("vol01:15:1:9",  "clean", "亦"),
+    ("vol01:15:5:5",  "clean", "文"),
+    ("vol02:100:8:4", "clean", "一（与二的对照）"),
+]
 
 
 def git_commit() -> str:
@@ -277,6 +301,25 @@ def main() -> None:
                                               patch_roots, 6):
             picked.append((r, g, q, book, "degraded", cue))
 
+    # 定向防护样本（append 在最后，编号从 101 起，见 TARGETED 注释）
+    index_all = {}
+    for book in ("vol01", "vol02"):
+        for r in load_index(book, output_root):
+            index_all[r["id"]] = (book, r)
+    targeted_items = []
+    for iid, tier, note in TARGETED:
+        hit = index_all.get(iid)
+        if hit is None:
+            print(f"  定向样本消失（上游重跑？）: {iid}")
+            continue
+        book, r = hit
+        gray = cv2.imread(str(patch_roots[book] / r["patch_path"]),
+                          cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            continue
+        targeted_items.append((r, gray, assess_crop(gray, margins=margins_of(r)),
+                               book, tier, "targeted"))
+
     # 去重（human seeds 可能与线索抽样撞车）
     seen, uniq = set(), []
     for item in picked:
@@ -298,6 +341,17 @@ def main() -> None:
     for rec, gray, quality, book, tier, cue in uniq:
         n += 1
         sid = f"{n:03d}"
+        if sid in DROP:
+            continue
+        written.append(write_sample(samples_dir / sid, rec, gray, quality,
+                                    book, tier, cue, commit))
+    seen_ids = {rec["id"] for rec, *_ in uniq}
+    tn = 100
+    for rec, gray, quality, book, tier, cue in targeted_items:
+        if rec["id"] in seen_ids:
+            continue
+        tn += 1
+        sid = f"{tn:03d}"
         if sid in DROP:
             continue
         written.append(write_sample(samples_dir / sid, rec, gray, quality,
