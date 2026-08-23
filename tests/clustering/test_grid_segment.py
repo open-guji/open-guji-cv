@@ -963,3 +963,19 @@ def test_cell_bounds_stay_outside_a_worn_double_frame():
     g[:1200, 372:378] = 0    # 磨掉一截的外框线（覆盖率 0.75，检不出实心核心）
     (lo, hi), = cell_bounds_from_rules(g, 180.0, 180.0, 1, 40.0, 40.0)
     assert hi <= 360.0, hi
+
+
+def test_component_cells_accept_a_two_cell_spread_column():
+    """2 格拉开的官衔列也要切得出来——旧闸门只认 3.5 格那种，把这类挡在门外，
+    判了 elastic 却回落刚性，字就被格线腰斩。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import (GridParams,
+                                                      cells_from_components)
+    cell_h, w = 110.0, 130
+    col = np.full((int(cell_h * 21), w), 255, np.uint8)
+    for k in range(9):                      # 字距 2 格，字高 0.8 格
+        y = int(cell_h * (0.2 + 1.95 * k))
+        col[y:y + int(cell_h * 0.8), 20:w - 20] = 0
+    cells = cells_from_components(col, cell_h, 21, GridParams(21))
+    assert cells is not None
+    assert sum(1 for c in cells if c["type"] == "char") == 9, cells
