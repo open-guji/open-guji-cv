@@ -7,6 +7,11 @@ cd "$(dirname "$0")/.."
 books=("${@:-vol01 vol02}")
 [ $# -eq 0 ] && books=(vol01 vol02)
 
+# segment 页级并行度：多册并行时按册分核（2 册 × 满核在 4 核机上互相挤）
+cores=$(nproc 2>/dev/null || echo 1)
+GUJI_WORKERS=$(( cores / ${#books[@]} )); [ "$GUJI_WORKERS" -lt 1 ] && GUJI_WORKERS=1
+export GUJI_WORKERS
+
 run_book() {
   local b=$1
   for step in "segment output/$b --chars-per-line 21" "chars output/$b" \
