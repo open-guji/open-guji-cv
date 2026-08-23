@@ -142,8 +142,13 @@ def test_leading_blank_cells_keep_grid_anchor():
         assert abs(a["y_top"] - b["y_top"]) < 6
 
 
-def test_rigid_grid_uniform_cell_height():
-    """刚性网格：格高固定——所有格高度一致（±步长误差）。"""
+def test_rigid_grid_keeps_a_uniform_pitch():
+    """刚性网格：**格距**固定。
+
+    格线允许逐条吸附到字间空隙（snap_bounds_to_gaps），所以单格高度不再
+    严格相等——但吸附半径只有 SNAP_RANGE×格高，格高的离散度必须仍被它
+    框住。这条约束比「完全相等」更贴近版面的物理：栏格是刚性的，切哪一刀
+    才允许在空隙里挑位置。"""
     n = 8
     col = _make_column(n, jitter=5)
     page = np.full((col.shape[0] + 40, 140, ), 235, dtype=np.uint8)
@@ -156,7 +161,9 @@ def test_rigid_grid_uniform_cell_height():
     result = GridSegmenter(chars_per_line=n).segment_page(page, layout)
     cells = [c for c in result["columns"][0]["cells"] if c["type"] != "margin"]
     heights = [c["y_bottom"] - c["y_top"] for c in cells]
-    assert max(heights) - min(heights) < 1e-6
+    from open_guji_cv.clustering.grid_segment import SNAP_RANGE
+    span = max(heights) - min(heights)
+    assert span <= 2 * SNAP_RANGE * float(np.median(heights)) + 1e-6, heights
 
 
 def test_column_grid_fitting():
@@ -979,3 +986,51 @@ def test_component_cells_accept_a_two_cell_spread_column():
     cells = cells_from_components(col, cell_h, 21, GridParams(21))
     assert cells is not None
     assert sum(1 for c in cells if c["type"] == "char") == 9, cells
+
+
+def test_pitch_is_insensitive_to_the_prior():
+    """量物理常量的估计量必须对先验不敏感——先验给偏 6%，结果不许跟着跑。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import column_pitch
+    proj = np.zeros(2400)
+    for k in range(20):                      # 真字距 112，字高 90
+        proj[int(k * 112) + 11:int(k * 112) + 101] = 40.0
+    vals = [column_pitch(proj, 112 * s, 1.0) for s in (0.94, 1.0, 1.06)]
+    assert all(v is not None for v in vals), vals
+    assert max(vals) - min(vals) < 1.0, vals
+    assert abs(vals[1] - 112) < 1.5, vals
+
+
+def test_pitch_returns_none_on_a_non_rigid_column():
+    """字距忽大忽小的列量不出格高，宁可不给。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import column_pitch
+    proj = np.zeros(2400)
+    y = 20
+    # 步长刻意都**不是**格高的整数倍——整数倍那是「刚性列里夹空格」，
+    # 本来就该量得出来
+    for step in (112, 170, 135, 96, 158, 124, 186, 143, 105, 167):
+        proj[y:y + 80] = 40.0
+        y += step
+    assert column_pitch(proj, 112.0, 1.0) is None
+
+
+def test_snap_moves_a_line_out_of_a_stroke_into_the_gap():
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import snap_bounds_to_gaps
+    proj = np.zeros(1200)
+    for k in range(11):                      # 字 [k*100+10, k*100+90]，空隙 [90,110]
+        proj[k * 100 + 10:k * 100 + 90] = 50.0
+    bounds = [float(k * 100 + 86) for k in range(1, 10)]   # 线切进笔画 4px
+    out = snap_bounds_to_gaps(proj, bounds, 100.0)
+    assert all(90 <= y % 100 <= 100 or y % 100 == 0 for y in out), out
+    assert all(proj[int(y)] == 0 for y in out), out
+
+
+def test_snap_keeps_the_rigid_line_when_there_is_no_gap():
+    """上下两字真连在一起时不许乱滑——宁可在原处切一刀。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import snap_bounds_to_gaps
+    proj = np.full(1200, 50.0)
+    bounds = [float(k * 100) for k in range(1, 11)]
+    assert snap_bounds_to_gaps(proj, bounds, 100.0) == bounds
