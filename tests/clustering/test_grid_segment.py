@@ -1011,7 +1011,7 @@ def test_cell_bounds_widen_up_to_the_rule_but_not_into_it():
     from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
     g = _ruled_page(0.0, w=900, period=180)
     # 列格 [180,360]，文字带留 40px 内缩；界行在 180 与 360 上，线宽 2px
-    bounds = cell_bounds_from_rules(g, 180.0, 180.0, 3, 40.0, 40.0)
+    bounds, _bands = cell_bounds_from_rules(g, 180.0, 180.0, 3, 40.0, 40.0)
     lo, hi = bounds[0]
     assert lo < 220.0 and hi > 320.0, bounds     # 确实往外扩了
     assert lo > 181.0 and hi < 359.0, bounds     # 但没碰到界行
@@ -1022,7 +1022,7 @@ def test_cell_bounds_never_narrower_than_the_text_band():
     import numpy as np
     from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
     blank = np.full((1600, 900), 255, np.uint8)
-    (lo, hi), = cell_bounds_from_rules(blank, 180.0, 180.0, 1, 40.0, 40.0)
+    (lo, hi), = cell_bounds_from_rules(blank, 180.0, 180.0, 1, 40.0, 40.0)[0]
     assert lo >= 220.0 - 4.0 and hi <= 320.0 + 4.0, (lo, hi)
 
 
@@ -1033,7 +1033,7 @@ def test_cell_bounds_stay_outside_a_worn_double_frame():
     g = _ruled_page(0.0, w=900, period=180)
     g[:, 360:366] = 0        # 实心内框线
     g[:1200, 372:378] = 0    # 磨掉一截的外框线（覆盖率 0.75，检不出实心核心）
-    (lo, hi), = cell_bounds_from_rules(g, 180.0, 180.0, 1, 40.0, 40.0)
+    (lo, hi), = cell_bounds_from_rules(g, 180.0, 180.0, 1, 40.0, 40.0)[0]
     assert hi <= 360.0, hi
 
 
@@ -1183,3 +1183,33 @@ def test_refine_page_type_keeps_body_below_threshold():
                              "columns": [{"layout": "elastic"}] * 2}) == "body"
     # 非 body 原样返回
     assert refine_page_type({"page_type": "toc", "columns": cols}) == "toc"
+
+
+def test_bowed_rule_gets_per_band_bounds():
+    """弯的界行：各带的墙不在同一个 x，围栏要逐带跟着走。
+
+    实测 vol02/151 一条界行沿页高横向漂 49px——任何一条竖直裁切线要么在
+    某些高度裹进线、要么在另一些高度切掉字。逐带围栏每条带贴着自己带内的
+    线走；直边界仍保持扁平表示（cell_bands 不输出）。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import cell_bounds_from_rules
+    h, period = 2400, 180
+    g = np.full((h, 2 * period + 40), 255, np.uint8)
+    # 右边界的界行从 x=2*period+20 向左弯 30px
+    for y in range(h):
+        x = int(2 * period + 20 - 30 * y / h)
+        g[y, x - 1:x + 2] = 0
+    # 直的左界行
+    g[:, 18:21] = 0
+    bounds, bands = cell_bounds_from_rules(g, 20.0, float(period), 2, 40.0, 40.0)
+    assert bands[1] is not None, "弯边界应输出逐带裁切边"
+    his = [r[3] for r in bands[1]]
+    assert max(his) - min(his) > 15, his          # 各带的右墙确实在动
+    # 每条带的墙都在该带的线之内侧
+    for ya, yb, _lo, hi in bands[1]:
+        ymid = (ya + yb) / 2
+        x_line = 2 * period + 20 - 30 * ymid / h
+        assert hi <= x_line + 1, (hi, x_line)
+    assert bands[0] is None or \
+        max(r[2] for r in bands[0]) - min(r[2] for r in bands[0]) <= 31
