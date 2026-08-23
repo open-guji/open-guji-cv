@@ -86,12 +86,24 @@ CELL_RULE_CLEARANCE = 4.0  # 停下之后再往回让这么多像素，躲开线
 CELL_FENCE_BANDS = 6       # 围栏用的覆盖率**分带**统计：整页统计对斜/弯的界行
                            # 是瞎的（墨摊到二三十个 x 上，每个都不到 0.2），
                            # 分带后同一条线在每带里都是直的，取各带最内侧
-CELL_FENCE_LINE_FRAC = 0.45  # 带内竖直开运算的长度比例。带高约 1/6 页高（≈3 个
-                           # 字高），0.45 ≈ 1.4 个字高——字的竖笔够不着
+CELL_FENCE_LINE_FRAC = 0.45  # 未给定 min_run 时，带内开运算长度 = 此比例 × 带高
+RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 此倍数 × 列距。
+                           # **不能挂在页高上**：那样阈值折算成「几个字高」会随
+                           # 页面尺寸浮动——真页 2483px 高时是 1.66 个字高（安全），
+                           # 合成页 420px 高时只剩 0.53 个字高，文字块自己就被当成
+                           # 界行了。列距是版面自身的尺度，字的竖笔最长约 1 个字高
+                           # （≈0.6 列距），1.2 倍列距留了一倍余量
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
+INSET_TOL_HI = 1.25        # 页内缩**高于**共识此比例 → 同样是量错了，也换成共识值。
+                           # 塌掉的危害是列框贴着界行走（把线圈进来），涨上去的
+                           # 危害相反且更隐蔽：文字带被人为收窄，字的偏旁被裁掉，
+                           # 而 rule_in_col 一路是 0，任何以「界行有没有进框」为
+                           # 判据的门控都发现不了。实测 vol02 有 14 页 inset_l
+                           # 超共识 25%（最极端 63px vs 共识 33），那些页的图块
+                           # 缺掉整个偏旁——「但」被裁成「且」、「說」丢了言字旁
                            # 实测 inset_l 中位 32.5px，但有 69 页塌到 <15px，
                            # 那些页 rule_in_col 均值 0.083、其余页才 0.006
 
@@ -125,7 +137,7 @@ def _vline_cov(binary: np.ndarray, line_frac: float = 0.3) -> np.ndarray:
     return cv2.dilate(cv2.erode(binary, k), k).sum(axis=0) / h
 
 
-def _vline_cov_banded(binary: np.ndarray,
+def _vline_cov_banded(binary: np.ndarray, min_run: float | None = None,
                       n_bands: int = CELL_FENCE_BANDS,
                       line_frac: float = CELL_FENCE_LINE_FRAC) -> np.ndarray:
     """逐 x 的竖线覆盖率，**分带取最大**——斜线/弯线也拦得住。
@@ -140,13 +152,20 @@ def _vline_cov_banded(binary: np.ndarray,
     分带围栏 0.43%，而被裁掉笔画的比例反而更低。
     """
     h = binary.shape[0]
+    if min_run is None:                       # 未给尺度 → 按页高分带（旧行为）
+        bands, run = n_bands, None
+    else:
+        # 带高至少 3 倍 min_run，否则线在带内占比过高、覆盖率失去分辨力
+        bands = max(1, int(h // max(1.0, 3.0 * min_run)))
+        run = int(round(min_run))
     out = np.zeros(binary.shape[1], dtype=float)
-    for i in range(n_bands):
-        a, b = h * i // n_bands, h * (i + 1) // n_bands
+    for i in range(bands):
+        a, b = h * i // bands, h * (i + 1) // bands
         if b - a < 3:
             continue
-        k = cv2.getStructuringElement(
-            cv2.MORPH_RECT, (1, max(3, int((b - a) * line_frac))))
+        klen = max(3, run if run is not None else int((b - a) * line_frac))
+        klen = min(klen, b - a)
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, klen))
         seg = binary[a:b]
         out = np.maximum(out,
                          cv2.dilate(cv2.erode(seg, k), k).sum(axis=0) / (b - a))
@@ -219,15 +238,29 @@ def estimate_shear(gray: np.ndarray) -> float:
     return best_t
 
 
-def rule_segments(gray: np.ndarray) -> list[tuple[int, int]]:
+def rule_segments(gray: np.ndarray,
+                  min_run: float | None = None) -> list[tuple[int, int]]:
     """页面上「竖直长线」的 x 区间（界行/版框竖线）。
 
-    必须在**去错切帧**里调用——斜着走的界行覆盖率只有 0.1~0.2，
-    根本过不了 RULE_COV_T。
+    覆盖率**分带**统计（`_vline_cov_banded`），不是整页统计。整页统计要求
+    一条竖直连续段跨 0.3 页高，界行只要斜或**弯**几个像素就过不了阈值——
+    而弯的那部分错切校正根本救不了：实测 vol02/151 在 ±0.02 的全部候选角度
+    里，界行证据最多只提升 1.02×，可它每一条带里的覆盖率都是 1.00，线明明
+    都在。分带之后同一条线在带内几乎是直的，照样检得出来。
+
+    这件事的下游代价极大：界行检不出来，`snap_columns_to_rules`（≥3 条才
+    动）、`_period_from_rules`、`cell_bounds_from_rules` 的围栏**全部失效**，
+    而 `rule_in_col` 恒为 0 又让所有以它为判据的择优门控一律放行——页面
+    悄悄退化成纯投影拟合，列相位漂了也没人报。实测 vol02 里界行检出
+    ≤1 条的页，图块缺掉整个偏旁的比例是正常页的数倍。
+
+    代价是漂移的线会给出偏宽的 x 区间（各带取并集）。实测 vol02/151 一条
+    界行跨 6~7px、正常页 2~3px，相对 33px 的内缩仍然够用。
     """
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
-    cov = _vline_cov((gray < BINARY_THRESHOLD).astype(np.uint8))
+    cov = _vline_cov_banded((gray < BINARY_THRESHOLD).astype(np.uint8),
+                            min_run)
     xs = np.where(cov > RULE_COV_T)[0]
     if len(xs) == 0:
         return []
@@ -323,7 +356,7 @@ def snap_columns_to_rules(gray: np.ndarray, vproj: np.ndarray,
     193 页采纳，总体从 0.136 降到 0.050。
     """
     period_in = period
-    segs = rule_segments(gray)
+    segs = rule_segments(gray, period * RULE_MIN_RUN_PERIOD)
     if len(segs) < MIN_RULES_TO_SNAP:
         return cx0, period, inset_l, inset_r
     centers = np.array([(a + b) / 2 for a, b in segs])
@@ -390,9 +423,10 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
     """
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
-    cov = _vline_cov_banded((gray < BINARY_THRESHOLD).astype(np.uint8))
+    run = period * RULE_MIN_RUN_PERIOD
+    cov = _vline_cov_banded((gray < BINARY_THRESHOLD).astype(np.uint8), run)
     w = len(cov)
-    centers = [(a + b) / 2 for a, b in rule_segments(gray)]
+    centers = [(a + b) / 2 for a, b in rule_segments(gray, run)]
     tol = period * CELL_RULE_TOL
     # 文字带本身也先内缩一点：界行正好压在带边上时，这一点点就是全部的余量
     shrink = min(max(period - inset_l - inset_r, 0.0) * 0.03, 4.0)
@@ -1405,9 +1439,11 @@ class GridSegmenter:
                 # 列框于是贴着界行走、把界行圈进去——实测内缩塌掉的 69 页
                 # rule_in_col 均值 0.083，内缩正常的页只有 0.006，差 14 倍。
                 # 放在界行吸附**之后**：吸附会按新相位重量一遍内缩，早设会被覆盖。
-                if inset_l < inset_prior[0] * INSET_TOL:
+                if not (inset_prior[0] * INSET_TOL <= inset_l
+                        <= inset_prior[0] * INSET_TOL_HI):
                     inset_l = float(inset_prior[0])
-                if inset_r < inset_prior[1] * INSET_TOL:
+                if not (inset_prior[1] * INSET_TOL <= inset_r
+                        <= inset_prior[1] * INSET_TOL_HI):
                     inset_r = float(inset_prior[1])
             # left_x/right_x 是**文字带**（正常居中字的范围，网格拟合用）；
             # cell_left_x/cell_right_x 是**图块裁切边**（贴着实测界行内缘，
@@ -1688,6 +1724,11 @@ class GridSegmenter:
         # 的列格切片里内容范围量不准，会塌到 0~6px——列框于是贴着界行走。
         # 实测全书 inset_l 中位 32.5px，却有 69 页塌到 <15px，那些页
         # rule_in_col 均值 0.083、内缩正常的页只有 0.006，差 14 倍。
+        #
+        # **两个方向都要管。** 涨上去的那一侧危害相反且更隐蔽：文字带被人为
+        # 收窄，字的偏旁被裁掉，而 rule_in_col 一路是 0——以「界行有没有进框」
+        # 为判据的门控完全发现不了。实测 vol02 有 14 页 inset_l 超共识 25%，
+        # 那些页的图块缺掉整个偏旁（「但」裁成「且」、「說」丢了言字旁）。
         n_inset_fix = 0
         if self.n_cols:
             ils = [r["grid"]["inset_l"] for r in results.values()
@@ -1698,8 +1739,10 @@ class GridSegmenter:
                 prior = (float(np.median(ils)), float(np.median(irs)))
                 off = [s2 for s2, r in results.items()
                        if r.get("grid", {}).get("period")
-                       and (r["grid"]["inset_l"] < prior[0] * INSET_TOL
-                            or r["grid"]["inset_r"] < prior[1] * INSET_TOL)]
+                       and not (prior[0] * INSET_TOL <= r["grid"]["inset_l"]
+                                <= prior[0] * INSET_TOL_HI
+                                and prior[1] * INSET_TOL <= r["grid"]["inset_r"]
+                                <= prior[1] * INSET_TOL_HI)]
                 for stem, img_path, layout in pages:
                     if stem not in off:
                         continue

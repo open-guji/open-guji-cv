@@ -424,10 +424,46 @@ def test_rule_segments_finds_the_rules():
     assert len(segs) == 4, segs          # w//period - 1 = 4 条
 
 
-def test_rule_segments_blind_to_tilted_rules():
-    """斜界行的覆盖率被摊薄，检不出——这正是必须先去错切的理由。"""
-    from open_guji_cv.clustering.grid_segment import rule_segments
-    assert len(rule_segments(_ruled_page(0.015))) < 2
+def test_rule_evidence_is_blind_to_tilted_rules():
+    """整页覆盖率对斜界行是瞎的——这正是错切校正的目标函数用它的理由。"""
+    from open_guji_cv.clustering.grid_segment import rule_evidence
+    assert rule_evidence(_ruled_page(0.015)) < 0.2 * rule_evidence(_ruled_page(0.0))
+
+
+def _bowed_page(amp=15.0, h=2400, w=1700, period=185):
+    """造一张界行**弯**的页：竖线按正弦横向鼓出 amp 像素。
+
+    这是实测 vol02/151 的形态——不是斜（错切校正在 ±0.02 的全部候选角度里
+    只能把界行证据提升 1.02×），而是弯，任何整体线性变换都摆不正它。
+    """
+    import numpy as np
+    g = np.full((h, w), 255, np.uint8)
+    for k in range(1, w // period):
+        for y in range(h):
+            x = int(k * period + amp * np.sin(np.pi * y / h))
+            if 0 <= x < w:
+                g[y, max(0, x - 1):x + 2] = 0
+    return g
+
+
+def test_banded_detection_finds_bowed_rules_that_page_cov_misses():
+    """弯的界行整页统计检不出来，分带能——下游一整套机制都靠它。
+
+    界行一旦检不出，snap_columns_to_rules（≥3 条才动）、_period_from_rules、
+    cell_bounds_from_rules 的围栏全部失效，而 rule_in_col 恒为 0 又让所有以
+    它为判据的择优门控一律放行：页面悄悄退化成纯投影拟合。实测 vol02/151
+    整页只检出 1 条界行，分带后是 9 条。
+    """
+    from open_guji_cv.clustering.grid_segment import (BINARY_THRESHOLD,
+                                                      RULE_COV_T, _vline_cov,
+                                                      rule_segments)
+    g = _bowed_page()
+    binary = (g < BINARY_THRESHOLD).astype(np.uint8)
+    # 整页统计：弯线被摊薄，只剩正弦最平的那一小段还过阈值
+    whole = _vline_cov(binary)
+    whole_lines = np.count_nonzero(np.diff((whole > RULE_COV_T).astype(int)) > 0)
+    assert whole_lines == 0, whole_lines
+    assert len(rule_segments(g, 185 * 1.2)) >= 6
 
 
 def test_snap_moves_column_phase_onto_the_rules():
@@ -876,9 +912,38 @@ def test_inset_prior_leaves_a_healthy_inset_alone():
                                           "bottom": {"intercept": 1960}}}}
     seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
     a = seg.segment_page(page, layout, period_prior=float(period))
+    prior = float(a["grid"]["inset_l"])
     b = seg.segment_page(page, layout, period_prior=float(period),
-                         inset_prior=(10.0, 10.0))
+                         inset_prior=(prior * 0.95, prior * 0.95))
     assert abs(a["grid"]["inset_l"] - b["grid"]["inset_l"]) < 1e-6
+
+
+def test_inset_prior_also_clamps_an_inflated_inset():
+    """内缩**涨上去**同样是量错了，也要换成共识值。
+
+    塌掉的危害是列框贴着界行走；涨上去的危害相反且更隐蔽——文字带被人为
+    收窄、字的偏旁被裁掉，而 rule_in_col 一路是 0，以「界行有没有进框」
+    为判据的门控完全发现不了。实测 vol02 有 14 页 inset_l 超共识 25%，
+    那些页的图块缺掉整个偏旁（「但」裁成「且」）。"""
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+    n_cols, period, h, w = 9, 185, 2000, 9 * 185 + 20
+    page = np.full((h, w), 245, np.uint8)
+    for k in range(n_cols + 1):
+        x = 10 + k * period
+        if x < w:
+            page[40:h - 40, x - 2:x + 2] = 20
+    for k in range(n_cols):
+        x = 10 + k * period + 40
+        for i in range(14):
+            page[70 + i * 130:70 + i * 130 + 100, x:x + period - 80] = 20
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
+    a = seg.segment_page(page, layout, period_prior=float(period))
+    prior = float(a["grid"]["inset_l"]) * 0.5          # 本页量出来是共识的 2 倍
+    b = seg.segment_page(page, layout, period_prior=float(period),
+                         inset_prior=(prior, prior))
+    assert abs(b["grid"]["inset_l"] - prior) < 1e-6, b["grid"]["inset_l"]
 
 
 def test_later_passes_keep_the_corrected_cell_height(tmp_path):
