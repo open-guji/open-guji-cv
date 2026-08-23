@@ -188,6 +188,37 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
     return out, True
 
 
+def page_reference(page: str, slots: list[tuple[int, int, str]],
+                   corpus: str, corpus_index: dict[str, list[int]],
+                   window_pad: int = WINDOW_PAD,
+                   ) -> dict[tuple[int, int], tuple[str | None, str]]:
+    """免闸参考对齐：逐字位 best-effort 整理本字（**审查页面参考用，非金标**）。
+
+    与 label_page 的区别：不设采信闸——equal 与等长 replace 段全部取
+    对应语料字（replace 不限段长、不要求 equal 夹住），所以噪声比过闸
+    标签大得多，只配当人眼参考；insert/delete/不等长段无对应（None）。
+    非汉字参考（语料换行等）也置 None。返回 {(col, idx): (字|None, op)}。
+    """
+    text = "".join(ch for _, _, ch in slots)
+    offset = anchor_page(text, corpus_index)
+    if offset is None:
+        return {}
+    lo = max(0, offset)
+    hi = min(len(corpus), offset + len(text) + window_pad)
+    window = corpus[lo:hi]
+    sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
+    out: dict[tuple[int, int], tuple[str | None, str]] = {}
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        aligned = tag == "equal" or (tag == "replace" and (i2 - i1) == (j2 - j1))
+        for k in range(i2 - i1):
+            col, idx, _ = slots[i1 + k]
+            ref = window[j1 + k] if aligned else None
+            if ref is not None and not is_han(ref):
+                ref = None
+            out[(col, idx)] = (ref, tag)
+    return out
+
+
 def carrier_slots(carrier_path: str | Path) -> dict[str, list[tuple[int, int, str]]]:
     """OCR 载体 jsonl（build_ocr_carrier.py 产出）→ slots_by_page。
 

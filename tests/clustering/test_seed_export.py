@@ -201,13 +201,20 @@ def test_render_html_theme_tokens_three_states(seed_book):
 
 
 def test_render_html_persistence_wiring(seed_book):
-    """三层持久化：.txt 副檔名（.jsonl 教训）+ localStorage + 兜底。"""
+    """三层持久化（二轮：整页 publish(html)）：日志内嵌 + localStorage + 兜底。
+
+    一轮的 files 形式（publish({'seed_events.txt':…})）对单文件 artifact
+    拒 capability_disabled（vol01 第 4 页实测）——改整页快照发布，
+    日志内嵌页面自身，恢复不再走 fetch。
+    """
     page = render_seed_html(build_seed_batch(seed_book, _queue(seed_book),
                                              page=4))
-    assert "'seed_events.txt'" in page
-    assert "contentType: 'text/plain'" in page
-    assert ".jsonl'" not in page                      # 绝不再用 .jsonl 发布
-    assert "fetch('seed_events.txt')" in page         # 恢复路径
+    assert "snapshotHtml" in page                     # 整页快照发布
+    assert "ns.publish(snapshotHtml())" in page
+    assert "seed_events.txt'" not in page.replace(    # files 形式已废
+        ".seed_events.txt", "")                       # （下载文件名除外）
+    assert "fetch(" not in page                       # 恢复不走网络
+    assert "sessionStorage" in page                   # 重载前后视图接续
     assert "localStorage" in page                     # 崩溃备份
     assert "navigator.clipboard" in page              # 复制主路径
     assert 'id="dl"' in page and "selectLog" in page  # 下载/全选兜底

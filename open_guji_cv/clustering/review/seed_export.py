@@ -129,12 +129,15 @@ def _assemble_choices(item: SeedItem) -> list[dict]:
         if ch not in info:
             order.append(ch)
             info[ch] = {"char": ch, "ocr_prob": None, "align_op": None,
-                        "db_cov": None, "proposed": False}
+                        "ref_op": None, "db_cov": None, "proposed": False}
         for k, v in kv.items():
             if v is not None and info[ch].get(k) in (None, False):
                 info[ch][k] = v
 
     add(item.proposed, proposed=True)
+    ctx = item.context or {}
+    if ctx.get("ref_char"):                       # 整理本参考（免闸，1:1 对位）
+        add(ctx["ref_char"], ref_op=ctx.get("ref_op"))
     if item.ocr:
         topk = item.ocr.get("topk") or []
         if not topk and item.ocr.get("char"):
@@ -204,6 +207,7 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
                         "label": DOUBT_LABELS.get(c, c)}
                        for c in (it.doubts or [])],
             "db": it.match,
+            "context": it.context,
             "note": it.note,
         })
 
@@ -249,6 +253,8 @@ def _render_choice(i: int, c: dict) -> str:
     tags = []
     if c.get("proposed"):
         tags.append('<span class="tag t-prop">拟</span>')
+    if c.get("ref_op"):
+        tags.append('<span class="tag t-ref">整理本</span>')
     if c.get("ocr_prob") is not None:
         tags.append(f'<span class="tag t-ocr">OCR {c["ocr_prob"]:.0%}</span>')
     if c.get("align_op"):
@@ -273,7 +279,7 @@ def _render_evidence(e: dict) -> str:
     else:
         rows.append('<div class="evi-row"><span class="evi-k">OCR</span>'
                     '<span class="none">无结果</span></div>')
-    # 整理本对齐行
+    # 整理本行：过闸对齐（强参考）与免闸逐位参考（弱参考）分开展示
     if e["align"] and e["align"].get("char"):
         op = e["align"].get("op") or "?"
         cls = "t-eq" if op == "equal" else "t-rep"
@@ -282,8 +288,16 @@ def _render_evidence(e: dict) -> str:
             f'<span class="chip">{_esc(e["align"]["char"])}</span>'
             f'<span class="tag {cls}">{_esc(op)}</span></div>')
     else:
-        rows.append('<div class="evi-row"><span class="evi-k">整理本</span>'
-                    '<span class="none">无对齐</span></div>')
+        ctx = e.get("context") or {}
+        if ctx.get("ref_char"):
+            rows.append(
+                f'<div class="evi-row"><span class="evi-k">整理本</span>'
+                f'<span class="chip big">{_esc(ctx["ref_char"])}</span>'
+                f'<span class="tag t-ref">参考·{_esc(ctx.get("ref_op") or "?")}'
+                '</span><small class="near">免闸逐位参考，非金标</small></div>')
+        else:
+            rows.append('<div class="evi-row"><span class="evi-k">整理本</span>'
+                        '<span class="none">无对应（该位附近有增/漏字）</span></div>')
     # 库内行
     db = e.get("db")
     if db and (db.get("candidates") or db.get("matched_id")):
@@ -311,6 +325,41 @@ def _render_evidence(e: dict) -> str:
     return "".join(rows)
 
 
+_CTX_WIN = 5     # 上下文条：当前字上下各显示几个字
+
+
+def _render_context(e: dict) -> str:
+    """竖排上下文条：该列 OCR 载体文与整理本参考文并排，当前字高亮。
+
+    只开窗 pos±_CTX_WIN（整列可能 20 字，全部竖排比图块还高）；
+    截断端加「⋮」。列文按古籍阅读序自上而下（writing-mode 竖排）。
+    """
+    ctx = e.get("context") or {}
+    col_ocr, col_ref, pos = ctx.get("col_ocr"), ctx.get("col_ref"), ctx.get("pos")
+    if not col_ocr or pos is None:
+        return ""
+    lo = max(0, pos - _CTX_WIN)
+    hi = min(len(col_ocr), pos + _CTX_WIN + 1)
+
+    def vline(text: str | None, label: str) -> str:
+        if not text:
+            return ""
+        chars = []
+        if lo > 0:
+            chars.append('<span class="ell">⋮</span>')
+        for i in range(lo, min(hi, len(text))):
+            ch = _esc(text[i])
+            chars.append(f'<b class="cur">{ch}</b>' if i == pos
+                         else f'<span>{ch}</span>')
+        if hi < len(text):
+            chars.append('<span class="ell">⋮</span>')
+        return (f'<div class="vline"><span class="vlab">{label}</span>'
+                f'<div class="vtxt">{"".join(chars)}</div></div>')
+
+    return (f'<div class="ctx">{vline(col_ocr, "OCR")}'
+            f'{vline(col_ref, "整理本")}</div>')
+
+
 def _render_seed_card(e: dict) -> str:
     iid = _esc(e["instance_id"])
     tier = ('<span class="tag t-rep">degraded</span>'
@@ -324,7 +373,7 @@ def _render_seed_card(e: dict) -> str:
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
-<div class="imgs">{_img(e["patch_b64"], "orig", "原图")}{_img(e["norm_b64"], "norm", "归一")}</div>
+<div class="imgs">{_img(e["patch_b64"], "orig", "原图")}{_img(e["norm_b64"], "norm", "归一")}{_render_context(e)}</div>
 <div class="main">
 <div class="cands">{choices}
 <span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
@@ -410,6 +459,18 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 .t-eq{color:var(--done);border-color:var(--done)}
 .t-rep,.t-skip{color:var(--doubt);border-color:var(--doubt)}
 .t-ocr,.t-db{color:var(--muted)}
+.t-ref{color:var(--seal);border-color:var(--seal)}
+.chip.big{font-size:1.3rem}
+.ctx{display:flex;gap:.35rem;align-items:flex-start}
+.vline{display:flex;flex-direction:column;align-items:center;gap:.25rem}
+.vlab{font-size:.62rem;color:var(--muted);letter-spacing:.1em;
+  writing-mode:horizontal-tb}
+.vtxt{writing-mode:vertical-rl;text-orientation:upright;
+  font-size:1.02rem;line-height:1.35;letter-spacing:.12em;
+  border:1px solid var(--line);border-radius:2px;background:var(--paper);
+  color:var(--ink);padding:.35rem .15rem;min-height:7.5rem}
+.vtxt .cur{color:var(--seal);background:var(--hl);border-radius:2px}
+.vtxt .ell{color:var(--muted)}
 .other{display:inline-flex;gap:.3rem}
 .other-in{font:inherit;font-size:1.1rem;width:5em;background:var(--paper);
   color:var(--ink);border:1px solid var(--line);border-radius:3px;
@@ -470,8 +531,12 @@ _JS = """
     disabled = true;
     status(why + ' — 記錄仍在本機，請點上方「複製記錄」貼回對話', true); }
 
-  // ── 持久化：複製為主路徑，files-publish 只是加分項（見 artifact_export 教訓）──
-  var pubTimer = 0, disabled = false;
+  // ── 持久化：整頁 publish(html)。單文件經典 artifact 只有這條自動路徑
+  // ——files 形式對它拒 capability_disabled（vol01 第 4 頁首輪實測）。
+  // 日誌內嵌在 #guji-log 裡隨頁面一起發布：發布成功後 shell 會重載本視
+  // 圖到新版本，重載前把滾動位置存 sessionStorage，重載後日誌已在頁裡、
+  // 狀態由 restore() 重放。複製/下載兜底照舊，永遠可用。
+  var pubTimer = 0, disabled = false, publishing = false;
   function withTimeout(pr, ms, tag){
     return new Promise(function(res, rej){
       var done = false;
@@ -502,31 +567,62 @@ _JS = """
       : (n ? '複製 ' + n + ' 條記錄' : '尚無記錄');
     bar.setAttribute('data-pending', pending > 0 ? '1' : '0'); }
 
+  function snapshotHtml(){
+    // 當前 DOM 就是要發布的頁面：日誌/卡片狀態已寫在屬性與文本裡，
+    // 重開時 restore() 按日誌重放即可。active 高亮不入快照。
+    var a = list.querySelector('.card.active');
+    if(a) a.classList.remove('active');
+    var html = '<!doctype html>\\n' + document.documentElement.outerHTML;
+    if(a) a.classList.add('active');
+    return html; }
+  function stashView(){
+    try {
+      var a = list.querySelector('.card.active');
+      sessionStorage.setItem(LSKEY + ':view', JSON.stringify({
+        iid: a ? a.getAttribute('data-iid') : null,
+        y: window.scrollY || 0 }));
+    } catch(e){} }
+  function restoreView(){
+    try {
+      var raw = sessionStorage.getItem(LSKEY + ':view');
+      if(!raw) return;
+      sessionStorage.removeItem(LSKEY + ':view');
+      var v = JSON.parse(raw);
+      if(v.iid){ var c = cardOf(v.iid); if(c){ setActive(c); return; } }
+      if(v.y) window.scrollTo(0, v.y);
+    } catch(e){} }
+
   function publishNow(){
-    if(disabled) return;
+    if(disabled || publishing) return;
+    var t = document.querySelector('.other-in:focus');
+    if(t && t.value){ schedulePublish(); return; }   // 正在手輸，等一等
     nsPromise.then(function(ns){
       if(!ns){ fail('此視圖無自動儲存'); return; }
+      publishing = true;
       status('儲存中…');
-      // 副檔名必須是平台能推斷類型的（.jsonl → invalid_content 整批丟失）
-      withTimeout(ns.publish({'seed_events.txt': {content: log.textContent,
-                                                  contentType: 'text/plain'}}),
-                  20000, 'publish')
+      saveLocal(); stashView();
+      withTimeout(ns.publish(snapshotHtml()), 30000, 'publish')
         .then(function(){
-          disabled = false; status('已儲存 ' + lines().length + ' 條');
+          // 成功後 shell 會把本視圖重載到新版本；此行多半來不及顯示
+          publishing = false; disabled = false;
+          status('已儲存 ' + lines().length + ' 條');
         }).catch(function(e){
+          publishing = false;
           var c = (e && e.code) || 'unknown';
           if(c === 'rate_limited'){
-            status('儲存排隊中…'); setTimeout(publishNow, 30000); }
-          else if(c === 'upstream_error'){
-            setTimeout(publishNow, 4000 + Math.random() * 3000); }
-          else if(c === 'conflict'){ saveLocal(); }
+            status('儲存排隊中…'); pubTimer = setTimeout(publishNow, 30000); }
+          else if(c === 'upstream_error' || c === 'publish_timeout'){
+            pubTimer = setTimeout(publishNow, 5000 + Math.random() * 4000); }
+          else if(c === 'conflict'){ saveLocal(); /* shell 正在重載到新版 */ }
           else { fail('自動儲存失效（' + c + '）'); }
         });
     }); }
   function schedulePublish(){
     status('未儲存…');
-    clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 3000); }
+    clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 6000); }
   window.addEventListener('beforeunload', function(){ saveLocal(); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden'){ saveLocal(); } });
 
   // ── 事件發射 ──
   function seqNext(){
@@ -623,45 +719,49 @@ _JS = """
     } else { card.setAttribute('data-state', 'open'); setChosen(card, ''); }
     progress(); setActive(card); }
 
-  // ── 恢復：已發布 seed_events.txt + localStorage，按 (batch,seq) 合併重放 ──
+  // ── 恢復：頁內嵌日誌（上次整頁發布帶回）∪ localStorage，
+  //          按 (batch,seq) 合併去重、按 seq 順序重放 ──
   function restore(){
-    fetch('seed_events.txt')
-      .then(function(r){ return r.ok ? r.text() : ''; })
-      .catch(function(){ return ''; })
-      .then(function(saved){
-        var localTxt = '';
-        try { localTxt = localStorage.getItem(LSKEY) || ''; } catch(e){}
-        var seen = {}, merged = [], extra = 0;
-        function add(l, isLocal){
-          try { var ev = JSON.parse(l.slice(PREFIX.length + 1)); }
-          catch(e){ return; }
-          var key = ev.batch + '#' + ev.seq;
-          if(seen[key]) return;
-          seen[key] = 1; merged.push(l);
-          if(isLocal) extra++; }
-        (saved.match(/GUJI-SEED-EVENT .*/g) || []).forEach(function(l){ add(l, 0); });
-        (localTxt.match(/GUJI-SEED-EVENT .*/g) || []).forEach(function(l){ add(l, 1); });
-        if(merged.length){
-          log.textContent = merged.join('\\n') + '\\n';
-          var mx = 0;
-          var evs = events();
-          evs.forEach(function(ev){
-            if(ev.batch === BATCH && ev.seq > mx) mx = ev.seq; });
-          log.setAttribute('data-seq', String(mx));
-          // 按 seq 順序重放：同一 instance 後到覆蓋
-          evs.sort(function(a, b){ return (a.seq||0) - (b.seq||0); });
-          evs.forEach(function(ev){
-            if(ev.op === 'skip'){
-              var c = cardOf(ev.instance_id);
-              if(c) c.removeAttribute('data-undone'); }
-            applyVisual(ev);
-            undoStack.push({iid: ev.instance_id, op: ev.op}); });
-        }
-        progress();
-        if(extra) schedulePublish();
-        else if(merged.length) status('已儲存 ' + merged.length + ' 條');
-        advance(null);
-      }); }
+    var saved = log.textContent || '';
+    var localTxt = '';
+    try { localTxt = localStorage.getItem(LSKEY) || ''; } catch(e){}
+    var seen = {}, merged = [], extra = 0;
+    function add(l, isLocal){
+      try { var ev = JSON.parse(l.slice(PREFIX.length + 1)); }
+      catch(e){ return; }
+      var key = ev.batch + '#' + ev.seq;
+      if(seen[key]) return;
+      seen[key] = 1; merged.push(l);
+      if(isLocal) extra++; }
+    (saved.match(/GUJI-SEED-EVENT .*/g) || []).forEach(function(l){ add(l, 0); });
+    (localTxt.match(/GUJI-SEED-EVENT .*/g) || []).forEach(function(l){ add(l, 1); });
+    if(merged.length){
+      log.textContent = merged.join('\\n') + '\\n';
+      var mx = 0;
+      var evs = events();
+      evs.forEach(function(ev){
+        if(ev.batch === BATCH && ev.seq > mx) mx = ev.seq; });
+      log.setAttribute('data-seq', String(mx));
+      // 卡片可能已带上次快照的视觉状态：先归零再按日志重放，
+      // 保证「日志是唯一真源」（快照状态与日志不可能分叉）
+      for(var i = 0, cs = cards(); i < cs.length; i++){
+        cs[i].setAttribute('data-state', 'open');
+        cs[i].removeAttribute('data-undone');
+        setChosen(cs[i], ''); }
+      // 按 seq 順序重放：同一 instance 後到覆蓋
+      evs.sort(function(a, b){ return (a.seq||0) - (b.seq||0); });
+      evs.forEach(function(ev){
+        if(ev.op === 'skip'){
+          var c = cardOf(ev.instance_id);
+          if(c) c.removeAttribute('data-undone'); }
+        applyVisual(ev);
+        undoStack.push({iid: ev.instance_id, op: ev.op}); });
+    }
+    progress();
+    if(extra) schedulePublish();
+    else if(merged.length) status('已儲存 ' + merged.length + ' 條');
+    restoreView();
+    if(!list.querySelector('.card.active')) advance(null); }
 
   // ── 交互：滑鼠 ──
   document.addEventListener('click', function(e){
@@ -787,8 +887,9 @@ def render_seed_html(batch: dict, title: str | None = None) -> str:
 <p class="hint">單鍵：<kbd>1</kbd>–<kbd>9</kbd> 選候選 ｜ 直接打字手輸正字（Enter 確認）
 ｜ <kbd>N</kbd> 非字 ｜ <kbd>S</kbd> 存疑跳過 ｜ <kbd>U</kbd> 撤銷上一條
 ｜ <kbd>↑</kbd><kbd>↓</kbd> 移動。已裁決卡片自動收起，點「改」可復查。
-每次操作後約 3 秒自動儲存，關頁重開會自動恢復。
-<b>審完請點頂部「複製記錄」並貼回對話</b>——這條路徑不依賴任何平台功能，永遠有效。
+停手約 6 秒自動儲存（儲存瞬間頁面會刷新一下，位置自動接續），關頁重開會自動恢復。
+審完後告訴 Claude 一聲即可——裁決已隨頁面儲存，Claude 能直接讀取；
+「複製記錄」是不依賴任何平台功能的兜底路徑。
 {'尚有待審頁：' + _esc(pages_nav) if pages_nav else ''}</p>
 <details><summary>事件日誌（審查記錄，可全選複製）</summary>
 <pre class="log" id="guji-log" data-seq="0" data-batch="{_esc(batch["batch_id"])}"></pre>

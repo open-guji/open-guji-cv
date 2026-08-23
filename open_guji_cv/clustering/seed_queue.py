@@ -89,6 +89,12 @@ class SeedItem:
     proposed: str | None = None      # 双信号一致时的拟进库字（唯一候选优先展示）
     doubts: list[str] = field(default_factory=list)   # 空 = 免审
     match: dict | None = None        # MatchResult.to_dict()（对当时的库）
+    context: dict | None = None      # 审查上下文（2026-08-23 二轮加）：
+    #   col_ocr: 该列 OCR 载体全文（空识别 □ 占位）
+    #   col_ref: 该列整理本参考文（免闸对齐 page_reference；无对应 ·）
+    #   pos:     当前字在列中的位置（0 起，供高亮）
+    #   ref_char/ref_op: 本字位的整理本参考字与对齐 op（参考≠金标：
+    #            免闸对齐噪声大，页面须与过闸的 align 字段区分展示）
     status: str = STATUS_PENDING
     decided_char: str | None = None  # confirmed/rejected 后的最终字
     provenance: str | None = None    # 进库时的 provenance: align | human

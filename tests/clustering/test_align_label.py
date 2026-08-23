@@ -143,3 +143,26 @@ def _corpus_file(tmp_path):
     p = tmp_path / "corpus.txt"
     p.write_text(CORPUS, encoding="utf-8")
     return p
+
+
+def test_page_reference_no_gate_and_gaps():
+    """免闸参考：长 replace 段也逐位给参考字；insert/delete 段给 None。
+
+    与 label_page 的采信闸形成对照——参考层的用途是审查页面上给人看，
+    噪声大没关系，位置对得上才是它的全部价值。
+    """
+    from open_guji_cv.clustering.align_eval import build_ngram_index
+    from open_guji_cv.clustering.align_label import page_reference
+
+    head = "天地玄黃宇宙洪荒日月盈昃辰宿列張"      # 16 字全对（锚定票源）
+    mid = "寒來暑往秋"                               # 语料真文，载体错读成 誤×5
+    tail = "收冬藏閏餘成歲律呂調陽"                  # 尾部再回到全对
+    corpus = head + mid + tail
+    idx = build_ngram_index(corpus)
+    page_text = head + "誤誤誤誤誤" + tail
+    slots = [(1, i, ch) for i, ch in enumerate(page_text)]
+    refs = page_reference("1", slots, corpus, idx)
+    assert refs[(1, 0)] == ("天", "equal")
+    for i, want in enumerate(mid):                   # 段长 5 > 采信闸的 3
+        got = refs[(1, len(head) + i)]
+        assert got[0] == want and got[1] == "replace"

@@ -35,7 +35,9 @@ from pathlib import Path
 
 import cv2
 
-from .align_label import carrier_slots, clean_labels, label_book
+from .align_eval import build_ngram_index
+from .align_label import (carrier_slots, clean_labels, label_book,
+                          page_reference)
 from .crop_quality import assess_crop
 from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
@@ -224,10 +226,39 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     slots_by_page = carrier_slots(carrier_path)
 
     # 整理本对齐（align_label 现有机制：结构校验 + 锚定 + 采信闸 + 清洗）
+    corpus_text = Path(corpus).read_text(encoding="utf-8")
+    corpus_index = build_ngram_index(corpus_text)
     labels, _stats = label_book(book, book_out_dir, corpus, pages=set(todo),
+                                corpus_index=corpus_index,
                                 slots_by_page=slots_by_page)
     labels, _dropped = clean_labels(labels, rec_quality_index)
     align_of = {x.instance_id: x for x in labels}
+
+    # 审查上下文：免闸参考对齐（page_reference，参考≠金标）+ 列文
+    ref_by_page: dict[str, dict] = {
+        p: page_reference(p, slots_by_page.get(p, []), corpus_text,
+                          corpus_index)
+        for p in todo}
+    cols_by_page: dict[str, dict[int, list[tuple[int, str]]]] = {}
+    for p in todo:
+        cols: dict[int, list[tuple[int, str]]] = defaultdict(list)
+        for col, idx, ch in slots_by_page.get(p, []):
+            cols[col].append((idx, ch))
+        cols_by_page[p] = {c: sorted(v) for c, v in cols.items()}
+
+    def slot_context(page: str, col: int, idx: int) -> dict | None:
+        cols = cols_by_page.get(page) or {}
+        entries = cols.get(col)
+        if not entries:
+            return None
+        refs = ref_by_page.get(page, {})
+        col_ocr = "".join(ch for _, ch in entries)
+        col_ref = "".join((refs.get((col, i), (None, ""))[0] or "·")
+                          for i, _ in entries)
+        pos = next((n for n, (i, _) in enumerate(entries) if i == idx), None)
+        ref_char, ref_op = refs.get((col, idx), (None, ""))
+        return {"col_ocr": col_ocr, "col_ref": col_ref, "pos": pos,
+                "ref_char": ref_char, "ref_op": ref_op or None}
 
     # 当前库 → 内存匹配器（本轮进库实例增量累加）
     matcher, db_chars = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
@@ -277,7 +308,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                 col=rec.col, idx=rec.idx,
                                 patch_path=rec.patch_path, tier=tier,
                                 ocr=ocr, align=align, proposed=proposed,
-                                doubts=doubts, match=mr.to_dict())
+                                doubts=doubts, match=mr.to_dict(),
+                                context=slot_context(page, rec.col, rec.idx))
                 if dual_ok and not doubts:
                     # 双信号一致零疑问 → align provenance 直接进库
                     evidence = {"match": mr.to_dict(), "ocr": ocr,
