@@ -46,6 +46,16 @@ FRAME_BAR_N = 2            # 满宽横条达此条数 → 版框而非「一」
 # ── 缺陷自检：疑似层阈值（有误报，进人工审查队列）──────────────
 WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此 → 疑似跨列
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
+# ── 贴边界行残条清除 ─────────────────────────────────────
+# 磨损界行断成的短残段够不着围栏放宽档的游程（<0.8×列距），墙外扩后
+# 留在图块边缘，是 vol02 wide_gap 的主要成因（抽 24 例有 19 例是
+# 「字 + 贴边残条」）。清除条件全部同时成立才动手——尤其高度上限：
+# 「刂/亅」这类真实的细长边缘笔画高约一个字高，残段实测 5~60px。
+RESIDUE_W_MAX = 6          # 残条宽度上限（px）
+RESIDUE_HW_MIN = 3.0       # 高 ≥ 此倍数 × 宽（细高形；圆点不动）
+RESIDUE_H_MAX = 0.5        # 高度上限 = 此比例 × 格高（真笔画 ~0.8 格高）
+RESIDUE_EDGE = 10          # 整体落在距图块左/右边缘此距离内才算贴边
+RESIDUE_GAP = 3            # 与非残条墨体的横向间隔至少此值（px）
 SIDE_PROBE = 12            # 向列框左右各探这么多像素，看横条是否继续
 SIDE_INK_T = 0.25          # 探针带内墨量占比超此算「还在走」
 OFF_CENTER_T = 0.15
@@ -356,6 +366,79 @@ def _boundary_ink_frac(gray: np.ndarray) -> float:
     band = max(2, int(binary.shape[0] * BOUNDARY_BAND))
     edge = int(binary[:band].sum()) + int(binary[-band:].sum())
     return edge / total
+
+
+def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
+    """抹掉最外侧的界行残条（磨损界行断成的短竖段/虚线链）。
+
+    按 x **跨段**（被 ≥RESIDUE_GAP 空白列隔开的墨列组）处理，而不是按
+    连通体——虚线链是多个小连通体但同属一个窄跨段。最外侧跨段满足：
+    窄（≤RESIDUE_W_MAX）、段内最长连续竖游程 ≤RESIDUE_H_MAX×格高
+    （「刂/亅」等真实边缘长笔画是 0.7~0.9 格高的**连续**竖线，不会中招）、
+    墨量 ≤20% —— 整段抹白。每侧最多剥两层（残条+毛点可能成两段）。
+    抹的是像素不是 flag：残条同时也污染聚类，清源比压报警对。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    total = int(binary.sum())
+    if total < 1:
+        return patch
+    colink = binary.sum(axis=0)
+    W = len(colink)
+
+    def spans() -> list[tuple[int, int]]:
+        out, s = [], None
+        gap = 0
+        for x in range(W):
+            if colink[x] > 0:
+                if s is None:
+                    s = x
+                gap = 0
+            elif s is not None:
+                gap += 1
+                if gap >= RESIDUE_GAP:
+                    out.append((s, x - gap + 1))
+                    s = None
+        if s is not None:
+            out.append((s, W))
+        return out
+
+    def is_residue(a: int, b: int) -> bool:
+        if b - a > RESIDUE_W_MAX:
+            return False
+        seg = binary[:, a:b]
+        if seg.sum() > 0.2 * total:
+            return False
+        rows = seg.any(axis=1)
+        run = mx = 0
+        for v in rows:
+            run = run + 1 if v else 0
+            mx = max(mx, run)
+        if mx <= RESIDUE_H_MAX * cell_h:
+            return True
+        # 更长的残段（实测有 78px 的，几乎够着「刂」的 0.7 格）只在
+        # 图块最外 12% 宽度内才认——字的笔画到不了那里（图块按墙裁、
+        # 字居中，字缘距边 ≥15%），残条恰恰贴着墙根
+        edge = 0.12 * W
+        return (mx <= 0.85 * cell_h
+                and (b <= edge or a >= W - edge))
+
+    out = patch
+    for _ in range(2):
+        sp = spans()
+        if len(sp) < 2:          # 只剩一个跨段：那是 rule_bar/not_text 的事
+            break
+        hit = False
+        edge_spans = [sp[0]] if sp[0] == sp[-1] else [sp[0], sp[-1]]
+        for a, b in edge_spans:
+            if is_residue(a, b):
+                if out is patch:
+                    out = patch.copy()
+                out[:, a:b] = 255
+                binary[:, a:b] = 0
+                colink[a:b] = 0
+                hit = True
+        if not hit:
+            break
+    return out
 
 
 def _patch_ink_ratio(gray: np.ndarray) -> float:
@@ -795,6 +878,7 @@ class CharExtractor:
                     continue
                 patch = (strip[y0:y1].copy() if owner is None
                          else clean_patch(strip, owner, idx, y0, y1))
+                patch = strip_rule_residue(patch, cell_h)
 
                 x0 = float(sx0)
                 x1 = float(sx1)
