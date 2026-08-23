@@ -56,6 +56,7 @@ from open_guji_cv.clustering.align_label import (BLANK_INK, carrier_slots,
                                                  clean_labels, label_book,
                                                  summarize)
 from open_guji_cv.clustering.crop_quality import assess_crop
+from open_guji_cv.clustering.match import NEVER_MATCH_FAMILIES
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch)
 
@@ -135,14 +136,11 @@ def pick_pages(labels, max_instances: int, seed: int) -> set[str]:
 # 操作点下真实发生过错并的字对）。进永久回归：verify 判据每次改动，这些
 # `diff` 对都必须保持不同簇。线索来源是**聚类自己的失败记录**，与转写混淆
 # 表互补——两者都独立于当前判据的打分。
-CLUSTER_LEAK_FAMILIES = [
-    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
-    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"), ("彖", "象"),
-    # 彖/象：502fa04 轮实测混簇（易类文本 彖曰/象曰 都高频）。注意 彖 在
-    # PP-OCR 字表之外（G5 的 1.20% 结构性天花板名单），OCR 载体永远发不出
-    # equal 的 彖 实例，这对在载体升级前不会物化——名单先挂上。
-]
+# 单一事实源在 match.NEVER_MATCH_FAMILIES（库级 never-match 用同一张表）。
+# 彖/象：502fa04 轮实测混簇（易类文本 彖曰/象曰 都高频）。注意 彖 在
+# PP-OCR 字表之外（G5 的 1.20% 结构性天花板名单），OCR 载体永远发不出
+# equal 的 彖 实例，这对在载体升级前不会物化——名单先挂上。
+CLUSTER_LEAK_FAMILIES = NEVER_MATCH_FAMILIES
 MAX_LEAK_PAIRS_PER_FAMILY = 3
 
 

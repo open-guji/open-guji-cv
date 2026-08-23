@@ -381,6 +381,64 @@ def cmd_label(args):
     print(f"完成: {stats}，输出: {book_out_dir / 'phase6_labels'}")
 
 
+def cmd_recognize(args):
+    """字形库优先识别第一段（glyph_db_first_design §2）：逐图块匹配库。
+
+    same 档（完美匹配）直接继承库条目的字 = 识别完成；unsure/diff 档
+    只落证据与候选先验，等 OCR+上下文分支接线（设计 §7 第 4 步）。
+    输出 phase8_match/matches.jsonl（每行一个实例的 MatchResult 证据）。
+    """
+    from .clustering.extractor import load_index
+    from .clustering.glyph_db import GlyphDB, _unpng
+    from .clustering.match import GlyphMatcher
+    from .clustering.normalize import normalize_patch
+
+    book_out_dir = _book_out_dir(args)
+    root = book_out_dir / "phase4_chars"
+    matcher = GlyphMatcher(k=args.knn_k)
+
+    db = GlyphDB(args.db)
+    cur = db.conn.cursor()
+    sql = """SELECT g.char, e.instance_id, d.data
+             FROM exemplars e
+             JOIN glyphs g ON g.glyph_id = e.glyph_id
+             JOIN derived d ON d.instance_id = e.instance_id AND d.kind='norm'"""
+    dbargs: tuple = ()
+    if args.edition:
+        sql += " WHERE g.edition_tag = ?"
+        dbargs = (args.edition,)
+    for char, iid, data in cur.execute(sql, dbargs).fetchall():
+        matcher.add(iid, char, _unpng(data))
+    db.close()
+    print(f"库载入 {len(matcher)} 个已验证刻例")
+
+    out_dir = book_out_dir / "phase8_match"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    recs = [r for r in load_index(root) if r.cell_type == "char"]
+    n_same = n_unsure = n_diff = 0
+    import cv2 as _cv2
+    with open(out_dir / "matches.jsonl", "w", encoding="utf-8") as f:
+        for n, rec in enumerate(recs, 1):
+            gray = _cv2.imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
+            if gray is None:
+                continue
+            r = matcher.match(normalize_patch(gray))
+            n_same += r.verdict == "same"
+            n_unsure += r.verdict == "unsure"
+            n_diff += r.verdict == "diff"
+            row = {"id": rec.id, **r.to_dict()}
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            if n % 2000 == 0:
+                print(f"  {n}/{len(recs)}  same {n_same} unsure {n_unsure} diff {n_diff}",
+                      flush=True)
+    total = max(1, n_same + n_unsure + n_diff)
+    summary = {"n": total, "same": n_same, "unsure": n_unsure, "diff": n_diff,
+               "coverage": round(n_same / total, 4), "db_size": len(matcher)}
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False))
+
+
 def cmd_refine(args):
     """M5+ 上下文自动修正：簇级边缘化 + 同书自举 n-gram，迭代重解码。"""
     from .clustering.context_refine import refine_book
@@ -719,6 +777,15 @@ def main():
     p.add_argument("--lm-corpus", default=None,
                    help="语料目录（*.txt，现场训练 n-gram；与 --lm-model 二选一）")
 
+    # ── recognize（字形库优先识别，第一段）───────────────
+    p = sub.add_parser("recognize",
+                       help="字形库优先识别：逐图块匹配 GlyphDB → phase8_match/"
+                            "（same 档=识别完成；unsure/diff 落证据待裁决）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", default="glyph.db", help="GlyphDB SQLite 路径")
+    p.add_argument("--edition", default=None, help="限定 edition_tag（同版匹配）")
+    p.add_argument("--knn-k", type=int, default=10, help="近邻候选数（默认 10）")
+
     # ── refine（M5+ 上下文自动修正）──────────────────────
     p = sub.add_parser("refine",
                        help="M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）")
@@ -844,6 +911,7 @@ def main():
         "chars":             cmd_chars,
         "cluster":           cmd_cluster,
         "label":             cmd_label,
+        "recognize":         cmd_recognize,
         "refine":            cmd_refine,
         "eval-align":        cmd_eval_align,
         "bench-ocr":         cmd_bench_ocr,
