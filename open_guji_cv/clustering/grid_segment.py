@@ -1776,7 +1776,10 @@ class GridSegmenter:
                 # 门控——rule_in_col 度量的是列相位，对行格高无判别力，
                 # 且这些页它已经是 0，任何门控都会一律拒绝校正。
                 results[stem] = self.segment_page(
-                    image, layout, cell_h_prior=consensus_h)
+                    image, layout, cell_h_prior=consensus_h,
+                    # 错切在 Pass 1 已估过且与格高无关，带上省掉 21 个候选
+                    # 角度的重估（实测 0.25s/页；本 pass 重扫全书，省 ~50s/册）
+                    shear_override=results[stem]["grid"].get("shear", 0.0))
                 row_prior[stem] = consensus_h
                 n_row_fix += 1
             if n_row_fix:
