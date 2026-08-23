@@ -17,6 +17,15 @@
    不同就整页丢弃。这不是洁癖：实测 vol01 201 页里有 139 页结构已经变了
    （转写产自更早一次 phase4），不校验就会把标签系统性地错位一格。
 
+对齐载体有两种来源：
+
+- `phase6_labels/ranked.json` 的转写（原设计）——但它只有在 label 步骤
+  与切分同版重跑过时才可用；881d777 之后的转写全是 `<unk>`（重跑没带
+  OCR 源），载体作废。
+- **OCR 载体**（`scripts/build_ocr_carrier.py`，2026-08-23 起首选）：
+  逐图块 RapidOCR top1 + s2t，与切分永远同版。G5 在 book9 金标上的实测
+  top1 88.75%，比旧转写载体（86.4%）还高。用 `slots_by_page` 参数传入。
+
 用法见 `scripts/build_clustering_dataset.py`。
 """
 
@@ -167,22 +176,42 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
     return out, True
 
 
+def carrier_slots(carrier_path: str | Path) -> dict[str, list[tuple[int, int, str]]]:
+    """OCR 载体 jsonl（build_ocr_carrier.py 产出）→ slots_by_page。
+
+    空识别用 '□' 占位：格位必须占住，否则页文本长度与实例数对不上，
+    对齐窗口整体错位。
+    """
+    by_page: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
+    with open(carrier_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            _, page, col, idx = r["id"].split(":")
+            by_page[page].append((int(col), int(idx), r["char"] or "□"))
+    return {p: sorted(v) for p, v in by_page.items()}
+
+
 def label_book(book: str, book_out_dir: str | Path, corpus_path: str | Path,
                pages: set[str] | None = None,
                corpus_index: dict[str, list[int]] | None = None,
+               slots_by_page: dict[str, list[tuple[int, int, str]]] | None = None,
                ) -> tuple[list[AlignedLabel], list[PageLabelStat]]:
     """整册对齐标注。
 
     pages 给定时只处理这些页（正文页筛选交给调用方，见 page-type 金标）。
+    slots_by_page 给定时用它当载体（OCR 载体），否则读 ranked.json。
     只有**结构一致且锚定成功**的页会产出标签。
     """
     book_out_dir = Path(book_out_dir)
     corpus = Path(corpus_path).read_text(encoding="utf-8")
     corpus_index = corpus_index if corpus_index is not None else build_ngram_index(corpus)
 
-    with open(book_out_dir / "phase6_labels" / "ranked.json", encoding="utf-8") as f:
-        ranked = json.load(f)["results"]
-    slots_by_page = page_slots(ranked)
+    if slots_by_page is None:
+        with open(book_out_dir / "phase6_labels" / "ranked.json", encoding="utf-8") as f:
+            ranked = json.load(f)["results"]
+        slots_by_page = page_slots(ranked)
     current = index_structure(book_out_dir / "phase4_chars" / "index.jsonl")
 
     labels: list[AlignedLabel] = []
