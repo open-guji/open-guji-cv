@@ -315,6 +315,9 @@ def cmd_cluster(args):
     from .clustering.clusterer import ClusterParams, ConservativeClusterer
 
     params = ClusterParams(feature=args.feature,
+                           verify_method=args.verify_method,
+                           cov_high=args.cov_high,
+                           miss_wmax=args.miss_wmax,
                            theta_high=args.theta_high,
                            knn_k=args.knn_k)
     clusterer = ConservativeClusterer(params)
@@ -679,8 +682,15 @@ def main():
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--feature", default="hog", choices=["raw", "hog"],
                    help="特征后端（默认 hog）")
+    p.add_argument("--verify-method", default="coverage",
+                   choices=["coverage", "overlap"],
+                   help="配准判据（默认 coverage=有界位移覆盖率；overlap=旧 F1 对照）")
+    p.add_argument("--cov-high", type=float, default=0.992,
+                   help="coverage 判据的合并覆盖率（默认 0.992）")
+    p.add_argument("--miss-wmax", type=float, default=12,
+                   help="coverage 判据的 12×12 窗口残差上限（默认 12px）")
     p.add_argument("--theta-high", type=float, default=0.80,
-                   help="合并阈值（默认 0.80，可由标定更新）")
+                   help="overlap 判据的合并阈值（默认 0.80）")
     p.add_argument("--knn-k", type=int, default=10,
                    help="近邻候选数（默认 10）")
     p.add_argument("--no-montage", action="store_true",
