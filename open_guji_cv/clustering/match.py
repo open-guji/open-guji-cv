@@ -43,6 +43,9 @@ NEVER_MATCH_FAMILIES: list[tuple[str, str]] = [
     # 日/曰：vol01:10:9:10 实审发现（裘曰修之「曰」，库内「日」对它
     # cov 0.96 已进 unsure 带；OCR 也认成日）。同形程度全表最高。
     ("日", "曰"),
+    # 揀/棟：vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」
+    # 对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。
+    ("揀", "棟"),
 ]
 
 _PARTNER: dict[str, set[str]] = {}

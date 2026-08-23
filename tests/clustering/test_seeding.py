@@ -414,6 +414,57 @@ def test_admission_decision_match_ref():
                               vmap, match_char="文")[0] is False
 
 
+def test_admission_decision_match_solo():
+    """十轮定案：无整理本锚定时，库内形状验证 cov ≥ 0.98 单独放行。"""
+    from open_guji_cv.clustering.seed_queue import (DOUBT_NEAR_FORM,
+                                                    DOUBT_WEAK_SINGLE)
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap({})
+    lo = {"char": "又", "prob": 0.4}
+    # same 档（cov 1.0）无整理本 → match_solo；weak_single 不拦
+    assert admission_decision(lo, None, None, [DOUBT_WEAK_SINGLE], vmap,
+                              match_char="文", match_candidates=[("文", 1.0)]
+                              ) == (True, "match_solo")
+    # unsure 带（char None）但顶部候选 cov 过阈也放行——OCR 空识别也不碍
+    assert admission_decision(None, None, None, [DOUBT_WEAK_SINGLE], vmap,
+                              match_candidates=[("文", 0.985)]
+                              ) == (True, "match_solo")
+    # cov 差一点 → 不进
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("文", 0.975)])[0] is False
+    # 有整理本参照的字位不走本通道（归 match_ref / 人审管）
+    assert admission_decision(lo, None, "文", [DOUBT_WEAK_SINGLE], vmap,
+                              match_candidates=[("文", 1.0)])[0] is False
+    # 护栏触发（never_match/conflict）→ 禁
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("日", 0.99), ("曰", 0.97)],
+                              match_guard="never_match")[0] is False
+    # 不同语义的对手也到 0.98 档 → 形近存疑，禁
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("文", 0.99), ("又", 0.981)]
+                              )[0] is False
+    # 同语义异体不算对手（珎/珍 都到档也放行，取 cov 最高形）
+    vm2 = VariantMap({"珎": "珍"})
+    assert admission_decision(lo, None, None, [], vm2,
+                              match_candidates=[("珎", 0.99), ("珍", 0.981)]
+                              ) == (True, "match_solo")
+    # near_form 仍拦
+    assert admission_decision(lo, None, None, [DOUBT_NEAR_FORM], vmap,
+                              match_candidates=[("文", 0.99)])[0] is False
+    # 残差窗防线（揀/棟 实锤）：wmax 超阈 + OCR 不背书 → 禁；
+    # OCR 字符背书（偏旁读对）则放行；wmax 达标本来就行
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("棟", 0.981)],
+                              match_wmax=13.0)[0] is False
+    assert admission_decision({"char": "棟", "prob": 0.5}, None, None, [],
+                              vmap, match_candidates=[("棟", 0.981)],
+                              match_wmax=13.0) == (True, "match_solo")
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("棟", 0.981)],
+                              match_wmax=12.0) == (True, "match_solo")
+
+
 def test_context_crosses_columns(seeded):
     """列首/列尾的上下文接邻列（prev_/next_ 字段）。"""
     q = _queue(seeded)

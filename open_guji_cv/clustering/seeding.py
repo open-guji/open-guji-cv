@@ -45,6 +45,7 @@ from .lm import train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
 from .recognize_flow import ColumnContext, decide_unsure, semantic_margin
 from .normalize import normalize_patch, sauvola_binarize
+from .verify import MISS_WMAX
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
@@ -69,6 +70,11 @@ SEED_DIR = "phase9_seed"
 #   首个错例出现在 0.5 档。取 0.70，离首错留 0.2 缓冲。
 # 另有单候选防护（见 context 通道注释）兜底。
 DEFAULT_CONTEXT_MARGIN = 0.70
+
+# match_solo 通道（十轮用户定案）：无整理本锚定时，库内形状验证
+# cov ≥ 此阈单独放行（same 档 0.992 之下留一小段——同字异刻的正常
+# 波动带；护栏与形近防线见 admission_decision docstring）。
+MATCH_SOLO_COV = 0.98
 
 
 def _now() -> str:
@@ -184,8 +190,12 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                        ref_char: str | None, doubts: list[str],
                        vmap: VariantMap,
                        match_char: str | None = None,
+                       match_candidates: list[tuple[str, float]] | None = None,
+                       match_guard: str | None = None,
+                       match_wmax: float = 0.0,
+                       solo_cov: float = MATCH_SOLO_COV,
                        ) -> tuple[bool, str | None]:
-    """进库裁决：返回 (可自动进库, 通道名 None|"match_ref")。
+    """进库裁决：返回 (可自动进库, 通道名 None|"match_ref"|"match_solo")。
 
     五轮实审定型（此前的 OCR prob 强信号/三重通道已废）：**OCR 不参与
     自动判断**——实测置信度校准不可靠（100% 也照样认错形近字），它只
@@ -199,7 +209,15 @@ def admission_decision(ocr: dict | None, align_char: str | None,
       参考字）同字 → 直接进库，degraded_crop 单独不拦。两路证据
       同源性为零，同时错到同一个字上的概率可忽略。never-match 护栏
       在匹配层已把形近家族降档 unsure（match_char 为 None），本通道
-      天然触不到形近字。
+      天然触不到形近字；
+    - **库匹配单独通道（match_solo）**：无整理本可参照时（奏折/上谕
+      页，corpus_char 为 None），库内形状验证 cov ≥ solo_cov（默认
+      0.98，十轮用户定案）单独放行——库里的条目都是已验证的，同字
+      同刻工的覆盖率天然到这个档。防线：护栏（never_match/conflict）
+      触发即禁；候选里有**不同语义**的字也到 0.98 档 → 形近存疑，禁；
+      残差窗 wmax 超 MISS_WMAX（偏旁之差的典型形态）时需 OCR 字符
+      背书；near_form / db_inconsistent 照拦。weak_single（无对齐 +
+      OCR 弱）不拦——形状证据自己站得住，OCR 置信度不参与判断。
     near_form / db_inconsistent 仍拦（毒化库的两条路）。
     """
     ocr_char = ocr["char"] if ocr else None
@@ -216,6 +234,23 @@ def admission_decision(ocr: dict | None, align_char: str | None,
     if (overridable and match_char is not None and corpus_char is not None
             and vmap.semantic(match_char) == vmap.semantic(corpus_char)):
         return True, "match_ref"
+    solo_ok = all(d in (DOUBT_DEGRADED_CROP, DOUBT_WEAK_SINGLE)
+                  for d in doubts)
+    if (corpus_char is None and solo_ok and match_guard is None
+            and match_candidates):
+        c1, cov1 = max(match_candidates, key=lambda t: t[1])
+        rival = any(cov >= solo_cov
+                    and vmap.semantic(ch) != vmap.semantic(c1)
+                    for ch, cov in match_candidates)
+        # 残差窗形近防线（十轮实锤：揀 页匹配库内 棟 cov 0.9802——
+        # 偏旁之差全落在一个残差窗里，wmax 13 恰好超阈）：wmax 超
+        # MISS_WMAX（same 档同款护栏）时要求 OCR **字符**背书——
+        # 用的是它读出的偏旁（字符层证据），不是不可靠的置信度。
+        shape_clean = match_wmax <= MISS_WMAX
+        ocr_backs = (ocr_char is not None
+                     and vmap.semantic(ocr_char) == vmap.semantic(c1))
+        if cov1 >= solo_cov and not rival and (shape_clean or ocr_backs):
+            return True, "match_solo"
     return False, None
 
 
@@ -250,6 +285,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               max_pages: int | None = None,
               prob_threshold: float = DEFAULT_PROB_THRESHOLD,
               context_margin: float = DEFAULT_CONTEXT_MARGIN,
+              solo_cov: float = MATCH_SOLO_COV,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -445,13 +481,18 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 admit_ok, channel = admission_decision(
                     ocr, al.char if al else None,
                     (ctx or {}).get("ref_char"), doubts, vmap,
-                    match_char=mr.char)
+                    match_char=mr.char, match_candidates=mr.candidates,
+                    match_guard=mr.guard, match_wmax=mr.wmax,
+                    solo_cov=solo_cov)
                 if admit_ok and channel == "match_ref":
                     # 库 × 整理本通道的进库字取库匹配形——站着的是形状
                     # 证据（verify same）+ 整理本，OCR 只是旁证；否则
                     # 无对齐时 proposed 会落到 OCR 字（十轮实审：之 页
                     # OCR 报 芝，库 × 整理本同说 之，进库字必须是 之）
                     proposed = mr.char
+                elif admit_ok and channel == "match_solo":
+                    # 库匹配单独通道：进库字取库内验证 cov 最高的形
+                    proposed = max(mr.candidates, key=lambda t: t[1])[0]
                 elif admit_ok and proposed is None:
                     proposed = ocr["char"] if ocr else None
 
@@ -462,7 +503,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                 doubts=doubts, match=mr.to_dict(),
                                 context=ctx)
                 if admit_ok and proposed:
-                    # 双信号一致（常规零疑问 / 强信号通道）→ align 进库
+                    # 双信号一致（常规零疑问 / 强信号通道）→ align 进库；
+                    # match_solo 无整理本参与，审计上以 match 记 provenance
+                    prov = "match" if channel == "match_solo" else "align"
                     evidence = {"match": mr.to_dict(), "ocr": ocr,
                                 "align": align, "tier": tier,
                                 "crop": q.to_dict()}
@@ -472,7 +515,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                            "op": (ctx or {}).get("ref_op")}
                     admitted = db.admit_instance(
                         rec.id, proposed, (root / rec.patch_path).read_bytes(),
-                        norm, provenance="align", evidence=evidence,
+                        norm, provenance=prov, evidence=evidence,
                         edition_tag=edition, page=page, col=rec.col,
                         idx=rec.idx, bbox=list(rec.bbox),
                         ink_ratio=rec.ink_ratio, width=rec.width,
@@ -483,7 +526,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                         summary["db_added"] += 1
                     item.status = STATUS_AUTO
                     item.decided_char = proposed
-                    item.provenance = "align"
+                    item.provenance = prov
                     if channel:
                         item.note = channel
                         key = f"n_auto_{channel}"
