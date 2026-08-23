@@ -20,8 +20,13 @@ run_book() {
     python -m open_guji_cv $step > "/tmp/pipe_${b}_${step%% *}.log" 2>&1
     local rc=$?
     echo "[$b] ${step%% *}: $(( $(date +%s) - s ))s rc=$rc"
-    [ $rc -ne 0 ] && { echo "[$b] ${step%% *} 失败，日志 /tmp/pipe_${b}_${step%% *}.log"; return 1; }
+    if [ $rc -ne 0 ]; then
+      echo "[$b] ${step%% *} 失败，日志 /tmp/pipe_${b}_${step%% *}.log"; return 1
+    fi
   done
+  # 注意不能写成 `[ $rc -ne 0 ] && {...}`：rc=0 时整个复合命令状态为 1，
+  # 作为循环体最后一条命令会把成功的册误报成 fail=1
+  return 0
 }
 
 t0=$(date +%s)
