@@ -299,3 +299,24 @@ def test_context_strip_crosses_columns():
     e["context"]["pos"] = 11
     html_out = _render_context(e)
     assert "春" in html_out and "土" not in html_out
+
+
+def test_confusable_candidates_get_hints(seed_book):
+    """同卡出现同形字组两员（日/曰）→ 按钮加读音/用例提示。"""
+    from open_guji_cv.clustering.review.seed_export import (
+        _confusable_hints_for, _render_seed_card)
+    hints = _confusable_hints_for(["日", "曰", "修"])
+    assert hints["日"].startswith("rì") and hints["曰"].startswith("yuē")
+    assert "修" not in hints                      # 组外不加注
+    assert _confusable_hints_for(["日", "修"]) == {}   # 单独出现不加注
+    e = {"instance_id": "t:1:1:1", "col": 1, "idx": 1, "tier": "clean",
+         "status": "pending_review", "patch_b64": None,
+         "choices": [
+             {"char": "日", "ocr_prob": 0.18, "align_op": None,
+              "ref_op": None, "db_cov": 0.96, "proposed": True},
+             {"char": "曰", "ocr_prob": None, "align_op": None,
+              "ref_op": "replace", "db_cov": None, "proposed": False}],
+         "ocr": None, "align": None, "doubts": [], "db": None,
+         "context": None, "note": None}
+    card = _render_seed_card(e)
+    assert "rì 日月" in card and "yuē 子曰" in card
