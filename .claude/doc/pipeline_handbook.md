@@ -448,13 +448,37 @@ file`，与代码无关），跑测试必须加 `--capture=no`。
 ## 6. 全流程运行与耗时
 
 ```bash
-bash scripts/run_pipeline.sh          # 两册并行，逐阶段计时，≈15 分钟墙钟
+bash scripts/run_pipeline.sh          # 两册并行，逐阶段计时，≈11 分钟墙钟
 ```
 
-单册各阶段实测（vol01）：segment 482s / chars 62s / cluster 318s / label 7s。
+单册各阶段实测（vol01，两册并行跑、每册 GUJI_WORKERS=2）：
+
+| 阶段 | 并行化前 | 并行化后 | 说明 |
+|---|---|---|---|
+| segment | 482s | 318s | Pass 1/2a/2a2/2a3/2b 页级进程池 |
+| chars | 62s | 148s | 吃下了归一化 + npz 压缩（净赚在 cluster）|
+| cluster | 318s | 161s | verify 并行预计算 + 归一化缓存全命中 |
+| label | 7s | 8s | — |
+| **合计** | **869s** | **635s** | 两册并行总墙钟 663s |
+
+- 并行度由 `GUJI_WORKERS` 控制（run_pipeline.sh 多册并行时自动按册分核，
+  单册单跑时不设即用满核，segment 还能再快约一倍）。
+- 并行只改执行顺序不改计算，**产物与串行逐字节等价**（验证法：重跑后
+  `git status output/` 应只有未跟踪的新文件，无任何 modified）。
+- 进程池必须用 **spawn 不能用 fork**：父进程跑过 cv2 之后自带线程池，
+  fork 子进程一碰 cv2 就死锁在 futex 上（pytest 里 100% 复现，
+  全部挂起、负载归零、无任何报错——症状就是"跑着跑着不动了"）。
+- chars 阶段顺手把归一化图块写进 `phase4_chars/normalized.npz`
+  （压缩后 ~4MB/册），cluster 查缓存、缺了 imread 兜底。
+
 热点构成与优化记录见 char_clustering_design.md「全流程耗时画像」。
 量耗时**别用产物 mtime 推**——多轮重跑会把时间戳搅在一起（实测把 5 分钟
 的聚类推成了 34 分钟）。
+
+**Pass 1 采样化评估后搁置**：采样会改变字距共识的取样总体，
+`consensus_h` 中位数微移 → 全书网格相位/尺度都变 → 产物不再逐字节
+等价，按金标漂移协议 91 个实例样本全得重核对。页级并行后它只值
+~60s/册墙钟，不抵人工重核成本。
 
 ## 7. 提交规范
 
