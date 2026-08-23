@@ -1146,3 +1146,18 @@ def test_later_passes_keep_the_corrected_period(tmp_path):
                for i in range(8)]
     med = float(np.median(periods))
     assert max(abs(p - med) for p in periods) <= 0.06 * med, periods
+
+
+def test_period_from_rules_survives_a_worn_frame_cluster():
+    """磨损版框给同一条线出一串假中心时，量列距不许被它们带歪。
+
+    实测 vol01/94：左框出了 9/25/38/47 四个中心，全被指到 k=0，把最小
+    二乘的斜率拉出容差 → 测量被弃用 → 保留的先验恰恰是错的（177.6，
+    实际 ~187）。近邻合并后无论先验对错都量得出真值。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import _period_from_rules
+    centers = np.array([9, 25, 38, 47, 242, 427, 613, 800,
+                        984, 1173, 1350, 1542], float)
+    for prior in (177.6, 184.7):
+        assert abs(_period_from_rules(centers, prior) - 187.3) < 1.0
