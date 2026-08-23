@@ -24,6 +24,7 @@
 |---|---|
 | [pipeline_handbook.md](doc/pipeline_handbook.md) | **总入口**：分步现状 / 并行分工 / 量法 / 踩过的坑 |
 | [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）|
+| [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
 | [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
 | [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |

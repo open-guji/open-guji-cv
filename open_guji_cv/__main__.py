@@ -384,7 +384,10 @@ def cmd_refine(args):
 
     report = refine_book(_book_out_dir(args), rounds=args.rounds,
                          lm_order=args.lm_order, use_lm=args.with_lm,
-                         external_corpus=args.corpus)
+                         external_corpus=args.corpus,
+                         general_corpus=args.general_corpus,
+                         general_weight=args.general_weight,
+                         lam=args.lam)
     print(json.dumps(report, ensure_ascii=False, indent=1))
 
 
@@ -716,7 +719,16 @@ def main():
                    help="启用同书自举 n-gram（默认关闭：实测在缺乏外部"
                         "语料时净有害，见 context_refine 模块文档）")
     p.add_argument("--corpus", default=None,
-                   help="外部古文语料（目录或 txt）：真 LM + 本版用字习惯")
+                   help="本书/本版语料（目录或 txt）：高权重 LM 分量 + 本版用字习惯")
+    p.add_argument("--general-corpus", default=None,
+                   help="通用古文语料（目录或 txt）：低权重 LM 分量。"
+                        "体裁要对得上被测书（实测经解语料对上谕页毫无收益，"
+                        "诏令奏议语料 +1.21%%）")
+    p.add_argument("--general-weight", type=float, default=0.1,
+                   help="通用分量的权重（默认 0.1，本书分量取 1-w）")
+    p.add_argument("--lam", type=float, default=0.65,
+                   help="OCR 项与 LM 项的配比（默认 0.65；context-correction "
+                        "实测 0.55 给 LM 过多话语权，有害翻转翻倍）")
 
     # ── bench-ocr（多引擎对比）───────────────────────────
     p = sub.add_parser("eval-align",
