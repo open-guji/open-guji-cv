@@ -9,7 +9,8 @@ from open_guji_cv.clustering.match import MatchResult
 from open_guji_cv.clustering.recognize_flow import (ColumnContext,
                                                     decide_diff,
                                                     decide_unsure,
-                                                    fuse_priors)
+                                                    fuse_priors,
+                                                    semantic_margin)
 
 
 def _unsure(cands):
@@ -177,3 +178,41 @@ def test_decision_to_dict_roundtrip_fields():
     assert payload["branch"] == "diff"
     assert isinstance(payload["margin"], float)
     assert payload["ranked"][0][0] == "甲"
+
+
+# ── 语义层 margin + 字形层选形 ──────────────────────────────
+
+
+def _sem(mapping):
+    return lambda ch: mapping.get(ch, ch)
+
+
+def test_semantic_margin_folds_variants():
+    """珎/珍 同语义分票：surface margin 被自家摊薄，语义层合并后
+    对无竞争的裁决应给出 margin=1.0，且选形优先取库/OCR 见过的形。"""
+    d = decide_unsure(_unsure([("珎", 0.9)]), [("珍", 0.85)], s2t=False)
+    assert d.margin < 0.5                       # surface 层被摊薄
+    surface, m = semantic_margin(d, _sem({"珎": "珍"}), surface_prefs={"珎"})
+    assert m == pytest.approx(1.0)              # 语义层无竞争
+    assert surface == "珎"                      # 字形层保留精确异体
+
+
+def test_semantic_margin_real_competition_unchanged():
+    """不同语义的竞争不受归并影响：margin 仍是两组概率差。"""
+    d = decide_unsure(_unsure([("甲", 0.9)]), [("乙", 0.85)], s2t=False)
+    surface, m = semantic_margin(d, _sem({}))
+    assert surface == "甲"
+    assert m == pytest.approx(d.margin)
+
+
+def test_semantic_margin_prefers_top_group_member():
+    """surface_prefs 只在胜出语义组内挑形——组外的形不会被选走。"""
+    d = decide_unsure(_unsure([("珎", 0.9), ("乙", 0.2)]),
+                      [("珍", 0.85)], s2t=False)
+    surface, _ = semantic_margin(d, _sem({"珎": "珍"}), surface_prefs={"乙"})
+    assert surface in {"珎", "珍"}              # 落回组内最高分形
+
+
+def test_semantic_margin_empty_ranked_passthrough():
+    d = decide_diff([], s2t=False)
+    assert semantic_margin(d, _sem({})) == (d.char, d.margin)
