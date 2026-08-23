@@ -96,3 +96,36 @@ def test_edge_blob_still_fires_on_a_far_neighbor_residue():
     g[40:105, 20:130] = 0                 # 主体
     g[2:18, 40:110] = 0                   # 顶部残余：距主体 22px（0.16h）
     assert _defect_features(g)["edge_blob"] > 0.03
+
+
+def _jiazhu_patch(w=120, h=110):
+    """两列并排的小字块：合起来占满列宽，中缝 6px。"""
+    import numpy as np
+    g = np.full((h, w), 255, np.uint8)
+    g[20:90, 8:55] = 0          # 左子列
+    g[15:85, 61:112] = 0        # 右子列
+    return g
+
+
+def test_jiazhu_gap_center_fires_on_side_by_side_small_chars():
+    from open_guji_cv.clustering.extractor import _jiazhu_gap_center
+    c = _jiazhu_gap_center(_jiazhu_patch())
+    assert c is not None and 50 < c < 66, c
+
+
+def test_jiazhu_gap_center_spares_a_normal_radical_char():
+    """左右结构字（部/郎）：单字只占 ~0.7 列宽，span 条件挡住。"""
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _jiazhu_gap_center
+    g = np.full((110, 120), 255, np.uint8)
+    g[10:100, 25:55] = 0        # 左部首
+    g[10:100, 58:85] = 0        # 右部首（总跨度 0.5w）
+    assert _jiazhu_gap_center(g) is None
+
+
+def test_flag_jiazhu_runs_requires_consecutive_aligned_cells():
+    from open_guji_cv.clustering.extractor import flag_jiazhu_runs
+    # 连续三格缝对齐 → 全标；孤立一格 → 不标；缝错开 → 不标
+    assert flag_jiazhu_runs([(0, 60.0), (1, 62.0), (2, 58.0)]) == {0, 1, 2}
+    assert flag_jiazhu_runs([(0, 60.0), (2, 60.0)]) == set()
+    assert flag_jiazhu_runs([(0, 60.0), (1, 90.0)]) == set()

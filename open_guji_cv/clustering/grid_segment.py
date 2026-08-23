@@ -106,6 +106,8 @@ RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 
                            # 界行了。列距是版面自身的尺度，字的竖笔最长约 1 个字高
                            # （≈0.6 列距），1.2 倍列距留了一倍余量
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
+CELL_BOW_T = 3.0           # 各带围栏彼此相差超过此像素 → 这条边界是弯的，
+                           # 额外输出逐带裁切边（cell_bands），图块按带掩蔽
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
@@ -149,6 +151,40 @@ def _vline_cov(binary: np.ndarray, line_frac: float = 0.3) -> np.ndarray:
     return cv2.dilate(cv2.erode(binary, k), k).sum(axis=0) / h
 
 
+def _vline_cov_bands(binary: np.ndarray, min_run: float | None = None,
+                     n_bands: int = CELL_FENCE_BANDS,
+                     line_frac: float = CELL_FENCE_LINE_FRAC
+                     ) -> tuple[np.ndarray, list[tuple[int, int]]]:
+    """逐带的竖线覆盖率矩阵 (bands × W) 与各带的 y 区间。
+
+    _vline_cov_banded 的逐带版本：围栏要**顺着弯线走**时，需要知道每条带
+    各自的墙在哪，而不是各带取 max 之后「最往里探」的那一个位置——实测
+    vol02/151 一条界行沿页高横向漂 49px，取 max 的围栏在多数带里把墙划在
+    了线根本不在的地方。
+    """
+    h = binary.shape[0]
+    if min_run is None:
+        bands, run = n_bands, None
+    else:
+        bands = max(1, int(h // max(1.0, BAND_OVER_RUN * min_run)))
+        run = int(round(min_run))
+    spans: list[tuple[int, int]] = []
+    rows: list[np.ndarray] = []
+    for i in range(bands):
+        a, b = h * i // bands, h * (i + 1) // bands
+        if b - a < 3:
+            continue
+        klen = min(max(3, run if run is not None else int((b - a) * line_frac)),
+                   b - a)
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, klen))
+        seg = binary[a:b]
+        rows.append(cv2.dilate(cv2.erode(seg, k), k).sum(axis=0) / (b - a))
+        spans.append((a, b))
+    if not rows:
+        return np.zeros((1, binary.shape[1])), [(0, h)]
+    return np.stack(rows), spans
+
+
 def _vline_cov_banded(binary: np.ndarray, min_run: float | None = None,
                       n_bands: int = CELL_FENCE_BANDS,
                       line_frac: float = CELL_FENCE_LINE_FRAC) -> np.ndarray:
@@ -163,29 +199,8 @@ def _vline_cov_banded(binary: np.ndarray, min_run: float | None = None,
     实测（vol01，24605 个字格）：整页围栏 rule_bar 代理 0.94%，
     分带围栏 0.43%，而被裁掉笔画的比例反而更低。
     """
-    h = binary.shape[0]
-    if min_run is None:                       # 未给尺度 → 按页高分带（旧行为）
-        bands, run = n_bands, None
-    else:
-        # 带高取 BAND_OVER_RUN 倍 min_run：太矮则一条正常界行也占不满带、
-        # 覆盖率失去分辨力；**太高则弯的界行在带内又断掉**——这一条是实测
-        # 踩出来的，带高系数从 1.7 提到 3.0（真页从 6 带掉到 3 带）时，
-        # vol02/151 的界行检出从 7 条掉回 2 条、119 从 5 条掉回 0 条，
-        # 分带带来的全部收益被抵消。
-        bands = max(1, int(h // max(1.0, BAND_OVER_RUN * min_run)))
-        run = int(round(min_run))
-    out = np.zeros(binary.shape[1], dtype=float)
-    for i in range(bands):
-        a, b = h * i // bands, h * (i + 1) // bands
-        if b - a < 3:
-            continue
-        klen = max(3, run if run is not None else int((b - a) * line_frac))
-        klen = min(klen, b - a)
-        k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, klen))
-        seg = binary[a:b]
-        out = np.maximum(out,
-                         cv2.dilate(cv2.erode(seg, k), k).sum(axis=0) / (b - a))
-    return out
+    cov, _spans = _vline_cov_bands(binary, min_run, n_bands, line_frac)
+    return cov.max(axis=0)
 
 
 def rule_evidence(gray: np.ndarray, line_frac: float = 0.3) -> float:
@@ -454,34 +469,63 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     run = period * RULE_MIN_RUN_PERIOD
-    cov = _vline_cov_banded((gray < BINARY_THRESHOLD).astype(np.uint8), run)
+    covs, spans = _vline_cov_bands((gray < BINARY_THRESHOLD).astype(np.uint8),
+                                   run)
+    cov = covs.max(axis=0)
     w = len(cov)
     centers = [(a + b) / 2 for a, b in rule_segments(gray, run)]
     tol = period * CELL_RULE_TOL
     # 文字带本身也先内缩一点：界行正好压在带边上时，这一点点就是全部的余量
     shrink = min(max(period - inset_l - inset_r, 0.0) * 0.03, 4.0)
+
+    def walk(cov_row, start, stop_at, step):
+        x = int(round(start))
+        while 0 <= x + step < w and (x + step - stop_at) * step < 0 \
+                and cov_row[x + step] <= CELL_COV_STOP:
+            x += step
+        hit = 0 <= x + step < w and cov_row[x + step] > CELL_COV_STOP
+        return x, hit
+
     out: list[tuple[float, float]] = []
+    band_out: list[list[list[float]] | None] = []
     for k in range(n_cols):
         bl, br = cx0 + period * k, cx0 + period * (k + 1)
-        lo = cx0 + period * k + inset_l + shrink
-        hi = cx0 + period * (k + 1) - inset_r - shrink
-        x = int(round(lo))
-        while x - 1 >= bl and x - 1 >= 0 and cov[x - 1] <= CELL_COV_STOP:
-            x -= 1
-        if (x - 1 >= 0 and cov[x - 1] > CELL_COV_STOP) \
-                or any(abs(c - bl) <= tol for c in centers):
-            lo = min(lo, max(bl, x + CELL_RULE_CLEARANCE))
-        x = int(round(hi))
-        while x + 1 <= br and x + 1 < w and cov[x + 1] <= CELL_COV_STOP:
-            x += 1
-        if (x + 1 < w and cov[x + 1] > CELL_COV_STOP) \
-                or any(abs(c - br) <= tol for c in centers):
-            hi = max(hi, min(br, x - CELL_RULE_CLEARANCE))
+        lo0 = cx0 + period * k + inset_l + shrink
+        hi0 = cx0 + period * (k + 1) - inset_r - shrink
+        near_l = any(abs(c - bl) <= tol for c in centers)
+        near_r = any(abs(c - br) <= tol for c in centers)
+        x, hit = walk(cov, lo0, bl, -1)
+        lo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) if (hit or near_l) \
+            else lo0
+        x, hit = walk(cov, hi0, br, +1)
+        hi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) if (hit or near_r) \
+            else hi0
         if hi - lo < period * 0.2:            # 证据自相矛盾 → 退回文字带
             lo = cx0 + period * k + inset_l
             hi = cx0 + period * (k + 1) - inset_r
         out.append((float(lo), float(hi)))
-    return out
+
+        # ── 逐带围栏：弯的界行各带的墙不在同一个 x，取 max 的围栏在多数
+        # 带里把墙划在线根本不在的地方（实测 vol02/151 一条界行沿页高漂
+        # 49px）。每条带用**自己带内**的覆盖率重走一遍；带里量不到墙就用
+        # 整体值兜底。仅当各带彼此差得够大（CELL_BOW_T）才输出，直边界
+        # 保持原有的扁平表示。
+        rows: list[list[float]] = []
+        for bi, (ya, yb) in enumerate(spans):
+            crow = covs[bi]
+            x, hit = walk(crow, lo0, bl, -1)
+            blo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) \
+                if (hit or near_l) else lo
+            x, hit = walk(crow, hi0, br, +1)
+            bhi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) \
+                if (hit or near_r) else hi
+            if bhi - blo < period * 0.2:
+                blo, bhi = lo, hi
+            rows.append([float(ya), float(yb), float(blo), float(bhi)])
+        spread = max(max(r[2] for r in rows) - min(r[2] for r in rows),
+                     max(r[3] for r in rows) - min(r[3] for r in rows))
+        band_out.append(rows if spread > CELL_BOW_T else None)
+    return out, band_out
 
 
 def column_projection(col_gray: np.ndarray,
@@ -1479,15 +1523,19 @@ class GridSegmenter:
             # cell_left_x/cell_right_x 是**图块裁切边**（贴着实测界行内缘，
             # 量不到界行则退回文字带）。两者都要给下游：职名列的「臣」写在
             # 文字带之外的留白里，按文字带裁会被切掉；见 cell_bounds_from_rules。
-            cell_bounds = cell_bounds_from_rules(image, cx0, period, n_cols,
-                                                 inset_l, inset_r)
-            columns_info = [
-                {"index": n_cols - k,          # 从右到左编号，最右列=1
-                 "left_x": cx0 + period * k + inset_l,
-                 "right_x": cx0 + period * (k + 1) - inset_r,
-                 "cell_left_x": cell_bounds[k][0],
-                 "cell_right_x": cell_bounds[k][1]}
-                for k in range(n_cols)]
+            cell_bounds, cell_bands = cell_bounds_from_rules(
+                image, cx0, period, n_cols, inset_l, inset_r)
+            columns_info = []
+            for k in range(n_cols):
+                info = {"index": n_cols - k,   # 从右到左编号，最右列=1
+                        "left_x": cx0 + period * k + inset_l,
+                        "right_x": cx0 + period * (k + 1) - inset_r,
+                        "cell_left_x": cell_bounds[k][0],
+                        "cell_right_x": cell_bounds[k][1]}
+                if cell_bands[k] is not None:
+                    # 弯的边界：额外给逐带裁切边，图块裁剪按带掩蔽
+                    info["cell_bands"] = cell_bands[k]
+                columns_info.append(info)
             # 列拟合质量：界行竖线落入列格内部的比例。拟合正确时
             # 界行全在列格之间的缝里；错位半周期则大量进入列内——
             # 这正是下游"图块裹线被隔离"的直接前因。
@@ -1533,6 +1581,8 @@ class GridSegmenter:
             if col.get("cell_left_x") is not None:
                 col_result["cell_left_x"] = float(col["cell_left_x"])
                 col_result["cell_right_x"] = float(col["cell_right_x"])
+                if col.get("cell_bands") is not None:
+                    col_result["cell_bands"] = col["cell_bands"]
             result_columns.append(col_result)
             x1 = max(0, int(left_x) + 2)
             x2 = min(w, int(right_x) - 2)

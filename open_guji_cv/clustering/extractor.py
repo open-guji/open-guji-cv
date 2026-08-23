@@ -47,7 +47,16 @@ WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
 SIDE_PROBE = 12            # 向列框左右各探这么多像素，看横条是否继续
 SIDE_INK_T = 0.25          # 探针带内墨量占比超此算「还在走」
-OFF_CENTER_T = 0.15        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
+OFF_CENTER_T = 0.15
+# ── 夹注/双行小字（列上下文判据）──────────────────────────
+# 单格几何分不开「夹注行」与「左右结构字」（真夹注 span 0.99~1.0 vs 单字
+# 0.60~0.70 是唯一不重叠的量，但保险起见还要列上下文）：夹注是**列区域**
+# 现象，连续多格都有双列形态、且缝的 x 位置对齐；散在的左右结构字对不齐。
+JIAZHU_SPAN_T = 0.85       # 两个子列合起来占列宽的比例下限（单字只占 ~0.7）
+JIAZHU_GAP_MIN = 3         # 子列间缝宽下限（px）。部首缝只有 2~3px
+JIAZHU_MASS_W = 0.6        # 单个子列宽度上限（× 列宽）
+JIAZHU_ALIGN = 8           # 相邻格的缝中心相差不超过此才算同一条夹注（px）
+JIAZHU_MIN_RUN = 2         # 至少连续这么多格才判夹注        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
                            # 标注集里 clean 最大 0.088、truncated 0.148~0.339；
                            # 全书命中 3.4%(vol01)/1.4%(vol02)，目视 15/18 属实
 
@@ -249,6 +258,75 @@ def _defect_flags(gray: np.ndarray) -> list[str]:
         flags.append("boundary_ink")        # 疑似：边缘带见墨
     return flags
 
+
+
+def _jiazhu_gap_center(gray: np.ndarray) -> float | None:
+    """图块若呈「双列小字」形态，返回两子列之间缝的中心 x；否则 None。
+
+    判据（实测 vol02 版本注「永樂大典本/通志堂本」与 vol01 职名双行结衔）：
+    墨的总跨度占满列宽（span ≥ JIAZHU_SPAN_T——夹注两个子列合起来和正文
+    一样宽，单字只占 ~0.7）、中缝 ≥ JIAZHU_GAP_MIN px（部首缝只有 2~3px）、
+    两侧墨量均衡、单侧不超过 0.6 列宽。
+
+    单格判据仍会被个别字骗到，所以**必须配合列上下文**使用：只有连续
+    JIAZHU_MIN_RUN 格以上、缝中心对齐（±JIAZHU_ALIGN px）才落 jiazhu flag
+    ——图块按列条带裁、x 坐标同系，缝中心可直接比较。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    binary = (gray < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    h, w = binary.shape
+    if binary.sum() < 80:
+        return None
+    xp = binary.sum(axis=0)
+    ink = np.flatnonzero(xp > 0)
+    if len(ink) < 10:
+        return None
+    x0, x1 = int(ink[0]), int(ink[-1])
+    if (x1 - x0 + 1) / w < JIAZHU_SPAN_T:
+        return None
+    runs: list[tuple[int, int]] = []
+    start = None
+    for i, v in enumerate(xp[x0:x1 + 1]):
+        if v == 0 and start is None:
+            start = i
+        elif v > 0 and start is not None:
+            runs.append((start, i)); start = None
+    gaps = [(a, b) for a, b in runs
+            if x0 + a > w * 0.30 and x0 + b < w * 0.70
+            and b - a >= JIAZHU_GAP_MIN]
+    if not gaps:
+        return None
+    ga, gb = max(gaps, key=lambda r: r[1] - r[0])
+    left = binary[:, x0:x0 + ga]
+    right = binary[:, x0 + gb:x1 + 1]
+    if min(int(left.sum()), int(right.sum())) < 40:
+        return None
+    if min(left.sum(), right.sum()) / max(left.sum(), right.sum()) < 0.25:
+        return None
+    if max(left.shape[1], right.shape[1]) > JIAZHU_MASS_W * w:
+        return None
+    return float(x0 + (ga + gb) / 2)
+
+
+def flag_jiazhu_runs(entries: list[tuple[int, float | None]]) -> set[int]:
+    """列内连续、缝对齐的夹注格序号集合。entries: [(idx, gap_center|None)]。"""
+    out: set[int] = set()
+    run: list[int] = []
+    prev_i = prev_c = None
+    for i, c in sorted(entries):
+        ok = (c is not None and prev_i is not None and i == prev_i + 1
+              and prev_c is not None and abs(c - prev_c) <= JIAZHU_ALIGN)
+        if ok:
+            run.append(i)
+        else:
+            if len(run) >= JIAZHU_MIN_RUN:
+                out.update(run)
+            run = [i] if c is not None else []
+        prev_i, prev_c = i, c
+    if len(run) >= JIAZHU_MIN_RUN:
+        out.update(run)
+    return out
 
 def _boundary_ink_frac(gray: np.ndarray) -> float:
     """图块**上下边缘带**的墨量占全图块墨量的比例。
@@ -671,7 +749,25 @@ class CharExtractor:
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
             strip = page_img[sy0:sy1, sx0:sx1]
+            # 弯的界行：矩形裁不掉（线在不同高度处于不同 x），按切分给出的
+            # **逐带裁切边**把墙外像素抹白。必须在归属之前做——弯线一旦
+            # 进入连通体分析，会与字粘连或被误归属。
+            bands = col.get("cell_bands")
+            if bands:
+                strip = strip.copy()
+                for ya, yb, blx, brx in bands:
+                    ra = max(0, int(round(ya)) - sy0)
+                    rb = min(strip.shape[0], int(round(yb)) - sy0)
+                    if rb <= ra:
+                        continue
+                    ca = max(0, int(round(blx)) - sx0)
+                    cb = min(strip.shape[1], int(round(brx)) - sx0)
+                    if ca > 0:
+                        strip[ra:rb, :ca] = 255
+                    if cb < strip.shape[1]:
+                        strip[ra:rb, cb:] = 255
 
+            col_entries: list[tuple[int, float | None, CharInstance]] = []
             local = [(int(c["index"]),
                       float(c["y_top"]) - sy0,
                       float(c["y_bottom"]) - sy0) for c in cells]
@@ -736,6 +832,13 @@ class CharExtractor:
                     flags=flags,
                 )
                 results.append((inst, patch))
+                col_entries.append((idx, _jiazhu_gap_center(patch), inst))
+            # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
+            # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
+            for j in flag_jiazhu_runs([(i, c) for i, c, _ in col_entries]):
+                for i, _c, inst in col_entries:
+                    if i == j and "jiazhu" not in inst.flags:
+                        inst.flags.append("jiazhu")
         return results
 
     # ── IO 壳 ────────────────────────────────────────────

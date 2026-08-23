@@ -292,6 +292,13 @@ class ConservativeClusterer:
         n_q = int(quarantine.sum())
         if n_q:
             print(f"隔离含贯穿竖线的图块 {n_q} 个（列边界错位嫌疑，强制单例）")
+        # 夹注/双行小字：一格里是两个并排小字，进簇会把两个不同的字捏在
+        # 一起污染整簇。隔离成单例——不丢数据，只是不参与合并。
+        jz = np.array([("jiazhu" in (inst.flags or [])) for inst in instances])
+        n_jz = int((jz & ~quarantine).sum())
+        if n_jz:
+            print(f"隔离夹注/双行小字图块 {n_jz} 个（双列并排，强制单例）")
+        quarantine |= jz
 
         print("聚类 ...")
         result = self.cluster(patches, feats, hw, ink, quarantine=quarantine)
