@@ -237,5 +237,13 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
 - **vol01 前 5 个正文页实测**：868 字位，auto 进库 71.5%、待审 28.5%；
   疑问码分布 replace_align 92 / signal_conflict 88 / degraded_crop 71 /
   weak_single 68 / near_form 30 / db_inconsistent 7。
+- **仅定字·不入库**（vol01 第 4 页首轮实审催生）：图块混有无法剥离的
+  残余、但字本身能定时，简单批准会让脏字形当上匹配范例毒化库。
+  confirm 事件可带 `admit:false`（页面 B 键拨钮）→ 字进标注结果、
+  字形不进 GlyphDB，队列状态 `confirmed_label_only`。首轮实审 70 条
+  裁决全部经此流程回收（60 human 进库 / 8 非字），事件按 seq 后到
+  覆盖（confirm 被 skip 撤销的不进库）。
 - 已知待办：weak_single 的 prob 阈（暂 0.85，`--prob-threshold`）待
-  char-ocr 集标定；已进库实例改判的 amend 语义留待重放机制实现。
+  char-ocr 集标定；已进库实例改判的 amend 语义留待重放机制实现；
+  残余混入图块的**手动抹除**（画布橡皮擦，抹后字形以 human_edited
+  provenance 入库）作为审查页下一步增强。

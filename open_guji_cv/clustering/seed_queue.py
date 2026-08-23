@@ -68,6 +68,10 @@ DOUBT_LABELS = {
 STATUS_AUTO = "auto_admitted"        # 双信号一致且零疑问，已 align 进库
 STATUS_PENDING = "pending_review"    # 等用户裁决
 STATUS_CONFIRMED = "confirmed"       # 用户确认，已 human 进库
+STATUS_LABEL_ONLY = "confirmed_label_only"
+#                                    # 用户确认了**字**但字形不入库：图块混有
+#                                    # 无法剥离的残余，当范例会毒化匹配。
+#                                    # 定字进转写/标注结果，字形不进 GlyphDB。
 STATUS_REJECTED = "rejected"         # 用户改判成别的字（decided_char 为准）
 STATUS_NOT_A_CHAR = "not_a_char"     # 用户判非字（版框/残带），不进库
 STATUS_SKIPPED = "skipped"           # 用户存疑跳过，留在队列
@@ -119,10 +123,16 @@ class SeedItem:
 #                      "ts": "..."}
 #
 # op 取值：
-#   confirm    确认 char（来自候选或手输）→ status=confirmed，human 进库
+#   confirm    确认 char（来自候选或手输）→ status=confirmed，human 进库。
+#              可带 "admit": false（**仅定字·不入库**）：图块混有无法
+#              剥离的残余时，字收进标注结果、字形不进 GlyphDB →
+#              status=confirmed_label_only。缺省 admit=true。
 #   not_a_char 非字 → status=not_a_char，不进库
 #   skip       存疑跳过 → status=skipped，留队列下批再出
 # (batch, seq) 供去重；char 仅 confirm 需要。
+# 应用纪律：同一 instance_id 的多条事件按 seq 升序、**后到覆盖**——
+# ingest 侧只应用每个字位 seq 最大的事件（confirm 后被 skip 撤销的，
+# 最终以 skip 为准、不进库）。
 SEED_EVENT_PREFIX = "GUJI-SEED-EVENT"
 
 
