@@ -3,12 +3,18 @@
   "4": {
    "total": 168,
    "auto": 98,
-   "pending": 2,
+   "pending": 0,
+   "done": true
+  },
+  "5": {
+   "total": 171,
+   "auto": 129,
+   "pending": 42,
    "done": true
   }
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": null,
- "updated_at": "2026-08-23T15:14:08+00:00"
+ "pointer": "6",
+ "updated_at": "2026-08-23T15:22:42+00:00"
 }
