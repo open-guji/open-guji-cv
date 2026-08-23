@@ -136,36 +136,50 @@ def judge_doubts(ocr: dict | None, align: dict | None, tier: str,
 
 
 DEFAULT_STRONG_PROB = 0.995   # 「OCR 100%」强信号阈（显示层四舍五入到 100%）
+DEFAULT_TRIPLE_PROB = 0.90    # 三重信号通道里 OCR 单独需要达到的下限
 
 
 def admission_decision(ocr: dict | None, align_char: str | None,
                        ref_char: str | None, doubts: list[str],
                        vmap: VariantMap,
                        strong_prob: float = DEFAULT_STRONG_PROB,
-                       ) -> tuple[bool, bool]:
-    """进库裁决：返回 (可自动进库, 是否走了强信号通道)。
+                       match_char: str | None = None,
+                       triple_prob: float = DEFAULT_TRIPLE_PROB,
+                       ) -> tuple[bool, str | None]:
+    """进库裁决：返回 (可自动进库, 通道名 None|"strong_dual"|"triple")。
 
     - 常规通道：双信号一致（OCR × 过闸对齐）且六条疑问全不命中；
     - **强信号通道**（首两页实审后加）：OCR prob ≥ strong_prob 且与
       整理本一致（过闸对齐字，或无对齐时的免闸参考字）时，
       **degraded_crop 单独不再拦**——实审校准：这类字位人工全数照准，
       机器分级的残留线索在双 100% 信号面前误报居多。
-      near_form / db_inconsistent 仍然拦（形近与库不自洽正是毒化库的
-      两条路，字对了字形也可能骑在两字之间）；signal_conflict /
-      weak_single / replace_align 与强信号在逻辑上互斥，无需另判。
+    - **三重信号通道**（四轮实审后加）：库匹配完美档（verify same，
+      cov ≥ 0.992）继承的字与 OCR、整理本三方同字时，OCR 下限放宽到
+      triple_prob——库匹配是独立于两个文本信号的**形状**证据，三方
+      同时错到同一个字上的概率可忽略。注意 never-match 护栏在匹配层
+      就把形近家族降档 unsure（match_char 为 None），所以本通道天然
+      触不到形近字。
+    两个通道都只豁免 degraded_crop；near_form / db_inconsistent 仍拦
+    （形近与库不自洽正是毒化库的两条路）；signal_conflict /
+    weak_single / replace_align 与通道条件逻辑互斥，无需另判。
     """
     ocr_char = ocr["char"] if ocr else None
     dual = (ocr_char is not None and align_char is not None
             and vmap.semantic(ocr_char) == vmap.semantic(align_char))
     if dual and not doubts:
-        return True, False
+        return True, None
     corpus_char = align_char if align_char is not None else ref_char
-    strong = (ocr is not None and ocr.get("prob", 0.0) >= strong_prob
-              and ocr_char is not None and corpus_char is not None
-              and vmap.semantic(ocr_char) == vmap.semantic(corpus_char))
-    if strong and all(d == DOUBT_DEGRADED_CROP for d in doubts):
-        return True, True
-    return False, False
+    agree = (ocr_char is not None and corpus_char is not None
+             and vmap.semantic(ocr_char) == vmap.semantic(corpus_char))
+    overridable = all(d == DOUBT_DEGRADED_CROP for d in doubts)
+    prob = ocr.get("prob", 0.0) if ocr else 0.0
+    if agree and overridable:
+        if prob >= strong_prob:
+            return True, "strong_dual"
+        if (prob >= triple_prob and match_char is not None
+                and vmap.semantic(match_char) == vmap.semantic(ocr_char)):
+            return True, "triple"
+    return False, None
 
 
 # ── progress.json ────────────────────────────────────────────────────
@@ -199,6 +213,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               max_pages: int | None = None,
               prob_threshold: float = DEFAULT_PROB_THRESHOLD,
               strong_prob: float = DEFAULT_STRONG_PROB,
+              triple_prob: float = DEFAULT_TRIPLE_PROB,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -353,9 +368,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 doubts = judge_doubts(ocr, align, tier, proposed, mr,
                                       db_chars, vmap, prob_threshold)
                 ctx = slot_context(page, rec.col, rec.idx)
-                admit_ok, strong = admission_decision(
+                admit_ok, channel = admission_decision(
                     ocr, al.char if al else None,
-                    (ctx or {}).get("ref_char"), doubts, vmap, strong_prob)
+                    (ctx or {}).get("ref_char"), doubts, vmap, strong_prob,
+                    match_char=mr.char, triple_prob=triple_prob)
                 if admit_ok and proposed is None:
                     proposed = ocr["char"] if ocr else None
 
@@ -370,8 +386,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     evidence = {"match": mr.to_dict(), "ocr": ocr,
                                 "align": align, "tier": tier,
                                 "crop": q.to_dict()}
-                    if strong:
-                        evidence["strong_dual"] = True
+                    if channel:
+                        evidence["channel"] = channel
                         evidence["ref"] = {"char": (ctx or {}).get("ref_char"),
                                            "op": (ctx or {}).get("ref_op")}
                     admitted = db.admit_instance(
@@ -388,10 +404,11 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     item.status = STATUS_AUTO
                     item.decided_char = proposed
                     item.provenance = "align"
-                    if strong:
-                        item.note = "strong_dual"
-                        summary["n_auto_strong"] = summary.get(
-                            "n_auto_strong", 0) + 1
+                    if channel:
+                        item.note = channel
+                        key = ("n_auto_strong" if channel == "strong_dual"
+                               else "n_auto_triple")
+                        summary[key] = summary.get(key, 0) + 1
                     n_auto += 1
                 else:
                     item.status = STATUS_PENDING

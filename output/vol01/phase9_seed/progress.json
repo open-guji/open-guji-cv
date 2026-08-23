@@ -21,12 +21,18 @@
   "7": {
    "total": 173,
    "auto": 125,
-   "pending": 48,
+   "pending": 0,
+   "done": true
+  },
+  "8": {
+   "total": 180,
+   "auto": 135,
+   "pending": 45,
    "done": true
   }
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": "8",
- "updated_at": "2026-08-23T15:53:36+00:00"
+ "pointer": "9",
+ "updated_at": "2026-08-23T16:10:21+00:00"
 }

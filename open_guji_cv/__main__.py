@@ -472,6 +472,7 @@ def cmd_seed(args):
                             max_pages=args.max_pages,
                             prob_threshold=args.prob_threshold,
                             strong_prob=args.strong_prob,
+                            triple_prob=args.triple_prob,
                             edition=args.edition)
     finally:
         db.close()
@@ -865,6 +866,9 @@ def main():
     p.add_argument("--strong-prob", type=float, default=0.995,
                    help="强信号阈：OCR prob ≥ 此值且与整理本一致时 "
                         "degraded 疑问不再拦、直接进库（默认 0.995）")
+    p.add_argument("--triple-prob", type=float, default=0.90,
+                   help="三重信号通道的 OCR 下限：库完美匹配 + 整理本 + "
+                        "OCR ≥ 此值 三方同字即进库（默认 0.90）")
     p.add_argument("--edition", default=None,
                    help="edition_tag（默认=书名；同版多书标同 tag）")
 

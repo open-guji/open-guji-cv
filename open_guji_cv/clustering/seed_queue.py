@@ -14,6 +14,10 @@
                  0.995）且与整理本一致（过闸对齐或免闸参考）时，
                  degraded_crop 单独不拦、直接进库（note=strong_dual）；
                  near_form / db_inconsistent 仍拦
+        三重信号通道（四轮实审后加）：库完美匹配（verify same）继承的
+                 字与 OCR（≥ triple_prob，默认 0.90）、整理本三方同字
+                 → 直接进库（note=triple）。never-match 护栏在匹配层
+                 已把形近家族降档，本通道触不到它们
         有疑问 → SeedItem(status=pending_review) 进 queue.jsonl
     审查页面（页面侧）
       按页读 queue.jsonl 的 pending_review 项 → 用户单键裁决 →

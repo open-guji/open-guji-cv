@@ -370,13 +370,13 @@ def test_admission_decision_strong_dual():
     hi = {"char": "文", "prob": 0.997}
     lo = {"char": "文", "prob": 0.92}
     # 常规：双信号零疑问
-    assert admission_decision(lo, "文", None, [], vmap) == (True, False)
+    assert admission_decision(lo, "文", None, [], vmap) == (True, None)
     # 强信号压过 degraded（对齐版 / 免闸参考版都行）
     assert admission_decision(hi, "文", None, [DOUBT_DEGRADED_CROP],
-                              vmap) == (True, True)
+                              vmap) == (True, "strong_dual")
     assert admission_decision(hi, None, "文", [DOUBT_DEGRADED_CROP],
-                              vmap) == (True, True)
-    # 低置信不走通道；混入 near_form/db_inconsistent 仍拦
+                              vmap) == (True, "strong_dual")
+    # 低置信不走强通道；混入 near_form/db_inconsistent 仍拦
     assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
                               vmap)[0] is False
     assert admission_decision(hi, "文", None,
@@ -387,6 +387,17 @@ def test_admission_decision_strong_dual():
     # 与整理本不一致 / 无整理本 → 不进
     assert admission_decision(hi, None, "又", [], vmap)[0] is False
     assert admission_decision(hi, None, None, [], vmap)[0] is False
+    # 三重信号：库完美匹配同字 → OCR 下限放宽到 triple_prob
+    assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
+                              vmap, match_char="文") == (True, "triple")
+    assert admission_decision(lo, None, "文", [], vmap,
+                              match_char="文") == (True, "triple")
+    # 库匹配的字与文本信号不同 / OCR 低于 triple 下限 → 不进
+    assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
+                              vmap, match_char="又")[0] is False
+    assert admission_decision({"char": "文", "prob": 0.7}, "文", None,
+                              [DOUBT_DEGRADED_CROP], vmap,
+                              match_char="文")[0] is False
 
 
 def test_context_crosses_columns(seeded):
