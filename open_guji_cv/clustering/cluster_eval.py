@@ -162,6 +162,11 @@ def evaluate(assignment: dict[str, str], instances: list[dict],
         strata[f"label_origin={i.get('label_origin', '?')}"].add(i["instance_id"])
         if "align_op" in i:
             strata[f"align_op={i['align_op']}"].add(i["instance_id"])
+        if "tier" in i:
+            # 干净/退化分层（2026-08 策略）：算法在干净图块上必须非常好，
+            # 在退化图块上能不崩即可——这两层的 purity 期望完全不同，
+            # 合成一个数字会互相稀释。
+            strata[f"tier={i['tier']}"].add(i["instance_id"])
     for name, subset in sorted(strata.items()):
         report["strata"][name] = compute_purity(assignment, gold, subset).to_dict()
     return report
