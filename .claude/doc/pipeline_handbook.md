@@ -68,9 +68,9 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | D | 版面几何 | `segment` | `grid.shear/period/inset` | `page-geometry`（39 页 353 界行）| 界行落入列框 0.57%，全清页 36/39 |
 | E | 行列识别 | `segment` | 逐列 `layout` + `cells` | `column-layout`（36 页 289 计分列）| 列型准确率 93.8%，elastic F1 0.91 |
 | F | 格内净化 | `chars` | 图块像素归属 | `char-segmentation/cells`（60 合成）| 逐像素金标，见 `seg-bench` |
-| G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（65 真实）| 缺陷检出 100%，确定层零误报，误报 19% |
-| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（**0**，框架）| 待建 |
-| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（**0**，框架）| 待建 |
+| G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（62 真实，第九轮）| 缺陷检出 100%，确定层零误报，误报 11% |
+| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（32，双层）| 回归门 28/28；clean 层 19 样本 0 缺陷，degraded 层 4 缺陷已记账 |
+| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6197 实例）| coverage 判据（2026-08-23 起默认）：purity 0.999/1.0/1.0，碎片率 2.80/3.58/2.92；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**0**，框架）| 待建 |
 | K | 上下文纠正 | `refine` | 定字 | `context-correction`（**0**，框架）| 待建 |
 | L | 参考校对 | `collate` | 对齐 | `collation`（**0**，框架）| 规划中 |
@@ -128,7 +128,11 @@ G6 四组可以同时开工，互相不踩脚。
 
 1. **上游产物要冻结。** G3~G6 开工前，把当时的 `output/*/phase4_chars/`
    记一个 git commit 号，评测报告里写上。上游一动，你的金标就漂了
-   （这个坑本仓库踩了 8 轮，见 §4）。
+   （这个坑本仓库踩了 8 轮，见 §4）。**转写与切分必须同版**：a435d7b 重跑
+   切分后 phase6 没跟着重跑，旧转写对新图块做对齐会系统性错标——结构
+   指纹相同也保证不了字没换（第九轮重标：10:2:6 从「列」变成「冬」）。
+   char-clustering 数据集因此用 `--pipeline-rev` 从 git 固定取 23ee9a5
+   那一版的 phase4+phase6。
 2. **各自的数据集各自建**，别改别人的。跨步骤共用的只有原图。
 3. **接口契约不许私自改**：`phase3_char_grid` 的列/格 JSON、
    `phase4_chars/index.jsonl` 的字段（`id/book/page/col/idx/bbox/flags`）、
@@ -165,6 +169,11 @@ vol01/90、93（职名页，非正文，按当前策略可以缓）。出路多�
 
 **P3 — 横向截断这一类金标样本没有了**（被修好了）。`off_center` 阈值
 实质是在已消失的案例上定的，需要另行补样才能说它「验证过」。
+
+**G3/G4（归一化/聚类）的后续待办与所需数据**单独记在
+[g3g4_error_analysis.md](g3g4_error_analysis.md) §4：unsure 审查队列
+（碎片率 2.8→1.06 的量化收益）、kNN 召回率、第三册数据、impure 对落图、
+归一化定向补样、char-ocr 白拿方案。
 
 ---
 

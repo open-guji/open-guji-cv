@@ -1,12 +1,21 @@
-"""M3 两两配准验证 —— 保守聚类的核心判据（设计文档 6.3）。
+"""M3 两两配准验证 —— 保守聚类的核心判据。
 
-在 ±max_shift 平移 × 少量缩放的小网格上搜索最优对齐，
-相似度 = 墨迹像素 F1（2·|A∩B| / (|A|+|B|)）。
+两套判据（.claude/doc/g3g4_error_analysis.md 的实测结论）：
 
-三档判决：
+**coverage（默认，2026-08-23 起）**：有界位移覆盖率 + 局部窗口残差。
+同一个字在不同字位是**不同的手工雕刻**，天然带 2~3px 局部笔画位移——
+刚性重叠 F1 对此的上限就在 0.67~0.75（扩大配准搜索只救回 1.2%，几何
+变换不是原因）。覆盖率把「B 的墨在 A 的 r=2 邻域内」都算命中，吸收
+刻工位移；12×12 窗口残差当形近护栏（一笔之差在窗口里是集中的，刻工
+噪声是弥散的）。基准（char-clustering 三分片）：purity 全部 ≥ 基线
+（vol02/human 达 1.0），碎片率 2.86→2.80 / 3.71→3.58 / 3.21→2.92。
+已知漏网家族（更宽松操作点下）：整部件替换型形近字（諭/論、太/大、
+間/問、曾/會…），密度自适应半径 / 骨架失配 / 部件失配否决均实测无效，
+出路在 OCR 候选 + 上下文（18.4 结论），几何层用回归难例对钉死操作点。
+
+**overlap（旧默认，保留作对照）**：配准 F1（2·|A∩B| / (|A|+|B|)）三档：
 - same:   f1 ≥ theta_high 且局部差异块不超限
-- unsure: theta_low ≤ f1 < theta_high，或整体相似但存在集中的局部差异
-          （"曰/日"一笔之差的防线）—— 不合并，供审查/标定
+- unsure: theta_low ≤ f1 < theta_high，或整体相似但差异集中（曰/日防线）
 - diff:   f1 < theta_low
 """
 
@@ -23,7 +32,15 @@ MAX_SHIFT = 3
 SCALES = (0.95, 1.0, 1.05)
 DIFF_BLOB_RATIO = 0.06
 
+# coverage 判据的操作点：在 880 同字对 + 879 异字对 + 173 形近对上扫出，
+# 并经三分片全量聚类验证 never-make-worse（g3g4_error_analysis.md §2）。
+COV_HIGH = 0.992       # same 所需覆盖率
+COV_LOW = 0.85         # unsure 下限（低于此 diff）
+MISS_WMAX = 12         # 12×12 窗口内未覆盖墨的上限（像素）——形近护栏
+MISS_WIN = 12
+
 _KERNEL3 = np.ones((3, 3), dtype=np.uint8)
+_KERNEL5 = np.ones((5, 5), dtype=np.uint8)   # r=2 覆盖邻域
 
 
 @dataclass
@@ -80,6 +97,59 @@ def _largest_diff_blob(a: np.ndarray, b_aligned: np.ndarray) -> int:
         return 0
     n, _, stats, _ = cv2.connectedComponentsWithStats(diff, connectivity=8)
     return int(stats[1:, cv2.CC_STAT_AREA].max()) if n > 1 else 0
+
+
+def verify_pair_cov(a: np.ndarray, b: np.ndarray,
+                    max_shift: int = MAX_SHIFT,
+                    scales: tuple[float, ...] = SCALES,
+                    cov_high: float = COV_HIGH,
+                    cov_low: float = COV_LOW,
+                    miss_wmax: float = MISS_WMAX) -> PairVerdict:
+    """coverage 判据：a, b 为 S×S uint8 {0,1} 归一二值图。
+
+    f1 字段放覆盖率（供排序/报告），diff_blob_ratio 字段放窗口残差
+    ——字段语义随判据走，报告里连着 params 读。
+    """
+    size = a.shape[0]
+    na = int(np.count_nonzero(a))
+
+    best_f1, best_shift, best_scale = 0.0, (0, 0), 1.0
+    best_b: np.ndarray | None = None
+    for scale in scales:
+        b_s = _rescale(b, scale)
+        nb = int(np.count_nonzero(b_s))
+        padded = np.zeros((size + 2 * max_shift, size + 2 * max_shift), dtype=np.uint8)
+        padded[max_shift:max_shift + size, max_shift:max_shift + size] = b_s
+        for dy in range(-max_shift, max_shift + 1):
+            for dx in range(-max_shift, max_shift + 1):
+                view = _shifted_view(padded, dx, dy, size, max_shift)
+                f1 = _f1(a, view, na, nb)
+                if f1 > best_f1:
+                    best_f1, best_shift, best_scale = f1, (dx, dy), scale
+                    best_b = view.copy()
+    if best_b is None:
+        return PairVerdict("diff", 0.0, 0.0, (0, 0), 1.0, 0.0)
+
+    b_cov = cv2.dilate(best_b, _KERNEL5)
+    a_cov = cv2.dilate(a, _KERNEL5)
+    miss_a = (a & (1 - b_cov)).astype(np.uint8)
+    miss_b = (best_b & (1 - a_cov)).astype(np.uint8)
+    na2 = max(1, int(a.sum()))
+    nb2 = max(1, int(best_b.sum()))
+    cov = 1.0 - (int(miss_a.sum()) + int(miss_b.sum())) / (na2 + nb2)
+    k = (MISS_WIN, MISS_WIN)
+    wmax = max(
+        float(cv2.boxFilter(miss_a.astype(np.float32), -1, k, normalize=False).max()),
+        float(cv2.boxFilter(miss_b.astype(np.float32), -1, k, normalize=False).max()))
+
+    if cov >= cov_high and wmax <= miss_wmax:
+        verdict = "same"
+    elif cov >= cov_low:
+        verdict = "unsure"
+    else:
+        verdict = "diff"
+    return PairVerdict(verdict, float(cov), float(best_f1),
+                       best_shift, best_scale, wmax)
 
 
 def verify_pair(a: np.ndarray, b: np.ndarray,
