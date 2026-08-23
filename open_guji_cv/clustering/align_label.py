@@ -160,11 +160,23 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
     sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
 
     out: list[AlignedLabel] = []
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+    ops = sm.get_opcodes()
+    for n, (tag, i1, i2, j1, j2) in enumerate(ops):
         if tag == "equal":
             pass
         elif tag == "replace" and (i2 - i1) == (j2 - j1):
-            pass
+            # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
+            # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
+            # 位置本身就不可信——实测漏进来的错标（卷→曰、己→已）全是
+            # 这种。要求段长 ≤3 且左右都有 ≥2 字的 equal 段贴身夹住。
+            if (i2 - i1) > 3:
+                continue
+            prev_ok = (n > 0 and ops[n - 1][0] == "equal"
+                       and ops[n - 1][2] - ops[n - 1][1] >= 2)
+            next_ok = (n + 1 < len(ops) and ops[n + 1][0] == "equal"
+                       and ops[n + 1][2] - ops[n + 1][1] >= 2)
+            if not (prev_ok and next_ok):
+                continue
         else:
             # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
             continue

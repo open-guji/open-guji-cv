@@ -174,8 +174,10 @@ G6 四组可以同时开工，互相不踩脚。
    （这个坑本仓库踩了 8 轮，见 §4）。**转写与切分必须同版**：a435d7b 重跑
    切分后 phase6 没跟着重跑，旧转写对新图块做对齐会系统性错标——结构
    指纹相同也保证不了字没换（第九轮重标：10:2:6 从「列」变成「冬」）。
-   char-clustering 数据集因此用 `--pipeline-rev` 从 git 固定取 23ee9a5
-   那一版的 phase4+phase6。
+   char-clustering 数据集因此用 `--pipeline-rev` 从 git 固定取产物版本，
+   且对齐载体改用 **OCR 载体**（`build_ocr_carrier.py`，rapidocr top1+s2t
+   落在 phase4 目录里随版本走）——载体与切分永远同版，不再依赖 label
+   步骤的重跑节奏。
 2. **各自的数据集各自建**，别改别人的。跨步骤共用的只有原图。
 3. **接口契约不许私自改**：`phase3_char_grid` 的列/格 JSON、
    `phase4_chars/index.jsonl` 的字段（`id/book/page/col/idx/bbox/flags`）、

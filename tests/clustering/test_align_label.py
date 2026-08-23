@@ -29,7 +29,7 @@ def test_equal_block_labels_every_instance():
 def test_replace_takes_gold_from_corpus_not_from_transcription():
     """转写错的位置正是最有价值的标注——金标取语料字，不取转写字。"""
     text = list(CORPUS[10:40])
-    text[5] = "傅"          # 制造一个单字转写错误
+    text[5] = "傅"          # 制造一个单字转写错误（两侧有长 equal 段夹住）
     labels, _ = label_page("7", _slots("".join(text)), "tb", CORPUS,
                            build_ngram_index(CORPUS))
     wrong = [x for x in labels if x.op == "replace"]
@@ -108,6 +108,29 @@ def test_renumbered_column_is_drift_even_at_equal_count(tmp_path):
     book = _write_book(tmp_path, ranked, renumbered)
     labels, stats = label_book("tb", book, _corpus_file(tmp_path))
     assert labels == [] and stats[0].structure_ok is False
+
+
+def test_long_replace_run_is_rejected():
+    """replace 段 >3 或没被 equal≥2 夹住的不采信（G5 采信规则）：
+    段一长，位置本身就不可信，错标全从这里漏进来。"""
+    text = list(CORPUS[10:40])
+    for i in (5, 6, 7, 8):
+        text[i] = "囗"
+    labels, _ = label_page("7", _slots("".join(text)), "tb", CORPUS,
+                           build_ngram_index(CORPUS))
+    got = {x.instance_id for x in labels if x.op == "replace"}
+    assert got == set()                       # 4 连错段整段不采
+    for i in (5, 6, 7, 8):
+        assert f"tb:7:1:{i}" not in {x.instance_id for x in labels}
+
+
+def test_replace_at_window_edge_is_rejected():
+    """页首的 replace 段没有左侧 equal 夹住 → 不采信。"""
+    text = list(CORPUS[10:40])
+    text[0] = "囗"
+    labels, _ = label_page("7", _slots("".join(text)), "tb", CORPUS,
+                           build_ngram_index(CORPUS))
+    assert "tb:7:1:0" not in {x.instance_id for x in labels}
 
 
 def test_page_slots_orders_by_column_then_index():

@@ -14,7 +14,10 @@ s2t 用 opencc 逐字转换：PP-OCR 是简体模型，语料是传承字形，�
 **单进程顺序跑**：4 核环境实测单进程 ~21ms/块（onnxruntime 内部已并
 行），多进程互相踩踏反而慢一个量级。支持断点续跑（追加写，已有 id 跳过）。
 
-    python scripts/build_ocr_carrier.py vol01 --out carrier_vol01.jsonl
+    python scripts/build_ocr_carrier.py vol01 \
+        --out output/vol01/phase4_chars/ocr_carrier.jsonl
+    # 推荐落点：与 phase4 同目录——数据集构建的 materialize_rev 按版本
+    # 取 phase4 时连带取到，载体与切分天然同版
 """
 
 from __future__ import annotations
