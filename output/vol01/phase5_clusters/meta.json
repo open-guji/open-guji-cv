@@ -1,6 +1,10 @@
 {
   "params": {
     "feature": "hog",
+    "verify_method": "coverage",
+    "cov_high": 0.992,
+    "cov_low": 0.85,
+    "miss_wmax": 12,
     "theta_high": 0.8,
     "theta_low": 0.62,
     "diff_blob_ratio": 0.06,
@@ -10,10 +14,10 @@
     "seed": 7
   },
   "stats": {
-    "n_instances": 24511,
-    "n_clusters": 22303,
-    "singleton_ratio": 0.9512,
-    "max_cluster_size": 157,
-    "n_verify_calls": 157544
+    "n_instances": 24588,
+    "n_clusters": 19528,
+    "singleton_ratio": 0.8774,
+    "max_cluster_size": 234,
+    "n_verify_calls": 194420
   }
 }
