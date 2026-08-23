@@ -1,6 +1,8 @@
 venv/
 __pycache__/
-.claude/
+# .claude/ 曾被整体忽略，但仓库里其实一直跟踪着 23 个文件（settings、doc、
+# scripts）——只有**新增**的文件会被静默漏掉：pipeline_handbook.md 写完
+# 提交时就这么丢过一次。这里是项目的设计文档与协作约定，本来就该入库。
 dist/
 build/
 *.egg-info/
