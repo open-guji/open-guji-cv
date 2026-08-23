@@ -202,6 +202,40 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
    *vol01 唯一错配 = 已记账金标标签错（羣/詳，KNOWN_GOLD_ISSUES 豁免
    进门不豁免数字）；跨册的字形层 0.9985 = 注/註 异体字形（语义层
    正确）。**硬约束门（计门精度 ≥0.999）三协议全过，真错配 0。**
-4. unsure/diff 分支接 GlyphKnnSource+RapidOcrSource+refine（现有代码
-   重编排）；context-margin 准入阈在 context-correction 集上标定。
+4. **✅ unsure/diff 分支接线 + margin 标定**（2026-08-23 晚，三轨并行
+   之分支轨）：`recognize_flow.py`（decide_unsure/decide_diff：库候选
+   cov 先验 ∪ OCR top-k+s2t，沿 context_rank 的 λ·先验+LM 融合；
+   margin = softmax 后 p1−p2；ColumnContext 同列前文窗口）。
+   `scripts/calibrate_margin.py` 在 vol02 金标分片标定（context-
+   correction 集还空，2518 个 unsure/diff 裁决）：**推荐准入阈
+   margin ≥ 0.99**（阈上计门精度 1.0000，覆盖分支实例 16.6%）。
+   `eval_db_match.py --with-branches` 端到端：
+
+   | 协议 | end2end 覆盖 | end2end 精度 | pending |
+   |---|---|---|---|
+   | vol02 册内增量 | **30.6%**（same 507 + context 419）| **1.0000** | 69.4% |
+   | vol02 ← 库=vol01 | **40.5%**（same 666 + context 560）| 0.9984（语义 0.9992）| 59.5% |
+
+   唯一阈上错例 匕→七（diff 分支 OCR-only）：匕/七 已入 never-match
+   表（防库匹配侧）；OCR-only 路径的残余风险待 char-ocr 集立门。
+   注意循环性：LM 语料 = 整理本 = 金标来源，无整理本的新书须在
+   context-correction 集重标阈值。
 5. 与 cluster→label 流水在同一分片上对完整对比，赢了切主干。
+
+### 7.1 §3.5 进库协议已落地（三轨并行，2026-08-23 晚）
+
+- **流程侧**：`guji-cv seed`（逐页双信号 + 六条疑问判定 → 零疑问
+  align 进库 / 有疑问进队列；phase9_seed/queue.jsonl + progress.json，
+  按页断点续跑）与 `guji-cv seed-ingest`（GUJI-SEED-EVENT →
+  confirmed 以 human 进库，admissions 表幂等闸）。GlyphDB 新增
+  `admit_instance`（原始图块真源 + 派生 + 证据 JSON + 审计行）。
+- **页面侧**：`review/seed_export.py` + `scripts/export_seed_review.py`
+  ——按页出 pending 卡片（原图+归一图、OCR 候选带 prob、对齐徽标、
+  库内 cov、疑问中文说明），数字键/手输/N/S/U 单键裁决，三层持久化。
+- **接口契约**：`seed_queue.py`（疑问码 / SeedItem / 事件格式 / 应用
+  纪律——两侧唯一耦合点；集成澄清见其文件头）。
+- **vol01 前 5 个正文页实测**：868 字位，auto 进库 71.5%、待审 28.5%；
+  疑问码分布 replace_align 92 / signal_conflict 88 / degraded_crop 71 /
+  weak_single 68 / near_form 30 / db_inconsistent 7。
+- 已知待办：weak_single 的 prob 阈（暂 0.85，`--prob-threshold`）待
+  char-ocr 集标定；已进库实例改判的 amend 语义留待重放机制实现。
