@@ -87,6 +87,9 @@ CELL_FENCE_BANDS = 6       # 围栏用的覆盖率**分带**统计：整页统�
                            # 是瞎的（墨摊到二三十个 x 上，每个都不到 0.2），
                            # 分带后同一条线在每带里都是直的，取各带最内侧
 CELL_FENCE_LINE_FRAC = 0.45  # 未给定 min_run 时，带内开运算长度 = 此比例 × 带高
+BAND_OVER_RUN = 1.7        # 分带的带高 = 此倍数 × min_run。实测扫参：1.5~1.7 时
+                           # vol02/151 检出 4~7 条界行、119 检出 5~6 条；提到 2.0
+                           # 以上就掉到 ≤3 条和 0~3 条——弯的界行在高带里会断
 RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 此倍数 × 列距。
                            # **不能挂在页高上**：那样阈值折算成「几个字高」会随
                            # 页面尺寸浮动——真页 2483px 高时是 1.66 个字高（安全），
@@ -155,8 +158,12 @@ def _vline_cov_banded(binary: np.ndarray, min_run: float | None = None,
     if min_run is None:                       # 未给尺度 → 按页高分带（旧行为）
         bands, run = n_bands, None
     else:
-        # 带高至少 3 倍 min_run，否则线在带内占比过高、覆盖率失去分辨力
-        bands = max(1, int(h // max(1.0, 3.0 * min_run)))
+        # 带高取 BAND_OVER_RUN 倍 min_run：太矮则一条正常界行也占不满带、
+        # 覆盖率失去分辨力；**太高则弯的界行在带内又断掉**——这一条是实测
+        # 踩出来的，带高系数从 1.7 提到 3.0（真页从 6 带掉到 3 带）时，
+        # vol02/151 的界行检出从 7 条掉回 2 条、119 从 5 条掉回 0 条，
+        # 分带带来的全部收益被抵消。
+        bands = max(1, int(h // max(1.0, BAND_OVER_RUN * min_run)))
         run = int(round(min_run))
     out = np.zeros(binary.shape[1], dtype=float)
     for i in range(bands):
