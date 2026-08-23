@@ -197,3 +197,42 @@ def classify_page_type(gray: np.ndarray) -> tuple[str, str]:
     if f["x_cover"] < LABEL_X_COVER and f["y_cover"] > LABEL_Y_COVER:
         return "label", "skip"
     return "body", "standard"
+
+# ── 切分后的页型细化（正文/职名判别）──────────────────────
+ROSTER_EL_T = 0.5          # 弹性列比例达到此值才判 roster。阈值从金标极端定：
+                           # 修正金标后 body 的弹性列比例最大 0.22（vol02/179、
+                           # 131 各有 2/9 列被误判弹性），0.5 留了 2.3 倍余量，
+                           # 金标上 roster 检出 41/44、body 误判 0。漏掉的 3 页
+                           # （p90 压缩型职名 el=0.11、p107、p89 段首）都是
+                           # 弹性列检出不足的已知案例，归 body 是可接受方向。
+                           # 方向性代价不对称：正文误判成职名 = 该页被排除在
+                           # 正文指标/正文优化之外（静默损失，零容忍）；
+                           # 职名漏判成正文 = 噪声页混进正文集（可事后标记）。
+                           # 所以存疑一律归 body
+ROSTER_EL_MIN = 3          # 至少这么多条弹性列（绝对数，防少列页碰运气）
+
+
+def refine_page_type(result: dict) -> str:
+    """用**切分产物**把 body 细分出 roster（职名页）。
+
+    classify_page_type 在切分前跑，只看得到灰度统计，分不开 body/roster/
+    toc（实测 roster 31 页、toc 47 页全被归into body）。切分之后强特征
+    就有了：职名页的列几乎全是弹性列（字距拉开），正文页几乎没有——
+    修正金标后两个分布完全分开（body max 0.22 vs roster p25 1.00）。
+
+    toc **不判**，如实记录：卷首页（标题短列 + 正文列混合）与 toc 在
+    列占用形态上真重叠（body fill 最低 0.24 vs toc 最高 0.65），
+    没有不重叠的量之前不设阈值。
+
+    返回细化后的页型；非 body 或证据不足时原样返回。
+    """
+    ptype = result.get("page_type", "body")
+    if ptype != "body":
+        return ptype
+    cols = [c for c in result.get("columns", []) if not c.get("skipped")]
+    if len(cols) < ROSTER_EL_MIN:
+        return ptype
+    n_el = sum(1 for c in cols if c.get("layout") == "elastic")
+    if n_el >= ROSTER_EL_MIN and n_el / len(cols) >= ROSTER_EL_T:
+        return "roster"
+    return ptype

@@ -7,7 +7,8 @@ from pathlib import Path
 
 import cv2
 
-from open_guji_cv.clustering.page_type import classify_page_type, load_labels
+from open_guji_cv.clustering.page_type import (classify_page_type,
+                                               load_labels, refine_page_type)
 from open_guji_cv.clustering.pagetype_eval import evaluate, format_report
 
 
@@ -22,7 +23,15 @@ def main() -> None:
         img = cv2.imread(f"output/{g.book}/{g.page}.png", cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
-        pred[g.key] = classify_page_type(img)
+        ptype, policy = classify_page_type(img)
+        # 切分产物在手时做页型细化（body → roster），与管线 run_book 一致
+        gp = Path("output") / g.book / "phase3_char_grid" \
+            / f"{g.page}_char_grid.json"
+        if ptype == "body" and gp.exists():
+            r = json.loads(gp.read_text(encoding="utf-8"))
+            r["page_type"] = ptype
+            ptype = refine_page_type(r)
+        pred[g.key] = (ptype, policy)
     rep = evaluate(gold, pred)
     print(format_report(rep))
     if args.json_out:

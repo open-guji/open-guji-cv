@@ -1161,3 +1161,21 @@ def test_period_from_rules_survives_a_worn_frame_cluster():
                         984, 1173, 1350, 1542], float)
     for prior in (177.6, 184.7):
         assert abs(_period_from_rules(centers, prior) - 187.3) < 1.0
+
+
+def test_refine_page_type_flags_an_elastic_page_as_roster():
+    from open_guji_cv.clustering.page_type import refine_page_type
+    cols = [{"layout": "elastic"}] * 6 + [{"layout": "rigid"}] * 3
+    assert refine_page_type({"page_type": "body", "columns": cols}) == "roster"
+
+
+def test_refine_page_type_keeps_body_below_threshold():
+    """存疑一律归 body——正文误判成职名是静默损失，零容忍。"""
+    from open_guji_cv.clustering.page_type import refine_page_type
+    cols = [{"layout": "elastic"}] * 2 + [{"layout": "rigid"}] * 7
+    assert refine_page_type({"page_type": "body", "columns": cols}) == "body"
+    # 少列页凑不齐绝对数也不判
+    assert refine_page_type({"page_type": "body",
+                             "columns": [{"layout": "elastic"}] * 2}) == "body"
+    # 非 body 原样返回
+    assert refine_page_type({"page_type": "toc", "columns": cols}) == "toc"
