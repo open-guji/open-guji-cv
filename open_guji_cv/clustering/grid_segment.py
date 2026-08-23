@@ -24,7 +24,7 @@ import numpy as np
 
 from ..utils.image_io import imread
 from .extractor import CharExtractor
-from .page_type import classify_page_type
+from .page_type import classify_page_type, refine_page_type
 
 BINARY_THRESHOLD = 128
 EMPTY_INK_RATIO = 0.02     # 格内墨迹覆盖率低于此 → empty
@@ -1889,6 +1889,17 @@ class GridSegmenter:
                             n_weak += 1
                 if n_weak:
                     print(f"  书级网格校正弱信号页 {n_weak} 张")
+
+        # ── 页型细化：切分完成后用产物特征把 body 里的职名页分出来 ──
+        # （只改标签不改切分；toc 不判，见 refine_page_type 的注释）
+        n_refined = 0
+        for stem, _, _ in pages:
+            new_type = refine_page_type(results[stem])
+            if new_type != results[stem].get("page_type"):
+                results[stem]["page_type"] = new_type
+                n_refined += 1
+        if n_refined:
+            print(f"  页型细化：{n_refined} 页由 body 改判 roster")
 
         n_pages = n_chars = n_empty = 0
         for stem, _, _ in pages:
