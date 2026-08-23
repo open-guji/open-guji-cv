@@ -1617,6 +1617,11 @@ class GridSegmenter:
         pages: list[tuple[str, Path, dict]] = []
         skipped_pages: list[tuple[str, str]] = []
         pitches: list[float] = []
+        # 页型单独存：后续各 pass 用 segment_page 的返回值**整体替换**
+        # results[stem]，替换时字段就丢了。逐个 pass 补「保留 page_type」
+        # 已经踩过一次坑（Pass 2a3 保留到了一个 None），治本是把页型放在
+        # results 之外，写盘前统一盖章。
+        ptypes: dict[str, str] = {}
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
             img_path = CharExtractor._find_page_image(src, stem)
@@ -1646,6 +1651,7 @@ class GridSegmenter:
             pages.append((stem, img_path, layout))   # 不缓存像素，弱页重读
             r = self.segment_page(image, layout)
             r["page_type"] = ptype
+            ptypes[stem] = ptype
             results[stem] = r
             pitches.extend(measure_page_pitch(
                 image if image.ndim == 2
@@ -1801,7 +1807,6 @@ class GridSegmenter:
                     # 择优：内缩塌掉本身即失败证据，但仍按 rule_in_col 把关
                     if redone["grid"].get("rule_in_col", 1.0) <= \
                             results[stem]["grid"].get("rule_in_col", 1.0):
-                        redone["page_type"] = results[stem].get("page_type")
                         results[stem] = redone
                         ins_prior[stem] = prior
                         n_inset_fix += 1
@@ -1890,12 +1895,14 @@ class GridSegmenter:
                 if n_weak:
                     print(f"  书级网格校正弱信号页 {n_weak} 张")
 
-        # ── 页型细化：切分完成后用产物特征把 body 里的职名页分出来 ──
+        # ── 页型盖章 + 细化：先把 Pass 1 的页型统一写回（后续 pass 的整体
+        # 替换会丢字段），再用产物特征把 body 里的职名页分出来。
         # （只改标签不改切分；toc 不判，见 refine_page_type 的注释）
         n_refined = 0
         for stem, _, _ in pages:
+            results[stem]["page_type"] = ptypes.get(stem, "body")
             new_type = refine_page_type(results[stem])
-            if new_type != results[stem].get("page_type"):
+            if new_type != results[stem]["page_type"]:
                 results[stem]["page_type"] = new_type
                 n_refined += 1
         if n_refined:
