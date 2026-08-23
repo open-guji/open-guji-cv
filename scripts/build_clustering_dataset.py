@@ -52,14 +52,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from open_guji_cv.clustering.align_label import (BLANK_INK, clean_labels,
-                                                 label_book, summarize)
+from open_guji_cv.clustering.align_label import (BLANK_INK, carrier_slots,
+                                                 clean_labels, label_book,
+                                                 summarize)
 from open_guji_cv.clustering.crop_quality import assess_crop
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch)
 
 SOURCE_ITEM = "06061300.cn"        # 武英殿刻本《欽定四庫全書總目》卷首（page-type 同源）
-PIPELINE_REV = "23ee9a518"         # 冻结的上游产物版本（见文件头 --pipeline-rev）
+PIPELINE_REV = "502fa04d0c"        # 冻结的上游产物版本（见文件头 --pipeline-rev）
 FEATURE_BACKEND = "hog"
 MAX_CONFUSION_PAIRS = 40
 MAX_INK_PAIRS = 40
@@ -222,8 +223,11 @@ def ink_extreme_same_pairs(labels, ink_of: dict[str, float],
 
 def build_align_shard(book: str, out_dir: Path, output_root: Path,
                       corpus: Path, body_pages: set[str],
-                      max_instances: int, seed: int, commit: str) -> dict:
-    labels, stats = label_book(book, output_root / book, corpus, pages=body_pages)
+                      max_instances: int, seed: int, commit: str,
+                      carrier: Path | None = None) -> dict:
+    slots = carrier_slots(carrier) if carrier else None
+    labels, stats = label_book(book, output_root / book, corpus,
+                               pages=body_pages, slots_by_page=slots)
     page_stats = summarize(stats)
 
     index = {}
@@ -285,6 +289,7 @@ def build_align_shard(book: str, out_dir: Path, output_root: Path,
         "pipeline_version": commit,
         "label_origin": "align",
         "shard_id": f"{book}/body-{len(chosen)}pages",
+        "carrier": "rapidocr-top1-s2t" if carrier else "phase6-ranked",
         "feature_backend": FEATURE_BACKEND,
         "norm_params": norm_params(),
         "pages": sorted(chosen, key=int),
@@ -446,6 +451,9 @@ def main() -> None:
     ap.add_argument("--pipeline-rev", default=PIPELINE_REV,
                     help="从 git 的这一版取 phase4/phase6（transcription 与切分必须同版）；"
                          "传空串则用工作区 output/")
+    ap.add_argument("--carrier-dir", default=None,
+                    help="OCR 载体目录（含 carrier_{book}.jsonl，"
+                         "由 scripts/build_ocr_carrier.py 生成）。给定时不再依赖 phase6 转写")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--page-type", default="../open-guji-dataset/page-type/expected.json")
     ap.add_argument("--glyph-store", default="glyph_store")
@@ -468,8 +476,11 @@ def main() -> None:
                 if g["book"] == book and g["page_type"] == "body"}
         out_dir = dataset / "samples" / name
         out_dir.mkdir(parents=True, exist_ok=True)
+        carrier = (Path(args.carrier_dir) / f"carrier_{book}.jsonl"
+                   if args.carrier_dir else None)
         st = build_align_shard(book, out_dir, output_root, Path(args.corpus),
-                               body, args.max_instances, args.seed, commit)
+                               body, args.max_instances, args.seed, commit,
+                               carrier=carrier)
         write_info(out_dir, {
             "id": name, "source": SOURCE_ITEM, "source_item": SOURCE_ITEM,
             "book": book,
