@@ -46,8 +46,9 @@ from .normalize import normalize_patch
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
-                         STATUS_AUTO, STATUS_CONFIRMED, STATUS_NOT_A_CHAR,
-                         STATUS_PENDING, STATUS_SKIPPED, SeedItem)
+                         STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
+                         STATUS_NOT_A_CHAR, STATUS_PENDING, STATUS_SKIPPED,
+                         SeedItem)
 from .variants import VariantMap
 
 # weak_single 的 OCR prob 阈。**待 char-ocr 集标定**（设计 §3.5 条目 2），
@@ -390,7 +391,16 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
     rec_of = {r.id: r for r in load_index(root)}
     vmap = VariantMap.load(variants)
     n = Counter()
-    for ev in events:
+    # 契约应用纪律：同一 instance_id 按 seq 后到覆盖——只应用每个字位
+    # seq 最大的事件（confirm 后被 skip 撤销的，最终以 skip 为准）。
+    last: dict[str, dict] = {}
+    for ev in sorted(events, key=lambda e: e.get("seq") or 0):
+        iid = ev.get("instance_id", "")
+        if iid:
+            last[iid] = ev
+    n["events"] = len(events)
+    n["superseded"] = len(events) - len(last)
+    for ev in last.values():
         it = items.get(ev.get("instance_id", ""))
         if it is None:
             n["unknown"] += 1
@@ -400,6 +410,13 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             char = (ev.get("char") or "").strip()
             if not char:
                 n["invalid"] += 1
+                continue
+            if ev.get("admit") is False:
+                # 仅定字·不入库：图块混有无法剥离的残余，字形不当范例
+                it.status = STATUS_LABEL_ONLY
+                it.decided_char = char
+                it.provenance = None
+                n["label_only"] += 1
                 continue
             gray = cv2.imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
             if gray is None:

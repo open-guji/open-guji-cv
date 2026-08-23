@@ -273,3 +273,14 @@ def test_ingest_roundtrip(seed_book):
     assert by_iid["tbook:4:2:5"]["op"] == "not_a_char"
     assert ingest_seed_events("") == []
     assert ingest_seed_events("没有事件的文本") == []
+
+
+def test_render_html_label_only_toggle(seed_book):
+    """「字形不入库」拨钮：按钮 + 热键 B + confirm 事件带 admit:false 的接线。"""
+    page = render_seed_html(build_seed_batch(seed_book, _queue(seed_book),
+                                             page=4))
+    assert 'class="noadm"' in page and "字形不入库" in page
+    assert "toggleNoAdmit" in page
+    assert "ev.admit = false" in page
+    assert "'b' || e.key === 'B'" in page
+    assert "data-noadmit" in page

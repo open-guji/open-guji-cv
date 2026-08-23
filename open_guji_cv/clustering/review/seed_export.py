@@ -34,9 +34,10 @@ from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
                           parse_seed_events)
 
-# 已裁决 = 不再需要出现在待审批次里的状态（auto_admitted 也算：免审进库）
-_DECIDED = {"auto_admitted", STATUS_CONFIRMED, STATUS_REJECTED,
-            STATUS_NOT_A_CHAR}
+# 已裁决 = 不再需要出现在待审批次里的状态（auto_admitted 也算：免审进库；
+# confirmed_label_only = 定了字但字形不入库，同样已裁决）
+_DECIDED = {"auto_admitted", STATUS_CONFIRMED, "confirmed_label_only",
+            STATUS_REJECTED, STATUS_NOT_A_CHAR}
 # 待审 = 本批次要出的状态（skipped 留在队列，下批再出）
 _REVIEWABLE = {STATUS_PENDING, STATUS_SKIPPED}
 
@@ -379,7 +380,8 @@ def _render_seed_card(e: dict) -> str:
 <span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
 <button type="button" class="other-ok">确定</button></span>
 <button type="button" class="nac"><kbd>N</kbd>非字</button>
-<button type="button" class="skip"><kbd>S</kbd>存疑跳过</button></div>
+<button type="button" class="skip"><kbd>S</kbd>存疑跳过</button>
+<button type="button" class="noadm" title="图块混有无法剥离的残余时：确认的字只进标注结果，字形不进库当匹配范例"><kbd>B</kbd>字形不入库</button></div>
 <div class="evi">{_render_evidence(e)}</div>
 </div></div></article>"""
 
@@ -480,6 +482,11 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   padding:.2rem .55rem;cursor:pointer;display:inline-flex;gap:.3rem}
 .nac{color:var(--bad);border-color:var(--bad)}
 .skip{color:var(--doubt);border-color:var(--doubt)}
+.noadm{font:inherit;font-size:.85rem;background:none;color:var(--muted);
+  border:1px dashed var(--line);border-radius:3px;padding:.2rem .55rem;
+  cursor:pointer;display:inline-flex;gap:.3rem}
+.card[data-noadmit="1"] .noadm{color:var(--seal);border-color:var(--seal);
+  border-style:solid;background:var(--hl)}
 .evi{display:flex;flex-direction:column;gap:.3rem;font-size:.92rem}
 .evi-row{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
 .evi-k{font-size:.72rem;color:var(--muted);letter-spacing:.15em;min-width:3.2em}
@@ -645,7 +652,9 @@ _JS = """
   function applyVisual(ev){
     var card = cardOf(ev.instance_id); if(!card) return;
     if(ev.op === 'confirm'){
-      card.setAttribute('data-state', 'done'); setChosen(card, ev.char); }
+      card.setAttribute('data-state', 'done');
+      card.removeAttribute('data-noadmit');
+      setChosen(card, ev.admit === false ? ev.char + '·不入庫' : ev.char); }
     else if(ev.op === 'not_a_char'){
       card.setAttribute('data-state', 'nac'); setChosen(card, '非字'); }
     else if(ev.op === 'skip'){
@@ -688,7 +697,11 @@ _JS = """
   function decide(card, op, ch){
     var iid = card.getAttribute('data-iid');
     var ev = {op: op, instance_id: iid};
-    if(op === 'confirm') ev.char = ch;
+    if(op === 'confirm'){
+      ev.char = ch;
+      // 「字形不入库」拨钮开着 → 定字进标注结果、字形不进 GlyphDB
+      if(card.getAttribute('data-noadmit') === '1') ev.admit = false;
+    }
     emit(ev);
     undoStack.push({iid: iid, op: op});
     applyVisual(ev);
@@ -775,8 +788,15 @@ _JS = """
       confirmChar(card, card.querySelector('.other-in').value);
     else if(btn.classList.contains('nac')) decide(card, 'not_a_char');
     else if(btn.classList.contains('skip')) decide(card, 'skip');
+    else if(btn.classList.contains('noadm')) toggleNoAdmit(card);
     else if(btn.classList.contains('reopen')) reopen(card);
   });
+  function toggleNoAdmit(card){
+    if(card.getAttribute('data-noadmit') === '1')
+      card.removeAttribute('data-noadmit');
+    else { card.setAttribute('data-noadmit', '1');
+           status('已標記「字形不入庫」：接下來選的字只進標注結果'); }
+    setActive(card); }
 
   // ── 交互：單鍵 ──
   document.addEventListener('keydown', function(e){
@@ -799,6 +819,8 @@ _JS = """
       decide(card, 'not_a_char'); e.preventDefault(); }
     else if(e.key === 's' || e.key === 'S'){
       decide(card, 'skip'); e.preventDefault(); }
+    else if(e.key === 'b' || e.key === 'B'){
+      toggleNoAdmit(card); e.preventDefault(); }
     else if(e.key === 'ArrowDown' || e.key === 'j'){
       advance(card); e.preventDefault(); }
     else if(e.key === 'ArrowUp' || e.key === 'k'){
@@ -885,7 +907,8 @@ def render_seed_html(batch: dict, title: str | None = None) -> str:
 </main>
 <footer class="foot">
 <p class="hint">單鍵：<kbd>1</kbd>–<kbd>9</kbd> 選候選 ｜ 直接打字手輸正字（Enter 確認）
-｜ <kbd>N</kbd> 非字 ｜ <kbd>S</kbd> 存疑跳過 ｜ <kbd>U</kbd> 撤銷上一條
+｜ <kbd>N</kbd> 非字 ｜ <kbd>S</kbd> 存疑跳過 ｜ <kbd>B</kbd> 字形不入庫（先撥開，再選字：
+圖塊混殘余時字只進標注結果、不進字形庫當範例）｜ <kbd>U</kbd> 撤銷上一條
 ｜ <kbd>↑</kbd><kbd>↓</kbd> 移動。已裁決卡片自動收起，點「改」可復查。
 停手約 6 秒自動儲存（儲存瞬間頁面會刷新一下，位置自動接續），關頁重開會自動恢復。
 審完後告訴 Claude 一聲即可——裁決已隨頁面儲存，Claude 能直接讀取；

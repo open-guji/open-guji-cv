@@ -328,3 +328,31 @@ def test_ingest_decisions_and_idempotency(seeded):
         .read_text(encoding="utf-8"))
     assert progress["pages"]["2"]["pending"] == 0
     assert progress["pages"]["7"]["pending"] == len(PAGES["7"])  # skip 留队列
+
+
+def test_ingest_label_only_and_last_wins(seeded):
+    """仅定字·不入库（admit:false）+ 同字位事件按 seq 后到覆盖。"""
+    db = seeded["db"]
+    text = "\n".join([
+        # 图块混残余：定字「珍」但字形不进库
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:3:1:9", '
+        '"char": "珍", "admit": false, "batch": "b2", "seq": 1}',
+        # confirm 后撤销（skip 后到）→ 最终不进库、留队列（取 pending 字位）
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:1", '
+        '"char": "被", "batch": "b2", "seq": 2}',
+        'GUJI-SEED-EVENT {"op": "skip", "instance_id": "tb:7:1:1", '
+        '"batch": "b2", "seq": 3}',
+    ])
+    events = parse_seed_events(text)
+    r = ingest_decisions(seeded["book_dir"], db, events)
+    assert r["label_only"] == 1
+    assert r.get("admitted", 0) == 0          # 两条 confirm 都没进库
+
+    q = _queue(seeded)
+    it = q["tb:3:1:9"]
+    assert it.status == "confirmed_label_only"
+    assert it.decided_char == "珍" and it.provenance is None
+    assert q["tb:7:1:1"].status == STATUS_SKIPPED
+
+    admitted = _admitted_ids(db)
+    assert "tb:3:1:9" not in admitted and "tb:7:1:1" not in admitted
