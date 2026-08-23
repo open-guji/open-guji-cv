@@ -1099,3 +1099,50 @@ def test_snap_keeps_the_rigid_line_when_there_is_no_gap():
     proj = np.full(1200, 50.0)
     bounds = [float(k * 100) for k in range(1, 11)]
     assert snap_bounds_to_gaps(proj, bounds, 100.0) == bounds
+
+
+def test_later_passes_keep_the_corrected_period(tmp_path):
+    """后续 pass 重跑时必须带上已修好的**列距**。
+
+    与格高同理，但当初只给格高做了。实测 vol02/38 的自由拟合列距是 70.2px
+    （书级 184.4），Pass 2a2 修成 187.3，Pass 2a3 重跑时没带列距先验、又被
+    自由拟合掉回 70.2——而它的择优判据 rule_in_col 在这种退化几何下恒为 0
+    （列框小到界行根本落不进去），门控一律放行。那一页 88 个图块全部 bad_seg。
+    """
+    import json
+
+    import cv2
+
+    from open_guji_cv.clustering.grid_segment import GridSegmenter
+
+    n_cols, period, h = 9, 185, 2000
+    w = n_cols * period + 20
+    out = tmp_path / "book"
+    src = out / "src"
+    (out / "phase2_layout").mkdir(parents=True)
+    src.mkdir(parents=True)
+    layout = {"borders": {"inner_frame": {"top": {"intercept": 40},
+                                          "bottom": {"intercept": 1960}}}}
+    for i in range(8):
+        page = np.full((h, w), 245, np.uint8)
+        for k in range(n_cols + 1):
+            x = 10 + k * period
+            if x < w:
+                page[40:h - 40, x - 2:x + 2] = 20
+        for k in range(n_cols):
+            x = 10 + k * period + 30
+            # 最后一页的内缩故意大一截，把它拖进「内缩共识」那一 pass
+            if i == 7:
+                x += 18
+            for j in range(14):
+                page[70 + j * 130:70 + j * 130 + 100, x:x + period - 70] = 20
+        cv2.imwrite(str(src / f"{i}.png"), page)
+        (out / "phase2_layout" / f"{i}_layout.json").write_text(
+            json.dumps(layout), encoding="utf-8")
+    seg = GridSegmenter(chars_per_line=14, n_cols=n_cols)
+    seg.run_book(out, source_dir=src)
+    periods = [json.loads((out / "phase3_char_grid" / f"{i}_char_grid.json")
+                          .read_text(encoding="utf-8"))["grid"]["period"]
+               for i in range(8)]
+    med = float(np.median(periods))
+    assert max(abs(p - med) for p in periods) <= 0.06 * med, periods

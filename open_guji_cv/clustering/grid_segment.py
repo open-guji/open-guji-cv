@@ -1649,6 +1649,13 @@ class GridSegmenter:
         # 否则行网格会被重新自由拟合、再次锁到谐波上。实测漏带这个参数时
         # 格高坏掉的页从 3 张涨到 17 张（页 168 整页格高 59px = 书级 113.7 的一半）。
         row_prior: dict[str, float] = {}
+        # 同理，列距与内缩修好之后也必须带给后续 pass。这一条当初只给格高
+        # 做了，列距漏了：实测 vol02/38 的自由拟合列距是 70.2px（书级 184.4），
+        # Pass 2a2 修成 187.3，Pass 2a3 重跑时没带列距先验，又被自由拟合掉回
+        # 70.2——而它的择优判据 rule_in_col 在这种退化几何下恒为 0（列框小到
+        # 界行根本落不进去），门控一律放行。那一页 88 个图块全部 bad_seg。
+        col_prior: dict[str, float] = {}
+        ins_prior: dict[str, tuple[float, float]] = {}
         cell_hs = [r["grid"]["cell_h"] for r in results.values()
                    if r.get("grid", {}).get("cell_h")]
         if len(cell_hs) >= 5:
@@ -1713,6 +1720,7 @@ class GridSegmenter:
                 if redone["grid"].get("rule_in_col", 1.0) <= \
                         results[stem]["grid"].get("rule_in_col", 1.0):
                     results[stem] = redone
+                    col_prior[stem] = consensus_p
                     n_period_fix += 1
             if n_period_fix:
                 print(f"  书级列距共识 {consensus_p:.1f}px，"
@@ -1751,6 +1759,7 @@ class GridSegmenter:
                         continue
                     redone = self.segment_page(
                         image, layout, inset_prior=prior,
+                        period_prior=col_prior.get(stem),
                         # 这两个 pass 只改**列**参数，行网格不该重新拟合——
                     # 原样带过去（Pass 2a 修过的用修后的值）
                     cell_h_prior=(row_prior.get(stem)
@@ -1761,6 +1770,7 @@ class GridSegmenter:
                             results[stem]["grid"].get("rule_in_col", 1.0):
                         redone["page_type"] = results[stem].get("page_type")
                         results[stem] = redone
+                        ins_prior[stem] = prior
                         n_inset_fix += 1
                 if n_inset_fix:
                     print(f"  书级内缩共识 ({prior[0]:.0f},{prior[1]:.0f})px，"
@@ -1789,6 +1799,8 @@ class GridSegmenter:
                     redone = self.segment_page(
                         image, layout, cell_h_prior=consensus_h,
                         row_phase_abs=y_best,
+                        period_prior=col_prior.get(stem),
+                        inset_prior=ins_prior.get(stem),
                         shear_override=res["grid"].get("shear", 0.0))
                     if straddle_score(image, redone) < cur - STRADDLE_GAIN:
                         results[stem] = redone
