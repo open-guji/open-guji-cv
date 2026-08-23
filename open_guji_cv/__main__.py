@@ -471,6 +471,7 @@ def cmd_seed(args):
                             carrier_path=args.ocr_carrier,
                             max_pages=args.max_pages,
                             prob_threshold=args.prob_threshold,
+                            context_margin=args.context_margin,
                             edition=args.edition)
     finally:
         db.close()
@@ -857,7 +858,12 @@ def main():
                             "phase9_seed/（需先 chars + OCR 载体）")
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--db", required=True, help="GlyphDB SQLite 路径")
-    p.add_argument("--corpus", required=True, help="整理本参考文本路径")
+    p.add_argument("--corpus", required=True, action="append",
+                   help="整理本参考文本路径（可给多次：主整理本 + 自补的"
+                        "奏折/上谕文本，内部拼接后锚定/参考/LM 同源）")
+    p.add_argument("--context-margin", type=float, default=0.70,
+                   help="上下文通道的 margin 准入阈（用户实审 303 条裁决"
+                        "重标定：≥0.70 全对；默认 0.70）")
     p.add_argument("--pages", default="body", choices=["body", "all"],
                    help="body=只跑金标正文页（默认）；all=索引里的全部页")
     p.add_argument("--page-type",

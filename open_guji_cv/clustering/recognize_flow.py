@@ -44,6 +44,9 @@ from .match import MatchResult
 # glyph_knn 是人工/上下文验证过的字形，OCR 是简体模型的猜测）。
 DB_WEIGHT = 3.0
 OCR_WEIGHT = 1.5
+CORPUS_WEIGHT = 2.5   # 整理本字当第三路候选的权重（seed 上下文通道用；
+#                       实审校准：信号打架时用户 92% 选整理本，但仍须过
+#                       margin 门 + LM，不是无条件采信）
 DEFAULT_TOPK = 5
 
 
@@ -83,12 +86,16 @@ class Decision:
 def fuse_priors(db_candidates: list[tuple[str, float]],
                 ocr_topk: list[tuple[str, float]],
                 w_db: float = DB_WEIGHT, w_ocr: float = OCR_WEIGHT,
-                s2t: bool = True) -> dict[str, float]:
-    """库候选 ∪ OCR top-k → 归一化先验分布（纯函数）。
+                s2t: bool = True,
+                extra: list[tuple[str, float]] | None = None,
+                w_extra: float = CORPUS_WEIGHT) -> dict[str, float]:
+    """库候选 ∪ OCR top-k（∪ 额外来源）→ 归一化先验分布（纯函数）。
 
     - 库候选：(char, cov)，cov 直接当先验强度；
     - OCR top-k：(char, prob)，先过 traditional_candidates 做 s2t 扩展
       （简体输出还原为繁体候选，一简多繁全给、权重照旧表）；
+    - extra：额外来源（当前用途：seed 上下文通道把整理本字放进候选池
+      ——OCR 认错时语料字必须有资格被裁决，八轮实审发现的缺口）；
     - 同字多来源相加（库与 OCR 都指向同一个字 = 更强）。
     """
     score: dict[str, float] = {}
@@ -98,6 +105,8 @@ def fuse_priors(db_candidates: list[tuple[str, float]],
         forms = traditional_candidates(ch) if s2t else [(ch, 1.0)]
         for form, w in forms:
             score[form] = score.get(form, 0.0) + w_ocr * max(p, 0.0) * w
+    for ch, p in extra or []:
+        score[ch] = score.get(ch, 0.0) + w_extra * max(p, 0.0)
     total = sum(score.values())
     if total <= 0:
         n = len(score)
@@ -145,7 +154,9 @@ def decide_unsure(match_result: MatchResult,
                   semantic_fn: Callable[[str], str] | None = None,
                   lam: float = LAMBDA,
                   w_db: float = DB_WEIGHT, w_ocr: float = OCR_WEIGHT,
-                  s2t: bool = True) -> Decision:
+                  s2t: bool = True,
+                  extra: list[tuple[str, float]] | None = None,
+                  w_extra: float = CORPUS_WEIGHT) -> Decision:
     """unsure 档裁决：库候选（cov 先验）∪ OCR top-k（prob 先验）→ 融合。
 
     Args:
@@ -161,7 +172,8 @@ def decide_unsure(match_result: MatchResult,
         lam: 先验/LM 融合权重（context_rank.LAMBDA 同义）。
     """
     priors = fuse_priors(match_result.candidates, ocr_topk,
-                         w_db=w_db, w_ocr=w_ocr, s2t=s2t)
+                         w_db=w_db, w_ocr=w_ocr, s2t=s2t,
+                         extra=extra, w_extra=w_extra)
     return _decide(priors, "unsure", context, lm, semantic_fn, lam)
 
 
@@ -180,6 +192,39 @@ def decide_diff(ocr_topk: list[tuple[str, float]],
     """
     priors = fuse_priors([], ocr_topk, w_ocr=w_ocr, s2t=s2t)
     return _decide(priors, "diff", context, lm, semantic_fn, lam)
+
+
+def semantic_margin(decision: Decision,
+                    semantic_fn: Callable[[str], str],
+                    surface_prefs: set[str] | None = None,
+                    ) -> tuple[str | None, float]:
+    """语义层 margin + 字形层选形（seed 准入用，纯函数）。
+
+    同语义的异体候选（珎/珍、為/爲）不是真竞争——surface 层的 margin
+    会被自家摊薄（九轮实审：语料字入池后 珎 vs 珍 margin 掉到 0.28）。
+    这里把 ranked 按 semantic 归并计分：
+    - margin = 胜出语义组的合计概率 − 次强**不同语义**组的合计概率；
+    - 返回的 surface 字优先取 surface_prefs 里的形（OCR/库真正看到的
+      精确异体，字形层纪律：不按语义归并丢字形），否则取组内最高分形。
+    """
+    if not decision.ranked:
+        return decision.char, decision.margin
+    groups: dict[str, float] = {}
+    for ch, p in decision.ranked:
+        groups[semantic_fn(ch)] = groups.get(semantic_fn(ch), 0.0) + p
+    top_sem = max(groups, key=lambda s: groups[s])
+    rest = [v for s, v in groups.items() if s != top_sem]
+    margin = groups[top_sem] - (max(rest) if rest else 0.0)
+    members = [(ch, p) for ch, p in decision.ranked
+               if semantic_fn(ch) == top_sem]
+    surface = None
+    if surface_prefs:
+        pref = [(ch, p) for ch, p in members if ch in surface_prefs]
+        if pref:
+            surface = max(pref, key=lambda t: t[1])[0]
+    if surface is None:
+        surface = max(members, key=lambda t: t[1])[0]
+    return surface, margin
 
 
 class ColumnContext:

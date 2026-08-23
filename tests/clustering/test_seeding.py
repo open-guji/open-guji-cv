@@ -179,20 +179,26 @@ def test_admission_evidence_recorded(seeded):
 
 # ── 六条疑问判定 ─────────────────────────────────────────────────────
 
-def test_doubt_signal_conflict(seeded):
-    it = _queue(seeded)[f"{BOOK}:2:1:10"]           # 载体「馬」 vs 语料「致」
-    assert it.status == STATUS_PENDING
+def test_doubt_signal_conflict_context_rescue(seeded):
+    """载体「馬」 vs 语料「致」：双信号打架不再一律人审——语料字入池
+    （九轮实审 118 例 92% 语料对）+ 同列 LM 裁决出「致」且 margin 过阈
+    → context provenance 进库；疑问码照记（审计）。"""
+    it = _queue(seeded)[f"{BOOK}:2:1:10"]
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "致"
     assert DOUBT_SIGNAL_CONFLICT in it.doubts
     assert DOUBT_REPLACE_ALIGN in it.doubts         # replace 位天然也命中 6
     assert it.ocr["char"] == "馬" and it.align == {"char": "致", "op": "replace"}
-    assert it.proposed == "致"                      # 拟进库字取语料侧
-    assert it.instance_id not in _admitted_ids(seeded["db"])
+    assert it.instance_id in _admitted_ids(seeded["db"])
 
 
 def test_doubt_replace_align_alone_when_semantically_equal(seeded):
-    """异体（珎→珍 语义同字）不算双信号打架，但 replace 位仍须人审。"""
+    """异体（珎→珍 语义同字）不算双信号打架；七轮起走上下文通道进库
+    ——裁决字与整理本语义一致（单候选防护第 ③ 条的后半支），
+    字形层保留精确异体「珎」。"""
     it = _queue(seeded)[f"{BOOK}:3:1:9"]
-    assert it.status == STATUS_PENDING
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "珎"                   # 字形层不归并异体
     assert it.doubts == [DOUBT_REPLACE_ALIGN]
     assert it.ocr["char"] == "珎" and it.align["char"] == "珍"
 
@@ -217,10 +223,12 @@ def test_single_signal_high_prob_still_pending(seeded):
 
 
 def test_doubt_degraded_crop(seeded):
+    """双信号一致 + 仅 degraded：七轮起 dual_degraded 通道直接进库
+    （前 13 页实审 58/58 全数照准）。"""
     it = _queue(seeded)[f"{BOOK}:6:1:3"]
-    assert it.status == STATUS_PENDING
+    assert it.status == STATUS_AUTO and it.note == "dual_degraded"
     assert it.tier == "degraded"
-    assert it.doubts == [DOUBT_DEGRADED_CROP]        # 双信号一致，只有图块疑问
+    assert it.doubts == [DOUBT_DEGRADED_CROP]        # 疑问照记（审计）
 
 
 def test_doubt_near_form(seeded):
@@ -242,8 +250,13 @@ def test_summary_counts(seeded):
     n_slots = sum(len(t) for t in PAGES.values())
     assert s["n_slots"] == n_slots
     assert s["n_auto"] + s["n_pending"] == n_slots
-    # 预期 pending：2:10 / 3:9 / 4:6 / 5:0 / 6:3 + 第 7 页整页（8 格）
-    assert s["n_pending"] == 5 + len(PAGES["7"])
+    # 预期 pending：4:6 near_form / 5:0 db_inconsistent + 第 7 页整页
+    # （8 格，未锚定上下文通道关闭）；2:10、3:9 走 context、
+    # 6:3 走 dual_degraded 进库
+    assert s["n_pending"] == 2 + len(PAGES["7"])
+    assert s.get("n_auto_context", 0) == 2
+    assert "tb:4:1:6" in {i for i in _queue(seeded)
+                          if _queue(seeded)[i].status == STATUS_PENDING}
     assert s["doubt_counts"][DOUBT_WEAK_SINGLE] == 2
     assert s["pages_processed"] == len(PAGES)
 
@@ -288,9 +301,9 @@ def test_max_pages_limits_this_run(tmp_path):
 def test_ingest_decisions_and_idempotency(seeded):
     db = seeded["db"]
     text = "\n".join([
-        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:2:1:10", '
-        '"char": "致", "batch": "b1", "seq": 1}',
-        'GUJI-SEED-EVENT {"op": "not_a_char", "instance_id": "tb:6:1:3", '
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:3", '
+        '"char": "木", "batch": "b1", "seq": 1}',
+        'GUJI-SEED-EVENT {"op": "not_a_char", "instance_id": "tb:5:1:0", '
         '"batch": "b1", "seq": 2}',
         'GUJI-SEED-EVENT {"op": "skip", "instance_id": "tb:7:1:0", '
         '"batch": "b1", "seq": 3}',
@@ -301,13 +314,13 @@ def test_ingest_decisions_and_idempotency(seeded):
     r1 = ingest_decisions(seeded["book_dir"], db, events)
     assert r1["admitted"] == 1
     q = _queue(seeded)
-    assert q["tb:2:1:10"].status == STATUS_CONFIRMED
-    assert q["tb:2:1:10"].decided_char == "致"
-    assert q["tb:2:1:10"].provenance == "human"
-    assert q["tb:6:1:3"].status == STATUS_NOT_A_CHAR
+    assert q["tb:7:1:3"].status == STATUS_CONFIRMED
+    assert q["tb:7:1:3"].decided_char == "木"
+    assert q["tb:7:1:3"].provenance == "human"
+    assert q["tb:5:1:0"].status == STATUS_NOT_A_CHAR
     assert q["tb:7:1:0"].status == STATUS_SKIPPED
     row = db.conn.execute(
-        "SELECT provenance FROM admissions WHERE instance_id='tb:2:1:10'"
+        "SELECT provenance FROM admissions WHERE instance_id='tb:7:1:3'"
     ).fetchone()
     assert row == ("human",)
 
@@ -318,19 +331,19 @@ def test_ingest_decisions_and_idempotency(seeded):
     assert db.conn.execute(
         "SELECT COUNT(*) FROM admissions").fetchone()[0] == n_before
     q2 = _queue(seeded)
-    assert q2["tb:2:1:10"].status == STATUS_CONFIRMED
-    assert q2["tb:6:1:3"].status == STATUS_NOT_A_CHAR
+    assert q2["tb:7:1:3"].status == STATUS_CONFIRMED
+    assert q2["tb:5:1:0"].status == STATUS_NOT_A_CHAR
 
     # not_a_char / skip 不进库
     admitted = _admitted_ids(db)
-    assert "tb:6:1:3" not in admitted and "tb:7:1:0" not in admitted
+    assert "tb:5:1:0" not in admitted and "tb:7:1:0" not in admitted
 
-    # progress 的 pending 随裁决下降（第 2 页清零）
+    # progress 的 pending 随裁决下降（第 5 页清零；skip 留队列）
     progress = json.loads(
         (seeded["book_dir"] / "phase9_seed" / "progress.json")
         .read_text(encoding="utf-8"))
-    assert progress["pages"]["2"]["pending"] == 0
-    assert progress["pages"]["7"]["pending"] == len(PAGES["7"])  # skip 留队列
+    assert progress["pages"]["5"]["pending"] == 0
+    assert progress["pages"]["7"]["pending"] == len(PAGES["7"]) - 1
 
 
 def test_ingest_label_only_and_last_wins(seeded):
@@ -338,8 +351,8 @@ def test_ingest_label_only_and_last_wins(seeded):
     db = seeded["db"]
     text = "\n".join([
         # 图块混残余：定字「珍」但字形不进库
-        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:3:1:9", '
-        '"char": "珍", "admit": false, "batch": "b2", "seq": 1}',
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:4:1:6", '
+        '"char": "大", "admit": false, "batch": "b2", "seq": 1}',
         # confirm 后撤销（skip 后到）→ 最终不进库、留队列（取 pending 字位）
         'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:1", '
         '"char": "被", "batch": "b2", "seq": 2}',
@@ -352,13 +365,13 @@ def test_ingest_label_only_and_last_wins(seeded):
     assert r.get("admitted", 0) == 0          # 两条 confirm 都没进库
 
     q = _queue(seeded)
-    it = q["tb:3:1:9"]
+    it = q["tb:4:1:6"]
     assert it.status == "confirmed_label_only"
-    assert it.decided_char == "珍" and it.provenance is None
+    assert it.decided_char == "大" and it.provenance is None
     assert q["tb:7:1:1"].status == STATUS_SKIPPED
 
     admitted = _admitted_ids(db)
-    assert "tb:3:1:9" not in admitted and "tb:7:1:1" not in admitted
+    assert "tb:4:1:6" not in admitted and "tb:7:1:1" not in admitted
 
 
 def test_admission_decision_match_ref():
@@ -373,19 +386,23 @@ def test_admission_decision_match_ref():
     lo = {"char": "文", "prob": 0.4}
     # 常规通道：过闸对齐一致 + 零疑问（载体只是运输工具）
     assert admission_decision(lo, "文", None, [], vmap) == (True, None)
-    # 库 × 整理本通道：OCR prob 无关紧要（甚至 OCR 认错也不碍事）
+    # 双信号一致 + 仅 degraded → dual_degraded 通道（58/58 实证）
     assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
+                              vmap, match_char="文") == (True, "dual_degraded")
+    # 库 × 整理本通道（OCR 认错也不碍事：非 dual 场景）
+    assert admission_decision({"char": "又", "prob": 0.99}, "文", None,
+                              [DOUBT_DEGRADED_CROP],
                               vmap, match_char="文") == (True, "match_ref")
     assert admission_decision({"char": "又", "prob": 0.99}, None, "文",
                               [], vmap, match_char="文") == (True, "match_ref")
     assert admission_decision(None, None, "文", [DOUBT_DEGRADED_CROP],
                               vmap, match_char="文") == (True, "match_ref")
-    # OCR 单独再高也不再是通道（strong_dual/triple 已废）
-    assert admission_decision(hi, "文", None, [DOUBT_DEGRADED_CROP],
-                              vmap)[0] is False
+    # OCR prob 本身不是通道（strong_dual/triple 已废）：无过闸对齐时
+    # 单靠 OCR 高置信 + 免闸参考不能进（需 match 或 dual）
     assert admission_decision(hi, None, "文", [], vmap)[0] is False
-    # 库匹配与整理本不同字 / 无整理本 → 不进
-    assert admission_decision(lo, "文", None, [DOUBT_DEGRADED_CROP],
+    # 库匹配与整理本不同字 / 无整理本 → 不进（用非 dual 场景隔离验证）
+    assert admission_decision({"char": "又", "prob": 0.9}, "文", None,
+                              [DOUBT_DEGRADED_CROP],
                               vmap, match_char="又")[0] is False
     assert admission_decision(lo, None, None, [], vmap,
                               match_char="文")[0] is False

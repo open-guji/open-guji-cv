@@ -41,7 +41,9 @@ from .align_label import (carrier_slots, clean_labels, is_han, label_book,
 from .crop_quality import assess_crop
 from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
+from .lm import train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
+from .recognize_flow import ColumnContext, decide_unsure, semantic_margin
 from .normalize import normalize_patch, sauvola_binarize
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
@@ -59,6 +61,14 @@ DEFAULT_PROB_THRESHOLD = 0.85
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 
 SEED_DIR = "phase9_seed"
+
+# 上下文通道的 margin 准入阈。八轮重标定：语料字入候选池后 margin 分布
+# 整体左移（LM softmax 摊薄），vol02 基准的 0.99 阈在这套配置下几乎全拦。
+# 改用**用户前 13 页 303 条真实裁决**重标（同配置回放）：
+#   margin ≥0.70 → 198/198 全对（覆盖 65.3%）；≥0.60 → 213/213；
+#   首个错例出现在 0.5 档。取 0.70，离首错留 0.2 缓冲。
+# 另有单候选防护（见 context 通道注释）兜底。
+DEFAULT_CONTEXT_MARGIN = 0.70
 
 
 def _now() -> str:
@@ -199,6 +209,10 @@ def admission_decision(ocr: dict | None, align_char: str | None,
         return True, None
     corpus_char = align_char if align_char is not None else ref_char
     overridable = all(d == DOUBT_DEGRADED_CROP for d in doubts)
+    if dual and overridable:
+        # 双信号一致 + 仅 degraded：前 13 页实审 58/58 全数照准——
+        # 机器残留分级在双信号一致面前误报居多（七轮实审定案）
+        return True, "dual_degraded"
     if (overridable and match_char is not None and corpus_char is not None
             and vmap.semantic(match_char) == vmap.semantic(corpus_char)):
         return True, "match_ref"
@@ -235,6 +249,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               carrier_path: str | Path | None = None,
               max_pages: int | None = None,
               prob_threshold: float = DEFAULT_PROB_THRESHOLD,
+              context_margin: float = DEFAULT_CONTEXT_MARGIN,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -254,6 +269,15 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     if not carrier_path.exists():
         raise FileNotFoundError(
             f"OCR 载体不存在: {carrier_path}（先跑 scripts/build_ocr_carrier.py）")
+
+    # 语料可给多份（主整理本 + 用户自补的奏折/上谕文本）：拼接成一份
+    # 落在 seed 目录里用，锚定/参考/LM 三处同源
+    if isinstance(corpus, (list, tuple)):
+        parts = [Path(p).read_text(encoding="utf-8") for p in corpus
+                 if Path(p).exists()]
+        combined = seed_dir / "corpus_combined.txt"
+        combined.write_text("\n".join(parts), encoding="utf-8")
+        corpus = combined
 
     # 实例索引（只取 char 格位）
     recs = [r for r in load_index(root) if r.cell_type == "char"]
@@ -352,6 +376,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     matcher, db_chars = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
     vmap = VariantMap.load(variants)
 
+    # 上下文通道件：本书语料 3-gram LM + 同列已定字滚动窗口
+    lm = train_ngram([corpus_text], order=3)
+    ctx_window = ColumnContext()
+
     # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）
     queue_path = seed_dir / "queue.jsonl"
     todo_set = set(todo)
@@ -418,7 +446,13 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     ocr, al.char if al else None,
                     (ctx or {}).get("ref_char"), doubts, vmap,
                     match_char=mr.char)
-                if admit_ok and proposed is None:
+                if admit_ok and channel == "match_ref":
+                    # 库 × 整理本通道的进库字取库匹配形——站着的是形状
+                    # 证据（verify same）+ 整理本，OCR 只是旁证；否则
+                    # 无对齐时 proposed 会落到 OCR 字（十轮实审：之 页
+                    # OCR 报 芝，库 × 整理本同说 之，进库字必须是 之）
+                    proposed = mr.char
+                elif admit_ok and proposed is None:
                     proposed = ocr["char"] if ocr else None
 
                 item = SeedItem(instance_id=rec.id, book=book, page=page,
@@ -452,17 +486,83 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     item.provenance = "align"
                     if channel:
                         item.note = channel
-                        summary["n_auto_match_ref"] = summary.get(
-                            "n_auto_match_ref", 0) + 1
+                        key = f"n_auto_{channel}"
+                        summary[key] = summary.get(key, 0) + 1
                     n_auto += 1
                 else:
-                    item.status = STATUS_PENDING
-                    if not doubts:
-                        # 六条全不命中但双信号不齐（单信号高置信）——
-                        # 契约无对应疑问码，审查侧凭 status 出队即可
-                        item.note = "single_signal"
-                    doubt_counts.update(doubts)
-                    n_pending += 1
+                    # 上下文通道（设计 §3 准入分级之 context）：候选融合
+                    # （库 unsure 命中 ∪ OCR top1+s2t）+ 同列前文 LM 打分，
+                    # margin ≥ 阈即以 context provenance 进库。
+                    # 三道防护：① 只在锚定页跑（无语料没有安全网）；
+                    # ② near_form / db_inconsistent 仍然只走人审；
+                    # ③ 单候选的 margin=1.0 是平凡值——要求 ranked ≥2
+                    #    （真竞争胜出）或裁决字与整理本一致。
+                    ctx_admit = False
+                    if (page_anchored
+                            and DOUBT_NEAR_FORM not in doubts
+                            and DOUBT_DB_INCONSISTENT not in doubts):
+                        topk = [(ocr["char"], ocr["prob"])] if ocr else []
+                        corpus_char = (al.char if al else None) or \
+                            (ctx or {}).get("ref_char")
+                        # 整理本字进候选池（八轮实审：OCR 认错时语料字
+                        # 必须有资格被裁决；权重见 CORPUS_WEIGHT 注释）
+                        extra = [(corpus_char, 1.0)] if corpus_char else None
+                        dec = decide_unsure(
+                            mr, topk,
+                            context=ctx_window.window(page, rec.col, rec.idx),
+                            lm=lm, semantic_fn=vmap.semantic, extra=extra)
+                        # 语义层量竞争、字形层选形（九轮实审：珎/珍 同语义
+                        # 分票把 surface margin 摊薄到阈下）。选形优先取
+                        # OCR/库真正见过的形——图上是什么形就录什么形。
+                        prefs = {c for c, _ in mr.candidates}
+                        if ocr:
+                            prefs.add(ocr["char"])
+                        surface, sem_margin = semantic_margin(
+                            dec, vmap.semantic, surface_prefs=prefs)
+                        safe = (len(dec.ranked) >= 2
+                                or (surface is not None and corpus_char
+                                    and vmap.semantic(surface) ==
+                                    vmap.semantic(corpus_char)))
+                        if surface and sem_margin >= context_margin and safe:
+                            evidence = {"decision": dec.to_dict(),
+                                        "surface": surface,
+                                        "sem_margin": sem_margin,
+                                        "match": mr.to_dict(), "ocr": ocr,
+                                        "align": align, "tier": tier,
+                                        "crop": q.to_dict()}
+                            admitted = db.admit_instance(
+                                rec.id, surface,
+                                (root / rec.patch_path).read_bytes(),
+                                norm, provenance="context",
+                                evidence=evidence, edition_tag=edition,
+                                page=page, col=rec.col, idx=rec.idx,
+                                bbox=list(rec.bbox),
+                                ink_ratio=rec.ink_ratio, width=rec.width,
+                                height=rec.height,
+                                semantic=vmap.semantic(surface))
+                            if admitted:
+                                matcher.add(rec.id, surface, norm)
+                                db_chars.add(surface)
+                                summary["db_added"] += 1
+                            item.status = STATUS_AUTO
+                            item.decided_char = surface
+                            item.provenance = "context"
+                            item.note = "context"
+                            summary["n_auto_context"] = summary.get(
+                                "n_auto_context", 0) + 1
+                            n_auto += 1
+                            ctx_admit = True
+                    if not ctx_admit:
+                        item.status = STATUS_PENDING
+                        if not doubts:
+                            # 六条全不命中但双信号不齐（单信号高置信）——
+                            # 契约无对应疑问码，审查侧凭 status 出队即可
+                            item.note = "single_signal"
+                        doubt_counts.update(doubts)
+                        n_pending += 1
+                if item.status == STATUS_AUTO and item.decided_char:
+                    ctx_window.record(page, rec.col, rec.idx,
+                                      item.decided_char)
                 qf.write(item.to_json() + "\n")
             qf.flush()
 
