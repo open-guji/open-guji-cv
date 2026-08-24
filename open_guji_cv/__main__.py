@@ -486,6 +486,11 @@ def cmd_seed(args):
                             context_margin=args.context_margin,
                             solo_cov=args.match_solo_cov,
                             general_corpus=_general_corpus_paths(args),
+                            font_store=(None if str(args.font_store).lower()
+                                        == "none" else args.font_store),
+                            font_editions=[e.strip() for e in
+                                           args.font_editions.split(",")
+                                           if e.strip()],
                             edition=args.edition)
     finally:
         db.close()
@@ -892,6 +897,12 @@ def main():
                         "external/*.txt）。与本书语料线性混合成上下文 LM"
                         "（本书 0.9 / 通用 0.1，charset_and_lm.md §二）；"
                         "给 --general-corpus none 可关闭混合")
+    p.add_argument("--font-store", default="glyph_store",
+                   help="字体字形库（glyph-db import-font 建的），刻本库匹配"
+                        "不上时从这里找备选；给 none 关闭")
+    p.add_argument("--font-editions", default="font:iming",
+                   help="用哪几套字体（逗号分隔）。字体只作候选源，永不"
+                        "参与准入裁决——实测 recall@1 仅两成，分布不可分")
     p.add_argument("--match-solo-cov", type=float, default=0.99,
                    help="库匹配单独通道的 cov 阈：无整理本锚定时，库内"
                         "形状验证 cov ≥ 此值直接进库（默认 0.99；0.98 "

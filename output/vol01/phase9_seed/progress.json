@@ -48,12 +48,6 @@
    "pending": 2,
    "done": true
   },
-  "14": {
-   "total": 164,
-   "auto": 135,
-   "pending": 29,
-   "done": true
-  },
   "9": {
    "total": 169,
    "auto": 27,
@@ -65,10 +59,16 @@
    "auto": 31,
    "pending": 157,
    "done": true
+  },
+  "14": {
+   "total": 163,
+   "auto": 137,
+   "pending": 26,
+   "done": true
   }
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": null,
- "updated_at": "2026-08-23T18:35:59+00:00"
+ "pointer": "15",
+ "updated_at": "2026-08-24T10:30:48+00:00"
 }

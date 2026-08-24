@@ -78,6 +78,21 @@ BOOK_LM_WEIGHT = 0.9
 GENERAL_LM_WEIGHT = 0.1
 GENERAL_LM_PRUNE = 3      # 通用语料剪枝阈（≥10M 字，n-gram 表才装得下）
 
+# 字体字形兜底（十六轮实测接线）：刻本库匹配不上时，从字体渲染字形库
+# 里找**备选**。三条纪律，缺一条就会毁掉库的纯净：
+#   ① 只当候选源，**永不参与准入裁决**——字体形与刻本形的相似度分布
+#      重叠（bench separable=false，字体 recall@1 仅 21%），没法拿阈值
+#      定生死；进库通道（match_ref/match_solo）一律只认刻本库；
+#   ② 只在刻本库**弱**时才查（top cov < FONT_COV_GATE）——库强的层
+#      现有候选已含金标 99~100%，查字体是白花钱还添噪声；
+#   ③ 权重低于任何真证据（库 3.0 / 语料 2.5 / OCR 1.5），且按检索名次
+#      衰减——它的价值是「把正确字带进候选集」，不是「说它是对的」。
+# 529 条人审难例实测：查字体后定字对 +9、门槛进库对 +15、**错 +0**，
+# 门槛精度 99.4% 不变；增益全部来自 cov<0.95 那 245 格。
+FONT_COV_GATE = 0.95     # 刻本库 top cov 低于此才查字体库
+FONT_WEIGHT = 0.6        # 字体候选的先验权重（第 1 名；后续按名次衰减）
+FONT_TOPK = 10           # 每格取多少个字体候选
+
 # match_solo 通道（十轮用户定案，十一轮上调）：无整理本锚定时，
 # 库内形状验证 cov ≥ 此阈单独放行。初值 0.98 首日即出一例压线错
 # （揀/棟 0.9802），用户裁定收紧到 0.99（约让出四成通道量换稳）；
@@ -344,6 +359,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               context_margin: float = DEFAULT_CONTEXT_MARGIN,
               solo_cov: float = MATCH_SOLO_COV,
               general_corpus: list[str | Path] | None = None,
+              font_store: str | Path | None = None,
+              font_editions: list[str] | None = None,
+              font_cov_gate: float = FONT_COV_GATE,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -412,7 +430,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             if line.strip():
                 r = json.loads(line)
                 carrier[r["id"]] = r
-    slots_by_page = carrier_slots(carrier_path)
+    slots_by_page = carrier_slots(carrier_path,
+                                  valid_ids={r.id for r in recs})
 
     # 整理本对齐（align_label 现有机制：结构校验 + 锚定 + 采信闸 + 清洗）
     corpus_text = Path(corpus).read_text(encoding="utf-8")
@@ -476,6 +495,22 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     ctx_decider = build_strategy("gated_ngram", lm=lm,
                                  semantic_fn=vmap.semantic)
     ctx_window = ColumnContext()
+
+    # 字体兜底库（独立于进库用的 GlyphDB：刻本库只进真实刻本字形，
+    # 字体库是可由 glyph-db import-font 一键重建的旁路资产）
+    font_db = None
+    if font_store and font_editions:
+        fp = Path(font_store)
+        fp = fp / "glyphdb.sqlite" if fp.is_dir() else fp
+        if fp.exists():
+            font_db = GlyphDB(fp)
+            have = {r[0] for r in font_db.conn.execute(
+                "SELECT DISTINCT edition_tag FROM glyphs")}
+            font_editions = [e for e in font_editions if e in have]
+            if not font_editions:
+                font_db.close()
+                font_db = None
+    summary["font_consulted"] = 0
 
     # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）
     queue_path = seed_dir / "queue.jsonl"
@@ -611,7 +646,18 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                             (ctx or {}).get("ref_char")
                         # 整理本字进候选池（八轮实审：OCR 认错时语料字
                         # 必须有资格被裁决；权重见 CORPUS_WEIGHT 注释）
-                        extra = [(corpus_char, 1.0)] if corpus_char else None
+                        extra = [(corpus_char, 1.0)] if corpus_char else []
+                        # 字体兜底：只在刻本库弱时查（见 FONT_COV_GATE 注释）
+                        if font_db is not None:
+                            topcov = max((v for _, v in mr.candidates),
+                                         default=0.0)
+                            if topcov < font_cov_gate:
+                                fh = font_db.query(norm, editions=font_editions,
+                                                   k=FONT_TOPK)
+                                extra += [(h.char, FONT_WEIGHT / (i + 1))
+                                          for i, h in enumerate(fh)]
+                                summary["font_consulted"] += 1
+                        extra = extra or None
                         # 语义层量竞争、字形层选形（九轮实审：珎/珍 同语义
                         # 分票把 surface margin 摊薄到阈下）。选形优先取
                         # OCR/库真正见过的形——图上是什么形就录什么形。

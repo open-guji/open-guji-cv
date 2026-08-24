@@ -556,3 +556,34 @@ def test_detect_nonchar_rules():
                           "一", True, True) is None
     assert detect_nonchar(bar, {"char": "一", "prob": 0.9},
                           None, True, True) is None
+
+
+def test_font_fallback_only_when_woodblock_weak(tmp_path):
+    """字体兜底的三条纪律，逐条钉死（十六轮实测接线）。"""
+    import numpy as np
+    from open_guji_cv.clustering import seeding
+
+    # 纪律 ②：只在刻本库弱时才查
+    assert seeding.FONT_COV_GATE == 0.95
+    # 纪律 ③：权重低于任何真证据
+    from open_guji_cv.clustering.recognize_flow import (CORPUS_WEIGHT,
+                                                        DB_WEIGHT, OCR_WEIGHT)
+    assert seeding.FONT_WEIGHT < min(DB_WEIGHT, OCR_WEIGHT, CORPUS_WEIGHT)
+
+
+def test_font_never_reaches_admission(tmp_path):
+    """纪律 ①：准入裁决只认刻本库——admission_decision 根本没有字体入口。
+
+    这是**接口层**的保证，比任何阈值都硬：字体候选进的是 fuse_priors 的
+    extra（候选池），而 match_ref/match_solo 只读 match_candidates。
+    """
+    import inspect
+
+    from open_guji_cv.clustering.seeding import admission_decision
+    sig = inspect.signature(admission_decision)
+    assert not [p for p in sig.parameters if "font" in p.lower()]
+
+
+def test_seed_book_without_font_store_is_unchanged(seeded):
+    """不给字体库时行为与从前完全一致（font_consulted 为 0）。"""
+    assert seeded["summary"].get("font_consulted", 0) == 0
