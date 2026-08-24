@@ -196,6 +196,15 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 用户在审查页裁决完一批后，按序做完下面八步——顺序有讲究，标 ⚠ 的
 步骤错序会丢数据：
 
+0. **首次 seed 新页前** ⚠：先删掉载体里这些页的旧行、重跑
+   `scripts/build_ocr_carrier.py`（断点续跑，只补缺行）。载体是全书
+   一次性建的，重跑过切分后新页的 idx 全体挪位——已经栽过两次
+   （14 页 auto 82%→38%；16/17 页 auto 直接掉到 8%/2%，
+   db_inconsistent 231，库匹配显示图块内容整体错位 2 格）。症状特征：
+   align 全灭 + db_inconsistent 异常高 + 库候选对得上**邻格**的 OCR
+   字。发现坏 seed 要全量重置该页（admissions/exemplars/derived/
+   instances + 队列行 + progress 页条目）再重跑，别在坏队列上缝补。
+
 1. **读回事件**：从审查页 artifact 取最新存档，提取 `GUJI-SEED-EVENT`
    行，与已入库的事件文件 diff 出**新批次**（按 batch+seq 去重，不要
    整文件重灌）。
