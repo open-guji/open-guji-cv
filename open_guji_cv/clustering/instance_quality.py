@@ -57,6 +57,11 @@ class InstanceQuality:
     idx: int
     quality: str
     layout: str = "rigid"          # 所在列的列型（rigid|elastic），分层用
+    defect: str | None = None      # contaminated 的子类：rule_bar（竖界行）/
+                                   # frame_bar（横版框、邻字压线）/ 其他。
+                                   # 上游要修的是**哪一种定位偏差**，只知道
+                                   # 「脏」不够——竖线是切窗横向偏移，横线是
+                                   # 网格纵向越界，两条修法完全不同。
     seed: str | None = None        # 抽样来源，用于说明采样偏置
     label_origin: str = "human"
     schema_version: int = SCHEMA_VERSION

@@ -159,3 +159,44 @@ def test_export_is_deterministic(db, synth_book, tmp_path):
     export_store(db, b)
     for f in sorted(a.rglob("*.jsonl")):
         assert f.read_bytes() == (b / f.relative_to(a)).read_bytes(), f.name
+
+
+def test_query_cache_invalidates_on_new_glyphs(tmp_path):
+    """特征矩阵常驻缓存：入库新字形后必须自动重载，不能返回陈旧结果。"""
+    import numpy as np
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+
+    db = GlyphDB(tmp_path / "c.sqlite")
+    probe = np.zeros((64, 64), dtype=np.uint8)
+    probe[20:44, 20:44] = 1
+    assert db.query(probe, k=3) == []          # 空库，同时把缓存建起来
+
+    _seed_one_glyph(db, "甲", probe)
+    hits = db.query(probe, k=3)
+    assert [h.char for h in hits] == ["甲"], "新入库的字形没被检索到（缓存未失效）"
+
+    _seed_one_glyph(db, "乙", probe)
+    assert {h.char for h in db.query(probe, k=5)} == {"甲", "乙"}
+    db.close()
+
+
+def _seed_one_glyph(db, char, norm):
+    """直接塞一个 glyph+exemplar+derived，绕开 import_book 的整书依赖。"""
+    from open_guji_cv.clustering.glyph_db import _now, _png
+    cur = db.conn.cursor()
+    iid = f"seed:{char}"
+    cur.execute("INSERT OR IGNORE INTO sources (source_id, edition_tag, kind,"
+                " created_at) VALUES ('seed','seed-ed','woodblock',?)", (_now(),))
+    cur.execute(
+        "INSERT OR REPLACE INTO instances (instance_id, source_id, page, col,"
+        " idx, patch_png, updated_at) VALUES (?,'seed','p',0,0,?,?)",
+        (iid, _png(norm), _now()))
+    cur.execute("INSERT OR REPLACE INTO glyphs (edition_tag, char, status,"
+                " n_confirmed, updated_at) VALUES ('seed-ed',?,'sparse',1,?)",
+                (char, _now()))
+    gid = cur.execute("SELECT glyph_id FROM glyphs WHERE char=?",
+                      (char,)).fetchone()[0]
+    cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,'medoid',?)",
+                (gid, iid, _now()))
+    db._write_derived(cur, iid, norm)
+    db.conn.commit()

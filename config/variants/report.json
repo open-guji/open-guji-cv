@@ -1,0 +1,102 @@
+{
+  "chars": 47724,
+  "groups_all_sources": {
+    "chars": 47724,
+    "groups": 8478,
+    "largest": 7869,
+    "largest_sample": "㐀㐁㐅㐪㐬㐯㐴㐵㐶㐷㐺㑃㑄㑇㑏㑑㑘㑳㑹㑺㒓㒚㒞㒨㒫㒭㒲㒳㒵㒹㒻㓝㓡㓨㓪㓬㓭㓰㓵㓹",
+    "top10_sizes": [
+      7869,
+      509,
+      249,
+      229,
+      219,
+      192,
+      178,
+      172,
+      152,
+      127
+    ]
+  },
+  "groups_trusted_default": {
+    "chars": 41823,
+    "groups": 10646,
+    "largest": 117,
+    "largest_sample": "㑄㒚㔗㚢㝧㢙㢶㢸㣠㳊㳺䇚䢊䢟䦟䦷仅付伎佟佬使侮僅厪哱夂夊奴姆姥娒廑弻弼彣怫悖愂懚",
+    "top10_sizes": [
+      117,
+      109,
+      86,
+      82,
+      80,
+      78,
+      64,
+      61,
+      60,
+      60
+    ]
+  },
+  "pairs": 44266,
+  "pairs_by_source": {
+    "cjkvi-simplified": 5902,
+    "dypytz": 1051,
+    "hydzd": 28784,
+    "twedu": 24615,
+    "unihan:kSemanticVariant": 2177,
+    "unihan:kSimplifiedVariant": 6562,
+    "unihan:kSpecializedSemanticVariant": 304,
+    "unihan:kSpoofingVariant": 181,
+    "unihan:kTraditionalVariant": 6562,
+    "unihan:kZVariant": 85,
+    "yitizi": 8688
+  },
+  "sources": {
+    "cjkvi-simplified": {
+      "col3_bad": 2653,
+      "edges": 10797,
+      "line_meta": 4,
+      "self_loop": 231,
+      "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/cjkvi-simplified.txt"
+    },
+    "dypytz": {
+      "col1_bad": 2,
+      "col3_bad": 2,
+      "edges": 1051,
+      "line_meta": 13,
+      "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/dypytz-variants.txt"
+    },
+    "hydzd": {
+      "col1_bad": 1,
+      "col3_bad": 50,
+      "edges": 29159,
+      "line_meta": 6,
+      "self_loop": 9,
+      "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/hydzd-variants.txt"
+    },
+    "twedu": {
+      "edges": 24741,
+      "line_meta": 4,
+      "self_loop": 4,
+      "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/twedu-variants.txt"
+    },
+    "unihan": {
+      "by_prop": {
+        "unihan:kSemanticVariant": 4322,
+        "unihan:kSimplifiedVariant": 6562,
+        "unihan:kSpecializedSemanticVariant": 608,
+        "unihan:kSpoofingVariant": 362,
+        "unihan:kTraditionalVariant": 6562,
+        "unihan:kZVariant": 170
+      },
+      "edges": 18586,
+      "self_loop": 864,
+      "url": "https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip"
+    },
+    "yitizi": {
+      "edges": 17376,
+      "entries": 11456,
+      "url": "https://cdn.jsdelivr.net/npm/yitizi@0.1.3/index.js"
+    }
+  },
+  "variants_json_bytes": 1638071
+}

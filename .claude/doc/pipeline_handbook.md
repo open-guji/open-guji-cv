@@ -69,11 +69,12 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | E | 行列识别 | `segment` | 逐列 `layout` + `cells` | `column-layout`（36 页 289 计分列）| 列型准确率 93.8%，elastic F1 0.91 |
 | F | 格内净化 | `chars` | 图块像素归属 | `char-segmentation/cells`（60 合成）| 逐像素金标，见 `seg-bench` |
 | G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（91 真实，第十二轮）| 缺陷检出 100%，确定层零误报，误报 25%（含 boundary_ink 超采偏置）|
-| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（32，双层）| 回归门 28/28；clean 层 19 样本 0 缺陷，degraded 层 4 缺陷已记账 |
-| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6197 实例）| coverage 判据（2026-08-23 起默认）：purity 0.999/1.0/1.0，碎片率 2.80/3.58/2.92；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md）|
+| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（37，双层）| 回归门 33/33；clean 层 24 样本 **0 缺陷**（P3 修掉吃笔画 P0），degraded 层 4 缺陷已记账（厚残留，归切分层）|
+| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6177 实例）| coverage 判据（2026-08-23 起默认）：purity 0.99967/0.99967/0.98901，碎片率 2.99/3.45/3.00；human 分片的 諭/論 为对级漏网（never-match 家族靶子）；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md §7）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**1404 实例**）| top1 88.75%，字表上界 99.29% |
-| K | 上下文纠正 | `refine` | 定字 | `context-correction`（**1404 槽位**）| 基线 89.32%，混合 LM +2.14% |
-| L | 参考校对 | `collate` | 对齐 | `collation`（**0**，框架）| 规划中 |
+| K | 上下文裁决 | **`context_step`（独立一步，策略注册表）**；seed context 通道与评测共用同一核心 | 定字 | `context-correction`（**1681 槽位**，种子队列实集）| 基线 67.52%，门槛化混合 LM +2.14%（救40/坏4；无门槛重排任何 λ 净亏，见下）。换模型/换算法 → 实现 ContextDecider 注册进 STRATEGIES，在本集上出数 |
+| L | 参考校对 | `collate` / 對勘記 Artifact | 对齐 | `collation`（**0**，框架）| 人工×整理本对勘页已上线（三栏对照）|
+| P | **逐页进库（seed）** | `seed` / `seed-ingest` | GlyphDB + 队列 | 进库协议即金标产线 | vol01 前 11 页 1916 字位：自动 61%，库 1648 例 / 607 字；六通道详见 glyph_db_first_design.md §7.2 |
 
 ### 正文页现状基线（2026-08-23）
 
@@ -126,6 +127,152 @@ vol02 从 21.1% 降到 17.9%、vol01 从 8.9% 降到 8.3%；纵向那一半基�
 
 混合优于两个端点，吃掉 headroom 的 41%。
 
+### 对勘复审：我的定字 × 整理本（2026-08-24）
+
+```bash
+PYTHONPATH=. python scripts/export_collation_review.py output/vol01
+# → phase9_seed/collation_review.html：自含单文件，可改判 / 可打印 PDF / 可发布分享
+```
+
+只出**已定字位与整理本不一致**的条目，四类分开（分类本身是信息，
+四类的改法完全不同）：
+
+| 类 | vol01 | 含义与处置 |
+|---|---|---|
+| 改字 substitution | 3 | 用字真的不同（戶/言、巳/已、淮/准）——必须逐条裁断 |
+| 添字 insertion | 19 | 锚定页上整理本此位无字（衍文或整理本漏收）|
+| 删字 deletion | 7 | 整理本有字而我判非字（版框误判或整理本多收）|
+| 异体 variant | 16 | 正规化后同字（珎/珍、卽/即）——字形层保留精确异体是纪律，**通常不必改** |
+
+**未锚定的页整页排除**（vol01 第 9/11 页奏折/上谕，语料里根本没有）：
+那不是差异，是没得比，混进来只会淹没真差异（19 条添字若不排除会变成 212 条）。
+
+每条给的信息：整列条图（目标格描红框——只给单字图块无法判断它在版面上
+是否真处在那个位置，而对齐错位恰恰是差异的常见成因）、原图、页/列/字位、
+我的定字 vs 整理本、该列整理本全文并高亮该字。裁决沿用
+`GUJI-SEED-EVENT`，改完贴回照旧 `seed-ingest` 回收——不另立协议；
+「维持原判」不发事件，故一轮下来记录里只有真改动。
+
+持久化核心（整页 publish + localStorage + 复制兜底）已抽成
+`review/persist_js.py` 由两个审查页共用，`test_collation_export.py`
+里有断言防止只改一处。
+
+### 版面线侵入：审查涌现的缺陷回流上游（2026-08-24）
+
+进库审查不只是产金标，它还是**上游缺陷的探针**——用户逐页审 1916 个
+字位时挑出的 46 条「仅定字·不入库」+ 32 条「非字」，逐条目视细分后
+41 条是版面线混入，且高度系统性：
+
+| 证据 | 指向的上游问题 |
+|---|---|
+| 15/46 挤在**第 7 页第 6 列**一列 | G2 该列切窗横向偏移，整列吃进界行 |
+| 30/32 非字落在**列尾** | G3 网格越过末字，撞上版框 |
+
+判据落地为 `crop_quality.detect_intrusion`（rule_bar_left/right、
+frame_bar_top/bottom）。要害是**不看连通性**：框线常与字身相连，既有的
+`residue`（非主体连通体探进核心区）在这恰好失效——46 条里 35 条只落了
+个泛泛的 `boundary_ink`。改看几何「贴外带的细实贯穿条」，且横竖分开定阈
+（竖界行深入但线实：band 0.40 / fill 0.88；横版框贴极边但「一三世而」的
+横笔会撞车：band 0.15 / fill 0.60）。
+
+标定（46 条目视金标 + 600 条 clean 对照）：竖 10/19、横 12/22、合计
+**56% 召回 / 1.0% clean 误报**，且对「缺笔·划痕」那 5 条**零误报**
+（该管的管、不该管的不碰）。接进 `char-segmentation/instances` 后
+**确定层召回 30% → 55%**（精确 96%，误报 3%）——可直接自动处理的比例
+接近翻倍。
+
+```bash
+# 全书扫描 → 列级聚集，这才是上游能照着修的信号
+PYTHONPATH=. python scripts/report_intrusions.py output/vol01
+```
+
+vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其中
+718 在列尾），**13 列整列系统性偏移**——第 26 页第 9 列 21/21 全中、
+第 42 页第 2 列 18/20，目视确认每格左侧都有贯穿竖线。这两列是新发现的，
+不在审查覆盖的 11 页里。
+
+### 每轮审阅后的固定流程（2026-08-24 定，照单执行）
+
+用户在审查页裁决完一批后，按序做完下面八步——顺序有讲究，标 ⚠ 的
+步骤错序会丢数据：
+
+0. **首次 seed 新页前** ⚠：先删掉载体里这些页的旧行、重跑
+   `scripts/build_ocr_carrier.py`（断点续跑，只补缺行）。载体是全书
+   一次性建的，重跑过切分后新页的 idx 全体挪位——已经栽过两次
+   （14 页 auto 82%→38%；16/17 页 auto 直接掉到 8%/2%，
+   db_inconsistent 231，库匹配显示图块内容整体错位 2 格）。症状特征：
+   align 全灭 + db_inconsistent 异常高 + 库候选对得上**邻格**的 OCR
+   字。发现坏 seed 要全量重置该页（admissions/exemplars/derived/
+   instances + 队列行 + progress 页条目）再重跑，别在坏队列上缝补。
+
+1. **读回事件**：从审查页 artifact 取最新存档，提取 `GUJI-SEED-EVENT`
+   行，与已入库的事件文件 diff 出**新批次**（按 batch+seq 去重，不要
+   整文件重灌）。
+2. **入库**：`python -m open_guji_cv -o output seed-ingest vol01
+   --db output/glyph.db --events <新批次>`。两通道语义：重切（几何）
+   先应用、裁决后应用——确认位存的自动就是重切后的字形。
+3. **校验重切位** ⚠：index.jsonl 里 flags 含 `recropped` 的每一位，
+   已进库的必须 `db.patch_png == 磁盘图块`（字节一致）。不一致说明
+   两通道顺序被破坏，立刻停下查 ingest。
+4. **重切回流上游** ⚠：`PYTHONPATH=. python scripts/build_recrop_shard.py
+   output/vol01 --dataset ../open-guji-dataset`。**必须在提交重切改动
+   之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
+   提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
+5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
+   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰；
+   **不要**重跑 seed——那会整页重写队列、冲掉人裁）。
+6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
+   --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
+   **同一个 artifact URL**（用户书签不换）。
+7. **两仓库提交推送**：output/glyph.db、queue.jsonl、index.jsonl、
+   重切过的 patch 随 open-guji-cv 提交；expected.json + patches 随
+   open-guji-dataset 提交。库必须随推——其他分支在用。
+8. **减免人工标定更新**（攒了新人裁数据时）：把新裁决并进回放
+   分析（形近家族、match_solo_ocr 等阈值的样本底数），有富余
+   安全边际再动阈值，动了就回到第 5 步回填。
+
+### 版面线侵入：审查涌现的缺陷回流上游（第二批）
+
+**第二批回流（2026-08-24，14/15 页人工重切）**：审查页的 recrop 事件
+（纯几何、与选字独立）产出 9 对 `old_bbox → corrected_bbox` 切分金标，
+`scripts/build_recrop_shard.py` 回流进 `char-segmentation/instances`
+（`seed="review_recrop"`）。模式：列尾格**整体上飘 35~55px**（同页四个
+列尾全中，系统性格线偏移，不是「多裁了框」）、最左/最右列吃进**断续
+内边框**（版面检测目前根本不认这条线）。四个惯犯位置与给 G2/G3 的
+整改诉求 → **[segmentation_border_feedback.md](segmentation_border_feedback.md)**。
+
+### 上下文纠正第二轮基线（2026-08-24，种子队列实集）
+
+`context-correction` 重建为 **vol01 phase9_seed 实集**：11 页 98 列
+1681 槽位，金标来自进库协议（human 529 / align 1152 分层；context 通道
+字位剔除防循环），候选 = fuse_priors(库匹配 cov ∪ OCR s2t) 融合先验
+快照。基线 top1 67.52%，候选召回 90.07%。两个硬结论：
+
+1. **无门槛全局重排在任何 λ 下净亏**（λ 0.10~0.95 全扫，0.95 仍
+   救17/坏34）——候选里有库匹配证据后先验已经很强，LM 只配当
+   「先验拿不准时的裁判」；
+2. **门槛化（语义 margin ≥ 0.70，即 seed context 通道口径）稳赚且
+   混合优于两端**：
+
+| 条件（--gate 0.70）| 净增益 | 救回/改坏 | 有害翻转 |
+|---|---|---|---|
+| 纯通用（daizhige 诏令）| +1.61% | 30/3 | 0.26% |
+| **混合 本书0.9+通用0.1** | **+2.32%** | **41/2** | **0.18%** |
+| 纯本书 | +1.73% | 39/10 | 0.88% |
+
+human 难样本层基线 49.15% → 52.55%。此配置即生产（`build_seed_lm`，
+通用 LM 落盘缓存，`--general-corpus` 缺省自动发现 corpus/external）。
+量法：`scripts/eval_context_correction.py … --gate 0.70`（本书语料自动
+对测试页挖洞防背答案）。
+
+**上下文裁决已抽象为独立一步**（`clustering/context_step.py`）：
+候选先验分布 + 列前文 → 定字，策略注册表（`prior` / `gated_ngram`，
+神经 LM / 大模型 API 按 ContextDecider 接口接入）。seed context 通道
+与评测脚本走**同一核心**（recognize_flow.rank_candidates + 
+semantic_margin）——测试集上量出来的就是生产里跑的。两条铁律写在
+模块 docstring：字形层不可改写（只在候选内重排）、门槛化不做全局
+重排（拿不准就保持基线）。
+
 ### 字表天花板（做 J/K 之前先看这个）
 
 `config/charset/`（`scripts/build_charset.py` 生成）。在本书整理本
@@ -174,8 +321,10 @@ G6 四组可以同时开工，互相不踩脚。
    （这个坑本仓库踩了 8 轮，见 §4）。**转写与切分必须同版**：a435d7b 重跑
    切分后 phase6 没跟着重跑，旧转写对新图块做对齐会系统性错标——结构
    指纹相同也保证不了字没换（第九轮重标：10:2:6 从「列」变成「冬」）。
-   char-clustering 数据集因此用 `--pipeline-rev` 从 git 固定取 23ee9a5
-   那一版的 phase4+phase6。
+   char-clustering 数据集因此用 `--pipeline-rev` 从 git 固定取产物版本，
+   且对齐载体改用 **OCR 载体**（`build_ocr_carrier.py`，rapidocr top1+s2t
+   落在 phase4 目录里随版本走）——载体与切分永远同版，不再依赖 label
+   步骤的重跑节奏。
 2. **各自的数据集各自建**，别改别人的。跨步骤共用的只有原图。
 3. **接口契约不许私自改**：`phase3_char_grid` 的列/格 JSON、
    `phase4_chars/index.jsonl` 的字段（`id/book/page/col/idx/bbox/flags`）、
@@ -213,6 +362,18 @@ vol01/90、93（职名页，非正文，按当前策略可以缓）。出路多�
 
 **P3 — 横向截断这一类金标样本没有了**（被修好了）。`off_center` 阈值
 实质是在已消失的案例上定的，需要另行补样才能说它「验证过」。
+
+**G3/G4/G5 合并重设计（字形库优先的增量识别）**见
+[glyph_db_first_design.md](glyph_db_first_design.md)：不再先聚簇再定字，
+每个新图块先与已验证字形库匹配，完美匹配直接继承 Unicode，不完美走
+候选+OCR+上下文。进度（其 §7/§7.1）：P3 归一化修复 ✅、`match.py` + `recognize` CLI ✅、
+`eval_db_match.py` 两协议基线 ✅（same 档覆盖 10~22%、计门精度门全过、
+真错配 0）、unsure/diff 分支 + margin≥0.99 准入阈 ✅（端到端覆盖
+vol02 册内 30.6% / 跨册 40.5%，精度 1.0000/0.9984）、§3.5 进库协议
+✅（`seed`/`seed-ingest` 命令 + 种子审查页面 + `seed_queue.py` 契约；
+vol01 前 5 页实测 auto 进库 71.5%）。剩：与 cluster→label 流水对比
+（§7 第 5 步）、weak_single 阈待 char-ocr 集标定、OCR-only 分支
+（匕/七类）立门。
 
 **G3/G4（归一化/聚类）的后续待办与所需数据**单独记在
 [g3g4_error_analysis.md](g3g4_error_analysis.md) §4：unsure 审查队列

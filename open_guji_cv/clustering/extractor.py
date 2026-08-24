@@ -119,7 +119,8 @@ class CharInstance:
     def from_json(cls, line: str) -> "CharInstance":
         d = json.loads(line)
         d["bbox"] = tuple(d["bbox"])
-        return cls(**d)
+        # 只取已声明字段：index.jsonl 可能带后加的溯源键，未知键不应炸
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
 
 
 def _deshear(gray: np.ndarray, tan_t: float) -> np.ndarray:
