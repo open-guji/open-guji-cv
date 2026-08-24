@@ -103,9 +103,20 @@ def is_canonical(img: np.ndarray, size: int = CANON_SIZE) -> bool:
             and img.dtype == np.uint8)
 
 
-def canonical_png(gray: np.ndarray, clean: bool = True) -> bytes:
-    """任意字形图 → canonical PNG bytes（入库用）。"""
-    ok, buf = cv2.imencode(".png", to_canonical(gray, clean=clean))
+def encode_png(img: np.ndarray) -> bytes:
+    """已是 canonical 的图 → PNG bytes（不再重复几何归一）。"""
+    ok, buf = cv2.imencode(".png", img)
     if not ok:
         raise RuntimeError("PNG 編碼失敗")
     return buf.tobytes()
+
+
+def canonical_png(gray: np.ndarray, clean: bool = True) -> bytes:
+    """任意字形图 → canonical PNG bytes（入库用）。
+
+    图块**已经**是 canonical 时请直接用 :func:`encode_png`——``to_canonical``
+    幂等，但重跑一遍要多一次 Sauvola，批量导入时那是白烧的两成时间。
+    这里不靠 :func:`is_canonical` 自动判断：它只验形状/类型，一张未归一的
+    256×256 图会蒙混过关，静默跳过归一比多花点时间危险得多。
+    """
+    return encode_png(to_canonical(gray, clean=clean))
