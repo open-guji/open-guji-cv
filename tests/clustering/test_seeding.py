@@ -406,10 +406,20 @@ def test_admission_decision_match_ref():
                               vmap, match_char="又")[0] is False
     assert admission_decision(lo, None, None, [], vmap,
                               match_char="文")[0] is False
-    # near_form / db_inconsistent 仍拦
+    # 形近家族放行（2026-08-24，75 条人裁回放 35/35）：**过闸对齐 ×
+    # 库 top 一致**时 near_form 穿透 match_ref——「人」处处 100% 匹配
+    # 还压给人点，是这条改掉的
     assert admission_decision(lo, "文", None,
                               [DOUBT_DEGRADED_CROP, DOUBT_NEAR_FORM],
+                              vmap, match_char="文") == (True, "match_ref")
+    # 免闸参考（无过闸对齐）零家族样本 → near_form 照拦
+    assert admission_decision(lo, None, "文", [DOUBT_NEAR_FORM],
                               vmap, match_char="文")[0] is False
+    # replace 层对齐（REPLACE_ALIGN 疑问在）→ 照拦
+    assert admission_decision(lo, "文", None,
+                              [DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN],
+                              vmap, match_char="文")[0] is False
+    # db_inconsistent 全通道仍拦
     assert admission_decision(lo, None, "文", [DOUBT_DB_INCONSISTENT],
                               vmap, match_char="文")[0] is False
 
@@ -434,11 +444,12 @@ def test_match_ref_accepts_unsure_top_candidate():
     assert admission_decision(lo, None, "文", [], vmap,
                               match_candidates=[("文", 0.96)]
                               ) == (True, "match_ref")
-    # 形近家族**仍然拦**：交叉分析里 corpus×db 一致的 33 条形近字虽然
-    # 全对，但 n=33 撑不起拆护栏；而反例（已/巳、人/入、日/曰）恰恰都
-    # 出在这一族。放宽与否留给后续更大样本，当前保守。
+    # 形近家族（2026-08-24 放行）：n=33 时保守拦过，累到 75 条人裁
+    # 回放（命中 35/35 全对、反例全落在两路不一致侧）后定案——
+    # **过闸对齐 × 库 top 一致**穿透 near_form
     assert admission_decision(lo, "日", None, [DOUBT_NEAR_FORM], vmap,
-                              match_candidates=[("日", 0.96)])[0] is False
+                              match_candidates=[("日", 0.96)]
+                              ) == (True, "match_ref")
     # 库 top 与整理本不一致 → 仍不进（这正是 4 条 OCR×库 反例的形态）
     assert admission_decision(lo, "巳", None, [], vmap,
                               match_candidates=[("已", 0.949)])[0] is False
@@ -587,3 +598,125 @@ def test_font_never_reaches_admission(tmp_path):
 def test_seed_book_without_font_store_is_unchanged(seeded):
     """不给字体库时行为与从前完全一致（font_consulted 为 0）。"""
     assert seeded["summary"].get("font_consulted", 0) == 0
+
+
+def test_recrop_geometry_and_decision_are_independent(tmp_path):
+    """十七轮定案：重切是几何事件、选字是裁决事件，互不覆盖。
+
+    实批实锤（14:9:18 出现 recrop→skip→confirm→skip→recrop 的反复）：
+    旧「后到覆盖」会把重切框整个丢掉、进库存下错位的原图字形。
+    """
+    root = tmp_path
+    book_dir, corpus_path, variants_path = build_book(root)
+    # 页图：seed 合成书没有，造一张——第 1 页图块 bbox [0,0,80,80]，
+    # 页图放大一点，让新 bbox 有处可挪
+    import cv2
+    page_img = np.full((200, 200), 245, dtype=np.uint8)
+    page_img[10:74, 10:74] = np.where(_glyph("天") > 0, 20, 245)
+    cv2.imwrite(str(book_dir / "1.png"), page_img)
+
+    db = GlyphDB(root / "g.db")
+    try:
+        seed_book(book_dir, db, corpus_path, variants=variants_path)
+        iid = "tb:1:1:0"
+
+        # ① 先 confirm（进库存的是旧图块），后 recrop → 库里的真源要刷新
+        ev1 = [{"op": "confirm", "instance_id": iid, "char": "天",
+                "batch": "b", "seq": 1},
+               {"op": "recrop", "instance_id": iid, "char": "忽略我",
+                "bbox": [5, 5, 80, 80], "batch": "b", "seq": 2}]
+        r = ingest_decisions(book_dir, db, ev1)
+        assert r["recropped"] == 1 and r["recrop_refreshed_db"] == 1
+        # 图块与 index 都换成了新框
+        import json as _json
+        idx = {_json.loads(l)["id"]: _json.loads(l) for l in
+               (book_dir / "phase4_chars" / "index.jsonl")
+               .read_text(encoding="utf-8").splitlines()}
+        assert idx[iid]["bbox"] == [5.0, 5.0, 80.0, 80.0]
+        assert "recropped" in (idx[iid].get("flags") or [])
+        # recrop 事件里的 char 被忽略（那是首版 UI 的脏字段）
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in (book_dir / "phase9_seed" / "queue.jsonl")
+             .read_text(encoding="utf-8").splitlines() if l.strip()}
+        assert q[iid].decided_char == "天"          # 仍是 confirm 的字
+        assert q[iid].note == "recropped"
+        # 库里的 bbox 已刷新
+        row = db.conn.execute(
+            "SELECT bbox FROM instances WHERE instance_id=?", (iid,)).fetchone()
+        assert _json.loads(row[0]) == [5.0, 5.0, 80.0, 80.0]
+
+        # ② 只 recrop 不定字 → 字位保持待审（重切完仍可独立选字）
+        iid2 = "tb:1:1:1"
+        # 先把它退回 pending（fixture 里它是 auto——直接对 pending 页字位测）
+        iid2 = "tb:7:1:0"                       # 第 7 页无对齐 → pending
+        cv2.imwrite(str(book_dir / "7.png"), page_img)
+        r2 = ingest_decisions(book_dir, db, [
+            {"op": "recrop", "instance_id": iid2,
+             "bbox": [5, 5, 80, 80], "batch": "b", "seq": 3}])
+        assert r2["recropped"] == 1
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in (book_dir / "phase9_seed" / "queue.jsonl")
+             .read_text(encoding="utf-8").splitlines() if l.strip()}
+        assert q[iid2].status == STATUS_PENDING     # 没定字就还在队列
+        assert q[iid2].note == "recropped"
+
+        # ③ 重切后再 confirm → 进库读的就是重切后的图块字节
+        r3 = ingest_decisions(book_dir, db, [
+            {"op": "confirm", "instance_id": iid2, "char": "化",
+             "batch": "b", "seq": 4}])
+        assert r3["admitted"] == 1
+        png = db.conn.execute(
+            "SELECT patch_png FROM instances WHERE instance_id=?",
+            (iid2,)).fetchone()[0]
+        disk = (book_dir / "phase4_chars" / q[iid2].patch_path).read_bytes()
+        assert png == disk                          # 库里存的 = 重切后的
+    finally:
+        db.close()
+
+
+def test_readjudicate_pending_near_form_corpus_db(tmp_path):
+    """规则升级回填存量：readjudicate_pending 只动待审行。
+
+    形近家族放行后，存证里「过闸对齐 × 库 top 一致」的 pending 行
+    应复裁进库；免闸/无库证据的行原地不动；人裁行永不触碰。
+    """
+    from open_guji_cv.clustering.seeding import readjudicate_pending
+    root = tmp_path
+    book_dir, corpus_path, variants_path = build_book(root)
+    db = GlyphDB(root / "g.db")
+    try:
+        seed_book(book_dir, db, corpus_path, variants=variants_path)
+        qp = book_dir / "phase9_seed" / "queue.jsonl"
+        rows = [json.loads(l) for l in
+                qp.read_text(encoding="utf-8").splitlines() if l.strip()]
+        # 4:1:6「大」：near_form pending，align 过闸 equal。给它补上
+        # 库匹配快照（top 候选与 align 同字）——模拟库里已有大量「大」
+        fired = "tb:4:1:6"
+        for d in rows:
+            if d["instance_id"] == fired:
+                assert d["status"] == STATUS_PENDING
+                d["match"] = {"char": None, "verdict": "unsure",
+                              "guard": "never_match", "wmax": 3.0,
+                              "candidates": [["大", 0.98], ["太", 0.90]]}
+        qp.write_text("".join(json.dumps(d, ensure_ascii=False) + "\n"
+                              for d in rows), encoding="utf-8")
+        n = readjudicate_pending(book_dir, db, variants=variants_path)
+        assert n.get("auto_match_ref") == 1
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in qp.read_text(encoding="utf-8").splitlines()
+             if l.strip()}
+        it = q[fired]
+        assert it.status == STATUS_AUTO
+        assert it.decided_char == "大"
+        assert it.note == "match_ref:readj"
+        assert db.conn.execute(
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (fired,)).fetchone()
+        # 第 7 页（未锚定、无库证据）的行原地不动
+        assert any(v.status == STATUS_PENDING for k, v in q.items()
+                   if v.page == "7")
+        # 幂等：再跑一遍不重复进库
+        n2 = readjudicate_pending(book_dir, db, variants=variants_path)
+        assert n2.get("auto_match_ref") is None
+    finally:
+        db.close()

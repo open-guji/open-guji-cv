@@ -33,6 +33,7 @@
 | [technical_learning.md](doc/technical_learning.md) | PaddleOCR 版本/环境坑 |
 | s1~s6_*.md | 各预处理步骤 |
 | [jiazhu_detection.md](doc/jiazhu_detection.md) / [edge_border_analysis.md](doc/edge_border_analysis.md) | 夹注检测 / 边框分析 |
+| [segmentation_border_feedback.md](doc/segmentation_border_feedback.md) | 进库实审回流给切分层的反馈：边框混入四个惯犯位置 + 重切 bbox 金标 |
 
 数据集与评测在隔壁仓库 `open-guji-dataset`，入口见其
 `doc/making-datasets.md`（怎么定义和准备一个测试集）。

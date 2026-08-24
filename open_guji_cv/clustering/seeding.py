@@ -53,7 +53,7 @@ from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
                          STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
                          STATUS_NOT_A_CHAR, STATUS_PENDING,
-                         STATUS_RECROPPED, STATUS_SKIPPED,
+                         STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
 
@@ -243,7 +243,9 @@ def admission_decision(ocr: dict | None, align_char: str | None,
       残差窗 wmax 超 MISS_WMAX（偏旁之差的典型形态）时需 OCR 字符
       背书；near_form / db_inconsistent 照拦。weak_single（无对齐 +
       OCR 弱）不拦——形状证据自己站得住，OCR 置信度不参与判断。
-    near_form / db_inconsistent 仍拦（毒化库的两条路）。
+    near_form 对 match_solo / 免闸 match_ref 仍拦；**过闸对齐 × 库 top
+    一致**时穿透（75 条家族人裁回放 35/35，见通道内注释）。
+    db_inconsistent 全通道仍拦（毒化库的路）。
     """
     ocr_char = ocr["char"] if ocr else None
     dual = (ocr_char is not None and align_char is not None
@@ -256,7 +258,19 @@ def admission_decision(ocr: dict | None, align_char: str | None,
         # 双信号一致 + 仅 degraded：前 13 页实审 58/58 全数照准——
         # 机器残留分级在双信号一致面前误报居多（七轮实审定案）
         return True, "dual_degraded"
-    if overridable and corpus_char is not None:
+    # 形近家族放行（2026-08-24，用户实锤「人 处处 100% 还要手点」后
+    # 用 75 条已裁 near_form 回放定案）：near_form 拦的是**形状判据
+    # 自己**——已/巳 库内错配也能到 cov 0.999，OCR × 库还会同错
+    # （14:2:18）。但**过闸对齐 × 库 top 一致**是文本 × 形状两路零同
+    # 源证据，实测 35/35 全对，而所有人工推翻 align 的家族案例
+    # （巳→已、入→人等）全落在「两路不一致」侧，本来就不命中。
+    # 只对过闸 align 放（op=equal，replace 层有 REPLACE_ALIGN 拦）；
+    # 免闸参考（ref_char）零家族样本，继续拦。
+    ref_overridable = overridable or (
+        align_char is not None
+        and all(d in (DOUBT_DEGRADED_CROP, DOUBT_NEAR_FORM)
+                for d in doubts))
+    if ref_overridable and corpus_char is not None:
         # 库 × 整理本通道。十四轮全量交叉分析（529 条人审难例回放）把它
         # 从「库须 verify same」放宽到「库 top 候选一致即可」：文本证据 ×
         # 形状证据同源性为零，实测 **144/144 全对**，其中 33 条属形近家族
@@ -776,7 +790,12 @@ def apply_recrop(book_out_dir: Path, rec, bbox: list[float]) -> bytes | None:
             d["bbox"] = [float(x0), float(y0), float(x1), float(y1)]
             d["height"] = float(y1 - y0)
             d["width"] = float(x1 - x0)
-            d["recropped"] = True        # 溯源：这一格是人工重切过的
+            # 溯源标记放进已有的 flags 列表——CharInstance 是固定字段的
+            # dataclass，新加顶层键会让 load_index 直接炸
+            fl = d.get("flags") or []
+            if "recropped" not in fl:
+                fl.append("recropped")
+            d["flags"] = fl
         out.append(json.dumps(d, ensure_ascii=False))
     idx_path.write_text("".join(x + "\n" for x in out), encoding="utf-8")
     return png
@@ -815,15 +834,51 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
     rec_of = {r.id: r for r in load_index(root)}
     vmap = VariantMap.load(variants)
     n = Counter()
-    # 契约应用纪律：同一 instance_id 按 seq 后到覆盖——只应用每个字位
-    # seq 最大的事件（confirm 后被 skip 撤销的，最终以 skip 为准）。
+    # 事件分两个独立通道（十七轮用户定案：**重切与选字是两件事**）：
+    # - 几何通道：recrop 事件只改 bbox/图块，不定字、不改裁决状态。
+    #   同字位取 seq 最大的一条（用户可能拖了好几次框）。事件里若带
+    #   char 一律忽略——那是首版 UI 误把重切与选字绑死留下的脏字段，
+    #   实批实锤（14:9:18 出现 recrop→skip→confirm→skip→recrop 的反复，
+    #   全是用户在跟自动选字对抗）。
+    # - 裁决通道：confirm/not_a_char/skip 照旧后到覆盖。
+    # 应用顺序：先几何后裁决——confirm 进库读的就是重切后的图块；
+    # 已进库的字位被重切时刷新库里的真源与派生（refresh_instance_patch）。
+    geom: dict[str, dict] = {}
     last: dict[str, dict] = {}
     for ev in sorted(events, key=lambda e: e.get("seq") or 0):
         iid = ev.get("instance_id", "")
-        if iid:
+        if not iid:
+            continue
+        if ev.get("op") == "recrop":
+            geom[iid] = ev
+        else:
             last[iid] = ev
     n["events"] = len(events)
-    n["superseded"] = len(events) - len(last)
+    n["superseded"] = len(events) - len(last) - len(geom)
+
+    # ── 几何通道 ──
+    for iid, ev in geom.items():
+        it = items.get(iid)
+        rec = rec_of.get(iid)
+        if it is None or rec is None:
+            n["unknown"] += 1
+            continue
+        png = apply_recrop(book_out_dir, rec, ev["bbox"])
+        if png is None:
+            n["recrop_failed"] += 1
+            continue
+        n["recropped"] += 1
+        it.note = "recropped"
+        gray = cv2.imdecode(np.frombuffer(png, np.uint8),
+                            cv2.IMREAD_GRAYSCALE)
+        # 已进库的实例：库里的真源与派生一起刷新，否则检索用的还是错形
+        if db.conn.execute("SELECT 1 FROM admissions WHERE instance_id=?",
+                           (iid,)).fetchone():
+            db.refresh_instance_patch(iid, png, normalize_patch(gray),
+                                      bbox=[float(v) for v in ev["bbox"]])
+            n["recrop_refreshed_db"] += 1
+
+    # ── 裁决通道 ──
     for ev in last.values():
         it = items.get(ev.get("instance_id", ""))
         if it is None:
@@ -863,41 +918,6 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             n["admitted" if admitted else "already_admitted"] += 1
             it.status = STATUS_CONFIRMED
             it.decided_char = char
-            it.provenance = "human"
-        elif op == "recrop":
-            char = (ev.get("char") or "").strip()
-            rec = rec_of.get(it.instance_id)
-            if not char or rec is None:
-                n["invalid"] += 1
-                continue
-            png = apply_recrop(book_out_dir, rec, ev["bbox"])
-            if png is None:
-                n["recrop_failed"] += 1
-                continue
-            n["recropped"] += 1
-            it.decided_char = char
-            it.note = "recropped"
-            if ev.get("admit") is False:
-                it.status = STATUS_LABEL_ONLY
-                it.provenance = None
-                n["label_only"] += 1
-                continue
-            gray = cv2.imdecode(np.frombuffer(png, np.uint8),
-                                cv2.IMREAD_GRAYSCALE)
-            admitted = db.admit_instance(
-                it.instance_id, char, png, normalize_patch(gray),
-                provenance="human",
-                evidence={"event": {k: ev.get(k) for k in
-                                    ("op", "char", "bbox", "batch", "seq", "ts")},
-                          "recrop": {"old_bbox": list(rec.bbox),
-                                     "new_bbox": ev["bbox"]},
-                          "doubts": it.doubts, "ocr": it.ocr,
-                          "align": it.align, "match": it.match},
-                edition_tag=edition, page=it.page, col=it.col, idx=it.idx,
-                bbox=[float(v) for v in ev["bbox"]],
-                semantic=vmap.semantic(char))
-            n["admitted" if admitted else "already_admitted"] += 1
-            it.status = STATUS_RECROPPED
             it.provenance = "human"
         elif op == "not_a_char":
             it.status = STATUS_NOT_A_CHAR
@@ -985,6 +1005,94 @@ def scrub_nonchar(book_out_dir: str | Path) -> dict:
             n[f"auto_{reason}"] += 1
         else:
             n["kept"] += 1
+
+    with open(queue_path, "w", encoding="utf-8") as f:
+        for iid in order:
+            f.write(items[iid].to_json() + "\n")
+    _refresh_progress_pending(seed_dir, items)
+    return dict(n)
+
+
+def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
+                         variants: Path | None = None,
+                         solo_cov: float = MATCH_SOLO_COV,
+                         edition: str | None = None) -> dict:
+    """裁决规则升级后，对既有队列的待审行按存证复裁（不重跑匹配）。
+
+    scrub_nonchar 的姊妹函数：seed 重跑会整页重写队列、冲掉人裁，
+    所以规则回填存量必须走这种「只动 pending/skipped 行」的窄口。
+    用行内存下的 ocr/align/ref/doubts/match 重新调 admission_decision，
+    如今能过的照 seed 同款方式进库（进库字取库匹配形）。存下的 match
+    是 seed 当时对库的快照——只用它的 top 候选一致性，不重算 cov，
+    宁可少放。首个用例：2026-08-24 形近家族「过闸对齐 × 库 top 一致」
+    放行（人 处处 100% 却压给人点）。
+    """
+    book_out_dir = Path(book_out_dir)
+    root = book_out_dir / "phase4_chars"
+    seed_dir = book_out_dir / SEED_DIR
+    queue_path = seed_dir / "queue.jsonl"
+    if not queue_path.exists():
+        raise FileNotFoundError(f"队列不存在: {queue_path}（先跑 seed）")
+    vmap = VariantMap.load(variants)
+    book = book_out_dir.name
+    edition = edition or book
+
+    order: list[str] = []
+    items: dict[str, SeedItem] = {}
+    for line in queue_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        it = SeedItem.from_json(line)
+        if it.instance_id not in items:
+            order.append(it.instance_id)
+        items[it.instance_id] = it
+    recs = {r.id: r for r in load_index(root)}
+
+    n = Counter()
+    for it in items.values():
+        if it.status not in (STATUS_PENDING, STATUS_SKIPPED):
+            continue
+        m = it.match or {}
+        cands = [(c, float(v)) for c, v in (m.get("candidates") or [])]
+        admit_ok, channel = admission_decision(
+            it.ocr, (it.align or {}).get("char"),
+            (it.context or {}).get("ref_char"), it.doubts or [], vmap,
+            match_char=m.get("char"), match_candidates=cands or None,
+            match_guard=m.get("guard"), match_wmax=float(m.get("wmax") or 0.0),
+            solo_cov=solo_cov)
+        if not admit_ok:
+            n["kept"] += 1
+            continue
+        if channel in ("match_ref", "match_solo"):
+            proposed = m.get("char") or (
+                max(cands, key=lambda t: t[1])[0] if cands else None)
+        else:
+            proposed = it.proposed
+        rec = recs.get(it.instance_id)
+        if not proposed or rec is None:
+            n["kept"] += 1
+            continue
+        gray = cv2.imread(str(root / rec.patch_path), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            n["missing_patch"] += 1
+            continue
+        evidence = {"match": m, "ocr": it.ocr, "align": it.align,
+                    "tier": it.tier, "channel": channel,
+                    "readjudicated": True,
+                    "ref": {"char": (it.context or {}).get("ref_char"),
+                            "op": (it.context or {}).get("ref_op")}}
+        prov = "match" if channel == "match_solo" else "align"
+        db.admit_instance(
+            it.instance_id, proposed, (root / rec.patch_path).read_bytes(),
+            normalize_patch(gray), provenance=prov, evidence=evidence,
+            edition_tag=edition, page=it.page, col=it.col, idx=it.idx,
+            bbox=list(rec.bbox), ink_ratio=rec.ink_ratio, width=rec.width,
+            height=rec.height, semantic=vmap.semantic(proposed))
+        it.status = STATUS_AUTO
+        it.decided_char = proposed
+        it.provenance = prov
+        it.note = f"{channel}:readj" if channel else "readj"
+        n[f"auto_{channel or 'dual'}"] += 1
 
     with open(queue_path, "w", encoding="utf-8") as f:
         for iid in order:
