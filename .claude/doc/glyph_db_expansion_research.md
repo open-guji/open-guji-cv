@@ -101,12 +101,13 @@
    归一。正确做法：渲染 ≤195px 字面并留足白边，`to_canonical(clean=False)`
    转 canonical 后入库（详见 glyph_canonical_format.md §4）。
 3. **笔画粗细不是问题**（`stroke_normalize` 已抹平），真正的差异在骨架形状/部件写法。
-4. **阈值是拦路虎**：字体 vs 刻本真匹配相似度可低至 0.69 < THETA_HIGH 0.80。字体来源
-   必须单开 verdict/阈值档，且按 §19.4 约定「异 edition 命中只作语义候选」降权——
-   `GlyphKnnSource` 目前不区分 hit 的 edition_tag，要一起补。
+4. ~~**阈值是拦路虎**：字体来源必须单开 verdict/阈值档~~ **实测推翻了「单开阈值档就能
+   用」这个前提**（§6.2）：字体命中的对/错 f1 分布是重叠的，没有阈值能分开。
+   `GlyphKnnSource` 已改为默认 `kinds=("woodblock",)`，字体来源不进精确字形通道。
 5. `edition_tag` 另开域（如 `font:jigmo`、`font:iming`、`kangxi-scan`、`mth:tripitaka`），
    `(edition_tag, char)` 唯一键天然隔离，不污染 `wuyingdian-siku-zongmu` 的同版高置信。
-6. 字体模板每字 1 例 → `sparse` 标志，下游目前无人消费，需接降权。
+6. 字体模板每字 1 例 → `sparse` 标志，下游目前无人消费；字体来源改由 `kind` 隔离后
+   这条不再紧要，但 scan 类来源（每字亦仅 1 例）将来仍要接降权。
 7. 已知 bug：`run_update()`（feedback.py:264）还在用旧 `GlyphLibrary` 读新 schema 的
    `glyphs.jsonl`，会 TypeError（待修）。~~`export_store` 不清 patches 孤儿 PNG~~
    已修（2026-08-24，导出时清理 + 迁移脚本已删存量 53 个）。
@@ -131,13 +132,88 @@
    > spoofing + twedu + yitizi 的高置信边；全来源展开时最大连通分量 7,869
    > 字——多义桥接的实证，千万别拿连通分量当等价类）。单测
    > `tests/variants/`，不依赖网络。
-2. **P1 字体渲染 → 语义候选层**：Jigmo(CC0) + 全字庫宋体 + I.Ming 传承字形三套渲染
-   全字表（89,109 字），走 `normalize_patch`，独立 edition_tag + 独立阈值档 +
-   GlyphKnnSource 降权通道。先建测试集标定阈值。GlyphWiki dump 补 `-itaiji-` 异体写法
-   （一字多形，这是字体给不了的）。
+2. **P1 字体渲染 → 语义候选层**：Jigmo(CC0) + 全字庫宋/楷 + I.Ming 传承字形，独立
+   edition_tag + 独立阈值档。GlyphWiki dump 补 `-itaiji-` 异体写法（一字多形，这是
+   字体给不了的）。
+
+   > **已实现并实测（2026-08-24）**：见下面 §6。**结论是字体字形不能当精确字形判据**
+   > ——四套字体的「对/错」f1 分布完全重叠，阈值划不出来。已按此把
+   > `GlyphKnnSource` 默认锁死在 `kinds=("woodblock",)`。
 3. **P2 真实刻本数据集当新 edition**：申请 TKH/MTH（6,733 类、108 万刻本字形），按
    book 导入流程进库——这是「精确字形层」不靠人工的唯一扩源。
 4. **P3 康熙字典扫描**（CC BY-SA 可批量）：每字 1 例、需切分净化，当雕版风格的语义
    候选补充，`script_style` 标清楚。
 5. **远期**：若模板匹配对长尾字仍不够，参考汉典重光/FontDiffuser 路线，用本书已确认
    字形做风格参考，把字体字形迁移成「本书风格」再入候选层。
+
+---
+## 6. P1 实测：字体字形到底能不能匹配刻本（2026-08-24）
+
+### 6.1 怎么做的
+
+`config/fonts/manifest.json` 列四套开源字体，`glyph-db import-font` 按字表渲染入库：
+
+```bash
+export GUJI_FONT_DIR=/path/to/fonts        # 字体档不进仓库，本地放哪都行
+python -m open_guji_cv glyph-db import-font                 # 全部
+python -m open_guji_cv glyph-db import-font --edition font:iming --limit 500
+```
+
+渲染走 canonical 规范（`font_glyphs.py:FontRenderer`）：384 画布、字面 190px、
+`to_canonical(clean=False)` 质心居中——与刻本图块同一条归一路径，两边才可比。
+每套字体一个 `edition_tag`、`sources.kind='font'`。本轮导入本书字表（corpus+ocr
+两栏合并 8,138 字），各套 8,091~8,138 字，合计 32,461 个字形，约 50 字/秒。
+
+**来源隔离与选择性匹配**（本轮的主要交付）：
+
+```python
+db.query(norm, editions=["font:iming", "font:twsung"])   # 只挑这两个库比对
+db.query(norm, kinds=["woodblock"])                      # 按可信度分层
+db.query(norm, exclude=[iid])                            # 留一法评测
+hit.edition_tag, hit.kind                                # 命中出自哪个库
+```
+
+`exclude` 必须在检索里生效，不能拿返回结果过滤——每个 (edition, char) 只留最高分，
+自身命中若排第一，事后过滤会把那个字整个抹掉（第一版实验就栽在这，刻本对照组
+recall 假成 0.000）。
+
+### 6.2 结果（`scripts/bench_font_glyphs.py`，94 个刻本 exemplar / 26 字，留一法）
+
+| 来源 | kind | recall@1 | recall@5 | 正确命中 f1 p10 | 错误命中 f1 p90 | 可分性 |
+|---|---|---|---|---|---|---|
+| **wuyingdian-siku-zongmu** | woodblock | **0.904** | 0.915 | 0.741 | 0.592 | **是 +0.149** |
+| font:iming（传承字形） | font | 0.425 | 0.692 | 0.621 | 0.680 | 否 −0.060 |
+| font:twsung（全字庫宋） | font | 0.383 | 0.596 | 0.599 | 0.676 | 否 −0.078 |
+| font:twkai（全字庫楷） | font | 0.372 | 0.660 | 0.592 | 0.720 | 否 −0.128 |
+| font:jigmo | font | 0.330 | 0.479 | 0.597 | 0.664 | 否 −0.067 |
+
+「可分性」= 正确命中 f1 的下十分位是否高于错误命中 f1 的上十分位。
+
+### 6.3 结论
+
+1. **字体字形不能当精确字形判据，这是分布层面的否决，不是调阈值能救的。**
+   四套字体的正确命中 f1 中位数都在 0.65 上下，而**错误命中也在 0.62~0.64**——
+   两个分布压在一起（margin 全为负）。刻本自身对照组则干净可分（+0.149）。
+   这与 open-guji-fonts 早先「仿宋 vs 宋体真匹配可低至 0.69」的观察一致，也印证了
+   §3 的文献信号：没人拿现成字体渲染图直接做刻本模板匹配是有原因的。
+2. **`verify_pair` 判 same 的只有 1~4/94**，即照原样接进 `GlyphKnnSource`
+   （只收 same、权重 3.0）命中率确实接近 0——预测得到验证。
+3. **但 recall@5 有价值**：I.Ming 0.692、twkai 0.660。正确字进前五的概率不低，
+   说明字体字形**当候选生成器**（配合 OCR/语言模型上下文定夺）是有戏的，
+   只是不能自己拍板。这条要单独接一个低权重来源并对 char-ocr 金标评测，
+   属于下一步，本轮没做。
+4. **字体排序符合预期**：I.Ming（传承字形/旧字形）> 全字庫宋 > 全字庫楷 > Jigmo。
+   传承字形最贴刻本用字习惯这一判断得到数据支持。
+
+### 6.4 工程约定
+
+- **字体字形不进 Git**：`export_store` 跳过 `kind='font'` 的整条链
+  （sources/glyphs/exemplars/instances/patches）。它由「字体档 + 字表」确定性
+  重生成，`glyph-db rebuild` 后重跑 `import-font` 即可。
+- **`GlyphKnnSource` 默认 `kinds=("woodblock",)`**：3 万多字体字形若混入粗排会把
+  百来个刻本 exemplar 直接淹没，且按上面的分布根本不该当精确判据。
+- 检索规模提醒：目前 32,555 个 exemplar 做全量线性扫描（HOG 1764 维），
+  单次 query 约 0.18s。再上一个量级（全字表 10 万字 × N 套字体）需要换近似最近邻，
+  这是已知的下一个瓶颈。
+- 已知无关失败：`test_all_ocr_sources_have_s2t_attribute` 在本容器缺 `opencc` 依赖，
+  与本轮改动无关。

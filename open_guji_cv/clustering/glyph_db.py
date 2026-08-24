@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,12 @@ CREATE TABLE IF NOT EXISTS sources (
     script_style TEXT, era TEXT,
     cols_per_page INTEGER, chars_per_col INTEGER,
     pipeline_version TEXT, notes TEXT,
+    -- kind 決定這個來源的可信度與去留：
+    --   woodblock 人工確認的刻本字形（精確字形層，導出進 Git）
+    --   scan      字典/掃描件字形（語義候選層，導出進 Git）
+    --   font      字體渲染字形（語義候選層，**不導出**——由字體檔 +
+    --             字表確定性重生成，見 font_glyphs.py）
+    kind TEXT NOT NULL DEFAULT 'woodblock',
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS instances (
@@ -138,6 +145,7 @@ class DBHit:
     f1: float
     verdict: str
     sparse: bool
+    kind: str = "woodblock"   # 來源類別：woodblock / scan / font
 
 
 class GlyphDB:
@@ -152,7 +160,20 @@ class GlyphDB:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.executescript(_SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """補上舊索引檔缺的列。
+
+        SQLite 的 CREATE TABLE IF NOT EXISTS 不會給既有表加列，而這個檔
+        雖然是可重建索引（rebuild 即可），也不該以 OperationalError 的
+        形式告知用戶。
+        """
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(sources)")}
+        if "kind" not in have:
+            self.conn.execute("ALTER TABLE sources ADD COLUMN kind TEXT "
+                              "NOT NULL DEFAULT 'woodblock'")
 
     def close(self) -> None:
         self.conn.close()
@@ -172,8 +193,8 @@ class GlyphDB:
         cur.execute(
             """INSERT INTO sources (source_id, collection, title, volume,
                  edition_tag, script_style, era, cols_per_page, chars_per_col,
-                 pipeline_version, notes, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                 pipeline_version, notes, kind, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(source_id) DO UPDATE SET
                  edition_tag=excluded.edition_tag,
                  collection=COALESCE(excluded.collection, collection),
@@ -182,7 +203,7 @@ class GlyphDB:
              meta.get("volume"), edition, meta.get("script_style"),
              meta.get("era"), meta.get("cols_per_page"),
              meta.get("chars_per_col"), meta.get("pipeline_version"),
-             meta.get("notes"), _now()))
+             meta.get("notes"), meta.get("kind", "woodblock"), _now()))
 
         instances = load_index(book_dir / "phase4_chars")
         pos_of = {i.id: k for k, i in enumerate(instances)}
@@ -415,23 +436,58 @@ class GlyphDB:
     # ── 檢索 ─────────────────────────────────────────────
 
     def query(self, norm_patch: np.ndarray,
-              edition_hint: str | None = None, k: int = 5) -> list[DBHit]:
+              edition_hint: str | None = None, k: int = 5,
+              editions: Sequence[str] | None = None,
+              kinds: Sequence[str] | None = None,
+              exclude: Sequence[str] | None = None) -> list[DBHit]:
         """exemplar 特徵 kNN 粗排 → verify_pair 精驗。
 
         特徵由庫內部按自持後端計算——調用方只需給歸一化圖塊，
         不必知道（也不會弄錯）特徵後端。
+
+        來源過濾（**在 kNN 粗排之前**生效，這很要緊：字體來源動輒
+        數萬字形，不先濾掉會把百來個刻本 exemplar 直接淹沒）：
+
+        - ``edition_hint``：單一版本（舊參數，等價於 ``editions=[hint]``）
+        - ``editions``：版本白名單，只在這幾個 edition_tag 裡檢索
+        - ``kinds``：來源類別白名單（woodblock/scan/font），跨版本按
+          可信度分層檢索用
+
+        三者可疊加（取交集）。返回的 :class:`DBHit` 帶 ``edition_tag``
+        與 ``kind``，調用方據此區分命中來自哪個庫。
+
+        ``exclude``：排除指定 instance_id（留一法評測用）。**必須在這裡
+        排除，不能拿返回結果過濾**——每個 (edition, char) 只留最高分，
+        自身命中若排第一，事後過濾會連帶把那個字整個抹掉。
         """
         feat = self._feature.extract(norm_patch[None, ...])[0]
         cur = self.conn.cursor()
-        sql = """SELECT g.char, g.edition_tag, g.status, e.instance_id, d.data
+        sql = """SELECT g.char, g.edition_tag, g.status, e.instance_id, d.data,
+                        COALESCE(s.kind, 'woodblock')
                  FROM exemplars e
                  JOIN glyphs g ON g.glyph_id = e.glyph_id
                  JOIN derived d ON d.instance_id = e.instance_id
-                   AND d.kind = ?"""
+                   AND d.kind = ?
+                 JOIN instances i ON i.instance_id = e.instance_id
+                 LEFT JOIN sources s ON s.source_id = i.source_id"""
         args: tuple = (self._feat_kind(),)
+        where: list[str] = []
+        wanted = list(editions) if editions else []
         if edition_hint:
-            sql += " WHERE g.edition_tag = ?"
-            args = args + (edition_hint,)
+            wanted.append(edition_hint)
+        if wanted:
+            where.append(f"g.edition_tag IN ({','.join('?' * len(wanted))})")
+            args = args + tuple(wanted)
+        if kinds:
+            where.append("COALESCE(s.kind, 'woodblock') IN "
+                         f"({','.join('?' * len(kinds))})")
+            args = args + tuple(kinds)
+        if exclude:
+            where.append(f"e.instance_id NOT IN "
+                         f"({','.join('?' * len(exclude))})")
+            args = args + tuple(exclude)
+        if where:
+            sql += " WHERE " + " AND ".join(where)
         rows = cur.execute(sql, args).fetchall()
         if not rows:
             return []
@@ -439,7 +495,7 @@ class GlyphDB:
         d2 = ((feats - feat[None]) ** 2).sum(1)
         hits: list[DBHit] = []
         for idx in np.argsort(d2)[:max(k * 3, 12)]:
-            char, edition, status, iid, _ = rows[int(idx)]
+            char, edition, status, iid, _, kind = rows[int(idx)]
             row = cur.execute(
                 "SELECT data FROM derived WHERE instance_id=? AND kind='norm'",
                 (iid,)).fetchone()
@@ -448,7 +504,7 @@ class GlyphDB:
             v = verify_pair(norm_patch, _unpng(row[0]))
             hits.append(DBHit(char=char, edition_tag=edition,
                               instance_id=iid, f1=v.f1, verdict=v.verdict,
-                              sparse=(status == "sparse")))
+                              sparse=(status == "sparse"), kind=kind))
         hits.sort(key=lambda h: -h.f1)
         # 每字形只留最高分
         seen, out = set(), []
@@ -524,25 +580,37 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
                                    sort_keys=True) + "\n")
         return len(recs)
 
+    # 字體來源整條鏈（sources / glyphs / exemplars / instances / patches）
+    # 都不導出，見下面 kind='font' 的註解
+    fe = tuple(r[0] for r in cur.execute(
+        "SELECT DISTINCT edition_tag FROM sources WHERE kind='font'"))
+    ph = ",".join("?" * len(fe))
+
+    def not_font(col: str, keyword: str = "WHERE") -> str:
+        return f" {keyword} {col} NOT IN ({ph})" if fe else ""
+
     counts["sources"] = dump(
         out / "sources.jsonl",
-        cur.execute("SELECT * FROM sources ORDER BY source_id"))
+        cur.execute("SELECT * FROM sources WHERE COALESCE(kind,'woodblock') "
+                    "!= 'font' ORDER BY source_id"))
     # glyph_id 是本地自增代理鍵，導出時剔除——重建時按
     # (edition_tag, char) 重新分配，跨機器/跨克隆才不會衝突
     counts["glyphs"] = dump(
         out / "glyphs.jsonl",
         [{k: v for k, v in dict(r).items() if k != "glyph_id"}
          for r in cur.execute(
-             "SELECT * FROM glyphs ORDER BY edition_tag, char")])
+             "SELECT * FROM glyphs" + not_font("edition_tag")
+             + " ORDER BY edition_tag, char", fe)])
     counts["exemplars"] = dump(
         out / "exemplars.jsonl",
         [{"edition_tag": r["edition_tag"], "char": r["char"],
           "instance_id": r["instance_id"], "role": r["role"],
           "added_at": r["added_at"]}
          for r in cur.execute(
-             """SELECT g.edition_tag, g.char, e.instance_id, e.role, e.added_at
-                FROM exemplars e JOIN glyphs g ON g.glyph_id = e.glyph_id
-                ORDER BY g.edition_tag, g.char, e.instance_id""")])
+             "SELECT g.edition_tag, g.char, e.instance_id, e.role, e.added_at "
+             "FROM exemplars e JOIN glyphs g ON g.glyph_id = e.glyph_id"
+             + not_font("g.edition_tag")
+             + " ORDER BY g.edition_tag, g.char, e.instance_id", fe)])
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
@@ -550,7 +618,11 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     # 事件與實例按書分檔：一本書一個檔，審查增量只動一個檔
     n_ev = n_inst = n_png = 0
     written: set[str] = set()
-    for (src,) in db.conn.execute("SELECT source_id FROM sources ORDER BY 1"):
+    # kind='font' 的來源不導出：字形由字體檔 + 字表確定性重生成，
+    # 進 Git 只是把幾萬張可再生的圖塞進版本歷史（另見字體外框版權）。
+    for (src,) in db.conn.execute(
+            "SELECT source_id FROM sources WHERE COALESCE(kind,'woodblock') "
+            "!= 'font' ORDER BY 1"):
         n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
             "SELECT source_id, batch, seq, ts, op, payload FROM events "
             "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
