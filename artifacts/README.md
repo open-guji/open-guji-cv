@@ -13,6 +13,15 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
+## 切分审查（G1/G2 工作流）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 数据即产物 | `scripts/build_patch_review.py --pages vol01:20-27 vol02:1-8` + 壳模板（会话脚手架）|
+| 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物 | `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20` |
+
+标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
+
 ## 分析报告（静态，作决策依据引用）
 
 | 页面 | URL | 快照 | 说明 |
