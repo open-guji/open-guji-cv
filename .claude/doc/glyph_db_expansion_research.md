@@ -93,11 +93,13 @@
 
 批量导入外部字形时：
 
-1. **不用改代码的入库路径**：往 `glyph_store/` 写 4 个 JSONL + `patches/*.png`（**原始
-   灰度图**，白底黑字），`glyph-db rebuild` 会自动重算 norm/skeleton/feat。
-2. `synth.py:render_char()` 是现成的字体渲染函数，但它整画布 resize、**没走
-   `normalize_patch`**——直接 query 会系统性失配。正确做法：渲染大图留足 padding
-   （防 `remove_edge_specks` 咬掉「丨刂囗」贴边笔画），统一走 `normalize_patch(gray)`。
+1. **不用改代码的入库路径**：往 `glyph_store/` 写 4 个 JSONL + `patches/*.png`
+   （**canonical 统一格式**，200×200 灰度、质心居中，规范见
+   glyph_canonical_format.md，2026-08-24 起），`glyph-db rebuild` 会自动重算
+   norm/skeleton/feat。
+2. `synth.py:render_char()` 是现成的字体渲染函数，但它整画布 resize、没走统一
+   归一。正确做法：渲染 ≤152px 字面并留足白边，`to_canonical(clean=False)`
+   转 canonical 后入库（详见 glyph_canonical_format.md §4）。
 3. **笔画粗细不是问题**（`stroke_normalize` 已抹平），真正的差异在骨架形状/部件写法。
 4. **阈值是拦路虎**：字体 vs 刻本真匹配相似度可低至 0.69 < THETA_HIGH 0.80。字体来源
    必须单开 verdict/阈值档，且按 §19.4 约定「异 edition 命中只作语义候选」降权——
@@ -106,7 +108,8 @@
    `(edition_tag, char)` 唯一键天然隔离，不污染 `wuyingdian-siku-zongmu` 的同版高置信。
 6. 字体模板每字 1 例 → `sparse` 标志，下游目前无人消费，需接降权。
 7. 已知 bug：`run_update()`（feedback.py:264）还在用旧 `GlyphLibrary` 读新 schema 的
-   `glyphs.jsonl`，会 TypeError；`export_store` 不清 patches 孤儿 PNG（现有 30+23 个）。
+   `glyphs.jsonl`，会 TypeError（待修）。~~`export_store` 不清 patches 孤儿 PNG~~
+   已修（2026-08-24，导出时清理 + 迁移脚本已删存量 53 个）。
 8. **纪律：先建测试集再动手**（handbook §3 P1）。用 `synth.py` 造「字体模板 vs 刻本」
    配对 + char-ocr 1404 实例金标，重点量字表外字的召回，不看整体 top1。
 
@@ -115,6 +118,19 @@
 1. **P0 关系层先行（零风险，纯数据）**：引入 Unihan variants + cjkvi-variants + yitizi，
    建「语义字 → 异体形集合」映射表。立刻能用在两处：候选融合时把 OCR/VLM 报的异体
    归一到正字；为字形库检索做「同义展开」。
+
+   > **已实现（2026-08-24）**：`scripts/build_variants.py` 下载并合并三源
+   > （Unihan_Variants 六属性 + cjkvi 的 twedu/hydzd/dypytz/cjkvi-simplified +
+   > yitizi@0.1.3，注意 yitizi 的 npm 包里 `dist/yitizi.json` 是 404，数据内嵌
+   > 在 `index.js` 里），产物 `config/variants/variants.json`（无向边 + 来源
+   > 标签，确定性输出，1.6MB）+ `config/variants/report.json`。规模：**47,724
+   > 字 / 44,266 对关系**（twedu 24,615 / hydzd 28,784 / yitizi 8,688 /
+   > unihan:kSemanticVariant 2,177 / 简繁各 6,562 / spoofing 181——spoofing
+   > 单独打标签，默认不当异体用）。查询模块 `open_guji_cv/variants.py`：
+   > `variants_of` / `are_variants` / `variant_group`（默认只走 unihan 非
+   > spoofing + twedu + yitizi 的高置信边；全来源展开时最大连通分量 7,869
+   > 字——多义桥接的实证，千万别拿连通分量当等价类）。单测
+   > `tests/variants/`，不依赖网络。
 2. **P1 字体渲染 → 语义候选层**：Jigmo(CC0) + 全字庫宋体 + I.Ming 传承字形三套渲染
    全字表（89,109 字），走 `normalize_patch`，独立 edition_tag + 独立阈值档 +
    GlyphKnnSource 降权通道。先建测试集标定阈值。GlyphWiki dump 补 `-itaiji-` 异体写法
