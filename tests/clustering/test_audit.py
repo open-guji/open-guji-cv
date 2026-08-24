@@ -66,7 +66,7 @@ def test_evict_instance_removes_everything(tmp_path):
     try:
         n = _norm("天")
         png = cv2.imencode(".png", (255 - n * 255).astype(np.uint8))[1].tobytes()
-        assert db.admit_instance("b:1:1:0", "天", png, n, provenance="human")
+        assert db.admit_instance("b:1:1:0", "天", png, provenance="human")
         assert evict_instance(db, "b:1:1:0") == "天"
         for t in ("admissions", "exemplars", "derived", "instances"):
             assert db.conn.execute(

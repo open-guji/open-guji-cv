@@ -652,7 +652,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                            "op": (ctx or {}).get("ref_op")}
                     admitted = db.admit_instance(
                         rec.id, proposed, (root / rec.patch_path).read_bytes(),
-                        norm, provenance=prov, evidence=evidence,
+                        provenance=prov, evidence=evidence,
                         edition_tag=edition, page=page, col=rec.col,
                         idx=rec.idx, bbox=list(rec.bbox),
                         ink_ratio=rec.ink_ratio, width=rec.width,
@@ -724,7 +724,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                             admitted = db.admit_instance(
                                 rec.id, surface,
                                 (root / rec.patch_path).read_bytes(),
-                                norm, provenance="context",
+                                provenance="context",
                                 evidence=evidence, edition_tag=edition,
                                 page=page, col=rec.col, idx=rec.idx,
                                 bbox=list(rec.bbox),
@@ -898,7 +898,7 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
         # 已进库的实例：库里的真源与派生一起刷新，否则检索用的还是错形
         if db.conn.execute("SELECT 1 FROM admissions WHERE instance_id=?",
                            (iid,)).fetchone():
-            db.refresh_instance_patch(iid, png, normalize_patch(gray),
+            db.refresh_instance_patch(iid, png,
                                       bbox=[float(v) for v in ev["bbox"]])
             n["recrop_refreshed_db"] += 1
 
@@ -928,7 +928,7 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             rec = rec_of.get(it.instance_id)
             admitted = db.admit_instance(
                 it.instance_id, char, (root / it.patch_path).read_bytes(),
-                normalize_patch(gray), provenance="human",
+                provenance="human",
                 evidence={"event": {k: ev.get(k) for k in
                                     ("op", "char", "batch", "seq", "ts")},
                           "doubts": it.doubts, "ocr": it.ocr,
@@ -1109,7 +1109,7 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
                 else "align")
         db.admit_instance(
             it.instance_id, proposed, (root / rec.patch_path).read_bytes(),
-            normalize_patch(gray), provenance=prov, evidence=evidence,
+            provenance=prov, evidence=evidence,
             edition_tag=edition, page=it.page, col=it.col, idx=it.idx,
             bbox=list(rec.bbox), ink_ratio=rec.ink_ratio, width=rec.width,
             height=rec.height, semantic=vmap.semantic(proposed))

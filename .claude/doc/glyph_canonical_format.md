@@ -67,3 +67,23 @@
   可接受（信息只多不少）。
 - `edition_tag` 按来源分域（`font:jigmo` / `kangxi-scan` / …），
   见 glyph_db_expansion_research.md §4。
+
+
+## 迁移补记（2026-08-24，用户发现的缺口）
+
+canonical 标准此前只接在 `import_book` 批量路径；**逐页种子的
+`admit_instance` / `refresh_instance_patch` 一直存原始裁切**——
+output/glyph.db 2533 个实例全是各异尺寸（~133×170），审查/体检页里
+字忽上忽下，比较不可比。修法：
+
+- 两个入口内部统一 `to_canonical`：真源存 canonical PNG，derived
+  （norm/skeleton/feat）一律从 canonical 图重算，**不再收调用方的
+  norm**（单一标准，调用方各算各的必然漂移）；
+- 存量由 `scripts/canonicalize_glyph_db.py` 一次迁完（2533/2533，
+  幂等，末尾统一触碰 exemplars.added_at 失效特征缓存）；
+- 迁移后体检复扫：rival 68→29、outlier 53→39——此前一部分「形不
+  一致」其实是**存储格式不一致**（裁切余白/位置差异渗进 norm）。
+
+「让字尽量填满」的诉求由**匹配层** normalize_patch 承担（墨迹外接框
+等比缩放到内容区 + 质心居中）——存储层坚持只缩不放（§3 实测：放大
+重采样翻转 10/60 金标对），两层分工不变。
