@@ -93,15 +93,25 @@ def render_html(findings, patches, batch_id: str, n_total: int,
                        for t in f.flags)
         figs = [f'<figure><img src="{_b64(patches[f.instance_id])}">'
                 f'<figcaption>本例「{_html.escape(f.char)}」</figcaption></figure>']
+        # 参照图也可能才是坏的（划痕/残余混进库当了范例）——给每张
+        # 参照图配「撤此参照」，撤的是参照实例自己，与本例判定无关
         if f.same_peer and f.same_peer in patches:
+            sp = _html.escape(f.same_peer)
             figs.append(
-                f'<figure><img src="{_b64(patches[f.same_peer])}">'
-                f'<figcaption>同字最近 cov {f.best_same:.2f}</figcaption></figure>')
+                f'<figure data-peer="{sp}"><img src="{_b64(patches[f.same_peer])}">'
+                f'<figcaption>同字最近 cov {f.best_same:.2f}<br>'
+                f'<button type="button" class="act mini" data-op="evict" '
+                f'data-iid="{sp}" title="{sp}">撤此参照</button>'
+                f'</figcaption></figure>')
         if f.other_peer and f.other_peer in patches:
+            op_ = _html.escape(f.other_peer)
             figs.append(
-                f'<figure><img src="{_b64(patches[f.other_peer])}">'
+                f'<figure data-peer="{op_}"><img src="{_b64(patches[f.other_peer])}">'
                 f'<figcaption>竞争「{_html.escape(f.other_char or "?")}」'
-                f' cov {f.best_other:.2f}</figcaption></figure>')
+                f' cov {f.best_other:.2f}<br>'
+                f'<button type="button" class="act mini" data-op="evict" '
+                f'data-iid="{op_}" title="{op_}">撤此参照</button>'
+                f'</figcaption></figure>')
         ocr_line = (f'<small class="near">OCR 读作「{_html.escape(f.ocr_char)}」'
                     f' {f.ocr_prob:.0%}</small>' if f.ocr_char else "")
         cards.append(f"""
@@ -235,6 +245,12 @@ h2{{max-width:56rem;margin:1rem auto .3rem;padding:0 1rem;font-size:.95rem}}
     var b = document.querySelector(
       '.single .act[data-iid="' + ev.instance_id + '"]');
     if(b) b.closest('.single').style.opacity = '0.45';
+    if(ev.op === 'evict')
+      document.querySelectorAll(
+        'figure[data-peer="' + ev.instance_id + '"]')
+        .forEach(function(fg){{ fg.style.opacity = '0.35';
+          var bt = fg.querySelector('.act');
+          if(bt){{ bt.disabled = true; bt.textContent = '已撤 ✗'; }} }});
   }}
   function act(iid, op){{
     emit({{op: op, instance_id: iid}});
@@ -343,8 +359,8 @@ def cmd_run(args) -> None:
         json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
     batch_id = "glyphdb-audit-" + hashlib.md5(
-        json.dumps(sorted(f.instance_id for f in flagged)).encode()
-    ).hexdigest()[:8]
+        (json.dumps(sorted(f.instance_id for f in flagged)) + args.tag)
+        .encode()).hexdigest()[:8]
     need = {f.instance_id for f in flagged} | {i for i, *_ in singles_ocr}
     for f in flagged:
         need |= {p for p in (f.same_peer, f.other_peer) if p}
@@ -424,6 +440,8 @@ def main() -> None:
     p_run.add_argument("--db", default="output/glyph.db")
     p_run.add_argument("--out", default="output/glyphdb_audit")
     p_run.add_argument("--no-ocr", action="store_true")
+    p_run.add_argument("--tag", default="", help="掺进批次号的盐——重置一轮"
+                       "审阅（作废页面上的旧事件与本地计数）时换一个值")
     p_run.set_defaults(fn=cmd_run)
     p_ap = sub.add_parser("apply", help="回收审查页事件")
     p_ap.add_argument("--db", default="output/glyph.db")
