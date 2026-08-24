@@ -1,0 +1,2474 @@
+{
+ "n_exemplars": 2541,
+ "n_flagged": 144,
+ "n_singleton": 300,
+ "n_singleton_ocr": 17,
+ "whitelisted": 0,
+ "flagged": [
+  {
+   "instance_id": "vol01:15:8:15",
+   "char": "紛",
+   "flags": [
+    "outlier",
+    "rival",
+    "ocr"
+   ],
+   "best_same": 0.8736,
+   "same_peer": "vol01:15:8:14",
+   "best_other": 0.9138,
+   "other_char": "給",
+   "other_peer": "vol01:14:2:3",
+   "ocr": [
+    "粉",
+    0.956
+   ]
+  },
+  {
+   "instance_id": "vol01:13:5:15",
+   "char": "指",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8252,
+   "same_peer": "vol01:8:9:11",
+   "best_other": 0.9494,
+   "other_char": "描",
+   "other_peer": "vol01:10:4:8",
+   "ocr": [
+    "指",
+    0.991
+   ]
+  },
+  {
+   "instance_id": "vol01:6:7:10",
+   "char": "候",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8779,
+   "same_peer": "vol01:8:3:8",
+   "best_other": 0.946,
+   "other_char": "俟",
+   "other_peer": "vol01:14:1:15",
+   "ocr": [
+    "候",
+    0.969
+   ]
+  },
+  {
+   "instance_id": "vol01:13:3:3",
+   "char": "壽",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8767,
+   "same_peer": "vol01:5:2:14",
+   "best_other": 0.9402,
+   "other_char": "富",
+   "other_peer": "vol01:4:7:13",
+   "ocr": [
+    "壽",
+    0.782
+   ]
+  },
+  {
+   "instance_id": "vol01:10:8:18",
+   "char": "較",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8839,
+   "same_peer": "vol01:18:4:2",
+   "best_other": 0.9337,
+   "other_char": "校",
+   "other_peer": "vol01:9:3:13",
+   "ocr": [
+    "焚",
+    0.436
+   ]
+  },
+  {
+   "instance_id": "vol01:17:2:3",
+   "char": "馬",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.883,
+   "same_peer": "vol01:16:7:8",
+   "best_other": 0.9324,
+   "other_char": "周",
+   "other_peer": "vol01:17:3:16",
+   "ocr": [
+    "馬",
+    0.849
+   ]
+  },
+  {
+   "instance_id": "vol01:18:4:2",
+   "char": "較",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8839,
+   "same_peer": "vol01:10:8:18",
+   "best_other": 0.9242,
+   "other_char": "既",
+   "other_peer": "vol01:18:4:10",
+   "ocr": [
+    "較",
+    0.982
+   ]
+  },
+  {
+   "instance_id": "vol01:12:5:17",
+   "char": "淮",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8446,
+   "same_peer": "vol01:16:7:6",
+   "best_other": 0.9236,
+   "other_char": "惟",
+   "other_peer": "vol01:4:4:0",
+   "ocr": [
+    "淮",
+    0.891
+   ]
+  },
+  {
+   "instance_id": "vol01:4:4:0",
+   "char": "惟",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8655,
+   "same_peer": "vol01:9:9:1",
+   "best_other": 0.9236,
+   "other_char": "淮",
+   "other_peer": "vol01:12:5:17",
+   "ocr": [
+    "惟",
+    0.988
+   ]
+  },
+  {
+   "instance_id": "vol01:6:5:11",
+   "char": "皆",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8643,
+   "same_peer": "vol01:16:7:20",
+   "best_other": 0.923,
+   "other_char": "者",
+   "other_peer": "vol01:11:6:8",
+   "ocr": [
+    "皆",
+    0.996
+   ]
+  },
+  {
+   "instance_id": "vol01:4:1:7",
+   "char": "目",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8413,
+   "same_peer": "vol01:10:6:15",
+   "best_other": 0.9149,
+   "other_char": "回",
+   "other_peer": "vol01:17:8:7",
+   "ocr": [
+    "目",
+    0.972
+   ]
+  },
+  {
+   "instance_id": "vol01:5:2:14",
+   "char": "壽",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8767,
+   "same_peer": "vol01:13:3:3",
+   "best_other": 0.9143,
+   "other_char": "畫",
+   "other_peer": "vol01:10:4:10",
+   "ocr": [
+    "善",
+    0.114
+   ]
+  },
+  {
+   "instance_id": "vol01:16:7:20",
+   "char": "皆",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8643,
+   "same_peer": "vol01:6:5:11",
+   "best_other": 0.9115,
+   "other_char": "青",
+   "other_peer": "vol01:12:1:10",
+   "ocr": [
+    "皆",
+    0.474
+   ]
+  },
+  {
+   "instance_id": "vol01:9:9:1",
+   "char": "惟",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8655,
+   "same_peer": "vol01:4:4:0",
+   "best_other": 0.9103,
+   "other_char": "雅",
+   "other_peer": "vol01:18:8:7",
+   "ocr": [
+    "惟",
+    0.998
+   ]
+  },
+  {
+   "instance_id": "vol01:18:7:18",
+   "char": "佩",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8779,
+   "same_peer": "vol01:17:6:6",
+   "best_other": 0.9032,
+   "other_char": "無",
+   "other_peer": "vol01:4:8:2",
+   "ocr": [
+    "佩",
+    0.961
+   ]
+  },
+  {
+   "instance_id": "vol01:14:4:17",
+   "char": "奏",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8758,
+   "same_peer": "vol01:12:2:4",
+   "best_other": 0.9028,
+   "other_char": "藝",
+   "other_peer": "vol01:15:6:10",
+   "ocr": [
+    "奏",
+    0.901
+   ]
+  },
+  {
+   "instance_id": "vol01:18:4:1",
+   "char": "然",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8762,
+   "same_peer": "vol01:14:9:8",
+   "best_other": 0.9023,
+   "other_char": "餘",
+   "other_peer": "vol01:9:1:8",
+   "ocr": [
+    "然",
+    0.993
+   ]
+  },
+  {
+   "instance_id": "vol01:13:7:17",
+   "char": "且",
+   "flags": [
+    "outlier",
+    "rival"
+   ],
+   "best_same": 0.8684,
+   "same_peer": "vol01:10:2:8",
+   "best_other": 0.9003,
+   "other_char": "止",
+   "other_peer": "vol01:13:4:13",
+   "ocr": [
+    "且",
+    0.989
+   ]
+  },
+  {
+   "instance_id": "vol01:5:4:11",
+   "char": "傳",
+   "flags": [
+    "rival",
+    "ocr"
+   ],
+   "best_same": 0.9804,
+   "same_peer": "vol01:15:9:14",
+   "best_other": 0.9884,
+   "other_char": "傅",
+   "other_peer": "vol01:5:5:19",
+   "ocr": [
+    "傅",
+    0.963
+   ]
+  },
+  {
+   "instance_id": "vol01:16:1:15",
+   "char": "覽",
+   "flags": [
+    "rival",
+    "ocr"
+   ],
+   "best_same": 0.943,
+   "same_peer": "vol01:4:1:13",
+   "best_other": 0.9464,
+   "other_char": "牘",
+   "other_peer": "vol01:5:2:11",
+   "ocr": [
+    "覺",
+    0.856
+   ]
+  },
+  {
+   "instance_id": "vol01:14:2:18",
+   "char": "巳",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9183,
+   "same_peer": "vol01:7:5:20",
+   "best_other": 0.999,
+   "other_char": "已",
+   "other_peer": "vol01:13:7:2",
+   "ocr": [
+    "已",
+    0.723
+   ]
+  },
+  {
+   "instance_id": "vol01:13:7:2",
+   "char": "已",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9728,
+   "same_peer": "vol01:16:4:13",
+   "best_other": 0.999,
+   "other_char": "巳",
+   "other_peer": "vol01:14:2:18",
+   "ocr": [
+    "已",
+    0.916
+   ]
+  },
+  {
+   "instance_id": "vol01:16:4:13",
+   "char": "已",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9911,
+   "same_peer": "vol01:4:2:14",
+   "best_other": 0.998,
+   "other_char": "巳",
+   "other_peer": "vol01:14:2:18",
+   "ocr": [
+    "已",
+    0.936
+   ]
+  },
+  {
+   "instance_id": "vol01:12:6:9",
+   "char": "已",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9841,
+   "same_peer": "vol01:16:4:13",
+   "best_other": 0.9961,
+   "other_char": "巳",
+   "other_peer": "vol01:14:2:18",
+   "ocr": [
+    "已",
+    0.983
+   ]
+  },
+  {
+   "instance_id": "vol01:7:2:7",
+   "char": "朱",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.978,
+   "same_peer": "vol01:8:4:12",
+   "best_other": 0.989,
+   "other_char": "未",
+   "other_peer": "vol01:13:9:16",
+   "ocr": [
+    "朱",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:12:9:15",
+   "char": "闡",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9622,
+   "same_peer": "vol01:5:4:16",
+   "best_other": 0.9889,
+   "other_char": "闌",
+   "other_peer": "vol01:10:5:1",
+   "ocr": [
+    "聞",
+    0.515
+   ]
+  },
+  {
+   "instance_id": "vol01:10:7:18",
+   "char": "遺",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.982,
+   "same_peer": "vol01:12:9:11",
+   "best_other": 0.9885,
+   "other_char": "還",
+   "other_peer": "vol01:16:5:11",
+   "ocr": [
+    "遭",
+    0.488
+   ]
+  },
+  {
+   "instance_id": "vol01:9:4:1",
+   "char": "已",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9581,
+   "same_peer": "vol01:4:2:14",
+   "best_other": 0.9867,
+   "other_char": "巳",
+   "other_peer": "vol01:9:9:9",
+   "ocr": [
+    "已",
+    0.734
+   ]
+  },
+  {
+   "instance_id": "vol01:9:9:9",
+   "char": "巳",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9824,
+   "same_peer": "vol01:7:5:20",
+   "best_other": 0.9867,
+   "other_char": "已",
+   "other_peer": "vol01:9:4:1",
+   "ocr": [
+    "已",
+    0.447
+   ]
+  },
+  {
+   "instance_id": "vol01:9:2:11",
+   "char": "日",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9793,
+   "same_peer": "vol01:12:1:12",
+   "best_other": 0.9834,
+   "other_char": "曰",
+   "other_peer": "vol01:10:9:10",
+   "ocr": [
+    "日",
+    0.994
+   ]
+  },
+  {
+   "instance_id": "vol01:12:4:8",
+   "char": "編",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9621,
+   "same_peer": "vol01:4:1:9",
+   "best_other": 0.9823,
+   "other_char": "綱",
+   "other_peer": "vol01:10:7:2",
+   "ocr": [
+    "篇",
+    0.577
+   ]
+  },
+  {
+   "instance_id": "vol01:9:5:14",
+   "char": "交",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.943,
+   "same_peer": "vol01:13:8:8",
+   "best_other": 0.982,
+   "other_char": "文",
+   "other_peer": "vol01:5:2:1",
+   "ocr": [
+    "交",
+    0.6
+   ]
+  },
+  {
+   "instance_id": "vol01:8:1:7",
+   "char": "細",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9748,
+   "same_peer": "vol01:19:8:15",
+   "best_other": 0.9758,
+   "other_char": "綱",
+   "other_peer": "vol01:10:7:2",
+   "ocr": [
+    "細",
+    0.158
+   ]
+  },
+  {
+   "instance_id": "vol01:12:8:19",
+   "char": "儲",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.964,
+   "same_peer": "vol01:10:7:7",
+   "best_other": 0.9727,
+   "other_char": "備",
+   "other_peer": "vol01:12:8:13",
+   "ocr": [
+    "儲",
+    0.959
+   ]
+  },
+  {
+   "instance_id": "vol01:4:1:1",
+   "char": "復",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.97,
+   "same_peer": "vol01:13:7:13",
+   "best_other": 0.9721,
+   "other_char": "後",
+   "other_peer": "vol01:10:3:4",
+   "ocr": [
+    "役",
+    0.584
+   ]
+  },
+  {
+   "instance_id": "vol01:4:4:17",
+   "char": "圖",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9606,
+   "same_peer": "vol01:17:2:11",
+   "best_other": 0.9709,
+   "other_char": "國",
+   "other_peer": "vol01:15:5:2",
+   "ocr": [
+    "圓",
+    0.755
+   ]
+  },
+  {
+   "instance_id": "vol01:18:3:3",
+   "char": "撮",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9655,
+   "same_peer": "vol01:8:5:3",
+   "best_other": 0.9705,
+   "other_char": "採",
+   "other_peer": "vol01:12:4:6",
+   "ocr": [
+    "撮",
+    0.594
+   ]
+  },
+  {
+   "instance_id": "vol01:10:6:19",
+   "char": "子",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9625,
+   "same_peer": "vol01:18:8:17",
+   "best_other": 0.9703,
+   "other_char": "予",
+   "other_peer": "vol01:14:8:9",
+   "ocr": [
+    "子",
+    0.987
+   ]
+  },
+  {
+   "instance_id": "vol01:4:3:1",
+   "char": "讀",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9527,
+   "same_peer": "vol01:15:2:18",
+   "best_other": 0.9701,
+   "other_char": "續",
+   "other_peer": "vol01:14:3:7",
+   "ocr": [
+    "讀",
+    0.698
+   ]
+  },
+  {
+   "instance_id": "vol01:6:7:9",
+   "char": "聞",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9507,
+   "same_peer": "vol01:8:3:7",
+   "best_other": 0.9685,
+   "other_char": "間",
+   "other_peer": "vol01:5:2:4",
+   "ocr": [
+    "聞",
+    0.495
+   ]
+  },
+  {
+   "instance_id": "vol01:19:7:8",
+   "char": "官",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9632,
+   "same_peer": "vol01:9:4:17",
+   "best_other": 0.9673,
+   "other_char": "言",
+   "other_peer": "vol01:5:6:12",
+   "ocr": [
+    "官",
+    0.994
+   ]
+  },
+  {
+   "instance_id": "vol01:9:3:2",
+   "char": "據",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9617,
+   "same_peer": "vol01:15:7:8",
+   "best_other": 0.9643,
+   "other_char": "棟",
+   "other_peer": "vol01:5:8:16",
+   "ocr": [
+    "撩",
+    0.555
+   ]
+  },
+  {
+   "instance_id": "vol01:13:1:6",
+   "char": "交",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9541,
+   "same_peer": "vol01:13:8:8",
+   "best_other": 0.9627,
+   "other_char": "文",
+   "other_peer": "vol01:4:6:9",
+   "ocr": [
+    "交",
+    0.999
+   ]
+  },
+  {
+   "instance_id": "vol01:8:2:11",
+   "char": "巳",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9475,
+   "same_peer": "vol01:7:5:20",
+   "best_other": 0.9602,
+   "other_char": "已",
+   "other_peer": "vol01:16:4:13",
+   "ocr": [
+    "巳",
+    0.449
+   ]
+  },
+  {
+   "instance_id": "vol01:4:8:8",
+   "char": "或",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9524,
+   "same_peer": "vol01:6:1:19",
+   "best_other": 0.9598,
+   "other_char": "成",
+   "other_peer": "vol01:5:9:11",
+   "ocr": [
+    "或",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:6:3:8",
+   "char": "還",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9521,
+   "same_peer": "vol01:16:5:11",
+   "best_other": 0.9596,
+   "other_char": "遺",
+   "other_peer": "vol01:12:9:11",
+   "ocr": [
+    "還",
+    0.89
+   ]
+  },
+  {
+   "instance_id": "vol01:4:4:11",
+   "char": "康",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9139,
+   "same_peer": "vol01:8:6:20",
+   "best_other": 0.9595,
+   "other_char": "廣",
+   "other_peer": "vol01:12:9:5",
+   "ocr": [
+    "康",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:16:1:17",
+   "char": "幾",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.94,
+   "same_peer": "vol01:6:8:12",
+   "best_other": 0.9583,
+   "other_char": "樂",
+   "other_peer": "vol01:14:7:11",
+   "ocr": [
+    "髮",
+    0.346
+   ]
+  },
+  {
+   "instance_id": "vol01:8:7:3",
+   "char": "間",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9549,
+   "same_peer": "vol01:4:4:14",
+   "best_other": 0.9575,
+   "other_char": "閱",
+   "other_peer": "vol01:8:1:9",
+   "ocr": [
+    "間",
+    0.627
+   ]
+  },
+  {
+   "instance_id": "vol01:13:2:11",
+   "char": "罕",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9382,
+   "same_peer": "vol01:16:9:15",
+   "best_other": 0.9571,
+   "other_char": "年",
+   "other_peer": "vol01:7:1:7",
+   "ocr": [
+    "罕",
+    0.8
+   ]
+  },
+  {
+   "instance_id": "vol01:9:1:2",
+   "char": "右",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9114,
+   "same_peer": "vol01:13:5:3",
+   "best_other": 0.9541,
+   "other_char": "古",
+   "other_peer": "vol01:16:9:2",
+   "ocr": [
+    "右",
+    0.964
+   ]
+  },
+  {
+   "instance_id": "vol01:8:8:11",
+   "char": "俟",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9492,
+   "same_peer": "vol01:16:3:16",
+   "best_other": 0.9525,
+   "other_char": "候",
+   "other_peer": "vol01:6:7:10",
+   "ocr": [
+    "侯",
+    0.709
+   ]
+  },
+  {
+   "instance_id": "vol01:6:8:12",
+   "char": "幾",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.94,
+   "same_peer": "vol01:16:1:17",
+   "best_other": 0.9521,
+   "other_char": "機",
+   "other_peer": "vol01:9:4:6",
+   "ocr": [
+    "凝",
+    0.162
+   ]
+  },
+  {
+   "instance_id": "vol01:4:3:14",
+   "char": "往",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9192,
+   "same_peer": "vol01:7:3:20",
+   "best_other": 0.9518,
+   "other_char": "在",
+   "other_peer": "vol01:4:3:4",
+   "ocr": [
+    "往",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:4:3:11",
+   "char": "識",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9038,
+   "same_peer": "vol01:16:2:4",
+   "best_other": 0.9513,
+   "other_char": "議",
+   "other_peer": "vol01:7:2:5",
+   "ocr": [
+    "識",
+    0.708
+   ]
+  },
+  {
+   "instance_id": "vol01:5:5:1",
+   "char": "法",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9261,
+   "same_peer": "vol01:10:7:14",
+   "best_other": 0.9512,
+   "other_char": "注",
+   "other_peer": "vol01:11:6:11",
+   "ocr": [
+    "法",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:6:3:13",
+   "char": "屬",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9152,
+   "same_peer": "vol01:5:1:8",
+   "best_other": 0.946,
+   "other_char": "風",
+   "other_peer": "vol01:5:8:12",
+   "ocr": [
+    "廚",
+    0.46
+   ]
+  },
+  {
+   "instance_id": "vol01:5:1:3",
+   "char": "政",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9011,
+   "same_peer": "vol01:12:5:19",
+   "best_other": 0.9421,
+   "other_char": "攷",
+   "other_peer": "vol01:5:6:1",
+   "ocr": [
+    "政",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:15:5:19",
+   "char": "時",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.938,
+   "same_peer": "vol01:5:8:5",
+   "best_other": 0.9406,
+   "other_char": "將",
+   "other_peer": "vol01:18:2:18",
+   "ocr": [
+    "時",
+    0.888
+   ]
+  },
+  {
+   "instance_id": "vol01:7:3:20",
+   "char": "往",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9192,
+   "same_peer": "vol01:4:3:14",
+   "best_other": 0.9362,
+   "other_char": "任",
+   "other_peer": "vol01:12:1:3",
+   "ocr": [
+    "往",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:9:5:3",
+   "char": "量",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9057,
+   "same_peer": "vol01:6:1:12",
+   "best_other": 0.9264,
+   "other_char": "豈",
+   "other_peer": "vol01:14:1:3",
+   "ocr": [
+    "量",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:18:4:10",
+   "char": "既",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9084,
+   "same_peer": "vol01:13:6:12",
+   "best_other": 0.9242,
+   "other_char": "較",
+   "other_peer": "vol01:18:4:2",
+   "ocr": [
+    "既",
+    0.795
+   ]
+  },
+  {
+   "instance_id": "vol01:17:8:14",
+   "char": "員",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9172,
+   "same_peer": "vol01:17:8:1",
+   "best_other": 0.9181,
+   "other_char": "實",
+   "other_peer": "vol01:5:6:15",
+   "ocr": [
+    "員",
+    0.897
+   ]
+  },
+  {
+   "instance_id": "vol01:8:6:20",
+   "char": "康",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9139,
+   "same_peer": "vol01:4:4:11",
+   "best_other": 0.918,
+   "other_char": "原",
+   "other_peer": "vol01:5:8:10",
+   "ocr": [
+    "康",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:9:9:4",
+   "char": "武",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9138,
+   "same_peer": "vol01:17:9:0",
+   "best_other": 0.915,
+   "other_char": "載",
+   "other_peer": "vol01:10:3:9",
+   "ocr": [
+    "武",
+    0.998
+   ]
+  },
+  {
+   "instance_id": "vol01:6:2:3",
+   "char": "印",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9141,
+   "same_peer": "vol01:18:7:17",
+   "best_other": 0.9145,
+   "other_char": "卽",
+   "other_peer": "vol01:7:8:14",
+   "ocr": [
+    "印",
+    0.996
+   ]
+  },
+  {
+   "instance_id": "vol01:17:5:18",
+   "char": "每",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9056,
+   "same_peer": "vol01:8:4:16",
+   "best_other": 0.9125,
+   "other_char": "傳",
+   "other_peer": "vol01:5:4:11",
+   "ocr": [
+    "每",
+    0.999
+   ]
+  },
+  {
+   "instance_id": "vol01:16:2:4",
+   "char": "識",
+   "flags": [
+    "rival"
+   ],
+   "best_same": 0.9038,
+   "same_peer": "vol01:4:3:11",
+   "best_other": 0.9039,
+   "other_char": "裁",
+   "other_peer": "vol01:10:9:14",
+   "ocr": [
+    "識",
+    0.664
+   ]
+  },
+  {
+   "instance_id": "vol01:15:8:14",
+   "char": "紛",
+   "flags": [
+    "outlier",
+    "ocr"
+   ],
+   "best_same": 0.8736,
+   "same_peer": "vol01:15:8:15",
+   "best_other": 0.8838,
+   "other_char": "翰",
+   "other_peer": "vol01:7:9:6",
+   "ocr": [
+    "粉",
+    0.996
+   ]
+  },
+  {
+   "instance_id": "vol01:14:9:19",
+   "char": "之",
+   "flags": [
+    "outlier",
+    "ocr"
+   ],
+   "best_same": 0.8449,
+   "same_peer": "vol01:10:3:1",
+   "best_other": 0.7736,
+   "other_char": "送",
+   "other_peer": "vol01:15:7:14",
+   "ocr": [
+    "芝",
+    0.989
+   ]
+  },
+  {
+   "instance_id": "vol01:19:1:7",
+   "char": "者",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8605,
+   "same_peer": "vol01:11:6:8",
+   "best_other": 0.899,
+   "other_char": "著",
+   "other_peer": "vol01:17:2:7",
+   "ocr": [
+    "者",
+    0.803
+   ]
+  },
+  {
+   "instance_id": "vol01:4:5:19",
+   "char": "因",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.7902,
+   "same_peer": "vol01:13:8:14",
+   "best_other": 0.8958,
+   "other_char": "屑",
+   "other_peer": "vol01:5:3:18",
+   "ocr": [
+    "因",
+    0.945
+   ]
+  },
+  {
+   "instance_id": "vol01:7:3:13",
+   "char": "修",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8834,
+   "same_peer": "vol01:10:9:11",
+   "best_other": 0.8933,
+   "other_char": "條",
+   "other_peer": "vol01:9:3:11",
+   "ocr": [
+    "修",
+    0.948
+   ]
+  },
+  {
+   "instance_id": "vol01:17:7:10",
+   "char": "外",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8949,
+   "same_peer": "vol01:10:5:0",
+   "best_other": 0.8933,
+   "other_char": "如",
+   "other_peer": "vol01:14:3:11",
+   "ocr": [
+    "外",
+    0.631
+   ]
+  },
+  {
+   "instance_id": "vol01:14:3:19",
+   "char": "本",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.7304,
+   "same_peer": "vol01:8:7:18",
+   "best_other": 0.8898,
+   "other_char": "渠",
+   "other_peer": "vol01:12:4:18",
+   "ocr": [
+    "耀",
+    0.164
+   ]
+  },
+  {
+   "instance_id": "vol01:8:3:8",
+   "char": "候",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8779,
+   "same_peer": "vol01:6:7:10",
+   "best_other": 0.8886,
+   "other_char": "陳",
+   "other_peer": "vol01:13:4:1",
+   "ocr": [
+    "候",
+    0.971
+   ]
+  },
+  {
+   "instance_id": "vol01:8:9:11",
+   "char": "指",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8252,
+   "same_peer": "vol01:13:5:15",
+   "best_other": 0.888,
+   "other_char": "稽",
+   "other_peer": "vol01:19:1:3",
+   "ocr": [
+    "指",
+    0.543
+   ]
+  },
+  {
+   "instance_id": "vol01:10:2:8",
+   "char": "且",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8684,
+   "same_peer": "vol01:13:7:17",
+   "best_other": 0.887,
+   "other_char": "宜",
+   "other_peer": "vol01:4:8:18",
+   "ocr": [
+    "且",
+    0.998
+   ]
+  },
+  {
+   "instance_id": "vol01:13:7:5",
+   "char": "或",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8847,
+   "same_peer": "vol01:6:1:19",
+   "best_other": 0.8844,
+   "other_char": "成",
+   "other_peer": "vol01:5:9:11",
+   "ocr": [
+    "或",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:18:4:3",
+   "char": "之",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8896,
+   "same_peer": "vol01:10:3:1",
+   "best_other": 0.8818,
+   "other_char": "在",
+   "other_peer": "vol01:14:2:11",
+   "ocr": [
+    "北",
+    0.5
+   ]
+  },
+  {
+   "instance_id": "vol01:8:9:6",
+   "char": "員",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8869,
+   "same_peer": "vol01:7:9:13",
+   "best_other": 0.8802,
+   "other_char": "賞",
+   "other_peer": "vol01:17:6:0",
+   "ocr": [
+    "員",
+    0.682
+   ]
+  },
+  {
+   "instance_id": "vol01:5:2:15",
+   "char": "戶",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8776,
+   "same_peer": "vol01:4:2:8",
+   "best_other": 0.877,
+   "other_char": "弆",
+   "other_peer": "vol01:16:8:4",
+   "ocr": [
+    "戶",
+    0.425
+   ]
+  },
+  {
+   "instance_id": "vol01:7:9:13",
+   "char": "員",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8891,
+   "same_peer": "vol01:17:8:14",
+   "best_other": 0.8744,
+   "other_char": "冀",
+   "other_peer": "vol01:12:9:13",
+   "ocr": [
+    "員",
+    0.976
+   ]
+  },
+  {
+   "instance_id": "vol01:17:6:6",
+   "char": "佩",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8779,
+   "same_peer": "vol01:18:7:18",
+   "best_other": 0.8743,
+   "other_char": "俱",
+   "other_peer": "vol01:17:5:11",
+   "ocr": [
+    "佩",
+    0.998
+   ]
+  },
+  {
+   "instance_id": "vol01:15:2:10",
+   "char": "均",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8312,
+   "same_peer": "vol01:6:1:1",
+   "best_other": 0.8728,
+   "other_char": "昀",
+   "other_peer": "vol01:14:9:15",
+   "ocr": [
+    "均",
+    0.99
+   ]
+  },
+  {
+   "instance_id": "vol01:6:7:4",
+   "char": "開",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8079,
+   "same_peer": "vol01:8:3:3",
+   "best_other": 0.8688,
+   "other_char": "用",
+   "other_peer": "vol01:5:2:6",
+   "ocr": [
+    "開",
+    0.973
+   ]
+  },
+  {
+   "instance_id": "vol01:10:5:0",
+   "char": "外",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8949,
+   "same_peer": "vol01:17:7:10",
+   "best_other": 0.8682,
+   "other_char": "辦",
+   "other_peer": "vol01:19:8:18",
+   "ocr": [
+    "外",
+    0.868
+   ]
+  },
+  {
+   "instance_id": "vol01:16:7:6",
+   "char": "淮",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8446,
+   "same_peer": "vol01:12:5:17",
+   "best_other": 0.8634,
+   "other_char": "惟",
+   "other_peer": "vol01:9:9:1",
+   "ocr": [
+    "準",
+    0.703
+   ]
+  },
+  {
+   "instance_id": "vol01:7:6:18",
+   "char": "博",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8648,
+   "same_peer": "vol01:9:6:4",
+   "best_other": 0.862,
+   "other_char": "簡",
+   "other_peer": "vol01:6:7:2",
+   "ocr": [
+    "博",
+    0.996
+   ]
+  },
+  {
+   "instance_id": "vol01:5:5:7",
+   "char": "心",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8302,
+   "same_peer": "vol01:13:3:1",
+   "best_other": 0.8373,
+   "other_char": "必",
+   "other_peer": "vol01:8:4:18",
+   "ocr": [
+    "心",
+    0.999
+   ]
+  },
+  {
+   "instance_id": "vol01:4:2:8",
+   "char": "戶",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8776,
+   "same_peer": "vol01:5:2:15",
+   "best_other": 0.8353,
+   "other_char": "百",
+   "other_peer": "vol01:18:6:1",
+   "ocr": [
+    "萬",
+    0.21
+   ]
+  },
+  {
+   "instance_id": "vol01:12:1:9",
+   "char": "汗",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8669,
+   "same_peer": "vol01:7:4:14",
+   "best_other": 0.8329,
+   "other_char": "序",
+   "other_peer": "vol01:9:5:13",
+   "ocr": [
+    "汗",
+    0.986
+   ]
+  },
+  {
+   "instance_id": "vol01:7:2:14",
+   "char": "樂",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8388,
+   "same_peer": "vol01:14:7:11",
+   "best_other": 0.82,
+   "other_char": "學",
+   "other_peer": "vol01:5:1:2",
+   "ocr": [
+    "樂",
+    0.194
+   ]
+  },
+  {
+   "instance_id": "vol01:16:7:8",
+   "char": "馬",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.883,
+   "same_peer": "vol01:17:2:3",
+   "best_other": 0.7951,
+   "other_char": "閱",
+   "other_peer": "vol01:6:8:2",
+   "ocr": [
+    "馬",
+    0.96
+   ]
+  },
+  {
+   "instance_id": "vol01:7:1:8",
+   "char": "二",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.7936,
+   "same_peer": "vol01:15:1:1",
+   "best_other": 0.7758,
+   "other_char": "三",
+   "other_peer": "vol01:18:2:7",
+   "ocr": [
+    "二",
+    0.821
+   ]
+  },
+  {
+   "instance_id": "vol01:7:4:14",
+   "char": "汗",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8669,
+   "same_peer": "vol01:12:1:9",
+   "best_other": 0.7673,
+   "other_char": "府",
+   "other_peer": "vol01:4:7:5",
+   "ocr": [
+    "汗",
+    0.893
+   ]
+  },
+  {
+   "instance_id": "vol01:13:3:1",
+   "char": "心",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8302,
+   "same_peer": "vol01:5:5:7",
+   "best_other": 0.7436,
+   "other_char": "必",
+   "other_peer": "vol01:8:4:18",
+   "ocr": [
+    "心",
+    0.951
+   ]
+  },
+  {
+   "instance_id": "vol01:14:7:0",
+   "char": "上",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.463,
+   "same_peer": "vol01:15:7:4",
+   "best_other": 0.7158,
+   "other_char": "千",
+   "other_peer": "vol01:4:8:5",
+   "ocr": [
+    "上",
+    0.985
+   ]
+  },
+  {
+   "instance_id": "vol01:14:4:20",
+   "char": "此",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.792,
+   "same_peer": "vol01:9:1:12",
+   "best_other": 0.7037,
+   "other_char": "備",
+   "other_peer": "vol01:6:8:1",
+   "ocr": [
+    "此",
+    0.977
+   ]
+  },
+  {
+   "instance_id": "vol01:14:3:18",
+   "char": "還",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.7096,
+   "same_peer": "vol01:16:5:11",
+   "best_other": 0.689,
+   "other_char": "且",
+   "other_peer": "vol01:10:2:8",
+   "ocr": [
+    "牌",
+    0.318
+   ]
+  },
+  {
+   "instance_id": "vol01:14:3:17",
+   "char": "俾",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.389,
+   "same_peer": "vol01:17:1:5",
+   "best_other": 0.6645,
+   "other_char": "令",
+   "other_peer": "vol01:8:9:2",
+   "ocr": [
+    "。",
+    0.585
+   ]
+  },
+  {
+   "instance_id": "vol01:18:4:18",
+   "char": "如",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.8537,
+   "same_peer": "vol01:18:6:4",
+   "best_other": 0.6614,
+   "other_char": "光",
+   "other_peer": "vol01:15:6:5",
+   "ocr": [
+    "如",
+    0.942
+   ]
+  },
+  {
+   "instance_id": "vol01:9:3:19",
+   "char": "一",
+   "flags": [
+    "outlier"
+   ],
+   "best_same": 0.1457,
+   "same_peer": "vol01:7:3:5",
+   "best_other": 0.6558,
+   "other_char": "手",
+   "other_peer": "vol01:14:9:20",
+   "ocr": [
+    "一",
+    0.598
+   ]
+  },
+  {
+   "instance_id": "vol01:15:9:14",
+   "char": "傳",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9804,
+   "same_peer": "vol01:5:4:11",
+   "best_other": 0.9802,
+   "other_char": "傅",
+   "other_peer": "vol01:5:5:19",
+   "ocr": [
+    "傅",
+    0.865
+   ]
+  },
+  {
+   "instance_id": "vol01:13:3:10",
+   "char": "傳",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9771,
+   "same_peer": "vol01:5:4:11",
+   "best_other": 0.9725,
+   "other_char": "傅",
+   "other_peer": "vol01:5:5:19",
+   "ocr": [
+    "傅",
+    0.979
+   ]
+  },
+  {
+   "instance_id": "vol01:10:7:4",
+   "char": "裒",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9939,
+   "same_peer": "vol01:18:6:13",
+   "best_other": 0.9635,
+   "other_char": "裘",
+   "other_peer": "vol01:10:9:9",
+   "ocr": [
+    "戛",
+    0.909
+   ]
+  },
+  {
+   "instance_id": "vol01:12:6:14",
+   "char": "千",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9961,
+   "same_peer": "vol01:4:8:5",
+   "best_other": 0.9605,
+   "other_char": "予",
+   "other_peer": "vol01:14:8:9",
+   "ocr": [
+    "幹",
+    0.849
+   ]
+  },
+  {
+   "instance_id": "vol01:5:4:5",
+   "char": "採",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.983,
+   "same_peer": "vol01:10:2:9",
+   "best_other": 0.9587,
+   "other_char": "樣",
+   "other_peer": "vol01:10:3:18",
+   "ocr": [
+    "探",
+    0.979
+   ]
+  },
+  {
+   "instance_id": "vol01:14:1:19",
+   "char": "竣",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.968,
+   "same_peer": "vol01:16:3:20",
+   "best_other": 0.9579,
+   "other_char": "校",
+   "other_peer": "vol01:9:3:13",
+   "ocr": [
+    "坡",
+    0.962
+   ]
+  },
+  {
+   "instance_id": "vol01:7:5:20",
+   "char": "巳",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9824,
+   "same_peer": "vol01:9:9:9",
+   "best_other": 0.9553,
+   "other_char": "已",
+   "other_peer": "vol01:9:4:1",
+   "ocr": [
+    "已",
+    0.868
+   ]
+  },
+  {
+   "instance_id": "vol01:16:8:6",
+   "char": "子",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9549,
+   "same_peer": "vol01:18:1:13",
+   "best_other": 0.9546,
+   "other_char": "予",
+   "other_peer": "vol01:14:8:9",
+   "ocr": [
+    "於",
+    0.97
+   ]
+  },
+  {
+   "instance_id": "vol01:8:2:10",
+   "char": "傳",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9705,
+   "same_peer": "vol01:5:4:11",
+   "best_other": 0.9535,
+   "other_char": "傅",
+   "other_peer": "vol01:5:5:19",
+   "ocr": [
+    "傅",
+    0.847
+   ]
+  },
+  {
+   "instance_id": "vol01:6:2:19",
+   "char": "繕",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9857,
+   "same_peer": "vol01:7:2:19",
+   "best_other": 0.9454,
+   "other_char": "編",
+   "other_peer": "vol01:12:4:8",
+   "ocr": [
+    "善",
+    0.855
+   ]
+  },
+  {
+   "instance_id": "vol01:5:6:1",
+   "char": "攷",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.972,
+   "same_peer": "vol01:9:6:12",
+   "best_other": 0.9421,
+   "other_char": "政",
+   "other_peer": "vol01:5:1:3",
+   "ocr": [
+    "孜",
+    0.906
+   ]
+  },
+  {
+   "instance_id": "vol01:9:6:12",
+   "char": "攷",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.972,
+   "same_peer": "vol01:5:6:1",
+   "best_other": 0.9398,
+   "other_char": "政",
+   "other_peer": "vol01:17:7:19",
+   "ocr": [
+    "致",
+    0.812
+   ]
+  },
+  {
+   "instance_id": "vol01:5:1:6",
+   "char": "飭",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9858,
+   "same_peer": "vol01:6:3:11",
+   "best_other": 0.9333,
+   "other_char": "備",
+   "other_peer": "vol01:12:8:13",
+   "ocr": [
+    "筋",
+    0.975
+   ]
+  },
+  {
+   "instance_id": "vol01:7:4:7",
+   "char": "專",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9676,
+   "same_peer": "vol01:5:8:1",
+   "best_other": 0.9254,
+   "other_char": "再",
+   "other_peer": "vol01:10:9:3",
+   "ocr": [
+    "事",
+    0.944
+   ]
+  },
+  {
+   "instance_id": "vol01:5:1:1",
+   "char": "撫",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9891,
+   "same_peer": "vol01:6:5:18",
+   "best_other": 0.9235,
+   "other_char": "無",
+   "other_peer": "vol01:19:3:10",
+   "ocr": [
+    "撕",
+    0.894
+   ]
+  },
+  {
+   "instance_id": "vol01:9:3:15",
+   "char": "永",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9785,
+   "same_peer": "vol01:7:2:13",
+   "best_other": 0.9188,
+   "other_char": "京",
+   "other_peer": "vol01:17:8:12",
+   "ocr": [
+    "汞",
+    0.909
+   ]
+  },
+  {
+   "instance_id": "vol01:10:3:10",
+   "char": "入",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9559,
+   "same_peer": "vol01:10:5:2",
+   "best_other": 0.9186,
+   "other_char": "人",
+   "other_peer": "vol01:14:3:20",
+   "ocr": [
+    "人",
+    0.951
+   ]
+  },
+  {
+   "instance_id": "vol01:9:5:17",
+   "char": "採",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9837,
+   "same_peer": "vol01:10:2:9",
+   "best_other": 0.9176,
+   "other_char": "撮",
+   "other_peer": "vol01:18:3:3",
+   "ocr": [
+    "探",
+    0.995
+   ]
+  },
+  {
+   "instance_id": "vol01:4:8:5",
+   "char": "千",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9961,
+   "same_peer": "vol01:12:6:14",
+   "best_other": 0.9145,
+   "other_char": "予",
+   "other_peer": "vol01:14:8:9",
+   "ocr": [
+    "幹",
+    0.914
+   ]
+  },
+  {
+   "instance_id": "vol01:4:5:18",
+   "char": "屬",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9751,
+   "same_peer": "vol01:15:1:14",
+   "best_other": 0.9143,
+   "other_char": "勵",
+   "other_peer": "vol01:15:3:6",
+   "ocr": [
+    "廚",
+    0.964
+   ]
+  },
+  {
+   "instance_id": "vol01:6:5:6",
+   "char": "令",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9862,
+   "same_peer": "vol01:10:9:17",
+   "best_other": 0.9137,
+   "other_char": "合",
+   "other_peer": "vol01:10:6:7",
+   "ocr": [
+    "合",
+    0.884
+   ]
+  },
+  {
+   "instance_id": "vol01:9:1:9",
+   "char": "依",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.969,
+   "same_peer": "vol01:9:8:16",
+   "best_other": 0.9075,
+   "other_char": "使",
+   "other_peer": "vol01:4:6:10",
+   "ocr": [
+    "：",
+    0.914
+   ]
+  },
+  {
+   "instance_id": "vol01:4:7:17",
+   "char": "來",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9832,
+   "same_peer": "vol01:19:9:17",
+   "best_other": 0.9048,
+   "other_char": "京",
+   "other_peer": "vol01:17:8:12",
+   "ocr": [
+    "水",
+    0.941
+   ]
+  },
+  {
+   "instance_id": "vol01:15:7:18",
+   "char": "兩",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9638,
+   "same_peer": "vol01:16:7:5",
+   "best_other": 0.903,
+   "other_char": "而",
+   "other_peer": "vol01:14:9:2",
+   "ocr": [
+    "雨",
+    0.804
+   ]
+  },
+  {
+   "instance_id": "vol01:10:8:6",
+   "char": "採",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9894,
+   "same_peer": "vol01:10:2:9",
+   "best_other": 0.9028,
+   "other_char": "撮",
+   "other_peer": "vol01:18:3:3",
+   "ocr": [
+    "探",
+    0.987
+   ]
+  },
+  {
+   "instance_id": "vol01:9:8:9",
+   "char": "卽",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9902,
+   "same_peer": "vol01:7:8:14",
+   "best_other": 0.8996,
+   "other_char": "印",
+   "other_peer": "vol01:6:2:3",
+   "ocr": [
+    "郎",
+    0.814
+   ]
+  },
+  {
+   "instance_id": "vol01:14:7:10",
+   "char": "永",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9676,
+   "same_peer": "vol01:13:1:11",
+   "best_other": 0.8954,
+   "other_char": "承",
+   "other_peer": "vol01:8:9:3",
+   "ocr": [
+    "汞",
+    0.811
+   ]
+  },
+  {
+   "instance_id": "vol01:7:8:7",
+   "char": "名",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9361,
+   "same_peer": "vol01:4:8:11",
+   "best_other": 0.8921,
+   "other_char": "各",
+   "other_peer": "vol01:19:5:17",
+   "ocr": [
+    "各",
+    0.841
+   ]
+  },
+  {
+   "instance_id": "vol01:17:3:4",
+   "char": "又",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.975,
+   "same_peer": "vol01:5:7:4",
+   "best_other": 0.8835,
+   "other_char": "文",
+   "other_peer": "vol01:18:7:19",
+   "ocr": [
+    "叉",
+    0.817
+   ]
+  },
+  {
+   "instance_id": "vol01:13:1:11",
+   "char": "永",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9676,
+   "same_peer": "vol01:14:7:10",
+   "best_other": 0.881,
+   "other_char": "未",
+   "other_peer": "vol01:12:7:18",
+   "ocr": [
+    "汞",
+    0.821
+   ]
+  },
+  {
+   "instance_id": "vol01:12:5:16",
+   "char": "兩",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9598,
+   "same_peer": "vol01:15:7:18",
+   "best_other": 0.8809,
+   "other_char": "嗣",
+   "other_peer": "vol01:14:3:2",
+   "ocr": [
+    "雨",
+    0.997
+   ]
+  },
+  {
+   "instance_id": "vol01:16:6:19",
+   "char": "范",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9582,
+   "same_peer": "vol01:17:1:17",
+   "best_other": 0.8783,
+   "other_char": "蒐",
+   "other_peer": "vol01:12:9:7",
+   "ocr": [
+    "範",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:7:5:9",
+   "char": "又",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9765,
+   "same_peer": "vol01:5:7:4",
+   "best_other": 0.878,
+   "other_char": "及",
+   "other_peer": "vol01:5:2:2",
+   "ocr": [
+    "叉",
+    0.977
+   ]
+  },
+  {
+   "instance_id": "vol01:17:1:17",
+   "char": "范",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9582,
+   "same_peer": "vol01:16:6:19",
+   "best_other": 0.8756,
+   "other_char": "蒐",
+   "other_peer": "vol01:12:9:7",
+   "ocr": [
+    "範",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:7:2:13",
+   "char": "永",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9785,
+   "same_peer": "vol01:9:3:15",
+   "best_other": 0.8728,
+   "other_char": "藏",
+   "other_peer": "vol01:6:1:17",
+   "ocr": [
+    "汞",
+    0.86
+   ]
+  },
+  {
+   "instance_id": "vol01:8:2:4",
+   "char": "採",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9795,
+   "same_peer": "vol01:10:2:9",
+   "best_other": 0.8718,
+   "other_char": "撫",
+   "other_peer": "vol01:19:6:16",
+   "ocr": [
+    "探",
+    0.911
+   ]
+  },
+  {
+   "instance_id": "vol01:18:6:7",
+   "char": "范",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9571,
+   "same_peer": "vol01:17:1:17",
+   "best_other": 0.8588,
+   "other_char": "流",
+   "other_peer": "vol01:5:6:8",
+   "ocr": [
+    "範",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:4:4:3",
+   "char": "益",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9756,
+   "same_peer": "vol01:10:9:1",
+   "best_other": 0.8523,
+   "other_char": "盛",
+   "other_peer": "vol01:13:5:6",
+   "ocr": [
+    "盆",
+    0.829
+   ]
+  },
+  {
+   "instance_id": "vol01:12:8:14",
+   "char": "恐",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9187,
+   "same_peer": "vol01:7:4:3",
+   "best_other": 0.8397,
+   "other_char": "悉",
+   "other_peer": "vol01:8:5:17",
+   "ocr": [
+    "芯",
+    0.92
+   ]
+  },
+  {
+   "instance_id": "vol01:8:2:12",
+   "char": "久",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.9892,
+   "same_peer": "vol01:7:5:4",
+   "best_other": 0.8311,
+   "other_char": "分",
+   "other_peer": "vol01:7:3:9",
+   "ocr": [
+    "人",
+    0.832
+   ]
+  },
+  {
+   "instance_id": "vol01:4:1:9",
+   "char": "編",
+   "flags": [
+    "ocr"
+   ],
+   "best_same": 0.99,
+   "same_peer": "vol01:4:5:16",
+   "best_other": 0.0,
+   "other_char": null,
+   "other_peer": null,
+   "ocr": [
+    "福",
+    0.925
+   ]
+  }
+ ],
+ "singleton_ocr": [
+  {
+   "instance_id": "vol01:5:3:9",
+   "char": "馳",
+   "ocr": [
+    "也",
+    0.896
+   ]
+  },
+  {
+   "instance_id": "vol01:5:7:10",
+   "char": "洎",
+   "ocr": [
+    "泊",
+    0.815
+   ]
+  },
+  {
+   "instance_id": "vol01:6:3:10",
+   "char": "嚴",
+   "ocr": [
+    "最",
+    0.814
+   ]
+  },
+  {
+   "instance_id": "vol01:6:4:7",
+   "char": "擾",
+   "ocr": [
+    "攝",
+    0.857
+   ]
+  },
+  {
+   "instance_id": "vol01:7:7:9",
+   "char": "恒",
+   "ocr": [
+    "恆",
+    0.963
+   ]
+  },
+  {
+   "instance_id": "vol01:10:4:5",
+   "char": "頫",
+   "ocr": [
+    "兆",
+    0.883
+   ]
+  },
+  {
+   "instance_id": "vol01:10:6:5",
+   "char": "枘",
+   "ocr": [
+    "柄",
+    0.979
+   ]
+  },
+  {
+   "instance_id": "vol01:12:1:8",
+   "char": "誚",
+   "ocr": [
+    "銷",
+    0.874
+   ]
+  },
+  {
+   "instance_id": "vol01:9:5:6",
+   "char": "兹",
+   "ocr": [
+    "茲",
+    0.999
+   ]
+  },
+  {
+   "instance_id": "vol01:9:7:6",
+   "char": "貪",
+   "ocr": [
+    "食",
+    0.906
+   ]
+  },
+  {
+   "instance_id": "vol01:9:7:14",
+   "char": "窠",
+   "ocr": [
+    "巢",
+    0.999
+   ]
+  },
+  {
+   "instance_id": "vol01:14:4:14",
+   "char": "妥",
+   "ocr": [
+    "安",
+    0.987
+   ]
+  },
+  {
+   "instance_id": "vol01:14:1:3",
+   "char": "豈",
+   "ocr": [
+    "登",
+    0.924
+   ]
+  },
+  {
+   "instance_id": "vol01:16:3:4",
+   "char": "鈐",
+   "ocr": [
+    "鈴",
+    0.892
+   ]
+  },
+  {
+   "instance_id": "vol01:17:1:13",
+   "char": "貽",
+   "ocr": [
+    "眙",
+    0.895
+   ]
+  },
+  {
+   "instance_id": "vol01:18:3:7",
+   "char": "并",
+   "ocr": [
+    "並",
+    1.0
+   ]
+  },
+  {
+   "instance_id": "vol01:19:6:12",
+   "char": "由",
+   "ocr": [
+    "出",
+    0.963
+   ]
+  }
+ ]
+}
