@@ -24,8 +24,10 @@ from ..utils.image_io import imread, imwrite
 from .extractor import CharInstance, load_index
 from .features import DEFAULT_FEATURE, get_feature
 from .normalize import NORM_SIZE, normalize_patch
-from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO, MISS_WMAX,
-                     THETA_HIGH, THETA_LOW, verify_pair, verify_pair_cov)
+from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO,
+                     ELASTIC_CLUSTER_COV_HIGH, MISS_WMAX, THETA_HIGH,
+                     THETA_LOW, verify_pair, verify_pair_cov,
+                     verify_pair_elastic)
 
 KNN_K = 10
 CROSS_CHECK_K = 3
@@ -37,10 +39,16 @@ INK_BUCKET = 0.08      # ink_ratio 分桶宽度
 @dataclass
 class ClusterParams:
     feature: str = DEFAULT_FEATURE
-    # coverage（默认）：有界位移覆盖率判据，操作点见 verify.py 与
-    # g3g4_error_analysis.md。overlap：旧配准 F1 判据，保留作对照。
-    verify_method: str = "coverage"
-    cov_high: float = COV_HIGH
+    # elastic（默认，2026-08-24 起）：软覆盖 + 分块弹性对齐，分数已校准回
+    # coverage 刻度，故 cov_low/miss_wmax 沿用同一组数；same 闸另标
+    # （聚类侧 ELASTIC_CLUSTER_COV_HIGH=0.988，理由见 verify.py）。
+    # coverage：旧的 r=2 硬膨胀覆盖率判据；overlap：更旧的配准 F1 判据。
+    # 三者都保留作对照，操作点见 verify.py 与 g3g4_error_analysis.md。
+    verify_method: str = "elastic"
+    # None = 跟随判据自己的**聚类侧**默认闸（elastic 0.988 / coverage
+    # 0.992——各自标定，别互相借用；库匹配侧另有更严的一档，见 verify.py），
+    # __post_init__ 里解析成具体数值后再进报告。
+    cov_high: float | None = None
     cov_low: float = COV_LOW
     miss_wmax: float = MISS_WMAX
     theta_high: float = THETA_HIGH
@@ -50,6 +58,11 @@ class ClusterParams:
     cross_check_k: int = CROSS_CHECK_K
     n_reps: int = N_REPS
     seed: int = 7
+
+    def __post_init__(self) -> None:
+        if self.cov_high is None:
+            self.cov_high = (ELASTIC_CLUSTER_COV_HIGH
+                             if self.verify_method == "elastic" else COV_HIGH)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -128,6 +141,18 @@ _VP_PATCHES = None
 _VP_PARAMS = None
 
 
+def _verify_one(a: np.ndarray, b: np.ndarray, p: "ClusterParams"):
+    """按 params 选判据跑一对——三个判据的唯一分派点。"""
+    if p.verify_method == "elastic":
+        return verify_pair_elastic(a, b, cov_high=p.cov_high,
+                                   cov_low=p.cov_low, miss_wmax=p.miss_wmax)
+    if p.verify_method == "coverage":
+        return verify_pair_cov(a, b, cov_high=p.cov_high, cov_low=p.cov_low,
+                               miss_wmax=p.miss_wmax)
+    return verify_pair(a, b, theta_high=p.theta_high, theta_low=p.theta_low,
+                       diff_blob_ratio=p.diff_blob_ratio)
+
+
 def _vp_init(patches: np.ndarray, params: "ClusterParams") -> None:
     global _VP_PATCHES, _VP_PARAMS
     _VP_PATCHES, _VP_PARAMS = patches, params
@@ -137,16 +162,7 @@ def _vp_chunk(chunk: list[tuple[int, int]]) -> list:
     p = _VP_PARAMS
     out = []
     for i, j in chunk:
-        if p.verify_method == "coverage":
-            out.append(verify_pair_cov(
-                _VP_PATCHES[i], _VP_PATCHES[j],
-                cov_high=p.cov_high, cov_low=p.cov_low,
-                miss_wmax=p.miss_wmax))
-        else:
-            out.append(verify_pair(
-                _VP_PATCHES[i], _VP_PATCHES[j],
-                theta_high=p.theta_high, theta_low=p.theta_low,
-                diff_blob_ratio=p.diff_blob_ratio))
+        out.append(_verify_one(_VP_PATCHES[i], _VP_PATCHES[j], p))
     return out
 
 
@@ -229,16 +245,8 @@ class ConservativeClusterer:
         def _verify(i: int, j: int):
             key = (min(i, j), max(i, j))
             if key not in verdict_cache:
-                if p.verify_method == "coverage":
-                    verdict_cache[key] = verify_pair_cov(
-                        patches[key[0]], patches[key[1]],
-                        cov_high=p.cov_high, cov_low=p.cov_low,
-                        miss_wmax=p.miss_wmax)
-                else:
-                    verdict_cache[key] = verify_pair(
-                        patches[key[0]], patches[key[1]],
-                        theta_high=p.theta_high, theta_low=p.theta_low,
-                        diff_blob_ratio=p.diff_blob_ratio)
+                verdict_cache[key] = _verify_one(patches[key[0]],
+                                                 patches[key[1]], p)
             return verdict_cache[key]
 
         same_edges: list[tuple[float, int, int]] = []

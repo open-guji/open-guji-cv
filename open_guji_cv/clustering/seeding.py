@@ -99,6 +99,10 @@ FONT_TOPK = 10           # 每格取多少个字体候选
 # 库内形状验证 cov ≥ 此阈单独放行。初值 0.98 首日即出一例压线错
 # （揀/棟 0.9802），用户裁定收紧到 0.99（约让出四成通道量换稳）；
 # 护栏与形近防线见 admission_decision docstring。
+# 2026-08-24 判据换 elastic 后本闸数值未动：elastic 的分数经**分位校准**
+# 搬回了 coverage 的刻度（verify.py `_CAL_*`），同一个数放行同样比例的对。
+# 但「放行谁」变了，而本闸当年是**人裁回放**标定的——严格说欠一次回放
+# 复核，记在 glyph_match_stack.md §七。MATCH_SOLO_OCR_COV / FONT_COV_GATE 同理。
 MATCH_SOLO_COV = 0.99
 
 # match_solo 的 OCR 字符背书档（十八轮，167 条无语料人裁回放定标）：
@@ -238,7 +242,8 @@ def admission_decision(ocr: dict | None, align_char: str | None,
     - **常规通道**：过闸对齐（整理本 × 载体逐字印证 + 采信闸）且六条
       疑问全不命中。载体在这里只是把页锚到语料的运输工具，站着的证据
       是整理本；
-    - **库 × 整理本通道**：库匹配完美档（verify same，cov ≥ 0.992 的
+    - **库 × 整理本通道**：库匹配完美档（verify same，cov ≥ 判据自己的
+      same 闸——elastic 0.988 / coverage 0.992，见 verify.py——的
       **形状**证据）继承的字与整理本（过闸对齐字，或无对齐时的免闸
       参考字）同字 → 直接进库，degraded_crop 单独不拦。两路证据
       同源性为零，同时错到同一个字上的概率可忽略。never-match 护栏
