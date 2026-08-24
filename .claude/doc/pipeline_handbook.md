@@ -224,12 +224,23 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
    --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
    **同一个 artifact URL**（用户书签不换）。
-7. **两仓库提交推送**：output/glyph.db、queue.jsonl、index.jsonl、
-   重切过的 patch 随 open-guji-cv 提交；expected.json + patches 随
-   open-guji-dataset 提交。库必须随推——其他分支在用。
+7. **两仓库提交推送 + 主干同步**：output/glyph.db、queue.jsonl、
+   index.jsonl、重切过的 patch 随 open-guji-cv 提交；expected.json +
+   patches 随 open-guji-dataset 提交。库必须随推——其他分支在用。
+   随后同步主干（open-guji-cv 主干是 main、open-guji-dataset 主干是
+   **master**）：能快进就 `git push origin HEAD:main|master`；数据集
+   仓库主干常有别的会话在推标注，先 `git merge origin/master` 解冲突
+   （expected.json 冲突的合法解法：原有条目取主干版、我们的新增
+   review_* 条目并入）再推。
 8. **减免人工标定更新**（攒了新人裁数据时）：把新裁决并进回放
    分析（形近家族、match_solo_ocr 等阈值的样本底数），有富余
    安全边际再动阈值，动了就回到第 5 步回填。
+9. **周期性库体检**（每累计新进库几百条 / 改过形状判据后）：
+   `/glyphdb-audit`（.claude/skills/glyphdb-audit）——形离群 +
+   竞争字 + OCR 异议三路扫 `output/glyph.db`，出交互审查页，
+   evict 撤库回队列、ok 进白名单。体检的 rival × 白名单案例回流
+   `glyph-match/triplets`（匹配排序金标：同字形须胜形近异字；
+   首建 hard 38 条基线 0.079——匹配算法优化的现成靶子）。
 
 ### 版面线侵入：审查涌现的缺陷回流上游（第二批）
 

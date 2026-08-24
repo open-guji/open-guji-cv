@@ -128,7 +128,7 @@ def seeded(tmp_path_factory):
     # 预置库：一个与真实「弔」字形完全不同的已验证刻例（人工 provenance）
     sq = _square_norm()
     png = cv2.imencode(".png", (255 - sq * 255).astype(np.uint8))[1].tobytes()
-    assert db.admit_instance("pre:9:1:1", "弔", png, sq, provenance="human")
+    assert db.admit_instance("pre:9:1:1", "弔", png, provenance="human")
     summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
     yield {"root": root, "book_dir": book_dir, "db": db, "summary": summary,
            "corpus": corpus_path, "variants": variants_path}
@@ -668,8 +668,11 @@ def test_recrop_geometry_and_decision_are_independent(tmp_path):
         png = db.conn.execute(
             "SELECT patch_png FROM instances WHERE instance_id=?",
             (iid2,)).fetchone()[0]
-        disk = (book_dir / "phase4_chars" / q[iid2].patch_path).read_bytes()
-        assert png == disk                          # 库里存的 = 重切后的
+        # 十九轮起真源统一 canonical：库里存的 = canonical(重切后的图块)
+        from open_guji_cv.clustering.canonical import canonical_png
+        disk = cv2.imread(str(book_dir / "phase4_chars" / q[iid2].patch_path),
+                          cv2.IMREAD_GRAYSCALE)
+        assert png == canonical_png(disk)
     finally:
         db.close()
 
