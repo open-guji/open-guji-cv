@@ -80,8 +80,10 @@ class InstanceQuality:
 
     @classmethod
     def from_dict(cls, d: dict) -> "InstanceQuality":
-        d = dict(d)
-        d.pop("schema_version", None)
+        # 只取已声明字段：review_recrop 条目带 old_bbox/corrected_bbox 等
+        # 溯源键（eval_recrop.py 专用），未知键不应炸
+        d = {k: v for k, v in d.items()
+             if k in cls.__dataclass_fields__ and k != "schema_version"}
         return cls(**d)
 
 
