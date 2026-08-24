@@ -74,7 +74,8 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**1404 实例**）| top1 88.75%，字表上界 99.29% |
 | K | 上下文裁决 | **`context_step`（独立一步，策略注册表）**；seed context 通道与评测共用同一核心 | 定字 | `context-correction`（**1681 槽位**，种子队列实集）| 基线 67.52%，门槛化混合 LM +2.14%（救40/坏4；无门槛重排任何 λ 净亏，见下）。换模型/换算法 → 实现 ContextDecider 注册进 STRATEGIES，在本集上出数 |
 | L | 参考校对 | `collate` / 對勘記 Artifact | 对齐 | `collation`（**0**，框架）| 人工×整理本对勘页已上线（三栏对照）|
-| P | **逐页进库（seed）** | `seed` / `seed-ingest` | GlyphDB + 队列 | 进库协议即金标产线 | vol01 前 11 页 1916 字位：自动 61%，库 1648 例 / 607 字；六通道详见 glyph_db_first_design.md §7.2 |
+| M | **字形匹配** | `GlyphMatcher`（normalize→HOG kNN→verify_pair_cov）| cov + same/unsure/diff | `glyph-match/triplets`（98 三元组）| hard 38 条基线 rank_acc **0.079**（体检人裁实锤的已知失败，优化靶子）、control 60 条 1.0 护栏；栈的完整交接 → **[glyph_match_stack.md](glyph_match_stack.md)** |
+| P | **逐页进库（seed）** | `seed` / `seed-ingest` | GlyphDB + 队列 | 进库协议即金标产线 | vol01 前 19 页 2797 字位：已裁 2646（95%），库 **2513 例（canonical 256×256 真源）**；七通道（常规/dual_degraded/match_ref[形近家族过闸×库一致可穿透]/match_solo 0.99/match_solo_ocr 0.95×OCR 背书/context/nonchar）详见 glyph_db_first_design.md §7.2 与 seeding.py 通道注释；候选带字典释义（config/gloss，覆盖 99.3%）；库体检 → /glyphdb-audit |
 
 ### 正文页现状基线（2026-08-23）
 
