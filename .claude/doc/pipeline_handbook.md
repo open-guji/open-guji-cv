@@ -72,7 +72,7 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | H | 归一化 | `normalize` | 归一图块 | `char-normalization`（37，双层）| 回归门 33/33；clean 层 24 样本 **0 缺陷**（P3 修掉吃笔画 P0），degraded 层 4 缺陷已记账（厚残留，归切分层）|
 | I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6177 实例）| coverage 判据（2026-08-23 起默认）：purity 0.99967/0.99967/0.98901，碎片率 2.99/3.45/3.00；human 分片的 諭/論 为对级漏网（never-match 家族靶子）；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md §7）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**1404 实例**）| top1 88.75%，字表上界 99.29% |
-| K | 上下文纠正 | `refine` / seed context 通道 | 定字 | `context-correction`（**1681 槽位**，种子队列实集）| 基线 67.52%，门槛化混合 LM +2.32%（无门槛重排任何 λ 净亏，见下）|
+| K | 上下文裁决 | **`context_step`（独立一步，策略注册表）**；seed context 通道与评测共用同一核心 | 定字 | `context-correction`（**1681 槽位**，种子队列实集）| 基线 67.52%，门槛化混合 LM +2.14%（救40/坏4；无门槛重排任何 λ 净亏，见下）。换模型/换算法 → 实现 ContextDecider 注册进 STRATEGIES，在本集上出数 |
 | L | 参考校对 | `collate` / 對勘記 Artifact | 对齐 | `collation`（**0**，框架）| 人工×整理本对勘页已上线（三栏对照）|
 | P | **逐页进库（seed）** | `seed` / `seed-ingest` | GlyphDB + 队列 | 进库协议即金标产线 | vol01 前 11 页 1916 字位：自动 61%，库 1648 例 / 607 字；六通道详见 glyph_db_first_design.md §7.2 |
 
@@ -146,10 +146,18 @@ vol02 从 21.1% 降到 17.9%、vol01 从 8.9% 降到 8.3%；纵向那一半基�
 | **混合 本书0.9+通用0.1** | **+2.32%** | **41/2** | **0.18%** |
 | 纯本书 | +1.73% | 39/10 | 0.88% |
 
-human 难样本层基线 49.15% → 53.50%。此配置即生产（`build_seed_lm`，
+human 难样本层基线 49.15% → 52.55%。此配置即生产（`build_seed_lm`，
 通用 LM 落盘缓存，`--general-corpus` 缺省自动发现 corpus/external）。
 量法：`scripts/eval_context_correction.py … --gate 0.70`（本书语料自动
 对测试页挖洞防背答案）。
+
+**上下文裁决已抽象为独立一步**（`clustering/context_step.py`）：
+候选先验分布 + 列前文 → 定字，策略注册表（`prior` / `gated_ngram`，
+神经 LM / 大模型 API 按 ContextDecider 接口接入）。seed context 通道
+与评测脚本走**同一核心**（recognize_flow.rank_candidates + 
+semantic_margin）——测试集上量出来的就是生产里跑的。两条铁律写在
+模块 docstring：字形层不可改写（只在候选内重排）、门槛化不做全局
+重排（拿不准就保持基线）。
 
 ### 字表天花板（做 J/K 之前先看这个）
 

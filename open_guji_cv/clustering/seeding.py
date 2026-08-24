@@ -43,7 +43,8 @@ from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
 from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
-from .recognize_flow import ColumnContext, decide_unsure, semantic_margin
+from .context_step import build_strategy
+from .recognize_flow import ColumnContext, fuse_priors
 from .normalize import normalize_patch, sauvola_binarize
 from .verify import MISS_WMAX
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
@@ -459,8 +460,11 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     matcher, db_chars = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
     vmap = VariantMap.load(variants)
 
-    # 上下文通道件：本书 LM（可混通用语料）+ 同列已定字滚动窗口
+    # 上下文通道件：本书 LM（可混通用语料）+ 同列已定字滚动窗口；
+    # 裁决走 context_step 的 gated_ngram 策略（与评测同一核心）
     lm = build_seed_lm(corpus_text, general_corpus)
+    ctx_decider = build_strategy("gated_ngram", lm=lm,
+                                 semantic_fn=vmap.semantic)
     ctx_window = ColumnContext()
 
     # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）
@@ -597,18 +601,18 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                         # 整理本字进候选池（八轮实审：OCR 认错时语料字
                         # 必须有资格被裁决；权重见 CORPUS_WEIGHT 注释）
                         extra = [(corpus_char, 1.0)] if corpus_char else None
-                        dec = decide_unsure(
-                            mr, topk,
-                            context=ctx_window.window(page, rec.col, rec.idx),
-                            lm=lm, semantic_fn=vmap.semantic, extra=extra)
                         # 语义层量竞争、字形层选形（九轮实审：珎/珍 同语义
                         # 分票把 surface margin 摊薄到阈下）。选形优先取
                         # OCR/库真正见过的形——图上是什么形就录什么形。
                         prefs = {c for c, _ in mr.candidates}
                         if ocr:
                             prefs.add(ocr["char"])
-                        surface, sem_margin = semantic_margin(
-                            dec, vmap.semantic, surface_prefs=prefs)
+                        res = ctx_decider.decide(
+                            fuse_priors(mr.candidates, topk, extra=extra),
+                            context=ctx_window.window(page, rec.col, rec.idx),
+                            surface_prefs=prefs)
+                        dec = res.decision
+                        surface, sem_margin = res.surface, res.margin
                         safe = (len(dec.ranked) >= 2
                                 or (surface is not None and corpus_char
                                     and vmap.semantic(surface) ==
