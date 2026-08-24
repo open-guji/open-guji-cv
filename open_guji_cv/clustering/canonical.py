@@ -3,7 +3,7 @@
 `glyph_store/patches/` 及一切外部字形来源（字体渲染、字典扫描、外部
 数据集）入库前统一转成本格式，消除「每个来源一种尺寸/居中方式」：
 
-- **画布**：200×200，8-bit 灰度 PNG，白底（255）黑字。存灰度不存二值：
+- **画布**：256×256，8-bit 灰度 PNG，白底（255）黑字。存灰度不存二值：
   管线裁切本来就近二值，无损；扫描/渲染来源保留灰度信息给下游二值化。
 - **几何**：墨迹外接框**等比、只缩不放**——超出内容区（画布 ×
   (1 - 2×0.12)，与匹配层 MARGIN_RATIO 同参）才 INTER_AREA 缩小，
@@ -36,7 +36,7 @@ from .normalize import (
     sauvola_binarize,
 )
 
-CANON_SIZE = 200
+CANON_SIZE = 256            # 2 的幂：内容区 195px 覆盖各册原生分辨率
 CANON_MARGIN_RATIO = 0.12   # 与 normalize.MARGIN_RATIO 保持一致
 
 
