@@ -3,37 +3,37 @@
   "4": {
    "total": 168,
    "auto": 98,
-   "pending": 0,
+   "pending": 1,
    "done": true
   },
   "5": {
    "total": 171,
    "auto": 129,
-   "pending": 0,
+   "pending": 3,
    "done": true
   },
   "6": {
    "total": 176,
    "auto": 137,
-   "pending": 1,
+   "pending": 2,
    "done": true
   },
   "7": {
    "total": 173,
    "auto": 125,
-   "pending": 0,
+   "pending": 3,
    "done": true
   },
   "8": {
    "total": 180,
    "auto": 135,
-   "pending": 0,
+   "pending": 1,
    "done": true
   },
   "10": {
    "total": 180,
    "auto": 133,
-   "pending": 0,
+   "pending": 2,
    "done": true
   },
   "12": {
@@ -45,13 +45,13 @@
   "13": {
    "total": 180,
    "auto": 121,
-   "pending": 2,
+   "pending": 3,
    "done": true
   },
   "9": {
    "total": 169,
    "auto": 27,
-   "pending": 1,
+   "pending": 3,
    "done": true
   },
   "11": {
@@ -63,13 +63,13 @@
   "14": {
    "total": 163,
    "auto": 137,
-   "pending": 0,
+   "pending": 7,
    "done": true
   },
   "15": {
    "total": 162,
    "auto": 133,
-   "pending": 0,
+   "pending": 1,
    "done": true
   },
   "16": {
@@ -87,7 +87,7 @@
   "18": {
    "total": 167,
    "auto": 130,
-   "pending": 37,
+   "pending": 9,
    "done": true
   },
   "19": {
@@ -99,6 +99,6 @@
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": "20",
- "updated_at": "2026-08-24T12:52:59+00:00"
+ "pointer": null,
+ "updated_at": "2026-08-24T14:45:19+00:00"
 }
