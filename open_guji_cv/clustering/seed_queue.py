@@ -108,6 +108,13 @@ class SeedItem:
     #            免闸对齐噪声大，页面须与过闸的 align 字段区分展示）
     #   prev_ocr/prev_ref: 上一列末 ≤5 字（三轮加：列首字的上下文要
     #            接上一列）；next_ocr/next_ref: 下一列首 ≤5 字（列尾同理）
+    intrusion: list[str] = field(default_factory=list)
+    #   版面线侵入码（crop_quality.detect_intrusion，2026-08-24 加）：
+    #   rule_bar_left/right（竖界行）、frame_bar_top/bottom（横版框、邻字
+    #   压线）。**只作提示，不参与准入裁决**——用户实审里这类图块的字
+    #   多半仍能认，该走「仅定字·不入库」还是照常进库由人定；这里的
+    #   价值是让审查页把「为什么这块脏」说出来，并让缺陷能按列聚集
+    #   回流上游（scripts/report_intrusions.py）。
     status: str = STATUS_PENDING
     decided_char: str | None = None  # confirmed/rejected 后的最终字
     provenance: str | None = None    # 进库时的 provenance: align | human

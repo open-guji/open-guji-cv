@@ -38,7 +38,7 @@ import cv2
 from .align_eval import build_ngram_index
 from .align_label import (carrier_slots, clean_labels, is_han, label_book,
                           page_reference)
-from .crop_quality import assess_crop
+from .crop_quality import assess_crop, detect_intrusion
 from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
 from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
@@ -515,6 +515,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     continue
                 q = assess_crop(gray, margins=margins_of(rec))
                 tier = "clean" if q.tier == "clean" else "degraded"
+                intrusion = detect_intrusion(gray)
                 norm = normalize_patch(gray)
                 mr = matcher.match(norm)
 
@@ -552,7 +553,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                 patch_path=rec.patch_path, tier=tier,
                                 ocr=ocr, align=align, proposed=proposed,
                                 doubts=doubts, match=mr.to_dict(),
-                                context=ctx)
+                                context=ctx, intrusion=intrusion)
                 if admit_ok and proposed:
                     # 双信号一致（常规零疑问 / 强信号通道）→ align 进库；
                     # match_solo 无整理本参与，审计上以 match 记 provenance
