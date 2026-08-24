@@ -101,6 +101,15 @@ FONT_TOPK = 10           # 每格取多少个字体候选
 # 护栏与形近防线见 admission_decision docstring。
 MATCH_SOLO_COV = 0.99
 
+# match_solo 的 OCR 字符背书档（十八轮，167 条无语料人裁回放定标）：
+# 库形状证据 0.95~0.99 单独不够（历史标定 68.5%），但再要求 OCR **字符**
+# 同字（语义归一后）时，两路证据（形状 kNN × 识别模型）独立到足以互证
+# ——回放 81/81 全对（cov≥0.99 9 条 + 0.95~0.99 72 条），错案零。
+# 形近家族除外（那正是两路会同错的地方：已/巳、人/入、日/曰、今/全
+# 四条历史反例全在家族里）；不同语义的竞争候选到 0.95 档也禁。
+# 0.95 以下无「OCR×库一致」样本，不外推。
+MATCH_SOLO_OCR_COV = 0.95
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -300,6 +309,18 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                      and vmap.semantic(ocr_char) == vmap.semantic(c1))
         if cov1 >= solo_cov and not rival and (shape_clean or ocr_backs):
             return True, "match_solo"
+        # OCR 字符背书档（MATCH_SOLO_OCR_COV 注释，81/81 回放）：
+        # 形状 0.95~0.99 + OCR 字符同字 = 两路独立证据互证。
+        # 形近家族显式禁（proposed=OCR 字时 near_form 疑问已拦一道，
+        # 这里对 c1 也拦——两侧任一属家族都算）；异语义竞争到
+        # 0.95 档也禁。
+        rival95 = any(cov >= MATCH_SOLO_OCR_COV
+                      and vmap.semantic(ch) != vmap.semantic(c1)
+                      for ch, cov in match_candidates)
+        if (cov1 >= MATCH_SOLO_OCR_COV and ocr_backs and not rival95
+                and c1 not in NEAR_FORM_CHARS
+                and ocr_char not in NEAR_FORM_CHARS):
+            return True, "match_solo_ocr"
     return False, None
 
 
@@ -603,7 +624,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     # 无对齐时 proposed 会落到 OCR 字（十轮实审：之 页
                     # OCR 报 芝，库 × 整理本同说 之，进库字必须是 之）
                     proposed = mr.char
-                elif admit_ok and channel == "match_solo":
+                elif admit_ok and channel in ("match_solo",
+                                              "match_solo_ocr"):
                     # 库匹配单独通道：进库字取库内验证 cov 最高的形
                     proposed = max(mr.candidates, key=lambda t: t[1])[0]
                 elif admit_ok and proposed is None:
@@ -618,7 +640,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 if admit_ok and proposed:
                     # 双信号一致（常规零疑问 / 强信号通道）→ align 进库；
                     # match_solo 无整理本参与，审计上以 match 记 provenance
-                    prov = "match" if channel == "match_solo" else "align"
+                    prov = ("match" if channel in ("match_solo",
+                                                   "match_solo_ocr")
+                            else "align")
                     evidence = {"match": mr.to_dict(), "ocr": ocr,
                                 "align": align, "tier": tier,
                                 "crop": q.to_dict()}
@@ -1063,7 +1087,7 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
         if not admit_ok:
             n["kept"] += 1
             continue
-        if channel in ("match_ref", "match_solo"):
+        if channel in ("match_ref", "match_solo", "match_solo_ocr"):
             proposed = m.get("char") or (
                 max(cands, key=lambda t: t[1])[0] if cands else None)
         else:
@@ -1081,7 +1105,8 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
                     "readjudicated": True,
                     "ref": {"char": (it.context or {}).get("ref_char"),
                             "op": (it.context or {}).get("ref_op")}}
-        prov = "match" if channel == "match_solo" else "align"
+        prov = ("match" if channel in ("match_solo", "match_solo_ocr")
+                else "align")
         db.admit_instance(
             it.instance_id, proposed, (root / rec.patch_path).read_bytes(),
             normalize_patch(gray), provenance=prov, evidence=evidence,

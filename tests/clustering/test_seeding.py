@@ -720,3 +720,46 @@ def test_readjudicate_pending_near_form_corpus_db(tmp_path):
         assert n2.get("auto_match_ref") is None
     finally:
         db.close()
+
+
+def test_admission_decision_match_solo_ocr():
+    """十八轮：无语料页 OCR 字符背书档（167 条人裁回放 81/81 定标）。
+
+    形状 0.95~0.99 单独不够（历史 68.5%），加 OCR 字符同字即互证；
+    形近家族与异语义竞争照禁，0.95 以下不外推。
+    """
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap({})
+    ok = {"char": "文", "prob": 0.92}
+    # 0.95~0.99 + OCR 同字 → 进（solo_cov=0.99 之下、新档之上）
+    assert admission_decision(ok, None, None, [], vmap,
+                              match_candidates=[("文", 0.96)]
+                              ) == (True, "match_solo_ocr")
+    # OCR 不同字 → 不进（形状证据单独 68.5%，不够）
+    assert admission_decision({"char": "又", "prob": 0.92}, None, None, [],
+                              vmap, match_candidates=[("文", 0.96)])[0] is False
+    # 无 OCR → 不进
+    assert admission_decision(None, None, None, [DOUBT_WEAK_SINGLE], vmap,
+                              match_candidates=[("文", 0.96)])[0] is False
+    # 形近家族（两侧任一）→ 禁：两路会同错的地方
+    assert admission_decision({"char": "日", "prob": 0.95}, None, None,
+                              [DOUBT_NEAR_FORM], vmap,
+                              match_candidates=[("日", 0.97)])[0] is False
+    # 异语义竞争到 0.95 档 → 禁
+    assert admission_decision(ok, None, None, [], vmap,
+                              match_candidates=[("文", 0.96), ("又", 0.955)]
+                              )[0] is False
+    # 0.95 以下 → 不外推
+    assert admission_decision(ok, None, None, [], vmap,
+                              match_candidates=[("文", 0.94)])[0] is False
+    # 护栏触发 → 禁（solo 组整体前提）
+    assert admission_decision(ok, None, None, [], vmap,
+                              match_candidates=[("文", 0.96)],
+                              match_guard="conflict")[0] is False
+    # 有语料信号时轮不到本通道（那是 match_ref 的地盘；
+    # 用 OCR≠语料的场景隔离，dual 零疑问会先走常规通道）
+    assert admission_decision({"char": "又", "prob": 0.4}, "文", None,
+                              [], vmap,
+                              match_candidates=[("文", 0.96)]
+                              ) == (True, "match_ref")

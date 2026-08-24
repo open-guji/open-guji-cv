@@ -27,6 +27,7 @@ import json
 from pathlib import Path
 
 from .persist_js import PERSIST_JS
+from ...gloss import gloss_of
 from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
@@ -343,8 +344,15 @@ def _render_choice(i: int, c: dict, hint: str | None = None) -> str:
         tags.append(f'<span class="tag {cls}">对齐·{_esc(c["align_op"])}</span>')
     if c.get("db_cov") is not None:
         tags.append(f'<span class="tag t-db">库 {c["db_cov"]:.2f}</span>')
+    # 速查释义（config/gloss，另一分支四层合并的字典）：只放释义正文，
+    # 不放拼音——用户定的口径「扫一眼是什么意思」；超长 CSS 截断、
+    # 悬停 title 看全文；字典没有的字静默不显示
+    gl = ""
+    d = gloss_of(c["char"]).get("d")
+    if d:
+        gl = f'<span class="gl" title="{_esc(d)}">{_esc(d)}</span>'
     return (f'<button type="button" class="cand" data-char="{_esc(c["char"])}">'
-            f'{key}<b>{_esc(c["char"])}</b>{"".join(tags)}</button>')
+            f'{key}<b>{_esc(c["char"])}</b>{"".join(tags)}{gl}</button>')
 
 
 def _render_evidence(e: dict) -> str:
@@ -588,6 +596,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
   border:1px solid var(--line);background:none;color:var(--ink);
   border-radius:3px;padding:.25rem .6rem;cursor:pointer}
 .cand b{font-size:1.5rem;font-weight:600}
+.cand .gl{font-size:.7rem;color:var(--muted);max-width:11em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cand:hover,.cand:focus-visible{border-color:var(--seal)}
 kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   border:1px solid var(--line);border-radius:3px;padding:0 .3em;
