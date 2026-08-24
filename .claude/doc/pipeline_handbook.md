@@ -191,6 +191,39 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 第 42 页第 2 列 18/20，目视确认每格左侧都有贯穿竖线。这两列是新发现的，
 不在审查覆盖的 11 页里。
 
+### 每轮审阅后的固定流程（2026-08-24 定，照单执行）
+
+用户在审查页裁决完一批后，按序做完下面八步——顺序有讲究，标 ⚠ 的
+步骤错序会丢数据：
+
+1. **读回事件**：从审查页 artifact 取最新存档，提取 `GUJI-SEED-EVENT`
+   行，与已入库的事件文件 diff 出**新批次**（按 batch+seq 去重，不要
+   整文件重灌）。
+2. **入库**：`python -m open_guji_cv -o output seed-ingest vol01
+   --db output/glyph.db --events <新批次>`。两通道语义：重切（几何）
+   先应用、裁决后应用——确认位存的自动就是重切后的字形。
+3. **校验重切位** ⚠：index.jsonl 里 flags 含 `recropped` 的每一位，
+   已进库的必须 `db.patch_png == 磁盘图块`（字节一致）。不一致说明
+   两通道顺序被破坏，立刻停下查 ingest。
+4. **重切回流上游** ⚠：`PYTHONPATH=. python scripts/build_recrop_shard.py
+   output/vol01 --dataset ../open-guji-dataset`。**必须在提交重切改动
+   之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
+   提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
+5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
+   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰；
+   **不要**重跑 seed——那会整页重写队列、冲掉人裁）。
+6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
+   --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
+   **同一个 artifact URL**（用户书签不换）。
+7. **两仓库提交推送**：output/glyph.db、queue.jsonl、index.jsonl、
+   重切过的 patch 随 open-guji-cv 提交；expected.json + patches 随
+   open-guji-dataset 提交。库必须随推——其他分支在用。
+8. **减免人工标定更新**（攒了新人裁数据时）：把新裁决并进回放
+   分析（形近家族、match_solo_ocr 等阈值的样本底数），有富余
+   安全边际再动阈值，动了就回到第 5 步回填。
+
+### 版面线侵入：审查涌现的缺陷回流上游（第二批）
+
 **第二批回流（2026-08-24，14/15 页人工重切）**：审查页的 recrop 事件
 （纯几何、与选字独立）产出 9 对 `old_bbox → corrected_bbox` 切分金标，
 `scripts/build_recrop_shard.py` 回流进 `char-segmentation/instances`
