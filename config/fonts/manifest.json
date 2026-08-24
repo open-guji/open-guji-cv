@@ -1,5 +1,5 @@
 {
-  "_doc": "字体字形来源清单。字体档本身不进仓库（体积 + 授权），只记去哪找、什么版本。取字与许可见 .claude/doc/glyph_db_expansion_research.md §2.2，渲染与几何约定见 glyph_canonical_format.md §4。用 GUJI_FONT_DIR 指向本地字体目录后运行：python -m open_guji_cv glyph-db import-font",
+  "_doc": "字体字形来源清单。字体档随仓库提交在 fonts/（见 fonts/README.md：两套都是允许再分发的自由字体），字形图本身不进 Git——由字体档 + 字表确定性重建：python -m open_guji_cv glyph-db import-font。$GUJI_FONT_DIR 不设时默认指向仓库的 fonts/。取字与许可见 .claude/doc/glyph_db_expansion_research.md §2.2，渲染与几何约定见 glyph_canonical_format.md §4。",
   "charset": "config/charset/charset.ranges.tsv",
   "fonts": [
     {
@@ -11,10 +11,11 @@
       "source_url": "https://kamichikoichi.github.io/jigmo/",
       "notes": "HanaMin 官方后继，覆盖 Unicode 15.1 全部汉字；三档分区段，按序命中",
       "font_paths": [
-        "$GUJI_FONT_DIR/Jigmo-20230816/Jigmo.ttf",
-        "$GUJI_FONT_DIR/Jigmo-20230816/Jigmo2.ttf",
-        "$GUJI_FONT_DIR/Jigmo-20230816/Jigmo3.ttf"
-      ]
+        "$GUJI_FONT_DIR/jigmo/Jigmo.ttf",
+        "$GUJI_FONT_DIR/jigmo/Jigmo2.ttf",
+        "$GUJI_FONT_DIR/jigmo/Jigmo3.ttf"
+      ],
+      "bundled": true
     },
     {
       "edition_tag": "font:iming",
@@ -24,7 +25,10 @@
       "version": "8.10",
       "source_url": "https://github.com/ichitenfont/I.Ming",
       "notes": "传承字形（旧字形），用字习惯与刻本最吻合",
-      "font_paths": ["$GUJI_FONT_DIR/i.ming/8.10/I.Ming-8.10.ttf"]
+      "font_paths": [
+        "$GUJI_FONT_DIR/iming/I.Ming-8.10.ttf"
+      ],
+      "bundled": true
     },
     {
       "edition_tag": "font:twsung",
@@ -33,11 +37,12 @@
       "license": "OGDL-1.0 / OFL-1.1（择一适用）",
       "version": "11508.01",
       "source_url": "https://www.cns11643.gov.tw/opendata/Fonts_Sung.zip",
-      "notes": "台湾官方宋体，形态与明清刻本正字最接近；按 Unicode 平面拆三档，ExtB 那 4.27 万字是生僻/异体的主力。Plus 档是全字库私有 PUA 编码，跨字体不通用，字表阶段应已按 charset_and_lm.md 过滤掉",
+      "notes": "台湾官方宋体，形态与明清刻本正字最接近；按 Unicode 平面拆三档，ExtB 那 4.27 万字是生僻/异体的主力。Plus 档是全字库私有 PUA 编码，跨字体不通用，字表阶段应已按 charset_and_lm.md 过滤掉（字体档未随仓库提交，需自行下载到 $GUJI_FONT_DIR）",
       "font_paths": [
         "$GUJI_FONT_DIR/TW-Sung-98_1.ttf",
         "$GUJI_FONT_DIR/TW-Sung-Ext-B-98_1.ttf"
-      ]
+      ],
+      "bundled": false
     },
     {
       "edition_tag": "font:twkai",
@@ -46,11 +51,12 @@
       "license": "OGDL-1.0 / OFL-1.1（择一适用）",
       "version": "11508.01",
       "source_url": "https://www.cns11643.gov.tw/opendata/Fonts_Kai.zip",
-      "notes": "楷体，与写刻本/软体字刻本形态接近；与 twsung 同源不同体，正好当「字体风格差异」的对照",
+      "notes": "楷体，与写刻本/软体字刻本形态接近；与 twsung 同源不同体，正好当「字体风格差异」的对照（字体档未随仓库提交，需自行下载到 $GUJI_FONT_DIR）",
       "font_paths": [
         "$GUJI_FONT_DIR/TW-Kai-98_1.ttf",
         "$GUJI_FONT_DIR/TW-Kai-Ext-B-98_1.ttf"
-      ]
+      ],
+      "bundled": false
     }
   ]
 }
