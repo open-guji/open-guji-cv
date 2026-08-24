@@ -43,6 +43,13 @@ CELL_H_TOL = 0.05          # 页格高偏离全书共识超此比例 → 判定�
 PITCH_MIN_SEGS = 8         # 一列至少这么多个单字墨段才拿来量字距
 PITCH_MIN_COLS = 40        # 全书至少这么多列量得出字距，才敢用它定格高
 PITCH_MAX_DEV = 0.08       # 实测字距偏离投影共识超此 → 判为量错，不用
+# 逐页格高（2026-08-24 grid_shift 族根因）：每叶是独立版片，栏格高度页间
+# 实测有 ±3% 差异（vol01/14 量 119.0 vs 书级共识 115.2，21 格累积把列尾
+# 推漂 ~40px——recrop 金标 grid_shift 族全部源于此）。「格高刚性」只在
+# **页内**成立；页自己的字距证据够硬时，行格高用页距而非书距。
+PAGE_PITCH_MIN_COLS = 5    # 本页至少这么多列量得出字距，才敢用页距
+PAGE_PITCH_MAD = 1.5       # 页内各列字距的中位绝对偏差上限（px）——散了说明量不稳
+PAGE_PITCH_DEV = 0.04      # 页距偏离书级共识超此比例 → 判为量错，回退书距
 PITCH_SEARCH = 0.10        # 字距候选的搜索半径（× 先验）。窗要窄到把 2 倍
                            # 谐波挡在外面，宽到覆盖投影拟合的系统偏差
 PITCH_STEP = 0.2           # 候选步长（px）
@@ -1861,6 +1868,7 @@ class GridSegmenter:
         pages: list[tuple[str, Path, dict]] = []
         skipped_pages: list[tuple[str, str]] = []
         pitches: list[float] = []
+        page_pitches: dict[str, list[float]] = {}
         # 页型单独存：后续各 pass 用 segment_page 的返回值**整体替换**
         # results[stem]，替换时字段就丢了。逐个 pass 补「保留 page_type」
         # 已经踩过一次坑（Pass 2a3 保留到了一个 None），治本是把页型放在
@@ -1900,6 +1908,7 @@ class GridSegmenter:
             ptypes[stem] = out["ptype"]
             results[stem] = r
             pitches.extend(out["pitches"])
+            page_pitches[stem] = out["pitches"]
 
         # ── Pass 2a0: 书级格高改由**实测字距**定 ──
         # 刻本一格一字，字距就是格高，可以直接量；而投影拟合的基准
@@ -1940,6 +1949,22 @@ class GridSegmenter:
                    if r.get("grid", {}).get("cell_h")]
         if len(cell_hs) >= 5:
             consensus_h = pitch_h or float(np.median(cell_hs))
+
+            # 逐页格高：每叶是独立版片，页间字距实测差 ±3%（见常量注释）。
+            # 页自己的字距证据够硬（列数够、页内散布小、离共识不离谱）时
+            # 用页距；否则回退书距。column_pitch 是先验不敏感的估计量
+            # （环形集中度，实测先验偏 ±6% 只差 0.1%），页距可信。
+            def _page_h(stem: str) -> float:
+                ps = page_pitches.get(stem) or []
+                if len(ps) < PAGE_PITCH_MIN_COLS or not pitch_h:
+                    return consensus_h
+                med = float(np.median(ps))
+                mad = float(np.median(np.abs(np.asarray(ps) - med)))
+                if mad > PAGE_PITCH_MAD \
+                        or abs(med - consensus_h) > PAGE_PITCH_DEV * consensus_h:
+                    return consensus_h
+                return med
+
             if pitch_h:
                 # 字距定的格高与每一页原来的拟合值都差 1~2%，不是只有
                 # 「锁错的页」要改——全书都得按新格高重扫。
@@ -1959,16 +1984,20 @@ class GridSegmenter:
             # 角度的重估（实测 0.25s/页；本 pass 重扫全书，省 ~50s/册）
             outs = _pmap(_job_refit,
                          [(self, str(p), lo,
-                           {"cell_h_prior": consensus_h,
+                           {"cell_h_prior": _page_h(s),
                             "shear_override":
                                 results[s]["grid"].get("shear", 0.0)})
                           for s, p, lo in todo])
+            n_page_h = 0
             for (stem, _, _), redone in zip(todo, outs):
                 if redone is None:
                     continue
                 results[stem] = redone
-                row_prior[stem] = consensus_h
+                row_prior[stem] = _page_h(stem)
+                n_page_h += (abs(row_prior[stem] - consensus_h) > 0.2)
                 n_row_fix += 1
+            if n_page_h:
+                print(f"  逐页格高：{n_page_h} 页用本页实测字距替代书距")
             if n_row_fix:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
@@ -2081,7 +2110,8 @@ class GridSegmenter:
             todo = [pg for pg in pages
                     if results[pg[0]].get("grid", {}).get("cell_h")]
             outs = _pmap(_job_phase,
-                         [(self, str(p), lo, results[s], consensus_h,
+                         [(self, str(p), lo, results[s],
+                           row_prior.get(s, consensus_h),
                            col_prior.get(s), ins_prior.get(s))
                           for s, p, lo in todo])
             for (stem, _, _), redone in zip(todo, outs):
