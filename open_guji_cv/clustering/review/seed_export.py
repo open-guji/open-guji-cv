@@ -26,6 +26,7 @@ import html
 import json
 from pathlib import Path
 
+from .persist_js import PERSIST_JS
 from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
@@ -565,130 +566,7 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 # 注意：本串不是 f-string；JS 字符串里的换行一律写 \\n。
 _JS = """
 (function(){
-  var log = document.getElementById('guji-log');
-  var list = document.getElementById('list');
-  var PREFIX = 'GUJI-SEED-EVENT';
-  var LSKEY = 'guji-seed:' + BATCH;
-  var undoStack = [];
-
-  function lines(){
-    return log.textContent.match(/GUJI-SEED-EVENT .*/g) || []; }
-  function events(){
-    return lines().map(function(l){
-      try { return JSON.parse(l.slice(PREFIX.length + 1)); }
-      catch(e){ return null; }
-    }).filter(Boolean); }
-  function status(msg, bad){
-    var el = document.getElementById('save-status');
-    if(!el) return;
-    el.textContent = msg;
-    el.setAttribute('data-bad', bad ? '1' : '0'); }
-  function fail(why){
-    disabled = true;
-    status(why + ' — 記錄仍在本機，請點上方「複製記錄」貼回對話', true); }
-
-  // ── 持久化：整頁 publish(html)。單文件經典 artifact 只有這條自動路徑
-  // ——files 形式對它拒 capability_disabled（vol01 第 4 頁首輪實測）。
-  // 日誌內嵌在 #guji-log 裡隨頁面一起發布：發布成功後 shell 會重載本視
-  // 圖到新版本，重載前把滾動位置存 sessionStorage，重載後日誌已在頁裡、
-  // 狀態由 restore() 重放。複製/下載兜底照舊，永遠可用。
-  var pubTimer = 0, disabled = false, publishing = false;
-  function withTimeout(pr, ms, tag){
-    return new Promise(function(res, rej){
-      var done = false;
-      var t = setTimeout(function(){
-        if(!done){ done = true; rej({code: tag + '_timeout'}); } }, ms);
-      pr.then(function(v){ if(!done){ done=true; clearTimeout(t); res(v); } },
-              function(e){ if(!done){ done=true; clearTimeout(t); rej(e); } });
-    }); }
-  var nsPromise = (window.claude && window.claude.use)
-    ? withTimeout(window.claude.use('artifact'), 15000, 'use')
-        .catch(function(){ return null; })
-    : Promise.resolve(null);
-
-  function saveLocal(){
-    try { localStorage.setItem(LSKEY, log.textContent); } catch(e){} }
-  function exportedCount(){
-    try { return parseInt(localStorage.getItem(LSKEY + ':exported') || '0', 10); }
-    catch(e){ return 0; } }
-  function markExported(n){
-    try { localStorage.setItem(LSKEY + ':exported', String(n)); } catch(e){}
-    refreshBar(); }
-  function refreshBar(){
-    var n = lines().length, pending = n - exportedCount();
-    var bar = document.getElementById('copybar');
-    if(!bar) return;
-    bar.textContent = pending > 0
-      ? '複製 ' + n + ' 條記錄（' + pending + ' 條未匯出）'
-      : (n ? '複製 ' + n + ' 條記錄' : '尚無記錄');
-    bar.setAttribute('data-pending', pending > 0 ? '1' : '0'); }
-
-  function snapshotHtml(){
-    // 當前 DOM 就是要發布的頁面：日誌/卡片狀態已寫在屬性與文本裡，
-    // 重開時 restore() 按日誌重放即可。active 高亮不入快照。
-    var a = list.querySelector('.card.active');
-    if(a) a.classList.remove('active');
-    var html = '<!doctype html>\\n' + document.documentElement.outerHTML;
-    if(a) a.classList.add('active');
-    return html; }
-  function stashView(){
-    try {
-      var a = list.querySelector('.card.active');
-      sessionStorage.setItem(LSKEY + ':view', JSON.stringify({
-        iid: a ? a.getAttribute('data-iid') : null,
-        y: window.scrollY || 0 }));
-    } catch(e){} }
-  function restoreView(){
-    try {
-      var raw = sessionStorage.getItem(LSKEY + ':view');
-      if(!raw) return;
-      sessionStorage.removeItem(LSKEY + ':view');
-      var v = JSON.parse(raw);
-      if(v.iid){ var c = cardOf(v.iid); if(c){ setActive(c); return; } }
-      if(v.y) window.scrollTo(0, v.y);
-    } catch(e){} }
-
-  function publishNow(){
-    if(disabled || publishing) return;
-    var t = document.querySelector('.other-in:focus');
-    if(t && t.value){ schedulePublish(); return; }   // 正在手輸，等一等
-    nsPromise.then(function(ns){
-      if(!ns){ fail('此視圖無自動儲存'); return; }
-      publishing = true;
-      status('儲存中…');
-      saveLocal(); stashView();
-      withTimeout(ns.publish(snapshotHtml()), 30000, 'publish')
-        .then(function(){
-          // 成功後 shell 會把本視圖重載到新版本；此行多半來不及顯示
-          publishing = false; disabled = false;
-          status('已儲存 ' + lines().length + ' 條');
-        }).catch(function(e){
-          publishing = false;
-          var c = (e && e.code) || 'unknown';
-          if(c === 'rate_limited'){
-            status('儲存排隊中…'); pubTimer = setTimeout(publishNow, 30000); }
-          else if(c === 'upstream_error' || c === 'publish_timeout'){
-            pubTimer = setTimeout(publishNow, 5000 + Math.random() * 4000); }
-          else if(c === 'conflict'){ saveLocal(); /* shell 正在重載到新版 */ }
-          else { fail('自動儲存失效（' + c + '）'); }
-        });
-    }); }
-  function schedulePublish(){
-    status('未儲存…');
-    clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 6000); }
-  window.addEventListener('beforeunload', function(){ saveLocal(); });
-  document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'hidden'){ saveLocal(); } });
-
-  // ── 事件發射 ──
-  function seqNext(){
-    var n = parseInt(log.getAttribute('data-seq') || '0', 10) + 1;
-    log.setAttribute('data-seq', String(n)); return n; }
-  function emit(ev){
-    ev.batch = BATCH; ev.seq = seqNext();
-    ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
-    log.textContent += PREFIX + ' ' + JSON.stringify(ev) + '\\n';
-    saveLocal(); schedulePublish(); progress(); refreshBar(); }
+""" + PERSIST_JS + """
 
   // ── 卡片狀態 ──
   function cards(){ return list.querySelectorAll('.card'); }
