@@ -1,0 +1,317 @@
+# 字形库扩展调研：外部开源字形/异体字数据怎么用
+
+> 2026-08-24 调研记录。背景：字形库现在只有 26 字 / 94 样本（全部来自 book9all 人工
+> 审阅），逐字审阅几万字形不现实。本文回答三个问题：①zi.tools 及其上游有哪些能批量
+> 拿的开源数据；②业界有没有「拿现成字形免人工建库」的先例、他们怎么做的；③结合本
+> 项目现有管线，扩库的可行路线是什么。
+
+## 0. 一句话结论
+
+**不要把字体渲染字形直接当「精确字形模板」入库**——公开文献里没有这么做成功的先例，
+且本库 `verify_pair` 的 same 阈值（F1≥0.80）按 open-guji-fonts 实测（跨字体真匹配可低至
+0.69）会把命中几乎全滤掉。可行路线是**分层**：
+
+- **精确字形层**（现有 glyph_store，`same` 判定、glyph_knn 权重 3.0）：只进真实刻本字形。
+  扩它靠「聚类 + 簇级确认」摊薄人工（本来就是现有设计），以及引入现成的
+  **真实刻本标注数据集**（TKH/MTH 等）作为新 edition。
+- **语义候选层**（新增，降权、只出候选不出定论）：字体渲染字形（Jigmo/全字庫/一点明朝
+  体）+ 康熙字典扫描字形，单独 edition_tag 域 + 单独阈值档，配合**异体字关系表**
+  （Unihan + cjkvi-variants + yitizi）做「同一语义字的多写法」展开。
+
+## 1. zi.tools（字統网）调研结论
+
+- 作者是 GitHub 用户 [yi-bai](https://github.com/yi-bai)，个人项目，网站本身不开源，
+  **无使用条款页、无 API 文档、无数据下载入口**。
+- 技术上有无鉴权 JSON 接口：`https://zi.tools/api/zi/<字>` 返回单字全量数据（实测 ~400KB），
+  含异体字关系图（`yi.nodes/edges`，节点按字典出处编码：GKX=康熙、GHZR=汉语大字典等）、
+  base64 内嵌扫描字形图（康熙/简牍/传抄古文/各地标准形）、康熙与漢語多功能字庫释文全文。
+- **但不建议当数据源批量抓**：无授权条款是灰色地带，且它聚合的上游（汉语大字典、
+  漢語多功能字庫、教育部異體字字典网站内容）本身有版权，抓了也不能再分发。
+- 它真正的价值：**(a)** 人工查证/抽样交叉验证的参照系（异体字图谱自称 14.4 万字/6.9 万组，
+  全网最好用）；**(b)** 作者把两块核心数据开源了，可直接用：
+  - [yi-bai/ids](https://github.com/yi-bai/ids)（**MIT**）— zi.tools 同款 IDS 拆字表，三档
+    粒度（lv0 笔画级 / lv2 UCV 认同级）；
+  - [yi-bai/iwds](https://github.com/yi-bai/iwds) — UCV 认同规则 + 字形图（未标 LICENSE）。
+
+## 2. 可批量获取的开源数据地图
+
+### 2.1 关系层：字 → 异体字集合（全部可下载、可再分发）
+
+| 数据 | 许可 | 说明 |
+|---|---|---|
+| Unihan `kSemanticVariant`/`kZVariant`/`kTraditionalVariant` | Unicode License | 最「干净」的基线，覆盖偏少。[Unihan.zip](https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip) |
+| [cjkvi/cjkvi-variants](https://github.com/cjkvi/cjkvi-variants) | 无 LICENSE 文件；按「事实数据」用并注明出处 | 22 个文件共 ~10.9 万行 `字,类型,字`。核心：`twedu-variants.txt`（台湾教育部異體字字典抽取版，该字典关系数据唯一机器可读版）、`hydzd-variants.txt`（汉语大字典）、`dypytz-variants.txt`（第一批异体字整理表） |
+| [nk2028/yitizi](https://github.com/nk2028/yitizi) | MIT | 现成聚合（OpenCC+韻典+手工表）成 `yitizi.json`，pip/npm 可装，工程上最省事 |
+| [yi-bai/ids](https://github.com/yi-bai/ids) 或 [cjkvi-ids](https://github.com/cjkvi/cjkvi-ids) | MIT / GPLv2 | IDS 结构拆解，可按部件替换规则程序化生成「结构异体」候选 |
+| OpenCC 词表 | Apache-2.0 | 简繁/异体第一层归一化 |
+
+### 2.2 字形层：字 → 图像/矢量（合成）
+
+| 来源 | 许可 | 定位 |
+|---|---|---|
+| **GlyphWiki** [dump.tar.gz](https://glyphwiki.org/dump.tar.gz)（116MB，每日更新）+ [kage-engine](https://github.com/kamichikoichi/kage-engine)(MIT) 离线渲染 | GlyphWiki License（自由使用/修改/做字体，无需署名） | **唯一能拿到「同一字多种写法」矢量的开源来源**（`-itaiji-`/`-var-`/各地区标准形 u5263-j/-g/-t/-k…）。注意站点对云 IP 有 403，走 dump 别爬页面 |
+| **Jigmo（字雲）** | **CC0** | HanaMin 官方后继，覆盖 Unicode 15.1 全部汉字，仍在更新。批量渲染兜底首选（花園明朝体已 2017 停更，可不用） |
+| **全字庫 TW-Sung/TW-Kai/明體**（CNS11643，[data.gov.tw #5961](https://data.gov.tw/dataset/5961)） | OGDL-1.0 / OFL 1.1 | 台湾官方 10 万+ 字，宋体形态与刻本正字最接近，附部首/部件属性表 |
+| **一点明朝体 I.Ming**（[ichitenfont/I.Ming](https://github.com/ichitenfont/I.Ming)） | IPA Font License v1.0 | **传承字形（旧字形）**，用字习惯与刻本最吻合，渲染时优先于任何「新字形」字体 |
+| 天珩全字库 | ⚠️ 不要用 | 字形拼凑自商业字体，法律不干净 |
+
+许可提醒：`charset_and_lm.md` 已有约定——字体渲染模板**不入库不 commit**，由本地字体
+现场生成（CC0 的 Jigmo 理论上可入库，但保持统一纪律更简单）。
+
+### 2.3 真实刻本/写本字形（标注数据集，科研申请、禁商用）
+
+| 数据集 | 规模 | 备注 |
+|---|---|---|
+| [TKH/MTH v2](https://github.com/HCIILAB/MTHv2_Datasets_Release)（华南理工） | 3,199 页、**108 万字符框、6,733 类**，高丽藏+诸大藏经**刻本** | 逐字 bbox+类别，**最适合直接当新 edition 导入字形库** |
+| [HisDoc1B](https://github.com/SCUT-DLVCLab/HisDoc1B) | 4 万本书、**10 亿字符、30,615 类** | 伪标签（管线自动标注），补长尾类别用，精度需自评 |
+| [CASIA-AHCDB](https://nlpr.ia.ac.cn/pal/CASIA-AHCDB.html) | 220 万单字、10,350 类 | **写本**（四库抄本+佛经），风格与刻本不同，优先级低 |
+| [HNG 漢字字体規範史](https://www.hng-data.org/)（[GitLab](https://gitlab.hng-data.org/HNG/hng-basic-data)） | 数十种有纪年写本/刊本逐字字形卡 | 含宋刊本；量小但字形学价值高 |
+| [kangxizidian.com](https://www.kangxizidian.com/) | 康熙字典整页扫描（同文书局/武英殿/渡部三版） | ⚠️ **原先记的「CC BY-SA 3.0」是错的**（见 §7 更正）：该许可属于《開放康熙》的点校文本，不是这个站的扫描件；站方半商业、无授权声明。整页图、无逐字坐标 |
+
+教育部異體字字典网站有《字彙》《正字通》等明清字书的逐异体扫描图（正是我们最想要的
+形态），但**无开放授权**，只能人工参照；关系数据用 `twedu-variants.txt` 代替。
+
+## 3. 业界先例：他们怎么免人工建库
+
+- **阿里「汉典重光」**（2021，20 万页，最终 97.5%）：与本项目同构度最高。第一阶段
+  **单字检测 + 无监督聚类，只对聚类中心做专家标注**（≈ 我们的 phase5 + review 流程）；
+  第二阶段对样本不足的字类用**字体迁移合成**补到每字 ~10 样本，训练小样本分类器 +
+  主动学习迭代。首轮 70% → 两轮 91%。[技术细节](https://www.qbitai.com/2021/05/24032.html)
+- **MegaHan97K**（SCUT，PR 2025，97,455 类）：319 个古籍风格 TTF 渲染 + FontDiffuser
+  字体生成模型补缺失类。[arXiv](https://arxiv.org/abs/2506.04807)
+- **AGTGAN**（ACM MM 2022）等：标准字形 → 真实载体风格的 GAN 迁移，专治小样本类别。
+- **关键负面信号**：公开文献里**几乎没有**「现成字体渲染图直接做模板匹配识别刻本」并
+  成功的工作——合成字形一律是喂分类器，或先过退化/风格迁移。退化工具现成的有
+  [ocrodeg](https://github.com/TalibDaryabi/ocrodeg)、DocCreator；本仓库 `synth.py` 的
+  `degrade()` 已实现一部分（腐蚀/膨胀/断笔/噪声）。
+
+## 4. 对接本项目：现状与坑（代码层）
+
+现有管线（详见 char_clustering_design.md）：原始灰度图为真源 → `normalize_patch()`
+（Sauvola → 去边缘残条 → 外接框缩放+质心居中 → **3px 笔宽归一**）→ HOG 粗排 +
+`verify_pair` 配准精验两级匹配；`GlyphKnnSource` 只采纳 `verdict=="same"`，权重 3.0。
+
+批量导入外部字形时：
+
+1. **不用改代码的入库路径**：往 `glyph_store/` 写 4 个 JSONL + `patches/*.png`
+   （**canonical 统一格式**，256×256 灰度、质心居中，规范见
+   glyph_canonical_format.md，2026-08-24 起），`glyph-db rebuild` 会自动重算
+   norm/skeleton/feat。
+2. `synth.py:render_char()` 是现成的字体渲染函数，但它整画布 resize、没走统一
+   归一。正确做法：渲染 ≤195px 字面并留足白边，`to_canonical(clean=False)`
+   转 canonical 后入库（详见 glyph_canonical_format.md §4）。
+3. **笔画粗细不是问题**（`stroke_normalize` 已抹平），真正的差异在骨架形状/部件写法。
+4. ~~**阈值是拦路虎**：字体来源必须单开 verdict/阈值档~~ **实测推翻了「单开阈值档就能
+   用」这个前提**（§6.2）：字体命中的对/错 f1 分布是重叠的，没有阈值能分开。
+   `GlyphKnnSource` 已改为默认 `kinds=("woodblock",)`，字体来源不进精确字形通道。
+5. `edition_tag` 另开域（如 `font:jigmo`、`font:iming`、`kangxi-scan`、`mth:tripitaka`），
+   `(edition_tag, char)` 唯一键天然隔离，不污染 `wuyingdian-siku-zongmu` 的同版高置信。
+6. 字体模板每字 1 例 → `sparse` 标志，下游目前无人消费；字体来源改由 `kind` 隔离后
+   这条不再紧要，但 scan 类来源（每字亦仅 1 例）将来仍要接降权。
+7. 已知 bug：`run_update()`（feedback.py:264）还在用旧 `GlyphLibrary` 读新 schema 的
+   `glyphs.jsonl`，会 TypeError（待修）。~~`export_store` 不清 patches 孤儿 PNG~~
+   已修（2026-08-24，导出时清理 + 迁移脚本已删存量 53 个）。
+8. **纪律：先建测试集再动手**（handbook §3 P1）。用 `synth.py` 造「字体模板 vs 刻本」
+   配对 + char-ocr 1404 实例金标，重点量字表外字的召回，不看整体 top1。
+
+## 5. 建议路线（按性价比排序）
+
+1. **P0 关系层先行（零风险，纯数据）**：引入 Unihan variants + cjkvi-variants + yitizi，
+   建「语义字 → 异体形集合」映射表。立刻能用在两处：候选融合时把 OCR/VLM 报的异体
+   归一到正字；为字形库检索做「同义展开」。
+
+   > **已实现（2026-08-24）**：`scripts/build_variants.py` 下载并合并三源
+   > （Unihan_Variants 六属性 + cjkvi 的 twedu/hydzd/dypytz/cjkvi-simplified +
+   > yitizi@0.1.3，注意 yitizi 的 npm 包里 `dist/yitizi.json` 是 404，数据内嵌
+   > 在 `index.js` 里），产物 `config/variants/variants.json`（无向边 + 来源
+   > 标签，确定性输出，1.6MB）+ `config/variants/report.json`。规模：**47,724
+   > 字 / 44,266 对关系**（twedu 24,615 / hydzd 28,784 / yitizi 8,688 /
+   > unihan:kSemanticVariant 2,177 / 简繁各 6,562 / spoofing 181——spoofing
+   > 单独打标签，默认不当异体用）。查询模块 `open_guji_cv/variants.py`：
+   > `variants_of` / `are_variants` / `variant_group`（默认只走 unihan 非
+   > spoofing + twedu + yitizi 的高置信边；全来源展开时最大连通分量 7,869
+   > 字——多义桥接的实证，千万别拿连通分量当等价类）。单测
+   > `tests/variants/`，不依赖网络。
+2. **P1 字体渲染 → 语义候选层**：Jigmo(CC0) + 全字庫宋/楷 + I.Ming 传承字形，独立
+   edition_tag + 独立阈值档。GlyphWiki dump 补 `-itaiji-` 异体写法（一字多形，这是
+   字体给不了的）。
+
+   > **已实现并实测（2026-08-24）**：见下面 §6。**结论是字体字形不能当精确字形判据**
+   > ——四套字体的「对/错」f1 分布完全重叠，阈值划不出来。已按此把
+   > `GlyphKnnSource` 默认锁死在 `kinds=("woodblock",)`。
+3. **P2 真实刻本数据集当新 edition**：申请 TKH/MTH（6,733 类、108 万刻本字形），按
+   book 导入流程进库——这是「精确字形层」不靠人工的唯一扩源。
+4. **P3 康熙字典扫描**：详见 §7——**没有现成的逐字切分数据**，但有一条自动标注路线
+   （公版高清整页 + `kx2ucs.txt` 页码索引 + 本项目已有的夹注检测）。
+5. **远期**：若模板匹配对长尾字仍不够，参考汉典重光/FontDiffuser 路线，用本书已确认
+   字形做风格参考，把字体字形迁移成「本书风格」再入候选层。
+
+---
+## 6. P1 实测：字体字形到底能不能匹配刻本（2026-08-24）
+
+### 6.1 怎么做的
+
+`config/fonts/manifest.json` 列四套开源字体，`glyph-db import-font` 按字表渲染入库：
+
+```bash
+export GUJI_FONT_DIR=/path/to/fonts        # 字体档不进仓库，本地放哪都行
+python -m open_guji_cv glyph-db import-font                 # 全部
+python -m open_guji_cv glyph-db import-font --edition font:iming --limit 500
+```
+
+渲染走 canonical 规范（`font_glyphs.py:FontRenderer`）：384 画布、字面 190px、
+`to_canonical(clean=False)` 质心居中——与刻本图块同一条归一路径，两边才可比。
+每套字体一个 `edition_tag`、`sources.kind='font'`。本轮导入本书字表（corpus+ocr
+两栏合并 8,138 字），各套 8,091~8,138 字，合计 32,461 个字形，约 50 字/秒。
+
+**来源隔离与选择性匹配**（本轮的主要交付）：
+
+```python
+db.query(norm, editions=["font:iming", "font:twsung"])   # 只挑这两个库比对
+db.query(norm, kinds=["woodblock"])                      # 按可信度分层
+db.query(norm, exclude=[iid])                            # 留一法评测
+hit.edition_tag, hit.kind                                # 命中出自哪个库
+```
+
+`exclude` 必须在检索里生效，不能拿返回结果过滤——每个 (edition, char) 只留最高分，
+自身命中若排第一，事后过滤会把那个字整个抹掉（第一版实验就栽在这，刻本对照组
+recall 假成 0.000）。
+
+### 6.2 结果（`scripts/bench_font_glyphs.py`，94 个刻本 exemplar / 26 字，留一法）
+
+| 来源 | kind | recall@1 | recall@5 | 正确命中 f1 p10 | 错误命中 f1 p90 | 可分性 |
+|---|---|---|---|---|---|---|
+| **wuyingdian-siku-zongmu** | woodblock | **0.904** | 0.915 | 0.741 | 0.592 | **是 +0.149** |
+| font:iming（传承字形） | font | 0.425 | 0.692 | 0.621 | 0.680 | 否 −0.060 |
+| font:twsung（全字庫宋） | font | 0.383 | 0.596 | 0.599 | 0.676 | 否 −0.078 |
+| font:twkai（全字庫楷） | font | 0.372 | 0.660 | 0.592 | 0.720 | 否 −0.128 |
+| font:jigmo | font | 0.330 | 0.479 | 0.597 | 0.664 | 否 −0.067 |
+
+「可分性」= 正确命中 f1 的下十分位是否高于错误命中 f1 的上十分位。
+
+### 6.2b 全字表规模下的复测（10 万字表，2026-08-24）
+
+把字表从本书的 8,138 字换成全字表 102,998 字重跑，同一查询集：
+
+| 来源 | 覆盖字数 | recall@1 | recall@5 | 8 千字表时 recall@5 | 相对衰减 |
+|---|---|---|---|---|---|
+| wuyingdian-siku-zongmu | 26 | 0.904 | 0.915 | 0.915 | — |
+| **font:iming** | 56,778 (55.1%) | 0.330 | **0.606** | 0.692 | −12% |
+| font:jigmo | 98,682 (95.8%) | 0.138 | 0.330 | 0.479 | **−31%** |
+
+两个结论：
+
+1. **字体之间差得远，不是「都差不多」。** I.Ming 的 recall@5 是 Jigmo 的 1.8 倍。
+   这不是覆盖量造成的假象——在 8 千字表的同等规模下对比（0.692 vs 0.479）
+   差距就已经存在。传承字形贴刻本用字习惯这一点在数据上是稳的。
+2. **干扰项多 12 倍后衰减不均**：I.Ming 只掉 12%，Jigmo 掉 31%。抗干扰能力
+   本身就是字形贴合度的一个体现。
+
+**覆盖与质量的矛盾**：Jigmo 的字表覆盖是 I.Ming 的**严格超集**
+（I.Ming 没有任何 Jigmo 缺的字），但 I.Ming 缺了 41,904 个 Jigmo 有的字。
+即质量最好的那套达不到 8~10 万量级。故最终保留**两套**：I.Ming 当质量层
+（56,778 常用字），Jigmo 当覆盖兜底（生僻字）。检索时用
+`editions=[...]` 指定，或先查 I.Ming、查不到再落 Jigmo。
+
+全字庫宋/楷（各覆盖 74.7%）在覆盖和质量两方面都不占优，已用
+`glyph-db drop-edition` 剪掉；manifest 仍保留其配置，需要时可随时重导。
+
+### 6.3 结论
+
+1. **字体字形不能当精确字形判据，这是分布层面的否决，不是调阈值能救的。**
+   四套字体的正确命中 f1 中位数都在 0.65 上下，而**错误命中也在 0.62~0.64**——
+   两个分布压在一起（margin 全为负）。刻本自身对照组则干净可分（+0.149）。
+   这与 open-guji-fonts 早先「仿宋 vs 宋体真匹配可低至 0.69」的观察一致，也印证了
+   §3 的文献信号：没人拿现成字体渲染图直接做刻本模板匹配是有原因的。
+2. **`verify_pair` 判 same 的只有 1~4/94**，即照原样接进 `GlyphKnnSource`
+   （只收 same、权重 3.0）命中率确实接近 0——预测得到验证。
+3. **但 recall@5 有价值**：I.Ming 0.692、twkai 0.660。正确字进前五的概率不低，
+   说明字体字形**当候选生成器**（配合 OCR/语言模型上下文定夺）是有戏的，
+   只是不能自己拍板。这条要单独接一个低权重来源并对 char-ocr 金标评测，
+   属于下一步，本轮没做。
+4. **字体排序符合预期**：I.Ming（传承字形/旧字形）> 全字庫宋 > 全字庫楷 > Jigmo。
+   传承字形最贴刻本用字习惯这一判断得到数据支持。
+
+### 6.4 工程约定
+
+- **字体字形不进 Git**：`export_store` 跳过 `kind='font'` 的整条链
+  （sources/glyphs/exemplars/instances/patches）。它由「字体档 + 字表」确定性
+  重生成，`glyph-db rebuild` 后重跑 `import-font` 即可。
+- **`GlyphKnnSource` 默认 `kinds=("woodblock",)`**：3 万多字体字形若混入粗排会把
+  百来个刻本 exemplar 直接淹没，且按上面的分布根本不该当精确判据。
+- 检索规模：**已重写为常驻特征缓存 + 矩阵向量乘**（`_exemplar_matrix`），
+  过滤走 numpy 掩码而非 SQL。原先每次 query 都重读整张特征表并为广播减法分配
+  N×D 临时数组，3 万字形时 0.18s、到 15 万就是每查一次搬几 GB。改后 3 万字形
+  0.024s；当前 15.5 万 exemplar 全量 bench（94 查询 × 3 来源）55s。
+  缓存失效判据取 (条数, MAX(added_at))——只看条数会让覆写式重导入读到陈旧特征。
+  再上一个量级仍需近似最近邻。
+- 存储：每字形约 16KB（canonical PNG 7KB + HOG 特征 7KB + 归一图/骨架 2KB）。
+  当前 15.5 万字形 ≈ 3.1GB SQLite（不进 Git），特征缓存常驻内存约 1.1GB。
+- 已知无关失败：`test_all_ocr_sources_have_s2t_attribute` 在本容器缺 `opencc` 依赖，
+  与本轮改动无关。
+
+---
+## 7. 康熙字典逐字字形：调研结论（2026-08-24）
+
+### 7.0 先更正一处错误
+
+§2.3 原先记「kangxizidian.com 的扫描件是 CC BY-SA 3.0」——**这是张冠李戴**。
+CC BY-SA 3.0 属于志攀《開放康熙》的**点校文本**（以及基于它的 mdx 词典），
+不是那个站的扫描图。kangxizidian.com 现站无任何授权声明，且是半商业性质
+（卖字体/软件、募捐、挂广告）。要用公版扫描请走下面的 Commons / IA。
+
+顺带澄清：网传《開放康熙》配的「47,853 张图片」也不是雕版切图，是取自漢典
+网站的字头小图。
+
+### 7.1 核心结论：没有现成的逐字切分数据，但有一条自动标注路线
+
+唯一现成的逐字康熙字形是 zi.tools 内嵌图，实测**只有 70×70 且已重度二值化**
+（是它所有图源里分辨率最低的一档，书法/篆书扫描都有 150~390px），加上无授权，
+**不能用**。
+
+可行路线是「公版高清整页 + 索引自动标注 + 自己切」，关键抓手有两个：
+
+1. **`kx2ucs.txt`**（[cjkvi/cjkvi-dict](https://github.com/cjkvi/cjkvi-dict)，**GPLv2**）
+   ——48,812 条 `KX0144.045→劍`，覆盖康熙全部约 4.8 万字头，1,506 页，
+   均值 32.4 字头/页。Unihan 的 `kKangXi` 是同类数据但少约 6,000 条。
+2. **页码天然对齐**：已实测验证 kangxizidian.com 同文书局版的页码编号
+   **与 Unihan/IRG 的 KX 页码完全一致**（page 0144 刀部、page 0500 日部两页
+   逐字核对吻合）。这让整页扫描件直接变成「每页一个有序字头列表」的弱标注集。
+3. **切分线索不是字号，是版式**：康熙字典释文是**双行夹注**，字头是单行满宽。
+   规则化判据「墨迹横跨整列宽 = 字头 / 分裂成左右半宽 = 释文」——这正是本项目
+   `doc/jiazhu_detection.md` 已有的原语，不用新造轮子。粗糙实验（同文书局
+   p0500，连通域 ≥28px + 方正度）得 77 个候选 vs 真实 46 个字头，约 1.7× 过检，
+   加列结构约束应能收敛。
+
+管线草案：整页图 → 版框/列切分 → 夹注检测定字头 → 按阅读顺序排序 →
+用 `kx2ucs.txt[页]` 的有序列表对齐赋标签 → 数目相符才接受该页。
+已知坑：〔古文〕后的重文也是大字号会误判；「增」字头带圈内标记；
+1632–1683 页是補遺/備考，版式不同。
+
+### 7.2 扫描件来源（按性价比）
+
+| 来源 | 形态/分辨率 | 授权 | 备注 |
+|---|---|---|---|
+| ⭐ **Wikimedia Commons 哈佛武英殿本**（`Category:康熙字典`，693 文件） | 整页 PDF **2837×3750**，40 册全书 | **PD，零风险** | 康熙五十五年内府刻本，**真雕版非石印**，单栏+双行夹注版式最干净。页码需自行对齐 KX 标准页码 |
+| kangxizidian.com 同文书局版 `p.kangxizidian.com/kangxi/{NNNN}.gif` | 整页 1000×1480，1683 页 | ⚠️ 无声明 | **页码天然对齐 kx2ucs**，适合做对齐参考/快速原型；但字头仅 40~48px 且烧了水印。渡部版 `/kangxi3/` 1616×2312 是折中 |
+| Internet Archive `kangxizidian14unse` | 整页 **2552×4218**，790 叶（點石齋 1889） | **PD** | IIIF 可按需取图；自带 chOCR 字符框实测不可用（chi_sim 对石印古籍无效） |
+| ctext.org / 書格 | — | ctext 明令禁止批量下载；書格 403 反爬 | 不推荐（書格那份就是哈佛本，走 Commons 即可） |
+
+### 7.3 顺带查到的其他逐字字形源
+
+- **MTHv2 / TKH**（华南理工）：**唯一现成的「雕版 + 字符级 bbox + 类别」中文数据集**，
+  2,200 页 / 约 76 万字符 / 非商业研究。不是康熙，但对「刻本单字样本库」的
+  边际价值比康熙更高，**今天就能用**——这仍是 §5 里 P2 的首选。
+- **HNG**（[search.hng-data.org](https://search.hng-data.org/)）：免费无鉴权 API，
+  逐字二值 PNG 110×110，64 部文献约 40 万字例，其中 20 部是刻本（含高丽藏、
+  北宋版）。分辨率低、以写本为主、无康熙；授权未明（站上只有版权声明无 CC 标记）。
+- **教育部異體字字典** `dict.variants.moe.edu.tw/book_piece/{书号}/{id}.png`：
+  27 部刻本字书的**逐条目切图**（含**字彙、正字通**——康熙字典的直接底本，
+  字形谱系最近），295×707 量级。但《康熙字典》本身标 `[申請]` 不公开，
+  且全站无开放授权，适合小规模取样对照、不适合建库。
+- **史的文字データベース連携システム**（mojiportal，奈文研）：约 150 万件逐字
+  图像、IIIF 兼容，聚合日台多家机构。无康熙；授权需逐来源确认（官网只有版权
+  声明，「等同 CC-BY-SA」是新闻稿转述）。
+- 明确排除：GlyphWiki（矢量非扫描）、漢字構形資料庫/小學堂（生成字形非扫描、
+  无开放授权）、今昔文字鏡（授权极严）、HuggingFace `cnshD/Kangxi-Dictionary-V1.0`
+  （纯文本无图）。HF/Kaggle/OpenDataLab 均**没有**康熙字典字形图像数据集。

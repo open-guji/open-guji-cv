@@ -33,30 +33,66 @@ def sauvola_binarize(gray: np.ndarray, window: int = SAUVOLA_WINDOW,
     return (g < thresh).astype(np.uint8)
 
 
-def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA) -> np.ndarray:
-    """删除切分/裁切残留：
+def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
+                       margins: tuple[int, int] | None = None) -> np.ndarray:
+    """删除切分/裁切残留（P3 重写，2026-08-23）。
 
-    - 贴边且面积 < noise_area 的毛刺；
-    - 贴左右边、细而高的贯穿竖线（界行残留）；
-    - 贴上下边、扁而宽的贯穿横线（相邻字/边框残留）。
+    旧判据（贴边 + shallow_tb/lr + 贴边细线）被废除：它既**漏**（不贴边的
+    版框线/界行线一条都够不着——golden 集三轮切分版本下 4 个缺陷同根因），
+    又**误杀**（「二」贴底边的底横被 shallow_tb 当残留删掉，实锤实例
+    vol02:157:2:4 直接毒化字形匹配）。
+
+    新判据只删**无歧义的非笔画**，厚组件的格位归属是切分层（F 步
+    component_owner）的职责，不在这里重复判断：
+
+    1. **贴边小噪点**：贴边且面积 < noise_area（原规则保留）；
+    2. **细线（位置无关）**：平均厚度 ≤ max(3, 0.045×min(h,w)) 且细长
+       （长边 ≥ 0.5×对应边长）的组件——版框/界行线厚 2~5px，本书笔画厚
+       8~14px，两个分布不重叠（分布重叠就别调阈值，这里不重叠才敢用）。
+       护栏：非最大组件，且最大组件面积 ≥ 1.2× 它——保护「一」（自己就
+       是主体）与 二/三（笔画厚，根本进不了细线档）；
+    3. **padding 带碎屑**：墨 ≥80% 落在 padding 带（核心区 = bbox，
+       margins 给出带宽，缺省按 7.5% 估）且面积 < 0.25× 最大组件——
+       邻字探进来的小残片。大块残片**不删**（可能是被切的本字笔画，
+       归属该由切分层判）。
     """
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
     if n <= 1:
         return binary
     h, w = binary.shape
+    if margins is None:
+        my, mx = int(round(h * 0.075)), int(round(w * 0.075))
+    else:
+        my, mx = margins
+    my = min(max(my, 0), max(h // 2 - 1, 0))
+    mx = min(max(mx, 0), max(w // 2 - 1, 0))
+
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    largest = int(areas.max())
+    thin_cap = max(3.0, 0.045 * min(h, w))
+
+    core = np.zeros((h, w), dtype=bool)
+    core[my:h - my, mx:w - mx] = True
+
     out = binary.copy()
     for i in range(1, n):
         x, y, bw, bh, area = stats[i]
-        touches_lr = (x == 0 or x + bw >= w)
-        touches_tb = (y == 0 or y + bh >= h)
-        speck = (touches_lr or touches_tb) and area < noise_area
-        vline = touches_lr and bw <= 0.16 * w and bh >= 0.55 * h
-        hline = touches_tb and bh <= 0.16 * h and bw >= 0.55 * w
-        # 浅入侵残片：相邻字/界行被切进来的边缘碎块。图块有 padding 外扩，
-        # 本字主体连通域不会既贴边又这么浅。
-        shallow_tb = touches_tb and bh <= 0.20 * h
-        shallow_lr = touches_lr and bw <= 0.20 * w
-        if speck or vline or hline or shallow_tb or shallow_lr:
+        touches = (x == 0 or y == 0 or x + bw >= w or y + bh >= h)
+        if touches and area < noise_area:                      # 规则 1
+            out[labels == i] = 0
+            continue
+        if area == largest:
+            continue
+        long_side = max(bw, bh)
+        thickness = area / max(1, long_side)
+        is_line = (thickness <= thin_cap
+                   and ((bh >= 0.5 * h and bw < bh) or (bw >= 0.5 * w and bh < bw)))
+        if is_line and largest >= 1.2 * area:                  # 规则 2
+            out[labels == i] = 0
+            continue
+        comp = labels == i
+        in_core = int(np.count_nonzero(comp & core))
+        if area - in_core >= 0.8 * area and area < 0.25 * largest:   # 规则 3
             out[labels == i] = 0
     return out
 
@@ -95,7 +131,8 @@ def ink_bbox(binary: np.ndarray) -> tuple[int, int, int, int] | None:
 def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
                     margin_ratio: float = MARGIN_RATIO,
                     noise_area: int = NOISE_AREA,
-                    stroke_width: int | None = 3) -> np.ndarray:
+                    stroke_width: int | None = 3,
+                    margins: tuple[int, int] | None = None) -> np.ndarray:
     """灰度图块 → S×S uint8 {0,1} 归一二值图。
 
     墨迹外接框等比缩放到内容区（size × (1 - 2*margin)），
@@ -105,7 +142,7 @@ def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     binary = sauvola_binarize(gray)
-    binary = remove_edge_specks(binary, noise_area)
+    binary = remove_edge_specks(binary, noise_area, margins=margins)
 
     binary = _drop_stray_components(binary)
     bbox = ink_bbox(binary)

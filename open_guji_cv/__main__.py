@@ -23,8 +23,11 @@ Web 界面：
     review     <folder>   M6 人工审查 Web 界面 → phase7_review/labels.jsonl
     review-export <folder>  导出审查批次为自包含 HTML（Artifact/GitHub Pages）
     review-ingest <folder>  回收页面审查事件 → labels.jsonl
+    seed       <folder>   逐页进库（种子）：双信号+六条疑问判定 → phase9_seed/
+    seed-ingest <folder>  回收种子审查事件 → human 进库 + 队列状态更新
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
-    glyph-db   <action>   M8 跨书字形数据库（import / stats / export / rebuild）
+    glyph-db   <action>   M8 跨书字形数据库
+                          （import / import-font / drop-edition / stats / export / rebuild）
     bench      <target>   合成数据集基准评测（verify / cluster）
 
 工具：
@@ -381,6 +384,146 @@ def cmd_label(args):
     print(f"完成: {stats}，输出: {book_out_dir / 'phase6_labels'}")
 
 
+def cmd_recognize(args):
+    """字形库优先识别第一段（glyph_db_first_design §2）：逐图块匹配库。
+
+    same 档（完美匹配）直接继承库条目的字 = 识别完成；unsure/diff 档
+    只落证据与候选先验，等 OCR+上下文分支接线（设计 §7 第 4 步）。
+    输出 phase8_match/matches.jsonl（每行一个实例的 MatchResult 证据）。
+    """
+    from .clustering.extractor import load_index
+    from .clustering.glyph_db import GlyphDB, _unpng
+    from .clustering.match import GlyphMatcher
+    from .clustering.normalize import normalize_patch
+
+    book_out_dir = _book_out_dir(args)
+    root = book_out_dir / "phase4_chars"
+    matcher = GlyphMatcher(k=args.knn_k)
+
+    db = GlyphDB(args.db)
+    cur = db.conn.cursor()
+    sql = """SELECT g.char, e.instance_id, d.data
+             FROM exemplars e
+             JOIN glyphs g ON g.glyph_id = e.glyph_id
+             JOIN derived d ON d.instance_id = e.instance_id AND d.kind='norm'"""
+    dbargs: tuple = ()
+    if args.edition:
+        sql += " WHERE g.edition_tag = ?"
+        dbargs = (args.edition,)
+    for char, iid, data in cur.execute(sql, dbargs).fetchall():
+        matcher.add(iid, char, _unpng(data))
+    db.close()
+    print(f"库载入 {len(matcher)} 个已验证刻例")
+
+    out_dir = book_out_dir / "phase8_match"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    recs = [r for r in load_index(root) if r.cell_type == "char"]
+    n_same = n_unsure = n_diff = 0
+    import cv2 as _cv2
+    with open(out_dir / "matches.jsonl", "w", encoding="utf-8") as f:
+        for n, rec in enumerate(recs, 1):
+            gray = _cv2.imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
+            if gray is None:
+                continue
+            r = matcher.match(normalize_patch(gray))
+            n_same += r.verdict == "same"
+            n_unsure += r.verdict == "unsure"
+            n_diff += r.verdict == "diff"
+            row = {"id": rec.id, **r.to_dict()}
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            if n % 2000 == 0:
+                print(f"  {n}/{len(recs)}  same {n_same} unsure {n_unsure} diff {n_diff}",
+                      flush=True)
+    total = max(1, n_same + n_unsure + n_diff)
+    summary = {"n": total, "same": n_same, "unsure": n_unsure, "diff": n_diff,
+               "coverage": round(n_same / total, 4), "db_size": len(matcher)}
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False))
+
+
+def _general_corpus_paths(args):
+    """--general-corpus 解析：显式路径 > 自动发现 corpus/external/*.txt；
+    传 none 关闭混合。"""
+    if args.general_corpus:
+        if any(str(p).lower() == "none" for p in args.general_corpus):
+            return None
+        return args.general_corpus
+    found = sorted(Path("corpus/external").glob("*.txt"))
+    return found or None
+
+
+def cmd_seed(args):
+    """逐页进库（种子，设计 §3.5）：双信号 + 六条疑问判定 → phase9_seed/。
+
+    双信号一致零疑问 → align provenance 直接进库；其余进审查队列
+    （queue.jsonl），等 seed-ingest 回收裁决。断点续跑按页粒度。
+    """
+    from .clustering.glyph_db import GlyphDB
+    from .clustering.seeding import seed_book
+
+    book_out_dir = _book_out_dir(args)
+    pages = None
+    if args.pages == "body":
+        gold_path = Path(args.page_type)
+        if not gold_path.exists():
+            print(f"页型金标不存在: {gold_path}（--pages all 可跳过正文筛选）")
+            sys.exit(1)
+        gold = json.loads(gold_path.read_text(encoding="utf-8"))
+        book = book_out_dir.name
+        pages = {g["page"] for g in gold
+                 if g["book"] == book and g["page_type"] == "body"}
+        if not pages:
+            print(f"金标里没有 {book} 的正文页")
+            sys.exit(1)
+
+    db = GlyphDB(args.db)
+    try:
+        summary = seed_book(book_out_dir, db, args.corpus, pages=pages,
+                            carrier_path=args.ocr_carrier,
+                            max_pages=args.max_pages,
+                            prob_threshold=args.prob_threshold,
+                            context_margin=args.context_margin,
+                            solo_cov=args.match_solo_cov,
+                            general_corpus=_general_corpus_paths(args),
+                            font_store=(None if str(args.font_store).lower()
+                                        == "none" else args.font_store),
+                            font_editions=[e.strip() for e in
+                                           args.font_editions.split(",")
+                                           if e.strip()],
+                            edition=args.edition)
+    finally:
+        db.close()
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+
+
+def cmd_seed_ingest(args):
+    """回收种子审查事件（GUJI-SEED-EVENT 行）→ human 进库 + 队列更新。"""
+    from .clustering.glyph_db import GlyphDB
+    from .clustering.seed_queue import parse_seed_events
+    from .clustering.seeding import ingest_decisions
+
+    events = parse_seed_events(Path(args.events).read_text(encoding="utf-8"))
+    if not events:
+        print("文件里没有可用的 GUJI-SEED-EVENT 行")
+        sys.exit(1)
+    db = GlyphDB(args.db)
+    try:
+        summary = ingest_decisions(_book_out_dir(args), db, events,
+                                   edition=args.edition)
+    finally:
+        db.close()
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+
+
+def cmd_seed_scrub(args):
+    """对既有种子队列的待审行复扫空白/非字（新增检测规则后回填存量）。"""
+    from .clustering.seeding import scrub_nonchar
+
+    print(json.dumps(scrub_nonchar(_book_out_dir(args)),
+                     ensure_ascii=False, indent=1))
+
+
 def cmd_refine(args):
     """M5+ 上下文自动修正：簇级边缘化 + 同书自举 n-gram，迭代重解码。"""
     from .clustering.context_refine import refine_book
@@ -504,6 +647,15 @@ def cmd_glyph_db(args):
             summary = rebuild_from_store(args.store,
                                          Path(args.store) / "glyphdb.sqlite")
             db = None
+        elif args.action == "drop-edition":
+            if not args.edition:
+                print("drop-edition 需要 --edition"); sys.exit(1)
+            summary = db.drop_edition(args.edition)
+        elif args.action == "import-font":
+            from .clustering.font_glyphs import import_fonts_from_manifest
+            summary = import_fonts_from_manifest(
+                db, args.manifest, only=args.edition,
+                charset=args.charset, limit=args.limit)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -719,6 +871,68 @@ def main():
     p.add_argument("--lm-corpus", default=None,
                    help="语料目录（*.txt，现场训练 n-gram；与 --lm-model 二选一）")
 
+    # ── recognize（字形库优先识别，第一段）───────────────
+    p = sub.add_parser("recognize",
+                       help="字形库优先识别：逐图块匹配 GlyphDB → phase8_match/"
+                            "（same 档=识别完成；unsure/diff 落证据待裁决）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", default="glyph.db", help="GlyphDB SQLite 路径")
+    p.add_argument("--edition", default=None, help="限定 edition_tag（同版匹配）")
+    p.add_argument("--knn-k", type=int, default=10, help="近邻候选数（默认 10）")
+
+    # ── seed / seed-ingest（逐页进库，设计 §3.5）─────────
+    p = sub.add_parser("seed",
+                       help="逐页进库（种子）：双信号+六条疑问判定 → "
+                            "phase9_seed/（需先 chars + OCR 载体）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", required=True, help="GlyphDB SQLite 路径")
+    p.add_argument("--corpus", required=True, action="append",
+                   help="整理本参考文本路径（可给多次：主整理本 + 自补的"
+                        "奏折/上谕文本，内部拼接后锚定/参考/LM 同源）")
+    p.add_argument("--context-margin", type=float, default=0.70,
+                   help="上下文通道的 margin 准入阈（用户实审 303 条裁决"
+                        "重标定：≥0.70 全对；默认 0.70）")
+    p.add_argument("--general-corpus", action="append", default=None,
+                   help="通用语料路径（可给多次；缺省自动发现 corpus/"
+                        "external/*.txt）。与本书语料线性混合成上下文 LM"
+                        "（本书 0.9 / 通用 0.1，charset_and_lm.md §二）；"
+                        "给 --general-corpus none 可关闭混合")
+    p.add_argument("--font-store", default="glyph_store",
+                   help="字体字形库（glyph-db import-font 建的），刻本库匹配"
+                        "不上时从这里找备选；给 none 关闭")
+    p.add_argument("--font-editions", default="font:iming",
+                   help="用哪几套字体（逗号分隔）。字体只作候选源，永不"
+                        "参与准入裁决——实测 recall@1 仅两成，分布不可分")
+    p.add_argument("--match-solo-cov", type=float, default=0.99,
+                   help="库匹配单独通道的 cov 阈：无整理本锚定时，库内"
+                        "形状验证 cov ≥ 此值直接进库（默认 0.99；0.98 "
+                        "首日即出压线错例 揀/棟，用户裁定收紧）")
+    p.add_argument("--pages", default="body", choices=["body", "all"],
+                   help="body=只跑金标正文页（默认）；all=索引里的全部页")
+    p.add_argument("--page-type",
+                   default="../open-guji-dataset/page-type/expected.json",
+                   help="页型金标路径（--pages body 时使用）")
+    p.add_argument("--ocr-carrier", default=None,
+                   help="OCR 载体 jsonl（默认 phase4_chars/ocr_carrier.jsonl）")
+    p.add_argument("--max-pages", type=int, default=None,
+                   help="本次最多处理的页数（断点续跑分批推进用）")
+    p.add_argument("--prob-threshold", type=float, default=0.85,
+                   help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
+    p.add_argument("--edition", default=None,
+                   help="edition_tag（默认=书名；同版多书标同 tag）")
+
+    p = sub.add_parser("seed-scrub",
+                       help="对种子队列待审行复扫空白/非字（规则升级后回填存量）")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+
+    p = sub.add_parser("seed-ingest",
+                       help="回收种子审查事件（GUJI-SEED-EVENT）→ human 进库")
+    p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
+    p.add_argument("--db", required=True, help="GlyphDB SQLite 路径")
+    p.add_argument("--events", required=True,
+                   help="含 GUJI-SEED-EVENT 行的文本/HTML 文件")
+    p.add_argument("--edition", default=None, help="edition_tag（默认=书名）")
+
     # ── refine（M5+ 上下文自动修正）──────────────────────
     p = sub.add_parser("refine",
                        help="M5+ 上下文自动修正（簇级边缘化 + 自举 n-gram）")
@@ -790,10 +1004,19 @@ def main():
     # ── glyph-db（M8 跨书字形数据库）─────────────────────
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
-                   choices=["import", "stats", "export", "rebuild"])
+                   choices=["import", "stats", "export", "rebuild",
+                            "import-font", "drop-edition"])
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default="glyph_store", help="字形库目录")
-    p.add_argument("--edition", default=None, help="版本 edition_tag（默认=书名）")
+    p.add_argument("--edition", default=None,
+                   help="版本 edition_tag（import 默认=书名；"
+                        "import-font 用于只导 manifest 里的某一套字体）")
+    p.add_argument("--manifest", default="config/fonts/manifest.json",
+                   help="字体清单（import-font 用）")
+    p.add_argument("--charset", default=None,
+                   help="字表文件（import-font 用，默认取 manifest 里的）")
+    p.add_argument("--limit", type=int, default=None,
+                   help="只导前 N 个字（import-font 冒烟测试用）")
     p.add_argument("--collection", default=None, help="丛书（如 武英殿聚珍版）")
     p.add_argument("--script-style", default=None, help="字体（宋体刻/写刻/手写）")
     p.add_argument("--title", default=None, help="书名")
@@ -844,6 +1067,10 @@ def main():
         "chars":             cmd_chars,
         "cluster":           cmd_cluster,
         "label":             cmd_label,
+        "recognize":         cmd_recognize,
+        "seed":              cmd_seed,
+        "seed-scrub":        cmd_seed_scrub,
+        "seed-ingest":       cmd_seed_ingest,
         "refine":            cmd_refine,
         "eval-align":        cmd_eval_align,
         "bench-ocr":         cmd_bench_ocr,

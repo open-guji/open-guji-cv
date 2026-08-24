@@ -138,6 +138,70 @@ def run_once(samples: list[dict], lm, vm, lam: float) -> dict:
     }
 
 
+def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
+    """生产口径（seed 上下文通道）：**门槛化**纠正，不做全局重排。
+
+    十二轮实测定案：在含库匹配证据的强融合先验上，无条件 LM 重排
+    在任何 λ 下都是净亏（λ=0.95 仍 救17/坏34）——LM 的正确用法是
+    「先验拿不准时的裁判」，不是「对所有槽位的再排序器」。这里复刻
+    seed 通道的裁决：语义层 margin ≥ 阈才改判，其余保持基线首选；
+    上下文用列内金标前文（理想口径，同 context.prev 的说明）。
+    按 origin（human/align）分层——human 层才是硬样本。"""
+    from open_guji_cv.clustering.context_step import build_strategy
+
+    decider = build_strategy("gated_ngram", lm=lm,
+                             semantic_fn=vm.semantic, lam=lam)
+
+    def decide_slot(cands, ctx_chars):
+        priors = {c["char"]: c["prob"] for c in cands}
+        res = decider.decide(priors, context=tuple(ctx_chars))
+        return res.surface, res.margin
+
+    strata = {"human": [0, 0, 0, 0], "align": [0, 0, 0, 0]}  # n, base, new, flips
+    rescued = harmed = flips = 0
+    for s in samples:
+        for col in s["columns"]:
+            ctx: list[str] = []
+            for sl in col["slots"]:
+                cands = sl["candidates"]
+                if not cands:
+                    continue
+                g = sl["gold"]
+                base = cands[0]["char"]
+                pick, m = decide_slot(cands, ctx[-4:])
+                new = pick if (pick != base and m >= margin
+                               and len(cands) >= 2) else base
+                origin = sl.get("origin") or "align"
+                st = strata.setdefault(origin, [0, 0, 0, 0])
+                st[0] += 1
+                st[1] += base == g
+                st[2] += new == g
+                if new != base:
+                    flips += 1
+                    st[3] += 1
+                    rescued += (new == g and base != g)
+                    harmed += (base == g and new != g)
+                ctx.append(g)          # 教师强制：后文上下文用金标
+    n = sum(v[0] for v in strata.values())
+    base_ok = sum(v[1] for v in strata.values())
+    new_ok = sum(v[2] for v in strata.values())
+    return {
+        "n": n, "gate_margin": margin,
+        "baseline_top1": round(base_ok / n, 4) if n else 0.0,
+        "top1": round(new_ok / n, 4) if n else 0.0,
+        "top1_gain": round((new_ok - base_ok) / n, 4) if n else 0.0,
+        "flips": flips, "rescued": rescued, "harmed": harmed,
+        "harmful_flip_rate": round(harmed / base_ok, 4) if base_ok else 0.0,
+        "flip_precision": round(rescued / flips, 4) if flips else None,
+        "by_origin": {k: {"n": v[0],
+                          "baseline_top1": round(v[1] / v[0], 4) if v[0] else 0,
+                          "top1": round(v[2] / v[0], 4) if v[0] else 0,
+                          "flips": v[3]}
+                      for k, v in strata.items() if v[0]},
+        "glyph_layer_immutability": True,   # 只在候选集内挑，构造保证
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="context-correction 评测")
     ap.add_argument("dataset")
@@ -152,6 +216,10 @@ def main() -> None:
     ap.add_argument("--order", type=int, default=3)
     ap.add_argument("--min-count", type=int, default=2,
                     help="通用语料高阶计数的剪枝阈值")
+    ap.add_argument("--gate", type=float, default=None,
+                    help="门槛化模式：语义 margin ≥ 此阈才改判（生产口径，"
+                         "seed 默认 0.70）；给了本参数就跑 run_gated 而非"
+                         "全局重排")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -215,7 +283,10 @@ def main() -> None:
         if book_lm is not None and w > 0:
             comps.append((book_lm, w))
         lm = InterpolatedLM(comps) if comps else UniformLM()
-        r = run_once(samples, lm, vm, args.lam)
+        if args.gate is not None:
+            r = run_gated(samples, lm, vm, args.lam, args.gate)
+        else:
+            r = run_once(samples, lm, vm, args.lam)
         r["book_weight"] = w
         r["lm"] = lm.name
         rows.append(r)

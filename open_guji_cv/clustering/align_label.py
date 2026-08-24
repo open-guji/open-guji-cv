@@ -17,6 +17,15 @@
    不同就整页丢弃。这不是洁癖：实测 vol01 201 页里有 139 页结构已经变了
    （转写产自更早一次 phase4），不校验就会把标签系统性地错位一格。
 
+对齐载体有两种来源：
+
+- `phase6_labels/ranked.json` 的转写（原设计）——但它只有在 label 步骤
+  与切分同版重跑过时才可用；881d777 之后的转写全是 `<unk>`（重跑没带
+  OCR 源），载体作废。
+- **OCR 载体**（`scripts/build_ocr_carrier.py`，2026-08-23 起首选）：
+  逐图块 RapidOCR top1 + s2t，与切分永远同版。G5 在 book9 金标上的实测
+  top1 88.75%，比旧转写载体（86.4%）还高。用 `slots_by_page` 参数传入。
+
 用法见 `scripts/build_clustering_dataset.py`。
 """
 
@@ -151,11 +160,23 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
     sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
 
     out: list[AlignedLabel] = []
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+    ops = sm.get_opcodes()
+    for n, (tag, i1, i2, j1, j2) in enumerate(ops):
         if tag == "equal":
             pass
         elif tag == "replace" and (i2 - i1) == (j2 - j1):
-            pass
+            # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
+            # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
+            # 位置本身就不可信——实测漏进来的错标（卷→曰、己→已）全是
+            # 这种。要求段长 ≤3 且左右都有 ≥2 字的 equal 段贴身夹住。
+            if (i2 - i1) > 3:
+                continue
+            prev_ok = (n > 0 and ops[n - 1][0] == "equal"
+                       and ops[n - 1][2] - ops[n - 1][1] >= 2)
+            next_ok = (n + 1 < len(ops) and ops[n + 1][0] == "equal"
+                       and ops[n + 1][2] - ops[n + 1][1] >= 2)
+            if not (prev_ok and next_ok):
+                continue
         else:
             # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
             continue
@@ -167,22 +188,90 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
     return out, True
 
 
+def page_reference(page: str, slots: list[tuple[int, int, str]],
+                   corpus: str, corpus_index: dict[str, list[int]],
+                   window_pad: int = WINDOW_PAD,
+                   ) -> dict[tuple[int, int], tuple[str | None, str]]:
+    """免闸参考对齐：逐字位 best-effort 整理本字（**审查页面参考用，非金标**）。
+
+    与 label_page 的区别：不设采信闸——equal 与等长 replace 段全部取
+    对应语料字（replace 不限段长、不要求 equal 夹住），所以噪声比过闸
+    标签大得多，只配当人眼参考；insert/delete/不等长段无对应（None）。
+    非汉字参考（语料换行等）也置 None。返回 {(col, idx): (字|None, op)}。
+    """
+    text = "".join(ch for _, _, ch in slots)
+    offset = anchor_page(text, corpus_index)
+    if offset is None:
+        return {}
+    lo = max(0, offset)
+    hi = min(len(corpus), offset + len(text) + window_pad)
+    window = corpus[lo:hi]
+    sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
+    out: dict[tuple[int, int], tuple[str | None, str]] = {}
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        aligned = tag == "equal" or (tag == "replace" and (i2 - i1) == (j2 - j1))
+        for k in range(i2 - i1):
+            col, idx, _ = slots[i1 + k]
+            ref = window[j1 + k] if aligned else None
+            if ref is not None and not is_han(ref):
+                ref = None
+            out[(col, idx)] = (ref, tag)
+    return out
+
+
+def carrier_slots(carrier_path: str | Path,
+                  valid_ids: set[str] | None = None,
+                  ) -> dict[str, list[tuple[int, int, str]]]:
+    """OCR 载体 jsonl（build_ocr_carrier.py 产出）→ slots_by_page。
+
+    空识别用 '□' 占位：格位必须占住，否则页文本长度与实例数对不上，
+    对齐窗口整体错位。
+
+    ``valid_ids`` 给当前 index.jsonl 的实例 id 集合时，**丢掉载体里已经
+    不存在的格位**。切分一重跑，载体就可能比索引多出/少掉格——多出的
+    那一格会把整列文本后移一位，锚定照样"成功"但采信闸全灭：整页看着
+    像"没锚定"，不报任何错。vol01 第 14 页实锤（切分 164→163 格，载体
+    仍 164 条，过闸对齐从 162/180 掉到 0/163）。所以调用方**应当**把
+    索引 id 传进来；载体缺格（索引有而载体无）无害（那一格没 OCR 而已），
+    载体多格才致命。
+    """
+    by_page: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
+    dropped = 0
+    with open(carrier_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if valid_ids is not None and r["id"] not in valid_ids:
+                dropped += 1
+                continue
+            _, page, col, idx = r["id"].split(":")
+            by_page[page].append((int(col), int(idx), r["char"] or "□"))
+    if dropped:
+        print(f"⚠ OCR 载体有 {dropped} 条已不在索引里（切分重跑过？）已丢弃；"
+              f"建议重建载体：scripts/build_ocr_carrier.py")
+    return {p: sorted(v) for p, v in by_page.items()}
+
+
 def label_book(book: str, book_out_dir: str | Path, corpus_path: str | Path,
                pages: set[str] | None = None,
                corpus_index: dict[str, list[int]] | None = None,
+               slots_by_page: dict[str, list[tuple[int, int, str]]] | None = None,
                ) -> tuple[list[AlignedLabel], list[PageLabelStat]]:
     """整册对齐标注。
 
     pages 给定时只处理这些页（正文页筛选交给调用方，见 page-type 金标）。
+    slots_by_page 给定时用它当载体（OCR 载体），否则读 ranked.json。
     只有**结构一致且锚定成功**的页会产出标签。
     """
     book_out_dir = Path(book_out_dir)
     corpus = Path(corpus_path).read_text(encoding="utf-8")
     corpus_index = corpus_index if corpus_index is not None else build_ngram_index(corpus)
 
-    with open(book_out_dir / "phase6_labels" / "ranked.json", encoding="utf-8") as f:
-        ranked = json.load(f)["results"]
-    slots_by_page = page_slots(ranked)
+    if slots_by_page is None:
+        with open(book_out_dir / "phase6_labels" / "ranked.json", encoding="utf-8") as f:
+            ranked = json.load(f)["results"]
+        slots_by_page = page_slots(ranked)
     current = index_structure(book_out_dir / "phase4_chars" / "index.jsonl")
 
     labels: list[AlignedLabel] = []

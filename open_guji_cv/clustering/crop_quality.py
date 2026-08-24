@@ -23,9 +23,12 @@ vol01 78.9% / vol02 68.2%（管线手册 §1），总有一部分图块带着邻
 二值化用 Otsu，不用归一化的 Sauvola——分级判据要给归一化当评测分层用，
 不能与被测算法同源（making-datasets.md 第四步第 4 条的同一条纪律）。
 
-**校准**（2026-08-23，对着 `char-segmentation/instances` 人工 quality 标签
-第九轮 62 个实例扫）：`edge_ink_px=14 / foreign_core_px=25` 时缺陷检出 5/7、
-clean 误报 2/55。阈值在 10~24 / 15~60 区间内数字几乎不动，不是精调出来的。
+**校准**（对着 `char-segmentation/instances` 人工 quality 标签扫）：
+- 第九轮（62 实例，a435d7b 切分）：检出 5/7、clean 误报 2/55；
+- 第十三轮（91 实例，502fa04 逐带围栏切分）：检出 10/14、clean 误报 7/77。
+  阈值在 12~16 / 25~40 区间内数字几乎不动，维持 14/25 不动。误报升到 9%
+  的主因是逐带围栏改变了图块边缘形态（包络放宽的掩蔽残漏，见 881d777
+  提交记录），边缘带见墨的 clean 字变多。
 
 已知盲区（漏掉的那 2 个缺陷就是它们，写进各数据集 known_limitation）：
 
@@ -41,6 +44,28 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+
+# ── 版面异物侵入（进库审查倒逼出来的判据，2026-08-24）────────────────
+# 用户审查 46 条「仅定字·不入库」逐条目视后发现：41 条是版面线/邻字残余
+# 混进图块，且**高度系统性**——15 条挤在同一列（整列切窗偏移吃进界行），
+# not_a_char 则 30/32 落在列尾（网格越过末字伸进版框区）。这不是随机
+# 噪声，是上游 G2/G3 的定位偏差，必须能自动检出并回流。
+#
+# 与 residue 判据的分工：residue 抓「非主体连通体探进核心区」，对**与
+# 字身相连**的框线无能为力（实测 46 条里 35 条只落了个泛泛的
+# boundary_ink）。本判据不看连通性，只看**几何**：版面线是贯穿图块的
+# 细直条，笔画不是。
+# 竖界行与横版框的形态不同，带宽/填充阈**必须分开**（46 条金标扫参）：
+# - 竖界行是切窗横向偏移带进来的，可以深入图块四成宽，但线极实（近乎
+#   全高贯穿）→ 宽带 + 高填充阈；
+# - 横版框紧贴图块极边（网格越过末字撞上版框），但「一二三世而」的横笔
+#   同样能填满整行 → 窄带 + 中填充阈，靠「贴不贴边」把笔画摘出去。
+# 合并阈（0.28/0.62）两头不讨好：召回 59% 时误报已到 22.7%。
+INTRUSION_V_BAND = 0.40   # 竖条：外侧带宽（占图块宽）
+INTRUSION_V_FILL = 0.88   # 竖条：列着墨占比下限
+INTRUSION_H_BAND = 0.15   # 横条：外侧带宽（占图块高）
+INTRUSION_H_FILL = 0.60   # 横条：行着墨占比下限
+INTRUSION_MAX_T = 0.16    # 条的厚度上限（占对边长度；超过就是笔画不是线）
 
 EDGE_INK_PX = 14         # 主体压图块外边界的墨（像素数）达到此值 → truncated
 FOREIGN_CORE_PX = 25     # 碰边连通体落在核心区内的墨（像素数）→ residue
@@ -126,3 +151,71 @@ def assess_crop(gray: np.ndarray,
     tier = "degraded" if (truncated or residue) else "clean"
     return CropQuality(tier, truncated, residue, edge_ink,
                        n_foreign, core_total, main_area)
+
+
+def detect_intrusion(gray: np.ndarray,
+                     v_band: float = INTRUSION_V_BAND,
+                     v_fill: float = INTRUSION_V_FILL,
+                     h_band: float = INTRUSION_H_BAND,
+                     h_fill: float = INTRUSION_H_FILL,
+                     max_t: float = INTRUSION_MAX_T) -> list[str]:
+    """图块里的版面线侵入 → 侵入码列表（空 = 干净）。
+
+    返回码（可多个）：``rule_bar_left`` / ``rule_bar_right``（竖界行）、
+    ``frame_bar_top`` / ``frame_bar_bottom``（横版框或邻字压线）。
+
+    判据是「贴外带的细实贯穿条」：在外侧带里找连续若干列（行），条内
+    着墨占比 ≥ 填充阈、条厚 ≤ ``max_t``。**不看连通性**是要害——框线
+    常与字身相连，连通体判据（residue）在这恰好失效，这正是它在 46 条
+    实例上漏掉 35 条、只落个泛泛 boundary_ink 的原因。
+
+    **标定**（用户逐条目视的 46 条「仅定字·不入库」+ 600 条 clean 对照，
+    2026-08-24）：
+
+    | 类 | 操作点 | 召回 | clean 误报 |
+    |---|---|---|---|
+    | 竖界行 | band 0.40 / fill 0.88 | 10/19 = 53% | 0.5% |
+    | 横版框 | band 0.15 / fill 0.60 | 12/22 = 55% | 0.5% |
+
+    取的是**高精度、中召回**的点：本判据的用途是回流上游定位偏差 +
+    给审查页提示，误报会让人不信任提示，漏检只是回到现状。
+
+    已知漏检（写进数据集 known_limitation）：淡墨/断续的界行（扫描时
+    线本身就没印实，填充率上不去）、只压住半格高的短线。这两类要靠
+    页级信息（同列其他格是不是也有线）才判得准——见 seed 侧的**列级
+    聚集**统计，那才是回流上游的主证据。
+    """
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    b = _binarize(gray) > 0
+    h, w = b.shape
+    if h < 8 or w < 8 or not b.any():
+        return []
+    out: list[str] = []
+
+    def scan(axis: int, band: float, fill: float,
+             lo_name: str, hi_name: str) -> None:
+        """axis=0 逐列扫竖条，axis=1 逐行扫横条。"""
+        profile = b.mean(axis=axis)          # 每条线的着墨占比
+        n = len(profile)                     # 竖条 n=w，横条 n=h
+        limit = max(1, int(round(band * n)))
+        thick_max = max(1, int(round(max_t * n)))
+        hot = profile >= fill
+        i = 0
+        while i < n:
+            if not hot[i]:
+                i += 1
+                continue
+            j = i
+            while j < n and hot[j]:
+                j += 1
+            if j - i <= thick_max:
+                if i < limit and lo_name not in out:
+                    out.append(lo_name)
+                elif j > n - limit and hi_name not in out:
+                    out.append(hi_name)
+            i = j
+
+    scan(0, v_band, v_fill, "rule_bar_left", "rule_bar_right")
+    scan(1, h_band, h_fill, "frame_bar_top", "frame_bar_bottom")
+    return out

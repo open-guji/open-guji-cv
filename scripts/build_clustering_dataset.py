@@ -52,14 +52,16 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from open_guji_cv.clustering.align_label import (BLANK_INK, clean_labels,
-                                                 label_book, summarize)
+from open_guji_cv.clustering.align_label import (BLANK_INK, carrier_slots,
+                                                 clean_labels, label_book,
+                                                 summarize)
 from open_guji_cv.clustering.crop_quality import assess_crop
+from open_guji_cv.clustering.match import NEVER_MATCH_FAMILIES
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch)
 
 SOURCE_ITEM = "06061300.cn"        # 武英殿刻本《欽定四庫全書總目》卷首（page-type 同源）
-PIPELINE_REV = "23ee9a518"         # 冻结的上游产物版本（见文件头 --pipeline-rev）
+PIPELINE_REV = "502fa04d0c"        # 冻结的上游产物版本（见文件头 --pipeline-rev）
 FEATURE_BACKEND = "hog"
 MAX_CONFUSION_PAIRS = 40
 MAX_INK_PAIRS = 40
@@ -134,11 +136,11 @@ def pick_pages(labels, max_instances: int, seed: int) -> set[str]:
 # 操作点下真实发生过错并的字对）。进永久回归：verify 判据每次改动，这些
 # `diff` 对都必须保持不同簇。线索来源是**聚类自己的失败记录**，与转写混淆
 # 表互补——两者都独立于当前判据的打分。
-CLUSTER_LEAK_FAMILIES = [
-    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
-    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"),
-]
+# 单一事实源在 match.NEVER_MATCH_FAMILIES（库级 never-match 用同一张表）。
+# 彖/象：502fa04 轮实测混簇（易类文本 彖曰/象曰 都高频）。注意 彖 在
+# PP-OCR 字表之外（G5 的 1.20% 结构性天花板名单），OCR 载体永远发不出
+# equal 的 彖 实例，这对在载体升级前不会物化——名单先挂上。
+CLUSTER_LEAK_FAMILIES = NEVER_MATCH_FAMILIES
 MAX_LEAK_PAIRS_PER_FAMILY = 3
 
 
@@ -222,8 +224,11 @@ def ink_extreme_same_pairs(labels, ink_of: dict[str, float],
 
 def build_align_shard(book: str, out_dir: Path, output_root: Path,
                       corpus: Path, body_pages: set[str],
-                      max_instances: int, seed: int, commit: str) -> dict:
-    labels, stats = label_book(book, output_root / book, corpus, pages=body_pages)
+                      max_instances: int, seed: int, commit: str,
+                      carrier: Path | None = None) -> dict:
+    slots = carrier_slots(carrier) if carrier else None
+    labels, stats = label_book(book, output_root / book, corpus,
+                               pages=body_pages, slots_by_page=slots)
     page_stats = summarize(stats)
 
     index = {}
@@ -285,6 +290,7 @@ def build_align_shard(book: str, out_dir: Path, output_root: Path,
         "pipeline_version": commit,
         "label_origin": "align",
         "shard_id": f"{book}/body-{len(chosen)}pages",
+        "carrier": "rapidocr-top1-s2t" if carrier else "phase6-ranked",
         "feature_backend": FEATURE_BACKEND,
         "norm_params": norm_params(),
         "pages": sorted(chosen, key=int),
@@ -404,6 +410,32 @@ def build_human_shard(out_dir: Path, store: Path, commit: str) -> dict:
                       "origin": f"human/{p['origin']}"
                                 + ("+review-correction" if rel != p["relation"] else "")})
 
+    # 漏网家族对（人工标签是三个分片里最干净的两端）。P3 轮实锤：
+    # 151:8:3(論)×40:2:4(諭) 对级 same（cov=0.9987, wmax=1）在新旧归一图上
+    # 都成立——此前 human 分片 purity 1.0 只是合并顺序的运气。钉死进回归。
+    by_char_h: dict[str, list[str]] = defaultdict(list)
+    for i in instances:
+        by_char_h[i["char"]].append(i["instance_id"])
+    seen_pairs = {frozenset((p["a"], p["b"])) for p in pairs}
+    pinned = [("book9all:151:8:3", "book9all:40:2:4",
+               "諭/論 对级漏网实锤（cov=0.9987, wmax=1，穿透完美档）"),
+              ("book9all:151:8:3", "book9all:43:5:19",
+               "諭/論 对级漏网实锤（cov=0.9930, wmax=9）")]
+    for a, b, note in pinned:
+        if a in char_of and b in char_of and frozenset((a, b)) not in seen_pairs:
+            seen_pairs.add(frozenset((a, b)))
+            pairs.append({"a": a, "b": b, "relation": "diff",
+                          "origin": "cluster_leak", "note": note})
+    for c1, c2 in CLUSTER_LEAK_FAMILIES:
+        a_ids, b_ids = sorted(by_char_h.get(c1, [])), sorted(by_char_h.get(c2, []))
+        for k in range(min(MAX_LEAK_PAIRS_PER_FAMILY, len(a_ids), len(b_ids))):
+            if frozenset((a_ids[k], b_ids[k])) in seen_pairs:
+                continue
+            seen_pairs.add(frozenset((a_ids[k], b_ids[k])))
+            pairs.append({"a": a_ids[k], "b": b_ids[k], "relation": "diff",
+                          "origin": "cluster_leak",
+                          "note": f"聚类实测漏网家族 {c1}/{c2}"})
+
     expected = {
         "source_item": SOURCE_ITEM,
         "book": "book9all",
@@ -446,6 +478,9 @@ def main() -> None:
     ap.add_argument("--pipeline-rev", default=PIPELINE_REV,
                     help="从 git 的这一版取 phase4/phase6（transcription 与切分必须同版）；"
                          "传空串则用工作区 output/")
+    ap.add_argument("--carrier-dir", default=None,
+                    help="OCR 载体目录（含 carrier_{book}.jsonl，"
+                         "由 scripts/build_ocr_carrier.py 生成）。给定时不再依赖 phase6 转写")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--page-type", default="../open-guji-dataset/page-type/expected.json")
     ap.add_argument("--glyph-store", default="glyph_store")
@@ -468,8 +503,24 @@ def main() -> None:
                 if g["book"] == book and g["page_type"] == "body"}
         out_dir = dataset / "samples" / name
         out_dir.mkdir(parents=True, exist_ok=True)
+        if args.carrier_dir:
+            carrier = Path(args.carrier_dir) / f"carrier_{book}.jsonl"
+        else:
+            # 默认找产物目录里的载体（build_ocr_carrier.py 的推荐落点：
+            # 与 phase4 同目录，materialize_rev 会连带取到，天然同版）。
+            # 载体入库晚于 PIPELINE_REV 时 archive 里没有 → 回落工作区
+            # output/（载体本来就是对 PIPELINE_REV 的切分构建的）。
+            carrier = None
+            for cand in (output_root / book / "phase4_chars" / "ocr_carrier.jsonl",
+                         Path("output") / book / "phase4_chars" / "ocr_carrier.jsonl"):
+                if cand.exists():
+                    carrier = cand
+                    break
+            if carrier is None:
+                print(f"  警告：{book} 无 OCR 载体，回落 phase6 转写（可能全 <unk>）")
         st = build_align_shard(book, out_dir, output_root, Path(args.corpus),
-                               body, args.max_instances, args.seed, commit)
+                               body, args.max_instances, args.seed, commit,
+                               carrier=carrier)
         write_info(out_dir, {
             "id": name, "source": SOURCE_ITEM, "source_item": SOURCE_ITEM,
             "book": book,
