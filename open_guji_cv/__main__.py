@@ -441,6 +441,17 @@ def cmd_recognize(args):
     print(json.dumps(summary, ensure_ascii=False))
 
 
+def _general_corpus_paths(args):
+    """--general-corpus 解析：显式路径 > 自动发现 corpus/external/*.txt；
+    传 none 关闭混合。"""
+    if args.general_corpus:
+        if any(str(p).lower() == "none" for p in args.general_corpus):
+            return None
+        return args.general_corpus
+    found = sorted(Path("corpus/external").glob("*.txt"))
+    return found or None
+
+
 def cmd_seed(args):
     """逐页进库（种子，设计 §3.5）：双信号 + 六条疑问判定 → phase9_seed/。
 
@@ -473,6 +484,7 @@ def cmd_seed(args):
                             prob_threshold=args.prob_threshold,
                             context_margin=args.context_margin,
                             solo_cov=args.match_solo_cov,
+                            general_corpus=_general_corpus_paths(args),
                             edition=args.edition)
     finally:
         db.close()
@@ -865,6 +877,11 @@ def main():
     p.add_argument("--context-margin", type=float, default=0.70,
                    help="上下文通道的 margin 准入阈（用户实审 303 条裁决"
                         "重标定：≥0.70 全对；默认 0.70）")
+    p.add_argument("--general-corpus", action="append", default=None,
+                   help="通用语料路径（可给多次；缺省自动发现 corpus/"
+                        "external/*.txt）。与本书语料线性混合成上下文 LM"
+                        "（本书 0.9 / 通用 0.1，charset_and_lm.md §二）；"
+                        "给 --general-corpus none 可关闭混合")
     p.add_argument("--match-solo-cov", type=float, default=0.99,
                    help="库匹配单独通道的 cov 阈：无整理本锚定时，库内"
                         "形状验证 cov ≥ 此值直接进库（默认 0.99；0.98 "

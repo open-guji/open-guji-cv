@@ -466,6 +466,24 @@ def test_admission_decision_match_solo():
                               match_wmax=12.0) == (True, "match_solo")
 
 
+def test_build_seed_lm_mixture_and_cache(tmp_path):
+    """LM 混合：无通用语料退化为纯本书；有则线性混合并落盘缓存。"""
+    from open_guji_cv.clustering.seeding import build_seed_lm
+    book_text = "四庫全書總目提要"
+    assert build_seed_lm(book_text, None).name == "ngram"
+    gen = tmp_path / "general.txt"
+    gen.write_text("欽定四庫全書\n" * 50, encoding="utf-8")
+    lm = build_seed_lm(book_text, [gen])
+    assert lm.name.startswith("mix(")
+    assert (tmp_path / ".general_lm_cache.json").exists()
+    # 二次构造走缓存（源未变）；源变了重训不炸
+    lm2 = build_seed_lm(book_text, [gen])
+    assert lm2.logp("庫", ("四",)) == lm.logp("庫", ("四",))
+    # 本书没见过、通用语料见过的搭配：混合后概率高于纯本书
+    pure = build_seed_lm(book_text, None)
+    assert lm.logp("定", ("欽",)) > pure.logp("定", ("欽",))
+
+
 def test_context_crosses_columns(seeded):
     """列首/列尾的上下文接邻列（prev_/next_ 字段）。"""
     q = _queue(seeded)

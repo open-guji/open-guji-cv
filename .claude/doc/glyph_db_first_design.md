@@ -247,3 +247,41 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
   char-ocr 集标定；已进库实例改判的 amend 语义留待重放机制实现；
   残余混入图块的**手动抹除**（画布橡皮擦，抹后字形以 human_edited
   provenance 入库）作为审查页下一步增强。
+
+### 7.2 自动通道全谱（vol01 前 11 页 6~12 轮实审逐步定型，2026-08-24）
+
+用户 1900+ 条真实裁决把最初的「零疑问才自动」扩成六条通道。**OCR 的
+置信度不参与任何自动判断**（实测 100% 也照样认错形近字），它只供审查
+候选；例外是 match_solo 的残差窗防线用它的**字符**读数当第二证据。
+
+| 通道 | 条件 | provenance | 标定依据 |
+|---|---|---|---|
+| 常规 | 过闸对齐 × 载体一致 + 六条疑问全不命中 | `align` | 协议原案 |
+| dual_degraded | 双信号一致 + 仅 degraded_crop | `align` | 实审 58/58 全准 |
+| match_ref | 库 verify same × 整理本同字（语义层比）| `align` | 进库字取**库匹配形**（「之」页 OCR 报「芝」实锤：无对齐时 proposed 曾误取 OCR 字）|
+| match_solo | **无整理本参照** + 库内 cov ≥ 0.99 | `match` | 初值 0.98 首日即出压线错（揀 对库内 棟 0.9802，扌/木 之差恰好全落一个 12×12 残差窗，wmax 13）→ 用户裁定 0.99；三道防线：护栏（never_match/conflict）、异语义对手同到阈档即禁、wmax > MISS_WMAX 时需 OCR 字符背书 |
+| context | 锚定页 + 语料字入池（fuse_priors extra，权重 2.5）+ 同列前文 LM，语义层 margin ≥ 0.70 | `context` | 303 条实审：margin ≥ 0.70 → 198/198 全对（覆盖 65.3%）；语义层量竞争、字形层选形（semantic_margin：珎/珍 同语义分票不摊薄 margin，进库仍取图上精确异体）|
+| nonchar | R1 blank（去噪墨量 <1%）/ R2 tail_junk（锚定页列尾 + 无参照 + OCR 非汉字或 prob<0.3）| —（not_a_char）| 1198 已定真字零误杀 |
+
+配套机制（同期落地）：
+
+- **语料可多份**（`--corpus` 重复给）：主整理本 + 用户自补的奏折/上谕
+  文本拼接后锚定/参考/LM 三处同源。第 9 页即用户在审查页逐字整理后
+  按列拼回 `corpus/vol01_supplement.txt` 的闭环示范。
+- **LM 混合已接线**（charset_and_lm.md §二标定的落地）：`build_seed_lm`
+  = 本书 3-gram 0.9 + 通用语料（daizhige，`--general-corpus`，缺省自动
+  发现 `corpus/external/*.txt`）0.1 线性插值；通用 LM 训练一次落盘缓存。
+- **门槛化是 LM 的唯一正确用法**（context-correction 集 1681 真实槽位
+  实测）：对含库匹配证据的强融合先验做**无条件重排**，λ 从 0.10 扫到
+  0.95 全部净亏（0.95 仍 救17/坏34）；margin ≥ 0.70 门槛化后混合 LM
+  +2.32%（救 41 / 坏 2），混合优于纯本书（坏 10）与纯通用（救 30）两端。
+- **重置纪律**（第 14 页 exemplar 残留实锤）：重播一页必须连
+  `admissions/instances/derived/exemplars` 四表 + 空 glyph 一起清，
+  只清 admissions 会让旧 exemplar 自匹配污染 match 通道。
+- 审查页为**整页 publish** 的自含 Artifact；裁决以 GUJI-SEED-EVENT 行
+  嵌在页内，回收前先读线上版（用户边审边发布不丢事件）。
+
+截至 2026-08-24：vol01 第 4~14 页 1916 字位——自动 1165（61%）、human
+确认 483 + 仅定字 46、非字 32、跳过积压 4、待审 186（第 11 页 157 +
+第 14 页 29）。库 1648 例 / 607 字（align 1106 / human 473 / match 56 /
+context 13）。

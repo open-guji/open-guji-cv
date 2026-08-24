@@ -46,13 +46,139 @@ def git_rev(path: Path) -> str:
         return "unknown"
 
 
+def build_from_seed(book_dir: Path, dataset: Path, split: str) -> None:
+    """--from-seed：从 phase9_seed 队列（逐页进库的已定字位）冻结候选。
+
+    与 phase6 模式的差别：金标是**人工审查/进库协议**产出（human 分层
+    可信度最高，正是 doc/context-correction.md 要求分层报告的那一层）；
+    候选 = fuse_priors(库匹配 cov ∪ OCR top1 s2t 扩展) 的融合先验快照
+    ——正好是 seed 上下文通道 LM 介入前看到的分布。context 通道自动
+    进库的字位**不入样本**（金标由被测 LM 产出，循环论证）。
+    """
+    import sys
+    sys.path.insert(0, str(REPO))
+    from open_guji_cv.clustering.recognize_flow import fuse_priors
+    from open_guji_cv.clustering.variants import VariantMap
+
+    vpath = REPO / "config" / "charset" / "variants.tsv"
+    vm = VariantMap.load(vpath if vpath.exists() else None)
+    book = book_dir.name
+    qpath = book_dir / "phase9_seed" / "queue.jsonl"
+    rows = [json.loads(l) for l in qpath.read_text(encoding="utf-8").splitlines()
+            if l.strip()]
+
+    ORIGIN = {"human": "human", "align": "align", "match": "align",
+              "context": None}          # context 金标循环，剔除
+    DECIDED = {"confirmed", "confirmed_label_only", "auto_admitted"}
+
+    by_page: dict[str, dict[int, list[dict]]] = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        by_page[r["page"]][r["col"]].append(r)
+
+    samples_dir = dataset / "context-correction" / "samples"
+    samples_dir.mkdir(parents=True, exist_ok=True)
+    n_cols = n_slots = n_ctx_dropped = 0
+    gold_in = gold_top1 = 0
+    written = []
+    for page in sorted(by_page, key=lambda p: int(p)):
+        cols = by_page[page]
+        col_order = sorted(cols)
+        gold_text = {}
+        for c in col_order:
+            cols[c].sort(key=lambda r: r["idx"])
+            gold_text[c] = "".join(r["decided_char"] or "□" for r in cols[c]
+                                   if r["status"] in DECIDED)
+        columns = []
+        origins = set()
+        for k, c in enumerate(col_order):
+            slots = []
+            for r in cols[c]:
+                if r["status"] not in DECIDED or not r.get("decided_char"):
+                    continue
+                prov = r.get("provenance") or "align"
+                if r["status"].startswith("confirmed"):
+                    prov = "human"
+                origin = ORIGIN.get(prov, "align")
+                if origin is None:
+                    n_ctx_dropped += 1
+                    continue
+                ocr = r.get("ocr") or {}
+                topk = [(ocr["char"], float(ocr.get("prob", 0.0)))] \
+                    if ocr.get("char") else []
+                db_cands = [(ch, cov) for ch, cov in
+                            (r.get("match") or {}).get("candidates") or []]
+                fused = sorted(fuse_priors(db_cands, topk).items(),
+                               key=lambda t: -t[1])
+                if not fused:
+                    continue
+                srcs = {ch for ch, _ in db_cands}
+                cands = [{"char": ch, "prob": round(p, 6),
+                          "source": "glyph" if ch in srcs else "rapidocr",
+                          "semantic": vm.semantic(ch)}
+                         for ch, p in fused]
+                g = r["decided_char"]
+                n_slots += 1
+                gold_in += g in {c0["char"] for c0 in cands}
+                gold_top1 += cands[0]["char"] == g
+                origins.add(origin)
+                slots.append({"index": r["idx"], "instance_id": r["instance_id"],
+                              "candidates": cands, "gold": g,
+                              "origin": origin, "frozen": True})
+            if not slots:
+                continue
+            columns.append({
+                "column_id": f"{book}:{page}:{c}",
+                "context": {
+                    "prev": gold_text.get(col_order[k - 1]) if k > 0 else None,
+                    "next": gold_text.get(col_order[k + 1])
+                            if k + 1 < len(col_order) else None,
+                },
+                "slots": slots})
+            n_cols += 1
+        if not columns:
+            continue
+        sample = samples_dir / f"{book}_seed_{page}"
+        sample.mkdir(exist_ok=True)
+        label = "human" if origins == {"human"} else "align"
+        (sample / "expected.json").write_text(json.dumps({
+            "source_item": book, "pipeline_version": git_rev(REPO),
+            "label_origin": label, "split": split, "page": page,
+            "corpus": "phase9_seed 进库协议（逐槽位 origin 字段细分 human/align）",
+            "columns": columns,
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        (sample / "info.json").write_text(json.dumps({
+            "id": sample.name, "placeholder": False,
+            "source": f"open-guji-cv {book_dir.as_posix()} phase9_seed",
+            "source_item": book,
+            "description": f"{book} 第 {page} 页种子队列已定字位：融合先验冻结 + 进库金标",
+            "tags": [label, "frozen-candidates", "seed-queue", book],
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        written.append(sample.name)
+
+    print(json.dumps({
+        "samples": len(written), "columns": n_cols, "slots": n_slots,
+        "context_origin_dropped": n_ctx_dropped,
+        "gold_in_candidates_rate": round(gold_in / n_slots, 4) if n_slots else 0,
+        "baseline_top1": round(gold_top1 / n_slots, 4) if n_slots else 0,
+    }, ensure_ascii=False, indent=1))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="构建 context-correction 测试集")
     ap.add_argument("book_out_dir")
-    ap.add_argument("--corpus", required=True)
+    ap.add_argument("--corpus", required=False, default=None)
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--split", default="test", choices=["train", "test"])
+    ap.add_argument("--from-seed", action="store_true",
+                    help="改从 phase9_seed 队列建样本（人工/进库金标；"
+                         "context 通道字位剔除）")
     args = ap.parse_args()
+
+    if args.from_seed:
+        build_from_seed(Path(args.book_out_dir), Path(args.dataset), args.split)
+        return
+    if not args.corpus:
+        raise SystemExit("phase6 模式需要 --corpus")
 
     import sys
     sys.path.insert(0, str(REPO))
