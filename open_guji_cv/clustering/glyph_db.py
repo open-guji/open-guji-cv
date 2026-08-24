@@ -458,7 +458,12 @@ class GlyphDB:
                LEFT JOIN sources s ON s.source_id = i.source_id""",
             (self._feat_kind(),)).fetchall()
         if rows:
-            feats = np.stack([np.frombuffer(r[5], np.float32) for r in rows])
+            # 預分配後逐行填充：np.stack 要先攢齊 N 個小數組再拷一份，
+            # 幾十萬行時峰值內存翻倍
+            dim = len(rows[0][5]) // 4
+            feats = np.empty((len(rows), dim), dtype=np.float32)
+            for i, r in enumerate(rows):
+                feats[i] = np.frombuffer(r[5], np.float32)
         else:
             feats = np.zeros((0, 1), dtype=np.float32)
         self._cache_stamp = stamp
