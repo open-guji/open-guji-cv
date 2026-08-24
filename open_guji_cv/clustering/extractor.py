@@ -25,6 +25,9 @@ from .normalize import NORM_SIZE, normalize_patch
 BINARY_THRESHOLD_PATCH = 128
 PADDING_RATIO = 0.08
 MIN_INK_RATIO = 0.01
+TIGHT_MARGIN = 2           # 裁紧余量：图块=本字墨迹外接框 ± 此像素
+                           # （2026-08-24 用户定版：框要完完全全包住字即可，
+                           # 左右贴墙的空白装的从来不是字，是边框残渣）
 BOUNDARY_BAND = 0.10       # 图块上下各此比例的高度算「边缘带」
 BOUNDARY_INK_T = 0.025     # 边缘带墨量占全图块墨量超此 → 标 boundary_ink
 
@@ -1037,6 +1040,28 @@ class CharExtractor:
                 if aspect > 1.8 or aspect < 0.3:
                     flags.append("bad_seg")
 
+                # 夹注缝在**格框图块**上量（判据阈值按格框几何标定：单字
+                # 只占 0.6~0.7 列宽是唯一不重叠的量，裁紧后谁都是满宽）
+                jz_center = _jiazhu_gap_center(patch)
+
+                # 裁紧（2026-08-24 用户定版）：图块**完完全全包住本字墨迹**
+                # ±TIGHT_MARGIN，左右不再留到墙的空白——贴墙的空白装的从来
+                # 不是字，是边框/界行残渣。归属清理已把外人墨抹掉，剩下的
+                # 墨迹外接框就是本字。自检 flags 全部在裁紧**前**的格框图块
+                # 上算完（边缘带比例等阈值是按格框标定的）。判空格保持格框。
+                ty, tx = np.nonzero(patch < BINARY_THRESHOLD_PATCH)
+                if ty.size:
+                    tx0 = max(0, int(tx.min()) - TIGHT_MARGIN)
+                    tx1 = min(patch.shape[1], int(tx.max()) + 1 + TIGHT_MARGIN)
+                    ty0 = max(0, int(ty.min()) - TIGHT_MARGIN)
+                    ty1 = min(patch.shape[0], int(ty.max()) + 1 + TIGHT_MARGIN)
+                    x0 = float(sx0 + tx0)
+                    x1 = float(sx0 + tx1)
+                    py1 = float(sy0 + y0 + ty1)
+                    py0 = float(sy0 + y0 + ty0)
+                    patch = patch[ty0:ty1, tx0:tx1]
+                    ink = _patch_ink_ratio(patch)
+
                 inst = CharInstance(
                     id=make_id(book, page, col_no, idx),
                     book=book, page=page, col=col_no, idx=idx,
@@ -1046,12 +1071,12 @@ class CharExtractor:
                     ocr_confidence=float(cell.get("confidence", 0.0)),
                     patch_path=f"patches/{page}/{col_no}_{idx}.png",
                     ink_ratio=round(ink, 4),
-                    height=round(cell_h, 2),
-                    width=round(col_w, 2),
+                    height=round(py1 - py0, 2),
+                    width=round(x1 - x0, 2),
                     flags=flags,
                 )
                 results.append((inst, patch))
-                col_entries.append((idx, _jiazhu_gap_center(patch), inst))
+                col_entries.append((idx, jz_center, inst))
             # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
             # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
             for j in flag_jiazhu_runs([(i, c) for i, c, _ in col_entries]):
