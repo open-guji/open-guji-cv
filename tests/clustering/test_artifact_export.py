@@ -209,3 +209,29 @@ def test_multi_book_batch_keys_and_dispatch(synth_book, tmp_path):
     ])
     r = ingest_events(synth_book, text)
     assert r["new"] == 1 and r["other_books"] == 1 and not r["errors"]
+
+
+def test_candidates_carry_gloss_annotations():
+    """候选注记：释义/拼音随 gloss 表出现，候选间异体/通假关系要标出来。"""
+    from open_guji_cv.clustering.review.artifact_export import _with_gloss
+
+    cands = [{"char": "仍", "p": 0.6}, {"char": "乃", "p": 0.3},
+             {"char": "為", "p": 0.1}]
+    out = _with_gloss(cands)
+    assert [c["char"] for c in out] == ["仍", "乃", "為"]   # 顺序与内容不变
+    rel_of = {c["char"]: c.get("rel", []) for c in out}
+    assert any(r["char"] == "乃" and r["kind"] == "通假"
+               for r in rel_of["仍"])                        # 仍↔乃 通假
+    assert all(r["char"] != "為" for r in rel_of["仍"])      # 无关字不标
+    # gloss 表在（本仓库随带 unihan 层）→ 拼音应就位；表缺失时允许降级
+    from open_guji_cv.gloss import gloss_of
+    if gloss_of("仍"):
+        assert out[0]["py"]
+
+
+def test_render_candidates_includes_rel_and_gloss():
+    from open_guji_cv.clustering.review.artifact_export import (
+        _render_candidates, _with_gloss)
+    html = _render_candidates({"candidates": _with_gloss(
+        [{"char": "仍", "p": 0.6}, {"char": "乃", "p": 0.4}])})
+    assert "通假" in html and 'class="cand"' in html
