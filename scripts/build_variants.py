@@ -76,6 +76,10 @@ UNIHAN_PROPS = (
 CJKVI_FILES = {
     "twedu-variants.txt": "twedu",
     "hydzd-variants.txt": "hydzd",
+    # 通假字（漢語大字典）——不是异体字：借音假字与本字是不同的词，
+    # 单独打 borrowed 标签，永不进高置信异体集合；审阅界面only作
+    # 「A 通 B」提示用
+    "hydzd-borrowed.txt": "hydzd-borrowed",
     "dypytz-variants.txt": "dypytz",
     "cjkvi-simplified.txt": "cjkvi-simplified",
 }
