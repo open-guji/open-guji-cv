@@ -535,6 +535,53 @@ def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     return out
 
 
+# ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
+# 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
+# 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
+# 输出（几乎全在 idx 末端，tail 层 48 格里 18 个）。判据在**格框图块**
+# （裁紧前、清理后）上算。危险邻例是列尾的扁字（实测「二」：两笔各高
+# ~18px 但只占 0.78 墙距、两笔纵向跨度≈整格），故「字证据」看两条：
+# 非满宽连通体的纵向总跨度，或单个够高的连通体。
+TAIL_JUNK_W2W = 0.92       # 连通体宽 ≥ 此比例 × 墙距 → 满宽条渣（字笔画到
+                           #   文字带就停，条痕物理上穿墙，裁到图块边）
+TAIL_JUNK_W2W_H = 0.35     # 满宽体高 ≥ 此比例 × 格高 → 不是条渣是「字粘条」
+                           #   （字与条连成一个连通体时整体满宽；实测纯条渣
+                           #   高 ≤0.26 格，字粘条 ≥0.6 格）
+TAIL_JUNK_MIN_INK = 60     # 字证据连通体的最小墨量（px），滤碎点
+TAIL_JUNK_CC_H = 0.30      # 单连通体高 ≥ 此比例 × 格高 → 直接是字
+TAIL_JUNK_SPAN = 0.35      # 字证据连通体纵向总跨度 ≥ 此比例 × 格高 → 字
+TAIL_JUNK_ONE_INK = 1000   # 孤「一」逃生口：单连通体墨量下限（实测条渣
+TAIL_JUNK_ONE_W = 0.45     #   非满宽块 ≤725）、宽度下限（× 墙距）
+TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）
+
+
+def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
+    """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    if not binary.any():
+        return True
+    W = patch.shape[1]
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    top, bot = None, None
+    for k in range(1, n):
+        x, y, w, h, area = (int(st[k, 0]), int(st[k, 1]), int(st[k, 2]),
+                            int(st[k, 3]), int(st[k, 4]))
+        if w >= TAIL_JUNK_W2W * W and h < TAIL_JUNK_W2W_H * cell_h:
+            continue                      # 满宽且矮：条渣，不算字证据
+        if area < TAIL_JUNK_MIN_INK or h < 4:
+            continue                      # 碎点
+        if h >= TAIL_JUNK_CC_H * cell_h:
+            return False                  # 够高，直接是字
+        if (area >= TAIL_JUNK_ONE_INK and w >= TAIL_JUNK_ONE_W * W
+                and h >= TAIL_JUNK_ONE_H * cell_h):
+            return False                  # 孤「一」：矮但宽厚墨足
+        top = y if top is None else min(top, y)
+        bot = y + h if bot is None else max(bot, y + h)
+    if top is not None and (bot - top) >= TAIL_JUNK_SPAN * cell_h:
+        return False                      # 「二/三」类：多笔跨度撑起整格
+    return True
+
+
 def _patch_ink_ratio(gray: np.ndarray) -> float:
     """Otsu 二值化后的暗像素占比（粗略墨迹密度，供分块与异常过滤）。"""
     if gray.size == 0:
@@ -998,6 +1045,11 @@ class CharExtractor:
             else:
                 boxes, owner = {}, None
 
+            # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
+            # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
+            order = [i for i, _t, _b in local]
+            end_cand = set(order[:2] + order[-2:])
+            end_patches: dict[int, tuple[np.ndarray, float]] = {}
             for cell, (idx, ltop, lbot) in zip(cells, local):
                 cell_h = lbot - ltop
                 pad = cell_h * self.padding_ratio
@@ -1024,6 +1076,8 @@ class CharExtractor:
 
                 ink = _patch_ink_ratio(patch)
                 flags: list[str] = []
+                if idx in end_cand:
+                    end_patches[idx] = (patch.copy(), cell_h)
                 if (owner is not None and box is None) or ink < self.min_ink_ratio:
                     flags.append("suspect_empty")
                 # 缺陷自检：确定层按成因分开标，疑似层兜底送审查。
@@ -1077,6 +1131,20 @@ class CharExtractor:
                 )
                 results.append((inst, patch))
                 col_entries.append((idx, jz_center, inst))
+            # 列端渣格闸：从两端向内走（各最多 2 格），渣格转 empty +
+            # tail_junk 旗，遇到第一格真字停。判据在裁紧前的格框图块上算。
+            by_idx = {i: inst for i, _c, inst in col_entries}
+            for seq in (order[:2], order[::-1][:2]):
+                for i in seq:
+                    info, inst = end_patches.get(i), by_idx.get(i)
+                    if info is None or inst is None:
+                        break
+                    if "tail_junk" in inst.flags:
+                        continue
+                    if not is_end_cell_junk(*info):
+                        break
+                    inst.cell_type = "empty"
+                    inst.flags.append("tail_junk")
             # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
             # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
             for j in flag_jiazhu_runs([(i, c) for i, c, _ in col_entries]):
