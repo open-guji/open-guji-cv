@@ -1,0 +1,346 @@
+<title>三信號進庫策略</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f7f4ec; --card:#fffdf7; --sunk:#efe9db;
+  --ink:#241f1a; --ink-2:#5c5347; --ink-3:#8b8073;
+  --line:#ded5c2; --line-2:#c9bda5;
+  --go:#2f6b4f; --go-bg:#e4efe6; --go-line:#9dc0a9;
+  --cond:#8a6a17; --cond-bg:#f6eed6; --cond-line:#d3bd83;
+  --stop:#a63b2a; --stop-bg:#f7e6e1; --stop-line:#dba99c;
+  --accent:#a63b2a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#1a1713; --card:#232019; --sunk:#141210;
+    --ink:#ece5d6; --ink-2:#b3a894; --ink-3:#867c6d;
+    --line:#38322a; --line-2:#4d4438;
+    --go:#8fc9a4; --go-bg:#1d2c23; --go-line:#3d5c48;
+    --cond:#d9bb6c; --cond-bg:#2c2718; --cond-line:#5c5030;
+    --stop:#e0917f; --stop-bg:#2e1d19; --stop-line:#5f382f;
+    --accent:#e0917f;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#1a1713; --card:#232019; --sunk:#141210;
+  --ink:#ece5d6; --ink-2:#b3a894; --ink-3:#867c6d;
+  --line:#38322a; --line-2:#4d4438;
+  --go:#8fc9a4; --go-bg:#1d2c23; --go-line:#3d5c48;
+  --cond:#d9bb6c; --cond-bg:#2c2718; --cond-line:#5c5030;
+  --stop:#e0917f; --stop-bg:#2e1d19; --stop-line:#5f382f;
+  --accent:#e0917f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Serif TC","Songti TC","SimSun",serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased}
+main{max-width:60rem;margin:0 auto;padding:2.5rem 1.25rem 5rem;
+  display:flex;flex-direction:column;gap:3rem}
+code,.num,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums}
+
+header{display:flex;flex-direction:column;gap:.8rem;
+  border-bottom:2px solid var(--line-2);padding-bottom:1.6rem}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.72rem;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
+h1{font-size:clamp(1.6rem,4vw,2.3rem);margin:0;letter-spacing:.06em;
+  font-weight:700;text-wrap:balance}
+.lede{margin:0;color:var(--ink-2);max-width:44rem;font-size:1.02rem}
+.basis{font-family:"IBM Plex Mono",monospace;font-size:.78rem;
+  color:var(--ink-3);letter-spacing:.02em}
+
+h2{font-size:1.12rem;letter-spacing:.1em;margin:0 0 .2rem;font-weight:600;
+  display:flex;align-items:baseline;gap:.7rem}
+h2 .h2n{font-family:"IBM Plex Mono",monospace;font-size:.78rem;
+  color:var(--accent);letter-spacing:.1em}
+section{display:flex;flex-direction:column;gap:1.1rem}
+.note{color:var(--ink-2);margin:0;max-width:46rem}
+.note b{color:var(--ink)}
+
+/* 信号强度 */
+.sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem}
+.sig{background:var(--card);border:1px solid var(--line);border-radius:3px;
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.55rem}
+.sig h3{margin:0;font-size:1rem;letter-spacing:.06em;font-weight:600}
+.sig .role{font-size:.78rem;color:var(--ink-3);letter-spacing:.04em}
+.bar{height:6px;background:var(--sunk);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--fill,var(--ink-3))}
+.sig .val{font-family:"IBM Plex Mono",monospace;font-size:1.5rem;font-weight:600;
+  line-height:1}
+.sig .val small{font-size:.72rem;font-weight:400;color:var(--ink-3);
+  margin-left:.4rem;letter-spacing:.02em}
+.sig.s-hi{--fill:var(--go)} .sig.s-hi .val{color:var(--go)}
+.sig.s-mid{--fill:var(--cond)} .sig.s-mid .val{color:var(--cond)}
+.sig.s-lo{--fill:var(--stop)} .sig.s-lo .val{color:var(--stop)}
+
+/* 表格通用 */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:.55rem .8rem;text-align:left;border-bottom:1px solid var(--line)}
+thead th{background:var(--sunk);font-size:.75rem;letter-spacing:.12em;
+  color:var(--ink-2);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",monospace}
+.rowhead{font-weight:600;white-space:nowrap}
+
+/* 判定网格 */
+.cell{display:flex;flex-direction:column;gap:.15rem;min-width:6.5rem}
+.cell .pol{font-size:.74rem;letter-spacing:.08em;font-weight:600}
+.cell .met{font-family:"IBM Plex Mono",monospace;font-size:.76rem;color:var(--ink-3)}
+td.go{background:var(--go-bg)} td.go .pol{color:var(--go)}
+td.cond{background:var(--cond-bg)} td.cond .pol{color:var(--cond)}
+td.stop{background:var(--stop-bg)} td.stop .pol{color:var(--stop)}
+.legend{display:flex;flex-wrap:wrap;gap:1.2rem;font-size:.8rem;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:.4rem}
+.sw{width:.85rem;height:.85rem;border-radius:2px;border:1px solid var(--line-2);display:inline-block}
+.sw.go{background:var(--go-bg);border-color:var(--go-line)}
+.sw.cond{background:var(--cond-bg);border-color:var(--cond-line)}
+.sw.stop{background:var(--stop-bg);border-color:var(--stop-line)}
+
+/* 反例 */
+.traps{display:grid;grid-template-columns:repeat(auto-fit,minmax(13.5rem,1fr));gap:.9rem}
+.trap{background:var(--stop-bg);border:1px solid var(--stop-line);border-radius:3px;
+  padding:.85rem 1rem;display:flex;flex-direction:column;gap:.5rem}
+.trap .id{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink-3)}
+.duel{display:flex;align-items:center;gap:.55rem;font-size:1.9rem;line-height:1}
+.duel .wrong{color:var(--stop);text-decoration:line-through;
+  text-decoration-thickness:2px}
+.duel .arrow{font-size:.9rem;color:var(--ink-3)}
+.duel .right{color:var(--go);font-weight:600}
+.trap .why{font-size:.8rem;color:var(--ink-2);line-height:1.55}
+.trap .why b{color:var(--ink)}
+
+/* 规则 */
+.rules{display:flex;flex-direction:column;gap:.7rem}
+.rule{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ln,var(--line-2));
+  border-radius:3px;padding:.85rem 1.1rem;display:flex;flex-wrap:wrap;
+  align-items:baseline;gap:.4rem 1rem}
+.rule.ok{--ln:var(--go)} .rule.no{--ln:var(--stop)}
+.rule .rn{font-family:"IBM Plex Mono",monospace;font-size:.75rem;color:var(--ink-3);
+  letter-spacing:.1em;min-width:2.2rem}
+.rule .txt{flex:1;min-width:16rem}
+.rule .sc{font-family:"IBM Plex Mono",monospace;font-size:.95rem;font-weight:600}
+.rule.ok .sc{color:var(--go)} .rule.no .sc{color:var(--stop)}
+.rule .sub{font-size:.78rem;color:var(--ink-3);width:100%;margin-top:-.1rem}
+
+.callout{background:var(--sunk);border:1px solid var(--line);border-radius:3px;
+  padding:1.1rem 1.25rem;display:flex;flex-direction:column;gap:.5rem}
+.callout h3{margin:0;font-size:.95rem;letter-spacing:.08em;font-weight:600}
+.callout p{margin:0;color:var(--ink-2);font-size:.92rem}
+.delta{font-family:"IBM Plex Mono",monospace;font-size:1.35rem;font-weight:600;color:var(--go)}
+footer{border-top:1px solid var(--line);padding-top:1.2rem;font-size:.8rem;
+  color:var(--ink-3);line-height:1.65}
+</style>
+<main>
+
+<header>
+  <div class="eyebrow">vol01 · 1916 字位 · 529 條人工裁決</div>
+  <h1>三信號進庫策略</h1>
+  <p class="lede">OCR、整理本、字形庫三路信號，什麼時候可以讓機器定字，什麼時候必須人看。
+  下面每一條都是從真實裁決裡量出來的，不是設計時拍的。</p>
+  <div class="basis">量法：以用戶人工裁決為真值。人審過的 529 條是<b>難例</b>——簡單的早被自動收走了，
+  所以這裡的準確率是<b>下界</b>：在難例上站得住的規則，全書必然更穩。</div>
+</header>
+
+<section>
+  <h2><span class="h2n">01</span>三路信號各自有多可信</h2>
+  <p class="note">先把「這個信號單獨說了算靠不靠譜」量清楚。結論很不對稱：
+  <b>整理本是最強的單信號，OCR 單獨用等於擲硬幣</b>。</p>
+  <div class="sigs">
+    <div class="sig s-lo">
+      <h3>OCR</h3>
+      <div class="role">每個字位都有 · 唯一全覆蓋的信號</div>
+      <div class="val">45.0%<small>難例 529 條</small></div>
+      <div class="bar"><i style="width:45%"></i></div>
+      <div class="role">它的價值是<b>提供候選</b>，不是下判斷。置信度也不可信——實測 100% 照樣認錯形近字。</div>
+    </div>
+    <div class="sig s-hi">
+      <h3>整理本</h3>
+      <div class="role">有整理本的頁才有 · 過閘 95.8% / 免閘 94.8%</div>
+      <div class="val">95.8%<small>過閘對齊 259 條</small></div>
+      <div class="bar"><i style="width:96%"></i></div>
+      <div class="role">免閘參考（沒過採信閘的逐位對照）也有 <span class="mono">94.8%</span>，
+      幾乎一樣可靠——這一格現在幾乎沒被利用。</div>
+    </div>
+    <div class="sig s-mid">
+      <h3>字形庫匹配</h3>
+      <div class="role">庫裡有這個字才有 · 可信度隨 cov 連續變化</div>
+      <div class="val">100%<small>same 檔 27 條</small></div>
+      <div class="bar"><i style="width:100%"></i></div>
+      <div class="role">但整體 top 候選只有 <span class="mono">50.1%</span>——
+      庫匹配<b>不是一個信號，是一條可信度曲線</b>，看 cov 落在哪。</div>
+    </div>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>庫匹配檔位</th><th class="n">難例條數</th><th class="n">說對</th><th class="n">準確率</th><th>讀法</th></tr></thead>
+      <tbody>
+        <tr><td class="rowhead mono">verify same</td><td class="n">27</td><td class="n">27</td><td class="n" style="color:var(--go)">100%</td><td>形狀完美檔，可單獨採信</td></tr>
+        <tr><td class="rowhead mono">cov ≥ 0.99</td><td class="n">9</td><td class="n">9</td><td class="n" style="color:var(--go)">100%</td><td>實測拐點就在這裡</td></tr>
+        <tr><td class="rowhead mono">cov ≥ 0.98</td><td class="n">83</td><td class="n">79</td><td class="n" style="color:var(--cond)">95.2%</td><td>4 條錯例——曾經的阈，已上調</td></tr>
+        <tr><td class="rowhead mono">cov ≥ 0.95</td><td class="n">165</td><td class="n">113</td><td class="n" style="color:var(--stop)">68.5%</td><td>只配當候選</td></tr>
+        <tr><td class="rowhead mono">cov &lt; 0.95</td><td class="n">215</td><td class="n">22</td><td class="n" style="color:var(--stop)">10.2%</td><td>基本沒有信息量</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="h2n">02</span>要害不是準確率，是錯誤相不相關</h2>
+  <p class="note">兩個信號能不能互相印證，取決於它們<b>會不會在同一個地方栽同樣的跟頭</b>。
+  三對組合實測出來差別極大——這一節是整套策略的地基。</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>兩信號一致時</th><th class="n">一致條數</th><th class="n">準確率</th><th>為什麼</th></tr></thead>
+      <tbody>
+        <tr><td class="rowhead">OCR × 整理本</td><td class="n">118</td><td class="n" style="color:var(--go)">100%</td>
+            <td>誤差源完全獨立：OCR 錯在形近，整理本錯在錄入/版本</td></tr>
+        <tr><td class="rowhead">整理本 × 字形庫</td><td class="n">144</td><td class="n" style="color:var(--go)">100%</td>
+            <td>文本證據 × 形狀證據，同源性為零</td></tr>
+        <tr><td class="rowhead" style="color:var(--stop)">OCR × 字形庫</td><td class="n">138</td><td class="n" style="color:var(--stop)">97.1%</td>
+            <td><b>不能當雙信號</b>——兩者被同一批形近字騙</td></tr>
+        <tr><td class="rowhead">三者全一致</td><td class="n">49</td><td class="n" style="color:var(--go)">100%</td>
+            <td>——</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">那 <b>4 條 OCR 與庫一齊說錯</b>的字位，值得逐條看——它們定義了整套護欄。
+  注意一個規律：<b>四條裡整理本全都是對的</b>。</p>
+  <div class="traps">
+    <div class="trap">
+      <div class="id">vol01:7:5:20</div>
+      <div class="duel"><span class="wrong">已</span><span class="arrow">實為</span><span class="right">巳</span></div>
+      <div class="why">OCR <b>0.87</b>、庫 cov <b>0.949</b> 同說「已」。已/巳 是 never-match 家族——
+      形狀判據天生打不過。</div>
+    </div>
+    <div class="trap">
+      <div class="id">vol01:10:3:10</div>
+      <div class="duel"><span class="wrong">人</span><span class="arrow">實為</span><span class="right">入</span></div>
+      <div class="why">OCR <b>0.95</b> 高置信照樣錯，庫 cov <b>0.905</b> 附和。
+      這條是「OCR 置信度不參與判斷」的直接依據。</div>
+    </div>
+    <div class="trap">
+      <div class="id">vol01:10:9:10</div>
+      <div class="duel"><span class="wrong">日</span><span class="arrow">實為</span><span class="right">曰</span></div>
+      <div class="why">裘<b>曰</b>修之「曰」。庫 cov <b>0.957</b>。此例催生了
+      日/曰 進 never-match 家族。</div>
+    </div>
+    <div class="trap">
+      <div class="id">vol01:7:6:3</div>
+      <div class="duel"><span class="wrong">今</span><span class="arrow">實為</span><span class="right">全</span></div>
+      <div class="why">圖塊被界行侵入（degraded），形狀證據本就不該採信。
+      cov <b>0.883</b> 遠在阈下。</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="h2n">03</span>判定網格：按信號在不在場分類</h2>
+  <p class="note">整理本三態（過閘對齊／免閘參考／無）× 庫匹配五檔，就是全部情形。
+  每格標的是<b>現行策略</b>與該格實測自動率。</p>
+  <div class="legend">
+    <span><i class="sw go"></i>可自動：雙路獨立證據一致</span>
+    <span><i class="sw cond"></i>有條件：靠單路強證據 + 護欄</span>
+    <span><i class="sw stop"></i>必人審：沒有可信證據</span>
+  </div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>整理本 ＼ 庫檔</th><th>same</th><th>≥0.99</th><th>≥0.98</th><th>≥0.95</th><th>&lt;0.95</th><th>無候選</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="rowhead">過閘對齊<br><span class="mono" style="font-size:.72rem;color:var(--ink-3)">n=1372</span></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">239 · 95%</span></div></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">45 · 91%</span></div></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">211 · 90%</span></div></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">378 · 81%</span></div></td>
+          <td class="cond"><div class="cell"><span class="pol">OCR 印證</span><span class="met">438 · 71%</span></div></td>
+          <td class="cond"><div class="cell"><span class="pol">OCR 印證</span><span class="met">61 · 66%</span></div></td>
+        </tr>
+        <tr>
+          <td class="rowhead">免閘參考<br><span class="mono" style="font-size:.72rem;color:var(--ink-3)">n=110</span></td>
+          <td class="cond"><div class="cell"><span class="pol">未利用</span><span class="met">6 · 0%</span></div></td>
+          <td class="cond"><div class="cell"><span class="pol">未利用</span><span class="met">2 · 0%</span></div></td>
+          <td class="cond"><div class="cell"><span class="pol">未利用</span><span class="met">14 · 0%</span></div></td>
+          <td class="cond"><div class="cell"><span class="pol">上下文</span><span class="met">33 · 3%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">48 · 2%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">7 · 43%</span></div></td>
+        </tr>
+        <tr>
+          <td class="rowhead">無語料<br><span class="mono" style="font-size:.72rem;color:var(--ink-3)">n=212</span></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">41 · 80%</span></div></td>
+          <td class="go"><div class="cell"><span class="pol">自動</span><span class="met">16 · 81%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">47 · 0%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">61 · 2%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">42 · 0%</span></div></td>
+          <td class="stop"><div class="cell"><span class="pol">人審</span><span class="met">5 · 0%</span></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><b>「免閘參考」整行是最大的閒置資產</b>：110 個字位幾乎全走人審，
+  可那一路信號本身有 94.8% 準確率。下一節就是為它設計的。</p>
+</section>
+
+<section>
+  <h2><span class="h2n">04</span>規則清單與實測成績</h2>
+  <p class="note">每條規則都在 529 條難例上回放過。<span class="mono">R2</span> 是這次分析新提的，
+  <span class="mono">R6</span> 列出來是為了說明<b>它為什麼不能用</b>。</p>
+  <div class="rules">
+    <div class="rule ok"><span class="rn">R1</span>
+      <span class="txt">整理本 × OCR 語義一致 → 進庫<br>
+        <span class="sub">現行「常規 / dual_degraded」通道</span></span>
+      <span class="sc">128/128 · 100%</span></div>
+    <div class="rule ok"><span class="rn">R2</span>
+      <span class="txt"><b>整理本 × 庫 top 候選一致 → 進庫（含免閘參考、不限 same 檔）</b><br>
+        <span class="sub">新提。比現行 match_ref 寬：現在要求庫必須是 verify same，且整理本須過閘</span></span>
+      <span class="sc">144/144 · 100%</span></div>
+    <div class="rule ok"><span class="rn">R4</span>
+      <span class="txt">無語料 + 庫 cov ≥ 0.99 → 進庫<br>
+        <span class="sub">現行 match_solo。阈從 0.98 上調，正是因為 0.98 檔有 4 條錯例</span></span>
+      <span class="sc">11/11 · 100%</span></div>
+    <div class="rule ok"><span class="rn">R5</span>
+      <span class="txt">無語料 + 庫 verify same → 進庫<br>
+        <span class="sub">形狀完美檔，R4 的特例</span></span>
+      <span class="sc">8/8 · 100%</span></div>
+    <div class="rule no"><span class="rn">R6</span>
+      <span class="txt">OCR × 庫 top 一致 → 進庫　<b>✗ 否決</b><br>
+        <span class="sub">看著能多清 96 條待審，但誤差相關——已/巳、人/入、日/曰、今/全 全在這裡漏過去</span></span>
+      <span class="sc">147/151 · 97.4%</span></div>
+  </div>
+  <div class="callout">
+    <h3>採納 R2 的預期收益</h3>
+    <p>在已定的 1694 個字位上回放：自動率
+      <span class="mono">69%</span> → <span class="delta">77%</span>，
+      少 <b>144</b> 條人審。命中的 33 條屬形近家族，整理本全部正確——
+      因為文本證據不受形狀干擾，這正是它能穿透 never-match 護欄的原因。</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="h2n">05</span>四條可以背下來的原則</h2>
+  <div class="tw">
+    <table>
+      <thead><tr><th>原則</th><th>依據</th></tr></thead>
+      <tbody>
+        <tr><td class="rowhead">整理本在場時，它有一票否決權</td>
+            <td>4 條 OCR×庫 一齊說錯的字位，整理本 4/4 全對</td></tr>
+        <tr><td class="rowhead">OCR 只供候選，置信度不參與判斷</td>
+            <td>難例上 45%；「人/入」那條 OCR 給 0.95 仍錯</td></tr>
+        <tr><td class="rowhead">庫匹配按 cov 分檔採信，0.99 是拐點</td>
+            <td>≥0.99 100%（n=9+27）；0.98 檔 95.2%，4 條錯例</td></tr>
+        <tr><td class="rowhead">湊雙信號要挑<b>誤差獨立</b>的兩路</td>
+            <td>文本×形狀 100%；OCR×形狀 97.4%（同源缺陷）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  數據源：<code>output/vol01/phase9_seed/queue.jsonl</code>（vol01 第 4–14 頁，1916 字位）。
+  真值取用戶人工裁決 529 條；準確率一律按語義層比較（異體同字不算錯），字形層仍保留精確異體。
+  網格中的「現自動率」含全部六條通道（常規 / dual_degraded / match_ref / match_solo / context / nonchar）。
+</footer>
+
+</main>
