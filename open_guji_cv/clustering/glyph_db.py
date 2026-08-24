@@ -513,6 +513,35 @@ class GlyphDB:
         self.conn.commit()
         return True
 
+    def refresh_instance_patch(self, instance_id: str, patch_png: bytes,
+                               norm: np.ndarray,
+                               bbox: list | None = None) -> bool:
+        """已進庫實例的圖塊被重切後，刷新庫裡的真源與全部派生。
+
+        重切（人工改 bbox 重裁）發生在進庫**之後**時，庫裡存的還是錯位的
+        舊圖塊——當 exemplar 被檢索到的是它，等於拿錯形當範例。這裡把
+        instances.patch_png/bbox、derived（norm/skeleton/feat）整套換掉，
+        並觸碰 exemplars.added_at 讓特徵矩陣常駐緩存失效（緩存戳含
+        MAX(added_at)，只換 derived 它不會察覺）。
+
+        admissions 審計行**不動**：進庫決定本身沒變，變的是圖塊。
+        返回是否確有此實例。
+        """
+        cur = self.conn.cursor()
+        if not cur.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                           (instance_id,)).fetchone():
+            return False
+        cur.execute(
+            "UPDATE instances SET patch_png=?, bbox=?, updated_at=? "
+            "WHERE instance_id=?",
+            (patch_png, json.dumps(bbox) if bbox is not None else None,
+             _now(), instance_id))
+        self._write_derived(cur, instance_id, norm)
+        cur.execute("UPDATE exemplars SET added_at=? WHERE instance_id=?",
+                    (_now(), instance_id))
+        self.conn.commit()
+        return True
+
     # ── 檢索 ─────────────────────────────────────────────
 
     def _exemplar_matrix(self):

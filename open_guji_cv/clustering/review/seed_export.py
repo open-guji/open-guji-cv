@@ -483,7 +483,7 @@ def _render_seed_card(e: dict) -> str:
 <div class="cands">{choices}
 <span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
 <button type="button" class="other-ok">确定</button></span>
-<button type="button" class="recrop-open" title="切分错位时改框重裁">重切</button>
+<button type="button" class="recrop-open" title="切分错位时改框重裁">重切</button><span class="tag" data-slot="rcdone"></span>
 <button type="button" class="nac"><kbd>N</kbd>非字</button>
 <button type="button" class="skip"><kbd>S</kbd>存疑跳过</button>
 <button type="button" class="noadm" title="图块混有无法剥离的残余时：确认的字只进标注结果，字形不进库当匹配范例"><kbd>B</kbd>字形不入库</button></div>
@@ -517,10 +517,10 @@ def _render_recrop(e: dict) -> str:
         '<button type="button" class="rc-nudge" data-d="up">↑ 整体上移</button>'
         '<button type="button" class="rc-nudge" data-d="down">↓ 下移</button>'
         '<button type="button" class="rc-nudge" data-d="reset">复位</button>'
-        '<button type="button" class="rc-ok">重切并用当前字进库</button>'
-        '<button type="button" class="rc-ok-noadm">重切·不入库</button>'
+        '<button type="button" class="rc-ok">确认重切</button>'
         '<button type="button" class="rc-cancel">取消</button>'
         '<span class="rc-info" data-slot="rcinfo"></span>'
+        '<span class="rc-info" data-slot="rcdone" style="color:var(--done)"></span>'
         '</div></div>')
 
 
@@ -844,15 +844,6 @@ _JS = """
   });
   window.addEventListener('pointerup', function(){ drag = null; });
 
-  function rcChar(card){
-    // 重切用的字：先看已选中的，其次手输框，最后拟进库字
-    var ch = card.querySelector('[data-slot="chosen"]').textContent.trim();
-    if(ch) return ch[0];
-    var inp = card.querySelector('.other-in');
-    if(inp && inp.value.trim()) return inp.value.trim()[0];
-    var b = card.querySelector('.cand');       // 候选按第一顺位（拟进库字在前）
-    return b ? (b.getAttribute('data-char') || '').trim() : ''; }
-
   list.addEventListener('click', function(e){
     var card = e.target.closest('.card'); if(!card) return;
     var panel = card.querySelector('[data-slot="recrop"]');
@@ -871,20 +862,17 @@ _JS = """
       if(d === 'reset'){ rcInit(panel); return; }
       var b = rcCur(panel), k = (d === 'up' ? -8 : 8);
       rcPut(panel, [b[0], b[1] + k, b[2], b[3] + k]); return; }
-    var ok = e.target.closest('.rc-ok'), okn = e.target.closest('.rc-ok-noadm');
-    if(ok || okn){
-      var ch = rcChar(card);
-      if(!ch){ alert('先选一个字或手输，再重切'); return; }
+    if(e.target.closest('.rc-ok')){
+      // 重切与选字是**两件独立的事**（十七轮用户定案）：这里只发几何
+      // 事件改框，不定字、不推进——重切完照旧独立选字（数字键/手输/B）。
+      // ingest 侧按「先几何后裁决」应用，confirm 进库读的即重切后图块。
       var b = rcCur(panel);
       var ox = +panel.getAttribute('data-ox'), oy = +panel.getAttribute('data-oy');
-      var ev = {op: 'recrop', instance_id: card.getAttribute('data-iid'),
-                char: ch, bbox: [ox + b[0], oy + b[1], ox + b[2], oy + b[3]]};
-      if(okn) ev.admit = false;
-      emit(ev);
-      setChosen(card, ch + (okn ? '（重切·不入库）' : '（重切）'));
-      card.setAttribute('data-state', 'done');
+      emit({op: 'recrop', instance_id: card.getAttribute('data-iid'),
+            bbox: [ox + b[0], oy + b[1], ox + b[2], oy + b[3]]});
+      var v = card.querySelector('[data-slot="rcdone"]');
+      if(v) v.textContent = '已重切 ✓（仍需选字）';
       card.setAttribute('data-recrop', '0');
-      advance(card);
     }
   });
 
