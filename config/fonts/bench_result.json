@@ -1,0 +1,127 @@
+{
+  "font:iming": {
+    "kind": "font",
+    "chars_in_edition": 8102,
+    "evaluated": 94,
+    "recall@1": 0.4255,
+    "recall@5": 0.6915,
+    "verdicts": {
+      "unsure": 66,
+      "diff": 24,
+      "same": 4
+    },
+    "f1_correct": {
+      "n": 40,
+      "p10": 0.6207,
+      "median": 0.6673,
+      "p90": 0.776
+    },
+    "f1_wrong_top1": {
+      "n": 54,
+      "median": 0.63,
+      "p90": 0.6802
+    },
+    "separable": false,
+    "margin": -0.0596
+  },
+  "font:jigmo": {
+    "kind": "font",
+    "chars_in_edition": 8138,
+    "evaluated": 94,
+    "recall@1": 0.3298,
+    "recall@5": 0.4787,
+    "verdicts": {
+      "diff": 42,
+      "unsure": 48,
+      "same": 4
+    },
+    "f1_correct": {
+      "n": 31,
+      "p10": 0.5971,
+      "median": 0.6626,
+      "p90": 0.7895
+    },
+    "f1_wrong_top1": {
+      "n": 63,
+      "median": 0.616,
+      "p90": 0.6638
+    },
+    "separable": false,
+    "margin": -0.0667
+  },
+  "font:twkai": {
+    "kind": "font",
+    "chars_in_edition": 8130,
+    "evaluated": 94,
+    "recall@1": 0.3723,
+    "recall@5": 0.6596,
+    "verdicts": {
+      "unsure": 69,
+      "diff": 24,
+      "same": 1
+    },
+    "f1_correct": {
+      "n": 35,
+      "p10": 0.5919,
+      "median": 0.6586,
+      "p90": 0.7147
+    },
+    "f1_wrong_top1": {
+      "n": 59,
+      "median": 0.6419,
+      "p90": 0.7201
+    },
+    "separable": false,
+    "margin": -0.1281
+  },
+  "font:twsung": {
+    "kind": "font",
+    "chars_in_edition": 8091,
+    "evaluated": 94,
+    "recall@1": 0.383,
+    "recall@5": 0.5957,
+    "verdicts": {
+      "diff": 40,
+      "unsure": 51,
+      "same": 3
+    },
+    "f1_correct": {
+      "n": 36,
+      "p10": 0.5986,
+      "median": 0.6461,
+      "p90": 0.7773
+    },
+    "f1_wrong_top1": {
+      "n": 58,
+      "median": 0.6155,
+      "p90": 0.6762
+    },
+    "separable": false,
+    "margin": -0.0776
+  },
+  "wuyingdian-siku-zongmu": {
+    "kind": "woodblock",
+    "chars_in_edition": 26,
+    "evaluated": 94,
+    "recall@1": 0.9043,
+    "recall@5": 0.9149,
+    "verdicts": {
+      "unsure": 57,
+      "diff": 8,
+      "same": 29
+    },
+    "f1_correct": {
+      "n": 85,
+      "p10": 0.7409,
+      "median": 0.783,
+      "p90": 0.8287
+    },
+    "f1_wrong_top1": {
+      "n": 9,
+      "median": 0.4368,
+      "p90": 0.5919
+    },
+    "separable": true,
+    "margin": 0.149
+  }
+}
