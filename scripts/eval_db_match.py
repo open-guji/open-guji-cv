@@ -254,6 +254,9 @@ def main() -> None:
     ap.add_argument("--seed-shard", default="001-vol01-body")
     ap.add_argument("--query-shard", default="002-vol02-body")
     ap.add_argument("--k", type=int, default=10)
+    ap.add_argument("--verify-method", default="elastic",
+                    choices=["elastic", "coverage"],
+                    help="精验判据（默认 elastic=现行；coverage=旧判据对照）")
     ap.add_argument("--out", default=None, help="报告 JSON 路径")
     ap.add_argument("--with-branches", action="store_true",
                     help="unsure/diff 走 decide_*，追加端到端三个数（见文件头）")
@@ -287,7 +290,7 @@ def main() -> None:
     if args.protocol in ("incremental", "all"):
         for shard in args.shards.split(","):
             inst, patches = load_shard(samples, shard)
-            m = GlyphMatcher(k=args.k)
+            m = GlyphMatcher(k=args.k, verify_method=args.verify_method)
             feats = m.extract(patches)
             reports.append(run(m, inst, patches, feats, f"incremental/{shard}",
                                branches=branches))
@@ -295,7 +298,7 @@ def main() -> None:
     if args.protocol in ("cross-seed", "all"):
         si, sp = load_shard(samples, args.seed_shard)
         qi, qp = load_shard(samples, args.query_shard)
-        m = GlyphMatcher(k=args.k)
+        m = GlyphMatcher(k=args.k, verify_method=args.verify_method)
         sf = m.extract(sp)
         qf = m.extract(qp)
         for i, x in enumerate(si):

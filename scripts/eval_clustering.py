@@ -74,7 +74,7 @@ def main() -> None:
                     help="端到端模式：管线的 phase5_clusters/clusters.json")
     ap.add_argument("--feature", default=None, help="覆盖分片记录的特征后端")
     ap.add_argument("--verify-method", default=None,
-                    choices=["coverage", "overlap"], help="覆盖默认判据")
+                    choices=["elastic", "coverage", "overlap"], help="覆盖默认判据")
     ap.add_argument("--cov-high", type=float, default=None)
     ap.add_argument("--miss-wmax", type=float, default=None)
     ap.add_argument("--theta-high", type=float, default=None)

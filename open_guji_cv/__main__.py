@@ -837,11 +837,13 @@ def main():
     p.add_argument("path", help="古籍文件夹路径（用作输出子目录名）")
     p.add_argument("--feature", default="hog", choices=["raw", "hog"],
                    help="特征后端（默认 hog）")
-    p.add_argument("--verify-method", default="coverage",
-                   choices=["coverage", "overlap"],
-                   help="配准判据（默认 coverage=有界位移覆盖率；overlap=旧 F1 对照）")
-    p.add_argument("--cov-high", type=float, default=0.992,
-                   help="coverage 判据的合并覆盖率（默认 0.992）")
+    p.add_argument("--verify-method", default="elastic",
+                   choices=["elastic", "coverage", "overlap"],
+                   help="配准判据（默认 elastic=软覆盖+分块弹性对齐；"
+                        "coverage=旧的 r=2 硬膨胀覆盖率；overlap=更旧的 F1 对照）")
+    p.add_argument("--cov-high", type=float, default=None,
+                   help="合并覆盖率闸（默认跟随判据：elastic 0.988 / "
+                        "coverage 0.992）")
     p.add_argument("--miss-wmax", type=float, default=12,
                    help="coverage 判据的 12×12 窗口残差上限（默认 12px）")
     p.add_argument("--theta-high", type=float, default=0.80,

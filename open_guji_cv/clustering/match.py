@@ -1,6 +1,6 @@
 """字形库优先匹配器（glyph_db_first_design.md §2 的主干件）。
 
-每个新实例先与已验证字形库做匹配，`verify_pair_cov` 三档判决直接沿用：
+每个新实例先与已验证字形库做匹配，`verify_pair_elastic` 三档判决直接沿用：
 
 - same（完美匹配）→ 继承库条目的 surface char，识别完成；
 - unsure → 命中条目的字进候选集（带 cov 当先验），交 OCR+上下文裁决；
@@ -26,7 +26,8 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .features import get_feature
-from .verify import COV_HIGH, MISS_WMAX, verify_pair_cov
+from .verify import (COV_HIGH, ELASTIC_COV_HIGH, MISS_WMAX,
+                     verify_pair_cov, verify_pair_elastic)
 
 # 聚类实测漏网的形近家族（g3g4_error_analysis.md §2/§7：在 coverage 判据
 # 下真实发生过错并、或对级实测能穿透完美档的字对）。库级 never-match：
@@ -76,7 +77,7 @@ class MatchResult:
 
 
 class GlyphMatcher:
-    """内存字形索引：kNN(特征) 粗排 → verify_pair_cov 精验 → 三档判决。
+    """内存字形索引：kNN(特征) 粗排 → verify_pair_elastic 精验 → 三档判决。
 
     与 GlyphDB（SQLite，跨书持久层）解耦：本类只管「一批已验证
     (id, char, 归一图) → 匹配判决」，基准协议与册内增量识别都用它；
@@ -84,8 +85,16 @@ class GlyphMatcher:
     """
 
     def __init__(self, feature_backend: str = "hog", k: int = 10,
-                 cov_high: float = COV_HIGH, miss_wmax: float = MISS_WMAX):
+                 cov_high: float | None = None,
+                 miss_wmax: float = MISS_WMAX,
+                 verify_method: str = "elastic"):
         self._feature = get_feature(feature_backend)
+        self._verify = (verify_pair_elastic if verify_method == "elastic"
+                        else verify_pair_cov)
+        if cov_high is None:      # 两个判据各标各的闸，别互相借用
+            cov_high = (ELASTIC_COV_HIGH if verify_method == "elastic"
+                        else COV_HIGH)
+        self.verify_method = verify_method
         self.k = k
         self.cov_high = cov_high
         self.miss_wmax = miss_wmax
@@ -129,9 +138,9 @@ class GlyphMatcher:
         n_verified = 0
         for j in top:
             j = int(j)
-            v = verify_pair_cov(norm, self._patches[j],
-                                cov_high=self.cov_high,
-                                miss_wmax=self.miss_wmax)
+            v = self._verify(norm, self._patches[j],
+                             cov_high=self.cov_high,
+                             miss_wmax=self.miss_wmax)
             n_verified += 1
             if v.f1 > best_cov:
                 best_cov, best_wmax = v.f1, v.diff_blob_ratio

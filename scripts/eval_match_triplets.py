@@ -4,8 +4,9 @@
     PYTHONPATH=. python scripts/eval_match_triplets.py \
         ../open-guji-dataset/glyph-match/triplets
 
-对每个三元组 (anchor, same, other)：patch → normalize_patch →
-verify_pair_cov 两侧，判 cov(anchor,same) > cov(anchor,other)。
+对每个三元组 (anchor, same, other)：patch → normalize_patch → 现行判据
+（默认 elastic）两侧，判 cov(anchor,same) > cov(anchor,other)。
+`--method coverage/overlap` 换判据对照。
 报各子集排序正确率与平均 margin（cov_same - cov_other）。
 
 - **hard**：构建时算法的已知失败（体检 rival 旗 + 人工白名单确认），
@@ -29,7 +30,9 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
 from open_guji_cv.clustering.normalize import normalize_patch  # noqa: E402
-from open_guji_cv.clustering.verify import verify_pair_cov  # noqa: E402
+from open_guji_cv.clustering.verify import (verify_pair,  # noqa: E402
+                                            verify_pair_cov,
+                                            verify_pair_elastic)
 
 
 def main() -> None:
@@ -37,7 +40,12 @@ def main() -> None:
     ap.add_argument("dataset", help="glyph-match/triplets 目录")
     ap.add_argument("--report", action="store_true",
                     help="逐条输出（排查用）")
+    ap.add_argument("--method", default="elastic",
+                    choices=["elastic", "coverage", "overlap"],
+                    help="用哪个判据打分（默认 elastic=现行）")
     args = ap.parse_args()
+    verify = {"elastic": verify_pair_elastic, "coverage": verify_pair_cov,
+              "overlap": verify_pair}[args.method]
     root = Path(args.dataset)
     triplets = json.loads((root / "expected.json").read_text(encoding="utf-8"))
 
@@ -53,8 +61,8 @@ def main() -> None:
     stats: dict[str, dict] = {}
     for t in triplets:
         a = norm_of(t["anchor"])
-        cs = float(verify_pair_cov(a, norm_of(t["same"])).f1)
-        co = float(verify_pair_cov(a, norm_of(t["other"])).f1)
+        cs = float(verify(a, norm_of(t["same"])).f1)
+        co = float(verify(a, norm_of(t["other"])).f1)
         s = stats.setdefault(t["subset"], {"n": 0, "correct": 0, "margins": []})
         s["n"] += 1
         s["correct"] += int(cs > co)
@@ -65,7 +73,7 @@ def main() -> None:
                   f'「{t["char"]}」same {cs:.3f} vs '
                   f'「{t["other_char"]}」other {co:.3f}')
 
-    out = {}
+    out = {"method": args.method}
     for sub, s in sorted(stats.items()):
         out[sub] = {
             "n": s["n"],

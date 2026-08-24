@@ -152,6 +152,213 @@ def verify_pair_cov(a: np.ndarray, b: np.ndarray,
                        best_shift, best_scale, wmax)
 
 
+# ---------------------------------------------------------------- elastic
+# elastic 判据（2026-08-24 起默认）：coverage 的两处放宽方向反过来做——
+# **距离容忍收紧成软的，位移容忍放宽成局部的**。
+#
+# coverage 的 r=2 硬膨胀对「整部件替换型形近字」不敏感（glyph_match_stack
+# §4.1）：差一个偏旁的墨量占比小，膨胀把它抹平；而它给刻工位移的容忍是
+# **全局刚性**的——同一个字在不同字位是不同的手工雕刻，位移是**逐部件
+# 各走各的**，刚性对齐吃不下，只能靠把半径放大来硬凑，于是形近字跟着
+# 沾光。两件事拧在一个半径里，调不开。
+#
+# elastic 把它们拆开：
+#   1. 距离容忍改成高斯软权 w(d)=exp(-(d/tau)^2)，tau=1.5——2px 外仍算
+#      命中但只算 0.17，形近字缺的那一笔不再白拿满分；
+#   2. 位移容忍改成**分块弹性**：全局 (scale, dx, dy) 之上，每 16×16 块
+#      再各自搜 ±1px。同字的局部刻痕位移每块自己找补回来；形近字缺的
+#      部件挪到哪儿都还是缺，块内位移救不了。
+#
+# 靶子（glyph-match/triplets）：hard 排序正确率 0.079 → 0.684，control
+# 1.000 不动、平均 margin 0.068 → 0.103（分离度还变宽了）。
+ELASTIC_TAU = 1.5       # 高斯软覆盖的尺度（像素）
+ELASTIC_BLOCK = 16      # 弹性块边长（64 归一图 = 4×4 块）
+ELASTIC_LOCAL = 1       # 每块在全局位移之上的额外搜索半径（像素）
+
+# elastic 的 same 闸。校准把两个判据放到了同一把尺子上（同分位同数值），
+# 但**同一个放行比例下 elastic 换的是构成**：形近误并全没了，真同字对也
+# 跟着少放行一些。所以闸得按 coverage 当年那把量尺重新钉一次——
+# char-clustering 三分片扫 0.980~0.992，0.988 是唯一 never-make-worse 的点：
+#   purity  0.99967/0.99967/0.98901 → 1.0/1.0/1.0（諭/論 脏簇也没了）
+#   碎片率  2.99/3.45/3.00 → 2.97/3.38/3.04
+#   难例对  40/80、34/74、14/65 全部持平
+# 再往下放（0.985）vol02 purity 就掉到 0.99934，破硬约束。
+ELASTIC_COV_HIGH = 0.988
+
+# elastic 原始分与 coverage 的数值分布不同（软权 + 局部位移），而 COV_HIGH /
+# MATCH_SOLO_COV 这些闸是按 coverage 的分布标定的。这里用**单调分位映射**
+# 把 elastic 原始分搬回 coverage 的刻度上：同一个分位对应同一个数值，
+# 于是所有既有阈值的**操作点（放行比例）**原样保留，改变的只是**放行谁**
+# ——这正是本次优化要改的东西。锚点由 scripts/calibrate_elastic.py 在
+# char-clustering 两个大分片的 kNN 对群上拟合，重标方法见该脚本。
+_CAL_RAW: tuple[float, ...] = (0.0, 0.3019, 0.6758, 0.7091, 0.729, 0.7452, 0.759, 0.7715, 0.7841, 0.7974, 0.8119, 0.8268, 0.8441, 0.8616, 0.8763, 0.8891, 0.8998, 0.91, 0.9198, 0.9307, 0.9356, 0.9413, 0.9483, 0.9529, 0.9581, 0.9657, 1.0)
+_CAL_COV: tuple[float, ...] = (0.0, 0.306, 0.757, 0.8014, 0.8281, 0.8473, 0.8626, 0.8762, 0.8883, 0.8995, 0.9105, 0.9212, 0.932, 0.9422, 0.9513, 0.9592, 0.966, 0.9722, 0.9778, 0.9835, 0.9858, 0.9884, 0.9912, 0.9929, 0.9948, 0.9971, 1.0)
+_CAL_WRAW: tuple[float, ...] = (0.0, 12.3657, 16.2269, 19.3623, 22.3354, 25.2338, 28.3445, 31.53, 34.6437, 37.4849, 39.9215, 42.1869, 44.4516, 46.7773, 49.1988, 51.7835, 54.7105, 58.1193, 62.707, 65.199, 68.1902, 72.6119, 75.6193, 79.8322, 87.6575, 95.2282, 104.9741, 109.4116, 129.7701, 194.6551)
+_CAL_WMAX: tuple[float, ...] = (0.0, 6.0, 9.0, 12.0, 15.0, 17.0, 20.0, 23.0, 26.0, 29.0, 32.0, 35.0, 37.0, 40.0, 42.0, 45.0, 48.0, 52.0, 57.0, 60.0, 63.0, 68.0, 72.0, 77.0, 85.0, 93.0, 102.0, 109.0, 131.0, 196.5)
+
+
+def _calibrate(x: float, src: tuple[float, ...], dst: tuple[float, ...]) -> float:
+    """单调分段线性映射（锚点为空时恒等）。"""
+    if not src:
+        return x
+    return float(np.interp(x, src, dst))
+
+
+def _weight_field(binary: np.ndarray, tau: float, pad: int) -> np.ndarray:
+    """到墨迹的距离 → 高斯软覆盖权重，pad 后展平（越界处权重 0）。"""
+    dist = cv2.distanceTransform((1 - binary).astype(np.uint8), cv2.DIST_L2, 5)
+    w = np.exp(-(dist / tau) ** 2).astype(np.float32)
+    return np.pad(w, pad).ravel()
+
+
+def _blocks(binary: np.ndarray, block: int, n_side: int
+            ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """墨点按所属块排序，返回 (ys, xs, 段起点)——段起点喂 reduceat 求块和。"""
+    ys, xs = np.nonzero(binary)
+    if len(ys) == 0:
+        return ys, xs, np.zeros(0, dtype=np.int64)
+    gid = (ys // block) * n_side + (xs // block)
+    order = np.argsort(gid, kind="stable")
+    ys, xs, gid = ys[order], xs[order], gid[order]
+    starts = np.flatnonzero(np.r_[True, gid[1:] != gid[:-1]])
+    return ys, xs, starts
+
+
+def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
+                   scales: tuple[float, ...], tau: float, block: int,
+                   local: int) -> tuple[float, tuple[int, int], float]:
+    """搜最优 (scale, dx, dy)：目标是分块弹性软覆盖率本身。"""
+    size = a.shape[0]
+    na = int(a.sum())
+    span = max_shift + local
+    stride = size + 2 * span
+    n_side = (size + block - 1) // block
+    wa = _weight_field(a, tau, span)
+    ay, ax, sa = _blocks(a, block, n_side)
+    base_a = (ay + span) * stride + (ax + span)
+
+    # 全局位移 (dy,dx) × 块内位移 (ly,lx) 合成后仍是一个平移，先把所有
+    # 合成位移的块和一次算完，再按 (dy,dx) 取各块在 9 个块内位移里的最优。
+    grid = np.arange(-span, span + 1)
+    offsets = (grid[:, None] * stride + grid[None, :]).ravel()
+    ids = np.arange(offsets.size).reshape(2 * span + 1, 2 * span + 1)
+    pick = np.stack([ids[dy:dy + 2 * local + 1, dx:dx + 2 * local + 1].ravel()
+                     for dy in range(2 * max_shift + 1)
+                     for dx in range(2 * max_shift + 1)])
+
+    # 位移平局的打破：块内 ±local 能吸收同样多的位移，最优位往往是一
+    # **连片**而非一点。取其中最居中（|shift| 最小、scale 最近 1）的那个
+    # ——分数一样，但报告出来的 shift/scale 才读得懂，wmax 也从最居中的
+    # 那次对齐上量。
+    radius = np.array([(dy - max_shift) ** 2 + (dx - max_shift) ** 2
+                       for dy in range(2 * max_shift + 1)
+                       for dx in range(2 * max_shift + 1)], dtype=np.float64)
+    best, best_key, best_shift, best_scale = -1.0, None, (0, 0), 1.0
+    for scale in scales:
+        b_s = _rescale(b, scale)
+        nb = int(b_s.sum())
+        if nb == 0:
+            continue
+        wb = _weight_field(b_s, tau, span)
+        by, bx, sb = _blocks(b_s, block, n_side)
+        base_b = (by + span) * stride + (bx + span)
+        t_b = np.add.reduceat(wa[base_b[None, :] + offsets[:, None]], sb, axis=1)
+        t_a = np.add.reduceat(wb[base_a[None, :] - offsets[:, None]], sa, axis=1)
+        cov = (t_b[pick].max(axis=1).sum(axis=1)
+               + t_a[pick].max(axis=1).sum(axis=1)) / (na + nb)
+        top = float(cov.max())
+        k = int(np.lexsort((radius, -cov))[0])
+        key = (-top, radius[k], abs(scale - 1.0))
+        if best_key is None or key < best_key:
+            best, best_key = top, key
+            # 网格里的 (dy, dx) 是「把 b 的墨搬到 a 的坐标系」的位移；
+            # _shifted_view 取的是反向视图，故取负号后与 coverage 同约定。
+            best_shift = (max_shift - k % (2 * max_shift + 1),
+                          max_shift - k // (2 * max_shift + 1))
+            best_scale = scale
+    return best, best_shift, best_scale
+
+
+def _elastic_miss(a: np.ndarray, b_aligned: np.ndarray, tau: float,
+                  block: int, local: int) -> tuple[np.ndarray, np.ndarray]:
+    """最优对齐下逐像素的**未覆盖权重** (1-w)，双向各一张图。
+
+    这里的块划分在**对齐后的公共坐标系**里（boxFilter 要求同一张图），
+    而 `_elastic_align` 是各自在自己的坐标系里分块——两者在块边界上会
+    差一点点，所以本函数反推的覆盖率与 `raw` 不完全相等。wmax 是护栏、
+    自己按自己的分布标定，这点差异不影响它的操作点。
+    """
+    size = a.shape[0]
+    n_side = (size + block - 1) // block
+    out = []
+    for src, dst in ((a, b_aligned), (b_aligned, a)):
+        miss = np.zeros((size, size), dtype=np.float32)
+        ys, xs = np.nonzero(src)
+        if len(ys) == 0:
+            out.append(miss)
+            continue
+        stride = size + 2 * local
+        wd = _weight_field(dst, tau, local).reshape(stride, stride)
+        cand = np.stack([wd[ys + local + ly, xs + local + lx]
+                         for ly in range(-local, local + 1)
+                         for lx in range(-local, local + 1)])
+        gid = (ys // block) * n_side + (xs // block)
+        # 每块选块内总权重最大的那个块内位移
+        sums = np.stack([np.bincount(gid, weights=c, minlength=n_side * n_side)
+                         for c in cand])
+        best_local = sums.argmax(axis=0)[gid]
+        w = cand[best_local, np.arange(len(ys))]
+        miss[ys, xs] = 1.0 - w
+        out.append(miss)
+    return out[0], out[1]
+
+
+def verify_pair_elastic(a: np.ndarray, b: np.ndarray,
+                        max_shift: int = MAX_SHIFT,
+                        scales: tuple[float, ...] = SCALES,
+                        cov_high: float = ELASTIC_COV_HIGH,
+                        cov_low: float = COV_LOW,
+                        miss_wmax: float = MISS_WMAX,
+                        tau: float = ELASTIC_TAU,
+                        block: int = ELASTIC_BLOCK,
+                        local: int = ELASTIC_LOCAL) -> PairVerdict:
+    """elastic 判据：软覆盖 + 分块弹性对齐。字段语义与 verify_pair_cov 一致
+    （f1 放覆盖率、diff_blob_ratio 放窗口残差），数值已校准回 coverage 刻度。
+    """
+    if a.shape != b.shape:
+        raise ValueError("a/b 尺寸不一致")
+    size = a.shape[0]
+    na = int(np.count_nonzero(a))
+    if na == 0 or int(np.count_nonzero(b)) == 0:
+        return PairVerdict("diff", 0.0, 0.0, (0, 0), 1.0, 0.0)
+
+    raw, (dx, dy), scale = _elastic_align(a, b, max_shift, scales, tau,
+                                          block, local)
+    b_s = _rescale(b, scale)
+    padded = np.zeros((size + 2 * max_shift, size + 2 * max_shift), dtype=np.uint8)
+    padded[max_shift:max_shift + size, max_shift:max_shift + size] = b_s
+    b_aligned = _shifted_view(padded, dx, dy, size, max_shift)
+    rigid_f1 = _f1(a, b_aligned, na, int(np.count_nonzero(b_aligned)))
+
+    miss_a, miss_b = _elastic_miss(a, b_aligned, tau, block, local)
+    k = (MISS_WIN, MISS_WIN)
+    w_raw = max(
+        float(cv2.boxFilter(miss_a, -1, k, normalize=False).max()),
+        float(cv2.boxFilter(miss_b, -1, k, normalize=False).max()))
+
+    cov = _calibrate(raw, _CAL_RAW, _CAL_COV)
+    wmax = _calibrate(w_raw, _CAL_WRAW, _CAL_WMAX)
+
+    if cov >= cov_high and wmax <= miss_wmax:
+        verdict = "same"
+    elif cov >= cov_low:
+        verdict = "unsure"
+    else:
+        verdict = "diff"
+    return PairVerdict(verdict, float(cov), float(rigid_f1),
+                       (dx, dy), scale, float(wmax))
+
+
 def verify_pair(a: np.ndarray, b: np.ndarray,
                 max_shift: int = MAX_SHIFT,
                 scales: tuple[float, ...] = SCALES,
