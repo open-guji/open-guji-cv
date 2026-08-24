@@ -181,20 +181,37 @@ class PriorSource(CandidateSource):
 
 
 class GlyphKnnSource(CandidateSource):
-    """字形库检索：特征 kNN 粗排 → verify_pair 精验。"""
+    """字形库检索：特征 kNN 粗排 → verify_pair 精验。
+
+    默认**只查刻本来源**（kinds=("woodblock",)）。字体渲染来源动辄数万
+    字形，混进来有两重害处：粗排把百来个刻本 exemplar 直接淹没；而实测
+    （scripts/bench_font_glyphs.py）字体命中的「对」与「错」f1 分布是重叠
+    的（正确命中 p10 反而低于错误命中 p90 0.06~0.13），阈值划不出来，
+    当精确字形用只会注入错字。字体字形的用法见
+    .claude/doc/glyph_db_expansion_research.md §5 P1。
+    """
 
     name = "glyph_knn"
 
-    def __init__(self, library, edition_hint: str | None = None):
+    def __init__(self, library, edition_hint: str | None = None,
+                 kinds=("woodblock",)):
         self.library = library
         self.edition_hint = edition_hint
+        self.kinds = kinds
 
     def propose(self, rep_patches, members) -> list[Proposal]:
+        from .canonical import to_canonical
         from .normalize import normalize_patch
         votes: dict[str, float] = {}
+        # 旧的 GlyphLibrary.query 不认 kinds，按能力降级
+        kw = {"kinds": self.kinds} if self.kinds and hasattr(
+            self.library, "_feat_kind") else {}
         for patch in rep_patches:
-            norm = normalize_patch(patch)
-            for hit in self.library.query(norm, edition_hint=self.edition_hint, k=3):
+            # 库侧 exemplar 的派生物算自 canonical 图（glyph_db 入库时
+            # 统一转换），查询侧走同一条路，两边预处理才对称
+            norm = normalize_patch(to_canonical(patch))
+            for hit in self.library.query(norm, edition_hint=self.edition_hint,
+                                          k=3, **kw):
                 if hit.verdict == "same":
                     votes[hit.char] = max(votes.get(hit.char, 0.0), hit.f1)
         return [Proposal(c, f1, self.name)
