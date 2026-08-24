@@ -1,103 +1,53 @@
 {
   "font:iming": {
     "kind": "font",
-    "chars_in_edition": 8102,
-    "evaluated": 94,
-    "recall@1": 0.4255,
-    "recall@5": 0.6915,
-    "verdicts": {
-      "unsure": 66,
-      "diff": 24,
-      "same": 4
-    },
-    "f1_correct": {
-      "n": 40,
-      "p10": 0.6207,
-      "median": 0.6673,
-      "p90": 0.776
-    },
-    "f1_wrong_top1": {
-      "n": 54,
-      "median": 0.63,
-      "p90": 0.6802
-    },
-    "separable": false,
-    "margin": -0.0596
-  },
-  "font:jigmo": {
-    "kind": "font",
-    "chars_in_edition": 8138,
+    "chars_in_edition": 56778,
     "evaluated": 94,
     "recall@1": 0.3298,
-    "recall@5": 0.4787,
+    "recall@5": 0.6064,
     "verdicts": {
-      "diff": 42,
-      "unsure": 48,
+      "unsure": 67,
+      "diff": 23,
       "same": 4
     },
     "f1_correct": {
       "n": 31,
-      "p10": 0.5971,
-      "median": 0.6626,
-      "p90": 0.7895
+      "p10": 0.6207,
+      "median": 0.6701,
+      "p90": 0.7801
     },
     "f1_wrong_top1": {
       "n": 63,
-      "median": 0.616,
-      "p90": 0.6638
+      "median": 0.6409,
+      "p90": 0.7028
     },
     "separable": false,
-    "margin": -0.0667
+    "margin": -0.0821
   },
-  "font:twkai": {
+  "font:jigmo": {
     "kind": "font",
-    "chars_in_edition": 8130,
+    "chars_in_edition": 98682,
     "evaluated": 94,
-    "recall@1": 0.3723,
-    "recall@5": 0.6596,
+    "recall@1": 0.1383,
+    "recall@5": 0.3298,
     "verdicts": {
-      "unsure": 69,
-      "diff": 24,
-      "same": 1
+      "diff": 34,
+      "unsure": 55,
+      "same": 5
     },
     "f1_correct": {
-      "n": 35,
-      "p10": 0.5919,
-      "median": 0.6586,
-      "p90": 0.7147
+      "n": 13,
+      "p10": 0.6542,
+      "median": 0.7109,
+      "p90": 0.8115
     },
     "f1_wrong_top1": {
-      "n": 59,
-      "median": 0.6419,
-      "p90": 0.7201
+      "n": 81,
+      "median": 0.6271,
+      "p90": 0.7114
     },
     "separable": false,
-    "margin": -0.1281
-  },
-  "font:twsung": {
-    "kind": "font",
-    "chars_in_edition": 8091,
-    "evaluated": 94,
-    "recall@1": 0.383,
-    "recall@5": 0.5957,
-    "verdicts": {
-      "diff": 40,
-      "unsure": 51,
-      "same": 3
-    },
-    "f1_correct": {
-      "n": 36,
-      "p10": 0.5986,
-      "median": 0.6461,
-      "p90": 0.7773
-    },
-    "f1_wrong_top1": {
-      "n": 58,
-      "median": 0.6155,
-      "p90": 0.6762
-    },
-    "separable": false,
-    "margin": -0.0776
+    "margin": -0.0573
   },
   "wuyingdian-siku-zongmu": {
     "kind": "woodblock",
