@@ -62,6 +62,10 @@ STEPS: list[StepDef] = [
     StepDef(1, "remove_watermark", RemoveWatermarkPreprocessor, lambda p: "watermark" in p.interferences),
     StepDef(2, "deskew",         NormalizePreprocessor,     lambda p: True),
     StepDef(3, "crop",           CropMarginPreprocessor,    lambda p: True),
+    # 2026-08-24 加证据闸后保留：无闸版会把共线的字笔画当界行整条画穿
+    # 全列（vol01/18 col4 假线实证）；全停用实测 vol02 偏旁级截断 +44%
+    # （磨损界行无描线后墙锚定变差）。闸=线带覆盖率+侧翼干净度，
+    # 见 enhance_lines._line_is_isolated。
     StepDef(4, "enhance_lines",  EnhanceLinesPreprocessor,  lambda p: True),
     StepDef(5, "split",          SplitPagePreprocessor,     lambda p: p.is_uncut),
     StepDef(6, "binarize",       BinarizePreprocessor,      lambda p: not p.is_colored),
