@@ -46,6 +46,23 @@ FRAME_BAR_N = 2            # 满宽横条达此条数 → 版框而非「一」
 # ── 缺陷自检：疑似层阈值（有误报，进人工审查队列）──────────────
 WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此 → 疑似跨列
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
+# ── 首/末格外的边框横条掩蔽 ──────────────────────────────
+# 用户审阅实测：首字含上框横线、末字含下框横线成批出现。横条作为独立
+# 连通体被 _assign_column 归给最近的首/末格，再随 padding/归属外扩进
+# 图块。完全落在首格上沿之上/末格下沿之下的扁平满宽连通体只能是版框
+# 横线——从条带里抹掉。「一」字有位置保护：它在自己格内，不可能整体
+# 越出首末格界；贴着字的横线（连通）不动，保守优先。
+FRAME_BAR_ROW_T = 0.55     # 行墨 ≥ 此比例 × 条带宽 → 横条候选行。「一/百顶横」
+                           # 也能到 0.6——单看形状分不开，页级延续探针才是闸门
+FRAME_BAR_SOFT_T = 0.35    # 迟滞：确认行 ±3 行内 ≥ 此比例的行一并算横条
+                           # （波浪线边缘行是部分填充）
+FRAME_BAR_ZONE = 0.30      # 只看首格上沿 +/末格下沿 − 此比例 × 格高的端区
+                           # （页级共识网格与本页物理框有相位差，横条常在
+                           # 末格**内部**尾段，实测 vol02/136 在末线上方 25px）
+FRAME_BAR_PROBE_OFF = 14   # 延续探针的远窗：墙外 [OFF, OFF+W) px。近窗不行：
+FRAME_BAR_PROBE_W = 12     # 界行竖线在每一行都贡献 ~0.25 假延续
+FRAME_BAR_PROBE_T = 0.5    # 远窗行墨比 ≥ 此值（任一侧）才算「越列继续走」：
+                           # 版框横线横贯整版 →~1.0；「一」/界行 → ≤0.3
 # ── 贴边界行残条清除 ─────────────────────────────────────
 # 磨损界行断成的短残段够不着围栏放宽档的游程（<0.8×列距），墙外扩后
 # 留在图块边缘，是 vol02 wide_gap 的主要成因（抽 24 例有 19 例是
@@ -366,6 +383,63 @@ def _boundary_ink_frac(gray: np.ndarray) -> float:
     band = max(2, int(binary.shape[0] * BOUNDARY_BAND))
     edge = int(binary[:band].sum()) + int(binary[-band:].sum())
     return edge / total
+
+
+def mask_frame_bars_outside(strip: np.ndarray,
+                            local: list[tuple[int, float, float]],
+                            page: np.ndarray, sx0: int, sx1: int, sy0: int,
+                            cell_h: float) -> np.ndarray:
+    """抹掉条带首/末端区里的版框横线**行**（用户审阅反馈的主病灶）。
+
+    三道判据缺一不可：
+    - 按**行**不按连通体：横条经 8 连通与条带边缘细碎渣会链成几百像素
+      高的稀疏大连通体（实测 vol02/136 col5 高 614px、墨才 2970），
+      任何「扁平连通体」判据都失灵；
+    - 端区限定：页级共识网格与本页物理框有相位差，下框横条常在末格
+      **内部**尾段（实测在末线上方 25px），所以端区伸进格内 0.3 格；
+    - 页级**远窗**延续探针：行墨 ≥55% 的行「一/百顶横」也做得到，唯一
+      的区别在列外——版框横线横贯整版。近窗（紧贴墙）不行，界行竖线
+      在每一行都贡献 ~0.25 假延续，要在墙外 14px 起的远窗看。"""
+    if not local:
+        return strip
+    top = int(min(l for _, l, _ in local))
+    bot = int(max(b for _, _, b in local))
+    H, W = strip.shape
+    binary = (strip < BINARY_THRESHOLD_PATCH)
+    rowink = binary.sum(axis=1)
+    z = int(FRAME_BAR_ZONE * cell_h)
+    zone = np.zeros(H, dtype=bool)
+    zone[0:np.clip(top + z, 0, H)] = True
+    zone[np.clip(bot - z, 0, H):H] = True
+    core = (rowink >= FRAME_BAR_ROW_T * W) & zone
+    if not core.any():
+        return strip
+    pw = page.shape[1]
+    la, lb = max(0, sx0 - FRAME_BAR_PROBE_OFF - FRAME_BAR_PROBE_W), \
+        max(0, sx0 - FRAME_BAR_PROBE_OFF)
+    ra, rb = min(pw, sx1 + FRAME_BAR_PROBE_OFF), \
+        min(pw, sx1 + FRAME_BAR_PROBE_OFF + FRAME_BAR_PROBE_W)
+    wiped = np.zeros(H, dtype=bool)
+    for y in np.flatnonzero(core):
+        py = sy0 + y
+        if not (0 <= py < page.shape[0]):
+            continue
+        lf = float((page[py, la:lb] < BINARY_THRESHOLD_PATCH).mean()) \
+            if lb > la else 0.0
+        rf = float((page[py, ra:rb] < BINARY_THRESHOLD_PATCH).mean()) \
+            if rb > ra else 0.0
+        if max(lf, rf) >= FRAME_BAR_PROBE_T:
+            wiped[y] = True
+    if not wiped.any():
+        return strip
+    soft = (rowink >= FRAME_BAR_SOFT_T * W) & zone
+    for _ in range(2):
+        for y in np.flatnonzero(soft & ~wiped):
+            if wiped[max(0, y - 3):y + 4].any():
+                wiped[y] = True
+    out = strip.copy()
+    out[wiped, :] = 255
+    return out
 
 
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
@@ -855,6 +929,8 @@ class CharExtractor:
             local = [(int(c["index"]),
                       float(c["y_top"]) - sy0,
                       float(c["y_bottom"]) - sy0) for c in cells]
+            strip = mask_frame_bars_outside(strip, local, page_img,
+                                            sx0, sx1, sy0, cell_h_ref)
             if self.strategy == "component_owner":
                 boxes, owner = _assign_column(strip, local, cell_h_ref,
                                               float(sx1 - sx0))
