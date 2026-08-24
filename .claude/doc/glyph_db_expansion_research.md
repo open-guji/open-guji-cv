@@ -55,8 +55,9 @@
 | **一点明朝体 I.Ming**（[ichitenfont/I.Ming](https://github.com/ichitenfont/I.Ming)） | IPA Font License v1.0 | **传承字形（旧字形）**，用字习惯与刻本最吻合，渲染时优先于任何「新字形」字体 |
 | 天珩全字库 | ⚠️ 不要用 | 字形拼凑自商业字体，法律不干净 |
 
-许可提醒：`charset_and_lm.md` 已有约定——字体渲染模板**不入库不 commit**，由本地字体
-现场生成（CC0 的 Jigmo 理论上可入库，但保持统一纪律更简单）。
+许可提醒：`charset_and_lm.md` 的「字体只取 cmap，不取字形」纪律针对**商业字体**
+（外框受版权保护）。Jigmo(CC0) 与 I.Ming(IPA License) 明确允许再分发，已随仓库
+收在 `fonts/`；渲染出的**字形图**仍不进 Git（体积，见 §6.4）。
 
 ### 2.3 真实刻本/写本字形（标注数据集，科研申请、禁商用）
 
@@ -154,9 +155,9 @@
 `config/fonts/manifest.json` 列四套开源字体，`glyph-db import-font` 按字表渲染入库：
 
 ```bash
-export GUJI_FONT_DIR=/path/to/fonts        # 字体档不进仓库，本地放哪都行
-python -m open_guji_cv glyph-db import-font                 # 全部
+python -m open_guji_cv glyph-db import-font --jobs 4         # 全部（约 10 分钟）
 python -m open_guji_cv glyph-db import-font --edition font:iming --limit 500
+# Jigmo/I.Ming 随仓库在 fonts/，无需配置；其他字体放 $GUJI_FONT_DIR
 ```
 
 渲染走 canonical 规范（`font_glyphs.py:FontRenderer`）：384 画布、字面 190px、
@@ -234,9 +235,18 @@ recall 假成 0.000）。
 
 ### 6.4 工程约定
 
-- **字体字形不进 Git**：`export_store` 跳过 `kind='font'` 的整条链
-  （sources/glyphs/exemplars/instances/patches）。它由「字体档 + 字表」确定性
-  重生成，`glyph-db rebuild` 后重跑 `import-font` 即可。
+- **字形图不进 Git，字体档进**（2026-08-24 定）：15.5 万张 canonical PNG 按现有
+  一图一文件导出要 1,185MB；实测各种无损打包最好也要 ~420MB（灰度整批 lzma 442MB /
+  外接框裁切+lzma 418MB），而 `.git` 本就已 2.2GB。二值化能压到 106MB 但**不是无损**
+  ——实测 300 个样本里只有 0.3% 的归一图与灰度存完全一致、2.3% 的 coverage 判定
+  翻转，字体匹配本就勉强不该再降。故改为把两套**可自由再分发**的字体档收进
+  `fonts/`（86MB：Jigmo CC0 + I.Ming IPA License，见 `fonts/README.md`），
+  `export_store` 仍跳过 `kind='font'` 整条链，任一份克隆跑
+  `glyph-db import-font` 重建。已验证并行与串行产出**字节级一致**。
+  注意 `charset_and_lm.md` 的「字体只取 cmap 不取字形」纪律针对的是**商业字体**
+  （外框有版权），这两套是明确许可再分发的自由字体，不受该条约束。
+- 重建耗时：`--jobs 4` 并行渲染 271 字/秒（串行 67），15.5 万字形约 10 分钟。
+  渲染+归一是纯 CPU 放进工作进程，写库仍单线程。
 - **`GlyphKnnSource` 默认 `kinds=("woodblock",)`**：3 万多字体字形若混入粗排会把
   百来个刻本 exemplar 直接淹没，且按上面的分布根本不该当精确判据。
 - 检索规模：**已重写为常驻特征缓存 + 矩阵向量乘**（`_exemplar_matrix`），

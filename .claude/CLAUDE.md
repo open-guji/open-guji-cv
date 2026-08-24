@@ -41,6 +41,15 @@
 测试数据：
 data/ 文件夹下边 有5本古籍 每本古籍有10个截图 和一个read me文件 来介绍它的基本的排版信息
 
+### 字形库
+跨书字形库真源在 `glyph_store/`（随仓库提交），SQLite 索引可重建：
+```bash
+python -m open_guji_cv glyph-db rebuild        # 刻本字形（真源在 glyph_store/）
+python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 分钟）
+```
+字体字形不进 Git，由 `fonts/` 里的字体档 + 字表确定性重建，详见
+[fonts/README.md](../fonts/README.md) 与 glyph_db_expansion_research.md §6。
+
 ### 环境变量
 - `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` — 跳过模型源连接检查，加快启动速度
 - `PYTHONIOENCODING=utf-8` — Windows 控制台中文输出必须设置
