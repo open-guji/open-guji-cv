@@ -239,9 +239,19 @@ def admission_decision(ocr: dict | None, align_char: str | None,
         # 双信号一致 + 仅 degraded：前 13 页实审 58/58 全数照准——
         # 机器残留分级在双信号一致面前误报居多（七轮实审定案）
         return True, "dual_degraded"
-    if (overridable and match_char is not None and corpus_char is not None
-            and vmap.semantic(match_char) == vmap.semantic(corpus_char)):
-        return True, "match_ref"
+    if overridable and corpus_char is not None:
+        # 库 × 整理本通道。十四轮全量交叉分析（529 条人审难例回放）把它
+        # 从「库须 verify same」放宽到「库 top 候选一致即可」：文本证据 ×
+        # 形状证据同源性为零，实测 **144/144 全对**，其中 33 条属形近家族
+        # 也全对——形近护栏防的是形状判据，文本证据不受形状干扰，本就该
+        # 穿透它。相形之下 OCR × 库 一致只有 97.1%（已/巳、人/入、日/曰、
+        # 今/全 四条漏网，且这四条的整理本全是对的），故 OCR 永不与库配对。
+        db_char = match_char
+        if db_char is None and match_candidates:
+            db_char = max(match_candidates, key=lambda t: t[1])[0]
+        if db_char is not None \
+                and vmap.semantic(db_char) == vmap.semantic(corpus_char):
+            return True, "match_ref"
     solo_ok = all(d in (DOUBT_DEGRADED_CROP, DOUBT_WEAK_SINGLE)
                   for d in doubts)
     if (corpus_char is None and solo_ok and match_guard is None
