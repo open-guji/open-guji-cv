@@ -190,10 +190,13 @@ class GlyphKnnSource(CandidateSource):
         self.edition_hint = edition_hint
 
     def propose(self, rep_patches, members) -> list[Proposal]:
+        from .canonical import to_canonical
         from .normalize import normalize_patch
         votes: dict[str, float] = {}
         for patch in rep_patches:
-            norm = normalize_patch(patch)
+            # 库侧 exemplar 的派生物算自 canonical 图（glyph_db 入库时
+            # 统一转换），查询侧走同一条路，两边预处理才对称
+            norm = normalize_patch(to_canonical(patch))
             for hit in self.library.query(norm, edition_hint=self.edition_hint, k=3):
                 if hit.verdict == "same":
                     votes[hit.char] = max(votes.get(hit.char, 0.0), hit.f1)

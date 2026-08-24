@@ -22,6 +22,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .canonical import canonical_png
 from .extractor import load_index
 from .feedback import load_events, remap_events, replay_events
 from .features import DEFAULT_FEATURE, get_feature
@@ -228,13 +229,15 @@ class GlyphDB:
             "INSERT OR REPLACE INTO cluster_members VALUES (?,?,?)",
             [(run_id, m, cid) for cid, ms in members_of.items() for m in ms])
 
-        # 實例（原始圖塊為真源）
+        # 實例（圖塊統一轉 canonical 格式後為真源，見 canonical.py）
         vmap = VariantMap.load()
         n_inst = n_labeled = 0
         for inst in instances:
             p = book_dir / "phase4_chars" / inst.patch_path
             if not p.exists():
                 continue
+            raw = cv2.imdecode(np.frombuffer(p.read_bytes(), np.uint8),
+                               cv2.IMREAD_GRAYSCALE)
             label = state.label_of(inst.id, cluster_of.get(inst.id))
             status = None
             if label:
@@ -257,7 +260,7 @@ class GlyphDB:
                      quality_flags=excluded.quality_flags,
                      updated_at=excluded.updated_at""",
                 (inst.id, source_id, inst.page, inst.col, inst.idx,
-                 json.dumps(list(inst.bbox)), p.read_bytes(),
+                 json.dumps(list(inst.bbox)), canonical_png(raw),
                  inst.ink_ratio, inst.width, inst.height,
                  json.dumps(inst.flags, ensure_ascii=False),
                  label, status, 1.0 if label else None,
@@ -546,6 +549,7 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
 
     # 事件與實例按書分檔：一本書一個檔，審查增量只動一個檔
     n_ev = n_inst = n_png = 0
+    written: set[str] = set()
     for (src,) in db.conn.execute("SELECT source_id FROM sources ORDER BY 1"):
         n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
             "SELECT source_id, batch, seq, ts, op, payload FROM events "
@@ -558,11 +562,20 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
         for r in rows:
             d = dict(r)
             png = d.pop("patch_png")
-            (out / "patches" / f"{_safe(d['instance_id'])}.png").write_bytes(png)
+            name = f"{_safe(d['instance_id'])}.png"
+            (out / "patches" / name).write_bytes(png)
+            written.add(name)
             n_png += 1
             meta.append(d)
         n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
-    counts.update(events=n_ev, instances=n_inst, patches=n_png)
+    # 清孤兒：上輪導出遺留、已不被任何實例引用的 PNG（冪等覆寫的補全）
+    n_orphan = 0
+    for f in (out / "patches").glob("*.png"):
+        if f.name not in written:
+            f.unlink()
+            n_orphan += 1
+    counts.update(events=n_ev, instances=n_inst, patches=n_png,
+                  orphans_removed=n_orphan)
 
     # 統計不含 glyphdb.sqlite——它是可重建索引，不進版本控制
     counts["bytes"] = sum(f.stat().st_size for f in out.rglob("*")
