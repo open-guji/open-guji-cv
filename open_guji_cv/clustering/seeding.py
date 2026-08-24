@@ -41,7 +41,7 @@ from .align_label import (carrier_slots, clean_labels, is_han, label_book,
 from .crop_quality import assess_crop
 from .extractor import CharInstance, load_index
 from .glyph_db import GlyphDB, _unpng
-from .lm import train_ngram
+from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
 from .recognize_flow import ColumnContext, decide_unsure, semantic_margin
 from .normalize import normalize_patch, sauvola_binarize
@@ -70,6 +70,12 @@ SEED_DIR = "phase9_seed"
 #   首个错例出现在 0.5 档。取 0.70，离首错留 0.2 缓冲。
 # 另有单候选防护（见 context 通道注释）兜底。
 DEFAULT_CONTEXT_MARGIN = 0.70
+
+# 语言模型混合（charset_and_lm.md §二标定）：通用语料只配低权重，
+# 本书语料拿大头；线性插值（对数线性会被通用语料的零概率专名拖死）。
+BOOK_LM_WEIGHT = 0.9
+GENERAL_LM_WEIGHT = 0.1
+GENERAL_LM_PRUNE = 3      # 通用语料剪枝阈（≥10M 字，n-gram 表才装得下）
 
 # match_solo 通道（十轮用户定案，十一轮上调）：无整理本锚定时，
 # 库内形状验证 cov ≥ 此阈单独放行。初值 0.98 首日即出一例压线错
@@ -255,6 +261,45 @@ def admission_decision(ocr: dict | None, align_char: str | None,
     return False, None
 
 
+# ── 语言模型 ─────────────────────────────────────────────────────────
+
+def _load_general_lm(paths: list[Path]) -> CharNgramLM:
+    """通用语料 LM：训练一次（~30s/10M 字）后缓存在首个语料同目录。
+
+    缓存键 = 各源文件 (name, size, mtime) + 剪枝阈；源变了自动重训。
+    """
+    key = json.dumps([[p.name, p.stat().st_size, int(p.stat().st_mtime)]
+                      for p in paths] + [GENERAL_LM_PRUNE])
+    cache = paths[0].parent / ".general_lm_cache.json"
+    meta = paths[0].parent / ".general_lm_cache.meta"
+    if cache.exists() and meta.exists() \
+            and meta.read_text(encoding="utf-8") == key:
+        return CharNgramLM.load(cache)
+    lm = CharNgramLM(order=3)
+    lm.train(p.read_text(encoding="utf-8") for p in paths)
+    lm.prune(min_count=GENERAL_LM_PRUNE)
+    lm.save(cache)
+    meta.write_text(key, encoding="utf-8")
+    return lm
+
+
+def build_seed_lm(corpus_text: str,
+                  general_corpus: list[str | Path] | None = None) -> BaseLM:
+    """上下文通道的 LM：本书 3-gram，可选与通用语料线性混合。
+
+    charset_and_lm.md §二标定定案：本书 0.9 / 通用 0.1。通用语料补的
+    是本书语料没见过的搭配（LM 判「通不通顺」的底气），权重压低使
+    本书专名（人名/书名）不被通用分布淹没。
+    """
+    book = train_ngram([corpus_text], order=3)
+    paths = [Path(p) for p in (general_corpus or []) if Path(p).exists()]
+    if not paths:
+        return book
+    general = _load_general_lm(paths)
+    return InterpolatedLM([(book, BOOK_LM_WEIGHT),
+                           (general, GENERAL_LM_WEIGHT)])
+
+
 # ── progress.json ────────────────────────────────────────────────────
 
 def _load_progress(seed_dir: Path) -> dict:
@@ -287,6 +332,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               prob_threshold: float = DEFAULT_PROB_THRESHOLD,
               context_margin: float = DEFAULT_CONTEXT_MARGIN,
               solo_cov: float = MATCH_SOLO_COV,
+              general_corpus: list[str | Path] | None = None,
               edition: str | None = None, knn_k: int = 10,
               variants: str | Path | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
@@ -413,8 +459,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     matcher, db_chars = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
     vmap = VariantMap.load(variants)
 
-    # 上下文通道件：本书语料 3-gram LM + 同列已定字滚动窗口
-    lm = train_ngram([corpus_text], order=3)
+    # 上下文通道件：本书 LM（可混通用语料）+ 同列已定字滚动窗口
+    lm = build_seed_lm(corpus_text, general_corpus)
     ctx_window = ColumnContext()
 
     # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）

@@ -18,3 +18,4 @@ glyph_store/glyphdb.sqlite
 # `cluster` 命令几分钟重算，体积却单册就上百 MB，超过 GitHub 单文件
 # 100MB 硬限（vol02 首次推送即被拒）。
 **/phase5_clusters/features*.npz
+corpus/external/.general_lm_cache.*
