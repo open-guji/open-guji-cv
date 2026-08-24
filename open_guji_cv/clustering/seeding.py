@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from .align_eval import build_ngram_index
 from .align_label import (carrier_slots, clean_labels, is_han, label_book,
@@ -51,7 +52,8 @@ from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
                          STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
-                         STATUS_NOT_A_CHAR, STATUS_PENDING, STATUS_SKIPPED,
+                         STATUS_NOT_A_CHAR, STATUS_PENDING,
+                         STATUS_RECROPPED, STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
 
@@ -733,6 +735,53 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
 
 # ── 决策回收：审查事件 → human 进库 ──────────────────────────────────
 
+def apply_recrop(book_out_dir: Path, rec, bbox: list[float]) -> bytes | None:
+    """按新 bbox 从**页图**重裁图块，覆盖 patch 与 index.jsonl 的 bbox。
+
+    切分错位（格线整体偏移）时光改字没用——图块本身就是错的，收进库当
+    范例会毒化匹配（vol01:5:2:15「言」：上边切掉亠头、下边吃进「等」）。
+    这里改的是**上游产物**，所以要连 index.jsonl 一起改，否则下次重跑
+    seed 又回到错的框。
+
+    返回新 patch 的 PNG 字节；页图找不到或框越界返回 None。
+    """
+    page_img = book_out_dir / f"{rec.page}.png"
+    if not page_img.exists():
+        return None
+    im = cv2.imread(str(page_img), cv2.IMREAD_GRAYSCALE)
+    if im is None:
+        return None
+    h, w = im.shape[:2]
+    x0, y0, x1, y1 = (int(round(v)) for v in bbox)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return None
+    crop = im[y0:y1, x0:x1]
+    ok, buf = cv2.imencode(".png", crop)
+    if not ok:
+        return None
+    png = buf.tobytes()
+    (book_out_dir / "phase4_chars" / rec.patch_path).write_bytes(png)
+
+    # index.jsonl：整文件重写，只改这一行的 bbox/height/width
+    idx_path = book_out_dir / "phase4_chars" / "index.jsonl"
+    lines = idx_path.read_text(encoding="utf-8").splitlines()
+    out = []
+    for line in lines:
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        if d["id"] == rec.id:
+            d["bbox"] = [float(x0), float(y0), float(x1), float(y1)]
+            d["height"] = float(y1 - y0)
+            d["width"] = float(x1 - x0)
+            d["recropped"] = True        # 溯源：这一格是人工重切过的
+        out.append(json.dumps(d, ensure_ascii=False))
+    idx_path.write_text("".join(x + "\n" for x in out), encoding="utf-8")
+    return png
+
+
 def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
                      events: list[dict], edition: str | None = None,
                      variants: str | Path | None = None) -> dict:
@@ -814,6 +863,41 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             n["admitted" if admitted else "already_admitted"] += 1
             it.status = STATUS_CONFIRMED
             it.decided_char = char
+            it.provenance = "human"
+        elif op == "recrop":
+            char = (ev.get("char") or "").strip()
+            rec = rec_of.get(it.instance_id)
+            if not char or rec is None:
+                n["invalid"] += 1
+                continue
+            png = apply_recrop(book_out_dir, rec, ev["bbox"])
+            if png is None:
+                n["recrop_failed"] += 1
+                continue
+            n["recropped"] += 1
+            it.decided_char = char
+            it.note = "recropped"
+            if ev.get("admit") is False:
+                it.status = STATUS_LABEL_ONLY
+                it.provenance = None
+                n["label_only"] += 1
+                continue
+            gray = cv2.imdecode(np.frombuffer(png, np.uint8),
+                                cv2.IMREAD_GRAYSCALE)
+            admitted = db.admit_instance(
+                it.instance_id, char, png, normalize_patch(gray),
+                provenance="human",
+                evidence={"event": {k: ev.get(k) for k in
+                                    ("op", "char", "bbox", "batch", "seq", "ts")},
+                          "recrop": {"old_bbox": list(rec.bbox),
+                                     "new_bbox": ev["bbox"]},
+                          "doubts": it.doubts, "ocr": it.ocr,
+                          "align": it.align, "match": it.match},
+                edition_tag=edition, page=it.page, col=it.col, idx=it.idx,
+                bbox=[float(v) for v in ev["bbox"]],
+                semantic=vmap.semantic(char))
+            n["admitted" if admitted else "already_admitted"] += 1
+            it.status = STATUS_RECROPPED
             it.provenance = "human"
         elif op == "not_a_char":
             it.status = STATUS_NOT_A_CHAR

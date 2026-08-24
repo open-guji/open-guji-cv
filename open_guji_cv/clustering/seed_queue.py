@@ -81,6 +81,7 @@ STATUS_LABEL_ONLY = "confirmed_label_only"
 #                                    # 定字进转写/标注结果，字形不进 GlyphDB。
 STATUS_REJECTED = "rejected"         # 用户改判成别的字（decided_char 为准）
 STATUS_NOT_A_CHAR = "not_a_char"     # 用户判非字（版框/残带），不进库
+STATUS_RECROPPED = "confirmed_recropped"   # 重切后定字进库（human）
 STATUS_SKIPPED = "skipped"           # 用户存疑跳过，留在队列
 
 
@@ -145,6 +146,14 @@ class SeedItem:
 #              status=confirmed_label_only。缺省 admit=true。
 #   not_a_char 非字 → status=not_a_char，不进库
 #   skip       存疑跳过 → status=skipped，留队列下批再出
+#   recrop     **重切**：带 "bbox": [x0,y0,x1,y1]（页图绝对坐标，浮点）
+#              + "char"。切分错位时（格线整体偏移，把本字的头切掉、
+#              又吃进下一字）光改字没用——图块本身就是错的，收进库会
+#              毒化匹配。ingest 侧从页图按新 bbox 重裁、覆盖 patch 与
+#              index.jsonl 的 bbox，再以 human provenance 进库。
+#              同样支持 "admit": false（重切了但仍不想入库）。
+#              实锤：vol01:5:2:15「言」——框整体下移约 35px，上边切掉
+#              亠头、下边吃进「等」的头两笔。
 # (batch, seq) 供去重；char 仅 confirm 需要。
 # 应用纪律：同一 instance_id 的多条事件按 seq 升序、**后到覆盖**——
 # ingest 侧只应用每个字位 seq 最大的事件（confirm 后被 skip 撤销的，
@@ -163,8 +172,14 @@ def parse_seed_events(text: str) -> list[dict]:
             ev = json.loads(line[len(SEED_EVENT_PREFIX):].strip())
         except json.JSONDecodeError:
             continue
-        if ev.get("op") not in ("confirm", "not_a_char", "skip"):
+        if ev.get("op") not in ("confirm", "not_a_char", "skip", "recrop"):
             continue
+        if ev["op"] == "recrop":
+            bb = ev.get("bbox")
+            if not (isinstance(bb, list) and len(bb) == 4
+                    and all(isinstance(v, (int, float)) for v in bb)
+                    and bb[2] > bb[0] and bb[3] > bb[1]):
+                continue                      # 坏 bbox 不如不改
         if not ev.get("instance_id"):
             continue
         out[(ev.get("batch"), ev.get("seq"))] = ev
