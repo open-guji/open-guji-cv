@@ -435,6 +435,41 @@ class GlyphDB:
 
     # ── 檢索 ─────────────────────────────────────────────
 
+    def _exemplar_matrix(self):
+        """全部 exemplar 的特徵矩陣（常駐緩存）。
+
+        原先每次 query 都把整張特徵表從 SQLite 讀出來重新 stack——庫小時
+        看不出來，到幾十萬字形就是每查一次搬幾 GB。這裡一次加載常駐。
+
+        失效判據取 (條數, 最新 added_at)：只看條數的話，覆寫式重導入
+        （條數不變、內容變了）會讀到陳舊特徵。
+        """
+        stamp = self.conn.execute(
+            "SELECT COUNT(*), MAX(added_at) FROM exemplars").fetchone()
+        if getattr(self, "_cache_stamp", None) == stamp:
+            return self._cache_feats, self._cache_rows, self._cache_norms
+        rows = self.conn.execute(
+            """SELECT g.char, g.edition_tag, g.status, e.instance_id,
+                      COALESCE(s.kind, 'woodblock'), d.data
+               FROM exemplars e
+               JOIN glyphs g ON g.glyph_id = e.glyph_id
+               JOIN derived d ON d.instance_id = e.instance_id AND d.kind = ?
+               JOIN instances i ON i.instance_id = e.instance_id
+               LEFT JOIN sources s ON s.source_id = i.source_id""",
+            (self._feat_kind(),)).fetchall()
+        if rows:
+            feats = np.stack([np.frombuffer(r[5], np.float32) for r in rows])
+        else:
+            feats = np.zeros((0, 1), dtype=np.float32)
+        self._cache_stamp = stamp
+        self._cache_rows = [r[:5] for r in rows]
+        self._cache_feats = feats
+        self._cache_norms = (feats ** 2).sum(1)
+        self._cache_edition = np.array([r[1] for r in rows], dtype=object)
+        self._cache_kind = np.array([r[4] for r in rows], dtype=object)
+        self._cache_iid = np.array([r[3] for r in rows], dtype=object)
+        return feats, self._cache_rows, self._cache_norms
+
     def query(self, norm_patch: np.ndarray,
               edition_hint: str | None = None, k: int = 5,
               editions: Sequence[str] | None = None,
@@ -462,40 +497,37 @@ class GlyphDB:
         """
         feat = self._feature.extract(norm_patch[None, ...])[0]
         cur = self.conn.cursor()
-        sql = """SELECT g.char, g.edition_tag, g.status, e.instance_id, d.data,
-                        COALESCE(s.kind, 'woodblock')
-                 FROM exemplars e
-                 JOIN glyphs g ON g.glyph_id = e.glyph_id
-                 JOIN derived d ON d.instance_id = e.instance_id
-                   AND d.kind = ?
-                 JOIN instances i ON i.instance_id = e.instance_id
-                 LEFT JOIN sources s ON s.source_id = i.source_id"""
-        args: tuple = (self._feat_kind(),)
-        where: list[str] = []
+        feats, rows, norms = self._exemplar_matrix()
+        if not rows:
+            return []
         wanted = list(editions) if editions else []
         if edition_hint:
             wanted.append(edition_hint)
+        # 過濾在粗排之前生效：字體來源動輒數萬字形，不先濾會把刻本
+        # exemplar 淹沒。用 numpy 掩碼而不是 SQL——矩陣常駐，重查 SQLite
+        # 才是慢的那一頭
+        mask = np.ones(len(rows), dtype=bool)
         if wanted:
-            where.append(f"g.edition_tag IN ({','.join('?' * len(wanted))})")
-            args = args + tuple(wanted)
+            mask &= np.isin(self._cache_edition, wanted)
         if kinds:
-            where.append("COALESCE(s.kind, 'woodblock') IN "
-                         f"({','.join('?' * len(kinds))})")
-            args = args + tuple(kinds)
+            mask &= np.isin(self._cache_kind, list(kinds))
         if exclude:
-            where.append(f"e.instance_id NOT IN "
-                         f"({','.join('?' * len(exclude))})")
-            args = args + tuple(exclude)
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        rows = cur.execute(sql, args).fetchall()
-        if not rows:
+            mask &= ~np.isin(self._cache_iid, list(exclude))
+        if not mask.any():
             return []
-        feats = np.stack([np.frombuffer(r[4], np.float32) for r in rows])
-        d2 = ((feats - feat[None]) ** 2).sum(1)
+        # ‖a−b‖² = ‖a‖² − 2a·b + ‖b‖²：矩陣向量乘，不為每次查詢分配
+        # 一個 N×D 的臨時大數組（D=1764 時那是幾 GB）。省掉的 ‖b‖² 對
+        # 所有行是同一個常數，不影響排序（這裡只要名次，不要距離值）。
+        d2 = norms - 2.0 * (feats @ feat)
+        d2[~mask] = np.inf
+        n_take = min(max(k * 3, 12), int(mask.sum()))
+        # argpartition 不保證組內有序，但粗排只負責選出候選，
+        # 最終次序由下面的 f1 決定
+        cand = (np.argpartition(d2, n_take - 1)[:n_take] if n_take < len(d2)
+                else np.argsort(d2))
         hits: list[DBHit] = []
-        for idx in np.argsort(d2)[:max(k * 3, 12)]:
-            char, edition, status, iid, _, kind = rows[int(idx)]
+        for idx in cand:
+            char, edition, status, iid, kind = rows[int(idx)]
             row = cur.execute(
                 "SELECT data FROM derived WHERE instance_id=? AND kind='norm'",
                 (iid,)).fetchone()

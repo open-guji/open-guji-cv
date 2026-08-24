@@ -20,13 +20,14 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 
-from .canonical import CANON_SIZE, canonical_png, to_canonical
+from .canonical import CANON_SIZE, encode_png, to_canonical
 from .normalize import normalize_patch
 
 RENDER_CANVAS = 384        # 渲染畫布（大於 canonical，留足白邊）
@@ -100,13 +101,15 @@ class FontRenderer:
         return to_canonical(arr, clean=False)
 
 
-def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000) -> dict:
+def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
+                progress_every: int = 0) -> dict:
     """按字表渲染一套字體並入庫（冪等：重跑覆寫同 instance_id）。
 
     每字一個實例、一個 glyph、一個 exemplar（role='render'）。
     glyph.status 一律 'sparse'——字體每字僅一形，下游據此降權。
     """
     renderer = FontRenderer([Path(p) for p in spec.font_paths])
+    t0 = time.time()
     cur = db.conn.cursor()
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     cur.execute(
@@ -143,7 +146,7 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000) -> dict:
                        NULL,?,NULL,?)
                ON CONFLICT(instance_id) DO UPDATE SET
                  patch_png=excluded.patch_png, updated_at=excluded.updated_at""",
-            (iid, spec.source_id, ord(char), canonical_png(canon, clean=False),
+            (iid, spec.source_id, ord(char), encode_png(canon),
              float((canon < 128).mean()), float(CANON_SIZE), float(CANON_SIZE),
              char, ord(char), now))
         cur.execute(
@@ -162,6 +165,13 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000) -> dict:
         n_ok += 1
         if n_ok % batch_commit == 0:
             db.conn.commit()
+        if progress_every and (i + 1) % progress_every == 0:
+            el = time.time() - t0
+            print(f"  [{spec.edition_tag}] {i + 1}/{len(chars)} "
+                  f"入库 {n_ok} 缺字 {n_missing} "
+                  f"{(i + 1) / el:.0f} 字/秒 "
+                  f"剩余 ~{(len(chars) - i - 1) / max((i + 1) / el, 1) / 60:.0f} 分",
+                  flush=True)
     db.conn.commit()
     return {"edition": spec.edition_tag, "glyphs": n_ok,
             "missing": n_missing, "requested": len(chars)}
@@ -220,7 +230,8 @@ def load_manifest(path: str | Path) -> tuple[list[FontSpec], dict]:
 def import_fonts_from_manifest(db, manifest_path: str | Path,
                                only: str | None = None,
                                charset: str | Path | None = None,
-                               limit: int | None = None) -> dict:
+                               limit: int | None = None,
+                               progress_every: int = 5000) -> dict:
     """按清單批量導入字體字形。缺失字體檔的條目跳過並記在結果裡。"""
     specs, data = load_manifest(manifest_path)
     if only:
@@ -237,7 +248,8 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
             skipped.append({"edition": spec.edition_tag,
                             "missing_files": missing_files})
             continue
-        results.append(import_font(db, spec, chars))
+        results.append(import_font(db, spec, chars,
+                                   progress_every=progress_every))
     return {"charset_size": len(chars), "imported": results,
             "skipped": skipped}
 
