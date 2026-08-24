@@ -354,8 +354,9 @@ G6 四组可以同时开工，互相不踩脚。
 `cell_type=empty`，下游自动排除；判据与实测见
 char_clustering_design.md 末节）。失败 39 格中 36 带旗，无声漏网 3。
 模型自标注分片 `instances/self_assess_r1.json`（`label_origin=model`，
-不进人工层 eval）；剩余专题：混入类（邻字残余为主，7 例）与
-grid_shift 族（条穿字，p136/p119）。**注意：闸只进了代码，output/
+不进人工层 eval）；剩余专题：混入类（邻字残余为主，7 例）；
+grid_shift 族已在算法层根治（逐页格高，见 char_clustering_design.md
+末节），产物重建与金标重键并入 #9。**注意：闸只进了代码，output/
 产物还是闸前的，待 #9 专项重建轮一并刷新。**
 
 **P1（原 P0，已做掉一半）— 图块被切掉笔画 vol02 17.9% / vol01 8.3%。**
