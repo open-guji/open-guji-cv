@@ -46,6 +46,27 @@ FRAME_BAR_N = 2            # 满宽横条达此条数 → 版框而非「一」
 # ── 缺陷自检：疑似层阈值（有误报，进人工审查队列）──────────────
 WIDE_GAP_T = 0.12          # 主体之间最大水平空隙占图块宽度超此 → 疑似跨列
 MIN_SPAN_INK = 0.02        # 参与空隙计算的连通体墨量下限
+# ── 首/末格外的边框横条掩蔽 ──────────────────────────────
+# 用户审阅实测：首字含上框横线、末字含下框横线成批出现。横条作为独立
+# 连通体被 _assign_column 归给最近的首/末格，再随 padding/归属外扩进
+# 图块。完全落在首格上沿之上/末格下沿之下的扁平满宽连通体只能是版框
+# 横线——从条带里抹掉。「一」字有位置保护：它在自己格内，不可能整体
+# 越出首末格界；贴着字的横线（连通）不动，保守优先。
+FRAME_BAR_ROW_T = 0.55     # 行墨 ≥ 此比例 × 条带宽 → 横条候选行。「一/百顶横」
+                           # 也能到 0.6——单看形状分不开，页级延续探针才是闸门
+FRAME_BAR_SOFT_T = 0.35    # 迟滞：确认行 ±3 行内 ≥ 此比例的行一并算横条
+                           # （波浪线边缘行是部分填充）
+FRAME_BAR_ZONE = 0.30      # 只看首格上沿 +/末格下沿 − 此比例 × 格高的端区
+                           # （页级共识网格与本页物理框有相位差，横条常在
+                           # 末格**内部**尾段，实测 vol02/136 在末线上方 25px）
+FRAME_BAR_SIDE_T = 0.5     # 「横条行」的定谳证据：**文字带两侧的墙内空档**
+                           # 里该行的墨比 ≥ 此值。字的笔画到文字带边就停
+                           # （「一/辶捺/灬底」都如此），空档里只有横条/
+                           # 细界行会有墨（界行 ~3px / 空档 ~25px ≈ 0.12，
+                           # 够不着）。第一版用页级远窗探针，被**邻列同一
+                           # 行字**的墨骗了——各列末行字同 y 对齐，探出去
+                           # 撞到的「延续」是隔壁的字，末格宽底笔被成片
+                           # 误削（实测 vol01 274 格核心区被削 ≥250px）
 # ── 贴边界行残条清除 ─────────────────────────────────────
 # 磨损界行断成的短残段够不着围栏放宽档的游程（<0.8×列距），墙外扩后
 # 留在图块边缘，是 vol02 wide_gap 的主要成因（抽 24 例有 19 例是
@@ -369,6 +390,75 @@ def _boundary_ink_frac(gray: np.ndarray) -> float:
     return edge / total
 
 
+def mask_frame_bars_outside(strip: np.ndarray,
+                            local: list[tuple[int, float, float]],
+                            lpad: int, rpad: int,
+                            cell_h: float) -> np.ndarray:
+    """抹掉条带首/末端区里的版框横线**行**（用户审阅反馈的主病灶）。
+
+    三道判据缺一不可：
+    - 按**行**不按连通体：横条经 8 连通与条带边缘细碎渣会链成几百像素
+      高的稀疏大连通体（实测 vol02/136 col5 高 614px、墨才 2970），
+      任何「扁平连通体」判据都失灵；
+    - 端区限定：页级共识网格与本页物理框有相位差，下框横条常在末格
+      **内部**尾段（实测在末线上方 25px），所以端区伸进格内 0.3 格；
+    - **墙内空档**定谳（lpad/rpad = 文字带相对条带的左右起止）：横条
+      填满文字带两侧的空档，字的宽底笔（一/辶捺/灬底）到文字带边就停
+      （见 FRAME_BAR_SIDE_T 注——页级探针会被邻列同行字骗，已废）。
+    只按行抹、只在端区抹：与字连通的横条也只削掉横条本身那几行，
+    绝不顺着连通关系动格心的字身。"""
+    if not local:
+        return strip
+    top = int(min(l for _, l, _ in local))
+    bot = int(max(b for _, _, b in local))
+    H, W = strip.shape
+    la, lb = 0, max(0, min(lpad - 2, W))
+    ra, rb = min(W, rpad + 2), W
+    if (lb - la) + (rb - ra) < 8:      # 没有空档可取证 → 保守不动
+        return strip
+    binary = (strip < BINARY_THRESHOLD_PATCH)
+    rowink = binary.sum(axis=1)
+    z = int(FRAME_BAR_ZONE * cell_h)
+    zone = np.zeros(H, dtype=bool)
+    zone[0:np.clip(top + z, 0, H)] = True
+    zone[np.clip(bot - z, 0, H):H] = True
+    core = (rowink >= FRAME_BAR_ROW_T * W) & zone
+    if not core.any():
+        return strip
+    wiped = np.zeros(H, dtype=bool)
+    for y in np.flatnonzero(core):
+        lf = float(binary[y, la:lb].mean()) if lb > la else 0.0
+        rf = float(binary[y, ra:rb].mean()) if rb > ra else 0.0
+        if max(lf, rf) >= FRAME_BAR_SIDE_T:
+            wiped[y] = True
+    if not wiped.any():
+        return strip
+    soft = (rowink >= FRAME_BAR_SOFT_T * W) & zone
+    for _ in range(2):
+        for y in np.flatnonzero(soft & ~wiped):
+            if wiped[max(0, y - 3):y + 4].any():
+                wiped[y] = True
+    # 穿行保护（用户实审反馈：字的捺/底笔常压在框线行上，整行抹会把
+    # 穿行而过的笔画一起削掉）：对每条抹带逐 x 检查，[带±5行] 里的墨
+    # 高出带高 ≥6px 的 x 是贯穿笔画，保留；只有带内有墨的 x 是纯横条，
+    # 抹。「只裁横条本身，不动与它连通的字」。
+    out = strip.copy()
+    ys = np.flatnonzero(wiped)
+    bands = []
+    s = ys[0]
+    for a, b2 in zip(ys, ys[1:]):
+        if b2 - a > 1:
+            bands.append((s, a + 1)); s = b2
+    bands.append((s, ys[-1] + 1))
+    for ya, yb in bands:
+        ea, eb = max(0, ya - 5), min(H, yb + 5)
+        span_ink = binary[ea:eb].sum(axis=0)
+        protect = span_ink >= (yb - ya) + 6
+        seg = out[ya:yb]
+        seg[:, ~protect] = 255
+    return out
+
+
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     """抹掉最外侧的界行残条（磨损界行断成的短竖段/虚线链）。
 
@@ -648,6 +738,36 @@ def _assign_column(col_gray: np.ndarray,
         x, y, cw, ch, _a = live[k]
         return max(0, min(y + ch, int(bot)) - max(y, int(top)))
 
+    # ── 跨格重占检查（用户实审反馈：连通片整块被错删）────────
+    # 字身与边缘残渣/邻字连成一体后，若整体认给某一格，clean_patch 会把
+    # 它从其他格的图块里整片抹掉——实测 vol02 全书 3.5k 格核心区被删
+    # ≥250px 墨，93% 出自本路径。判据：连通体在**归属格之外**某格的
+    # **中央带**（30%~70% 格高）里有实质墨，说明那格的字身（的一部分）
+    # 在这个连通体里，谁都不许整体独占 → 降级为粘连块按格界硬切，
+    # 各归各格。中央带是关键余量：「守」的宀、出头笔画都住在邻格的
+    # **边缘带**，不会触发（不然会回退到「守削成寸」的老病）。
+    CORE_BAND = 0.30
+    CORE_SPLIT_MIN = 200
+    _rowcache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+    def _rows_of(k: int) -> tuple[np.ndarray, np.ndarray]:
+        if k not in _rowcache:
+            ys = np.nonzero(labels == k)[0]
+            _rowcache[k] = np.unique(ys, return_counts=True)
+        return _rowcache[k]
+
+    def overclaims(k: int, own_cell: int) -> bool:
+        rows, cnt = _rows_of(k)
+        for i, top, bot in cells:
+            if i == own_cell:
+                continue
+            bh = bot - top
+            a, b = top + CORE_BAND * bh, bot - CORE_BAND * bh
+            m = int(cnt[(rows >= a) & (rows < b)].sum())
+            if m >= CORE_SPLIT_MIN:
+                return True
+        return False
+
     # ── 2. 每格认一个字身（一个连通体只当一次字身）──────
     # 贪心最大重叠匹配：一个格一个字身、一个连通体只当一次字身。
     # 逐格取最优会漏配——某块被隔壁以更大重叠抢走后，本格就再没有第二
@@ -663,6 +783,13 @@ def _assign_column(col_gray: np.ndarray,
     taken_cell: set[int] = set()
     for _ov, i, k in pairs:
         if i in taken_cell or k in claim:
+            continue
+        if overclaims(k, i):
+            # 它占着别格的中央带：不能由 i 独占。只跳过**这个配对**——
+            # 若那个「别格」正是它真正的字身格，后面的配对会把它认走；
+            # 真正横跨多格中央带的（对谁都 overclaims）会一路配不上，
+            # 落到第 3 步被硬切。（第一版在这里直接弹出 live 转硬切，
+            # 结果它稍后仍被真身格 claim，bodies 循环 KeyError。）
             continue
         claim[k] = i
         taken_cell.add(i)
@@ -708,6 +835,9 @@ def _assign_column(col_gray: np.ndarray,
                     best, best_ov = i, ov
             if best is None:
                 continue
+        if overclaims(k, best):
+            merged.append(k)                          # 占着别格中央带 → 硬切
+            continue
         owner[labels == k] = best + 1
         add(best, x, y, x + cw, y + ch)
 
@@ -856,6 +986,9 @@ class CharExtractor:
             local = [(int(c["index"]),
                       float(c["y_top"]) - sy0,
                       float(c["y_bottom"]) - sy0) for c in cells]
+            strip = mask_frame_bars_outside(
+                strip, local, int(round(left_x)) - sx0,
+                int(round(right_x)) - sx0, cell_h_ref)
             if self.strategy == "component_owner":
                 boxes, owner = _assign_column(strip, local, cell_h_ref,
                                               float(sx1 - sx0))
