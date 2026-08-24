@@ -23,7 +23,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .canonical import canonical_png
+from .canonical import canonical_png, encode_png, to_canonical
 from .extractor import load_index
 from .feedback import load_events, remap_events, replay_events
 from .features import DEFAULT_FEATURE, get_feature
@@ -445,7 +445,7 @@ class GlyphDB:
     # ── 單實例準入（種子協議 §3.5）───────────────────────
 
     def admit_instance(self, instance_id: str, char: str, patch_png: bytes,
-                       norm: np.ndarray, *, provenance: str,
+                       *, provenance: str,
                        evidence: dict | None = None,
                        edition_tag: str | None = None,
                        page: str = "", col: int = 0, idx: int = 0,
@@ -456,8 +456,11 @@ class GlyphDB:
                        semantic: str | None = None) -> bool:
         """單個已裁決實例進庫（逐頁種子流程用，區別於 import_book 全量）。
 
-        寫入：原始圖塊（真源）、派生表示（norm/skeleton/feat）、glyph
-        條目（n_confirmed 累加）、exemplar（role='seed'，逐實例可檢索）、
+        寫入：canonical 圖塊（真源，256×256 質心居中——十九輪起與
+        import_book 同一標準，此前種子路徑存的是原始裁切，全庫展示/
+        比較不可比）、派生表示（norm/skeleton/feat，一律從 canonical
+        圖重算——單一標準，不收調用方的 norm）、glyph 條目
+        （n_confirmed 累加）、exemplar（role='seed'，逐實例可檢索）、
         admissions 審計行（provenance + evidence JSON——設計 §3 紀律 1：
         逐實例證據，不做盲傳播；改判時憑它重放）。
 
@@ -474,6 +477,11 @@ class GlyphDB:
             " VALUES (?,?,?)", (source_id, edition, _now()))
         sem = semantic or char
         cp = ord(char) if len(char) == 1 else None
+        raw = cv2.imdecode(np.frombuffer(patch_png, np.uint8),
+                           cv2.IMREAD_GRAYSCALE)
+        canon = to_canonical(raw)
+        patch_png = encode_png(canon)
+        norm = normalize_patch(canon)
         cur.execute(
             """INSERT INTO instances (instance_id, source_id, page, col, idx,
                  bbox, patch_png, ink_ratio, width, height, quality_flags,
@@ -514,7 +522,6 @@ class GlyphDB:
         return True
 
     def refresh_instance_patch(self, instance_id: str, patch_png: bytes,
-                               norm: np.ndarray,
                                bbox: list | None = None) -> bool:
         """已進庫實例的圖塊被重切後，刷新庫裡的真源與全部派生。
 
@@ -531,10 +538,14 @@ class GlyphDB:
         if not cur.execute("SELECT 1 FROM instances WHERE instance_id=?",
                            (instance_id,)).fetchone():
             return False
+        raw = cv2.imdecode(np.frombuffer(patch_png, np.uint8),
+                           cv2.IMREAD_GRAYSCALE)
+        canon = to_canonical(raw)
+        norm = normalize_patch(canon)
         cur.execute(
             "UPDATE instances SET patch_png=?, bbox=?, updated_at=? "
             "WHERE instance_id=?",
-            (patch_png, json.dumps(bbox) if bbox is not None else None,
+            (encode_png(canon), json.dumps(bbox) if bbox is not None else None,
              _now(), instance_id))
         self._write_derived(cur, instance_id, norm)
         cur.execute("UPDATE exemplars SET added_at=? WHERE instance_id=?",
