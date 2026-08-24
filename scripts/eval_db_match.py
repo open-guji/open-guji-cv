@@ -254,6 +254,10 @@ def main() -> None:
     ap.add_argument("--seed-shard", default="001-vol01-body")
     ap.add_argument("--query-shard", default="002-vol02-body")
     ap.add_argument("--k", type=int, default=10)
+    ap.add_argument("--cov-high", type=float, default=None,
+                    help="same 闸（默认跟随判据的库匹配侧标定，两者都是 0.992）")
+    ap.add_argument("--miss-wmax", type=float, default=None,
+                    help="12×12 窗口残差闸（默认 MISS_WMAX=12）")
     ap.add_argument("--verify-method", default="elastic",
                     choices=["elastic", "coverage"],
                     help="精验判据（默认 elastic=现行；coverage=旧判据对照）")
@@ -285,12 +289,14 @@ def main() -> None:
                                 cache_paths, args.carrier_tmpl)
 
     samples = Path(args.dataset) / "samples"
+    wmax_kw = {} if args.miss_wmax is None else {"miss_wmax": args.miss_wmax}
     reports = []
 
     if args.protocol in ("incremental", "all"):
         for shard in args.shards.split(","):
             inst, patches = load_shard(samples, shard)
-            m = GlyphMatcher(k=args.k, verify_method=args.verify_method)
+            m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
+                             cov_high=args.cov_high, **wmax_kw)
             feats = m.extract(patches)
             reports.append(run(m, inst, patches, feats, f"incremental/{shard}",
                                branches=branches))
@@ -298,7 +304,8 @@ def main() -> None:
     if args.protocol in ("cross-seed", "all"):
         si, sp = load_shard(samples, args.seed_shard)
         qi, qp = load_shard(samples, args.query_shard)
-        m = GlyphMatcher(k=args.k, verify_method=args.verify_method)
+        m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
+                         cov_high=args.cov_high, **wmax_kw)
         sf = m.extract(sp)
         qf = m.extract(qp)
         for i, x in enumerate(si):

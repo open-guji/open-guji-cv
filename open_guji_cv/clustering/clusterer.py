@@ -24,9 +24,10 @@ from ..utils.image_io import imread, imwrite
 from .extractor import CharInstance, load_index
 from .features import DEFAULT_FEATURE, get_feature
 from .normalize import NORM_SIZE, normalize_patch
-from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO, ELASTIC_COV_HIGH,
-                     MISS_WMAX, THETA_HIGH, THETA_LOW, verify_pair,
-                     verify_pair_cov, verify_pair_elastic)
+from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO,
+                     ELASTIC_CLUSTER_COV_HIGH, MISS_WMAX, THETA_HIGH,
+                     THETA_LOW, verify_pair, verify_pair_cov,
+                     verify_pair_elastic)
 
 KNN_K = 10
 CROSS_CHECK_K = 3
@@ -40,12 +41,13 @@ class ClusterParams:
     feature: str = DEFAULT_FEATURE
     # elastic（默认，2026-08-24 起）：软覆盖 + 分块弹性对齐，分数已校准回
     # coverage 刻度，故 cov_low/miss_wmax 沿用同一组数；same 闸另标
-    # （ELASTIC_COV_HIGH=0.988，理由见 verify.py）。
+    # （聚类侧 ELASTIC_CLUSTER_COV_HIGH=0.988，理由见 verify.py）。
     # coverage：旧的 r=2 硬膨胀覆盖率判据；overlap：更旧的配准 F1 判据。
     # 三者都保留作对照，操作点见 verify.py 与 g3g4_error_analysis.md。
     verify_method: str = "elastic"
-    # None = 跟随判据自己的默认闸（elastic 0.988 / coverage 0.992——两者
-    # 各自标定，别互相借用），__post_init__ 里解析成具体数值后再进报告。
+    # None = 跟随判据自己的**聚类侧**默认闸（elastic 0.988 / coverage
+    # 0.992——各自标定，别互相借用；库匹配侧另有更严的一档，见 verify.py），
+    # __post_init__ 里解析成具体数值后再进报告。
     cov_high: float | None = None
     cov_low: float = COV_LOW
     miss_wmax: float = MISS_WMAX
@@ -59,7 +61,7 @@ class ClusterParams:
 
     def __post_init__(self) -> None:
         if self.cov_high is None:
-            self.cov_high = (ELASTIC_COV_HIGH
+            self.cov_high = (ELASTIC_CLUSTER_COV_HIGH
                              if self.verify_method == "elastic" else COV_HIGH)
 
     def to_dict(self) -> dict:
