@@ -842,8 +842,8 @@ def main():
                    help="配准判据（默认 elastic=软覆盖+分块弹性对齐；"
                         "coverage=旧的 r=2 硬膨胀覆盖率；overlap=更旧的 F1 对照）")
     p.add_argument("--cov-high", type=float, default=None,
-                   help="合并覆盖率闸（默认跟随判据：elastic 0.988 / "
-                        "coverage 0.992）")
+                   help="合并覆盖率闸（默认跟随判据的聚类侧标定："
+                        "elastic 0.988 / coverage 0.992）")
     p.add_argument("--miss-wmax", type=float, default=12,
                    help="coverage 判据的 12×12 窗口残差上限（默认 12px）")
     p.add_argument("--theta-high", type=float, default=0.80,
