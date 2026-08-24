@@ -31,10 +31,13 @@ from pathlib import Path
 import numpy as np
 
 from .features import get_feature
-from .verify import verify_pair_cov
+from .verify import verify_pair_elastic
 
 # 形离群阈：同字最优 cov 低于此才怀疑。同字同刻工的覆盖率天然 ≥0.95
 # 档（match_solo 标定），0.90 以下已经是「不太像同一个刻字」的水位。
+# 判据 2026-08-24 起随匹配栈换成 elastic——体检必须和匹配器用同一把尺，
+# 否则体检打的旗是匹配器早已不犯的错。elastic 的分数经分位校准回
+# coverage 刻度（verify.py），下面三个阈的操作点因此照旧。
 TH_OUTLIER = 0.90
 # 竞争字达标线：异字 cov 要到这个档才算「形上更像别人」（低档的
 # 异字相似遍地都是，不构成怀疑）。
@@ -102,8 +105,8 @@ def shape_audit(entries: list[AuditEntry],
     def cov(i: int, j: int) -> float:
         k = (i, j) if i < j else (j, i)
         if k not in cache:
-            cache[k] = float(verify_pair_cov(entries[i].norm,
-                                             entries[j].norm).f1)
+            cache[k] = float(verify_pair_elastic(entries[i].norm,
+                                                 entries[j].norm).f1)
         return cache[k]
 
     for i, e in enumerate(entries):
