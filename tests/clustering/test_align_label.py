@@ -166,3 +166,34 @@ def test_page_reference_no_gate_and_gaps():
     for i, want in enumerate(mid):                   # 段长 5 > 采信闸的 3
         got = refs[(1, len(head) + i)]
         assert got[0] == want and got[1] == "replace"
+
+
+def test_carrier_slots_drops_stale_entries(tmp_path):
+    """载体比索引多出格位 → 必须丢掉，否则整列文本后移一位。
+
+    vol01 第 14 页实锤：切分重跑 164→163 格、载体仍 164 条，锚定照样
+    "成功"但采信闸全灭（过闸对齐 162/180 → 0/163），且**不报任何错**
+    ——整页看着像"没锚定"。这是最坏的失败模式，必须有回归钉住。
+    """
+    from open_guji_cv.clustering.align_label import carrier_slots
+    p = tmp_path / "carrier.jsonl"
+    p.write_text("".join(json.dumps(
+        {"id": f"b:1:1:{i}", "char": c, "prob": 0.9}, ensure_ascii=False) + "\n"
+        for i, c in enumerate("天地玄黃")), encoding="utf-8")
+
+    # 不给 valid_ids：照单全收（旧行为，向后兼容）
+    assert [c for _, _, c in carrier_slots(p)["1"]] == list("天地玄黃")
+    # 给了索引 id：载体里多出的 b:1:1:2 被丢掉，剩下的顺序不变
+    valid = {"b:1:1:0", "b:1:1:1", "b:1:1:3"}
+    assert [c for _, _, c in carrier_slots(p, valid_ids=valid)["1"]] == \
+        list("天地黃")
+
+
+def test_carrier_slots_tolerates_missing_entries(tmp_path):
+    """索引有而载体无：无害（那一格没 OCR 而已），不该报错也不该丢别的。"""
+    from open_guji_cv.clustering.align_label import carrier_slots
+    p = tmp_path / "carrier.jsonl"
+    p.write_text(json.dumps({"id": "b:1:1:0", "char": "天", "prob": 0.9}) + "\n",
+                 encoding="utf-8")
+    got = carrier_slots(p, valid_ids={"b:1:1:0", "b:1:1:1", "b:1:1:2"})
+    assert [c for _, _, c in got["1"]] == ["天"]

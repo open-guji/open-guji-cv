@@ -219,20 +219,37 @@ def page_reference(page: str, slots: list[tuple[int, int, str]],
     return out
 
 
-def carrier_slots(carrier_path: str | Path) -> dict[str, list[tuple[int, int, str]]]:
+def carrier_slots(carrier_path: str | Path,
+                  valid_ids: set[str] | None = None,
+                  ) -> dict[str, list[tuple[int, int, str]]]:
     """OCR 载体 jsonl（build_ocr_carrier.py 产出）→ slots_by_page。
 
     空识别用 '□' 占位：格位必须占住，否则页文本长度与实例数对不上，
     对齐窗口整体错位。
+
+    ``valid_ids`` 给当前 index.jsonl 的实例 id 集合时，**丢掉载体里已经
+    不存在的格位**。切分一重跑，载体就可能比索引多出/少掉格——多出的
+    那一格会把整列文本后移一位，锚定照样"成功"但采信闸全灭：整页看着
+    像"没锚定"，不报任何错。vol01 第 14 页实锤（切分 164→163 格，载体
+    仍 164 条，过闸对齐从 162/180 掉到 0/163）。所以调用方**应当**把
+    索引 id 传进来；载体缺格（索引有而载体无）无害（那一格没 OCR 而已），
+    载体多格才致命。
     """
     by_page: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
+    dropped = 0
     with open(carrier_path, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
             r = json.loads(line)
+            if valid_ids is not None and r["id"] not in valid_ids:
+                dropped += 1
+                continue
             _, page, col, idx = r["id"].split(":")
             by_page[page].append((int(col), int(idx), r["char"] or "□"))
+    if dropped:
+        print(f"⚠ OCR 载体有 {dropped} 条已不在索引里（切分重跑过？）已丢弃；"
+              f"建议重建载体：scripts/build_ocr_carrier.py")
     return {p: sorted(v) for p, v in by_page.items()}
 
 
