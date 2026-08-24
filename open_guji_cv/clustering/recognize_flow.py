@@ -194,6 +194,22 @@ def decide_diff(ocr_topk: list[tuple[str, float]],
     return _decide(priors, "diff", context, lm, semantic_fn, lam)
 
 
+def rank_candidates(priors: dict[str, float],
+                    context: tuple[str, ...] | None = None,
+                    lm: BaseLM | None = None,
+                    semantic_fn: Callable[[str], str] | None = None,
+                    lam: float = LAMBDA,
+                    branch: str = "rank") -> Decision:
+    """裁决核心的公开入口：已融合的先验分布 + 上下文 LM → Decision。
+
+    decide_unsure/decide_diff 是「从原始来源融合再裁决」的便捷封装；
+    本入口给**已经拿到先验分布**的调用方（context_step 的策略、
+    context-correction 评测的冻结候选）——同一个核心，保证测试集上
+    量出来的就是生产里跑的。
+    """
+    return _decide(priors, branch, context, lm, semantic_fn, lam)
+
+
 def semantic_margin(decision: Decision,
                     semantic_fn: Callable[[str], str],
                     surface_prefs: set[str] | None = None,

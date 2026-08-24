@@ -147,28 +147,15 @@ def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
     seed 通道的裁决：语义层 margin ≥ 阈才改判，其余保持基线首选；
     上下文用列内金标前文（理想口径，同 context.prev 的说明）。
     按 origin（human/align）分层——human 层才是硬样本。"""
-    import math
+    from open_guji_cv.clustering.context_step import build_strategy
+
+    decider = build_strategy("gated_ngram", lm=lm,
+                             semantic_fn=vm.semantic, lam=lam)
 
     def decide_slot(cands, ctx_chars):
-        scores = {}
-        for c in cands:
-            lp = lm.logp(c["char"], tuple(ctx_chars))
-            scores[c["char"]] = lam * math.log(max(c["prob"], 1e-12)) \
-                + (1.0 - lam) * lp
-        top = max(scores.values())
-        exp = {ch: math.exp(s - top) for ch, s in scores.items()}
-        z = sum(exp.values())
-        ranked = sorted(((ch, e / z) for ch, e in exp.items()),
-                        key=lambda t: -t[1])
-        groups: dict[str, float] = {}
-        for ch, p in ranked:
-            g = vm.semantic(ch)
-            groups[g] = groups.get(g, 0.0) + p
-        top_sem = max(groups, key=lambda g: groups[g])
-        rest = [v for g, v in groups.items() if g != top_sem]
-        sem_margin = groups[top_sem] - (max(rest) if rest else 0.0)
-        members = [ch for ch, _ in ranked if vm.semantic(ch) == top_sem]
-        return members[0], sem_margin
+        priors = {c["char"]: c["prob"] for c in cands}
+        res = decider.decide(priors, context=tuple(ctx_chars))
+        return res.surface, res.margin
 
     strata = {"human": [0, 0, 0, 0], "align": [0, 0, 0, 0]}  # n, base, new, flips
     rescued = harmed = flips = 0
