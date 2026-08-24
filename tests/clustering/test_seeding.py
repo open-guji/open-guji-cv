@@ -414,6 +414,39 @@ def test_admission_decision_match_ref():
                               vmap, match_char="文")[0] is False
 
 
+def test_match_ref_accepts_unsure_top_candidate():
+    """R2（十四轮全量交叉分析）：库 × 整理本通道放宽到 top 候选。
+
+    文本证据 × 形状证据同源性为零，529 条人审难例回放 144/144 全对，
+    其中 33 条属形近家族也全对——形近护栏防的是形状判据，文本证据
+    不受形状干扰，本就该穿透它。
+    """
+    from open_guji_cv.clustering.seed_queue import DOUBT_NEAR_FORM
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap({})
+    lo = {"char": "又", "prob": 0.4}
+    # 库没到 same 档（match_char=None），但 top 候选与整理本一致 → 进库
+    assert admission_decision(lo, "文", None, [], vmap,
+                              match_candidates=[("文", 0.96), ("又", 0.90)]
+                              ) == (True, "match_ref")
+    # 免闸参考（无过闸对齐）同样算数
+    assert admission_decision(lo, None, "文", [], vmap,
+                              match_candidates=[("文", 0.96)]
+                              ) == (True, "match_ref")
+    # 形近家族**仍然拦**：交叉分析里 corpus×db 一致的 33 条形近字虽然
+    # 全对，但 n=33 撑不起拆护栏；而反例（已/巳、人/入、日/曰）恰恰都
+    # 出在这一族。放宽与否留给后续更大样本，当前保守。
+    assert admission_decision(lo, "日", None, [DOUBT_NEAR_FORM], vmap,
+                              match_candidates=[("日", 0.96)])[0] is False
+    # 库 top 与整理本不一致 → 仍不进（这正是 4 条 OCR×库 反例的形态）
+    assert admission_decision(lo, "巳", None, [], vmap,
+                              match_candidates=[("已", 0.949)])[0] is False
+    # 没有整理本时本通道不生效（那是 match_solo 的地盘）
+    assert admission_decision(lo, None, None, [], vmap,
+                              match_candidates=[("文", 0.96)])[0] is False
+
+
 def test_admission_decision_match_solo():
     """十轮定案（十一轮上调 0.99）：无整理本锚定时，库内形状验证
     cov ≥ 0.99 单独放行。"""
