@@ -1,0 +1,77 @@
+{
+  "font:iming": {
+    "kind": "font",
+    "chars_in_edition": 56778,
+    "evaluated": 94,
+    "recall@1": 0.3298,
+    "recall@5": 0.6064,
+    "verdicts": {
+      "unsure": 67,
+      "diff": 23,
+      "same": 4
+    },
+    "f1_correct": {
+      "n": 31,
+      "p10": 0.6207,
+      "median": 0.6701,
+      "p90": 0.7801
+    },
+    "f1_wrong_top1": {
+      "n": 63,
+      "median": 0.6409,
+      "p90": 0.7028
+    },
+    "separable": false,
+    "margin": -0.0821
+  },
+  "font:jigmo": {
+    "kind": "font",
+    "chars_in_edition": 98682,
+    "evaluated": 94,
+    "recall@1": 0.1383,
+    "recall@5": 0.3298,
+    "verdicts": {
+      "diff": 34,
+      "unsure": 55,
+      "same": 5
+    },
+    "f1_correct": {
+      "n": 13,
+      "p10": 0.6542,
+      "median": 0.7109,
+      "p90": 0.8115
+    },
+    "f1_wrong_top1": {
+      "n": 81,
+      "median": 0.6271,
+      "p90": 0.7114
+    },
+    "separable": false,
+    "margin": -0.0573
+  },
+  "wuyingdian-siku-zongmu": {
+    "kind": "woodblock",
+    "chars_in_edition": 26,
+    "evaluated": 94,
+    "recall@1": 0.9043,
+    "recall@5": 0.9149,
+    "verdicts": {
+      "unsure": 57,
+      "diff": 8,
+      "same": 29
+    },
+    "f1_correct": {
+      "n": 85,
+      "p10": 0.7409,
+      "median": 0.783,
+      "p90": 0.8287
+    },
+    "f1_wrong_top1": {
+      "n": 9,
+      "median": 0.4368,
+      "p90": 0.5919
+    },
+    "separable": true,
+    "margin": 0.149
+  }
+}

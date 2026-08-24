@@ -26,7 +26,8 @@ Web 界面：
     seed       <folder>   逐页进库（种子）：双信号+六条疑问判定 → phase9_seed/
     seed-ingest <folder>  回收种子审查事件 → human 进库 + 队列状态更新
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
-    glyph-db   <action>   M8 跨书字形数据库（import / stats / export / rebuild）
+    glyph-db   <action>   M8 跨书字形数据库
+                          （import / import-font / drop-edition / stats / export / rebuild）
     bench      <target>   合成数据集基准评测（verify / cluster）
 
 工具：
@@ -641,6 +642,15 @@ def cmd_glyph_db(args):
             summary = rebuild_from_store(args.store,
                                          Path(args.store) / "glyphdb.sqlite")
             db = None
+        elif args.action == "drop-edition":
+            if not args.edition:
+                print("drop-edition 需要 --edition"); sys.exit(1)
+            summary = db.drop_edition(args.edition)
+        elif args.action == "import-font":
+            from .clustering.font_glyphs import import_fonts_from_manifest
+            summary = import_fonts_from_manifest(
+                db, args.manifest, only=args.edition,
+                charset=args.charset, limit=args.limit)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -983,10 +993,19 @@ def main():
     # ── glyph-db（M8 跨书字形数据库）─────────────────────
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
-                   choices=["import", "stats", "export", "rebuild"])
+                   choices=["import", "stats", "export", "rebuild",
+                            "import-font", "drop-edition"])
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default="glyph_store", help="字形库目录")
-    p.add_argument("--edition", default=None, help="版本 edition_tag（默认=书名）")
+    p.add_argument("--edition", default=None,
+                   help="版本 edition_tag（import 默认=书名；"
+                        "import-font 用于只导 manifest 里的某一套字体）")
+    p.add_argument("--manifest", default="config/fonts/manifest.json",
+                   help="字体清单（import-font 用）")
+    p.add_argument("--charset", default=None,
+                   help="字表文件（import-font 用，默认取 manifest 里的）")
+    p.add_argument("--limit", type=int, default=None,
+                   help="只导前 N 个字（import-font 冒烟测试用）")
     p.add_argument("--collection", default=None, help="丛书（如 武英殿聚珍版）")
     p.add_argument("--script-style", default=None, help="字体（宋体刻/写刻/手写）")
     p.add_argument("--title", default=None, help="书名")

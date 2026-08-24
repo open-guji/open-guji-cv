@@ -6,6 +6,10 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+# 异体字关系层的下载缓存（Unihan.zip / cjkvi / yitizi 原始文件，
+# 可由 scripts/build_variants.py 重新下载；产物 variants.json 入库）
+config/variants/cache/
+
 # 字形库 SQLite 索引（可由 glyph_store/ 重建，不入版本控制）
 glyph_store/glyphdb.sqlite
 *.sqlite-journal

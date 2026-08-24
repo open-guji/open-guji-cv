@@ -108,6 +108,16 @@ RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 
                            # 合成页 420px 高时只剩 0.53 个字高，文字块自己就被当成
                            # 界行了。列距是版面自身的尺度，字的竖笔最长约 1 个字高
                            # （≈0.6 列距），1.2 倍列距留了一倍余量
+RULE_RELAX_RUN_PERIOD = 0.8  # 放宽档竖线游程 = 此倍数 × 列距（≈145px）。磨损
+                           # 断裂的界行残段实测 122~197px，够不着严格档的 1.2 倍
+                           # （vol02/119 col7 右侧界行因此「无墙不敢扩」，整列越带
+                           # 的字被切）；而单字竖笔最长 ≈0.5 列距（90px），0.8 倍
+                           # 仍留 60% 余量，字迹冒充不了
+CELL_COV_STOP_RELAX = 0.30  # 放宽档的覆盖率门槛。结构弱（游程短）就要求量足：
+                           # 放宽档带高 ≈246px、开运算核 ≈145px，能活下来的游程
+                           # 覆盖率天然 ≥0.59，字迹开运算后带内 ≈0——放宽档只用于
+                           # 「允许外扩/在哪停」，且墙只放宽不收紧
+                           # （hi=max(hi0,·)），最坏也退回现状
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 CELL_BOW_T = 3.0           # 各带围栏彼此相差超过此像素 → 这条边界是弯的，
                            # 额外输出逐带裁切边（cell_bands），图块按带掩蔽
@@ -472,21 +482,37 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     run = period * RULE_MIN_RUN_PERIOD
-    covs, spans = _vline_cov_bands((gray < BINARY_THRESHOLD).astype(np.uint8),
-                                   run)
-    cov = covs.max(axis=0)
-    w = len(cov)
+    binary = (gray < BINARY_THRESHOLD).astype(np.uint8)
+    covs, spans = _vline_cov_bands(binary, run)
+    # 放宽档：磨损断裂的界行残段（实测 122~197px）够不着严格档 1.2×列距，
+    # 「无墙不敢扩」会拒绝外扩、切掉越出文字带的字（vol02/119 col7 整列）。
+    # 放宽档用**自己的更细带划分**（带高 1.7×0.8×列距 ≈ 246px）：弯的界行
+    # 在粗带里墨摊开、每个 x 都不够游程，细带里同一段线更直（vol02/151
+    # 全页左墙在 6 条粗带下全部拒扩）。门槛相应抬高（结构弱要量足）。
+    run_rel = period * RULE_RELAX_RUN_PERIOD
+    covs_rel, spans_rel = _vline_cov_bands(binary, run_rel)
+    # 对齐到严格档的带：每条严格带取与之重叠的放宽带的最大覆盖率
+    rel_aligned = np.stack([
+        covs_rel[[i for i, (ra, rb) in enumerate(spans_rel)
+                  if not (rb <= a or ra >= b)]].max(axis=0)
+        for a, b in spans])
+    stops = (covs > CELL_COV_STOP) | (rel_aligned > CELL_COV_STOP_RELAX)
+    stop_any = stops.any(axis=0)
+    w = stops.shape[1]
+    # 界行中心：放宽档检出的也算「这一侧有分隔物」的证据——界行弯到列格
+    # 名义边界之外时，走到边界都撞不上墙，只能靠 near_* 放行扩到边界
     centers = [(a + b) / 2 for a, b in rule_segments(gray, run)]
+    centers += [(a + b) / 2 for a, b in rule_segments(gray, run_rel)]
     tol = period * CELL_RULE_TOL
     # 文字带本身也先内缩一点：界行正好压在带边上时，这一点点就是全部的余量
     shrink = min(max(period - inset_l - inset_r, 0.0) * 0.03, 4.0)
 
-    def walk(cov_row, start, stop_at, step):
+    def walk(stop_row, start, stop_at, step):
         x = int(round(start))
         while 0 <= x + step < w and (x + step - stop_at) * step < 0 \
-                and cov_row[x + step] <= CELL_COV_STOP:
+                and not stop_row[x + step]:
             x += step
-        hit = 0 <= x + step < w and cov_row[x + step] > CELL_COV_STOP
+        hit = 0 <= x + step < w and bool(stop_row[x + step])
         return x, hit
 
     out: list[tuple[float, float]] = []
@@ -497,10 +523,10 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         hi0 = cx0 + period * (k + 1) - inset_r - shrink
         near_l = any(abs(c - bl) <= tol for c in centers)
         near_r = any(abs(c - br) <= tol for c in centers)
-        x, hit = walk(cov, lo0, bl, -1)
+        x, hit = walk(stop_any, lo0, bl, -1)
         lo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) if (hit or near_l) \
             else lo0
-        x, hit = walk(cov, hi0, br, +1)
+        x, hit = walk(stop_any, hi0, br, +1)
         hi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) if (hit or near_r) \
             else hi0
         if hi - lo < period * 0.2:            # 证据自相矛盾 → 退回文字带
@@ -515,11 +541,11 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         # 保持原有的扁平表示。
         rows: list[list[float]] = []
         for bi, (ya, yb) in enumerate(spans):
-            crow = covs[bi]
-            x, hit = walk(crow, lo0, bl, -1)
+            srow = stops[bi]
+            x, hit = walk(srow, lo0, bl, -1)
             blo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) \
                 if (hit or near_l) else lo
-            x, hit = walk(crow, hi0, br, +1)
+            x, hit = walk(srow, hi0, br, +1)
             bhi = max(hi0, min(br, x - CELL_RULE_CLEARANCE)) \
                 if (hit or near_r) else hi
             if bhi - blo < period * 0.2:
@@ -787,6 +813,53 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
 
     best = (float(top), base)
     best_cost = float("inf")
+    # 盖不住的内容要付钱。谷/峰代价对「整体错开 k 格」的解族近乎无感：
+    # 相位以上的真字没有线去碰、页外的线剪裁到空白处，都不进代价——
+    # 实测 vol01/66 书级格高差 0.013px 就让相位在两族解之间翻转，坏解
+    # 把网格整体压低 2 格、顶部两行真字落在网格外、丢 11 个字；vol01/65
+    # 的旧产物就长期锁在这种坏解上（相位 403、末两格悬在页外空转）。
+    # 惩罚 = 网格跨度外（留 0.5 格出头余量：末格字下探、首格字上冒是
+    # 正常现象）的墨量 ÷ 格高——量纲与谷/峰项同阶但对整格错开是
+    # 压倒性的；半格以内的细对齐仍由谷/峰项主导。
+    # 两道防误伤，缺一不可（都是实测踩出来的）：
+    # 1) **两端各让开 1/4 格保护带**：content_range 已剔短游程废墨，但上
+    #    边框横杠与首行字连成一个长游程时它分不开（vol02/17 实测 top 直
+    #    接落在横杠上），贴边小段里的墨不可信。第一版不设保护带，vol01
+    #    有 56 页被拉高一格去「盖住」顶部废墨、净丢 129 个字。带宽只能
+    #    1/4 格：半格会把末行字的出头证据也吃掉，1 格错位就分不出了。
+    # 2) **逐列算、取中位**：聚合投影会让一列非规范的墨压过多数列——
+    #    vol02/17 卷首页的题名列顶格写、高出正文一行，聚合惩罚为了盖住
+    #    这一个字把 8 列正文的末行全甩掉。刻本栏格跨列统一，相位由多数
+    #    列的证据定（与全书「列间共识」原则同构）；跨全列的坏证据（边框
+    #    横杠人人有份，中位滤不掉）由保护带兜住。
+    # 代价是「只错开一格」的解族分不出——保护带正好吃掉一行——这类页
+    # 回到谷/峰代价的原判（与历史产物一致）；错开 ≥2 格的病（vol01/65
+    # 长期锁坏解、66 一触即翻）保护带外仍有整行真字墨，惩罚决定性。
+    # 3) **每行墨量门槛**：保护带外仍可能有跨列的低强度渗墨/晕染
+    #    （vol02/17 实测 ~4 墨/行/列，真字行是它的 20 倍），行墨低于该列
+    #    内容区 75 分位的 15% 就不算「没盖住的内容」。
+    csums = []
+    for p in projs:
+        seg = p[int(top):int(bottom)]
+        nz = seg[seg > 0]
+        thr = 0.15 * float(np.percentile(nz, 75)) if nz.size else 0.0
+        masked = np.where(p >= thr, p, 0.0)
+        csums.append(np.concatenate([[0.0], np.cumsum(masked)]))
+
+    def _uncovered(phase: float, span: float, g: float) -> float:
+        lo1, hi1 = top + g, phase - g
+        lo2, hi2 = phase + span + g, bottom - g
+        vals = []
+        for cs in csums:
+            v = 0.0
+            for a, b in ((lo1, hi1), (lo2, hi2)):
+                a = int(np.clip(round(a), top + g, bottom - g))
+                b = int(np.clip(round(b), top + g, bottom - g))
+                if b > a:
+                    v += float(cs[b] - cs[a])
+            vals.append(v)
+        return float(np.median(vals))
+
     for cell_h in cell_hs:
         span = cell_h * n_chars
         # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头。
@@ -796,7 +869,11 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         p_hi = top + 1.2 * cell_h if cell_h_fixed \
             else min(top + 1.2 * cell_h, max(p_lo, L - span))
         for phase in np.arange(p_lo, p_hi + phase_step, phase_step):
-            cost = _grid_cost(smooth, phase, cell_h, n_chars)
+            # 中位是列数一半的量级，聚合(smooth=各列之和)是全列量级，
+            # 补上列数因子让惩罚与谷/峰项同纲
+            uncovered = _uncovered(phase, span, 0.25 * cell_h) * len(csums)
+            cost = _grid_cost(smooth, phase, cell_h, n_chars) \
+                + uncovered / cell_h
             if cost < best_cost:
                 best_cost = cost
                 best = (float(phase), float(cell_h))
