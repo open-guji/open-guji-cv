@@ -26,7 +26,7 @@
 | [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）|
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图与分层扩库路线（P0 异体字关系层已实现）|
-| [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（200×200 灰度、只缩不放、质心居中）与迁移记录 |
+| [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
 | [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
 | [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |

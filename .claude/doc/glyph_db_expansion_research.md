@@ -94,11 +94,11 @@
 批量导入外部字形时：
 
 1. **不用改代码的入库路径**：往 `glyph_store/` 写 4 个 JSONL + `patches/*.png`
-   （**canonical 统一格式**，200×200 灰度、质心居中，规范见
+   （**canonical 统一格式**，256×256 灰度、质心居中，规范见
    glyph_canonical_format.md，2026-08-24 起），`glyph-db rebuild` 会自动重算
    norm/skeleton/feat。
 2. `synth.py:render_char()` 是现成的字体渲染函数，但它整画布 resize、没走统一
-   归一。正确做法：渲染 ≤152px 字面并留足白边，`to_canonical(clean=False)`
+   归一。正确做法：渲染 ≤195px 字面并留足白边，`to_canonical(clean=False)`
    转 canonical 后入库（详见 glyph_canonical_format.md §4）。
 3. **笔画粗细不是问题**（`stroke_normalize` 已抹平），真正的差异在骨架形状/部件写法。
 4. **阈值是拦路虎**：字体 vs 刻本真匹配相似度可低至 0.69 < THETA_HIGH 0.80。字体来源
