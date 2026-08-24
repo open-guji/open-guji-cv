@@ -218,6 +218,7 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         entries.append({
             "instance_id": it.instance_id,
             "col": it.col, "idx": it.idx, "tier": it.tier,
+            "intrusion": list(getattr(it, "intrusion", []) or []),
             "status": it.status,
             "patch_b64": _png_b64(patch),
             "choices": _assemble_choices(it),
@@ -401,6 +402,13 @@ def _render_seed_card(e: dict) -> str:
     iid = _esc(e["instance_id"])
     tier = ('<span class="tag t-rep">degraded</span>'
             if e["tier"] == "degraded" else "")
+    # 版面线侵入提示（十三轮加）：说清「这块脏在哪」，省得审查时自己找。
+    # 只是提示——字能不能认、要不要「仅定字·不入库」仍由人定。
+    _INTRUSION_CN = {"rule_bar_left": "左界行", "rule_bar_right": "右界行",
+                     "frame_bar_top": "上版框", "frame_bar_bottom": "下版框"}
+    intr = "".join(
+        f'<span class="tag t-rep">混入·{_esc(_INTRUSION_CN.get(c, c))}</span>'
+        for c in (e.get("intrusion") or []))
     skipped = (' <span class="tag t-skip">上批跳过</span>'
                if e["status"] == STATUS_SKIPPED else "")
     hints = _confusable_hints_for([c["char"] for c in e["choices"]])
@@ -408,7 +416,7 @@ def _render_seed_card(e: dict) -> str:
                       for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
-<span class="pos">第{e["col"]}列第{e["idx"]}字</span>{tier}{skipped}
+<span class="pos">第{e["col"]}列第{e["idx"]}字</span>{tier}{intr}{skipped}
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
