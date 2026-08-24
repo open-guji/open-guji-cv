@@ -1,51 +1,37 @@
 {
  "book": "vol01",
- "n_scanned": 24588,
- "n_hit": 1345,
- "hit_rate": 0.0547,
+ "n_scanned": 24668,
+ "n_hit": 842,
+ "hit_rate": 0.0341,
  "by_code": {
-  "frame_bar_bottom": 1002,
-  "rule_bar_right": 56,
-  "frame_bar_top": 177,
-  "rule_bar_left": 141
+  "rule_bar_right": 26,
+  "frame_bar_top": 142,
+  "frame_bar_bottom": 590,
+  "rule_bar_left": 95
  },
  "by_code_position": {
-  "frame_bar_bottom": {
-   "列尾": 718,
-   "列中": 261,
-   "列首": 23
-  },
   "rule_bar_right": {
-   "列尾": 28,
-   "列中": 27,
+   "列尾": 16,
+   "列中": 9,
    "列首": 1
   },
   "frame_bar_top": {
-   "列首": 34,
-   "列中": 61,
-   "列尾": 82
+   "列中": 55,
+   "列尾": 76,
+   "列首": 11
+  },
+  "frame_bar_bottom": {
+   "列尾": 309,
+   "列中": 262,
+   "列首": 19
   },
   "rule_bar_left": {
-   "列尾": 30,
-   "列中": 106,
-   "列首": 5
+   "列尾": 18,
+   "列中": 74,
+   "列首": 3
   }
  },
  "hot_columns": [
-  {
-   "page": "132",
-   "col": 9,
-   "hit": 1,
-   "slots": 1,
-   "rate": 1.0
-  },
-  {
-   "page": "132",
-   "col": 8,
-   "hit": 1,
-   "slots": 1,
-   "rate": 1.0
-  },
   {
    "page": "26",
    "col": 9,
@@ -70,16 +56,9 @@
   {
    "page": "57",
    "col": 8,
-   "hit": 12,
-   "slots": 20,
-   "rate": 0.6
-  },
-  {
-   "page": "133",
-   "col": 9,
-   "hit": 1,
-   "slots": 2,
-   "rate": 0.5
+   "hit": 13,
+   "slots": 21,
+   "rate": 0.619
   },
   {
    "page": "134",
@@ -124,98 +103,8 @@
    "rate": 0.5
   }
  ],
- "n_hot_columns": 13,
+ "n_hot_columns": 10,
  "instances": [
-  {
-   "instance_id": "vol01:100:8:8",
-   "page": "100",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:100:7:10",
-   "page": "100",
-   "col": 7,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:100:6:7",
-   "page": "100",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:100:3:13",
-   "page": "100",
-   "col": 3,
-   "idx": 13,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:100:2:8",
-   "page": "100",
-   "col": 2,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:100:1:13",
-   "page": "100",
-   "col": 1,
-   "idx": 13,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:101:9:7",
-   "page": "101",
-   "col": 9,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:101:8:7",
-   "page": "101",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:101:2:8",
-   "page": "101",
-   "col": 2,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
   {
    "instance_id": "vol01:101:1:6",
    "page": "101",
@@ -237,66 +126,6 @@
    ]
   },
   {
-   "instance_id": "vol01:102:9:0",
-   "page": "102",
-   "col": 9,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:102:7:0",
-   "page": "102",
-   "col": 7,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:102:5:0",
-   "page": "102",
-   "col": 5,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:102:5:7",
-   "page": "102",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:102:4:9",
-   "page": "102",
-   "col": 4,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:102:2:10",
-   "page": "102",
-   "col": 2,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:103:9:5",
    "page": "103",
    "col": 9,
@@ -304,98 +133,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:9:7",
-   "page": "103",
-   "col": 9,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:8:8",
-   "page": "103",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:7:8",
-   "page": "103",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:6:9",
-   "page": "103",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:5:8",
-   "page": "103",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:4:10",
-   "page": "103",
-   "col": 4,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left",
-    "rule_bar_right",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:3:7",
-   "page": "103",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:2:9",
-   "page": "103",
-   "col": 2,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:103:1:10",
-   "page": "103",
-   "col": 1,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -409,80 +146,10 @@
    ]
   },
   {
-   "instance_id": "vol01:104:9:8",
-   "page": "104",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:8:7",
-   "page": "104",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:7:10",
-   "page": "104",
-   "col": 7,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:104:6:8",
    "page": "104",
    "col": 6,
    "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:6:9",
-   "page": "104",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:5:9",
-   "page": "104",
-   "col": 5,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:4:8",
-   "page": "104",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:3:9",
-   "page": "104",
-   "col": 3,
-   "idx": 9,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -499,16 +166,6 @@
    ]
   },
   {
-   "instance_id": "vol01:104:2:7",
-   "page": "104",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:104:1:5",
    "page": "104",
    "col": 1,
@@ -516,56 +173,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:104:1:7",
-   "page": "104",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:9:5",
-   "page": "105",
-   "col": 9,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:8:6",
-   "page": "105",
-   "col": 8,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:7:9",
-   "page": "105",
-   "col": 7,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:6:5",
-   "page": "105",
-   "col": 6,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -589,121 +196,11 @@
    ]
   },
   {
-   "instance_id": "vol01:105:5:19",
-   "page": "105",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:2:6",
-   "page": "105",
-   "col": 2,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:105:1:8",
-   "page": "105",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:9:7",
-   "page": "106",
-   "col": 9,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:8:9",
-   "page": "106",
-   "col": 8,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:7:7",
-   "page": "106",
-   "col": 7,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:6:11",
-   "page": "106",
-   "col": 6,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:5:14",
-   "page": "106",
-   "col": 5,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:106:4:9",
    "page": "106",
    "col": 4,
    "idx": 9,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:4:11",
-   "page": "106",
-   "col": 4,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:3:12",
-   "page": "106",
-   "col": 3,
-   "idx": 12,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:2:8",
-   "page": "106",
-   "col": 2,
-   "idx": 8,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -716,16 +213,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:106:1:8",
-   "page": "106",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -759,30 +246,10 @@
    ]
   },
   {
-   "instance_id": "vol01:107:8:7",
-   "page": "107",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:107:7:5",
    "page": "107",
    "col": 7,
    "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:107:7:6",
-   "page": "107",
-   "col": 7,
-   "idx": 6,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -822,6 +289,16 @@
    "instance_id": "vol01:107:5:20",
    "page": "107",
    "col": 5,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_top"
+   ]
+  },
+  {
+   "instance_id": "vol01:107:4:20",
+   "page": "107",
+   "col": 4,
    "idx": 20,
    "pos": "列尾",
    "codes": [
@@ -879,46 +356,6 @@
    ]
   },
   {
-   "instance_id": "vol01:108:9:9",
-   "page": "108",
-   "col": 9,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:8:7",
-   "page": "108",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:7:8",
-   "page": "108",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:6:11",
-   "page": "108",
-   "col": 6,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:108:5:3",
    "page": "108",
    "col": 5,
@@ -929,120 +366,10 @@
    ]
   },
   {
-   "instance_id": "vol01:108:4:8",
-   "page": "108",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:3:6",
-   "page": "108",
-   "col": 3,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:2:7",
-   "page": "108",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:108:1:0",
-   "page": "108",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:9:6",
-   "page": "109",
-   "col": 9,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:8:7",
-   "page": "109",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:7:7",
-   "page": "109",
-   "col": 7,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:6:7",
-   "page": "109",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:109:5:5",
    "page": "109",
    "col": 5,
    "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:5:6",
-   "page": "109",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:4:7",
-   "page": "109",
-   "col": 4,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:109:3:20",
-   "page": "109",
-   "col": 3,
-   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -1059,11 +386,11 @@
    ]
   },
   {
-   "instance_id": "vol01:109:2:20",
+   "instance_id": "vol01:109:2:10",
    "page": "109",
    "col": 2,
-   "idx": 20,
-   "pos": "列尾",
+   "idx": 10,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -1076,16 +403,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:10:9:5",
-   "page": "10",
-   "col": 9,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -1109,31 +426,11 @@
    ]
   },
   {
-   "instance_id": "vol01:10:8:19",
-   "page": "10",
-   "col": 8,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:10:6:4",
    "page": "10",
    "col": 6,
    "idx": 4,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:10:6:19",
-   "page": "10",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -1169,16 +466,6 @@
    ]
   },
   {
-   "instance_id": "vol01:10:4:19",
-   "page": "10",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:10:3:6",
    "page": "10",
    "col": 3,
@@ -1209,150 +496,10 @@
    ]
   },
   {
-   "instance_id": "vol01:110:8:6",
-   "page": "110",
-   "col": 8,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:110:6:8",
-   "page": "110",
-   "col": 6,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:110:5:7",
-   "page": "110",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:110:4:6",
-   "page": "110",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:110:1:7",
-   "page": "110",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:111:7:8",
-   "page": "111",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:111:6:6",
-   "page": "111",
-   "col": 6,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:111:5:7",
-   "page": "111",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:111:4:7",
-   "page": "111",
-   "col": 4,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:111:3:8",
-   "page": "111",
-   "col": 3,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:111:1:8",
    "page": "111",
    "col": 1,
    "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:9:8",
-   "page": "112",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:8:9",
-   "page": "112",
-   "col": 8,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:7:8",
-   "page": "112",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:6:7",
-   "page": "112",
-   "col": 6,
-   "idx": 7,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -1369,112 +516,11 @@
    ]
   },
   {
-   "instance_id": "vol01:112:3:9",
-   "page": "112",
-   "col": 3,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:2:8",
-   "page": "112",
-   "col": 2,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:112:1:8",
-   "page": "112",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:113:6:6",
-   "page": "113",
-   "col": 6,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:113:5:7",
    "page": "113",
    "col": 5,
    "idx": 7,
    "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:113:5:8",
-   "page": "113",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:113:4:10",
-   "page": "113",
-   "col": 4,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:113:3:7",
-   "page": "113",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:113:1:8",
-   "page": "113",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:9:1",
-   "page": "114",
-   "col": 9,
-   "idx": 1,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:9:5",
-   "page": "114",
-   "col": 9,
-   "idx": 5,
-   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -1490,26 +536,6 @@
    ]
   },
   {
-   "instance_id": "vol01:114:8:4",
-   "page": "114",
-   "col": 8,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:8:10",
-   "page": "114",
-   "col": 8,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:114:7:6",
    "page": "114",
    "col": 7,
@@ -1517,16 +543,6 @@
    "pos": "列尾",
    "codes": [
     "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:7:7",
-   "page": "114",
-   "col": 7,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -1540,85 +556,13 @@
    ]
   },
   {
-   "instance_id": "vol01:114:5:8",
-   "page": "114",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:4:8",
-   "page": "114",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:3:7",
-   "page": "114",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:114:2:9",
-   "page": "114",
-   "col": 2,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right",
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:114:1:7",
    "page": "114",
    "col": 1,
    "idx": 7,
    "pos": "列尾",
    "codes": [
-    "frame_bar_top",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:9:7",
-   "page": "115",
-   "col": 9,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:8:9",
-   "page": "115",
-   "col": 8,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:7:6",
-   "page": "115",
-   "col": 7,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -1632,114 +576,13 @@
    ]
   },
   {
-   "instance_id": "vol01:115:6:9",
-   "page": "115",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:5:6",
-   "page": "115",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:4:6",
-   "page": "115",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:3:6",
-   "page": "115",
-   "col": 3,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:115:2:9",
    "page": "115",
    "col": 2,
    "idx": 9,
    "pos": "列尾",
    "codes": [
-    "frame_bar_top",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:115:1:6",
-   "page": "115",
-   "col": 1,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:9:11",
-   "page": "116",
-   "col": 9,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:8:10",
-   "page": "116",
-   "col": 8,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:7:10",
-   "page": "116",
-   "col": 7,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:6:9",
-   "page": "116",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:5:10",
-   "page": "116",
-   "col": 5,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -1753,39 +596,9 @@
    ]
   },
   {
-   "instance_id": "vol01:116:4:8",
-   "page": "116",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:3:7",
-   "page": "116",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:2:8",
+   "instance_id": "vol01:116:2:7",
    "page": "116",
    "col": 2,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:116:1:7",
-   "page": "116",
-   "col": 1,
    "idx": 7,
    "pos": "列尾",
    "codes": [
@@ -1803,292 +616,11 @@
    ]
   },
   {
-   "instance_id": "vol01:117:9:12",
-   "page": "117",
-   "col": 9,
-   "idx": 12,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:8:10",
-   "page": "117",
-   "col": 8,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:7:0",
-   "page": "117",
-   "col": 7,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:7:9",
-   "page": "117",
-   "col": 7,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:6:0",
-   "page": "117",
-   "col": 6,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:6:11",
-   "page": "117",
-   "col": 6,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:5:8",
-   "page": "117",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:4:8",
-   "page": "117",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:3:8",
-   "page": "117",
-   "col": 3,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:2:10",
-   "page": "117",
-   "col": 2,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:117:1:8",
-   "page": "117",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:9:8",
-   "page": "118",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:7:10",
-   "page": "118",
-   "col": 7,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:6:9",
-   "page": "118",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:5:10",
-   "page": "118",
-   "col": 5,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:4:10",
-   "page": "118",
-   "col": 4,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:3:9",
-   "page": "118",
-   "col": 3,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:2:9",
-   "page": "118",
-   "col": 2,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:118:1:0",
-   "page": "118",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:9:6",
-   "page": "119",
-   "col": 9,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:8:5",
-   "page": "119",
-   "col": 8,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:7:7",
-   "page": "119",
-   "col": 7,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:6:5",
-   "page": "119",
-   "col": 6,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:5:6",
-   "page": "119",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:119:4:9",
    "page": "119",
    "col": 4,
    "idx": 9,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:4:11",
-   "page": "119",
-   "col": 4,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:3:6",
-   "page": "119",
-   "col": 3,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:2:14",
-   "page": "119",
-   "col": 2,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:119:1:8",
-   "page": "119",
-   "col": 1,
-   "idx": 8,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -2114,53 +646,13 @@
    ]
   },
   {
-   "instance_id": "vol01:11:4:19",
-   "page": "11",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:9:12",
+   "instance_id": "vol01:120:5:4",
    "page": "120",
-   "col": 9,
-   "idx": 12,
-   "pos": "列尾",
+   "col": 5,
+   "idx": 4,
+   "pos": "列中",
    "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:8:11",
-   "page": "120",
-   "col": 8,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:7:7",
-   "page": "120",
-   "col": 7,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:6:7",
-   "page": "120",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -2169,26 +661,6 @@
    "col": 5,
    "idx": 5,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:5:7",
-   "page": "120",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:120:4:8",
-   "page": "120",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -2214,36 +686,6 @@
    ]
   },
   {
-   "instance_id": "vol01:120:1:7",
-   "page": "120",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:9:8",
-   "page": "121",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:8:5",
-   "page": "121",
-   "col": 8,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:121:7:4",
    "page": "121",
    "col": 7,
@@ -2254,90 +696,9 @@
    ]
   },
   {
-   "instance_id": "vol01:121:6:9",
-   "page": "121",
-   "col": 6,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:5:5",
-   "page": "121",
-   "col": 5,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
    "instance_id": "vol01:121:5:6",
    "page": "121",
    "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:4:0",
-   "page": "121",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:4:12",
-   "page": "121",
-   "col": 4,
-   "idx": 12,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:3:13",
-   "page": "121",
-   "col": 3,
-   "idx": 13,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:2:14",
-   "page": "121",
-   "col": 2,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:121:1:13",
-   "page": "121",
-   "col": 1,
-   "idx": 13,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:9:6",
-   "page": "122",
-   "col": 9,
    "idx": 6,
    "pos": "列尾",
    "codes": [
@@ -2355,484 +716,13 @@
    ]
   },
   {
-   "instance_id": "vol01:122:7:8",
-   "page": "122",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:6:7",
-   "page": "122",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:5:6",
-   "page": "122",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:4:0",
-   "page": "122",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:4:8",
-   "page": "122",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:3:7",
-   "page": "122",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:2:7",
-   "page": "122",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:122:1:7",
-   "page": "122",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:9:5",
-   "page": "123",
-   "col": 9,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:8:8",
-   "page": "123",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:7:5",
-   "page": "123",
-   "col": 7,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:6:7",
-   "page": "123",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:5:5",
-   "page": "123",
-   "col": 5,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:4:6",
-   "page": "123",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:2:6",
-   "page": "123",
-   "col": 2,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:123:1:6",
-   "page": "123",
-   "col": 1,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:9:9",
-   "page": "124",
-   "col": 9,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:8:8",
-   "page": "124",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:5:8",
-   "page": "124",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:4:8",
-   "page": "124",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:3:7",
-   "page": "124",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:2:7",
-   "page": "124",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:124:1:0",
-   "page": "124",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:124:1:8",
    "page": "124",
    "col": 1,
    "idx": 8,
    "pos": "列尾",
    "codes": [
-    "frame_bar_top",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:8:8",
-   "page": "125",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:7:6",
-   "page": "125",
-   "col": 7,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:6:7",
-   "page": "125",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:5:6",
-   "page": "125",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:4:5",
-   "page": "125",
-   "col": 4,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:2:5",
-   "page": "125",
-   "col": 2,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:125:1:5",
-   "page": "125",
-   "col": 1,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:9:8",
-   "page": "126",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:8:6",
-   "page": "126",
-   "col": 8,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:7:6",
-   "page": "126",
-   "col": 7,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:6:10",
-   "page": "126",
-   "col": 6,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:5:7",
-   "page": "126",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:4:8",
-   "page": "126",
-   "col": 4,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:3:9",
-   "page": "126",
-   "col": 3,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:2:7",
-   "page": "126",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:126:1:9",
-   "page": "126",
-   "col": 1,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:9:7",
-   "page": "127",
-   "col": 9,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:8:7",
-   "page": "127",
-   "col": 8,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:7:8",
-   "page": "127",
-   "col": 7,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:6:5",
-   "page": "127",
-   "col": 6,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:5:10",
-   "page": "127",
-   "col": 5,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:4:7",
-   "page": "127",
-   "col": 4,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:3:8",
-   "page": "127",
-   "col": 3,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:127:2:6",
-   "page": "127",
-   "col": 2,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -2842,8 +732,7 @@
    "idx": 7,
    "pos": "列尾",
    "codes": [
-    "frame_bar_top",
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -2867,121 +756,10 @@
    ]
   },
   {
-   "instance_id": "vol01:128:8:6",
-   "page": "128",
-   "col": 8,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:128:7:8",
    "page": "128",
    "col": 7,
    "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:6:8",
-   "page": "128",
-   "col": 6,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:5:7",
-   "page": "128",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:4:9",
-   "page": "128",
-   "col": 4,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:3:7",
-   "page": "128",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:2:7",
-   "page": "128",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:128:1:6",
-   "page": "128",
-   "col": 1,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:129:9:19",
-   "page": "129",
-   "col": 9,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:129:8:9",
-   "page": "129",
-   "col": 8,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:129:7:10",
-   "page": "129",
-   "col": 7,
-   "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:129:5:9",
-   "page": "129",
-   "col": 5,
-   "idx": 9,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -3048,50 +826,10 @@
    ]
   },
   {
-   "instance_id": "vol01:130:9:4",
-   "page": "130",
-   "col": 9,
-   "idx": 4,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:130:8:8",
-   "page": "130",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:130:7:20",
    "page": "130",
    "col": 7,
    "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:130:6:8",
-   "page": "130",
-   "col": 6,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:130:5:8",
-   "page": "130",
-   "col": 5,
-   "idx": 8,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -3108,66 +846,6 @@
    ]
   },
   {
-   "instance_id": "vol01:130:3:8",
-   "page": "130",
-   "col": 3,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:130:2:6",
-   "page": "130",
-   "col": 2,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:130:1:6",
-   "page": "130",
-   "col": 1,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:131:7:5",
-   "page": "131",
-   "col": 7,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:131:6:7",
-   "page": "131",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:131:5:8",
-   "page": "131",
-   "col": 5,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:131:4:4",
    "page": "131",
    "col": 4,
@@ -3175,26 +853,6 @@
    "pos": "列中",
    "codes": [
     "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:131:4:6",
-   "page": "131",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:131:3:7",
-   "page": "131",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -3208,93 +866,13 @@
    ]
   },
   {
-   "instance_id": "vol01:131:2:5",
-   "page": "131",
-   "col": 2,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:9:20",
+   "instance_id": "vol01:132:4:20",
    "page": "132",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:8:20",
-   "page": "132",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:5:9",
-   "page": "132",
-   "col": 5,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:3:7",
-   "page": "132",
-   "col": 3,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:2:4",
-   "page": "132",
-   "col": 2,
-   "idx": 4,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:132:1:5",
-   "page": "132",
-   "col": 1,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:133:9:20",
-   "page": "133",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:133:4:2",
-   "page": "133",
    "col": 4,
-   "idx": 2,
-   "pos": "列中",
+   "idx": 20,
+   "pos": "列尾",
    "codes": [
-    "rule_bar_left"
+    "frame_bar_top"
    ]
   },
   {
@@ -3308,31 +886,11 @@
    ]
   },
   {
-   "instance_id": "vol01:133:1:0",
-   "page": "133",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:134:9:0",
    "page": "134",
    "col": 9,
    "idx": 0,
    "pos": "列首",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:134:7:8",
-   "page": "134",
-   "col": 7,
-   "idx": 8,
-   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -3379,51 +937,11 @@
    ]
   },
   {
-   "instance_id": "vol01:135:8:20",
-   "page": "135",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:135:7:20",
-   "page": "135",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:135:6:20",
-   "page": "135",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:135:2:8",
    "page": "135",
    "col": 2,
    "idx": 8,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:135:2:20",
-   "page": "135",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -3443,16 +961,6 @@
    "page": "136",
    "col": 9,
    "idx": 14,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:137:9:5",
-   "page": "137",
-   "col": 9,
-   "idx": 5,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -3549,16 +1057,6 @@
    ]
   },
   {
-   "instance_id": "vol01:138:2:1",
-   "page": "138",
-   "col": 2,
-   "idx": 1,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:138:1:2",
    "page": "138",
    "col": 1,
@@ -3609,16 +1107,6 @@
    ]
   },
   {
-   "instance_id": "vol01:139:5:19",
-   "page": "139",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:139:5:20",
    "page": "139",
    "col": 5,
@@ -3649,190 +1137,60 @@
    ]
   },
   {
-   "instance_id": "vol01:139:1:1",
-   "page": "139",
-   "col": 1,
-   "idx": 1,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:139:1:17",
-   "page": "139",
-   "col": 1,
-   "idx": 17,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:139:1:18",
-   "page": "139",
-   "col": 1,
-   "idx": 18,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:7:19",
-   "page": "13",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:5:12",
+   "instance_id": "vol01:13:5:14",
    "page": "13",
    "col": 5,
-   "idx": 12,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:5:18",
-   "page": "13",
-   "col": 5,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:4:13",
-   "page": "13",
-   "col": 4,
-   "idx": 13,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:4:18",
-   "page": "13",
-   "col": 4,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:3:18",
-   "page": "13",
-   "col": 3,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:2:18",
-   "page": "13",
-   "col": 2,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:1:5",
-   "page": "13",
-   "col": 1,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:13:1:19",
-   "page": "13",
-   "col": 1,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:140:7:5",
-   "page": "140",
-   "col": 7,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:140:7:13",
-   "page": "140",
-   "col": 7,
-   "idx": 13,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:140:7:14",
-   "page": "140",
-   "col": 7,
    "idx": 14,
    "pos": "列中",
    "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:13:4:15",
+   "page": "13",
+   "col": 4,
+   "idx": 15,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:13:1:7",
+   "page": "13",
+   "col": 1,
+   "idx": 7,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:140:7:6",
+   "page": "140",
+   "col": 7,
+   "idx": 6,
+   "pos": "列中",
+   "codes": [
     "rule_bar_right"
    ]
   },
   {
-   "instance_id": "vol01:140:7:17",
-   "page": "140",
-   "col": 7,
-   "idx": 17,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:140:3:1",
+   "instance_id": "vol01:140:3:2",
    "page": "140",
    "col": 3,
-   "idx": 1,
+   "idx": 2,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:140:1:6",
+   "instance_id": "vol01:140:1:7",
    "page": "140",
    "col": 1,
-   "idx": 6,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:141:9:12",
-   "page": "141",
-   "col": 9,
-   "idx": 12,
+   "idx": 7,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -3909,16 +1267,6 @@
    ]
   },
   {
-   "instance_id": "vol01:144:5:19",
-   "page": "144",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:144:4:17",
    "page": "144",
    "col": 4,
@@ -3966,36 +1314,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:145:2:19",
-   "page": "145",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:146:9:18",
-   "page": "146",
-   "col": 9,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:146:7:0",
-   "page": "146",
-   "col": 7,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -4129,33 +1447,13 @@
    ]
   },
   {
-   "instance_id": "vol01:149:3:20",
+   "instance_id": "vol01:149:5:20",
    "page": "149",
-   "col": 3,
+   "col": 5,
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:149:1:0",
-   "page": "149",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:14:9:0",
-   "page": "14",
-   "col": 9,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -4239,16 +1537,6 @@
    ]
   },
   {
-   "instance_id": "vol01:151:1:4",
-   "page": "151",
-   "col": 1,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
    "instance_id": "vol01:152:9:20",
    "page": "152",
    "col": 9,
@@ -4266,26 +1554,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:152:7:17",
-   "page": "152",
-   "col": 7,
-   "idx": 17,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:152:7:19",
-   "page": "152",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -4509,36 +1777,6 @@
    ]
   },
   {
-   "instance_id": "vol01:155:5:20",
-   "page": "155",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:155:4:20",
-   "page": "155",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:155:3:20",
-   "page": "155",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:156:9:2",
    "page": "156",
    "col": 9,
@@ -4546,16 +1784,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:156:9:7",
-   "page": "156",
-   "col": 9,
-   "idx": 7,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -4649,13 +1877,13 @@
    ]
   },
   {
-   "instance_id": "vol01:157:2:11",
-   "page": "157",
-   "col": 2,
-   "idx": 11,
-   "pos": "列中",
+   "instance_id": "vol01:159:9:20",
+   "page": "159",
+   "col": 9,
+   "idx": 20,
+   "pos": "列尾",
    "codes": [
-    "rule_bar_right"
+    "frame_bar_top"
    ]
   },
   {
@@ -4665,87 +1893,17 @@
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
-   "instance_id": "vol01:159:1:4",
+   "instance_id": "vol01:159:2:20",
    "page": "159",
-   "col": 1,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:9:20",
-   "page": "15",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:8:20",
-   "page": "15",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:7:20",
-   "page": "15",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:6:20",
-   "page": "15",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:5:20",
-   "page": "15",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:2:20",
-   "page": "15",
    "col": 2,
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:15:1:20",
-   "page": "15",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -4819,26 +1977,6 @@
    ]
   },
   {
-   "instance_id": "vol01:161:8:19",
-   "page": "161",
-   "col": 8,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:161:7:19",
-   "page": "161",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:161:4:20",
    "page": "161",
    "col": 4,
@@ -4849,9 +1987,19 @@
    ]
   },
   {
-   "instance_id": "vol01:161:3:19",
+   "instance_id": "vol01:161:1:20",
    "page": "161",
-   "col": 3,
+   "col": 1,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_top"
+   ]
+  },
+  {
+   "instance_id": "vol01:162:9:19",
+   "page": "162",
+   "col": 9,
    "idx": 19,
    "pos": "列尾",
    "codes": [
@@ -4889,16 +2037,6 @@
    ]
   },
   {
-   "instance_id": "vol01:163:7:5",
-   "page": "163",
-   "col": 7,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:163:6:19",
    "page": "163",
    "col": 6,
@@ -4919,60 +2057,10 @@
    ]
   },
   {
-   "instance_id": "vol01:163:5:5",
-   "page": "163",
-   "col": 5,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:163:4:19",
-   "page": "163",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:163:3:19",
-   "page": "163",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:163:2:19",
-   "page": "163",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:163:1:19",
    "page": "163",
    "col": 1,
    "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:164:8:20",
-   "page": "164",
-   "col": 8,
-   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -4999,23 +2087,13 @@
    ]
   },
   {
-   "instance_id": "vol01:164:5:4",
+   "instance_id": "vol01:164:5:20",
    "page": "164",
    "col": 5,
-   "idx": 4,
-   "pos": "列中",
+   "idx": 20,
+   "pos": "列尾",
    "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:164:4:4",
-   "page": "164",
-   "col": 4,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
+    "frame_bar_bottom"
    ]
   },
   {
@@ -5049,20 +2127,10 @@
    ]
   },
   {
-   "instance_id": "vol01:164:2:0",
+   "instance_id": "vol01:164:2:3",
    "page": "164",
    "col": 2,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:164:2:1",
-   "page": "164",
-   "col": 2,
-   "idx": 1,
+   "idx": 3,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -5073,16 +2141,6 @@
    "page": "164",
    "col": 2,
    "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:164:1:20",
-   "page": "164",
-   "col": 1,
-   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -5159,6 +2217,16 @@
    ]
   },
   {
+   "instance_id": "vol01:166:9:4",
+   "page": "166",
+   "col": 9,
+   "idx": 4,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
    "instance_id": "vol01:166:9:10",
    "page": "166",
    "col": 9,
@@ -5174,16 +2242,6 @@
    "col": 9,
    "idx": 20,
    "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:166:8:2",
-   "page": "166",
-   "col": 8,
-   "idx": 2,
-   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -5449,51 +2507,11 @@
    ]
   },
   {
-   "instance_id": "vol01:16:8:19",
-   "page": "16",
-   "col": 8,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:16:5:15",
+   "instance_id": "vol01:16:5:17",
    "page": "16",
    "col": 5,
-   "idx": 15,
+   "idx": 17,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:16:5:19",
-   "page": "16",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:170:9:19",
-   "page": "170",
-   "col": 9,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:170:8:19",
-   "page": "170",
-   "col": 8,
-   "idx": 19,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -5551,16 +2569,6 @@
    ]
   },
   {
-   "instance_id": "vol01:170:2:19",
-   "page": "170",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:170:1:2",
    "page": "170",
    "col": 1,
@@ -5611,76 +2619,6 @@
    ]
   },
   {
-   "instance_id": "vol01:171:7:15",
-   "page": "171",
-   "col": 7,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:6:15",
-   "page": "171",
-   "col": 6,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:5:15",
-   "page": "171",
-   "col": 5,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:4:15",
-   "page": "171",
-   "col": 4,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:3:15",
-   "page": "171",
-   "col": 3,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:2:15",
-   "page": "171",
-   "col": 2,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:171:1:15",
-   "page": "171",
-   "col": 1,
-   "idx": 15,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:172:8:19",
    "page": "172",
    "col": 8,
@@ -5708,26 +2646,6 @@
    "pos": "列尾",
    "codes": [
     "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:172:6:19",
-   "page": "172",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:172:5:5",
-   "page": "172",
-   "col": 5,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -5788,8 +2706,7 @@
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "rule_bar_right",
-    "frame_bar_bottom"
+    "rule_bar_right"
    ]
   },
   {
@@ -5799,18 +2716,17 @@
    "idx": 19,
    "pos": "列尾",
    "codes": [
-    "rule_bar_left",
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:175:9:19",
+   "instance_id": "vol01:175:8:7",
    "page": "175",
-   "col": 9,
-   "idx": 19,
+   "col": 8,
+   "idx": 7,
    "pos": "列尾",
    "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -5844,70 +2760,10 @@
    ]
   },
   {
-   "instance_id": "vol01:175:4:19",
-   "page": "175",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:175:3:19",
-   "page": "175",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:175:2:10",
    "page": "175",
    "col": 2,
    "idx": 10,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:176:7:20",
-   "page": "176",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:176:6:20",
-   "page": "176",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:176:5:5",
-   "page": "176",
-   "col": 5,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:176:5:20",
-   "page": "176",
-   "col": 5,
-   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -5924,31 +2780,11 @@
    ]
   },
   {
-   "instance_id": "vol01:176:4:20",
-   "page": "176",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:176:1:5",
    "page": "176",
    "col": 1,
    "idx": 5,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:176:1:20",
-   "page": "176",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -5974,10 +2810,10 @@
    ]
   },
   {
-   "instance_id": "vol01:177:2:20",
-   "page": "177",
-   "col": 2,
-   "idx": 20,
+   "instance_id": "vol01:178:9:19",
+   "page": "178",
+   "col": 9,
+   "idx": 19,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -5989,6 +2825,16 @@
    "col": 8,
    "idx": 19,
    "pos": "列尾",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:178:7:4",
+   "page": "178",
+   "col": 7,
+   "idx": 4,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -6014,16 +2860,6 @@
    ]
   },
   {
-   "instance_id": "vol01:178:5:6",
-   "page": "178",
-   "col": 5,
-   "idx": 6,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:178:2:3",
    "page": "178",
    "col": 2,
@@ -6041,16 +2877,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:179:8:8",
-   "page": "179",
-   "col": 8,
-   "idx": 8,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -6084,51 +2910,11 @@
    ]
   },
   {
-   "instance_id": "vol01:179:1:19",
-   "page": "179",
-   "col": 1,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:8:20",
-   "page": "17",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:7:19",
+   "instance_id": "vol01:17:7:18",
    "page": "17",
    "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:7:20",
-   "page": "17",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:6:20",
-   "page": "17",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
+   "idx": 18,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -6144,10 +2930,10 @@
    ]
   },
   {
-   "instance_id": "vol01:17:4:20",
+   "instance_id": "vol01:17:3:19",
    "page": "17",
-   "col": 4,
-   "idx": 20,
+   "col": 3,
+   "idx": 19,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -6164,41 +2950,11 @@
    ]
   },
   {
-   "instance_id": "vol01:17:2:20",
-   "page": "17",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:1:2",
+   "instance_id": "vol01:17:1:4",
    "page": "17",
    "col": 1,
-   "idx": 2,
+   "idx": 4,
    "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:1:5",
-   "page": "17",
-   "col": 1,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:17:1:20",
-   "page": "17",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -6238,46 +2994,6 @@
    "page": "180",
    "col": 1,
    "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:181:9:20",
-   "page": "181",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:181:8:20",
-   "page": "181",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:181:7:20",
-   "page": "181",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:181:5:20",
-   "page": "181",
-   "col": 5,
-   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -6384,16 +3100,6 @@
    ]
   },
   {
-   "instance_id": "vol01:184:2:0",
-   "page": "184",
-   "col": 2,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:184:1:20",
    "page": "184",
    "col": 1,
@@ -6454,36 +3160,6 @@
    ]
   },
   {
-   "instance_id": "vol01:186:7:19",
-   "page": "186",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:187:9:0",
-   "page": "187",
-   "col": 9,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:187:9:2",
-   "page": "187",
-   "col": 9,
-   "idx": 2,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:187:9:4",
    "page": "187",
    "col": 9,
@@ -6494,21 +3170,20 @@
    ]
   },
   {
-   "instance_id": "vol01:187:9:8",
+   "instance_id": "vol01:187:9:6",
    "page": "187",
    "col": 9,
-   "idx": 8,
-   "pos": "列尾",
+   "idx": 6,
+   "pos": "列中",
    "codes": [
-    "frame_bar_top",
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:187:7:3",
+   "instance_id": "vol01:187:7:4",
    "page": "187",
    "col": 7,
-   "idx": 3,
+   "idx": 4,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -6587,16 +3262,6 @@
    ]
   },
   {
-   "instance_id": "vol01:188:8:19",
-   "page": "188",
-   "col": 8,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:188:6:0",
    "page": "188",
    "col": 6,
@@ -6632,16 +3297,6 @@
    "col": 4,
    "idx": 4,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:188:3:19",
-   "page": "188",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -6737,26 +3392,6 @@
    ]
   },
   {
-   "instance_id": "vol01:18:4:15",
-   "page": "18",
-   "col": 4,
-   "idx": 15,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:18:4:20",
-   "page": "18",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:18:3:15",
    "page": "18",
    "col": 3,
@@ -6817,6 +3452,16 @@
    ]
   },
   {
+   "instance_id": "vol01:190:6:5",
+   "page": "190",
+   "col": 6,
+   "idx": 5,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
    "instance_id": "vol01:190:2:13",
    "page": "190",
    "col": 2,
@@ -6824,46 +3469,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:191:6:19",
-   "page": "191",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:191:4:19",
-   "page": "191",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:191:3:19",
-   "page": "191",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:191:2:19",
-   "page": "191",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -6882,16 +3487,6 @@
    "col": 6,
    "idx": 11,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:192:2:20",
-   "page": "192",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -7314,7 +3909,6 @@
    "idx": 19,
    "pos": "列尾",
    "codes": [
-    "rule_bar_left",
     "frame_bar_bottom"
    ]
   },
@@ -7326,26 +3920,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:200:9:3",
-   "page": "200",
-   "col": 9,
-   "idx": 3,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:200:9:7",
-   "page": "200",
-   "col": 9,
-   "idx": 7,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -7365,7 +3939,6 @@
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "rule_bar_left",
     "frame_bar_bottom"
    ]
   },
@@ -7420,16 +3993,6 @@
    ]
   },
   {
-   "instance_id": "vol01:201:4:19",
-   "page": "201",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:202:7:20",
    "page": "202",
    "col": 7,
@@ -7451,41 +4014,21 @@
    ]
   },
   {
-   "instance_id": "vol01:202:4:19",
-   "page": "202",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:202:3:19",
-   "page": "202",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:202:2:19",
-   "page": "202",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:202:1:19",
    "page": "202",
    "col": 1,
    "idx": 19,
    "pos": "列尾",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:203:8:6",
+   "page": "203",
+   "col": 8,
+   "idx": 6,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -7642,6 +4185,16 @@
    ]
   },
   {
+   "instance_id": "vol01:204:1:19",
+   "page": "204",
+   "col": 1,
+   "idx": 19,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
    "instance_id": "vol01:205:7:3",
    "page": "205",
    "col": 7,
@@ -7672,39 +4225,9 @@
    ]
   },
   {
-   "instance_id": "vol01:20:5:20",
-   "page": "20",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:20:4:20",
    "page": "20",
    "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:20:3:20",
-   "page": "20",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:20:2:20",
-   "page": "20",
-   "col": 2,
    "idx": 20,
    "pos": "列尾",
    "codes": [
@@ -7752,30 +4275,10 @@
    ]
   },
   {
-   "instance_id": "vol01:22:7:18",
-   "page": "22",
-   "col": 7,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:22:6:4",
+   "instance_id": "vol01:22:6:5",
    "page": "22",
    "col": 6,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:22:1:17",
-   "page": "22",
-   "col": 1,
-   "idx": 17,
+   "idx": 5,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -7786,16 +4289,16 @@
    "page": "22",
    "col": 1,
    "idx": 18,
-   "pos": "列尾",
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:23:9:20",
-   "page": "23",
-   "col": 9,
-   "idx": 20,
+   "instance_id": "vol01:22:1:19",
+   "page": "22",
+   "col": 1,
+   "idx": 19,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -7812,51 +4315,11 @@
    ]
   },
   {
-   "instance_id": "vol01:23:8:20",
+   "instance_id": "vol01:23:1:5",
    "page": "23",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:23:7:20",
-   "page": "23",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:23:6:0",
-   "page": "23",
-   "col": 6,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:23:6:20",
-   "page": "23",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:23:3:20",
-   "page": "23",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
+   "col": 1,
+   "idx": 5,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -8012,29 +4475,9 @@
    ]
   },
   {
-   "instance_id": "vol01:25:4:19",
-   "page": "25",
-   "col": 4,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:25:3:19",
    "page": "25",
    "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:25:2:19",
-   "page": "25",
-   "col": 2,
    "idx": 19,
    "pos": "列尾",
    "codes": [
@@ -8258,8 +4701,7 @@
    "idx": 20,
    "pos": "列尾",
    "codes": [
-    "rule_bar_left",
-    "frame_bar_bottom"
+    "rule_bar_left"
    ]
   },
   {
@@ -8273,11 +4715,11 @@
    ]
   },
   {
-   "instance_id": "vol01:26:6:18",
+   "instance_id": "vol01:26:6:20",
    "page": "26",
    "col": 6,
-   "idx": 18,
-   "pos": "列中",
+   "idx": 20,
+   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -8343,41 +4785,11 @@
    ]
   },
   {
-   "instance_id": "vol01:27:6:19",
-   "page": "27",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:27:3:3",
    "page": "27",
    "col": 3,
    "idx": 3,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:27:3:19",
-   "page": "27",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:27:2:19",
-   "page": "27",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -8473,36 +4885,6 @@
    ]
   },
   {
-   "instance_id": "vol01:28:3:19",
-   "page": "28",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:28:2:19",
-   "page": "28",
-   "col": 2,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:28:1:19",
-   "page": "28",
-   "col": 1,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:29:9:12",
    "page": "29",
    "col": 9,
@@ -8523,91 +4905,11 @@
    ]
   },
   {
-   "instance_id": "vol01:29:8:20",
-   "page": "29",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:29:7:15",
    "page": "29",
    "col": 7,
    "idx": 15,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:7:20",
-   "page": "29",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:6:20",
-   "page": "29",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:5:20",
-   "page": "29",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:4:20",
-   "page": "29",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:3:20",
-   "page": "29",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:2:20",
-   "page": "29",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:29:1:20",
-   "page": "29",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -8783,16 +5085,6 @@
    ]
   },
   {
-   "instance_id": "vol01:31:5:19",
-   "page": "31",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:31:4:19",
    "page": "31",
    "col": 4,
@@ -8833,39 +5125,29 @@
    ]
   },
   {
-   "instance_id": "vol01:31:2:20",
+   "instance_id": "vol01:31:2:19",
    "page": "31",
    "col": 2,
-   "idx": 20,
+   "idx": 19,
    "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:33:9:0",
-   "page": "33",
-   "col": 9,
-   "idx": 0,
-   "pos": "列首",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:33:5:0",
-   "page": "33",
+   "instance_id": "vol01:32:5:0",
+   "page": "32",
    "col": 5,
    "idx": 0,
    "pos": "列首",
    "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
-   "instance_id": "vol01:33:4:0",
-   "page": "33",
-   "col": 4,
+   "instance_id": "vol01:32:1:0",
+   "page": "32",
+   "col": 1,
    "idx": 0,
    "pos": "列首",
    "codes": [
@@ -8873,20 +5155,20 @@
    ]
   },
   {
-   "instance_id": "vol01:33:3:1",
+   "instance_id": "vol01:33:8:4",
    "page": "33",
-   "col": 3,
-   "idx": 1,
+   "col": 8,
+   "idx": 4,
    "pos": "列中",
    "codes": [
-    "frame_bar_top"
+    "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:33:2:7",
+   "instance_id": "vol01:33:2:6",
    "page": "33",
    "col": 2,
-   "idx": 7,
+   "idx": 6,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -8903,93 +5185,12 @@
    ]
   },
   {
-   "instance_id": "vol01:35:9:20",
-   "page": "35",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:8:20",
-   "page": "35",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:7:20",
-   "page": "35",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:6:20",
-   "page": "35",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:5:20",
-   "page": "35",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:4:20",
-   "page": "35",
+   "instance_id": "vol01:34:4:16",
+   "page": "34",
    "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:3:20",
-   "page": "35",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:2:6",
-   "page": "35",
-   "col": 2,
-   "idx": 6,
+   "idx": 16,
    "pos": "列中",
    "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:2:20",
-   "page": "35",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right",
     "frame_bar_bottom"
    ]
   },
@@ -9000,7 +5201,6 @@
    "idx": 0,
    "pos": "列首",
    "codes": [
-    "frame_bar_top",
     "frame_bar_bottom"
    ]
   },
@@ -9010,16 +5210,6 @@
    "col": 1,
    "idx": 4,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:35:1:20",
-   "page": "35",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -9055,26 +5245,6 @@
    ]
   },
   {
-   "instance_id": "vol01:36:2:20",
-   "page": "36",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:36:1:20",
-   "page": "36",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:37:9:4",
    "page": "37",
    "col": 9,
@@ -9095,16 +5265,6 @@
    ]
   },
   {
-   "instance_id": "vol01:37:9:6",
-   "page": "37",
-   "col": 9,
-   "idx": 6,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:37:9:13",
    "page": "37",
    "col": 9,
@@ -9115,181 +5275,11 @@
    ]
   },
   {
-   "instance_id": "vol01:37:9:20",
-   "page": "37",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:6:20",
-   "page": "37",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:5:20",
-   "page": "37",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:3:20",
-   "page": "37",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:2:20",
-   "page": "37",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:1:9",
-   "page": "37",
-   "col": 1,
-   "idx": 9,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:1:19",
-   "page": "37",
-   "col": 1,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:37:1:20",
-   "page": "37",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:38:4:0",
-   "page": "38",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:9:20",
-   "page": "39",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:8:20",
-   "page": "39",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:7:20",
-   "page": "39",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:39:6:17",
    "page": "39",
    "col": 6,
    "idx": 17,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:6:20",
-   "page": "39",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:5:20",
-   "page": "39",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:4:20",
-   "page": "39",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:3:20",
-   "page": "39",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:39:2:20",
-   "page": "39",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -9436,21 +5426,21 @@
    ]
   },
   {
+   "instance_id": "vol01:3:3:0",
+   "page": "3",
+   "col": 3,
+   "idx": 0,
+   "pos": "列首",
+   "codes": [
+    "rule_bar_left"
+   ]
+  },
+  {
    "instance_id": "vol01:3:3:4",
    "page": "3",
    "col": 3,
    "idx": 4,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:3:3:13",
-   "page": "3",
-   "col": 3,
-   "idx": 13,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -9466,73 +5456,53 @@
    ]
   },
   {
-   "instance_id": "vol01:3:1:0",
-   "page": "3",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:40:9:0",
+   "instance_id": "vol01:40:9:9",
    "page": "40",
    "col": 9,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:40:8:18",
-   "page": "40",
-   "col": 8,
-   "idx": 18,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:40:5:19",
-   "page": "40",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:40:4:8",
-   "page": "40",
-   "col": 4,
-   "idx": 8,
+   "idx": 9,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:40:2:18",
+   "instance_id": "vol01:40:5:20",
+   "page": "40",
+   "col": 5,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_top"
+   ]
+  },
+  {
+   "instance_id": "vol01:40:4:9",
+   "page": "40",
+   "col": 4,
+   "idx": 9,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:40:2:19",
    "page": "40",
    "col": 2,
-   "idx": 18,
+   "idx": 19,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:40:1:18",
+   "instance_id": "vol01:40:1:0",
    "page": "40",
    "col": 1,
-   "idx": 18,
-   "pos": "列尾",
+   "idx": 0,
+   "pos": "列首",
    "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -9542,37 +5512,47 @@
    "idx": 19,
    "pos": "列尾",
    "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:40:1:20",
+   "page": "40",
+   "col": 1,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
     "frame_bar_top"
    ]
   },
   {
-   "instance_id": "vol01:41:8:8",
+   "instance_id": "vol01:41:8:7",
    "page": "41",
    "col": 8,
-   "idx": 8,
+   "idx": 7,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:41:8:12",
+   "instance_id": "vol01:41:8:11",
    "page": "41",
    "col": 8,
-   "idx": 12,
+   "idx": 11,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:41:1:8",
-   "page": "41",
-   "col": 1,
-   "idx": 8,
+   "instance_id": "vol01:42:7:5",
+   "page": "42",
+   "col": 7,
+   "idx": 5,
    "pos": "列中",
    "codes": [
-    "rule_bar_right"
+    "frame_bar_bottom"
    ]
   },
   {
@@ -9786,41 +5766,11 @@
    ]
   },
   {
-   "instance_id": "vol01:43:6:20",
-   "page": "43",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:43:5:20",
-   "page": "43",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:43:4:16",
    "page": "43",
    "col": 4,
    "idx": 16,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:43:4:20",
-   "page": "43",
-   "col": 4,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -9866,16 +5816,6 @@
    ]
   },
   {
-   "instance_id": "vol01:43:2:20",
-   "page": "43",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:43:1:13",
    "page": "43",
    "col": 1,
@@ -9893,46 +5833,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:43:1:20",
-   "page": "43",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:44:9:4",
-   "page": "44",
-   "col": 9,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:44:9:9",
-   "page": "44",
-   "col": 9,
-   "idx": 9,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:44:9:13",
-   "page": "44",
-   "col": 9,
-   "idx": 13,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -10036,16 +5936,6 @@
    ]
   },
   {
-   "instance_id": "vol01:45:9:18",
-   "page": "45",
-   "col": 9,
-   "idx": 18,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:45:8:18",
    "page": "45",
    "col": 8,
@@ -10083,16 +5973,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:46:9:14",
-   "page": "46",
-   "col": 9,
-   "idx": 14,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -10196,60 +6076,20 @@
    ]
   },
   {
-   "instance_id": "vol01:48:9:18",
-   "page": "48",
-   "col": 9,
-   "idx": 18,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:48:9:19",
-   "page": "48",
-   "col": 9,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:48:9:20",
-   "page": "48",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:48:8:13",
+   "instance_id": "vol01:48:8:14",
    "page": "48",
    "col": 8,
-   "idx": 13,
+   "idx": 14,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:48:7:0",
-   "page": "48",
-   "col": 7,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:48:5:1",
+   "instance_id": "vol01:48:5:2",
    "page": "48",
    "col": 5,
-   "idx": 1,
+   "idx": 2,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -10273,16 +6113,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:49:7:20",
-   "page": "49",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
    ]
   },
   {
@@ -10346,26 +6176,6 @@
    ]
   },
   {
-   "instance_id": "vol01:49:1:4",
-   "page": "49",
-   "col": 1,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:49:1:5",
-   "page": "49",
-   "col": 1,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
    "instance_id": "vol01:49:1:7",
    "page": "49",
    "col": 1,
@@ -10386,31 +6196,11 @@
    ]
   },
   {
-   "instance_id": "vol01:49:1:20",
-   "page": "49",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
    "instance_id": "vol01:4:8:20",
    "page": "4",
    "col": 8,
    "idx": 20,
    "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:4:7:2",
-   "page": "4",
-   "col": 7,
-   "idx": 2,
-   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -10423,26 +6213,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:4:6:8",
-   "page": "4",
-   "col": 6,
-   "idx": 8,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:4:6:11",
-   "page": "4",
-   "col": 6,
-   "idx": 11,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_top"
    ]
   },
   {
@@ -10476,16 +6246,6 @@
    ]
   },
   {
-   "instance_id": "vol01:4:5:16",
-   "page": "4",
-   "col": 5,
-   "idx": 16,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:4:4:3",
    "page": "4",
    "col": 4,
@@ -10516,16 +6276,6 @@
    ]
   },
   {
-   "instance_id": "vol01:4:1:8",
-   "page": "4",
-   "col": 1,
-   "idx": 8,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:50:8:18",
    "page": "50",
    "col": 8,
@@ -10546,26 +6296,6 @@
    ]
   },
   {
-   "instance_id": "vol01:51:7:19",
-   "page": "51",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:52:9:20",
-   "page": "52",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:52:8:18",
    "page": "52",
    "col": 8,
@@ -10576,21 +6306,11 @@
    ]
   },
   {
-   "instance_id": "vol01:52:8:20",
+   "instance_id": "vol01:52:6:9",
    "page": "52",
-   "col": 8,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:52:7:20",
-   "page": "52",
-   "col": 7,
-   "idx": 20,
-   "pos": "列尾",
+   "col": 6,
+   "idx": 9,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -10616,6 +6336,16 @@
    ]
   },
   {
+   "instance_id": "vol01:52:1:4",
+   "page": "52",
+   "col": 1,
+   "idx": 4,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
    "instance_id": "vol01:53:9:5",
    "page": "53",
    "col": 9,
@@ -10626,20 +6356,20 @@
    ]
   },
   {
-   "instance_id": "vol01:53:9:20",
+   "instance_id": "vol01:53:2:4",
    "page": "53",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
+   "col": 2,
+   "idx": 4,
+   "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:53:2:4",
+   "instance_id": "vol01:53:2:8",
    "page": "53",
    "col": 2,
-   "idx": 4,
+   "idx": 8,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
@@ -10666,31 +6396,11 @@
    ]
   },
   {
-   "instance_id": "vol01:55:3:20",
-   "page": "55",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:56:3:10",
    "page": "56",
    "col": 3,
    "idx": 10,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:57:9:20",
-   "page": "57",
-   "col": 9,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -10806,6 +6516,16 @@
    ]
   },
   {
+   "instance_id": "vol01:57:8:14",
+   "page": "57",
+   "col": 8,
+   "idx": 14,
+   "pos": "列中",
+   "codes": [
+    "rule_bar_left"
+   ]
+  },
+  {
    "instance_id": "vol01:57:8:15",
    "page": "57",
    "col": 8,
@@ -10813,6 +6533,16 @@
    "pos": "列中",
    "codes": [
     "rule_bar_left"
+   ]
+  },
+  {
+   "instance_id": "vol01:57:7:12",
+   "page": "57",
+   "col": 7,
+   "idx": 12,
+   "pos": "列中",
+   "codes": [
+    "frame_bar_bottom"
    ]
   },
   {
@@ -10976,56 +6706,6 @@
    ]
   },
   {
-   "instance_id": "vol01:63:4:0",
-   "page": "63",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:63:1:0",
-   "page": "63",
-   "col": 1,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:64:8:10",
-   "page": "64",
-   "col": 8,
-   "idx": 10,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:64:8:11",
-   "page": "64",
-   "col": 8,
-   "idx": 11,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:64:8:17",
-   "page": "64",
-   "col": 8,
-   "idx": 17,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:64:7:20",
    "page": "64",
    "col": 7,
@@ -11053,16 +6733,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:64:5:15",
-   "page": "64",
-   "col": 5,
-   "idx": 15,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -11116,43 +6786,63 @@
    ]
   },
   {
-   "instance_id": "vol01:65:8:9",
+   "instance_id": "vol01:65:8:11",
    "page": "65",
    "col": 8,
-   "idx": 9,
+   "idx": 11,
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:65:8:18",
+   "instance_id": "vol01:65:8:20",
    "page": "65",
    "col": 8,
-   "idx": 18,
+   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:65:7:18",
+   "instance_id": "vol01:65:7:20",
    "page": "65",
    "col": 7,
-   "idx": 18,
+   "idx": 20,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
   },
   {
-   "instance_id": "vol01:65:4:0",
+   "instance_id": "vol01:65:6:17",
    "page": "65",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
+   "col": 6,
+   "idx": 17,
+   "pos": "列中",
    "codes": [
-    "frame_bar_top"
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:65:6:20",
+   "page": "65",
+   "col": 6,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_bottom"
+   ]
+  },
+  {
+   "instance_id": "vol01:65:5:20",
+   "page": "65",
+   "col": 5,
+   "idx": 20,
+   "pos": "列尾",
+   "codes": [
+    "frame_bar_bottom"
    ]
   },
   {
@@ -11336,16 +7026,6 @@
    ]
   },
   {
-   "instance_id": "vol01:69:8:17",
-   "page": "69",
-   "col": 8,
-   "idx": 17,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:69:3:2",
    "page": "69",
    "col": 3,
@@ -11376,13 +7056,13 @@
    ]
   },
   {
-   "instance_id": "vol01:69:2:19",
+   "instance_id": "vol01:69:2:20",
    "page": "69",
    "col": 2,
-   "idx": 19,
+   "idx": 20,
    "pos": "列尾",
    "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -11393,16 +7073,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:69:1:11",
-   "page": "69",
-   "col": 1,
-   "idx": 11,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
    ]
   },
   {
@@ -11426,26 +7096,6 @@
    ]
   },
   {
-   "instance_id": "vol01:6:7:4",
-   "page": "6",
-   "col": 7,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:6:7:16",
-   "page": "6",
-   "col": 7,
-   "idx": 16,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:6:3:9",
    "page": "6",
    "col": 3,
@@ -11453,16 +7103,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:70:7:1",
-   "page": "70",
-   "col": 7,
-   "idx": 1,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -11626,26 +7266,6 @@
    ]
   },
   {
-   "instance_id": "vol01:72:7:4",
-   "page": "72",
-   "col": 7,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:72:7:5",
-   "page": "72",
-   "col": 7,
-   "idx": 5,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
    "instance_id": "vol01:72:3:20",
    "page": "72",
    "col": 3,
@@ -11691,16 +7311,6 @@
    "col": 4,
    "idx": 6,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:73:3:20",
-   "page": "73",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -11816,31 +7426,11 @@
    ]
   },
   {
-   "instance_id": "vol01:75:3:20",
-   "page": "75",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:75:2:3",
    "page": "75",
    "col": 2,
    "idx": 3,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:75:2:20",
-   "page": "75",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -11883,16 +7473,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:76:2:2",
-   "page": "76",
-   "col": 2,
-   "idx": 2,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
    ]
   },
   {
@@ -11986,16 +7566,6 @@
    ]
   },
   {
-   "instance_id": "vol01:77:2:10",
-   "page": "77",
-   "col": 2,
-   "idx": 10,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
    "instance_id": "vol01:77:1:7",
    "page": "77",
    "col": 1,
@@ -12003,26 +7573,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:78:9:4",
-   "page": "78",
-   "col": 9,
-   "idx": 4,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:78:9:19",
-   "page": "78",
-   "col": 9,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
    ]
   },
   {
@@ -12086,13 +7636,13 @@
    ]
   },
   {
-   "instance_id": "vol01:78:1:17",
+   "instance_id": "vol01:78:1:16",
    "page": "78",
    "col": 1,
-   "idx": 17,
+   "idx": 16,
    "pos": "列中",
    "codes": [
-    "frame_bar_top"
+    "frame_bar_bottom"
    ]
   },
   {
@@ -12103,26 +7653,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:79:7:0",
-   "page": "79",
-   "col": 7,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:79:6:0",
-   "page": "79",
-   "col": 6,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
    ]
   },
   {
@@ -12286,13 +7816,13 @@
    ]
   },
   {
-   "instance_id": "vol01:7:2:16",
-   "page": "7",
-   "col": 2,
-   "idx": 16,
-   "pos": "列中",
+   "instance_id": "vol01:80:6:2",
+   "page": "80",
+   "col": 6,
+   "idx": 2,
+   "pos": "列尾",
    "codes": [
-    "rule_bar_left"
+    "frame_bar_bottom"
    ]
   },
   {
@@ -12301,16 +7831,6 @@
    "col": 3,
    "idx": 13,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:80:2:20",
-   "page": "80",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -12436,16 +7956,6 @@
    ]
   },
   {
-   "instance_id": "vol01:83:9:8",
-   "page": "83",
-   "col": 9,
-   "idx": 8,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:83:9:20",
    "page": "83",
    "col": 9,
@@ -12536,16 +8046,6 @@
    ]
   },
   {
-   "instance_id": "vol01:85:4:0",
-   "page": "85",
-   "col": 4,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
-   ]
-  },
-  {
    "instance_id": "vol01:85:4:9",
    "page": "85",
    "col": 4,
@@ -12576,16 +8076,6 @@
    ]
   },
   {
-   "instance_id": "vol01:86:2:20",
-   "page": "86",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:86:1:17",
    "page": "86",
    "col": 1,
@@ -12593,16 +8083,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:87:9:7",
-   "page": "87",
-   "col": 9,
-   "idx": 7,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_top"
    ]
   },
   {
@@ -12643,16 +8123,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:87:6:0",
-   "page": "87",
-   "col": 6,
-   "idx": 0,
-   "pos": "列首",
-   "codes": [
-    "frame_bar_top"
    ]
   },
   {
@@ -12756,16 +8226,6 @@
    ]
   },
   {
-   "instance_id": "vol01:88:6:19",
-   "page": "88",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:88:5:19",
    "page": "88",
    "col": 5,
@@ -12816,36 +8276,6 @@
    ]
   },
   {
-   "instance_id": "vol01:89:6:4",
-   "page": "89",
-   "col": 6,
-   "idx": 4,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:89:5:9",
-   "page": "89",
-   "col": 5,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:89:4:9",
-   "page": "89",
-   "col": 4,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:89:3:20",
    "page": "89",
    "col": 3,
@@ -12853,16 +8283,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:8:9:19",
-   "page": "8",
-   "col": 9,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -12881,36 +8301,6 @@
    "col": 9,
    "idx": 12,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:90:9:14",
-   "page": "90",
-   "col": 9,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:90:6:20",
-   "page": "90",
-   "col": 6,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:90:5:20",
-   "page": "90",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -12936,41 +8326,11 @@
    ]
   },
   {
-   "instance_id": "vol01:90:3:20",
-   "page": "90",
-   "col": 3,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:90:2:20",
-   "page": "90",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:90:1:1",
    "page": "90",
    "col": 1,
    "idx": 1,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:90:1:20",
-   "page": "90",
-   "col": 1,
-   "idx": 20,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -12986,140 +8346,10 @@
    ]
   },
   {
-   "instance_id": "vol01:91:9:5",
-   "page": "91",
-   "col": 9,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:91:8:6",
-   "page": "91",
-   "col": 8,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:91:7:4",
    "page": "91",
    "col": 7,
    "idx": 4,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:91:7:5",
-   "page": "91",
-   "col": 7,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:91:6:11",
-   "page": "91",
-   "col": 6,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:91:4:11",
-   "page": "91",
-   "col": 4,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:91:1:12",
-   "page": "91",
-   "col": 1,
-   "idx": 12,
-   "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:9:12",
-   "page": "92",
-   "col": 9,
-   "idx": 12,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:8:11",
-   "page": "92",
-   "col": 8,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:5:9",
-   "page": "92",
-   "col": 5,
-   "idx": 9,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:4:13",
-   "page": "92",
-   "col": 4,
-   "idx": 13,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:3:5",
-   "page": "92",
-   "col": 3,
-   "idx": 5,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:2:11",
-   "page": "92",
-   "col": 2,
-   "idx": 11,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:92:1:9",
-   "page": "92",
-   "col": 1,
-   "idx": 9,
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
@@ -13142,7 +8372,8 @@
    "idx": 11,
    "pos": "列尾",
    "codes": [
-    "rule_bar_left"
+    "rule_bar_left",
+    "frame_bar_bottom"
    ]
   },
   {
@@ -13153,46 +8384,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:93:1:7",
-   "page": "93",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:9:6",
-   "page": "94",
-   "col": 9,
-   "idx": 6,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:9:7",
-   "page": "94",
-   "col": 9,
-   "idx": 7,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:9:9",
-   "page": "94",
-   "col": 9,
-   "idx": 9,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
    ]
   },
   {
@@ -13216,77 +8407,6 @@
    ]
   },
   {
-   "instance_id": "vol01:94:6:8",
-   "page": "94",
-   "col": 6,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:5:20",
-   "page": "94",
-   "col": 5,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:4:6",
-   "page": "94",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:2:20",
-   "page": "94",
-   "col": 2,
-   "idx": 20,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:94:1:7",
-   "page": "94",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:95:9:12",
-   "page": "95",
-   "col": 9,
-   "idx": 12,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_right"
-   ]
-  },
-  {
-   "instance_id": "vol01:95:9:14",
-   "page": "95",
-   "col": 9,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "rule_bar_right",
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:95:7:20",
    "page": "95",
    "col": 7,
@@ -13307,144 +8427,13 @@
    ]
   },
   {
-   "instance_id": "vol01:96:9:8",
-   "page": "96",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:96:2:7",
-   "page": "96",
-   "col": 2,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:96:1:7",
-   "page": "96",
-   "col": 1,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:8:8",
-   "page": "97",
-   "col": 8,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:7:6",
-   "page": "97",
-   "col": 7,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:6:7",
-   "page": "97",
-   "col": 6,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:5:6",
-   "page": "97",
-   "col": 5,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:4:7",
-   "page": "97",
-   "col": 4,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:97:2:14",
-   "page": "97",
-   "col": 2,
-   "idx": 14,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:97:1:11",
    "page": "97",
    "col": 1,
    "idx": 11,
    "pos": "列尾",
    "codes": [
-    "frame_bar_top",
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:98:9:1",
-   "page": "98",
-   "col": 9,
-   "idx": 1,
-   "pos": "列中",
-   "codes": [
-    "rule_bar_left"
-   ]
-  },
-  {
-   "instance_id": "vol01:98:9:6",
-   "page": "98",
-   "col": 9,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:99:9:8",
-   "page": "99",
-   "col": 9,
-   "idx": 8,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:99:5:7",
-   "page": "99",
-   "col": 5,
-   "idx": 7,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
+    "frame_bar_top"
    ]
   },
   {
@@ -13455,26 +8444,6 @@
    "pos": "列尾",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:99:4:6",
-   "page": "99",
-   "col": 4,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:99:3:6",
-   "page": "99",
-   "col": 3,
-   "idx": 6,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {
@@ -13508,41 +8477,11 @@
    ]
   },
   {
-   "instance_id": "vol01:9:7:19",
-   "page": "9",
-   "col": 7,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:9:6:19",
-   "page": "9",
-   "col": 6,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
    "instance_id": "vol01:9:5:3",
    "page": "9",
    "col": 5,
    "idx": 3,
    "pos": "列中",
-   "codes": [
-    "frame_bar_bottom"
-   ]
-  },
-  {
-   "instance_id": "vol01:9:5:19",
-   "page": "9",
-   "col": 5,
-   "idx": 19,
-   "pos": "列尾",
    "codes": [
     "frame_bar_bottom"
    ]
@@ -13575,16 +8514,6 @@
    "pos": "列中",
    "codes": [
     "frame_bar_top"
-   ]
-  },
-  {
-   "instance_id": "vol01:9:3:19",
-   "page": "9",
-   "col": 3,
-   "idx": 19,
-   "pos": "列尾",
-   "codes": [
-    "frame_bar_bottom"
    ]
   },
   {

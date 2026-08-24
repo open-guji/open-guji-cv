@@ -108,6 +108,11 @@ RULE_MIN_RUN_PERIOD = 1.2  # 认定「竖直长线」所需的最短连续段 = 
                            # 合成页 420px 高时只剩 0.53 个字高，文字块自己就被当成
                            # 界行了。列距是版面自身的尺度，字的竖笔最长约 1 个字高
                            # （≈0.6 列距），1.2 倍列距留了一倍余量
+FRAME_RAW_T = 0.22         # 最左列左侧的「原始墨密度」停墙档：模糊内边框
+                           # 二值化后断续，开运算游程档全部失灵；但最左列
+                           # 文字带以左只可能是边框——带内原始墨密度超此
+                           # 即停。只开**左外侧**：右外侧有职名「臣」贴框
+                           # 写的先例，密度档会把字当墙裁
 RULE_RELAX_RUN_PERIOD = 0.8  # 放宽档竖线游程 = 此倍数 × 列距（≈145px）。磨损
                            # 断裂的界行残段实测 122~197px，够不着严格档的 1.2 倍
                            # （vol02/119 col7 右侧界行因此「无墙不敢扩」，整列越带
@@ -498,6 +503,15 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         for a, b in spans])
     stops = (covs > CELL_COV_STOP) | (rel_aligned > CELL_COV_STOP_RELAX)
     stop_any = stops.any(axis=0)
+    # 最左列左侧的密度档：模糊内边框断续到两档游程都检不出（实测
+    # vol02/158 等页边框墨进条带），但文字带以左只可能是边框——
+    # 原始墨密度（不开运算，跟严格档同带划分）超阈即算墙
+    raw_rows = []
+    for a, b in spans:
+        raw_rows.append(binary[a:b].mean(axis=0))
+    raws = np.stack(raw_rows) > FRAME_RAW_T
+    stops_frame = stops | raws
+    stop_frame_any = stops_frame.any(axis=0)
     w = stops.shape[1]
     # 界行中心：放宽档检出的也算「这一侧有分隔物」的证据——界行弯到列格
     # 名义边界之外时，走到边界都撞不上墙，只能靠 near_* 放行扩到边界
@@ -523,7 +537,9 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         hi0 = cx0 + period * (k + 1) - inset_r - shrink
         near_l = any(abs(c - bl) <= tol for c in centers)
         near_r = any(abs(c - br) <= tol for c in centers)
-        x, hit = walk(stop_any, lo0, bl, -1)
+        # 最左列（k=0）的左侧启用密度档（见 stops_frame 注）
+        l_any = stop_frame_any if k == 0 else stop_any
+        x, hit = walk(l_any, lo0, bl, -1)
         lo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) if (hit or near_l) \
             else lo0
         x, hit = walk(stop_any, hi0, br, +1)
@@ -542,7 +558,8 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
         rows: list[list[float]] = []
         for bi, (ya, yb) in enumerate(spans):
             srow = stops[bi]
-            x, hit = walk(srow, lo0, bl, -1)
+            lrow = stops_frame[bi] if k == 0 else srow
+            x, hit = walk(lrow, lo0, bl, -1)
             blo = min(lo0, max(bl, x + CELL_RULE_CLEARANCE)) \
                 if (hit or near_l) else lo
             x, hit = walk(srow, hi0, br, +1)
