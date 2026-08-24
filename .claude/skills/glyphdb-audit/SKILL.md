@@ -50,6 +50,11 @@ description: 刻本字形库体检——找出同字不相像的刻例（可能�
 4. **收尾**：撤库过的页要重新导出审查（进库审查页 artifact），用户
    重新裁决后照常 seed-ingest；`output/glyph.db`、`audit_ok.json`、
    `report.json` 随 open-guji-cv 提交推送（分支 + 主干同步）。
+5. **回流匹配基准**：本轮 rival × 白名单的新案例是匹配算法的
+   排序金标——`scripts/build_match_triplets_shard.py --dataset
+   ../open-guji-dataset` 重建 `glyph-match/triplets`（hard 会增长，
+   control 抽样有固定 seed），`scripts/eval_match_triplets.py` 重报
+   基线并更新分片 README/results。
 
 ## 什么时候跑
 

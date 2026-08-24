@@ -238,7 +238,9 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 9. **周期性库体检**（每累计新进库几百条 / 改过形状判据后）：
    `/glyphdb-audit`（.claude/skills/glyphdb-audit）——形离群 +
    竞争字 + OCR 异议三路扫 `output/glyph.db`，出交互审查页，
-   evict 撤库回队列、ok 进白名单。
+   evict 撤库回队列、ok 进白名单。体检的 rival × 白名单案例回流
+   `glyph-match/triplets`（匹配排序金标：同字形须胜形近异字；
+   首建 hard 38 条基线 0.079——匹配算法优化的现成靶子）。
 
 ### 版面线侵入：审查涌现的缺陷回流上游（第二批）
 
