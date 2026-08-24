@@ -24,7 +24,8 @@ Web 界面：
     review-export <folder>  导出审查批次为自包含 HTML（Artifact/GitHub Pages）
     review-ingest <folder>  回收页面审查事件 → labels.jsonl
     update     <folder>   M7 消费标签 → 字形库 / 阈值标定 / 用字习惯 / 语料
-    glyph-db   <action>   M8 跨书字形数据库（import / stats / export / rebuild）
+    glyph-db   <action>   M8 跨书字形数据库
+                          （import / import-font / drop-edition / stats / export / rebuild）
     bench      <target>   合成数据集基准评测（verify / cluster）
 
 工具：
@@ -504,6 +505,10 @@ def cmd_glyph_db(args):
             summary = rebuild_from_store(args.store,
                                          Path(args.store) / "glyphdb.sqlite")
             db = None
+        elif args.action == "drop-edition":
+            if not args.edition:
+                print("drop-edition 需要 --edition"); sys.exit(1)
+            summary = db.drop_edition(args.edition)
         elif args.action == "import-font":
             from .clustering.font_glyphs import import_fonts_from_manifest
             summary = import_fonts_from_manifest(
@@ -796,7 +801,7 @@ def main():
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["import", "stats", "export", "rebuild",
-                            "import-font"])
+                            "import-font", "drop-edition"])
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default="glyph_store", help="字形库目录")
     p.add_argument("--edition", default=None,

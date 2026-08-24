@@ -552,6 +552,40 @@ class GlyphDB:
                 out.append(h)
         return out[:k]
 
+    # ── 剪庫 ─────────────────────────────────────────────
+
+    def drop_edition(self, edition_tag: str) -> dict:
+        """刪掉一個來源的整條鏈（glyphs/exemplars/derived/instances/sources）。
+
+        用於剪掉不再需要的字體庫或導入到一半的殘局。只認 kind='font' 之外
+        的來源時要當心：刻本來源的真源在 glyph_store/，這裡刪的只是索引，
+        `rebuild` 會把它們拉回來——真要棄掉刻本來源得動導出目錄。
+        """
+        cur = self.conn.cursor()
+        iids = [r[0] for r in cur.execute(
+            """SELECT i.instance_id FROM instances i
+               JOIN sources s ON s.source_id = i.source_id
+               WHERE s.edition_tag = ?""", (edition_tag,))]
+        n_gly = cur.execute(
+            "SELECT COUNT(*) FROM glyphs WHERE edition_tag=?",
+            (edition_tag,)).fetchone()[0]
+        cur.execute("""DELETE FROM exemplars WHERE glyph_id IN
+                       (SELECT glyph_id FROM glyphs WHERE edition_tag=?)""",
+                    (edition_tag,))
+        cur.execute("DELETE FROM glyphs WHERE edition_tag=?", (edition_tag,))
+        for i in range(0, len(iids), 500):
+            chunk = iids[i:i + 500]
+            ph = ",".join("?" * len(chunk))
+            cur.execute(f"DELETE FROM derived WHERE instance_id IN ({ph})",
+                        chunk)
+            cur.execute(f"DELETE FROM instances WHERE instance_id IN ({ph})",
+                        chunk)
+        cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
+        self.conn.commit()
+        self._cache_stamp = None          # 特徵緩存必須失效
+        return {"edition": edition_tag, "glyphs": n_gly,
+                "instances": len(iids)}
+
     # ── 統計 ─────────────────────────────────────────────
 
     def stats(self) -> dict:
