@@ -174,6 +174,37 @@ def _assemble_choices(item: SeedItem) -> list[dict]:
     return [info[ch] for ch in order]
 
 
+RECROP_PAD = 110          # 重切视图在 bbox 四周多给的页图像素
+
+
+def _recrop_region(book_dir: Path, rec) -> dict | None:
+    """从页图裁出 bbox ± RECROP_PAD 的区域，供页面上拖框重切。
+
+    带上区域在页图里的绝对原点与尺寸——页面把拖出来的框换算回**页图
+    绝对坐标**发事件，ingest 侧才能照它重裁。只给单字图块是没法改框的：
+    错位的框恰恰把该看的邻字关系裁掉了（vol01:5:2:15「言」的亠头在框外）。
+    """
+    import cv2
+    img = book_dir / f"{rec.page}.png"
+    if not img.exists():
+        return None
+    im = cv2.imread(str(img), cv2.IMREAD_GRAYSCALE)
+    if im is None:
+        return None
+    h, w = im.shape[:2]
+    x0, y0, x1, y1 = (float(v) for v in rec.bbox)
+    rx0, ry0 = max(0, int(x0) - RECROP_PAD), max(0, int(y0) - RECROP_PAD)
+    rx1, ry1 = min(w, int(x1) + RECROP_PAD), min(h, int(y1) + RECROP_PAD)
+    if rx1 - rx0 < 8 or ry1 - ry0 < 8:
+        return None
+    ok, buf = cv2.imencode(".png", im[ry0:ry1, rx0:rx1])
+    if not ok:
+        return None
+    return {"b64": base64.b64encode(buf.tobytes()).decode("ascii"),
+            "ox": rx0, "oy": ry0, "w": rx1 - rx0, "h": ry1 - ry0,
+            "bbox": [x0, y0, x1, y1]}
+
+
 def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
                      limit: int = 200) -> dict:
     """从 queue.jsonl 读待审条目，按页组织成可序列化批次。
@@ -197,6 +228,18 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
          if any(i.status in _REVIEWABLE for i in its)),
         key=_page_sort_key)
 
+    if page is not None and "," in str(page):
+        # 多页一批（连审两页时省一次来回；卡片按页→列→字位排序）
+        pages = [x.strip() for x in str(page).split(",") if x.strip()]
+        bad = [x for x in pages if x not in by_page]
+        if bad:
+            raise ValueError(f"队列里没有第 {', '.join(bad)} 页的条目")
+        multi = []
+        for pg in sorted(pages, key=_page_sort_key):
+            multi += sorted(by_page[pg], key=lambda i: (i.col, i.idx))
+        page = "+".join(pages)
+        by_page = dict(by_page)
+        by_page[page] = multi
     if page is not None:
         page = str(page)
         if page not in by_page:
@@ -210,18 +253,32 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
             raise ValueError(
                 f"队列 {queue_path} 里已无待审条目（全部已裁决）。")
 
-    page_items = sorted(by_page[page], key=lambda i: (i.col, i.idx))
+    # 按 页→列→字位：单页时页号相同、等价于原来的 (col, idx)；
+    # 多页一批时才用得上第一维（否则两页会按列交错）
+    page_items = sorted(by_page[page],
+                        key=lambda i: (_page_sort_key(str(i.page)),
+                                       i.col, i.idx))
     todo = [i for i in page_items if i.status in _REVIEWABLE][:limit]
+
+    rec_of = {}
+    try:
+        from ..extractor import load_index
+        rec_of = {r.id: r for r in load_index(book_dir / "phase4_chars")}
+    except Exception:
+        pass                       # 没有索引就没有重切视图，其余照常
 
     entries = []
     for it in todo:
         patch = book_dir / "phase4_chars" / it.patch_path
+        rec = rec_of.get(it.instance_id)
+        region = _recrop_region(book_dir, rec) if rec is not None else None
         entries.append({
             "instance_id": it.instance_id,
             "col": it.col, "idx": it.idx, "tier": it.tier,
             "intrusion": list(getattr(it, "intrusion", []) or []),
             "status": it.status,
             "patch_b64": _png_b64(patch),
+            "region": region,
             "choices": _assemble_choices(it),
             "ocr": it.ocr,
             "align": it.align,
@@ -426,11 +483,45 @@ def _render_seed_card(e: dict) -> str:
 <div class="cands">{choices}
 <span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
 <button type="button" class="other-ok">确定</button></span>
+<button type="button" class="recrop-open" title="切分错位时改框重裁">重切</button>
 <button type="button" class="nac"><kbd>N</kbd>非字</button>
 <button type="button" class="skip"><kbd>S</kbd>存疑跳过</button>
 <button type="button" class="noadm" title="图块混有无法剥离的残余时：确认的字只进标注结果，字形不进库当匹配范例"><kbd>B</kbd>字形不入库</button></div>
 <div class="evi">{_render_evidence(e)}</div>
+{_render_recrop(e)}
 </div></div></article>"""
+
+
+def _render_recrop(e: dict) -> str:
+    """重切面板：页图区域 + 可拖框 + 实时预览。region 缺失就不出这块。"""
+    r = e.get("region")
+    if not r:
+        return ""
+    return (
+        '<div class="recrop" data-slot="recrop"'
+        f' data-ox="{r["ox"]}" data-oy="{r["oy"]}"'
+        f' data-rw="{r["w"]}" data-rh="{r["h"]}"'
+        f' data-bbox="{_esc(json.dumps(r["bbox"]))}">'
+        '<div class="rc-side">'
+        f'<div class="rc-wrap" data-slot="rcwrap">'
+        f'<img src="data:image/png;base64,{r["b64"]}" alt="页图区域" draggable="false">'
+        '<div class="rc-box" data-slot="rcbox">'
+        '<i class="rc-h" data-e="n"></i><i class="rc-h" data-e="s"></i>'
+        '<i class="rc-h" data-e="w"></i><i class="rc-h" data-e="e"></i>'
+        '</div></div>'
+        '<div class="rc-prev"><canvas data-slot="rcprev" width="128" height="128">'
+        '</canvas><span class="lab">重切预览</span></div>'
+        '</div>'
+        '<div class="rc-acts">'
+        '<span class="hint">拖框移动、拖四边把手改大小；也可用</span>'
+        '<button type="button" class="rc-nudge" data-d="up">↑ 整体上移</button>'
+        '<button type="button" class="rc-nudge" data-d="down">↓ 下移</button>'
+        '<button type="button" class="rc-nudge" data-d="reset">复位</button>'
+        '<button type="button" class="rc-ok">重切并用当前字进库</button>'
+        '<button type="button" class="rc-ok-noadm">重切·不入库</button>'
+        '<button type="button" class="rc-cancel">取消</button>'
+        '<span class="rc-info" data-slot="rcinfo"></span>'
+        '</div></div>')
 
 
 _CSS = """
@@ -560,6 +651,30 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   border:1px solid var(--line);border-radius:4px;padding:.6rem;
   overflow-x:auto;white-space:pre;min-height:2rem}
 .hint{color:var(--muted);font-size:.8rem}
+/* 重切：页图区域 + 可拖动的框 */
+.recrop{display:none;margin-top:.6rem;padding:.6rem;border:1px solid var(--line);
+  border-radius:4px;background:var(--paper)}
+.card[data-recrop="1"] .recrop{display:block}
+.rc-wrap{position:relative;display:inline-block;touch-action:none;
+  border:1px solid var(--line);background:var(--imgbg)}
+.rc-wrap img{display:block;image-rendering:pixelated;user-select:none;
+  -webkit-user-drag:none}
+.rc-box{position:absolute;border:2px solid var(--seal);cursor:move;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.28)}
+.rc-h{position:absolute;background:var(--seal);width:11px;height:11px;
+  border-radius:2px}
+.rc-h[data-e="n"]{left:50%;top:-6px;margin-left:-5px;cursor:ns-resize}
+.rc-h[data-e="s"]{left:50%;bottom:-6px;margin-left:-5px;cursor:ns-resize}
+.rc-h[data-e="w"]{top:50%;left:-6px;margin-top:-5px;cursor:ew-resize}
+.rc-h[data-e="e"]{top:50%;right:-6px;margin-top:-5px;cursor:ew-resize}
+.rc-side{display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap}
+.rc-prev{display:flex;flex-direction:column;gap:.35rem;align-items:center}
+.rc-prev canvas{width:6rem;height:6rem;border:1px solid var(--line);
+  background:var(--imgbg);image-rendering:pixelated}
+.rc-acts{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;
+  margin-top:.5rem}
+.rc-acts .rc-nudge{font-size:.78rem;padding:.15rem .45rem}
+.rc-info{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace}
 """
 
 # 与 artifact_export._JS 同构的三层持久化 + 种子专用交互（单键 / 顺序前进）。
@@ -658,6 +773,120 @@ _JS = """
       emit(ev); applyVisual(ev);
     } else { card.setAttribute('data-state', 'open'); setChosen(card, ''); }
     progress(); setActive(card); }
+
+  // ── 重切：拖框改 bbox，发 recrop 事件 ────────────────────────
+  // 切分错位时光改字没用——图块本身就是错的，收进库当范例会毒化匹配。
+  // 页面上拖出来的框换算回**页图绝对坐标**再发事件，ingest 侧照它重裁。
+  function rcState(panel){
+    var box = panel.querySelector('[data-slot="rcbox"]');
+    var img = panel.querySelector('.rc-wrap img');
+    var rw = +panel.getAttribute('data-rw'), rh = +panel.getAttribute('data-rh');
+    // 图片按 CSS 缩放过，换算要用显示尺寸与原始尺寸的比
+    var sx = img.clientWidth / rw, sy = img.clientHeight / rh;
+    return {box: box, img: img, rw: rw, rh: rh, sx: sx, sy: sy,
+            ox: +panel.getAttribute('data-ox'),
+            oy: +panel.getAttribute('data-oy')}; }
+  function rcPut(panel, b){          // b = 区域内像素坐标 [x0,y0,x1,y1]
+    var st = rcState(panel);
+    b[0] = Math.max(0, Math.min(b[0], st.rw - 8));
+    b[1] = Math.max(0, Math.min(b[1], st.rh - 8));
+    b[2] = Math.min(st.rw, Math.max(b[2], b[0] + 8));
+    b[3] = Math.min(st.rh, Math.max(b[3], b[1] + 8));
+    panel.setAttribute('data-cur', JSON.stringify(b));
+    st.box.style.left = (b[0] * st.sx) + 'px';
+    st.box.style.top = (b[1] * st.sy) + 'px';
+    st.box.style.width = ((b[2] - b[0]) * st.sx) + 'px';
+    st.box.style.height = ((b[3] - b[1]) * st.sy) + 'px';
+    var info = panel.querySelector('[data-slot="rcinfo"]');
+    if(info) info.textContent = 'bbox ' + [
+      Math.round(st.ox + b[0]), Math.round(st.oy + b[1]),
+      Math.round(st.ox + b[2]), Math.round(st.oy + b[3])].join(', ');
+    // 预览：把区域图按当前框画进 canvas
+    var cv = panel.querySelector('[data-slot="rcprev"]');
+    if(cv && st.img.complete){
+      var g = cv.getContext('2d');
+      g.clearRect(0, 0, cv.width, cv.height);
+      try {
+        g.drawImage(st.img, b[0], b[1], b[2] - b[0], b[3] - b[1],
+                    0, 0, cv.width, cv.height);
+      } catch(e){}
+    } }
+  function rcCur(panel){
+    try { return JSON.parse(panel.getAttribute('data-cur')); } catch(e){ return null; } }
+  function rcInit(panel){
+    var st = rcState(panel);
+    var abs = JSON.parse(panel.getAttribute('data-bbox'));   // 页图绝对
+    rcPut(panel, [abs[0] - st.ox, abs[1] - st.oy,
+                  abs[2] - st.ox, abs[3] - st.oy]); }
+
+  var drag = null;
+  list.addEventListener('pointerdown', function(e){
+    var panel = e.target.closest('.recrop'); if(!panel) return;
+    var h = e.target.closest('.rc-h');
+    var box = e.target.closest('.rc-box');
+    if(!h && !box) return;
+    e.preventDefault();
+    drag = {panel: panel, edge: h ? h.getAttribute('data-e') : null,
+            x: e.clientX, y: e.clientY, start: rcCur(panel).slice()};
+    try { e.target.setPointerCapture(e.pointerId); } catch(err){}
+  });
+  window.addEventListener('pointermove', function(e){
+    if(!drag) return;
+    var st = rcState(drag.panel);
+    var dx = (e.clientX - drag.x) / st.sx, dy = (e.clientY - drag.y) / st.sy;
+    var b = drag.start.slice();
+    if(!drag.edge){ b[0]+=dx; b[2]+=dx; b[1]+=dy; b[3]+=dy; }
+    else if(drag.edge === 'n') b[1] += dy;
+    else if(drag.edge === 's') b[3] += dy;
+    else if(drag.edge === 'w') b[0] += dx;
+    else if(drag.edge === 'e') b[2] += dx;
+    rcPut(drag.panel, b);
+  });
+  window.addEventListener('pointerup', function(){ drag = null; });
+
+  function rcChar(card){
+    // 重切用的字：先看已选中的，其次手输框，最后拟进库字
+    var ch = card.querySelector('[data-slot="chosen"]').textContent.trim();
+    if(ch) return ch[0];
+    var inp = card.querySelector('.other-in');
+    if(inp && inp.value.trim()) return inp.value.trim()[0];
+    var b = card.querySelector('.cand');       // 候选按第一顺位（拟进库字在前）
+    return b ? (b.getAttribute('data-char') || '').trim() : ''; }
+
+  list.addEventListener('click', function(e){
+    var card = e.target.closest('.card'); if(!card) return;
+    var panel = card.querySelector('[data-slot="recrop"]');
+    if(e.target.closest('.recrop-open')){
+      if(!panel){ alert('这一格没有页图区域，无法重切'); return; }
+      var on = card.getAttribute('data-recrop') === '1';
+      card.setAttribute('data-recrop', on ? '0' : '1');
+      if(!on) setTimeout(function(){ rcInit(panel); }, 0);
+      return; }
+    if(!panel) return;
+    if(e.target.closest('.rc-cancel')){
+      card.setAttribute('data-recrop', '0'); return; }
+    var nud = e.target.closest('.rc-nudge');
+    if(nud){
+      var d = nud.getAttribute('data-d');
+      if(d === 'reset'){ rcInit(panel); return; }
+      var b = rcCur(panel), k = (d === 'up' ? -8 : 8);
+      rcPut(panel, [b[0], b[1] + k, b[2], b[3] + k]); return; }
+    var ok = e.target.closest('.rc-ok'), okn = e.target.closest('.rc-ok-noadm');
+    if(ok || okn){
+      var ch = rcChar(card);
+      if(!ch){ alert('先选一个字或手输，再重切'); return; }
+      var b = rcCur(panel);
+      var ox = +panel.getAttribute('data-ox'), oy = +panel.getAttribute('data-oy');
+      var ev = {op: 'recrop', instance_id: card.getAttribute('data-iid'),
+                char: ch, bbox: [ox + b[0], oy + b[1], ox + b[2], oy + b[3]]};
+      if(okn) ev.admit = false;
+      emit(ev);
+      setChosen(card, ch + (okn ? '（重切·不入库）' : '（重切）'));
+      card.setAttribute('data-state', 'done');
+      card.setAttribute('data-recrop', '0');
+      advance(card);
+    }
+  });
 
   // ── 恢復：頁內嵌日誌（上次整頁發布帶回）∪ localStorage，
   //          按 (batch,seq) 合併去重、按 seq 順序重放 ──

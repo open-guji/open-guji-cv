@@ -320,3 +320,33 @@ def test_confusable_candidates_get_hints(seed_book):
          "context": None, "note": None}
     card = _render_seed_card(e)
     assert "rì 日月" in card and "yuē 子曰" in card
+
+
+def test_recrop_event_is_parsed_and_validated():
+    """recrop 事件：bbox 必须是四个数且右下大于左上，坏框宁可丢掉。"""
+    from open_guji_cv.clustering.seed_queue import parse_seed_events
+    good = ('GUJI-SEED-EVENT {"op":"recrop","instance_id":"b:5:2:15",'
+            '"char":"言","bbox":[1304,1753,1473,1913],"batch":"x","seq":1}')
+    assert len(parse_seed_events(good)) == 1
+    for bad in ('"bbox":[1,2,3]', '"bbox":[9,9,1,1]', '"bbox":"nope"'):
+        line = ('GUJI-SEED-EVENT {"op":"recrop","instance_id":"b:5:2:15",'
+                f'"char":"言",{bad},"batch":"x","seq":2}}')
+        assert parse_seed_events(line) == []
+
+
+def test_multi_page_batch(tmp_path):
+    """--page 14,15 连审两页：卡片按页→列→字位排序，页号写成 14+15。"""
+    from open_guji_cv.clustering.review.seed_export import build_seed_batch
+    from open_guji_cv.clustering.seed_queue import STATUS_PENDING, SeedItem
+    d = tmp_path / "tb" / "phase9_seed"
+    d.mkdir(parents=True)
+    rows = [SeedItem(instance_id=f"tb:{pg}:1:{i}", book="tb", page=pg, col=1,
+                     idx=i, patch_path="p.png", tier="clean",
+                     status=STATUS_PENDING)
+            for pg in ("15", "14") for i in (1, 0)]
+    (d / "queue.jsonl").write_text(
+        "".join(r.to_json() + "\n" for r in rows), encoding="utf-8")
+    b = build_seed_batch(tmp_path / "tb", d / "queue.jsonl", page="14,15")
+    assert b["page"] == "14+15"
+    assert [e["instance_id"] for e in b["entries"]] == [
+        "tb:14:1:0", "tb:14:1:1", "tb:15:1:0", "tb:15:1:1"]
