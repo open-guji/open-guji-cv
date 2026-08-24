@@ -223,7 +223,9 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    **不要**重跑 seed——那会整页重写队列、冲掉人裁）。
 6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
    --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
-   **同一个 artifact URL**（用户书签不换）。
+   **同一个 artifact URL**（用户书签不换）。各页 URL 台账、快照与
+   再生方法在 **[artifacts/README.md](../../artifacts/README.md)**，
+   收尾时把最新 HTML 拷回快照目录一并提交。
 7. **两仓库提交推送 + 主干同步**：output/glyph.db、queue.jsonl、
    index.jsonl、重切过的 patch 随 open-guji-cv 提交；expected.json +
    patches 随 open-guji-dataset 提交。库必须随推——其他分支在用。

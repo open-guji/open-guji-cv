@@ -118,7 +118,8 @@ def render_html(findings, patches, batch_id: str, n_total: int,
 <div class="card" data-iid="{_html.escape(f.instance_id)}">
  <header><span class="iid">{_html.escape(f.instance_id)}</span>
   <b style="font-size:1.3rem">{_html.escape(f.char)}</b>{tags}
-  <span class="tag" data-slot="done"></span></header>
+  <span class="tag" data-slot="done"></span>
+  <button type="button" class="reopen">改判</button></header>
  <div class="row"><div class="imgs">{''.join(figs)}</div>
   <div class="main">{ocr_line}
    <div class="cands">
@@ -186,6 +187,10 @@ body{{margin:0;background:var(--paper);color:var(--ink);line-height:1.5;
 .t-ocr{{color:var(--seal)}}
 .near{{color:var(--muted)}}
 .card[data-state="done"] .row{{display:none}}
+.card>header .reopen{{display:none;margin-left:auto;font:inherit;
+ font-size:.75rem;background:none;border:1px solid var(--line);
+ border-radius:3px;color:var(--muted);cursor:pointer;padding:.05rem .5rem}}
+.card[data-state="done"]>header .reopen{{display:inline-block}}
 .singles{{max-width:56rem;margin:0 auto;padding:0 1rem 2rem;display:flex;
  flex-wrap:wrap;gap:.5rem}}
 .single{{display:flex;align-items:center;gap:.4rem;border:1px solid var(--line);
@@ -259,6 +264,16 @@ h2{{max-width:56rem;margin:1rem auto .3rem;padding:0 1rem;font-size:.95rem}}
     if(card && card.nextElementSibling) setActive(card.nextElementSibling);
   }}
   document.addEventListener('click', function(ev){{
+    var ro = ev.target.closest('.reopen');
+    if(ro){{
+      var card = ro.closest('.card');
+      delete card.dataset.state;
+      var slot = card.querySelector('[data-slot="done"]');
+      if(slot) slot.textContent = '';
+      setActive(card);
+      progress();
+      return;
+    }}
     var b = ev.target.closest('.act');
     if(!b) return;
     var iid = b.dataset.iid ||
