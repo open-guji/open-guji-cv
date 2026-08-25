@@ -707,6 +707,92 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
     return out
 
 
+# ── 列端曲线切边（2026-08-25，用户定：图块的边不必是直线）────
+# 用户看过框渣剥离的结果后提的：
+#
+#   最好还是做成一步……让最后这一个字它就不是一个方框，它可能是一个
+#   曲线或弧线的一个边框，这样在截这个方框时，它的最下边这个边就直接
+#   不要去取到它的下边框。
+#
+# 于是列端格的边不再是直线，而是一条**紧贴字身外沿、绕开版框**的路径
+# （复用曲线切分那轮的 `_min_ink_path` DP 寻径）：路径以外的像素抹白，
+# 等效于给图块切了一条弧线边。比矩形剥离强在能绕开**侧下方**的框线
+# 断段——那些与字身垂直位置重叠，矩形判据够不着。
+#
+# 红线（用户定，写死成硬约束）：路径每一列都必须在该列**字身墨的最低
+# 点之下**，所以字一个像素都切不到，连「从字内部空隙穿过去」这种绕法
+# 都被禁掉。字身含字底部件——判据是 **bbox 垂直间隙**（实测「黙」的
+# 四点底间隙 -5~-2px，与字身垂直重叠；框渣在字身之下，间隙 +2~+28px）。
+# 用形态学膨胀不行：灬的点与最近笔画的像素距离远大于其 bbox 间隙，
+# 首版用膨胀把「黙」的灬整个抹掉了。
+CARVE_ZONE = 0.5           # 路径活动带（× 图块高，自底向上）
+CARVE_NEAR_GAP = 1         # bbox 垂直间隙 < 此值的连通体并入字身受保护
+CARVE_DEBRIS_H = 10        # 可切连通体的高度上限（px）——版框线本来就薄
+CARVE_DEBRIS_AREA = 200    # 可切连通体的墨量上限（px）
+CARVE_MARGIN = 2           # 路径与字身下沿的余量（px）
+CARVE_STEP = 3             # 路径每列允许的纵向浮动（px）
+CARVE_CHAR = 400.0         # 禁区（字身及其上方）的代价
+CARVE_DEBRIS = 1.0         # 可穿墨（框渣）的代价
+CARVE_LIFT = 0.35          # 「尽量贴字身」的偏好，把路径压到字身下沿
+
+
+def _char_body(binary: np.ndarray) -> np.ndarray | None:
+    """字身 + 字底部件的掩膜（判据见 CARVE_* 上方注释）。"""
+    n, lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return None
+    main = int(np.argmax(st[1:, 4])) + 1
+    m_y0 = int(st[main, 1])
+    m_y1 = m_y0 + int(st[main, 3])
+    out = (lab == main)
+    for k in range(1, n):
+        if k == main:
+            continue
+        y, ch, area = int(st[k, 1]), int(st[k, 3]), int(st[k, 4])
+        y1 = y + ch
+        gap = (y - m_y1) if y >= m_y1 else (m_y0 - y1)
+        # 只有「离字身有间隙 + 又薄又小」的才当框渣放行；其余一律并入
+        # 字身保护。高度是最干净的判别：实测框渣 h≤8px（版框线本来就
+        # 薄），而字的下部件（「覽」下的兩條腿）h=27~61、面积 400~870
+        # ——首版只看间隙，把那两条腿当框渣切了。
+        if not (gap >= CARVE_NEAR_GAP
+                and ch <= CARVE_DEBRIS_H
+                and area <= CARVE_DEBRIS_AREA):
+            out |= (lab == k)
+    return out
+
+
+def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
+    """列端图块的曲线边：沿紧贴字身外沿、绕开版框的路径切，路径外抹白。
+
+    bottom=True 切下边（列末格），False 切上边（列首格，上下翻转同解）。
+    """
+    work = patch if bottom else patch[::-1]
+    binary = (work < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    h, w = binary.shape
+    if h < 8 or not binary.any():
+        return patch
+    body = _char_body(binary)
+    if body is None:
+        return patch
+    ys = np.arange(h)[:, None]
+    has = body.any(axis=0)
+    bot = np.where(has, np.where(body, ys, -1).max(axis=0), -1)
+    limit = np.where(has, bot + CARVE_MARGIN, 0)     # 路径在各列的上限
+    lo = int(min(h * (1 - CARVE_ZONE), max(0, int(limit.min()))))
+    rows = np.arange(lo, h, dtype=np.float64)
+    band_ink = (work[lo:h] < BINARY_THRESHOLD_PATCH)
+    forbid = rows[:, None] < limit[None, :]
+    cost = (np.where(forbid, CARVE_CHAR, 0.0)
+            + np.where(band_ink & ~forbid, CARVE_DEBRIS, 0.0)
+            + CARVE_LIFT * (rows - lo)[:, None] / max(1, h - lo))
+    path = np.maximum(_min_ink_path(cost, step=CARVE_STEP) + lo, limit)
+    out = work.copy()
+    for x in range(w):
+        out[path[x]:, x] = 255
+    return out if bottom else out[::-1]
+
+
 # ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
 # 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
 # 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
@@ -1357,6 +1443,11 @@ class CharExtractor:
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
             order = [i for i, _t, _b in local]
             end_cand = set(order[:2] + order[-2:])
+            # 曲线切边只碰**最外一格**：只有它挨着版框。列端渣格闸取
+            # 首末各 2 格（渣有时占两格），但短列里那两个集合会重叠，
+            # 拿它切边会把列首格**下方的邻字残余**也当框线切掉。
+            head_cell = order[0] if order else None
+            tail_cell = order[-1] if order else None
             end_patches: dict[int, tuple[np.ndarray, float]] = {}
             jz_pre: dict[int, tuple[np.ndarray, float, float]] = {}
             for cell, (idx, ltop, lbot) in zip(cells, local):
@@ -1384,6 +1475,13 @@ class CharExtractor:
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)
+                    # 曲线切边：列末切下边、列首切上边（用户定——图块的
+                    # 边不必是直线，绕开版框即可）。放在框渣剥离之后，
+                    # 剥不掉的粘连/侧下方断段由它兜底。
+                    if idx == tail_cell:
+                        patch = carve_end_edge(patch, bottom=True)
+                    if idx == head_cell:
+                        patch = carve_end_edge(patch, bottom=False)
 
                 x0 = float(sx0)
                 x1 = float(sx1)
