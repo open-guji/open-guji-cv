@@ -1870,11 +1870,14 @@ class GridSegmenter:
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
             else:
                 # 版框行锚定：在去错切帧上量上下框线，换算到裁剪窗坐标。
-                # 下框磨没检不出时用页底 H 兜底（s3 裁切贴框，H≈下框；
-                # 实测 vol01/12 ft+21×格高 与 H 只差 4px）——跨度门控
-                # 仍在 fit 里把关，框高与 n 格不合的特殊页自动不锚。
+                # 框线磨没检不出时用裁剪边兜底——s3 裁切的上/下边**就是**
+                # 按框线裁的（构造性事实；实测 vol01/12 0+21×格高 与 H 只
+                # 差 4px）。跨度门控仍在 fit 里把关：框高与 n 格不合的
+                # 特殊页（短框/卷末）自动不锚。
                 ft, fb = measure_row_frames(image)
-                if ft is not None and fb is None:
+                if ft is None:
+                    ft = 0
+                if fb is None:
                     fb = image.shape[0]
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
