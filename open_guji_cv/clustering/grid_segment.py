@@ -809,7 +809,10 @@ def measure_page_pitch(gray: np.ndarray, result: dict) -> list[float]:
 FRAME_ROW_T = 0.5          # 行墨 ≥ 此比例 × 页宽 → 横框线行
 FRAME_ROW_T2 = 0.28        # 磨损框线档：行墨 ≥ 此值且最长段够长也认
 FRAME_RUN_T = 0.22         # 磨损档的最长横向连续墨段下限（× 页宽；字最长段 ~0.1）
-FRAME_ROW_ZONE = 0.08      # 只在页顶/页底此比例窗内找横框线（字行进不来）
+FRAME_ROW_ZONE = 0.08      # 页顶搜索窗比例（裁切贴上框，框就在最顶上）
+FRAME_ROW_ZONE_B = 0.20    # 页底搜索窗比例：下框磨损时 s3 的内线搜索会在框上
+                           #   方停下，页底留出大段空白（vol01/22 实测 300px，
+                           #   框落在 8% 窗外）。长横段判据挡得住字行，扩窗安全。
 ANCHOR_TOL = 0.35          # 相位偏离框顶超此比例 × 格高才罚（框线厚度 ~0.1 格）
 ANCHOR_SPAN_TOL = 0.06     # |框高/n - 格高| 超此比例 × 格高 → 框证据不可信，不锚
 ANCHOR_W = 1e4             # 决定性罚款权重（谷/峰项在平族间差值只有个位数）
@@ -828,6 +831,7 @@ def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
     h, w = binary.shape
     rowink = binary.sum(axis=1) / max(1, w)
     zone = max(4, int(FRAME_ROW_ZONE * h))
+    zone_b = max(4, int(FRAME_ROW_ZONE_B * h))
 
     def maxrun(y: int) -> float:
         row = binary[y]
@@ -844,7 +848,7 @@ def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
         return rowink[y] >= FRAME_ROW_T2 and maxrun(y) >= FRAME_RUN_T
 
     ft = next((y for y in range(zone) if is_bar(y)), None)
-    fb = next((y for y in range(h - 1, h - zone, -1) if is_bar(y)), None)
+    fb = next((y for y in range(h - 1, h - zone_b, -1) if is_bar(y)), None)
     return ft, fb
 
 
@@ -1870,15 +1874,22 @@ class GridSegmenter:
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
             else:
                 # 版框行锚定：在去错切帧上量上下框线，换算到裁剪窗坐标。
-                # 框线磨没检不出时用裁剪边兜底——s3 裁切的上/下边**就是**
-                # 按框线裁的（构造性事实；实测 vol01/12 0+21×格高 与 H 只
-                # 差 4px）。跨度门控仍在 fit 里把关：框高与 n 格不合的
-                # 特殊页（短框/卷末）自动不锚。
+                # 框线磨没检不出时的兜底：上框用裁剪顶 0（s3 的上边就是按
+                # 框线裁的，构造性事实）；下框用**墨底**而非页底 H——下框
+                # 磨损时 s3 内线搜索会在框上方停下、页底留大段空白
+                # （vol01/22 实测 300px，H 兜底差 13.4% 被跨度门拒），而
+                # 框碎渣 + 末行字仍让墨迹恰好断在框位（实测差 +1.6%）。
+                # 跨度门控仍在 fit 里把关，框高与 n 格不合的特殊页不锚。
                 ft, fb = measure_row_frames(image)
                 if ft is None:
                     ft = 0
                 if fb is None:
-                    fb = image.shape[0]
+                    g2 = image if image.ndim == 2 \
+                        else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                    ri = (g2 < BINARY_THRESHOLD).sum(axis=1) \
+                        / max(1, g2.shape[1])
+                    nz = np.nonzero(ri >= 0.05)[0]
+                    fb = int(nz[-1]) + 6 if nz.size else image.shape[0]
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],

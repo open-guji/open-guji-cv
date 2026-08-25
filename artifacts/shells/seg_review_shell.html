@@ -120,7 +120,30 @@ dialog textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;
 const PAGES = JSON.parse(document.getElementById('pages-data').textContent);
 let STATE = JSON.parse(document.getElementById('marks-data').textContent);
 if(!STATE.marks) STATE = {marks:{}, visited:[]};
-let cur = 0, filter = 'all', lastCell = null, dirty = false, navOpen = false;
+// 本地备份：保存失败/页面被新版本顶掉时标记不丢。仅本浏览器可见。
+const LS_KEY='guji-marks-v1';
+let dirty0 = false;
+function backupLocal(){ try{ localStorage.setItem(LS_KEY,
+  JSON.stringify({t:Date.now(),state:STATE})); }catch(e){} }
+(function restoreLocal(){
+  // 自动合并：页面里已有的标记优先，本机备份补上页面没有的
+  //（页面被新版本顶掉/保存失败后重开，标记从这里回来）
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const b=JSON.parse(raw);
+    const bm=(b.state||{}).marks||{};
+    let merged=0;
+    for(const k in bm){ if(!STATE.marks[k]){ STATE.marks[k]=bm[k]; merged++; } }
+    for(const v of ((b.state||{}).visited||[]))
+      if(!STATE.visited.includes(v)) STATE.visited.push(v);
+    if(merged>0){ dirty0=true;
+      setTimeout(()=>{ const el=document.getElementById('toast');
+        if(el){ el.textContent=`已从本机备份找回 ${merged} 条标记（记得保存或导出）`;
+          el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),3600);} },600); }
+  }catch(e){}
+})();
+let cur = 0, filter = 'all', lastCell = null, dirty = dirty0, navOpen = false;
 const MOB = matchMedia('(max-width:720px)');
 let zoom = MOB.matches ? 'fit' : 1;
 function zf(p){ if(zoom!=='fit') return zoom;
@@ -215,8 +238,8 @@ function render(){
       <span><span class="k" style="border:2px solid var(--warn)"></span>自检有标记</span>
       <span><span class="k" style="border:1px dashed var(--ink2)"></span>判空格</span>
       <span><span class="k" style="background:var(--badbg);border:2px solid var(--bad)"></span>点一下=切错</span>
-      <span><span class="k" style="background:var(--unsurebg);border:2px solid var(--warn)"></span>再点=存疑</span>
-      <span><span class="k" style="background:var(--okbg);border:2px solid var(--ok)"></span>三点=无误（对橙框标无误=自检误报）· 四点=清除</span>
+      <span><span class="k" style="background:var(--okbg);border:2px solid var(--ok)"></span>再点=无误</span>
+      <span><span class="k" style="background:var(--unsurebg);border:2px solid var(--warn)"></span>三点=存疑（对橙框标无误=自检误报）· 四点=清除</span>
     </div>
     <div class="stage"><div class="canvas" style="width:${W}px;height:${H}px">
       <img src="${p.src}" alt="${p.book} 第 ${p.page} 页切分叠框图">${zones}
@@ -243,10 +266,10 @@ function bind(){
     const act=()=>{
       const id=z.dataset.id, m=STATE.marks[id];
       if(!m) STATE.marks[id]={s:1};
-      else if(m.s===1) STATE.marks[id].s=2;
-      else if(m.s===2) STATE.marks[id].s=3;
+      else if(m.s===1) STATE.marks[id].s=3;
+      else if(m.s===3) STATE.marks[id].s=2;
       else delete STATE.marks[id];
-      lastCell=id; dirty=true;
+      lastCell=id; dirty=true; backupLocal();
       z.classList.remove('m1','m2','m3');
       const nc=markCls(STATE.marks[id]);
       if(nc) z.classList.add(nc);
@@ -257,7 +280,7 @@ function bind(){
   });
   $('#note').onchange=e=>{
     if(lastCell){ if(!STATE.marks[lastCell]) STATE.marks[lastCell]={s:2};
-      STATE.marks[lastCell].note=e.target.value; dirty=true;
+      STATE.marks[lastCell].note=e.target.value; dirty=true; backupLocal();
       const z=document.querySelector(`.zone[data-id="${lastCell}"]`);
       if(z){ z.classList.remove('m1','m2','m3');
         const nc=markCls(STATE.marks[lastCell]); if(nc) z.classList.add(nc); }
@@ -278,10 +301,14 @@ async function saveState(){
   clone.querySelector('#marks-data').textContent=JSON.stringify(STATE);
   try{
     await ns.publish('<!doctype html>\n<html>'+clone.innerHTML+'</html>');
-    dirty=false; toast('已保存'); render();
+    dirty=false; backupLocal(); toast('已保存'); render();
   }catch(e){
-    if(e&&e.code==='conflict'){ toast('别处已保存过，页面即将刷新'); }
-    else toast('保存失败：'+(e&&e.code||e));
+    backupLocal();
+    if(e&&e.code==='conflict'){
+      toast('保存被新版本挡住——标记已备份到本机，请用导出发我'); }
+    else toast('保存失败（已本机备份）：'+(e&&e.code||e));
+    $('#expbox').value=eventsText();
+    $('#expdlg').showModal();
   }
 }
 function eventsText(){
