@@ -50,11 +50,11 @@ def elastic_raw(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     size = a.shape[0]
     if int(a.sum()) == 0 or int(b.sum()) == 0:
         return 0.0, 0.0
-    raw, (dx, dy), scale = _elastic_align(a, b, MAX_SHIFT, SCALES,
-                                          ELASTIC_TAU, ELASTIC_BLOCK,
-                                          ELASTIC_LOCAL)
+    raw, (dx, dy), scale, b_s = _elastic_align(a, b, MAX_SHIFT, SCALES,
+                                               ELASTIC_TAU, ELASTIC_BLOCK,
+                                               ELASTIC_LOCAL)
     padded = np.zeros((size + 2 * MAX_SHIFT, size + 2 * MAX_SHIFT), dtype=np.uint8)
-    padded[MAX_SHIFT:MAX_SHIFT + size, MAX_SHIFT:MAX_SHIFT + size] = _rescale(b, scale)
+    padded[MAX_SHIFT:MAX_SHIFT + size, MAX_SHIFT:MAX_SHIFT + size] = b_s
     b_aligned = _shifted_view(padded, dx, dy, size, MAX_SHIFT)
     miss_a, miss_b = _elastic_miss(a, b_aligned, ELASTIC_TAU, ELASTIC_BLOCK,
                                    ELASTIC_LOCAL)

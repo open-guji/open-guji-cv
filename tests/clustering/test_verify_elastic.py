@@ -103,3 +103,37 @@ def test_cov_high_gate_is_the_elastic_one():
     v = verify_pair_elastic(a, b, cov_high=ELASTIC_COV_HIGH)
     assert (v.f1 >= ELASTIC_COV_HIGH) == (v.verdict == "same"
                                           or v.diff_blob_ratio > 12)
+
+
+def test_prep_cache_is_transparent():
+    """图块预处理缓存必须是纯提速：命中与否结果逐位相同。
+
+    缓存按**内容**索引（不是 id()——数组回收后 id 会复用），所以同内容的
+    另一个数组对象也该命中，且结果不变。
+    """
+    from open_guji_cv.clustering import verify as V
+    a, b = _glyph(6), _glyph(7)
+    V._PREP_CACHE.clear()
+    cold = verify_pair_elastic(a, b)                     # 全冷
+    warm = verify_pair_elastic(a, b)                     # 全热
+    copy = verify_pair_elastic(a.copy(), b.copy())       # 同内容、不同对象
+    for other in (warm, copy):
+        assert other.f1 == cold.f1
+        assert other.diff_blob_ratio == cold.diff_blob_ratio
+        assert other.shift == cold.shift and other.scale == cold.scale
+        assert other.verdict == cold.verdict
+    assert len(V._PREP_CACHE) > 0
+
+
+def test_prep_cache_is_bounded():
+    """缓存有上限，跑长了不能把内存吃光。"""
+    from open_guji_cv.clustering import verify as V
+    V._PREP_CACHE.clear()
+    cap, V.ELASTIC_PREP_CACHE = V.ELASTIC_PREP_CACHE, 8
+    try:
+        for seed in range(12):
+            verify_pair_elastic(_glyph(seed), _glyph(seed + 100))
+        assert len(V._PREP_CACHE) <= 8
+    finally:
+        V.ELASTIC_PREP_CACHE = cap
+        V._PREP_CACHE.clear()
