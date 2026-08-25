@@ -207,7 +207,10 @@ const saveEl = document.getElementById('save');
 const SAVE_TEXT = {idle:'本机', wait:'待存', busy:'存中…', saved:'已存',
                    local:'仅存本机', ro:'只读'};
 function setSave(s, extra){ saveEl.dataset.s = s; saveEl.textContent = extra || SAVE_TEXT[s] || s; }
-let ns = null, canPub = false, timer = 0, inflight = false, dirty = false, delay = 6000;
+let ns = null, canPub = false, timer = 0, inflight = false, dirty = false;
+/* 头一次存**快**（2 秒），好让「存不了」这件事当场露出来而不是等到最后；
+   之后 6 秒防抖。html 兜底模式下会重发整页并重载本视图，所以放慢到 30 秒。 */
+let delay = 2000, mode = 'files';
 
 function renderIndex(){
   const css = document.getElementById('css').textContent;
@@ -224,37 +227,56 @@ function queueSave(){
   if (!canPub){ setSave('local'); return; }
   setSave('wait'); clearTimeout(timer); timer = setTimeout(save, delay);
 }
+async function publishNow(html){
+  /* files 形式不重载本视图，是首选；它在有些视图上根本不开放（capability_disabled），
+     那就退回 html 形式——会重载本视图，但裁决在 localStorage 里，重载回来还在。 */
+  if (mode === 'files'){
+    try { return await ns.publish({'index.html': html}); }
+    catch (e){
+      if ((e && e.code) !== 'capability_disabled') throw e;
+      mode = 'html';
+    }
+  }
+  return await ns.publish(html);
+}
 async function save(){
   if (!canPub || !dirty || inflight) return;
   inflight = true; setSave('busy');
   const snap = JSON.stringify(state);
   try {
-    await ns.publish({'index.html': renderIndex()});   // files 形式不重载本视图
+    await publishNow(renderIndex());
     dirty = JSON.stringify(state) !== snap;
-    setSave(dirty ? 'wait' : 'saved'); delay = 6000;
+    delay = mode === 'files' ? 6000 : 30000;
+    setSave(dirty ? 'wait' : 'saved');
     if (dirty) timer = setTimeout(save, delay);
   } catch (err){
     const code = (err && err.code) || 'upstream_error';
     if (code === 'conflict') setSave('busy', '别处已改');
     else if (['not_writer','not_granted','not_declared','capability_disabled',
               'capability_removed','consent_required'].includes(code)){
-      canPub = false; setSave('ro');
+      canPub = false; setSave('ro', '只读·' + code);
     } else if (code === 'too_large' || code === 'invalid_content'){
-      canPub = false; setSave('local');
+      canPub = false; setSave('local', '仅存本机·' + code);
     } else if (code === 'rate_limited'){
-      delay = Math.min(delay * 2, 60000); setSave('wait'); timer = setTimeout(save, delay);
-    } else { setSave('wait'); timer = setTimeout(save, 8000); }
+      delay = Math.min(Math.max(delay, 6000) * 2, 60000);
+      setSave('wait'); timer = setTimeout(save, delay);
+    } else { setSave('wait', '重试中·' + code); timer = setTimeout(save, 8000); }
   } finally { inflight = false; }
 }
 function flush(){ if (canPub && dirty){ clearTimeout(timer); save(); } }
 addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 addEventListener('pagehide', flush);
+/* 开页就比一次：本机比页里嵌的那份新，说明上一轮的裁决还没推上去
+   （能力当时没拿到、或者关得太快）——立刻补推，别等下一次点击。 */
+const behind = JSON.stringify(state) !== JSON.stringify(D.verdicts || {});
 if (window.claude && typeof window.claude.use === 'function'){
   setSave('idle');
   window.claude.use('artifact').then(x => {
     ns = x; canPub = !!x;
-    setSave(canPub ? (dirty ? 'wait' : 'saved') : 'local');
-    if (canPub && dirty) queueSave();
+    if (!canPub){ setSave('local'); return; }
+    if (dirty || behind){ dirty = true; setSave('wait');
+                          clearTimeout(timer); timer = setTimeout(save, delay); }
+    else setSave('saved');
   }).catch(() => setSave('local'));
 } else setSave('local');
 
