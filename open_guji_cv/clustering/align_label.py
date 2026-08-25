@@ -150,14 +150,30 @@ def _structure(slots: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
     return sorted((col, idx) for col, idx, _ in slots)
 
 
-def index_structure(index_path: str | Path) -> dict[str, list[tuple[int, int]]]:
-    """当前 phase4 index.jsonl → {页: 结构指纹}。"""
+def index_structure(index_path: str | Path,
+                    cell_types: tuple[str, ...] | None = ("char",),
+                    ) -> dict[str, list[tuple[int, int]]]:
+    """当前 phase4 index.jsonl → {页: 结构指纹}。
+
+    **只算 `cell_type == "char"` 的格**（2026-08-25 修）。指纹是拿来跟
+    `carrier_slots(..., valid_ids=…)` 的输出比的，而调用方传的 valid_ids
+    向来只含 char 实例——这边却把 `empty` 空格位也数进来，两边口径差几格，
+    整页就被判 structure drift 丢掉。vol01 新切分实锤：第 21 页载体 179
+    vs 指纹 181、第 24 页 179 vs 180，两页的过闸对齐因此**全灭**（各自
+    120+ 个字位白白进了人工队列），而 20/22/23 页恰好没有空格位所以没事。
+    `cell_types=None` 可以要回旧的全量口径。
+    """
     per_page: dict[str, list[tuple[int, int]]] = defaultdict(list)
     with open(index_path, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
             r = json.loads(line)
+            # 缺 cell_type 的精简行（旧产物、测试 fixture）当作 char——
+            # 老口径本来就是全量，不能因为字段缺失把整页滤空
+            if cell_types is not None \
+                    and r.get("cell_type", "char") not in cell_types:
+                continue
             # 夹注子字的后缀只在 id 里（idx 字段是 int），所以优先按 id 拆；
             # 没有 id 的精简行（测试 fixture、外部导出）退回 col/idx 字段
             if r.get("id") and r["id"].count(":") == 3:

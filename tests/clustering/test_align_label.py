@@ -228,3 +228,21 @@ def test_carrier_slots_with_jiazhu(tmp_path):
                          for r in rows), encoding="utf-8")
     got = carrier_slots(p)
     assert got["1"] == [(9, 2, "甲"), (9, 2, "乙"), (9, 3, "丙")]
+
+
+def test_index_structure_ignores_empty_cells(tmp_path):
+    """结构指纹只算 char 格——与 carrier_slots 的 valid_ids 同口径。
+
+    调用方传的 valid_ids 向来只含 `cell_type=="char"` 的实例，指纹这边
+    若把 `empty` 空格位也数进来，两边差几格就整页判 drift 丢掉。
+    vol01 新切分实锤：21 页 179 vs 181、24 页 179 vs 180，过闸对齐全灭。
+    """
+    import json as _json
+    from open_guji_cv.clustering.align_label import index_structure
+    p = tmp_path / "index.jsonl"
+    rows = [{"id": "b:1:1:0", "page": "1", "col": 1, "idx": 0, "cell_type": "char"},
+            {"id": "b:1:1:1", "page": "1", "col": 1, "idx": 1, "cell_type": "empty"},
+            {"id": "b:1:1:2", "page": "1", "col": 1, "idx": 2, "cell_type": "char"}]
+    p.write_text("".join(_json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    assert index_structure(p) == {"1": [(1, 0), (1, 2)]}
+    assert index_structure(p, cell_types=None) == {"1": [(1, 0), (1, 1), (1, 2)]}
