@@ -1,0 +1,334 @@
+<title>字形匹配栈现状</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  color-scheme:light dark;
+  --ground:#EBE8DF; --surface:#F8F6F1; --sunk:#E3DFD3;
+  --ink:#1C1B16; --muted:#6B6659; --faint:#948E7E;
+  --rule:#D6D1C3; --rule-hard:#BCB5A2;
+  --indigo:#2C4C76; --indigo-soft:#DEE6F1;
+  --zhu:#A8342A; --zhu-soft:#F4E2DE;
+  --ok:#39684A; --ok-soft:#DFEBE2;
+  --ochre:#856418; --ochre-soft:#F0E8D2;
+  --shadow:0 1px 0 rgba(28,27,22,.04),0 2px 10px rgba(28,27,22,.055);
+  --sans:"Archivo","Noto Sans SC",system-ui,-apple-system,sans-serif;
+  --serif:"Noto Serif SC",Songti SC,SimSun,serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#161612; --surface:#20201A; --sunk:#2A2923;
+    --ink:#E9E5D9; --muted:#9A9486; --faint:#7A7568;
+    --rule:#32312A; --rule-hard:#4A483E;
+    --indigo:#8FB3DE; --indigo-soft:#22303F;
+    --zhu:#E28C80; --zhu-soft:#3A2521;
+    --ok:#84BA93; --ok-soft:#1E2C23;
+    --ochre:#CBA652; --ochre-soft:#302819;
+    --shadow:0 1px 0 rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.28);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#161612; --surface:#20201A; --sunk:#2A2923;
+  --ink:#E9E5D9; --muted:#9A9486; --faint:#7A7568;
+  --rule:#32312A; --rule-hard:#4A483E;
+  --indigo:#8FB3DE; --indigo-soft:#22303F;
+  --zhu:#E28C80; --zhu-soft:#3A2521;
+  --ok:#84BA93; --ok-soft:#1E2C23;
+  --ochre:#CBA652; --ochre-soft:#302819;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.28);
+}
+body{margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:15.5px; line-height:1.62;
+  -webkit-text-size-adjust:100%;}
+.wrap{max-width:47rem; margin:0 auto; padding:0 20px 88px;}
+
+/* ── 抬头 ── */
+.head{padding:44px 0 26px; border-bottom:1px solid var(--rule);}
+h1{font-family:var(--serif); font-weight:700; letter-spacing:.01em;
+  font-size:clamp(26px,5.2vw,34px); line-height:1.22; margin:0 0 10px;
+  text-wrap:balance;}
+.thesis{margin:0; color:var(--muted); max-width:40em;}
+.thesis b{color:var(--ink); font-weight:600;}
+.headline{display:flex; flex-wrap:wrap; gap:10px; margin-top:22px;}
+.stat{flex:1 1 9.5rem; background:var(--surface); border:1px solid var(--rule);
+  border-radius:3px; padding:11px 13px; box-shadow:var(--shadow);}
+.stat .k{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--faint);}
+.stat .v{font-family:var(--mono); font-variant-numeric:tabular-nums;
+  font-size:21px; font-weight:500; line-height:1.25; margin-top:3px;}
+.stat .n{font-size:12px; color:var(--muted); line-height:1.4; margin-top:2px;}
+.stat.good .v{color:var(--ok)} .stat.warn .v{color:var(--ochre)}
+
+/* ── 章 ── */
+section{margin-top:44px;}
+h2{font-family:var(--serif); font-weight:700; font-size:20px; margin:0 0 6px;
+  display:flex; align-items:baseline; gap:10px; text-wrap:balance;}
+h2 .q{font-family:var(--mono); font-size:11.5px; font-weight:400;
+  color:var(--faint); letter-spacing:.03em;}
+.sub{margin:0 0 18px; color:var(--muted); font-size:14px; max-width:42em;}
+p{max-width:42em;}
+
+/* ── 四步链条 ── */
+.chain{display:grid; gap:2px; background:var(--rule); border:1px solid var(--rule);
+  border-radius:3px; overflow:hidden;}
+.step{background:var(--surface); padding:13px 15px;
+  display:grid; grid-template-columns:2.1rem 1fr; gap:4px 13px; align-items:baseline;}
+.step .no{font-family:var(--mono); font-size:12px; color:var(--indigo);
+  font-weight:500; grid-row:span 3;}
+.step h3{margin:0; font-size:15px; font-weight:600; font-family:var(--sans);}
+.step h3 code{font-family:var(--mono); font-size:12px; font-weight:400;
+  color:var(--muted); background:var(--sunk); padding:1px 5px; border-radius:2px;
+  margin-left:7px; white-space:nowrap;}
+.step .d{margin:0; font-size:13.5px; color:var(--muted); grid-column:2;}
+.step .p{margin:0; grid-column:2; font-family:var(--mono); font-size:11.5px;
+  color:var(--faint); word-break:break-word;}
+
+/* ── 表 ── */
+.tw{overflow-x:auto; border:1px solid var(--rule); border-radius:3px;
+  background:var(--surface); box-shadow:var(--shadow);}
+table{border-collapse:collapse; width:100%; min-width:33rem; font-size:13.5px;}
+th,td{text-align:left; padding:9px 13px; border-bottom:1px solid var(--rule);
+  vertical-align:top;}
+th{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--faint); font-weight:600; background:var(--sunk); white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap;}
+td b{font-weight:600;}
+.set{font-family:var(--mono); font-size:12px;}
+.pill{display:inline-block; font-size:11px; padding:1px 7px; border-radius:2px;
+  white-space:nowrap; font-weight:500;}
+.p-ok{color:var(--ok); background:var(--ok-soft)}
+.p-cost{color:var(--ochre); background:var(--ochre-soft)}
+.p-todo{color:var(--zhu); background:var(--zhu-soft)}
+
+/* ── 覆盖率条 ── */
+.gauge{display:grid; gap:9px; margin-top:4px;}
+.g{display:grid; grid-template-columns:8.5rem 1fr 3.6rem; gap:11px;
+  align-items:center; font-size:13px;}
+.g .lab{color:var(--muted)}
+.g .track{height:9px; background:var(--sunk); border-radius:2px; position:relative;
+  overflow:hidden;}
+.g .fill{position:absolute; inset:0 auto 0 0; background:var(--indigo);}
+.g .pct{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right;
+  color:var(--ink);}
+.gnote{margin:11px 0 0; font-size:13px; color:var(--muted);}
+
+/* ── 待办 ── */
+.todo{display:grid; gap:10px;}
+.item{background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  border-left:3px solid var(--rule-hard); padding:12px 14px; box-shadow:var(--shadow);}
+.item.now{border-left-color:var(--zhu)}
+.item.pick{border-left-color:var(--indigo)}
+.item h3{margin:0 0 4px; font-size:14.5px; font-weight:600;}
+.item p{margin:0; font-size:13.5px; color:var(--muted);}
+.item .why{margin-top:6px; font-size:12.5px; color:var(--faint);}
+.item a{color:var(--indigo); text-decoration-thickness:1px; text-underline-offset:2px;}
+.tagrow{display:flex; gap:6px; align-items:baseline; margin-bottom:5px;}
+.kind{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--faint);}
+
+.note{margin-top:16px; padding:12px 14px; background:var(--sunk);
+  border-radius:3px; font-size:13px; color:var(--muted);}
+.note b{color:var(--ink)}
+code{font-family:var(--mono); font-size:12.5px;}
+footer{margin-top:52px; padding-top:16px; border-top:1px solid var(--rule);
+  font-size:12px; color:var(--faint); font-family:var(--mono);}
+a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="head">
+  <h1>字形匹配栈现状</h1>
+  <p class="thesis">干的事只有一件：<b>两张刻本字块图，判它们是不是同一个字。</b>
+     判 same 就把库里那个字的标签继承过来。判错一次的代价不是错一个字——
+     错标进库会沿着簇批量扩散，所以整条链子是<b>宁可不判，也不能判错</b>。</p>
+  <div class="headline">
+    <div class="stat good">
+      <div class="k">判出来的准不准</div>
+      <div class="v">100%</div>
+      <div class="n">三条库匹配协议字形精度全 1.0000</div>
+    </div>
+    <div class="stat warn">
+      <div class="k">敢判多少</div>
+      <div class="v">8.7–18.1%</div>
+      <div class="n">其余走 OCR + 上下文</div>
+    </div>
+    <div class="stat">
+      <div class="k">形近硬例排序</div>
+      <div class="v">76.3%</div>
+      <div class="n">良例 100%；硬例只有 38 组，分母还太小</div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <h2>四步链条 <span class="q">两张灰度图块 → 一个分数</span></h2>
+  <p class="sub">顺序是真的：上一步的输出就是下一步的输入，任何一步动了，后面全部要重量。</p>
+  <div class="chain">
+    <div class="step">
+      <div class="no">1</div>
+      <h3>存储归一 <code>canonical.to_canonical</code></h3>
+      <p class="d">库里的真源统一成 256×256 灰度：<b>只缩不放</b>、按墨迹质心居中、清边缘残渣。
+         保证不同来源的图块进库时是同一把尺子。</p>
+      <p class="p">CANON_SIZE=256　MARGIN=0.12</p>
+    </div>
+    <div class="step">
+      <div class="no">2</div>
+      <h3>匹配归一 <code>normalize.normalize_patch</code></h3>
+      <p class="d">Sauvola 局部二值 → 去贴边杂点 → 丢掉字身之外的残片 →
+         墨迹外接框等比填满内容区 → 质心居中 → <b>64×64 黑白图</b>。
+         比较真正发生在这张图上。</p>
+      <p class="p">NORM_SIZE=64　MARGIN_RATIO=0.12　stroke_width=None（不做笔宽归一）</p>
+    </div>
+    <div class="step">
+      <div class="no">3</div>
+      <h3>特征粗排 <code>features.HogFeature</code></h3>
+      <p class="d">HOG 方向梯度直方图（8×8 格 / 9 方向 / 2×2 块 L2 归一，纯 numpy）。
+         内积取相似度，从全库里挑出 <b>最像的 10 个</b>送去精验——
+         不然每来一个字都要和全库逐对比。</p>
+      <p class="p">k=10（GlyphMatcher）</p>
+    </div>
+    <div class="step">
+      <div class="no">4</div>
+      <h3>逐对精验 <code>verify.verify_pair_elastic</code></h3>
+      <p class="d"><b>软覆盖 + 分块弹性对齐</b>。命中权重 <code>w(d)=exp(−(d/1.5)²)</code>：
+         差 2 像素仍算命中但只算 0.17 分；全局缩放/平移之上，每 16×16 块再各搜 ±1 像素。
+         同字的逐部件刻痕位移每块自己找补，形近字缺的那一笔挪到哪儿都还是缺。</p>
+      <p class="p">TAU=1.5　BLOCK=16　LOCAL=±1　MAX_SHIFT=3　SCALES=(0.95,1,1.05)</p>
+    </div>
+  </div>
+  <div class="note">最后的判决：<code>cov ≥ same 闸</code> 且 <code>wmax ≤ 12</code> → 判 same。
+    same 闸<b>分两档</b>，因为两个消费方错的代价不一样——<b>库匹配 0.996</b>（一条边就继承标签，没兜底）、
+    <b>聚类 0.992</b>（合并要过多代表一致性，单条边错了有兜底）。
+    另有形近家族护栏（<code>NEVER_MATCH_FAMILIES</code>：而/面、七/一、彖/象…）
+    ——但它要求库里有对家，<b>无监督聚类用不上</b>。</div>
+</section>
+
+<section>
+  <h2>六本账 <span class="q">改任何一层，这六条都要重量</span></h2>
+  <p class="sub">没有单一的「准确率」。六个集各量一件事，量的东西不同、先验不同，数字不能互相换算，也不能合起来平均。</p>
+  <div class="tw"><table>
+    <thead><tr><th>测试集</th><th>量什么</th><th>现在的数</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="set">glyph-match/<b>triplets</b></td>
+        <td>排序：同字要比形近异字更匹配</td>
+        <td class="num">良例 <b>1.0000</b><br>硬例 <b>0.7632</b></td>
+        <td><span class="pill p-ok">达标</span></td>
+      </tr>
+      <tr>
+        <td class="set">glyph-match/<b>pairs</b><br><span style="color:var(--faint)">71 497 对</span></td>
+        <td>操作点：精度 ≥ 0.999 时闸能放行多少真同字对</td>
+        <td class="num">recall <b>0.1444</b><br>@ 闸 0.9945</td>
+        <td><span class="pill p-ok">达标</span></td>
+      </tr>
+      <tr>
+        <td class="set"><b>eval_db_match</b><br><span style="color:var(--faint)">端到端协议</span></td>
+        <td>库匹配的精度与覆盖率（<b>硬约束</b> 精度 ≥ 0.999）</td>
+        <td class="num">精度 <b>1.0000</b> ×3<br>覆盖 8.7 / 16.3 / 18.1%</td>
+        <td><span class="pill p-ok">达标</span></td>
+      </tr>
+      <tr>
+        <td class="set"><b>char-clustering</b><br><span style="color:var(--faint)">三分片</span></td>
+        <td>聚类纯度（≥0.999 硬约束）与碎片率</td>
+        <td class="num">purity <b>.99967 / .99901 / 1.0</b><br>碎片率 2.77 / 2.96 / 2.58</td>
+        <td><span class="pill p-cost">有代价</span></td>
+      </tr>
+      <tr>
+        <td class="set"><b>char-normalization</b><br><span style="color:var(--faint)">37 张 golden</span></td>
+        <td>归一化回归门（<b>人工目视</b>，输出本身错的绝不冻成金标）</td>
+        <td class="num"><b>37/37</b> 过门<br>5 张待定</td>
+        <td><span class="pill p-todo">5 张待定</span></td>
+      </tr>
+      <tr>
+        <td class="set">char-segmentation/<br><b>instances</b></td>
+        <td>管线能不能<b>自己发现</b>坏图块（切分残留）</td>
+        <td class="num">召回 <b>54%</b><br>精确 <b>27%</b></td>
+        <td><span class="pill p-todo">判据太糙</span></td>
+      </tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>聚类那条「有代价」是什么意思</b>：purity 从上一版的
+    1.0/1.0/1.0 掉到 .99967/.99901（仍过 ≥0.999 的硬约束），换来碎片率三片全面改善。
+    脏簇全是 而/面、彖/象 这类形近家族——聚类拿不到字标签，那道护栏在这儿用不上。
+    要把 purity 拉回 1.0 得把聚类闸提到 0.996，那时碎片率反超基线。<b>这笔账还没定。</b></p>
+</section>
+
+<section>
+  <h2>准确率到底是多少 <span class="q">一句话：判出来的都对，但只敢判两成</span></h2>
+  <p class="sub">这是整条链子最该记住的一件事——精度是被硬钉死的，代价全部落在覆盖率上。</p>
+  <div class="gauge">
+    <div class="g"><span class="lab">vol01 增量</span>
+      <span class="track"><span class="fill" style="width:8.7%"></span></span>
+      <span class="pct">8.7%</span></div>
+    <div class="g"><span class="lab">vol02 增量</span>
+      <span class="track"><span class="fill" style="width:16.3%"></span></span>
+      <span class="pct">16.3%</span></div>
+    <div class="g"><span class="lab">vol02 查 vol01 库</span>
+      <span class="track"><span class="fill" style="width:18.1%"></span></span>
+      <span class="pct">18.1%</span></div>
+  </div>
+  <p class="gnote">条形是<b>覆盖率</b>——直接靠字形匹配定下来的字。这部分的<b>字形精度是 1.0000</b>，
+     一个没错。剩下的八成走 OCR + 上下文，慢一点、也没那么准，但不会把错标写进库。</p>
+  <p class="note"><b>刚验过的一件事</b>：pairs 说最优操作点是 0.9945，照它把闸调下来，
+    覆盖率能从 16.3% 涨到 22.1%。但 eval_db_match 在 0.9945 上精度掉到 0.9985 和 0.9986，
+    <b>破了 ≥0.999 的硬约束</b>，所以闸维持 0.996。<br>
+    不是两本账打架：pairs 量的是<b>一对一</b>的判决，库匹配是<b>一对 N</b>——闸放低之后
+    一个查询会同时够到好几个形近字，错的撞上一次就写进库、沿簇扩散。先验不同，最优操作点就不同。</p>
+</section>
+
+<section>
+  <h2>现在卡在你这儿 <span class="q">按能解开多少东西排的</span></h2>
+  <div class="todo">
+    <div class="item now">
+      <div class="tagrow"><span class="kind">要过目</span></div>
+      <h3>归一化 golden 还剩 5 张待定</h3>
+      <p>029 / 031 / 033 / 035 / 036。029 整块只有两条版框横线、根本不是字，
+         我建议移出这个集、改挂到 char-segmentation 当 not_text 金标；035 字头被切。
+         其余三张是残留没去干净。</p>
+      <p class="why">→ 解开：这个集能重新说「37 张全过目」，归一化那层的人工门就闭环了。</p>
+    </div>
+    <div class="item now">
+      <div class="tagrow"><span class="kind">要裁决</span></div>
+      <h3>形近误判裁决台还有 70 张没裁</h3>
+      <p><a href="https://claude.ai/code/artifact/9e45a22b-da42-4bd5-9486-378fd714a80a">打开裁决台</a>。
+         已裁 132 张，可入集 57 / 标注有误 73 / 异体字 1 / 拿不准 1。</p>
+      <p class="why">→ 解开：hard 子集从 38 例扩到七八十例。现在 0.7632 是 29/38 算出来的，
+         分母太小，一例就动 2.6 个百分点。</p>
+    </div>
+    <div class="item pick">
+      <div class="tagrow"><span class="kind">要定</span></div>
+      <h3>列尾那 131 块图，动还是不动</h3>
+      <p>格内序号 idx=20（每列最后一个字）的缺陷率是抽样 6 块中 4 块，全池平均才 4.9%。
+         但根子在上游 G3 网格对齐——列尾格整体上飘 50±10px，在这儿逐块剔是给上游擦屁股。</p>
+      <p class="why">→ 两条路：<b>现在降级</b>（这一批干净了，上游照旧）或
+         <b>回流 G3</b>（修一次全书受益，但要动切分层）。</p>
+    </div>
+    <div class="item pick">
+      <div class="tagrow"><span class="kind">要定</span></div>
+      <h3>出库那 29 块怎么处置</h3>
+      <p>我的默认是<b>可逆降级</b>：tier 改成 defect、排除出干净层指标，不物理删——
+         删了基线就没法回头比。要真删说一声。</p>
+      <p class="why">→ 解开：这批落地之后，干净层的指标才是干净的。</p>
+    </div>
+    <div class="item pick">
+      <div class="tagrow"><span class="kind">要定</span></div>
+      <h3>聚类纯度那笔账要不要拿回来</h3>
+      <p>purity .99967 / .99901 换了碎片率 2.79→2.77 / 3.01→2.96。
+         把聚类闸提到 0.996 能把 purity 拉回 1.0，代价是碎片率反超基线。</p>
+      <p class="why">→ 我倾向<b>维持现状</b>：硬约束是 ≥0.999，已经过了；碎片只是多进一次审查队列，
+         脏簇却会把错标带进库。</p>
+    </div>
+  </div>
+  <p class="note"><b>不用你操心的</b>：全库自动清理这条我已经否掉了——现有判据精确只有 27%，
+    照它清一遍 606 个旗标块里约 445 块是好的，误伤四分之三。我自己提的那组新规则
+    （墨框宽高比 / 投影干净缝）12.5%，比对照层高但远不如现行判据，也毙了。</p>
+</section>
+
+<footer>open-guji-cv · 分支 claude/glyph-match-optimization-ixzntn · 管线 502fa04d0c · 2026-08-25</footer>
+</div>

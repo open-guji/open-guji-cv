@@ -94,6 +94,15 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 151 条已并入 `open-guji-dataset/char-segmentation/instances`（带 `stratum`
 与 `stratum_weight`）。
 
+## 总览
+
+| 页面 | URL | 快照 | 说明 |
+|---|---|---|---|
+| **字形匹配栈现状** | https://claude.ai/code/artifact/51e7647f-ab90-439a-b36f-5adc6aee084b | [match_stack_status.html](match_stack_status.html) | 四步链条 / 六个测试集的当前数字 / 卡在人裁那侧的五件事。乱了先看这张 |
+
+数字随基线变，**改完护栏记得重发到同一 URL**；真源是
+`.claude/doc/glyph_match_stack.md` §三 的基线表。
+
 ## 分析报告（静态，作决策依据引用）
 
 | 页面 | URL | 快照 | 说明 |
