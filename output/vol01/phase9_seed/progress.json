@@ -3,13 +3,13 @@
   "4": {
    "total": 168,
    "auto": 98,
-   "pending": 1,
+   "pending": 0,
    "done": true
   },
   "5": {
    "total": 171,
    "auto": 129,
-   "pending": 3,
+   "pending": 6,
    "done": true
   },
   "6": {
@@ -33,7 +33,7 @@
   "10": {
    "total": 180,
    "auto": 133,
-   "pending": 2,
+   "pending": 0,
    "done": true
   },
   "12": {
@@ -81,7 +81,7 @@
   "17": {
    "total": 183,
    "auto": 102,
-   "pending": 6,
+   "pending": 0,
    "done": true
   },
   "18": {
@@ -279,6 +279,6 @@
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": "50",
- "updated_at": "2026-08-25T15:15:57+00:00"
+ "pointer": null,
+ "updated_at": "2026-08-25T16:14:00+00:00"
 }
