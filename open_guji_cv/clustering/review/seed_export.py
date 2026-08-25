@@ -269,6 +269,22 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         pass                       # 没有索引就没有重切视图，其余照常
 
     entries = []
+    # 「第几个字」按 **index** 里该列 char 的位次算，1 起。
+    # 不能用 context.pos——那是按 **OCR 载体** 算的，载体缺格时与页面上
+    # 数出来的位置对不上（2026-08-25 实测 295 条待审里只有 118 条相符，
+    # 用户对着原图数「全弄错位了」正是这个）。也不能直接用 idx：那是
+    # 格号，空格位也占号且从 0 起。
+    seq_of: dict[str, int] = {}
+    if rec_of:
+        from collections import defaultdict as _dd
+        _by_col: dict[tuple, list] = _dd(list)
+        for r in rec_of.values():
+            if getattr(r, "cell_type", "char") == "char":
+                _by_col[(r.page, r.col)].append(r)
+        for group in _by_col.values():
+            for n, r in enumerate(sorted(group, key=lambda x: x.idx), 1):
+                seq_of[r.id] = n
+
     for it in todo:
         patch = book_dir / "phase4_chars" / it.patch_path
         rec = rec_of.get(it.instance_id)
@@ -276,6 +292,12 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         entries.append({
             "instance_id": it.instance_id,
             "col": it.col, "idx": it.idx, "tier": it.tier,
+            # 卡头显示用「该列第几个字」（1 起、跳过空格位），不是 idx。
+            # idx 是**格号**：空格位也占号且从 0 起，拿它当序号，用户对着
+            # 原图数第几个字必然对不上（2026-08-25 用户实锤）。
+            # context.pos 是 carrier_slots 里该列 char 的实际位次，正是
+            # 人数原图的口径；没有上下文时退回 idx+1 只求不崩。
+            "seq": seq_of.get(it.instance_id, it.idx + 1),
             "intrusion": list(getattr(it, "intrusion", []) or []),
             "status": it.status,
             "patch_b64": _png_b64(patch),
@@ -482,7 +504,7 @@ def _render_seed_card(e: dict) -> str:
                       for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
-<span class="pos">第{e["col"]}列第{e["idx"]}字</span>{tier}{intr}{skipped}
+<span class="pos">第{e["col"]}列第{e["seq"]}字</span>{tier}{intr}{skipped}
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
