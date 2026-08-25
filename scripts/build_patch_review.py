@@ -59,7 +59,15 @@ def build_page(book: str, page: str, quality: int, index: dict):
                 c for c in col["cells"] if c.get("type") != "margin"):
             cid = f"{book}/{page}:{cno}:{i}"
             rec = index.get((book, page, cno, i))
-            if cell.get("type") == "char" and isinstance(rec, dict) \
+            # 判空要看**实例**的 cell_type，不是 grid 的 type：列端渣格闸
+            # 把纯框渣/污渍的格判成 empty 时只改实例，grid 里仍写着 char
+            # ——审查页照 grid 显示，就把管线已经判空的格又画成字块，
+            # 看着像「管线把污渍当字圈起来」（2026-08-25 用户实审反馈）。
+            if isinstance(rec, dict) and not rec.get("__subs__") \
+                    and rec.get("cell_type") == "empty":
+                cells_out.append({"id": cid, "empty": True,
+                                  "lab": str(i + 1), "junk": 1})
+            elif cell.get("type") == "char" and isinstance(rec, dict) \
                     and rec.get("__subs__"):
                 # 夹注格：整格实例已被 a=右子列 / b=左子列 两个半宽实例
                 # 替换，流里按读序 a 前 b 后排两块，编号 如「5a」「5b」
