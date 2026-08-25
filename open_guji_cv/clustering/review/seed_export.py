@@ -504,7 +504,7 @@ def _render_seed_card(e: dict) -> str:
                       for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
-<span class="pos">第{e["col"]}列第{e["seq"]}字</span>{tier}{intr}{skipped}
+<span class="pos">第{e["col"]}列第{e.get("seq", e["idx"] + 1)}字</span>{tier}{intr}{skipped}
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
