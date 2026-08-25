@@ -5,6 +5,10 @@
 2. 去边缘毛刺：删除贴边且面积过小的连通域（界行/相邻字残留）
 3. 墨迹外接框等比缩放 + 质心居中，四周留白
 4. 输出 uint8 {0,1} 二值图（1=墨迹）
+
+**笔宽归一（stroke_normalize）2026-08-24 起默认不做**，理由见该函数的
+文档字符串——一句话：它是为刚性 F1 判据抗着墨浓淡而加的，现在的
+elastic 软覆盖判据本来就不吃这一套，它反而把 已/巳 那类开口糊死。
 """
 
 from __future__ import annotations
@@ -99,9 +103,29 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
 
 def _drop_stray_components(binary: np.ndarray,
                            keep_ink_ratio: float = 0.98) -> np.ndarray:
-    """稳健化墨迹：按面积从大到小累计到 keep_ink_ratio 的连通域保留，
-    其余小残片（相邻字一角、噪点）删除 —— 防止外接框被残片撑大。"""
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    """稳健化墨迹：删掉**落在字身之外**的小残片（邻字一角、界行线、噪点），
+    防止外接框被残片撑大。
+
+    两步，缺一不可：
+
+    1. 先按面积从大到小累计到 `keep_ink_ratio`，得到「字身」；
+    2. **再把质心落在字身外接框内的小块收回来**——它们是本字自己的
+       点、短横、断开的笔画，不是残片。
+
+    第 2 步是 2026-08-25 补的。此前只有第 1 步，是个纯质量判据：笔画密的
+    字里一个「丶」占不到总墨的 2%，于是被当残片删掉。拿出库裁决台那
+    152 块扫，53 个被删的连通体里 **40 个的质心落在字身框内**——按/削/資/
+    量/罔/勝/臨/隨/明 的点和短横，全是真笔画。用户在裁决台上就是这么发现的
+    （「把一些特别短的笔画，比方说短横和点都给变没了」）。剩下 13 个落在
+    框外（舜左边那条界行线之类），正是这条判据本来要删的东西。
+
+    质心在框内不等于一定是本字的笔画——bbox 过高吃进下一字的头、且那截
+    墨恰好落在框内，仍然收不回来也删不掉（`crop_quality` 模块头里记的同一个
+    已知盲区）。但「框内的小块一律留着」比「小块一律删掉」错得轻：多留一个
+    残点只让外接框稍胖，删掉一个「丶」是把字改了。
+    """
+    n, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8)
     if n <= 2:
         return binary
     areas = stats[1:, cv2.CC_STAT_AREA]
@@ -114,6 +138,17 @@ def _drop_stray_components(binary: np.ndarray,
         acc += areas[k]
         if acc >= total * keep_ink_ratio:
             break
+    # 字身外接框（只由第 1 步留下的块决定）
+    body = np.isin(labels, list(keep))
+    ys, xs = np.nonzero(body)
+    if len(xs):
+        x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+        for i in range(1, n):
+            if i in keep:
+                continue
+            cx, cy = centroids[i]
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                keep.add(i)
     out = binary.copy()
     drop_mask = ~np.isin(labels, list(keep)) & (binary > 0)
     out[drop_mask] = 0
@@ -131,7 +166,7 @@ def ink_bbox(binary: np.ndarray) -> tuple[int, int, int, int] | None:
 def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
                     margin_ratio: float = MARGIN_RATIO,
                     noise_area: int = NOISE_AREA,
-                    stroke_width: int | None = 3,
+                    stroke_width: int | None = None,
                     margins: tuple[int, int] | None = None) -> np.ndarray:
     """灰度图块 → S×S uint8 {0,1} 归一二值图。
 
@@ -214,11 +249,27 @@ def skeletonize(binary: np.ndarray, max_iter: int = 20) -> np.ndarray:
 
 
 def stroke_normalize(binary: np.ndarray, stroke_width: int = 3) -> np.ndarray:
-    """笔宽归一：骨架化 + 统一膨胀到固定笔宽。
+    """笔宽归一：骨架化 + 统一膨胀到固定笔宽。**默认不再调用**（2026-08-24）。
 
-    刻本不同印次着墨浓淡不同（同字笔画可差 2 倍宽），墨迹 F1 对此极敏感；
-    归一到统一笔宽后，同字 F1 主要反映骨架形状差异——这才是字形本身。
-    副作用：膨胀还能桥接 1~2px 的笔画断裂（磨损容忍）。
+    当初的理由：刻本不同印次着墨浓淡不同（同字笔画可差 2 倍宽），而当时的
+    判据是**刚性墨迹 F1**，对笔宽极敏感；归一到统一笔宽后，同字 F1 主要
+    反映骨架形状差异。
+
+    为什么撤掉：判据早已换成 elastic（软覆盖 + 分块弹性对齐，verify.py），
+    它按「到对方墨迹的距离」给分——粗笔多出来的墨就贴在细笔旁边，本来就
+    几乎不扣分。也就是说它抗着墨浓淡的那份功劳现在是白拿的，代价却实打实：
+
+    - 膨胀到 3px 会把 已/巳、日/曰 这类**开口/缝隙直接糊死**，那正是
+      glyph-match/triplets hard 子集的主要失败形态；
+    - 它的「副作用」——桥接 1~2px 笔画断裂——是**把断口盖住而不是修好**
+      （实测 37 张 golden 里 4 张如此）。断是上游二值化留下的，该在上游修。
+
+    撤掉后实测（参数一个没动，tau1.5/blk16/loc1）：
+      triplets hard 排序      0.6842 → 0.7632（control 1.000 不动）
+      glyph-match/pairs 主指标 recall 0.0807 → 0.1130，precision 仍 ≥0.999
+      其中笔画最密的一档 recall 0.0101 → 0.0155
+
+    函数保留：`stroke_width=3` 仍可显式传入（旧判据对照、单测用）。
     """
     skel = skeletonize(binary)
     if not skel.any():

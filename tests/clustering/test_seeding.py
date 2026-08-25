@@ -766,3 +766,102 @@ def test_admission_decision_match_solo_ocr():
                               [], vmap,
                               match_candidates=[("文", 0.96)]
                               ) == (True, "match_ref")
+
+
+def test_exclusions_block_admission_and_review(tmp_path, monkeypatch):
+    """排除名单：名单里的字位既不进库，也不出审查卡（用户 2026-08-25 口径）。
+
+    钉死两条路：seed 自动通道、ingest 裁决通道。名单是「有意撤掉的」，
+    重跑管线绝不能把它们悄悄填回来。
+    """
+    from open_guji_cv.clustering import seeding as S
+    from open_guji_cv.clustering.review.seed_export import _REVIEWABLE
+    from open_guji_cv.clustering.seed_queue import STATUS_EXCLUDED
+
+    root = tmp_path
+    book_dir, corpus_path, variants_path = build_book(root)
+    victim = f"{BOOK}:1:1:0"          # 第 1 页首字，本该 auto 进库
+    monkeypatch.setattr(S, "load_exclusions",
+                        lambda *a, **k: {victim: {"reason": "rule_bar"}})
+    db = GlyphDB(root / "g.db")
+    try:
+        summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert summary["n_excluded"] == 1
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in (book_dir / "phase9_seed" / "queue.jsonl")
+             .read_text(encoding="utf-8").splitlines() if l.strip()}
+        it = q[victim]
+        assert it.status == STATUS_EXCLUDED          # 落账
+        assert it.status not in _REVIEWABLE          # 不出审查卡
+        assert not db.conn.execute(                  # 不进库
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+
+        # ingest 通道：哪怕来了一条 confirm 事件也顶回去
+        r = ingest_decisions(book_dir, db, [
+            {"op": "confirm", "instance_id": victim, "char": "天",
+             "batch": "b", "seq": 1}])
+        assert r.get("excluded") == 1
+        assert not db.conn.execute(
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+    finally:
+        db.close()
+
+
+# ── 上下文条口径：pos 必须与「列内第几个 char 格」同源 ─────────────────
+
+def test_context_pos_follows_index_not_carrier(tmp_path):
+    """载体缺格时，上下文高亮位仍要对准图块本身。
+
+    2026-08-25 用户实锤：``vol01:4:2:20`` 卡片是「第」，上下文条却高亮
+    下一位的「一」。真因是列文按 **OCR 载体** 建——载体少一格，整列文本
+    就短一位，``pos`` 与审查页按 index 数出来的「第几字」错开。列文改
+    按 index 的 char 格位建（载体缺格补 □）之后，
+    ``pos == 列内 char 位次 - 1`` 恒成立。
+    """
+    book_dir = tmp_path / BOOK
+    chars_dir = book_dir / "phase4_chars"
+    (chars_dir / "patches").mkdir(parents=True)
+    text = PAGES["1"]
+    missing = 3                      # 这一格故意不写进载体
+    index_lines, carrier_lines = [], []
+    for i, gold in enumerate(text):
+        iid = f"{BOOK}:1:1:{i}"
+        rel = f"patches/1_{i}.png"
+        cv2.imwrite(str(chars_dir / rel), _patch(gold))
+        index_lines.append(json.dumps(
+            {"id": iid, "book": BOOK, "page": "1", "col": 1, "idx": i,
+             "bbox": [0, 0, 80, 80], "cell_type": "char", "ocr_text": None,
+             "ocr_confidence": 0.0, "patch_path": rel, "ink_ratio": 0.2,
+             "height": 64, "width": 64, "flags": []}, ensure_ascii=False))
+        if i != missing:
+            carrier_lines.append(json.dumps(
+                {"id": iid, "char": gold, "prob": 0.92}, ensure_ascii=False))
+    (chars_dir / "index.jsonl").write_text(
+        "".join(x + "\n" for x in index_lines), encoding="utf-8")
+    (chars_dir / "ocr_carrier.jsonl").write_text(
+        "".join(x + "\n" for x in carrier_lines), encoding="utf-8")
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(text, encoding="utf-8")
+
+    db = GlyphDB(tmp_path / "glyph.db")
+    try:
+        seed_book(book_dir, db, corpus_path)
+    finally:
+        db.close()
+
+    rows = [SeedItem.from_json(x) for x in
+            (book_dir / "phase9_seed" / "queue.jsonl")
+            .read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert rows
+    for it in rows:
+        ctx = it.context or {}
+        # 列文长度 = 列内 char 格数（不是载体条数）
+        assert len(ctx["col_ocr"]) == len(text)
+        # 高亮位 = 该格在列内的 char 位次 - 1
+        assert ctx["pos"] == it.idx
+    # 载体缺的那一格占住位并补 □，后面的字因此没有整体前移
+    it = {r.instance_id: r for r in rows}[f"{BOOK}:1:1:{missing}"]
+    assert it.context["col_ocr"][missing] == "□"
+    assert it.context["col_ocr"][missing + 1] == text[missing + 1]

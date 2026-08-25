@@ -9,7 +9,7 @@
     "shear": 0.008,
     "narrow_page": false,
     "n_cols_used": 9,
-    "page_ink": 637433.0,
+    "page_ink": 639279.0,
     "period": 184.21276595744678,
     "col_phase_rel": -83.42014322865646,
     "inset_l": 26.0,
@@ -1837,15 +1837,20 @@
         {
           "type": "char",
           "index": 8,
+<<<<<<< HEAD
           "y_top": 911.0,
           "y_bottom": 1016.0,
+=======
+          "y_top": 910.0,
+          "y_bottom": 1015.0,
+>>>>>>> origin/main
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 9,
-          "y_top": 1016.0,
+          "y_top": 1015.0,
           "y_bottom": 1135.0,
           "text": null,
           "confidence": 0.0

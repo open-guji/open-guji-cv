@@ -1,5 +1,6 @@
 """align_label.py 单测：对齐标签必须落在正确的实例上，错位一格就算失败。"""
 
+import pytest
 import json
 
 from open_guji_cv.clustering.align_eval import build_ngram_index
@@ -197,3 +198,51 @@ def test_carrier_slots_tolerates_missing_entries(tmp_path):
                  encoding="utf-8")
     got = carrier_slots(p, valid_ids={"b:1:1:0", "b:1:1:1", "b:1:1:2"})
     assert [c for _, _, c in got["1"]] == ["天"]
+
+
+def test_slot_key_handles_jiazhu_suffix():
+    """夹注子字的 a/b 后缀：`…:9:2a` / `2b` 是同一格里的左右两个小字。
+
+    main 的「双行夹注 a/b 子列拆分」让 id 尾段带上后缀，而 index 的
+    `idx` 字段仍是 2。此前 `int(idx)` 直接炸（vol01 有 248 条），
+    seed 整个跑不动。排序上必须 2a < 2b < 3，与页面阅读顺序一致。
+    """
+    from open_guji_cv.clustering.align_label import slot_key
+    assert slot_key(9, "2a") == (9, 2, "a")
+    assert slot_key("9", 3) == (9, 3, "")
+    assert sorted([slot_key(9, 3), slot_key(9, "2b"), slot_key(9, "2a")]) == \
+        [(9, 2, "a"), (9, 2, "b"), (9, 3, "")]
+    with pytest.raises(ValueError):
+        slot_key(9, "x")
+
+
+def test_carrier_slots_with_jiazhu(tmp_path):
+    """带夹注后缀的载体能正常读出，且对外仍是 (col, idx, 字) 三元组。"""
+    import json as _json
+    from open_guji_cv.clustering.align_label import carrier_slots
+    p = tmp_path / "carrier.jsonl"
+    rows = [{"id": "b:1:9:3", "char": "丙", "prob": 1.0},
+            {"id": "b:1:9:2b", "char": "乙", "prob": 1.0},
+            {"id": "b:1:9:2a", "char": "甲", "prob": 1.0}]
+    p.write_text("".join(_json.dumps(r, ensure_ascii=False) + "\n"
+                         for r in rows), encoding="utf-8")
+    got = carrier_slots(p)
+    assert got["1"] == [(9, 2, "甲"), (9, 2, "乙"), (9, 3, "丙")]
+
+
+def test_index_structure_ignores_empty_cells(tmp_path):
+    """结构指纹只算 char 格——与 carrier_slots 的 valid_ids 同口径。
+
+    调用方传的 valid_ids 向来只含 `cell_type=="char"` 的实例，指纹这边
+    若把 `empty` 空格位也数进来，两边差几格就整页判 drift 丢掉。
+    vol01 新切分实锤：21 页 179 vs 181、24 页 179 vs 180，过闸对齐全灭。
+    """
+    import json as _json
+    from open_guji_cv.clustering.align_label import index_structure
+    p = tmp_path / "index.jsonl"
+    rows = [{"id": "b:1:1:0", "page": "1", "col": 1, "idx": 0, "cell_type": "char"},
+            {"id": "b:1:1:1", "page": "1", "col": 1, "idx": 1, "cell_type": "empty"},
+            {"id": "b:1:1:2", "page": "1", "col": 1, "idx": 2, "cell_type": "char"}]
+    p.write_text("".join(_json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    assert index_structure(p) == {"1": [(1, 0), (1, 2)]}
+    assert index_structure(p, cell_types=None) == {"1": [(1, 0), (1, 1), (1, 2)]}

@@ -43,6 +43,27 @@ EVENT_RE = re.compile(r"GUJI-EVENT\s+(\{.*\})")
 # ── 批次构建 ─────────────────────────────────────────────
 
 
+def _with_gloss(cands: list[dict]) -> list[dict]:
+    """给候选补速查注记：释义/拼音 + 候选之间的异体/通假关系。
+
+    审阅者最需要的是「这几个候选互相什么关系」——异体是同一个词挑字形，
+    通假是不同的词按文意挑。gloss 表缺失时静默降级（注记为空）。"""
+    from ...gloss import annotate
+    chars = tuple(c["char"] for c in cands)
+    out = []
+    for c in cands:
+        info = annotate(c["char"], chars)
+        c = dict(c)
+        if info.get("p"):
+            c["py"] = info["p"]
+        if info.get("d"):
+            c["def"] = info["d"]
+        if info.get("rel"):
+            c["rel"] = info["rel"]
+        out.append(c)
+    return out
+
+
 def build_batch(book_out_dir, limit: int = 400,
                 sort: str = "gain", max_members: int = 4,
                 max_candidates: int = 5) -> dict:
@@ -88,7 +109,8 @@ def build_batch(book_out_dir, limit: int = 400,
                 "rep": rep,
                 # 成员实例 id：簇 id 会随重跑聚类变号，回收时靠成员重绑
                 "members": [m["id"] for m in members],
-                "candidates": (detail["candidates"] or [])[:max_candidates],
+                "candidates": _with_gloss(
+                    (detail["candidates"] or [])[:max_candidates]),
                 "patches": patches,
                 "n_more": max(0, len(members) - max_members),
                 "ctx_compact": session.context(rep, mode="compact"),
@@ -126,9 +148,18 @@ def _render_candidates(entry: dict) -> str:
         sem = c.get("semantic")
         note = (f'<small class="sem">→{_esc(sem)}</small>'
                 if sem and sem != ch else "")
+        # 速查注记：拼音+释义（悬停出全文）、与其他候选的异体/通假关系
+        rel = "".join(f'<i class="rel">{_esc(r["kind"])}:{_esc(r["char"])}</i>'
+                      for r in c.get("rel", []))
+        gl = ""
+        if c.get("py") or c.get("def"):
+            body = " ".join(x for x in (c.get("py"), c.get("def")) if x)
+            gl = (f'<small class="gloss" title="{_esc(body)}">'
+                  f'{_esc(body[:22])}</small>')
         out.append(
             f'<button type="button" class="cand" data-char="{_esc(ch)}">'
-            f'<b>{_esc(ch)}</b>{note}<span class="p">{p:.0%}</span></button>')
+            f'<b>{_esc(ch)}</b>{note}<span class="p">{p:.0%}</span>'
+            f'{rel}{gl}</button>')
     return "".join(out)
 
 
@@ -262,6 +293,11 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .more{color:var(--muted);font-size:.8rem;align-self:center}
 .main{flex:1;min-width:16rem;display:flex;flex-direction:column;gap:.55rem}
 .cands{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}
+.cand .gloss{display:block;max-width:11rem;overflow:hidden;white-space:nowrap;
+  text-overflow:ellipsis;color:#777;font-size:.62rem;line-height:1.1}
+.cand .rel{display:inline-block;margin-left:.25rem;color:#a55;
+  font-size:.62rem;font-style:normal;border:1px solid #d99;
+  border-radius:3px;padding:0 .2rem}
 .cand{font:inherit;display:inline-flex;align-items:baseline;gap:.3rem;
   border:1px solid var(--line);background:none;color:var(--ink);
   border-radius:3px;padding:.2rem .55rem;cursor:pointer}

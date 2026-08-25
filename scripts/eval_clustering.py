@@ -30,7 +30,18 @@ from open_guji_cv.clustering.features import get_feature
 
 
 def load_shard(shard_dir: Path) -> dict:
-    return json.loads((shard_dir / "expected.json").read_text(encoding="utf-8"))
+    data = json.loads((shard_dir / "expected.json").read_text(encoding="utf-8"))
+    # 排除名单：切分坏掉的图块不参与聚类评测——它们的碎片与脏簇量的是切分
+    # 的账，不是聚类的账。`--include-excluded` 可以把旧口径量回来对照。
+    if not _INCLUDE_EXCLUDED:
+        from open_guji_cv.clustering.exclusions import excluded_ids
+        ex = excluded_ids()
+        n0 = len(data["instances"])
+        data["instances"] = [i for i in data["instances"]
+                             if i["instance_id"] not in ex]
+        if n0 != len(data["instances"]):
+            print(f"  排除名单跳过 {n0 - len(data['instances'])}/{n0} 个实例")
+    return data
 
 
 def cluster_frozen(shard_dir: Path, data: dict, params: ClusterParams
@@ -66,10 +77,15 @@ def cluster_from_pipeline(path: Path, data: dict) -> tuple[dict[str, str], int]:
     return out, len(want - set(out))
 
 
+_INCLUDE_EXCLUDED = False
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", help="char-clustering 数据集目录")
     ap.add_argument("--shard", default=None, help="只跑这个分片（默认全部）")
+    ap.add_argument("--include-excluded", action="store_true",
+                    help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--clusters", default=None,
                     help="端到端模式：管线的 phase5_clusters/clusters.json")
     ap.add_argument("--feature", default=None, help="覆盖分片记录的特征后端")
@@ -80,6 +96,8 @@ def main() -> None:
     ap.add_argument("--theta-high", type=float, default=None)
     ap.add_argument("--out", default=None, help="报告 JSON 路径")
     args = ap.parse_args()
+    global _INCLUDE_EXCLUDED
+    _INCLUDE_EXCLUDED = args.include_excluded
 
     samples = Path(args.dataset) / "samples"
     shards = ([samples / args.shard] if args.shard else

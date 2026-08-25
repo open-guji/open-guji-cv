@@ -791,15 +791,33 @@ def _smooth(proj: np.ndarray, cell_h: float) -> np.ndarray:
     return np.convolve(proj, np.ones(kernel) / kernel, mode="same")
 
 
+# 格线/格心的相对位置只由 n_chars 决定，而相位搜索会拿同一个 n_chars
+# 调 _grid_cost 上千次——每次重新 arange 是纯浪费，按 n_chars 缓存。
+_GRID_OFFSETS: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+
 def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
                n_chars: int) -> float:
-    """网格代价：线落谷（小） − 0.5×格中心落峰（大）。"""
+    """网格代价：线落谷（小） − 0.5×格中心落峰（大）。
+
+    性能敏感（单页 5752 次调用）：偏移量按 n_chars 缓存，clip 就地做，
+    两次索引合并成一次——数值与旧版逐位一致，只是少了每次的临时分配。
+    """
     L = len(smooth)
-    li = np.clip(np.round(off + cell_h * np.arange(n_chars + 1)).astype(int),
-                 0, L - 1)
-    ci = np.clip(np.round(off + cell_h * (np.arange(n_chars) + 0.5)).astype(int),
-                 0, L - 1)
-    return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
+    offs = _GRID_OFFSETS.get(n_chars)
+    if offs is None:
+        offs = (np.arange(n_chars + 1, dtype=np.float64),
+                np.arange(n_chars, dtype=np.float64) + 0.5)
+        _GRID_OFFSETS[n_chars] = offs
+    a_line, a_cent = offs
+    pos = np.empty(2 * n_chars + 1, dtype=np.float64)
+    np.multiply(a_line, cell_h, out=pos[:n_chars + 1])
+    np.multiply(a_cent, cell_h, out=pos[n_chars + 1:])
+    pos += off
+    np.round(pos, out=pos)
+    np.clip(pos, 0, L - 1, out=pos)
+    vals = smooth[pos.astype(np.intp)]
+    return float(vals[:n_chars + 1].mean()) - 0.5 * float(vals[n_chars + 1:].mean())
 
 
 def page_column_projection(gray: np.ndarray, line_frac: float = 0.3,
@@ -1098,19 +1116,36 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         masked = np.where(p >= thr, p, 0.0)
         csums.append(np.concatenate([[0.0], np.cumsum(masked)]))
 
+    # 逐列前缀和堆成一张 (列数, L+1) 的表：下面按相位试格线时，
+    # 「网格没盖住的墨」对每一列都是同两个区间的差值——区间端点与列无关，
+    # 所以能一次切出所有列，不必逐列进 Python 循环。
+    CS = np.asarray(csums)
+
     def _uncovered(phase: float, span: float, g: float) -> float:
-        lo1, hi1 = top + g, phase - g
-        lo2, hi2 = phase + span + g, bottom - g
-        vals = []
-        for cs in csums:
-            v = 0.0
-            for a, b in ((lo1, hi1), (lo2, hi2)):
-                a = int(np.clip(round(a), top + g, bottom - g))
-                b = int(np.clip(round(b), top + g, bottom - g))
-                if b > a:
-                    v += float(cs[b] - cs[a])
-            vals.append(v)
-        return float(np.median(vals))
+        """网格之外（首格上方 + 末格下方）剩下多少墨，取各列中位数。
+
+        性能敏感：相位×格高的搜索会调它上千次（单页 cProfile 里它累计
+        占 52%）。所以这里刻意写成「标量夹取 + 一次向量化切片」——
+        原来是逐列 Python 循环 + 每个端点一次 `np.clip`（单页 12.5 万次
+        标量 clip，光这一项就 0.5s）。数值与旧版逐位一致：np.clip 对
+        标量与 min/max 同义，round 用的都是 Python 内建。
+        """
+        lo_b, hi_b = top + g, bottom - g
+
+        def clamp(x: float) -> int:
+            return int(min(max(round(x), lo_b), hi_b))
+
+        a1, b1 = clamp(lo_b), clamp(phase - g)
+        a2, b2 = clamp(phase + span + g), clamp(hi_b)
+        v = None
+        if b1 > a1:
+            v = CS[:, b1] - CS[:, a1]
+        if b2 > a2:
+            seg = CS[:, b2] - CS[:, a2]
+            v = seg if v is None else v + seg
+        if v is None:
+            return 0.0
+        return float(np.median(v))
 
     for cell_h in cell_hs:
         span = cell_h * n_chars

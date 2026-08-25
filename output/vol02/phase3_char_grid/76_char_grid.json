@@ -9,13 +9,17 @@
     "shear": -0.002,
     "narrow_page": false,
     "n_cols_used": 9,
-    "page_ink": 566860.0,
+    "page_ink": 568316.0,
     "period": 185.88636363636357,
     "col_phase_rel": -8.924309600982525,
     "inset_l": 33.0,
     "inset_r": 32.0,
     "rule_in_col": 0.0,
+<<<<<<< HEAD
     "cell_h": 113.2615714285716,
+=======
+    "cell_h": 113.24957142857158,
+>>>>>>> origin/main
     "row_phase_rel": 15.828377428124682
   },
   "columns": [
@@ -1523,15 +1527,20 @@
         {
           "type": "char",
           "index": 16,
+<<<<<<< HEAD
           "y_top": 1862.0,
           "y_bottom": 1973.0,
+=======
+          "y_top": 1861.0,
+          "y_bottom": 1972.0,
+>>>>>>> origin/main
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 17,
-          "y_top": 1973.0,
+          "y_top": 1972.0,
           "y_bottom": 2088.0,
           "text": null,
           "confidence": 0.0
@@ -1794,13 +1803,13 @@
         }
       ],
       "cell_left_x": 1342.0,
-      "cell_right_x": 1518.0,
+      "cell_right_x": 1517.0,
       "cell_bands": [
         [
           0.0,
           407.0,
           1349.0,
-          1518.0
+          1517.0
         ],
         [
           407.0,
