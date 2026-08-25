@@ -478,9 +478,12 @@ def test_admission_decision_match_solo():
     # cov 差一点（旧阈 0.98 放行档）→ 不进
     assert admission_decision(lo, None, None, [], vmap,
                               match_candidates=[("文", 0.985)])[0] is False
-    # 有整理本参照的字位不走本通道（归 match_ref / 人审管）
+    # 有整理本参照的字位不走 match_solo——十七轮起这个组合改由
+    # match_ref_weak 放行（参考 × 库 双证据，25/25 回放），通道名必须
+    # 区分开：审计上 solo 是「库单独说了算」，ref_weak 是「两路互证」
     assert admission_decision(lo, None, "文", [DOUBT_WEAK_SINGLE], vmap,
-                              match_candidates=[("文", 1.0)])[0] is False
+                              match_candidates=[("文", 1.0)]
+                              ) == (True, "match_ref_weak")
     # 护栏触发（never_match/conflict）→ 禁
     assert admission_decision(lo, None, None, [], vmap,
                               match_candidates=[("日", 0.995), ("曰", 0.97)],
@@ -865,3 +868,58 @@ def test_context_pos_follows_index_not_carrier(tmp_path):
     it = {r.instance_id: r for r in rows}[f"{BOOK}:1:1:{missing}"]
     assert it.context["col_ocr"][missing] == "□"
     assert it.context["col_ocr"][missing + 1] == text[missing + 1]
+
+
+# ── 十七轮：replace 层对齐 × 库 / 免闸参考 × 库 两条新通道 ─────────────
+
+def test_admission_decision_match_replace_and_ref_weak():
+    """756 条历史人裁回放标定的两条放行（都要求库 top 与文本证据同字）。
+
+    - match_replace（@0.95，70/70）：OCR 认错产生 replace 层对齐 +
+      signal_conflict，但 OCR 本不参与自动判断；整理本 × 库形状同指
+      一字即放行，进库字取整理本字；
+    - match_ref_weak（@0.98，25/25）：无对齐页 weak_single 必在场，
+      此前把 参考 × 库 的路堵死；0.98 档放行（0.97 出 祗/祇 一错）。
+    """
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    # match_replace：够 0.95 放行
+    ok, ch = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.96), ("烏", 0.90)])
+    assert (ok, ch) == (True, "match_replace")
+    # 库 top 与对齐不同字 → 拦
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("烏", 0.99)])
+    assert not ok
+    # cov 不够 → 拦
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.94)])
+    assert not ok
+    # 混入 near_form / db_inconsistent → 拦
+    for extra in ("near_form", "db_inconsistent"):
+        ok, _ = admission_decision(
+            {"char": "馬", "prob": 0.99}, "焉", None,
+            ["signal_conflict", "replace_align", extra], vmap,
+            match_candidates=[("焉", 0.99)])
+        assert not ok
+
+    # match_ref_weak：无对齐 + 免闸参考 + 库 0.98
+    ok, ch = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允",
+        ["weak_single"], vmap,
+        match_candidates=[("允", 0.985)])
+    assert (ok, ch) == (True, "match_ref_weak")
+    # 0.98 之下 → 拦（祗/祇 档）
+    ok, _ = admission_decision(
+        {"char": "祇", "prob": 0.30}, None, "祗",
+        ["weak_single"], vmap,
+        match_candidates=[("祇", 0.97)])
+    assert not ok

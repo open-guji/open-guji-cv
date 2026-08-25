@@ -114,6 +114,15 @@ MATCH_SOLO_COV = 0.99
 # 四条历史反例全在家族里）；不同语义的竞争候选到 0.95 档也禁。
 # 0.95 以下无「OCR×库一致」样本，不外推。
 MATCH_SOLO_OCR_COV = 0.95
+# replace 层对齐 × 库 top 一致的放行阈（2026-08-25 十七轮实审标定：
+# 756 条历史人裁回放，@0.95 触发 70 全对——OCR 认错才产生 replace 层，
+# 而「OCR 不参与自动判断」本就是定案；整理本（文本）× 库（形状）两路
+# 零同源证据同指一字，与 match_ref 通道同一机理，只是对齐来自 replace
+# 层所以单独设档留观察窗）
+MATCH_REPLACE_COV = 0.95
+# 免闸参考 × 库 top 一致的放行阈（同一轮标定：@0.98 触发 25 全对；
+# @0.97 出 祗/祇 一错——免闸参考噪声大于过闸对齐，阈往上顶一档）
+MATCH_REF_WEAK_COV = 0.98
 
 
 def _now() -> str:
@@ -298,6 +307,29 @@ def admission_decision(ocr: dict | None, align_char: str | None,
         if db_char is not None \
                 and vmap.semantic(db_char) == vmap.semantic(corpus_char):
             return True, "match_ref"
+    # replace 层对齐 × 库 top 一致（十七轮，70/70）：signal_conflict 与
+    # replace_align 这两条疑问都在说「OCR 与整理本不一致」——可 OCR 本来
+    # 就不参与自动判断，拦错了对象。整理本字与库内形状 top 候选同字且
+    # cov 够高时放行，进库字取**整理本字**（库只是形状旁证）。
+    # near_form / db_inconsistent 不在允许集，照拦。
+    d_replace = {DOUBT_SIGNAL_CONFLICT, DOUBT_REPLACE_ALIGN,
+                 DOUBT_DEGRADED_CROP}
+    if align_char is not None and doubts \
+            and all(d in d_replace for d in doubts) and match_candidates:
+        c1, cov1 = max(match_candidates, key=lambda t: t[1])
+        if cov1 >= MATCH_REPLACE_COV \
+                and vmap.semantic(c1) == vmap.semantic(align_char):
+            return True, "match_replace"
+    # 免闸参考 × 库 top 一致（十七轮，25/25 @0.98）：无对齐的页（上谕/
+    # 奏折补录）weak_single 几乎必然在场，此前它把 参考 × 库 双证据的路
+    # 整个堵死。参考虽免闸（噪声大），但库形状 0.98 档同字时两路互证。
+    d_weak = {DOUBT_WEAK_SINGLE, DOUBT_DEGRADED_CROP}
+    if align_char is None and ref_char is not None and doubts \
+            and all(d in d_weak for d in doubts) and match_candidates:
+        c1, cov1 = max(match_candidates, key=lambda t: t[1])
+        if cov1 >= MATCH_REF_WEAK_COV \
+                and vmap.semantic(c1) == vmap.semantic(ref_char):
+            return True, "match_ref_weak"
     solo_ok = all(d in (DOUBT_DEGRADED_CROP, DOUBT_WEAK_SINGLE)
                   for d in doubts)
     if (corpus_char is None and solo_ok and match_guard is None
@@ -688,7 +720,12 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     match_char=mr.char, match_candidates=mr.candidates,
                     match_guard=mr.guard, match_wmax=mr.wmax,
                     solo_cov=solo_cov)
-                if admit_ok and channel == "match_ref":
+                if admit_ok and channel in ("match_replace",
+                                             "match_ref_weak"):
+                    # 新两通道站着的是整理本/参考字，库只是形状旁证
+                    proposed = (al.char if al else None) or \
+                        (ctx or {}).get("ref_char")
+                elif admit_ok and channel == "match_ref":
                     # 库 × 整理本通道的进库字取库匹配形——站着的是形状
                     # 证据（verify same）+ 整理本，OCR 只是旁证；否则
                     # 无对齐时 proposed 会落到 OCR 字（十轮实审：之 页
@@ -1174,7 +1211,10 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
         if not admit_ok:
             n["kept"] += 1
             continue
-        if channel in ("match_ref", "match_solo", "match_solo_ocr"):
+        if channel in ("match_replace", "match_ref_weak"):
+            proposed = (it.align or {}).get("char") or \
+                (it.context or {}).get("ref_char")
+        elif channel in ("match_ref", "match_solo", "match_solo_ocr"):
             proposed = m.get("char") or (
                 max(cands, key=lambda t: t[1])[0] if cands else None)
         else:

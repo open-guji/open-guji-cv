@@ -139,3 +139,27 @@ def test_padding_band_debris_removed_but_core_dot_kept():
     out = normalize_patch(g, stroke_width=None)
     n, _, stats, _ = __import__('cv2').connectedComponentsWithStats(out, 8)
     assert n - 1 == 2, f"应保留主体+点共 2 个组件，实得 {n-1}"
+
+
+def test_thin_line_position_guard():
+    """细线判据带位置守卫：字身中部的细长横是笔画，不是版框。
+
+    实锤 vol01:26:3:5「壽」——中部一条磨损印细（3~4px）、又断开、又跨
+    半宽的真横，被位置无关的细线判据当界行删掉（用户在库页面上看出
+    「短笔画被消掉」）。守卫后：外带的竖界行照删，中部细横必须留。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.normalize import remove_edge_specks
+
+    h = w = 120
+    img = np.zeros((h, w), dtype=np.uint8)
+    # 主体：一个厚笔画的方框（最大组件）
+    img[20:100, 30:38] = 1
+    img[20:28, 30:90] = 1
+    # 中部细长横（厚 3px、跨 70px > 0.5w）——真笔画，必须保留
+    img[58:61, 25:95] = 1
+    # 贴右边的细竖线（界行）——照删
+    img[5:115, 114:117] = 1
+    out = remove_edge_specks(img)
+    assert out[59, 60] == 1, "字身中部的细横被误删"
+    assert out[60, 115] == 0, "外带的竖界行没删掉"
