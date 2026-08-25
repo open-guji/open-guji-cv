@@ -4,19 +4,22 @@
 :root{
   --bg:#f6f2e8; --panel:#fffdf6; --panel2:#efe9da; --ink:#26221c; --ink2:#6b6353;
   --line:#d9d2c0; --warn:#a97a12; --bad:#b3372a; --badbg:rgba(179,55,42,.18);
-  --unsurebg:rgba(201,151,30,.22); --accent:#5a4632; --focus:#8a6b3f;
+  --unsurebg:rgba(201,151,30,.22); --ok:#2e7d4f; --okbg:rgba(46,125,79,.18);
+  --accent:#5a4632; --focus:#8a6b3f;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
     --line:#3d382a; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.26);
-    --unsurebg:rgba(210,164,55,.28); --accent:#c9b48f; --focus:#d8bf94;
+    --unsurebg:rgba(210,164,55,.28); --ok:#5fae83; --okbg:rgba(95,174,131,.25);
+    --accent:#c9b48f; --focus:#d8bf94;
   }
 }
 :root[data-theme="dark"]{
   --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
   --line:#3d382a; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.26);
-  --unsurebg:rgba(210,164,55,.28); --accent:#c9b48f; --focus:#d8bf94;
+  --unsurebg:rgba(210,164,55,.28); --ok:#5fae83; --okbg:rgba(95,174,131,.25);
+  --accent:#c9b48f; --focus:#d8bf94;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -38,6 +41,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans SC",system-
 .badge{font-size:11px;padding:0 6px;border-radius:8px;font-variant-numeric:tabular-nums}
 .badge.b{background:var(--badbg);color:var(--bad)}
 .badge.u{background:var(--unsurebg);color:var(--warn)}
+.badge.g{background:var(--okbg);color:var(--ok)}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);
   background:var(--panel);flex-wrap:wrap}
@@ -59,6 +63,7 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
 .cell.hasflag{border-color:var(--warn)}
 .cell.m1{background:var(--badbg);border-color:var(--bad)}
 .cell.m2{background:var(--unsurebg);border-color:var(--warn)}
+.cell.m3{background:var(--okbg);border-color:var(--ok)}
 .cell.emptycell{width:64px;height:34px;border:1px dashed var(--ink2);border-radius:4px;
   background:none;display:flex;align-items:center;justify-content:center;
   color:var(--ink2);font-size:11px;line-height:1}
@@ -85,9 +90,10 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
     opacity:0;pointer-events:none;transition:opacity .2s}
   #app.nav #scrim{opacity:1;pointer-events:auto}
   .menu{display:inline-block}
-  .bar{gap:6px;padding:6px 8px}
+  .bar{gap:4px;padding:4px 6px}
   .bar .ttl{display:none}
-  button.act{padding:8px 10px;touch-action:manipulation}
+  .bar button.act{padding:4px 7px;font-size:12px;touch-action:manipulation}
+  .foot button.act{touch-action:manipulation}
   .cell,.zone{touch-action:manipulation}
   .stage{padding:10px;-webkit-overflow-scrolling:touch}
   .cols{margin:0}
@@ -126,29 +132,53 @@ const MOB = matchMedia('(max-width:720px)');
 let zoom = MOB.matches ? 0.8 : 1;
 const $ = s => document.querySelector(s);
 const markOf = id => STATE.marks[id] || null;
+const markCls = m => m ? (m.s===1?'m1':m.s===2?'m2':'m3') : '';
 
 function pageStats(p){
-  let b=0,u=0;
+  let b=0,u=0,g=0;
   for(const col of p.cols) for(const c of col.cells){
-    const m=markOf(c.id); if(m){ if(m.s===1)b++; else u++; } }
-  return {b,u};
+    const m=markOf(c.id); if(m){ if(m.s===1)b++; else if(m.s===2)u++; else g++; } }
+  return {b,u,g};
 }
-function render(){
-  const p = PAGES[cur];
-  const pk = p.book+'/'+p.page;
-  if(!STATE.visited.includes(pk)){ STATE.visited.push(pk); dirty=true; }
-  const items = PAGES.map((pg,i)=>{
+function sideItems(){
+  return PAGES.map((pg,i)=>{
     const st=pageStats(pg), seen=STATE.visited.includes(pg.book+'/'+pg.page);
     return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}">
       <span class="nm">${pg.book==='vol01'?'一':'二'}·${pg.page}</span>
       ${st.b?`<span class="badge b">${st.b}</span>`:''}
       ${st.u?`<span class="badge u">${st.u}</span>`:''}
+      ${st.g?`<span class="badge g">${st.g}</span>`:''}
       <span class="seen">✓</span></button>`;
   }).join('');
+}
+function subLine(){
+  const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
+  const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
+  const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
+  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
+}
+// 朱批不重绘画面：只改被点格的类 + 侧栏/页脚（滚动位置原地不动）
+function refreshChrome(){
+  const pl=$('.plist'); if(pl){ pl.innerHTML=sideItems(); bindSide(); }
+  const sb=$('.brand .sub'); if(sb) sb.textContent=subLine();
+  const ci=$('#cellinfo'); if(ci) ci.textContent=lastCell||'';
+  const note=$('#note');
+  if(note){ note.disabled=!lastCell;
+    note.value=lastCell&&markOf(lastCell)&&markOf(lastCell).note?markOf(lastCell).note:''; }
+  const sv=$('#save'); if(sv) sv.textContent='保存'+(dirty?' ●':'');
+}
+function bindSide(){
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;navOpen=false;render();});
+}
+function render(){
+  const p = PAGES[cur];
+  const pk = p.book+'/'+p.page;
+  if(!STATE.visited.includes(pk)){ STATE.visited.push(pk); dirty=true; }
+  const items = sideItems();
   const colsHtml = p.cols.map(col=>{
     const cells = col.cells.map((c,ci)=>{
       const m = markOf(c.id);
-      const mk = m ? (m.s===1?'m1':'m2') : '';
+      const mk = markCls(m);
       if(c.empty){
         if(filter==='flag'||filter==='marked'&&!m) {}
         return `<div class="cell emptycell ${mk}" data-id="${c.id}" role="button"
@@ -160,20 +190,19 @@ function render(){
       return `<div class="cell ${c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
         role="button" tabindex="0"
         title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}">
-        <span class="idx">${ci}</span>
+        <span class="idx">${ci+1}</span>
         <img src="${c.src}" width="${w}" height="${h}" alt="${c.id}"></div>`;
     }).join('');
     return `<div class="colbox"><div class="colhead">第 ${col.col} 列</div>
       <div class="cells">${cells}</div></div>`;
   }).reverse().join('');
-  const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
-  const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
+
   $('#app').className = navOpen ? 'nav' : '';
   $('#app').innerHTML = `
   <div id="scrim"></div>
   <nav class="side">
     <div class="brand"><h1>切分朱批·图块流</h1>
-      <div class="sub">看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu}</div></div>
+      <div class="sub">${subLine()}</div></div>
     <div class="plist">${items}</div>
   </nav>
   <div class="main">
@@ -187,6 +216,7 @@ function render(){
       <button class="act ${filter==='flag'?'on':''}" data-f="flag">只看自检标记</button>
       <button class="act ${filter==='marked'?'on':''}" data-f="marked">只看已朱批</button>
       <span class="sp"></span>
+      <button class="act ${zoom===0.4?'on':''}" data-z="0.4">0.4×</button>
       <button class="act ${zoom===0.6?'on':''}" data-z="0.6">0.6×</button>
       <button class="act ${zoom===0.8?'on':''}" data-z="0.8">0.8×</button>
       <button class="act ${zoom===1?'on':''}" data-z="1">1×</button>
@@ -197,8 +227,8 @@ function render(){
     </div>
     <div class="stage"><div class="cols">${colsHtml}</div></div>
     <div class="foot">
-      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--warn)">存疑</b> · 三下=清除。橙边=管线自检有标记。列序右→左，格序自上而下。</span>
-      <span class="mobonly">点 1 下=错 · 2 下=疑 · 3 下=清 · 列序右→左</span>
+      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--warn)">存疑</b> · 三下=<b style="color:var(--ok)">无误</b>（对<b style="color:var(--warn)">橙边</b>自检格标无误即判它误报）· 四下=清除。列序右→左。</span>
+      <span class="mobonly">点 1=错 2=疑 3=无误 4=清（橙边格标无误=自检误报）</span>
       <span class="sp"></span>
       <span id="cellinfo">${lastCell||''}</span>
       <input id="note" placeholder="给最后点的格补备注" ${lastCell?'':'disabled'}
@@ -208,9 +238,11 @@ function render(){
   bind();
 }
 function bind(){
-  const mb=$('#menu'); if(mb) mb.onclick=()=>{navOpen=!navOpen;render();};
-  const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;render();};
-  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;navOpen=false;render();});
+  const mb=$('#menu'); if(mb) mb.onclick=()=>{navOpen=!navOpen;
+    $('#app').classList.toggle('nav',navOpen);};
+  const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;
+    $('#app').classList.remove('nav');};
+  bindSide();
   $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
   $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
@@ -220,15 +252,24 @@ function bind(){
       const id=z.dataset.id, m=STATE.marks[id];
       if(!m) STATE.marks[id]={s:1};
       else if(m.s===1) STATE.marks[id].s=2;
+      else if(m.s===2) STATE.marks[id].s=3;
       else delete STATE.marks[id];
-      lastCell=id; dirty=true; render();
+      lastCell=id; dirty=true;
+      z.classList.remove('m1','m2','m3');
+      const nc=markCls(STATE.marks[id]);
+      if(nc) z.classList.add(nc);
+      refreshChrome();
     };
     z.onclick=act;
     z.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act();}};
   });
   $('#note').onchange=e=>{
     if(lastCell){ if(!STATE.marks[lastCell]) STATE.marks[lastCell]={s:2};
-      STATE.marks[lastCell].note=e.target.value; dirty=true; render(); }
+      STATE.marks[lastCell].note=e.target.value; dirty=true;
+      const z=document.querySelector(`.cell[data-id="${lastCell}"]`);
+      if(z){ z.classList.remove('m1','m2','m3');
+        const nc=markCls(STATE.marks[lastCell]); if(nc) z.classList.add(nc); }
+      refreshChrome(); }
   };
   $('#save').onclick=saveState;
   $('#export').onclick=()=>{ $('#expbox').value=eventsText(); $('#expdlg').showModal(); };
@@ -253,7 +294,7 @@ async function saveState(){
 }
 function eventsText(){
   const lines=Object.entries(STATE.marks).map(([id,m])=>JSON.stringify(
-    {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':'unsure',...(m.note?{note:m.note}:{})}));
+    {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':(m.s===2?'unsure':'ok'),...(m.note?{note:m.note}:{})}));
   return lines.join('\n')||'(还没有标记)';
 }
 $('#expcopy').onclick=async()=>{

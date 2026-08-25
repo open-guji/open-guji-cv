@@ -3,20 +3,23 @@
 <style>
 :root{
   --bg:#f6f2e8; --panel:#fffdf6; --panel2:#efe9da; --ink:#26221c; --ink2:#6b6353;
-  --line:#d9d2c0; --ok:#2e7d4f; --warn:#a97a12; --bad:#b3372a; --badbg:rgba(179,55,42,.16);
+  --line:#d9d2c0; --ok:#2e7d4f; --okbg:rgba(46,125,79,.18); --warn:#a97a12;
+  --bad:#b3372a; --badbg:rgba(179,55,42,.16);
   --unsurebg:rgba(201,151,30,.20); --accent:#5a4632; --focus:#8a6b3f;
 }
 :root:not([data-theme="light"]){}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
-    --line:#3d382a; --ok:#5fae83; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.22);
+    --line:#3d382a; --ok:#5fae83; --okbg:rgba(95,174,131,.25); --warn:#d2a437;
+    --bad:#e06152; --badbg:rgba(224,97,82,.22);
     --unsurebg:rgba(210,164,55,.24); --accent:#c9b48f; --focus:#d8bf94;
   }
 }
 :root[data-theme="dark"]{
   --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
-  --line:#3d382a; --ok:#5fae83; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.22);
+  --line:#3d382a; --ok:#5fae83; --okbg:rgba(95,174,131,.25); --warn:#d2a437;
+  --bad:#e06152; --badbg:rgba(224,97,82,.22);
   --unsurebg:rgba(210,164,55,.24); --accent:#c9b48f; --focus:#d8bf94;
 }
 *{box-sizing:border-box}
@@ -39,6 +42,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans SC",system-
 .badge{font-size:11px;padding:0 6px;border-radius:8px;font-variant-numeric:tabular-nums}
 .badge.b{background:var(--badbg);color:var(--bad)}
 .badge.u{background:var(--unsurebg);color:var(--warn)}
+.badge.g{background:var(--okbg);color:var(--ok)}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);
   background:var(--panel);flex-wrap:wrap}
@@ -56,6 +60,7 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
 .zone:hover{border-color:var(--focus)}
 .zone.m1{background:var(--badbg);border-color:var(--bad)}
 .zone.m2{background:var(--unsurebg);border-color:var(--warn)}
+.zone.m3{background:var(--okbg);border-color:var(--ok)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink2);font-size:12px;padding:6px 14px;
   border-bottom:1px solid var(--line);background:var(--panel)}
 .k{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:4px}
@@ -79,9 +84,10 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
     opacity:0;pointer-events:none;transition:opacity .2s}
   #app.nav #scrim{opacity:1;pointer-events:auto}
   .menu{display:inline-block}
-  .bar{gap:6px;padding:6px 8px}
+  .bar{gap:4px;padding:4px 6px}
   .bar .ttl{display:none}
-  button.act{padding:8px 10px;touch-action:manipulation}
+  .bar button.act{padding:4px 7px;font-size:12px;touch-action:manipulation}
+  .foot button.act{touch-action:manipulation}
   .zone{touch-action:manipulation}
   .legend{display:none}
   .stage{padding:8px;-webkit-overflow-scrolling:touch}
@@ -123,24 +129,46 @@ function zf(p){ if(zoom!=='fit') return zoom;
 const $ = s => document.querySelector(s);
 
 function markOf(id){ return STATE.marks[id] || null; }
+const markCls = m => m ? (m.s===1?'m1':m.s===2?'m2':'m3') : '';
 function pageStats(p){
-  let b=0,u=0;
-  for(const c of p.cells){ const m=markOf(c.id); if(m){ if(m.s===1)b++; else if(m.s===2)u++; } }
-  return {b,u};
+  let b=0,u=0,g=0;
+  for(const c of p.cells){ const m=markOf(c.id); if(m){ if(m.s===1)b++; else if(m.s===2)u++; else g++; } }
+  return {b,u,g};
+}
+function sideItems(){
+  return PAGES.map((pg,i)=>{
+    const st=pageStats(pg), seen=STATE.visited.includes(pg.book+'/'+pg.page);
+    return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}">
+      <span class="nm">${pg.book==='vol01'?'一':'二'}·${pg.page}</span>
+      ${st.b?`<span class="badge b">${st.b}</span>`:''}
+      ${st.u?`<span class="badge u">${st.u}</span>`:''}
+      ${st.g?`<span class="badge g">${st.g}</span>`:''}
+      <span class="seen">✓</span></button>`;
+  }).join('');
+}
+function subLine(){
+  const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
+  const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
+  const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
+  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
+}
+function refreshChrome(){
+  const pl=document.querySelector('.plist'); if(pl){ pl.innerHTML=sideItems(); bindSide(); }
+  const sb=document.querySelector('.brand .sub'); if(sb) sb.textContent=subLine();
+  const ci=$('#cellinfo'); if(ci) ci.textContent=lastCell||'';
+  const note=$('#note');
+  if(note){ note.disabled=!lastCell;
+    note.value=lastCell&&markOf(lastCell)&&markOf(lastCell).note?markOf(lastCell).note:''; }
+  const sv=$('#save'); if(sv) sv.textContent='保存'+(dirty?' ●':'');
+}
+function bindSide(){
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;navOpen=false;render();});
 }
 function render(){
   const app = $('#app');
   const p = PAGES[cur];
   if(!STATE.visited.includes(p.book+'/'+p.page)){ STATE.visited.push(p.book+'/'+p.page); dirty=true; }
-  const items = PAGES.map((pg,i)=>{
-    const st = pageStats(pg);
-    const seen = STATE.visited.includes(pg.book+'/'+pg.page);
-    return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}">
-      <span class="nm">${pg.book==='vol01'?'一':'二'}·${pg.page}</span>
-      ${st.b?`<span class="badge b">${st.b}</span>`:''}
-      ${st.u?`<span class="badge u">${st.u}</span>`:''}
-      <span class="seen">✓</span></button>`;
-  }).join('');
+  const items = sideItems();
   const z = zf(p);
   const W = Math.round(p.w*z), H = Math.round(p.h*z);
   const zones = p.cells.filter(c=>{
@@ -149,19 +177,18 @@ function render(){
     return true;
   }).map(c=>{
     const [x0,y0,x1,y1]=c.r, m=markOf(c.id);
-    const cls = m ? (m.s===1?'m1':'m2') : '';
+    const cls = markCls(m);
     return `<div class="zone ${cls}" data-id="${c.id}" role="button" tabindex="0"
       title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}"
       style="left:${x0*z}px;top:${y0*z}px;width:${(x1-x0)*z}px;height:${(y1-y0)*z}px"></div>`;
   }).join('');
-  const nb = Object.values(STATE.marks).filter(m=>m.s===1).length;
-  const nu = Object.values(STATE.marks).filter(m=>m.s===2).length;
+
   app.className = navOpen ? 'nav' : '';
   app.innerHTML = `
   <div id="scrim"></div>
   <nav class="side">
     <div class="brand"><h1>切分朱批</h1>
-      <div class="sub">看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu}</div></div>
+      <div class="sub">${subLine()}</div></div>
     <div class="plist">${items}</div>
   </nav>
   <div class="main">
@@ -188,7 +215,8 @@ function render(){
       <span><span class="k" style="border:2px solid var(--warn)"></span>自检有标记</span>
       <span><span class="k" style="border:1px dashed var(--ink2)"></span>判空格</span>
       <span><span class="k" style="background:var(--badbg);border:2px solid var(--bad)"></span>点一下=切错</span>
-      <span><span class="k" style="background:var(--unsurebg);border:2px solid var(--warn)"></span>再点=存疑 · 三点=清除</span>
+      <span><span class="k" style="background:var(--unsurebg);border:2px solid var(--warn)"></span>再点=存疑</span>
+      <span><span class="k" style="background:var(--okbg);border:2px solid var(--ok)"></span>三点=无误（对橙框标无误=自检误报）· 四点=清除</span>
     </div>
     <div class="stage"><div class="canvas" style="width:${W}px;height:${H}px">
       <img src="${p.src}" alt="${p.book} 第 ${p.page} 页切分叠框图">${zones}
@@ -202,9 +230,11 @@ function render(){
   bind();
 }
 function bind(){
-  const mb=$('#menu'); if(mb) mb.onclick=()=>{navOpen=!navOpen;render();};
-  const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;render();};
-  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;navOpen=false;render();});
+  const mb=$('#menu'); if(mb) mb.onclick=()=>{navOpen=!navOpen;
+    $('#app').classList.toggle('nav',navOpen);};
+  const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;
+    $('#app').classList.remove('nav');};
+  bindSide();
   $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
   $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
@@ -214,15 +244,24 @@ function bind(){
       const id=z.dataset.id, m=STATE.marks[id];
       if(!m) STATE.marks[id]={s:1};
       else if(m.s===1) STATE.marks[id].s=2;
+      else if(m.s===2) STATE.marks[id].s=3;
       else delete STATE.marks[id];
-      lastCell=id; dirty=true; render();
+      lastCell=id; dirty=true;
+      z.classList.remove('m1','m2','m3');
+      const nc=markCls(STATE.marks[id]);
+      if(nc) z.classList.add(nc);
+      refreshChrome();
     };
     z.onclick=act;
     z.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act();}};
   });
   $('#note').onchange=e=>{
     if(lastCell){ if(!STATE.marks[lastCell]) STATE.marks[lastCell]={s:2};
-      STATE.marks[lastCell].note=e.target.value; dirty=true; render(); }
+      STATE.marks[lastCell].note=e.target.value; dirty=true;
+      const z=document.querySelector(`.zone[data-id="${lastCell}"]`);
+      if(z){ z.classList.remove('m1','m2','m3');
+        const nc=markCls(STATE.marks[lastCell]); if(nc) z.classList.add(nc); }
+      refreshChrome(); }
   };
   $('#save').onclick=saveState;
   $('#export').onclick=openExport;
@@ -247,7 +286,7 @@ async function saveState(){
 }
 function eventsText(){
   const lines=Object.entries(STATE.marks).map(([id,m])=>JSON.stringify(
-    {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':'unsure',...(m.note?{note:m.note}:{})}));
+    {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':(m.s===2?'unsure':'ok'),...(m.note?{note:m.note}:{})}));
   return lines.join('\n')||'(还没有标记)';
 }
 function openExport(){
