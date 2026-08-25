@@ -3,8 +3,7 @@
 
     PYTHONPATH=. python scripts/eval_match_pairs.py \
         ../open-guji-dataset/glyph-match/pairs --dump /tmp/pairs.npz
-    PYTHONPATH=. python scripts/build_match_inversion_review.py \
-        --dump /tmp/pairs.npz --out artifacts/match_inversion_review.html
+    PYTHONPATH=. python scripts/build_match_inversion_review.py --dump /tmp/pairs.npz
 
 glyph-match/triplets 的 hard 子集是**人裁**出来的（README：「用户亲眼裁定
 本例标签没错」才收），所以扩集的瓶颈从来不是挖不到候选，是没人过目。本脚本
@@ -19,8 +18,22 @@ glyph-match/triplets 的 hard 子集是**人裁**出来的（README：「用户�
   异体字   两个「异字」其实是同一个字的异体 → 归 P0 异体字关系层
   拿不准   看不出来 → 不进集，也不算标注问题
 
-裁决经页内「复制裁决」回流（JSONL）。图块用**原始灰度**（未归一化）——
-判「这到底是不是那个字」得看原图，二值化 64×64 已经丢掉判断依据了。
+图块用**原始灰度**（未归一化）——判「这到底是不是那个字」得看原图，
+二值化 64×64 已经丢掉判断依据了。
+
+## 卡号必须稳
+
+裁决是按卡号（T000…）记的，而挖掘结果会随金标改判变。所以卡集**冻在**
+`--cards`（默认 artifacts/match_inversion_cards.jsonl）里：老 anchor 保号，
+金标改判过的刷新字头并打「已订正」，改判后不再倒挂的打「已解决」但不删，
+新冒出来的追加新号。重跑本脚本不会让任何一条已有裁决错位。
+
+## 页面自己存
+
+页面声明 `artifact` 能力，裁决改动 6 秒防抖后用 files 形式把 index.html
+重新发一版（files 形式不会重载本视图），裁决就嵌在页里，我这边
+`action:"read"` 直接读得到，不用人手复制。localStorage 仍是即时兜底，
+「复制裁决」也留着——能力拿不到时（只读视图、旧运行时）页面照常能用。
 """
 from __future__ import annotations
 
@@ -43,28 +56,74 @@ PIPE_REV = "502fa04d0c"      # 出这批 patch 的管线版本（与 pairs 集�
 THUMB = 128                  # 缩略图边长（手机上按 ~105 CSS px 显示）
 GRAY_STEP = 16               # 灰阶量化步长：16 级灰 + PNG，比同尺寸 JPEG 还小 45%，
                              # 且线条不带振铃——细笔画是这页要看的东西，不能让编码吃掉
+TITLE = "形近误判裁决台"
 
 
 # ---------------------------------------------------------------- 候选挖掘
-def mine_inversions(dump: Path) -> list[dict]:
+def mine_inversions(dump: Path, chars: dict[str, str]) -> dict[str, dict]:
+    """→ {anchor: {same, other, cov_same, cov_other}}。
+
+    label 一律拿 `chars`（数据集当前金标）现算，不信 dump 里存的那份——
+    金标改判过而缓存没跟上的话，挖出来的倒挂是假的。
+    """
     z = np.load(dump, allow_pickle=True)
     pairs, cov = list(z["pairs"]), z["cov"]
     best_same: dict[str, tuple[float, str]] = defaultdict(lambda: (-1.0, ""))
     best_diff: dict[str, tuple[float, str]] = defaultdict(lambda: (-1.0, ""))
     for k, p in enumerate(pairs):
-        tgt = best_same if p["label"] == "same" else best_diff
+        tgt = best_same if chars[p["a"]] == chars[p["b"]] else best_diff
         for x, y in ((p["a"], p["b"]), (p["b"], p["a"])):
             if cov[k] > tgt[x][0]:
                 tgt[x] = (float(cov[k]), y)
-    rows = []
+    out = {}
     for x in sorted(set(best_same) & set(best_diff)):
         cs, s = best_same[x]
         co, o = best_diff[x]
         if co > cs:
-            rows.append({"anchor": x, "same": s, "other": o,
-                         "cov_same": round(cs, 4), "cov_other": round(co, 4),
-                         "margin": round(cs - co, 4)})
-    return rows
+            out[x] = {"same": s, "other": o, "cov_same": round(cs, 4),
+                      "cov_other": round(co, 4), "margin": round(cs - co, 4)}
+    return out
+
+
+def merge_cards(frozen: Path, fresh: dict[str, dict], meta: dict[str, dict]
+                ) -> list[dict]:
+    """老卡保号，新卡追加，改判过的刷字头，不再倒挂的标 resolved。"""
+    old = ([json.loads(l) for l in frozen.read_text(encoding="utf-8").splitlines()]
+           if frozen.exists() else [])
+    by_anchor = {c["anchor"]: c for c in old}
+    nxt = max((int(c["id"][1:]) for c in old), default=-1) + 1
+    cards = []
+    for c in old:
+        a = c["anchor"]
+        cur = fresh.get(a)
+        new = dict(c)
+        new["resolved"] = cur is None
+        if cur:
+            new.update(cur)
+        # 字头一律刷成数据集现值，并记下改了哪一格
+        fixed = []
+        for slot, key in (("anchor", "char"), ("same", "same_char"),
+                          ("other", "other_char")):
+            now = meta[new[slot]]["char"]
+            if new.get(key) and new[key] != now:
+                fixed.append({"slot": slot, "from": new[key], "to": now})
+            new[key] = now
+        new["fixed"] = fixed
+        cards.append(new)
+    for a, cur in fresh.items():
+        if a in by_anchor:
+            continue
+        m = meta[a]
+        cards.append({"id": f"T{nxt:03d}", "anchor": a, **cur,
+                      "char": m["char"], "same_char": meta[cur["same"]]["char"],
+                      "other_char": meta[cur["other"]]["char"],
+                      "book": m["book"], "tier": m["tier"],
+                      "ink": m["ink_bucket"], "resolved": False, "fixed": []})
+        nxt += 1
+    frozen.parent.mkdir(parents=True, exist_ok=True)
+    frozen.write_text("\n".join(json.dumps(c, ensure_ascii=False, sort_keys=True)
+                                for c in cards) + "\n", encoding="utf-8")
+    return cards
 
 
 # ---------------------------------------------------------------- 原始灰度
@@ -103,44 +162,33 @@ def thumb(img: np.ndarray) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode()
 
 
-# ---------------------------------------------------------------- 组装
-def build(dataset: Path, dump: Path) -> dict:
+def build(dataset: Path, dump: Path, frozen: Path, seed: Path | None) -> dict:
     data = json.loads((dataset / "expected.json").read_text(encoding="utf-8"))
     meta = {r["instance_id"]: r for r in data["instances"]}
+    chars = {k: v["char"] for k, v in meta.items()}
+    cards = merge_cards(frozen, mine_inversions(dump, chars), meta)
+
     out = gray_sources()
     imgs: dict[str, str] = {}
     rows = []
-    for i, r in enumerate(mine_inversions(dump)):
-        iids = (r["anchor"], r["same"], r["other"])
+    for c in cards:
+        iids = (c["anchor"], c["same"], c["other"])
         grays = [load_gray(x, out) for x in iids]
         if any(g is None for g in grays):
-            print(f"  跳过 {r['anchor']}：找不到原图", flush=True)
+            print(f"  跳过 {c['id']}：找不到原图", flush=True)
             continue
         for x, g in zip(iids, grays):
             imgs.setdefault(x, thumb(g))
-        a = meta[r["anchor"]]
-        rows.append({**r, "id": f"T{i:03d}", "char": a["char"],
-                     "same_char": meta[r["same"]]["char"],
-                     "other_char": meta[r["other"]]["char"],
-                     "book": a["book"], "tier": a["tier"],
-                     "ink": a["ink_bucket"]})
-    return {"imgs": imgs, "rows": rows,
+        rows.append(c)
+
+    verdicts = {}
+    if seed and seed.exists():
+        for line in seed.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                verdicts[r["id"]] = {"v": r["verdict"], "t": 1}
+    return {"imgs": imgs, "rows": rows, "verdicts": verdicts,
             "pipeline_version": data.get("pipeline_version", PIPE_REV)}
-
-
-HTML_HEAD = """<title>形近误判裁决台</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;700&display=swap">
-"""
-
-
-def render(payload: dict, css: str, js: str) -> str:
-    blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    return (HTML_HEAD + "<style>\n" + css + "\n</style>\n"
-            + BODY + '\n<script type="application/json" id="data">'
-            + blob.replace("</", "<\\/") + "</script>\n<script>\n" + js + "\n</script>\n")
 
 
 CSS = """
@@ -198,8 +246,13 @@ body{
   backdrop-filter:blur(10px) saturate(1.2); border-bottom:1px solid var(--rule);
 }
 .top-in{max-width:34rem; margin:0 auto; padding:9px 14px 0;
-  display:flex; align-items:baseline; gap:10px;}
+  display:flex; align-items:baseline; gap:9px;}
 .brand{font-family:var(--serif); font-weight:700; font-size:16px; letter-spacing:.02em;}
+.save{font-size:10.5px; letter-spacing:.03em; padding:1px 6px; border-radius:2px;
+  color:var(--muted); background:var(--sunk); white-space:nowrap;}
+.save[data-s="saved"]{color:var(--ok); background:var(--ok-soft)}
+.save[data-s="busy"],.save[data-s="wait"]{color:var(--indigo); background:var(--indigo-soft)}
+.save[data-s="local"]{color:var(--ochre); background:var(--ochre-soft)}
 .count{margin-left:auto; font-family:var(--mono); font-size:12px; color:var(--muted);
   font-variant-numeric:tabular-nums; white-space:nowrap;}
 .bar{height:3px; background:var(--sunk); margin-top:8px;}
@@ -236,6 +289,8 @@ body{
   background:var(--surface); color:var(--ink); border-radius:3px; cursor:pointer;
   font-family:var(--sans); font-size:13px; font-weight:500; white-space:nowrap;}
 .ghost:active{background:var(--sunk)}
+.ghost:focus-visible,.seg button:focus-visible{outline:2px solid var(--indigo);
+  outline-offset:2px;}
 
 /* ---- 卡片 ---- */
 .list{display:grid; gap:12px; margin-top:12px;}
@@ -255,6 +310,11 @@ body{
   border:1px solid var(--rule); border-radius:2px; padding:1px 5px; white-space:nowrap;}
 .tag.deg{color:var(--ochre); border-color:var(--ochre)}
 .cid{font-family:var(--mono); font-size:10.5px; color:var(--faint);}
+.note{display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 9px;}
+.note span{font-size:11.5px; padding:2px 7px; border-radius:2px;}
+.note .fix{color:var(--indigo); background:var(--indigo-soft)}
+.note .done{color:var(--ok); background:var(--ok-soft)}
+.note b{font-family:var(--serif); font-weight:700}
 
 .strip{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
 .pane{margin:0; display:grid; gap:5px; justify-items:center;}
@@ -305,6 +365,8 @@ body{
 .verdicts button.idk[aria-pressed="true"] {background:var(--faint)}
 
 .empty{padding:34px 10px; text-align:center; color:var(--faint); font-size:13.5px;}
+.warn{margin:14px 0 0; padding:11px 13px; border-radius:3px; font-size:13px;
+  color:var(--zhu); background:var(--zhu-soft); border:1px solid var(--zhu);}
 
 /* ---- 复制浮层 ---- */
 .sheet{position:fixed; inset:0; z-index:40; background:rgba(20,19,15,.5);
@@ -325,10 +387,61 @@ body{
 @media (min-width:600px){ .verdicts button{font-size:13.5px} }
 """
 
-BODY = """
+
+HEAD_TAGS = """<title>形近误判裁决台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;700&display=swap">"""
+
+
+JS = r"""
+const D = JSON.parse(document.getElementById('data').textContent);
+const KEY = 'guji-inversion-verdicts-v2', OLD = 'guji-inversion-verdicts-v1';
+const V = {keep:'可入集', bad:'标注有误', var:'异体字', idk:'拿不准'};
+const HEAD = __HEAD__;
+
+/* ---------- 裁决状态：{id:{v,t}}，t 用来跟页里嵌的那份合并 ---------- */
+function readLocal(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return JSON.parse(raw);
+    const old = localStorage.getItem(OLD);          // v1 是 {id:'keep'}
+    if (old){
+      const o = JSON.parse(old), out = {};
+      for (const k in o) out[k] = {v:o[k], t:0};    // t=0：页里嵌的那份优先
+      return out;
+    }
+  } catch(e){}
+  return {};
+}
+function merge(a, b){
+  const out = {...a};
+  for (const k in b) if (!(k in out) || (b[k].t||0) > (out[k].t||0)) out[k] = b[k];
+  return out;
+}
+let state = merge(D.verdicts || {}, readLocal());
+function persist(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
+  queueSave();
+}
+const verdictOf = id => (state[id] || {}).v || '';
+const doneCount = () => D.rows.filter(r => verdictOf(r.id)).length;
+
+/* ---------- 折轴：0~0.90 占左 26%，0.90~1.00 占右 74% ----------
+   分数几乎都挤在 0.9 以上，全线性画出来两个点会重叠成一个。 */
+const BRK = 0.90, LEFT = 26, GATE = 0.996;
+const pos = v => v <= BRK ? Math.max(0, v)/BRK*LEFT
+                          : LEFT + (v-BRK)/(1-BRK)*(100-LEFT);
+
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const BODY = `
 <header class="top">
   <div class="top-in">
     <span class="brand">形近误判裁决台</span>
+    <span class="save" id="save" data-s="idle">本机</span>
     <span class="count" id="count">—</span>
   </div>
   <div class="bar"><i id="prog"></i></div>
@@ -338,8 +451,8 @@ BODY = """
     <summary>怎么裁</summary>
     <p>每张卡是一个<b>排序倒挂</b>：中间是待判字块，左边是它打分最高的<b>同字</b>邻居，
        右边是打分最高的<b>异字</b>邻居——而右边的分数<b>压过了</b>左边。判据在这个实例上排反了。</p>
-    <p>要裁的不是「哪个更像」，是<b>这一例的金标有没有错</b>。裁完点顶部的
-       <code>复制裁决</code> 带回来。</p>
+    <p>要裁的不是「哪个更像」，是<b>这一例的金标有没有错</b>。裁完自动存，
+       顶上那颗标记会说存到哪了。</p>
     <div class="rubric">
       <div class="k-keep"><b>可入集</b><span>标签没错，判据确实排反了——收进 hard 子集</span></div>
       <div class="k-bad"><b>标注有误</b><span>金标本身错了（切歪、串行、字头认错）——回流标注层</span></div>
@@ -371,45 +484,26 @@ BODY = """
       <button class="ghost" id="sheet-close">关闭</button>
     </div>
   </div>
-</div>
-"""
+</div>`;
 
-JS = r"""
-const D = JSON.parse(document.getElementById('data').textContent);
-const KEY = 'guji-inversion-verdicts-v1';
-const V = {keep:'可入集', bad:'标注有误', var:'异体字', idk:'拿不准'};
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'{}'); }
-                     catch(e){ return {}; } };
-const save = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e){} };
-let state = load(), filter = 'all', tight = true;
+document.getElementById('app').innerHTML = BODY;
 
-/* 折轴：0~0.90 占左 26%，0.90~1.00 占右 74%——分数几乎都挤在 0.9 以上，
-   全线性画出来两个点会重叠成一个。折点画一道竖线明示。 */
-const BRK = 0.90, LEFT = 26;
-const pos = v => v <= BRK ? Math.max(0, v)/BRK*LEFT
-                          : LEFT + (v-BRK)/(1-BRK)*(100-LEFT);
-const GATE = 0.996;
-
-let flashT = 0;
-function flash(msg){
-  const el = document.getElementById('count');
-  el.textContent = msg; clearTimeout(flashT);
-  flashT = setTimeout(tally, 2200);
-}
-const esc = s => String(s).replace(/[&<>"]/g, c =>
-  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
+/* ---------- 卡片 ---------- */
 function pane(cls, role, iid, ch){
   return `<figure class="pane ${cls}">
     <span class="role">${role}</span>
     <span class="tile"><img data-src="${iid}" alt="${esc(ch)} 字块" decoding="async"></span>
     <span class="glyph">${esc(ch)}</span></figure>`;
 }
+const SLOT = {anchor:'待判', same:'同字最像', other:'异字最像'};
 
 function card(r){
-  const v = state[r.id] || '';
+  const v = verdictOf(r.id);
   const btn = k => `<button class="${k}" data-v="${k}" aria-pressed="${v===k}">${V[k]}</button>`;
   const lo = Math.min(r.cov_same, r.cov_other), hi = Math.max(r.cov_same, r.cov_other);
+  const notes = (r.fixed||[]).map(f =>
+      `<span class="fix">已订正 ${SLOT[f.slot]}　<b>${esc(f.from)}</b> → <b>${esc(f.to)}</b></span>`)
+    .concat(r.resolved ? [`<span class="done">改判后已不再倒挂</span>`] : []).join('');
   return `<article class="card" data-id="${r.id}"${v?` data-v="${v}"`:''}>
     <div class="ch">
       <span class="pair"><span>${esc(r.char)}</span><span class="vs">敌不过</span>
@@ -420,6 +514,7 @@ function card(r){
         <span class="cid">${r.id}</span>
       </span>
     </div>
+    ${notes ? `<div class="note">${notes}</div>` : ''}
     <div class="strip">
       ${pane('same','同字最像', r.same, r.same_char)}
       ${pane('anchor','待判', r.anchor, r.char)}
@@ -452,10 +547,11 @@ const io = new IntersectionObserver(es => {
   }
 }, {rootMargin: '600px 0px'});
 
+let filter = 'all', tight = true;
 const listEl = document.getElementById('list');
 function draw(){
   let rows = D.rows.filter(r => filter === 'all' ? true
-    : filter === 'done' ? !!state[r.id] : !state[r.id]);
+    : filter === 'done' ? !!verdictOf(r.id) : !verdictOf(r.id));
   rows = rows.slice().sort((a,b) => tight ? Math.abs(a.margin)-Math.abs(b.margin)
                                           : Math.abs(b.margin)-Math.abs(a.margin));
   listEl.innerHTML = rows.length ? rows.map(card).join('')
@@ -463,9 +559,13 @@ function draw(){
   listEl.querySelectorAll('img[data-src]').forEach(i => io.observe(i));
   tally();
 }
-
+let flashT = 0;
+function flash(msg){
+  const el = document.getElementById('count');
+  el.textContent = msg; clearTimeout(flashT); flashT = setTimeout(tally, 2200);
+}
 function tally(){
-  const done = D.rows.filter(r => state[r.id]).length;
+  const done = doneCount();
   document.getElementById('count').textContent = `${done} / ${D.rows.length} 已裁`;
   document.getElementById('prog').style.width = (done / D.rows.length * 100) + '%';
 }
@@ -473,11 +573,12 @@ function tally(){
 listEl.addEventListener('click', e => {
   const b = e.target.closest('.verdicts button'); if (!b) return;
   const art = b.closest('.card'), id = art.dataset.id, v = b.dataset.v;
-  if (state[id] === v) delete state[id]; else state[id] = v;
-  save(state);
+  if (verdictOf(id) === v) delete state[id]; else state[id] = {v, t: Date.now()};
+  persist();
+  const now = verdictOf(id);
   art.querySelectorAll('.verdicts button').forEach(x =>
-    x.setAttribute('aria-pressed', String(state[id] === x.dataset.v)));
-  if (state[id]) art.dataset.v = state[id]; else art.removeAttribute('data-v');
+    x.setAttribute('aria-pressed', String(now === x.dataset.v)));
+  if (now) art.dataset.v = now; else art.removeAttribute('data-v');
   tally();
   if (filter !== 'all') setTimeout(draw, 180);
 });
@@ -494,12 +595,86 @@ sortBtn.addEventListener('click', () => {
   tight = !tight; sortBtn.textContent = tight ? '势均优先' : '悬殊优先'; draw();
 });
 
-/* ---- 复制 ---- */
+/* ---------- 自存：把自己重发一版，裁决就嵌在页里 ---------- */
+const saveEl = document.getElementById('save');
+const SAVE_TEXT = {idle:'本机', wait:'待存', busy:'存中…', saved:'已存',
+                   local:'仅存本机', ro:'只读'};
+function setSave(s, extra){
+  saveEl.dataset.s = s;
+  saveEl.textContent = extra || SAVE_TEXT[s] || s;
+}
+let ns = null, canPub = false, timer = 0, inflight = false,
+    dirty = false, delay = 6000;
+
+function renderIndex(){
+  const css = document.getElementById('css').textContent;
+  const js  = document.getElementById('js').textContent;
+  const data = JSON.stringify({imgs: D.imgs, rows: D.rows, verdicts: state,
+                               pipeline_version: D.pipeline_version})
+                 .split('</').join('<\\/');
+  return '<!doctype html>\n<html lang="zh-Hans">\n<head>\n<meta charset="utf-8">\n'
+    + HEAD + '\n<style id="css">' + css + '</style>\n</head>\n<body>\n'
+    + '<div id="app"></div>\n'
+    + '<script type="application/json" id="data">' + data + '<\/script>\n'
+    + '<script id="js">' + js + '<\/script>\n</body>\n</html>\n';
+}
+
+function queueSave(){
+  dirty = true;
+  if (!canPub){ setSave('local'); return; }
+  setSave('wait');
+  clearTimeout(timer);
+  timer = setTimeout(save, delay);
+}
+async function save(){
+  if (!canPub || !dirty || inflight) return;
+  inflight = true; setSave('busy');
+  const snapshot = JSON.stringify(state);
+  try {
+    // files 形式：本视图不会被重载，用户可以一直点下去
+    await ns.publish({'index.html': renderIndex()});
+    dirty = JSON.stringify(state) !== snapshot;
+    setSave(dirty ? 'wait' : 'saved');
+    delay = 6000;
+    if (dirty) timer = setTimeout(save, delay);
+  } catch (err){
+    const code = (err && err.code) || 'upstream_error';
+    if (code === 'conflict'){
+      setSave('busy', '别处已改');          // 外壳正在把视图重载到新版，什么都不用做
+    } else if (['not_writer','not_granted','not_declared','capability_disabled',
+                'capability_removed','consent_required'].includes(code)){
+      canPub = false; setSave('ro');
+    } else if (code === 'too_large' || code === 'invalid_content'){
+      canPub = false; setSave('local');
+    } else if (code === 'rate_limited'){
+      delay = Math.min(delay * 2, 60000);
+      setSave('wait'); timer = setTimeout(save, delay);
+    } else {
+      setSave('wait'); timer = setTimeout(save, 8000);   // upstream_error：等一会儿再试
+    }
+  } finally { inflight = false; }
+}
+function flush(){ if (canPub && dirty){ clearTimeout(timer); save(); } }
+addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+addEventListener('pagehide', flush);
+
+if (window.claude && typeof window.claude.use === 'function'){
+  setSave('idle');
+  window.claude.use('artifact').then(x => {
+    ns = x; canPub = !!x;
+    setSave(canPub ? (dirty ? 'wait' : 'saved') : 'local');
+    if (canPub && dirty) queueSave();
+  }).catch(() => setSave('local'));
+} else {
+  setSave('local');
+}
+
+/* ---------- 复制（自存拿不到时的退路，也可以随时手动取） ---------- */
 const sheet = document.getElementById('sheet');
 const sheetText = document.getElementById('sheet-text');
 function payload(){
-  return D.rows.filter(r => state[r.id]).map(r => JSON.stringify({
-    id: r.id, verdict: state[r.id], anchor: r.anchor, same: r.same, other: r.other,
+  return D.rows.filter(r => verdictOf(r.id)).map(r => JSON.stringify({
+    id: r.id, verdict: verdictOf(r.id), anchor: r.anchor, same: r.same, other: r.other,
     char: r.char, other_char: r.other_char,
     cov_same: r.cov_same, cov_other: r.cov_other
   })).join('\n');
@@ -522,6 +697,7 @@ document.getElementById('sheet-copy').addEventListener('click', async () => {
 });
 document.getElementById('sheet-close').addEventListener('click', () => sheet.hidden = true);
 sheet.addEventListener('click', e => { if (e.target === sheet) sheet.hidden = true; });
+
 const resetBtn = document.getElementById('reset');
 let armed = 0;
 resetBtn.addEventListener('click', () => {
@@ -529,7 +705,7 @@ resetBtn.addEventListener('click', () => {
                setTimeout(() => { armed = 0; resetBtn.textContent = '清空'; }, 3000);
                return; }
   armed = 0; resetBtn.textContent = '清空';
-  state = {}; save(state); draw(); flash('已清空。');
+  state = {}; persist(); draw(); flash('已清空。');
 });
 
 /* 说明栏的展开状态记住——同一个人反复来，不该每次都被推下去 200px */
@@ -545,22 +721,36 @@ draw();
 """
 
 
+def render(payload: dict) -> str:
+    blob = json.dumps(payload, ensure_ascii=False,
+                      separators=(",", ":")).replace("</", "<\\/")
+    js = JS.replace("__HEAD__", json.dumps(HEAD_TAGS))
+    return (HEAD_TAGS + '\n<style id="css">' + CSS + "</style>\n"
+            + '<div id="app"></div>\n'
+            + '<script type="application/json" id="data">' + blob + "</script>\n"
+            + '<script id="js">' + js + "</script>\n")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default="../open-guji-dataset/glyph-match/pairs")
     ap.add_argument("--dump", required=True, help="eval_match_pairs.py --dump 出的 npz")
+    ap.add_argument("--cards", default="artifacts/match_inversion_cards.jsonl",
+                    help="冻结卡集（保号用），本脚本读后回写")
+    ap.add_argument("--seed", default="artifacts/match_inversion_verdicts.jsonl",
+                    help="嵌进页里的已有裁决")
     ap.add_argument("--out", default="artifacts/match_inversion_review.html")
-    ap.add_argument("--json", default=None, help="顺便存一份候选 JSON")
     args = ap.parse_args()
 
-    payload = build(Path(args.dataset), Path(args.dump))
-    print(f"候选 {len(payload['rows'])} 例，去重后图 {len(payload['imgs'])} 张")
-    if args.json:
-        Path(args.json).write_text(json.dumps(payload, ensure_ascii=False),
-                                   encoding="utf-8")
+    payload = build(Path(args.dataset), Path(args.dump), Path(args.cards),
+                    Path(args.seed) if args.seed else None)
+    n_open = sum(1 for r in payload["rows"] if not r.get("resolved"))
+    print(f"卡 {len(payload['rows'])}（在挂 {n_open} / 已解决 "
+          f"{len(payload['rows']) - n_open}），去重后图 {len(payload['imgs'])} 张，"
+          f"已嵌裁决 {len(payload['verdicts'])}")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(payload, CSS, JS), encoding="utf-8")
+    out.write_text(render(payload), encoding="utf-8")
     print(f"→ {out}  ({out.stat().st_size/1e6:.2f} MB)")
 
 
