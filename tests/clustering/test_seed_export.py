@@ -371,3 +371,20 @@ def test_card_shows_column_sequence_not_raw_idx(tmp_path):
                              "book_total": 1, "book_done": 0,
                              "pages_pending": []})
     assert "第2列第3字" in html          # seq，不是 idx+1=6，也不是 5
+
+
+def test_stale_context_is_dropped_not_rendered():
+    """队列行的 context 与 index 口径对不上（旧切分算的）→ 整块摘掉。
+
+    实锤 vol01:4:2:20：卡片图块是「第」，context 却是旧切分的，pos 指到
+    下一格的「一」。宁可少显示一条辅助信息，也不能给一条错位的高亮。
+    """
+    from open_guji_cv.clustering.review.seed_export import _checked_context
+
+    class _It:
+        context = {"col_ocr": "甲乙丙丁", "col_ref": "甲乙丙丁", "pos": 3}
+
+    it = _It()
+    assert _checked_context(it, 4) == it.context      # pos == seq-1 → 留
+    assert _checked_context(it, 3) is None            # 错一位 → 摘
+    assert _checked_context(it, None) == it.context   # 没有 index 就别管

@@ -54,7 +54,7 @@ from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
                          STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
                          STATUS_EXCLUDED, STATUS_NOT_A_CHAR, STATUS_PENDING,
-                         STATUS_SKIPPED,
+                         STATUS_RECROPPED, STATUS_REJECTED, STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
 
@@ -388,6 +388,22 @@ def _save_progress(seed_dir: Path, progress: dict,
         json.dumps(progress, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# 人裁过 = 不可再生。force 重跑一页时这些行原样留下，其余（auto/pending/
+# skipped/excluded/机器判的 not_a_char）按新证据重生。
+# not_a_char 要分来源：``note="auto:..."`` 是规则自动判的，规则改了就该重判；
+# 没有 auto: 前缀的是人按下「非字」。
+_HUMAN_STATUSES = (STATUS_CONFIRMED, STATUS_LABEL_ONLY, STATUS_REJECTED,
+                   STATUS_RECROPPED)
+
+
+def _is_human_decided(row: dict) -> bool:
+    st = row.get("status")
+    if st in _HUMAN_STATUSES:
+        return True
+    return st == STATUS_NOT_A_CHAR and not str(
+        row.get("note") or "").startswith("auto:")
+
+
 def _page_key(p: str) -> tuple[int, str]:
     return (len(p), p)
 
@@ -406,12 +422,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               font_editions: list[str] | None = None,
               font_cov_gate: float = FONT_COV_GATE,
               edition: str | None = None, knn_k: int = 10,
-              variants: str | Path | None = None) -> dict:
+              variants: str | Path | None = None,
+              force_pages: set[str] | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
 
     断点续跑：progress.json 里 ``done`` 的页整页跳过；进库幂等
     （GlyphDB.admit_instance 按 instance_id 判重），中途崩掉重跑安全。
     max_pages 限制**本次调用**处理的页数（已完成页不计）。
+
+    ``force_pages`` 里的页**即使 done 也重跑**（上游切分/载体/判据改过，
+    队列里的证据整页作废时用）。重跑不会毁掉人工成果：队列清理只删
+    「机器可再生」的行，人裁过的行（confirmed / confirmed_label_only /
+    rejected / 人工 not_a_char）原样留下，对应字位也跳过不再判——
+    见 ``_is_human_decided``。
     """
     book_out_dir = Path(book_out_dir)
     book = book_out_dir.name
@@ -452,7 +475,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     progress.setdefault("book", book)
     progress.setdefault("prob_threshold", prob_threshold)
     page_state: dict = progress.setdefault("pages", {})
-    todo = [p for p in all_pages if not page_state.get(p, {}).get("done")]
+    force = set(force_pages or ())
+    todo = [p for p in all_pages
+            if p in force or not page_state.get(p, {}).get("done")]
     skipped_done = len(all_pages) - len(todo)
     if max_pages is not None:
         todo = todo[:max_pages]
@@ -490,11 +515,17 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
         p: page_reference(p, slots_by_page.get(p, []), corpus_text,
                           corpus_index)
         for p in todo}
+    # 列文按 **index 的 char 格位** 建，不按 OCR 载体建（2026-08-25 定案）。
+    # 载体可能缺格（那一格没识别出东西），缺一格整列文本就短一位，高亮
+    # 的 pos 与审查页按 index 数出来的「第几字」对不上——用户对着原图数
+    # 「文字错了一位」正是这个。以 index 为准、载体缺格补 □，则
+    # ``pos == 该格在列内的 char 位次 - 1`` 恒成立，与卡片头的 seq 同源。
     cols_by_page: dict[str, dict[int, list[tuple[int, str]]]] = {}
     for p in todo:
         cols: dict[int, list[tuple[int, str]]] = defaultdict(list)
-        for col, idx, ch in slots_by_page.get(p, []):
-            cols[col].append((idx, ch))
+        for r in by_page.get(p, []):
+            c0 = carrier.get(r.id)
+            cols[r.col].append((r.idx, (c0 or {}).get("char") or "□"))
         cols_by_page[p] = {c: sorted(v) for c, v in cols.items()}
 
     def _col_strings(page: str, col: int) -> tuple[str, str] | None:
@@ -555,13 +586,28 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 font_db = None
     summary["font_consulted"] = 0
 
-    # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）
+    # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）。
+    # **人裁过的行不动**（2026-08-25）：force 重跑一页时，机器判的行要按
+    # 新证据重生，人裁的结论却是不可再生的成果——留行，并把那些字位记进
+    # keep_ids 本轮跳过，免得同一 id 出两行（旧队列里 125 个重号就是这么
+    # 来的，页面因此拿错卡片的证据）。
     queue_path = seed_dir / "queue.jsonl"
     todo_set = set(todo)
+    keep_ids: set[str] = set()
+    valid_ids = {r.id for r in recs}
     if queue_path.exists():
-        kept = [ln for ln in queue_path.read_text(encoding="utf-8").splitlines()
-                if ln.strip()
-                and json.loads(ln).get("page") not in todo_set]
+        kept = []
+        for ln in queue_path.read_text(encoding="utf-8").splitlines():
+            if not ln.strip():
+                continue
+            row = json.loads(ln)
+            if row.get("instance_id") not in valid_ids:
+                continue        # 切分重跑后已不存在的字位：整行作废
+            if row.get("page") in todo_set:
+                if not _is_human_decided(row):
+                    continue
+                keep_ids.add(row["instance_id"])
+            kept.append(ln)
         queue_path.write_text("".join(x + "\n" for x in kept),
                               encoding="utf-8")
 
@@ -579,6 +625,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             for r in page_recs:
                 tail_idx[r.col] = max(tail_idx.get(r.col, -1), r.idx)
             for rec in page_recs:
+                if rec.id in keep_ids:
+                    continue            # 人裁过，队列里那行才是真源
                 # 排除名单（config/crop_exclusions.jsonl）：切坏/带残留的图块
                 # **不进库也不出审查卡**——用户 2026-08-25 定的口径，重扫前
                 # 一律保守处理。落一行 excluded 只为留账。
@@ -779,8 +827,13 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 qf.write(item.to_json() + "\n")
             qf.flush()
 
+            # force 重跑时保留下来的人裁行不参与本轮判定，单独记一笔，
+            # 免得 auto+pending != total 看着像丢了字位
+            n_keep = sum(1 for r in page_recs if r.id in keep_ids)
             page_state[page] = {"total": len(page_recs), "auto": n_auto,
                                 "pending": n_pending, "done": True}
+            if n_keep:
+                page_state[page]["human_kept"] = n_keep
             _save_progress(seed_dir, progress, all_pages)
             summary["pages_processed"] += 1
             summary["n_slots"] += len(page_recs)
