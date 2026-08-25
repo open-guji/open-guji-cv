@@ -1406,6 +1406,7 @@ class CharExtractor:
         if shear:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
+        n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
         results: list[tuple[CharInstance, np.ndarray]] = []
         jz_replaced: set[str] = set()
 
@@ -1475,7 +1476,7 @@ class CharExtractor:
             # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
             order = [i for i, _t, _b in local]
-            end_cand = set(order[:2] + order[-2:])
+            end_cand = set(order[:2 + n_head_rows] + order[-2:])
             # 曲线切边只碰**最外一格**：只有它挨着版框。列端渣格闸取
             # 首末各 2 格（渣有时占两格），但短列里那两个集合会重叠，
             # 拿它切边会把列首格**下方的邻字残余**也当框线切掉。
@@ -1595,6 +1596,17 @@ class CharExtractor:
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")
+            # 抬头位（页级补出来的行）：只有个别列真有抬头字，其余列那
+            # 一格本来就空，落在那儿的墨几乎都是版框横线。通用闸对这里
+            # 太松（两条框线相连就冒充「字粘条」），另用严判据。
+            for i in order[:n_head_rows]:
+                info, inst = end_patches.get(i), by_idx.get(i)
+                if info is None or inst is None or inst.cell_type != "char":
+                    continue
+                if is_head_cell_junk(*info):
+                    inst.cell_type = "empty"
+                    if "tail_junk" not in inst.flags:
+                        inst.flags.append("tail_junk")
             # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
             # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
             jz_runs = flag_jiazhu_runs([(i, c) for i, c, _ in col_entries])
