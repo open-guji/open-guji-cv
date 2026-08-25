@@ -923,3 +923,35 @@ def test_admission_decision_match_replace_and_ref_weak():
         ["weak_single"], vmap,
         match_candidates=[("祇", 0.97)])
     assert not ok
+
+
+def test_db_inconsistent_about_ocr_char_does_not_block_ref_weak():
+    """db_inconsistent 说的是 OCR 字时，不该拦「参考 × 库」通道。
+
+    实锤 vol01:22:5:4：OCR 司 18%、整理本 詞、库 top 詞 cov 1.00。
+    疑问 5「与库内已有同字刻例形状对不上」判的是 **proposed**（无对齐时
+    退回 OCR 字 司）——这句话完全正确，且正是「它不该是司」的旁证，却把
+    要进 詞 的通道拦死了。放行的字自己不可能 db_inconsistent：库里最像它
+    的就是同字刻例，cov 还压着 0.98。回放 @0.98 触发 25 → 38 全对。
+    """
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    ok, ch = admission_decision(
+        {"char": "司", "prob": 0.178}, None, "詞",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_char="詞", match_candidates=[("詞", 1.0), ("請", 0.94)])
+    assert (ok, ch) == (True, "match_ref_weak")
+
+    # OCR 字与参考字**同字**时，db_inconsistent 说的就是要进的那个字 → 照拦
+    ok, _ = admission_decision(
+        {"char": "詞", "prob": 0.178}, None, "詞",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_char="詞", match_candidates=[("詞", 1.0)])
+    assert not ok
+    # 没有 OCR 字可比对时保守：照拦
+    ok, _ = admission_decision(
+        None, None, "詞", ["weak_single", "db_inconsistent"], vmap,
+        match_candidates=[("詞", 1.0)])
+    assert not ok
