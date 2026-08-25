@@ -17,8 +17,8 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 数据即产物 | `scripts/build_patch_review.py --pages vol01:20-27 vol02:1-8` + 壳模板（会话脚手架）|
-| 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物 | `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20` |
+| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_patch_review.py --pages vol01:20-27 vol02:1-8 --quality 70` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）|
+| 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20 --quality 62` + 壳模板 [shells/seg_review_shell.html](shells/seg_review_shell.html) |
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
 
