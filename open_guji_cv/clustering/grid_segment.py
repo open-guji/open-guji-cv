@@ -807,6 +807,8 @@ def measure_page_pitch(gray: np.ndarray, result: dict) -> list[float]:
 # 页外，哪边都没内容可罚，整版下坠一格（末格挂到页外、末字并进
 # 下框条），全书扫出 174 页。框证据可用时按 |相位-框顶| 决定性收罚。
 FRAME_ROW_T = 0.5          # 行墨 ≥ 此比例 × 页宽 → 横框线行
+FRAME_ROW_T2 = 0.28        # 磨损框线档：行墨 ≥ 此值且最长段够长也认
+FRAME_RUN_T = 0.22         # 磨损档的最长横向连续墨段下限（× 页宽；字最长段 ~0.1）
 FRAME_ROW_ZONE = 0.08      # 只在页顶/页底此比例窗内找横框线（字行进不来）
 ANCHOR_TOL = 0.35          # 相位偏离框顶超此比例 × 格高才罚（框线厚度 ~0.1 格）
 ANCHOR_SPAN_TOL = 0.06     # |框高/n - 格高| 超此比例 × 格高 → 框证据不可信，不锚
@@ -814,16 +816,35 @@ ANCHOR_W = 1e4             # 决定性罚款权重（谷/峰项在平族间差�
 
 
 def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
-    """页顶/页底窗内最靠外的满宽横线行 =（上框线, 下框线）。检不出为 None。"""
+    """页顶/页底窗内最靠外的横框线行。检不出为 None。
+
+    磨损/波浪框线单行墨量掉到 0.3~0.5，纯行墨阈值漏检；补一条
+    **最长横向连续墨段**判据（框线断成段也远长于字宽，字行最长段
+    ≤ 单字宽 ~0.1 页宽）：行墨 ≥0.5 直接认，或行墨 ≥FRAME_ROW_T2
+    且最长段 ≥FRAME_RUN_T × 页宽。"""
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     binary = gray < BINARY_THRESHOLD
     h, w = binary.shape
     rowink = binary.sum(axis=1) / max(1, w)
     zone = max(4, int(FRAME_ROW_ZONE * h))
-    ft = next((y for y in range(zone) if rowink[y] >= FRAME_ROW_T), None)
-    fb = next((y for y in range(h - 1, h - zone, -1)
-               if rowink[y] >= FRAME_ROW_T), None)
+
+    def maxrun(y: int) -> float:
+        row = binary[y]
+        best = run = 0
+        for v in row:
+            run = run + 1 if v else 0
+            if run > best:
+                best = run
+        return best / max(1, w)
+
+    def is_bar(y: int) -> bool:
+        if rowink[y] >= FRAME_ROW_T:
+            return True
+        return rowink[y] >= FRAME_ROW_T2 and maxrun(y) >= FRAME_RUN_T
+
+    ft = next((y for y in range(zone) if is_bar(y)), None)
+    fb = next((y for y in range(h - 1, h - zone, -1) if is_bar(y)), None)
     return ft, fb
 
 
@@ -925,6 +946,11 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         p_lo = max(0.0, top - 1.2 * cell_h)
         p_hi = top + 1.2 * cell_h if cell_h_fixed \
             else min(top + 1.2 * cell_h, max(p_lo, L - span))
+        if anchored:
+            # 内容顶远低于框顶的页（职名首列低开等），原范围够不到框顶
+            # ——锚定罚了却无解可选。范围必须罩住 框顶 ± 容差。
+            p_lo = min(p_lo, max(0.0, frame_top - ANCHOR_TOL * cell_h))
+            p_hi = max(p_hi, frame_top + ANCHOR_TOL * cell_h)
         for phase in np.arange(p_lo, p_hi + phase_step, phase_step):
             # 中位是列数一半的量级，聚合(smooth=各列之和)是全列量级，
             # 补上列数因子让惩罚与谷/峰项同纲
@@ -1844,8 +1870,12 @@ class GridSegmenter:
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
             else:
                 # 版框行锚定：在去错切帧上量上下框线，换算到裁剪窗坐标。
-                # 检不出（磨损）或框高与 n 格不合时 fit 内部门控自动不锚。
+                # 下框磨没检不出时用页底 H 兜底（s3 裁切贴框，H≈下框；
+                # 实测 vol01/12 ft+21×格高 与 H 只差 4px）——跨度门控
+                # 仍在 fit 里把关，框高与 n 格不合的特殊页自动不锚。
                 ft, fb = measure_row_frames(image)
+                if ft is not None and fb is None:
+                    fb = image.shape[0]
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],
