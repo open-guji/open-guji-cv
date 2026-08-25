@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import multiprocessing as mp
 import os
+import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -1648,6 +1649,40 @@ def _job_refit(seg: "GridSegmenter", img_path: str, layout: dict, kw: dict):
     return seg.segment_page(image, layout, **kw)
 
 
+def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
+                 res: dict, used_h: float, consensus_h: float,
+                 col_p=None, ins_p=None):
+    """Pass 2a-bis 单页：在重切后的网格上二次量页距，够硬且与所用先验
+    差 >0.5px 就再重切一轮。Pass 1 自由拟合失败的页量不出页距，第一轮
+    只能用书距——vol01/25 实测 Pass1 量不出 → 用书距 115.2，而终网格上
+    实测 113.9（-1.1%），差值在列中部累积 ~25px，格界切到邻字头上
+    （用户朱批 grid_shift 8 例的根因）。返回 (重切结果, 页距) 或 None。"""
+    image = imread(img_path)
+    if image is None:
+        return None
+    gray = image if image.ndim == 2 \
+        else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    sh = res.get("grid", {}).get("shear", 0.0) or 0.0
+    ps = measure_page_pitch(deshear(gray, sh) if sh else gray, res)
+    if os.environ.get("GUJI_REPITCH_DBG"):
+        med0 = float(np.median(ps)) if ps else None
+        print(f"[repitch] {Path(img_path).stem}: n={len(ps)} "
+              f"med={None if med0 is None else round(med0, 2)} used={round(used_h, 2)}",
+              flush=True)
+    if len(ps) < PAGE_PITCH_MIN_COLS:
+        return None
+    med = float(np.median(ps))
+    mad = float(np.median(np.abs(np.asarray(ps) - med)))
+    if mad > PAGE_PITCH_MAD \
+            or abs(med - consensus_h) > PAGE_PITCH_DEV * consensus_h \
+            or abs(med - used_h) <= 0.5:
+        return None
+    redone = seg.segment_page(image, layout, cell_h_prior=med,
+                              period_prior=col_p, inset_prior=ins_p,
+                              shear_override=sh)
+    return (redone, med)
+
+
 def _job_phase(seg: "GridSegmenter", img_path: str, layout: dict, res: dict,
                consensus_h: float, col_p, ins_p):
     """Pass 2b 单页：骑线评分 → 全周期相位自扫 → 择优重切。
@@ -2084,6 +2119,7 @@ class GridSegmenter:
                 n_row_fix += 1
             if n_page_h:
                 print(f"  逐页格高：{n_page_h} 页用本页实测字距替代书距")
+
             if n_row_fix:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
@@ -2184,6 +2220,31 @@ class GridSegmenter:
                 if n_inset_fix:
                     print(f"  书级内缩共识 ({prior[0]:.0f},{prior[1]:.0f})px，"
                           f"校正内缩塌掉页 {n_inset_fix} 张")
+
+        # ── Pass 2a-bis: 二次页距（放在 2a2/2a3 之后）──
+        # Pass 1 拟合失败的页量不出页距，Pass 2a 只能给书距；且必须等
+        # 列距/内缩修完才量——p25 实测在 2a 后立刻量只剩 4 列（内缩塌着，
+        # 列框坏），修完列后 8 列齐（113.9 vs 书距 115.2）。补切带上
+        # 列距/内缩先验，别把 2a2/2a3 修好的列又自由拟合掉。
+        if cell_hs and len(cell_hs) >= 5 and pitch_h:
+            todo_bis = [pg for pg in pages
+                        if results[pg[0]].get("grid", {}).get("cell_h")]
+            outs2 = _pmap(_job_repitch,
+                          [(self, str(p), lo, results[s],
+                            row_prior.get(s, consensus_h), consensus_h,
+                            col_prior.get(s), ins_prior.get(s))
+                           for s, p, lo in todo_bis])
+            n_re = 0
+            for (stem, _, _), r2 in zip(todo_bis, outs2):
+                if r2 is None:
+                    continue
+                redone, med = r2
+                results[stem] = redone
+                row_prior[stem] = med
+                n_re += 1
+            if n_re:
+                print(f"  二次页距：{n_re} 页补切: "
+                      f"{sorted(s for (s, _, _), r in zip(todo_bis, outs2) if r)}")
 
         # ── Pass 2b: 行相位骑线重扫 ──
         # 直接质量信号：骑线比（straddle_score）。稀疏页（职名/目录）
