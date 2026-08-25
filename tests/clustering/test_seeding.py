@@ -766,3 +766,44 @@ def test_admission_decision_match_solo_ocr():
                               [], vmap,
                               match_candidates=[("文", 0.96)]
                               ) == (True, "match_ref")
+
+
+def test_exclusions_block_admission_and_review(tmp_path, monkeypatch):
+    """排除名单：名单里的字位既不进库，也不出审查卡（用户 2026-08-25 口径）。
+
+    钉死两条路：seed 自动通道、ingest 裁决通道。名单是「有意撤掉的」，
+    重跑管线绝不能把它们悄悄填回来。
+    """
+    from open_guji_cv.clustering import seeding as S
+    from open_guji_cv.clustering.review.seed_export import _REVIEWABLE
+    from open_guji_cv.clustering.seed_queue import STATUS_EXCLUDED
+
+    root = tmp_path
+    book_dir, corpus_path, variants_path = build_book(root)
+    victim = f"{BOOK}:1:1:0"          # 第 1 页首字，本该 auto 进库
+    monkeypatch.setattr(S, "load_exclusions",
+                        lambda *a, **k: {victim: {"reason": "rule_bar"}})
+    db = GlyphDB(root / "g.db")
+    try:
+        summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert summary["n_excluded"] == 1
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in (book_dir / "phase9_seed" / "queue.jsonl")
+             .read_text(encoding="utf-8").splitlines() if l.strip()}
+        it = q[victim]
+        assert it.status == STATUS_EXCLUDED          # 落账
+        assert it.status not in _REVIEWABLE          # 不出审查卡
+        assert not db.conn.execute(                  # 不进库
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+
+        # ingest 通道：哪怕来了一条 confirm 事件也顶回去
+        r = ingest_decisions(book_dir, db, [
+            {"op": "confirm", "instance_id": victim, "char": "天",
+             "batch": "b", "seq": 1}])
+        assert r.get("excluded") == 1
+        assert not db.conn.execute(
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+    finally:
+        db.close()

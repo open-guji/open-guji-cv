@@ -48,11 +48,12 @@ from .context_step import build_strategy
 from .recognize_flow import ColumnContext, fuse_priors
 from .normalize import normalize_patch, sauvola_binarize
 from .verify import MISS_WMAX
+from .exclusions import load_exclusions
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
                          STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
-                         STATUS_NOT_A_CHAR, STATUS_PENDING,
+                         STATUS_EXCLUDED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                          STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
@@ -564,6 +565,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
         queue_path.write_text("".join(x + "\n" for x in kept),
                               encoding="utf-8")
 
+    exclusions = load_exclusions()
+    summary["n_excluded"] = 0
+
     doubt_counts: Counter = Counter()
     with open(queue_path, "a", encoding="utf-8") as qf:
         for page in todo:
@@ -575,6 +579,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             for r in page_recs:
                 tail_idx[r.col] = max(tail_idx.get(r.col, -1), r.idx)
             for rec in page_recs:
+                # 排除名单（config/crop_exclusions.jsonl）：切坏/带残留的图块
+                # **不进库也不出审查卡**——用户 2026-08-25 定的口径，重扫前
+                # 一律保守处理。落一行 excluded 只为留账。
+                if rec.id in exclusions:
+                    item = SeedItem(
+                        instance_id=rec.id, book=book, page=page,
+                        col=rec.col, idx=rec.idx, patch_path=rec.patch_path,
+                        tier="excluded", status=STATUS_EXCLUDED,
+                        note="excluded:" + str(
+                            exclusions[rec.id].get("reason", "")))
+                    qf.write(item.to_json() + "\n")
+                    summary["n_excluded"] = summary.get("n_excluded", 0) + 1
+                    continue
                 gray = cv2.imread(str(root / rec.patch_path),
                                   cv2.IMREAD_GRAYSCALE)
                 if gray is None:
@@ -908,10 +925,22 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             n["recrop_refreshed_db"] += 1
 
     # ── 裁决通道 ──
+    # 排除名单守门：名单里的字位不进库（用户 2026-08-25 定的口径）。
+    # 页面本就不出它们的卡，这里防的是旧批次事件与手写事件文件。
+    excluded = load_exclusions()
     for ev in last.values():
         it = items.get(ev.get("instance_id", ""))
         if it is None:
             n["unknown"] += 1
+            continue
+        if it.instance_id in excluded:
+            # 名单里的图块无论事件说什么都不进库；队列行也钉成 excluded
+            it.status = STATUS_EXCLUDED
+            it.decided_char = None
+            it.provenance = None
+            it.note = "excluded:" + str(
+                excluded[it.instance_id].get("reason", ""))
+            n["excluded"] += 1
             continue
         op = ev.get("op")
         if op == "confirm":
