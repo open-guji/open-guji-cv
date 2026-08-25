@@ -40,19 +40,33 @@ def test_extract_counts_and_ids():
     assert "bookX:5:2:2" in ids
 
 
-def test_padding_and_bounds():
+def test_patch_is_the_tight_ink_box():
+    """裁剪策略定版（2026-08-24）：图块 = 本字墨迹外接框 ±TIGHT_MARGIN。
+
+    旧断言写的是「垂直外扩、水平内缩」——那是从墙裁到墙的年代。现在
+    bbox 就是紧框，height/width 由它算出，两者必须逐像素相等；贴墙的
+    空白装的从来不是字，多留一列都是回归。
+    """
+    from open_guji_cv.clustering.extractor import (BINARY_THRESHOLD_PATCH,
+                                                   TIGHT_MARGIN)
     page, grid = _make_page_and_grid()
     extractor = CharExtractor(padding_ratio=0.1)
+    seen = 0
     for inst, patch in extractor.extract_page(page, grid, "b", "1"):
         x0, y0, x1, y1 = inst.bbox
-        # bbox 在图内
         assert 0 <= x0 < x1 <= page.shape[1]
         assert 0 <= y0 < y1 <= page.shape[0]
-        # 垂直外扩（笔画出头）；水平内缩（列边界即界行，不裹进来）
-        assert (y1 - y0) > inst.height
-        assert (x1 - x0) < inst.width
+        assert (y1 - y0) == inst.height and (x1 - x0) == inst.width
         assert patch.shape == (int(round(y1)) - int(round(y0)),
                                int(round(x1)) - int(round(x0)))
+        ys, xs = np.nonzero(patch < BINARY_THRESHOLD_PATCH)
+        if ys.size == 0:                      # 判空格没有墨可量
+            continue
+        seen += 1
+        assert ys.min() <= TIGHT_MARGIN and xs.min() <= TIGHT_MARGIN
+        assert patch.shape[0] - 1 - ys.max() <= TIGHT_MARGIN
+        assert patch.shape[1] - 1 - xs.max() <= TIGHT_MARGIN
+    assert seen > 0
 
 
 def test_ink_ratio_and_flags():
@@ -180,3 +194,52 @@ def test_jiazhu_reading_order_a_before_b_per_run():
     got = [r.id for r in jiazhu_reading_order(col[::-1])]  # 乱序输入
     assert got == ["b:1:1:0", "b:1:1:1", "b:1:1:2a", "b:1:1:3a",
                    "b:1:1:2b", "b:1:1:3b", "b:1:1:4"]
+
+
+def test_strip_side_rule_cuts_only_outside_the_text_band():
+    """界行竖条剥掉，文字带内的竖笔（忄/阝/川 的边竖）一根不许动。"""
+    from open_guji_cv.clustering.extractor import strip_side_rule
+
+    patch = np.full((100, 100), 235, dtype=np.uint8)
+    patch[10:90, 42:92] = 30          # 字身
+    patch[5:95, 2:7] = 30             # 界行竖条：贴左缘，离字身 25px
+    patch[15:85, 32:36] = 30          # 带内竖笔：与字身分离但在带内
+    # 图块左缘在整页上的 x=100；文字带 [130, 195]
+    out = strip_side_rule(patch, 100.0, 130.0, 195.0)
+    assert (out[5:95, 2:7] == 255).all(), "界行竖条没剥掉"
+    assert (out[15:85, 32:36] == 30).all(), "带内竖笔被误剥（红线）"
+    assert (out[10:90, 42:92] == 30).all(), "字身被动了"
+
+
+def test_widen_wide_gutters_only_touches_the_anomalous_gap():
+    """异常宽的列缝补到空白段中心，正常缝一动不动。"""
+    from open_guji_cv.clustering.grid_segment import _widen_wide_gutters
+
+    binary = np.zeros((200, 500), dtype=np.uint8)
+    for lo, hi in [(10, 90), (110, 190), (210, 290), (350, 430)]:
+        binary[20:180, lo:hi] = 1
+    out = [(10.0, 95.0), (105.0, 195.0), (205.0, 295.0), (345.0, 435.0)]
+    bands = [None, None, None, None]
+    spans = [(0, 100), (100, 200)]
+    _widen_wide_gutters(binary, spans, out, bands)
+    assert out[0] == (10.0, 95.0), "正常缝被动了"
+    assert out[1] == (105.0, 195.0), "正常缝被动了"
+    # 295~345 这条 50px 的缝（正常缝 10px）：空白段 295~345，中心 320
+    assert out[2][1] == out[3][0] == 320.0
+    assert bands[2] is not None and bands[3] is not None
+
+
+def test_strip_side_rule_spares_a_char_written_outside_the_band():
+    """带外也住着字（职名的「臣」、夹注的左子列）：它的外沿竖笔不许剥。"""
+    from open_guji_cv.clustering.extractor import strip_side_rule
+
+    patch = np.full((100, 120), 235, dtype=np.uint8)
+    patch[10:90, 46:76] = 30          # 带内的字身（右缘越出文字带一点）
+    patch[15:85, 18:40] = 30          # 带外的小字（夹注左子列/职名的臣）
+    patch[15:85, 8:14] = 30           # 那个小字的外沿竖笔：紧挨着它（4px）
+    patch[5:95, 110:114] = 30         # 真界行：带外，离字身 34px
+    # 图块左缘 x=0；文字带 [42, 74]
+    out = strip_side_rule(patch, 0.0, 42.0, 74.0)
+    assert (out[15:85, 8:14] == 30).all(), "带外小字的竖笔被剥了（红线）"
+    assert (out[5:95, 110:114] == 255).all(), "真界行没剥掉"
+    assert (out[10:90, 46:76] == 30).all(), "字身被动了"

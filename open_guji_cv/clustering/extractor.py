@@ -91,7 +91,14 @@ OFF_CENTER_T = 0.15
 # 单格几何分不开「夹注行」与「左右结构字」（真夹注 span 0.99~1.0 vs 单字
 # 0.60~0.70 是唯一不重叠的量，但保险起见还要列上下文）：夹注是**列区域**
 # 现象，连续多格都有双列形态、且缝的 x 位置对齐；散在的左右结构字对不齐。
-JIAZHU_SPAN_T = 0.85       # 两个子列合起来占列宽的比例下限（单字只占 ~0.7）
+JIAZHU_SPAN_T = 0.75       # 两个子列合起来占**列距**的比例下限。实测两册
+                           # 抽样 4023 个格：普通字的跨度/列距中位 0.59、
+                           # 95 分位 0.676，夹注在 0.78~0.97。0.85 会漏掉
+                           # 写得略窄的夹注（vol01/184 col9「陰陽五行／
+                           # 相宅相墓」量到 0.785，用户 r6 报过）；下调到
+                           # 0.75 后 vol01/36「如」、vol02/74「外」、
+                           # vol01/92「韶」、vol02/144「郭」这些左右结构
+                           # 仍全部拒判，抽样 30 页拆出的列数一格没变。
 JIAZHU_GAP_MIN = 3         # 子列间缝宽下限（px）。部首缝只有 2~3px
 JIAZHU_MASS_W = 0.6        # 单个子列宽度上限（× 列宽）
 JIAZHU_ALIGN = 8           # 相邻格的缝中心相差不超过此才算同一条夹注（px）
@@ -305,13 +312,41 @@ def _defect_flags(gray: np.ndarray) -> list[str]:
 
 
 
-def _jiazhu_gap_center(gray: np.ndarray) -> tuple[float, float] | None:
+# ── 自检队列口径（2026-08-25，用户 r7「有一个自检太多了 我就没消除」）─
+# flags 里混着两种东西：**缺陷**（这一格可能切错了，要人看）和**版式
+# 标注**（这一格是什么，给下游用）。jiazhu 是后者——本批 18 页 21 条
+# jiazhu 里用户一条都没判错，它进自检队列纯粹是让人白清一遍。
+# 标注照旧写进 flags（下游按它把夹注图块隔离成单例），只是不再计入
+# 「待审」的口径。
+INFO_FLAGS = frozenset({"jiazhu"})
+
+
+def defect_flags(flags) -> list[str]:
+    """flags 里真正代表「可能切错了」的那几个（见 INFO_FLAGS 注释）。"""
+    return [f for f in (flags or ()) if f not in INFO_FLAGS]
+
+
+def _jiazhu_gap_center(gray: np.ndarray,
+                      ref_w: float | None = None) -> tuple[float, float] | None:
     """图块若呈「双列小字」形态，返回 (两子列间缝的中心 x, strength)。
 
     判据（实测 vol02 版本注「永樂大典本/通志堂本」与 vol01 职名双行结衔）：
     墨的总跨度占满列宽（span ≥ JIAZHU_SPAN_T——夹注两个子列合起来和正文
     一样宽，单字只占 ~0.7）、中缝 ≥ JIAZHU_GAP_MIN px（部首缝只有 2~3px）、
-    两侧墨量均衡、单侧不超过 0.6 列宽。
+    两侧墨量均衡、单侧不超过 0.6 跨度。
+
+    ref_w 是量跨度用的**尺子**，取**列距**（period）；不给就退回图块宽度。
+
+    两个都不能用：
+    - 图块宽度：条带宽度按界行/空白缝定，同一页各列能差 50px，宽缝
+      补齐（_widen_wide_gutters）之后差得更多——vol02/171 col2 的窗口
+      从 150px 补到 202px，同一段夹注的 span 比就从 0.88 掉到 0.83，
+      整段夹注反而判不出来了。
+    - 文字带宽度：文字带的**定义**就是「正常居中字的范围」，任何一个
+      正常字的跨度除以它都接近 1，判据直接失效——试过一版，vol01 的
+      夹注列从 10 列涨到 36 列，涨出来的全是「如=女+口」「外=卜+夕」
+      「頗=皮+頁」这种左右结构被拦腰劈开。
+    列距是书级刚性常量，又恰好接近原先标定用的图块宽度，两头都占。
 
     单格判据仍会被个别字骗到，所以**必须配合列上下文**使用：只有连续
     JIAZHU_MIN_RUN 格以上、缝中心对齐（±JIAZHU_ALIGN px）才落 jiazhu flag
@@ -328,7 +363,8 @@ def _jiazhu_gap_center(gray: np.ndarray) -> tuple[float, float] | None:
     if len(ink) < 10:
         return None
     x0, x1 = int(ink[0]), int(ink[-1])
-    if (x1 - x0 + 1) / w < JIAZHU_SPAN_T:
+    span = x1 - x0 + 1
+    if span / float(ref_w or w) < JIAZHU_SPAN_T:
         return None
     runs: list[tuple[int, int]] = []
     start = None
@@ -337,8 +373,10 @@ def _jiazhu_gap_center(gray: np.ndarray) -> tuple[float, float] | None:
             start = i
         elif v > 0 and start is not None:
             runs.append((start, i)); start = None
+    # 缝要在**墨迹跨度**的中段，不是图块的中段——图块两侧的留白多少
+    # 由条带宽度决定，拿它定中段会随窗口宽窄漂移
     gaps = [(a, b) for a, b in runs
-            if x0 + a > w * 0.30 and x0 + b < w * 0.70
+            if a > span * 0.30 and b < span * 0.70
             and b - a >= JIAZHU_GAP_MIN]
     if not gaps:
         return None
@@ -349,7 +387,7 @@ def _jiazhu_gap_center(gray: np.ndarray) -> tuple[float, float] | None:
         return None
     if min(left.sum(), right.sum()) / max(left.sum(), right.sum()) < 0.25:
         return None
-    if max(left.shape[1], right.shape[1]) > JIAZHU_MASS_W * w:
+    if max(left.shape[1], right.shape[1]) > JIAZHU_MASS_W * span:
         return None
     # strength：两侧较小的最大连通体面积。真小字必有笔画网络级大连通
     # 体（实测 ≥1242px），纸面噪点全是碎点（≤327px）——单格不卡（薄字
@@ -754,6 +792,95 @@ def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
         ro = float((right < BINARY_THRESHOLD_PATCH).mean()) if right.size else 0.0
         if max(lo, ro) >= STUB_SIDE_INK:
             hits.append(k)
+    if not hits:
+        return patch
+    out = patch.copy()
+    for k in hits:
+        out[lab == k] = 255
+    return out
+
+
+# ── 侧边界行残余剥离（2026-08-25，用户 r7 实审：「还是有很多侧面
+# 边框误入」）──────────────────────────────────────────────
+# 图块条带按 cell_left_x/cell_right_x 裁（贴界行内缘），界行磨损断裂
+# 时那道墙检不出来，条带就一路扩到列格名义边界、把界行圈进来——实测
+# vol02/115、vol02/171 整列整列地在图块右缘留一条竖线。
+#
+# 判据同样搬到**图块之外**：看这条竖条落在哪儿。文字带（left_x~right_x）
+# 是「正常居中字」的范围，界行按定义在带外的留白里；而字自己的竖笔
+# （忄的左竖、阝、川、而 的边竖）无论多细都在带内。实测本批 71 个
+# 「细高贴边」候选：完全落在文字带外的 33 个里 28 个是用户判错的格、
+# 0 个落在用户判对的格；带内的 34 个里有 10 个是别的毛病、还有 1 个
+# 正是「訓」的川字最右竖——只按形状剥必砍字。
+#
+# 红线不变：只剥与字身**不连通**的连通体（主连通体永不参与）。
+# 「出文字带」本身还不够：带外也住着东西——职名列贴界行写的「臣」、
+# 双行夹注宽过文字带的左子列。它们的外沿竖笔同样细高、同样在带外。
+# 所以再加一条：竖条**近旁不许有别的墨块**。界行与字之间总隔着一段
+# 留白（本批实测最近的字身也在 17px 之外）；而字的外沿竖笔身后紧挨着
+# 这个字剩下的部分（隔几个像素）。
+#
+# 判「近旁」不能判「中间有没有」：字常常伸出文字带（「作」的右竖、
+# 「人」的捺、「朱」「公」的末笔都越界），按「中间有墨就不动」会把这
+# 一类的界行全放过——首版实测 25 条正样本里放过 5 条。
+SIDE_RULE_MAX_W = 12       # 竖条宽度上限（px）——界行本来就细
+SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是字的一部分，不动
+SIDE_RULE_ASPECT = 2.0     # 高/宽下限：得是「竖」的
+SIDE_RULE_MIN_AREA = 40    # 墨量下限，纸面碎点交给别的闸
+
+
+def strip_side_rule(patch: np.ndarray, x0: float,
+                    text_x0: float, text_x1: float) -> np.ndarray:
+    """剥掉图块左右缘吃进来的界行竖条（判据见上方注释）。
+
+    x0 是图块左缘在整页上的 x，text_x0/text_x1 是本列**文字带**的左右界。
+    """
+    if patch.size == 0 or not np.isfinite([x0, text_x0, text_x1]).all():
+        return patch
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    main = int(np.argmax(st[1:, 4])) + 1
+    cand: list[tuple[int, int, int, bool]] = []      # (k, cx, cx+cw, 左侧?)
+    for k in range(1, n):
+        if k == main:
+            continue
+        cx, cw, ch, area = (int(st[k, 0]), int(st[k, 2]),
+                            int(st[k, 3]), int(st[k, 4]))
+        if area < SIDE_RULE_MIN_AREA or cw > SIDE_RULE_MAX_W:
+            continue
+        if ch < cw * SIDE_RULE_ASPECT:
+            continue
+        # 「中心出带」而不是「整条出带」：最外一列挨着的版框线常常正好
+        # 压在文字带边上（实测 vol02/171 col1 的框线 1653~1660、带边
+        # 1653.7，差 0.7px），按整条判会全数漏掉——本批因此从 17 个
+        # 判错格涨到 21 个，误伤的判对格仍是 0。
+        gc = x0 + cx + cw / 2.0
+        if gc < text_x0:                              # 竖条中心在文字带左外
+            cand.append((k, cx, cx + cw, True))
+        elif gc > text_x1:                            # ……或右外
+            cand.append((k, cx, cx + cw, False))
+    if not cand:
+        return patch
+    # 近旁的墨块只数**字料**：够大，而且**两个方向都不细**
+    # （w 和 h 都 > SIDE_RULE_MAX_W）。线状的东西一律不算近旁墨块——
+    # 竖的是界行自己（同一条线常断成好几段，细高的成了候选、矮胖的没成，
+    # 若互相算挡路则谁也剥不掉），横的是版框拐角那截横线（实测 24×9，
+    # 又宽又矮，照样会把紧挨着的竖线挡下来）。字料在两个方向上都有厚度。
+    others = [(int(st[k, 0]), int(st[k, 0]) + int(st[k, 2]))
+              for k in range(1, n)
+              if int(st[k, 4]) >= SIDE_RULE_MIN_AREA
+              and int(st[k, 2]) > SIDE_RULE_MAX_W
+              and int(st[k, 3]) > SIDE_RULE_MAX_W]
+    hits = []
+    for k, cx0_, cx1_, is_left in cand:
+        near = any((ox0 - cx1_ if ox0 >= cx1_ else
+                    (cx0_ - ox1 if ox1 <= cx0_ else -1)) < SIDE_RULE_NEAR
+                   for ox0, ox1 in others)
+        if near:
+            continue                                  # 紧挨着字，那是字的笔画
+        hits.append(k)
     if not hits:
         return patch
     out = patch.copy()
@@ -1462,6 +1589,8 @@ class CharExtractor:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
         n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
+        # 夹注跨度的尺子：列距（书级刚性常量）。老产物没有就退回图块宽度
+        jz_ref_w = float((grid.get("grid") or {}).get("period") or 0.0) or None
         results: list[tuple[CharInstance, np.ndarray]] = []
         jz_replaced: set[str] = set()
 
@@ -1558,6 +1687,8 @@ class CharExtractor:
                          else clean_patch(strip, owner, idx, y0, y1))
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
+                # 侧边界行残余：全列都会中招，不限列端（用户 r7）
+                patch = strip_side_rule(patch, float(sx0), left_x, right_x)
                 # 列端格：剥掉与字身分离的版框碎渣（2026-08-25 用户定
                 # 口径——框渣算可后处理的污染，不算错误截取）。自检
                 # flags 与紧裁都在剥后的图块上算，口径统一为「去框后」。
@@ -1602,7 +1733,7 @@ class CharExtractor:
 
                 # 夹注缝在**格框图块**上量（判据阈值按格框几何标定：单字
                 # 只占 0.6~0.7 列宽是唯一不重叠的量，裁紧后谁都是满宽）
-                jz_center = _jiazhu_gap_center(patch)
+                jz_center = _jiazhu_gap_center(patch, jz_ref_w)
                 # 每格都留住裁紧前图块与几何：桥接格（自己量不出缝、由
                 # 邻格插值确认成夹注）拆 a/b 时也要用
                 jz_pre[idx] = (patch.copy(), float(sx0), float(sy0 + y0))
@@ -1781,7 +1912,7 @@ class CharExtractor:
                     norm_ids.append(inst.patch_path)
                     norm_arrs.append(normalize_patch(patch))
                     n_chars += 1
-                    if inst.flags:
+                    if defect_flags(inst.flags):
                         n_flagged += 1
                 n_pages += 1
 
