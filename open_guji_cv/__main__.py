@@ -655,7 +655,8 @@ def cmd_glyph_db(args):
             from .clustering.font_glyphs import import_fonts_from_manifest
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
-                charset=args.charset, limit=args.limit)
+                charset=args.charset, limit=args.limit,
+                jobs=args.jobs)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -1019,6 +1020,9 @@ def main():
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,
                    help="只导前 N 个字（import-font 冒烟测试用）")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
+                        "写库仍单线程）")
     p.add_argument("--collection", default=None, help="丛书（如 武英殿聚珍版）")
     p.add_argument("--script-style", default=None, help="字体（宋体刻/写刻/手写）")
     p.add_argument("--title", default=None, help="书名")
