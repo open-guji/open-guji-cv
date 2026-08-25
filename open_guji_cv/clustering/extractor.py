@@ -795,17 +795,28 @@ def _split_touching(binary: np.ndarray,
         comp = labels == k
         prof = comp.sum(axis=1)
         for g in lines:
-            lo = int(max(y + 0.2 * cell_h, g - win))
-            hi = int(min(y + ch - 0.2 * cell_h, g + win,
-                         y + FIT_RATIO * cell_h))
+            # 碎片粘连（vol01/22「修/集」病灶）：连通体在格线上方的延伸
+            # 装不下一个完整上字——组件里只有上一字的残尾（其主体是独立
+            # 连通体）。此时「上半块 ≥MIN_PIECE」以组件顶来量毫无意义，
+            # 反而把刀强行压进下一字（全书同型 41 处不切 + 29 处刀位
+            # 偏移）。豁免 MIN_PIECE，改在 g±SPLIT_FRAG_WIN 窄带内准切
+            # ——窄带同时守住「草的艹被切走」老病灶（那道错缝在
+            # g+0.3 格高，够不着窄带）。
+            frag = (g - y) < MIN_PIECE * cell_h
+            w_here = SPLIT_FRAG_WIN * cell_h if frag else win
+            lo = int(max(y + (0.0 if frag else 0.2 * cell_h), g - w_here))
+            hi = int(min(y + ch - 0.2 * cell_h, g + w_here,
+                         y + (ch if frag else FIT_RATIO * cell_h)))
             if hi <= lo:
                 continue
             thin = np.flatnonzero(prof[lo:hi] <= NECK_ABS * col_w) + lo
             # 上半块必须够得上一个字。否则会切在「粘着的上一字残尾」和
             # 本字之间——那道缝也在格线附近、也很细，切下去本字就少一个
-            # 部首（实测把「草」的艹切给了上一格）。
-            thin = thin[(thin - y >= MIN_PIECE * cell_h)
-                        & (y + ch - thin >= MIN_TAIL * cell_h)]
+            # 部首（实测把「草」的艹切给了上一格）。碎片粘连时该约束
+            # 失效（见上），只留下半块防碎渣。
+            if not frag:
+                thin = thin[thin - y >= MIN_PIECE * cell_h]
+            thin = thin[y + ch - thin >= MIN_TAIL * cell_h]
             if thin.size == 0:
                 continue
             # 取细颈里**离格线最近**的一行，而不是最细的一行。上一字的
