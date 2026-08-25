@@ -70,6 +70,24 @@ def score_all(root: Path, method: str) -> tuple[list[dict], np.ndarray, np.ndarr
     return pairs, cov, wmax
 
 
+def relabel(root: Path, cached: list[dict]) -> list[dict]:
+    """拿数据集现在的金标重算 dump 里每一对的 label 与分层，顺序必须对上。"""
+    data = json.loads((root / "expected.json").read_text(encoding="utf-8"))
+    meta = {r["instance_id"]: r for r in data["instances"]}
+    fresh = [json.loads(l) for l in
+             (root / data["pairs_file"]).read_text(encoding="utf-8").splitlines()]
+    if len(fresh) != len(cached) or any(
+            f["a"] != c["a"] or f["b"] != c["b"] for f, c in zip(fresh, cached)):
+        raise SystemExit("dump 与数据集的对序对不上——重新打分（去掉 --from-dump）")
+    for p in fresh:
+        p["label"] = ("same" if meta[p["a"]]["char"] == meta[p["b"]]["char"]
+                      else "diff")
+        p["ink_bucket"] = max(meta[p["a"]]["ink_bucket"], meta[p["b"]]["ink_bucket"])
+        p["tier"] = ("degraded" if "degraded" in
+                     (meta[p["a"]]["tier"], meta[p["b"]]["tier"]) else "clean")
+    return fresh
+
+
 def pr(is_same: np.ndarray, passed: np.ndarray
        ) -> tuple[int, int, int, float | None, float | None]:
     """→ (tp, fp, 同字对总数, precision, recall)。
@@ -104,7 +122,11 @@ def main() -> None:
 
     if args.from_dump:
         z = np.load(args.from_dump, allow_pickle=True)
-        pairs, cov, wmax = list(z["pairs"]), z["cov"], z["wmax"]
+        cov, wmax = z["cov"], z["wmax"]
+        # dump 只是**分数**缓存。标签和分层一律从数据集现读——金标改判过
+        # （relabel_history）而缓存里还压着旧 label 的话，报出来的
+        # precision/recall 是错的，而且错得无声无息。
+        pairs = relabel(Path(args.dataset), list(z["pairs"]))
     else:
         pairs, cov, wmax = score_all(root, args.method)
         if args.dump:
