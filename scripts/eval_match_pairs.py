@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO))
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
+from open_guji_cv.clustering.exclusions import excluded_ids  # noqa: E402
 from open_guji_cv.clustering.verify import (COV_LOW, ELASTIC_COV_HIGH,  # noqa: E402
                                             MISS_WMAX, verify_pair,
                                             verify_pair_cov,
@@ -116,6 +117,8 @@ def main() -> None:
     ap.add_argument("--dump", default=None, help="把逐对分数存成 npz")
     ap.add_argument("--from-dump", default=None, help="跳过打分，直接读 npz")
     ap.add_argument("--out", default=None, help="报告 JSON")
+    ap.add_argument("--include-excluded", action="store_true",
+                    help="连排除名单里的坏图块一起量（默认跳过）")
     args = ap.parse_args()
     root = Path(args.dataset)
     gate = args.cov_high if args.cov_high is not None else ELASTIC_COV_HIGH
@@ -134,11 +137,24 @@ def main() -> None:
                                 cov=cov, wmax=wmax)
             print(f"→ 分数已存 {args.dump}")
 
-    is_same = np.array([p["label"] == "same" for p in pairs])
-    origin = np.array([p["origin"] for p in pairs])
     report: dict = {"method": args.method, "cov_high": gate,
                     "miss_wmax": args.miss_wmax, "n_pairs": len(pairs)}
 
+    # 排除名单：切分坏掉的图块不参与量匹配——不然量的是「匹配 + 切分损伤」
+    # 的混合物。默认跳过，`--include-excluded` 可以把旧口径量回来对照。
+    ex = frozenset() if args.include_excluded else excluded_ids()
+    keep = np.array([p["a"] not in ex and p["b"] not in ex for p in pairs])
+    n_drop = int((~keep).sum())
+    if n_drop:
+        pairs = [p for p, k in zip(pairs, keep) if k]
+        cov, wmax = cov[keep], wmax[keep]
+        print(f"排除名单跳过 {n_drop} 对（{n_drop/len(keep):.1%}），"
+              f"剩 {len(pairs)} 对参与评测")
+    report["n_pairs_excluded"] = n_drop
+    report["n_pairs"] = len(pairs)
+
+    is_same = np.array([p["label"] == "same" for p in pairs])
+    origin = np.array([p["origin"] for p in pairs])
     print(f"\n=== 判据 {args.method}  操作点 cov≥{gate} & wmax≤{args.miss_wmax} ===")
     passed = (cov >= gate) & (wmax <= args.miss_wmax)
     for og in sorted(set(origin.tolist())):
