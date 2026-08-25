@@ -96,6 +96,7 @@ same 闸则**按各自的量尺重新钉**，两个消费方分开——它们�
 | glyph-match/triplets control | eval_match_triplets.py | 良例排序不回退 |
 | char-clustering 三分片 + hard_pairs | eval_clustering.py | purity ≥ 基线，难例对 never-make-worse |
 | char-normalization golden | eval_normalize.py | 归一化回归门 33/33（改 normalize 时）|
+| **glyph-match/pairs**（71497 对）| eval_match_pairs.py | **对级操作点**：knn 层 `precision ≥ 0.999` 下的最大 recall。改阈值/改判据必看 |
 | 库匹配协议基线 | eval_db_match.py | same 档 `match_precision` **≥ 0.999 硬约束**；覆盖率是另一本账 |
 | 单测 | tests/clustering/{test_verify_cov,test_verify_elastic,test_match,test_audit}.py | 判据契约 |
 
@@ -110,8 +111,11 @@ same 闸则**按各自的量尺重新钉**，两个消费方分开——它们�
 - char-normalization：33/33（本轮没动 normalize）；
 - eval_db_match（库匹配闸 0.992）：三协议精度全 **1.0000**（旧判据是
   1.0000/1.0000/1.0000，但字形精度里带着 詳←羣 一条），**覆盖率
-  10.4/16.6/21.8% → 6.2/11.4/13.5%**——本轮唯一的负向，机理与取舍
-  见 §六；
+  10.4/16.6/21.8% → 6.2/11.4/13.5%**——实例级的负向，机理与取舍见 §六；
+- glyph-match/pairs（2026-08-24 新建）：**对级上 elastic 双优**——同闸
+  precision 1.0000（2286/2286）vs coverage 0.9973，recall 0.0740 vs
+  0.0730；硬约束下可用 recall 是 coverage 的 5.8 倍。与上一条不矛盾，
+  两个仪器量的不是一回事，见 §六末；
 - 单测 421 passed（另有 2 个 s2t 用例因环境缺 opencc 失败，与本轮无关）。
 
 ⚠️ 阈值联动：same 闸同时是**进库准入**的闸（seeding.py 各通道、
@@ -245,6 +249,30 @@ ink_ratio 分档，同字最优 cov 能过 0.992 的实例比例：
 anchor 比两个复杂度相当的候选，所以 hard 一路涨），**绝对阈值判决
 受影响**。出路是 §四.2。
 
+### 订正：对级上 elastic 是双优的（2026-08-24 建 pairs 集之后）
+
+上面那张覆盖率表是**实例级**的（「这个实例有没有被某个库条目判 same」）。
+`glyph-match/pairs` 建起来之后，同一件事的**对级**读数是反的：
+
+| 判据（闸 0.992 / wmax 12，knn 层）| precision | recall | 硬约束下最大 recall |
+|---|---|---|---|
+| coverage | **0.9973**（2257/2263）| 0.0730 | 闸 0.9995 → **0.0140** |
+| elastic | **1.0000**（2286/2286）| 0.0740 | 闸 0.9915 → **0.0807** |
+
+两条都成立，因为两个仪器量的不是一回事：
+
+- **对级**（pairs）：判据本身。elastic 同闸 precision 满分、recall 略高，
+  硬约束下可用 recall 是 coverage 的 **5.8 倍**。顺带发现
+  **coverage 在对级上根本达不到 precision ≥ 0.999**——它在 eval_db_match
+  里过门，靠的是 kNN 检索 + never-match 护栏 + best-of-k 兜底。
+- **实例级**（eval_db_match）：管线产出。elastic 放行的对**更集中**——
+  同样的对级 recall，落在更少的实例上，所以「有 same 命中的实例」变少。
+  根子还是那条密度曲线：elastic 把 recall 都给了笔画稀的字（那些字实例
+  多、彼此互相命中），笔画密的字一个都够不到。
+
+所以「elastic 让库匹配变差了」这句话是**不准确**的：判据变好了，是
+**同一个闸下产出的分布**变了。要把实例级也拉回来，仍然指向 §四.2。
+
 ## 七、本轮遗留
 
 1. **库匹配覆盖率的坑**（§六）：same 档覆盖率掉了约三到四成，机理已
@@ -265,4 +293,7 @@ anchor 比两个复杂度相当的候选，所以 hard 一路涨），**绝对�
    保住了「放行多少」，没保「放行谁」——严格说该在新判据下重放一遍。
 4. **数据集侧的数没刷**：`glyph-match/triplets` 的 README /
    `results/baseline.json`、`char-clustering` 的基线数字仍记着
-   coverage 那版（本轮只改了 `open-guji-cv` 仓）。
+   coverage 那版。（`glyph-match/pairs` 是 2026-08-24 新建的，已带
+   两个判据的基线。）
+5. **pairs 集的形近层太薄**（190 条）：多数形近族的两个字不同时出现在
+   vol01/vol02 里。等第三册进来再补。
