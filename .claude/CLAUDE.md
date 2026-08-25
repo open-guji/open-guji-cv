@@ -28,6 +28,7 @@
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图、分层扩库路线（P0 异体字关系层 + P1 字体字形已实现）与**字体字形匹配力实测**（§6）|
 | [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
 | [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + glyph-match/triplets 测试集 + 回归护栏 + 已知失败形态（匹配优化专题从这进）|
+| [glyph_match_research.md](doc/glyph_match_research.md) | 匹配算法调研：我们这层在文献谱系里的位置（IDM 零阶形变模型）+ 四条改进路线与引用文献 |
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
 | [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
 | [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |
