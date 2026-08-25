@@ -85,9 +85,10 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
     opacity:0;pointer-events:none;transition:opacity .2s}
   #app.nav #scrim{opacity:1;pointer-events:auto}
   .menu{display:inline-block}
-  .bar{gap:6px;padding:6px 8px}
+  .bar{gap:4px;padding:4px 6px}
   .bar .ttl{display:none}
-  button.act{padding:8px 10px;touch-action:manipulation}
+  .bar button.act{padding:4px 7px;font-size:12px;touch-action:manipulation}
+  .foot button.act{touch-action:manipulation}
   .cell,.zone{touch-action:manipulation}
   .stage{padding:10px;-webkit-overflow-scrolling:touch}
   .cols{margin:0}
@@ -160,7 +161,7 @@ function render(){
       return `<div class="cell ${c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
         role="button" tabindex="0"
         title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}">
-        <span class="idx">${ci}</span>
+        <span class="idx">${ci+1}</span>
         <img src="${c.src}" width="${w}" height="${h}" alt="${c.id}"></div>`;
     }).join('');
     return `<div class="colbox"><div class="colhead">第 ${col.col} 列</div>
@@ -187,6 +188,7 @@ function render(){
       <button class="act ${filter==='flag'?'on':''}" data-f="flag">只看自检标记</button>
       <button class="act ${filter==='marked'?'on':''}" data-f="marked">只看已朱批</button>
       <span class="sp"></span>
+      <button class="act ${zoom===0.4?'on':''}" data-z="0.4">0.4×</button>
       <button class="act ${zoom===0.6?'on':''}" data-z="0.6">0.6×</button>
       <button class="act ${zoom===0.8?'on':''}" data-z="0.8">0.8×</button>
       <button class="act ${zoom===1?'on':''}" data-z="1">1×</button>
