@@ -153,16 +153,36 @@ def apply_ocr(findings: dict[str, AuditFinding],
 
 
 def evict_instance(db, instance_id: str) -> str | None:
-    """撤库：删四表行 + 清空壳 glyph。返回原字（不存在返回 None）。"""
+    """撤库：删四表行 + 修正字头（n_confirmed 减一，最后一个刻例撤掉就删字头）。
+
+    返回原字（不存在返回 None）。
+
+    2026-08-25 修：原来那条清壳 SQL 一次都没生效过。它写的是
+
+        DELETE FROM glyphs WHERE glyph_id NOT IN (SELECT ... FROM exemplars)
+          AND glyph_id NOT IN (SELECT DISTINCT glyph_id FROM instances
+                               WHERE glyph_id IS NOT NULL)
+
+    而 `instances` **根本没有 glyph_id 列**——SQLite 于是把子查询里的
+    `glyph_id` 解析成外层 `glyphs.glyph_id`（相关子查询），子查询对每个
+    instance 行都返回外层那个值，`NOT IN` 恒为假，整条 DELETE 永不删任何行。
+    没报错，只是默默不干活：撤库一轮下来库里攒了 34 个零刻例的空壳字头，
+    `n_confirmed` 也还停在 1。改成只按 exemplars 判，并同步 n_confirmed。
+    """
     row = db.conn.execute(
-        """SELECT g.char FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
-           WHERE e.instance_id=?""", (instance_id,)).fetchone()
+        """SELECT g.glyph_id, g.char FROM exemplars e
+           JOIN glyphs g ON g.glyph_id=e.glyph_id WHERE e.instance_id=?""",
+        (instance_id,)).fetchone()
     for t in ("admissions", "exemplars", "derived", "instances"):
         db.conn.execute(f"DELETE FROM {t} WHERE instance_id=?", (instance_id,))
-    db.conn.execute(
-        """DELETE FROM glyphs WHERE glyph_id NOT IN
-             (SELECT DISTINCT glyph_id FROM exemplars)
-           AND glyph_id NOT IN (SELECT DISTINCT glyph_id FROM instances
-                                WHERE glyph_id IS NOT NULL)""")
+    if row:
+        gid = row[0]
+        left = db.conn.execute(
+            "SELECT count(*) FROM exemplars WHERE glyph_id=?", (gid,)).fetchone()[0]
+        if left:
+            db.conn.execute(
+                "UPDATE glyphs SET n_confirmed=? WHERE glyph_id=?", (left, gid))
+        else:
+            db.conn.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
     db.conn.commit()
-    return row[0] if row else None
+    return row[1] if row else None
