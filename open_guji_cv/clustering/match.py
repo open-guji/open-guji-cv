@@ -29,30 +29,17 @@ from .features import get_feature
 from .verify import (COV_HIGH, ELASTIC_COV_HIGH, MISS_WMAX,
                      verify_pair_cov, verify_pair_elastic)
 
-# 聚类实测漏网的形近家族（g3g4_error_analysis.md §2/§7：在 coverage 判据
-# 下真实发生过错并、或对级实测能穿透完美档的字对）。库级 never-match：
-# 这两族字互相永不做 same 判定。build_clustering_dataset.py 的难例对
-# 生成也引用本表——单一事实源。
-NEVER_MATCH_FAMILIES: list[tuple[str, str]] = [
-    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
-    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"), ("彖", "象"),
-    # 匕/七：margin 标定唯一阈上错例（vol02:37:6:12，diff 分支 OCR 认错）。
-    # 本表只防库匹配侧；OCR-only 路径（diff 档）管不到，属残余风险，
-    # 出路是 char-ocr 集给 OCR 分支单独立门。
-    ("匕", "七"),
-    # 日/曰：vol01:10:9:10 实审发现（裘曰修之「曰」，库内「日」对它
-    # cov 0.96 已进 unsure 带；OCR 也认成日）。同形程度全表最高。
-    ("日", "曰"),
-    # 揀/棟：vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」
-    # 对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。
-    ("揀", "棟"),
-]
+# 形近家族表搬到 confusable.py 了（三张表：手工核过的 / 人裁确认的 / 字体
+# 自动跑的，各自门槛不同的理由写在那边的模块注释里）。这里保留
+# `NEVER_MATCH_FAMILIES` 的再导出：seeding.NEAR_FORM_CHARS 与
+# build_clustering_dataset.py 的难例对生成都引它，**只认手工那张**——
+# 那边命中要拦掉采信通道，代价高，不能拿自动表去喂。
+from .confusable import NEVER_MATCH_FAMILIES, partners as _partners  # noqa: F401
 
-_PARTNER: dict[str, set[str]] = {}
-for _a, _b in NEVER_MATCH_FAMILIES:
-    _PARTNER.setdefault(_a, set()).add(_b)
-    _PARTNER.setdefault(_b, set()).add(_a)
+# 匹配侧的降档护栏用**并起来的那张**：命中只是 same → unsure，还有候选 +
+# 上下文兜底，代价低，宁可多拦。留出实测（eval_guard_ceiling.py）：
+# 闸 0.9933 / recall 0.196 → 闸 0.9809 / recall 0.544，precision 仍 0.999。
+_PARTNER: dict[str, frozenset[str]] = _partners()
 
 
 @dataclass
