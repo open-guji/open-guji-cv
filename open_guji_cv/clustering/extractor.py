@@ -707,6 +707,61 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
     return out
 
 
+# ── 版框断段剥离（2026-08-25，用户问「还有没有别的办法」）────
+# 曲线切边之后仍剩下一类框渣：版框横线被字挡断后留在字**左右两侧**的
+# 断段。它们与字身垂直位置重叠，所以曲线路径（必须走在字身之下）够不
+# 着，间隙判据（gap≥1）也失效——两组的面积/高度/宽高比/填充率分布全部
+# 重叠，图块内部再怎么量都分不开。
+#
+# 分得开的信息在**图块之外**：框线横贯整版，被字挡断只是局部现象，
+# 断段所在的那几行在**列框外侧仍然继续走**；字的笔画到界行就停。实测
+# 列外墨率（取左右两侧的较大者，因为被挡断的那一侧本来就没墨）——
+# 框线断段 0.46~0.66，「黙」的四点底这类字部件 ≤0.24，一刀两断。
+STUB_SIDE_PROBE = 42       # 列框外侧的探测宽度（px）
+STUB_SIDE_INK = 0.35       # 列外墨率（取两侧较大者）超此 → 框线在继续
+STUB_MAX_H = 12            # 断段的高度上限（px）——版框线本来就薄
+STUB_MIN_AREA = 40         # 小于此的碎点交给别的闸，这里不管
+
+
+def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
+                     x0: int, x1: int, y0: int) -> np.ndarray:
+    """剥掉版框横线被字挡断后留下的断段（判据见上方注释）。
+
+    x0/x1 是本列在整页上的左右边界，y0 是图块顶在整页上的 y。
+    """
+    if page.size == 0 or patch.size == 0:
+        return patch
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    main = int(np.argmax(st[1:, 4])) + 1
+    H, W = page.shape[:2]
+    hits = []
+    for k in range(1, n):
+        if k == main:
+            continue
+        ch, area = int(st[k, 3]), int(st[k, 4])
+        if ch > STUB_MAX_H or area < STUB_MIN_AREA:
+            continue
+        ya = max(0, y0 + int(st[k, 1]))
+        yb = min(H, ya + ch)
+        if yb <= ya:
+            continue
+        left = page[ya:yb, max(0, x0 - STUB_SIDE_PROBE):max(1, x0)]
+        right = page[ya:yb, min(W - 1, x1):min(W, x1 + STUB_SIDE_PROBE)]
+        lo = float((left < BINARY_THRESHOLD_PATCH).mean()) if left.size else 0.0
+        ro = float((right < BINARY_THRESHOLD_PATCH).mean()) if right.size else 0.0
+        if max(lo, ro) >= STUB_SIDE_INK:
+            hits.append(k)
+    if not hits:
+        return patch
+    out = patch.copy()
+    for k in hits:
+        out[lab == k] = 255
+    return out
+
+
 # ── 列端曲线切边（2026-08-25，用户定：图块的边不必是直线）────
 # 用户看过框渣剥离的结果后提的：
 #
@@ -837,6 +892,39 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
         bot = y + h if bot is None else max(bot, y + h)
     if top is not None and (bot - top) >= TAIL_JUNK_SPAN * cell_h:
         return False                      # 「二/三」类：多笔跨度撑起整格
+    return True
+
+
+HEAD_CELL_MIN_H = 0.5      # 抬头位的字必须有这么高的连通体（× 格高）
+
+
+def is_head_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
+    """抬头位的格：没有整字级的连通体就判空。
+
+    抬头行是页级补出来的（补一行则全部列都多一格），但**抬头只发生在
+    个别列**——普通列的抬头位本来就是空的，落在那儿的墨几乎都是版框
+    横线。通用的列端渣格闸对这里太松：两条框线只要在某处相连，bbox
+    就是「满宽 + 0.75 格高」，被当成「字粘条」放行（实测 vol01/33:9:0）。
+    抬头位的判据因此收紧成：最大连通体高 < HEAD_CELL_MIN_H 格 → 判空。
+    真抬头字是整字，一定够高；框线组合再怎么相连也矮。
+    """
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    if not binary.any():
+        return True
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return True
+    for k in range(1, n):
+        h = int(st[k, 3])
+        w = int(st[k, 2])
+        area = int(st[k, 4])
+        if h < HEAD_CELL_MIN_H * cell_h or area < TAIL_JUNK_MIN_INK:
+            continue
+        # 满宽且填充稀疏 = 上下两条框线在某处相连，不是字
+        if w >= TAIL_JUNK_W2W * patch.shape[1] \
+                and area < 0.30 * w * h:
+            continue
+        return False
     return True
 
 
@@ -1373,6 +1461,7 @@ class CharExtractor:
         if shear:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
+        n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
         results: list[tuple[CharInstance, np.ndarray]] = []
         jz_replaced: set[str] = set()
 
@@ -1442,7 +1531,7 @@ class CharExtractor:
             # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
             order = [i for i, _t, _b in local]
-            end_cand = set(order[:2] + order[-2:])
+            end_cand = set(order[:2 + n_head_rows] + order[-2:])
             # 曲线切边只碰**最外一格**：只有它挨着版框。列端渣格闸取
             # 首末各 2 格（渣有时占两格），但短列里那两个集合会重叠，
             # 拿它切边会把列首格**下方的邻字残余**也当框线切掉。
@@ -1475,6 +1564,9 @@ class CharExtractor:
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)
+                    # 框线断段：判据在图块之外（列外墨率），必须传整页
+                    patch = strip_frame_stub(patch, page_img, int(sx0),
+                                             int(sx1), int(sy0 + y0))
                     # 曲线切边：列末切下边、列首切上边（用户定——图块的
                     # 边不必是直线，绕开版框即可）。放在框渣剥离之后，
                     # 剥不掉的粘连/侧下方断段由它兜底。
@@ -1562,6 +1654,17 @@ class CharExtractor:
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")
+            # 抬头位（页级补出来的行）：只有个别列真有抬头字，其余列那
+            # 一格本来就空，落在那儿的墨几乎都是版框横线。通用闸对这里
+            # 太松（两条框线相连就冒充「字粘条」），另用严判据。
+            for i in order[:n_head_rows]:
+                info, inst = end_patches.get(i), by_idx.get(i)
+                if info is None or inst is None or inst.cell_type != "char":
+                    continue
+                if is_head_cell_junk(*info):
+                    inst.cell_type = "empty"
+                    if "tail_junk" not in inst.flags:
+                        inst.flags.append("tail_junk")
             # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
             # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
             jz_runs = flag_jiazhu_runs([(i, c) for i, c, _ in col_entries])

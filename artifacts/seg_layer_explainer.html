@@ -1,0 +1,459 @@
+<title>从版面到字块</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap">
+<style>
+:root{
+  --paper:#eeeae0; --paper2:#e6e1d4; --card:#f6f3ec;
+  --ink:#1c1a17; --ink2:#5d574c; --ink3:#8b8577;
+  --rule:#c3bcaa; --rule2:#d9d3c3;
+  --zhu:#a8342a; --zhu-bg:rgba(168,52,42,.09);
+  --qing:#3d5a63; --qing-bg:rgba(61,90,99,.09);
+  --ok:#3f6b46; --ok-bg:rgba(63,107,70,.10);
+  --warn:#8a6420; --warn-bg:rgba(138,100,32,.10);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#15140f; --paper2:#1d1b15; --card:#211f18;
+    --ink:#e9e4d6; --ink2:#a49c88; --ink3:#7a7365;
+    --rule:#3b372c; --rule2:#2b281f;
+    --zhu:#d9776a; --zhu-bg:rgba(217,119,106,.14);
+    --qing:#84a8b2; --qing-bg:rgba(132,168,178,.13);
+    --ok:#7fb389; --ok-bg:rgba(127,179,137,.14);
+    --warn:#c9a15a; --warn-bg:rgba(201,161,90,.14);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15140f; --paper2:#1d1b15; --card:#211f18;
+  --ink:#e9e4d6; --ink2:#a49c88; --ink3:#7a7365;
+  --rule:#3b372c; --rule2:#2b281f;
+  --zhu:#d9776a; --zhu-bg:rgba(217,119,106,.14);
+  --qing:#84a8b2; --qing-bg:rgba(132,168,178,.13);
+  --ok:#7fb389; --ok-bg:rgba(127,179,137,.14);
+  --warn:#c9a15a; --warn-bg:rgba(201,161,90,.14);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 15.5px/1.75 "Noto Sans SC",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:56px 28px 96px}
+h1{
+  font:900 clamp(30px,5.2vw,46px)/1.15 "Noto Serif SC",serif;
+  letter-spacing:.06em; margin:0 0 14px; text-wrap:balance;
+}
+.lede{color:var(--ink2);font-size:17px;max-width:62ch;margin:0 0 8px}
+.meta{color:var(--ink3);font-size:13px;letter-spacing:.04em;margin-top:18px}
+h2{
+  font:700 23px/1.3 "Noto Serif SC",serif; letter-spacing:.05em;
+  margin:0 0 6px; text-wrap:balance;
+}
+h2 .num{
+  color:var(--zhu); font-size:14px; letter-spacing:.14em;
+  display:block; margin-bottom:6px; font-family:"Noto Sans SC",sans-serif;
+  font-weight:700;
+}
+section{margin-top:60px}
+.sub{color:var(--ink2);max-width:64ch;margin:0 0 22px}
+hr{border:0;border-top:1px solid var(--rule2);margin:0}
+
+/* 界行：竖线隐喻 */
+.steps{position:relative;padding-left:30px;display:flex;flex-direction:column;gap:2px}
+.steps::before{
+  content:"";position:absolute;left:9px;top:6px;bottom:6px;
+  width:1px;background:var(--rule);
+}
+.step{
+  position:relative;display:grid;
+  grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);
+  gap:8px 26px;padding:14px 0 15px;border-bottom:1px solid var(--rule2);
+}
+.step:last-child{border-bottom:0}
+.step::before{
+  content:"";position:absolute;left:-25px;top:22px;width:9px;height:9px;
+  border-radius:50%;background:var(--paper);border:1.5px solid var(--rule);
+}
+.step.key::before{background:var(--zhu);border-color:var(--zhu)}
+.st{min-width:0}
+.st h3{
+  margin:0 0 3px;font:700 16px/1.45 "Noto Sans SC",sans-serif;
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+}
+.tag{
+  font-size:11px;font-weight:700;letter-spacing:.09em;padding:2px 7px;
+  border-radius:3px;background:var(--qing-bg);color:var(--qing);
+  white-space:nowrap;
+}
+.tag.z{background:var(--zhu-bg);color:var(--zhu)}
+.st p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.7}
+code{
+  font:500 13px/1.5 ui-monospace,"SFMono-Regular",Menlo,monospace;
+  background:var(--paper2);padding:1px 5px;border-radius:3px;color:var(--ink);
+}
+.probe{
+  font-size:13.5px;color:var(--ink2);align-self:start;
+  padding-top:2px;
+}
+.probe b{
+  display:block;font:700 11px/1.6 "Noto Sans SC",sans-serif;
+  letter-spacing:.11em;color:var(--ink3);margin-bottom:2px;
+}
+.probe .none{color:var(--ink3);font-style:italic}
+
+/* 表 */
+.tw{overflow-x:auto;margin:0 -4px;padding:0 4px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th{
+  text-align:left;font:700 11.5px/1.6 "Noto Sans SC",sans-serif;
+  letter-spacing:.11em;color:var(--ink3);padding:0 14px 9px 0;
+  border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule2);vertical-align:top}
+td:last-child,th:last-child{padding-right:0}
+.num-c{font-variant-numeric:tabular-nums;white-space:nowrap}
+.nm{font-weight:500}
+.hint{color:var(--ink3);font-size:12.5px;display:block;margin-top:2px}
+
+/* 指标 */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px}
+.m{
+  background:var(--card);border:1px solid var(--rule2);border-radius:5px;
+  padding:15px 16px 14px;
+}
+.m .lbl{font-size:12.5px;color:var(--ink2);line-height:1.5}
+.m .val{
+  font:700 27px/1.15 "Noto Serif SC",serif;margin:7px 0 2px;
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;
+}
+.m .sub2{font-size:12px;color:var(--ink3)}
+.m.red .val{color:var(--zhu)}
+.m.grn .val{color:var(--ok)}
+.pill{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.07em;
+  padding:2px 8px;border-radius:99px;background:var(--ok-bg);color:var(--ok);
+}
+.pill.w{background:var(--warn-bg);color:var(--warn)}
+.pill.z{background:var(--zhu-bg);color:var(--zhu)}
+
+.note{
+  background:var(--card);border-left:2.5px solid var(--zhu);
+  padding:15px 18px;margin:24px 0 0;border-radius:0 4px 4px 0;
+}
+.note b{color:var(--zhu)}
+.note p{margin:0;font-size:14.5px;color:var(--ink2)}
+.note p+p{margin-top:9px}
+
+figure{margin:0 0 26px}
+figcaption{font-size:12.5px;color:var(--ink3);margin-top:9px;text-align:center}
+svg{display:block;width:100%;height:auto}
+
+@media (max-width:660px){
+  .wrap{padding:38px 18px 70px}
+  .step{grid-template-columns:1fr;gap:8px}
+  .probe{border-left:2px solid var(--rule2);padding-left:12px}
+}
+</style>
+
+<div class="wrap">
+
+<h1>从版面到字块</h1>
+<p class="lede">刻本切分层做的是一件事：把一页扫描图变成一个个单字图块。它分成两大步、二十来个动作，每个动作都有自己的靶子和自己的测试集。这份是它们的对照表。</p>
+<p class="meta">《四庫全書總目》vol01 / vol02 · 2026-08-25 产物</p>
+
+<section>
+<h2><span class="num">全 景</span>两大步，各管一半</h2>
+<p class="sub">第一步只回答「格子在哪」，第二步只回答「格子里的墨哪些属于这个字」。分开的理由是它们坏起来的样子完全不同——格位错了整列跟着错，归属错了只坏一个块。</p>
+
+<figure>
+<svg viewBox="0 0 900 210" role="img" aria-label="切分层两大步流程：页图经网格切分得到格位，再经图块提取得到单字图块">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L7,3.2 L0,6.4" fill="none" stroke="var(--rule)" stroke-width="1.4"/>
+    </marker>
+  </defs>
+  <!-- 输入 -->
+  <rect x="8" y="62" width="104" height="86" rx="3" fill="var(--card)" stroke="var(--rule)"/>
+  <text x="60" y="98" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">页 图</text>
+  <text x="60" y="118" text-anchor="middle" font-size="11" fill="var(--ink3)">去错切后</text>
+
+  <line x1="118" y1="105" x2="152" y2="105" stroke="var(--rule)" stroke-width="1.4" marker-end="url(#ar)"/>
+
+  <!-- G1 -->
+  <rect x="158" y="30" width="290" height="150" rx="4" fill="var(--qing-bg)" stroke="var(--qing)" stroke-width="1.2"/>
+  <text x="176" y="54" font-size="12" font-weight="700" letter-spacing="1.5" fill="var(--qing)">G1 · 网格切分</text>
+  <text x="176" y="78" font-size="12.5" fill="var(--ink)">页型闸门 → 列网格 → 行网格</text>
+  <text x="176" y="99" font-size="12.5" fill="var(--ink)">→ 抬头行 → 列型 → 切格</text>
+  <text x="176" y="120" font-size="12.5" fill="var(--ink)">→ 六趟书级共识校正</text>
+  <text x="176" y="150" font-size="11.5" fill="var(--ink3)">产出：每列 21 个格位的上下界</text>
+  <text x="176" y="167" font-size="11.5" fill="var(--ink3)">（抬头页 22–23 个）</text>
+
+  <line x1="454" y1="105" x2="488" y2="105" stroke="var(--rule)" stroke-width="1.4" marker-end="url(#ar)"/>
+
+  <!-- G2 -->
+  <rect x="494" y="30" width="290" height="150" rx="4" fill="var(--zhu-bg)" stroke="var(--zhu)" stroke-width="1.2"/>
+  <text x="512" y="54" font-size="12" font-weight="700" letter-spacing="1.5" fill="var(--zhu)">G2 · 图块提取</text>
+  <text x="512" y="78" font-size="12.5" fill="var(--ink)">粘连切分 → 格内归属 → 四道剥离</text>
+  <text x="512" y="99" font-size="12.5" fill="var(--ink)">→ 曲线切边 → 紧裁 → 自检</text>
+  <text x="512" y="120" font-size="12.5" fill="var(--ink)">→ 渣格闸 → 夹注拆分</text>
+  <text x="512" y="150" font-size="11.5" fill="var(--ink3)">产出：单字图块 + 缺陷标记</text>
+
+  <line x1="790" y1="105" x2="824" y2="105" stroke="var(--rule)" stroke-width="1.4" marker-end="url(#ar)"/>
+  <rect x="830" y="62" width="62" height="86" rx="3" fill="var(--card)" stroke="var(--rule)"/>
+  <text x="861" y="98" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">字块</text>
+  <text x="861" y="118" text-anchor="middle" font-size="11" fill="var(--ink3)">54k</text>
+</svg>
+<figcaption>两册合计 5.4 万个字块（vol01 24,413 / vol02 29,617）</figcaption>
+</figure>
+</section>
+
+<section>
+<h2><span class="num">G1 · 网 格 切 分</span>格子在哪</h2>
+<p class="sub">刻本是先划栏格再上字的，所以格高跨列统一、格位刚性——这条物理事实是整个 G1 的地基。红点标的是这几轮改动过的步骤。</p>
+
+<div class="steps">
+
+  <div class="step">
+    <div class="st">
+      <h3>1 · 页型闸门<span class="tag">分类</span></h3>
+      <p>封面、牌记、空白页不切。判据是墨量分布与列结构，不是内容识别。</p>
+    </div>
+    <div class="probe"><b>测试集</b>page-type · 394 页人工标页型<br><span class="hint">红线：误跳过正文页 = 0（丢真数据）</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>2 · 去错切 + 内容裁窗<span class="tag">几何</span></h3>
+      <p>估扫描形变的剪切角并校正；再由 <code>content_range</code> 定出正文带，上方留一格余量。</p>
+    </div>
+    <div class="probe"><b>测试集</b>page-geometry · 39 页 353 条界行<br><span class="hint">量 shear 残差与界行位置</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>3 · 列网格<span class="tag">拟合</span></h3>
+      <p>横向投影上搜「列距 + 相位」，再量左右内缩。列数由书的版式先验给定，梳子整体落在页内。</p>
+    </div>
+    <div class="probe"><b>测试集</b>page-geometry<br><span class="hint">列数完全正确的页 · 界行落入列框比例</span></div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>4 · 行网格 + 版框锚定<span class="tag">拟合</span></h3>
+      <p>纵向搜「格高 + 相位」。栏格首线物理上贴着上框线，所以拟合带一项<b>锚定惩罚</b>把相位钉到框线附近，避免整页错半格。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances 的 grid_shift 类<br><span class="hint">人审「字被切在格线上」的条目</span></div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>5 · 抬头行<span class="tag z">新</span></h3>
+      <p>清代官书遇尊称要抬头，抬头列比常规列多 1–2 个字位。先用原窗拟合定相位，再<b>逐格上探</b>看网格顶之上还有没有整格的墨，有就补行并扩窗重裁。</p>
+    </div>
+    <div class="probe"><b>测试集</b>暂无专项<br><span class="none">靠整册扫描 + 目检把关：vol01 触发 5 页，其余 196 页格线逐字节不变</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>6 · 列型判别<span class="tag">分类</span></h3>
+      <p>正文列是刚性等分（rigid），职名、目录那种字距拉开的列是弹性（elastic），两者切法不同。</p>
+    </div>
+    <div class="probe"><b>测试集</b>column-layout · 36 页 289 计分列<br><span class="hint">列型准确率 · elastic 的 P/R/F1</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>7 · 逐列切格<span class="tag">切分</span></h3>
+      <p>刚性列按格高等分再逐条吸附到字间空隙；弹性列按连通体聚类定格。</p>
+    </div>
+    <div class="probe"><b>测试集</b>review_recrop · 24 条你手画的正确框<br><span class="hint">IoU ≥ 0.85 且覆盖 ≥ 95% 墨</span></div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>8 · 六趟书级共识校正<span class="tag">收敛</span></h3>
+      <p>整册跑完再回头修单页：格高共识 → 列距 → 内缩 → <b>二次页距</b>（重切后再量一次，因为 Pass 1 拟合失败的页量不出页距）→ 骑线相位重扫 → 弱信号页套共享网格。</p>
+    </div>
+    <div class="probe"><b>测试集</b>page-geometry + instances<br><span class="hint">二次页距那轮：51 页补切，你的 grid_shift 金标 7/8 痊愈</span></div>
+  </div>
+
+</div>
+</section>
+
+<section>
+<h2><span class="num">G2 · 图 块 提 取</span>墨归谁</h2>
+<p class="sub">格位定死之后，这一步只做减法：把不属于本字的墨从格框里拿掉，再把框收到本字墨迹上。你的红线——只裁与字身不连通的渣、绝不删与字身连通的墨——是这一整段的硬约束。</p>
+
+<div class="steps">
+
+  <div class="step">
+    <div class="st">
+      <h3>1 · 粘连切分<span class="tag">切分</span></h3>
+      <p>上下两字连成一体时，在格线附近找墨最细的一行下刀。含<b>碎片粘连分支</b>：当组件里只有上一字的残尾时豁免「上半块要够一个字」的约束——那条约束本来是防「草」的艹被切走，但在残尾场景下反而把刀压进下一字。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances 的 grid_shift / 粘连类<br><span class="hint">你标的 22:9:3 就是这一类，已痊愈</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>2 · 格内归属<span class="tag">归属</span></h3>
+      <p>列条带做连通体分析，每个连通体按重心归给某一格，其余抹白。这是「一个格框里只留本字」的主力。</p>
+    </div>
+    <div class="probe"><b>测试集</b>char-segmentation/cells · 60 例合成页<br><span class="hint">合成时像素归属已知，可逐像素比对</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>3 · 界行残余剥离<span class="tag">清理</span></h3>
+      <p>竖向的界行（列与列之间的分隔线）常擦进图块边缘，按「细长且贴墙」剥掉。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances 的 rule_bar 类</div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>4 · 碎渣带剥离<span class="tag">清理</span></h3>
+      <p>骑在格界线上的小碎点（h≤15、面积≤300），≥2 个才剥——孤立墨渍宁留勿删。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances 的 neighbor_residue 类</div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>5 · 列端框渣剥离<span class="tag z">新</span></h3>
+      <p>版框离列端字太近，格框一裁必然带进框线。按「与字身有间隙 + 又薄又小」剥掉独立连通体。间隙是最强判别量：框渣离字身 5–23px，而「灬」四点这类字的部件只有 ≤2px。</p>
+    </div>
+    <div class="probe"><b>测试集</b>frame-strip · 65 条<br><span class="hint">你 r4 实审确诊的带框 / 干净样本</span></div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>6 · 列端曲线切边<span class="tag z">新</span></h3>
+      <p>图块的边不必是直线。沿一条紧贴字身外沿、绕开版框的路径切，路径以外抹白——能绕掉侧下方的框线断段，那些矩形判据够不着。硬约束：路径每一列都必须在该列字身墨的最低点之下。</p>
+    </div>
+    <div class="probe"><b>测试集</b>frame-strip<br><span class="hint">残余率 · 误剥率 · 字保全（红线）</span></div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>7 · 紧裁<span class="tag">定框</span></h3>
+      <p>图块收到本字墨迹的外接框 ±2px，不再从墙裁到墙——贴墙的空白装的从来不是字。</p>
+    </div>
+    <div class="probe"><b>测试集</b>review_recrop · 24 条手画框</div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>8 · 自检打标<span class="tag">判定</span></h3>
+      <p>分两层：确定层（界行混入、邻字残余、版框横线）成因明确、下游可直接剥；疑似层（跨列、边缘见墨）有误报，只用于送人工审查。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances · 426 条<br><span class="hint">缺陷检出率 · 标记精确率 · 正例误报率</span></div>
+  </div>
+
+  <div class="step key">
+    <div class="st">
+      <h3>9 · 列端渣格闸<span class="tag">判空</span></h3>
+      <p>清理后只剩条痕残渣的端格判成空格，不产出字块。抬头位另立严判据——那儿绝大多数列本来就空，最大连通体不足半格高就判空。</p>
+    </div>
+    <div class="probe"><b>测试集</b>instances 的 not_text 类 · 42 条</div>
+  </div>
+
+  <div class="step">
+    <div class="st">
+      <h3>10 · 夹注 a/b 拆分<span class="tag">拆分</span></h3>
+      <p>双行小注的格拆成 a（右子列）/ b（左子列）两个半宽实例，读序是段内先读完全部 a 再读全部 b。</p>
+    </div>
+    <div class="probe"><b>测试集</b>暂无专项<br><span class="none">按你定的「不要太差就可以」，目前靠目检：vol01 拆 10 列、vol02 拆 65 列</span></div>
+  </div>
+
+</div>
+</section>
+
+<section>
+<h2><span class="num">测 试 集</span>输入是什么，标注怎么来</h2>
+<p class="sub">标注来源分四类，可靠性和维护成本完全不同。最要紧的一条设计原则是：<b>输入必须自含</b>——测试集自己带着输入图，不依赖当前产物，否则一改切分，测的就不再是同一件事了。</p>
+
+<div class="tw">
+<table>
+<thead><tr>
+  <th>分片</th><th>输入是什么</th><th>标注怎么来</th><th class="num-c">规模</th><th>主指标</th>
+</tr></thead>
+<tbody>
+<tr><td class="nm">page-type</td><td>整页图</td><td>人工标页型<span class="hint">body / cover / label / blank …</span></td><td class="num-c">394 页</td><td>策略准确率 · 误跳过正文页</td></tr>
+<tr><td class="nm">page-geometry</td><td>整页图</td><td>人工标界行位置</td><td class="num-c">39 页 / 353 线</td><td>列数正确页 · 界行落入列框</td></tr>
+<tr><td class="nm">column-layout</td><td>页图 + 列框</td><td>人工标每列列型</td><td class="num-c">36 页 / 289 列</td><td>列型准确率 · elastic F1</td></tr>
+<tr><td class="nm">cells</td><td>合成页</td><td>合成时像素归属已知</td><td class="num-c">60 例</td><td>逐像素归属</td></tr>
+<tr><td class="nm">instances</td><td>产物图块</td><td>你在审查页上判 <span class="pill z">错</span> <span class="pill">无误</span> <span class="pill w">存疑</span></td><td class="num-c">426 条</td><td>缺陷检出 · 标记精确 · 正例误报</td></tr>
+<tr><td class="nm">review_recrop</td><td>产物 + 原图</td><td>你手画正确的字框</td><td class="num-c">24 条</td><td>IoU ≥ 0.85 且覆盖 ≥ 95% 墨</td></tr>
+<tr><td class="nm">frame-strip</td><td>产物图块</td><td>你判「带框 / 干净」+ 冻结字身墨量基线</td><td class="num-c">65 条</td><td>残余率 · 误剥率 · 字保全</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<p><b>为什么 frame-strip 要单独立一个分片</b></p>
+<p>因为你定了两步口径：第一步看框的位置对不对，第二步才看边缘的框线处理干不干净。这两件事混在一个指标里就没法判断改动有没有效——所以 frame-strip 只量第二步，它的 55 条「带框」样本在第一步全部算通过。</p>
+<p>它存的不是「这条对不对」，而是<b>字身墨量的基线数字</b>。这样每次改动我自己就能跑回归（剥框不该让字身少一个像素），只在定版时请你抽样复核。</p>
+</div>
+</section>
+
+<section>
+<h2><span class="num">标 注 去 向</span>你标的都用上了吗</h2>
+<p class="sub">这次盘点下来：<b>之前没有全部用上</b>。r4 有 42 条、r5 全部 21 条、r2 有 3 条从来没进过任何分片——建 frame-strip 时只收了列端格，中段格说「归 instances」却没实际加进去。已经补齐。</p>
+
+<div class="tw">
+<table>
+<thead><tr>
+  <th>批次</th><th class="num-c">条数</th><th class="num-c">入 instances</th><th class="num-c">入 frame-strip</th><th class="num-c">退役</th><th>说明</th>
+</tr></thead>
+<tbody>
+<tr><td class="nm">自评 r1</td><td class="num-c">240</td><td class="num-c">149</td><td class="num-c">—</td><td class="num-c">—</td><td>模型自标 + 你裁决</td></tr>
+<tr><td class="nm">recrop</td><td class="num-c">24</td><td class="num-c">24</td><td class="num-c">—</td><td class="num-c">0</td><td>手画框，一直在用</td></tr>
+<tr><td class="nm">r2</td><td class="num-c">45</td><td class="num-c">39</td><td class="num-c">15</td><td class="num-c">0</td><td>补入 3 条</td></tr>
+<tr><td class="nm">r3</td><td class="num-c">55</td><td class="num-c">49</td><td class="num-c">22</td><td class="num-c">0</td><td>全部在用</td></tr>
+<tr><td class="nm">r4</td><td class="num-c">153</td><td class="num-c">61</td><td class="num-c">65</td><td class="num-c">41</td><td>补入 12 条；p33 的 20 条格位漂移退役</td></tr>
+<tr><td class="nm">r5</td><td class="num-c">21</td><td class="num-c">20</td><td class="num-c">—</td><td class="num-c">1</td><td>本次全部补入</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<p><b>新加了一个 healed 字段</b></p>
+<p>13 条是「你当时判错、后来被修好了」的。金标漂移一直在系统性压低检出率——已修复的旧缺陷仍挂着缺陷标签，分母里塞满了不存在的病。现在把它显式标出来，评测可以选择排除或单列。</p>
+<p><b>退役的 41 条</b>是格位漂移：p33 补了抬头行之后从 21 格变 22 格，「第几格」的语义整体平移了一位，不可迁移。这类我一律退役重标，不硬迁——硬迁会把错标混进金标，比少几条样本危险得多。</p>
+</div>
+</section>
+
+<section>
+<h2><span class="num">当 前 水 平</span>数字</h2>
+<p class="sub">2026-08-25 最新产物。红色是红线指标（破了就是事故），绿色是这几轮改善明显的。</p>
+
+<div class="mgrid">
+  <div class="m grn"><div class="lbl">页型判别</div><div class="val">99.5%</div><div class="sub2">394 页 · 误跳过正文页 0</div></div>
+  <div class="m"><div class="lbl">列数完全正确</div><div class="val">38<span style="font-size:17px;color:var(--ink3)">/39</span></div><div class="sub2">界行落入列框的坏页 0</div></div>
+  <div class="m grn"><div class="lbl">重切框吻合<span class="hint">你手画的 24 条</span></div><div class="val">20<span style="font-size:17px;color:var(--ink3)">/24</span></div><div class="sub2">本轮之前是 13/24</div></div>
+  <div class="m grn"><div class="lbl">去框后仍有框渣</div><div class="val">9%</div><div class="sub2">矩形剥离时是 19%</div></div>
+  <div class="m red"><div class="lbl">字身墨保全<span class="hint">你的红线</span></div><div class="val">100%</div><div class="sub2">65/65 · 误剥 0%</div></div>
+  <div class="m"><div class="lbl">保守聚类 purity</div><div class="val">1.00</div><div class="sub2">clean / degraded 两层</div></div>
+</div>
+
+<div class="note">
+<p><b>有一个数字要当心：图块自检的「缺陷检出率 31%」</b></p>
+<p>它被系统性压低了。金标里很多缺陷已经被修好——图块变干净了，但标签还写着旧缺陷名，分母里塞满了不存在的病。要看逐条明细，不要看这个总数。新加的 <code>healed</code> 字段就是为了让这件事可量化。</p>
+</div>
+</section>
+
+<section>
+<h2><span class="num">缺 口</span>还没有测试集的地方</h2>
+<div class="tw">
+<table>
+<thead><tr><th>步骤</th><th>现在靠什么把关</th><th>该建什么</th></tr></thead>
+<tbody>
+<tr><td class="nm">抬头行</td><td>整册扫描 + 目检<span class="hint">vol01 触发 5 页，其余 196 页格线逐字节不变</span></td><td>抬头页金标：每页每列的实际字数，指标 = 漏字数（红线 0）</td></tr>
+<tr><td class="nm">夹注 a/b 拆分</td><td>目检<span class="hint">vol01 拆 10 列、vol02 拆 65 列</span></td><td>夹注段金标：段位 + 每格 a/b 的正确切缝</td></tr>
+<tr><td class="nm">上游裁切吃字</td><td>无<span class="hint">p50/p70/p195 的抬头字曾被裁剪窗切掉</span></td><td>并入抬头页金标一起量</td></tr>
+<tr><td class="nm">上下接壤的字</td><td>instances 的粘连类条目<span class="hint">你最新一轮反馈的主要剩余问题</span></td><td>粘连专项分片：切缝位置的人工标注</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+</div>
