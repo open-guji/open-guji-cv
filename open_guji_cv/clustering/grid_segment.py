@@ -66,6 +66,14 @@ SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于
                            # 根本没有空隙，保持刚性位置
 SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
+SNAP_TIGHT = 0.10          # 「无谷微挪」半径（× 格高，≈11px）。上下两字真连在
+                           # 一起时没有谷可吸附，但**这一行墨更少**仍是硬事实。
+                           # 与一档吸附同半径：半格是 57px，11px 根本挪不到
+                           # 邻格的空隙上去，「把整个字让给隔壁」的风险不存在。
+                           # 实测正文页重切缝 1685 → 620（扫参见
+                           # char_clustering_design.md「上下接壤」一节）。
+SNAP_TIGHT_GAIN = 0.15     # 微挪至少要把切缝墨压低这么多（× 参考墨量）才动。
+                           # 防止在噪声上抖：墨量本来就平的地方不折腾。
 PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
 RULE_IN_COL_T = 0.05       # rule_in_col 超此 → 页面自己报了「竖线落在列框里」，
                            # 即便所有参数都在共识容差内也要按共识先验重扫一次。
@@ -1180,6 +1188,33 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
     return best
 
 
+def _micro_slide(sm: np.ndarray, bi: int, cell_h: float,
+                 ref: float, fallback: float) -> float:
+    """无谷时的微挪：在 ±SNAP_TIGHT×格高 内挪到墨最少的一行。
+
+    「谷判据」是为了拦住大幅吸附（滑到邻格空隙 = 把整个字送给隔壁），
+    但它一票否决之后，线就**原地不动**了——而实测正文页 1685 条重切缝
+    里有 926 条只要挪 6px 就能显著变瘦，位移中位数只有 6~10px。而所谓
+    「送字」的风险在这个半径下根本不存在：半格 57px，滑动半径只有 11px。
+    剩下的只是「同样要切一刀，切在笔画薄的地方」。
+
+    仍然要求墨量**明显**下降（≥ SNAP_TIGHT_GAIN×参考墨），否则原位不动：
+    平坦区抖动一两像素毫无意义，只会让产物在无关的重跑之间漂。
+    """
+    L = len(sm)
+    bi = min(max(bi, 0), L - 1)
+    r2 = max(1, int(round(SNAP_TIGHT * cell_h)))
+    lo, hi = max(0, bi - r2), min(L, bi + r2 + 1)
+    win = sm[lo:hi]
+    if win.size < 3:
+        return fallback
+    m = float(win.min())
+    if float(sm[bi]) - m < SNAP_TIGHT_GAIN * ref:
+        return fallback
+    cand = np.flatnonzero(win <= m + 1e-9) + lo
+    return float(cand[np.argmin(np.abs(cand - bi))])
+
+
 def snap_bounds_to_gaps(proj: np.ndarray, bounds: list[float],
                         cell_h: float) -> list[float]:
     """逐条格线滑到**字间空隙**（局部墨谷）。
@@ -1220,7 +1255,9 @@ def snap_bounds_to_gaps(proj: np.ndarray, bounds: list[float],
         ref = float(sm[a0:a1].mean()) if a1 > a0 else 0.0
         m = float(win.min())
         if ref > 0 and m > SNAP_VALLEY_T * ref:
-            out.append(float(b)); continue          # 这里本来就没有空隙
+            # 没有空隙 → 不做大幅吸附，但仍在**微挪**半径内找更瘦的一刀
+            out.append(_micro_slide(sm, bi, cell_h, ref, float(b)))
+            continue
         cand = np.flatnonzero(win <= m + 1e-9) + lo
         out.append(float(cand[np.argmin(np.abs(cand - bi))]))
     # 保序：吸附半径 < 半格，正常不会交叉；真交叉了就退回原位
