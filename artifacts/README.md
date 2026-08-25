@@ -22,6 +22,12 @@
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
 
+## 说明页（静态，讲清楚管线怎么运作）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **从版面到字块**（切分层分步算法 + 每步测试集 + 标注去向盘点）| https://claude.ai/code/artifact/2a8475ed-dc47-454c-b1fc-049a89be0b7a | [seg_layer_explainer.html](seg_layer_explainer.html) | 手写，随管线改动更新 |
+
 ## 分析报告（静态，作决策依据引用）
 
 | 页面 | URL | 快照 | 说明 |
