@@ -17,10 +17,22 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_patch_review.py --pages vol01:20-27 vol02:1-8 --quality 70` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）|
+| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 图块数据即产物；**朱批真源** [marks/patch_review_marks.json](marks/patch_review_marks.json)（264 条）| `scripts/build_patch_review.py --pages vol01:38,70,88,50 vol02:18,31,41,43,52,67,73,77,89,92,97,108,124,137,153,155,152 --quality 52` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）。**HTML 快照不入库**（14MB，图块本来就在 output/ 里）。当前第十轮 = 文字带窗口救回来的 19 页 + 2 页仍偏短 |
 | 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20 --quality 62` + 壳模板 [shells/seg_review_shell.html](shells/seg_review_shell.html) |
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
+
+**⚠ 重切/重扫之后，朱批也会漂。** 朱批键在 `book/page:col:idx` 上，跟
+`char-segmentation/instances` 一样是**会漂的**。2026-08-25 文字带窗口救援
+让 vol01/70 整列多出一行，挂在它上面的 11 条朱批全体错位一格。规矩与
+金标一致：**先查漂移，再谈数字**——逐条比 bbox 找出最佳位移，再把旧图块
+与位移后的新图块并排渲染**逐个看**，确认是同一个字才改键。那一次 9 条
+确认重键（紫/香/對/設/冠/粉/署/徵/其），2 条看不出对应关系就摘掉、
+等用户在新一批里重标，绝不猜。
+
+真源存在 [marks/patch_review_marks.json](marks/patch_review_marks.json)，
+每次发布前**必须先 `Artifact action:"read"` 读回页面里的实时 `marks-data`**
+并以它为准——用户可能有还没导出的朱批，直接拿旧文件重发会盖掉。
 
 朱批口径：点一下=切错、两下=无误、三下=存疑、四下=清除。**自检橙边
 默认关**（用户 r7「自检太多了我就没消除」），要看点工具栏「自检框」，

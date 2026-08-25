@@ -26,6 +26,10 @@ def main() -> None:
     rows = json.loads(
         (Path(args.dataset) / "side-rule" / "expected.json")
         .read_text(encoding="utf-8"))
+    # 退役样本不计分：`retired` 字段里写着为什么这条不再对应任何图块
+    # （多半是所在列被重切、基线无法核对）。留在文件里是为了留档，
+    # 不是为了每轮都失败一次。
+    rows = [e for e in rows if not e.get("retired")]
 
     bands: dict[tuple[str, str], dict] = {}
     index: dict[tuple[str, str], dict] = {}
