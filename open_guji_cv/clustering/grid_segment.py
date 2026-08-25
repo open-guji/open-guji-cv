@@ -1874,15 +1874,22 @@ class GridSegmenter:
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
             else:
                 # 版框行锚定：在去错切帧上量上下框线，换算到裁剪窗坐标。
-                # 框线磨没检不出时用裁剪边兜底——s3 裁切的上/下边**就是**
-                # 按框线裁的（构造性事实；实测 vol01/12 0+21×格高 与 H 只
-                # 差 4px）。跨度门控仍在 fit 里把关：框高与 n 格不合的
-                # 特殊页（短框/卷末）自动不锚。
+                # 框线磨没检不出时的兜底：上框用裁剪顶 0（s3 的上边就是按
+                # 框线裁的，构造性事实）；下框用**墨底**而非页底 H——下框
+                # 磨损时 s3 内线搜索会在框上方停下、页底留大段空白
+                # （vol01/22 实测 300px，H 兜底差 13.4% 被跨度门拒），而
+                # 框碎渣 + 末行字仍让墨迹恰好断在框位（实测差 +1.6%）。
+                # 跨度门控仍在 fit 里把关，框高与 n 格不合的特殊页不锚。
                 ft, fb = measure_row_frames(image)
                 if ft is None:
                     ft = 0
                 if fb is None:
-                    fb = image.shape[0]
+                    g2 = image if image.ndim == 2 \
+                        else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                    ri = (g2 < BINARY_THRESHOLD).sum(axis=1) \
+                        / max(1, g2.shape[1])
+                    nz = np.nonzero(ri >= 0.05)[0]
+                    fb = int(nz[-1]) + 6 if nz.size else image.shape[0]
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],
