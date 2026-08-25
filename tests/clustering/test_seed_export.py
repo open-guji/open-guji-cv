@@ -350,3 +350,24 @@ def test_multi_page_batch(tmp_path):
     assert b["page"] == "14+15"
     assert [e["instance_id"] for e in b["entries"]] == [
         "tb:14:1:0", "tb:14:1:1", "tb:15:1:0", "tb:15:1:1"]
+
+
+def test_card_shows_column_sequence_not_raw_idx(tmp_path):
+    """卡头的「第几字」= 该列 char 的实际位次（1 起），不是格号 idx。
+
+    idx 是格号：空格位也占号、从 0 起。拿它当序号，用户对着原图数会
+    错位（2026-08-25 实锤）。context.pos 也不行——那按 OCR 载体算，
+    载体缺格时同样对不上。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    assert "第2列第3字" in html          # seq，不是 idx+1=6，也不是 5
