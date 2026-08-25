@@ -11,7 +11,8 @@ publish 成功后 shell 会重载视图，故滚动位置要先存 sessionStorag
 - 常量 ``BATCH``（批次 id）；
 - ``list``：卡片容器元素；
 - ``progress()``：每次发事件后刷新进度显示；
-- ``cardOf(iid)`` / ``setActive(card)``：恢复视图时定位到上次那张卡；
+- ``cardOf(iid)`` / ``setActive(card)``：恢复视图时定位到上次那张卡
+  （``setActive`` 只在没有存下滚动位置时才用——见 ``restoreView`` 注释）；
 - 手输框类名 ``.other-in``（正在输入时推迟发布，别把半截字存进去）。
 
 事件格式与 ``seed_queue.SEED_EVENT_PREFIX`` 同源，故两个页面产出的
@@ -87,6 +88,14 @@ PERSIST_JS = """  var log = document.getElementById('guji-log');
     var html = '<!doctype html>\\n' + document.documentElement.outerHTML;
     if(a) a.classList.add('active');
     return html; }
+  // 視圖位置**持續**記錄，不能只在 publish 那一刻記（2026-08-25 用戶
+  // 實錘「focus 經常自己跳到之前的某個地方」）。publish 是裁決後 6 秒
+  // 防抖觸發、網絡再走幾秒，成功後 shell 才重載本視圖——這期間用戶早
+  // 已往下審了好幾張。只在 publishNow() 裡 stash 一次，重載後就把人
+  // 拽回**發布那一刻**的卡片，隔多遠取決於這段飛行時間。
+  // 治法：滾動（含 setActive 的平滑滾動）安定後就刷新 stash，於是無論
+  // shell 什麼時候重載，恢復的都是使用者當下的位置。
+  var viewTimer = 0;
   function stashView(){
     try {
       var a = list.querySelector('.card.active');
@@ -94,14 +103,24 @@ PERSIST_JS = """  var log = document.getElementById('guji-log');
         iid: a ? a.getAttribute('data-iid') : null,
         y: window.scrollY || 0 }));
     } catch(e){} }
+  function trackView(){
+    clearTimeout(viewTimer); viewTimer = setTimeout(stashView, 200); }
+  try { addEventListener('scroll', trackView, {passive: true}); } catch(e){}
   function restoreView(){
     try {
       var raw = sessionStorage.getItem(LSKEY + ':view');
       if(!raw) return;
       sessionStorage.removeItem(LSKEY + ':view');
       var v = JSON.parse(raw);
-      if(v.iid){ var c = cardOf(v.iid); if(c){ setActive(c); return; } }
-      if(v.y) window.scrollTo(0, v.y);
+      var c = v.iid ? cardOf(v.iid) : null;
+      // 標記 active 但**不滾動**：重載後 DOM 一模一樣，存下的 y 是像素
+      // 精確的，比 scrollIntoView 再算一次穩，也沒有平滑動畫那一下晃。
+      if(c){
+        var a = list.querySelector('.card.active');
+        if(a && a !== c) a.classList.remove('active');
+        c.classList.add('active'); }
+      if(typeof v.y === 'number' && v.y >= 0) window.scrollTo(0, v.y);
+      else if(c) setActive(c);
     } catch(e){} }
 
   function publishNow(){
@@ -132,9 +151,10 @@ PERSIST_JS = """  var log = document.getElementById('guji-log');
   function schedulePublish(){
     status('未儲存…');
     clearTimeout(pubTimer); pubTimer = setTimeout(publishNow, 6000); }
-  window.addEventListener('beforeunload', function(){ saveLocal(); });
+  window.addEventListener('beforeunload', function(){
+    saveLocal(); stashView(); });
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'hidden'){ saveLocal(); } });
+    if(document.visibilityState === 'hidden'){ saveLocal(); stashView(); } });
 
   // ── 事件發射 ──
   function seqNext(){
