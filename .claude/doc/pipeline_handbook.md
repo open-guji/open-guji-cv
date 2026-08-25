@@ -355,8 +355,9 @@ G6 四组可以同时开工，互相不踩脚。
 char_clustering_design.md 末节）。失败 39 格中 36 带旗，无声漏网 3。
 模型自标注分片 `instances/self_assess_r1.json`（`label_origin=model`，
 不进人工层 eval）；剩余专题：混入类（邻字残余为主，7 例）；
-grid_shift 族已在算法层根治（逐页格高，见 char_clustering_design.md
-末节），产物重建与金标重键并入 #9。**#9 重建轮已完成（2026-08-24）：output/ 已是
+grid_shift 族已根治（逐页格高）；相位族「整版下坠一格」亦已根治
+（版框行锚定，用户 p20 实审回流，174→21 页，详见
+char_clustering_design.md 末两节）。**#9 重建轮已完成（2026-08-24）：output/ 已是
 四件套（s3 救援 + s4 闸 + 逐页格高 + 渣格闸）重建产物，基准数字见
 char_clustering_design.md 末节；下游 phase5+/聚类识别需在新产物上重跑。**
 
