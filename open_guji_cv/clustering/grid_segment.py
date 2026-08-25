@@ -874,36 +874,62 @@ def head_raise_rows(image: np.ndarray, text_cols: list, page_phase: float,
                     ) -> int:
     """需要在网格顶部补几行抬头位。0 表示不是抬头页。
 
-    text_cols 里每项是 (col_result, crop, proj)——crop 已是列条带，
-    其行坐标与 page_phase 同系（都相对裁剪窗 y1）。
+    量在**全图**上做，不用 crop：抬头字常落在裁切窗之上（内框检测把
+    普通首行当内框顶时尤其如此），拿 crop 量根本看不见它。补行不需要
+    扩窗——格位是全图坐标，抬头行照样切得到。
     """
     if cell_h <= 0 or not text_cols:
         return 0
-    top = int(round(page_phase))
-    if top <= 2:
+    g = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    top_abs = int(round(y1 + page_phase))          # 网格首线的全图 y
+    if top_abs <= 2:
         return 0
     best_per_col = []
-    for _col, crop, _proj in text_cols:
-        band = crop[:min(top, crop.shape[0])]
+    for col, _crop, _proj in text_cols:
+        x0 = int(col.get("left_x", 0))
+        x1 = int(col.get("right_x", 0))
+        if x1 - x0 < 8:
+            continue
+        band = g[:min(top_abs, g.shape[0]), max(0, x0):min(g.shape[1], x1)]
         if band.size == 0:
             best_per_col.append(0)
             continue
-        g = band if band.ndim == 2 else cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
-        rows = (g < BINARY_THRESHOLD).sum(axis=1) / max(1, g.shape[1])
+        rows = (band < BINARY_THRESHOLD).sum(axis=1) / max(1, band.shape[1])
         best = cur = 0
         for v in rows:
             cur = cur + 1 if v >= HEAD_RAISE_INK else 0
             best = max(best, cur)
         best_per_col.append(best)
-    n_head = sum(1 for b in best_per_col if b >= HEAD_RAISE_T * cell_h)
-    if n_head < HEAD_RAISE_COLS:
+    if not best_per_col:
         return 0
-    k = int(np.ceil(max(best_per_col) / cell_h))
-    k = max(1, min(k, HEAD_RAISE_MAX))
-    # 扩出的行必须还在版框内：框顶给定时按它设上限
-    if frame_top is not None:
-        room = int((page_phase - frame_top) // cell_h)
-        k = min(k, max(0, room))
+    if sum(1 for b in best_per_col if b >= HEAD_RAISE_T * cell_h) \
+            < HEAD_RAISE_COLS:
+        return 0
+    # 补几行：从网格顶**逐格上探**——清代抬头分平抬/单抬/双抬/三抬，
+    # 同一页不同列抬的格数还不一样（p70 实测「召驥」「天潢」两列抬两格，
+    # 其余列抬一格）。拿「最长连续墨段」一次定 k 会漏掉抬两格的列：那
+    # 两个字之间断开时，最长段只有一格。
+    k = 0
+    while k < HEAD_RAISE_MAX:
+        hi = top_abs - int(round(k * cell_h))
+        lo_b = hi - int(round(cell_h))
+        if lo_b < 0:
+            break
+        n_ink = 0
+        for col, _c, _p in text_cols:
+            x0 = int(col.get("left_x", 0))
+            x1 = int(col.get("right_x", 0))
+            if x1 - x0 < 8:
+                continue
+            band = g[lo_b:hi, max(0, x0):min(g.shape[1], x1)]
+            if band.size == 0:
+                continue
+            rows = (band < BINARY_THRESHOLD).sum(axis=1) / max(1, band.shape[1])
+            if int((rows >= HEAD_RAISE_INK).sum()) >= HEAD_RAISE_T * cell_h:
+                n_ink += 1
+        if n_ink < HEAD_RAISE_COLS:
+            break
+        k += 1
     return k
 
 
@@ -1929,6 +1955,7 @@ class GridSegmenter:
 
         # 第一遍：收集文字列裁切与投影
         text_cols: list[tuple[dict, np.ndarray, np.ndarray]] = []
+        col_xs: list[tuple[int, int]] = []      # 各文字列的裁切 x 范围
         result_columns = []
         for col in columns_info:
             left_x, right_x = float(col["left_x"]), float(col["right_x"])
@@ -1948,6 +1975,7 @@ class GridSegmenter:
                 continue
             crop = image[y1:y2, x1:x2]
             text_cols.append((col_result, crop, column_projection(crop)))
+            col_xs.append((x1, x2))
 
         # 刚性网格模型：刻本整版先划栏格再上字，**格高固定、跨列统一**；
         # 列首/列尾空格占格位但无墨（判空处理），网格锚定栏格周期证据
@@ -1998,21 +2026,34 @@ class GridSegmenter:
                     # 清晰」）锚定退化成裁剪顶兜底，会把相位钉在原处——
                     # 那样既没捡回抬头字，又多出一个越过下框的空格。因此
                     # 拟合结果偏离几何值超过半格时以几何值为准。
-                    want = page_phase - k_head * cell_h
-                    if want < -0.05 * cell_h:
-                        k_head = 0          # 抬头位在裁剪窗外，网格层够不着
+                    # 相位已由原窗（只含正文带）拟出，抬头位就是它上方
+                    # k 格。窗不够时**扩窗重裁**——先拟合后扩窗，反过来
+                    # 做会把抬头墨喂给拟合，网格整体被拉上去（实测 p32
+                    # 首格 404→283、末字掉出网格）。
+                    shift = int(round(k_head * cell_h))
+                    want = page_phase - shift
+                    if want < 0:
+                        room = y1                      # 窗顶还能往上让多少
+                        take = min(room, -int(np.floor(want)))
+                        if take > 0:
+                            y1 -= take
+                            page_phase += take
+                            want += take
+                            text_cols = [
+                                (c, image[y1:y2, xs[0]:xs[1]],
+                                 column_projection(image[y1:y2,
+                                                         xs[0]:xs[1]]))
+                                for (c, _cr, _p), xs in zip(text_cols,
+                                                            col_xs)]
+                            if ft_rel is not None:
+                                ft_rel += take
+                            if fb_rel is not None:
+                                fb_rel += take
+                    if want < 0:
+                        k_head = 0          # 全图都放不下，据实不补
                     else:
                         n += k_head
-                        p2, h2 = fit_page_grid(
-                            [p for _, _, p in text_cols], n,
-                            full_widths=[crop.shape[1]
-                                         for _, crop, _ in text_cols],
-                            cell_h_fixed=cell_h_prior,
-                            frame_top=ft_rel, frame_bottom=fb_rel)
-                        if abs(p2 - want) <= 0.5 * cell_h:
-                            page_phase, cell_h = p2, h2
-                        else:
-                            page_phase = max(0.0, want)
+                        page_phase = want
                         grid_meta["head_raise_rows"] = int(k_head)
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
