@@ -28,9 +28,8 @@ sys.path.insert(0, str(REPO))
 
 import cv2  # noqa: E402
 
-from open_guji_cv.clustering.normalize import normalize_patch  # noqa: E402
-from open_guji_cv.clustering.normalize_eval import (  # noqa: E402
-    binary_iou, pixel_diff_ratio, skeleton_nodes, to_binary)
+from open_guji_cv.clustering.normalize import normalize_patch, skeletonize  # noqa: E402
+from open_guji_cv.clustering.normalize_eval import check_sample, to_binary  # noqa: E402
 
 
 def main() -> None:
@@ -44,7 +43,7 @@ def main() -> None:
     v = json.loads(Path(args.verdicts).read_text(encoding="utf-8"))
     ok, bad, pend = set(v.get("可以", [])), set(v.get("有问题", [])), set(v.get("待定", []))
     root = Path(args.dataset) / "samples"
-    n_re = n_same = 0
+    n_re = n_same = n_skel = 0
     for d in sorted(p for p in root.iterdir() if (p / "expected.json").exists()):
         spec = json.loads((d / "expected.json").read_text(encoding="utf-8"))
         gray = cv2.imread(str(d / spec["input"]), cv2.IMREAD_GRAYSCALE)
@@ -62,6 +61,13 @@ def main() -> None:
                         spec["status"] = "verified"
             else:
                 n_same += 1
+            # `golden_skeleton` 是**另一份**冻结产物，评测的拓扑那一项读的是它，
+            # 不是从 golden 现算的。所以**无论 golden 变没变都要重写**：
+            # 第一版只在 golden 变了时写，结果留下一份对不上的骨架，而且
+            # 自查还查不出来（自查当时是自己重算的，恒为 0）。
+            if not args.dry_run and spec.get("golden_skeleton"):
+                cv2.imwrite(str(d / spec["golden_skeleton"]), skeletonize(new) * 255)
+                n_skel += 1
         elif d.name in bad:
             spec["status"] = "known_defect"
             spec["defect"] = (spec.get("defect") or "") + "｜人裁：新输出本身就错"
@@ -76,22 +82,20 @@ def main() -> None:
               f"{'待定' if d.name in pend else ''}"
               f"{'' if changed else '（输出未变）'}")
     print(f"\n可以 {len(ok)}（其中输出变了、已重冻 {n_re}；未变 {n_same}）"
-          f"  有问题 {len(bad)}  待定 {len(pend)}")
+          f"  骨架重写 {n_skel}  有问题 {len(bad)}  待定 {len(pend)}")
 
-    # 重冻之后全集必须过回归门
+    # 重冻之后全集必须过回归门——**调评测本身的 check_sample**，不要在这里
+    # 重写一遍判据。第一版就是自己重算 golden 与 new 的骨架端点差，那个数
+    # 按定义恒为 0，自查永远通过，而真正的评测读的是冻结的 golden_skeleton，
+    # 当场就挂了。自查抄一遍判据 = 没有自查。
     fail = []
     for d in sorted(p for p in root.iterdir() if (p / "expected.json").exists()):
         spec = json.loads((d / "expected.json").read_text(encoding="utf-8"))
         gray = cv2.imread(str(d / spec["input"]), cv2.IMREAD_GRAYSCALE)
-        gold = to_binary(cv2.imread(str(d / spec["golden"]), cv2.IMREAD_GRAYSCALE))
-        new = normalize_patch(gray)
-        t = spec["tolerance"]
-        ge, _ = skeleton_nodes(gold)
-        ne, _ = skeleton_nodes(new)
-        if not (pixel_diff_ratio(gold, new) <= t["pixel_diff_ratio"]
-                and binary_iou(gold, new) >= t["binary_iou_min"]
-                and abs(ne - ge) <= t["skeleton_endpoint_delta_max"]):
-            fail.append(d.name)
+        produced = normalize_patch(gray)
+        r = check_sample(d, produced, skeletonize(produced))
+        if not r.passed:
+            fail.append((d.name, r.reasons))
     print(f"回归门：{len(fail)} 张出容差 {fail if fail else ''}")
 
 
