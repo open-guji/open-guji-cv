@@ -738,6 +738,7 @@ SPLIT_CURVE_EPS = 0.02     # 距格线偏离的微小代价（px⁻¹），墨�
 # 不再卡 MIN_PIECE——窄带同时守住「草的艹被切走」老病灶（那道错缝在
 # g+0.3 格高，够不着窄带）。
 SPLIT_FRAG_WIN = 0.07      # 碎片粘连时的准切窄带（× 格高）
+SPLIT_CURVE_BUDGET = 0.5   # 曲刀墨预算 = 此系数×NECK_ABS×列宽（比直刀紧）
 
 
 def _column_binary(col_gray: np.ndarray) -> np.ndarray:
@@ -937,7 +938,10 @@ def _split_touching_curve(binary: np.ndarray,
             band = band + SPLIT_CURVE_EPS * np.abs(rows - g)[:, None] / cell_h
             path = _min_ink_path(band)
             pierced = int(comp[path + lo, np.arange(W)].sum())
-            if pierced > NECK_ABS * col_w:
+            # 曲刀预算比直刀紧一半：好缝实测穿墨仅 1~20px，收紧只挡
+            # 坏刀——防止在重度磨损页的噪糊粘连里硬穿割断真笔画
+            # （调查报告任务B风险项，reg_167_9_277）
+            if pierced > SPLIT_CURVE_BUDGET * NECK_ABS * col_w:
                 continue                              # 颈太厚，留给硬切
             r_rows = path + lo
             r_mean = float(r_rows.mean())
