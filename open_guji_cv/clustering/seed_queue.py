@@ -86,6 +86,10 @@ STATUS_RECROPPED = "confirmed_recropped"   # 已废（2026-08-24 起重切是纯
 #                                    # 几何事件，不再有独立状态；旧队列
 #                                    # 行可能残留此值，读取侧仍需认识）
 STATUS_SKIPPED = "skipped"           # 用户存疑跳过，留在队列
+STATUS_EXCLUDED = "excluded"         # 在 config/crop_exclusions.jsonl 排除名单里：
+#                                    # 图块被判切坏/带残留，**不进库也不出审查卡**。
+#                                    # 落队列行只为留账（note 记名单里的 reason），
+#                                    # 重扫之后按名单逐条复核再决定放不放回来。
 
 
 @dataclass
