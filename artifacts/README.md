@@ -22,6 +22,16 @@
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
 
+## 归一化（G3 工作流）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **笔宽归一复核台**（撤除笔宽归一，golden 重冻的人工目视门）| https://claude.ai/code/artifact/cd2fee67-fb9d-4519-870a-41413b9c87d3 | [norm_stroke_review.html](norm_stroke_review.html) | `scripts/build_norm_stroke_review.py --dataset ../open-guji-dataset/char-normalization` |
+
+改 `normalize_patch` 会让 char-normalization 的 37 张 golden 全部出容差，而那层
+按规矩是**人工目视门**（「输出本身就错的绝不冻成 golden」）。本页把
+原图 / 现 golden / 新输出 三联并排，裁决经页内「复制裁决」按钮回流。
+
 ## 分析报告（静态，作决策依据引用）
 
 | 页面 | URL | 快照 | 说明 |
