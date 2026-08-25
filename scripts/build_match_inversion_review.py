@@ -60,7 +60,8 @@ TITLE = "形近误判裁决台"
 
 
 # ---------------------------------------------------------------- 候选挖掘
-def mine_inversions(dump: Path, chars: dict[str, str]) -> dict[str, dict]:
+def mine_inversions(dump: Path, chars: dict[str, str],
+                    skip: frozenset[str] = frozenset()) -> dict[str, dict]:
     """→ {anchor: {same, other, cov_same, cov_other}}。
 
     label 一律拿 `chars`（数据集当前金标）现算，不信 dump 里存的那份——
@@ -71,6 +72,8 @@ def mine_inversions(dump: Path, chars: dict[str, str]) -> dict[str, dict]:
     best_same: dict[str, tuple[float, str]] = defaultdict(lambda: (-1.0, ""))
     best_diff: dict[str, tuple[float, str]] = defaultdict(lambda: (-1.0, ""))
     for k, p in enumerate(pairs):
+        if p["a"] in skip or p["b"] in skip:   # 排除名单里的图块不参与挖掘
+            continue
         tgt = best_same if chars[p["a"]] == chars[p["b"]] else best_diff
         for x, y in ((p["a"], p["b"]), (p["b"], p["a"])):
             if cov[k] > tgt[x][0]:
@@ -98,16 +101,21 @@ def merge_cards(frozen: Path, fresh: dict[str, dict], meta: dict[str, dict]
         cur = fresh.get(a)
         new = dict(c)
         new["resolved"] = cur is None
-        if cur:
-            new.update(cur)
-        # 字头一律刷成数据集现值，并记下改了哪一格
+        # 「已订正」只记**同一个实例的金标改判**。挖掘会重新挑最近邻，
+        # 槽位换了实例时字头当然不一样——那不是改判，拿它当改判会满屏
+        # 假的「已订正 易 → 董」。所以先按旧实例比字头，再更新槽位。
         fixed = []
         for slot, key in (("anchor", "char"), ("same", "same_char"),
                           ("other", "other_char")):
-            now = meta[new[slot]]["char"]
-            if new.get(key) and new[key] != now:
-                fixed.append({"slot": slot, "from": new[key], "to": now})
-            new[key] = now
+            iid = c.get(slot)
+            if iid and c.get(key) and meta[iid]["char"] != c[key]:
+                fixed.append({"slot": slot, "from": c[key],
+                              "to": meta[iid]["char"]})
+        if cur:
+            new.update(cur)
+        for slot, key in (("anchor", "char"), ("same", "same_char"),
+                          ("other", "other_char")):
+            new[key] = meta[new[slot]]["char"]
         new["fixed"] = fixed
         cards.append(new)
     for a, cur in fresh.items():
@@ -166,7 +174,12 @@ def build(dataset: Path, dump: Path, frozen: Path, seed: Path | None) -> dict:
     data = json.loads((dataset / "expected.json").read_text(encoding="utf-8"))
     meta = {r["instance_id"]: r for r in data["instances"]}
     chars = {k: v["char"] for k, v in meta.items()}
-    cards = merge_cards(frozen, mine_inversions(dump, chars), meta)
+    from open_guji_cv.clustering.exclusions import excluded_ids
+    ex = excluded_ids()
+    cards = merge_cards(frozen, mine_inversions(dump, chars, ex), meta)
+    for c in cards:   # 三格里只要有一格被排除，这张卡就不用再裁了
+        c["excluded"] = sorted(
+            {k for k in ("anchor", "same", "other") if c[k] in ex})
 
     out = gray_sources()
     imgs: dict[str, str] = {}
@@ -314,6 +327,8 @@ body{
 .note span{font-size:11.5px; padding:2px 7px; border-radius:2px;}
 .note .fix{color:var(--indigo); background:var(--indigo-soft)}
 .note .done{color:var(--ok); background:var(--ok-soft)}
+.note .gone{color:var(--muted); background:var(--sunk)}
+.card[data-gone]{opacity:.55}
 .note b{font-family:var(--serif); font-weight:700}
 
 .strip{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
@@ -453,6 +468,8 @@ const BODY = `
        右边是打分最高的<b>异字</b>邻居——而右边的分数<b>压过了</b>左边。判据在这个实例上排反了。</p>
     <p>要裁的不是「哪个更像」，是<b>这一例的金标有没有错</b>。裁完自动存，
        顶上那颗标记会说存到哪了。</p>
+    <p>默认只显示<b>待裁</b>的：图块已被移出数据集的、以及金标改判后不再倒挂的，
+       都不用再看了——它们还留在「全部」里备查。</p>
     <div class="rubric">
       <div class="k-keep"><b>可入集</b><span>标签没错，判据确实排反了——收进 hard 子集</span></div>
       <div class="k-bad"><b>标注有误</b><span>金标本身错了（切歪、串行、字头认错）——回流标注层</span></div>
@@ -462,7 +479,8 @@ const BODY = `
   </details>
   <div class="ctrl">
     <div class="seg" id="filter" role="group" aria-label="筛选">
-      <button data-f="all" aria-pressed="true">全部</button>
+      <button data-f="live" aria-pressed="true">待裁</button>
+      <button data-f="all" aria-pressed="false">全部</button>
       <button data-f="todo" aria-pressed="false">未裁</button>
       <button data-f="done" aria-pressed="false">已裁</button>
     </div>
@@ -503,8 +521,11 @@ function card(r){
   const lo = Math.min(r.cov_same, r.cov_other), hi = Math.max(r.cov_same, r.cov_other);
   const notes = (r.fixed||[]).map(f =>
       `<span class="fix">已订正 ${SLOT[f.slot]}　<b>${esc(f.from)}</b> → <b>${esc(f.to)}</b></span>`)
-    .concat(r.resolved ? [`<span class="done">改判后已不再倒挂</span>`] : []).join('');
-  return `<article class="card" data-id="${r.id}"${v?` data-v="${v}"`:''}>
+    .concat((r.excluded||[]).length
+              ? [`<span class="gone">图块已移出数据集（${r.excluded.map(x=>SLOT[x]).join('、')}）</span>`] : [])
+    .concat(r.resolved && !(r.excluded||[]).length
+              ? [`<span class="done">改判后已不再倒挂</span>`] : []).join('');
+  return `<article class="card" data-id="${r.id}"${v?` data-v="${v}"`:''}${(r.excluded||[]).length?' data-gone':''}>
     <div class="ch">
       <span class="pair"><span>${esc(r.char)}</span><span class="vs">敌不过</span>
         <span class="w">${esc(r.other_char)}</span></span>
@@ -547,11 +568,14 @@ const io = new IntersectionObserver(es => {
   }
 }, {rootMargin: '600px 0px'});
 
-let filter = 'all', tight = true;
+let filter = 'live', tight = true;
 const listEl = document.getElementById('list');
 function draw(){
-  let rows = D.rows.filter(r => filter === 'all' ? true
-    : filter === 'done' ? !!verdictOf(r.id) : !verdictOf(r.id));
+  let rows = D.rows.filter(r =>
+      filter === 'all'  ? true
+    : filter === 'done' ? !!verdictOf(r.id)
+    : filter === 'todo' ? !verdictOf(r.id)
+    /* live */          : !verdictOf(r.id) && !(r.excluded||[]).length && !r.resolved);
   rows = rows.slice().sort((a,b) => tight ? Math.abs(a.margin)-Math.abs(b.margin)
                                           : Math.abs(b.margin)-Math.abs(a.margin));
   listEl.innerHTML = rows.length ? rows.map(card).join('')
@@ -566,7 +590,9 @@ function flash(msg){
 }
 function tally(){
   const done = doneCount();
-  document.getElementById('count').textContent = `${done} / ${D.rows.length} 已裁`;
+  const live = D.rows.filter(r => !verdictOf(r.id) && !(r.excluded||[]).length
+                                  && !r.resolved).length;
+  document.getElementById('count').textContent = `待裁 ${live} · 已裁 ${done}/${D.rows.length}`;
   document.getElementById('prog').style.width = (done / D.rows.length * 100) + '%';
 }
 
