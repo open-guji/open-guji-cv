@@ -91,7 +91,8 @@ JIAZHU_SPAN_T = 0.85       # 两个子列合起来占列宽的比例下限（单
 JIAZHU_GAP_MIN = 3         # 子列间缝宽下限（px）。部首缝只有 2~3px
 JIAZHU_MASS_W = 0.6        # 单个子列宽度上限（× 列宽）
 JIAZHU_ALIGN = 8           # 相邻格的缝中心相差不超过此才算同一条夹注（px）
-JIAZHU_MIN_RUN = 2         # 至少连续这么多格才判夹注        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
+JIAZHU_MIN_RUN = 2         # 至少连续这么多格才判夹注
+JIAZHU_CC_MIN = 500        # 段中位「两侧较小 maxCC」低于此 → 噪点段否决        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
                            # 标注集里 clean 最大 0.088、truncated 0.148~0.339；
                            # 全书命中 3.4%(vol01)/1.4%(vol02)，目视 15/18 属实
 
@@ -118,6 +119,7 @@ class CharInstance:
     height: float                             # bbox 高（不含 padding）
     width: float
     flags: list[str]                          # ["suspect_empty", "bad_seg", ...]
+    sub: str | None = None                    # 夹注子列："a"=右 / "b"=左；正文 None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -296,8 +298,8 @@ def _defect_flags(gray: np.ndarray) -> list[str]:
 
 
 
-def _jiazhu_gap_center(gray: np.ndarray) -> float | None:
-    """图块若呈「双列小字」形态，返回两子列之间缝的中心 x；否则 None。
+def _jiazhu_gap_center(gray: np.ndarray) -> tuple[float, float] | None:
+    """图块若呈「双列小字」形态，返回 (两子列间缝的中心 x, strength)。
 
     判据（实测 vol02 版本注「永樂大典本/通志堂本」与 vol01 职名双行结衔）：
     墨的总跨度占满列宽（span ≥ JIAZHU_SPAN_T——夹注两个子列合起来和正文
@@ -342,26 +344,68 @@ def _jiazhu_gap_center(gray: np.ndarray) -> float | None:
         return None
     if max(left.shape[1], right.shape[1]) > JIAZHU_MASS_W * w:
         return None
-    return float(x0 + (ga + gb) / 2)
+    # strength：两侧较小的最大连通体面积。真小字必有笔画网络级大连通
+    # 体（实测 ≥1242px），纸面噪点全是碎点（≤327px）——单格不卡（薄字
+    # 「一/三」会误伤），由 flag_jiazhu_runs 按段中位数否决噪点段。
+    strength = w * h
+    for side in (left, right):
+        n, _lab, stats, _c = cv2.connectedComponentsWithStats(
+            np.ascontiguousarray(side))
+        strength = min(strength,
+                       int(stats[1:, 4].max()) if n > 1 else 0)
+    return float(x0 + (ga + gb) / 2), float(strength)
 
 
-def flag_jiazhu_runs(entries: list[tuple[int, float | None]]) -> set[int]:
-    """列内连续、缝对齐的夹注格序号集合。entries: [(idx, gap_center|None)]。"""
-    out: set[int] = set()
+def flag_jiazhu_runs(
+        entries: list[tuple[int, tuple[float, float] | None]]
+        ) -> dict[int, float]:
+    """列内连续、缝对齐的夹注格 → 缝中心。
+    entries: [(idx, (gap_center, strength)|None)]。
+
+    桥接：夹注段里个别行（vol02/5「一/辨」）单侧墨太少，单格判据因
+    均衡不足落空，会把连段拦腰截断——两侧紧邻格的缝中心都在且对齐时，
+    这一格按邻格中心均值补上（一次只桥 1 格，两侧必须是实测中心，
+    防止桥接自我扩散）。返回值里桥接格给的就是这个插值中心，拆分
+    a/b 时直接用。
+
+    噪点段否决：纸面碎点列（vol01/3 col2）span/缝/均衡全能骗过、还能
+    连成 7 格长段，唯一分得开的是连通体结构——真小字必有笔画网络级
+    大连通体（两侧较小 maxCC ≥1242px 实测），噪点全是碎点（≤327px）。
+    按**段中位数** < JIAZHU_CC_MIN 整段否决（单格不卡，薄字「一/三」
+    由段里其他字撑住中位数）。
+    """
+    ents = sorted(entries)
+    measured = {i: c for i, c in ents if c is not None}
+    cmap: dict[int, float] = {i: c[0] for i, c in measured.items()}
+    smap: dict[int, float] = {i: c[1] for i, c in measured.items()}
+    for i, c in ents:
+        if c is not None:
+            continue
+        a, b = measured.get(i - 1), measured.get(i + 1)
+        if a is not None and b is not None and abs(a[0] - b[0]) <= JIAZHU_ALIGN:
+            cmap[i] = (a[0] + b[0]) / 2
+    out: dict[int, float] = {}
+
+    def _commit(run: list[int]) -> None:
+        if len(run) < JIAZHU_MIN_RUN:
+            return
+        strengths = sorted(smap[j] for j in run if j in smap)
+        if not strengths or strengths[len(strengths) // 2] < JIAZHU_CC_MIN:
+            return
+        out.update({j: cmap[j] for j in run})
+
     run: list[int] = []
-    prev_i = prev_c = None
-    for i, c in sorted(entries):
-        ok = (c is not None and prev_i is not None and i == prev_i + 1
-              and prev_c is not None and abs(c - prev_c) <= JIAZHU_ALIGN)
+    prev_i = None
+    for i in sorted(cmap):
+        ok = (prev_i is not None and i == prev_i + 1
+              and abs(cmap[i] - cmap[prev_i]) <= JIAZHU_ALIGN)
         if ok:
             run.append(i)
         else:
-            if len(run) >= JIAZHU_MIN_RUN:
-                out.update(run)
-            run = [i] if c is not None else []
-        prev_i, prev_c = i, c
-    if len(run) >= JIAZHU_MIN_RUN:
-        out.update(run)
+            _commit(run)
+            run = [i]
+        prev_i = i
+    _commit(run)
     return out
 
 def _boundary_ink_frac(gray: np.ndarray) -> float:
@@ -648,6 +692,24 @@ FIT_RATIO = 1.15              # 部件并入字身后的总高上限（× 格高
 MAX_EXTEND_RATIO = 0.35       # 图块最多比格位多裁这么多（× 格高），防粘连失控
 HALO_DILATE = 2               # 抹除非本格墨迹时一并抹掉的灰边（px）
 
+# ── 曲线切分原型（P2 #12，2026-08-25 调查轮，默认关）──────────
+# _split_touching 的水平直线刀升级为「最小墨量路径」：在格线 ±SPLIT_WIN
+# 带内做 DP 寻径（从左到右、每步纵向浮动 ±SPLIT_CURVE_STEP px），沿总墨
+# 量最小的路径断开连通体。两处收益（vol01 全册实测见
+# .claude/doc/split_curve_boundary_research.md 任务B）：
+# 直刀会在颈部整行清墨、切断斜穿该行的真笔画；曲刀绕着笔画走，只在
+# 真正的字间缝隙处过刀。开关默认关——量产启用前需按金标漂移协议重核。
+SPLIT_CURVE = False        # True 时 _assign_column 改用 _split_touching_curve
+SPLIT_CURVE_STEP = 1       # 路径每列允许的纵向浮动（px/步）
+SPLIT_CURVE_EPS = 0.02     # 距格线偏离的微小代价（px⁻¹），墨量相同时贴格线走
+# 碎片粘连修正：连通体在格线上方的部分不足 MIN_PIECE×格高时（例如上一字
+# 只有一条撇尾混进来、其主体是独立连通体——vol01/22 col9「修/集」病灶），
+# 「上半块 ≥MIN_PIECE」以连通体顶来量就是无意义的（上半块本来就不是整字，
+# 它要与上格已有的字身合并）。此时改用窄带 g±SPLIT_FRAG_WIN×格高准切，
+# 不再卡 MIN_PIECE——窄带同时守住「草的艹被切走」老病灶（那道错缝在
+# g+0.3 格高，够不着窄带）。
+SPLIT_FRAG_WIN = 0.07      # 碎片粘连时的准切窄带（× 格高）
+
 
 def _column_binary(col_gray: np.ndarray) -> np.ndarray:
     """列内二值化。Otsu 阈值加夹取——整列全空时 Otsu 会把纸纹判成墨。"""
@@ -754,6 +816,107 @@ def _split_touching(binary: np.ndarray,
     return out
 
 
+def _min_ink_path(cost: np.ndarray, step: int = SPLIT_CURVE_STEP) -> np.ndarray:
+    """带状代价图上的最小代价横穿路径（DP）。
+
+    cost: (B, W) 非负代价。返回长度 W 的行号数组 path，
+    满足 |path[x+1] - path[x]| ≤ step，且 Σ cost[path[x], x] 最小。
+    """
+    B, W = cost.shape
+    dp = cost[:, 0].astype(np.float64).copy()
+    back = np.zeros((B, W), dtype=np.int16)
+    idx = np.arange(B)
+    for x in range(1, W):
+        # cand[k] = dp 在 y+off 处的值（off ∈ [-step, step]）
+        best = np.full(B, np.inf)
+        arg = np.zeros(B, dtype=np.int16)
+        for off in range(-step, step + 1):
+            src = idx + off
+            ok = (src >= 0) & (src < B)
+            v = np.full(B, np.inf)
+            v[ok] = dp[src[ok]]
+            upd = v < best
+            best[upd] = v[upd]
+            arg[upd] = off
+        dp = best + cost[:, x]
+        back[:, x] = arg
+    path = np.empty(W, dtype=np.int32)
+    path[-1] = int(np.argmin(dp))
+    for x in range(W - 1, 0, -1):
+        path[x - 1] = path[x] + back[path[x], x]
+    return path
+
+
+def _split_touching_curve(binary: np.ndarray,
+                          cells: list[tuple[int, float, float]],
+                          cell_h: float, col_w: float) -> np.ndarray:
+    """曲线版 _split_touching：颈部改沿**最小墨量路径**下刀（原型，默认关）。
+
+    与直线版的三点差异：
+
+    1. 刀口不是水平行，而是格线 ±SPLIT_WIN 带内 DP 找出的最小墨量路径
+       （每步纵向浮动 ±SPLIT_CURVE_STEP px）——直刀在颈部整行清墨，会把
+       斜穿该行的真笔画（撇/捺/斜钩）切出一个平口；曲刀绕开笔画，只在
+       字间缝隙里走；
+    2. 「颈够细」的判据从「存在一行墨宽 ≤NECK_ABS×列宽」换成等价的
+       「路径总穿墨 ≤NECK_ABS×列宽」——路径能绕，同样的墨预算能对付
+       更歪斜的粘连；
+    3. 碎片粘连修正（见 SPLIT_FRAG_WIN 注释）：连通体在格线上方不足
+       MIN_PIECE×格高时不再按连通体顶卡 MIN_PIECE（上半块本来就只是
+       上一字的零件），改在 g±SPLIT_FRAG_WIN 窄带内准切。
+
+    路径两行清墨（断开 8 连通），只清本连通体的像素，不碰邻组件。
+    """
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    out = binary.copy()
+    lines = [top for _i, top, _b in cells[1:]]
+    win = SPLIT_WIN * cell_h
+    H, W = binary.shape
+    for k in range(1, n):
+        x, y, cw, ch, _area = stats[k]
+        if ch <= SPLIT_H_RATIO * cell_h:
+            continue
+        comp = labels == k
+        for g in lines:
+            if not (y < g < y + ch):
+                continue
+            frag = (g - y) < MIN_PIECE * cell_h      # 上方只是上一字碎片
+            w_here = SPLIT_FRAG_WIN * cell_h if frag else win
+            lo = int(max(y + (0.0 if frag else 0.2 * cell_h), g - w_here))
+            hi = int(min(y + ch - 0.2 * cell_h, g + w_here,
+                         y + FIT_RATIO * cell_h))
+            if frag:
+                hi = int(min(y + ch - 0.2 * cell_h, g + w_here))
+            lo = max(0, lo)
+            hi = min(H - 1, hi)
+            if hi <= lo:
+                continue
+            band = comp[lo:hi].astype(np.float64)
+            # 贴格线偏好：墨量相同时选离格线近的路径
+            rows = np.arange(lo, hi, dtype=np.float64)
+            band = band + SPLIT_CURVE_EPS * np.abs(rows - g)[:, None] / cell_h
+            path = _min_ink_path(band)
+            pierced = int(comp[path + lo, np.arange(W)].sum())
+            if pierced > NECK_ABS * col_w:
+                continue                              # 颈太厚，留给硬切
+            r_rows = path + lo
+            r_mean = float(r_rows.mean())
+            if not frag:
+                if r_mean - y < MIN_PIECE * cell_h:
+                    continue
+                if y + ch - r_mean < MIN_TAIL * cell_h:
+                    continue
+            else:
+                if y + ch - r_mean < MIN_TAIL * cell_h:
+                    continue
+            xs = np.arange(W)
+            for dy in (0, 1):
+                rr = np.clip(r_rows + dy, 0, H - 1)
+                sel = comp[rr, xs]
+                out[rr[sel], xs[sel]] = 0
+    return out
+
+
 def _assign_column(col_gray: np.ndarray,
                    cells: list[tuple[int, float, float]],
                    cell_h: float, col_w: float
@@ -787,7 +950,8 @@ def _assign_column(col_gray: np.ndarray,
     非均匀格位同样适用。
     """
     h = col_gray.shape[0]
-    binary = _split_touching(
+    _splitter = _split_touching_curve if SPLIT_CURVE else _split_touching
+    binary = _splitter(
         _strip_lines(_column_binary(col_gray), cell_h), cells, cell_h, col_w)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
     min_area = MIN_COMP_AREA_RATIO * cell_h * col_w
@@ -1020,6 +1184,7 @@ class CharExtractor:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
         results: list[tuple[CharInstance, np.ndarray]] = []
+        jz_replaced: set[str] = set()
 
         for col in grid.get("columns", []):
             col_no = int(col["index"])
@@ -1089,6 +1254,7 @@ class CharExtractor:
             order = [i for i, _t, _b in local]
             end_cand = set(order[:2] + order[-2:])
             end_patches: dict[int, tuple[np.ndarray, float]] = {}
+            jz_pre: dict[int, tuple[np.ndarray, float, float]] = {}
             for cell, (idx, ltop, lbot) in zip(cells, local):
                 cell_h = lbot - ltop
                 pad = cell_h * self.padding_ratio
@@ -1137,6 +1303,9 @@ class CharExtractor:
                 # 夹注缝在**格框图块**上量（判据阈值按格框几何标定：单字
                 # 只占 0.6~0.7 列宽是唯一不重叠的量，裁紧后谁都是满宽）
                 jz_center = _jiazhu_gap_center(patch)
+                # 每格都留住裁紧前图块与几何：桥接格（自己量不出缝、由
+                # 邻格插值确认成夹注）拆 a/b 时也要用
+                jz_pre[idx] = (patch.copy(), float(sx0), float(sy0 + y0))
 
                 # 裁紧（2026-08-24 用户定版）：图块**完完全全包住本字墨迹**
                 # ±TIGHT_MARGIN，左右不再留到墙的空白——贴墙的空白装的从来
@@ -1187,10 +1356,54 @@ class CharExtractor:
                     inst.flags.append("tail_junk")
             # 夹注/双行小字：连续 ≥2 格、缝中心对齐才落 flag（疑似层）。
             # 下游把 jiazhu 图块隔离成单例，不进簇、不进训练。
-            for j in flag_jiazhu_runs([(i, c) for i, c, _ in col_entries]):
+            jz_runs = flag_jiazhu_runs([(i, c) for i, c, _ in col_entries])
+            for j in jz_runs:
                 for i, _c, inst in col_entries:
                     if i == j and "jiazhu" not in inst.flags:
                         inst.flags.append("jiazhu")
+            # ── 夹注 a/b 拆分（2026-08-25 用户定）────────────────
+            # 确认成夹注段的格，整格实例替换为两个半宽实例：a=右子列、
+            # b=左子列（读序：段内先 a 全部、后 b 全部——见
+            # jiazhu_reading_order）。半边无墨（段末单半）不发实例。
+            # flags 原样带上（含 jiazhu），下游据此区分字形/隔离训练。
+            # 缝中心取 jz_runs：实测格是自己的、桥接格是邻格插值。
+            for i, _c, inst in col_entries:
+                if "jiazhu" not in inst.flags or i not in jz_pre \
+                        or i not in jz_runs:
+                    continue
+                pre, ax0, ay0 = jz_pre[i]
+                cx = jz_runs[i]
+                cxi = int(round(cx))
+                halves = []
+                for sub, xs, xe in (("a", cxi, pre.shape[1]), ("b", 0, cxi)):
+                    hp = pre[:, xs:xe]
+                    ty, tx = np.nonzero(hp < BINARY_THRESHOLD_PATCH)
+                    if ty.size < 30:
+                        continue
+                    tx0 = max(0, int(tx.min()) - TIGHT_MARGIN)
+                    tx1 = min(hp.shape[1], int(tx.max()) + 1 + TIGHT_MARGIN)
+                    ty0 = max(0, int(ty.min()) - TIGHT_MARGIN)
+                    ty1 = min(hp.shape[0], int(ty.max()) + 1 + TIGHT_MARGIN)
+                    hpatch = hp[ty0:ty1, tx0:tx1]
+                    hinst = CharInstance(
+                        id=inst.id + sub,
+                        book=inst.book, page=inst.page, col=inst.col,
+                        idx=inst.idx,
+                        bbox=(ax0 + xs + tx0, ay0 + ty0,
+                              ax0 + xs + tx1, ay0 + ty1),
+                        cell_type="char",
+                        ocr_text=None, ocr_confidence=0.0,
+                        patch_path=f"patches/{page}/{col_no}_{i}{sub}.png",
+                        ink_ratio=round(_patch_ink_ratio(hpatch), 4),
+                        height=round(float(ty1 - ty0), 2),
+                        width=round(float(tx1 - tx0), 2),
+                        flags=list(inst.flags), sub=sub)
+                    halves.append((hinst, hpatch))
+                if halves:
+                    jz_replaced.add(inst.id)
+                    results.extend(halves)
+        if jz_replaced:
+            results = [r for r in results if r[0].id not in jz_replaced]
         return results
 
     # ── IO 壳 ────────────────────────────────────────────
@@ -1301,6 +1514,39 @@ class CharExtractor:
             if p.exists():
                 return p
         return None
+
+
+def jiazhu_reading_order(col_instances: list["CharInstance"]
+                         ) -> list["CharInstance"]:
+    """一列实例的**阅读顺序**（夹注读序的唯一权威，下游文本装配用它）。
+
+    正文格按 idx 升序；**连续夹注段**（idx 连续的 jiazhu 格）作为整体
+    插在段位上，段内先读右子列 a 全部（idx 升序）、再读左子列 b 全部
+    ——双行小注先右行后左行（2026-08-25 用户定）。输入乱序也行。
+    """
+    by_idx: dict[int, list[CharInstance]] = {}
+    for r in col_instances:
+        by_idx.setdefault(r.idx, []).append(r)
+    out: list[CharInstance] = []
+    idxs = sorted(by_idx)
+    k = 0
+    while k < len(idxs):
+        i = idxs[k]
+        cells = by_idx[i]
+        if any(r.sub for r in cells):
+            # 收整个连续夹注段
+            run = [i]
+            while (k + 1 < len(idxs) and idxs[k + 1] == idxs[k] + 1
+                   and any(r.sub for r in by_idx[idxs[k + 1]])):
+                k += 1
+                run.append(idxs[k])
+            for sub in ("a", "b"):
+                for j in run:
+                    out.extend(r for r in by_idx[j] if r.sub == sub)
+        else:
+            out.extend(cells)
+        k += 1
+    return out
 
 
 def load_index(phase4_dir: Path) -> list[CharInstance]:

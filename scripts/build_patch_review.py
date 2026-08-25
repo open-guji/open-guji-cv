@@ -31,6 +31,18 @@ def parse_pages(specs: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+def _patch_cell(book: str, cid: str, lab: str, rec: dict, quality: int):
+    p = Path("output") / book / "phase4_chars" / rec["patch_path"]
+    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return {"id": cid, "lab": lab, "w": img.shape[1], "h": img.shape[0],
+            "f": rec.get("flags") or [],
+            "src": "data:image/jpeg;base64," +
+                   base64.b64encode(buf.tobytes()).decode()}
+
+
 def build_page(book: str, page: str, quality: int, index: dict):
     gp = Path("output") / book / "phase3_char_grid" / f"{page}_char_grid.json"
     if not gp.exists():
@@ -47,20 +59,27 @@ def build_page(book: str, page: str, quality: int, index: dict):
                 c for c in col["cells"] if c.get("type") != "margin"):
             cid = f"{book}/{page}:{cno}:{i}"
             rec = index.get((book, page, cno, i))
-            if cell.get("type") == "char" and rec is not None:
-                p = Path("output") / book / "phase4_chars" / rec["patch_path"]
-                img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
-                if img is None:
-                    continue
-                ok, buf = cv2.imencode(
-                    ".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                cells_out.append({
-                    "id": cid, "w": img.shape[1], "h": img.shape[0],
-                    "f": rec.get("flags") or [],
-                    "src": "data:image/jpeg;base64," +
-                           base64.b64encode(buf.tobytes()).decode()})
+            if cell.get("type") == "char" and isinstance(rec, dict) \
+                    and rec.get("__subs__"):
+                # 夹注格：整格实例已被 a=右子列 / b=左子列 两个半宽实例
+                # 替换，流里按读序 a 前 b 后排两块，编号 如「5a」「5b」
+                for sub in ("a", "b"):
+                    sr = rec.get(sub)
+                    if sr is None:
+                        continue
+                    d = _patch_cell(book, f"{cid}{sub}", f"{i + 1}{sub}",
+                                    sr, quality)
+                    if d is not None:
+                        d["jz"] = 1
+                        cells_out.append(d)
+            elif cell.get("type") == "char" and rec is not None \
+                    and not rec.get("__subs__"):
+                d = _patch_cell(book, cid, str(i + 1), rec, quality)
+                if d is not None:
+                    cells_out.append(d)
             else:
-                cells_out.append({"id": cid, "empty": True})
+                cells_out.append({"id": cid, "empty": True,
+                                  "lab": str(i + 1)})
         if cells_out:
             cols_out.append({"col": cno, "cells": cells_out})
     # 阅读顺序：右列在前
@@ -91,7 +110,16 @@ def main() -> None:
         p = Path("output") / book / "phase4_chars" / "index.jsonl"
         for line in p.read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
-            index[(r["book"], r["page"], r["col"], r["idx"])] = r
+            k = (r["book"], r["page"], r["col"], r["idx"])
+            if r.get("sub"):
+                # 夹注 a/b 半宽实例：同格两条，聚成 {'__subs__':1,'a':…,'b':…}
+                slot = index.get(k)
+                if not (isinstance(slot, dict) and slot.get("__subs__")):
+                    slot = {"__subs__": 1}
+                    index[k] = slot
+                slot[r["sub"]] = r
+            else:
+                index[k] = r
 
     pages = []
     for book, page in parse_pages(args.pages):
