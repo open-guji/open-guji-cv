@@ -69,12 +69,12 @@ toc 47→body、edict 1→body、colophon 1→body）。所以：
 | E | 行列识别 | `segment` | 逐列 `layout` + `cells` | `column-layout`（36 页 289 计分列）| 列型准确率 93.8%，elastic F1 0.91 |
 | F | 格内净化 | `chars` | 图块像素归属 | `char-segmentation/cells`（60 合成）| 逐像素金标，见 `seg-bench` |
 | G | 图块自检 | `chars` | `flags` | `char-segmentation/instances`（91 真实，第十二轮）| 缺陷检出 100%，确定层零误报，误报 25%（含 boundary_ink 超采偏置）|
-| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（37，双层）| 回归门 33/33；clean 层 24 样本 **0 缺陷**（P3 修掉吃笔画 P0），degraded 层 4 缺陷已记账（厚残留，归切分层）|
-| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6177 实例）| **elastic 判据（2026-08-24 起默认）：purity 1.0/1.0/1.0，碎片率 2.97/3.38/3.04**（旧 coverage 判据 0.99967/0.99967/0.98901、2.99/3.45/3.00）；human 分片的 諭/論 对级漏网已被 elastic 关掉；unsure 带全审可到 ~1.1（见 g3g4_error_analysis.md §7）|
+| H | 归一化 | `normalize` | 归一图块 | `char-normalization`（37，双层）| 回归门 33/33；**2026-08-24 撤除笔宽归一，golden 全部人工复核后重冻**（`stroke_width` 3 → None，动机与实测见 glyph_match_stack.md §六.3）|
+| I | 保守聚类 | `cluster` | 簇 | `char-clustering`（3 分片 6177 实例）| **elastic 判据 + 不做笔宽归一（2026-08-24）：purity .99967/.99901/1.0（硬约束 ≥0.999 三片都过）、碎片率 2.79/3.01/2.58、难例对 39/35/26**（笔宽归一时代 1.0/1.0/1.0、2.97/3.38/3.04、40/34/14——碎片率与难例对全面改善，purity 退了一档，脏簇全是聚类拿不到字标签因而护栏够不着的形近家族）|
 | J | 单字识别 | `label` / `bench-ocr` | 候选 | `char-ocr`（**1404 实例**）| top1 88.75%，字表上界 99.29% |
 | K | 上下文裁决 | **`context_step`（独立一步，策略注册表）**；seed context 通道与评测共用同一核心 | 定字 | `context-correction`（**1681 槽位**，种子队列实集）| 基线 67.52%，门槛化混合 LM +2.14%（救40/坏4；无门槛重排任何 λ 净亏，见下）。换模型/换算法 → 实现 ContextDecider 注册进 STRATEGIES，在本集上出数 |
 | L | 参考校对 | `collate` / 對勘記 Artifact | 对齐 | `collation`（**0**，框架）| 人工×整理本对勘页已上线（三栏对照）|
-| M | **字形匹配** | `GlyphMatcher`（normalize→HOG kNN→verify_pair_elastic）| cov + same/unsure/diff | `glyph-match/triplets`（98 三元组）| hard 38 条 rank_acc **0.079 → 0.684**（elastic 判据，2026-08-24）、control 60 条 1.0 护栏未动；代价：`eval_db_match` same 档覆盖 10.4/16.6/21.8% → **6.2/11.4/13.5%**（精度全 1.0000，硬约束仍过），机理是 elastic 绝对分随笔画密度走低；剩下 12 条失败以 已/巳、日/曰 这类整字近似家族为主，下一个大杠杆是**去掉笔宽归一**（同时能修这两处，但要重建两个冻结集）；栈的完整交接 → **[glyph_match_stack.md](glyph_match_stack.md)** |
+| M | **字形匹配** | `GlyphMatcher`（normalize→HOG kNN→verify_pair_elastic）| cov + same/unsure/diff | `glyph-match/triplets`（98 三元组，量排序）+ **`glyph-match/pairs`（71497 对，量阈值操作点）** | hard 38 条 rank_acc **0.079 → 0.684（elastic）→ 0.763（再撤笔宽归一）**、control 60 条 1.0 护栏三版未动；阈值操作点见 pairs 集：主指标 recall 0.0807 → **0.1067**；`eval_db_match` 覆盖 8.5/16.3/17.9% 且三协议精度全 1.0000；|
 | P | **逐页进库（seed）** | `seed` / `seed-ingest` | GlyphDB + 队列 | 进库协议即金标产线 | vol01 前 19 页 2797 字位：已裁 2646（95%），库 **2513 例（canonical 256×256 真源）**；七通道（常规/dual_degraded/match_ref[形近家族过闸×库一致可穿透]/match_solo 0.99/match_solo_ocr 0.95×OCR 背书/context/nonchar）详见 glyph_db_first_design.md §7.2 与 seeding.py 通道注释；候选带字典释义（config/gloss，覆盖 99.3%）；库体检 → /glyphdb-audit |
 
 ### 正文页现状基线（2026-08-23）
@@ -220,8 +220,17 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
    提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
 5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
-   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰；
-   **不要**重跑 seed——那会整页重写队列、冲掉人裁）。
+   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰）。
+   若变的不只是规则、而是**证据本身**（切分/载体/上下文口径改过，队列
+   里的 ocr/align/match/context 整页作废），才用
+   `python -m open_guji_cv seed <book> ... --force-pages 9,11,12`
+   重跑那几页：done 页也照跑，人裁过的行原样留下、那些字位跳过不再判
+   （2026-08-25 加；此前 seed 会整页重写队列，所以这一步曾经是禁区）。
+   哪几页该重跑由体检给出：
+   `PYTHONPATH=. python scripts/repair_seed_queue.py output/vol01`
+   —— 它同时修队列的两类硬伤（幽灵行 = id 已不在 index 里；重号 = 同一
+   instance_id 两行），`--apply` 落地。重号会让审查页拿 A 的证据配 B 的
+   图，实锤见下面「踩过的坑」。
 6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
    --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
    **同一个 artifact URL**（用户书签不换）。各页 URL 台账、快照与
@@ -589,6 +598,22 @@ toc 从 62.2% 降到 58.7%——两个方向都被带偏了。
 
 **重跑要清理旧产物。** `run_book` 曾经只截断 `index.jsonl` 却留下 2456
 个孤儿 PNG，人工标注对着的是过期图片。写产物前先清目录。
+
+**同一个东西的「位置」只能有一个真源。** 审查卡片上有三样东西各自算位置：
+图块（按 index.jsonl 取）、卡头的「第几字」、上下文条的高亮位。前者按
+**index 的 char 格位**数，后两者一度按 **OCR 载体**数——载体缺一格，整列
+文本就短一位，用户对着原图数「文字错了一位」。修法不是给渲染层加偏移，
+是让列文也按 index 的 char 格位建（载体缺格补 □），于是
+`pos == 列内 char 位次 - 1` 恒成立。回归钉在
+`test_context_pos_follows_index_not_carrier`。
+
+**队列的「一个 id 一行」是硬契约，破了不报错只出怪现象。**
+`migrate_labels_after_resegment.py` 早期版本对「目标字位在新切分里不存在」
+的行只改状态、不改 id——那个旧 id 已经被另一条迁移行占了，于是 queue.jsonl
+里同一个 instance_id 出两行（vol01 实测 125 处）。审查页按 id 取证据、按
+index 取图，正好取到不同那条：卡片是「第」，上下文高亮「一」。
+**迁移只搬号，不重算证据**，所以迁完必须对那些页 `seed --force-pages`
+刷新，`scripts/repair_seed_queue.py` 负责体检出是哪几页。
 
 **合成测试要用真实量级。** 600×400 的合成页量错切会得到 0.018（真值
 0.010）——倾斜在一个形态学核高度内的漂移不足一个线宽，竖线其实没被打断。

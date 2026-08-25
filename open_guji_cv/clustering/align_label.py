@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,6 +111,21 @@ class PageLabelStat:
         return self.n_equal + self.n_replace
 
 
+def slot_key(col: str | int, idx: str | int) -> tuple[int, int, str]:
+    """(列, 格) → 可排序的键，能吃下**夹注子字**的 a/b 后缀。
+
+    双行夹注（main 的「a/b 子列拆分」）把一格里的左右两个小字写成
+    `…:9:2a` / `…:9:2b`——id 尾段带后缀，而 index 的 `idx` 字段仍是 2。
+    直接 `int(idx)` 会炸（vol01 有 248 条这样的记录）。这里把尾段拆成
+    数字 + 后缀：排序上 2a < 2b < 3，与 index 里的行序、与页面上的
+    阅读顺序都一致。
+    """
+    m = re.match(r"^(-?\d+)([a-z]*)$", str(idx).strip())
+    if not m:
+        raise ValueError(f"格序号解析不了: {idx!r}")
+    return (int(col), int(m.group(1)), m.group(2))
+
+
 def page_slots(ranked: list[dict]) -> dict[str, list[tuple[int, int, str]]]:
     """ranked.json 的 results → {页: [(col, idx, 转写字), ...]}，页内按 (col, idx)。
 
@@ -119,8 +135,10 @@ def page_slots(ranked: list[dict]) -> dict[str, list[tuple[int, int, str]]]:
     by_page: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
     for r in ranked:
         _, page, col, idx = r["id"].split(":")
-        by_page[page].append((int(col), int(idx), r["best"]))
-    return {p: sorted(v) for p, v in by_page.items()}
+        by_page[page].append((*slot_key(col, idx), r["best"]))
+    # 排序用带后缀的四元组（2a < 2b < 3），对外仍是 (col, idx, 字) 三元组
+    return {p: [(c, i, t) for c, i, _, t in sorted(v)]
+            for p, v in by_page.items()}
 
 
 def _structure(slots: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
@@ -132,16 +150,39 @@ def _structure(slots: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
     return sorted((col, idx) for col, idx, _ in slots)
 
 
-def index_structure(index_path: str | Path) -> dict[str, list[tuple[int, int]]]:
-    """当前 phase4 index.jsonl → {页: 结构指纹}。"""
+def index_structure(index_path: str | Path,
+                    cell_types: tuple[str, ...] | None = ("char",),
+                    ) -> dict[str, list[tuple[int, int]]]:
+    """当前 phase4 index.jsonl → {页: 结构指纹}。
+
+    **只算 `cell_type == "char"` 的格**（2026-08-25 修）。指纹是拿来跟
+    `carrier_slots(..., valid_ids=…)` 的输出比的，而调用方传的 valid_ids
+    向来只含 char 实例——这边却把 `empty` 空格位也数进来，两边口径差几格，
+    整页就被判 structure drift 丢掉。vol01 新切分实锤：第 21 页载体 179
+    vs 指纹 181、第 24 页 179 vs 180，两页的过闸对齐因此**全灭**（各自
+    120+ 个字位白白进了人工队列），而 20/22/23 页恰好没有空格位所以没事。
+    `cell_types=None` 可以要回旧的全量口径。
+    """
     per_page: dict[str, list[tuple[int, int]]] = defaultdict(list)
     with open(index_path, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
             r = json.loads(line)
-            per_page[r["page"]].append((int(r["col"]), int(r["idx"])))
-    return {p: sorted(v) for p, v in per_page.items()}
+            # 缺 cell_type 的精简行（旧产物、测试 fixture）当作 char——
+            # 老口径本来就是全量，不能因为字段缺失把整页滤空
+            if cell_types is not None \
+                    and r.get("cell_type", "char") not in cell_types:
+                continue
+            # 夹注子字的后缀只在 id 里（idx 字段是 int），所以优先按 id 拆；
+            # 没有 id 的精简行（测试 fixture、外部导出）退回 col/idx 字段
+            if r.get("id") and r["id"].count(":") == 3:
+                _, _, col, idx = r["id"].split(":")
+            else:
+                col, idx = r["col"], r["idx"]
+            per_page[r["page"]].append(slot_key(col, idx))
+    return {p: [(c, i) for c, i, _ in sorted(v)]
+            for p, v in per_page.items()}
 
 
 def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
@@ -246,11 +287,12 @@ def carrier_slots(carrier_path: str | Path,
                 dropped += 1
                 continue
             _, page, col, idx = r["id"].split(":")
-            by_page[page].append((int(col), int(idx), r["char"] or "□"))
+            by_page[page].append((*slot_key(col, idx), r["char"] or "□"))
     if dropped:
         print(f"⚠ OCR 载体有 {dropped} 条已不在索引里（切分重跑过？）已丢弃；"
               f"建议重建载体：scripts/build_ocr_carrier.py")
-    return {p: sorted(v) for p, v in by_page.items()}
+    return {p: [(c, i, t) for c, i, _, t in sorted(v)]
+            for p, v in by_page.items()}
 
 
 def label_book(book: str, book_out_dir: str | Path, corpus_path: str | Path,

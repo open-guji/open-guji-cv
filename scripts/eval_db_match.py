@@ -66,10 +66,18 @@ KNOWN_GOLD_ISSUES: dict[str, str] = {
 }
 
 
-def load_shard(samples_dir: Path, shard: str):
+def load_shard(samples_dir: Path, shard: str, include_excluded: bool = False):
     d = json.loads((samples_dir / shard / "expected.json").read_text(encoding="utf-8"))
     inst = sorted(d["instances"],
                   key=lambda x: (int(x["page"]), x["instance_id"]))
+    # 排除名单：切分坏掉的图块既不进库也不当查询——它们量的是切分的账
+    if not include_excluded:
+        from open_guji_cv.clustering.exclusions import excluded_ids
+        ex = excluded_ids()
+        n0 = len(inst)
+        inst = [x for x in inst if x["instance_id"] not in ex]
+        if n0 != len(inst):
+            print(f"  [{shard}] 排除名单跳过 {n0 - len(inst)}/{n0} 个实例", flush=True)
     patches = np.zeros((len(inst), 64, 64), np.uint8)
     for i, x in enumerate(inst):
         img = cv2.imread(str(samples_dir / shard / x["crop"]), cv2.IMREAD_GRAYSCALE)
@@ -262,6 +270,8 @@ def main() -> None:
                     choices=["elastic", "coverage"],
                     help="精验判据（默认 elastic=现行；coverage=旧判据对照）")
     ap.add_argument("--out", default=None, help="报告 JSON 路径")
+    ap.add_argument("--include-excluded", action="store_true",
+                    help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--with-branches", action="store_true",
                     help="unsure/diff 走 decide_*，追加端到端三个数（见文件头）")
     ap.add_argument("--margin-threshold", type=float, default=0.99,
@@ -294,7 +304,7 @@ def main() -> None:
 
     if args.protocol in ("incremental", "all"):
         for shard in args.shards.split(","):
-            inst, patches = load_shard(samples, shard)
+            inst, patches = load_shard(samples, shard, args.include_excluded)
             m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
                              cov_high=args.cov_high, **wmax_kw)
             feats = m.extract(patches)
@@ -302,8 +312,8 @@ def main() -> None:
                                branches=branches))
 
     if args.protocol in ("cross-seed", "all"):
-        si, sp = load_shard(samples, args.seed_shard)
-        qi, qp = load_shard(samples, args.query_shard)
+        si, sp = load_shard(samples, args.seed_shard, args.include_excluded)
+        qi, qp = load_shard(samples, args.query_shard, args.include_excluded)
         m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
                          cov_high=args.cov_high, **wmax_kw)
         sf = m.extract(sp)

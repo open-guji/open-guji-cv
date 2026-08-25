@@ -104,7 +104,7 @@ def crop_name(instance_id: str) -> str:
 
 def norm_params() -> dict:
     return {"size": NORM_SIZE, "margin_ratio": MARGIN_RATIO,
-            "noise_area": NOISE_AREA, "stroke_width": 3}
+            "noise_area": NOISE_AREA, "stroke_width": None}
 
 
 def save_norm(gray: np.ndarray, path: Path) -> None:

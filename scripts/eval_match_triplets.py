@@ -40,6 +40,8 @@ def main() -> None:
     ap.add_argument("dataset", help="glyph-match/triplets 目录")
     ap.add_argument("--report", action="store_true",
                     help="逐条输出（排查用）")
+    ap.add_argument("--include-excluded", action="store_true",
+                    help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--method", default="elastic",
                     choices=["elastic", "coverage", "overlap"],
                     help="用哪个判据打分（默认 elastic=现行）")
@@ -48,6 +50,15 @@ def main() -> None:
               "overlap": verify_pair}[args.method]
     root = Path(args.dataset)
     triplets = json.loads((root / "expected.json").read_text(encoding="utf-8"))
+    # 排除名单：三元组里只要有一格是坏图块，这一组量的就是「匹配 + 切分损伤」
+    if not args.include_excluded:
+        from open_guji_cv.clustering.exclusions import excluded_ids
+        ex = excluded_ids()
+        n0 = len(triplets)
+        triplets = [t for t in triplets
+                    if not any(t[k] in ex for k in ("anchor", "same", "other"))]
+        if n0 != len(triplets):
+            print(f"排除名单跳过 {n0 - len(triplets)} 组，剩 {len(triplets)} 组")
 
     norms: dict[str, np.ndarray] = {}
 

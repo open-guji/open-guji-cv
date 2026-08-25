@@ -238,7 +238,7 @@ def write_sample(out_dir: Path, rec: dict, gray, quality, book: str,
         "extractor_flags": rec["flags"],
         "ink_ratio": rec["ink_ratio"],
         "norm_params": {"size": NORM_SIZE, "margin_ratio": MARGIN_RATIO,
-                        "noise_area": NOISE_AREA, "stroke_width": 3},
+                        "noise_area": NOISE_AREA, "stroke_width": None},
         "schema_version": 2,
     }
     if defect:
