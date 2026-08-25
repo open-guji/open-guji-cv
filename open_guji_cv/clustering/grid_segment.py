@@ -818,6 +818,21 @@ ANCHOR_TOL = 0.35          # 相位偏离框顶超此比例 × 格高才罚（�
 ANCHOR_SPAN_TOL = 0.06     # |框高/n - 格高| 超此比例 × 格高 → 框证据不可信，不锚
 ANCHOR_W = 1e4             # 决定性罚款权重（谷/峰项在平族间差值只有个位数）
 
+# ── 抬头行（2026-08-25，用户 p32/p33 实审）────────────────
+# 清代官书的抬头制：遇尊称要提行顶格甚至高出一到三格（平抬/单抬/双抬），
+# 抬头列因此比常规列**多 1~2 个字位**。网格按书级 chars_per_line 固定
+# 21 行时，抬头字整字掉在网格顶之外——那是**漏字**，比框渣严重。实测
+# 两册 11 页受影响（vol01 8 / vol02 3，最多多 2 行）。
+# 判据：拟合出 21 行网格后，量各文字列在网格顶之上的**最长连续墨段**；
+# 常规页那里只有版框线（全书 p90=22px、p50=8px），抬头字则是整格高的
+# 连续墨（实测 0.63~1.98 格）。≥HEAD_RAISE_T 格的列达 HEAD_RAISE_COLS
+# 列就判抬头页，网格向上扩行后**重拟合**——扩行后网格能同时覆盖抬头字
+# 与正文，相位会自己回到正位（21 行时拟合被抬头墨拉成两不靠的折中值）。
+HEAD_RAISE_T = 0.55        # 网格顶上方连续墨段 ≥ 此比例 × 格高 → 该列有抬头
+HEAD_RAISE_COLS = 2        # 达此列数才判抬头页（抬头是版式现象，成片出现）
+HEAD_RAISE_MAX = 3         # 最多扩这么多行（清制最高三抬）
+HEAD_RAISE_INK = 0.06      # 行墨率达此值算「有墨行」
+
 
 def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
     """页顶/页底窗内最靠外的横框线行。检不出为 None。
@@ -851,6 +866,45 @@ def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
     ft = next((y for y in range(zone) if is_bar(y)), None)
     fb = next((y for y in range(h - 1, h - zone_b, -1) if is_bar(y)), None)
     return ft, fb
+
+
+
+def head_raise_rows(image: np.ndarray, text_cols: list, page_phase: float,
+                    cell_h: float, y1: int, frame_top: float | None
+                    ) -> int:
+    """需要在网格顶部补几行抬头位。0 表示不是抬头页。
+
+    text_cols 里每项是 (col_result, crop, proj)——crop 已是列条带，
+    其行坐标与 page_phase 同系（都相对裁剪窗 y1）。
+    """
+    if cell_h <= 0 or not text_cols:
+        return 0
+    top = int(round(page_phase))
+    if top <= 2:
+        return 0
+    best_per_col = []
+    for _col, crop, _proj in text_cols:
+        band = crop[:min(top, crop.shape[0])]
+        if band.size == 0:
+            best_per_col.append(0)
+            continue
+        g = band if band.ndim == 2 else cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
+        rows = (g < BINARY_THRESHOLD).sum(axis=1) / max(1, g.shape[1])
+        best = cur = 0
+        for v in rows:
+            cur = cur + 1 if v >= HEAD_RAISE_INK else 0
+            best = max(best, cur)
+        best_per_col.append(best)
+    n_head = sum(1 for b in best_per_col if b >= HEAD_RAISE_T * cell_h)
+    if n_head < HEAD_RAISE_COLS:
+        return 0
+    k = int(np.ceil(max(best_per_col) / cell_h))
+    k = max(1, min(k, HEAD_RAISE_MAX))
+    # 扩出的行必须还在版框内：框顶给定时按它设上限
+    if frame_top is not None:
+        room = int((page_phase - frame_top) // cell_h)
+        k = min(k, max(0, room))
+    return k
 
 
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
@@ -1925,12 +1979,27 @@ class GridSegmenter:
                         / max(1, g2.shape[1])
                     nz = np.nonzero(ri >= 0.05)[0]
                     fb = int(nz[-1]) + 6 if nz.size else image.shape[0]
+                ft_rel = None if ft is None else float(ft - y1)
+                fb_rel = None if fb is None else float(fb - y1)
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],
                     cell_h_fixed=cell_h_prior,
-                    frame_top=None if ft is None else float(ft - y1),
-                    frame_bottom=None if fb is None else float(fb - y1))
+                    frame_top=ft_rel, frame_bottom=fb_rel)
+                # 抬头页：网格顶之上还有整格墨 = 抬头字漏在网格外。补行
+                # 后**重拟合**——扩行后网格能同时覆盖抬头字与正文，相位
+                # 会自己归位（21 行时拟合被抬头墨拉成两不靠的折中值）。
+                k_head = head_raise_rows(image, text_cols, page_phase,
+                                         cell_h, y1, ft_rel)
+                if k_head:
+                    n += k_head
+                    page_phase, cell_h = fit_page_grid(
+                        [p for _, _, p in text_cols], n,
+                        full_widths=[crop.shape[1]
+                                     for _, crop, _ in text_cols],
+                        cell_h_fixed=cell_h_prior,
+                        frame_top=ft_rel, frame_bottom=fb_rel)
+                    grid_meta["head_raise_rows"] = int(k_head)
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
