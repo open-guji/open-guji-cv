@@ -95,10 +95,40 @@
    "auto": 172,
    "pending": 14,
    "done": true
+  },
+  "20": {
+   "total": 158,
+   "auto": 120,
+   "pending": 24,
+   "done": true
+  },
+  "21": {
+   "total": 179,
+   "auto": 159,
+   "pending": 20,
+   "done": true
+  },
+  "22": {
+   "total": 180,
+   "auto": 145,
+   "pending": 20,
+   "done": true
+  },
+  "23": {
+   "total": 165,
+   "auto": 134,
+   "pending": 16,
+   "done": true
+  },
+  "24": {
+   "total": 179,
+   "auto": 163,
+   "pending": 16,
+   "done": true
   }
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": null,
- "updated_at": "2026-08-24T14:45:19+00:00"
+ "pointer": "25",
+ "updated_at": "2026-08-25T14:34:32+00:00"
 }
