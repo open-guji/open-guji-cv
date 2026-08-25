@@ -152,7 +152,8 @@ function sideItems(){
   }).join('');
 }
 function subLine(){
-
+  const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
+  const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
   const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
   return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
 }
