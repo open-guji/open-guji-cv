@@ -727,6 +727,8 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
 # 首版用膨胀把「黙」的灬整个抹掉了。
 CARVE_ZONE = 0.5           # 路径活动带（× 图块高，自底向上）
 CARVE_NEAR_GAP = 1         # bbox 垂直间隙 < 此值的连通体并入字身受保护
+CARVE_DEBRIS_H = 10        # 可切连通体的高度上限（px）——版框线本来就薄
+CARVE_DEBRIS_AREA = 200    # 可切连通体的墨量上限（px）
 CARVE_MARGIN = 2           # 路径与字身下沿的余量（px）
 CARVE_STEP = 3             # 路径每列允许的纵向浮动（px）
 CARVE_CHAR = 400.0         # 禁区（字身及其上方）的代价
@@ -746,10 +748,16 @@ def _char_body(binary: np.ndarray) -> np.ndarray | None:
     for k in range(1, n):
         if k == main:
             continue
-        y = int(st[k, 1])
-        y1 = y + int(st[k, 3])
+        y, ch, area = int(st[k, 1]), int(st[k, 3]), int(st[k, 4])
+        y1 = y + ch
         gap = (y - m_y1) if y >= m_y1 else (m_y0 - y1)
-        if gap < CARVE_NEAR_GAP:
+        # 只有「离字身有间隙 + 又薄又小」的才当框渣放行；其余一律并入
+        # 字身保护。高度是最干净的判别：实测框渣 h≤8px（版框线本来就
+        # 薄），而字的下部件（「覽」下的兩條腿）h=27~61、面积 400~870
+        # ——首版只看间隙，把那两条腿当框渣切了。
+        if not (gap >= CARVE_NEAR_GAP
+                and ch <= CARVE_DEBRIS_H
+                and area <= CARVE_DEBRIS_AREA):
             out |= (lab == k)
     return out
 
