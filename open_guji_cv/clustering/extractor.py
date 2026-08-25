@@ -29,7 +29,11 @@ TIGHT_MARGIN = 2           # 裁紧余量：图块=本字墨迹外接框 ± 此�
                            # （2026-08-24 用户定版：框要完完全全包住字即可，
                            # 左右贴墙的空白装的从来不是字，是边框残渣）
 BOUNDARY_BAND = 0.10       # 图块上下各此比例的高度算「边缘带」
-BOUNDARY_INK_T = 0.025     # 边缘带墨量占全图块墨量超此 → 标 boundary_ink
+BOUNDARY_INK_T = 0.025     # （旧判据，_boundary_ink_frac 保留供研究脚本）
+BOUNDARY_BOT_T = 0.025     # 下带墨占比超此 → boundary_ink（正信号带；
+                           # 0.015 档在 vol02 抽样里大量标到贴底满格字，
+                           # 取 0.025 两册兼顾——见 boundary_ink 定版记录）
+BOUNDARY_TOP_T = 0.08      # 上带逃生口：超此才报（上带整体是反信号）
 
 # ── 缺陷自检：确定层阈值（实测 0 误报，可直接自动处理）────────────
 DEFECT_BAND = 0.18         # 判「整体落在上/下边缘带内」用的带宽
@@ -292,8 +296,11 @@ def _defect_flags(gray: np.ndarray) -> list[str]:
         flags.append("wide_gap")            # 疑似跨列
     if _off_center_frac(gray) > OFF_CENTER_T:
         flags.append("off_center")          # 疑似横向截断
-    if _boundary_ink_frac(gray) > BOUNDARY_INK_T:
-        flags.append("boundary_ink")        # 疑似：边缘带见墨
+    # 疑似：下带见墨（缺陷几乎全从下方来）；top 只留高位逃生口
+    # ——上带是反信号（clean 悬顶字），详见 _boundary_band_fracs
+    top, bot = _boundary_band_fracs(gray)
+    if bot > BOUNDARY_BOT_T or top > BOUNDARY_TOP_T:
+        flags.append("boundary_ink")
     return flags
 
 
@@ -435,6 +442,28 @@ def _boundary_ink_frac(gray: np.ndarray) -> float:
     band = max(2, int(binary.shape[0] * BOUNDARY_BAND))
     edge = int(binary[:band].sum()) + int(binary[-band:].sum())
     return edge / total
+
+
+def _boundary_band_fracs(gray: np.ndarray) -> tuple[float, float]:
+    """上带、下带各自的墨量占比（分开算——两带不是一种东西）。
+
+    2026-08-25 调查（split_curve_boundary_research.md 任务C）：clean 字
+    在格里**悬顶**，上带见墨的主体是高字/顶横（top>0.02 精确率只有
+    33%，反信号）；缺陷几乎全从**下方**来——列尾版框横线、grid_shift
+    下坠、下邻字残余（bot>0.01 精确率 61.5%）。合并成一个比例等于拿
+    反信号稀释正信号。
+    """
+    if gray.size == 0:
+        return 0.0, 0.0
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    binary = gray < BINARY_THRESHOLD_PATCH
+    total = int(binary.sum())
+    if total == 0:
+        return 0.0, 0.0
+    band = max(2, int(binary.shape[0] * BOUNDARY_BAND))
+    return (int(binary[:band].sum()) / total,
+            int(binary[-band:].sum()) / total)
 
 
 def mask_frame_bars_outside(strip: np.ndarray,
