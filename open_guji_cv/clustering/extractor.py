@@ -840,6 +840,39 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
     return True
 
 
+HEAD_CELL_MIN_H = 0.5      # 抬头位的字必须有这么高的连通体（× 格高）
+
+
+def is_head_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
+    """抬头位的格：没有整字级的连通体就判空。
+
+    抬头行是页级补出来的（补一行则全部列都多一格），但**抬头只发生在
+    个别列**——普通列的抬头位本来就是空的，落在那儿的墨几乎都是版框
+    横线。通用的列端渣格闸对这里太松：两条框线只要在某处相连，bbox
+    就是「满宽 + 0.75 格高」，被当成「字粘条」放行（实测 vol01/33:9:0）。
+    抬头位的判据因此收紧成：最大连通体高 < HEAD_CELL_MIN_H 格 → 判空。
+    真抬头字是整字，一定够高；框线组合再怎么相连也矮。
+    """
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    if not binary.any():
+        return True
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return True
+    for k in range(1, n):
+        h = int(st[k, 3])
+        w = int(st[k, 2])
+        area = int(st[k, 4])
+        if h < HEAD_CELL_MIN_H * cell_h or area < TAIL_JUNK_MIN_INK:
+            continue
+        # 满宽且填充稀疏 = 上下两条框线在某处相连，不是字
+        if w >= TAIL_JUNK_W2W * patch.shape[1] \
+                and area < 0.30 * w * h:
+            continue
+        return False
+    return True
+
+
 def _patch_ink_ratio(gray: np.ndarray) -> float:
     """Otsu 二值化后的暗像素占比（粗略墨迹密度，供分块与异常过滤）。"""
     if gray.size == 0:

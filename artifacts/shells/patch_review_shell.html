@@ -67,6 +67,7 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
 .cell.emptycell{width:64px;height:34px;border:1px dashed var(--ink2);border-radius:4px;
   background:none;display:flex;align-items:center;justify-content:center;
   color:var(--ink2);font-size:11px;line-height:1}
+.junkcell{color:var(--warn);border-color:var(--warn);border-style:dashed}
 .jzcell{outline:1.5px dashed #a78bda;outline-offset:-1px}
 .idx{position:absolute;left:-2px;top:-2px;font-size:9px;color:var(--ink2);
   background:var(--panel);padding:0 3px;border-radius:3px;line-height:1.4}
@@ -205,8 +206,9 @@ function render(){
       const mk = markCls(m);
       if(c.empty){
         if(filter==='flag'||filter==='marked'&&!m) {}
-        return `<div class="cell emptycell ${mk}" data-id="${c.id}" role="button"
-          tabindex="0" title="${c.id} 判空格">空</div>`;
+        return `<div class="cell emptycell ${c.junk?'junkcell ':''}${mk}" data-id="${c.id}"
+          role="button" tabindex="0"
+          title="${c.id} ${c.junk?'判为渣格（框渣/污渍，已判空）':'判空格'}">${c.junk?'渣':'空'}</div>`;
       }
       if(filter==='flag' && !c.f.length) return '';
       if(filter==='marked' && !m) return '';
