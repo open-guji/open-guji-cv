@@ -123,14 +123,37 @@ class GlyphMatcher:
         return self._feature.extract(patches)
 
     def match(self, norm: np.ndarray,
-              feat: np.ndarray | None = None) -> MatchResult:
+              feat: np.ndarray | None = None,
+              exclude_id: str | None = None) -> MatchResult:
+        """``exclude_id`` 把该实例自己从库里摘掉再比（2026-08-25 加）。
+
+        字位一旦进过库，重跑 seed / 复裁时它自己就在 matcher 里，于是
+        「库匹配」这一路拿到的是**自证**：cov 1.00、matched_id 就是它
+        自己。用户在审查页看到「最近刻例 vol01:22:5:4 cov 1.00」——刻例
+        编号和被审的字位是同一个，一眼就露馅。自证不是证据：进库通道
+        的整套设计前提是「文本 × 形状两路同源性为零」，自比把形状那一路
+        变成了「上次进库时定的字」，独立性归零；``match_solo``（无整理本、
+        库 cov≥0.99 单独放行）更是会被自证直接喂饱。
+        实测 vol01 队列：1333 行的 matched_id 指向自己，1136 条 cov=1.0。
+        """
         if not self._ids:
             return MatchResult("diff", None, None, 0.0, 0.0)
         if feat is None:
             feat = self._feature.extract(norm[None, ...])[0]
         F = np.asarray(self._feats)
         sims = F @ np.asarray(feat, dtype=np.float32)
+        if exclude_id is not None:
+            # 摘自身：把相似度压到最低，排序自然把它甩到末尾。取 k+1 个
+            # 再滤，保证摘掉一个之后仍有 k 个候选可验。
+            sims = sims.copy()
+            for j, iid in enumerate(self._ids):
+                if iid == exclude_id:
+                    sims[j] = -np.inf
         top = np.argsort(-sims)[: self.k]
+        if exclude_id is not None:
+            top = [j for j in top if self._ids[int(j)] != exclude_id]
+            if not top:
+                return MatchResult("diff", None, None, 0.0, 0.0)
 
         same_hits: list[tuple[float, float, str, str]] = []   # cov,wmax,char,id
         unsure_best: dict[str, float] = {}                    # char -> max cov
