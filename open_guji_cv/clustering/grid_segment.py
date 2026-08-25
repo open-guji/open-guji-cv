@@ -800,10 +800,39 @@ def measure_page_pitch(gray: np.ndarray, result: dict) -> list[float]:
     return out
 
 
+# ── 版框行锚定（2026-08-24 用户 p20 实审回流）────────────────
+# 栏格是版框等分出来的：**首格上沿物理上贴着上框线**（实测健康页
+# 相位-框顶 0.1~0.2 格）。抬头空格页（首格空白、字从第 2 格起）的
+# 谷/峰代价对「上下错开一格」的两族解等价——上面是空白格、下面是
+# 页外，哪边都没内容可罚，整版下坠一格（末格挂到页外、末字并进
+# 下框条），全书扫出 174 页。框证据可用时按 |相位-框顶| 决定性收罚。
+FRAME_ROW_T = 0.5          # 行墨 ≥ 此比例 × 页宽 → 横框线行
+FRAME_ROW_ZONE = 0.08      # 只在页顶/页底此比例窗内找横框线（字行进不来）
+ANCHOR_TOL = 0.35          # 相位偏离框顶超此比例 × 格高才罚（框线厚度 ~0.1 格）
+ANCHOR_SPAN_TOL = 0.06     # |框高/n - 格高| 超此比例 × 格高 → 框证据不可信，不锚
+ANCHOR_W = 1e4             # 决定性罚款权重（谷/峰项在平族间差值只有个位数）
+
+
+def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
+    """页顶/页底窗内最靠外的满宽横线行 =（上框线, 下框线）。检不出为 None。"""
+    if gray.ndim == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    binary = gray < BINARY_THRESHOLD
+    h, w = binary.shape
+    rowink = binary.sum(axis=1) / max(1, w)
+    zone = max(4, int(FRAME_ROW_ZONE * h))
+    ft = next((y for y in range(zone) if rowink[y] >= FRAME_ROW_T), None)
+    fb = next((y for y in range(h - 1, h - zone, -1)
+               if rowink[y] >= FRAME_ROW_T), None)
+    return ft, fb
+
+
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
                   full_widths: list[float] | None = None,
                   cell_step: float = 0.5, phase_step: int = 2,
-                  cell_h_fixed: float | None = None
+                  cell_h_fixed: float | None = None,
+                  frame_top: float | None = None,
+                  frame_bottom: float | None = None
                   ) -> tuple[float, float]:
     """页级刚性网格拟合：在全部文字列的聚合投影上搜索 (相位, 格高)。
 
@@ -886,6 +915,10 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
 
     for cell_h in cell_hs:
         span = cell_h * n_chars
+        # 版框锚定门控：上下框都检得出、且框高与 n 格吻合才启用
+        anchored = (frame_top is not None and frame_bottom is not None
+                    and abs((frame_bottom - frame_top) / n_chars - cell_h)
+                    <= ANCHOR_SPAN_TOL * cell_h)
         # 相位范围：允许首格空/框偏差，网格可高于内容顶一格出头。
         # 格高固定时不再按 L-span 收窄上界——共识格高下整版可能略高于
         # 裁切后的页面（末格出界由 cells_from_bounds 裁掉）。
@@ -898,6 +931,10 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
             uncovered = _uncovered(phase, span, 0.25 * cell_h) * len(csums)
             cost = _grid_cost(smooth, phase, cell_h, n_chars) \
                 + uncovered / cell_h
+            if anchored:
+                excess = max(0.0, abs(phase - frame_top)
+                             - ANCHOR_TOL * cell_h)
+                cost += excess / cell_h * ANCHOR_W
             if cost < best_cost:
                 best_cost = cost
                 best = (float(phase), float(cell_h))
@@ -1806,10 +1843,15 @@ class GridSegmenter:
                 # row_phase_rel 以 frame_top 为基准 → 换算到 crop 坐标
                 page_phase = float(col_top) + grid_override["row_phase_rel"] - y1
             else:
+                # 版框行锚定：在去错切帧上量上下框线，换算到裁剪窗坐标。
+                # 检不出（磨损）或框高与 n 格不合时 fit 内部门控自动不锚。
+                ft, fb = measure_row_frames(image)
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],
-                    cell_h_fixed=cell_h_prior)
+                    cell_h_fixed=cell_h_prior,
+                    frame_top=None if ft is None else float(ft - y1),
+                    frame_bottom=None if fb is None else float(fb - y1))
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
