@@ -7,10 +7,13 @@
   字形永不合併，檢索時 ``GlyphDB.query(editions=[...], kinds=[...])``
   可以只挑其中一兩個庫比對，命中結果的 ``DBHit.edition_tag/kind``
   直接說明字形出自哪個庫。
-- **不進 Git**：字體字形由「字體檔 + 字表」確定性重生成，
-  ``export_store`` 跳過 kind='font' 的整條鏈；重建後用
-  ``python -m open_guji_cv glyph-db import-font`` 重新灌。
-  可復現所需的字體版本/字表記在 ``config/fonts/manifest.json``。
+- **字形圖不進 Git，字體檔進**：15.5 萬張 canonical PNG 無損打包也要
+  ~420MB / 15.5 萬個文件，會顯著拖垮倉庫；而字形是「字體檔 + 字表」的
+  確定性函數。故 ``export_store`` 跳過 kind='font' 的整條鏈，改把兩套
+  可自由再分發的字體收在 ``fonts/``（Jigmo CC0、I.Ming IPA License，
+  見 ``fonts/README.md``）。任一份克隆跑
+  ``python -m open_guji_cv glyph-db import-font`` 即可重建出完全相同的
+  字形。清單見 ``config/fonts/manifest.json``。
 
 渲染幾何按 canonical 規範（glyph_canonical_format.md §4）：渲染到大
 畫布、字面 ≤195px、四周留白，再 ``to_canonical(clean=False)`` 質心
@@ -101,8 +104,26 @@ class FontRenderer:
         return to_canonical(arr, clean=False)
 
 
+_WORKER: dict = {}
+
+
+def _worker_init(font_paths: list[str]) -> None:
+    _WORKER["r"] = FontRenderer([Path(p) for p in font_paths])
+
+
+def _worker_render(char: str):
+    """渲染 + 歸一 + 編碼（純 CPU，可並行）。返回 None 表示缺字/空白。"""
+    canon = _WORKER["r"].render(char)
+    if canon is None:
+        return None
+    norm = normalize_patch(canon)
+    if not norm.any():
+        return None
+    return (char, encode_png(canon), float((canon < 128).mean()), norm)
+
+
 def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
-                progress_every: int = 0) -> dict:
+                progress_every: int = 0, jobs: int = 1) -> dict:
     """按字表渲染一套字體並入庫（冪等：重跑覆寫同 instance_id）。
 
     每字一個實例、一個 glyph、一個 exemplar（role='render'）。
@@ -127,16 +148,20 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
          now))
 
     n_ok = n_missing = 0
-    for i, char in enumerate(chars):
-        canon = renderer.render(char)
-        if canon is None:
+    if jobs > 1:
+        import multiprocessing as mp
+        pool = mp.Pool(jobs, initializer=_worker_init,
+                       initargs=([str(p) for p in spec.font_paths],))
+        produced = pool.imap(_worker_render, chars, chunksize=64)
+    else:
+        pool = None
+        produced = (_worker_render_serial(renderer, c) for c in chars)
+    for i, item in enumerate(produced):
+        if item is None:
             n_missing += 1
             continue
+        char, png, ink, norm = item
         iid = f"{spec.edition_tag}:{ord(char):05X}"
-        norm = normalize_patch(canon)
-        if not norm.any():
-            n_missing += 1
-            continue
         cur.execute(
             """INSERT INTO instances (instance_id, source_id, page, col, idx,
                  bbox, patch_png, ink_ratio, width, height, quality_flags,
@@ -146,8 +171,8 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
                        NULL,?,NULL,?)
                ON CONFLICT(instance_id) DO UPDATE SET
                  patch_png=excluded.patch_png, updated_at=excluded.updated_at""",
-            (iid, spec.source_id, ord(char), encode_png(canon),
-             float((canon < 128).mean()), float(CANON_SIZE), float(CANON_SIZE),
+            (iid, spec.source_id, ord(char), png,
+             ink, float(CANON_SIZE), float(CANON_SIZE),
              char, ord(char), now))
         cur.execute(
             """INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
@@ -172,9 +197,22 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
                   f"{(i + 1) / el:.0f} 字/秒 "
                   f"剩余 ~{(len(chars) - i - 1) / max((i + 1) / el, 1) / 60:.0f} 分",
                   flush=True)
+    if pool is not None:
+        pool.close()
+        pool.join()
     db.conn.commit()
     return {"edition": spec.edition_tag, "glyphs": n_ok,
             "missing": n_missing, "requested": len(chars)}
+
+
+def _worker_render_serial(renderer, char):
+    canon = renderer.render(char)
+    if canon is None:
+        return None
+    norm = normalize_patch(canon)
+    if not norm.any():
+        return None
+    return (char, encode_png(canon), float((canon < 128).mean()), norm)
 
 
 # ── 字表 ──────────────────────────────────────────────────
@@ -216,9 +254,14 @@ def load_manifest(path: str | Path) -> tuple[list[FontSpec], dict]:
     """
     import os
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    # 未設 GUJI_FONT_DIR 時指向倉庫自帶的 fonts/（見 fonts/README.md）
+    env = dict(os.environ)
+    env.setdefault("GUJI_FONT_DIR",
+                   str(Path(__file__).resolve().parents[2] / "fonts"))
     specs = []
     for f in data.get("fonts", []):
-        paths = [Path(os.path.expandvars(p)).expanduser()
+        paths = [Path(os.path.expandvars(p) if "$" not in p
+                      else _expand(p, env)).expanduser()
                  for p in f["font_paths"]]
         specs.append(FontSpec(
             edition_tag=f["edition_tag"], font_paths=paths,
@@ -231,7 +274,8 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
                                only: str | None = None,
                                charset: str | Path | None = None,
                                limit: int | None = None,
-                               progress_every: int = 5000) -> dict:
+                               progress_every: int = 5000,
+                               jobs: int = 1) -> dict:
     """按清單批量導入字體字形。缺失字體檔的條目跳過並記在結果裡。"""
     specs, data = load_manifest(manifest_path)
     if only:
@@ -246,12 +290,20 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
         missing_files = [str(p) for p in spec.font_paths if not p.exists()]
         if missing_files:
             skipped.append({"edition": spec.edition_tag,
-                            "missing_files": missing_files})
+                            "missing_files": missing_files,
+                            "hint": "该字体未随仓库提交，需自行下载到 "
+                                    "$GUJI_FONT_DIR（见 fonts/README.md）"})
             continue
         results.append(import_font(db, spec, chars,
-                                   progress_every=progress_every))
+                                   progress_every=progress_every, jobs=jobs))
     return {"charset_size": len(chars), "imported": results,
             "skipped": skipped}
+
+
+def _expand(text: str, env: dict) -> str:
+    """按給定環境展開 $VAR（os.path.expandvars 只認真實環境變量）。"""
+    import string
+    return string.Template(text).safe_substitute(env)
 
 
 def _parse_cp(s: str) -> int | None:
