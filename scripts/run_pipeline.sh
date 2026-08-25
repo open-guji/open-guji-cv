@@ -14,6 +14,10 @@ export GUJI_WORKERS
 
 run_book() {
   local b=$1
+  # 注意：chars 之后必跑 replay_recrops —— segment/chars 会整份重写
+  # index.jsonl 与 patches，人工重切的框就没了（实测 24 条归零）。真源在
+  # 数据集 char-segmentation/instances（seed=review_recrop），贴回即可。
+  # 幂等，没有可贴的就是个空操作。
   for step in "segment output/$b --chars-per-line 21" "chars output/$b" \
               "cluster output/$b" "label output/$b"; do
     local s=$(date +%s)
@@ -22,6 +26,12 @@ run_book() {
     echo "[$b] ${step%% *}: $(( $(date +%s) - s ))s rc=$rc"
     if [ $rc -ne 0 ]; then
       echo "[$b] ${step%% *} 失败，日志 /tmp/pipe_${b}_${step%% *}.log"; return 1
+    fi
+    if [ "${step%% *}" = "chars" ]; then
+      PYTHONPATH=. python scripts/replay_recrops.py "output/$b" --apply \
+        >> "/tmp/pipe_${b}_chars.log" 2>&1 \
+        && echo "[$b] replay_recrops: 人工重切已贴回" \
+        || echo "[$b] replay_recrops 失败（人工重切没贴回！）日志 /tmp/pipe_${b}_chars.log"
     fi
   done
   # 注意不能写成 `[ $rc -ne 0 ] && {...}`：rc=0 时整个复合命令状态为 1，

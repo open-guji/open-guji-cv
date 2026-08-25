@@ -607,6 +607,22 @@ toc 从 62.2% 降到 58.7%——两个方向都被带偏了。
 `pos == 列内 char 位次 - 1` 恒成立。回归钉在
 `test_context_pos_follows_index_not_carrier`。
 
+**人工成果不能只活在产物里。** 审查页的重切改的是 `index.jsonl` 的 bbox
+和磁盘 patch —— 而 `segment`/`chars` 一重跑就把这两样整份重写，24 条重切
+就这么无声无息地归零（逐提交实锤见 segmentation_border_feedback.md
+2026-08-25 一节）。凡是**人给的**东西（重切框、裁决、排除名单）都必须有
+产物之外的真源：重切的真源是数据集分片
+`char-segmentation/instances`（`seed=review_recrop`），
+`scripts/replay_recrops.py` 负责重跑之后贴回来，已挂进 run_pipeline.sh。
+
+**「产物是不是最新的」要用重跑对比来答，不能靠 git log。** 代码没动不等于
+产物是那份代码出的（中间可能被别的分支的产物换过装）。做法：用当天的代码
+往 scratch 目录整册重跑一遍，与盘上的逐页比 JSON。注意两个坑：书级共识
+（格高/列距/内缩）是**跨全书**算的，只跑几页结论全错；`segment vol01` 与
+`segment output/vol01` 走**不同代码路径**（`profile.json` 按 `args.path`
+找，前者找不到 → `n_cols=None` → 退回 Phase 2 列检测），必须照
+run_pipeline.sh 的写法传 `output/<book>`。
+
 **队列的「一个 id 一行」是硬契约，破了不报错只出怪现象。**
 `migrate_labels_after_resegment.py` 早期版本对「目标字位在新切分里不存在」
 的行只改状态、不改 id——那个旧 id 已经被另一条迁移行占了，于是 queue.jsonl
