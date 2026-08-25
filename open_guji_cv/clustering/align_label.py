@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,6 +111,21 @@ class PageLabelStat:
         return self.n_equal + self.n_replace
 
 
+def slot_key(col: str | int, idx: str | int) -> tuple[int, int, str]:
+    """(列, 格) → 可排序的键，能吃下**夹注子字**的 a/b 后缀。
+
+    双行夹注（main 的「a/b 子列拆分」）把一格里的左右两个小字写成
+    `…:9:2a` / `…:9:2b`——id 尾段带后缀，而 index 的 `idx` 字段仍是 2。
+    直接 `int(idx)` 会炸（vol01 有 248 条这样的记录）。这里把尾段拆成
+    数字 + 后缀：排序上 2a < 2b < 3，与 index 里的行序、与页面上的
+    阅读顺序都一致。
+    """
+    m = re.match(r"^(-?\d+)([a-z]*)$", str(idx).strip())
+    if not m:
+        raise ValueError(f"格序号解析不了: {idx!r}")
+    return (int(col), int(m.group(1)), m.group(2))
+
+
 def page_slots(ranked: list[dict]) -> dict[str, list[tuple[int, int, str]]]:
     """ranked.json 的 results → {页: [(col, idx, 转写字), ...]}，页内按 (col, idx)。
 
@@ -119,8 +135,10 @@ def page_slots(ranked: list[dict]) -> dict[str, list[tuple[int, int, str]]]:
     by_page: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
     for r in ranked:
         _, page, col, idx = r["id"].split(":")
-        by_page[page].append((int(col), int(idx), r["best"]))
-    return {p: sorted(v) for p, v in by_page.items()}
+        by_page[page].append((*slot_key(col, idx), r["best"]))
+    # 排序用带后缀的四元组（2a < 2b < 3），对外仍是 (col, idx, 字) 三元组
+    return {p: [(c, i, t) for c, i, _, t in sorted(v)]
+            for p, v in by_page.items()}
 
 
 def _structure(slots: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
@@ -140,8 +158,15 @@ def index_structure(index_path: str | Path) -> dict[str, list[tuple[int, int]]]:
             if not line.strip():
                 continue
             r = json.loads(line)
-            per_page[r["page"]].append((int(r["col"]), int(r["idx"])))
-    return {p: sorted(v) for p, v in per_page.items()}
+            # 夹注子字的后缀只在 id 里（idx 字段是 int），所以优先按 id 拆；
+            # 没有 id 的精简行（测试 fixture、外部导出）退回 col/idx 字段
+            if r.get("id") and r["id"].count(":") == 3:
+                _, _, col, idx = r["id"].split(":")
+            else:
+                col, idx = r["col"], r["idx"]
+            per_page[r["page"]].append(slot_key(col, idx))
+    return {p: [(c, i) for c, i, _ in sorted(v)]
+            for p, v in per_page.items()}
 
 
 def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
@@ -246,11 +271,12 @@ def carrier_slots(carrier_path: str | Path,
                 dropped += 1
                 continue
             _, page, col, idx = r["id"].split(":")
-            by_page[page].append((int(col), int(idx), r["char"] or "□"))
+            by_page[page].append((*slot_key(col, idx), r["char"] or "□"))
     if dropped:
         print(f"⚠ OCR 载体有 {dropped} 条已不在索引里（切分重跑过？）已丢弃；"
               f"建议重建载体：scripts/build_ocr_carrier.py")
-    return {p: sorted(v) for p, v in by_page.items()}
+    return {p: [(c, i, t) for c, i, _, t in sorted(v)]
+            for p, v in by_page.items()}
 
 
 def label_book(book: str, book_out_dir: str | Path, corpus_path: str | Path,
