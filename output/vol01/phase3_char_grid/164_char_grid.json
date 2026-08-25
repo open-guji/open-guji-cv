@@ -507,22 +507,22 @@
           "type": "char",
           "index": 3,
           "y_top": 372.0,
-          "y_bottom": 487.02477714285783,
+          "y_bottom": 499.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 487.02477714285783,
-          "y_bottom": 602.2373485714295,
+          "y_top": 499.0,
+          "y_bottom": 595.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 602.2373485714295,
+          "y_top": 595.0,
           "y_bottom": 717.449920000001,
           "text": null,
           "confidence": 0.0
@@ -1408,14 +1408,14 @@
           "type": "char",
           "index": 4,
           "y_top": 496.02477714285783,
-          "y_bottom": 611.2373485714295,
+          "y_bottom": 623.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 611.2373485714295,
+          "y_top": 623.0,
           "y_bottom": 726.449920000001,
           "text": null,
           "confidence": 0.0
@@ -1741,22 +1741,22 @@
           "type": "char",
           "index": 3,
           "y_top": 375.0,
-          "y_bottom": 490.02477714285783,
+          "y_bottom": 485.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 490.02477714285783,
-          "y_bottom": 605.2373485714295,
+          "y_top": 485.0,
+          "y_bottom": 594.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 5,
-          "y_top": 605.2373485714295,
+          "y_top": 594.0,
           "y_bottom": 720.449920000001,
           "text": null,
           "confidence": 0.0
@@ -1874,12 +1874,17 @@
           "confidence": 0.0
         },
         {
-          "type": "char",
+          "type": "empty",
           "index": 20,
           "y_top": 2333.0,
-          "y_bottom": 2448.638491428575,
+          "y_bottom": 2436.0,
           "text": null,
           "confidence": 0.0
+        },
+        {
+          "type": "margin",
+          "y_top": 2436.0,
+          "y_bottom": 2447.0
         }
       ],
       "cell_left_x": 1532.0,

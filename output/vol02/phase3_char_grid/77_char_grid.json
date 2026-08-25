@@ -547,14 +547,14 @@
           "type": "char",
           "index": 1,
           "y_top": 587.0,
-          "y_bottom": 691.4708285714291,
+          "y_bottom": 702.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 2,
-          "y_top": 691.4708285714291,
+          "y_top": 702.0,
           "y_bottom": 814.0,
           "text": null,
           "confidence": 0.0
@@ -563,14 +563,14 @@
           "type": "char",
           "index": 3,
           "y_top": 814.0,
-          "y_bottom": 914.9416571428583,
+          "y_bottom": 926.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 4,
-          "y_top": 914.9416571428583,
+          "y_top": 926.0,
           "y_bottom": 1035.0,
           "text": null,
           "confidence": 0.0
@@ -1451,9 +1451,14 @@
       "ocr_text": "",
       "cells": [
         {
+          "type": "margin",
+          "y_top": 454.0,
+          "y_bottom": 464.0
+        },
+        {
           "type": "char",
           "index": 0,
-          "y_top": 454.0,
+          "y_top": 464.0,
           "y_bottom": 564.0,
           "text": null,
           "confidence": 0.0
@@ -1901,9 +1906,14 @@
       "ocr_text": "",
       "cells": [
         {
+          "type": "margin",
+          "y_top": 454.0,
+          "y_bottom": 465.0
+        },
+        {
           "type": "char",
           "index": 0,
-          "y_top": 454.0,
+          "y_top": 465.0,
           "y_bottom": 562.0,
           "text": null,
           "confidence": 0.0
@@ -1920,14 +1930,14 @@
           "type": "char",
           "index": 2,
           "y_top": 668.0,
-          "y_bottom": 789.2062428571437,
+          "y_bottom": 799.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 3,
-          "y_top": 789.2062428571437,
+          "y_top": 799.0,
           "y_bottom": 900.9416571428583,
           "text": null,
           "confidence": 0.0

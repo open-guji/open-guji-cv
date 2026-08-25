@@ -1737,14 +1737,14 @@
           "type": "char",
           "index": 19,
           "y_top": 2248.0,
-          "y_bottom": 2375.8448800000037,
+          "y_bottom": 2370.0,
           "text": null,
           "confidence": 0.0
         },
         {
           "type": "char",
           "index": 20,
-          "y_top": 2375.8448800000037,
+          "y_top": 2370.0,
           "y_bottom": 2483.0,
           "text": null,
           "confidence": 0.0
@@ -1969,12 +1969,17 @@
           "confidence": 0.0
         },
         {
-          "type": "char",
+          "type": "empty",
           "index": 20,
           "y_top": 2381.0,
-          "y_bottom": 2497.1851657142893,
+          "y_bottom": 2483.0,
           "text": null,
           "confidence": 0.0
+        },
+        {
+          "type": "margin",
+          "y_top": 2483.0,
+          "y_bottom": 2488.0
         }
       ],
       "cell_left_x": 1491.0,
