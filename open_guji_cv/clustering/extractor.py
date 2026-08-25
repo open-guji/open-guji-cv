@@ -707,6 +707,61 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
     return out
 
 
+# ── 版框断段剥离（2026-08-25，用户问「还有没有别的办法」）────
+# 曲线切边之后仍剩下一类框渣：版框横线被字挡断后留在字**左右两侧**的
+# 断段。它们与字身垂直位置重叠，所以曲线路径（必须走在字身之下）够不
+# 着，间隙判据（gap≥1）也失效——两组的面积/高度/宽高比/填充率分布全部
+# 重叠，图块内部再怎么量都分不开。
+#
+# 分得开的信息在**图块之外**：框线横贯整版，被字挡断只是局部现象，
+# 断段所在的那几行在**列框外侧仍然继续走**；字的笔画到界行就停。实测
+# 列外墨率（取左右两侧的较大者，因为被挡断的那一侧本来就没墨）——
+# 框线断段 0.46~0.66，「黙」的四点底这类字部件 ≤0.24，一刀两断。
+STUB_SIDE_PROBE = 42       # 列框外侧的探测宽度（px）
+STUB_SIDE_INK = 0.35       # 列外墨率（取两侧较大者）超此 → 框线在继续
+STUB_MAX_H = 12            # 断段的高度上限（px）——版框线本来就薄
+STUB_MIN_AREA = 40         # 小于此的碎点交给别的闸，这里不管
+
+
+def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
+                     x0: int, x1: int, y0: int) -> np.ndarray:
+    """剥掉版框横线被字挡断后留下的断段（判据见上方注释）。
+
+    x0/x1 是本列在整页上的左右边界，y0 是图块顶在整页上的 y。
+    """
+    if page.size == 0 or patch.size == 0:
+        return patch
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    main = int(np.argmax(st[1:, 4])) + 1
+    H, W = page.shape[:2]
+    hits = []
+    for k in range(1, n):
+        if k == main:
+            continue
+        ch, area = int(st[k, 3]), int(st[k, 4])
+        if ch > STUB_MAX_H or area < STUB_MIN_AREA:
+            continue
+        ya = max(0, y0 + int(st[k, 1]))
+        yb = min(H, ya + ch)
+        if yb <= ya:
+            continue
+        left = page[ya:yb, max(0, x0 - STUB_SIDE_PROBE):max(1, x0)]
+        right = page[ya:yb, min(W - 1, x1):min(W, x1 + STUB_SIDE_PROBE)]
+        lo = float((left < BINARY_THRESHOLD_PATCH).mean()) if left.size else 0.0
+        ro = float((right < BINARY_THRESHOLD_PATCH).mean()) if right.size else 0.0
+        if max(lo, ro) >= STUB_SIDE_INK:
+            hits.append(k)
+    if not hits:
+        return patch
+    out = patch.copy()
+    for k in hits:
+        out[lab == k] = 255
+    return out
+
+
 # ── 列端曲线切边（2026-08-25，用户定：图块的边不必是直线）────
 # 用户看过框渣剥离的结果后提的：
 #
@@ -1509,6 +1564,9 @@ class CharExtractor:
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)
+                    # 框线断段：判据在图块之外（列外墨率），必须传整页
+                    patch = strip_frame_stub(patch, page_img, int(sx0),
+                                             int(sx1), int(sy0 + y0))
                     # 曲线切边：列末切下边、列首切上边（用户定——图块的
                     # 边不必是直线，绕开版框即可）。放在框渣剥离之后，
                     # 剥不掉的粘连/侧下方断段由它兜底。
