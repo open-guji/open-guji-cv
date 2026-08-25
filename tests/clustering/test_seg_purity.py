@@ -194,20 +194,31 @@ def test_boundary_ink_empty_patch_is_zero():
 def test_extract_page_emits_boundary_ink_flag():
     import numpy as np
     from open_guji_cv.clustering.extractor import CharExtractor
-    # 一列两格，第 2 格的字紧贴格顶（模拟上邻字残余/截断）
+    # 一列两格；第 1 格下边缘挂着下邻字残余（缺陷几乎全从下方来，
+    # 2026-08-25 判据定版为下带 >0.025 ∨ 上带 >0.08）
     page = np.full((300, 120), 235, np.uint8)
-    page[20:80, 30:90] = 25          # 第 1 格：居中
-    page[100:112, 30:90] = 25        # 第 2 格：紧贴顶部
-    page[150:190, 30:90] = 25
+    page[20:80, 30:90] = 25           # 第 1 格：本字居中
+    page[96:108, 30:90] = 25          # 第 1 格底部残余（骑在格线上）
+    page[150:190, 30:90] = 25         # 第 2 格：居中
     grid = {"columns": [{"index": 1, "left_x": 20.0, "right_x": 100.0,
                          "cells": [
                              {"type": "char", "index": 0, "y_top": 10.0,
                               "y_bottom": 100.0},
                              {"type": "char", "index": 1, "y_top": 100.0,
                               "y_bottom": 200.0}]}]}
-    res = CharExtractor().extract_page(page, grid, "b", "1")
+    res = CharExtractor(strategy="padding_box").extract_page(
+        page, grid, "b", "1")
     flags = {i.idx: i.flags for i, _ in res}
-    assert "boundary_ink" in flags.get(1, []), flags
+    assert "boundary_ink" in flags.get(0, []), flags
+
+
+def test_boundary_ink_spares_light_top_band_ink():
+    """上带轻墨是反信号（clean 悬顶字/高字顶横），不再单独触发。"""
+    import numpy as np
+    from open_guji_cv.clustering.extractor import _defect_flags
+    g = np.full((120, 100), 255, np.uint8)
+    g[8:100, 20:80] = 0               # 高字：顶到上带但主体在格内
+    assert "boundary_ink" not in _defect_flags(g)
 
 
 # ── 分层缺陷自检：确定层按成因分开标 ──────────────────────
