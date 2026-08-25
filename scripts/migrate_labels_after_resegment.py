@@ -149,45 +149,89 @@ def main() -> None:
         return
 
     # ── 落地 ──
+    # 先算全部映射再动手：整页平移是**链式**的（4:1:5→4:1:6、4:1:6→4:1:7…），
+    # 逐行边算边写会自己踩自己；而且要先查两类冲突，否则会静默丢标注。
     qp = book_dir / "phase9_seed" / "queue.jsonl"
     rows = [json.loads(l) for l in qp.read_text(encoding="utf-8").splitlines()
             if l.strip()]
-    n = Counter()
+    drift_ids = {x for v in drift_by_page.values() for x in v}
+    by_id = {r["instance_id"]: r for r in rows}
+
+    mapping: dict[str, str] = {}
     for r in rows:
-        iid = r["instance_id"]
-        page = r["page"]
+        iid, page = r["instance_id"], r["page"]
         if r["status"] not in DECIDED or page not in plan:
             continue
-        if iid not in {x for v in drift_by_page.values() for x in v} \
-                and iid in store:
+        if iid in store and iid not in drift_ids:
             continue                       # 本来就对得上，不动
         dc, di = plan[page]
-        new_id = f"{book}:{page}:{r['col']+dc}:{r['idx']+di}"
-        if new_id not in idx:
+        mapping[iid] = f"{book}:{page}:{r['col']+dc}:{r['idx']+di}"
+
+    # 冲突①：两个源迁到同一个目标；冲突②：目标是一条**留在原地**的已裁决行
+    targets = Counter(mapping.values())
+    stay = {r["instance_id"] for r in rows
+            if r["status"] in DECIDED and r["instance_id"] not in mapping}
+    bad = {src for src, dst in mapping.items()
+           if targets[dst] > 1 or dst in stay}
+    for src in bad:
+        mapping.pop(src)
+
+    n = Counter()
+    n["conflict_skipped"] = len(bad)
+    # 撤库要在重进之前整批做完：目标 id 可能正被另一条旧记录占着
+    for src in mapping:
+        if src in store:
+            evict_instance(db, src)
+            n["evicted"] += 1
+    for dst in set(mapping.values()):
+        if db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                           (dst,)).fetchone():
+            evict_instance(db, dst)        # 目标位上的旧内容让位
+            n["target_cleared"] += 1
+
+    for src, dst in mapping.items():
+        r = by_id[src]
+        if dst not in idx:
             r["status"] = "pending_review"
+            r["decided_char"] = None
+            r["provenance"] = None
             r["note"] = "resegment_lost"
             n["lost"] += 1
             continue
-        ch = chars.get(iid) or r.get("decided_char")
-        if iid in store:                   # 库里有 → 撤旧、用新图块重进
-            evict_instance(db, iid)
-            n["evicted"] += 1
-            if ch:
-                d = idx[new_id]
-                db.admit_instance(
-                    new_id, ch, (root / d["patch_path"]).read_bytes(),
-                    provenance=r.get("provenance") or "human",
-                    evidence={"migrated_from": iid, "shift": [dc, di],
-                              "reason": "resegment"},
-                    page=page, col=r["col"] + dc, idx=r["idx"] + di,
-                    bbox=list(d["bbox"]), ink_ratio=d.get("ink_ratio"),
-                    width=d.get("width"), height=d.get("height"))
-                n["readmitted"] += 1
-        r["instance_id"] = new_id
-        r["col"], r["idx"] = r["col"] + dc, r["idx"] + di
-        r["patch_path"] = idx[new_id]["patch_path"]
-        r["note"] = f"migrated:{dc:+d}{di:+d}"
+        ch = chars.get(src) or r.get("decided_char")
+        d = idx[dst]
+        if ch and r["status"] in ("auto_admitted", "confirmed", "rejected"):
+            db.admit_instance(
+                dst, ch, (root / d["patch_path"]).read_bytes(),
+                provenance=r.get("provenance") or "human",
+                evidence={"migrated_from": src, "shift": plan[r["page"]],
+                          "reason": "resegment"},
+                page=r["page"], col=d["col"], idx=d["idx"],
+                bbox=list(d["bbox"]), ink_ratio=d.get("ink_ratio"),
+                width=d.get("width"), height=d.get("height"))
+            n["readmitted"] += 1
+        r["instance_id"] = dst
+        r["col"], r["idx"] = d["col"], d["idx"]
+        r["patch_path"] = d["patch_path"]
+        r["note"] = f"migrated:{plan[r['page']][0]:+d}{plan[r['page']][1]:+d}"
         n["migrated"] += 1
+
+    # 冲突行与不迁移页的错位行：退回待审，库里也别留错形
+    for iid in list(bad) + [i for i in drift_ids
+                            if i.split(":")[1] not in plan]:
+        r = by_id.get(iid)
+        if r is None or r["status"] not in DECIDED:
+            continue
+        if db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                           (iid,)).fetchone():
+            evict_instance(db, iid)
+            n["evicted_unmigrated"] += 1
+        r["status"] = "pending_review"
+        r["decided_char"] = None
+        r["provenance"] = None
+        r["note"] = "resegment_recheck"
+        n["back_to_review"] += 1
+
     qp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
                           for r in rows), encoding="utf-8")
     db.close()
