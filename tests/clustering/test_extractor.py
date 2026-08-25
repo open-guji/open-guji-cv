@@ -243,3 +243,46 @@ def test_strip_side_rule_spares_a_char_written_outside_the_band():
     assert (out[15:85, 8:14] == 30).all(), "带外小字的竖笔被剥了（红线）"
     assert (out[5:95, 110:114] == 255).all(), "真界行没剥掉"
     assert (out[10:90, 46:76] == 30).all(), "字身被动了"
+
+
+def test_frame_band_inner_stops_at_the_bar_not_at_a_dense_text_row():
+    """框带内缘只吃框线行；末行字再密也不算框带（红线：绝不吞字）。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+
+    h, w = 600, 400
+    page = np.full((h, w), 235, dtype=np.uint8)
+    page[8:12, :] = 30                     # 上框：满宽横条
+    page[560:566, :] = 30                  # 下框：满宽横条
+    # 末行字：行墨率不低（每 8px 一竖，约 0.35），但没有长连续段
+    page[500:556, ::8] = 30
+    top, bot = frame_band_inner(page)
+    assert top == 12, f"上框内缘 {top}"
+    assert bot == 560, f"下框内缘 {bot}（吃进末行字了）"
+
+
+def test_frame_band_clamp_keeps_the_tail_char_and_drops_the_bar():
+    """列尾格：框线不进条带，字一个像素不少。"""
+    from open_guji_cv.clustering.extractor import (BINARY_THRESHOLD_PATCH,
+                                                   CharExtractor)
+    h, w = 400, 200
+    page = np.full((h, w), 235, dtype=np.uint8)
+    page[6:10, :] = 30                              # 上框
+    cells, y = [{"type": "margin", "y_top": 0.0, "y_bottom": 10.0}], 10.0
+    for idx in range(3):
+        y0, y1 = y, y + 110.0
+        page[int(y0) + 20:int(y1) - 20, 70:130] = 30    # 每格一个墨块
+        cells.append({"type": "char", "index": idx,
+                      "y_top": y0, "y_bottom": y1})
+        y = y1
+    page[336:344, :] = 30                           # 下框：压在末格下沿之内
+    grid = {"image_size": {"width": w, "height": h},
+            "columns": [{"index": 1, "left_x": 60.0, "right_x": 140.0,
+                         "cell_left_x": 55.0, "cell_right_x": 145.0,
+                         "layout": "rigid", "cells": cells}],
+            "grid": {"cell_h": 110.0, "period": 100.0}}
+    got = {i.idx: p for i, p in CharExtractor().extract_page(page, grid, "b", "1")}
+    tail = got[2]
+    ink_rows = np.flatnonzero((tail < BINARY_THRESHOLD_PATCH).any(axis=1))
+    assert ink_rows.size, "末格全空了"
+    # 末格的墨块高 70px（y 250~320）：框线一行都不许进来
+    assert int(ink_rows.max() - ink_rows.min()) + 1 <= 74, "下框线混进末格"

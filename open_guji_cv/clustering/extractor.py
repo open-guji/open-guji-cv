@@ -919,27 +919,39 @@ CARVE_LIFT = 0.35          # 「尽量贴字身」的偏好，把路径压到字
 
 
 def _char_body(binary: np.ndarray) -> np.ndarray | None:
-    """字身 + 字底部件的掩膜（判据见 CARVE_* 上方注释）。"""
+    """字身 + 字底部件的掩膜（判据见 CARVE_* 上方注释）。
+
+    间隙量的是「候选块与**它头顶那片字料**的距离」，不是「与主连通体
+    bbox 的距离」。后者在主连通体又高又瘦时形同虚设：「院」的阝几乎贯穿
+    整块图块，页底那两条框线残段的 y 区间落在它的 bbox 里，算出来的
+    间隙是 −96，于是被当字身保护、曲刀一刀也切不动（2026-08-25 用户
+    指出列尾格是密集失败点，逐格看图查到这一条）。
+    """
     n, lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
     if n <= 1:
         return None
     main = int(np.argmax(st[1:, 4])) + 1
-    m_y0 = int(st[main, 1])
-    m_y1 = m_y0 + int(st[main, 3])
-    out = (lab == main)
+    # 第一遍按形状挑候选：又薄又小的才可能是框渣（「覽」下面那两条腿
+    # h=27~61、面积 400~870，这一关就把它们挡在外面）
+    cand = [k for k in range(1, n)
+            if k != main
+            and int(st[k, 3]) <= CARVE_DEBRIS_H
+            and int(st[k, 4]) <= CARVE_DEBRIS_AREA]
+    out = np.zeros(binary.shape, dtype=bool)
     for k in range(1, n):
-        if k == main:
-            continue
-        y, ch, area = int(st[k, 1]), int(st[k, 3]), int(st[k, 4])
-        y1 = y + ch
-        gap = (y - m_y1) if y >= m_y1 else (m_y0 - y1)
-        # 只有「离字身有间隙 + 又薄又小」的才当框渣放行；其余一律并入
-        # 字身保护。高度是最干净的判别：实测框渣 h≤8px（版框线本来就
-        # 薄），而字的下部件（「覽」下的兩條腿）h=27~61、面积 400~870
-        # ——首版只看间隙，把那两条腿当框渣切了。
-        if not (gap >= CARVE_NEAR_GAP
-                and ch <= CARVE_DEBRIS_H
-                and area <= CARVE_DEBRIS_AREA):
+        if k not in cand:
+            out |= (lab == k)          # 字料：主连通体 + 一切不薄不小的块
+    core = out.copy()
+    h = binary.shape[0]
+    ys = np.arange(h)[:, None]
+    for k in cand:
+        x, y, cw = int(st[k, 0]), int(st[k, 1]), int(st[k, 2])
+        band = core[:y, x:x + cw]      # 候选块头顶、同一批列上的字料
+        above = -1
+        if band.size and band.any():
+            rows = np.where(band, ys[:y], -1).max()
+            above = int(rows)
+        if y - above < CARVE_NEAR_GAP:  # 紧贴字料 → 是字的一部分，保护
             out |= (lab == k)
     return out
 
@@ -1547,6 +1559,61 @@ def clean_patch(strip: np.ndarray, owner: np.ndarray, cell_idx: int,
     return patch
 
 
+# ── 版框带内缘钉桩（2026-08-25，用户「列尾格是密集失败点」）────────
+# 列端格的格线是等分算出来的，撞上版框时会一路裁到框线上甚至框外。
+# 框墨一旦进了条带就很难再拿掉：它常和字的竖笔**粘成一个连通体**
+# （实测「院」的阝、「續」「蒐」的末笔都是），剥离只动独立连通体、
+# 曲刀的红线又不许切与字身连通的墨，两条路都堵死。
+#
+# 所以把桩打在**进来之前**：条带的上下界先钉在版框带的内缘。
+# 内缘的量法——从最外那条框线行往里走，**只要下一行还是「框线行」就
+# 继续**（框线磨损会散成几行）。判「框线行」必须用 grid_segment 里那套
+# 标定过的双档（行墨 ≥0.5，或行墨 ≥0.28 且最长横向连续段 ≥0.22 页宽），
+# 不能只看行墨率：末行字的行墨能到 0.23~0.55，只看行墨会把整行字当成
+# 框带吞掉（首版取 0.22，实测把 vol01/28 col8 的末字砍掉一半）。
+# 再加两条保险：框带最厚 FRAME_BAND_MAX 行；钉桩最多吃掉端格的
+# FRAME_BAND_MAX_CUT 比例，越过就不钉——宁可留框渣，绝不吞字。
+FRAME_BAND_MAX = 25        # 框带最厚走这么多行
+FRAME_BAND_MAX_CUT = 0.35  # 钉桩最多吃掉端格的这个比例（× 格高）
+
+
+def frame_band_inner(page: np.ndarray) -> tuple[int, int]:
+    """整页上下版框带的**内缘**行号 (top_inner, bot_inner)。检不出给页界。"""
+    from .grid_segment import (BINARY_THRESHOLD, FRAME_ROW_T, FRAME_ROW_T2,
+                               FRAME_RUN_T, measure_row_frames)
+    if page.ndim == 3:
+        page = cv2.cvtColor(page, cv2.COLOR_BGR2GRAY)
+    h, w = page.shape[:2]
+    ft, fb = measure_row_frames(page)
+    binary = page < BINARY_THRESHOLD
+    rowink = binary.sum(axis=1) / max(1, w)
+
+    def is_bar(y: int) -> bool:
+        if rowink[y] >= FRAME_ROW_T:
+            return True
+        if rowink[y] < FRAME_ROW_T2:
+            return False
+        row = binary[y].astype(np.int8)
+        d = np.diff(np.concatenate(([0], row, [0])))
+        starts, ends = np.flatnonzero(d == 1), np.flatnonzero(d == -1)
+        run = int((ends - starts).max()) if starts.size else 0
+        return run / max(1, w) >= FRAME_RUN_T
+
+    top = 0
+    if ft is not None:
+        y = int(ft)
+        while y + 1 < h and y - ft < FRAME_BAND_MAX and is_bar(y + 1):
+            y += 1
+        top = y + 1
+    bot = h
+    if fb is not None:
+        y = int(fb)
+        while y - 1 >= 0 and fb - y < FRAME_BAND_MAX and is_bar(y - 1):
+            y -= 1
+        bot = y
+    return top, bot
+
+
 class CharExtractor:
     """从整页灰度图 + phase3 网格 JSON 提取单字图块。"""
 
@@ -1588,6 +1655,7 @@ class CharExtractor:
         if shear:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
+        frame_in_top, frame_in_bot = frame_band_inner(page_img)
         n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
         # 夹注跨度的尺子：列距（书级刚性常量）。老产物没有就退回图块宽度
         jz_ref_w = float((grid.get("grid") or {}).get("period") or 0.0) or None
@@ -1623,6 +1691,13 @@ class CharExtractor:
             sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
                                max(float(c["y_bottom"]) for c in cells) + pad_y)))
+            # 版框带内缘钉桩：框墨不进条带（理由见 frame_band_inner 上方）。
+            # 硬保险：最多吃掉端格的 FRAME_BAND_MAX_CUT，越过就不钉。
+            cut_lim = cell_h_ref * FRAME_BAND_MAX_CUT
+            if frame_in_top - sy0 <= cut_lim:
+                sy0 = max(sy0, frame_in_top)
+            if sy1 - frame_in_bot <= cut_lim:
+                sy1 = min(sy1, frame_in_bot)
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
             strip = page_img[sy0:sy1, sx0:sx1]
