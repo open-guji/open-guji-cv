@@ -1,11 +1,23 @@
-"""review_recrop 分片回归：当前切分 bbox vs 人工拖框金标的 IoU。
+"""review_recrop 分片回归：**切分算法自己**的框 vs 人工拖框金标。
 
 金标来自进库审查页的人工重切事件回流（open-guji-dataset/
 char-segmentation/instances 里 seed=="review_recrop" 的条目）：
 old_bbox 是当时切分的坏输出，corrected_bbox 是用户拖框。
-回归口径：当前产物在这些 (page,col,idx) 上的 bbox 与 corrected_bbox
-的 IoU ≥ 0.85 为过；修不好的至少要被 flag 进审查队列（不能无声放行）。
 分片是定向富集（只有切错的才被重切），通过率不能读作全书正确率。
+
+**不能读产物里的 bbox。** `scripts/replay_recrops.py` 会把 corrected_bbox
+贴回 index.jsonl（人工成果不能只活在产物里，整册重跑会抹掉），贴完之后
+产物里的框**就是金标本身**，拿它算等于自己考自己——实测一贴回，通过数
+就从 20/24 跳到 23/24，而算法一行没改。所以这里现场重跑 `extract_page`
+取算法自己的输出。
+
+判定口径（2026-08-24 裁紧定版后）：图块框=墨迹外接框 ±2px，而人工拖框
+是**整格拖**的（实测金标宽 125~175px，跟列格窗口 163~177px 一个量级，
+比紧框宽出每侧 20~25px）。两种口径不同，IoU 永远上不去，所以判两条：
+  1) 紧框 ⊆ 金标框 + CONTAIN_TOL —— 框里没混进金标框外的东西；
+  2) 金标框内的墨 ≥ INK_COVER 落在紧框内 —— 该要的字墨没丢。
+IoU 仍然打印出来当趋势参考（用户 2026-08-25 记的基线 0.671 即此列），
+但**它不是过闸条件**。
 
 用法：PYTHONPATH=. python scripts/eval_recrop.py \
         ../open-guji-dataset/char-segmentation/instances [--out report.json]
@@ -41,16 +53,25 @@ def main() -> None:
         print("没有 review_recrop 条目")
         return
 
-    index: dict[tuple, dict] = {}
-    for book in {e["book"] for e in gold}:
-        p = Path("output") / book / "phase4_chars" / "index.jsonl"
-        for line in p.read_text(encoding="utf-8").splitlines():
-            r = json.loads(line)
-            index[(r["book"], r["page"], r["col"], r["idx"])] = r
-
     import cv2
     import numpy as np
+    from open_guji_cv.clustering.extractor import CharExtractor
     from open_guji_cv.clustering.grid_segment import deshear
+
+    # 现场重跑取**算法自己**的框（理由见模块 docstring）
+    index: dict[tuple, dict] = {}
+    extractor = CharExtractor()
+    for book, page in sorted({(e["book"], e["page"]) for e in gold}):
+        gp = Path("output") / book / "phase3_char_grid" / f"{page}_char_grid.json"
+        img = cv2.imread(f"output/{book}/{page}.png")
+        if img is None or not gp.exists():
+            continue
+        grid = json.loads(gp.read_text(encoding="utf-8"))
+        for inst, _patch in extractor.extract_page(img, grid, book, page):
+            if inst.sub:                     # 夹注半宽实例不参与
+                continue
+            index[(book, page, inst.col, inst.idx)] = {
+                "bbox": list(inst.bbox), "flags": list(inst.flags)}
 
     grids: dict[tuple, dict] = {}
 
@@ -125,9 +146,13 @@ def main() -> None:
                   f"IoU {r['iou_old']:.2f}→{r['iou_new']:.2f}{cov}{cont} [{mark}]"
                   f"{' ' + ','.join(r['flags']) if r['flags'] else ''}")
     n = len(gold)
-    print(f"\nreview_recrop {n} 条：IoU≥0.85 通过 {n_pass}，"
+    ious = sorted(r["iou_new"] for r in rows if "iou_new" in r)
+    print(f"\nreview_recrop {n} 条：**含住+盖墨**通过 {n_pass}，"
           f"未过但有 flag 兜底 {n_flagged}，"
           f"无声放行 {n - n_pass - n_flagged - n_missing}，格位消失 {n_missing}")
+    if ious:
+        print(f"  IoU（趋势参考，非过闸条件）均值 "
+              f"{sum(ious) / len(ious):.3f} 中位 {ious[len(ious) // 2]:.3f}")
     if args.out:
         Path(args.out).write_text(json.dumps(rows, ensure_ascii=False,
                                              indent=1), encoding="utf-8")
