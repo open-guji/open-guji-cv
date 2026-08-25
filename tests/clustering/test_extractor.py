@@ -109,8 +109,11 @@ def _jiazhu_patch(w=120, h=110):
 
 def test_jiazhu_gap_center_fires_on_side_by_side_small_chars():
     from open_guji_cv.clustering.extractor import _jiazhu_gap_center
-    c = _jiazhu_gap_center(_jiazhu_patch())
-    assert c is not None and 50 < c < 66, c
+    got = _jiazhu_gap_center(_jiazhu_patch())
+    assert got is not None
+    c, strength = got
+    assert 50 < c < 66, c
+    assert strength >= 500  # 实心矩形＝大连通体
 
 
 def test_jiazhu_gap_center_spares_a_normal_radical_char():
@@ -123,9 +126,57 @@ def test_jiazhu_gap_center_spares_a_normal_radical_char():
     assert _jiazhu_gap_center(g) is None
 
 
+def _e(c, s=2000.0):
+    return None if c is None else (c, s)
+
+
 def test_flag_jiazhu_runs_requires_consecutive_aligned_cells():
     from open_guji_cv.clustering.extractor import flag_jiazhu_runs
     # 连续三格缝对齐 → 全标；孤立一格 → 不标；缝错开 → 不标
-    assert flag_jiazhu_runs([(0, 60.0), (1, 62.0), (2, 58.0)]) == {0, 1, 2}
-    assert flag_jiazhu_runs([(0, 60.0), (2, 60.0)]) == set()
-    assert flag_jiazhu_runs([(0, 60.0), (1, 90.0)]) == set()
+    assert set(flag_jiazhu_runs([(0, _e(60.0)), (1, _e(62.0)),
+                                 (2, _e(58.0))])) == {0, 1, 2}
+    assert flag_jiazhu_runs([(0, _e(60.0)), (2, _e(60.0))]) == {}
+    assert flag_jiazhu_runs([(0, _e(60.0)), (1, _e(90.0))]) == {}
+
+
+def test_flag_jiazhu_runs_bridges_single_gap_cell():
+    from open_guji_cv.clustering.extractor import flag_jiazhu_runs
+    # vol02/5 col2 形态：idx17 单格判据落空（单侧墨太少）但两侧对齐
+    # → 桥接进段，中心取邻格均值；两个连续 None 不桥（防扩散）
+    got = flag_jiazhu_runs([(15, None), (16, _e(90.0)), (17, None),
+                            (18, _e(94.0)), (19, _e(92.0)),
+                            (20, _e(93.0))])
+    assert set(got) == {16, 17, 18, 19, 20}
+    assert got[17] == 92.0
+    assert flag_jiazhu_runs([(0, _e(60.0)), (1, None), (2, None),
+                             (3, _e(61.0))]) == {}
+
+
+def test_flag_jiazhu_runs_vetoes_speckle_run():
+    from open_guji_cv.clustering.extractor import flag_jiazhu_runs
+    # vol01/3 col2：纸面碎点连成长段但无大连通体 → 段中位 strength
+    # 低于 JIAZHU_CC_MIN，整段否决；个别薄字（一/三）strength 低不碍事
+    assert flag_jiazhu_runs([(i, _e(60.0, 250.0))
+                             for i in range(7)]) == {}
+    mixed = [(0, _e(60.0)), (1, _e(61.0, 300.0)), (2, _e(60.0))]
+    assert set(flag_jiazhu_runs(mixed)) == {0, 1, 2}
+
+
+def test_jiazhu_reading_order_a_before_b_per_run():
+    from open_guji_cv.clustering.extractor import (CharInstance,
+                                                   jiazhu_reading_order)
+
+    def inst(idx, sub=None):
+        sid = f"b:1:1:{idx}{sub or ''}"
+        return CharInstance(id=sid, book="b", page="1", col=1, idx=idx,
+                            bbox=(0, 0, 1, 1), cell_type="char",
+                            ocr_text=None, ocr_confidence=0.0,
+                            patch_path="x.png", ink_ratio=0.1,
+                            height=1.0, width=1.0, flags=[], sub=sub)
+
+    # 正文 0,1 → 夹注段 2,3（先 a 全部再 b 全部）→ 正文 4
+    col = [inst(0), inst(1), inst(2, "a"), inst(2, "b"),
+           inst(3, "a"), inst(3, "b"), inst(4)]
+    got = [r.id for r in jiazhu_reading_order(col[::-1])]  # 乱序输入
+    assert got == ["b:1:1:0", "b:1:1:1", "b:1:1:2a", "b:1:1:3a",
+                   "b:1:1:2b", "b:1:1:3b", "b:1:1:4"]
