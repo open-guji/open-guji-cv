@@ -219,6 +219,10 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    output/vol01 --dataset ../open-guji-dataset`。**必须在提交重切改动
    之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
    提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
+4b. **准入标定**：`PYTHONPATH=. python scripts/calibrate_admission.py
+   output/vol01`——报待审里有多少按现行规则已能自动进（>0 就跑第 5 步
+   回填）、人裁被拦行的 疑问×信号 聚类（放行规则候选从这里挑）。
+   三条反馈环的机理与去向见 **review_feedback_loops.md**。
 5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
    对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰）。
    若变的不只是规则、而是**证据本身**（切分/载体/上下文口径改过，队列
