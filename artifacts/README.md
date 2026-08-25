@@ -32,6 +32,19 @@
 按规矩是**人工目视门**（「输出本身就错的绝不冻成 golden」）。本页把
 原图 / 现 golden / 新输出 三联并排，裁决经页内「复制裁决」按钮回流。
 
+## 匹配裁决（G4 工作流）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **形近误判裁决台**（排序倒挂逐例人裁，手机优先）| https://claude.ai/code/artifact/9e45a22b-da42-4bd5-9486-378fd714a80a | [match_inversion_review.html](match_inversion_review.html) | `scripts/eval_match_pairs.py ../open-guji-dataset/glyph-match/pairs --dump /tmp/pairs.npz` → `scripts/build_match_inversion_review.py --dump /tmp/pairs.npz` |
+
+triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标签没错」才收），
+扩集的瓶颈从来不是挖不到候选，是没人过目。本页挖的是 pairs 集里最尖锐的
+一种失败形态：对同一实例，最高分的**异字**邻居压过了最高分的**同字**邻居
+（202 例 / 5279 个双边齐全的实例）。四个裁决键分别对应四种归宿——
+可入集（进 triplets hard）／标注有误（回流标注层）／异体字（归 P0 异体字
+关系层）／拿不准（两边都不收），经页内「复制裁决」出 JSONL 回流。
+
 ## 分析报告（静态，作决策依据引用）
 
 | 页面 | URL | 快照 | 说明 |
