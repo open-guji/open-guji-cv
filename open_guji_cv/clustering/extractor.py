@@ -535,6 +535,45 @@ def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     return out
 
 
+# ── 格界碎渣带剥离（2026-08-25 朱批第二轮回流）───────────
+# 磨损下框碎成**点状虚线**（行墨稀到过不了横条掩蔽的行判据），列尾格
+# 的字下方混进一排碎渣，裁紧时被框进图块（用户实审 15 例：上於均淵第
+# 無以其/久至四人職分朕 全是好字 + 底部虚线）。判据的要害是**位置**：
+# 碎渣带骑在**格界线**上（框线的物理位置，裁前坐标已知），而字的灬点
+# 再低也在格界上方十几像素——尺寸判据分不开两者（虚线段 h4-7 但宽到
+# 37px、墨 194；灬点 12×15 墨 ~120），位置判据一刀两断。只剥独立
+# 连通体（与字连通的墨绝不动——用户红线），且 ≥2 个成带才剥。
+SPECKLE_ZONE = 8           # 格界 ± 此像素内为碎渣带
+SPECKLE_H = 15             # 碎渣连通体高度上限（框线渣扁平，字身高得多）
+SPECKLE_AREA = 300         # 碎渣连通体墨量上限
+SPECKLE_MIN_N = 2          # 带内 ≥ 此数才剥（孤立墨渍不动，宁留勿删）
+
+
+def strip_speckle_band(patch: np.ndarray, cell_top: float,
+                       cell_bot: float) -> np.ndarray:
+    """剥掉骑在格界线上的碎渣带。cell_top/cell_bot 为图块坐标系里的格界。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    hits = []
+    for k in range(1, n):
+        y, h, area = int(st[k, 1]), int(st[k, 3]), int(st[k, 4])
+        if h > SPECKLE_H or area > SPECKLE_AREA:
+            continue
+        cy = y + h / 2.0
+        # 非对称：下界取「线上及以下」（框渣骑线、邻字顶尖越线），上界
+        # 取「线上及以上」。字的灬点/底横离格界还有 ≥8px，不会进带。
+        if cy >= cell_bot - 2 or cy <= cell_top + 2:
+            hits.append(k)
+    if len(hits) < SPECKLE_MIN_N:
+        return patch
+    out = patch.copy()
+    for k in hits:
+        out[lab == k] = 255
+    return out
+
+
 # ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
 # 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
 # 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
@@ -1068,6 +1107,7 @@ class CharExtractor:
                 patch = (strip[y0:y1].copy() if owner is None
                          else clean_patch(strip, owner, idx, y0, y1))
                 patch = strip_rule_residue(patch, cell_h)
+                patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
 
                 x0 = float(sx0)
                 x1 = float(sx1)
