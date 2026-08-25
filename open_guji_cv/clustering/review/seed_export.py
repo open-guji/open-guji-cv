@@ -269,11 +269,11 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         pass                       # 没有索引就没有重切视图，其余照常
 
     entries = []
-    # 「第几个字」按 **index** 里该列 char 的位次算，1 起。
-    # 不能用 context.pos——那是按 **OCR 载体** 算的，载体缺格时与页面上
-    # 数出来的位置对不上（2026-08-25 实测 295 条待审里只有 118 条相符，
-    # 用户对着原图数「全弄错位了」正是这个）。也不能直接用 idx：那是
-    # 格号，空格位也占号且从 0 起。
+    # 「第几个字」按 **index** 里该列 char 的位次算，1 起。不能直接用
+    # idx：那是格号，空格位也占号、起点还随切分版本变（0 起 / 1 起都出现过）。
+    # seeding 里上下文条的 pos 现在同源（也按 index 的 char 格位数），
+    # 于是 pos == seq - 1 恒成立；对不上就说明这行证据是旧切分算的，
+    # 下面直接把 context 摘掉——宁可不显示，也不能显示错位的高亮。
     seq_of: dict[str, int] = {}
     if rec_of:
         from collections import defaultdict as _dd
@@ -293,10 +293,8 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
             "instance_id": it.instance_id,
             "col": it.col, "idx": it.idx, "tier": it.tier,
             # 卡头显示用「该列第几个字」（1 起、跳过空格位），不是 idx。
-            # idx 是**格号**：空格位也占号且从 0 起，拿它当序号，用户对着
-            # 原图数第几个字必然对不上（2026-08-25 用户实锤）。
-            # context.pos 是 carrier_slots 里该列 char 的实际位次，正是
-            # 人数原图的口径；没有上下文时退回 idx+1 只求不崩。
+            # idx 是**格号**：空格位也占号、起点随切分版本变，拿它当序号
+            # 用户对着原图数必然对不上（2026-08-25 用户实锤）。
             "seq": seq_of.get(it.instance_id, it.idx + 1),
             "intrusion": list(getattr(it, "intrusion", []) or []),
             "status": it.status,
@@ -309,7 +307,7 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
                         "label": DOUBT_LABELS.get(c, c)}
                        for c in (it.doubts or [])],
             "db": it.match,
-            "context": it.context,
+            "context": _checked_context(it, seq_of.get(it.instance_id)),
             "note": it.note,
         })
 
@@ -434,6 +432,24 @@ def _render_evidence(e: dict) -> str:
     if marks:
         rows.append(f'<ul class="doubts">{marks}</ul>')
     return "".join(rows)
+
+
+def _checked_context(it, seq: int | None) -> dict | None:
+    """上下文条只在与 index 口径对得上时才给页面。
+
+    ``context`` 是 seed 当时算的证据快照；切分一重跑，队列行若没跟着重跑，
+    里面的列文与 pos 就是旧切分的。此时高亮位会指到邻格上（2026-08-25
+    用户实锤 vol01:4:2:20：卡片是「第」，高亮的却是下一位的「一」）。
+    对不上就整块摘掉——审查页少一条辅助信息，好过给一条错的。
+    修法是对那些页 ``seed --force-pages`` 重跑，见 pipeline_handbook §3。
+    """
+    ctx = it.context or None
+    if not ctx or seq is None:
+        return ctx
+    pos = ctx.get("pos")
+    if pos is not None and pos != seq - 1:
+        return None
+    return ctx
 
 
 _CTX_WIN = 5     # 上下文条：当前字上下各显示几个字

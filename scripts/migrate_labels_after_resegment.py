@@ -29,6 +29,14 @@
 - 库：旧 id 撤库（evict），用新 id + **新切分的图块**重新进库，
   字与 provenance 沿用（evidence 里记 migrated_from）。
   存的是新图块——上游清理改进的收益一并吃到。
+- 队列唯一性：目标字位在新切分里不存在的行**整行删掉**（不能顶着旧号
+  留下——那个号已被另一条迁移行占，同号两行会让审查页拿错证据）；
+  落盘前再按 instance_id 去重，已裁决的优先。
+
+迁移只搬「号」，不重算证据（ocr/align/match/context 仍是旧切分算的）。
+所以迁移之后**必须**对这些页重跑 seed 刷新证据：
+
+    python -m open_guji_cv seed <book> ... --force-pages 4,9,10,11
 """
 from __future__ import annotations
 
@@ -189,13 +197,15 @@ def main() -> None:
             evict_instance(db, dst)        # 目标位上的旧内容让位
             n["target_cleared"] += 1
 
+    lost_rows: set[int] = set()
     for src, dst in mapping.items():
         r = by_id[src]
         if dst not in idx:
-            r["status"] = "pending_review"
-            r["decided_char"] = None
-            r["provenance"] = None
-            r["note"] = "resegment_lost"
+            # 目标字位在新切分里根本不存在（整列少了一格）。**整行作废**：
+            # 留着它就会顶着旧号，而那个号已经被另一条迁移行占了——同一
+            # instance_id 出两行，审查页拿到的证据就不是这块图的
+            # （2026-08-25 用户实锤：4:2:20 卡片是「第」，上下文却高亮「一」）。
+            lost_rows.add(id(r))
             n["lost"] += 1
             continue
         ch = chars.get(src) or r.get("decided_char")
@@ -231,6 +241,22 @@ def main() -> None:
         r["provenance"] = None
         r["note"] = "resegment_recheck"
         n["back_to_review"] += 1
+
+    # 落盘前再兜一道：作废行删掉、id 已不在新索引里的行删掉、同号只留一行
+    #（决定过的优先）——队列的唯一性是审查页取证据的前提。
+    rank = {s: i for i, s in enumerate(
+        ("confirmed", "confirmed_label_only", "rejected", "not_a_char",
+         "confirmed_recropped", "auto_admitted", "excluded",
+         "skipped", "pending_review"))}
+    rows = [r for r in rows if id(r) not in lost_rows
+            and r["instance_id"] in idx]
+    best: dict[str, dict] = {}
+    for r in rows:
+        cur = best.get(r["instance_id"])
+        if cur is None or rank.get(r["status"], 99) < rank.get(cur["status"], 99):
+            best[r["instance_id"]] = r
+    n["dedup_dropped"] = len(rows) - len(best)
+    rows = [r for r in rows if best[r["instance_id"]] is r]
 
     qp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
                           for r in rows), encoding="utf-8")

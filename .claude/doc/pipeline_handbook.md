@@ -220,8 +220,17 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
    提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
 5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
-   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰；
-   **不要**重跑 seed——那会整页重写队列、冲掉人裁）。
+   对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰）。
+   若变的不只是规则、而是**证据本身**（切分/载体/上下文口径改过，队列
+   里的 ocr/align/match/context 整页作废），才用
+   `python -m open_guji_cv seed <book> ... --force-pages 9,11,12`
+   重跑那几页：done 页也照跑，人裁过的行原样留下、那些字位跳过不再判
+   （2026-08-25 加；此前 seed 会整页重写队列，所以这一步曾经是禁区）。
+   哪几页该重跑由体检给出：
+   `PYTHONPATH=. python scripts/repair_seed_queue.py output/vol01`
+   —— 它同时修队列的两类硬伤（幽灵行 = id 已不在 index 里；重号 = 同一
+   instance_id 两行），`--apply` 落地。重号会让审查页拿 A 的证据配 B 的
+   图，实锤见下面「踩过的坑」。
 6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
    --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
    **同一个 artifact URL**（用户书签不换）。各页 URL 台账、快照与
@@ -589,6 +598,22 @@ toc 从 62.2% 降到 58.7%——两个方向都被带偏了。
 
 **重跑要清理旧产物。** `run_book` 曾经只截断 `index.jsonl` 却留下 2456
 个孤儿 PNG，人工标注对着的是过期图片。写产物前先清目录。
+
+**同一个东西的「位置」只能有一个真源。** 审查卡片上有三样东西各自算位置：
+图块（按 index.jsonl 取）、卡头的「第几字」、上下文条的高亮位。前者按
+**index 的 char 格位**数，后两者一度按 **OCR 载体**数——载体缺一格，整列
+文本就短一位，用户对着原图数「文字错了一位」。修法不是给渲染层加偏移，
+是让列文也按 index 的 char 格位建（载体缺格补 □），于是
+`pos == 列内 char 位次 - 1` 恒成立。回归钉在
+`test_context_pos_follows_index_not_carrier`。
+
+**队列的「一个 id 一行」是硬契约，破了不报错只出怪现象。**
+`migrate_labels_after_resegment.py` 早期版本对「目标字位在新切分里不存在」
+的行只改状态、不改 id——那个旧 id 已经被另一条迁移行占了，于是 queue.jsonl
+里同一个 instance_id 出两行（vol01 实测 125 处）。审查页按 id 取证据、按
+index 取图，正好取到不同那条：卡片是「第」，上下文高亮「一」。
+**迁移只搬号，不重算证据**，所以迁完必须对那些页 `seed --force-pages`
+刷新，`scripts/repair_seed_queue.py` 负责体检出是哪几页。
 
 **合成测试要用真实量级。** 600×400 的合成页量错切会得到 0.018（真值
 0.010）——倾斜在一个形态学核高度内的漂移不足一个线宽，竖线其实没被打断。

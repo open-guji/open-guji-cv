@@ -491,7 +491,10 @@ def cmd_seed(args):
                             font_editions=[e.strip() for e in
                                            args.font_editions.split(",")
                                            if e.strip()],
-                            edition=args.edition)
+                            edition=args.edition,
+                            force_pages={p.strip() for p in
+                                         (args.force_pages or "").split(",")
+                                         if p.strip()})
     finally:
         db.close()
     print(json.dumps(summary, ensure_ascii=False, indent=1))
@@ -919,6 +922,10 @@ def main():
                    help="OCR 载体 jsonl（默认 phase4_chars/ocr_carrier.jsonl）")
     p.add_argument("--max-pages", type=int, default=None,
                    help="本次最多处理的页数（断点续跑分批推进用）")
+    p.add_argument("--force-pages", default=None,
+                   help="逗号分隔的页号：即使 progress.json 里已 done 也重跑"
+                        "（上游切分/载体/判据改过，队列证据整页作废时用）。"
+                        "人裁过的行不会被覆盖，那些字位本轮跳过")
     p.add_argument("--prob-threshold", type=float, default=0.85,
                    help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
     p.add_argument("--edition", default=None,
