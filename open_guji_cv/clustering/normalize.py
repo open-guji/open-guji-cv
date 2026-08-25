@@ -5,6 +5,10 @@
 2. 去边缘毛刺：删除贴边且面积过小的连通域（界行/相邻字残留）
 3. 墨迹外接框等比缩放 + 质心居中，四周留白
 4. 输出 uint8 {0,1} 二值图（1=墨迹）
+
+**笔宽归一（stroke_normalize）2026-08-24 起默认不做**，理由见该函数的
+文档字符串——一句话：它是为刚性 F1 判据抗着墨浓淡而加的，现在的
+elastic 软覆盖判据本来就不吃这一套，它反而把 已/巳 那类开口糊死。
 """
 
 from __future__ import annotations
@@ -131,7 +135,7 @@ def ink_bbox(binary: np.ndarray) -> tuple[int, int, int, int] | None:
 def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
                     margin_ratio: float = MARGIN_RATIO,
                     noise_area: int = NOISE_AREA,
-                    stroke_width: int | None = 3,
+                    stroke_width: int | None = None,
                     margins: tuple[int, int] | None = None) -> np.ndarray:
     """灰度图块 → S×S uint8 {0,1} 归一二值图。
 
@@ -214,11 +218,27 @@ def skeletonize(binary: np.ndarray, max_iter: int = 20) -> np.ndarray:
 
 
 def stroke_normalize(binary: np.ndarray, stroke_width: int = 3) -> np.ndarray:
-    """笔宽归一：骨架化 + 统一膨胀到固定笔宽。
+    """笔宽归一：骨架化 + 统一膨胀到固定笔宽。**默认不再调用**（2026-08-24）。
 
-    刻本不同印次着墨浓淡不同（同字笔画可差 2 倍宽），墨迹 F1 对此极敏感；
-    归一到统一笔宽后，同字 F1 主要反映骨架形状差异——这才是字形本身。
-    副作用：膨胀还能桥接 1~2px 的笔画断裂（磨损容忍）。
+    当初的理由：刻本不同印次着墨浓淡不同（同字笔画可差 2 倍宽），而当时的
+    判据是**刚性墨迹 F1**，对笔宽极敏感；归一到统一笔宽后，同字 F1 主要
+    反映骨架形状差异。
+
+    为什么撤掉：判据早已换成 elastic（软覆盖 + 分块弹性对齐，verify.py），
+    它按「到对方墨迹的距离」给分——粗笔多出来的墨就贴在细笔旁边，本来就
+    几乎不扣分。也就是说它抗着墨浓淡的那份功劳现在是白拿的，代价却实打实：
+
+    - 膨胀到 3px 会把 已/巳、日/曰 这类**开口/缝隙直接糊死**，那正是
+      glyph-match/triplets hard 子集的主要失败形态；
+    - 它的「副作用」——桥接 1~2px 笔画断裂——是**把断口盖住而不是修好**
+      （实测 37 张 golden 里 4 张如此）。断是上游二值化留下的，该在上游修。
+
+    撤掉后实测（参数一个没动，tau1.5/blk16/loc1）：
+      triplets hard 排序      0.6842 → 0.7632（control 1.000 不动）
+      glyph-match/pairs 主指标 recall 0.0807 → 0.1130，precision 仍 ≥0.999
+      其中笔画最密的一档 recall 0.0101 → 0.0155
+
+    函数保留：`stroke_width=3` 仍可显式传入（旧判据对照、单测用）。
     """
     skel = skeletonize(binary)
     if not skel.any():
