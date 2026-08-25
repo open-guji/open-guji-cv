@@ -208,9 +208,14 @@
       "ocr_text": "",
       "cells": [
         {
-          "type": "char",
-          "index": 0,
+          "type": "margin",
           "y_top": 0.0,
+          "y_bottom": 12.0
+        },
+        {
+          "type": "empty",
+          "index": 0,
+          "y_top": 12.0,
           "y_bottom": 115.0,
           "text": null,
           "confidence": 0.0
