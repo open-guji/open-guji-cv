@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
-"""人裁审查页的公共壳：设计令牌 + 状态/自存/复制/进度那一套。
+"""人裁审查页的公共壳：设计令牌 + 裁决状态 / 自存 / 复制 / 进度那一套。
 
-各审查页只需要给出「一张卡怎么画」和自己的控制条，壳负责：
+调用方只需要给出「一张卡怎么画」和自己的控制条（`page_js`）+ 自己的 CSS，
+壳负责剩下的：
 
 - 三态主题令牌（bare `:root` 亮 / `prefers-color-scheme` 暗 / `[data-theme]` 覆盖）；
 - 裁决状态 `{id:{v,t}}`：localStorage 即时兜底 + 页里嵌的那份按时间戳合并；
-- **自存**：声明 `artifact` 能力，改动 6 秒防抖后用 files 形式把 index.html
-  重发一版（files 形式不重载本视图，可以一路点下去），裁决嵌在 `#data` 里，
-  `Artifact action:"read"` 直接读得到。能力拿不到时退回本机 + 复制按钮；
-- 页面靠读自己的 `#css`/`#js` 重建完整文档，是**定点**（重发一版再重发，
-  字节相同）——这条别改坏了：坏了就会每存一次页面漂一点。
+- **自存**：声明 `artifact` 能力，改动后防抖把 index.html 重发一版（files 形式
+  不重载本视图，可以一路点下去），裁决嵌在 `#data` 里，`Artifact action:"read"`
+  直接读得到；能力拿不到时退回本机 + 复制按钮；
+- 页面靠读自己的 `#css`/`#js` 重建完整文档，是**定点**（重发一版再重发，字节
+  相同）——这条别改坏了：坏了每存一次页面就漂一点，最后自己把自己拆了。
+  改完用 `check_fixedpoint.py` 验一遍。
 
-这套东西已经整理成 skill：`.claude/skills/review-artifact/`（壳 + 最小例子 +
-定点自检 + 裁决回收 + 自存/配色的踩坑记录）。**新出的审查页从那儿起手**，
-本文件留给已经发布过的那几页，别再往里加新东西。
-
-用法见 `build_glyph_evict_review.py`。`build_match_inversion_review.py` 是
-这套东西的第一版，还没迁过来（迁移会改动它的定点，等那一轮人裁收工再动）。
+`page_js` 必须定义的东西见 SKILL.md「壳与页的契约」，最小可跑例子见
+`example_review.py`。
 """
 from __future__ import annotations
 
@@ -131,10 +129,14 @@ body{margin:0; background:var(--ground); color:var(--ink);
 """
 
 
-def head_tags(title: str) -> str:
-    return (f"<title>{title}</title>\n"
+def head_tags(title: str, fonts: bool = True) -> str:
+    """标题 + viewport（+ Google Fonts —— artifact 的 CSP 只放行这一家外部资源）。"""
+    base = (f"<title>{title}</title>\n"
             '<meta name="viewport" content="width=device-width, initial-scale=1, '
-            'viewport-fit=cover">\n'
+            'viewport-fit=cover">')
+    if not fonts:
+        return base
+    return (base + "\n"
             '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
             '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
             '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
@@ -144,7 +146,7 @@ def head_tags(title: str) -> str:
 
 SHELL_JS = r"""
 const D = JSON.parse(document.getElementById('data').textContent);
-const HEAD = __HEAD__, KEY = __KEY__, V = __VERDICTS__;
+const HEAD = __HEAD__, KEY = __KEY__, LANG = __LANG__;
 
 /* ---------- 裁决状态：{id:{v,t}}，与页里嵌的那份按时间戳合并 ---------- */
 function readLocal(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); }
@@ -203,13 +205,12 @@ listEl.addEventListener('click', e => {
     x.setAttribute('aria-pressed', String(now === x.dataset.v)));
   if (now) art.dataset.v = now; else art.removeAttribute('data-v');
   tally();
-  if (afterVerdict) afterVerdict();
+  if (typeof afterVerdict === 'function') afterVerdict();
 });
 
 /* ---------- 自存：把自己重发一版 ---------- */
 const saveEl = document.getElementById('save');
-const SAVE_TEXT = {idle:'本机', wait:'待存', busy:'存中…', saved:'已存',
-                   local:'仅存本机', ro:'只读'};
+const SAVE_TEXT = __LABELS__;
 function setSave(s, extra){ saveEl.dataset.s = s; saveEl.textContent = extra || SAVE_TEXT[s] || s; }
 let ns = null, canPub = false, timer = 0, inflight = false, dirty = false;
 /* 头一次存**快**（2 秒），好让「存不了」这件事当场露出来而不是等到最后；
@@ -220,7 +221,7 @@ function renderIndex(){
   const css = document.getElementById('css').textContent;
   const js  = document.getElementById('js').textContent;
   const data = JSON.stringify({...D, verdicts: state}).split('</').join('<\\/');
-  return '<!doctype html>\n<html lang="zh-Hans">\n<head>\n<meta charset="utf-8">\n'
+  return '<!doctype html>\n<html lang="' + LANG + '">\n<head>\n<meta charset="utf-8">\n'
     + HEAD + '\n<style id="css">' + css + '</style>\n</head>\n<body>\n'
     + '<div id="app"></div>\n'
     + '<script type="application/json" id="data">' + data + '<\/script>\n'
@@ -319,14 +320,33 @@ draw();
 """
 
 
-def render(title: str, key: str, verdicts: dict[str, str], css: str, page_js: str,
-           payload: dict) -> str:
-    """页面 js = page_js（定义 BODY / rowId / card / visibleRows / payload …）+ 公共壳。"""
-    head = head_tags(title)
-    js = page_js + SHELL_JS.replace("__HEAD__", json.dumps(head)) \
-                           .replace("__KEY__", json.dumps(key)) \
-                           .replace("__VERDICTS__", json.dumps(verdicts, ensure_ascii=False))
-    blob = json.dumps(payload, ensure_ascii=False,
+DEFAULT_LABELS = {"idle": "本机", "wait": "待存", "busy": "存中…",
+                  "saved": "已存", "local": "仅存本机", "ro": "只读"}
+
+
+def render(title: str, key: str, verdicts: dict, css: str, page_js: str,
+           payload: dict, labels: dict | None = None, lang: str = "zh-Hans",
+           fonts: bool = True) -> str:
+    """拼出完整页面（发布用的那份 HTML）。
+
+    title / key —— 标题、localStorage 键。**换一张页务必换 key**，否则两页的
+        裁决会互相污染。
+    verdicts —— 已有裁决 `{id: {"v": 裁决, "t": 毫秒时间戳}}`，嵌进页里；页面
+        重发自己时会把新裁决写回这里，所以 `Artifact action:"read"` 读回来的
+        `#data` 里就是最新裁决。
+    css / page_js —— 本页自己的样式与脚本；`page_js` 要定义 BODY / rowId /
+        card / visibleRows / payload（契约见 SKILL.md）。
+    payload —— 嵌到 `#data` 的整包，至少要有 `rows`；图放 `imgs`（data URI），
+        卡里只写 `data-src`，交给壳里的 IntersectionObserver 懒加载。
+    """
+    head = head_tags(title, fonts=fonts)
+    js = page_js + (SHELL_JS
+                    .replace("__HEAD__", json.dumps(head))
+                    .replace("__KEY__", json.dumps(key))
+                    .replace("__LANG__", json.dumps(lang))
+                    .replace("__LABELS__",
+                             json.dumps(labels or DEFAULT_LABELS, ensure_ascii=False)))
+    blob = json.dumps({**payload, "verdicts": verdicts}, ensure_ascii=False,
                       separators=(",", ":")).replace("</", "<\\/")
     return (head + '\n<style id="css">' + TOKENS + css + "</style>\n"
             + '<div id="app"></div>\n'
