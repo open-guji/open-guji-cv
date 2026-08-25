@@ -68,6 +68,7 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
   background:none;display:flex;align-items:center;justify-content:center;
   color:var(--ink2);font-size:11px;line-height:1}
 .junkcell{color:var(--warn);border-color:var(--warn);border-style:dashed}
+.jzrow{display:flex;flex-direction:row-reverse;gap:3px;align-items:flex-start}
 .jzcell{outline:1.5px dashed #a78bda;outline-offset:-1px}
 .idx{position:absolute;left:-2px;top:-2px;font-size:9px;color:var(--ink2);
   background:var(--panel);padding:0 3px;border-radius:3px;line-height:1.4}
@@ -209,6 +210,20 @@ function render(){
         return `<div class="cell emptycell ${c.junk?'junkcell ':''}${mk}" data-id="${c.id}"
           role="button" tabindex="0"
           title="${c.id} ${c.junk?'判为渣格（框渣/污渍，已判空）':'判空格'}">${c.junk?'渣':'空'}</div>`;
+      }
+      if(c.pair){
+        // 夹注一格的两半并排：a 在右、b 在左（竖排读序）
+        const halves=c.pair.map(x=>{
+          const mx=markOf(x.id), w=Math.round(x.w*zoom), h=Math.round(x.h*zoom);
+          if(filter==='flag' && !x.f.length) return '';
+          if(filter==='marked' && !mx) return '';
+          return `<div class="cell jzcell ${x.f.length?'hasflag':''} ${markCls(mx)}"
+            data-id="${x.id}" role="button" tabindex="0"
+            title="${x.id}${x.f.length?' ['+x.f.join(',')+']':''}">
+            <span class="idx">${x.lab}</span>
+            <img src="${x.src}" width="${w}" height="${h}" alt="${x.id}"></div>`;
+        }).join('');
+        return halves.trim() ? `<div class="jzrow">${halves}</div>` : '';
       }
       if(filter==='flag' && !c.f.length) return '';
       if(filter==='marked' && !m) return '';

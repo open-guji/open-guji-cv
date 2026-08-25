@@ -70,7 +70,10 @@ def build_page(book: str, page: str, quality: int, index: dict):
             elif cell.get("type") == "char" and isinstance(rec, dict) \
                     and rec.get("__subs__"):
                 # 夹注格：整格实例已被 a=右子列 / b=左子列 两个半宽实例
-                # 替换，流里按读序 a 前 b 后排两块，编号 如「5a」「5b」
+                # 替换。两半**并排**成一块（a 在右、b 在左，与竖排读序
+                # 一致）——分成上下两块看不出它们本是同一格的左右两半
+                # （2026-08-25 用户反馈）。
+                pair = []
                 for sub in ("a", "b"):
                     sr = rec.get(sub)
                     if sr is None:
@@ -79,7 +82,10 @@ def build_page(book: str, page: str, quality: int, index: dict):
                                     sr, quality)
                     if d is not None:
                         d["jz"] = 1
-                        cells_out.append(d)
+                        pair.append(d)
+                if pair:
+                    cells_out.append({"id": cid, "lab": str(i + 1),
+                                      "jz": 1, "pair": pair})
             elif cell.get("type") == "char" and rec is not None \
                     and not rec.get("__subs__"):
                 d = _patch_cell(book, cid, str(i + 1), rec, quality)
