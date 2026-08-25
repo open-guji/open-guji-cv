@@ -2128,7 +2128,8 @@ class GridSegmenter:
                 row_prior[stem] = med
                 n_re += 1
             if n_re:
-                print(f"  二次页距：{n_re} 页补切（Pass1 拟合差量不出页距的）")
+                print(f"  二次页距：{n_re} 页补切（Pass1 拟合差量不出页距的）: "
+                      f"{sorted(s for (s, _, _), r in zip(todo, outs2) if r)}")
             if n_row_fix:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
