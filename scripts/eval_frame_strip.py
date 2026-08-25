@@ -22,7 +22,8 @@ import cv2
 import numpy as np
 
 from open_guji_cv.clustering.extractor import (BINARY_THRESHOLD_PATCH,
-                                               DEBRIS_GAP, DEBRIS_ZONE)
+                                               DEBRIS_GAP, DEBRIS_ZONE,
+                                               STUB_MAX_H)
 
 
 def _analyse(img: np.ndarray) -> tuple[int, bool]:
@@ -41,6 +42,12 @@ def _analyse(img: np.ndarray) -> tuple[int, bool]:
         if k == main:
             continue
         y, ch = int(st[k, 1]), int(st[k, 3])
+        # 框渣是**薄**的（版框线实测 1~11px）。没有这条，字自己那些与
+        # 主体断开的部件会被算成残余——刻本墨色不匀，「書」的日部、
+        # 「當」的上半、「諱」的言旁上横都可能与主体断开，落在边缘带里
+        # 就冒充框渣（实测这三条的部件高 23~43px，而真框渣 ≤11px）。
+        if ch > STUB_MAX_H:
+            continue
         in_band = (y + ch >= h - zone) or (y <= zone)
         if not in_band:
             continue
