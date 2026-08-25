@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO))
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
+from open_guji_cv.clustering.exclusions import excluded_ids  # noqa: E402
 from open_guji_cv.clustering.verify import (COV_LOW, ELASTIC_COV_HIGH,  # noqa: E402
                                             MISS_WMAX, verify_pair,
                                             verify_pair_cov,
@@ -70,6 +71,24 @@ def score_all(root: Path, method: str) -> tuple[list[dict], np.ndarray, np.ndarr
     return pairs, cov, wmax
 
 
+def relabel(root: Path, cached: list[dict]) -> list[dict]:
+    """拿数据集现在的金标重算 dump 里每一对的 label 与分层，顺序必须对上。"""
+    data = json.loads((root / "expected.json").read_text(encoding="utf-8"))
+    meta = {r["instance_id"]: r for r in data["instances"]}
+    fresh = [json.loads(l) for l in
+             (root / data["pairs_file"]).read_text(encoding="utf-8").splitlines()]
+    if len(fresh) != len(cached) or any(
+            f["a"] != c["a"] or f["b"] != c["b"] for f, c in zip(fresh, cached)):
+        raise SystemExit("dump 与数据集的对序对不上——重新打分（去掉 --from-dump）")
+    for p in fresh:
+        p["label"] = ("same" if meta[p["a"]]["char"] == meta[p["b"]]["char"]
+                      else "diff")
+        p["ink_bucket"] = max(meta[p["a"]]["ink_bucket"], meta[p["b"]]["ink_bucket"])
+        p["tier"] = ("degraded" if "degraded" in
+                     (meta[p["a"]]["tier"], meta[p["b"]]["tier"]) else "clean")
+    return fresh
+
+
 def pr(is_same: np.ndarray, passed: np.ndarray
        ) -> tuple[int, int, int, float | None, float | None]:
     """→ (tp, fp, 同字对总数, precision, recall)。
@@ -98,13 +117,19 @@ def main() -> None:
     ap.add_argument("--dump", default=None, help="把逐对分数存成 npz")
     ap.add_argument("--from-dump", default=None, help="跳过打分，直接读 npz")
     ap.add_argument("--out", default=None, help="报告 JSON")
+    ap.add_argument("--include-excluded", action="store_true",
+                    help="连排除名单里的坏图块一起量（默认跳过）")
     args = ap.parse_args()
     root = Path(args.dataset)
     gate = args.cov_high if args.cov_high is not None else ELASTIC_COV_HIGH
 
     if args.from_dump:
         z = np.load(args.from_dump, allow_pickle=True)
-        pairs, cov, wmax = list(z["pairs"]), z["cov"], z["wmax"]
+        cov, wmax = z["cov"], z["wmax"]
+        # dump 只是**分数**缓存。标签和分层一律从数据集现读——金标改判过
+        # （relabel_history）而缓存里还压着旧 label 的话，报出来的
+        # precision/recall 是错的，而且错得无声无息。
+        pairs = relabel(Path(args.dataset), list(z["pairs"]))
     else:
         pairs, cov, wmax = score_all(root, args.method)
         if args.dump:
@@ -112,11 +137,24 @@ def main() -> None:
                                 cov=cov, wmax=wmax)
             print(f"→ 分数已存 {args.dump}")
 
-    is_same = np.array([p["label"] == "same" for p in pairs])
-    origin = np.array([p["origin"] for p in pairs])
     report: dict = {"method": args.method, "cov_high": gate,
                     "miss_wmax": args.miss_wmax, "n_pairs": len(pairs)}
 
+    # 排除名单：切分坏掉的图块不参与量匹配——不然量的是「匹配 + 切分损伤」
+    # 的混合物。默认跳过，`--include-excluded` 可以把旧口径量回来对照。
+    ex = frozenset() if args.include_excluded else excluded_ids()
+    keep = np.array([p["a"] not in ex and p["b"] not in ex for p in pairs])
+    n_drop = int((~keep).sum())
+    if n_drop:
+        pairs = [p for p, k in zip(pairs, keep) if k]
+        cov, wmax = cov[keep], wmax[keep]
+        print(f"排除名单跳过 {n_drop} 对（{n_drop/len(keep):.1%}），"
+              f"剩 {len(pairs)} 对参与评测")
+    report["n_pairs_excluded"] = n_drop
+    report["n_pairs"] = len(pairs)
+
+    is_same = np.array([p["label"] == "same" for p in pairs])
+    origin = np.array([p["origin"] for p in pairs])
     print(f"\n=== 判据 {args.method}  操作点 cov≥{gate} & wmax≤{args.miss_wmax} ===")
     passed = (cov >= gate) & (wmax <= args.miss_wmax)
     for og in sorted(set(origin.tolist())):

@@ -76,3 +76,36 @@ def test_evict_instance_removes_everything(tmp_path):
         assert evict_instance(db, "b:1:1:0") is None     # 幂等
     finally:
         db.close()
+
+
+def test_evict_drops_empty_glyph_and_decrements(tmp_path):
+    """撤最后一个刻例要连字头一起删；还有别的刻例则只把 n_confirmed 减下来。
+
+    回归：原实现的清壳 SQL 引用了 `instances.glyph_id`——那列不存在，SQLite
+    把它当相关子查询解析成外层的 `glyphs.glyph_id`，`NOT IN` 恒为假，DELETE
+    永不生效。上面那条老用例查不出来：它撤完之后两张表都空了，空子查询的
+    `NOT IN` 恰好为真，删除照样发生。**只有库里还剩别的刻例时才露馅**——
+    生产库因此攒了 34 个零刻例的空壳字头。
+    """
+    import cv2
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    db = GlyphDB(tmp_path / "g.db")
+    try:
+        for iid, ch in (("b:1:1:0", "天"), ("b:1:1:1", "天"), ("b:1:1:2", "地")):
+            n = _norm(ch)
+            png = cv2.imencode(".png", (255 - n * 255).astype(np.uint8))[1].tobytes()
+            assert db.admit_instance(iid, ch, png, provenance="human")
+
+        assert evict_instance(db, "b:1:1:0") == "天"
+        assert db.conn.execute(
+            "SELECT n_confirmed FROM glyphs WHERE char='天'").fetchone()[0] == 1
+
+        assert evict_instance(db, "b:1:1:2") == "地"
+        assert db.conn.execute(
+            "SELECT COUNT(*) FROM glyphs WHERE char='地'").fetchone()[0] == 0
+        assert db.conn.execute(
+            """SELECT COUNT(*) FROM glyphs g WHERE NOT EXISTS
+                 (SELECT 1 FROM exemplars e WHERE e.glyph_id=g.glyph_id)"""
+        ).fetchone()[0] == 0
+    finally:
+        db.close()
