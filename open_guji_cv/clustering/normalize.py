@@ -103,9 +103,29 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
 
 def _drop_stray_components(binary: np.ndarray,
                            keep_ink_ratio: float = 0.98) -> np.ndarray:
-    """稳健化墨迹：按面积从大到小累计到 keep_ink_ratio 的连通域保留，
-    其余小残片（相邻字一角、噪点）删除 —— 防止外接框被残片撑大。"""
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    """稳健化墨迹：删掉**落在字身之外**的小残片（邻字一角、界行线、噪点），
+    防止外接框被残片撑大。
+
+    两步，缺一不可：
+
+    1. 先按面积从大到小累计到 `keep_ink_ratio`，得到「字身」；
+    2. **再把质心落在字身外接框内的小块收回来**——它们是本字自己的
+       点、短横、断开的笔画，不是残片。
+
+    第 2 步是 2026-08-25 补的。此前只有第 1 步，是个纯质量判据：笔画密的
+    字里一个「丶」占不到总墨的 2%，于是被当残片删掉。拿出库裁决台那
+    152 块扫，53 个被删的连通体里 **40 个的质心落在字身框内**——按/削/資/
+    量/罔/勝/臨/隨/明 的点和短横，全是真笔画。用户在裁决台上就是这么发现的
+    （「把一些特别短的笔画，比方说短横和点都给变没了」）。剩下 13 个落在
+    框外（舜左边那条界行线之类），正是这条判据本来要删的东西。
+
+    质心在框内不等于一定是本字的笔画——bbox 过高吃进下一字的头、且那截
+    墨恰好落在框内，仍然收不回来也删不掉（`crop_quality` 模块头里记的同一个
+    已知盲区）。但「框内的小块一律留着」比「小块一律删掉」错得轻：多留一个
+    残点只让外接框稍胖，删掉一个「丶」是把字改了。
+    """
+    n, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8)
     if n <= 2:
         return binary
     areas = stats[1:, cv2.CC_STAT_AREA]
@@ -118,6 +138,17 @@ def _drop_stray_components(binary: np.ndarray,
         acc += areas[k]
         if acc >= total * keep_ink_ratio:
             break
+    # 字身外接框（只由第 1 步留下的块决定）
+    body = np.isin(labels, list(keep))
+    ys, xs = np.nonzero(body)
+    if len(xs):
+        x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+        for i in range(1, n):
+            if i in keep:
+                continue
+            cx, cy = centroids[i]
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                keep.add(i)
     out = binary.copy()
     drop_mask = ~np.isin(labels, list(keep)) & (binary > 0)
     out[drop_mask] = 0
