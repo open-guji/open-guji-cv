@@ -647,6 +647,66 @@ def strip_speckle_band(patch: np.ndarray, cell_top: float,
     return out
 
 
+# ── 列端框渣剥离（2026-08-25，用户 r4 实审定口径）────────
+# 用户 r4 实审 153 格：86 个判错里 61 个（71%）是**列末格带下边框**——
+# 字本身完整，只是版框横线离末字太近，格框一裁必然带进来。用户定的
+# 口径是「后期算法消掉它就不算错误截取」，于是这里把框渣当**可后处理
+# 的污染**剥掉，而不再要求切分层做到框线不进图块（物理上做不到）。
+#
+# 判别（r4 的 415 个残余块 vs 46 个 OK 图块里的字身部件标定）：
+#   与字身主体的垂直间隙   残余 p50=5px / p90=23px；字部件 p90=2px ← 最强
+#   尺寸                   残余 p50 面积 3px、高 1px；字部件 p50 面积 371、高 27
+# 「灬」的四点、「二」的下横这类字身部件**紧贴**字身（间隙 ≤2px），
+# 用间隙闸就能保住；框渣离字身远。红线（用户定）：只剥与字身**不连通**
+# 的独立连通体，绝不碰与字身连通的墨——框线与字粘连的那些剥不掉，
+# 保留并由 frame_bars / boundary_ink 标记送审。
+DEBRIS_ZONE = 0.18         # 只在格界外侧此比例（× 格高）的带内剥
+DEBRIS_GAP = 0.025         # 与字身主体的最小间隙（× 格高，~3px@120px 格）
+DEBRIS_AREA = 120          # 残渣墨量上限（px）
+DEBRIS_H = 0.05            # 或高度上限（× 格高）
+
+
+def strip_frame_debris(patch: np.ndarray, cell_top: float,
+                       cell_bot: float, cell_h: float) -> np.ndarray:
+    """剥掉列端格上下边缘带里与字身分离的框线碎渣。
+
+    cell_top/cell_bot 为格界在图块坐标系里的位置。只应对列首/列尾格
+    调用——中段格没有版框，那里的边缘墨是邻字残余，归切分层管。
+    """
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    areas = st[1:, 4]
+    main = int(np.argmax(areas)) + 1          # 字身 = 最大连通体
+    m_y0, m_y1 = int(st[main, 1]), int(st[main, 1] + st[main, 3])
+    zone = DEBRIS_ZONE * cell_h
+    gap_min = DEBRIS_GAP * cell_h
+    h_max = DEBRIS_H * cell_h
+    hits = []
+    for k in range(1, n):
+        if k == main:
+            continue
+        y, ch, area = int(st[k, 1]), int(st[k, 3]), int(st[k, 4])
+        y1 = y + ch
+        in_bot = y1 >= cell_bot - zone
+        in_top = y <= cell_top + zone
+        if not (in_bot or in_top):
+            continue
+        gap = (y - m_y1) if y >= m_y1 else (m_y0 - y1)
+        if gap < gap_min:                     # 紧贴字身 → 是字的部件
+            continue
+        if area > DEBRIS_AREA and ch > h_max:
+            continue                          # 又大又高 → 不是碎渣，留着送审
+        hits.append(k)
+    if not hits:
+        return patch
+    out = patch.copy()
+    for k in hits:
+        out[lab == k] = 255
+    return out
+
+
 # ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
 # 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
 # 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
@@ -1318,6 +1378,12 @@ class CharExtractor:
                          else clean_patch(strip, owner, idx, y0, y1))
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
+                # 列端格：剥掉与字身分离的版框碎渣（2026-08-25 用户定
+                # 口径——框渣算可后处理的污染，不算错误截取）。自检
+                # flags 与紧裁都在剥后的图块上算，口径统一为「去框后」。
+                if idx in end_cand:
+                    patch = strip_frame_debris(patch, ltop - y0,
+                                               lbot - y0, cell_h)
 
                 x0 = float(sx0)
                 x1 = float(sx1)
