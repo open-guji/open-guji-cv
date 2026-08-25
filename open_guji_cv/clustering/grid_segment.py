@@ -1992,14 +1992,28 @@ class GridSegmenter:
                 k_head = head_raise_rows(image, text_cols, page_phase,
                                          cell_h, y1, ft_rel)
                 if k_head:
-                    n += k_head
-                    page_phase, cell_h = fit_page_grid(
-                        [p for _, _, p in text_cols], n,
-                        full_widths=[crop.shape[1]
-                                     for _, crop, _ in text_cols],
-                        cell_h_fixed=cell_h_prior,
-                        frame_top=ft_rel, frame_bottom=fb_rel)
-                    grid_meta["head_raise_rows"] = int(k_head)
+                    # 抬头位与正文同格高同网格，几何上就是首行**正上方**
+                    # k 格；重拟合只用来微调。上框线磨没时（p32 实测
+                    # measure_row_frames 返回 None，用户也报「上边框极不
+                    # 清晰」）锚定退化成裁剪顶兜底，会把相位钉在原处——
+                    # 那样既没捡回抬头字，又多出一个越过下框的空格。因此
+                    # 拟合结果偏离几何值超过半格时以几何值为准。
+                    want = page_phase - k_head * cell_h
+                    if want < -0.05 * cell_h:
+                        k_head = 0          # 抬头位在裁剪窗外，网格层够不着
+                    else:
+                        n += k_head
+                        p2, h2 = fit_page_grid(
+                            [p for _, _, p in text_cols], n,
+                            full_widths=[crop.shape[1]
+                                         for _, crop, _ in text_cols],
+                            cell_h_fixed=cell_h_prior,
+                            frame_top=ft_rel, frame_bottom=fb_rel)
+                        if abs(p2 - want) <= 0.5 * cell_h:
+                            page_phase, cell_h = p2, h2
+                        else:
+                            page_phase = max(0.0, want)
+                        grid_meta["head_raise_rows"] = int(k_head)
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
