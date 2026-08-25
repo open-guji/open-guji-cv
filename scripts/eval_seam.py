@@ -31,7 +31,10 @@ from open_guji_cv.clustering.grid_segment import (
 
 BASE_FLOOR = 0.35   # 分母下限（× 本列字峰中位）
 HEAVY_T = 0.7       # 「重切缝」门槛：比值超此，这一刀基本贴着笔画走
-PAGE_NEW_T = 3      # 单页重切缝比金标多这么多条 → 点名
+PAGE_NEW_T = 3      # 单页重切缝比金标多这么多条 → 候选点名
+# ……但只有**占比也变糟**才算真退步。页面被修好之后字格会变多（文字带
+# 窗口救援一次给 vol02/108 多切了 17 格），切缝数跟着涨，重切缝的绝对
+# 条数自然也涨——拿绝对条数罚它，等于罚它多切出了字。
 
 
 def page_seams(book: str, page: str, out: str = "output") -> list[float]:
@@ -89,7 +92,8 @@ def scan(dataset: str, out: str = "output") -> dict:
         allv += v
         n = sum(1 for x in v if x >= HEAVY_T)
         if n:
-            pages[f"{book}/{page}"] = n
+            # 同时记总切缝数：单页比较必须按**占比**，不能按绝对条数
+            pages[f"{book}/{page}"] = [n, len(v)]
     a = np.array(allv) if allv else np.zeros(1)
     return {
         "heavy_threshold": HEAVY_T,
@@ -122,10 +126,26 @@ def main() -> None:
           f"中位 {gold['median']} → {got['median']}   "
           f"p90 {gold['p90']} → {got['p90']}")
     gp, tp = gold.get("pages", {}), got.get("pages", {})
-    worse = sorted((k for k in tp if tp[k] - gp.get(k, 0) >= PAGE_NEW_T),
-                   key=lambda k: gp.get(k, 0) - tp[k])
-    for k in worse[:15]:
-        print(f"  ✗ {k}：{gp.get(k, 0)} → {tp[k]}")
+
+    def pair(d, k):
+        v = d.get(k)
+        if v is None:
+            return 0, 0
+        return (v, 0) if isinstance(v, int) else (v[0], v[1])
+
+    worse = []
+    for k in sorted(tp):
+        n_new, t_new = pair(tp, k)
+        n_old, t_old = pair(gp, k)
+        if n_new - n_old < PAGE_NEW_T:
+            continue
+        r_new = n_new / t_new if t_new else 1.0
+        r_old = n_old / t_old if t_old else 0.0
+        if r_new <= r_old:        # 切缝总数涨了、占比没涨 → 是修好带来的
+            continue
+        worse.append((k, n_old, t_old, n_new, t_new))
+    for k, n_old, t_old, n_new, t_new in worse[:15]:
+        print(f"  ✗ {k}：{n_old}/{t_old} → {n_new}/{t_new}")
     ok = got["n_heavy"] <= gold["n_heavy"] and not worse
     print("回归门：通过" if ok else "回归门：**失败**")
     raise SystemExit(0 if ok else 1)
