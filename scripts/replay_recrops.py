@@ -121,19 +121,12 @@ def main() -> None:
                 print(f"  ⚠ {rec.id} 重裁失败（页图缺失或框越界）")
                 continue
             n_patch += 1
-            row = db.conn.execute(
-                "SELECT 1 FROM instances WHERE instance_id=?",
-                (rec.id,)).fetchone()
-            if row:
-                # 库里存的必须是重切后的字形（用户 2026-08-24 定的口径）。
-                # bbox 与派生缓存要一起动：derived 里的归一化/canonical 是
-                # 从**旧图块**算的，留着就等于换了图却还用老特征匹配。
-                db.conn.execute(
-                    "UPDATE instances SET patch_png=?, bbox=? "
-                    "WHERE instance_id=?",
-                    (png, json.dumps([float(v) for v in want]), rec.id))
-                db.conn.execute("DELETE FROM derived WHERE instance_id=?",
-                                (rec.id,))
+            # 库内同步必须走 refresh_instance_patch：库真源是 canonical
+            # 256×256（glyph_canonical_format.md），直接 UPDATE 原始字节会
+            # 破坏全库同一标准（首版就犯了这个错，14 条已修复回来）。
+            # 它同时重算派生（norm/skeleton/feat）并触碰 exemplars 缓存戳。
+            if db.refresh_instance_patch(rec.id, png,
+                                         bbox=[float(v) for v in want]):
                 n_db += 1
         db.conn.commit()
     finally:

@@ -50,11 +50,18 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
     component_owner）的职责，不在这里重复判断：
 
     1. **贴边小噪点**：贴边且面积 < noise_area（原规则保留）；
-    2. **细线（位置无关）**：平均厚度 ≤ max(3, 0.045×min(h,w)) 且细长
+    2. **细线（带位置守卫）**：平均厚度 ≤ max(3, 0.045×min(h,w)) 且细长
        （长边 ≥ 0.5×对应边长）的组件——版框/界行线厚 2~5px，本书笔画厚
        8~14px，两个分布不重叠（分布重叠就别调阈值，这里不重叠才敢用）。
-       护栏：非最大组件，且最大组件面积 ≥ 1.2× 它——保护「一」（自己就
-       是主体）与 二/三（笔画厚，根本进不了细线档）；
+       护栏一：非最大组件，且最大组件面积 ≥ 1.2× 它——保护「一」（自己就
+       是主体）与 二/三（笔画厚，根本进不了细线档）。
+       护栏二（2026-08-25 加）：**质心必须落在对应轴的外带**（横线在
+       上下 25% 带、竖线在左右 25% 带）才删。版框/界行是版面结构，只会
+       出现在图块边缘；字身**中部**的细长横是磨损后印细、又恰好断开的
+       真笔画——实锤 vol01:26:3:5「壽」中横（3~4px 细、跨半宽）被当界行
+       删掉，用户在库页面上看出「短笔画被消掉」。位置无关的老判据全库
+       扫描：1371 处字身框内删除里，深入核心区的仅 3 处、其一为真笔画
+       ——错杀率低但错杀的是字本身，必须守。
     3. **padding 带碎屑**：墨 ≥80% 落在 padding 带（核心区 = bbox，
        margins 给出带宽，缺省按 7.5% 估）且面积 < 0.25× 最大组件——
        邻字探进来的小残片。大块残片**不删**（可能是被切的本字笔画，
@@ -89,9 +96,15 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
             continue
         long_side = max(bw, bh)
         thickness = area / max(1, long_side)
-        is_line = (thickness <= thin_cap
-                   and ((bh >= 0.5 * h and bw < bh) or (bw >= 0.5 * w and bh < bw)))
-        if is_line and largest >= 1.2 * area:                  # 规则 2
+        cy = y + bh / 2.0
+        cx = x + bw / 2.0
+        vline = bh >= 0.5 * h and bw < bh
+        hline = bw >= 0.5 * w and bh < bw
+        # 位置守卫：竖线要贴左右外带、横线要贴上下外带，字身中部的
+        # 细长笔画（壽的中横）不删
+        in_band = ((vline and (cx < 0.25 * w or cx > 0.75 * w))
+                   or (hline and (cy < 0.25 * h or cy > 0.75 * h)))
+        if thickness <= thin_cap and in_band                 and largest >= 1.2 * area:                     # 规则 2
             out[labels == i] = 0
             continue
         comp = labels == i
