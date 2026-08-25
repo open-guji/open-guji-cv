@@ -155,13 +155,13 @@ a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
     </div>
     <div class="stat warn">
       <div class="k">敢判多少</div>
-      <div class="v">8.7–18.1%</div>
+      <div class="v">8.8–18.6%</div>
       <div class="n">其余走 OCR + 上下文</div>
     </div>
     <div class="stat">
       <div class="k">形近硬例排序</div>
-      <div class="v">76.3%</div>
-      <div class="n">良例 100%；硬例只有 38 组，分母还太小</div>
+      <div class="v">78.8%</div>
+      <div class="n">良例 100%；硬例只有 33 组，分母还太小</div>
     </div>
   </div>
 </header>
@@ -218,25 +218,25 @@ a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
       <tr>
         <td class="set">glyph-match/<b>triplets</b></td>
         <td>排序：同字要比形近异字更匹配</td>
-        <td class="num">良例 <b>1.0000</b><br>硬例 <b>0.7632</b></td>
+        <td class="num">良例 <b>1.0000</b>（53 组）<br>硬例 <b>0.7879</b>（33 组）</td>
         <td><span class="pill p-ok">达标</span></td>
       </tr>
       <tr>
         <td class="set">glyph-match/<b>pairs</b><br><span style="color:var(--faint)">71 497 对</span></td>
         <td>操作点：精度 ≥ 0.999 时闸能放行多少真同字对</td>
-        <td class="num">recall <b>0.1444</b><br>@ 闸 0.9945</td>
+        <td class="num">recall <b>0.1241</b><br>@ 闸 0.9955</td>
         <td><span class="pill p-ok">达标</span></td>
       </tr>
       <tr>
         <td class="set"><b>eval_db_match</b><br><span style="color:var(--faint)">端到端协议</span></td>
         <td>库匹配的精度与覆盖率（<b>硬约束</b> 精度 ≥ 0.999）</td>
-        <td class="num">精度 <b>1.0000</b> ×3<br>覆盖 8.7 / 16.3 / 18.1%</td>
+        <td class="num">精度 <b>1.0000</b> ×3<br>覆盖 8.8 / 16.7 / 18.6%</td>
         <td><span class="pill p-ok">达标</span></td>
       </tr>
       <tr>
         <td class="set"><b>char-clustering</b><br><span style="color:var(--faint)">三分片</span></td>
         <td>聚类纯度（≥0.999 硬约束）与碎片率</td>
-        <td class="num">purity <b>.99967 / .99901 / 1.0</b><br>碎片率 2.77 / 2.96 / 2.58</td>
+        <td class="num">purity <b>.99965 / .99886 / 1.0</b><br>碎片率 2.65 / 2.77 / 2.58</td>
         <td><span class="pill p-cost">有代价</span></td>
       </tr>
       <tr>
@@ -264,14 +264,14 @@ a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
   <p class="sub">这是整条链子最该记住的一件事——精度是被硬钉死的，代价全部落在覆盖率上。</p>
   <div class="gauge">
     <div class="g"><span class="lab">vol01 增量</span>
-      <span class="track"><span class="fill" style="width:8.7%"></span></span>
-      <span class="pct">8.7%</span></div>
+      <span class="track"><span class="fill" style="width:8.8%"></span></span>
+      <span class="pct">8.8%</span></div>
     <div class="g"><span class="lab">vol02 增量</span>
-      <span class="track"><span class="fill" style="width:16.3%"></span></span>
-      <span class="pct">16.3%</span></div>
+      <span class="track"><span class="fill" style="width:16.7%"></span></span>
+      <span class="pct">16.7%</span></div>
     <div class="g"><span class="lab">vol02 查 vol01 库</span>
-      <span class="track"><span class="fill" style="width:18.1%"></span></span>
-      <span class="pct">18.1%</span></div>
+      <span class="track"><span class="fill" style="width:18.6%"></span></span>
+      <span class="pct">18.6%</span></div>
   </div>
   <p class="gnote">条形是<b>覆盖率</b>——直接靠字形匹配定下来的字。这部分的<b>字形精度是 1.0000</b>，
      一个没错。剩下的八成走 OCR + 上下文，慢一点、也没那么准，但不会把错标写进库。</p>
@@ -280,6 +280,32 @@ a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
     <b>破了 ≥0.999 的硬约束</b>，所以闸维持 0.996。<br>
     不是两本账打架：pairs 量的是<b>一对一</b>的判决，库匹配是<b>一对 N</b>——闸放低之后
     一个查询会同时够到好几个形近字，错的撞上一次就写进库、沿簇扩散。先验不同，最优操作点就不同。</p>
+</section>
+
+<section>
+  <h2>2026-08-25 的口径变更 <span class="q">坏图块一律排除</span></h2>
+  <p class="sub">你定的：现在的扫描件质量低、后面会重扫，所以有问题的图块一律移出测试集与库。
+     上面那张表里的数<b>已经是排除之后的口径</b>。</p>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>全量口径（旧）</th><th>排除口径（新默认）</th></tr></thead>
+    <tbody>
+      <tr><td>triplets 硬例</td><td class="num">0.7632（38 组）</td><td class="num"><b>0.7879</b>（33 组）</td></tr>
+      <tr><td>pairs 固定闸 0.996 的 recall</td><td class="num">0.1050</td><td class="num"><b>0.1106</b></td></tr>
+      <tr><td>pairs 无偏层 recall</td><td class="num">0.0324</td><td class="num"><b>0.0453</b></td></tr>
+      <tr><td>聚类碎片率</td><td class="num">2.77 / 2.96 / 2.58</td><td class="num"><b>2.65 / 2.77 / 2.58</b></td></tr>
+      <tr><td>库匹配覆盖</td><td class="num">8.7 / 16.3 / 18.1%</td><td class="num"><b>8.8 / 16.7 / 18.6%</b></td></tr>
+      <tr><td>glyph.db</td><td class="num">2530 实例 / 706 字头</td><td class="num"><b>2338 / 673</b></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>名单不是删除</b>：753 条记在 <code>config/crop_exclusions.jsonl</code>
+    （人裁 39 + 判据旗标 714），每条带证据和来源。<b>正因为后面会重扫</b>，才必须留名单——
+    重扫之后要能一条条拿回来对着新图复核。判据那 714 条按标定只有约 27% 是真有问题，
+    四条里三条是好的，这是故意付的代价。</p>
+  <p class="note"><b>一个你可能没想到的副作用</b>：排除用的就是当初定
+    <code>tier=degraded</code> 的那把尺子，两者高度重合——char-clustering 的退化层从
+    160/283 掉到 1/1，pairs 从 443 掉到 2。<b>从此默认只在干净图上量。</b>
+    这跟「后面会重扫」的前提一致，但重扫要是没那么干净，我们就没有护栏了。
+    要量退化层得显式加 <code>--include-excluded</code>。</p>
 </section>
 
 <section>
@@ -303,18 +329,11 @@ a:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
     </div>
     <div class="item pick">
       <div class="tagrow"><span class="kind">要定</span></div>
-      <h3>列尾那 131 块图，动还是不动</h3>
-      <p>格内序号 idx=20（每列最后一个字）的缺陷率是抽样 6 块中 4 块，全池平均才 4.9%。
-         但根子在上游 G3 网格对齐——列尾格整体上飘 50±10px，在这儿逐块剔是给上游擦屁股。</p>
-      <p class="why">→ 两条路：<b>现在降级</b>（这一批干净了，上游照旧）或
-         <b>回流 G3</b>（修一次全书受益，但要动切分层）。</p>
-    </div>
-    <div class="item pick">
-      <div class="tagrow"><span class="kind">要定</span></div>
-      <h3>出库那 29 块怎么处置</h3>
-      <p>我的默认是<b>可逆降级</b>：tier 改成 defect、排除出干净层指标，不物理删——
-         删了基线就没法回头比。要真删说一声。</p>
-      <p class="why">→ 解开：这批落地之后，干净层的指标才是干净的。</p>
+      <h3>列尾的毛病要不要回流上游 G3</h3>
+      <p>被判据抓到的列尾块已经随排除名单出去了。但根子还在：idx=20 在图块池里
+         旗标率 55.7%、在已进库实例里 40.5%，病因是 G3 网格在列尾整体上飘 50±10px。
+         不修的话，重扫之后同样的位置还会再坏一遍。</p>
+      <p class="why">→ 修一次全书受益，但要动切分层，是另一条工作线。</p>
     </div>
     <div class="item pick">
       <div class="tagrow"><span class="kind">要定</span></div>
