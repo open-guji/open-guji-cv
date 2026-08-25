@@ -65,7 +65,18 @@ def build_page(book: str, page: str, quality: int, index: dict):
             cols_out.append({"col": cno, "cells": cells_out})
     # 阅读顺序：右列在前
     cols_out.sort(key=lambda c: c["col"])
-    return {"book": book, "page": page, "cols": cols_out}
+    out = {"book": book, "page": page, "cols": cols_out}
+    if not cols_out:
+        # 页型闸门跳过的页（封面/牌记/空白）没有字块——给审查页一个
+        # 说明，否则显示成一片空白像没处理（2026-08-25 用户反馈）
+        gp = Path("output") / book / "phase3_char_grid" \
+            / f"{page}_char_grid.json"
+        ptype = "?"
+        if gp.exists():
+            g = json.loads(gp.read_text(encoding="utf-8"))
+            ptype = g.get("page_type") or g.get("skipped") or "?"
+        out["skipped"] = ptype
+    return out
 
 
 def main() -> None:
