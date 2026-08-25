@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import multiprocessing as mp
 import os
+import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -1662,6 +1663,11 @@ def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
         else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     sh = res.get("grid", {}).get("shear", 0.0) or 0.0
     ps = measure_page_pitch(deshear(gray, sh) if sh else gray, res)
+    if os.environ.get("GUJI_REPITCH_DBG"):
+        med0 = float(np.median(ps)) if ps else None
+        print(f"[repitch] {Path(img_path).stem}: n={len(ps)} "
+              f"med={None if med0 is None else round(med0, 2)} used={round(used_h, 2)}",
+              flush=True)
     if len(ps) < PAGE_PITCH_MIN_COLS:
         return None
     med = float(np.median(ps))
