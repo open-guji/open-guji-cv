@@ -243,9 +243,11 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 7. **两仓库提交推送 + 主干同步**：output/glyph.db、queue.jsonl、
    index.jsonl、重切过的 patch 随 open-guji-cv 提交；expected.json +
    patches 随 open-guji-dataset 提交。库必须随推——其他分支在用。
-   随后同步主干（open-guji-cv 主干是 main、open-guji-dataset 主干是
-   **master**）：能快进就 `git push origin HEAD:main|master`；数据集
-   仓库主干常有别的会话在推标注，先 `git merge origin/master` 解冲突
+   随后同步主干（open-guji-cv 主干是 main；open-guji-dataset 主干
+   **2026-08-25 起是 main**——远端 HEAD 已指 main，旧的 master 名还在、
+   推 main 时顺手镜像一份免得别的会话按旧口径推错）：能快进就
+   `git push origin HEAD:main`；数据集仓库主干常有别的会话在推标注，
+   先 `git merge origin/main` 解冲突
    （expected.json 冲突的合法解法：原有条目取主干版、我们的新增
    review_* 条目并入）再推。
 8. **减免人工标定更新**（攒了新人裁数据时）：把新裁决并进回放
