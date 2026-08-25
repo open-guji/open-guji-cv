@@ -50,14 +50,16 @@ def render_page(book: str, page: str, scale: float, quality: int):
     if shear:
         img = deshear(img, shear)
     # 图块 bbox 与 flags 来自 phase4 index
+    # 夹注格一格有 a/b 两个半宽实例（sub 后缀），同键收成列表全画
     flags: dict[tuple[int, int], list[str]] = {}
-    bbox: dict[tuple[int, int], list[float]] = {}
+    bbox: dict[tuple[int, int], list[tuple[list[float], str]]] = {}
     idx_path = Path("output") / book / "phase4_chars" / "index.jsonl"
     for line in idx_path.read_text(encoding="utf-8").splitlines():
         r = json.loads(line)
         if r["page"] == page:
-            flags[(r["col"], r["idx"])] = r.get("flags") or []
-            bbox[(r["col"], r["idx"])] = r["bbox"]
+            k = (r["col"], r["idx"])
+            flags[k] = r.get("flags") or []
+            bbox.setdefault(k, []).append((r["bbox"], r.get("sub") or ""))
 
     vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     cells_out = []
@@ -72,14 +74,16 @@ def render_page(book: str, page: str, scale: float, quality: int):
             ct = cell.get("type")
             key = (cno, i)
             if ct == "char" and key in bbox:
-                x0, y0, x1, y1 = [int(round(v)) for v in bbox[key]]
                 fl = flags.get(key, [])
                 color = ORANGE if fl else GREEN
-                cv2.rectangle(vis, (x0, y0), (x1, y1), color, 2)
-                cells_out.append({
-                    "id": f"{book}/{page}:{cno}:{i}",
-                    "r": [round(v * scale, 1) for v in (x0, y0, x1, y1)],
-                    "f": fl})
+                for bb, sub in bbox[key]:
+                    x0, y0, x1, y1 = [int(round(v)) for v in bb]
+                    cv2.rectangle(vis, (x0, y0), (x1, y1), color, 2)
+                    cells_out.append({
+                        "id": f"{book}/{page}:{cno}:{i}{sub}",
+                        "r": [round(v * scale, 1)
+                              for v in (x0, y0, x1, y1)],
+                        "f": fl})
             elif ct == "empty":
                 y0, y1 = int(cell["y_top"]), int(cell["y_bottom"])
                 x0, x1 = int(x0d), int(x1d)
