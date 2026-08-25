@@ -42,7 +42,10 @@ class CropMarginPreprocessor(BasePreprocessor):
         if h < self.MIN_DIMENSION or w < self.MIN_DIMENSION:
             return image
 
-        top, bottom, left, right = find_content_bounds(gray)
+        # lines_per_page 触发裁边外整列救援（外框磨损页 LSD 把界行当外框
+        # 会吃整列；扫描贴边页第 9 列顶着图像边）——见 content_bounds
+        top, bottom, left, right = find_content_bounds(
+            gray, n_cols_expected=getattr(profile, "lines_per_page", None))
 
         content_h = bottom - top + 1
         content_w = right - left + 1

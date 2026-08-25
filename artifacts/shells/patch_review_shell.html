@@ -1,0 +1,270 @@
+<title>切分朱批·图块流</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --bg:#f6f2e8; --panel:#fffdf6; --panel2:#efe9da; --ink:#26221c; --ink2:#6b6353;
+  --line:#d9d2c0; --warn:#a97a12; --bad:#b3372a; --badbg:rgba(179,55,42,.18);
+  --unsurebg:rgba(201,151,30,.22); --accent:#5a4632; --focus:#8a6b3f;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
+    --line:#3d382a; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.26);
+    --unsurebg:rgba(210,164,55,.28); --accent:#c9b48f; --focus:#d8bf94;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17150f; --panel:#201d15; --panel2:#2a261b; --ink:#e8e2d2; --ink2:#a89e88;
+  --line:#3d382a; --warn:#d2a437; --bad:#e06152; --badbg:rgba(224,97,82,.26);
+  --unsurebg:rgba(210,164,55,.28); --accent:#c9b48f; --focus:#d8bf94;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans SC",system-ui,sans-serif}
+#app{display:flex;height:100vh;overflow:hidden}
+.side{width:220px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;min-height:0}
+.brand{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.brand h1{margin:0;font:900 19px/1.2 "Noto Serif SC",serif;letter-spacing:.05em}
+.brand .sub{color:var(--ink2);font-size:12px;margin-top:2px}
+.plist{flex:1;overflow-y:auto;padding:6px}
+.pbtn{display:flex;align-items:center;gap:8px;width:100%;padding:6px 10px;border:0;
+  background:none;color:var(--ink);cursor:pointer;border-radius:6px;font:inherit;text-align:left}
+.pbtn:hover{background:var(--panel2)}
+.pbtn.cur{background:var(--panel2);outline:2px solid var(--focus);outline-offset:-2px}
+.pbtn .nm{flex:1;font-variant-numeric:tabular-nums}
+.pbtn .seen{color:var(--focus);font-size:12px;visibility:hidden}
+.pbtn.visited .seen{visibility:visible}
+.badge{font-size:11px;padding:0 6px;border-radius:8px;font-variant-numeric:tabular-nums}
+.badge.b{background:var(--badbg);color:var(--bad)}
+.badge.u{background:var(--unsurebg);color:var(--warn)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);
+  background:var(--panel);flex-wrap:wrap}
+.bar .ttl{font:600 15px "Noto Serif SC",serif}
+button.act{font:inherit;padding:5px 12px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel2);color:var(--ink);cursor:pointer}
+button.act:hover{border-color:var(--focus)}
+button.act:focus-visible,.pbtn:focus-visible,.cell:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg)}
+.sp{flex:1}
+.stage{flex:1;overflow:auto;padding:16px}
+.cols{display:flex;gap:14px;align-items:flex-start;width:max-content;margin:0 auto}
+.colbox{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 6px}
+.colhead{text-align:center;color:var(--ink2);font-size:12px;margin-bottom:6px}
+.cells{display:flex;flex-direction:column;gap:4px;align-items:center}
+.cell{position:relative;border:2px solid transparent;border-radius:4px;cursor:pointer;
+  background:#fff;line-height:0;padding:1px}
+.cell img{display:block}
+.cell.hasflag{border-color:var(--warn)}
+.cell.m1{background:var(--badbg);border-color:var(--bad)}
+.cell.m2{background:var(--unsurebg);border-color:var(--warn)}
+.cell.emptycell{width:64px;height:34px;border:1px dashed var(--ink2);border-radius:4px;
+  background:none;display:flex;align-items:center;justify-content:center;
+  color:var(--ink2);font-size:11px;line-height:1}
+.idx{position:absolute;left:-2px;top:-2px;font-size:9px;color:var(--ink2);
+  background:var(--panel);padding:0 3px;border-radius:3px;line-height:1.4}
+.foot{padding:8px 14px;border-top:1px solid var(--line);background:var(--panel);display:flex;
+  gap:10px;align-items:center;flex-wrap:wrap;font-size:13px}
+#cellinfo{color:var(--ink2);font-variant-numeric:tabular-nums}
+#note{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;width:220px;
+  background:var(--panel2);color:var(--ink)}
+#toast{position:fixed;right:16px;bottom:16px;background:var(--accent);color:var(--bg);
+  padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){#toast{transition:none}}
+.menu{display:none}
+#scrim{display:none}
+.mobonly{display:none}
+@media (max-width:720px){
+  #app{height:100dvh}
+  .side{position:fixed;z-index:31;top:0;bottom:0;left:0;width:min(78vw,300px);
+    transform:translateX(-105%);transition:transform .2s;box-shadow:4px 0 18px rgba(0,0,0,.25)}
+  #app.nav .side{transform:none}
+  #scrim{display:block;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.35);
+    opacity:0;pointer-events:none;transition:opacity .2s}
+  #app.nav #scrim{opacity:1;pointer-events:auto}
+  .menu{display:inline-block}
+  .bar{gap:6px;padding:6px 8px}
+  .bar .ttl{display:none}
+  button.act{padding:8px 10px;touch-action:manipulation}
+  .cell,.zone{touch-action:manipulation}
+  .stage{padding:10px;-webkit-overflow-scrolling:touch}
+  .cols{margin:0}
+  .deskonly{display:none}
+  .mobonly{display:inline;color:var(--ink2)}
+  .foot{gap:6px;padding:6px 8px}
+  #note{flex:1;width:auto;min-width:0;font-size:16px}
+  #toast{left:50%;right:auto;transform:translateX(-50%);bottom:74px}
+}
+@media (prefers-reduced-motion: reduce){.side,#scrim{transition:none}}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);
+  max-width:640px;width:90%}
+dialog textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;
+  background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+</style>
+<div id="app"></div>
+<div id="toast" role="status"></div>
+<dialog id="expdlg">
+  <h3 style="margin-top:0;font-family:'Noto Serif SC',serif">导出审查事件</h3>
+  <p style="color:var(--ink2);font-size:13px">复制下面的 GUJI-SEG-REVIEW 块发给我（或用「存为文件」）。</p>
+  <textarea id="expbox" readonly></textarea>
+  <div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end">
+    <button class="act" id="expcopy">复制</button>
+    <button class="act" id="expsave">存为文件</button>
+    <button class="act" onclick="document.getElementById('expdlg').close()">关闭</button>
+  </div>
+</dialog>
+<script type="application/json" id="marks-data">__MARKS__</script>
+<script type="application/json" id="pages-data">__PAGES__</script>
+<script>
+const PAGES = JSON.parse(document.getElementById('pages-data').textContent);
+let STATE = JSON.parse(document.getElementById('marks-data').textContent);
+if(!STATE.marks) STATE = {marks:{}, visited:[]};
+let cur = 0, filter='all', lastCell = null, dirty = false, navOpen = false;
+const MOB = matchMedia('(max-width:720px)');
+let zoom = MOB.matches ? 0.8 : 1;
+const $ = s => document.querySelector(s);
+const markOf = id => STATE.marks[id] || null;
+
+function pageStats(p){
+  let b=0,u=0;
+  for(const col of p.cols) for(const c of col.cells){
+    const m=markOf(c.id); if(m){ if(m.s===1)b++; else u++; } }
+  return {b,u};
+}
+function render(){
+  const p = PAGES[cur];
+  const pk = p.book+'/'+p.page;
+  if(!STATE.visited.includes(pk)){ STATE.visited.push(pk); dirty=true; }
+  const items = PAGES.map((pg,i)=>{
+    const st=pageStats(pg), seen=STATE.visited.includes(pg.book+'/'+pg.page);
+    return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}">
+      <span class="nm">${pg.book==='vol01'?'一':'二'}·${pg.page}</span>
+      ${st.b?`<span class="badge b">${st.b}</span>`:''}
+      ${st.u?`<span class="badge u">${st.u}</span>`:''}
+      <span class="seen">✓</span></button>`;
+  }).join('');
+  const colsHtml = p.cols.map(col=>{
+    const cells = col.cells.map((c,ci)=>{
+      const m = markOf(c.id);
+      const mk = m ? (m.s===1?'m1':'m2') : '';
+      if(c.empty){
+        if(filter==='flag'||filter==='marked'&&!m) {}
+        return `<div class="cell emptycell ${mk}" data-id="${c.id}" role="button"
+          tabindex="0" title="${c.id} 判空格">空</div>`;
+      }
+      if(filter==='flag' && !c.f.length) return '';
+      if(filter==='marked' && !m) return '';
+      const w=Math.round(c.w*zoom), h=Math.round(c.h*zoom);
+      return `<div class="cell ${c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
+        role="button" tabindex="0"
+        title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}">
+        <span class="idx">${ci}</span>
+        <img src="${c.src}" width="${w}" height="${h}" alt="${c.id}"></div>`;
+    }).join('');
+    return `<div class="colbox"><div class="colhead">第 ${col.col} 列</div>
+      <div class="cells">${cells}</div></div>`;
+  }).reverse().join('');
+  const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
+  const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
+  $('#app').className = navOpen ? 'nav' : '';
+  $('#app').innerHTML = `
+  <div id="scrim"></div>
+  <nav class="side">
+    <div class="brand"><h1>切分朱批·图块流</h1>
+      <div class="sub">看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu}</div></div>
+    <div class="plist">${items}</div>
+  </nav>
+  <div class="main">
+    <div class="bar">
+      <button class="act menu" id="menu">☰ ${p.book==='vol01'?'一':'二'}·${p.page}</button>
+      <span class="ttl">${p.book} 第 ${p.page} 页</span>
+      <button class="act" id="prev">‹ 上一页</button>
+      <button class="act" id="next">下一页 ›</button>
+      <span class="sp"></span>
+      <button class="act ${filter==='all'?'on':''}" data-f="all">全部</button>
+      <button class="act ${filter==='flag'?'on':''}" data-f="flag">只看自检标记</button>
+      <button class="act ${filter==='marked'?'on':''}" data-f="marked">只看已朱批</button>
+      <span class="sp"></span>
+      <button class="act ${zoom===0.6?'on':''}" data-z="0.6">0.6×</button>
+      <button class="act ${zoom===0.8?'on':''}" data-z="0.8">0.8×</button>
+      <button class="act ${zoom===1?'on':''}" data-z="1">1×</button>
+      <button class="act ${zoom===1.5?'on':''}" data-z="1.5">1.5×</button>
+      <span class="sp"></span>
+      <button class="act" id="save">保存${dirty?' ●':''}</button>
+      <button class="act" id="export">导出</button>
+    </div>
+    <div class="stage"><div class="cols">${colsHtml}</div></div>
+    <div class="foot">
+      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--warn)">存疑</b> · 三下=清除。橙边=管线自检有标记。列序右→左，格序自上而下。</span>
+      <span class="mobonly">点 1 下=错 · 2 下=疑 · 3 下=清 · 列序右→左</span>
+      <span class="sp"></span>
+      <span id="cellinfo">${lastCell||''}</span>
+      <input id="note" placeholder="给最后点的格补备注" ${lastCell?'':'disabled'}
+        value="${lastCell&&markOf(lastCell)&&markOf(lastCell).note?markOf(lastCell).note:''}">
+    </div>
+  </div>`;
+  bind();
+}
+function bind(){
+  const mb=$('#menu'); if(mb) mb.onclick=()=>{navOpen=!navOpen;render();};
+  const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;render();};
+  document.querySelectorAll('.pbtn').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;navOpen=false;render();});
+  $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
+  $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
+  document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
+  document.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{zoom=+b.dataset.z;render();});
+  document.querySelectorAll('.cell').forEach(z=>{
+    const act=()=>{
+      const id=z.dataset.id, m=STATE.marks[id];
+      if(!m) STATE.marks[id]={s:1};
+      else if(m.s===1) STATE.marks[id].s=2;
+      else delete STATE.marks[id];
+      lastCell=id; dirty=true; render();
+    };
+    z.onclick=act;
+    z.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act();}};
+  });
+  $('#note').onchange=e=>{
+    if(lastCell){ if(!STATE.marks[lastCell]) STATE.marks[lastCell]={s:2};
+      STATE.marks[lastCell].note=e.target.value; dirty=true; render(); }
+  };
+  $('#save').onclick=saveState;
+  $('#export').onclick=()=>{ $('#expbox').value=eventsText(); $('#expdlg').showModal(); };
+}
+function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200); }
+async function saveState(){
+  const ns=await claude.use('artifact');
+  if(!ns){ toast('此环境不能保存，请用「导出」'); return; }
+  const clone=document.documentElement.cloneNode(true);
+  clone.querySelector('#app').innerHTML='';
+  clone.querySelector('#toast').textContent='';
+  const dlg=clone.querySelector('#expdlg'); if(dlg) dlg.removeAttribute('open');
+  clone.querySelector('#marks-data').textContent=JSON.stringify(STATE);
+  try{
+    await ns.publish('<!doctype html>\n<html>'+clone.innerHTML+'</html>');
+    dirty=false; toast('已保存'); render();
+  }catch(e){
+    if(e&&e.code==='conflict'){ toast('别处已保存过，页面即将刷新'); }
+    else toast('保存失败：'+(e&&e.code||e));
+  }
+}
+function eventsText(){
+  const lines=Object.entries(STATE.marks).map(([id,m])=>JSON.stringify(
+    {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':'unsure',...(m.note?{note:m.note}:{})}));
+  return lines.join('\n')||'(还没有标记)';
+}
+$('#expcopy').onclick=async()=>{
+  try{ await navigator.clipboard.writeText($('#expbox').value); toast('已复制'); }
+  catch(e){ $('#expbox').select(); document.execCommand('copy'); toast('已复制'); }
+};
+$('#expsave').onclick=async()=>{
+  const dl=await claude.use('downloads');
+  if(!dl){ toast('此环境不支持存文件，请复制'); return; }
+  try{ await dl.save({filename:'seg_review_marks.jsonl',data:eventsText()}); }
+  catch(e){ toast('未保存'); }
+};
+render();
+</script>
