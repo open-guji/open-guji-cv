@@ -213,12 +213,28 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    --db output/glyph.db --events <新批次>`。两通道语义：重切（几何）
    先应用、裁决后应用——确认位存的自动就是重切后的字形。
 3. **校验重切位** ⚠：index.jsonl 里 flags 含 `recropped` 的每一位，
-   已进库的必须 `db.patch_png == 磁盘图块`（字节一致）。不一致说明
-   两通道顺序被破坏，立刻停下查 ingest。
+   已进库的必须与磁盘图块一致。**比的是 canonical 口径，不是原始字节**
+   ——`instances.patch_png` 存的是 256×256 灰度规范图（见
+   glyph_canonical_format.md），磁盘图块是原始裁切（如 117×146），
+   两者永远不可能字节相等：
+
+   ```python
+   from open_guji_cv.clustering.canonical import canonical_png
+   assert bytes(db_row["patch_png"]) == canonical_png(cv2.imread(patch, 0))
+   ```
+
+   （2026-08-25 更正：这一条原来写的是「字节一致」，是**规范化迁移之前**
+   的口径。照旧写法查会 100% 报不一致，差点据此判定 ingest 坏了——实测
+   按 canonical 口径 14/14 全对。）
+   不一致才说明两通道顺序被破坏，那时立刻停下查 ingest。
 4. **重切回流上游** ⚠：`PYTHONPATH=. python scripts/build_recrop_shard.py
    output/vol01 --dataset ../open-guji-dataset`。**必须在提交重切改动
    之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
    提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
+4b. **准入标定**：`PYTHONPATH=. python scripts/calibrate_admission.py
+   output/vol01`——报待审里有多少按现行规则已能自动进（>0 就跑第 5 步
+   回填）、人裁被拦行的 疑问×信号 聚类（放行规则候选从这里挑）。
+   三条反馈环的机理与去向见 **review_feedback_loops.md**。
 5. **规则回填**（本轮若改了准入规则才需要）：`readjudicate_pending`
    对存量待审行按新规则复裁（只动 pending/skipped，人裁行永不触碰）。
    若变的不只是规则、而是**证据本身**（切分/载体/上下文口径改过，队列
@@ -239,10 +255,11 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 7. **两仓库提交推送 + 主干同步**：output/glyph.db、queue.jsonl、
    index.jsonl、重切过的 patch 随 open-guji-cv 提交；expected.json +
    patches 随 open-guji-dataset 提交。库必须随推——其他分支在用。
-   随后同步主干（两个仓库的主干都是 **main**——这里一度写成数据集仓库
-   是 master，是旧信息，2026-08-25 核对 `origin/HEAD -> origin/main`
-   后改正）：能快进就 `git push origin HEAD:main`；数据集
-   仓库主干常有别的会话在推标注，先 `git merge origin/main` 解冲突
+   随后同步主干（**两个仓库的主干都是 main**——open-guji-dataset 一度写成
+   master，2026-08-25 两个会话各自核对后改正；`git branch -a` 实测远端
+   只有 `origin/main`（`origin/HEAD -> origin/main`），**没有** master
+   分支，别再往那个名字推）：能快进就 `git push origin HEAD:main`；
+   数据集仓库主干常有别的会话在推标注，先 `git merge origin/main` 解冲突
    （expected.json 冲突的合法解法：原有条目取主干版、我们的新增
    review_* 条目并入）再推。
 8. **减免人工标定更新**（攒了新人裁数据时）：把新裁决并进回放
