@@ -134,6 +134,25 @@ CELL_COV_STOP_RELAX = 0.30  # 放宽档的覆盖率门槛。结构弱（游程�
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 CELL_BOW_T = 3.0           # 各带围栏彼此相差超过此像素 → 这条边界是弯的，
                            # 额外输出逐带裁切边（cell_bands），图块按带掩蔽
+# ── 异常宽列缝（2026-08-25，用户 r7「有一页左边小注被竖着切断」）──
+# 双行夹注写满整个列格：两个子列合起来比文字带还宽（vol02/171 的
+# 「兩江總督／採進本」跨 170px，文字带只有 136px）。这一侧既没界行也
+# 没墙时，上面的围栏按「无墙不敢扩」把窗口停在文字带上，左子列被竖着
+# 切掉 37px——图块里只剩半个小字，夹注判据的均衡检查跟着落空，整列
+# 也就没拆成 a/b。
+# 判据不看单列看**列缝**：正常缝 9~15px，这种漏扩的缝 44~75px，全书
+# 387 页只有 27 条。补法是把缝两侧的边界一起挪到缝内**最宽空白段的
+# 中心**——空白段是版面自己给出的分界，比名义中线可靠（p171 的空白段
+# 中心 1285，名义中线 1309 仍要切掉 9px 小字）。
+# 投影要先滤掉版框横线行：上下框线横贯全宽，不滤则每个 x 都有墨、
+# 空白段永远量不出来。
+GUTTER_WIDE_K = 2.0        # 缝宽超过页内中位数的这个倍数
+GUTTER_WIDE_ABS = 20.0     # 且至少比中位数宽这么多（px），两条都满足才算异常
+GUTTER_BLANK_REL = 0.005   # 「空白」列的墨量上限（× 参与统计的行数）
+GUTTER_BLANK_ABS = 3       # 空白列墨量的绝对下限，短页不至于苛刻
+GUTTER_MIN_BLANK = 4       # 缝内最宽空白段窄于此 → 证据不足，不动
+
+
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
@@ -589,7 +608,81 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
                        float(max(r[3] for r in rows)))
         else:
             band_out.append(None)
+
+    _widen_wide_gutters(binary, spans, out, band_out)
     return out, band_out
+
+
+def _widest_blank(xs: np.ndarray, thresh: int) -> tuple[int, int, int]:
+    """xs 里最宽的一段「墨量 ≤ thresh」的连续区间，返回 (长度, 起, 止)。"""
+    best = (0, 0, 0)
+    start = None
+    for j, v in enumerate(list(xs) + [thresh + 1]):
+        if v <= thresh and start is None:
+            start = j
+        elif v > thresh and start is not None:
+            if j - start > best[0]:
+                best = (j - start, start, j)
+            start = None
+    return best
+
+
+def _widen_wide_gutters(binary: np.ndarray,
+                        spans: list[tuple[int, int]],
+                        out: list[tuple[float, float]],
+                        band_out: list[list[list[float]] | None]) -> None:
+    """异常宽的列缝：把两侧边界挪到缝内空白段的中心（原地改）。
+
+    判据与理由见 GUTTER_* 常量上方注释。**逐带**做：整页投影上这条缝
+    往往根本没有空白段——摆正之后的页仍有残余弯曲，同一条缝在页顶和
+    页底能差十几个像素，整页一投影就糊成一片（vol02/171 实测整页投影
+    的最宽空白段 0px，而夹注那一带有 8px）。逐带算完写进 cell_bands，
+    扁平边界取包络，与「弯的界行」分支同一套口径。
+    """
+    if len(out) < 3 or not spans:
+        return
+    gaps = [out[i + 1][0] - out[i][1] for i in range(len(out) - 1)]
+    med = float(np.median(gaps))
+    band_xs: list[tuple[np.ndarray, int] | None] = []
+    for ya, yb in spans:
+        sub = binary[ya:yb]
+        keep = sub.mean(axis=1) < FRAME_ROW_T     # 滤掉版框横线行
+        if not keep.any():
+            band_xs.append(None)
+            continue
+        band_xs.append((sub[keep].sum(axis=0),
+                        max(GUTTER_BLANK_ABS,
+                            int(keep.sum() * GUTTER_BLANK_REL))))
+    w = binary.shape[1]
+    for i, gap in enumerate(gaps):
+        if gap <= max(med * GUTTER_WIDE_K, med + GUTTER_WIDE_ABS):
+            continue
+        a = max(0, min(w, int(round(out[i][1]))))
+        b = max(a, min(w, int(round(out[i + 1][0]))))
+        mids: list[float | None] = []
+        for bx in band_xs:
+            if bx is None or b <= a:
+                mids.append(None)
+                continue
+            xs, thresh = bx
+            blen, ba, bb = _widest_blank(xs[a:b], thresh)
+            mids.append((a + ba + a + bb) / 2.0
+                        if blen >= GUTTER_MIN_BLANK else None)
+        if all(m is None for m in mids):
+            continue
+        rows_l = band_out[i] or [[float(ya), float(yb),
+                                  out[i][0], out[i][1]] for ya, yb in spans]
+        rows_r = band_out[i + 1] or [[float(ya), float(yb),
+                                      out[i + 1][0], out[i + 1][1]]
+                                     for ya, yb in spans]
+        for bi, m in enumerate(mids):
+            if m is None:
+                continue
+            rows_l[bi][3] = max(rows_l[bi][3], m)
+            rows_r[bi][2] = min(rows_r[bi][2], m)
+        band_out[i], band_out[i + 1] = rows_l, rows_r
+        out[i] = (out[i][0], max(r[3] for r in rows_l))
+        out[i + 1] = (min(r[2] for r in rows_r), out[i + 1][1])
 
 
 def column_projection(col_gray: np.ndarray,
