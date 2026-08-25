@@ -156,6 +156,10 @@ function backupLocal(){ try{ localStorage.setItem(LS_KEY,
 let cur = 0, filter='all', lastCell = null, dirty = dirty0, navOpen = false;
 const MOB = matchMedia('(max-width:720px)');
 let zoom = MOB.matches ? 0.8 : 1;
+// 自检橙边默认**关**：用户 r7「有一个自检太多了 我就没消除」——
+// 清自检是额外负担，不该挡在朱批前面。想看的时候一键打开。
+let showFlags = (()=>{ try{ return localStorage.getItem('pr_flags')==='1'; }
+                       catch(e){ return false; } })();
 const $ = s => document.querySelector(s);
 const markOf = id => STATE.marks[id] || null;
 const markCls = m => m ? (m.s===1?'m1':m.s===2?'m2':'m3') : '';
@@ -181,7 +185,10 @@ function subLine(){
   const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
   const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
   const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
-  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
+  // 只数**本批**看过的页：visited 里攒着历轮的页，直接拿长度会出现
+  //「看过 51/18 页」这种读数
+  const seen=PAGES.filter(p=>STATE.visited.includes(p.book+'/'+p.page)).length;
+  return `看过 ${seen}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
 }
 // 朱批不重绘画面：只改被点格的类 + 侧栏/页脚（滚动位置原地不动）
 function refreshChrome(){
@@ -217,7 +224,7 @@ function render(){
           const mx=markOf(x.id), w=Math.round(x.w*zoom), h=Math.round(x.h*zoom);
           if(filter==='flag' && !x.f.length) return '';
           if(filter==='marked' && !mx) return '';
-          return `<div class="cell jzcell ${x.f.length?'hasflag':''} ${markCls(mx)}"
+          return `<div class="cell jzcell ${showFlags&&x.f.length?'hasflag':''} ${markCls(mx)}"
             data-id="${x.id}" role="button" tabindex="0"
             title="${x.id}${x.f.length?' ['+x.f.join(',')+']':''}">
             <span class="idx">${x.lab}</span>
@@ -228,7 +235,7 @@ function render(){
       if(filter==='flag' && !c.f.length) return '';
       if(filter==='marked' && !m) return '';
       const w=Math.round(c.w*zoom), h=Math.round(c.h*zoom);
-      return `<div class="cell ${c.jz?'jzcell ':''}${c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
+      return `<div class="cell ${c.jz?'jzcell ':''}${showFlags&&c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
         role="button" tabindex="0"
         title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}">
         <span class="idx">${c.lab||ci+1}</span>
@@ -256,6 +263,7 @@ function render(){
       <button class="act ${filter==='all'?'on':''}" data-f="all">全部</button>
       <button class="act ${filter==='flag'?'on':''}" data-f="flag">只看自检标记</button>
       <button class="act ${filter==='marked'?'on':''}" data-f="marked">只看已朱批</button>
+      <button class="act ${showFlags?'on':''}" id="flagsw">自检框</button>
       <span class="sp"></span>
       <button class="act ${zoom===0.4?'on':''}" data-z="0.4">0.4×</button>
       <button class="act ${zoom===0.6?'on':''}" data-z="0.6">0.6×</button>
@@ -268,8 +276,8 @@ function render(){
     </div>
     <div class="stage"><div class="cols">${colsHtml}</div></div>
     <div class="foot">
-      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--ok)">无误</b> · 三下=<b style="color:var(--warn)">存疑</b>（对<b style="color:var(--warn)">橙边</b>格标无误=判自检误报）· 四下=清除。列序右→左。</span>
-      <span class="mobonly">点 1=错 2=无误 3=疑 4=清（橙边标无误=自检误报）</span>
+      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--ok)">无误</b> · 三下=<b style="color:var(--warn)">存疑</b>· 四下=清除。列序右→左。自检橙边默认关，要看点「自检框」（对橙边格标无误=判自检误报）。</span>
+      <span class="mobonly">点 1=错 2=无误 3=疑 4=清（自检框默认关）</span>
       <span class="sp"></span>
       <span id="cellinfo">${lastCell||''}</span>
       <input id="note" placeholder="给最后点的格补备注" ${lastCell?'':'disabled'}
@@ -287,6 +295,10 @@ function bind(){
   $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
   $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
+  const fw=$('#flagsw'); if(fw) fw.onclick=()=>{ showFlags=!showFlags;
+    try{ localStorage.setItem('pr_flags', showFlags?'1':'0'); }catch(e){}
+    if(!showFlags && filter==='flag') filter='all';
+    render(); };
   document.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{zoom=+b.dataset.z;render();});
   document.querySelectorAll('.cell').forEach(z=>{
     const act=()=>{
