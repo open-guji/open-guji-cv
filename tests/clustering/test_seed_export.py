@@ -442,3 +442,44 @@ def test_auto_advance_hides_top_bar_and_aligns_tall_cards():
     assert "if(bar) bar.setAttribute('data-hide', '1');" in html
     assert "tall ? 'start' : 'center'" in html
     assert "scroll-margin-top:3.2rem" in html
+
+
+def test_mobile_row_stacks_and_recrop_leaves_a_visible_badge():
+    """手机窄屏两件事（用户 2026-08-26 实拍两条抱怨）：
+
+    一、「圖片佔了一半的豎排的位置」——原图 + 上下文竖排条 + 主区三者
+    横排，412px 宽下 `.cand` 撑到 380px，整页横向溢出到 574px。手机块把
+    `.row` 改成竖排堆叠，主区独占整行。
+
+    二、「確認之後它總是彈開，讓我再次重新切分，無限循環」——重切是**几何
+    通道**，不定字、不推进，面板一关卡片看着毫无变化，用户以为没生效就
+    再切一遍。卡头挂一枚常驻徽章，定字之前一直亮着；重放也要跟着日志
+    回来（发布重载之后痕迹不能丢），定案/非字之后自动隐去。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    # 一：窄屏堆叠，主区不再跟图片抢宽
+    assert "@media (max-width: 640px)" in html
+    assert "flex-direction:column" in html
+    assert ".main{min-width:0;width:100%}" in html
+    assert "overflow-x:hidden}   /* 兜底" in html
+
+    # 二：徽章存在、默认收着、只有 data-recropped 才亮、定案后隐去
+    assert '<span class="rcbadge">' in html
+    assert ".rcbadge{display:none" in html
+    assert '.card[data-recropped="1"] .rcbadge{display:inline-block}' in html
+    assert ('.card[data-state="done"] .rcbadge,'
+            '.card[data-state="nac"] .rcbadge{display:none}') in html
+    # 确认重切时挂上；日志重放时挂回来；归零时摘掉（日志是唯一真源）
+    assert html.count("card.setAttribute('data-recropped', '1')") >= 2
+    assert "else if(ev.op === 'recrop')" in html
+    assert "cs[i].removeAttribute('data-recropped');" in html

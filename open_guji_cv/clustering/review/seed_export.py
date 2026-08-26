@@ -520,7 +520,7 @@ def _render_seed_card(e: dict) -> str:
                       for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
-<span class="pos">第{e["col"]}列第{e.get("seq", e["idx"] + 1)}字</span>{tier}{intr}{skipped}
+<span class="pos">第{e["col"]}列第{e.get("seq", e["idx"] + 1)}字</span>{tier}{intr}{skipped}<span class="rcbadge">已重切 ✓ 待选字</span>
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
@@ -593,7 +593,8 @@ _CSS = """
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);
-  font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5}
+  font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5;
+  overflow-x:hidden}   /* 兜底：任何漏网元素都不许撑出横向滚动 */
 .top{position:sticky;top:0;z-index:5;background:var(--paper);
   border-bottom:1px solid var(--line);padding:.6rem 1rem;
   display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline;
@@ -618,6 +619,12 @@ body{margin:0;background:var(--paper);color:var(--ink);
 .iid{font-family:ui-monospace,monospace;font-size:.75rem;color:var(--muted)}
 .pos{font-size:.8rem;color:var(--muted)}
 .chosen{font-size:1.2rem;color:var(--done);min-width:1.4em}
+/* 重切成功的唯一提示原先在面板里，面板一关就看不见了——用户于是以为
+   没生效、反复重切（2026-08-26 手机实拍「无限循环」）。挪到卡头常驻。 */
+.rcbadge{display:none;font-size:.7rem;color:var(--done);
+  border:1px solid var(--done);border-radius:3px;padding:.02rem .35rem}
+.card[data-recropped="1"] .rcbadge{display:inline-block}
+.card[data-state="done"] .rcbadge,.card[data-state="nac"] .rcbadge{display:none}
 .card>header .reopen{display:none;margin-left:auto;font:inherit;font-size:.75rem;
   background:none;border:1px solid var(--line);border-radius:3px;
   color:var(--muted);cursor:pointer;padding:.05rem .5rem}
@@ -741,17 +748,30 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   .top .prog{font-size:.72rem}
   .top button{font-size:.72rem;padding:.1rem .45rem}
   .list{padding:.5rem;gap:.5rem}
-  .row{gap:.6rem;padding:.55rem}
+  /* 原图 + 竖排上下文条 与 候选/证据 改成**上下堆叠**：横着排时窄屏
+     宽度不够，原图占掉一半、竖排被压成看不清的细柱，候选按钮又溢出
+     右边（用户 2026-08-26 手机实拍）。堆叠后两边都拿满宽。 */
+  .row{gap:.5rem;padding:.55rem;flex-direction:column;align-items:stretch}
   .card>header{padding:.3rem .55rem;gap:.4rem}
   .iid{font-size:.66rem}
   .pos{font-size:.72rem}
-  .imgs img,.imgs .noimg{width:5.4rem;height:5.4rem}
+  .imgs{gap:.5rem;align-items:flex-start}
+  .imgs img,.imgs .noimg{width:5rem;height:5rem}
   .imgs figcaption{font-size:.62rem}
-  .main{min-width:0}
-  .cand{padding:.18rem .45rem;gap:.25rem}
+  .ctx{flex:1 1 auto;min-width:0}      /* 竖排拿走原图之外的全部宽度 */
+  .main{min-width:0;width:100%}
+  /* 候选按钮：允许内部折行并卡死在容器宽度内，别再撑出横向滚动 */
+  .cands{gap:.35rem}
+  .cand{padding:.18rem .45rem;gap:.2rem;max-width:100%;flex-wrap:wrap}
   .cand b{font-size:1.2rem}
-  .cand .gl{font-size:.64rem;max-width:8em}
+  .cand .gl{font-size:.64rem;max-width:100%;white-space:normal}
   .vtxt{font-size:.86rem;letter-spacing:.08em}
+  /* 重切面板：页图与预览都收进容器 */
+  .recrop{padding:.45rem}
+  .rc-wrap{max-width:100%}
+  .rc-wrap img{max-width:100%;height:auto}
+  .rc-prev canvas{width:4.5rem;height:4.5rem}
+  .rc-acts{gap:.3rem}
   .evi{font-size:.82rem}
   .other-in{font-size:.95rem;width:4em}
   .other-ok,.nac,.skip,.noadm{font-size:.76rem}
@@ -812,7 +832,11 @@ _JS = """
       card.setAttribute('data-state',
         card.getAttribute('data-undone') === '1' ? 'open' : 'skip');
       setChosen(card, card.getAttribute('data-undone') === '1' ? '' : '疑');
-      card.removeAttribute('data-undone'); } }
+      card.removeAttribute('data-undone'); }
+    else if(ev.op === 'recrop'){
+      // 几何通道不定字，但徽章要跟着日志重放回来——否则发布重载之后
+      // 「已重切」的痕迹全没了，用户又会再切一次
+      card.setAttribute('data-recropped', '1'); } }
 
   function progress(){
     var done = list.querySelectorAll(
@@ -992,6 +1016,7 @@ _JS = """
             bbox: [ox + b[0], oy + b[1], ox + b[2], oy + b[3]]});
       var v = card.querySelector('[data-slot="rcdone"]');
       if(v) v.textContent = '已重切 ✓（仍需选字）';
+      card.setAttribute('data-recropped', '1');   // 卡头徽章，面板关了也在
       card.setAttribute('data-recrop', '0');
     }
   });
@@ -1024,6 +1049,7 @@ _JS = """
       for(var i = 0, cs = cards(); i < cs.length; i++){
         cs[i].setAttribute('data-state', 'open');
         cs[i].removeAttribute('data-undone');
+        cs[i].removeAttribute('data-recropped');
         setChosen(cs[i], ''); }
       // 按 seq 順序重放：同一 instance 後到覆蓋
       evs.sort(function(a, b){ return (a.seq||0) - (b.seq||0); });
