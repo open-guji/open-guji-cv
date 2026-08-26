@@ -182,6 +182,34 @@ GUTTER_MIN_BLANK = 4       # 缝内最宽空白段窄于此 → 证据不足，�
 
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
+RULE_PITCH_MIN_PEAKS = 3   # 界行第二意见：至少数出这么多条界行才可信
+RULE_PITCH_CLIP = (120.0, 300.0)   # 界行间距的合理范围（px）
+
+
+def _rule_pitch(rule_xs: np.ndarray) -> float | None:
+    """界行 x 位置的中位间距 ≈ 列距（判窄前的第二意见）。
+
+    Pass 1 自由拟合的列距在噪声页上会拟大（vol02/118 实测拟出 190、
+    真值 187——差 3px 就把 9×period 推过页宽、整页误判 narrow 丢一列，
+    而第 9 列的像素明明在图上）。界行是物理刻线，间距不受文字带噪声
+    影响。证据不足（<3 条界行）返回 None。"""
+    xs = np.flatnonzero(rule_xs)
+    if xs.size < 2:
+        return None
+    groups: list[list[int]] = [[int(xs[0])]]
+    for x in xs[1:]:
+        if x - groups[-1][-1] <= 8:
+            groups[-1].append(int(x))
+        else:
+            groups.append([int(x)])
+    peaks = [float(np.mean(g)) for g in groups]
+    if len(peaks) < RULE_PITCH_MIN_PEAKS:
+        return None
+    gaps = np.diff(peaks)
+    gaps = gaps[(gaps >= RULE_PITCH_CLIP[0]) & (gaps <= RULE_PITCH_CLIP[1])]
+    if gaps.size < 2:
+        return None
+    return float(np.median(gaps))
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
 INSET_TOL_HI = 1.25        # 页内缩**高于**共识此比例 → 同样是量错了，也换成共识值。
                            # 塌掉的危害是列框贴着界行走（把线圈进来），涨上去的
@@ -2115,6 +2143,15 @@ class GridSegmenter:
             # 把最左边那列真有字的列排除在外。
             n_cols = self.n_cols
             narrow = period * n_cols > w + period * NARROW_TOL
+            if narrow:
+                # 判窄前的第二意见：界行间距（见 _rule_pitch 注）。拟大
+                # 的列距会把装得下的页误判 narrow 白丢一列；界行说装得
+                # 下就按界行的列距装（相位随后由界行吸附钉死）。
+                rp = _rule_pitch(rule_xs)
+                if (rp is not None
+                        and rp * n_cols <= w + rp * NARROW_TOL):
+                    period = rp
+                    narrow = False
             if narrow:
                 # 页面装不下 n_cols 列 —— 实测这类页被上游裁掉了一整列：
                 # 图宽 1460~1530（正常 1696，差一个列距），且**图上真的只有
