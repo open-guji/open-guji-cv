@@ -64,6 +64,9 @@ def main() -> None:
     ap.add_argument("--tau", nargs="*", type=float,
                     default=[0.99, 0.98, 0.97, 0.96, 0.95, 0.94, 0.93])
     ap.add_argument("--origin", default="knn")
+    ap.add_argument("--exclude-origins", default=None,
+                    help="只按这几个来源排除（逗号分隔，如 human,pipeline）。"
+                         "默认全用——用来量「排除名单收紧之后会怎样」。")
     ap.add_argument("--book", default=None,
                     help="只在这一册的对上评（留出用：表从另一册学，这里评）")
     a = ap.parse_args()
@@ -71,7 +74,8 @@ def main() -> None:
     ds = Path(a.dataset)
     meta = {r["instance_id"]: r["char"]
             for r in json.loads((ds / "expected.json").read_text(encoding="utf-8"))["instances"]}
-    ex = excluded_ids()
+    ex = excluded_ids(origins=tuple(a.exclude_origins.split(","))
+                      if a.exclude_origins else None)
     z = np.load(a.dump, allow_pickle=True)
     pairs, cov = list(z["pairs"]), z["cov"]
 
