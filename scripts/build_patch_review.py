@@ -5,7 +5,14 @@
 排列；判空格给灰色占位（真字被判空=漏切，在流里立刻现形）。
 
 用法：PYTHONPATH=. python scripts/build_patch_review.py \
-        --pages vol01:20-32 vol02:1-12 --quality 74 --out review_patches.json
+        --pages vol01:20-32 vol02:1-12 --out review_patches.json
+
+图块用**无损灰度 PNG**（2026-08-26 定）。曾用 JPEG q52：产物本身
+是二值图（中间灰只占 2.96%，全是抗锯齿边），JPEG 对这种内容既臃肿
+又生振铃——实测 300 块平均 3106 B/块，无损 PNG 只要 1038 B/块。
+整页 13.86MB → 4.63MB，而且用户看到的从此是**产物真实像素**，
+不再是压过一道的版本。审查页每存一次要整份重发布，页多大就传多大，
+所以编码效率直接决定「保存」有多慢。
 """
 
 from __future__ import annotations
@@ -16,6 +23,8 @@ import json
 from pathlib import Path
 
 import cv2
+
+from open_guji_cv.clustering.extractor import defect_flags
 
 
 def parse_pages(specs: list[str]) -> list[tuple[str, str]]:
@@ -29,6 +38,20 @@ def parse_pages(specs: list[str]) -> list[tuple[str, str]]:
             else:
                 out.append((book, part))
     return out
+
+
+def _patch_cell(book: str, cid: str, lab: str, rec: dict, quality: int = 0):
+    p = Path("output") / book / "phase4_chars" / rec["patch_path"]
+    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    ok, buf = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    # 只把**缺陷** flag 送进审查页：jiazhu 一类是版式标注，画成橙边
+    # 只是让人白清一遍（2026-08-25 用户 r7）
+    return {"id": cid, "lab": lab, "w": img.shape[1], "h": img.shape[0],
+            "f": defect_flags(rec.get("flags")),
+            "src": "data:image/png;base64," +
+                   base64.b64encode(buf.tobytes()).decode()}
 
 
 def build_page(book: str, page: str, quality: int, index: dict):
@@ -47,20 +70,41 @@ def build_page(book: str, page: str, quality: int, index: dict):
                 c for c in col["cells"] if c.get("type") != "margin"):
             cid = f"{book}/{page}:{cno}:{i}"
             rec = index.get((book, page, cno, i))
-            if cell.get("type") == "char" and rec is not None:
-                p = Path("output") / book / "phase4_chars" / rec["patch_path"]
-                img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
-                if img is None:
-                    continue
-                ok, buf = cv2.imencode(
-                    ".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                cells_out.append({
-                    "id": cid, "w": img.shape[1], "h": img.shape[0],
-                    "f": rec.get("flags") or [],
-                    "src": "data:image/jpeg;base64," +
-                           base64.b64encode(buf.tobytes()).decode()})
+            # 判空要看**实例**的 cell_type，不是 grid 的 type：列端渣格闸
+            # 把纯框渣/污渍的格判成 empty 时只改实例，grid 里仍写着 char
+            # ——审查页照 grid 显示，就把管线已经判空的格又画成字块，
+            # 看着像「管线把污渍当字圈起来」（2026-08-25 用户实审反馈）。
+            if isinstance(rec, dict) and not rec.get("__subs__") \
+                    and rec.get("cell_type") == "empty":
+                cells_out.append({"id": cid, "empty": True,
+                                  "lab": str(i + 1), "junk": 1})
+            elif cell.get("type") == "char" and isinstance(rec, dict) \
+                    and rec.get("__subs__"):
+                # 夹注格：整格实例已被 a=右子列 / b=左子列 两个半宽实例
+                # 替换。两半**并排**成一块（a 在右、b 在左，与竖排读序
+                # 一致）——分成上下两块看不出它们本是同一格的左右两半
+                # （2026-08-25 用户反馈）。
+                pair = []
+                for sub in ("a", "b"):
+                    sr = rec.get(sub)
+                    if sr is None:
+                        continue
+                    d = _patch_cell(book, f"{cid}{sub}", f"{i + 1}{sub}",
+                                    sr, quality)
+                    if d is not None:
+                        d["jz"] = 1
+                        pair.append(d)
+                if pair:
+                    cells_out.append({"id": cid, "lab": str(i + 1),
+                                      "jz": 1, "pair": pair})
+            elif cell.get("type") == "char" and rec is not None \
+                    and not rec.get("__subs__"):
+                d = _patch_cell(book, cid, str(i + 1), rec, quality)
+                if d is not None:
+                    cells_out.append(d)
             else:
-                cells_out.append({"id": cid, "empty": True})
+                cells_out.append({"id": cid, "empty": True,
+                                  "lab": str(i + 1)})
         if cells_out:
             cols_out.append({"col": cno, "cells": cells_out})
     # 阅读顺序：右列在前
@@ -82,7 +126,8 @@ def build_page(book: str, page: str, quality: int, index: dict):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pages", nargs="+", required=True)
-    ap.add_argument("--quality", type=int, default=74)
+    ap.add_argument("--quality", type=int, default=0,
+                    help="已废弃：图块改用无损 PNG，此参数不再有作用")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -91,7 +136,16 @@ def main() -> None:
         p = Path("output") / book / "phase4_chars" / "index.jsonl"
         for line in p.read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
-            index[(r["book"], r["page"], r["col"], r["idx"])] = r
+            k = (r["book"], r["page"], r["col"], r["idx"])
+            if r.get("sub"):
+                # 夹注 a/b 半宽实例：同格两条，聚成 {'__subs__':1,'a':…,'b':…}
+                slot = index.get(k)
+                if not (isinstance(slot, dict) and slot.get("__subs__")):
+                    slot = {"__subs__": 1}
+                    index[k] = slot
+                slot[r["sub"]] = r
+            else:
+                index[k] = r
 
     pages = []
     for book, page in parse_pages(args.pages):

@@ -67,6 +67,9 @@ button.act.on{border-color:var(--accent);background:var(--accent);color:var(--bg
 .cell.emptycell{width:64px;height:34px;border:1px dashed var(--ink2);border-radius:4px;
   background:none;display:flex;align-items:center;justify-content:center;
   color:var(--ink2);font-size:11px;line-height:1}
+.junkcell{color:var(--warn);border-color:var(--warn);border-style:dashed}
+.jzrow{display:flex;flex-direction:row-reverse;gap:3px;align-items:flex-start}
+.jzcell{outline:1.5px dashed #a78bda;outline-offset:-1px}
 .idx{position:absolute;left:-2px;top:-2px;font-size:9px;color:var(--ink2);
   background:var(--panel);padding:0 3px;border-radius:3px;line-height:1.4}
 .foot{padding:8px 14px;border-top:1px solid var(--line);background:var(--panel);display:flex;
@@ -124,7 +127,25 @@ dialog textarea{width:100%;height:220px;font:12px/1.4 ui-monospace,monospace;
 <script type="application/json" id="marks-data">__MARKS__</script>
 <script type="application/json" id="pages-data">__PAGES__</script>
 <script>
-const PAGES = JSON.parse(document.getElementById('pages-data').textContent);
+// 图块载荷（十几 MB 的 base64）启动时就从 DOM 摘走：实况 DOM 不再背这个
+// 大文本节点，发布时按模板拼串即可（见 saveState）。
+// 数据槽令牌：源码里只以拼接式出现，模板里的字面量就唯一是数据槽本身
+// （否则 replace 可能打到脚本源码里的同名字符串上）
+const TK_P = '@@PAGES' + '_SLOT@@', TK_M = '@@MARKS' + '_SLOT@@';
+const _pnode = document.getElementById('pages-data');
+const PAGES_TEXT = _pnode.textContent;
+const PAGES = JSON.parse(PAGES_TEXT);
+_pnode.textContent = TK_P;
+// 平台在 <head> 注入的 frame-runtime + <base> 不是本页源码。保存要整份
+// 重发布，把它们烧回源码的话，下一次保存会连同新注入的那份一起再烧一遍
+// ——自动保存开着就是逐次叠加。只留 meta/style。
+const HEAD_TPL = (() => {
+  const h = document.head.cloneNode(true);
+  h.querySelectorAll('base').forEach(n => n.remove());
+  h.querySelectorAll('script').forEach(n => { if (!n.src) n.remove(); });
+  return h.innerHTML;
+})();
+let BODY_TPL = '';
 let STATE = JSON.parse(document.getElementById('marks-data').textContent);
 if(!STATE.marks) STATE = {marks:{}, visited:[]};
 // 本地备份：保存失败/页面被新版本顶掉时标记不丢。仅本浏览器可见。
@@ -151,8 +172,22 @@ function backupLocal(){ try{ localStorage.setItem(LS_KEY,
   }catch(e){}
 })();
 let cur = 0, filter='all', lastCell = null, dirty = dirty0, navOpen = false;
+// 自动保存（2026-08-26 用户「不用我每次手动保存」）：本环境只有 artifact
+// 能力、没有小状态存储，保存必然是整份重发布，所以按「停手 20 秒再存」
+// 防抖，别边点边传。切页/切标签页也冲一次。手点「保存」照旧立刻存。
+const AUTOSAVE_MS = 20000;
+let autoT = null, saving = false;
+function touch(){
+  dirty = true; backupLocal();
+  clearTimeout(autoT);
+  autoT = setTimeout(() => { saveState(true); }, AUTOSAVE_MS);
+}
 const MOB = matchMedia('(max-width:720px)');
 let zoom = MOB.matches ? 0.8 : 1;
+// 自检橙边默认**关**：用户 r7「有一个自检太多了 我就没消除」——
+// 清自检是额外负担，不该挡在朱批前面。想看的时候一键打开。
+let showFlags = (()=>{ try{ return localStorage.getItem('pr_flags')==='1'; }
+                       catch(e){ return false; } })();
 const $ = s => document.querySelector(s);
 const markOf = id => STATE.marks[id] || null;
 const markCls = m => m ? (m.s===1?'m1':m.s===2?'m2':'m3') : '';
@@ -178,7 +213,10 @@ function subLine(){
   const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
   const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
   const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
-  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
+  // 只数**本批**看过的页：visited 里攒着历轮的页，直接拿长度会出现
+  //「看过 51/18 页」这种读数
+  const seen=PAGES.filter(p=>STATE.visited.includes(p.book+'/'+p.page)).length;
+  return `看过 ${seen}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
 }
 // 朱批不重绘画面：只改被点格的类 + 侧栏/页脚（滚动位置原地不动）
 function refreshChrome(){
@@ -196,7 +234,8 @@ function bindSide(){
 function render(){
   const p = PAGES[cur];
   const pk = p.book+'/'+p.page;
-  if(!STATE.visited.includes(pk)){ STATE.visited.push(pk); dirty=true; }
+  if(!STATE.visited.includes(pk)){ STATE.visited.push(pk);
+    dirty=true; backupLocal(); }   // 只记脏，不排自动保存（见 touch）
   const items = sideItems();
   const colsHtml = p.cols.map(col=>{
     const cells = col.cells.map((c,ci)=>{
@@ -204,16 +243,31 @@ function render(){
       const mk = markCls(m);
       if(c.empty){
         if(filter==='flag'||filter==='marked'&&!m) {}
-        return `<div class="cell emptycell ${mk}" data-id="${c.id}" role="button"
-          tabindex="0" title="${c.id} 判空格">空</div>`;
+        return `<div class="cell emptycell ${c.junk?'junkcell ':''}${mk}" data-id="${c.id}"
+          role="button" tabindex="0"
+          title="${c.id} ${c.junk?'判为渣格（框渣/污渍，已判空）':'判空格'}">${c.junk?'渣':'空'}</div>`;
+      }
+      if(c.pair){
+        // 夹注一格的两半并排：a 在右、b 在左（竖排读序）
+        const halves=c.pair.map(x=>{
+          const mx=markOf(x.id), w=Math.round(x.w*zoom), h=Math.round(x.h*zoom);
+          if(filter==='flag' && !x.f.length) return '';
+          if(filter==='marked' && !mx) return '';
+          return `<div class="cell jzcell ${showFlags&&x.f.length?'hasflag':''} ${markCls(mx)}"
+            data-id="${x.id}" role="button" tabindex="0"
+            title="${x.id}${x.f.length?' ['+x.f.join(',')+']':''}">
+            <span class="idx">${x.lab}</span>
+            <img src="${x.src}" width="${w}" height="${h}" alt="${x.id}"></div>`;
+        }).join('');
+        return halves.trim() ? `<div class="jzrow">${halves}</div>` : '';
       }
       if(filter==='flag' && !c.f.length) return '';
       if(filter==='marked' && !m) return '';
       const w=Math.round(c.w*zoom), h=Math.round(c.h*zoom);
-      return `<div class="cell ${c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
+      return `<div class="cell ${c.jz?'jzcell ':''}${showFlags&&c.f.length?'hasflag':''} ${mk}" data-id="${c.id}"
         role="button" tabindex="0"
         title="${c.id}${c.f.length?' ['+c.f.join(',')+']':''}${m&&m.note?' 注:'+m.note:''}">
-        <span class="idx">${ci+1}</span>
+        <span class="idx">${c.lab||ci+1}</span>
         <img src="${c.src}" width="${w}" height="${h}" alt="${c.id}"></div>`;
     }).join('');
     return `<div class="colbox"><div class="colhead">第 ${col.col} 列</div>
@@ -238,6 +292,7 @@ function render(){
       <button class="act ${filter==='all'?'on':''}" data-f="all">全部</button>
       <button class="act ${filter==='flag'?'on':''}" data-f="flag">只看自检标记</button>
       <button class="act ${filter==='marked'?'on':''}" data-f="marked">只看已朱批</button>
+      <button class="act ${showFlags?'on':''}" id="flagsw">自检框</button>
       <span class="sp"></span>
       <button class="act ${zoom===0.4?'on':''}" data-z="0.4">0.4×</button>
       <button class="act ${zoom===0.6?'on':''}" data-z="0.6">0.6×</button>
@@ -250,8 +305,8 @@ function render(){
     </div>
     <div class="stage"><div class="cols">${colsHtml}</div></div>
     <div class="foot">
-      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--ok)">无误</b> · 三下=<b style="color:var(--warn)">存疑</b>（对<b style="color:var(--warn)">橙边</b>格标无误=判自检误报）· 四下=清除。列序右→左。</span>
-      <span class="mobonly">点 1=错 2=无误 3=疑 4=清（橙边标无误=自检误报）</span>
+      <span class="deskonly">点图块：一下=<b style="color:var(--bad)">切错</b> · 两下=<b style="color:var(--ok)">无误</b> · 三下=<b style="color:var(--warn)">存疑</b>· 四下=清除。列序右→左。自检橙边默认关，要看点「自检框」（对橙边格标无误=判自检误报）。</span>
+      <span class="mobonly">点 1=错 2=无误 3=疑 4=清（自检框默认关）</span>
       <span class="sp"></span>
       <span id="cellinfo">${lastCell||''}</span>
       <input id="note" placeholder="给最后点的格补备注" ${lastCell?'':'disabled'}
@@ -269,6 +324,10 @@ function bind(){
   $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
   $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.f;render();});
+  const fw=$('#flagsw'); if(fw) fw.onclick=()=>{ showFlags=!showFlags;
+    try{ localStorage.setItem('pr_flags', showFlags?'1':'0'); }catch(e){}
+    if(!showFlags && filter==='flag') filter='all';
+    render(); };
   document.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{zoom=+b.dataset.z;render();});
   document.querySelectorAll('.cell').forEach(z=>{
     const act=()=>{
@@ -277,7 +336,7 @@ function bind(){
       else if(m.s===1) STATE.marks[id].s=3;
       else if(m.s===3) STATE.marks[id].s=2;
       else delete STATE.marks[id];
-      lastCell=id; dirty=true; backupLocal();
+      lastCell=id; touch();
       z.classList.remove('m1','m2','m3');
       const nc=markCls(STATE.marks[id]);
       if(nc) z.classList.add(nc);
@@ -288,37 +347,45 @@ function bind(){
   });
   $('#note').onchange=e=>{
     if(lastCell){ if(!STATE.marks[lastCell]) STATE.marks[lastCell]={s:2};
-      STATE.marks[lastCell].note=e.target.value; dirty=true; backupLocal();
+      STATE.marks[lastCell].note=e.target.value; touch();
       const z=document.querySelector(`.cell[data-id="${lastCell}"]`);
       if(z){ z.classList.remove('m1','m2','m3');
         const nc=markCls(STATE.marks[lastCell]); if(nc) z.classList.add(nc); }
       refreshChrome(); }
   };
-  $('#save').onclick=saveState;
+  $('#save').onclick=()=>saveState(false);
   $('#export').onclick=()=>{ $('#expbox').value=eventsText(); $('#expdlg').showModal(); };
 }
 function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show');
   setTimeout(()=>el.classList.remove('show'),2200); }
-async function saveState(){
+// 保存 = 整份重发布（本环境只有 artifact 能力，没有小状态存储可写），
+// 所以别把十几 MB 搬两遍：**不** cloneNode(true)（要拷大文本节点 + 已渲染
+// 的几百个 <img>），改按启动时抓的空壳模板拼串；成功后只刷页脚不重绘，
+// 滚动位置和已渲染的图块都原地不动。
+async function saveState(auto){
+  if(saving) return;
+  if(!dirty){ if(!auto) toast('没有要保存的新标记'); return; }
   const ns=await claude.use('artifact');
-  if(!ns){ toast('此环境不能保存，请用「导出」'); return; }
-  const clone=document.documentElement.cloneNode(true);
-  clone.querySelector('#app').innerHTML='';
-  clone.querySelector('#toast').textContent='';
-  const dlg=clone.querySelector('#expdlg'); if(dlg) dlg.removeAttribute('open');
-  clone.querySelector('#marks-data').textContent=JSON.stringify(STATE);
+  if(!ns){ if(!auto) toast('此环境不能保存，请用「导出」'); return; }
+  saving=true; clearTimeout(autoT);
+  const sv=$('#save'); if(sv) sv.textContent='保存中…';
+  const html='<!doctype html>\n<html><head>'+HEAD_TPL+'</head><body>'
+    +BODY_TPL.replace(TK_M,()=>JSON.stringify(STATE))
+             .replace(TK_P,()=>PAGES_TEXT)+'</body></html>';
   try{
-    await ns.publish('<!doctype html>\n<html>'+clone.innerHTML+'</html>');
-    dirty=false; backupLocal(); toast('已保存'); render();
+    await ns.publish(html);
+    dirty=false; backupLocal(); toast(auto?'已自动保存':'已保存');
   }catch(e){
     backupLocal();
     if(e&&e.code==='conflict'){
       toast('保存被新版本挡住——标记已备份到本机，请用导出发我'); }
     else toast('保存失败（已本机备份）：'+(e&&e.code||e));
-    $('#expbox').value=eventsText();
-    $('#expdlg').showModal();
-  }
+    if(!auto){ $('#expbox').value=eventsText(); $('#expdlg').showModal(); }
+  }finally{ saving=false; refreshChrome(); }
 }
+// 切走标签页/关页前冲一次（本机备份是同步的，冲不成也不丢）
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&dirty) saveState(true); });
 function eventsText(){
   const lines=Object.entries(STATE.marks).map(([id,m])=>JSON.stringify(
     {t:'GUJI-SEG-REVIEW',id,verdict:m.s===1?'bad':(m.s===2?'unsure':'ok'),...(m.note?{note:m.note}:{})}));
@@ -334,5 +401,15 @@ $('#expsave').onclick=async()=>{
   try{ await dl.save({filename:'seg_review_marks.jsonl',data:eventsText()}); }
   catch(e){ toast('未保存'); }
 };
+// 空壳模板：#app 还没渲染、toast 空、弹窗关着，此刻的 body 就是发布用的
+// 骨架；两个数据槽留占位符，保存时填。
+(function captureTpl(){
+  const mn=document.getElementById('marks-data'), keep=mn.textContent;
+  mn.textContent=TK_M;
+  BODY_TPL=document.body.innerHTML;
+  mn.textContent=keep;
+})();
 render();
+// 从本机备份找回来的标记也自动存回去——上一轮就是卡在「没人点保存」
+if(dirty0) touch();
 </script>

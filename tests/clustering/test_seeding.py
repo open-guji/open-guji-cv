@@ -47,9 +47,18 @@ PAGES = {
     "5": "弔民伐罪周發殷湯愛育黎首臣伏戎羌",
     "6": "遐邇壹體率賓歸王鳴鳳在樹白駒食場",
     "7": "化被草木賴及萬方",          # 不进语料 → 整页无对齐
+    # 8: idx10「已」是 SEMANTIC_MERGED_PAIRS 成员（已/巳 同词异写，
+    # 2026-08-26 用户定：字形不重要，上下文文意才是判据）。载体故意
+    # 给成家族搭档「巳」→ signal_conflict + near_form + replace_align
+    # 三条疑问都命中，换作表里任何别的形近字这里就该卡人审——但
+    # 已/巳 不该被同一道 near_form 闸拦住上下文通道，语料训练过这句
+    # 原文，margin 应该过阈，走 context 通道自动进库判「已」。
+    # （两侧各留 10 字不动——align_label 的 8-gram 锚定要求替换位
+    # 至少一侧有 ≥8 个连续未改字符才能锚上，太短的页会整页无对齐）
+    "8": "光風霽月虛懷若谷學海已至誠力行不倦志存高遠",
 }
-CORPUS_PAGES = ("1", "2", "3", "4", "5", "6")
-ALTERED = {("2", 10): "馬", ("3", 9): "珎"}      # 载体（OCR）故意给的字
+CORPUS_PAGES = ("1", "2", "3", "4", "5", "6", "8")
+ALTERED = {("2", 10): "馬", ("3", 9): "珎", ("8", 10): "巳"}  # 载体故意给的字
 PROBS = {("7", 1): 0.30}                          # 低置信槽位
 EMPTY_OCR = {("7", 2)}                            # OCR 空识别槽位
 DEGRADED = {("6", 3)}                             # 手工残留图块
@@ -232,9 +241,58 @@ def test_doubt_degraded_crop(seeded):
 
 
 def test_doubt_near_form(seeded):
+    """near_form 疑问照记（审计用），但 2026-08-27 起不再单独拦上下文
+    通道——用户实锤 諭/論、曾/會、人/入这类家族反复要人工校对，而 154
+    题盲测 n-gram 95.5%/大模型 98.7% 远胜字形层 64.3%，挡的一直是更可靠
+    的证据。这条「大」OCR 与整理本本就一致（equal），语料训练过这句
+    原文，上下文通道径直确认，不必再等人。"""
     it = _queue(seeded)[f"{BOOK}:4:1:6"]             # 「大」∈ 大/太 家族
-    assert it.status == STATUS_PENDING
     assert it.doubts == [DOUBT_NEAR_FORM]
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "大"
+
+
+def test_semantic_merged_pair_context_bypasses_near_form(seeded):
+    """已/巳 同词异写：near_form 挡字形通道，不挡上下文通道。
+
+    「大」（上一测试）近形家族命中就只能人审；已/巳 不一样——它俩历史
+    上就是同一个词的两种写法（charset_and_lm.md §四），字形层拦得对
+    （近形护栏防的是形状判据自己会认错），但文意判断不该被同一道闸
+    挡下。这条位载体故意给错成家族搭档「巳」，三条疑问全命中
+    （signal_conflict + near_form + replace_align），换作表里任何别的
+    形近字这里就该卡人审——但 SEMANTIC_MERGED_PAIRS 让它照走 context
+    通道，按上下文判「已」自动进库。"""
+    it = _queue(seeded)[f"{BOOK}:8:1:10"]
+    assert it.ocr["char"] == "巳" and it.align == {"char": "已", "op": "replace"}
+    assert set(it.doubts) == {DOUBT_SIGNAL_CONFLICT, DOUBT_NEAR_FORM,
+                              DOUBT_REPLACE_ALIGN}
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "已"
+    iid = it.instance_id
+    assert iid in _admitted_ids(seeded["db"])
+
+    # 释读（已）进 admissions.char/instances.semantic/queue.decided_char——
+    # 用户显示看到、进最终文本的都是这个。字形（这条位载体给的形状信号
+    # 是「巳」）进 instances.label/glyphs/exemplars——GlyphMatcher 的
+    # 形状索引必须按刻本实际形状分类，绝不能被这次的释读污染，否则
+    # 未来一个真刻成同一形状、该读别的字的实例会错误继承「已」。
+    db = seeded["db"]
+    label, semantic = db.conn.execute(
+        "SELECT label, semantic FROM instances WHERE instance_id=?",
+        (iid,)).fetchone()
+    assert label == "巳" and semantic == "已"
+    admitted_char = db.conn.execute(
+        "SELECT char FROM admissions WHERE instance_id=?", (iid,)).fetchone()[0]
+    assert admitted_char == "已"
+    n_si = db.conn.execute(
+        "SELECT n_confirmed FROM glyphs WHERE edition_tag=? AND char='巳'",
+        (BOOK,)).fetchone()
+    assert n_si and n_si[0] >= 1, "字形库必须按巳（实际形状）建条目"
+    n_yi_has_this = db.conn.execute(
+        """SELECT 1 FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
+           WHERE g.edition_tag=? AND g.char='已' AND e.instance_id=?""",
+        (BOOK, iid)).fetchone()
+    assert n_yi_has_this is None, "这个实例不该出现在「已」的字形示例里"
 
 
 def test_doubt_db_inconsistent(seeded):
@@ -250,13 +308,13 @@ def test_summary_counts(seeded):
     n_slots = sum(len(t) for t in PAGES.values())
     assert s["n_slots"] == n_slots
     assert s["n_auto"] + s["n_pending"] == n_slots
-    # 预期 pending：4:6 near_form / 5:0 db_inconsistent + 第 7 页整页
-    # （8 格，未锚定上下文通道关闭）；2:10、3:9 走 context、
-    # 6:3 走 dual_degraded 进库
-    assert s["n_pending"] == 2 + len(PAGES["7"])
-    assert s.get("n_auto_context", 0) == 2
+    # 预期 pending：5:0 db_inconsistent + 第 7 页整页（8 格，未锚定上下文
+    # 通道关闭）；2:10、3:9、4:6、8:5 走 context、6:3 走 dual_degraded
+    # 进库——4:6「大」near_form 不再单独拦上下文通道（2026-08-27 起）
+    assert s["n_pending"] == 1 + len(PAGES["7"])
+    assert s.get("n_auto_context", 0) == 4
     assert "tb:4:1:6" in {i for i in _queue(seeded)
-                          if _queue(seeded)[i].status == STATUS_PENDING}
+                          if _queue(seeded)[i].status == STATUS_AUTO}
     assert s["doubt_counts"][DOUBT_WEAK_SINGLE] == 2
     assert s["pages_processed"] == len(PAGES)
 
@@ -347,12 +405,17 @@ def test_ingest_decisions_and_idempotency(seeded):
 
 
 def test_ingest_label_only_and_last_wins(seeded):
-    """仅定字·不入库（admit:false）+ 同字位事件按 seq 后到覆盖。"""
+    """仅定字·不入库（admit:false）+ 同字位事件按 seq 后到覆盖。
+
+    第一个字位原用 tb:4:1:6（那时是 near_form pending 的样例）——
+    2026-08-27 起 near_form 不再单独拦上下文通道，该字位改为 seed 时
+    就自动进库，不再有 pending 状态可供本测试模拟人工事件，换成第 7
+    页另一个未被别的测试占用的字位（该页无语料锚定，seed 后必 pending）。"""
     db = seeded["db"]
     text = "\n".join([
-        # 图块混残余：定字「珍」但字形不进库
-        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:4:1:6", '
-        '"char": "大", "admit": false, "batch": "b2", "seq": 1}',
+        # 图块混残余：定字但字形不进库
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:2", '
+        '"char": "草", "admit": false, "batch": "b2", "seq": 1}',
         # confirm 后撤销（skip 后到）→ 最终不进库、留队列（取 pending 字位）
         'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:1", '
         '"char": "被", "batch": "b2", "seq": 2}',
@@ -365,13 +428,13 @@ def test_ingest_label_only_and_last_wins(seeded):
     assert r.get("admitted", 0) == 0          # 两条 confirm 都没进库
 
     q = _queue(seeded)
-    it = q["tb:4:1:6"]
+    it = q["tb:7:1:2"]
     assert it.status == "confirmed_label_only"
-    assert it.decided_char == "大" and it.provenance is None
+    assert it.decided_char == "草" and it.provenance is None
     assert q["tb:7:1:1"].status == STATUS_SKIPPED
 
     admitted = _admitted_ids(db)
-    assert "tb:4:1:6" not in admitted and "tb:7:1:1" not in admitted
+    assert "tb:7:1:2" not in admitted and "tb:7:1:1" not in admitted
 
 
 def test_admission_decision_match_ref():
@@ -478,9 +541,12 @@ def test_admission_decision_match_solo():
     # cov 差一点（旧阈 0.98 放行档）→ 不进
     assert admission_decision(lo, None, None, [], vmap,
                               match_candidates=[("文", 0.985)])[0] is False
-    # 有整理本参照的字位不走本通道（归 match_ref / 人审管）
+    # 有整理本参照的字位不走 match_solo——十七轮起这个组合改由
+    # match_ref_weak 放行（参考 × 库 双证据，25/25 回放），通道名必须
+    # 区分开：审计上 solo 是「库单独说了算」，ref_weak 是「两路互证」
     assert admission_decision(lo, None, "文", [DOUBT_WEAK_SINGLE], vmap,
-                              match_candidates=[("文", 1.0)])[0] is False
+                              match_candidates=[("文", 1.0)]
+                              ) == (True, "match_ref_weak")
     # 护栏触发（never_match/conflict）→ 禁
     assert admission_decision(lo, None, None, [], vmap,
                               match_candidates=[("日", 0.995), ("曰", 0.97)],
@@ -692,12 +758,19 @@ def test_readjudicate_pending_near_form_corpus_db(tmp_path):
         qp = book_dir / "phase9_seed" / "queue.jsonl"
         rows = [json.loads(l) for l in
                 qp.read_text(encoding="utf-8").splitlines() if l.strip()]
-        # 4:1:6「大」：near_form pending，align 过闸 equal。给它补上
-        # 库匹配快照（top 候选与 align 同字）——模拟库里已有大量「大」
+        # 4:1:6「大」：align 过闸 equal，doubts=[near_form]。2026-08-27
+        # 起近形不再单独拦上下文通道，这一位 seed 时就直接自动进库了
+        # （见 test_doubt_near_form）——本测试要单独钉住的是
+        # readjudicate_pending 自己那条「规则升级回填存量」的窄口逻辑
+        # （只动 pending/skipped 行，不重算证据），所以人工把它摆回
+        # pending，模拟「规则升级前还没轮到复裁」的存量行；再补上库匹配
+        # 快照（top 候选与 align 同字）——模拟库里已有大量「大」
         fired = "tb:4:1:6"
         for d in rows:
             if d["instance_id"] == fired:
-                assert d["status"] == STATUS_PENDING
+                d["status"] = STATUS_PENDING
+                d["decided_char"] = None
+                d["provenance"] = None
                 d["match"] = {"char": None, "verdict": "unsure",
                               "guard": "never_match", "wmax": 3.0,
                               "candidates": [["大", 0.98], ["太", 0.90]]}
@@ -723,6 +796,52 @@ def test_readjudicate_pending_near_form_corpus_db(tmp_path):
         assert n2.get("auto_match_ref") is None
     finally:
         db.close()
+
+
+def test_admission_decision_match_margin():
+    """兜底通道：没有 competitor + 整理本一致 → 放行，不看绝对 cov。
+
+    用户 2026-08-27 定：「有時即使庫內匹配率，未達到 0.99，但是沒有
+    競爭者，且整理本一致，完全可以自動錄入。只有有相似競爭者，或整理本
+    不一致時，需要人工」。全部历史人裁回放 margin≥0.05 触发 102 全对
+    （0.04 档出第一错，阈留一档余量）。前面几条通道各自守着自己的
+    doubt 组合与绝对阈；这条不管 doubts 是什么组合（db_inconsistent
+    除外），只看 top1 与 top2 的 cov 差距。"""
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    # weak_single 单独出现（无对齐、免闸参考也没有）——前面的通道
+    # 一个都碰不到（match_ref_weak 要求 ref_char 存在），match_margin
+    # 因为没有 corpus_char 同样不该放
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, None, ["weak_single"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert not ok
+    # 免闸参考 + 库单候选、cov 远低于 match_ref_weak 的 0.98，但没有
+    # competitor——match_margin 兜底放行
+    ok, ch = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert (ok, ch) == (True, "match_margin")
+    # 同样场面但库里有个分数很接近的对手——margin 不够，人审
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=[("允", 0.70), ("充", 0.67)])
+    assert not ok
+    # db_inconsistent 混进来——库本身已经不自洽，margin 再大也不该信
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert not ok
+    # 库里压根没有这个字（corpus_char 无候选可查）——没法判自洽，人审
+    # （用户裁定「如果庫內沒有，第一次肯定要人工」，本就是结构性保证：
+    # 没有候选，match_margin/match_solo/match_ref 全都碰不到）
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=None)
+    assert not ok
 
 
 def test_admission_decision_match_solo_ocr():
@@ -766,3 +885,236 @@ def test_admission_decision_match_solo_ocr():
                               [], vmap,
                               match_candidates=[("文", 0.96)]
                               ) == (True, "match_ref")
+
+
+def test_exclusions_block_admission_and_review(tmp_path, monkeypatch):
+    """排除名单：名单里的字位既不进库，也不出审查卡（用户 2026-08-25 口径）。
+
+    钉死两条路：seed 自动通道、ingest 裁决通道。名单是「有意撤掉的」，
+    重跑管线绝不能把它们悄悄填回来。
+    """
+    from open_guji_cv.clustering import seeding as S
+    from open_guji_cv.clustering.review.seed_export import _REVIEWABLE
+    from open_guji_cv.clustering.seed_queue import STATUS_EXCLUDED
+
+    root = tmp_path
+    book_dir, corpus_path, variants_path = build_book(root)
+    victim = f"{BOOK}:1:1:0"          # 第 1 页首字，本该 auto 进库
+    monkeypatch.setattr(S, "load_exclusions",
+                        lambda *a, **k: {victim: {"reason": "rule_bar"}})
+    db = GlyphDB(root / "g.db")
+    try:
+        summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert summary["n_excluded"] == 1
+        q = {SeedItem.from_json(l).instance_id: SeedItem.from_json(l)
+             for l in (book_dir / "phase9_seed" / "queue.jsonl")
+             .read_text(encoding="utf-8").splitlines() if l.strip()}
+        it = q[victim]
+        assert it.status == STATUS_EXCLUDED          # 落账
+        assert it.status not in _REVIEWABLE          # 不出审查卡
+        assert not db.conn.execute(                  # 不进库
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+
+        # ingest 通道：哪怕来了一条 confirm 事件也顶回去
+        r = ingest_decisions(book_dir, db, [
+            {"op": "confirm", "instance_id": victim, "char": "天",
+             "batch": "b", "seq": 1}])
+        assert r.get("excluded") == 1
+        assert not db.conn.execute(
+            "SELECT 1 FROM admissions WHERE instance_id=?",
+            (victim,)).fetchone()
+    finally:
+        db.close()
+
+
+# ── 上下文条口径：pos 必须与「列内第几个 char 格」同源 ─────────────────
+
+def test_context_pos_follows_index_not_carrier(tmp_path):
+    """载体缺格时，上下文高亮位仍要对准图块本身。
+
+    2026-08-25 用户实锤：``vol01:4:2:20`` 卡片是「第」，上下文条却高亮
+    下一位的「一」。真因是列文按 **OCR 载体** 建——载体少一格，整列文本
+    就短一位，``pos`` 与审查页按 index 数出来的「第几字」错开。列文改
+    按 index 的 char 格位建（载体缺格补 □）之后，
+    ``pos == 列内 char 位次 - 1`` 恒成立。
+    """
+    book_dir = tmp_path / BOOK
+    chars_dir = book_dir / "phase4_chars"
+    (chars_dir / "patches").mkdir(parents=True)
+    text = PAGES["1"]
+    missing = 3                      # 这一格故意不写进载体
+    index_lines, carrier_lines = [], []
+    for i, gold in enumerate(text):
+        iid = f"{BOOK}:1:1:{i}"
+        rel = f"patches/1_{i}.png"
+        cv2.imwrite(str(chars_dir / rel), _patch(gold))
+        index_lines.append(json.dumps(
+            {"id": iid, "book": BOOK, "page": "1", "col": 1, "idx": i,
+             "bbox": [0, 0, 80, 80], "cell_type": "char", "ocr_text": None,
+             "ocr_confidence": 0.0, "patch_path": rel, "ink_ratio": 0.2,
+             "height": 64, "width": 64, "flags": []}, ensure_ascii=False))
+        if i != missing:
+            carrier_lines.append(json.dumps(
+                {"id": iid, "char": gold, "prob": 0.92}, ensure_ascii=False))
+    (chars_dir / "index.jsonl").write_text(
+        "".join(x + "\n" for x in index_lines), encoding="utf-8")
+    (chars_dir / "ocr_carrier.jsonl").write_text(
+        "".join(x + "\n" for x in carrier_lines), encoding="utf-8")
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(text, encoding="utf-8")
+
+    db = GlyphDB(tmp_path / "glyph.db")
+    try:
+        seed_book(book_dir, db, corpus_path)
+    finally:
+        db.close()
+
+    rows = [SeedItem.from_json(x) for x in
+            (book_dir / "phase9_seed" / "queue.jsonl")
+            .read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert rows
+    for it in rows:
+        ctx = it.context or {}
+        # 列文长度 = 列内 char 格数（不是载体条数）
+        assert len(ctx["col_ocr"]) == len(text)
+        # 高亮位 = 该格在列内的 char 位次 - 1
+        assert ctx["pos"] == it.idx
+    # 载体缺的那一格占住位并补 □，后面的字因此没有整体前移
+    it = {r.instance_id: r for r in rows}[f"{BOOK}:1:1:{missing}"]
+    assert it.context["col_ocr"][missing] == "□"
+    assert it.context["col_ocr"][missing + 1] == text[missing + 1]
+
+
+# ── 十七轮：replace 层对齐 × 库 / 免闸参考 × 库 两条新通道 ─────────────
+
+def test_admission_decision_match_replace_and_ref_weak():
+    """756 条历史人裁回放标定的两条放行（都要求库 top 与文本证据同字）。
+
+    - match_replace（@0.95，70/70）：OCR 认错产生 replace 层对齐 +
+      signal_conflict，但 OCR 本不参与自动判断；整理本 × 库形状同指
+      一字即放行，进库字取整理本字；
+    - match_ref_weak（@0.98，25/25）：无对齐页 weak_single 必在场，
+      此前把 参考 × 库 的路堵死；0.98 档放行（0.97 出 祗/祇 一错）。
+    """
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    # match_replace：够 0.95 放行
+    ok, ch = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.96), ("烏", 0.90)])
+    assert (ok, ch) == (True, "match_replace")
+    # 库 top 与对齐不同字 → 拦
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("烏", 0.99)])
+    assert not ok
+    # match_replace 自己那道 cov 阈不够，但 match_margin 兜底接住——
+    # 单候选、没有第二名，corpus 一致就该放行（2026-08-27 用户定：
+    # 「即使庫內匹配率未達到 0.99，但是沒有競爭者，且整理本一致，
+    # 完全可以自動錄入」，全部历史人裁回放 margin≥0.05 触发 102 全对）
+    ok, ch = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.94)])
+    assert (ok, ch) == (True, "match_margin")
+    # 但真有 competitor（第二名离得很近）时，match_margin 也不该放——
+    # margin 不够，仍然人审
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.94), ("烏", 0.91)])
+    assert not ok
+    # near_form 现在也放行 match_replace（2026-08-27，match_ref 早就放了
+    # 的同一论证：整理本×库 zero-shared-source，与对齐层 equal/replace
+    # 无关，全部历史人裁回放 143/143 全对）；db_inconsistent 仍然照拦
+    # ——库本身对不上，margin/near_form 都救不了
+    ok, ch = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align", "near_form"], vmap,
+        match_candidates=[("焉", 0.99)])
+    assert (ok, ch) == (True, "match_replace")
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align", "db_inconsistent"], vmap,
+        match_candidates=[("焉", 0.99)])
+    assert not ok
+
+    # match_ref_weak：无对齐 + 免闸参考 + 库 0.98
+    ok, ch = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允",
+        ["weak_single"], vmap,
+        match_candidates=[("允", 0.985)])
+    assert (ok, ch) == (True, "match_ref_weak")
+    # 0.98 之下 → 拦（祗/祇 档）
+    ok, _ = admission_decision(
+        {"char": "祇", "prob": 0.30}, None, "祗",
+        ["weak_single"], vmap,
+        match_candidates=[("祇", 0.97)])
+    assert not ok
+
+
+def test_db_inconsistent_about_ocr_char_does_not_block_ref_weak():
+    """db_inconsistent 说的是 OCR 字时，不该拦「参考 × 库」通道。
+
+    实锤 vol01:22:5:4：OCR 司 18%、整理本 詞、库 top 詞 cov 1.00。
+    疑问 5「与库内已有同字刻例形状对不上」判的是 **proposed**（无对齐时
+    退回 OCR 字 司）——这句话完全正确，且正是「它不该是司」的旁证，却把
+    要进 詞 的通道拦死了。放行的字自己不可能 db_inconsistent：库里最像它
+    的就是同字刻例，cov 还压着 0.98。回放 @0.98 触发 25 → 38 全对。
+    """
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    ok, ch = admission_decision(
+        {"char": "司", "prob": 0.178}, None, "詞",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_char="詞", match_candidates=[("詞", 1.0), ("請", 0.94)])
+    assert (ok, ch) == (True, "match_ref_weak")
+
+    # OCR 字与参考字**同字**时，db_inconsistent 说的就是要进的那个字 → 照拦
+    ok, _ = admission_decision(
+        {"char": "詞", "prob": 0.178}, None, "詞",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_char="詞", match_candidates=[("詞", 1.0)])
+    assert not ok
+    # 没有 OCR 字可比对时保守：照拦
+    ok, _ = admission_decision(
+        None, None, "詞", ["weak_single", "db_inconsistent"], vmap,
+        match_candidates=[("詞", 1.0)])
+    assert not ok
+
+
+def test_force_pages_runs_only_those_pages(tmp_path):
+    """--force-pages 给了就只跑这几页，不把「所有没 seed 过的页」捎上。
+
+    2026-08-26 实锤：用户要「再匹配十页」刷新 match 快照，旧语义是把
+    force 页**追加**进待办——而待办本来就含全部未 seed 页，结果跑了
+    108 页 12 分钟。库每轮都在长，后面页的快照迟早还要再刷，跑多了白烧。
+    """
+    book_dir, corpus_path, variants_path = build_book(tmp_path)
+    db = GlyphDB(tmp_path / "glyph.db")
+    try:
+        # 先只跑第 1 页，其余留作未 done
+        s1 = seed_book(book_dir, db, corpus_path, max_pages=1,
+                       variants=variants_path)
+        assert s1["pages_processed"] == 1
+        # force 第 1 页：只重跑它，不捎上 2~7 页
+        s2 = seed_book(book_dir, db, corpus_path, force_pages={"1"},
+                       variants=variants_path)
+        assert s2["pages_processed"] == 1
+        assert set(s2["per_page"]) == {"1"}
+        # force 两页（一页 done、一页没跑过）：正好这两页
+        s3 = seed_book(book_dir, db, corpus_path, force_pages={"1", "3"},
+                       variants=variants_path)
+        assert set(s3["per_page"]) == {"1", "3"}
+        # 不给 force：回到「跑所有未 done 页」的老behavior
+        s4 = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert set(s4["per_page"]) >= {"2", "4", "5", "6", "7"}
+    finally:
+        db.close()

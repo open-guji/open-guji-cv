@@ -1,21 +1,21 @@
 {
-  "chars": 47724,
+  "chars": 47935,
   "groups_all_sources": {
-    "chars": 47724,
-    "groups": 8478,
-    "largest": 7869,
-    "largest_sample": "㐀㐁㐅㐪㐬㐯㐴㐵㐶㐷㐺㑃㑄㑇㑏㑑㑘㑳㑹㑺㒓㒚㒞㒨㒫㒭㒲㒳㒵㒹㒻㓝㓡㓨㓪㓬㓭㓰㓵㓹",
+    "chars": 47935,
+    "groups": 6975,
+    "largest": 23533,
+    "largest_sample": "㐀㐁㐅㐜㐡㐤㐩㐪㐫㐬㐯㐰㐲㐳㐴㐵㐶㐷㐸㐺㑁㑂㑃㑄㑅㑇㑌㑏㑑㑘㑞㑤㑥㑦㑲㑳㑴㑷㑹㑺",
     "top10_sizes": [
-      7869,
-      509,
-      249,
-      229,
-      219,
-      192,
-      178,
-      172,
-      152,
-      127
+      23533,
+      84,
+      61,
+      60,
+      55,
+      50,
+      48,
+      46,
+      46,
+      42
     ]
   },
   "groups_trusted_default": {
@@ -36,11 +36,12 @@
       60
     ]
   },
-  "pairs": 44266,
+  "pairs": 47181,
   "pairs_by_source": {
     "cjkvi-simplified": 5902,
     "dypytz": 1051,
     "hydzd": 28784,
+    "hydzd-borrowed": 3198,
     "twedu": 24615,
     "unihan:kSemanticVariant": 2177,
     "unihan:kSimplifiedVariant": 6562,
@@ -73,6 +74,12 @@
       "self_loop": 9,
       "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/hydzd-variants.txt"
     },
+    "hydzd-borrowed": {
+      "edges": 3380,
+      "line_meta": 2,
+      "self_loop": 1,
+      "url": "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/hydzd-borrowed.txt"
+    },
     "twedu": {
       "edges": 24741,
       "line_meta": 4,
@@ -98,5 +105,5 @@
       "url": "https://cdn.jsdelivr.net/npm/yitizi@0.1.3/index.js"
     }
   },
-  "variants_json_bytes": 1638071
+  "variants_json_bytes": 1718254
 }

@@ -1101,6 +1101,36 @@ def test_snap_keeps_the_rigid_line_when_there_is_no_gap():
     assert snap_bounds_to_gaps(proj, bounds, 100.0) == bounds
 
 
+def test_snap_micro_slides_to_the_thinnest_row_when_there_is_no_gap():
+    """没有空隙、但邻近几个像素明显更瘦时，仍然要挪过去切。
+
+    「谷判据」一票否决之后线原地不动，是实测正文页重切缝的主要来源：
+    上下两字连着，可它们之间总有一处笔画最薄。微挪半径不足十分之一格，
+    挪不过一个字，只是把同样必切的一刀切在薄处。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import snap_bounds_to_gaps
+    proj = np.full(1200, 50.0)
+    for k in range(1, 11):
+        proj[k * 100 + 4] = 20.0             # 颈部：比谷判据高得多，但明显更瘦
+    bounds = [float(k * 100) for k in range(1, 11)]
+    out = snap_bounds_to_gaps(proj, bounds, 100.0)
+    # 平滑窗 SNAP_SMOOTH 会把这一个像素的凹陷摊成一小段等值区，取离刚性
+    # 位置最近的那个 —— 落在颈部 ±2px 内即可，重点是「离开了原位」。
+    assert all(abs(y - (k * 100 + 4)) <= 2 for k, y in zip(range(1, 11), out)), out
+    assert all(y != k * 100 for k, y in zip(range(1, 11), out)), out
+
+
+def test_snap_micro_slide_does_not_jitter_on_flat_ink():
+    """墨量本来就平的地方不许抖——产物必须在无关重跑之间稳定。"""
+    import numpy as np
+    from open_guji_cv.clustering.grid_segment import snap_bounds_to_gaps
+    rng = np.random.default_rng(0)
+    proj = 50.0 + rng.normal(0, 0.3, 1200)   # 只有噪声，没有颈部
+    bounds = [float(k * 100) for k in range(1, 11)]
+    assert snap_bounds_to_gaps(proj, bounds, 100.0) == bounds
+
+
 def test_later_passes_keep_the_corrected_period(tmp_path):
     """后续 pass 重跑时必须带上已修好的**列距**。
 
