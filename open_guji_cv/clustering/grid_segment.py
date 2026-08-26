@@ -71,6 +71,41 @@ SNAP_RANGE = 0.10          # 每条格线的滑动半径（× 格高）。再大
                            # 邻格的空隙上去，把一个字整个让给隔壁
 SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于此说明这里
                            # 根本没有空隙，保持刚性位置
+# ── 逐列相位第二意见（抬头 / 低格起排）──────────────────
+# rigid_bounds 只在**页相位 ±0.12 格**（≈14px）内微调，理由是「微调只
+# 容忍板歪/扫描形变」。但版式本身就会让某些列**整列高出或低下大半格**：
+# 上諭页的「朝」「欽定」抬头、低格起排的起讫行。这类列页相位够不着，
+# 于是整列每一刀都骑在字身上——实测 vol01/50 c2 整列差 44px（0.38 格），
+# 逐列相位一刀修好（重切后「本集首卷庶眉目清而開帙了然…」每格一个整字）。
+# ⚠ 同页 c1 差 86px 却**不是**这个病：宽搜增益 36.2 远超门槛，但下挪会
+# 削掉首字 43px、被下面的红线闸挡住——挡得对，c1 真正的病是**这一列的
+# 字距和书级格高对不上**（自相关实测 116.1 vs 115.2，20 格累积 18px），
+# 相位这一个自由度治不了。详见 char_clustering_design.md「一个格高套不住
+# 每一列」。
+# 做法：窄搜之后再在**整周期**内搜一遍，只有代价压得**决定性地**低
+# （按本列墨量归一）才改判。稀疏列信号弱、代价面平坦，自然不会触发。
+COLPHASE_SPAN = 1.0        # 全周期自搜范围（× 格高，向两侧各这么多）
+COLPHASE_GAIN = 0.60       # 自搜代价须比窄搜低这么多（× 本列平滑墨均值）
+COLPHASE_MIN_INK = 2.0     # 本列平滑墨均值低于此不搜（空列/稀疏列）
+# 【红线】新相位不许把字挤出网格。实测 vol01/50 c1：宽搜相位盖住的文字
+# 2354 → 2311，少 43px（首字要被削掉这么多），闸据此否决。全书实测
+# （vol01，GUJI_COLPHASE_DEBUG=1）3610 次评估里 128 次代价够低，
+# **92 次采纳、36 次被这道闸否决**——拦下了 28% 的候选，不是摆设。
+# 判据必须是**相对**的（新相位盖住的文字比原相位少多少），不能是绝对窗口：
+# 绝对窗口版本（首线 ≤ 文字上缘 + 0.25 格）把 vol01/60 那些「原相位本来
+# 就没盖住首字、往上挪反而多盖」的列也一并挡了——该页从 0% 打回 16%。
+# 护栏只该拦「变差」，不该拦「本来就差、改了变好」。
+#
+# 【必读·血的教训】这道闸**不是**保守，它拦下的是真的丢字。关掉它做对照：
+# vol01/60 九列首线整体下移 82px，seam 重切缝 16.4% → 0.0%、逐格看图
+# 「每格一个整字、全列可读」——但字格 171 → 162，**每列的首字被整个丢在
+# 网格之上**（col9 的「種」字身 y136~243，网格从 245 起）。
+# 我据此宣布过「vol01/60 已修好」，是错的：**seam 这类指标会奖励少切字**
+# （格少了，坏缝自然少），而只看切出来的格、不跟原图核对首末字，就看不见
+# 丢的那个。凡是让切分指标变好的改动，都要先跟**原图的墨**对一遍首末字。
+COLPHASE_LOSS = 0.20       # 新相位盖住的文字长度，最多比原相位少这么多
+                           # （× 格高）。少得更多 = 有字被挤出去了。
+
 # ── 骑线复切（刚性网格的第二意见）────────────────────────
 # 刚性网格只有「一个格高 + 一个相位」两个自由度，逐线吸附半径又只有
 # 0.10 格；列内字距真有累积漂移时（刻工手写上版，一列 20 字漂半格很常见）
@@ -1361,6 +1396,39 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
             + 1e-3 * abs(phase - page_phase) / cell_h * max(1.0, smooth.mean())
         if cost < best_cost:
             best_cost, best_phase = cost, float(phase)
+    # 抬头/低格起排：整周期再搜一遍（见 COLPHASE_* 上方）
+    ink = float(smooth.mean())
+    if ink >= COLPHASE_MIN_INK:
+        wide_phase, wide_cost = best_phase, best_cost
+        lo = max(0.0, page_phase - COLPHASE_SPAN * cell_h)
+        hi = page_phase + COLPHASE_SPAN * cell_h
+        for phase in np.arange(lo, hi + phase_step, phase_step):
+            cost = _grid_cost(smooth, float(phase), cell_h, n_chars)
+            if cost < wide_cost:
+                wide_cost, wide_phase = cost, float(phase)
+        if os.environ.get("GUJI_COLPHASE_DEBUG"):
+            print(f"    [colphase] {os.environ.get('GUJI_PAGE_TAG', '')}"
+                  f" n={n_chars} pp={page_phase:.0f} 窄={best_phase:.0f}"
+                  f"/{best_cost:.1f} 宽={wide_phase:.0f}/{wide_cost:.1f}"
+                  f" 增益={best_cost - wide_cost:.1f} 门槛"
+                  f"={COLPHASE_GAIN * ink:.1f}", flush=True)
+        if best_cost - wide_cost >= COLPHASE_GAIN * ink:
+            # 红线闸：新相位盖住的文字不许比原相位少（见 COLPHASE_LOSS）
+            top, bot = content_range(proj, min_run=0.25 * cell_h)
+            span = n_chars * cell_h
+
+            def _covered(ph: float) -> float:
+                return min(ph + span, bot) - max(ph, top)
+
+            cw, cb = _covered(wide_phase), _covered(best_phase)
+            if os.environ.get("GUJI_COLPHASE_DEBUG"):
+                print(f"      [colphase 红线] 文字 {top:.0f}~{bot:.0f}"
+                      f" 盖住 宽={cw:.0f} 窄={cb:.0f}"
+                      f" 允许降={COLPHASE_LOSS * cell_h:.0f}"
+                      f" → {'采纳' if cw >= cb - COLPHASE_LOSS * cell_h else '否决'}",
+                      flush=True)
+            if cw >= cb - COLPHASE_LOSS * cell_h:
+                best_phase = wide_phase
     bounds = [best_phase + cell_h * k for k in range(n_chars + 1)]
     return snap_bounds_to_gaps(proj, bounds, cell_h) if snap else bounds
 
@@ -1387,7 +1455,8 @@ def _line_center_ink(sm: np.ndarray,
 
 
 def elastic_recut(proj: np.ndarray, bounds: list[float], cell_h: float,
-                  n_chars: int) -> tuple[list[float], bool, float | None]:
+                  n_chars: int,
+                  tag: str = "") -> tuple[list[float], bool, float | None]:
     """刚性网格骑线时用弹性 DP 复切一遍，明显更干净**且没整体滑走**才换。
 
     返回 (bounds, 是否换过, 复切**前**的骑线比)。判据与护栏见 RECUT_*
@@ -1412,7 +1481,8 @@ def elastic_recut(proj: np.ndarray, bounds: list[float], cell_h: float,
     lim = cell_h * (RECUT_ANCHOR_WIDE if lv2 <= RECUT_STRONG * lv
                     else RECUT_ANCHOR)
     if os.environ.get("GUJI_RECUT_DEBUG"):
-        print(f"    [recut] n={n_chars} 骑线 {lv / cv:.3f} 线上 {lv:.1f}→{lv2:.1f}"
+        print(f"    [recut] {tag} n={n_chars} 骑线 {lv / cv:.3f}"
+              f" 线上 {lv:.1f}→{lv2:.1f}"
               f" 首末位移 {d0:.0f}/{d1:.0f} 上限 {lim:.0f}", flush=True)
     if d0 > lim or d1 > lim:
         return bounds, False, pre       # 整体滑走了，不是复切是搬家
@@ -2033,8 +2103,17 @@ def _pmap(fn, jobs: list[tuple]) -> list:
         return list(ex.map(fn, *zip(*jobs), chunksize=1))
 
 
+def _dbg_tag(img_path: str) -> None:
+    """调试用：把当前页名塞进环境变量，供 recut / colphase 的日志带上页号。
+    只在打开对应调试开关时才写（多进程 worker 里各写各的，互不干扰）。"""
+    if os.environ.get("GUJI_RECUT_DEBUG") or \
+            os.environ.get("GUJI_COLPHASE_DEBUG"):
+        os.environ["GUJI_PAGE_TAG"] = Path(img_path).stem + ":"
+
+
 def _job_pass1(seg: "GridSegmenter", img_path: str, layout: dict):
     """Pass 1 单页：读图 → 页型闸门 → 整页拟合 → 量字距。"""
+    _dbg_tag(img_path)
     image = imread(img_path)
     if image is None:
         return None
@@ -2051,6 +2130,7 @@ def _job_pass1(seg: "GridSegmenter", img_path: str, layout: dict):
 
 def _job_refit(seg: "GridSegmenter", img_path: str, layout: dict, kw: dict):
     """共识校正 pass 的单页重扫（Pass 2a/2a2/2a3 共用）；择优在父进程。"""
+    _dbg_tag(img_path)
     image = imread(img_path)
     if image is None:
         return None
@@ -2088,6 +2168,7 @@ def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
 
     返回 (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new) 或 None。
     """
+    _dbg_tag(img_path)
     image = imread(img_path)
     if image is None:
         return None
@@ -2113,6 +2194,7 @@ def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
     只能用书距——vol01/25 实测 Pass1 量不出 → 用书距 115.2，而终网格上
     实测 113.9（-1.1%），差值在列中部累积 ~25px，格界切到邻字头上
     （用户朱批 grid_shift 8 例的根因）。返回 (重切结果, 页距) 或 None。"""
+    _dbg_tag(img_path)
     image = imread(img_path)
     if image is None:
         return None
@@ -2147,6 +2229,7 @@ def _job_phase(seg: "GridSegmenter", img_path: str, layout: dict, res: dict,
                consensus_h: float, col_p, ins_p, band_p=None):
     """Pass 2b 单页：骑线评分 → 全周期相位自扫 → 择优重切。
     判据（骑线比对比）只依赖本页，可整段搬进工作进程。"""
+    _dbg_tag(img_path)
     image = imread(img_path)
     if image is None:
         return None
@@ -2477,7 +2560,9 @@ class GridSegmenter:
                     bounds = rigid_bounds(proj, page_phase, cell_h, n)
                     pre_bounds = list(bounds)
                     bounds, recut, _pre = elastic_recut(
-                        proj, bounds, cell_h, n)
+                        proj, bounds, cell_h, n,
+                        tag=f"{os.environ.get('GUJI_PAGE_TAG', '')}"
+                            f"col{col_result.get('index')}")
                     if recut:
                         col_result["elastic_recut"] = True
                         # 页坐标；供 straddle_score 按复切前的格线量
