@@ -20,6 +20,16 @@
 `old_bbox`（当时的坏框）。所以产物可以重建，重切不能——每次整册重跑
 之后把这份金标重放回去即可。
 
+## corrected_bbox 是「格位范围」，不是贴墨紧框
+
+用户 2026-08-26 裁定（见数据集 char-segmentation/instances/README.md）：
+拖框拖的是「这个字应占的格位」。所以贴回来的 patch 比管线紧裁的松——
+实测墨框只占图块 58~92%。**这不影响库**：`admit_instance` /
+`refresh_instance_patch` 存的是 canonical（先按墨迹外接框重裁、再质心
+居中），松框在那一步就被裁掉了；`normalize_patch` 同理。受影响的只有
+index.jsonl 的 bbox 口径与磁盘图块的留白，评测侧按格位口径标定
+（eval_recrop.py 含住+盖墨、±8px 容差）。
+
 ## 字位漂移怎么办
 
 `instance_id` 是序号，整页格位挪一格它就换人（见
