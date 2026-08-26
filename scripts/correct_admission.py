@@ -1,19 +1,27 @@
-"""改判已入库的人裁字位——不是重新裁决图块，是纠正之前的判据。
+"""改判已入库人裁字位的**释读**——不碰字形，不是重新裁决图块。
 
-起因（用户 2026-08-26 定）：已/巳 这类字对，古代刻工本就不分（详见
-`.claude/doc/charset_and_lm.md` §四考据），字形上「封不封口」不是可靠
-判据。此前有几条人裁按字形（照着刻本封口与否）判成了「巳」，但按现代
-用法（除干支纪年纪日/专名外一律用「已」）看，上下文文意明明白白是
-「已经」——这是本末倒置，字形不该赢过文意。用户裁定：**以后一律以
-上下文文意为准，不以字形为准**，并要求把此前判错的改回来。
+起因（用户 2026-08-26 定）：已/巳/己 这类字，古代刻工本就不分（详见
+`.claude/doc/charset_and_lm.md` §四考据）。校对古籍的默认规矩是「字形
+是什么我们就录什么」（diplomatic transcription，绝不因为「觉得该是
+别的字」就改字形）——但这三个字是**唯一的例外**：字形上「封不封口」
+不是可靠判据，古人自己都不当回事，所以只在这三个字上改按上下文文意
+判**释读**，字形照录不动。
+
+**字形（shape）与释读（reading）是两件事，别用同一个字段改：**
+
+* `instances.label` / `glyphs` / `exemplars` / `GlyphMatcher` 索引
+  ——**字形层**，按刻本实际刻的形状分类，供未来实例做形状匹配用。
+  这三个字的字形照样互相长得像，字形层的 near_form 护栏本来就该继续
+  拦——如果这里也被改成释读，未来一个真的刻成同一形状、该读别的字
+  的实例会错误继承这次的释读，字形匹配整个失真。
+* `instances.semantic` / `admissions.char` ——**释读层**，「这个字位
+  说的是什么」，本脚本改的就是这个。
 
 `admit_instance()` 是幂等的（同一 instance_id 第二次调用直接返回
-False）——那是防重复入库的闸，不是改判入口。已入库的字位要纠正，
-必须显式改这四张表：`instances.label/semantic/unicode_cp`（真源）、
-`admissions.char`（审计行，旧判据保留在 evidence 里，不是删掉重写）、
-`glyphs.n_confirmed`（旧字减一、新字加一，各自按 K_MIN 重算 status）、
-`exemplars`（旧字形下的示例挪到新字形下）。derived（norm/skeleton/feat）
-不动——图块本身没变，变的只是贴的标签。
+False）——那是防重复入库的闸，不是改判入口。已入库的字位要纠正释读，
+只碰 `instances.semantic` 与 `admissions.char` 这两处；`label` /
+`glyphs` / `exemplars` / `unicode_cp`（字形层）与 `derived`（图块的
+纯函数，图块没变）一律不动。
 """
 
 from __future__ import annotations
@@ -27,92 +35,61 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-K_MIN = 3
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def correct_one(cur: sqlite3.Cursor, instance_id: str, new_char: str,
+def correct_one(cur: sqlite3.Cursor, instance_id: str, new_reading: str,
                 reason: str, dry_run: bool) -> dict:
     row = cur.execute(
-        "SELECT char, provenance, evidence FROM admissions WHERE instance_id=?",
+        "SELECT char, evidence FROM admissions WHERE instance_id=?",
         (instance_id,)).fetchone()
     if row is None:
         return {"instance_id": instance_id, "skipped": "not_admitted"}
-    old_char, provenance, evidence_raw = row
-    if old_char == new_char:
+    old_reading, evidence_raw = row
+    if old_reading == new_reading:
         return {"instance_id": instance_id, "skipped": "already_correct"}
 
-    source_id = instance_id.split(":")[0]
-    edition = cur.execute(
-        "SELECT edition_tag FROM sources WHERE source_id=?",
-        (source_id,)).fetchone()[0]
-
     if dry_run:
-        return {"instance_id": instance_id, "old": old_char,
-                "new": new_char, "would_correct": True}
+        return {"instance_id": instance_id, "old": old_reading,
+                "new": new_reading, "would_correct": True}
 
     now = _now()
     old_evidence = json.loads(evidence_raw) if evidence_raw else None
-    new_evidence = {"correction": {"old_char": old_char, "new_char": new_char,
+    new_evidence = {"correction": {"old_reading": old_reading,
+                                   "new_reading": new_reading,
                                    "reason": reason, "corrected_at": now,
-                                   "corrected_by": "human:modern_usage_policy"},
+                                   "corrected_by": "human:modern_usage_policy",
+                                   "note": "只改释读，字形层（label/glyphs/"
+                                           "exemplars）未动"},
                     "original_evidence": old_evidence}
-    cp = ord(new_char) if len(new_char) == 1 else None
 
+    # 释读只在 instances.semantic 与 admissions.char 两处——字形层
+    # （label/glyphs/exemplars/unicode_cp）保持刻本实际形状不变
     cur.execute(
-        "UPDATE instances SET label=?, semantic=?, unicode_cp=?, updated_at=?"
-        " WHERE instance_id=?", (new_char, new_char, cp, now, instance_id))
+        "UPDATE instances SET semantic=?, updated_at=? WHERE instance_id=?",
+        (new_reading, now, instance_id))
     cur.execute(
         "UPDATE admissions SET char=?, evidence=?, admitted_at=?"
         " WHERE instance_id=?",
-        (new_char, json.dumps(new_evidence, ensure_ascii=False), now,
+        (new_reading, json.dumps(new_evidence, ensure_ascii=False), now,
          instance_id))
 
-    old_gid = cur.execute(
-        "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-        (edition, old_char)).fetchone()
-    if old_gid:
-        old_gid = old_gid[0]
-        cur.execute("DELETE FROM exemplars WHERE glyph_id=? AND instance_id=?",
-                    (old_gid, instance_id))
-        cur.execute(
-            "UPDATE glyphs SET n_confirmed = n_confirmed - 1, updated_at=?"
-            " WHERE glyph_id=?", (now, old_gid))
-        n = cur.execute("SELECT n_confirmed FROM glyphs WHERE glyph_id=?",
-                        (old_gid,)).fetchone()[0]
-        if n < K_MIN:
-            cur.execute("UPDATE glyphs SET status='sparse' WHERE glyph_id=?",
-                        (old_gid,))
-
-    cur.execute(
-        """INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp, ids,
-             status, n_confirmed, updated_at)
-           VALUES (?,?,?,?,NULL,'sparse',1,?)
-           ON CONFLICT(edition_tag, char) DO UPDATE SET
-             n_confirmed = n_confirmed + 1,
-             status = CASE WHEN n_confirmed + 1 >= {} THEN 'stable' ELSE status END,
-             updated_at = excluded.updated_at""".format(K_MIN),
-        (edition, new_char, new_char, cp, now))
-    new_gid = cur.execute(
-        "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-        (edition, new_char)).fetchone()[0]
-    cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
-                (new_gid, instance_id, "seed", now))
-
-    return {"instance_id": instance_id, "old": old_char, "new": new_char,
-            "corrected": True}
+    return {"instance_id": instance_id, "old": old_reading,
+            "new": new_reading, "corrected": True}
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="改判已入库的人裁字位")
+    ap = argparse.ArgumentParser(description="改判已入库人裁字位的释读（不碰字形）")
     ap.add_argument("db")
     ap.add_argument("--queue", required=True,
-                    help="phase9_seed/queue.jsonl，同步改 decided_char")
+                    help="phase9_seed/queue.jsonl，同步改 decided_char"
+                        "（队列里没有字形/释读之分，历来就是释读——展示"
+                        "给人看的、进最终文本的就是这个）")
     ap.add_argument("--corrections", required=True,
-                    help="JSON 数组：[{instance_id, new_char, reason}, …]")
+                    help="JSON 数组：[{instance_id, new_char, reason}, …]"
+                        "（new_char 是新释读，字段名沿用旧协议不动）")
     ap.add_argument("--apply", action="store_true", help="缺省只演练不落地")
     args = ap.parse_args()
 

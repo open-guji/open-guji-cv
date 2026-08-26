@@ -483,3 +483,43 @@ def test_mobile_row_stacks_and_recrop_leaves_a_visible_badge():
     assert html.count("card.setAttribute('data-recropped', '1')") >= 2
     assert "else if(ev.op === 'recrop')" in html
     assert "cs[i].removeAttribute('data-recropped');" in html
+
+
+def test_semantic_merged_pair_gets_shape_not_important_hint():
+    """已/巳撞上 near_form 时，疑问说明换一句话：字形不重要，按文意选。
+
+    这三个字史上就是同一个词的两种写法（charset_and_lm.md §四），字形
+    护栏拦得对（防形状判据自己认错），但审阅时不该纠结「封不封口」——
+    这条提示直接把答案摆出来，省得用户对着图块犹豫（2026-08-26
+    用户定：这是唯一一类允许「字形是什么我们不一定录什么」的例外，
+    要让这个例外在审查页上一眼可辨）。换作大/太这种普通形近字家族，
+    字形仍然重要，提示语不该跟着换。"""
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    base = {"book": "b", "page": "1", "batch_id": "t",
+            "n_done": 0, "n_total": 1, "page_total": 1, "page_done": 0,
+            "book_total": 1, "book_done": 0, "pages_pending": []}
+
+    merged = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+             "tier": "clean", "intrusion": [], "status": "pending_review",
+             "patch_b64": None, "region": None, "ocr": {"char": "巳", "prob": 0.9},
+             "align": {"char": "已", "op": "replace"}, "context": None,
+             "match": None, "proposed": "已",
+             "choices": [{"char": "已", "ocr_prob": None, "align_op": "replace",
+                         "ref_op": None, "db_cov": None, "proposed": True},
+                        {"char": "巳", "ocr_prob": 0.9, "align_op": None,
+                         "ref_op": None, "db_cov": None, "proposed": False}],
+             "doubts": [{"code": "near_form", "no": 4, "label": DOUBT_LABELS["near_form"]}]}
+    html = render_seed_html({**base, "entries": [merged]})
+    assert "字形不重要，直接按文意选" in html
+    assert DOUBT_LABELS["near_form"] not in html   # 换掉了，不是叠加
+
+    ordinary = {**merged, "instance_id": "b:1:2:6",
+               "ocr": {"char": "大", "prob": 0.9},
+               "align": {"char": "太", "op": "replace"}, "proposed": "太",
+               "choices": [{"char": "太", "ocr_prob": None, "align_op": "replace",
+                           "ref_op": None, "db_cov": None, "proposed": True},
+                          {"char": "大", "ocr_prob": 0.9, "align_op": None,
+                           "ref_op": None, "db_cov": None, "proposed": False}]}
+    html2 = render_seed_html({**base, "entries": [ordinary]})
+    assert "字形不重要，直接按文意选" not in html2
+    assert DOUBT_LABELS["near_form"] in html2      # 普通形近字照旧用原文案

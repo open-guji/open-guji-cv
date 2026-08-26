@@ -262,7 +262,31 @@ def test_semantic_merged_pair_context_bypasses_near_form(seeded):
                               DOUBT_REPLACE_ALIGN}
     assert it.status == STATUS_AUTO and it.provenance == "context"
     assert it.decided_char == "已"
-    assert it.instance_id in _admitted_ids(seeded["db"])
+    iid = it.instance_id
+    assert iid in _admitted_ids(seeded["db"])
+
+    # 释读（已）进 admissions.char/instances.semantic/queue.decided_char——
+    # 用户显示看到、进最终文本的都是这个。字形（这条位载体给的形状信号
+    # 是「巳」）进 instances.label/glyphs/exemplars——GlyphMatcher 的
+    # 形状索引必须按刻本实际形状分类，绝不能被这次的释读污染，否则
+    # 未来一个真刻成同一形状、该读别的字的实例会错误继承「已」。
+    db = seeded["db"]
+    label, semantic = db.conn.execute(
+        "SELECT label, semantic FROM instances WHERE instance_id=?",
+        (iid,)).fetchone()
+    assert label == "巳" and semantic == "已"
+    admitted_char = db.conn.execute(
+        "SELECT char FROM admissions WHERE instance_id=?", (iid,)).fetchone()[0]
+    assert admitted_char == "已"
+    n_si = db.conn.execute(
+        "SELECT n_confirmed FROM glyphs WHERE edition_tag=? AND char='巳'",
+        (BOOK,)).fetchone()
+    assert n_si and n_si[0] >= 1, "字形库必须按巳（实际形状）建条目"
+    n_yi_has_this = db.conn.execute(
+        """SELECT 1 FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
+           WHERE g.edition_tag=? AND g.char='已' AND e.instance_id=?""",
+        (BOOK, iid)).fetchone()
+    assert n_yi_has_this is None, "这个实例不该出现在「已」的字形示例里"
 
 
 def test_doubt_db_inconsistent(seeded):

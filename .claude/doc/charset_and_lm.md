@@ -342,6 +342,50 @@ python scripts/prepare_corpus.py --src <殆知阁 史藏/诏令奏议> --src ...
 的 margin 恰好不够高（`vol01:73:2:12` 那条候选池里 已/己/巳 三家打架，
 guard=conflict，是真正拿不准的场面），安全阀按设计工作。
 
+### 字形与释读必须分开存——不能用同一个字段改（2026-08-26 补）
+
+第一版落地时踩了自己定的规矩：改判 4 条已/巳实例时，把 `instances.label`
+（`GlyphMatcher`/`glyphs`/`exemplars` 的**字形索引键**）也一并改成了
+「已」。用户看完后指出问题：「校对古籍的时候字形是什么我们就录什么，
+但这是特殊情况，只有这三个字按语意改」——这句话里藏着一个此前没分清
+的区别：
+
+* **释读（reading）**：这个字位「说的是什么」，人/context 通道判的就是
+  它，只有已/巳/己 这三个字允许它偏离字形（其余所有字，释读=字形，
+  diplomatic transcription 是唯一规矩，绝不因「觉得该是别的字」改）。
+* **字形（shape）**：刻本上实际刻的形状，进 `GlyphMatcher` 的匹配索引。
+  **这个字段永远照录，连已/巳/己 也不例外**——字形层的 near_form 护栏
+  本来就是防「形状判据自己会认错」，如果连字形库本身都被释读污染，
+  未来一个真的刻成同一形状、该读别的字的实例会**错误继承这次的释读**，
+  字形匹配整条链就失真了，等于自己拆自己刚立的护栏。
+
+**改法**：`GlyphDB.admit_instance()` 新增 `shape` 形参（缺省 = `char`，
+绝大多数调用不受影响）——`char` 走 `admissions.char`/`instances.semantic`
+（释读），`shape` 走 `instances.label`/`glyphs`/`exemplars`/
+`unicode_cp`（字形索引）。`seeding.py` 的 SEMANTIC_MERGED_PAIRS 分支
+现在这样定字形信号：**优先用 OCR 的原始识别**（它是纯视觉分类器，
+不掺文意判断，`vol01:8:2:11` 那类实锤里 OCR 认的形状信号往往和最终
+釋讀不同，恰恰是这个字段该存的东西）；OCR 缺失或不在家族里时才退回
+释读本身（没有独立形状信号，不引入分岔）。`scripts/correct_admission.py`
+同步改写：现在**只碰** `instances.semantic`/`admissions.char`，绝不碰
+`label`/`glyphs`/`exemplars`——早先误伤字形库的 4 条实例已用一次性
+脚本撤回（`label` 复原为改判前的原字，`semantic`/`admissions.char`
+维持改判后的释读不动）。
+
+单测 `test_semantic_merged_pair_context_bypasses_near_form`
+补了字形/释读分岔的断言：`instances.label`=OCR 给的形状信号、
+`instances.semantic`=释读、`admissions.char`=释读、且这个实例**不会**
+出现在释读字符的字形示例（exemplars）里。
+
+**审查页也补了提示**（`open_guji_cv/clustering/review/seed_export.py`）
+——`_render_evidence` 遇到 near_form 且候选里含已/巳 时，把疑问说明
+换成「候选里有已/巳——这两个字史上就是同一个词的两种写法，字形不重要，
+直接按文意选，不用管封不封口」，直接把答案摆出来，省得用户对着图块
+纠结封口不封口——这是唯一允许「字形不用管」的例外，其余形近字家族
+（大/太、諭/論……）字形照样重要，提示语不跟着换。单测
+`test_semantic_merged_pair_gets_shape_not_important_hint`
+（`tests/clustering/test_seed_export.py`）覆盖两种情形都对。
+
 **反向发现：上下文能抓人裁的错。** `vol01:42:7:10`
 「指摘利病至不憚再三△告」，人裁定的是「人」，n-gram（margin 18.5）
 与大模型都高置信选「入」——「入告」出《尚书》，是进言于君的成语。

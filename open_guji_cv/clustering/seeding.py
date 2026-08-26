@@ -887,8 +887,23 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                     and vmap.semantic(surface) ==
                                     vmap.semantic(corpus_char)))
                         if surface and sem_margin >= context_margin and safe:
+                            # 字形/释读分岔（只在 SEMANTIC_MERGED_PAIRS 触发，
+                            # 用户 2026-08-26 定：字形是什么就录什么，已/巳
+                            # 这三个字才按语意改——但改的是**释读**，不能
+                            # 污染字形匹配层。字形库/GlyphMatcher 必须按
+                            # OCR 这个纯视觉信号归类（它不掺文意判断），
+                            # 不然未来一个真该读「巳」的同形实例会错误
+                            # 继承这次的释读。OCR 缺失或本身不在家族里
+                            # 时说明没有独立的形状信号，退回 surface
+                            # （不引入分岔，绝大多数字符走这条路）。
+                            shape_char = surface
+                            if surface in SEMANTIC_MERGED_CHARS:
+                                ocr_c = ocr["char"] if ocr else None
+                                if ocr_c and ocr_c in SEMANTIC_MERGED_CHARS:
+                                    shape_char = ocr_c
                             evidence = {"decision": dec.to_dict(),
                                         "surface": surface,
+                                        "shape": shape_char,
                                         "sem_margin": sem_margin,
                                         "match": mr.to_dict(), "ocr": ocr,
                                         "align": align, "tier": tier,
@@ -902,10 +917,11 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                 bbox=list(rec.bbox),
                                 ink_ratio=rec.ink_ratio, width=rec.width,
                                 height=rec.height,
-                                semantic=vmap.semantic(surface))
+                                semantic=vmap.semantic(surface),
+                                shape=shape_char)
                             if admitted:
-                                matcher.add(rec.id, surface, norm)
-                                db_chars.add(surface)
+                                matcher.add(rec.id, shape_char, norm)
+                                db_chars.add(shape_char)
                                 summary["db_added"] += 1
                             item.status = STATUS_AUTO
                             item.decided_char = surface
