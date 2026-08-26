@@ -65,6 +65,20 @@ DEFAULT_PROB_THRESHOLD = 0.85
 # 形近否决家族的全部成员（near_form 疑问用；单一事实源在 match.py）
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 
+# 「同词异写」而非「认错字」的形近对（用户 2026-08-26 定；考据见
+# charset_and_lm.md §四）。已/巳 历史上就是同一个词的两种写法（段玉裁：
+# 巳久已用为「已然」之已），config/variants/variants.json 里
+# 已→巳 登记为 hydzd/yitizi 异体关系——字形层拦得对（近形护栏防的是
+# **形状判据**自己会错认），但**上下文/语言模型的文意判断**不该被同一
+# 道闸挡下：这道题字形本就不重要，文意才是唯一相关的证据。
+#
+# 严格窄集，不等于 NEAR_FORM_CHARS：己 长得像已/巳但是**真的另一个字**
+# （自己 vs 已经/地支），vol01:21:3:19 实锤过把己错认成巳/已——己不进
+# 这张表，上下文通道对它照样要拦，仍然人审。
+SEMANTIC_MERGED_PAIRS: frozenset[tuple[str, str]] = frozenset({("已", "巳")})
+SEMANTIC_MERGED_CHARS = frozenset(
+    c for pair in SEMANTIC_MERGED_PAIRS for c in pair)
+
 SEED_DIR = "phase9_seed"
 
 # 上下文通道的 margin 准入阈。八轮重标定：语料字入候选池后 margin 分布
@@ -825,12 +839,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     # （库 unsure 命中 ∪ OCR top1+s2t）+ 同列前文 LM 打分，
                     # margin ≥ 阈即以 context provenance 进库。
                     # 三道防护：① 只在锚定页跑（无语料没有安全网）；
-                    # ② near_form / db_inconsistent 仍然只走人审；
+                    # ② near_form / db_inconsistent 仍然只走人审——
+                    #    **除非**命中的字属于 SEMANTIC_MERGED_PAIRS（已/巳
+                    #    这类同词异写，字形不重要，文意才是判据，2026-08-26
+                    #    用户定：155 题盲测重验，字形层 top-1 只有
+                    #    66.7%（正是被这道闸拦住的原因），n-gram 83.3%、
+                    #    大模型 91.7%——挡的对象反而是更可靠的证据）；
                     # ③ 单候选的 margin=1.0 是平凡值——要求 ranked ≥2
                     #    （真竞争胜出）或裁决字与整理本一致。
                     ctx_admit = False
+                    near_form_blocks = (DOUBT_NEAR_FORM in doubts
+                                        and proposed not in SEMANTIC_MERGED_CHARS)
                     if (page_anchored
-                            and DOUBT_NEAR_FORM not in doubts
+                            and not near_form_blocks
                             and DOUBT_DB_INCONSISTENT not in doubts):
                         topk = [(ocr["char"], ocr["prob"])] if ocr else []
                         corpus_char = (al.char if al else None) or \

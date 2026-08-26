@@ -47,9 +47,18 @@ PAGES = {
     "5": "弔民伐罪周發殷湯愛育黎首臣伏戎羌",
     "6": "遐邇壹體率賓歸王鳴鳳在樹白駒食場",
     "7": "化被草木賴及萬方",          # 不进语料 → 整页无对齐
+    # 8: idx10「已」是 SEMANTIC_MERGED_PAIRS 成员（已/巳 同词异写，
+    # 2026-08-26 用户定：字形不重要，上下文文意才是判据）。载体故意
+    # 给成家族搭档「巳」→ signal_conflict + near_form + replace_align
+    # 三条疑问都命中，换作表里任何别的形近字这里就该卡人审——但
+    # 已/巳 不该被同一道 near_form 闸拦住上下文通道，语料训练过这句
+    # 原文，margin 应该过阈，走 context 通道自动进库判「已」。
+    # （两侧各留 10 字不动——align_label 的 8-gram 锚定要求替换位
+    # 至少一侧有 ≥8 个连续未改字符才能锚上，太短的页会整页无对齐）
+    "8": "光風霽月虛懷若谷學海已至誠力行不倦志存高遠",
 }
-CORPUS_PAGES = ("1", "2", "3", "4", "5", "6")
-ALTERED = {("2", 10): "馬", ("3", 9): "珎"}      # 载体（OCR）故意给的字
+CORPUS_PAGES = ("1", "2", "3", "4", "5", "6", "8")
+ALTERED = {("2", 10): "馬", ("3", 9): "珎", ("8", 10): "巳"}  # 载体故意给的字
 PROBS = {("7", 1): 0.30}                          # 低置信槽位
 EMPTY_OCR = {("7", 2)}                            # OCR 空识别槽位
 DEGRADED = {("6", 3)}                             # 手工残留图块
@@ -237,6 +246,25 @@ def test_doubt_near_form(seeded):
     assert it.doubts == [DOUBT_NEAR_FORM]
 
 
+def test_semantic_merged_pair_context_bypasses_near_form(seeded):
+    """已/巳 同词异写：near_form 挡字形通道，不挡上下文通道。
+
+    「大」（上一测试）近形家族命中就只能人审；已/巳 不一样——它俩历史
+    上就是同一个词的两种写法（charset_and_lm.md §四），字形层拦得对
+    （近形护栏防的是形状判据自己会认错），但文意判断不该被同一道闸
+    挡下。这条位载体故意给错成家族搭档「巳」，三条疑问全命中
+    （signal_conflict + near_form + replace_align），换作表里任何别的
+    形近字这里就该卡人审——但 SEMANTIC_MERGED_PAIRS 让它照走 context
+    通道，按上下文判「已」自动进库。"""
+    it = _queue(seeded)[f"{BOOK}:8:1:10"]
+    assert it.ocr["char"] == "巳" and it.align == {"char": "已", "op": "replace"}
+    assert set(it.doubts) == {DOUBT_SIGNAL_CONFLICT, DOUBT_NEAR_FORM,
+                              DOUBT_REPLACE_ALIGN}
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "已"
+    assert it.instance_id in _admitted_ids(seeded["db"])
+
+
 def test_doubt_db_inconsistent(seeded):
     """库里已有「弔」但形状对不上（verify 全 diff）→ 库内不自洽。"""
     it = _queue(seeded)[f"{BOOK}:5:1:0"]
@@ -251,10 +279,10 @@ def test_summary_counts(seeded):
     assert s["n_slots"] == n_slots
     assert s["n_auto"] + s["n_pending"] == n_slots
     # 预期 pending：4:6 near_form / 5:0 db_inconsistent + 第 7 页整页
-    # （8 格，未锚定上下文通道关闭）；2:10、3:9 走 context、
+    # （8 格，未锚定上下文通道关闭）；2:10、3:9、8:5 走 context、
     # 6:3 走 dual_degraded 进库
     assert s["n_pending"] == 2 + len(PAGES["7"])
-    assert s.get("n_auto_context", 0) == 2
+    assert s.get("n_auto_context", 0) == 3
     assert "tb:4:1:6" in {i for i in _queue(seeded)
                           if _queue(seeded)[i].status == STATUS_PENDING}
     assert s["doubt_counts"][DOUBT_WEAK_SINGLE] == 2

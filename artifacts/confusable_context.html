@@ -96,7 +96,7 @@ td.v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
   padding:.8rem .85rem .9rem;display:flex;flex-direction:column;gap:.55rem;
   box-shadow:var(--shadow);
 }
-.pair.dead{border-color:var(--vermil);background:var(--vermil-soft)}
+.pair.corrected{border-color:var(--indigo)}
 .pair-top{display:flex;align-items:baseline;justify-content:space-between;gap:.4rem}
 .pair-gl{font-family:"Noto Serif TC",serif;font-weight:600;font-size:1.7rem;line-height:1;letter-spacing:.06em}
 .pair-n{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--mute)}
@@ -143,7 +143,8 @@ td.v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
   font-size:.92rem;color:var(--ink-2);max-width:44rem}
 .callout b{color:var(--ink)}
 code{font-family:"IBM Plex Mono",monospace;font-size:.86em;
-  background:var(--rule-2);padding:.08em .34em;border-radius:2px}
+  background:var(--rule-2);padding:.08em .34em;border-radius:2px;
+  overflow-wrap:anywhere}
 footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
   font-size:.82rem;color:var(--mute);display:flex;flex-direction:column;gap:.3rem}
 @media (max-width:640px){
@@ -158,10 +159,10 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
   <div class="eyebrow">形近对消歧 · vol01 · 2026-08-26</div>
   <div class="glyphduo"><em>入</em><span class="slash">/</span>人</div>
   <p class="lede">刻本里有十几对字，字形层再准也分不开。用户问：能不能靠上下文？
-  两条路——n-gram 语言模型，和大模型直读。拿 155 条人裁金标盲测，两条都成立。</p>
-  <p class="verdict">剔除注定治不了的 已/巳 之后（n=142）：<b class="num">n-gram 96.5%</b>、
-  <b class="num">大模型 99.3%</b>，而字形层 top-1 只有 <b class="num">64.1%</b>、OCR
-  <b class="num">64.1%</b>。上下文不是锦上添花，是这一类字的主判据。</p>
+  两条路——n-gram 语言模型，和大模型直读。拿 154 条人裁金标盲测，两条都成立。</p>
+  <p class="verdict">全部 154 题：<b class="num">n-gram 95.5%</b>、
+  <b class="num">大模型 98.7%</b>，而字形层 top-1 只有 <b class="num">64.3%</b>、OCR
+  <b class="num">66.2%</b>。上下文不是锦上添花，是这一类字的主判据。</p>
 </header>
 
 <section>
@@ -173,26 +174,26 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
   「真难档」是整理本在该位没给答案的那些（脱字/异文/未覆盖），
   上下文必须自己扛；「送分档」整理本给得出，但题面里一并挖掉了。</p>
   <div class="scroller"><table>
-    <thead><tr><th>臂</th><th>真难档 n=27</th><th>送分档 n=115</th><th>合计 n=142</th></tr></thead>
+    <thead><tr><th>臂</th><th>真难档 n=32</th><th>送分档 n=122</th><th>合计 n=154</th></tr></thead>
     <tbody>
       <tr class="base"><td class="armname">多数类基线<small>每对按金标众数猜</small></td>
-        <td class="v">96.3%</td><td class="v">68.7%</td><td class="v">73.9%</td></tr>
+        <td class="v">96.9%</td><td class="v">70.5%</td><td class="v">76.0%</td></tr>
       <tr class="dim"><td class="armname">字形层 top-1<small>库匹配最高覆盖率</small></td>
-        <td class="v">70.4%</td><td class="v">62.6%</td><td class="v lose">64.1%</td></tr>
+        <td class="v">71.9%</td><td class="v">62.3%</td><td class="v lose">64.3%</td></tr>
       <tr class="dim"><td class="armname">OCR<small>PaddleOCR 单字</small></td>
-        <td class="v">55.6%</td><td class="v">66.1%</td><td class="v lose">64.1%</td></tr>
+        <td class="v">62.5%</td><td class="v">67.2%</td><td class="v lose">66.2%</td></tr>
       <tr class="hi"><td class="armname">n-gram(3)　留出<small>本书原文剔除后重训</small></td>
-        <td class="v">92.6%</td><td class="v">97.4%</td><td class="v win">96.5%</td></tr>
+        <td class="v">87.5%</td><td class="v">97.5%</td><td class="v win">95.5%</td></tr>
       <tr><td class="armname">n-gram(3)　只用通用语料<small>完全不碰本书</small></td>
-        <td class="v">85.2%</td><td class="v">93.0%</td><td class="v">91.5%</td></tr>
+        <td class="v">87.5%</td><td class="v">93.4%</td><td class="v">92.2%</td></tr>
       <tr class="hi"><td class="armname">大模型（盲测）<small>只读上下文，不给字形信号</small></td>
-        <td class="v">96.3%</td><td class="v">100.0%</td><td class="v win">99.3%</td></tr>
+        <td class="v">93.8%</td><td class="v">100.0%</td><td class="v win">98.7%</td></tr>
     </tbody>
   </table></div>
   <div class="callout"><b>为什么必须并列报多数类基线。</b>先验极不平衡——日 28 : 曰 1、
-  諭 32 : 論 15。真难档只有 27 题，其中多数类基线就有 96.3%，所以那一列的
+  諭 32 : 論 15。真难档只有 32 题，其中多数类基线就有 96.9%，所以那一列的
   绝对数字不能单独读；真正有判别力的是送分档那一列，它类别均衡得多
-  （人/入 20 题里多数类只占 50%），基线 68.7% 而两条上下文臂打到 97% 以上。</div>
+  （人/入 20 题里多数类只占 50%），基线 70.5% 而两条上下文臂打到 97% 以上。</div>
 </section>
 
 <section>
@@ -202,38 +203,70 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
   </div>
   <p class="body-copy">用户点名的三对全在。<b>人/入</b>是最干净的一例：类别均衡、
   OCR 掷硬币（50%）、字形层 64%，上下文两条臂都到 95%。<b>論/諭</b>的
-  OCR 只有 11%——不是不准，是系统性认反。</p>
+  OCR 只有 11%——不是不准，是系统性认反。<b>已/巳</b>那格边框特别标出来——
+  它的故事在下面。</p>
   <div class="pairgrid" id="pairs"></div>
 </section>
 
 <section>
   <div class="sechead">
-    <div class="eyebrow">反例</div>
-    <h2>已/巳：这一对根本不该问上下文</h2>
+    <div class="eyebrow">复盘</div>
+    <h2>已/巳：第一版说「治不了」，是错的</h2>
   </div>
-  <div class="counter">
-    <h3>同一个词，刻工有时刻「巳」有时刻「已」</h3>
+  <div class="counter" style="background:var(--indigo-soft);border-color:var(--indigo)">
+    <h3 style="color:var(--indigo)">金标本身被字形污染了</h3>
     <div class="specimens">
       <div class="spec">
-        <div class="line"><span>實在流傳</span><mark>巳</mark><span>久，尚可裒綴成編</span></div>
-        <div class="cap">[016] vol01:8:2:11 · 金标 巳</div>
+        <div class="line"><span>實在流傳</span><mark style="background:var(--indigo)">巳</mark><span>久，尚可裒綴成編</span></div>
+        <div class="cap">vol01:8:2:11 · 当时人裁 巳 → 现改判 <b>已</b></div>
       </div>
       <div class="spec">
-        <div class="line"><span>實在流傳</span><mark>已</mark><span>少，其書足資啓牖</span></div>
-        <div class="cap">[059] vol01:11:3:14 · 金标 已</div>
+        <div class="line"><span>書籍</span><mark style="background:var(--indigo)">巳</mark><span>屬不少，嗣後自必陸續加多</span></div>
+        <div class="cap">vol01:14:2:18 · 当时人裁 巳 → 现改判 <b>已</b></div>
       </div>
       <div class="spec" style="flex:1 1 20rem;background:none;border:none;padding:.2rem 0">
-        <p style="font-size:.92rem;color:var(--ink-2)">语境同构，金标相反。这不是语义问题，
-        是<b>字形层</b>问题——任何上下文方法原理上都分不了。实测所有臂在这一对上都卡在 <span class="num">62~69%</span>，谁都没超过多数类基线。</p>
-        <p style="font-size:.92rem;color:var(--ink-2)"><code>config/variants/variants.json</code>
-        里 <code>已 → 巳</code> 早已登记为异体（hydzd/yitizi）：<b>语义层本来就归并了</b>，
-        剩下的只是「刻的是哪个形」，那是字形层与人的活。</p>
+        <p style="font-size:.92rem;color:var(--ink-2)">第一版评测举过这个反例：语境同构、金标相反，
+        断言「任何上下文方法原理上都分不了」。<b>断错了</b>——13 条人裁金标里
+        4 条是当时的人照着刻本封口字形判的，不是照文意判的。「流傳巳久」
+        「書籍巳屬不少」明显是「已经」语义，只因刻本上那一笔封了口就判成巳。</p>
+        <p style="font-size:.92rem;color:var(--ink-2)">用户看完考据后定：<b>字形不重要，
+        一律以上下文文意为准</b>，逐条核对 align/图块改判后重测——</p>
       </div>
     </div>
-    <p style="font-size:.92rem;color:var(--ink-2)">规矩：<b>新形近对进表之前先过一问</b>——
-    它是语义可分的，还是异体同词的？后者送进上下文通道是白费力气，
-    还会把一条本来干净的通道的精度拖下去。</p>
+    <div class="scroller"><table style="margin-top:.4rem;min-width:0;max-width:24rem">
+      <thead><tr><th>臂</th><th>已/巳（n=12，改判后）</th></tr></thead>
+      <tbody>
+        <tr class="base"><td class="armname">多数类基线</td><td class="v">100%<small style="display:block;font-weight:400;color:var(--mute)">这批样本碰巧全是「已」</small></td></tr>
+        <tr class="dim"><td class="armname">字形层 top-1</td><td class="v lose">67%<small style="display:block;font-weight:400;color:var(--mute)">低于多数类基线——字形在这里是负资产</small></td></tr>
+        <tr class="dim"><td class="armname">OCR</td><td class="v">92%</td></tr>
+        <tr><td class="armname">n-gram</td><td class="v">83%</td></tr>
+        <tr class="hi"><td class="armname">大模型</td><td class="v win">92%</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:.92rem;color:var(--ink-2)">字形层不但没赢，反而<b>输给瞎猜</b>——这才是当初
+    「治不了」的真正成因：不是上下文方法不行，是拿被字形污染的金标去考它们，
+    考卷本身就是错的。这批样本多数类基线 100% 是巧合，不是「已/巳 已解决」——
+    巳仍有真实存在的场景（干支纪年纪日），这 12 条恰好没碰上；等审到真正的
+    巳用例，才能验证上下文方法能不能正确转向。</p>
   </div>
+
+  <div class="callout">
+    <p><b>顺带查出一条更少见的误判。</b><code>vol01:21:3:19</code>「則因<b>巳</b>身」
+    被判成了巳，但整理本这一位其实是<b>己</b>（「因己身服藥交年」，因自己
+    本人服药经年）——图块目视核对底部钩画开口未封，也更像己。这条超出
+    已/巳二元对立，己是真的另一个字（自己 vs 已经/地支），不是同词异写，
+    已加进字形层护栏（<code>match.NEVER_MATCH_FAMILIES</code>）防再认错，
+    但没进下面这条「文意优先」的豁免名单——上下文通道对它照样要拦，仍然人审。</p>
+  </div>
+
+  <h3 style="margin-top:1.6rem">己/已/巳 混用的历史考据</h3>
+  <p class="body-copy">用户问：这是不是某个朝代特定的用法？查证：<b>不是</b>——
+  已/巳字源上本来就是同一个字（甲骨文同形，段玉裁：地支「巳」久已借用为
+  「已然」之「已」）。现代课堂教的「己不封口、已半封口、巳全封口」是
+  <b>今人总结的辨认口诀，不是古人的书写规矩</b>。北师大出版科学研究院的
+  校对研究直接点名：宋元刻本已经混，<b>清代《欽定四庫全書》本——己已巳
+  仍然混用</b>，光绪翻刻本也混。四库馆本身有《功过处分条例》专门追责誊录
+  讹字，都没能把这三字单独整顿——古人根本不觉得这是错。</p>
 </section>
 
 <section>
@@ -275,7 +308,8 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
   </div>
   <p class="body-copy">当前 vol01 待审 <span class="num">1311</span> 行里，
   信号里带形近家族字的有 <span class="num">245</span> 行（19%），全都有上下文。
-  这是能直接兑现的人力。</p>
+  这是能直接兑现的人力。<b>已经落地</b>：已/巳这类同词异写（非语义可分的
+  真异字），不再被字形层的 near_form 护栏拦住上下文判断。</p>
   <div class="scroller"><table>
     <thead><tr><th>n-gram margin 阈</th><th>覆盖</th><th>精度</th><th>错例</th></tr></thead>
     <tbody>
@@ -285,11 +319,26 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
       <tr><td class="num">≥ 10</td><td class="v">70%</td><td class="v">99.0%</td><td class="v">1</td></tr>
     </tbody>
   </table></div>
-  <div class="callout"><b>但它不能单独当闸。</b>提高阈值到 margin ≥ 3 能把错例压到 1 条，
-  可再往上抬就压不动了——因为<b>残余那一错恰恰是高置信的</b>（margin
-  <span class="num">18.5</span>）。所以照本项目一贯的规矩办：上下文只作
-  <b>两条零同源证据</b>里的一条，要与字形层或 OCR 之一相合才放行，
-  不合就照旧送人审。</div>
+  <div class="callout"><b>margin 阈来自全量 154 题，不能单独当闸。</b>
+  提高阈值能把错例压下去，但压不到零——残余错例往往恰是高置信的
+  （见下条反向发现，margin 18.5）。所以照本项目一贯的规矩办：上下文只作
+  <b>两条零同源证据</b>里的一条，够不着阈值（默认 0.70）一律送人审，
+  不单独当闸。</div>
+  <div class="callout"><b>SEMANTIC_MERGED_PAIRS：只豁免「同词异写」，不豁免「认错字」。</b>
+  <code>open_guji_cv/clustering/seeding.py</code> 新增这张窄表（当前只有
+  已/巳），上下文通道的 near_form 护栏加了一条例外——命中的字若在表里，
+  不拦，照走语言模型判断，margin 过阈才自动进库；够不着阈值仍然人审，
+  安全阀没关。字形层 <code>NEVER_MATCH_FAMILIES</code>（防形状判据自己
+  认错）完全不动，还补了 <code>己/已</code>、<code>己/巳</code> 两对
+  （防上面那条 21:3:19 的错再犯）——己是真的另一个字，没进豁免表，
+  上下文通道对它照样要拦。单测
+  <code>test_semantic_merged_pair_context_bypasses_near_form</code>
+  覆盖：near_form + signal_conflict + replace_align 三条疑问全命中的
+  场面，只因为字属于豁免表就照走上下文通道自动进库。真实数据验证：
+  vol01 待审里 9 条已/巳 near_form 候选拿新规则重跑，全部<b>仍在人审</b>
+  ——不是没生效，是这批的 margin 恰好不够高（其中一条候选池里
+  已/己/巳 三家打架，guard=conflict，是真正拿不准的场面），安全阀
+  按设计工作。</div>
   <div class="callout" style="border-left-color:var(--vermil)"><b>反向发现：上下文能抓人裁的错。</b>
   <code>vol01:42:7:10</code>「指摘利病至不憚再三<b>△</b>告」，人裁定的是「人」，
   但 n-gram（margin 18.5）与大模型都高置信选「入」——「入告」出《尚书》，
@@ -297,7 +346,7 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
 </section>
 
 <footer>
-  <div>测试集 <code>open-guji-dataset/confusable-context</code>（155 题，人裁金标，含答案与首轮各臂冻结基线）</div>
+  <div>测试集 <code>open-guji-dataset/confusable-context</code>（154 题，人裁金标，含答案与各臂冻结基线；2026-08-26 二次核对，改判 4 条字形误判 + 1 条超出已/巳范围的 己 误判）</div>
   <div>复现 <code>scripts/build_confusable_set.py</code> → <code>eval_confusable_lm.py</code> → <code>score_confusable.py</code></div>
 </footer>
 </div>
@@ -305,9 +354,9 @@ footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
 <script>
 const PAIRS = [
   ["人/入",22,55,64,50,95,95],["論/諭",18,72,78,11,89,100],
-  ["大/太",16,88,81,100,100,100],["已/巳",13,62,62,69,62,69],
-  ["而/面",12,75,67,83,100,100],["遺/還",11,55,73,55,100,100],
-  ["未/末",11,73,64,91,100,100],["問/間",9,78,56,78,100,100],
+  ["大/太",16,88,81,100,100,100],["已/巳",12,100,67,92,83,92],
+  ["而/面",12,75,67,83,100,100],["未/末",11,73,64,91,100,100],
+  ["遺/還",11,55,73,55,100,100],["問/間",9,78,56,78,100,100],
   ["日/曰",8,88,62,88,88,100],["曾/會",7,86,43,14,86,100],
   ["過/選",6,50,50,100,100,100],["廣/贋",6,100,83,100,100,100],
   ["圓/圖",5,100,60,0,100,100],["七/匕",5,100,60,80,100,100],
@@ -316,7 +365,7 @@ const PAIRS = [
 ];
 const ROWS = [["字形",3,"f-shape"],["OCR",4,"f-shape"],["n-gram",5,"f-lm"],["大模型",6,"f-llm"]];
 document.getElementById("pairs").innerHTML = PAIRS.map(p => `
-  <div class="pair${p[0]==="已/巳"?" dead":""}">
+  <div class="pair${p[0]==="已/巳"?" corrected":""}">
     <div class="pair-top">
       <span class="pair-gl">${p[0].replace("/"," / ")}</span>
       <span class="pair-n">n=${p[1]}</span>

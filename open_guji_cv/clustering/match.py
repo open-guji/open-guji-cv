@@ -47,6 +47,11 @@ NEVER_MATCH_FAMILIES: list[tuple[str, str]] = [
     # 揀/棟：vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」
     # 对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。
     ("揀", "棟"),
+    # 己/已、己/巳：vol01:21:3:19 实锤（因己身→人裁误判巳，align/图块
+    # 目视核对后改判己）。与下面 已/巳 不同——己是**真的另一个字**
+    # （自己 vs 已经/地支），不是同词异写，字形层同样要拦；但不进
+    # seeding.py 的 SEMANTIC_MERGED_PAIRS（上下文通道不豁免它）。
+    ("己", "已"), ("己", "巳"),
 ]
 
 _PARTNER: dict[str, set[str]] = {}
