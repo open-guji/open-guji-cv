@@ -5,7 +5,14 @@
 排列；判空格给灰色占位（真字被判空=漏切，在流里立刻现形）。
 
 用法：PYTHONPATH=. python scripts/build_patch_review.py \
-        --pages vol01:20-32 vol02:1-12 --quality 74 --out review_patches.json
+        --pages vol01:20-32 vol02:1-12 --out review_patches.json
+
+图块用**无损灰度 PNG**（2026-08-26 定）。曾用 JPEG q52：产物本身
+是二值图（中间灰只占 2.96%，全是抗锯齿边），JPEG 对这种内容既臃肿
+又生振铃——实测 300 块平均 3106 B/块，无损 PNG 只要 1038 B/块。
+整页 13.86MB → 4.63MB，而且用户看到的从此是**产物真实像素**，
+不再是压过一道的版本。审查页每存一次要整份重发布，页多大就传多大，
+所以编码效率直接决定「保存」有多慢。
 """
 
 from __future__ import annotations
@@ -33,17 +40,17 @@ def parse_pages(specs: list[str]) -> list[tuple[str, str]]:
     return out
 
 
-def _patch_cell(book: str, cid: str, lab: str, rec: dict, quality: int):
+def _patch_cell(book: str, cid: str, lab: str, rec: dict, quality: int = 0):
     p = Path("output") / book / "phase4_chars" / rec["patch_path"]
     img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
-    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    ok, buf = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
     # 只把**缺陷** flag 送进审查页：jiazhu 一类是版式标注，画成橙边
     # 只是让人白清一遍（2026-08-25 用户 r7）
     return {"id": cid, "lab": lab, "w": img.shape[1], "h": img.shape[0],
             "f": defect_flags(rec.get("flags")),
-            "src": "data:image/jpeg;base64," +
+            "src": "data:image/png;base64," +
                    base64.b64encode(buf.tobytes()).decode()}
 
 
@@ -119,7 +126,8 @@ def build_page(book: str, page: str, quality: int, index: dict):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pages", nargs="+", required=True)
-    ap.add_argument("--quality", type=int, default=74)
+    ap.add_argument("--quality", type=int, default=0,
+                    help="已废弃：图块改用无损 PNG，此参数不再有作用")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
