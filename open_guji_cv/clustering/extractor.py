@@ -525,7 +525,8 @@ def mask_frame_bars_outside(strip: np.ndarray,
                             local: list[tuple[int, float, float]],
                             lpad: int, rpad: int,
                             cell_h: float,
-                            right_ext: int = 0) -> np.ndarray:
+                            right_ext: int = 0,
+                            left_ext: int = 0) -> np.ndarray:
     """抹掉条带首/末端区里的版框横线**行**（用户审阅反馈的主病灶）。
 
     三道判据缺一不可：
@@ -544,23 +545,24 @@ def mask_frame_bars_outside(strip: np.ndarray,
     top = int(min(l for _, l, _ in local))
     bot = int(max(b for _, _, b in local))
     H, W = strip.shape
-    # 右缘救援外扩带（right_ext）不算「墙内空档」：那里按设计装着被救
-    # 回的穿边笔尖 + 磨损界行点渣。r11 实测 vol01/34「類」——底横的
-    # 笔尖伸进外扩带，被当成「横条填满右侧空档」的证据，整条底横带
-    # （30 行）被抹掉、字身裂成两半（红线）。取证窗与行墨统计都止步
-    # 于外扩前的裁切边。
+    # 左右缘救援外扩带（left_ext/right_ext）不算「墙内空档」：那里按
+    # 设计装着被救回的穿边笔尖 + 磨损界行点渣。r11 实测 vol01/34
+    # 「類」——底横的笔尖伸进右外扩带，被当成「横条填满右侧空档」的
+    # 证据，整条底横带（30 行）被抹掉、字身裂成两半（红线）。取证窗
+    # 与行墨统计都止步于外扩前的裁切边，两侧同理。
     We = max(0, W - right_ext)
-    la, lb = 0, max(0, min(lpad - 2, We))
+    Ws = min(left_ext, We)
+    la, lb = Ws, max(Ws, min(lpad - 2, We))
     ra, rb = min(We, rpad + 2), We
     if (lb - la) + (rb - ra) < 8:      # 没有空档可取证 → 保守不动
         return strip
     binary = (strip < BINARY_THRESHOLD_PATCH)
-    rowink = binary[:, :We].sum(axis=1)
+    rowink = binary[:, Ws:We].sum(axis=1)
     z = int(FRAME_BAR_ZONE * cell_h)
     zone = np.zeros(H, dtype=bool)
     zone[0:np.clip(top + z, 0, H)] = True
     zone[np.clip(bot - z, 0, H):H] = True
-    core = (rowink >= FRAME_BAR_ROW_T * We) & zone
+    core = (rowink >= FRAME_BAR_ROW_T * (We - Ws)) & zone
     if not core.any():
         return strip
     wiped = np.zeros(H, dtype=bool)
@@ -571,7 +573,7 @@ def mask_frame_bars_outside(strip: np.ndarray,
             wiped[y] = True
     if not wiped.any():
         return strip
-    soft = (rowink >= FRAME_BAR_SOFT_T * We) & zone
+    soft = (rowink >= FRAME_BAR_SOFT_T * (We - Ws)) & zone
     for _ in range(2):
         for y in np.flatnonzero(soft & ~wiped):
             if wiped[max(0, y - 3):y + 4].any():
@@ -858,6 +860,7 @@ SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是�
 # 外扩到组件尽头。带进来的界行残段由 strip_side_rule / _assign_column
 # 的竖线过滤收拾——它们已有独立回归（side-rule 分片）。
 RIGHT_RESCUE_MAX = 12      # 右缘外扩上限（px）
+LEFT_RESCUE_MAX = 12       # 左缘外扩上限（px）
 RIGHT_RESCUE_H = 30        # 穿边组件高度上限（超过是界行）
 RIGHT_RESCUE_AREA = 25     # 穿边组件面积下限（噪点）
 RIGHT_RESCUE_IN = 6        # 组件须从裁切边内这么深处伸出来（px）
@@ -885,6 +888,37 @@ def widen_right_for_crossing(page_img: np.ndarray, sx0: int, sx1: int,
         if x <= fence - RIGHT_RESCUE_IN and x + w >= fence + RIGHT_RESCUE_OUT:
             far = max(far, a + int(x + w) + 1)
     return min(far, sx1 + RIGHT_RESCUE_MAX, img_w)
+
+
+LEFT_RESCUE_W = 45         # 左缘穿边组件宽度上限：横向栏线/中缝线也会
+                           # 细着穿过左裁切边（h≤30 挡不住），但它们
+                           # 横贯整列（宽 ≫ 撇尖的 20~50px）且另一头
+                           # 伸出探测窗外。全书抽样：真撇尖 w≤45。
+
+
+def widen_left_for_crossing(page_img: np.ndarray, sx0: int, sx1: int,
+                            sy0: int, sy1: int) -> int:
+    """左缘镜像：撇尖/横尾穿过左裁切边 → 返回外扩后的 sx0。
+
+    与右缘同判据（穿边 ≥4px、连进格内 ≥6px、高 ≤30），另加两道
+    横条防线：宽 ≤LEFT_RESCUE_W，且不贴探测窗左缘（贴边=另一头在
+    窗外，是横贯的栏线不是笔尖——首版全书扫出 324 点，一半是栏线）。"""
+    if sx0 - RIGHT_RESCUE_OUT <= 0:
+        return sx0                      # 已到页缘
+    a = max(0, sx0 - LEFT_RESCUE_MAX - 2)
+    b = min(page_img.shape[1], sx0 + 40)
+    zone = (page_img[sy0:sy1, a:b] < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    fence = sx0 - a
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(zone, 8)
+    near = sx0
+    for k in range(1, n):
+        x, _y, w, h, area = st[k]
+        if (h > RIGHT_RESCUE_H or area < RIGHT_RESCUE_AREA
+                or w > LEFT_RESCUE_W or x <= 0):
+            continue
+        if x <= fence - RIGHT_RESCUE_OUT and x + w >= fence + RIGHT_RESCUE_IN:
+            near = min(near, a + int(x) - 1)
+    return max(near, sx0 - LEFT_RESCUE_MAX, 0)
 
 
 def strip_side_rule(patch: np.ndarray, x0: float,
@@ -970,6 +1004,8 @@ CARVE_NEAR_GAP = 1         # bbox 垂直间隙 < 此值的连通体并入字身�
 CARVE_DEBRIS_H = 10        # 可切连通体的高度上限（px）——版框线本来就薄
 CARVE_DEBRIS_AREA = 200    # 可切连通体的墨量上限（px）
 CARVE_MARGIN = 2           # 路径与字身下沿的余量（px）
+CARVE_KEEP_AREA = 60       # 字身外实体墨块并入保护的面积下限（px）
+CARVE_KEEP_D = 15          # ……且离被切端至少这么远（框渣都贴着端行）
 CARVE_STEP = 3             # 路径每列允许的纵向浮动（px）
 CARVE_CHAR = 400.0         # 禁区（字身及其上方）的代价
 CARVE_DEBRIS = 1.0         # 可穿墨（框渣）的代价
@@ -1027,6 +1063,16 @@ def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     body = _char_body(binary)
     if body is None:
         return patch
+    # 字身外的**实体墨块**也划进保护圈：左/右缘救回的断墨笔尖（「南」
+    # 顶横的左端，111px、离端 24px）与主体不连通，_char_body 罩不住，
+    # 寻径会从它旁边绕过去把它抹掉——left-cut 闸抓出的第 4 个对冲点
+    # （前三个：曲线掩膜、横条取证窗、边缘噪点门槛）。版框渣不会被
+    # 误保：版框带内缘钉桩后，框渣贴着被切的那一端（<CARVE_KEEP_D）。
+    n_cc, lab_cc, st_cc, _ = cv2.connectedComponentsWithStats(binary, 8)
+    for k in range(1, n_cc):
+        if (st_cc[k, 4] >= CARVE_KEEP_AREA
+                and st_cc[k, 1] + st_cc[k, 3] <= h - CARVE_KEEP_D):
+            body = body | (lab_cc == k)
     ys = np.arange(h)[:, None]
     has = body.any(axis=0)
     bot = np.where(has, np.where(body, ys, -1).max(axis=0), -1)
@@ -1403,7 +1449,8 @@ def _split_touching_curve(binary: np.ndarray,
 
 def _assign_column(col_gray: np.ndarray,
                    cells: list[tuple[int, float, float]],
-                   cell_h: float, col_w: float
+                   cell_h: float, col_w: float,
+                   left_ext: int = 0, right_ext: int = 0
                    ) -> tuple[dict[int, tuple[int, int, int, int]], np.ndarray]:
     """列内连通体按格位归属。
 
@@ -1466,7 +1513,16 @@ def _assign_column(col_gray: np.ndarray,
         interior = (x > INTERIOR_X_MARGIN
                     and x + cw < strip_w - INTERIOR_X_MARGIN
                     and not _near_line(y + ch / 2.0))
-        if area < (MIN_COMP_AREA_INTERIOR if interior else min_area):
+        # 左右缘救援带里的**穿边**碎片是刚救回来的笔尖（「南」顶横的
+        # 左端断墨成 60px 小块），不能再按边缘噪点门槛（79px）吃掉——
+        # 从救援带一直伸进原裁切边内的，按文字区门槛保。整体缩在带内
+        # 的照旧当渣（点渣清理已处理大半，这里兜漏网的）。
+        rescued = ((left_ext > 0 and x < left_ext
+                    and x + cw >= left_ext + 4)
+                   or (right_ext > 0 and x + cw > strip_w - right_ext
+                       and x <= strip_w - right_ext - 4))
+        if area < (MIN_COMP_AREA_INTERIOR if (interior or rescued)
+                   else min_area):
             continue
         if ch > RULE_H_RATIO * cell_h and cw <= RULE_W_RATIO * col_w:
             continue                                  # 界行/版框竖线
@@ -1821,6 +1877,10 @@ class CharExtractor:
                 page_img, sx0, sx1, sy0_pre, sy1_pre)
             right_delta = sx1_widened - sx1
             sx1 = sx1_widened
+            sx0_widened = widen_left_for_crossing(
+                page_img, sx0, sx1, sy0_pre, sy1_pre)
+            left_delta = sx0 - sx0_widened
+            sx0 = sx0_widened
             pad_y = cell_h_ref * self.padding_ratio
             sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
@@ -1835,16 +1895,20 @@ class CharExtractor:
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
             strip = page_img[sy0:sy1, sx0:sx1]
-            if right_delta > 0:
+            if right_delta > 0 or left_delta > 0:
                 # 外扩带进来的**非穿边**小组件只可能是界行点渣（磨损界行
                 # 是一串点，恰好整体落在原裁切边外侧）——清掉；穿边的
                 # 笔画（跨过原裁切边、连进格内）保留，这正是外扩的目的。
+                # 左右两侧同一逻辑镜像。
                 strip = strip.copy()
                 fence0 = (sx1 - right_delta) - sx0
                 bs = (strip < BINARY_THRESHOLD_PATCH).astype(np.uint8)
                 nrc, lrc, strc, _ = cv2.connectedComponentsWithStats(bs, 8)
                 for k in range(1, nrc):
-                    if strc[k, 0] >= fence0 - 1:
+                    if right_delta > 0 and strc[k, 0] >= fence0 - 1:
+                        strip[lrc == k] = 255
+                    elif (left_delta > 0
+                          and strc[k, 0] + strc[k, 2] <= left_delta + 1):
                         strip[lrc == k] = 255
             # 弯的界行：矩形裁不掉（线在不同高度处于不同 x），按切分给出的
             # **逐带裁切边**把墙外像素抹白。必须在归属之前做——弯线一旦
@@ -1857,9 +1921,9 @@ class CharExtractor:
                     rb = min(strip.shape[0], int(round(yb)) - sy0)
                     if rb <= ra:
                         continue
-                    ca = max(0, int(round(blx)) - sx0)
-                    # 右缘救援外扩了条带就同步放宽掩膜右界，别把刚救回的
-                    # 笔尖又涂白（带进来的界行归下游剥离，不归这里）
+                    # 左右缘救援外扩了条带就同步放宽掩膜边界，别把刚救回
+                    # 的笔尖又涂白（带进来的界行归下游剥离，不归这里）
+                    ca = max(0, int(round(blx)) - sx0 - left_delta)
                     cb = min(strip.shape[1],
                              int(round(brx)) - sx0 + right_delta)
                     if ca > 0:
@@ -1874,10 +1938,12 @@ class CharExtractor:
             strip = mask_frame_bars_outside(
                 strip, local, int(round(left_x)) - sx0,
                 int(round(right_x)) - sx0, cell_h_ref,
-                right_ext=right_delta)
+                right_ext=right_delta, left_ext=left_delta)
             if self.strategy == "component_owner":
                 boxes, owner = _assign_column(strip, local, cell_h_ref,
-                                              float(sx1 - sx0))
+                                              float(sx1 - sx0),
+                                              left_ext=left_delta,
+                                              right_ext=right_delta)
             else:
                 boxes, owner = {}, None
 
