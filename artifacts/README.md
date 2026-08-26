@@ -59,7 +59,7 @@
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **形近误判裁决台**（排序倒挂逐例人裁，手机优先，**页面自存**）| https://claude.ai/code/artifact/9e45a22b-da42-4bd5-9486-378fd714a80a | [match_inversion_review.html](match_inversion_review.html)（快照）· 卡集 [match_inversion_cards.jsonl](match_inversion_cards.jsonl) · 裁决 [match_inversion_verdicts.jsonl](match_inversion_verdicts.jsonl) | `scripts/eval_match_pairs.py ../open-guji-dataset/glyph-match/pairs --dump /tmp/pairs.npz` → `scripts/build_match_inversion_review.py --dump /tmp/pairs.npz` |
-| **形近对上下文消歧**（n-gram × 大模型 × 字形 × OCR 首轮实测）| https://claude.ai/code/artifact/f06d703d-0dab-4950-b130-09c87ae18882 | [confusable_context.html](confusable_context.html) · 测试集 `open-guji-dataset/confusable-context` | `scripts/build_confusable_set.py` → `eval_confusable_lm.py` → `score_confusable.py`（静态结果页，重测后手工更新数字）|
+| **形近对上下文消歧**（n-gram × 大模型 × 字形 × OCR，含已/巳改判复盘）| https://claude.ai/code/artifact/f06d703d-0dab-4950-b130-09c87ae18882 | [confusable_context.html](confusable_context.html) · 测试集 `open-guji-dataset/confusable-context` | `scripts/build_confusable_set.py` → `eval_confusable_lm.py` → `score_confusable.py`（静态结果页，重测后手工更新数字）。2026-08-26 二版：首轮「已/巳治不了」是金标被字形污染的假象（4 条按封口字形误判、1 条巳误判超出二元范围实为己），纠正后 n-gram 83% / 大模型 92% 均大胜字形层 67%；`SEMANTIC_MERGED_PAIRS` 已接进 `seeding.py` 生产准入 |
 
 triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标签没错」才收），
 扩集的瓶颈从来不是挖不到候选，是没人过目。本页挖的是 pairs 集里最尖锐的

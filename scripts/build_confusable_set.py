@@ -37,8 +37,17 @@ from open_guji_cv.clustering.match import NEVER_MATCH_FAMILIES
 MASK = "△"
 GAP = "·"          # 整理本参照里表示「这一位没有对应」的占位
 
+# 己 在 NEVER_MATCH_FAMILIES 里是给**字形层护栏**用的（vol01:21:3:19
+# 实锤过己会被认成已/巳）——但它是真的另一个字，不是同词异写，语境里
+# 「自己」和「已经/地支」本就不容易混，实测生成的题多数类基线 100%，
+# 没有真实歧义可测，进这个集只会掺水。这里单独摘掉，不影响 match.py
+# 的字形护栏（单一事实源仍是 NEVER_MATCH_FAMILIES，这里只筛生成范围）。
+_EXCLUDE_FROM_SET = {"己"}
+
 PARTNER: dict[str, set[str]] = {}
 for _a, _b in NEVER_MATCH_FAMILIES:
+    if _a in _EXCLUDE_FROM_SET or _b in _EXCLUDE_FROM_SET:
+        continue
     PARTNER.setdefault(_a, set()).add(_b)
     PARTNER.setdefault(_b, set()).add(_a)
 
