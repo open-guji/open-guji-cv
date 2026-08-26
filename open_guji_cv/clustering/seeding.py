@@ -474,8 +474,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     （GlyphDB.admit_instance 按 instance_id 判重），中途崩掉重跑安全。
     max_pages 限制**本次调用**处理的页数（已完成页不计）。
 
-    ``force_pages`` 里的页**即使 done 也重跑**（上游切分/载体/判据改过，
-    队列里的证据整页作废时用）。重跑不会毁掉人工成果：队列清理只删
+    ``force_pages`` 给了就**只跑这几页**（即使已 done），其余一律不碰——
+    定量重跑用：上游切分/载体/判据改过、或库长大了要刷新 match 快照。重跑不会毁掉人工成果：队列清理只删
     「机器可再生」的行，人裁过的行（confirmed / confirmed_label_only /
     rejected / 人工 not_a_char）原样留下，对应字位也跳过不再判——
     见 ``_is_human_decided``。
@@ -520,8 +520,18 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     progress.setdefault("prob_threshold", prob_threshold)
     page_state: dict = progress.setdefault("pages", {})
     force = set(force_pages or ())
-    todo = [p for p in all_pages
-            if p in force or not page_state.get(p, {}).get("done")]
+    if force:
+        # 给了 force_pages 就**只跑这几页**（2026-08-26 用户实锤）。
+        # 早先的语义是「追加到待办」——可待办本来就含全部没 seed 过的页，
+        # 于是「再匹配十页」跑成了 108 页 12 分钟。用户要的是定量重跑：
+        # 库每轮都在长，后面页的 match 快照迟早还要再刷一次，跑多了是白烧。
+        todo = [p for p in all_pages if p in force]
+        missing = force - set(all_pages)
+        if missing:
+            print(f"⚠ --force-pages 里这些页不在索引/页型筛选内，忽略："
+                  f"{sorted(missing, key=_page_key)}")
+    else:
+        todo = [p for p in all_pages if not page_state.get(p, {}).get("done")]
     skipped_done = len(all_pages) - len(todo)
     if max_pages is not None:
         todo = todo[:max_pages]

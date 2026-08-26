@@ -923,9 +923,10 @@ def main():
     p.add_argument("--max-pages", type=int, default=None,
                    help="本次最多处理的页数（断点续跑分批推进用）")
     p.add_argument("--force-pages", default=None,
-                   help="逗号分隔的页号：即使 progress.json 里已 done 也重跑"
-                        "（上游切分/载体/判据改过，队列证据整页作废时用）。"
-                        "人裁过的行不会被覆盖，那些字位本轮跳过")
+                   help="逗号分隔的页号：**只跑这几页**（即使已 done），"
+                        "其余一律不碰。定量重跑用——上游切分/载体/判据改过，"
+                        "或库长大了要刷新 match 快照。人裁过的行不会被覆盖，"
+                        "已进库的字位只复述不重判")
     p.add_argument("--prob-threshold", type=float, default=0.85,
                    help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
     p.add_argument("--edition", default=None,
