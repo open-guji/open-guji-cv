@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import multiprocessing as mp
 import os
-import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +50,14 @@ PITCH_MAX_DEV = 0.08       # 实测字距偏离投影共识超此 → 判为量�
 PAGE_PITCH_MIN_COLS = 5    # 本页至少这么多列量得出字距，才敢用页距
 PAGE_PITCH_MAD = 1.5       # 页内各列字距的中位绝对偏差上限（px）——散了说明量不稳
 PAGE_PITCH_DEV = 0.04      # 页距偏离书级共识超此比例 → 判为量错，回退书距
+# ……除非这一页的测量**硬得没话说**。4% 这条线是防「量错」的，可它不看
+# 测量质量：vol02/129 用 8 列量出 108.62、MAD 只有 0.20px，偏差 4.08%
+# ——差一点点被拒，于是整列按 113.25 排，20 格累积漂 60px，末字「畜」
+# 被格线拦腰切开（2026-08-26 自评 r2 实例）。测量够硬时把线放到 7%。
+OFFPAGE_KEEP = 0.5           # 格落在图内的比例低于此 → 判 empty（悬在页外）
+PAGE_PITCH_TIGHT_MAD = 0.6   # 页内各列字距 MAD ≤ 此值
+PAGE_PITCH_TIGHT_COLS = 6    # 且至少这么多列都量得出
+PAGE_PITCH_DEV_TIGHT = 0.07  # → 偏差上限放宽到这里
 PITCH_SEARCH = 0.10        # 字距候选的搜索半径（× 先验）。窗要窄到把 2 倍
                            # 谐波挡在外面，宽到覆盖投影拟合的系统偏差
 PITCH_STEP = 0.2           # 候选步长（px）
@@ -64,6 +71,22 @@ SNAP_RANGE = 0.10          # 每条格线的滑动半径（× 格高）。再大
                            # 邻格的空隙上去，把一个字整个让给隔壁
 SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于此说明这里
                            # 根本没有空隙，保持刚性位置
+# ── 骑线复切（刚性网格的第二意见）────────────────────────
+# 刚性网格只有「一个格高 + 一个相位」两个自由度，逐线吸附半径又只有
+# 0.10 格；列内字距真有累积漂移时（刻工手写上版，一列 20 字漂半格很常见）
+# 吸附够不着，格线就骑在字身上——r3 无偏抽样 6 个缺陷里 5 个是这一类
+# （上邻残留 / 跨格 / 两字一格 / 截断）。
+# 判据搬到图块之外：「线上墨 / 格心墨」是可直接量的**切分质量**，
+# 全书中位 0.38，骑线列显著更高。骑线才复切，切得干净的列一律不动。
+# 复切用弹性 DP（dp_boundaries，每格高度可 ±elastic 伸缩，全局最优），
+# 但必须**锚住首末线**：DP 若把整张网格整体滑掉半格，线上墨照样会降，
+# 那是把每个字都让给隔壁，比骑线更糟。
+# 名字别再叫 STRADDLE_OK/STRADDLE_GAIN——那两个名字下面 Pass 2b 已经占了
+# （页级骑线比门槛 / 绝对改善量），重名会被后面的赋值**静默覆盖**，
+# 采纳门槛会变成 0.10 而几乎全否。2026-08-26 踩过一次。
+RECUT_STRADDLE = 0.45      # 线上墨/格心墨 ≥ 此 → 这列骑线，试复切
+RECUT_ANCHOR = 0.30        # 复切后首/末线相对原位的位移上限（× 格高）
+RECUT_GAIN = 0.75          # 复切须把线上墨压到原来的此比例以下才采纳
 SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
 SNAP_TIGHT = 0.10          # 「无谷微挪」半径（× 格高，≈11px）。上下两字真连在
@@ -1336,12 +1359,73 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
     return snap_bounds_to_gaps(proj, bounds, cell_h) if snap else bounds
 
 
+def _line_center_ink(sm: np.ndarray,
+                     bounds: list[float]) -> tuple[float, float]:
+    """（内部格线上的平均墨，格中心的平均墨）。
+
+    首末线不计——它们贴版框，墨来自框而不是骑线，混进去会把每一列都
+    判成骑线。
+    """
+    L = len(sm)
+
+    def g(y: float) -> float:
+        return float(sm[min(max(int(round(y)), 0), L - 1)])
+
+    inner = bounds[1:-1]
+    if not inner or len(bounds) < 2:
+        return 0.0, 0.0
+    lv = float(np.mean([g(b) for b in inner]))
+    cv = float(np.mean([g((bounds[i] + bounds[i + 1]) / 2)
+                        for i in range(len(bounds) - 1)]))
+    return lv, cv
+
+
+def elastic_recut(proj: np.ndarray, bounds: list[float], cell_h: float,
+                  n_chars: int) -> tuple[list[float], bool, float | None]:
+    """刚性网格骑线时用弹性 DP 复切一遍，明显更干净**且没整体滑走**才换。
+
+    返回 (bounds, 是否换过, 复切**前**的骑线比)。判据与护栏见 RECUT_*
+    常量上方；第三项要存进列结果供 straddle_score 用，理由见那里。
+    """
+    if n_chars < 3 or cell_h <= 0 or len(bounds) != n_chars + 1:
+        return bounds, False, None
+    sm = _smooth(np.asarray(proj, dtype=float), cell_h)
+    lv, cv = _line_center_ink(sm, bounds)
+    if cv <= 1.0:
+        return bounds, False, None
+    pre = lv / cv
+    if lv <= RECUT_STRADDLE * cv:
+        return bounds, False, pre       # 切得干净，不动
+    alt = dp_boundaries(proj, cell_h, n_chars, phase_prior=bounds[0])
+    if len(alt) != n_chars + 1:
+        return bounds, False, pre
+    alt = snap_bounds_to_gaps(proj, alt, cell_h)
+    lim = RECUT_ANCHOR * cell_h
+    d0, d1 = abs(alt[0] - bounds[0]), abs(alt[-1] - bounds[-1])
+    lv2, _cv2 = _line_center_ink(sm, alt)
+    if os.environ.get("GUJI_RECUT_DEBUG"):
+        print(f"    [recut] n={n_chars} 骑线 {lv / cv:.3f} 线上 {lv:.1f}→{lv2:.1f}"
+              f" 首末位移 {d0:.0f}/{d1:.0f} 上限 {lim:.0f}", flush=True)
+    if d0 > lim or d1 > lim:
+        return bounds, False, pre       # 整体滑走了，不是复切是搬家
+    if lv2 > RECUT_GAIN * lv:
+        return bounds, False, pre       # 没有明显更干净，保持原判
+    return alt, True, pre
+
+
 def straddle_score(image: np.ndarray, result: dict) -> float:
     """骑线比：网格线上的墨 / 格中心的墨（逐列取中位）。
 
     这是切分质量的**直接**度量——字骑在格线上时线上墨接近格心墨
     （比值→1），对齐良好时线落字间空隙（比值→0.2±）。实测全书
-    中位 0.38，骑线页 >0.8。"""
+    中位 0.38，骑线页 >0.8。
+
+    列里有 `bounds_pre`（骑线复切**之前**的格线）时按那套格线量。
+    结构性对冲：这个分数同时是 Pass 2b「行相位重扫」的触发闸，而列级
+    复切正好会把它压下去——不隔开的话，几条列被局部救好就能把整页的
+    相位病瞒过去（2026-08-26 实测 vol02/102：复切采纳 3 列之后重扫不再
+    触发，该页另外 4 列骑线比从 0.20/0.51 涨到 0.40/0.96）。页级相位
+    该看的是**刚性网格对不对得上**，那正是复切前的值。"""
     if image.ndim == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # result 里的坐标在**去错切帧**，量图必须先摆到同一帧，否则列框会
@@ -1364,8 +1448,22 @@ def straddle_score(image: np.ndarray, result: dict) -> float:
         if sm.sum() < 1:
             continue
         L = len(sm)
-        lines = [int(c["y_top"]) for c in cells] + [int(cells[-1]["y_bottom"])]
-        centers = [int((c["y_top"] + c["y_bottom"]) / 2) for c in cells]
+        # 骑线复切换过格线的列，按**复切前**的格线量（见 docstring）。
+        # 必须用同一套公式重算，不能存一个别的口径的数字顶上来——
+        # 换口径会把**每一页**的分都挪一点，间接改掉 Pass 2b 的触发面
+        # （2026-08-26 实测 vol01/160、/195 相位就是这么被改坏的）。
+        pre = col.get("bounds_pre")
+        if pre:
+            lines = [int(round(v)) for v in pre]
+            centers = [int((lines[i] + lines[i + 1]) / 2)
+                       for i in range(len(lines) - 1)]
+        else:
+            # 没复切的列一个字节都别动：格中心仍按 cell 自己的上下沿取
+            # （弹性列 cells_from_components 切出来的格**不一定连续**，
+            #  按格线推中心会跨过空档，那是另一个量）
+            lines = [int(c["y_top"]) for c in cells] \
+                + [int(cells[-1]["y_bottom"])]
+            centers = [int((c["y_top"] + c["y_bottom"]) / 2) for c in cells]
         lv = float(np.mean([sm[min(max(y, 0), L - 1)] for y in lines]))
         cv_ = float(np.mean([sm[min(max(y, 0), L - 1)] for y in centers]))
         if cv_ > 1:
@@ -1573,6 +1671,16 @@ def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
         cells.append({"type": "margin", "y_top": 0.0, "y_bottom": bounds[0]})
     for i in range(n_chars):
         y0, y1 = bounds[i], bounds[i + 1]
+        # 悬在页外的格：刚性梳子按书级格高排，页面短一点点末格就整个吊
+        # 在图外（实测 11 页越界 20~108px）。格里没有像素就不可能有字，
+        # 却照样占一个格位、还会把真字挤到上一格里去（vol02/129「畜」
+        # 被拦腰切开就是这么来的）。落在图外过半的格直接判 empty。
+        if y1 - y0 > 0 and (min(y1, L) - max(y0, 0.0)) < OFFPAGE_KEEP * (y1 - y0):
+            cells.append({"type": "empty", "index": i,
+                          "y_top": y0, "y_bottom": y1,
+                          "offpage": True,
+                          "text": None, "confidence": 0.0})
+            continue
         ink = _junk_free_ink(col_gray[int(y0):int(y1)])
         if ink < params.empty_ink_ratio:
             cells.append({"type": "empty", "index": i,
@@ -2013,8 +2121,12 @@ def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
         return None
     med = float(np.median(ps))
     mad = float(np.median(np.abs(np.asarray(ps) - med)))
+    dev_lim = (PAGE_PITCH_DEV_TIGHT
+               if (mad <= PAGE_PITCH_TIGHT_MAD
+                   and len(ps) >= PAGE_PITCH_TIGHT_COLS)
+               else PAGE_PITCH_DEV)
     if mad > PAGE_PITCH_MAD \
-            or abs(med - consensus_h) > PAGE_PITCH_DEV * consensus_h \
+            or abs(med - consensus_h) > dev_lim * consensus_h \
             or abs(med - used_h) <= 0.5:
         return None
     redone = seg.segment_page(image, layout, cell_h_prior=med,
@@ -2355,6 +2467,14 @@ class GridSegmenter:
                     if layout == "elastic":
                         col_result["layout"] = "rigid"   # 判弹性但切不出 → 据实回落
                     bounds = rigid_bounds(proj, page_phase, cell_h, n)
+                    pre_bounds = list(bounds)
+                    bounds, recut, _pre = elastic_recut(
+                        proj, bounds, cell_h, n)
+                    if recut:
+                        col_result["elastic_recut"] = True
+                        # 页坐标；供 straddle_score 按复切前的格线量
+                        col_result["bounds_pre"] = [
+                            round(float(b) + y1, 1) for b in pre_bounds]
                     cells = cells_from_bounds(crop, bounds, self.params)
                 else:
                     col_result["spread_col"] = True
@@ -2493,8 +2613,12 @@ class GridSegmenter:
                     return consensus_h
                 med = float(np.median(ps))
                 mad = float(np.median(np.abs(np.asarray(ps) - med)))
+                dev_lim = (PAGE_PITCH_DEV_TIGHT
+                           if (mad <= PAGE_PITCH_TIGHT_MAD
+                               and len(ps) >= PAGE_PITCH_TIGHT_COLS)
+                           else PAGE_PITCH_DEV)
                 if mad > PAGE_PITCH_MAD \
-                        or abs(med - consensus_h) > PAGE_PITCH_DEV * consensus_h:
+                        or abs(med - consensus_h) > dev_lim * consensus_h:
                     return consensus_h
                 return med
 

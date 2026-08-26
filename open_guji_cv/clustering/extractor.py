@@ -66,6 +66,10 @@ FRAME_BAR_SOFT_T = 0.35    # 迟滞：确认行 ±3 行内 ≥ 此比例的行�
 FRAME_BAR_ZONE = 0.30      # 只看首格上沿 +/末格下沿 − 此比例 × 格高的端区
                            # （页级共识网格与本页物理框有相位差，横条常在
                            # 末格**内部**尾段，实测 vol02/136 在末线上方 25px）
+FRAME_BAR_GAP_FILL = 0.6   # 空档异常行：单侧空档被填满这个比例 → 横条候选
+FRAME_BAR_GAP_MED = 0.15   # ……但该侧空档**常年**墨率中位超此值就不算异常
+                           #   （界行竖线落在档里时每行都满，那是线不是条）
+FRAME_BAR_GAP_MAX_H = 0.35 # ……且异常连续段高 ≤ 此比例 × 格高（条是薄的，字不是）
 FRAME_BAR_SIDE_T = 0.5     # 「横条行」的定谳证据：**文字带两侧的墙内空档**
                            # 里该行的墨比 ≥ 此值。字的笔画到文字带边就停
                            # （「一/辶捺/灬底」都如此），空档里只有横条/
@@ -521,6 +525,22 @@ def _boundary_band_fracs(gray: np.ndarray) -> tuple[float, float]:
             int(binary[-band:].sum()) / total)
 
 
+def _runs(ys: np.ndarray) -> list[tuple[int, int]]:
+    """把递增行号切成连续段 [(起, 止), ...]（含两端）。"""
+    out: list[tuple[int, int]] = []
+    if not len(ys):
+        return out
+    s = p = int(ys[0])
+    for y in ys[1:]:
+        y = int(y)
+        if y != p + 1:
+            out.append((s, p))
+            s = y
+        p = y
+    out.append((s, p))
+    return out
+
+
 def mask_frame_bars_outside(strip: np.ndarray,
                             local: list[tuple[int, float, float]],
                             lpad: int, rpad: int,
@@ -562,8 +582,28 @@ def mask_frame_bars_outside(strip: np.ndarray,
     zone = np.zeros(H, dtype=bool)
     zone[0:np.clip(top + z, 0, H)] = True
     zone[np.clip(bot - z, 0, H):H] = True
+    # 空档异常行（2026-08-26 自评 r2 的无声漏网 vol01/48:3:0）：版框横条
+    # 常是**阶梯形**——一端厚一端薄。行墨门槛只抓得住薄段（横贯全宽），
+    # 厚段那几行行墨才 26% 条带宽，够不着 55%，于是厚块留在图块里、与字
+    # 连成一体，还不带任何旗。厚段的特征换个地方看就很显眼：它**把一侧
+    # 空档填满**，而空档常年是空的（该条实测中位 0.000、最大 0.83）。
+    # 用「本条自己的中位数」自归一，界行竖线落在档里的情形自动排除
+    # （那种每行都满，中位数就高）。再要求异常段**薄**，字不会中招。
+    gap_rows = np.zeros(H, dtype=bool)
+    for ga, gb in ((la, lb), (ra, rb)):
+        if gb - ga < 6:
+            continue
+        g = binary[:, ga:gb].mean(axis=1)
+        if float(np.median(g)) > FRAME_BAR_GAP_MED:
+            continue
+        ys = np.flatnonzero(g >= FRAME_BAR_GAP_FILL)
+        if not ys.size:
+            continue
+        for a, b in _runs(ys):
+            if b - a + 1 <= FRAME_BAR_GAP_MAX_H * cell_h:
+                gap_rows[a:b + 1] = True
     core = (rowink >= FRAME_BAR_ROW_T * (We - Ws)) & zone
-    if not core.any():
+    if not core.any() and not (gap_rows & zone).any():
         return strip
     wiped = np.zeros(H, dtype=bool)
     for y in np.flatnonzero(core):
@@ -571,7 +611,7 @@ def mask_frame_bars_outside(strip: np.ndarray,
         rf = float(binary[y, ra:rb].mean()) if rb > ra else 0.0
         if max(lf, rf) >= FRAME_BAR_SIDE_T:
             wiped[y] = True
-    if not wiped.any():
+    if not wiped.any() and not (gap_rows & zone).any():
         return strip
     soft = (rowink >= FRAME_BAR_SOFT_T * (We - Ws)) & zone
     for _ in range(2):
@@ -583,7 +623,23 @@ def mask_frame_bars_outside(strip: np.ndarray,
     # 高出带高 ≥6px 的 x 是贯穿笔画，保留；只有带内有墨的 x 是纯横条，
     # 抹。「只裁横条本身，不动与它连通的字」。
     out = strip.copy()
+    # 空档异常段：**不按行整抹**。厚条有十几行厚，行抹的穿行保护会把它
+    # 当成穿行笔画放过（保护门槛是「墨高出带高 6px」，条自己就够厚）。
+    # 改成在这几行的**横切片**里做连通体分析，只抹「从空档连出来」的那
+    # 一块——字的笔画到文字带边就停，不会从空档里长出来。
+    for ga, gb in _runs(np.flatnonzero(gap_rows & zone)):
+        slab = binary[ga:gb + 1]
+        ns, ls, sst, _ = cv2.connectedComponentsWithStats(
+            slab.astype(np.uint8), 8)
+        for k in range(1, ns):
+            x, _y, w, _h, _a = sst[k]
+            touches_gap = (x < lb and lb > la) or (x + w > ra and rb > ra)
+            if touches_gap:
+                out_slab = out[ga:gb + 1]
+                out_slab[ls == k] = 255
     ys = np.flatnonzero(wiped)
+    if not ys.size:
+        return out
     bands = []
     s = ys[0]
     for a, b2 in zip(ys, ys[1:]):
@@ -861,6 +917,18 @@ SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是�
 # 的竖线过滤收拾——它们已有独立回归（side-rule 分片）。
 RIGHT_RESCUE_MAX = 12      # 右缘外扩上限（px）
 LEFT_RESCUE_MAX = 12       # 左缘外扩上限（px）
+# 【负结果·勿重造】「碎裂闸」——按图块内碎块统计判「一地碎渣不是字」，
+# 2026-08-26 试过并**撤掉**。起因是 vol02/3 col1 底下一枚淡灰藏书印被
+# 二值化炸成椒盐，切成 5 个假字格。用 255 个干净字定标出的阈值
+# （小块<60px 计数 ≥8 且前 3 大连通体占墨 ≤0.80）在整册一放，除本页外
+# 另中 18 格，逐格放大**全是真字**（書內跛勞說補寶臺觀讀圖…）——笔画多
+# 的字本来就碎块多，这个统计量量的是**字繁不繁**，不是墨烂不烂。
+# 后续又量过笔画性（最长横/竖游程、开运算存活率、墨密度、笔宽），
+# 印区与真字**全部交叠**：印区 max(hrun,vrun) 0.25~0.67，真字 0.16~0.90。
+# 二值图上分不开的根因是灰度已丢：真墨近黑、印是中灰，`output/*.png`
+# 只有 0/255 两个值。要治得回到 s6 之前拿灰度做（印区局部对比度极低）。
+# 收益侧也不支持：全册正文这一类只有这 5 格（~0.003%），远低于误伤
+# 18 个真字的代价。真要做，先修灰度通道，别再在二值图上试统计闸。
 SLIVER_W_RATIO = 0.12      # 裁紧后宽度低于此比例 × 列宽 → 疑似界行残条
 SLIVER_ASPECT = 3.0        # ……且高 ≥ 此倍宽度（细长）才判，扁字不受影响
 RIGHT_RESCUE_H = 30        # 穿边组件高度上限（超过是界行）
