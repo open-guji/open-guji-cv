@@ -150,3 +150,22 @@ def test_persist_core_shared_with_seed_page():
     from open_guji_cv.clustering.review.persist_js import PERSIST_JS
     assert PERSIST_JS in seed_export._JS
     assert PERSIST_JS in collation_export._JS
+
+
+def test_view_position_tracked_continuously_not_only_at_publish():
+    """視圖位置要持續記錄，否則重載後 focus 會跳回發布那一刻的卡片。
+
+    2026-08-25 用戶實錘「focus 經常會自己跳到之前的某個地方」：publish 是
+    裁決後 6 秒防抖觸發、網絡再走幾秒，成功後 shell 才重載視圖——這段
+    飛行時間裡使用者早已往下審了好幾張，而 stash 只在 publishNow() 裡做
+    了一次，於是重載把人拽回發布那一刻。修法是滾動安定後就刷新 stash。
+    """
+    from open_guji_cv.clustering.review.persist_js import PERSIST_JS
+
+    # 滾動監聽存在，且走的是同一個 stashView
+    assert "addEventListener('scroll', trackView" in PERSIST_JS
+    assert "viewTimer = setTimeout(stashView, 200)" in PERSIST_JS
+    # 離頁/切走時也要落一次，別讓最後一段滾動丟掉
+    assert PERSIST_JS.count("saveLocal(); stashView();") >= 2
+    # 恢復時用存下的像素位置，不再用平滑 scrollIntoView 重算
+    assert "window.scrollTo(0, v.y)" in PERSIST_JS
