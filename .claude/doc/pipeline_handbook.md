@@ -231,6 +231,22 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    output/vol01 --dataset ../open-guji-dataset`。**必须在提交重切改动
    之前跑**（旧框/旧图块从 `--base`（缺省 HEAD）的 git 历史里捞，
    提交后 HEAD 就是新框了；补跑要 `--base` 指到重切前的提交）。
+4a. **用新库重匹配下一批页** ⚠（2026-08-26 用户定，**每轮必做**）：
+   队列行里的 `match` 是 seed 当时对**当时那个库**算的快照。这一轮刚
+   进库的字形，后面页的待审行根本没见过——「很多刚入库的都没用上」。
+   所以每轮入库之后，对**下一批要审的页**重跑：
+
+   ```bash
+   python -m open_guji_cv -o output seed vol01 --db output/glyph.db \
+     --corpus ... --force-pages 31,32,…,40      # 一次十页够了
+   ```
+
+   done 页也照跑，人裁行原样保留、已进库的字位只复述不重判（见
+   seeding.py 的 keep_ids / already_admitted）。**一次十页**是用户定的
+   节奏——反正每轮入库都要重来一次，跑多了是白烧。
+   与第 5 步的区别：`readjudicate_pending` 只拿**存量快照**按新规则复裁，
+   救不了「库变大了」；只有重跑 seed 才会重新查库。
+
 4b. **准入标定**：`PYTHONPATH=. python scripts/calibrate_admission.py
    output/vol01`——报待审里有多少按现行规则已能自动进（>0 就跑第 5 步
    回填）、人裁被拦行的 疑问×信号 聚类（放行规则候选从这里挑）。
@@ -252,6 +268,13 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    **同一个 artifact URL**（用户书签不换）。各页 URL 台账、快照与
    再生方法在 **[artifacts/README.md](../../artifacts/README.md)**，
    收尾时把最新 HTML 拷回快照目录一并提交。
+6b. **压库** ⚠：`PYTHONPATH=. python scripts/compact_glyph_db.py`
+   ——`derived.feat_hog` 是**无读者**的 HOG 缓存（`load_matcher_from_db`
+   只取 `norm`，`GlyphMatcher.add()` 自己算特征），却按每实例 ~7KB 写盘。
+   vol01 铺到 15008 条时它独占 100MB，把 glyph.db 顶到 179MB，
+   **超过 GitHub 单文件 100MB 硬上限、推送被 pre-receive 拒掉**
+   （2026-08-26 实锤）。压完 73MB。丢了安全：每次 admit / refresh 都会
+   重写，要用时自然重建。VACUUM 单独救不了——这库没有空闲页，大小是真的。
 7. **两仓库提交推送 + 主干同步**：output/glyph.db、queue.jsonl、
    index.jsonl、重切过的 patch 随 open-guji-cv 提交；expected.json +
    patches 随 open-guji-dataset 提交。库必须随推——其他分支在用。

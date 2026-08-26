@@ -955,3 +955,33 @@ def test_db_inconsistent_about_ocr_char_does_not_block_ref_weak():
         None, None, "詞", ["weak_single", "db_inconsistent"], vmap,
         match_candidates=[("詞", 1.0)])
     assert not ok
+
+
+def test_force_pages_runs_only_those_pages(tmp_path):
+    """--force-pages 给了就只跑这几页，不把「所有没 seed 过的页」捎上。
+
+    2026-08-26 实锤：用户要「再匹配十页」刷新 match 快照，旧语义是把
+    force 页**追加**进待办——而待办本来就含全部未 seed 页，结果跑了
+    108 页 12 分钟。库每轮都在长，后面页的快照迟早还要再刷，跑多了白烧。
+    """
+    book_dir, corpus_path, variants_path = build_book(tmp_path)
+    db = GlyphDB(tmp_path / "glyph.db")
+    try:
+        # 先只跑第 1 页，其余留作未 done
+        s1 = seed_book(book_dir, db, corpus_path, max_pages=1,
+                       variants=variants_path)
+        assert s1["pages_processed"] == 1
+        # force 第 1 页：只重跑它，不捎上 2~7 页
+        s2 = seed_book(book_dir, db, corpus_path, force_pages={"1"},
+                       variants=variants_path)
+        assert s2["pages_processed"] == 1
+        assert set(s2["per_page"]) == {"1"}
+        # force 两页（一页 done、一页没跑过）：正好这两页
+        s3 = seed_book(book_dir, db, corpus_path, force_pages={"1", "3"},
+                       variants=variants_path)
+        assert set(s3["per_page"]) == {"1", "3"}
+        # 不给 force：回到「跑所有未 done 页」的老behavior
+        s4 = seed_book(book_dir, db, corpus_path, variants=variants_path)
+        assert set(s4["per_page"]) >= {"2", "4", "5", "6", "7"}
+    finally:
+        db.close()
