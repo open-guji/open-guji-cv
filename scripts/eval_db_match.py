@@ -59,11 +59,15 @@ from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 
 
 # 已记账的金标标签问题（与 normalize 回归门的 known_defect 同思路：不进
-# 硬约束门，但每轮照报——金标修好后从这里删）。定性见 g3g4_error_analysis
+# 硬约束门，但每轮照报——**金标修好后从这里删**）。定性见 g3g4_error_analysis
 # §5 与 char-clustering README。
-KNOWN_GOLD_ISSUES: dict[str, str] = {
-    "vol01:23:7:12": "羣/詳：OCR 错认 + 语料邻近同字序 → spurious equal，金标为錯",
-}
+#
+# 2026-08-26 清空：里头唯一那条 `vol01:23:7:12`（羣/詳）根本不是这个实例的
+# 问题——错的是它匹配上的那条库内条目 `vol01:23:3:12`，那条 glyph-match/pairs
+# 早就按人裁改成「詳」了，char-clustering 这份漏同步。同源同图两个集标得不
+# 一样，在这里就表现为一条「已知金标问题」长期挂着豁免。豁免是记账，不是
+# 修理：金标错了就改金标（gold_sync_r1，连带 vol02:162:3:6 象→彖）。
+KNOWN_GOLD_ISSUES: dict[str, str] = {}
 
 
 def load_shard(samples_dir: Path, shard: str, include_excluded: bool = False):
