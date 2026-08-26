@@ -38,14 +38,22 @@ RANK = {s: i for i, s in enumerate(
      "skipped", "pending_review"))}
 
 
-def char_seq(index_path: Path) -> dict[str, int]:
-    """instance_id → 该字位在列内的 char 位次（1 起）。审查页的「第几字」
-    与 ``context.pos + 1`` 都必须等于它。"""
+def char_seq(index_path: Path) -> tuple[dict[str, int], set[str]]:
+    """→ (instance_id → 列内 char 位次（1 起）, index 里的全部 id)。
+
+    位次只按 char 格位数（与审查页的「第几字」、``context.pos + 1`` 同源）。
+    **幽灵行要按「id 在不在 index 里」判，不能按在不在 seq 里判**：切分层
+    可能把一个真字改判成 ``empty``（实锤 vol01:9:3:20「一」——单横字墨少，
+    ink_ratio 判据把它当空格位，而人裁确认是真字），那种行不是幽灵，是
+    **切分层的误判**，要留着并回流上游，删掉等于把证据也删了。
+    """
     by_col: dict[tuple, list] = defaultdict(list)
+    all_ids: set[str] = set()
     for line in index_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         d = json.loads(line)
+        all_ids.add(d["id"])
         if d.get("cell_type", "char") != "char":
             continue
         _, page, col, _ = d["id"].split(":")
@@ -54,7 +62,7 @@ def char_seq(index_path: Path) -> dict[str, int]:
     for group in by_col.values():
         for n, d in enumerate(sorted(group, key=lambda x: x["idx"]), 1):
             seq[d["id"]] = n
-    return seq
+    return seq, all_ids
 
 
 def main() -> None:
@@ -65,12 +73,15 @@ def main() -> None:
 
     book_dir = Path(args.book_out_dir)
     qp = book_dir / "phase9_seed" / "queue.jsonl"
-    seq = char_seq(book_dir / "phase4_chars" / "index.jsonl")
+    seq, all_ids = char_seq(book_dir / "phase4_chars" / "index.jsonl")
     rows = [json.loads(l) for l in qp.read_text(encoding="utf-8").splitlines()
             if l.strip()]
 
-    ghosts = [r for r in rows if r["instance_id"] not in seq]
-    live = [r for r in rows if r["instance_id"] in seq]
+    ghosts = [r for r in rows if r["instance_id"] not in all_ids]
+    live = [r for r in rows if r["instance_id"] in all_ids]
+    # 切分层把真字改判成非 char 的：留着并报出来（见 char_seq 的注释）
+    demoted = [r for r in live
+               if r["instance_id"] not in seq and r.get("decided_char")]
 
     best: dict[str, dict] = {}
     for r in live:
@@ -83,11 +94,17 @@ def main() -> None:
     stale_pages: Counter = Counter()
     for r in kept:
         pos = (r.get("context") or {}).get("pos")
+        if r["instance_id"] not in seq:
+            continue                       # 已被改判成非 char，位次无从谈起
         if pos is not None and pos != seq[r["instance_id"]] - 1:
             stale_pages[r["page"]] += 1
 
     print(f"{qp}：{len(rows)} 行")
     print(f"  幽灵行（id 不在 index 里）  {len(ghosts)}")
+    if demoted:
+        print(f"  ⚠ 切分层改判成非 char、却已被裁定为真字  {len(demoted)}"
+              f"（不删，回流切分层）："
+              f"{[(r['instance_id'], r['decided_char']) for r in demoted[:5]]}")
     print(f"  重号丢弃                    {dup_dropped}")
     print(f"  上下文错位（证据是旧切分算的）{sum(stale_pages.values())} 行，"
           f"分布在 {len(stale_pages)} 页")

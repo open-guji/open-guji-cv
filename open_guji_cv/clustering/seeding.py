@@ -323,7 +323,19 @@ def admission_decision(ocr: dict | None, align_char: str | None,
     # 免闸参考 × 库 top 一致（十七轮，25/25 @0.98）：无对齐的页（上谕/
     # 奏折补录）weak_single 几乎必然在场，此前它把 参考 × 库 双证据的路
     # 整个堵死。参考虽免闸（噪声大），但库形状 0.98 档同字时两路互证。
+    # db_inconsistent 判的是 **proposed**——无对齐时 proposed 退回 OCR 字，
+    # 这条疑问于是在说「这块图不像库里的 **OCR 字**」。本通道要进的却是
+    # 参考字，两者不同字时这句话与放行毫无关系，反而是「它不该是 OCR 字」
+    # 的旁证（用户 2026-08-25 实锤 vol01:22:5:4：OCR 司 18%、整理本 詞、
+    # 库 top 詞 cov 1.00，疑问 5 说的是「不像库里的司」——完全正确）。
+    # 与 signal_conflict 拦 match_replace 同一形态：疑问码描述 OCR，
+    # 而 OCR 不投票。放行的字自己不可能 db_inconsistent——库里最像它的
+    # 就是同字刻例，cov 还压着 0.98。
+    # 回放：@0.98 触发 25 → 38 全对（剔除自证行 32/32）。
     d_weak = {DOUBT_WEAK_SINGLE, DOUBT_DEGRADED_CROP}
+    if (align_char is None and ref_char is not None and ocr_char is not None
+            and vmap.semantic(ocr_char) != vmap.semantic(ref_char)):
+        d_weak = d_weak | {DOUBT_DB_INCONSISTENT}
     if align_char is None and ref_char is not None and doubts \
             and all(d in d_weak for d in doubts) and match_candidates:
         c1, cov1 = max(match_candidates, key=lambda t: t[1])
@@ -645,6 +657,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
 
     exclusions = load_exclusions()
     summary["n_excluded"] = 0
+    # 库里已进过的字位（任何通道）：重跑时只复述、不重判，见主循环注释
+    already_admitted: dict[str, tuple[str, str]] = {
+        r[0]: (r[1], r[2]) for r in db.conn.execute(
+            "SELECT instance_id, char, provenance FROM admissions")}
 
     doubt_counts: Counter = Counter()
     with open(queue_path, "a", encoding="utf-8") as qf:
@@ -659,6 +675,23 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             for rec in page_recs:
                 if rec.id in keep_ids:
                     continue            # 人裁过，队列里那行才是真源
+                if rec.id in already_admitted:
+                    # 库里已进过（上一轮任何通道），本轮判据即使不放行
+                    # 也不能把它降回待审——库不会因此撤条目，只会让队列与
+                    # 库分叉、把一个**已经进库**的字位再推给人审一遍。
+                    # 用户 2026-08-25 实锤 vol01:22:5:4（库内 provenance
+                    # =context，队列却是 pending_review）。
+                    item = SeedItem(
+                        instance_id=rec.id, book=book, page=page,
+                        col=rec.col, idx=rec.idx, patch_path=rec.patch_path,
+                        tier="clean", status=STATUS_AUTO,
+                        decided_char=already_admitted[rec.id][0],
+                        provenance=already_admitted[rec.id][1],
+                        note="already_in_db",
+                        context=slot_context(page, rec.col, rec.idx))
+                    qf.write(item.to_json() + "\n")
+                    n_auto += 1
+                    continue
                 # 排除名单（config/crop_exclusions.jsonl）：切坏/带残留的图块
                 # **不进库也不出审查卡**——用户 2026-08-25 定的口径，重扫前
                 # 一律保守处理。落一行 excluded 只为留账。
@@ -701,7 +734,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 tier = "clean" if q.tier == "clean" else "degraded"
                 intrusion = detect_intrusion(gray)
                 norm = normalize_patch(gray)
-                mr = matcher.match(norm)
+                # 摘掉自身：这个字位可能上一轮已进库，自比等于自证
+                mr = matcher.match(norm, exclude_id=rec.id)
 
                 c = carrier.get(rec.id)
                 ocr = ({"char": c["char"], "prob": float(c.get("prob", 0.0))}

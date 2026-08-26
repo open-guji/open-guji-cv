@@ -91,3 +91,33 @@ def test_evidence_serializes():
     d = m.match(_glyph(1)).to_dict()
     assert d["verdict"] == "same" and d["matched_id"] == "db:1"
     assert isinstance(d["candidates"], list) and d["n_verified"] >= 1
+
+
+def test_match_excludes_self():
+    """字位自己在库里时必须摘掉再比——自证不是证据。
+
+    2026-08-25 用户实锤 vol01:22:5:4：审查页显示「最近刻例 vol01:22:5:4
+    cov 1.00」，刻例编号与被审字位是同一个。进库通道的设计前提是「文本 ×
+    形状两路同源性为零」，自比把形状那一路变成「上次进库时定的字」，
+    独立性归零；match_solo（库 cov≥0.99 单独放行）更会被自证直接喂饱。
+    """
+    import numpy as np
+    from open_guji_cv.clustering.match import GlyphMatcher
+
+    rng = np.random.default_rng(3)
+    a = (rng.random((64, 64)) > 0.7).astype(np.uint8)
+    b = (rng.random((64, 64)) > 0.7).astype(np.uint8)
+    m = GlyphMatcher()
+    m.add("bk:1:1:1", "甲", a)
+    m.add("bk:1:1:2", "乙", b)
+
+    # 不摘：拿自己比自己，必然命中自己
+    assert m.match(a).matched_id == "bk:1:1:1"
+    # 摘掉自身：结果里不能再出现自己
+    r = m.match(a, exclude_id="bk:1:1:1")
+    assert r.matched_id != "bk:1:1:1"
+    assert all(c != "甲" for c, _ in (r.candidates or [])) or r.verdict != "same"
+    # 库里只有自己一条时，摘完就没得比了
+    solo = GlyphMatcher()
+    solo.add("bk:1:1:1", "甲", a)
+    assert solo.match(a, exclude_id="bk:1:1:1").verdict == "diff"
