@@ -596,7 +596,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
   font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5}
 .top{position:sticky;top:0;z-index:5;background:var(--paper);
   border-bottom:1px solid var(--line);padding:.6rem 1rem;
-  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline}
+  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline;
+  transition:transform .18s ease}
+/* 往下滚就把顶栏收起来（手机上它占掉小半屏），往上滚立刻回来 */
+.top[data-hide="1"]{transform:translateY(-100%)}
 .top h1{font-size:1.05rem;margin:0;letter-spacing:.1em}
 .top .prog{color:var(--muted);font-variant-numeric:tabular-nums}
 #save-status[data-bad="1"]{color:var(--seal-ink);background:var(--bad);
@@ -607,7 +610,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .6rem;cursor:pointer}
 .list{max-width:56rem;margin:0 auto;padding:1rem;display:flex;
   flex-direction:column;gap:.8rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;
+  scroll-margin-top:3.2rem}   /* 顶栏没收起时，别让它压住卡头 */
 .card.active{border-color:var(--seal);box-shadow:0 0 0 1px var(--seal)}
 .card>header{display:flex;gap:.7rem;align-items:baseline;flex-wrap:wrap;
   padding:.4rem .8rem;border-bottom:1px solid var(--line)}
@@ -723,6 +727,37 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   margin-top:.5rem}
 .rc-acts .rc-nudge{font-size:.78rem;padding:.15rem .45rem}
 .rc-info{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace}
+
+/* ── 手机端（≤640px）：整体缩一档，顶栏只留一行 ─────────────────────
+   用户 2026-08-26 在手机上实拍反馈：标题「vol01 种子审查 · 第41+…+50页」
+   在窄屏折成三行、加上两条进度与两个按钮，顶栏吃掉小半屏，而它在审字
+   时一个都用不上。做法：标题单行截断、字号统一降一档、图块与候选字
+   缩小，配合上面的 data-hide 滚动收起。 */
+@media (max-width: 640px){
+  body{font-size:.92rem}
+  .top{padding:.4rem .6rem;gap:.3rem .7rem}
+  .top h1{font-size:.82rem;letter-spacing:.02em;flex:1 1 100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .prog{font-size:.72rem}
+  .top button{font-size:.72rem;padding:.1rem .45rem}
+  .list{padding:.5rem;gap:.5rem}
+  .row{gap:.6rem;padding:.55rem}
+  .card>header{padding:.3rem .55rem;gap:.4rem}
+  .iid{font-size:.66rem}
+  .pos{font-size:.72rem}
+  .imgs img,.imgs .noimg{width:5.4rem;height:5.4rem}
+  .imgs figcaption{font-size:.62rem}
+  .main{min-width:0}
+  .cand{padding:.18rem .45rem;gap:.25rem}
+  .cand b{font-size:1.2rem}
+  .cand .gl{font-size:.64rem;max-width:8em}
+  .vtxt{font-size:.86rem;letter-spacing:.08em}
+  .evi{font-size:.82rem}
+  .other-in{font-size:.95rem;width:4em}
+  .other-ok,.nac,.skip,.noadm{font-size:.76rem}
+  .doubts{font-size:.74rem}
+  kbd{display:none}          /* 手机没键盘，快捷键提示纯占地方 */
+}
 """
 
 # 与 artifact_export._JS 同构的三层持久化 + 种子专用交互（单键 / 顺序前进）。
@@ -730,6 +765,31 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 _JS = """
 (function(){
 """ + PERSIST_JS + """
+
+  // ── 顶栏滚动收起 ──
+  // 手机上顶栏（标题 + 两条进度 + 两个按钮）占掉小半屏，审字时一个都用
+  // 不上。往下滚收起、往上滚立刻回来——回来的判据要宽松（往上挪一点就
+  // 显示），因为用户往上滚多半就是想看进度或按「复制记录」。
+  // 阈值 6px 是为了躲开 iOS 回弹与 scrollIntoView 的细微抖动。
+  (function(){
+    var bar = document.querySelector('.top');
+    if(!bar) return;
+    var last = window.scrollY || 0;
+    function onScroll(){
+      var y = window.scrollY || 0, dy = y - last;
+      if(Math.abs(dy) < 6) return;
+      last = y;
+      // 只有**往上滚**才强制显示——往上滚多半就是想看进度或按按钮。
+      // 往下滚越过两倍栏高才收起；没越过就**什么都不做**，不能强制显示：
+      // setActive 自动前进时会先显式收起，若这里抢着改回 0，顶栏又会
+      //压住卡头（用户 2026-08-26 报的正是这个）。
+      if(dy < 0){ bar.setAttribute('data-hide', '0'); return; }
+      if(y > bar.offsetHeight * 2) bar.setAttribute('data-hide', '1'); }
+    try { addEventListener('scroll', onScroll, {passive: true}); } catch(e){}
+    // 键盘前进/裁决时把它放回来，免得「已储存 N 条」被藏着看不见
+    document.addEventListener('keydown', function(){
+      bar.setAttribute('data-hide', '0'); });
+  })();
 
   // ── 卡片狀態 ──
   function cards(){ return list.querySelectorAll('.card'); }
@@ -772,8 +832,20 @@ _JS = """
   function setActive(card){
     var a = list.querySelector('.card.active');
     if(a && a !== card) a.classList.remove('active');
-    if(card){ card.classList.add('active');
-      card.scrollIntoView({block: 'center', behavior: 'smooth'}); } }
+    if(!card) return;
+    card.classList.add('active');
+    // 自动前进时把顶栏收起（用户 2026-08-26 手机实拍）：裁决完自动滚到
+    // 下一张，而 sticky 顶栏正压在卡片头上，要审的字被挡住。这一滚是
+    // 程序发起的、用户没在读顶栏，收掉最省事；他往上滚一下就回来。
+    var bar = document.querySelector('.top');
+    if(bar) bar.setAttribute('data-hide', '1');
+    // 卡片比视口还高时（手机上常见：图块 + 上下文条 + 候选 + 疑问）
+    // block:'center' 会把卡头顶出屏幕。这种就对齐到顶，保证「第几列第几
+    // 字 + 原图」先进视野——那才是判断的起点。
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var tall = card.getBoundingClientRect().height > vh * 0.8;
+    card.scrollIntoView({block: tall ? 'start' : 'center',
+                         behavior: 'smooth'}); }
   function advance(from){
     var cs = cards(), start = -1;
     for(var i = 0; i < cs.length; i++) if(cs[i] === from) start = i;
