@@ -87,6 +87,12 @@ SNAP_TIGHT_GAIN = 0.15     # 微挪至少要把切缝墨压低这么多（× 参
 WINDOW_MIN_RATIO = 0.90    # 窗口高 / (n × 书级格高) 低于此 → 判定窗口塌了
 WINDOW_STRADDLE_OK = 0.35  # 放开后骑线比只要不高于此就算合格（全书中位 0.38）
 WINDOW_STRADDLE_TOL = 0.05 # 或者：比原来糟不超过这么多也接受
+# 字格数不是可靠的采纳信号：网格骑在字上时一个字跨两格能数出**更多**
+# 「字格」（vol02/152 实测：错位版 158 格、对齐版 156 格——对的反而少）。
+# 真正的硬通货是**覆盖**：列带里的墨有多少落在 char 格之外。
+WINDOW_UNCOV_MIN = 0.02    # 旧结果未覆盖墨率至少这么多才谈得上「有字在窗外」
+WINDOW_UNCOV_HALVE = 0.5   # 放开后未覆盖墨率至少减半才算真捞回了字
+WINDOW_CELL_DROP = 8       # 走覆盖通道时字格数最多允许回落这么多
 PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
 RULE_IN_COL_T = 0.05       # rule_in_col 超此 → 页面自己报了「竖线落在列框里」，
                            # 即便所有参数都在共识容差内也要按共识先验重扫一次。
@@ -1907,11 +1913,36 @@ def _job_refit(seg: "GridSegmenter", img_path: str, layout: dict, kw: dict):
     return seg.segment_page(image, layout, **kw)
 
 
+def _uncovered_ink(image: np.ndarray, res: dict) -> float:
+    """列带里的墨，有多少落在 char 格**之外**（比例，0=全覆盖）。
+
+    这是窗口救援的采纳硬通货：窗口塌掉的页，窗外的字全在 char 格之外；
+    网格错位的页，字骑在格线上仍算「覆盖」，但那由骑线比把关——两个量
+    各管一头，不重复。"""
+    g = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    g = deshear(g, res.get("grid", {}).get("shear", 0.0))
+    tot = cov = 0.0
+    for col in res.get("columns") or []:
+        cells = [c for c in col.get("cells", []) if c.get("type") == "char"]
+        x0 = max(0, int(col["left_x"]) + 2)
+        x1 = min(g.shape[1], int(col["right_x"]) - 2)
+        if x1 - x0 < 8:
+            continue
+        proj = column_projection(g[:, x0:x1])
+        L = len(proj)
+        tot += float(proj.sum())
+        m = np.zeros(L, bool)
+        for c in cells:
+            m[max(0, int(c["y_top"])):min(L, int(c["y_bottom"]))] = True
+        cov += float(proj[m].sum())
+    return 1 - cov / tot if tot else 0.0
+
+
 def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
               cur: dict, kw: dict):
     """Pass 2a4 单页：窗口整页放开重扫，择优在本函数里做完（要读像素）。
 
-    返回 (redone, n_old, n_new, sc_old, sc_new) 或 None。
+    返回 (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new) 或 None。
     """
     image = imread(img_path)
     if image is None:
@@ -1925,7 +1956,9 @@ def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
                 for x in c.get("cells", []) if x.get("type") == "char")
     sc_old = straddle_score(image, cur)
     sc_new = straddle_score(image, redone)
-    return redone, n_old, n_new, sc_old, sc_new
+    uc_old = _uncovered_ink(image, cur)
+    uc_new = _uncovered_ink(image, redone)
+    return redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new
 
 
 def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
@@ -2493,11 +2526,18 @@ class GridSegmenter:
                 for (stem, _, _), out in zip(cand, outs):
                     if out is None:
                         continue
-                    redone, n_old, n_new, sc_old, sc_new = out
-                    # never-make-worse：字格要真的多出来，且骑线比要么
-                    # 本身合格、要么没比原来糟多少。只多一两格不值得动
-                    # （那多半是噪声格），要求至少多一格且不是负增长。
-                    if n_new <= n_old:
+                    redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new = out
+                    # never-make-worse，两条采纳通道：
+                    # ① 字格真的多出来（窗外整片文字被捞回）；
+                    # ② 覆盖显著变好——旧结果有 ≥WINDOW_UNCOV_MIN 的墨落在
+                    #    char 格之外，放开后至少减半，且字格数没塌
+                    #    （vol02/152 型：错位版靠一字跨两格反而数出更多格，
+                    #    字格数在这里是**反向**信号，不能当硬门槛）。
+                    more_cells = n_new > n_old
+                    better_cover = (uc_old >= WINDOW_UNCOV_MIN
+                                    and uc_new <= uc_old * WINDOW_UNCOV_HALVE
+                                    and n_new >= n_old - WINDOW_CELL_DROP)
+                    if not (more_cells or better_cover):
                         continue
                     if not (sc_new <= WINDOW_STRADDLE_OK
                             or sc_new <= sc_old + WINDOW_STRADDLE_TOL):
