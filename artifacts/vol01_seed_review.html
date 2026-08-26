@@ -27,7 +27,10 @@ body{margin:0;background:var(--paper);color:var(--ink);
   font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5}
 .top{position:sticky;top:0;z-index:5;background:var(--paper);
   border-bottom:1px solid var(--line);padding:.6rem 1rem;
-  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline}
+  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline;
+  transition:transform .18s ease}
+/* 往下滚就把顶栏收起来（手机上它占掉小半屏），往上滚立刻回来 */
+.top[data-hide="1"]{transform:translateY(-100%)}
 .top h1{font-size:1.05rem;margin:0;letter-spacing:.1em}
 .top .prog{color:var(--muted);font-variant-numeric:tabular-nums}
 #save-status[data-bad="1"]{color:var(--seal-ink);background:var(--bad);
@@ -154,34 +157,47 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   margin-top:.5rem}
 .rc-acts .rc-nudge{font-size:.78rem;padding:.15rem .45rem}
 .rc-info{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace}
+
+/* ── 手机端（≤640px）：整体缩一档，顶栏只留一行 ─────────────────────
+   用户 2026-08-26 在手机上实拍反馈：标题「vol01 种子审查 · 第41+…+50页」
+   在窄屏折成三行、加上两条进度与两个按钮，顶栏吃掉小半屏，而它在审字
+   时一个都用不上。做法：标题单行截断、字号统一降一档、图块与候选字
+   缩小，配合上面的 data-hide 滚动收起。 */
+@media (max-width: 640px){
+  body{font-size:.92rem}
+  .top{padding:.4rem .6rem;gap:.3rem .7rem}
+  .top h1{font-size:.82rem;letter-spacing:.02em;flex:1 1 100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .prog{font-size:.72rem}
+  .top button{font-size:.72rem;padding:.1rem .45rem}
+  .list{padding:.5rem;gap:.5rem}
+  .row{gap:.6rem;padding:.55rem}
+  .card>header{padding:.3rem .55rem;gap:.4rem}
+  .iid{font-size:.66rem}
+  .pos{font-size:.72rem}
+  .imgs img,.imgs .noimg{width:5.4rem;height:5.4rem}
+  .imgs figcaption{font-size:.62rem}
+  .main{min-width:0}
+  .cand{padding:.18rem .45rem;gap:.25rem}
+  .cand b{font-size:1.2rem}
+  .cand .gl{font-size:.64rem;max-width:8em}
+  .vtxt{font-size:.86rem;letter-spacing:.08em}
+  .evi{font-size:.82rem}
+  .other-in{font-size:.95rem;width:4em}
+  .other-ok,.nac,.skip,.noadm{font-size:.76rem}
+  .doubts{font-size:.74rem}
+  kbd{display:none}          /* 手机没键盘，快捷键提示纯占地方 */
+}
 </style>
 <header class="top">
 <h1>vol01 种子审查 · 第41+42+43+44+45+46+47+48+49+50页</h1>
-<span class="prog" id="prog">本頁 1386 / 1579</span>
-<span class="prog" id="bookprog">全書 15235 / 16964</span>
+<span class="prog" id="prog">本頁 1387 / 1579</span>
+<span class="prog" id="bookprog">全書 15228 / 16947</span>
 <span class="prog" id="save-status"></span>
 <button type="button" id="copybar" data-pending="0">尚無記錄</button>
 <button type="button" id="dl">下載存檔</button>
 </header>
 <main class="list" id="list">
-<article class="card" data-iid="vol01:41:1:9" data-state="open">
-<header><span class="iid">vol01:41:1:9</span>
-<span class="pos">第1列第9字</span>
-<span class="chosen" data-slot="chosen"></span>
-<button type="button" class="reopen">改</button></header>
-<div class="row">
-<div class="imgs"><figure class="orig"><img src="data:image/png;base64,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" alt="原图"><figcaption>原图</figcaption></figure><div class="ctx"><div class="vline"><span class="vlab">OCR</span><div class="vtxt"><span class="ell">⋮</span><span>詳</span><span>明</span><span>劃</span><span>切</span><span>又</span><b class="cur">侯</b><span>震</span><span>腸</span><span>天</span><span>垣</span><span>疏</span><span class="ell">⋮</span></div></div><div class="vline"><span class="vlab">整理本</span><div class="vtxt"><span class="ell">⋮</span><span>詳</span><span>明</span><span>剴</span><span>切</span><span>又</span><b class="cur">侯</b><span>震</span><span>暘</span><span>天</span><span>垣</span><span>疏</span><span class="ell">⋮</span></div></div></div></div>
-<div class="main">
-<div class="cands"><button type="button" class="cand" data-char="侯"><kbd>1</kbd><b>侯</b><span class="tag t-hint">hóu 諸侯</span><span class="tag t-prop">拟</span><span class="tag t-ref">整理本</span><span class="tag t-ocr">OCR 51%</span><span class="tag t-eq">对齐·equal</span><span class="gl" title="〔名〕中國古代五等爵位的第二等。">〔名〕中國古代五等爵位的第二等。</span></button><button type="button" class="cand" data-char="候"><kbd>2</kbd><b>候</b><span class="tag t-hint">hòu 時候</span><span class="tag t-db">库 0.97</span><span class="gl" title="〔動〕偵察、探察。">〔動〕偵察、探察。</span></button><button type="button" class="cand" data-char="俟"><kbd>3</kbd><b>俟</b><span class="tag t-db">库 0.94</span><span class="gl" title="參見「万俟」條。">參見「万俟」條。</span></button>
-<span class="other"><input class="other-in" maxlength="4" placeholder="手输正字">
-<button type="button" class="other-ok">确定</button></span>
-<button type="button" class="recrop-open" title="切分错位时改框重裁">重切</button><span class="tag" data-slot="rcdone"></span>
-<button type="button" class="nac"><kbd>N</kbd>非字</button>
-<button type="button" class="skip"><kbd>S</kbd>存疑跳过</button>
-<button type="button" class="noadm" title="图块混有无法剥离的残余时：确认的字只进标注结果，字形不进库当匹配范例"><kbd>B</kbd>字形不入库</button></div>
-<div class="evi"><div class="evi-row"><span class="evi-k">OCR</span><span class="chip">侯<small>51%</small></span></div><div class="evi-row"><span class="evi-k">整理本</span><span class="chip">侯</span><span class="tag t-eq">equal</span></div><div class="evi-row"><span class="evi-k">库内</span><span class="chip">候<small>cov 0.97</small></span><span class="chip">俟<small>cov 0.94</small></span></div><ul class="doubts"><li><b>疑问4</b> <code>near_form</code> 形近字家族成员，两个信号源都容易犯同样的错</li></ul></div>
-<div class="recrop" data-slot="recrop" data-ox="1363" data-oy="959" data-rw="301" data-rh="332" data-bbox="[1473.0, 1069.0, 1624.0, 1181.0]"><div class="rc-side"><div class="rc-wrap" data-slot="rcwrap"><img src="data:image/png;base64,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" alt="页图区域" draggable="false"><div class="rc-box" data-slot="rcbox"><i class="rc-h" data-e="n"></i><i class="rc-h" data-e="s"></i><i class="rc-h" data-e="w"></i><i class="rc-h" data-e="e"></i></div></div><div class="rc-prev"><canvas data-slot="rcprev" width="128" height="128"></canvas><span class="lab">重切预览</span></div></div><div class="rc-acts"><span class="hint">拖框移动、拖四边把手改大小；也可用</span><button type="button" class="rc-nudge" data-d="up">↑ 整体上移</button><button type="button" class="rc-nudge" data-d="down">↓ 下移</button><button type="button" class="rc-nudge" data-d="reset">复位</button><button type="button" class="rc-ok">确认重切</button><button type="button" class="rc-cancel">取消</button><span class="rc-info" data-slot="rcinfo"></span><span class="rc-info" data-slot="rcdone" style="color:var(--done)"></span></div></div>
-</div></div></article>
 <article class="card" data-iid="vol01:41:1:11" data-state="open">
 <header><span class="iid">vol01:41:1:11</span>
 <span class="pos">第1列第11字</span>
@@ -2531,12 +2547,12 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 停手約 6 秒自動儲存（儲存瞬間頁面會刷新一下，位置自動接續），關頁重開會自動恢復。
 審完後告訴 Claude 一聲即可——裁決已隨頁面儲存，Claude 能直接讀取；
 「複製記錄」是不依賴任何平台功能的兜底路徑。
-尚有待審頁：26(1)、27(1)、32(1)、38(1)、41(10)、42(7)、43(5)、44(6)、45(3)、46(11)、47(18)、48(10)</p>
+尚有待審頁：26(1)、27(1)、32(1)、38(1)、41(9)、42(7)、43(5)、44(6)、45(3)、46(11)、47(18)、48(10)</p>
 <details><summary>事件日誌（審查記錄，可全選複製）</summary>
-<pre class="log" id="guji-log" data-seq="0" data-batch="vol01-seed-41+42+43+44+45+46+47+48+49+50-70f0d2cb"></pre>
+<pre class="log" id="guji-log" data-seq="0" data-batch="vol01-seed-41+42+43+44+45+46+47+48+49+50-dc29f3e0"></pre>
 </details>
 </footer>
-<script>var BATCH = "vol01-seed-41+42+43+44+45+46+47+48+49+50-70f0d2cb";var PAGE_TOTAL = 1579;var PAGE_DONE = 1386;var BOOK_TOTAL = 16964;var BOOK_DONE = 15235;
+<script>var BATCH = "vol01-seed-41+42+43+44+45+46+47+48+49+50-dc29f3e0";var PAGE_TOTAL = 1579;var PAGE_DONE = 1387;var BOOK_TOTAL = 16947;var BOOK_DONE = 15228;
 (function(){
   var log = document.getElementById('guji-log');
   var list = document.getElementById('list');
@@ -2681,6 +2697,28 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
     ev.ts = new Date().toISOString().slice(0, 19) + '+00:00';
     log.textContent += PREFIX + ' ' + JSON.stringify(ev) + '\n';
     saveLocal(); schedulePublish(); progress(); refreshBar(); }
+
+  // ── 顶栏滚动收起 ──
+  // 手机上顶栏（标题 + 两条进度 + 两个按钮）占掉小半屏，审字时一个都用
+  // 不上。往下滚收起、往上滚立刻回来——回来的判据要宽松（往上挪一点就
+  // 显示），因为用户往上滚多半就是想看进度或按「复制记录」。
+  // 阈值 6px 是为了躲开 iOS 回弹与 scrollIntoView 的细微抖动。
+  (function(){
+    var bar = document.querySelector('.top');
+    if(!bar) return;
+    var last = window.scrollY || 0;
+    function onScroll(){
+      var y = window.scrollY || 0, dy = y - last;
+      if(Math.abs(dy) < 6) return;
+      // 顶部一小段永远显示；越过一屏高度才允许收起
+      bar.setAttribute('data-hide',
+        (dy > 0 && y > bar.offsetHeight * 2) ? '1' : '0');
+      last = y; }
+    try { addEventListener('scroll', onScroll, {passive: true}); } catch(e){}
+    // 键盘前进/裁决时把它放回来，免得「已储存 N 条」被藏着看不见
+    document.addEventListener('keydown', function(){
+      bar.setAttribute('data-hide', '0'); });
+  })();
 
   // ── 卡片狀態 ──
   function cards(){ return list.querySelectorAll('.card'); }

@@ -388,3 +388,31 @@ def test_stale_context_is_dropped_not_rendered():
     assert _checked_context(it, 4) == it.context      # pos == seq-1 → 留
     assert _checked_context(it, 3) is None            # 错一位 → 摘
     assert _checked_context(it, None) == it.context   # 没有 index 就别管
+
+
+def test_mobile_shrink_and_scroll_hide_top_bar():
+    """手机端：字号缩一档 + 顶栏滚动收起。
+
+    用户 2026-08-26 手机实拍反馈：标题「vol01 种子审查 · 第41+…+50页」
+    在窄屏折成三行，加上两条进度与两个按钮，顶栏吃掉小半屏——而审字时
+    这些一个都用不上。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    # 手机断点存在，且标题单行截断（不折成三行）
+    assert "@media (max-width: 640px)" in html
+    assert "text-overflow:ellipsis" in html
+    # 顶栏可收起：样式 + 驱动它的滚动逻辑，缺一不可
+    assert '.top[data-hide="1"]{transform:translateY(-100%)}' in html
+    assert "bar.setAttribute('data-hide'" in html
+    # 往上滚要能回来（收起只在 dy>0 时）
+    assert "dy > 0 && y > bar.offsetHeight" in html
