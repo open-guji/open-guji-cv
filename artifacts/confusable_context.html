@@ -1,0 +1,332 @@
+<title>入還是人</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#f6f2e8; --card:#fffdf7; --ink:#1d1a15; --ink-2:#4a453b;
+  --mute:#8b8474; --rule:#ddd5c4; --rule-2:#ebe4d5;
+  --indigo:#2c5a75; --indigo-soft:#e2ecf1;
+  --vermil:#b03b2a; --vermil-soft:#f6e3de;
+  --ok:#4d6b3f; --warn:#9a7420;
+  --shadow:0 1px 2px rgba(29,26,21,.05),0 8px 24px -16px rgba(29,26,21,.3);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#16151a; --card:#1e1d23; --ink:#eae4d7; --ink-2:#b8b2a4;
+    --mute:#807a6e; --rule:#33313a; --rule-2:#2a2830;
+    --indigo:#7fb4d1; --indigo-soft:#1d2c36;
+    --vermil:#e07a66; --vermil-soft:#33201c;
+    --ok:#9dbb8b; --warn:#d3a951;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#16151a; --card:#1e1d23; --ink:#eae4d7; --ink-2:#b8b2a4;
+  --mute:#807a6e; --rule:#33313a; --rule-2:#2a2830;
+  --indigo:#7fb4d1; --indigo-soft:#1d2c36;
+  --vermil:#e07a66; --vermil-soft:#33201c;
+  --ok:#9dbb8b; --warn:#d3a951;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -16px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC",system-ui,-apple-system,sans-serif;
+  font-size:16px; line-height:1.72; overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:60rem;margin:0 auto;padding:0 1.5rem 6rem}
+h1,h2,h3{font-family:"Noto Serif TC",Georgia,serif;text-wrap:balance;margin:0}
+h1{font-weight:900;font-size:clamp(2.4rem,7vw,3.9rem);line-height:1.08;letter-spacing:.01em}
+h2{font-weight:600;font-size:1.5rem;line-height:1.3}
+h3{font-weight:600;font-size:1.05rem;line-height:1.4}
+p{margin:0}
+a{color:var(--indigo)}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--mute);
+}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* ── 抬头 ───────────────────────────────── */
+header{padding:5rem 0 3rem;display:flex;flex-direction:column;gap:1.6rem}
+.glyphduo{
+  display:flex;align-items:baseline;gap:.1em;
+  font-family:"Noto Serif TC",serif;font-weight:900;
+  font-size:clamp(4rem,17vw,8.5rem);line-height:.86;letter-spacing:-.02em;
+}
+.glyphduo .slash{font-size:.42em;color:var(--rule);font-weight:400;margin:0 .12em}
+.glyphduo em{font-style:normal;color:var(--indigo)}
+.lede{max-width:36rem;color:var(--ink-2);font-size:1.06rem}
+.verdict{
+  border-left:3px solid var(--indigo);padding:.1rem 0 .1rem 1.1rem;
+  max-width:38rem;font-size:1.06rem;
+}
+.verdict b{font-weight:700;color:var(--ink)}
+
+section{padding-top:3.6rem;display:flex;flex-direction:column;gap:1.25rem}
+.sechead{display:flex;flex-direction:column;gap:.3rem;
+  border-top:1px solid var(--rule);padding-top:1.1rem}
+.body-copy{max-width:38rem;color:var(--ink-2)}
+
+/* ── 主表 ───────────────────────────────── */
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:34rem}
+th,td{text-align:right;padding:.6rem .55rem;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+thead th{
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--mute);
+  border-bottom:1px solid var(--rule);
+}
+tbody tr.hi td{background:var(--indigo-soft)}
+tbody tr.dim td{color:var(--mute)}
+tbody tr.base td{border-bottom:2px solid var(--rule)}
+td.v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.armname{font-weight:500}
+.armname small{display:block;font-weight:400;font-size:.76rem;color:var(--mute);line-height:1.35}
+.win{color:var(--indigo);font-weight:600}
+.lose{color:var(--vermil)}
+
+/* ── 逐对小卡 ────────────────────────────── */
+.pairgrid{display:grid;gap:.7rem;grid-template-columns:repeat(auto-fill,minmax(11.5rem,1fr))}
+.pair{
+  background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  padding:.8rem .85rem .9rem;display:flex;flex-direction:column;gap:.55rem;
+  box-shadow:var(--shadow);
+}
+.pair.dead{border-color:var(--vermil);background:var(--vermil-soft)}
+.pair-top{display:flex;align-items:baseline;justify-content:space-between;gap:.4rem}
+.pair-gl{font-family:"Noto Serif TC",serif;font-weight:600;font-size:1.7rem;line-height:1;letter-spacing:.06em}
+.pair-n{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--mute)}
+.bars{display:flex;flex-direction:column;gap:.28rem}
+.bar{display:grid;grid-template-columns:3.6rem 1fr 2.3rem;align-items:center;gap:.4rem;font-size:.68rem}
+.bar .lbl{color:var(--mute);font-size:.66rem;letter-spacing:.02em}
+.track{height:5px;background:var(--rule-2);border-radius:1px;overflow:hidden}
+.fill{height:100%;background:var(--mute);display:block}
+.fill.f-lm{background:var(--indigo)}
+.fill.f-llm{background:var(--ok)}
+.fill.f-shape{background:var(--mute)}
+.bar .pct{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
+
+/* ── 反例 ───────────────────────────────── */
+.counter{
+  background:var(--vermil-soft);border:1px solid var(--vermil);
+  border-radius:2px;padding:1.4rem 1.3rem;display:flex;flex-direction:column;gap:1rem;
+}
+.counter h3{color:var(--vermil)}
+.specimens{display:flex;gap:1.4rem;flex-wrap:wrap;align-items:stretch}
+/* 竖排看着更贴刻本，但可用的 CJK 字体缺 vmtx 竖排度量，writing-mode
+   会把整行压成零高度——宁可横排，也不发一个可能糊掉的版式 */
+.spec{display:flex;flex-direction:column;gap:.45rem;
+  background:var(--card);border:1px solid var(--rule);border-radius:1px;
+  padding:.9rem 1rem;flex:1 1 17rem;min-width:0}
+.line{font-family:"Noto Serif TC",serif;font-size:1.22rem;line-height:1.75;
+  letter-spacing:.12em;display:flex;flex-wrap:wrap}
+.line span{display:inline-block}
+.line mark{background:var(--vermil);color:var(--card);font-weight:900;
+  border-radius:1px;padding:0 .1em;margin:0 .06em}
+.spec .cap{font-family:"IBM Plex Mono",monospace;font-size:.7rem;
+  color:var(--mute);letter-spacing:.06em}
+
+/* ── 泄漏防线 ────────────────────────────── */
+.guards{display:grid;gap:.7rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
+.guard{background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  padding:1rem 1.05rem;display:flex;flex-direction:column;gap:.45rem;box-shadow:var(--shadow)}
+.guard .tag{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--vermil)}
+.guard p{font-size:.88rem;color:var(--ink-2);line-height:1.6}
+
+.callout{border:1px solid var(--rule);border-left:3px solid var(--warn);
+  background:var(--card);padding:1rem 1.15rem;border-radius:2px;
+  font-size:.92rem;color:var(--ink-2);max-width:44rem}
+.callout b{color:var(--ink)}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;
+  background:var(--rule-2);padding:.08em .34em;border-radius:2px}
+footer{margin-top:4.5rem;border-top:1px solid var(--rule);padding-top:1.2rem;
+  font-size:.82rem;color:var(--mute);display:flex;flex-direction:column;gap:.3rem}
+@media (max-width:640px){
+  .wrap{padding:0 1.1rem 4rem} header{padding:3rem 0 2rem}
+  .specimens{gap:1rem}
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">形近对消歧 · vol01 · 2026-08-26</div>
+  <div class="glyphduo"><em>入</em><span class="slash">/</span>人</div>
+  <p class="lede">刻本里有十几对字，字形层再准也分不开。用户问：能不能靠上下文？
+  两条路——n-gram 语言模型，和大模型直读。拿 155 条人裁金标盲测，两条都成立。</p>
+  <p class="verdict">剔除注定治不了的 已/巳 之后（n=142）：<b class="num">n-gram 96.5%</b>、
+  <b class="num">大模型 99.3%</b>，而字形层 top-1 只有 <b class="num">64.1%</b>、OCR
+  <b class="num">64.1%</b>。上下文不是锦上添花，是这一类字的主判据。</p>
+</header>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">主结果</div>
+    <h2>五条臂，同一批题</h2>
+  </div>
+  <p class="body-copy">题面把待定字位挖空，只给列内上下文与前后列，二选一。
+  「真难档」是整理本在该位没给答案的那些（脱字/异文/未覆盖），
+  上下文必须自己扛；「送分档」整理本给得出，但题面里一并挖掉了。</p>
+  <div class="scroller"><table>
+    <thead><tr><th>臂</th><th>真难档 n=27</th><th>送分档 n=115</th><th>合计 n=142</th></tr></thead>
+    <tbody>
+      <tr class="base"><td class="armname">多数类基线<small>每对按金标众数猜</small></td>
+        <td class="v">96.3%</td><td class="v">68.7%</td><td class="v">73.9%</td></tr>
+      <tr class="dim"><td class="armname">字形层 top-1<small>库匹配最高覆盖率</small></td>
+        <td class="v">70.4%</td><td class="v">62.6%</td><td class="v lose">64.1%</td></tr>
+      <tr class="dim"><td class="armname">OCR<small>PaddleOCR 单字</small></td>
+        <td class="v">55.6%</td><td class="v">66.1%</td><td class="v lose">64.1%</td></tr>
+      <tr class="hi"><td class="armname">n-gram(3)　留出<small>本书原文剔除后重训</small></td>
+        <td class="v">92.6%</td><td class="v">97.4%</td><td class="v win">96.5%</td></tr>
+      <tr><td class="armname">n-gram(3)　只用通用语料<small>完全不碰本书</small></td>
+        <td class="v">85.2%</td><td class="v">93.0%</td><td class="v">91.5%</td></tr>
+      <tr class="hi"><td class="armname">大模型（盲测）<small>只读上下文，不给字形信号</small></td>
+        <td class="v">96.3%</td><td class="v">100.0%</td><td class="v win">99.3%</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>为什么必须并列报多数类基线。</b>先验极不平衡——日 28 : 曰 1、
+  諭 32 : 論 15。真难档只有 27 题，其中多数类基线就有 96.3%，所以那一列的
+  绝对数字不能单独读；真正有判别力的是送分档那一列，它类别均衡得多
+  （人/入 20 题里多数类只占 50%），基线 68.7% 而两条上下文臂打到 97% 以上。</div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">逐对明细</div>
+    <h2>哪几对治得了</h2>
+  </div>
+  <p class="body-copy">用户点名的三对全在。<b>人/入</b>是最干净的一例：类别均衡、
+  OCR 掷硬币（50%）、字形层 64%，上下文两条臂都到 95%。<b>論/諭</b>的
+  OCR 只有 11%——不是不准，是系统性认反。</p>
+  <div class="pairgrid" id="pairs"></div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">反例</div>
+    <h2>已/巳：这一对根本不该问上下文</h2>
+  </div>
+  <div class="counter">
+    <h3>同一个词，刻工有时刻「巳」有时刻「已」</h3>
+    <div class="specimens">
+      <div class="spec">
+        <div class="line"><span>實在流傳</span><mark>巳</mark><span>久，尚可裒綴成編</span></div>
+        <div class="cap">[016] vol01:8:2:11 · 金标 巳</div>
+      </div>
+      <div class="spec">
+        <div class="line"><span>實在流傳</span><mark>已</mark><span>少，其書足資啓牖</span></div>
+        <div class="cap">[059] vol01:11:3:14 · 金标 已</div>
+      </div>
+      <div class="spec" style="flex:1 1 20rem;background:none;border:none;padding:.2rem 0">
+        <p style="font-size:.92rem;color:var(--ink-2)">语境同构，金标相反。这不是语义问题，
+        是<b>字形层</b>问题——任何上下文方法原理上都分不了。实测所有臂在这一对上都卡在 <span class="num">62~69%</span>，谁都没超过多数类基线。</p>
+        <p style="font-size:.92rem;color:var(--ink-2)"><code>config/variants/variants.json</code>
+        里 <code>已 → 巳</code> 早已登记为异体（hydzd/yitizi）：<b>语义层本来就归并了</b>，
+        剩下的只是「刻的是哪个形」，那是字形层与人的活。</p>
+      </div>
+    </div>
+    <p style="font-size:.92rem;color:var(--ink-2)">规矩：<b>新形近对进表之前先过一问</b>——
+    它是语义可分的，还是异体同词的？后者送进上下文通道是白费力气，
+    还会把一条本来干净的通道的精度拖下去。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">方法</div>
+    <h2>三道泄漏防线</h2>
+  </div>
+  <p class="body-copy">这套评测的可信度全在这三条上。任何一条没做，
+  数字都会虚高到没法用。</p>
+  <div class="guards">
+    <div class="guard">
+      <div class="tag">防线一</div>
+      <h3>金标只收人裁</h3>
+      <p>人是看着字形定的，与 n-gram、与整理本对齐通道都无关，是唯一对各臂都中立的真值。
+      自动进库的字多数由整理本锚定，拿它当金标去考一个在同一语料上训练的 LM，
+      等于让考生带着答案进考场。</p>
+    </div>
+    <div class="guard">
+      <div class="tag">防线二</div>
+      <h3>参照文本也挖空</h3>
+      <p>管线「没锚上」不等于整理本那一位是空的——实测 43 条难档里仍有
+      <span class="num">12</span> 条参照文本直接写着答案。两列按位等长对齐
+      （实测 161/161），所以同一个下标挖两次。</p>
+    </div>
+    <div class="guard">
+      <div class="tag">防线三</div>
+      <h3>n-gram 必须留出</h3>
+      <p>把所有测试列的整理本原文从训练语料里剔掉再训。不剔的话送分档是
+      <span class="num">100%</span>——那是把原文背下来了，不是学会了。
+      两个口径的落差就是记忆的贡献。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">落地</div>
+    <h2>怎么接进准入</h2>
+  </div>
+  <p class="body-copy">当前 vol01 待审 <span class="num">1311</span> 行里，
+  信号里带形近家族字的有 <span class="num">245</span> 行（19%），全都有上下文。
+  这是能直接兑现的人力。</p>
+  <div class="scroller"><table>
+    <thead><tr><th>n-gram margin 阈</th><th>覆盖</th><th>精度</th><th>错例</th></tr></thead>
+    <tbody>
+      <tr><td class="num">≥ 0</td><td class="v">100%</td><td class="v">96.5%</td><td class="v">5</td></tr>
+      <tr><td class="num">≥ 2.5</td><td class="v">92%</td><td class="v">98.5%</td><td class="v">2</td></tr>
+      <tr class="hi"><td class="num">≥ 3.0</td><td class="v">89%</td><td class="v win">99.2%</td><td class="v">1</td></tr>
+      <tr><td class="num">≥ 10</td><td class="v">70%</td><td class="v">99.0%</td><td class="v">1</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>但它不能单独当闸。</b>提高阈值到 margin ≥ 3 能把错例压到 1 条，
+  可再往上抬就压不动了——因为<b>残余那一错恰恰是高置信的</b>（margin
+  <span class="num">18.5</span>）。所以照本项目一贯的规矩办：上下文只作
+  <b>两条零同源证据</b>里的一条，要与字形层或 OCR 之一相合才放行，
+  不合就照旧送人审。</div>
+  <div class="callout" style="border-left-color:var(--vermil)"><b>反向发现：上下文能抓人裁的错。</b>
+  <code>vol01:42:7:10</code>「指摘利病至不憚再三<b>△</b>告」，人裁定的是「人」，
+  但 n-gram（margin 18.5）与大模型都高置信选「入」——「入告」出《尚书》，
+  是进言于君的成语。这一条已列入待复核，不是自动改判。</div>
+</section>
+
+<footer>
+  <div>测试集 <code>open-guji-dataset/confusable-context</code>（155 题，人裁金标，含答案与首轮各臂冻结基线）</div>
+  <div>复现 <code>scripts/build_confusable_set.py</code> → <code>eval_confusable_lm.py</code> → <code>score_confusable.py</code></div>
+</footer>
+</div>
+
+<script>
+const PAIRS = [
+  ["人/入",22,55,64,50,95,95],["論/諭",18,72,78,11,89,100],
+  ["大/太",16,88,81,100,100,100],["已/巳",13,62,62,69,62,69],
+  ["而/面",12,75,67,83,100,100],["遺/還",11,55,73,55,100,100],
+  ["未/末",11,73,64,91,100,100],["問/間",9,78,56,78,100,100],
+  ["日/曰",8,88,62,88,88,100],["曾/會",7,86,43,14,86,100],
+  ["過/選",6,50,50,100,100,100],["廣/贋",6,100,83,100,100,100],
+  ["圓/圖",5,100,60,0,100,100],["七/匕",5,100,60,80,100,100],
+  ["侯/候",4,50,0,100,100,100],["揀/棟",1,100,0,0,100,100],
+  ["夫/夬",1,100,0,100,100,100]
+];
+const ROWS = [["字形",3,"f-shape"],["OCR",4,"f-shape"],["n-gram",5,"f-lm"],["大模型",6,"f-llm"]];
+document.getElementById("pairs").innerHTML = PAIRS.map(p => `
+  <div class="pair${p[0]==="已/巳"?" dead":""}">
+    <div class="pair-top">
+      <span class="pair-gl">${p[0].replace("/"," / ")}</span>
+      <span class="pair-n">n=${p[1]}</span>
+    </div>
+    <div class="bars">${ROWS.map(([lbl,i,cls]) => `
+      <div class="bar">
+        <span class="lbl">${lbl}</span>
+        <span class="track"><span class="fill ${cls}" style="width:${p[i]}%"></span></span>
+        <span class="pct">${p[i]}%</span>
+      </div>`).join("")}
+    </div>
+  </div>`).join("");
+</script>
