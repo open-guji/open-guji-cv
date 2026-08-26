@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -90,6 +91,17 @@ class GlyphMatcher:
         self._patches: list[np.ndarray] = []
         self._feats: list[np.ndarray] = []
         self._char_set: set[str] = set()
+        # 护栏 1 要不要求「对家的字已经在库里」。
+        #
+        # 曾经要求过，是个**盲区**：库里有 千、没有 干 时，第一个 干 进来，
+        # 匹配判 same→千，而护栏去查「千 的对手 干 在不在库里」——不在，
+        # 于是不拦。可这正是会出错的那一刻：一个字**第一次出现**时，库里
+        # 只有它的形近对家，没有它自己。闸放到 0.97 实测，两条错配
+        # （vol01:43:1:4 干←千、vol02:145:6:17 長←畏）**全是这个形态**，
+        # 而 干/千、長/畏 两对在形近表里都在（0.999 / 0.9915），表没漏，
+        # 是这个 `& self._char_set` 把护栏关掉了。
+        # 默认改成不要求；GUJI_GUARD_IN_DB=1 可切回老行为做对照。
+        self.guard_needs_partner_in_db = os.environ.get("GUJI_GUARD_IN_DB") == "1"
 
     def __len__(self) -> int:
         return len(self._ids)
@@ -150,7 +162,9 @@ class GlyphMatcher:
                     "unsure", None, None, cov, wmax,
                     sorted(cands.items(), key=lambda t: -t[1]),
                     guard="conflict", n_verified=n_verified)
-            partners = _PARTNER.get(char, set()) & self._char_set
+            partners = _PARTNER.get(char, frozenset())
+            if self.guard_needs_partner_in_db:
+                partners = partners & self._char_set
             if partners:                                       # 护栏 1
                 for p in partners:
                     cands.setdefault(p, 0.0)

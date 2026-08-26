@@ -64,9 +64,28 @@ def test_never_match_family_demotes_to_unsure():
     assert cands[a] >= 0.992                # 命中方带真实 cov 先验
 
 
-def test_never_match_partner_absent_no_demotion():
+def test_never_match_fires_even_when_partner_absent():
+    """对家**不在库里**照样降档——那正是会出错的一刻。
+
+    以前这里断言的是反过来的（对家不在库里就不拦）。闸放到 0.97 的端到端
+    实测把这个盲区照出来了：两条错配 `vol01:43:1:4` 干←千、
+    `vol02:145:6:17` 長←畏，全是「库里有对家、没有它自己，它第一次出现」
+    的形态。一个字第一次进来时，库里当然只有它的形近对家——要求对家在库
+    等于在最需要护栏的那一刻把护栏关掉。
+    """
     a, _b = NEVER_MATCH_FAMILIES[0]
     m = GlyphMatcher()
+    m.add("db:a", a, _glyph(1))
+    m.add("db:x", "山", _glyph(2))
+    r = m.match(_glyph(1))
+    assert r.verdict == "unsure" and r.guard == "never_match"
+
+
+def test_never_match_partner_in_db_mode_keeps_old_behavior():
+    """GUJI_GUARD_IN_DB=1 的老行为仍可切回来（做对照实验用）。"""
+    a, _b = NEVER_MATCH_FAMILIES[0]
+    m = GlyphMatcher()
+    m.guard_needs_partner_in_db = True
     m.add("db:a", a, _glyph(1))
     m.add("db:x", "山", _glyph(2))
     r = m.match(_glyph(1))
