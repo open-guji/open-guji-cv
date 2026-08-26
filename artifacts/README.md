@@ -17,7 +17,7 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 图块数据即产物；**朱批真源** [marks/patch_review_marks.json](marks/patch_review_marks.json)（264 条）| `scripts/build_patch_review.py --pages vol01:38,70,88,50 vol02:18,31,41,43,52,67,73,77,89,92,97,108,124,137,153,155,152 --quality 52` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）。**HTML 快照不入库**（14MB，图块本来就在 output/ 里）。当前第十轮 = 文字带窗口救回来的 19 页 + 2 页仍偏短 |
+| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 图块数据即产物；**朱批真源** [marks/patch_review_marks.json](marks/patch_review_marks.json)（264 条）| `scripts/build_patch_review.py --pages vol01:38,70,88,50 vol02:18,31,41,43,52,67,73,77,89,92,97,108,124,137,153,155,152 --quality 52` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）。**HTML 快照不入库**（14MB，图块本来就在 output/ 里）。当前第十一轮 = 同 21 页、r10 四病灶（夹注末行单字/右缘穿边/噪点分级/152 窗口）修后产物换装（2026-08-26） |
 | 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20 --quality 62` + 壳模板 [shells/seg_review_shell.html](shells/seg_review_shell.html) |
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
