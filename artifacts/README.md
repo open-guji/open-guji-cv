@@ -87,6 +87,7 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **图块出库裁决台**（逐块判能不能用，四层分层，**页面自存**）| https://claude.ai/code/artifact/69cdfc83-3117-496f-8209-265887e963af | [glyph_evict_review.html](glyph_evict_review.html)（快照）· 卡集 [glyph_evict_cards.jsonl](glyph_evict_cards.jsonl) | `scripts/build_glyph_evict_review.py` |
+| **排除名单复核台**（排除候选按「当初为什么排」分 10 类各抽 10 张，**页面自存**）| https://claude.ai/code/artifact/faf12f8f-4ede-41ce-8b4f-bd7254d003b9 | [exclusion_sample_review.html](exclusion_sample_review.html)（快照）· 卡集 [exclusion_sample_cards.jsonl](exclusion_sample_cards.jsonl) | `PYTHONPATH=. python scripts/build_exclusion_sample_review.py` |
 
 形近误判裁决台第一轮 132 例里 73 例判「标注有误」，用户看完的结论是**大量图块
 本身带残留**（界行线、版框条、邻字整块混入、格线上飘切了半截），标签错只是症状。
