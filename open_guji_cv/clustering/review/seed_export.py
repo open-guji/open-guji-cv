@@ -28,6 +28,7 @@ from pathlib import Path
 
 from .persist_js import PERSIST_JS
 from ...gloss import gloss_of
+from ..seeding import DOUBT_NEAR_FORM as _NEAR_FORM, SEMANTIC_MERGED_CHARS
 from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
@@ -425,10 +426,24 @@ def _render_evidence(e: dict) -> str:
     else:
         rows.append('<div class="evi-row"><span class="evi-k">库内</span>'
                     '<span class="none">无同字条目</span></div>')
-    # 疑问码逐条说明
-    marks = "".join(
-        f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
-        f'{_esc(d["label"])}</li>' for d in e["doubts"])
+    # 疑问码逐条说明——已/巳这类同词异写单独换一句话：字形护栏拦得对
+    # （近形判据本来就防形状判据自己认错），但**这条位不用纠结字形**，
+    # 直接按文意判就是了（用户 2026-08-26 定：这三个字唯一例外，别的
+    # 形近字家族字形仍然重要，别混着看）。
+    merged_here = bool(SEMANTIC_MERGED_CHARS & {
+        c["char"] for c in e.get("choices") or [] if c.get("char")})
+    marks = []
+    for d in e["doubts"]:
+        if d["code"] == _NEAR_FORM and merged_here:
+            marks.append(
+                f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
+                '候选里有已/巳——这两个字史上就是同一个词的两种写法，'
+                '<b>字形不重要，直接按文意选</b>，不用管封不封口</li>')
+        else:
+            marks.append(
+                f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
+                f'{_esc(d["label"])}</li>')
+    marks = "".join(marks)
     if marks:
         rows.append(f'<ul class="doubts">{marks}</ul>')
     return "".join(rows)
