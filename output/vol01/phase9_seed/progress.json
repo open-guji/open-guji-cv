@@ -105,25 +105,25 @@
   "21": {
    "total": 179,
    "auto": 159,
-   "pending": 1,
+   "pending": 0,
    "done": true
   },
   "22": {
    "total": 180,
    "auto": 145,
-   "pending": 8,
+   "pending": 0,
    "done": true
   },
   "23": {
    "total": 165,
    "auto": 134,
-   "pending": 9,
+   "pending": 0,
    "done": true
   },
   "24": {
    "total": 179,
    "auto": 163,
-   "pending": 9,
+   "pending": 0,
    "done": true
   },
   "25": {
@@ -275,10 +275,16 @@
    "auto": 154,
    "pending": 4,
    "done": true
+  },
+  "50": {
+   "total": 98,
+   "auto": 40,
+   "pending": 58,
+   "done": true
   }
  },
  "book": "vol01",
  "prob_threshold": 0.85,
- "pointer": null,
- "updated_at": "2026-08-25T23:51:14+00:00"
+ "pointer": "51",
+ "updated_at": "2026-08-25T23:58:40+00:00"
 }
