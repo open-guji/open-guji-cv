@@ -1,0 +1,7704 @@
+[
+ {
+  "book": "vol01",
+  "page": "10",
+  "col": 8,
+  "idx": 2,
+  "sub": null,
+  "id": "vol01:10:8:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   270.0,
+   253.0,
+   385.0,
+   362.0
+  ],
+  "patch_path": "patches/vol01_10_8_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "10",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:10:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1547.0,
+   1166.0,
+   1674.0,
+   1278.0
+  ],
+  "patch_path": "patches/vol01_10_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "11",
+  "col": 8,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:11:8:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   215.0,
+   1268.0,
+   328.0,
+   1365.0
+  ],
+  "patch_path": "patches/vol01_11_8_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "11",
+  "col": 5,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:11:5:20",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   778.0,
+   2321.0,
+   890.0,
+   2418.0
+  ],
+  "patch_path": "patches/vol01_11_5_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "13",
+  "col": 7,
+  "idx": 12,
+  "sub": null,
+  "id": "vol01:13:7:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   404.0,
+   1435.0,
+   521.0,
+   1543.0
+  ],
+  "patch_path": "patches/vol01_13_7_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "13",
+  "col": 3,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:13:3:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1143.0,
+   370.0,
+   1251.0,
+   475.0
+  ],
+  "patch_path": "patches/vol01_13_3_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "135",
+  "col": 8,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:135:8:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   221.0,
+   2249.0,
+   341.0,
+   2351.0
+  ],
+  "patch_path": "patches/vol01_135_8_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 106
+ },
+ {
+  "book": "vol01",
+  "page": "135",
+  "col": 5,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:135:5:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   795.0,
+   519.0,
+   887.0,
+   632.0
+  ],
+  "patch_path": "patches/vol01_135_5_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 106
+ },
+ {
+  "book": "vol01",
+  "page": "136",
+  "col": 4,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:136:4:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   978.0,
+   1048.0,
+   1096.0,
+   1158.0
+  ],
+  "patch_path": "patches/vol01_136_4_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 141
+ },
+ {
+  "book": "vol01",
+  "page": "136",
+  "col": 7,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:136:7:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   415.0,
+   353.0,
+   537.0,
+   462.0
+  ],
+  "patch_path": "patches/vol01_136_7_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 141
+ },
+ {
+  "book": "vol01",
+  "page": "137",
+  "col": 4,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:137:4:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   953.0,
+   952.0,
+   1061.0,
+   1059.0
+  ],
+  "patch_path": "patches/vol01_137_4_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "137",
+  "col": 3,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:137:3:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1148.0,
+   734.0,
+   1249.0,
+   827.0
+  ],
+  "patch_path": "patches/vol01_137_3_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "138",
+  "col": 4,
+  "idx": 14,
+  "sub": null,
+  "id": "vol01:138:4:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1000.0,
+   1608.0,
+   1107.0,
+   1711.0
+  ],
+  "patch_path": "patches/vol01_138_4_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol01",
+  "page": "138",
+  "col": 8,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:138:8:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   266.0,
+   463.0,
+   379.0,
+   574.0
+  ],
+  "patch_path": "patches/vol01_138_8_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol01",
+  "page": "139",
+  "col": 7,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:139:7:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   391.0,
+   582.0,
+   503.0,
+   693.0
+  ],
+  "patch_path": "patches/vol01_139_7_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol01",
+  "page": "139",
+  "col": 7,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:139:7:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   396.0,
+   927.0,
+   504.0,
+   1035.0
+  ],
+  "patch_path": "patches/vol01_139_7_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol01",
+  "page": "14",
+  "col": 8,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:14:8:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   260.0,
+   1560.0,
+   378.0,
+   1666.0
+  ],
+  "patch_path": "patches/vol01_14_8_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol01",
+  "page": "14",
+  "col": 9,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:14:9:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   73.0,
+   946.0,
+   193.0,
+   1053.0
+  ],
+  "patch_path": "patches/vol01_14_9_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol01",
+  "page": "140",
+  "col": 7,
+  "idx": 2,
+  "sub": null,
+  "id": "vol01:140:7:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   399.0,
+   237.0,
+   510.0,
+   353.0
+  ],
+  "patch_path": "patches/vol01_140_7_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "140",
+  "col": 2,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:140:2:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1316.0,
+   2293.0,
+   1433.0,
+   2396.0
+  ],
+  "patch_path": "patches/vol01_140_2_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "141",
+  "col": 3,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:141:3:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1133.0,
+   944.0,
+   1248.0,
+   1050.0
+  ],
+  "patch_path": "patches/vol01_141_3_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "141",
+  "col": 1,
+  "idx": 18,
+  "sub": null,
+  "id": "vol01:141:1:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1498.0,
+   2105.0,
+   1604.0,
+   2228.0
+  ],
+  "patch_path": "patches/vol01_141_1_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "142",
+  "col": 7,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:142:7:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   487.0,
+   381.0,
+   587.0,
+   497.0
+  ],
+  "patch_path": "patches/vol01_142_7_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "142",
+  "col": 1,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:142:1:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1587.0,
+   966.0,
+   1701.0,
+   1084.0
+  ],
+  "patch_path": "patches/vol01_142_1_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "143",
+  "col": 1,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:143:1:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1513.0,
+   731.0,
+   1606.0,
+   842.0
+  ],
+  "patch_path": "patches/vol01_143_1_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol01",
+  "page": "143",
+  "col": 3,
+  "idx": 12,
+  "sub": null,
+  "id": "vol01:143:3:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1154.0,
+   1434.0,
+   1255.0,
+   1539.0
+  ],
+  "patch_path": "patches/vol01_143_3_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol01",
+  "page": "144",
+  "col": 1,
+  "idx": 18,
+  "sub": null,
+  "id": "vol01:144:1:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1571.0,
+   2115.0,
+   1680.0,
+   2234.0
+  ],
+  "patch_path": "patches/vol01_144_1_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "144",
+  "col": 5,
+  "idx": 15,
+  "sub": null,
+  "id": "vol01:144:5:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   834.0,
+   1766.0,
+   942.0,
+   1883.0
+  ],
+  "patch_path": "patches/vol01_144_5_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "145",
+  "col": 6,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:145:6:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   612.0,
+   386.0,
+   688.0,
+   483.0
+  ],
+  "patch_path": "patches/vol01_145_6_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 136
+ },
+ {
+  "book": "vol01",
+  "page": "145",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol01:145:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   245.0,
+   1985.0,
+   329.0,
+   2087.0
+  ],
+  "patch_path": "patches/vol01_145_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 136
+ },
+ {
+  "book": "vol01",
+  "page": "146",
+  "col": 9,
+  "idx": 4,
+  "sub": "b",
+  "id": "vol01:146:9:4b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu",
+   "wide_gap"
+  ],
+  "bbox": [
+   98.0,
+   486.0,
+   152.0,
+   569.0
+  ],
+  "patch_path": "patches/vol01_146_9_4b.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol01",
+  "page": "146",
+  "col": 9,
+  "idx": 3,
+  "sub": "b",
+  "id": "vol01:146:9:3b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   98.0,
+   370.0,
+   150.0,
+   467.0
+  ],
+  "patch_path": "patches/vol01_146_9_3b.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol01",
+  "page": "147",
+  "col": 1,
+  "idx": 17,
+  "sub": null,
+  "id": "vol01:147:1:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1494.0,
+   1961.0,
+   1609.0,
+   2070.0
+  ],
+  "patch_path": "patches/vol01_147_1_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "147",
+  "col": 8,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:147:8:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   223.0,
+   1046.0,
+   331.0,
+   1157.0
+  ],
+  "patch_path": "patches/vol01_147_8_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "148",
+  "col": 1,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:148:1:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1569.0,
+   2198.0,
+   1686.0,
+   2314.0
+  ],
+  "patch_path": "patches/vol01_148_1_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 136
+ },
+ {
+  "book": "vol01",
+  "page": "148",
+  "col": 7,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:148:7:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   469.0,
+   1851.0,
+   576.0,
+   1968.0
+  ],
+  "patch_path": "patches/vol01_148_7_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 136
+ },
+ {
+  "book": "vol01",
+  "page": "149",
+  "col": 3,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:149:3:16",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1158.0,
+   1892.0,
+   1270.0,
+   2011.0
+  ],
+  "patch_path": "patches/vol01_149_3_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "149",
+  "col": 7,
+  "idx": 14,
+  "sub": null,
+  "id": "vol01:149:7:14",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   428.0,
+   1667.0,
+   540.0,
+   1771.0
+  ],
+  "patch_path": "patches/vol01_149_7_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "150",
+  "col": 6,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:150:6:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   667.0,
+   1515.0,
+   782.0,
+   1614.0
+  ],
+  "patch_path": "patches/vol01_150_6_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 157
+ },
+ {
+  "book": "vol01",
+  "page": "150",
+  "col": 9,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:150:9:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   101.0,
+   1171.0,
+   232.0,
+   1293.0
+  ],
+  "patch_path": "patches/vol01_150_9_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 157
+ },
+ {
+  "book": "vol01",
+  "page": "151",
+  "col": 5,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:151:5:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   762.0,
+   730.0,
+   878.0,
+   836.0
+  ],
+  "patch_path": "patches/vol01_151_5_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 142
+ },
+ {
+  "book": "vol01",
+  "page": "151",
+  "col": 6,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:151:6:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   580.0,
+   1063.0,
+   690.0,
+   1180.0
+  ],
+  "patch_path": "patches/vol01_151_6_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 142
+ },
+ {
+  "book": "vol01",
+  "page": "153",
+  "col": 5,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:153:5:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   761.0,
+   598.0,
+   864.0,
+   710.0
+  ],
+  "patch_path": "patches/vol01_153_5_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "153",
+  "col": 2,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:153:2:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1289.0,
+   1847.0,
+   1410.0,
+   1963.0
+  ],
+  "patch_path": "patches/vol01_153_2_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "156",
+  "col": 6,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:156:6:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   639.0,
+   700.0,
+   758.0,
+   803.0
+  ],
+  "patch_path": "patches/vol01_156_6_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 142
+ },
+ {
+  "book": "vol01",
+  "page": "156",
+  "col": 4,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:156:4:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1003.0,
+   356.0,
+   1129.0,
+   470.0
+  ],
+  "patch_path": "patches/vol01_156_4_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 142
+ },
+ {
+  "book": "vol01",
+  "page": "16",
+  "col": 6,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:16:6:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   648.0,
+   826.0,
+   756.0,
+   942.0
+  ],
+  "patch_path": "patches/vol01_16_6_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "16",
+  "col": 3,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:16:3:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1197.0,
+   2353.0,
+   1310.0,
+   2453.0
+  ],
+  "patch_path": "patches/vol01_16_3_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "18",
+  "col": 4,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:18:4:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   958.0,
+   959.0,
+   1076.0,
+   1074.0
+  ],
+  "patch_path": "patches/vol01_18_4_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "18",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol01:18:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   214.0,
+   1659.0,
+   340.0,
+   1773.0
+  ],
+  "patch_path": "patches/vol01_18_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "19",
+  "col": 9,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:19:9:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   34.0,
+   1858.0,
+   148.0,
+   1981.0
+  ],
+  "patch_path": "patches/vol01_19_9_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "19",
+  "col": 5,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:19:5:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   769.0,
+   1283.0,
+   881.0,
+   1390.0
+  ],
+  "patch_path": "patches/vol01_19_5_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "21",
+  "col": 4,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:21:4:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   949.0,
+   2189.0,
+   1063.0,
+   2305.0
+  ],
+  "patch_path": "patches/vol01_21_4_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol01",
+  "page": "21",
+  "col": 1,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:21:1:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1517.0,
+   1251.0,
+   1623.0,
+   1368.0
+  ],
+  "patch_path": "patches/vol01_21_1_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol01",
+  "page": "22",
+  "col": 2,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:22:2:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1357.0,
+   1167.0,
+   1468.0,
+   1282.0
+  ],
+  "patch_path": "patches/vol01_22_2_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "22",
+  "col": 3,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:22:3:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1168.0,
+   1517.0,
+   1285.0,
+   1632.0
+  ],
+  "patch_path": "patches/vol01_22_3_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "23",
+  "col": 3,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:23:3:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1143.0,
+   402.0,
+   1253.0,
+   506.0
+  ],
+  "patch_path": "patches/vol01_23_3_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol01",
+  "page": "23",
+  "col": 2,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:23:2:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1333.0,
+   520.0,
+   1426.0,
+   631.0
+  ],
+  "patch_path": "patches/vol01_23_2_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol01",
+  "page": "25",
+  "col": 7,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:25:7:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   416.0,
+   1499.0,
+   506.0,
+   1602.0
+  ],
+  "patch_path": "patches/vol01_25_7_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol01",
+  "page": "25",
+  "col": 2,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:25:2:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1323.0,
+   1823.0,
+   1435.0,
+   1937.0
+  ],
+  "patch_path": "patches/vol01_25_2_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol01",
+  "page": "26",
+  "col": 8,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:26:8:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   252.0,
+   2191.0,
+   368.0,
+   2310.0
+  ],
+  "patch_path": "patches/vol01_26_8_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "26",
+  "col": 2,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:26:2:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1362.0,
+   1852.0,
+   1479.0,
+   1958.0
+  ],
+  "patch_path": "patches/vol01_26_2_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "28",
+  "col": 3,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:28:3:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1218.0,
+   2194.0,
+   1338.0,
+   2314.0
+  ],
+  "patch_path": "patches/vol01_28_3_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol01",
+  "page": "28",
+  "col": 9,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:28:9:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   116.0,
+   586.0,
+   235.0,
+   700.0
+  ],
+  "patch_path": "patches/vol01_28_9_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol01",
+  "page": "29",
+  "col": 4,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:29:4:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   961.0,
+   1528.0,
+   1079.0,
+   1636.0
+  ],
+  "patch_path": "patches/vol01_29_4_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "29",
+  "col": 7,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:29:7:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   392.0,
+   835.0,
+   528.0,
+   952.0
+  ],
+  "patch_path": "patches/vol01_29_7_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "30",
+  "col": 2,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:30:2:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1387.0,
+   1877.0,
+   1509.0,
+   1985.0
+  ],
+  "patch_path": "patches/vol01_30_2_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "30",
+  "col": 9,
+  "idx": 2,
+  "sub": null,
+  "id": "vol01:30:9:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   86.0,
+   255.0,
+   205.0,
+   357.0
+  ],
+  "patch_path": "patches/vol01_30_9_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "32",
+  "col": 8,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:32:8:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   264.0,
+   2175.0,
+   375.0,
+   2281.0
+  ],
+  "patch_path": "patches/vol01_32_8_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 140
+ },
+ {
+  "book": "vol01",
+  "page": "32",
+  "col": 7,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:32:7:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   445.0,
+   647.0,
+   570.0,
+   753.0
+  ],
+  "patch_path": "patches/vol01_32_7_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 140
+ },
+ {
+  "book": "vol01",
+  "page": "33",
+  "col": 8,
+  "idx": 15,
+  "sub": null,
+  "id": "vol01:33:8:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   211.0,
+   2100.0,
+   336.0,
+   2213.0
+  ],
+  "patch_path": "patches/vol01_33_8_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol01",
+  "page": "33",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:33:2:8",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1315.0,
+   1321.0,
+   1428.0,
+   1428.0
+  ],
+  "patch_path": "patches/vol01_33_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol01",
+  "page": "34",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:34:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1570.0,
+   1170.0,
+   1685.0,
+   1281.0
+  ],
+  "patch_path": "patches/vol01_34_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "34",
+  "col": 7,
+  "idx": 1,
+  "sub": null,
+  "id": "vol01:34:7:1",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   457.0,
+   122.0,
+   569.0,
+   240.0
+  ],
+  "patch_path": "patches/vol01_34_7_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "35",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:35:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1308.0,
+   392.0,
+   1418.0,
+   501.0
+  ],
+  "patch_path": "patches/vol01_35_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 181
+ },
+ {
+  "book": "vol01",
+  "page": "35",
+  "col": 9,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:35:9:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   16.0,
+   1883.0,
+   138.0,
+   1975.0
+  ],
+  "patch_path": "patches/vol01_35_9_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 181
+ },
+ {
+  "book": "vol01",
+  "page": "38",
+  "col": 5,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:38:5:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   817.0,
+   487.0,
+   938.0,
+   591.0
+  ],
+  "patch_path": "patches/vol01_38_5_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol01",
+  "page": "38",
+  "col": 3,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:38:3:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1206.0,
+   1533.0,
+   1275.0,
+   1634.0
+  ],
+  "patch_path": "patches/vol01_38_3_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol01",
+  "page": "4",
+  "col": 3,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:4:3:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1159.0,
+   1847.0,
+   1270.0,
+   1958.0
+  ],
+  "patch_path": "patches/vol01_4_3_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "4",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:4:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1339.0,
+   363.0,
+   1454.0,
+   467.0
+  ],
+  "patch_path": "patches/vol01_4_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "40",
+  "col": 2,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:40:2:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1388.0,
+   846.0,
+   1507.0,
+   957.0
+  ],
+  "patch_path": "patches/vol01_40_2_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 157
+ },
+ {
+  "book": "vol01",
+  "page": "40",
+  "col": 8,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:40:8:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   273.0,
+   973.0,
+   392.0,
+   1078.0
+  ],
+  "patch_path": "patches/vol01_40_8_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 157
+ },
+ {
+  "book": "vol01",
+  "page": "41",
+  "col": 2,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:41:2:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1298.0,
+   488.0,
+   1408.0,
+   613.0
+  ],
+  "patch_path": "patches/vol01_41_2_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "41",
+  "col": 9,
+  "idx": 15,
+  "sub": null,
+  "id": "vol01:41:9:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   25.0,
+   1749.0,
+   136.0,
+   1857.0
+  ],
+  "patch_path": "patches/vol01_41_9_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "42",
+  "col": 6,
+  "idx": 4,
+  "sub": null,
+  "id": "vol01:42:6:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   623.0,
+   510.0,
+   736.0,
+   631.0
+  ],
+  "patch_path": "patches/vol01_42_6_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "42",
+  "col": 7,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:42:7:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   436.0,
+   1090.0,
+   554.0,
+   1184.0
+  ],
+  "patch_path": "patches/vol01_42_7_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "43",
+  "col": 5,
+  "idx": 13,
+  "sub": null,
+  "id": "vol01:43:5:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   768.0,
+   1509.0,
+   897.0,
+   1616.0
+  ],
+  "patch_path": "patches/vol01_43_5_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol01",
+  "page": "43",
+  "col": 9,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:43:9:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   33.0,
+   1282.0,
+   157.0,
+   1395.0
+  ],
+  "patch_path": "patches/vol01_43_9_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol01",
+  "page": "44",
+  "col": 8,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:44:8:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   290.0,
+   699.0,
+   397.0,
+   821.0
+  ],
+  "patch_path": "patches/vol01_44_8_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "44",
+  "col": 3,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:44:3:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1221.0,
+   1160.0,
+   1318.0,
+   1269.0
+  ],
+  "patch_path": "patches/vol01_44_3_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "46",
+  "col": 4,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:46:4:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1032.0,
+   2317.0,
+   1150.0,
+   2427.0
+  ],
+  "patch_path": "patches/vol01_46_4_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 176
+ },
+ {
+  "book": "vol01",
+  "page": "46",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:46:2:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1416.0,
+   964.0,
+   1534.0,
+   1057.0
+  ],
+  "patch_path": "patches/vol01_46_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 176
+ },
+ {
+  "book": "vol01",
+  "page": "48",
+  "col": 9,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:48:9:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   125.0,
+   1086.0,
+   238.0,
+   1206.0
+  ],
+  "patch_path": "patches/vol01_48_9_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol01",
+  "page": "48",
+  "col": 9,
+  "idx": 18,
+  "sub": null,
+  "id": "vol01:48:9:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   128.0,
+   2119.0,
+   246.0,
+   2240.0
+  ],
+  "patch_path": "patches/vol01_48_9_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol01",
+  "page": "5",
+  "col": 4,
+  "idx": 19,
+  "sub": null,
+  "id": "vol01:5:4:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   963.0,
+   2259.0,
+   1083.0,
+   2381.0
+  ],
+  "patch_path": "patches/vol01_5_4_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol01",
+  "page": "5",
+  "col": 5,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:5:5:8",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   774.0,
+   989.0,
+   896.0,
+   1106.0
+  ],
+  "patch_path": "patches/vol01_5_5_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol01",
+  "page": "50",
+  "col": 1,
+  "idx": 1,
+  "sub": null,
+  "id": "vol01:50:1:1",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1583.0,
+   189.0,
+   1710.0,
+   358.0
+  ],
+  "patch_path": "patches/vol01_50_1_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 98
+ },
+ {
+  "book": "vol01",
+  "page": "50",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:50:2:8",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1404.0,
+   1055.0,
+   1529.0,
+   1164.0
+  ],
+  "patch_path": "patches/vol01_50_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 98
+ },
+ {
+  "book": "vol01",
+  "page": "52",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:52:2:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1367.0,
+   988.0,
+   1489.0,
+   1102.0
+  ],
+  "patch_path": "patches/vol01_52_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol01",
+  "page": "52",
+  "col": 7,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:52:7:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   439.0,
+   2363.0,
+   557.0,
+   2478.0
+  ],
+  "patch_path": "patches/vol01_52_7_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol01",
+  "page": "53",
+  "col": 6,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:53:6:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   585.0,
+   1296.0,
+   696.0,
+   1399.0
+  ],
+  "patch_path": "patches/vol01_53_6_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "53",
+  "col": 4,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:53:4:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   953.0,
+   1908.0,
+   1058.0,
+   1988.0
+  ],
+  "patch_path": "patches/vol01_53_4_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "54",
+  "col": 3,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:54:3:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1210.0,
+   1307.0,
+   1332.0,
+   1417.0
+  ],
+  "patch_path": "patches/vol01_54_3_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "54",
+  "col": 3,
+  "idx": 17,
+  "sub": null,
+  "id": "vol01:54:3:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1211.0,
+   1994.0,
+   1318.0,
+   2097.0
+  ],
+  "patch_path": "patches/vol01_54_3_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "55",
+  "col": 3,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:55:3:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1159.0,
+   396.0,
+   1264.0,
+   510.0
+  ],
+  "patch_path": "patches/vol01_55_3_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "55",
+  "col": 3,
+  "idx": 10,
+  "sub": null,
+  "id": "vol01:55:3:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1157.0,
+   1206.0,
+   1261.0,
+   1310.0
+  ],
+  "patch_path": "patches/vol01_55_3_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "56",
+  "col": 6,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:56:6:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   642.0,
+   363.0,
+   751.0,
+   472.0
+  ],
+  "patch_path": "patches/vol01_56_6_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "56",
+  "col": 2,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:56:2:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1376.0,
+   597.0,
+   1487.0,
+   713.0
+  ],
+  "patch_path": "patches/vol01_56_2_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "58",
+  "col": 6,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:58:6:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   635.0,
+   2345.0,
+   742.0,
+   2464.0
+  ],
+  "patch_path": "patches/vol01_58_6_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol01",
+  "page": "58",
+  "col": 2,
+  "idx": 17,
+  "sub": null,
+  "id": "vol01:58:2:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1363.0,
+   1989.0,
+   1472.0,
+   2103.0
+  ],
+  "patch_path": "patches/vol01_58_2_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol01",
+  "page": "59",
+  "col": 7,
+  "idx": 12,
+  "sub": null,
+  "id": "vol01:59:7:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   417.0,
+   1439.0,
+   528.0,
+   1562.0
+  ],
+  "patch_path": "patches/vol01_59_7_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "59",
+  "col": 3,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:59:3:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1152.0,
+   754.0,
+   1265.0,
+   863.0
+  ],
+  "patch_path": "patches/vol01_59_3_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 169
+ },
+ {
+  "book": "vol01",
+  "page": "60",
+  "col": 8,
+  "idx": 15,
+  "sub": null,
+  "id": "vol01:60:8:15",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   292.0,
+   1875.0,
+   374.0,
+   1987.0
+  ],
+  "patch_path": "patches/vol01_60_8_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "60",
+  "col": 4,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:60:4:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1004.0,
+   848.0,
+   1122.0,
+   981.0
+  ],
+  "patch_path": "patches/vol01_60_4_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 180
+ },
+ {
+  "book": "vol01",
+  "page": "64",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol01:64:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   266.0,
+   1656.0,
+   375.0,
+   1766.0
+  ],
+  "patch_path": "patches/vol01_64_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol01",
+  "page": "64",
+  "col": 4,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:64:4:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1006.0,
+   838.0,
+   1117.0,
+   952.0
+  ],
+  "patch_path": "patches/vol01_64_4_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol01",
+  "page": "65",
+  "col": 4,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:65:4:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   992.0,
+   2398.0,
+   1080.0,
+   2510.0
+  ],
+  "patch_path": "patches/vol01_65_4_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "65",
+  "col": 5,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:65:5:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   799.0,
+   753.0,
+   904.0,
+   876.0
+  ],
+  "patch_path": "patches/vol01_65_5_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "66",
+  "col": 9,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:66:9:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   77.0,
+   2347.0,
+   185.0,
+   2467.0
+  ],
+  "patch_path": "patches/vol01_66_9_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "66",
+  "col": 6,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:66:6:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   637.0,
+   714.0,
+   740.0,
+   831.0
+  ],
+  "patch_path": "patches/vol01_66_6_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "67",
+  "col": 4,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:67:4:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   949.0,
+   1856.0,
+   1064.0,
+   1967.0
+  ],
+  "patch_path": "patches/vol01_67_4_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 116
+ },
+ {
+  "book": "vol01",
+  "page": "67",
+  "col": 7,
+  "idx": 2,
+  "sub": null,
+  "id": "vol01:67:7:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   433.0,
+   256.0,
+   503.0,
+   350.0
+  ],
+  "patch_path": "patches/vol01_67_7_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 116
+ },
+ {
+  "book": "vol01",
+  "page": "68",
+  "col": 8,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:68:8:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   265.0,
+   703.0,
+   383.0,
+   807.0
+  ],
+  "patch_path": "patches/vol01_68_8_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 121
+ },
+ {
+  "book": "vol01",
+  "page": "68",
+  "col": 4,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:68:4:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   995.0,
+   1053.0,
+   1116.0,
+   1162.0
+  ],
+  "patch_path": "patches/vol01_68_4_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 121
+ },
+ {
+  "book": "vol01",
+  "page": "69",
+  "col": 6,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:69:6:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   578.0,
+   2331.0,
+   687.0,
+   2456.0
+  ],
+  "patch_path": "patches/vol01_69_6_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 145
+ },
+ {
+  "book": "vol01",
+  "page": "69",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol01:69:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   206.0,
+   1635.0,
+   313.0,
+   1741.0
+  ],
+  "patch_path": "patches/vol01_69_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 145
+ },
+ {
+  "book": "vol01",
+  "page": "7",
+  "col": 8,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:7:8:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   251.0,
+   2320.0,
+   366.0,
+   2440.0
+  ],
+  "patch_path": "patches/vol01_7_8_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "7",
+  "col": 1,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:7:1:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1506.0,
+   597.0,
+   1633.0,
+   707.0
+  ],
+  "patch_path": "patches/vol01_7_1_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol01",
+  "page": "70",
+  "col": 3,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:70:3:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1221.0,
+   392.0,
+   1309.0,
+   498.0
+  ],
+  "patch_path": "patches/vol01_70_3_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 132
+ },
+ {
+  "book": "vol01",
+  "page": "70",
+  "col": 7,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:70:7:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   450.0,
+   955.0,
+   566.0,
+   1069.0
+  ],
+  "patch_path": "patches/vol01_70_7_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 132
+ },
+ {
+  "book": "vol01",
+  "page": "71",
+  "col": 6,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:71:6:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   602.0,
+   1279.0,
+   724.0,
+   1393.0
+  ],
+  "patch_path": "patches/vol01_71_6_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "71",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol01:71:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   242.0,
+   1964.0,
+   361.0,
+   2075.0
+  ],
+  "patch_path": "patches/vol01_71_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol01",
+  "page": "72",
+  "col": 2,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:72:2:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1394.0,
+   816.0,
+   1498.0,
+   934.0
+  ],
+  "patch_path": "patches/vol01_72_2_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "72",
+  "col": 7,
+  "idx": 16,
+  "sub": null,
+  "id": "vol01:72:7:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   462.0,
+   1856.0,
+   557.0,
+   1971.0
+  ],
+  "patch_path": "patches/vol01_72_7_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol01",
+  "page": "76",
+  "col": 8,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:76:8:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   229.0,
+   828.0,
+   348.0,
+   970.0
+  ],
+  "patch_path": "patches/vol01_76_8_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "76",
+  "col": 4,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:76:4:8",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   961.0,
+   960.0,
+   1083.0,
+   1081.0
+  ],
+  "patch_path": "patches/vol01_76_4_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "77",
+  "col": 3,
+  "idx": 12,
+  "sub": null,
+  "id": "vol01:77:3:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1141.0,
+   1404.0,
+   1241.0,
+   1516.0
+  ],
+  "patch_path": "patches/vol01_77_3_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "77",
+  "col": 7,
+  "idx": 5,
+  "sub": null,
+  "id": "vol01:77:7:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   388.0,
+   601.0,
+   506.0,
+   718.0
+  ],
+  "patch_path": "patches/vol01_77_7_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "78",
+  "col": 1,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:78:1:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1561.0,
+   2298.0,
+   1679.0,
+   2412.0
+  ],
+  "patch_path": "patches/vol01_78_1_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "78",
+  "col": 6,
+  "idx": 2,
+  "sub": null,
+  "id": "vol01:78:6:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   641.0,
+   256.0,
+   763.0,
+   360.0
+  ],
+  "patch_path": "patches/vol01_78_6_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "79",
+  "col": 7,
+  "idx": 1,
+  "sub": null,
+  "id": "vol01:79:7:1",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   408.0,
+   142.0,
+   529.0,
+   262.0
+  ],
+  "patch_path": "patches/vol01_79_7_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 138
+ },
+ {
+  "book": "vol01",
+  "page": "79",
+  "col": 2,
+  "idx": 12,
+  "sub": null,
+  "id": "vol01:79:2:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1321.0,
+   1419.0,
+   1441.0,
+   1538.0
+  ],
+  "patch_path": "patches/vol01_79_2_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 138
+ },
+ {
+  "book": "vol01",
+  "page": "80",
+  "col": 3,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:80:3:3",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1203.0,
+   357.0,
+   1309.0,
+   499.0
+  ],
+  "patch_path": "patches/vol01_80_3_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 121
+ },
+ {
+  "book": "vol01",
+  "page": "80",
+  "col": 4,
+  "idx": 8,
+  "sub": null,
+  "id": "vol01:80:4:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1015.0,
+   940.0,
+   1129.0,
+   1058.0
+  ],
+  "patch_path": "patches/vol01_80_4_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 121
+ },
+ {
+  "book": "vol01",
+  "page": "81",
+  "col": 3,
+  "idx": 18,
+  "sub": null,
+  "id": "vol01:81:3:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1142.0,
+   2126.0,
+   1254.0,
+   2246.0
+  ],
+  "patch_path": "patches/vol01_81_3_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 129
+ },
+ {
+  "book": "vol01",
+  "page": "81",
+  "col": 2,
+  "idx": 20,
+  "sub": null,
+  "id": "vol01:81:2:20",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1313.0,
+   2364.0,
+   1425.0,
+   2476.0
+  ],
+  "patch_path": "patches/vol01_81_2_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 129
+ },
+ {
+  "book": "vol01",
+  "page": "82",
+  "col": 6,
+  "idx": 11,
+  "sub": null,
+  "id": "vol01:82:6:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   652.0,
+   1316.0,
+   765.0,
+   1421.0
+  ],
+  "patch_path": "patches/vol01_82_6_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 139
+ },
+ {
+  "book": "vol01",
+  "page": "82",
+  "col": 3,
+  "idx": 9,
+  "sub": null,
+  "id": "vol01:82:3:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1210.0,
+   1081.0,
+   1321.0,
+   1185.0
+  ],
+  "patch_path": "patches/vol01_82_3_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 139
+ },
+ {
+  "book": "vol01",
+  "page": "84",
+  "col": 5,
+  "idx": 7,
+  "sub": null,
+  "id": "vol01:84:5:7",
+  "stratum": "rand",
+  "flags": [
+   "wide_gap"
+  ],
+  "bbox": [
+   789.0,
+   840.0,
+   927.0,
+   945.0
+  ],
+  "patch_path": "patches/vol01_84_5_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "84",
+  "col": 8,
+  "idx": 6,
+  "sub": null,
+  "id": "vol01:84:8:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   266.0,
+   716.0,
+   374.0,
+   840.0
+  ],
+  "patch_path": "patches/vol01_84_8_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol01",
+  "page": "88",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol01:88:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1397.0,
+   462.0,
+   1521.0,
+   574.0
+  ],
+  "patch_path": "patches/vol01_88_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 68
+ },
+ {
+  "book": "vol01",
+  "page": "88",
+  "col": 8,
+  "idx": 1,
+  "sub": null,
+  "id": "vol01:88:8:1",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   292.0,
+   238.0,
+   389.0,
+   343.0
+  ],
+  "patch_path": "patches/vol01_88_8_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 68
+ },
+ {
+  "book": "vol02",
+  "page": "10",
+  "col": 4,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:10:4:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   962.0,
+   342.0,
+   1080.0,
+   454.0
+  ],
+  "patch_path": "patches/vol02_10_4_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "10",
+  "col": 2,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:10:2:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1340.0,
+   2322.0,
+   1447.0,
+   2435.0
+  ],
+  "patch_path": "patches/vol02_10_2_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "100",
+  "col": 3,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:100:3:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1168.0,
+   1161.0,
+   1275.0,
+   1285.0
+  ],
+  "patch_path": "patches/vol02_100_3_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "100",
+  "col": 3,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:100:3:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1167.0,
+   598.0,
+   1287.0,
+   718.0
+  ],
+  "patch_path": "patches/vol02_100_3_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "101",
+  "col": 9,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:101:9:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   53.0,
+   717.0,
+   180.0,
+   821.0
+  ],
+  "patch_path": "patches/vol02_101_9_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol02",
+  "page": "101",
+  "col": 4,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:101:4:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   977.0,
+   2236.0,
+   1098.0,
+   2352.0
+  ],
+  "patch_path": "patches/vol02_101_4_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol02",
+  "page": "103",
+  "col": 5,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:103:5:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   754.0,
+   946.0,
+   869.0,
+   1052.0
+  ],
+  "patch_path": "patches/vol02_103_5_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 163
+ },
+ {
+  "book": "vol02",
+  "page": "103",
+  "col": 2,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:103:2:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1314.0,
+   1030.0,
+   1440.0,
+   1158.0
+  ],
+  "patch_path": "patches/vol02_103_2_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 163
+ },
+ {
+  "book": "vol02",
+  "page": "104",
+  "col": 1,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:104:1:9",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1521.0,
+   1076.0,
+   1632.0,
+   1171.0
+  ],
+  "patch_path": "patches/vol02_104_1_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "104",
+  "col": 6,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:104:6:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   590.0,
+   2271.0,
+   706.0,
+   2395.0
+  ],
+  "patch_path": "patches/vol02_104_6_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "105",
+  "col": 2,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:105:2:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1344.0,
+   1770.0,
+   1451.0,
+   1884.0
+  ],
+  "patch_path": "patches/vol02_105_2_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol02",
+  "page": "105",
+  "col": 9,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:105:9:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   73.0,
+   1996.0,
+   169.0,
+   2112.0
+  ],
+  "patch_path": "patches/vol02_105_9_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 155
+ },
+ {
+  "book": "vol02",
+  "page": "106",
+  "col": 8,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:106:8:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   269.0,
+   1271.0,
+   377.0,
+   1376.0
+  ],
+  "patch_path": "patches/vol02_106_8_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "106",
+  "col": 6,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:106:6:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   629.0,
+   387.0,
+   743.0,
+   500.0
+  ],
+  "patch_path": "patches/vol02_106_6_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "107",
+  "col": 7,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:107:7:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   421.0,
+   494.0,
+   545.0,
+   597.0
+  ],
+  "patch_path": "patches/vol02_107_7_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "107",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:107:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   233.0,
+   1986.0,
+   362.0,
+   2106.0
+  ],
+  "patch_path": "patches/vol02_107_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "108",
+  "col": 6,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:108:6:15",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   653.0,
+   1675.0,
+   783.0,
+   1872.0
+  ],
+  "patch_path": "patches/vol02_108_6_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 154
+ },
+ {
+  "book": "vol02",
+  "page": "108",
+  "col": 6,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:108:6:17",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   662.0,
+   1947.0,
+   774.0,
+   2089.0
+  ],
+  "patch_path": "patches/vol02_108_6_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 154
+ },
+ {
+  "book": "vol02",
+  "page": "109",
+  "col": 9,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:109:9:12",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   22.0,
+   1371.0,
+   142.0,
+   1508.0
+  ],
+  "patch_path": "patches/vol02_109_9_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "109",
+  "col": 7,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:109:7:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   398.0,
+   1834.0,
+   515.0,
+   1942.0
+  ],
+  "patch_path": "patches/vol02_109_7_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "11",
+  "col": 7,
+  "idx": 0,
+  "sub": null,
+  "id": "vol02:11:7:0",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   396.0,
+   48.0,
+   512.0,
+   163.0
+  ],
+  "patch_path": "patches/vol02_11_7_0.png",
+  "seed": "self_assess_r3",
+  "n_page": 98
+ },
+ {
+  "book": "vol02",
+  "page": "11",
+  "col": 1,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:11:1:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1485.0,
+   2210.0,
+   1604.0,
+   2335.0
+  ],
+  "patch_path": "patches/vol02_11_1_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 98
+ },
+ {
+  "book": "vol02",
+  "page": "110",
+  "col": 8,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:110:8:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   251.0,
+   1810.0,
+   375.0,
+   1921.0
+  ],
+  "patch_path": "patches/vol02_110_8_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "110",
+  "col": 4,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:110:4:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   994.0,
+   1693.0,
+   1122.0,
+   1807.0
+  ],
+  "patch_path": "patches/vol02_110_4_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "111",
+  "col": 6,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:111:6:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   578.0,
+   1263.0,
+   687.0,
+   1368.0
+  ],
+  "patch_path": "patches/vol02_111_6_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "111",
+  "col": 4,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:111:4:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   938.0,
+   1158.0,
+   1058.0,
+   1271.0
+  ],
+  "patch_path": "patches/vol02_111_4_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "112",
+  "col": 7,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:112:7:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   444.0,
+   249.0,
+   537.0,
+   358.0
+  ],
+  "patch_path": "patches/vol02_112_7_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "112",
+  "col": 2,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:112:2:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1350.0,
+   704.0,
+   1475.0,
+   809.0
+  ],
+  "patch_path": "patches/vol02_112_2_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "114",
+  "col": 1,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:114:1:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1552.0,
+   335.0,
+   1665.0,
+   456.0
+  ],
+  "patch_path": "patches/vol02_114_1_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 149
+ },
+ {
+  "book": "vol02",
+  "page": "114",
+  "col": 1,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:114:1:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1544.0,
+   2040.0,
+   1665.0,
+   2147.0
+  ],
+  "patch_path": "patches/vol02_114_1_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 149
+ },
+ {
+  "book": "vol02",
+  "page": "115",
+  "col": 3,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:115:3:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1120.0,
+   1605.0,
+   1234.0,
+   1698.0
+  ],
+  "patch_path": "patches/vol02_115_3_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "115",
+  "col": 5,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:115:5:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   755.0,
+   1043.0,
+   873.0,
+   1151.0
+  ],
+  "patch_path": "patches/vol02_115_5_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "116",
+  "col": 8,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:116:8:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   231.0,
+   368.0,
+   367.0,
+   478.0
+  ],
+  "patch_path": "patches/vol02_116_8_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 147
+ },
+ {
+  "book": "vol02",
+  "page": "116",
+  "col": 4,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:116:4:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   984.0,
+   273.0,
+   1104.0,
+   401.0
+  ],
+  "patch_path": "patches/vol02_116_4_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 147
+ },
+ {
+  "book": "vol02",
+  "page": "118",
+  "col": 9,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:118:9:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   31.0,
+   1785.0,
+   150.0,
+   1887.0
+  ],
+  "patch_path": "patches/vol02_118_9_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "118",
+  "col": 7,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:118:7:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   405.0,
+   1121.0,
+   522.0,
+   1232.0
+  ],
+  "patch_path": "patches/vol02_118_7_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "119",
+  "col": 4,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:119:4:15",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink",
+   "off_center"
+  ],
+  "bbox": [
+   962.0,
+   1707.0,
+   1111.0,
+   1829.0
+  ],
+  "patch_path": "patches/vol02_119_4_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "119",
+  "col": 9,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:119:9:20",
+  "stratum": "rand",
+  "flags": [
+   "off_center",
+   "wide_gap"
+  ],
+  "bbox": [
+   64.0,
+   2265.0,
+   209.0,
+   2384.0
+  ],
+  "patch_path": "patches/vol02_119_9_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "120",
+  "col": 5,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:120:5:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   859.0,
+   1611.0,
+   971.0,
+   1719.0
+  ],
+  "patch_path": "patches/vol02_120_5_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 151
+ },
+ {
+  "book": "vol02",
+  "page": "120",
+  "col": 9,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:120:9:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   97.0,
+   746.0,
+   210.0,
+   836.0
+  ],
+  "patch_path": "patches/vol02_120_9_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 151
+ },
+ {
+  "book": "vol02",
+  "page": "121",
+  "col": 1,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:121:1:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1500.0,
+   1342.0,
+   1605.0,
+   1452.0
+  ],
+  "patch_path": "patches/vol02_121_1_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "121",
+  "col": 8,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:121:8:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   226.0,
+   566.0,
+   338.0,
+   662.0
+  ],
+  "patch_path": "patches/vol02_121_8_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "122",
+  "col": 6,
+  "idx": 7,
+  "sub": "b",
+  "id": "vol02:122:6:7b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   602.0,
+   793.0,
+   695.0,
+   896.0
+  ],
+  "patch_path": "patches/vol02_122_6_7b.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "122",
+  "col": 8,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:122:8:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   269.0,
+   456.0,
+   387.0,
+   569.0
+  ],
+  "patch_path": "patches/vol02_122_8_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "125",
+  "col": 1,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:125:1:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1493.0,
+   1332.0,
+   1600.0,
+   1457.0
+  ],
+  "patch_path": "patches/vol02_125_1_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "125",
+  "col": 6,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:125:6:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   572.0,
+   904.0,
+   692.0,
+   1021.0
+  ],
+  "patch_path": "patches/vol02_125_6_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "127",
+  "col": 8,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:127:8:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   213.0,
+   586.0,
+   328.0,
+   700.0
+  ],
+  "patch_path": "patches/vol02_127_8_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "127",
+  "col": 6,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:127:6:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   578.0,
+   1906.0,
+   688.0,
+   2013.0
+  ],
+  "patch_path": "patches/vol02_127_6_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "128",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:128:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   275.0,
+   1564.0,
+   380.0,
+   1678.0
+  ],
+  "patch_path": "patches/vol02_128_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "128",
+  "col": 3,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:128:3:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1196.0,
+   456.0,
+   1313.0,
+   572.0
+  ],
+  "patch_path": "patches/vol02_128_3_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "129",
+  "col": 9,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:129:9:4",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   55.0,
+   458.0,
+   164.0,
+   567.0
+  ],
+  "patch_path": "patches/vol02_129_9_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "129",
+  "col": 5,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:129:5:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   785.0,
+   1313.0,
+   904.0,
+   1430.0
+  ],
+  "patch_path": "patches/vol02_129_5_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 166
+ },
+ {
+  "book": "vol02",
+  "page": "13",
+  "col": 2,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:13:2:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1309.0,
+   261.0,
+   1427.0,
+   380.0
+  ],
+  "patch_path": "patches/vol02_13_2_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol02",
+  "page": "13",
+  "col": 4,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:13:4:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   940.0,
+   614.0,
+   1056.0,
+   717.0
+  ],
+  "patch_path": "patches/vol02_13_4_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol02",
+  "page": "131",
+  "col": 6,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:131:6:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   573.0,
+   1457.0,
+   693.0,
+   1571.0
+  ],
+  "patch_path": "patches/vol02_131_6_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 168
+ },
+ {
+  "book": "vol02",
+  "page": "131",
+  "col": 1,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:131:1:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1472.0,
+   1359.0,
+   1589.0,
+   1462.0
+  ],
+  "patch_path": "patches/vol02_131_1_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 168
+ },
+ {
+  "book": "vol02",
+  "page": "133",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:133:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   237.0,
+   2110.0,
+   355.0,
+   2223.0
+  ],
+  "patch_path": "patches/vol02_133_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol02",
+  "page": "133",
+  "col": 9,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:133:9:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   58.0,
+   1786.0,
+   198.0,
+   1892.0
+  ],
+  "patch_path": "patches/vol02_133_9_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol02",
+  "page": "137",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:137:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1318.0,
+   354.0,
+   1425.0,
+   470.0
+  ],
+  "patch_path": "patches/vol02_137_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "137",
+  "col": 6,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:137:6:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   577.0,
+   678.0,
+   697.0,
+   785.0
+  ],
+  "patch_path": "patches/vol02_137_6_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "139",
+  "col": 8,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:139:8:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   221.0,
+   1232.0,
+   339.0,
+   1338.0
+  ],
+  "patch_path": "patches/vol02_139_8_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol02",
+  "page": "139",
+  "col": 7,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:139:7:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   398.0,
+   581.0,
+   516.0,
+   697.0
+  ],
+  "patch_path": "patches/vol02_139_7_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 167
+ },
+ {
+  "book": "vol02",
+  "page": "14",
+  "col": 6,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:14:6:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   618.0,
+   1393.0,
+   734.0,
+   1504.0
+  ],
+  "patch_path": "patches/vol02_14_6_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "14",
+  "col": 9,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:14:9:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   52.0,
+   1622.0,
+   174.0,
+   1735.0
+  ],
+  "patch_path": "patches/vol02_14_9_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "140",
+  "col": 7,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:140:7:10",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   425.0,
+   1155.0,
+   541.0,
+   1271.0
+  ],
+  "patch_path": "patches/vol02_140_7_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "140",
+  "col": 7,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:140:7:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   431.0,
+   1709.0,
+   545.0,
+   1801.0
+  ],
+  "patch_path": "patches/vol02_140_7_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "141",
+  "col": 5,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:141:5:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   769.0,
+   559.0,
+   895.0,
+   674.0
+  ],
+  "patch_path": "patches/vol02_141_5_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "141",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:141:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1508.0,
+   1113.0,
+   1605.0,
+   1219.0
+  ],
+  "patch_path": "patches/vol02_141_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "144",
+  "col": 5,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:144:5:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   816.0,
+   482.0,
+   940.0,
+   599.0
+  ],
+  "patch_path": "patches/vol02_144_5_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "144",
+  "col": 2,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:144:2:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1377.0,
+   479.0,
+   1504.0,
+   593.0
+  ],
+  "patch_path": "patches/vol02_144_2_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "145",
+  "col": 7,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:145:7:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   402.0,
+   1960.0,
+   502.0,
+   2074.0
+  ],
+  "patch_path": "patches/vol02_145_7_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "145",
+  "col": 5,
+  "idx": 1,
+  "sub": null,
+  "id": "vol02:145:5:1",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   755.0,
+   108.0,
+   875.0,
+   182.0
+  ],
+  "patch_path": "patches/vol02_145_5_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "146",
+  "col": 3,
+  "idx": 1,
+  "sub": null,
+  "id": "vol02:146:3:1",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1163.0,
+   321.0,
+   1280.0,
+   432.0
+  ],
+  "patch_path": "patches/vol02_146_3_1.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "146",
+  "col": 3,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:146:3:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1182.0,
+   1861.0,
+   1265.0,
+   1962.0
+  ],
+  "patch_path": "patches/vol02_146_3_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "149",
+  "col": 7,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:149:7:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   404.0,
+   1053.0,
+   527.0,
+   1176.0
+  ],
+  "patch_path": "patches/vol02_149_7_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "149",
+  "col": 6,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:149:6:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   587.0,
+   1617.0,
+   704.0,
+   1728.0
+  ],
+  "patch_path": "patches/vol02_149_6_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "15",
+  "col": 4,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:15:4:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   955.0,
+   947.0,
+   1072.0,
+   1066.0
+  ],
+  "patch_path": "patches/vol02_15_4_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 144
+ },
+ {
+  "book": "vol02",
+  "page": "15",
+  "col": 9,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:15:9:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   39.0,
+   609.0,
+   157.0,
+   722.0
+  ],
+  "patch_path": "patches/vol02_15_9_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 144
+ },
+ {
+  "book": "vol02",
+  "page": "150",
+  "col": 6,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:150:6:9",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   639.0,
+   1017.0,
+   759.0,
+   1165.0
+  ],
+  "patch_path": "patches/vol02_150_6_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "150",
+  "col": 9,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:150:9:11",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   84.0,
+   1268.0,
+   201.0,
+   1387.0
+  ],
+  "patch_path": "patches/vol02_150_9_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "153",
+  "col": 9,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:153:9:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   32.0,
+   636.0,
+   160.0,
+   748.0
+  ],
+  "patch_path": "patches/vol02_153_9_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "153",
+  "col": 9,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:153:9:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   32.0,
+   745.0,
+   161.0,
+   860.0
+  ],
+  "patch_path": "patches/vol02_153_9_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "154",
+  "col": 2,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:154:2:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1358.0,
+   1684.0,
+   1497.0,
+   1800.0
+  ],
+  "patch_path": "patches/vol02_154_2_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 154
+ },
+ {
+  "book": "vol02",
+  "page": "154",
+  "col": 1,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:154:1:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1558.0,
+   929.0,
+   1686.0,
+   1015.0
+  ],
+  "patch_path": "patches/vol02_154_1_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 154
+ },
+ {
+  "book": "vol02",
+  "page": "157",
+  "col": 7,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:157:7:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   408.0,
+   1334.0,
+   518.0,
+   1437.0
+  ],
+  "patch_path": "patches/vol02_157_7_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 168
+ },
+ {
+  "book": "vol02",
+  "page": "157",
+  "col": 3,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:157:3:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1125.0,
+   2113.0,
+   1244.0,
+   2204.0
+  ],
+  "patch_path": "patches/vol02_157_3_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 168
+ },
+ {
+  "book": "vol02",
+  "page": "158",
+  "col": 3,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:158:3:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1194.0,
+   1065.0,
+   1316.0,
+   1166.0
+  ],
+  "patch_path": "patches/vol02_158_3_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "158",
+  "col": 6,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:158:6:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   598.0,
+   855.0,
+   756.0,
+   954.0
+  ],
+  "patch_path": "patches/vol02_158_6_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "159",
+  "col": 3,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:159:3:2",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1131.0,
+   290.0,
+   1248.0,
+   393.0
+  ],
+  "patch_path": "patches/vol02_159_3_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "159",
+  "col": 8,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:159:8:10",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   223.0,
+   1159.0,
+   341.0,
+   1270.0
+  ],
+  "patch_path": "patches/vol02_159_8_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 162
+ },
+ {
+  "book": "vol02",
+  "page": "160",
+  "col": 1,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:160:1:19",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink",
+   "off_center"
+  ],
+  "bbox": [
+   1574.0,
+   2142.0,
+   1670.0,
+   2257.0
+  ],
+  "patch_path": "patches/vol02_160_1_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "160",
+  "col": 1,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:160:1:17",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink",
+   "off_center"
+  ],
+  "bbox": [
+   1560.0,
+   1928.0,
+   1670.0,
+   2034.0
+  ],
+  "patch_path": "patches/vol02_160_1_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "161",
+  "col": 3,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:161:3:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1146.0,
+   479.0,
+   1305.0,
+   592.0
+  ],
+  "patch_path": "patches/vol02_161_3_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "161",
+  "col": 3,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:161:3:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1168.0,
+   2250.0,
+   1281.0,
+   2353.0
+  ],
+  "patch_path": "patches/vol02_161_3_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "162",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:162:2:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1366.0,
+   918.0,
+   1492.0,
+   1029.0
+  ],
+  "patch_path": "patches/vol02_162_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "162",
+  "col": 4,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:162:4:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   999.0,
+   811.0,
+   1124.0,
+   917.0
+  ],
+  "patch_path": "patches/vol02_162_4_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "163",
+  "col": 3,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:163:3:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1131.0,
+   2005.0,
+   1250.0,
+   2112.0
+  ],
+  "patch_path": "patches/vol02_163_3_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "163",
+  "col": 5,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:163:5:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   777.0,
+   577.0,
+   894.0,
+   686.0
+  ],
+  "patch_path": "patches/vol02_163_5_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "164",
+  "col": 7,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:164:7:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   442.0,
+   2133.0,
+   564.0,
+   2225.0
+  ],
+  "patch_path": "patches/vol02_164_7_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "164",
+  "col": 6,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:164:6:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   622.0,
+   341.0,
+   750.0,
+   458.0
+  ],
+  "patch_path": "patches/vol02_164_6_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "165",
+  "col": 5,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:165:5:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   791.0,
+   1569.0,
+   881.0,
+   1688.0
+  ],
+  "patch_path": "patches/vol02_165_5_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 145
+ },
+ {
+  "book": "vol02",
+  "page": "165",
+  "col": 7,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:165:7:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   407.0,
+   1575.0,
+   529.0,
+   1684.0
+  ],
+  "patch_path": "patches/vol02_165_7_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 145
+ },
+ {
+  "book": "vol02",
+  "page": "167",
+  "col": 1,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:167:1:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1509.0,
+   1644.0,
+   1626.0,
+   1757.0
+  ],
+  "patch_path": "patches/vol02_167_1_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "167",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:167:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   242.0,
+   2321.0,
+   360.0,
+   2427.0
+  ],
+  "patch_path": "patches/vol02_167_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "168",
+  "col": 4,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:168:4:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1023.0,
+   1816.0,
+   1134.0,
+   1921.0
+  ],
+  "patch_path": "patches/vol02_168_4_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "168",
+  "col": 5,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:168:5:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   832.0,
+   2255.0,
+   957.0,
+   2371.0
+  ],
+  "patch_path": "patches/vol02_168_5_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "169",
+  "col": 9,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:169:9:15",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   76.0,
+   1678.0,
+   194.0,
+   1795.0
+  ],
+  "patch_path": "patches/vol02_169_9_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "169",
+  "col": 8,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:169:8:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   260.0,
+   1785.0,
+   384.0,
+   1890.0
+  ],
+  "patch_path": "patches/vol02_169_8_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "17",
+  "col": 9,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:17:9:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   24.0,
+   607.0,
+   151.0,
+   727.0
+  ],
+  "patch_path": "patches/vol02_17_9_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol02",
+  "page": "17",
+  "col": 9,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:17:9:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   29.0,
+   2347.0,
+   145.0,
+   2459.0
+  ],
+  "patch_path": "patches/vol02_17_9_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 160
+ },
+ {
+  "book": "vol02",
+  "page": "174",
+  "col": 1,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:174:1:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1534.0,
+   1280.0,
+   1657.0,
+   1391.0
+  ],
+  "patch_path": "patches/vol02_174_1_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "174",
+  "col": 6,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:174:6:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   608.0,
+   1168.0,
+   720.0,
+   1278.0
+  ],
+  "patch_path": "patches/vol02_174_6_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "175",
+  "col": 4,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:175:4:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   985.0,
+   2033.0,
+   1101.0,
+   2143.0
+  ],
+  "patch_path": "patches/vol02_175_4_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "175",
+  "col": 7,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:175:7:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   427.0,
+   687.0,
+   543.0,
+   798.0
+  ],
+  "patch_path": "patches/vol02_175_7_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "176",
+  "col": 9,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:176:9:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   98.0,
+   1806.0,
+   201.0,
+   1915.0
+  ],
+  "patch_path": "patches/vol02_176_9_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol02",
+  "page": "176",
+  "col": 8,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:176:8:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   276.0,
+   469.0,
+   385.0,
+   571.0
+  ],
+  "patch_path": "patches/vol02_176_8_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol02",
+  "page": "177",
+  "col": 1,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:177:1:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1845.0,
+   2237.0,
+   1963.0,
+   2354.0
+  ],
+  "patch_path": "patches/vol02_177_1_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "177",
+  "col": 4,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:177:4:4",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1318.0,
+   460.0,
+   1427.0,
+   581.0
+  ],
+  "patch_path": "patches/vol02_177_4_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "178",
+  "col": 2,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:178:2:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1637.0,
+   1234.0,
+   1753.0,
+   1343.0
+  ],
+  "patch_path": "patches/vol02_178_2_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "178",
+  "col": 5,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:178:5:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1091.0,
+   1365.0,
+   1199.0,
+   1485.0
+  ],
+  "patch_path": "patches/vol02_178_5_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "180",
+  "col": 5,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:180:5:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   797.0,
+   1020.0,
+   920.0,
+   1140.0
+  ],
+  "patch_path": "patches/vol02_180_5_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "180",
+  "col": 4,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:180:4:3",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   992.0,
+   333.0,
+   1111.0,
+   489.0
+  ],
+  "patch_path": "patches/vol02_180_4_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 150
+ },
+ {
+  "book": "vol02",
+  "page": "182",
+  "col": 9,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:182:9:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   84.0,
+   1513.0,
+   197.0,
+   1596.0
+  ],
+  "patch_path": "patches/vol02_182_9_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "182",
+  "col": 3,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:182:3:5",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1209.0,
+   628.0,
+   1323.0,
+   754.0
+  ],
+  "patch_path": "patches/vol02_182_3_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "184",
+  "col": 7,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:184:7:11",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   451.0,
+   1303.0,
+   578.0,
+   1403.0
+  ],
+  "patch_path": "patches/vol02_184_7_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "184",
+  "col": 7,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:184:7:4",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   457.0,
+   486.0,
+   575.0,
+   613.0
+  ],
+  "patch_path": "patches/vol02_184_7_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "185",
+  "col": 6,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:185:6:13",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   567.0,
+   1486.0,
+   684.0,
+   1600.0
+  ],
+  "patch_path": "patches/vol02_185_6_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "185",
+  "col": 3,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:185:3:2",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   1129.0,
+   258.0,
+   1232.0,
+   375.0
+  ],
+  "patch_path": "patches/vol02_185_3_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "187",
+  "col": 9,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:187:9:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   30.0,
+   222.0,
+   141.0,
+   337.0
+  ],
+  "patch_path": "patches/vol02_187_9_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "187",
+  "col": 6,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:187:6:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   571.0,
+   1367.0,
+   676.0,
+   1481.0
+  ],
+  "patch_path": "patches/vol02_187_6_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "188",
+  "col": 5,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:188:5:20",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   834.0,
+   2290.0,
+   949.0,
+   2396.0
+  ],
+  "patch_path": "patches/vol02_188_5_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol02",
+  "page": "188",
+  "col": 5,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:188:5:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   829.0,
+   1238.0,
+   948.0,
+   1359.0
+  ],
+  "patch_path": "patches/vol02_188_5_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 173
+ },
+ {
+  "book": "vol02",
+  "page": "20",
+  "col": 2,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:20:2:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1329.0,
+   254.0,
+   1445.0,
+   372.0
+  ],
+  "patch_path": "patches/vol02_20_2_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 178
+ },
+ {
+  "book": "vol02",
+  "page": "20",
+  "col": 6,
+  "idx": 20,
+  "sub": "b",
+  "id": "vol02:20:6:20b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   568.0,
+   2330.0,
+   647.0,
+   2432.0
+  ],
+  "patch_path": "patches/vol02_20_6_20b.png",
+  "seed": "self_assess_r3",
+  "n_page": 178
+ },
+ {
+  "book": "vol02",
+  "page": "21",
+  "col": 6,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:21:6:7",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   595.0,
+   820.0,
+   709.0,
+   945.0
+  ],
+  "patch_path": "patches/vol02_21_6_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "21",
+  "col": 9,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:21:9:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   40.0,
+   1163.0,
+   156.0,
+   1279.0
+  ],
+  "patch_path": "patches/vol02_21_9_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "23",
+  "col": 4,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:23:4:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1004.0,
+   598.0,
+   1088.0,
+   699.0
+  ],
+  "patch_path": "patches/vol02_23_4_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol02",
+  "page": "23",
+  "col": 6,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:23:6:19",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink",
+   "off_center"
+  ],
+  "bbox": [
+   660.0,
+   2192.0,
+   783.0,
+   2313.0
+  ],
+  "patch_path": "patches/vol02_23_6_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol02",
+  "page": "24",
+  "col": 5,
+  "idx": 6,
+  "sub": "a",
+  "id": "vol02:24:5:6a",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   914.0,
+   743.0,
+   994.0,
+   837.0
+  ],
+  "patch_path": "patches/vol02_24_5_6a.png",
+  "seed": "self_assess_r3",
+  "n_page": 175
+ },
+ {
+  "book": "vol02",
+  "page": "24",
+  "col": 7,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:24:7:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   480.0,
+   1188.0,
+   596.0,
+   1280.0
+  ],
+  "patch_path": "patches/vol02_24_7_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 175
+ },
+ {
+  "book": "vol02",
+  "page": "26",
+  "col": 9,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:26:9:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   101.0,
+   242.0,
+   212.0,
+   344.0
+  ],
+  "patch_path": "patches/vol02_26_9_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "26",
+  "col": 5,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:26:5:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   826.0,
+   1270.0,
+   939.0,
+   1373.0
+  ],
+  "patch_path": "patches/vol02_26_5_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "27",
+  "col": 3,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:27:3:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1152.0,
+   976.0,
+   1272.0,
+   1080.0
+  ],
+  "patch_path": "patches/vol02_27_3_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "27",
+  "col": 8,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:27:8:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   222.0,
+   503.0,
+   351.0,
+   624.0
+  ],
+  "patch_path": "patches/vol02_27_8_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "28",
+  "col": 3,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:28:3:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1155.0,
+   1035.0,
+   1271.0,
+   1152.0
+  ],
+  "patch_path": "patches/vol02_28_3_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "28",
+  "col": 6,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:28:6:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   597.0,
+   1834.0,
+   713.0,
+   1954.0
+  ],
+  "patch_path": "patches/vol02_28_6_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "31",
+  "col": 2,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:31:2:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1326.0,
+   1658.0,
+   1440.0,
+   1780.0
+  ],
+  "patch_path": "patches/vol02_31_2_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol02",
+  "page": "31",
+  "col": 1,
+  "idx": 13,
+  "sub": "b",
+  "id": "vol02:31:1:13b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   1479.0,
+   1553.0,
+   1564.0,
+   1659.0
+  ],
+  "patch_path": "patches/vol02_31_1_13b.png",
+  "seed": "self_assess_r3",
+  "n_page": 174
+ },
+ {
+  "book": "vol02",
+  "page": "33",
+  "col": 7,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:33:7:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   406.0,
+   1781.0,
+   515.0,
+   1892.0
+  ],
+  "patch_path": "patches/vol02_33_7_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "33",
+  "col": 6,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:33:6:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   610.0,
+   975.0,
+   695.0,
+   1094.0
+  ],
+  "patch_path": "patches/vol02_33_6_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "34",
+  "col": 3,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:34:3:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1187.0,
+   1954.0,
+   1303.0,
+   2082.0
+  ],
+  "patch_path": "patches/vol02_34_3_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "34",
+  "col": 9,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:34:9:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   83.0,
+   358.0,
+   197.0,
+   472.0
+  ],
+  "patch_path": "patches/vol02_34_9_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "4",
+  "col": 8,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:4:8:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   278.0,
+   717.0,
+   398.0,
+   826.0
+  ],
+  "patch_path": "patches/vol02_4_8_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 211
+ },
+ {
+  "book": "vol02",
+  "page": "4",
+  "col": 6,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:4:6:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   651.0,
+   2210.0,
+   768.0,
+   2323.0
+  ],
+  "patch_path": "patches/vol02_4_6_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 211
+ },
+ {
+  "book": "vol02",
+  "page": "40",
+  "col": 8,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:40:8:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   295.0,
+   599.0,
+   379.0,
+   709.0
+  ],
+  "patch_path": "patches/vol02_40_8_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "40",
+  "col": 8,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:40:8:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   298.0,
+   2204.0,
+   377.0,
+   2317.0
+  ],
+  "patch_path": "patches/vol02_40_8_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "41",
+  "col": 4,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:41:4:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   957.0,
+   1060.0,
+   1077.0,
+   1173.0
+  ],
+  "patch_path": "patches/vol02_41_4_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "41",
+  "col": 2,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:41:2:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1320.0,
+   2205.0,
+   1440.0,
+   2322.0
+  ],
+  "patch_path": "patches/vol02_41_2_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "43",
+  "col": 9,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:43:9:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   40.0,
+   1420.0,
+   160.0,
+   1528.0
+  ],
+  "patch_path": "patches/vol02_43_9_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "43",
+  "col": 4,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:43:4:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   961.0,
+   847.0,
+   1079.0,
+   964.0
+  ],
+  "patch_path": "patches/vol02_43_4_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "44",
+  "col": 9,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:44:9:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   44.0,
+   855.0,
+   170.0,
+   968.0
+  ],
+  "patch_path": "patches/vol02_44_9_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "44",
+  "col": 5,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:44:5:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   784.0,
+   271.0,
+   908.0,
+   393.0
+  ],
+  "patch_path": "patches/vol02_44_5_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "45",
+  "col": 4,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:45:4:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   956.0,
+   356.0,
+   1076.0,
+   478.0
+  ],
+  "patch_path": "patches/vol02_45_4_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol02",
+  "page": "45",
+  "col": 5,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:45:5:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   768.0,
+   474.0,
+   896.0,
+   583.0
+  ],
+  "patch_path": "patches/vol02_45_5_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol02",
+  "page": "46",
+  "col": 8,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:46:8:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   274.0,
+   506.0,
+   391.0,
+   625.0
+  ],
+  "patch_path": "patches/vol02_46_8_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "46",
+  "col": 2,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:46:2:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1384.0,
+   2128.0,
+   1500.0,
+   2218.0
+  ],
+  "patch_path": "patches/vol02_46_2_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "48",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:48:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1412.0,
+   383.0,
+   1525.0,
+   495.0
+  ],
+  "patch_path": "patches/vol02_48_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol02",
+  "page": "48",
+  "col": 7,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:48:7:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   475.0,
+   265.0,
+   602.0,
+   378.0
+  ],
+  "patch_path": "patches/vol02_48_7_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 172
+ },
+ {
+  "book": "vol02",
+  "page": "49",
+  "col": 1,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:49:1:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1485.0,
+   1742.0,
+   1650.0,
+   1848.0
+  ],
+  "patch_path": "patches/vol02_49_1_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol02",
+  "page": "49",
+  "col": 4,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:49:4:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   951.0,
+   831.0,
+   1060.0,
+   938.0
+  ],
+  "patch_path": "patches/vol02_49_4_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 158
+ },
+ {
+  "book": "vol02",
+  "page": "5",
+  "col": 5,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:5:5:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   785.0,
+   1057.0,
+   901.0,
+   1182.0
+  ],
+  "patch_path": "patches/vol02_5_5_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "5",
+  "col": 3,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:5:3:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1152.0,
+   1629.0,
+   1264.0,
+   1745.0
+  ],
+  "patch_path": "patches/vol02_5_3_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 161
+ },
+ {
+  "book": "vol02",
+  "page": "50",
+  "col": 7,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:50:7:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   446.0,
+   279.0,
+   557.0,
+   399.0
+  ],
+  "patch_path": "patches/vol02_50_7_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "50",
+  "col": 6,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:50:6:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   633.0,
+   2007.0,
+   744.0,
+   2125.0
+  ],
+  "patch_path": "patches/vol02_50_6_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "52",
+  "col": 1,
+  "idx": 8,
+  "sub": null,
+  "id": "vol02:52:1:8",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1543.0,
+   933.0,
+   1655.0,
+   1027.0
+  ],
+  "patch_path": "patches/vol02_52_1_8.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "52",
+  "col": 1,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:52:1:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1542.0,
+   1605.0,
+   1660.0,
+   1716.0
+  ],
+  "patch_path": "patches/vol02_52_1_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "53",
+  "col": 8,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:53:8:20",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   246.0,
+   2293.0,
+   361.0,
+   2410.0
+  ],
+  "patch_path": "patches/vol02_53_8_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "53",
+  "col": 9,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:53:9:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   54.0,
+   1494.0,
+   168.0,
+   1603.0
+  ],
+  "patch_path": "patches/vol02_53_9_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "54",
+  "col": 2,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:54:2:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1401.0,
+   2079.0,
+   1493.0,
+   2178.0
+  ],
+  "patch_path": "patches/vol02_54_2_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol02",
+  "page": "54",
+  "col": 3,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:54:3:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1203.0,
+   612.0,
+   1320.0,
+   708.0
+  ],
+  "patch_path": "patches/vol02_54_3_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 153
+ },
+ {
+  "book": "vol02",
+  "page": "55",
+  "col": 3,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:55:3:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1138.0,
+   1966.0,
+   1243.0,
+   2067.0
+  ],
+  "patch_path": "patches/vol02_55_3_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "55",
+  "col": 8,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:55:8:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   224.0,
+   2078.0,
+   329.0,
+   2171.0
+  ],
+  "patch_path": "patches/vol02_55_8_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "56",
+  "col": 1,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:56:1:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1584.0,
+   849.0,
+   1695.0,
+   935.0
+  ],
+  "patch_path": "patches/vol02_56_1_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "56",
+  "col": 1,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:56:1:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1586.0,
+   269.0,
+   1698.0,
+   380.0
+  ],
+  "patch_path": "patches/vol02_56_1_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "57",
+  "col": 2,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:57:2:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1298.0,
+   1588.0,
+   1412.0,
+   1702.0
+  ],
+  "patch_path": "patches/vol02_57_2_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "57",
+  "col": 9,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:57:9:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   33.0,
+   701.0,
+   138.0,
+   806.0
+  ],
+  "patch_path": "patches/vol02_57_9_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "58",
+  "col": 2,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:58:2:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1349.0,
+   2142.0,
+   1475.0,
+   2258.0
+  ],
+  "patch_path": "patches/vol02_58_2_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "58",
+  "col": 1,
+  "idx": 15,
+  "sub": null,
+  "id": "vol02:58:1:15",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1538.0,
+   1697.0,
+   1674.0,
+   1813.0
+  ],
+  "patch_path": "patches/vol02_58_1_15.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "6",
+  "col": 8,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:6:8:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   290.0,
+   1629.0,
+   406.0,
+   1738.0
+  ],
+  "patch_path": "patches/vol02_6_8_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 125
+ },
+ {
+  "book": "vol02",
+  "page": "6",
+  "col": 9,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:6:9:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   105.0,
+   1520.0,
+   211.0,
+   1623.0
+  ],
+  "patch_path": "patches/vol02_6_9_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 125
+ },
+ {
+  "book": "vol02",
+  "page": "61",
+  "col": 9,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:61:9:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   44.0,
+   1094.0,
+   142.0,
+   1194.0
+  ],
+  "patch_path": "patches/vol02_61_9_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "61",
+  "col": 9,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:61:9:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   37.0,
+   1426.0,
+   155.0,
+   1539.0
+  ],
+  "patch_path": "patches/vol02_61_9_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "62",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:62:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   273.0,
+   1940.0,
+   392.0,
+   2058.0
+  ],
+  "patch_path": "patches/vol02_62_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "62",
+  "col": 1,
+  "idx": 8,
+  "sub": "b",
+  "id": "vol02:62:1:8b",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   1555.0,
+   935.0,
+   1640.0,
+   1035.0
+  ],
+  "patch_path": "patches/vol02_62_1_8b.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "64",
+  "col": 5,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:64:5:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   884.0,
+   2093.0,
+   994.0,
+   2212.0
+  ],
+  "patch_path": "patches/vol02_64_5_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "64",
+  "col": 8,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:64:8:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   277.0,
+   1068.0,
+   433.0,
+   1183.0
+  ],
+  "patch_path": "patches/vol02_64_8_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "65",
+  "col": 4,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:65:4:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   964.0,
+   2094.0,
+   1075.0,
+   2205.0
+  ],
+  "patch_path": "patches/vol02_65_4_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 156
+ },
+ {
+  "book": "vol02",
+  "page": "65",
+  "col": 3,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:65:3:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1147.0,
+   2089.0,
+   1256.0,
+   2204.0
+  ],
+  "patch_path": "patches/vol02_65_3_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 156
+ },
+ {
+  "book": "vol02",
+  "page": "66",
+  "col": 2,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:66:2:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1371.0,
+   1292.0,
+   1484.0,
+   1403.0
+  ],
+  "patch_path": "patches/vol02_66_2_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "66",
+  "col": 9,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:66:9:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   104.0,
+   1624.0,
+   198.0,
+   1748.0
+  ],
+  "patch_path": "patches/vol02_66_9_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "68",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:68:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1551.0,
+   1198.0,
+   1667.0,
+   1306.0
+  ],
+  "patch_path": "patches/vol02_68_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "68",
+  "col": 9,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:68:9:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   83.0,
+   729.0,
+   203.0,
+   851.0
+  ],
+  "patch_path": "patches/vol02_68_9_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "69",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:69:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1523.0,
+   1189.0,
+   1635.0,
+   1293.0
+  ],
+  "patch_path": "patches/vol02_69_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "69",
+  "col": 2,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:69:2:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1339.0,
+   619.0,
+   1454.0,
+   721.0
+  ],
+  "patch_path": "patches/vol02_69_2_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "70",
+  "col": 6,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:70:6:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   610.0,
+   836.0,
+   722.0,
+   946.0
+  ],
+  "patch_path": "patches/vol02_70_6_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "70",
+  "col": 3,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:70:3:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1162.0,
+   1520.0,
+   1274.0,
+   1638.0
+  ],
+  "patch_path": "patches/vol02_70_3_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "71",
+  "col": 5,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:71:5:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   780.0,
+   616.0,
+   894.0,
+   721.0
+  ],
+  "patch_path": "patches/vol02_71_5_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "71",
+  "col": 9,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:71:9:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   41.0,
+   262.0,
+   161.0,
+   371.0
+  ],
+  "patch_path": "patches/vol02_71_9_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "73",
+  "col": 3,
+  "idx": 11,
+  "sub": null,
+  "id": "vol02:73:3:11",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1153.0,
+   1314.0,
+   1271.0,
+   1424.0
+  ],
+  "patch_path": "patches/vol02_73_3_11.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "73",
+  "col": 9,
+  "idx": 19,
+  "sub": null,
+  "id": "vol02:73:9:19",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   48.0,
+   2237.0,
+   164.0,
+   2331.0
+  ],
+  "patch_path": "patches/vol02_73_9_19.png",
+  "seed": "self_assess_r3",
+  "n_page": 164
+ },
+ {
+  "book": "vol02",
+  "page": "74",
+  "col": 3,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:74:3:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1174.0,
+   1844.0,
+   1261.0,
+   1946.0
+  ],
+  "patch_path": "patches/vol02_74_3_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "74",
+  "col": 2,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:74:2:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1334.0,
+   699.0,
+   1464.0,
+   811.0
+  ],
+  "patch_path": "patches/vol02_74_2_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "75",
+  "col": 8,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:75:8:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   229.0,
+   709.0,
+   343.0,
+   813.0
+  ],
+  "patch_path": "patches/vol02_75_8_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "75",
+  "col": 1,
+  "idx": 18,
+  "sub": null,
+  "id": "vol02:75:1:18",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1508.0,
+   2062.0,
+   1623.0,
+   2171.0
+  ],
+  "patch_path": "patches/vol02_75_1_18.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "77",
+  "col": 6,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:77:6:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   607.0,
+   1375.0,
+   700.0,
+   1474.0
+  ],
+  "patch_path": "patches/vol02_77_6_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 123
+ },
+ {
+  "book": "vol02",
+  "page": "77",
+  "col": 9,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:77:9:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   54.0,
+   1140.0,
+   162.0,
+   1256.0
+  ],
+  "patch_path": "patches/vol02_77_9_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 123
+ },
+ {
+  "book": "vol02",
+  "page": "78",
+  "col": 3,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:78:3:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1233.0,
+   1062.0,
+   1341.0,
+   1178.0
+  ],
+  "patch_path": "patches/vol02_78_3_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "78",
+  "col": 6,
+  "idx": 9,
+  "sub": null,
+  "id": "vol02:78:6:9",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   676.0,
+   1043.0,
+   782.0,
+   1161.0
+  ],
+  "patch_path": "patches/vol02_78_6_9.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "8",
+  "col": 8,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:8:8:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   268.0,
+   271.0,
+   371.0,
+   381.0
+  ],
+  "patch_path": "patches/vol02_8_8_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol02",
+  "page": "8",
+  "col": 6,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:8:6:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   596.0,
+   1420.0,
+   748.0,
+   1534.0
+  ],
+  "patch_path": "patches/vol02_8_6_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 152
+ },
+ {
+  "book": "vol02",
+  "page": "83",
+  "col": 6,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:83:6:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   602.0,
+   357.0,
+   720.0,
+   477.0
+  ],
+  "patch_path": "patches/vol02_83_6_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "83",
+  "col": 7,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:83:7:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   420.0,
+   1823.0,
+   530.0,
+   1940.0
+  ],
+  "patch_path": "patches/vol02_83_7_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 148
+ },
+ {
+  "book": "vol02",
+  "page": "84",
+  "col": 6,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:84:6:4",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   669.0,
+   522.0,
+   783.0,
+   626.0
+  ],
+  "patch_path": "patches/vol02_84_6_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "84",
+  "col": 1,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:84:1:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1583.0,
+   1875.0,
+   1704.0,
+   1994.0
+  ],
+  "patch_path": "patches/vol02_84_1_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "86",
+  "col": 3,
+  "idx": 5,
+  "sub": null,
+  "id": "vol02:86:3:5",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1247.0,
+   621.0,
+   1364.0,
+   721.0
+  ],
+  "patch_path": "patches/vol02_86_3_5.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "86",
+  "col": 3,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:86:3:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1234.0,
+   1613.0,
+   1349.0,
+   1728.0
+  ],
+  "patch_path": "patches/vol02_86_3_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "87",
+  "col": 4,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:87:4:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   960.0,
+   485.0,
+   1060.0,
+   604.0
+  ],
+  "patch_path": "patches/vol02_87_4_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "87",
+  "col": 8,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:87:8:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   226.0,
+   257.0,
+   334.0,
+   364.0
+  ],
+  "patch_path": "patches/vol02_87_8_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "88",
+  "col": 2,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:88:2:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1387.0,
+   388.0,
+   1507.0,
+   496.0
+  ],
+  "patch_path": "patches/vol02_88_2_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "88",
+  "col": 6,
+  "idx": 13,
+  "sub": "a",
+  "id": "vol02:88:6:13a",
+  "stratum": "rand",
+  "flags": [
+   "jiazhu"
+  ],
+  "bbox": [
+   707.0,
+   1532.0,
+   792.0,
+   1635.0
+  ],
+  "patch_path": "patches/vol02_88_6_13a.png",
+  "seed": "self_assess_r3",
+  "n_page": 159
+ },
+ {
+  "book": "vol02",
+  "page": "89",
+  "col": 9,
+  "idx": 13,
+  "sub": null,
+  "id": "vol02:89:9:13",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   41.0,
+   1499.0,
+   152.0,
+   1608.0
+  ],
+  "patch_path": "patches/vol02_89_9_13.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "89",
+  "col": 1,
+  "idx": 7,
+  "sub": null,
+  "id": "vol02:89:1:7",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1514.0,
+   818.0,
+   1628.0,
+   935.0
+  ],
+  "patch_path": "patches/vol02_89_1_7.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "9",
+  "col": 1,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:9:1:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1492.0,
+   367.0,
+   1600.0,
+   482.0
+  ],
+  "patch_path": "patches/vol02_9_1_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol02",
+  "page": "9",
+  "col": 1,
+  "idx": 6,
+  "sub": null,
+  "id": "vol02:9:1:6",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1487.0,
+   716.0,
+   1594.0,
+   825.0
+  ],
+  "patch_path": "patches/vol02_9_1_6.png",
+  "seed": "self_assess_r3",
+  "n_page": 179
+ },
+ {
+  "book": "vol02",
+  "page": "90",
+  "col": 7,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:90:7:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   455.0,
+   1607.0,
+   569.0,
+   1725.0
+  ],
+  "patch_path": "patches/vol02_90_7_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "90",
+  "col": 8,
+  "idx": 2,
+  "sub": null,
+  "id": "vol02:90:8:2",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   272.0,
+   244.0,
+   386.0,
+   351.0
+  ],
+  "patch_path": "patches/vol02_90_8_2.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "93",
+  "col": 8,
+  "idx": 20,
+  "sub": null,
+  "id": "vol02:93:8:20",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   222.0,
+   2309.0,
+   333.0,
+   2431.0
+  ],
+  "patch_path": "patches/vol02_93_8_20.png",
+  "seed": "self_assess_r3",
+  "n_page": 147
+ },
+ {
+  "book": "vol02",
+  "page": "93",
+  "col": 5,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:93:5:10",
+  "stratum": "rand",
+  "flags": [
+   "boundary_ink"
+  ],
+  "bbox": [
+   765.0,
+   1207.0,
+   882.0,
+   1315.0
+  ],
+  "patch_path": "patches/vol02_93_5_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 147
+ },
+ {
+  "book": "vol02",
+  "page": "94",
+  "col": 6,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:94:6:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   626.0,
+   1171.0,
+   741.0,
+   1285.0
+  ],
+  "patch_path": "patches/vol02_94_6_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "94",
+  "col": 1,
+  "idx": 16,
+  "sub": null,
+  "id": "vol02:94:1:16",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1552.0,
+   1860.0,
+   1663.0,
+   1973.0
+  ],
+  "patch_path": "patches/vol02_94_1_16.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "95",
+  "col": 5,
+  "idx": 4,
+  "sub": null,
+  "id": "vol02:95:5:4",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   772.0,
+   500.0,
+   882.0,
+   614.0
+  ],
+  "patch_path": "patches/vol02_95_5_4.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "95",
+  "col": 1,
+  "idx": 10,
+  "sub": null,
+  "id": "vol02:95:1:10",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1496.0,
+   1197.0,
+   1617.0,
+   1313.0
+  ],
+  "patch_path": "patches/vol02_95_1_10.png",
+  "seed": "self_assess_r3",
+  "n_page": 170
+ },
+ {
+  "book": "vol02",
+  "page": "96",
+  "col": 2,
+  "idx": 14,
+  "sub": null,
+  "id": "vol02:96:2:14",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1402.0,
+   1639.0,
+   1525.0,
+   1746.0
+  ],
+  "patch_path": "patches/vol02_96_2_14.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "96",
+  "col": 8,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:96:8:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   291.0,
+   2018.0,
+   408.0,
+   2037.0
+  ],
+  "patch_path": "patches/vol02_96_8_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "97",
+  "col": 9,
+  "idx": 3,
+  "sub": null,
+  "id": "vol02:97:9:3",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   41.0,
+   385.0,
+   153.0,
+   502.0
+  ],
+  "patch_path": "patches/vol02_97_9_3.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "97",
+  "col": 3,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:97:3:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1159.0,
+   1995.0,
+   1274.0,
+   2102.0
+  ],
+  "patch_path": "patches/vol02_97_3_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 165
+ },
+ {
+  "book": "vol02",
+  "page": "99",
+  "col": 9,
+  "idx": 17,
+  "sub": null,
+  "id": "vol02:99:9:17",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   37.0,
+   1959.0,
+   150.0,
+   2049.0
+  ],
+  "patch_path": "patches/vol02_99_9_17.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ },
+ {
+  "book": "vol02",
+  "page": "99",
+  "col": 3,
+  "idx": 12,
+  "sub": null,
+  "id": "vol02:99:3:12",
+  "stratum": "rand",
+  "flags": [],
+  "bbox": [
+   1136.0,
+   1379.0,
+   1259.0,
+   1501.0
+  ],
+  "patch_path": "patches/vol02_99_3_12.png",
+  "seed": "self_assess_r3",
+  "n_page": 171
+ }
+]

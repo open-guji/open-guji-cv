@@ -531,10 +531,11 @@
           "confidence": 0.0
         },
         {
-          "type": "char",
+          "type": "empty",
           "index": 20,
           "y_top": 2730.0,
           "y_bottom": 2845.383405714289,
+          "offpage": true,
           "text": null,
           "confidence": 0.0
         }
@@ -719,6 +720,7 @@
           "index": 20,
           "y_top": 2744.0,
           "y_bottom": 2851.383405714289,
+          "offpage": true,
           "text": null,
           "confidence": 0.0
         }
@@ -1399,6 +1401,7 @@
           "index": 20,
           "y_top": 2751.0,
           "y_bottom": 2858.383405714289,
+          "offpage": true,
           "text": null,
           "confidence": 0.0
         }

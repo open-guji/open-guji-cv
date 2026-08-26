@@ -24,3 +24,10 @@ glyph_store/glyphdb.sqlite
 # 100MB 硬限（vol02 首次推送即被拒）。
 **/phase5_clusters/features*.npz
 corpus/external/.general_lm_cache.*
+
+# 自评抽样的中间件：图块由 scripts/sample_live.py 现算可重建，
+# 判读结论的真源在 open-guji-dataset 的 self_assess_*.json 分片里。
+# sample.json 与 sheets/ 入库（便于回看当轮抽到了哪些格）。
+output/self_assess_*/patches/
+output/self_assess_*/baseline.json
+output/self_assess_*/judged_ids.txt
