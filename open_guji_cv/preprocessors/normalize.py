@@ -59,7 +59,8 @@ class NormalizePreprocessor(BasePreprocessor):
         skew_angle = self._detect_skew(image)
 
         # 优先尝试透视校正（同时完成校正+裁切到边框）
-        result = self._perspective_correct(image)
+        result = self._perspective_correct(
+            image, n_cols_expected=getattr(profile, "lines_per_page", None))
         if result is not None:
             # 透视校正成功即采用：它不仅校正倾斜，还裁切到边框区域
             # 校正后残余角度验证仅在原图有明显倾斜时才需要
@@ -79,7 +80,9 @@ class NormalizePreprocessor(BasePreprocessor):
 
     # ─── 透视校正 ─────────────────────────────────────────────
 
-    def _perspective_correct(self, image: np.ndarray) -> np.ndarray | None:
+    def _perspective_correct(self, image: np.ndarray,
+                             n_cols_expected: int | None = None
+                             ) -> np.ndarray | None:
         """检测边框四角并透视校正。失败返回 None。"""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         h, w = gray.shape
@@ -133,6 +136,27 @@ class NormalizePreprocessor(BasePreprocessor):
         if (abs(t_slope) > max_slope or abs(b_slope) > max_slope or
                 abs(l_slope) > max_slope or abs(r_slope) > max_slope):
             return None
+
+        # ── 跨度闸：边框对装不下预期列数就不裁（2026-08-26，#7 专项）─
+        # 外框磨没时 LSD 只剩界行，_find_border_pair 把最外一条**界行**
+        # 当左/右外框——warp 直接把边框外那一列字裁掉，s3 的裁切救援
+        # 来晚了（像素已丢，vol01/81、vol02/186 实证）。两版废案：
+        # ① 在这里用 s3 同款证据把外框外移——未去斜原图上边缘列扫描
+        #   形变重，行网格相关（零位/带位移/分段三版）分不开真列与
+        #   版心渣（实测真列 0.08~0.46、渣 0.28，交叠）；
+        # ② 用界内墨列计数当赤字闸——原图上计数极不稳，全书误报几十页
+        #   （健康页数出 0~8 列的都有），每个误报都会改走不裁路径、
+        #   坐标全漂。
+        # 定版用**几何**：所选边框对的跨度 < (预期列数−0.5)×列距，则这
+        # 对边框物理上装不下版面，必是误检——放弃裁切走仅旋转回退，把
+        # 裁切决定推迟给 s3（去斜图上取证，裁切救援已被证明有效）。
+        # 健康页跨度 ≈ 列数×列距，离 0.5 列距的余量很远，不会触发。
+        if n_cols_expected:
+            from ..utils.content_bounds import _cluster_pitch
+            pitch = _cluster_pitch(v_clusters, int(l_int), int(r_int), h)
+            if (pitch is not None
+                    and r_int - l_int < (n_cols_expected - 0.5) * pitch):
+                return None
 
         # 计算四角点
         tl = _intersect_hv(t_slope, t_int, l_slope, l_int)

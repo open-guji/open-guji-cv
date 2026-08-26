@@ -50,6 +50,12 @@ RESCUE_ROW_COV = 0.45
 RESCUE_DENS_LO = 0.015
 RESCUE_DENS_HI = 0.35
 RESCUE_CORR = 0.40
+# 组合闸的第二通道（2026-08-26 #7 收尾）：vol02/23 的右列中段磨损，
+# 全局相关只有 0.31 被拒，但分 6 段各自找 ±40px 位移后中位 0.44——
+# 弯曲/局部磨损打断全局对齐、打不断分段对齐。通道：全局 ≥0.25 且
+# 分段中位 ≥0.40。只在赤字页（列数<预期）才会走到这里，风险面小。
+RESCUE_CORR_LO = 0.25
+RESCUE_SEG_CORR = 0.40
 RESCUE_EDGE_W = 0.55
 RESCUE_PAD = 8
 RESCUE_MAX_STEPS = 2
@@ -128,6 +134,103 @@ def _count_text_columns(binary_inner: np.ndarray, pitch: float) -> int:
     return n
 
 
+def _inner_row_profile(binary: np.ndarray, ct: int, cb: int,
+                       left: int, right: int) -> np.ndarray:
+    """界内行墨轮廓（行网格指纹，救援的对齐参照）。"""
+    kern = np.ones(15) / 15
+    return np.convolve(
+        binary[ct:cb, left + 40:max(left + 41, right - 40)]
+        .sum(axis=1).astype(float), kern, "same")
+
+
+def _lagged_corr(a: np.ndarray, b: np.ndarray, max_lag: int) -> float:
+    """允许 ±max_lag 纵向位移的最大相关。s2 在**未去斜**的图上取证，
+    窗口与界内横向隔 ~800px，0.5°~1° 倾斜就让两边行网格错开十几像素，
+    零位相关把真列判到 0.4 门槛之下（实测 0.39/0.07/−0.04）。max_lag
+    必须小于半个行距（~55px），否则错一整行会假对齐。max_lag=0 即
+    原零位口径（s3 在去斜图上跑，继续用零位）。"""
+    if max_lag <= 0:
+        return float(np.corrcoef(a, b)[0, 1])
+    best = -1.0
+    n = len(a)
+    for lag in range(-max_lag, max_lag + 1, 4):
+        if lag >= 0:
+            x, y = a[lag:], b[:n - lag]
+        else:
+            x, y = a[:n + lag], b[-lag:]
+        if len(x) < 50 or x.std() <= 0 or y.std() <= 0:
+            continue
+        c = float(np.corrcoef(x, y)[0, 1])
+        if np.isfinite(c) and c > best:
+            best = c
+    return best
+
+
+def _seg_corr_median(a: np.ndarray, b: np.ndarray,
+                     k: int = 6, max_lag: int = 40) -> float:
+    """分段各自找 ±max_lag 位移的最大相关，取中位。弯曲/局部磨损打断
+    全局对齐（vol02/23 右列全局 0.31）、打不断分段对齐（中位 0.44）。"""
+    n = len(a)
+    seg = n // k
+    if seg < 120:
+        return -1.0
+    vals = []
+    for i in range(k):
+        vals.append(_lagged_corr(a[i * seg:(i + 1) * seg],
+                                 b[i * seg:(i + 1) * seg], max_lag))
+    return float(np.median(vals))
+
+
+def extend_bound_by_text(binary: np.ndarray, ct: int, cb: int,
+                         bound: int, direction: int, pitch: float,
+                         inner_prof: np.ndarray, max_lag: int = 0) -> int:
+    """界外有整列文字则把边界外推（s3 裁切救援的证据核，s2 透视校正
+    的界外文字否决共用同一套判据——两处的误检是同一个：外框磨没时
+    把最外界行当外框）。判据见模块头常量注释。"""
+    W = binary.shape[1]
+    kern = np.ones(15) / 15
+    for _ in range(RESCUE_MAX_STEPS):
+        if direction < 0:
+            w0 = max(0, int(bound - pitch))
+            w1 = max(0, int(bound - RESCUE_PAD))
+        else:
+            w0 = min(W, int(bound + RESCUE_PAD))
+            w1 = min(W, int(bound + pitch))
+        if w1 - w0 < 0.4 * pitch:
+            return bound
+        win = binary[ct:cb, w0:w1]
+        rows = float((win.sum(axis=1) > 0).mean())
+        dens = float(win.mean())
+        nz = np.nonzero(win.sum(axis=0))[0]
+        if rows < RESCUE_ROW_COV or not (RESCUE_DENS_LO <= dens
+                                         <= RESCUE_DENS_HI) \
+                or not nz.size:
+            return bound
+        win_prof = np.convolve(win.sum(axis=1).astype(float), kern, "same")
+        if win_prof.std() <= 0:
+            return bound
+        corr = _lagged_corr(inner_prof, win_prof, max_lag)
+        if not np.isfinite(corr):
+            return bound
+        if corr < RESCUE_CORR:
+            # 第二通道：全局尚可 + 分段对齐（弯曲/局部磨损页），见常量注
+            if corr < RESCUE_CORR_LO or \
+                    _seg_corr_median(inner_prof, win_prof) < RESCUE_SEG_CORR:
+                return bound
+        ink_w = int(nz[-1] - nz[0]) + 1
+        if direction < 0:
+            lo = int(nz[0]) + w0
+            if lo < RESCUE_PAD + 4:          # 墨贴图像边
+                return 0 if ink_w >= RESCUE_EDGE_W * pitch else bound
+            bound = max(0, lo - RESCUE_PAD)
+        else:
+            hi = int(nz[-1]) + w0
+            if hi > W - RESCUE_PAD - 4:
+                return W - 1 if ink_w >= RESCUE_EDGE_W * pitch else bound
+            bound = min(W - 1, hi + RESCUE_PAD)
+    return bound
+
+
 def _rescue_cropped_columns(gray: np.ndarray, top: int, bottom: int,
                             left: int, right: int, v_clusters: list,
                             n_expected: int) -> tuple[int, int]:
@@ -142,49 +245,9 @@ def _rescue_cropped_columns(gray: np.ndarray, top: int, bottom: int,
         return left, right
     if _count_text_columns(binary[ct:cb, left:right], pitch) >= n_expected:
         return left, right
-    kern = np.ones(15) / 15
-    inner_prof = np.convolve(
-        binary[ct:cb, left + 40:max(left + 41, right - 40)]
-        .sum(axis=1).astype(float), kern, "same")
-
-    def extend(bound: int, direction: int) -> int:
-        for _ in range(RESCUE_MAX_STEPS):
-            if direction < 0:
-                w0 = max(0, int(bound - pitch))
-                w1 = max(0, int(bound - RESCUE_PAD))
-            else:
-                w0 = min(W, int(bound + RESCUE_PAD))
-                w1 = min(W, int(bound + pitch))
-            if w1 - w0 < 0.4 * pitch:
-                return bound
-            win = binary[ct:cb, w0:w1]
-            rows = float((win.sum(axis=1) > 0).mean())
-            dens = float(win.mean())
-            nz = np.nonzero(win.sum(axis=0))[0]
-            if rows < RESCUE_ROW_COV or not (RESCUE_DENS_LO <= dens
-                                             <= RESCUE_DENS_HI) \
-                    or not nz.size:
-                return bound
-            win_prof = np.convolve(win.sum(axis=1).astype(float), kern, "same")
-            if win_prof.std() <= 0:
-                return bound
-            corr = float(np.corrcoef(inner_prof, win_prof)[0, 1])
-            if not np.isfinite(corr) or corr < RESCUE_CORR:
-                return bound
-            ink_w = int(nz[-1] - nz[0]) + 1
-            if direction < 0:
-                lo = int(nz[0]) + w0
-                if lo < RESCUE_PAD + 4:          # 墨贴图像边
-                    return 0 if ink_w >= RESCUE_EDGE_W * pitch else bound
-                bound = max(0, lo - RESCUE_PAD)
-            else:
-                hi = int(nz[-1]) + w0
-                if hi > W - RESCUE_PAD - 4:
-                    return W - 1 if ink_w >= RESCUE_EDGE_W * pitch else bound
-                bound = min(W - 1, hi + RESCUE_PAD)
-        return bound
-
-    return extend(left, -1), extend(right, +1)
+    inner_prof = _inner_row_profile(binary, ct, cb, left, right)
+    return (extend_bound_by_text(binary, ct, cb, left, -1, pitch, inner_prof),
+            extend_bound_by_text(binary, ct, cb, right, +1, pitch, inner_prof))
 
 
 # ─── 左右方向：LSD + border_detect ────────────────────────
