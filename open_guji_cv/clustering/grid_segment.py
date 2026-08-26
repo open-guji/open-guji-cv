@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing as mp
+import sys
 import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -87,6 +88,12 @@ SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于
 COLPHASE_SPAN = 1.0        # 全周期自搜范围（× 格高，向两侧各这么多）
 COLPHASE_GAIN = 0.60       # 自搜代价须比窄搜低这么多（× 本列平滑墨均值）
 COLPHASE_MIN_INK = 2.0     # 本列平滑墨均值低于此不搜（空列/稀疏列）
+# 【负结果·勿重造】把「切头/切尾墨」并进**这里**的代价（COLPHASE_CLIP）
+# 2026-08-26 试过，对 vol01/60 **一点没动**（135/147 → 135/147）。原因不是
+# 权重不够，是这里拿到的 `proj` 是**文字带裁窗内**的投影：debug 打出来
+# pp=0（页相位就在窗顶），窗外的墨看不见，搜索下限又被 max(0.0, ...) 夹在
+# 窗顶——「往上挪」这个方向物理上走不了。治这一族要到**整页坐标**里去，
+# 见下方 clip_refit。
 # 【红线】新相位不许把字挤出网格。实测 vol01/50 c1：宽搜相位盖住的文字
 # 2354 → 2311，少 43px（首字要被削掉这么多），闸据此否决。全书实测
 # （vol01，GUJI_COLPHASE_DEBUG=1）3610 次评估里 128 次代价够低，
@@ -1396,7 +1403,7 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
             + 1e-3 * abs(phase - page_phase) / cell_h * max(1.0, smooth.mean())
         if cost < best_cost:
             best_cost, best_phase = cost, float(phase)
-    # 抬头/低格起排：整周期再搜一遍（见 COLPHASE_* 上方）
+    # 抬头/低格起排/整版偏低：整周期再搜一遍（见 COLPHASE_* 上方）
     ink = float(smooth.mean())
     if ink >= COLPHASE_MIN_INK:
         wide_phase, wide_cost = best_phase, best_cost
@@ -1431,6 +1438,329 @@ def rigid_bounds(proj: np.ndarray, page_phase: float, cell_h: float,
                 best_phase = wide_phase
     bounds = [best_phase + cell_h * k for k in range(n_chars + 1)]
     return snap_bounds_to_gaps(proj, bounds, cell_h) if snap else bounds
+
+
+# ── 切头/切尾重拟（2026-08-26 用户第二次实审「太多截断」）──────
+# 用户在审查页上点了 33 格全判切错，只说了六个字「太多截断」，而当时
+# 12 道闸全绿、抽样正确率 99.25%。补出 eval_truncation 才量到：全书
+# 32862 个单字段里 695 条被格线切进 ≥10% 字高，且**高度扎堆**——
+# vol01/60 一页 91.8%（147 个字段里 135 个被切）。
+#
+# 根因在 vol01/60 上量得很死：逐条列出墨段与格线，**每一条格线都落在
+# 字身里**，整版系统性偏低 25~50px，而网格尾部还空着约 100px
+# （文字占 20.4 格、网格 21 格）——整体上移 ~37px 就能让每一刀都落进
+# 字缝，两端都不丢字。
+#
+# 为什么原来的逐列相位够不着：`rigid_bounds` 拿到的 `proj` 是**文字带
+# 裁窗内**的投影，而这类页的窗顶恰好压在首字上（甚至压在首字下方），
+# 窗外的墨它根本看不见；搜索下限又被 `max(0.0, page_phase - ...)` 夹在
+# 窗顶，于是「往上挪」这个方向物理上走不了。实测把切墨罚项加进
+# rigid_bounds（COLPHASE_CLIP）对 vol01/60 **一点没动**，就是这个原因。
+#
+# 所以这一刀改在**整页坐标**里做，判据也搬到裁窗之外：
+#   1. 用整列（全页高）的投影量出文字范围 [t, b]；
+#   2. 算现任网格「没盖住的文字墨」——切头 + 切尾，归一到「一个字」；
+#   3. 没切到 CLIPFIT_MIN 就**一点不动**（绝大多数列走这一支）；
+#   4. 要动就在**可行域**里搜：网格必须盖住 [t,b]（ph ≤ t 且
+#      ph+span ≥ b），两头各留 CLIPFIT_SLACK 格余量；代价 = 谷/峰代价
+#      + CLIPFIT_LAM × 切墨；
+#   5. 新解要比现任**决定性地**少切（CLIPFIT_GAIN）才采纳，再逐线吸附。
+#
+# 【可行域的上下限写反过一次】lo 写成 t-slack、hi 写成 b-span+slack，
+# 窗口整个落在可行域外——vol01/60 反而从 135 恶化到 144，随机 30 页
+# 2.8% → 8.1%。写对之后：最差 13 页 46.8% → 29.5%（vol01/60 135 → 0、
+# vol01/50 16 → 2、vol01/88 24 → 15），随机 30 页 2.8% → 2.4%。
+# **约束条件写反的表现和「这条路走不通」一模一样，先验算边界再下结论。**
+#
+# 红线核对（改动前后都做）：字段落在网格外 0、一格装两字 0。
+CLIPFIT_MIN = 0.15         # 现任被切掉的字身深度（× 字高）达此才考虑动
+CLIPFIT_GAIN = 0.10        # 新解须比现任少切这么多才采纳
+CLIPFIT_LAM = 1.5          # 切字深度在代价里的权重（× 本列平滑墨均值）
+CLIPFIT_SLACK = 0.6        # 可行域两头各留的余量（× 格高）
+CLIPFIT_RUN_LO = 0.45      # 「单字墨段」高度窗（× 格高）
+CLIPFIT_RUN_HI = 1.35
+CLIPFIT_EDGE = 3           # 格线离段端这么近不算切（量化/抗锯齿）
+CLIPFIT_LOSS = 0.10        # 网格漏掉的文字墨最多比原来多这么多「个字」
+CLIPFIT_MIN_RUNS = 1       # 少于这么多「单字墨段」就不动（证据不足）
+CLIPFIT_MAX_SHIFT = 1.0    # 相位最多挪这么多（× 格高）。这一刀治的是
+                           # 「整版偏低半格」，实测真实需求 0.3~0.8 格；
+                           # 挪超过一格必是判据看错了，直接拦住。
+
+
+def _char_runs(proj: np.ndarray, cell_h: float,
+               width: float) -> list[tuple[int, int]]:
+    """列投影上的**单字墨段**：太短是碎屑/框条，太长是上下粘连。
+    门槛与 scripts/eval_truncation.py **逐字一致**（那是这条毛病的尺子），
+    口径一分家，触发条件和闸就对不上了。"""
+    if proj.size == 0 or width <= 0:
+        return []
+    on = proj > width * 0.06
+    out: list[list[int]] = []
+    st = None
+    for y, v in enumerate(on):
+        if v and st is None:
+            st = y
+        elif not v and st is not None:
+            out.append([st, y - 1])
+            st = None
+    if st is not None:
+        out.append([st, len(on) - 1])
+    out = [r for r in out if r[1] - r[0] >= 14]
+    merged: list[list[int]] = []
+    for r in out:
+        if merged and r[0] - merged[-1][1] <= 6:
+            merged[-1][1] = r[1]
+        else:
+            merged.append(r)
+    return [(r[0], r[1]) for r in merged
+            if CLIPFIT_RUN_LO * cell_h <= r[1] - r[0] <= CLIPFIT_RUN_HI * cell_h]
+
+
+def _cut_depth(runs: list[tuple[int, int]], lines: list[float]) -> float:
+    """所有格线切进字身的深度之和，按字高归一（单位＝「几个字被切掉一半」）。"""
+    tot = 0.0
+    for a, b in runs:
+        h = float(b - a)
+        d = 0.0
+        for y in lines:
+            if a + CLIPFIT_EDGE < y < b - CLIPFIT_EDGE:
+                d = max(d, min(y - a, b - y))
+        tot += d / h
+    return tot
+
+
+def _body_runs(proj: np.ndarray, cell_h: float,
+               width: float) -> list[tuple[int, int]]:
+    """红线用的**宽进**字身段：只要够 0.30 格高就算一个字，不设上限。
+
+    【必读】判「有没有病」可以挑干净样本（`_char_runs` 的 0.45~1.35 格窗），
+    判「有没有丢字」**必须宽进**。第一版红线闸直接复用了 `_char_runs`，
+    于是矮于 0.45 格的字身**根本不在它眼里**——vol02/120 c7、vol02/159 c2
+    各被挪掉一格（字格 11→10、19→18）而闸一声不吭。
+    同一个错误在这轮里犯了两次：先是墨段口径和闸分家，再是红线口径和
+    「一个字」分家。**凡是拦红线的判据，宁可宽到误拦，不可漏。**
+    """
+    if proj.size == 0 or width <= 0:
+        return []
+    on = proj > width * 0.06
+    out: list[list[int]] = []
+    st = None
+    for y, v in enumerate(on):
+        if v and st is None:
+            st = y
+        elif not v and st is not None:
+            out.append([st, y - 1])
+            st = None
+    if st is not None:
+        out.append([st, len(on) - 1])
+    merged: list[list[int]] = []
+    for r in out:
+        if r[1] - r[0] < 10:
+            continue
+        if merged and r[0] - merged[-1][1] <= 6:
+            merged[-1][1] = r[1]
+        else:
+            merged.append(r)
+    return [(r[0], r[1]) for r in merged if r[1] - r[0] >= 0.30 * cell_h]
+
+
+def _uncov_ink(sm: np.ndarray, runs: list[tuple[int, int]],
+               lo: float, hi: float, cell_h: float) -> float:
+    """网格 [lo,hi] 没盖住的**文字墨**，归一到「一个字」——红线判据。
+
+    【第三版，前两版都漏了】
+    v1 数「完全落在网格外的单字段」：矮于 0.45 格的字身不在样本窗里，看不见；
+    v2 换成宽进的字身段，仍数「整段在外」——`vol02/120 c7` 的「經」和下面的
+    「齋」墨连成一段（53~388），网格首线从 88 挪到 189 时这一段仍然**跨着**
+    首线，于是「整段在外」为 0，闸放行，而「經」实实在在丢了一整个。
+    v3 改成**量墨**：把首末字身段之间没被网格盖住的墨加起来。段连不连、
+    高不高都不影响——丢多少墨就是多少。
+    **红线要量墨，不要数段。**
+    """
+    if not runs:
+        return 0.0
+    t, b = float(runs[0][0]), float(runs[-1][1])
+    L = len(sm)
+    a = int(min(L, max(t, lo)))
+    q = int(max(0, min(b, hi)))
+    v = float(sm[int(max(0, t)):a].sum())
+    if b > q:
+        v += float(sm[q:int(min(L, b))].sum())
+    return v / max(1.0, float(sm.mean()) * cell_h)
+
+
+def _dbg_out():
+    """clip_refit 调试输出：子进程 stdout 会被吞，写到 GUJI_CLIPFIT_LOG。"""
+    path = os.environ.get("GUJI_CLIPFIT_LOG")
+    if not path:
+        return sys.stdout
+    return open(path, "a", encoding="utf-8")
+
+
+def dropped_char_runs(image: np.ndarray, result: dict) -> int:
+    """整页有多少「单字墨段」一格都没被 char 格接住（= 丢了几个字）。
+
+    与 `scripts/eval_char_drop.py` 同一把尺子（`_char_runs` 的口径又与
+    `eval_truncation` 一致），Pass 2a4 用它当第三条采纳通道：**漏墨率
+    这类比例判据有硬门槛，跨不过门槛的「差一点点」照样丢字**——实测
+    vol02/152 漏墨 0.0243 → 0.0124，只差 0.00005 没到「减半」，于是
+    放开窗口的版本被否，c2 抬头的「周」「易」两个字整个掉在网格之上。
+    直接数丢了几个字，就不必再靠比例阈值去猜。
+    """
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    cell_h = float((result.get("grid") or {}).get("cell_h") or 0)
+    if cell_h <= 0:
+        return 0
+    n = 0
+    for c in result.get("columns") or []:
+        x0 = int(max(0, c.get("left_x", 0))) + 4
+        x1 = int(min(gray.shape[1], c.get("right_x", 0))) - 4
+        if x1 - x0 < 8:
+            continue
+        proj = (gray[:, x0:x1] < BINARY_THRESHOLD).sum(axis=1).astype(float)
+        runs = _char_runs(proj, cell_h, float(x1 - x0))
+        if not runs:
+            continue
+        cov = np.zeros(gray.shape[0], dtype=bool)
+        for ce in c.get("cells", []):
+            if ce.get("type") != "char":
+                continue
+            a = int(max(0, ce["y_top"]))
+            b = int(min(gray.shape[0], ce["y_bottom"]))
+            if b > a:
+                cov[a:b] = True
+        for r in runs:
+            if r[1] > r[0] and cov[r[0]:r[1]].mean() < 0.5:
+                n += 1
+    return n
+
+
+def refit_window(image: np.ndarray, col_result: dict, crop: np.ndarray,
+                 bounds: list[float], bounds_pre: list[float],
+                 y1: float) -> tuple[np.ndarray, list[float], float]:
+    """网格被 clip_refit 挪出裁窗时，把**裁窗一起挪**。
+
+    【必读·丢字】`cells_from_bounds(crop, bounds)` 用 `crop[int(y0):int(y1)]`
+    取格内像素。clip_refit 在**整页坐标**里找相位，完全可能把首线挪到裁窗
+    顶之上，于是 y0 变负——负下标是从尾部切，切出来是空数组，`_junk_free_ink`
+    见 h<6 直接返回 0，整格判 empty，**格里那个真字就此消失**。实测
+    vol01/60 c6/c7/c9、vol01/50 c5 各丢首字一枚（新首格墨率 0.34~0.40）。
+
+    红线普查（`_uncov_ink` / redline_list）看不见这一类：墨确实落在网格
+    覆盖的区间里，只是承载它的那一格被判成了空。**「墨在网格内」和
+    「墨被取出来」是两把尺子**，前者绿不代表后者没丢。
+
+    裁不出等宽窗（left_x/right_x 与 crop 对不上）或像素对不齐时，一律
+    退回 refit 之前的网格——宁可少修一列，不可丢一个字。
+    """
+    h = crop.shape[0]
+    if bounds[0] >= -0.5 and bounds[-1] <= h + 0.5:
+        return crop, bounds, float(y1)
+    # 【口径】裁窗的 x 范围是 max(0, int(left_x)+2) ~ min(w, int(right_x)-2)
+    # （见 text_cols 的构造），不是 left_x~right_x——差这 4px 就等宽检查
+    # 不过、整刀退回原网格（实测 vol01/60 直接回到 92% 截断）。
+    lx = max(0, int(col_result.get("left_x", 0)) + 2)
+    rx = min(image.shape[1], int(col_result.get("right_x", 0)) - 2)
+    top = int(max(0, np.floor(min(y1 + bounds[0], y1))))
+    bot = int(min(image.shape[0], np.ceil(max(y1 + bounds[-1], y1 + h))))
+    off = int(y1) - top
+    if (rx - lx != crop.shape[1] or off < 0 or bot - top < h + off
+            or image.ndim != 2):
+        return crop, bounds_pre, float(y1)
+    wide = image[top:bot, lx:rx]
+    if wide.shape[0] < off + h or not np.array_equal(wide[off:off + h], crop):
+        return crop, bounds_pre, float(y1)
+    return wide, [b + y1 - top for b in bounds], float(top)
+
+
+def clip_refit(image: np.ndarray, col_result: dict, bounds: list[float],
+               y1: float, cell_h: float, n_chars: int) -> list[float]:
+    """整页坐标下的截断重拟。bounds 进出都是**裁窗坐标**。"""
+    x0 = max(0, int(col_result.get("left_x", 0)))
+    x1 = min(image.shape[1], int(col_result.get("right_x", 0)))
+    if x1 - x0 < 10 or n_chars < 2:
+        return bounds
+    # 【必须与闸同一口径】墨段要用**原始**行墨投影量，不能用
+    # column_projection——它会剥掉长竖线，实测 vol02/141 c8 因此**看不见**
+    # 开头两个字（226~334、341~434），可行域算成 [0,965]、把网格整体挪了
+    # 7.5 格，那两个字被整个丢在网格之上，`_uncovered` 也跟着瞎了。
+    # 代价项里的 `sm` 仍用 column_projection（那里确实该去掉竖线，
+    # 竖线会把字间谷填平），两者各司其职但**判字身的那把尺子必须和
+    # eval_truncation 一模一样**。
+    xa, xb = x0 + 4, x1 - 4
+    if xb - xa < 8:
+        return bounds
+    raw = (image[:, xa:xb] < BINARY_THRESHOLD).sum(axis=1).astype(np.float64)
+    runs = _char_runs(raw, cell_h, float(xb - xa))
+    dbg = os.environ.get("GUJI_CLIPFIT_DEBUG")
+    if dbg and dbg not in ("1", os.environ.get("GUJI_PAGE_TAG", "")):
+        dbg = None
+    if dbg:
+        print(f"[clipfit] h{image.shape[0]} x{x0}-{x1} "
+              f"col{col_result.get('index')} "
+              f"runs={runs} cell_h={cell_h:.1f} n={n_chars}",
+              file=_dbg_out(), flush=True)
+    if len(runs) < CLIPFIT_MIN_RUNS:
+        if dbg:
+            print("[clipfit]   → 段数 <3，跳过", file=_dbg_out(), flush=True)
+        return bounds
+    # 红线用宽进口径，别拿挑过的样本去拦丢字（见 _body_runs）
+    body = _body_runs(raw, cell_h, float(xb - xa))
+    sm = _smooth(column_projection(image[:, x0:x1]), cell_h)
+    span = n_chars * cell_h
+    ink = float(sm.mean())
+    t, b = float(runs[0][0]), float(runs[-1][1])
+
+    def lines_at(ph: float) -> list[float]:
+        return [ph + cell_h * k for k in range(n_chars + 1)]
+
+    cur = float(bounds[0]) + y1
+    cur_lines = [bd + y1 for bd in bounds]
+    d0 = _cut_depth(runs, cur_lines)
+    if dbg:
+        print(f"[clipfit]   cur={cur:.0f} d0={d0:.3f}",
+              file=_dbg_out(), flush=True)
+    if d0 < CLIPFIT_MIN:
+        if dbg:
+            print("[clipfit]   → 没切到字，不动", file=_dbg_out(), flush=True)
+        return bounds                       # 没切到字 → 一点不动
+    u0 = _uncov_ink(sm, body, cur_lines[0], cur_lines[-1], cell_h)
+    lo = max(0.0, b - span - CLIPFIT_SLACK * cell_h)
+    hi = max(lo, t + CLIPFIT_SLACK * cell_h)
+    best_ph, best_cost = cur, float("inf")
+    lo = max(lo, cur - CLIPFIT_MAX_SHIFT * cell_h)
+    hi = min(hi, cur + CLIPFIT_MAX_SHIFT * cell_h)
+    if dbg:
+        print(f"[clipfit]   可行域 [{lo:.0f},{hi:.0f}] u0={u0:.3f}",
+              file=_dbg_out(), flush=True)
+    if hi < lo:
+        if dbg:
+            print("[clipfit]   → 可行域空", file=_dbg_out(), flush=True)
+        return bounds
+    for ph in np.arange(lo, hi + 1.0, 1.0):
+        cost = _grid_cost(sm, float(ph), cell_h, n_chars) \
+            + CLIPFIT_LAM * _cut_depth(runs, lines_at(float(ph))) * ink
+        if cost < best_cost:
+            best_cost, best_ph = cost, float(ph)
+    page_bounds = snap_bounds_to_gaps(
+        column_projection(image[:, x0:x1]), lines_at(best_ph), cell_h)
+    d1 = _cut_depth(runs, page_bounds)
+    if dbg:
+        u1 = _uncov_ink(sm, body, page_bounds[0], page_bounds[-1], cell_h)
+        print(f"[clipfit]   best_ph={best_ph:.0f} 吸附后首线="
+              f"{page_bounds[0]:.0f} d1={d1:.3f} u1={u1:.3f}",
+              file=_dbg_out(), flush=True)
+    if d1 >= d0 - CLIPFIT_GAIN:
+        if dbg:
+            print("[clipfit]   → 没少切，不动", file=_dbg_out(), flush=True)
+        return bounds                       # 没有决定性地少切 → 不动
+    if _uncov_ink(sm, body, page_bounds[0], page_bounds[-1],
+                  cell_h) > u0 + CLIPFIT_LOSS:
+        if dbg:
+            print("[clipfit]   → 红线否决", file=_dbg_out(), flush=True)
+        return bounds                       # 红线：不许把字挤出网格
+    col_result["clip_refit"] = round(d0 - d1, 3)
+    return [pb - y1 for pb in page_bounds]
 
 
 def _line_center_ink(sm: np.ndarray,
@@ -2166,7 +2496,8 @@ def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
               cur: dict, kw: dict):
     """Pass 2a4 单页：窗口整页放开重扫，择优在本函数里做完（要读像素）。
 
-    返回 (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new) 或 None。
+    返回 (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new,
+          dr_old, dr_new) 或 None。
     """
     _dbg_tag(img_path)
     image = imread(img_path)
@@ -2183,7 +2514,10 @@ def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
     sc_new = straddle_score(image, redone)
     uc_old = _uncovered_ink(image, cur)
     uc_new = _uncovered_ink(image, redone)
-    return redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new
+    dr_old = dropped_char_runs(image, cur)
+    dr_new = dropped_char_runs(image, redone)
+    return (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new,
+            dr_old, dr_new)
 
 
 def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
@@ -2552,6 +2886,7 @@ class GridSegmenter:
                     crop, page_phase, cell_h, float(crop.shape[1]))
                 col_result["layout"] = layout
                 cells = None
+                y_off = float(y1)
                 if layout == "elastic":
                     cells = cells_from_components(crop, cell_h, n, self.params)
                 if cells is None:
@@ -2568,12 +2903,20 @@ class GridSegmenter:
                         # 页坐标；供 straddle_score 按复切前的格线量
                         col_result["bounds_pre"] = [
                             round(float(b) + y1, 1) for b in pre_bounds]
+                    bounds_pre_refit = list(bounds)
+                    bounds = clip_refit(image, col_result, bounds,
+                                        float(y1), cell_h, n)
+                    crop, bounds, y_off = refit_window(
+                        image, col_result, crop, bounds,
+                        bounds_pre_refit, float(y1))
+                    if y_off != float(y1):
+                        col_result["refit_window"] = int(y1 - y_off)
                     cells = cells_from_bounds(crop, bounds, self.params)
                 else:
                     col_result["spread_col"] = True
                 for c in cells:   # 局部 → 全图坐标
-                    c["y_top"] += y1
-                    c["y_bottom"] += y1
+                    c["y_top"] += y_off
+                    c["y_bottom"] += y_off
                 col_result["cells"] = cells
 
         return {
@@ -2616,6 +2959,9 @@ class GridSegmenter:
         # 已经踩过一次坑（Pass 2a3 保留到了一个 None），治本是把页型放在
         # results 之外，写盘前统一盖章。
         ptypes: dict[str, str] = {}
+        # 同理（见上）：band_checked 也必须放在 results 之外，
+        # Pass 2a2/2a-bis/相位/inset 都会整体替换 results[stem]。
+        band_checked: dict[str, dict] = {}
         loaded: list[tuple[str, Path, dict]] = []
         for lf in layout_files:
             stem = lf.stem.replace("_layout", "")
@@ -2780,7 +3126,13 @@ class GridSegmenter:
                 for (stem, _, _), out in zip(cand, outs):
                     if out is None:
                         continue
-                    redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new = out
+                    (redone, n_old, n_new, sc_old, sc_new,
+                     uc_old, uc_new, dr_old, dr_new) = out
+                    if os.environ.get("GUJI_BAND_DEBUG"):
+                        print(f"  [band] {stem}: 字格 {n_old}→{n_new} "
+                              f"骑线 {sc_old:.3f}→{sc_new:.3f} "
+                              f"漏墨 {uc_old:.5f}→{uc_new:.5f} "
+                              f"丢字 {dr_old}→{dr_new}", flush=True)
                     # never-make-worse，两条采纳通道：
                     # ① 字格真的多出来（窗外整片文字被捞回）；
                     # ② 覆盖显著变好——旧结果有 ≥WINDOW_UNCOV_MIN 的墨落在
@@ -2791,7 +3143,22 @@ class GridSegmenter:
                     better_cover = (uc_old >= WINDOW_UNCOV_MIN
                                     and uc_new <= uc_old * WINDOW_UNCOV_HALVE
                                     and n_new >= n_old - WINDOW_CELL_DROP)
-                    if not (more_cells or better_cover):
+                    # ③ 直接少丢字。①②都是**比例**判据，带硬门槛，
+                    #    「差一点点没跨过去」照样丢真字（vol02/152 只差
+                    #    0.00005 没到减半，c2 抬头的「周」「易」就此掉在
+                    #    网格之上）。丢字数是可以直接数的，别拿比例去猜。
+                    fewer_drops = (dr_new < dr_old
+                                   and n_new >= n_old - WINDOW_CELL_DROP)
+                    if not (more_cells or better_cover or fewer_drops):
+                        # 放开窗口并没有更好 = 这一页的短窗口**没有造成
+                        # 覆盖损失**。留个印子给 eval_text_band：窗口比
+                        # 依旧偏短（那是上游 inner_frame 的病，照样要修），
+                        # 但它没在切分层造成伤害，不该记成「塌陷」。
+                        # 判据用的全是真像素（漏墨/丢字/字格），不是自证。
+                        band_checked[stem] = {
+                            "cells": [n_old, n_new],
+                            "uncov": [round(uc_old, 5), round(uc_new, 5)],
+                            "drops": [dr_old, dr_new]}
                         continue
                     if not (sc_new <= WINDOW_STRADDLE_OK
                             or sc_new <= sc_old + WINDOW_STRADDLE_TOL):
@@ -3008,6 +3375,9 @@ class GridSegmenter:
         n_refined = 0
         for stem, _, _ in pages:
             results[stem]["page_type"] = ptypes.get(stem, "body")
+            if stem in band_checked and not results[stem]["grid"].get(
+                    "band_widened"):
+                results[stem]["grid"]["band_checked"] = band_checked[stem]
             new_type = refine_page_type(results[stem])
             if new_type != results[stem]["page_type"]:
                 results[stem]["page_type"] = new_type

@@ -65,6 +65,15 @@ def scan(dataset: str, out: str = "output") -> dict:
             band = g.get("grid", {}).get("band_widened")
             if band:
                 continue          # 已被 Pass 2a4 放开，不再算塌陷
+            if g.get("grid", {}).get("band_checked"):
+                # Pass 2a4 拿真像素比过了：整页放开并**没有**更好
+                # （漏墨没减半、字格没多、丢字没少）——短窗口在这一页
+                # 没有造成覆盖损失。窗口比照旧偏短（上游 inner_frame
+                # 的病，归 phase2 修），但不记成切分层的「塌陷」。
+                # 2026-08-26：clip_refit 把这些页的原网格修准之后，
+                # 11 张页从「靠放开窗口救回来」变成「本来就不用救」，
+                # 字格 1800 → 1801、文字跨度逐页几乎不变。
+                continue
             if t is None or b is None:
                 continue
             ratio = (b - t) / (n * cell_h)
