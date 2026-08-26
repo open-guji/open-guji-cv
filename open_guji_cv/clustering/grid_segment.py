@@ -86,6 +86,12 @@ SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于
 # 采纳门槛会变成 0.10 而几乎全否。2026-08-26 踩过一次。
 RECUT_STRADDLE = 0.45      # 线上墨/格心墨 ≥ 此 → 这列骑线，试复切
 RECUT_ANCHOR = 0.30        # 复切后首/末线相对原位的位移上限（× 格高）
+RECUT_ANCHOR_WIDE = 0.45   # ……墨证据极强时放宽到这里。整列均匀下移
+                           # 1/3 格是**合法的相位修正**，不是搬家：真要把
+                           # 每个字让给隔壁得挪满一格，0.45 挡得住。
+                           # 实测 vol01/50 col1 首线要挪 39px（0.34 格），
+                           # 线上墨 31.4→5.7（1/5.5），被 0.30 冤枉否掉。
+RECUT_STRONG = 0.25        # 「证据极强」= 线上墨压到原来的此比例以下
 RECUT_GAIN = 0.75          # 复切须把线上墨压到原来的此比例以下才采纳
 SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
@@ -1400,9 +1406,11 @@ def elastic_recut(proj: np.ndarray, bounds: list[float], cell_h: float,
     if len(alt) != n_chars + 1:
         return bounds, False, pre
     alt = snap_bounds_to_gaps(proj, alt, cell_h)
-    lim = RECUT_ANCHOR * cell_h
     d0, d1 = abs(alt[0] - bounds[0]), abs(alt[-1] - bounds[-1])
     lv2, _cv2 = _line_center_ink(sm, alt)
+    # 测量质量决定门槛松紧：墨证据压倒性时锚定放宽（见 RECUT_ANCHOR_WIDE）
+    lim = cell_h * (RECUT_ANCHOR_WIDE if lv2 <= RECUT_STRONG * lv
+                    else RECUT_ANCHOR)
     if os.environ.get("GUJI_RECUT_DEBUG"):
         print(f"    [recut] n={n_chars} 骑线 {lv / cv:.3f} 线上 {lv:.1f}→{lv2:.1f}"
               f" 首末位移 {d0:.0f}/{d1:.0f} 上限 {lim:.0f}", flush=True)
