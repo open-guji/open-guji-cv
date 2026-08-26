@@ -103,7 +103,24 @@ JIAZHU_GAP_MIN = 3         # 子列间缝宽下限（px）。部首缝只有 2~3
 JIAZHU_MASS_W = 0.6        # 单个子列宽度上限（× 列宽）
 JIAZHU_ALIGN = 8           # 相邻格的缝中心相差不超过此才算同一条夹注（px）
 JIAZHU_MIN_RUN = 2         # 至少连续这么多格才判夹注
-JIAZHU_CC_MIN = 500        # 段中位「两侧较小 maxCC」低于此 → 噪点段否决        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
+JIAZHU_CC_MIN = 500        # 段中位「两侧较小 maxCC」低于此 → 噪点段否决
+# ── 段端收编（2026-08-26 用户 r10：「双行小注有时奇数个字，最后一行
+# 剩一个，要识别出这是小注在 a 行，而不是正文」）──────────────────
+# 单格判据永远量不出末行：奇数字的末行只有右半一个字（span 只有半列，
+# 过不了 JIAZHU_SPAN_T）；偶数字的末行两个小字合起来也常不够跨度。
+# 桥接也救不了段端——只有一侧邻格。收编拿**邻格的缝中心**当尺：
+#   单字尾   墨 ≥JZ_TAIL_A_FRAC 在缝右（a 侧）且 a 侧够窄 → 只发 a 半
+#   漏拆行   缝两侧各有实墨、缝带内几乎无墨、两半各自够窄 → 正常拆 a/b
+# 全尺寸正文窄字（大/督/撫）居中，frac_a≈0.5、缝带上有墨，两条都过不了。
+JZ_TAIL_MIN_INK = 100      # 收编候选的总墨下限（px）
+JZ_TAIL_A_FRAC = 0.8       # 单字尾：缝右墨占比下限
+JZ_TAIL_GAP_BAND = 3       # 缝带半宽（px）
+JZ_TAIL_GAP_FRAC = 0.02    # 缝带内墨占比上限（正文字的中竖会露馅）
+JZ_ROW_B_CC = 250          # 分型看 b 侧最大连通体：≥此是真笔画（「一」实测
+                           # ~700+）→ 整行拆分；<此只是邻字残渣 → 单字尾。
+                           # 拿墨占比分型栽过：vol02/4:5:20 末行「一|璉」的
+                           # 「一」只占 18% 墨，被 0.8 的比例判据划成残渣，
+                           # b 半被压制、「一」被丢——红线事故。        # 墨的横向重心偏离格心超此比例 → 疑似横向截断
                            # 标注集里 clean 最大 0.088、truncated 0.148~0.339；
                            # 全书命中 3.4%(vol01)/1.4%(vol02)，目视 15/18 属实
 
@@ -507,7 +524,8 @@ def _boundary_band_fracs(gray: np.ndarray) -> tuple[float, float]:
 def mask_frame_bars_outside(strip: np.ndarray,
                             local: list[tuple[int, float, float]],
                             lpad: int, rpad: int,
-                            cell_h: float) -> np.ndarray:
+                            cell_h: float,
+                            right_ext: int = 0) -> np.ndarray:
     """抹掉条带首/末端区里的版框横线**行**（用户审阅反馈的主病灶）。
 
     三道判据缺一不可：
@@ -526,17 +544,23 @@ def mask_frame_bars_outside(strip: np.ndarray,
     top = int(min(l for _, l, _ in local))
     bot = int(max(b for _, _, b in local))
     H, W = strip.shape
-    la, lb = 0, max(0, min(lpad - 2, W))
-    ra, rb = min(W, rpad + 2), W
+    # 右缘救援外扩带（right_ext）不算「墙内空档」：那里按设计装着被救
+    # 回的穿边笔尖 + 磨损界行点渣。r11 实测 vol01/34「類」——底横的
+    # 笔尖伸进外扩带，被当成「横条填满右侧空档」的证据，整条底横带
+    # （30 行）被抹掉、字身裂成两半（红线）。取证窗与行墨统计都止步
+    # 于外扩前的裁切边。
+    We = max(0, W - right_ext)
+    la, lb = 0, max(0, min(lpad - 2, We))
+    ra, rb = min(We, rpad + 2), We
     if (lb - la) + (rb - ra) < 8:      # 没有空档可取证 → 保守不动
         return strip
     binary = (strip < BINARY_THRESHOLD_PATCH)
-    rowink = binary.sum(axis=1)
+    rowink = binary[:, :We].sum(axis=1)
     z = int(FRAME_BAR_ZONE * cell_h)
     zone = np.zeros(H, dtype=bool)
     zone[0:np.clip(top + z, 0, H)] = True
     zone[np.clip(bot - z, 0, H):H] = True
-    core = (rowink >= FRAME_BAR_ROW_T * W) & zone
+    core = (rowink >= FRAME_BAR_ROW_T * We) & zone
     if not core.any():
         return strip
     wiped = np.zeros(H, dtype=bool)
@@ -547,7 +571,7 @@ def mask_frame_bars_outside(strip: np.ndarray,
             wiped[y] = True
     if not wiped.any():
         return strip
-    soft = (rowink >= FRAME_BAR_SOFT_T * W) & zone
+    soft = (rowink >= FRAME_BAR_SOFT_T * We) & zone
     for _ in range(2):
         for y in np.flatnonzero(soft & ~wiped):
             if wiped[max(0, y - 3):y + 4].any():
@@ -825,8 +849,42 @@ def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
 # 一类的界行全放过——首版实测 25 条正样本里放过 5 条。
 SIDE_RULE_MAX_W = 12       # 竖条宽度上限（px）——界行本来就细
 SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是字的一部分，不动
+
+# ── 右缘穿边救援（2026-08-26 用户 r10：「有的整列从右边被剪切」）──
+# 字写得压着界行时，cell_right_x 贴界行内缘裁，捺脚/横尾被齐刷刷切断
+# （vol02/168 一页 5 列、vol02/176「大」的捺、vol02/119「之」的捺）。
+# 裁条带前检测**穿过右裁切边的笔画组件**（从格内深处一直连到边外、
+# 高 ≤30px——界行是长竖、噪点跨不过 10px 宽的检测窗），有就把 sx1
+# 外扩到组件尽头。带进来的界行残段由 strip_side_rule / _assign_column
+# 的竖线过滤收拾——它们已有独立回归（side-rule 分片）。
+RIGHT_RESCUE_MAX = 12      # 右缘外扩上限（px）
+RIGHT_RESCUE_H = 30        # 穿边组件高度上限（超过是界行）
+RIGHT_RESCUE_AREA = 25     # 穿边组件面积下限（噪点）
+RIGHT_RESCUE_IN = 6        # 组件须从裁切边内这么深处伸出来（px）
+RIGHT_RESCUE_OUT = 4       # 且越出裁切边这么多（px）
 SIDE_RULE_ASPECT = 2.0     # 高/宽下限：得是「竖」的
 SIDE_RULE_MIN_AREA = 40    # 墨量下限，纸面碎点交给别的闸
+
+
+def widen_right_for_crossing(page_img: np.ndarray, sx0: int, sx1: int,
+                             sy0: int, sy1: int) -> int:
+    """穿边笔画检测 → 返回外扩后的 sx1（无穿边则原样返回）。"""
+    img_w = page_img.shape[1]
+    if sx1 + RIGHT_RESCUE_OUT >= img_w:
+        return sx1                      # 已到页缘，无处可扩
+    a = max(0, sx1 - 40)
+    b = min(img_w, sx1 + RIGHT_RESCUE_MAX + 2)
+    zone = (page_img[sy0:sy1, a:b] < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    fence = sx1 - a
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(zone, 8)
+    far = sx1
+    for k in range(1, n):
+        x, _y, w, h, area = st[k]
+        if h > RIGHT_RESCUE_H or area < RIGHT_RESCUE_AREA:
+            continue
+        if x <= fence - RIGHT_RESCUE_IN and x + w >= fence + RIGHT_RESCUE_OUT:
+            far = max(far, a + int(x + w) + 1)
+    return min(far, sx1 + RIGHT_RESCUE_MAX, img_w)
 
 
 def strip_side_rule(patch: np.ndarray, x0: float,
@@ -1081,6 +1139,15 @@ def _patch_ink_ratio(gray: np.ndarray) -> float:
 # ── 列级连通体归属（避免边框与邻字残余混入）──────────────
 
 MIN_COMP_AREA_RATIO = 0.004   # 连通体面积 < 格面积此比例 → 噪点，丢弃
+                              # ——只对**边缘带**生效（条带左右缘 ±10px、
+                              # 格界线 ±SPECKLE_ZONE）。文字区内用下面的
+                              # 绝对小阈值：断版会把字里的短横断成小块，
+                              # 0.004 一刀切会把它们当噪点吃掉
+                              # （2026-08-26 用户 r10：「图像处理似乎删去
+                              # 了文字中的短横……文字区域阈值特别小，
+                              # 边缘部分阈值可稍大」）。
+MIN_COMP_AREA_INTERIOR = 12   # 文字区内的噪点阈值（px，几乎不删）
+INTERIOR_X_MARGIN = 10        # 离条带左右缘超过此才算文字区（px）
 RULE_H_RATIO = 1.6            # 高 > 此倍格高 且窄 → 界行竖线
 RULE_W_RATIO = 0.18           # 界行宽度上限（× 列宽）
 MERGE_H_RATIO = 1.45          # 连通体高于此倍格高 → 粘连块，回退按格线切
@@ -1368,9 +1435,11 @@ def _assign_column(col_gray: np.ndarray,
     """
     h = col_gray.shape[0]
     _splitter = _split_touching_curve if SPLIT_CURVE else _split_touching
-    binary = _splitter(
-        _strip_lines(_column_binary(col_gray), cell_h), cells, cell_h, col_w)
+    # 去线、未拆的图另留一份：步骤 3 的「拆分前连通」证据从这上面取
+    prelim = _strip_lines(_column_binary(col_gray), cell_h)
+    binary = _splitter(prelim, cells, cell_h, col_w)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    _n_raw, raw_lab = cv2.connectedComponents(prelim, 8)
     min_area = MIN_COMP_AREA_RATIO * cell_h * col_w
     owner = np.zeros(labels.shape, np.int32)
     boxes: dict[int, list[int]] = {}
@@ -1386,9 +1455,18 @@ def _assign_column(col_gray: np.ndarray,
     # ── 1. 筛掉线状与噪点，分出「可归属」与「粘连块」──────
     live: dict[int, tuple[int, int, int, int, int]] = {}   # k → (x,y,w,h,area)
     merged: list[int] = []
+    lines_y = sorted({t for _i, t, _b in cells} | {b for _i, _t, b in cells})
+
+    def _near_line(cy: float) -> bool:
+        return any(abs(cy - ly) <= SPECKLE_ZONE for ly in lines_y)
+
+    strip_w = binary.shape[1]
     for k in range(1, n):
         x, y, cw, ch, area = stats[k]
-        if area < min_area:
+        interior = (x > INTERIOR_X_MARGIN
+                    and x + cw < strip_w - INTERIOR_X_MARGIN
+                    and not _near_line(y + ch / 2.0))
+        if area < (MIN_COMP_AREA_INTERIOR if interior else min_area):
             continue
         if ch > RULE_H_RATIO * cell_h and cw <= RULE_W_RATIO * col_w:
             continue                                  # 界行/版框竖线
@@ -1417,7 +1495,11 @@ def _assign_column(col_gray: np.ndarray,
     # 各归各格。中央带是关键余量：「守」的宀、出头笔画都住在邻格的
     # **边缘带**，不会触发（不然会回退到「守削成寸」的老病）。
     CORE_BAND = 0.30
-    CORE_SPLIT_MIN = 200
+    # 110：r10 实审 vol01/6 1:13「爲」——爪头与上字连成一体（h 不足
+    # MERGE_H，拆颈不管），整块认给上字，爲头被吃。它在本格中央带的墨
+    # 是 123px，原阈值 200 放行。中央带口径本身已挡住「守」的宀类
+    # 误伤（那些住边缘带，中央带墨 ≈0），阈值只防噪点，压到 110。
+    CORE_SPLIT_MIN = 110
     _rowcache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
     def _rows_of(k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -1471,14 +1553,58 @@ def _assign_column(col_gray: np.ndarray,
         bodies[i] = (x, y, x + cw, y + ch)
 
     # ── 3. 零散部件就近投靠字身 ────────────────────────
+    # 最强证据先行：**拆分前连通**。邻字压线的笔尾（捺脚/竖钩/顶横）被
+    # _split_touching 或墨色断点从本体上切下来后，就成了贴着格线的零散
+    # 部件——四级键的「越格量」这时必然判错：笔尾伸进哪格，并进那格的
+    # 越格量就最小（r10 实审 vol01/8 与 /11 的 9:11，上/下邻字的笔尾都
+    # 被判给了本格，用户手工裁掉）。而它在**去线未拆**的图上与真身原是
+    # 一块墨。墨迹相连不是距离阈值（间隙分布重叠的教训还在），是物理
+    # 证据：与**唯一**一个字身同源的部件直接归还；同源字身有两个以上
+    # （真粘连对半拆开的场合）或一个也没有，才走四级键。
+    # 只认**窄**部件（≤0.45 列宽）：拆颈拆下来的东西有两种，邻字伸过来
+    # 的笔尾（捺脚/竖钩，实测 0.27 列宽）归还是对的；被上字竖尾粘住的
+    # 下字**顶横**（0.7~0.9 列宽，test_split_touching_cuts_at_the_stem）
+    # 是下字的部首，归还就把拆颈白拆了——宽部件是「字的横向笔画」，
+    # 窄部件才是「伸过来的尾巴」。
+    _rawcache: dict[int, int] = {}
+
+    def _raw_of(k: int) -> int:
+        if k not in _rawcache:
+            x, y, cw, ch, _a = (live[k] if k in live else
+                                tuple(int(v) for v in stats[k][:5]))
+            win = labels[y:y + ch, x:x + cw] == k
+            vals = raw_lab[y:y + ch, x:x + cw][win]
+            _rawcache[k] = int(vals[0]) if vals.size else 0
+        return _rawcache[k]
+
+    raw_owner: dict[int, set[int]] = {}
+    for kb, ib in claim.items():
+        raw_owner.setdefault(_raw_of(kb), set()).add(ib)
+
     for k in live:
         if k in claim:
             continue
         x, y, cw, ch, _a = live[k]
         cx = x + cw / 2
+        kin = (raw_owner.get(_raw_of(k))
+               if cw <= 0.45 * col_w else None)
+        if kin is not None and len(kin) == 1:
+            best = next(iter(kin))
+            if not overclaims(k, best):
+                owner[labels == k] = best + 1
+                add(best, x, y, x + cw, y + ch)
+                continue
+            merged.append(k)                          # 同源但占别格中央带
+            continue
         best, best_key = None, None
         for i, (bx0, by0, bx1, by1) in bodies.items():
             top, bot = cell_span[i]
+            # 字身自己已经越线的，越格量按「格线 ∪ 字身实占」量：字明摆着
+            # 写长了/压线了，它伸过去的那段行区里的浮散笔画（r10 实审
+            # vol01/11 9:11——下字的顶横浮在上格底带、正被下字身体盖着的
+            # 行区里）并进来不该再记越格。字身没越线时与原口径完全一致，
+            # 「守」的宀类判断不受影响。
+            top, bot = min(top, by0), max(bot, by1)
             u0, u1 = min(by0, y), max(by1, y + ch)
             # 并入后**越出该格格线**的量。刻本单字待在自己格里，这一条
             # 把「顶部部件该归谁」从模棱两可的距离比较变成了确定判断：
@@ -1687,6 +1813,14 @@ class CharExtractor:
                 gl, gr = left_x + shrink_x, right_x - shrink_x
             sx0 = int(round(max(0.0, float(gl))))
             sx1 = int(round(min(float(img_w), float(gr))))
+            sy0_pre = int(round(max(0.0,
+                min(float(c["y_top"]) for c in cells))))
+            sy1_pre = int(round(min(float(img_h),
+                max(float(c["y_bottom"]) for c in cells))))
+            sx1_widened = widen_right_for_crossing(
+                page_img, sx0, sx1, sy0_pre, sy1_pre)
+            right_delta = sx1_widened - sx1
+            sx1 = sx1_widened
             pad_y = cell_h_ref * self.padding_ratio
             sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
@@ -1701,6 +1835,17 @@ class CharExtractor:
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
             strip = page_img[sy0:sy1, sx0:sx1]
+            if right_delta > 0:
+                # 外扩带进来的**非穿边**小组件只可能是界行点渣（磨损界行
+                # 是一串点，恰好整体落在原裁切边外侧）——清掉；穿边的
+                # 笔画（跨过原裁切边、连进格内）保留，这正是外扩的目的。
+                strip = strip.copy()
+                fence0 = (sx1 - right_delta) - sx0
+                bs = (strip < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+                nrc, lrc, strc, _ = cv2.connectedComponentsWithStats(bs, 8)
+                for k in range(1, nrc):
+                    if strc[k, 0] >= fence0 - 1:
+                        strip[lrc == k] = 255
             # 弯的界行：矩形裁不掉（线在不同高度处于不同 x），按切分给出的
             # **逐带裁切边**把墙外像素抹白。必须在归属之前做——弯线一旦
             # 进入连通体分析，会与字粘连或被误归属。
@@ -1713,7 +1858,10 @@ class CharExtractor:
                     if rb <= ra:
                         continue
                     ca = max(0, int(round(blx)) - sx0)
-                    cb = min(strip.shape[1], int(round(brx)) - sx0)
+                    # 右缘救援外扩了条带就同步放宽掩膜右界，别把刚救回的
+                    # 笔尖又涂白（带进来的界行归下游剥离，不归这里）
+                    cb = min(strip.shape[1],
+                             int(round(brx)) - sx0 + right_delta)
                     if ca > 0:
                         strip[ra:rb, :ca] = 255
                     if cb < strip.shape[1]:
@@ -1725,7 +1873,8 @@ class CharExtractor:
                       float(c["y_bottom"]) - sy0) for c in cells]
             strip = mask_frame_bars_outside(
                 strip, local, int(round(left_x)) - sx0,
-                int(round(right_x)) - sx0, cell_h_ref)
+                int(round(right_x)) - sx0, cell_h_ref,
+                right_ext=right_delta)
             if self.strategy == "component_owner":
                 boxes, owner = _assign_column(strip, local, cell_h_ref,
                                               float(sx1 - sx0))
@@ -1878,6 +2027,59 @@ class CharExtractor:
                 for i, _c, inst in col_entries:
                     if i == j and "jiazhu" not in inst.flags:
                         inst.flags.append("jiazhu")
+            # ── 段端收编：奇数字末行单字 / 漏拆的末行 ──────────
+            jz_tail_a: set[int] = set()
+            if jz_runs:
+                for e in [i for i in sorted(jz_runs) if i + 1 not in jz_runs]:
+                    t = e + 1
+                    if t in jz_runs or t not in jz_pre:
+                        continue
+                    tinst = by_idx.get(t)
+                    if tinst is None or tinst.cell_type != "char" \
+                            or tinst.sub:
+                        continue
+                    pre_t = jz_pre[t][0]
+                    cx = int(round(jz_runs[e]))
+                    ys_t, xs_t = np.nonzero(pre_t < BINARY_THRESHOLD_PATCH)
+                    if xs_t.size < JZ_TAIL_MIN_INK:
+                        continue
+                    frac_a = float((xs_t >= cx).mean())
+                    in_band = int(((xs_t >= cx - JZ_TAIL_GAP_BAND)
+                                   & (xs_t <= cx + JZ_TAIL_GAP_BAND)).sum())
+                    a_xs = xs_t[xs_t >= cx]
+                    b_xs = xs_t[xs_t < cx]
+                    w_full = pre_t.shape[1]
+                    a_narrow = bool(a_xs.size) and (
+                        a_xs.max() - a_xs.min() + 1 <= JIAZHU_MASS_W * w_full)
+                    # b 侧最大连通体：真笔画（「一」~700+）还是邻字残渣。
+                    # **分型不能拿墨占比**——瘦字的墨占比跟残渣重叠。
+                    b_cc = 0
+                    if b_xs.size:
+                        bh = (pre_t[:, :max(1, cx)]
+                              < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+                        nb, _lb, stb, _cb = \
+                            cv2.connectedComponentsWithStats(bh, 8)
+                        if nb > 1:
+                            b_cc = int(stb[1:, 4].max())
+                    row_ok = (a_xs.size >= JZ_TAIL_MIN_INK
+                              and b_xs.size >= JZ_TAIL_MIN_INK
+                              and b_cc >= JZ_ROW_B_CC
+                              and in_band <= JZ_TAIL_GAP_FRAC * xs_t.size
+                              and a_narrow
+                              and b_xs.max() - b_xs.min() + 1
+                                  <= JIAZHU_MASS_W * w_full)
+                    if row_ok:
+                        # 漏拆行（末行两字，单格判据量不出缝）：正常拆 a/b
+                        jz_runs[t] = float(jz_runs[e])
+                        if "jiazhu" not in tinst.flags:
+                            tinst.flags.append("jiazhu")
+                    elif (frac_a >= JZ_TAIL_A_FRAC and a_narrow
+                          and b_cc < JZ_ROW_B_CC):
+                        # 单字尾（奇数字末行）：b 侧只有碎渣，只发 a 半
+                        jz_runs[t] = float(jz_runs[e])
+                        jz_tail_a.add(t)
+                        if "jiazhu" not in tinst.flags:
+                            tinst.flags.append("jiazhu")
             # ── 夹注 a/b 拆分（2026-08-25 用户定）────────────────
             # 确认成夹注段的格，整格实例替换为两个半宽实例：a=右子列、
             # b=左子列（读序：段内先 a 全部、后 b 全部——见
@@ -1893,6 +2095,8 @@ class CharExtractor:
                 cxi = int(round(cx))
                 halves = []
                 for sub, xs, xe in (("a", cxi, pre.shape[1]), ("b", 0, cxi)):
+                    if sub == "b" and i in jz_tail_a:
+                        continue      # 单字尾：b 侧只有残渣，不发实例
                     hp = pre[:, xs:xe]
                     ty, tx = np.nonzero(hp < BINARY_THRESHOLD_PATCH)
                     if ty.size < 30:
