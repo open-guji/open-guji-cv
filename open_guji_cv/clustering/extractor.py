@@ -861,6 +861,8 @@ SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是�
 # 的竖线过滤收拾——它们已有独立回归（side-rule 分片）。
 RIGHT_RESCUE_MAX = 12      # 右缘外扩上限（px）
 LEFT_RESCUE_MAX = 12       # 左缘外扩上限（px）
+SLIVER_W_RATIO = 0.12      # 裁紧后宽度低于此比例 × 列宽 → 疑似界行残条
+SLIVER_ASPECT = 3.0        # ……且高 ≥ 此倍宽度（细长）才判，扁字不受影响
 RIGHT_RESCUE_H = 30        # 穿边组件高度上限（超过是界行）
 RIGHT_RESCUE_AREA = 25     # 穿边组件面积下限（噪点）
 RIGHT_RESCUE_IN = 6        # 组件须从裁切边内这么深处伸出来（px）
@@ -2061,6 +2063,21 @@ class CharExtractor:
                 )
                 results.append((inst, patch))
                 col_entries.append((idx, jz_center, inst))
+            # 细条闸（2026-08-26 自评 r2）：裁紧后**窄成一条**的格装不下
+            # 任何字，是界行残条冒充字（实测 28 格全在列端，宽 4~20px、
+            # 高 41~145，长宽比 5~18）。判据只用几何，不看位置——它不
+            # 挑列端，哪儿冒出来都算。宽度阈值取 0.12 列距（≈21px）：
+            # 真字最窄的「丨」类部件也有 0.15 列距以上，且必须同时细长
+            # （高 ≥3 倍宽）才判，扁字（一/二，宽 0.6 列距）不受影响。
+            for _i, _c, inst in col_entries:
+                if inst.cell_type != "char":
+                    continue
+                bw = inst.bbox[2] - inst.bbox[0]
+                bh = inst.bbox[3] - inst.bbox[1]
+                if bw < SLIVER_W_RATIO * col_w and bh >= SLIVER_ASPECT * bw:
+                    inst.cell_type = "empty"
+                    if "sliver" not in inst.flags:
+                        inst.flags.append("sliver")
             # 列端渣格闸：从两端向内走（各最多 2 格），渣格转 empty +
             # tail_junk 旗，遇到第一格真字停。判据在裁紧前的格框图块上算。
             by_idx = {i: inst for i, _c, inst in col_entries}
