@@ -430,7 +430,7 @@ def _entry_html(e: dict) -> str:
  data-done="0" data-hidden="0">
 {strip}
 <div class="body">
-<div class="hd"><span class="loc mono">第{_esc(e["page"])}页 · 第{_esc(e["col"])}列 · 第{_esc(e["idx"])}字</span>
+<div class="hd"><span class="loc mono">第{_esc(e["page"])}页 · 第{_esc(e["col"])}列 · 第{_esc(str((e.get("pos") + 1) if e.get("pos") is not None else e["idx"] + 1))}字</span>
 <span class="mono">{iid}</span>{"".join(tags)}</div>
 <div class="cmp">
 <div class="cell">{patch}<div class="lab">原图</div></div>

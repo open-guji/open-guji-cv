@@ -350,3 +350,176 @@ def test_multi_page_batch(tmp_path):
     assert b["page"] == "14+15"
     assert [e["instance_id"] for e in b["entries"]] == [
         "tb:14:1:0", "tb:14:1:1", "tb:15:1:0", "tb:15:1:1"]
+
+
+def test_card_shows_column_sequence_not_raw_idx(tmp_path):
+    """卡头的「第几字」= 该列 char 的实际位次（1 起），不是格号 idx。
+
+    idx 是格号：空格位也占号、从 0 起。拿它当序号，用户对着原图数会
+    错位（2026-08-25 实锤）。context.pos 也不行——那按 OCR 载体算，
+    载体缺格时同样对不上。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    assert "第2列第3字" in html          # seq，不是 idx+1=6，也不是 5
+
+
+def test_stale_context_is_dropped_not_rendered():
+    """队列行的 context 与 index 口径对不上（旧切分算的）→ 整块摘掉。
+
+    实锤 vol01:4:2:20：卡片图块是「第」，context 却是旧切分的，pos 指到
+    下一格的「一」。宁可少显示一条辅助信息，也不能给一条错位的高亮。
+    """
+    from open_guji_cv.clustering.review.seed_export import _checked_context
+
+    class _It:
+        context = {"col_ocr": "甲乙丙丁", "col_ref": "甲乙丙丁", "pos": 3}
+
+    it = _It()
+    assert _checked_context(it, 4) == it.context      # pos == seq-1 → 留
+    assert _checked_context(it, 3) is None            # 错一位 → 摘
+    assert _checked_context(it, None) == it.context   # 没有 index 就别管
+
+
+def test_mobile_shrink_and_scroll_hide_top_bar():
+    """手机端：字号缩一档 + 顶栏滚动收起。
+
+    用户 2026-08-26 手机实拍反馈：标题「vol01 种子审查 · 第41+…+50页」
+    在窄屏折成三行，加上两条进度与两个按钮，顶栏吃掉小半屏——而审字时
+    这些一个都用不上。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    # 手机断点存在，且标题单行截断（不折成三行）
+    assert "@media (max-width: 640px)" in html
+    assert "text-overflow:ellipsis" in html
+    # 顶栏可收起：样式 + 驱动它的滚动逻辑，缺一不可
+    assert '.top[data-hide="1"]{transform:translateY(-100%)}' in html
+    assert "bar.setAttribute('data-hide'" in html
+    # 往上滚要能回来；往下滚没越过阈值时**什么都不做**（不能强制显示，
+    # 否则会跟 setActive 的显式收起打架，顶栏又压住卡头）
+    assert "if(dy < 0){ bar.setAttribute('data-hide', '0'); return; }" in html
+    assert "if(y > bar.offsetHeight * 2) bar.setAttribute('data-hide', '1')" in html
+
+
+def test_auto_advance_hides_top_bar_and_aligns_tall_cards():
+    """裁决完自动前进时：收起顶栏 + 过高的卡片对齐到顶。
+
+    用户 2026-08-26 手机实拍：裁决完自动滚到下一张，sticky 顶栏正压在
+    卡片头上，要审的字被挡住。两处一起治——顶栏收起（这一滚是程序发起
+    的，用户没在读它），卡片比视口高时用 block:'start' 而不是 'center'
+    （否则卡头被顶出屏幕），外加 scroll-margin-top 兜底。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    assert "if(bar) bar.setAttribute('data-hide', '1');" in html
+    assert "tall ? 'start' : 'center'" in html
+    assert "scroll-margin-top:3.2rem" in html
+
+
+def test_mobile_row_stacks_and_recrop_leaves_a_visible_badge():
+    """手机窄屏两件事（用户 2026-08-26 实拍两条抱怨）：
+
+    一、「圖片佔了一半的豎排的位置」——原图 + 上下文竖排条 + 主区三者
+    横排，412px 宽下 `.cand` 撑到 380px，整页横向溢出到 574px。手机块把
+    `.row` 改成竖排堆叠，主区独占整行。
+
+    二、「確認之後它總是彈開，讓我再次重新切分，無限循環」——重切是**几何
+    通道**，不定字、不推进，面板一关卡片看着毫无变化，用户以为没生效就
+    再切一遍。卡头挂一枚常驻徽章，定字之前一直亮着；重放也要跟着日志
+    回来（发布重载之后痕迹不能丢），定案/非字之后自动隐去。
+    """
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    e = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+         "tier": "clean", "intrusion": [], "status": "pending_review",
+         "patch_b64": None, "region": None, "choices": [], "ocr": None,
+         "align": None, "doubts": [], "context": None, "match": None,
+         "proposed": None}
+    html = render_seed_html({"book": "b", "page": "1", "batch_id": "t",
+                             "entries": [e], "n_done": 0, "n_total": 1,
+                             "page_total": 1, "page_done": 0,
+                             "book_total": 1, "book_done": 0,
+                             "pages_pending": []})
+    # 一：窄屏堆叠，主区不再跟图片抢宽
+    assert "@media (max-width: 640px)" in html
+    assert "flex-direction:column" in html
+    assert ".main{min-width:0;width:100%}" in html
+    assert "overflow-x:hidden}   /* 兜底" in html
+
+    # 二：徽章存在、默认收着、只有 data-recropped 才亮、定案后隐去
+    assert '<span class="rcbadge">' in html
+    assert ".rcbadge{display:none" in html
+    assert '.card[data-recropped="1"] .rcbadge{display:inline-block}' in html
+    assert ('.card[data-state="done"] .rcbadge,'
+            '.card[data-state="nac"] .rcbadge{display:none}') in html
+    # 确认重切时挂上；日志重放时挂回来；归零时摘掉（日志是唯一真源）
+    assert html.count("card.setAttribute('data-recropped', '1')") >= 2
+    assert "else if(ev.op === 'recrop')" in html
+    assert "cs[i].removeAttribute('data-recropped');" in html
+
+
+def test_semantic_merged_pair_gets_shape_not_important_hint():
+    """已/巳撞上 near_form 时，疑问说明换一句话：字形不重要，按文意选。
+
+    这三个字史上就是同一个词的两种写法（charset_and_lm.md §四），字形
+    护栏拦得对（防形状判据自己认错），但审阅时不该纠结「封不封口」——
+    这条提示直接把答案摆出来，省得用户对着图块犹豫（2026-08-26
+    用户定：这是唯一一类允许「字形是什么我们不一定录什么」的例外，
+    要让这个例外在审查页上一眼可辨）。换作大/太这种普通形近字家族，
+    字形仍然重要，提示语不该跟着换。"""
+    from open_guji_cv.clustering.review.seed_export import render_seed_html
+    base = {"book": "b", "page": "1", "batch_id": "t",
+            "n_done": 0, "n_total": 1, "page_total": 1, "page_done": 0,
+            "book_total": 1, "book_done": 0, "pages_pending": []}
+
+    merged = {"instance_id": "b:1:2:5", "col": 2, "idx": 5, "seq": 3,
+             "tier": "clean", "intrusion": [], "status": "pending_review",
+             "patch_b64": None, "region": None, "ocr": {"char": "巳", "prob": 0.9},
+             "align": {"char": "已", "op": "replace"}, "context": None,
+             "match": None, "proposed": "已",
+             "choices": [{"char": "已", "ocr_prob": None, "align_op": "replace",
+                         "ref_op": None, "db_cov": None, "proposed": True},
+                        {"char": "巳", "ocr_prob": 0.9, "align_op": None,
+                         "ref_op": None, "db_cov": None, "proposed": False}],
+             "doubts": [{"code": "near_form", "no": 4, "label": DOUBT_LABELS["near_form"]}]}
+    html = render_seed_html({**base, "entries": [merged]})
+    assert "字形不重要，直接按文意选" in html
+    assert DOUBT_LABELS["near_form"] not in html   # 换掉了，不是叠加
+
+    ordinary = {**merged, "instance_id": "b:1:2:6",
+               "ocr": {"char": "大", "prob": 0.9},
+               "align": {"char": "太", "op": "replace"}, "proposed": "太",
+               "choices": [{"char": "太", "ocr_prob": None, "align_op": "replace",
+                           "ref_op": None, "db_cov": None, "proposed": True},
+                          {"char": "大", "ocr_prob": 0.9, "align_op": None,
+                           "ref_op": None, "db_cov": None, "proposed": False}]}
+    html2 = render_seed_html({**base, "entries": [ordinary]})
+    assert "字形不重要，直接按文意选" not in html2
+    assert DOUBT_LABELS["near_form"] in html2      # 普通形近字照旧用原文案

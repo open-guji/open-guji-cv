@@ -66,6 +66,33 @@ SNAP_VALLEY_T = 0.35       # 谷底墨量 / 相邻两格的平均墨量。高于
                            # 根本没有空隙，保持刚性位置
 SNAP_SMOOTH = 3            # 找谷前的行向平滑窗（px），滤掉单像素噪声
                            # （修复后自然抖动 σ≈2.2%，0.10 曾放过 0.91 的漏网页）
+SNAP_TIGHT = 0.10          # 「无谷微挪」半径（× 格高，≈11px）。上下两字真连在
+                           # 一起时没有谷可吸附，但**这一行墨更少**仍是硬事实。
+                           # 与一档吸附同半径：半格是 57px，11px 根本挪不到
+                           # 邻格的空隙上去，「把整个字让给隔壁」的风险不存在。
+                           # 实测正文页重切缝 1685 → 620（扫参见
+                           # char_clustering_design.md「上下接壤」一节）。
+SNAP_TIGHT_GAIN = 0.15     # 微挪至少要把切缝墨压低这么多（× 参考墨量）才动。
+                           # 防止在噪声上抖：墨量本来就平的地方不折腾。
+# ── 文字带窗口塌掉的救援（2026-08-25 专项）────────────────────────
+# 列的纵向窗口来自 phase2 的 inner_frame 上下界。版面检测把**正文中间的
+# 某条横线**当成上/下框时，窗口能塌到只剩三分之一页，窗外的字全部判空、
+# 静默丢掉——实测两册 21 张正文页中招，最惨的 vol02/97 只切出 47 个字格
+# （中位 168），按中位估算丢了 ~1276 格。
+#
+# 判据不看像素，看**模型**：文字带高是书级刚性常量 n_chars × 书级格高，
+# 窗口短过它一大截就是版面检测认错了线。救法是把窗口整页放开，让投影
+# 自己定文字带（content_range + 版框行锚定本来就干这件事）。
+# 逐页 never-make-worse 择优：字格数要涨，且骑线比不许变糟。
+WINDOW_MIN_RATIO = 0.90    # 窗口高 / (n × 书级格高) 低于此 → 判定窗口塌了
+WINDOW_STRADDLE_OK = 0.35  # 放开后骑线比只要不高于此就算合格（全书中位 0.38）
+WINDOW_STRADDLE_TOL = 0.05 # 或者：比原来糟不超过这么多也接受
+# 字格数不是可靠的采纳信号：网格骑在字上时一个字跨两格能数出**更多**
+# 「字格」（vol02/152 实测：错位版 158 格、对齐版 156 格——对的反而少）。
+# 真正的硬通货是**覆盖**：列带里的墨有多少落在 char 格之外。
+WINDOW_UNCOV_MIN = 0.02    # 旧结果未覆盖墨率至少这么多才谈得上「有字在窗外」
+WINDOW_UNCOV_HALVE = 0.5   # 放开后未覆盖墨率至少减半才算真捞回了字
+WINDOW_CELL_DROP = 8       # 走覆盖通道时字格数最多允许回落这么多
 PERIOD_TOL = 0.04          # 页列距偏离全书共识超此比例 → 判定拟错，改用共识值
 RULE_IN_COL_T = 0.05       # rule_in_col 超此 → 页面自己报了「竖线落在列框里」，
                            # 即便所有参数都在共识容差内也要按共识先验重扫一次。
@@ -134,8 +161,55 @@ CELL_COV_STOP_RELAX = 0.30  # 放宽档的覆盖率门槛。结构弱（游程�
 CELL_RULE_TOL = 0.25       # 界行中心离列格边界不超过此比例（× 列距）也算证据
 CELL_BOW_T = 3.0           # 各带围栏彼此相差超过此像素 → 这条边界是弯的，
                            # 额外输出逐带裁切边（cell_bands），图块按带掩蔽
+# ── 异常宽列缝（2026-08-25，用户 r7「有一页左边小注被竖着切断」）──
+# 双行夹注写满整个列格：两个子列合起来比文字带还宽（vol02/171 的
+# 「兩江總督／採進本」跨 170px，文字带只有 136px）。这一侧既没界行也
+# 没墙时，上面的围栏按「无墙不敢扩」把窗口停在文字带上，左子列被竖着
+# 切掉 37px——图块里只剩半个小字，夹注判据的均衡检查跟着落空，整列
+# 也就没拆成 a/b。
+# 判据不看单列看**列缝**：正常缝 9~15px，这种漏扩的缝 44~75px，全书
+# 387 页只有 27 条。补法是把缝两侧的边界一起挪到缝内**最宽空白段的
+# 中心**——空白段是版面自己给出的分界，比名义中线可靠（p171 的空白段
+# 中心 1285，名义中线 1309 仍要切掉 9px 小字）。
+# 投影要先滤掉版框横线行：上下框线横贯全宽，不滤则每个 x 都有墨、
+# 空白段永远量不出来。
+GUTTER_WIDE_K = 2.0        # 缝宽超过页内中位数的这个倍数
+GUTTER_WIDE_ABS = 20.0     # 且至少比中位数宽这么多（px），两条都满足才算异常
+GUTTER_BLANK_REL = 0.005   # 「空白」列的墨量上限（× 参与统计的行数）
+GUTTER_BLANK_ABS = 3       # 空白列墨量的绝对下限，短页不至于苛刻
+GUTTER_MIN_BLANK = 4       # 缝内最宽空白段窄于此 → 证据不足，不动
+
+
 NARROW_TOL = 0.25          # 梳子跨度超出页宽此比例（× 列距）→ 标 narrow_page
                            # 实测被裁窄的页只有 7.5 个列距的宽度，差整整一列
+RULE_PITCH_MIN_PEAKS = 3   # 界行第二意见：至少数出这么多条界行才可信
+RULE_PITCH_CLIP = (120.0, 300.0)   # 界行间距的合理范围（px）
+
+
+def _rule_pitch(rule_xs: np.ndarray) -> float | None:
+    """界行 x 位置的中位间距 ≈ 列距（判窄前的第二意见）。
+
+    Pass 1 自由拟合的列距在噪声页上会拟大（vol02/118 实测拟出 190、
+    真值 187——差 3px 就把 9×period 推过页宽、整页误判 narrow 丢一列，
+    而第 9 列的像素明明在图上）。界行是物理刻线，间距不受文字带噪声
+    影响。证据不足（<3 条界行）返回 None。"""
+    xs = np.flatnonzero(rule_xs)
+    if xs.size < 2:
+        return None
+    groups: list[list[int]] = [[int(xs[0])]]
+    for x in xs[1:]:
+        if x - groups[-1][-1] <= 8:
+            groups[-1].append(int(x))
+        else:
+            groups.append([int(x)])
+    peaks = [float(np.mean(g)) for g in groups]
+    if len(peaks) < RULE_PITCH_MIN_PEAKS:
+        return None
+    gaps = np.diff(peaks)
+    gaps = gaps[(gaps >= RULE_PITCH_CLIP[0]) & (gaps <= RULE_PITCH_CLIP[1])]
+    if gaps.size < 2:
+        return None
+    return float(np.median(gaps))
 INSET_TOL = 0.5            # 页内缩低于书级共识此比例 → 判为量塌了，改用共识值
 INSET_TOL_HI = 1.25        # 页内缩**高于**共识此比例 → 同样是量错了，也换成共识值。
                            # 塌掉的危害是列框贴着界行走（把线圈进来），涨上去的
@@ -589,7 +663,81 @@ def cell_bounds_from_rules(gray: np.ndarray, cx0: float, period: float,
                        float(max(r[3] for r in rows)))
         else:
             band_out.append(None)
+
+    _widen_wide_gutters(binary, spans, out, band_out)
     return out, band_out
+
+
+def _widest_blank(xs: np.ndarray, thresh: int) -> tuple[int, int, int]:
+    """xs 里最宽的一段「墨量 ≤ thresh」的连续区间，返回 (长度, 起, 止)。"""
+    best = (0, 0, 0)
+    start = None
+    for j, v in enumerate(list(xs) + [thresh + 1]):
+        if v <= thresh and start is None:
+            start = j
+        elif v > thresh and start is not None:
+            if j - start > best[0]:
+                best = (j - start, start, j)
+            start = None
+    return best
+
+
+def _widen_wide_gutters(binary: np.ndarray,
+                        spans: list[tuple[int, int]],
+                        out: list[tuple[float, float]],
+                        band_out: list[list[list[float]] | None]) -> None:
+    """异常宽的列缝：把两侧边界挪到缝内空白段的中心（原地改）。
+
+    判据与理由见 GUTTER_* 常量上方注释。**逐带**做：整页投影上这条缝
+    往往根本没有空白段——摆正之后的页仍有残余弯曲，同一条缝在页顶和
+    页底能差十几个像素，整页一投影就糊成一片（vol02/171 实测整页投影
+    的最宽空白段 0px，而夹注那一带有 8px）。逐带算完写进 cell_bands，
+    扁平边界取包络，与「弯的界行」分支同一套口径。
+    """
+    if len(out) < 3 or not spans:
+        return
+    gaps = [out[i + 1][0] - out[i][1] for i in range(len(out) - 1)]
+    med = float(np.median(gaps))
+    band_xs: list[tuple[np.ndarray, int] | None] = []
+    for ya, yb in spans:
+        sub = binary[ya:yb]
+        keep = sub.mean(axis=1) < FRAME_ROW_T     # 滤掉版框横线行
+        if not keep.any():
+            band_xs.append(None)
+            continue
+        band_xs.append((sub[keep].sum(axis=0),
+                        max(GUTTER_BLANK_ABS,
+                            int(keep.sum() * GUTTER_BLANK_REL))))
+    w = binary.shape[1]
+    for i, gap in enumerate(gaps):
+        if gap <= max(med * GUTTER_WIDE_K, med + GUTTER_WIDE_ABS):
+            continue
+        a = max(0, min(w, int(round(out[i][1]))))
+        b = max(a, min(w, int(round(out[i + 1][0]))))
+        mids: list[float | None] = []
+        for bx in band_xs:
+            if bx is None or b <= a:
+                mids.append(None)
+                continue
+            xs, thresh = bx
+            blen, ba, bb = _widest_blank(xs[a:b], thresh)
+            mids.append((a + ba + a + bb) / 2.0
+                        if blen >= GUTTER_MIN_BLANK else None)
+        if all(m is None for m in mids):
+            continue
+        rows_l = band_out[i] or [[float(ya), float(yb),
+                                  out[i][0], out[i][1]] for ya, yb in spans]
+        rows_r = band_out[i + 1] or [[float(ya), float(yb),
+                                      out[i + 1][0], out[i + 1][1]]
+                                     for ya, yb in spans]
+        for bi, m in enumerate(mids):
+            if m is None:
+                continue
+            rows_l[bi][3] = max(rows_l[bi][3], m)
+            rows_r[bi][2] = min(rows_r[bi][2], m)
+        band_out[i], band_out[i + 1] = rows_l, rows_r
+        out[i] = (out[i][0], max(r[3] for r in rows_l))
+        out[i + 1] = (min(r[2] for r in rows_r), out[i + 1][1])
 
 
 def column_projection(col_gray: np.ndarray,
@@ -698,15 +846,33 @@ def _smooth(proj: np.ndarray, cell_h: float) -> np.ndarray:
     return np.convolve(proj, np.ones(kernel) / kernel, mode="same")
 
 
+# 格线/格心的相对位置只由 n_chars 决定，而相位搜索会拿同一个 n_chars
+# 调 _grid_cost 上千次——每次重新 arange 是纯浪费，按 n_chars 缓存。
+_GRID_OFFSETS: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+
 def _grid_cost(smooth: np.ndarray, off: float, cell_h: float,
                n_chars: int) -> float:
-    """网格代价：线落谷（小） − 0.5×格中心落峰（大）。"""
+    """网格代价：线落谷（小） − 0.5×格中心落峰（大）。
+
+    性能敏感（单页 5752 次调用）：偏移量按 n_chars 缓存，clip 就地做，
+    两次索引合并成一次——数值与旧版逐位一致，只是少了每次的临时分配。
+    """
     L = len(smooth)
-    li = np.clip(np.round(off + cell_h * np.arange(n_chars + 1)).astype(int),
-                 0, L - 1)
-    ci = np.clip(np.round(off + cell_h * (np.arange(n_chars) + 0.5)).astype(int),
-                 0, L - 1)
-    return float(smooth[li].mean()) - 0.5 * float(smooth[ci].mean())
+    offs = _GRID_OFFSETS.get(n_chars)
+    if offs is None:
+        offs = (np.arange(n_chars + 1, dtype=np.float64),
+                np.arange(n_chars, dtype=np.float64) + 0.5)
+        _GRID_OFFSETS[n_chars] = offs
+    a_line, a_cent = offs
+    pos = np.empty(2 * n_chars + 1, dtype=np.float64)
+    np.multiply(a_line, cell_h, out=pos[:n_chars + 1])
+    np.multiply(a_cent, cell_h, out=pos[n_chars + 1:])
+    pos += off
+    np.round(pos, out=pos)
+    np.clip(pos, 0, L - 1, out=pos)
+    vals = smooth[pos.astype(np.intp)]
+    return float(vals[:n_chars + 1].mean()) - 0.5 * float(vals[n_chars + 1:].mean())
 
 
 def page_column_projection(gray: np.ndarray, line_frac: float = 0.3,
@@ -818,6 +984,21 @@ ANCHOR_TOL = 0.35          # 相位偏离框顶超此比例 × 格高才罚（�
 ANCHOR_SPAN_TOL = 0.06     # |框高/n - 格高| 超此比例 × 格高 → 框证据不可信，不锚
 ANCHOR_W = 1e4             # 决定性罚款权重（谷/峰项在平族间差值只有个位数）
 
+# ── 抬头行（2026-08-25，用户 p32/p33 实审）────────────────
+# 清代官书的抬头制：遇尊称要提行顶格甚至高出一到三格（平抬/单抬/双抬），
+# 抬头列因此比常规列**多 1~2 个字位**。网格按书级 chars_per_line 固定
+# 21 行时，抬头字整字掉在网格顶之外——那是**漏字**，比框渣严重。实测
+# 两册 11 页受影响（vol01 8 / vol02 3，最多多 2 行）。
+# 判据：拟合出 21 行网格后，量各文字列在网格顶之上的**最长连续墨段**；
+# 常规页那里只有版框线（全书 p90=22px、p50=8px），抬头字则是整格高的
+# 连续墨（实测 0.63~1.98 格）。≥HEAD_RAISE_T 格的列达 HEAD_RAISE_COLS
+# 列就判抬头页，网格向上扩行后**重拟合**——扩行后网格能同时覆盖抬头字
+# 与正文，相位会自己回到正位（21 行时拟合被抬头墨拉成两不靠的折中值）。
+HEAD_RAISE_T = 0.55        # 网格顶上方连续墨段 ≥ 此比例 × 格高 → 该列有抬头
+HEAD_RAISE_COLS = 2        # 达此列数才判抬头页（抬头是版式现象，成片出现）
+HEAD_RAISE_MAX = 3         # 最多扩这么多行（清制最高三抬）
+HEAD_RAISE_INK = 0.06      # 行墨率达此值算「有墨行」
+
 
 def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
     """页顶/页底窗内最靠外的横框线行。检不出为 None。
@@ -851,6 +1032,71 @@ def measure_row_frames(gray: np.ndarray) -> tuple[int | None, int | None]:
     ft = next((y for y in range(zone) if is_bar(y)), None)
     fb = next((y for y in range(h - 1, h - zone_b, -1) if is_bar(y)), None)
     return ft, fb
+
+
+
+def head_raise_rows(image: np.ndarray, text_cols: list, page_phase: float,
+                    cell_h: float, y1: int, frame_top: float | None
+                    ) -> int:
+    """需要在网格顶部补几行抬头位。0 表示不是抬头页。
+
+    量在**全图**上做，不用 crop：抬头字常落在裁切窗之上（内框检测把
+    普通首行当内框顶时尤其如此），拿 crop 量根本看不见它。补行不需要
+    扩窗——格位是全图坐标，抬头行照样切得到。
+    """
+    if cell_h <= 0 or not text_cols:
+        return 0
+    g = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    top_abs = int(round(y1 + page_phase))          # 网格首线的全图 y
+    if top_abs <= 2:
+        return 0
+    best_per_col = []
+    for col, _crop, _proj in text_cols:
+        x0 = int(col.get("left_x", 0))
+        x1 = int(col.get("right_x", 0))
+        if x1 - x0 < 8:
+            continue
+        band = g[:min(top_abs, g.shape[0]), max(0, x0):min(g.shape[1], x1)]
+        if band.size == 0:
+            best_per_col.append(0)
+            continue
+        rows = (band < BINARY_THRESHOLD).sum(axis=1) / max(1, band.shape[1])
+        best = cur = 0
+        for v in rows:
+            cur = cur + 1 if v >= HEAD_RAISE_INK else 0
+            best = max(best, cur)
+        best_per_col.append(best)
+    if not best_per_col:
+        return 0
+    if sum(1 for b in best_per_col if b >= HEAD_RAISE_T * cell_h) \
+            < HEAD_RAISE_COLS:
+        return 0
+    # 补几行：从网格顶**逐格上探**——清代抬头分平抬/单抬/双抬/三抬，
+    # 同一页不同列抬的格数还不一样（p70 实测「召驥」「天潢」两列抬两格，
+    # 其余列抬一格）。拿「最长连续墨段」一次定 k 会漏掉抬两格的列：那
+    # 两个字之间断开时，最长段只有一格。
+    k = 0
+    while k < HEAD_RAISE_MAX:
+        hi = top_abs - int(round(k * cell_h))
+        lo_b = hi - int(round(cell_h))
+        if lo_b < 0:
+            break
+        n_ink = 0
+        for col, _c, _p in text_cols:
+            x0 = int(col.get("left_x", 0))
+            x1 = int(col.get("right_x", 0))
+            if x1 - x0 < 8:
+                continue
+            band = g[lo_b:hi, max(0, x0):min(g.shape[1], x1)]
+            if band.size == 0:
+                continue
+            rows = (band < BINARY_THRESHOLD).sum(axis=1) / max(1, band.shape[1])
+            if int((rows >= HEAD_RAISE_INK).sum()) >= HEAD_RAISE_T * cell_h:
+                n_ink += 1
+        if n_ink < HEAD_RAISE_COLS:
+            break
+        k += 1
+    return k
 
 
 def fit_page_grid(projs: list[np.ndarray], n_chars: int,
@@ -925,19 +1171,36 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
         masked = np.where(p >= thr, p, 0.0)
         csums.append(np.concatenate([[0.0], np.cumsum(masked)]))
 
+    # 逐列前缀和堆成一张 (列数, L+1) 的表：下面按相位试格线时，
+    # 「网格没盖住的墨」对每一列都是同两个区间的差值——区间端点与列无关，
+    # 所以能一次切出所有列，不必逐列进 Python 循环。
+    CS = np.asarray(csums)
+
     def _uncovered(phase: float, span: float, g: float) -> float:
-        lo1, hi1 = top + g, phase - g
-        lo2, hi2 = phase + span + g, bottom - g
-        vals = []
-        for cs in csums:
-            v = 0.0
-            for a, b in ((lo1, hi1), (lo2, hi2)):
-                a = int(np.clip(round(a), top + g, bottom - g))
-                b = int(np.clip(round(b), top + g, bottom - g))
-                if b > a:
-                    v += float(cs[b] - cs[a])
-            vals.append(v)
-        return float(np.median(vals))
+        """网格之外（首格上方 + 末格下方）剩下多少墨，取各列中位数。
+
+        性能敏感：相位×格高的搜索会调它上千次（单页 cProfile 里它累计
+        占 52%）。所以这里刻意写成「标量夹取 + 一次向量化切片」——
+        原来是逐列 Python 循环 + 每个端点一次 `np.clip`（单页 12.5 万次
+        标量 clip，光这一项就 0.5s）。数值与旧版逐位一致：np.clip 对
+        标量与 min/max 同义，round 用的都是 Python 内建。
+        """
+        lo_b, hi_b = top + g, bottom - g
+
+        def clamp(x: float) -> int:
+            return int(min(max(round(x), lo_b), hi_b))
+
+        a1, b1 = clamp(lo_b), clamp(phase - g)
+        a2, b2 = clamp(phase + span + g), clamp(hi_b)
+        v = None
+        if b1 > a1:
+            v = CS[:, b1] - CS[:, a1]
+        if b2 > a2:
+            seg = CS[:, b2] - CS[:, a2]
+            v = seg if v is None else v + seg
+        if v is None:
+            return 0.0
+        return float(np.median(v))
 
     for cell_h in cell_hs:
         span = cell_h * n_chars
@@ -970,6 +1233,33 @@ def fit_page_grid(projs: list[np.ndarray], n_chars: int,
                 best_cost = cost
                 best = (float(phase), float(cell_h))
     return best
+
+
+def _micro_slide(sm: np.ndarray, bi: int, cell_h: float,
+                 ref: float, fallback: float) -> float:
+    """无谷时的微挪：在 ±SNAP_TIGHT×格高 内挪到墨最少的一行。
+
+    「谷判据」是为了拦住大幅吸附（滑到邻格空隙 = 把整个字送给隔壁），
+    但它一票否决之后，线就**原地不动**了——而实测正文页 1685 条重切缝
+    里有 926 条只要挪 6px 就能显著变瘦，位移中位数只有 6~10px。而所谓
+    「送字」的风险在这个半径下根本不存在：半格 57px，滑动半径只有 11px。
+    剩下的只是「同样要切一刀，切在笔画薄的地方」。
+
+    仍然要求墨量**明显**下降（≥ SNAP_TIGHT_GAIN×参考墨），否则原位不动：
+    平坦区抖动一两像素毫无意义，只会让产物在无关的重跑之间漂。
+    """
+    L = len(sm)
+    bi = min(max(bi, 0), L - 1)
+    r2 = max(1, int(round(SNAP_TIGHT * cell_h)))
+    lo, hi = max(0, bi - r2), min(L, bi + r2 + 1)
+    win = sm[lo:hi]
+    if win.size < 3:
+        return fallback
+    m = float(win.min())
+    if float(sm[bi]) - m < SNAP_TIGHT_GAIN * ref:
+        return fallback
+    cand = np.flatnonzero(win <= m + 1e-9) + lo
+    return float(cand[np.argmin(np.abs(cand - bi))])
 
 
 def snap_bounds_to_gaps(proj: np.ndarray, bounds: list[float],
@@ -1012,7 +1302,9 @@ def snap_bounds_to_gaps(proj: np.ndarray, bounds: list[float],
         ref = float(sm[a0:a1].mean()) if a1 > a0 else 0.0
         m = float(win.min())
         if ref > 0 and m > SNAP_VALLEY_T * ref:
-            out.append(float(b)); continue          # 这里本来就没有空隙
+            # 没有空隙 → 不做大幅吸附，但仍在**微挪**半径内找更瘦的一刀
+            out.append(_micro_slide(sm, bi, cell_h, ref, float(b)))
+            continue
         cand = np.flatnonzero(win <= m + 1e-9) + lo
         out.append(float(cand[np.argmin(np.abs(cand - bi))]))
     # 保序：吸附半径 < 半格，正常不会交叉；真交叉了就退回原位
@@ -1649,9 +1941,57 @@ def _job_refit(seg: "GridSegmenter", img_path: str, layout: dict, kw: dict):
     return seg.segment_page(image, layout, **kw)
 
 
+def _uncovered_ink(image: np.ndarray, res: dict) -> float:
+    """列带里的墨，有多少落在 char 格**之外**（比例，0=全覆盖）。
+
+    这是窗口救援的采纳硬通货：窗口塌掉的页，窗外的字全在 char 格之外；
+    网格错位的页，字骑在格线上仍算「覆盖」，但那由骑线比把关——两个量
+    各管一头，不重复。"""
+    g = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    g = deshear(g, res.get("grid", {}).get("shear", 0.0))
+    tot = cov = 0.0
+    for col in res.get("columns") or []:
+        cells = [c for c in col.get("cells", []) if c.get("type") == "char"]
+        x0 = max(0, int(col["left_x"]) + 2)
+        x1 = min(g.shape[1], int(col["right_x"]) - 2)
+        if x1 - x0 < 8:
+            continue
+        proj = column_projection(g[:, x0:x1])
+        L = len(proj)
+        tot += float(proj.sum())
+        m = np.zeros(L, bool)
+        for c in cells:
+            m[max(0, int(c["y_top"])):min(L, int(c["y_bottom"]))] = True
+        cov += float(proj[m].sum())
+    return 1 - cov / tot if tot else 0.0
+
+
+def _job_band(seg: "GridSegmenter", img_path: str, layout: dict,
+              cur: dict, kw: dict):
+    """Pass 2a4 单页：窗口整页放开重扫，择优在本函数里做完（要读像素）。
+
+    返回 (redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new) 或 None。
+    """
+    image = imread(img_path)
+    if image is None:
+        return None
+    h = image.shape[0]
+    redone = seg.segment_page(image, layout,
+                              band_override=(0.0, float(h)), **kw)
+    n_old = sum(1 for c in cur.get("columns") or []
+                for x in c.get("cells", []) if x.get("type") == "char")
+    n_new = sum(1 for c in redone.get("columns") or []
+                for x in c.get("cells", []) if x.get("type") == "char")
+    sc_old = straddle_score(image, cur)
+    sc_new = straddle_score(image, redone)
+    uc_old = _uncovered_ink(image, cur)
+    uc_new = _uncovered_ink(image, redone)
+    return redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new
+
+
 def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
                  res: dict, used_h: float, consensus_h: float,
-                 col_p=None, ins_p=None):
+                 col_p=None, ins_p=None, band_p=None):
     """Pass 2a-bis 单页：在重切后的网格上二次量页距，够硬且与所用先验
     差 >0.5px 就再重切一轮。Pass 1 自由拟合失败的页量不出页距，第一轮
     只能用书距——vol01/25 实测 Pass1 量不出 → 用书距 115.2，而终网格上
@@ -1679,12 +2019,12 @@ def _job_repitch(seg: "GridSegmenter", img_path: str, layout: dict,
         return None
     redone = seg.segment_page(image, layout, cell_h_prior=med,
                               period_prior=col_p, inset_prior=ins_p,
-                              shear_override=sh)
+                              band_override=band_p, shear_override=sh)
     return (redone, med)
 
 
 def _job_phase(seg: "GridSegmenter", img_path: str, layout: dict, res: dict,
-               consensus_h: float, col_p, ins_p):
+               consensus_h: float, col_p, ins_p, band_p=None):
     """Pass 2b 单页：骑线评分 → 全周期相位自扫 → 择优重切。
     判据（骑线比对比）只依赖本页，可整段搬进工作进程。"""
     image = imread(img_path)
@@ -1698,7 +2038,7 @@ def _job_phase(seg: "GridSegmenter", img_path: str, layout: dict, res: dict,
         return None
     redone = seg.segment_page(
         image, layout, cell_h_prior=consensus_h, row_phase_abs=y_best,
-        period_prior=col_p, inset_prior=ins_p,
+        period_prior=col_p, inset_prior=ins_p, band_override=band_p,
         shear_override=res["grid"].get("shear", 0.0))
     if straddle_score(image, redone) < cur - STRADDLE_GAIN:
         return redone
@@ -1724,7 +2064,8 @@ class GridSegmenter:
                      row_phase_abs: float | None = None,
                      shear_override: float | None = None,
                      period_prior: float | None = None,
-                     inset_prior: tuple[float, float] | None = None) -> dict:
+                     inset_prior: tuple[float, float] | None = None,
+                     band_override: tuple[float, float] | None = None) -> dict:
         """grid_override 给定时跳过本页拟合，用书级共享网格参数
         （period/col_phase_rel/inset_l/inset_r/cell_h/row_phase_rel，
         相位以本页 inner_frame 为基准换算）——弱信号页专用。
@@ -1732,6 +2073,10 @@ class GridSegmenter:
         cell_h_prior 给定时只固定行格高（书级共识），相位仍按本页投影
         重搜——格高锁错（谐波/稀疏页）的页专用：这类页列网格正常，
         相位也是本页自身的，不该跟随书级中位。
+
+        band_override 给定时用它顶掉 layout 的 inner_frame 上下界——版面
+        检测把中间某条横线当成了上/下框、窗口塌成半页时专用（见
+        run_book 的 Pass 2a4）。
 
         row_phase_abs 给定时行相位钉死为该值（全图 y 坐标的网格首线），
         供骑线重扫（Pass 2c）择优后回填——注意**不能**跟随书级中位相位：
@@ -1755,6 +2100,9 @@ class GridSegmenter:
         inner = borders.get("inner_frame", {})
         col_top = inner.get("top", {}).get("intercept", 0)
         col_bottom = inner.get("bottom", {}).get("intercept", h)
+        band_widened = band_override is not None
+        if band_widened:
+            col_top, col_bottom = float(band_override[0]), float(band_override[1])
         # 边框竖线取**中高度**的 x：去错切以纵向中点为不动点，中高度的 x
         # 不受变换影响，而 intercept（y=0 处的 x）会被整条线的斜率带偏。
         frame_left = (inner.get("left", {}).get("intercept", 0)
@@ -1795,6 +2143,15 @@ class GridSegmenter:
             # 把最左边那列真有字的列排除在外。
             n_cols = self.n_cols
             narrow = period * n_cols > w + period * NARROW_TOL
+            if narrow:
+                # 判窄前的第二意见：界行间距（见 _rule_pitch 注）。拟大
+                # 的列距会把装得下的页误判 narrow 白丢一列；界行说装得
+                # 下就按界行的列距装（相位随后由界行吸附钉死）。
+                rp = _rule_pitch(rule_xs)
+                if (rp is not None
+                        and rp * n_cols <= w + rp * NARROW_TOL):
+                    period = rp
+                    narrow = False
             if narrow:
                 # 页面装不下 n_cols 列 —— 实测这类页被上游裁掉了一整列：
                 # 图宽 1460~1530（正常 1696，差一个列距），且**图上真的只有
@@ -1875,6 +2232,7 @@ class GridSegmenter:
 
         # 第一遍：收集文字列裁切与投影
         text_cols: list[tuple[dict, np.ndarray, np.ndarray]] = []
+        col_xs: list[tuple[int, int]] = []      # 各文字列的裁切 x 范围
         result_columns = []
         for col in columns_info:
             left_x, right_x = float(col["left_x"]), float(col["right_x"])
@@ -1894,6 +2252,7 @@ class GridSegmenter:
                 continue
             crop = image[y1:y2, x1:x2]
             text_cols.append((col_result, crop, column_projection(crop)))
+            col_xs.append((x1, x2))
 
         # 刚性网格模型：刻本整版先划栏格再上字，**格高固定、跨列统一**；
         # 列首/列尾空格占格位但无墨（判空处理），网格锚定栏格周期证据
@@ -1925,12 +2284,61 @@ class GridSegmenter:
                         / max(1, g2.shape[1])
                     nz = np.nonzero(ri >= 0.05)[0]
                     fb = int(nz[-1]) + 6 if nz.size else image.shape[0]
+                ft_rel = None if ft is None else float(ft - y1)
+                fb_rel = None if fb is None else float(fb - y1)
                 page_phase, cell_h = fit_page_grid(
                     [p for _, _, p in text_cols], n,
                     full_widths=[crop.shape[1] for _, crop, _ in text_cols],
                     cell_h_fixed=cell_h_prior,
-                    frame_top=None if ft is None else float(ft - y1),
-                    frame_bottom=None if fb is None else float(fb - y1))
+                    frame_top=ft_rel, frame_bottom=fb_rel)
+                # 抬头页：网格顶之上还有整格墨 = 抬头字漏在网格外。补行
+                # 后**重拟合**——扩行后网格能同时覆盖抬头字与正文，相位
+                # 会自己归位（21 行时拟合被抬头墨拉成两不靠的折中值）。
+                k_head = head_raise_rows(image, text_cols, page_phase,
+                                         cell_h, y1, ft_rel)
+                if k_head:
+                    # 抬头位与正文同格高同网格，几何上就是首行**正上方**
+                    # k 格；重拟合只用来微调。上框线磨没时（p32 实测
+                    # measure_row_frames 返回 None，用户也报「上边框极不
+                    # 清晰」）锚定退化成裁剪顶兜底，会把相位钉在原处——
+                    # 那样既没捡回抬头字，又多出一个越过下框的空格。因此
+                    # 拟合结果偏离几何值超过半格时以几何值为准。
+                    # 相位已由原窗（只含正文带）拟出，抬头位就是它上方
+                    # k 格。窗不够时**扩窗重裁**——先拟合后扩窗，反过来
+                    # 做会把抬头墨喂给拟合，网格整体被拉上去（实测 p32
+                    # 首格 404→283、末字掉出网格）。
+                    shift = int(round(k_head * cell_h))
+                    want = page_phase - shift
+                    if want < 0:
+                        room = y1                      # 窗顶还能往上让多少
+                        take = min(room, -int(np.floor(want)))
+                        if take > 0:
+                            y1 -= take
+                            page_phase += take
+                            want += take
+                            text_cols = [
+                                (c, image[y1:y2, xs[0]:xs[1]],
+                                 column_projection(image[y1:y2,
+                                                         xs[0]:xs[1]]))
+                                for (c, _cr, _p), xs in zip(text_cols,
+                                                            col_xs)]
+                            if ft_rel is not None:
+                                ft_rel += take
+                            if fb_rel is not None:
+                                fb_rel += take
+                    if want < 0:
+                        k_head = 0          # 全图都放不下，据实不补
+                    else:
+                        n += k_head
+                        page_phase = want
+                        grid_meta["head_raise_rows"] = int(k_head)
+            # 注意：上面列网格分支里 grid_meta 被**整个重建**过一次
+            # （只保留了 shear），任何在那之前写进去的键都会丢——
+            # band_widened 必须写在重建之后。
+            if band_widened:
+                # 供 eval_text_band 区分「窗口塌了」与「窗口已被放开救过」：
+                # 这些页的 inner_frame 依旧是错的，但网格已经不用它了。
+                grid_meta["band_widened"] = True
             grid_meta.update({"cell_h": float(cell_h),
                               "row_phase_rel": float(y1 + page_phase - col_top)})
             for col_result, crop, proj in text_cols:
@@ -2066,6 +2474,10 @@ class GridSegmenter:
         # 界行根本落不进去），门控一律放行。那一页 88 个图块全部 bad_seg。
         col_prior: dict[str, float] = {}
         ins_prior: dict[str, tuple[float, float]] = {}
+        # 文字带窗口一旦放开（Pass 2a4），同样必须透传给后续每一个
+        # 重扫 pass——否则 2a2/2a3/2a-bis/2b 会重新读 layout 的 inner_frame，
+        # 把刚救回来的三分之二页又裁掉。
+        band_prior: dict[str, tuple[float, float]] = {}
         cell_hs = [r["grid"]["cell_h"] for r in results.values()
                    if r.get("grid", {}).get("cell_h")]
         if len(cell_hs) >= 5:
@@ -2124,6 +2536,57 @@ class GridSegmenter:
                 print(f"  书级格高共识 {consensus_h:.1f}px，"
                       f"校正格高锁错页 {n_row_fix} 张")
 
+        # ── Pass 2a4: 文字带窗口塌掉的页，整页放开重扫 ──
+        # 判据搬到图块之外（同 page-crop 的路子）：文字带高是书级刚性
+        # 常量 n_chars × 书级格高，窗口短过它一大截，就是 phase2 把正文
+        # 中间的某条横线当成了上/下框。放在 2a 之后是因为要用书级格高；
+        # 21 张坏页拉不动 ~200 页的中位，不必为它再多一遍共识。
+        n_band = 0
+        if cell_hs and len(cell_hs) >= 5:
+            want = self.params.chars_per_line * consensus_h
+            cand = []
+            for stem, p, lo in pages:
+                inner = (lo.get("borders") or {}).get("inner_frame") or {}
+                t = (inner.get("top") or {}).get("intercept")
+                b = (inner.get("bottom") or {}).get("intercept")
+                if t is None or b is None:
+                    continue
+                if (b - t) < WINDOW_MIN_RATIO * want:
+                    cand.append((stem, p, lo))
+            if cand:
+                outs = _pmap(_job_band,
+                             [(self, str(p), lo, results[s],
+                               {"cell_h_prior": row_prior.get(s, consensus_h),
+                                "shear_override":
+                                    results[s]["grid"].get("shear", 0.0)})
+                              for s, p, lo in cand])
+                for (stem, _, _), out in zip(cand, outs):
+                    if out is None:
+                        continue
+                    redone, n_old, n_new, sc_old, sc_new, uc_old, uc_new = out
+                    # never-make-worse，两条采纳通道：
+                    # ① 字格真的多出来（窗外整片文字被捞回）；
+                    # ② 覆盖显著变好——旧结果有 ≥WINDOW_UNCOV_MIN 的墨落在
+                    #    char 格之外，放开后至少减半，且字格数没塌
+                    #    （vol02/152 型：错位版靠一字跨两格反而数出更多格，
+                    #    字格数在这里是**反向**信号，不能当硬门槛）。
+                    more_cells = n_new > n_old
+                    better_cover = (uc_old >= WINDOW_UNCOV_MIN
+                                    and uc_new <= uc_old * WINDOW_UNCOV_HALVE
+                                    and n_new >= n_old - WINDOW_CELL_DROP)
+                    if not (more_cells or better_cover):
+                        continue
+                    if not (sc_new <= WINDOW_STRADDLE_OK
+                            or sc_new <= sc_old + WINDOW_STRADDLE_TOL):
+                        continue
+                    results[stem] = redone
+                    row_prior.setdefault(stem, consensus_h)
+                    band_prior[stem] = (0.0, float(
+                        redone["image_size"]["height"]))
+                    n_band += 1
+                print(f"  文字带窗口塌陷：{len(cand)} 张候选，"
+                      f"整页放开后采纳 {n_band} 张")
+
         # ── Pass 2a2: 书级列距共识，校正列距拟错的页 ──
         # 与格高同理：列距也是物理刚性常量（同一版反复刷印）。实测全书
         # 5~95 分位只有 174~186px，拟歪的页会掉到 152~157——差 15%，
@@ -2149,6 +2612,7 @@ class GridSegmenter:
             outs = _pmap(_job_refit,
                          [(self, str(p), lo,
                            {"period_prior": consensus_p,
+                            "band_override": band_prior.get(s),
                             "cell_h_prior":
                                 (row_prior.get(s)
                                  or results[s]["grid"].get("cell_h")),
@@ -2202,6 +2666,7 @@ class GridSegmenter:
                              [(self, str(p), lo,
                                {"inset_prior": prior,
                                 "period_prior": col_prior.get(s),
+                                "band_override": band_prior.get(s),
                                 "cell_h_prior":
                                     (row_prior.get(s)
                                      or results[s]["grid"].get("cell_h")),
@@ -2232,7 +2697,8 @@ class GridSegmenter:
             outs2 = _pmap(_job_repitch,
                           [(self, str(p), lo, results[s],
                             row_prior.get(s, consensus_h), consensus_h,
-                            col_prior.get(s), ins_prior.get(s))
+                            col_prior.get(s), ins_prior.get(s),
+                            band_prior.get(s))
                            for s, p, lo in todo_bis])
             n_re = 0
             for (stem, _, _), r2 in zip(todo_bis, outs2):
@@ -2259,7 +2725,8 @@ class GridSegmenter:
             outs = _pmap(_job_phase,
                          [(self, str(p), lo, results[s],
                            row_prior.get(s, consensus_h),
-                           col_prior.get(s), ins_prior.get(s))
+                           col_prior.get(s), ins_prior.get(s),
+                           band_prior.get(s))
                           for s, p, lo in todo])
             for (stem, _, _), redone in zip(todo, outs):
                 if redone is not None:
@@ -2301,6 +2768,7 @@ class GridSegmenter:
                             continue
                         redone = self.segment_page(
                             image, layout, grid_override=override,
+                            band_override=band_prior.get(stem),
                             shear_override=results[stem]["grid"].get(
                                 "shear", 0.0))
                         # 择优：校正绝不允许把页面改差（书级相位的边框

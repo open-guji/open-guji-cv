@@ -27,6 +27,7 @@
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图、分层扩库路线（P0 异体字关系层 + P1 字体字形已实现）与**字体字形匹配力实测**（§6）|
 | [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
+| [review_feedback_loops.md](doc/review_feedback_loops.md) | **审阅反馈三环总入口**：切分回流 / 匹配回流 / 准入规则标定（含短笔画被咬的三源修复记录）|
 | [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + glyph-match/triplets 测试集 + 回归护栏 + 已知失败形态（匹配优化专题从这进）|
 | [glyph_match_research.md](doc/glyph_match_research.md) | 匹配算法调研：我们这层在文献谱系里的位置（IDM 零阶形变模型）+ 四条改进路线与引用文献 |
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
@@ -44,6 +45,15 @@
 ----
 测试数据：
 data/ 文件夹下边 有5本古籍 每本古籍有10个截图 和一个read me文件 来介绍它的基本的排版信息
+
+### 字形库
+跨书字形库真源在 `glyph_store/`（随仓库提交），SQLite 索引可重建：
+```bash
+python -m open_guji_cv glyph-db rebuild        # 刻本字形（真源在 glyph_store/）
+python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 分钟）
+```
+字体字形不进 Git，由 `fonts/` 里的字体档 + 字表确定性重建，详见
+[fonts/README.md](../fonts/README.md) 与 glyph_db_expansion_research.md §6。
 
 ### 环境变量
 - `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` — 跳过模型源连接检查，加快启动速度

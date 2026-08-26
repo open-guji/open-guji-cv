@@ -9,7 +9,7 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **种子审查页**（逐页进库人裁）| https://claude.ai/code/artifact/98d441fc-b27e-482a-a0c0-1cf1f72d170d | [vol01_seed_review.html](vol01_seed_review.html) | `scripts/export_seed_review.py output/vol01 --page <页>` |
+| **种子审查页**（逐页进库人裁）| https://claude.ai/code/artifact/98d441fc-b27e-482a-a0c0-1cf1f72d170d | [vol01_seed_review.html](vol01_seed_review.html) | `scripts/export_seed_review.py output/vol01 --page 41,…,50`（逗号分隔可多页一批）。当前 41~50 页 131 条待审；**发布一律覆盖同一 URL**（用户 2026-08-26 定，不必再问）|
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
@@ -17,10 +17,26 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_patch_review.py --pages vol01:20-27 vol02:1-8 --quality 70` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）|
+| **切分朱批·图块流**（紧裁版逐块审）| https://claude.ai/code/artifact/5406db9c-76da-46a6-a3d9-6b55e2965f81 | 图块数据即产物；**朱批真源** [marks/patch_review_marks.json](marks/patch_review_marks.json)（264 条）| `scripts/build_patch_review.py --pages vol01:38,70,88,50 vol02:18,31,41,43,52,67,73,77,89,92,97,108,124,137,153,155,152` + 壳模板 [shells/patch_review_shell.html](shells/patch_review_shell.html)（`__PAGES__`/`__MARKS__` 占位注入）。**HTML 快照不入库**（4.2MB，图块本来就在 output/ 里）。图块为**无损 PNG**（曾用 JPEG q52，整页 13.9MB；产物本是二值图，JPEG 既臃肿又生振铃），页面**自动保存**（停手 20 秒、切标签页各冲一次），朱批不再靠人手点。当前第十一轮 = 同 21 页、r10 四病灶（夹注末行单字/右缘穿边/噪点分级/152 窗口）修后产物换装（2026-08-26） |
 | 切分朱批·整页叠框（V1，看框位）| https://claude.ai/code/artifact/46681969-bd3f-46fe-915c-0ecd5a376f32 | 数据即产物（2026-08-24 重建轮已刷新）| `scripts/build_seg_review.py --pages vol01:20-39 vol02:1-20 --quality 62` + 壳模板 [shells/seg_review_shell.html](shells/seg_review_shell.html) |
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
+
+**⚠ 重切/重扫之后，朱批也会漂。** 朱批键在 `book/page:col:idx` 上，跟
+`char-segmentation/instances` 一样是**会漂的**。2026-08-25 文字带窗口救援
+让 vol01/70 整列多出一行，挂在它上面的 11 条朱批全体错位一格。规矩与
+金标一致：**先查漂移，再谈数字**——逐条比 bbox 找出最佳位移，再把旧图块
+与位移后的新图块并排渲染**逐个看**，确认是同一个字才改键。那一次 9 条
+确认重键（紫/香/對/設/冠/粉/署/徵/其），2 条看不出对应关系就摘掉、
+等用户在新一批里重标，绝不猜。
+
+真源存在 [marks/patch_review_marks.json](marks/patch_review_marks.json)，
+每次发布前**必须先 `Artifact action:"read"` 读回页面里的实时 `marks-data`**
+并以它为准——用户可能有还没导出的朱批，直接拿旧文件重发会盖掉。
+
+朱批口径：点一下=切错、两下=无误、三下=存疑、四下=清除。**自检橙边
+默认关**（用户 r7「自检太多了我就没消除」），要看点工具栏「自检框」，
+状态存在浏览器本地。
 
 ## 归一化（G3 工作流）
 
@@ -32,11 +48,18 @@
 按规矩是**人工目视门**（「输出本身就错的绝不冻成 golden」）。本页把
 原图 / 现 golden / 新输出 三联并排，裁决经页内「复制裁决」按钮回流。
 
+## 说明页（静态，讲清楚管线怎么运作）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **从版面到字块**（切分层分步算法 + 每步测试集 + 标注去向盘点）| https://claude.ai/code/artifact/2a8475ed-dc47-454c-b1fc-049a89be0b7a | [seg_layer_explainer.html](seg_layer_explainer.html) | 手写，随管线改动更新 |
+
 ## 匹配裁决（G4 工作流）
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **形近误判裁决台**（排序倒挂逐例人裁，手机优先，**页面自存**）| https://claude.ai/code/artifact/9e45a22b-da42-4bd5-9486-378fd714a80a | [match_inversion_review.html](match_inversion_review.html)（快照）· 卡集 [match_inversion_cards.jsonl](match_inversion_cards.jsonl) · 裁决 [match_inversion_verdicts.jsonl](match_inversion_verdicts.jsonl) | `scripts/eval_match_pairs.py ../open-guji-dataset/glyph-match/pairs --dump /tmp/pairs.npz` → `scripts/build_match_inversion_review.py --dump /tmp/pairs.npz` |
+| **形近对上下文消歧**（n-gram × 大模型 × 字形 × OCR，含已/巳改判复盘）| https://claude.ai/code/artifact/f06d703d-0dab-4950-b130-09c87ae18882 | [confusable_context.html](confusable_context.html) · 测试集 `open-guji-dataset/confusable-context` | `scripts/build_confusable_set.py` → `eval_confusable_lm.py` → `score_confusable.py`（静态结果页，重测后手工更新数字）。2026-08-26 二版：首轮「已/巳治不了」是金标被字形污染的假象（4 条按封口字形误判、1 条巳误判超出二元范围实为己），纠正后 n-gram 83% / 大模型 92% 均大胜字形层 67%；`SEMANTIC_MERGED_PAIRS` 已接进 `seeding.py` 生产准入 |
 
 triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标签没错」才收），
 扩集的瓶颈从来不是挖不到候选，是没人过目。本页挖的是 pairs 集里最尖锐的

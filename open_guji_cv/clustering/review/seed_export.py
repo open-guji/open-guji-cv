@@ -28,6 +28,7 @@ from pathlib import Path
 
 from .persist_js import PERSIST_JS
 from ...gloss import gloss_of
+from ..seeding import DOUBT_NEAR_FORM as _NEAR_FORM, SEMANTIC_MERGED_CHARS
 from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
@@ -269,6 +270,22 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         pass                       # 没有索引就没有重切视图，其余照常
 
     entries = []
+    # 「第几个字」按 **index** 里该列 char 的位次算，1 起。不能直接用
+    # idx：那是格号，空格位也占号、起点还随切分版本变（0 起 / 1 起都出现过）。
+    # seeding 里上下文条的 pos 现在同源（也按 index 的 char 格位数），
+    # 于是 pos == seq - 1 恒成立；对不上就说明这行证据是旧切分算的，
+    # 下面直接把 context 摘掉——宁可不显示，也不能显示错位的高亮。
+    seq_of: dict[str, int] = {}
+    if rec_of:
+        from collections import defaultdict as _dd
+        _by_col: dict[tuple, list] = _dd(list)
+        for r in rec_of.values():
+            if getattr(r, "cell_type", "char") == "char":
+                _by_col[(r.page, r.col)].append(r)
+        for group in _by_col.values():
+            for n, r in enumerate(sorted(group, key=lambda x: x.idx), 1):
+                seq_of[r.id] = n
+
     for it in todo:
         patch = book_dir / "phase4_chars" / it.patch_path
         rec = rec_of.get(it.instance_id)
@@ -276,6 +293,10 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
         entries.append({
             "instance_id": it.instance_id,
             "col": it.col, "idx": it.idx, "tier": it.tier,
+            # 卡头显示用「该列第几个字」（1 起、跳过空格位），不是 idx。
+            # idx 是**格号**：空格位也占号、起点随切分版本变，拿它当序号
+            # 用户对着原图数必然对不上（2026-08-25 用户实锤）。
+            "seq": seq_of.get(it.instance_id, it.idx + 1),
             "intrusion": list(getattr(it, "intrusion", []) or []),
             "status": it.status,
             "patch_b64": _png_b64(patch),
@@ -287,7 +308,7 @@ def build_seed_batch(book_out_dir, queue_path, page: str | None = None,
                         "label": DOUBT_LABELS.get(c, c)}
                        for c in (it.doubts or [])],
             "db": it.match,
-            "context": it.context,
+            "context": _checked_context(it, seq_of.get(it.instance_id)),
             "note": it.note,
         })
 
@@ -405,13 +426,45 @@ def _render_evidence(e: dict) -> str:
     else:
         rows.append('<div class="evi-row"><span class="evi-k">库内</span>'
                     '<span class="none">无同字条目</span></div>')
-    # 疑问码逐条说明
-    marks = "".join(
-        f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
-        f'{_esc(d["label"])}</li>' for d in e["doubts"])
+    # 疑问码逐条说明——已/巳这类同词异写单独换一句话：字形护栏拦得对
+    # （近形判据本来就防形状判据自己认错），但**这条位不用纠结字形**，
+    # 直接按文意判就是了（用户 2026-08-26 定：这三个字唯一例外，别的
+    # 形近字家族字形仍然重要，别混着看）。
+    merged_here = bool(SEMANTIC_MERGED_CHARS & {
+        c["char"] for c in e.get("choices") or [] if c.get("char")})
+    marks = []
+    for d in e["doubts"]:
+        if d["code"] == _NEAR_FORM and merged_here:
+            marks.append(
+                f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
+                '候选里有已/巳——这两个字史上就是同一个词的两种写法，'
+                '<b>字形不重要，直接按文意选</b>，不用管封不封口</li>')
+        else:
+            marks.append(
+                f'<li><b>疑问{d["no"]}</b> <code>{_esc(d["code"])}</code> '
+                f'{_esc(d["label"])}</li>')
+    marks = "".join(marks)
     if marks:
         rows.append(f'<ul class="doubts">{marks}</ul>')
     return "".join(rows)
+
+
+def _checked_context(it, seq: int | None) -> dict | None:
+    """上下文条只在与 index 口径对得上时才给页面。
+
+    ``context`` 是 seed 当时算的证据快照；切分一重跑，队列行若没跟着重跑，
+    里面的列文与 pos 就是旧切分的。此时高亮位会指到邻格上（2026-08-25
+    用户实锤 vol01:4:2:20：卡片是「第」，高亮的却是下一位的「一」）。
+    对不上就整块摘掉——审查页少一条辅助信息，好过给一条错的。
+    修法是对那些页 ``seed --force-pages`` 重跑，见 pipeline_handbook §3。
+    """
+    ctx = it.context or None
+    if not ctx or seq is None:
+        return ctx
+    pos = ctx.get("pos")
+    if pos is not None and pos != seq - 1:
+        return None
+    return ctx
 
 
 _CTX_WIN = 5     # 上下文条：当前字上下各显示几个字
@@ -482,7 +535,7 @@ def _render_seed_card(e: dict) -> str:
                       for i, c in enumerate(e["choices"]))
     return f"""<article class="card" data-iid="{iid}" data-state="open">
 <header><span class="iid">{iid}</span>
-<span class="pos">第{e["col"]}列第{e["idx"]}字</span>{tier}{intr}{skipped}
+<span class="pos">第{e["col"]}列第{e.get("seq", e["idx"] + 1)}字</span>{tier}{intr}{skipped}<span class="rcbadge">已重切 ✓ 待选字</span>
 <span class="chosen" data-slot="chosen"></span>
 <button type="button" class="reopen">改</button></header>
 <div class="row">
@@ -555,10 +608,14 @@ _CSS = """
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);
-  font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5}
+  font-family:"Noto Serif TC","Songti TC","SimSun",serif;line-height:1.5;
+  overflow-x:hidden}   /* 兜底：任何漏网元素都不许撑出横向滚动 */
 .top{position:sticky;top:0;z-index:5;background:var(--paper);
   border-bottom:1px solid var(--line);padding:.6rem 1rem;
-  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline}
+  display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:baseline;
+  transition:transform .18s ease}
+/* 往下滚就把顶栏收起来（手机上它占掉小半屏），往上滚立刻回来 */
+.top[data-hide="1"]{transform:translateY(-100%)}
 .top h1{font-size:1.05rem;margin:0;letter-spacing:.1em}
 .top .prog{color:var(--muted);font-variant-numeric:tabular-nums}
 #save-status[data-bad="1"]{color:var(--seal-ink);background:var(--bad);
@@ -569,13 +626,20 @@ body{margin:0;background:var(--paper);color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .6rem;cursor:pointer}
 .list{max-width:56rem;margin:0 auto;padding:1rem;display:flex;
   flex-direction:column;gap:.8rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;
+  scroll-margin-top:3.2rem}   /* 顶栏没收起时，别让它压住卡头 */
 .card.active{border-color:var(--seal);box-shadow:0 0 0 1px var(--seal)}
 .card>header{display:flex;gap:.7rem;align-items:baseline;flex-wrap:wrap;
   padding:.4rem .8rem;border-bottom:1px solid var(--line)}
 .iid{font-family:ui-monospace,monospace;font-size:.75rem;color:var(--muted)}
 .pos{font-size:.8rem;color:var(--muted)}
 .chosen{font-size:1.2rem;color:var(--done);min-width:1.4em}
+/* 重切成功的唯一提示原先在面板里，面板一关就看不见了——用户于是以为
+   没生效、反复重切（2026-08-26 手机实拍「无限循环」）。挪到卡头常驻。 */
+.rcbadge{display:none;font-size:.7rem;color:var(--done);
+  border:1px solid var(--done);border-radius:3px;padding:.02rem .35rem}
+.card[data-recropped="1"] .rcbadge{display:inline-block}
+.card[data-state="done"] .rcbadge,.card[data-state="nac"] .rcbadge{display:none}
 .card>header .reopen{display:none;margin-left:auto;font:inherit;font-size:.75rem;
   background:none;border:1px solid var(--line);border-radius:3px;
   color:var(--muted);cursor:pointer;padding:.05rem .5rem}
@@ -685,6 +749,50 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
   margin-top:.5rem}
 .rc-acts .rc-nudge{font-size:.78rem;padding:.15rem .45rem}
 .rc-info{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace}
+
+/* ── 手机端（≤640px）：整体缩一档，顶栏只留一行 ─────────────────────
+   用户 2026-08-26 在手机上实拍反馈：标题「vol01 种子审查 · 第41+…+50页」
+   在窄屏折成三行、加上两条进度与两个按钮，顶栏吃掉小半屏，而它在审字
+   时一个都用不上。做法：标题单行截断、字号统一降一档、图块与候选字
+   缩小，配合上面的 data-hide 滚动收起。 */
+@media (max-width: 640px){
+  body{font-size:.92rem}
+  .top{padding:.4rem .6rem;gap:.3rem .7rem}
+  .top h1{font-size:.82rem;letter-spacing:.02em;flex:1 1 100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .prog{font-size:.72rem}
+  .top button{font-size:.72rem;padding:.1rem .45rem}
+  .list{padding:.5rem;gap:.5rem}
+  /* 原图 + 竖排上下文条 与 候选/证据 改成**上下堆叠**：横着排时窄屏
+     宽度不够，原图占掉一半、竖排被压成看不清的细柱，候选按钮又溢出
+     右边（用户 2026-08-26 手机实拍）。堆叠后两边都拿满宽。 */
+  .row{gap:.5rem;padding:.55rem;flex-direction:column;align-items:stretch}
+  .card>header{padding:.3rem .55rem;gap:.4rem}
+  .iid{font-size:.66rem}
+  .pos{font-size:.72rem}
+  .imgs{gap:.5rem;align-items:flex-start}
+  .imgs img,.imgs .noimg{width:5rem;height:5rem}
+  .imgs figcaption{font-size:.62rem}
+  .ctx{flex:1 1 auto;min-width:0}      /* 竖排拿走原图之外的全部宽度 */
+  .main{min-width:0;width:100%}
+  /* 候选按钮：允许内部折行并卡死在容器宽度内，别再撑出横向滚动 */
+  .cands{gap:.35rem}
+  .cand{padding:.18rem .45rem;gap:.2rem;max-width:100%;flex-wrap:wrap}
+  .cand b{font-size:1.2rem}
+  .cand .gl{font-size:.64rem;max-width:100%;white-space:normal}
+  .vtxt{font-size:.86rem;letter-spacing:.08em}
+  /* 重切面板：页图与预览都收进容器 */
+  .recrop{padding:.45rem}
+  .rc-wrap{max-width:100%}
+  .rc-wrap img{max-width:100%;height:auto}
+  .rc-prev canvas{width:4.5rem;height:4.5rem}
+  .rc-acts{gap:.3rem}
+  .evi{font-size:.82rem}
+  .other-in{font-size:.95rem;width:4em}
+  .other-ok,.nac,.skip,.noadm{font-size:.76rem}
+  .doubts{font-size:.74rem}
+  kbd{display:none}          /* 手机没键盘，快捷键提示纯占地方 */
+}
 """
 
 # 与 artifact_export._JS 同构的三层持久化 + 种子专用交互（单键 / 顺序前进）。
@@ -692,6 +800,31 @@ kbd{font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);
 _JS = """
 (function(){
 """ + PERSIST_JS + """
+
+  // ── 顶栏滚动收起 ──
+  // 手机上顶栏（标题 + 两条进度 + 两个按钮）占掉小半屏，审字时一个都用
+  // 不上。往下滚收起、往上滚立刻回来——回来的判据要宽松（往上挪一点就
+  // 显示），因为用户往上滚多半就是想看进度或按「复制记录」。
+  // 阈值 6px 是为了躲开 iOS 回弹与 scrollIntoView 的细微抖动。
+  (function(){
+    var bar = document.querySelector('.top');
+    if(!bar) return;
+    var last = window.scrollY || 0;
+    function onScroll(){
+      var y = window.scrollY || 0, dy = y - last;
+      if(Math.abs(dy) < 6) return;
+      last = y;
+      // 只有**往上滚**才强制显示——往上滚多半就是想看进度或按按钮。
+      // 往下滚越过两倍栏高才收起；没越过就**什么都不做**，不能强制显示：
+      // setActive 自动前进时会先显式收起，若这里抢着改回 0，顶栏又会
+      //压住卡头（用户 2026-08-26 报的正是这个）。
+      if(dy < 0){ bar.setAttribute('data-hide', '0'); return; }
+      if(y > bar.offsetHeight * 2) bar.setAttribute('data-hide', '1'); }
+    try { addEventListener('scroll', onScroll, {passive: true}); } catch(e){}
+    // 键盘前进/裁决时把它放回来，免得「已储存 N 条」被藏着看不见
+    document.addEventListener('keydown', function(){
+      bar.setAttribute('data-hide', '0'); });
+  })();
 
   // ── 卡片狀態 ──
   function cards(){ return list.querySelectorAll('.card'); }
@@ -714,7 +847,11 @@ _JS = """
       card.setAttribute('data-state',
         card.getAttribute('data-undone') === '1' ? 'open' : 'skip');
       setChosen(card, card.getAttribute('data-undone') === '1' ? '' : '疑');
-      card.removeAttribute('data-undone'); } }
+      card.removeAttribute('data-undone'); }
+    else if(ev.op === 'recrop'){
+      // 几何通道不定字，但徽章要跟着日志重放回来——否则发布重载之后
+      // 「已重切」的痕迹全没了，用户又会再切一次
+      card.setAttribute('data-recropped', '1'); } }
 
   function progress(){
     var done = list.querySelectorAll(
@@ -734,8 +871,20 @@ _JS = """
   function setActive(card){
     var a = list.querySelector('.card.active');
     if(a && a !== card) a.classList.remove('active');
-    if(card){ card.classList.add('active');
-      card.scrollIntoView({block: 'center', behavior: 'smooth'}); } }
+    if(!card) return;
+    card.classList.add('active');
+    // 自动前进时把顶栏收起（用户 2026-08-26 手机实拍）：裁决完自动滚到
+    // 下一张，而 sticky 顶栏正压在卡片头上，要审的字被挡住。这一滚是
+    // 程序发起的、用户没在读顶栏，收掉最省事；他往上滚一下就回来。
+    var bar = document.querySelector('.top');
+    if(bar) bar.setAttribute('data-hide', '1');
+    // 卡片比视口还高时（手机上常见：图块 + 上下文条 + 候选 + 疑问）
+    // block:'center' 会把卡头顶出屏幕。这种就对齐到顶，保证「第几列第几
+    // 字 + 原图」先进视野——那才是判断的起点。
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var tall = card.getBoundingClientRect().height > vh * 0.8;
+    card.scrollIntoView({block: tall ? 'start' : 'center',
+                         behavior: 'smooth'}); }
   function advance(from){
     var cs = cards(), start = -1;
     for(var i = 0; i < cs.length; i++) if(cs[i] === from) start = i;
@@ -882,6 +1031,7 @@ _JS = """
             bbox: [ox + b[0], oy + b[1], ox + b[2], oy + b[3]]});
       var v = card.querySelector('[data-slot="rcdone"]');
       if(v) v.textContent = '已重切 ✓（仍需选字）';
+      card.setAttribute('data-recropped', '1');   // 卡头徽章，面板关了也在
       card.setAttribute('data-recrop', '0');
     }
   });
@@ -914,6 +1064,7 @@ _JS = """
       for(var i = 0, cs = cards(); i < cs.length; i++){
         cs[i].setAttribute('data-state', 'open');
         cs[i].removeAttribute('data-undone');
+        cs[i].removeAttribute('data-recropped');
         setChosen(cs[i], ''); }
       // 按 seq 順序重放：同一 instance 後到覆蓋
       evs.sort(function(a, b){ return (a.seq||0) - (b.seq||0); });

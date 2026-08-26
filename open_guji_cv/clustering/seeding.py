@@ -48,12 +48,13 @@ from .context_step import build_strategy
 from .recognize_flow import ColumnContext, fuse_priors
 from .normalize import normalize_patch, sauvola_binarize
 from .verify import MISS_WMAX
+from .exclusions import load_exclusions
 from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          DOUBT_NEAR_FORM, DOUBT_REPLACE_ALIGN,
                          DOUBT_SIGNAL_CONFLICT, DOUBT_WEAK_SINGLE,
                          STATUS_AUTO, STATUS_CONFIRMED, STATUS_LABEL_ONLY,
-                         STATUS_NOT_A_CHAR, STATUS_PENDING,
-                         STATUS_SKIPPED,
+                         STATUS_EXCLUDED, STATUS_NOT_A_CHAR, STATUS_PENDING,
+                         STATUS_RECROPPED, STATUS_REJECTED, STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
 
@@ -63,6 +64,20 @@ DEFAULT_PROB_THRESHOLD = 0.85
 
 # 形近否决家族的全部成员（near_form 疑问用；单一事实源在 match.py）
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
+
+# 「同词异写」而非「认错字」的形近对（用户 2026-08-26 定；考据见
+# charset_and_lm.md §四）。已/巳 历史上就是同一个词的两种写法（段玉裁：
+# 巳久已用为「已然」之已），config/variants/variants.json 里
+# 已→巳 登记为 hydzd/yitizi 异体关系——字形层拦得对（近形护栏防的是
+# **形状判据**自己会错认），但**上下文/语言模型的文意判断**不该被同一
+# 道闸挡下：这道题字形本就不重要，文意才是唯一相关的证据。
+#
+# 严格窄集，不等于 NEAR_FORM_CHARS：己 长得像已/巳但是**真的另一个字**
+# （自己 vs 已经/地支），vol01:21:3:19 实锤过把己错认成巳/已——己不进
+# 这张表，上下文通道对它照样要拦，仍然人审。
+SEMANTIC_MERGED_PAIRS: frozenset[tuple[str, str]] = frozenset({("已", "巳")})
+SEMANTIC_MERGED_CHARS = frozenset(
+    c for pair in SEMANTIC_MERGED_PAIRS for c in pair)
 
 SEED_DIR = "phase9_seed"
 
@@ -113,6 +128,25 @@ MATCH_SOLO_COV = 0.99
 # 四条历史反例全在家族里）；不同语义的竞争候选到 0.95 档也禁。
 # 0.95 以下无「OCR×库一致」样本，不外推。
 MATCH_SOLO_OCR_COV = 0.95
+# replace 层对齐 × 库 top 一致的放行阈（2026-08-25 十七轮实审标定：
+# 756 条历史人裁回放，@0.95 触发 70 全对——OCR 认错才产生 replace 层，
+# 而「OCR 不参与自动判断」本就是定案；整理本（文本）× 库（形状）两路
+# 零同源证据同指一字，与 match_ref 通道同一机理，只是对齐来自 replace
+# 层所以单独设档留观察窗）
+MATCH_REPLACE_COV = 0.95
+# 免闸参考 × 库 top 一致的放行阈（同一轮标定：@0.98 触发 25 全对；
+# @0.97 出 祗/祇 一错——免闸参考噪声大于过闸对齐，阈往上顶一档）
+MATCH_REF_WEAK_COV = 0.98
+
+# match_margin 通道用：库 top1 与 top2 的覆盖率差（不是绝对 cov）。
+# 用户 2026-08-27 定：「即使庫內匹配率未達到 0.99，但是沒有競爭者，
+# 且整理本一致，完全可以自動錄入。只有有相似競爭者，或整理本不一致
+# 時，需要人工」——上面几条通道全部按**绝对 cov** 卡阈，会漏掉「cov
+# 不高但根本没有第二名」的场面（比如 top1 0.85、top2 0.30，比 top1
+# 0.97、top2 0.95 那种真竞争更不该拦）。全部历史人裁回放定标：
+# margin≥0.05 触发 102 全对；0.04 档出第一错（祗/祇，MATCH_REF_WEAK_COV
+# 注释里同一对，免闸参考噪声大），阈定在错例之上留一档。
+MATCH_MARGIN_THRESH = 0.05
 
 
 def _now() -> str:
@@ -297,6 +331,45 @@ def admission_decision(ocr: dict | None, align_char: str | None,
         if db_char is not None \
                 and vmap.semantic(db_char) == vmap.semantic(corpus_char):
             return True, "match_ref"
+    # replace 层对齐 × 库 top 一致（十七轮，70/70）：signal_conflict 与
+    # replace_align 这两条疑问都在说「OCR 与整理本不一致」——可 OCR 本来
+    # 就不参与自动判断，拦错了对象。整理本字与库内形状 top 候选同字且
+    # cov 够高时放行，进库字取**整理本字**（库只是形状旁证）。
+    # db_inconsistent 不在允许集，照拦。near_form 2026-08-27 加入
+    # ——match_ref（equal 层）早就放了 near_form（33/33 全对，见上面
+    # ref_overridable 注释），replace 层没跟上纯属疏漏：证据独立性论证
+    # 一样成立，整理本×库 zero-shared-source，与对齐是 equal 还是
+    # replace 无关。全部历史人裁回放：143/143 全对。
+    d_replace = {DOUBT_SIGNAL_CONFLICT, DOUBT_REPLACE_ALIGN,
+                 DOUBT_DEGRADED_CROP, DOUBT_NEAR_FORM}
+    if align_char is not None and doubts \
+            and all(d in d_replace for d in doubts) and match_candidates:
+        c1, cov1 = max(match_candidates, key=lambda t: t[1])
+        if cov1 >= MATCH_REPLACE_COV \
+                and vmap.semantic(c1) == vmap.semantic(align_char):
+            return True, "match_replace"
+    # 免闸参考 × 库 top 一致（十七轮，25/25 @0.98）：无对齐的页（上谕/
+    # 奏折补录）weak_single 几乎必然在场，此前它把 参考 × 库 双证据的路
+    # 整个堵死。参考虽免闸（噪声大），但库形状 0.98 档同字时两路互证。
+    # db_inconsistent 判的是 **proposed**——无对齐时 proposed 退回 OCR 字，
+    # 这条疑问于是在说「这块图不像库里的 **OCR 字**」。本通道要进的却是
+    # 参考字，两者不同字时这句话与放行毫无关系，反而是「它不该是 OCR 字」
+    # 的旁证（用户 2026-08-25 实锤 vol01:22:5:4：OCR 司 18%、整理本 詞、
+    # 库 top 詞 cov 1.00，疑问 5 说的是「不像库里的司」——完全正确）。
+    # 与 signal_conflict 拦 match_replace 同一形态：疑问码描述 OCR，
+    # 而 OCR 不投票。放行的字自己不可能 db_inconsistent——库里最像它的
+    # 就是同字刻例，cov 还压着 0.98。
+    # 回放：@0.98 触发 25 → 38 全对（剔除自证行 32/32）。
+    d_weak = {DOUBT_WEAK_SINGLE, DOUBT_DEGRADED_CROP}
+    if (align_char is None and ref_char is not None and ocr_char is not None
+            and vmap.semantic(ocr_char) != vmap.semantic(ref_char)):
+        d_weak = d_weak | {DOUBT_DB_INCONSISTENT}
+    if align_char is None and ref_char is not None and doubts \
+            and all(d in d_weak for d in doubts) and match_candidates:
+        c1, cov1 = max(match_candidates, key=lambda t: t[1])
+        if cov1 >= MATCH_REF_WEAK_COV \
+                and vmap.semantic(c1) == vmap.semantic(ref_char):
+            return True, "match_ref_weak"
     solo_ok = all(d in (DOUBT_DEGRADED_CROP, DOUBT_WEAK_SINGLE)
                   for d in doubts)
     if (corpus_char is None and solo_ok and match_guard is None
@@ -326,6 +399,22 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                 and c1 not in NEAR_FORM_CHARS
                 and ocr_char not in NEAR_FORM_CHARS):
             return True, "match_solo_ocr"
+    # match_margin（用户 2026-08-27 定，见 MATCH_MARGIN_THRESH 注释）：
+    # 兜底通道——上面全部通道都没吃到的，最后看一眼「有没有 competitor」。
+    # 不管疑问是什么组合（db_inconsistent 除外——它说的是库本身对不上，
+    # margin 再大也不该信）、不管 cov 绝对值，corpus_char（过闸对齐或
+    # 免闸参考）与库 top1 语义一致，且 top1 断档领先 top2 达
+    # MATCH_MARGIN_THRESH 即放行——「没有竞争者 + 整理本一致」，与
+    # match_replace/match_ref_weak 同一机理，进库字同样取整理本字
+    # （库只是形状旁证）。全部历史人裁回放：margin≥0.05 触发 102 全对。
+    if (corpus_char is not None and DOUBT_DB_INCONSISTENT not in doubts
+            and match_candidates):
+        ranked = sorted(match_candidates, key=lambda t: -t[1])
+        c1, cov1 = ranked[0]
+        cov2 = ranked[1][1] if len(ranked) > 1 else 0.0
+        if (vmap.semantic(c1) == vmap.semantic(corpus_char)
+                and cov1 - cov2 >= MATCH_MARGIN_THRESH):
+            return True, "match_margin"
     return False, None
 
 
@@ -387,6 +476,22 @@ def _save_progress(seed_dir: Path, progress: dict,
         json.dumps(progress, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# 人裁过 = 不可再生。force 重跑一页时这些行原样留下，其余（auto/pending/
+# skipped/excluded/机器判的 not_a_char）按新证据重生。
+# not_a_char 要分来源：``note="auto:..."`` 是规则自动判的，规则改了就该重判；
+# 没有 auto: 前缀的是人按下「非字」。
+_HUMAN_STATUSES = (STATUS_CONFIRMED, STATUS_LABEL_ONLY, STATUS_REJECTED,
+                   STATUS_RECROPPED)
+
+
+def _is_human_decided(row: dict) -> bool:
+    st = row.get("status")
+    if st in _HUMAN_STATUSES:
+        return True
+    return st == STATUS_NOT_A_CHAR and not str(
+        row.get("note") or "").startswith("auto:")
+
+
 def _page_key(p: str) -> tuple[int, str]:
     return (len(p), p)
 
@@ -405,12 +510,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
               font_editions: list[str] | None = None,
               font_cov_gate: float = FONT_COV_GATE,
               edition: str | None = None, knn_k: int = 10,
-              variants: str | Path | None = None) -> dict:
+              variants: str | Path | None = None,
+              force_pages: set[str] | None = None) -> dict:
     """按页序逐页处理正文页（正文筛选交给调用方的 pages 参数）。
 
     断点续跑：progress.json 里 ``done`` 的页整页跳过；进库幂等
     （GlyphDB.admit_instance 按 instance_id 判重），中途崩掉重跑安全。
     max_pages 限制**本次调用**处理的页数（已完成页不计）。
+
+    ``force_pages`` 给了就**只跑这几页**（即使已 done），其余一律不碰——
+    定量重跑用：上游切分/载体/判据改过、或库长大了要刷新 match 快照。重跑不会毁掉人工成果：队列清理只删
+    「机器可再生」的行，人裁过的行（confirmed / confirmed_label_only /
+    rejected / 人工 not_a_char）原样留下，对应字位也跳过不再判——
+    见 ``_is_human_decided``。
     """
     book_out_dir = Path(book_out_dir)
     book = book_out_dir.name
@@ -451,7 +563,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
     progress.setdefault("book", book)
     progress.setdefault("prob_threshold", prob_threshold)
     page_state: dict = progress.setdefault("pages", {})
-    todo = [p for p in all_pages if not page_state.get(p, {}).get("done")]
+    force = set(force_pages or ())
+    if force:
+        # 给了 force_pages 就**只跑这几页**（2026-08-26 用户实锤）。
+        # 早先的语义是「追加到待办」——可待办本来就含全部没 seed 过的页，
+        # 于是「再匹配十页」跑成了 108 页 12 分钟。用户要的是定量重跑：
+        # 库每轮都在长，后面页的 match 快照迟早还要再刷一次，跑多了是白烧。
+        todo = [p for p in all_pages if p in force]
+        missing = force - set(all_pages)
+        if missing:
+            print(f"⚠ --force-pages 里这些页不在索引/页型筛选内，忽略："
+                  f"{sorted(missing, key=_page_key)}")
+    else:
+        todo = [p for p in all_pages if not page_state.get(p, {}).get("done")]
     skipped_done = len(all_pages) - len(todo)
     if max_pages is not None:
         todo = todo[:max_pages]
@@ -489,11 +613,17 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
         p: page_reference(p, slots_by_page.get(p, []), corpus_text,
                           corpus_index)
         for p in todo}
+    # 列文按 **index 的 char 格位** 建，不按 OCR 载体建（2026-08-25 定案）。
+    # 载体可能缺格（那一格没识别出东西），缺一格整列文本就短一位，高亮
+    # 的 pos 与审查页按 index 数出来的「第几字」对不上——用户对着原图数
+    # 「文字错了一位」正是这个。以 index 为准、载体缺格补 □，则
+    # ``pos == 该格在列内的 char 位次 - 1`` 恒成立，与卡片头的 seq 同源。
     cols_by_page: dict[str, dict[int, list[tuple[int, str]]]] = {}
     for p in todo:
         cols: dict[int, list[tuple[int, str]]] = defaultdict(list)
-        for col, idx, ch in slots_by_page.get(p, []):
-            cols[col].append((idx, ch))
+        for r in by_page.get(p, []):
+            c0 = carrier.get(r.id)
+            cols[r.col].append((r.idx, (c0 or {}).get("char") or "□"))
         cols_by_page[p] = {c: sorted(v) for c, v in cols.items()}
 
     def _col_strings(page: str, col: int) -> tuple[str, str] | None:
@@ -554,15 +684,37 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 font_db = None
     summary["font_consulted"] = 0
 
-    # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）
+    # 队列：崩溃页残行清理（done 页永不重写；todo 页的旧行整页替换）。
+    # **人裁过的行不动**（2026-08-25）：force 重跑一页时，机器判的行要按
+    # 新证据重生，人裁的结论却是不可再生的成果——留行，并把那些字位记进
+    # keep_ids 本轮跳过，免得同一 id 出两行（旧队列里 125 个重号就是这么
+    # 来的，页面因此拿错卡片的证据）。
     queue_path = seed_dir / "queue.jsonl"
     todo_set = set(todo)
+    keep_ids: set[str] = set()
+    valid_ids = {r.id for r in recs}
     if queue_path.exists():
-        kept = [ln for ln in queue_path.read_text(encoding="utf-8").splitlines()
-                if ln.strip()
-                and json.loads(ln).get("page") not in todo_set]
+        kept = []
+        for ln in queue_path.read_text(encoding="utf-8").splitlines():
+            if not ln.strip():
+                continue
+            row = json.loads(ln)
+            if row.get("instance_id") not in valid_ids:
+                continue        # 切分重跑后已不存在的字位：整行作废
+            if row.get("page") in todo_set:
+                if not _is_human_decided(row):
+                    continue
+                keep_ids.add(row["instance_id"])
+            kept.append(ln)
         queue_path.write_text("".join(x + "\n" for x in kept),
                               encoding="utf-8")
+
+    exclusions = load_exclusions()
+    summary["n_excluded"] = 0
+    # 库里已进过的字位（任何通道）：重跑时只复述、不重判，见主循环注释
+    already_admitted: dict[str, tuple[str, str]] = {
+        r[0]: (r[1], r[2]) for r in db.conn.execute(
+            "SELECT instance_id, char, provenance FROM admissions")}
 
     doubt_counts: Counter = Counter()
     with open(queue_path, "a", encoding="utf-8") as qf:
@@ -575,6 +727,38 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
             for r in page_recs:
                 tail_idx[r.col] = max(tail_idx.get(r.col, -1), r.idx)
             for rec in page_recs:
+                if rec.id in keep_ids:
+                    continue            # 人裁过，队列里那行才是真源
+                if rec.id in already_admitted:
+                    # 库里已进过（上一轮任何通道），本轮判据即使不放行
+                    # 也不能把它降回待审——库不会因此撤条目，只会让队列与
+                    # 库分叉、把一个**已经进库**的字位再推给人审一遍。
+                    # 用户 2026-08-25 实锤 vol01:22:5:4（库内 provenance
+                    # =context，队列却是 pending_review）。
+                    item = SeedItem(
+                        instance_id=rec.id, book=book, page=page,
+                        col=rec.col, idx=rec.idx, patch_path=rec.patch_path,
+                        tier="clean", status=STATUS_AUTO,
+                        decided_char=already_admitted[rec.id][0],
+                        provenance=already_admitted[rec.id][1],
+                        note="already_in_db",
+                        context=slot_context(page, rec.col, rec.idx))
+                    qf.write(item.to_json() + "\n")
+                    n_auto += 1
+                    continue
+                # 排除名单（config/crop_exclusions.jsonl）：切坏/带残留的图块
+                # **不进库也不出审查卡**——用户 2026-08-25 定的口径，重扫前
+                # 一律保守处理。落一行 excluded 只为留账。
+                if rec.id in exclusions:
+                    item = SeedItem(
+                        instance_id=rec.id, book=book, page=page,
+                        col=rec.col, idx=rec.idx, patch_path=rec.patch_path,
+                        tier="excluded", status=STATUS_EXCLUDED,
+                        note="excluded:" + str(
+                            exclusions[rec.id].get("reason", "")))
+                    qf.write(item.to_json() + "\n")
+                    summary["n_excluded"] = summary.get("n_excluded", 0) + 1
+                    continue
                 gray = cv2.imread(str(root / rec.patch_path),
                                   cv2.IMREAD_GRAYSCALE)
                 if gray is None:
@@ -604,7 +788,8 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 tier = "clean" if q.tier == "clean" else "degraded"
                 intrusion = detect_intrusion(gray)
                 norm = normalize_patch(gray)
-                mr = matcher.match(norm)
+                # 摘掉自身：这个字位可能上一轮已进库，自比等于自证
+                mr = matcher.match(norm, exclude_id=rec.id)
 
                 c = carrier.get(rec.id)
                 ocr = ({"char": c["char"], "prob": float(c.get("prob", 0.0))}
@@ -623,7 +808,14 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     match_char=mr.char, match_candidates=mr.candidates,
                     match_guard=mr.guard, match_wmax=mr.wmax,
                     solo_cov=solo_cov)
-                if admit_ok and channel == "match_ref":
+                if admit_ok and channel in ("match_replace",
+                                             "match_ref_weak",
+                                             "match_margin"):
+                    # 这三条通道站着的都是整理本/参考字，库只是形状旁证
+                    # （match_margin 同一机理，见 MATCH_MARGIN_THRESH 注释）
+                    proposed = (al.char if al else None) or \
+                        (ctx or {}).get("ref_char")
+                elif admit_ok and channel == "match_ref":
                     # 库 × 整理本通道的进库字取库匹配形——站着的是形状
                     # 证据（verify same）+ 整理本，OCR 只是旁证；否则
                     # 无对齐时 proposed 会落到 OCR 字（十轮实审：之 页
@@ -679,12 +871,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     # （库 unsure 命中 ∪ OCR top1+s2t）+ 同列前文 LM 打分，
                     # margin ≥ 阈即以 context provenance 进库。
                     # 三道防护：① 只在锚定页跑（无语料没有安全网）；
-                    # ② near_form / db_inconsistent 仍然只走人审；
+                    # ② db_inconsistent 仍然只走人审——它说的是库本身
+                    #    对不上，跟上下文判断是两回事，不该被 margin 盖过；
+                    #    near_form **不再拦这条通道**（2026-08-27 用户定：
+                    #    諭/論、曾/會、人/入这类反复靠人校对的形近字家族，
+                    #    154 题盲测 n-gram 95.5%、大模型 98.7%，远超字形
+                    #    层 top-1 64.3%——挡的一直是更可靠的证据。已/巳的
+                    #    字形/释读分岔逻辑对其余家族不适用：那些是**真的
+                    #    不同字**，context 判对了，形与义本就该是同一个值，
+                    #    不需要再拆 shape）；
                     # ③ 单候选的 margin=1.0 是平凡值——要求 ranked ≥2
                     #    （真竞争胜出）或裁决字与整理本一致。
                     ctx_admit = False
                     if (page_anchored
-                            and DOUBT_NEAR_FORM not in doubts
                             and DOUBT_DB_INCONSISTENT not in doubts):
                         topk = [(ocr["char"], ocr["prob"])] if ocr else []
                         corpus_char = (al.char if al else None) or \
@@ -720,8 +919,23 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                     and vmap.semantic(surface) ==
                                     vmap.semantic(corpus_char)))
                         if surface and sem_margin >= context_margin and safe:
+                            # 字形/释读分岔（只在 SEMANTIC_MERGED_PAIRS 触发，
+                            # 用户 2026-08-26 定：字形是什么就录什么，已/巳
+                            # 这三个字才按语意改——但改的是**释读**，不能
+                            # 污染字形匹配层。字形库/GlyphMatcher 必须按
+                            # OCR 这个纯视觉信号归类（它不掺文意判断），
+                            # 不然未来一个真该读「巳」的同形实例会错误
+                            # 继承这次的释读。OCR 缺失或本身不在家族里
+                            # 时说明没有独立的形状信号，退回 surface
+                            # （不引入分岔，绝大多数字符走这条路）。
+                            shape_char = surface
+                            if surface in SEMANTIC_MERGED_CHARS:
+                                ocr_c = ocr["char"] if ocr else None
+                                if ocr_c and ocr_c in SEMANTIC_MERGED_CHARS:
+                                    shape_char = ocr_c
                             evidence = {"decision": dec.to_dict(),
                                         "surface": surface,
+                                        "shape": shape_char,
                                         "sem_margin": sem_margin,
                                         "match": mr.to_dict(), "ocr": ocr,
                                         "align": align, "tier": tier,
@@ -735,10 +949,11 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                 bbox=list(rec.bbox),
                                 ink_ratio=rec.ink_ratio, width=rec.width,
                                 height=rec.height,
-                                semantic=vmap.semantic(surface))
+                                semantic=vmap.semantic(surface),
+                                shape=shape_char)
                             if admitted:
-                                matcher.add(rec.id, surface, norm)
-                                db_chars.add(surface)
+                                matcher.add(rec.id, shape_char, norm)
+                                db_chars.add(shape_char)
                                 summary["db_added"] += 1
                             item.status = STATUS_AUTO
                             item.decided_char = surface
@@ -762,8 +977,13 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                 qf.write(item.to_json() + "\n")
             qf.flush()
 
+            # force 重跑时保留下来的人裁行不参与本轮判定，单独记一笔，
+            # 免得 auto+pending != total 看着像丢了字位
+            n_keep = sum(1 for r in page_recs if r.id in keep_ids)
             page_state[page] = {"total": len(page_recs), "auto": n_auto,
                                 "pending": n_pending, "done": True}
+            if n_keep:
+                page_state[page]["human_kept"] = n_keep
             _save_progress(seed_dir, progress, all_pages)
             summary["pages_processed"] += 1
             summary["n_slots"] += len(page_recs)
@@ -908,10 +1128,22 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
             n["recrop_refreshed_db"] += 1
 
     # ── 裁决通道 ──
+    # 排除名单守门：名单里的字位不进库（用户 2026-08-25 定的口径）。
+    # 页面本就不出它们的卡，这里防的是旧批次事件与手写事件文件。
+    excluded = load_exclusions()
     for ev in last.values():
         it = items.get(ev.get("instance_id", ""))
         if it is None:
             n["unknown"] += 1
+            continue
+        if it.instance_id in excluded:
+            # 名单里的图块无论事件说什么都不进库；队列行也钉成 excluded
+            it.status = STATUS_EXCLUDED
+            it.decided_char = None
+            it.provenance = None
+            it.note = "excluded:" + str(
+                excluded[it.instance_id].get("reason", ""))
+            n["excluded"] += 1
             continue
         op = ev.get("op")
         if op == "confirm":
@@ -1092,7 +1324,10 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
         if not admit_ok:
             n["kept"] += 1
             continue
-        if channel in ("match_ref", "match_solo", "match_solo_ocr"):
+        if channel in ("match_replace", "match_ref_weak", "match_margin"):
+            proposed = (it.align or {}).get("char") or \
+                (it.context or {}).get("ref_char")
+        elif channel in ("match_ref", "match_solo", "match_solo_ocr"):
             proposed = m.get("char") or (
                 max(cands, key=lambda t: t[1])[0] if cands else None)
         else:

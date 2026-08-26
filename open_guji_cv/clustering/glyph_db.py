@@ -453,7 +453,8 @@ class GlyphDB:
                        ink_ratio: float | None = None,
                        width: float | None = None,
                        height: float | None = None,
-                       semantic: str | None = None) -> bool:
+                       semantic: str | None = None,
+                       shape: str | None = None) -> bool:
         """單個已裁決實例進庫（逐頁種子流程用，區別於 import_book 全量）。
 
         寫入：canonical 圖塊（真源，256×256 質心居中——十九輪起與
@@ -463,6 +464,17 @@ class GlyphDB:
         （n_confirmed 累加）、exemplar（role='seed'，逐實例可檢索）、
         admissions 審計行（provenance + evidence JSON——設計 §3 紀律 1：
         逐實例證據，不做盲傳播；改判時憑它重放）。
+
+        ``char`` 是釋讀（這個字位「說的是什麼」，寫進 ``admissions.char``、
+        且是 ``semantic`` 缺省值的來源——絕大多數字符字形=釋讀，兩者
+        本就同值）；``shape`` 是字形識別鍵（餵給 ``glyphs``/``exemplars``/
+        ``GlyphMatcher`` 索引的那個），缺省等於 ``char``。二者只在
+        「同詞異寫、字形不重要」的窄類（已/巳，見
+        ``seeding.SEMANTIC_MERGED_PAIRS``）才會分岔——那類字用文意判
+        釋讀，但字形庫必須按刻本上實際刻的形狀分類，否則未來一個真的
+        刻成巳形、該讀巳的實例會錯誤繼承這次的釋讀（2026-08-26 用戶
+        定：「字形是什麼我們就錄什麼，這三個字才按語意改，但這個修改
+        不能污染字形匹配層」）。
 
         冪等：同一 instance_id 第二次調用直接返回 False，什麼都不寫。
         """
@@ -475,8 +487,9 @@ class GlyphDB:
         cur.execute(
             "INSERT OR IGNORE INTO sources (source_id, edition_tag, created_at)"
             " VALUES (?,?,?)", (source_id, edition, _now()))
+        shape = shape or char
         sem = semantic or char
-        cp = ord(char) if len(char) == 1 else None
+        cp = ord(shape) if len(shape) == 1 else None
         raw = cv2.imdecode(np.frombuffer(patch_png, np.uint8),
                            cv2.IMREAD_GRAYSCALE)
         canon = to_canonical(raw)
@@ -497,7 +510,7 @@ class GlyphDB:
             (instance_id, source_id, page, col, idx,
              json.dumps(bbox) if bbox is not None else None, patch_png,
              ink_ratio, width, height, None,
-             char, provenance, 1.0, sem, cp, None, _now()))
+             shape, provenance, 1.0, sem, cp, None, _now()))
         self._write_derived(cur, instance_id, norm)
         cur.execute(
             f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
@@ -508,10 +521,10 @@ class GlyphDB:
                   status = CASE WHEN n_confirmed + 1 >= {K_MIN}
                            THEN 'stable' ELSE status END,
                   updated_at=excluded.updated_at""",
-            (edition, char, sem, cp, None, _now()))
+            (edition, shape, sem, cp, None, _now()))
         gid = cur.execute(
             "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-            (edition, char)).fetchone()[0]
+            (edition, shape)).fetchone()[0]
         cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
                     (gid, instance_id, "seed", _now()))
         cur.execute("INSERT INTO admissions VALUES (?,?,?,?,?)",

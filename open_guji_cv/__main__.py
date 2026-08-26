@@ -491,7 +491,10 @@ def cmd_seed(args):
                             font_editions=[e.strip() for e in
                                            args.font_editions.split(",")
                                            if e.strip()],
-                            edition=args.edition)
+                            edition=args.edition,
+                            force_pages={p.strip() for p in
+                                         (args.force_pages or "").split(",")
+                                         if p.strip()})
     finally:
         db.close()
     print(json.dumps(summary, ensure_ascii=False, indent=1))
@@ -655,7 +658,8 @@ def cmd_glyph_db(args):
             from .clustering.font_glyphs import import_fonts_from_manifest
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
-                charset=args.charset, limit=args.limit)
+                charset=args.charset, limit=args.limit,
+                jobs=args.jobs)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -918,6 +922,11 @@ def main():
                    help="OCR 载体 jsonl（默认 phase4_chars/ocr_carrier.jsonl）")
     p.add_argument("--max-pages", type=int, default=None,
                    help="本次最多处理的页数（断点续跑分批推进用）")
+    p.add_argument("--force-pages", default=None,
+                   help="逗号分隔的页号：**只跑这几页**（即使已 done），"
+                        "其余一律不碰。定量重跑用——上游切分/载体/判据改过，"
+                        "或库长大了要刷新 match 快照。人裁过的行不会被覆盖，"
+                        "已进库的字位只复述不重判")
     p.add_argument("--prob-threshold", type=float, default=0.85,
                    help="weak_single 的 OCR prob 阈（默认 0.85，待 char-ocr 集标定）")
     p.add_argument("--edition", default=None,
@@ -1019,6 +1028,9 @@ def main():
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,
                    help="只导前 N 个字（import-font 冒烟测试用）")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
+                        "写库仍单线程）")
     p.add_argument("--collection", default=None, help="丛书（如 武英殿聚珍版）")
     p.add_argument("--script-style", default=None, help="字体（宋体刻/写刻/手写）")
     p.add_argument("--title", default=None, help="书名")
