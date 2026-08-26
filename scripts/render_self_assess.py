@@ -28,6 +28,9 @@ def main() -> None:
     ap.add_argument("--sample", required=True)
     ap.add_argument("--stratum", default="rand")
     ap.add_argument("--out", required=True)
+    # 现算样本（sample_live.py）把图块写在自己的目录下，不在 phase4 产物里
+    ap.add_argument("--patch-root", default=None,
+                    help="图块根目录；缺省用 output/<book>/phase4_chars/")
     a = ap.parse_args()
 
     rows = [r for r in json.loads(Path(a.sample).read_text(encoding="utf-8"))
@@ -71,8 +74,9 @@ def main() -> None:
             if ctx.shape[0] < TILE_H:      # 顶部对齐，下方留白
                 ctx = cv2.copyMakeBorder(ctx, 0, TILE_H - ctx.shape[0], 0, 0,
                                          cv2.BORDER_CONSTANT, value=(245,245,245))
-        p = cv2.imread(f"output/{r['book']}/phase4_chars/{r['patch_path']}",
-                       cv2.IMREAD_GRAYSCALE)
+        pp = (Path(a.patch_root) / r["patch_path"]) if a.patch_root else \
+            Path(f"output/{r['book']}/phase4_chars/{r['patch_path']}")
+        p = cv2.imread(str(pp), cv2.IMREAD_GRAYSCALE)
         if p is None:
             pat = np.full((TILE_H, 60, 3), 230, np.uint8)
         else:
