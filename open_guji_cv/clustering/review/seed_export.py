@@ -610,7 +610,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
   border:1px solid var(--line);border-radius:3px;padding:.15rem .6rem;cursor:pointer}
 .list{max-width:56rem;margin:0 auto;padding:1rem;display:flex;
   flex-direction:column;gap:.8rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;
+  scroll-margin-top:3.2rem}   /* 顶栏没收起时，别让它压住卡头 */
 .card.active{border-color:var(--seal);box-shadow:0 0 0 1px var(--seal)}
 .card>header{display:flex;gap:.7rem;align-items:baseline;flex-wrap:wrap;
   padding:.4rem .8rem;border-bottom:1px solid var(--line)}
@@ -777,10 +778,13 @@ _JS = """
     function onScroll(){
       var y = window.scrollY || 0, dy = y - last;
       if(Math.abs(dy) < 6) return;
-      // 顶部一小段永远显示；越过一屏高度才允许收起
-      bar.setAttribute('data-hide',
-        (dy > 0 && y > bar.offsetHeight * 2) ? '1' : '0');
-      last = y; }
+      last = y;
+      // 只有**往上滚**才强制显示——往上滚多半就是想看进度或按按钮。
+      // 往下滚越过两倍栏高才收起；没越过就**什么都不做**，不能强制显示：
+      // setActive 自动前进时会先显式收起，若这里抢着改回 0，顶栏又会
+      //压住卡头（用户 2026-08-26 报的正是这个）。
+      if(dy < 0){ bar.setAttribute('data-hide', '0'); return; }
+      if(y > bar.offsetHeight * 2) bar.setAttribute('data-hide', '1'); }
     try { addEventListener('scroll', onScroll, {passive: true}); } catch(e){}
     // 键盘前进/裁决时把它放回来，免得「已储存 N 条」被藏着看不见
     document.addEventListener('keydown', function(){
@@ -828,8 +832,20 @@ _JS = """
   function setActive(card){
     var a = list.querySelector('.card.active');
     if(a && a !== card) a.classList.remove('active');
-    if(card){ card.classList.add('active');
-      card.scrollIntoView({block: 'center', behavior: 'smooth'}); } }
+    if(!card) return;
+    card.classList.add('active');
+    // 自动前进时把顶栏收起（用户 2026-08-26 手机实拍）：裁决完自动滚到
+    // 下一张，而 sticky 顶栏正压在卡片头上，要审的字被挡住。这一滚是
+    // 程序发起的、用户没在读顶栏，收掉最省事；他往上滚一下就回来。
+    var bar = document.querySelector('.top');
+    if(bar) bar.setAttribute('data-hide', '1');
+    // 卡片比视口还高时（手机上常见：图块 + 上下文条 + 候选 + 疑问）
+    // block:'center' 会把卡头顶出屏幕。这种就对齐到顶，保证「第几列第几
+    // 字 + 原图」先进视野——那才是判断的起点。
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var tall = card.getBoundingClientRect().height > vh * 0.8;
+    card.scrollIntoView({block: tall ? 'start' : 'center',
+                         behavior: 'smooth'}); }
   function advance(from){
     var cs = cards(), start = -1;
     for(var i = 0; i < cs.length; i++) if(cs[i] === from) start = i;
