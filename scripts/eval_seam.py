@@ -85,22 +85,38 @@ def scan(dataset: str, out: str = "output") -> dict:
     body = [(r["book"], r["page"]) for r in gold if r["page_type"] == "body"]
     pages: dict[str, int] = {}
     allv: list[float] = []
+    rates: list[tuple] = []
     for book, page in sorted(body):
         v = page_seams(book, page, out)
         if not v:
             continue
         allv += v
         n = sum(1 for x in v if x >= HEAVY_T)
+        rates.append((n / len(v), f"{book}/{page}", n, len(v)))
         if n:
             # 同时记总切缝数：单页比较必须按**占比**，不能按绝对条数
             pages[f"{book}/{page}"] = [n, len(v)]
     a = np.array(allv) if allv else np.zeros(1)
+    # 页级分布：全书总数会把「少数页烂透」平均掉——vol01/60 单页 16.4%
+    # 重切缝，全书总率却只有 0.6%。**先看页级分布，再看总数。**
+    r = np.array([x[0] for x in rates]) if rates else np.zeros(1)
+    rates.sort(reverse=True)
     return {
         "heavy_threshold": HEAVY_T,
         "n_seams": len(allv),
         "n_heavy": int((a >= HEAVY_T).sum()),
         "median": round(float(np.median(a)), 4),
         "p90": round(float(np.percentile(a, 90)), 4),
+        "page_rate": {
+            "n_pages": len(rates),
+            "median": round(float(np.median(r)), 4),
+            "p90": round(float(np.percentile(r, 90)), 4),
+            "p99": round(float(np.percentile(r, 99)), 4),
+            "n_ge_05": int((r >= 0.05).sum()),
+            "n_ge_10": int((r >= 0.10).sum()),
+            "n_ge_20": int((r >= 0.20).sum()),
+            "worst": [[k, n, t, round(x, 4)] for x, k, n, t in rates[:20]],
+        },
         "pages": pages,
     }
 
@@ -125,6 +141,17 @@ def main() -> None:
     print(f"重切缝（≥{HEAVY_T}） {gold['n_heavy']} → {got['n_heavy']}   "
           f"中位 {gold['median']} → {got['median']}   "
           f"p90 {gold['p90']} → {got['p90']}")
+    gr, tr = gold.get("page_rate") or {}, got.get("page_rate") or {}
+    if tr:
+        print("页级重切缝率（全书总数会把「少数页烂透」平均掉，先看这个）：")
+        print(f"  中位 {gr.get('median','-')} → {tr['median']}   "
+              f"p90 {gr.get('p90','-')} → {tr['p90']}   "
+              f"p99 {gr.get('p99','-')} → {tr['p99']}")
+        print(f"  ≥5% 的页 {gr.get('n_ge_05','-')} → {tr['n_ge_05']}   "
+              f"≥10% {gr.get('n_ge_10','-')} → {tr['n_ge_10']}   "
+              f"≥20% {gr.get('n_ge_20','-')} → {tr['n_ge_20']}")
+        print("  最差 8 页：" + "  ".join(
+            f"{k} {n}/{t}={x:.0%}" for k, n, t, x in tr["worst"][:8]))
     gp, tp = gold.get("pages", {}), got.get("pages", {})
 
     def pair(d, k):
@@ -146,7 +173,14 @@ def main() -> None:
         worse.append((k, n_old, t_old, n_new, t_new))
     for k, n_old, t_old, n_new, t_new in worse[:15]:
         print(f"  ✗ {k}：{n_old}/{t_old} → {n_new}/{t_new}")
-    ok = got["n_heavy"] <= gold["n_heavy"] and not worse
+    # 回归门也必须看页级：总数持平但「烂页」变多，等于把病灶挪了个地方
+    page_bad = bool(tr) and bool(gr) and (
+        tr["n_ge_10"] > gr.get("n_ge_10", 0)
+        or tr["n_ge_20"] > gr.get("n_ge_20", 0))
+    if page_bad:
+        print(f"  ✗ 烂页变多：≥10% 的页 {gr.get('n_ge_10')} → {tr['n_ge_10']}，"
+              f"≥20% 的页 {gr.get('n_ge_20')} → {tr['n_ge_20']}")
+    ok = got["n_heavy"] <= gold["n_heavy"] and not worse and not page_bad
     print("回归门：通过" if ok else "回归门：**失败**")
     raise SystemExit(0 if ok else 1)
 
