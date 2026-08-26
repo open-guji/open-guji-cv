@@ -138,6 +138,16 @@ MATCH_REPLACE_COV = 0.95
 # @0.97 出 祗/祇 一错——免闸参考噪声大于过闸对齐，阈往上顶一档）
 MATCH_REF_WEAK_COV = 0.98
 
+# match_margin 通道用：库 top1 与 top2 的覆盖率差（不是绝对 cov）。
+# 用户 2026-08-27 定：「即使庫內匹配率未達到 0.99，但是沒有競爭者，
+# 且整理本一致，完全可以自動錄入。只有有相似競爭者，或整理本不一致
+# 時，需要人工」——上面几条通道全部按**绝对 cov** 卡阈，会漏掉「cov
+# 不高但根本没有第二名」的场面（比如 top1 0.85、top2 0.30，比 top1
+# 0.97、top2 0.95 那种真竞争更不该拦）。全部历史人裁回放定标：
+# margin≥0.05 触发 102 全对；0.04 档出第一错（祗/祇，MATCH_REF_WEAK_COV
+# 注释里同一对，免闸参考噪声大），阈定在错例之上留一档。
+MATCH_MARGIN_THRESH = 0.05
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -325,9 +335,13 @@ def admission_decision(ocr: dict | None, align_char: str | None,
     # replace_align 这两条疑问都在说「OCR 与整理本不一致」——可 OCR 本来
     # 就不参与自动判断，拦错了对象。整理本字与库内形状 top 候选同字且
     # cov 够高时放行，进库字取**整理本字**（库只是形状旁证）。
-    # near_form / db_inconsistent 不在允许集，照拦。
+    # db_inconsistent 不在允许集，照拦。near_form 2026-08-27 加入
+    # ——match_ref（equal 层）早就放了 near_form（33/33 全对，见上面
+    # ref_overridable 注释），replace 层没跟上纯属疏漏：证据独立性论证
+    # 一样成立，整理本×库 zero-shared-source，与对齐是 equal 还是
+    # replace 无关。全部历史人裁回放：143/143 全对。
     d_replace = {DOUBT_SIGNAL_CONFLICT, DOUBT_REPLACE_ALIGN,
-                 DOUBT_DEGRADED_CROP}
+                 DOUBT_DEGRADED_CROP, DOUBT_NEAR_FORM}
     if align_char is not None and doubts \
             and all(d in d_replace for d in doubts) and match_candidates:
         c1, cov1 = max(match_candidates, key=lambda t: t[1])
@@ -385,6 +399,22 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                 and c1 not in NEAR_FORM_CHARS
                 and ocr_char not in NEAR_FORM_CHARS):
             return True, "match_solo_ocr"
+    # match_margin（用户 2026-08-27 定，见 MATCH_MARGIN_THRESH 注释）：
+    # 兜底通道——上面全部通道都没吃到的，最后看一眼「有没有 competitor」。
+    # 不管疑问是什么组合（db_inconsistent 除外——它说的是库本身对不上，
+    # margin 再大也不该信）、不管 cov 绝对值，corpus_char（过闸对齐或
+    # 免闸参考）与库 top1 语义一致，且 top1 断档领先 top2 达
+    # MATCH_MARGIN_THRESH 即放行——「没有竞争者 + 整理本一致」，与
+    # match_replace/match_ref_weak 同一机理，进库字同样取整理本字
+    # （库只是形状旁证）。全部历史人裁回放：margin≥0.05 触发 102 全对。
+    if (corpus_char is not None and DOUBT_DB_INCONSISTENT not in doubts
+            and match_candidates):
+        ranked = sorted(match_candidates, key=lambda t: -t[1])
+        c1, cov1 = ranked[0]
+        cov2 = ranked[1][1] if len(ranked) > 1 else 0.0
+        if (vmap.semantic(c1) == vmap.semantic(corpus_char)
+                and cov1 - cov2 >= MATCH_MARGIN_THRESH):
+            return True, "match_margin"
     return False, None
 
 
@@ -779,8 +809,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     match_guard=mr.guard, match_wmax=mr.wmax,
                     solo_cov=solo_cov)
                 if admit_ok and channel in ("match_replace",
-                                             "match_ref_weak"):
-                    # 新两通道站着的是整理本/参考字，库只是形状旁证
+                                             "match_ref_weak",
+                                             "match_margin"):
+                    # 这三条通道站着的都是整理本/参考字，库只是形状旁证
+                    # （match_margin 同一机理，见 MATCH_MARGIN_THRESH 注释）
                     proposed = (al.char if al else None) or \
                         (ctx or {}).get("ref_char")
                 elif admit_ok and channel == "match_ref":
@@ -839,19 +871,19 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     # （库 unsure 命中 ∪ OCR top1+s2t）+ 同列前文 LM 打分，
                     # margin ≥ 阈即以 context provenance 进库。
                     # 三道防护：① 只在锚定页跑（无语料没有安全网）；
-                    # ② near_form / db_inconsistent 仍然只走人审——
-                    #    **除非**命中的字属于 SEMANTIC_MERGED_PAIRS（已/巳
-                    #    这类同词异写，字形不重要，文意才是判据，2026-08-26
-                    #    用户定：155 题盲测重验，字形层 top-1 只有
-                    #    66.7%（正是被这道闸拦住的原因），n-gram 83.3%、
-                    #    大模型 91.7%——挡的对象反而是更可靠的证据）；
+                    # ② db_inconsistent 仍然只走人审——它说的是库本身
+                    #    对不上，跟上下文判断是两回事，不该被 margin 盖过；
+                    #    near_form **不再拦这条通道**（2026-08-27 用户定：
+                    #    諭/論、曾/會、人/入这类反复靠人校对的形近字家族，
+                    #    154 题盲测 n-gram 95.5%、大模型 98.7%，远超字形
+                    #    层 top-1 64.3%——挡的一直是更可靠的证据。已/巳的
+                    #    字形/释读分岔逻辑对其余家族不适用：那些是**真的
+                    #    不同字**，context 判对了，形与义本就该是同一个值，
+                    #    不需要再拆 shape）；
                     # ③ 单候选的 margin=1.0 是平凡值——要求 ranked ≥2
                     #    （真竞争胜出）或裁决字与整理本一致。
                     ctx_admit = False
-                    near_form_blocks = (DOUBT_NEAR_FORM in doubts
-                                        and proposed not in SEMANTIC_MERGED_CHARS)
                     if (page_anchored
-                            and not near_form_blocks
                             and DOUBT_DB_INCONSISTENT not in doubts):
                         topk = [(ocr["char"], ocr["prob"])] if ocr else []
                         corpus_char = (al.char if al else None) or \
@@ -1292,7 +1324,7 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
         if not admit_ok:
             n["kept"] += 1
             continue
-        if channel in ("match_replace", "match_ref_weak"):
+        if channel in ("match_replace", "match_ref_weak", "match_margin"):
             proposed = (it.align or {}).get("char") or \
                 (it.context or {}).get("ref_char")
         elif channel in ("match_ref", "match_solo", "match_solo_ocr"):

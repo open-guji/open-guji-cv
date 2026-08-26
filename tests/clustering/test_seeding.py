@@ -241,9 +241,15 @@ def test_doubt_degraded_crop(seeded):
 
 
 def test_doubt_near_form(seeded):
+    """near_form 疑问照记（审计用），但 2026-08-27 起不再单独拦上下文
+    通道——用户实锤 諭/論、曾/會、人/入这类家族反复要人工校对，而 154
+    题盲测 n-gram 95.5%/大模型 98.7% 远胜字形层 64.3%，挡的一直是更可靠
+    的证据。这条「大」OCR 与整理本本就一致（equal），语料训练过这句
+    原文，上下文通道径直确认，不必再等人。"""
     it = _queue(seeded)[f"{BOOK}:4:1:6"]             # 「大」∈ 大/太 家族
-    assert it.status == STATUS_PENDING
     assert it.doubts == [DOUBT_NEAR_FORM]
+    assert it.status == STATUS_AUTO and it.provenance == "context"
+    assert it.decided_char == "大"
 
 
 def test_semantic_merged_pair_context_bypasses_near_form(seeded):
@@ -302,13 +308,13 @@ def test_summary_counts(seeded):
     n_slots = sum(len(t) for t in PAGES.values())
     assert s["n_slots"] == n_slots
     assert s["n_auto"] + s["n_pending"] == n_slots
-    # 预期 pending：4:6 near_form / 5:0 db_inconsistent + 第 7 页整页
-    # （8 格，未锚定上下文通道关闭）；2:10、3:9、8:5 走 context、
-    # 6:3 走 dual_degraded 进库
-    assert s["n_pending"] == 2 + len(PAGES["7"])
-    assert s.get("n_auto_context", 0) == 3
+    # 预期 pending：5:0 db_inconsistent + 第 7 页整页（8 格，未锚定上下文
+    # 通道关闭）；2:10、3:9、4:6、8:5 走 context、6:3 走 dual_degraded
+    # 进库——4:6「大」near_form 不再单独拦上下文通道（2026-08-27 起）
+    assert s["n_pending"] == 1 + len(PAGES["7"])
+    assert s.get("n_auto_context", 0) == 4
     assert "tb:4:1:6" in {i for i in _queue(seeded)
-                          if _queue(seeded)[i].status == STATUS_PENDING}
+                          if _queue(seeded)[i].status == STATUS_AUTO}
     assert s["doubt_counts"][DOUBT_WEAK_SINGLE] == 2
     assert s["pages_processed"] == len(PAGES)
 
@@ -399,12 +405,17 @@ def test_ingest_decisions_and_idempotency(seeded):
 
 
 def test_ingest_label_only_and_last_wins(seeded):
-    """仅定字·不入库（admit:false）+ 同字位事件按 seq 后到覆盖。"""
+    """仅定字·不入库（admit:false）+ 同字位事件按 seq 后到覆盖。
+
+    第一个字位原用 tb:4:1:6（那时是 near_form pending 的样例）——
+    2026-08-27 起 near_form 不再单独拦上下文通道，该字位改为 seed 时
+    就自动进库，不再有 pending 状态可供本测试模拟人工事件，换成第 7
+    页另一个未被别的测试占用的字位（该页无语料锚定，seed 后必 pending）。"""
     db = seeded["db"]
     text = "\n".join([
-        # 图块混残余：定字「珍」但字形不进库
-        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:4:1:6", '
-        '"char": "大", "admit": false, "batch": "b2", "seq": 1}',
+        # 图块混残余：定字但字形不进库
+        'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:2", '
+        '"char": "草", "admit": false, "batch": "b2", "seq": 1}',
         # confirm 后撤销（skip 后到）→ 最终不进库、留队列（取 pending 字位）
         'GUJI-SEED-EVENT {"op": "confirm", "instance_id": "tb:7:1:1", '
         '"char": "被", "batch": "b2", "seq": 2}',
@@ -417,13 +428,13 @@ def test_ingest_label_only_and_last_wins(seeded):
     assert r.get("admitted", 0) == 0          # 两条 confirm 都没进库
 
     q = _queue(seeded)
-    it = q["tb:4:1:6"]
+    it = q["tb:7:1:2"]
     assert it.status == "confirmed_label_only"
-    assert it.decided_char == "大" and it.provenance is None
+    assert it.decided_char == "草" and it.provenance is None
     assert q["tb:7:1:1"].status == STATUS_SKIPPED
 
     admitted = _admitted_ids(db)
-    assert "tb:4:1:6" not in admitted and "tb:7:1:1" not in admitted
+    assert "tb:7:1:2" not in admitted and "tb:7:1:1" not in admitted
 
 
 def test_admission_decision_match_ref():
@@ -747,12 +758,19 @@ def test_readjudicate_pending_near_form_corpus_db(tmp_path):
         qp = book_dir / "phase9_seed" / "queue.jsonl"
         rows = [json.loads(l) for l in
                 qp.read_text(encoding="utf-8").splitlines() if l.strip()]
-        # 4:1:6「大」：near_form pending，align 过闸 equal。给它补上
-        # 库匹配快照（top 候选与 align 同字）——模拟库里已有大量「大」
+        # 4:1:6「大」：align 过闸 equal，doubts=[near_form]。2026-08-27
+        # 起近形不再单独拦上下文通道，这一位 seed 时就直接自动进库了
+        # （见 test_doubt_near_form）——本测试要单独钉住的是
+        # readjudicate_pending 自己那条「规则升级回填存量」的窄口逻辑
+        # （只动 pending/skipped 行，不重算证据），所以人工把它摆回
+        # pending，模拟「规则升级前还没轮到复裁」的存量行；再补上库匹配
+        # 快照（top 候选与 align 同字）——模拟库里已有大量「大」
         fired = "tb:4:1:6"
         for d in rows:
             if d["instance_id"] == fired:
-                assert d["status"] == STATUS_PENDING
+                d["status"] = STATUS_PENDING
+                d["decided_char"] = None
+                d["provenance"] = None
                 d["match"] = {"char": None, "verdict": "unsure",
                               "guard": "never_match", "wmax": 3.0,
                               "candidates": [["大", 0.98], ["太", 0.90]]}
@@ -778,6 +796,52 @@ def test_readjudicate_pending_near_form_corpus_db(tmp_path):
         assert n2.get("auto_match_ref") is None
     finally:
         db.close()
+
+
+def test_admission_decision_match_margin():
+    """兜底通道：没有 competitor + 整理本一致 → 放行，不看绝对 cov。
+
+    用户 2026-08-27 定：「有時即使庫內匹配率，未達到 0.99，但是沒有
+    競爭者，且整理本一致，完全可以自動錄入。只有有相似競爭者，或整理本
+    不一致時，需要人工」。全部历史人裁回放 margin≥0.05 触发 102 全对
+    （0.04 档出第一错，阈留一档余量）。前面几条通道各自守着自己的
+    doubt 组合与绝对阈；这条不管 doubts 是什么组合（db_inconsistent
+    除外），只看 top1 与 top2 的 cov 差距。"""
+    from open_guji_cv.clustering.seeding import admission_decision
+    from open_guji_cv.clustering.variants import VariantMap
+    vmap = VariantMap(mapping={})
+
+    # weak_single 单独出现（无对齐、免闸参考也没有）——前面的通道
+    # 一个都碰不到（match_ref_weak 要求 ref_char 存在），match_margin
+    # 因为没有 corpus_char 同样不该放
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, None, ["weak_single"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert not ok
+    # 免闸参考 + 库单候选、cov 远低于 match_ref_weak 的 0.98，但没有
+    # competitor——match_margin 兜底放行
+    ok, ch = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert (ok, ch) == (True, "match_margin")
+    # 同样场面但库里有个分数很接近的对手——margin 不够，人审
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=[("允", 0.70), ("充", 0.67)])
+    assert not ok
+    # db_inconsistent 混进来——库本身已经不自洽，margin 再大也不该信
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允",
+        ["weak_single", "db_inconsistent"], vmap,
+        match_candidates=[("允", 0.70)])
+    assert not ok
+    # 库里压根没有这个字（corpus_char 无候选可查）——没法判自洽，人审
+    # （用户裁定「如果庫內沒有，第一次肯定要人工」，本就是结构性保证：
+    # 没有候选，match_margin/match_solo/match_ref 全都碰不到）
+    ok, _ = admission_decision(
+        {"char": "允", "prob": 0.30}, None, "允", ["weak_single"], vmap,
+        match_candidates=None)
+    assert not ok
 
 
 def test_admission_decision_match_solo_ocr():
@@ -949,19 +1013,36 @@ def test_admission_decision_match_replace_and_ref_weak():
         ["signal_conflict", "replace_align"], vmap,
         match_candidates=[("烏", 0.99)])
     assert not ok
-    # cov 不够 → 拦
-    ok, _ = admission_decision(
+    # match_replace 自己那道 cov 阈不够，但 match_margin 兜底接住——
+    # 单候选、没有第二名，corpus 一致就该放行（2026-08-27 用户定：
+    # 「即使庫內匹配率未達到 0.99，但是沒有競爭者，且整理本一致，
+    # 完全可以自動錄入」，全部历史人裁回放 margin≥0.05 触发 102 全对）
+    ok, ch = admission_decision(
         {"char": "馬", "prob": 0.99}, "焉", None,
         ["signal_conflict", "replace_align"], vmap,
         match_candidates=[("焉", 0.94)])
+    assert (ok, ch) == (True, "match_margin")
+    # 但真有 competitor（第二名离得很近）时，match_margin 也不该放——
+    # margin 不够，仍然人审
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align"], vmap,
+        match_candidates=[("焉", 0.94), ("烏", 0.91)])
     assert not ok
-    # 混入 near_form / db_inconsistent → 拦
-    for extra in ("near_form", "db_inconsistent"):
-        ok, _ = admission_decision(
-            {"char": "馬", "prob": 0.99}, "焉", None,
-            ["signal_conflict", "replace_align", extra], vmap,
-            match_candidates=[("焉", 0.99)])
-        assert not ok
+    # near_form 现在也放行 match_replace（2026-08-27，match_ref 早就放了
+    # 的同一论证：整理本×库 zero-shared-source，与对齐层 equal/replace
+    # 无关，全部历史人裁回放 143/143 全对）；db_inconsistent 仍然照拦
+    # ——库本身对不上，margin/near_form 都救不了
+    ok, ch = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align", "near_form"], vmap,
+        match_candidates=[("焉", 0.99)])
+    assert (ok, ch) == (True, "match_replace")
+    ok, _ = admission_decision(
+        {"char": "馬", "prob": 0.99}, "焉", None,
+        ["signal_conflict", "replace_align", "db_inconsistent"], vmap,
+        match_candidates=[("焉", 0.99)])
+    assert not ok
 
     # match_ref_weak：无对齐 + 免闸参考 + 库 0.98
     ok, ch = admission_decision(
