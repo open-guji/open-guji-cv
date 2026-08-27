@@ -41,6 +41,8 @@
 
 标记经页内「导出」产 `GUJI-SEG-REVIEW` JSONL 回流。
 
+| **页面级快速审阅**（正文页里疑似有问题的页，页型/列行/严重度免标注）| https://claude.ai/code/artifact/7ec62645-d07d-4527-8d59-1ae40658a19d | 数据即产物 | `scripts/build_seg_review.py --pages <书:页,页,…> --scale 0.4 --quality 65 --out …`（`page_severity` 复用 truncation/seam 两把尺子挑页，见脚本 docstring）。当前装的是 2026-08-27 全书扫描出的 22 张**正文**疑似问题页（vol01 87/88/90/107/171/182/183/185/196/205、vol02 3/107/108/119/133/135/141/149/179/180/181/182）——同一次扫描还测出 vol01 87~131 区间一批**职名页**截断偏高，按「只调正文」策略未收进此页，记在 pipeline_handbook 待办。用户已用导出流程反馈 vol02/135、108 共 20 处切错，均落在已知「浓墨粘连」区（见 char_clustering_design.md「与 seam 打架的两页」），等下一轮浓墨粘连专项处理。
+
 **⚠ 重切/重扫之后，朱批也会漂。** 朱批键在 `book/page:col:idx` 上，跟
 `char-segmentation/instances` 一样是**会漂的**。2026-08-25 文字带窗口救援
 让 vol01/70 整列多出一行，挂在它上面的 11 条朱批全体错位一格。规矩与
