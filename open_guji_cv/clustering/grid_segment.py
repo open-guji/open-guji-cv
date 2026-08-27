@@ -2034,14 +2034,25 @@ def refine_boundaries(proj: np.ndarray, offset: float, cell_h: float,
     return refined
 
 
-def _junk_free_ink(cell_gray: np.ndarray) -> float:
+BORDER_LINE_TOL = 20.0     # 已知版框线位置的命中容差（像素）
+BORDER_BAND_HALF = 35.0    # 已知版框线附近直接清空的半带宽（像素）
+
+def _junk_free_ink(cell_gray: np.ndarray,
+                   border_rows: tuple[float, ...] = ()) -> float:
     """格内去「界行竖线段 + 贴边框横线」后的墨量占比（判空用）。
 
     界行竖线段与版框横线的墨量足以骗过朴素判空（0.05~0.15 ≫ 0.02），
     batch3 人工反馈 147 例 not_text 大多如此。剔除规则：
     - 竖直长线（≥0.55 格高）整体剔——字的竖笔不会纵贯半格以上还落单；
-    - 水平长线（≥0.55 格宽）仅当**贴边**（组件 y 中心在格高 22% 以外
-      边带）才剔——版框线贴格顶/格底，「一」的横笔在格中央。
+    - 水平长线（≥0.55 格宽）当**贴边**（组件 y 中心在格高 22% 以外
+      边带）才剔——版框线贴格顶/格底，「一」的横笔在格中央；
+    - 水平长线中心落在 `border_rows`（页级实测的版框线位置，格内相对
+      坐标）附近 `BORDER_LINE_TOL` 像素内，**不论在格内哪个位置**也剔——
+      2026-08-26 实测 vol01/50 c1/c5/c7/c9：clip_refit 把这几列末格
+      整体下移，页面下边框（页级测得的同一条线）落到了格高 34%~35%
+      处——够不着 22% 的边带，被当成截断的「一」字整个提取出来。
+      边带假设的前提是「框线贴着格边」，clip_refit 把格子挪动之后这个
+      前提不成立；页级量出来的框线位置比格内相对位置**更硬**，优先信它。
     实测：真值垃圾 48% 直接判空，用户确认真字/截断半字 0 误杀。"""
     b = (cell_gray < BINARY_THRESHOLD).astype(np.uint8)
     h, w = b.shape
@@ -2061,16 +2072,42 @@ def _junk_free_ink(cell_gray: np.ndarray) -> float:
     n, lab, statsh, cent = cv2.connectedComponentsWithStats(hl, 8)
     hl_edge = np.zeros_like(hl)
     for k in range(1, n):
-        cy = cent[k][1] / h
-        if (cy < 0.22 or cy > 0.78) and statsh[k][3] <= max(6, 0.15 * h):
+        cy_px = cent[k][1]
+        cy = cy_px / h
+        thin = statsh[k][3] <= max(6, 0.15 * h)
+        if not thin:
+            continue
+        near_edge = cy < 0.22 or cy > 0.78
+        near_known_border = any(abs(cy_px - r) <= BORDER_LINE_TOL
+                                for r in border_rows)
+        if near_edge or near_known_border:
             hl_edge[lab == k] = 1
     clean = b & (1 - vl_narrow) & (1 - hl_edge)
+    if border_rows:
+        # 组件检测（开运算）只认「够粗够直」的线，版框线的抗锯齿软边、
+        # 双线框的第二道细线、角落里的碎渣点，宽度/连续性都够不上组件
+        # 门槛，逃过上面的剔除——但它们的位置紧贴着**同一条已知框线**，
+        # 直接按半带宽清空，不再逐组件判形状。实测 vol01/50 c1/c5/c7/c9
+        # 组件法漏网 2~5% 的框边墨，加了这一刀才干净归零。
+        band = np.zeros_like(b)
+        h = b.shape[0]
+        for r in border_rows:
+            lo = max(0, int(r - BORDER_BAND_HALF))
+            hi = min(h, int(r + BORDER_BAND_HALF) + 1)
+            band[lo:hi, :] = 1
+        clean = clean & (1 - band)
     return float(clean.sum()) / b.size
 
 
 def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
-                      params: GridParams) -> list[dict]:
-    """按给定网格线产出 cells（局部 y 坐标）。"""
+                      params: GridParams,
+                      border_rows: tuple[float, ...] = ()) -> list[dict]:
+    """按给定网格线产出 cells（局部 y 坐标）。
+
+    `border_rows`：页级实测的版框线位置（与 `bounds` 同一坐标系），
+    传给 `_junk_free_ink` 兜住「框线恰好落在格中部、够不着边带」那类
+    （clip_refit 挪格之后的常见后果，见该函数 docstring）。
+    """
     n_chars = len(bounds) - 1
     w = col_gray.shape[1]
     L = col_gray.shape[0]
@@ -2089,7 +2126,8 @@ def cells_from_bounds(col_gray: np.ndarray, bounds: list[float],
                           "offpage": True,
                           "text": None, "confidence": 0.0})
             continue
-        ink = _junk_free_ink(col_gray[int(y0):int(y1)])
+        cell_borders = tuple(r - y0 for r in border_rows if y0 <= r <= y1)
+        ink = _junk_free_ink(col_gray[int(y0):int(y1)], cell_borders)
         if ink < params.empty_ink_ratio:
             cells.append({"type": "empty", "index": i,
                           "y_top": y0, "y_bottom": y1,
@@ -2796,6 +2834,7 @@ class GridSegmenter:
         # （页级聚合投影），绝不按单列内容范围锚定——抬头空格列会错一格。
         # 每列仅允许相位 ±0.12 格微调（板歪/扫描形变），格高不变。
         if text_cols:
+            ft_rel = fb_rel = None
             if row_phase_abs is not None:
                 cell_h = cell_h_prior or (col_bottom - col_top) / n
                 page_phase = float(row_phase_abs) - y1
@@ -2869,6 +2908,20 @@ class GridSegmenter:
                         n += k_head
                         page_phase = want
                         grid_meta["head_raise_rows"] = int(k_head)
+            if fb_rel is None:
+                # 只有「版框行锚定」分支顺手量了框线；另外两条分支
+                # （书级中位相位 / 校正覆盖）没有，但 cells_from_bounds
+                # 剔框线残迹同样用得上，这里补量一次（页级一次，不是
+                # 逐列，开销可忽略）。
+                _, fb_fallback = measure_row_frames(image)
+                if fb_fallback is None:
+                    g2 = image if image.ndim == 2 \
+                        else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                    ri = (g2 < BINARY_THRESHOLD).sum(axis=1) \
+                        / max(1, g2.shape[1])
+                    nz = np.nonzero(ri >= 0.05)[0]
+                    fb_fallback = int(nz[-1]) + 6 if nz.size else image.shape[0]
+                fb_rel = float(fb_fallback - y1)
             # 注意：上面列网格分支里 grid_meta 被**整个重建**过一次
             # （只保留了 shear），任何在那之前写进去的键都会丢——
             # band_widened 必须写在重建之后。
@@ -2911,7 +2964,12 @@ class GridSegmenter:
                         bounds_pre_refit, float(y1))
                     if y_off != float(y1):
                         col_result["refit_window"] = int(y1 - y_off)
-                    cells = cells_from_bounds(crop, bounds, self.params)
+                    # fb_rel 是相对**原始** y1 量的；换算到本列最终裁窗
+                    # （refit_window 可能已经把窗顶挪到 y1 之上）的坐标系。
+                    border_rows = (fb_rel + y1 - y_off,) \
+                        if fb_rel is not None else ()
+                    cells = cells_from_bounds(crop, bounds, self.params,
+                                              border_rows)
                 else:
                     col_result["spread_col"] = True
                 for c in cells:   # 局部 → 全图坐标
