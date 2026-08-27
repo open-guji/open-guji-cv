@@ -43,6 +43,15 @@ body{background:var(--bg);color:var(--ink);font:14px/1.55 "Noto Sans SC",system-
 .badge.b{background:var(--badbg);color:var(--bad)}
 .badge.u{background:var(--unsurebg);color:var(--warn)}
 .badge.g{background:var(--okbg);color:var(--ok)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.dot.s0{background:var(--line)}
+.dot.s1{background:var(--warn)}
+.dot.s2{background:var(--bad)}
+.dot.s3{background:var(--bad);box-shadow:0 0 0 2px var(--badbg)}
+.pt{font-size:11px;color:var(--ink2);flex:none}
+.side-tools{display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.side-tools button{flex:1;font-size:12px;padding:4px 6px}
+.pageinfo{color:var(--ink2);font-size:12px;white-space:nowrap}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);
   background:var(--panel);flex-wrap:wrap}
@@ -143,7 +152,7 @@ function backupLocal(){ try{ localStorage.setItem(LS_KEY,
           el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),3600);} },600); }
   }catch(e){}
 })();
-let cur = 0, filter = 'all', lastCell = null, dirty = dirty0, navOpen = false;
+let cur = 0, filter = 'all', lastCell = null, dirty = dirty0, navOpen = false, onlyFlag = false;
 const MOB = matchMedia('(max-width:720px)');
 let zoom = MOB.matches ? 'fit' : 1;
 function zf(p){ if(zoom!=='fit') return zoom;
@@ -160,9 +169,14 @@ function pageStats(p){
 }
 function sideItems(){
   return PAGES.map((pg,i)=>{
+    if(onlyFlag && !(pg.sev>0)) return '';
     const st=pageStats(pg), seen=STATE.visited.includes(pg.book+'/'+pg.page);
-    return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}">
+    const sev=pg.sev||0;
+    return `<button class="pbtn ${i===cur?'cur':''} ${seen?'visited':''}" data-i="${i}"
+        title="${pg.ptl||''}${pg.sevl?' · '+pg.sevl:''}">
+      <span class="dot s${sev}"></span>
       <span class="nm">${pg.book==='vol01'?'一':'二'}·${pg.page}</span>
+      ${pg.pt&&pg.pt!=='body'?`<span class="pt">${pg.ptl}</span>`:''}
       ${st.b?`<span class="badge b">${st.b}</span>`:''}
       ${st.u?`<span class="badge u">${st.u}</span>`:''}
       ${st.g?`<span class="badge g">${st.g}</span>`:''}
@@ -173,7 +187,9 @@ function subLine(){
   const nb=Object.values(STATE.marks).filter(m=>m.s===1).length;
   const nu=Object.values(STATE.marks).filter(m=>m.s===2).length;
   const ng=Object.values(STATE.marks).filter(m=>m.s===3).length;
-  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
+  const nf=PAGES.filter(p=>p.sev>0).length;
+  return `看过 ${STATE.visited.length}/${PAGES.length} 页 · `+
+    `疑似有问题 ${nf} 页 · 切错 ${nb} · 存疑 ${nu} · 无误 ${ng}`;
 }
 function refreshChrome(){
   const pl=document.querySelector('.plist'); if(pl){ pl.innerHTML=sideItems(); bindSide(); }
@@ -212,12 +228,16 @@ function render(){
   <nav class="side">
     <div class="brand"><h1>切分朱批</h1>
       <div class="sub">${subLine()}</div></div>
+    <div class="side-tools">
+      <button class="act ${onlyFlag?'on':''}" id="onlyflag">只看疑似有问题</button>
+    </div>
     <div class="plist">${items}</div>
   </nav>
   <div class="main">
     <div class="bar">
       <button class="act menu" id="menu">☰ ${p.book==='vol01'?'一':'二'}·${p.page}</button>
       <span class="ttl">${p.book} 第 ${p.page} 页</span>
+      <span class="pageinfo">${p.ptl}${p.nc?` · ${p.nc} 列 × ${p.nl} 行`:''}${p.sevl?` · ${p.sevl}`:''}</span>
       <button class="act" id="prev">‹ 上一页</button>
       <button class="act" id="next">下一页 ›</button>
       <span class="sp"></span>
@@ -257,6 +277,7 @@ function bind(){
     $('#app').classList.toggle('nav',navOpen);};
   const sc=$('#scrim'); if(sc) sc.onclick=()=>{navOpen=false;
     $('#app').classList.remove('nav');};
+  const of=$('#onlyflag'); if(of) of.onclick=()=>{onlyFlag=!onlyFlag;render();};
   bindSide();
   $('#prev').onclick=()=>{if(cur>0){cur--;render();}};
   $('#next').onclick=()=>{if(cur<PAGES.length-1){cur++;render();}};
