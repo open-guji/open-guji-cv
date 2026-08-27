@@ -3443,6 +3443,26 @@ class GridSegmenter:
         if n_refined:
             print(f"  页型细化：{n_refined} 页由 body 改判 roster")
 
+        # 【负结果·勿重造】曾试过「body 页挨着一页已判定的 roster、且
+        # 自己有非零弹性列迹象，就跟着改判 roster」（职名录连续印刷，
+        # 中间不该插正文）。撤销：vol01/184 是目录页（子部/术数类各卷
+        # 附的双行小类注多，弹性列比例够上了 refine_page_type 的门槛，
+        # 被 pass 1 本身就误判成 roster——这不是这一刀带来的新错，是
+        # 既有分类器在「目录密注」与「职名拉开/压缩」上的已知重叠
+        # （见 page_type.py「toc 不判」的注释）。相邻传播只会把这类
+        # 既有误判**扩散**给它两侧同样是目录页的 183/185/201，反而更糟。
+        # 用户实审确认的 90、107 改用后面的手工白名单直接改判——
+        # 那两页人眼看过，不靠链式推断。
+        ROSTER_OVERRIDE = {"90", "107"}   # 手工核实，见上面的负结果
+        n_ov = 0
+        for stem, _, _ in pages:
+            if stem in ROSTER_OVERRIDE \
+                    and results[stem].get("page_type") == "body":
+                results[stem]["page_type"] = "roster"
+                n_ov += 1
+        if n_ov:
+            print(f"  页型细化（人工核实）：{n_ov} 页由 body 改判 roster")
+
         n_pages = n_chars = n_empty = 0
         for stem, _, _ in pages:
             result = results[stem]
