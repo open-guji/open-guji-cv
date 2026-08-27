@@ -3453,7 +3453,9 @@ class GridSegmenter:
         # 既有误判**扩散**给它两侧同样是目录页的 183/185/201，反而更糟。
         # 用户实审确认的 90、107 改用后面的手工白名单直接改判——
         # 那两页人眼看过，不靠链式推断。
-        ROSTER_OVERRIDE = {"90", "107"}   # 手工核实，见上面的负结果
+        # 只认 vol01——stem 是页号，两册页号会撞（vol02/107 是正文，
+        # 曾被这条白名单跟着误改成 roster，2026-08-27 用户实审发现后收窄）。
+        ROSTER_OVERRIDE = {"90", "107"} if book_out_dir.name == "vol01" else set()
         n_ov = 0
         for stem, _, _ in pages:
             if stem in ROSTER_OVERRIDE \
