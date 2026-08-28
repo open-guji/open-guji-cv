@@ -157,6 +157,7 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | 三信號進庫策略 | https://claude.ai/code/artifact/bbea2607-799d-4ab2-a97f-4c35fd485f87 | [signal_policy.html](signal_policy.html) | 529 条人审难例的三信号交叉标定（R1~R4 规则的依据）|
 | vol01 對勘記 | https://claude.ai/code/artifact/cda67c8c-b5e9-48ac-99cb-f769652d71f4 | [vol01_duikanji.html](vol01_duikanji.html) | 三栏对照（原图/我的整理/整理本）|
 | 裁边失手体检 | https://claude.ai/code/artifact/717b2081-3e9f-4ea3-818c-50a184abb1b2 | [crop_review.html](crop_review.html) | vol02 抽样 14 页 s3_crop 中间产物：133/135/107 三页裁剪失败残留大片空白，根子在 content_bounds 边框线检测阈值（2026-08-27，浓墨粘连截断专题的新根因线索，待修）|
+| 版框线批量检测 | https://claude.ai/code/artifact/7d730326-db8f-4046-bbee-8162950da09d | **HTML 快照不入库**（4.8MB，5 页整页图内嵌 base64）| `scripts/find_border_lines.py --pages vol02/133:9 vol02/135:9 vol01/33:9 vol01/90:9 vol01/171:9 --root <s3裁剪跳过s4增强产物根目录> --report report.html`。5 个样本页跑 `peak_line_search`（半高宽匹配度 + 位置角度联合搜索，见 [peak_line_search.md](../.claude/doc/peak_line_search.md)）：正文/目录 3 页干净，抬头页（vol01/33）顶部边框被抬头小框干扰、职名页（vol01/90）顶/底边框搜出退化结果（宽度=1px，疑似 s3 裁剪已把边框裁掉）——两处已知局限都在报告页标红。附带发现 vol02/133 底部边框比 `border_detect.py` 生产算法的检测偏了 41px（2026-08-28）|
 
 ## 历史页面（早期会话，无本地快照，URL 备查）
 
