@@ -31,6 +31,7 @@
 | [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + glyph-match/triplets 测试集 + 回归护栏 + 已知失败形态（匹配优化专题从这进）|
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
 | [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
+| [peak_line_search.md](doc/peak_line_search.md) | 投影峰匹配找版框线（半高宽匹配度 + 位置角度联合搜索）：跟 `border_detect.py` 并存的实验性替代方案，5 页试跑 + 已知局限（抬头页/职名页）+ 意外发现 vol02/133 底边框偏差 41px，**未接入生产管线** |
 | [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |
 | [technical_learning.md](doc/technical_learning.md) | PaddleOCR 版本/环境坑 |
 | s1~s6_*.md | 各预处理步骤 |
