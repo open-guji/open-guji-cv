@@ -1119,7 +1119,12 @@ def head_raise_rows(image: np.ndarray, text_cols: list, page_phase: float,
         return 0
     g = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     top_abs = int(round(y1 + page_phase))          # 网格首线的全图 y
-    if top_abs <= 2:
+    # 只挡真正非法的负坐标（切片会从数组尾部绕回去）；正常小值交给
+    # 下面的证据判据自然处理——band 太窄本来就凑不满 HEAD_RAISE_T*cell_h，
+    # 不需要在这里额外硬编码一个「离图像顶边 2px」的绝对像素门槛。
+    # 2026-08-28：s3 裁边收紧之后干净页的 top_abs 也常年落在个位数，
+    # 旧门槛会把这批页的抬头检测整体误关掉。
+    if top_abs <= 0:
         return 0
     best_per_col = []
     for col, _crop, _proj in text_cols:

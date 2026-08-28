@@ -30,6 +30,24 @@ INNER_LINE_SEARCH_MAX_BOTTOM = 0.10 # 地脚最大深度（地脚较小，~6%）
 INNER_LINE_GAP_MIN = 30
 INNER_LINE_PADDING = 3
 
+# ── 边框磨没时的墨密度兜底（2026-08-28 裁边失手专项）──
+# `_find_h_frame` 找外框线靠「这一行边缘密度 ≥20%」，全书体检 394 页
+# 抽 93 页（24%）边框磨损重到密度从没到过这个门槛——函数退化成
+# 「没找到就当图像边缘是边框」，那一侧完全不裁，残留 270~577px
+# 扫描空白纸边（char-segmentation/crop-margin 金标）。这类页边缘检测
+# 彻底失效，没有「差一点」的中间态可调阈值补，只能换一把不同性质的
+# 尺子：不找线，找「墨密度从空白转为非空白」的那个点——不管接下来是
+# 磨损的框线还是正文本身，只要过了这个点就不再是空白纸边。
+INK_FALLBACK_T = 0.012      # 行墨密度阈值，远低于框线阈值——磨损框线/
+                            # 正文起笔都够，纯扫描空白纸边够不到
+INK_FALLBACK_RUN = 10       # 连续这么多行都过阈值才采信，滤掉尘点/折痕
+INK_FALLBACK_PAD = 6        # 找到之后往外留这么多 px，宁可留一点空白
+                            # 也不切进真墨——不追求贴到线上，只求不再
+                            # 大片留白
+INK_FALLBACK_SEARCH_TOP = 0.25    # 与 INNER_LINE_SEARCH_MAX_TOP 同一档
+INK_FALLBACK_SEARCH_BOTTOM = 0.15 # 比 INNER_LINE_SEARCH_MAX_BOTTOM 稍宽——
+                                  # 兜底本身不精确，留够搜索空间
+
 # ── LSD 参数 ──
 _MIN_LINE_LENGTH = 30
 _ANGLE_TOL = 10.0
@@ -91,6 +109,17 @@ def find_content_bounds(gray: np.ndarray,
     # 从外框线向内找正文界栏线
     top = _find_inner_line(edges, top_frame, h, left, right, content_w, from_top=True)
     bottom = _find_inner_line(edges, bottom_frame, h, left, right, content_w, from_top=False)
+
+    # 边框磨没到边缘密度全程不达标时，_find_h_frame 退化返回图像边缘
+    # （0 / h-1），_find_inner_line 跟着一起失效——换墨密度兜底
+    if top_frame == 0:
+        t2 = _ink_fallback_bound(gray_u8, left, right, h, from_top=True)
+        if t2 is not None:
+            top = t2
+    if bottom_frame == h - 1:
+        b2 = _ink_fallback_bound(gray_u8, left, right, h, from_top=False)
+        if b2 is not None:
+            bottom = b2
 
     if n_cols_expected:
         left, right = _rescue_cropped_columns(
@@ -320,6 +349,35 @@ def _find_h_frame(
             if d >= 0.20:
                 return r
         return h - 1
+
+
+def _ink_fallback_bound(gray_u8: np.ndarray, col_left: int, col_right: int,
+                        h: int, from_top: bool) -> int | None:
+    """`_find_h_frame` 退化（边缘密度全程不达标）时的墨密度兜底。
+
+    不找线，找「行墨密度从空白转为非空白」的第一个点——不管接下来是
+    磨损的框线还是正文本身，过了这个点就不再是空白纸边。返回 None
+    表示兜底也没找到（整个搜索窗口都是空白，交回调用方按原样处理）。
+    """
+    binary = (gray_u8 < 128).astype(np.uint8)
+    density = binary[:, col_left:col_right + 1].mean(axis=1)
+    search_max = int(h * (INK_FALLBACK_SEARCH_TOP if from_top
+                          else INK_FALLBACK_SEARCH_BOTTOM))
+    on = density > INK_FALLBACK_T
+    run = 0
+    if from_top:
+        for i in range(min(search_max, h)):
+            run = run + 1 if on[i] else 0
+            if run >= INK_FALLBACK_RUN:
+                return max(0, i - INK_FALLBACK_RUN + 1 - INK_FALLBACK_PAD)
+        return None
+    else:
+        lo = max(0, h - search_max)
+        for i in range(h - 1, lo - 1, -1):
+            run = run + 1 if on[i] else 0
+            if run >= INK_FALLBACK_RUN:
+                return min(h - 1, i + INK_FALLBACK_RUN - 1 + INK_FALLBACK_PAD)
+        return None
 
 
 def _find_inner_line(
