@@ -32,6 +32,7 @@
 | [design.md](doc/design.md) | 预处理框架（s0~s6 + Phase 2/3）总体设计 |
 | [phase2_detectors.md](doc/phase2_detectors.md) | 版面检测（边框/列）|
 | [peak_line_search.md](doc/peak_line_search.md) | 投影峰匹配找版框线（半高宽匹配度 + 位置角度联合搜索）：跟 `border_detect.py` 并存的实验性替代方案，5 页试跑 + 已知局限（抬头页/职名页）+ 意外发现 vol02/133 底边框偏差 41px，**未接入生产管线** |
+| [row_boundaries_design.md](doc/row_boundaries_design.md) | 列内字格纵向边界（弹性DP，候选=波谷+页面共享周期先验+三层硬约束）：vol02/135 九列全部收敛，均值误差2.5~4.2px；记录十几版失败尝试各自的坑（整段滑格/独立snap漏选/自估周期偏差），**未接入生产管线** |
 | [phase3_char_grid.md](doc/phase3_char_grid.md) | 字符网格切分 |
 | [technical_learning.md](doc/technical_learning.md) | PaddleOCR 版本/环境坑 |
 | s1~s6_*.md | 各预处理步骤 |
