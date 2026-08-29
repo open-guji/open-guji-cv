@@ -108,6 +108,30 @@ def test_fit_row_boundaries_recovers_char_slots_on_clean_synthetic_column():
         assert abs(result.boundaries[k] - expected) < GAP * 0.5
 
 
+def test_fit_row_boundaries_top_slack_recovers_content_above_border_top():
+    """模拟"抬头列"最简单的一种失败：探测到的版框位置(border_top)本身落在
+    本该属于开头空白格的区域里(抬头把首字往上顶，边框相对内容的"有效位置"
+    就往后退了)——不给 top_slack，起点窗口卡在 border_top 之后，找不到能
+    撑满 n_slots 个格子的候选，直接判无解(比瞎猜一个錯误位置更安全)；给了
+    top_slack 放宽起点窗口下界，才能把第 0 个边界点找回真正的内容起点。"""
+    n_chars = 4
+    lead = 2
+    n_slots = lead + n_chars
+    curve = _synth_column(n_chars=n_chars, lead_blank_slots=lead)
+    border_bottom = float(len(curve) - 1)
+    fake_border_top = 1.3 * GAP  # 探测到的版框位置落进了本该是开头空白格的区间
+
+    no_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
+                                   period=GAP, n_slots=n_slots)
+    assert no_slack is None
+
+    with_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
+                                     period=GAP, n_slots=n_slots, top_slack=2 * GAP)
+    assert with_slack is not None
+    assert len(with_slack.boundaries) == n_slots + 1
+    assert abs(with_slack.boundaries[0] - 0.0) < GAP * 0.3
+
+
 def test_fit_row_boundaries_returns_none_when_not_enough_candidates():
     # 太短的曲线撑不出 21 个格子
     curve = _synth_column(n_chars=2, lead_blank_slots=0)
