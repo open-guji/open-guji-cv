@@ -156,6 +156,8 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 |---|---|---|---|
 | 三信號進庫策略 | https://claude.ai/code/artifact/bbea2607-799d-4ab2-a97f-4c35fd485f87 | [signal_policy.html](signal_policy.html) | 529 条人审难例的三信号交叉标定（R1~R4 规则的依据）|
 | vol01 對勘記 | https://claude.ai/code/artifact/cda67c8c-b5e9-48ac-99cb-f769652d71f4 | [vol01_duikanji.html](vol01_duikanji.html) | 三栏对照（原图/我的整理/整理本）|
+| 列内字格纵向边界：算法演进 | https://claude.ai/code/artifact/642f222d-c2e9-4f62-98ca-29d6110f2880 | **HTML 快照不入库**（base64 内嵌列图，多轮重发） | vol02/135 九列从"硬分21等分"(36px/102px) 一路试到最终版弹性DP(候选=波谷+页面共享周期先验+间距比例硬界+首尾padding硬界，均值2.5~4.2px/最大8~21px)，中间十几版尝试(独立最近邻snap漏选、纯DP整段滑格、自估周期偏差等)及各自失败模式的可视化记录。产物代码见 `open_guji_cv/utils/row_boundaries.py`，设计记录见 [row_boundaries_design.md](../.claude/doc/row_boundaries_design.md)，人工核校金标见 `open-guji-dataset/char-segmentation/row-boundaries`（交互标注工具是这轮探索里第一次用 `claude.use('artifact')` 自存能力做的可拖拽标注页）|
+| vol01/33 抬头列人工标注 | https://claude.ai/code/artifact/5c51122c-0573-4956-87de-e9a33419a207 | **HTML 快照不入库**（base64 内嵌 9 列图，交互页会自存） | 给"抬头列放宽DP窗口"这个改动配金标：种子取自当时(未修)算法输出，标注过程中发现抬头列分两种——列4抬头但格数不变、列1/2/3抬头到能多塞一个字（第一版工具按统一21格设计，漏了这种情况，补了一版每列可独立设格数的工具才补全）。生成脚本（未入库）`build_annotate_v33_tool.py`/`build_annotate_v33_tool_v2.py`，同上一行的自存标注页是同一套模板 |
 
 ## 历史页面（早期会话，无本地快照，URL 备查）
 
