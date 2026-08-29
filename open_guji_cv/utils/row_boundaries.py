@@ -33,11 +33,20 @@ lam=0.3`）是在 vol02/135 九列上网格搜出来的，九列全部收敛到�
 
 ## 已知局限
 
-- 只在 1 页（vol02/135，正文中段普通页）上验证过，参数未跨页/跨册验证。
+- 参数在 vol02/135（正文中段普通列）+ vol01/33（含抬头列）两页上验证过，
+  仍未跨更多页/跨册验证。
 - `p_shared` 需要调用方自己算（每列跑 `estimate_period` 取中位数），本模块
   不负责"这一页有几列"这类版面判断。
 - 空白区间内部的分割点位置本质上没有真实信号支撑（纯合成候选撑住可行性），
   精度不如落在真实字缝上的点。
+- **抬头列**：`top_slack` 参数解决了"首字位置比 border_top 高，但字数不变"
+  这一种（vol01/33 列4 实测精确复现人工金标，0px 误差）。**没解决**"抬头
+  空间大到能多塞一个字"这一种（同页列1/2/3，字数从21变22）——这三列窗口
+  放宽后 DP 会被首字自己的笔画间隙(把它们识别成候选)带偏，均值误差 88px
+  的量级，不能用。这一子问题需要的不是调参，是别的判据（"这一列到底几个
+  字"目前只能靠人工金标或版式先验，装饰性花边墨量与真字墨量在这一页上
+  分不开，试过的"上探测墨量占比"判据把普通列的角框装饰也一并误判成了
+  抬头字）。
 
 详见 `.claude/doc/row_boundaries_design.md`（完整实验记录：从硬分等分到
 DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失败模式）。
@@ -212,10 +221,11 @@ class RowBoundaryResult:
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
                          period: float, eps: float, lo_ratio: float, hi_ratio: float,
                          y1_max_frac: float, y2_max_frac: float, lam: float,
-                         n_slots: int) -> list[float] | None:
+                         n_slots: int, top_slack: float = 0.0) -> list[float] | None:
     y1_max = y1_max_frac * period
     y2_max = y2_max_frac * period
-    cand0 = [(v, ink) for v, ink in zip(valleys, valley_ink) if x1 <= v <= x1 + y1_max]
+    x1_eff = x1 - top_slack
+    cand0 = [(v, ink) for v, ink in zip(valleys, valley_ink) if x1_eff <= v <= x1 + y1_max]
     candN = [(v, ink) for v, ink in zip(valleys, valley_ink) if x2 - y2_max <= v <= x2]
     if not cand0:
         cand0 = [(x1 + y1_max * 0.4, 0.05)]
@@ -224,7 +234,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
 
     n_interior = n_slots - 1
     mid = sorted(
-        [(v, ink) for v, ink in zip(valleys, valley_ink) if x1 < v < x2], key=lambda t: t[0]
+        [(v, ink) for v, ink in zip(valleys, valley_ink) if x1_eff < v < x2], key=lambda t: t[0]
     )
     m_count = len(mid)
     if m_count < n_interior:
@@ -289,13 +299,25 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         period: float, n_slots: int = 21, eps: float = 0.01, lam: float = 0.3,
                         lo_ratio: float = 0.7, hi_ratio: float = 1.35,
                         y1_max_frac: float = 0.5, y2_max_frac: float = 0.3,
-                        blank_thresh_frac: float = 0.08, synth_step: int = 20) -> RowBoundaryResult | None:
+                        blank_thresh_frac: float = 0.08, synth_step: int = 20,
+                        top_slack: float = 0.0) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
     不要传本列自己的 `estimate_period` 结果——单列自估可能有系统偏差，正是
     共享先验要解决的问题）。返回 None 表示在给定约束下找不到可行解（约束
     卡太紧，或这一列的候选点确实撑不出 n_slots 个格子）。
+
+    `top_slack`：**抬头列专用**，默认 0 不影响普通列。首锚点(cand0)的候选
+    窗口从 `[border_top, border_top+y1_max]` 放宽成
+    `[border_top-top_slack, border_top+y1_max]`，允许首字顶边界落在版框线
+    以上——抬头惯例会把首字整体抬高、甚至顶到版框线以上表达尊重。**这只
+    解决"首字在哪"，不解决"这一列到底该有几个字格"**：抬头列的实际字数
+    可能比普通列多一个（腾出的抬头空间够塞一个字），也可能不多（只是整体
+    往上挪），这个 `n_slots` 本身仍需调用方按页面版式常识/人工核校提供，
+    本模块不负责判断——vol01/33 的实测（4 个抬头列里 3 个多一字、1 个不多）
+    表明这件事没有可靠的纯信号判据（装饰性花边墨量与真字墨量在这一页上
+    分不开），见 `.claude/doc/row_boundaries_design.md`「抬头列」节。
     """
     curve = smooth_curve(np.asarray(row_proj, dtype=np.float64))
     valleys_all = find_valleys(curve, dst_w)
@@ -322,7 +344,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
 
     boundaries = _bounded_elastic_dp(
         border_top, border_bottom, all_valleys, all_ink, period, eps,
-        lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots,
+        lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
     )
     if boundaries is None:
         return None
