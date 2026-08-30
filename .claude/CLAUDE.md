@@ -23,7 +23,7 @@
 | 文档 | 内容 |
 |---|---|
 | [pipeline_handbook.md](doc/pipeline_handbook.md) | **总入口**：分步现状 / 并行分工 / 量法 / 踩过的坑 |
-| [segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md) | **切分管线重定义（进行中）**：边框探测/单列射影变换/单列文字切分/字框收缩四步，每步严格输入输出+测试集现状；坐标系改为右上角原点+从1计数。当前在细化 Step1（边框探测），金标测试集（尤其抬头页）待建 |
+| [segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md) | **切分管线重定义（进行中）**：边框探测/单列射影变换/单列文字切分/字框收缩四步，每步严格输入输出+测试集现状；坐标系改为右上角原点+从1计数。Step1（边框探测）已定版含内外边框+抬头框，第一批金标 5 页已入库 `open-guji-dataset/border-detection`（vol01/32 抬头框推测值单独标记），下一步细化 Step2 |
 | [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）|
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图、分层扩库路线（P0 异体字关系层 + P1 字体字形已实现）与**字体字形匹配力实测**（§6）|
