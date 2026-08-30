@@ -87,26 +87,25 @@ def detect_borders(gray, expected_cols: int) -> BorderDetectionResult: ...
 一列，不贯穿整页），跟贯穿全页的版框线放在同一个"水平线列表"里语义
 不一致，拆开更清楚。
 
-**外边框（补充，标注金标时确认要加，代码待补）**：上下版框其实各有
-内外两层；左右外边框只在"纸边"那一侧存在——书是筒子页对折装订，偶数页
-纸边在左、奇数页在右，版心/装订那一侧没有独立的外边框（被切/装订吃掉，
-不是没探测到）。外边框跟对应内边框物理上是平行的（同一块印版/同一张纸
-的两条边），**斜率锁定跟内边框一致，只需要一个"沿垂直方向的偏移量"**，
-不需要独立的位置+角度两个自由度——数据结构上应该是：
+**外边框（已定版）**：上下版框其实各有内外两层；左右外边框只在"纸边"
+那一侧存在——书是筒子页对折装订，偶数页纸边在左、奇数页在右，版心/
+装订那一侧没有独立的外边框（被切/装订吃掉，不是没探测到）。外边框跟
+对应内边框物理上是平行的（同一块印版/同一张纸的两条边），**斜率锁定跟
+内边框一致，只需要一个"沿垂直方向的偏移量"**，不需要独立的位置+角度
+两个自由度——`BorderDetectionResult` 已加上这四个字段：
 
 ```python
 @dataclass
 class BorderDetectionResult:
     ...
-    top_outer_offset: float | None       # None=没测到；有值=沿y方向相对top的偏移量
-    bottom_outer_offset: float | None
-    v_outer_side: str                     # "left" | "right"，由页码奇偶决定
-    v_outer_offset: float | None          # 相对 verticals[0]或verticals[-1] 的偏移量
+    top_outer_offset: float | None = None    # None=没测到；有值=沿y方向相对top的偏移量
+    bottom_outer_offset: float | None = None
+    v_outer_side: str | None = None           # "left" | "right"，由页码奇偶决定
+    v_outer_offset: float | None = None       # 相对 verticals[0](right)/verticals[-1](left) 的偏移量
 ```
 
-目前 `detect_borders()` 还没实现外边框探测（连自动判据都没有，跟抬头框
-一样），这次先在标注工具里加了可拖手柄、按上面这个"偏移量"模型采集，
-等标完这批金标再回头把这四个字段正式加进 `BorderDetectionResult`。
+`detect_borders()` 仍然没有实现外边框自动探测（连自动判据都没有，跟
+抬头框一样），这几个字段目前只在人工金标里有值，代码路径恒为 `None`。
 
 **现有实现**：`open_guji_cv/utils/peak_line_search.py` 提供底层探测算法
 （半高宽匹配度找峰 + 位置角度联合搜索），跟生产 `border_detect.py`/
@@ -118,22 +117,22 @@ class BorderDetectionResult:
 
 **抬头框探测**：`detect_borders()` 的 `head_raise` 字段目前恒为空
 列表——**没有可靠的自动探测算法**（试过"扫描墨量占比"，会把普通列的
-装饰花边也误判成抬头，见 `row_boundaries_design.md`「抬头列」节），
-需要人工标注补上，见下面「测试集」。
+装饰花边也误判成抬头，见 `row_boundaries_design.md`「抬头列」节）。
+`HeadRaiseBorder` 加了 `estimated: bool` 字段——有的页面（vol01/32）抬头框
+的上边框被物理装订/裁切吃掉，人工标注时也只能推测大致位置，不是"看得见
+但没标准"，跟真正观测到线的记录不能同等确信度使用。
 
-**测试集**：**标注中**。现有测试集（`text-band`、`page-crop` 等）测的
-是边框探测出错之后下游的症状（窗口太小丢字、裁切吃掉整列），不是直接
-拿人工核校的边框/界行坐标做金标比对；单测 `tests/test_border_geometry.py`
-只验证坐标转换数学本身是对的，也不能替代真实页面的金标。第一批标注页面
-已发布（见 `artifacts/README.md`「Step1边框探测金标标注」）：2 普通页
-（vol01/137、138）+ 3 抬头页（vol01/32、33、49——32/49 是这轮新确认的
-真实抬头页，此前只深入分析过 33），图源用 `rebuild_src` 原始扫描；
-种子取自 `peak_line_search` 自动探测(内边框)，外边框(上下各一层+纸边侧
-竖直一条)是标注工具里新加的可拖手柄(斜率锁定内边框、只调偏移量，无
-自动探测种子，起点是粗猜的)。等人工拖拽核校完导出即为金标（导出后按
-标准像素坐标两端点，用 `VLine.from_endpoints`/`HLine.from_endpoints`
-转成本文档定义的新坐标系；外边框的偏移量直接就是新坐标系里两条线的
-`x_at_top`/`y_at_right`之差，不用额外换算）。
+**测试集**：**第一批已完成**，`open-guji-dataset/border-detection`
+（5页：普通页 vol01/137、138 + 抬头页 vol01/32、33、49——32/49 是这轮
+新确认的真实抬头页，此前只深入分析过 33）。图源用 `rebuild_src` 原始
+扫描；内边框种子取自 `peak_line_search` 自动探测，外边框/抬头框没有
+自动探测种子，人工从粗猜的起点标定。vol01/32 的 5 个抬头框上边框全部
+`estimated=true`（见上）。现有旧测试集（`text-band`、`page-crop` 等）
+测的是边框探测出错之后下游的症状，不是边框坐标本身的金标，跟这个子集
+不重复；单测 `tests/test_border_geometry.py` 只验证坐标转换数学本身，
+不能替代真实页面的金标。**样本量仍然很小**（5页，抬头框只 9 例、5 例
+还是推测值），后续要扩大，尤其需要找到抬头框完整可见（未被裁切）的
+页面。
 
 ### Step 2：单列射影变换 + 去噪
 
