@@ -43,7 +43,11 @@ vol02/133、vol02/135、vol01/33、vol01 133~142 等页上验证过比现有算�
 **定义**：从原始扫描图上找出版框（上下内外边框）和界行（列间分隔线），
 显式处理倾斜和模糊/磨损；有抬头列的页面额外定位抬头框。
 
-**输入**：原图（未去噪、未矫正的单页扫描图）。
+**输入**：**最原始的扫描图**（`rebuild_src/<book>/<page>.tif`）——不用
+`output/` 下 s3 裁剪 + s4 直线增强之后的产物。理由跟 `peak_line_search.md`
+里"跳过S2去斜+S3裁剪"的实测一致：s4直线增强能把边框位置挪动最多96.6px，
+这个量级足以让边框探测本身的结果失真；这一步的算法（位置+角度联合搜索）
+本来就是设计给未矫正的原始图用的，不需要预处理帮忙去斜/裁剪。
 
 **输出**（已定版，`open_guji_cv/utils/border_geometry.py`）：
 
@@ -83,6 +87,27 @@ def detect_borders(gray, expected_cols: int) -> BorderDetectionResult: ...
 一列，不贯穿整页），跟贯穿全页的版框线放在同一个"水平线列表"里语义
 不一致，拆开更清楚。
 
+**外边框（补充，标注金标时确认要加，代码待补）**：上下版框其实各有
+内外两层；左右外边框只在"纸边"那一侧存在——书是筒子页对折装订，偶数页
+纸边在左、奇数页在右，版心/装订那一侧没有独立的外边框（被切/装订吃掉，
+不是没探测到）。外边框跟对应内边框物理上是平行的（同一块印版/同一张纸
+的两条边），**斜率锁定跟内边框一致，只需要一个"沿垂直方向的偏移量"**，
+不需要独立的位置+角度两个自由度——数据结构上应该是：
+
+```python
+@dataclass
+class BorderDetectionResult:
+    ...
+    top_outer_offset: float | None       # None=没测到；有值=沿y方向相对top的偏移量
+    bottom_outer_offset: float | None
+    v_outer_side: str                     # "left" | "right"，由页码奇偶决定
+    v_outer_offset: float | None          # 相对 verticals[0]或verticals[-1] 的偏移量
+```
+
+目前 `detect_borders()` 还没实现外边框探测（连自动判据都没有，跟抬头框
+一样），这次先在标注工具里加了可拖手柄、按上面这个"偏移量"模型采集，
+等标完这批金标再回头把这四个字段正式加进 `BorderDetectionResult`。
+
 **现有实现**：`open_guji_cv/utils/peak_line_search.py` 提供底层探测算法
 （半高宽匹配度找峰 + 位置角度联合搜索），跟生产 `border_detect.py`/
 `detectors/borders.py` 并存，未接入生产管线。`border_geometry.py` 是新加
@@ -102,9 +127,13 @@ def detect_borders(gray, expected_cols: int) -> BorderDetectionResult: ...
 只验证坐标转换数学本身是对的，也不能替代真实页面的金标。第一批标注页面
 已发布（见 `artifacts/README.md`「Step1边框探测金标标注」）：2 普通页
 （vol01/137、138）+ 3 抬头页（vol01/32、33、49——32/49 是这轮新确认的
-真实抬头页，此前只深入分析过 33），种子取自 `peak_line_search` 自动
-探测，等人工拖拽核校完导出即为金标（导出后按标准像素坐标两端点，用
-`VLine.from_endpoints`/`HLine.from_endpoints` 转成本文档定义的新坐标系）。
+真实抬头页，此前只深入分析过 33），图源用 `rebuild_src` 原始扫描；
+种子取自 `peak_line_search` 自动探测(内边框)，外边框(上下各一层+纸边侧
+竖直一条)是标注工具里新加的可拖手柄(斜率锁定内边框、只调偏移量，无
+自动探测种子，起点是粗猜的)。等人工拖拽核校完导出即为金标（导出后按
+标准像素坐标两端点，用 `VLine.from_endpoints`/`HLine.from_endpoints`
+转成本文档定义的新坐标系；外边框的偏移量直接就是新坐标系里两条线的
+`x_at_top`/`y_at_right`之差，不用额外换算）。
 
 ### Step 2：单列射影变换 + 去噪
 
