@@ -45,24 +45,63 @@ vol02/133、vol02/135、vol01/33、vol01 133~142 等页上验证过比现有算�
 
 **输入**：原图（未去噪、未矫正的单页扫描图）。
 
-**输出**（草案，下一轮细化）：
-- 水平线 2~4 条，每条 `(纵坐标, 斜率)`：纵坐标是该线在页面右端（新坐标系
-  下 x=0 处）的 y 值，斜率描述随 x（向左）变化的倾斜。一般是主上边框+
-  主下边框两条，页面结构更复杂时更多。
-- 竖直线若干条（外边框 2 条 + 界行 N-1 条，N=列数），每条 `(横坐标, 斜率)`：
-  横坐标是该线在页面顶端（y=0 处）的 x 值。
-- 抬头列：额外给出每个抬头列自己的内、外上边框纵坐标（局部量，不是整页
-  一条线）。
+**输出**（已定版，`open_guji_cv/utils/border_geometry.py`）：
 
-**现有实现**：`open_guji_cv/utils/peak_line_search.py`（半高宽匹配度找峰
-+ 位置角度联合搜索），跟生产 `border_detect.py`/`detectors/borders.py`
-并存，未接入生产管线。目前只有 `(position, slope)` 这一种线型输出，坐标
-原点仍是左上角、没有专门的抬头框输出——都需要在下一轮细化时改。
+```python
+@dataclass
+class HLine:               # 水平线(上/下版框)
+    y_at_right: float       # 该线在页面右端(新坐标系x=0处)的y值
+    slope: float             # dy/dx，x向左递增
+    kind: str                 # "top" | "bottom"
+
+@dataclass
+class VLine:                # 竖直线(外边框/界行)
+    x_at_top: float          # 该线在页面顶端(y=0处)的x值
+    slope: float             # dx/dy
+
+@dataclass
+class HeadRaiseBorder:      # 某一抬头列自己的内外上边框(局部量，非整页一条线)
+    col: int                  # 列号，从右到左、从1开始
+    inner_y: float
+    outer_y: float
+
+@dataclass
+class BorderDetectionResult:
+    width: int
+    height: int
+    top: HLine
+    bottom: HLine
+    verticals: list[VLine]           # 从右到左排列：[0]=第1列外边框(最右)
+    head_raise: list[HeadRaiseBorder]  # 目前恒为空列表，见下
+
+def detect_borders(gray, expected_cols: int) -> BorderDetectionResult: ...
+```
+
+一般水平线只有 top/bottom 两条；本版没有把"2~4条"这个更宽的口子做成
+数据结构（只固定了 top+bottom），抬头框的纵坐标改用专门的 `HeadRaiseBorder`
+承载，不是塞进"水平线"字段——每个抬头列的抬头框是**局部量**（只影响这
+一列，不贯穿整页），跟贯穿全页的版框线放在同一个"水平线列表"里语义
+不一致，拆开更清楚。
+
+**现有实现**：`open_guji_cv/utils/peak_line_search.py` 提供底层探测算法
+（半高宽匹配度找峰 + 位置角度联合搜索），跟生产 `border_detect.py`/
+`detectors/borders.py` 并存，未接入生产管线。`border_geometry.py` 是新加
+的坐标系转换层——`peak_line_search.py` 内部完全不用改，仍按标准图像坐标
+（左上角原点、x向右）工作，`detect_borders()` 探测完之后做一次坐标转换
+（`_hline_to_new`/`_vline_to_new`，含把 `peak_line_search` 内部"锚点在
+页面中心"的约定重新锚定到"页面顶端/右端"），包成新约定的输出。
+
+**抬头框探测**：`detect_borders()` 的 `head_raise` 字段目前恒为空
+列表——**没有可靠的自动探测算法**（试过"扫描墨量占比"，会把普通列的
+装饰花边也误判成抬头，见 `row_boundaries_design.md`「抬头列」节），
+需要人工标注补上，见下面「测试集」。
 
 **测试集**：**目前没有**。现有测试集（`text-band`、`page-crop` 等）测的
 是边框探测出错之后下游的症状（窗口太小丢字、裁切吃掉整列），不是直接
-拿人工核校的边框/界行坐标做金标比对。下一轮要建：普通页金标 + **抬头页
-专项金标**（抬头框的内外边框坐标目前完全没有任何人工核校数据）。
+拿人工核校的边框/界行坐标做金标比对。下一步要建：普通页金标 + **抬头页
+专项金标**（抬头框的内外边框坐标目前完全没有任何人工核校数据）。单测
+`tests/test_border_geometry.py` 只验证坐标转换数学本身是对的（新旧坐标
+系换算、水平/竖直线在任意点求值一致），不能替代真实页面的金标。
 
 ### Step 2：单列射影变换 + 去噪
 
