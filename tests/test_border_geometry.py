@@ -64,26 +64,49 @@ def test_hline_and_vline_y_at_x_at_roundtrip_consistent_with_old_line():
 
 
 def test_vline_from_endpoints_matches_manual_conversion():
-    """标注工具采集的是"标准像素坐标里这条线上下两端的x值"——
-    from_endpoints 应该跟先转LineMatch再转新坐标得到同一条线。"""
+    """标注工具采集的是"这条线上任意两点(标准像素坐标)"——不要求手柄
+    落在图像上下边缘(实际标注页手柄放在 8%/92% 高度处)。用 y=0/h-1
+    这个特例验证跟旧版本行为一致。"""
     w, h = 300, 400
     x_top, x_bottom = 120.0, 132.0  # 标准坐标：上端x=120，下端x=132，向下微斜
-    v = VLine.from_endpoints(x_top, x_bottom, h, w)
-    # 用点(y=0)和点(y=h-1)反推应该对得上原始端点(换算回旧坐标)
+    v = VLine.from_endpoints(x_top, 0, x_bottom, h - 1, w)
     x_old_at_0 = (w - 1) - v.x_at(0)
     x_old_at_h1 = (w - 1) - v.x_at(h - 1)
     assert abs(x_old_at_0 - x_top) < 1e-6
     assert abs(x_old_at_h1 - x_bottom) < 1e-6
 
 
+def test_vline_from_endpoints_works_with_arbitrary_points_not_at_edges():
+    """手柄在图像内部任意两点(不在y=0/h-1)也应该算出同一条线。"""
+    w, h = 300, 400
+    # 构造一条真实线：x_old(y) = 50 + 0.02*y，取 y=100 和 y=300 两个内部点
+    y_a, y_b = 100.0, 300.0
+    x_a, x_b = 50 + 0.02 * y_a, 50 + 0.02 * y_b
+    v = VLine.from_endpoints(x_a, y_a, x_b, y_b, w)
+    for y in (0, 100, 300, 399):
+        x_old_expected = 50 + 0.02 * y
+        assert abs(((w - 1) - v.x_at(y)) - x_old_expected) < 1e-6
+
+
 def test_hline_from_endpoints_matches_manual_conversion():
     w = 300
-    y_left, y_right = 40.0, 45.0  # 标准坐标：左端y=40，右端y=45
-    h = HLine.from_endpoints(y_left, y_right, w, kind="top")
+    y_left, y_right = 40.0, 45.0  # 标准坐标：左端y=40(x=0)，右端y=45(x=w-1)
+    h = HLine.from_endpoints(0, y_left, w - 1, y_right, w, kind="top")
     # 新坐标 x_new=0 对应标准坐标最右端(x_old=w-1)，其y值就是y_right
     assert abs(h.y_at(0) - y_right) < 1e-6
     # 新坐标 x_new=w-1 对应标准坐标最左端(x_old=0)，其y值就是y_left
     assert abs(h.y_at(w - 1) - y_left) < 1e-6
+
+
+def test_hline_from_endpoints_works_with_arbitrary_points_not_at_edges():
+    w = 300
+    x_a, x_b = 30.0, 200.0
+    y_a, y_b = 40.0, 47.0  # y_old(x) = 40 + (7/170)*(x-30)
+    h = HLine.from_endpoints(x_a, y_a, x_b, y_b, w, kind="bottom")
+    for x_old in (0, 30, 200, w - 1):
+        y_expected = y_a + (y_b - y_a) / (x_b - x_a) * (x_old - x_a)
+        x_new = (w - 1) - x_old
+        assert abs(h.y_at(x_new) - y_expected) < 1e-6
 
 
 def _draw_tilted_vline(mask, x_old_at_top, slope, half_width=2):
