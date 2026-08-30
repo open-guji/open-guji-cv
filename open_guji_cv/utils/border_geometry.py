@@ -36,6 +36,14 @@ class HLine:
     def y_at(self, x: float) -> float:
         return self.y_at_right + self.slope * x
 
+    @classmethod
+    def from_endpoints(cls, y_left: float, y_right: float, w: int, kind: str) -> "HLine":
+        """标注工具通常按"标准像素坐标(左上角原点)里这条线左右两端的y值"
+        采集(方便拖拽)，这里转成新坐标系——不用先在旧LineMatch(中心锚点)
+        绕一圈，直接从两个端点算。"""
+        slope_old = (y_right - y_left) / (w - 1)  # 旧坐标：y_old(x)=y_left+slope_old*x
+        return cls(y_at_right=float(y_right), slope=float(-slope_old), kind=kind)
+
 
 @dataclass
 class VLine:
@@ -47,6 +55,12 @@ class VLine:
 
     def x_at(self, y: float) -> float:
         return self.x_at_top + self.slope * y
+
+    @classmethod
+    def from_endpoints(cls, x_top: float, x_bottom: float, h: int, w: int) -> "VLine":
+        """同上，标注工具按"这条线上下两端的x值(标准像素坐标)"采集。"""
+        slope_old = (x_bottom - x_top) / (h - 1)  # 旧坐标：x_old(y)=x_top+slope_old*y
+        return cls(x_at_top=float((w - 1) - x_top), slope=float(-slope_old))
 
 
 @dataclass
