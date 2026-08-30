@@ -96,12 +96,15 @@ def detect_borders(gray, expected_cols: int) -> BorderDetectionResult: ...
 装饰花边也误判成抬头，见 `row_boundaries_design.md`「抬头列」节），
 需要人工标注补上，见下面「测试集」。
 
-**测试集**：**目前没有**。现有测试集（`text-band`、`page-crop` 等）测的
+**测试集**：**标注中**。现有测试集（`text-band`、`page-crop` 等）测的
 是边框探测出错之后下游的症状（窗口太小丢字、裁切吃掉整列），不是直接
-拿人工核校的边框/界行坐标做金标比对。下一步要建：普通页金标 + **抬头页
-专项金标**（抬头框的内外边框坐标目前完全没有任何人工核校数据）。单测
-`tests/test_border_geometry.py` 只验证坐标转换数学本身是对的（新旧坐标
-系换算、水平/竖直线在任意点求值一致），不能替代真实页面的金标。
+拿人工核校的边框/界行坐标做金标比对；单测 `tests/test_border_geometry.py`
+只验证坐标转换数学本身是对的，也不能替代真实页面的金标。第一批标注页面
+已发布（见 `artifacts/README.md`「Step1边框探测金标标注」）：2 普通页
+（vol01/137、138）+ 3 抬头页（vol01/32、33、49——32/49 是这轮新确认的
+真实抬头页，此前只深入分析过 33），种子取自 `peak_line_search` 自动
+探测，等人工拖拽核校完导出即为金标（导出后按标准像素坐标两端点，用
+`VLine.from_endpoints`/`HLine.from_endpoints` 转成本文档定义的新坐标系）。
 
 ### Step 2：单列射影变换 + 去噪
 
