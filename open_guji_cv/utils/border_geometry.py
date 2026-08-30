@@ -37,12 +37,16 @@ class HLine:
         return self.y_at_right + self.slope * x
 
     @classmethod
-    def from_endpoints(cls, y_left: float, y_right: float, w: int, kind: str) -> "HLine":
-        """标注工具通常按"标准像素坐标(左上角原点)里这条线左右两端的y值"
-        采集(方便拖拽)，这里转成新坐标系——不用先在旧LineMatch(中心锚点)
-        绕一圈，直接从两个端点算。"""
-        slope_old = (y_right - y_left) / (w - 1)  # 旧坐标：y_old(x)=y_left+slope_old*x
-        return cls(y_at_right=float(y_right), slope=float(-slope_old), kind=kind)
+    def from_endpoints(cls, x1: float, y1: float, x2: float, y2: float,
+                       w: int, kind: str) -> "HLine":
+        """标注工具按"标准像素坐标(左上角原点)里这条线上任意两点"采集
+        (方便拖拽——手柄不必落在图像左右边缘上，只要是这条线上两个不同的
+        点即可)，这里转成新坐标系。不用先在旧LineMatch(中心锚点)绕一圈，
+        直接从两点算斜率再外推到新坐标系的锚点(页面右端 x_new=0，也就是
+        旧坐标 x_old=w-1 处)。"""
+        slope_old = (y2 - y1) / (x2 - x1)  # 旧坐标：y_old(x)=y1+slope_old*(x-x1)
+        y_at_right = y1 + slope_old * ((w - 1) - x1)
+        return cls(y_at_right=float(y_at_right), slope=float(-slope_old), kind=kind)
 
 
 @dataclass
@@ -57,10 +61,12 @@ class VLine:
         return self.x_at_top + self.slope * y
 
     @classmethod
-    def from_endpoints(cls, x_top: float, x_bottom: float, h: int, w: int) -> "VLine":
-        """同上，标注工具按"这条线上下两端的x值(标准像素坐标)"采集。"""
-        slope_old = (x_bottom - x_top) / (h - 1)  # 旧坐标：x_old(y)=x_top+slope_old*y
-        return cls(x_at_top=float((w - 1) - x_top), slope=float(-slope_old))
+    def from_endpoints(cls, x1: float, y1: float, x2: float, y2: float, w: int) -> "VLine":
+        """同上，标注工具按"这条线上任意两点(标准像素坐标)"采集，不要求
+        手柄落在图像上下边缘。"""
+        slope_old = (x2 - x1) / (y2 - y1)  # 旧坐标：x_old(y)=x1+slope_old*(y-y1)
+        x_old_at_top = x1 + slope_old * (0.0 - y1)
+        return cls(x_at_top=float((w - 1) - x_old_at_top), slope=float(-slope_old))
 
 
 @dataclass
@@ -71,6 +77,7 @@ class HeadRaiseBorder:
     col: int  # 列号，从右到左、从 1 开始
     inner_y: float
     outer_y: float
+    estimated: bool = False  # 真线被物理裁切/装订吃掉，标注时纯靠推测(见 vol01/32)
 
 
 @dataclass
@@ -81,6 +88,15 @@ class BorderDetectionResult:
     bottom: HLine
     verticals: list[VLine]  # 从右到左排列：verticals[0]是第1列外边框(最右)，verticals[-1]是最左外边框
     head_raise: list[HeadRaiseBorder] = field(default_factory=list)
+    # 外边框：上下版框各有内外两层；左右外边框只在"纸边"那一侧存在——
+    # 筒子页对折装订，偶数页纸边在左、奇数页在右，版心/装订那一侧没有
+    # 独立外边框(被切/装订吃掉，不是没探测到)。跟对应内边框斜率锁定，
+    # 只用一个"沿垂直方向的偏移量"描述，不需要独立的位置+角度两个自由度。
+    # 目前没有自动探测算法，恒为 None，需要人工标注补上。
+    top_outer_offset: float | None = None
+    bottom_outer_offset: float | None = None
+    v_outer_side: str | None = None  # "left" | "right"，由页码奇偶决定
+    v_outer_offset: float | None = None  # 相对 verticals[0](right)或verticals[-1](left) 的偏移量
 
 
 def _hline_to_new(m: LineMatch, w: int, kind: str) -> HLine:
