@@ -23,7 +23,7 @@
 | 文档 | 内容 |
 |---|---|
 | [pipeline_handbook.md](doc/pipeline_handbook.md) | **总入口**：分步现状 / 并行分工 / 量法 / 踩过的坑 |
-| [segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md) | **切分管线重定义（进行中）**：边框探测/单列射影变换/单列文字切分/字框收缩四步，每步严格输入输出+测试集现状；坐标系改为右上角原点+从1计数。Step1（边框探测）已定版含内外边框+抬头框，金标已扩到 11 页 `open-guji-dataset/border-detection`；`find_horizontal_border` 窄窗口第二候选修复（top 0.5px、bottom 7.0px 均值）+ `find_vertical_lines` 精修去重bug修复（竖直线 2.0px 均值）均已落地。真抬头判据踩过坑——"边框上方有字凸出"不可靠，正确判据是"边框线本身有台阶"，第三批候选（vol01/26/47/51）标注中。Step2（单列射影变换+去噪）`column_projection.py` 已定版（合成图单测覆盖，真实页面金标待建）。下一步：等第三批抬头金标核校 或 细化 Step3 双行小注 |
+| [segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md) | **切分管线重定义（进行中）**：边框探测/单列射影变换/单列文字切分/字框收缩四步，每步严格输入输出+测试集现状；坐标系改为右上角原点+从1计数。Step1（边框探测）已定版含内外边框+抬头框，金标已扩到 14 页 `open-guji-dataset/border-detection`；`find_horizontal_border` 窄窗口第二候选修复+ `find_vertical_lines` 精修去重bug修复均已落地（top 1.9px、bottom 7.0px、竖直线2.7px均值，14页含1页"凡例"复杂抬头页新暴露的竖直线系统性偏斜、未修）。真抬头判据踩过坑——"边框上方有字凸出"不可靠，正确判据是"边框线本身有台阶"，第三批金标（vol01/26/47/51）已入库。Step2（单列射影变换+去噪）`column_projection.py` 已定版（合成图单测覆盖，真实页面金标待建）。下一步：细化 Step3 双行小注 或 继续扩大金标/追查47型竖直线系统偏斜 |
 | [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）|
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图、分层扩库路线（P0 异体字关系层 + P1 字体字形已实现）与**字体字形匹配力实测**（§6）|
