@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -426,15 +427,60 @@ setTimeout(paintAll, 0);
    .replace("__TITLE__", TITLE).replace("__SH__", str(STRIP_H))
 
 
+def load_existing(path: str | None, drop: set[str]) -> dict:
+    """带回旧页里的裁决；`drop` 里的列（几何漂了、标注已失效）连同它的 #band 一起丢。
+
+    重发一律**先 read 回来再 build**，否则覆盖掉用户还没收割的标注
+    （规矩见 artifacts/README.md）。"""
+    if not path:
+        return {}
+    html = Path(path).read_text(encoding="utf-8")
+    m = re.search(r'<script type="application/json" id="data">(.*?)</script>', html, re.S)
+    if not m:
+        raise SystemExit("这份 HTML 里没有 #data")
+    st = json.loads(m.group(1).replace("<\\/", "</")).get("verdicts", {})
+    return {k: v for k, v in st.items()
+            if k.split("#")[0] not in drop}
+
+
+_TAGS_FROZEN: dict[tuple[str, str, int], list[str]] = {}
+
+
+def frozen_columns(path: str) -> list[tuple[str, str, int]]:
+    """从冻好的卡集里读列表。Step1 每改一次几何，`pick_columns` 用的三个指标
+    就跟着变、选出来的列也会变——已经标过的那一批必须冻住，不然重出一版页
+    列换了，上一轮的标注全对不上号。"""
+    out = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line:
+            continue
+        r = json.loads(line)
+        key = (r["book"], r["page"], r["col"])
+        _TAGS_FROZEN[key] = r.get("tags", [])
+        out.append(key)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--out", default="output/column_warp_review.html")
     ap.add_argument("--cards", default="output/column_warp_cards.jsonl",
                     help="卡片 id 冻在这里——重出一版页照旧读，否则上一轮的标注对不上号")
+    ap.add_argument("--freeze", help="按这个卡集里的列重建（不重跑 pick_columns）")
+    ap.add_argument("--carry", help="读回来的旧页 HTML，把仍然有效的裁决带过来")
+    ap.add_argument("--drop", default="", help="逗号分隔的列 id，几何漂了、标注已失效，清掉重标")
     args = ap.parse_args()
 
     metrics = column_metrics()
-    picked = pick_columns(metrics)
+    if args.freeze:
+        keep = frozen_columns(args.freeze)
+        picked = [dict(book=b, page=p, col=c,
+                        tags=sorted(_TAGS_FROZEN.get((b, p, c), [])), **metrics[(b, p, c)])
+                   for b, p, c in keep]
+    else:
+        picked = pick_columns(metrics)
+    drop = {x for x in args.drop.split(",") if x}
+    existing = load_existing(args.carry, drop)
     rows, imgs = build_rows(picked)
 
     cards = Path(args.cards)
@@ -444,13 +490,15 @@ def main() -> None:
         for r in rows) + "\n", encoding="utf-8")
 
     # 第三个参数是**已有裁决**（{id:{v,t}}），不是按钮文案——文案在 page_js 里
-    html = render(TITLE, KEY, verdicts={}, css=CSS, page_js=PAGE_JS,
+    html = render(TITLE, KEY, verdicts=existing, css=CSS, page_js=PAGE_JS,
                    payload={"rows": rows, "imgs": imgs})
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    print(f"{len(rows)} 列 / {len({(r['book'], r['page']) for r in rows})} 页 "
-          f"-> {out} ({out.stat().st_size / 1024:.0f} KB)")
+    done = len({k.split('#')[0] for k in existing})
+    print(f"{len(rows)} 列 / {len({(r['book'], r['page']) for r in rows})} 页"
+          f"，带过来 {done} 列的裁决、清掉 {len(drop)} 列 -> {out} "
+          f"({out.stat().st_size / 1024:.0f} KB)")
 
 
 if __name__ == "__main__":
