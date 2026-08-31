@@ -80,6 +80,7 @@
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **形近误判裁决台**（排序倒挂逐例人裁，手机优先，**页面自存**）| https://claude.ai/code/artifact/9e45a22b-da42-4bd5-9486-378fd714a80a | [match_inversion_review.html](match_inversion_review.html)（快照）· 卡集 [match_inversion_cards.jsonl](match_inversion_cards.jsonl) · 裁决 [match_inversion_verdicts.jsonl](match_inversion_verdicts.jsonl) | `scripts/eval_match_pairs.py ../open-guji-dataset/glyph-match/pairs --dump /tmp/pairs.npz` → `scripts/build_match_inversion_review.py --dump /tmp/pairs.npz` |
+| **形近对上下文消歧**（n-gram × 大模型 × 字形 × OCR，含已/巳改判复盘）| https://claude.ai/code/artifact/f06d703d-0dab-4950-b130-09c87ae18882 | [confusable_context.html](confusable_context.html) · 测试集 `open-guji-dataset/confusable-context` | `scripts/build_confusable_set.py` → `eval_confusable_lm.py` → `score_confusable.py`（静态结果页，重测后手工更新数字）。2026-08-26 二版：首轮「已/巳治不了」是金标被字形污染的假象（4 条按封口字形误判、1 条巳误判超出二元范围实为己），纠正后 n-gram 83% / 大模型 92% 均大胜字形层 67%；`SEMANTIC_MERGED_PAIRS` 已接进 `seeding.py` 生产准入 |
 
 triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标签没错」才收），
 扩集的瓶颈从来不是挖不到候选，是没人过目。本页挖的是 pairs 集里最尖锐的
@@ -106,11 +107,31 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 降到 **82/4335** —— 一半的倒挂本来就是切分损伤造成的。卡集 202 → 220
 （新增 18 张），页面默认只显示「待裁」的 **37 张**，那批才是真正的判据失败。
 
+## 标注质量（G4 回流）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **疑似错标裁决台**（反复只跟同一个字相撞的实例，**页面自存**）| https://claude.ai/code/artifact/aa816ec8-3eca-4cb8-a889-87660e92d24a | 卡集 [label_suspect_cards.jsonl](label_suspect_cards.jsonl) | `scripts/eval_match_pairs.py <集> --dump /tmp/pairs.npz` → `scripts/build_label_suspect_review.py --dump /tmp/pairs.npz` |
+
+库匹配的覆盖率天花板是**异字对分数的上尾**（硬约束 precision ≥ 0.999 逼着闸站在
+0.9985，只放行 5% 的真同字对）。去看那条尾巴里是什么，签名很齐：**一个实例反复
+出现、而且几乎只跟同一个字撞**——那多半不是算法弄混了，是它自己标错了，于是跟
+那个字的每个刻例各撞一次，全挤在顶上。`vol02:28:6:12` 标「一」撞「七」5 次纯度
+1.0，调原图一看就是个「七」。
+
+留出口径实测：**只修 20 个疑似错标，recall 0.0532 → 0.3131（5.9×）；再加字体
+形近护栏到 0.5974（11.2×）**，precision 全程 ≥0.999。改几十条标签就是六倍覆盖率，
+这是眼下性价比最高的一件事。
+
+宽口径 71 张（cov≥0.97 撞≥2 次 纯度≥0.8）。最常见：自→目、王→玉、入→人、
+朱→未、目→自、末→未、開→間、面→而。
+
 ## 图块质量（G1/G4 回流）
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **图块出库裁决台**（逐块判能不能用，四层分层，**页面自存**）| https://claude.ai/code/artifact/69cdfc83-3117-496f-8209-265887e963af | [glyph_evict_review.html](glyph_evict_review.html)（快照）· 卡集 [glyph_evict_cards.jsonl](glyph_evict_cards.jsonl) | `scripts/build_glyph_evict_review.py` |
+| **排除名单复核台**（排除候选按「当初为什么排」分 10 类各抽 10 张，**页面自存**）| https://claude.ai/code/artifact/faf12f8f-4ede-41ce-8b4f-bd7254d003b9 | [exclusion_sample_review.html](exclusion_sample_review.html)（快照）· 卡集 [exclusion_sample_cards.jsonl](exclusion_sample_cards.jsonl) | `PYTHONPATH=. python scripts/build_exclusion_sample_review.py` |
 
 形近误判裁决台第一轮 132 例里 73 例判「标注有误」，用户看完的结论是**大量图块
 本身带残留**（界行线、版框条、邻字整块混入、格线上飘切了半截），标签错只是症状。
@@ -159,7 +180,7 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | 裁边失手体检 | https://claude.ai/code/artifact/717b2081-3e9f-4ea3-818c-50a184abb1b2 | [crop_review.html](crop_review.html) | vol02 抽样 14 页 s3_crop 中间产物：133/135/107 三页裁剪失败残留大片空白，根子在 content_bounds 边框线检测阈值（2026-08-27，浓墨粘连截断专题的新根因线索，待修）|
 | 版框线批量检测 | https://claude.ai/code/artifact/7d730326-db8f-4046-bbee-8162950da09d | **HTML 快照不入库**（5.6MB，原始图+裁剪图各 5 页整页图内嵌 base64）| 生成脚本见下；页面现在是**原始扫描 vs s3 裁剪产物**并排对比（2026-08-28 更新，覆盖同一 URL）。5 个样本页跑 `peak_line_search`（半高宽匹配度 + 位置角度联合搜索，见 [peak_line_search.md](../.claude/doc/peak_line_search.md)）：4/5 页两种输入结果一致或更好——职名页（vol01/90）在原始图上顶/底边框从裁剪产物的退化结果（宽度=1px）恢复正常，说明退化是 s3 裁剪裁掉边框造成的信息丢失；抬头页（vol01/33）顶部边框被抬头小框干扰的问题两边都在，确认是内容结构性问题跟预处理无关；vol02/133 底部边框比 `border_detect.py` 生产算法偏 41px 两边复现一致。裁剪产物版：`scripts/find_border_lines.py --pages vol02/133:9 vol02/135:9 vol01/33:9 vol01/90:9 vol01/171:9 --root <s3裁剪跳过s4增强产物根目录> --report report.html`；原始图对比版用的是内部脚本 `build_raw_vs_crop_report.py`（未入库，调用同一个 `analyze_page`/`draw_overlay` API，原始图源 `rebuild_src/<book>/<page>.tif`）|
 | 列内字格纵向边界：算法演进 | https://claude.ai/code/artifact/642f222d-c2e9-4f62-98ca-29d6110f2880 | **HTML 快照不入库**（base64 内嵌列图，多轮重发） | vol02/135 九列从"硬分21等分"(36px/102px) 一路试到最终版弹性DP(候选=波谷+页面共享周期先验+间距比例硬界+首尾padding硬界，均值2.5~4.2px/最大8~21px)，中间十几版尝试(独立最近邻snap漏选、纯DP整段滑格、自估周期偏差等)及各自失败模式的可视化记录。产物代码见 `open_guji_cv/utils/row_boundaries.py`，设计记录见 [row_boundaries_design.md](../.claude/doc/row_boundaries_design.md)，人工核校金标见 `open-guji-dataset/char-segmentation/row-boundaries`（交互标注工具是这轮探索里第一次用 `claude.use('artifact')` 自存能力做的可拖拽标注页）|
-| vol01/33 抬头列人工标注 | https://claude.ai/code/artifact/5c51122c-0573-4956-87de-e9a33419a207 | **HTML 快照不入库**（base64 内嵌 9 列图，交互页会自存） | 生产版 `row_boundaries.py` 在 vol02/133、vol01/33 两页正文页扩测时，发现 vol01/33 的 4 个抬头列(1/2/3/4)算法首点会卡在真实首字中间——抬头惯例把首字整体抬高、甚至顶到 border_top 以上，违反了 DP 里"内容不早于 border_top"的窗口假设，是新的失败形态（非匹配/周期/窗口参数问题）。此页种子点位取自当前(未修)算法输出 `prod_test_vol01_33.json`，用来标一版真实首字位置的人工金标，供之后验证"抬头列放宽 cand0 窗口下界到 [border_top-1.0×period, border_top+0.5×period]"这个改动。生成脚本（未入库）`build_annotate_v33_tool.py`，同上一行的自存标注页是同一套模板 |
+| vol01/33 抬头列人工标注 | https://claude.ai/code/artifact/5c51122c-0573-4956-87de-e9a33419a207 | **HTML 快照不入库**（base64 内嵌 9 列图，交互页会自存） | 给"抬头列放宽DP窗口"这个改动配金标：种子取自当时(未修)算法输出，标注过程中发现抬头列分两种——列4抬头但格数不变、列1/2/3抬头到能多塞一个字（第一版工具按统一21格设计，漏了这种情况，补了一版每列可独立设格数的工具才补全）。生成脚本（未入库）`build_annotate_v33_tool.py`/`build_annotate_v33_tool_v2.py`，同上一行的自存标注页是同一套模板 |
 | vol01 新算法逐字框选（十页） | https://claude.ai/code/artifact/6f054ade-34f7-4169-8b81-e5eaf82e0ffd | **HTML 快照不入库**（base64 内嵌 10 页整页图，约 15MB）| `row_boundaries.py` 合并main后的整体效果抽查，vol01 133~142 共10个未进过任何审查工作流的正文页。v1版版框/列线用生产 `phase3_char_grid` 产物；用户指出"列线探测和去斜也该用新算法(`peak_line_search.py`)，更准"——v2版换成竖直界行+上下边框用 `peak_line_search` 逐条线单独找(位置+角度联合搜索)，**每列按自己两条边线的平均斜率单独去斜**(不是全页共享一个shear——同页不同列残余倾角能差到0.008，两千像素高的列头尾错开近20px，共享shear会在偏差大的列上把相邻字连通体判串，v1图上"譜"那列多处两字框成一格的问题根子在此，v2已修，逐列单独调用`CharExtractor.extract_page`纠正)。133/134两页(凡例类短行版式，单列常有大段真空白)仍有已知的长空白区伪框问题(空白区无真实波谷信号，纯合成候选撑可行性)，图上标了提示。生成脚本（未入库）`run_new_algo_pages_v3.py` + `build_new_algo_gallery.py`（v1版`run_new_algo_pages.py`已废弃） |
 | Step1边框探测金标标注 | https://claude.ai/code/artifact/9d721dd1-1e8e-4a91-bdea-e874f9daf880 | **HTML 快照不入库**（base64 内嵌 5 页整页图，约 3.3MB，交互页会自存） | 切分管线重定义（[segmentation_v2_pipeline.md](../.claude/doc/segmentation_v2_pipeline.md)）Step1的第一批金标：2普通页(vol01/137、138) + 3抬头页(vol01/32、33、49——32/49是这轮新确认的真实抬头页，此前只深入分析过33)。图源用最原始扫描(`rebuild_src`，不用s3裁剪+s4直线增强产物，用户要求不要预处理)。种子取自 `peak_line_search` 自动探测(10条竖直内边框/界行+上下2条水平内边框，按标准像素坐标存两端点方便拖)；新加**外边框**——上下各一条外层、纸边那一侧(偶数页左/奇数页右，版心装订侧没有)一条竖直外边框，跟对应内边框斜率锁定、单手柄只调偏移量(目前没有外边框自动探测，种子是粗猜的起点)；抬头页额外可以加"抬头框"标记(外/内上边框y值)。导出后用 `border_geometry.py` 的 `from_endpoints` 转成新坐标系(右上角原点/从右到左/从1开始)存进金标。生成脚本（未入库）`gen_border_gold_seed.py` + `build_border_gold_tool.py` |
 | Step1边框探测金标标注 第二批 | https://claude.ai/code/artifact/2b1f11ee-dfe0-4919-a81b-2b54fbf81f05 | **HTML 快照不入库**（base64 内嵌 6 页整页图，约 4.1MB，交互页会自存） | **已人工核对/保存**，导出进 `open-guji-dataset/border-detection`。新增2个普通页(vol01/24、65) + 4个"曾以为是抬头、核校后不是"的页面(vol01/9、14、142、141——9/14/142的"上諭"字紧贴边框但边框本身是直线没有台阶，不算真抬头，`likely_raised` 已按核校结果改回false；141核校时发现`find_vertical_lines`把同一条竖直线收了两条(x≈1633和1648只差15px)，用户手动挪开，回查代码复现根因见下方bug修复条目)。选页方法：`build_top_contact_sheets.py` 把 vol01 108个body页最上方一条带批量裁图人眼扫过，第二批当时用的判据("边框上方有清晰字迹凸出")不准，第三批已修正 |

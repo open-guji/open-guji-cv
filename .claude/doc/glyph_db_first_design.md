@@ -248,20 +248,48 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
   残余混入图块的**手动抹除**（画布橡皮擦，抹后字形以 human_edited
   provenance 入库）作为审查页下一步增强。
 
-### 7.2 自动通道全谱（vol01 前 11 页 6~12 轮实审逐步定型，2026-08-24）
+### 7.2 自动通道全谱（vol01 前 11 页 6~12 轮实审逐步定型，2026-08-24；
+2026-08-27 补 match_replace/match_ref_weak/match_solo_ocr/match_margin
+四条 + near_form 护栏两处松绑）
 
-用户 1900+ 条真实裁决把最初的「零疑问才自动」扩成六条通道。**OCR 的
+用户 2600+ 条真实裁决把最初的「零疑问才自动」扩成十条通道。**OCR 的
 置信度不参与任何自动判断**（实测 100% 也照样认错形近字），它只供审查
-候选；例外是 match_solo 的残差窗防线用它的**字符**读数当第二证据。
+候选；例外是 match_solo/match_solo_ocr 的残差窗防线用它的**字符**读数
+当第二证据。
 
 | 通道 | 条件 | provenance | 标定依据 |
 |---|---|---|---|
 | 常规 | 过闸对齐 × 载体一致 + 六条疑问全不命中 | `align` | 协议原案 |
 | dual_degraded | 双信号一致 + 仅 degraded_crop | `align` | 实审 58/58 全准 |
-| match_ref | 库 verify same × 整理本同字（语义层比）| `align` | 进库字取**库匹配形**（「之」页 OCR 报「芝」实锤：无对齐时 proposed 曾误取 OCR 字）|
+| match_ref | 库 verify same × 整理本同字（语义层比），near_form 也放（33/33）| `align` | 进库字取**库匹配形**（「之」页 OCR 报「芝」实锤：无对齐时 proposed 曾误取 OCR 字）|
+| match_replace | replace 层对齐 × 库 top 一致，cov ≥ 0.95；near_form 2026-08-27 也放 | `align` | 十七轮 70/70；near_form 加入后回放 143/143 全对（与 match_ref 同一论证：证据独立性和对齐是 equal 还是 replace 无关）|
+| match_ref_weak | 免闸参考 × 库 top 一致，cov ≥ 0.98（0.97 出祗/祇一错）| `align` | 十七轮 25/25 |
 | match_solo | **无整理本参照** + 库内 cov ≥ 0.99 | `match` | 初值 0.98 首日即出压线错（揀 对库内 棟 0.9802，扌/木 之差恰好全落一个 12×12 残差窗，wmax 13）→ 用户裁定 0.99；三道防线：护栏（never_match/conflict）、异语义对手同到阈档即禁、wmax > MISS_WMAX 时需 OCR 字符背书 |
-| context | 锚定页 + 语料字入池（fuse_priors extra，权重 2.5）+ 同列前文 LM，语义层 margin ≥ 0.70 | `context` | 303 条实审：margin ≥ 0.70 → 198/198 全对（覆盖 65.3%）；语义层量竞争、字形层选形（semantic_margin：珎/珍 同语义分票不摊薄 margin，进库仍取图上精确异体）|
+| match_solo_ocr | 无整理本 + 库 cov 0.95~0.99 + OCR 字符背书（语义同字）| `match` | 十八轮 81/81；形近家族显式禁（两路会同错） |
+| match_margin | 库 top1 与 top2 的 cov **差距**（不看绝对值）≥ 0.05 + 与整理本/参考一致；db_inconsistent 除外 | `align` | 2026-08-27 用户定：「即使庫內匹配率未達到 0.99，但沒有競爭者，且整理本一致，完全可以自動錄入」，全部历史人裁回放 102/102 全对（0.04 档出第一错，阈留一档）。**兜底通道**——放在最后，前面通道都没吃到才轮到它 |
+| context | 锚定页 + 语料字入池（fuse_priors extra，权重 2.5）+ 同列前文 LM，语义层 margin ≥ 0.70；near_form 2026-08-27 不再单独拦 | `context` | 303 条实审：margin ≥ 0.70 → 198/198 全对（覆盖 65.3%）；语义层量竞争、字形层选形（semantic_margin：珎/珍 同语义分票不摊薄 margin，进库仍取图上精确异体）。near_form 摘除见下方说明 |
 | nonchar | R1 blank（去噪墨量 <1%）/ R2 tail_junk（锚定页列尾 + 无参照 + OCR 非汉字或 prob<0.3）| —（not_a_char）| 1198 已定真字零误杀 |
+
+**near_form 护栏两处松绑（2026-08-27，用户实锤諭/論、曾/會、人/入这类
+家族反复要人工校对）：**
+
+1. **match_replace 加入 near_form**——match_ref（equal 层对齐）早就放了
+   （见上表 33/33），match_replace（replace 层对齐）没跟上纯属疏漏，
+   补齐后回放 143/143 全对。
+2. **context 通道彻底摘除 near_form 拦截**——原先只放行
+   `SEMANTIC_MERGED_PAIRS`（已/巳 同词异写窄集，见 charset_and_lm.md
+   §四），现在扩到全部 near_form 家族：154 题盲测 n-gram 95.5%、大模型
+   98.7%，远胜字形层 top-1 64.3%——挡的一直是更可靠的证据。已/巳
+   那套「字形≠释读」的 shape 参数分岔逻辑**只对已/巳生效**（历史上
+   真是同一个词的两种写法）；其余家族是真的不同字，context 判对了，
+   形与义就该是同一个值，`admit_instance()` 不传 `shape` 参数（默认
+   等于释读，无需分岔）。
+
+三处仍然照拦、没有松绑：db_inconsistent（库本身对不上，任何通道都
+不该信）；match_solo/match_solo_ocr 的 near_form 禁入（那是纯形状证据，
+没有文本佐证，本就是 near_form 要防的场面）；`己` 不进
+`SEMANTIC_MERGED_PAIRS`（真的是另一个字，`vol01:21:3:19` 实锤过会被
+错认成巳）。
 
 配套机制（同期落地）：
 

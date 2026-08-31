@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -29,30 +30,17 @@ from .features import get_feature
 from .verify import (COV_HIGH, ELASTIC_COV_HIGH, MISS_WMAX,
                      verify_pair_cov, verify_pair_elastic)
 
-# 聚类实测漏网的形近家族（g3g4_error_analysis.md §2/§7：在 coverage 判据
-# 下真实发生过错并、或对级实测能穿透完美档的字对）。库级 never-match：
-# 这两族字互相永不做 same 判定。build_clustering_dataset.py 的难例对
-# 生成也引用本表——单一事实源。
-NEVER_MATCH_FAMILIES: list[tuple[str, str]] = [
-    ("諭", "論"), ("遺", "還"), ("圓", "圖"), ("大", "太"), ("廣", "贋"),
-    ("候", "侯"), ("間", "問"), ("已", "巳"), ("曾", "會"), ("選", "過"),
-    ("人", "入"), ("未", "末"), ("面", "而"), ("夬", "夫"), ("彖", "象"),
-    # 匕/七：margin 标定唯一阈上错例（vol02:37:6:12，diff 分支 OCR 认错）。
-    # 本表只防库匹配侧；OCR-only 路径（diff 档）管不到，属残余风险，
-    # 出路是 char-ocr 集给 OCR 分支单独立门。
-    ("匕", "七"),
-    # 日/曰：vol01:10:9:10 实审发现（裘曰修之「曰」，库内「日」对它
-    # cov 0.96 已进 unsure 带；OCR 也认成日）。同形程度全表最高。
-    ("日", "曰"),
-    # 揀/棟：vol01:9:4:12 实锤（match_solo 通道首个错例——揀选之「揀」
-    # 对库内「棟」cov 0.9802，偏旁 扌/木 之差全落一个残差窗，wmax 13）。
-    ("揀", "棟"),
-]
+# 形近家族表搬到 confusable.py 了（三张表：手工核过的 / 人裁确认的 / 字体
+# 自动跑的，各自门槛不同的理由写在那边的模块注释里）。这里保留
+# `NEVER_MATCH_FAMILIES` 的再导出：seeding.NEAR_FORM_CHARS 与
+# build_clustering_dataset.py 的难例对生成都引它，**只认手工那张**——
+# 那边命中要拦掉采信通道，代价高，不能拿自动表去喂。
+from .confusable import NEVER_MATCH_FAMILIES, partners as _partners  # noqa: F401
 
-_PARTNER: dict[str, set[str]] = {}
-for _a, _b in NEVER_MATCH_FAMILIES:
-    _PARTNER.setdefault(_a, set()).add(_b)
-    _PARTNER.setdefault(_b, set()).add(_a)
+# 匹配侧的降档护栏用**并起来的那张**：命中只是 same → unsure，还有候选 +
+# 上下文兜底，代价低，宁可多拦。留出实测（eval_guard_ceiling.py）：
+# 闸 0.9933 / recall 0.196 → 闸 0.9809 / recall 0.544，precision 仍 0.999。
+_PARTNER: dict[str, frozenset[str]] = _partners()
 
 
 @dataclass
@@ -103,6 +91,17 @@ class GlyphMatcher:
         self._patches: list[np.ndarray] = []
         self._feats: list[np.ndarray] = []
         self._char_set: set[str] = set()
+        # 护栏 1 要不要求「对家的字已经在库里」。
+        #
+        # 曾经要求过，是个**盲区**：库里有 千、没有 干 时，第一个 干 进来，
+        # 匹配判 same→千，而护栏去查「千 的对手 干 在不在库里」——不在，
+        # 于是不拦。可这正是会出错的那一刻：一个字**第一次出现**时，库里
+        # 只有它的形近对家，没有它自己。闸放到 0.97 实测，两条错配
+        # （vol01:43:1:4 干←千、vol02:145:6:17 長←畏）**全是这个形态**，
+        # 而 干/千、長/畏 两对在形近表里都在（0.999 / 0.9915），表没漏，
+        # 是这个 `& self._char_set` 把护栏关掉了。
+        # 默认改成不要求；GUJI_GUARD_IN_DB=1 可切回老行为做对照。
+        self.guard_needs_partner_in_db = os.environ.get("GUJI_GUARD_IN_DB") == "1"
 
     def __len__(self) -> int:
         return len(self._ids)
@@ -143,8 +142,7 @@ class GlyphMatcher:
         F = np.asarray(self._feats)
         sims = F @ np.asarray(feat, dtype=np.float32)
         if exclude_id is not None:
-            # 摘自身：把相似度压到最低，排序自然把它甩到末尾。取 k+1 个
-            # 再滤，保证摘掉一个之后仍有 k 个候选可验。
+            # 摘自身：把相似度压到最低，排序自然把它甩到末尾。
             sims = sims.copy()
             for j, iid in enumerate(self._ids):
                 if iid == exclude_id:
@@ -186,7 +184,9 @@ class GlyphMatcher:
                     "unsure", None, None, cov, wmax,
                     sorted(cands.items(), key=lambda t: -t[1]),
                     guard="conflict", n_verified=n_verified)
-            partners = _PARTNER.get(char, set()) & self._char_set
+            partners = _PARTNER.get(char, frozenset())
+            if self.guard_needs_partner_in_db:
+                partners = partners & self._char_set
             if partners:                                       # 护栏 1
                 for p in partners:
                     cands.setdefault(p, 0.0)
