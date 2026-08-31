@@ -11,6 +11,9 @@
   2. 吃进字身     pred 越过 human 往里 = 把字身当界行清掉了（px）。
   3. 留下残墨     pred 没推到 canonical = 界行残墨留在带里（px + 那一段的墨量）。
 
+上下版框那部分的金标**只记类别不记坐标**（clean/glued/none/idk），所以按类别
+混淆矩阵报，不算像素误差。
+
 按人裁的 verdict 分组报：只有 `clean`（人认为界行残墨和字身墨分得开）那组才是
 位置精度基准；`mixed` 组人已经判定「做不到两者兼得」，那组的边界误差说明不了
 算法准不准，只能说明这些列**矫正得不够好**——它们本身就是待修的失败样本。
@@ -31,6 +34,7 @@ sys.path.insert(0, str(ROOT))
 
 from open_guji_cv.utils.border_geometry import VLine  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
+    clean_column,
     column_profile,
     column_text_band,
     denoise_column,
@@ -135,6 +139,52 @@ def report(rows: list[dict]) -> None:
               f"命中 {hit}/{2 * len(g)}  判「分不开」{mixed}")
 
 
+# 算法档 -> 人裁类别。a(贴边) 和 d(内缩) 都是"有版框残墨且有间隙"，人看不出
+# 也不需要分——切在哪一行算法自己算得准，人只判有没有间隙。
+CASE_TO_CLASS = {"a": "clean", "d": "clean", "b": "glued", "c": "none"}
+
+
+def report_border(samples: list[dict]) -> None:
+    """上下版框分档的准确度：金标只记类别，所以按类别混淆矩阵报。"""
+    graded = [s for s in samples if s.get("border_class")]
+    if not graded:
+        print("\n（还没有 border_class 金标，跳过上下版框那部分）")
+        return
+    rows = []
+    for s in graded:
+        _, diag = clean_column(rebuild(s))
+        for end in ("top", "bottom"):
+            gold = s["border_class"].get(end)
+            if not gold:
+                continue
+            case = diag[end]["case"]
+            rows.append((s, end, case, CASE_TO_CLASS[case], gold, diag[end]["px"]))
+
+    scored = [r for r in rows if r[4] != "idk"]
+    agree = sum(1 for r in scored if r[3] == r[4])
+    print(f"\n上下版框分档：{len(graded)} 列 / {len(rows)} 条端裁决"
+          f"（其中 idk {len(rows) - len(scored)} 条不计分）")
+    print(f"  一致 {agree} / {len(scored)}")
+    labels = ["clean", "glued", "none"]
+    header = "金标\\自动"
+    print("\n  " + f"{header:<10}" + "".join(f"{c:>8}" for c in labels))
+    for g in labels:
+        line = "".join(
+            f"{sum(1 for r in scored if r[4] == g and r[3] == p):>8}" for p in labels)
+        print(f"  {g:<10}" + line)
+    bad = [r for r in scored if r[3] != r[4]]
+    if bad:
+        print("\n  不一致的：")
+        for s, end, case, pred, gold, px in bad:
+            print(f"    {s['book']}/{s['page']} c{s['col']} {end:<6} "
+                  f"自动={case}({pred}, 削{px}行)  金标={gold}")
+    cases = {}
+    for _, end, case, *_ in rows:
+        cases[(end, case)] = cases.get((end, case), 0) + 1
+    print("\n  算法分档分布：" + "  ".join(
+        f"{e}·{c}={n}" for (e, c), n in sorted(cases.items())))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", help="column-warp 子集目录")
@@ -142,7 +192,9 @@ def main() -> None:
     files = sorted((Path(args.dataset) / "samples").glob("*.json"))
     if not files:
         raise SystemExit(f"{args.dataset}/samples 里没有样本")
-    report([measure(json.loads(f.read_text(encoding="utf-8"))) for f in files])
+    samples = [json.loads(f.read_text(encoding="utf-8")) for f in files]
+    report([measure(s) for s in samples])
+    report_border(samples)
 
 
 if __name__ == "__main__":

@@ -7,22 +7,26 @@
 上下两端常常带进一截版框线（`column_bounds` 取页面右端 x=0 锚点，落点未必
 正好压在版框上），得在 Step2 就削掉。
 
-一列出两张卡（上端 / 下端），每张卡 = 该端的裁剪图（已清侧界行、只取文字带
-宽度）+ 沿水平方向的投影曲线。人拖一条横线定「削到哪一行」，再裁决这一端属于
-哪一档：
+**金标只记类别，不记坐标**（用户 2026-08-31 定：「如果确认了属于哪一类，
+基本很好切分」）。所以卡上没有可拖的线、也不显示算法打算削几行——印上去会
+把人的判断带偏，而我们要量的正是"人怎么分类"。一列出两张卡（上端 / 下端），
+每张卡 = 该端的裁剪图 + 沿水平方向的投影曲线，人只需要点一个类别：
 
-  * `clean` 版框和首字之间有间隙，线放得下（对应算法的 a 档）
-  * `glued` 版框跟首字粘连，找不到间隙，只能少削一点（b 档）
-  * `none`  这一端压根没有版框残墨，不用削（c 档）
+  * `clean` 有版框残墨，且跟首字之间**有间隙**（对应算法的 a/d 档）
+  * `glued` 有版框残墨，但**跟首字粘连**、找不到间隙（b 档）
+  * `none`  这一端**压根没有**版框残墨（c 档）
   * `idk`   拿不准
 
-金标真源是人拖的那个行数和这条裁决；投影曲线只是随卡存的快照。
+裁剪图按 `clean_column` 的定版顺序做出来：**先在原始矫正图上定文字带 → 抹掉
+两侧界行 → 只在文字带宽度内算水平投影**。顺序错了投影就不准——抹白之后再定
+带会拿到整幅宽度，带外那片白把整条曲线稀释约 9%，`ink_eps` 之类的阈值全部失准。
 """
 from __future__ import annotations
 
 import argparse
 import base64
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,9 +38,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / ".claude" / "skills" / "review-artifact" / "scripts"))
 
 from open_guji_cv.utils.column_projection import (  # noqa: E402
-    column_border_trim,
     column_row_profile,
     column_text_band,
+    denoise_column,
     strip_column_rules,
 )
 from eval_column_warp import rebuild  # noqa: E402
@@ -56,15 +60,20 @@ def build_rows() -> tuple[list[dict], dict[str, str]]:
     rows, imgs = [], {}
     for f in sorted(GOLD.glob("*.json")):
         s = json.loads(f.read_text(encoding="utf-8"))
-        warped = strip_column_rules(rebuild(s))
-        band = column_text_band(warped)
-        core = warped[:, band[0]:band[1]]
-        prof = column_row_profile(warped, band)
-        (top_px, top_case), (bot_px, bot_case) = column_border_trim(warped, band)
+        # 定版顺序：原图定带 -> 抹侧界行 -> 只在带宽内算水平投影（见 clean_column）
+        denoised = denoise_column(rebuild(s))
+        band = column_text_band(denoised)
+        no_rules = strip_column_rules(denoised)
+        core = no_rules[:, band[0]:band[1]]
+        prof = column_row_profile(no_rules, band)
         h = core.shape[0]
+        raised = s["geometry"]["top_y_source"] == "head_raise_inner_y"
+        # tags 里的「抬头列」是选列时按当时的 head_raise 打的，Step1 改过列号
+        # 归属之后会过期——以当前几何为准重算，别把过期标签摆给人看
+        tags = [t for t in s["tags"] if t != "抬头列"] + (["抬头列"] if raised else [])
 
-        for end, seed, case in (("top", top_px, top_case), ("bot", bot_px, bot_case)):
-            # 两端都按「从该端往里」的朝向裁，人看到的永远是"边框在上、字在下"
+        for end in ("top", "bot"):
+            # 两端都按「从该端往里」的朝向裁，人看到的永远是"版框在上、字在下"
             crop = core[:CROP_ROWS] if end == "top" else core[h - CROP_ROWS:][::-1]
             pslice = prof[:CROP_ROWS] if end == "top" else prof[h - CROP_ROWS:][::-1]
             cid = f"{s['book']}_{s['page']}_c{s['col']}_{end}"
@@ -73,10 +82,8 @@ def build_rows() -> tuple[list[dict], dict[str, str]]:
             imgs[cid] = "data:image/png;base64," + base64.b64encode(buf).decode()
             rows.append(dict(
                 id=cid, book=s["book"], page=s["page"], col=s["col"], end=end,
-                tags=s["tags"], raised=s["geometry"]["top_y_source"] == "head_raise_inner_y",
-                w=int(core.shape[1]), rows=CROP_ROWS, seed=int(seed),
-                # 自动判据给的档不印在卡上（会带偏人的判断），只留种子位置
-                auto_case=case,
+                tags=tags, raised=raised,
+                w=int(core.shape[1]), rows=CROP_ROWS,
                 prof=base64.b64encode(
                     bytes(int(round(float(v) * 255)) for v in pslice)).decode()))
     return rows, imgs
@@ -98,29 +105,14 @@ CSS = """
 .tags span.raise{background:var(--ochre-soft); color:var(--ochre)}
 
 .pair{display:flex; gap:6px; margin:10px auto 0; align-items:flex-start;}
-.stage{position:relative; flex:0 1 auto; touch-action:pan-x;
-  background:var(--tile); border:1px solid var(--rule-hard); border-radius:2px;
-  overflow:hidden; cursor:ns-resize;}
+.stage{flex:0 1 auto; background:var(--tile);
+  border:1px solid var(--rule-hard); border-radius:2px; overflow:hidden;}
 .stage img{display:block; width:100%; height:auto; image-rendering:pixelated;}
-.veil{position:absolute; left:0; right:0; top:0; background:var(--zhu);
-  opacity:.3; pointer-events:none;}
-.grip{position:absolute; left:0; right:0; height:2px; margin-top:-1px;
-  background:var(--indigo); pointer-events:none;}
 .prof{flex:0 0 54px; align-self:stretch; background:var(--ground);
   border:1px solid var(--rule); border-radius:2px;}
 .prof path{fill:var(--indigo); fill-opacity:.5; stroke:none}
-.prof rect.cut{fill:var(--zhu); fill-opacity:.2}
-
-.nudge{display:flex; align-items:center; gap:6px; margin-top:9px; font-size:12px;
-  color:var(--muted);}
-.nudge button{min-width:36px; min-height:36px; border:1px solid var(--rule-hard);
-  border-radius:3px; background:var(--surface); color:var(--ink);
-  font-family:var(--mono); font-size:15px; cursor:pointer;}
-.nudge button:active{background:var(--sunk)}
-.nudge output{font-family:var(--mono); font-size:14px; color:var(--ink);
-  min-width:2.4em; text-align:center; font-variant-numeric:tabular-nums;}
-.nudge .rst{margin-left:auto; min-width:0; padding:0 9px; font-size:11px;
-  font-family:var(--sans); color:var(--muted);}
+.edge{position:absolute; left:0; right:0; top:0; height:2px; background:var(--indigo);
+  opacity:.55; pointer-events:none;}
 
 .verdicts{display:grid; grid-template-columns:repeat(NCOL,1fr); gap:6px; margin-top:10px;}
 .verdicts button{min-height:44px; border:1px solid var(--rule-hard); border-radius:3px;
@@ -149,15 +141,14 @@ const BODY = `
     <p>一张卡是<b>一列的一端</b>（上端或下端）。图已经把两侧界行清掉了、只留文字带那一段宽度，
        并且<b>一律转成「版框在上、字在下」</b>——下端的卡是翻过来给你看的，别被字倒了吓到。
        右边那条是<b>沿水平方向的投影</b>：每一行的墨占比。</p>
-    <p>拖那条蓝线，定出<b>要削掉几行</b>（红色阴影就是会被抹白的部分）。
-       目标是：<b>版框墨全在线以上，字身墨一点不碰</b>。不用削就拖到 0。</p>
+    <p><b>只需要点一个类别，不用标坐标</b>——类别定了，切在哪一行算法自己能算准。</p>
     <div class="rubric">
       <div><b style="background:var(--ok-soft);color:var(--ok)">有间隙</b>
-        <span>版框和首字之间看得到空白，线能干净地放进去。</span></div>
+        <span>有版框残墨，而且它跟首字之间看得到空白。（版框贴着边、或者往里缩了一截都算。）</span></div>
       <div><b style="background:var(--zhu-soft);color:var(--zhu)">粘连</b>
-        <span>版框跟首字连着，找不到间隙——线只能少削一点，宁可留残框也别切字。</span></div>
+        <span>有版框残墨，但跟首字连成一片、找不到间隙——只能少削一点，宁可留残框也别切字。</span></div>
       <div><b style="background:var(--indigo-soft);color:var(--indigo)">没残墨</b>
-        <span>这一端根本没带进版框，什么都不用削（线放 0）。</span></div>
+        <span>这一端根本没带进版框，什么都不用削。</span></div>
       <div><b style="background:var(--sunk);color:var(--faint)">拿不准</b>
         <span>看不清，或这一端另有毛病。</span></div>
     </div>
@@ -185,21 +176,6 @@ const rowId = r => r.id;
 let _idx = null;
 const rowOf = id => (_idx || (_idx = Object.fromEntries(D.rows.map(r => [r.id, r]))))[id];
 
-const trimKey = id => id + '#trim';
-function trimOf(id){
-  const raw = (state[trimKey(id)] || {}).v;
-  const v = raw === undefined ? NaN : Number(raw);
-  return Number.isFinite(v) ? v : rowOf(id).seed;
-}
-function setTrim(id, v){
-  const r = rowOf(id);
-  const n = Math.max(0, Math.min(Math.round(v), r.rows));
-  state[trimKey(id)] = {v: String(n), t: Date.now()};
-  persist();
-  return n;
-}
-const touched = id => !!state[trimKey(id)];
-
 function unpackProf(s){
   const bin = atob(s), out = new Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) / 255;
@@ -208,86 +184,40 @@ function unpackProf(s){
 
 function profSvg(r){
   const p = unpackProf(r.prof), n = p.length;
-  /* 横躺的投影：y 是行号（跟左边的图对齐），x 是墨占比。按本卡峰值归一。 */
+  /* 横躺的投影：y 是行号（跟左边的图对齐），x 是墨占比。按本卡峰值归一，
+     峰值原值写不出来也无所谓——这一页只判类别，看的是形状不是数值。 */
   const pmax = Math.max(...p, 0.02);
   let d = 'M0,0';
   for (let i = 0; i < n; i++){ const x = p[i] / pmax * 96;
     d += ` L${x},${i} L${x},${i + 1}`; }
   d += ` L0,${n} Z`;
   return `<svg class="prof" viewBox="0 0 100 ${n}" preserveAspectRatio="none">
-    <rect class="cut" x="0" y="0" width="100" height="0"></rect>
     <path d="${d}"></path></svg>`;
 }
 
 function card(r){
-  const v = verdictOf(r.id), t = trimOf(r.id);
+  const v = verdictOf(r.id);
   const btn = ([k, txt]) => `<button class="${k}" data-v="${k}" aria-pressed="${v === k}">${txt}</button>`;
-  const tag = s => `<span>${esc(s)}</span>`;
+  const tag = s => `<span${s === '抬头列' ? ' class="raise"' : ''}>${esc(s)}</span>`;
   return `<article class="card" data-id="${r.id}"${v ? ` data-v="${v}"` : ''}>
     <h3>${r.book}/${r.page} 第 ${r.col} 列<em>${r.end === 'top' ? '上端' : '下端（已翻转）'}</em></h3>
     <div class="tags"><span class="end">${r.end === 'top' ? '上' : '下'}</span>${
-      r.raised && r.end === 'top' ? '<span class="raise">抬头列</span>' : ''}${
-      r.tags.map(tag).join('')}${touched(r.id) ? '<span>已改过</span>' : ''}</div>
+      r.tags.map(tag).join('')}</div>
     <div class="pair" style="max-width:${r.w * 2 + 60}px">
-      <div class="stage" style="flex-basis:${r.w * 2}px">
-        <img data-src="${r.id}" alt="">
-        <div class="veil"></div><div class="grip"></div>
+      <div class="stage" style="position:relative; flex-basis:${r.w * 2}px">
+        <img data-src="${r.id}" alt=""><div class="edge"></div>
       </div>
       ${profSvg(r)}
-    </div>
-    <div class="nudge">
-      <button data-n="-5">−5</button><button data-n="-1">−</button>
-      <output>${t}</output>
-      <button data-n="1">+</button><button data-n="5">+5</button>
-      <span>行</span><button class="rst" data-n="reset">复位</button>
     </div>
     <div class="verdicts">${VERDICTS.map(btn).join('')}</div>
   </article>`;
 }
 
-function paint(art){
-  const r = rowOf(art.dataset.id), t = trimOf(r.id), pct = t / r.rows * 100;
-  art.querySelector('.veil').style.height = pct + '%';
-  art.querySelector('.grip').style.top = pct + '%';
-  art.querySelector('output').textContent = t;
-  art.querySelector('.prof rect.cut').setAttribute('height', t);
-}
-function paintAll(){ listEl.querySelectorAll('.card').forEach(paint); }
-
-let drag = null;
-function yOf(e, stage, r){
-  const box = stage.getBoundingClientRect();
-  return Math.max(0, Math.min(r.rows, (e.clientY - box.top) / box.height * r.rows));
-}
-document.addEventListener('pointerdown', e => {
-  const stage = e.target.closest('.stage'); if (!stage) return;
-  const art = stage.closest('.card'), r = rowOf(art.dataset.id);
-  drag = {art, stage, r};
-  stage.setPointerCapture(e.pointerId);
-  move(e);
-});
-function move(e){
-  if (!drag) return;
-  setTrim(drag.r.id, yOf(e, drag.stage, drag.r));
-  paint(drag.art);
-  e.preventDefault();
-}
-document.addEventListener('pointermove', move);
-document.addEventListener('pointerup', () => { drag = null; });
-document.addEventListener('pointercancel', () => { drag = null; });
-
 document.addEventListener('click', e => {
-  const nb = e.target.closest('.nudge button');
-  if (nb){
-    const art = nb.closest('.card'), r = rowOf(art.dataset.id);
-    if (nb.dataset.n === 'reset') { state[trimKey(r.id)] = {v: String(r.seed), t: Date.now()}; persist(); }
-    else setTrim(r.id, trimOf(r.id) + Number(nb.dataset.n));
-    paint(art); return;
-  }
   const fb = e.target.closest('#filter button'); if (!fb) return;
   filter = fb.dataset.f;
   [...fb.parentElement.children].forEach(x => x.setAttribute('aria-pressed', String(x === fb)));
-  draw(); paintAll();
+  draw();
 });
 
 let filter = 'todo';
@@ -296,40 +226,53 @@ function visibleRows(){
   const done = filter === 'done';
   return D.rows.filter(r => !!verdictOf(r.id) === done);
 }
-function afterVerdict(){ if (filter !== 'all') draw(); paintAll(); }
+function afterVerdict(){ if (filter !== 'all') draw(); }
 
 function payload(){
   return D.rows.filter(r => verdictOf(r.id)).map(r =>
-    JSON.stringify({id: r.id, book: r.book, page: r.page, col: r.col, end: r.end,
-                     verdict: verdictOf(r.id), trim: trimOf(r.id),
-                     seed: r.seed, moved: touched(r.id)})).join('\n');
+    JSON.stringify({id: r.id, book: r.book, page: r.page, col: r.col,
+                     end: r.end, verdict: verdictOf(r.id)})).join('\n');
 }
-
-/* 壳在整段脚本的最后才第一次 draw()，初次补画排到宏任务里 */
-setTimeout(paintAll, 0);
 """.replace("__VERDICTS__", json.dumps([[v, t] for v, t, _ in VERDICTS], ensure_ascii=False)) \
    .replace("__TITLE__", TITLE)
+
+
+def load_existing(path: str | None) -> dict:
+    """把读回来的页里已有的裁决带上——重发一律先 read 再 build，否则覆盖掉
+    用户还没收割的标注（规矩见 artifacts/README.md）。`#trim` 那批键是上一版
+    可拖动界面的遗留，本版金标只记类别，丢掉。"""
+    if not path:
+        return {}
+    html = Path(path).read_text(encoding="utf-8")
+    m = re.search(r'<script type="application/json" id="data">(.*?)</script>', html, re.S)
+    if not m:
+        raise SystemExit("这份 HTML 里没有 #data")
+    st = json.loads(m.group(1).replace("<\\/", "</")).get("verdicts", {})
+    return {k: v for k, v in st.items() if not k.endswith("#trim")}
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--out", default="output/column_border_review.html")
     ap.add_argument("--cards", default="output/column_border_cards.jsonl")
+    ap.add_argument("--carry", help="读回来的旧页 HTML，把已有裁决带过来")
     args = ap.parse_args()
 
     rows, imgs = build_rows()
+    existing = load_existing(args.carry)
     cards = Path(args.cards)
     cards.parent.mkdir(parents=True, exist_ok=True)
     cards.write_text("\n".join(
         json.dumps({k: v for k, v in r.items() if k != "prof"}, ensure_ascii=False)
         for r in rows) + "\n", encoding="utf-8")
 
-    html = render(TITLE, KEY, verdicts={}, css=CSS, page_js=PAGE_JS,
+    html = render(TITLE, KEY, verdicts=existing, css=CSS, page_js=PAGE_JS,
                    payload={"rows": rows, "imgs": imgs})
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    print(f"{len(rows)} 张卡（{len(rows) // 2} 列 × 上下两端）-> {out} "
+    print(f"{len(rows)} 张卡（{len(rows) // 2} 列 × 上下两端）"
+          f"，带过来 {len(existing)} 条已有裁决 -> {out} "
           f"({out.stat().st_size / 1024:.0f} KB)")
 
 
