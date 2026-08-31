@@ -59,6 +59,21 @@
 默认关**（用户 r7「自检太多了我就没消除」），要看点工具栏「自检框」，
 状态存在浏览器本地。
 
+### 切分管线重定义（v2 四步）的金标标注页
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **单列矫正·文字带核校**（Step2 金标）| https://claude.ai/code/artifact/59061981-4e03-4378-9b36-019477706df8 | 金标真源 `open-guji-dataset/char-segmentation/column-warp/samples/`；卡片 id 冻在 `output/column_warp_cards.jsonl`（**HTML 快照不入库**，802KB，全是矫正图 data URI，脚本可确定性再生）| `python scripts/build_column_warp_review.py` |
+
+32 列 / 13 页，列从 `border-detection` 那 14 页金标的 VLine/HLine 派生，按
+`column_bounds()` 定版约定（上下界取页面右端 x=0 锚点，抬头列改用该列抬头框
+`inner_y`）跑 `warp_column`+`denoise_column`。每张卡 = 整列压扁图（横向 1:1）
++ 沿竖直方向的投影曲线，人拖两条线定「文字带」左右边界，再裁决
+**分得开 / 分不开 / 拿不准**——「分不开」指界行残墨和字身墨在横向糊在一起，
+是矫正没矫正好的直接症状。选列规则是明说的四条难例（倾斜大/梯形大/锚点
+偏差大/抬头列）+ 一条平稳列对照，写在 `pick_columns()` 里，**不是挑跑得
+好看的**。文字带边界存成 `<id>#band` 的 state 记录，跟裁决一起自动存回页面。
+
 ## 归一化（G3 工作流）
 
 | 页面 | URL | 快照/真源 | 再生 |
