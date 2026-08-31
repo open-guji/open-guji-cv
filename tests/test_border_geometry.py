@@ -7,6 +7,7 @@ from open_guji_cv.utils.border_geometry import (
     _hline_to_new,
     _vline_to_new,
     detect_borders,
+    detect_head_raise,
 )
 from open_guji_cv.utils.peak_line_search import LineMatch
 
@@ -145,3 +146,95 @@ def test_detect_borders_orders_verticals_right_to_left_in_new_coords():
     assert abs(result.verticals[0].x_at_top - expected_rightmost_x_new) < 15
     assert abs(result.verticals[-1].x_at_top - expected_leftmost_x_new) < 15
     assert result.head_raise == []  # 抬头目前没有自动探测，默认空
+
+
+# --- 抬头框探测 ---------------------------------------------------------
+
+def _blank_head_raise_page(w=1000, h=800, n_cols=9, border_top=400):
+    """搭一张只有版框+界行的合成页，返回 (mask, top, verticals)。
+    抬头框由各测试自己往 mask 上画。"""
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = np.linspace(80, w - 80, n_cols + 1)
+    for x_old in xs_old:
+        # 界行只在版框内，主上边框以上是空白——抬头框的竖墙是那片区域里
+        # 唯一的竖直墨迹，墙线判据才有意义
+        mask[border_top:, int(x_old) - 2:int(x_old) + 3] = 1.0
+    mask[border_top:border_top + 5, :] = 1.0          # 主上边框(内)
+    mask[border_top - 34:border_top - 30, :] = 1.0    # 主上边框(外)
+    top = HLine(y_at_right=float(border_top + 2), slope=0.0, kind="top")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, top, verticals, xs_old
+
+
+def _paint_raised_box(mask, xs_old, cols, inner_y, outer_y, border_top,
+                       outer_thickness=1):
+    """把 cols(新坐标列号,从右到左从1开始) 这一块画成抬头：内框细线、
+    外框(粗细可调)、两端竖墙落到主边框。"""
+    n = len(xs_old) - 1
+    # 列号 c 对应的旧坐标区间：[xs_old[n-c], xs_old[n-c+1]]
+    lefts = [xs_old[n - c] for c in cols]
+    rights = [xs_old[n - c + 1] for c in cols]
+    x0, x1 = int(min(lefts)), int(max(rights))
+    mask[int(inner_y) - 1:int(inner_y) + 2, x0:x1] = 1.0
+    if outer_thickness:
+        mask[int(outer_y):int(outer_y) + outer_thickness, x0:x1] = 1.0
+    for xw in (x0, x1 - 4):
+        mask[int(inner_y):border_top + 3, xw:xw + 5] = 1.0
+
+
+def test_detect_head_raise_finds_nothing_on_plain_page():
+    """普通页：窗口里唯一的细锐线是主边框自己的外框(距主框仅30px)，
+    必须被"离主边框 90~210px"这一条挡掉，不能报抬头。"""
+    mask, top, verts, _ = _blank_head_raise_page()
+    assert detect_head_raise(mask, top, verts, width=1000) == []
+
+
+def test_detect_head_raise_finds_thick_outer_bar_block():
+    """典型形态(vol01/33、26、47 型)：外框是一条粗满墨条，内框是细线。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[5, 6], inner_y=280, outer_y=244,
+                      border_top=border_top, outer_thickness=18)
+    got = detect_head_raise(mask, top, verts, width=1000)
+    assert sorted(r.col for r in got) == [5, 6]
+    for r in got:
+        assert abs(r.inner_y - 280) <= 4
+        assert abs(r.outer_y - 244) <= 4
+        assert r.estimated is False
+
+
+def test_detect_head_raise_survives_missing_outer_border():
+    """vol01/51 型：外框在扫描里根本没印上(墨占比 0.00~0.18)。只有内框
+    可见时仍然要报出来，outer 按中位间距推、标 estimated。
+    这条是 v3 "必须内外成对"那版召回崩到 28% 的直接原因。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[3], inner_y=270, outer_y=0,
+                      border_top=border_top, outer_thickness=0)
+    got = detect_head_raise(mask, top, verts, width=1000)
+    assert [r.col for r in got] == [3]
+    assert abs(got[0].inner_y - 270) <= 4
+    assert got[0].estimated is True
+
+
+def test_detect_head_raise_block_middle_column_needs_no_own_wall():
+    """连续抬头列共用一个抬头框，块内部的界行在抬头区继续延伸、不是墙。
+    墙线只能在块的最外两侧查——vol01/33 c7 在块中间，实测墙覆盖率只有
+    0.00~0.04，按列查墙会把它误杀。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    _paint_raised_box(mask, xs, cols=[4, 5, 6], inner_y=285, outer_y=249,
+                      border_top=border_top, outer_thickness=16)
+    got = detect_head_raise(mask, top, verts, width=1000)
+    assert sorted(r.col for r in got) == [4, 5, 6]
+
+
+def test_detect_head_raise_rejects_horizontal_line_without_walls():
+    """没有竖直连接墙线的孤立横线(书斑/渗墨/邻页痕)不算抬头。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    n = len(xs) - 1
+    x0, x1 = int(xs[n - 6]), int(xs[n - 5])
+    mask[279:282, x0:x1] = 1.0
+    mask[243:261, x0:x1] = 1.0
+    assert detect_head_raise(mask, top, verts, width=1000) == []
