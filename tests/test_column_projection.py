@@ -4,10 +4,13 @@ import numpy as np
 
 from open_guji_cv.utils.border_geometry import HLine, VLine
 from open_guji_cv.utils.column_projection import (
+    column_border_trim,
     column_bounds,
     column_profile,
+    column_row_profile,
     column_text_band,
     denoise_column,
+    strip_column_borders,
     strip_column_rules,
     warp_column,
 )
@@ -89,7 +92,7 @@ def test_column_text_band_excludes_rules_keeps_chars():
     img = _column_with_rules(width=180, rule_w=5, char_w=110)
     left, right = column_text_band(img)
     assert 5 <= left <= 8                       # 吃掉界行，没吃进留白太多
-    assert 172 <= right <= 175
+    assert 172 <= right <= 175                  # 半开区间，右端不含
     x0 = (180 - 110) // 2
     assert left <= x0 and right >= x0 + 110     # 字身完整落在带内
 
@@ -103,19 +106,23 @@ def test_column_text_band_leaves_rule_free_side_alone():
     assert right < img.shape[1]                  # 右侧界行照常吃掉
 
 
-def test_column_text_band_never_eats_more_than_max_rule_frac():
-    """整列全是墨（退化输入）时，每侧最多啃掉 max_rule_frac，带不会被吃空。
-    宁可留残墨也不切字——切掉的字下游补不回来。"""
+def test_column_text_band_leaves_a_solid_ink_column_untouched():
+    """整列全是墨（退化输入）：窗口里没有谷，最低点就是边缘那一格，
+    扫到它立刻停 —— 一个像素也不啃，更不会返回空带。"""
     img = np.zeros((400, 100), dtype=np.uint8)
-    left, right = column_text_band(img, max_rule_frac=0.15)
-    assert (left, right) == (15, 85)
-    assert left < right
+    assert column_text_band(img) == (0, 100)
 
 
-def test_column_text_band_falls_back_when_cap_allows_eating_everything():
-    """max_rule_frac >= 0.5 时两侧会啃穿，此时应原样返回整条、而不是空带。"""
-    img = np.zeros((400, 100), dtype=np.uint8)
-    assert column_text_band(img, max_rule_frac=0.6) == (0, 100)
+def test_column_text_band_stops_at_a_low_plateau_instead_of_eating_through_it():
+    """界行衰减到一个不归零的低平台（vol01/33 c5 右侧那种贯穿全高的淡竖痕）时，
+    平台本身就是窗口最低点，扫到它就该停，不能一路啃到上限。"""
+    img = np.full((1000, 120), 255, dtype=np.uint8)
+    img[:, :4] = 0                              # 界行本体
+    img[:10, 4:9] = 0                            # 衰减尾
+    img[:12, 9:40] = 0                           # 贯穿不了全高、但压着的淡竖痕(1.2%)
+    img[200:900, 45:100] = 0                     # 字身
+    left, _ = column_text_band(img)
+    assert 4 <= left <= 9                        # 停在界行尾，没吃进 9~40 那片淡痕
 
 
 def test_strip_column_rules_whitens_edges_keeps_shape_and_chars():
@@ -133,3 +140,96 @@ def test_column_bounds_uses_page_right_anchor_and_head_raise():
     bottom = HLine(y_at_right=2900.0, slope=-0.005, kind="bottom")
     assert column_bounds(top, bottom) == (500.0, 2900.0)      # 一律取 x=0 锚点
     assert column_bounds(top, bottom, head_raise_inner_y=330.0) == (330.0, 2900.0)
+
+
+# ---- Step2 新增：上下版框残墨（水平投影三档 a/b/c）----
+
+def _column_with_top_border(border_h=0, gap=12, glued=False, height=600, width=180):
+    """合成一条已去掉侧界行的列：顶部可选一条版框线，之后留间隙或直接接上字。"""
+    img = np.full((height, width), 255, dtype=np.uint8)
+    if border_h:
+        img[:border_h, :] = 0                    # 版框：贯穿整宽
+    y0 = border_h if glued else border_h + gap   # glued=版框和首字之间没间隙
+    for k in range(4):                            # 几个字块
+        top = y0 + k * 120
+        img[top:top + 95, 35:145] = 0
+    return img
+
+
+def test_column_row_profile_is_ink_fraction_per_y():
+    img = _column_with_top_border(border_h=4)
+    prof = column_row_profile(img)
+    assert prof.shape == (img.shape[0],)
+    assert prof[0] == 1.0            # 版框贯穿整宽
+    assert prof[6] == 0.0             # 间隙里没墨
+
+
+def test_column_row_profile_respects_text_band():
+    """界行不排除掉，每一行都有底噪，"归不归零"这个判据就废了。"""
+    img = _column_with_top_border(border_h=4)
+    img[:, :5] = 0                    # 补一条没清掉的左界行
+    assert column_row_profile(img)[10] > 0            # 整幅算：间隙(4~15行)里也有墨
+    assert column_row_profile(img, band=(6, 180))[10] == 0   # 带内算：干净
+
+
+def test_column_border_trim_case_a_removes_whole_border_run():
+    img = _column_with_top_border(border_h=5, gap=14)
+    (top_px, top_case), (bot_px, bot_case) = column_border_trim(img)
+    assert (top_case, top_px) == ("a", 5)
+    assert (bot_case, bot_px) == ("c", 0)   # 底部本来就没墨
+
+
+def test_column_border_trim_case_b_only_takes_glue_px():
+    """版框跟首字粘连、看不到间隙时，只削 glue_px，不敢整段切。"""
+    img = _column_with_top_border(border_h=5, glued=True)
+    (top_px, top_case), _ = column_border_trim(img, glue_px=3)
+    assert (top_case, top_px) == ("b", 3)
+
+
+def test_column_border_trim_case_c_leaves_clean_edge_alone():
+    img = _column_with_top_border(border_h=0, gap=20)
+    (top_px, top_case), _ = column_border_trim(img)
+    assert (top_case, top_px) == ("c", 0)
+
+
+def test_strip_column_borders_whitens_only_the_border_rows():
+    img = _column_with_top_border(border_h=5, gap=14)
+    out = strip_column_borders(img)
+    assert out.shape == img.shape
+    assert (out[:5] == 255).all()                    # 版框抹掉
+    assert (out[19:114, 35:145] == 0).all()          # 首字原样保留
+
+
+def _column_with_inset_border(blank=12, border_h=4, gap=10, height=600, width=180):
+    """版框"内缩"：边缘先一段空白，往里才是版框线，再往里才是字。
+    column_bounds 取页面右端 x=0 锚点、锚点越过该列真实版框时就长这样。"""
+    img = np.full((height, width), 255, dtype=np.uint8)
+    img[blank:blank + border_h, :] = 0
+    y0 = blank + border_h + gap
+    for k in range(4):
+        img[y0 + k * 120:y0 + k * 120 + 95, 35:145] = 0
+    return img
+
+
+def test_column_border_trim_case_d_reaches_an_inset_border():
+    """只看"边缘有没有墨"会把内缩版框整条漏掉（32列金标里下端有8条是这种）。"""
+    img = _column_with_inset_border(blank=12, border_h=4)
+    (top_px, top_case), _ = column_border_trim(img)
+    assert (top_case, top_px) == ("d", 16)      # 空白 + 横线一起削
+
+
+def test_column_border_trim_does_not_mistake_the_first_char_for_a_border():
+    """边缘空白之后直接是首字（厚 95 行、顶边是细的）时，什么都不该削。"""
+    img = _column_with_inset_border(blank=12, border_h=0, gap=0)
+    (top_px, top_case), _ = column_border_trim(img)
+    assert (top_case, top_px) == ("c", 0)
+
+
+def test_column_border_trim_row_coverage_alone_would_have_failed():
+    """负结果护栏：字身里带满宽长横画的那一行，行墨占比跟版框线一样高——
+    只用"墨占比高"判会把它当版框切掉。厚度判据必须扛住这一条。"""
+    img = _column_with_inset_border(blank=12, border_h=0, gap=0)
+    img[40:52, 5:175] = 0                        # 首字里一道贯穿全宽的长横
+    assert column_row_profile(img)[45] > 0.9     # 这一行确实"满宽"
+    (top_px, top_case), _ = column_border_trim(img)
+    assert (top_case, top_px) == ("c", 0)        # 仍然不动

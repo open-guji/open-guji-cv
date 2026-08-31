@@ -6,8 +6,14 @@
     python scripts/export_column_warp_gold.py read_back.html \\
         -o ../open-guji-dataset/char-segmentation/column-warp
 
-金标一列一个 JSON，存三样东西：
-  * `text_band` —— 人工拖出来的文字带左右边界（矫正图局部 x），**真源**；
+金标一列一个 JSON，存这几样：
+  * `text_band` —— 文字带左右边界（矫正图局部 x），**真源**。它不是一个点
+    而是一条**走廊**：用户明说「我标定的不一定是唯一的坐标，应该让坐标尽量
+    靠近两边（保持墨量接近 0）」，所以存两组——
+      `human_*`     人拖到的位置（保守端，一定在零区里）；
+      `canonical_*` 从人标点**往外推到墨量还 <= `ZERO_EPS` 的最远处**（激进端）。
+    算法落在 [canonical, human] 这条走廊里都算对；推过 canonical = 留残墨，
+    越过 human = 吃字。
   * `verdict` —— 界行残墨跟字身墨分不分得开，**真源**；
   * `geometry` + `profile` —— 复现这次矫正所需的全部量，以及沿竖直方向的
     投影快照。快照是给人看形状用的，不当硬金标（改一行 warp 实现就会全量
@@ -40,6 +46,10 @@ from open_guji_cv.utils.column_projection import (  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from build_column_warp_review import SRC, page_geometry  # noqa: E402
+
+# "墨量接近 0" 的口径。人标点处的墨占比实测均值 0.0010 / 最大 0.0097，
+# 而界行裙边一路从 0.4 缓降、要到 0.01 才真正归零——0.005 卡在这两者之间。
+ZERO_EPS = 0.005
 
 COORD_SPACE = (
     "left_line/right_line/top_y/bottom_y 都在 Step1 的新坐标系里（原点在页面"
@@ -84,6 +94,14 @@ def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
             xl, xr = (int(v) for v in band_rec["v"].split(","))
         else:
             xl, xr = r["seed"]            # 人裁了但没动界 = 认可种子位置
+        prof = column_profile(warped)
+        # 从人标点往外推到墨量还接近 0 的最远处 —— 走廊的激进端
+        cl = xl
+        while cl - 1 >= 0 and prof[cl - 1] <= ZERO_EPS:
+            cl -= 1
+        cr = xr
+        while cr < len(prof) and prof[cr] <= ZERO_EPS:
+            cr += 1
         auto = column_text_band(warped)
 
         sample = {
@@ -100,7 +118,9 @@ def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
                 "top_y_source": "head_raise_inner_y" if head_y is not None else "page_top_border",
                 "warped_size": {"width": int(warped.shape[1]), "height": int(warped.shape[0])},
             },
-            "text_band": {"x_left": xl, "x_right": xr},
+            "text_band": {"human_left": xl, "human_right": xr,
+                           "canonical_left": cl, "canonical_right": cr,
+                           "zero_eps": ZERO_EPS},
             "verdict": rec["v"],
             "label_origin": "human",
             "moved_from_seed": bool(band_rec),
@@ -109,7 +129,7 @@ def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
             "column_metrics": {"drift_px": r["drift"], "trapezoid_px": r["dgap"],
                                 "anchor_offset_px": r["anchor"]},
             # 快照，不是硬金标：给人看"界行是尖峰还是鼓包"用的
-            "profile": [round(float(v), 4) for v in column_profile(warped)],
+            "profile": [round(float(v), 4) for v in prof],
         }
         (samples_dir / f"{book}_{page}_c{col}.json").write_text(
             json.dumps(sample, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -140,9 +160,11 @@ def write_metadata(out_dir: Path, samples: list[dict]) -> None:
         "book_distribution": books,
         "gold_definition":
             "每列经 warp_column 矫正成竖直矩形后，在该图自身的局部 x 坐标里，"
-            "「文字带」的左右边界 [x_left, x_right)——带外只该剩界行残墨、带内"
-            "字身完整；外加一条裁决：这两件事能不能同时做到（clean=分得开 / "
-            "mixed=分不开，界行残墨跟字身墨在横向糊在一起 / idk=拿不准）。",
+            "「文字带」的左右边界——带外只该剩界行残墨、带内字身完整；外加一条"
+            "裁决：这两件事能不能同时做到（clean=分得开 / mixed=分不开，界行"
+            "残墨跟字身墨在横向糊在一起 / idk=拿不准）。边界不是唯一解而是一条"
+            "**走廊**：human_* 是人拖到的保守端，canonical_* 是从人标点往外推到"
+            "墨占比仍 <= zero_eps(0.005) 的最远处；落在走廊内都算对。",
         "why_gold_does_not_go_stale":
             "金标挂在人对矫正图的判断上，样本里一并存了复现矫正所需的全部几何量"
             "（左右边线 + top_y/bottom_y + 采用的上下界口径）。只要 Step1 那两条"
