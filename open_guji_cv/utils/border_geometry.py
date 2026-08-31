@@ -9,10 +9,10 @@
 角度联合搜索照常在标准图像坐标里跑，这个模块只在探测完成后做一次坐标
 系转换，把结果包装成新约定的输出格式。
 
-抬头列的内外上边框目前**没有可靠的自动探测算法**（纯信号判据试过会把
-普通列的装饰花边也误判成抬头，见 `row_boundaries_design.md`「抬头列」
-节），`detect_borders()` 默认给空列表，需要人工标注补上——这也是新建
-金标测试集时最优先要补的部分。
+抬头列的内外上边框由 `detect_head_raise()` 探测，已接入 `detect_borders()`
+（14 页金标：13/13 可观测抬头框全中、8 页普通页零误报，inner 0.6px /
+outer 0.4px）。坐标口径跟金标一致：**`inner_y` 取线心、`outer_y` 取外延**
+（外框常是一条 15~23px 的粗条，取峰值位置会落在条中间、比外延低 2~4px）。
 """
 
 from __future__ import annotations
@@ -83,10 +83,12 @@ class HeadRaiseBorder:
     col: int  # 列号，从右到左、从 1 开始
     inner_y: float
     outer_y: float
-    # 人工金标里表示"真线被物理裁切/装订吃掉，标注时纯靠推测"(见 vol01/32)；
-    # `detect_head_raise()` 输出里表示"外边框没在扫描里观测到，outer_y 是按
-    # 实测中位间距从 inner_y 推的"(vol01/51 型：外框墨占比只有 0.00~0.18)。
-    # 两种情况下 outer_y 都不能跟观测到线的记录同等确信度使用。
+    # "这条记录不是全观测"。`detect_head_raise()` 里=外边框没在扫描中找到、
+    # outer_y 是按实测中位间距从 inner_y 推的(vol01/51 型：外框墨占比只有
+    # 0.00~0.18，整条没印上)；人工金标里同义，且拆得更细——那边另有
+    # inner_observed/outer_observed 两个字段分别记两个坐标是不是量出来的，
+    # estimated = not(inner_observed and outer_observed)。
+    # estimated=True 时 outer_y 不能跟观测到线的记录同等确信度使用。
     estimated: bool = False
 
 
@@ -162,6 +164,24 @@ def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float) -> fl
     return best
 
 
+def _outer_edge(curve: np.ndarray, lo: int, y_peak: float) -> float:
+    """粗条/线的**外延**：从峰往外(y 小的一侧)走到墨占比跌破峰值一半的地方，
+    线性插值取亚像素。金标 `outer_y` 就是按这个口径标的——外边框常常是一条
+    15~23px 的粗条，取"峰值位置"会落在条中间、比外延低 2~4px。"""
+    i = int(round(y_peak)) - lo
+    if not (0 <= i < len(curve)):
+        return float(y_peak)
+    half = curve[i] * 0.5
+    while i > 0 and curve[i - 1] >= half:
+        i -= 1
+    if i == 0:
+        return float(lo)
+    p0, p1 = float(curve[i - 1]), float(curve[i])
+    if p1 == p0:
+        return float(lo + i)
+    return float(lo + i) - (p1 - half) / (p1 - p0)
+
+
 def _dedup_peaks(peaks: list[tuple[float, float, float]],
                  min_dy: float = 12.0) -> list[tuple[float, float, float]]:
     """同一条线上会冒出好几个极大值点(尤其粗条)，按 y 间距去重，保留最上的。"""
@@ -235,7 +255,8 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
             continue
         per_col.append(dict(
             col=i + 1, inner_y=inner[0],
-            outer_y=outer[0] if outer else inner[0] - HR_DEFAULT_PAIR_GAP,
+            outer_y=(_outer_edge(curve, lo, outer[0]) if outer
+                     else inner[0] - HR_DEFAULT_PAIR_GAP),
             estimated=estimated, btop=btop, xl=xl, xr=xr))
 
     blocks: list[list[dict]] = []
