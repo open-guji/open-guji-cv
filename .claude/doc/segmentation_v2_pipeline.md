@@ -120,11 +120,15 @@ class BorderDetectionResult:
 误差 **0.6px**（最大 1.1px）、outer **0.4px**（最大 1.2px）。（这两个数
 原本是 6.9px / 3.3px，金标按真墨重拟后降到亚像素——**那几个 px 全是标注
 口径的差，探测器一直就找对了**；见下面「金标已按真墨重拟」。坐标口径已跟
-金标对齐：`inner_y` 取**线心**、`outer_y` 取**外延**。）详细的形态实测和四版失败原型见下面「抬头框
-自动探测」一节。`HeadRaiseBorder.estimated` 有两个来源：人工金标里表示
-"真线被物理装订/裁切吃掉、标注时纯靠推测"（vol01/32），算法输出里表示
-"外边框没在扫描里观测到、`outer_y` 是按实测中位间距推的"（vol01/51 型）——
-两种情况下 `outer_y` 都不能跟观测到线的记录同等确信度使用。
+金标对齐：`inner_y` 取**线心**、`outer_y` 取**外延**。）详细的形态实测和
+四版失败原型见下面「抬头框自动探测」一节。
+
+`HeadRaiseBorder.estimated` 统一表示"**这条记录不是全观测**"：算法输出里
+是"外边框没在扫描中找到、`outer_y` 按实测中位间距从 `inner_y` 推的"
+（vol01/51 型，外框墨占比只有 0.00~0.18、整条没印上）；人工金标里同义，
+且拆得更细——那边另有 `inner_observed`/`outer_observed` 分别记两个坐标是不是
+量出来的，`estimated = not(inner_observed and outer_observed)`。
+`estimated=True` 时 `outer_y` 不能跟观测到线的记录同等确信度使用。
 
 **测试集**：`open-guji-dataset/border-detection`，**14 页**（普通页
 vol01/137、138、24、65 + 曾以为是抬头、核校后确认不是的 vol01/9、14、
