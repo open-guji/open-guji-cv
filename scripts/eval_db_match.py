@@ -59,11 +59,15 @@ from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 
 
 # 已记账的金标标签问题（与 normalize 回归门的 known_defect 同思路：不进
-# 硬约束门，但每轮照报——金标修好后从这里删）。定性见 g3g4_error_analysis
+# 硬约束门，但每轮照报——**金标修好后从这里删**）。定性见 g3g4_error_analysis
 # §5 与 char-clustering README。
-KNOWN_GOLD_ISSUES: dict[str, str] = {
-    "vol01:23:7:12": "羣/詳：OCR 错认 + 语料邻近同字序 → spurious equal，金标为錯",
-}
+#
+# 2026-08-26 清空：里头唯一那条 `vol01:23:7:12`（羣/詳）根本不是这个实例的
+# 问题——错的是它匹配上的那条库内条目 `vol01:23:3:12`，那条 glyph-match/pairs
+# 早就按人裁改成「詳」了，char-clustering 这份漏同步。同源同图两个集标得不
+# 一样，在这里就表现为一条「已知金标问题」长期挂着豁免。豁免是记账，不是
+# 修理：金标错了就改金标（gold_sync_r1，连带 vol02:162:3:6 象→彖）。
+KNOWN_GOLD_ISSUES: dict[str, str] = {}
 
 
 def load_shard(samples_dir: Path, shard: str, include_excluded: bool = False):
@@ -153,6 +157,7 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
     matched = correct = sem_correct = 0
     guards = {"never_match": 0, "conflict": 0}
     wrong = []
+    hits: list[dict] = []                        # --dump-matches 用
     per_flag = []                                # True=命中, None=未命中
     for i, x in enumerate(inst):
         r = matcher.match(patches[i], feat=feats[i])
@@ -164,6 +169,9 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
             sem_correct += sem_ok
             if not sem_ok:
                 wrong.append((x["instance_id"], x["char"], r.char, r.matched_id))
+            hits.append({"instance_id": x["instance_id"], "gold": x["char"],
+                         "pred": r.char, "cov": round(r.cov, 4),
+                         "wmax": r.wmax, "sem_ok": bool(sem_ok)})
             per_flag.append(True)
             if branches is not None:
                 _, pg, col, idx = parse_id(x["instance_id"])
@@ -215,6 +223,7 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
         "mismatches": [{"id": a, "gold": g, "pred": p, "matched": m}
                        for a, g, p, m in wrong],
     }
+    report["_hits"] = hits          # --dump-matches 取走后从报告里删
     if branches is not None:
         e2e_n = matched + ctx_n
         report["branches"] = {
@@ -270,6 +279,12 @@ def main() -> None:
                     choices=["elastic", "coverage"],
                     help="精验判据（默认 elastic=现行；coverage=旧判据对照）")
     ap.add_argument("--out", default=None, help="报告 JSON 路径")
+    ap.add_argument("--dump-matches", default=None,
+                    help="把每个 same 档命中的 (id, 金标, 判出的字, cov, wmax) "
+                         "落成 jsonl。用途：闸开低跑**一遍**，事后就能算出"
+                         "整条 precision-闸 曲线，不用每个闸各跑一遍。"
+                         "（近似：闸变了 conflict 护栏的触发也会变，定完闸"
+                         "仍要按那个闸实跑一遍复核。）")
     ap.add_argument("--include-excluded", action="store_true",
                     help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--with-branches", action="store_true",
@@ -327,6 +342,16 @@ def main() -> None:
     # 硬约束量在「计门精度」：语义层（异体字形匹配是正确行为）+ 已记账
     # 金标问题豁免（KNOWN_GOLD_ISSUES，逐条带定性依据）。字形/语义精度
     # 照报不豁免——豁免只对门，不对数字。
+    if args.dump_matches:
+        with open(args.dump_matches, "w", encoding="utf-8") as f:
+            for r in reports:
+                for h in r["_hits"]:
+                    f.write(json.dumps({**h, "tag": r["tag"]},
+                                       ensure_ascii=False) + "\n")
+        print(f"→ {args.dump_matches}")
+    for r in reports:
+        r.pop("_hits", None)
+
     hard_fail = [r for r in reports if r["match_precision_gated"] < 0.999]
     if args.out:
         Path(args.out).write_text(
