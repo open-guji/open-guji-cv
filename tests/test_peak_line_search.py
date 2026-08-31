@@ -2,6 +2,8 @@
 import numpy as np
 
 from open_guji_cv.utils.peak_line_search import (
+    LineMatch,
+    _dedup_by_position,
     find_horizontal_border,
     half_height_score_at,
     joint_search_coarse_to_fine,
@@ -102,6 +104,26 @@ def test_find_horizontal_border_prefers_secondary_closer_to_center():
 
     result = find_horizontal_border(mask, "top", band_frac=0.2)
     assert abs(result.position - true_y) <= 3
+
+
+def _lm(position, score):
+    return LineMatch(position=position, slope=0.0, score=score, width=5.0, proj=score * 5)
+
+
+def test_dedup_by_position_drops_weaker_of_close_pair():
+    """相邻窗口切在同一条真实线中间时，两侧各自会精修出一条位置接近的线
+    （vol01/141 实测：x≈1633 和 x≈1648，相隔15px<min_dist），应该只保留
+    分数更高的那条，不是两条都留。"""
+    results = [_lm(100, 50), _lm(1633, 273.3), _lm(1648, 255.8), _lm(2005, 140.3)]
+    deduped = _dedup_by_position(results, min_dist=60)
+    positions = sorted(r.position for r in deduped)
+    assert positions == [100, 1633, 2005]
+
+
+def test_dedup_by_position_keeps_all_when_well_separated():
+    results = [_lm(100, 50), _lm(300, 80), _lm(500, 60)]
+    deduped = _dedup_by_position(results, min_dist=60)
+    assert len(deduped) == 3
 
 
 def test_find_horizontal_border_rejects_secondary_farther_from_center():

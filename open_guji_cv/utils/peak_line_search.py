@@ -239,6 +239,17 @@ def _windows_from_candidates(candidates: list[int], lo_bound: int, hi_bound: int
     return windows
 
 
+def _dedup_by_position(results: list[LineMatch], min_dist: int) -> list[LineMatch]:
+    """按分数从高到低贪心保留，跳过离已保留结果 < min_dist 的——见
+    `find_vertical_lines` 里"窗口切在同一条真实线中间"那段注释。"""
+    ordered = sorted(results, key=lambda r: -r.score)
+    deduped: list[LineMatch] = []
+    for r in ordered:
+        if all(abs(r.position - k.position) >= min_dist for k in deduped):
+            deduped.append(r)
+    return deduped
+
+
 def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: float = 90,
                          edge_margin: int = 200, expected_count: int | None = None,
                          alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST) -> list[LineMatch]:
@@ -269,8 +280,17 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     for lo, hi in windows:
         results.append(joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst))
 
+    # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
+    # 都收敛到这条线上，位置只差十几到几十像素，是精修阶段"两个窗口找到
+    # 同一条线"的重复（不是前面 NMS min_dist 不够大导致的候选级重复）。
+    # 不去重的话，这种重复会在 expected_count 按分数截断时把两个名额都占
+    # 走，挤掉别处一条本该收进来的真实列线（vol01/141 col8 实测复现：x≈1633
+    # 和x≈1648两个窗口各出一条线，双双挤进前10，页面最右一条真实列线被
+    # 顶掉）。用跟前面候选级 NMS 相同的间距假设去重（真实列距远大于 min_dist）。
+    results = _dedup_by_position(results, min_dist)
+
     if expected_count is not None and len(results) > expected_count:
-        results = sorted(results, key=lambda r: -r.score)[:expected_count]
+        results = results[:expected_count]
 
     results.sort(key=lambda r: r.position)
     return results
