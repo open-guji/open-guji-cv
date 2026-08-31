@@ -226,8 +226,12 @@ class Cell:
     左上角原点、x 向右、y 向下），不是页面坐标——列图矫正之后已经不是页面
     的一部分了（Step 2 的约定，这里沿用）。
 
-    - `slot`：格号，**从 1 开始**、从上到下递增（新管线计数约定）。一格夹注
-      会发出两个 `Cell`，`slot` 相同、`kind` 分别是 `jiazhu_a`/`jiazhu_b`。
+    - `slot`：格号，从上到下递增，**正文格从 1 开始，抬头多出来的格用负数**
+      （倒数第一个抬头格是 -1，再往上 -2、-3……），**跳过 0**——这样"同一个
+      slot 数字"跨列指的是同一条物理网格线：正文列的 slot 1 和抬头列
+      （不管抬头挤没挤出额外格）的 slot 1 永远是版框下同一条起始线，抬头
+      多占的格另算在负数区，不会把正文格往后挤。一格夹注会发出两个 `Cell`，
+      `slot` 相同、`kind` 分别是 `jiazhu_a`/`jiazhu_b`。
     - `x0/x1`：正常格是整个内容窗口（界行已剥掉）；夹注半格是各自那半边——
       `jiazhu_a` = 缝右（`[gap_center, x_hi]`），`jiazhu_b` = 缝左。
       **a 是右子列、先读**（双行小注先右行后左行）。
@@ -477,18 +481,25 @@ def reading_order(cells: list[Cell]) -> list[Cell]:
     正文格按 slot 升序；**连续夹注段**（slot 连续的夹注格）作为整体插在段位
     上，段内先读右子列 a 全部（slot 升序）、再读左子列 b 全部——双行小注先
     右行后左行。逐条对应生产 `extractor.jiazhu_reading_order`，输入乱序也行。
+
+    `slot` 在抬头/正文交界处跳过 0（`-1` 后面直接是 `1`），"连续"的判断
+    要把这一格也算相邻——物理上它们本来就是相邻两格，只是显示编号跳了一格。
     """
     by_slot: dict[int, list[Cell]] = {}
     for c in cells:
         by_slot.setdefault(c.slot, []).append(c)
     out: list[Cell] = []
     slots = sorted(by_slot)
+
+    def _adjacent(a: int, b: int) -> bool:
+        return b == a + 1 or (a == -1 and b == 1)
+
     k = 0
     while k < len(slots):
         s = slots[k]
         if any(c.sub for c in by_slot[s]):
             run = [s]
-            while (k + 1 < len(slots) and slots[k + 1] == slots[k] + 1
+            while (k + 1 < len(slots) and _adjacent(slots[k], slots[k + 1])
                    and any(c.sub for c in by_slot[slots[k + 1]])):
                 k += 1
                 run.append(slots[k])
@@ -507,7 +518,22 @@ def _ink_ratio(patch: np.ndarray, ink_threshold: int) -> float:
     return float((patch < ink_threshold).sum()) / float(patch.size)
 
 
-def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
+def _pos_to_slot(pos: int, n_raised: int) -> int:
+    """物理位置(1..n_body_slots+n_raised，从上到下连续)→ 对外的 slot 号。
+
+    `pos` 是内部处理（DP、夹注相邻性判断）用的连续编号，物理上永远
+    `pos+1 == pos的下一格`；`slot` 是对外的显示编号，抬头多出来的
+    `n_raised` 格排在最前面、编成 `-n_raised..-1`，正文接着从 `1` 编到
+    `n_body_slots`，**跳过 0**。两者只在这一处转换，其余内部逻辑（DP、
+    `jiazhu_split.link_runs` 的"相邻"判断）一律用 `pos`，不用 `slot`——
+    `slot` 在抬头/正文交界处不连续（-1 后面直接是 1），拿它判断"是否相邻"
+    会在这一格上出错。
+    """
+    return pos - n_raised - 1 if pos <= n_raised else pos - n_raised
+
+
+def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
+                    n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
                     ref_w: float | None = None, top_slack: float = 0.0,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
@@ -521,10 +547,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
 
     参数：
     - `period`：**纵向**字距先验，页级共享（`estimate_shared_period`）。
-    - `n_slots`：这一列有几格。**本模块不判断格数**——普通列是版式常量
-      （通常 21），抬头列可能多一格，这件事没有可靠的纯信号判据（见
+    - `n_body_slots`：正文格数，版式常量（这两册都是 21）。
+    - `n_raised`：抬头额外多出来的格数，默认 0（普通列，或"抬头但格数不变"
+      的列——那种只需要 `top_slack`，不需要 `n_raised`）。**本模块不判断
+      这两个数该给多少**——纯信号判据不可靠（见
       `.claude/doc/row_boundaries_design.md`「抬头列」节），由调用方按版式
-      先验/人工核校给。
+      先验/人工核校给。给对了，`n_body_slots+n_raised` 就是这一列实际要切
+      的总格数，DP 侧的行为跟改之前用一个 `n_slots` 完全一样；只是对外
+      编号从"1..n_slots 连续"变成"负数区(抬头) + 正数区(正文)"，见 `Cell.slot`。
     - `border_top`/`border_bottom`：上下版框在**列图坐标**里的 y。抬头列要
       让 Step 2 多矫正一截页顶（`warp_column(top_y=版框y-抬头余量)`），再把
       版框自己的 y 从这里告诉 Step 3，配合 `top_slack` 才能让首格落到版框
@@ -535,7 +565,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
       窗口宽度（会随列宽漂移，生产为此栽过，见 `jiazhu_split` 模块头）。
     - `min_ink_ratio`：格内墨占比低于此判空白格（口径同生产 `MIN_INK_RATIO`）。
     - `raise_tol`：格顶高出 `border_top` 超过此像素数就标 `raised`（抬头字）。
-      这是**几何标记**，不是版式判断——只说"这一格伸到版框线以上了"。
+      这是**几何标记**，跟 `slot` 是不是负数是两回事——`n_raised=0` 的
+      「抬头但格数不变」列，slot 1 本身也会被标 `raised`；只说"这一格伸到
+      版框线以上了"，不代表它占了额外的格。
     - `detect_jiazhu`：关掉就只出 char/blank/raised 三类。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
@@ -548,6 +580,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
     h, w = col_gray.shape[:2]
     if border_bottom is None:
         border_bottom = float(h - 1)
+    n_slots = n_body_slots + n_raised
 
     x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
     dst_w = x_hi - x_lo
@@ -560,24 +593,27 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
     result.content_x = (float(x_lo), float(x_hi))
     bounds = result.boundaries
 
+    # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
+    # （对外编号，抬头/正文交界处跳过 0）只在生成 Cell 的最后一步换算。
     patches: dict[int, np.ndarray] = {}
     inks: dict[int, float] = {}
     for k in range(n_slots):
+        pos = k + 1
         y0i = max(0, min(h, int(round(bounds[k]))))
         y1i = max(0, min(h, int(round(bounds[k + 1]))))
         patch = col_gray[y0i:y1i, x_lo:x_hi]
-        patches[k + 1] = patch
-        inks[k + 1] = _ink_ratio(patch, ink_threshold)
-    nonblank = {s for s in patches if inks[s] >= min_ink_ratio}
+        patches[pos] = patch
+        inks[pos] = _ink_ratio(patch, ink_threshold)
+    nonblank = {p for p in patches if inks[p] >= min_ink_ratio}
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
-            (s, jiazhu_split.gap_center(patches[s], ruler, ink_threshold)
-                if s in nonblank else None)
-            for s in sorted(patches)
+            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold)
+                if p in nonblank else None)
+            for p in sorted(patches)
         ]
         runs = jiazhu_split.link_runs(entries)
         runs, tail_a = jiazhu_split.adopt_run_tails(
@@ -585,19 +621,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
 
     cells: list[Cell] = []
     for k in range(n_slots):
-        slot = k + 1
+        pos = k + 1
+        slot = _pos_to_slot(pos, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
-        if slot in runs:
-            cx_local = runs[slot]
+        if pos in runs:
+            cx_local = runs[pos]
             cx = float(x_lo) + cx_local
             cxi = int(round(cx_local))
             # 半边无墨（段末单半）不发格子——生产同口径（`ty.size < 30`）。
             # a=右子列先读、b=左子列；单字尾（tail_a）的 b 侧只有邻字残渣。
             for kind, xs, xe in (("jiazhu_a", cxi, x_hi - x_lo),
                                   ("jiazhu_b", 0, cxi)):
-                if kind == "jiazhu_b" and slot in tail_a:
+                if kind == "jiazhu_b" and pos in tail_a:
                     continue
-                half = patches[slot][:, xs:xe]
+                half = patches[pos][:, xs:xe]
                 if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
                     continue
                 cells.append(Cell(slot=slot, y0=y0, y1=y1,
@@ -605,14 +642,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_slots: int = 21, *,
                                   kind=kind, gap_center=cx,
                                   ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
             continue
-        if slot not in nonblank:
+        if pos not in nonblank:
             kind = "blank"
         elif y0 < border_top - raise_tol:
             kind = "raised"
         else:
             kind = "char"
         cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),
-                          kind=kind, ink_ratio=round(inks[slot], 4)))
+                          kind=kind, ink_ratio=round(inks[pos], 4)))
 
     for i, c in enumerate(reading_order(cells), start=1):
         c.order = i

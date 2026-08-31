@@ -537,7 +537,8 @@ def denoise_column(warped_gray, ink_threshold=128, min_blob_area=6) -> np.ndarra
 - **页级共享量两个**：纵向字距 `period`（`estimate_shared_period`）和横向
   列距 `ref_w`（各列内容窗口宽度取中位数）——两个都必须是页级的，不能用
   本列自己算的，理由分别见下方「周期用页面先验」和「尺子」；
-- 该列的格数 `n_slots` 与上下版框在**列图坐标**里的 y。
+- 该列的格数（`n_body_slots` + `n_raised`，见下方 slot 编号约定）与上下
+  版框在**列图坐标**里的 y。
 
 **输出（已定版）**（`open_guji_cv/utils/row_boundaries.py`）：
 
@@ -546,7 +547,8 @@ CELL_KINDS = ("char", "blank", "raised", "jiazhu_a", "jiazhu_b")
 
 @dataclass
 class Cell:
-    slot: int                 # 格号，从 1 开始、从上到下（夹注两半共用同一个 slot）
+    slot: int                 # 格号：正文 1..n_body_slots，抬头多出来的格
+                               # 编 -1..-n_raised（从上到下），跳过 0；夹注两半共用同一个 slot
     y0: float; y1: float      # 纵向边界
     x0: float; x1: float      # 横向范围：正常格=内容窗口全宽，夹注半格=各自那半
     kind: str                 # CELL_KINDS 之一
@@ -562,13 +564,32 @@ class RowBoundaryResult:      # 原有字段不动，新增后两个
     cells: list[Cell]                     # Step 3 的正式产物
     content_x: tuple[float, float] | None # 剥掉界行之后的内容窗口 [x_lo, x_hi)
 
-def segment_column(col_gray, period, n_slots=21, *, border_top=0.0,
+def segment_column(col_gray, period, n_body_slots=21, n_raised=0, *, border_top=0.0,
                    border_bottom=None, ref_w=None, top_slack=0.0,
                    ink_threshold=128, min_ink_ratio=0.01, raise_tol=2.0,
                    detect_jiazhu=True, **dp_kwargs) -> RowBoundaryResult | None
 
 def reading_order(cells) -> list[Cell]    # 读序唯一权威，别自己按 slot 排
 ```
+
+**`slot` 用负数编号抬头多出来的格**（用户 2026-08-31 定，定版即用）：跟
+之前"1..n_slots 连续编号"的版本比，改动是把格数拆成两个数——
+`n_body_slots`（正文格数，版式常量）+ `n_raised`（抬头额外多出来的格数，
+默认 0）。正文从 1 编到 `n_body_slots`，抬头多出来的格排在最前面（物理上
+在最上面），编成 `-n_raised..-1`，**跳过 0**。理由：改之前"抬头但格数
+不变"（如 vol01/33 列4，`n_raised` 实为 0）跟"抬头多一格"（列1/2/3，
+`n_raised=1`）在旧编号下 slot 1 指的不是同一条物理网格线——列4 的 slot 1
+就是版框下第一格，列1/2/3 的 slot 1 却是多出来的那个抬头格，同一个数字
+跨列不指同一个位置，没法直接比较"第几格"。改成负数区之后，**只要
+`n_body_slots` 相同，任意两列的 slot `k`（`k≥1`）永远是同一条物理网格线**
+——不管这一列有没有抬头、抬头占了几格，都不影响正文区的编号。
+
+`n_raised` 只影响编号，不影响 DP：`fit_row_boundaries` 内部仍然只按
+`n_body_slots+n_raised` 这一个总格数跑，跟改之前用一个 `n_slots` 完全
+一样。夹注相邻性判断（`jiazhu_split.link_runs`、`reading_order` 的连续
+夹注段识别）一律用**物理位置**（1..总格数，永远连续），不用 `slot`——
+`slot` 在抬头/正文交界处跳过 0，拿它判断"是否相邻"会在这一格上出错；
+`reading_order` 为这一条边界专门加了 `-1` 与 `1` 相邻的特判。
 
 **坐标系**：Step 3 全程在**列图坐标**里（标准图像坐标：左上角原点、x 向右、
 y 向下），沿用 Step 2 的约定——列图矫正之后已经不是页面的一部分了。所以
@@ -722,9 +743,12 @@ Step 3 的输入契约就是「一列」。
 
 #### 已知局限
 
-- **`n_slots` 由调用方给，本步不判断**。普通列是版式常量（这两册 21），
-  抬头列可能多一格，纯信号判据不可靠（见下）。传错了 DP 会判无解或整列
-  滑格，不会「自适应」。
+- **`n_body_slots`/`n_raised` 由调用方给，本步不判断**。普通列是版式常量
+  （这两册 21），抬头列可能多一格，纯信号判据不可靠（见下）。传错了 DP
+  会判无解或整列滑格，不会「自适应」。（下面这批 40 页实测和「抬头列」
+  节的数据是接口改成负数 slot 之前跑的，当时还是单一 `n_slots` 参数——
+  数字本身不受影响，只是当时的「n_slots=22」对应现在的
+  `n_body_slots=21, n_raised=1`。）
 - **上游连坐**：Step 1 少探到一条竖直线，这一页的列宽就整体错位
   （vol02/105 实测量到 `wins=[87,84,172,171,167,186,505]`——只出来 7 列，
   两列窄成 85px、一列宽到 505px），Step 3 拿到的根本不是一列，无从谈起。

@@ -196,7 +196,7 @@ def test_find_content_window_is_a_noop_without_rules():
 
 def test_segment_column_types_plain_and_blank_cells():
     img = _synth_column_image(blank_slots=(5, 6))
-    r = fit_mod.segment_column(img, period=SLOT_H, n_slots=N_SLOTS)
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS)
     assert r is not None
     kinds = _kinds(r)
     assert kinds[5] == "blank" and kinds[6] == "blank"
@@ -215,7 +215,7 @@ def test_segment_column_types_plain_and_blank_cells():
 
 def test_segment_column_splits_jiazhu_run_into_a_and_b_halves():
     img = _synth_column_image(jiazhu_slots=(8, 9, 10, 11))
-    r = fit_mod.segment_column(img, period=SLOT_H, n_slots=N_SLOTS, ref_w=COL_W)
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
     assert r is not None
     jz = {}
     for c in r.cells:
@@ -237,7 +237,7 @@ def test_segment_column_splits_jiazhu_run_into_a_and_b_halves():
 
 def test_segment_column_reading_order_is_all_a_then_all_b_within_a_run():
     img = _synth_column_image(jiazhu_slots=(8, 9, 10))
-    r = fit_mod.segment_column(img, period=SLOT_H, n_slots=N_SLOTS, ref_w=COL_W)
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
     seq = [(c.slot, c.sub) for c in sorted(r.cells, key=lambda c: c.order)]
     assert seq[:7] == [(s, None) for s in range(1, 8)]
     assert seq[7:13] == [(8, "a"), (9, "a"), (10, "a"),
@@ -249,7 +249,7 @@ def test_segment_column_reading_order_is_all_a_then_all_b_within_a_run():
 
 def test_segment_column_detect_jiazhu_off_keeps_whole_cells():
     img = _synth_column_image(jiazhu_slots=(8, 9, 10, 11))
-    r = fit_mod.segment_column(img, period=SLOT_H, n_slots=N_SLOTS, ref_w=COL_W,
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
                                detect_jiazhu=False)
     assert all(c.sub is None for c in r.cells)
     assert len(r.cells) == N_SLOTS
@@ -259,7 +259,7 @@ def test_segment_column_marks_cells_above_the_top_border_as_raised():
     """抬头列：Step 2 多矫正了一截页顶（列图顶端那条线是这一列自己的抬头框），
     页面主版框在列图里的 y 由调用方告诉 Step 3；首格落到它上面 → 标 raised。"""
     img = _synth_column_image()          # 顶端那条线 = 抬头框，网格从 y=10 起
-    r = fit_mod.segment_column(img, period=SLOT_H, n_slots=N_SLOTS,
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
                                border_top=60.0,      # 主版框在列图里的位置
                                top_slack=SLOT_H)
     assert r is not None
@@ -271,4 +271,53 @@ def test_segment_column_marks_cells_above_the_top_border_as_raised():
 def test_segment_column_returns_none_when_dp_has_no_solution():
     img = _synth_column_image()
     # 只有 21 格的信号，硬要切 40 格：候选撑不出来，应当判无解而不是给错结果
-    assert fit_mod.segment_column(img, period=SLOT_H, n_slots=40) is None
+    assert fit_mod.segment_column(img, period=SLOT_H, n_body_slots=40) is None
+
+
+# ── 负数 slot：抬头多出来的格 ────────────────────────────────
+
+def test_pos_to_slot_skips_zero_and_matches_n_raised_zero_to_identity():
+    # n_raised=0 时必须跟旧行为完全一致：slot 就是 pos，1..n_body_slots
+    assert [fit_mod._pos_to_slot(p, 0) for p in range(1, 5)] == [1, 2, 3, 4]
+    # n_raised=2：抬头两格编 -2,-1，正文接着从 1 开始，中间没有 0
+    assert [fit_mod._pos_to_slot(p, 2) for p in range(1, 5)] == [-2, -1, 1, 2]
+    # n_raised=1：只有一个多出来的格，编 -1
+    assert [fit_mod._pos_to_slot(p, 1) for p in range(1, 4)] == [-1, 1, 2]
+
+
+def test_segment_column_numbers_extra_raised_slots_negative():
+    """抬头多出 2 格：列图顶端多画 2 个"抬头字"，物理上紧挨着正文第一格。
+    body 从 1 编到 21，多出来的 2 格编 -2/-1（不是 22/23，也不是把正文往后
+    挤），且都应该落进 raised（伸到 border_top 以上）。"""
+    n_raised = 2
+    img = _synth_column_image(n_slots=N_SLOTS + n_raised)   # 造 23 个连续画满的格
+    border_top = float(GRID_Y0 + n_raised * SLOT_H)          # 正文第一格顶 = 主版框
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
+                               n_raised=n_raised, border_top=border_top,
+                               top_slack=n_raised * SLOT_H + 10)
+    assert r is not None
+    slots = sorted({c.slot for c in r.cells})
+    assert slots == [-2, -1] + list(range(1, N_SLOTS + 1))   # 跳过 0，body 没被挤号
+    kinds = _kinds(r)
+    assert kinds[-2] == "raised" and kinds[-1] == "raised"   # 多出来的两格顶到版框线以上
+    assert kinds[1] == "char"                                 # 正文第一格没被顶上去
+    # order 仍是一条不断号的 1..N 序，负数区排在最前面（物理上在最上面）
+    ordered_slots = [c.slot for c in sorted(r.cells, key=lambda c: c.order)]
+    assert ordered_slots == slots
+    assert sorted(c.order for c in r.cells) == list(range(1, len(r.cells) + 1))
+
+
+def test_reading_order_treats_minus_one_and_one_as_adjacent_for_jiazhu_runs():
+    """slot 在 -1→1 之间跳过 0，但物理上是相邻两格——一段跨越这个边界的
+    夹注段（人为构造，检验的是 reading_order 的相邻性判断本身，不代表
+    真实版式会出现"抬头格是双行小注"这种组合）不应该被这道跳号拦腰截断。"""
+    cells = [
+        fit_mod.Cell(slot=-1, y0=0, y1=10, x0=50, x1=100, kind="jiazhu_a"),
+        fit_mod.Cell(slot=-1, y0=0, y1=10, x0=0, x1=50, kind="jiazhu_b"),
+        fit_mod.Cell(slot=1, y0=10, y1=20, x0=50, x1=100, kind="jiazhu_a"),
+        fit_mod.Cell(slot=1, y0=10, y1=20, x0=0, x1=50, kind="jiazhu_b"),
+        fit_mod.Cell(slot=2, y0=20, y1=30, x0=0, x1=100, kind="char"),
+    ]
+    seq = [(c.slot, c.sub) for c in fit_mod.reading_order(cells)]
+    # 整段(-1,1)先 a 后 b，说明 -1/1 被当成了相邻格、没有被 0 的空号截断
+    assert seq == [(-1, "a"), (1, "a"), (-1, "b"), (1, "b"), (2, None)]
