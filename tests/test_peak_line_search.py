@@ -2,6 +2,7 @@
 import numpy as np
 
 from open_guji_cv.utils.peak_line_search import (
+    find_horizontal_border,
     half_height_score_at,
     joint_search_coarse_to_fine,
     projection,
@@ -87,3 +88,32 @@ def test_projection_axis_v_and_h_are_transposes():
     row = projection(mask, "h")
     assert col[32] == 10  # 该列 10 行都是墨
     assert row[15] == 5   # 该行 5 列都是墨
+
+
+def test_find_horizontal_border_prefers_secondary_closer_to_center():
+    """整带最强峰是"离中心更远"的干扰（抬头装饰墨迹/外边框），真正的内
+    边框是窗口内次强但离中心更近的候选——应该换成次强候选。对应实测里
+    vol01/49 顶部（装饰墨迹分数比边框还高）和 vol01/137、138 底部（外边框
+    分数比内边框高）两类失败模式的最小复现。"""
+    mask = _blank_mask()
+    decoy_y, true_y = 12, 45  # 都在 top 搜索带(0..~60)内，间距33px < 60px窗口
+    mask[decoy_y - 2:decoy_y + 3, :] = 1.0        # 离中心更远，分数更高
+    mask[true_y - 2:true_y + 3, :150] = 1.0        # 离中心更近，分数较低但 ratio>0.2
+
+    result = find_horizontal_border(mask, "top", band_frac=0.2)
+    assert abs(result.position - true_y) <= 3
+
+
+def test_find_horizontal_border_rejects_secondary_farther_from_center():
+    """回归护栏：primary 已经是正确的边框（离中心更近），窗口内即使有个分数
+    相近甚至更高的候选，只要它离中心更远（比如抬头页顶部一坨强墨迹、或者
+    比 primary 更靠外的另一条线），也不该被换上去——防止重蹈"整带最强峰
+    优先"式的过度纠正（这条护栏对应之前一次失败尝试：宽范围搜索+离中心
+    最近，把好几个本来正确的页面带崩了）。"""
+    mask = _blank_mask()
+    true_y, far_decoy_y = 45, 12  # true 离中心更近，far_decoy 离中心更远
+    mask[true_y - 2:true_y + 3, :] = 1.0            # 主峰，应该保留
+    mask[far_decoy_y - 2:far_decoy_y + 3, :148] = 1.0  # 窗口内、分数稍弱、但离中心更远
+
+    result = find_horizontal_border(mask, "top", band_frac=0.2)
+    assert abs(result.position - true_y) <= 3
