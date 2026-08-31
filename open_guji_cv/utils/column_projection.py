@@ -118,41 +118,55 @@ def column_profile(warped_gray: np.ndarray, ink_threshold: int = 128) -> np.ndar
 
 
 def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
-                      rule_coverage: float = 0.35, skirt_coverage: float = 0.12,
+                      edge_ink_eps: float = 0.01, plateau_tol: float = 0.005,
                       max_rule_frac: float = 0.15) -> tuple[int, int]:
     """找矫正图里**文字带的左右边界** `(x_left, x_right)`（半开区间，右端不含）。
 
     边界外侧就是残余界行。判据：界行是一条贯穿整列的竖直墨线，在
-    `column_profile` 上表现为紧贴边缘、墨占比很高的一小段；字身墨再密也
-    到不了那个占比（字与字之间有空隙）。所以从两端各自往里扫——
+    `column_profile` 上表现为紧贴边缘、由高到低衰减的一段；界行和字身之间
+    有一道墨量的**谷**。所以从两端各自往里扫——
 
-    1. 先吃掉墨占比 >= `rule_coverage` 的那一段（界行本体）；
-    2. 再吃掉紧跟着的、墨占比仍 >= `skirt_coverage` 的一段（界行边缘的
-       灰过渡带 + 矫正重采样抹开的裙边）；
-    3. 整个过程限制在 `max_rule_frac * 宽度` 以内——扫过头就是把字吃了，
-       宁可留一点残墨也不切字（Step4 的字框收缩还有一道防线，切掉的字
-       没人补得回来）。
+    1. 边缘那一格墨占比 `<= edge_ink_eps` 就直接收手：这一侧压根没有界行
+       （版心侧被装订切掉了），别动。
+    2. 否则在 `max_rule_frac * 宽度` 的窗口里找**最低点**，边界取
+       **第一个降到「最低点 + `plateau_tol`」的位置**——也就是界行衰减到谷底
+       的那一格。
 
-    某一侧压根没有界行（比如版心侧被装订切掉了）时，第 1 步一开始就不满足，
-    返回的边界就是 0 / 宽度本身，不会误吃。
+    第 2 步这个"扫到窗口最低点"的写法是拿 32 列人裁金标标定出来的
+    （`char-segmentation/column-warp`）。**上一版是"先吃墨占比 >= 0.35 的
+    界行本体、再吃 >= 阈值的裙边"，两头都会翻车，已撤销**：
+
+    * 界行被残余倾斜抹糊时（vol01/47 那几列，整段墨占比只有 0.10~0.12）
+      够不到 0.35，第一步就判成"这侧没界行"，整条界行原样留在带里（欠 30px）；
+    * 带内有一道贯穿全高的淡竖痕时（vol01/33 c5 右侧，界行降到 0.01 之后
+      **永远停在 0.01**、不再归零），裙边判据一路吃到 15% 上限，切进字身 21px。
+
+    "扫到最低点"对两者都成立：糊掉的界行照样有谷（0.11→0.00），淡竖痕的
+    0.01 平台**本身就是窗口最低点**，扫到它就停，不会继续啃。
+
+    两个阈值的默认值是在 32 列金标上**扫曲线**定的，不是挑的单点：
+    `plateau_tol` 取 0.002 时命中 57/64、但会切进字身 23px；取 0.005 时命中
+    56/64、**切字 0px**（欠量 39px）；取 0.01 直接掉到 35/64。按"宁可留残墨
+    也不切字"取 0.005 这个零切字点，少的那 1 条命中是自愿付的价。
+    `edge_ink_eps` 在 0.01/0.02/0.04 之间只影响欠量（39/51/51px），不影响
+    切字，取最小的 0.01。`max_rule_frac` 这个上限也保留着——留下的残墨
+    Step4 的字框收缩还有一道防线，切掉的字谁也补不回来。
     """
     prof = column_profile(warped_gray, ink_threshold)
     n = len(prof)
-    limit = max(1, int(round(max_rule_frac * n)))
+    limit = max(1, min(int(round(max_rule_frac * n)), n // 2))
 
-    def scan(order: list[int]) -> int:
-        eaten = 0
-        while eaten < limit and prof[order[eaten]] >= rule_coverage:
-            eaten += 1                     # 第1步：界行本体
-        if eaten == 0:
-            return 0                       # 这一侧压根没有界行，别动
-        while eaten < limit and prof[order[eaten]] >= skirt_coverage:
-            eaten += 1                     # 第2步：界行边缘的灰过渡带/重采样裙边
-        return eaten
+    def scan(order: np.ndarray) -> int:
+        window = prof[order[:limit]]
+        if window[0] <= edge_ink_eps:
+            return 0                        # 这一侧没有界行，别动
+        floor = float(window.min())
+        return int(np.argmax(window <= floor + plateau_tol))
 
-    left = scan(list(range(n)))
-    right = n - scan(list(range(n - 1, -1, -1)))
-    if left >= right:                       # 整条都被判成界行——判据失效，原样返回
+    idx = np.arange(n)
+    left = scan(idx)
+    right = n - scan(idx[::-1])
+    if left >= right:                        # 判据失效，原样返回，绝不返回空带
         return 0, n
     return left, right
 
@@ -171,4 +185,91 @@ def strip_column_rules(warped_gray: np.ndarray, ink_threshold: int = 128,
     out = warped_gray.copy()
     out[:, :left] = 255
     out[:, right:] = 255
+    return out
+
+
+def column_row_profile(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
+                        ink_threshold: int = 128) -> np.ndarray:
+    """矫正图**沿水平方向的投影**：长度 = 图高，每个 y 上的墨占比（0~1）。
+
+    `band` 是 `column_text_band` 给的文字带 —— **必须先把两侧界行排除掉再算**，
+    否则界行贯穿整列、每一行都带着 0.03~0.06 的底噪，"归不归零"这个判据就废了。
+    默认按整幅算，只在调用方已经把界行抹白之后才应该这么用。
+    """
+    lo, hi = band if band is not None else (0, warped_gray.shape[1])
+    return (warped_gray[:, lo:hi] < ink_threshold).astype(np.float64).mean(axis=1)
+
+
+def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
+                        ink_threshold: int = 128, ink_eps: float = 0.02,
+                        border_max_rows: int = 30, inset_look: int = 70,
+                        glue_px: int = 3, bar_probe: int = 8,
+                        bar_coverage: float = 0.65
+                        ) -> tuple[tuple[int, str], tuple[int, str]]:
+    """上下版框残墨该削掉几行 —— 返回 `((top_px, top_case), (bottom_px, bottom_case))`。
+
+    上下界用的是 `column_bounds` 的口径（页面右端 x=0 锚点），落点未必正好压在
+    版框上，所以矫正图的头尾常常带进一截版框线。判据在水平投影上分四档：
+
+    * **a 档**：边缘就有墨，且**迅速归零**（连续墨行 <= `border_max_rows`）——
+      那一段就是版框本体，整段削掉。
+    * **b 档**：边缘有墨且**不归零**（连续墨行很长）——版框跟首字粘连，分不出
+      界在哪，只削 `glue_px`（默认 3）行，宁可留一点也不切字。
+    * **c 档**：边缘那一片是空白，往里第一段墨又厚又是字——这一端没带进版框，
+      **不动**。
+    * **d 档**：边缘先是一段空白，往里才碰到一条**薄横线**——版框"内缩"了，
+      把空白连同横线一起削掉。这是 `column_bounds` 取 x=0 锚点的直接后果：
+      锚点越过了该列真实版框，版框线就落在图里面而不是边上。32 列金标里
+      **下端有 8 条是这种**（空白 5~47 行），锚点偏移量 10~49px，只按"边缘
+      有没有墨"判会全部漏掉。
+
+    分 a/b/c/d 靠两把尺子，都是拿 32 列金标标定的：
+
+    1. **厚度**（`border_max_rows`）分"版框线"和"字"：跳过前导空白之后第一段
+       连续墨的厚度实测**要么 3~13 行（版框线）、要么 91~121 行（首字，跟
+       `row-boundaries` 金标的字格高 108.8px 对得上）**，中间 13→91 完全没有
+       样本，阈值取 30 落在空档里、且离两边都有余量。
+    2. **起始陡度**（`bar_coverage` / `bar_probe`）分"厚墨段是纯首字"还是
+       "版框粘着首字"：版框粘着字时墨占比在头 3~4 行就冲到 0.74~0.93，纯首字
+       的头 8 行最高只到 0.50。
+
+    **行墨占比本身不能当判据**（负结果，试过了）：正文中段的字身行墨占比最高
+    能到 0.747、中位 0.598，跟内缩版框横线的 0.56~0.93 **完全重叠**——带长
+    横画的字（一/三/王之类）整行就是满的。只有把探测限制在"某段墨的头几行"
+    才分得开，因为字的顶边必然是细的。
+    """
+    prof = column_row_profile(warped_gray, band, ink_threshold)
+
+    def one(p: np.ndarray) -> tuple[int, str]:
+        blank = 0
+        while blank < len(p) and p[blank] <= ink_eps:
+            blank += 1
+        if blank > inset_look or blank >= len(p):
+            return 0, "c"                     # 边缘一大片空白，里面是正文
+        run = blank
+        while run < len(p) and p[run] > ink_eps:
+            run += 1
+        thick = run - blank
+        if thick <= border_max_rows:           # 一条薄横线 = 版框
+            return run, ("a" if blank == 0 else "d")
+        if float(p[blank:blank + bar_probe].max()) >= bar_coverage:
+            return blank + glue_px, "b"        # 版框粘着首字，只削一点
+        return (glue_px, "b") if blank == 0 else (0, "c")
+
+    return one(prof), one(prof[::-1])
+
+
+def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
+                          **kwargs) -> np.ndarray:
+    """把上下版框残墨抹成背景白，返回**同尺寸**的新图（理由同 `strip_column_rules`）。
+
+    调用顺序是**先侧后上下**：`strip_column_rules` -> `column_text_band` ->
+    这个函数，因为"归不归零"必须在排除了两侧界行的水平投影上判。
+    """
+    (top_px, _), (bot_px, _) = column_border_trim(warped_gray, band, **kwargs)
+    out = warped_gray.copy()
+    if top_px:
+        out[:top_px] = 255
+    if bot_px:
+        out[warped_gray.shape[0] - bot_px:] = 255
     return out

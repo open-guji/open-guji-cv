@@ -3,12 +3,13 @@
 
     python scripts/eval_column_warp.py ../open-guji-dataset/char-segmentation/column-warp
 
-三把尺子，**吃字和留残墨分开报**——代价完全不对称：留一点界行残墨下游还能救，
-切掉的字身墨谁也补不回来。
+金标的边界**不是一个点而是一条走廊** `[canonical, human]`（用户明说标定的坐标
+不唯一，只要墨量接近 0、越靠外越好）。所以尺子按走廊来，**吃字和留残墨分开报**
+——代价完全不对称：留一点界行残墨下游还能救，切掉的字身墨谁也补不回来。
 
-  1. 边界误差   |pred - gold|，左右两条分别算（px）。
-  2. 吃进字身   pred 比 gold 窄的那部分，也就是被误当界行清掉的字身区域（px）。
-  3. 留下残墨   gold 带外、pred 带内那一段里的墨量——没清干净的界行（墨占比）。
+  1. 落在走廊内   pred 在 [canonical, human] 之间 = 对，误差记 0。
+  2. 吃进字身     pred 越过 human 往里 = 把字身当界行清掉了（px）。
+  3. 留下残墨     pred 没推到 canonical = 界行残墨留在带里（px + 那一段的墨量）。
 
 按人裁的 verdict 分组报：只有 `clean`（人认为界行残墨和字身墨分得开）那组才是
 位置精度基准；`mixed` 组人已经判定「做不到两者兼得」，那组的边界误差说明不了
@@ -53,25 +54,27 @@ def rebuild(sample: dict) -> np.ndarray:
 
 def measure(sample: dict) -> dict:
     warped = rebuild(sample)
-    gl, gr = sample["text_band"]["x_left"], sample["text_band"]["x_right"]
+    tb = sample["text_band"]
+    hl, hr = tb["human_left"], tb["human_right"]
+    cl, cr = tb["canonical_left"], tb["canonical_right"]
     pl, pr = column_text_band(warped)
     prof = column_profile(warped)
 
-    def outside_ink(lo: int, hi: int) -> float:
-        """[lo,hi) 里的平均墨占比；空区间算 0。"""
+    def ink(lo: int, hi: int) -> float:
         return float(prof[lo:hi].mean()) if hi > lo else 0.0
 
     return dict(
         book=sample["book"], page=sample["page"], col=sample["col"],
         verdict=sample["verdict"], tags=sample["tags"], w=warped.shape[1],
-        err_left=abs(pl - gl), err_right=abs(pr - gr),
-        # 预测带比金标窄 = 把字身当界行清掉了
-        eaten_left=max(0, pl - gl), eaten_right=max(0, gr - pr),
-        # 预测带比金标宽 = 界行残墨留在带里没清掉；用那一段的墨量衡量
-        left_residue=outside_ink(pl, gl) if gl > pl else 0.0,
-        right_residue=outside_ink(gr, pr) if pr > gr else 0.0,
-        # 人标的带外还剩多少墨——这是"界行残墨到底有多少"的绝对量，跟算法无关
-        gold_outside_ink=max(outside_ink(0, gl), outside_ink(gr, warped.shape[1])),
+        in_corridor_left=cl <= pl <= hl, in_corridor_right=hr <= pr <= cr,
+        # 越过 human 往里 = 吃字（左界比 human 大 / 右界比 human 小）
+        eaten_left=max(0, pl - hl), eaten_right=max(0, hr - pr),
+        # 没推到 canonical = 残墨留在带里
+        short_left=max(0, cl - pl), short_right=max(0, pr - cr),
+        residue_ink=max(ink(pl, cl), ink(cr, pr)),
+        corridor_left=hl - cl, corridor_right=cr - hr,
+        # 人标带外的墨占比：界行残墨的绝对量，与算法无关
+        gold_outside_ink=max(ink(0, cl), ink(cr, warped.shape[1])),
     )
 
 
@@ -89,28 +92,33 @@ def report(rows: list[dict]) -> None:
     groups = [(v, g) for v, g in groups if g] + [("全部", rows)]
 
     print("\n（每格 = 均值 / 中位 / 最大）")
-    head = ("分组", "n", "左界误差px", "右界误差px", "吃进字身px", "残墨墨占比")
-    print(f"{head[0]:<8}{head[1]:>4} | {head[2]:^19} | {head[3]:^19} | "
+    head = ("分组", "n", "落在走廊内", "吃进字身px", "差多少到走廊px", "留下的残墨")
+    print(f"{head[0]:<8}{head[1]:>4} | {head[2]:^11} | {head[3]:^19} | "
           f"{head[4]:^19} | {head[5]:^21}")
     for name, g in groups:
+        hit = sum(r["in_corridor_left"] + r["in_corridor_right"] for r in g)
         eaten = [r["eaten_left"] + r["eaten_right"] for r in g]
-        resid = [max(r["left_residue"], r["right_residue"]) for r in g]
-        print(f"{name:<8}{len(g):>4} | {stat([r['err_left'] for r in g]):^19} | "
-              f"{stat([r['err_right'] for r in g]):^19} | "
-              f"{stat(eaten):^19} | {stat(resid, '%.3f'):^21}")
+        short = [r["short_left"] + r["short_right"] for r in g]
+        resid = [r["residue_ink"] for r in g]
+        print(f"{name:<8}{len(g):>4} | {f'{hit}/{2 * len(g)} 条界':^11} | "
+              f"{stat(eaten):^19} | {stat(short):^19} | {stat(resid, '%.3f'):^21}")
 
     n_eat = sum(1 for r in rows if r["eaten_left"] + r["eaten_right"] > 0)
     print(f"\n吃到字身的列：{n_eat} / {len(rows)}"
           f"（宁可留残墨也不切字，这个数应该压到 0）")
-    print("金标带外的墨占比（界行残墨的绝对量，与算法无关）："
+    print(f"走廊宽度（human 到 canonical 有多少 px 余地）："
+          f"{stat([r['corridor_left'] for r in rows])} 左 / "
+          f"{stat([r['corridor_right'] for r in rows])} 右")
+    print("金标 canonical 之外的墨占比（界行残墨的绝对量，与算法无关）："
           f"{stat([r['gold_outside_ink'] for r in rows], '%.3f')}")
 
-    worst = sorted(rows, key=lambda r: -(r["err_left"] + r["err_right"]))[:8]
-    print("\n误差最大的 8 列：")
+    worst = sorted(rows, key=lambda r: -(r["eaten_left"] + r["eaten_right"]
+                                          + r["short_left"] + r["short_right"]))[:8]
+    print("\n偏出走廊最多的 8 列：")
     for r in worst:
         print(f"  {r['book']}/{r['page']} c{r['col']:<2} 宽{r['w']:>4} "
-              f"左{r['err_left']:>3} 右{r['err_right']:>3} "
-              f"吃{r['eaten_left'] + r['eaten_right']:>3}  "
+              f"吃{r['eaten_left'] + r['eaten_right']:>3} "
+              f"欠{r['short_left'] + r['short_right']:>3}  "
               f"[{r['verdict']}] {'/'.join(r['tags'])}")
 
     by_tag: dict[str, list[dict]] = {}
@@ -119,10 +127,12 @@ def report(rows: list[dict]) -> None:
             by_tag.setdefault(t, []).append(r)
     print("\n按选列标签（同一列可能挂多个标签，行间会重叠）：")
     for t, g in sorted(by_tag.items(), key=lambda kv: -len(kv[1])):
-        errs = [r["err_left"] + r["err_right"] for r in g]
+        off = [r["eaten_left"] + r["eaten_right"] + r["short_left"] + r["short_right"]
+               for r in g]
+        hit = sum(r["in_corridor_left"] + r["in_corridor_right"] for r in g)
         mixed = sum(1 for r in g if r["verdict"] == "mixed")
-        print(f"  {t:<12} n={len(g):>3}  边界误差合计 {stat(errs)}  "
-              f"判「分不开」{mixed}")
+        print(f"  {t:<12} n={len(g):>3}  偏出走廊 {stat(off)}  "
+              f"命中 {hit}/{2 * len(g)}  判「分不开」{mixed}")
 
 
 def main() -> None:
