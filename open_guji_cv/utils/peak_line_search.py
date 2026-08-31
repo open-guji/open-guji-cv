@@ -277,11 +277,24 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
 
 
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
-                            alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST) -> LineMatch:
+                            alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
+                            secondary_window: int = 60, secondary_dead_zone: int = 15,
+                            secondary_ratio_thresh: float = 0.2) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
     "相邻线"的概念，直接限定在页边margin区域内找最强峰即可。
+
+    带内全局分数最高的峰不一定是真正的内边框：抬头页顶部的抬头装饰墨迹
+    分数有时比边框本身还高（vol01/49），底部有时会锁到外边框而不是内
+    边框（vol01/137、138）。这两种情况有个共同点——真正的内边框物理上
+    总是比这些干扰峰更靠近页面中心（装饰墨迹在边框外/上方，外边框在
+    纸边更外侧）。所以先按原逻辑找 `primary`（保证所有已经正确的页面不
+    受影响），再只在 `primary` 位置附近 ±`secondary_window` px 的窄窗口内
+    （不能扩大到整个条带——之前试过带内多候选+相对分数阈值+"离中心最近"
+    的方案，结果远处噪声峰把好几个本来正确的页面带崩了，见
+    `.claude/doc/peak_line_search.md`）找一个"比 primary 更靠近页面中心、
+    且匹配度达到 primary 一定比例"的候选，找到就换成它，否则保留 primary。
     """
     h, w = mask.shape
     band = max(10, int(h * band_frac))
@@ -289,4 +302,30 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
         lo, hi = 0, band
     else:
         lo, hi = h - band, h - 1
-    return joint_search_coarse_to_fine(mask, "h", lo, hi, alpha=alpha, hyst=hyst)
+
+    primary = joint_search_coarse_to_fine(mask, "h", lo, hi, alpha=alpha, hyst=hyst)
+
+    center = h / 2.0
+    primary_dist = abs(primary.position - center)
+    wlo = max(lo, int(round(primary.position)) - secondary_window)
+    whi = min(hi, int(round(primary.position)) + secondary_window)
+    positions, curve = sample_line_curve(mask, "h", wlo, whi, primary.slope)
+
+    best_secondary: dict | None = None
+    for i in local_maxima(curve, radius=5):
+        pos = float(positions[i])
+        if abs(pos - primary.position) < secondary_dead_zone:
+            continue
+        if abs(pos - center) >= primary_dist:
+            continue
+        wd, sc = half_height_score_at(curve, i, alpha, hyst)
+        if primary.score <= 0 or sc / primary.score <= secondary_ratio_thresh:
+            continue
+        if best_secondary is None or sc > best_secondary["score"]:
+            best_secondary = dict(position=pos, score=sc, width=wd, proj=float(curve[i]))
+
+    if best_secondary is None:
+        return primary
+    return LineMatch(position=best_secondary["position"], slope=primary.slope,
+                      score=best_secondary["score"], width=best_secondary["width"],
+                      proj=best_secondary["proj"])
