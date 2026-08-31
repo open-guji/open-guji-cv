@@ -204,7 +204,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
                         ink_threshold: int = 128, ink_eps: float = 0.02,
                         border_max_rows: int = 30, inset_look: int = 70,
                         glue_px: int = 3, bar_probe: int = 8,
-                        bar_coverage: float = 0.65
+                        bar_coverage: float = 0.65, inset_min_peak: float = 0.15
                         ) -> tuple[tuple[int, str], tuple[int, str]]:
     """上下版框残墨该削掉几行 —— 返回 `((top_px, top_case), (bottom_px, bottom_case))`。
 
@@ -250,8 +250,15 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
         while run < len(p) and p[run] > ink_eps:
             run += 1
         thick = run - blank
-        if thick <= border_max_rows:           # 一条薄横线 = 版框
-            return run, ("a" if blank == 0 else "d")
+        if thick <= border_max_rows:           # 一条薄横线
+            if blank == 0:
+                return run, "a"                 # 贴着边缘，削掉几行无害
+            # 内缩档：要求这条线本身有像样的墨，否则那是噪点不是版框
+            # （vol01/142 c6 上端：空白 30 行后 3 行、墨占比只有 0.03，
+            #   人裁的结论是"没残墨"，早先按 d 档削了 33 行是假阳性）
+            if float(p[blank:run].max()) >= inset_min_peak:
+                return run, "d"
+            return 0, "c"
         if float(p[blank:blank + bar_probe].max()) >= bar_coverage:
             return blank + glue_px, "b"        # 版框粘着首字，只削一点
         return (glue_px, "b") if blank == 0 else (0, "c")
@@ -273,3 +280,35 @@ def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None =
     if bot_px:
         out[warped_gray.shape[0] - bot_px:] = 255
     return out
+
+
+def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
+                  **kwargs) -> tuple[np.ndarray, dict]:
+    """Step2 的收尾：去噪 + 清两侧界行 + 清上下版框，返回 `(清干净的图, 诊断)`。
+
+    **顺序是有讲究的，这个函数存在的意义就是把它固化下来**：
+
+    1. `column_text_band` 在**原始矫正图**上定文字带 —— 这一步必须在抹白之前
+       做，抹白之后边缘变成纯白，`column_text_band` 会判成"这侧没界行"而返回
+       整幅宽度；
+    2. `strip_column_rules` 抹掉带外的界行；
+    3. `column_border_trim` 在**抹白之后的图上、且只在文字带宽度内**算水平
+       投影 —— 两侧界行贯穿整列，不排除掉的话每一行都带着底噪，"归不归零"
+       这个判据就废了；带外那片白也要排除，否则整条曲线被稀释约 9%，
+       `ink_eps` 这类阈值全部失准。
+
+    诊断字典里带 `band` / `top`/`bottom` 的削除行数与档位，方便评测和标注页复用。
+    """
+    denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
+    band = column_text_band(denoised, ink_threshold=ink_threshold)
+    no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold)
+    (top_px, top_case), (bot_px, bot_case) = column_border_trim(
+        no_rules, band, ink_threshold=ink_threshold, **kwargs)
+    out = no_rules.copy()
+    if top_px:
+        out[:top_px] = 255
+    if bot_px:
+        out[out.shape[0] - bot_px:] = 255
+    return out, {"band": band,
+                  "top": {"px": top_px, "case": top_case},
+                  "bottom": {"px": bot_px, "case": bot_case}}
