@@ -207,12 +207,30 @@ for page in ["137", "138", "32", "33", "49"]:
 
 **输出**：该列去透视后的竖直矩形灰度图（去噪后）。
 
-**现有实现**：`row_boundaries.py`/`peak_line_search.py` 探索时都各自写过
-一次性的射影矫正代码（`cv2.getPerspectiveTransform` + `warpPerspective`，
-只用两条边线的 position+slope，取满页高不按上下版框裁），但没有沉淀成
-独立、可复用的函数，也没有做"去噪"这一部分。
+**现有实现**（已定版，`open_guji_cv/utils/column_projection.py`）：
 
-**测试集**：**目前没有**。
+```python
+def warp_column(gray, left: VLine, right: VLine,
+                 top_y: float = 0.0, bottom_y: float | None = None) -> np.ndarray:
+    """把 left/right 两条竖直边线之间的列矫正成竖直矩形灰度图。
+    top_y/bottom_y 是新坐标系 y，应传该列的上下版框 y（不是整页边缘）。
+    输出宽度取两端间距较大者（避免内容被压扁），沿用标准图像坐标系
+    （矫正后的列图不再是页面的一部分，没必要维持右上角原点约定）。"""
+
+def denoise_column(warped_gray, ink_threshold=128, min_blob_area=6) -> np.ndarray:
+    """清掉二值化后面积 < min_blob_area 的孤立小连通体（书斑/墨渍/灰尘），
+    笔画连通体面积远大于这个量级，不会被误清；只删孤立小块，不是整体滤波。"""
+```
+
+之前 `row_boundaries.py`/`peak_line_search.py` 探索时各自写过一次性射影
+矫正代码（只用两条边线的 position+slope，取满页高不按上下版框裁），现在
+收拢成这一处；`denoise_column` 是新加的，之前完全没有这部分。合成图单测
+（`tests/test_column_projection.py`）验证了倾斜列矫正后应变成均匀矩形、
+退化输入报错、孤立小点被清除但笔画保留。
+
+**测试集**：单测覆盖了函数本身的数学正确性，但**真实页面的金标测试集
+目前没有**——"矫正得准不准"要拿真实倾斜列跟人工标的"矫正后应该长什么样"
+比对，这类金标还没建（跟 Step 1 一样，需要人工在真实页面上标注）。
 
 ### Step 3：单列文字切分
 
@@ -261,5 +279,9 @@ extract_page`（连通体归属 + 清边 + 弯曲界行处理等一整套已经�
 
 ## 下一步
 
-先细化 Step 1（边框探测）的严格算法/接口定义，并建金标测试集——普通页
-一批 + 抬头页专项一批（抬头框内外边框坐标目前完全是空白，优先级最高）。
+Step 1（边框探测）已定版并测过准确度（竖直线 2.6px、水平线 top 1.1px/
+bottom 8.9px 均值），Step 2（单列射影变换+去噪）函数已定版但没有真实
+页面金标。下一步任选其一：a) 给 Step 1/Step 2 建更大的真实页面金标集
+（当前 5 页，抬头框样本尤其少），b) 细化 Step 3（双行小注还完全没接进
+`row_boundaries.py` 这条新链路）。两者都需要人工标注/判读，看优先级
+再定。
