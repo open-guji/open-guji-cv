@@ -39,14 +39,15 @@ lam=0.3`）是在 vol02/135 九列上网格搜出来的，九列全部收敛到�
   不负责"这一页有几列"这类版面判断。
 - 空白区间内部的分割点位置本质上没有真实信号支撑（纯合成候选撑住可行性），
   精度不如落在真实字缝上的点。
-- **抬头列**：`top_slack` 参数解决了"首字位置比 border_top 高，但字数不变"
-  这一种（vol01/33 列4 实测精确复现人工金标，0px 误差）。**没解决**"抬头
-  空间大到能多塞一个字"这一种（同页列1/2/3，字数从21变22）——这三列窗口
-  放宽后 DP 会被首字自己的笔画间隙(把它们识别成候选)带偏，均值误差 88px
-  的量级，不能用。这一子问题需要的不是调参，是别的判据（"这一列到底几个
-  字"目前只能靠人工金标或版式先验，装饰性花边墨量与真字墨量在这一页上
-  分不开，试过的"上探测墨量占比"判据把普通列的角框装饰也一并误判成了
-  抬头字）。
+- **抬头列**：`top_slack` 把首锚点窗口往上放宽，**直接开到列图顶端**
+  （`top_slack=border_top`）即可——vol01/33 四个抬头列均值误差 0.6/12.3/
+  0.6/0.0px（对照人工金标）。别按 period 的倍数抠：早先用 1×period 时
+  列2 误差 88px，根因不是"窗口里不干净"，是金标首点就落在窗口外面 3px，
+  开大就进来了（1.2× 到 2.5× 逐档实测完全一样，见设计文档「修正」节）。
+  开错代价也很小：把普通列全开也只从 0px 退化到 0.9~1.2px。
+  **仍然没解决的是"这一列到底几个字"**（抬头列可能 21 也可能 22）——纯
+  信号判据不可靠（试过的"上探测墨量占比"把普通列的角框装饰也误判成抬头
+  字），`n_slots` 仍要调用方按版式先验/人工核校给。
 
 详见 `.claude/doc/row_boundaries_design.md`（完整实验记录：从硬分等分到
 DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失败模式）。
@@ -54,9 +55,11 @@ DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
+
+from . import jiazhu_split
 
 
 # ── 波谷 / 空白区间探测 ──────────────────────────────────────────
@@ -210,12 +213,66 @@ def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[floa
 # ── 弹性 DP ──────────────────────────────────────────────────
 
 
+# ── Step 3 对外输出格式（→ Step 4）──────────────────────────
+# 只有切分点是不够的：下游要知道每一格**是什么**（正文字/空白/抬头字/双行
+# 小注的哪一半），才谈得上装配文本与隔离字形。类型口径见 `CELL_KINDS`。
+
+CELL_KINDS = ("char", "blank", "raised", "jiazhu_a", "jiazhu_b")
+
+
+@dataclass
+class Cell:
+    """一个字格。坐标一律在 **Step 2 输出的列图** 里（标准图像坐标系：
+    左上角原点、x 向右、y 向下），不是页面坐标——列图矫正之后已经不是页面
+    的一部分了（Step 2 的约定，这里沿用）。
+
+    - `slot`：格号，从上到下递增，**正文格从 1 开始，抬头多出来的格用负数**
+      （倒数第一个抬头格是 -1，再往上 -2、-3……），**跳过 0**——这样"同一个
+      slot 数字"跨列指的是同一条物理网格线：正文列的 slot 1 和抬头列
+      （不管抬头挤没挤出额外格）的 slot 1 永远是版框下同一条起始线，抬头
+      多占的格另算在负数区，不会把正文格往后挤。一格夹注会发出两个 `Cell`，
+      `slot` 相同、`kind` 分别是 `jiazhu_a`/`jiazhu_b`。
+    - `x0/x1`：正常格是整个内容窗口（界行已剥掉）；夹注半格是各自那半边——
+      `jiazhu_a` = 缝右（`[gap_center, x_hi]`），`jiazhu_b` = 缝左。
+      **a 是右子列、先读**（双行小注先右行后左行）。
+    - `order`：本列的阅读序，从 1 开始。正文格按 slot 升序；连续夹注段整体
+      插在段位上，段内先 a 全部、再 b 全部（见 `reading_order`）。
+    - `gap_center`：夹注格的缝中心 x（a/b 两半共用同一个值），非夹注为 None。
+    - `ink_ratio`：格内墨占比（在裁紧前的格框上算，`< min_ink_ratio` 判空白）。
+    """
+
+    slot: int
+    y0: float
+    y1: float
+    x0: float
+    x1: float
+    kind: str
+    order: int = 0
+    gap_center: float | None = None
+    ink_ratio: float = 0.0
+
+    @property
+    def sub(self) -> str | None:
+        """夹注半格的 `"a"`/`"b"`，非夹注为 None（对齐生产 CharInstance.sub）。"""
+        if self.kind == "jiazhu_a":
+            return "a"
+        if self.kind == "jiazhu_b":
+            return "b"
+        return None
+
+
 @dataclass
 class RowBoundaryResult:
     boundaries: list[float]  # n_slots+1 个点，boundaries[k]..boundaries[k+1] 是第 k 格
     blank_intervals: list[tuple[int, int]]
     valleys: list[int]
     period: float
+    cells: list[Cell] = field(default_factory=list)
+    """格子列表（Step 3 的正式产物）。`fit_row_boundaries` 只有行投影、拿不到
+    图像，判不了类型，所以留空；走 `segment_column`（Step 3 的正门，输入是
+    Step 2 的列图）才会填。"""
+    content_x: tuple[float, float] | None = None
+    """内容窗口 `[x_lo, x_hi)`：列图两侧的界行/版框竖线剥掉之后剩下的范围。"""
 
 
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
@@ -311,13 +368,17 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     `top_slack`：**抬头列专用**，默认 0 不影响普通列。首锚点(cand0)的候选
     窗口从 `[border_top, border_top+y1_max]` 放宽成
     `[border_top-top_slack, border_top+y1_max]`，允许首字顶边界落在版框线
-    以上——抬头惯例会把首字整体抬高、甚至顶到版框线以上表达尊重。**这只
-    解决"首字在哪"，不解决"这一列到底该有几个字格"**：抬头列的实际字数
-    可能比普通列多一个（腾出的抬头空间够塞一个字），也可能不多（只是整体
-    往上挪），这个 `n_slots` 本身仍需调用方按页面版式常识/人工核校提供，
-    本模块不负责判断——vol01/33 的实测（4 个抬头列里 3 个多一字、1 个不多）
-    表明这件事没有可靠的纯信号判据（装饰性花边墨量与真字墨量在这一页上
-    分不开），见 `.claude/doc/row_boundaries_design.md`「抬头列」节。
+    以上——抬头惯例会把首字整体抬高、甚至顶到版框线以上表达尊重。
+    **抬头列直接给 `top_slack=border_top`（开到列图顶端）**，不要按 period
+    的倍数抠：vol01/33 实测 1×period 时列2 误差 88px（金标首点就在窗口外
+    3px），开到顶端后降到 12.3px，且 1.2×~2.5× 逐档结果完全一样；开错的
+    代价也只有 0.9~1.2px。
+    **这只解决"首字在哪"，不解决"这一列到底该有几个字格"**：抬头列的实际
+    字数可能比普通列多一个（腾出的抬头空间够塞一个字），也可能不多（只是
+    整体往上挪），`n_slots` 仍需调用方按页面版式常识/人工核校提供，本模块
+    不负责判断——vol01/33 的实测（4 个抬头列里 3 个多一字、1 个不多）表明
+    这件事没有可靠的纯信号判据（装饰性花边墨量与真字墨量在这一页上分不
+    开），见 `.claude/doc/row_boundaries_design.md`「抬头列」节。
     """
     curve = smooth_curve(np.asarray(row_proj, dtype=np.float64))
     valleys_all = find_valleys(curve, dst_w)
@@ -351,3 +412,246 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     return RowBoundaryResult(
         boundaries=boundaries, blank_intervals=intervals, valleys=valleys_all, period=period,
     )
+
+
+# ── Step 3 正门：列图 → 带类型的字格 ──────────────────────────
+
+
+def find_content_window(col_gray: np.ndarray, ink_threshold: int = 128,
+                         wall_ink_frac: float = 0.25, wall_pad: int = 3,
+                         max_inset_frac: float = 0.15) -> tuple[int, int]:
+    """列图两侧的界行/版框竖线占了几列像素 → 内容窗口 `[x_lo, x_hi)`。
+
+    Step 2 的 `warp_column` 是**贴着两条界行**矫正的，列图最左最右两条就是
+    界行本身。界行贯穿整列高度，不剥掉会连坐两处：
+    - 行投影每一行凭空多出两坨常量墨（抬高空白判据的基线）；
+    - 更要命的是夹注判据——`jiazhu_split.gap_center` 量的是"墨迹跨度占列距
+      的比例"，界行让**每一格**的跨度都顶满列宽，`SPAN_T` 直接失效、所有格
+      都像夹注。
+
+    判据只用"贯穿性"：某个 x 上的墨占该列全高的比例 ≥ `wall_ink_frac` 才算
+    墙。只从两侧往里啃，最多啃掉 `max_inset_frac` 的宽度——真字里也有又长又
+    直的竖笔，限死啃食范围才不会把窗口啃穿。取窗口内**最靠内的那堵墙**
+    （不是"第一个不是墙的 x"）：矫正后的界行常常是断续的，遇断口就停会把
+    半条界行留在窗口里。
+
+    两个阈值都是量出来的（vol02/171 九列）：
+    - `wall_ink_frac=0.25`——真实界行**不是**贯穿到底的实线，这批页上量到的
+      整列墨占比只有 0.30~1.00（刻版磨损 + 矫正错位），0.5 会漏掉一多半；
+      正文字在边缘 28px 内的整列墨占比是 0.0x 量级，两者之间空得很。
+    - `wall_pad=3`——界行的墨是**渐弱**的（实测某列 x=0..3 的单格墨量
+      87/51/19/3），只按阈值切会把尾巴留在窗口里。留一格没关系（版式本来
+      就有 20 多像素的 inset，生产量到 `inset_l=26/inset_r=22`），留半条
+      界行则会让**每一格**的墨迹跨度都顶满列宽、夹注的 `SPAN_T` 判据直接
+      失效——vol02/171 col4 的「出」「於」就是这么被误判成夹注的。
+    """
+    if col_gray.ndim == 3:
+        col_gray = col_gray[:, :, 0]
+    h, w = col_gray.shape[:2]
+    ink = (col_gray < ink_threshold)
+    frac = ink.sum(axis=0) / float(max(h, 1))
+    max_inset = max(1, int(round(max_inset_frac * w)))
+    x_lo = 0
+    walls = np.flatnonzero(frac[:max_inset] >= wall_ink_frac)
+    if walls.size:
+        x_lo = int(walls[-1]) + 1 + wall_pad
+    x_hi = w
+    walls = np.flatnonzero(frac[w - max_inset:] >= wall_ink_frac)
+    if walls.size:
+        x_hi = w - max_inset + int(walls[0]) - wall_pad
+    if x_hi - x_lo < w // 2:      # 啃过头了，宁可不剥
+        return 0, w
+    return x_lo, x_hi
+
+
+def row_ink_projection(col_gray: np.ndarray, x_lo: int = 0, x_hi: int | None = None,
+                        ink_threshold: int = 128) -> np.ndarray:
+    """列图的行投影：每一行在内容窗口内的墨像素个数（喂给弹性 DP 的曲线）。"""
+    if col_gray.ndim == 3:
+        col_gray = col_gray[:, :, 0]
+    if x_hi is None:
+        x_hi = col_gray.shape[1]
+    return (col_gray[:, x_lo:x_hi] < ink_threshold).sum(axis=1).astype(np.float64)
+
+
+def reading_order(cells: list[Cell]) -> list[Cell]:
+    """一列格子的**阅读顺序**（夹注读序的唯一权威，下游装文本用它，别自己按
+    slot 排）。
+
+    正文格按 slot 升序；**连续夹注段**（slot 连续的夹注格）作为整体插在段位
+    上，段内先读右子列 a 全部（slot 升序）、再读左子列 b 全部——双行小注先
+    右行后左行。逐条对应生产 `extractor.jiazhu_reading_order`，输入乱序也行。
+
+    `slot` 在抬头/正文交界处跳过 0（`-1` 后面直接是 `1`），"连续"的判断
+    要把这一格也算相邻——物理上它们本来就是相邻两格，只是显示编号跳了一格。
+    """
+    by_slot: dict[int, list[Cell]] = {}
+    for c in cells:
+        by_slot.setdefault(c.slot, []).append(c)
+    out: list[Cell] = []
+    slots = sorted(by_slot)
+
+    def _adjacent(a: int, b: int) -> bool:
+        return b == a + 1 or (a == -1 and b == 1)
+
+    k = 0
+    while k < len(slots):
+        s = slots[k]
+        if any(c.sub for c in by_slot[s]):
+            run = [s]
+            while (k + 1 < len(slots) and _adjacent(slots[k], slots[k + 1])
+                   and any(c.sub for c in by_slot[slots[k + 1]])):
+                k += 1
+                run.append(slots[k])
+            for sub in ("a", "b"):
+                for j in run:
+                    out.extend(c for c in by_slot[j] if c.sub == sub)
+        else:
+            out.extend(by_slot[s])
+        k += 1
+    return out
+
+
+def _ink_ratio(patch: np.ndarray, ink_threshold: int) -> float:
+    if patch.size == 0:
+        return 0.0
+    return float((patch < ink_threshold).sum()) / float(patch.size)
+
+
+def _pos_to_slot(pos: int, n_raised: int) -> int:
+    """物理位置(1..n_body_slots+n_raised，从上到下连续)→ 对外的 slot 号。
+
+    `pos` 是内部处理（DP、夹注相邻性判断）用的连续编号，物理上永远
+    `pos+1 == pos的下一格`；`slot` 是对外的显示编号，抬头多出来的
+    `n_raised` 格排在最前面、编成 `-n_raised..-1`，正文接着从 `1` 编到
+    `n_body_slots`，**跳过 0**。两者只在这一处转换，其余内部逻辑（DP、
+    `jiazhu_split.link_runs` 的"相邻"判断）一律用 `pos`，不用 `slot`——
+    `slot` 在抬头/正文交界处不连续（-1 后面直接是 1），拿它判断"是否相邻"
+    会在这一格上出错。
+    """
+    return pos - n_raised - 1 if pos <= n_raised else pos - n_raised
+
+
+def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
+                    n_raised: int = 0, *,
+                    border_top: float = 0.0, border_bottom: float | None = None,
+                    ref_w: float | None = None, top_slack: float = 0.0,
+                    ink_threshold: int = 128, min_ink_ratio: float = 0.01,
+                    raise_tol: float = 2.0, detect_jiazhu: bool = True,
+                    **dp_kwargs) -> RowBoundaryResult | None:
+    """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
+
+    输入是 `column_projection.warp_column`（+`denoise_column`）的输出，输出是
+    填好 `cells` 的 `RowBoundaryResult`；返回 None 表示弹性 DP 在给定约束下
+    无解（同 `fit_row_boundaries`）。
+
+    参数：
+    - `period`：**纵向**字距先验，页级共享（`estimate_shared_period`）。
+    - `n_body_slots`：正文格数，版式常量（这两册都是 21）。
+    - `n_raised`：抬头额外多出来的格数，默认 0（普通列，或"抬头但格数不变"
+      的列——那种只需要 `top_slack`，不需要 `n_raised`）。**本模块不判断
+      这两个数该给多少**——纯信号判据不可靠（见
+      `.claude/doc/row_boundaries_design.md`「抬头列」节），由调用方按版式
+      先验/人工核校给。给对了，`n_body_slots+n_raised` 就是这一列实际要切
+      的总格数，DP 侧的行为跟改之前用一个 `n_slots` 完全一样；只是对外
+      编号从"1..n_slots 连续"变成"负数区(抬头) + 正数区(正文)"，见 `Cell.slot`。
+    - `border_top`/`border_bottom`：上下版框在**列图坐标**里的 y。抬头列要
+      让 Step 2 多矫正一截页顶（`warp_column(top_y=版框y-抬头余量)`），再把
+      版框自己的 y 从这里告诉 Step 3，配合 `top_slack` 才能让首格落到版框
+      线以上——列图裁在版框上就没有抬头字可切了。抬头列的 `top_slack`
+      **直接给 `border_top`（开到列图顶端）**，别按 period 的倍数抠，
+      理由见 `fit_row_boundaries` 的 `top_slack` 说明。
+    - `ref_w`：夹注跨度判据的尺子，应传**页级列距中位数**；不传退回本列内容
+      窗口宽度（会随列宽漂移，生产为此栽过，见 `jiazhu_split` 模块头）。
+    - `min_ink_ratio`：格内墨占比低于此判空白格（口径同生产 `MIN_INK_RATIO`）。
+    - `raise_tol`：格顶高出 `border_top` 超过此像素数就标 `raised`（抬头字）。
+      这是**几何标记**，跟 `slot` 是不是负数是两回事——`n_raised=0` 的
+      「抬头但格数不变」列，slot 1 本身也会被标 `raised`；只说"这一格伸到
+      版框线以上了"，不代表它占了额外的格。
+    - `detect_jiazhu`：关掉就只出 char/blank/raised 三类。
+    - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
+      `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
+
+    类型判定的优先级：空白 > 夹注 > 抬头 > 正文字。空白格不参与夹注判据
+    （生产同口径：只在 char 格上量缝），夹注段的段端收编也只收非空白格。
+    """
+    if col_gray.ndim == 3:
+        col_gray = col_gray[:, :, 0]
+    h, w = col_gray.shape[:2]
+    if border_bottom is None:
+        border_bottom = float(h - 1)
+    n_slots = n_body_slots + n_raised
+
+    x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
+    dst_w = x_hi - x_lo
+    row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
+
+    result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
+                                n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
+    if result is None:
+        return None
+    result.content_x = (float(x_lo), float(x_hi))
+    bounds = result.boundaries
+
+    # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
+    # （对外编号，抬头/正文交界处跳过 0）只在生成 Cell 的最后一步换算。
+    patches: dict[int, np.ndarray] = {}
+    inks: dict[int, float] = {}
+    for k in range(n_slots):
+        pos = k + 1
+        y0i = max(0, min(h, int(round(bounds[k]))))
+        y1i = max(0, min(h, int(round(bounds[k + 1]))))
+        patch = col_gray[y0i:y1i, x_lo:x_hi]
+        patches[pos] = patch
+        inks[pos] = _ink_ratio(patch, ink_threshold)
+    nonblank = {p for p in patches if inks[p] >= min_ink_ratio}
+
+    runs: dict[int, float] = {}
+    tail_a: set[int] = set()
+    if detect_jiazhu:
+        ruler = float(ref_w) if ref_w else float(dst_w)
+        entries = [
+            (p, jiazhu_split.gap_center(patches[p], ruler, ink_threshold)
+                if p in nonblank else None)
+            for p in sorted(patches)
+        ]
+        runs = jiazhu_split.link_runs(entries)
+        runs, tail_a = jiazhu_split.adopt_run_tails(
+            runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
+
+    cells: list[Cell] = []
+    for k in range(n_slots):
+        pos = k + 1
+        slot = _pos_to_slot(pos, n_raised)
+        y0, y1 = float(bounds[k]), float(bounds[k + 1])
+        if pos in runs:
+            cx_local = runs[pos]
+            cx = float(x_lo) + cx_local
+            cxi = int(round(cx_local))
+            # 半边无墨（段末单半）不发格子——生产同口径（`ty.size < 30`）。
+            # a=右子列先读、b=左子列；单字尾（tail_a）的 b 侧只有邻字残渣。
+            for kind, xs, xe in (("jiazhu_a", cxi, x_hi - x_lo),
+                                  ("jiazhu_b", 0, cxi)):
+                if kind == "jiazhu_b" and pos in tail_a:
+                    continue
+                half = patches[pos][:, xs:xe]
+                if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
+                    continue
+                cells.append(Cell(slot=slot, y0=y0, y1=y1,
+                                  x0=float(x_lo + xs), x1=float(x_lo + xe),
+                                  kind=kind, gap_center=cx,
+                                  ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
+            continue
+        if pos not in nonblank:
+            kind = "blank"
+        elif y0 < border_top - raise_tol:
+            kind = "raised"
+        else:
+            kind = "char"
+        cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),
+                          kind=kind, ink_ratio=round(inks[pos], 4)))
+
+    for i, c in enumerate(reading_order(cells), start=1):
+        c.order = i
+    result.cells = cells
+    return result
