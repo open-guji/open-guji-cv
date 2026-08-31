@@ -56,10 +56,14 @@ def main() -> None:
 
     counts: Counter = Counter()
     touched = 0
-    for key, cls in by_col.items():
+    orphan: list[str] = []
+    for key, cls in sorted(by_col.items()):
         f = samples_dir / f"{key}.json"
         if not f.exists():
-            raise SystemExit(f"{f} 不存在——先跑 export_column_warp_gold.py")
+            # 这一列的文字带标注被 Step1 的几何重拟作废、已从金标里删掉，
+            # 它的端裁决自然也无处可挂——记下来，等重标完再并
+            orphan.append(key)
+            continue
         s = json.loads(f.read_text(encoding="utf-8"))
         s["border_class"] = cls
         f.write_text(json.dumps(s, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -79,6 +83,8 @@ def main() -> None:
                           encoding="utf-8")
 
     print(f"并入 {touched} 列的 border_class（共 {sum(counts.values())} 条端裁决）")
+    if orphan:
+        print(f"  跳过 {len(orphan)} 列（文字带金标已作废、等重标）：{', '.join(orphan)}")
     for (end, v), n in sorted(counts.items()):
         print(f"  {end:>6} {v:<6} {n}")
 

@@ -67,9 +67,11 @@ def parse_page(html: str) -> tuple[list[dict], dict]:
     return d["rows"], d.get("verdicts", {})
 
 
-def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
+def export(rows: list[dict], state: dict, out_dir: Path,
+            drop: set[str] | None = None) -> list[dict]:
     samples_dir = out_dir / "samples"
     samples_dir.mkdir(parents=True, exist_ok=True)
+    drop = drop or set()
     cache: dict[str, object] = {}
     written = []
 
@@ -77,6 +79,11 @@ def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
         rec = state.get(r["id"])
         if not rec or not rec.get("v"):
             continue                      # 没裁 ≠ 默认通过，是还没看
+        if r["id"] in drop:
+            # Step1 重拟了这一列的边线，矫正图变了、人标的 x 已经不落在零区，
+            # 标注失效。宁可少一列也不留一条错金标——从 samples 里删掉、等重标。
+            (samples_dir / f"{r['id']}.json").unlink(missing_ok=True)
+            continue
         book, page, col = r["book"], r["page"], r["col"]
         key = f"{book}/{page}"
         if key not in cache:
@@ -137,7 +144,8 @@ def export(rows: list[dict], state: dict, out_dir: Path) -> list[dict]:
     return written
 
 
-def write_metadata(out_dir: Path, samples: list[dict]) -> None:
+def write_metadata(out_dir: Path, samples: list[dict],
+                    pending: list[str] | None = None) -> None:
     verdicts: dict[str, int] = {}
     pages, books = set(), {}
     for s in samples:
@@ -175,6 +183,9 @@ def write_metadata(out_dir: Path, samples: list[dict]) -> None:
             "自研交互标注 artifact（整列压扁图横向 1:1 + 沿竖直方向的投影曲线，"
             "拖两条竖线定边界、可逐像素微调），种子取自 column_text_band() 自动"
             "判据，人工逐列核校；页面自存，裁决读回后导出。",
+        # Step1 在并行开发，每改一次几何就可能作废一批标注；这里记着哪些列
+        # 的人标已经失效、正等着重标，别让人以为金标是完整的 32 列
+        "pending_relabel": sorted(pending or []),
         "known_limitations": [
             "只有 vol01，且列是按「难例优先」选的（倾斜大/梯形大/锚点偏差大/"
             "抬头列各取前几名 + 少量平稳列对照），**不是随机抽样**——可以用来"
@@ -192,15 +203,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("html", help="从 Artifact 读回来的标注页 HTML")
     ap.add_argument("-o", "--out", required=True, help="金标子集目录")
+    ap.add_argument("--drop", default="",
+                    help="逗号分隔的列 id：几何漂了、人标已失效，从金标里删掉等重标")
     args = ap.parse_args()
 
     rows, state = parse_page(Path(args.html).read_text(encoding="utf-8"))
     out_dir = Path(args.out)
-    samples = export(rows, state, out_dir)
+    drop = {x for x in args.drop.split(",") if x}
+    samples = export(rows, state, out_dir, drop)
     if not samples:
         raise SystemExit(f"0 / {len(rows)} 已裁——多半是自存没生效，"
                          "查 .claude/skills/review-artifact/references/autosave.md")
-    write_metadata(out_dir, samples)
+    write_metadata(out_dir, samples, sorted(drop))
     moved = sum(1 for s in samples if s["moved_from_seed"])
     print(f"导出 {len(samples)} / {len(rows)} 列 -> {out_dir/'samples'}"
           f"（其中 {moved} 列人工改过界）")
