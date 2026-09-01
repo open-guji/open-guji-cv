@@ -31,3 +31,10 @@ corpus/external/.general_lm_cache.*
 output/self_assess_*/patches/
 output/self_assess_*/baseline.json
 output/self_assess_*/judged_ids.txt
+
+# Step2 金标标注页的 HTML 快照——802KB 全是矫正图 data URI，
+# `scripts/build_column_warp_review.py` 可确定性再生，不入库（卡片 id 另存 jsonl）
+output/column_warp_review.html
+
+# 上下版框标注页的 HTML 快照——同上，`scripts/build_column_border_review.py` 可再生
+output/column_border_review.html

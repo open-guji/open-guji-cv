@@ -48,7 +48,7 @@ def regen(book: str, page: str, expected_cols: int, denoise: bool) -> dict:
             border_top_y=win.border_top_y, border_bottom_y=win.border_bottom_y,
             border_top_in_column=win.border_top_in_column,
             border_bottom_in_column=win.border_bottom_in_column,
-            raised=win.raised, head_raise_outer_y=win.head_raise_outer_y,
+            raised=win.raised, head_raise_inner_y=win.head_raise_inner_y,
             warped_size=dict(width=int(img.shape[1]), height=int(img.shape[0]))))
     (out_dir / "windows.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=1) + "\n")
