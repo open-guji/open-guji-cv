@@ -181,6 +181,10 @@ def _kinds(result):
     return {c.slot: c.kind for c in result.cells if c.sub is None}
 
 
+def _raised(result):
+    return {c.slot: c.raised for c in result.cells if c.sub is None}
+
+
 def test_find_content_window_strips_the_rules_on_both_sides():
     img = _synth_column_image()
     pad = 3     # find_content_window 的默认安全余量（界行的墨是渐弱的）
@@ -275,15 +279,20 @@ def test_segment_column_detect_jiazhu_off_keeps_whole_cells():
 
 def test_segment_column_marks_cells_above_the_top_border_as_raised():
     """抬头列：Step 2 多矫正了一截页顶（列图顶端那条线是这一列自己的抬头框），
-    页面主版框在列图里的 y 由调用方告诉 Step 3；首格落到它上面 → 标 raised。"""
+    页面主版框在列图里的 y 由调用方告诉 Step 3；首格落到它上面 → `raised=True`。
+
+    `raised` 不是一种 `kind`（用户 2026-08-31 定：「不需要区分抬头和普通字，
+    它们都是字，按坐标来区分位置」）——这一格的 `kind` 仍然是 `"char"`，
+    只是 `raised` 这个独立的几何字段为真。"""
     img = _synth_column_image()          # 顶端那条线 = 抬头框，网格从 y=10 起
     r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
                                border_top=60.0,      # 主版框在列图里的位置
                                top_slack=SLOT_H)
     assert r is not None
-    kinds = _kinds(r)
-    assert kinds[1] == "raised"
-    assert all(k == "char" for s, k in kinds.items() if s != 1)
+    kinds, raised = _kinds(r), _raised(r)
+    assert all(k == "char" for k in kinds.values())    # kind 不区分抬头/正文
+    assert raised[1] is True
+    assert all(v is False for s, v in raised.items() if s != 1)
 
 
 def test_segment_column_returns_none_when_dp_has_no_solution():
@@ -306,7 +315,7 @@ def test_pos_to_slot_skips_zero_and_matches_n_raised_zero_to_identity():
 def test_segment_column_numbers_extra_raised_slots_negative():
     """抬头多出 2 格：列图顶端多画 2 个"抬头字"，物理上紧挨着正文第一格。
     body 从 1 编到 21，多出来的 2 格编 -2/-1（不是 22/23，也不是把正文往后
-    挤），且都应该落进 raised（伸到 border_top 以上）。"""
+    挤）；`kind` 一律是 `"char"`，`raised` 这个独立字段才区分位置。"""
     n_raised = 2
     img = _synth_column_image(n_slots=N_SLOTS + n_raised)   # 造 23 个连续画满的格
     border_top = float(GRID_Y0 + n_raised * SLOT_H)          # 正文第一格顶 = 主版框
@@ -316,9 +325,10 @@ def test_segment_column_numbers_extra_raised_slots_negative():
     assert r is not None
     slots = sorted({c.slot for c in r.cells})
     assert slots == [-2, -1] + list(range(1, N_SLOTS + 1))   # 跳过 0，body 没被挤号
-    kinds = _kinds(r)
-    assert kinds[-2] == "raised" and kinds[-1] == "raised"   # 多出来的两格顶到版框线以上
-    assert kinds[1] == "char"                                 # 正文第一格没被顶上去
+    kinds, raised = _kinds(r), _raised(r)
+    assert all(k == "char" for k in kinds.values())           # kind 不区分抬头/正文
+    assert raised[-2] is True and raised[-1] is True          # 多出来的两格顶到版框线以上
+    assert raised[1] is False                                  # 正文第一格没被顶上去
     # order 仍是一条不断号的 1..N 序，负数区排在最前面（物理上在最上面）
     ordered_slots = [c.slot for c in sorted(r.cells, key=lambda c: c.order)]
     assert ordered_slots == slots
