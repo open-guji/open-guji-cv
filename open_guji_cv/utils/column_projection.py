@@ -28,27 +28,21 @@ import numpy as np
 from .border_geometry import BorderDetectionResult, HLine, VLine
 
 
-def warp_column(gray: np.ndarray, left: VLine, right: VLine,
-                 top_y: float = 0.0, bottom_y: float | None = None) -> np.ndarray:
-    """把 `left`/`right` 两条竖直边线之间的列矫正成竖直矩形灰度图。
+def column_warp_matrix(page_width: int, left: VLine, right: VLine,
+                        top_y: float, bottom_y: float
+                        ) -> tuple[np.ndarray, int, int]:
+    """算这一列的射影矩阵和输出尺寸，返回 `(M, out_w, out_h)`。
 
-    `left`/`right` 是新坐标系（右上角原点）下的 `VLine`；`top_y`/`bottom_y`
-    也是新坐标系的 y（默认整页高度，通常应传 Step 1 输出的上下版框在该
-    列位置的 y 值，而不是整页边缘——版框外的页边留白不属于这一列）。
-
-    输出矩形的宽度取 `left`/`right` 在 `top_y`/`bottom_y` 两处间距的较大者
-    （避免两端宽度不一致时把内容压扁）；高度取 `bottom_y - top_y`。输出图
-    沿用标准图像坐标系（左上角原点）——矫正之后的列图不再是页面的一部分，
-    没必要维持"右上角原点"这个页面级约定。
+    `warp_column` 用它，金标那边也用它——**把人标的列图坐标反算回原图坐标**
+    需要 `M` 的逆。金标一旦有了原图坐标的锚，上游改边线/窗口之后就能把标注
+    重新投影到新列图上，而不是整批作废重标（见
+    `scripts/migrate_column_warp_gold.py`）。
     """
-    h, w = gray.shape[:2]
-    if bottom_y is None:
-        bottom_y = float(h - 1)
     if bottom_y <= top_y:
         raise ValueError(f"bottom_y({bottom_y}) must be > top_y({top_y})")
 
     def to_old_x(vline: VLine, y_new: float) -> float:
-        return (w - 1) - vline.x_at(y_new)
+        return (page_width - 1) - vline.x_at(y_new)
 
     lx_top, rx_top = to_old_x(left, top_y), to_old_x(right, top_y)
     lx_bot, rx_bot = to_old_x(left, bottom_y), to_old_x(right, bottom_y)
@@ -61,7 +55,32 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     src = np.array([[lx_top, top_y], [rx_top, top_y],
                      [rx_bot, bottom_y], [lx_bot, bottom_y]], dtype=np.float32)
     dst = np.array([[0, 0], [out_w, 0], [out_w, out_h], [0, out_h]], dtype=np.float32)
-    m = cv2.getPerspectiveTransform(src, dst)
+    return cv2.getPerspectiveTransform(src, dst), out_w, out_h
+
+
+def warp_column(gray: np.ndarray, left: VLine, right: VLine,
+                 top_y: float = 0.0, bottom_y: float | None = None) -> np.ndarray:
+    """把 `left`/`right` 两条竖直边线之间的列矫正成竖直矩形灰度图。
+
+    `left`/`right` 是新坐标系（右上角原点）下的 `VLine`；`top_y`/`bottom_y`
+    也是新坐标系的 y（默认整页高度，通常应由 `column_bounds()` /
+    `page_column_windows()` 给出，而不是整页边缘——版框外的页边留白不属于
+    这一列）。
+
+    输出矩形的宽度取 `left`/`right` 在 `top_y`/`bottom_y` 两处间距的较大者；
+    高度取 `bottom_y - top_y`。输出图沿用标准图像坐标系（左上角原点）——
+    矫正之后的列图不再是页面的一部分，没必要维持"右上角原点"这个页面级约定。
+
+    **`out_w` 取较大者会不会把内容压扁？不会**（负结果，已查）：梯形→矩形的
+    射影映射把**每一条源图水平线都归一到 `out_w`**，实测梯形量最大的那一列
+    逐行缩放 1.0010（顶）→ 1.1269（底），每行映射后都精确落在 0..out_w。
+    所以 max/min/mean 只决定输出的整体分辨率、不改变顶底之间的相对形变，
+    取 max 保证没有任何一行被下采样。
+    """
+    h, w = gray.shape[:2]
+    if bottom_y is None:
+        bottom_y = float(h - 1)
+    m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
     return cv2.warpPerspective(gray, m, (out_w, out_h),
                                 flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
@@ -142,38 +161,43 @@ def column_profile(warped_gray: np.ndarray, ink_threshold: int = 128) -> np.ndar
 
 def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
                       edge_ink_eps: float = 0.01, plateau_tol: float = 0.005,
-                      max_rule_frac: float = 0.15) -> tuple[int, int]:
+                      max_rule_frac: float = 0.15, bar_min_peak: float = 0.40,
+                      bar_max_width: int = 22, inset_look_frac: float = 0.28
+                      ) -> tuple[int, int]:
     """找矫正图里**文字带的左右边界** `(x_left, x_right)`（半开区间，右端不含）。
 
-    边界外侧就是残余界行。判据：界行是一条贯穿整列的竖直墨线，在
-    `column_profile` 上表现为紧贴边缘、由高到低衰减的一段；界行和字身之间
-    有一道墨量的**谷**。所以从两端各自往里扫——
+    边界外侧就是残余界行。判据：界行是一条贯穿的竖直墨线，在 `column_profile`
+    上表现为紧贴边缘、由高到低衰减的一段；界行和字身之间有一道墨量的**谷**。
+    从两端各自往里扫，分两档——
 
-    1. 边缘那一格墨占比 `<= edge_ink_eps` 就直接收手：这一侧压根没有界行
-       （版心侧被装订切掉了），别动。
-    2. 否则在 `max_rule_frac * 宽度` 的窗口里找**最低点**，边界取
-       **第一个降到「最低点 + `plateau_tol`」的位置**——也就是界行衰减到谷底
-       的那一格。
+    * **贴边档**：边缘那一格墨占比 > `edge_ink_eps` —— 在
+      `max_rule_frac * 宽度` 的窗口里找**最低点**，边界取第一个降到
+      「最低点 + `plateau_tol`」的位置，也就是界行衰减到谷底的那一格。
+    * **内缩档**：边缘那一格是空的，但里面藏着一条**孤立的窄墨条**
+      （峰 ≥ `bar_min_peak`、宽 ≤ `bar_max_width`、两侧都归零）—— 那是探进
+      带里的界行，边界取它的内侧末端。真实界行是**弯的**而 `VLine` 是直的，
+      所以界行常常只在列的一端探进来（vol01/47 那几列尤其明显）。
+      这一档用**单独的、更宽的**搜索窗口 `inset_look_frac`（默认 28% 宽度）
+      —— 实测那些条落在离边 24~35px，贴边档的 15% 窗口（约 28px）够不着；
+      放宽是安全的，因为只有真找到"孤立窄条"才动手。
+    * 两档都不满足就收手，一个像素也不啃。
 
-    第 2 步这个"扫到窗口最低点"的写法是拿 32 列人裁金标标定出来的
-    （`char-segmentation/column-warp`）。**上一版是"先吃墨占比 >= 0.35 的
-    界行本体、再吃 >= 阈值的裙边"，两头都会翻车，已撤销**：
+    "扫到窗口最低点"这个写法是拿人裁金标标定出来的
+    （`char-segmentation/column-warp`）。**上一版是"先吃墨占比 >= 0.35 的界行
+    本体、再吃 >= 阈值的裙边"，两头都会翻车，已撤销**：界行被残余倾斜抹糊时
+    （整段墨占比只有 0.10~0.12）够不到 0.35，第一步就判成"这侧没界行"、整条
+    留在带里；带内有贯穿全高的淡竖痕时（界行降到 0.01 之后**永远停在 0.01**）
+    裙边判据一路吃到上限，切进字身 21px。
 
-    * 界行被残余倾斜抹糊时（vol01/47 那几列，整段墨占比只有 0.10~0.12）
-      够不到 0.35，第一步就判成"这侧没界行"，整条界行原样留在带里（欠 30px）；
-    * 带内有一道贯穿全高的淡竖痕时（vol01/33 c5 右侧，界行降到 0.01 之后
-      **永远停在 0.01**、不再归零），裙边判据一路吃到 15% 上限，切进字身 21px。
+    **内缩档不能只看峰值**（负结果）：126 列实测"文字腹地"（两侧各去掉 25%，
+    那里绝无界行）的列投影峰值均值 0.377、**最高 0.533**，而实测到的内缩界行
+    峰值最低 0.40 —— 完全重叠。分得开的是**形状**：界行是零→窄条→零的
+    **孤立**结构，字身峰是宽鼓包的一部分、两侧不归零。所以判据是"孤立且窄"，
+    `bar_min_peak` 只当辅助门槛。
 
-    "扫到最低点"对两者都成立：糊掉的界行照样有谷（0.11→0.00），淡竖痕的
-    0.01 平台**本身就是窗口最低点**，扫到它就停，不会继续啃。
-
-    两个阈值的默认值是在 32 列金标上**扫曲线**定的，不是挑的单点：
+    两个主阈值的默认值是在金标上**扫曲线**定的，不是挑的单点：
     `plateau_tol` 取 0.002 时命中 57/64、但会切进字身 23px；取 0.005 时命中
-    56/64、**切字 0px**（欠量 39px）；取 0.01 直接掉到 35/64。按"宁可留残墨
-    也不切字"取 0.005 这个零切字点，少的那 1 条命中是自愿付的价。
-    `edge_ink_eps` 在 0.01/0.02/0.04 之间只影响欠量（39/51/51px），不影响
-    切字，取最小的 0.01。`max_rule_frac` 这个上限也保留着——留下的残墨
-    Step4 的字框收缩还有一道防线，切掉的字谁也补不回来。
+    56/64、**切字 0px**。按"宁可留残墨也不切字"取 0.005。
     """
     prof = column_profile(warped_gray, ink_threshold)
     n = len(prof)
@@ -181,10 +205,34 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
 
     def scan(order: np.ndarray) -> int:
         window = prof[order[:limit]]
-        if window[0] <= edge_ink_eps:
-            return 0                        # 这一侧没有界行，别动
-        floor = float(window.min())
-        return int(np.argmax(window <= floor + plateau_tol))
+        if window[0] > edge_ink_eps:                 # 贴边档
+            floor = float(window.min())
+            return int(np.argmax(window <= floor + plateau_tol))
+        # 内缩档：在自己的宽窗口里找**峰值最高的那一段**墨，看它是不是孤立窄条。
+        # 不能取"第一段"——去噪之后仍有零星 1~2% 的麻点，一段麻点就把前导空白
+        # 截断了（vol01/47 c4 实测踩过：真正的界行条在 x=22~30、峰 0.98，却被
+        # x=9 处一个 0.013 的麻点挡住，判成"没有条"）。
+        wide = prof[order[:max(1, min(int(round(inset_look_frac * n)), n // 2))]]
+        best = None
+        k = 0
+        while k < len(wide):
+            if wide[k] <= edge_ink_eps:
+                k += 1
+                continue
+            a = k
+            while k < len(wide) and wide[k] > edge_ink_eps:
+                k += 1
+            peak = float(wide[a:k].max())
+            if best is None or peak > best[2]:
+                best = (a, k, peak)
+        if best is None:
+            return 0
+        a, b_, peak = best
+        if b_ >= len(wide):
+            return 0                                  # 条没在窗口里收口，多半是字身
+        if b_ - a <= bar_max_width and peak >= bar_min_peak:
+            return b_
+        return 0                                      # 又宽又矮 = 字身，不是界行
 
     idx = np.arange(n)
     left = scan(idx)
@@ -195,19 +243,30 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
 
 
 def strip_column_rules(warped_gray: np.ndarray, ink_threshold: int = 128,
-                        rule_coverage: float = 0.35, skirt_coverage: float = 0.12,
-                        max_rule_frac: float = 0.15) -> np.ndarray:
+                        slab_rows: int | None = 240, **kwargs) -> np.ndarray:
     """把矫正图两侧的残余界行抹成背景白，返回**同尺寸**的新图。
+
+    **分横条做，不是整列一个带**（`slab_rows` 给条高，`None` 退回整列一个带）。
+    真实界行是**弯的**、`VLine` 是直的，所以界行常常只在列的某一段探进带里——
+    整列平均之后那一段被稀释、看不见，抹白就漏掉它。实测 vol01/47 有 5 处
+    界行只在列的一端探进来 10~23px，整列口径一处都清不掉，按 240 行分条之后
+    全部清掉。
 
     抹白而不是裁掉——矫正图的局部坐标系是 Step3(`row-boundaries` 金标)、
     Step4 共用的锚，裁一刀所有挂在上面的坐标就全漂了。要裁的调用方自己
     按 `column_text_band` 的返回值裁。
     """
-    left, right = column_text_band(warped_gray, ink_threshold, rule_coverage,
-                                    skirt_coverage, max_rule_frac)
     out = warped_gray.copy()
-    out[:, :left] = 255
-    out[:, right:] = 255
+    h = warped_gray.shape[0]
+    if slab_rows is None or h <= slab_rows:
+        bounds = [(0, h)]
+    else:
+        n = max(1, round(h / slab_rows))
+        bounds = [(int(i * h / n), int((i + 1) * h / n)) for i in range(n)]
+    for lo, hi in bounds:
+        left, right = column_text_band(warped_gray[lo:hi], ink_threshold, **kwargs)
+        out[lo:hi, :left] = 255
+        out[lo:hi, right:] = 255
     return out
 
 
@@ -282,9 +341,13 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[blank:run].max()) >= inset_min_peak:
                 return run, "d"
             return 0, "c"
+        # 厚墨段：是版框粘着字，还是**压根就是字**？看起始陡度——版框线一上来
+        # 就满宽（头 3~4 行冲到 0.74~0.93），字的顶/底边必然是细的、缓起。
+        # 这一条以前只在内缩档用，贴边档一律判 b（粘连），结果把"末字顶到
+        # 边缘"整批误报成版框：64 条端裁决实测错 7 条，全是底端的 b→金标 none。
         if float(p[blank:blank + bar_probe].max()) >= bar_coverage:
-            return blank + glue_px, "b"        # 版框粘着首字，只削一点
-        return (glue_px, "b") if blank == 0 else (0, "c")
+            return blank + glue_px, "b"        # 版框粘着字，只削一点
+        return 0, "c"                           # 是字不是版框，什么都不削
 
     return one(prof), one(prof[::-1])
 
