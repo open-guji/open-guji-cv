@@ -1,28 +1,38 @@
 # -*- coding: utf-8 -*-
-"""生成「下版框存墨判读」审查页：判断某页的下内框到底印上了没有。
+"""生成「下版框存墨判读」审查页：某页的下内框到底印上了没有 + 版框几何统计。
 
 **背景**：vol01 的 137/138/141 三页，`border-detection` 金标的 `bottom_inner`
-整条画在白纸上（线上行墨 0.010/0.033/0.000）。要裁决的是一句话——这三页的
-下内框是**印糊了**（按残墨重标金标）还是**根本没印上**（标成缺失）。
+落在墨量极低的位置（行墨 0.010/0.033/0.000）。要判的是：印糊了，还是没印上。
 
-**定位办法**：这本书的下框是「细内框线 + 约 17px 白 + 约 19px 粗外条」。
-粗外条即使磨损也还认得出，所以用 **外条起点 − BAR_TO_INNER** 反推内框该在
-哪，再看那儿有没有墨。常数取自 5 页印得好的正文页（vol01/24、26、65、33、14
-实测 17/15/16/17/18px）。
+**结论（2026-09-01 复核）：三页都印上了，只是磨得极淡，金标是对的。**
+早先「138 根本没印上」「141 算法本来就对」两个说法都错了，原因见下面两条。
 
-⚠️ 注意间距口径：这里的 17px 是「内框线心 → 粗外条**近**沿」。金标里的
-`bottom_outer_offset`（以及页级的内外间距 38.4±4.0px）量的是**外延**，也就是
-外条的**远**沿——外条本身约 19px 厚，两个数不冲突，但别混用。
+**判据一：相对本底的局部峰。** 用 0.20 这种绝对门槛判「有没有线」对糊页太粗暴。
+本底（内框与外条之间那段白）实测就是 0.000，所以只要金标处有 0.02~0.10 的墨，
+就已经是本底的 8~39 倍。清楚页是 250~450 倍，「淡但明确」的 47/51/142/49 是
+105~180 倍——是一条连续的衰减谱，不是有无之分。
 
-**为什么这个脚本只出图不改金标**：自动重拟试过两版，都被粗外条骗走——外条
-比这几页磨损的内框黑约 3 倍，「取最黑的一行」只要外条落进搜索范围就必然选
-它；想拿金标自己的 `bottom_outer_offset` 挖掉外条也不行，它是相对同一条画错
-的内框量的，内框错了它跟着错。所以做成人裁页面。
+**判据二：空间相干性（真线 vs 噪点）。** 真版框线的墨沿 x 连成长横条，噪点是
+散点。量「覆盖率 + 最长连段」，并跟同页确定空白的对照行比：
+    p24(清楚)   覆盖 0.719 最长连段 188   对照行 0.002 / 2
+    p47(淡)     覆盖 0.257 最长连段  55   对照行 0.000 / 0
+    p138        覆盖 0.095 最长连段  37   对照行 0.009 / 4
+    p137        覆盖 0.027 最长连段  25   对照行 0.000 / 0
+    p141        覆盖 0.017 最长连段  17   对照行 0.029 / 47
+137/138 在金标处都有远超对照行的结构，是真线。141 两边都只剩个位数碎片，
+下内框基本磨没了——但算法在那页落在**外框粗条**上，比金标错得多。
+
+⚠️ **不能拿外条近沿反推内框位置**（上一版就是这么错的）。外条是从**内侧**磨掉
+的：清楚页近沿在 +15~+17，磨损页漂到 +28~+34，而远沿只从 +33~+38 漂到 +39~+45。
+所以只有**远沿（外延）**是稳的，近沿不是。
+
+**几何统计**见页面里的表，由本脚本按 `--clear` 指定的清楚页现算。关键一条：
+**版框四边不等距**——同页实测竖直外延间距比 top 大 10.8±4.5px、比 bottom 大
+5.9±4.2px（n=5）。`detect_outer_borders` 已按这个差做逐边校正。
 
 跑法：
-    python scripts/build_border_bottom_review.py                    # 默认那三页 + 参照页
+    python scripts/build_border_bottom_review.py
     python scripts/build_border_bottom_review.py --pages 24,137,138,141
-    python scripts/build_border_bottom_review.py --out /tmp/x.html
 发布：`Artifact` 工具重发布到同一 URL，见 artifacts/README.md 的台账。
 原图路径用 GUJI_RAW 覆盖（默认 /home/user/rebuild_src）。
 """
@@ -47,24 +57,31 @@ from open_guji_cv.utils.border_geometry import HLine, detect_borders  # noqa: E4
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 GOLD = ROOT.parent / "open-guji-dataset" / "border-detection" / "samples"
 
-BAR_TO_INNER = 17      # 内框线心 → 粗外条近沿，健康页实测中位（见模块 docstring）
 BAR_INK = 0.30         # 认粗外条的墨门槛
+COH_HALF = 2           # 相干性取线上下 ±这么多行做或运算
+CTRL_OFF = 9           # 对照行：内框与外条之间那段确定的白
+CLEAR_DEFAULT = "33,14,24,65,26"   # 下框印得清楚、用来算几何常数的页
+GAP_FAR_BOTTOM = 33.9  # 下框 内框线心 → 外条外延，清楚页实测均值（main 里按实测覆盖）
 ZOOM, CROP_W = 3, 460
 
 # 判读结论（人写的，随证据更新）
 NOTES = {
     "24": ("参照", "印得好", "ok",
-           "下框完整：细内框线（墨 0.70）+ 约 17px 白 + 约 19px 粗外条（墨 1.00）。"
-           "金标与算法完全重合。这页是量「内框↔外条」几何常数的基准之一。"),
-    "137": ("待裁决", "印上了，磨成虚线", "worn",
-            "推定内框处是一排断续墨点，墨 0.102——只有健康页的七分之一，但位置分毫不差。"
-            "算法咬在末行字的墨上（0.197 是一片 20px 宽的平台，不是线），金标落在两者之间的白纸上。"),
-    "138": ("待裁决", "根本没印上", "none",
-            "推定内框处墨 0.002，整条是白纸。往下紧贴粗外条有一点 0.05~0.07 的散墨，"
-            "更像外条自己的毛边而不是另一条线。这页只有外条。"),
-    "141": ("待裁决", "印上了，算法本来就对", "good",
-            "推定内框 = 算法线（差 1px），墨 0.407，是三页里最结实的一条。"
-            "金标偏上 28px 落在白纸上。外条磨成 0.36 的细痕，再往下扫描就裁掉了。"),
+           "下框完整：细内框线（墨 0.70、覆盖 0.72、最长连段 188px）+ 白 + 粗外条。"
+           "对照行覆盖只有 0.002。这页是量几何常数的基准之一。"),
+    "137": ("已判", "印上了，磨得极淡", "worn",
+            "金标处覆盖 0.027、最长连段 25px，而正下方 +5~+11 是真正的空白"
+            "（覆盖 0.000、连段 0）。有结构就不是噪点。算法线在金标上方 23px，"
+            "咬在末行字的墨上——那是一片 20px 宽的平台，不是线。<b>金标对，算法错。</b>"),
+    "138": ("已判", "印上了，糊但清楚", "good",
+            "金标处覆盖 0.095、最长连段 37px，对照行只有 0.009 / 4px。"
+            "特征中心约在金标下方 3px，金标基本准。算法线在金标上方 21px，也在末行字上。"
+            "<b>金标对，算法错。</b>"),
+    "141": ("已判", "基本磨没了；但算法错得更远", "none",
+            "金标处覆盖 0.017、最长连段 17px，跟对照行同量级——下内框在这页基本磨没了。"
+            "但算法线落在金标下方 28px，正是<b>外框粗条</b>的近沿（粗条 +28~+45）。"
+            "外条远沿 44.8px 与清楚页的 33.9px 相比，提示真内框约在金标下方 10px，"
+            "那里只剩一段 47px 的碎片。<b>金标比算法近得多。</b>"),
 }
 
 
@@ -101,7 +118,8 @@ def measure(book: str, page: str) -> dict:
                 runs.append((a, b)); a = b = q
         runs.append((a, b))
         bar = max(runs, key=lambda r: r[1] - r[0])
-    pred = None if bar is None else bar[0] - BAR_TO_INNER
+    # 只能用**远沿**反推（近沿会被磨掉，见模块 docstring）
+    pred = None if bar is None else round(bar[1] - GAP_FAR_BOTTOM)
 
     goff = G.y_at(w / 2) - A.y_at(w / 2)
     lo = int(max(0, A.y_at(w / 2) + min(-30, goff - 30)))
@@ -117,6 +135,9 @@ def measure(book: str, page: str) -> dict:
             y = int(round(A.y_at((w - 1) - (x + x0)) + off)) - lo
             if 0 <= y < annot.shape[0]:
                 annot[y, x] = col
+
+    coh = coherence(binm, A, w, h, xs, goff)
+    ctrl = coherence(binm, A, w, h, xs, goff + CTRL_OFF)
 
     draw(goff, (0, 180, 0))            # 金标 绿
     draw(0, (0, 0, 235))               # 算法 红
@@ -135,10 +156,99 @@ def measure(book: str, page: str) -> dict:
     tmp.unlink(missing_ok=True)
 
     near = lambda c: round(max(prof[o] for o in range(c - 2, c + 3)), 3)
+    # 本底 = 金标外侧那段白里最低的 20 个采样（prof 的定义域是 -40..120）
+    lo_b, hi_b = max(-40, int(goff) + 6), min(120, int(goff) + 100)
+    bg = round(float(np.median(sorted(prof[o] for o in range(lo_b, hi_b))[:20])), 4)
+    gi = near(int(goff))
     return dict(page=page, bar=bar, pred=pred,
                 pred_ink=None if pred is None else near(pred),
-                gold_off=round(goff, 1), algo_ink=near(0), gold_ink=near(int(goff)),
-                prof=prof, img=uri)
+                gold_off=round(goff, 1), algo_ink=near(0), gold_ink=gi,
+                bg=bg, ratio=round(gi / max(bg, 0.0005), 1),
+                coh=coh, ctrl=ctrl, prof=prof, img=uri)
+
+
+def coherence(binm, A, w, h, xs, off):
+    """线性度：沿 x 看这一行的墨。真版框线连成长横条，噪点是散点。
+    返回 (覆盖率, 最长连段px)。"""
+    cols = np.arange(int(xs[0]), int(xs[-1]))
+    ys = np.rint([A.y_at((w - 1) - x) for x in cols]).astype(int) + int(round(off))
+    acc = np.zeros(len(cols), bool)
+    for d in range(-COH_HALF, COH_HALF + 1):
+        yy = ys + d
+        ok = (yy >= 0) & (yy < h)
+        acc[ok] |= binm[yy[ok], cols[ok]] > 0
+    best = cur = 0
+    for v in acc:
+        cur = cur + 1 if v else 0
+        best = max(best, cur)
+    return round(float(acc.mean()), 3), int(best)
+
+
+def geom_stats(book, pages):
+    """在清楚的页上量版框几何：内框线宽 / 外条宽 / 内外间距（近沿与外延两种口径）。"""
+    from open_guji_cv.utils.border_geometry import VLine  # noqa: F401
+    acc = {k: [] for k in ("top", "bottom", "vert")}
+    for page in pages:
+        g = json.loads((GOLD / f"{book}_{page}.json").read_text(encoding="utf-8"))
+        gray = cv2.imread(str(RAW / book / f"{page}.tif"), cv2.IMREAD_GRAYSCALE)
+        binm = (gray < 128).astype(np.uint8)
+        h, w = binm.shape
+        verts = [VLine(v["x_at_top"], v["slope"]) for v in g["verticals_inner"]]
+        vx = sorted((w - 1) - v.x_at(h / 2.0) for v in verts)
+        xs = np.arange(int((w - 1) - vx[-1] + 20), int((w - 1) - vx[0] - 20), 2)
+        ys = np.arange(int(h * 0.15), int(h * 0.85), 3)
+        for kind in ("top", "bottom", "vert"):
+            if kind == "vert":
+                V = verts[0] if g["v_outer_side"] == "right" else verts[-1]
+                sgn = -1 if g["v_outer_side"] == "right" else 1
+                base = np.array([(w - 1) - V.x_at(y) for y in ys])
+                pr = {}
+                for o in range(-25, 121):
+                    xx = (base - o * sgn).astype(int)
+                    ok = (xx >= 0) & (xx < w)
+                    pr[o] = float(binm[ys[ok], xx[ok]].mean()) if ok.any() else 0.0
+            else:
+                L = HLine(g[f"{kind}_inner"]["y_at_right"], g[f"{kind}_inner"]["slope"], kind)
+                sgn = -1 if kind == "top" else 1
+                base = np.array([L.y_at((w - 1) - x) for x in xs])
+                pr = {}
+                for o in range(-25, 121):
+                    yy = np.rint(base + o * sgn).astype(int)
+                    ok = (yy >= 0) & (yy < h)
+                    pr[o] = float(binm[yy[ok], xs[ok]].mean()) if ok.any() else 0.0
+
+            def halfw(c):
+                half = pr[c] / 2.0
+                a = c
+                while a - 1 in pr and pr[a - 1] >= half:
+                    a -= 1
+                b = c
+                while b + 1 in pr and pr[b + 1] >= half:
+                    b += 1
+                def cross(i, j):
+                    p0, p1 = pr[i], pr[j]
+                    return float(i) if p0 == p1 else i + (p0 - half) / (p0 - p1) * (j - i)
+                lo = cross(a, a - 1) if a - 1 in pr and pr[a - 1] < half else float(a)
+                hi = cross(b, b + 1) if b + 1 in pr and pr[b + 1] < half else float(b)
+                return lo, hi
+
+            ic = max(range(-4, 5), key=lambda o: pr[o])
+            oc = max(range(8, 121), key=lambda o: pr[o])
+            if pr[ic] < 0.45 or pr[oc] < 0.60:
+                continue                          # 不够清楚，不进统计
+            ilo, ihi = halfw(ic)
+            olo, ohi = halfw(oc)
+            acc[kind].append((ihi - ilo, ohi - olo, olo, ohi))
+    out = {}
+    for kind, v in acc.items():
+        if not v:
+            continue
+        a = np.array(v)
+        out[kind] = dict(n=len(v), iw=(a[:, 0].mean(), a[:, 0].std()),
+                         barw=(a[:, 1].mean(), a[:, 1].std()),
+                         near=(a[:, 2].mean(), a[:, 2].std()),
+                         far=(a[:, 3].mean(), a[:, 3].std()))
+    return out
 
 
 def spark(prof, gold, pred, bar) -> str:
@@ -165,11 +275,11 @@ def spark(prof, gold, pred, bar) -> str:
 def card(v: dict) -> str:
     role, verdict, cls, note = NOTES.get(v["page"], ("待裁决", "—", "worn", ""))
     bar = v["bar"]
-    rows = [("算法线 (offset 0)", f'{v["algo_ink"]:.3f}'),
-            (f'金标 ({v["gold_off"]:+.0f}px)', f'{v["gold_ink"]:.3f}'),
-            (f'推定内框 ({v["pred"]:+d}px)' if v["pred"] is not None else "推定内框",
-             f'{v["pred_ink"]:.3f}' if v["pred_ink"] is not None else "—"),
-            ("粗外条", f'{bar[0]:+d} … {bar[1]:+d}px' if bar else "没印上/被裁")]
+    rows = [("金标处行墨 / 本底", f'{v["gold_ink"]:.3f} / {v["bg"]:.3f}　({v["ratio"]:.0f}×)'),
+            ("金标行 覆盖 / 最长连段", f'{v["coh"][0]:.3f} / {v["coh"][1]}px'),
+            ("对照行 覆盖 / 最长连段", f'{v["ctrl"][0]:.3f} / {v["ctrl"][1]}px'),
+            ("算法线位置 / 该处行墨", f'{-v["gold_off"]:+.0f}px　{v["algo_ink"]:.3f}'),
+            ("粗外条 [近沿,远沿]", f'{bar[0]:+d} … {bar[1]:+d}px' if bar else "没印上/被裁")]
     tr = "".join(f"<tr><th>{html.escape(a)}</th><td>{html.escape(b)}</td></tr>" for a, b in rows)
     return f'''<article class="card {cls}">
   <header class="ch">
@@ -252,6 +362,11 @@ tr+tr th,tr+tr td{border-top:1px solid var(--rule)}
 .tk{font-size:8px;fill:var(--dim);text-anchor:middle;
   font-family:"IBM Plex Mono",ui-monospace,monospace}
 .note{font-size:14px;margin:10px 0 0}
+table.wide th{white-space:normal}
+table.wide td{text-align:right}
+table.wide tr:first-child th{color:var(--fg);font-weight:500;text-align:right}
+table.wide tr:first-child th:first-child{text-align:left}
+table.wide tr th:first-child{text-align:left;color:var(--fg)}
 footer{color:var(--dim);font-size:13px;border-top:1px solid var(--rule);padding-top:18px}
 code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.92em;
   background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:1px 5px}
@@ -263,15 +378,20 @@ code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.92em;
   这页把真像素、行墨占比、以及从粗外条反推的内框位置摆在一起，供裁决。</p>
 </header>
 <div class="q">
-  <p style="margin:0 0 6px"><b>要判的一句话：</b>这三页的下内框是<b>印糊了</b>（那就按残墨重标金标）还是<b>根本没印上</b>（那就该标成缺失）。</p>
-  <p style="margin:0;color:var(--dim);font-size:14px">定位办法：这本书的下框是「细内框线 + 约 17px 白 + 约 19px 粗外条」。
-  粗外条即使磨损也还认得出，所以用<b>外条起点减 17px</b> 反推内框该在哪，再看那儿有没有墨。
-  常数取自 5 页印得好的正文页（vol01/24、26、65、33、14 实测 17/15/16/17/18px）。</p>
+  <p style="margin:0 0 6px"><b>已判：三页都印上了，只是磨得极淡，金标是对的。</b>
+  早先「138 根本没印上」「141 算法本来就对」两个说法都错了。</p>
+  <p style="margin:0;color:var(--dim);font-size:14px">判据一 <b>相对本底的局部峰</b>：本底（内框与外条之间那段白）实测是 0.000，
+  所以金标处 0.02~0.10 的墨已是本底的 8~39 倍；清楚页 250~450 倍、「淡但明确」的 47/51/142/49 是 105~180 倍——
+  是一条连续的衰减谱，不是有无之分。判据二 <b>空间相干性</b>：真版框线的墨沿 x 连成长横条，噪点是散点，
+  所以同时看「覆盖率 + 最长连段」，并跟同页确定空白的对照行比。</p>
+  <p style="margin:8px 0 0;color:var(--dim);font-size:14px">⚠️ <b>不能拿外条近沿反推内框</b>（上一版就是这么错的）：外条是从<b>内侧</b>磨掉的，
+  清楚页近沿在 +15~+17、磨损页漂到 +28~+34，而远沿只从 +33~+38 漂到 +39~+45。只有<b>远沿（外延）</b>是稳的。</p>
 </div>
+__STATS__
 <div class="legend">
   <span class="sw" style="color:var(--algo)"><i></i>算法线（offset 0 基准）</span>
   <span class="sw" style="color:var(--gold)"><i></i>人工金标</span>
-  <span class="sw" style="color:var(--pred)"><i></i>几何推定的内框位置</span>
+  <span class="sw" style="color:var(--pred)"><i></i>由外条<b>远沿</b>反推的内框位置</span>
   <span class="sw" style="color:var(--bar)"><i></i>粗外条外延</span>
 </div>
 __CARDS__
@@ -292,8 +412,22 @@ def main() -> int:
     ap.add_argument("--book", default="vol01")
     ap.add_argument("--pages", default="24,137,138,141",
                     help="逗号分隔；第一页通常放一页印得好的当参照")
+    ap.add_argument("--clear", default=CLEAR_DEFAULT, help="用来算几何常数的清楚页")
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "border_bottom_review.html"))
     a = ap.parse_args()
+    st = geom_stats(a.book, [x.strip() for x in a.clear.split(",")])
+    global GAP_FAR_BOTTOM
+    if "bottom" in st:
+        GAP_FAR_BOTTOM = st["bottom"]["far"][0]
+    print("版框几何（清楚页实测）")
+    for kind in ("top", "bottom", "vert"):
+        if kind not in st:
+            continue
+        d = st[kind]
+        print(f"  {kind:<7} n={d['n']}  内框线宽={d['iw'][0]:.1f}±{d['iw'][1]:.1f}  "
+              f"外条宽={d['barw'][0]:.1f}±{d['barw'][1]:.1f}  "
+              f"内心→近沿={d['near'][0]:.1f}±{d['near'][1]:.1f}  "
+              f"内心→外延={d['far'][0]:.1f}±{d['far'][1]:.1f}")
     cards = []
     for page in a.pages.split(","):
         v = measure(a.book, page.strip())
@@ -302,7 +436,26 @@ def main() -> int:
               f"该处墨={v['pred_ink']} | 算法墨={v['algo_ink']} 金标({v['gold_off']:+.0f})墨={v['gold_ink']}")
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(TEMPLATE.replace("__CARDS__", "\n".join(cards)), encoding="utf-8")
+    hdr = ("<tr><th>边</th><th>页数</th><th>内框线宽</th><th>外框条宽</th>"
+           "<th>间距 内心→外条近沿</th><th>间距 内心→外条外延</th></tr>")
+    lab = {"top": "上框", "bottom": "下框", "vert": "竖直（纸边侧）"}
+    body = "".join(
+        f"<tr><th>{lab[k]}</th><td>{st[k]['n']}</td>"
+        + "".join(f"<td>{st[k][f][0]:.1f} ± {st[k][f][1]:.1f}</td>"
+                  for f in ("iw", "barw", "near", "far"))
+        + "</tr>" for k in ("top", "bottom", "vert") if k in st)
+    stats = (f'<section class="card"><header class="ch"><div>'
+             f'<span class="role">清楚的页实测（单位 px，均值 ± 标准差）</span>'
+             f'<h2>版框几何</h2></div></header><div style="padding:6px 18px 18px">'
+             f'<table class="wide">{hdr}{body}</table>'
+             f'<p class="cap">清楚 = 内框峰墨 ≥0.45 且外条峰墨 ≥0.60。'
+             f'「外延」就是金标 <code>*_outer_offset</code> 的口径。</p>'
+             f'<p class="note"><b>版框四边不等距。</b>同页实测，竖直的外延间距比上框大 '
+             f'10.8±4.5px、比下框大 5.9±4.2px（n=5）。<code>detect_outer_borders</code> '
+             f'原先直接拿竖直间距当上下的先验，等于窗口中心整体偏外；按边校正后，'
+             f'对真墨外延的误差 top 1.6→1.2px、bottom 5.6→<b>0.9px</b>。</p></div></section>')
+    out.write_text(TEMPLATE.replace("__CARDS__", "\n".join(cards)).replace("__STATS__", stats),
+                   encoding="utf-8")
     print(f"\n写出 {out}（{out.stat().st_size // 1024} KB）")
     return 0
 
