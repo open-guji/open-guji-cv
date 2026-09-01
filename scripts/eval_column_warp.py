@@ -51,6 +51,15 @@ def rebuild(sample: dict) -> np.ndarray:
     `regen_step2_columns.py` 产的列图；`legacy-page-anchor/` 那套旧金标没有
     列图文件，按样本里存的几何量现算。**两套不能混着比**——边线一个来自
     人工金标、一个来自算法探测，实测差 0.76~27.6px。"""
+    if "input" not in sample:
+        # 只有 border_class 的样本（文字带待重标）没存 input 块，按定版输入现找
+        wf = (ROOT / "output" / sample["book"] / "step2_columns" / sample["page"]
+              / "windows.json")
+        if wf.exists():
+            win = next(c for c in json.loads(wf.read_text(encoding="utf-8"))["columns"]
+                        if c["col"] == sample["col"])
+            return denoise_column(cv2.imread(str(wf.parent / win["file"]),
+                                              cv2.IMREAD_GRAYSCALE))
     if "input" in sample:
         p = ROOT / sample["input"]["column_image"].replace("open-guji-cv ", "")
         img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
@@ -204,7 +213,13 @@ def main() -> None:
     if not files:
         raise SystemExit(f"{args.dataset}/samples 里没有样本")
     samples = [json.loads(f.read_text(encoding="utf-8")) for f in files]
-    report([measure(s) for s in samples])
+    # 有些样本只有 border_class（文字带被上游改动作废、等重标），跳过带那部分
+    banded = [s for s in samples if s.get("text_band")]
+    if banded:
+        report([measure(s) for s in banded])
+        pending = len(samples) - len(banded)
+        if pending:
+            print(f"\n另有 {pending} 列只有 border_class、文字带待重标，未计入上表")
     report_border(samples)
 
 
