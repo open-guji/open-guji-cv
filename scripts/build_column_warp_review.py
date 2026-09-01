@@ -476,6 +476,9 @@ def main() -> None:
                     help="卡片 id 冻在这里——重出一版页照旧读，否则上一轮的标注对不上号")
     ap.add_argument("--freeze", help="按这个卡集里的列重建（不重跑 pick_columns）")
     ap.add_argument("--carry", help="读回来的旧页 HTML，把仍然有效的裁决带过来")
+    ap.add_argument("--only", default="",
+                    help="逗号分隔的 id：只放这些卡（要重标时用，别让人在一堆"
+                         "已裁的卡里找那几张）")
     ap.add_argument("--drop", default="", help="逗号分隔的列 id，几何漂了、标注已失效，清掉重标")
     args = ap.parse_args()
 
@@ -488,8 +491,17 @@ def main() -> None:
     else:
         picked = pick_columns(metrics)
     drop = {x for x in args.drop.split(",") if x}
+    only = {x for x in args.only.split(",") if x}
+    if only:
+        # 重标时只放要重标的列——别让人在一堆已裁的卡里翻那几张
+        picked = [p for p in picked if f"{p['book']}_{p['page']}_c{p['col']}" in only]
+        if not picked:
+            raise SystemExit(f"--only 里的 id 一个都没匹配上：{sorted(only)}")
     existing = load_existing(args.carry, drop)
     rows, imgs = build_rows(picked)
+    if only:
+        keep = {r["id"] for r in rows}
+        existing = {k: v for k, v in existing.items() if k.split("#")[0] in keep}
 
     cards = Path(args.cards)
     cards.parent.mkdir(parents=True, exist_ok=True)

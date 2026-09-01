@@ -51,6 +51,9 @@ from open_guji_cv.utils.column_projection import (  # noqa: E402
     denoise_column,
 )
 
+sys.path.insert(0, str(ROOT / "scripts"))
+from migrate_column_warp_gold import COL_FP_SIZE, fingerprint  # noqa: E402
+
 STEP2_COLUMNS = ROOT / "output" / "{book}" / "step2_columns" / "{page}"
 VARIANT = "detected_lines@per_column_window"
 
@@ -145,6 +148,10 @@ def export(rows: list[dict], state: dict, out_dir: Path,
             "label_origin": "human",
             "moved_from_seed": bool(band_rec),
             "auto_band_at_export": [int(auto[0]), int(auto[1])],
+            # 人当时看的那张列图的指纹。上游再改列图时
+            # scripts/migrate_column_warp_gold.py 拿它当**主判据**判断"还是不是
+            # 同一张图"——是就原样留用，不必回去重标。
+            "column_fingerprint": fingerprint(warped, COL_FP_SIZE),
             "tags": r["tags"],
             # 快照，不是硬金标：给人看"界行是尖峰还是鼓包"用的
             "profile": [round(float(v), 4) for v in prof],
