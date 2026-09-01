@@ -786,12 +786,27 @@ class RowBoundaryResult:      # 原有字段不动，新增后两个
     content_x: tuple[float, float] | None # 剥掉界行之后的内容窗口 [x_lo, x_hi)
 
 def segment_column(col_gray, period, n_body_slots=21, n_raised=0, *, border_top=0.0,
-                   border_bottom=None, ref_w=None, top_slack=0.0,
+                   border_bottom=None, ref_w=None, top_slack=0.0, content_x=None,
                    ink_threshold=128, min_ink_ratio=0.01, raise_tol=2.0,
                    detect_jiazhu=True, **dp_kwargs) -> RowBoundaryResult | None
 
 def reading_order(cells) -> list[Cell]    # 读序唯一权威，别自己按 slot 排
 ```
+
+**`content_x`（2026-09-01 补，Step2 换 `clean_column` 之后加的）**：Step 2
+后来扩成了「射影变换+去噪+界行清除+上下版框清除」（`clean_column`），产出的
+图是**抹白不裁切**——界行/版框的墨被抹成背景色，坐标系不变。这对 Step 3
+自己的 `find_content_window`（靠"墨量贯穿"找墙）是个问题：墙的墨没了，
+它在图上一堵墙都找不到，会把整幅宽度当内容窗口（`scripts/
+export_step3_input.py` 实测 24 列全部如此，宽 9.6%~17%）。`segment_column`
+加了 `content_x` 参数，给了就直接用、跳过 `find_content_window`——Step 2
+既然已经把这条带定出来了（`clean_column` 的 `diag["band"]`，随
+`export_step3_input.py` 的 manifest 一起传），Step 3 没道理自己重猜一遍。
+**不传（默认 `None`）走原来的路**，适配"界行墨还在"的输入（`denoise_column`
+而非 `clean_column` 的产物），已有调用方/已有金标零影响——这条口径差本身
+也不是紧急正确性问题（同一批 24 列量过，只有 1 列的格类型判断因此不同，
+方向还跟"窗口变宽会多判空白"的直觉相反），只是接口该说清楚，Step 2 定出来
+的东西不该被 Step 3 悄悄重算一遍、猜错了还不报错。
 
 **`slot` 用负数编号抬头多出来的格**（用户 2026-08-31 定，定版即用）：跟
 之前"1..n_slots 连续编号"的版本比，改动是把格数拆成两个数——
@@ -1034,10 +1049,19 @@ Step 3 的输入契约就是「一列」。
   测的是**纵向切分点**，不测格子类型，也没有夹注样本。vol01_33.json 自带
   `row_proj`，不需要图源即可复现（vol02_135.json 只存了矫正用的线参数，
   要复现得有图）。
-- **格子类型（含夹注 a/b）没有专门的金标测试集**。本轮的对照基准是**生产
-  已有的 `phase4_chars` 输出**——它不是金标（生产自己也会错），但它是两册
-  实审调出来的、跨 73 页有夹注列的存量标注，作为迁移正确性的回归基准够用；
-  真要定 Step 3 的准确率，还是得建人工金标。
+- **格子类型（含夹注 a/b）金标试点已发布，待收**：`artifacts/README.md`
+  「Step3 格类型试点金标」，5 列 39 格，字/空白/抬头/夹注四选一（先不细到
+  夹注缝的精确 x，用户 2026-08-31 定）。此前的对照基准是**生产已有的
+  `phase4_chars` 输出**——它不是金标（生产自己也会错），只是两册实审调出来
+  的、跨 73 页有夹注列的存量标注，够用来验证迁移没退步，回答不了"夹注检出
+  的真实精确率/召回率是多少"，这批试点才是第一份独立人工金标。
+- **这批试点金标不挂在 Step2 的具体产物上，Step2 升级不影响它**：截图是
+  直接从原始页面用 `detect_borders`+`warp_column`/`denoise_column` 现算的
+  （老式"界行墨还在"的路子），不是 `export_step3_input.py`/`clean_column`
+  产出的图；只要格子边界本身没变，标注结果不需要因为 Step2 换算法而重标。
+  `row-boundaries`（切分点 y 坐标）同理更彻底——那份金标从设计起就是"自带
+  几何、冻住 left_line/right_line，不挂在当次探测结果上"（metadata 里
+  `why_gold_does_not_go_stale` 写明），Step1/Step2 再怎么迭代都不影响它。
 - `jiazhu-tail` 分片测的是生产旧管线的段端修复，跟这条链路不通用。
 - 单测：`tests/test_jiazhu_split.py`（14 条：单格判据/列上下文/段端收编 +
   **跟生产常量逐个对齐的漂移护栏** + `link_runs` 与生产 `flag_jiazhu_runs`

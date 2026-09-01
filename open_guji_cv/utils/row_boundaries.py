@@ -536,6 +536,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
                     ref_w: float | None = None, top_slack: float = 0.0,
+                    content_x: tuple[float, float] | None = None,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
@@ -563,6 +564,17 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       理由见 `fit_row_boundaries` 的 `top_slack` 说明。
     - `ref_w`：夹注跨度判据的尺子，应传**页级列距中位数**；不传退回本列内容
       窗口宽度（会随列宽漂移，生产为此栽过，见 `jiazhu_split` 模块头）。
+    - `content_x`：内容窗口 `(x_lo, x_hi)`，给了就直接用、跳过内部的
+      `find_content_window`。**Step 2 的产物如果已经先"抹白"了界行/版框
+      （`column_projection.clean_column` 那条链路，`scripts/
+      export_step3_input.py` 交出的 manifest 里带这个字段），这里必须传**
+      ——`find_content_window` 靠"墨量贯穿"找墙，墙的墨被抹白之后它在图上
+      一堵墙都找不到，会整幅宽度都当内容窗口（实测 24 列全部如此，宽
+      9.6%~17%）。已经量过这条口径差的下游影响很小（24 列只 1 列的格类型
+      判断不同），但既然 Step 2 已经把这条带定出来了，没道理让 Step 3 自己
+      重猜一遍，猜错了还会悄悄退化不报错。**不传（默认 None）** 走的还是
+      原来的路——只在图上自己找墙，适配的是"界行墨还在、没被抹白"的输入
+      （比如 `denoise_column` 而非 `clean_column` 的产物），旧调用方零影响。
     - `min_ink_ratio`：格内墨占比低于此判空白格（口径同生产 `MIN_INK_RATIO`）。
     - `raise_tol`：格顶高出 `border_top` 超过此像素数就标 `raised`（抬头字）。
       这是**几何标记**，跟 `slot` 是不是负数是两回事——`n_raised=0` 的
@@ -582,7 +594,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         border_bottom = float(h - 1)
     n_slots = n_body_slots + n_raised
 
-    x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
+    if content_x is not None:
+        x_lo, x_hi = int(round(content_x[0])), int(round(content_x[1]))
+    else:
+        x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
     dst_w = x_hi - x_lo
     row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
 
