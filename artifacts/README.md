@@ -13,6 +13,31 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
+## 边框判读（Step1）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **下版框存墨判读**（下内框印上了没有）| https://claude.ai/code/artifact/cd2e4252-01ff-46bb-915f-a266f9378a10 | [border_bottom_review.html](border_bottom_review.html) | `python scripts/build_border_bottom_review.py`（默认 vol01 的 24,137,138,141——第一页是印得好的参照）|
+
+判的是一句话：vol01/137、138、141 的下内框是**印糊了**（按残墨重标金标）还是
+**根本没印上**（标成缺失）。定位靠这本书的下框几何「细内框线 + 约 17px 白 +
+约 19px 粗外条」——粗外条即使磨损也认得出，用**外条起点 − 17px** 反推内框该
+在哪，常数取自 5 页印得好的正文页（24/26/65/33/14 实测 17/15/16/17/18px）。
+⚠️ 别跟金标的 `bottom_outer_offset` 混：那个量的是外条**外延**（远沿），
+外条本身约 19px 厚，两个数不冲突但口径不同。
+
+当前读数（参照页 vol01/24 自洽：推定内框 = 算法线，墨 0.70）：
+
+| 页 | 推定内框处墨 | 结论 |
+|---|---|---|
+| 137 | 0.102（健康页的 1/7，位置分毫不差）| 印上了，磨成虚线 |
+| 138 | 0.002（整条白纸）| 根本没印上 |
+| 141 | 0.407（三页里最结实）| 印上了，**算法本来就对**，金标偏上 28px |
+
+**没有自动改金标**：两版自动重拟都被粗外条骗走（外条比磨损的内框黑约 3 倍；
+拿金标自己的 `bottom_outer_offset` 挖也不行，它相对同一条画错的内框量的）。
+体检脚本 `open-guji-dataset/scripts/report_border_hlines_offtarget.py`。
+
 ## 切分审查（G1/G2 工作流）
 
 | 页面 | URL | 快照/真源 | 再生 |
