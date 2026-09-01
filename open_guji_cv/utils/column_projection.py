@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
-from .border_geometry import VLine
+from .border_geometry import BorderDetectionResult, HLine, VLine
 
 
 def warp_column(gray: np.ndarray, left: VLine, right: VLine,
@@ -69,4 +71,99 @@ def denoise_column(warped_gray: np.ndarray, ink_threshold: int = 128,
     for i in range(1, n_labels):
         if stats[i, cv2.CC_STAT_AREA] < min_blob_area:
             out[labels == i] = 255
+    return out
+
+
+# ── 逐列的矫正窗口 ───────────────────────────────────────────
+
+RAISE_PAD = 8.0    # 抬头列在抬头框外延之上再多留这么多，别把外框自己切掉
+BODY_PAD = 0.0     # 普通列在版框之外额外留的余量
+
+
+@dataclass
+class ColumnWindow:
+    """一列该从哪儿矫正到哪儿——`warp_column` 的参数由这里算，不要再由调用方
+    传页级标量。
+
+    以前的做法是整页共用一个 `top_y = top.y_at(0)`（版框在**页面右端**处的
+    y）。版框是斜的，越靠左的列这个锚点离该列真实版框越远——14 页 126 列
+    实测均值 14.5px、最大 54.4px，而且**一律偏下**，等于列图顶端切进了正文，
+    首字被削掉一截（`open-guji-dataset/char-segmentation/column-warp` 的
+    known_limitations 记过这个现象）。抬头列更狠：列图裁在主版框上，而抬头
+    字整段在版框以上，实测被切掉 140~187px，抬头字直接没了。
+    """
+
+    col: int                       # 列号，从右到左、从 1 开始
+    left: VLine
+    right: VLine
+    top_y: float                   # 矫正窗口上界（新坐标 y）
+    bottom_y: float                # 矫正窗口下界
+    border_top_y: float            # **主**上版框在该列的 y（新坐标）
+    border_bottom_y: float
+    raised: bool                   # 这一列是不是抬头列
+    head_raise_outer_y: float | None = None
+
+    @property
+    def border_top_in_column(self) -> float:
+        """主上版框在**列图坐标**里的 y——Step 3 的 `border_top` 要这个值。
+        普通列是 0；抬头列是正数（列图顶端在版框之上）。"""
+        return self.border_top_y - self.top_y
+
+    @property
+    def border_bottom_in_column(self) -> float:
+        return self.border_bottom_y - self.top_y
+
+
+def _column_center_x(left: VLine, right: VLine, y: float) -> float:
+    return (left.x_at(y) + right.x_at(y)) / 2.0
+
+
+def _border_y_at_column(border: HLine, left: VLine, right: VLine) -> float:
+    """版框线在这一列中心处的 y。列线本身也是斜的，所以 x 依赖 y、y 又依赖
+    x——迭代两次就收敛到亚像素（两条线的斜率都是 1e-2 量级）。"""
+    y = border.y_at(0.0)
+    for _ in range(2):
+        y = border.y_at(_column_center_x(left, right, y))
+    return y
+
+
+def page_column_windows(result: BorderDetectionResult,
+                         raise_pad: float = RAISE_PAD,
+                         body_pad: float = BODY_PAD) -> list[ColumnWindow]:
+    """整页每一列的矫正窗口，上下界**逐列**算，抬头列自动上探到抬头框外延。
+
+    `result` 直接用 `border_geometry.detect_borders()` 的输出——`head_raise`
+    已经由 `detect_head_raise()` 填好，不需要调用方再给抬头先验。
+    """
+    hr = {b.col: b for b in result.head_raise}
+    out: list[ColumnWindow] = []
+    for i in range(len(result.verticals) - 1):
+        col = i + 1
+        right_v, left_v = result.verticals[i], result.verticals[i + 1]
+        btop = _border_y_at_column(result.top, left_v, right_v)
+        bbot = _border_y_at_column(result.bottom, left_v, right_v)
+        box = hr.get(col)
+        top_y = (box.outer_y - raise_pad) if box else (btop - body_pad)
+        bottom_y = bbot + body_pad
+        top_y = max(0.0, min(top_y, btop))
+        bottom_y = min(float(result.height - 1), max(bottom_y, bbot))
+        out.append(ColumnWindow(
+            col=col, left=left_v, right=right_v,
+            top_y=float(top_y), bottom_y=float(bottom_y),
+            border_top_y=float(btop), border_bottom_y=float(bbot),
+            raised=box is not None,
+            head_raise_outer_y=None if box is None else float(box.outer_y)))
+    return out
+
+
+def warp_page_columns(gray: np.ndarray, result: BorderDetectionResult,
+                       denoise: bool = False, **window_kwargs
+                       ) -> list[tuple[ColumnWindow, np.ndarray]]:
+    """整页逐列矫正，返回 `[(窗口, 列图), ...]`。Step 2 的正门。"""
+    out = []
+    for win in page_column_windows(result, **window_kwargs):
+        img = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y)
+        if denoise:
+            img = denoise_column(img)
+        out.append((win, img))
     return out

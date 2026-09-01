@@ -1,0 +1,236 @@
+{
+ "book": "vol01",
+ "page": "47",
+ "source_image": "/home/user/rebuild_src/vol01/47.tif",
+ "page_size": {
+  "width": 2368,
+  "height": 3225
+ },
+ "top_inner": {
+  "y_at_right": 502.54020588235295,
+  "slope": -0.02497058823529412
+ },
+ "bottom_inner": {
+  "y_at_right": 2905.733323529412,
+  "slope": -0.007382352941176463
+ },
+ "denoised": false,
+ "columns": [
+  {
+   "col": 1,
+   "file": "c1.png",
+   "left_line": {
+    "x_at_top": 564.9382352941177,
+    "slope": -0.016705882352941164
+   },
+   "right_line": {
+    "x_at_top": 375.4558823529412,
+    "slope": -0.017647058823529405
+   },
+   "top_y": 491.0097081491917,
+   "bottom_y": 2902.630224486589,
+   "border_top_y": 491.0097081491917,
+   "border_bottom_y": 2902.630224486589,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2411.6205163373975,
+   "raised": false,
+   "head_raise_outer_y": null,
+   "warped_size": {
+    "width": 192,
+    "height": 2412
+   }
+  },
+  {
+   "col": 2,
+   "file": "c2.png",
+   "left_line": {
+    "x_at_top": 749.3257352941175,
+    "slope": -0.015705882352941163
+   },
+   "right_line": {
+    "x_at_top": 564.9382352941177,
+    "slope": -0.016705882352941164
+   },
+   "top_y": 486.3280388845636,
+   "bottom_y": 2901.2292392880954,
+   "border_top_y": 486.3280388845636,
+   "border_bottom_y": 2901.2292392880954,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2414.9012004035317,
+   "raised": false,
+   "head_raise_outer_y": null,
+   "warped_size": {
+    "width": 187,
+    "height": 2415
+   }
+  },
+  {
+   "col": 3,
+   "file": "c3.png",
+   "left_line": {
+    "x_at_top": 922.6819852941176,
+    "slope": -0.012205882352941165
+   },
+   "right_line": {
+    "x_at_top": 749.3257352941175,
+    "slope": -0.015705882352941163
+   },
+   "top_y": 481.8326124426243,
+   "bottom_y": 2899.86041267606,
+   "border_top_y": 481.8326124426243,
+   "border_bottom_y": 2899.86041267606,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2418.0278002334358,
+   "raised": false,
+   "head_raise_outer_y": null,
+   "warped_size": {
+    "width": 184,
+    "height": 2418
+   }
+  },
+  {
+   "col": 4,
+   "file": "c4.png",
+   "left_line": {
+    "x_at_top": 1106.9705882352941,
+    "slope": -0.011764705882352941
+   },
+   "right_line": {
+    "x_at_top": 922.6819852941176,
+    "slope": -0.012205882352941165
+   },
+   "top_y": 289.2156862745098,
+   "bottom_y": 2898.4979759112844,
+   "border_top_y": 477.34225771802744,
+   "border_bottom_y": 2898.4979759112844,
+   "border_top_in_column": 188.12657144351766,
+   "border_bottom_in_column": 2609.2822896367747,
+   "raised": true,
+   "head_raise_outer_y": 297.2156862745098,
+   "warped_size": {
+    "width": 186,
+    "height": 2609
+   }
+  },
+  {
+   "col": 5,
+   "file": "c5.png",
+   "left_line": {
+    "x_at_top": 1275.1301470588235,
+    "slope": -0.0019411764705882318
+   },
+   "right_line": {
+    "x_at_top": 1106.9705882352941,
+    "slope": -0.011764705882352941
+   },
+   "top_y": 286.0919540229885,
+   "bottom_y": 2897.087135410917,
+   "border_top_y": 472.87989859364575,
+   "border_bottom_y": 2897.087135410917,
+   "border_top_in_column": 186.78794457065726,
+   "border_bottom_in_column": 2610.995181387929,
+   "raised": true,
+   "head_raise_outer_y": 294.0919540229885,
+   "warped_size": {
+    "width": 197,
+    "height": 2611
+   }
+  },
+  {
+   "col": 6,
+   "file": "c6.png",
+   "left_line": {
+    "x_at_top": 1476.7132352941176,
+    "slope": -0.014705882352941166
+   },
+   "right_line": {
+    "x_at_top": 1275.1301470588235,
+    "slope": -0.0019411764705882318
+   },
+   "top_y": 281.62142857142857,
+   "bottom_y": 2895.7537200735765,
+   "border_top_y": 468.27996227917527,
+   "border_bottom_y": 2895.7537200735765,
+   "border_top_in_column": 186.6585337077467,
+   "border_bottom_in_column": 2614.132291502148,
+   "raised": true,
+   "head_raise_outer_y": 289.62142857142857,
+   "warped_size": {
+    "width": 198,
+    "height": 2614
+   }
+  },
+  {
+   "col": 7,
+   "file": "c7.png",
+   "left_line": {
+    "x_at_top": 1615.2867647058824,
+    "slope": 0.01470588235294118
+   },
+   "right_line": {
+    "x_at_top": 1476.7132352941176,
+    "slope": -0.014705882352941166
+   },
+   "top_y": 463.93567647058825,
+   "bottom_y": 2894.320205882353,
+   "border_top_y": 463.93567647058825,
+   "border_bottom_y": 2894.320205882353,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2430.384529411765,
+   "raised": false,
+   "head_raise_outer_y": null,
+   "warped_size": {
+    "width": 224,
+    "height": 2430
+   }
+  },
+  {
+   "col": 8,
+   "file": "c8.png",
+   "left_line": {
+    "x_at_top": 1838.9705882352941,
+    "slope": -0.011764705882352941
+   },
+   "right_line": {
+    "x_at_top": 1615.2867647058824,
+    "slope": 0.01470588235294118
+   },
+   "top_y": 459.3959172453026,
+   "bottom_y": 2892.951643022164,
+   "border_top_y": 459.3959172453026,
+   "border_bottom_y": 2892.951643022164,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2433.5557257768614,
+   "raised": false,
+   "head_raise_outer_y": null,
+   "warped_size": {
+    "width": 212,
+    "height": 2434
+   }
+  },
+  {
+   "col": 9,
+   "file": "c9.png",
+   "left_line": {
+    "x_at_top": 2017.0341911764706,
+    "slope": -0.009323529411764703
+   },
+   "right_line": {
+    "x_at_top": 1838.9705882352941,
+    "slope": -0.011764705882352941
+   },
+   "top_y": 274.7826086956522,
+   "bottom_y": 2891.725222544051,
+   "border_top_y": 454.51652635861177,
+   "border_bottom_y": 2891.725222544051,
+   "border_top_in_column": 179.73391766295958,
+   "border_bottom_in_column": 2616.942613848399,
+   "raised": true,
+   "head_raise_outer_y": 282.7826086956522,
+   "warped_size": {
+    "width": 185,
+    "height": 2617
+   }
+  }
+ ]
+}

@@ -527,9 +527,78 @@ def denoise_column(warped_gray, ink_threshold=128, min_blob_area=6) -> np.ndarra
 （`tests/test_column_projection.py`）验证了倾斜列矫正后应变成均匀矩形、
 退化输入报错、孤立小点被清除但笔画保留。
 
-**测试集**：单测覆盖了函数本身的数学正确性，但**真实页面的金标测试集
-目前没有**——"矫正得准不准"要拿真实倾斜列跟人工标的"矫正后应该长什么样"
-比对，这类金标还没建（跟 Step 1 一样，需要人工在真实页面上标注）。
+#### 矫正窗口改成逐列算（2026-08-31）
+
+原来调用方给的 `top_y`/`bottom_y` 是**整页共用一个标量**——版框在页面右端
+（新坐标 x=0）处的 y。版框是斜的，这个锚点对越靠左的列偏得越多。14 页
+126 列实测：
+
+| | 值 |
+|---|---|
+| 页级锚点离该列真实版框 | 均值 **14.5px** / 中位 11.1px / 最大 **54.4px** |
+| 偏差 >20px 的列 | 28 / 126 |
+| 偏差方向 | **全部同号**（锚点一律在真实版框**下方**）|
+
+方向一致这件事说明它不是抖动而是系统偏差，后果有两个：
+
+1. **列图根本不含上版框线**（起点永远在版框下方），Step 3 想拿版框锚行
+   却拿不到——`segment_column` 的 `border_top` 参数没有正确的值可传。
+2. **抬头列整段被切**。列图裁在主版框上，而抬头字全在版框以上，实测
+   15 个抬头列各被切掉 **106~200px**——抬头字连同下一个字的顶端一起没了。
+
+`page_column_windows()` 逐列算上下界，抬头列自动上探到抬头框外延：
+
+```python
+@dataclass
+class ColumnWindow:
+    col: int; left: VLine; right: VLine
+    top_y: float; bottom_y: float          # 矫正窗口（新坐标 y）
+    border_top_y: float; border_bottom_y: float   # **主**版框在该列的 y
+    raised: bool; head_raise_outer_y: float | None
+    @property
+    def border_top_in_column(self) -> float:   # Step 3 的 border_top 用这个
+        return self.border_top_y - self.top_y
+
+def page_column_windows(result, raise_pad=8.0, body_pad=0.0) -> list[ColumnWindow]
+def warp_page_columns(gray, result, denoise=False) -> list[(ColumnWindow, ndarray)]
+```
+
+- 普通列：`top_y` = 主版框在**该列中心**的 y（版框线正好落在列图第 0 行，
+  `border_top_in_column == 0`）。列线本身也是斜的，所以"列中心 x"依赖 y、
+  y 又依赖 x——迭代两次就收敛到亚像素。
+- 抬头列：`top_y` = `head_raise.outer_y - 8px`（外框自己也要留在图里），
+  `border_top_in_column` 变成正数，正好是 Step 3 文档里说的"多矫正的那一截"
+  ——以前这个"抬头余量"只能猜，现在 `detect_head_raise()` 直接给。
+- 上界永远不越过版框往下（`top_y <= border_top_y`），越过就等于主动切正文。
+
+**效果**：首字被切的列 **15 → 0**；每一列的版框线都精确落在列图第 0 行
+（普通列）或已知的正数行（抬头列）。
+
+**对 `column-warp` 金标的影响：可以不重标。** 那批金标的 `text_band` 是
+**列图局部 x**，而换 `top_y` 只通过 `out_w`（取两端间距较大者）间接影响
+宽度——实测 111 个普通列里只有 6 个宽度变了、幅度 −1~+2px，抬头列 −1~+3px，
+都在金标那条"走廊"容差之内。样本里存的 `top_y`/`top_y_source` 是快照，
+重算时应改用 `page_column_windows()`；那边 `known_limitations` 记的
+"锚点离该列真实版框最远 60.5px、个别列首字被切掉一截"这条**已经消掉了**。
+
+**重算产物**：`scripts/regen_step2_columns.py`
+
+```bash
+python scripts/regen_step2_columns.py vol01 --gold-pages   # border-detection 那 14 页
+python scripts/regen_step2_columns.py vol01 137 138 --denoise
+```
+
+输出 `output/<book>/step2_columns/<page>/c<N>.png` + `windows.json`（几何量
++ `border_top_in_column` 全存下来，下游不用再算一遍）。目前生成了 vol01 那
+14 页（**覆盖 `column-warp` 金标的全部 13 页**）。vol02/135 的
+`row-boundaries` 金标是更早的血统（图源是 `noenh_out/` 的 s1~s6 产物、矫正
+取满页高不按版框裁），坐标系跟这条链路不同，**没有一起重算**——要换得连
+金标的 y 坐标一起迁移。
+
+**测试集**：单测覆盖函数本身的数学正确性（含逐列窗口的四条：跟着斜版框
+走、抬头列上探、上界不越过版框、逐列出图）；真实页面的"矫正得准不准"金标
+见 `open-guji-dataset/char-segmentation/column-warp`（25 列 / 13 页，由并行
+会话建）。
 
 ### Step 3：单列文字切分
 
