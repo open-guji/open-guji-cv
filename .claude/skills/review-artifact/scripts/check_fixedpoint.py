@@ -51,6 +51,9 @@ def main() -> int:
             pg.on("pageerror", lambda e: errs.append(str(e)))
             pg.goto(tmp.resolve().as_uri())
             pg.wait_for_selector(".card")
+            # 页里可能已经带着上一轮的裁决（重发前 read 回来带过来的），
+            # 所以比的是"多了一条"，不是"只有一条"。
+            n1 = pg.evaluate("Object.keys(state).length")
             btn = pg.locator(".verdicts button").first
             vv = btn.get_attribute("data-v")
             btn.click()
@@ -59,8 +62,8 @@ def main() -> int:
             if errs:
                 print("页面报错：" + "; ".join(errs))
                 return 1
-            if n2 != 1:
-                print(f"点了一下裁决，state 里却有 {n2} 条——状态没接上")
+            if n2 != n1 + 1:
+                print(f"点了一下裁决，state 从 {n1} 变成 {n2} 条（应为 {n1 + 1}）——状态没接上")
                 return 1
 
             tmp.write_text(v2, encoding="utf-8")

@@ -34,7 +34,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2409.0136482605594,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 182,
     "height": 2409
@@ -58,7 +58,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2413.1592606107106,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 183,
     "height": 2413
@@ -82,7 +82,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2417.2658093391537,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 180,
     "height": 2417
@@ -106,7 +106,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2421.4235738885614,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 186,
     "height": 2421
@@ -130,7 +130,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2425.6791854240155,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 187,
     "height": 2426
@@ -147,17 +147,17 @@
     "x_at_top": 1237.0501764705882,
     "slope": 0.0024411764705882383
    },
-   "top_y": 286.4390243902439,
+   "top_y": 333.0,
    "bottom_y": 2909.8259466362492,
    "border_top_y": 480.049647337235,
    "border_bottom_y": 2909.8259466362492,
-   "border_top_in_column": 193.6106229469911,
-   "border_bottom_in_column": 2623.3869222460053,
+   "border_top_in_column": 147.049647337235,
+   "border_bottom_in_column": 2576.8259466362492,
    "raised": true,
-   "head_raise_outer_y": 294.4390243902439,
+   "head_raise_inner_y": 333.0,
    "warped_size": {
     "width": 193,
-    "height": 2623
+    "height": 2577
    }
   },
   {
@@ -171,17 +171,17 @@
     "x_at_top": 1412.5325294117647,
     "slope": 0.008323529411764709
    },
-   "top_y": 279.9390243902439,
+   "top_y": 329.0,
    "bottom_y": 2908.635436437487,
    "border_top_y": 474.6484492053964,
    "border_bottom_y": 2908.635436437487,
-   "border_top_in_column": 194.7094248151525,
-   "border_bottom_in_column": 2628.696412047243,
+   "border_top_in_column": 145.6484492053964,
+   "border_bottom_in_column": 2579.635436437487,
    "raised": true,
-   "head_raise_outer_y": 287.9390243902439,
+   "head_raise_inner_y": 329.0,
    "warped_size": {
     "width": 196,
-    "height": 2629
+    "height": 2580
    }
   },
   {
@@ -195,17 +195,17 @@
     "x_at_top": 1609.955,
     "slope": 0.0025
    },
-   "top_y": 275.0869565217391,
+   "top_y": 321.0,
    "bottom_y": 2907.4770991830305,
    "border_top_y": 469.25410407534434,
    "border_bottom_y": 2907.4770991830305,
-   "border_top_in_column": 194.16714755360522,
-   "border_bottom_in_column": 2632.3901426612915,
+   "border_top_in_column": 148.25410407534434,
+   "border_bottom_in_column": 2586.4770991830305,
    "raised": true,
-   "head_raise_outer_y": 283.0869565217391,
+   "head_raise_inner_y": 321.0,
    "warped_size": {
     "width": 183,
-    "height": 2632
+    "height": 2586
    }
   },
   {
@@ -226,7 +226,7 @@
    "border_top_in_column": 0.0,
    "border_bottom_in_column": 2442.296108216776,
    "raised": false,
-   "head_raise_outer_y": null,
+   "head_raise_inner_y": null,
    "warped_size": {
     "width": 187,
     "height": 2442
