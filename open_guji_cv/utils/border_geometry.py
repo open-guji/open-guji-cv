@@ -295,6 +295,11 @@ OUTER_INK_MIN = 0.30      # 认一段"外框墨"的绝对门槛。**别为了提
 OUTER_RUN_MIN = 4         # 墨条厚度：竖直外框实测 17~28px，上下 0~20px。
 OUTER_RUN_MAX = 40        # 实测 30/40/60 三档结果完全一样，不是敏感参数。
 OUTER_PRIOR_TOL = 10.0    # 偏离页级间距先验多少 px 算一个"半衰"
+OUTER_PRIOR_SHIFT = {"top": -10.8, "bottom": -5.9}
+                          # 版框**不是四边等距的**：同页实测（两侧都清楚的 5 页）
+                          # 竖直外延间距比 top 大 10.8±4.5px、比 bottom 大 5.9±4.2px。
+                          # 先验是从竖直外框量的，套到上下要先减掉这个差，否则
+                          # 窗口中心整体偏外。
 OUTER_PRIOR_WIN = 16.0    # 上下外框只在"页级内外间距"先验的 ±这么多 px 里找。
                           # 依据是用户给的判据、并已用金标验证：同一页四条边的
                           # 内外间距基本是个常数——竖直外框 38.4±4.0px（n=14）、
@@ -409,8 +414,9 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             base = np.array([line.y_at((width - 1) - x) for x in xs])
             lo, hi = OUTER_GAP_MIN, OUTER_GAP_MAX
             if prior is not None:      # 钉在页级间距先验上，见函数 docstring
-                lo = max(lo, prior - OUTER_PRIOR_WIN)
-                hi = min(hi, prior + OUTER_PRIOR_WIN)
+                c = prior + OUTER_PRIOR_SHIFT[kind]     # 四边不等距，先按边校正
+                lo = max(lo, c - OUTER_PRIOR_WIN)
+                hi = min(hi, c + OUTER_PRIOR_WIN)
             if hi - lo < 5:
                 continue
             offs = np.arange(lo, hi + 1, 1.0) * sign
