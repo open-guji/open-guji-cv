@@ -8,6 +8,7 @@ from open_guji_cv.utils.border_geometry import (
     _vline_to_new,
     detect_borders,
     detect_head_raise,
+    detect_outer_borders,
 )
 from open_guji_cv.utils.peak_line_search import LineMatch
 
@@ -238,3 +239,66 @@ def test_detect_head_raise_rejects_horizontal_line_without_walls():
     mask[279:282, x0:x1] = 1.0
     mask[243:261, x0:x1] = 1.0
     assert detect_head_raise(mask, top, verts, width=1000) == []
+
+
+# ---------------------------------------------------------------- 外框探测
+
+def _outer_page(w=1000, h=1200, gap=40, top_y=300, bot_y=900,
+                 paint_top_outer=True, paint_bottom_outer=True,
+                 decoy_top_offset=None):
+    """搭一张有内外双版框的合成页。
+
+    `gap` 是内外框间距——真书上这是个全页常数（14 页实测竖直 38.4±4.0px），
+    `detect_outer_borders` 就靠竖直外框把它量出来、再拿去框住上下的搜索窗。
+    `decoy_top_offset` 用来在别处再画一条假线，测先验窗口挡不挡得住。
+    """
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_old = np.linspace(150, w - 150, 10)
+    for x_old in xs_old:
+        mask[top_y:bot_y, int(x_old) - 2:int(x_old) + 3] = 1.0
+    mask[top_y:top_y + 5, :] = 1.0
+    mask[bot_y - 5:bot_y, :] = 1.0
+    # 竖直外框只在纸边一侧（筒子页），这里放在新坐标 x 更大的那侧=旧坐标左侧
+    x_in = int(xs_old[0])
+    mask[top_y:bot_y, x_in - gap - 6:x_in - gap] = 1.0
+    if paint_top_outer:
+        mask[top_y - gap - 6:top_y - gap, :] = 1.0
+    if paint_bottom_outer:
+        mask[bot_y + gap:bot_y + gap + 6, :] = 1.0
+    if decoy_top_offset is not None:
+        d = decoy_top_offset
+        mask[top_y - d - 6:top_y - d, :] = 1.0
+    top = HLine(y_at_right=float(top_y + 2), slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(bot_y - 2), slope=0.0, kind="bottom")
+    verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
+    return mask, top, bottom, verticals
+
+
+def test_detect_outer_borders_measures_gap_on_all_three_sides():
+    mask, top, bottom, verts = _outer_page(gap=40)
+    r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+    assert r["v_outer_side"] == "left"           # 纸边侧在新坐标的左边
+    # 口径是**外延**（朝外那侧的半高边缘），墨条 6px 厚，所以量出来是
+    # gap+6 而不是 gap。抬头框的 outer_y 也是这个口径，不统一就没法比。
+    for k in ("v_outer_offset", "top_outer_offset", "bottom_outer_offset"):
+        assert abs(abs(r[k]) - (40 + 6)) < 4, (k, r[k])
+
+
+def test_detect_outer_borders_prior_window_rejects_far_decoy():
+    """书口/纸边的痕迹常常比真外框还黑。上下外框只在竖直外框量出来的
+    页级间距 ±OUTER_PRIOR_WIN 里找，所以 -70px 处的假线必须被挡住。
+    没有这道窗口时 vol01/32 报过 -58、vol01/47 报过 -62，都不是版框。"""
+    mask, top, bottom, verts = _outer_page(gap=40, paint_top_outer=False,
+                                            decoy_top_offset=70)
+    r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+    assert r["top_outer_offset"] is None or abs(r["top_outer_offset"]) < 60
+
+
+def test_detect_outer_borders_reports_none_when_outer_not_printed():
+    """上下外框在这批书上大量磨没/被扫描裁掉（vol01/141 bottom 窗内峰值墨
+    只有 0.048）。宁可报 None 也不要报一个错的数——放低门槛去凑覆盖率
+    是量过的负结果（弱档 6 例里 3 例误差超 10px）。"""
+    mask, top, bottom, verts = _outer_page(gap=40, paint_bottom_outer=False)
+    r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+    assert r["bottom_outer_offset"] is None
+    assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4   # 另一边不受连累
