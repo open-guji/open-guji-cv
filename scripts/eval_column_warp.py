@@ -45,7 +45,18 @@ SRC = ROOT / "data_full" / "zongmu" / "{book}" / "{page}.png"
 
 
 def rebuild(sample: dict) -> np.ndarray:
-    """按样本里存的几何量重算矫正图——金标不依赖任何中间产物文件。"""
+    """取这条金标标注时看的那张列图。
+
+    新口径（`input.variant = detected_lines@per_column_window`）直接读
+    `regen_step2_columns.py` 产的列图；`legacy-page-anchor/` 那套旧金标没有
+    列图文件，按样本里存的几何量现算。**两套不能混着比**——边线一个来自
+    人工金标、一个来自算法探测，实测差 0.76~27.6px。"""
+    if "input" in sample:
+        p = ROOT / sample["input"]["column_image"].replace("open-guji-cv ", "")
+        img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise SystemExit(f"读不到列图 {p}——先跑 scripts/regen_step2_columns.py")
+        return denoise_column(img)
     g = sample["geometry"]
     gray = cv2.imread(str(SRC).format(book=sample["book"], page=sample["page"]),
                        cv2.IMREAD_GRAYSCALE)

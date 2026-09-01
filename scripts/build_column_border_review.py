@@ -20,6 +20,11 @@
 裁剪图按 `clean_column` 的定版顺序做出来：**先在原始矫正图上定文字带 → 抹掉
 两侧界行 → 只在文字带宽度内算水平投影**。顺序错了投影就不准——抹白之后再定
 带会拿到整幅宽度，带外那片白把整条曲线稀释约 9%，`ink_eps` 之类的阈值全部失准。
+
+列图取 `output/<book>/step2_columns/<page>/c<N>.png`（`regen_step2_columns.py`
+产的定版输入）。**换输入口径之后这一页的裁决一律作废、不能带**：新窗口逐列算
+上下界、故意把主版框线放在列图第 0 行，两端有什么东西是被口径决定的——实测
+上端 `c`（没残墨）从 24 列掉到 6 列，旧的 `none` 是被口径作废的，不是噪声。
 """
 from __future__ import annotations
 
@@ -43,10 +48,11 @@ from open_guji_cv.utils.column_projection import (  # noqa: E402
     denoise_column,
     strip_column_rules,
 )
-from eval_column_warp import rebuild  # noqa: E402
 from review_shell import render  # noqa: E402
 
 GOLD = ROOT.parent / "open-guji-dataset" / "char-segmentation" / "column-warp" / "samples"
+STEP2_COLUMNS = ROOT / "output" / "{book}" / "step2_columns" / "{page}"
+CARDS = ROOT / "output" / "column_warp_cards.jsonl"   # 列表跟侧界行那页一致
 
 TITLE = "单列矫正·上下版框核校"
 KEY = "column-warp-border-v1"       # 换页必须换 key
@@ -57,32 +63,43 @@ VERDICTS = [("clean", "有间隙", "ok"), ("glued", "粘连", "zhu"),
 
 
 def build_rows() -> tuple[list[dict], dict[str, str]]:
+    """列表跟侧界行那页共用冻好的卡集，两页说的是同一批列。"""
     rows, imgs = [], {}
-    for f in sorted(GOLD.glob("*.json")):
-        s = json.loads(f.read_text(encoding="utf-8"))
+    wins: dict[tuple[str, str], dict[int, dict]] = {}
+    for line in CARDS.read_text(encoding="utf-8").splitlines():
+        if not line:
+            continue
+        card = json.loads(line)
+        book, page, col = card["book"], card["page"], card["col"]
+        if (book, page) not in wins:
+            wf = Path(str(STEP2_COLUMNS).format(book=book, page=page)) / "windows.json"
+            if not wf.exists():
+                raise SystemExit(f"{wf} 不存在——先跑 scripts/regen_step2_columns.py")
+            wins[(book, page)] = {c["col"]: c
+                                   for c in json.loads(wf.read_text(encoding="utf-8"))["columns"]}
+        win = wins[(book, page)][col]
+        img_path = Path(str(STEP2_COLUMNS).format(book=book, page=page)) / win["file"]
         # 定版顺序：原图定带 -> 抹侧界行 -> 只在带宽内算水平投影（见 clean_column）
-        denoised = denoise_column(rebuild(s))
+        denoised = denoise_column(cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE))
         band = column_text_band(denoised)
         no_rules = strip_column_rules(denoised)
         core = no_rules[:, band[0]:band[1]]
         prof = column_row_profile(no_rules, band)
         h = core.shape[0]
-        raised = s["geometry"]["top_y_source"] == "head_raise_inner_y"
-        # tags 里的「抬头列」是选列时按当时的 head_raise 打的，Step1 改过列号
-        # 归属之后会过期——以当前几何为准重算，别把过期标签摆给人看
-        tags = [t for t in s["tags"] if t != "抬头列"] + (["抬头列"] if raised else [])
+        raised = bool(win["raised"])
+        tags = [t for t in card["tags"] if t != "抬头列"] + (["抬头列"] if raised else [])
 
         for end in ("top", "bot"):
             # 两端都按「从该端往里」的朝向裁，人看到的永远是"版框在上、字在下"
             crop = core[:CROP_ROWS] if end == "top" else core[h - CROP_ROWS:][::-1]
             pslice = prof[:CROP_ROWS] if end == "top" else prof[h - CROP_ROWS:][::-1]
-            cid = f"{s['book']}_{s['page']}_c{s['col']}_{end}"
+            cid = f"{book}_{page}_c{col}_{end}"
             ok, buf = cv2.imencode(".png", crop, [cv2.IMWRITE_PNG_COMPRESSION, 9])
             assert ok
             imgs[cid] = "data:image/png;base64," + base64.b64encode(buf).decode()
             rows.append(dict(
-                id=cid, book=s["book"], page=s["page"], col=s["col"], end=end,
-                tags=tags, raised=raised,
+                id=cid, book=book, page=page, col=col, end=end,
+                tags=sorted(tags), raised=raised,
                 w=int(core.shape[1]), rows=CROP_ROWS,
                 prof=base64.b64encode(
                     bytes(int(round(float(v) * 255)) for v in pslice)).decode()))
