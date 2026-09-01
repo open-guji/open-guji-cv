@@ -50,6 +50,16 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
     SCAN_MARGIN = 10         # 法线方向最大搜索范围（像素）—— 减小以避免碰到文字
     WIDTH_CAP = 15           # 单次线宽测量上限（排除文字干扰）
 
+    # ── 证据闸（2026-08-24）：整条复原前先验证这是**孤立的真线** ──
+    # 汉字竖笔在列中心天然共线，LSD 线段凑够 0.5×页高就会被当成界行
+    # **整条画穿全列**（实测 vol01/18 col4 一条 1906px 假线贯穿所有字，
+    # 原图干净）。真界行与假线的判别不在覆盖率（字笔画共线也能到 0.5），
+    # 而在**侧翼**：真界行两侧 5~14px 是列缝空白（偶有出头笔画 ≤0.12），
+    # 假线两侧全是字身（0.4+）。
+    EVIDENCE_COV = 0.35      # 线带（±2px）沿程墨覆盖率下限（磨损真线 ~0.4+）
+    FLANK_MAX = 0.18         # 两侧 5~14px 侧翼墨占比上限
+    FLANK_NEAR, FLANK_FAR = 5, 14
+
     @classmethod
     def is_needed(cls, profile: BookProfile) -> bool:
         return True
@@ -92,11 +102,15 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
         # 5. 创建增强掩码（255=不改，line_color=需要填充）
         mask = np.full_like(gray, 255, dtype=np.uint8)
 
-        # 6. 对每条长线：测量实际线宽，然后整条复原
+        # 6. 对每条长线：先过证据闸（孤立真线才画），再测线宽整条复原
         for cluster in long_h:
+            if not self._line_is_isolated(binary, cluster, "h", w, h):
+                continue
             self._restore_full_line(binary, mask, cluster, "h",
                                     w, h, line_color)
         for cluster in long_v:
+            if not self._line_is_isolated(binary, cluster, "v", w, h):
+                continue
             self._restore_full_line(binary, mask, cluster, "v",
                                     w, h, line_color)
 
@@ -148,6 +162,42 @@ class EnhanceLinesPreprocessor(BasePreprocessor):
             })
 
         return result
+
+    # ─── 证据闸：孤立真线判定 ─────────────────────────────────
+
+    def _line_is_isolated(self, binary: np.ndarray, cluster: dict,
+                          axis: str, img_w: int, img_h: int) -> bool:
+        """线带沿程有足量墨、且两侧侧翼干净，才认定是真实的孤立长线。
+
+        见类头 EVIDENCE_COV/FLANK_MAX 注：假线（字笔画共线）过得了
+        覆盖率但过不了侧翼——它两侧全是字身。"""
+        slope, intercept = cluster["slope"], cluster["intercept"]
+        span = img_w if axis == "h" else img_h
+        cross = img_h if axis == "h" else img_w
+        coords = np.arange(span)
+        centers = np.rint(slope * coords + intercept).astype(np.int64)
+        ok = (centers >= 0) & (centers < cross)
+        coords, centers = coords[ok], centers[ok]
+        if len(coords) < 50:
+            return False
+        fg = binary == 0
+
+        def sample(off: int) -> np.ndarray:
+            cc = np.clip(centers + off, 0, cross - 1)
+            if axis == "v":
+                return fg[coords, cc]
+            return fg[cc, coords]
+
+        band = np.zeros(len(coords), dtype=bool)
+        for off in range(-2, 3):
+            band |= sample(off)
+        if float(band.mean()) < self.EVIDENCE_COV:
+            return False
+        flank_vals = []
+        for off in list(range(-self.FLANK_FAR, -self.FLANK_NEAR + 1)) + \
+                list(range(self.FLANK_NEAR, self.FLANK_FAR + 1)):
+            flank_vals.append(float(sample(off).mean()))
+        return float(np.mean(flank_vals)) <= self.FLANK_MAX
 
     # ─── 线条颜色估计 ─────────────────────────────────────────
 
