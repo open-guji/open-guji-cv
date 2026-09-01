@@ -1,0 +1,4397 @@
+{
+ "producer": "open-guji-cv scripts/export_step3_input.py",
+ "source": "output/vol01/step2_columns",
+ "book": "vol01",
+ "tier": "gold",
+ "n_body_slots": 21,
+ "gate": {
+  "expected_cols": 9,
+  "width_tol": 0.15,
+  "side_floor_look": 0.25,
+  "side_floor_max": 0.012
+ },
+ "contract": [
+  "图是 clean_column 的输出：抹白不裁切，坐标系跟 Step2 矫正图完全一致，border_top/border_bottom 仍是版框线原来的 y（墨被抹掉了，位置没动）。",
+  "content_x 是 Step2 定出来的文字带，调用方必须拿它覆盖 Step3 内部的 find_content_window——界行墨已经被抹掉，那个函数在这张图上找不到墙、会返回整幅宽度（实测宽 10%~13%）。",
+  "period / ref_w 是页级共享量，用该页**全部 9 列**算的（准入闸管的是哪些列推过去切，不是哪些列参与算页级先验）。",
+  "n_raised 不给：raised 只是几何标记，抬头列可能多一格也可能不多，纯信号判据不可靠（见 row_boundaries_design.md「抬头列」节），由调用方按版式先验/人工核校定。"
+ ],
+ "pages": [
+  {
+   "page": "9",
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 163.0,
+   "column_widths": [
+    207,
+    179,
+    184,
+    185,
+    183,
+    193,
+    180,
+    190,
+    185
+   ],
+   "median_width": 185,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      15,
+      203
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.52393366372,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 207,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 3
+     },
+     "side_floor": 0.0017,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "9/c1.png"
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      12,
+      175
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.4556112117866,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 179,
+      "height": 2414
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 1
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      15,
+      177
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.5559678165173,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 3
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      20,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.6365713062187,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 2
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      17,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.7396089962795,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 2
+     },
+     "side_floor": 0.0017,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      17,
+      189
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.7983434240696,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 193,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 3
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      18,
+      174
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.8563237864446,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 180,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 3
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      18,
+      186
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.9824795713535,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 2
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      16,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2415.114992002761,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "14",
+   "admitted": true,
+   "reject": [],
+   "period": 120.0,
+   "ref_w": 177.0,
+   "column_widths": [
+    188,
+    187,
+    185,
+    185,
+    187,
+    187,
+    189,
+    190,
+    181
+   ],
+   "median_width": 187,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2486.0731833075242,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2486
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 5
+     },
+     "side_floor": 0.0024,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2487.894706700563,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2488
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0028,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2489.7002319105195,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2490
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "14/c3.png"
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2491.5065455629456,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2492
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2493.324686204989,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2493
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2495.142003965608,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2495
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2496.966085177005,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 189,
+      "height": 2497
+     },
+     "border_case": {
+      "top": "b",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2498.8272001889763,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2499
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 4
+     },
+     "side_floor": 0.002,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      177
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2500.6500700899987,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 181,
+      "height": 2501
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 7
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "24",
+   "admitted": true,
+   "reject": [],
+   "period": 116.0,
+   "ref_w": 177.0,
+   "column_widths": [
+    190,
+    190,
+    188,
+    188,
+    185,
+    187,
+    180,
+    186,
+    188
+   ],
+   "median_width": 188,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2426.316967999627,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2426
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 6
+     },
+     "side_floor": 0.0029,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2428.333811239494,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2428
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "24/c2.png"
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2430.357729503861,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2430
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 27
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2432.354791437215,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2432
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2434.353231845121,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2434
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2436.3616605355132,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2436
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      176
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2438.3400403098344,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 180,
+      "height": 2438
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 4
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2440.3167200676303,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2440
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 3
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2442.311834974412,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2442
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 3
+     },
+     "side_floor": 0.0029,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "26",
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 174.0,
+   "column_widths": [
+    188,
+    183,
+    182,
+    192,
+    184,
+    183,
+    188,
+    184,
+    183
+   ],
+   "median_width": 184,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2422.210235727631,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2422
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 4
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2423.2084695383855,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2423
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 4
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2424.1897803501843,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2424
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      188
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2425.1904634671605,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 192,
+      "height": 2425
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 2
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      179
+     ],
+     "border_top": 123.81331764117516,
+     "border_bottom": 2550.0,
+     "top_slack": 123.81331764117516,
+     "raised": true,
+     "head_raise_inner_y": 322.0,
+     "warped_size": {
+      "width": 184,
+      "height": 2550
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 11,
+      "bottom": 2
+     },
+     "side_floor": 0.0004,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "glued",
+       "bottom": "clean"
+      }
+     },
+     "file": "26/c5.png"
+    },
+    {
+     "col": 6,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      180
+     ],
+     "border_top": 125.83513823544757,
+     "border_bottom": 2553.0,
+     "top_slack": 125.83513823544757,
+     "raised": true,
+     "head_raise_inner_y": 319.0,
+     "warped_size": {
+      "width": 183,
+      "height": 2553
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "26/c6.png"
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2428.1493801268407,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2428
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2429.136994986157,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2429
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 2
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2430.115397869738,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2430
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 4
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "32",
+   "admitted": true,
+   "reject": [],
+   "period": 117.0,
+   "ref_w": 177.0,
+   "column_widths": [
+    187,
+    188,
+    188,
+    191,
+    187,
+    187,
+    190,
+    184,
+    186
+   ],
+   "median_width": 187,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      7,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2452.8349864402453,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2453
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "32/c1.png"
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      184
+     ],
+     "border_top": 107.81018247066396,
+     "border_bottom": 2563.5791537008336,
+     "top_slack": 107.81018247066396,
+     "raised": true,
+     "head_raise_inner_y": 306.0,
+     "warped_size": {
+      "width": 188,
+      "height": 2564
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 4
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2458.6952915045467,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2459
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 1,
+      "bottom": 5
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      188
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2461.6229528323183,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 191,
+      "height": 2462
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 6
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      184
+     ],
+     "border_top": 103.79064279662805,
+     "border_bottom": 2568.3375094045796,
+     "top_slack": 103.79064279662805,
+     "raised": true,
+     "head_raise_inner_y": 307.0,
+     "warped_size": {
+      "width": 187,
+      "height": 2568
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2467.4523259198595,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2467
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 5
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      11,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2470.3605207228748,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2470
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      8,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2473.2454459696573,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2473
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 2
+     },
+     "side_floor": 0.0004,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2476.1248939527077,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2476
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "33",
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 173.0,
+   "column_widths": [
+    182,
+    183,
+    180,
+    186,
+    187,
+    193,
+    196,
+    183,
+    187
+   ],
+   "median_width": 186,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2409.0136482605594,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2409
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 10,
+      "bottom": 0
+     },
+     "side_floor": 0.0025,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      4,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2413.1592606107106,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2413
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 9,
+      "bottom": 3
+     },
+     "side_floor": 0.0029,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      176
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2417.2658093391537,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 180,
+      "height": 2417
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 9,
+      "bottom": 3
+     },
+     "side_floor": 0.0033,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      10,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2421.4235738885614,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2421
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 5
+     },
+     "side_floor": 0.0045,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      13,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2425.6791854240155,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2426
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 11,
+      "bottom": 3
+     },
+     "side_floor": 0.0021,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "33/c5.png"
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      9,
+      188
+     ],
+     "border_top": 147.049647337235,
+     "border_bottom": 2576.8259466362492,
+     "top_slack": 147.049647337235,
+     "raised": true,
+     "head_raise_inner_y": 333.0,
+     "warped_size": {
+      "width": 193,
+      "height": 2577
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0023,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      19,
+      191
+     ],
+     "border_top": 145.6484492053964,
+     "border_bottom": 2579.635436437487,
+     "top_slack": 145.6484492053964,
+     "raised": true,
+     "head_raise_inner_y": 329.0,
+     "warped_size": {
+      "width": 196,
+      "height": 2580
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 4
+     },
+     "side_floor": 0.0012,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "33/c7.png"
+    },
+    {
+     "col": 8,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      13,
+      176
+     ],
+     "border_top": 148.25410407534434,
+     "border_bottom": 2586.4770991830305,
+     "top_slack": 148.25410407534434,
+     "raised": true,
+     "head_raise_inner_y": 321.0,
+     "warped_size": {
+      "width": 183,
+      "height": 2586
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 3
+     },
+     "side_floor": 0.0027,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "glued"
+      }
+     },
+     "file": "33/c8.png"
+    },
+    {
+     "col": 9,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      7,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2442.296108216776,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2442
+     },
+     "border_case": {
+      "top": "d",
+      "bottom": "b"
+     },
+     "border_trim_px": {
+      "top": 15,
+      "bottom": 3
+     },
+     "side_floor": 0.0025,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "glued"
+      }
+     },
+     "file": "33/c9.png"
+    }
+   ]
+  },
+  {
+   "page": "47",
+   "admitted": false,
+   "reject": [
+    "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+   ],
+   "period": null,
+   "ref_w": null,
+   "column_widths": [
+    192,
+    187,
+    184,
+    186,
+    197,
+    197,
+    224,
+    212,
+    185
+   ],
+   "median_width": 192,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）",
+      "L3：还没标过金标"
+     ],
+     "tier": null,
+     "content_x": [
+      26,
+      188
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2411.6205163373975,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 192,
+      "height": 2412
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 2
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）",
+      "L2：两侧最低墨 0.0261 > 0.012（找不到墨量归零的边界）",
+      "L3：人裁 verdict=mixed（界行残墨与字身分不开）"
+     ],
+     "tier": null,
+     "content_x": [
+      18,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2414.9012004035317,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2415
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 0
+     },
+     "side_floor": 0.0261,
+     "gold": {
+      "verdict": "mixed",
+      "border_class": {
+       "top": "none",
+       "bottom": "none"
+      }
+     }
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）",
+      "L3：还没标过金标"
+     ],
+     "tier": null,
+     "content_x": [
+      19,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2418.0278002334358,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2418
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+     ],
+     "tier": "gold",
+     "content_x": [
+      13,
+      181
+     ],
+     "border_top": 138.34225771802744,
+     "border_bottom": 2559.4979759112844,
+     "top_slack": 138.34225771802744,
+     "raised": true,
+     "head_raise_inner_y": 339.0,
+     "warped_size": {
+      "width": 186,
+      "height": 2559
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     }
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+     ],
+     "tier": "gold",
+     "content_x": [
+      20,
+      192
+     ],
+     "border_top": 137.87989859364575,
+     "border_bottom": 2562.087135410917,
+     "top_slack": 137.87989859364575,
+     "raised": true,
+     "head_raise_inner_y": 335.0,
+     "warped_size": {
+      "width": 197,
+      "height": 2562
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     }
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+     ],
+     "tier": "gold",
+     "content_x": [
+      29,
+      193
+     ],
+     "border_top": 137.27996227917527,
+     "border_bottom": 2564.7537200735765,
+     "top_slack": 137.27996227917527,
+     "raised": true,
+     "head_raise_inner_y": 331.0,
+     "warped_size": {
+      "width": 197,
+      "height": 2565
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 1
+     },
+     "side_floor": 0.0109,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     }
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）",
+      "L2：两侧最低墨 0.0136 > 0.012（找不到墨量归零的边界）",
+      "L3：人裁 verdict=mixed（界行残墨与字身分不开）"
+     ],
+     "tier": null,
+     "content_x": [
+      23,
+      219
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2430.384529411765,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 224,
+      "height": 2430
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 0
+     },
+     "side_floor": 0.0136,
+     "gold": {
+      "verdict": "mixed",
+      "border_class": {
+       "top": "none",
+       "bottom": "none"
+      }
+     }
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+     ],
+     "tier": "gold",
+     "content_x": [
+      25,
+      207
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2433.5557257768614,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 212,
+      "height": 2434
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "none",
+       "bottom": "clean"
+      }
+     }
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 192px 超过 ±15% 的列 [7]（[224]）"
+     ],
+     "tier": "gold",
+     "content_x": [
+      18,
+      181
+     ],
+     "border_top": 135.51652635861177,
+     "border_bottom": 2572.725222544051,
+     "top_slack": 135.51652635861177,
+     "raised": true,
+     "head_raise_inner_y": 319.0,
+     "warped_size": {
+      "width": 185,
+      "height": 2573
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 2
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "page": "49",
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 165.0,
+   "column_widths": [
+    189,
+    182,
+    179,
+    184,
+    185,
+    187,
+    190,
+    182,
+    192
+   ],
+   "median_width": 185,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      173
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2467.613539735996,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 189,
+      "height": 2468
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：人裁 border_class bottom = idk（没看清）"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      165
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2466.2256823320463,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2466
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "d"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 11
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "idk"
+      }
+     }
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      165
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2464.8960182602846,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 179,
+      "height": 2465
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      171
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2463.5915623986366,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2464
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      4,
+      167
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2462.2736493136126,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2462
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 2
+     },
+     "side_floor": 0.002,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "49/c5.png"
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      4,
+      174
+     ],
+     "border_top": 115.92296696435312,
+     "border_bottom": 2576.861208175967,
+     "top_slack": 115.92296696435312,
+     "raised": true,
+     "head_raise_inner_y": 324.0,
+     "warped_size": {
+      "width": 187,
+      "height": 2577
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 4
+     },
+     "side_floor": 0.0004,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      8,
+      172
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2459.5554336509904,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2460
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 4
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      4,
+      174
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2458.2414766293887,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2458
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      173
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2456.939155421462,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 192,
+      "height": 2457
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 4
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "51",
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 175.0,
+   "column_widths": [
+    188,
+    181,
+    183,
+    184,
+    189,
+    186,
+    184,
+    188,
+    186
+   ],
+   "median_width": 186,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      13,
+      184
+     ],
+     "border_top": 127.42378085309895,
+     "border_bottom": 2528.8250589760933,
+     "top_slack": 127.42378085309895,
+     "raised": true,
+     "head_raise_inner_y": 318.0,
+     "warped_size": {
+      "width": 188,
+      "height": 2529
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0008,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "51/c1.png"
+    },
+    {
+     "col": 2,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      7,
+      178
+     ],
+     "border_top": 125.39719308184482,
+     "border_bottom": 2530.381525822696,
+     "top_slack": 125.39719308184482,
+     "raised": true,
+     "head_raise_inner_y": 316.0,
+     "warped_size": {
+      "width": 181,
+      "height": 2530
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "51/c2.png"
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      10,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2408.5174682561797,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2409
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 2,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      12,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2412.133896430148,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2412
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      186
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2415.656658489361,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 189,
+      "height": 2416
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2419.2024705882354,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2419
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2422.8456799660903,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2423
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0004,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "51/c7.png"
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      184
+     ],
+     "border_top": 121.20634418288626,
+     "border_bottom": 2547.7138212423965,
+     "top_slack": 121.20634418288626,
+     "raised": true,
+     "head_raise_inner_y": 296.0,
+     "warped_size": {
+      "width": 188,
+      "height": 2548
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2430.142153627601,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2430
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0004,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "65",
+   "admitted": true,
+   "reject": [],
+   "period": 118.0,
+   "ref_w": 176.0,
+   "column_widths": [
+    184,
+    179,
+    183,
+    182,
+    189,
+    186,
+    184,
+    185,
+    191
+   ],
+   "median_width": 184,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2467.5046599749353,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2468
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 14,
+      "bottom": 7
+     },
+     "side_floor": 0.0028,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      175
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2468.760590295556,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 179,
+      "height": 2469
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 3
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      179
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2470.013101757709,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2470
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2471.292431240691,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2471
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 4
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2472.5550570290784,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 189,
+      "height": 2473
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2473.849208548935,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2474
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      4,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2475.1496202801422,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2475
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2476.439492626254,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2476
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      187
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2477.730052208954,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 191,
+      "height": 2478
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 4
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "137",
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 164.0,
+   "column_widths": [
+    187,
+    178,
+    181,
+    185,
+    194,
+    190,
+    181,
+    187,
+    199
+   ],
+   "median_width": 187,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      20,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2371.306453562813,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "d",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 11,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      12,
+      174
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2371.193873112381,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 178,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      15,
+      176
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2371.0694771172593,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 181,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      15,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.965168680415,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      13,
+      190
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.7896371330694,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 194,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0004,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "137/c5.png"
+    },
+    {
+     "col": 6,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      17,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.6221673613577,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0004,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "137/c6.png"
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      16,
+      177
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.5435034355087,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 181,
+      "height": 2371
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      19,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.438995191026,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2370
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      15,
+      195
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.4393204020025,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 199,
+      "height": 2370
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "138",
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 164.0,
+   "column_widths": [
+    192,
+    182,
+    185,
+    202,
+    186,
+    187,
+    187,
+    180,
+    190
+   ],
+   "median_width": 187,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      21,
+      187
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2373.4367491306098,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 192,
+      "height": 2373
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      18,
+      177
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2374.3066919110242,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 182,
+      "height": 2374
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      15,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2375.1681597369166,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2375
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      23,
+      196
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2375.8998255346246,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 202,
+      "height": 2376
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "138/c4.png"
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      22,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2376.653696922245,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2377
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0034,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "138/c5.png"
+    },
+    {
+     "col": 6,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      19,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2377.6235081638238,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2378
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0029,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "none"
+      }
+     },
+     "file": "138/c6.png"
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      19,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2378.595889444754,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
+      "height": 2379
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 0
+     },
+     "side_floor": 0.0013,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      10,
+      174
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2379.5503246849485,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 180,
+      "height": 2380
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      13,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2380.5219223589484,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2381
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0017,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "141",
+   "admitted": true,
+   "reject": [],
+   "period": 117.0,
+   "ref_w": 172.0,
+   "column_widths": [
+    192,
+    189,
+    190,
+    184,
+    185,
+    178,
+    186,
+    188,
+    184
+   ],
+   "median_width": 186,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      5,
+      184
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2478.7237198841626,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 192,
+      "height": 2479
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 8
+     },
+     "side_floor": 0.0044,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "141/c1.png"
+    },
+    {
+     "col": 2,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      12,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2478.138821593491,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 189,
+      "height": 2478
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 7
+     },
+     "side_floor": 0.002,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "141/c2.png"
+    },
+    {
+     "col": 3,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      16,
+      187
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2477.6921500066555,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2478
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 5
+     },
+     "side_floor": 0.0016,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "141/c3.png"
+    },
+    {
+     "col": 4,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      13,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2477.245622811167,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2477
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 2
+     },
+     "side_floor": 0.0,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "141/c4.png"
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      12,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2476.7669795677866,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2477
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 0
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      8,
+      175
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2476.2893405288123,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 178,
+      "height": 2476
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "d"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 22
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      11,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2475.804067655093,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2476
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 0
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2475.3189331278195,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2475
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      8,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2474.7947877228944,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2475
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 2
+     },
+     "side_floor": 0.0,
+     "gold": null
+    }
+   ]
+  },
+  {
+   "page": "142",
+   "admitted": true,
+   "reject": [],
+   "period": 118.0,
+   "ref_w": 180.0,
+   "column_widths": [
+    186,
+    185,
+    194,
+    190,
+    184,
+    188,
+    190,
+    190,
+    196
+   ],
+   "median_width": 190,
+   "columns": [
+    {
+     "col": 1,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2445.724872644819,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 186,
+      "height": 2446
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null
+    },
+    {
+     "col": 2,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      7,
+      181
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2447.0840162887566,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2447
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 5,
+      "bottom": 0
+     },
+     "side_floor": 0.0012,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      189
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2448.445564296619,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 194,
+      "height": 2448
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 4,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      186
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2449.8156894510835,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2450
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 0
+     },
+     "side_floor": 0.0016,
+     "gold": null
+    },
+    {
+     "col": 5,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2451.17697628974,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2451
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0004,
+     "gold": null
+    },
+    {
+     "col": 6,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
+     "content_x": [
+      6,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2452.538525016026,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 188,
+      "height": 2453
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 3
+     },
+     "side_floor": 0.0004,
+     "gold": {
+      "verdict": "clean",
+      "border_class": {
+       "top": "clean",
+       "bottom": "clean"
+      }
+     },
+     "file": "142/c6.png"
+    },
+    {
+     "col": 7,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      4,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2453.8722459997466,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2454
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 3
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      5,
+      185
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2455.215238858272,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 190,
+      "height": 2455
+     },
+     "border_case": {
+      "top": "c",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 0,
+      "bottom": 4
+     },
+     "side_floor": 0.0008,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L3：还没标过金标"
+     ],
+     "tier": "gate",
+     "content_x": [
+      6,
+      190
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2456.630927965999,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 196,
+      "height": 2457
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 8,
+      "bottom": 0
+     },
+     "side_floor": 0.0028,
+     "gold": null
+    }
+   ]
+  }
+ ]
+}
