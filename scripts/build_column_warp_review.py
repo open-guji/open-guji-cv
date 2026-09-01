@@ -3,11 +3,15 @@
 
     python scripts/build_column_warp_review.py -o output/column_warp_review.html
 
-拿 `open-guji-dataset/border-detection` 那 14 页金标里已经核校过的 VLine/HLine，
-按定版调用约定（`column_bounds`：上下界一律取页面右端 x=0 锚点，抬头列改用该列
-抬头框 inner_y）跑 `warp_column` + `denoise_column`，把每一列的矫正图和它**沿
-竖直方向的投影**摆出来，让人拖两条线定出「文字带」的左右边界，并裁决这一列
-能不能做到「界行残墨全在带外、字身墨全在带内」。
+列图直接读 `output/<book>/step2_columns/<page>/c<N>.png`——生产链路真正会喂给
+Step2 的那张图（`scripts/regen_step2_columns.py` 用 `detect_borders` 算法探测
+的边线 + `page_column_windows` 逐列窗口生成）。把矫正图和它**沿竖直方向的
+投影**摆出来，让人拖两条线定出「文字带」的左右边界，并裁决这一列能不能做到
+「界行残墨全在带外、字身墨全在带内」。
+
+**别再从 border-detection 金标现算列图**：那是另一条链路（人工金标边线 +
+页级 x=0 锚点），实测边线差 0.76~27.6px、列图宽度差到 38px，标注不通用。
+那套的金标归档在数据集的 `column-warp/legacy-page-anchor/`。
 
 金标真源是人拖出来的那两个 x 和那条裁决，投影曲线只是随卡存的快照。
 
@@ -25,25 +29,30 @@ import sys
 from pathlib import Path
 
 import cv2
-import numpy as np
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / ".claude" / "skills" / "review-artifact" / "scripts"))
 
 from open_guji_cv.utils.border_geometry import HLine, VLine  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
-    column_bounds,
     column_profile,
     column_text_band,
     denoise_column,
-    warp_column,
 )
 from review_shell import render  # noqa: E402
 
 DATASET = ROOT.parent / "open-guji-dataset"
 GOLD_DIR = DATASET / "border-detection" / "samples"
 SRC = ROOT / "data_full" / "zongmu" / "{book}" / "{page}.png"
+STEP2_COLUMNS = ROOT / "output" / "{book}" / "step2_columns" / "{page}"
+
+
+def load_windows(book: str, page: str) -> dict[int, dict]:
+    """读 regen_step2_columns.py 产的逐列窗口——这是 Step2 的**定版输入**。"""
+    f = Path(str(STEP2_COLUMNS).format(book=book, page=page)) / "windows.json"
+    if not f.exists():
+        raise SystemExit(f"{f} 不存在——先跑 scripts/regen_step2_columns.py {book} {page}")
+    return {c["col"]: c for c in json.loads(f.read_text(encoding="utf-8"))["columns"]}
 
 TITLE = "单列矫正·文字带核校"
 KEY = "column-warp-band-v1"          # 换页必须换 key
@@ -126,20 +135,17 @@ def pick_columns(metrics: dict[tuple[str, str, int], dict]) -> list[dict]:
 
 def build_rows(picked: list[dict]) -> tuple[list[dict], dict[str, str]]:
     rows, imgs = [], {}
-    cache: dict[str, np.ndarray] = {}
+    wins: dict[tuple[str, str], dict[int, dict]] = {}
     for p in picked:
         book, page, col = p["book"], p["page"], p["col"]
-        key = f"{book}/{page}"
-        if key not in cache:
-            path = str(SRC).format(book=book, page=page)
-            g = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if g is None:
-                raise SystemExit(f"读不到原始扫描: {path}")
-            cache[key] = g
-        gray = cache[key]
-        _, top, bottom, vs, raise_y, _ = page_geometry(book, page)
-        top_y, bottom_y = column_bounds(top, bottom, raise_y.get(col))
-        warped = denoise_column(warp_column(gray, vs[col], vs[col - 1], top_y, bottom_y))
+        if (book, page) not in wins:
+            wins[(book, page)] = load_windows(book, page)
+        win = wins[(book, page)][col]
+        img_path = Path(str(STEP2_COLUMNS).format(book=book, page=page)) / win["file"]
+        raw = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        if raw is None:
+            raise SystemExit(f"读不到列图: {img_path}")
+        warped = denoise_column(raw)
         seed_l, seed_r = column_text_band(warped)
         prof = column_profile(warped)
 
@@ -149,10 +155,12 @@ def build_rows(picked: list[dict]) -> tuple[list[dict], dict[str, str]]:
         ok, buf = cv2.imencode(".png", squashed, [cv2.IMWRITE_PNG_COMPRESSION, 9])
         assert ok
         imgs[cid] = "data:image/png;base64," + base64.b64encode(buf).decode()
+        # 「抬头列」以**当前输入**为准重打，别用选列时的旧标签
+        tags = [t for t in p["tags"] if t != "抬头列"] + (["抬头列"] if win["raised"] else [])
         rows.append(dict(
-            id=cid, book=book, page=page, col=col, tags=p["tags"],
-            raised=bool(p["raised"]), w=int(warped.shape[1]), h=int(warped.shape[0]),
-            top_y=round(top_y, 1), bottom_y=round(bottom_y, 1),
+            id=cid, book=book, page=page, col=col, tags=sorted(tags),
+            raised=bool(win["raised"]), w=int(warped.shape[1]), h=int(warped.shape[0]),
+            top_y=round(win["top_y"], 1), bottom_y=round(win["bottom_y"], 1),
             drift=round(p["drift"], 1), dgap=round(p["dgap"], 1),
             anchor=round(p["anchor"], 1), seed=[int(seed_l), int(seed_r)],
             # 投影量化成 0~255 一个字节一点，base64 存——32 列合计几 KB
@@ -468,6 +476,9 @@ def main() -> None:
                     help="卡片 id 冻在这里——重出一版页照旧读，否则上一轮的标注对不上号")
     ap.add_argument("--freeze", help="按这个卡集里的列重建（不重跑 pick_columns）")
     ap.add_argument("--carry", help="读回来的旧页 HTML，把仍然有效的裁决带过来")
+    ap.add_argument("--only", default="",
+                    help="逗号分隔的 id：只放这些卡（要重标时用，别让人在一堆"
+                         "已裁的卡里找那几张）")
     ap.add_argument("--drop", default="", help="逗号分隔的列 id，几何漂了、标注已失效，清掉重标")
     args = ap.parse_args()
 
@@ -480,8 +491,17 @@ def main() -> None:
     else:
         picked = pick_columns(metrics)
     drop = {x for x in args.drop.split(",") if x}
+    only = {x for x in args.only.split(",") if x}
+    if only:
+        # 重标时只放要重标的列——别让人在一堆已裁的卡里翻那几张
+        picked = [p for p in picked if f"{p['book']}_{p['page']}_c{p['col']}" in only]
+        if not picked:
+            raise SystemExit(f"--only 里的 id 一个都没匹配上：{sorted(only)}")
     existing = load_existing(args.carry, drop)
     rows, imgs = build_rows(picked)
+    if only:
+        keep = {r["id"] for r in rows}
+        existing = {k: v for k, v in existing.items() if k.split("#")[0] in keep}
 
     cards = Path(args.cards)
     cards.parent.mkdir(parents=True, exist_ok=True)
