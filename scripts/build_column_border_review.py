@@ -273,10 +273,21 @@ def main() -> None:
     ap.add_argument("-o", "--out", default="output/column_border_review.html")
     ap.add_argument("--cards", default="output/column_border_cards.jsonl")
     ap.add_argument("--carry", help="读回来的旧页 HTML，把已有裁决带过来")
+    ap.add_argument("--only", default="",
+                    help="逗号分隔的卡 id（如 vol01_47_c2_top）：只放这些卡，"
+                         "要重标时用，别让人在一堆已裁的卡里翻那几张")
     args = ap.parse_args()
 
     rows, imgs = build_rows()
+    only = {x for x in args.only.split(",") if x}
+    if only:
+        rows = [r for r in rows if r["id"] in only]
+        if not rows:
+            raise SystemExit(f"--only 里的 id 一个都没匹配上：{sorted(only)}")
+        imgs = {r["id"]: imgs[r["id"]] for r in rows}
     existing = load_existing(args.carry)
+    if only:
+        existing = {k: v for k, v in existing.items() if k in only}
     cards = Path(args.cards)
     cards.parent.mkdir(parents=True, exist_ok=True)
     cards.write_text("\n".join(

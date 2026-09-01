@@ -14,27 +14,27 @@ Step1 还在改，每改一次列图就变，这批金标已经因此作废过�
 那样会永久丢掉 2 条"上一轮失效、这一轮又有效"的标注。这个脚本把那套复核
 固化下来，让**变化不大的自动留用、只有真变了的才回去重标**。
 
-## 两条判据（都**不用算法自己的输出**当基准，避免循环论证）
+## 判据：**主判据是「图变没变」**，不是「算法现在怎么判」
 
-**文字带** —— 判据就是金标自己的定义：「边界处墨量接近 0」。把人标的
-`human_left/right` 放到新列图上，重算那两个 x 处的墨占比：
+一条人裁只对**它当时看的那张图**成立。所以导出时给每条标注存一份图像指纹
+（文字带存整列图的 `column_fingerprint`，上下版框存两张端裁剪图的
+`end_fingerprint`，都是灰度缩略）；迁移时重算、比平均绝对差 ≤ `FP_TOL`
+（6 灰阶）就**原样留用**。
 
-  * ≤ `KEEP_EPS`(0.01) —— 标注**仍然成立**，原样留用；`canonical_*` 按新图
-    重新往外推（走廊的激进端本来就是派生量，不是人标的）。
-  * 否则 —— 边界落进墨里了，标注失效，列进 `pending_relabel`。
+指纹法的好处是**跟算法无关**：它只问"人当时看的那张图还在不在"。
+**拿算法的一致性当留用判据会让金标永远测不出算法错——那是循环论证。**
 
-**上下版框类别** —— 类别取决于"窗口裁到哪"，不能用墨量判。改用**图像指纹**：
-导出时把人当时看的那两张端裁剪图各存一份 32×24 的缩略（`end_fingerprint`）；
-迁移时重算裁剪图、跟指纹比平均绝对差：
+图**真的变了**之后，还有一条自动补救通道，只对 `clean` 列开：把人标的
+`human_left/right` 放到新图上，如果那两个 x 处的墨占比仍 ≤ `KEEP_EPS`(0.01)，
+说明"边界处墨量接近 0"这个**金标自己的定义**依旧满足，可以免人工留用
+（`canonical_*` 按新图重推——走廊的激进端本来就是派生量）。
 
-  * ≤ `FP_TOL`(6 灰阶) —— 人看的还是同一张图，裁决留用；
-  * 否则 —— 图变了，类别得重判。
+**这条通道对 `mixed`/`idk` 列不适用**，别拿它去查：`mixed` 的含义就是"这一列
+压根找不到墨量归零的边界"，用零墨判据去查必然报警。实测 vol01/47 c2/c7 的
+左侧从头到尾在 0.04~0.09 之间、没有任何零区——那正是人判 `mixed` 的原因，
+不是标注错了。早先版本没分这个情况，把它们误报成"失效"。
 
-指纹法的好处是**跟算法无关**：它只问"人当时看的那张图还在不在"，不问算法
-现在怎么判。拿算法的一致性当留用判据会让金标永远测不出算法错——那是循环。
-
-没有 `end_fingerprint` 的老样本（指纹是这一轮才加的）一律判为"需重看"，
-不猜。
+没有指纹的老样本（指纹是后加的）一律判"需重看"，不猜。
 """
 from __future__ import annotations
 
@@ -59,18 +59,23 @@ from open_guji_cv.utils.column_projection import (  # noqa: E402
 
 KEEP_EPS = 0.01      # 人标点处的墨占比 <= 这个就算"还在零区"（实测人标处均值 0.0010）
 ZERO_EPS = 0.005     # 往外推 canonical 用的门槛，跟导出脚本一致
-FP_TOL = 6.0         # 端裁剪图指纹的平均绝对差容差（灰阶）
-FP_SIZE = (32, 24)   # 指纹尺寸 (w, h)
+FP_TOL = 6.0         # 指纹的平均绝对差容差（灰阶）；标定见下面的注释
+FP_SIZE = (32, 24)   # 端裁剪图指纹尺寸 (w, h)
+COL_FP_SIZE = (24, 96)   # 整列图指纹尺寸——列又高又窄，纵向多给点
+# FP_TOL 标定：列图横向平移 1~3px 时指纹差 ≈0（带跟着移、图其实没变，正是
+# "变化不大就不用重标"该有的行为），平移 8px 才开始报警。
 CROP_ROWS = 220      # 跟标注页一致
 
 
-def fingerprint(crop: np.ndarray) -> str:
-    small = cv2.resize(crop, FP_SIZE, interpolation=cv2.INTER_AREA)
+def fingerprint(crop: np.ndarray, size: tuple[int, int] = FP_SIZE) -> str:
+    small = cv2.resize(crop, size, interpolation=cv2.INTER_AREA)
     return base64.b64encode(small.astype(np.uint8).tobytes()).decode()
 
 
-def unpack_fp(s: str) -> np.ndarray:
-    return np.frombuffer(base64.b64decode(s), dtype=np.uint8).reshape(FP_SIZE[1], FP_SIZE[0])
+def fp_diff(stored: str, img: np.ndarray, size: tuple[int, int] = FP_SIZE) -> float:
+    a = np.frombuffer(base64.b64decode(stored), dtype=np.uint8).reshape(size[1], size[0])
+    b = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+    return float(np.abs(a.astype(int) - b.astype(int)).mean())
 
 
 def end_crops(warped: np.ndarray) -> dict[str, np.ndarray]:
@@ -120,10 +125,22 @@ def main() -> None:
         else:
             prof = column_profile(warped)
             hl, hr = tb["human_left"], tb["human_right"]
-            if hl >= len(prof) or hr > len(prof):
+            col_fp = s.get("column_fingerprint")
+            same_img = (col_fp is not None
+                         and fp_diff(col_fp, warped, COL_FP_SIZE) <= FP_TOL)
+            ink = (max(float(prof[hl]), float(prof[hr - 1]))
+                   if hl < len(prof) and hr <= len(prof) else None)
+            if same_img:
+                band_keep.append(key)        # 图没变，人裁照旧成立
+            elif ink is None:
                 band_drop.append((key, "越界"))
-            elif max(float(prof[hl]), float(prof[hr - 1])) > KEEP_EPS:
-                band_drop.append((key, "墨 %.4f" % max(float(prof[hl]), float(prof[hr - 1]))))
+            elif s.get("verdict") != "clean":
+                # mixed/idk 没有"墨量归零的边界"可言，零墨判据用不上——图变了
+                # 就只能回去重看
+                band_drop.append((key, "图变了且判为 %s，零墨判据不适用"
+                                   % s.get("verdict")))
+            elif ink > KEEP_EPS:
+                band_drop.append((key, "图变了、人标点处墨 %.4f" % ink))
             else:
                 cl, cr = hl, hr
                 while cl - 1 >= 0 and prof[cl - 1] <= ZERO_EPS:
@@ -146,9 +163,7 @@ def main() -> None:
                 if end not in fps:
                     cls_nofp.append(cid)
                     continue
-                d = float(np.abs(unpack_fp(fps[end]).astype(int)
-                                  - cv2.resize(crops[end], FP_SIZE,
-                                                interpolation=cv2.INTER_AREA).astype(int)).mean())
+                d = fp_diff(fps[end], crops[end])
                 (cls_keep if d <= FP_TOL else cls_recheck).append((cid, round(d, 1)))
 
         if changed and args.apply:
