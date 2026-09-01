@@ -213,6 +213,24 @@ def test_segment_column_types_plain_and_blank_cells():
     assert all(c.x0 == x_lo and c.x1 == x_hi for c in r.cells)
 
 
+def test_segment_column_content_x_override_bypasses_find_content_window():
+    """`content_x` 给了就直接用，不再调用 `find_content_window` 自己找墙。
+
+    这是 Step2 换成 `clean_column`（抹白不裁切）之后的真实场景：界行的墨被
+    抹成背景色，`find_content_window` 在图上一堵墙都找不到，会退化成整幅
+    宽度——所以调用方（`export_step3_input.py` 的 manifest）必须把 Step2
+    自己定出来的窗口传进来，Step3 不该在这张图上重新猜一遍。
+    """
+    img = _synth_column_image()      # 有界行，find_content_window 正常会剥掉它
+    auto_lo, auto_hi = fit_mod.find_content_window(img)
+    given = (auto_lo + 5, auto_hi - 5)   # 故意给一个不同的窗口，证明真被用上了
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
+                               content_x=given)
+    assert r is not None
+    assert r.content_x == given
+    assert all((c.x0, c.x1) == given for c in r.cells)
+
+
 def test_segment_column_splits_jiazhu_run_into_a_and_b_halves():
     img = _synth_column_image(jiazhu_slots=(8, 9, 10, 11))
     r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
