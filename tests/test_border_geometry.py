@@ -245,7 +245,7 @@ def test_detect_head_raise_rejects_horizontal_line_without_walls():
 
 def _outer_page(w=1000, h=1200, gap=40, top_y=300, bot_y=900,
                  paint_top_outer=True, paint_bottom_outer=True,
-                 decoy_top_offset=None):
+                 decoy_top_offset=None, text_below_bottom=False):
     """搭一张有内外双版框的合成页。
 
     `gap` 是内外框间距——真书上这是个全页常数（14 页实测竖直 38.4±4.0px），
@@ -268,6 +268,10 @@ def _outer_page(w=1000, h=1200, gap=40, top_y=300, bot_y=900,
     if decoy_top_offset is not None:
         d = decoy_top_offset
         mask[top_y - d - 6:top_y - d, :] = 1.0
+    if text_below_bottom:
+        # 下框"外面"还铺着正文——模拟 bottom 内框线根本没落在下版框上的页
+        for r in range(bot_y + gap + 18, min(h - 2, bot_y + gap + 170), 18):
+            mask[r:r + 13, 160:w - 160] = 1.0
     top = HLine(y_at_right=float(top_y + 2), slope=0.0, kind="top")
     bottom = HLine(y_at_right=float(bot_y - 2), slope=0.0, kind="bottom")
     verticals = [VLine(x_at_top=float((w - 1) - x), slope=0.0) for x in xs_old[::-1]]
@@ -302,3 +306,14 @@ def test_detect_outer_borders_reports_none_when_outer_not_printed():
     r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
     assert r["bottom_outer_offset"] is None
     assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4   # 另一边不受连累
+
+
+def test_detect_outer_borders_rejects_when_ink_continues_beyond():
+    """外框条外面必须是纸。vol02/75、vol02/153 的 `bottom` 内框线本身没落在下版框
+    上，外框探测就在正文里挑了最黑的一段，画出来的线**直接穿过文字**（用户实审
+    点名）。健康页外条之外的行墨是恰好 0.000 一路到 +110px，那两页从不归零、一直
+    0.15~0.26——据此拦掉。"""
+    mask, top, bottom, verts = _outer_page(gap=40, text_below_bottom=True)
+    r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+    assert r["bottom_outer_offset"] is None
+    assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4      # 上边不受连累
