@@ -13,8 +13,10 @@
     gap_near  = near              内心 → 外条近沿
     gap_far   = far               内心 → 外条外延（**就是金标 `*_outer_offset` 的口径**）
 
-只统计「清楚」的边：内框峰墨 >= INNER_CLEAR 且外条峰墨 >= OUTER_CLEAR。糊页的
-数进来会把常数拉偏，而且糊页本来就不该用来定常数。
+只统计「清楚」的边：内框峰墨 >= INNER_CLEAR、外条峰墨 >= OUTER_CLEAR，且内框线
+半高宽 <= INNER_W_MAX。糊页的数进来会把常数拉偏，而且糊页本来就不该用来定常数。
+**线宽那道闸是必须的**——末行字那一片墨也能有 0.5 以上的行墨占比，光看墨量拦不住，
+混进来会把下框的「内心→外延」从 34.3±3.7 拉成 30.3±9.8。
 
 **已知的两条坑**（都是量出来的，别再踩）：
 - **外条近沿不可用，只有远沿（外延）稳**。外条是从**内侧**磨掉的：清楚页近沿
@@ -54,6 +56,9 @@ RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 PAGE_TYPE = ROOT.parent / "open-guji-dataset" / "page-type" / "expected.json"
 
 INNER_CLEAR, OUTER_CLEAR = 0.45, 0.60
+INNER_W_MAX = 10.0     # 内框线半高宽上限。真版框线实测 4~8px；**这道闸是必须的**
+                       # ——末行字那一片墨也能有 0.5 以上的行墨占比，混进来会把
+                       # 「内心→外延」整体拉小（下框 34.3→30.3px、标准差 3.7→9.8）
 LO, HI = -25, 120          # 剖面范围（相对内框线，向外为正）
 ORIGIN_SNAP = 6            # 精修原点时在 ±这么多 px 里找真墨峰
 
@@ -136,6 +141,8 @@ def measure_page(args) -> list[dict]:
             continue
         origin = _centroid(pr, ic)          # 原点精修到真墨线心，去掉算法残差
         ilo, ihi = _halfwidth(pr, ic)
+        if ihi - ilo > INNER_W_MAX:
+            continue                        # 太宽 => 那是字行不是版框线
         olo, ohi = _halfwidth(pr, oc)
         out.append(dict(book=book, page=page, kind=kind,
                         inner_peak=round(pr[ic], 3), outer_peak=round(pr[oc], 3),
