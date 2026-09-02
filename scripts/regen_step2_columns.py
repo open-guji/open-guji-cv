@@ -7,12 +7,48 @@
 
     python scripts/regen_step2_columns.py <book> <page> [<page> ...] [--denoise]
     python scripts/regen_step2_columns.py vol01 --gold-pages
+    python scripts/regen_step2_columns.py vol01 4 7 10 ... --jobs 4   # 跨页并行
 
 输出：output/<book>/step2_columns/<page>/c<N>.png + <page>/windows.json
+
+## 性能：99.7% 的时间在 Step1 的 `detect_borders`，Step2 自己几乎不花时间
+
+实测单页（vol01/9，2327×3072）：`detect_borders` 22.1s，`warp_page_columns`
+（9 列射影变换）0.006s，`denoise_column`×9 0.02s，`clean_column`×9
+（denoise+定带+去界行+削版框）0.03s——Step2 自己的活加起来 **不到 0.1s**，
+优化 Step2 本身没有意义，瓶颈是它调用的 Step1 探测。
+
+`detect_borders` 内部再拆（cProfile，同一页）：`find_vertical_lines` 17.5s
+（76%）、`find_horizontal_border`（上下各一次）3.9s（17%）、
+`fit_vlines_polyline`（三段折线拟合）1.4s（6%）。`find_vertical_lines` 的
+时间几乎全在 `joint_search_coarse_to_fine`——9 列页面探 16 个候选线窗口，
+每个窗口粗扫 35 档角度 + 精扫 25 档角度，每一档角度都要对整页高度做一次
+双线性插值投影（`sample_line_curve`，962 次调用、17.7s tottime）。这是
+Step1（`peak_line_search.py`）内部的计算结构，不归 Step2 改，但记在这里
+方便算总账：
+
+- **本文件已加的优化：跨页并行**（`--jobs`）。`detect_borders` 每页完全
+  独立，`ProcessPoolExecutor` 按页分给多个进程。这台容器 4 核实测（4 页，
+  vol01/4·7·10·13）：`--jobs 1` 81.9s（20.5s/页）→ `--jobs 4` 24.2s
+  （6.1s/页），**3.4x**，接近核数上限（`detect_borders` 是纯 CPU 计算，
+  没有 IO 等待可省，多进程序列化图像数组的开销吃掉了一点理论上限）。
+  两种跑法产出的 `windows.json` **逐字节相同**——并行不改变任何一页的
+  结果，只是分给谁算的问题。按这个比率外推，54 页批跑大约能从 ~18 分钟
+  压到 ~5.5 分钟；这台容器只有 4 核，更多核数应该还能往上摊（`detect_borders`
+  之间没有共享状态，理论上 `--jobs` 可以一直加到核数）。
+- **没做、留给 Step1 那边的建议**（都要改 `peak_line_search.py`，这次范围
+  外）：①`joint_search_coarse_to_fine` 的粗扫/精扫是 Python 循环里逐个角度
+  调 `sample_line_curve`，60 次独立 numpy 调用——合并成一次广播（加一维
+  角度轴）能把 60 次调用变 1 次，省掉大部分重复的数组分配和调用开销；
+  ②先在降采样图（比如 2x/4x）上粗定位候选线的大致 x/角度范围，再回原图
+  精搜小窗口——`sample_line_curve` 的开销跟页高线性相关，降采样能按比例
+  砍时间；③`find_horizontal_border` 的两次调用（top/bottom）互相独立，
+  也能并行，但相对 `find_vertical_lines` 的 17.5s 收益有限。
 """
 import argparse
 import json
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import cv2
@@ -69,6 +105,14 @@ def regen(book: str, page: str, expected_cols: int, denoise: bool) -> dict:
     return meta
 
 
+def _report(book: str, page: str, m: dict) -> str:
+    r = [c["col"] for c in m["columns"] if c["raised"]]
+    return (f"{book}/{page}: {len(m['columns'])} 列"
+            + (f"，抬头列 {r}（多矫正 "
+               + ", ".join(f"{c['border_top_in_column']:.0f}px" for c in m["columns"] if c["raised"])
+               + "）" if r else ""))
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("book")
@@ -76,17 +120,29 @@ if __name__ == "__main__":
     ap.add_argument("--gold-pages", action="store_true", help="用 border-detection 金标那 14 页")
     ap.add_argument("--cols", type=int, default=9)
     ap.add_argument("--denoise", action="store_true")
+    ap.add_argument("--jobs", type=int, default=1,
+                     help="跨页并行进程数——detect_borders 是纯 CPU 计算、"
+                          "每页互相独立，是这个脚本唯一值得并行的地方（见"
+                          "模块头「性能」一节）。默认 1（顺序，行为不变）。")
     a = ap.parse_args()
     pages = GOLD_PAGES if a.gold_pages else a.pages
     if not pages:
         ap.error("给页号，或者 --gold-pages")
     n_raised = 0
-    for pg in pages:
-        m = regen(a.book, pg, a.cols, a.denoise)
-        r = [c["col"] for c in m["columns"] if c["raised"]]
-        n_raised += len(r)
-        print(f"{a.book}/{pg}: {len(m['columns'])} 列"
-              + (f"，抬头列 {r}（多矫正 "
-                 + ", ".join(f"{c['border_top_in_column']:.0f}px" for c in m["columns"] if c["raised"])
-                 + "）" if r else ""), flush=True)
+    if a.jobs <= 1:
+        for pg in pages:
+            m = regen(a.book, pg, a.cols, a.denoise)
+            n_raised += len([c for c in m["columns"] if c["raised"]])
+            print(_report(a.book, pg, m), flush=True)
+    else:
+        with ProcessPoolExecutor(max_workers=a.jobs) as pool:
+            futs = {pool.submit(regen, a.book, pg, a.cols, a.denoise): pg for pg in pages}
+            done = {}
+            for fut in as_completed(futs):
+                pg = futs[fut]
+                done[pg] = fut.result()
+            for pg in pages:  # 按传入顺序打印，不按完成顺序——输出可复现、方便 diff
+                m = done[pg]
+                n_raised += len([c for c in m["columns"] if c["raised"]])
+                print(_report(a.book, pg, m), flush=True)
     print(f"\n完成，抬头列共 {n_raised} 个")
