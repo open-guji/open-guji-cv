@@ -104,7 +104,9 @@ class BorderDetectionResult:
     # 筒子页对折装订，偶数页纸边在左、奇数页在右，版心/装订那一侧没有
     # 独立外边框(被切/装订吃掉，不是没探测到)。跟对应内边框斜率锁定，
     # 只用一个"沿垂直方向的偏移量"描述，不需要独立的位置+角度两个自由度。
-    # 目前没有自动探测算法，恒为 None，需要人工标注补上。
+    # 由 `detect_outer_borders()` 填（口径=**外延**，跟 head_raise.outer_y 统一）。
+    # 探测不到就留 None——这批书的上下外框磨损严重，14 页里 5 例峰值墨只有
+    # 0.08~0.30，宁可报 None 也不硬凑。
     top_outer_offset: float | None = None
     bottom_outer_offset: float | None = None
     v_outer_side: str | None = None  # "left" | "right"，由页码奇偶决定
@@ -283,6 +285,152 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     return out
 
 
+# --- 外边框探测（形态常数来自 14 页金标实测） ---
+OUTER_GAP_MIN, OUTER_GAP_MAX = 12, 78   # 外框离内框多远，金标实测 24~47
+OUTER_INK_MIN = 0.30      # 认一段"外框墨"的绝对门槛。**别为了提高覆盖率往下调**：
+                          # 14 页 28 条边实测，0.30 以下放进来的每一档都会拖进
+                          # >25px 的离群（0.26→最大 27.6px、0.12 弱档 6 例里 3 例
+                          # 超 10px）。上下外框在这批书上大量磨没/裁掉，宁可报
+                          # None 也不要报一个错的数。
+OUTER_RUN_MIN = 4         # 墨条厚度：竖直外框实测 17~28px，上下 0~20px。
+OUTER_RUN_MAX = 40        # 实测 30/40/60 三档结果完全一样，不是敏感参数。
+OUTER_PRIOR_TOL = 10.0    # 偏离页级间距先验多少 px 算一个"半衰"
+OUTER_PRIOR_SHIFT = {"top": -10.8, "bottom": -5.9}
+                          # 版框**不是四边等距的**：同页实测（两侧都清楚的 5 页）
+                          # 竖直外延间距比 top 大 10.8±4.5px、比 bottom 大 5.9±4.2px。
+                          # 先验是从竖直外框量的，套到上下要先减掉这个差，否则
+                          # 窗口中心整体偏外。
+OUTER_PRIOR_WIN = 16.0    # 上下外框只在"页级内外间距"先验的 ±这么多 px 里找。
+                          # 依据是用户给的判据、并已用金标验证：同一页四条边的
+                          # 内外间距基本是个常数——竖直外框 38.4±4.0px（n=14）、
+                          # 抬头框内外距 37.0px（n=11），两者对得上。放宽到 ±20
+                          # 就会跑到远处的书口/纸边痕迹上去（vol01/32 top 报 -58、
+                          # vol01/47 top 报 -62，都不是版框）。
+OUTER_EDGE_RUN = 8        # 外延最多从墨段端点再往外走这么多 px
+
+
+def _outer_run(prof: np.ndarray, offs: np.ndarray,
+                prefer_abs: float | None = None) -> tuple[float, float] | None:
+    """在"由内向外"单调排列的剖面里找外框墨条，返回 (外延offset, 峰值墨)。
+
+    **`offs` 必须单调**（不能按绝对值排序）——负方向排成递减的话
+    `offs[b]-offs[a]` 会算出负厚度，整段被 RUN_MIN 挡掉；原型就是这么让
+    top 和 right 侧全军覆没的。
+
+    `prefer_abs`：这一页"内外间距应该是多少"的先验（用户给的判据——四条边
+    的内外间距全页基本一致，实测上 36.3±6.2 / 下 38.2±5.1 / 侧 38.4±4.0）。
+    给了就对偏离它的候选段打折。上下外框在这批书上磨损严重，光看墨量会
+    挑到更远处的别的痕迹；竖直外框那一侧墨很稳（峰值 0.48~1.00），拿它当
+    先验能把上下那几个离群页拉回来。
+    """
+    idx = np.where(prof >= OUTER_INK_MIN)[0]
+    if len(idx) == 0:
+        return None
+    runs, a, b = [], idx[0], idx[0]
+    for q in idx[1:]:
+        if q == b + 1:
+            b = q
+        else:
+            runs.append((a, b)); a = b = q
+    runs.append((a, b))
+    best = None
+    for a, b in runs:
+        thick = abs(float(offs[b] - offs[a]))
+        if not (OUTER_RUN_MIN <= thick <= OUTER_RUN_MAX):
+            continue
+        score = float(prof[a:b + 1].mean()) * (thick + 1.0)
+        if prefer_abs is not None:
+            mid = abs(float(offs[a] + offs[b]) / 2.0)
+            score /= 1.0 + (abs(mid - prefer_abs) / OUTER_PRIOR_TOL) ** 2
+        if best is None or score > best[0]:
+            pk = float(prof[a:b + 1].max())
+            half = pk * 0.5
+            # 外延要有刹车：半高门槛在低对比区会一路滑到搜索边界（vol01/32 top
+            # 的段明明在 -45~-50，却一路滑出去报了 -78=GAP_MAX）。最多再走
+            # OUTER_EDGE_RUN px。
+            i, limit = b, min(len(prof) - 1, b + OUTER_EDGE_RUN)
+            while i < limit and prof[i + 1] >= half:
+                i += 1
+            if i >= len(prof) - 1 or prof[i + 1] >= half:
+                edge = float(offs[i])
+            else:
+                p0, p1 = float(prof[i]), float(prof[i + 1])
+                edge = (float(offs[i]) if p0 == p1 else
+                        float(offs[i]) + (p0 - half) / (p0 - p1) * float(offs[i + 1] - offs[i]))
+            best = (score, edge, pk)
+    return None if best is None else (best[1], best[2])
+
+
+def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
+                          verticals: list[VLine], width: int, height: int) -> dict:
+    """上下版框的外框偏移 + 纸边侧竖直外框偏移。
+
+    坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
+    `outer_y` 统一。外框是一条粗墨条，"位置"取决于量条的哪一侧，不定死口径
+    就没法比——抬头框那边踩过这个坑。
+
+    **上下外框走"页级间距先验"**：先测竖直外框（墨最稳，峰值 0.48~1.00、
+    14/14 页侧别正确），拿 `abs(v_outer_offset)` 当这一页的内外间距，再只在
+    它的 ±`OUTER_PRIOR_WIN` 里找上下外框。这是用户给的判据（内外间距全页
+    基本一致），已用 14 页金标验证成立：竖直 38.4±4.0px、抬头框内外距
+    37.0px（n=11）。
+
+    ⚠️ **上下外框有一半根本不该报数**。14 页 28 条边里只有 14 条在先验窗口
+    内有 >=0.30 的版框墨；其余要么磨没了（vol01/141 bottom 窗内峰值墨 0.048、
+    vol01/142 top 0.129），要么被扫描裁掉了。这些一律返回 None——试过用
+    弱档（ink>=0.12）把它们补上，6 例里 3 例误差超 10px，是负结果。
+    报数的那 14 条离金标均值 3.0px / 中位 2.1px。
+
+    ⚠️ **上下外框的人工金标口径本身也不统一**（14 页实测：top 外延6/中心3/
+    内沿1，bottom 外延8/内沿3/中心1），所以剩下那点差**部分是标注口径的
+    散布，不全是探测误差**，别照着它继续调参。竖直外框那一侧口径是干净的
+    （外延 12/14，金标离真墨外延平均 4.1px）。
+    """
+    binm = (mask > 0).astype(np.uint8)
+    out: dict = dict(top_outer_offset=None, bottom_outer_offset=None,
+                     v_outer_side=None, v_outer_offset=None)
+    vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
+    xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
+    ys = np.arange(int(height * 0.12), int(height * 0.88), 3)
+    # 先测竖直外框——那一侧的墨最稳（峰值 0.48~1.00），拿它当上下的间距先验
+    if len(ys) > 10 and len(verticals) >= 2:
+        best = None
+        for side, vi, sign in (("right", 0, -1.0), ("left", len(verticals) - 1, 1.0)):
+            base = np.array([(width - 1) - verticals[vi].x_at(y) for y in ys])
+            offs = np.arange(OUTER_GAP_MIN, OUTER_GAP_MAX + 1, 1.0) * sign
+            prof = []
+            for o in offs:
+                xx = (base - o).astype(int)     # 新坐标 x 向左递增 => 旧坐标取反
+                ok = (xx >= 0) & (xx < width)
+                prof.append(binm[ys[ok], xx[ok]].mean() if ok.any() else 0.0)
+            r = _outer_run(np.array(prof), offs)
+            if r is not None and (best is None or r[1] > best[2]):
+                best = (side, r[0], r[1])
+        if best is not None:
+            out["v_outer_side"], out["v_outer_offset"] = best[0], best[1]
+    prior = None if out["v_outer_offset"] is None else abs(out["v_outer_offset"])
+    if len(xs) > 10:
+        for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
+            base = np.array([line.y_at((width - 1) - x) for x in xs])
+            lo, hi = OUTER_GAP_MIN, OUTER_GAP_MAX
+            if prior is not None:      # 钉在页级间距先验上，见函数 docstring
+                c = prior + OUTER_PRIOR_SHIFT[kind]     # 四边不等距，先按边校正
+                lo = max(lo, c - OUTER_PRIOR_WIN)
+                hi = min(hi, c + OUTER_PRIOR_WIN)
+            if hi - lo < 5:
+                continue
+            offs = np.arange(lo, hi + 1, 1.0) * sign
+            prof = []
+            for o in offs:
+                yy = (base + o).astype(int)
+                ok = (yy >= 0) & (yy < height)
+                prof.append(binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0)
+            r = _outer_run(np.array(prof), offs, prefer_abs=prior)
+            if r is not None:
+                out[f"{kind}_outer_offset"] = r[0]
+    return out
+
+
 def detect_borders(gray: np.ndarray, expected_cols: int,
                     ink_threshold: int = 128) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
@@ -306,5 +454,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     top = _hline_to_new(top_old, w, "top")
     bottom = _hline_to_new(bottom_old, w, "bottom")
     head_raise = detect_head_raise(mask, top, verticals, w)
+    outer = detect_outer_borders(mask, top, bottom, verticals, w, h)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
-                                  verticals=verticals, head_raise=head_raise)
+                                  verticals=verticals, head_raise=head_raise,
+                                  **outer)

@@ -214,10 +214,23 @@ def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[floa
 
 
 # ── Step 3 对外输出格式（→ Step 4）──────────────────────────
-# 只有切分点是不够的：下游要知道每一格**是什么**（正文字/空白/抬头字/双行
-# 小注的哪一半），才谈得上装配文本与隔离字形。类型口径见 `CELL_KINDS`。
+# 只有切分点是不够的：下游要知道每一格**是什么**（正文字/空白/双行小注的
+# 哪一半），才谈得上装配文本与隔离字形。类型口径见 `CELL_KINDS`。
 
-CELL_KINDS = ("char", "blank", "raised", "jiazhu_a", "jiazhu_b")
+CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")
+"""**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
+它们都是字，按坐标来区分位置」）。「抬头」不是一种跟"字/空白/夹注"并列的
+内容类型——它是同一个字的**位置**信息（顶边有没有伸到版框线以上），跟
+"这一格里是什么"是两个维度，硬塞进同一个 `kind` 枚举会让分类互相打架
+（`Cell.raised` 见下）。
+
+试标 5 列 39 格金标时踩出来的：`kind` 还叫 `"raised"` 那版，标注页给了
+单格裁紧图，人只能看见格子本身，看不见它相对版框线的位置——两格真正
+「顶边伸到版框线以上」的格子（vol01/33 col2 的"天""而"）人都标成了"字"，
+不是标错，是那道题问的就是坐标问题、裁紧图里根本看不出坐标。改成
+`Cell.raised` 之后，这两格重新算是 `kind="char", raised=True`，跟人标的
+"字"完全对上——不用重标，是分类口径本来就问岔了。
+"""
 
 
 @dataclass
@@ -239,6 +252,12 @@ class Cell:
       插在段位上，段内先 a 全部、再 b 全部（见 `reading_order`）。
     - `gap_center`：夹注格的缝中心 x（a/b 两半共用同一个值），非夹注为 None。
     - `ink_ratio`：格内墨占比（在裁紧前的格框上算，`< min_ink_ratio` 判空白）。
+    - `raised`：这一格顶边有没有伸到 `border_top` 以上，纯几何量（`y0` 跟
+      `border_top` 比大小），不进 `kind`——见上面 `CELL_KINDS` 的说明。跟
+      `slot` 是不是负数是两件事：`n_raised=0` 的「抬头但格数不变」列，
+      slot 1 本身也会是 `raised=True`；`slot` 负数只说明"这一格是多出来
+      的格"，不代表它一定伸到版框线以上（理论上不会不伸，但这两个字段各自
+      独立计算，不互相推导）。
     """
 
     slot: int
@@ -250,6 +269,7 @@ class Cell:
     order: int = 0
     gap_center: float | None = None
     ink_ratio: float = 0.0
+    raised: bool = False
 
     @property
     def sub(self) -> str | None:
@@ -536,6 +556,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
                     ref_w: float | None = None, top_slack: float = 0.0,
+                    content_x: tuple[float, float] | None = None,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
@@ -563,17 +584,31 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       理由见 `fit_row_boundaries` 的 `top_slack` 说明。
     - `ref_w`：夹注跨度判据的尺子，应传**页级列距中位数**；不传退回本列内容
       窗口宽度（会随列宽漂移，生产为此栽过，见 `jiazhu_split` 模块头）。
+    - `content_x`：内容窗口 `(x_lo, x_hi)`，给了就直接用、跳过内部的
+      `find_content_window`。**Step 2 的产物如果已经先"抹白"了界行/版框
+      （`column_projection.clean_column` 那条链路，`scripts/
+      export_step3_input.py` 交出的 manifest 里带这个字段），这里必须传**
+      ——`find_content_window` 靠"墨量贯穿"找墙，墙的墨被抹白之后它在图上
+      一堵墙都找不到，会整幅宽度都当内容窗口（实测 24 列全部如此，宽
+      9.6%~17%）。已经量过这条口径差的下游影响很小（24 列只 1 列的格类型
+      判断不同），但既然 Step 2 已经把这条带定出来了，没道理让 Step 3 自己
+      重猜一遍，猜错了还会悄悄退化不报错。**不传（默认 None）** 走的还是
+      原来的路——只在图上自己找墙，适配的是"界行墨还在、没被抹白"的输入
+      （比如 `denoise_column` 而非 `clean_column` 的产物），旧调用方零影响。
     - `min_ink_ratio`：格内墨占比低于此判空白格（口径同生产 `MIN_INK_RATIO`）。
-    - `raise_tol`：格顶高出 `border_top` 超过此像素数就标 `raised`（抬头字）。
-      这是**几何标记**，跟 `slot` 是不是负数是两回事——`n_raised=0` 的
-      「抬头但格数不变」列，slot 1 本身也会被标 `raised`；只说"这一格伸到
-      版框线以上了"，不代表它占了额外的格。
-    - `detect_jiazhu`：关掉就只出 char/blank/raised 三类。
+    - `raise_tol`：格顶高出 `border_top` 超过此像素数就把 `Cell.raised` 置
+      True。这是纯几何量，不影响 `kind`（见 `CELL_KINDS` 的说明），跟 `slot`
+      是不是负数也是两回事——`n_raised=0` 的「抬头但格数不变」列，slot 1
+      本身也会是 `raised=True`；只说"这一格伸到版框线以上了"，不代表它占了
+      额外的格。
+    - `detect_jiazhu`：关掉就只出 char/blank 两类（`raised` 仍照算，它跟
+      夹注判定完全独立）。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
-    类型判定的优先级：空白 > 夹注 > 抬头 > 正文字。空白格不参与夹注判据
-    （生产同口径：只在 char 格上量缝），夹注段的段端收编也只收非空白格。
+    `kind` 判定的优先级：空白 > 夹注 > 正文字。空白格不参与夹注判据（生产
+    同口径：只在 char 格上量缝），夹注段的段端收编也只收非空白格。`raised`
+    在这条优先级之外单独算，任何 `kind` 的格都可能是 `raised=True`。
     """
     if col_gray.ndim == 3:
         col_gray = col_gray[:, :, 0]
@@ -582,7 +617,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         border_bottom = float(h - 1)
     n_slots = n_body_slots + n_raised
 
-    x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
+    if content_x is not None:
+        x_lo, x_hi = int(round(content_x[0])), int(round(content_x[1]))
+    else:
+        x_lo, x_hi = find_content_window(col_gray, ink_threshold=ink_threshold)
     dst_w = x_hi - x_lo
     row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
 
@@ -624,6 +662,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         pos = k + 1
         slot = _pos_to_slot(pos, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
+        raised = y0 < border_top - raise_tol   # 纯几何量，跟 kind 判定分开算
         if pos in runs:
             cx_local = runs[pos]
             cx = float(x_lo) + cx_local
@@ -639,17 +678,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     continue
                 cells.append(Cell(slot=slot, y0=y0, y1=y1,
                                   x0=float(x_lo + xs), x1=float(x_lo + xe),
-                                  kind=kind, gap_center=cx,
+                                  kind=kind, gap_center=cx, raised=raised,
                                   ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
             continue
-        if pos not in nonblank:
-            kind = "blank"
-        elif y0 < border_top - raise_tol:
-            kind = "raised"
-        else:
-            kind = "char"
+        kind = "blank" if pos not in nonblank else "char"
         cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),
-                          kind=kind, ink_ratio=round(inks[pos], 4)))
+                          kind=kind, raised=raised, ink_ratio=round(inks[pos], 4)))
 
     for i, c in enumerate(reading_order(cells), start=1):
         c.order = i
