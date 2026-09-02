@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """整页叠图看每一列的折线效果：红=拟合前直线，绿=三段折线，黄点=折点，
-每列顶上标该列 w80 直线→折线（装下 80% 墨的最窄 x 跨度，越小越贴）。
+每条线顶上标 w80 直线→折线（装下 80% 墨的最窄 x 跨度，越小越贴）。
+线号**从右到左、从 1 开始**，跟 `verticals` 的顺序一致。
 
     python scripts/draw_polyline_overlay.py 151 119 11             # vol01
     python scripts/draw_polyline_overlay.py --book vol02 95 --scale 0.6
@@ -31,8 +32,9 @@ def work(args):
     binm = (gray < 128).astype(np.uint8)
     res = detect_borders(gray, expected_cols=9)
     img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-    pairs = sorted(zip(res.verticals_straight, res.verticals),
-                   key=lambda t: (w - 1) - t[1].x_at(h / 2.0))
+    # **从右到左编号**（项目约定：verticals 已按 x_at_top 升序 = 最右在前）。
+    # 头一版按 x_old 升序标号，标出来是从左到右、跟约定正好反着，对不上话。
+    pairs = list(zip(res.verticals_straight, res.verticals))
     labels = []
     for i, (s, p) in enumerate(pairs, 1):
         xc = p.x_at(h / 2.0)

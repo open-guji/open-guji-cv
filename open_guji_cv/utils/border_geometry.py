@@ -531,7 +531,12 @@ BEND_W80_MED = 7.0        # 页级 w80 中位 >= 这个 => 整页三段。
                           # 射影；每条线另有"折线得分不比直线高就退回"的保险。
 BEND_W80_MAX = 24.0       # 或任一条线 w80 >= 这个（单条线跑飞的那一型：vol01/11
                           # 页级中位只有 9.5 但单条到 64，只看中位会漏）
-KNOT_SEARCH = 24          # 每个折点在直线估计的 ±这么多 px 里找
+KNOT_SEARCH = 40          # 每个折点在直线估计的 ±这么多 px 里找。
+                          # 24 不够：vol01/119 L3 段3 真墨离直线中位 23px（到 33）、
+                          # L4 段1 中位 18.5px（到 55），折点够不着。扫 24/40/60：
+                          # 40 把这两段从 w80 19/22 修到 15/13，60 再无收益（已收敛），
+                          # 对照页 vol01/151、11、24、vol02/95 一个数都没变。
+                          # 邻列界行相距 ~183px，40 不会跳到隔壁。
 KNOT_PASSES = 3           # 坐标下降轮数（实测 2 轮已收敛，第 3 轮保险）
 
 
@@ -627,6 +632,15 @@ def _aligned(binm: np.ndarray, rows: np.ndarray, xs: np.ndarray, w: int) -> int:
     return total
 
 
+def _from_knots(kx: list[float], ky: list[float]) -> VLine:
+    """四个折点 x + 四个折点 y -> (x, k1, k2, k3)，精确等价。"""
+    k1 = (kx[1] - kx[0]) / (ky[1] - ky[0])
+    k2 = (kx[2] - kx[1]) / (ky[2] - ky[1])
+    k3 = (kx[3] - kx[2]) / (ky[3] - ky[2])
+    return VLine(x_at_top=float(kx[0] - k1 * ky[0]), slope=float(k1),
+                 k2=float(k2), k3=float(k3), y1=float(ky[1]), y2=float(ky[2]))
+
+
 def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
                         verticals: list[VLine], w: int, h: int
                         ) -> tuple[list[VLine], int, float | None, float | None]:
@@ -659,8 +673,8 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     if w80_med < BEND_W80_MED and w80_max < BEND_W80_MAX:
         return verticals, 1, w80_med, w80_max
 
-    out = []
-    for v in verticals:
+    out, shifts, failed = [], [], []
+    for vi, v in enumerate(verticals):
         xc = v.x_at(h / 2.0)
         yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
         if yb - yt < 400:
@@ -672,6 +686,7 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
         rows_all, _ = _rule_rows(binm, v.x_at, int(yt), int(yb), w)
         if len(rows_all) < BEND_MIN_ROWS:
             out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope, ky[1], ky[2]))
+            failed.append(vi)
             continue
 
         def seg_rows(i):
@@ -707,11 +722,22 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
         if new_score <= base_score:
             out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope, ky[1], ky[2]))
             continue
-        k1 = (kx[1] - kx[0]) / (ky[1] - ky[0])
-        k2 = (kx[2] - kx[1]) / (ky[2] - ky[1])
-        k3 = (kx[3] - kx[2]) / (ky[3] - ky[2])
-        out.append(VLine(x_at_top=float(kx[0] - k1 * ky[0]), slope=float(k1),
-                         k2=float(k2), k3=float(k3), y1=float(ky[1]), y2=float(ky[2])))
+        shifts.append([kx[j] - v.x_at(ky[j]) for j in range(4)])
+        out.append(_from_knots(kx, ky))
+
+    # 拟合失败的线（有效行不够）借同页已拟合线的折点位移——**同一页的线是一起
+    # 弯的**（纸张/雕版形变是整页的），这个先验比"退回直线"强得多。
+    # 治的是最外侧那两条框线：窗口里同时压着内框细线和外框粗条，合起来墨宽
+    # 中位 17~21px，被 BEND_INK_W_MAX 全剔掉，有效行只剩 83/1185（vol01/11 L1）
+    # 和 46/1197（vol01/119 L1）。
+    if shifts and failed:
+        med = np.median(np.array(shifts), axis=0)
+        for i in failed:
+            v = verticals[i]
+            xc = v.x_at(h / 2.0)
+            yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+            ky = [yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb]
+            out[i] = _from_knots([v.x_at(ky[j]) + med[j] for j in range(4)], ky)
     return out, 3, w80_med, w80_max
 
 
