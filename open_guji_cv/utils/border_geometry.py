@@ -149,6 +149,10 @@ class BorderDetectionResult:
     vline_segments: int = 1
     bend_w80_med: float | None = None
     bend_w80_max: float | None = None
+    # 折线拟合**之前**的直线（跟 verticals 一一对应）。量"改前改后"要用它——
+    # 三段页的 verticals[i].x_at_top/slope 是第一段外推到 y=0 的值，拿它当
+    # "原直线"是错的（量法踩过：改前数字全被第一段的斜率带偏）。直线页两者相同。
+    verticals_straight: list[VLine] = field(default_factory=list)
 
 
 def _hline_to_new(m: LineMatch, w: int, kind: str) -> HLine:
@@ -518,8 +522,13 @@ BEND_INK_W_MAX = 9        # 一行在窗口里的墨宽超过这个就当被笔�
                           # 界行本身 3~6px 宽，不剔量的是字不是线
 BEND_Y_STEP = 2
 BEND_MIN_ROWS = 150       # 有效行少于这个不给结论（按直线处理）
-BEND_W80_MED = 10.0       # 页级 w80 中位 >= 这个 => 整页三段。200 页实测直线页
-                          # 中位 6.0 / 90 分位 10.0；弯页 12~21
+BEND_W80_MED = 7.0        # 页级 w80 中位 >= 这个 => 整页三段。
+                          # 门槛定在"折线开始有收益"的那一档，不是拍脑袋：200 页
+                          # 实测（加局部一致性闸后）直线主峰在 4~6（137 页），
+                          # 7~9 档 37 页强制跑折线，**18/18 页全部降到 4~5、每页
+                          # 9~10 条线都动了**——说明这一档已经是真的轻微弯，不是
+                          # 噪声。定 7 会切 ~31% 的页，代价只是 Step2 多做两次
+                          # 射影；每条线另有"折线得分不比直线高就退回"的保险。
 BEND_W80_MAX = 24.0       # 或任一条线 w80 >= 这个（单条线跑飞的那一型：vol01/11
                           # 页级中位只有 9.5 但单条到 64，只看中位会漏）
 KNOT_SEARCH = 24          # 每个折点在直线估计的 ±这么多 px 里找
@@ -730,6 +739,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     bottom = _hline_to_new(bottom_old, w, "bottom")
     # 弯页整页换三段折线（先量 w80 再决定，直线页原样通过）——要在 top/bottom
     # 之后，折点 y 取自这条线跟上下版框的交点
+    verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom,
                                                             verticals, w, h)
     head_raise = detect_head_raise(mask, top, verticals, w)
@@ -738,4 +748,5 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,
                                   bend_w80_max=w80_max,
+                                  verticals_straight=verticals_straight,
                                   **outer)

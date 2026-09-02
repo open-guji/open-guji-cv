@@ -36,7 +36,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.utils.border_geometry import detect_borders, VLine  # noqa: E402
+from open_guji_cv.utils.border_geometry import detect_borders  # noqa: E402
 
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 PAGE_TYPE = ROOT.parent / "open-guji-dataset" / "page-type" / "expected.json"
@@ -67,9 +67,10 @@ def measure_page(args) -> dict | None:
     if y1 - y0 < 400:
         return None
     lines = []
-    for i, V in enumerate(sorted(res.verticals, key=lambda v: (w - 1) - v.x_at(h / 2.0)), 1):
-        straight = VLine(V.x_at_top, V.slope)        # 量的是**直线拟合下**的弯度
-        r = gutter_projection(binm, straight.x_at, y0, y1, w)
+    # 量的是**直线拟合下**的弯度——用拟合前留下的 verticals_straight，不能从
+    # 三段线的 x_at_top/slope 反推（那是第一段的外推，量出来是错的）
+    for i, V in enumerate(sorted(res.verticals_straight, key=lambda v: (w - 1) - v.x_at(h / 2.0)), 1):
+        r = gutter_projection(binm, V.x_at, y0, y1, w)
         if r is None:
             continue
         pk, w50, w80, n = r
