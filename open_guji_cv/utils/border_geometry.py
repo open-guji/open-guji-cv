@@ -316,6 +316,21 @@ OUTER_PRIOR_WIN = 16.0    # 上下外框只在"页级内外间距"先验的 ±�
                           # 就会跑到远处的书口/纸边痕迹上去（vol01/32 top 报 -58、
                           # vol01/47 top 报 -62，都不是版框）。
 OUTER_EDGE_RUN = 8        # 外延最多从墨段端点再往外走这么多 px
+OUTER_PAPER_LO, OUTER_PAPER_HI = 10, 40
+OUTER_PAPER_MAX = 0.11    # **外框条外面必须是纸**：外延再往外 10~40px 的行墨中位数
+                          # 超过这个就认定找错了，返回 None。
+                          #
+                          # 依据是 108 条人裁（`border-detection/outer-edge`）。健康页
+                          # 外条之外的行墨是**恰好 0.000 一路到 +110px**；而两条被用户
+                          # 点名「线直接穿过文字」的（vol02/153 bottom、vol02/75 bottom）
+                          # 是 0.178 / 0.126——因为那两页 `bottom` 内框线本身就没落在
+                          # 下版框上，外框探测于是在正文里挑了最黑的一段，线下面还是正文。
+                          # 这是"彻底不同"而不是"差一点"。
+                          #
+                          # ⚠️ **门槛压不到更低，因为抬头页是真例外**：抬头框就在上框
+                          # 外面，vol01/52/49/58/134 的 top 条外之墨有 0.028~0.094，
+                          # 而它们都是人裁 `ok`。0.11 这个值把三条坏的（0.126~0.178）
+                          # 拦下、四条抬头页全放行，`ok` 一条没误伤。
 
 
 def _outer_run(prof: np.ndarray, offs: np.ndarray,
@@ -368,6 +383,20 @@ def _outer_run(prof: np.ndarray, offs: np.ndarray,
                         float(offs[i]) + (p0 - half) / (p0 - p1) * float(offs[i + 1] - offs[i]))
             best = (score, edge, pk)
     return None if best is None else (best[1], best[2])
+
+
+def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
+                   edge: float, sign: float, height: int) -> float:
+    """外延再往外 `OUTER_PAPER_LO..HI` px 的行墨中位数——版框之外应该是纸。"""
+    far = abs(edge)
+    vals = []
+    for o in range(int(far) + OUTER_PAPER_LO, int(far) + OUTER_PAPER_HI + 1):
+        yy = np.rint(base + o * sign).astype(int)
+        ok = (yy >= 0) & (yy < height)
+        if ok.mean() < 0.5:          # 大半跑出页面了，别拿残缺的行下判断
+            continue
+        vals.append(float(binm[yy[ok], xs[ok]].mean()))
+    return float(np.median(vals)) if vals else 0.0
 
 
 def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
@@ -435,8 +464,11 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 ok = (yy >= 0) & (yy < height)
                 prof.append(binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0)
             r = _outer_run(np.array(prof), offs, prefer_abs=prior)
-            if r is not None:
-                out[f"{kind}_outer_offset"] = r[0]
+            if r is None:
+                continue
+            if _paper_beyond(binm, base, xs, r[0], sign, height) > OUTER_PAPER_MAX:
+                continue          # 条外面还是墨 => 这根本不是最外层，见常量注释
+            out[f"{kind}_outer_offset"] = r[0]
     return out
 
 
