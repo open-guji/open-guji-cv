@@ -36,12 +36,29 @@
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import numpy as np
 
 DEFAULT_ALPHA = 0.5
 DEFAULT_HYST = 3
+
+# 每个候选窗口的位置+角度联合搜索彼此独立，且 98% 的时间花在 numpy 的大数组
+# 运算上（会放开 GIL），所以线程池是有效的——实测 4 线程 2.2~2.5x，**结果逐位
+# 相同**（position/slope/score 全等，见 doc/segmentation_v2_pipeline.md 的性能
+# 一节）。进程池不合适：mask 有 ~59MB，序列化开销比省下的还多。
+# 0 = 按 CPU 数自动；1 = 串行（批处理时外层已经按页并行，内层要关掉，
+# 否则线程数 = 页并行数 x 窗口线程数，会过度订阅把整体拖慢）。
+LINE_SEARCH_THREADS = int(os.environ.get("OGCV_LINE_SEARCH_THREADS", "0"))
+
+
+def _line_search_workers(n_tasks: int) -> int:
+    if LINE_SEARCH_THREADS == 1 or n_tasks <= 1:
+        return 1
+    n = LINE_SEARCH_THREADS or (os.cpu_count() or 1)
+    return max(1, min(n, n_tasks))
 
 
 # ── 半高宽匹配度 ──────────────────────────────────────────────
@@ -276,9 +293,16 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
         return []
 
     windows = _windows_from_candidates(candidates, 0, w - 1, edge_margin, edge_margin)
-    results = []
-    for lo, hi in windows:
-        results.append(joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst))
+
+    def _refine(win: tuple[int, int]) -> LineMatch:
+        return joint_search_coarse_to_fine(mask, "v", win[0], win[1], alpha=alpha, hyst=hyst)
+
+    nw = _line_search_workers(len(windows))
+    if nw > 1:
+        with ThreadPoolExecutor(max_workers=nw) as ex:
+            results = list(ex.map(_refine, windows))
+    else:
+        results = [_refine(win) for win in windows]
 
     # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
     # 都收敛到这条线上，位置只差十几到几十像素，是精修阶段"两个窗口找到

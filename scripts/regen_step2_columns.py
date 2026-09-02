@@ -19,6 +19,7 @@ x 标准差 0.7~1.1px（直线页 0.6px），弯线确实被拉直了。
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +106,12 @@ def _body_pages(book: str) -> list[str]:
 
 
 def _one(args):
+    # 页级并行时把 Step1 内部的线程池关掉：`find_vertical_lines` 自己会开
+    # CPU 数条线程，跟页级进程数相乘就是过度订阅（4 核上开 8 进程实测比 4 进程
+    # 还慢）。页级并行没有 GIL，优先用它。
+    os.environ.setdefault("OGCV_LINE_SEARCH_THREADS", "1")
+    from open_guji_cv.utils import peak_line_search as _pls
+    _pls.LINE_SEARCH_THREADS = 1
     book, pg, cols, denoise, clean, only_poly = args
     try:
         return book, pg, regen(book, pg, cols, denoise, clean, only_poly)
@@ -123,7 +130,9 @@ if __name__ == "__main__":
     ap.add_argument("--denoise", action="store_true")
     ap.add_argument("--clean", action="store_true",
                     help="另出 c<N>_clean.png：去噪 + 清两侧界行 + 清上下版框")
-    ap.add_argument("--jobs", type=int, default=1)
+    ap.add_argument("--jobs", type=int, default=max(1, os.cpu_count() or 1),
+                    help="页级并行进程数（默认=CPU 数）。别超过 CPU 数：Step1 已经"
+                         "吃满一个核，超订只会更慢")
     a = ap.parse_args()
     books = [b.strip() for b in a.book.split(",") if b.strip()]
 
