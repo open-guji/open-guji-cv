@@ -151,7 +151,9 @@ def one_page(args) -> list[dict]:
     return out
 
 
-def body_pages(books, sample):
+def body_pages(books, sample, explicit=""):
+    if explicit:      # 点名几页（比如用户实审反馈的坏页），不走抽样
+        return [(books[0], x.strip()) for x in explicit.split(",") if x.strip()]
     rows = json.loads(PAGE_TYPE.read_text(encoding="utf-8"))
     pages = [(r["book"], r["page"]) for r in rows
              if r["book"] in set(books) and r.get("page_type") == "body"]
@@ -167,11 +169,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--books", default="vol01,vol02")
     ap.add_argument("--sample", type=int, default=30, help="每册抽多少页正文页")
+    ap.add_argument("--pages", default="", help="点名几页（逗号分隔，用 --books 的第一册），给了就忽略 --sample")
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--out", default=str(ROOT / "output" / "border_review"))
     a = ap.parse_args()
     books = [b.strip() for b in a.books.split(",")]
-    jobs = body_pages(books, a.sample)
+    jobs = body_pages(books, a.sample, a.pages)
     out = Path(a.out)
     (out / "img").mkdir(parents=True, exist_ok=True)
     print(f"探测 {len(jobs)} 页（{', '.join(books)}），{a.jobs} 并行…")
