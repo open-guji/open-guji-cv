@@ -29,7 +29,7 @@ from .border_geometry import BorderDetectionResult, HLine, VLine
 
 
 def column_warp_matrix(page_width: int, left: VLine, right: VLine,
-                        top_y: float, bottom_y: float
+                        top_y: float, bottom_y: float, out_w: int | None = None
                         ) -> tuple[np.ndarray, int, int]:
     """算这一列的射影矩阵和输出尺寸，返回 `(M, out_w, out_h)`。
 
@@ -37,6 +37,11 @@ def column_warp_matrix(page_width: int, left: VLine, right: VLine,
     需要 `M` 的逆。金标一旦有了原图坐标的锚，上游改边线/窗口之后就能把标注
     重新投影到新列图上，而不是整批作废重标（见
     `scripts/migrate_column_warp_gold.py`）。
+
+    ⚠️ 这个矩阵只对**直线**边线成立。三段折线的页（`vline_segments == 3`）
+    `warp_column` 会按折点分带、每带一个矩阵——要反算列图坐标得先按 y 落在
+    哪一带找对应的矩阵（带界见 `_strip_bounds`）。`out_w` 可外给，分带时三带
+    要共用一个宽度。
     """
     if bottom_y <= top_y:
         raise ValueError(f"bottom_y({bottom_y}) must be > top_y({top_y})")
@@ -47,7 +52,8 @@ def column_warp_matrix(page_width: int, left: VLine, right: VLine,
     lx_top, rx_top = to_old_x(left, top_y), to_old_x(right, top_y)
     lx_bot, rx_bot = to_old_x(left, bottom_y), to_old_x(right, bottom_y)
 
-    out_w = int(round(max(abs(rx_top - lx_top), abs(rx_bot - lx_bot))))
+    if out_w is None:
+        out_w = int(round(max(abs(rx_top - lx_top), abs(rx_bot - lx_bot))))
     out_h = int(round(bottom_y - top_y))
     if out_w <= 0 or out_h <= 0:
         raise ValueError(f"warped column size invalid: {out_w}x{out_h}")
@@ -80,9 +86,32 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     h, w = gray.shape[:2]
     if bottom_y is None:
         bottom_y = float(h - 1)
-    m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
-    return cv2.warpPerspective(gray, m, (out_w, out_h),
-                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    if left.segments == 1 and right.segments == 1:
+        m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
+        return cv2.warpPerspective(gray, m, (out_w, out_h),
+                                    flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    # 三段折线：一个单应变换表示不了折线，按折点把列切成横带各自射影、竖向拼接。
+    # 相邻带共享同一组源角点，拼缝天然对齐；out_w 三带取同一个（最大者），否则
+    # 拼不起来。左右两条线的折点 y 差几 px（版框有斜率），取均值当带界——那几
+    # px 里把线当直线，误差亚像素。
+    strips = _strip_bounds(left, right, top_y, bottom_y)
+    mats = [column_warp_matrix(w, left, right, a, b) for a, b in strips]
+    out_w = max(m[1] for m in mats)
+    parts = []
+    for (a, b), (_, _, out_h) in zip(strips, mats):
+        m, _, _ = column_warp_matrix(w, left, right, a, b, out_w=out_w)
+        parts.append(cv2.warpPerspective(gray, m, (out_w, out_h), flags=cv2.INTER_LINEAR,
+                                         borderMode=cv2.BORDER_REPLICATE))
+    return np.vstack(parts)
+
+
+def _strip_bounds(left: VLine, right: VLine, top_y: float, bottom_y: float
+                  ) -> list[tuple[float, float]]:
+    """按两条边线的折点把 [top_y, bottom_y] 切成横带。"""
+    ks = sorted(set((a + b) / 2.0 for a, b in zip(left.knots() or right.knots(),
+                                                 right.knots() or left.knots())))
+    cuts = [top_y] + [k for k in ks if top_y + 2 < k < bottom_y - 2] + [bottom_y]
+    return [(cuts[i], cuts[i + 1]) for i in range(len(cuts) - 1)]
 
 
 def denoise_column(warped_gray: np.ndarray, ink_threshold: int = 128,

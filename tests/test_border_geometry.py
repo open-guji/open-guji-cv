@@ -317,3 +317,83 @@ def test_detect_outer_borders_rejects_when_ink_continues_beyond():
     r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
     assert r["bottom_outer_offset"] is None
     assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4      # 上边不受连累
+
+
+# ---------------------------------------------------------------- 界行折线
+
+from open_guji_cv.utils.border_geometry import fit_vlines_polyline, gutter_projection
+
+
+def _bent_page(w=1400, h=2400, n_cols=6, top_y=300, bot_y=2100, bend=22.0):
+    """合成页：界行在中段整体往左鼓出 `bend` px（S 形），版框直。"""
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs_new = np.linspace(200, w - 200, n_cols + 1)
+    ky = [top_y, top_y + (bot_y - top_y) / 3, top_y + 2 * (bot_y - top_y) / 3, bot_y]
+    for x0 in xs_new:
+        for y in range(top_y, bot_y):
+            if y < ky[1]:
+                t = (y - ky[0]) / (ky[1] - ky[0]); x = x0 + bend * t
+            elif y < ky[2]:
+                x = x0 + bend
+            else:
+                t = (y - ky[2]) / (ky[3] - ky[2]); x = x0 + bend * (1 - t)
+            xo = (w - 1) - int(round(x))
+            mask[y, xo - 2:xo + 3] = 1.0
+    mask[top_y:top_y + 5, :] = 1.0
+    mask[bot_y - 5:bot_y, :] = 1.0
+    top = HLine(y_at_right=float(top_y + 2), slope=0.0, kind="top")
+    bottom = HLine(y_at_right=float(bot_y - 2), slope=0.0, kind="bottom")
+    # 直线初值：故意给"两端连线"（中段偏 bend 的一半），模拟直线拟合的折中
+    verts = [VLine(x_at_top=float(x0 + bend / 2), slope=0.0) for x0 in xs_new]
+    return mask, top, bottom, verts, xs_new, ky
+
+
+def test_straight_page_stays_one_segment():
+    mask, top, bottom, verts, xs, ky = _bent_page(bend=0.0)
+    verts = [VLine(x_at_top=float(x), slope=0.0) for x in xs]
+    out, seg, w80m, w80x = fit_vlines_polyline(mask, top, bottom, verts, 1400, 2400)
+    assert seg == 1 and w80m is not None and w80m <= 6
+    assert all(v.segments == 1 for v in out)
+
+
+def test_bent_page_switches_whole_page_to_three_segments_and_tracks_rule():
+    """中段鼓出 22px 的 S 形界行：直线下 w80 大，整页切三段后每段都贴回真墨。"""
+    mask, top, bottom, verts, xs, ky = _bent_page(bend=22.0)
+    out, seg, w80m, w80x = fit_vlines_polyline(mask, top, bottom, verts, 1400, 2400)
+    assert seg == 3 and w80m >= 10
+    assert all(v.segments == 3 for v in out)          # 整页统一
+    for v, x0 in zip(out, xs):
+        # 三个折点 + 两端都该在真线上（误差 <= 2px）
+        assert abs(v.x_at(ky[0]) - x0) <= 2
+        assert abs(v.x_at(ky[1]) - (x0 + 22)) <= 2
+        assert abs(v.x_at(ky[2]) - (x0 + 22)) <= 2
+        assert abs(v.x_at(ky[3]) - x0) <= 2
+        # 换算回来的斜率符号对：第一段向左、第二段平、第三段向右
+        assert v.slope > 0 and abs(v.k2) < 0.01 and v.k3 < 0
+
+
+def test_polyline_x_at_is_continuous_at_knots():
+    v = VLine(x_at_top=100.0, slope=0.02, k2=-0.03, k3=0.01, y1=800.0, y2=1600.0)
+    for y in (800.0, 1600.0):
+        assert abs(v.x_at(y - 1e-6) - v.x_at(y + 1e-6)) < 1e-3
+    assert v.segments == 3 and v.knots() == [800.0, 1600.0]
+
+
+def test_stroke_fragments_do_not_fake_a_bend():
+    """vol02/3 型：界行是直的，但断掉的行里混进 <=9px 的笔画碎片。碎片在 y 方向
+    是跳的、线是连的——局部一致性闸把它们剔掉，页面必须留在直线（seg=1）。"""
+    mask, top, bottom, verts, xs, ky = _bent_page(bend=0.0)
+    verts = [VLine(x_at_top=float(x), slope=0.0) for x in xs]
+    rng = np.random.default_rng(7)
+    # 每条线随机抹掉 1/3 的行，再在这些行的窗口里随机撒 6px 宽的碎片
+    for x0 in xs:
+        xo = (1400 - 1) - int(round(x0))
+        for y in range(300, 2100):
+            if rng.random() < 0.33:
+                mask[y, xo - 2:xo + 3] = 0.0
+                off = int(rng.integers(-30, 31))
+                if abs(off) > 6:
+                    mask[y, xo + off - 3:xo + off + 3] = 1.0
+    out, seg, w80m, w80x = fit_vlines_polyline(mask, top, bottom, verts, 1400, 2400)
+    assert seg == 1, (seg, w80m, w80x)
+    assert w80m is not None and w80m <= 7
