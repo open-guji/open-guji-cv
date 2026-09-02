@@ -23,12 +23,26 @@ from open_guji_cv.utils.border_geometry import detect_borders
 from open_guji_cv.utils.column_projection import warp_page_columns
 
 RAW_ROOT = Path("/home/user/rebuild_src")
+FALLBACK_ROOT = Path(__file__).resolve().parent.parent / "data_full" / "zongmu"
 OUT_ROOT = Path(__file__).resolve().parent.parent / "output"
 GOLD_PAGES = ["137", "138", "32", "33", "49", "9", "14", "142", "24", "65", "141", "26", "47", "51"]
 
 
+def _find_source(book: str, page: str) -> Path:
+    """`RAW_ROOT` 是那台原始容器里的路径，这台容器上不存在——退回
+    `data_full/zongmu/<book>/<page>.png`，跟 14 页金标核对过是同一张源图
+    （page_size 逐位对得上），只是格式从 tif 换成了 png。"""
+    tif = RAW_ROOT / book / f"{page}.tif"
+    if tif.exists():
+        return tif
+    png = FALLBACK_ROOT / book / f"{page}.png"
+    if png.exists():
+        return png
+    raise SystemExit(f"两个候选源都没有：{tif}  /  {png}")
+
+
 def regen(book: str, page: str, expected_cols: int, denoise: bool) -> dict:
-    src = RAW_ROOT / book / f"{page}.tif"
+    src = _find_source(book, page)
     gray = cv2.cvtColor(cv2.imread(str(src)), cv2.COLOR_BGR2GRAY)
     res = detect_borders(gray, expected_cols=expected_cols)
     out_dir = OUT_ROOT / book / "step2_columns" / page

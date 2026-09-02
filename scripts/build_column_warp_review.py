@@ -485,8 +485,13 @@ def main() -> None:
     metrics = column_metrics()
     if args.freeze:
         keep = frozen_columns(args.freeze)
+        # 没有 border-detection 金标的页（比如专门筛 mixed 候选的新页）量不出
+        # 三个几何指标——那三个数只是卡片元数据，标注界面不展示，缺了给 0
+        # 占位即可，不该因此挡住这一批标注。
+        _NO_METRICS = dict(drift=0.0, dgap=0.0, anchor=0.0, raised=False, estimated=False)
         picked = [dict(book=b, page=p, col=c,
-                        tags=sorted(_TAGS_FROZEN.get((b, p, c), [])), **metrics[(b, p, c)])
+                        tags=sorted(_TAGS_FROZEN.get((b, p, c), [])),
+                        **metrics.get((b, p, c), _NO_METRICS))
                    for b, p, c in keep]
     else:
         picked = pick_columns(metrics)
