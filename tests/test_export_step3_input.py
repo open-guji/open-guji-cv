@@ -88,13 +88,7 @@ def test_side_floor_is_measured_on_the_raw_column_not_the_cleaned_one():
     assert raw > mod.SIDE_FLOOR_MAX >= cleaned, f"原图 {raw:.4f} / 清理后 {cleaned:.4f}"
 
 
-@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
-def test_gate_threshold_still_separates_the_human_verdicts():
-    """`SIDE_FLOOR_MAX` 必须仍然把金标的 clean 和 mixed 分在两边。
-
-    间隔很窄（clean 上限 0.0109 vs mixed 下限 0.0136，而 mixed 只有 n=2），
-    所以任何一次调参、任何一次上游改列图，都该让这条先响。
-    """
+def _clean_vs_mixed_side_floor() -> tuple[list[float], list[float]]:
     import cv2
     from open_guji_cv.utils.column_projection import denoise_column
     lo, hi = [], []
@@ -110,8 +104,44 @@ def test_gate_threshold_still_separates_the_human_verdicts():
         img = cv2.imread(str(wf.parent / win["file"]), cv2.IMREAD_GRAYSCALE)
         (lo if d["verdict"] == "clean" else hi).append(
             mod.side_floor(denoise_column(img)))
+    return lo, hi
+
+
+@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
+@pytest.mark.xfail(strict=True, reason=(
+    "负结果（2026-09-02 扩金标后坐实）：「两侧最低墨」这一条单一指标已经不能"
+    "分开 clean/mixed —— vol01/151 c4 是 mixed、side_floor 只有 0.0044，"
+    "比多条 clean 列（比如 vol01/141 c1，同样 0.0044）还低。原因是这条判据"
+    "结构上只看两侧外 25% 的墨——vol01/151 c4 那种「弯界行只在列中段探入」和"
+    "vol02/3 c9 那种「背景印章导致整列散布噪点、不集中在边缘」，这两种污染"
+    "side_floor 天生看不见。见 test_side_floor_cannot_see_whole_column_contamination。"
+    "如果这条哪天意外 PASS 了，不代表判据修好了，先去查是不是金标又漂了"
+    "（比如某次上游改动让样本对应的列图变了但没重标）。"))
+def test_gate_threshold_still_separates_the_human_verdicts():
+    """`SIDE_FLOOR_MAX` 曾经能把金标的 clean 和 mixed 分在两边（clean 上限
+    0.0109 vs mixed 下限 0.0136，n=2），现在不能了——标成 `xfail` 而不是删掉，
+    是为了留一个「这条判据啥时候好使、啥时候不好使」的活证据。
+    """
+    lo, hi = _clean_vs_mixed_side_floor()
     if not lo or not hi:
         pytest.skip("金标里没有可比的 clean/mixed 列图")
     assert max(lo) <= mod.SIDE_FLOOR_MAX < min(hi), (
         f"clean 上限 {max(lo):.4f} / mixed 下限 {min(hi):.4f} / "
         f"门槛 {mod.SIDE_FLOOR_MAX}")
+
+
+@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
+def test_side_floor_cannot_see_whole_column_contamination():
+    """记录 `side_floor` 结构性看不见的两种污染，别再拿它当全能判据。
+
+    `side_floor` 只量两侧外 25% —— 污染要是不贴边（弯界行只在列中段探入、
+    背景印章整列散布噪点）就测不到。这不是参数没调好，是这条尺子的设计
+    范围本来就只覆盖「贴边」这一种形态。**扩大金标不会把这条测挽救回来**，
+    需要的是另一条独立于「两侧墨量」的判据（比如整列噪点密度/连通域特征）。
+    """
+    lo, hi = _clean_vs_mixed_side_floor()
+    if not lo or not hi:
+        pytest.skip("金标里没有可比的 clean/mixed 列图")
+    assert min(hi) <= max(lo), (
+        "如果这条也开始失败，说明 side_floor 又能分开了——"
+        "去看金标是不是漂了，而不是庆祝判据修好了")

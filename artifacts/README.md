@@ -167,6 +167,31 @@ fallback，page_size 逐位核对是同一张源图），跑 94 个还没金标�
 复核过图像再收进候选（排除了检测本身出错的页，比如 143——那页只切出 135px
 的窄列，`page_ok=False`，L1 已经先挡了，不是"列级判据该不该收"的例子）。
 
+**第二轮已收**（2026-09-02）：11 列全部标完——**8 mixed / 2 clean / 1 idk**。
+`export_column_warp_gold.py` 并入金标，现有 43 clean + 11 mixed + 1 idk = 55 列。
+
+> ⚠️ **负结果，L2 那条「两侧最低墨」阈值已被坐实推翻**：扩标之后 clean 上限
+> 0.0111 vs mixed 下限 **0.0044**（vol01/151 c4），跟一条 clean 列
+> （vol01/141 c1，同样 0.0044）**分数完全一样**——这条单一指标结构上就
+> 分不开。原因是它只看两侧外 25% 的墨，而 151 c4 是"弯界行只探进列中段"、
+> 不贴边，天生测不到。测试从硬断言改成了 `xfail(strict=True)`（留活证据，
+> 别人手滑调阈值让它"看起来又过了"会立刻报警），另加一条
+> `test_side_floor_cannot_see_whole_column_contamination` 把这条负结果焊死。
+> 详见 `scripts/export_step3_input.py` 和 `tests/test_export_step3_input.py`。
+
+**第三轮已收（vol02 首次抽样，2026-09-02）**：Step2 刚扩页跑完 vol02 27 页
+（见 pipeline_handbook），但 vol02 上一条 Step2 人裁都没有。补标 12 列（按
+算法探测线自算的倾斜/梯形/锚点偏差三条难例各挑 3 页 + 3 页对照，跟 vol01
+`pick_columns()` 同一个思路，但几何量是从 `output/vol02/step2_columns/`
+的算法探测线直接算的——vol02 没有 border-detection 人工金标可用）。结果
+**11 clean / 1 mixed**，跟 vol01 的高 clean 率一致，**Step2 在 vol02 上没
+跑偏**。唯一的 mixed（vol02/3 c9）用户目视核实：**背景有印章、整列散布
+噪点**——这是第四种 mixed 机制（跟"弯界行"/"夹注列"/"文字顶边"都不同，
+是外部污染不是版式或矫正问题），而且**再次印证 `side_floor` 看不见这类
+污染**（噪点不贴边）。vol02/3 这一页在 L1 也被挡了（c1 列宽 229 对中位数
+186，见 pipeline_handbook「Step2 扩页」），一页两处独立信号都指向同一页
+有问题，不是巧合。
+
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **单列矫正·上下版框核校**（Step2 金标·第二部分）| https://claude.ai/code/artifact/2d8ff95c-1773-4f78-ab54-0eb8514fa115 | 卡片 id 冻在 `output/column_border_cards.jsonl`（HTML 快照不入库，302KB，脚本可再生）| `python scripts/build_column_border_review.py` |
