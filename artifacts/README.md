@@ -45,6 +45,32 @@
 5.9±4.2px）；**外条近沿不可用、只有远沿稳**（外条从内侧磨掉，近沿 +15→+34
 漂，远沿只 +33→+45）——拿近沿反推内框会错十几 px，审查页第一版就是这么错的。
 
+## Step1 金标标注（三个裁决台，2026-09-02）
+
+素材共用一次探测（`scripts/export_border_review_cards.py`，60 页正文页，一页
+10~40s，各跑一遍太浪费）；页面由 `scripts/build_border_gold_reviews.py` 拼。
+卡的 id **冻在** `output/border_review/cards.jsonl` 里，重出一版页面照旧读它——
+否则 id 一变，上一轮的裁决就对不上号了。
+
+| 页面 | URL | 卡数 | 判什么 |
+|---|---|---|---|
+| **界行切分裁决台** | https://claude.ai/code/artifact/12a167f9-b3e1-443a-9702-af89de5a3be1 | 60 | 红虚线是探到的界行，判是不是都落在字缝上。4 档：都在缝上 / 有缝漏切 / 线压在字上 / 拿不准 |
+| **抬头有无裁决台** | https://claude.ai/code/artifact/1353ce9a-2a54-4170-bcde-1118b7765893 | 60 | 上版框横带的原图，判有没有抬头。3 档：有 / 没有 / 拿不准 |
+| **外框外延裁决台** | https://claude.ai/code/artifact/e8cdb7b4-1057-402b-8e31-aaa8ed966cbc | 108 | 红虚线是算法量的外条最外沿，判位置。5 档：在外沿上 / 偏内 / 偏外 / 没有外框 / 拿不准 |
+
+各自补的缺口：**界行切分**是文档里记的准确率封顶因素（40 页里 13 页没切对，
+Step2/Step3 全部连坐）；**抬头**金标只有 6 页 18 例，`HR_*` 那批形态常数有过拟合
+风险；**外框外延**的上框金标口径不统一（外延6/中心3/内沿1），已证实 vol01/14
+的 `top_outer_offset` 错了 17px。
+
+出题上守的几条：**抬头页不叠任何探测结果**（要量的是漏检率，卡上印了机器的判断
+人就顺着点，测出来的是机器自己）；卡序打散（固定种子）；每页留「拿不准」一档；
+外延页不写偏移量。三页定点自检都过（v3 == v2，裁决嵌得进页里）。
+
+收回：`Artifact action:"read"` 拿到 HTML，喂
+`.claude/skills/review-artifact/scripts/harvest_verdicts.py` 出 JSONL。
+续裁：`build_border_gold_reviews.py --verdicts 上一轮.jsonl`，**重发到同一 URL**。
+
 ## 切分审查（G1/G2 工作流）
 
 | 页面 | URL | 快照/真源 | 再生 |
