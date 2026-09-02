@@ -58,13 +58,44 @@ class HLine:
 @dataclass
 class VLine:
     """竖直线（外边框/界行）：新坐标系里 x = x_at_top + slope * y
-    （y 向下递增，起点是页面顶端 y=0 处的 x 值）。"""
+    （y 向下递增，起点是页面顶端 y=0 处的 x 值）。
+
+    **弯的界行用三段折线表示**（用户 2026-09-02 定的方案）：以上下内版框为界，
+    把版框内高度三等分，每条线加两个折点，记成 `(x, k1, k2, k3)`——`x_at_top`
+    就是 x，`slope` 就是 k1，再加 `k2`/`k3` 是第二、三段的斜率，`y1`/`y2` 是两个
+    折点的 y。`k2 is None` 就是原来的直线，所有只调 `x_at()` 的下游代码不用改。
+    折点以上/以下按 k1/k3 外推。**整页要么全直线要么全三段**，看
+    `BorderDetectionResult.vline_segments`。
+
+    为什么存 y1/y2 而不是让下游自己按 top/bottom 算：折点 y 取决于这条线自己
+    在上下版框上的交点（版框有斜率，每条线的折点 y 差几 px），存下来 `x_at()`
+    才是自洽的。"""
 
     x_at_top: float
     slope: float
+    k2: float | None = None
+    k3: float | None = None
+    y1: float | None = None
+    y2: float | None = None
+
+    @property
+    def segments(self) -> int:
+        return 1 if self.k2 is None else 3
 
     def x_at(self, y: float) -> float:
-        return self.x_at_top + self.slope * y
+        if self.k2 is None or self.y1 is None or self.y2 is None or self.k3 is None:
+            return self.x_at_top + self.slope * y
+        if y <= self.y1:
+            return self.x_at_top + self.slope * y
+        xa = self.x_at_top + self.slope * self.y1
+        if y <= self.y2:
+            return xa + self.k2 * (y - self.y1)
+        xb = xa + self.k2 * (self.y2 - self.y1)
+        return xb + self.k3 * (y - self.y2)
+
+    def knots(self) -> list[float]:
+        """折点的 y（直线返回空表）。Step2 按这些 y 把列切成横带分别射影。"""
+        return [] if self.k2 is None else [float(self.y1), float(self.y2)]
 
     @classmethod
     def from_endpoints(cls, x1: float, y1: float, x2: float, y2: float, w: int) -> "VLine":
@@ -111,6 +142,13 @@ class BorderDetectionResult:
     bottom_outer_offset: float | None = None
     v_outer_side: str | None = None  # "left" | "right"，由页码奇偶决定
     v_outer_offset: float | None = None  # 相对 verticals[0](right)或verticals[-1](left) 的偏移量
+    # 界行是直线(1)还是三段折线(3)——**整页统一**。由 `fit_vlines_polyline()`
+    # 按弯度指标决定：`bend_w80_med`/`bend_w80_max` 是直线拟合下的 w80（装下
+    # 80% 墨的最窄 x 跨度，px；界行本身 3~6px 宽，直线页 5~7）。Step2 看到 3
+    # 就要按折点分带射影（`column_projection.warp_column` 已处理）。
+    vline_segments: int = 1
+    bend_w80_med: float | None = None
+    bend_w80_max: float | None = None
 
 
 def _hline_to_new(m: LineMatch, w: int, kind: str) -> HLine:
@@ -472,6 +510,202 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     return out
 
 
+# ---------------------------------------------------------------- 界行折线拟合
+
+BEND_SEARCH = 40          # 弯度投影窗口半宽（px）。要盖得住弯幅（实测最大 ~30），
+                          # 又别宽到吃进邻列的字（列距 ~185）
+BEND_INK_W_MAX = 9        # 一行在窗口里的墨宽超过这个就当被笔画占了，不算——
+                          # 界行本身 3~6px 宽，不剔量的是字不是线
+BEND_Y_STEP = 2
+BEND_MIN_ROWS = 150       # 有效行少于这个不给结论（按直线处理）
+BEND_W80_MED = 10.0       # 页级 w80 中位 >= 这个 => 整页三段。200 页实测直线页
+                          # 中位 6.0 / 90 分位 10.0；弯页 12~21
+BEND_W80_MAX = 24.0       # 或任一条线 w80 >= 这个（单条线跑飞的那一型：vol01/11
+                          # 页级中位只有 9.5 但单条到 64，只看中位会漏）
+KNOT_SEARCH = 24          # 每个折点在直线估计的 ±这么多 px 里找
+KNOT_PASSES = 3           # 坐标下降轮数（实测 2 轮已收敛，第 3 轮保险）
+
+
+BEND_COHERE_WIN = 9       # 局部一致性：跟相邻这么多个有效行的 x 中位比
+BEND_COHERE_TOL = 3.0     # 偏离超过这么多 px 的行剔掉——碎片是跳的，线是连的
+
+
+def _rule_rows(binm: np.ndarray, xfn, y0: int, y1: int, w: int
+               ) -> tuple[np.ndarray, np.ndarray]:
+    """挑出"这一行的墨确实像界行"的行。两道闸：
+
+    1. 窗口里有墨且墨宽 <= BEND_INK_W_MAX（界行 3~6px 宽；宽了是撞上字）。
+    2. **局部一致性**：这一行墨的 x 跟相邻 BEND_COHERE_WIN 个有效行的中位差
+       不超过 BEND_COHERE_TOL。真线（哪怕弯）在 y 方向是连续的，笔画碎片是
+       跳的。没这道闸 vol02/3 会被判成"最弯的页之一"（w80 36），其实界行是
+       直的，只是断掉的行里混进了一小截笔画——第 1 道闸拦不住 <=9px 的碎片。
+
+    返回 (有效行 ys, 全部采样 ys)。`xfn(y)` 是当前线的 x。"""
+    ys = np.arange(int(y0), int(y1), BEND_Y_STEP)
+    cand_y, cand_x = [], []
+    for y in ys:
+        c = int(round(xfn(y)))
+        lo, hi = c - BEND_SEARCH, c + BEND_SEARCH + 1
+        if lo < 0 or hi > w:
+            continue
+        row = binm[y, (w - 1) - hi + 1:(w - 1) - lo + 1][::-1]   # 翻回新坐标方向
+        k = int(row.sum())
+        if k == 0 or k > BEND_INK_W_MAX:
+            continue
+        cand_y.append(y)
+        cand_x.append(lo + float(np.flatnonzero(row).mean()))
+    if len(cand_y) < BEND_COHERE_WIN:
+        return np.array(cand_y, dtype=int), ys
+    cx = np.array(cand_x)
+    half = BEND_COHERE_WIN // 2
+    keep = []
+    for i, y in enumerate(cand_y):
+        a, b = max(0, i - half), min(len(cx), i + half + 1)
+        nb = np.concatenate([cx[a:i], cx[i + 1:b]])
+        if len(nb) == 0 or abs(cx[i] - np.median(nb)) <= BEND_COHERE_TOL:
+            keep.append(y)
+    return np.array(keep, dtype=int), ys
+
+
+def gutter_projection(binm: np.ndarray, xfn, y0: int, y1: int, w: int
+                      ) -> tuple[float, int, int, int] | None:
+    """把一条界行整条投到 x 轴（用户给的直度判据）：线越直，墨全落在同一个 x
+    上，峰越高越窄。返回 (peak, w50, w80, n_rows)，n 不够返回 None。
+
+    peak = 投影峰值 ÷ 采样行数（1.0 = 完美）；w50 = 半高宽；w80 = 装下 80% 墨的
+    最窄 x 跨度。**判弯用 w80**——线弯成两段时 w50 会出现双峰、被误判成窄。
+    """
+    rows, _ = _rule_rows(binm, xfn, y0, y1, w)
+    if len(rows) < BEND_MIN_ROWS:
+        return None
+    proj = np.zeros(BEND_SEARCH * 2 + 1, np.float64)
+    for y in rows:
+        c = int(round(xfn(y)))
+        lo, hi = c - BEND_SEARCH, c + BEND_SEARCH + 1
+        seg = binm[y, (w - 1) - hi + 1:(w - 1) - lo + 1][::-1]   # 翻回新坐标方向
+        proj += seg
+    p = proj / len(rows)
+    pk = float(p.max())
+    if pk <= 0:
+        return None
+    w50 = int((p >= pk / 2.0).sum())
+    total, need = p.sum(), p.sum() * 0.80
+    best, run, a = len(p), 0.0, 0
+    for b in range(len(p)):
+        run += p[b]
+        while run - p[a] >= need:
+            run -= p[a]
+            a += 1
+        if run >= need:
+            best = min(best, b - a + 1)
+    return pk, w50, int(best), int(len(rows))
+
+
+_ALIGN_KERNEL = ((0, 3), (-1, 2), (1, 2), (-2, 1), (2, 1))
+
+
+def _aligned(binm: np.ndarray, rows: np.ndarray, xs: np.ndarray, w: int) -> int:
+    """rows 里的墨落在 xs（新坐标）附近的加权计数——三角核 {0:3, ±1:2, ±2:1}。
+    就是"投影峰在 0 处的高度"，但**峰是尖的**：界行 3~6px 宽，用 ±1 硬窗口
+    会在线上出现一段平台、折点定不到线心（合成页实测偏 2.9px）；三角核让
+    线心处唯一最高。"""
+    xo = (w - 1) - np.rint(xs).astype(int)          # 转回旧坐标列号
+    total = 0
+    for d, wt in _ALIGN_KERNEL:
+        xx = xo + d
+        ok = (xx >= 0) & (xx < w)
+        total += wt * int((binm[rows[ok], xx[ok]] > 0).sum())
+    return total
+
+
+def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
+                        verticals: list[VLine], w: int, h: int
+                        ) -> tuple[list[VLine], int, float | None, float | None]:
+    """按弯度决定整页用直线还是三段折线，弯就逐线拟合折线。
+    返回 (verticals, segments, w80_med, w80_max)。
+
+    **先量再改**：先在直线拟合下算每条线的 w80，页级中位 >= BEND_W80_MED 或任
+    一条 >= BEND_W80_MAX 才进入三段；否则原样返回、segments=1。**整页统一**——
+    用户要求"要变整个页面都变"，Step2 分带逻辑也只看页级标志。
+
+    三段的拟合不按 k1→k2→k3 顺序贪心搜（前一段的误差会往下传），而是直接搜
+    四个折点的 x（x0/xa/xb/x3，在这条线跟上版框、1/3、2/3、下版框交点处），
+    连续性天然满足；目标 = 相邻段"墨落在线上 ±1px"的行数（= 投影峰在 0 处的
+    高度，就是用户说的"投影最能出现高峰"）。坐标下降 KNOT_PASSES 轮。最后换算
+    成 (x, k1, k2, k3)，精确等价。某条线折线得分不高于直线时退回直线斜率
+    （k2=k3=k1），格式仍是三段，整页保持一致。
+    """
+    binm = (mask > 0).astype(np.uint8)
+    metrics = []
+    for v in verticals:
+        xc = v.x_at(h / 2.0)
+        y0 = int(top.y_at(xc)) + 30
+        y1 = int(bottom.y_at(xc)) - 30
+        m = gutter_projection(binm, v.x_at, y0, y1, w) if y1 - y0 > 400 else None
+        metrics.append(m)
+    w80s = [m[2] for m in metrics if m]
+    if not w80s:
+        return verticals, 1, None, None
+    w80_med, w80_max = float(np.median(w80s)), float(max(w80s))
+    if w80_med < BEND_W80_MED and w80_max < BEND_W80_MAX:
+        return verticals, 1, w80_med, w80_max
+
+    out = []
+    for v in verticals:
+        xc = v.x_at(h / 2.0)
+        yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+        if yb - yt < 400:
+            out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
+                             yt + (yb - yt) / 3, yt + 2 * (yb - yt) / 3))
+            continue
+        ky = [yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb]
+        kx = [v.x_at(y) for y in ky]                      # 直线初值
+        rows_all, _ = _rule_rows(binm, v.x_at, int(yt), int(yb), w)
+        if len(rows_all) < BEND_MIN_ROWS:
+            out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope, ky[1], ky[2]))
+            continue
+
+        def seg_rows(i):
+            return rows_all[(rows_all >= ky[i]) & (rows_all < ky[i + 1])]
+
+        def seg_score(i, xa, xb):
+            r = seg_rows(i)
+            if len(r) == 0:
+                return 0
+            t = (r - ky[i]) / (ky[i + 1] - ky[i])
+            return _aligned(binm, r, xa + t * (xb - xa), w)
+
+        base_score = sum(seg_score(i, kx[i], kx[i + 1]) for i in range(3))
+        for _ in range(KNOT_PASSES):
+            moved = False
+            for j in range(4):
+                best, best_x = None, kx[j]
+                for d in range(-KNOT_SEARCH, KNOT_SEARCH + 1):
+                    x = kx[j] + d
+                    sc = 0
+                    if j > 0:
+                        sc += seg_score(j - 1, kx[j - 1], x)
+                    if j < 3:
+                        sc += seg_score(j, x, kx[j + 1])
+                    if best is None or sc > best or (sc == best and abs(d) < abs(best_x - kx[j])):
+                        best, best_x = sc, x
+                if best_x != kx[j]:
+                    kx[j] = best_x
+                    moved = True
+            if not moved:
+                break
+        new_score = sum(seg_score(i, kx[i], kx[i + 1]) for i in range(3))
+        if new_score <= base_score:
+            out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope, ky[1], ky[2]))
+            continue
+        k1 = (kx[1] - kx[0]) / (ky[1] - ky[0])
+        k2 = (kx[2] - kx[1]) / (ky[2] - ky[1])
+        k3 = (kx[3] - kx[2]) / (ky[3] - ky[2])
+        out.append(VLine(x_at_top=float(kx[0] - k1 * ky[0]), slope=float(k1),
+                         k2=float(k2), k3=float(k3), y1=float(ky[1]), y2=float(ky[2])))
+    return out, 3, w80_med, w80_max
+
+
 def detect_borders(gray: np.ndarray, expected_cols: int,
                     ink_threshold: int = 128) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
@@ -494,8 +728,14 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
 
     top = _hline_to_new(top_old, w, "top")
     bottom = _hline_to_new(bottom_old, w, "bottom")
+    # 弯页整页换三段折线（先量 w80 再决定，直线页原样通过）——要在 top/bottom
+    # 之后，折点 y 取自这条线跟上下版框的交点
+    verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom,
+                                                            verticals, w, h)
     head_raise = detect_head_raise(mask, top, verticals, w)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
+                                  vline_segments=vseg, bend_w80_med=w80_med,
+                                  bend_w80_max=w80_max,
                                   **outer)

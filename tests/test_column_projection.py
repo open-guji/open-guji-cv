@@ -301,3 +301,33 @@ def test_warp_page_columns_returns_one_image_per_column():
     for wnd, img in out:
         assert img.shape[0] == int(round(wnd.bottom_y - wnd.top_y))
         assert img.shape[1] > 0
+
+
+def test_warp_column_three_segment_stacks_strips_seamlessly():
+    """折线边线：按折点分三带射影后拼接，总高 = 窗口高，宽度三带一致，
+    且一条随折线弯的竖直墨线在列图里必须变成一根直的竖线。"""
+    import numpy as np
+    from open_guji_cv.utils.border_geometry import VLine
+    from open_guji_cv.utils.column_projection import warp_column
+    w, h = 800, 1500
+    gray = np.full((h, w), 255, np.uint8)
+    # 左边线折线：中段往左鼓 20px；右边线直
+    left = VLine(x_at_top=500.0, slope=0.0, k2=0.0, k3=0.0, y1=600.0, y2=1000.0)
+    # 手工构造中段偏移：k1 使 x(600)=520，k2=0 保持，k3 回到 500 at 1400
+    left = VLine(x_at_top=500.0 - (20 / 600.0) * 0, slope=20.0 / 600.0,
+                 k2=0.0, k3=-20.0 / 400.0, y1=600.0, y2=1000.0)
+    right = VLine(x_at_top=320.0, slope=0.0)
+    # 在左边线内侧 10px 画一根"跟着弯"的墨线
+    for y in range(200, 1400):
+        xo = (w - 1) - int(round(left.x_at(y) - 10))
+        gray[y, xo - 1:xo + 2] = 0
+    img = warp_column(gray, left, right, 200.0, 1400.0)
+    assert img.shape[0] == 1200
+    # 拼出来的列图里，那根墨线在各带的 x 应一致（直了）
+    xs = []
+    for y in (100, 500, 700, 900, 1100):
+        row = img[y]
+        dark = np.where(row < 128)[0]
+        assert len(dark) > 0
+        xs.append(dark.mean())
+    assert max(xs) - min(xs) <= 3.0
