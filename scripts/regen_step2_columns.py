@@ -12,10 +12,22 @@ x 标准差 0.7~1.1px（直线页 0.6px），弯线确实被拉直了。
     python scripts/regen_step2_columns.py <book> <page> [<page> ...] [--denoise]
     python scripts/regen_step2_columns.py vol01 --gold-pages
     python scripts/regen_step2_columns.py vol01 --polyline-pages --clean   # 全册弯页
-    python scripts/regen_step2_columns.py vol01,vol02 --polyline-pages --clean --jobs 8
+    python scripts/regen_step2_columns.py vol01,vol02 --polyline-pages --clean
 
 输出：output/<book>/step2_columns/<page>/c<N>.png + <page>/windows.json
 `--clean` 另出 c<N>_clean.png（`clean_column`：去噪 + 清两侧界行 + 清上下版框）。
+
+## 性能：这个脚本本身几乎不花时间
+
+单页 Step2 的活加起来不到 0.1s（`warp_page_columns` 0.02s、`clean_column`×9
+0.08s、写盘 0.02s），99% 在它调用的 Step1 `detect_borders`。`detect_borders`
+内部已经上了线程池（14 页金标 2.17x，结果逐位相同），完整的分阶段实测和三条
+否掉的路子记在 `.claude/doc/segmentation_v2_pipeline.md`「Step 1 性能」一节。
+
+这里只管**页级并行**（`--jobs`，`ProcessPoolExecutor`，每页完全独立）。
+**`--jobs` 不要超过 CPU 数**：worker 里会把 Step1 的内层线程池关掉
+（`OGCV_LINE_SEARCH_THREADS=1`），页级进程数就是实际并行度，超订只会更慢——
+4 核上开 8 进程跑 294 页花了 62 分钟。
 """
 import argparse
 import json
@@ -167,11 +179,14 @@ if __name__ == "__main__":
         else:
             n_done += 1
             done_pages.append(f"{bk}/{pg}")
-            r = [c["col"] for c in m["columns"] if c["raised"]]
-            n_raised += len(r)
+            raised = [c for c in m["columns"] if c["raised"]]
+            n_raised += len(raised)
+            tail = ""
+            if raised:
+                px = ", ".join(f"{c['border_top_in_column']:.0f}px" for c in raised)
+                tail = f"  抬头列 {[c['col'] for c in raised]}（多矫正 {px}）"
             print(f"{bk}/{pg}: {len(m['columns'])} 列  seg={m['vline_segments']}"
-                  f"  w80={m['bend_w80_med']}"
-                  + (f"  抬头列 {r}" if r else ""), flush=True)
+                  f"  w80={m['bend_w80_med']}" + tail, flush=True)
         if a.polyline_pages and i % 25 == 0:
             print(f"  … {i}/{len(jobs)} 页，已出 {n_done}", flush=True)
     print(f"\n完成：处理 {n_done} 页" + (f"，跳过直线页 {n_skip}" if n_skip else "")
