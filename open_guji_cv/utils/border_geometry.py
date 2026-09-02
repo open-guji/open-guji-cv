@@ -17,12 +17,14 @@ outer 0.4px）。坐标口径跟金标一致：**`inner_y` 取线心、`outer_y`
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from .peak_line_search import (
     LineMatch,
+    _line_search_workers,
     find_horizontal_border,
     find_vertical_lines,
     half_height_score_at,
@@ -753,8 +755,17 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     mask = (gray < ink_threshold).astype(np.float64)
 
     vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
-    top_old = find_horizontal_border(mask, "top")
-    bottom_old = find_horizontal_border(mask, "bottom")
+    # 上下边框互不相干，各 1.4s；并到 2 线程省掉其中一份（竖直线降到 6.5s 之后
+    # 这一段占比就上来了）。跟 find_vertical_lines 用同一个开关，批处理时
+    # OGCV_LINE_SEARCH_THREADS=1 会退回串行。
+    if _line_search_workers(2) > 1:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fu_t = ex.submit(find_horizontal_border, mask, "top")
+            fu_b = ex.submit(find_horizontal_border, mask, "bottom")
+            top_old, bottom_old = fu_t.result(), fu_b.result()
+    else:
+        top_old = find_horizontal_border(mask, "top")
+        bottom_old = find_horizontal_border(mask, "bottom")
 
     verticals = [_vline_to_new(m, w, h) for m in vlines_old]
     # 新坐标系 x 向左递增：旧坐标里越靠右(x_old越大) -> 新坐标x_new越小，
