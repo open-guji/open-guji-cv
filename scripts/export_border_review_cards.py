@@ -44,7 +44,9 @@ from open_guji_cv.utils.border_geometry import detect_borders  # noqa: E402
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 PAGE_TYPE = ROOT.parent / "open-guji-dataset" / "page-type" / "expected.json"
 
-PAGE_W = 660          # 列探测整页缩图宽
+PAGE_W = 560          # 列探测整页缩图宽。**别往大调**：60 张卡就把页面撑到
+                      # 10 MB，页面每存一次要把自己整个重发一遍，越大越容易
+                      # 被限流；560px 下界行间距还有 ~33px，判「在不在缝上」够用
 HEAD_W = 900          # 抬头带缩图宽（比整页宽，好让那条横带别太扁）
 HEAD_UP, HEAD_DN = 250, 45     # 抬头带：上版框上方/下方各取多少 px
 STRIP_W, STRIP_ZOOM = 480, 2   # 外延带：横向取多少 px、纵向放大几倍
@@ -110,7 +112,7 @@ def one_page(args) -> list[dict]:
                 if 0 <= x + dx < PAGE_W:
                     thumb[yy, x + dx] = (0, 40, 235)
     out.append(dict(kind="cols", id=f"cols:{book}:{page}", book=book, page=page,
-                    n_cols=len(res.verticals), jpg=_enc(thumb, 74)))
+                    n_cols=len(res.verticals), jpg=_enc(thumb, 58)))
 
     # ---- 2. 抬头带：上版框附近，不叠任何探测结果 ----
     ytop = int(res.top.y_at((w - 1) - w // 2))
