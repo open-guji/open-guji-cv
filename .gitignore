@@ -38,3 +38,10 @@ output/column_warp_review.html
 
 # 上下版框标注页的 HTML 快照——同上，`scripts/build_column_border_review.py` 可再生
 output/column_border_review.html
+
+# Step2→Step3 交接的列图：131MB，但**由已入库的 output/<book>/step2_columns/
+# 确定性再生**，`python scripts/export_step3_input.py --book <book> --tier gate`
+# 几秒钟跑完（clean_column 每页 0.03s）。跟 step2_columns 不一样——那个要跑
+# Step1 的 detect_borders（每页 1.8s，全书 5 分钟），值得入库；这个不值得。
+# manifest.json 照常入库：准入裁决、period/ref_w、逐页拒绝理由都在里面。
+output/*/step3_input/*/

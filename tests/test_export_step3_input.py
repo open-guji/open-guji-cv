@@ -110,8 +110,8 @@ def _clean_vs_mixed_side_floor() -> tuple[list[float], list[float]]:
 @pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
 @pytest.mark.xfail(strict=True, reason=(
     "负结果（2026-09-02 扩金标后坐实）：「两侧最低墨」这一条单一指标已经不能"
-    "分开 clean/mixed —— vol01/151 c4 是 mixed、side_floor 只有 0.0044，"
-    "比多条 clean 列（比如 vol01/141 c1，同样 0.0044）还低。原因是这条判据"
+    "分开 clean/mixed —— 114 列金标复核：clean 上到 0.0417、mixed 低到 0.0038，"
+    "完全重叠，扫遍所有门槛最优也只能误杀 3 / 放过 1。原因是这条判据"
     "结构上只看两侧外 25% 的墨——vol01/151 c4 那种「弯界行只在列中段探入」和"
     "vol02/3 c9 那种「背景印章导致整列散布噪点、不集中在边缘」，这两种污染"
     "side_floor 天生看不见。见 test_side_floor_cannot_see_whole_column_contamination。"
