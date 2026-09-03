@@ -1520,10 +1520,7 @@
      "side_floor": 0.0017,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "9/c1.png"
     },
@@ -2083,7 +2080,7 @@
      "col": 1,
      "admitted": true,
      "reject": [],
-     "tier": "gate",
+     "tier": "gold",
      "content_x": [
       6,
       168
@@ -2107,7 +2104,7 @@
      },
      "side_floor": 0.0008,
      "gold": {
-      "verdict": "mixed",
+      "verdict": "clean",
       "border_class": null
      },
      "file": "11/c1.png"
@@ -3047,10 +3044,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "14/c3.png"
     },
@@ -5939,10 +5933,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "24/c2.png"
     },
@@ -6617,10 +6608,7 @@
      "side_floor": 0.0004,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "glued",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "26/c5.png"
     },
@@ -6653,10 +6641,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "26/c6.png"
     },
@@ -8255,10 +8240,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "32/c1.png"
     },
@@ -8672,10 +8654,7 @@
      "side_floor": 0.0021,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "33/c5.png"
     },
@@ -8738,10 +8717,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "33/c7.png"
     },
@@ -8774,10 +8750,7 @@
      "side_floor": 0.0027,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "glued"
-      }
+      "border_class": null
      },
      "file": "33/c8.png"
     },
@@ -8810,10 +8783,7 @@
      "side_floor": 0.0025,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "glued"
-      }
+      "border_class": null
      },
      "file": "33/c9.png"
     }
@@ -11413,7 +11383,7 @@
      "col": 9,
      "admitted": true,
      "reject": [],
-     "tier": "gate",
+     "tier": "gold",
      "content_x": [
       15,
       213
@@ -11436,7 +11406,10 @@
       "bottom": 0
      },
      "side_floor": 0.0077,
-     "gold": null,
+     "gold": {
+      "verdict": "clean",
+      "border_class": null
+     },
      "file": "42/c9.png"
     }
    ]
@@ -12683,10 +12656,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "none",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "47/c2.png"
     },
@@ -12749,10 +12719,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "47/c4.png"
     },
@@ -12785,10 +12752,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "47/c5.png"
     },
@@ -12821,10 +12785,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "47/c6.png"
     },
@@ -12857,10 +12818,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "none",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "47/c7.png"
     },
@@ -12893,10 +12851,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "none",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "47/c8.png"
     },
@@ -12929,10 +12884,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "47/c9.png"
     }
@@ -13282,7 +13234,7 @@
      "col": 2,
      "admitted": true,
      "reject": [],
-     "tier": "gate",
+     "tier": "gold",
      "content_x": [
       4,
       180
@@ -13307,10 +13259,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "idk"
-      }
+      "border_class": null
      },
      "file": "49/c2.png"
     },
@@ -13403,10 +13352,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "49/c5.png"
     },
@@ -13871,10 +13817,7 @@
      "side_floor": 0.0008,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "51/c1.png"
     },
@@ -13907,10 +13850,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "51/c2.png"
     },
@@ -14063,10 +14003,7 @@
      "side_floor": 0.0004,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "51/c7.png"
     },
@@ -25964,10 +25901,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "137/c5.png"
     },
@@ -26000,10 +25934,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "137/c6.png"
     },
@@ -26237,10 +26168,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "138/c4.png"
     },
@@ -26273,10 +26201,7 @@
      "side_floor": 0.0029,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "138/c5.png"
     },
@@ -26309,10 +26234,7 @@
      "side_floor": 0.0025,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "none"
-      }
+      "border_class": null
      },
      "file": "138/c6.png"
     },
@@ -27041,10 +26963,7 @@
      "side_floor": 0.004,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "141/c1.png"
     },
@@ -27077,10 +26996,7 @@
      "side_floor": 0.002,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "141/c2.png"
     },
@@ -27113,10 +27029,7 @@
      "side_floor": 0.0012,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "141/c3.png"
     },
@@ -27149,10 +27062,7 @@
      "side_floor": 0.0,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "141/c4.png"
     },
@@ -27506,10 +27416,7 @@
      "side_floor": 0.0004,
      "gold": {
       "verdict": "clean",
-      "border_class": {
-       "top": "clean",
-       "bottom": "clean"
-      }
+      "border_class": null
      },
      "file": "142/c6.png"
     },
