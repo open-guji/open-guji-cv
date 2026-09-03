@@ -48,7 +48,25 @@
 - [ ] P1 尾巴：`glyphdb_admit` / `glyphdb_recrop` 两个消费者（现在照旧走 `seed-ingest`）；
       把「界行切分裁决台」真改成 server 模式跑一轮真人裁；`column-split` 分片补 metadata.json
 
-### P2 金标 → P3 增量与存储 → P4 扩展
+### P2 金标 —— ✅ 已落地（2026-09-03，提交 `aef2e2f` + 数据集仓 `0d53f92`；记录见设计 §8.3）
+
+- [x] `gold/adapters/`：五种旧载体读取器（samples_dir / flat_expected / verdicts / cases），
+      **35 个分片、8879 条金标全部可读**（唯一为 0 的 truncation 是统计型分片，本就无条目金标）
+- [x] `gold/drift.py`：图像指纹漂移检查，**沿用 migrate_column_warp_gold 已标定的判据**
+      （容差 6.0 灰阶；不用内容哈希、不用算法一致性）。column-warp 实测 keep 110 / recheck 4
+- [x] 已迁三个最活跃分片，旧文件保留并存：column-split 60 / column-warp 114 / instances 559
+- [x] 控制台金标视图（分片表 / 迁移 / 漂移检查）；CLI `gold migrate | drift`
+- [x] 15 条测试全过，全量 642 条零失败
+- **迁移查出的四个问题**（都已显式处理，见设计 §8.3）：samples/NNN 冒充分片；报告式
+  expected 的阈值名被当条目 id；instances 有 3 处真矛盾（同字位两轮判不同类，已标 uncertain
+  并记 history 待人裁）；coord_space 等文档字段混进了 expected
+- [ ] P2 尾巴：**评测器包进控制台**（27 个 eval_*.py 的命令行约定不统一：--out / --json-out /
+      --report 三种，位置参数 dataset / samples / cases / book_out_dir 四种）；
+      metadata.json 字段公约不统一（known_limitation 单复数、sampling 四种写法、
+      instances 的 total_samples 写 392 实际 562）；instances 与 border-detection 补图像指纹
+      （前者 patches/ 已有 909 张 PNG 可直接算）
+
+### P3 增量与存储 → P4 扩展
 
 见 doc/console_architecture.md §8 的表。要点：P3 用 `guji pin` 把数值产物钉进 git 的 `pins/`
 后再把 `output/`、`data_full/` 移出 git 并清 v1 目录；P4 切到 v2 Step4 时 GlyphDB / seed 队列的
