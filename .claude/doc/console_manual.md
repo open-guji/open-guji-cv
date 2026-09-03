@@ -275,3 +275,7 @@ PYTHONPATH=. .venv/Scripts/python scripts/verify_gold_migration.py --all   # 校
 | `../open-guji-dataset/<分片>/items.jsonl` | 统一金标 | 是 |
 | `../open-guji-dataset/feedback/events/` | 人裁事件 | 是 |
 | `review/batches/*.json` | 批次登记 | 否（真源随数据集仓） |
+| `output/<册>/phase2..phase9` | **v1 遗留产物**，v2 链不碰它们 | 现在还在，P3 时清 |
+
+v2 链与 v1 产物完全解耦：Step1 直接吃原始扫描，Step4 由控制台把列图传给
+`CharExtractor.extract_page`，不走它那个按 `s4_deskew` 等目录名找图源的整册入口。
