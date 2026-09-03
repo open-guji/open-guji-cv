@@ -254,10 +254,12 @@ function payload(){
    .replace("__TITLE__", TITLE)
 
 
-def load_existing(path: str | None) -> dict:
+def load_existing(path: str | None, drop: set[str] | None = None) -> dict:
     """把读回来的页里已有的裁决带上——重发一律先 read 再 build，否则覆盖掉
     用户还没收割的标注（规矩见 artifacts/README.md）。`#trim` 那批键是上一版
-    可拖动界面的遗留，本版金标只记类别，丢掉。"""
+    可拖动界面的遗留，本版金标只记类别，丢掉。`drop` 里的卡 id（几何漂了、
+    标注已失效）连同它的裁决一起清掉，回到"未裁"——跟姊妹脚本
+    `build_column_warp_review.py` 的 `--drop` 同一条规矩。"""
     if not path:
         return {}
     html = Path(path).read_text(encoding="utf-8")
@@ -265,7 +267,8 @@ def load_existing(path: str | None) -> dict:
     if not m:
         raise SystemExit("这份 HTML 里没有 #data")
     st = json.loads(m.group(1).replace("<\\/", "</")).get("verdicts", {})
-    return {k: v for k, v in st.items() if not k.endswith("#trim")}
+    drop = drop or set()
+    return {k: v for k, v in st.items() if not k.endswith("#trim") and k not in drop}
 
 
 def main() -> None:
@@ -276,16 +279,20 @@ def main() -> None:
     ap.add_argument("--only", default="",
                     help="逗号分隔的卡 id（如 vol01_47_c2_top）：只放这些卡，"
                          "要重标时用，别让人在一堆已裁的卡里翻那几张")
+    ap.add_argument("--drop", default="",
+                     help="逗号分隔的卡 id，几何漂了、标注已失效，清掉裁决重标"
+                          "（不加 --only 就仍然显示这张卡，只是打回未裁状态）")
     args = ap.parse_args()
 
     rows, imgs = build_rows()
     only = {x for x in args.only.split(",") if x}
+    drop = {x for x in args.drop.split(",") if x}
     if only:
         rows = [r for r in rows if r["id"] in only]
         if not rows:
             raise SystemExit(f"--only 里的 id 一个都没匹配上：{sorted(only)}")
         imgs = {r["id"]: imgs[r["id"]] for r in rows}
-    existing = load_existing(args.carry)
+    existing = load_existing(args.carry, drop)
     if only:
         existing = {k: v for k, v in existing.items() if k in only}
     cards = Path(args.cards)
