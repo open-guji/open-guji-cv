@@ -563,9 +563,32 @@ server 传输壳只做了同步 JS，还没把「界行切分裁决台」真正�
 confusable-context 的 154 条全部 uncertain（题面在 `cases.json` 里但没有对应的
 `answer_key` 条目，没答案的题本就不该进指标）。
 
-**P2 的已知缺口**：评测器还没包进控制台（27 个 `eval_*.py` 的命令行约定不统一：
-报告路径有 `--out` / `--json-out` / `--report` 三种写法，位置参数名有 `dataset` /
-`samples` / `cases` / `book_out_dir` 四种，`eval_guard_ceiling` 干脆没有位置参数）；
+### 8.4 P2 收尾：评测器进控制台（2026-09-03）
+
+`eval/` 三个文件把 27 个 `eval_*.py` 包进控制台，**一行脚本没改**：
+
+- `registry.py` 把各脚本的调用契约记成数据（位置参数传哪一层、报告选项是哪个、要不要
+  `PYTHONPATH`、跑得起来的前提）；
+- `runner.py` 起子进程、抓 stdout、解析指标，**金标状态由 GoldStore 补**（评测脚本读的是
+  旧文件，压根不知道 stale 这回事）；
+- `report.py` 统一报告：每个指标带分母，分层不合成一个数，`stale_gold` 与
+  `uncertain_skipped` 必填——手册那三条量法纪律变成字段，不靠人记。
+
+**实测 17 个可跑，全部跑通**：12 个通过、5 个回归门失败（后者是**有效结论**）。
+其余 10 个如实标出前提：需 OCR 引擎、重活、需语料、需中间产物、需上游评测器的 npz。
+
+**这一轮避掉的一个陷阱值得记死**：有十个脚本的 `--out` **不是报告路径而是产物根目录**
+（`char_drop` / `left_cut` / `seam` / `text_band` / `side_rule` 那批，默认值就是 `output`）。
+给它们传报告路径，脚本会去 `report.json/vol01/phase3_char_grid/` 找产物，静默扫到 0 页，
+然后印「回归门：通过」——**假通过比失败危险得多**。注册表把这批的报告选项置空。
+同理 `--update` 会覆写金标 `expected.json`，`argv()` 里加了断言，永不透传。
+
+另外三处细节：`回归门` 有三种写法（`通过` / `**失败**` 带星号 / `31/31 通过` 夹分数），
+正则要全认；**回归门失败不等于跑挂**，报告分 `ok` / `regressed` / `failed` 三态，
+混报会让人分不清该看算法还是该修评测；有脚本把指标印完才在收尾处崩（除零），
+所以判据是「有没有解析出指标」，退出码只作参考。
+
+**P2 的剩余缺口**：
 `metadata.json` 的字段公约也不统一（`known_limitation` 单数 vs `known_limitations` 复数，
 `sampling` / `sampling_bias` / `stratification` / `strata` 四种写法同一件事，
 instances 的 `total_samples` 写 392 而实际 562）；instances 与 border-detection

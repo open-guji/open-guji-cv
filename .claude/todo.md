@@ -61,9 +61,11 @@
 - **迁移查出的四个问题**（都已显式处理，见设计 §8.3）：samples/NNN 冒充分片；报告式
   expected 的阈值名被当条目 id；instances 有 3 处真矛盾（同字位两轮判不同类，已标 uncertain
   并记 history 待人裁）；coord_space 等文档字段混进了 expected
-- [ ] P2 尾巴：**评测器包进控制台**（27 个 eval_*.py 的命令行约定不统一：--out / --json-out /
-      --report 三种，位置参数 dataset / samples / cases / book_out_dir 四种）；
-      metadata.json 字段公约不统一（known_limitation 单复数、sampling 四种写法、
+- [x] **P2 尾巴已做完**：27 个评测脚本包进控制台（`eval/` 三件套，脚本一行没改）。
+      17 个可跑全部跑通（12 通过 + 5 回归门失败）；其余 10 个如实标出前提。
+      避掉一个大陷阱：十个脚本的 `--out` 是**产物根目录**不是报告路径，传错会静默扫 0 页
+      然后报「回归门：通过」——假通过比失败危险。详见设计 §8.4。
+- [ ] 仍缺：`metadata.json` 字段公约不统一（known_limitation 单复数、sampling 四种写法、
       instances 的 total_samples 写 392 实际 562）；instances 与 border-detection 补图像指纹
       （前者 patches/ 已有 909 张 PNG 可直接算）
 
