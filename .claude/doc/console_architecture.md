@@ -532,8 +532,19 @@ server 传输壳只做了同步 JS，还没把「界行切分裁决台」真正�
 不用「算法现在还判得对吗」——那是循环论证，会让金标永远测不出算法错。
 真实 column-warp 114 条实测：keep 110 / recheck 4。
 
-**已迁三个最活跃分片**（旧文件保留并存，人核对过再删）：column-split 60 条、
-column-warp 114 条、instances 559 条。
+**全部 34 个分片已迁完**（8,879 条；旧文件保留并存，人核对过再删）。先迁三个最活跃的
+（column-split 60 / column-warp 114 / instances 559），再迁其余 31 个（8,146 条）。
+
+**迁移无损是逐条校验过的**，不是声称的。`scripts/verify_gold_migration.py` 把 items.jsonl
+还原回旧格式的关键字段，与旧文件逐条比对：**34 个分片零差异**。比对前要把两类**有意的重排**
+还原回去（溯源字段搬进了 GoldItem 专有位、文档字段搬进了 input），否则会假报差异；
+另需归一 page 的字符串与数字写法。迁移前后各跑一遍评测脚本，基线一字未变：
+
+| 评测 | 迁移前 | 迁移后 |
+|---|---|---|
+| instances 缺陷检出率 / 标记精确率 | 50% / 82% | 50% / 82% |
+| column-layout 列型准确率 / elastic F1 | 91.4% / 0.88 | 91.4% / 0.88 |
+| page-type 网格策略准确率 | 99.5% | 99.5% |
 
 **迁移中查出并显式处理的四个问题**：
 
@@ -547,6 +558,10 @@ column-warp 114 条、instances 559 条。
 
 控制台加金标视图（分片表 / 一键迁移 / 漂移检查），CLI `gold` 加 `migrate` 与 `drift`。
 `tests/test_gold_v2.py` 15 条全过，全量 642 条零失败。
+
+迁移把两处既有状态显式化了：instances 的 3 处真矛盾标成 uncertain 待人裁；
+confusable-context 的 154 条全部 uncertain（题面在 `cases.json` 里但没有对应的
+`answer_key` 条目，没答案的题本就不该进指标）。
 
 **P2 的已知缺口**：评测器还没包进控制台（27 个 `eval_*.py` 的命令行约定不统一：
 报告路径有 `--out` / `--json-out` / `--report` 三种写法，位置参数名有 `dataset` /

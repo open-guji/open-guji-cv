@@ -54,7 +54,8 @@
       **35 个分片、8879 条金标全部可读**（唯一为 0 的 truncation 是统计型分片，本就无条目金标）
 - [x] `gold/drift.py`：图像指纹漂移检查，**沿用 migrate_column_warp_gold 已标定的判据**
       （容差 6.0 灰阶；不用内容哈希、不用算法一致性）。column-warp 实测 keep 110 / recheck 4
-- [x] 已迁三个最活跃分片，旧文件保留并存：column-split 60 / column-warp 114 / instances 559
+- [x] **全部 34 个分片迁完**（8879 条），旧文件保留并存；`scripts/verify_gold_migration.py --all`
+      逐条校验**零差异**，迁移前后评测基线一字未变（instances 50%/82%、layout 91.4%、page-type 99.5%）
 - [x] 控制台金标视图（分片表 / 迁移 / 漂移检查）；CLI `gold migrate | drift`
 - [x] 15 条测试全过，全量 642 条零失败
 - **迁移查出的四个问题**（都已显式处理，见设计 §8.3）：samples/NNN 冒充分片；报告式
