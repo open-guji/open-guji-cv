@@ -79,9 +79,12 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
         by_shard.setdefault(d.shard, []).append(item)
     for shard, items in by_shard.items():
         if dry_run:
-            have = {i.id for i in store.list(shard)}
+            # 试算要和真消费口径一致：内容相同的不算「更新」，否则试算说会改 2 条、
+            # 真跑却改 0 条，人会以为消费没生效。
+            have = {i.id: i.expected for i in store.list(shard)}
             res.added += sum(1 for i in items if i.id not in have)
-            res.updated += sum(1 for i in items if i.id in have)
+            res.updated += sum(1 for i in items
+                               if i.id in have and have[i.id] != i.expected)
             continue
         a, u = store.upsert(shard, items, why or "由人裁事件自动落入")
         res.added += a

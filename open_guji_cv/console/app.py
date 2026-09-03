@@ -84,13 +84,32 @@ def api_kinds() -> list[dict]:
 
 # ── 状态 ─────────────────────────────────────────────────────────────
 @app.get("/api/status")
-def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set") -> dict:
-    eng = _engine(book, pipeline)
+def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set",
+               param_json: str = "") -> dict:
+    """状态是**相对某套参数**的。
+
+    用参数覆盖跑出来的产物，在默认参数视角下永远显示「过期」——指纹里含参数，
+    这是对的。所以查状态时要能带上同一套覆盖，否则跑完照样满屏黄，人会以为没跑成。
+    """
+    overrides = None
+    if param_json:
+        try:
+            overrides = json.loads(param_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(400, f"参数 JSON 不合法: {e}") from e
+    try:
+        eng = Engine(load_book(book), load_pipeline(pipeline), params=overrides,
+                     log=lambda s: None)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except KeyError as e:
+        raise HTTPException(400, f"参数覆盖里有未知步骤: {e}") from e
     try:
         pg = eng.book.resolve_pages(pages)
     except ValueError as e:
         raise HTTPException(400, f"页号表达式错误: {e}") from e
     st = eng.status(pages=pg)
+    st["params"] = overrides or {}
     st["running"] = (runner.running().to_dict() if runner.running() else None)
     return st
 

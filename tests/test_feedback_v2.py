@@ -193,6 +193,25 @@ def test_dry_run_does_not_write_gold(tmp_path):
     assert len(store.list("border-detection/column-split")) == 2
 
 
+def test_dry_run_counts_match_real_run(tmp_path):
+    """试算与真消费口径必须一致：内容没变的不算「更新」。
+
+    否则试算报「会改 2 条」、真跑报「改了 0 条」，人会以为消费没生效。
+    """
+    log = EventLog(tmp_path / "feedback")
+    store = GoldStore(tmp_path / "dataset")
+    log.append(from_verdicts([{"id": "a", "verdict": "ok", "t": 1}], "r1", "border_detect"))
+    route_and_consume(log, "r1", RouteTable.load(None), store)
+
+    # 第二批：一条同内容（不该算更新）、一条改判（该算更新）、一条新增
+    log.append(from_verdicts([{"id": "a", "verdict": "ok", "t": 2},
+                              {"id": "b", "verdict": "miss", "t": 3}], "r2", "border_detect"))
+    dry = route_and_consume(log, "r2", RouteTable.load(None), store, dry_run=True)["results"][0]
+    real = route_and_consume(log, "r2", RouteTable.load(None), store)["results"][0]
+    assert (dry["added"], dry["updated"]) == (real["added"], real["updated"])
+    assert dry["added"] == 1 and dry["updated"] == 0      # a 同内容，b 是新的
+
+
 def test_harvest_into_batch_with_existing_events(tmp_path):
     """先 server 直连写过几条，再收割整份文件：新 key 必须续号进来，不能因撞号被丢。"""
     log = EventLog(tmp_path)
