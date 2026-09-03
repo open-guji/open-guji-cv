@@ -1,7 +1,7 @@
 {
  "book": "vol02",
  "page": "5",
- "source_image": "/home/user/rebuild_src/vol02/5.tif",
+ "source_image": "/home/user/open-guji-cv/data_full/zongmu/vol02/5.png",
  "page_size": {
   "width": 2377,
   "height": 3109
@@ -15,7 +15,7 @@
   "slope": -0.013205882352941165
  },
  "denoised": false,
- "cleaned": true,
+ "cleaned": false,
  "vline_segments": 3,
  "bend_w80_med": 9.0,
  "bend_w80_max": 15.0,
@@ -23,21 +23,8 @@
   {
    "col": 1,
    "file": "c1.png",
-   "clean_file": "c1_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     180
-    ],
-    "top": {
-     "px": 8,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 476.53710564048396,
     "slope": 0.024723201001306965,
@@ -72,21 +59,8 @@
   {
    "col": 2,
    "file": "c2.png",
-   "clean_file": "c2_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     181
-    ],
-    "top": {
-     "px": 8,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 657.9675141327837,
     "slope": 0.025761811514814967,
@@ -121,21 +95,8 @@
   {
    "col": 3,
    "file": "c3.png",
-   "clean_file": "c3_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     180
-    ],
-    "top": {
-     "px": 6,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 842.3913533173841,
     "slope": 0.023563804790576584,
@@ -170,21 +131,8 @@
   {
    "col": 4,
    "file": "c4.png",
-   "clean_file": "c4_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     183
-    ],
-    "top": {
-     "px": 6,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1031.2982266186048,
     "slope": 0.019811487453931093,
@@ -219,21 +167,8 @@
   {
    "col": 5,
    "file": "c5.png",
-   "clean_file": "c5_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     181
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1216.2161349236312,
     "slope": 0.018899546291946505,
@@ -268,21 +203,8 @@
   {
    "col": 6,
    "file": "c6.png",
-   "clean_file": "c6_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     180
-    ],
-    "top": {
-     "px": 3,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1398.4628357207757,
     "slope": 0.020091972073813164,
@@ -317,21 +239,8 @@
   {
    "col": 7,
    "file": "c7.png",
-   "clean_file": "c7_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     180
-    ],
-    "top": {
-     "px": 6,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1584.8664366483351,
     "slope": 0.016224755328210556,
@@ -366,21 +275,8 @@
   {
    "col": 8,
    "file": "c8.png",
-   "clean_file": "c8_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     184
-    ],
-    "top": {
-     "px": 7,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1769.511786243397,
     "slope": 0.015481840332472347,
@@ -415,21 +311,8 @@
   {
    "col": 9,
    "file": "c9.png",
-   "clean_file": "c9_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     181
-    ],
-    "top": {
-     "px": 7,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 0,
-     "case": "c"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1955.043912972775,
     "slope": 0.012310888922938057,

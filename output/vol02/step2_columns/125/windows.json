@@ -1,7 +1,7 @@
 {
  "book": "vol02",
  "page": "125",
- "source_image": "/home/user/rebuild_src/vol02/125.tif",
+ "source_image": "/home/user/open-guji-cv/data_full/zongmu/vol02/125.png",
  "page_size": {
   "width": 2353,
   "height": 3109
@@ -15,7 +15,7 @@
   "slope": -0.0048823529411764635
  },
  "denoised": false,
- "cleaned": true,
+ "cleaned": false,
  "vline_segments": 3,
  "bend_w80_med": 9.0,
  "bend_w80_max": 16.0,
@@ -23,21 +23,8 @@
   {
    "col": 1,
    "file": "c1.png",
-   "clean_file": "c1_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     187
-    ],
-    "top": {
-     "px": 6,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 17,
-     "case": "d"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 503.45129497539205,
     "slope": 0.022666053588068412,
@@ -72,21 +59,8 @@
   {
    "col": 2,
    "file": "c2.png",
-   "clean_file": "c2_clean.png",
-   "clean_diag": {
-    "band": [
-     7,
-     181
-    ],
-    "top": {
-     "px": 4,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 3,
-     "case": "b"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 690.7979761235121,
     "slope": 0.019224600095423143,
@@ -121,21 +95,8 @@
   {
    "col": 3,
    "file": "c3.png",
-   "clean_file": "c3_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     178
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 7,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 874.3958070836521,
     "slope": 0.0187610493588483,
@@ -170,21 +131,8 @@
   {
    "col": 4,
    "file": "c4.png",
-   "clean_file": "c4_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     182
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 4,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1062.0131470588235,
     "slope": 0.018647058823529454,
@@ -219,21 +167,8 @@
   {
    "col": 5,
    "file": "c5.png",
-   "clean_file": "c5_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     180
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 15,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1248.1891553788541,
     "slope": 0.015242976661611642,
@@ -268,21 +203,8 @@
   {
    "col": 6,
    "file": "c6.png",
-   "clean_file": "c6_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     177
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 3,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1429.8766786900692,
     "slope": 0.014801980940481138,
@@ -317,21 +239,8 @@
   {
    "col": 7,
    "file": "c7.png",
-   "clean_file": "c7_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     181
-    ],
-    "top": {
-     "px": 6,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 3,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1612.1276546317251,
     "slope": 0.015570897207301327,
@@ -366,21 +275,8 @@
   {
    "col": 8,
    "file": "c8.png",
-   "clean_file": "c8_clean.png",
-   "clean_diag": {
-    "band": [
-     6,
-     178
-    ],
-    "top": {
-     "px": 5,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 4,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1796.9618498784937,
     "slope": 0.012533528240057903,
@@ -415,21 +311,8 @@
   {
    "col": 9,
    "file": "c9.png",
-   "clean_file": "c9_clean.png",
-   "clean_diag": {
-    "band": [
-     5,
-     175
-    ],
-    "top": {
-     "px": 4,
-     "case": "a"
-    },
-    "bottom": {
-     "px": 6,
-     "case": "a"
-    }
-   },
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1988.2838235294116,
     "slope": 0.008823529411764605,

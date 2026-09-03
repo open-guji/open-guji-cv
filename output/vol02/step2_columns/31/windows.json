@@ -15,17 +15,33 @@
   "slope": -0.007823529411764701
  },
  "denoised": false,
+ "cleaned": false,
+ "vline_segments": 1,
+ "bend_w80_med": 5.0,
+ "bend_w80_max": 13.0,
  "columns": [
   {
    "col": 1,
    "file": "c1.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 497.67132352941167,
-    "slope": 0.00794117647058824
+    "slope": 0.00794117647058824,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 318.8676470588234,
-    "slope": 0.0058823529411764774
+    "slope": 0.0058823529411764774,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 353.02179189764763,
    "bottom_y": 2799.7180574485624,
@@ -43,13 +59,25 @@
   {
    "col": 2,
    "file": "c2.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 684.2100735294118,
-    "slope": 0.0024411764705882383
+    "slope": 0.0024411764705882383,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 497.67132352941167,
-    "slope": 0.00794117647058824
+    "slope": 0.00794117647058824,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 349.3648326060262,
    "bottom_y": 2798.3266675543405,
@@ -67,13 +95,25 @@
   {
    "col": 3,
    "file": "c3.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 865.8676470588234,
-    "slope": 0.0058823529411764774
+    "slope": 0.0058823529411764774,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 684.2100735294118,
-    "slope": 0.0024411764705882383
+    "slope": 0.0024411764705882383,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 345.6741584827674,
    "bottom_y": 2796.908953026782,
@@ -91,13 +131,25 @@
   {
    "col": 4,
    "file": "c4.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1047.1963970588235,
-    "slope": 0.004382352941176478
+    "slope": 0.004382352941176478,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 865.8676470588234,
-    "slope": 0.0058823529411764774
+    "slope": 0.0058823529411764774,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 342.02191803724054,
    "bottom_y": 2795.4678556878894,
@@ -115,13 +167,25 @@
   {
    "col": 5,
    "file": "c5.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1224.6438970588235,
-    "slope": 0.005382352941176477
+    "slope": 0.005382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1047.1963970588235,
-    "slope": 0.004382352941176478
+    "slope": 0.004382352941176478,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 338.42039807200837,
    "bottom_y": 2794.0699284199054,
@@ -139,13 +203,25 @@
   {
    "col": 6,
    "file": "c6.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1405.6438970588235,
-    "slope": 0.005382352941176477
+    "slope": 0.005382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1224.6438970588235,
-    "slope": 0.005382352941176477
+    "slope": 0.005382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 334.81709976260595,
    "bottom_y": 2792.656895903074,
@@ -163,13 +239,25 @@
   {
    "col": 7,
    "file": "c7.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1585.5388970588235,
-    "slope": 0.007382352941176477
+    "slope": 0.007382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1405.6438970588235,
-    "slope": 0.005382352941176477
+    "slope": 0.005382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 331.18596777318993,
    "bottom_y": 2791.2233827361847,
@@ -187,13 +275,25 @@
   {
    "col": 8,
    "file": "c8.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1768.3151470588236,
-    "slope": 0.0068823529411764775
+    "slope": 0.0068823529411764775,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1585.5388970588235,
-    "slope": 0.007382352941176477
+    "slope": 0.007382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 327.5387881174285,
    "bottom_y": 2789.788400311006,
@@ -211,13 +311,25 @@
   {
    "col": 9,
    "file": "c9.png",
+   "clean_file": null,
+   "clean_diag": null,
    "left_line": {
     "x_at_top": 1954.6438970588235,
-    "slope": 0.005382352941176477
+    "slope": 0.005382352941176477,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1768.3151470588236,
-    "slope": 0.0068823529411764775
+    "slope": 0.0068823529411764775,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 323.8384894580519,
    "bottom_y": 2788.3664426040964,
