@@ -1,0 +1,18 @@
+# 刻本正文（v2 切分链）—— 本设计唯一建模的链。
+# 顺序必须是合法拓扑序（上游在前）；边由各步 consumes / produces 推出。
+# P0 只含已包壳的五步；page_type_gate / grid_prior / normalize / glyph_match / seed /
+# context_decide 待后续阶段接入时再加进来。
+id: keben_body_v2
+title: 刻本正文（v2 切分链）
+selector:
+  edition: keben
+  page_type: [body]
+steps:
+  - border_detect        # Step1 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
+  - column_warp          # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存
+  - column_gate          # Step2→3 交接闸：L1 页级 / L2 列级；页级 period / ref_w 用全部列算
+  - row_segment          # Step3 单列文字切分：→ 带类型字格 + 读序
+  - cell_shrink          # Step4 字框收缩：沿用 CharExtractor；→ 紧框 + flags；字块走缓存
+notes: |
+  坐标：Step1 产物存规范空间 raw_page_px@top-right；Step2–4 的列内坐标是 column_px，
+  另带回到原图的 quad_page / bbox_page。

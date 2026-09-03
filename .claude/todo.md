@@ -1,36 +1,71 @@
-# open-guji-cv 近期任务 (Priority: Volume 1)
+# open-guji-cv 近期任务
 
-> 来源：overview 项目下发 (2026-02-25 更新，2026-02-26 调整优先级)
-> 背景：优先完成第 1 册 OCR 检测与夹注优化，暂时挂起第 2-10 册。
+> 来源：overview 项目下发（2026-09-03 更新）。此前 2026-02 下发的「Volume 1 / Volume 2」任务
+> 已完成或挂起，归档在文末。
+> **算法层**的待办仍以 `.claude/doc/pipeline_handbook.md` §3 与 `segmentation_v2_pipeline.md`
+> 「下一步」为准；本文件只放 overview 下发的**架构层**任务。
 
-## 🎯 开发调试 (Volume 1)
+## 🎯 架构：控制台 + 四个抽象
 
-完成 ce01 (第 1 册) 的 OCR pipeline 全部功能，确保前置页与正文页位置信息准确。**重点提升夹注检测覆盖率**，为下游 merger 提供高质量 JSON。
+设计全文：[doc/console_architecture.md](doc/console_architecture.md)。
+四个抽象 Step / Product / Gold / Event，上面架一个本地控制台。按 P0 → P4 推进，
+每阶段单独可交付，旧 CLI 始终可用。
 
-已完成
+两条硬约束（用户 2026-09-03）：
+- **只建模 v2 链**（Step1 边框 → Step2 单列矫正 → 交接闸 → Step3 切格 → Step4 字框收缩 → 下游）。
+  v1 的 s1..s6 / phase2 / phase3 不包壳、不注册；phase2..phase9 产物目录 P3 时清掉。
+- **数值长期、图像即算**（设计 §3.8）：Step1 只存线，Step2 只存 warp 参数 / 文字带 / border_class，
+  Step3 只存字格，Step4 只存紧框 + flags；列图、字块、归一图块一律走 `ctx.materialize` 的本地缓存
+  （LRU、有上限），缺了现算。长期存图的只有原始扫描和人裁过的图（金标 assets、GlyphDB 范例）。
+
+### P0 骨架 —— ✅ 已落地（2026-09-03，分支 `feat/console-p0`，未提交；记录见设计 §8.1）
+
+- [x] `core/`：spec.py、step.py、book.py、pipeline.py、engine.py（指纹、stale 沿 DAG 下传）、anchor.py
+- [x] `products/`：store / manifest / cache（LRU 20 GB）/ kinds（borders、column_windows、gate_manifest、cells、char_index + 三种缓存图）
+- [x] `steps/`：五个薄适配 + `_warpmap.py`（列图 → 原图逆映射，含三段折线）
+- [x] `pipelines/keben_body_v2.yaml`；`books/vol01.yaml`、`vol02.yaml`（各 12 页 dev_set）
+- [x] `console/`：FastAPI + 无构建前端（总览矩阵 / 运行 + SSE 日志 / 产物叠图）；`guji-cv console`
+- [x] CLI：`guji-cv pipeline | step | status | cache`，`guji` 独立入口；旧命令原样
+- [x] 验收：vol01 第 24 页全链 2.4 s；dev_set 12 页 35.6 s；第二遍全跳过；改参数只下游过期；
+      产物目录只有 JSON，列图 / 字块在 `cache/`；`tests/test_core_v2.py` 9 条全过
+- [ ] P0 尾巴：包 `page_type_gate` / `grid_prior`；`when` 求值；Step4 直接喂半宽夹注框（现在合成满宽格再拆一次）
+- 环境：`venv/` 已死（Store Python 3.13 被卸），用 `uv venv .venv --python 3.12` +
+  `uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`
+- 算法层待办（P0 跑出来的）：vol01/119 页级周期估成 70 → 9 列 DP 无解；vol01/60 c8 DP 无解；vol01/42 被 L1 列宽拦下（已知）
+
+### P1 反馈（可与 P0 并行：一个碰产物，一个碰事件）
+
+- [ ] `feedback/events.py`（统一信封）+ `review/batches.py`（批次登记，替代 artifacts/README.md 表格）
+      + `feedback/routes.yaml`
+- [ ] `review/shell.py` 双传输（server / artifact），先把「界行切分裁决台」迁成控制台模式
+- [ ] `feedback/harvest.py`：解析四种旧格式（verdicts / GUJI-SEED-EVENT / GUJI-SEG-REVIEW / marks）
+- 验收：一批裁决从控制台发起 → 裁 → 自动进 items.jsonl，中间不跑手工脚本；
+  旧 Artifact 页收割后结果与 `harvest_verdicts.py` 一致
+
+### P2 金标 → P3 增量与存储 → P4 扩展
+
+见 doc/console_architecture.md §8 的表。要点：P3 用 `guji pin` 把数值产物钉进 git 的 `pins/`
+后再把 `output/`、`data_full/` 移出 git 并清 v1 目录；P4 切到 v2 Step4 时 GlyphDB / seed 队列的
+`instance_id` 要按内容一次性重键到 v2 口径（右上、从 1）。
+
+### 已裁定（用户 2026-09-03，见设计 §9）
+
+- 快照仓：**本地**（仓库外目录，`GUJI_SNAPSHOT_DIR`），只给自己和少数开发者看，存免费的地方；
+  `github_release` 只作可选免费镜像，不引入付费桶。
+- git 历史：**稳定后重写**（P3 落地、分支收敛后跑 filter-repo）。
+- 控制台：**先跑本机**（Windows 开发机），iPad 走 Tailscale。
+- 数据集仓：**不合并**，独立存在，GoldStore 走 `../open-guji-dataset`。
+- 锚点规范坐标：**右上角原点** `raw_page_px@top-right`（古籍从 top-right 起）；v1 左上原点只作遗留声明；
+  `core/anchor.py` 负责与 cv2 互转。
+
+### 与 overview 的约定
+
+- 每阶段完成后更新本文件与 overview `项目进展/图片初步数字化/todo.md`。
 
 ---
 
-## 🎯 测试 (Volume 2)
+## 历史（2026-02 下发，已归档）
 
-已处理 等待guji-platform 进行merge
-
----
-
-## ⏳ 挂起/后续任务 (Phase 2: Volumes 2-10)
-
-> **注意：现阶段优先测试处理第一册，以下任务暂不执行。**
-
-| 册 | 目录 | 状态 | 说明 |
-|----|------|------|------|
-| 2 | 06064238.cn | ⏸️ 暂停 | 待补跑前置页 |
-| 3 | 06064239.cn | ⏸️ 暂停 | 待补跑前置页 |
-| 4 | 06064240.cn | ⏸️ 暂停 | 待补跑前置页 |
-| 5 | 06064241.cn | ⏸️ 暂停 | 待补跑前置页 |
-| 6 | 06064242.cn | ⏸️ 暂停 | 待补跑前置页 |
-| 7 | 06064243.cn | ⏸️ 暂停 | 待运行 |
-| 8 | 06064244.cn | ⏸️ 暂停 | 待运行 |
-| 9 | 06064245.cn | ⏸️ 暂停 | 待运行 |
-| 10 | 06064246.cn | ⏸️ 暂停 | 待运行 |
-
----
+- Volume 1（ce01）OCR pipeline 与夹注检测：已完成。
+- Volume 2：已处理，等 guji-platform merge。
+- Volumes 2–10（06064238.cn ~ 06064246.cn）：挂起。

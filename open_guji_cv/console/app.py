@@ -1,0 +1,319 @@
+"""控制台 FastAPI 应用。
+
+路由（P0）：
+    GET  /api/books  /api/pipelines  /api/steps            注册表
+    GET  /api/status?book=&pipeline=&pages=                每步每页 fresh/stale/missing/failed/blocked
+    POST /api/runs   GET /api/runs  GET /api/runs/{id}     任务
+    POST /api/runs/{id}/cancel   GET /api/runs/{id}/log    取消 / SSE 日志
+    GET  /api/products/{book}/{step}/{key}                 数值产物 JSON
+    GET  /api/overlay/{book}/{step}/{page}.png             原图叠产物
+    GET  /api/raw/{book}/{page}.png                        原图缩略
+    GET  /api/cache/{book}/{kind}/{key}.png                缓存图像（缺了现算）
+    GET  /                                                 静态前端
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import threading
+import time
+import webbrowser
+from pathlib import Path
+from typing import Iterator
+
+import cv2
+import numpy as np
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from pydantic import BaseModel
+
+from .jobs import TERMINAL, JobRunner, JobSpec
+from ..core.anchor import x_tr_to_tl
+from ..core.book import list_books, load_book
+from ..core.engine import Engine
+from ..core.pipeline import list_pipelines, load_pipeline
+from ..core.spec import page_key
+from ..core.step import STEPS, KINDS, RunContext
+from ..products.cache import ImageCache
+from ..products.store import ProductStore
+
+STATIC = Path(__file__).parent / "static"
+
+app = FastAPI(title="open-guji-cv 控制台", version="0.1")
+runner = JobRunner()
+_engines_lock = threading.Lock()
+
+
+def _engine(book: str, pipeline: str) -> Engine:
+    try:
+        return Engine(load_book(book), load_pipeline(pipeline), log=lambda s: None)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+# ── 注册表 ───────────────────────────────────────────────────────────
+@app.get("/api/books")
+def api_books() -> list[dict]:
+    return [load_book(b).to_dict() for b in list_books()]
+
+
+@app.get("/api/pipelines")
+def api_pipelines() -> list[dict]:
+    return [load_pipeline(p).to_dict() for p in list_pipelines()]
+
+
+@app.get("/api/steps")
+def api_steps() -> list[dict]:
+    import open_guji_cv.steps  # noqa: F401
+    return [s.describe() for s in STEPS.values()]
+
+
+@app.get("/api/kinds")
+def api_kinds() -> list[dict]:
+    import open_guji_cv.steps  # noqa: F401
+    return [{"id": k.id, "title": k.title, "storage": k.storage, "unit": k.unit,
+             "coord_space": k.coord_space} for k in KINDS.values()]
+
+
+# ── 状态 ─────────────────────────────────────────────────────────────
+@app.get("/api/status")
+def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set") -> dict:
+    eng = _engine(book, pipeline)
+    try:
+        pg = eng.book.resolve_pages(pages)
+    except ValueError as e:
+        raise HTTPException(400, f"页号表达式错误: {e}") from e
+    st = eng.status(pages=pg)
+    st["running"] = (runner.running().to_dict() if runner.running() else None)
+    return st
+
+
+# ── 任务 ─────────────────────────────────────────────────────────────
+class RunRequest(BaseModel):
+    book: str
+    pipeline: str = "keben_body_v2"
+    from_step: str | None = None
+    to_step: str | None = None
+    pages: str = "dev_set"
+    force: bool = False
+    params: dict = {}
+
+
+@app.post("/api/runs")
+def api_run(req: RunRequest) -> dict:
+    eng = _engine(req.book, req.pipeline)            # 校验 book / pipeline / 步骤范围
+    try:
+        eng.pipeline.slice(req.from_step, req.to_step)
+        eng.book.resolve_pages(req.pages)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    job = runner.submit(JobSpec(book=req.book, pipeline=req.pipeline, from_step=req.from_step,
+                                to_step=req.to_step, pages=req.pages, force=req.force,
+                                params=req.params))
+    return job.to_dict()
+
+
+@app.get("/api/runs")
+def api_runs(limit: int = 50) -> list[dict]:
+    return runner.list(limit)
+
+
+@app.get("/api/runs/{job_id}")
+def api_run_get(job_id: str) -> dict:
+    job = runner.get(job_id)
+    if not job:
+        raise HTTPException(404, "没有这个任务")
+    return job.to_dict()
+
+
+@app.post("/api/runs/{job_id}/cancel")
+def api_run_cancel(job_id: str) -> dict:
+    return {"ok": runner.cancel(job_id)}
+
+
+def _tail_log(job_id: str) -> Iterator[bytes]:
+    job = runner.get(job_id)
+    if not job:
+        yield b"data: " + json.dumps({"type": "error", "line": "没有这个任务"}).encode() + b"\n\n"
+        return
+    path = runner.log_path(job_id)
+    pos = 0
+    last_beat = time.time()
+    while True:
+        if path.exists():
+            with open(path, "rb") as f:
+                f.seek(pos)
+                chunk = f.read()
+                pos = f.tell()
+            for line in chunk.decode("utf-8", errors="replace").splitlines():
+                if line.strip():
+                    yield b"data: " + json.dumps({"type": "line", "line": line}, ensure_ascii=False).encode() + b"\n\n"
+        job = runner.get(job_id)
+        if job and job.status in TERMINAL:
+            yield b"data: " + json.dumps({"type": "complete", **job.to_dict()}, ensure_ascii=False).encode() + b"\n\n"
+            return
+        if time.time() - last_beat > 15:
+            yield b": keepalive\n\n"
+            last_beat = time.time()
+        time.sleep(0.4)
+
+
+@app.get("/api/runs/{job_id}/log")
+def api_run_log(job_id: str) -> StreamingResponse:
+    return StreamingResponse(_tail_log(job_id), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/runs/{job_id}/log.txt")
+def api_run_log_text(job_id: str) -> Response:
+    path = runner.log_path(job_id)
+    if not path.exists():
+        raise HTTPException(404, "还没有日志")
+    return Response(path.read_text(encoding="utf-8", errors="replace"), media_type="text/plain; charset=utf-8")
+
+
+# ── 产物 ─────────────────────────────────────────────────────────────
+@app.get("/api/products/{book}/{step}/{key}")
+def api_product(book: str, step: str, key: str) -> dict:
+    d = ProductStore().read_raw(book, step, key)
+    if d is None:
+        raise HTTPException(404, "没有这份产物")
+    entry = ProductStore().manifest(book, step).get(key)
+    return {"book": book, "step": step, "key": key,
+            "manifest": (entry.__dict__ if entry else None), "products": d}
+
+
+@app.get("/api/manifest/{book}/{step}")
+def api_manifest(book: str, step: str) -> dict:
+    m = ProductStore().manifest(book, step).all()
+    return {k: v.__dict__ for k, v in m.items()}
+
+
+def _png(img: np.ndarray, scale: float | None = None) -> Response:
+    if scale and scale != 1.0:
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".png", img)
+    if not ok:
+        raise HTTPException(500, "编码失败")
+    return Response(buf.tobytes(), media_type="image/png",
+                    headers={"Cache-Control": "max-age=60"})
+
+
+@app.get("/api/raw/{book}/{page}.png")
+def api_raw(book: str, page: int, scale: float = 0.35) -> Response:
+    b = load_book(book)
+    p = b.raw_path(page)
+    if not p.exists():
+        raise HTTPException(404, "原图缺失")
+    img = cv2.imread(str(p))
+    return _png(img, scale)
+
+
+@app.get("/api/cache/{book}/{kind}/{key}.png")
+def api_cache(book: str, kind: str, key: str) -> Response:
+    import open_guji_cv.steps  # noqa: F401
+    if kind not in KINDS or KINDS[kind].storage != "image_cache":
+        raise HTTPException(404, "不是缓存图像种类")
+    ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda s: None)
+    try:
+        path = ctx.materialize(kind, key)
+    except Exception as e:   # noqa: BLE001
+        raise HTTPException(404, f"拿不到图像: {e}") from e
+    return FileResponse(path, media_type="image/png")
+
+
+# ── 叠图 ─────────────────────────────────────────────────────────────
+def _draw_vline(img: np.ndarray, v: dict, W: int, H: int, color, thick: int = 3) -> None:
+    pts = []
+    for y in range(0, H, 16):
+        if v.get("k2") is None or y <= v["y1"]:
+            x = v["x_at_top"] + v["slope"] * y
+        elif y <= v["y2"]:
+            x = v["x_at_top"] + v["slope"] * v["y1"] + v["k2"] * (y - v["y1"])
+        else:
+            x = (v["x_at_top"] + v["slope"] * v["y1"] + v["k2"] * (v["y2"] - v["y1"])
+                 + v["k3"] * (y - v["y2"]))
+        pts.append((int(round(x_tr_to_tl(x, W))), y))
+    cv2.polylines(img, [np.array(pts, dtype=np.int32)], False, color, thick)
+
+
+def _overlay(book: str, step: str, page: int) -> np.ndarray:
+    b = load_book(book)
+    st = ProductStore()
+    img = cv2.imread(str(b.raw_path(page)))
+    if img is None:
+        raise HTTPException(404, "原图缺失")
+    H, W = img.shape[:2]
+    d = st.read_raw(book, step, page_key(page))
+    if d is None:
+        raise HTTPException(404, "没有这份产物")
+    if step == "border_detect":
+        bd = d["borders"]
+        for v in bd["verticals"]:
+            _draw_vline(img, v, W, H, (0, 0, 255))
+        for h in (bd["top"], bd["bottom"]):
+            p0 = (W - 1, int(round(h["y_at_right"])))
+            p1 = (0, int(round(h["y_at_right"] + h["slope"] * (W - 1))))
+            cv2.line(img, p0, p1, (255, 0, 0), 3)
+        for hr in bd.get("head_raise", []):
+            cv2.putText(img, f"HR c{hr['col']}", (W // 2, int(hr["inner_y"])), cv2.FONT_HERSHEY_SIMPLEX,
+                        1.2, (0, 140, 255), 3)
+    elif step == "column_warp":
+        for c in d["column_windows"]["columns"]:
+            _draw_vline(img, c["left_line"], W, H, (0, 0, 255), 2)
+            _draw_vline(img, c["right_line"], W, H, (0, 0, 255), 2)
+            y0, y1 = int(c["top_y"]), int(c["bottom_y"])
+            xr = int(round(x_tr_to_tl(c["right_line"]["x_at_top"], W)))
+            cv2.putText(img, f"c{c['col']}", (xr - 60, max(30, y0 - 10)), cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0, (0, 140, 255), 2)
+    elif step == "column_gate":
+        gm = d["gate_manifest"]
+        for c in gm["columns"]:
+            color = (0, 160, 0) if c["admitted"] else (0, 0, 220)
+            cv2.putText(img, f"c{c['col']} {'ok' if c['admitted'] else 'x'}", (40 + 250 * (c["col"] - 1), 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+        cv2.putText(img, f"period {gm['period']} ref_w {gm['ref_w']} {' | '.join(gm['reject'])}",
+                    (40, H - 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 220), 2)
+    elif step == "row_segment":
+        for col in d["cells"]["columns"]:
+            for c in col["cells"]:
+                q = c.get("quad_page")
+                if not q:
+                    continue
+                pts = np.array([(int(round(x_tr_to_tl(x, W))), int(round(y))) for x, y in q], dtype=np.int32)
+                color = {"char": (0, 160, 0), "blank": (160, 160, 160)}.get(c["kind"], (200, 0, 200))
+                cv2.polylines(img, [pts], True, color, 2)
+    elif step == "cell_shrink":
+        for col in d["char_index"]["columns"]:
+            for c in col["chars"]:
+                bb = c.get("bbox_page")
+                if not bb:
+                    continue
+                x0, y0, x1, y1 = bb
+                X0, X1 = int(round(x_tr_to_tl(x1, W))), int(round(x_tr_to_tl(x0, W)))
+                color = (0, 0, 220) if c["flags"] else (0, 160, 0)
+                cv2.rectangle(img, (X0, int(y0)), (X1, int(y1)), color, 2)
+    else:
+        raise HTTPException(404, f"{step} 还没有叠图画法")
+    return img
+
+
+@app.get("/api/overlay/{book}/{step}/{page}.png")
+def api_overlay(book: str, step: str, page: int, scale: float = 0.35) -> Response:
+    return _png(_overlay(book, step, page), scale)
+
+
+# ── 静态 ─────────────────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return (STATIC / "index.html").read_text(encoding="utf-8")
+
+
+def serve(port: int = 8640, open_browser: bool = True) -> None:
+    import uvicorn
+    url = f"http://127.0.0.1:{port}/"
+    print(f"控制台: {url}")
+    if open_browser:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

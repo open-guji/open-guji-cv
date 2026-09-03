@@ -760,6 +760,10 @@ def main():
 
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
+    # ── v2 四个抽象（pipeline / step / status / console / cache），见 cli_v2.py ──
+    from .cli_v2 import register_subcommands, COMMANDS_V2
+    register_subcommands(sub)
+
     # ── ui ───────────────────────────────────────────────
     p = sub.add_parser("ui", help="启动 Web 界面")
     p.add_argument("--port", type=int, default=8632, help="端口号（默认: 8632）")
@@ -1069,6 +1073,7 @@ def main():
     args = parser.parse_args()
 
     commands = {
+        **COMMANDS_V2,
         "ui":                cmd_ui,
         "cut":               cmd_cut,
         "recognize-profile": cmd_recognize_profile,

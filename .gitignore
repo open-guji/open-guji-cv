@@ -45,3 +45,12 @@ output/column_border_review.html
 # Step1 的 detect_borders（每页 1.8s，全书 5 分钟），值得入库；这个不值得。
 # manifest.json 照常入库：准入裁决、period/ref_w、逐页拒绝理由都在里面。
 output/*/step3_input/*/
+
+# ── 四个抽象（console_architecture.md）──────────────────────────────
+# 数值产物本地工作副本、图像缓存、控制台任务记录：都能由 原图 × 代码 现算/重跑，
+# 不入库；要冻结某版产物用 `guji pin`（进 pins/）。新 venv 用 uv 建在 .venv/。
+# 前导 / 锚定到仓库根：否则 `products/` 会连源码包 open_guji_cv/products/ 一起忽略
+/products/
+/cache/
+/runs/
+/.venv/
