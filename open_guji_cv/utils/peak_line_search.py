@@ -222,11 +222,14 @@ def _sample_line_curve_naive(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: i
 def local_maxima(curve: np.ndarray, radius: int = 2) -> list[int]:
     """曲线上"半径内自己最大"的点，作为半高宽算法的候选（不用扫全部位置）。"""
     n = len(curve)
-    idx = []
-    for i in range(n):
-        lo, hi = max(0, i - radius), min(n, i + radius + 1)
-        if curve[i] > 0 and curve[i] == curve[lo:hi].max():
-            idx.append(i)
+    if n == 0:
+        return []
+    # 窗口最大值一次算完：两端补 -inf 后 sliding_window_view，跟逐点切片取 max
+    # 同一判据（2026-09-03 向量化，结果逐位相同）。原来是每次调用 O(n·radius)
+    # 的 Python 循环，联合搜索每页调 1000+ 次。
+    pad = np.concatenate([np.full(radius, -np.inf), curve, np.full(radius, -np.inf)])
+    wmax = np.lib.stride_tricks.sliding_window_view(pad, 2 * radius + 1).max(axis=1)
+    idx = [int(i) for i in np.flatnonzero((curve > 0) & (curve == wmax))]
     dedup: list[int] = []
     for i in idx:
         if dedup and i - dedup[-1] <= radius:
@@ -266,19 +269,34 @@ class LineMatch:
 def joint_search_coarse_to_fine(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
                                  coarse_range: float = 0.05, coarse_n: int = 35,
                                  fine_radius: float = 0.006, fine_n: int = 25,
-                                 alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST) -> LineMatch:
+                                 alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
+                                 coarse_bank: tuple[int, dict[float, np.ndarray]] | None = None
+                                 ) -> LineMatch:
     """位置 + 角度联合搜索：不把位置锁死在窗口中心，让峰的锚点跟角度一起找。
 
     先粗扫 ±coarse_range（coarse_n 档）定位大致倾角，再在附近 ±fine_radius
     精扫（fine_n 档）——两段合起来比一次性细扫全范围快，且因为最终分辨率
     更高，比固定粗网格找到的分数还更高。
+
+    `coarse_bank=(bank_lo, {slope: curve})`：粗扫那 coarse_n 档倾角对同一页所有
+    窗口都一样，而**投影值只跟位置和倾角有关、跟窗口无关**，所以整页可以
+    每档只算一次（`coarse_curve_bank`），各窗口按位置切片。传了就用；精扫的
+    倾角每个窗口不同，仍然现算。
     """
     best: dict | None = None
+
+    def take(s: float) -> tuple[np.ndarray, np.ndarray]:
+        if coarse_bank is not None and s in coarse_bank[1]:
+            bank_lo, curves = coarse_bank
+            a = pos_lo - bank_lo
+            return (np.arange(pos_lo, pos_hi + 1, dtype=np.float64),
+                    curves[s][a:a + (pos_hi - pos_lo + 1)])
+        return sample_line_curve(mask, axis, pos_lo, pos_hi, s)
 
     def scan(slopes: np.ndarray) -> None:
         nonlocal best
         for s in slopes:
-            positions, curve = sample_line_curve(mask, axis, pos_lo, pos_hi, float(s))
+            positions, curve = take(float(s))
             b = best_in_curve(curve, alpha, hyst)
             if b is None:
                 continue
@@ -296,6 +314,19 @@ def joint_search_coarse_to_fine(mask: np.ndarray, axis: str, pos_lo: int, pos_hi
         center = (pos_lo + pos_hi) / 2.0
         return LineMatch(position=center, slope=0.0, score=0.0, width=0.0, proj=0.0)
     return LineMatch(**best)
+
+
+def coarse_curve_bank(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
+                      coarse_range: float = 0.05, coarse_n: int = 35
+                      ) -> tuple[int, dict[float, np.ndarray]]:
+    """粗扫那组倾角在 [pos_lo, pos_hi] 上的投影曲线，整页一次算齐。
+    键是跟 `joint_search_coarse_to_fine` 里 `np.linspace` 同一组 float，切片时
+    按键精确匹配。"""
+    curves = {}
+    for s in np.linspace(-coarse_range, coarse_range, coarse_n):
+        _, c = sample_line_curve(mask, axis, pos_lo, pos_hi, float(s))
+        curves[float(s)] = c
+    return pos_lo, curves
 
 
 # ── 整页便捷入口 ──────────────────────────────────────────────
@@ -349,7 +380,11 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
         return []
 
     windows = _windows_from_candidates(candidates, 0, w - 1, edge_margin, edge_margin)
-    results = [joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst)
+    # 粗扫 35 档倾角整页只算一次再按窗口切片：原来 17 个窗口 × 35 档 = 595 次
+    # `sample_line_curve`，其中两个边缘窗口 600+px 宽还跟中间窗口重叠。
+    bank = coarse_curve_bank(mask, "v", windows[0][0], windows[-1][1])
+    results = [joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
+                                           coarse_bank=bank)
                for lo, hi in windows]
 
     # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
