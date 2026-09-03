@@ -18,7 +18,7 @@
  "cleaned": true,
  "vline_segments": 3,
  "bend_w80_med": 7.0,
- "bend_w80_max": 26.0,
+ "bend_w80_max": 35.0,
  "columns": [
   {
    "col": 1,
@@ -27,11 +27,11 @@
    "clean_diag": {
     "band": [
      6,
-     94
+     201
     ],
     "top": {
-     "px": 0,
-     "case": "c"
+     "px": 4,
+     "case": "a"
     },
     "bottom": {
      "px": 0,
@@ -48,25 +48,25 @@
     "segments": 3
    },
    "right_line": {
-    "x_at_top": 480.9913577261441,
-    "slope": -0.04693290518696726,
-    "k2": -0.01882707850705849,
-    "k3": 0.02638664267366448,
-    "y1": 1146.342607843137,
-    "y2": 1964.6782598039215,
+    "x_at_top": 341.19777489264067,
+    "slope": 0.0024437117501836603,
+    "k2": -0.056205370254224195,
+    "k3": -0.009774847000734638,
+    "y1": 1146.7085294117646,
+    "y2": 1965.1356617647057,
     "segments": 3
    },
-   "top_y": 327.31960003670775,
-   "bottom_y": 2781.925288128022,
-   "border_top_y": 327.31960003670775,
-   "border_bottom_y": 2781.925288128022,
+   "top_y": 327.71413064178313,
+   "bottom_y": 2782.8402042471444,
+   "border_top_y": 327.71413064178313,
+   "border_bottom_y": 2782.8402042471444,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2454.6056880913143,
+   "border_bottom_in_column": 2455.1260736053614,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 107,
-    "height": 2454
+    "width": 220,
+    "height": 2455
    }
   },
   {

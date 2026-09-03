@@ -18,7 +18,7 @@
  "cleaned": true,
  "vline_segments": 3,
  "bend_w80_med": 7.0,
- "bend_w80_max": 46.0,
+ "bend_w80_max": 41.0,
  "columns": [
   {
    "col": 1,
@@ -27,14 +27,14 @@
    "clean_diag": {
     "band": [
      6,
-     183
+     205
     ],
     "top": {
-     "px": 6,
-     "case": "a"
+     "px": 3,
+     "case": "b"
     },
     "bottom": {
-     "px": 3,
+     "px": 6,
      "case": "a"
     }
    },
@@ -48,24 +48,24 @@
     "segments": 3
    },
    "right_line": {
-    "x_at_top": 325.49478897427537,
-    "slope": 0.01426073728312304,
-    "k2": 0.010432516098186125,
-    "k3": 0.005328221184936973,
-    "y1": 1116.4684852941177,
-    "y2": 1900.1222647058823,
+    "x_at_top": 293.5120697571197,
+    "slope": 0.0016667674860342888,
+    "k2": -0.004713867452074396,
+    "k3": 0.08333889469382548,
+    "y1": 1116.4828382352941,
+    "y2": 1900.103911764706,
     "segments": 3
    },
-   "top_y": 332.41514665979054,
-   "bottom_y": 2684.383101460337,
-   "border_top_y": 332.41514665979054,
-   "border_bottom_y": 2684.383101460337,
+   "top_y": 332.5215209310565,
+   "bottom_y": 2684.393537625158,
+   "border_top_y": 332.5215209310565,
+   "border_bottom_y": 2684.393537625158,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2351.9679548005465,
+   "border_bottom_in_column": 2351.8720166941016,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 187,
+    "width": 240,
     "height": 2352
    }
   },

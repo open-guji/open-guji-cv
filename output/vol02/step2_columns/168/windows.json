@@ -17,8 +17,8 @@
  "denoised": false,
  "cleaned": true,
  "vline_segments": 3,
- "bend_w80_med": 7.5,
- "bend_w80_max": 78.0,
+ "bend_w80_med": 7.0,
+ "bend_w80_max": 40.0,
  "columns": [
   {
    "col": 1,
@@ -418,25 +418,25 @@
    "clean_file": "c9_clean.png",
    "clean_diag": {
     "band": [
-     23,
-     209
+     4,
+     178
     ],
     "top": {
      "px": 0,
      "case": "c"
     },
     "bottom": {
-     "px": 13,
+     "px": 4,
      "case": "a"
     }
    },
    "left_line": {
-    "x_at_top": 2067.423887411613,
-    "slope": 0.03210318092921009,
-    "k2": -0.0037308104271198623,
-    "k3": -0.2136156169427625,
-    "y1": 1097.8192352941176,
-    "y2": 1879.2002352941176,
+    "x_at_top": 2078.980632352941,
+    "slope": -0.009323529411764833,
+    "k2": -0.009323529411764835,
+    "k3": -0.00932352941176425,
+    "y1": 1097.7185098039215,
+    "y2": 1879.0958431372546,
     "segments": 3
    },
    "right_line": {
@@ -448,16 +448,16 @@
     "y2": 1880.8230588235294,
     "segments": 3
    },
-   "top_y": 317.03988292192315,
-   "bottom_y": 2662.0612653991984,
-   "border_top_y": 317.03988292192315,
-   "border_bottom_y": 2662.0612653991984,
+   "top_y": 317.04684155852044,
+   "bottom_y": 2661.4637334727313,
+   "border_top_y": 317.04684155852044,
+   "border_bottom_y": 2661.4637334727313,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2345.0213824772754,
+   "border_bottom_in_column": 2344.4168919142107,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 221,
+    "width": 183,
     "height": 2345
    }
   }
