@@ -29,6 +29,12 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from pydantic import BaseModel
 
 from .jobs import TERMINAL, JobRunner, JobSpec
+from ..feedback.consumers import route_and_consume
+from ..feedback.events import EventLog, EventTarget, make_event
+from ..feedback.harvest import harvest_text
+from ..feedback.routes import RouteTable
+from ..gold.store import GoldStore
+from ..review.batches import Batch, BatchStore, render_registry_markdown
 from ..core.anchor import x_tr_to_tl
 from ..core.book import list_books, load_book
 from ..core.engine import Engine
@@ -302,6 +308,158 @@ def _overlay(book: str, step: str, page: int) -> np.ndarray:
 @app.get("/api/overlay/{book}/{step}/{page}.png")
 def api_overlay(book: str, step: str, page: int, scale: float = 0.35) -> Response:
     return _png(_overlay(book, step, page), scale)
+
+
+# ── 反馈：批次 / 事件 / 收割 / 路由 ──────────────────────────────────
+_log = EventLog()
+_batches = BatchStore()
+_gold = GoldStore()
+
+
+class BatchCreate(BaseModel):
+    id: str
+    title: str
+    step: str
+    kind: str = "verdict"
+    book: str | None = None
+    transport: str = "server"
+    url: str | None = None
+    shard: str | None = None
+    cards_ref: str | None = None
+    n_cards: int = 0
+    options: list[str] = []
+    notes: str = ""
+
+
+class EventsIn(BaseModel):
+    """审查页 server 模式回传的一批裁决。"""
+    batch: str
+    step: str
+    unit: str = "page"
+    kind: str = "verdict"
+    events: list[dict]        # [{id, verdict, t, ...}]
+
+
+@app.get("/api/batches")
+def api_batches() -> list[dict]:
+    out = []
+    for b in _batches.list():
+        out.append(_batches.refresh_counts(b, _log).to_dict())
+    return out
+
+
+@app.post("/api/batches")
+def api_batch_create(req: BatchCreate) -> dict:
+    if _batches.get(req.id):
+        raise HTTPException(409, f"批次 {req.id} 已存在")
+    b = Batch(**req.model_dump())
+    _batches.save(b)
+    return b.to_dict()
+
+
+@app.get("/api/batches/{batch_id}")
+def api_batch_get(batch_id: str) -> dict:
+    b = _batches.get(batch_id)
+    if not b:
+        raise HTTPException(404, "没有这个批次")
+    b = _batches.refresh_counts(b, _log)
+    d = b.to_dict()
+    ok, why = b.can_publish()
+    d["can_publish"], d["publish_block_reason"] = ok, why
+    d["events"] = [e.model_dump(mode="json") for e in _log.read(batch_id)][-200:]
+    return d
+
+
+@app.post("/api/events")
+def api_events(req: EventsIn) -> dict:
+    """审查页直连写入。seq 从当前最大值续，保证同批不撞号。"""
+    base = _log.latest_seq(req.batch)
+    evs = []
+    for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
+        if not row.get("id"):
+            continue
+        payload = {k: v for k, v in row.items() if k not in ("id", "t")}
+        from ..feedback.harvest import parse_card_id
+        evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
+                              EventTarget(step=req.step, unit=req.unit, key=row["id"],
+                                          **parse_card_id(row["id"])),
+                              payload, source_format="server"))
+    n = _log.append(evs)
+    b = _batches.get(req.batch)
+    if b:
+        if b.status == "draft":
+            b.status = "open"
+        _batches.refresh_counts(b, _log)
+    return {"appended": n, "batch": req.batch, "total": len(_log.read(req.batch))}
+
+
+@app.get("/api/events")
+def api_events_list(batch: str | None = None, limit: int = 200) -> list[dict]:
+    evs = _log.read(batch) if batch else sorted(_log.iter_all(), key=lambda e: e.order)
+    return [e.model_dump(mode="json") for e in evs[-limit:]]
+
+
+class HarvestIn(BaseModel):
+    batch: str
+    step: str
+    unit: str = "page"
+    kind: str = "verdict"
+    content: str              # 读回的 HTML / JSONL / 日志文本
+
+
+@app.post("/api/batches/{batch_id}/harvest")
+def api_harvest(batch_id: str, req: HarvestIn) -> dict:
+    """喂 Artifact 读回的 HTML（或旧格式文本）→ 解析 → 事件入库。
+
+    收割器从 seq=1 开始编号；若这批已有事件（server 模式先写过、或上一轮收割过），
+    直接追加会撞号被当成重复而丢掉。所以按 **target.key** 去重：已在库里的 key 跳过，
+    新 key 从当前最大 seq 往后续。
+    """
+    try:
+        evs = harvest_text(req.content, batch_id, req.step, req.unit, req.kind)  # type: ignore[arg-type]
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    existing = _log.read(batch_id)
+    if existing:
+        have = {e.target.key for e in existing}
+        base = _log.latest_seq(batch_id)
+        fresh = [e for e in evs if e.target.key not in have]
+        evs = [make_event(batch_id, base + i, e.kind, e.target, e.payload,
+                          e.actor, e.source_format, e.ts)
+               for i, e in enumerate(fresh, 1)]
+    n = _log.append(evs)
+    b = _batches.get(batch_id)
+    if b:
+        b.status = "harvested" if n or b.n_events else b.status
+        import time as _t
+        b.harvested_at = _t.time()
+        _batches.refresh_counts(b, _log)
+    return {"parsed": len(evs), "appended": n, "total": len(_log.read(batch_id))}
+
+
+@app.post("/api/batches/{batch_id}/route")
+def api_route(batch_id: str, dry_run: bool = False) -> dict:
+    table = RouteTable.load(_log.root / "routes.yaml")
+    out = route_and_consume(_log, batch_id, table, _gold, dry_run=dry_run)
+    b = _batches.get(batch_id)
+    if b:
+        _batches.refresh_counts(b, _log)
+    return out
+
+
+@app.get("/api/gold")
+def api_gold(shard: str | None = None) -> dict:
+    if shard:
+        return {"summary": _gold.summary(shard),
+                "items": [i.model_dump(mode="json", exclude_none=True)
+                          for i in _gold.list(shard)][:300]}
+    return {"shards": [_gold.summary(s) for s in _gold.shards()]}
+
+
+@app.get("/api/batches.md", response_class=Response)
+def api_batches_md() -> Response:
+    md = render_registry_markdown([_batches.refresh_counts(b, _log) for b in _batches.list()])
+    return Response(md, media_type="text/markdown; charset=utf-8")
 
 
 # ── 静态 ─────────────────────────────────────────────────────────────
