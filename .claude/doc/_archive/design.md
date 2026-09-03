@@ -1,3 +1,10 @@
+> ⚠️ **v1 退役，仅存档。** 这份文档描述的是已停用的 v1 链
+> （s1..s6 预处理 → phase2_layout → phase3_char_grid），其中的包名 `guji_preprocess/`、
+> CLI 命令、步骤编号均已失真，**不要照它写代码**。当前在跑的是 v2 切分链，
+> 见 [../segmentation_v2_pipeline.md](../segmentation_v2_pipeline.md) 与
+> [../console_manual.md](../console_manual.md)。
+> 留档是因为它记着不可再生的东西（负结果、量法教训、口径沿革）。
+
 # 古籍图像预处理框架设计文档
 
 ## 1. 项目目标
@@ -30,13 +37,13 @@
 
 | 步骤 | 文件夹 | 名称 | 条件 | 说明 | 详细文档 |
 |------|--------|------|------|------|----------|
-| s0 | — | 书级分析 | 始终 | 分析样本图片 → `profile.json` | [book_profile.md](./book_profile.md) |
-| s1 | `s1_crop_spine/` | 裁书脊 | `has_spine_shadow` | 检测并裁切书脊阴影 | [s1_crop_spine.md](./s1_crop_spine.md) |
-| s2 | `s2_crop_border/` | 裁边框 | 始终 | 裁切到边框外缘 | [s2_crop_border.md](./s2_crop_border.md) |
-| s3 | `s3_enhance_lines/` | 直线增强 | 始终 | 长直线断续补全+线宽统一 | [s3_enhance_lines.md](./s3_enhance_lines.md) |
-| s4 | `s4_deskew/` | 倾斜/透视校正 | 始终 | 透视校正优先，回退投影法旋转 | [s4_deskew.md](./s4_deskew.md) |
-| s5 | `s5_split/` | 拆分半页 | `is_uncut` | 沿版心中线拆分为右半页+左半页 | [s5_split.md](./s5_split.md) |
-| s6 | `s6_binarize/` | 二值化 | 始终 | 自适应二值化（黑白/彩色分策略）| [s6_binarize.md](./s6_binarize.md) |
+| s0 | — | 书级分析 | 始终 | 分析样本图片 → `profile.json` | [book_profile.md](../book_profile.md) |
+| s1 | `s1_crop_spine/` | 裁书脊 | `has_spine_shadow` | 检测并裁切书脊阴影 | ~~s1_crop_spine.md（已删）~~ |
+| s2 | `s2_crop_border/` | 裁边框 | 始终 | 裁切到边框外缘 | ~~s2_crop_border.md（已删）~~ |
+| s3 | `s3_enhance_lines/` | 直线增强 | 始终 | 长直线断续补全+线宽统一 | ~~s3_enhance_lines.md（已删）~~ |
+| s4 | `s4_deskew/` | 倾斜/透视校正 | 始终 | 透视校正优先，回退投影法旋转 | ~~s4_deskew.md（已删）~~ |
+| s5 | `s5_split/` | 拆分半页 | `is_uncut` | 沿版心中线拆分为右半页+左半页 | ~~s5_split.md（已删）~~ |
+| s6 | `s6_binarize/` | 二值化 | 始终 | 自适应二值化（黑白/彩色分策略）| ~~s6_binarize.md（已删）~~ |
 
 ### 执行逻辑
 
@@ -125,7 +132,7 @@ guji_preprocess/
 
 ### 4.1 BookProfile
 
-详细定义参见 [BookProfile 数据结构](./book_profile.md)。
+详细定义参见 [BookProfile 数据结构](../book_profile.md)。
 
 ```python
 @dataclass

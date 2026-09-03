@@ -1287,7 +1287,7 @@ HALO_DILATE = 2               # 抹除非本格墨迹时一并抹掉的灰边（
 # _split_touching 的水平直线刀升级为「最小墨量路径」：在格线 ±SPLIT_WIN
 # 带内做 DP 寻径（从左到右、每步纵向浮动 ±SPLIT_CURVE_STEP px），沿总墨
 # 量最小的路径断开连通体。两处收益（vol01 全册实测见
-# .claude/doc/split_curve_boundary_research.md 任务B）：
+# .claude/doc/_archive/split_curve_boundary_research.md 任务B）：
 # 直刀会在颈部整行清墨、切断斜穿该行的真笔画；曲刀绕着笔画走，只在
 # 真正的字间缝隙处过刀。开关默认关——量产启用前需按金标漂移协议重核。
 SPLIT_CURVE = False        # True 时 _assign_column 改用 _split_touching_curve

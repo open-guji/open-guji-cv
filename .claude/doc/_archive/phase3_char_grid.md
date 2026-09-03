@@ -1,3 +1,10 @@
+> ⚠️ **v1 退役，仅存档。** 这份文档描述的是已停用的 v1 链
+> （s1..s6 预处理 → phase2_layout → phase3_char_grid），其中的包名 `guji_preprocess/`、
+> CLI 命令、步骤编号均已失真，**不要照它写代码**。当前在跑的是 v2 切分链，
+> 见 [../segmentation_v2_pipeline.md](../segmentation_v2_pipeline.md) 与
+> [../console_manual.md](../console_manual.md)。
+> 留档是因为它记着不可再生的东西（负结果、量法教训、口径沿革）。
+
 # Phase 3: 字符网格检测 (char_grid)
 
 ## 概述
