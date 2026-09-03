@@ -55,6 +55,23 @@ SEARCH_PAD = 60
 FLANK_MAX_RATIO = 0.35
 FLANK_GAP, FLANK_SPAN = 2, 10
 
+# ── 最外侧两条线：粗外条 → 细内框的次候选 ──────────────────────
+# 版框是"细内框 + 粗外条"。内框印得淡时，分数会输给粗外条，最外那条线就落在
+# 外条上——列图因此多含一条 20px 的黑边、列宽偏大。全书 294 正文页里最外线
+# 半高宽 >12 的有 19 页。
+BAR_WIDTH_MIN = 12.0      # 半高宽超过这个就当"落在粗条上"，去朝页心一侧找内框。
+                          # 健康页的细内框半高宽中位 5，19 页粗条是 13~21，中间空得很开。
+INNER_GAP_MIN, INNER_GAP_MAX = 12.0, 78.0   # 内框离外条中心多远。**这不是拍的**：
+                          # 90 页实测版框几何（measure_frame_geometry.py）里竖直外条
+                          # 近沿 +20.4 / 远沿 +40.1（从内框线心往外量），条心约 +30；
+                          # 19 页实测的间距 17~40、中位 30，跟它对得上——这是"细候选
+                          # 确实是内框"的独立佐证，不是循环论证。区间沿用 border_geometry
+                          # 的 OUTER_GAP_MIN/MAX。
+INNER_WIDTH_MAX = 10.0    # 内框是细线；宽的是文字或另一条粗条，不收
+INNER_PEAK_MIN = 0.035    # 沿线有墨的行占比下限。内框印得再淡也有 0.04~0.17；
+                          # 低于这个就是噪声，宁可留在外条上（用户裁定：移到外框
+                          # 远好过切到字上，但优先仍是内框）
+
 # **这里不要开线程池**（2026-09-02 实测的负结果，别再加回来）。
 # `sample_line_curve` 还是花式索引 gather 的时候，每个候选窗口的联合搜索有 98%
 # 的时间在放开 GIL 的大数组运算上，4 线程能拿 2.2x。换成分块 BLAS 之后那部分
@@ -369,6 +386,45 @@ def joint_search_coarse_to_fine(mask: np.ndarray, axis: str, pos_lo: int, pos_hi
     return LineMatch(**best)
 
 
+def _snap_to_inner_rule(mask: np.ndarray, sel: LineMatch, center_side: str,
+                        alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST) -> LineMatch:
+    """最外侧那条线落在粗外条上时，改用朝页心一侧的细内框。
+
+    只在 `sel.width > BAR_WIDTH_MIN` 时动手——健康页的最外线本来就是细内框
+    （半高宽中位 5），一律原样返回。候选要同时满足：离外条 INNER_GAP_MIN~MAX、
+    半高宽 <= INNER_WIDTH_MAX、朝页心那一翼干净、沿线墨占比 >= INNER_PEAK_MIN。
+    多个满足就取**最靠外**的那条（离外条最近）——内框只有一条，更靠里的是界行。
+
+    `center_side` 是朝页心的翼方向（"right"=页左那条线，"left"=页右那条线），
+    跟 `find_vertical_lines` 里给 `flank_sides` 的值一致。
+    """
+    if sel.width <= BAR_WIDTH_MIN or sel.score <= 0:
+        return sel
+    h, w = mask.shape
+    step = 1 if center_side == "right" else -1        # 曲线下标朝页心的方向
+    i0 = int(round(sel.position))
+    lo = min(i0, i0 + step * int(INNER_GAP_MAX))
+    hi = max(i0, i0 + step * int(INNER_GAP_MAX))
+    lo, hi = max(0, lo - SEARCH_PAD), min(w - 1, hi + SEARCH_PAD)
+    if hi - lo < 2 * SEARCH_PAD:
+        return sel
+    positions, curve = sample_line_curve(mask, "v", lo, hi, sel.slope)
+    best = None
+    for i in local_maxima(curve):
+        gap = (positions[i] - sel.position) * step
+        if not (INNER_GAP_MIN <= gap <= INNER_GAP_MAX):
+            continue
+        wd, sc = half_height_score_at(curve, i, alpha, hyst)
+        if wd > INNER_WIDTH_MAX or curve[i] / h < INNER_PEAK_MIN:
+            continue
+        if flank_ratio(curve, i, wd, center_side) > FLANK_MAX_RATIO:
+            continue
+        if best is None or gap < best[0]:             # 最靠外的那条
+            best = (gap, LineMatch(position=float(positions[i]), slope=sel.slope,
+                                   score=sc, width=wd, proj=float(curve[i])))
+    return sel if best is None else best[1]
+
+
 def coarse_curve_bank(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
                       coarse_range: float = 0.05, coarse_n: int = 35
                       ) -> tuple[int, dict[float, np.ndarray]]:
@@ -440,8 +496,11 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     for k, (lo, hi) in enumerate(windows):
         # 曲线下标 = 旧坐标 x 递增；最左窗口朝页心是右翼，最右窗口是左翼
         sides = "right" if k == 0 else ("left" if k == len(windows) - 1 else "both")
-        results.append(joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
-                                                   coarse_bank=bank, flank_sides=sides))
+        r = joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
+                                        coarse_bank=bank, flank_sides=sides)
+        if sides != "both":
+            r = _snap_to_inner_rule(mask, r, sides, alpha, hyst)
+        results.append(r)
 
     # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
     # 都收敛到这条线上，位置只差十几到几十像素，是精修阶段"两个窗口找到

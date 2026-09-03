@@ -418,11 +418,11 @@
    "clean_file": "c9_clean.png",
    "clean_diag": {
     "band": [
-     15,
-     213
+     4,
+     192
     ],
     "top": {
-     "px": 19,
+     "px": 18,
      "case": "a"
     },
     "bottom": {
@@ -431,7 +431,7 @@
     }
    },
    "left_line": {
-    "x_at_top": 2069.023117647059,
+    "x_at_top": 2048.023117647059,
     "slope": 0.0038823529411764774,
     "k2": null,
     "k3": null,
@@ -448,16 +448,16 @@
     "y2": null,
     "segments": 1
    },
-   "top_y": 297.27131359198944,
-   "bottom_y": 2756.3326018935404,
-   "border_top_y": 297.27131359198944,
-   "border_bottom_y": 2756.3326018935404,
+   "top_y": 297.2811958904922,
+   "bottom_y": 2756.3681158963486,
+   "border_top_y": 297.2811958904922,
+   "border_bottom_y": 2756.3681158963486,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2459.061288301551,
+   "border_bottom_in_column": 2459.0869200058564,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 218,
+    "width": 197,
     "height": 2459
    }
   }
