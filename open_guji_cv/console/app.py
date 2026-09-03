@@ -487,6 +487,23 @@ def api_gold_drift(shard: str, apply: bool = False) -> dict:
     return out
 
 
+@app.get("/api/evals")
+def api_evals() -> list[dict]:
+    from ..eval.registry import EVALS, runnable
+    out = []
+    for s in sorted(EVALS.values(), key=lambda x: x.id):
+        ok, why = runnable(s)
+        out.append({"id": s.id, "shard": s.shard, "title": s.title, "note": s.note,
+                    "runnable": ok, "blocked": why, "needs": list(s.needs)})
+    return out
+
+
+@app.post("/api/evals/{eval_id}/run")
+def api_eval_run(eval_id: str, timeout: int = 900) -> dict:
+    from ..eval import run_eval
+    return run_eval(eval_id, timeout=timeout).to_dict()
+
+
 @app.get("/api/batches.md", response_class=Response)
 def api_batches_md() -> Response:
     md = render_registry_markdown([_batches.refresh_counts(b, _log) for b in _batches.list()])
