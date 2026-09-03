@@ -4,10 +4,13 @@ import numpy as np
 from open_guji_cv.utils.peak_line_search import (
     LineMatch,
     _dedup_by_position,
+    _sample_line_curve_naive,
+    _shift_blocks,
     find_horizontal_border,
     half_height_score_at,
     joint_search_coarse_to_fine,
     projection,
+    sample_line_curve,
 )
 
 H, W = 400, 300
@@ -139,3 +142,53 @@ def test_find_horizontal_border_rejects_secondary_farther_from_center():
 
     result = find_horizontal_border(mask, "top", band_frac=0.2)
     assert abs(result.position - true_y) <= 3
+
+
+# ── 分块 BLAS 采样：跟朴素花式索引实现的等价性护栏 ──────────────
+
+
+def test_shift_blocks_cover_all_rows_and_are_contiguous():
+    """分块采样成立的前提：整数位移相同的行必须是**连续**区间，且不重不漏。"""
+    for n, slope in ((3077, 0.05), (3077, -0.05), (400, 0.0071), (37, -1e-9), (60, 0.0)):
+        blocks = _shift_blocks(n, slope)
+        assert blocks[0][0] == 0 and blocks[-1][1] == n
+        for (a, b, _), (c, _, _) in zip(blocks, blocks[1:]):
+            assert a < b == c                      # 首尾相接、不重不漏
+        t = np.arange(n, dtype=np.float64)
+        want = np.floor(slope * (t - n / 2.0)).astype(np.int64)
+        for a, b, k in blocks:
+            assert (want[a:b] == k).all()
+
+
+def test_sample_line_curve_matches_naive_reference():
+    """分块 BLAS 实现必须跟朴素 gather 实现在数值上一致（求和次序不同，只允许
+    浮点级差）。两个方向、越界窗口、空窗口、正负倾角都要覆盖。
+
+    唯一的例外是朴素实现自己的 clip 瑕疵：它先 `clip(coord, 0, limit-1.001)`
+    再 `floor`，`coord` 落进 [limit-1.001, limit-1) 这条 0.001px 宽的缝时会把
+    0.1% 的权重错挪一列。真实倾角网格下够不着，所以这里只测真实倾角。"""
+    rng = np.random.default_rng(0)
+    slopes = list(np.linspace(-0.05, 0.05, 9)) + [0.0071, -0.0123]
+    for shape in ((37, 29), (60, 60), (11, 53)):
+        mask = (rng.random(shape) < 0.3).astype(np.float64)
+        h, w = shape
+        for axis, limit in (("v", w), ("h", h)):
+            for lo, hi in [(0, limit - 1), (-20, limit + 19), (-5, 3),
+                           (limit - 4, limit + 9), (7, 7), (10, 4)]:
+                for s in slopes:
+                    pn, cn = _sample_line_curve_naive(mask, axis, lo, hi, float(s))
+                    pb, cb = sample_line_curve(mask, axis, lo, hi, float(s))
+                    assert pn.shape == pb.shape and cn.shape == cb.shape
+                    if cn.size:
+                        assert np.abs(cn - cb).max() < 1e-9
+
+
+def test_sample_line_curve_far_edge_weight_is_not_clipped():
+    """朴素实现在最外沿有 0.1% 的权重错挪（clip 到 limit-1.001 再 floor），
+    分块实现给的是真值。这条钉住的是「分块版更对」，不是「两版一样」。"""
+    mask = np.zeros((4, 6))
+    mask[:, 5] = 1.0
+    _, naive = _sample_line_curve_naive(mask, "v", 0, 5, -1e-9)
+    _, block = sample_line_curve(mask, "v", 0, 5, -1e-9)
+    assert abs(naive[5] - 0.999) < 1e-9            # 0.1% 被挪到了第 4 列（那列没墨）
+    assert abs(block[5] - 1.0) < 1e-6              # 真值：该行的墨全在第 5 列
