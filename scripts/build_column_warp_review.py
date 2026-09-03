@@ -55,7 +55,14 @@ def load_windows(book: str, page: str) -> dict[int, dict]:
     return {c["col"]: c for c in json.loads(f.read_text(encoding="utf-8"))["columns"]}
 
 TITLE = "单列矫正·文字带核校"
-KEY = "column-warp-band-v1"          # 换页必须换 key
+KEY = "column-warp-band-v2"          # 换页必须换 key —— 见下面这条教训
+# ⚠️ **要强制重标就必须换 KEY**。`--drop` 只清页里嵌的那份裁决，而壳是
+# `mergeState(D.verdicts, readLocal())`——浏览器 localStorage 里那份**同 key**
+# 的旧裁决会在加载时合并回来（`!(k in out)` 那一支：嵌的那份没有的键无条件补上）。
+# 2026-09-03 实测吃过一次：全书重跑后 drop 了 23 条要重标的，用户打开页面看到的
+# 却仍是旧裁决，23 条里只有 1 条（vol01/42 c9）是真的新点的，其余 22 条时间戳
+# 还停在 08-31~09-02，等于**重标根本没发生**，而页面看起来是"都标完了"。
+# 换 key = localStorage 读不到旧值 = 只有嵌进去的那份生效。
 STRIP_H = 460                          # 矫正图压扁到这个高度（只判 x，y 分辨率无所谓）
 
 VERDICTS = [("clean", "分得开", "ok"),
