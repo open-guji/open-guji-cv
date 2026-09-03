@@ -18,7 +18,7 @@
  "cleaned": true,
  "vline_segments": 3,
  "bend_w80_med": 5.0,
- "bend_w80_max": 42.0,
+ "bend_w80_max": 40.0,
  "columns": [
   {
    "col": 1,
@@ -26,11 +26,11 @@
    "clean_file": "c1_clean.png",
    "clean_diag": {
     "band": [
-     6,
-     210
+     5,
+     182
     ],
     "top": {
-     "px": 36,
+     "px": 38,
      "case": "d"
     },
     "bottom": {
@@ -48,24 +48,24 @@
     "segments": 3
    },
    "right_line": {
-    "x_at_top": 319.94852941176464,
-    "slope": 0.014705882352941176,
-    "k2": -0.06550455408332735,
-    "k3": 0.019798608475878856,
-    "y1": 1089.1376421568627,
-    "y2": 1874.571593137255,
+    "x_at_top": 324.81629471469876,
+    "slope": 0.005487495670697492,
+    "k2": 0.0029411764705882916,
+    "k3": 0.0016680168705335845,
+    "y1": 1089.1844068627452,
+    "y2": 1874.6318872549023,
     "segments": 3
    },
-   "top_y": 303.4561307256641,
-   "bottom_y": 2659.4950557157213,
-   "border_top_y": 303.4561307256641,
-   "border_bottom_y": 2659.4950557157213,
+   "top_y": 303.45269030115526,
+   "bottom_y": 2659.3682436667536,
+   "border_top_y": 303.45269030115526,
+   "border_bottom_y": 2659.3682436667536,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2356.0389249900572,
+   "border_bottom_in_column": 2355.9155533655985,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 233,
+    "width": 188,
     "height": 2355
    }
   },

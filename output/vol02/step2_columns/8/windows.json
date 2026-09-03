@@ -17,8 +17,8 @@
  "denoised": false,
  "cleaned": true,
  "vline_segments": 3,
- "bend_w80_med": 7.5,
- "bend_w80_max": 41.0,
+ "bend_w80_med": 7.0,
+ "bend_w80_max": 11.0,
  "columns": [
   {
    "col": 1,
@@ -418,8 +418,8 @@
    "clean_file": "c9_clean.png",
    "clean_diag": {
     "band": [
-     26,
-     235
+     17,
+     227
     ],
     "top": {
      "px": 5,
@@ -431,12 +431,12 @@
     }
    },
    "left_line": {
-    "x_at_top": 2119.3988390977065,
-    "slope": -0.013017127309481196,
-    "k2": -0.11824562321496268,
-    "k3": -0.0130171273094812,
-    "y1": 1138.2167647058825,
-    "y2": 1955.4858823529414,
+    "x_at_top": 2096.303457577175,
+    "slope": 0.010499596755803519,
+    "k2": 0.004382352941176638,
+    "k3": 0.0031589041782507047,
+    "y1": 1137.908862745098,
+    "y2": 1955.270431372549,
     "segments": 3
    },
    "right_line": {
@@ -448,16 +448,16 @@
     "y2": 1955.8694901960785,
     "segments": 3
    },
-   "top_y": 321.1052879900808,
-   "bottom_y": 2772.8831190585247,
-   "border_top_y": 321.1052879900808,
-   "border_bottom_y": 2772.8831190585247,
+   "top_y": 321.1432319571646,
+   "bottom_y": 2772.795285680178,
+   "border_top_y": 321.1432319571646,
+   "border_bottom_y": 2772.795285680178,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2451.777831068444,
+   "border_bottom_in_column": 2451.6520537230135,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 241,
+    "width": 230,
     "height": 2451
    }
   }

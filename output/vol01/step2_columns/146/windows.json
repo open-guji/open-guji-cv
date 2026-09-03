@@ -1,7 +1,7 @@
 {
  "book": "vol01",
  "page": "146",
- "source_image": "/home/user/open-guji-cv/data_full/zongmu/vol01/146.png",
+ "source_image": "/home/user/rebuild_src/vol01/146.tif",
  "page_size": {
   "width": 2394,
   "height": 3073
@@ -15,17 +15,46 @@
   "slope": 0.01026470588235294
  },
  "denoised": false,
+ "cleaned": true,
+ "vline_segments": 1,
+ "bend_w80_med": 6.0,
+ "bend_w80_max": 12.0,
  "columns": [
   {
    "col": 1,
    "file": "c1.png",
+   "clean_file": "c1_clean.png",
+   "clean_diag": {
+    "band": [
+     7,
+     191
+    ],
+    "top": {
+     "px": 5,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 1,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 597.1320882352941,
-    "slope": -0.015705882352941163
+    "slope": -0.015705882352941163,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 405.346455882353,
-    "slope": -0.017147058823529404
+    "slope": -0.017147058823529404,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 311.34913750015556,
    "bottom_y": 2755.4038887251913,
@@ -43,61 +72,136 @@
   {
    "col": 2,
    "file": "c2.png",
+   "clean_file": "c2_clean.png",
+   "clean_diag": {
+    "band": [
+     7,
+     178
+    ],
+    "top": {
+     "px": 3,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 8,
+     "case": "a"
+    }
+   },
    "left_line": {
-    "x_at_top": 778.651205882353,
-    "slope": -0.018647058823529402
+    "x_at_top": 781.1147058823528,
+    "slope": -0.017647058823529405,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 597.1320882352941,
-    "slope": -0.015705882352941163
+    "slope": -0.015705882352941163,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
-   "top_y": 314.4515758652006,
-   "bottom_y": 2757.298273825875,
-   "border_top_y": 314.4515758652006,
-   "border_bottom_y": 2757.298273825875,
+   "top_y": 314.4746918610525,
+   "bottom_y": 2757.3250642302387,
+   "border_top_y": 314.4746918610525,
+   "border_bottom_y": 2757.3250642302387,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2442.8466979606746,
+   "border_bottom_in_column": 2442.850372369186,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 181,
+    "width": 183,
     "height": 2443
    }
   },
   {
    "col": 3,
    "file": "c3.png",
+   "clean_file": "c3_clean.png",
+   "clean_diag": {
+    "band": [
+     6,
+     185
+    ],
+    "top": {
+     "px": 2,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 6,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 963.363838235294,
-    "slope": -0.015205882352941165
+    "slope": -0.015205882352941165,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
-    "x_at_top": 778.651205882353,
-    "slope": -0.018647058823529402
+    "x_at_top": 781.1147058823528,
+    "slope": -0.017647058823529405,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
-   "top_y": 317.50036599029914,
-   "bottom_y": 2759.184652338754,
-   "border_top_y": 317.50036599029914,
-   "border_bottom_y": 2759.184652338754,
+   "top_y": 317.5235074654404,
+   "bottom_y": 2759.2114524949475,
+   "border_top_y": 317.5235074654404,
+   "border_bottom_y": 2759.2114524949475,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2441.684286348455,
+   "border_bottom_in_column": 2441.6879450295073,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 194,
+    "width": 189,
     "height": 2442
    }
   },
   {
    "col": 4,
    "file": "c4.png",
+   "clean_file": "c4_clean.png",
+   "clean_diag": {
+    "band": [
+     5,
+     180
+    ],
+    "top": {
+     "px": 4,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 7,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 1147.132088235294,
-    "slope": -0.015705882352941163
+    "slope": -0.015705882352941163,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 963.363838235294,
-    "slope": -0.015205882352941165
+    "slope": -0.015205882352941165,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 320.5744092196021,
    "bottom_y": 2761.117170000746,
@@ -115,13 +219,38 @@
   {
    "col": 5,
    "file": "c5.png",
+   "clean_file": "c5_clean.png",
+   "clean_diag": {
+    "band": [
+     6,
+     180
+    ],
+    "top": {
+     "px": 5,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 6,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 1330.363838235294,
-    "slope": -0.015205882352941165
+    "slope": -0.015205882352941165,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1147.132088235294,
-    "slope": -0.015705882352941163
+    "slope": -0.015705882352941163,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 323.62835854565515,
    "bottom_y": 2763.000444701054,
@@ -139,13 +268,38 @@
   {
    "col": 6,
    "file": "c6.png",
+   "clean_file": "c6_clean.png",
+   "clean_diag": {
+    "band": [
+     9,
+     180
+    ],
+    "top": {
+     "px": 6,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 7,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 1515.041705882353,
-    "slope": -0.015647058823529403
+    "slope": -0.015647058823529403,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1330.363838235294,
-    "slope": -0.015205882352941165
+    "slope": -0.015205882352941165,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 326.69003707146595,
    "bottom_y": 2764.8892217371067,
@@ -163,13 +317,38 @@
   {
    "col": 7,
    "file": "c7.png",
+   "clean_file": "c7_clean.png",
+   "clean_diag": {
+    "band": [
+     8,
+     184
+    ],
+    "top": {
+     "px": 5,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 5,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 1704.346455882353,
-    "slope": -0.017147058823529404
+    "slope": -0.017147058823529404,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1515.041705882353,
-    "slope": -0.015647058823529403
+    "slope": -0.015647058823529403,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 329.7967654595301,
    "bottom_y": 2766.7807680110186,
@@ -187,13 +366,38 @@
   {
    "col": 8,
    "file": "c8.png",
+   "clean_file": "c8_clean.png",
+   "clean_diag": {
+    "band": [
+     12,
+     184
+    ],
+    "top": {
+     "px": 6,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 3,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 1877.3082205882351,
-    "slope": -0.01126470588235294
+    "slope": -0.01126470588235294,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1704.346455882353,
-    "slope": -0.017147058823529404
+    "slope": -0.017147058823529404,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 332.8234158948908,
    "bottom_y": 2768.7019973736374,
@@ -211,13 +415,38 @@
   {
    "col": 9,
    "file": "c9.png",
+   "clean_file": "c9_clean.png",
+   "clean_diag": {
+    "band": [
+     6,
+     183
+    ],
+    "top": {
+     "px": 7,
+     "case": "a"
+    },
+    "bottom": {
+     "px": 6,
+     "case": "a"
+    }
+   },
    "left_line": {
     "x_at_top": 2067.6512058823528,
-    "slope": -0.018647058823529402
+    "slope": -0.018647058823529402,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "right_line": {
     "x_at_top": 1877.3082205882351,
-    "slope": -0.01126470588235294
+    "slope": -0.01126470588235294,
+    "k2": null,
+    "k3": null,
+    "y1": null,
+    "y2": null,
+    "segments": 1
    },
    "top_y": 335.8424862389111,
    "bottom_y": 2770.5450076224456,
