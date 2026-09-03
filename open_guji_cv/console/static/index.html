@@ -103,9 +103,10 @@
       <div id="notes" class="muted"></div>
     </div>
     <div class="card">
-      <h2>状态矩阵 <span class="muted">行 = 步骤，列 = 页；点格子看产物</span></h2>
+      <h2>状态矩阵 <span class="muted">行 = 步骤，列 = 页；点格子看产物</span>
+        <span id="params_note" class="muted mono" style="margin-left:.6rem"></span></h2>
       <div id="legend" class="counts" style="margin-bottom:.5rem">
-        <span class="s-fresh">新鲜</span><span class="s-stale">过期（指纹失配）</span><span class="s-missing">缺失</span><span class="s-failed">失败</span><span class="s-blocked">阻塞（上游缺）</span>
+        <span class="s-fresh">✓ 新鲜</span><span class="s-stale">~ 过期（指纹失配）</span><span class="s-missing">· 缺失</span><span class="s-failed">✗ 失败</span><span class="s-blocked">⊘ 阻塞（上游缺）</span>
       </div>
       <div style="overflow-x:auto"><table id="matrix" class="matrix"></table></div>
     </div>
@@ -189,6 +190,8 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+// 状态记号：形状可辨，不只靠颜色
+const STATUS_MARK = { fresh: '✓', stale: '~', missing: '·', failed: '✗', blocked: '⊘' };
 const state = { books: [], pipelines: [], status: null, jobs: [], es: null, selJob: null };
 
 async function api(path, opts) {
@@ -325,14 +328,24 @@ function fillSteps() {
 function showView(v) {
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  // 切到视图时重新拉一次：批次可能是在 CLI 里建的，页面初始化那一次拉不到
+  if (v === 'review') loadBatches();
+  if (v === 'evals') loadEvals();
 }
 
 // ── 总览 ───────────────────────────────────────────────────────────
 async function refreshStatus() {
   const book = $('#book').value, pl = $('#pipeline').value, pages = $('#pages').value || 'dev_set';
+  // 状态是相对某套参数的：用覆盖参数跑出的产物，在默认参数视角下永远显示过期。
+  // 所以把「运行」里填的那套覆盖一并带上，跑完才能看到它变绿。
+  const raw = ($('#params') && $('#params').value.trim()) || '';
+  let qs = `book=${encodeURIComponent(book)}&pipeline=${encodeURIComponent(pl)}&pages=${encodeURIComponent(pages)}`;
+  if (raw) qs += `&param_json=${encodeURIComponent(raw)}`;
   try {
-    state.status = await api(`/api/status?book=${encodeURIComponent(book)}&pipeline=${encodeURIComponent(pl)}&pages=${encodeURIComponent(pages)}`);
+    state.status = await api(`/api/status?${qs}`);
   } catch (e) { $('#matrix').innerHTML = `<tr><td class="s-failed">${e.message}</td></tr>`; return; }
+  const pbar = $('#params_note');
+  if (pbar) pbar.textContent = raw ? `按参数覆盖看：${raw}` : '';
   const st = state.status;
   const pageList = st.pages;
   let html = '<thead><tr><th class="step">步骤</th><th>汇总</th>' + pageList.map(p => `<th>${p}</th>`).join('') + '</tr></thead><tbody>';
@@ -342,7 +355,8 @@ async function refreshStatus() {
     for (const p of pageList) {
       const cell = d.pages[p];
       const t = cell.error ? cell.error : (cell.elapsed != null ? cell.elapsed + 's' : '');
-      html += `<td class="cell s-${cell.status}" title="${t}" data-step="${sid}" data-page="${p}">${cell.status[0]}</td>`;
+      // 不能用状态首字母：fresh 和 failed 都是 f，颜色之外分不出来（色盲、打印、截图都会栽）
+      html += `<td class="cell s-${cell.status}" title="${cell.status}${t ? ' · ' + t : ''}" data-step="${sid}" data-page="${p}">${STATUS_MARK[cell.status] || '?'}</td>`;
     }
     html += '</tr>';
   }
