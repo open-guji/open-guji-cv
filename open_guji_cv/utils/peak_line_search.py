@@ -43,6 +43,18 @@ import numpy as np
 DEFAULT_ALPHA = 0.5
 DEFAULT_HYST = 3
 
+# 联合搜索的采样窗口两侧各垫这么多 px（只用来量半高宽和两翼，候选峰仍限制在
+# 原窗口内）。不垫的话，半高宽走到窗口边缘就被截断，切在文字驼峰上升沿的假峰
+# 会拿到 4px 的"半高宽"和灌水的分数——vol01/42 左版框就是这样被第 9 列的字
+# 顶掉的，全书 28/294 页有最终线正好压在窗口边界上。
+SEARCH_PAD = 60
+# 「版框/界行的投影是尖峰、两侧近乎为零；切到字上的峰两侧一定拖着字的墨」
+# （用户 2026-09-03 给的判据）。两翼取半高宽外 [2, 12] px 里的最低值，跟峰高
+# 的比 > FLANK_MAX_RATIO 就不是线。14 页金标 + 42/11 实测：158 条真线的比
+# 中位 0.021、最大 0.23；两条已知假线 0.83（42 的文字峰）、0.43（11 的落字假线）。
+FLANK_MAX_RATIO = 0.35
+FLANK_GAP, FLANK_SPAN = 2, 10
+
 # **这里不要开线程池**（2026-09-02 实测的负结果，别再加回来）。
 # `sample_line_curve` 还是花式索引 gather 的时候，每个候选窗口的联合搜索有 98%
 # 的时间在放开 GIL 的大数组运算上，4 线程能拿 2.2x。换成分块 BLAS 之后那部分
@@ -240,14 +252,46 @@ def local_maxima(curve: np.ndarray, radius: int = 2) -> list[int]:
     return dedup
 
 
+def flank_ratio(curve: np.ndarray, idx: int, width: float, sides: str = "both") -> float:
+    """峰两翼的最低值 ÷ 峰高。翼取半高宽之外 [FLANK_GAP, FLANK_GAP+FLANK_SPAN] px。
+    真线两翼是纸（≈0），切到字上的峰至少一侧拖着字。某一翼落在曲线外就当那翼
+    未知（只看另一翼）。
+
+    `sides`："both" / "left" / "right"（曲线下标方向）。**最外侧两个窗口只看朝
+    页心那一翼**：外框是"细内框 + 粗外条"，内框朝外那一翼是外条的软边（离得
+    只有十几 px），两翼都要求干净会把真内框闸掉——vol01/11 L1 就这么被换成
+    了一条更平、离人工金标更远的线；而假峰（切在文字上）朝页心那一翼一定脏，
+    只看那一翼照样拦得住（vol01/42 的文字峰朝页心翼 0.16 / 峰 0.18）。"""
+    n = len(curve)
+    a = int(round(width / 2.0))
+    L = curve[max(0, idx - a - FLANK_GAP - FLANK_SPAN):max(0, idx - a - FLANK_GAP)]
+    R = curve[min(n, idx + a + FLANK_GAP):min(n, idx + a + FLANK_GAP + FLANK_SPAN)]
+    v = float(curve[idx])
+    if v <= 0:
+        return float("inf")
+    parts = {"both": (L, R), "left": (L,), "right": (R,)}[sides]
+    vals = [float(x.min()) for x in parts if len(x)]
+    return max(vals) / v if vals else 0.0
+
+
 def best_in_curve(curve: np.ndarray, alpha: float = DEFAULT_ALPHA,
-                   hyst: int = DEFAULT_HYST, radius: int = 2) -> dict | None:
+                   hyst: int = DEFAULT_HYST, radius: int = 2,
+                   idx_lo: int = 0, idx_hi: int | None = None,
+                   flank_max_ratio: float | None = None,
+                   flank_sides: str = "both") -> dict | None:
+    """曲线上分数最高的峰。`idx_lo..idx_hi`（含）限制候选峰的位置——采样范围比
+    候选范围两侧各宽 SEARCH_PAD，这样半高宽和两翼都能量完整。
+    `flank_max_ratio` 给了就把两翼不干净的峰剔掉（见 FLANK_MAX_RATIO）。"""
     cands = local_maxima(curve, radius=radius)
-    if not cands:
-        return None
+    if idx_hi is None:
+        idx_hi = len(curve) - 1
     best = None
     for i in cands:
+        if i < idx_lo or i > idx_hi:
+            continue
         wd, sc = half_height_score_at(curve, i, alpha, hyst)
+        if flank_max_ratio is not None and flank_ratio(curve, i, wd, flank_sides) > flank_max_ratio:
+            continue
         if best is None or sc > best["score"]:
             best = dict(idx=i, score=sc, width=wd, proj=float(curve[i]))
     return best
@@ -270,8 +314,8 @@ def joint_search_coarse_to_fine(mask: np.ndarray, axis: str, pos_lo: int, pos_hi
                                  coarse_range: float = 0.05, coarse_n: int = 35,
                                  fine_radius: float = 0.006, fine_n: int = 25,
                                  alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
-                                 coarse_bank: tuple[int, dict[float, np.ndarray]] | None = None
-                                 ) -> LineMatch:
+                                 coarse_bank: tuple[int, dict[float, np.ndarray]] | None = None,
+                                 flank_sides: str = "both") -> LineMatch:
     """位置 + 角度联合搜索：不把位置锁死在窗口中心，让峰的锚点跟角度一起找。
 
     先粗扫 ±coarse_range（coarse_n 档）定位大致倾角，再在附近 ±fine_radius
@@ -285,19 +329,28 @@ def joint_search_coarse_to_fine(mask: np.ndarray, axis: str, pos_lo: int, pos_hi
     """
     best: dict | None = None
 
+    # 垫窗口 + 两翼闸都只走竖直线。上下版框那条路一动就变：vol01/33 的真上框
+    # （金标 517.9）会被换成 143px 外的抬头框——那边有自己的"更靠页心的次候选"
+    # 逻辑和 14 页金标护着，这次不碰。
+    pad = SEARCH_PAD if axis == "v" else 0
+    lo_s, hi_s = pos_lo - pad, pos_hi + pad                    # 采样范围（垫过的）
+
     def take(s: float) -> tuple[np.ndarray, np.ndarray]:
         if coarse_bank is not None and s in coarse_bank[1]:
             bank_lo, curves = coarse_bank
-            a = pos_lo - bank_lo
-            return (np.arange(pos_lo, pos_hi + 1, dtype=np.float64),
-                    curves[s][a:a + (pos_hi - pos_lo + 1)])
-        return sample_line_curve(mask, axis, pos_lo, pos_hi, s)
+            a = lo_s - bank_lo
+            if a >= 0 and a + (hi_s - lo_s + 1) <= len(curves[s]):
+                return (np.arange(lo_s, hi_s + 1, dtype=np.float64),
+                        curves[s][a:a + (hi_s - lo_s + 1)])
+        return sample_line_curve(mask, axis, lo_s, hi_s, s)
 
     def scan(slopes: np.ndarray) -> None:
         nonlocal best
         for s in slopes:
             positions, curve = take(float(s))
-            b = best_in_curve(curve, alpha, hyst)
+            b = best_in_curve(curve, alpha, hyst, idx_lo=pad, idx_hi=pad + (pos_hi - pos_lo),
+                              flank_max_ratio=FLANK_MAX_RATIO if axis == "v" else None,
+                              flank_sides=flank_sides)
             if b is None:
                 continue
             rec = dict(slope=float(s), position=float(positions[b["idx"]]),
@@ -382,10 +435,13 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     windows = _windows_from_candidates(candidates, 0, w - 1, edge_margin, edge_margin)
     # 粗扫 35 档倾角整页只算一次再按窗口切片：原来 17 个窗口 × 35 档 = 595 次
     # `sample_line_curve`，其中两个边缘窗口 600+px 宽还跟中间窗口重叠。
-    bank = coarse_curve_bank(mask, "v", windows[0][0], windows[-1][1])
-    results = [joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
-                                           coarse_bank=bank)
-               for lo, hi in windows]
+    bank = coarse_curve_bank(mask, "v", windows[0][0] - SEARCH_PAD, windows[-1][1] + SEARCH_PAD)
+    results = []
+    for k, (lo, hi) in enumerate(windows):
+        # 曲线下标 = 旧坐标 x 递增；最左窗口朝页心是右翼，最右窗口是左翼
+        sides = "right" if k == 0 else ("left" if k == len(windows) - 1 else "both")
+        results.append(joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
+                                                   coarse_bank=bank, flank_sides=sides))
 
     # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
     # 都收敛到这条线上，位置只差十几到几十像素，是精修阶段"两个窗口找到
