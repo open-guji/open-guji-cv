@@ -77,6 +77,18 @@ def _find_source(book: str, page: str) -> Path:
     raise SystemExit(f"两个候选源都没有：{tif}  /  {png}")
 
 
+def _vline_dict(v) -> dict:
+    """`VLine` 的完整口径，含三段折线字段。以前这里只存 `x_at_top`/`slope`
+    （相当于 k1），弯页（`segments==3`）的 `k2`/`k3`/`y1`/`y2` 被静静丢掉——
+    `warp_column` 自己按 `win.left`/`win.right`（内存里的完整 VLine 对象）
+    做分带射影，矫正图本身没受影响；但 `windows.json` 一旦被下游拿去反算
+    （`column_warp_matrix` 的文档就明说了"这个矩阵只对直线边线成立"，反算
+    弯页必须先知道 k2/k3/y1/y2 才找得到对应带），存的这几个字段一直是 None，
+    没法用。2026-09-02 全书重跑（vol01/47、11、151 十条线全部变成三段）
+    才发现——按当时的口径一次都没漏，因为之前跑过的页基本都是直线。"""
+    return dict(x_at_top=v.x_at_top, slope=v.slope, k2=v.k2, k3=v.k3, y1=v.y1, y2=v.y2)
+
+
 def regen(book: str, page: str, expected_cols: int, denoise: bool) -> dict:
     src = _find_source(book, page)
     gray = cv2.cvtColor(cv2.imread(str(src)), cv2.COLOR_BGR2GRAY)
@@ -92,8 +104,8 @@ def regen(book: str, page: str, expected_cols: int, denoise: bool) -> dict:
         cv2.imwrite(str(out_dir / f"c{win.col}.png"), img)
         meta["columns"].append(dict(
             col=win.col, file=f"c{win.col}.png",
-            left_line=dict(x_at_top=win.left.x_at_top, slope=win.left.slope),
-            right_line=dict(x_at_top=win.right.x_at_top, slope=win.right.slope),
+            left_line=_vline_dict(win.left),
+            right_line=_vline_dict(win.right),
             top_y=win.top_y, bottom_y=win.bottom_y,
             border_top_y=win.border_top_y, border_bottom_y=win.border_bottom_y,
             border_top_in_column=win.border_top_in_column,

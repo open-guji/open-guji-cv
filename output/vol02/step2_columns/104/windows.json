@@ -1,0 +1,236 @@
+{
+ "book": "vol02",
+ "page": "104",
+ "source_image": "/home/user/open-guji-cv/data_full/zongmu/vol02/104.png",
+ "page_size": {
+  "width": 2394,
+  "height": 3023
+ },
+ "top_inner": {
+  "y_at_right": 317.20576470588236,
+  "slope": 0.013205882352941178
+ },
+ "bottom_inner": {
+  "y_at_right": 2667.0803529411764,
+  "slope": 0.0024411764705882383
+ },
+ "denoised": false,
+ "columns": [
+  {
+   "col": 1,
+   "file": "c1.png",
+   "left_line": {
+    "x_at_top": 567.9795618685655,
+    "slope": -0.0023399655939082397
+   },
+   "right_line": {
+    "x_at_top": 383.85704154214216,
+    "slope": 0.0010455417014561073
+   },
+   "top_y": 323.48792095453655,
+   "bottom_y": 2668.2574680009525,
+   "border_top_y": 323.48792095453655,
+   "border_bottom_y": 2668.2574680009525,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2344.769547046416,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 183,
+    "height": 2346
+   }
+  },
+  {
+   "col": 2,
+   "file": "c2.png",
+   "left_line": {
+    "x_at_top": 762.3629685362575,
+    "slope": -0.007905473560051467
+   },
+   "right_line": {
+    "x_at_top": 567.9795618685655,
+    "slope": -0.0023399655939082397
+   },
+   "top_y": 325.96788640063386,
+   "bottom_y": 2668.696411054681,
+   "border_top_y": 325.96788640063386,
+   "border_bottom_y": 2668.696411054681,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2342.7285246540473,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 193,
+    "height": 2343
+   }
+  },
+  {
+   "col": 3,
+   "file": "c3.png",
+   "left_line": {
+    "x_at_top": 944.0905184611289,
+    "slope": -0.0050930254087327605
+   },
+   "right_line": {
+    "x_at_top": 762.3629685362575,
+    "slope": -0.007905473560051467
+   },
+   "top_y": 328.44518671818093,
+   "bottom_y": 2669.158720000252,
+   "border_top_y": 328.44518671818093,
+   "border_bottom_y": 2669.158720000252,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2340.713533282071,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 192,
+    "height": 2340
+   }
+  },
+  {
+   "col": 4,
+   "file": "c4.png",
+   "left_line": {
+    "x_at_top": 1134.634155376983,
+    "slope": -0.008108426166465175
+   },
+   "right_line": {
+    "x_at_top": 944.0905184611289,
+    "slope": -0.0050930254087327605
+   },
+   "top_y": 330.90261709083177,
+   "bottom_y": 2669.6173230148124,
+   "border_top_y": 330.90261709083177,
+   "border_bottom_y": 2669.6173230148124,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2338.7147059239805,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 190,
+    "height": 2340
+   }
+  },
+  {
+   "col": 5,
+   "file": "c5.png",
+   "left_line": {
+    "x_at_top": 1322.6588904240562,
+    "slope": -0.007775161263367556
+   },
+   "right_line": {
+    "x_at_top": 1134.634155376983,
+    "slope": -0.008108426166465175
+   },
+   "top_y": 333.39615990891184,
+   "bottom_y": 2670.069430701603,
+   "border_top_y": 333.39615990891184,
+   "border_bottom_y": 2670.069430701603,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2336.6732707926913,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 188,
+    "height": 2337
+   }
+  },
+  {
+   "col": 6,
+   "file": "c6.png",
+   "left_line": {
+    "x_at_top": 1511.7901777433308,
+    "slope": -0.010809868150757046
+   },
+   "right_line": {
+    "x_at_top": 1322.6588904240562,
+    "slope": -0.007775161263367556
+   },
+   "top_y": 335.88024705741066,
+   "bottom_y": 2670.517306945357,
+   "border_top_y": 335.88024705741066,
+   "border_bottom_y": 2670.517306945357,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2334.6370598879466,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 188,
+    "height": 2334
+   }
+  },
+  {
+   "col": 7,
+   "file": "c7.png",
+   "left_line": {
+    "x_at_top": 1698.2063385229576,
+    "slope": -0.01473379407547504
+   },
+   "right_line": {
+    "x_at_top": 1511.7901777433308,
+    "slope": -0.010809868150757046
+   },
+   "top_y": 338.3441160431868,
+   "bottom_y": 2670.955440248376,
+   "border_top_y": 338.3441160431868,
+   "border_bottom_y": 2670.955440248376,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2332.6113242051892,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 185,
+    "height": 2333
+   }
+  },
+  {
+   "col": 8,
+   "file": "c8.png",
+   "left_line": {
+    "x_at_top": 1880.7823529411764,
+    "slope": -0.011764705882352842
+   },
+   "right_line": {
+    "x_at_top": 1698.2063385229576,
+    "slope": -0.01473379407547504
+   },
+   "top_y": 340.77799052923086,
+   "bottom_y": 2671.4051409819413,
+   "border_top_y": 340.77799052923086,
+   "border_bottom_y": 2671.4051409819413,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2330.6271504527103,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 190,
+    "height": 2331
+   }
+  },
+  {
+   "col": 9,
+   "file": "c9.png",
+   "left_line": {
+    "x_at_top": 2073.6130892007,
+    "slope": -0.011024524206392631
+   },
+   "right_line": {
+    "x_at_top": 1880.7823529411764,
+    "slope": -0.011764705882352842
+   },
+   "top_y": 343.264751520584,
+   "bottom_y": 2671.875439739743,
+   "border_top_y": 343.264751520584,
+   "border_bottom_y": 2671.875439739743,
+   "border_top_in_column": 0.0,
+   "border_bottom_in_column": 2328.610688219159,
+   "raised": false,
+   "head_raise_inner_y": null,
+   "warped_size": {
+    "width": 196,
+    "height": 2328
+   }
+  }
+ ]
+}
