@@ -82,15 +82,22 @@ class VLine:
     def segments(self) -> int:
         return 1 if self.k2 is None else 3
 
-    def x_at(self, y: float) -> float:
+    def x_at(self, y):
+        """y 可以是标量或 ndarray。数组分支用 np.where 逐元素走**同一套算式**
+        （每个元素的加减乘顺序跟标量分支一样，结果逐位相同），`_rule_rows` /
+        `gutter_projection` 的向量化版靠这个。"""
         if self.k2 is None or self.y1 is None or self.y2 is None or self.k3 is None:
             return self.x_at_top + self.slope * y
+        xa = self.x_at_top + self.slope * self.y1
+        xb = xa + self.k2 * (self.y2 - self.y1)
+        if isinstance(y, np.ndarray):
+            return np.where(y <= self.y1, self.x_at_top + self.slope * y,
+                            np.where(y <= self.y2, xa + self.k2 * (y - self.y1),
+                                     xb + self.k3 * (y - self.y2)))
         if y <= self.y1:
             return self.x_at_top + self.slope * y
-        xa = self.x_at_top + self.slope * self.y1
         if y <= self.y2:
             return xa + self.k2 * (y - self.y1)
-        xb = xa + self.k2 * (self.y2 - self.y1)
         return xb + self.k3 * (y - self.y2)
 
     def knots(self) -> list[float]:
@@ -554,31 +561,50 @@ def _rule_rows(binm: np.ndarray, xfn, y0: int, y1: int, w: int
        跳的。没这道闸 vol02/3 会被判成"最弯的页之一"（w80 36），其实界行是
        直的，只是断掉的行里混进了一小截笔画——第 1 道闸拦不住 <=9px 的碎片。
 
-    返回 (有效行 ys, 全部采样 ys)。`xfn(y)` 是当前线的 x。"""
+    返回 (有效行 ys, 全部采样 ys)。`xfn(y)` 是当前线的 x，要能吃 ndarray。
+
+    **实现是整批 gather**（2026-09-03 向量化，结果逐位相同）：原来逐行切片
+    每页 10 条线 × 2 次 × 600 行的 Python 循环占 `fit_vlines_polyline` 的 38%
+    （直线页 86%）。现在 `_row_windows` 一次取出 (n, 81) 的窗口矩阵，墨宽/质心
+    用矩阵算；局部一致性闸中段用 sliding_window_view 去掉中心列取中位，两端
+    不足 9 个邻居的 4 行仍按原来的截断窗口逐行算，跟旧实现一样。"""
     ys = np.arange(int(y0), int(y1), BEND_Y_STEP)
-    cand_y, cand_x = [], []
-    for y in ys:
-        c = int(round(xfn(y)))
-        lo, hi = c - BEND_SEARCH, c + BEND_SEARCH + 1
-        if lo < 0 or hi > w:
-            continue
-        row = binm[y, (w - 1) - hi + 1:(w - 1) - lo + 1][::-1]   # 翻回新坐标方向
-        k = int(row.sum())
-        if k == 0 or k > BEND_INK_W_MAX:
-            continue
-        cand_y.append(y)
-        cand_x.append(lo + float(np.flatnonzero(row).mean()))
+    rows, lo, win = _row_windows(binm, xfn, ys, w)
+    k = win.sum(axis=1)
+    good = (k > 0) & (k <= BEND_INK_W_MAX)
+    cand_y = rows[good]
     if len(cand_y) < BEND_COHERE_WIN:
-        return np.array(cand_y, dtype=int), ys
-    cx = np.array(cand_x)
+        return cand_y.astype(int), ys
+    j = np.arange(2 * BEND_SEARCH + 1, dtype=np.float64)
+    cx = lo[good] + (win[good] * j).sum(axis=1) / k[good]      # 墨的 x 质心
     half = BEND_COHERE_WIN // 2
-    keep = []
-    for i, y in enumerate(cand_y):
-        a, b = max(0, i - half), min(len(cx), i + half + 1)
+    n = len(cx)
+    keep = np.zeros(n, dtype=bool)
+    for i in list(range(min(half, n))) + list(range(max(half, n - half), n)):
+        a, b = max(0, i - half), min(n, i + half + 1)
         nb = np.concatenate([cx[a:i], cx[i + 1:b]])
-        if len(nb) == 0 or abs(cx[i] - np.median(nb)) <= BEND_COHERE_TOL:
-            keep.append(y)
-    return np.array(keep, dtype=int), ys
+        keep[i] = len(nb) == 0 or abs(cx[i] - np.median(nb)) <= BEND_COHERE_TOL
+    if n > 2 * half:
+        sw = np.lib.stride_tricks.sliding_window_view(cx, BEND_COHERE_WIN)   # (n-8, 9)
+        nb = np.delete(sw, half, axis=1)                                     # 去掉自己
+        mid = np.abs(cx[half:n - half] - np.median(nb, axis=1)) <= BEND_COHERE_TOL
+        keep[half:n - half] = mid
+    return cand_y[keep].astype(int), ys
+
+
+def _row_windows(binm: np.ndarray, xfn, ys: np.ndarray, w: int
+                 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """每一行以这条线为中心取 ±BEND_SEARCH 的窗口（新坐标方向，右到左翻回来），
+    一次 gather 成 (n, 81)。窗口出界的行整行丢掉（跟旧实现的 `continue` 一样）。
+    返回 (保留的行 y, 各行窗口起点 lo（新坐标）, 窗口矩阵)。"""
+    c = np.rint(xfn(ys.astype(np.float64))).astype(int)
+    lo = c - BEND_SEARCH
+    ok = (lo >= 0) & (c + BEND_SEARCH + 1 <= w)
+    ys, lo = ys[ok], lo[ok]
+    # 新坐标 x = lo + j  <=>  旧列 (w-1) - (lo + j)
+    cols = (w - 1) - (lo[:, None] + np.arange(2 * BEND_SEARCH + 1)[None, :])
+    win = binm[ys[:, None], cols]
+    return ys, lo, win
 
 
 def gutter_projection(binm: np.ndarray, xfn, y0: int, y1: int, w: int
@@ -592,12 +618,8 @@ def gutter_projection(binm: np.ndarray, xfn, y0: int, y1: int, w: int
     rows, _ = _rule_rows(binm, xfn, y0, y1, w)
     if len(rows) < BEND_MIN_ROWS:
         return None
-    proj = np.zeros(BEND_SEARCH * 2 + 1, np.float64)
-    for y in rows:
-        c = int(round(xfn(y)))
-        lo, hi = c - BEND_SEARCH, c + BEND_SEARCH + 1
-        seg = binm[y, (w - 1) - hi + 1:(w - 1) - lo + 1][::-1]   # 翻回新坐标方向
-        proj += seg
+    _, _, win = _row_windows(binm, xfn, rows, w)
+    proj = win.sum(axis=0, dtype=np.float64)      # 0/1 计数，整数和，跟逐行累加逐位相同
     p = proj / len(rows)
     pk = float(p.max())
     if pk <= 0:
@@ -629,6 +651,23 @@ def _aligned(binm: np.ndarray, rows: np.ndarray, xs: np.ndarray, w: int) -> int:
         xx = xo + d
         ok = (xx >= 0) & (xx < w)
         total += wt * int((binm[rows[ok], xx[ok]] > 0).sum())
+    return total
+
+
+def _aligned_batch(binm: np.ndarray, rows: np.ndarray, xs: np.ndarray, w: int) -> np.ndarray:
+    """`_aligned` 的批量版：xs 是 (n_rows, n_cand)，一次算 n_cand 个候选线的得分。
+    折点搜索里每个折点要试 81 档偏移，原来是 81 × 5 次小 gather（每页 1.4 万次
+    `_aligned` 调用占弯页 `fit_vlines_polyline` 的 49%），现在 5 次 (n_rows, 81)
+    的 gather。逐元素算式跟 `_aligned` 相同（同样的 rint / 出界置零），
+    结果逐位相同。"""
+    xo = (w - 1) - np.rint(xs).astype(int)
+    total = np.zeros(xs.shape[1], dtype=np.int64)
+    ridx = rows[:, None]
+    for d, wt in _ALIGN_KERNEL:
+        xx = xo + d
+        ok = (xx >= 0) & (xx < w)
+        hit = (binm[ridx, np.clip(xx, 0, w - 1)] > 0) & ok
+        total += wt * hit.sum(axis=0)
     return total
 
 
@@ -689,30 +728,42 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
             failed.append(vi)
             continue
 
-        def seg_rows(i):
-            return rows_all[(rows_all >= ky[i]) & (rows_all < ky[i + 1])]
+        # 三段的行集合和归一化位置 t 在整个坐标下降里不变，先算好
+        segs = []
+        for i in range(3):
+            r = rows_all[(rows_all >= ky[i]) & (rows_all < ky[i + 1])]
+            segs.append((r, (r - ky[i]) / (ky[i + 1] - ky[i]) if len(r) else None))
 
         def seg_score(i, xa, xb):
-            r = seg_rows(i)
+            r, t = segs[i]
             if len(r) == 0:
                 return 0
-            t = (r - ky[i]) / (ky[i + 1] - ky[i])
             return _aligned(binm, r, xa + t * (xb - xa), w)
 
+        offs = np.arange(-KNOT_SEARCH, KNOT_SEARCH + 1, dtype=np.float64)
         base_score = sum(seg_score(i, kx[i], kx[i + 1]) for i in range(3))
         for _ in range(KNOT_PASSES):
             moved = False
             for j in range(4):
+                xs_all = kx[j] + offs                          # 81 个候选折点 x
+                sc = np.zeros(len(offs), dtype=np.int64)
+                if j > 0:                                      # 左段：xa 固定，xb 变
+                    r, t = segs[j - 1]
+                    if len(r):
+                        xa = kx[j - 1]
+                        sc += _aligned_batch(binm, r, xa + t[:, None] * (xs_all[None, :] - xa), w)
+                if j < 3:                                      # 右段：xa 变，xb 固定
+                    r, t = segs[j]
+                    if len(r):
+                        xb = kx[j + 1]
+                        sc += _aligned_batch(binm, r, xs_all[None, :] + t[:, None] * (xb - xs_all[None, :]), w)
+                # 跟旧的逐档循环同一条挑选规则：分数严格更高才换；平分取 |d| 更小的
                 best, best_x = None, kx[j]
-                for d in range(-KNOT_SEARCH, KNOT_SEARCH + 1):
+                for di, d in enumerate(range(-KNOT_SEARCH, KNOT_SEARCH + 1)):
                     x = kx[j] + d
-                    sc = 0
-                    if j > 0:
-                        sc += seg_score(j - 1, kx[j - 1], x)
-                    if j < 3:
-                        sc += seg_score(j, x, kx[j + 1])
-                    if best is None or sc > best or (sc == best and abs(d) < abs(best_x - kx[j])):
-                        best, best_x = sc, x
+                    s_ = int(sc[di])
+                    if best is None or s_ > best or (s_ == best and abs(d) < abs(best_x - kx[j])):
+                        best, best_x = s_, x
                 if best_x != kx[j]:
                     kx[j] = best_x
                     moved = True
