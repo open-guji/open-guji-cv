@@ -167,8 +167,9 @@
       <pre id="h_out" class="json" style="margin-top:.6rem;max-height:14rem"></pre>
     </div>
     <div class="card">
-      <h2>金标分片</h2>
-      <pre id="gold" class="json" style="max-height:20rem"></pre>
+      <h2>金标分片 <span class="muted">载体 items 的已迁；其余由适配器读旧格式</span></h2>
+      <div style="overflow-x:auto"><table class="jobs"><thead><tr><th>分片</th><th>载体</th><th>条数</th><th>状态</th><th>分层</th><th></th></tr></thead><tbody id="goldtbl"></tbody></table></div>
+      <pre id="goldout" class="json" style="max-height:16rem;margin-top:.6rem"></pre>
     </div>
   </section>
 </main>
@@ -218,7 +219,29 @@ async function loadBatches() {
     : '<tr><td colspan="9" class="muted">还没有批次。用 CLI 建：guji-cv batch new …</td></tr>';
   $('#batches').querySelectorAll('button[data-route]').forEach(x => x.onclick = () => { $('#h_batch').value = x.dataset.route; doRoute(false); });
   $('#h_batch').innerHTML = bs.map(b => `<option value="${b.id}">${b.id}</option>`).join('');
-  try { $('#gold').textContent = JSON.stringify((await api('/api/gold')).shards, null, 1); } catch (e) { $('#gold').textContent = e.message; }
+  loadGold();
+}
+async function loadGold() {
+  let shards = [];
+  try { shards = (await api('/api/gold')).shards; } catch (e) { $('#goldout').textContent = e.message; return; }
+  $('#goldtbl').innerHTML = shards.map(s => {
+    const st = Object.entries(s.status || {}).map(([k, v]) => `${k} ${v}`).join(' / ');
+    const str = Object.entries(s.stratum || {}).map(([k, v]) => `${k} ${v}`).join(' / ') || '—';
+    const migrated = s.carrier === 'items';
+    return `<tr><td class="mono">${s.shard}</td>
+      <td><span class="badge b-${migrated ? 'completed' : 'pending'}">${s.carrier}</span></td>
+      <td class="mono">${s.n}</td><td class="mono">${st}</td><td class="mono">${str}</td>
+      <td>${migrated ? `<button data-drift="${s.shard}">漂移检查</button>` : `<button data-mig="${s.shard}">迁移</button>`}</td></tr>`;
+  }).join('');
+  $('#goldtbl').querySelectorAll('button[data-mig]').forEach(b => b.onclick = async () => {
+    try { $('#goldout').textContent = JSON.stringify(await api(`/api/gold/${b.dataset.mig}/migrate`, { method: 'POST' }), null, 1); loadGold(); }
+    catch (e) { $('#goldout').textContent = e.message; }
+  });
+  $('#goldtbl').querySelectorAll('button[data-drift]').forEach(b => b.onclick = async () => {
+    $('#goldout').textContent = '检查中…';
+    try { $('#goldout').textContent = JSON.stringify(await api(`/api/gold/${b.dataset.drift}/drift`, { method: 'POST' }), null, 1); }
+    catch (e) { $('#goldout').textContent = e.message; }
+  });
 }
 async function doHarvest() {
   const batch = $('#h_batch').value, text = $('#h_text').value.trim();
