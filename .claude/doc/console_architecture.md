@@ -511,8 +511,53 @@ P0 与 P1 可以并行（一个碰产物，一个碰事件，不改同一文件�
 server 传输壳只做了同步 JS，还没把「界行切分裁决台」真正改成控制台模式跑一轮；
 `column-split` 分片没有机器可读的 metadata.json。
 
-**下一步**：P2（GoldStore 适配器读全部旧分片 + 迁三个最活跃分片 + 评测器进控制台），
-或先补 P0/P1 的尾巴（`page_type_gate` / `grid_prior` 包壳；把裁决台迁成 server 模式跑一轮真人裁）。
+### 8.3 P2 落地记录（2026-09-03）
+
+同分支，提交 `aef2e2f`（代码）+ 数据集仓 `0d53f92`（迁移产物）。新增约 1,000 行。
+
+**适配器读全部旧分片**。实测载体有**五种**，不是设计里预估的四种：
+
+| 载体 | 形态 | 分片数 / 条数 |
+|---|---|---|
+| `samples_dir` | `samples/NNN/{expected\|case}.json`、`samples/<key>.json`、单个汇总表 | 15 / 378 |
+| `flat_expected` | 数组、对象即表、**报告式**（阈值在顶层、条目在嵌套字段）、`samples.jsonl` | 16 / 8,119 |
+| `verdicts` | `verdicts_*.jsonl`，多轮后覆前，`idk` → uncertain | 3 / 228 |
+| `cases` | `cases.json` + `answer_key.json` 合读 | 1 / 154 |
+
+**35 个分片、8,879 条金标全部可读**，唯一为 0 的 `char-segmentation/truncation`
+是全自动统计型分片，本就没有条目级金标。
+
+**漂移检查不另造判据**：沿用 `scripts/migrate_column_warp_gold.py` 已标定的图像指纹
+（容差 6.0 灰阶，列图平移 1~3px 时指纹差约 0）。不用内容哈希——1px 平移就变；
+不用「算法现在还判得对吗」——那是循环论证，会让金标永远测不出算法错。
+真实 column-warp 114 条实测：keep 110 / recheck 4。
+
+**已迁三个最活跃分片**（旧文件保留并存，人核对过再删）：column-split 60 条、
+column-warp 114 条、instances 559 条。
+
+**迁移中查出并显式处理的四个问题**：
+
+1. `samples/NNN` 是分片内的样本而非分片——枚举时每个样本都冒充了一个分片，
+   且它的 `expected.json` 被扁平适配器误读成「字段名即 id」；
+2. 报告式 `expected.json` 的阈值名（`heavy_threshold` 等）被当成条目 id；
+3. instances 有 **3 处真矛盾**：同一字位一轮判 contaminated、另一轮判 not_text。
+   迁移不静默取后者，而是保留后者、标 uncertain、把两个版本都记进 history 交人裁；
+4. `coord_space` 那种整段口径说明是给人看的文档，混进 `expected` 会让「金标改没改」
+   的比较变成比较散文——改为进 `input`。
+
+控制台加金标视图（分片表 / 一键迁移 / 漂移检查），CLI `gold` 加 `migrate` 与 `drift`。
+`tests/test_gold_v2.py` 15 条全过，全量 642 条零失败。
+
+**P2 的已知缺口**：评测器还没包进控制台（27 个 `eval_*.py` 的命令行约定不统一：
+报告路径有 `--out` / `--json-out` / `--report` 三种写法，位置参数名有 `dataset` /
+`samples` / `cases` / `book_out_dir` 四种，`eval_guard_ceiling` 干脆没有位置参数）；
+`metadata.json` 的字段公约也不统一（`known_limitation` 单数 vs `known_limitations` 复数，
+`sampling` / `sampling_bias` / `stratification` / `strata` 四种写法同一件事，
+instances 的 `total_samples` 写 392 而实际 562）；instances 与 border-detection
+都还没有图像指纹字段（前者 `patches/` 里已有 909 张 PNG，可直接补算）。
+
+**下一步**：把评测器包进控制台（P2 收尾），或 P3（指纹级增量跳过 + `pin` + `output/` 出 git），
+或补 P0/P1 尾巴（`page_type_gate` / `grid_prior` 包壳、裁决台迁 server 模式跑一轮真人裁）。
 
 ## 9. 已裁定（用户 2026-09-03）
 
