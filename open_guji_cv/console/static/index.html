@@ -92,6 +92,7 @@
     <button data-view="run">运行</button>
     <button data-view="products">产物</button>
     <button data-view="review">审查</button>
+    <button data-view="evals">评测</button>
   </nav>
 </header>
 <main>
@@ -172,6 +173,18 @@
       <pre id="goldout" class="json" style="max-height:16rem;margin-top:.6rem"></pre>
     </div>
   </section>
+
+  <section id="view-evals" class="view">
+    <div class="card">
+      <h2>评测器 <span class="muted">27 个 eval 脚本；报告带分母、分层与过期金标数</span></h2>
+      <div style="display:flex;gap:.6rem;margin-bottom:.6rem;align-items:center">
+        <button id="ev_all">跑全部轻量的</button>
+        <span id="ev_msg" class="muted"></span>
+      </div>
+      <div style="overflow-x:auto"><table class="jobs"><thead><tr><th>评测器</th><th>分片</th><th>状态</th><th>指标</th><th>金标</th><th></th></tr></thead><tbody id="evtbl"></tbody></table></div>
+      <pre id="evout" class="json" style="max-height:18rem;margin-top:.6rem"></pre>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -220,7 +233,43 @@ async function loadBatches() {
   $('#batches').querySelectorAll('button[data-route]').forEach(x => x.onclick = () => { $('#h_batch').value = x.dataset.route; doRoute(false); });
   $('#h_batch').innerHTML = bs.map(b => `<option value="${b.id}">${b.id}</option>`).join('');
   loadGold();
+  loadEvals();
 }
+
+// ── 评测 ───────────────────────────────────────────────────────────
+const evalState = {};
+async function loadEvals() {
+  let list = [];
+  try { list = await api('/api/evals'); } catch (e) { $('#ev_msg').textContent = e.message; return; }
+  $('#evtbl').innerHTML = list.map(s => {
+    const r = evalState[s.id];
+    const badge = r ? `<span class="badge b-${r.status === 'ok' ? 'completed' : (r.status === 'regressed' ? 'running' : 'failed')}">${r.status}</span>`
+                    : (s.runnable ? '<span class="muted">未跑</span>' : `<span class="muted">${s.blocked}</span>`);
+    const ms = r ? (r.metrics || []).slice(0, 2).map(m => `${m.name} ${m.value}${m.unit || ''}`).join('，') : '';
+    const gold = r && r.n_gold != null ? `${r.n_gold}${r.stale_gold ? ` (过期 ${r.stale_gold})` : ''}` : '';
+    return `<tr><td class="mono">${s.id}</td><td class="mono">${s.shard}</td><td>${badge}</td>
+      <td class="mono">${ms}</td><td class="mono">${gold}</td>
+      <td>${s.runnable ? `<button data-ev="${s.id}">跑</button>` : ''}</td></tr>`;
+  }).join('');
+  $('#evtbl').querySelectorAll('button[data-ev]').forEach(b => b.onclick = () => runOneEval(b.dataset.ev));
+  $('#ev_all').onclick = async () => {
+    const runnables = list.filter(s => s.runnable);
+    $('#ev_msg').textContent = `跑 ${runnables.length} 个…`;
+    for (const s of runnables) await runOneEval(s.id, true);
+    $('#ev_msg').textContent = '完成';
+  };
+}
+async function runOneEval(id, quiet) {
+  if (!quiet) $('#ev_msg').textContent = `${id} 跑中…`;
+  try {
+    const r = await api(`/api/evals/${id}/run`, { method: 'POST' });
+    evalState[id] = r;
+    $('#evout').textContent = JSON.stringify(r, null, 1).slice(0, 4000);
+    loadEvals();
+  } catch (e) { $('#evout').textContent = `${id}: ${e.message}`; }
+  if (!quiet) $('#ev_msg').textContent = '';
+}
+
 async function loadGold() {
   let shards = [];
   try { shards = (await api('/api/gold')).shards; } catch (e) { $('#goldout').textContent = e.message; return; }

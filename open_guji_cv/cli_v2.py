@@ -171,7 +171,37 @@ def cmd_gold(args) -> None:
             print(f"标 stale: {mark_drifted(store, args.shard, rep)} 条")
 
 
+def cmd_eval(args) -> None:
+    from .eval import run_eval
+    from .eval.registry import EVALS, runnable
+    if args.action == "list":
+        print(f"{'评测器':20s} {'分片':40s} {'状态':22s} 说明")
+        for s in sorted(EVALS.values(), key=lambda x: x.id):
+            ok, why = runnable(s)
+            print(f"  {s.id:18s} {s.shard:40s} {'可跑' if ok else why:22s} {s.title}")
+        return
+    keys = args.evals or [k for k, s in EVALS.items()
+                          if not ({"heavy", "engine", "corpus", "dump", "intermediate"} & set(s.needs))]
+    reports = []
+    for k in sorted(keys):
+        r = run_eval(k, timeout=args.timeout)
+        reports.append(r)
+        mark = {"ok": "✓", "regressed": "⚠", "failed": "✗", "skipped": "–"}[r.status]
+        print(f"{mark} {r.summary_line()}")
+        for w in r.warnings():
+            print(f"    ⚠ {w}")
+        if r.status == "failed":
+            print(f"    {r.error[:160]}")
+    if args.json:
+        print(json.dumps([r.to_dict() for r in reports], ensure_ascii=False))
+    n_bad = sum(1 for r in reports if r.status == "failed")
+    n_reg = sum(1 for r in reports if r.status == "regressed")
+    print(f"\n通过 {sum(1 for r in reports if r.status=='ok')} / 回归门失败 {n_reg} / 跑不起来 {n_bad}")
+    sys.exit(1 if n_bad and args.strict else 0)
+
+
 COMMANDS_V2 = {
+    "eval": cmd_eval,
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
@@ -245,6 +275,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--kind", default="verdict")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--limit", type=int, default=30)
+
+    p = sub.add_parser("eval", help="[v2] 评测：list | run")
+    p.add_argument("action", choices=["list", "run"])
+    p.add_argument("evals", nargs="*", help="评测器 id；留空跑全部轻量的")
+    p.add_argument("--timeout", type=int, default=900)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--strict", action="store_true", help="有跑不起来的就以 1 退出")
 
     p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift")
     p.add_argument("action", choices=["shards", "show", "migrate", "drift"])
