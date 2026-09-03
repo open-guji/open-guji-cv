@@ -25,9 +25,9 @@ x 标准差 0.7~1.1px（直线页 0.6px），弯线确实被拉直了。
 否掉的路子记在 `.claude/doc/segmentation_v2_pipeline.md`「Step 1 性能」一节。
 
 这里只管**页级并行**（`--jobs`，`ProcessPoolExecutor`，每页完全独立）。
-**`--jobs` 不要超过 CPU 数**：worker 里会把 Step1 的内层线程池关掉
-（`OGCV_LINE_SEARCH_THREADS=1`），页级进程数就是实际并行度，超订只会更慢——
-4 核上开 8 进程跑 294 页花了 62 分钟。
+**`--jobs` 不要超过 CPU 数**：Step1 内部已经没有线程池了（分块 BLAS 之后线程
+是负收益，见 `peak_line_search.py` 顶部），页级进程数就是实际并行度，超订只会
+更慢——4 核上开 8 进程跑 294 页花了 62 分钟。
 """
 import argparse
 import json
@@ -118,12 +118,6 @@ def _body_pages(book: str) -> list[str]:
 
 
 def _one(args):
-    # 页级并行时把 Step1 内部的线程池关掉：`find_vertical_lines` 自己会开
-    # CPU 数条线程，跟页级进程数相乘就是过度订阅（4 核上开 8 进程实测比 4 进程
-    # 还慢）。页级并行没有 GIL，优先用它。
-    os.environ.setdefault("OGCV_LINE_SEARCH_THREADS", "1")
-    from open_guji_cv.utils import peak_line_search as _pls
-    _pls.LINE_SEARCH_THREADS = 1
     book, pg, cols, denoise, clean, only_poly = args
     try:
         return book, pg, regen(book, pg, cols, denoise, clean, only_poly)
