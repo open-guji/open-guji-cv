@@ -18,7 +18,7 @@
   Step3 只存字格，Step4 只存紧框 + flags；列图、字块、归一图块一律走 `ctx.materialize` 的本地缓存
   （LRU、有上限），缺了现算。长期存图的只有原始扫描和人裁过的图（金标 assets、GlyphDB 范例）。
 
-### P0 骨架 —— ✅ 已落地（2026-09-03，分支 `feat/console-p0`，未提交；记录见设计 §8.1）
+### P0 骨架 —— ✅ 已落地（2026-09-03，分支 `feat/console-p0` 提交 `d63d1b4`；记录见设计 §8.1）
 
 - [x] `core/`：spec.py、step.py、book.py、pipeline.py、engine.py（指纹、stale 沿 DAG 下传）、anchor.py
 - [x] `products/`：store / manifest / cache（LRU 20 GB）/ kinds（borders、column_windows、gate_manifest、cells、char_index + 三种缓存图）
@@ -33,14 +33,20 @@
   `uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`
 - 算法层待办（P0 跑出来的）：vol01/119 页级周期估成 70 → 9 列 DP 无解；vol01/60 c8 DP 无解；vol01/42 被 L1 列宽拦下（已知）
 
-### P1 反馈（可与 P0 并行：一个碰产物，一个碰事件）
+### P1 反馈 —— ✅ 已落地（2026-09-03，提交 `6130449`；记录见设计 §8.2）
 
-- [ ] `feedback/events.py`（统一信封）+ `review/batches.py`（批次登记，替代 artifacts/README.md 表格）
-      + `feedback/routes.yaml`
-- [ ] `review/shell.py` 双传输（server / artifact），先把「界行切分裁决台」迁成控制台模式
-- [ ] `feedback/harvest.py`：解析四种旧格式（verdicts / GUJI-SEED-EVENT / GUJI-SEG-REVIEW / marks）
-- 验收：一批裁决从控制台发起 → 裁 → 自动进 items.jsonl，中间不跑手工脚本；
-  旧 Artifact 页收割后结果与 `harvest_verdicts.py` 一致
+- [x] `feedback/`：events（信封 + 只追加日志 + 幂等记账）、harvest（四种旧格式）、
+      routes（kind × step → 消费者）、consumers（gold_add 已实现）
+- [x] `gold/`：统一金标信封 + 分片仓（upsert / retire / mark_stale / summary）
+- [x] `review/batches.py` 批次登记（含「发布前必须先收割」的闸）+ `review/shell.py` 双传输
+- [x] 控制台审查视图 + 7 个 API；CLI `batch` / `events` / `gold`
+- [x] 验收：真实 column-split 60 条裁决走完 收割 → 路由 → 金标，分布 ok 56 / extra 2 / miss 2
+      与分片 README 一致；重复收割与重复消费不产生副本。19 条测试全过，全量 627 条零失败
+- **修掉三处格式对齐 bug**（各有回归测试）：GUJI-SEG-REVIEW 前缀在 `t` 字段里且 `t` 非时间戳；
+  marks 值是 `{"s":N}` 且 2/3 语义反了；续裁要 `{id:{"v","t"}}` 不能传扁平串
+  （`build_border_gold_reviews.py --verdicts` 至今仍有这个 bug，迁它时一并修）
+- [ ] P1 尾巴：`glyphdb_admit` / `glyphdb_recrop` 两个消费者（现在照旧走 `seed-ingest`）；
+      把「界行切分裁决台」真改成 server 模式跑一轮真人裁；`column-split` 分片补 metadata.json
 
 ### P2 金标 → P3 增量与存储 → P4 扩展
 

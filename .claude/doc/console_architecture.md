@@ -448,7 +448,7 @@ P0 与 P1 可以并行（一个碰产物，一个碰事件，不改同一文件�
 
 ### 8.1 P0 落地记录（2026-09-03）
 
-分支 `feat/console-p0`（未提交）。新增约 3,200 行，不动任何算法函数。
+分支 `feat/console-p0`，提交 `d63d1b4`。新增约 3,800 行，不动任何算法函数。
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
@@ -483,7 +483,36 @@ P0 与 P1 可以并行（一个碰产物，一个碰事件，不改同一文件�
 `uv venv .venv --python 3.12` + `uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`。
 `tests/recognize-profile/test_recognize_profile.py::test_snapshots` 是被 pytest 误收集的脚本函数（fixture `books` 不存在），改动前就失败，与本次无关。
 
-**下一步**：P1（事件 + 批次 + server 传输壳），或先把 `page_type_gate` / `grid_prior` 包进来让 yaml 与 §3.3 对齐。
+### 8.2 P1 落地记录（2026-09-03）
+
+同分支，提交 `6130449`。新增约 1,700 行。
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| feedback | `events.py` `harvest.py` `routes.py` `consumers.py` | 事件信封 + 只追加日志（append 幂等、resolve 后到覆盖、consumed 记账）；四种旧格式解析；路由表；`gold_add` 消费者（`glyphdb_*` 显式未实现，不静默吞事件） |
+| gold | `item.py` `store.py` | 统一金标信封（label_origin / stratum / status / history / source_events）+ 分片仓 upsert / retire / mark_stale / summary |
+| review | `batches.py` `shell.py` | 批次登记（取代手写 `artifacts/README.md`，含发布前必须先收割的闸）；双传输壳（artifact 原样走现有壳，server 加一段同步 JS） |
+| console | 审查视图 + 7 个 API | 批次表 / 收割 / 路由消费 / 金标摘要；`/api/batches.md` 生成台账 |
+| CLI | `batch` `events` `gold` | list / new / show，harvest / route / list，shards / show |
+
+**修掉三处格式对齐 bug**（真格式与解析器对不上，各有回归测试）：
+
+1. `GUJI-SEG-REVIEW` 的前缀在 `t` 字段里而非行前缀，且 `t` 是字面量不是时间戳——原实现拿它排序会 TypeError；
+2. marks 的值是 `{"s": N}`，语义 1=切错 / 2=存疑 / 3=没问题，原映射把 2 和 3 弄反了；
+3. 续裁要 `{id: {"v","t"}}`，扁平串会让页面上一轮裁决全部消失（补 `to_shell_verdicts`）。
+
+另修两处本轮自测暴露的：`dry_run` 试算曾照样落库；收割进已有事件的批次时因撞号丢掉整份文件，改为按 `target.key` 去重并续号。
+
+**实测**：真实的 `border-detection/column-split` 第一轮 60 条裁决走完收割 → 路由 → 金标，
+分布 ok 56 / extra 2 / miss 2，与该分片 README 记载一致；重复收割与重复消费都不产生副本。
+`tests/test_feedback_v2.py` 19 条全过，全量 627 条零失败。
+
+**P1 的已知简化**：`glyphdb_admit` / `glyphdb_recrop` 两个消费者还没接（照旧走 `seed-ingest`）；
+server 传输壳只做了同步 JS，还没把「界行切分裁决台」真正改成控制台模式跑一轮；
+`column-split` 分片没有机器可读的 metadata.json。
+
+**下一步**：P2（GoldStore 适配器读全部旧分片 + 迁三个最活跃分片 + 评测器进控制台），
+或先补 P0/P1 的尾巴（`page_type_gate` / `grid_prior` 包壳；把裁决台迁成 server 模式跑一轮真人裁）。
 
 ## 9. 已裁定（用户 2026-09-03）
 
