@@ -43,6 +43,16 @@ import numpy as np
 DEFAULT_ALPHA = 0.5
 DEFAULT_HYST = 3
 
+# **这里不要开线程池**（2026-09-02 实测的负结果，别再加回来）。
+# `sample_line_curve` 还是花式索引 gather 的时候，每个候选窗口的联合搜索有 98%
+# 的时间在放开 GIL 的大数组运算上，4 线程能拿 2.2x。换成分块 BLAS 之后那部分
+# 缩了 20 倍，剩下的时间大头变成**持 GIL 的 Python 循环**（每次调用约 150 个
+# 分块、`half_height_score_at` 的 while、`local_maxima`），线程只剩争用：
+# 14 页金标实测 串行 47.3s / 窗口 4 线程 59.8s / 窗口 2 线程 55.2s，**每一档都
+# 是负收益**；BLAS 线程数（1 vs 4）对总时间没有区别（47.3 vs 47.8），说明这些
+# gemv 太小、OpenBLAS 根本没多线程。
+# 要并行就在**页级**（`ProcessPoolExecutor`，没有 GIL），见 regen_step2_columns.py。
+
 
 # ── 半高宽匹配度 ──────────────────────────────────────────────
 
@@ -109,6 +119,21 @@ def find_peaks_nms(scores: np.ndarray, min_dist: int, thresh: float) -> list[int
 # ── 位置 + 角度联合搜索 ────────────────────────────────────────
 
 
+def _shift_blocks(n_perp: int, slope: float) -> list[tuple[int, int, int]]:
+    """把垂直方向的每一行/列按「整数位移相同」切成连续块，返回 [(a, b, k)]。
+
+    位移 d = slope*(t - center) 在 t 上单调，所以 floor(d) 相同的 t 一定是一段
+    连续区间——这正是分块采样成立的前提。|slope| <= 0.05、页高 ~3000 时块数
+    约 150，远少于逐行的 3000 次。
+    """
+    t = np.arange(n_perp, dtype=np.float64)
+    k = np.floor(slope * (t - n_perp / 2.0)).astype(np.int64)
+    cuts = np.flatnonzero(np.diff(k)) + 1
+    starts = np.concatenate(([0], cuts))
+    ends = np.concatenate((cuts, [n_perp]))
+    return [(int(a), int(b), int(k[a])) for a, b in zip(starts, ends)]
+
+
 def sample_line_curve(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
                        slope: float) -> tuple[np.ndarray, np.ndarray]:
     """给定倾角，算一批候选位置(pos_lo..pos_hi)各自的倾斜投影值。
@@ -116,7 +141,55 @@ def sample_line_curve(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
     axis='v'：position=x，直线 x = position + slope*(y - h/2)，逐 y 求和。
     axis='h'：position=y，直线 y = position + slope*(x - w/2)，逐 x 求和。
     越界坐标按 0（没有墨）处理，不外推复制边缘像素。
+
+    **实现是分块 BLAS，不是花式索引**（2026-09-02 换的，采样本身快 19~24x）。
+    朴素写法是建一个 `(n_pos, n_perp)` 的 `coord` 再 gather，元素个数是对的，
+    但访存是随机的、而且要 9 个同样大的临时量。关键观察：对固定倾角，
+    `coord[p, t] = p + slope*(t - center)`，**对 p 只是平移**——所以每一行要取的
+    是一段**连续切片**；而整数位移相同的 t 是**连续区间**（`_shift_blocks`）。
+    于是整幅 gather 拆成约 150 个「连续二维块 × 权重向量」的矩阵-向量乘，
+    顺序访存 + BLAS。
+
+    ⚠️ 求和次序跟朴素写法不同，投影值有 ~1e-12 的浮点差；`best_in_curve` 用
+    严格 `>` 比分数，理论上能在极近的平局上翻面。14 页金标实测 `detect_borders`
+    的全部输出逐位相同，但这不是结构性保证，改这段之后要重跑那套对拍。
+
+    「加一维角度轴一次算完 60 档」是省不动的：元素个数一个不少，numpy 每次调用
+    开销只有几十 us，60 次合起来 ~2ms，相对 16s 是噪声。省的必须是访存。
     """
+    n_pos = pos_hi - pos_lo + 1
+    if n_pos <= 0:                      # 空窗口，跟朴素实现一样返回空
+        return np.arange(pos_lo, pos_hi + 1, dtype=np.float64), np.zeros(0)
+    n_perp = mask.shape[0] if axis == "v" else mask.shape[1]
+    limit = mask.shape[1] if axis == "v" else mask.shape[0]
+    positions = np.arange(pos_lo, pos_hi + 1, dtype=np.float64)
+    t = np.arange(n_perp, dtype=np.float64)
+    frac = slope * (t - n_perp / 2.0)
+    frac -= np.floor(frac)
+    acc = np.zeros(n_pos)
+    for a, b, k in _shift_blocks(n_perp, slope):
+        # 有效条件 0 <= coord < limit-1，coord = p + k + frac 且 frac in [0,1)
+        # <=> p + k 落在 [0, limit-2]
+        p0 = max(0, -(pos_lo + k))
+        p1 = min(n_pos, (limit - 1) - (pos_lo + k))
+        if p1 <= p0:
+            continue
+        c0 = pos_lo + k + p0
+        u = 1.0 - frac[a:b]
+        v = frac[a:b]
+        if axis == "v":
+            acc[p0:p1] += u @ mask[a:b, c0:c0 + (p1 - p0)]
+            acc[p0:p1] += v @ mask[a:b, c0 + 1:c0 + 1 + (p1 - p0)]
+        else:
+            acc[p0:p1] += mask[c0:c0 + (p1 - p0), a:b] @ u
+            acc[p0:p1] += mask[c0 + 1:c0 + 1 + (p1 - p0), a:b] @ v
+    return positions, acc
+
+
+def _sample_line_curve_naive(mask: np.ndarray, axis: str, pos_lo: int, pos_hi: int,
+                              slope: float) -> tuple[np.ndarray, np.ndarray]:
+    """`sample_line_curve` 的朴素参考实现（花式索引），只留给对拍用，别在生产
+    路径上调——比分块版慢 19~24x。"""
     h, w = mask.shape
     positions = np.arange(pos_lo, pos_hi + 1, dtype=np.float64)
     if axis == "v":
@@ -276,9 +349,8 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
         return []
 
     windows = _windows_from_candidates(candidates, 0, w - 1, edge_margin, edge_margin)
-    results = []
-    for lo, hi in windows:
-        results.append(joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst))
+    results = [joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst)
+               for lo, hi in windows]
 
     # 相邻粗候选切出的窗口有时会切在同一条真实线中间——两侧窗口各自精修
     # 都收敛到这条线上，位置只差十几到几十像素，是精修阶段"两个窗口找到

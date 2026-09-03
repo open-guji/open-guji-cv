@@ -753,6 +753,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     mask = (gray < ink_threshold).astype(np.float64)
 
     vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
+    # 上下边框曾经各 1.4s、并成 2 线程有收益；分块 BLAS 之后各只剩 0.17s，
+    # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
     top_old = find_horizontal_border(mask, "top")
     bottom_old = find_horizontal_border(mask, "bottom")
 
