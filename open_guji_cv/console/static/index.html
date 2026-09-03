@@ -91,6 +91,7 @@
     <button data-view="overview" class="active">总览</button>
     <button data-view="run">运行</button>
     <button data-view="products">产物</button>
+    <button data-view="review">审查</button>
   </nav>
 </header>
 <main>
@@ -147,6 +148,29 @@
       <div class="card"><h2>数值产物</h2><pre id="p_json" class="json"></pre></div>
     </div>
   </section>
+
+  <section id="view-review" class="view">
+    <div class="card">
+      <h2>审查批次 <span class="muted">取代手写的 artifacts/README.md 台账</span></h2>
+      <table class="jobs"><thead><tr><th>批次</th><th>题目</th><th>步骤</th><th>传输</th><th>卡片</th><th>已裁</th><th>已消费</th><th>状态</th><th></th></tr></thead><tbody id="batches"></tbody></table>
+      <div id="bmsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <h2>收割 <span class="muted">把 Artifact 读回的 HTML（或旧格式 JSONL / 日志）贴进来</span></h2>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
+        <label class="muted">批次 <select id="h_batch"></select></label>
+        <button id="h_go">收割</button>
+        <button id="r_go">按路由表消费</button>
+        <button id="r_dry">试算（不落库）</button>
+      </div>
+      <textarea id="h_text" style="width:100%;min-height:8rem;font-family:var(--mono);font-size:.76rem" placeholder="粘贴审查页 HTML、verdicts JSONL、GUJI-SEED-EVENT 日志，或 marks JSON"></textarea>
+      <pre id="h_out" class="json" style="margin-top:.6rem;max-height:14rem"></pre>
+    </div>
+    <div class="card">
+      <h2>金标分片</h2>
+      <pre id="gold" class="json" style="max-height:20rem"></pre>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -173,8 +197,49 @@ async function init() {
   $('#book').onchange = refreshStatus;
   $('#runform').onsubmit = submitRun;
   $('#p_load').onclick = loadProduct;
+  $('#h_go').onclick = doHarvest;
+  $('#r_go').onclick = () => doRoute(false);
+  $('#r_dry').onclick = () => doRoute(true);
   await refreshStatus();
   pollJobs();
+  loadBatches();
+}
+
+// ── 审查 ───────────────────────────────────────────────────────────
+async function loadBatches() {
+  let bs = [];
+  try { bs = await api('/api/batches'); } catch (e) { $('#bmsg').textContent = e.message; }
+  $('#batches').innerHTML = bs.length ? bs.map(b => `<tr>
+    <td class="mono">${b.id}</td><td>${b.title}</td><td class="mono">${b.step}</td>
+    <td>${b.transport}${b.url ? ` <a href="${b.url}" target="_blank" rel="noopener">链接</a>` : ''}</td>
+    <td class="mono">${b.n_cards}</td><td class="mono">${b.n_events}</td><td class="mono">${b.n_consumed}</td>
+    <td><span class="badge b-${b.status === 'harvested' ? 'completed' : (b.status === 'open' ? 'running' : 'pending')}">${b.status}</span></td>
+    <td><button data-route="${b.id}">消费</button></td></tr>`).join('')
+    : '<tr><td colspan="9" class="muted">还没有批次。用 CLI 建：guji-cv batch new …</td></tr>';
+  $('#batches').querySelectorAll('button[data-route]').forEach(x => x.onclick = () => { $('#h_batch').value = x.dataset.route; doRoute(false); });
+  $('#h_batch').innerHTML = bs.map(b => `<option value="${b.id}">${b.id}</option>`).join('');
+  try { $('#gold').textContent = JSON.stringify((await api('/api/gold')).shards, null, 1); } catch (e) { $('#gold').textContent = e.message; }
+}
+async function doHarvest() {
+  const batch = $('#h_batch').value, text = $('#h_text').value.trim();
+  if (!batch || !text) { $('#h_out').textContent = '选批次、贴内容'; return; }
+  const bs = await api('/api/batches');
+  const b = bs.find(x => x.id === batch);
+  try {
+    const r = await api(`/api/batches/${batch}/harvest`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch, step: b ? b.step : '', kind: b ? b.kind : 'verdict', content: text }) });
+    $('#h_out').textContent = JSON.stringify(r, null, 1);
+    loadBatches();
+  } catch (e) { $('#h_out').textContent = '收割失败：' + e.message; }
+}
+async function doRoute(dry) {
+  const batch = $('#h_batch').value;
+  if (!batch) return;
+  try {
+    const r = await api(`/api/batches/${batch}/route?dry_run=${dry}`, { method: 'POST' });
+    $('#h_out').textContent = JSON.stringify(r, null, 1);
+    loadBatches();
+  } catch (e) { $('#h_out').textContent = '消费失败：' + e.message; }
 }
 function fillSteps() {
   const p = pipeline(); if (!p) return;

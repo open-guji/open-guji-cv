@@ -54,3 +54,5 @@ output/*/step3_input/*/
 /cache/
 /runs/
 /.venv/
+# 审查批次登记的本地副本（真源随数据集仓走；控制台用 GUJI_BATCHES_DIR 指定）
+/review/batches/

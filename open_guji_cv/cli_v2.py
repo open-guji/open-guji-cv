@@ -79,12 +79,84 @@ def cmd_cache(args) -> None:
         print(f"释放 {freed / (1 << 20):.1f} MB")
 
 
+def cmd_batch(args) -> None:
+    from .feedback.events import EventLog
+    from .review.batches import Batch, BatchStore, render_registry_markdown
+    store, log = BatchStore(), EventLog()
+    if args.action == "list":
+        bs = [store.refresh_counts(b, log) for b in store.list()]
+        if args.json:
+            print(json.dumps([b.to_dict() for b in bs], ensure_ascii=False))
+        elif args.md:
+            print(render_registry_markdown(bs), end="")
+        else:
+            for b in bs:
+                print(f"  {b.id:24s} {b.step:14s} {b.transport:8s} 卡 {b.n_cards:4d} "
+                      f"裁 {b.n_events:4d} 消费 {b.n_consumed:4d}  {b.status}")
+    elif args.action == "new":
+        if store.get(args.id):
+            print(f"批次 {args.id} 已存在")
+            sys.exit(1)
+        b = Batch(id=args.id, title=args.title or args.id, step=args.step, kind=args.kind,
+                  book=args.book, transport=args.transport, url=args.url, shard=args.shard,
+                  cards_ref=args.cards_ref, n_cards=args.n_cards)
+        print(f"已建 {store.save(b)}")
+    elif args.action == "show":
+        b = store.get(args.id)
+        if not b:
+            print(f"没有批次 {args.id}")
+            sys.exit(1)
+        print(json.dumps(store.refresh_counts(b, log).to_dict(), ensure_ascii=False, indent=1))
+
+
+def cmd_events(args) -> None:
+    from .feedback.consumers import route_and_consume
+    from .feedback.events import EventLog
+    from .feedback.harvest import harvest_file
+    from .feedback.routes import RouteTable
+    from .gold.store import GoldStore
+    from .review.batches import BatchStore
+    log = EventLog()
+    if args.action == "harvest":
+        b = BatchStore().get(args.batch)
+        step = args.step or (b.step if b else "")
+        if not step:
+            print("需要 --step（或先建批次）")
+            sys.exit(1)
+        evs = harvest_file(Path(args.file), args.batch, step, args.unit, args.kind)
+        n = log.append(evs)
+        print(f"解析 {len(evs)} 条，新增 {n} 条 → {log.batch_path(args.batch)}")
+    elif args.action == "route":
+        table = RouteTable.load(log.root / "routes.yaml")
+        out = route_and_consume(log, args.batch, table, GoldStore(), dry_run=args.dry_run)
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+    elif args.action == "list":
+        evs = log.read(args.batch) if args.batch else sorted(log.iter_all(), key=lambda e: e.order)
+        for e in evs[-args.limit:]:
+            print(f"  {e.id}  {e.kind:12s} {e.target.key:28s} {json.dumps(e.payload, ensure_ascii=False)}")
+        print(f"  共 {len(evs)} 条")
+
+
+def cmd_gold(args) -> None:
+    from .gold.store import GoldStore
+    store = GoldStore()
+    if args.action == "shards":
+        for s in store.shards():
+            d = store.summary(s)
+            print(f"  {d['shard']:44s} {d['n']:5d} 条  {d['status']}")
+    elif args.action == "show":
+        print(json.dumps(store.summary(args.shard), ensure_ascii=False, indent=1))
+
+
 COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
     "console": cmd_console,
     "cache": cmd_cache,
+    "batch": cmd_batch,
+    "events": cmd_events,
+    "gold": cmd_gold,
 }
 
 
@@ -125,6 +197,35 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune")
     p.add_argument("action", choices=["usage", "prune"])
     p.add_argument("--limit-gb", type=float, default=None)
+
+    p = sub.add_parser("batch", help="[v2] 审查批次：list | new | show")
+    p.add_argument("action", choices=["list", "new", "show"])
+    p.add_argument("id", nargs="?", default=None)
+    p.add_argument("--title", default=None)
+    p.add_argument("--step", default="")
+    p.add_argument("--kind", default="verdict")
+    p.add_argument("--book", default=None)
+    p.add_argument("--transport", default="server", choices=["server", "artifact"])
+    p.add_argument("--url", default=None, help="artifact 模式的持久 URL")
+    p.add_argument("--shard", default=None, help="目标金标分片")
+    p.add_argument("--cards-ref", default=None)
+    p.add_argument("--n-cards", type=int, default=0)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--md", action="store_true", help="出台账 markdown")
+
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list")
+    p.add_argument("action", choices=["harvest", "route", "list"])
+    p.add_argument("batch", nargs="?", default=None)
+    p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
+    p.add_argument("--step", default=None)
+    p.add_argument("--unit", default="page")
+    p.add_argument("--kind", default="verdict")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--limit", type=int, default=30)
+
+    p = sub.add_parser("gold", help="[v2] 金标：shards | show")
+    p.add_argument("action", choices=["shards", "show"])
+    p.add_argument("shard", nargs="?", default=None)
 
 
 def main(argv: list[str] | None = None) -> None:
