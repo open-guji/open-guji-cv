@@ -37,7 +37,8 @@ python -m pytest tests/ -q -p no:cacheprovider --capture=no
 ### 怎么筛正文页
 
 `page-type` 金标（394 页人工标注）里 `page_type == "body"`：
-vol01 296 页 / vol02 **186 页（全书）**。
+vol01 **108** 页 / vol02 **186 页（全书）**——旧数字"296"是错的（vol01 全书
+只有 206 页，108 body + 47 toc + 44 roster + 7 其它，2026-09-02 查证更正）。
 
 ⚠️ **管线自己现在筛不出来。** `classify_page_type` 只分得开
 `blank / cover / label`（那是「跳过闸门」要的），body / roster / toc /
