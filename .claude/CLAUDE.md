@@ -16,11 +16,32 @@
 （`classify_page_type` 把 roster/toc/edict 都归 body），这本身是待办。
 
 ---
+## 怎么干活（2026-09-03 定）
+
+**前台优先用控制台，后台优先用新命令。**
+
+```bash
+.venv/Scripts/python -m open_guji_cv console      # → http://127.0.0.1:8640/
+```
+
+跑管线、看产物叠图、收人裁、跑评测、查金标，都在控制台里做，别再一个个手敲脚本。
+控制台干不了或要脚本化的，用 `python -m open_guji_cv` 的新命令（`pipeline` / `step` /
+`status` / `eval` / `gold` / `batch` / `events` / `cache`），**别直接调 `scripts/` 下的
+脚本**——那些脚本的参数约定互相打架（`--out` 有两种相反语义、位置参数有四种名字），
+新命令已经把这些差异抹平并加了防护。
+
+怎么用看 **[doc/console_manual.md](doc/console_manual.md)**：五个视图各干什么、
+三条典型工作流、排错表。**有问题先查手册。**
+
+旧的 `python -m open_guji_cv run/extract/preprocess` 等 v1 命令仍然可用，但那条链已退役，
+不要在它上面加新东西。
+
+---
 ## 文档
 
-**先看这份 → [.claude/doc/pipeline_handbook.md](doc/pipeline_handbook.md)**
-分步现状、各步的测试集在哪、哪些步骤能并行、以及踩过的坑。接手任何一步
-之前都应该先读它。
+**用这套东西干活 → [doc/console_manual.md](doc/console_manual.md)**（怎么用）
+**改算法之前 → [doc/pipeline_handbook.md](doc/pipeline_handbook.md)**（分步现状、
+各步的测试集在哪、哪些步骤能并行、踩过的坑）
 
 | 文档 | 内容 |
 |---|---|
@@ -71,12 +92,16 @@ python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 �
   `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`
 - pytest 在本机会吞掉终端输出，要结果就加 `--junitxml=…` 再解析。
 
-### 四个抽象（v2）快速上手
+### 新命令速查（详见 [console_manual.md](doc/console_manual.md)）
 ```bash
-.venv/Scripts/python -m open_guji_cv pipeline keben_body_v2 vol01            # dev_set 12 页，Step1→Step4
-.venv/Scripts/python -m open_guji_cv step border_detect vol01 --pages 24,42   # 只跑一步
-.venv/Scripts/python -m open_guji_cv status vol01                            # 各步各页 新鲜/过期/缺失
-.venv/Scripts/python -m open_guji_cv console                                 # http://127.0.0.1:8640/
+P=.venv/Scripts/python
+$P -m open_guji_cv console                              # 控制台，前台首选
+$P -m open_guji_cv pipeline keben_body_v2 vol01         # dev_set 12 页跑 Step1→Step4
+$P -m open_guji_cv step border_detect vol01 --pages 24  # 只跑一步
+$P -m open_guji_cv status vol01                         # 各步各页 新鲜/过期/缺失
+$P -m open_guji_cv eval run                             # 跑全部轻量评测
+$P -m open_guji_cv gold shards                          # 金标分片一览
+$P -m open_guji_cv batch list / events harvest / cache usage
 ```
 产物在 `products/<book>/<step>/p0024.json`（只有数值），列图 / 字块在 `cache/`，任务记录在 `runs/`。
 
