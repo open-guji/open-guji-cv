@@ -17,7 +17,8 @@ from open_guji_cv.gold.adapters import detect, load_shard
 from open_guji_cv.gold.adapters.base import Adapter
 from open_guji_cv.gold.store import GoldStore
 
-DATASET = Path(__file__).resolve().parent.parent.parent / "open-guji-dataset"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DATASET = REPO_ROOT.parent / "open-guji-dataset"
 needs_dataset = pytest.mark.skipif(not DATASET.exists(), reason="需要 open-guji-dataset")
 
 
@@ -280,11 +281,13 @@ def test_real_dataset_all_shards_readable():
 
 @needs_dataset
 def test_real_migrated_shards_are_items():
-    """三个最活跃分片已迁；数量与各自 README / metadata 记载对得上。"""
+    """已迁分片的条数与各自 README / metadata 记载对得上。"""
     store = GoldStore(DATASET)
     expect = {"border-detection/column-split": 60,
               "char-segmentation/column-warp": 114,
-              "char-segmentation/instances": 559}
+              "char-segmentation/instances": 559,
+              "page-type": 394,
+              "column-layout": 36}
     for sh, n in expect.items():
         if not store.items_path(sh).exists():
             pytest.skip(f"{sh} 还没迁")
@@ -296,3 +299,28 @@ def test_real_migrated_shards_are_items():
         v = i.expected.get("verdict")
         dist[v] = dist.get(v, 0) + 1
     assert dist == {"ok": 56, "extra": 2, "miss": 2}
+
+
+@needs_dataset
+def test_real_migration_is_lossless():
+    """**迁移无损**：items.jsonl 还原回旧格式后，与旧文件逐条相同。
+
+    这是迁移的核心保证——载体变了、内容不许变。校验器与
+    `scripts/verify_gold_migration.py` 同源。
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "verify_gold_migration", REPO_ROOT / "scripts" / "verify_gold_migration.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    store = GoldStore(DATASET)
+    migrated = [s for s in store.shards() if store.items_path(s).exists()]
+    if not migrated:
+        pytest.skip("还没有迁过的分片")
+    bad = []
+    for sh in migrated:
+        ok, msgs = mod.compare(sh, store)
+        if not ok:
+            bad.append((sh, msgs))
+    assert not bad, "\n".join(m for _, ms in bad for m in ms)
