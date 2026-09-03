@@ -135,14 +135,20 @@ if __name__ == "__main__":
             n_raised += len([c for c in m["columns"] if c["raised"]])
             print(_report(a.book, pg, m), flush=True)
     else:
+        # 边跑边打印（谁先完成先报），批大的时候（比如全书几百页）能看见进度；
+        # 跑完统一按传入顺序再打一遍摘要，方便复现/diff。
         with ProcessPoolExecutor(max_workers=a.jobs) as pool:
             futs = {pool.submit(regen, a.book, pg, a.cols, a.denoise): pg for pg in pages}
             done = {}
+            n_done = 0
             for fut in as_completed(futs):
                 pg = futs[fut]
-                done[pg] = fut.result()
-            for pg in pages:  # 按传入顺序打印，不按完成顺序——输出可复现、方便 diff
-                m = done[pg]
+                m = fut.result()
+                done[pg] = m
+                n_done += 1
                 n_raised += len([c for c in m["columns"] if c["raised"]])
-                print(_report(a.book, pg, m), flush=True)
+                print(f"[{n_done}/{len(pages)}] {_report(a.book, pg, m)}", flush=True)
+        print("\n--- 按传入顺序汇总 ---")
+        for pg in pages:
+            print(_report(a.book, pg, done[pg]), flush=True)
     print(f"\n完成，抬头列共 {n_raised} 个")
