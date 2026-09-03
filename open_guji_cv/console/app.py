@@ -448,12 +448,43 @@ def api_route(batch_id: str, dry_run: bool = False) -> dict:
 
 
 @app.get("/api/gold")
-def api_gold(shard: str | None = None) -> dict:
+def api_gold(shard: str | None = None, limit: int = 300) -> dict:
     if shard:
-        return {"summary": _gold.summary(shard),
+        return {"summary": _gold.summary(shard), "carrier": _gold.carrier(shard),
                 "items": [i.model_dump(mode="json", exclude_none=True)
-                          for i in _gold.list(shard)][:300]}
-    return {"shards": [_gold.summary(s) for s in _gold.shards()]}
+                          for i in _gold.list(shard)][:limit]}
+    out = []
+    for s in _gold.shards():
+        d = _gold.summary(s)
+        d["carrier"] = _gold.carrier(s)
+        out.append(d)
+    return {"shards": out}
+
+
+@app.post("/api/gold/{shard:path}/migrate")
+def api_gold_migrate(shard: str, dry_run: bool = False) -> dict:
+    """旧载体 → items.jsonl。不删旧文件，两边并存。"""
+    return _gold.migrate(shard, dry_run=dry_run)
+
+
+@app.post("/api/gold/{shard:path}/drift")
+def api_gold_drift(shard: str, apply: bool = False) -> dict:
+    """图像指纹漂移检查：产物重生后哪些金标还成立。"""
+    from ..gold.drift import check_shard, mark_drifted
+    root = Path(__file__).resolve().parent.parent.parent
+
+    def image_of(it):
+        p = (it.input.get("input") or {}).get("column_image")
+        if not p:
+            return None
+        f = root / str(p).replace("open-guji-cv ", "")
+        return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
+
+    rep = check_shard(shard, _gold.list(shard), image_of)
+    out = rep.to_dict()
+    if apply:
+        out["marked_stale"] = mark_drifted(_gold, shard, rep)
+    return out
 
 
 @app.get("/api/batches.md", response_class=Response)

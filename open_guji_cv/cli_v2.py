@@ -143,9 +143,32 @@ def cmd_gold(args) -> None:
     if args.action == "shards":
         for s in store.shards():
             d = store.summary(s)
-            print(f"  {d['shard']:44s} {d['n']:5d} 条  {d['status']}")
+            print(f"  {d['shard']:44s} {store.carrier(s):14s} {d['n']:5d} 条  {d['status']}")
     elif args.action == "show":
         print(json.dumps(store.summary(args.shard), ensure_ascii=False, indent=1))
+    elif args.action == "migrate":
+        shards = [args.shard] if args.shard else store.shards()
+        for sh in shards:
+            if store.items_path(sh).exists() and not args.shard:
+                continue
+            print(json.dumps(store.migrate(sh, dry_run=args.dry_run), ensure_ascii=False))
+    elif args.action == "drift":
+        from .gold.drift import check_shard, mark_drifted
+        import cv2
+        root = Path(__file__).resolve().parent.parent
+        items = store.list(args.shard)
+
+        def image_of(it):
+            p = (it.input.get("input") or {}).get("column_image")
+            if not p:
+                return None
+            f = root / p.replace("open-guji-cv ", "")
+            return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
+
+        rep = check_shard(args.shard, items, image_of)
+        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1))
+        if args.apply:
+            print(f"标 stale: {mark_drifted(store, args.shard, rep)} 条")
 
 
 COMMANDS_V2 = {
@@ -223,9 +246,11 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--limit", type=int, default=30)
 
-    p = sub.add_parser("gold", help="[v2] 金标：shards | show")
-    p.add_argument("action", choices=["shards", "show"])
+    p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift")
+    p.add_argument("action", choices=["shards", "show", "migrate", "drift"])
     p.add_argument("shard", nargs="?", default=None)
+    p.add_argument("--dry-run", action="store_true", help="migrate：只报数不写")
+    p.add_argument("--apply", action="store_true", help="drift：把漂移条目标成 stale")
 
 
 def main(argv: list[str] | None = None) -> None:
