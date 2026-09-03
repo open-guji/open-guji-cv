@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-guji-cv 控制台</title>
+<style>
+  :root {
+    --paper: #F4F5F1; --paper-2: #EBEDE7; --ink: #1E2326; --ink-2: #3E464A; --mute: #6B7275;
+    --rule: #D3D8D0; --indigo: #2F4E7E; --indigo-soft: #DCE4F1;
+    --ok: #4C7A4F; --ok-soft: #DCE8DA; --zhu: #B23A2E; --zhu-soft: #F3DCD8;
+    --ochre: #A8781C; --ochre-soft: #F1E6C9; --faint: #9AA0A3; --faint-soft: #E4E7E3;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #171A1C; --paper-2: #1F2427; --ink: #E6E4DC; --ink-2: #C9C8C0; --mute: #9AA0A3;
+      --rule: #2E3437; --indigo: #8FB0E0; --indigo-soft: #23334B; --ok: #7DB07F; --ok-soft: #22321F;
+      --zhu: #E0776A; --zhu-soft: #46251F; --ochre: #D6A44A; --ochre-soft: #3E3116;
+      --faint: #7C8386; --faint-soft: #2A2F32; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 14px/1.6 "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; align-items: center; padding: .6rem 1.2rem;
+    border-bottom: 1px solid var(--rule); background: var(--paper-2); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 1rem; margin: 0 1rem 0 0; font-weight: 700; color: var(--indigo); }
+  header label { color: var(--mute); font-size: .82rem; }
+  select, input[type=text], textarea, button { font: inherit; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 4px; padding: .25rem .5rem; }
+  button { cursor: pointer; }
+  button.primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+  button.danger { color: var(--zhu); border-color: var(--zhu); }
+  button:disabled { opacity: .5; cursor: default; }
+  nav.tabs { display: flex; gap: .2rem; margin-left: auto; }
+  nav.tabs button { border: none; background: none; padding: .3rem .8rem; color: var(--mute); border-bottom: 2px solid transparent; border-radius: 0; }
+  nav.tabs button.active { color: var(--indigo); border-bottom-color: var(--indigo); }
+  main { padding: 1rem 1.2rem 3rem; max-width: 96rem; margin: 0 auto; }
+  .view { display: none; } .view.active { display: block; }
+  .card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
+  .card h2 { font-size: .95rem; margin: 0 0 .6rem; }
+  .muted { color: var(--mute); font-size: .82rem; }
+  .mono { font-family: var(--mono); font-size: .8rem; }
+  /* 状态矩阵 */
+  table.matrix { border-collapse: collapse; font-size: .78rem; }
+  table.matrix th, table.matrix td { border: 1px solid var(--rule); padding: .15rem .35rem; text-align: center; }
+  table.matrix th.step { text-align: left; white-space: nowrap; min-width: 9rem; }
+  table.matrix td.cell { width: 2.6rem; cursor: pointer; font-family: var(--mono); }
+  .s-fresh { background: var(--ok-soft); color: var(--ok); }
+  .s-stale { background: var(--ochre-soft); color: var(--ochre); }
+  .s-missing { background: var(--faint-soft); color: var(--faint); }
+  .s-failed { background: var(--zhu-soft); color: var(--zhu); }
+  .s-blocked { background: repeating-linear-gradient(45deg, var(--faint-soft), var(--faint-soft) 4px, transparent 4px, transparent 8px); color: var(--faint); }
+  .counts { display: flex; gap: .6rem; flex-wrap: wrap; font-size: .78rem; }
+  .counts span { padding: 0 .4rem; border-radius: 3px; }
+  .dag { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; margin-bottom: .6rem; }
+  .dag .node { padding: .15rem .6rem; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+  .dag .arrow { color: var(--mute); }
+  /* 运行 */
+  form.run { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .6rem 1rem; align-items: end; }
+  form.run label { display: flex; flex-direction: column; gap: .2rem; font-size: .82rem; color: var(--mute); }
+  form.run textarea { font-family: var(--mono); font-size: .78rem; min-height: 2.4rem; }
+  table.jobs { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  table.jobs td, table.jobs th { border-bottom: 1px solid var(--rule); padding: .3rem .4rem; text-align: left; }
+  table.jobs tr.sel { background: var(--indigo-soft); }
+  .badge { display: inline-block; padding: 0 .45rem; border-radius: 3px; font-family: var(--mono); font-size: .72rem; }
+  .b-running { background: var(--indigo-soft); color: var(--indigo); }
+  .b-completed { background: var(--ok-soft); color: var(--ok); }
+  .b-failed, .b-cancelled { background: var(--zhu-soft); color: var(--zhu); }
+  .b-pending { background: var(--faint-soft); color: var(--faint); }
+  pre.log { font-family: var(--mono); font-size: .76rem; line-height: 1.45; background: #1b1f22; color: #d8d6cc; padding: .7rem .9rem;
+    border-radius: 6px; max-height: 24rem; overflow: auto; white-space: pre-wrap; margin: 0; }
+  pre.log .fail { color: #f0a097; } pre.log .ok { color: #9fd0a1; } pre.log .skip { color: #9aa0a3; }
+  /* 产物 */
+  .products { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(20rem, 1fr); gap: 1rem; }
+  .products img { width: 100%; height: auto; border: 1px solid var(--rule); background: #fff; }
+  pre.json { font-family: var(--mono); font-size: .74rem; background: var(--paper-2); border: 1px solid var(--rule); padding: .6rem .8rem;
+    border-radius: 6px; max-height: 40rem; overflow: auto; white-space: pre; margin: 0; }
+  @media (max-width: 60rem) { .products { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>open-guji-cv 控制台</h1>
+  <label>册 <select id="book"></select></label>
+  <label>管线 <select id="pipeline"></select></label>
+  <label>页 <input id="pages" type="text" value="dev_set" size="14" title="dev_set | all | 3-6,9"></label>
+  <button id="refresh">刷新状态</button>
+  <span id="running" class="muted"></span>
+  <nav class="tabs">
+    <button data-view="overview" class="active">总览</button>
+    <button data-view="run">运行</button>
+    <button data-view="products">产物</button>
+  </nav>
+</header>
+<main>
+  <section id="view-overview" class="view active">
+    <div class="card">
+      <h2>管线</h2>
+      <div id="dag" class="dag"></div>
+      <div id="notes" class="muted"></div>
+    </div>
+    <div class="card">
+      <h2>状态矩阵 <span class="muted">行 = 步骤，列 = 页；点格子看产物</span></h2>
+      <div id="legend" class="counts" style="margin-bottom:.5rem">
+        <span class="s-fresh">新鲜</span><span class="s-stale">过期（指纹失配）</span><span class="s-missing">缺失</span><span class="s-failed">失败</span><span class="s-blocked">阻塞（上游缺）</span>
+      </div>
+      <div style="overflow-x:auto"><table id="matrix" class="matrix"></table></div>
+    </div>
+  </section>
+
+  <section id="view-run" class="view">
+    <div class="card">
+      <h2>入队一次运行</h2>
+      <form id="runform" class="run">
+        <label>从步骤 <select id="from_step"></select></label>
+        <label>到步骤 <select id="to_step"></select></label>
+        <label>页 <input id="run_pages" type="text" value="dev_set"></label>
+        <label><span>参数覆盖（JSON，可空）</span><textarea id="params" placeholder='{"column_gate": {"width_tol": 0.2}}'></textarea></label>
+        <label style="flex-direction:row;align-items:center;gap:.4rem"><input id="force" type="checkbox"> 强制重跑（无视指纹）</label>
+        <div><button class="primary" type="submit">入队</button></div>
+      </form>
+      <div id="runmsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <h2>任务 <span class="muted">串行执行，最新在上</span></h2>
+      <table class="jobs"><thead><tr><th>任务</th><th>册 / 管线</th><th>范围</th><th>页</th><th>状态</th><th>时长</th><th></th></tr></thead><tbody id="jobs"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>日志 <span id="logtitle" class="muted"></span></h2>
+      <pre id="log" class="log"></pre>
+    </div>
+  </section>
+
+  <section id="view-products" class="view">
+    <div class="card">
+      <h2>产物</h2>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:end">
+        <label class="muted">步骤 <select id="p_step"></select></label>
+        <label class="muted">页 <select id="p_page"></select></label>
+        <button id="p_load">查看</button>
+        <span id="p_meta" class="muted mono"></span>
+      </div>
+    </div>
+    <div class="products">
+      <div class="card"><h2>叠图</h2><img id="p_img" alt="原图叠产物"></div>
+      <div class="card"><h2>数值产物</h2><pre id="p_json" class="json"></pre></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const state = { books: [], pipelines: [], status: null, jobs: [], es: null, selJob: null };
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let t = await r.text(); try { t = JSON.parse(t).detail || t; } catch (e) {} throw new Error(t); }
+  return r.json();
+}
+function pipeline() { return state.pipelines.find(p => p.id === $('#pipeline').value); }
+function fmtDur(s) { return s == null ? '' : (s < 60 ? s.toFixed(1) + 's' : (s / 60).toFixed(1) + 'min'); }
+
+// ── 初始化 ─────────────────────────────────────────────────────────
+async function init() {
+  [state.books, state.pipelines] = await Promise.all([api('/api/books'), api('/api/pipelines')]);
+  $('#book').innerHTML = state.books.map(b => `<option value="${b.id}">${b.id} · ${b.title}</option>`).join('');
+  $('#pipeline').innerHTML = state.pipelines.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+  fillSteps();
+  document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
+  $('#refresh').onclick = refreshStatus;
+  $('#pipeline').onchange = () => { fillSteps(); refreshStatus(); };
+  $('#book').onchange = refreshStatus;
+  $('#runform').onsubmit = submitRun;
+  $('#p_load').onclick = loadProduct;
+  await refreshStatus();
+  pollJobs();
+}
+function fillSteps() {
+  const p = pipeline(); if (!p) return;
+  const opts = p.steps.map(s => `<option value="${s.id}">${s.id} · ${s.title}</option>`).join('');
+  $('#from_step').innerHTML = opts; $('#to_step').innerHTML = opts;
+  $('#to_step').value = p.steps[p.steps.length - 1].id;
+  $('#p_step').innerHTML = opts;
+  $('#dag').innerHTML = p.steps.map((s, i) => `<span class="node" title="${s.consumes.join(',')} → ${s.produces.join(',')}">${s.id}</span>` + (i < p.steps.length - 1 ? '<span class="arrow">→</span>' : '')).join('');
+  $('#notes').textContent = p.notes || '';
+}
+function showView(v) {
+  document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+}
+
+// ── 总览 ───────────────────────────────────────────────────────────
+async function refreshStatus() {
+  const book = $('#book').value, pl = $('#pipeline').value, pages = $('#pages').value || 'dev_set';
+  try {
+    state.status = await api(`/api/status?book=${encodeURIComponent(book)}&pipeline=${encodeURIComponent(pl)}&pages=${encodeURIComponent(pages)}`);
+  } catch (e) { $('#matrix').innerHTML = `<tr><td class="s-failed">${e.message}</td></tr>`; return; }
+  const st = state.status;
+  const pageList = st.pages;
+  let html = '<thead><tr><th class="step">步骤</th><th>汇总</th>' + pageList.map(p => `<th>${p}</th>`).join('') + '</tr></thead><tbody>';
+  for (const [sid, d] of Object.entries(st.steps)) {
+    const c = d.counts;
+    html += `<tr><th class="step">${sid}</th><td class="counts"><span class="s-fresh">${c.fresh}</span><span class="s-stale">${c.stale}</span><span class="s-missing">${c.missing}</span><span class="s-failed">${c.failed}</span><span class="s-blocked">${c.blocked}</span></td>`;
+    for (const p of pageList) {
+      const cell = d.pages[p];
+      const t = cell.error ? cell.error : (cell.elapsed != null ? cell.elapsed + 's' : '');
+      html += `<td class="cell s-${cell.status}" title="${t}" data-step="${sid}" data-page="${p}">${cell.status[0]}</td>`;
+    }
+    html += '</tr>';
+  }
+  $('#matrix').innerHTML = html + '</tbody>';
+  $('#matrix').querySelectorAll('td.cell').forEach(td => td.onclick = () => { openProduct(td.dataset.step, td.dataset.page); });
+  $('#p_page').innerHTML = pageList.map(p => `<option value="${p}">${p}</option>`).join('');
+  $('#running').textContent = st.running ? `运行中：${st.running.id}` : '';
+}
+
+// ── 运行 ───────────────────────────────────────────────────────────
+async function submitRun(ev) {
+  ev.preventDefault();
+  let params = {};
+  const raw = $('#params').value.trim();
+  if (raw) { try { params = JSON.parse(raw); } catch (e) { $('#runmsg').textContent = '参数 JSON 不合法：' + e.message; return; } }
+  const body = { book: $('#book').value, pipeline: $('#pipeline').value, from_step: $('#from_step').value,
+    to_step: $('#to_step').value, pages: $('#run_pages').value || 'dev_set', force: $('#force').checked, params };
+  try {
+    const job = await api('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    $('#runmsg').textContent = `已入队 ${job.id}`;
+    await pollJobs(); selectJob(job.id);
+  } catch (e) { $('#runmsg').textContent = '入队失败：' + e.message; }
+}
+async function pollJobs() {
+  try { state.jobs = await api('/api/runs?limit=30'); } catch (e) { return; }
+  const tb = $('#jobs');
+  tb.innerHTML = state.jobs.map(j => `<tr class="${j.id === state.selJob ? 'sel' : ''}" data-id="${j.id}">
+    <td class="mono">${j.id.slice(4)}</td><td>${j.spec.book} / ${j.spec.pipeline}</td>
+    <td class="mono">${j.spec.from_step || '首'} → ${j.spec.to_step || '末'}${j.spec.force ? ' !' : ''}</td>
+    <td class="mono">${j.spec.pages}</td><td><span class="badge b-${j.status}">${j.status}</span></td>
+    <td class="mono">${fmtDur(j.duration)}</td>
+    <td>${['pending', 'running'].includes(j.status) ? `<button class="danger" data-cancel="${j.id}">取消</button>` : ''}</td></tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr => tr.onclick = (e) => { if (e.target.dataset.cancel) return; selectJob(tr.dataset.id); });
+  tb.querySelectorAll('button[data-cancel]').forEach(b => b.onclick = async () => { await api(`/api/runs/${b.dataset.cancel}/cancel`, { method: 'POST' }); pollJobs(); });
+  const active = state.jobs.some(j => ['pending', 'running'].includes(j.status));
+  $('#running').textContent = active ? '有任务在跑' : '';
+  setTimeout(pollJobs, active ? 2000 : 8000);
+}
+function selectJob(id) {
+  if (state.es) { state.es.close(); state.es = null; }
+  state.selJob = id;
+  $('#logtitle').textContent = id;
+  const pre = $('#log'); pre.textContent = '';
+  const es = new EventSource(`/api/runs/${id}/log`);
+  state.es = es;
+  es.onmessage = (m) => {
+    const d = JSON.parse(m.data);
+    if (d.type === 'line') {
+      const span = document.createElement('span');
+      span.textContent = d.line + '\n';
+      if (/失败|阻塞|Error|Traceback/.test(d.line)) span.className = 'fail';
+      else if (/完成/.test(d.line)) span.className = 'ok';
+      else if (/跳过/.test(d.line)) span.className = 'skip';
+      pre.appendChild(span); pre.scrollTop = pre.scrollHeight;
+    } else if (d.type === 'complete') {
+      const span = document.createElement('span'); span.className = d.status === 'completed' ? 'ok' : 'fail';
+      span.textContent = `— ${d.status}，退出码 ${d.exit_code}，${fmtDur(d.duration)} —\n`;
+      pre.appendChild(span); es.close(); state.es = null; refreshStatus(); pollJobs();
+    }
+  };
+  pollJobs();
+}
+
+// ── 产物 ───────────────────────────────────────────────────────────
+function openProduct(step, page) { $('#p_step').value = step; $('#p_page').value = page; showView('products'); loadProduct(); }
+async function loadProduct() {
+  const book = $('#book').value, step = $('#p_step').value, page = $('#p_page').value;
+  if (!page) return;
+  const key = 'p' + String(page).padStart(4, '0');
+  $('#p_img').src = `/api/overlay/${book}/${step}/${page}.png?scale=0.35&t=${Date.now()}`;
+  try {
+    const d = await api(`/api/products/${book}/${step}/${key}`);
+    const m = d.manifest || {};
+    $('#p_meta').textContent = `${key} · 指纹 ${m.fingerprint || '-'} · ${m.status || ''} · ${m.elapsed != null ? m.elapsed + 's' : ''} · ${m.code_rev || ''}`;
+    $('#p_json').textContent = JSON.stringify(d.products, null, 1);
+  } catch (e) { $('#p_meta').textContent = ''; $('#p_json').textContent = e.message; }
+}
+init();
+</script>
+</body>
+</html>
