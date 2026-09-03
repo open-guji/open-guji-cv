@@ -358,7 +358,18 @@ function selectJob(id) {
 }
 
 // ── 产物 ───────────────────────────────────────────────────────────
-function openProduct(step, page) { $('#p_step').value = step; $('#p_page').value = page; showView('products'); loadProduct(); }
+function openProduct(step, page) {
+  // 页号下拉由 refreshStatus 填；跨册切换后可能还没有这一页，补一个再选，
+  // 否则 value 赋不上、下拉显示的步骤与实际加载的对不上。
+  const sel = $('#p_page');
+  if (![...sel.options].some(o => o.value === String(page))) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${page}">${page}</option>`);
+  }
+  $('#p_step').value = step;
+  sel.value = String(page);
+  showView('products');
+  loadProduct();
+}
 async function loadProduct() {
   const book = $('#book').value, step = $('#p_step').value, page = $('#p_page').value;
   if (!page) return;
