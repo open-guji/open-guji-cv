@@ -539,6 +539,35 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     return {"book": book, "cards": out, "truncated": False}
 
 
+@app.get("/api/review/verdicts")
+def api_review_verdicts(batch: str) -> dict:
+    """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
+
+    裁决本来就落成事件了（`/api/events`），但前端只在内存里记 `RV.verdicts`，
+    一刷新就空。这个接口把事件读回成同样的形状，载入卡片时合并进去。
+
+    同一 id 多次裁决按 (batch, seq) 升序**后到覆盖**——沿用 seed_queue 的
+    纪律，人改主意时最后一次说了算。
+    """
+    out: dict[str, dict] = {}
+    for e in sorted(_log.read(batch), key=lambda x: (x.batch, x.seq)):
+        p = e.payload
+        v = p.get("v") or e.kind
+        if v == "not_a_char":
+            out[e.target.key] = {"shape": "", "reading": "", "done": "non"}
+        elif v == "skip":
+            out[e.target.key] = {"shape": "", "reading": "", "done": "skip"}
+        elif v == "seg_defect":
+            out[e.target.key] = {"shape": p.get("shape") or "",
+                                 "reading": p.get("reading") or "",
+                                 "done": p.get("quality") or "contaminated"}
+        elif v == "confirm":
+            out[e.target.key] = {"shape": p.get("shape") or "",
+                                 "reading": p.get("reading") or p.get("shape") or "",
+                                 "done": "1"}
+    return {"batch": batch, "n": len(out), "verdicts": out}
+
+
 @app.get("/api/review/column/{book}/{page}/{col}")
 def api_review_column(book: str, page: int, col: int) -> dict:
     """一列的上下文：定字串 + 每格的 slot，供审查页显示「这个字在哪句话里」。

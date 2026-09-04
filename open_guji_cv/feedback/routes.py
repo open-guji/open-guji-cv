@@ -34,7 +34,14 @@ DEFAULT_ROUTES: list[dict] = [
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/instances"}]},
     {"match": {"kind": "confirm"},
-     "to": [{"consumer": "glyphdb_admit"}]},
+     "to": [{"consumer": "glyphdb_admit"},
+            # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，
+            # 由 gold_add 落进 instances 金标——那批 144 条 truncated +
+            # 128 条 contaminated 就是它的既有同伴。定字裁决与切分缺陷是
+            # **两件事**：前者答「这是什么字」，后者答「这块图能不能用」，
+            # 所以同一批事件要同时喂给两个消费者，各取所需
+            # （glyphdb_admit 只认 v=="confirm"，gold_add 只认 seg_defect）。
+            {"consumer": "gold_add", "shard": "char-segmentation/instances"}]},
 ]
 
 

@@ -84,6 +84,11 @@
   .rvcard[data-done="1"] { border-left-color:var(--ok); }
   .rvcard[data-done="skip"] { border-left-color:var(--ochre); }
   .rvcard[data-done="non"] { border-left-color:var(--zhu); }
+  .rvcard[data-done="truncated"] { border-left-color:var(--zhu); border-left-style:dashed; }
+  .rvcard[data-done="contaminated"] { border-left-color:var(--ochre); border-left-style:dashed; }
+  .rvseg { margin-top:.3rem; display:flex; gap:.3rem; flex-wrap:wrap; }
+  .rvseg button { font-size:.72rem; padding:.05rem .4rem; color:var(--mute); }
+  .rvseg button.on { background:var(--zhu); color:#fff; border-color:var(--zhu); }
   .rvcard.cur { outline:2px solid var(--indigo); outline-offset:1px; }
   .rvhead { display:flex; justify-content:space-between; align-items:baseline; gap:.4rem; }
   .rvhead b { font-family:var(--mono); font-size:.72rem; font-weight:500; }
@@ -189,8 +194,10 @@
         <span id="rv_msg" class="muted"></span>
       </div>
       <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
-        键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡。
-        字形按图上刻的录；已/巳、人/入 这类**文本按文意**，两者不同时在输入框里写文意字。
+        键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>C</b> 有噪声 ·
+        <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡。
+        字一律**按图上刻的录**。只有 <b>己 / 已 / 巳</b> 例外——它们史上本就混用，
+        选中后会多出一个「文意」框，字形填图上的、文意填该读的；其余字不必区分。
       </div>
       <div id="rv_cards" class="rvgrid"></div>
     </div>
@@ -256,6 +263,15 @@ async function init() {
   $('#rv_load').onclick = rvLoad;
   $('#rv_send').onclick = rvSend;
   $('#rv_cards').addEventListener('click', ev => {
+    const mark = ev.target.closest('.rvmark');
+    if (mark) {
+      const i = +mark.dataset.i;
+      rvFocus(i);
+      // 再点一次同一个标记 = 取消
+      const cur = RV.verdicts[RV.cards[i]?.id];
+      rvSet(i, '', '', cur && cur.done === mark.dataset.mark ? '' : mark.dataset.mark);
+      return;
+    }
     const b = ev.target.closest('.rvpick');
     if (!b) return;
     const i = +b.dataset.i;
@@ -269,10 +285,18 @@ async function init() {
     if (!c) return;
     const cur = RV.verdicts[c.id] || {};
     const shape = el.dataset.f === 'shape' ? el.value : (cur.shape || '');
-    const reading = el.dataset.f === 'reading' ? el.value : (cur.reading || '');
+    let reading = el.dataset.f === 'reading' ? el.value : (cur.reading || '');
+    // 只有己/已/巳 才允许文意 ≠ 字形；其余一律照录，免得人误拆
+    if (!needsReading(shape)) reading = shape;
     RV.verdicts[c.id] = { shape, reading: reading || shape, done: shape ? '1' : '' };
     const card = document.getElementById('rvc' + i);
     if (card) card.dataset.done = shape ? '1' : '';
+    const box = card && card.querySelector('.rvread');
+    if (box) box.style.display = needsReading(shape) ? '' : 'none';
+    if (box && !needsReading(shape)) {
+      const ri = card.querySelector('[data-f="reading"]');
+      if (ri) ri.value = shape;
+    }
   });
   // 键盘：1/2/3 采信第几个候选，N 非字，S 跳过，←/→ 翻卡
   document.addEventListener('keydown', ev => {
@@ -290,6 +314,12 @@ async function init() {
       rvSet(RV.cur, '', '', 'non'); rvFocus(RV.cur + 1); ev.preventDefault();
     } else if (ev.key === 's' || ev.key === 'S') {
       rvSet(RV.cur, '', '', 'skip'); rvFocus(RV.cur + 1); ev.preventDefault();
+    } else if (ev.key === 't' || ev.key === 'T') {
+      // 切分问题：字形不完整（沿用 instances 金标的 truncated 口径）
+      rvSet(RV.cur, '', '', 'truncated'); rvFocus(RV.cur + 1); ev.preventDefault();
+    } else if (ev.key === 'c' || ev.key === 'C') {
+      // 切分问题：有噪声（沿用 contaminated 口径：邻字残留/界行/版框混入）
+      rvSet(RV.cur, '', '', 'contaminated'); rvFocus(RV.cur + 1); ev.preventDefault();
     }
   });
   $('#refresh').onclick = refreshStatus;
@@ -373,6 +403,16 @@ async function runOneEval(id, quiet) {
 // 下游按 GlyphDB 的 shape/char 分岔存（charset_and_lm.md §四）。
 let RV = { cards: [], cur: 0, verdicts: {} };
 
+// **只有 己/已/巳 这三个字才分「字形」与「文意」**（用户 2026-09-04 定：
+// 「除了己已巳 这三个字，其他的都不用区分字形和文意」）。
+// 依据是考据结论：已/巳 字源上本是同一个字（段玉裁：地支「巳」久已用为
+// 「已然」之「已」），清代刻本包括《欽定四庫全書》本仍混用，古人不当它是错；
+// 己 则是真的另一个字，但同样容易与那两个混刻。其余形近家族（諭/論、曾/會…）
+// 是**真的不同字**，字形就是释读，多一个输入框只会诱导人把它们也拆开。
+// 与 GlyphDB.admit_instance 的 shape/char 分岔、charset_and_lm.md §四 同源。
+const SPLIT_CHARS = new Set(['己', '已', '巳']);
+const needsReading = ch => SPLIT_CHARS.has(ch);
+
 function rvCard(c, i) {
   const cands = (c.db && c.db.candidates || []).slice(0, 3);
   const ocr = (c.ocr || []).slice(0, 2);
@@ -393,8 +433,21 @@ function rvCard(c, i) {
       </div>
     </div>
     <div class="rvcand">${btns}
-      <input class="rvin" data-i="${i}" data-f="shape" placeholder="字形" value="${v.shape || ''}">
-      <input class="rvin" data-i="${i}" data-f="reading" placeholder="文意" value="${v.reading || ''}">
+      <input class="rvin" data-i="${i}" data-f="shape" placeholder="字" value="${v.shape || ''}">
+      <span class="rvread" data-i="${i}" style="display:${needsReading(v.shape) ? '' : 'none'}">
+        → <input class="rvin" data-i="${i}" data-f="reading" placeholder="文意"
+                 value="${v.reading || ''}" title="己/已/巳 才需要：图上刻的是左边那个，这里填文意该读的">
+      </span>
+    </div>
+    <div class="rvseg">
+      <button data-i="${i}" data-mark="truncated" class="rvmark${v.done === 'truncated' ? ' on' : ''}"
+        title="本字的笔画被切掉了一部分（T）">字形不完整</button>
+      <button data-i="${i}" data-mark="contaminated" class="rvmark${v.done === 'contaminated' ? ' on' : ''}"
+        title="混进了邻字残墨 / 界行 / 版框（C）">有噪声</button>
+      <button data-i="${i}" data-mark="non" class="rvmark${v.done === 'non' ? ' on' : ''}"
+        title="这一格根本不是字（N）">非字</button>
+      <button data-i="${i}" data-mark="skip" class="rvmark${v.done === 'skip' ? ' on' : ''}"
+        title="真拿不准，留给以后（S）">跳过</button>
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
   </div>`;
@@ -404,11 +457,21 @@ async function rvLoad() {
   const book = $('#rv_book').value || $('#book').value;
   const pages = $('#rv_pages').value || 'dev_set';
   const only = $('#rv_only').value;
+  const batch = rvBatch();
   $('#rv_msg').textContent = '载入中…';
   const d = await api(`/api/review/cards?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}&only=${only}&limit=400`);
-  RV = { cards: d.cards, cur: 0, verdicts: RV.verdicts || {} };
+  // **把已裁过的读回来**——裁决早就落成事件了，前端此前只记在内存里，
+  // 一刷新就要重审一遍（用户 2026-09-04 实锤）。同 id 后到覆盖。
+  let done = {};
+  try {
+    const v = await api(`/api/review/verdicts?batch=${encodeURIComponent(batch)}`);
+    done = v.verdicts || {};
+  } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
+  RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) } };
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
-  $('#rv_msg').textContent = `${d.cards.length} 张${d.truncated ? '（已截断）' : ''}`;
+  const nDone = d.cards.filter(c => RV.verdicts[c.id] && RV.verdicts[c.id].done).length;
+  $('#rv_msg').textContent = `${d.cards.length} 张${d.truncated ? '（已截断）' : ''}`
+    + (nDone ? ` · 已裁 ${nDone}` : '');
   rvFocus(0);
   // 列上下文按需拉，一列只拉一次
   const seen = new Set();
@@ -441,27 +504,49 @@ function rvFocus(i) {
 function rvSet(i, shape, reading, done) {
   const c = RV.cards[i];
   if (!c) return;
-  RV.verdicts[c.id] = { shape, reading: reading || shape, done: done || '1' };
+  // `done` 显式传空串 = 撤销这张卡的裁决（再点一次同一个标记）；
+  // 传 undefined 才走「有字就算已裁」的默认。用 `||` 会把空串兜成 '1'，
+  // 撤销就失效了——实测点两次「字形不完整」会留下一个 done='1' 的假裁决。
+  const mark = done === undefined ? (shape ? '1' : '') : done;
+  RV.verdicts[c.id] = { shape, reading: reading || shape, done: mark };
   const el = document.getElementById('rvc' + i);
   if (el) {
-    el.dataset.done = done || '1';
+    el.dataset.done = mark;
     el.querySelectorAll('.rvpick').forEach(b =>
-      b.classList.toggle('pick', b.dataset.ch === shape));
+      b.classList.toggle('pick', !!shape && b.dataset.ch === shape));
+    el.querySelectorAll('.rvmark').forEach(b =>
+      b.classList.toggle('on', !!mark && b.dataset.mark === mark));
     const si = el.querySelector('[data-f="shape"]'), ri = el.querySelector('[data-f="reading"]');
     if (si) si.value = shape || '';
     if (ri) ri.value = reading || shape || '';
+    const box = el.querySelector('.rvread');
+    if (box) box.style.display = needsReading(shape) ? '' : 'none';
   }
 }
 
-async function rvSend() {
+// 载入与提交必须落在**同一个批次**上，否则读回的和写进去的对不上。
+function rvBatch() {
   const book = $('#rv_book').value || $('#book').value;
-  const batch = $('#rv_batch').value.trim()
+  return $('#rv_batch').value.trim()
     || `${book}-${$('#rv_pages').value || 'dev_set'}-decide`;
+}
+
+async function rvSend() {
+  const batch = rvBatch();
   const rows = [];
   for (const [id, v] of Object.entries(RV.verdicts)) {
     if (!v.done) continue;
     if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue; }
     if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue; }
+    // 切分问题：不是「这个字是什么」的裁决，而是「这块图不能用」。
+    // quality 取值沿用 char-segmentation/instances 金标的四分类
+    // （clean / truncated / contaminated / not_text），不另造词——
+    // 那批 144 条 truncated + 128 条 contaminated 就是这两档的既有金标。
+    if (v.done === 'truncated' || v.done === 'contaminated') {
+      rows.push({ id, v: 'seg_defect', quality: v.done,
+                  shape: v.shape || '', reading: v.reading || v.shape || '' });
+      continue;
+    }
     // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
     rows.push({ id, v: 'confirm', shape: v.shape, reading: v.reading || v.shape,
                 conversion: (v.reading && v.reading !== v.shape) ? 1 : 0 });
