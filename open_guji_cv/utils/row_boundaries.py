@@ -414,10 +414,17 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     valid = list(valleys_all)
     valley_ink = [curve[v] / dst_w for v in valid]
 
-    # 空白区间里若没有真波谷，仍补一批合成候选撑住可行性（墨量给个较低但非零
-    # 的固定值——真波谷因为墨量更低仍然优先，但空白区不会因为没候选就无解）。
-    # 只在**离真波谷足够远**的位置补，免得同一条字缝既有真点又有假点，
-    # 假点凭 0.03 的固定墨量把真点（墨可能是 0.000）挤掉。
+    # 空白区间里若没有真波谷，仍补一批合成候选撑住可行性——**墨量必须用真值**
+    # （2026-09-03 二改）。原先一律给固定 0.03，而空白区间的判据是
+    # `< blank_thresh_frac`（默认 0.08），所以合成点的真实墨量最高可以到 0.08，
+    # 给 0.03 等于**系统性低报**，DP 拿它跟真波谷比就被骗了：
+    # 实测 vol01/26c2 格3 选中的合成点真墨 0.231（该处在"空白区间"里是因为
+    # 区间按 8% 门槛切、这一小段冲高没把区间断开），旁边 23px 处有真波谷墨 0.000，
+    # 代价 0.2554 vs 0.0524 干净点优 5 倍却没选上。
+    # 一改（只保留区间内真波谷）之后仍有 90/462 条穿字是这个原因，全部
+    # `选中点 ∉ find_valleys`——即全是合成点。用真墨之后它们不再有虚假优势；
+    # 空白区真正空的地方墨本来就是 0，撑可行性的作用一点没丢。
+    # 只在**离真波谷足够远**的位置补，免得同一条字缝既有真点又有假点。
     synth_guard = max(6, synth_step // 3)
     synth: list[float] = []
     synth_ink: list[float] = []
@@ -426,7 +433,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         while y <= hi:
             if all(abs(y - v) >= synth_guard for v in valid):
                 synth.append(float(y))
-                synth_ink.append(0.03)
+                synth_ink.append(float(curve[int(y)]) / dst_w if 0 <= int(y) < len(curve) else 0.03)
             y += synth_step
 
     all_valleys = np.array(valid + synth, dtype=np.float64)

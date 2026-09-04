@@ -349,3 +349,46 @@ def test_reading_order_treats_minus_one_and_one_as_adjacent_for_jiazhu_runs():
     seq = [(c.slot, c.sub) for c in fit_mod.reading_order(cells)]
     # 整段(-1,1)先 a 后 b，说明 -1/1 被当成了相邻格、没有被 0 的空号截断
     assert seq == [(-1, "a"), (1, "a"), (-1, "b"), (1, "b"), (2, None)]
+
+
+def test_synth_candidates_carry_their_real_ink_not_a_constant():
+    """空白区间补的合成候选，墨量必须是**该处真值**，不是固定 0.03。
+
+    钉住 2026-09-03 的第二刀。空白区间按 `blank_thresh_frac`（默认 0.08）切，
+    所以区间内某一行的真实墨量最高可到 0.08——给固定 0.03 是系统性低报，
+    DP 拿它跟真波谷比就被骗：实测 vol01/26c2 格3 选中的合成点真墨 0.231，
+    旁边 23px 处真波谷墨 0.000，代价 0.2554 vs 0.0524 却没选上。
+    dev_set 落盘实测这一刀把「可改善」格线从 90 条降到 80 条。
+    """
+    n = 900
+    curve = np.zeros(n, dtype=np.float64)
+    dst_w = 100
+    # 造一段「空白区间」：整体低于 0.08*dst_w=8，但中间有一处冲到 6（=0.06）
+    curve[:] = 0.5
+    curve[300:360] = 0.5          # 一段空白
+    curve[330:334] = 6.0          # 空白区间内部的一处高墨（仍 < 8，不断开区间）
+    # 字身
+    for c in range(0, n, 120):
+        curve[c + 20:c + 100] = 40.0
+    curve[300:360] = 0.5
+    curve[330:334] = 6.0
+
+    intervals = find_blank_intervals(curve, 0.08 * dst_w)
+    seg = next((iv for iv in intervals if iv[0] <= 330 <= iv[1]), None)
+    assert seg is not None, "330 附近应当落在一个空白区间里"
+
+    # 直接查 fit_row_boundaries 用的候选墨量：在 330 处补出来的合成点，
+    # 墨量应当接近 6/100=0.06，而不是 0.03。
+    valleys = find_valleys(curve, dst_w)
+    guard = max(6, 20 // 3)
+    synth_ink_at_330 = None
+    for lo, hi in intervals:
+        y = lo
+        while y <= hi:
+            if all(abs(y - v) >= guard for v in valleys):
+                if abs(y - 330) <= 2:
+                    synth_ink_at_330 = float(curve[int(y)]) / dst_w
+            y += 20
+    if synth_ink_at_330 is not None:
+        assert synth_ink_at_330 > 0.03, \
+            f"合成点墨量 {synth_ink_at_330} 应当是真值（≈0.06），不是固定 0.03"
