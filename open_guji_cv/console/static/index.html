@@ -102,6 +102,18 @@
   .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
   .rvdoubt { color:var(--ochre); font-size:.72rem; }
   .rvin { width:4rem; font-size:.9rem; }
+  /* ? 信息符号：纯 CSS 气泡，鼠标移上或键盘聚焦都显示 */
+  .hint { display:inline-flex; align-items:center; justify-content:center;
+    width:1.05em; height:1.05em; margin-left:.35em; border-radius:50%;
+    border:1px solid currentColor; font-size:.72em; line-height:1; cursor:help;
+    opacity:.65; position:relative; vertical-align:baseline; }
+  .hint:hover, .hint:focus { opacity:1; outline:none; }
+  .hint::after { content:attr(data-tip); position:absolute; left:50%; top:calc(100% + .5em);
+    transform:translateX(-50%); width:24rem; max-width:70vw; padding:.6rem .75rem;
+    background:var(--ink); color:var(--paper); border-radius:5px; font-size:.76rem;
+    line-height:1.65; white-space:pre-line; text-align:left; z-index:9;
+    opacity:0; visibility:hidden; transition:opacity .12s; pointer-events:none; }
+  .hint:hover::after, .hint:focus::after { opacity:1; visibility:visible; }
   .rvtake { font-size:1rem; padding:0 .35rem; line-height:1.4; }
   .rvtake:hover { background:var(--indigo); color:#fff; border-color:var(--indigo); }
   .rvp { font-size:.68rem; color:var(--mute); margin:0 .35rem 0 .15rem; }
@@ -213,12 +225,26 @@
       <div id="bmsg" class="muted"></div>
     </div>
     <div class="card">
-      <h2>收割 <span class="muted">把 Artifact 读回的 HTML（或旧格式 JSONL / 日志）贴进来</span></h2>
+      <h2>收割与消费 <span class="muted">裁决 → 事件 → 字形库 / 测试集</span></h2>
+      <div class="muted" style="font-size:.78rem;margin-bottom:.5rem;line-height:1.7">
+        在本控制台裁决的，事件已经写好了，<b>直接点「按路由表消费」</b>即可；
+        「收割」只在裁决来自<b>外部审查页</b>时才需要。三步的关系：
+        <span class="mono">外部页 →(收割)→ 事件 →(消费)→ 字形库 / 测试集</span>
+      </div>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
         <label class="muted">批次 <select id="h_batch"></select></label>
-        <button id="h_go">收割</button>
-        <button id="r_go">按路由表消费</button>
-        <button id="r_dry">试算（不落库）</button>
+        <button id="h_go">收割</button><span class="hint" tabindex="0" data-tip="把「外部」审查页读回的内容变成事件。
+在这个控制台里裁决的不需要它——提交时事件就已经写好了。
+吃四种旧格式：审查页 HTML、verdicts JSONL、GUJI-SEED-EVENT 日志、marks JSON。
+重复收割同一份不会写重（按 batch+seq 去重）。">?</span>
+        <button id="r_dry">试算</button><span class="hint" tabindex="0" data-tip="消费的预览：一个字都不写。
+按路由表算一遍每个消费者会收到多少条、新增多少、跳过多少。
+数字对不上就先别真跑——试算与真跑口径一致（内容相同的不算「更新」）。">?</span>
+        <button id="r_go" class="primary">按路由表消费</button><span class="hint" tabindex="0" data-tip="真正落库。按路由表把事件分发给各消费者：
+· 定字 confirm → 字形库 GlyphDB（字形进匹配索引，释读进 admissions）
+· 切分缺陷 seg_defect → char-segmentation/instances 测试集
+· 界行/边框裁决 verdict → 对应的金标分片
+幂等：已消费过的不会重复写，可以裁一批消费一批。">?</span>
       </div>
       <textarea id="h_text" style="width:100%;min-height:8rem;font-family:var(--mono);font-size:.76rem" placeholder="粘贴审查页 HTML、verdicts JSONL、GUJI-SEED-EVENT 日志，或 marks JSON"></textarea>
       <pre id="h_out" class="json" style="margin-top:.6rem;max-height:14rem"></pre>
