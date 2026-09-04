@@ -547,6 +547,102 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     return {"book": book, "cards": out, "truncated": False}
 
 
+@app.get("/api/quality")
+def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
+    """**质量看板**：当前准确率 + 缺陷聚集在哪。
+
+    人裁完之后最该回答两个问题——「准了没有」和「下一刀该切哪」。此前两个都
+    要手写脚本查，这个接口把它们做成一次调用。
+
+    - **准确率**：拿整理本自动金标（`gold/v2_align`）对当前定字，按通道分层。
+      金标只覆盖锚得上的页，所以同时报覆盖率，别拿它当全量准确率。
+    - **缺陷聚集**：人裁标的切分缺陷按 页 / 列 / slot 聚。**孤例是个案，
+      扎堆才是系统性问题**——v1 时代 `report_intrusions.py` 就是靠列级聚集
+      找出「13 列整列偏移」的（手册「版面线侵入」一节）。
+    """
+    from ..core.book import load_book
+    from ..gold.v2_align import align_book
+    import collections
+
+    store = ProductStore()
+    bk = load_book(book)
+    pgs = bk.resolve_pages(pages)
+
+    # ── 准确率（对整理本金标）─────────────────────────────
+    golds = align_book(book, pgs, store)
+    gold = {c.id: c for g in golds if g.anchored for c in g.chars}
+    by_ch: dict[str, list[int]] = {}
+    errors: list[dict] = []
+    n_total = 0
+    for pg in pgs:
+        a = store.read(book, "seed_admit", page_key(pg), "seed_admit")
+        d = store.read(book, "context_decide", page_key(pg), "context_decision")
+        if a is None:
+            continue
+        dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
+        for cc in a.columns:
+            for r in cc.chars:
+                n_total += 1
+                g = gold.get(r.id)
+                if g is None:
+                    continue
+                pred = r.char if r.admit else (dd[r.id].char if r.id in dd else None)
+                if pred is None:
+                    continue
+                k = r.channel if r.admit else "人审"
+                slot = by_ch.setdefault(k, [0, 0])
+                ok = pred == g.shape
+                slot[0] += ok
+                slot[1] += 1
+                if not ok:
+                    errors.append({"id": r.id, "pred": pred, "gold": g.shape,
+                                   "channel": k, "cov": (r.evidence or {}).get("cov")})
+    acc = [{"channel": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}
+           for k, v in sorted(by_ch.items(), key=lambda x: -x[1][1])]
+    n_gold = sum(v[1] for v in by_ch.values())
+    n_ok = sum(v[0] for v in by_ch.values())
+
+    # ── 缺陷聚集（人裁标的切分问题）───────────────────────
+    from ..gold.store import GoldStore
+    gs = GoldStore()
+    page_c: collections.Counter = collections.Counter()
+    col_c: collections.Counter = collections.Counter()
+    slot_c: collections.Counter = collections.Counter()
+    qual_c: collections.Counter = collections.Counter()
+    n_def = 0
+    try:
+        for it in gs.list("char-segmentation/instances"):
+            q = (it.expected or {}).get("quality")
+            if q not in ("truncated", "contaminated"):
+                continue
+            an = it.anchor
+            if getattr(an, "book", None) != book or getattr(an, "page", None) not in pgs:
+                continue
+            n_def += 1
+            qual_c[q] += 1
+            page_c[an.page] += 1
+            if an.col is not None:
+                col_c[an.col] += 1
+            if an.slot is not None:
+                slot_c[an.slot] += 1
+    except Exception:
+        pass
+
+    def top(c, k=6):
+        return [{"key": str(a), "n": b} for a, b in c.most_common(k)]
+
+    return {
+        "book": book, "pages": len(pgs),
+        "accuracy": {"overall": round(n_ok / n_gold, 4) if n_gold else None,
+                      "n_gold": n_gold, "n_total": n_total,
+                      "gold_coverage": round(n_gold / n_total, 4) if n_total else None,
+                      "by_channel": acc, "errors": errors[:20]},
+        "defects": {"n": n_def, "by_quality": top(qual_c),
+                     "by_page": top(page_c), "by_col": top(col_c),
+                     "by_slot": top(slot_c)},
+    }
+
+
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
