@@ -406,10 +406,18 @@ def api_events(req: EventsIn) -> dict:
                               payload, source_format="server"))
     n = _log.append(evs)
     b = _batches.get(req.batch)
-    if b:
-        if b.status == "draft":
-            b.status = "open"
-        _batches.refresh_counts(b, _log)
+    if b is None:
+        # **批次不存在就自动登记**（2026-09-04 修）。控制台的定字裁决直接 POST
+        # 到这里，此前只写事件、不建批次，于是「收割」那块的批次下拉是空的，
+        # 人裁完了却没法点「按路由表消费」——看着像「必须全部审完才行」，
+        # 其实是登记漏了。批次是台账（谁裁的、多少条、消费了没），不是闸。
+        b = Batch(id=req.batch, title=req.batch, step=req.step,
+                  kind=req.kind, transport="server", status="open",
+                  notes="控制台直连裁决自动登记")
+    if b.status == "draft":
+        b.status = "open"
+    _batches.refresh_counts(b, _log)
+    _batches.save(b)
     return {"appended": n, "batch": req.batch, "total": len(_log.read(req.batch))}
 
 
