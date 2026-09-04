@@ -21,6 +21,20 @@ class GateColumn(BaseModel):
     border_top: float
     border_bottom: float
     top_slack: float = 0.0
+    n_raised_hint: int = 0
+    """这一列比版式常量**多出来**的字位数（2026-09-03 加）。
+
+    `n_raised` 原先只有页级参数一个来源，可「抬头多一个字」是**逐列**的
+    ——同一页上有的抬头列多一格、有的只是整体上挪（vol01/33 四个抬头列
+    实测 3 个多一字、1 个不多）。给不出逐列值时 DP 只能在 21 格里硬塞
+    22 个字，唯一可行解就是**丢掉首字**：实测 vol01/26c6、33c7/c8、
+    47c6/c9、vol02/3c3~c5 这 8 列的墨跨度 / period 是 21.4~22.2，
+    首字整个落在首格之上。
+
+    判据是**墨跨度**（首墨到末墨）÷ period，不是「顶端有没有墨」——后者
+    分不开「顶格写」和「多一个字」。Step3 用 `n_raised = max(页级参数,
+    本列 hint)`，所以给 0 就是不动。
+    """
     raised: bool = False
     head_raise_inner_y: float | None = None
     warped_size: tuple[int, int]            # (w, h)

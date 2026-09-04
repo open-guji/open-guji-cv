@@ -172,3 +172,46 @@ def test_bottom_bound_reaches_past_the_frame_line():
         pytest.skip("还没有闸产物")
     assert beyond > checked * 0.8, \
         f"只有 {beyond}/{checked} 列的下界越过版框线——bottom_slack 没生效？"
+
+
+@needs_raw
+def test_n_raised_hint_is_per_column_not_page_wide():
+    """「抬头多一个字」是逐列的，闸要按墨跨度逐列给出 hint。
+
+    钉住 2026-09-03 的 A2 收尾。`n_raised` 原先只有页级参数一个来源，
+    而同一页上有的抬头列多一格、有的只是整体上挪（vol01/33 四个抬头列
+    实测 3 个多一字、1 个不多）。给不出逐列值时 DP 只能在 21 格里硬塞
+    22 个字，唯一可行解是**丢掉首字**——实测 vol01/26c6、33c7/c8、
+    47c6/c9 的墨跨度 / period 达 21.4~22.2。
+    """
+    store = ProductStore()
+    hits = pages_with_mixed = 0
+    total = 0
+    for book in ("vol01", "vol02"):
+        for pg in load_book(book).dev_set:
+            d = store.read_raw(book, "column_gate", page_key(pg))
+            if not d:
+                continue
+            vals = [c.get("n_raised_hint", 0) for c in d["gate_manifest"]["columns"]]
+            total += len(vals)
+            hits += sum(1 for v in vals if v)
+            if any(vals) and not all(vals):
+                pages_with_mixed += 1
+    if not total:
+        pytest.skip("还没有闸产物")
+    assert hits, "hint 一列都没命中——判据没生效？"
+    assert hits < total * 0.2, f"hint 命中 {hits}/{total}，太多了，判据可能过松"
+    assert pages_with_mixed, \
+        "没有一页是「部分列有 hint」——那就说明它其实还是页级的，白改了"
+
+
+@needs_raw
+def test_vol01_33_head_raise_columns_differ():
+    """vol01/33 是逐列差异的实证页：同页抬头列有的多一格、有的不多。"""
+    store = ProductStore()
+    d = store.read_raw("vol01", "column_gate", page_key(33))
+    if not d:
+        pytest.skip("vol01/33 还没跑过闸")
+    hints = {c["col"]: c.get("n_raised_hint", 0) for c in d["gate_manifest"]["columns"]}
+    assert hints.get(7) or hints.get(8), "33 c7/c8 的墨跨度够 22 字，该给 hint"
+    assert not all(hints.values()), "同页不该所有列都多一格"
