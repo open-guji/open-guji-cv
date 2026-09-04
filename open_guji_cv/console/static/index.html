@@ -102,6 +102,11 @@
   .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
   .rvdoubt { color:var(--ochre); font-size:.72rem; }
   .rvin { width:4rem; font-size:.9rem; }
+  .rvtake { font-size:1rem; padding:0 .35rem; line-height:1.4; }
+  .rvtake:hover { background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .rvp { font-size:.68rem; color:var(--mute); margin:0 .35rem 0 .15rem; }
+  .rvsel { user-select:text; -webkit-user-select:text; cursor:text; }
+  .rvcard, .rvctx { user-select:text; -webkit-user-select:text; }
 </style>
 </head>
 <body>
@@ -189,6 +194,7 @@
             <option value="all">全部</option>
           </select></label>
         <label class="muted">批次 <input id="rv_batch" size="22" placeholder="留空 = 按册页自动命名"></label>
+        <label class="muted"><input type="checkbox" id="rv_todo"> 只看未裁决</label>
         <button id="rv_load">载入</button>
         <button id="rv_send">提交裁决</button>
         <span id="rv_msg" class="muted"></span>
@@ -262,7 +268,16 @@ async function init() {
   // 定字裁决（C2）
   $('#rv_load').onclick = rvLoad;
   $('#rv_send').onclick = rvSend;
+  $('#rv_todo').onchange = rvFilter;
   $('#rv_cards').addEventListener('click', ev => {
+    // 点 OCR / 上下文给出的字 = 直接采信（省掉手抄；那些字本来就是对的居多）
+    const take = ev.target.closest('.rvtake');
+    if (take) {
+      const i = +take.dataset.i;
+      rvFocus(i);
+      rvSet(i, take.dataset.ch);
+      return;
+    }
     const mark = ev.target.closest('.rvmark');
     if (mark) {
       const i = +mark.dataset.i;
@@ -422,13 +437,22 @@ function rvCard(c, i) {
       title="库 cov ${cov}">${k + 1}·${ch}</button>`).join('');
   const doubts = (c.doubts || []).map(d => `<div class="rvdoubt">⚠ ${d}</div>`).join('');
   return `<div class="rvcard" data-i="${i}" data-done="${v.done || ''}" id="rvc${i}">
-    <div class="rvhead"><b>${c.id}</b><span class="muted">${c.channel || '待审'}</span></div>
+    <div class="rvhead"><b class="rvsel">${c.id}</b><span class="muted">${c.channel || '待审'}</span></div>
     <div class="rvbody">
       <img src="${c.patch}" alt="${c.id}" loading="lazy">
       <div class="rvev">
         <div><span class="k">库</span> ${c.db ? c.db.verdict + ' ' + c.db.cov : '—'}</div>
-        <div><span class="k">OCR</span> ${ocr.map(([ch, p]) => ch + ' ' + Number(p).toFixed(2)).join(' / ') || '—'}</div>
-        <div><span class="k">上下文</span> ${c.ctx ? (c.ctx.char || '—') + ' m=' + c.ctx.margin : '—'}</div>
+        <div><span class="k">OCR</span> ${ocr.length
+          ? ocr.map(([ch, p]) =>
+              `<button class="rvtake" data-i="${i}" data-ch="${ch}"
+                 title="采信这个字（OCR 概率 ${Number(p).toFixed(3)}）">${ch}</button>`
+              + `<span class="rvp">${Number(p).toFixed(2)}</span>`).join(' ')
+          : '—'}</div>
+        <div><span class="k">上下文</span> ${c.ctx && c.ctx.char
+          ? `<button class="rvtake" data-i="${i}" data-ch="${c.ctx.char}"
+               title="采信上下文定的字（margin ${c.ctx.margin}）">${c.ctx.char}</button>`
+            + `<span class="rvp">m=${c.ctx.margin}</span>`
+          : '—'}</div>
         ${doubts}
       </div>
     </div>
@@ -469,9 +493,7 @@ async function rvLoad() {
   } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
   RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) } };
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
-  const nDone = d.cards.filter(c => RV.verdicts[c.id] && RV.verdicts[c.id].done).length;
-  $('#rv_msg').textContent = `${d.cards.length} 张${d.truncated ? '（已截断）' : ''}`
-    + (nDone ? ` · 已裁 ${nDone}` : '');
+  rvFilter();
   rvFocus(0);
   // 列上下文按需拉，一列只拉一次
   const seen = new Set();
@@ -493,9 +515,37 @@ async function rvLoad() {
   }
 }
 
+// 只看未裁决：纯前端过滤，不重新载入——裁完一张就让它消失，
+// 剩下多少一眼可见。取消勾选即可回看已裁的（要改主意时用）。
+function rvFilter() {
+  const todoOnly = $('#rv_todo') && $('#rv_todo').checked;
+  let shown = 0;
+  RV.cards.forEach((c, i) => {
+    const el = document.getElementById('rvc' + i);
+    if (!el) return;
+    const done = !!(RV.verdicts[c.id] && RV.verdicts[c.id].done);
+    const hide = todoOnly && done;
+    el.style.display = hide ? 'none' : '';
+    if (!hide) shown++;
+  });
+  const n = RV.cards.length;
+  const nDone = RV.cards.filter(c => RV.verdicts[c.id] && RV.verdicts[c.id].done).length;
+  $('#rv_msg').textContent = `${n} 张 · 已裁 ${nDone}`
+    + (todoOnly ? ` · 待裁 ${shown}` : '');
+}
+
 function rvFocus(i) {
   if (!RV.cards.length) return;
-  RV.cur = Math.max(0, Math.min(i, RV.cards.length - 1));
+  // 「只看未裁决」时，翻卡要跳过隐藏的那些，否则焦点会落到看不见的卡上
+  const dir = i >= RV.cur ? 1 : -1;
+  let j = Math.max(0, Math.min(i, RV.cards.length - 1));
+  while (j >= 0 && j < RV.cards.length) {
+    const el = document.getElementById('rvc' + j);
+    if (!el || el.style.display !== 'none') break;
+    j += dir;
+  }
+  if (j < 0 || j >= RV.cards.length) j = Math.max(0, Math.min(i, RV.cards.length - 1));
+  RV.cur = j;
   document.querySelectorAll('.rvcard.cur').forEach(e => e.classList.remove('cur'));
   const el = document.getElementById('rvc' + RV.cur);
   if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
@@ -522,6 +572,7 @@ function rvSet(i, shape, reading, done) {
     const box = el.querySelector('.rvread');
     if (box) box.style.display = needsReading(shape) ? '' : 'none';
   }
+  if ($('#rv_todo') && $('#rv_todo').checked) rvFilter();
 }
 
 // 载入与提交必须落在**同一个批次**上，否则读回的和写进去的对不上。
