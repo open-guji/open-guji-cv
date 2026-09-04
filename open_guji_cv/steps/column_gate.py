@@ -40,12 +40,13 @@ class ColumnGateParams(BaseModel):
     side_floor_max: float = 0.045
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     ink_threshold: int = 128
+    bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
 
 
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.1", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.2", unit="column",
         consumes=("column_windows", "column_image"), produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
@@ -142,7 +143,21 @@ class ColumnGateStep(Step):
                 col=c.col, admitted=not reasons, reject=reasons, tier=p.tier,
                 content_x=(float(c.band[0]), float(c.band[1])),
                 border_top=float(c.border_top_in_column),
-                border_bottom=float(c.border_bottom_in_column),
+                # **下界给列图底部，不是版框线**（2026-09-03 改，A4）。
+                # Step3 的 candN 窗口是 `[border_bottom - 0.3·period, border_bottom]`，
+                # 上界就是这个值——传版框线的话，末字只要压着版框写，末边界就
+                # **永远够不到它**。实测 dev_set 216 列：真末墨超出 border_bottom
+                # 的有 147 列（68%），末格 y1 比真末墨低中位 11px、27.6% 的列低
+                # 超过 20px，于是末字下半落在第 21 格之外——slot 21 占了 R4
+                # 被切总数的 57%（36/63）。
+                # 放 16px 是扫出来的最优点（dev_set，末墨超出 / R2 可改善）：
+                #    0px  27.6% / 0.40%     16px   9.6% / **0.20%**
+                #    8px  16.7% / 0.28%     24px   7.1% / 0.25%
+                #   40px（放到列图底） 1.5% / 0.76% ← 过冲，解空间一松反而多切在字上
+                # 16 同时让末墨超出降到 9.6% 且 R2 降到最低，代价只是多 1 列无解。
+                # 版框线本身已由 `clean_column` 抹白，不会被当成墨。
+                border_bottom=float(min(c.warped_size[1],
+                                        c.border_bottom_in_column + p.bottom_slack)),
                 top_slack=(float(c.border_top_in_column) if c.raised
                            else top_ink_slack.get(c.col, 0.0)),
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
