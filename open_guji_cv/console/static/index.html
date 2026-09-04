@@ -104,6 +104,15 @@
   .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
   .rvdoubt { color:var(--ochre); font-size:.72rem; }
   .rvin { width:4rem; font-size:.9rem; }
+  .qgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(20rem,1fr)); gap:1.2rem; }
+  .qk { font-size:.78rem; color:var(--mute); letter-spacing:.04em; }
+  .qv { font-family:var(--mono); font-size:2rem; line-height:1.2; }
+  .qs { font-size:.78rem; color:var(--ink-2); }
+  .qok { color:var(--ok); } .qbad { color:var(--zhu); }
+  .qerr { margin-top:.4rem; font-size:.74rem; color:var(--zhu); line-height:1.7; }
+  .qchip { display:inline-block; padding:.05rem .45rem; margin:.12rem .25rem .12rem 0;
+    border:1px solid var(--rule); border-radius:3px; font-size:.74rem; background:var(--paper); }
+  .qchip b { margin-left:.35em; font-family:var(--mono); }
   /* ? 信息符号：纯 CSS 气泡，鼠标移上或键盘聚焦都显示 */
   .hint { display:inline-flex; align-items:center; justify-content:center;
     width:1.05em; height:1.05em; margin-left:.35em; border-radius:50%;
@@ -196,6 +205,11 @@
   </section>
 
   <section id="view-review" class="view">
+    <div class="card">
+      <h2>质量看板 <span class="muted">裁完先看这里：准了没有、下一刀切哪</span>
+        <button id="q_go" style="float:right">刷新</button></h2>
+      <div id="q_out" class="muted">点「刷新」载入</div>
+    </div>
     <div class="card">
       <h2>定字裁决 <span class="muted">待审字位就在这里裁，不必再发外部 artifact</span></h2>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.6rem">
@@ -294,6 +308,7 @@ async function init() {
   fillSteps();
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
   // 定字裁决（C2）
+  $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
   $('#rv_send').onclick = rvSend;
   $('#rv_todo').onchange = () => { RV.snapshot = null; rvFilter(); };
@@ -497,6 +512,49 @@ function rvCard(c, i) {
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
   </div>`;
+}
+
+async function loadQuality() {
+  const book = $('#rv_book').value || $('#book').value;
+  const pages = $('#rv_pages').value || 'dev_set';
+  $('#q_out').textContent = '统计中…';
+  const d = await api('/api/quality?book=' + encodeURIComponent(book)
+                      + '&pages=' + encodeURIComponent(pages));
+  const a = d.accuracy, g = d.defects;
+  const pct = x => x == null ? '—' : (x * 100).toFixed(2) + '%';
+  const chips = rows => rows.map(r =>
+    '<span class="qchip">' + r.key + '<b>' + r.n + '</b></span>').join('');
+  const chan = a.by_channel.map(c =>
+    '<tr><td>' + c.channel + '</td><td class="mono">' + c.ok + '/' + c.n + '</td>'
+    + '<td class="mono ' + (c.acc < 1 ? 'qbad' : 'qok') + '">' + pct(c.acc)
+    + '</td></tr>').join('');
+  const errs = a.errors.length
+    ? '<div class="qerr">错例：' + a.errors.slice(0, 8).map(e =>
+        '<span class="mono">' + e.id + ' 判「' + e.pred + '」金标「' + e.gold
+        + '」(' + e.channel + ')</span>').join(' · ') + '</div>'
+    : '<div class="qok" style="font-size:.78rem;margin-top:.4rem">金标覆盖范围内零错例</div>';
+  $('#q_out').innerHTML =
+    '<div class="qgrid">'
+    + '<div>'
+    +   '<div class="qk">定字准确率</div>'
+    +   '<div class="qv ' + (a.overall === 1 ? 'qok' : 'qbad') + '">' + pct(a.overall) + '</div>'
+    +   '<div class="qs">对整理本自动金标 ' + a.n_gold + ' 条（覆盖 '
+    +      pct(a.gold_coverage) + ' 的字位）</div>'
+    +   '<table class="jobs" style="margin-top:.4rem">' + chan + '</table>'
+    +   errs
+    + '</div>'
+    + '<div>'
+    +   '<div class="qk">人裁标出的切分缺陷 <b>' + g.n + '</b> 条</div>'
+    +   '<div class="qs" style="margin:.3rem 0">类型 ' + chips(g.by_quality) + '</div>'
+    +   '<div class="qs">按页 ' + chips(g.by_page) + '</div>'
+    +   '<div class="qs">按列 ' + chips(g.by_col) + '</div>'
+    +   '<div class="qs">按格位 ' + chips(g.by_slot) + '</div>'
+    +   '<div class="qs" style="margin-top:.5rem;line-height:1.7">'
+    +     '<b>怎么读</b>：孤例是个案，<b>扎堆才是系统性问题</b>。某个格位反复出问题'
+    +     ' → 那一格的先验或边界有系统偏差；某一页占了大半 → 先查那页的上游几何。'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
 }
 
 async function rvLoad() {
