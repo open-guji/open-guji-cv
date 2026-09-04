@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+from functools import lru_cache
 import threading
 import time
 import webbrowser
@@ -399,6 +400,9 @@ def api_events(req: EventsIn) -> dict:
         if not row.get("id"):
             continue
         payload = {k: v for k, v in row.items() if k not in ("id", "t")}
+        # `client_ts` / `dwell_ms` 留在 payload 里：事件的 `ts` 是**收割时间**
+        # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
+        # 指标就是这个耗时，没有它 D 刀无法证伪。
         from ..feedback.harvest import parse_card_id
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
@@ -658,6 +662,77 @@ def api_rulers(book: str = "vol01", pages: str = "dev_set") -> dict:
     return measure(book, bk.resolve_pages(pages), ProductStore())
 
 
+@app.get("/api/rare/{book}/{page}/{col}/{slot}")
+def api_rare_candidates(book: str, page: int, col: int, slot: int,
+                        sub: str = "", k: int = 10) -> dict:
+    """**生僻字面板**：字体模板 top-k 候选 + 每个候选的 IDS / 频次 / 码点。
+
+    用户的原话：「碰到生僻字，我需要去字统网查阅是否有一致的 unicode 已收字，
+    如果没有完全一致的，找最像的，还要看意思是否合适，查词典。」
+
+    这一步要消掉的就是那趟外链之旅。库/OCR/上下文三路都给不出答案时
+    （rare-char 集上那 14 条），字体模板 top-10 召回 **78.6%**、命中时中位
+    名次 1——人在候选里点一下即可。每个候选带：
+
+    - **IDS 拆字**（⿰言俞 vs ⿰言侖）：对着图一眼就能比结构；
+    - **本书频次**：整理本里出现过几次，0 次的多半是异体或刻本特有字；
+    - **码点**：要不要造字、是不是扩展区字，看一眼就知道；
+    - **zi.tools 深链**：只链接不抓取（该站无授权条款，见
+      glyph_db_expansion_research §1）。
+
+    字体候选是**纯形状**证据，没有文本兜底，所以只出候选、永不放行。
+    """
+    import cv2
+
+    from ..clustering.font_candidates import book_charset, candidates
+    from ..clustering.ids_guard import ids_of
+    from ..clustering.normalize import normalize_patch
+    from ..products.cache import ImageCache
+    from ..steps.seed_admit import DEFAULT_CORPUS
+
+    ck = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
+    path = ImageCache().get(book, "char_patch", ck)
+    if path is None:
+        raise HTTPException(404, f"没有字块 {ck}")
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise HTTPException(404, f"字块读不出来 {ck}")
+    # ⚠️ 字表不能只取整理本用字。**最生僻的字恰恰是整理本里没有的那些**
+    # ——刻本刻「㕔」而整理本作「廳」、刻「䙝」而整理本作「褻」，这两个字
+    # 在整理本里频次是 0，只用整理本字表就永远召不回来（实测：㕔 从名次 1
+    # 掉到榜外）。所以并上 IDS 表里的**异体字邻居**：拿整理本字表里每个字的
+    # 异体展开一层，把 㕔/䙝 这类「本书用了但整理本没写」的形补进来。
+    cs = set(book_charset(DEFAULT_CORPUS))
+    try:
+        from ..variants import variants_of
+        for ch in list(cs):
+            # variants_of 返回 [(字, 来源标签), ...]，取字
+            cs.update(v[0] if isinstance(v, (tuple, list)) else v
+                      for v in (variants_of(ch) or ()))
+    except Exception:
+        pass
+    hits = candidates(normalize_patch(img), tuple(sorted(cs)), k=k)
+    freq = _corpus_freq(DEFAULT_CORPUS)
+    return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
+            "candidates": [{
+                "char": h.char, "score": round(h.score, 4), "font": h.font,
+                "ids": ids_of(h.char),
+                "freq": freq.get(h.char, 0),
+                "cp": f"U+{ord(h.char):04X}" if len(h.char) == 1 else "",
+                "zi": f"https://zi.tools/zi/{h.char}",
+            } for h in hits]}
+
+
+@lru_cache(maxsize=2)
+def _corpus_freq(path: str) -> dict:
+    from collections import Counter
+    f = Path(path)
+    if not f.exists():
+        return {}
+    return Counter(ch for ch in f.read_text(encoding="utf-8")
+                   if "㐀" <= ch <= "鿿")
+
+
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
@@ -693,17 +768,42 @@ def api_review_column(book: str, page: int, col: int) -> dict:
 
     单看一个裁紧图块判不出形近字——`confusable-context` 154 题实测，字形层
     top-1 只有 64.3%，而 n-gram 95.5%、大模型 98.7%。人也一样需要上下文。
+
+    ## 空位要用库/OCR 兜底填上（2026-09-04 改）
+
+    原先只印 Step6 的定字，弃权位一律「□」。可**待审的位恰恰全是弃权位**
+    ——人看到的就是一串「□□□」，等于没有上下文，读文定字也就无从谈起。
+    现在逐级兜底：定字 → 库 top1 → OCR top1，并逐位标出它是不是待审、
+    以及字从哪来，前端据此把待审位高亮、把兜底字标灰。
     """
-    d = ProductStore().read(book, "context_decide", page_key(page), "context_decision")
-    if d is None:
+    st = ProductStore()
+    d = st.read(book, "context_decide", page_key(page), "context_decision")
+    m = st.read(book, "glyph_match", page_key(page), "glyph_match")
+    o = st.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
+    a = st.read(book, "seed_admit", page_key(page), "seed_admit")
+    if d is None and m is None:
         return {"text": "", "slots": []}
-    cc = d.column(col)
-    if cc is None:
+    dm = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
+    om = {r.id: r for cc in (o.columns if o else []) for r in cc.chars}
+    am = {r.id: r for cc in (a.columns if a else []) for r in cc.chars}
+    src_col = (m.column(col) if m else None) or (d.column(col) if d else None)
+    if src_col is None:
         return {"text": "", "slots": []}
-    rows = sorted(cc.chars, key=lambda x: (x.slot, x.sub or ""))
-    return {"text": "".join(r.char or "□" for r in rows),
-            "slots": [{"slot": r.slot, "char": r.char, "source": r.source}
-                      for r in rows]}
+    out = []
+    for r in sorted(src_col.chars, key=lambda x: (x.slot, x.sub or "")):
+        dd, oo, aa = dm.get(r.id), om.get(r.id), am.get(r.id)
+        ch, src = None, ""
+        if dd is not None and dd.char:
+            ch, src = dd.char, (dd.source or "context")
+        elif getattr(r, "candidates", None):
+            ch, src = r.candidates[0][0], "db"
+        elif oo is not None and oo.topk:
+            ch, src = oo.topk[0][0], "ocr"
+        out.append({"slot": r.slot, "sub": r.sub, "id": r.id,
+                    "char": ch, "source": src,
+                    # 待审 = seed_admit 没放行；前端据此高亮
+                    "review": bool(aa is not None and not aa.admit)})
+    return {"text": "".join(x["char"] or "□" for x in out), "slots": out}
 
 
 @app.post("/api/gold/{shard:path}/migrate")
