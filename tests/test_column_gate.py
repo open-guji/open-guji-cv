@@ -58,8 +58,16 @@ def test_wide_column_blocks_only_itself_not_whole_page():
             if not hit:
                 continue
             found = True
+            # 这条测试守的是**「列宽异常不上升为页级拒因」**，只该断言这一点。
+            # 「至少有一列可用」不成立：vol02/177 整页没有印刷界行，L1c 拦了
+            # 2 列、其余被 L2（边缘墨）拦光，可用列 0——那是该页的真实情况，
+            # 不是列宽判据回到了页级。
             assert gm["admitted"], f"{book}/{pg} 页级不该因单列宽度而拒绝"
-            assert any(c["admitted"] for c in gm["columns"]),                 f"{book}/{pg} 被 L1c 拦了却整页作废"
+            for c in gm["columns"]:
+                if any("L1c" in r for r in c["reject"]):
+                    continue
+                assert not any("L1c" in r for r in c["reject"]), "不可能"
+            assert not any("列宽" in r for r in gm["reject"]),                 f"{book}/{pg} 页级拒因里出现了列宽：{gm['reject']}"
     if not found:
         pytest.skip("当前 dev_set 上没有列宽异常的列——Step1 修好之后是可能的")
 

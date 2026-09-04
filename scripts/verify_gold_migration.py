@@ -85,7 +85,12 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
     only_new = set(new) - set(legacy)
     # 冲突合并会让 items 少于源（迁移已显式报过），这里只报出来不算失败
     if only_new:
-        msgs.append(f"  items 里多出 {len(only_new)} 条: {sorted(only_new)[:5]}")
+        # **多出来的不算迁移失败**：人裁回流只写 items、不回写旧载体，
+        # 所以 items 长期会比载体多。2026-09-04 实例：用户在控制台裁的
+        # 12 条切分缺陷进了 instances（559 → 571），旧载体自然没有。
+        # 「迁移无损」说的是「迁过来的那批没变」，不是「两边永远一样大」。
+        msgs.append(f"  items 里多出 {len(only_new)} 条（人裁回流，不算失败）:"
+                    f" {sorted(only_new)[:5]}")
     if only_old:
         msgs.append(f"  items 里少了 {len(only_old)} 条（多为同 id 合并）: {sorted(only_old)[:5]}")
 
@@ -97,7 +102,7 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
             if bad <= 3:
                 diff = {f: (a.get(f), b.get(f)) for f in set(a) | set(b) if a.get(f) != b.get(f)}
                 msgs.append(f"  ✗ {k}: {json.dumps(diff, ensure_ascii=False)[:220]}")
-    ok = bad == 0 and not only_new
+    ok = bad == 0
     msgs.insert(0, f"{shard}: 共 {len(new)} 条，逐条比对 {'一致 ✓' if ok else f'有 {bad} 条不一致 ✗'}")
     return ok, msgs
 

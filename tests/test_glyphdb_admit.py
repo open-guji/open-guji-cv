@@ -21,6 +21,36 @@ DB = REPO / "output" / "glyph.db"
 needs_db = pytest.mark.skipif(not DB.exists(), reason="需要 output/glyph.db")
 
 
+def _free_key(db):
+    """在 dev_set 里找一个字块存在、但 v2: 命名空间下还没进过库的字位。"""
+    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.core.spec import page_key
+    from open_guji_cv.products.cache import ImageCache
+    from open_guji_cv.products.store import ProductStore
+    c = sqlite3.connect(db)
+    used = {r[0] for r in c.execute(
+        "select instance_id from admissions where instance_id like 'v2:%'")}
+    c.close()
+    store, cache = ProductStore(), ImageCache()
+    for pg in load_book("vol01").dev_set:
+        a = store.read("vol01", "cell_shrink", page_key(pg), "char_index")
+        if a is None:
+            continue
+        for cc in a.columns:
+            if not cc.ok:
+                continue
+            for ch in cc.chars:
+                if ch.cell_type != "char" or not ch.patch_key or ch.sub:
+                    continue
+                if f"v2:vol01:{pg}:{cc.col}:{ch.slot}" in used:
+                    continue
+                if cache.get("vol01", "char_patch", ch.patch_key) is None:
+                    continue
+                return pg, cc.col, ch.slot
+    return None
+
+
 def _ev(key, payload, page, col, slot):
     return (make_event("t", 1, "confirm",
                        EventTarget(step="seed_admit", unit="cell", key=key,
@@ -37,19 +67,25 @@ def test_shape_and_reading_land_in_different_columns(tmp_path):
     """
     db = tmp_path / "g.db"
     shutil.copy(DB, db)
-    r = glyphdb_admit([_ev("vol01:24:6:13",
+    # 挑一个**库里还没有**的字位——真库会随人裁不断长大，写死某个 id 迟早
+    # 撞上已进库的（实测 vol01:24:6:13 被人裁定成「次」之后，admit_instance
+    # 的幂等闸拒绝覆盖，测试跟着红）。
+    key = _free_key(db)
+    if key is None:
+        pytest.skip("dev_set 的字块都进过库了，没有干净的 id 可测")
+    pg, col, slot = key
+    r = glyphdb_admit([_ev(f"vol01:{pg}:{col}:{slot}",
                            {"v": "confirm", "shape": "巳", "reading": "已",
-                            "conversion": 1}, 24, 6, 13)], db_path=str(db))
+                            "conversion": 1}, pg, col, slot)], db_path=str(db))
     if r.added == 0 and any("缓存里没有字块" in e for e in r.errors):
         pytest.skip("字块缓存里没有这一格")
     assert r.added == 1, r.errors
+    iid = f"v2:vol01:{pg}:{col}:{slot}"
     c = sqlite3.connect(db)
     label, semantic = c.execute(
-        "select label, semantic from instances where instance_id='v2:vol01:24:6:13'"
-    ).fetchone()
+        "select label, semantic from instances where instance_id=?", (iid,)).fetchone()
     char, prov = c.execute(
-        "select char, provenance from admissions where instance_id='v2:vol01:24:6:13'"
-    ).fetchone()
+        "select char, provenance from admissions where instance_id=?", (iid,)).fetchone()
     c.close()
     assert label == "巳", f"字形索引该存刻本的形，实际 {label}"
     assert char == "已", f"admissions.char 该存释读，实际 {char}"

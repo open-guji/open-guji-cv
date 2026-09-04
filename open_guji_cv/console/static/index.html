@@ -84,6 +84,8 @@
   .rvcard[data-done="1"] { border-left-color:var(--ok); }
   .rvcard[data-done="skip"] { border-left-color:var(--ochre); }
   .rvcard[data-done="non"] { border-left-color:var(--zhu); }
+  .rvcard[data-done="need_reading"] { border-left-color:var(--ochre); box-shadow:inset 0 0 0 1px var(--ochre); }
+  .rvcard[data-done="need_reading"] .rvread input { border-color:var(--ochre); background:var(--ochre-soft); }
   .rvcard[data-done="truncated"] { border-left-color:var(--zhu); border-left-style:dashed; }
   .rvcard[data-done="contaminated"] { border-left-color:var(--ochre); border-left-style:dashed; }
   .rvseg { margin-top:.3rem; display:flex; gap:.3rem; flex-wrap:wrap; }
@@ -294,7 +296,7 @@ async function init() {
   // 定字裁决（C2）
   $('#rv_load').onclick = rvLoad;
   $('#rv_send').onclick = rvSend;
-  $('#rv_todo').onchange = rvFilter;
+  $('#rv_todo').onchange = () => { RV.snapshot = null; rvFilter(); };
   $('#rv_cards').addEventListener('click', ev => {
     // 点 OCR / 上下文给出的字 = 直接采信（省掉手抄；那些字本来就是对的居多）
     const take = ev.target.closest('.rvtake');
@@ -326,18 +328,12 @@ async function init() {
     if (!c) return;
     const cur = RV.verdicts[c.id] || {};
     const shape = el.dataset.f === 'shape' ? el.value : (cur.shape || '');
-    let reading = el.dataset.f === 'reading' ? el.value : (cur.reading || '');
-    // 只有己/已/巳 才允许文意 ≠ 字形；其余一律照录，免得人误拆
-    if (!needsReading(shape)) reading = shape;
-    RV.verdicts[c.id] = { shape, reading: reading || shape, done: shape ? '1' : '' };
-    const card = document.getElementById('rvc' + i);
-    if (card) card.dataset.done = shape ? '1' : '';
-    const box = card && card.querySelector('.rvread');
-    if (box) box.style.display = needsReading(shape) ? '' : 'none';
-    if (box && !needsReading(shape)) {
-      const ri = card.querySelector('[data-f="reading"]');
-      if (ri) ri.value = shape;
-    }
+    const reading = el.dataset.f === 'reading' ? el.value : (cur.reading || '');
+    // **一律走 rvSet**——「己/已/巳 必须填文意」「非三字时文意跟随字形」这些
+    // 规则只写在 rvSet 里。这里原先自己写状态、绕过了它，于是输入「巳」也被
+    // 直接判成已裁（用户 2026-09-04 实锤：选了巳没让填文意）。
+    // 传 undefined 让 rvSet 自己定 done（它会认出 need_reading）。
+    rvSet(i, shape, reading, undefined, true);
   });
   // 键盘：1/2/3 采信第几个候选，N 非字，S 跳过，←/→ 翻卡
   document.addEventListener('keydown', ev => {
@@ -517,7 +513,7 @@ async function rvLoad() {
     const v = await api(`/api/review/verdicts?batch=${encodeURIComponent(batch)}`);
     done = v.verdicts || {};
   } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
-  RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) } };
+  RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) }, snapshot: null };
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
   rvFilter();
   rvFocus(0);
@@ -544,20 +540,33 @@ async function rvLoad() {
 // 只看未裁决：纯前端过滤，不重新载入——裁完一张就让它消失，
 // 剩下多少一眼可见。取消勾选即可回看已裁的（要改主意时用）。
 function rvFilter() {
+  // **快照式过滤**（用户 2026-09-04 定）：勾选的那一刻把「当时还没裁的」记下来，
+  // 之后裁哪张都不再抽走卡片——边裁边消失会让页面一直跳，手上那张刚点完就
+  // 位移了。要重新收拢，再点一次复选框即可。
   const todoOnly = $('#rv_todo') && $('#rv_todo').checked;
+  if (todoOnly && !RV.snapshot) {
+    RV.snapshot = new Set(RV.cards
+      .filter(c => !(RV.verdicts[c.id] && RV.verdicts[c.id].done))
+      .map(c => c.id));
+  }
+  if (!todoOnly) RV.snapshot = null;
   let shown = 0;
   RV.cards.forEach((c, i) => {
     const el = document.getElementById('rvc' + i);
     if (!el) return;
-    const done = !!(RV.verdicts[c.id] && RV.verdicts[c.id].done);
-    const hide = todoOnly && done;
+    const hide = todoOnly && RV.snapshot && !RV.snapshot.has(c.id);
     el.style.display = hide ? 'none' : '';
     if (!hide) shown++;
   });
   const n = RV.cards.length;
-  const nDone = RV.cards.filter(c => RV.verdicts[c.id] && RV.verdicts[c.id].done).length;
+  const st = c => (RV.verdicts[c.id] || {}).done;
+  // need_reading 是「选了 己/已/巳 但还没填文意」——**不算已裁**，单独报，
+  // 否则人会以为裁完了，提交时才发现被拦下。
+  const nDone = RV.cards.filter(c => st(c) && st(c) !== 'need_reading').length;
+  const nNeed = RV.cards.filter(c => st(c) === 'need_reading').length;
   $('#rv_msg').textContent = `${n} 张 · 已裁 ${nDone}`
-    + (todoOnly ? ` · 待裁 ${shown}` : '');
+    + (nNeed ? ` · 待填文意 ${nNeed}` : '')
+    + (todoOnly ? ` · 本轮待裁 ${shown}` : '');
 }
 
 function rvFocus(i) {
@@ -577,14 +586,19 @@ function rvFocus(i) {
   if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
 }
 
-function rvSet(i, shape, reading, done) {
+function rvSet(i, shape, reading, done, fromInput) {
   const c = RV.cards[i];
   if (!c) return;
   // `done` 显式传空串 = 撤销这张卡的裁决（再点一次同一个标记）；
   // 传 undefined 才走「有字就算已裁」的默认。用 `||` 会把空串兜成 '1'，
   // 撤销就失效了——实测点两次「字形不完整」会留下一个 done='1' 的假裁决。
-  const mark = done === undefined ? (shape ? '1' : '') : done;
-  RV.verdicts[c.id] = { shape, reading: reading || shape, done: mark };
+  let mark = done === undefined ? (shape ? '1' : '') : done;
+  // 己/已/巳 **必须**填文意才算裁完（用户 2026-09-04 定：「这 3 个形近字是
+  // 一定要选文意的」）。只填字形就置成待填状态，卡片保持未完成、提交时不带上，
+  // 免得默认把文意当成等于字形——那恰恰是这三个字最容易错的地方。
+  const rd = reading || '';
+  if (needsReading(shape) && !rd) mark = 'need_reading';
+  RV.verdicts[c.id] = { shape, reading: needsReading(shape) ? rd : (rd || shape), done: mark };
   const el = document.getElementById('rvc' + i);
   if (el) {
     el.dataset.done = mark;
@@ -592,13 +606,15 @@ function rvSet(i, shape, reading, done) {
       b.classList.toggle('pick', !!shape && b.dataset.ch === shape));
     el.querySelectorAll('.rvmark').forEach(b =>
       b.classList.toggle('on', !!mark && b.dataset.mark === mark));
-    const si = el.querySelector('[data-f="shape"]'), ri = el.querySelector('[data-f="reading"]');
-    if (si) si.value = shape || '';
-    if (ri) ri.value = reading || shape || '';
+    // 从输入框来的不回写输入框——否则光标会跳、正在打的字被覆盖
+    if (!fromInput) {
+      const si = el.querySelector('[data-f="shape"]'), ri = el.querySelector('[data-f="reading"]');
+      if (si) si.value = shape || '';
+      if (ri) ri.value = needsReading(shape) ? (reading || '') : (reading || shape || '');
+    }
     const box = el.querySelector('.rvread');
     if (box) box.style.display = needsReading(shape) ? '' : 'none';
   }
-  if ($('#rv_todo') && $('#rv_todo').checked) rvFilter();
 }
 
 // 载入与提交必须落在**同一个批次**上，否则读回的和写进去的对不上。
@@ -611,7 +627,9 @@ function rvBatch() {
 async function rvSend() {
   const batch = rvBatch();
   const rows = [];
+  let pending = 0;
   for (const [id, v] of Object.entries(RV.verdicts)) {
+    if (v.done === 'need_reading') { pending++; continue; }
     if (!v.done) continue;
     if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue; }
     if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue; }
@@ -627,6 +645,12 @@ async function rvSend() {
     // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
     rows.push({ id, v: 'confirm', shape: v.shape, reading: v.reading || v.shape,
                 conversion: (v.reading && v.reading !== v.shape) ? 1 : 0 });
+  }
+  if (pending) {
+    $('#rv_msg').textContent = `有 ${pending} 张选了 己/已/巳 但没填文意（黄框那些），填完再提交`;
+    const first = RV.cards.findIndex(c => (RV.verdicts[c.id] || {}).done === 'need_reading');
+    if (first >= 0) rvFocus(first);
+    return;
   }
   if (!rows.length) { $('#rv_msg').textContent = '还没有裁决'; return; }
   $('#rv_msg').textContent = '提交中…';
