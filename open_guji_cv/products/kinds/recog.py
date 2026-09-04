@@ -107,6 +107,36 @@ class PageDecision(BaseModel):
         return next((c for c in self.columns if c.col == col), None)
 
 
+class AdmitRec(BaseModel):
+    """一个字位的进库裁决 + 证据（C1）。进库本身走 Event → glyphdb_admit。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    admit: bool = False
+    channel: str | None = None          # match_solo | match_solo_ocr | context | ...
+    char: str | None = None             # 拟进库的字（字形层，照录图上的形）
+    provenance: str = ""                # match | align | context —— 设计 §3.2 分级
+    doubts: list[str] = Field(default_factory=list)
+    evidence: dict = Field(default_factory=dict)
+
+
+class ColumnAdmit(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[AdmitRec] = Field(default_factory=list)
+
+
+class PageAdmit(BaseModel):
+    page: int
+    n_auto: int = 0
+    n_review: int = 0
+    columns: list[ColumnAdmit] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnAdmit | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
 GLYPH_MATCH = register_kind(ProductKindSpec(
     id="glyph_match", title="Step5 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
@@ -118,3 +148,7 @@ OCR_CANDIDATES = register_kind(ProductKindSpec(
 CONTEXT_DECISION = register_kind(ProductKindSpec(
     id="context_decision", title="Step6 上下文定字", storage="numeric", unit="cell",
     schema=PageDecision, coord_space=COLUMN_PX))
+
+SEED_ADMIT = register_kind(ProductKindSpec(
+    id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
+    schema=PageAdmit, coord_space=COLUMN_PX))
