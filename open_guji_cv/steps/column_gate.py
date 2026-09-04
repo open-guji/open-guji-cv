@@ -28,7 +28,8 @@ from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
 CONTRACT = [
     "页级共享量 period / ref_w 用该页全部列算，不只用准入的列",
     "content_x 随图传：交出去的列图抹白不裁切，Step3 内部找不到墙",
-    "border_top / border_bottom 沿用 windows 的 *_in_column；抬头列 top_slack = border_top",
+    "border_top / border_bottom 沿用 windows 的 *_in_column；抬头列 top_slack = border_top，"
+    "顶格列（版框平齐但顶端有字墨）top_slack = 0.5×period",
     "n_raised 不给：raised 只是几何标记，由 Step3 参数按版式先验定",
 ]
 
@@ -44,7 +45,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.0", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.1", unit="column",
         consumes=("column_windows", "column_image"), produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
@@ -98,6 +99,33 @@ class ColumnGateStep(Step):
                 ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
 
+        # **顶格列也要 top_slack**（2026-09-03 加）。原先只有 `raised`（Step1 探到
+        # 抬头**框**、版框有台阶）的列才给，可这批书里更常见的是**版框平齐、字从
+        # 版框内顶端起写**的顶格列——`raised=False`、`border_top_in_column=0`，
+        # 于是 `top_slack=0`，DP 的首锚点窗口开不上去，首字被压在格顶。
+        # 实测 dev_set 7 条格数不足的列里 5 条是这一型（vol01/141c7「諭旨」、
+        # 26c2、42c2、vol02/3c3、3c4），给 n_raised=1 也修不好——格数够了但
+        # 首锚点仍卡在原处；只有 33c8（真抬头框，top_slack=148）能修。
+        # 判据：列图**最顶端一格高之内**就有字墨（顶格写的字必然贴着版框），
+        # 且这段墨不是版框线残留（`clean_column` 已抹掉版框，所以剩下的就是字）。
+        # 给的量是「墨起点之上留半格」——够 DP 把首字整个圈进来，又不至于把
+        # 窗口开到无边（开过头的代价实测很小，见 row_boundaries 的 top_slack 说明）。
+        top_ink_slack: dict[int, float] = {}
+        if page_ok and period:
+            probe = max(20, int(round(period * 0.6)))
+            for c in cols:
+                if c.raised or c.border_top_in_column > 1.0:
+                    continue                      # 真抬头列走原路
+                try:
+                    img = ctx.image("column_image", column_key(page, c.col))
+                except Exception:
+                    continue
+                b0, b1 = c.band
+                prof = (img[:, int(b0):int(b1)] < p.ink_threshold).mean(axis=1)
+                head = prof[:probe]
+                if head.size and float(head.max()) > 0.08:
+                    top_ink_slack[c.col] = round(float(period) * 0.5, 2)
+
         recs: list[GateColumn] = []
         for c in cols:
             reasons: list[str] = []
@@ -115,7 +143,8 @@ class ColumnGateStep(Step):
                 content_x=(float(c.band[0]), float(c.band[1])),
                 border_top=float(c.border_top_in_column),
                 border_bottom=float(c.border_bottom_in_column),
-                top_slack=float(c.border_top_in_column) if c.raised else 0.0,
+                top_slack=(float(c.border_top_in_column) if c.raised
+                           else top_ink_slack.get(c.col, 0.0)),
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
                 warped_size=c.warped_size, side_floor=c.side_floor,
                 band_width=float(c.band[1] - c.band[0]),

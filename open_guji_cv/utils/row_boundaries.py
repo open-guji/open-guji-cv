@@ -304,6 +304,21 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     x1_eff = x1 - top_slack
     cand0 = [(v, ink) for v, ink in zip(valleys, valley_ink) if x1_eff <= v <= x1 + y1_max]
     candN = [(v, ink) for v, ink in zip(valleys, valley_ink) if x2 - y2_max <= v <= x2]
+    if top_slack > 0:
+        # **顶格 / 抬头列要显式补一个「窗口最上端」候选**（2026-09-03 加）。
+        # 这类列的首字顶边贴着列图边缘，它**上面没有字缝**——`find_valleys`
+        # 在那一带只挑得到首字**内部**的笔画间隙。实测：
+        #   vol01/141 c7「諭」顶边 y=0，窗口 [-58,58] 内唯一候选 y=52（字内部）；
+        #   vol01/33 c8 真墨起 y=33，窗口 [0,206] 内候选 72/150，全在墨之后。
+        # DP 只能在这些点里挑，首字的头必然被切掉。把窗口往上开（`top_slack`）
+        # 解决不了：开出去的区间里根本没有候选点。
+        # 所以补一个 `max(0, x1 - top_slack)`（窗口最上端，夹到图内），墨量给 0
+        # ——那一行要么是版框、要么是列图边缘，都不是字。DP 于是能在「切在字
+        # 内」和「从窗口顶端起」之间按代价选，后者间距更接近 period、代价更低。
+        # `top_slack > 0` 是 column_gate 给的「这一列可能顶格/抬头」信号。
+        head = max(0.0, x1 - top_slack)
+        if not any(abs(v - head) < 1e-6 for v, _ in cand0):
+            cand0.append((head, 0.0))
     if not cand0:
         cand0 = [(x1 + y1_max * 0.4, 0.05)]
     if not candN:
