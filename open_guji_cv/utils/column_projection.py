@@ -431,7 +431,24 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
 
 # ── 逐列的矫正窗口 ───────────────────────────────────────────
 
-BODY_PAD = 0.0     # 普通列在版框之外额外留的余量
+BODY_PAD = 0.0     # 普通列在版框之外额外留的余量（上界；下界见 BOTTOM_PAD）
+
+BOTTOM_PAD = 40.0
+# **下界要多开一截**（2026-09-03 加）。`detect_borders` 的下版框线系统性偏上，
+# 窗口就切在末字中部：dev_set 155 列实测，下界到真实版框线之间还剩字墨
+# **中位 21px、最大 69px，83% 的列被切掉 >5px**（目视复核 vol01/60c4、
+# vol02/181c5、vol01/137c6、vol01/24c1，红线切断「托」「更」「著」「淵」下半）。
+# 偏差呈双峰：45% 的列 ≤0（定位准），38% >15px，长尾整页出现
+# （01/60、02/3、02/181、01/137 多列同时偏），是下版框定位问题不是随机噪声。
+#
+# ⚠️ **别用连通体高度差量这个偏差**——笔画被切断后就不再与列图内的部分相连，
+# 那样只能量到 2px，低估整整一个量级。要量「下界到版框线上沿之间还有多少字墨」。
+#
+# 多开进来的版框线不用担心：`clean_column` 的 `column_border_trim` 本来就负责
+# 抹掉上下版框，它在文字带宽度内按水平投影归零判边，版框线进到列图里正是它
+# 设计要处理的输入。40px 覆盖实测最大切幅 69px 里的绝大多数，又不至于把下一
+# 页/页边噪声卷进来。见 doc/step3_error_survey.md 戊类、
+# 反馈批次 2026-09-03-step1-bottom-clip。
 
 
 @dataclass
@@ -469,13 +486,18 @@ class ColumnWindow:
 
 
 def page_column_windows(result: BorderDetectionResult,
-                         body_pad: float = BODY_PAD) -> list[ColumnWindow]:
+                         body_pad: float = BODY_PAD,
+                         bottom_pad: float = BOTTOM_PAD) -> list[ColumnWindow]:
     """整页每一列的矫正窗口——上下界**逐列**算（委派给 `column_bounds`），
     抬头列自动用抬头框的内边框当上界。
 
     `result` 直接用 `border_geometry.detect_borders()` 的输出：`head_raise`
     已经由 `detect_head_raise()` 填好，调用方不需要再给抬头先验。同一列若有
     多级台阶，取 `inner_y` **最小**的那个（最高的一级）。
+
+    `bottom_pad` 与 `body_pad` **分开**：下版框探测系统性偏上，下界要多开一截
+    才不会切掉末字下半，多进来的版框线由 `clean_column` 抹掉。理由与实测见
+    `BOTTOM_PAD`。
     """
     hr: dict[int, float] = {}
     for b in result.head_raise:
@@ -491,7 +513,7 @@ def page_column_windows(result: BorderDetectionResult,
             result.top, result.bottom, head_raise_inner_y=raised_top,
             left=left_v, right=right_v)
         top_y -= body_pad
-        bottom_y += body_pad
+        bottom_y += bottom_pad
         top_y = max(0.0, min(top_y, btop))
         bottom_y = min(float(result.height - 1), max(bottom_y, bbot))
         out.append(ColumnWindow(
