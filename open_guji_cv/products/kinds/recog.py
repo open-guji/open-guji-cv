@@ -78,6 +78,35 @@ class PageOcr(BaseModel):
         return next((c for c in self.columns if c.col == col), None)
 
 
+class DecisionRec(BaseModel):
+    """一个字位的最终定字 + 证据（Step6）。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    char: str | None = None                  # None = 弃权，落回人审
+    margin: float = 0.0
+    source: str = ""                         # db_same | context | prior | none
+    used_context: bool = False
+    ranked: list[tuple[str, float]] = Field(default_factory=list)
+
+
+class ColumnDecision(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[DecisionRec] = Field(default_factory=list)
+
+
+class PageDecision(BaseModel):
+    page: int
+    strategy: str = ""
+    corpus_fingerprint: str = ""             # 裁决是用**哪份语料**做的，见 context_decide
+    columns: list[ColumnDecision] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnDecision | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
 GLYPH_MATCH = register_kind(ProductKindSpec(
     id="glyph_match", title="Step5 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
@@ -85,3 +114,7 @@ GLYPH_MATCH = register_kind(ProductKindSpec(
 OCR_CANDIDATES = register_kind(ProductKindSpec(
     id="ocr_candidates", title="Step5 OCR 候选", storage="numeric", unit="cell",
     schema=PageOcr, coord_space=COLUMN_PX))
+
+CONTEXT_DECISION = register_kind(ProductKindSpec(
+    id="context_decision", title="Step6 上下文定字", storage="numeric", unit="cell",
+    schema=PageDecision, coord_space=COLUMN_PX))
