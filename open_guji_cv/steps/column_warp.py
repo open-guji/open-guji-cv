@@ -20,6 +20,7 @@ from ..utils.column_projection import (ColumnWindow, clean_column, column_profil
 
 class ColumnWarpParams(BaseModel):
     body_pad: float = 0.0
+    bottom_pad: float = 40.0          # 下界额外开的余量，见 column_projection.BOTTOM_PAD
     ink_threshold: int = 128
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
@@ -35,7 +36,7 @@ def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) ->
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.0", unit="column",
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.1", unit="column",
         consumes=("raw_page", "borders"), produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
         code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry"),
@@ -46,7 +47,8 @@ class ColumnWarpStep(Step):
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         gray = ctx.raw_page(page)
         borders: Borders = ctx.product("borders", page)
-        wins = page_column_windows(borders.to_result(), body_pad=p.body_pad)
+        wins = page_column_windows(borders.to_result(), body_pad=p.body_pad,
+                                   bottom_pad=p.bottom_pad)
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow

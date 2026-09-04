@@ -9,6 +9,7 @@ from open_guji_cv.utils.border_geometry import (
     VLine,
 )
 from open_guji_cv.utils.column_projection import (
+    BOTTOM_PAD,
     column_border_trim,
     column_bounds,
     column_profile,
@@ -331,3 +332,34 @@ def test_warp_column_three_segment_stacks_strips_seamlessly():
         assert len(dark) > 0
         xs.append(dark.mean())
     assert max(xs) - min(xs) <= 3.0
+
+
+def test_bottom_pad_opens_window_below_detected_border():
+    """下界要开到探出的下版框之外——`detect_borders` 的下版框系统性偏上。
+
+    钉住 2026-09-03 的修复：原先上下界都是零余量，列窗切在末字中部，
+    dev_set 155 列实测下界外还剩字墨中位 21px、最大 69px，83% 的列切掉 >5px
+    （目视：vol01/60c4、vol02/181c5、vol01/137c6、vol01/24c1 的
+    「托」「更」「著」「淵」下半被切）。多开进来的版框线由 clean_column 抹掉。
+    """
+    res = _result_with_tilted_top()
+    wins = {w.col: w for w in page_column_windows(res)}
+    for w in wins.values():
+        assert w.bottom_y > w.border_bottom_y, (
+            f"c{w.col} 下界 {w.bottom_y} 没开到版框 {w.border_bottom_y} 之外")
+        assert w.bottom_y - w.border_bottom_y <= BOTTOM_PAD + 1e-6
+
+    # body_pad 只管上界，不该再影响下界
+    a = page_column_windows(res, body_pad=0.0)
+    b = page_column_windows(res, body_pad=30.0)
+    assert [w.bottom_y for w in a] == [w.bottom_y for w in b], \
+        "body_pad 不该动下界（下界归 bottom_pad 管）"
+    assert all(y2 < y1 for y1, y2 in zip((w.top_y for w in a), (w.top_y for w in b))), \
+        "body_pad 应当只把上界往上开"
+
+
+def test_bottom_pad_zero_restores_old_behaviour():
+    """bottom_pad=0 时回到「下界=版框」，保证这个参数是纯增量、可关掉。"""
+    res = _result_with_tilted_top()
+    for w in page_column_windows(res, bottom_pad=0.0):
+        assert abs(w.bottom_y - w.border_bottom_y) < 1e-6
