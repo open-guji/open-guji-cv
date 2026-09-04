@@ -15,4 +15,5 @@
 
 from ..products import kinds  # noqa: F401  —— 先注册产物种类
 from . import (border_detect, column_warp, column_gate, row_segment,  # noqa: F401
-               cell_shrink, glyph_match, ocr_candidates, context_decide)
+               cell_shrink, glyph_match, ocr_candidates, context_decide,
+               seed_admit)
