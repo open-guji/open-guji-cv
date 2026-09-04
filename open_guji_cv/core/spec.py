@@ -50,6 +50,18 @@ class StepSpec:
     when: str | None = None          # 单位级条件，P0 只记录不求值
     code_deps: tuple[str, ...] = field(default=())
     """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
+    needs: tuple[str, ...] = field(default=())
+    """跑得起来的**外部**前提，控制台据此把跑不了的步骤置灰而不是让人点了才失败。
+    口径与 `eval/registry.py` 的 `needs` 一致：
+
+        engine    要 OCR 引擎 / GPU（rapidocr 等）
+        corpus    要语料文件
+        db        要 GlyphDB
+        heavy     分钟级以上
+
+    只是**声明**，不参与指纹——同一份代码在装了引擎的机器上跑出来的产物，
+    跟没装的机器上的空产物不是一回事，但那个差别由参数（如引擎名）和产物
+    内容自己体现，不该混进 Step 指纹。"""
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────
