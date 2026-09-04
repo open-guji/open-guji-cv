@@ -47,6 +47,16 @@ def _expected_of(e: Event) -> dict:
         return {"border_class": p.get("border_class") or p.get("verdict")}
     if e.kind == "not_a_char":
         return {"quality": "not_text"}
+    if e.kind == "confirm" and p.get("v") == "seg_defect":
+        # 切分缺陷：quality 沿用 char-segmentation/instances 的四分类
+        # （clean / truncated / contaminated / not_text），不另造词。
+        # 字形/文意若已填也一并留着——人看图时顺手认出的字不该丢。
+        out = {"quality": p.get("quality") or "contaminated"}
+        if p.get("shape"):
+            out["shape"] = p["shape"]
+        if p.get("reading"):
+            out["reading"] = p["reading"]
+        return out
     if e.kind == "recrop":
         return {"old_bbox": p.get("old_bbox"), "corrected_bbox": p.get("new_bbox") or p.get("corrected_bbox")}
     return p
@@ -58,6 +68,12 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
     res = ConsumeResult("gold_add", n_events=len(events))
     by_shard: dict[str, list[GoldItem]] = {}
     for e, d in events:
+        # `confirm` 事件同时路由给 glyphdb_admit 与这里：定字那部分归前者，
+        # 切分缺陷那部分归这里。不分流的话，每条定字都会往 instances 金标里
+        # 塞一条没有 quality 的空条目。
+        if e.kind == "confirm" and e.payload.get("v") != "seg_defect":
+            res.skipped += 1
+            continue
         if not d.shard:
             res.skipped += 1
             res.errors.append(f"{e.id}: 路由没给 shard")
