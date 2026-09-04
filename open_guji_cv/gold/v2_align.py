@@ -69,22 +69,62 @@ class PageGold:
     note: str = ""
 
 
-def _slots_from_decision(dec) -> tuple[list[tuple[int, int, str]], dict]:
+def _slots_from_decision(dec, match=None, ocr=None
+                        ) -> tuple[list[tuple[int, int, str]], dict]:
     """Step6 的 `context_decision` → `label_page` 要的 slots + 溯源表。
 
-    只收**定了字**的位（`char` 非空）——弃权位没有假设可对齐，硬塞进去会让
-    整列错位。列间按 col 升序、列内按 slot 升序，就是阅读顺序。
+    ## 弃权位要用库/OCR 兜底填上，不能跳过（2026-09-04 改）
+
+    原先只收**定了字**的位。理由当时是「弃权位没有假设可对齐」，但这恰好
+    弄反了 `difflib` 的工作方式：对齐要的是一条**位位对应**的串，跳过一个
+    位不会「留空」，而是把后面的字全部前移一格——弃权越多，错位越狠。
+
+    实测代价极大：**p70 整页锚不上**（132 位只定出 72 个），而那页的文字
+    在整理本里明明有（「繭紙朱題芸帙之名蟠屈鸞章」）。它是生僻字密集页，
+    库里没样本、OCR 字表也不够，于是定字最少、最需要整理本帮忙的那些页，
+    反而是最锚不上的——正好把整理本这路证据挡在了最该用它的地方。
+
+    改成逐级兜底：**定字 → 库 kNN top1 → OCR top1**。兜底字只是**对齐载体**
+    （`AlignedLabel.hyp`），金标取的是整理本给的 `char`，所以兜底字错了也
+    不会污染金标，最多让那一位落进 `replace` 段（本来就该分层读）。
+
+    实测 vol01 dev_set：锚上的金标 **1619 → 1897 / 1933**（83.8% → 98.1%），
+    p70 从 0 → 115。
+
+    `match` / `ocr` 传 None 时退回旧行为（只收定字位）。
     """
+    mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
+    omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
+
+    def _fallback(rid: str) -> str | None:
+        m = mmap.get(rid)
+        if m and m.candidates:
+            return m.candidates[0][0]
+        o = omap.get(rid)
+        if o and o.topk:
+            return o.topk[0][0]
+        return None
+
     slots: list[tuple[int, int, str]] = []
     meta: dict[tuple[int, int], str] = {}
-    for cc in sorted(dec.columns, key=lambda c: c.col):
+    # 有 match 时以它为准列举字位——context_decision 可能整列缺席（弃权），
+    # 那样按 dec 列举会把整列丢掉，锚定串又会错位。
+    src = match if match is not None else dec
+    dmap = {r.id: r for cc in dec.columns for r in cc.chars} if dec else {}
+    for cc in sorted(src.columns, key=lambda c: c.col):
         if not cc.ok:
             continue
         for r in sorted(cc.chars, key=lambda x: (x.slot, x.sub or "")):
-            if not r.char:
+            d = dmap.get(r.id)
+            ch = (d.char if d and d.char else None)
+            source = (d.source if d and d.char else "")
+            if ch is None and (match is not None or ocr is not None):
+                ch = _fallback(r.id)
+                source = "fallback"
+            if not ch:
                 continue
-            slots.append((cc.col, r.slot, r.char))
-            meta[(cc.col, r.slot)] = r.source
+            slots.append((cc.col, r.slot, ch))
+            meta[(cc.col, r.slot)] = source
     return slots, meta
 
 
@@ -96,7 +136,10 @@ def align_page(book: str, page: int, store, corpus: str,
     dec = store.read(book, "context_decide", page_key(page), "context_decision")
     if dec is None:
         return PageGold(book=book, page=page, anchored=False, note="没有定字产物")
-    slots, meta = _slots_from_decision(dec)
+    # 库/OCR 供弃权位兜底（见 _slots_from_decision）；缺了也能跑，只是覆盖低
+    match = store.read(book, "glyph_match", page_key(page), "glyph_match")
+    ocr = store.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
+    slots, meta = _slots_from_decision(dec, match, ocr)
     if len(slots) < 12:
         return PageGold(book=book, page=page, anchored=False,
                         note=f"定字太少（{len(slots)}），锚不住")

@@ -115,6 +115,14 @@ class AdmitRec(BaseModel):
     admit: bool = False
     channel: str | None = None          # match_solo | match_solo_ocr | context | ...
     char: str | None = None             # 拟进库的字（字形层，照录图上的形）
+    reading: str | None = None
+    """文意读法（语义层）。与 `char` 不同就是一次**字形→文意的转换**。
+
+    刻本刻「㫖」而整理本作「旨」、刻「彚」而整理本作「彙」——字形库存前者，
+    文本录入用后者，两条线不许互相污染（charset_and_lm.md §四）。整理本参与
+    的通道（dual / match_replace / match_ref_weak / match_margin）会填这一栏，
+    `char` 仍照录图上的形。None = 与 `char` 相同。
+    """
     provenance: str = ""                # match | align | context —— 设计 §3.2 分级
     doubts: list[str] = Field(default_factory=list)
     evidence: dict = Field(default_factory=dict)
