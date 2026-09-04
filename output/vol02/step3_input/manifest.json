@@ -19,12 +19,10 @@
  "pages": [
   {
    "page": "3",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 158.0,
    "column_widths": [
     229,
     182,
@@ -40,11 +38,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       214
@@ -67,13 +63,13 @@
       "bottom": 8
      },
      "side_floor": 0.0286,
-     "gold": null
+     "gold": null,
+     "file": "3/c1.png"
     },
     {
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）",
       "L2：两侧最低墨 0.0535 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
@@ -103,11 +99,9 @@
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       177
@@ -130,15 +124,14 @@
       "bottom": 0
      },
      "side_floor": 0.0421,
-     "gold": null
+     "gold": null,
+     "file": "3/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       162
@@ -161,15 +154,14 @@
       "bottom": 3
      },
      "side_floor": 0.043,
-     "gold": null
+     "gold": null,
+     "file": "3/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       162
@@ -192,15 +184,14 @@
       "bottom": 25
      },
      "side_floor": 0.0274,
-     "gold": null
+     "gold": null,
+     "file": "3/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       182
@@ -223,13 +214,13 @@
       "bottom": 0
      },
      "side_floor": 0.034,
-     "gold": null
+     "gold": null,
+     "file": "3/c6.png"
     },
     {
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）",
       "L2：两侧最低墨 0.0612 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
@@ -261,7 +252,6 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）",
       "L2：两侧最低墨 0.0666 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
@@ -293,7 +283,6 @@
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[229]）",
       "L2：两侧最低墨 0.0786 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
@@ -431,7 +420,7 @@
       "top": 3,
       "bottom": 0
      },
-     "side_floor": 0.0091,
+     "side_floor": 0.0099,
      "gold": null,
      "file": "4/c3.png"
     },
@@ -472,7 +461,7 @@
      "tier": "gold",
      "content_x": [
       4,
-      177
+      176
      ],
      "border_top": 0.0,
      "border_bottom": 2422.2658749179163,
@@ -1206,10 +1195,10 @@
    "page": "7",
    "admitted": true,
    "reject": [],
-   "period": 113.0,
+   "period": 115.0,
    "ref_w": 175.0,
    "column_widths": [
-    188,
+    226,
     186,
     185,
     184,
@@ -1223,22 +1212,20 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L2：两侧最低墨 0.1393 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gold",
      "content_x": [
       6,
-      179
+      207
      ],
      "border_top": 0.0,
-     "border_bottom": 2375.2823123761464,
+     "border_bottom": 2375.3907485030013,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 188,
+      "width": 226,
       "height": 2376
      },
      "border_case": {
@@ -1246,14 +1233,15 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 3,
+      "top": 4,
       "bottom": 0
      },
-     "side_floor": 0.1393,
+     "side_floor": 0.0008,
      "gold": {
-      "verdict": "mixed",
+      "verdict": "clean",
       "border_class": null
-     }
+     },
+     "file": "7/c1.png"
     },
     {
      "col": 2,
@@ -1291,7 +1279,7 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      6,
+      7,
       182
      ],
      "border_top": 0.0,
@@ -1499,12 +1487,10 @@
   },
   {
    "page": "8",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 180.0,
    "column_widths": [
     185,
     188,
@@ -1514,17 +1500,15 @@
     190,
     191,
     184,
-    241
+    230
    ],
    "median_width": 188,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       181
@@ -1547,15 +1531,14 @@
       "bottom": 5
      },
      "side_floor": 0.002,
-     "gold": null
+     "gold": null,
+     "file": "8/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       185
@@ -1578,15 +1561,14 @@
       "bottom": 7
      },
      "side_floor": 0.0041,
-     "gold": null
+     "gold": null,
+     "file": "8/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -1609,15 +1591,14 @@
       "bottom": 8
      },
      "side_floor": 0.002,
-     "gold": null
+     "gold": null,
+     "file": "8/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       185
@@ -1640,15 +1621,14 @@
       "bottom": 7
      },
      "side_floor": 0.002,
-     "gold": null
+     "gold": null,
+     "file": "8/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       178
@@ -1671,15 +1651,14 @@
       "bottom": 6
      },
      "side_floor": 0.0016,
-     "gold": null
+     "gold": null,
+     "file": "8/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       187
@@ -1702,15 +1681,14 @@
       "bottom": 10
      },
      "side_floor": 0.0033,
-     "gold": null
+     "gold": null,
+     "file": "8/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       187
@@ -1733,15 +1711,14 @@
       "bottom": 9
      },
      "side_floor": 0.0037,
-     "gold": null
+     "gold": null,
+     "file": "8/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -1764,27 +1741,25 @@
       "bottom": 7
      },
      "side_floor": 0.0037,
-     "gold": null
+     "gold": null,
+     "file": "8/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[241]）",
-      "L2：两侧最低墨 0.0996 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      26,
-      235
+      17,
+      227
      ],
      "border_top": 0.0,
-     "border_bottom": 2451.777831068444,
+     "border_bottom": 2451.6520537230135,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 241,
+      "width": 230,
       "height": 2451
      },
      "border_case": {
@@ -1795,8 +1770,9 @@
       "top": 5,
       "bottom": 4
      },
-     "side_floor": 0.0996,
-     "gold": null
+     "side_floor": 0.0008,
+     "gold": null,
+     "file": "8/c9.png"
     }
    ]
   },
@@ -2694,7 +2670,7 @@
     186,
     188,
     179,
-    203
+    201
    ],
    "median_width": 186,
    "columns": [
@@ -2940,34 +2916,33 @@
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L2：两侧最低墨 0.1609 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      20,
-      198
+      8,
+      196
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.4909429982754,
+     "border_bottom": 2410.482107959717,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 203,
-      "height": 2411
+      "width": 201,
+      "height": 2409
      },
      "border_case": {
       "top": "a",
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 5,
+      "top": 6,
       "bottom": 0
      },
-     "side_floor": 0.1609,
-     "gold": null
+     "side_floor": 0.0,
+     "gold": null,
+     "file": "12/c9.png"
     }
    ]
   },
@@ -3079,7 +3054,7 @@
       "top": 5,
       "bottom": 3
      },
-     "side_floor": 0.0021,
+     "side_floor": 0.0025,
      "gold": null,
      "file": "13/c3.png"
     },
@@ -3180,7 +3155,7 @@
      "tier": "gate",
      "content_x": [
       5,
-      184
+      183
      ],
      "border_top": 0.0,
      "border_bottom": 2415.4456331034316,
@@ -6002,7 +5977,7 @@
      },
      "border_trim_px": {
       "top": 6,
-      "bottom": 2
+      "bottom": 3
      },
      "side_floor": 0.0012,
      "gold": null,
@@ -9541,7 +9516,7 @@
       "top": 4,
       "bottom": 5
      },
-     "side_floor": 0.009,
+     "side_floor": 0.0102,
      "gold": {
       "verdict": "clean",
       "border_class": null
@@ -10812,7 +10787,7 @@
      "tier": "gate",
      "content_x": [
       4,
-      179
+      178
      ],
      "border_top": 0.0,
      "border_bottom": 2360.5010888774204,
@@ -11584,7 +11559,7 @@
       "top": 7,
       "bottom": 3
      },
-     "side_floor": 0.0033,
+     "side_floor": 0.0037,
      "gold": null,
      "file": "42/c4.png"
     },
@@ -11614,7 +11589,7 @@
       "top": 0,
       "bottom": 6
      },
-     "side_floor": 0.0127,
+     "side_floor": 0.0131,
      "gold": null,
      "file": "42/c5.png"
     },
@@ -11742,74 +11717,69 @@
   },
   {
    "page": "43",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 173.0,
    "column_widths": [
-    229,
-    178,
-    183,
+    233,
+    179,
+    184,
     182,
     187,
     186,
     182,
-    190,
+    189,
     185
    ],
    "median_width": 185,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      6,
-      209
+      5,
+      212
      ],
      "border_top": 0.0,
-     "border_bottom": 2406.951133114275,
+     "border_bottom": 2406.901119179172,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 229,
-      "height": 2406
+      "width": 233,
+      "height": 2407
      },
      "border_case": {
       "top": "a",
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 5,
+      "top": 7,
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "43/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
-      174
+      175
      ],
      "border_top": 0.0,
-     "border_bottom": 2407.346001394638,
+     "border_bottom": 2407.3276047754284,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 178,
+      "width": 179,
       "height": 2407
      },
      "border_case": {
@@ -11821,58 +11791,56 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "43/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      5,
+      6,
       179
      ],
      "border_top": 0.0,
-     "border_bottom": 2407.8272725292477,
+     "border_bottom": 2407.8150392284697,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 183,
-      "height": 2409
+      "width": 184,
+      "height": 2408
      },
      "border_case": {
       "top": "a",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 6,
-      "bottom": 1
+      "top": 5,
+      "bottom": 2
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "43/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      5,
-      177
+      6,
+      178
      ],
      "border_top": 0.0,
-     "border_bottom": 2408.2960513211137,
+     "border_bottom": 2408.288730378812,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 182,
-      "height": 2409
+      "height": 2408
      },
      "border_case": {
       "top": "a",
@@ -11883,21 +11851,20 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "43/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       183
      ],
      "border_top": 0.0,
-     "border_bottom": 2408.7665494700664,
+     "border_bottom": 2408.762883667257,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -11914,21 +11881,20 @@
       "bottom": 1
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "43/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.245709185444,
+     "border_bottom": 2409.2420482653333,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -11945,27 +11911,26 @@
       "bottom": 2
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "43/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
+      5,
       178
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.706807431502,
+     "border_bottom": 2409.699484930276,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 182,
-      "height": 2409
+      "height": 2410
      },
      "border_case": {
       "top": "a",
@@ -11976,27 +11941,26 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "43/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      5,
-      185
+      4,
+      184
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.1589059993175,
+     "border_bottom": 2410.1503400017637,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 190,
-      "height": 2409
+      "width": 189,
+      "height": 2410
      },
      "border_case": {
       "top": "a",
@@ -12007,27 +11971,26 @@
       "bottom": 5
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "43/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      5,
-      180
+      6,
+      179
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.6423964667356,
+     "border_bottom": 2410.62891648541,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 185,
-      "height": 2412
+      "height": 2411
      },
      "border_case": {
       "top": "a",
@@ -12038,7 +12001,8 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "43/c9.png"
     }
    ]
   },
@@ -12335,12 +12299,10 @@
   },
   {
    "page": "45",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 116.0,
+   "ref_w": 176.0,
    "column_widths": [
     239,
     181,
@@ -12356,11 +12318,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       206
@@ -12383,15 +12343,14 @@
       "bottom": 2
      },
      "side_floor": 0.0307,
-     "gold": null
+     "gold": null,
+     "file": "45/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       177
@@ -12414,15 +12373,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "45/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -12445,15 +12403,14 @@
       "bottom": 0
      },
      "side_floor": 0.0012,
-     "gold": null
+     "gold": null,
+     "file": "45/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -12476,15 +12433,14 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "45/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -12507,15 +12463,14 @@
       "bottom": 0
      },
      "side_floor": 0.0012,
-     "gold": null
+     "gold": null,
+     "file": "45/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       180
@@ -12538,15 +12493,14 @@
       "bottom": 3
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "45/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       184
@@ -12569,15 +12523,14 @@
       "bottom": 0
      },
      "side_floor": 0.0012,
-     "gold": null
+     "gold": null,
+     "file": "45/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       178
@@ -12600,15 +12553,14 @@
       "bottom": 3
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "45/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[239]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -12631,7 +12583,8 @@
       "bottom": 2
      },
      "side_floor": 0.005,
-     "gold": null
+     "gold": null,
+     "file": "45/c9.png"
     }
    ]
   },
@@ -12928,12 +12881,10 @@
   },
   {
    "page": "47",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 177.0,
    "column_widths": [
     220,
     185,
@@ -12949,11 +12900,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       206
@@ -12976,15 +12925,14 @@
       "bottom": 0
      },
      "side_floor": 0.0022,
-     "gold": null
+     "gold": null,
+     "file": "47/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       181
@@ -13007,15 +12955,14 @@
       "bottom": 0
      },
      "side_floor": 0.0022,
-     "gold": null
+     "gold": null,
+     "file": "47/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -13038,15 +12985,14 @@
       "bottom": 52
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -13069,15 +13015,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -13100,15 +13045,14 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "47/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       178
@@ -13131,15 +13075,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       183
@@ -13162,15 +13105,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -13193,15 +13135,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[220]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       182
@@ -13224,7 +13165,8 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "47/c9.png"
     }
    ]
   },
@@ -14103,12 +14045,10 @@
   },
   {
    "page": "51",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 115.0,
+   "ref_w": 176.0,
    "column_widths": [
     237,
     181,
@@ -14124,11 +14064,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       202
@@ -14151,15 +14089,14 @@
       "bottom": 0
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "51/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       177
@@ -14182,15 +14119,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "51/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       178
@@ -14213,15 +14149,14 @@
       "bottom": 2
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "51/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       179
@@ -14244,15 +14179,14 @@
       "bottom": 6
      },
      "side_floor": 0.0016,
-     "gold": null
+     "gold": null,
+     "file": "51/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       186
@@ -14275,15 +14209,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "51/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -14306,15 +14239,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "51/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       179
@@ -14337,15 +14269,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "51/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -14368,15 +14299,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "51/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[237]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       3,
       184
@@ -14399,7 +14329,8 @@
       "bottom": 1
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "51/c9.png"
     }
    ]
   },
@@ -14658,7 +14589,7 @@
       "top": 4,
       "bottom": 1
      },
-     "side_floor": 0.0008,
+     "side_floor": 0.0004,
      "gold": null,
      "file": "52/c8.png"
     },
@@ -15278,12 +15209,10 @@
   },
   {
    "page": "55",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 112.0,
+   "ref_w": 177.0,
    "column_widths": [
     230,
     181,
@@ -15299,11 +15228,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       202
@@ -15326,15 +15253,14 @@
       "bottom": 3
      },
      "side_floor": 0.0086,
-     "gold": null
+     "gold": null,
+     "file": "55/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       177
@@ -15357,15 +15283,14 @@
       "bottom": 2
      },
      "side_floor": 0.0061,
-     "gold": null
+     "gold": null,
+     "file": "55/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       180
@@ -15388,15 +15313,14 @@
       "bottom": 2
      },
      "side_floor": 0.0041,
-     "gold": null
+     "gold": null,
+     "file": "55/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -15419,15 +15343,14 @@
       "bottom": 51
      },
      "side_floor": 0.0029,
-     "gold": null
+     "gold": null,
+     "file": "55/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       180
@@ -15450,15 +15373,14 @@
       "bottom": 3
      },
      "side_floor": 0.0029,
-     "gold": null
+     "gold": null,
+     "file": "55/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       178
@@ -15481,15 +15403,14 @@
       "bottom": 4
      },
      "side_floor": 0.0024,
-     "gold": null
+     "gold": null,
+     "file": "55/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       181
@@ -15512,15 +15433,14 @@
       "bottom": 4
      },
      "side_floor": 0.0029,
-     "gold": null
+     "gold": null,
+     "file": "55/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -15543,15 +15463,14 @@
       "bottom": 4
      },
      "side_floor": 0.0012,
-     "gold": null
+     "gold": null,
+     "file": "55/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[230]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -15574,7 +15493,8 @@
       "bottom": 4
      },
      "side_floor": 0.0016,
-     "gold": null
+     "gold": null,
+     "file": "55/c9.png"
     }
    ]
   },
@@ -15582,7 +15502,7 @@
    "page": "56",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+    "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
@@ -15603,7 +15523,7 @@
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15634,7 +15554,7 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15665,7 +15585,7 @@
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15696,8 +15616,8 @@
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）",
-      "L2：两侧最低墨 0.0582 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.0590 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
@@ -15721,14 +15641,14 @@
       "top": 4,
       "bottom": 0
      },
-     "side_floor": 0.0582,
+     "side_floor": 0.059,
      "gold": null
     },
     {
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15759,7 +15679,7 @@
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15790,7 +15710,7 @@
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15821,7 +15741,7 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -15852,7 +15772,7 @@
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [5]（[247]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [5]（[247]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -16468,12 +16388,10 @@
   },
   {
    "page": "59",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 176.0,
    "column_widths": [
     223,
     183,
@@ -16489,11 +16407,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       205
@@ -16516,15 +16432,14 @@
       "bottom": 1
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -16547,15 +16462,14 @@
       "bottom": 1
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -16578,15 +16492,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -16609,15 +16522,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -16640,15 +16552,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "59/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -16671,15 +16582,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -16702,15 +16612,14 @@
       "bottom": 4
      },
      "side_floor": 0.0012,
-     "gold": null
+     "gold": null,
+     "file": "59/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       184
@@ -16733,15 +16642,14 @@
       "bottom": 2
      },
      "side_floor": 0.0115,
-     "gold": null
+     "gold": null,
+     "file": "59/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[223]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -16764,7 +16672,8 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "59/c9.png"
     }
    ]
   },
@@ -17646,12 +17555,10 @@
   },
   {
    "page": "63",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 177.0,
    "column_widths": [
     233,
     181,
@@ -17667,11 +17574,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       215
@@ -17694,15 +17599,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       177
@@ -17725,15 +17629,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       186
@@ -17756,14 +17659,13 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
+     "admitted": true,
+     "reject": [],
      "tier": "gold",
      "content_x": [
       4,
@@ -17790,15 +17692,14 @@
      "gold": {
       "verdict": "clean",
       "border_class": null
-     }
+     },
+     "file": "63/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -17821,15 +17722,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       179
@@ -17852,15 +17752,14 @@
       "bottom": 34
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -17883,15 +17782,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       185
@@ -17914,15 +17812,14 @@
       "bottom": 4
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "63/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -17945,7 +17842,8 @@
       "bottom": 3
      },
      "side_floor": 0.014,
-     "gold": null
+     "gold": null,
+     "file": "63/c9.png"
     }
    ]
   },
@@ -19409,105 +19307,69 @@
   },
   {
    "page": "69",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 176.0,
    "column_widths": [
-    209,
-    186,
-    188,
-    290,
+    202,
     199,
     184,
     184,
+    187,
+    184,
+    183,
     189,
-    186
+    185
    ],
-   "median_width": 188,
+   "median_width": 185,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      5,
-      194
+      8,
+      188
      ],
      "border_top": 0.0,
-     "border_bottom": 2421.9703137559154,
+     "border_bottom": 2421.8913630817947,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 209,
-      "height": 2421
+      "width": 202,
+      "height": 2422
      },
      "border_case": {
       "top": "a",
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 8,
+      "top": 9,
       "bottom": 0
      },
-     "side_floor": 0.0041,
-     "gold": null
+     "side_floor": 0.0029,
+     "gold": null,
+     "file": "69/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
-      182
+      13,
+      189
      ],
      "border_top": 0.0,
-     "border_bottom": 2421.1331575459967,
+     "border_bottom": 2421.1193515589976,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 186,
-      "height": 2421
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "c"
-     },
-     "border_trim_px": {
-      "top": 7,
-      "bottom": 0
-     },
-     "side_floor": 0.0021,
-     "gold": null
-    },
-    {
-     "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
-     "content_x": [
-      5,
-      184
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2420.4077157965776,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 188,
+      "width": 199,
       "height": 2421
      },
      "border_case": {
@@ -19518,27 +19380,86 @@
       "top": 6,
       "bottom": 0
      },
-     "side_floor": 0.0017,
-     "gold": null
+     "side_floor": 0.0012,
+     "gold": null,
+     "file": "69/c2.png"
     },
     {
-     "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "col": 3,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      43,
-      283
+      6,
+      180
      ],
      "border_top": 0.0,
-     "border_bottom": 2419.2356986598697,
+     "border_bottom": 2420.4174213227875,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 290,
+      "width": 184,
+      "height": 2420
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 0
+     },
+     "side_floor": 0.0021,
+     "gold": null,
+     "file": "69/c3.png"
+    },
+    {
+     "col": 4,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
+     "content_x": [
+      7,
+      178
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2419.68528581991,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 184,
+      "height": 2420
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 7,
+      "bottom": 0
+     },
+     "side_floor": 0.0021,
+     "gold": null,
+     "file": "69/c4.png"
+    },
+    {
+     "col": 5,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
+     "content_x": [
+      6,
+      183
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2418.970093464189,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 187,
       "height": 2419
      },
      "border_case": {
@@ -19546,57 +19467,24 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 11,
+      "top": 6,
       "bottom": 0
      },
-     "side_floor": 0.0289,
-     "gold": null
-    },
-    {
-     "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）",
-      "L2：两侧最低墨 0.2870 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
-     "content_x": [
-      9,
-      184
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2418.530490432894,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 199,
-      "height": 2418
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "a"
-     },
-     "border_trim_px": {
-      "top": 4,
-      "bottom": 12
-     },
-     "side_floor": 0.287,
-     "gold": null
+     "side_floor": 0.0017,
+     "gold": null,
+     "file": "69/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
-      181
+      6,
+      180
      ],
      "border_top": 0.0,
-     "border_bottom": 2418.2808845909185,
+     "border_bottom": 2418.2513559191816,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -19609,30 +19497,29 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 6,
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "69/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       8,
       180
      ],
      "border_top": 0.0,
-     "border_bottom": 2417.5717558051024,
+     "border_bottom": 2417.546114806076,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 184,
+      "width": 183,
       "height": 2418
      },
      "border_case": {
@@ -19643,28 +19530,27 @@
       "top": 7,
       "bottom": 0
      },
-     "side_floor": 0.0025,
-     "gold": null
+     "side_floor": 0.0021,
+     "gold": null,
+     "file": "69/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
+      5,
       185
      ],
      "border_top": 0.0,
-     "border_bottom": 2416.849703623826,
+     "border_bottom": 2416.833951830073,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 189,
-      "height": 2418
+      "height": 2417
      },
      "border_case": {
       "top": "a",
@@ -19675,27 +19561,26 @@
       "bottom": 0
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "69/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [4]（[290]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
-      182
+      5,
+      181
      ],
      "border_top": 0.0,
-     "border_bottom": 2416.1185374547204,
+     "border_bottom": 2416.1126598291285,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 186,
-      "height": 2415
+      "width": 185,
+      "height": 2416
      },
      "border_case": {
       "top": "a",
@@ -19706,7 +19591,8 @@
       "bottom": 0
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "69/c9.png"
     }
    ]
   },
@@ -20587,15 +20473,15 @@
    "page": "73",
    "admitted": true,
    "reject": [],
-   "period": 114.0,
-   "ref_w": 177.0,
+   "period": 113.0,
+   "ref_w": 179.0,
    "column_widths": [
-    216,
+    222,
     180,
     181,
-    185,
+    186,
     183,
-    192,
+    194,
     191,
     188,
     189
@@ -20608,16 +20494,16 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
-      207
+      6,
+      201
      ],
      "border_top": 0.0,
-     "border_bottom": 2422.561308779606,
+     "border_bottom": 2422.7670569150932,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 216,
+      "width": 222,
       "height": 2423
      },
      "border_case": {
@@ -20628,7 +20514,7 @@
       "top": 5,
       "bottom": 1
      },
-     "side_floor": 0.0004,
+     "side_floor": 0.0111,
      "gold": null,
      "file": "73/c1.png"
     },
@@ -20638,11 +20524,11 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
+      4,
       176
      ],
      "border_top": 0.0,
-     "border_bottom": 2423.708880437576,
+     "border_bottom": 2423.720757946464,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -20668,17 +20554,17 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
-      178
+      4,
+      177
      ],
      "border_top": 0.0,
-     "border_bottom": 2424.7552908406446,
+     "border_bottom": 2424.771613371918,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 181,
-      "height": 2425
+      "height": 2424
      },
      "border_case": {
       "top": "a",
@@ -20698,17 +20584,17 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
+      4,
       181
      ],
      "border_top": 0.0,
-     "border_bottom": 2425.815537237372,
+     "border_bottom": 2425.8134064560077,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 185,
-      "height": 2426
+      "width": 186,
+      "height": 2427
      },
      "border_case": {
       "top": "c",
@@ -20728,11 +20614,11 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      10,
-      179
+      6,
+      180
      ],
      "border_top": 0.0,
-     "border_bottom": 2426.880882985874,
+     "border_bottom": 2426.864781510339,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -20762,13 +20648,13 @@
       188
      ],
      "border_top": 0.0,
-     "border_bottom": 2428.0259191653813,
+     "border_bottom": 2428.0126928166633,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 192,
-      "height": 2428
+      "width": 194,
+      "height": 2427
      },
      "border_case": {
       "top": "c",
@@ -20788,17 +20674,17 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
+      4,
       186
      ],
      "border_top": 0.0,
-     "border_bottom": 2429.097338427379,
+     "border_bottom": 2429.0973152350166,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 191,
-      "height": 2429
+      "height": 2430
      },
      "border_case": {
       "top": "c",
@@ -20822,7 +20708,7 @@
       185
      ],
      "border_top": 0.0,
-     "border_bottom": 2430.1256335049457,
+     "border_bottom": 2430.1153573550596,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -20851,17 +20737,17 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      8,
-      185
+      7,
+      186
      ],
      "border_top": 0.0,
-     "border_bottom": 2431.267070510585,
+     "border_bottom": 2431.2427947607357,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 189,
-      "height": 2431
+      "height": 2430
      },
      "border_case": {
       "top": "d",
@@ -20871,7 +20757,7 @@
       "top": 10,
       "bottom": 4
      },
-     "side_floor": 0.0016,
+     "side_floor": 0.0012,
      "gold": null,
      "file": "73/c9.png"
     }
@@ -22340,12 +22226,10 @@
   },
   {
    "page": "79",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 179.0,
    "column_widths": [
     229,
     180,
@@ -22361,11 +22245,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       209
@@ -22388,15 +22270,14 @@
       "bottom": 0
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "79/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       173
@@ -22419,15 +22300,14 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "79/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -22450,15 +22330,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "79/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -22481,15 +22360,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "79/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       178
@@ -22512,15 +22390,14 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "79/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -22543,15 +22420,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "79/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       185
@@ -22574,15 +22450,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "79/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -22605,15 +22480,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "79/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[229]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       183
@@ -22636,7 +22510,8 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "79/c9.png"
     }
    ]
   },
@@ -26485,7 +26360,7 @@
      "tier": "gold",
      "content_x": [
       6,
-      189
+      188
      ],
      "border_top": 0.0,
      "border_bottom": 2413.6319542371602,
@@ -27018,7 +26893,7 @@
    "page": "95",
    "admitted": true,
    "reject": [],
-   "period": 115.0,
+   "period": 114.0,
    "ref_w": 174.0,
    "column_widths": [
     192,
@@ -27129,7 +27004,7 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      9,
+      10,
       183
      ],
      "border_top": 0.0,
@@ -27557,7 +27432,7 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 4,
+      "top": 5,
       "bottom": 3
      },
      "side_floor": 0.0012,
@@ -27731,7 +27606,7 @@
       "top": 5,
       "bottom": 0
      },
-     "side_floor": 0.0008,
+     "side_floor": 0.0012,
      "gold": null,
      "file": "97/c4.png"
     },
@@ -28773,7 +28648,7 @@
     180,
     193,
     181,
-    194,
+    193,
     195,
     180
    ],
@@ -28789,7 +28664,7 @@
       180
      ],
      "border_top": 0.0,
-     "border_bottom": 2324.810717896543,
+     "border_bottom": 2324.810734199937,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -28969,12 +28844,12 @@
       190
      ],
      "border_top": 0.0,
-     "border_bottom": 2331.2938387099994,
+     "border_bottom": 2331.3020704772516,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 194,
+      "width": 193,
       "height": 2331
      },
      "border_case": {
@@ -28999,13 +28874,13 @@
       191
      ],
      "border_top": 0.0,
-     "border_bottom": 2332.5037199247795,
+     "border_bottom": 2332.5119375842305,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 195,
-      "height": 2332
+      "height": 2333
      },
      "border_case": {
       "top": "a",
@@ -29136,7 +29011,7 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      4,
+      5,
       191
      ],
      "border_top": 0.0,
@@ -29219,7 +29094,7 @@
       "top": 6,
       "bottom": 3
      },
-     "side_floor": 0.0013,
+     "side_floor": 0.0017,
      "gold": null,
      "file": "102/c5.png"
     },
@@ -29307,7 +29182,7 @@
      },
      "border_trim_px": {
       "top": 6,
-      "bottom": 2
+      "bottom": 3
      },
      "side_floor": 0.0017,
      "gold": null,
@@ -31104,7 +30979,7 @@
    "period": 110.0,
    "ref_w": 176.0,
    "column_widths": [
-    187,
+    240,
     189,
     184,
     181,
@@ -31123,26 +30998,26 @@
      "tier": "gate",
      "content_x": [
       6,
-      183
+      205
      ],
      "border_top": 0.0,
-     "border_bottom": 2351.9679548005465,
+     "border_bottom": 2351.8720166941016,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 187,
+      "width": 240,
       "height": 2352
      },
      "border_case": {
-      "top": "a",
+      "top": "b",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 6,
-      "bottom": 3
+      "top": 3,
+      "bottom": 6
      },
-     "side_floor": 0.0017,
+     "side_floor": 0.0319,
      "gold": null,
      "file": "109/c1.png"
     },
@@ -31262,7 +31137,7 @@
       "top": 5,
       "bottom": 3
      },
-     "side_floor": 0.0017,
+     "side_floor": 0.0025,
      "gold": null,
      "file": "109/c5.png"
     },
@@ -31686,7 +31561,7 @@
    "page": "111",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+    "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
@@ -31707,7 +31582,7 @@
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31738,7 +31613,7 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31769,7 +31644,7 @@
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": "gold",
      "content_x": [
@@ -31803,7 +31678,7 @@
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31834,7 +31709,7 @@
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31865,7 +31740,7 @@
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31896,7 +31771,7 @@
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -31927,7 +31802,7 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）",
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）",
       "L2：两侧最低墨 0.1602 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
@@ -31959,7 +31834,7 @@
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [7]（[248]）"
+      "L1：列宽偏离本页中位数 186px 超容差的列 [7]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -32281,12 +32156,10 @@
   },
   {
    "page": "113",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 173.0,
    "column_widths": [
     232,
     188,
@@ -32302,11 +32175,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       10,
       213
@@ -32329,15 +32200,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "113/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       185
@@ -32360,15 +32230,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "113/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       179
@@ -32391,15 +32260,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "113/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       8,
       181
@@ -32422,15 +32290,14 @@
       "bottom": 2
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "113/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       8,
       188
@@ -32453,15 +32320,14 @@
       "bottom": 3
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "113/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       11,
       180
@@ -32484,15 +32350,14 @@
       "bottom": 3
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "113/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       180
@@ -32515,15 +32380,14 @@
       "bottom": 3
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "113/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       179
@@ -32546,15 +32410,14 @@
       "bottom": 3
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "113/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 185px 超过 ±15% 的列 [1]（[232]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       180
@@ -32577,7 +32440,8 @@
       "bottom": 6
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "113/c9.png"
     }
    ]
   },
@@ -32746,7 +32610,7 @@
       "top": 3,
       "bottom": 8
      },
-     "side_floor": 0.0256,
+     "side_floor": 0.026,
      "gold": null,
      "file": "114/c5.png"
     },
@@ -32786,7 +32650,7 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      4,
+      5,
       177
      ],
      "border_top": 0.0,
@@ -33418,7 +33282,7 @@
       "top": 3,
       "bottom": 3
      },
-     "side_floor": 0.0144,
+     "side_floor": 0.0148,
      "gold": null,
      "file": "116/c8.png"
     },
@@ -33970,7 +33834,7 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 4,
+      "top": 5,
       "bottom": 0
      },
      "side_floor": 0.0008,
@@ -34043,7 +33907,7 @@
    "page": "119",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+    "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
@@ -34051,12 +33915,12 @@
     215,
     184,
     188,
-    180,
-    306,
+    181,
+    248,
     175,
     188,
-    243,
-    153
+    184,
+    193
    ],
    "median_width": 188,
    "columns": [
@@ -34064,7 +33928,7 @@
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -34095,7 +33959,7 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -34126,7 +33990,7 @@
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -34157,53 +34021,52 @@
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）",
-      "L2：两侧最低墨 0.1070 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      9,
-      175
+      5,
+      176
      ],
      "border_top": 0.0,
-     "border_bottom": 2364.7052238315982,
+     "border_bottom": 2364.6674244258325,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 180,
-      "height": 2365
+      "width": 181,
+      "height": 2364
      },
      "border_case": {
       "top": "a",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 6,
-      "bottom": 4
+      "top": 7,
+      "bottom": 6
      },
-     "side_floor": 0.107,
+     "side_floor": 0.0021,
      "gold": null
     },
     {
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      31,
-      280
+      25,
+      242
      ],
      "border_top": 0.0,
-     "border_bottom": 2365.9386841381797,
+     "border_bottom": 2365.899765095392,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 306,
-      "height": 2366
+      "width": 248,
+      "height": 2367
      },
      "border_case": {
       "top": "a",
@@ -34211,17 +34074,17 @@
      },
      "border_trim_px": {
       "top": 6,
-      "bottom": 6
+      "bottom": 5
      },
-     "side_floor": 0.0085,
+     "side_floor": 0.0038,
      "gold": null
     },
     {
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）",
-      "L2：两侧最低墨 0.1614 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1618 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
@@ -34245,14 +34108,14 @@
       "top": 7,
       "bottom": 4
      },
-     "side_floor": 0.1614,
+     "side_floor": 0.1618,
      "gold": null
     },
     {
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -34283,20 +34146,20 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      17,
-      239
+      5,
+      180
      ],
      "border_top": 0.0,
-     "border_bottom": 2370.7539997389626,
+     "border_bottom": 2370.7269038150525,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 243,
+      "width": 184,
       "height": 2370
      },
      "border_case": {
@@ -34304,31 +34167,30 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 5,
-      "bottom": 5
+      "top": 4,
+      "bottom": 4
      },
-     "side_floor": 0.0025,
+     "side_floor": 0.0021,
      "gold": null
     },
     {
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [5, 8, 9]（[306, 243, 153]）",
-      "L2：两侧最低墨 0.2191 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [5]（[248]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
       5,
-      153
+      188
      ],
      "border_top": 0.0,
-     "border_bottom": 2372.249674040032,
+     "border_bottom": 2372.2226580370084,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 153,
+      "width": 193,
       "height": 2373
      },
      "border_case": {
@@ -34336,10 +34198,10 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 6,
       "bottom": 6
      },
-     "side_floor": 0.2191,
+     "side_floor": 0.0029,
      "gold": null
     }
    ]
@@ -35028,7 +34890,7 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 3,
+      "top": 4,
       "bottom": 2
      },
      "side_floor": 0.0004,
@@ -35121,7 +34983,7 @@
       "top": 3,
       "bottom": 3
      },
-     "side_floor": 0.02,
+     "side_floor": 0.0204,
      "gold": null,
      "file": "122/c6.png"
     },
@@ -36315,7 +36177,7 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 8,
+      "top": 7,
       "bottom": 0
      },
      "side_floor": 0.0017,
@@ -36388,7 +36250,7 @@
    "page": "127",
    "admitted": true,
    "reject": [],
-   "period": 109.0,
+   "period": 108.0,
    "ref_w": 172.0,
    "column_widths": [
     198,
@@ -36456,10 +36318,10 @@
       "bottom": "d"
      },
      "border_trim_px": {
-      "top": 5,
+      "top": 6,
       "bottom": 10
      },
-     "side_floor": 0.0021,
+     "side_floor": 0.0026,
      "gold": null,
      "file": "127/c2.png"
     },
@@ -37686,7 +37548,7 @@
       "top": 5,
       "bottom": 2
      },
-     "side_floor": 0.0,
+     "side_floor": 0.0004,
      "gold": null,
      "file": "131/c4.png"
     },
@@ -37696,7 +37558,7 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      6,
+      7,
       186
      ],
      "border_top": 0.0,
@@ -37787,7 +37649,7 @@
      "tier": "gate",
      "content_x": [
       5,
-      178
+      177
      ],
      "border_top": 0.0,
      "border_bottom": 2348.652752361134,
@@ -38137,20 +37999,20 @@
    "page": "133",
    "admitted": true,
    "reject": [],
-   "period": 110.0,
+   "period": 112.0,
    "ref_w": 170.0,
    "column_widths": [
-    196,
-    196,
-    193,
-    193,
+    197,
+    187,
     190,
+    181,
+    186,
     183,
     182,
     184,
     186
    ],
-   "median_width": 190,
+   "median_width": 186,
    "columns": [
     {
      "col": 1,
@@ -38158,16 +38020,16 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      5,
-      189
+      6,
+      190
      ],
      "border_top": 0.0,
-     "border_bottom": 2339.971332539516,
+     "border_bottom": 2340.062407520032,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 196,
+      "width": 197,
       "height": 2340
      },
      "border_case": {
@@ -38188,16 +38050,16 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      8,
+      7,
       172
      ],
      "border_top": 0.0,
-     "border_bottom": 2338.073840535281,
+     "border_bottom": 2338.1647329748075,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 196,
+      "width": 187,
       "height": 2338
      },
      "border_case": {
@@ -38218,47 +38080,17 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      2,
-      180
+      5,
+      177
      ],
      "border_top": 0.0,
-     "border_bottom": 2336.9983132857037,
+     "border_bottom": 2336.678536397098,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 193,
+      "width": 190,
       "height": 2337
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "a"
-     },
-     "border_trim_px": {
-      "top": 5,
-      "bottom": 5
-     },
-     "side_floor": 0.0009,
-     "gold": null,
-     "file": "133/c3.png"
-    },
-    {
-     "col": 4,
-     "admitted": true,
-     "reject": [],
-     "tier": "gate",
-     "content_x": [
-      3,
-      172
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2335.493996011758,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 193,
-      "height": 2335
      },
      "border_case": {
       "top": "a",
@@ -38268,7 +38100,37 @@
       "top": 5,
       "bottom": 4
      },
-     "side_floor": 0.0021,
+     "side_floor": 0.0004,
+     "gold": null,
+     "file": "133/c3.png"
+    },
+    {
+     "col": 4,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
+     "content_x": [
+      5,
+      170
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2335.1878039023704,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 181,
+      "height": 2335
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 4,
+      "bottom": 5
+     },
+     "side_floor": 0.0017,
      "gold": null,
      "file": "133/c4.png"
     },
@@ -38282,12 +38144,12 @@
       176
      ],
      "border_top": 0.0,
-     "border_bottom": 2333.80546493151,
+     "border_bottom": 2333.818658146101,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 190,
+      "width": 186,
       "height": 2334
      },
      "border_case": {
@@ -38680,7 +38542,7 @@
      },
      "border_trim_px": {
       "top": 7,
-      "bottom": 5
+      "bottom": 6
      },
      "side_floor": 0.0017,
      "gold": null,
@@ -39652,7 +39514,7 @@
      "reject": [],
      "tier": "gold",
      "content_x": [
-      6,
+      7,
       180
      ],
      "border_top": 0.0,
@@ -39716,7 +39578,7 @@
      "tier": "gate",
      "content_x": [
       9,
-      172
+      173
      ],
      "border_top": 0.0,
      "border_bottom": 2351.868474981314,
@@ -39735,7 +39597,7 @@
       "top": 6,
       "bottom": 3
      },
-     "side_floor": 0.0013,
+     "side_floor": 0.0017,
      "gold": null,
      "file": "138/c4.png"
     },
@@ -39795,7 +39657,7 @@
       "top": 6,
       "bottom": 5
      },
-     "side_floor": 0.0417,
+     "side_floor": 0.0421,
      "gold": {
       "verdict": "clean",
       "border_class": null
@@ -40483,7 +40345,7 @@
    "period": 110.0,
    "ref_w": 171.0,
    "column_widths": [
-    184,
+    182,
     189,
     183,
     183,
@@ -40502,15 +40364,15 @@
      "tier": "gold",
      "content_x": [
       6,
-      177
+      175
      ],
      "border_top": 0.0,
-     "border_bottom": 2310.3223617547733,
+     "border_bottom": 2310.318179340637,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 184,
+      "width": 182,
       "height": 2310
      },
      "border_case": {
@@ -40538,7 +40400,7 @@
       184
      ],
      "border_top": 0.0,
-     "border_bottom": 2311.287609941741,
+     "border_bottom": 2311.2883371662892,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -42817,11 +42679,11 @@
    "page": "149",
    "admitted": true,
    "reject": [],
-   "period": 110.0,
-   "ref_w": 173.0,
+   "period": 111.0,
+   "ref_w": 175.0,
    "column_widths": [
-    191,
-    177,
+    186,
+    185,
     181,
     180,
     187,
@@ -42830,7 +42692,7 @@
     181,
     197
    ],
-   "median_width": 183,
+   "median_width": 185,
    "columns": [
     {
      "col": 1,
@@ -42838,16 +42700,16 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      19,
-      187
+      6,
+      182
      ],
      "border_top": 0.0,
-     "border_bottom": 2381.4130812547733,
+     "border_bottom": 2381.3473877968077,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 191,
+      "width": 186,
       "height": 2381
      },
      "border_case": {
@@ -42858,7 +42720,7 @@
       "top": 4,
       "bottom": 0
      },
-     "side_floor": 0.0029,
+     "side_floor": 0.0025,
      "gold": null,
      "file": "149/c1.png"
     },
@@ -42869,15 +42731,15 @@
      "tier": "gate",
      "content_x": [
       6,
-      176
+      181
      ],
      "border_top": 0.0,
-     "border_bottom": 2380.960220407264,
+     "border_bottom": 2380.894555530849,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 177,
+      "width": 185,
       "height": 2381
      },
      "border_case": {
@@ -42885,8 +42747,8 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 5,
-      "bottom": 5
+      "top": 4,
+      "bottom": 6
      },
      "side_floor": 0.0004,
      "gold": null,
@@ -43424,7 +43286,7 @@
       170
      ],
      "border_top": 0.0,
-     "border_bottom": 2408.982588235294,
+     "border_bottom": 2408.614588235294,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43454,7 +43316,7 @@
       178
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.22886462994,
+     "border_bottom": 2408.9488097029066,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43470,7 +43332,7 @@
       "top": 4,
       "bottom": 7
      },
-     "side_floor": 0.0365,
+     "side_floor": 0.0361,
      "gold": null,
      "file": "151/c2.png"
     },
@@ -43484,7 +43346,7 @@
       172
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.475350627152,
+     "border_bottom": 2409.282678521256,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43517,7 +43379,7 @@
       181
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.7206600041927,
+     "border_bottom": 2409.6172479516717,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43550,7 +43412,7 @@
       180
      ],
      "border_top": 0.0,
-     "border_bottom": 2409.9707072717597,
+     "border_bottom": 2409.9583400014412,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43583,7 +43445,7 @@
       180
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.2236814248813,
+     "border_bottom": 2410.3013441990543,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43616,13 +43478,13 @@
       182
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.4775037800464,
+     "border_bottom": 2410.6463715142777,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
       "width": 185,
-      "height": 2410
+      "height": 2411
      },
      "border_case": {
       "top": "a",
@@ -43646,7 +43508,7 @@
       180
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.7291989836285,
+     "border_bottom": 2410.990008981462,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43672,11 +43534,11 @@
      "reject": [],
      "tier": "gate",
      "content_x": [
-      4,
+      5,
       187
      ],
      "border_top": 0.0,
-     "border_bottom": 2410.985630655788,
+     "border_bottom": 2411.3377204854146,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -43692,7 +43554,7 @@
       "top": 3,
       "bottom": 1
      },
-     "side_floor": 0.0328,
+     "side_floor": 0.0332,
      "gold": null,
      "file": "151/c9.png"
     }
@@ -44040,7 +43902,7 @@
       "top": 8,
       "bottom": 0
      },
-     "side_floor": 0.0382,
+     "side_floor": 0.0387,
      "gold": {
       "verdict": "clean",
       "border_class": null
@@ -44147,7 +44009,7 @@
      "tier": "gold",
      "content_x": [
       4,
-      184
+      185
      ],
      "border_top": 0.0,
      "border_bottom": 2244.7985392168675,
@@ -44591,12 +44453,10 @@
   },
   {
    "page": "155",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 110.0,
+   "ref_w": 179.0,
    "column_widths": [
     218,
     187,
@@ -44612,11 +44472,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       206
@@ -44639,15 +44497,14 @@
       "bottom": 0
      },
      "side_floor": 0.0018,
-     "gold": null
+     "gold": null,
+     "file": "155/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -44670,15 +44527,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "155/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       178
@@ -44701,15 +44557,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "155/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       185
@@ -44732,15 +44587,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "155/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       182
@@ -44763,15 +44617,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "155/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       3,
       181
@@ -44794,15 +44647,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "155/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -44825,15 +44677,14 @@
       "bottom": 0
      },
      "side_floor": 0.0018,
-     "gold": null
+     "gold": null,
+     "file": "155/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -44856,15 +44707,14 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "155/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[218]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -44887,7 +44737,8 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "155/c9.png"
     }
    ]
   },
@@ -45184,32 +45035,28 @@
   },
   {
    "page": "157",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 109.0,
+   "ref_w": 176.0,
    "column_widths": [
     190,
     190,
-    234,
-    188,
+    179,
+    185,
     186,
     190,
     184,
     185,
     190
    ],
-   "median_width": 190,
+   "median_width": 186,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -45232,15 +45079,14 @@
       "bottom": 3
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "157/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -45263,26 +45109,25 @@
       "bottom": 2
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "157/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      26,
-      229
+      5,
+      175
      ],
      "border_top": 0.0,
-     "border_bottom": 2373.722606604045,
+     "border_bottom": 2373.926590816312,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 234,
+      "width": 179,
       "height": 2373
      },
      "border_case": {
@@ -45294,47 +45139,44 @@
       "bottom": 3
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "157/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）",
-      "L2：两侧最低墨 0.1297 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      10,
-      171
+      7,
+      181
      ],
      "border_top": 0.0,
-     "border_bottom": 2374.719231828411,
+     "border_bottom": 2374.9234465959044,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 188,
-      "height": 2375
+      "width": 185,
+      "height": 2376
      },
      "border_case": {
       "top": "a",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 5,
+      "top": 6,
       "bottom": 2
      },
-     "side_floor": 0.1297,
-     "gold": null
+     "side_floor": 0.0,
+     "gold": null,
+     "file": "157/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       183
@@ -45357,15 +45199,14 @@
       "bottom": 2
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "157/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       179
@@ -45388,15 +45229,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "157/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -45419,15 +45259,14 @@
       "bottom": 3
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "157/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -45446,19 +45285,18 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 4,
+      "top": 5,
       "bottom": 2
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "157/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [3]（[234]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       187
@@ -45481,18 +45319,17 @@
       "bottom": 11
      },
      "side_floor": 0.0038,
-     "gold": null
+     "gold": null,
+     "file": "157/c9.png"
     }
    ]
   },
   {
    "page": "158",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 111.0,
+   "ref_w": 180.0,
    "column_widths": [
     186,
     188,
@@ -45508,11 +45345,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       183
@@ -45535,15 +45370,14 @@
       "bottom": 5
      },
      "side_floor": 0.0021,
-     "gold": null
+     "gold": null,
+     "file": "158/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       185
@@ -45566,15 +45400,14 @@
       "bottom": 8
      },
      "side_floor": 0.0038,
-     "gold": null
+     "gold": null,
+     "file": "158/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -45597,15 +45430,14 @@
       "bottom": 9
      },
      "side_floor": 0.0051,
-     "gold": null
+     "gold": null,
+     "file": "158/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       186
@@ -45628,15 +45460,14 @@
       "bottom": 8
      },
      "side_floor": 0.0038,
-     "gold": null
+     "gold": null,
+     "file": "158/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -45659,15 +45490,14 @@
       "bottom": 6
      },
      "side_floor": 0.0025,
-     "gold": null
+     "gold": null,
+     "file": "158/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -45690,15 +45520,14 @@
       "bottom": 4
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "158/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       186
@@ -45721,15 +45550,14 @@
       "bottom": 2
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "158/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       184
@@ -45752,15 +45580,14 @@
       "bottom": 1
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "158/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[245]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       29,
       241
@@ -45783,7 +45610,8 @@
       "bottom": 3
      },
      "side_floor": 0.016,
-     "gold": null
+     "gold": null,
+     "file": "158/c9.png"
     }
    ]
   },
@@ -46085,7 +45913,7 @@
    "page": "160",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+    "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
@@ -46095,18 +45923,18 @@
     186,
     217,
     188,
-    458,
+    183,
+    356,
     187,
-    107,
-    143
+    192
    ],
-   "median_width": 187,
+   "median_width": 188,
    "columns": [
     {
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -46137,7 +45965,7 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -46168,7 +45996,7 @@
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -46199,7 +46027,7 @@
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -46230,7 +46058,7 @@
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -46261,21 +46089,22 @@
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1423 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      31,
-      454
+      21,
+      179
      ],
      "border_top": 0.0,
-     "border_bottom": 2395.470322403905,
+     "border_bottom": 2397.0232889720437,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 458,
-      "height": 2396
+      "width": 183,
+      "height": 2397
      },
      "border_case": {
       "top": "a",
@@ -46283,17 +46112,48 @@
      },
      "border_trim_px": {
       "top": 10,
-      "bottom": 5
+      "bottom": 8
      },
-     "side_floor": 0.0079,
+     "side_floor": 0.1423,
      "gold": null
     },
     {
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）",
-      "L2：两侧最低墨 0.0602 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
+     ],
+     "tier": null,
+     "content_x": [
+      33,
+      309
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2394.7466862221445,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 356,
+      "height": 2394
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 9,
+      "bottom": 4
+     },
+     "side_floor": 0.0033,
+     "gold": null
+    },
+    {
+     "col": 8,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.0606 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
@@ -46317,28 +46177,27 @@
       "top": 8,
       "bottom": 8
      },
-     "side_floor": 0.0602,
+     "side_floor": 0.0606,
      "gold": null
     },
     {
-     "col": 8,
+     "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）",
-      "L2：两侧最低墨 0.1715 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 188px 超容差的列 [4, 7]（[217, 356]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      13,
-      102
+      4,
+      188
      ],
      "border_top": 0.0,
-     "border_bottom": 2391.279941412612,
+     "border_bottom": 2390.7400601342806,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 107,
+      "width": 192,
       "height": 2391
      },
      "border_case": {
@@ -46346,54 +46205,20 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 8,
-      "bottom": 4
+      "top": 9,
+      "bottom": 5
      },
-     "side_floor": 0.1715,
-     "gold": null
-    },
-    {
-     "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [4, 6, 8, 9]（[217, 458, 107, 143]）",
-      "L2：两侧最低墨 0.2158 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
-     "content_x": [
-      20,
-      136
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2390.5062919813836,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 143,
-      "height": 2391
-     },
-     "border_case": {
-      "top": "b",
-      "bottom": "b"
-     },
-     "border_trim_px": {
-      "top": 3,
-      "bottom": 3
-     },
-     "side_floor": 0.2158,
+     "side_floor": 0.0033,
      "gold": null
     }
    ]
   },
   {
    "page": "161",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 110.0,
+   "ref_w": 180.0,
    "column_widths": [
     217,
     183,
@@ -46409,11 +46234,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       203
@@ -46436,15 +46259,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -46467,15 +46289,14 @@
       "bottom": 3
      },
      "side_floor": 0.0018,
-     "gold": null
+     "gold": null,
+     "file": "161/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       177
@@ -46498,15 +46319,14 @@
       "bottom": 0
      },
      "side_floor": 0.0014,
-     "gold": null
+     "gold": null,
+     "file": "161/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       185
@@ -46529,15 +46349,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -46560,15 +46379,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -46591,15 +46409,14 @@
       "bottom": 0
      },
      "side_floor": 0.0036,
-     "gold": null
+     "gold": null,
+     "file": "161/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -46622,15 +46439,14 @@
       "bottom": 24
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       182
@@ -46653,15 +46469,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 187px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       190
@@ -46684,7 +46499,8 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "161/c9.png"
     }
    ]
   },
@@ -46981,14 +46797,12 @@
   },
   {
    "page": "163",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 114.0,
+   "ref_w": 177.0,
    "column_widths": [
-    233,
+    188,
     182,
     184,
     179,
@@ -47002,22 +46816,20 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      6,
-      210
+      5,
+      182
      ],
      "border_top": 0.0,
-     "border_bottom": 2356.0389249900572,
+     "border_bottom": 2355.9155533655985,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 233,
+      "width": 188,
       "height": 2355
      },
      "border_case": {
@@ -47025,19 +46837,18 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 36,
+      "top": 38,
       "bottom": 0
      },
-     "side_floor": 0.0076,
-     "gold": null
+     "side_floor": 0.0021,
+     "gold": null,
+     "file": "163/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -47060,15 +46871,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "163/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       180
@@ -47091,15 +46901,14 @@
       "bottom": 0
      },
      "side_floor": 0.0025,
-     "gold": null
+     "gold": null,
+     "file": "163/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       175
@@ -47122,15 +46931,14 @@
       "bottom": 0
      },
      "side_floor": 0.0025,
-     "gold": null
+     "gold": null,
+     "file": "163/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       182
@@ -47153,15 +46961,14 @@
       "bottom": 0
      },
      "side_floor": 0.0043,
-     "gold": null
+     "gold": null,
+     "file": "163/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -47184,15 +46991,14 @@
       "bottom": 0
      },
      "side_floor": 0.0026,
-     "gold": null
+     "gold": null,
+     "file": "163/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       180
@@ -47215,15 +47021,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "163/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       181
@@ -47246,15 +47051,14 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "163/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 184px 超过 ±15% 的列 [1]（[233]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       186
@@ -47277,7 +47081,8 @@
       "bottom": 0
      },
      "side_floor": 0.0026,
-     "gold": null
+     "gold": null,
+     "file": "163/c9.png"
     }
    ]
   },
@@ -47995,7 +47800,7 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 3,
+      "top": 4,
       "bottom": 0
      },
      "side_floor": 0.0,
@@ -48156,12 +47961,10 @@
   },
   {
    "page": "167",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 112.0,
+   "ref_w": 174.0,
    "column_widths": [
     217,
     179,
@@ -48177,11 +47980,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       207
@@ -48204,15 +48005,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       176
@@ -48235,15 +48035,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       8,
       190
@@ -48266,15 +48065,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -48297,15 +48095,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       181
@@ -48328,15 +48125,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       178
@@ -48359,15 +48155,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       9,
       181
@@ -48390,15 +48185,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       187
@@ -48421,15 +48215,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 183px 超过 ±15% 的列 [1]（[217]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       176
@@ -48452,7 +48245,8 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "167/c9.png"
     }
    ]
   },
@@ -48460,7 +48254,7 @@
    "page": "168",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+    "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
@@ -48473,15 +48267,15 @@
     183,
     191,
     196,
-    221
+    183
    ],
-   "median_width": 189,
+   "median_width": 187,
    "columns": [
     {
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -48512,12 +48306,12 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
       4,
-      185
+      184
      ],
      "border_top": 0.0,
      "border_bottom": 2345.7133942063406,
@@ -48543,13 +48337,13 @@
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）",
-      "L2：两侧最低墨 0.0656 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.0661 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
       21,
-      180
+      179
      ],
      "border_top": 0.0,
      "border_bottom": 2346.026605586343,
@@ -48568,19 +48362,19 @@
       "top": 2,
       "bottom": 7
      },
-     "side_floor": 0.0656,
+     "side_floor": 0.0661,
      "gold": null
     },
     {
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
       5,
-      266
+      254
      ],
      "border_top": 0.0,
      "border_bottom": 2345.838713830071,
@@ -48606,7 +48400,7 @@
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -48637,7 +48431,7 @@
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -48668,11 +48462,11 @@
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      4,
+      5,
       186
      ],
      "border_top": 0.0,
@@ -48699,7 +48493,7 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -48730,21 +48524,20 @@
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 189px 超过 ±15% 的列 [4, 9]（[296, 221]）",
-      "L2：两侧最低墨 0.1062 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 187px 超容差的列 [4]（[296]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      23,
-      209
+      4,
+      178
      ],
      "border_top": 0.0,
-     "border_bottom": 2345.0213824772754,
+     "border_bottom": 2344.4168919142107,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 221,
+      "width": 183,
       "height": 2345
      },
      "border_case": {
@@ -48753,9 +48546,9 @@
      },
      "border_trim_px": {
       "top": 0,
-      "bottom": 13
+      "bottom": 4
      },
-     "side_floor": 0.1062,
+     "side_floor": 0.0,
      "gold": null
     }
    ]
@@ -49929,12 +49722,10 @@
   },
   {
    "page": "173",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 112.0,
+   "ref_w": 177.0,
    "column_widths": [
     216,
     191,
@@ -49950,11 +49741,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       206
@@ -49977,15 +49766,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "173/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       8,
       188
@@ -50008,15 +49796,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "173/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -50039,15 +49826,14 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "173/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       178
@@ -50070,15 +49856,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "173/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       186
@@ -50101,17 +49886,16 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "173/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      4,
+      5,
       182
      ],
      "border_top": 0.0,
@@ -50132,15 +49916,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "173/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       184
@@ -50163,15 +49946,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "173/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -50194,15 +49976,14 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "173/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 186px 超过 ±15% 的列 [1]（[216]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       178
@@ -50225,7 +50006,8 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "173/c9.png"
     }
    ]
   },
@@ -50683,7 +50465,7 @@
      },
      "border_trim_px": {
       "top": 5,
-      "bottom": 5
+      "bottom": 6
      },
      "side_floor": 0.0021,
      "gold": null,
@@ -50813,12 +50595,10 @@
   },
   {
    "page": "176",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 113.0,
+   "ref_w": 179.0,
    "column_widths": [
     188,
     202,
@@ -50834,11 +50614,9 @@
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       183
@@ -50861,15 +50639,14 @@
       "bottom": 5
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "176/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       11,
       196
@@ -50892,15 +50669,14 @@
       "bottom": 1
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "176/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       175
@@ -50923,15 +50699,14 @@
       "bottom": 0
      },
      "side_floor": 0.0008,
-     "gold": null
+     "gold": null,
+     "file": "176/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       193
@@ -50954,15 +50729,14 @@
       "bottom": 3
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "176/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       183
@@ -50985,15 +50759,14 @@
       "bottom": 35
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "176/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       181
@@ -51016,15 +50789,14 @@
       "bottom": 34
      },
      "side_floor": 0.0067,
-     "gold": null
+     "gold": null,
+     "file": "176/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       184
@@ -51047,15 +50819,14 @@
       "bottom": 7
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "176/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       193
@@ -51078,15 +50849,14 @@
       "bottom": 4
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "176/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 188px 超过 ±15% 的列 [9]（[231]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       27,
       226
@@ -51109,7 +50879,8 @@
       "bottom": 4
      },
      "side_floor": 0.0025,
-     "gold": null
+     "gold": null,
+     "file": "176/c9.png"
     }
    ]
   },
@@ -51117,43 +50888,43 @@
    "page": "177",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）"
+    "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
    "column_widths": [
-    128,
-    236,
-    382,
-    223,
-    209,
-    190,
-    219,
-    117,
-    270
+    175,
+    279,
+    192,
+    180,
+    288,
+    203,
+    177,
+    211,
+    202
    ],
-   "median_width": 219,
+   "median_width": 202,
    "columns": [
     {
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.1392 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1052 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      0,
-      121
+      4,
+      171
      ],
      "border_top": 0.0,
-     "border_bottom": 2357.655155449067,
+     "border_bottom": 2358.0327717692,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 128,
-      "height": 2357
+      "width": 175,
+      "height": 2358
      },
      "border_case": {
       "top": "a",
@@ -51163,92 +50934,92 @@
       "top": 6,
       "bottom": 4
      },
-     "side_floor": 0.1392,
+     "side_floor": 0.1052,
      "gold": null
     },
     {
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.1925 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      34,
-      204
+      39,
+      274
      ],
      "border_top": 0.0,
-     "border_bottom": 2358.7697930333284,
+     "border_bottom": 2357.4389371664524,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 236,
-      "height": 2358
+      "width": 279,
+      "height": 2357
      },
      "border_case": {
       "top": "a",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 6,
-      "bottom": 5
+      "top": 7,
+      "bottom": 3
      },
-     "side_floor": 0.1925,
+     "side_floor": 0.0038,
      "gold": null
     },
     {
      "col": 3,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1192 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      51,
-      331
+      27,
+      188
      ],
      "border_top": 0.0,
-     "border_bottom": 2358.1923361446534,
+     "border_bottom": 2356.3161284644966,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 382,
-      "height": 2358
+      "width": 192,
+      "height": 2357
      },
      "border_case": {
       "top": "a",
-      "bottom": "c"
+      "bottom": "b"
      },
      "border_trim_px": {
-      "top": 8,
-      "bottom": 0
+      "top": 7,
+      "bottom": 3
      },
-     "side_floor": 0.0161,
+     "side_floor": 0.1192,
      "gold": null
     },
     {
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.2245 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.2236 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      32,
-      209
+      4,
+      166
      ],
      "border_top": 0.0,
-     "border_bottom": 2356.821231774151,
+     "border_bottom": 2357.344672094156,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 223,
-      "height": 2356
+      "width": 180,
+      "height": 2357
      },
      "border_case": {
       "top": "a",
@@ -51256,31 +51027,30 @@
      },
      "border_trim_px": {
       "top": 4,
-      "bottom": 3
+      "bottom": 4
      },
-     "side_floor": 0.2245,
+     "side_floor": 0.2236,
      "gold": null
     },
     {
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.2711 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      9,
-      187
+      27,
+      272
      ],
      "border_top": 0.0,
-     "border_bottom": 2356.579127535495,
+     "border_bottom": 2357.406222860102,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 209,
-      "height": 2357
+      "width": 288,
+      "height": 2358
      },
      "border_case": {
       "top": "a",
@@ -51290,28 +51060,28 @@
       "top": 8,
       "bottom": 3
      },
-     "side_floor": 0.2711,
+     "side_floor": 0.0017,
      "gold": null
     },
     {
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.2313 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.2789 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      27,
-      181
+      29,
+      174
      ],
      "border_top": 0.0,
-     "border_bottom": 2355.9352745091473,
+     "border_bottom": 2356.161624709874,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 190,
+      "width": 203,
       "height": 2356
      },
      "border_case": {
@@ -51319,31 +51089,31 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 11,
+      "top": 10,
       "bottom": 0
      },
-     "side_floor": 0.2313,
+     "side_floor": 0.2789,
      "gold": null
     },
     {
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.1711 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1766 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      18,
-      215
+      22,
+      174
      ],
      "border_top": 0.0,
-     "border_bottom": 2355.6605159018536,
+     "border_bottom": 2356.074082028926,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 219,
+      "width": 177,
       "height": 2356
      },
      "border_case": {
@@ -51351,31 +51121,31 @@
       "bottom": "b"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 6,
       "bottom": 3
      },
-     "side_floor": 0.1711,
+     "side_floor": 0.1766,
      "gold": null
     },
     {
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）",
-      "L2：两侧最低墨 0.2288 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1711 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      4,
-      114
+      31,
+      206
      ],
      "border_top": 0.0,
-     "border_bottom": 2355.7897524156615,
+     "border_bottom": 2355.8031466795264,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 117,
+      "width": 211,
       "height": 2356
      },
      "border_case": {
@@ -51383,41 +51153,42 @@
       "bottom": "b"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 9,
       "bottom": 3
      },
-     "side_floor": 0.2288,
+     "side_floor": 0.1711,
      "gold": null
     },
     {
      "col": 9,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 219px 超过 ±15% 的列 [1, 3, 8, 9]（[128, 382, 117, 270]）"
+      "L1：列宽偏离本页中位数 202px 超容差的列 [2, 5]（[279, 288]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1668 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      5,
-      238
+      7,
+      194
      ],
      "border_top": 0.0,
-     "border_bottom": 2356.661018909067,
+     "border_bottom": 2356.268750298387,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 270,
-      "height": 2357
+      "width": 202,
+      "height": 2356
      },
      "border_case": {
       "top": "a",
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 7,
-      "bottom": 5
+      "top": 5,
+      "bottom": 4
      },
-     "side_floor": 0.0021,
+     "side_floor": 0.1668,
      "gold": null
     }
    ]
@@ -51426,41 +51197,41 @@
    "page": "178",
    "admitted": false,
    "reject": [
-    "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）"
+    "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
    ],
    "period": null,
    "ref_w": null,
    "column_widths": [
-    252,
-    275,
-    220,
-    201,
-    193,
-    181,
-    183,
+    192,
+    314,
     185,
-    292
+    347,
+    189,
+    178,
+    183,
+    189,
+    185
    ],
-   "median_width": 201,
+   "median_width": 189,
    "columns": [
     {
      "col": 1,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      33,
-      248
+      4,
+      188
      ],
      "border_top": 0.0,
-     "border_bottom": 2357.0567805366227,
+     "border_bottom": 2356.746761512546,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 252,
+      "width": 192,
       "height": 2358
      },
      "border_case": {
@@ -51478,22 +51249,52 @@
      "col": 2,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.2909 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      7,
-      257
+      42,
+      308
      ],
      "border_top": 0.0,
-     "border_bottom": 2358.2715819402733,
+     "border_bottom": 2358.026403127529,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 275,
+      "width": 314,
       "height": 2358
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 2
+     },
+     "side_floor": 0.014,
+     "gold": null
+    },
+    {
+     "col": 3,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
+     ],
+     "tier": null,
+     "content_x": [
+      4,
+      182
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2360.029128889509,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2361
      },
      "border_case": {
       "top": "a",
@@ -51503,60 +51304,27 @@
       "top": 5,
       "bottom": 0
      },
-     "side_floor": 0.2909,
-     "gold": null
-    },
-    {
-     "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.1424 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
-     "content_x": [
-      22,
-      207
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2359.63293587512,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 220,
-      "height": 2359
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "a"
-     },
-     "border_trim_px": {
-      "top": 6,
-      "bottom": 6
-     },
-     "side_floor": 0.1424,
+     "side_floor": 0.0106,
      "gold": null
     },
     {
      "col": 4,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.3380 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      28,
-      201
+      43,
+      314
      ],
      "border_top": 0.0,
-     "border_bottom": 2361.600633819832,
+     "border_bottom": 2361.8998058950433,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 201,
+      "width": 347,
       "height": 2361
      },
      "border_case": {
@@ -51564,32 +51332,32 @@
       "bottom": "b"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 8,
       "bottom": 3
      },
-     "side_floor": 0.338,
+     "side_floor": 0.0025,
      "gold": null
     },
     {
      "col": 5,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.1710 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1476 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      27,
-      189
+      26,
+      183
      ],
      "border_top": 0.0,
-     "border_bottom": 2363.011059245051,
+     "border_bottom": 2363.0941354580227,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 193,
-      "height": 2363
+      "width": 189,
+      "height": 2364
      },
      "border_case": {
       "top": "a",
@@ -51597,30 +51365,30 @@
      },
      "border_trim_px": {
       "top": 8,
-      "bottom": 4
+      "bottom": 5
      },
-     "side_floor": 0.171,
+     "side_floor": 0.1476,
      "gold": null
     },
     {
      "col": 6,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.1726 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）",
+      "L2：两侧最低墨 0.1870 > 0.045（找不到墨量归零的边界）"
      ],
      "tier": null,
      "content_x": [
-      7,
-      174
+      6,
+      175
      ],
      "border_top": 0.0,
-     "border_bottom": 2364.9580111601713,
+     "border_bottom": 2365.0729459599797,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 181,
+      "width": 178,
       "height": 2364
      },
      "border_case": {
@@ -51629,16 +51397,16 @@
      },
      "border_trim_px": {
       "top": 7,
-      "bottom": 5
+      "bottom": 4
      },
-     "side_floor": 0.1726,
+     "side_floor": 0.187,
      "gold": null
     },
     {
      "col": 7,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
@@ -51669,63 +51437,62 @@
      "col": 8,
      "admitted": false,
      "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）",
-      "L2：两侧最低墨 0.1883 > 0.045（找不到墨量归零的边界）"
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
      ],
      "tier": null,
      "content_x": [
-      25,
-      178
+      4,
+      186
      ],
      "border_top": 0.0,
-     "border_bottom": 2369.023415551772,
+     "border_bottom": 2368.6090483692205,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 185,
+      "width": 189,
       "height": 2369
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "a"
-     },
-     "border_trim_px": {
-      "top": 5,
-      "bottom": 4
-     },
-     "side_floor": 0.1883,
-     "gold": null
-    },
-    {
-     "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 201px 超过 ±15% 的列 [1, 2, 9]（[252, 275, 292]）"
-     ],
-     "tier": null,
-     "content_x": [
-      6,
-      252
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2370.5806082625995,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 292,
-      "height": 2370
      },
      "border_case": {
       "top": "a",
       "bottom": "b"
      },
      "border_trim_px": {
-      "top": 6,
+      "top": 5,
       "bottom": 3
      },
-     "side_floor": 0.0422,
+     "side_floor": 0.0021,
+     "gold": null
+    },
+    {
+     "col": 9,
+     "admitted": false,
+     "reject": [
+      "L1：列宽偏离本页中位数 189px 超容差的列 [2, 4]（[314, 347]；中间列 ±15% / 最外列 ±35%）"
+     ],
+     "tier": null,
+     "content_x": [
+      5,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2370.257243111234,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 185,
+      "height": 2370
+     },
+     "border_case": {
+      "top": "a",
+      "bottom": "a"
+     },
+     "border_trim_px": {
+      "top": 6,
+      "bottom": 7
+     },
+     "side_floor": 0.0038,
      "gold": null
     }
    ]
@@ -52314,45 +52081,70 @@
   },
   {
    "page": "181",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 110.0,
+   "ref_w": 180.0,
    "column_widths": [
-    321,
-    179,
+    205,
+    183,
     191,
-    191,
-    274,
+    183,
+    185,
     183,
     193,
-    251,
-    163
+    190,
+    192
    ],
-   "median_width": 191,
+   "median_width": 190,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）",
-      "L2：两侧最低墨 0.1176 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      36,
-      292
+      5,
+      201
      ],
      "border_top": 0.0,
-     "border_bottom": 2312.193797217836,
+     "border_bottom": 2313.109204074774,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 321,
-      "height": 2312
+      "width": 205,
+      "height": 2313
+     },
+     "border_case": {
+      "top": "b",
+      "bottom": "c"
+     },
+     "border_trim_px": {
+      "top": 3,
+      "bottom": 0
+     },
+     "side_floor": 0.0,
+     "gold": null,
+     "file": "181/c1.png"
+    },
+    {
+     "col": 2,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
+     "content_x": [
+      5,
+      180
+     ],
+     "border_top": 0.0,
+     "border_bottom": 2311.9029457167494,
+     "top_slack": 0.0,
+     "raised": false,
+     "head_raise_inner_y": null,
+     "warped_size": {
+      "width": 183,
+      "height": 2313
      },
      "border_case": {
       "top": "a",
@@ -52362,48 +52154,15 @@
       "top": 6,
       "bottom": 0
      },
-     "side_floor": 0.1176,
-     "gold": null
-    },
-    {
-     "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）",
-      "L2：两侧最低墨 0.2042 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
-     "content_x": [
-      11,
-      155
-     ],
-     "border_top": 0.0,
-     "border_bottom": 2311.0520162661505,
-     "top_slack": 0.0,
-     "raised": false,
-     "head_raise_inner_y": null,
-     "warped_size": {
-      "width": 179,
-      "height": 2311
-     },
-     "border_case": {
-      "top": "a",
-      "bottom": "d"
-     },
-     "border_trim_px": {
-      "top": 5,
-      "bottom": 28
-     },
-     "side_floor": 0.2042,
-     "gold": null
+     "side_floor": 0.0004,
+     "gold": null,
+     "file": "181/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       187
@@ -52426,27 +52185,25 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "181/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）",
-      "L2：两侧最低墨 0.3394 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      28,
-      185
+      3,
+      179
      ],
      "border_top": 0.0,
-     "border_bottom": 2309.634732887224,
+     "border_bottom": 2309.172491017481,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 191,
+      "width": 183,
       "height": 2310
      },
      "border_case": {
@@ -52454,50 +52211,48 @@
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 3,
+      "top": 5,
       "bottom": 0
      },
-     "side_floor": 0.3394,
-     "gold": null
+     "side_floor": 0.0009,
+     "gold": null,
+     "file": "181/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
-      235
+      182
      ],
      "border_top": 0.0,
-     "border_bottom": 2308.3949791310642,
+     "border_bottom": 2307.931984762832,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 274,
-      "height": 2308
+      "width": 185,
+      "height": 2307
      },
      "border_case": {
       "top": "a",
       "bottom": "c"
      },
      "border_trim_px": {
-      "top": 7,
+      "top": 5,
       "bottom": 0
      },
-     "side_floor": 0.0026,
-     "gold": null
+     "side_floor": 0.0013,
+     "gold": null,
+     "file": "181/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       179
@@ -52520,15 +52275,14 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "181/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       7,
       190
@@ -52551,26 +52305,25 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "181/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      20,
-      247
+      4,
+      186
      ],
      "border_top": 0.0,
-     "border_bottom": 2303.6566347602497,
+     "border_bottom": 2304.002586027505,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 251,
+      "width": 190,
       "height": 2304
      },
      "border_case": {
@@ -52582,28 +52335,26 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "181/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 191px 超过 ±15% 的列 [1, 5, 8]（[321, 274, 251]）",
-      "L2：两侧最低墨 0.1394 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      8,
-      163
+      7,
+      189
      ],
      "border_top": 0.0,
-     "border_bottom": 2302.2211214181757,
+     "border_bottom": 2302.5667388653897,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 163,
-      "height": 2302
+      "width": 192,
+      "height": 2303
      },
      "border_case": {
       "top": "a",
@@ -52613,19 +52364,18 @@
       "top": 5,
       "bottom": 0
      },
-     "side_floor": 0.1394,
-     "gold": null
+     "side_floor": 0.0009,
+     "gold": null,
+     "file": "181/c9.png"
     }
    ]
   },
   {
    "page": "182",
-   "admitted": false,
-   "reject": [
-    "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-   ],
-   "period": null,
-   "ref_w": null,
+   "admitted": true,
+   "reject": [],
+   "period": 109.0,
+   "ref_w": 182.0,
    "column_widths": [
     186,
     193,
@@ -52635,17 +52385,15 @@
     193,
     190,
     198,
-    111
+    218
    ],
-   "median_width": 190,
+   "median_width": 193,
    "columns": [
     {
      "col": 1,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       182
@@ -52668,15 +52416,14 @@
       "bottom": 0
      },
      "side_floor": 0.0009,
-     "gold": null
+     "gold": null,
+     "file": "182/c1.png"
     },
     {
      "col": 2,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
       189
@@ -52699,15 +52446,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "182/c2.png"
     },
     {
      "col": 3,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       180
@@ -52730,15 +52476,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "182/c3.png"
     },
     {
      "col": 4,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       194
@@ -52761,15 +52506,14 @@
       "bottom": 0
      },
      "side_floor": 0.0017,
-     "gold": null
+     "gold": null,
+     "file": "182/c4.png"
     },
     {
      "col": 5,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       4,
       185
@@ -52792,15 +52536,14 @@
       "bottom": 0
      },
      "side_floor": 0.0013,
-     "gold": null
+     "gold": null,
+     "file": "182/c5.png"
     },
     {
      "col": 6,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       189
@@ -52823,18 +52566,17 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "182/c6.png"
     },
     {
      "col": 7,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       6,
-      186
+      185
      ],
      "border_top": 0.0,
      "border_bottom": 2323.4483311256995,
@@ -52854,15 +52596,14 @@
       "bottom": 0
      },
      "side_floor": 0.0004,
-     "gold": null
+     "gold": null,
+     "file": "182/c7.png"
     },
     {
      "col": 8,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
       5,
       193
@@ -52885,27 +52626,25 @@
       "bottom": 0
      },
      "side_floor": 0.0,
-     "gold": null
+     "gold": null,
+     "file": "182/c8.png"
     },
     {
      "col": 9,
-     "admitted": false,
-     "reject": [
-      "L1：列宽偏离本页中位数 190px 超过 ±15% 的列 [9]（[111]）",
-      "L2：两侧最低墨 0.2852 > 0.045（找不到墨量归零的边界）"
-     ],
-     "tier": null,
+     "admitted": true,
+     "reject": [],
+     "tier": "gate",
      "content_x": [
-      10,
-      106
+      31,
+      213
      ],
      "border_top": 0.0,
-     "border_bottom": 2324.53891486724,
+     "border_bottom": 2324.73580475767,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 111,
+      "width": 218,
       "height": 2325
      },
      "border_case": {
@@ -52916,8 +52655,9 @@
       "top": 0,
       "bottom": 0
      },
-     "side_floor": 0.2852,
-     "gold": null
+     "side_floor": 0.0,
+     "gold": null,
+     "file": "182/c9.png"
     }
    ]
   },
@@ -52928,7 +52668,7 @@
    "period": 112.0,
    "ref_w": 173.0,
    "column_widths": [
-    175,
+    182,
     189,
     187,
     196,
@@ -52947,16 +52687,16 @@
      "tier": "gate",
      "content_x": [
       12,
-      173
+      179
      ],
      "border_top": 0.0,
-     "border_bottom": 2400.4943470802164,
+     "border_bottom": 2400.631715773993,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
      "warped_size": {
-      "width": 175,
-      "height": 2400
+      "width": 182,
+      "height": 2401
      },
      "border_case": {
       "top": "c",
@@ -52966,7 +52706,7 @@
       "top": 0,
       "bottom": 0
      },
-     "side_floor": 0.0013,
+     "side_floor": 0.0004,
      "gold": null,
      "file": "183/c1.png"
     },
@@ -53434,7 +53174,7 @@
       "bottom": "a"
      },
      "border_trim_px": {
-      "top": 12,
+      "top": 13,
       "bottom": 4
      },
      "side_floor": 0.0029,
@@ -53592,7 +53332,7 @@
       173
      ],
      "border_top": 0.0,
-     "border_bottom": 2393.302376343622,
+     "border_bottom": 2393.3019958525597,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,
@@ -53622,7 +53362,7 @@
       181
      ],
      "border_top": 0.0,
-     "border_bottom": 2394.040630603203,
+     "border_bottom": 2394.0402498756894,
      "top_slack": 0.0,
      "raised": false,
      "head_raise_inner_y": null,

@@ -222,8 +222,22 @@ def write_metadata(out_dir: Path, samples: list[dict],
             "（人工金标边线），但那套的窗口口径已经过时。",
         ],
     }
-    (out_dir / "metadata.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # **保留别的工具往 metadata 里加的字段**。这个函数是整份重写的，2026-09-03
+    # 因此丢过两次数据：`sampling`（分层抽样口径，没它就没法解释「全书 mixed 率」
+    # 那个数是怎么来的）和 `previously_excluded`（页级排除台账 + 解除理由）。
+    # 本函数只对下面这些"自己算出来的"字段有话语权，其余一律沿用旧文件。
+    OWNED = {"name", "version", "schema_version", "description", "created", "status",
+              "input_variant", "input_note", "total_samples", "sample_unit", "sources",
+              "label_origin_values", "verdict_distribution", "book_distribution",
+              "raised_columns", "gold_definition", "why_gold_does_not_go_stale",
+              "labeling_method", "pending_relabel", "known_limitations"}
+    path = out_dir / "metadata.json"
+    if path.exists():
+        prev = json.loads(path.read_text(encoding="utf-8"))
+        merged = {k: v for k, v in prev.items() if k not in OWNED}
+        merged.update(meta)          # 自己算的那批覆盖旧值
+        meta = {**meta, **{k: v for k, v in prev.items() if k not in OWNED}}
+    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> None:

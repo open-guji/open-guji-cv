@@ -27,7 +27,7 @@
    "clean_diag": {
     "band": [
      5,
-     212
+     196
     ],
     "top": {
      "px": 7,
@@ -48,7 +48,7 @@
     "segments": 1
    },
    "right_line": {
-    "x_at_top": 283.29061764705875,
+    "x_at_top": 316.29061764705875,
     "slope": 0.004382352941176478,
     "k2": null,
     "k3": null,
@@ -56,16 +56,16 @@
     "y2": null,
     "segments": 1
    },
-   "top_y": 338.6209371337656,
-   "bottom_y": 2745.5220563129374,
-   "border_top_y": 338.6209371337656,
-   "border_bottom_y": 2745.5220563129374,
+   "top_y": 338.458863299226,
+   "bottom_y": 2745.401226081347,
+   "border_top_y": 338.458863299226,
+   "border_bottom_y": 2745.401226081347,
    "border_top_in_column": 0.0,
-   "border_bottom_in_column": 2406.901119179172,
+   "border_bottom_in_column": 2406.942362782121,
    "raised": false,
    "head_raise_inner_y": null,
    "warped_size": {
-    "width": 233,
+    "width": 200,
     "height": 2407
    }
   },
