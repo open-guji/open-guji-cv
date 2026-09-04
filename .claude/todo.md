@@ -5,6 +5,44 @@
 > **算法层**的待办仍以 `.claude/doc/pipeline_handbook.md` §3 与 `segmentation_v2_pipeline.md`
 > 「下一步」为准；本文件只放 overview 下发的**架构层**任务。
 
+## 🎯 全流程 review 下发（2026-09-03 晚）：Step 1–4 冲 100%，Step 5/6 接进 v2
+
+正本 [doc/pipeline_review_2026-09-03.md](doc/pipeline_review_2026-09-03.md)——六步现状实测、
+字位损失预算、四阶段方案。**目标（用户定）：Step 1–4 达 100%；Step 5 可略低；Step 6 靠上下文与 AI 选字。**
+四把尺子 R1 产出率 / R2 格线穿字 / R3 格数正确 / R4 紧框被切，现在 95.7% / 11.6% / ~90% 列 / 2.0%。
+
+### 阶段 A — Step 1–4（四刀互相独立；A4 的金标是验收尺子，先做）
+- [ ] **A1** Step3 穿字 11.6% → <2%：先分解剩 462 条；真粘连换判据（period 窗内找连通体颈部）；
+      `lo_ratio` 硬约束 0.7 改软（硬 0.6 + 二次惩罚）。金标：控制台逐格「格线是否在字缝」二选一
+- [ ] **A2** 格数逐列自估：接 Step1 `raised`→`n_raised`；顶格型查首格之上有无 ≥0.3 格高字墨；正文低格起不动
+- [ ] **A3** Step1 下版框根修：`find_horizontal_border` bottom 选峰加半高宽 ≤10px 闸；外框反推；
+      `BOTTOM_PAD` 40 → 12 当保险。尺子：14 页金标 bottom 7.0 → <2px；dev_set 残留 52 列 → 0
+- [ ] **A4** Step4 v2 金标：8 879 条 `instances` 按 `bbox_page` + 图像指纹重键；迁不动的新标 rand 层 200 格；
+      去掉夹注 a/b 合成再拆；复验 v1 绝对像素阈值
+- 验收：vol02 全书 R1 ≥99%、R2 <2%、R3 =100%、R4 =0；rand 层 400 格 Wilson 下界 ≥99%
+
+### 阶段 B — Step 5 接进 v2
+- [ ] **B0** `steps/_v1_bridge.py`：`PageChars`→`CharInstance`；`seeding`/`glyph_db` 抽 `InstanceSource`，v1 路径不改
+- [ ] **B1** 四个新 Step：`normalize`（cache）/ `glyph_match`（指纹含 glyph.db sha）/
+      `ocr_candidates`（needs=engine）/ `context_decide`（指纹含语料 sha）
+- [ ] **B2** 金标重键：char-ocr 1 404、context-correction 1 681、glyph-match 71 497 对
+- [ ] **B3** `uv pip install rapidocr-onnxruntime`
+
+### 阶段 C — Step 6 + 进库闭环
+- [ ] **C1** `seed_admit` Step：十条通道→自动发 `confirm`（路由已有 `glyphdb_admit`）/ 待审进队列
+- [ ] **C2** `review/seed_export.py` 包进 `review/shell.py`，收割→路由→进库
+- [ ] **C3** `ContextDecider` 加 `llm` 策略，门槛化不变
+- [ ] **C4** vol02 全书六步端到端，报字位定字准确率
+
+### 阶段 D — 非正文版式
+- [ ] `keben_roster.yaml`（vol01 p90–132 职名 41 页）；目录页双行小类注；无界行页
+
+### 控制台
+- [ ] yaml 加五步；产物视图字块 + 候选 overlay；审查视图定字页 / 格线二选一 / 紧框拖框；heavy 评测器解锁
+
+风险：穿字真粘连是图像极限（按「能分开的都分对、分不开的都标出」收）；v1→v2 重键格位不一一对应；
+`tests/clustering/` 本机 pytest 崩溃，B0 前先跑通；启发式判据先复核再投事件（今日 127 条误报教训）。
+
 ## 🎯 架构：控制台 + 四个抽象
 
 设计全文：[doc/console_architecture.md](doc/console_architecture.md)。
