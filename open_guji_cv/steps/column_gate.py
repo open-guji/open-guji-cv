@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import statistics
 
+import numpy as np
+
 from pydantic import BaseModel
 
 from ..core.spec import StepSpec, column_key
@@ -41,12 +43,16 @@ class ColumnGateParams(BaseModel):
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     ink_threshold: int = 128
     bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
+    chars_per_line: int | None = None   # None = Book.chars_per_line；算 n_raised_hint 的基准
+    span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
+    span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
+    max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
 
 
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.2", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.3", unit="column",
         consumes=("column_windows", "column_image"), produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
@@ -55,6 +61,7 @@ class ColumnGateStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: ColumnGateParams = ctx.params_for(self)  # type: ignore[assignment]
         expected = p.expected_cols or ctx.book.expected_cols
+        expected_slots = p.chars_per_line or ctx.book.chars_per_line
         wins: PageWindows = ctx.product("column_windows", page)
         cols = wins.columns
         widths = [float(c.warped_size[0]) for c in cols]
@@ -111,18 +118,33 @@ class ColumnGateStep(Step):
         # 且这段墨不是版框线残留（`clean_column` 已抹掉版框，所以剩下的就是字）。
         # 给的量是「墨起点之上留半格」——够 DP 把首字整个圈进来，又不至于把
         # 窗口开到无边（开过头的代价实测很小，见 row_boundaries 的 top_slack 说明）。
+        # 同一次列图读取里顺带算 `n_raised_hint`：**这一列的墨跨度装得下几个字**。
+        # 「抬头多一个字」是逐列的（vol01/33 四个抬头列实测 3 个多一字、1 个不多），
+        # 而 `n_raised` 只有页级参数一个来源 —— 给不出逐列值时 DP 只能在 21 格里
+        # 硬塞 22 个字，唯一可行解是**丢掉首字**。实测 8 列（26c6、33c7/c8、
+        # 47c6/c9、vol02/3c3~c5）跨度/period 达 21.4~22.2，首字整个落在首格之上。
+        # 判据用**墨跨度**而不是「顶端有没有墨」——后者分不开「顶格写」与「多一个字」。
         top_ink_slack: dict[int, float] = {}
+        n_raised_hint: dict[int, int] = {}
         if page_ok and period:
             probe = max(20, int(round(period * 0.6)))
             for c in cols:
-                if c.raised or c.border_top_in_column > 1.0:
-                    continue                      # 真抬头列走原路
                 try:
                     img = ctx.image("column_image", column_key(page, c.col))
                 except Exception:
                     continue
                 b0, b1 = c.band
                 prof = (img[:, int(b0):int(b1)] < p.ink_threshold).mean(axis=1)
+
+                ink = np.flatnonzero(prof > p.span_ink)
+                if ink.size:
+                    span = float(ink[-1] - ink[0])
+                    extra = int(span / period - expected_slots + p.span_margin)
+                    if extra > 0:
+                        n_raised_hint[c.col] = min(extra, p.max_raised_hint)
+
+                if c.raised or c.border_top_in_column > 1.0:
+                    continue                      # 真抬头列的 top_slack 走原路
                 head = prof[:probe]
                 if head.size and float(head.max()) > 0.08:
                     top_ink_slack[c.col] = round(float(period) * 0.5, 2)
@@ -160,6 +182,7 @@ class ColumnGateStep(Step):
                                         c.border_bottom_in_column + p.bottom_slack)),
                 top_slack=(float(c.border_top_in_column) if c.raised
                            else top_ink_slack.get(c.col, 0.0)),
+                n_raised_hint=n_raised_hint.get(c.col, 0),
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
                 warped_size=c.warped_size, side_floor=c.side_floor,
                 band_width=float(c.band[1] - c.band[0]),

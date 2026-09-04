@@ -31,7 +31,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.3", unit="column",
+        id="row_segment", title="Step3 单列文字切分", version="1.4", unit="column",
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -46,7 +46,11 @@ class RowSegmentStep(Step):
         page_w = wins.page_size[0]
         out: list[ColumnCells] = []
         for gc in gate.columns:
-            base = dict(col=gc.col, n_body_slots=n_body, n_raised=p.n_raised,
+            # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
+            # 装得下几个字」（见 GateColumn.n_raised_hint）——同一页上有的抬头列
+            # 多一格、有的不多，页级参数给不出这个差别，DP 只能丢掉首字。
+            n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
+            base = dict(col=gc.col, n_body_slots=n_body, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
                         top_slack=gc.top_slack)
@@ -58,7 +62,7 @@ class RowSegmentStep(Step):
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
             r = segment_column(
-                img, period=gate.period, n_body_slots=n_body, n_raised=p.n_raised,
+                img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
                 border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
@@ -71,10 +75,10 @@ class RowSegmentStep(Step):
             if wrec is not None:
                 mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                       wrec.top_y, wrec.bottom_y)
-            n_total = n_body + p.n_raised
+            n_total = n_body + n_raised_col
             cells = []
             for c in r.cells:
-                pos = _slot_to_pos(c.slot, p.n_raised)
+                pos = _slot_to_pos(c.slot, n_raised_col)
                 if not 1 <= pos <= n_total:
                     raise ValueError(f"slot {c.slot} 换算出的物理位置 {pos} 越界（总格数 {n_total}）")
                 cells.append(CellRec(
