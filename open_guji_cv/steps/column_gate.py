@@ -1,10 +1,16 @@
 """Step2 → Step3 交接闸：只把「确实是一列、且过了闸」的列推给 Step3。
 
-照抄 scripts/export_step3_input.py 的判据：
-- L1 页级（只看几何）：探出的列数 = 版式列数；每列宽在本页中位数 ±15% 内；
-- L2 列级：两侧外 25% 最低墨占比 <= 0.045（已知几乎没有独立筛选力，只挡极端）；
-- L3 金标：P0 不接（tier=gate）。
-页级共享量 period / ref_w **用该页全部列算**，不只用准入的列。
+判据分三层：
+- **L1 页级**（只看几何）：探出的列数 = 版式列数。整页性的问题才放这里；
+- **L1c 列级**：本列宽偏离本页中位数超 ±15% —— 多半是把界行圈进了列窗。
+  ⚠️ 这条**原先错放在页级**，一列坏就整页作废（vol01/42 八列完好只因 c9 坏而全废，
+  vol02 全书 27 页被拦、其中 17 页只坏 c1 一列）。2026-09-03 改为列级；
+- **L2 列级**：两侧外 25% 最低墨占比 <= 0.045（已知几乎没有独立筛选力，只挡极端）；
+- **L3 金标**：P0 不接（tier=gate）。
+
+页级共享量 period / ref_w 用**几何正常的列**算（剔掉 L1c 命中的列）——那些列的
+投影带着一条整界行，不该参与共识。实测剔掉后 period 变化 ≤1.5、ref_w ≤5px。
+若正常列不足半数则整页拒绝，因为共识已无意义。
 """
 
 from __future__ import annotations
@@ -54,15 +60,26 @@ class ColumnGateStep(Step):
         page_reject: list[str] = []
         if len(cols) != expected:
             page_reject.append(f"L1：只探出 {len(cols)} 列（版式应为 {expected}）")
-        bad_w = [c.col for c, w in zip(cols, widths) if med_w and abs(w - med_w) > p.width_tol * med_w]
-        if bad_w:
-            page_reject.append(f"L1：列宽偏离本页中位数 {med_w:.0f}px 超过 ±{p.width_tol:.0%} 的列 {bad_w}")
 
-        # 逐列：页级先验要用全部列，所以不管准不准入都先算
+        # **列宽偏离是列级判据，不是页级**（2026-09-03 改）。
+        # 它逐列算得出，却曾被放在页级拒因里 → 一列坏就整页 9 列作废。
+        # 实证：vol01/42 的 c1~c8 偏离都 ≤3.7%、外缘墨 ≤0.008（完好），只有 c9
+        # 残留了一条斜界行（宽 +16.6%、外缘墨 0.092），结果 9 列全废。
+        # vol02 全书 27 页因它被拦，其中 17 页只坏 c1 一列。
+        # 见 doc/step3_error_survey.md 乙类。
+        wide_cols = {c.col: (w - med_w) / med_w
+                     for c, w in zip(cols, widths)
+                     if med_w and abs(w - med_w) > p.width_tol * med_w}
+
+        # 逐列：页级先验要用**几何正常的列**算。
+        # 宽度异常的列多半是把界行圈进了列窗，它的投影带着一条整线，
+        # 不该参与页级周期/列距的共识。实测剔掉后 period 变化 ≤1.5、ref_w ≤5px。
         projs, borders, dst_ws, band_ws = [], [], [], []
         for c in cols:
             cleaned = ctx.image("column_image", column_key(page, c.col))
             b0, b1 = c.band
+            if c.col in wide_cols:
+                continue
             projs.append(row_ink_projection(cleaned, b0, b1, ink_threshold=p.ink_threshold))
             borders.append((c.border_top_in_column, c.border_bottom_in_column))
             dst_ws.append(b1 - b0)
@@ -70,11 +87,15 @@ class ColumnGateStep(Step):
 
         period = ref_w = None
         if not page_reject:
-            try:
-                period = round(float(estimate_shared_period(projs, borders, dst_ws)), 2)
-            except ValueError as e:
-                page_reject.append(f"L1：页级周期估不出来（{e}）")
-            ref_w = float(statistics.median(band_ws)) if band_ws else None
+            if len(projs) < max(2, expected // 2):
+                page_reject.append(
+                    f"L1：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
+            else:
+                try:
+                    period = round(float(estimate_shared_period(projs, borders, dst_ws)), 2)
+                except ValueError as e:
+                    page_reject.append(f"L1：页级周期估不出来（{e}）")
+                ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
 
         recs: list[GateColumn] = []
@@ -82,6 +103,9 @@ class ColumnGateStep(Step):
             reasons: list[str] = []
             if not page_ok:
                 reasons.append("页级未过 L1")
+            if c.col in wide_cols:
+                reasons.append(f"L1c：本列宽 {c.warped_size[0]}px 偏离本页中位数 "
+                               f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行）")
             if c.side_floor > p.side_floor_max:
                 reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
             if p.tier == "gold":
