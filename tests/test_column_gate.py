@@ -138,3 +138,37 @@ def test_top_flush_detection_does_not_fire_on_every_column():
         pytest.skip("还没有闸产物")
     assert 0 < hit < total * 0.5, \
         f"顶格列 {hit}/{total}——判据要么没生效要么全命中"
+
+
+@needs_raw
+def test_bottom_bound_reaches_past_the_frame_line():
+    """交给 Step3 的下界要落在版框线**之外**，否则末字够不到。
+
+    钉住 2026-09-03 的 A4 一刀。Step3 的 candN 窗口上界就是这个 border_bottom，
+    传版框线的话，末字只要压着版框写、末边界就永远够不到它——实测 dev_set
+    216 列中 147 列（68%）真末墨超出版框线，末格 y1 比真末墨低中位 11px，
+    slot 21 因此占了 R4 被切总数的 57%。
+    """
+    store = ProductStore()
+    checked = beyond = 0
+    for book in ("vol01", "vol02"):
+        for pg in load_book(book).dev_set:
+            g = store.read(book, "column_gate", page_key(pg), "gate_manifest")
+            w = store.read(book, "column_warp", page_key(pg), "column_windows")
+            if g is None or w is None:
+                continue
+            for gc in g.columns:
+                wc = next((x for x in w.columns if x.col == gc.col), None)
+                if wc is None:
+                    continue
+                checked += 1
+                assert gc.border_bottom >= wc.border_bottom_in_column, \
+                    f"{book}/{pg}c{gc.col} 下界跑到版框线里面了"
+                assert gc.border_bottom <= wc.warped_size[1], \
+                    f"{book}/{pg}c{gc.col} 下界超出列图"
+                if gc.border_bottom > wc.border_bottom_in_column:
+                    beyond += 1
+    if not checked:
+        pytest.skip("还没有闸产物")
+    assert beyond > checked * 0.8, \
+        f"只有 {beyond}/{checked} 列的下界越过版框线——bottom_slack 没生效？"
