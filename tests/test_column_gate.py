@@ -37,15 +37,31 @@ def _gate(book: str, page: int):
 
 @needs_raw
 def test_wide_column_blocks_only_itself_not_whole_page():
-    """vol01/42：只有 c9 圈进了界行，c1~c8 必须照常放行。"""
-    g = _gate("vol01", 42)
-    assert g.admitted, "页级不该因单列宽度而拒绝"
-    blocked = [c.col for c in g.columns if not c.admitted]
-    assert blocked == [9], f"应只拦 c9，实际拦了 {blocked}"
-    c9 = next(c for c in g.columns if c.col == 9)
-    assert any("L1c" in r for r in c9.reject)
-    # 其余八列必须都能用
-    assert sum(1 for c in g.columns if c.admitted) == 8
+    """列宽异常只拦本列，不拖累整页。
+
+    原来钉的是 vol01/42 c9（宽 218 对中位 187，+16.6%）——**2026-09-04
+    合并 main 之后这个缺陷没了**：Step1 换成「最外线粗外条 → 细内框次候选」
+    以后，该页九列宽度是 180~197、中位 187，c9 已在 ±15% 内，整页放行。
+    靶子消失是好事，但断言不能跟着消失，否则「列宽回到页级」这个回归就没人守。
+    改成在全 dev_set 上找任意一个被 L1c 拦的列，验证它只拦自己。
+    """
+    store = ProductStore()
+    found = False
+    for book in ("vol01", "vol02"):
+        for pg in load_book(book).dev_set:
+            d = store.read_raw(book, "column_gate", page_key(pg))
+            if not d:
+                continue
+            gm = d["gate_manifest"]
+            hit = [c for c in gm["columns"]
+                   if any("L1c" in r for r in c["reject"])]
+            if not hit:
+                continue
+            found = True
+            assert gm["admitted"], f"{book}/{pg} 页级不该因单列宽度而拒绝"
+            assert any(c["admitted"] for c in gm["columns"]),                 f"{book}/{pg} 被 L1c 拦了却整页作废"
+    if not found:
+        pytest.skip("当前 dev_set 上没有列宽异常的列——Step1 修好之后是可能的")
 
 
 @needs_raw

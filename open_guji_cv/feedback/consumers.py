@@ -93,9 +93,99 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
 
 
 # ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
-def glyphdb_admit(events, **kw) -> ConsumeResult:
-    res = ConsumeResult("glyphdb_admit", n_events=len(events), skipped=len(events))
-    res.errors.append("glyphdb_admit 尚未接入（P1 之后）：请照旧走 `seed-ingest`")
+def glyphdb_admit(events, db_path: str = "output/glyph.db",
+                  dry_run: bool = False, **kw) -> ConsumeResult:
+    """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
+
+    这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
+    此前只能手动跑 `seed-ingest`，人裁结果与控制台脱节。
+
+    ## 字形 / 释读分开写（用户 2026-09-04 定）
+
+    「碰到已/巳、人/入 这类，先读字形，但是文本录入要按文意录（最好能记录
+    这个转换）」。事件 payload 因此带两个值：
+
+    - `shape`：图上刻的形 → `admit_instance(shape=...)`，进 `glyphs` /
+      `exemplars` / `GlyphMatcher` 的**字形索引**；
+    - `reading`：文意读法 → `admit_instance(char=...)`，进 `admissions.char`
+      与 `instances.semantic`。
+
+    两者不同就是一次转换（`conversion=1`）。**字形永远照录**，连已/巳 也不
+    例外——字形层的 near_form 护栏本来就是防「形状判据自己会认错」，字形库
+    要是被释读污染，将来一个真刻成这形状、该读别的字的实例会错误继承这次的
+    释读，字形匹配整条链就失真（charset_and_lm.md §四的实锤）。
+
+    `not_a_char` / `skip` 事件不进库（前者是判非字，后者是存疑跳过）。
+    图块从 v2 的 `char_patch` 缓存取——那正是被裁决的那张图。
+
+    ## ⚠️ v2 的 id 必须加前缀，否则会污染 15332 条已有记录
+
+    v1 的 `book:page:col:idx`（idx 从 0、含 margin 格）与 v2 的
+    `book:page:col:slot`（slot 从 1）**长得一模一样但指的不是同一格**。
+    实测 vol01/24 c1：库里 `vol01:24:1:2` 是「每」，v2 的 `1:2` 是「書」，
+    整体差一格——170 个同 id 命中里 **0 个一致**。不隔离就是把 v1 的记录
+    按 v2 的口径改写。所以 v2 事件一律以 `v2:` 开头存库，跟 v1 分居两个
+    命名空间；将来要合并得先做真正的重键（阶段 B2），不是靠巧合对齐。
+    """
+    res = ConsumeResult("glyphdb_admit", n_events=len(events))
+    admits = [(e, d) for e, d in events
+              if e.kind == "confirm" and (e.payload.get("v") or "confirm") == "confirm"]
+    res.skipped = len(events) - len(admits)
+    if not admits:
+        return res
+    if dry_run:
+        res.added = len(admits)
+        return res
+
+    from ..clustering.glyph_db import GlyphDB
+    from ..products.cache import ImageCache
+    import cv2
+
+    db = GlyphDB(db_path)
+    cache = ImageCache()
+    for e, _dest in admits:
+        shape = e.payload.get("shape") or e.payload.get("char")
+        reading = e.payload.get("reading") or shape
+        if not shape:
+            res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
+            res.skipped += 1
+            continue
+        book = e.target.book or (e.target.key.split(":")[0] if ":" in e.target.key else "")
+        # 图块键：p{page}c{col}s{slot}[a|b]，与 Step4 落缓存时一致
+        try:
+            _b, pg, col, slot = e.target.key.split(":")
+            sub = ""
+            if slot and slot[-1] in "ab":
+                slot, sub = slot[:-1], slot[-1]
+            ckey = f"p{int(pg):04d}c{int(col):02d}s{int(slot)}{sub}"
+        except Exception as exc:
+            res.errors.append(f"{e.target.key}: 键解析不了（{exc}）")
+            res.skipped += 1
+            continue
+        path = cache.get(book, "char_patch", ckey)
+        if path is None:
+            res.errors.append(f"{e.target.key}: 缓存里没有字块 {ckey}")
+            res.skipped += 1
+            continue
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            res.errors.append(f"{e.target.key}: 图块读不出来")
+            res.skipped += 1
+            continue
+        # v2 命名空间：见上面「id 必须加前缀」那节
+        db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
+        ok = db.admit_instance(
+            db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
+            provenance="human", shape=shape,
+            evidence={"event": e.id, "batch": e.batch,
+                      "conversion": bool(e.payload.get("conversion")),
+                      "shape": shape, "reading": reading},
+            page=str(e.target.page or ""), col=int(e.target.col or 0),
+            idx=int(e.target.slot or 0))
+        if ok:
+            res.added += 1
+        else:
+            res.skipped += 1        # admit_instance 的幂等闸：已进过库
     return res
 
 
@@ -115,8 +205,11 @@ CONSUMERS = {
 def route_and_consume(log: EventLog, batch: str | None = None,
                       table: RouteTable | None = None,
                       store: GoldStore | None = None,
-                      dry_run: bool = False) -> dict:
-    """把未消费的事件按路由表分发给各消费者；成功的记账。"""
+                      dry_run: bool = False, **consumer_kw) -> dict:
+    """把未消费的事件按路由表分发给各消费者；成功的记账。
+
+    `consumer_kw` 透传给消费者（如 `glyphdb_admit` 的 `db_path`）——测试要
+    指向库副本，别动真库。"""
     table = table or RouteTable.load(log.root / "routes.yaml")
     results: list[ConsumeResult] = []
     all_pending: list[Event] = []
@@ -126,7 +219,8 @@ def route_and_consume(log: EventLog, batch: str | None = None,
         if not pairs:
             continue
         all_pending.extend(e for e, _ in pairs)
-        res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add" else fn(pairs))
+        res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
+               else fn(pairs, dry_run=dry_run, **consumer_kw))
         results.append(res)
         if not dry_run and not res.errors:
             log.mark_consumed(consumer, [e for e, _ in pairs], note=batch or "")

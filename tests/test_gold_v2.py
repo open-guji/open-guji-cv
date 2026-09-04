@@ -283,8 +283,11 @@ def test_real_dataset_all_shards_readable():
 def test_real_migrated_shards_are_items():
     """已迁分片的条数与各自 README / metadata 记载对得上。"""
     store = GoldStore(DATASET)
+    # ⚠️ 这些数字随上游扩金标而变，不是常量。改动时要说清是**扩了金标**
+    # 还是**迁移漏了**——2026-09-04 column-warp 从 114 到 115 是 main 那边
+    # 新增了 vol01_42_c9（Step1 最外线次候选那一轮的样本），不是丢条目。
     expect = {"border-detection/column-split": 60,
-              "char-segmentation/column-warp": 114,
+              "char-segmentation/column-warp": 115,
               "char-segmentation/instances": 559,
               "page-type": 394,
               "column-layout": 36}
