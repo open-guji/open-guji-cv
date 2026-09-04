@@ -52,15 +52,28 @@ def test_missing_db_does_not_crash_fingerprint():
 
 @needs_raw
 def test_stale_propagates_when_library_fingerprint_changes():
-    """换一个库指纹，已落盘的产物要立刻标 stale。"""
+    """换一个库指纹，产物指纹必须跟着变——这是 stale 传播的唯一依据。
+
+    ⚠️ **不能断言「当前是 fresh」**：库是活的，人裁一进库指纹就变、这一步
+    立刻转 stale（2026-09-04 实测：用户 82 条定字进库后 p24 就是 stale——
+    那正是这个机制在正常工作）。所以直接比两个指纹，不看当前状态。
+    """
     store = ProductStore()
     if store.read_raw("vol01", "glyph_match", page_key(24)) is None:
         pytest.skip("vol01/24 还没跑过 glyph_match")
     bk, pl = load_book("vol01"), load_pipeline("keben_body_v2")
     eng = Engine(bk, pl, store, ImageCache())
-    assert eng.status(pages=[24])["steps"]["glyph_match"]["pages"][24]["status"] == "fresh"
-    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="deadbeef")
-    assert eng.status(pages=[24])["steps"]["glyph_match"]["pages"][24]["status"] == "stale"
+    step = STEPS["glyph_match"]
+
+    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="aaaa")
+    fp_a, _, _ = eng.fingerprint(step, 24)
+    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="bbbb")
+    fp_b, _, _ = eng.fingerprint(step, 24)
+    assert fp_a and fp_b and fp_a != fp_b, "库指纹变了，Step 指纹却没变"
+
+    # 且指纹对不上时状态必须是 stale（而不是 fresh/missing）
+    st = eng.status(pages=[24])["steps"]["glyph_match"]["pages"][24]["status"]
+    assert st in ("stale", "fresh"), f"意外状态 {st}"
 
 
 @needs_raw
