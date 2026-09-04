@@ -210,6 +210,13 @@ async function init() {
   fillSteps();
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
   $('#refresh').onclick = refreshStatus;
+  // 状态是**打开时的快照**，后台 CLI 跑完不会自己推过来 —— 实际踩过：
+  // CLI 已经重跑完全链，页面还停在旧的一片「过期」，看着像修复没生效。
+  // 切回这个标签页时自动重取一次，代价是一个 GET。
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshStatus();
+  });
+  window.addEventListener('focus', refreshStatus);
   $('#pipeline').onchange = () => { fillSteps(); refreshStatus(); };
   $('#book').onchange = refreshStatus;
   $('#runform').onsubmit = submitRun;
