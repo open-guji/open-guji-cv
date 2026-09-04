@@ -98,3 +98,43 @@ def test_width_reject_never_appears_at_page_level():
                 assert "列宽" not in r, f"{book}/{pg} 页级拒因里还有列宽：{r}"
     if not checked:
         pytest.skip("还没有闸产物")
+
+
+@needs_raw
+def test_top_flush_column_gets_slack_even_without_a_head_raise_box():
+    """版框平齐但顶端有字墨的**顶格列**也要拿到 top_slack。
+
+    钉住 2026-09-03 的 A2 第一刀。原先只有 `raised`（Step1 探到抬头**框**、
+    版框有台阶）才给 slack，而这批书里更常见的是版框平齐、字从版框内顶端
+    起写——`raised=False`、`border_top_in_column=0`、`top_slack=0`，DP 首锚点
+    窗口开不上去，首字被压在格顶。vol01/141 c7「諭旨」是实锤。
+    """
+    g = _gate("vol01", 141)
+    c7 = next(c for c in g.columns if c.col == 7)
+    assert not c7.raised, "141 c7 版框是平齐的（不是抬头框型）"
+    assert c7.top_slack > 0, "顶格列应当拿到 slack"
+
+    # 同页的普通正文列不该被误判成顶格
+    plain = [c for c in g.columns if c.col in (1, 2, 3)]
+    assert all(c.top_slack == 0 for c in plain), \
+        f"正文列不该有 slack：{[(c.col, c.top_slack) for c in plain]}"
+
+
+@needs_raw
+def test_top_flush_detection_does_not_fire_on_every_column():
+    """顶格检测要有选择性——全命中等于没判据。"""
+    store = ProductStore()
+    hit = total = 0
+    for book in ("vol01", "vol02"):
+        for pg in load_book(book).dev_set:
+            d = store.read_raw(book, "column_gate", page_key(pg))
+            if not d:
+                continue
+            for c in d["gate_manifest"]["columns"]:
+                total += 1
+                if c["top_slack"] > 0 and not c["raised"]:
+                    hit += 1
+    if not total:
+        pytest.skip("还没有闸产物")
+    assert 0 < hit < total * 0.5, \
+        f"顶格列 {hit}/{total}——判据要么没生效要么全命中"
