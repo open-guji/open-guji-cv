@@ -77,6 +77,26 @@
   pre.json { font-family: var(--mono); font-size: .74rem; background: var(--paper-2); border: 1px solid var(--rule); padding: .6rem .8rem;
     border-radius: 6px; max-height: 40rem; overflow: auto; white-space: pre; margin: 0; }
   @media (max-width: 60rem) { .products { grid-template-columns: 1fr; } }
+  /* 定字裁决（C2）：一格一卡，图块 + 三路证据 + 单键裁决 */
+  .rvgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:.7rem; }
+  .rvcard { border:1px solid var(--rule); border-left-width:4px; border-left-color:var(--rule);
+            padding:.55rem .6rem; background:var(--paper-2); font-size:.78rem; }
+  .rvcard[data-done="1"] { border-left-color:var(--ok); }
+  .rvcard[data-done="skip"] { border-left-color:var(--ochre); }
+  .rvcard[data-done="non"] { border-left-color:var(--zhu); }
+  .rvcard.cur { outline:2px solid var(--indigo); outline-offset:1px; }
+  .rvhead { display:flex; justify-content:space-between; align-items:baseline; gap:.4rem; }
+  .rvhead b { font-family:var(--mono); font-size:.72rem; font-weight:500; }
+  .rvbody { display:flex; gap:.6rem; margin:.4rem 0; align-items:flex-start; }
+  .rvbody img { width:76px; height:76px; object-fit:contain; background:#fff; border:1px solid var(--rule); }
+  .rvev { flex:1; min-width:0; line-height:1.5; }
+  .rvev .k { color:var(--mute); font-size:.7rem; letter-spacing:.03em; }
+  .rvcand button { font-size:.9rem; padding:.1rem .45rem; margin:.1rem .2rem .1rem 0; }
+  .rvcand button.pick { background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .rvctx { font-size:.72rem; color:var(--ink-2); word-break:break-all; margin-top:.3rem; }
+  .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
+  .rvdoubt { color:var(--ochre); font-size:.72rem; }
+  .rvin { width:4rem; font-size:.9rem; }
 </style>
 </head>
 <body>
@@ -153,6 +173,28 @@
 
   <section id="view-review" class="view">
     <div class="card">
+      <h2>定字裁决 <span class="muted">待审字位就在这里裁，不必再发外部 artifact</span></h2>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.6rem">
+        <label class="muted">册 <select id="rv_book"></select></label>
+        <label class="muted">页 <input id="rv_pages" value="dev_set" size="10"></label>
+        <label class="muted">范围
+          <select id="rv_only">
+            <option value="review">只看待审</option>
+            <option value="auto">抽查自动档</option>
+            <option value="all">全部</option>
+          </select></label>
+        <label class="muted">批次 <input id="rv_batch" size="22" placeholder="留空 = 按册页自动命名"></label>
+        <button id="rv_load">载入</button>
+        <button id="rv_send">提交裁决</button>
+        <span id="rv_msg" class="muted"></span>
+      </div>
+      <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
+        键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡。
+        字形按图上刻的录；已/巳、人/入 这类**文本按文意**，两者不同时在输入框里写文意字。
+      </div>
+      <div id="rv_cards" class="rvgrid"></div>
+    </div>
+    <div class="card">
       <h2>审查批次 <span class="muted">取代手写的 artifacts/README.md 台账</span></h2>
       <table class="jobs"><thead><tr><th>批次</th><th>题目</th><th>步骤</th><th>传输</th><th>卡片</th><th>已裁</th><th>已消费</th><th>状态</th><th></th></tr></thead><tbody id="batches"></tbody></table>
       <div id="bmsg" class="muted"></div>
@@ -207,8 +249,49 @@ async function init() {
   [state.books, state.pipelines] = await Promise.all([api('/api/books'), api('/api/pipelines')]);
   $('#book').innerHTML = state.books.map(b => `<option value="${b.id}">${b.id} · ${b.title}</option>`).join('');
   $('#pipeline').innerHTML = state.pipelines.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+  $('#rv_book').innerHTML = state.books.map(b => `<option value="${b.id}">${b.id}</option>`).join('');
   fillSteps();
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
+  // 定字裁决（C2）
+  $('#rv_load').onclick = rvLoad;
+  $('#rv_send').onclick = rvSend;
+  $('#rv_cards').addEventListener('click', ev => {
+    const b = ev.target.closest('.rvpick');
+    if (!b) return;
+    const i = +b.dataset.i;
+    rvFocus(i);
+    rvSet(i, b.dataset.ch);
+  });
+  $('#rv_cards').addEventListener('input', ev => {
+    const el = ev.target.closest('.rvin');
+    if (!el) return;
+    const i = +el.dataset.i, c = RV.cards[i];
+    if (!c) return;
+    const cur = RV.verdicts[c.id] || {};
+    const shape = el.dataset.f === 'shape' ? el.value : (cur.shape || '');
+    const reading = el.dataset.f === 'reading' ? el.value : (cur.reading || '');
+    RV.verdicts[c.id] = { shape, reading: reading || shape, done: shape ? '1' : '' };
+    const card = document.getElementById('rvc' + i);
+    if (card) card.dataset.done = shape ? '1' : '';
+  });
+  // 键盘：1/2/3 采信第几个候选，N 非字，S 跳过，←/→ 翻卡
+  document.addEventListener('keydown', ev => {
+    if (!$('#view-review').classList.contains('active')) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    const c = RV.cards[RV.cur];
+    if (!c) return;
+    const cands = (c.db && c.db.candidates || []).slice(0, 3);
+    if (ev.key === 'ArrowRight' || ev.key === 'j') { rvFocus(RV.cur + 1); ev.preventDefault(); }
+    else if (ev.key === 'ArrowLeft' || ev.key === 'k') { rvFocus(RV.cur - 1); ev.preventDefault(); }
+    else if (['1', '2', '3'].includes(ev.key)) {
+      const pick = cands[+ev.key - 1];
+      if (pick) { rvSet(RV.cur, pick[0]); rvFocus(RV.cur + 1); ev.preventDefault(); }
+    } else if (ev.key === 'n' || ev.key === 'N') {
+      rvSet(RV.cur, '', '', 'non'); rvFocus(RV.cur + 1); ev.preventDefault();
+    } else if (ev.key === 's' || ev.key === 'S') {
+      rvSet(RV.cur, '', '', 'skip'); rvFocus(RV.cur + 1); ev.preventDefault();
+    }
+  });
   $('#refresh').onclick = refreshStatus;
   // 状态是**打开时的快照**，后台 CLI 跑完不会自己推过来 —— 实际踩过：
   // CLI 已经重跑完全链，页面还停在旧的一片「过期」，看着像修复没生效。
@@ -278,6 +361,117 @@ async function runOneEval(id, quiet) {
     loadEvals();
   } catch (e) { $('#evout').textContent = `${id}: ${e.message}`; }
   if (!quiet) $('#ev_msg').textContent = '';
+}
+
+// ── 定字裁决（C2）：审查搬进控制台 ──────────────────────────────
+// 卡片来自 /api/review/cards（seed_admit 产物），裁决直接 POST /api/events，
+// 再走既有的路由 → glyphdb_admit。**不新造协议**。
+//
+// 一条口径（用户 2026-09-04 定）：**先读字形，文本录入按文意，记录转换**。
+// 所以每张卡收两个值：shape（图上刻的形，默认取候选）与 reading（文意，
+// 默认等于 shape）。两者不同的那些正是已/巳、卽/即 这类，事件里都带上，
+// 下游按 GlyphDB 的 shape/char 分岔存（charset_and_lm.md §四）。
+let RV = { cards: [], cur: 0, verdicts: {} };
+
+function rvCard(c, i) {
+  const cands = (c.db && c.db.candidates || []).slice(0, 3);
+  const ocr = (c.ocr || []).slice(0, 2);
+  const v = RV.verdicts[c.id] || {};
+  const btns = cands.map(([ch, cov], k) =>
+    `<button data-i="${i}" data-ch="${ch}" class="rvpick${v.shape === ch ? ' pick' : ''}"
+      title="库 cov ${cov}">${k + 1}·${ch}</button>`).join('');
+  const doubts = (c.doubts || []).map(d => `<div class="rvdoubt">⚠ ${d}</div>`).join('');
+  return `<div class="rvcard" data-i="${i}" data-done="${v.done || ''}" id="rvc${i}">
+    <div class="rvhead"><b>${c.id}</b><span class="muted">${c.channel || '待审'}</span></div>
+    <div class="rvbody">
+      <img src="${c.patch}" alt="${c.id}" loading="lazy">
+      <div class="rvev">
+        <div><span class="k">库</span> ${c.db ? c.db.verdict + ' ' + c.db.cov : '—'}</div>
+        <div><span class="k">OCR</span> ${ocr.map(([ch, p]) => ch + ' ' + Number(p).toFixed(2)).join(' / ') || '—'}</div>
+        <div><span class="k">上下文</span> ${c.ctx ? (c.ctx.char || '—') + ' m=' + c.ctx.margin : '—'}</div>
+        ${doubts}
+      </div>
+    </div>
+    <div class="rvcand">${btns}
+      <input class="rvin" data-i="${i}" data-f="shape" placeholder="字形" value="${v.shape || ''}">
+      <input class="rvin" data-i="${i}" data-f="reading" placeholder="文意" value="${v.reading || ''}">
+    </div>
+    <div class="rvctx" id="rvctx${i}"></div>
+  </div>`;
+}
+
+async function rvLoad() {
+  const book = $('#rv_book').value || $('#book').value;
+  const pages = $('#rv_pages').value || 'dev_set';
+  const only = $('#rv_only').value;
+  $('#rv_msg').textContent = '载入中…';
+  const d = await api(`/api/review/cards?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}&only=${only}&limit=400`);
+  RV = { cards: d.cards, cur: 0, verdicts: RV.verdicts || {} };
+  $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
+  $('#rv_msg').textContent = `${d.cards.length} 张${d.truncated ? '（已截断）' : ''}`;
+  rvFocus(0);
+  // 列上下文按需拉，一列只拉一次
+  const seen = new Set();
+  for (let i = 0; i < d.cards.length; i++) {
+    const c = d.cards[i], key = `${c.page}:${c.col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    api(`/api/review/column/${book}/${c.page}/${c.col}`).then(col => {
+      d.cards.forEach((x, j) => {
+        if (x.page !== c.page || x.col !== c.col) return;
+        const el = document.getElementById('rvctx' + j);
+        if (!el) return;
+        const slots = col.slots || [];
+        const at = slots.findIndex(s => s.slot === x.slot);
+        el.innerHTML = slots.map((s, k) =>
+          k === at ? `<mark>${s.char || '□'}</mark>` : (s.char || '□')).join('');
+      });
+    }).catch(() => {});
+  }
+}
+
+function rvFocus(i) {
+  if (!RV.cards.length) return;
+  RV.cur = Math.max(0, Math.min(i, RV.cards.length - 1));
+  document.querySelectorAll('.rvcard.cur').forEach(e => e.classList.remove('cur'));
+  const el = document.getElementById('rvc' + RV.cur);
+  if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+function rvSet(i, shape, reading, done) {
+  const c = RV.cards[i];
+  if (!c) return;
+  RV.verdicts[c.id] = { shape, reading: reading || shape, done: done || '1' };
+  const el = document.getElementById('rvc' + i);
+  if (el) {
+    el.dataset.done = done || '1';
+    el.querySelectorAll('.rvpick').forEach(b =>
+      b.classList.toggle('pick', b.dataset.ch === shape));
+    const si = el.querySelector('[data-f="shape"]'), ri = el.querySelector('[data-f="reading"]');
+    if (si) si.value = shape || '';
+    if (ri) ri.value = reading || shape || '';
+  }
+}
+
+async function rvSend() {
+  const book = $('#rv_book').value || $('#book').value;
+  const batch = $('#rv_batch').value.trim()
+    || `${book}-${$('#rv_pages').value || 'dev_set'}-decide`;
+  const rows = [];
+  for (const [id, v] of Object.entries(RV.verdicts)) {
+    if (!v.done) continue;
+    if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue; }
+    if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue; }
+    // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
+    rows.push({ id, v: 'confirm', shape: v.shape, reading: v.reading || v.shape,
+                conversion: (v.reading && v.reading !== v.shape) ? 1 : 0 });
+  }
+  if (!rows.length) { $('#rv_msg').textContent = '还没有裁决'; return; }
+  $('#rv_msg').textContent = '提交中…';
+  const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
+  $('#rv_msg').textContent = `已写入 ${r.n_appended ?? rows.length} 条事件 → 批次 ${batch}`;
+  loadBatches();
 }
 
 async function loadGold() {

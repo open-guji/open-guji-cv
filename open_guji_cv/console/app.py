@@ -39,7 +39,8 @@ from ..core.anchor import x_tr_to_tl
 from ..core.book import list_books, load_book
 from ..core.engine import Engine
 from ..core.pipeline import list_pipelines, load_pipeline
-from ..core.spec import page_key
+from .. import steps as _steps  # noqa: F401  —— 注册全部 Step 与产物种类
+from ..core.spec import cell_key, page_key
 from ..core.step import STEPS, KINDS, RunContext
 from ..products.cache import ImageCache
 from ..products.store import ProductStore
@@ -478,6 +479,83 @@ def api_gold(shard: str | None = None, limit: int = 300) -> dict:
         d["carrier"] = _gold.carrier(s)
         out.append(d)
     return {"shards": out}
+
+
+# ── 定字审查（C2：审查搬进控制台，不再走外部 artifact）────────────────
+#
+# 用户 2026-09-04 定：「审查也放控制台。之前的审查页需要复用的话，也迁移到
+# 控制台。」这一组 API 就是那件事的后端：待审卡片从 `seed_admit` 产物来，
+# 裁决直接 POST /api/events（既有接口），再走既有的路由 → glyphdb_admit。
+# **不新造协议**——事件信封、批次登记、路由表全部沿用。
+
+
+@app.get("/api/review/cards")
+def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
+                     only: str = "review") -> dict:
+    """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
+
+    `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
+    all = 全出。**抽查自动档是必要的**——只看人审那批，永远只能证明
+    「拿不准的我确实拿不准」，证不出自动那批有没有错（那正是 100% 准确率
+    这个数字要防的自证）。
+    """
+    from ..core.book import load_book
+    st = ProductStore()
+    bk = load_book(book)
+    pgs = bk.resolve_pages(pages)
+    out: list[dict] = []
+    for pg in pgs:
+        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
+        d = st.read(book, "context_decide", page_key(pg), "context_decision")
+        if a is None:
+            continue
+        mm = {r.id: r for cc in (m.columns if m else []) for r in cc.chars}
+        dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
+        for cc in a.columns:
+            if not cc.ok:
+                continue
+            for r in cc.chars:
+                if only == "review" and r.admit:
+                    continue
+                if only == "auto" and not r.admit:
+                    continue
+                mr, dr = mm.get(r.id), dd.get(r.id)
+                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
+                out.append({
+                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot,
+                    "patch": f"/api/cache/{book}/char_patch/{key}.png",
+                    "admit": r.admit, "channel": r.channel, "char": r.char,
+                    "doubts": r.doubts,
+                    "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
+                           "wmax": round(mr.wmax, 1),
+                           "candidates": mr.candidates[:5]} if mr else None,
+                    "ocr": (r.evidence or {}).get("ocr", []),
+                    "ctx": {"char": dr.char, "margin": dr.margin,
+                            "source": dr.source} if dr else None,
+                })
+                if len(out) >= limit:
+                    return {"book": book, "cards": out, "truncated": True}
+    return {"book": book, "cards": out, "truncated": False}
+
+
+@app.get("/api/review/column/{book}/{page}/{col}")
+def api_review_column(book: str, page: int, col: int) -> dict:
+    """一列的上下文：定字串 + 每格的 slot，供审查页显示「这个字在哪句话里」。
+
+    单看一个裁紧图块判不出形近字——`confusable-context` 154 题实测，字形层
+    top-1 只有 64.3%，而 n-gram 95.5%、大模型 98.7%。人也一样需要上下文。
+    """
+    d = ProductStore().read(book, "context_decide", page_key(page), "context_decision")
+    if d is None:
+        return {"text": "", "slots": []}
+    cc = d.column(col)
+    if cc is None:
+        return {"text": "", "slots": []}
+    rows = sorted(cc.chars, key=lambda x: (x.slot, x.sub or ""))
+    return {"text": "".join(r.char or "□" for r in rows),
+            "slots": [{"slot": r.slot, "char": r.char, "source": r.source}
+                      for r in rows]}
 
 
 @app.post("/api/gold/{shard:path}/migrate")
