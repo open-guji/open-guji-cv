@@ -392,3 +392,42 @@ def test_synth_candidates_carry_their_real_ink_not_a_constant():
     if synth_ink_at_330 is not None:
         assert synth_ink_at_330 > 0.03, \
             f"合成点墨量 {synth_ink_at_330} 应当是真值（≈0.06），不是固定 0.03"
+
+
+def test_snap_to_raw_minimum_recovers_a_narrow_seam_smoothing_erased():
+    """DP 定完位后，边界要在**原始**投影上微调到更低点。
+
+    钉住 2026-09-03 的第三刀。DP 跑在 `smooth_curve`（5 点均值）上——平滑是
+    必须的（否则笔画间小凹陷制造噪声候选），代价是**只有一两行宽的真字缝被
+    抹平**：实测 vol01/70c1 原始投影 y=1495 是 0.0000 的真缝，平滑后 0.0365
+    反而高于 y=1494 的 0.0343，DP 选了 1494、格线压在笔画上。
+    dev_set 落盘实测这一刀把可改善格线 80 → 20 条（2.00% → 0.50%）。
+    """
+    raw = np.full(200, 30.0)
+    raw[100] = 0.0            # 一行宽的真缝
+    raw[99] = 28.0
+    raw[101] = 28.0
+    # 平滑把这条缝从 0 抹成 23.2，与邻近的 23.6 几乎无差——DP 在平滑曲线上
+    # 分辨不出它（真页上这个差反了号，见 vol01/70c1 的实测）。
+    sm = smooth_curve(raw)
+    assert sm[100] > 20.0, "平滑应当把 0 的缝抬到跟邻居同量级"
+
+    # DP 挑到平滑曲线上邻近的点（这里模拟成 98），微调该把它拉回原始极小 100
+    out = fit_mod._snap_to_raw_minimum([98.0], raw, radius=3)
+    assert out[0] == 100.0, f"应当吸附到原始极小 100，实际 {out[0]}"
+
+    # radius=0 关掉
+    assert fit_mod._snap_to_raw_minimum([98.0], raw, radius=0) == [98.0]
+    # 原选已是最低时不动
+    assert fit_mod._snap_to_raw_minimum([100.0], raw, radius=3) == [100.0]
+
+
+def test_snap_to_raw_minimum_never_moves_more_than_radius():
+    """微调幅度硬性受 radius 限制——不许改变格位归属。"""
+    rng = np.random.default_rng(0)
+    raw = rng.random(500) * 40
+    bounds = [50.0, 150.0, 250.0, 350.0]
+    for r in (1, 3, 6):
+        out = fit_mod._snap_to_raw_minimum(bounds, raw, radius=r)
+        for b, o in zip(bounds, out):
+            assert abs(o - b) <= r, f"radius={r} 却挪了 {abs(o - b)}px"

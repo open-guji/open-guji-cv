@@ -377,7 +377,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         lo_ratio: float = 0.7, hi_ratio: float = 1.35,
                         y1_max_frac: float = 0.5, y2_max_frac: float = 0.3,
                         blank_thresh_frac: float = 0.08, synth_step: int = 20,
-                        top_slack: float = 0.0) -> RowBoundaryResult | None:
+                        top_slack: float = 0.0, snap_raw: int = 3) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -447,9 +447,44 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     )
     if boundaries is None:
         return None
+    boundaries = _snap_to_raw_minimum(boundaries, np.asarray(row_proj, dtype=np.float64),
+                                      snap_raw)
     return RowBoundaryResult(
         boundaries=boundaries, blank_intervals=intervals, valleys=valleys_all, period=period,
     )
+
+
+def _snap_to_raw_minimum(bounds: list[float], raw: np.ndarray, radius: int) -> list[float]:
+    """DP 定完位后，把每条边界在**原始**投影上微调到最近的更低点（±radius）。
+
+    DP 全程跑在 `smooth_curve`（5 点均值）上——平滑是必须的，否则笔画间的小
+    凹陷会制造大量噪声候选（模块头「候选只从波谷来」那条）。代价是**只有一
+    两行宽的真字缝会被抹平**：实测 vol01/70c1，原始投影 y=1495 是 0.0000 的
+    真缝，平滑后变成 0.0365，反而高于 y=1494 的 0.0343，DP 于是选了 1494，
+    格线压在笔画上。这类窄缝正是刻本字距紧时的常态。
+
+    微调只在 ±`radius` 内找原始投影的更低点，**不改变格位归属**（radius 远
+    小于半个字距），也不影响 DP 的可行性判断——间距变化至多 2·radius。
+    平局取离 DP 原选最近的，保持确定性。radius=0 关掉。
+    """
+    if radius <= 0 or raw.size == 0:
+        return bounds
+    n = raw.size
+    out: list[float] = []
+    for b in bounds:
+        i = int(round(b))
+        if not (0 <= i < n):
+            out.append(b)
+            continue
+        lo, hi = max(0, i - radius), min(n, i + radius + 1)
+        seg = raw[lo:hi]
+        best_v = float(seg.min())
+        if best_v < raw[i]:
+            ties = [j for j in range(lo, hi) if raw[j] == best_v]
+            out.append(float(min(ties, key=lambda j: (abs(j - i), j))))
+        else:
+            out.append(b)
+    return out
 
 
 # ── Step 3 正门：列图 → 带类型的字格 ──────────────────────────
