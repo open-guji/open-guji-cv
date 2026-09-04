@@ -930,6 +930,24 @@ index 取图，正好取到不同那条：卡片是「第」，上下文高亮�
 README。这是结构性对冲：凡在条带边缘**取证或涂抹**的步骤，接入/
 改动时都要问一句「这条边被谁挪过」。
 
+**v2 CLI 汇总里的「失败 N」不可信，以 `_manifest.jsonl` 为准**（2026-09-04
+踩的）。`pipeline` 跑完打印的 `ok / 跳过 / 失败` 是**本次调用内的累计计数**，
+中途重试成功的仍计在失败里。实测 vol02 全书跑 Step5：CLI 分别报「失败 3」
+「失败 8」「失败 28」，而每次跑完读 manifest 最新状态都是 **failed 0 / 全 ok**。
+查法：
+
+```python
+last = {}
+for l in open(f"products/{book}/{step}/_manifest.jsonl", encoding="utf-8"):
+    if l.strip():
+        d = json.loads(l); last[d["key"]] = d      # 同 key 后写覆盖
+bad = [k for k, d in last.items() if d.get("status") == "failed"]
+```
+
+**长跑要前台分批，别用后台 `nohup`**：同一批 vol02 全书跑，后台进程两次都在
+48% 左右**以 exit 0 结束**（不是崩溃，是被环境收掉了），产物只落了一半却看不出
+异常。分成 45~50 页一批前台跑，每批 5~9 分钟，可控。
+
 **本环境 pytest 的输出捕获有 bug**（`ValueError: I/O operation on closed
 file`，与代码无关），跑测试必须加 `--capture=no`。
 `tests/recognize-profile/test_recognize_profile.py` 是脚本不是测试，
