@@ -4,4 +4,4 @@
 写盘时校验，读盘时校验。图像类只有 ProductKindSpec，没有模型。
 """
 
-from . import page, borders, columns, gate, cells, chars  # noqa: F401
+from . import page, borders, columns, gate, cells, chars, recog  # noqa: F401
