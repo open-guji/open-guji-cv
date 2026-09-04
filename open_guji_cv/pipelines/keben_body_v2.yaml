@@ -15,6 +15,7 @@ steps:
   - cell_shrink          # Step4 字框收缩：沿用 CharExtractor；→ 紧框 + flags；字块走缓存
   - glyph_match          # Step5 库匹配：字块 → GlyphDB 三档判决 + 逐实例证据（指纹带库指纹）
   - ocr_candidates       # Step5 OCR 候选：字块 → RapidOCR CTC top-k + 简→繁扩展（needs=engine）
+  - context_decide       # Step6 上下文裁决：库+OCR 候选融合 → 门槛化定字（needs=corpus，指纹带语料指纹）
 notes: |
   坐标：Step1 产物存规范空间 raw_page_px@top-right；Step2–4 的列内坐标是 column_px，
   另带回到原图的 quad_page / bbox_page。
