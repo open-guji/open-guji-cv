@@ -643,6 +643,21 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
     }
 
 
+@app.get("/api/rulers")
+def api_rulers(book: str = "vol01", pages: str = "dev_set") -> dict:
+    """**四把尺子**：Step 1-4 「离 100% 还差什么」。
+
+    以前这四个数是临时脚本算完抄进 `.claude/doc/*.md` 的快照，文档一滞后
+    就没人知道当下真值。改了一刀有没有变好，恰恰要看这四个数的**变化**。
+
+    口径见 `eval/rulers.py`，照抄 pipeline_review 的定义表，不另立标准。
+    """
+    from ..core.book import load_book
+    from ..eval.rulers import measure
+    bk = load_book(book)
+    return measure(book, bk.resolve_pages(pages), ProductStore())
+
+
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。

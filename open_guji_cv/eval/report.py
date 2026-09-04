@@ -105,6 +105,10 @@ _FRAC_PCT = re.compile(r"^\s*(?P<name>[一-鿿][^（(]{0,20}?)\s*(?:（[^）]*�
 # 行内含多个字段：「all  页 36 列 290  列型准确率 91.4%  elastic P/R/F1 0.88/0.88/0.88」
 # 这类行 eval_layout / eval_pagetype 都在用，整行正则认不出来。
 _INLINE = re.compile(r"(?P<name>[一-鿿][一-鿿\w /]{1,14}?)\s+(?P<val>\d+(?:\.\d+)?)(?P<unit>%|px)")
+# 逐类明细行：「  抽样·随机        n= 40  偏出走廊 …  命中 80/80 …」
+# 特征是行首缩进后跟类名、再跟 `n=` 计数。这类行是**每类各多少**，
+# 拿任意一条当总体都是错的（column_warp 的「命中」就栽在这上面）。
+_STRATUM_DETAIL = re.compile(r"^\s{2,}\S.*?\bn=\s*\d+")
 # 行首的分层名：「body 页 12 列 108 …」
 _STRATUM = re.compile(r"^\s*(?P<s>[a-z_]{3,14}|全部|总体)\s+页")
 
@@ -143,13 +147,21 @@ def _parse_summary_lines(lines: list[str], add) -> None:
 def parse_metrics(text: str, limit: int = 12) -> list[Metric]:
     out: list[Metric] = []
     seen: set[str] = set()
+    tally: dict[str, list[int]] = {}     # 分层明细行的同名分数累加
 
-    def add(name: str, val: float, unit: str = "", den: int | None = None) -> None:
+    def add(name: str, val: float, unit: str = "", den: int | None = None) -> bool:
+        """收下返回 True，被去重/限额挡下返回 False。
+
+        ⚠️ 必须看返回值再写 `out[-1].numerator`。以前 add 挡下重名后调用方
+        照写不误，分子就安到了**上一个不相干的指标**上——column_warp 的
+        「命中」因此显示成 100.0% 却配着 0/80（值来自第一条分层行 80/80，
+        分子来自最后一条 0/2）。"""
         name = name.strip()
         if not name or name in seen or name.isdigit() or len(out) >= limit:
-            return
+            return False
         out.append(Metric(name=name, value=val, denominator=den, unit=unit))
         seen.add(name)
+        return True
 
     for line in text.splitlines():
         line = line.rstrip()
@@ -159,16 +171,22 @@ def parse_metrics(text: str, limit: int = 12) -> list[Metric]:
             continue          # 逐类明细，不是总体指标
         fp = _FRAC_PCT.match(line)
         if fp:
-            add(fp.group("name"), float(fp.group("pct")), "%", int(fp.group("den")))
-            if out:
+            if add(fp.group("name"), float(fp.group("pct")), "%", int(fp.group("den"))):
                 out[-1].numerator = int(fp.group("num"))
             continue
         fm = _FRACTION.search(line)
         if fm and "%" not in line:
             num, den = int(fm.group("num")), int(fm.group("den"))
             if den and num <= den:
-                add(fm.group("name") or "通过率", round(100.0 * num / den, 2), "%", den)
-                out[-1].numerator = num
+                nm = (fm.group("name") or "通过率").strip()
+                if _STRATUM_DETAIL.match(line):
+                    # 分层明细行：单条不是总体指标，累加成总计（见 _tally）
+                    t = tally.setdefault(nm, [0, 0])
+                    t[0] += num
+                    t[1] += den
+                    continue
+                if add(nm, round(100.0 * num / den, 2), "%", den):
+                    out[-1].numerator = num
                 continue
         matched = False
         for pat in _LINE_PATTERNS:
@@ -203,4 +221,10 @@ def parse_metrics(text: str, limit: int = 12) -> list[Metric]:
     # 「缺陷检出率 50%」的好指标挤掉。
     if not out:
         _parse_summary_lines([l for l in text.splitlines()[-8:] if l.strip()], add)
+
+    # 分层明细累加 → 总计。评测脚本只按类印「命中 22/22」，没有总计行；
+    # 不累加的话控制台要么漏掉这个指标，要么拿某一类冒充总体。
+    for nm, (num, den) in tally.items():
+        if den and add(nm, round(100.0 * num / den, 2), "%", den):
+            out[-1].numerator = num
     return out

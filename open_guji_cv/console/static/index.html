@@ -156,6 +156,11 @@
       <div id="notes" class="muted"></div>
     </div>
     <div class="card">
+      <h2>四把尺子 <span class="muted">Step 1-4 离 100% 还差什么</span>
+        <button id="rl_go" style="float:right">测量</button></h2>
+      <div id="rl_out" class="muted">点「测量」跑（dev_set 约需十几秒）</div>
+    </div>
+    <div class="card">
       <h2>状态矩阵 <span class="muted">行 = 步骤，列 = 页；点格子看产物</span>
         <span id="params_note" class="muted mono" style="margin-left:.6rem"></span></h2>
       <div id="legend" class="counts" style="margin-bottom:.5rem">
@@ -308,6 +313,7 @@ async function init() {
   fillSteps();
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
   // 定字裁决（C2）
+  $('#rl_go').onclick = loadRulers;
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
   $('#rv_send').onclick = rvSend;
@@ -512,6 +518,40 @@ function rvCard(c, i) {
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
   </div>`;
+}
+
+async function loadRulers() {
+  const book = $('#book') ? $('#book').value : 'vol01';
+  $('#rl_out').textContent = '测量中…（要读列图，十几秒）';
+  let d;
+  try { d = await api('/api/rulers?book=' + encodeURIComponent(book) + '&pages=dev_set'); }
+  catch (e) { $('#rl_out').textContent = '测量失败：' + e.message; return; }
+  const rows = d.rulers.map(r => {
+    const v = r.value == null ? '—' : r.value.toFixed(2) + r.unit;
+    // 达标判定：目标写 0 的就要求为 0，写 100% 的就要求满分；'—' 是只报不判
+    const good = r.goal === '0' ? r.num === 0
+               : (r.goal === '100%' ? r.num === r.den : null);
+    const cls = good === null ? '' : (good ? 'qok' : 'qbad');
+    const det = (r.detail || []).slice(0, 6).map(x =>
+      'p' + x.page + (x.col != null ? ' c' + x.col : '')
+      + (x.slot != null ? ' s' + x.slot : '')
+      + (x.px != null ? ' ' + x.px + 'px' : '')).join(' · ');
+    return '<tr><td class="mono">' + r.key + '</td><td>' + r.title
+      + '<div class="qs">' + r.note + '</div></td>'
+      + '<td class="mono ' + cls + '">' + v + '</td>'
+      + '<td class="mono qs">' + r.num + '/' + r.den + '</td>'
+      + '<td class="qs">' + r.goal + '</td>'
+      + '<td class="qs">' + det + '</td></tr>';
+  }).join('');
+  $('#rl_out').innerHTML =
+    '<table class="jobs"><thead><tr><th>#</th><th>尺子</th><th>现值</th>'
+    + '<th>分子/分母</th><th>目标</th><th>头几条（可点页去看）</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table>'
+    + '<div class="qs" style="margin-top:.5rem;line-height:1.7">'
+    + '<b>怎么读</b>：R2「真粘连」是图像极限（笔画物理相连），'
+    + '标 flag 交人审即可，<b>不算错</b>；要盯的是「可改善」。'
+    + 'R4 只认紧贴紧框的笔画级墨段——窗口若开到版框会扫进邻字，'
+    + '把整字高度（~110px）误报成被切。</div>';
 }
 
 async function loadQuality() {
