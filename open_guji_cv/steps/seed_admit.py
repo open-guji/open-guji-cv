@@ -55,7 +55,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.0", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.1", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
@@ -65,7 +65,7 @@ class SeedAdmitStep(Step):
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        from ..clustering.seeding import admission_decision
+        from ..clustering.seeding import NEAR_FORM_CHARS, admission_decision
         from ..clustering.variants import VariantMap
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
@@ -87,8 +87,20 @@ class SeedAdmitStep(Step):
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
                 ocr_in = ({"char": o.topk[0][0], "prob": o.topk[0][1]}
                           if o and o.topk else None)
+                # **near_form 疑问要自己判**（2026-09-04 修）。`judge_doubts`
+                # 在 v1 里靠整理本/载体产出六条疑问，这里没有整理本，但
+                # `near_form` 只看候选字属不属于形近家族，自己就能判——
+                # 不判的话 `admission_decision` 的形近防线整条失效。
+                # 实锤：vol01:151:8:4 库候选 諭 0.9923 / 論 0.9898 只差
+                # 0.0025，matcher 已把它从 same 降档 unsure（但 guard 字段
+                # 是 None，v1 就没填），match_solo 只看 cov ≥ 0.99 就放行，
+                # 结果把「論」认成「諭」——**dev_set 1619 条金标里唯一的错**。
+                cand_chars = {c for c, _v in r.candidates[:3]}
+                if r.char:
+                    cand_chars.add(r.char)
+                doubts = (["near_form"] if cand_chars & NEAR_FORM_CHARS else [])
                 ok, channel = admission_decision(
-                    ocr=ocr_in, align_char=None, ref_char=None, doubts=[],
+                    ocr=ocr_in, align_char=None, ref_char=None, doubts=doubts,
                     vmap=vmap,
                     match_char=r.char if r.verdict == "same" else None,
                     match_candidates=list(r.candidates),
@@ -117,7 +129,7 @@ class SeedAdmitStep(Step):
                 recs.append(AdmitRec(
                     id=r.id, slot=r.slot, sub=r.sub, admit=ok, channel=channel,
                     char=char, provenance=prov,
-                    doubts=[] if ok else _doubts(r, d),
+                    doubts=[] if ok else (_doubts(r, d) + doubts),
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,
                               "ocr": (o.topk[:3] if o else []),
