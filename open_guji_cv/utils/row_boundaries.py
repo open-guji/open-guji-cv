@@ -404,18 +404,29 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     valleys_all = find_valleys(curve, dst_w)
     thresh = blank_thresh_frac * dst_w
     intervals = find_blank_intervals(curve, thresh)
-    valid = [v for v in valleys_all if not in_any_interval(v, intervals)]
+    # **空白区间里的真波谷要留下**（2026-09-03 改）。原先这里无条件剔除
+    # `in_any_interval` 的真波谷、只留合成候选，于是 DP 在一堆假墨 0.03 的
+    # 等间隔点里挑，挑中的点真实墨量可能远高于 0.03 —— 实测 vol01/24c1 格13：
+    # 真波谷 y=1357 墨 0.000 被扔掉，换成合成点 y=1345（假墨 0.03、真墨 0.039），
+    # DP 选了后者，格线穿字。按代价函数算干净点优 25 倍（0.0016 vs 0.0410），
+    # 不是权重问题，是那个点**根本没进候选集**。
+    # dev_set 实测：穿字格线 693 条里 318 条（46%）附近就有这样被扔掉的干净波谷。
+    valid = list(valleys_all)
     valley_ink = [curve[v] / dst_w for v in valid]
 
-    # 空白区间没有真实波谷，补一批合成候选撑住可行性（墨量给个较低但非零的
-    # 固定值——真波谷因为墨量更低仍然优先，但空白区不会因为没候选就无解）。
+    # 空白区间里若没有真波谷，仍补一批合成候选撑住可行性（墨量给个较低但非零
+    # 的固定值——真波谷因为墨量更低仍然优先，但空白区不会因为没候选就无解）。
+    # 只在**离真波谷足够远**的位置补，免得同一条字缝既有真点又有假点，
+    # 假点凭 0.03 的固定墨量把真点（墨可能是 0.000）挤掉。
+    synth_guard = max(6, synth_step // 3)
     synth: list[float] = []
     synth_ink: list[float] = []
     for lo, hi in intervals:
         y = lo
         while y <= hi:
-            synth.append(float(y))
-            synth_ink.append(0.03)
+            if all(abs(y - v) >= synth_guard for v in valid):
+                synth.append(float(y))
+                synth_ink.append(0.03)
             y += synth_step
 
     all_valleys = np.array(valid + synth, dtype=np.float64)
