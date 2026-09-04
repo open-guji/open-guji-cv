@@ -1,3 +1,9 @@
+> **2026-09-04 第二轮 review**：`doc/pipeline_review_2026-09-04.md`。结论：切分不再是瓶颈；
+> 人审 152 条里 65% 能被「整理本 × 库」通道吃掉（v2 没接 `align_char`），锚定串改用库 top1
+> 覆盖 83.8% → 98.1%；真正要人的是生僻字。四刀：A 接整理本通道 → B LLM 判形近 + 三方一致
+> → C 生僻字候选（字体模板 kNN / IDS 护栏与检索 / 部件模型）→ D 读文定字 UI。
+> 复现：`scripts/survey_review_queue.py`。
+
 # open-guji-cv 近期任务
 
 > 来源：overview 项目下发（2026-09-03 更新）。此前 2026-02 下发的「Volume 1 / Volume 2」任务
