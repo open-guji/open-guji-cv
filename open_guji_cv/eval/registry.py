@@ -117,6 +117,13 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="上游裁切", needs=("products",)),
     _e("char_drop", "char-segmentation/char-drop", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="字墨丢失", needs=("products",)),
+    # 生僻字候选召回（C 刀 L1）：库/OCR/上下文都给不出答案的字位，字体模板能
+    # 不能把答案捞进 top-10。主指标是**召回**不是准确率——目标是人在候选里点。
+    # 位置参数是数据集分片目录（--dataset），不是分片父目录。
+    _e("rare_char", "rare-char", arg_kind="none", out_flag="", pythonpath=True,
+       title="生僻字候选", needs=("products",),
+       extra=("--dataset", "../open-guji-dataset/rare-char"),
+       note="要建 4600 字 × 4 字体的索引，首跑约 1-2 分钟"),
     _e("truncation", "char-segmentation/truncation", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="字身截断", needs=("products",)),
     _e("crop_margin", "char-segmentation/crop-margin", arg_kind="shard_parent", out_flag="", pythonpath=True,
