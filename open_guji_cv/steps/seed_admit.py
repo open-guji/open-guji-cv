@@ -37,6 +37,8 @@ dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 7
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import BaseModel
 
 from ..core.spec import StepSpec
@@ -44,24 +46,39 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageDecision, PageMatch, PageOcr)
 
+DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+
 
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
+    corpus: str = DEFAULT_CORPUS        # 整理本；空字符串 = 不用整理本通道
+    corpus_fingerprint: str = ""        # 自动填，进 params_hash（外部可变状态）
+    always_review: str = "己已巳"       # 这些字永远人审（用户 2026-09-04 定）
+
+    def model_post_init(self, _ctx) -> None:
+        # 语料是**外部可变状态**：换了整理本，准入结论会变，产物必须过期。
+        # 与 glyph_match 的 db_fingerprint、context_decide 的 corpus_fingerprint
+        # 同一套做法（见 context_decide 模块头）。
+        if self.corpus and not self.corpus_fingerprint:
+            from ..steps.context_decide import corpus_fingerprint
+            object.__setattr__(self, "corpus_fingerprint",
+                               corpus_fingerprint([self.corpus]))
 
 
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.1", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.2", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
         code_deps=("open_guji_cv.clustering.seeding",
-                   "open_guji_cv.clustering.variants"),
+                   "open_guji_cv.clustering.variants",
+                   "open_guji_cv.clustering.align_label"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -75,6 +92,8 @@ class SeedAdmitStep(Step):
 
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
+        amap = _align(p, match, dec, ocr, page, ctx.book.id)
+        always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
         n_auto = n_review = 0
         for cc in match.columns:
@@ -99,20 +118,41 @@ class SeedAdmitStep(Step):
                 if r.char:
                     cand_chars.add(r.char)
                 doubts = (["near_form"] if cand_chars & NEAR_FORM_CHARS else [])
+                # 整理本这一路（2026-09-04 接上）。v1 标定过 match_ref 144/144、
+                # match_replace 70/70、match_margin 102/102，靠的就是「文本证据 ×
+                # 形状证据同源性为零」；v2 此前一直传 align_char=None，这些通道
+                # 一条都没生效，于是每个库 unsure 都要人点。
+                # replace 段照 v1 记 DOUBT_REPLACE_ALIGN（那层有独立的更严闸）。
+                al = amap.get(r.id)
+                align_char = al[0] if al else None
+                if al and al[1] == "replace":
+                    doubts.append("replace_align")
                 ok, channel = admission_decision(
-                    ocr=ocr_in, align_char=None, ref_char=None, doubts=doubts,
-                    vmap=vmap,
+                    ocr=ocr_in, align_char=align_char, ref_char=None,
+                    doubts=doubts, vmap=vmap,
                     match_char=r.char if r.verdict == "same" else None,
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
                     solo_cov=p.solo_cov)
+                # 己/已/巳 永远人审（用户 2026-09-04 定）。这三个字的字形与
+                # 文意会分岔（同词异写 + 真的另一个字），任何自动通道都不该
+                # 替人决定读法——字形层护栏拦不住 align×库 这种跨源一致。
+                if ok and (align_char in always
+                           or (r.candidates and r.candidates[0][0] in always)
+                           or (r.char in always)):
+                    ok, channel = False, None
 
-                # 进库的字：same 档用继承的字；unsure 档由 match_solo/
-                # match_solo_ocr 放行时，字来自**库候选 top1**（那正是这两条
-                # 通道采信的东西）——不取就会出现「自动进库却没有字」。
-                char = r.char if r.verdict == "same" else None
-                if char is None and r.candidates:
-                    char = r.candidates[0][0]
+                char, reading = _pick_char(
+                    ok=ok, channel=channel, align_char=align_char,
+                    match_char=r.char, verdict=r.verdict,
+                    candidates=list(r.candidates))
+                # `admission_decision` 给 dual 档返回 None（历史口径，别去改它
+                # ——`_pick_char` 与 seeding 的一串标定注释都按 None 写的）。但
+                # **产物里不许有匿名准入**：每条自动进库都得说清走的哪条通道，
+                # 否则出了错没法按通道归因（test_seed_admit_step 有护栏）。
+                # 所以在取完字之后、写产物之前补上名字。
+                if ok and channel is None:
+                    channel = "dual"
                 prov = "match" if ok else ""
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
@@ -128,7 +168,7 @@ class SeedAdmitStep(Step):
                     n_review += 1
                 recs.append(AdmitRec(
                     id=r.id, slot=r.slot, sub=r.sub, admit=ok, channel=channel,
-                    char=char, provenance=prov,
+                    char=char, reading=reading, provenance=prov,
                     doubts=[] if ok else (_doubts(r, d) + doubts),
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,
@@ -137,6 +177,96 @@ class SeedAdmitStep(Step):
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto,
                                         n_review=n_review, columns=out)}
+
+
+# 整理本参与的通道：进库字取**整理本字**，库只是形状旁证
+_CORPUS_CHANNELS = (None, "match_replace", "match_ref_weak", "match_margin")
+
+
+def _pick_char(ok: bool, channel: str | None, align_char: str | None,
+               match_char: str | None, verdict: str,
+               candidates: list) -> tuple[str | None, str | None]:
+    """决定这一位的 **(字形, 文意)**。
+
+    - `char`（字形）：same 档用库继承的字；否则取**库候选 top1**——那正是
+      match_solo / match_solo_ocr 采信的东西，不取就会「自动进库却没有字」。
+    - `reading`（文意）：整理本参与的通道填整理本字；与 char 相同时返回 None。
+
+    ## ⚠️ 整理本字不能覆盖 `char`
+
+    第一版让整理本字直接覆盖 `char`，结果 7 条异体字位被写成了整理本的形：
+    刻本刻「㫖」存成「旨」、「彚」存成「彙」、「卽」存成「即」。`AdmitRec.char`
+    喂的是字形库，**字形库存的是刻本上实际刻的形**——用整理本改它，将来一个真
+    刻成这形状的实例会继承错误的字形（charset_and_lm.md §四的实锤）。所以整理本
+    字只进 `reading`，`char` 永远照录图上的形。
+
+    ## ⚠️ `channel is None` 也是一条通道
+
+    `dual` 档（align × OCR 双信号一致且零疑问）在 `admission_decision` 里是
+    `return True, None`——**没有通道名**。漏掉它，`reading` 就不会填；更早的一版
+    连 `char` 都会掉进库 top1 兜底，实测判错 9 条金标（vol01:42:3:20 align 与
+    OCR 都读「敷」，库 top1 却是「數」，0.957 vs 0.955 的 HOG 饱和差距）。
+    所以按「这条通道用没用整理本」判，而不是列通道名。
+    """
+    char = match_char if verdict == "same" else None
+    reading = None
+    if ok and align_char and channel in _CORPUS_CHANNELS:
+        reading = align_char
+        # ⚠️ 库 unsure 时，**别拿库 top1 当字形**。
+        #
+        # unsure 的字面意思就是「库不知道这是什么」：实测 8 条 dual 位
+        # （vol01:42:3:20 等）库 top1 与 top2 只差 0.0017~0.0023，而 align 与
+        # OCR 两路独立证据都指向另一个字，且那个字**根本不在库的候选里**
+        # （敷/顯/毫/昌）。此时把库的猜测写进 `char`，等于往字形库塞 8 个错
+        # 例——下一页再遇到同形字就会继承这个错（charset_and_lm.md §四）。
+        #
+        # 库判 same 才有资格定字形（那是它下了断言）；unsure 时两路零同源证据
+        # 一致，整理本字是更好的字形估计。异体位（㫖/旨、彚/彙）不受影响：
+        # 库对它们判 same，char 仍照录刻本的形，只有 reading 取整理本。
+        if char is None:
+            char = align_char
+    if char is None and candidates:
+        char = candidates[0][0]
+    return char, (reading if reading and reading != char else None)
+
+
+@lru_cache(maxsize=4)
+def _corpus_text(path: str) -> str:
+    from pathlib import Path
+    f = Path(path)
+    return f.read_text(encoding="utf-8") if f.exists() else ""
+
+
+@lru_cache(maxsize=4)
+def _corpus_index(path: str):
+    """8-gram 索引建一次就好——整本书每页都要用，重建一次约 1 秒。"""
+    from ..clustering.align_label import build_ngram_index
+    return build_ngram_index(_corpus_text(path))
+
+
+def _align(p, match, dec, ocr, page: int, book: str = "") -> dict[str, tuple[str, str]]:
+    """整页锚到整理本 → {字位: (整理本字, equal|replace)}。
+
+    锚不上就返回空表——那样所有整理本通道自动失效，退回本次改动之前的行为，
+    不会把错的对齐硬塞进准入。这是「拿不准就保持基线」在这一层的落法。
+    """
+    if not p.corpus:
+        return {}
+    from ..clustering.align_label import label_page
+    from ..gold.v2_align import _slots_from_decision
+    text = _corpus_text(p.corpus)
+    if not text:
+        return {}
+    slots, _meta = _slots_from_decision(dec, match, ocr)
+    if len(slots) < 12:
+        return {}
+    # ⚠️ book 必须传真名：`label_page` 拼的是 `book:page:col:idx`，传空字符串
+    # 会得到 ":24:1:2" 这种键，与产物的 "vol01:24:1:2" 对不上——**查表全 miss，
+    # 不报错，只是整理本通道一条都不触发**（本轮实际踩到，靠比对键样例才发现）。
+    labs, ok = label_page(str(page), slots, book, text, _corpus_index(p.corpus))
+    if not ok:
+        return {}
+    return {l.instance_id: (l.char, l.op) for l in labs}
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
