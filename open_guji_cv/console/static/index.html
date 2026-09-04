@@ -104,6 +104,14 @@
   .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
   .rvdoubt { color:var(--ochre); font-size:.72rem; }
   .rvin { width:4rem; font-size:.9rem; }
+  /* 读文定字：待审位虚线下划线（别当可靠上下文用），兜底字浅一档 */
+  .ctx-rev { border-bottom:1px dashed var(--zhu); }
+  .ctx-w { color:var(--mute); }
+  .rvrare { margin-top:.35rem; font-size:.72rem; }
+  .rvrarebtn { font-size:.72rem; padding:.1rem .45rem; }
+  .rvrareout { margin-top:.3rem; font-size:.74rem; line-height:2 }
+  .rvrareout .rvrmeta { color:var(--mute); margin-right:.7rem; font-size:.7rem; }
+  .rvrarepick { font-family:var(--serif); font-size:1rem; }
   .qgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(20rem,1fr)); gap:1.2rem; }
   .qk { font-size:.78rem; color:var(--mute); letter-spacing:.04em; }
   .qv { font-family:var(--mono); font-size:2rem; line-height:1.2; }
@@ -316,6 +324,23 @@ async function init() {
   $('#rl_go').onclick = loadRulers;
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
+  $('#rv_cards').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('.rvrarebtn');
+    if (!b) return;
+    const i = +b.dataset.i, c = RV.cards[i];
+    const out = document.getElementById('rvrare' + i);
+    out.textContent = '查询中…（首次要建字体索引，约 20 秒）';
+    try {
+      const sub = c.sub ? `?sub=${c.sub}&k=10` : '?k=10';
+      const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
+      out.innerHTML = (d.candidates || []).map(x =>
+        `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
+           title="相似度 ${x.score} · ${x.font}">${x.char}</button>` +
+        `<span class="rvrmeta">${x.ids || '—'} · ${x.cp} · 本书 ${x.freq} 次` +
+        ` · <a href="${x.zi}" target="_blank" rel="noopener">字统网</a></span>`
+      ).join('') || '没有候选';
+    } catch (e) { out.textContent = '失败：' + e.message; }
+  });
   $('#rv_send').onclick = rvSend;
   $('#rv_todo').onchange = () => { RV.snapshot = null; rvFilter(); };
   $('#rv_cards').addEventListener('click', ev => {
@@ -459,7 +484,7 @@ async function runOneEval(id, quiet) {
 // 所以每张卡收两个值：shape（图上刻的形，默认取候选）与 reading（文意，
 // 默认等于 shape）。两者不同的那些正是已/巳、卽/即 这类，事件里都带上，
 // 下游按 GlyphDB 的 shape/char 分岔存（charset_and_lm.md §四）。
-let RV = { cards: [], cur: 0, verdicts: {} };
+let RV = { cards: [], cur: 0, verdicts: {}, seen: {} };
 
 // **只有 己/已/巳 这三个字才分「字形」与「文意」**（用户 2026-09-04 定：
 // 「除了己已巳 这三个字，其他的都不用区分字形和文意」）。
@@ -517,6 +542,9 @@ function rvCard(c, i) {
         title="真拿不准，留给以后（S）">跳过</button>
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
+    <div class="rvrare"><button class="rvrarebtn" data-i="${i}">查生僻字</button>
+      <span class="muted">库/OCR 都不对时点这个：字体模板 top-10 + IDS + 频次</span></div>
+    <div class="rvrareout" id="rvrare${i}"></div>
   </div>`;
 }
 
@@ -611,7 +639,11 @@ async function rvLoad() {
     const v = await api(`/api/review/verdicts?batch=${encodeURIComponent(batch)}`);
     done = v.verdicts || {};
   } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
-  RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) }, snapshot: null };
+  RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) },
+       seen: RV.seen || {}, snapshot: null };
+  // 卡片一进列表就算「看见」——dwell 从这里算到落裁那一刻
+  const t0 = Date.now();
+  d.cards.forEach(c => { if (!RV.seen[c.id]) RV.seen[c.id] = t0; });
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
   rvFilter();
   rvFocus(0);
@@ -628,8 +660,14 @@ async function rvLoad() {
         if (!el) return;
         const slots = col.slots || [];
         const at = slots.findIndex(s => s.slot === x.slot);
-        el.innerHTML = slots.map((s, k) =>
-          k === at ? `<mark>${s.char || '□'}</mark>` : (s.char || '□')).join('');
+        // 读文定字：本位高亮，**其他待审位标虚线**（提醒这几个字还没定，
+        // 别拿它们当可靠上下文），库/OCR 兜底来的字标灰（不是 Step6 定的）。
+        el.innerHTML = slots.map((s, k) => {
+          const ch = s.char || '□';
+          if (k === at) return `<mark>${ch}</mark>`;
+          const cls = s.review ? 'ctx-rev' : (s.source === 'db' || s.source === 'ocr' ? 'ctx-w' : '');
+          return cls ? `<span class="${cls}">${ch}</span>` : ch;
+        }).join('');
       });
     }).catch(() => {});
   }
@@ -696,7 +734,16 @@ function rvSet(i, shape, reading, done, fromInput) {
   // 免得默认把文意当成等于字形——那恰恰是这三个字最容易错的地方。
   const rd = reading || '';
   if (needsReading(shape) && !rd) mark = 'need_reading';
-  RV.verdicts[c.id] = { shape, reading: needsReading(shape) ? rd : (rd || shape), done: mark };
+  // 记裁决时刻与停留时长。**事件里的 ts 是收割时间，不是裁决时间**
+  // （324 条历史事件只有 4 个不同的 ts），所以「每条裁决多久」此前根本量不出来
+  // ——而那正是 UI 改造唯一的验收指标。dwell 从卡片进列表算到落裁那一刻，
+  // 改判时保留第一次的 dwell（第二次是复核，不是首次判断的耗时）。
+  const _prev = RV.verdicts[c.id];
+  const _now = Date.now();
+  const _dwell = (_prev && _prev.dwell !== undefined) ? _prev.dwell
+                 : (RV.seen && RV.seen[c.id] ? _now - RV.seen[c.id] : undefined);
+  RV.verdicts[c.id] = { shape, reading: needsReading(shape) ? rd : (rd || shape),
+                        done: mark, ts: _now, dwell: _dwell };
   const el = document.getElementById('rvc' + i);
   if (el) {
     el.dataset.done = mark;
@@ -737,12 +784,14 @@ async function rvSend() {
     // 那批 144 条 truncated + 128 条 contaminated 就是这两档的既有金标。
     if (v.done === 'truncated' || v.done === 'contaminated') {
       rows.push({ id, v: 'seg_defect', quality: v.done,
-                  shape: v.shape || '', reading: v.reading || v.shape || '' });
+                  shape: v.shape || '', reading: v.reading || v.shape || '',
+                  client_ts: v.ts, dwell_ms: v.dwell });
       continue;
     }
     // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
     rows.push({ id, v: 'confirm', shape: v.shape, reading: v.reading || v.shape,
-                conversion: (v.reading && v.reading !== v.shape) ? 1 : 0 });
+                conversion: (v.reading && v.reading !== v.shape) ? 1 : 0,
+                client_ts: v.ts, dwell_ms: v.dwell });
   }
   if (pending) {
     $('#rv_msg').textContent = `有 ${pending} 张选了 己/已/巳 但没填文意（黄框那些），填完再提交`;
