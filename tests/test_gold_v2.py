@@ -288,10 +288,14 @@ def test_real_migrated_shards_are_items():
     #   column-warp 114 → 115：main 那边新增 vol01_42_c9（Step1 最外线次候选轮）
     #   instances   559 → 571：控制台定字裁决回流的 12 条切分缺陷
     #                （9 truncated + 3 contaminated，2026-09-04 用户实裁）
+    #   instances   571 → 582：第二轮裁决再回流 11 条
+    #                （10 truncated + 1 contaminated，页 11/151/137/60/70）
+    #                核实办法：带 source_events 的条目共 23 条，其中
+    #                只挂 1 个事件的 11 条就是本轮新增——不是迁移漏条。
     # 数字对不上时先查是「金标长大了」还是「迁移漏了」，别直接改数。
     expect = {"border-detection/column-split": 60,
               "char-segmentation/column-warp": 115,
-              "char-segmentation/instances": 571,
+              "char-segmentation/instances": 582,
               "page-type": 394,
               "column-layout": 36}
     for sh, n in expect.items():
