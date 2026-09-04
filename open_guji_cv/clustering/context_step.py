@@ -104,15 +104,73 @@ class GatedNgram(ContextDecider):
         return ContextResult(surface, margin, dec)
 
 
+class OracleLLM(ContextDecider):
+    """大模型裁决（离线答案表驱动）。
+
+    ## 为什么是「答案表」而不是在线调 API
+
+    `confusable-context` 154 题上大模型盲测 98.7%，远高于 n-gram 95.5%、
+    字形层 64.3%。但那次是**导出题面、离线作答、再对分**跑出来的
+    （`scripts/export_confusable_prompt.py`），不是管线里在线调用。照搬成
+    在线调用有三个问题：
+
+    1. **数字不可复现**：模型版本、温度、甚至同一次请求的重试都会变答案，
+       而 benchmark 要求「换算法时数字还能比」；
+    2. **评测会泄漏**：在线模型见过整理本，等于把金标喂回给被测对象；
+    3. 本机没有 API 凭证，接了也跑不了——**没有验收集的算法不许进生产路径**
+       （handbook §3 P1）。
+
+    所以这一层做成：**答案表在外面产生，策略只负责消费**。答案表是
+    `{字位 id: 选中的字}` 的 JSON，可以来自大模型盲测、也可以来自人裁。
+    表里没有的字位一律**弃权**（margin=0），交回 n-gram 或人——
+    「拿不准就保持基线」。
+
+    ## 两条铁律照旧
+
+    - **只在候选内选**：答案不在 `priors` 里就当没答（防模型引入候选外的字）；
+    - **门槛化**：`margin` 由调用方定政策，本类只出证据。命中时给
+      `confidence`（默认 1.0）当 margin，未命中给 0。
+    """
+
+    name = "oracle_llm"
+
+    def __init__(self, answers: dict[str, str],
+                 semantic_fn: Callable[[str], str] | None = None,
+                 fallback: ContextDecider | None = None,
+                 confidence: float = 1.0):
+        self.answers = answers or {}
+        self.semantic_fn = semantic_fn or (lambda c: c)
+        self.fallback = fallback
+        self.confidence = confidence
+
+    def decide(self, priors, context=(), surface_prefs=None, item_id=""):
+        ans = self.answers.get(item_id) if item_id else None
+        # 答案必须落在候选内——不在就当没答，绝不引入候选外的字
+        if ans and ans in priors:
+            ranked = sorted(priors.items(), key=lambda kv: -kv[1])
+            dec = Decision(char=ans, margin=self.confidence, ranked=ranked,
+                           used_context=True)
+            return ContextResult(ans, self.confidence, dec)
+        if self.fallback is not None:
+            return self.fallback.decide(priors, context, surface_prefs)
+        ranked = sorted(priors.items(), key=lambda kv: -kv[1])
+        return ContextResult(None, 0.0,
+                             Decision(char=None, margin=0.0, ranked=ranked,
+                                      used_context=False,
+                                      fallback="no_oracle_answer"))
+
+
 STRATEGIES: dict[str, type[ContextDecider]] = {
     "prior": PriorTop1,
     "gated_ngram": GatedNgram,
+    "oracle_llm": OracleLLM,
 }
 
 
 def build_strategy(name: str, *, lm: BaseLM | None = None,
                    semantic_fn: Callable[[str], str] | None = None,
-                   lam: float = LAMBDA) -> ContextDecider:
+                   lam: float = LAMBDA,
+                   answers: dict[str, str] | None = None) -> ContextDecider:
     """按名字构造策略。gated_ngram 需要 lm + semantic_fn。"""
     if name == "prior":
         return PriorTop1(semantic_fn)
@@ -120,4 +178,9 @@ def build_strategy(name: str, *, lm: BaseLM | None = None,
         if lm is None or semantic_fn is None:
             raise ValueError("gated_ngram 需要 lm 与 semantic_fn")
         return GatedNgram(lm, semantic_fn, lam)
+    if name == "oracle_llm":
+        # 答案表缺席时退回 n-gram：策略在，但不假装有答案
+        fb = (GatedNgram(lm, semantic_fn, lam)
+              if lm is not None and semantic_fn is not None else None)
+        return OracleLLM(answers or {}, semantic_fn, fallback=fb)
     raise KeyError(f"未注册的上下文策略: {name}（可用: {sorted(STRATEGIES)}）")
