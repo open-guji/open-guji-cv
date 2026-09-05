@@ -110,3 +110,22 @@ def test_cnn_rare_char_top10():
         top = [ch for ch, _ in c.topk(normalize_patch(img), cs, k=10)]
         hit += any(ch == g or are_variants(ch, g) for ch in top)
     assert n and hit / n >= 0.85, f"CNN rare-char top-10 = {hit}/{n}"
+
+
+def test_rrf_weights_tilt_toward_heavier_source():
+    """权重：CNN=2 时，CNN 第一名要压过 HOG 第一名（两源不一致的情形）。
+
+    生产取 CNN_WEIGHT=2.0：HOG 在最难那撮上只有 47.6% top-1，等权会把 CNN 的
+    正确答案拖出 top-10（rare-char 90.5% → 加权后 100%）。
+    """
+    from open_guji_cv.clustering.cnn_candidates import CNN_WEIGHT
+    # 两源**完全不一致**时：等权是平手（各自第一名同分），加权后 CNN 第一名领先。
+    # 注意 RRF 奖励「两源都靠前」——若两源在某字上一致，它会压过任一源的第一名，
+    # 这是设计（见 test_rrf_prefers_agreement），不是权重的反例。
+    hog = ["甲", "乙", "丙"]
+    cnn = ["丁", "戊", "己"]
+    wt = rrf(hog, cnn, k=3, weights=(1.0, CNN_WEIGHT))
+    assert wt[0] == "丁", f"加权后 CNN 第一名该领先：{wt}"
+    rev = rrf(hog, cnn, k=3, weights=(CNN_WEIGHT, 1.0))
+    assert rev[0] == "甲", f"权重反过来 HOG 第一名该领先：{rev}"
+    assert 1.5 <= CNN_WEIGHT <= 3.0
