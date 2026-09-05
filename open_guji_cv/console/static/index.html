@@ -112,6 +112,16 @@
   .rvrareout { margin-top:.3rem; font-size:.74rem; line-height:2 }
   .rvrareout .rvrmeta { color:var(--mute); margin-right:.7rem; font-size:.7rem; }
   .rvrarepick { font-family:var(--serif); font-size:1rem; }
+  /* 候选一行一个：字 · 拼音 · 整理本对应字 · 释义 · 外链 */
+  .rvrrow { display:flex; align-items:baseline; gap:.4rem; padding:.12rem 0;
+            border-bottom:1px solid var(--rule); }
+  .rvrrow:last-child { border-bottom:none; }
+  .rvpy { color:var(--mute); font-size:.72rem; min-width:3.2rem; }
+  .rvstd { color:var(--indigo); font-family:var(--serif); font-size:.9rem; white-space:nowrap; }
+  .rvin { color:var(--ok); font-size:.68rem; white-space:nowrap; }
+  .rvgloss { color:var(--ink); font-size:.72rem; flex:1; overflow:hidden;
+             text-overflow:ellipsis; white-space:nowrap; }
+  .rvzi { color:var(--mute); font-size:.68rem; white-space:nowrap; }
   .qgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(20rem,1fr)); gap:1.2rem; }
   .qk { font-size:.78rem; color:var(--mute); letter-spacing:.04em; }
   .qv { font-family:var(--mono); font-size:2rem; line-height:1.2; }
@@ -537,8 +547,8 @@ function rvCard(c, i) {
         title="真拿不准，留给以后（S）">跳过</button>
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
-    <div class="rvrare"><button class="rvrarebtn" data-i="${i}">重查</button>
-      <span class="muted">候选自动加载（字体模板 + CNN 融合，带 IDS/频次）；不对再点重查</span></div>
+    <div class="rvrare"><button class="rvrarebtn" data-i="${i}">查候选</button>
+      <span class="muted">字体模板 + CNN 融合，10 个；带释义与整理本对应字</span></div>
     <div class="rvrareout" id="rvrare${i}"></div>
   </div>`;
 }
@@ -740,22 +750,23 @@ async function rvFetchRare(i, force) {
   try {
     const sub = c.sub ? `?sub=${c.sub}&k=10` : '?k=10';
     const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
-    out.innerHTML = (d.candidates || []).map(x =>
-      `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
-         title="相似度 ${x.score} · ${x.font}">${x.char}</button>` +
-      `<span class="rvrmeta">${x.ids || '—'} · ${x.cp} · 本书 ${x.freq} 次` +
-      ` · <a href="${x.zi}" target="_blank" rel="noopener">字统网</a></span>`
-    ).join('') || '没有候选';
+    // 一行一个候选：字 + 拼音 + 释义 + 整理本对应字。
+    // 用户 2026-09-05：「异体字不用显示 unicode 和 ids，最好可以显示常见意思，
+    // 以及对应哪个繁体整体字。」IDS/码点搬进 title，需要时悬停看。
+    out.innerHTML = (d.candidates || []).map(x => {
+      const std = x.std
+        ? `<b class="rvstd" title="整理本里用的是这个字（${x.std_freq} 次）">→ ${x.std}</b>`
+        : (x.freq ? `<span class="rvin" title="整理本里用过 ${x.freq} 次">整理本用字</span>` : '');
+      return `<div class="rvrrow">`
+        + `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
+             title="相似度 ${x.score} · ${x.font} · ${x.ids || '—'} · ${x.cp}">${x.char}</button>`
+        + (x.py ? `<span class="rvpy">${x.py}</span>` : '')
+        + std
+        + `<span class="rvgloss">${x.gloss || ''}</span>`
+        + `<a class="rvzi" href="${x.zi}" target="_blank" rel="noopener">字统网</a>`
+        + `</div>`;
+    }).join('') || '没有候选';
   } catch (e) { out.textContent = '失败：' + e.message; delete out.dataset.done; }
-}
-
-// 载入后自动预取全部卡片的生僻字候选（HOG + CNN 融合，见 /api/rare），并发 2。
-// 用户 2026-09-05：候选应该直接在卡片上，不该逐张点「查生僻字」。
-async function rvPrefetchRare() {
-  const n = RV.cards.length;
-  let next = 0;
-  const worker = async () => { while (next < n) { const i = next++; await rvFetchRare(i, false); } };
-  await Promise.all([worker(), worker()]);
 }
 
 async function rvLoad() {
@@ -780,7 +791,8 @@ async function rvLoad() {
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
   rvFilter();
   rvFocus(0);
-  rvPrefetchRare();
+  // 候选不再自动预取：一批 100 张卡就是 100 次 0.32s 的后端调用（并发 2 要 16 秒），
+  // 载入时整页发卡。用户 2026-09-05 反馈「一打开裁决卡了好久」。改成点「查候选」按需拉。
   // 列上下文按需拉，一列只拉一次
   const seen = new Set();
   for (let i = 0; i < d.cards.length; i++) {
