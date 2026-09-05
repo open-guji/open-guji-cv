@@ -666,6 +666,12 @@ async function loadRound() {
         + 'px，' + (r.near_ratio * 100).toFixed(0) + '% 不足 5px').join('<br>') : '字距正常',
       t.rows.length ? '这几页字<b>物理相连</b>，切分做不到完美；人审会偏多，标缺陷即可，<b>不算算法退步</b>' : '');
   }
+  if (d.D && d.D.rate != null) {
+    const x = d.D;
+    rows += row('D', '生僻字 top-10（字体模板+CNN 融合）', x.light,
+      x.hit + '/' + x.n + ' = ' + (x.rate * 100).toFixed(1) + '%' + (x.note ? ' · ' + x.note : ''),
+      x.cnn ? '' : '没有 CNN checkpoint，退回纯 HOG——数字会明显低');
+  }
   const nx = d.next || {};
   const nxt = (nx.batch || []).length
     ? '<div class="qs" style="margin-top:.6rem">下一批（正文页，已跳过职名/目录页）：'

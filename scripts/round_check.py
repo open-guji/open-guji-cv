@@ -75,6 +75,14 @@ def cmd_check(book: str, pages: list[int]) -> int:
           + ("  这几页字物理相连，切分做不到完美；人审会偏多，"
              "标缺陷即可，**不算算法退步**" if t["rows"] else "  字距正常"))
 
+    dd = d.get("D") or {}
+    if dd.get("rate") is not None:
+        print(f"\nD 生僻字 top-10（字体模板+CNN 融合，rare-char {dd['n']} 条）: "
+              f"{dd['hit']}/{dd['n']} = {dd['rate']:.1%}  → {MARK[dd['light']]}"
+              + (f"  ⚠ {dd['note']}" if dd.get("note") else ""))
+    else:
+        print(f"\nD 生僻字 top-10: — {dd.get('note', '')}")
+
     print("\n下一批: python scripts/round_check.py --next")
     return 0
 
