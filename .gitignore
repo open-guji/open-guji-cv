@@ -56,3 +56,7 @@ output/*/step3_input/*/
 /.venv/
 # 审查批次登记的本地副本（真源随数据集仓走；控制台用 GUJI_BATCHES_DIR 指定）
 /review/batches/
+
+# 临时目录（2026-09-05：git add -A 误带过一次）
+output/_grid_test/
+output/tmp*/
