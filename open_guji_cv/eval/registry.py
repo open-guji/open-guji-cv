@@ -124,6 +124,15 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="生僻字候选", needs=("products",),
        extra=("--dataset", "../open-guji-dataset/rare-char"),
        note="要建 4600 字 × 4 字体的索引，首跑约 1-2 分钟"),
+    # 零样本识别（拆字识别研究，见 doc/ocr_engine_and_zero_shot.md）：
+    # 字形库 unseen 档（≤2 样本的 1,022 字种，模板从未见过其刻例）。
+    _e("zero_shot", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
+       title="零样本·整字 vs 拆字", needs=("products", "heavy"),
+       extra=("--n", "300"),
+       note="HOG 检索 vs 手工拆字重排；重活，unseen 300 条约 5 分钟"),
+    _e("zero_shot_fusion", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
+       title="零样本·HOG/CNN/融合", needs=("products", "heavy"),
+       note="需要 cache/glyph_cnn/best.pt；全 unseen 1,327 条约 3 分钟"),
     _e("truncation", "char-segmentation/truncation", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="字身截断", needs=("products",)),
     _e("crop_margin", "char-segmentation/crop-margin", arg_kind="shard_parent", out_flag="", pythonpath=True,
