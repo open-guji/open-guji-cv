@@ -136,6 +136,71 @@ class CnnCandidates:
             top = pr.topk(min(k, len(idx)))
         return [(self._classes[idx[int(i)]], float(p)) for p, i in zip(top.values, top.indices)]
 
+    # ── embedding 检索（第三源）────────────────────────────────────
+    #
+    # 2026-09-05 实测（unseen 1,327，异体算对）：分类头 83.9 / 96.8 / 98.2，
+    # **embedding 对字体模板做余弦检索 91.9 / 98.1 / 98.6**——同一个网络，换一种
+    # 读法就高 8 个点。原因：unseen 类的分类头权重只在字体渲染上训过，是一组
+    # 线性权重；而 embedding 检索比的是「查询图的 256-d 向量」与「该字 4 张字体
+    # 渲染向量的均值」的夹角，归一化空间里的度量比线性头泛化得好（CCR-CLIP 一路
+    # 的结论）。rare-char 21 条 top-5 100%。
+    #
+    # 模板向量按「checkpoint 指纹 + 字表」落盘（cache/glyph_cnn/emb_<key>.npz），
+    # 4,636 字 × 4 字体首建约 1 分钟，之后毫秒级。
+
+    def _emb_index(self, charset) -> tuple[np.ndarray, list[str]]:
+        import hashlib
+        import torch
+        from .font_candidates import _font_files
+        from .synth import render_char
+
+        cs = tuple(charset)
+        key = hashlib.sha1((fingerprint(self.ckpt) + "".join(cs)).encode("utf-8")).hexdigest()[:16]
+        f = self.ckpt.parent / f"emb_{key}.npz"
+        if f.exists():
+            z = np.load(f, allow_pickle=False)
+            return z["mat"], z["chars"].tolist()
+        fonts = _font_files()
+        vecs, names = [], []
+        with torch.no_grad():
+            for ch in cs:
+                ims = []
+                for fp in fonts:
+                    try:
+                        im = render_char(ch, fp, size=64)
+                    except Exception:
+                        continue
+                    if im is not None and im.any():
+                        ims.append(im.astype(np.uint8))
+                if not ims:
+                    continue
+                x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=self._dev)
+                e, _, _ = self._net(x)
+                v = e.mean(0)
+                vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
+                names.append(ch)
+        mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(f, mat=mat, chars=np.array(names))
+        return mat, names
+
+    def emb_topk(self, norm_patch: np.ndarray, charset, k: int = 10) -> list[tuple[str, float]]:
+        """归一化 64² 二值图 → 与字体模板 embedding 的余弦 top-k。"""
+        if not self._ensure():
+            return []
+        import torch
+        mat, names = self._emb_index(charset)
+        if mat.shape[0] == 0:
+            return []
+        with torch.no_grad():
+            x = torch.tensor(norm_patch[None, None].astype(np.float32), device=self._dev)
+            e, _, _ = self._net(x)
+            q = e[0]
+            q = (q / (q.norm() + 1e-9)).cpu().numpy()
+        sims = mat @ q
+        order = np.argsort(-sims)[:k]
+        return [(names[int(i)], float(sims[int(i)])) for i in order]
+
 
 CNN_WEIGHT = 2.0
 """RRF 里 CNN 名次的权重（HOG = 1）。2026-09-05 扫描（unseen 1,327 / rare 21）：
@@ -149,6 +214,12 @@ CNN_WEIGHT = 2.0
 HOG 在最难那撮（rare）上只有 47.6% top-1，权重相等时会把 CNN 的正确答案拖出
 top-10；给 CNN 两倍权重，rare top-10 从 90.5% 回到 100%，unseen top-1 也涨。
 """
+
+
+EMB_WEIGHT = 2.0
+"""RRF 里 embedding 检索名次的权重（HOG=1、分类头=CNN_WEIGHT）。三源实测
+（unseen 1,327，异体算对，run-2 checkpoint）：emb 单独 91.9 / 98.1 / 98.6，
+三源等权 91.1 / 98.2 / 98.8。权重扫描进行中，先按分类头同权。"""
 
 
 def rrf(*orders: list[str], k: int = 10, c: int = RRF_K,
