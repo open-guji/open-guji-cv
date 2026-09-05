@@ -83,6 +83,20 @@ def cmd_check(book: str, pages: list[int]) -> int:
     else:
         print(f"\nD 生僻字 top-10: — {dd.get('note', '')}")
 
+    e = d.get("E") or {}
+    if e:
+        fa = e.get("form_auto") or [0, 0]
+        head = (f"\nE 字形保真率（异体位自动放行 {e['variant_admits']} 条，"
+                f"义定形未定待审 {e['form_open']} 条）: ")
+        if e.get("audited"):
+            print(head + f"人裁核过 {e['hit']}/{e['audited']} = {e['rate']:.1%}"
+                  f"（Wilson 下界 {e['wilson_low']:.3f}；其中 variant_form 定形 {fa[0]}/{fa[1]}）"
+                  f"  → {MARK[e['light']]}" + (f"  ⚠ {e['note']}" if e.get("note") else ""))
+        else:
+            print(head + f"— 还没有人裁核过的异体位  → {MARK[e['light']]}")
+        for x in e.get("errors", [])[:5]:
+            print(f"     {x['id']} 存「{x['pred']}」人裁「{x['human']}」(reading {x['reading']}, {x['state']})")
+
     print("\n下一批: python scripts/round_check.py --next")
     return 0
 

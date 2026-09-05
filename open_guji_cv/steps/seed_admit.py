@@ -57,35 +57,52 @@ class SeedAdmitParams(BaseModel):
     corpus: str = DEFAULT_CORPUS        # 整理本；空字符串 = 不用整理本通道
     corpus_fingerprint: str = ""        # 自动填，进 params_hash（外部可变状态）
     always_review: str = "己已巳"       # 这些字永远人审（用户 2026-09-04 定）
+    edition: str = "wuyingdian_zongmu"  # 本书用字账（variant_ledger）的键
+    ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
+    variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
 
     def model_post_init(self, _ctx) -> None:
         # 语料是**外部可变状态**：换了整理本，准入结论会变，产物必须过期。
         # 与 glyph_match 的 db_fingerprint、context_decide 的 corpus_fingerprint
         # 同一套做法（见 context_decide 模块头）。
+        from ..steps.context_decide import corpus_fingerprint
         if self.corpus and not self.corpus_fingerprint:
-            from ..steps.context_decide import corpus_fingerprint
             object.__setattr__(self, "corpus_fingerprint",
                                corpus_fingerprint([self.corpus]))
+        # 用字账与语义表同理（2026-09-05）：两张表都是派生物，重建就该让准入重跑
+        if not self.ledger_fingerprint:
+            from ..variant_ledger import ledger_path
+            object.__setattr__(self, "ledger_fingerprint",
+                               corpus_fingerprint([str(ledger_path(self.edition))]))
+        if not self.variants_fingerprint:
+            from ..clustering.variants import DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH
+            paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
+            object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
 
 
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.2", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.3", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
         code_deps=("open_guji_cv.clustering.seeding",
                    "open_guji_cv.clustering.variants",
+                   "open_guji_cv.clustering.variant_form",
+                   "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.align_label"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.seeding import NEAR_FORM_CHARS, admission_decision
+        from ..clustering.variant_form import decide_form, group_forms
         from ..clustering.variants import VariantMap
+        from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
+        ledger = BookLedger.load_or_empty(p.edition)
         match: PageMatch = ctx.product("glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
@@ -127,9 +144,18 @@ class SeedAdmitStep(Step):
                 align_char = al[0] if al else None
                 if al and al[1] == "replace":
                     doubts.append("replace_align")
+                # 账本人确认过的 T2 对（variant_strategy.md §4.3 第 6 行）：两头都是正字、
+                # 语义表不合并（注/註、鍾/鐘），但本书人裁明确记过「刻 X 读 Y」——对这一位
+                # 把 X 当 Y 的同义看，让 match_ref / match_replace 照常评。只影响这一次调用。
+                lib_top = r.char or (r.candidates[0][0] if r.candidates else None)
+                vm_here = vmap
+                if (align_char and lib_top and lib_top != align_char
+                        and vmap.semantic(lib_top) != vmap.semantic(align_char)
+                        and ledger.pair_confirmed(lib_top, align_char)):
+                    vm_here = _PairAwareMap(vmap, {lib_top: vmap.semantic(align_char)})
                 ok, channel = admission_decision(
                     ocr=ocr_in, align_char=align_char, ref_char=None,
-                    doubts=doubts, vmap=vmap,
+                    doubts=doubts, vmap=vm_here,
                     match_char=r.char if r.verdict == "same" else None,
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
@@ -154,11 +180,37 @@ class SeedAdmitStep(Step):
                 if ok and channel is None:
                     channel = "dual"
                 prov = "match" if ok else ""
+                # 「义定形未定」（2026-09-05，variant_strategy.md §4.2）：整理本通道
+                # 放行的、库又没下 same 断言的位，`_pick_char` 把整理本形当成了刻本形。
+                # 整理本对多数组只用一种形，它定得了义定不了形——刻 髪 存 髮 就是这么
+                # 来的。组里有 ≥2 个可能的形时，用形状证据（库候选 / 组内三源检索）
+                # 定形；定不了就落人审，卡片只列组内的形，人点一次账本就记住。
+                form_ev = None
+                form_open = False
+                if ok and align_char and channel in _CORPUS_CHANNELS and r.verdict != "same":
+                    forms = group_forms(ledger, align_char)
+                    if len(forms) >= 2:
+                        ranks = None
+                        fd = decide_form(align_char, forms, list(r.candidates), ledger)
+                        if fd.state == "open":
+                            ranks = _image_ranks(ctx.book.id, page, cc.col, r.slot, r.sub, forms)
+                            if ranks:
+                                fd = decide_form(align_char, forms, list(r.candidates), ledger, ranks)
+                        form_ev = fd.to_evidence()
+                        if fd.state == "open":
+                            ok, channel, prov, form_open = False, None, "", True
+                            doubts = doubts + ["form_open"]
+                            char = None
+                            reading = align_char
+                        else:
+                            char = fd.char
+                            reading = align_char if align_char != char else None
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
-                # 用的是候选内选出的 surface，不引入候选外的字。
+                # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
+                # 上下文只能定义，定不了形。
                 d = dmap.get(r.id)
-                if not ok and p.use_context and d and d.source == "context" \
+                if not ok and not form_open and p.use_context and d and d.source == "context" \
                         and d.char and d.margin >= p.context_margin:
                     ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -173,7 +225,8 @@ class SeedAdmitStep(Step):
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,
                               "ocr": (o.topk[:3] if o else []),
-                              "ctx_margin": (d.margin if d else None)}))
+                              "ctx_margin": (d.margin if d else None),
+                              **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto,
                                         n_review=n_review, columns=out)}
@@ -276,6 +329,41 @@ def _opt(ctx: RunContext, kind: str, page: int):
     """可选上游：缺了就 None，不炸——OCR 要引擎、上下文要语料，都可能没有。"""
     try:
         return ctx.product(kind, page)
+    except Exception:
+        return None
+
+
+class _PairAwareMap:
+    """VariantMap 的一次性包装：额外把几个形映到指定语义（本书人确认过的 T2 转换对）。
+    只给 `admission_decision` 这一次调用用，不改全局语义表。"""
+
+    def __init__(self, base, extra: dict[str, str]):
+        self._base, self._extra = base, extra
+
+    def semantic(self, char: str) -> str:
+        return self._extra.get(char) or self._base.semantic(char)
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+
+def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,
+                 forms: list[str]) -> dict | None:
+    """组内 closed-set 检索要看图：从 Step4 落的 `char_patch` 缓存取字块。没图 → None。"""
+    try:
+        import cv2
+
+        from ..clustering.normalize import normalize_patch
+        from ..clustering.variant_form import image_ranks_for
+        from ..products.cache import ImageCache
+        key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
+        path = ImageCache().get(book, "char_patch", key)
+        if path is None:
+            return None
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return None
+        return image_ranks_for(normalize_patch(img), forms)
     except Exception:
         return None
 

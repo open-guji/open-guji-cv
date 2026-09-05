@@ -39,6 +39,28 @@
   .view { display: none; } .view.active { display: block; }
   .card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
   .card h2 { font-size: .95rem; margin: 0 0 .6rem; }
+  table.vtbl td { vertical-align: top; }
+  table.vtbl td.vgl { font-size: 1.2rem; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+  table.vtbl sub { font-family: var(--mono); font-size: .66em; color: var(--mute); margin-left: .08em; }
+  table.vtbl .vpref { font-weight: 700; color: var(--indigo); }
+  .vg_groups { display: flex; flex-wrap: wrap; gap: .3rem; margin: .5rem 0; align-items: center; }
+  .vgrest { flex-basis: 100%; font-size: .85rem; } .vgrest summary { cursor: pointer; }
+  .vgbtn { font-size: .85rem; } .vgbtn.active { border-color: var(--indigo); color: var(--indigo); }
+  .vgbtn .vgl { font-family: "Noto Serif TC","Source Han Serif TC",serif; font-size: 1.15rem; }
+  .vgbtn sub { font-family: var(--mono); font-size: .68em; color: var(--mute); margin-left: .2em; }
+  .vgrid { display: grid; gap: .6rem; margin-top: .5rem; }
+  .vcol { border: 1px solid var(--rule); border-radius: 6px; padding: .4rem .5rem; min-height: 6rem; }
+  .vhead { display: flex; gap: .5rem; align-items: baseline; border-bottom: 1px solid var(--rule); padding-bottom: .25rem; margin-bottom: .4rem; font-size: .78rem; }
+  .vhead .vgl { font-family: "Noto Serif TC","Source Han Serif TC",serif; font-size: 1.4rem; }
+  .vtiles { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .vtile { position: relative; width: 56px; height: 56px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; cursor: pointer; }
+  .vtile img { width: 100%; height: 100%; object-fit: contain; }
+  .vtile.pending { outline: 2px dashed var(--zhu, #B3261E); outline-offset: 1px; }
+  .vtile.moved { outline: 2px solid var(--indigo); outline-offset: 1px; }
+  .vtile.non { opacity: .3; }
+  .vtile.hum::after { content: "✓"; position: absolute; right: 1px; bottom: -2px; font-size: .7rem; color: var(--indigo); }
+  .vtile i { position: absolute; left: 2px; top: 0; font-style: normal; font-size: .7rem; color: var(--indigo); background: rgba(255,255,255,.8); padding: 0 .15em; }
+  .vtile:focus-visible { outline: 2px solid var(--indigo); }
   .muted { color: var(--mute); font-size: .82rem; }
   .mono { font-family: var(--mono); font-size: .8rem; }
   /* 状态矩阵 */
@@ -121,6 +143,13 @@
   .rvev .k { color:var(--mute); font-size:.7rem; letter-spacing:.03em; }
   .rvcand button { font-size:.9rem; padding:.1rem .45rem; margin:.1rem .2rem .1rem 0; }
   .rvcand button.pick { background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .rvform { margin:.25rem 0 .1rem; }
+  .rvform .k { font-size:.72rem; color:var(--mute); margin-right:.4rem; }
+  .rvform button { font-size:1.2rem; line-height:1.3; padding:.05rem .55rem; margin:.1rem .3rem .1rem 0;
+                   font-family:"Noto Serif TC","Source Han Serif TC",serif; }
+  .rvform button sub { font-family:var(--mono); font-size:.55em; color:var(--mute); margin-left:.1em; }
+  .rvform button.pick { background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .rvform button.pick sub { color:#fff; }
   .rvctx { font-size:.72rem; color:var(--ink-2); word-break:break-all; margin-top:.3rem; }
   .rvctx mark { background:var(--indigo-soft); padding:0 .1em; }
   .rvdoubt { color:var(--ochre); font-size:.72rem; }
@@ -186,6 +215,7 @@
     <button data-view="review">审查</button>
     <button data-view="cutline">切线</button>
     <button data-view="evals">评测</button>
+    <button data-view="variants">异体</button>
   </nav>
 </header>
 <main>
@@ -344,6 +374,44 @@
       <div id="cl_cards" class="clgrid"></div>
     </div>
   </section>
+  <section id="view-variants" class="view">
+    <div class="card">
+      <h2>本书用字账 <span class="muted">这本书刻了哪些异体、整理本印成什么；只读，由 scripts/build_book_variants.py 派生</span></h2>
+      <div class="row">
+        <label>套 <input id="var_edition" type="text" value="wuyingdian_zongmu" size="18"></label>
+        <label>筛 <input id="var_q" type="text" placeholder="输入一个或几个字" size="14"></label>
+        <button id="var_reload">重新读取</button>
+        <span id="var_stat" class="muted"></span>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:.4rem 0 .6rem">
+        计数读法：<b>刻本形</b>下标是本书刻了几次（products + glyph.db，扣掉 v1 整理本贴标的 align），「·人N」是其中人裁确认的；
+        <b>整理本形</b>下标是整理本印了几次；<b>转换对</b>是自动或人裁把「刻本形→文意」记下的次数。
+        整理本一栏：single = 整理本对这组只用一种形（它定义不定形，形只能来自图像）；multi = 整理本自己在区分（它的字兼作形证据）。
+        分型是关系层的先验（T1 纯异体 / T2 互通·一对多 / T3 形近·通假·仅简繁），最终由这张账定。
+      </p>
+      <div id="var_tbl"></div>
+      <div id="var_unknown" class="muted" style="font-size:.8rem;margin-top:.6rem"></div>
+    </div>
+    <div class="card">
+      <h2>组视图 <span class="muted">一组一屏：列 = 形，格 = 图块。首例确认与字形保真抽审都在这里；裁决走 confirm 事件</span></h2>
+      <div class="row">
+        <label>页 <input id="vg_pages" type="text" value="dev_set" size="18" title="dev_set | all | 4-56,60"></label>
+        <button id="vg_load">载入</button>
+        <span id="vg_stat" class="muted"></span>
+      </div>
+      <div id="vg_groups" class="vg_groups"></div>
+      <p class="muted" style="font-size:.78rem;margin:.4rem 0">
+        红虚框 = 义定形未定（待审）；点格子 = 挪到下一列（改形）；<b>N</b> = 非字；提交时每格记 shape（所在列）+ reading（整理本字），两者不同即一次转换。
+        「照准全部」把已自动放行的也确认一遍——那就是字形保真率的抽审。
+      </p>
+      <div id="vg_grid"></div>
+      <div class="row" id="vg_actions" style="display:none">
+        <button id="vg_send_changed">提交待审与改动</button>
+        <button id="vg_send_all">照准全部（含已自动放行）</button>
+        <span id="vg_msg" class="muted"></span>
+      </div>
+    </div>
+  </section>
   <section id="view-evals" class="view">
     <div class="card">
       <h2>评测器 <span class="muted">27 个 eval 脚本；报告带分母、分层与过期金标数</span></h2>
@@ -408,6 +476,14 @@ async function init() {
       // 再点一次同一个标记 = 取消
       const cur = RV.verdicts[RV.cards[i]?.id];
       rvSet(i, '', '', cur && cur.done === mark.dataset.mark ? '' : mark.dataset.mark);
+      return;
+    }
+    // 义定形未定：形取按钮、文意取整理本字（data-rd），两者不同就是一次转换
+    const fp = ev.target.closest('.rvformpick');
+    if (fp) {
+      const i = +fp.dataset.i;
+      rvFocus(i);
+      rvSet(i, fp.dataset.ch, fp.dataset.rd || fp.dataset.ch);
       return;
     }
     const b = ev.target.closest('.rvpick');
@@ -553,6 +629,16 @@ function rvCard(c, i) {
     `<button data-i="${i}" data-ch="${ch}" class="rvpick${v.shape === ch ? ' pick' : ''}"
       title="库 cov ${cov}">${k + 1}·${ch}</button>`).join('');
   const doubts = (c.doubts || []).map(d => `<div class="rvdoubt">⚠ ${d}</div>`).join('');
+  // 「义定形未定」（variant_form）：文本两路已定语义，刻本刻的是哪个形没定。
+  // 只列组内的形，点一个 = 字形取它、文意取整理本字（转换自动记上），账本下次就记住。
+  const fm = c.form && c.form.state === 'open' ? c.form : null;
+  const fbtns = fm ? `<div class="rvform"><span class="k" title="整理本对这一组只用一种形，它定得了义定不了形；库也没下断言。只在这几个形里选">义定形未定 · 整理本「${fm.semantic}」</span>`
+      + (fm.forms || []).map(f => {
+          const hn = (fm.human || {})[f] || 0;
+          const lib = (fm.lib || []).find(x => x[0] === f);
+          return `<button class="rvformpick${v.shape === f ? ' pick' : ''}" data-i="${i}" data-ch="${f}" data-rd="${fm.semantic}"
+             title="${hn ? '本书人裁确认过 ' + hn + ' 次' : '本书还没人确认过这个形（首例）'}${lib ? ' · 库 cov ' + lib[1] : ''}">${f}<sub>${hn ? '人' + hn : '新'}</sub></button>`;
+        }).join('') + `</div>` : '';
   return `<div class="rvcard" data-i="${i}" data-done="${v.done || ''}" id="rvc${i}">
     <div class="rvhead"><b class="rvsel">${c.id}</b><span class="muted">${c.channel || '待审'}</span></div>
     <div class="rvbody">
@@ -573,9 +659,10 @@ function rvCard(c, i) {
         ${doubts}
       </div>
     </div>
+    ${fbtns}
     <div class="rvcand">${btns}
       <input class="rvin" data-i="${i}" data-f="shape" placeholder="字" value="${v.shape || ''}">
-      <span class="rvread" data-i="${i}" style="display:${needsReading(v.shape) ? '' : 'none'}">
+      <span class="rvread" data-i="${i}" style="display:${(needsReading(v.shape) || (v.reading && v.reading !== v.shape)) ? '' : 'none'}">
         → <input class="rvin" data-i="${i}" data-f="reading" placeholder="文意"
                  value="${v.reading || ''}" title="己/已/巳 才需要：图上刻的是左边那个，这里填文意该读的">
       </span>
@@ -947,8 +1034,10 @@ function rvSet(i, shape, reading, done, fromInput) {
       if (si) si.value = shape || '';
       if (ri) ri.value = needsReading(shape) ? (reading || '') : (reading || shape || '');
     }
+    el.querySelectorAll('.rvformpick').forEach(b =>
+      b.classList.toggle('pick', !!shape && b.dataset.ch === shape));
     const box = el.querySelector('.rvread');
-    if (box) box.style.display = needsReading(shape) ? '' : 'none';
+    if (box) box.style.display = (needsReading(shape) || (reading && reading !== shape)) ? '' : 'none';
   }
 }
 
@@ -1241,12 +1330,148 @@ function clBind() {
   });
 }
 
+// ── 异体：本书用字账（只读）──────────────────────────────────────
+// 数据全部来自 /api/variants/book（config/variants/books/<套>.json），页面不算账。
+let VAR = null;
+async function loadVariants() {
+  const stat = $('#var_stat');
+  stat.textContent = '读取中…';
+  try {
+    VAR = await api(`/api/variants/book?edition=${encodeURIComponent($('#var_edition').value.trim() || 'wuyingdian_zongmu')}`);
+  } catch (e) { stat.textContent = e.message; $('#var_tbl').innerHTML = ''; $('#var_unknown').textContent = ''; VAR = null; return; }
+  renderVariants();
+}
+function renderVariants() {
+  if (!VAR) return;
+  const m = VAR.meta || {}, s = m.stats || {}, inp = m.inputs || {};
+  $('#var_stat').textContent = `${m.edition} · 组 ${s.groups}（整理本单形 ${s.ref_single} / 多形 ${s.ref_multi}）· 转换对 ${s.pairs} · 关系图外 ${s.unknown_pairs} · 产物 ${inp.products_records} 条 / glyph.db ${inp.glyph_db_instances} 例 · ${m.built_at || ''}`;
+  const q = ($('#var_q').value || '').trim();
+  // 刻本真刻的次数：products + db − align（align 是 v1 拿整理本贴的标签，不算刻本证据）
+  const carved = (g, mm) => { const b = g.forms[mm].book; return b.products + b.db - b.align; };
+  const weight = g => Object.values(g.pairs).reduce((a, p) => a + p.n, 0) * 10
+                     + g.members.filter(mm => mm !== g.canonical).reduce((a, mm) => a + Math.max(0, carved(g, mm)), 0);
+  const rows = Object.values(VAR.groups || {})
+    .filter(g => !q || [...q].some(ch => g.members.includes(ch)))
+    .sort((a, b) => weight(b) - weight(a) || a.canonical.localeCompare(b.canonical));
+  const sub = (n, h) => `<sub>${n}${h ? '·人' + h : ''}</sub>`;
+  $('#var_tbl').innerHTML = rows.length ? `<table class="jobs vtbl"><thead><tr>
+      <th>组</th><th>刻本形</th><th>整理本形</th><th>转换对（刻本形→文意）</th><th>整理本</th><th>分型（先验）</th></tr></thead><tbody>`
+    + rows.map(g => {
+      const forms = g.members.map(mm => { const n = carved(g, mm); if (n <= 0) return '';
+        return `<span class="${mm === g.preferred ? 'vpref' : ''}">${mm}${sub(n, g.forms[mm].book.human)}</span>`; }).filter(Boolean).join(' ');
+      const refs = g.members.map(mm => g.forms[mm].ref > 0 ? `${mm}${sub(g.forms[mm].ref, 0)}` : '').filter(Boolean).join(' ');
+      const pairs = Object.entries(g.pairs).map(([k, v]) => `${k}${sub(v.n, v.human)}`).join(' ');
+      const tiers = g.members.filter(mm => mm !== g.canonical).map(mm => `${mm}:${g.forms[mm].tier || '—'}`).join(' ');
+      return `<tr><td class="vgl">${g.canonical}</td><td>${forms || '—'}</td><td>${refs || '—'}</td><td>${pairs || '—'}</td><td>${g.ref_policy}</td><td class="muted">${tiers}</td></tr>`;
+    }).join('') + '</tbody></table>' : '<span class="muted">没有匹配的组</span>';
+  const un = VAR.unknown_pairs || [];
+  $('#var_unknown').innerHTML = un.length
+    ? '关系图里没有这条边、或两头落在不同组的转换对（新异体 / OCR 错 / 整理本错 三选一，待审）：'
+      + un.map(u => `${u.shape}→${u.reading}<sub>${u.n}${u.human ? '·人' + u.human : ''}</sub>`).join('　')
+    : '';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const r = $('#var_reload'), qi = $('#var_q');
+  if (r) r.onclick = loadVariants;
+  if (qi) qi.oninput = renderVariants;
+  const vl = $('#vg_load');
+  if (vl) vl.onclick = vgLoad;
+  const s1 = $('#vg_send_changed'), s2 = $('#vg_send_all');
+  if (s1) s1.onclick = () => vgSend(false);
+  if (s2) s2.onclick = () => vgSend(true);
+});
+
+// ── 组视图：列 = 形，格 = 图块 ────────────────────────────────────
+// 数据来自 /api/variants/groups；裁决复用 /api/events 的 confirm 协议（shape/reading/conversion），
+// 与单卡裁决落到同一条路由 → glyphdb_admit → 账本下次重建就记住。
+let VG = { data: null, cur: null, state: {} };
+async function vgLoad() {
+  const book = $('#book').value, pages = $('#vg_pages').value.trim() || 'dev_set';
+  $('#vg_stat').textContent = '读取中…';
+  try {
+    VG.data = await api(`/api/variants/groups?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`);
+  } catch (e) { $('#vg_stat').textContent = e.message; return; }
+  VG.cur = null; VG.state = {};
+  const gs = VG.data.groups || [];
+  $('#vg_stat').textContent = `${gs.length} 组 · 待审 ${gs.reduce((a, g) => a + g.n_pending, 0)} 格 · 已自动放行 ${gs.reduce((a, g) => a + g.n_tiles - g.n_pending, 0)} 格`;
+  // 有异体故事的组在前：有待审格，或这些页里真刻了 ≥2 种形。其余（账本因一条字典边把 洧 挂到
+  // 有 名下这类，这些页里只刻了一种形）折到后面——它们不是抽审的靶子。
+  const story = g => g.n_pending > 0 || new Set(g.tiles.filter(t => t.char).map(t => t.char)).size >= 2;
+  const btn = (g, k) => `<button class="vgbtn" data-k="${k}"><span class="vgl">${g.canonical}</span> ${g.members.filter(m => m !== g.canonical).join(' ')}
+       <sub>${g.n_tiles}${g.n_pending ? ' · 待审 ' + g.n_pending : ''}</sub></button>`;
+  const main = gs.map((g, k) => [g, k]).filter(([g]) => story(g)), rest = gs.map((g, k) => [g, k]).filter(([g]) => !story(g));
+  $('#vg_groups').innerHTML = (main.map(([g, k]) => btn(g, k)).join('') || '<span class="muted">这些页里没有待审或多形的组</span>')
+    + (rest.length ? `<details class="vgrest"><summary class="muted">其余 ${rest.length} 组（这些页里只刻了一种形）</summary>${rest.map(([g, k]) => btn(g, k)).join('')}</details>` : '');
+  $('#vg_groups').querySelectorAll('.vgbtn').forEach(b => b.onclick = () => vgShow(+b.dataset.k));
+  $('#vg_grid').innerHTML = ''; $('#vg_actions').style.display = 'none';
+  if (main.length) vgShow(main[0][1]); else if (gs.length) vgShow(0);
+}
+function vgShow(k) {
+  const g = VG.data.groups[k]; VG.cur = k;
+  $('#vg_groups').querySelectorAll('.vgbtn').forEach(b => b.classList.toggle('active', +b.dataset.k === k));
+  // 每格当前所在列：待审的先放本书偏好形（preferred），已放行的放它存的形
+  for (const t of g.tiles) {
+    if (!VG.state[t.id]) VG.state[t.id] = { col: t.char || g.preferred || g.members[0], orig: t.char, mark: '', changed: false };
+  }
+  vgRender();
+}
+function vgRender() {
+  const g = VG.data.groups[VG.cur];
+  const cols = g.members.slice();
+  const byCol = Object.fromEntries(cols.map(c => [c, []]));
+  for (const t of g.tiles) { const s = VG.state[t.id]; (byCol[s.col] || (byCol[s.col] = [])).push(t); }
+  const fm = g.forms || {};
+  $('#vg_grid').innerHTML = `<div class="vgrid" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">`
+    + cols.map(c => {
+      const f = fm[c] || { book: {}, ref: 0 }; const b = f.book || {};
+      const carved = (b.products || 0) + (b.db || 0) - (b.align || 0);
+      return `<div class="vcol"><div class="vhead"><span class="vgl">${c}</span>
+          <span class="muted">刻 ${Math.max(0, carved)}${b.human ? '·人' + b.human : ''} · 整理本 ${f.ref || 0}${c === g.reading_default ? ' · 文意' : ''}${c === g.preferred ? ' · 本书惯用' : ''}</span></div>
+        <div class="vtiles">${(byCol[c] || []).map(t => {
+          const s = VG.state[t.id];
+          const cls = ['vtile', t.pending ? 'pending' : '', s.changed ? 'moved' : '', s.mark === 'non' ? 'non' : '', t.human ? 'hum' : ''].filter(Boolean).join(' ');
+          const tip = `${t.id} · ${t.pending ? '待审' : '自动 ' + (t.channel || '')}${t.state ? ' · ' + t.state : ''}${t.human ? ' · 人裁 ' + t.human : ''}`;
+          return `<div class="${cls}" data-id="${t.id}" title="${tip}" tabindex="0"><img src="${t.patch}" loading="lazy" alt="${t.id}">${t.human ? `<i>${t.human}</i>` : ''}</div>`;
+        }).join('')}</div></div>`;
+    }).join('') + '</div>';
+  $('#vg_actions').style.display = '';
+  $('#vg_grid').querySelectorAll('.vtile').forEach(el => {
+    el.onclick = () => { const s = VG.state[el.dataset.id]; const i = cols.indexOf(s.col); s.col = cols[(i + 1) % cols.length]; s.changed = s.col !== s.orig; s.mark = ''; vgRender(); };
+    el.onkeydown = ev => { if (ev.key === 'n' || ev.key === 'N') { const s = VG.state[el.dataset.id]; s.mark = s.mark === 'non' ? '' : 'non'; s.changed = true; vgRender(); } };
+  });
+}
+async function vgSend(all) {
+  const g = VG.data.groups[VG.cur]; if (!g) return;
+  const book = $('#book').value, now = Date.now();
+  const rows = [];
+  for (const t of g.tiles) {
+    const s = VG.state[t.id];
+    if (!all && !t.pending && !s.changed) continue;
+    if (s.mark === 'non') { rows.push({ id: t.id, v: 'not_a_char', client_ts: now }); continue; }
+    const shape = s.col, reading = t.reading && t.reading !== t.char ? t.reading : (g.reading_default || shape);
+    rows.push({ id: t.id, v: 'confirm', shape, reading: reading || shape,
+                conversion: (reading && reading !== shape) ? 1 : 0, client_ts: now, group: g.canonical });
+  }
+  if (!rows.length) { $('#vg_msg').textContent = '没有要提交的格'; return; }
+  const batch = `${book}-variants-${g.canonical}`;
+  $('#vg_msg').textContent = `提交 ${rows.length} 条…`;
+  try {
+    const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
+    $('#vg_msg').textContent = `已写 ${r.appended} 条到批次 ${batch}；到「审查 → 收割与消费」按路由表消费，再重建用字账`;
+    for (const row of rows) { const s = VG.state[row.id]; s.orig = s.col; s.changed = false; }
+    for (const t of g.tiles) if (rows.some(r => r.id === t.id)) { t.pending = false; t.human = VG.state[t.id].col; }
+    vgRender();
+  } catch (e) { $('#vg_msg').textContent = e.message; }
+}
+
 function showView(v) {
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   // 切到视图时重新拉一次：批次可能是在 CLI 里建的，页面初始化那一次拉不到
   if (v === 'review') loadBatches();
   if (v === 'evals') loadEvals();
+  if (v === 'variants' && !VAR) loadVariants();
 }
 
 // ── 总览 ───────────────────────────────────────────────────────────

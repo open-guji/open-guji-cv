@@ -161,7 +161,13 @@ def parse_unihan_variants(text: str) -> tuple[list[tuple[str, str, str]], dict]:
             if a == b:
                 stats["self_loop"] += 1
                 continue
-            edges.append((a, b, tag))
+            # 有向来源统一成 (正字, 异体) 顺序（见 DIRECTED_TAGS）：
+            # kTraditionalVariant 的键是简体、值是繁体，繁体是我们的「正字」，掉个头；
+            # kSimplifiedVariant 键繁值简，顺序已对。语义类属性 Unihan 两头都列，不定向。
+            if prop == "kTraditionalVariant":
+                edges.append((b, a, tag))
+            else:
+                edges.append((a, b, tag))
     stats["edges"] = len(edges)
     return edges, dict(stats)
 
@@ -184,7 +190,7 @@ def parse_cjkvi_variants(text: str, tag: str) -> tuple[list[tuple[str, str, str]
         if len(parts) < 3:
             stats["line_short"] += 1
             continue
-        a, _rel, b = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        a, rel, b = parts[0].strip(), parts[1].strip(), parts[2].strip()
         if "/" in a or a.startswith("<"):
             stats["line_meta"] += 1
             continue
@@ -197,6 +203,11 @@ def parse_cjkvi_variants(text: str, tag: str) -> tuple[list[tuple[str, str, str]
         if a == b:
             stats["self_loop"] += 1
             continue
+        # cjkvi 文件都是「正字/繁体 在前」（twedu/variant、hydzd/variant、
+        # dypytz/variant、cjkvi/simplified），唯独 cjkvi/traditional 是
+        # 「简,traditional,繁」——掉个头，让每条边统一成 (正字, 异体)。
+        if rel == "cjkvi/traditional":
+            a, b = b, a
         edges.append((a, b, tag))
     stats["edges"] = len(edges)
     return edges, dict(stats)
@@ -244,6 +255,48 @@ def merge_edges(edge_lists: list[list[tuple[str, str, str]]]) -> dict[str, dict[
     for (a, b), tags in acc.items():
         pairs.setdefault(a, {})[b] = sorted(tags)
     return pairs
+
+
+# 带方向的来源：解析函数已把这些来源的边统一成 (正字, 异体)。语义类 Unihan
+# 属性、yitizi、kSpoofing、借用 都不定向（两头对称列，或本来就不是「正/异」关系）。
+# 方向丢了就没法算「一对多」、也选不出跨书统一键 canonical（variant_strategy.md §2.2）。
+DIRECTED_TAGS = frozenset({
+    "twedu", "hydzd", "dypytz", "cjkvi-simplified",
+    "unihan:kSimplifiedVariant", "unihan:kTraditionalVariant",
+})
+
+
+def directed_edges(edge_lists: list[list[tuple[str, str, str]]]) -> dict[str, dict[str, list[str]]]:
+    """有向来源的边 → ``directed[异体][正字] = sorted(标签)``。
+
+    与 ``pairs`` 并存：``pairs`` 无向、全来源，管「有没有关系」；``directed`` 只收
+    DIRECTED_TAGS，管「哪边是正字」。一个异体在这里有 ≥2 个正字就是一对多。
+    """
+    acc: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for edges in edge_lists:
+        for reg, var, tag in edges:
+            if tag in DIRECTED_TAGS:
+                acc[(var, reg)].add(tag)
+    out: dict[str, dict[str, list[str]]] = {}
+    for (var, reg), tags in acc.items():
+        out.setdefault(var, {})[reg] = sorted(tags)
+    return out
+
+
+def one_to_many_stats(directed: dict[str, dict[str, list[str]]],
+                      sources: frozenset[str] | None = None) -> dict:
+    """一对多清单：异体在 ≥2 个正字名下。``sources`` 限定采信的来源标签。"""
+    multi: list[tuple[str, list[str]]] = []
+    for var, regs in directed.items():
+        keep = [r for r, tags in regs.items()
+                if sources is None or set(tags) & sources]
+        if len(keep) >= 2:
+            multi.append((var, sorted(keep)))
+    multi.sort(key=lambda t: (-len(t[1]), t[0]))
+    return {
+        "n": len(multi),
+        "sample": [f"{v}→{''.join(rs)}" for v, rs in multi[:40]],
+    }
 
 
 def group_stats(pairs: dict[str, dict[str, list[str]]],
@@ -321,6 +374,8 @@ def main() -> None:
 
     # 3. 合并
     pairs = merge_edges(edge_lists)
+    directed = directed_edges(edge_lists)
+    n_directed = sum(len(rs) for rs in directed.values())
     n_pairs = sum(len(bs) for bs in pairs.values())
     chars = set(pairs)
     for bs in pairs.values():
@@ -334,14 +389,20 @@ def main() -> None:
     # 4. 写 variants.json（确定性：键排序 + 紧凑分隔符）
     doc = {
         "meta": {
-            "what": "字↔异体字 无向关系表（P0 关系层）。"
-                    "pairs[a][b]=来源标签列表，只存 ord(a)<ord(b) 一侧；"
+            "what": "字↔异体字 关系表（P0 关系层）。"
+                    "pairs[a][b]=来源标签列表，无向，只存 ord(a)<ord(b) 一侧；"
+                    "directed[异体][正字]=来源标签列表，只收带方向的来源"
+                    "（twedu/hydzd/dypytz/cjkvi-simplified/unihan 简繁）；"
                     "查询用 open_guji_cv/variants.py。",
             "caution": "unihan:kSpoofingVariant 是形近易混字不是异体字；"
-                       "异体关系不传递，连通展开须限制来源（见查询模块）。",
+                       "异体关系不传递，连通展开须限制来源（见查询模块）；"
+                       "来源标签对不上 T1/T2/T3（twedu 也收古文 上/二），"
+                       "一对字最终是哪一类由本书用字账定（variant_ledger）。",
+            "directed_tags": sorted(DIRECTED_TAGS),
             "sources": {tag: source_stats[tag]["url"] for tag in sorted(source_stats)},
         },
         "pairs": pairs,
+        "directed": directed,
     }
     out_json = out_dir / "variants.json"
     out_json.write_text(
@@ -353,10 +414,19 @@ def main() -> None:
     trusted = frozenset(
         {f"unihan:{p}" for p in UNIHAN_PROPS if p != "kSpoofingVariant"}
         | {"twedu", "yitizi"})
+    directed_by_tag = Counter(t for rs in directed.values()
+                              for tags in rs.values() for t in tags)
     report = {
         "chars": len(chars),
         "pairs": n_pairs,
         "pairs_by_source": dict(sorted(tag_pair_count.items())),
+        "directed_pairs": n_directed,
+        "directed_by_source": dict(sorted(directed_by_tag.items())),
+        # 一对多：只看异体来源（twedu/hydzd）的是「真异体一形多正」；
+        # 全部有向来源的还含简繁合并（发→發髮），两个数分开报
+        "one_to_many_variant_sources": one_to_many_stats(
+            directed, frozenset({"twedu", "hydzd"})),
+        "one_to_many_all_directed": one_to_many_stats(directed, None),
         "sources": source_stats,
         "groups_trusted_default": group_stats(pairs, trusted),
         "groups_all_sources": group_stats(pairs, None),

@@ -284,8 +284,83 @@ def next_batch(book: str, n: int = 12, store=None) -> dict:
             "todo": len(todo), "batch": todo[:n]}
 
 
+FIDELITY_MIN_AUDIT = 50        # E：抽审不到这么多条，不亮灯
+FIDELITY_GREEN, FIDELITY_YELLOW = 0.99, 0.97   # E：Wilson 下界
+
+
+def _wilson_low(k: int, n: int, z: float = 1.96) -> float:
+    if n == 0:
+        return 0.0
+    p = k / n
+    d = 1 + z * z / n
+    c = p + z * z / (2 * n)
+    r = z * ((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5
+    return (c - r) / d
+
+
+def form_fidelity(book: str, pages: list[int], store=None) -> dict:
+    """判据 E（variant_strategy.md §4.5）：**字形保真率**——自动放行里，字形与人裁
+    完全一致的比例。分母只取「异体位」：自动放行且 (reading ≠ char，或走了
+    variant_form 定形)。这里**不许**用 `_same_char` 放水：整理本印 髮、刻本刻 髪，
+    存成 髮 在判据 A 里算对（异体算同字），在这里就是错——保真量的正是这一层。
+
+    分两层报：`form_auto`（variant_form 定的形）与其余（库 same 继承的形）。
+    抽审不足 FIDELITY_MIN_AUDIT 条不亮灯——这个数只能靠组视图攒。
+    """
+    from ..core.step import page_key
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.store import ProductStore
+
+    st = store or ProductStore()
+    truth = load_verdicts(book)
+    n_var = n_open = 0
+    hit = n = 0
+    hit_auto = n_auto = 0
+    errors: list[dict] = []
+    for pg in pages:
+        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        if a is None:
+            continue
+        for cc in a.columns:
+            for r in cc.chars:
+                f = (r.evidence or {}).get("form") or {}
+                if not r.admit:
+                    n_open += f.get("state") == "open"
+                    continue
+                is_var = bool(r.reading and r.reading != r.char) \
+                    or f.get("state") in ("fixed_lib", "fixed_form")
+                if not is_var or not r.char:
+                    continue
+                n_var += 1
+                t = truth.get(r.id)
+                if not t:
+                    continue
+                n += 1
+                ok = (r.char == t)
+                hit += ok
+                if f.get("state") in ("fixed_lib", "fixed_form"):
+                    n_auto += 1
+                    hit_auto += ok
+                if not ok:
+                    errors.append({"id": r.id, "pred": r.char, "human": t,
+                                   "reading": r.reading, "state": f.get("state")})
+    low = _wilson_low(hit, n)
+    if n < FIDELITY_MIN_AUDIT:
+        light = "none"
+    else:
+        light = GREEN if low >= FIDELITY_GREEN else (YELLOW if low >= FIDELITY_YELLOW else RED)
+    if errors:
+        light = RED
+    return {"variant_admits": n_var, "form_open": n_open,
+            "audited": n, "hit": hit, "rate": (hit / n if n else None),
+            "wilson_low": round(low, 4),
+            "form_auto": [hit_auto, n_auto],
+            "errors": errors[:10], "light": light,
+            "note": (f"抽审 {n} 条不足 {FIDELITY_MIN_AUDIT}，去组视图攒" if n < FIDELITY_MIN_AUDIT else "")}
+
+
 def check(book: str, pages: list[int]) -> dict:
-    """四个判据一次算完。"""
+    """五个判据一次算完。"""
     from ..products import kinds as _k  # noqa: F401
     from ..products.store import ProductStore
 
@@ -303,4 +378,5 @@ def check(book: str, pages: list[int]) -> dict:
         "C": defect_clusters(),
         "C2": tight_pages(book, pages, st),
         "D": rare_char_recall(),
+        "E": form_fidelity(book, pages, st),
     }
