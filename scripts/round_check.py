@@ -95,7 +95,10 @@ def cmd_regression(book: str) -> int:
                             "-p", "no:cacheprovider", "--capture=no"],
                            capture_output=True, text=True, encoding="utf-8",
                            errors="replace")
-        out = r.stdout or ""
+        # ⚠️ 本机 pytest 收尾会崩（I/O operation on closed file），崩之前的
+        # 计数可能落在 stderr 里——只读 stdout 会把整段统计吞掉，看起来像
+        # 「单测没跑」。两个流都算。
+        out = (r.stdout or "") + (r.stderr or "")
         p = out.count(" PASSED")
         fl = out.count(" FAILED") + out.count(" ERROR")
         passed += p
@@ -245,6 +248,52 @@ def cmd_check(book: str, pages: list[int]) -> int:
         print(f"  → {YELLOW}  先记着，继续跑，攒够再查")
     else:
         print(f"  → {GREEN}")
+
+    # C2 字距（挤排页预警）—— 决定「这批要不要人多看」
+    #
+    # 用户 2026-09-04 在 p44-56 标了 14 条 truncated，而「框外成段墨」只测出 1 条
+    # ——**测法漏了，人是对的**。真正的原因是 p44/45/46 字距极挤（字间隙中位
+    # 1px，74% 不足 5px；对照 p54-56 是 6px、dev_set 7px），字与字物理相连，
+    # 任何墨谷判据都找不到零墨行。R2「真粘连」在这三页是 11~14%，其余页 1~6%。
+    #
+    # 这类页**不是算法能修的**（handbook §1 早写明：口径是「能从图上分开的都
+    # 分对，分不开的都标出来」）。但要提前知道，好让人有心理准备、也别把它
+    # 当成算法退步。
+    print("\nC2 字距（挤排页 = 切分物理受限）:")
+    tight = []
+    for pg in pages:
+        c = st.read(book, "row_segment", page_key(pg), "cells")
+        ci = st.read(book, "cell_shrink", page_key(pg), "char_index")
+        if not c or not ci:
+            continue
+        gaps = []
+        for cc in c.columns:
+            cic = [x for x in ci.columns if x.col == cc.col]
+            if not cic:
+                continue
+            bys = {getattr(x, "slot", None): x for x in cic[0].chars}
+            prev = None
+            for ce in sorted(cc.cells, key=lambda z: z.slot):
+                ch = bys.get(ce.slot)
+                if ch is None:
+                    continue
+                if prev is not None:
+                    gaps.append(ch.bbox_col[1] - prev)
+                prev = ch.bbox_col[3]
+        if not gaps:
+            continue
+        gaps.sort()
+        med = gaps[len(gaps) // 2]
+        near = sum(1 for g in gaps if g < 5) / len(gaps)
+        if med <= 2 or near >= 0.6:
+            tight.append((pg, med, near))
+    if tight:
+        for pg, med, near in tight:
+            print(f"  p{pg}: 字间隙中位 {med:.0f}px，{near:.0%} 不足 5px ← 挤排")
+        print(f"  → {YELLOW}  这几页字物理相连，切分做不到完美；人审会偏多，"
+              f"标缺陷即可，**不算算法退步**")
+    else:
+        print(f"  → {GREEN}  字距正常")
 
     # D 生僻字 top-10（有集才跑）
     rc = DATASET / "rare-char" / "items.jsonl"
