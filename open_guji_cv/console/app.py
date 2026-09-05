@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from functools import lru_cache
 import threading
 import time
@@ -756,7 +757,65 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
                 "freq": freq.get(h.char, 0),
                 "cp": f"U+{ord(h.char):04X}" if len(h.char) == 1 else "",
                 "zi": f"https://zi.tools/zi/{h.char}",
+                **_char_hint(h.char),
             } for h in hits]}
+
+
+def _char_hint(ch: str) -> dict:
+    """给一个候选字配「常见意思」和「对应哪个繁体正字」。
+
+    用户 2026-09-05：「异体字不用显示 unicode 和 ids，最好可以显示常见意思，
+    以及对应哪个繁体整体字。」
+
+    - `gloss`：`config/gloss/gloss.json`（69,835 字，康熙/教育部/维基词典/Unihan 汇编）
+      的释义首句 + 拼音。释义可以很长（康熙的整段引证），这里截到一句话。
+    - `std`：这个字在**整理本**里对应哪个字。做法不是查"哪个是正字"（异体组里没有
+      客观正字），而是**在异体组里找整理本实际用过的那个**——整理本是繁体传承字形，
+      它用哪个就是这本书要录的那个。㕔 → 廳、䙝 → 褻 都能对上；候选自己就在整理本里
+      用过（freq > 0）时不再重复标。
+    """
+    from ..steps.seed_admit import DEFAULT_CORPUS
+
+    out: dict = {}
+    g = _gloss().get(ch)
+    if g:
+        d = (g.get("d") or "").strip()
+        # 维基词典那一档偶尔混进 MediaWiki 模板标记（如 __NOTITLECONVERT__），去掉
+        d = re.sub(r"__[A-Z]+__|\{\{[^}]*\}\}", "", d).strip()
+        if d:
+            # 康熙释义常是「【正字通】同丘。【風俗通】…」，取到第一个句号为止够看了
+            head = d.split("。")[0]
+            out["gloss"] = (head[:28] + "…") if len(head) > 28 else head
+        if g.get("p"):
+            out["py"] = g["p"]
+    freq = _corpus_freq(DEFAULT_CORPUS)
+    if not freq.get(ch):
+        try:
+            from ..variants import variants_of
+            best, best_n = "", 0
+            for v, _src in variants_of(ch):
+                n = freq.get(v, 0)
+                if n > best_n:
+                    best, best_n = v, n
+            if best:
+                out["std"] = best
+                out["std_freq"] = best_n
+        except Exception:
+            pass
+    return out
+
+
+@lru_cache(maxsize=1)
+def _gloss() -> dict:
+    """单字速查释义表（`config/gloss/README.md` 列了各源授权）。8 MB，进程内只读一次。"""
+    import json
+    f = Path(__file__).resolve().parent.parent.parent / "config" / "gloss" / "gloss.json"
+    if not f.exists():
+        return {}
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 @lru_cache(maxsize=1)
