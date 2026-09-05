@@ -50,13 +50,20 @@ cd /d/workspace/open-guji-cv
 
 ### 1.4 看四个数（这一步决定下一步）
 
+**控制台 → 审查 → 「本轮体检」→ 点「体检」**。四个判据各一行，带灯和「该怎么办」。
+
+命令行等价（同一套判据，共用 `open_guji_cv/eval/round_check.py`）：
+
 ```bash
 .venv/Scripts/python scripts/round_check.py --pages <本轮页码>
 ```
 
-一条命令印出全部判据。四个数的含义与阈值见 §2。
+四个判据的含义与阈值见 §2。
 
 ### 1.5 下一批页码怎么定
+
+体检卡片底部直接给出下一批，点「填入页框」就切过去了，不用手抄 12 个页号。
+命令行等价：
 
 ```bash
 .venv/Scripts/python scripts/round_check.py --next
@@ -135,11 +142,15 @@ cp output/glyph.db /d/tmp/glyph.db.bak-$(date +%m%d)
 
 三件事已经做成命令，不需要问我：
 
-| 你想知道 | 命令 |
-|---|---|
-| 下一批审哪几页 | `round_check.py --next` |
-| 这批跑得怎么样、要不要修 | `round_check.py --pages <页码>` |
-| 改完代码有没有退 | `round_check.py --regression` |
+| 你想知道 | 控制台 | 命令行 |
+|---|---|---|
+| 这批要不要停下修算法 | 审查 → 本轮体检 → 体检 | `round_check.py --pages <页码>` |
+| 下一批审哪几页 | 同上，卡片底部「填入页框」 | `round_check.py --next` |
+| 改完代码有没有退 | —（要跑单测，走命令行）| `round_check.py --regression` |
+
+判据与阈值的唯一事实源是 `open_guji_cv/eval/round_check.py`，控制台与命令行
+共用它——改阈值只改那一处，两边同时生效；否则过一阵子命令行说绿、控制台说黄，
+谁也不知道该信哪个。
 
 **什么时候该找我**：
 - 判据 C 红灯（缺陷扎堆）——定位根因要看图、要试判据，这是需要来回的活；
