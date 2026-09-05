@@ -118,17 +118,19 @@ def test_rrf_weights_tilt_toward_heavier_source():
     生产取 CNN_WEIGHT=2.0：HOG 在最难那撮上只有 47.6% top-1，等权会把 CNN 的
     正确答案拖出 top-10（rare-char 90.5% → 加权后 100%）。
     """
-    from open_guji_cv.clustering.cnn_candidates import CNN_WEIGHT
-    # 两源**完全不一致**时：等权是平手（各自第一名同分），加权后 CNN 第一名领先。
+    from open_guji_cv.clustering.cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT,
+                                                         HOG_WEIGHT)
+    # 两源**完全不一致**时：等权是平手（各自第一名同分），加权后重的那源第一名领先。
     # 注意 RRF 奖励「两源都靠前」——若两源在某字上一致，它会压过任一源的第一名，
     # 这是设计（见 test_rrf_prefers_agreement），不是权重的反例。
     hog = ["甲", "乙", "丙"]
     cnn = ["丁", "戊", "己"]
-    wt = rrf(hog, cnn, k=3, weights=(1.0, CNN_WEIGHT))
-    assert wt[0] == "丁", f"加权后 CNN 第一名该领先：{wt}"
-    rev = rrf(hog, cnn, k=3, weights=(CNN_WEIGHT, 1.0))
-    assert rev[0] == "甲", f"权重反过来 HOG 第一名该领先：{rev}"
-    assert 1.5 <= CNN_WEIGHT <= 3.0
+    wt = rrf(hog, cnn, k=3, weights=(1.0, 2.0))
+    assert wt[0] == "丁", f"加权后重的那源第一名该领先：{wt}"
+    rev = rrf(hog, cnn, k=3, weights=(2.0, 1.0))
+    assert rev[0] == "甲", f"权重反过来该换边：{rev}"
+    # 生产权重的序：embedding 检索最强（91.9%）、HOG 最弱且怕磨损——扫描定的
+    assert EMB_WEIGHT >= CNN_WEIGHT >= HOG_WEIGHT > 0
 
 
 @pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")

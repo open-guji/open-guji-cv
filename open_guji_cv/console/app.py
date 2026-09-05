@@ -730,16 +730,18 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**RRF 86.7/98.3**（top1/top10）。
     # 两者看的东西不一样（整体轮廓 vs 部件局部），融合比任一单源 top-1 高 11 个点。
     # 没有 checkpoint 时静默退回 HOG，界面照常。
-    from ..clustering.cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, rrf, shared
+    from ..clustering.cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT,
+                                             rrf, shared)
     cnn = shared()
     cnn_order = [c for c, _ in cnn.topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
     # 第五源：同一网络的 embedding 对字体模板做余弦检索——同网络换读法就高 8 个点
     # （unseen top-1 分类头 83.9 → 检索 91.9），见 cnn_candidates.emb_topk。
     emb_order = [c for c, _ in cnn.emb_topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
     if cnn_order and emb_order:
-        order = rrf(hog_order, cnn_order, emb_order, k=k, weights=(1.0, CNN_WEIGHT, EMB_WEIGHT))
+        order = rrf(hog_order, cnn_order, emb_order, k=k,
+                    weights=(HOG_WEIGHT, CNN_WEIGHT, EMB_WEIGHT))
     elif cnn_order:
-        order = rrf(hog_order, cnn_order, k=k, weights=(1.0, CNN_WEIGHT))
+        order = rrf(hog_order, cnn_order, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT))
     else:
         order = hog_order[:k]
     hits = []
