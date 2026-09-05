@@ -35,9 +35,15 @@ def main() -> int:
     items = [i for i in gs.list(SHARD) if i.status == "active"
              and (not a.book or i.anchor.book == a.book)]
     rows, overlap, drift, missing = [], 0, 0, 0
+    tagged: dict[str, list] = {}
     for it in items:
         ex = it.expected
         v = ex.get("verdict")
+        if ex.get("tags"):
+            # 有干扰因素（污点 / 界行 / 邻字残墨）的条目单独一档：切点本身不是算法能决定的
+            for t in ex["tags"]:
+                tagged.setdefault(t, []).append(it.id)
+            continue
         if v == "overlap":
             overlap += 1
             continue
@@ -65,15 +71,17 @@ def main() -> int:
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
                          cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v))
     if not rows:
-        print(f"touching-cuts：没有可比条目（overlap {overlap}，漂移 {drift}，缺产物 {missing}，金标 {len(items)}）")
+        print(f"touching-cuts：没有可比条目（overlap {overlap}，干扰 {sum(len(v) for v in tagged.values())}，漂移 {drift}，缺产物 {missing}，金标 {len(items)}）")
         return 0
     e = np.array([r["err"] for r in rows])
     print(f"touching-cuts n={len(e)}（moved {sum(r['verdict']=='moved' for r in rows)} / ok {sum(r['verdict']=='ok' for r in rows)}；"
-          f"overlap 另计 {overlap}，漂移跳过 {drift}，缺产物 {missing}）")
+          f"overlap 另计 {overlap}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}）")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
     print(f"  ≤3px {100*(e<=3).mean():.1f}%   ≤5px {100*(e<=5).mean():.1f}%   ≤10px {100*(e<=10).mean():.1f}%")
     worst = sorted(rows, key=lambda r: -r["err"])[:8]
     print("  最差:", [(r["id"], round(r["err"])) for r in worst])
+    if tagged:
+        print("  干扰另计:", {k: len(v) for k, v in tagged.items()}, {k: v[:5] for k, v in tagged.items()})
     if a.json:
         Path(a.json).write_text(json.dumps({"rows": rows, "overlap": overlap, "drift": drift,
                                             "missing": missing}, ensure_ascii=False, indent=1), encoding="utf-8")

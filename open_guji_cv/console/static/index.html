@@ -336,7 +336,8 @@
       </div>
       <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
         在图上<b>点击或拖动</b>定位；键盘：<b>↑/↓</b> 1px（Shift 5px）· <b>回车</b> 落定（没动过 = 现切点正确）·
-        <b>O</b> 现切点正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡。
+        <b>O</b> 现切点正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
+        干扰标签 <b>1</b> 污点 <b>2</b> 界行/版框 <b>3</b> 邻字残墨 <b>4</b> 其他（落定前点，可多选；评测里分开算）。
         每次落定立刻写入事件，刷新不丢。
       </div>
       <div id="cl_cards" class="clgrid"></div>
@@ -1051,7 +1052,16 @@ function fillSteps() {
 // 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
 // 每张卡：上下两格的列图裁片（1:1 像素，CSS 放大 CL.scale 倍）+ 可拖横线。
 // 每次落定立刻 POST 一条 cutline 事件（刷新不丢），verdict 见 touching-cuts README。
-const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {} };
+const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {}, tags: {} };
+
+function clToggleTag(i, t) {
+  const c = CL.cases[i];
+  if (!c) return;
+  CL.tags[c.id] = CL.tags[c.id] || {};
+  CL.tags[c.id][t] = !CL.tags[c.id][t];
+  const el = document.getElementById('clc' + i);
+  if (el) el.querySelectorAll('.cltags button').forEach(b => b.classList.toggle('on', !!CL.tags[c.id][b.dataset.t]));
+}
 
 function clBatch() {
   const book = $('#cl_book').value || $('#book').value;
@@ -1082,6 +1092,12 @@ function clCard(c, i) {
           <button data-i="${i}" data-v="ok" title="O">现切点正确</button>
           <button data-i="${i}" data-v="overlap" title="V">重叠·折中</button>
           <button data-i="${i}" data-v="idk" title="S">拿不准</button>
+        </div>
+        <div class="clbtns cltags" title="干扰因素（可多选，落定前点；评测里分开算）">
+          <button data-i="${i}" data-t="stain" title="1">污点</button>
+          <button data-i="${i}" data-t="border" title="2">界行/版框</button>
+          <button data-i="${i}" data-t="residue" title="3">邻字残墨</button>
+          <button data-i="${i}" data-t="other" title="4">其他</button>
         </div>
       </div>
     </div>
@@ -1129,8 +1145,10 @@ async function clDecide(i, verdict) {
     if ($('#cl_todo').checked) el.style.display = 'none';
   }
   const now = Date.now();
+  const tags = Object.keys(CL.tags[c.id] || {}).filter(t => CL.tags[c.id][t]);
   const row = { id: c.id, y, y_old: c.y, verdict, bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below,
                 col_h: c.col_h, char_above: c.char_above || '', char_below: c.char_below || '',
+                tags: tags.length ? tags : undefined,
                 client_ts: now, dwell_ms: CL.seen[c.id] ? now - CL.seen[c.id] : undefined };
   try {
     await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1189,6 +1207,7 @@ function clBind() {
   window.addEventListener('mouseup', () => { dragging = null; });
   grid.addEventListener('click', ev => {
     const b = ev.target.closest('.clbtns button');
+    if (b && b.dataset.t) { clToggleTag(+b.dataset.i, b.dataset.t); clFocus(+b.dataset.i); return; }
     if (b) clDecide(+b.dataset.i, b.dataset.v);
     const card = ev.target.closest('.clcard');
     if (card && !b) clFocus(+card.dataset.i);
@@ -1207,6 +1226,9 @@ function clBind() {
     else if (ev.key === 's' || ev.key === 'S') { clDecide(CL.cur, 'idk'); ev.preventDefault(); }
     else if (ev.key === 'ArrowRight' || ev.key === 'j') { clFocus(CL.cur + 1); ev.preventDefault(); }
     else if (ev.key === 'ArrowLeft' || ev.key === 'k') { clFocus(CL.cur - 1); ev.preventDefault(); }
+    else if (['1', '2', '3', '4'].includes(ev.key)) {
+      clToggleTag(CL.cur, ['stain', 'border', 'residue', 'other'][+ev.key - 1]); ev.preventDefault();
+    }
   });
 }
 

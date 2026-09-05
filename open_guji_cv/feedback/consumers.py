@@ -63,9 +63,11 @@ def _expected_of(e: Event) -> dict:
         # 粘连格线的理想切点。verdict：moved（拖到 y）/ ok（现切点就对，y == y_old）/
         # overlap（上下字重叠，切在哪都伤字，y 是折中位置）/ idk（拿不准 → uncertain）。
         # 坐标是现役 Step2 列图（col_h 一并记，换了矫正就能察觉）。
+        # tags：干扰因素（stain 污点在分界处 / border 界行或版框压进裁片 / residue 邻字残墨 / other），
+        # 用户 2026-09-05 裁完第一批点名的两类特殊情况；评测里分开报，不混进像素误差。
         keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below")
-        return {k: p[k] for k in keys if k in p}
+                "char_above", "char_below", "tags", "note")
+        return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
     return p
 
 
