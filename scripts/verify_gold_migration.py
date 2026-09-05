@@ -91,17 +91,30 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
         # 「迁移无损」说的是「迁过来的那批没变」，不是「两边永远一样大」。
         msgs.append(f"  items 里多出 {len(only_new)} 条（人裁回流，不算失败）:"
                     f" {sorted(only_new)[:5]}")
+
     if only_old:
         msgs.append(f"  items 里少了 {len(only_old)} 条（多为同 id 合并）: {sorted(only_old)[:5]}")
 
     bad = 0
+    added_fields = 0
     for k in sorted(set(legacy) & set(new)):
         a, b = norm(legacy[k]), norm(new[k])
+        # **新增字段不算迁移失败，丢字段才算**（2026-09-04）。
+        # 迁移无损的含义是「原来记的东西没丢、没被改」，不是「不许再记新
+        # 东西」。人裁回流与上游修复都会往同一条金标上补注解：本轮
+        # `healed_by`（版框钉桩 bug 修好后，29 条 truncated 复量成 clean，
+        # 注明是谁治好的）就是这类。旧字段少一个、或同名字段值变了，仍然报错。
+        extra = {f for f in set(b) - set(a) if b.get(f) is not None}
+        if extra and {f: a.get(f) for f in set(a)} == {f: b.get(f) for f in set(a)}:
+            added_fields += 1
+            continue
         if a != b:
             bad += 1
             if bad <= 3:
                 diff = {f: (a.get(f), b.get(f)) for f in set(a) | set(b) if a.get(f) != b.get(f)}
                 msgs.append(f"  ✗ {k}: {json.dumps(diff, ensure_ascii=False)[:220]}")
+    if added_fields:
+        msgs.append(f"  {added_fields} 条只是**新增**了字段（注解，不算失败）")
     ok = bad == 0
     msgs.insert(0, f"{shard}: 共 {len(new)} 条，逐条比对 {'一致 ✓' if ok else f'有 {bad} 条不一致 ✗'}")
     return ok, msgs

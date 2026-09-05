@@ -102,6 +102,24 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             res.updated += sum(1 for i in items
                                if i.id in have and have[i.id] != i.expected)
             continue
+        # ⚠️ **合并 expected，不整体替换**（2026-09-04）。
+        #
+        # 同一个字位可能既有 v1 时代的金标（带 review_verdict / layout /
+        # defect / healed 等字段），又有新的人裁事件。人裁说的只是「切分
+        # 质量是 truncated 还是 clean」，凭什么把别人记的字段一起抹掉？
+        # 实测：vol01:22:9:2 被人裁事件覆盖后，v1 的四个字段全没了，
+        # `verify_gold_migration` 当成数据丢失报错——**报得对**。
+        #
+        # 所以按 id 取回旧 expected 打底，新值覆盖同名键，其余保留。
+        prev = {i.id: i for i in store.list(shard)}
+        for it in items:
+            old = prev.get(it.id)
+            if old is None:
+                continue
+            it.expected = {**old.expected, **it.expected}
+            # `input` 同理：v1 条目把 seed / 载体信息记在这里，人裁事件不带
+            # 这些字段，直接写就会把它们清空（upsert 是整体替换）。
+            it.input = {**(old.input or {}), **(it.input or {})}
         a, u = store.upsert(shard, items, why or "由人裁事件自动落入")
         res.added += a
         res.updated += u
