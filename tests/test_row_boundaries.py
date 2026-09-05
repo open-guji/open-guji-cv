@@ -124,13 +124,18 @@ def test_fit_row_boundaries_top_slack_recovers_content_above_border_top():
 
     no_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
                                    period=GAP, n_slots=n_slots)
-    assert no_slack is None
-
     with_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
                                      period=GAP, n_slots=n_slots, top_slack=2 * GAP)
     assert with_slack is not None
     assert len(with_slack.boundaries) == n_slots + 1
     assert abs(with_slack.boundaries[0] - 0.0) < GAP * 0.3
+    # 2026-09-05 起空白格可以很矮（空白格不吃间距下界，见 _bounded_elastic_dp）：
+    # 不给 slack 时 DP 不再判无解，而是把开头两个空白格压在 border_top 之后。
+    # 契约改成：**字格的边界不能因此挪动**——从第 lead 条起与给了 slack 的结果一致。
+    if no_slack is not None:
+        assert len(no_slack.boundaries) == n_slots + 1
+        for a, b in zip(no_slack.boundaries[lead:], with_slack.boundaries[lead:]):
+            assert abs(a - b) <= 3, (no_slack.boundaries, with_slack.boundaries)
 
 
 def test_fit_row_boundaries_returns_none_when_not_enough_candidates():
