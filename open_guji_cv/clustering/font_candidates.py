@@ -67,16 +67,45 @@ def _font_files(root: str = "fonts") -> list[str]:
     return out
 
 
-@lru_cache(maxsize=2)
+INDEX_DIR = Path("cache/font_index")
+
+
+def _index_key(charset: tuple[str, ...], root: str, backend: str) -> str:
+    import hashlib
+    h = hashlib.sha1()
+    h.update(backend.encode())
+    for f in _font_files(root):
+        st = Path(f).stat()
+        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}".encode())
+    h.update("".join(charset).encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
+@lru_cache(maxsize=4)
 def _index(charset: tuple[str, ...], root: str = "fonts",
            backend: str = "hog") -> tuple[np.ndarray, list[tuple[str, str]]]:
     """字表 × 字体 → (特征矩阵, [(字, 字体名)])。
 
     特征后端与 `GlyphMatcher` 用同一个（默认 hog）——两边可比才有意义。
     渲染失败（字体没这个字）的直接跳过，所以同一个字可能只有部分字体有。
+
+    ## ⚠️ 必须落盘，不能只靠 lru_cache
+
+    2026-09-05 用户点「查生僻字」一直显示「查询中」——实测一次请求 **483 秒**。
+    两档字表里的大表 20,059 字 × 4 字体要渲染八万张图再提 HOG，而 lru_cache
+    的键是 charset 元组，进程一重启（或调用方每次重新拼元组）就全部重来。
+    现在按「字表 + 字体文件指纹」落到 `cache/font_index/<key>.npz`，
+    第二次起毫秒级；换字体或字表自动失效。
     """
     from .features import get_feature
     from .synth import render_char
+
+    key = _index_key(charset, root, backend)
+    f = INDEX_DIR / f"{key}.npz"
+    if f.exists():
+        z = np.load(f, allow_pickle=False)
+        keys = [(c, fn) for c, fn in zip(z["chars"].tolist(), z["fonts"].tolist())]
+        return z["mat"], keys
 
     feat = get_feature(backend)
     mats: list[np.ndarray] = []
@@ -94,7 +123,19 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
             keys.append((ch, fname))
     if not mats:
         return np.zeros((0, 1), dtype=np.float32), []
-    return feat.extract(np.stack(mats)), keys
+    mat = feat.extract(np.stack(mats)).astype(np.float32)
+    INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    np.savez(f, mat=mat,
+             chars=np.array([c for c, _ in keys]),
+             fonts=np.array([fn for _, fn in keys]))
+    return mat, keys
+
+
+def warm(charsets: list[tuple[str, ...]], root: str = "fonts",
+         backend: str = "hog") -> None:
+    """服务启动时预热——首次建大表要几分钟，别让第一个点按钮的人等。"""
+    for cs in charsets:
+        _index(tuple(cs), root, backend)
 
 
 def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],

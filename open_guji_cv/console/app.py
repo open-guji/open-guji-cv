@@ -715,19 +715,10 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     #
     # 有效的是**位次合并**：小表 top3 占据前三名（那里最可能是对的），
     # 其后接大表结果补召回。实测 top1 43% / top10 76%，两头都拿到。
-    cs_small = tuple(book_charset(DEFAULT_CORPUS))
-    big = set(cs_small)
-    try:
-        from ..variants import variants_of
-        for ch in cs_small:
-            # variants_of 返回 [(字, 来源标签), ...]，取字
-            big.update(v[0] if isinstance(v, (tuple, list)) else v
-                       for v in (variants_of(ch) or ()))
-    except Exception:
-        pass
+    cs_small, cs_big = _rare_charsets()
     norm = normalize_patch(img)
     a = candidates(norm, cs_small, k=max(k, 10))
-    b = candidates(norm, tuple(sorted(big)), k=max(k, 10))
+    b = candidates(norm, cs_big, k=max(k, 10))
     hits, seen = [], set()
     for h in list(a[:3]) + list(b) + list(a[3:]):
         if h.char in seen:
@@ -745,6 +736,37 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
                 "cp": f"U+{ord(h.char):04X}" if len(h.char) == 1 else "",
                 "zi": f"https://zi.tools/zi/{h.char}",
             } for h in hits]}
+
+
+@lru_cache(maxsize=1)
+def _rare_charsets() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """两档字表各算一次。元组身份稳定，`font_candidates._index` 的缓存才命中。
+
+    此前每次请求重新拼 `tuple(sorted(big))`，lru_cache 按值哈希本该命中，
+    但大表第一次建就是 8 分钟，且进程重启就丢——现在索引本身也落盘了
+    （见 font_candidates._index）。
+    """
+    from ..clustering.font_candidates import book_charset
+    from ..steps.seed_admit import DEFAULT_CORPUS
+    small = tuple(book_charset(DEFAULT_CORPUS))
+    big = set(small)
+    try:
+        from ..variants import variants_of
+        for ch in small:
+            big.update(v[0] if isinstance(v, (tuple, list)) else v
+                       for v in (variants_of(ch) or ()))
+    except Exception:
+        pass
+    return small, tuple(sorted(big))
+
+
+def _warm_font_index() -> None:
+    """后台线程预热字体索引。首次建大表要几分钟，别让第一个点按钮的人等。"""
+    try:
+        from ..clustering.font_candidates import warm
+        warm(list(_rare_charsets()))
+    except Exception:
+        pass
 
 
 @lru_cache(maxsize=2)
@@ -911,4 +933,6 @@ def serve(port: int = 8640, open_browser: bool = True) -> None:
     print(f"控制台: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    threading.Thread(target=_warm_font_index, name="font-index-warm",
+                     daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
