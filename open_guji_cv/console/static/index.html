@@ -241,6 +241,7 @@
           </select></label>
         <label class="muted">批次 <input id="rv_batch" size="22" placeholder="留空 = 按册页自动命名"></label>
         <label class="muted"><input type="checkbox" id="rv_todo"> 只看未裁决</label>
+        <button id="rv_run">跑这批</button>
         <button id="rv_load">载入</button>
         <button id="rv_send">提交裁决</button>
         <span id="rv_msg" class="muted"></span>
@@ -327,6 +328,7 @@ async function init() {
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
   // 定字裁决（C2）
   $('#rl_go').onclick = loadRulers;
+  $('#rv_run').onclick = runBatch;
   $('#rd_go').onclick = loadRound;
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
@@ -590,6 +592,45 @@ async function loadRulers() {
 
 const RD_MARK = { green: '✓ 绿', yellow: '~ 黄', red: '✗ 红', none: '—' };
 const RD_CLS = { green: 'qok', yellow: '', red: 'qbad', none: 'muted' };
+
+async function runBatch() {
+  const book = $('#rv_book').value || 'vol01';
+  const pages = ($('#rv_pages').value || '').trim();
+  if (!pages) { $('#rv_msg').textContent = '先填页码（或点体检里的「填入页框」）'; return; }
+  const btn = $('#rv_run');
+  btn.disabled = true;
+  $('#rv_msg').textContent = '入队中…';
+  let job;
+  try {
+    job = await api('/api/runs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book, pipeline: 'keben_body_v2', from_step: '', to_step: '',
+                             pages, force: false, params: {} })
+    });
+  } catch (e) { $('#rv_msg').textContent = '入队失败：' + e.message; btn.disabled = false; return; }
+  // 轮询到结束。跑完**自动载入卡片**——省掉「跑完了吗→再点载入」这一步。
+  const t0 = Date.now();
+  while (Date.now() - t0 < 30 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 2000));
+    let j;
+    try { j = await api('/api/runs/' + job.id); } catch (e) { continue; }
+    const secs = ((Date.now() - t0) / 1000).toFixed(0);
+    if (j.status === 'running' || j.status === 'queued') {
+      $('#rv_msg').textContent = `跑管线中… ${j.status} ${secs}s（九步 × ${pages.split(',').length} 页，约 3 分钟）`;
+      continue;
+    }
+    btn.disabled = false;
+    if (j.status === 'completed') {
+      $('#rv_msg').textContent = `跑完了（${secs}s），正在载入待审卡片…`;
+      await rvLoad();
+      return;
+    }
+    $('#rv_msg').textContent = `作业 ${j.status}：去「运行」页看日志（${job.id}）`;
+    return;
+  }
+  btn.disabled = false;
+  $('#rv_msg').textContent = '等超时了，去「运行」页看 ' + job.id;
+}
 
 async function loadRound() {
   const book = $('#rv_book').value || 'vol01';
