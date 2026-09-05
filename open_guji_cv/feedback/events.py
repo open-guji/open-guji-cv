@@ -34,6 +34,7 @@ Kind = Literal[
     "flag",           # 簇级标记
     "split", "merge", # 簇操作
     "note",           # 纯文字批注
+    "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
 ]
 
 Actor = Literal["user", "model", "align"]

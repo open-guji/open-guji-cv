@@ -133,6 +133,10 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("zero_shot_fusion", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
        title="零样本·HOG/CNN/融合", needs=("products", "heavy"),
        note="需要 cache/glyph_cnn/best.pt；全 unseen 1,327 条约 3 分钟"),
+    # 粘连格线理想切点（用户在控制台「切线」页拖出来的），现役 Step2 列图坐标。
+    _e("touching_cuts", "char-segmentation/touching-cuts", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="粘连切点误差", needs=("products",),
+       note="只算 moved/ok；overlap 另计；col_h 对不上的报漂移"),
     # Step3 格线逐像素误差：旧坐标系金标用版框线性映射 + 互相关重锚定到现役列图
     # （见 doc/step3_touching_and_jiazhu.md §3.5）。分「现役 R2s 粘连 / 非粘连」两层报。
     _e("row_boundaries", "char-segmentation/row-boundaries", arg_kind="none", out_flag="--json", pythonpath=True,

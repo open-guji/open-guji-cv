@@ -952,6 +952,85 @@ def api_review_column(book: str, page: int, col: int) -> dict:
     return {"text": "".join(x["char"] or "□" for x in out), "slots": out}
 
 
+# ── 拖切线：粘连格线的理想切点金标 ─────────────────────────────────
+#
+# 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
+# R2s（真粘连）格线两侧都没有墨谷，投影法无解；要优化它先得有"该切在哪"的金标。
+# 卡片 = 上下两格的列图裁片 + 一条可拖的横线（初值 = 现役切点）；裁决落 `cutline`
+# 事件 → gold_add → char-segmentation/touching-cuts。坐标系 = 现役 Step2 列图。
+_cutline_expected_cache: dict = {}
+
+
+@app.get("/api/cutline/cases")
+def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
+                      seed: int = 0, batch: str | None = None, skip_done: bool = True) -> dict:
+    """R2s 格线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。"""
+    from ..eval import touching as T
+
+    bk = load_book(book)
+    if pages == "body":
+        pg = [p for p in T.body_pages(book)]
+    else:
+        pg = bk.resolve_pages(pages)
+    st = ProductStore()
+    cases = T.r2s_boundaries(book, pg, st)
+    n_all = len(cases)
+    done: set[str] = set()
+    if skip_done:
+        done |= T.gold_ids()
+        if batch:
+            done |= {e.target.key for e in _log.read(batch) if e.kind == "cutline"}
+    cases = [c for c in cases if c["id"] not in done]
+    picked = T.pick_cases(cases, limit, seed=seed)
+    # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）
+    key = (book, tuple(sorted({c["page"] for c in picked})))
+    if key not in _cutline_expected_cache:
+        T.attach_expected(picked, book, st)
+        _cutline_expected_cache[key] = {c["id"]: (c.get("char_above", ""), c.get("char_below", "")) for c in picked}
+    else:
+        for c in picked:
+            c["char_above"], c["char_below"] = _cutline_expected_cache[key].get(c["id"], ("", ""))
+    for c in picked:
+        pad = 6
+        c["crop_y0"] = max(0, c["y0"] - pad)
+        c["crop_y1"] = min(c["col_h"], c["y1"] + pad)
+        c["img"] = (f"/api/cutline/img/{book}/{c['page']}/{c['col']}.png"
+                    f"?y0={c['crop_y0']}&y1={c['crop_y1']}")
+    return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
+            "n": len(picked), "cases": picked}
+
+
+@app.get("/api/cutline/img/{book}/{page}/{col}.png")
+def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) -> Response:
+    """列图的一段（上下两格 + 边距），1:1 像素，前端在上面叠可拖的横线。"""
+    from ..core.spec import column_key
+
+    path = ImageCache().get(book, "column_image", column_key(page, col))
+    if path is None:
+        raise HTTPException(404, "没有列图")
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise HTTPException(404, "列图读不出来")
+    h = img.shape[0]
+    y0 = max(0, min(h - 1, y0)); y1 = max(y0 + 1, min(h, y1 or h))
+    ok, buf = cv2.imencode(".png", img[y0:y1])
+    if not ok:
+        raise HTTPException(500, "编码失败")
+    return Response(content=buf.tobytes(), media_type="image/png")
+
+
+@app.get("/api/cutline/verdicts")
+def api_cutline_verdicts(batch: str) -> dict:
+    """读回本批已拖过的切线（刷新不重做；同 id 后到覆盖）。"""
+    out: dict[str, dict] = {}
+    for e in sorted(_log.read(batch), key=lambda x: (x.batch, x.seq)):
+        if e.kind != "cutline":
+            continue
+        p = e.payload
+        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict")}
+    return {"batch": batch, "n": len(out), "verdicts": out}
+
+
 @app.post("/api/gold/{shard:path}/migrate")
 def api_gold_migrate(shard: str, dry_run: bool = False) -> dict:
     """旧载体 → items.jsonl。不删旧文件，两边并存。"""

@@ -33,6 +33,9 @@ DEFAULT_ROUTES: list[dict] = [
              "extra": {"seed": "review_recrop"}}]},
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/instances"}]},
+    # 拖切线（2026-09-05）：粘连格线的理想切点，落 touching-cuts 金标（现役 Step2 列图坐标）
+    {"match": {"kind": "cutline"},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/touching-cuts"}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，
