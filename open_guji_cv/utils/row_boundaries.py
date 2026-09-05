@@ -298,7 +298,26 @@ class RowBoundaryResult:
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
                          period: float, eps: float, lo_ratio: float, hi_ratio: float,
                          y1_max_frac: float, y2_max_frac: float, lam: float,
-                         n_slots: int, top_slack: float = 0.0) -> list[float] | None:
+                         n_slots: int, top_slack: float = 0.0,
+                         curve: np.ndarray | None = None, blank_thresh: float = 0.0,
+                         blank_cost: float = 0.05, blank_min_gap: float = 2.0,
+                         tail_trim: bool = True) -> list[float] | None:
+    """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
+
+    **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
+    ≥ 0.7·period，缺的那一格只能摊到邻近 2–4 个字上，每条格线偏 30–58px——金标里
+    21 条大幅错切有 19 条是这个（`.claude/doc/step3_touching_and_jiazhu.md` §1.2）。
+    现在两候选之间**没有墨**（`curve` 在区间内最大值 < `blank_thresh`）就算空白格：
+    高度只需 ≥ `blank_min_gap`，不吃 λ 的间距惩罚，但每个收固定代价 `blank_cost`
+    ——不收的话 DP 会在宽缝里白造空白格、把两个矮字并成一格（实测最大偏差 243px）；
+    0.05 与"切在墨上"的典型代价同量级，只有确实缺字时才划算。
+
+    **列尾格按墨算高。** 列尾常有留白/版框残渣，最后一格若把它们全算进去就超过
+    上界，DP 只好把倒数第二条格线往上挪进末字（金标里列尾格线占大幅错切 6/21）。
+    `tail_trim` 时，到末锚点这一步的高度只算到最后一行有墨处。
+
+    `curve` 为 None 时退回旧行为（无空白格规则、无尾裁）。
+    """
     y1_max = y1_max_frac * period
     y2_max = y2_max_frac * period
     x1_eff = x1 - top_slack
@@ -332,11 +351,42 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     if m_count < n_interior:
         return None
 
-    def step_cost(y_prev: float, y: float) -> float | None:
+    cmax = None if curve is None else np.asarray(curve, dtype=np.float64)
+
+    def _is_blank(ya: float, yb: float) -> bool:
+        if cmax is None:
+            return False
+        a, b = int(round(min(ya, yb))), int(round(max(ya, yb)))
+        if b <= a:
+            return True
+        seg = cmax[max(0, a):min(len(cmax), b + 1)]
+        return seg.size == 0 or float(seg.max()) < blank_thresh
+
+    def _ink_end(ya: float, yb: float) -> float:
+        """[ya, yb] 内最后一行有墨的位置；没有就返回 ya。"""
+        if cmax is None:
+            return yb
+        a, b = int(round(ya)), int(round(yb))
+        seg = cmax[max(0, a):min(len(cmax), b + 1)]
+        idx = np.nonzero(seg >= blank_thresh)[0]
+        return float(a + int(idx[-1])) if idx.size else ya
+
+    def step_cost(y_prev: float, y: float, last: bool = False) -> float | None:
         gap = y - y_prev
-        if not (lo_ratio * period <= gap <= hi_ratio * period):
+        if gap < blank_min_gap:
             return None
-        return lam * ((gap - period) / period) ** 2
+        if _is_blank(y_prev, y):
+            # 空白格：固定代价 + 很轻的间距项（λ 的 1/10）——只用来在等价切法之间
+            # 偏向"接近一格高"，不然 DP 在整段空白里随便放，落点看候选顺序碰运气。
+            if gap > hi_ratio * period:
+                return None
+            return blank_cost + 0.1 * lam * ((gap - period) / period) ** 2
+        g = gap
+        if last and tail_trim:
+            g = max(lo_ratio * period, _ink_end(y_prev, y) - y_prev)
+        if not (lo_ratio * period <= g <= hi_ratio * period):
+            return None
+        return lam * ((g - period) / period) ** 2
 
     best: tuple[float, float, list[float], float] | None = None
     for v0, _ink0 in cand0:
@@ -368,7 +418,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                 continue
             y, _ = mid[m]
             for vN, _inkN in candN:
-                c = step_cost(y, vN)
+                c = step_cost(y, vN, last=True)
                 if c is None:
                     continue
                 total = dp_cost[k_last, m] + c
@@ -389,10 +439,11 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
 
 def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, border_bottom: float,
                         period: float, n_slots: int = 21, eps: float = 0.01, lam: float = 0.3,
-                        lo_ratio: float = 0.7, hi_ratio: float = 1.35,
+                        lo_ratio: float = 0.7, hi_ratio: float = 1.5,
                         y1_max_frac: float = 0.5, y2_max_frac: float = 0.3,
                         blank_thresh_frac: float = 0.08, synth_step: int = 20,
-                        top_slack: float = 0.0, snap_raw: int = 3) -> RowBoundaryResult | None:
+                        top_slack: float = 0.0, snap_raw: int = 3,
+                        blank_cost: float = 0.05, tail_trim: bool = True) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -456,9 +507,14 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     order = np.argsort(all_valleys)
     all_valleys, all_ink = all_valleys[order], all_ink[order]
 
+    # hi_ratio 默认 1.35 → 1.5（2026-09-05）：高字 + 矮字相邻时 1.35 卡死在真缝外 2px
+    # （vol01/46 c7：真缝 2274 到底 2432 是 158px = 1.36×period），DP 被迫把线挪进末字；
+    # 1.45 / 1.5 / 1.6 在 250 条金标上结果相同，取 1.5。并字的风险由 blank_cost 与
+    # 墨量代价挡住（实测 R2 未增）。
     boundaries = _bounded_elastic_dp(
         border_top, border_bottom, all_valleys, all_ink, period, eps,
         lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
+        curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
     )
     if boundaries is None:
         return None
