@@ -1833,6 +1833,30 @@ def clean_patch(strip: np.ndarray, owner: np.ndarray, cell_idx: int,
 # FRAME_BAND_MAX_CUT 比例，越过就不钉——宁可留框渣，绝不吞字。
 FRAME_BAND_MAX = 25        # 框带最厚走这么多行
 FRAME_BAND_MAX_CUT = 0.35  # 钉桩最多吃掉端格的这个比例（× 格高）
+# 字墨闸：桩要跨过的那段里有这么厚的成段墨就不钉（见钉桩处注释）
+PIN_INK_ROW_T = 0.12       # 行墨率 ≥ 此值算「有墨行」（框渣行通常 <0.10）
+PIN_INK_RUN = 4            # 连续这么多有墨行 = 成段字墨，不是框渣
+
+
+def _has_char_ink(page: np.ndarray, x0: int, x1: int,
+                  y0: int, y1: int) -> bool:
+    """[y0,y1) × [x0,x1) 里有没有**成段字墨**（而非零星框渣）。
+
+    判据是「连续 PIN_INK_RUN 行、每行墨率 ≥ PIN_INK_ROW_T」。框线残渣要么
+    很薄（一两行）、要么断续；字的横画连成一片。实测「非」的顶横在这段里
+    是 0.17 墨率、连续十几行，框渣则达不到 PIN_INK_RUN。
+    """
+    if y1 <= y0 or x1 <= x0:
+        return False
+    band = page[max(0, y0):max(0, y1), max(0, x0):max(0, x1)]
+    if band.size == 0:
+        return False
+    rows = (band < BINARY_THRESHOLD_PATCH).mean(axis=1) >= PIN_INK_ROW_T
+    run = best = 0
+    for v in rows:
+        run = run + 1 if v else 0
+        best = max(best, run)
+    return best >= PIN_INK_RUN
 
 
 def frame_band_inner(page: np.ndarray) -> tuple[int, int]:
@@ -1962,11 +1986,22 @@ class CharExtractor:
             sy1 = int(round(min(float(img_h),
                                max(float(c["y_bottom"]) for c in cells) + pad_y)))
             # 版框带内缘钉桩：框墨不进条带（理由见 frame_band_inner 上方）。
-            # 硬保险：最多吃掉端格的 FRAME_BAND_MAX_CUT，越过就不钉。
+            # 硬保险两条：比例闸 FRAME_BAND_MAX_CUT，以及**字墨闸**。
             cut_lim = cell_h_ref * FRAME_BAND_MAX_CUT
-            if frame_in_top - sy0 <= cut_lim:
+            # ⚠️ 比例闸单独用不住（2026-09-04）。它只问「吃掉几分之几格高」，
+            # 不问「吃掉的是不是字」。实测 vol01 p11/20/22/26/33 的首个正文格：
+            # 桩落在 y=143~150，而字墨从 y≈123 就开始，差 32~39px 恰好卡在
+            # 40px 限额之下 → 每次都钉，每次都把「非」「簡」这类字的顶横整条
+            # 切掉。用户在 10 个不同页面反复标 slot 2 截断，33 条切分缺陷里
+            # 17 条压在这一格，根因就在这里。
+            #
+            # 本模块的红线是「宁可留框渣，绝不吞字」（见 frame_band_inner 上方
+            # 注释），所以补一条直接看墨的闸：桩要跨过的那段里若已经有**成段
+            # 字墨**（连续 ≥MIN_INK_RUN 行、行墨率 ≥INK_ROW_T），就不钉——
+            # 框渣是薄的、断续的，字的横画是成段的。
+            if frame_in_top - sy0 <= cut_lim                     and not _has_char_ink(page_img, sx0, sx1, sy0, frame_in_top):
                 sy0 = max(sy0, frame_in_top)
-            if sy1 - frame_in_bot <= cut_lim:
+            if sy1 - frame_in_bot <= cut_lim                     and not _has_char_ink(page_img, sx0, sx1, frame_in_bot, sy1):
                 sy1 = min(sy1, frame_in_bot)
             if sx1 <= sx0 or sy1 <= sy0:
                 continue

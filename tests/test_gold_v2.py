@@ -288,6 +288,9 @@ def test_real_migrated_shards_are_items():
     #   column-warp 114 → 115：main 那边新增 vol01_42_c9（Step1 最外线次候选轮）
     #   instances   559 → 571：控制台定字裁决回流的 12 条切分缺陷
     #                （9 truncated + 3 contaminated，2026-09-04 用户实裁）
+    #   instances   582 → 600：p15-29 新页裁决回流 18 条（用户 2026-09-04 审
+    #                完 12 页新正文页，其中 9 条 seg_defect 集中在 slot 2
+    #                ——那批正是暴露「版框钉桩切字顶」的证据）
     #   instances   571 → 582：第二轮裁决再回流 11 条
     #                （10 truncated + 1 contaminated，页 11/151/137/60/70）
     #                核实办法：带 source_events 的条目共 23 条，其中
@@ -295,7 +298,7 @@ def test_real_migrated_shards_are_items():
     # 数字对不上时先查是「金标长大了」还是「迁移漏了」，别直接改数。
     expect = {"border-detection/column-split": 60,
               "char-segmentation/column-warp": 115,
-              "char-segmentation/instances": 582,
+              "char-segmentation/instances": 600,
               "page-type": 394,
               "column-layout": 36}
     for sh, n in expect.items():
