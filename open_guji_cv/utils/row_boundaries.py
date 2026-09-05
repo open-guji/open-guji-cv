@@ -378,13 +378,21 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         if _is_blank(y_prev, y):
             # 空白格：固定代价 + 很轻的间距项（λ 的 1/10）——只用来在等价切法之间
             # 偏向"接近一格高"，不然 DP 在整段空白里随便放，落点看候选顺序碰运气。
-            if gap > hi_ratio * period:
+            # 上界收到 1.25·period：空白格是"一个字位"，1.7 格高的留白该是两个空白格
+            # （vol01/141 c3：单个 160px 空白格让整列格位比人裁时少 1，裁决键全错位）。
+            if gap > 1.25 * period:
                 return None
             return blank_cost + 0.1 * lam * ((gap - period) / period) ** 2
         g = gap
+        lo_eff = lo_ratio * period
         if last and tail_trim:
-            g = max(lo_ratio * period, _ink_end(y_prev, y) - y_prev)
-        if not (lo_ratio * period <= g <= hi_ratio * period):
+            # 末格只算到最后一行有墨处；**墨的跨度本身仍要够半个字**——不能用下界去
+            # 兜（vol01/141 c3：24px 的版框残渣被兜成"末格"，当成字送进识别），但也不能
+            # 用整格下界 0.7 卡（vol01/140 c1：末字墨跨 75px = 0.67·period 是真字）。
+            # 字的墨跨通常是 0.75–0.85 格，残渣 0.1–0.3 格，取 0.5 分界。
+            g = _ink_end(y_prev, y) - y_prev
+            lo_eff = 0.5 * period
+        if not (lo_eff <= g <= hi_ratio * period):
             return None
         return lam * ((g - period) / period) ** 2
 

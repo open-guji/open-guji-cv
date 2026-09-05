@@ -59,15 +59,15 @@ def main() -> int:
         if prof is not None and ex.get("col_h") and abs(len(prof) - int(ex["col_h"])) > 2:
             drift += 1
             continue
+        # 金标是一个物理位置（"该切在这两个字之间"），不是"第 bi 条格线"——切分把空白格
+        # 放到别处后格线序号会整体错位（2026-09-05 实测按序号比会报出 115–132px 的假偏差）。
+        # 口径：金标位置到最近一条内部格线的距离；bi 只作展示。
         bi = ex.get("bi")
-        if bi is None or not (0 < bi < len(cc.boundaries) - 1):
-            # 退路：按上格格位找那条格线
-            idx = next((k for k, c in enumerate(cc.cells) if c.slot == it.anchor.slot), None)
-            if idx is None:
-                missing += 1
-                continue
-            bi = idx + 1
-        cur = float(cc.boundaries[bi])
+        inner = cc.boundaries[1:-1]
+        if not inner:
+            missing += 1
+            continue
+        cur = float(min(inner, key=lambda b: abs(b - float(ex["y"]))))
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
                          cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v))
     if not rows:
