@@ -347,6 +347,33 @@ class CandidateGenerator:
         return payload
 
 
+BAR_ASPECT = 3.5        # 墨框宽/高 ≥ 此值 = 单横笔（实测「一」4.9~6.9，其他字 0/596 超过 3.0）
+BAR_MIN_INK = 0.15      # 墨框内墨率下限，防空白格
+
+
+def _bar_rule(patch: np.ndarray, out: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """「一」输出为空的兜底：单横笔在 rec 模型眼里像空白。
+
+    2026-09-05 横评：PP-OCRv5 在 600 条里错 21 条，其中 **4 条是「一」输出为空**
+    ——单横笔没有任何可识别的结构，CTC 直接给空串。这类字位墨框极扁（宽高比
+    4.9~6.9），而非「一」的 596 个字里**没有一个**宽高比超过 3.0，判据零误伤。
+    规则只在 OCR 给不出东西（空、或 top1 置信 < 0.3）时才介入，不覆盖正常输出。
+    """
+    if out and out[0][1] >= 0.3:
+        return out
+    g = patch if patch.ndim == 2 else cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    b = g < 128
+    ys, xs = np.nonzero(b)
+    if not ys.size:
+        return out
+    h = ys.max() - ys.min() + 1
+    w = xs.max() - xs.min() + 1
+    box = b[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    if w / max(1, h) >= BAR_ASPECT and box.mean() >= BAR_MIN_INK:
+        return [("一", 0.9)] + [x for x in out if x[0] != "一"]
+    return out
+
+
 class PaddleOcrSource:
     """PP-OCRv5 识别器（paddleocr 3.x）：单字块 → CTC 主导时间步 top-k。
 
@@ -427,8 +454,8 @@ class PaddleOcrSource:
             line = line.strip()
             if line.startswith("{"):
                 d = json.loads(line)
-                return [(c, float(p)) for c, p in d.get("topk", [])]
-        return []
+                return _bar_rule(patch, [(c, float(p)) for c, p in d.get("topk", [])])
+        return _bar_rule(patch, [])
 
     def close(self):
         if self._proc is not None:

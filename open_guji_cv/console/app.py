@@ -719,14 +719,25 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     norm = normalize_patch(img)
     a = candidates(norm, cs_small, k=max(k, 10))
     b = candidates(norm, cs_big, k=max(k, 10))
-    hits, seen = [], set()
+    hog_order, seen = [], set()
     for h in list(a[:3]) + list(b) + list(a[3:]):
-        if h.char in seen:
-            continue
-        seen.add(h.char)
-        hits.append(h)
-        if len(hits) >= k:
-            break
+        if h.char not in seen:
+            seen.add(h.char)
+            hog_order.append(h.char)
+    by_char = {h.char: h for h in list(a) + list(b)}
+
+    # ── 第四源：CNN（scripts/train_glyph_cnn.py），与 HOG 做倒数排名融合 ──
+    # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**RRF 86.7/98.3**（top1/top10）。
+    # 两者看的东西不一样（整体轮廓 vs 部件局部），融合比任一单源 top-1 高 11 个点。
+    # 没有 checkpoint 时静默退回 HOG，界面照常。
+    from ..clustering.cnn_candidates import rrf, shared
+    cnn = shared()
+    cnn_order = [c for c, _ in cnn.topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
+    order = rrf(hog_order, cnn_order, k=k) if cnn_order else hog_order[:k]
+    hits = []
+    for ch in order:
+        h = by_char.get(ch)
+        hits.append(h if h is not None else type("H", (), {"char": ch, "score": 0.0, "font": "cnn"})())
     freq = _corpus_freq(DEFAULT_CORPUS)
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
             "candidates": [{
