@@ -219,7 +219,8 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
         return {"light": "none", "note": "没有 rare-char 集"}
     try:
         import cv2
-        from ..clustering.cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, rrf, shared
+        from ..clustering.cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT,
+                                                 rrf, shared)
         from ..clustering.font_candidates import book_charset, candidates
         from ..clustering.normalize import normalize_patch
         from ..variants import are_variants
@@ -238,8 +239,8 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
         hog = [h.char for h in candidates(q, cs, k=k)]
         cn = [c for c, _ in cnn.topk(q, cs, k=k)] if cnn.available else []
         em = [c for c, _ in cnn.emb_topk(q, cs, k=k)] if cnn.available else []
-        order = (rrf(hog, cn, em, k=k, weights=(1.0, CNN_WEIGHT, EMB_WEIGHT)) if (cn and em)
-                 else (rrf(hog, cn, k=k, weights=(1.0, CNN_WEIGHT)) if cn else hog))
+        order = (rrf(hog, cn, em, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT, EMB_WEIGHT)) if (cn and em)
+                 else (rrf(hog, cn, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT)) if cn else hog))
         g = it["expected"]["char"]
         n += 1
         hit += any(c == g or are_variants(c, g) for c in order)
