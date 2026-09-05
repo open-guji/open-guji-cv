@@ -129,3 +129,18 @@ def test_rrf_weights_tilt_toward_heavier_source():
     rev = rrf(hog, cnn, k=3, weights=(CNN_WEIGHT, 1.0))
     assert rev[0] == "甲", f"权重反过来 HOG 第一名该领先：{rev}"
     assert 1.5 <= CNN_WEIGHT <= 3.0
+
+
+@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+def test_emb_topk_contract_and_cache():
+    """embedding 检索：只返回字表内的字、相似度降序；模板向量落盘复用。"""
+    c = CnnCandidates()
+    cs = ["一", "二", "三", "十", "土", "王"]
+    q = np.zeros((64, 64), np.uint8)
+    q[20:44, 8:56] = 1
+    out = c.emb_topk(q, cs, k=4)
+    assert 0 < len(out) <= 4
+    assert all(ch in cs for ch, _ in out)
+    assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
+    # 第二次走缓存，结果一致
+    assert [ch for ch, _ in c.emb_topk(q, cs, k=4)] == [ch for ch, _ in out]
