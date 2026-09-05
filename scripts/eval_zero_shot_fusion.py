@@ -87,30 +87,14 @@ def main() -> int:
     emb_mat = None
     emb_chars: list[str] = []
     if a.emb:
-        from open_guji_cv.clustering.font_candidates import _font_files
-        from open_guji_cv.clustering.synth import render_char
-        fonts = _font_files()
-        vecs, names = [], []
-        with torch.no_grad():
-            for ch in cs:
-                ims = []
-                for f in fonts:
-                    try:
-                        im = render_char(ch, f, size=64)
-                    except Exception:
-                        continue
-                    if im is not None and im.any():
-                        ims.append(im.astype(np.uint8))
-                if not ims:
-                    continue
-                x = torch.tensor(np.stack(ims)[:, None].astype(np.float32))
-                e, _, _ = net(x)
-                v = e.mean(0)
-                vecs.append((v / (v.norm() + 1e-9)).numpy())
-                names.append(ch)
-        emb_mat = np.stack(vecs)
-        emb_chars = names
-        print(f"embedding 模板 {len(emb_chars)} 字")
+        # 复用 CnnCandidates 的落盘模板向量（按 checkpoint 指纹 + 字表），
+        # 免得每个配置重算 4,636 × 4 张渲染——扫权重时这是 90% 的耗时。
+        from open_guji_cv.clustering.cnn_candidates import CnnCandidates
+        cc_ = CnnCandidates(a.model)
+        cc_._ensure()
+        cc_._net = cc_._net.to("cpu"); cc_._dev = "cpu"
+        emb_mat, emb_chars = cc_._emb_index(cs)
+        print(f"embedding 模板 {len(emb_chars)} 字（缓存）")
 
     def wear(q: np.ndarray) -> np.ndarray:
         """评测用磨损：腐蚀一圈 + 横向抹白，模拟断墨。确定性（按图求种子）。"""
