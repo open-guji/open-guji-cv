@@ -219,6 +219,11 @@
 
   <section id="view-review" class="view">
     <div class="card">
+      <h2>本轮体检 <span class="muted">四个判据决定：继续跑，还是停下修算法</span>
+        <button id="rd_go" style="float:right">体检</button></h2>
+      <div id="rd_out" class="muted">点「体检」——用上面「页」框里的页码</div>
+    </div>
+    <div class="card">
       <h2>质量看板 <span class="muted">裁完先看这里：准了没有、下一刀切哪</span>
         <button id="q_go" style="float:right">刷新</button></h2>
       <div id="q_out" class="muted">点「刷新」载入</div>
@@ -322,6 +327,7 @@ async function init() {
   document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
   // 定字裁决（C2）
   $('#rl_go').onclick = loadRulers;
+  $('#rd_go').onclick = loadRound;
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
   $('#rv_cards').addEventListener('click', async (ev) => {
@@ -580,6 +586,71 @@ async function loadRulers() {
     + '标 flag 交人审即可，<b>不算错</b>；要盯的是「可改善」。'
     + 'R4 只认紧贴紧框的笔画级墨段——窗口若开到版框会扫进邻字，'
     + '把整字高度（~110px）误报成被切。</div>';
+}
+
+const RD_MARK = { green: '✓ 绿', yellow: '~ 黄', red: '✗ 红', none: '—' };
+const RD_CLS = { green: 'qok', yellow: '', red: 'qbad', none: 'muted' };
+
+async function loadRound() {
+  const book = $('#rv_book').value || 'vol01';
+  const pages = $('#rv_pages').value || 'dev_set';
+  $('#rd_out').textContent = '体检中…（要读产物与金标，十几秒）';
+  let d;
+  try {
+    d = await api('/api/round?book=' + encodeURIComponent(book)
+                  + '&pages=' + encodeURIComponent(pages));
+  } catch (e) { $('#rd_out').textContent = '体检失败：' + e.message; return; }
+  const row = (k, title, light, body, hint) =>
+    '<tr><td class="mono">' + k + '</td><td>' + title
+    + (hint ? '<div class="qs">' + hint + '</div>' : '') + '</td>'
+    + '<td class="mono ' + (RD_CLS[light] || '') + '">' + (RD_MARK[light] || '—') + '</td>'
+    + '<td class="qs">' + body + '</td></tr>';
+  let rows = '';
+  if (d.A) {
+    const a = d.A, pct = ([o, n]) => n ? (o / n * 100).toFixed(2) + '%' : '—';
+    let body = '整理本 ' + a.gold[0] + '/' + a.gold[1] + ' = ' + pct(a.gold);
+    if (a.human[1]) body += ' · 你的裁决 ' + a.human[0] + '/' + a.human[1] + ' = ' + pct(a.human);
+    if ((a.errors || []).length)
+      body += '<div class="qerr">' + a.errors.slice(0, 4).map(e =>
+        e.id + ' 判「' + e.pred + '」金标「' + e.gold + '」').join(' · ') + '</div>';
+    rows += row('A', '自动放行错误率', a.light, body,
+                a.light === 'green' ? '' : '先看图：管线错？金标错？还是你被坏图块误导？');
+  }
+  if (d.B) {
+    const b = d.B;
+    rows += row('B', '人审率', b.light,
+      b.review + '/' + b.total + ' = ' + (b.rate * 100).toFixed(2) + '%'
+      + (b.by_page.length ? '<div class="qs">' + b.by_page.map(r => 'p' + r.page + ':' + r.n).join(' ') + '</div>' : ''),
+      '');
+  }
+  if (d.C) {
+    const c = d.C;
+    rows += row('C', '缺陷聚集（累计 ' + c.total + ' 条）', c.light,
+      c.rows.slice(0, 5).map(r => '格位 ' + r.slot + ': ' + r.n + ' 条/' + r.pages + ' 页'
+        + (c.worst && r.slot === c.worst.slot ? ' ← 扎堆' : '')).join('<br>'),
+      c.worst ? '<b>停下修算法</b>：孤例是个案，扎堆才是系统性问题'
+              : '孤例是个案，扎堆才是系统性问题；黄灯先记着别动算法');
+  }
+  if (d.C2) {
+    const t = d.C2;
+    rows += row('C2', '字距（挤排页）', t.light,
+      t.rows.length ? t.rows.map(r => 'p' + r.page + ' 间隙中位 ' + r.median_gap
+        + 'px，' + (r.near_ratio * 100).toFixed(0) + '% 不足 5px').join('<br>') : '字距正常',
+      t.rows.length ? '这几页字<b>物理相连</b>，切分做不到完美；人审会偏多，标缺陷即可，<b>不算算法退步</b>' : '');
+  }
+  const nx = d.next || {};
+  const nxt = (nx.batch || []).length
+    ? '<div class="qs" style="margin-top:.6rem">下一批（正文页，已跳过职名/目录页）：'
+      + '<span class="mono">' + nx.batch.join(',') + '</span>'
+      + ' <button id="rd_use">填入页框</button>'
+      + '<div class="qs">正文页 ' + nx.body_total + '，已处理 ' + nx.done + '，剩 ' + nx.todo + '</div></div>'
+    : '<div class="qs" style="margin-top:.6rem">正文页跑完了。</div>';
+  $('#rd_out').innerHTML =
+    (rows ? '<table class="jobs"><thead><tr><th>#</th><th>判据</th><th>灯</th><th>数</th></tr></thead>'
+            + '<tbody>' + rows + '</tbody></table>'
+          : '<div class="qs">没填页码，只给下一批建议。</div>') + nxt;
+  const use = document.getElementById('rd_use');
+  if (use) use.onclick = () => { $('#rv_pages').value = (nx.batch || []).join(','); };
 }
 
 async function loadQuality() {

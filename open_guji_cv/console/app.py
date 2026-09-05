@@ -757,6 +757,26 @@ def _corpus_freq(path: str) -> dict:
                    if "㐀" <= ch <= "鿿")
 
 
+@app.get("/api/round")
+def api_round(book: str = "vol01", pages: str = "") -> dict:
+    """**一轮体检**：四个判据 + 下一批页码，判断跟命令行同一套。
+
+    判据与阈值在 `eval/round_check.py`（唯一事实源），`scripts/round_check.py`
+    与这里共用——阈值只写一处，免得过一阵子两边对不上。
+
+    含义与「什么时候修算法」见 `.claude/doc/review_loop_sop.md`：
+    绿=继续跑，黄=记着别动算法（样本不够时改算法是在拟合噪声），红=停下修。
+    """
+    from ..eval import round_check as rc
+    from ..core.book import load_book
+
+    out = {"next": rc.next_batch(book)}
+    if pages:
+        pgs = load_book(book).resolve_pages(pages)
+        out.update(rc.check(book, pgs))
+    return out
+
+
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
