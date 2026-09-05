@@ -29,6 +29,8 @@ def main() -> int:
     ap.add_argument("--w-cnn", type=float, default=1.0, help="RRF 里 CNN 名次的权重（HOG=1）")
     ap.add_argument("--w-hog", type=float, default=1.0, help="RRF 里 HOG 名次的权重")
     ap.add_argument("--w-emb", type=float, default=1.0, help="RRF 里 embedding 检索名次的权重")
+    ap.add_argument("--emb-mode", default="mean", choices=("mean", "max", "aug"),
+                    help="模板向量：mean=4 字体均值（生产）；max=逐字体取最大相似；aug=均值里掺退化渲染")
     ap.add_argument("--emb", action="store_true",
                     help="第三源：CNN embedding 对字体模板做余弦检索（CCR-CLIP-lite）")
     ap.add_argument("--wear", type=float, default=0.0,
@@ -93,8 +95,42 @@ def main() -> int:
         cc_ = CnnCandidates(a.model)
         cc_._ensure()
         cc_._net = cc_._net.to("cpu"); cc_._dev = "cpu"
-        emb_mat, emb_chars = cc_._emb_index(cs)
-        print(f"embedding 模板 {len(emb_chars)} 字（缓存）")
+        if a.emb_mode == "mean":
+            emb_mat, emb_chars = cc_._emb_index(cs)
+            emb_owner = None
+        else:
+            # 实验用：不落盘。max = 每字体一条向量，检索时按字取最大相似；
+            # aug = 每字 4 字体 × (原图 + 腐蚀 + 膨胀) 的均值——让模板分布更像刻本。
+            from open_guji_cv.clustering.font_candidates import _font_files
+            from open_guji_cv.clustering.synth import render_char
+            fonts = _font_files()
+            vecs, owner = [], []
+            with torch.no_grad():
+                for ch in cs:
+                    ims = []
+                    for fp in fonts:
+                        try:
+                            im = render_char(ch, fp, size=64)
+                        except Exception:
+                            continue
+                        if im is not None and im.any():
+                            ims.append(im.astype(np.uint8))
+                    if not ims:
+                        continue
+                    if a.emb_mode == "aug":
+                        ims = ims + [cv2.erode(x, np.ones((2, 2), np.uint8)) for x in ims]                                   + [cv2.dilate(x, np.ones((2, 2), np.uint8)) for x in ims]
+                    x = torch.tensor(np.stack(ims)[:, None].astype(np.float32))
+                    e, _, _ = net(x)
+                    e = e / (e.norm(dim=1, keepdim=True) + 1e-9)
+                    if a.emb_mode == "aug":
+                        v = e.mean(0); vecs.append((v / (v.norm() + 1e-9)).numpy()); owner.append(ch)
+                    else:
+                        for row in e.numpy():
+                            vecs.append(row); owner.append(ch)
+            emb_mat = np.stack(vecs).astype(np.float32)
+            emb_chars = owner
+            emb_owner = owner
+        print(f"embedding 模板 {emb_mat.shape[0]} 向量 / {len(set(emb_chars))} 字（{a.emb_mode}）")
 
     def wear(q: np.ndarray) -> np.ndarray:
         """评测用磨损：腐蚀一圈 + 横向抹白，模拟断墨。确定性（按图求种子）。"""
@@ -135,7 +171,17 @@ def main() -> int:
             if emb_mat is not None:
                 qe = e_all.mean(0); qe = (qe / (qe.norm() + 1e-9)).numpy()
                 sims = emb_mat @ qe
-                emb_order = [emb_chars[int(i)] for i in np.argsort(-sims)[:a.k]]
+                if a.emb_mode == "max":
+                    best: dict[str, float] = {}
+                    for i in np.argsort(-sims):
+                        ch_ = emb_chars[int(i)]
+                        if ch_ not in best:
+                            best[ch_] = float(sims[int(i)])
+                            if len(best) >= a.k:
+                                break
+                    emb_order = list(best)
+                else:
+                    emb_order = [emb_chars[int(i)] for i in np.argsort(-sims)[:a.k]]
             sub = lg[allowed]
             top = sub.topk(a.k).indices
             cnn = [classes[int(allowed[i])] for i in top]
