@@ -103,8 +103,12 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                note="分母是过了 Step2 交接闸的列")
     r2 = Ruler("R2", "格线穿字（可改善）", goal="0",
                note="存在更优切点却没切中的格线；真粘连另计")
-    r2s = Ruler("R2s", "格线穿字（真粘连，标 flag 不算错）", goal="—",
-                note="两侧都无墨谷，图像极限，交人审")
+    # 2026-09-05 用户：「R2s 从现在起不该被忽略，可以单独存在——但是也要优化」。
+    # 它不再是"不算错"的备注项：单独报、带明细、有目标线（dev_set 2.63% 起步，
+    # 黄 3% / 红 5%，见 round_check 的 limits）。真粘连的切法要靠识别引导，
+    # 不靠墨谷，实验与路线见 .claude/doc/step3_touching_and_jiazhu.md。
+    r2s = Ruler("R2s", "格线穿字（真粘连）", goal="<2%",
+                note="两侧都无墨谷；投影法到此为止，要靠识别引导切分")
     r3 = Ruler("R3", "首格之上仍有成段字墨的列", goal="0",
                note="抬头列少算一格的信号")
     r4 = Ruler("R4", "紧框被切的字位", goal="0",
@@ -154,6 +158,9 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                                       "best": round(best, 3)})
                 else:
                     r2s.num += 1
+                    r2s.detail.append({"page": pg, "col": cc.col,
+                                       "y": y, "ink": round(float(prof[y]), 3),
+                                       "best": round(best, 3)})
 
             # ── R3：首格之上还有没有成段字墨 ────────────────
             r3.den += 1

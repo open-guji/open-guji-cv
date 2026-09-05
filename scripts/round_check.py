@@ -117,7 +117,7 @@ def cmd_regression(book: str) -> int:
     from open_guji_cv.core.book import load_book
     from open_guji_cv.eval.rulers import measure
     bk = load_book(book)
-    limits = {"R2": (0.2, 0.5), "R3": (0, 0), "R4": (0.1, 0.3)}
+    limits = {"R2": (0.2, 0.5), "R2s": (3.0, 5.0), "R3": (0, 0), "R4": (0.1, 0.3)}
     for r in measure(book, bk.resolve_pages("dev_set"))["rulers"]:
         k = r["key"]
         if k == "R1":
