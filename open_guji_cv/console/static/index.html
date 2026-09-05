@@ -88,6 +88,26 @@
   .rvcard[data-done="need_reading"] .rvread input { border-color:var(--ochre); background:var(--ochre-soft); }
   .rvcard[data-done="truncated"] { border-left-color:var(--zhu); border-left-style:dashed; }
   .rvcard[data-done="contaminated"] { border-left-color:var(--ochre); border-left-style:dashed; }
+  /* 拖切线卡片 */
+  .clgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(21rem, 1fr)); gap:.6rem; }
+  .clcard { border:1px solid var(--rule); border-left-width:4px; border-radius:6px; padding:.4rem .5rem; background:var(--paper); }
+  .clcard.cur { box-shadow:0 0 0 2px var(--indigo); }
+  .clcard[data-done="moved"] { border-left-color:var(--ok); }
+  .clcard[data-done="ok"] { border-left-color:var(--ok); border-left-style:double; }
+  .clcard[data-done="overlap"] { border-left-color:var(--ochre); }
+  .clcard[data-done="idk"] { border-left-color:var(--zhu); border-left-style:dashed; }
+  .clhead { display:flex; justify-content:space-between; font-size:.78rem; margin-bottom:.3rem; }
+  .clbody { display:flex; gap:.6rem; align-items:flex-start; }
+  .climg { position:relative; cursor:ns-resize; user-select:none; flex:none; }
+  .climg img { display:block; image-rendering:pixelated; }
+  .clline { position:absolute; left:0; right:0; height:0; border-top:2px solid var(--zhu); pointer-events:none; }
+  .clline.old { border-top:1px dashed var(--indigo); opacity:.7; }
+  .clside { font-size:.8rem; line-height:1.6; }
+  .clside .ch { font-family:var(--serif); font-size:1.4rem; display:block; }
+  .clside .dy { font-family:var(--mono); }
+  .clbtns { margin-top:.4rem; display:flex; gap:.3rem; flex-wrap:wrap; }
+  .clbtns button { font-size:.74rem; padding:.1rem .45rem; }
+  .clbtns button.on { background:var(--indigo-soft); border-color:var(--indigo); }
   .rvseg { margin-top:.3rem; display:flex; gap:.3rem; flex-wrap:wrap; }
   .rvseg button { font-size:.72rem; padding:.05rem .4rem; color:var(--mute); }
   .rvseg button.on { background:var(--zhu); color:#fff; border-color:var(--zhu); }
@@ -163,6 +183,7 @@
     <button data-view="run">运行</button>
     <button data-view="products">产物</button>
     <button data-view="review">审查</button>
+    <button data-view="cutline">切线</button>
     <button data-view="evals">评测</button>
   </nav>
 </header>
@@ -301,6 +322,26 @@
     </div>
   </section>
 
+  <section id="view-cutline" class="view">
+    <div class="card">
+      <h2>拖切线 <span class="muted">粘连格线（R2s）：把横线拖到你认为该切的位置，攒成 touching-cuts 金标</span></h2>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.6rem">
+        <label class="muted">册 <select id="cl_book"></select></label>
+        <label class="muted">页 <input id="cl_pages" value="body" size="10" title="body = 正文页；或 3-6,9"></label>
+        <label class="muted">条数 <input id="cl_limit" value="250" size="4"></label>
+        <label class="muted">批次 <input id="cl_batch" size="22" placeholder="留空 = 按册自动命名"></label>
+        <label class="muted"><input type="checkbox" id="cl_todo" checked> 只看未裁</label>
+        <button id="cl_load">载入</button>
+        <span id="cl_msg" class="muted"></span>
+      </div>
+      <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
+        在图上<b>点击或拖动</b>定位；键盘：<b>↑/↓</b> 1px（Shift 5px）· <b>回车</b> 落定（没动过 = 现切点正确）·
+        <b>O</b> 现切点正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡。
+        每次落定立刻写入事件，刷新不丢。
+      </div>
+      <div id="cl_cards" class="clgrid"></div>
+    </div>
+  </section>
   <section id="view-evals" class="view">
     <div class="card">
       <h2>评测器 <span class="muted">27 个 eval 脚本；报告带分母、分层与过期金标数</span></h2>
@@ -340,6 +381,7 @@ async function init() {
   $('#rl_go').onclick = loadRulers;
   $('#rv_run').onclick = runBatch;
   $('#rd_go').onclick = loadRound;
+  clBind();
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
   $('#rv_cards').addEventListener('click', (ev) => {
@@ -1005,6 +1047,169 @@ function fillSteps() {
   $('#dag').innerHTML = p.steps.map((s, i) => `<span class="node" title="${s.consumes.join(',')} → ${s.produces.join(',')}">${s.id}</span>` + (i < p.steps.length - 1 ? '<span class="arrow">→</span>' : '')).join('');
   $('#notes').textContent = p.notes || '';
 }
+// ── 拖切线（粘连格线理想切点金标）───────────────────────────────
+// 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
+// 每张卡：上下两格的列图裁片（1:1 像素，CSS 放大 CL.scale 倍）+ 可拖横线。
+// 每次落定立刻 POST 一条 cutline 事件（刷新不丢），verdict 见 touching-cuts README。
+const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {} };
+
+function clBatch() {
+  const book = $('#cl_book').value || $('#book').value;
+  return $('#cl_batch').value.trim() || `${book}-cutline`;
+}
+
+function clCard(c, i) {
+  const y = CL.y[c.id] ?? c.y;
+  const d = CL.done[c.id] || '';
+  const h = (c.crop_y1 - c.crop_y0), s = CL.scale;
+  return `<div class="clcard" id="clc${i}" data-i="${i}" data-done="${d}">
+    <div class="clhead"><b>${c.id}</b><span class="muted">p${c.page} 列${c.col} 格线${c.bi} · 墨 ${c.ink}</span></div>
+    <div class="clbody">
+      <div class="climg" data-i="${i}" style="height:${h * s}px">
+        <img src="${c.img}" width="${(c.x1 - c.x0 + 12) * s}" height="${h * s}" alt="${c.id}" loading="lazy"
+             style="width:auto;height:${h * s}px">
+        <div class="clline old" style="top:${(c.y - c.crop_y0) * s}px"></div>
+        <div class="clline" id="clln${i}" style="top:${(y - c.crop_y0) * s}px"></div>
+      </div>
+      <div class="clside">
+        <span class="ch" title="上格期望字">${c.char_above || '？'}</span>
+        <span class="muted">上格 ${c.slot_above}</span><br>
+        <span class="dy" id="cldy${i}">Δ ${y - c.y}px</span><br>
+        <span class="muted">下格 ${c.slot_below}</span>
+        <span class="ch" title="下格期望字">${c.char_below || '？'}</span>
+        <div class="clbtns">
+          <button data-i="${i}" data-v="moved" title="回车">落定</button>
+          <button data-i="${i}" data-v="ok" title="O">现切点正确</button>
+          <button data-i="${i}" data-v="overlap" title="V">重叠·折中</button>
+          <button data-i="${i}" data-v="idk" title="S">拿不准</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function clSetY(i, y) {
+  const c = CL.cases[i];
+  if (!c) return;
+  y = Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)));
+  CL.y[c.id] = y;
+  const ln = document.getElementById('clln' + i);
+  if (ln) ln.style.top = `${(y - c.crop_y0) * CL.scale}px`;
+  const dy = document.getElementById('cldy' + i);
+  if (dy) dy.textContent = `Δ ${y - c.y}px`;
+}
+
+function clFocus(i) {
+  if (!CL.cases.length) return;
+  const dir = i >= CL.cur ? 1 : -1;
+  let j = Math.max(0, Math.min(i, CL.cases.length - 1));
+  while (j >= 0 && j < CL.cases.length) {
+    const el = document.getElementById('clc' + j);
+    if (!el || el.style.display !== 'none') break;
+    j += dir;
+  }
+  if (j < 0 || j >= CL.cases.length) j = Math.max(0, Math.min(i, CL.cases.length - 1));
+  CL.cur = j;
+  document.querySelectorAll('.clcard.cur').forEach(e => e.classList.remove('cur'));
+  const el = document.getElementById('clc' + CL.cur);
+  if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+async function clDecide(i, verdict) {
+  const c = CL.cases[i];
+  if (!c) return;
+  let y = CL.y[c.id] ?? c.y;
+  if (verdict === 'moved' && y === c.y) verdict = 'ok';   // 回车但没动 = 现切点正确
+  if (verdict === 'ok') y = c.y;
+  CL.done[c.id] = verdict;
+  const el = document.getElementById('clc' + i);
+  if (el) {
+    el.dataset.done = verdict;
+    el.querySelectorAll('.clbtns button').forEach(b => b.classList.toggle('on', b.dataset.v === verdict));
+    if ($('#cl_todo').checked) el.style.display = 'none';
+  }
+  const now = Date.now();
+  const row = { id: c.id, y, y_old: c.y, verdict, bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below,
+                col_h: c.col_h, char_above: c.char_above || '', char_below: c.char_below || '',
+                client_ts: now, dwell_ms: CL.seen[c.id] ? now - CL.seen[c.id] : undefined };
+  try {
+    await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch: clBatch(), step: 'row_segment', unit: 'boundary', kind: 'cutline', events: [row] }) });
+    const n = Object.keys(CL.done).length;
+    $('#cl_msg').textContent = `已落 ${n} / ${CL.cases.length} 条 → 批次 ${clBatch()}`;
+  } catch (e) {
+    $('#cl_msg').textContent = '写入失败：' + e.message;
+    delete CL.done[c.id];
+    if (el) { el.dataset.done = ''; el.style.display = ''; }
+    return;
+  }
+  clFocus(i + 1);
+}
+
+async function clLoad() {
+  const book = $('#cl_book').value || $('#book').value;
+  const pages = $('#cl_pages').value.trim() || 'body';
+  const limit = +$('#cl_limit').value || 250;
+  const batch = clBatch();
+  $('#cl_msg').textContent = '载入中…（首次要做整理本对齐，约一分钟）';
+  let d;
+  try {
+    d = await api(`/api/cutline/cases?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
+                  + `&limit=${limit}&batch=${encodeURIComponent(batch)}&skip_done=${$('#cl_todo').checked}`);
+  } catch (e) { $('#cl_msg').textContent = '失败：' + e.message; return; }
+  let done = {};
+  try { done = (await api(`/api/cutline/verdicts?batch=${encodeURIComponent(batch)}`)).verdicts || {}; } catch (e) { /* 新批次 */ }
+  CL.cases = d.cases; CL.cur = 0; CL.y = {}; CL.done = {}; CL.seen = {};
+  const t0 = Date.now();
+  d.cases.forEach(c => {
+    CL.seen[c.id] = t0;
+    if (done[c.id]) { CL.done[c.id] = done[c.id].verdict; if (done[c.id].y != null) CL.y[c.id] = done[c.id].y; }
+  });
+  $('#cl_cards').innerHTML = d.cases.map(clCard).join('');
+  if ($('#cl_todo').checked) d.cases.forEach((c, i) => { if (CL.done[c.id]) document.getElementById('clc' + i).style.display = 'none'; });
+  $('#cl_msg').textContent = `本册 R2s 共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${batch}`;
+  clFocus(0);
+}
+
+function clBind() {
+  $('#cl_book').innerHTML = state.books.map(b => `<option value="${b.id}">${b.id}</option>`).join('');
+  $('#cl_load').onclick = clLoad;
+  const grid = $('#cl_cards');
+  // 点击 / 拖动定位（坐标 → 列图像素）
+  let dragging = null;
+  const posY = (box, ev) => box.dataset && CL.cases[+box.dataset.i]
+    ? CL.cases[+box.dataset.i].crop_y0 + (ev.clientY - box.getBoundingClientRect().top) / CL.scale : null;
+  grid.addEventListener('mousedown', ev => {
+    const box = ev.target.closest('.climg');
+    if (!box) return;
+    dragging = box; clFocus(+box.dataset.i);
+    clSetY(+box.dataset.i, posY(box, ev)); ev.preventDefault();
+  });
+  window.addEventListener('mousemove', ev => { if (dragging) clSetY(+dragging.dataset.i, posY(dragging, ev)); });
+  window.addEventListener('mouseup', () => { dragging = null; });
+  grid.addEventListener('click', ev => {
+    const b = ev.target.closest('.clbtns button');
+    if (b) clDecide(+b.dataset.i, b.dataset.v);
+    const card = ev.target.closest('.clcard');
+    if (card && !b) clFocus(+card.dataset.i);
+  });
+  document.addEventListener('keydown', ev => {
+    if (!$('#view-cutline').classList.contains('active')) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    const c = CL.cases[CL.cur];
+    if (!c) return;
+    const step = ev.shiftKey ? 5 : 1;
+    if (ev.key === 'ArrowUp') { clSetY(CL.cur, (CL.y[c.id] ?? c.y) - step); ev.preventDefault(); }
+    else if (ev.key === 'ArrowDown') { clSetY(CL.cur, (CL.y[c.id] ?? c.y) + step); ev.preventDefault(); }
+    else if (ev.key === 'Enter') { clDecide(CL.cur, 'moved'); ev.preventDefault(); }
+    else if (ev.key === 'o' || ev.key === 'O') { clDecide(CL.cur, 'ok'); ev.preventDefault(); }
+    else if (ev.key === 'v' || ev.key === 'V') { clDecide(CL.cur, 'overlap'); ev.preventDefault(); }
+    else if (ev.key === 's' || ev.key === 'S') { clDecide(CL.cur, 'idk'); ev.preventDefault(); }
+    else if (ev.key === 'ArrowRight' || ev.key === 'j') { clFocus(CL.cur + 1); ev.preventDefault(); }
+    else if (ev.key === 'ArrowLeft' || ev.key === 'k') { clFocus(CL.cur - 1); ev.preventDefault(); }
+  });
+}
+
 function showView(v) {
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));

@@ -59,6 +59,13 @@ def _expected_of(e: Event) -> dict:
         return out
     if e.kind == "recrop":
         return {"old_bbox": p.get("old_bbox"), "corrected_bbox": p.get("new_bbox") or p.get("corrected_bbox")}
+    if e.kind == "cutline":
+        # 粘连格线的理想切点。verdict：moved（拖到 y）/ ok（现切点就对，y == y_old）/
+        # overlap（上下字重叠，切在哪都伤字，y 是折中位置）/ idk（拿不准 → uncertain）。
+        # 坐标是现役 Step2 列图（col_h 一并记，换了矫正就能察觉）。
+        keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
+                "char_above", "char_below")
+        return {k: p[k] for k in keys if k in p}
     return p
 
 
