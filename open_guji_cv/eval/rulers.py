@@ -109,6 +109,11 @@ def measure(book: str, pages: list[int], store=None) -> dict:
     # 不靠墨谷，实验与路线见 .claude/doc/step3_touching_and_jiazhu.md。
     r2s = Ruler("R2s", "格线穿字（真粘连）", goal="<2%",
                 note="两侧都无墨谷；投影法到此为止，要靠识别引导切分")
+    # R2x（2026-09-05，切线金标第一批暴露）：±12px 内没谷、但 ±半格内有净谷——
+    # 不是粘连，是切错了位置（DP 把线放到了邻字身上，偏 20–55px）。vol01 正文 95 条，
+    # 占原 R2s 的 11%；用户拖出的 3 条最大偏差（47–58px）全是这一类。算法可修，goal 0。
+    r2x = Ruler("R2x", "格线穿字（错切：半格内有净谷）", goal="0",
+                note="±12px 无谷但 ±半格内有 ≤0.02 的谷；从 R2s 拆出，另计不重复")
     r3 = Ruler("R3", "首格之上仍有成段字墨的列", goal="0",
                note="抬头列少算一格的信号")
     r4 = Ruler("R4", "紧框被切的字位", goal="0",
@@ -146,6 +151,7 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                     continue
                 r2.den += 1
                 r2s.den += 1
+                r2x.den += 1
                 if prof[y] <= INK_ON_LINE:
                     continue
                 # 附近有没有更好的切点？有 → 可改善；没有 → 真粘连
@@ -157,10 +163,17 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                                       "y": y, "ink": round(float(prof[y]), 3),
                                       "best": round(best, 3)})
                 else:
-                    r2s.num += 1
-                    r2s.detail.append({"page": pg, "col": cc.col,
-                                       "y": y, "ink": round(float(prof[y]), 3),
-                                       "best": round(best, 3)})
+                    half = max(13, int((cc.period or 40) / 2))
+                    far = float(prof[max(0, y - half):min(h, y + half + 1)].min())
+                    if far <= STUCK_FLOOR:
+                        r2x.num += 1
+                        r2x.detail.append({"page": pg, "col": cc.col, "y": y,
+                                           "ink": round(float(prof[y]), 3), "far": round(far, 3)})
+                    else:
+                        r2s.num += 1
+                        r2s.detail.append({"page": pg, "col": cc.col,
+                                           "y": y, "ink": round(float(prof[y]), 3),
+                                           "best": round(best, 3)})
 
             # ── R3：首格之上还有没有成段字墨 ────────────────
             r3.den += 1
@@ -197,7 +210,7 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                                       "px": int(n)})
 
     return {"book": book, "n_pages": len(pages),
-            "rulers": [x.to_dict() for x in (r1, r2, r2s, r3, r4)]}
+            "rulers": [x.to_dict() for x in (r1, r2, r2s, r2x, r3, r4)]}
 
 
 def _clipped_ink(prof: np.ndarray, bbox, cell, h: int) -> int:
