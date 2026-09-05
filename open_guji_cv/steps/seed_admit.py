@@ -179,8 +179,11 @@ class SeedAdmitStep(Step):
                                         n_review=n_review, columns=out)}
 
 
-# 整理本参与的通道：进库字取**整理本字**，库只是形状旁证
-_CORPUS_CHANNELS = (None, "match_replace", "match_ref_weak", "match_margin")
+# 整理本参与的通道：`reading` 记整理本字（字形仍照录图上的形）。
+# ⚠️ match_ref 也在内（2026-09-05 补）：它放行的依据就是「库 top1 语义 == 整理本字」，
+# 漏掉它的后果是 vol01:18:8:6 刻「㫖」、整理本「旨」被存成 reading=None——
+# 体检判据 A 把这种异体位当成错例（99.99%），其实是转换没记下来。
+_CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin")
 
 
 def _pick_char(ok: bool, channel: str | None, align_char: str | None,
