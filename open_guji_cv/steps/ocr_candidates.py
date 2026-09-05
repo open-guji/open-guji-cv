@@ -43,6 +43,9 @@ class OcrCandidatesParams(BaseModel):
     scale: float = 3.0          # 送进 rec 之前的放大倍数（RapidOcrSource 默认）
     s2t: bool = True            # 简→繁扩展，见模块头
     max_out: int = 8            # 扩展后每个字位最多存几个候选
+    engine: str = "rapid"       # rapid（PP-OCRv4 mobile，6,278 字）| paddle（PP-OCRv5 server，15,907 字）
+    """引擎名进 params_hash——换引擎产物必须过期。2026-09-05 横评 v5 比 v4 高
+    10 个点（93.5% vs 83.5%），字典大 2.5 倍；见 candidates.PaddleOcrSource。"""
 
 
 @register_step
@@ -56,12 +59,16 @@ class OcrCandidatesStep(Step):
     )
 
     def _source(self, p: OcrCandidatesParams):
-        key = (p.scale, p.s2t, p.topk)
+        key = (p.engine, p.scale, p.s2t, p.topk)
         cached = getattr(self, "_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
-        from ..clustering.candidates import RapidOcrSource
-        src = RapidOcrSource(scale=p.scale, s2t=p.s2t, topk=p.topk)
+        if p.engine == "paddle":
+            from ..clustering.candidates import PaddleOcrSource
+            src = PaddleOcrSource(s2t=p.s2t, topk=p.topk)
+        else:
+            from ..clustering.candidates import RapidOcrSource
+            src = RapidOcrSource(scale=p.scale, s2t=p.s2t, topk=p.topk)
         src._ensure()
         self._cache = (key, src)          # type: ignore[attr-defined]
         return src
@@ -105,4 +112,4 @@ class OcrCandidatesStep(Step):
                 recs.append(OcrRec(id=r.id, slot=r.slot, sub=r.sub, engine=engine,
                                    topk=[(c, round(float(v), 4)) for c, v in topk]))
             out.append(ColumnOcr(col=cc.col, ok=True, chars=recs))
-        return {"ocr_candidates": PageOcr(page=page, engine=engine, columns=out)}
+        return {"ocr_candidates": PageOcr(page=page, engine=p.engine, columns=out)}
