@@ -730,10 +730,11 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**RRF 86.7/98.3**（top1/top10）。
     # 两者看的东西不一样（整体轮廓 vs 部件局部），融合比任一单源 top-1 高 11 个点。
     # 没有 checkpoint 时静默退回 HOG，界面照常。
-    from ..clustering.cnn_candidates import rrf, shared
+    from ..clustering.cnn_candidates import CNN_WEIGHT, rrf, shared
     cnn = shared()
     cnn_order = [c for c, _ in cnn.topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
-    order = rrf(hog_order, cnn_order, k=k) if cnn_order else hog_order[:k]
+    order = (rrf(hog_order, cnn_order, k=k, weights=(1.0, CNN_WEIGHT))
+             if cnn_order else hog_order[:k])
     hits = []
     for ch in order:
         h = by_char.get(ch)

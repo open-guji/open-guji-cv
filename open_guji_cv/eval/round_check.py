@@ -206,6 +206,47 @@ def tight_pages(book: str, pages: list[int], store=None) -> dict:
     return {"rows": out, "light": YELLOW if out else GREEN}
 
 
+def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
+    """判据 D：rare-char 集上「字体模板 + CNN 融合」的 top-k 命中率。
+
+    集在 `rare-char/items.jsonl`（参考答案来自用户裁决）。没有集或没装字体就报
+    `none`。CNN checkpoint 缺席时退回纯 HOG——数字会明显低，界面上要能看出来。
+    """
+    import json
+
+    f = (root or DATASET) / "rare-char" / "items.jsonl"
+    if not f.exists():
+        return {"light": "none", "note": "没有 rare-char 集"}
+    try:
+        import cv2
+        from ..clustering.cnn_candidates import CNN_WEIGHT, rrf, shared
+        from ..clustering.font_candidates import book_charset, candidates
+        from ..clustering.normalize import normalize_patch
+        from ..variants import are_variants
+    except Exception as e:
+        return {"light": "none", "note": f"依赖缺失：{e}"}
+    items = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
+    cs = tuple(book_charset("corpus/zongmu_wuyingdian_reference.txt",
+                            [i["expected"]["char"] for i in items]))
+    cnn = shared()
+    hit = n = 0
+    for it in items:
+        img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            continue
+        q = normalize_patch(img)
+        hog = [h.char for h in candidates(q, cs, k=k)]
+        cn = [c for c, _ in cnn.topk(q, cs, k=k)] if cnn.available else []
+        order = rrf(hog, cn, k=k, weights=(1.0, CNN_WEIGHT)) if cn else hog
+        g = it["expected"]["char"]
+        n += 1
+        hit += any(c == g or are_variants(c, g) for c in order)
+    rate = hit / n if n else None
+    light = GREEN if (rate or 0) >= 0.75 else (YELLOW if (rate or 0) >= 0.60 else RED)
+    return {"hit": hit, "n": n, "rate": rate, "light": light,
+            "cnn": cnn.available, "note": "" if cnn.available else "无 CNN checkpoint，纯 HOG"}
+
+
 def next_batch(book: str, n: int = 12, store=None) -> dict:
     """下一批页码：正文页里没跑过 seed_admit 的，顺序取 n 个。
 
@@ -250,4 +291,5 @@ def check(book: str, pages: list[int]) -> dict:
         "B": {**rv, "light": _light(rv["rate"], REVIEW_GREEN, REVIEW_YELLOW)},
         "C": defect_clusters(),
         "C2": tight_pages(book, pages, st),
+        "D": rare_char_recall(),
     }

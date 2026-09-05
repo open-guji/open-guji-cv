@@ -137,12 +137,31 @@ class CnnCandidates:
         return [(self._classes[idx[int(i)]], float(p)) for p, i in zip(top.values, top.indices)]
 
 
-def rrf(*orders: list[str], k: int = 10, c: int = RRF_K) -> list[str]:
-    """倒数排名融合。只看名次，不看分数——各源量纲不同，分数相加没有意义。"""
+CNN_WEIGHT = 2.0
+"""RRF 里 CNN 名次的权重（HOG = 1）。2026-09-05 扫描（unseen 1,327 / rare 21）：
+
+| w_cnn | unseen top1/5/10 | rare top1/5/10 |
+|---|---|---|
+| 1.0 | 87.9 / 97.8 / 98.3 | 66.7 / 85.7 / 90.5 |
+| 1.5 | 88.8 / 97.9 / 98.4 | 66.7 / 85.7 / 90.5 |
+| **2.0** | **89.3 / 97.7 / 98.6** | 66.7 / 85.7 / **100.0** |
+
+HOG 在最难那撮（rare）上只有 47.6% top-1，权重相等时会把 CNN 的正确答案拖出
+top-10；给 CNN 两倍权重，rare top-10 从 90.5% 回到 100%，unseen top-1 也涨。
+"""
+
+
+def rrf(*orders: list[str], k: int = 10, c: int = RRF_K,
+        weights: tuple[float, ...] | None = None) -> list[str]:
+    """倒数排名融合。只看名次，不看分数——各源量纲不同，分数相加没有意义。
+
+    `weights` 与 `orders` 一一对应；缺省全 1。生产里 HOG=1、CNN=CNN_WEIGHT。
+    """
     score: dict[str, float] = {}
-    for order in orders:
+    ws = weights or (1.0,) * len(orders)
+    for order, w in zip(orders, ws):
         for r, ch in enumerate(order):
-            score[ch] = score.get(ch, 0.0) + 1.0 / (c + r)
+            score[ch] = score.get(ch, 0.0) + w / (c + r)
     return [ch for ch, _ in sorted(score.items(), key=lambda kv: -kv[1])[:k]]
 
 
