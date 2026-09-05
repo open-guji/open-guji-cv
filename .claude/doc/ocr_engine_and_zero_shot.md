@@ -178,6 +178,11 @@ rare-char 21 条 embedding 检索 top-5 100%。原因：unseen 类的分类头�
 
 seen_test 一直 99.5%+。unseen 的瓶颈就是「字体版见得够不够多」，还没饱和。
 
+第三轮 checkpoint 的 embedding 检索：unseen **93.3 / 98.3 / 98.6**，三源 RRF
+92.6 / 98.0 / 98.6；rare-char embedding 单独 85.7 / 95.2 / 95.2（比 run-2 少中
+一条，n=21 属噪声量级，但 top-10 没到 100% 要盯着）。默认 checkpoint 仍是 run-2，
+等第四轮与权重扫描一起定。
+
 ### 2.7 磨损鲁棒性：CNN 几乎不受影响，HOG 掉 14 个点
 
 用户点名「要考虑到字符磨损的情况」。评测时给查询图加模拟磨损（腐蚀一圈 +
