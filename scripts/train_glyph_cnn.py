@@ -99,6 +99,9 @@ def main() -> int:
     ap.add_argument("--out", default="cache/glyph_cnn")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--real-frac", type=float, default=1.0,
+                    help="只用这一比例的真刻例训练（按类分层抽样）——学习曲线实验用，"
+                         "测试集不受影响")
     a = ap.parse_args()
 
     import torch
@@ -149,6 +152,17 @@ def main() -> int:
 
     t0 = time.time()
     Xtr, Ytr = load_real("seen_train")
+    if a.real_frac < 1.0:
+        # 按类分层抽样：每类至少留 1 张，避免整类消失（那会变成"少了几个类"而非"少了数据"）
+        rs = np.random.RandomState(a.seed)
+        keep: list[int] = []
+        for c in np.unique(Ytr):
+            idx = np.where(Ytr == c)[0]
+            k = max(1, int(round(len(idx) * a.real_frac)))
+            keep += list(rs.choice(idx, k, replace=False))
+        keep = np.array(sorted(keep))
+        print(f"真刻例采样 {a.real_frac:.0%}: {len(Xtr)} → {len(keep)}（{len(np.unique(Ytr))} 类全保留）")
+        Xtr, Ytr = Xtr[keep], Ytr[keep]
     Xte, Yte = load_real("seen_test")
     Xun, Yun = load_real("unseen")
     print(f"真刻例 train {len(Xtr)} / seen_test {len(Xte)} / unseen {len(Xun)}  载入 {time.time()-t0:.0f}s")
