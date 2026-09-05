@@ -48,6 +48,7 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
             if prof is None:
                 continue
             h = len(prof)
+            col_w = int(max(c.x1 for c in cc.cells) + min(c.x0 for c in cc.cells)) if cc.cells else 0
             for bi, b in enumerate(cc.boundaries[1:-1], start=1):
                 y = int(round(b))
                 if not (0 <= y < h) or prof[y] <= INK_ON_LINE:
@@ -66,7 +67,7 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
                     slot_above=up.slot, slot_below=dn.slot,
                     y0=int(round(up.y0)), y1=int(round(dn.y1)),
                     x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
-                    col_h=h,
+                    col_h=h, col_w=col_w,
                 ))
     return out
 
