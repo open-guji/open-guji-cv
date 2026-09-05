@@ -697,21 +697,45 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise HTTPException(404, f"字块读不出来 {ck}")
-    # ⚠️ 字表不能只取整理本用字。**最生僻的字恰恰是整理本里没有的那些**
-    # ——刻本刻「㕔」而整理本作「廳」、刻「䙝」而整理本作「褻」，这两个字
-    # 在整理本里频次是 0，只用整理本字表就永远召不回来（实测：㕔 从名次 1
-    # 掉到榜外）。所以并上 IDS 表里的**异体字邻居**：拿整理本字表里每个字的
-    # 异体展开一层，把 㕔/䙝 这类「本书用了但整理本没写」的形补进来。
-    cs = set(book_charset(DEFAULT_CORPUS))
+    # ── 两档字表：小表定名次，大表保召回 ──────────────────
+    #
+    # 字表不能只取整理本用字：**最生僻的字恰恰是整理本里没有的那些**
+    # ——刻本刻「㕔」而整理本作「廳」、刻「䙝」而整理本作「褻」，整理本里
+    # 频次都是 0，只用整理本字表永远召不回来（实测 㕔 从名次 1 掉到榜外）。
+    #
+    # 但直接并上异体展开（4636 → 20059 字）会把名次冲垮：多出来的一万五千
+    # 个字大多是本书不会出现的罕用形，它们在 HOG 上与正确答案难分伯仲，
+    # 于是**top-1 从 43% 掉到 29%**（rare-char 21 条实测）。用户反馈的
+    # 「点生僻字查询准确率不高」就是这个。
+    #
+    # 试过三条都不行，记下来免得重走：
+    #   本书频次加权   top3 67% → 33%（要找的字本来就罕见，频次先验反着起作用）
+    #   异体身份加权   top3 67% → 62%
+    #   相似度闸控扩表 从不触发（小表 top1 分数恒 >0.84，错的时候也高）
+    #
+    # 有效的是**位次合并**：小表 top3 占据前三名（那里最可能是对的），
+    # 其后接大表结果补召回。实测 top1 43% / top10 76%，两头都拿到。
+    cs_small = tuple(book_charset(DEFAULT_CORPUS))
+    big = set(cs_small)
     try:
         from ..variants import variants_of
-        for ch in list(cs):
+        for ch in cs_small:
             # variants_of 返回 [(字, 来源标签), ...]，取字
-            cs.update(v[0] if isinstance(v, (tuple, list)) else v
-                      for v in (variants_of(ch) or ()))
+            big.update(v[0] if isinstance(v, (tuple, list)) else v
+                       for v in (variants_of(ch) or ()))
     except Exception:
         pass
-    hits = candidates(normalize_patch(img), tuple(sorted(cs)), k=k)
+    norm = normalize_patch(img)
+    a = candidates(norm, cs_small, k=max(k, 10))
+    b = candidates(norm, tuple(sorted(big)), k=max(k, 10))
+    hits, seen = [], set()
+    for h in list(a[:3]) + list(b) + list(a[3:]):
+        if h.char in seen:
+            continue
+        seen.add(h.char)
+        hits.append(h)
+        if len(hits) >= k:
+            break
     freq = _corpus_freq(DEFAULT_CORPUS)
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
             "candidates": [{

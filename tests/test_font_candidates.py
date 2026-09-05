@@ -111,3 +111,65 @@ def test_recall_on_rare_char_set():
         hit += it["expected"]["char"] in got
     rate = hit / len(hard)
     assert rate >= 0.60, f"真难题 top-10 召回掉到 {rate:.1%}（2026-09-04 实测 78.6%）"
+
+
+def test_two_tier_charset_beats_single_table():
+    """两档字表：小表 top3 占前三、大表补后——top1 与 top10 都要拿到。
+
+    2026-09-04 用户反馈「点生僻字查询准确率不高」，量出来是字表扩张的代价：
+    并上异体展开后字表 4636 → 20059，多出的一万五千个罕用形在 HOG 上与正确
+    答案难分伯仲，**top-1 从 43% 掉到 29%**。
+
+    | 字表 | top1 | top3 | top10 |
+    |---|---|---|---|
+    | 小表（整理本 4636 字）| 43% | 71% | 71% |
+    | 大表（+异体 20059 字）| 29% | 67% | **76%** |
+    | **小表 top3 + 大表** | **43%** | **71%** | **76%** |
+
+    小表名次准但召不全（㕔/䙝 整理本频次 0，压根不在表里）；大表召得全但名次
+    被冲垮。位次合并两头都拿到。
+
+    三条无效的路（别再走）：本书频次加权把 top3 从 67% 打到 33%——要找的字
+    本来就罕见，频次先验反着起作用；异体身份加权 67% → 62%；相似度闸控扩表
+    从不触发，因为小表 top1 分数恒 >0.84，**错的时候也高**。
+    """
+    ds = Path("../open-guji-dataset/rare-char/items.jsonl")
+    if not ds.exists() or not FONTS_OK:
+        pytest.skip("没有 rare-char 集或字体")
+    import json
+
+    import cv2
+
+    from open_guji_cv.clustering.normalize import normalize_patch
+    from open_guji_cv.variants import variants_of
+
+    items = [json.loads(l) for l in ds.read_text(encoding="utf-8").splitlines()]
+    small = tuple(book_charset("corpus/zongmu_wuyingdian_reference.txt"))
+    big = set(small)
+    for ch in small:
+        big.update(v[0] if isinstance(v, (tuple, list)) else v
+                   for v in (variants_of(ch) or ()))
+    big = tuple(sorted(big))
+
+    t1 = t10 = n = 0
+    for it in items:
+        p = it["input"]["patch"]
+        img = cv2.imread(p, cv2.IMREAD_GRAYSCALE) if p else None
+        if img is None:
+            continue
+        norm = normalize_patch(img)
+        a = candidates(norm, small, k=10)
+        b = candidates(norm, big, k=10)
+        out, seen = [], set()
+        for h in list(a[:3]) + list(b) + list(a[3:]):
+            if h.char not in seen:
+                seen.add(h.char)
+                out.append(h.char)
+        out = out[:10]
+        ref = it["expected"]["char"]
+        n += 1
+        t1 += out[:1] == [ref]
+        t10 += ref in out
+    assert n
+    assert t1 / n >= 0.38, f"top-1 掉到 {t1/n:.0%}（2026-09-04 实测 43%）"
+    assert t10 / n >= 0.70, f"top-10 掉到 {t10/n:.0%}（2026-09-04 实测 76%）"
