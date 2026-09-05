@@ -539,6 +539,9 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot,
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
                     "admit": r.admit, "channel": r.channel, "char": r.char,
+                    "reading": r.reading,
+                    # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
+                    "form": (r.evidence or {}).get("form"),
                     "doubts": r.doubts,
                     "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
                            "wmax": round(mr.wmax, 1),
@@ -1072,6 +1075,90 @@ def api_evals() -> list[dict]:
 def api_eval_run(eval_id: str, timeout: int = 900) -> dict:
     from ..eval import run_eval
     return run_eval(eval_id, timeout=timeout).to_dict()
+
+
+@app.get("/api/variants/book")
+def api_variants_book(edition: str = "") -> dict:
+    """本书用字账（只读）：`config/variants/books/<edition>.json` 原样返回。
+
+    账本由 `scripts/build_book_variants.py` 从产物 + glyph.db + 整理本语料派生，
+    这里不算任何东西——控制台只是把「这本书用哪个异体」摆出来看
+    （variant_strategy.md §3.2；`variant_ledger.py` 有字段说明）。
+    """
+    import json
+
+    from ..variant_ledger import DEFAULT_EDITION, ledger_path
+
+    ed = edition or DEFAULT_EDITION
+    p = ledger_path(ed)
+    if not p.exists():
+        raise HTTPException(
+            404, f"没有用字账 {p.name}——先跑 python scripts/build_book_variants.py --edition {ed}")
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/variants/groups")
+def api_variants_groups(book: str, pages: str = "dev_set", edition: str = "",
+                        limit_tiles: int = 400) -> dict:
+    """组视图（variant_strategy.md §5.1）：按异体组把字位摊成「列 = 形、格 = 图块」。
+
+    每组两类格：**已自动放行**的（char 在组内；抽审字形保真率用）与**义定形未定**的
+    （落人审、`evidence.form.state == open`；首例确认用）。人裁过的格带 `human`。
+    组按待审数、再按格数排。裁决走既有的 confirm 事件协议，这里只出数据。
+    """
+    from ..core.book import load_book
+    from ..eval.round_check import load_verdicts
+    from ..variant_ledger import DEFAULT_EDITION, BookLedger
+
+    led = BookLedger.load_or_empty(edition or DEFAULT_EDITION)
+    if not len(led):
+        raise HTTPException(404, "没有用字账——先跑 python scripts/build_book_variants.py")
+    st = ProductStore()
+    bk = load_book(book)
+    truth = load_verdicts(book)
+    tiles: dict[str, list[dict]] = {}
+    for pg in bk.resolve_pages(pages):
+        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        if a is None:
+            continue
+        for cc in a.columns:
+            if not cc.ok:
+                continue
+            for r in cc.chars:
+                f = (r.evidence or {}).get("form") or {}
+                pending = (not r.admit) and f.get("state") == "open"
+                if r.admit and r.char and r.char in led.form_index:
+                    canon = led.form_index[r.char]
+                elif pending:
+                    canon = led.canonical(f.get("semantic", ""))
+                else:
+                    continue
+                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
+                tiles.setdefault(canon, []).append({
+                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub,
+                    "patch": f"/api/cache/{book}/char_patch/{key}.png",
+                    "char": r.char, "reading": r.reading, "channel": r.channel,
+                    "state": f.get("state") or ("lib_same" if r.admit else None),
+                    "pending": pending, "human": truth.get(r.id),
+                    "lib": f.get("lib"), "human_n": f.get("human"),
+                })
+    out = []
+    for canon, ts in tiles.items():
+        g = led.groups.get(canon)
+        if not g:
+            continue
+        n_pending = sum(1 for t in ts if t["pending"])
+        ts.sort(key=lambda t: (not t["pending"], t["page"], t["col"], t["slot"]))
+        refd = [m for m, fm in g["forms"].items() if fm["ref"] > 0 and m not in g.get("ref_minor", [])]
+        out.append({
+            "canonical": canon, "members": g["members"], "forms": g["forms"],
+            "ref_policy": g["ref_policy"], "preferred": g.get("preferred"),
+            "reading_default": refd[0] if len(refd) == 1 else canon,
+            "n_tiles": len(ts), "n_pending": n_pending,
+            "tiles": ts[:limit_tiles], "truncated": len(ts) > limit_tiles,
+        })
+    out.sort(key=lambda x: (-x["n_pending"], -x["n_tiles"], x["canonical"]))
+    return {"book": book, "pages": pages, "groups": out}
 
 
 @app.get("/api/batches.md", response_class=Response)

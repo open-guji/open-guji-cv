@@ -1,0 +1,43 @@
+{
+  "book": "hanshu_yiwenzhi",
+  "profile": "profile.json",
+  "steps_executed": [
+    {
+      "number": 1,
+      "name": "remove_watermark",
+      "folder": "s1_remove_watermark",
+      "images": 10
+    },
+    {
+      "number": 2,
+      "name": "split",
+      "folder": "s2_split",
+      "images": 20
+    },
+    {
+      "number": 3,
+      "name": "deskew",
+      "folder": "s3_deskew",
+      "images": 20
+    },
+    {
+      "number": 4,
+      "name": "crop",
+      "folder": "s4_crop",
+      "images": 20
+    }
+  ],
+  "steps_skipped": [
+    {
+      "number": 5,
+      "name": "enhance_lines",
+      "reason": "skip_steps"
+    },
+    {
+      "number": 6,
+      "name": "binarize",
+      "reason": "彩色图片"
+    }
+  ],
+  "final_output": "s4_crop"
+}

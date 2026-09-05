@@ -1,0 +1,3963 @@
+{
+ "meta": {
+  "schema": 1,
+  "edition": "wuyingdian_zongmu",
+  "books": [
+   "vol01",
+   "vol02"
+  ],
+  "built_at": "2026-09-05T22:42:07Z",
+  "inputs": {
+   "products_records": 41366,
+   "glyph_db_instances": 15482,
+   "corpus_tokens": 341241,
+   "corpus_types": 4637,
+   "book_forms": 2149
+  },
+  "stats": {
+   "groups": 87,
+   "ref_single": 29,
+   "ref_multi": 58,
+   "ref_none": 0,
+   "pairs": 7,
+   "unknown_pairs": 2
+  },
+  "note": "只由 scripts/build_book_variants.py 派生，永不手编。book 计数分来源：human > products/db > align（align 是整理本形，别信）。"
+ },
+ "groups": {
+  "中": {
+   "canonical": "中",
+   "members": [
+    "中",
+    "仲"
+   ],
+   "forms": {
+    "中": {
+     "book": {
+      "products": 175,
+      "db": 44,
+      "human": 1,
+      "align": 39
+     },
+     "ref": 1438,
+     "tier": null,
+     "sources": []
+    },
+    "仲": {
+     "book": {
+      "products": 20,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 151,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "中"
+  },
+  "乃": {
+   "canonical": "乃",
+   "members": [
+    "乃",
+    "弓"
+   ],
+   "forms": {
+    "乃": {
+     "book": {
+      "products": 56,
+      "db": 20,
+      "human": 1,
+      "align": 14
+     },
+     "ref": 652,
+     "tier": null,
+     "sources": []
+    },
+    "弓": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 64,
+     "tier": "T2",
+     "sources": [
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "乃"
+  },
+  "乾": {
+   "canonical": "乾",
+   "members": [
+    "乾",
+    "干"
+   ],
+   "forms": {
+    "乾": {
+     "book": {
+      "products": 71,
+      "db": 23,
+      "human": 2,
+      "align": 15
+     },
+     "ref": 341,
+     "tier": null,
+     "sources": []
+    },
+    "干": {
+     "book": {
+      "products": 4,
+      "db": 2,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 52,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "乾"
+  },
+  "亭": {
+   "canonical": "亭",
+   "members": [
+    "亭",
+    "停"
+   ],
+   "forms": {
+    "亭": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 31,
+     "tier": null,
+     "sources": []
+    },
+    "停": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 12,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "亭"
+  },
+  "倒": {
+   "canonical": "倒",
+   "members": [
+    "倒",
+    "到"
+   ],
+   "forms": {
+    "倒": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 1,
+      "align": 1
+     },
+     "ref": 34,
+     "tier": null,
+     "sources": []
+    },
+    "到": {
+     "book": {
+      "products": 16,
+      "db": 13,
+      "human": 0,
+      "align": 12
+     },
+     "ref": 22,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "到"
+  },
+  "僭": {
+   "canonical": "僭",
+   "members": [
+    "僣",
+    "僭"
+   ],
+   "forms": {
+    "僣": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "僭": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 20,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "僭"
+  },
+  "凜": {
+   "canonical": "凜",
+   "members": [
+    "凛",
+    "凜"
+   ],
+   "forms": {
+    "凛": {
+     "book": {
+      "products": 3,
+      "db": 3,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "凜": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "凛"
+  },
+  "功": {
+   "canonical": "功",
+   "members": [
+    "功",
+    "紅"
+   ],
+   "forms": {
+    "功": {
+     "book": {
+      "products": 11,
+      "db": 4,
+      "human": 0,
+      "align": 3
+     },
+     "ref": 109,
+     "tier": null,
+     "sources": []
+    },
+    "紅": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "功"
+  },
+  "劫": {
+   "canonical": "劫",
+   "members": [
+    "刦",
+    "刼",
+    "劫"
+   ],
+   "forms": {
+    "刦": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 2,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "刼": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "劫": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "刼",
+    "劫"
+   ],
+   "preferred": "刦"
+  },
+  "勛": {
+   "canonical": "勛",
+   "members": [
+    "勛",
+    "勲"
+   ],
+   "forms": {
+    "勛": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 7,
+     "tier": null,
+     "sources": []
+    },
+    "勲": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 20,
+     "tier": "T2",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "勲"
+  },
+  "即": {
+   "canonical": "即",
+   "members": [
+    "即",
+    "卽",
+    "皍"
+   ],
+   "forms": {
+    "即": {
+     "book": {
+      "products": 40,
+      "db": 15,
+      "human": 0,
+      "align": 15
+     },
+     "ref": 563,
+     "tier": null,
+     "sources": []
+    },
+    "卽": {
+     "book": {
+      "products": 34,
+      "db": 18,
+      "human": 5,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "皍": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T2",
+     "sources": [
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {
+    "卽→即": {
+     "n": 19,
+     "human": 0,
+     "auto": 19,
+     "channels": {
+      "match_replace": 19
+     },
+     "first": "vol01:7:8:14",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "ref_policy": "single",
+   "ref_minor": [
+    "皍"
+   ],
+   "preferred": "卽"
+  },
+  "哲": {
+   "canonical": "哲",
+   "members": [
+    "哲",
+    "喆",
+    "悊"
+   ],
+   "forms": {
+    "哲": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 6,
+     "tier": null,
+     "sources": []
+    },
+    "喆": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "悊": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [
+    "悊"
+   ],
+   "preferred": "喆"
+  },
+  "啟": {
+   "canonical": "啟",
+   "members": [
+    "啓",
+    "啟"
+   ],
+   "forms": {
+    "啓": {
+     "book": {
+      "products": 10,
+      "db": 3,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 179,
+     "tier": "T2",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSpoofingVariant",
+      "yitizi"
+     ]
+    },
+    "啟": {
+     "book": {
+      "products": 10,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "啓"
+  },
+  "回": {
+   "canonical": "回",
+   "members": [
+    "囘",
+    "回",
+    "迴"
+   ],
+   "forms": {
+    "囘": {
+     "book": {
+      "products": 0,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "回": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 15,
+     "tier": null,
+     "sources": []
+    },
+    "迴": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "囘"
+  },
+  "奇": {
+   "canonical": "奇",
+   "members": [
+    "奇",
+    "畸"
+   ],
+   "forms": {
+    "奇": {
+     "book": {
+      "products": 10,
+      "db": 3,
+      "human": 0,
+      "align": 3
+     },
+     "ref": 285,
+     "tier": null,
+     "sources": []
+    },
+    "畸": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "奇"
+  },
+  "女": {
+   "canonical": "女",
+   "members": [
+    "女",
+    "汝"
+   ],
+   "forms": {
+    "女": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 91,
+     "tier": null,
+     "sources": []
+    },
+    "汝": {
+     "book": {
+      "products": 11,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 74,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "hydzd-borrowed"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "汝"
+  },
+  "寇": {
+   "canonical": "寇",
+   "members": [
+    "㓂",
+    "寇"
+   ],
+   "forms": {
+    "㓂": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu"
+     ]
+    },
+    "寇": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 12,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "㓂"
+  },
+  "崖": {
+   "canonical": "崖",
+   "members": [
+    "厓",
+    "崖",
+    "涯"
+   ],
+   "forms": {
+    "厓": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "崖": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 13,
+     "tier": null,
+     "sources": []
+    },
+    "涯": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "厓"
+  },
+  "州": {
+   "canonical": "州",
+   "members": [
+    "州",
+    "洲"
+   ],
+   "forms": {
+    "州": {
+     "book": {
+      "products": 37,
+      "db": 4,
+      "human": 0,
+      "align": 4
+     },
+     "ref": 317,
+     "tier": null,
+     "sources": []
+    },
+    "洲": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 17,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "州"
+  },
+  "已": {
+   "canonical": "已",
+   "members": [
+    "已",
+    "巳"
+   ],
+   "forms": {
+    "已": {
+     "book": {
+      "products": 51,
+      "db": 26,
+      "human": 8,
+      "align": 18
+     },
+     "ref": 599,
+     "tier": null,
+     "sources": []
+    },
+    "巳": {
+     "book": {
+      "products": 6,
+      "db": 9,
+      "human": 9,
+      "align": 0
+     },
+     "ref": 198,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {
+    "巳→已": {
+     "n": 5,
+     "human": 5,
+     "auto": 0,
+     "channels": {},
+     "first": "vol01:8:2:11",
+     "sources": [
+      "hydzd",
+      "yitizi"
+     ]
+    }
+   },
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "已"
+  },
+  "廳": {
+   "canonical": "廳",
+   "members": [
+    "㕔",
+    "廳"
+   ],
+   "forms": {
+    "㕔": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "twedu"
+     ]
+    },
+    "廳": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "㕔"
+  },
+  "彙": {
+   "canonical": "彙",
+   "members": [
+    "彙",
+    "彚"
+   ],
+   "forms": {
+    "彙": {
+     "book": {
+      "products": 5,
+      "db": 4,
+      "human": 0,
+      "align": 3
+     },
+     "ref": 64,
+     "tier": null,
+     "sources": []
+    },
+    "彚": {
+     "book": {
+      "products": 10,
+      "db": 11,
+      "human": 8,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {
+    "彚→彙": {
+     "n": 10,
+     "human": 0,
+     "auto": 10,
+     "channels": {
+      "match_replace": 10
+     },
+     "first": "vol01:7:7:16",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "彚"
+  },
+  "彝": {
+   "canonical": "彝",
+   "members": [
+    "彛",
+    "彜",
+    "彝",
+    "彞",
+    "𢑴"
+   ],
+   "forms": {
+    "彛": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 60,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "彜": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 15,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "yitizi"
+     ]
+    },
+    "彝": {
+     "book": {
+      "products": 17,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 180,
+     "tier": null,
+     "sources": []
+    },
+    "彞": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "𢑴": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "彝"
+  },
+  "復": {
+   "canonical": "復",
+   "members": [
+    "復",
+    "覆"
+   ],
+   "forms": {
+    "復": {
+     "book": {
+      "products": 51,
+      "db": 18,
+      "human": 1,
+      "align": 15
+     },
+     "ref": 399,
+     "tier": null,
+     "sources": []
+    },
+    "覆": {
+     "book": {
+      "products": 15,
+      "db": 7,
+      "human": 1,
+      "align": 5
+     },
+     "ref": 57,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "hydzd-borrowed",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "復"
+  },
+  "抗": {
+   "canonical": "抗",
+   "members": [
+    "伉",
+    "抗"
+   ],
+   "forms": {
+    "伉": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    },
+    "抗": {
+     "book": {
+      "products": 3,
+      "db": 4,
+      "human": 0,
+      "align": 4
+     },
+     "ref": 10,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "伉"
+   ],
+   "preferred": "抗"
+  },
+  "效": {
+   "canonical": "效",
+   "members": [
+    "効",
+    "效"
+   ],
+   "forms": {
+    "効": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "效": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 12,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "効"
+   ],
+   "preferred": "效"
+  },
+  "敕": {
+   "canonical": "敕",
+   "members": [
+    "勅",
+    "敕"
+   ],
+   "forms": {
+    "勅": {
+     "book": {
+      "products": 5,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 23,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "敕": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "敕"
+   ],
+   "preferred": "勅"
+  },
+  "有": {
+   "canonical": "有",
+   "members": [
+    "有",
+    "洧"
+   ],
+   "forms": {
+    "有": {
+     "book": {
+      "products": 355,
+      "db": 122,
+      "human": 0,
+      "align": 108
+     },
+     "ref": 2899,
+     "tier": null,
+     "sources": []
+    },
+    "洧": {
+     "book": {
+      "products": 1,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 4,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "洧"
+   ],
+   "preferred": "有"
+  },
+  "板": {
+   "canonical": "板",
+   "members": [
+    "板",
+    "版"
+   ],
+   "forms": {
+    "板": {
+     "book": {
+      "products": 11,
+      "db": 8,
+      "human": 0,
+      "align": 7
+     },
+     "ref": 58,
+     "tier": null,
+     "sources": []
+    },
+    "版": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "板"
+  },
+  "柏": {
+   "canonical": "柏",
+   "members": [
+    "柏",
+    "栢"
+   ],
+   "forms": {
+    "柏": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 36,
+     "tier": null,
+     "sources": []
+    },
+    "栢": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 11,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "栢"
+  },
+  "梅": {
+   "canonical": "梅",
+   "members": [
+    "梅",
+    "楳"
+   ],
+   "forms": {
+    "梅": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 36,
+     "tier": null,
+     "sources": []
+    },
+    "楳": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 11,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "楳"
+  },
+  "概": {
+   "canonical": "概",
+   "members": [
+    "概",
+    "槩"
+   ],
+   "forms": {
+    "概": {
+     "book": {
+      "products": 3,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 22,
+     "tier": null,
+     "sources": []
+    },
+    "槩": {
+     "book": {
+      "products": 5,
+      "db": 7,
+      "human": 4,
+      "align": 3
+     },
+     "ref": 48,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "槩"
+  },
+  "檃": {
+   "canonical": "檃",
+   "members": [
+    "檃",
+    "櫽"
+   ],
+   "forms": {
+    "檃": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    },
+    "櫽": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {
+    "櫽→檃": {
+     "n": 1,
+     "human": 0,
+     "auto": 1,
+     "channels": {
+      "match_replace": 1
+     },
+     "first": "vol01:8:9:13",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    }
+   },
+   "ref_policy": "single",
+   "ref_minor": [
+    "檃"
+   ],
+   "preferred": "櫽"
+  },
+  "歡": {
+   "canonical": "歡",
+   "members": [
+    "懽",
+    "歡"
+   ],
+   "forms": {
+    "懽": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "歡": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "懽"
+   ],
+   "preferred": "懽"
+  },
+  "正": {
+   "canonical": "正",
+   "members": [
+    "政",
+    "正"
+   ],
+   "forms": {
+    "政": {
+     "book": {
+      "products": 27,
+      "db": 14,
+      "human": 1,
+      "align": 12
+     },
+     "ref": 158,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "hydzd-borrowed"
+     ]
+    },
+    "正": {
+     "book": {
+      "products": 96,
+      "db": 44,
+      "human": 1,
+      "align": 40
+     },
+     "ref": 799,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "正"
+  },
+  "歷": {
+   "canonical": "歷",
+   "members": [
+    "厯",
+    "歷"
+   ],
+   "forms": {
+    "厯": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T2",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "歷": {
+     "book": {
+      "products": 18,
+      "db": 14,
+      "human": 0,
+      "align": 11
+     },
+     "ref": 119,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {
+    "厯→歷": {
+     "n": 1,
+     "human": 0,
+     "auto": 1,
+     "channels": {
+      "match_replace": 1
+     },
+     "first": "vol01:5:4:10",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "歷"
+  },
+  "毀": {
+   "canonical": "毀",
+   "members": [
+    "毀",
+    "毁"
+   ],
+   "forms": {
+    "毀": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 3,
+     "tier": null,
+     "sources": []
+    },
+    "毁": {
+     "book": {
+      "products": 5,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 19,
+     "tier": "T2",
+     "sources": [
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "毁"
+  },
+  "決": {
+   "canonical": "決",
+   "members": [
+    "决",
+    "決"
+   ],
+   "forms": {
+    "决": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 22,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "決": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 22,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "决"
+  },
+  "沒": {
+   "canonical": "沒",
+   "members": [
+    "沒",
+    "没"
+   ],
+   "forms": {
+    "沒": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": null,
+     "sources": []
+    },
+    "没": {
+     "book": {
+      "products": 5,
+      "db": 3,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 35,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "没"
+  },
+  "況": {
+   "canonical": "況",
+   "members": [
+    "兄",
+    "况",
+    "況"
+   ],
+   "forms": {
+    "兄": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 45,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    },
+    "况": {
+     "book": {
+      "products": 5,
+      "db": 4,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 21,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "況": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 9,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "况"
+  },
+  "注": {
+   "canonical": "注",
+   "members": [
+    "注",
+    "註"
+   ],
+   "forms": {
+    "注": {
+     "book": {
+      "products": 59,
+      "db": 6,
+      "human": 0,
+      "align": 5
+     },
+     "ref": 748,
+     "tier": null,
+     "sources": []
+    },
+    "註": {
+     "book": {
+      "products": 31,
+      "db": 12,
+      "human": 3,
+      "align": 9
+     },
+     "ref": 526,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {
+    "註→注": {
+     "n": 1,
+     "human": 0,
+     "auto": 1,
+     "channels": {
+      "match_replace": 1
+     },
+     "first": "vol02:24:1:10",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "注"
+  },
+  "溫": {
+   "canonical": "溫",
+   "members": [
+    "温",
+    "溫"
+   ],
+   "forms": {
+    "温": {
+     "book": {
+      "products": 12,
+      "db": 2,
+      "human": 1,
+      "align": 1
+     },
+     "ref": 38,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "溫": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "溫"
+   ],
+   "preferred": "温"
+  },
+  "濬": {
+   "canonical": "濬",
+   "members": [
+    "浚",
+    "濬"
+   ],
+   "forms": {
+    "浚": {
+     "book": {
+      "products": 2,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 11,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "濬": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 24,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "浚"
+  },
+  "瀾": {
+   "canonical": "瀾",
+   "members": [
+    "漣",
+    "瀾"
+   ],
+   "forms": {
+    "漣": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 3,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    },
+    "瀾": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 30,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "漣"
+  },
+  "無": {
+   "canonical": "無",
+   "members": [
+    "无",
+    "無",
+    "蕪"
+   ],
+   "forms": {
+    "无": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 41,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "無": {
+     "book": {
+      "products": 145,
+      "db": 57,
+      "human": 3,
+      "align": 47
+     },
+     "ref": 1370,
+     "tier": null,
+     "sources": []
+    },
+    "蕪": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 17,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "無"
+  },
+  "煙": {
+   "canonical": "煙",
+   "members": [
+    "烟",
+    "煙"
+   ],
+   "forms": {
+    "烟": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 3,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "煙": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "煙"
+   ],
+   "preferred": "烟"
+  },
+  "爐": {
+   "canonical": "爐",
+   "members": [
+    "爐",
+    "鑪"
+   ],
+   "forms": {
+    "爐": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": null,
+     "sources": []
+    },
+    "鑪": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "dypytz",
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "鑪"
+  },
+  "獎": {
+   "canonical": "獎",
+   "members": [
+    "奬",
+    "獎"
+   ],
+   "forms": {
+    "奬": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kZVariant",
+      "yitizi"
+     ]
+    },
+    "獎": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "獎"
+   ],
+   "preferred": "奬"
+  },
+  "琅": {
+   "canonical": "琅",
+   "members": [
+    "琅",
+    "瑯"
+   ],
+   "forms": {
+    "琅": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 6,
+     "tier": null,
+     "sources": []
+    },
+    "瑯": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "瑯"
+  },
+  "璿": {
+   "canonical": "璿",
+   "members": [
+    "璇",
+    "璿"
+   ],
+   "forms": {
+    "璇": {
+     "book": {
+      "products": 6,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 8,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "璿": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "璇"
+  },
+  "甚": {
+   "canonical": "甚",
+   "members": [
+    "什",
+    "甚"
+   ],
+   "forms": {
+    "什": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 26,
+     "tier": "T2",
+     "sources": [
+      "twedu"
+     ]
+    },
+    "甚": {
+     "book": {
+      "products": 26,
+      "db": 10,
+      "human": 0,
+      "align": 10
+     },
+     "ref": 218,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "甚"
+  },
+  "略": {
+   "canonical": "略",
+   "members": [
+    "略",
+    "畧"
+   ],
+   "forms": {
+    "略": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 43,
+     "tier": null,
+     "sources": []
+    },
+    "畧": {
+     "book": {
+      "products": 38,
+      "db": 15,
+      "human": 3,
+      "align": 7
+     },
+     "ref": 249,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "畧"
+  },
+  "疏": {
+   "canonical": "疏",
+   "members": [
+    "䟽",
+    "疎",
+    "疏",
+    "踈"
+   ],
+   "forms": {
+    "䟽": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 7,
+     "tier": "T2",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "疎": {
+     "book": {
+      "products": 3,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 42,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "疏": {
+     "book": {
+      "products": 41,
+      "db": 20,
+      "human": 0,
+      "align": 20
+     },
+     "ref": 544,
+     "tier": null,
+     "sources": []
+    },
+    "踈": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 7,
+     "tier": "T2",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "疏"
+  },
+  "睹": {
+   "canonical": "睹",
+   "members": [
+    "睹",
+    "覩"
+   ],
+   "forms": {
+    "睹": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 15,
+     "tier": null,
+     "sources": []
+    },
+    "覩": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 8,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "覩"
+  },
+  "瞭": {
+   "canonical": "瞭",
+   "members": [
+    "了",
+    "瞭"
+   ],
+   "forms": {
+    "了": {
+     "book": {
+      "products": 13,
+      "db": 3,
+      "human": 1,
+      "align": 1
+     },
+     "ref": 42,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "瞭": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "瞭"
+   ],
+   "preferred": "了"
+  },
+  "礙": {
+   "canonical": "礙",
+   "members": [
+    "碍",
+    "礙"
+   ],
+   "forms": {
+    "碍": {
+     "book": {
+      "products": 7,
+      "db": 6,
+      "human": 0,
+      "align": 4
+     },
+     "ref": 8,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "礙": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "碍"
+  },
+  "祐": {
+   "canonical": "祐",
+   "members": [
+    "佑",
+    "祐"
+   ],
+   "forms": {
+    "佑": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 3,
+     "tier": "T1",
+     "sources": [
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "祐": {
+     "book": {
+      "products": 8,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 60,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "祐"
+  },
+  "祕": {
+   "canonical": "祕",
+   "members": [
+    "祕",
+    "秘"
+   ],
+   "forms": {
+    "祕": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": null,
+     "sources": []
+    },
+    "秘": {
+     "book": {
+      "products": 15,
+      "db": 9,
+      "human": 3,
+      "align": 2
+     },
+     "ref": 58,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "秘"
+  },
+  "秕": {
+   "canonical": "秕",
+   "members": [
+    "秕",
+    "粃"
+   ],
+   "forms": {
+    "秕": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    },
+    "粃": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 2,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "秕"
+   ],
+   "preferred": "粃"
+  },
+  "稿": {
+   "canonical": "稿",
+   "members": [
+    "稾",
+    "稿",
+    "蒿",
+    "藁"
+   ],
+   "forms": {
+    "稾": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 6,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "稿": {
+     "book": {
+      "products": 7,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 77,
+     "tier": null,
+     "sources": []
+    },
+    "蒿": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 6,
+     "tier": null,
+     "sources": []
+    },
+    "藁": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 14,
+     "tier": "T2",
+     "sources": [
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "稿"
+  },
+  "穎": {
+   "canonical": "穎",
+   "members": [
+    "穎",
+    "頴"
+   ],
+   "forms": {
+    "穎": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 19,
+     "tier": null,
+     "sources": []
+    },
+    "頴": {
+     "book": {
+      "products": 3,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 49,
+     "tier": "T2",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "頴"
+  },
+  "穿": {
+   "canonical": "穿",
+   "members": [
+    "串",
+    "穿"
+   ],
+   "forms": {
+    "串": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 10,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    },
+    "穿": {
+     "book": {
+      "products": 4,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 86,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "穿"
+  },
+  "第": {
+   "canonical": "第",
+   "members": [
+    "第",
+    "苐"
+   ],
+   "forms": {
+    "第": {
+     "book": {
+      "products": 28,
+      "db": 7,
+      "human": 0,
+      "align": 7
+     },
+     "ref": 282,
+     "tier": null,
+     "sources": []
+    },
+    "苐": {
+     "book": {
+      "products": 2,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "第"
+  },
+  "籤": {
+   "canonical": "籤",
+   "members": [
+    "簽",
+    "籖",
+    "籤"
+   ],
+   "forms": {
+    "簽": {
+     "book": {
+      "products": 6,
+      "db": 5,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 8,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    },
+    "籖": {
+     "book": {
+      "products": 4,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 5,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "籤": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [
+    "籤"
+   ],
+   "preferred": "簽"
+  },
+  "納": {
+   "canonical": "納",
+   "members": [
+    "納",
+    "衲"
+   ],
+   "forms": {
+    "納": {
+     "book": {
+      "products": 5,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 62,
+     "tier": null,
+     "sources": []
+    },
+    "衲": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 3,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "納"
+  },
+  "考": {
+   "canonical": "考",
+   "members": [
+    "攷",
+    "考"
+   ],
+   "forms": {
+    "攷": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 31,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "考": {
+     "book": {
+      "products": 118,
+      "db": 26,
+      "human": 0,
+      "align": 25
+     },
+     "ref": 1256,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "考"
+  },
+  "船": {
+   "canonical": "船",
+   "members": [
+    "舡",
+    "船"
+   ],
+   "forms": {
+    "舡": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant"
+     ]
+    },
+    "船": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "舡"
+   ],
+   "preferred": "舡"
+  },
+  "茲": {
+   "canonical": "茲",
+   "members": [
+    "兹",
+    "茲"
+   ],
+   "forms": {
+    "兹": {
+     "book": {
+      "products": 3,
+      "db": 5,
+      "human": 1,
+      "align": 3
+     },
+     "ref": 30,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "茲": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "茲"
+   ],
+   "preferred": "兹"
+  },
+  "蓋": {
+   "canonical": "蓋",
+   "members": [
+    "盖",
+    "葢",
+    "蓋"
+   ],
+   "forms": {
+    "盖": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "葢": {
+     "book": {
+      "products": 36,
+      "db": 3,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 791,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "蓋": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "盖"
+   ],
+   "preferred": "葢"
+  },
+  "蠹": {
+   "canonical": "蠹",
+   "members": [
+    "蠧",
+    "蠹"
+   ],
+   "forms": {
+    "蠧": {
+     "book": {
+      "products": 3,
+      "db": 2,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 6,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "蠹": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "蠹"
+   ],
+   "preferred": "蠧"
+  },
+  "衛": {
+   "canonical": "衛",
+   "members": [
+    "衛",
+    "衞"
+   ],
+   "forms": {
+    "衛": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 44,
+     "tier": null,
+     "sources": []
+    },
+    "衞": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 33,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "衞"
+  },
+  "裨": {
+   "canonical": "裨",
+   "members": [
+    "禆",
+    "裨"
+   ],
+   "forms": {
+    "禆": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 3,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    },
+    "裨": {
+     "book": {
+      "products": 6,
+      "db": 4,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 26,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "裨"
+  },
+  "褒": {
+   "canonical": "褒",
+   "members": [
+    "裒",
+    "褒",
+    "襃"
+   ],
+   "forms": {
+    "裒": {
+     "book": {
+      "products": 14,
+      "db": 6,
+      "human": 2,
+      "align": 3
+     },
+     "ref": 47,
+     "tier": "T2",
+     "sources": [
+      "twedu"
+     ]
+    },
+    "褒": {
+     "book": {
+      "products": 2,
+      "db": 5,
+      "human": 1,
+      "align": 4
+     },
+     "ref": 27,
+     "tier": null,
+     "sources": []
+    },
+    "襃": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [
+    "襃"
+   ],
+   "preferred": "裒"
+  },
+  "褻": {
+   "canonical": "褻",
+   "members": [
+    "䙝",
+    "褻"
+   ],
+   "forms": {
+    "䙝": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "褻": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "䙝"
+  },
+  "證": {
+   "canonical": "證",
+   "members": [
+    "証",
+    "證"
+   ],
+   "forms": {
+    "証": {
+     "book": {
+      "products": 5,
+      "db": 3,
+      "human": 3,
+      "align": 0
+     },
+     "ref": 108,
+     "tier": "T1",
+     "sources": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "證": {
+     "book": {
+      "products": 24,
+      "db": 6,
+      "human": 0,
+      "align": 6
+     },
+     "ref": 312,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "證"
+  },
+  "變": {
+   "canonical": "變",
+   "members": [
+    "變",
+    "𠮓"
+   ],
+   "forms": {
+    "變": {
+     "book": {
+      "products": 52,
+      "db": 6,
+      "human": 0,
+      "align": 6
+     },
+     "ref": 469,
+     "tier": null,
+     "sources": []
+    },
+    "𠮓": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "twedu"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [],
+   "preferred": "變"
+  },
+  "豬": {
+   "canonical": "豬",
+   "members": [
+    "猪",
+    "豬"
+   ],
+   "forms": {
+    "猪": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "豬": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "猪",
+    "豬"
+   ],
+   "preferred": "猪"
+  },
+  "跡": {
+   "canonical": "跡",
+   "members": [
+    "跡",
+    "迹"
+   ],
+   "forms": {
+    "跡": {
+     "book": {
+      "products": 4,
+      "db": 4,
+      "human": 1,
+      "align": 1
+     },
+     "ref": 25,
+     "tier": null,
+     "sources": []
+    },
+    "迹": {
+     "book": {
+      "products": 6,
+      "db": 4,
+      "human": 1,
+      "align": 2
+     },
+     "ref": 104,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "迹"
+  },
+  "遍": {
+   "canonical": "遍",
+   "members": [
+    "徧",
+    "遍"
+   ],
+   "forms": {
+    "徧": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 6,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "遍": {
+     "book": {
+      "products": 1,
+      "db": 1,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "遍"
+   ],
+   "preferred": "徧"
+  },
+  "邪": {
+   "canonical": "邪",
+   "members": [
+    "耶",
+    "邪"
+   ],
+   "forms": {
+    "耶": {
+     "book": {
+      "products": 3,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 54,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "twedu"
+     ]
+    },
+    "邪": {
+     "book": {
+      "products": 2,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 15,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "耶"
+  },
+  "鉤": {
+   "canonical": "鉤",
+   "members": [
+    "鈎",
+    "鉤"
+   ],
+   "forms": {
+    "鈎": {
+     "book": {
+      "products": 1,
+      "db": 3,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 15,
+     "tier": "T2",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "鉤": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 26,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "鈎"
+  },
+  "隸": {
+   "canonical": "隸",
+   "members": [
+    "隷",
+    "隸",
+    "𨽾"
+   ],
+   "forms": {
+    "隷": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 16,
+     "tier": "T1",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kZVariant",
+      "yitizi"
+     ]
+    },
+    "隸": {
+     "book": {
+      "products": 7,
+      "db": 5,
+      "human": 0,
+      "align": 4
+     },
+     "ref": 46,
+     "tier": null,
+     "sources": []
+    },
+    "𨽾": {
+     "book": {
+      "products": 2,
+      "db": 3,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 0,
+     "tier": "T1",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "pairs": {
+    "𨽾→隸": {
+     "n": 1,
+     "human": 0,
+     "auto": 1,
+     "channels": {
+      "match_replace": 1
+     },
+     "first": "vol01:10:3:16",
+     "sources": [
+      "hydzd"
+     ]
+    }
+   },
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "隸"
+  },
+  "雲": {
+   "canonical": "雲",
+   "members": [
+    "云",
+    "雲"
+   ],
+   "forms": {
+    "云": {
+     "book": {
+      "products": 89,
+      "db": 2,
+      "human": 0,
+      "align": 1
+     },
+     "ref": 1023,
+     "tier": "T1",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "雲": {
+     "book": {
+      "products": 4,
+      "db": 4,
+      "human": 0,
+      "align": 4
+     },
+     "ref": 74,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "云"
+  },
+  "顏": {
+   "canonical": "顏",
+   "members": [
+    "顏",
+    "顔"
+   ],
+   "forms": {
+    "顏": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": null,
+     "sources": []
+    },
+    "顔": {
+     "book": {
+      "products": 1,
+      "db": 2,
+      "human": 0,
+      "align": 2
+     },
+     "ref": 16,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "顏"
+   ],
+   "preferred": "顔"
+  },
+  "驗": {
+   "canonical": "驗",
+   "members": [
+    "騐",
+    "驗"
+   ],
+   "forms": {
+    "騐": {
+     "book": {
+      "products": 1,
+      "db": 2,
+      "human": 2,
+      "align": 0
+     },
+     "ref": 13,
+     "tier": "T1",
+     "sources": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ]
+    },
+    "驗": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 39,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "騐"
+  },
+  "髮": {
+   "canonical": "髮",
+   "members": [
+    "髪",
+    "髮"
+   ],
+   "forms": {
+    "髪": {
+     "book": {
+      "products": 0,
+      "db": 1,
+      "human": 1,
+      "align": 0
+     },
+     "ref": 1,
+     "tier": "T1",
+     "sources": [
+      "twedu",
+      "yitizi"
+     ]
+    },
+    "髮": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 15,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "single",
+   "ref_minor": [
+    "髪"
+   ],
+   "preferred": "髪"
+  },
+  "鬱": {
+   "canonical": "鬱",
+   "members": [
+    "郁",
+    "鬱"
+   ],
+   "forms": {
+    "郁": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 4,
+     "tier": "T2",
+     "sources": [
+      "cjkvi-simplified",
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ]
+    },
+    "鬱": {
+     "book": {
+      "products": 0,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 5,
+     "tier": null,
+     "sources": []
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "郁"
+  }
+ },
+ "unknown_pairs": [
+  {
+   "n": 5,
+   "human": 0,
+   "auto": 5,
+   "channels": {
+    "match_replace": 5
+   },
+   "first": "vol01:11:4:21",
+   "sources": [],
+   "shape": "㫖",
+   "reading": "旨",
+   "why": "no_edge"
+  },
+  {
+   "n": 1,
+   "human": 1,
+   "auto": 0,
+   "channels": {},
+   "first": "vol01:21:3:19",
+   "sources": [],
+   "shape": "巳",
+   "reading": "己",
+   "why": "no_edge"
+  }
+ ]
+}

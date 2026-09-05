@@ -1,0 +1,27 @@
+{
+  "color_mode": "colored",
+  "background_color": "orange",
+  "text_color": "black",
+  "border_color": "orange",
+  "page_type": "spread",
+  "lines_per_page": 10,
+  "border_style": "double",
+  "border_wear": "medium",
+  "interferences": [
+    "spine_shadow",
+    "watermark"
+  ],
+  "skip_pages": [],
+  "skip_steps": [
+    "enhance_lines"
+  ],
+  "chars_per_line": 21,
+  "has_marginal_notes": false,
+  "auto_detected": true,
+  "detection_confidence": {
+    "color_mode": 1.0,
+    "page_type": 0.9785475792988313,
+    "lines_per_page": 0.5,
+    "spine_shadow": 0.8
+  }
+}
