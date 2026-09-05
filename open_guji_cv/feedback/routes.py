@@ -36,6 +36,11 @@ DEFAULT_ROUTES: list[dict] = [
     # 拖切线（2026-09-05）：粘连格线的理想切点，落 touching-cuts 金标（现役 Step2 列图坐标）
     {"match": {"kind": "cutline"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/touching-cuts"}]},
+    # 切线卡片上标了「界行/版框压进裁片」的，同时反馈给上游：这一格是 side-rule（侧边界行
+    # 残余）的正样本——用户 2026-09-05：「带边框的应该反馈到上游，我们希望边框都被清除了」。
+    {"match": {"kind": "cutline", "payload.tags": "border"},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/side-rule",
+             "extra": {"seed": "cutline_border"}}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，
@@ -62,7 +67,13 @@ class Route:
 
     def hits(self, e: Event) -> bool:
         for path, want in self.match.items():
-            if _get(e, path) != want:
+            got = _get(e, path)
+            # 实际值是列表（如 payload.tags）时，规则写一个标量表示"包含"
+            if isinstance(got, list) and not isinstance(want, list):
+                if want not in got:
+                    return False
+                continue
+            if got != want:
                 return False
         return True
 

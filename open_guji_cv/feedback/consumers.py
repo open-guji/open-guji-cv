@@ -88,11 +88,16 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             res.errors.append(f"{e.id}: 路由没给 shard")
             continue
         t = e.target
+        expected = _expected_of(e)
+        if e.kind == "cutline" and d.shard.endswith("/side-rule"):
+            # 同一条切线事件路由到上游 side-rule 时，金标语义变成「这一格有界行残余」，
+            # 不带切点字段（那是 touching-cuts 的事）。
+            expected = {"side_rule": True, "note": e.payload.get("note") or "切线卡片：界行/版框压进裁片"}
         item = GoldItem(
             id=t.key,
             anchor=Anchor(book=t.book, page=t.page, col=t.col, slot=t.slot,
                           **(t.anchor or {})),
-            expected=_expected_of(e),
+            expected=expected,
             label_origin="human" if e.actor == "user" else ("align" if e.actor == "align" else "model"),
             stratum=e.payload.get("stratum"),
             stratum_weight=e.payload.get("stratum_weight"),

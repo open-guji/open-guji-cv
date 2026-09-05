@@ -46,3 +46,13 @@ def test_pick_cases_spreads_over_pages_and_is_deterministic():
     # 轮转：只有 2 条的页全进；三个大页各拿到接近 1/3，而不是一页包场
     assert by_page[15] == 2
     assert all(8 <= by_page[p] <= 10 for p in (44, 71, 72)), by_page
+
+
+def test_cutline_with_border_tag_also_feeds_side_rule():
+    """标了「界行/版框」的切线事件要同时反馈上游：side-rule 正样本（用户 2026-09-05）。"""
+    e = _evt({"y": 1980, "y_old": 1980, "verdict": "ok", "tags": ["border"]})
+    dests = RouteTable.load().destinations(e)
+    shards = {d.shard for d in dests if d.consumer == "gold_add"}
+    assert "char-segmentation/touching-cuts" in shards and "char-segmentation/side-rule" in shards, shards
+    plain = _evt({"y": 1980, "y_old": 1980, "verdict": "ok"})
+    assert "char-segmentation/side-rule" not in {d.shard for d in RouteTable.load().destinations(plain)}
