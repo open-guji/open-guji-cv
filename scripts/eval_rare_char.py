@@ -25,6 +25,8 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--paddle", action="store_true",
+                    help="加 PP-OCRv5 一列（子进程 worker，见 candidates.PaddleOcrSource）")
     a = ap.parse_args()
 
     from open_guji_cv.clustering.font_candidates import book_charset, candidates
@@ -37,6 +39,12 @@ def main() -> int:
     # 字表：整理本用字 + 集里的参考答案（有些字整理本自己都没有，如 䙝 㕔）
     charset = book_charset(a.corpus, [i["expected"]["char"] for i in items])
     print(f"字表 {len(charset)} 字；样本 {len(items)} 条")
+
+    paddle = None
+    if a.paddle:
+        from open_guji_cv.clustering.candidates import PaddleOcrSource
+        paddle = PaddleOcrSource(topk=5)
+        paddle._ensure()
 
     rows = []
     for it in items:
@@ -51,6 +59,9 @@ def main() -> int:
         if img is not None:
             norm = normalize_patch(img)
             hits = [h.char for h in candidates(norm, charset, k=a.k)]
+        pd = []
+        if paddle is not None and img is not None:
+            pd = [c for c, _ in paddle.rec_topk(img)]
         rows.append({
             "id": it["id"], "ref": ref, "freq": exp["corpus_freq"],
             "hard": not exp["in_candidates"],
@@ -58,6 +69,9 @@ def main() -> int:
             "font_hit": ref in hits,
             "font_rank": (hits.index(ref) + 1) if ref in hits else None,
             "font_top3": hits[:3],
+            "paddle_top1": (pd[0] if pd else None),
+            "paddle_hit": ref in pd,
+            "union_hit": (ref in cur[:a.k * 3]) or (ref in hits) or (ref in pd),
         })
 
     def rate(sub, key):
@@ -75,6 +89,11 @@ def main() -> int:
     if easy:
         print(f"  稀有但候选里有 {len(easy)}：现状 {rate(easy,'cur_hit'):.1%}  "
               f"字体模板 {rate(easy,'font_hit'):.1%}")
+    if paddle is not None:
+        print(f"  PP-OCRv5 top1 {sum(1 for r in rows if r['paddle_top1']==r['ref'])/len(rows):.1%}  "
+              f"top5 {rate(rows,'paddle_hit'):.1%}  三源并集 top-k {rate(rows,'union_hit'):.1%}"
+              + (f"  真难题并集 {rate(hard,'union_hit'):.1%}" if hard else ""))
+        paddle.close()
     ranks = [r["font_rank"] for r in rows if r["font_rank"]]
     if ranks:
         print(f"  字体命中时的名次：中位 {sorted(ranks)[len(ranks)//2]}，"
@@ -84,7 +103,8 @@ def main() -> int:
         mark = "✓" if r["font_hit"] else "×"
         print(f"  {mark} {r['id']:<20} {r['ref']} freq={r['freq']:<4} "
               f"{'难' if r['hard'] else '易'} 字体名次={r['font_rank']} "
-              f"top3={''.join(r['font_top3'])}")
+              f"top3={''.join(r['font_top3'])}"
+              + (f"  v5={r['paddle_top1'] or '∅'}{'✓' if r['paddle_hit'] else ''}" if paddle is not None else ""))
     return 0
 
 
