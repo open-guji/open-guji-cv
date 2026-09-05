@@ -75,7 +75,15 @@ def _same_char(a: str | None, b: str | None) -> bool:
         return False
     try:
         from ..variants import are_variants
-        return bool(are_variants(a, b))
+        if are_variants(a, b):
+            return True
+    except Exception:
+        pass
+    # variants.json 没收的字形异体（㫖/旨 这类 UCV 认同形）：VariantMap 的语义归并兜底
+    try:
+        from ..clustering.variants import VariantMap
+        vm = VariantMap.load()
+        return vm.semantic(a) == vm.semantic(b)
     except Exception:
         return False
 

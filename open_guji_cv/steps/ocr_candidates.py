@@ -43,9 +43,13 @@ class OcrCandidatesParams(BaseModel):
     scale: float = 3.0          # 送进 rec 之前的放大倍数（RapidOcrSource 默认）
     s2t: bool = True            # 简→繁扩展，见模块头
     max_out: int = 8            # 扩展后每个字位最多存几个候选
-    engine: str = "rapid"       # rapid（PP-OCRv4 mobile，6,278 字）| paddle（PP-OCRv5 server，15,907 字）
-    """引擎名进 params_hash——换引擎产物必须过期。2026-09-05 横评 v5 比 v4 高
-    10 个点（93.5% vs 83.5%），字典大 2.5 倍；见 candidates.PaddleOcrSource。"""
+    engine: str = "paddle"      # paddle（PP-OCRv5 server，15,907 字）| rapid（PP-OCRv4 mobile，6,278 字）
+    """引擎名进 params_hash——换引擎产物必须过期。
+
+    2026-09-05 横评：v5 比 v4 高 10 个点（93.5% vs 83.5%，异体算对 96.5%），字典大
+    2.5 倍（整理本字种不可达 2.5% vs 39.5%）。三批页重跑准确率全 100%，人审不降
+    （残余是己已巳/生僻字/挤排页）——价值在候选质量与字典覆盖。用户 2026-09-05
+    定：默认切到 v5。v5 走独立进程 worker（见 candidates.PaddleOcrSource）。"""
 
 
 @register_step
