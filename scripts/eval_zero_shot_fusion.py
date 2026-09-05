@@ -25,6 +25,8 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=50)
     ap.add_argument("--rare", action="store_true", help="改测 rare-char 21 条")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
+    ap.add_argument("--tta", action="store_true", help="CNN 测试时增广：5 个视角平均 logits")
+    ap.add_argument("--w-cnn", type=float, default=1.0, help="RRF 里 CNN 名次的权重（HOG=1）")
     a = ap.parse_args()
 
     import torch
@@ -89,16 +91,23 @@ def main() -> int:
                 continue
             q = normalize_patch(img); g = it["char"]; n += 1
             hog = [h.char for h in candidates(q, cs, k=a.k)]
-            x = torch.tensor(q[None, None].astype(np.float32))
+            views = [q]
+            if a.tta:
+                for ang in (-4, 4):
+                    M = cv2.getRotationMatrix2D((32, 32), ang, 1.0)
+                    views.append(cv2.warpAffine(q, M, (64, 64), flags=cv2.INTER_NEAREST, borderValue=0))
+                views.append(cv2.dilate(q, np.ones((2, 2), np.uint8)))
+                views.append(cv2.erode(q, np.ones((2, 2), np.uint8)))
+            x = torch.tensor(np.stack(views)[:, None].astype(np.float32))
             _, lg, _ = net(x)
-            lg = lg[0]
+            lg = torch.log_softmax(lg, dim=1).mean(0)
             sub = lg[allowed]
             top = sub.topk(a.k).indices
             cnn = [classes[int(allowed[i])] for i in top]
             fused = Counter()
-            for order in (hog, cnn):
+            for order, w in ((hog, 1.0), (cnn, a.w_cnn)):
                 for r, c in enumerate(order):
-                    fused[c] += 1.0 / (60 + r)
+                    fused[c] += w / (60 + r)
             rrf = [c for c, _ in fused.most_common(a.k)]
             for name, order in (("hog", hog), ("cnn", cnn), ("rrf", rrf)):
                 r = hit(order, g)

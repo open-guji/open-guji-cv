@@ -332,22 +332,9 @@ async function init() {
   $('#rd_go').onclick = loadRound;
   $('#q_go').onclick = loadQuality;
   $('#rv_load').onclick = rvLoad;
-  $('#rv_cards').addEventListener('click', async (ev) => {
+  $('#rv_cards').addEventListener('click', (ev) => {
     const b = ev.target.closest('.rvrarebtn');
-    if (!b) return;
-    const i = +b.dataset.i, c = RV.cards[i];
-    const out = document.getElementById('rvrare' + i);
-    out.textContent = '查询中…（首次要建字体索引，约 20 秒）';
-    try {
-      const sub = c.sub ? `?sub=${c.sub}&k=10` : '?k=10';
-      const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
-      out.innerHTML = (d.candidates || []).map(x =>
-        `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
-           title="相似度 ${x.score} · ${x.font}">${x.char}</button>` +
-        `<span class="rvrmeta">${x.ids || '—'} · ${x.cp} · 本书 ${x.freq} 次` +
-        ` · <a href="${x.zi}" target="_blank" rel="noopener">字统网</a></span>`
-      ).join('') || '没有候选';
-    } catch (e) { out.textContent = '失败：' + e.message; }
+    if (b) rvFetchRare(+b.dataset.i, true);
   });
   $('#rv_send').onclick = rvSend;
   $('#rv_todo').onchange = () => { RV.snapshot = null; rvFilter(); };
@@ -550,8 +537,8 @@ function rvCard(c, i) {
         title="真拿不准，留给以后（S）">跳过</button>
     </div>
     <div class="rvctx" id="rvctx${i}"></div>
-    <div class="rvrare"><button class="rvrarebtn" data-i="${i}">查生僻字</button>
-      <span class="muted">库/OCR 都不对时点这个：字体模板 top-10 + IDS + 频次</span></div>
+    <div class="rvrare"><button class="rvrarebtn" data-i="${i}">重查</button>
+      <span class="muted">候选自动加载（字体模板 + CNN 融合，带 IDS/频次）；不对再点重查</span></div>
     <div class="rvrareout" id="rvrare${i}"></div>
   </div>`;
 }
@@ -737,6 +724,34 @@ async function loadQuality() {
     + '</div>';
 }
 
+async function rvFetchRare(i, force) {
+  const c = RV.cards[i];
+  const out = document.getElementById('rvrare' + i);
+  if (!c || !out) return;
+  if (!force && out.dataset.done) return;
+  out.dataset.done = '1';
+  out.textContent = '候选加载中…';
+  try {
+    const sub = c.sub ? `?sub=${c.sub}&k=10` : '?k=10';
+    const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
+    out.innerHTML = (d.candidates || []).map(x =>
+      `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
+         title="相似度 ${x.score} · ${x.font}">${x.char}</button>` +
+      `<span class="rvrmeta">${x.ids || '—'} · ${x.cp} · 本书 ${x.freq} 次` +
+      ` · <a href="${x.zi}" target="_blank" rel="noopener">字统网</a></span>`
+    ).join('') || '没有候选';
+  } catch (e) { out.textContent = '失败：' + e.message; delete out.dataset.done; }
+}
+
+// 载入后自动预取全部卡片的生僻字候选（HOG + CNN 融合，见 /api/rare），并发 2。
+// 用户 2026-09-05：候选应该直接在卡片上，不该逐张点「查生僻字」。
+async function rvPrefetchRare() {
+  const n = RV.cards.length;
+  let next = 0;
+  const worker = async () => { while (next < n) { const i = next++; await rvFetchRare(i, false); } };
+  await Promise.all([worker(), worker()]);
+}
+
 async function rvLoad() {
   const book = $('#rv_book').value || $('#book').value;
   const pages = $('#rv_pages').value || 'dev_set';
@@ -759,6 +774,7 @@ async function rvLoad() {
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
   rvFilter();
   rvFocus(0);
+  rvPrefetchRare();
   // 列上下文按需拉，一列只拉一次
   const seen = new Set();
   for (let i = 0; i < d.cards.length; i++) {
