@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
+import os
 import numpy as np
 
 from ..utils.image_io import imread
@@ -344,6 +345,99 @@ class CandidateGenerator:
         with open(phase6 / "candidates.json", "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return payload
+
+
+class PaddleOcrSource:
+    """PP-OCRv5 识别器（paddleocr 3.x）：单字块 → CTC 主导时间步 top-k。
+
+    ## 为什么加第二个引擎
+
+    2026-09-05 横评（dev_set + p15-29 的 600 条整理本金标字块，同一批样本）：
+
+    | 引擎 | 字典 | top-1 | 异体/简繁算对 | rare-char 21 条 |
+    |---|---|---|---|---|
+    | rapidocr（PP-OCRv4 mobile）| 6,278 汉字 | 83.5% | — | 8/21 |
+    | **PP-OCRv5_server_rec** | **15,907 汉字** | **93.5%** | **96.5%** | **13/21（异体算对 17/21）** |
+
+    整理本 4,636 字种：v4 字典不可达 1,814（39.5%），v5 只有 116（2.5%）。
+    生僻字要靠候选里**有没有那个字**，字典大小是硬上限。
+
+    残余错误全是老朋友：入/人、宋/朱、曰/日 这些形近对，以及「一」输出为空
+    （单横笔在 rec 模型眼里像空白）。置信度分得开：对的中位 1.00，错的 0.60。
+
+    ## 走独立进程，不装进主 venv
+
+    paddlepaddle 3.3 与本 venv 的 numpy/torch 解不开，且装的时候要换 numpy 的
+    DLL——控制台开着就「拒绝访问」（实测两次）。所以 paddle 留在它自己的环境，
+    本类通过 `ocr/paddle_worker.py` 常驻子进程按行收发 JSON。单字块 ~50ms。
+
+    仍然**只供候选、不投票**（OCR 永不与库配对放行，97.1% 那条老账）。
+    """
+
+    DEFAULT_PYTHON = r"D:/古籍整理/.venv/Scripts/python.exe"
+
+    def __init__(self, model_name: str = "PP-OCRv5_server_rec",
+                 s2t: bool = True, topk: int = 5, device: str = "cpu",
+                 python: str | None = None):
+        self._proc = None
+        self.model_name = model_name
+        self.s2t = s2t
+        self.topk = topk
+        self.device = device
+        self.python = python or os.environ.get("GUJI_PADDLE_PYTHON", self.DEFAULT_PYTHON)
+
+    def _ensure(self):
+        if self._proc is not None and self._proc.poll() is None:
+            return
+        import subprocess
+        from pathlib import Path
+        worker = Path(__file__).resolve().parents[1] / "ocr" / "paddle_worker.py"
+        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        self._proc = subprocess.Popen(
+            [self.python, str(worker), self.model_name, self.device],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", bufsize=1, env=env)
+        # 等 ready 行（模型加载约 2~5 秒）；中间可能夹着 paddle 的 warning 行
+        for _ in range(500):
+            line = self._proc.stdout.readline()
+            if not line:
+                raise RuntimeError(f"paddle worker 起不来（{self.python}）")
+            line = line.strip()
+            if line.startswith("{") and '"ready"' in line:
+                return
+        raise RuntimeError("paddle worker 没有回 ready")
+
+    def rec_topk(self, patch: np.ndarray) -> list[tuple[str, float]]:
+        self._ensure()
+        import base64
+        img = patch
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        ok, buf = cv2.imencode(".png", img)
+        if not ok:
+            return []
+        req = {"png": base64.b64encode(buf.tobytes()).decode("ascii"), "k": self.topk}
+        self._proc.stdin.write(json.dumps(req) + "\n")
+        self._proc.stdin.flush()
+        for _ in range(50):
+            line = self._proc.stdout.readline()
+            if not line:
+                self._proc = None
+                return []
+            line = line.strip()
+            if line.startswith("{"):
+                d = json.loads(line)
+                return [(c, float(p)) for c, p in d.get("topk", [])]
+        return []
+
+    def close(self):
+        if self._proc is not None:
+            try:
+                self._proc.stdin.close()
+                self._proc.terminate()
+            except Exception:
+                pass
+            self._proc = None
 
 
 class RapidOcrSource(CandidateSource):
