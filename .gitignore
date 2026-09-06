@@ -60,3 +60,6 @@ output/*/step3_input/*/
 # 临时目录（2026-09-05：git add -A 误带过一次）
 output/_grid_test/
 output/tmp*/
+
+# 对勘报告（scripts/build_collation_report.py 产物，可再生；分享件在 overview）
+output/collation_*
