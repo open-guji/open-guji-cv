@@ -1,39 +1,50 @@
 # 语义层自动表：异体字 → 整理本用形（LM 统计 / 阅读辅助用），由 scripts/build_semantic_variants.py 派生。
 # 格式：异体字	代表字	来源(ledger|graph)。手工表 config/dicts/variants.tsv 覆盖本表。
 # 字形层标签永远保留精确异体字形，绝不按此表合并。
-# edition=wuyingdian_zongmu  entries=9067
+# edition=wuyingdian_zongmu  entries=9076
 㓂	寇	ledger
 㕔	廳	ledger
+㽣	域	ledger
 䙝	褻	ledger
 伉	抗	ledger
-凜	凛	ledger
 刼	刦	ledger
 劫	刦	ledger
 効	效	ledger
 卽	即	ledger
 厯	歷	ledger
 啟	啓	ledger
+宮	宫	ledger
+宼	寇	ledger
 彚	彙	ledger
+徤	健	ledger
 懽	歡	ledger
 敕	勅	ledger
 檃	櫽	ledger
 洧	有	ledger
 溫	温	ledger
 煙	烟	ledger
+牓	榜	ledger
 猪	豬	ledger
 獎	奬	ledger
 皍	即	ledger
 盖	葢	ledger
 瞭	了	ledger
 秕	粃	ledger
+腋	掖	ledger
 舡	船	ledger
+芉	羊	ledger
 茲	兹	ledger
 蓋	葢	ledger
 蠹	蠧	ledger
+躭	耽	ledger
+轄	輨	ledger
+遅	遲	ledger
 遍	徧	ledger
+閨	閏	ledger
 顏	顔	ledger
-髪	髮	ledger
+駴	駭	ledger
 𠮓	變	ledger
+𥗤	蠧	ledger
 㐀	丘	graph
 㐄	跨	graph
 㐌	色	graph
@@ -952,6 +963,7 @@
 凊	清	graph
 减	減	graph
 凖	準	graph
+凜	凛	graph
 凟	瀆	graph
 凢	凡	graph
 凣	凡	graph
@@ -1222,7 +1234,6 @@
 宠	寵	graph
 审	審	graph
 宪	憲	graph
-宮	宫	graph
 宻	密	graph
 宽	寬	graph
 宾	賓	graph
@@ -2758,7 +2769,6 @@
 逶	倭	graph
 逺	遠	graph
 遀	隨	graph
-遅	遲	graph
 遆	遞	graph
 遬	速	graph
 遶	繞	graph
@@ -6327,7 +6337,6 @@
 𥗂	摩	graph
 𥗈	礎	graph
 𥗘	摩	graph
-𥗤	蠹	graph
 𥘅	示	graph
 𥘆	禮	graph
 𥘇	䃾	graph

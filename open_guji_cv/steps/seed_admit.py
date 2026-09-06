@@ -250,9 +250,16 @@ class SeedAdmitStep(Step):
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
                 # 上下文只能定义，定不了形。
+                # ⚠️ 己/已/巳 的「永远人审」在这里也要守（2026-09-06 补）。上面那道闸只拦
+                # admission_decision 的通道，context 这条是后接的，此前直接绕过去了：
+                # vol01 有 30 条 context 放行的 已/巳，用户抽审 18 条里 16 条形不对（刻 巳
+                # 存成整理本的 已）。字形库本身没脏——glyphdb_admit 把人裁的 shape 单独存
+                # 字形层，审计 617 条里字形只错 2 条；脏的是产物里的 char 与判据 E 的分母。
                 d = dmap.get(r.id)
                 if not ok and not form_open and p.use_context and d and d.source == "context" \
-                        and d.char and d.margin >= p.context_margin:
+                        and d.char and d.margin >= p.context_margin \
+                        and d.char not in always \
+                        and not (r.candidates and r.candidates[0][0] in always):
                     ok, channel, char, prov = True, "context", d.char, "context"
 
                 if ok:
