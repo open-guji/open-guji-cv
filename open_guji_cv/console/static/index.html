@@ -1832,8 +1832,10 @@ async function vgSend(all) {
     // char-segmentation/instances 金标的四分类；顺手认出的字一并带上（人看图时
     // 认出来的不该丢）。下游 gold_add 落金标、crop_exclude 进排除名单。
     if (s.mark === 'truncated' || s.mark === 'contaminated') {
+      const dshape = s.col;
       rows.push({ id: t.id, v: 'seg_defect', quality: s.mark,
-                  shape: s.col, reading: g.reading_default || s.col, client_ts: now });
+                  shape: dshape, reading: needsReading(dshape) ? (g.reading_default || dshape) : dshape,
+                  client_ts: now });
       continue;
     }
     // 组外：字形与文意都取人填的那个字（它跟这一组无关，整理本字不该当它的 reading）
@@ -1843,7 +1845,15 @@ async function vgSend(all) {
                   conversion: 0, client_ts: now, group: 'out:' + g.canonical });
       continue;
     }
-    const shape = s.col, reading = t.reading && t.reading !== t.char ? t.reading : (g.reading_default || shape);
+    // 只有 己/已/巳 才分字形/文意（needsReading，见审查页同名函数上方的说明）。组视图
+    // 此前对**所有组**都无条件把 reading 填成 g.reading_default（整理本字），于是选
+    // 𠮓（變的刻本异体）也被记成「文意=變」的一次转换——库/账本/字形层因此存对了刻本形，
+    // 但 admissions.reading、判据 A 的转换计数都被污染。规则改成：shape 不在 己已巳 时
+    // reading 必须等于 shape（不算转换）；shape 在 己已巳 时才取整理本字当文意兜底。
+    const shape = s.col;
+    const reading = needsReading(shape)
+      ? (t.reading && t.reading !== t.char ? t.reading : (g.reading_default || shape))
+      : shape;
     rows.push({ id: t.id, v: 'confirm', shape, reading: reading || shape,
                 conversion: (reading && reading !== shape) ? 1 : 0, client_ts: now, group: g.canonical });
   }
