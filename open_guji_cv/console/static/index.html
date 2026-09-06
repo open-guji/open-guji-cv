@@ -157,6 +157,10 @@
   .rvev .k { color:var(--mute); font-size:.7rem; letter-spacing:.03em; }
   .rvcand button { font-size:.9rem; padding:.1rem .45rem; margin:.1rem .2rem .1rem 0; }
   .rvcand button.pick { background:var(--indigo); color:#fff; border-color:var(--indigo); }
+  .rvcand .rvsrc { font-size:.6rem; color:var(--mute); margin-left:.15rem; font-family:var(--sans); }
+  .rvcand button.pick .rvsrc { color:#fff; opacity:.85; }
+  .rvcand button.nokey { border-style:dashed; }
+  .rvcand .rvwait { display:inline-block; font-size:.9rem; padding:.1rem .45rem; margin:.1rem .2rem .1rem 0; color:var(--mute); border:1px dashed var(--rule); border-radius:3px; }
   .rvform { margin:.25rem 0 .1rem; }
   .rvform .k { font-size:.72rem; color:var(--mute); margin-right:.4rem; }
   .rvform button { font-size:1.2rem; line-height:1.3; padding:.05rem .55rem; margin:.1rem .3rem .1rem 0;
@@ -535,12 +539,12 @@ async function init() {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
     const c = RV.cards[RV.cur];
     if (!c) return;
-    const cands = (c.db && c.db.candidates || []).slice(0, 3);
     if (ev.key === 'ArrowRight' || ev.key === 'j') { rvFocus(RV.cur + 1); ev.preventDefault(); }
     else if (ev.key === 'ArrowLeft' || ev.key === 'k') { rvFocus(RV.cur - 1); ev.preventDefault(); }
-    else if (['1', '2', '3'].includes(ev.key)) {
-      const pick = cands[+ev.key - 1];
-      if (pick) { rvSet(RV.cur, pick[0]); rvFocus(RV.cur + 1); ev.preventDefault(); }
+    else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
+      // 键号 = 候选按钮上的号：1 整理本 · 2 库最佳 · 3 生僻字算法 · 4/5 库次选（rvCandList）
+      const pick = rvKeyList(c).find(e => e.keys.includes(+ev.key));
+      if (pick && pick.ch) { rvSet(RV.cur, pick.ch); rvFocus(RV.cur + 1); ev.preventDefault(); }
     } else if (ev.key === 'n' || ev.key === 'N') {
       rvSet(RV.cur, '', '', 'non'); rvFocus(RV.cur + 1); ev.preventDefault();
     } else if (ev.key === 's' || ev.key === 'S') {
@@ -632,7 +636,7 @@ async function runOneEval(id, quiet) {
 // 所以每张卡收两个值：shape（图上刻的形，默认取候选）与 reading（文意，
 // 默认等于 shape）。两者不同的那些正是已/巳、卽/即 这类，事件里都带上，
 // 下游按 GlyphDB 的 shape/char 分岔存（charset_and_lm.md §四）。
-let RV = { cards: [], cur: 0, verdicts: {}, seen: {} };
+let RV = { cards: [], cur: 0, verdicts: {}, seen: {}, rare: {} };
 
 // **只有 己/已/巳 这三个字才分「字形」与「文意」**（用户 2026-09-04 定：
 // 「除了己已巳 这三个字，其他的都不用区分字形和文意」）。
@@ -644,14 +648,79 @@ let RV = { cards: [], cur: 0, verdicts: {}, seen: {} };
 const SPLIT_CHARS = new Set(['己', '已', '巳']);
 const needsReading = ch => SPLIT_CHARS.has(ch);
 
+// 候选顺序（用户 2026-09-06「没看到整理本用的是什么，应该放第一位；然后字形库最佳匹配；
+// 然后生僻字算法；paddle ocr 准确率不好」）：① 整理本用字 ② 库最佳 ③ 生僻字算法（字体模板+CNN）
+// ④⑤ 库次选；OCR 只留在证据行末尾。位置固定、键 1–5 对应；同一个字从两路来就并成一个按钮
+// （徽章并列，两个键都选它）。整理本印 即 而本书惯刻 卽 时，账本的 preferred 作无键按钮排在
+// 整理本后面——忠于刻本字形，图上刻的是哪个就点哪个。
+function rvCandList(c) {
+  const db = (c.db && c.db.candidates || []).slice(0, 3);
+  const rare = RV.rare[c.id];
+  const list = [];
+  if (c.ref && c.ref.char) {
+    list.push({ ch: c.ref.char, src: '整理本',
+                note: '整理本在这一位印的字' + (c.ref.op === 'replace' ? '（对齐段是 replace，位置可能错开一两格）' : '') });
+    if (c.ref.form) list.push({ ch: c.ref.form, src: '刻本惯用', nokey: true,
+                                note: `整理本印「${c.ref.char}」时本书惯刻这个形（用字账）` });
+  }
+  if (db[0]) list.push({ ch: db[0][0], src: '库', note: '字形库最佳匹配 cov ' + db[0][1] });
+  if (rare && rare[0]) list.push({ ch: rare[0].char, src: '形', note: '生僻字算法（字体模板+CNN）相似度 ' + rare[0].score });
+  else list.push({ ch: '', src: '形', note: rare ? '生僻字算法没给出候选' : '生僻字候选加载中…' });
+  db.slice(1).forEach(([ch, cov]) => list.push({ ch, src: '库', note: '库次选 cov ' + cov }));
+  return list;
+}
+// 键位表：去重后的 [{ch, keys, srcs, note}]，键号按出现顺序；重复的字把键并到先出现的那个按钮上
+function rvKeyList(c) {
+  const out = [], byCh = {};
+  let key = 0;
+  for (const x of rvCandList(c)) {
+    if (x.ch && byCh[x.ch]) {
+      byCh[x.ch].srcs.push(x.src);
+      if (!x.nokey) byCh[x.ch].keys.push(++key);
+      continue;
+    }
+    const e = { ch: x.ch, srcs: [x.src], keys: x.nokey ? [] : [++key], note: x.note, nokey: !!x.nokey };
+    if (x.ch) byCh[x.ch] = e;
+    out.push(e);
+  }
+  return out;
+}
+function rvBtnsHtml(c, i) {
+  const v = RV.verdicts[c.id] || {};
+  return rvKeyList(c).map(e => e.ch
+    ? `<button data-i="${i}" data-ch="${e.ch}" class="rvpick${v.shape === e.ch ? ' pick' : ''}${e.nokey ? ' nokey' : ''}"
+         title="${e.note}">${e.keys.length ? e.keys.join('/') + '·' : ''}${e.ch}<sub class="rvsrc">${e.srcs.join('·')}</sub></button>`
+    : `<span class="rvwait" title="${e.note}">${e.keys.join('/')}·…<sub class="rvsrc">形</sub></span>`).join('');
+}
+// 生僻字 top1 只为当前卡和后两张拉（k=3，约 0.5s 一张，首次 5s 热索引）。
+// 整批预取会让页面卡住（2026-09-05 教训），完整 10 个仍走「查候选」。
+async function rvPrefetchRare(i) {
+  RV.rareWant = i;
+  if (RV.rareBusy) return;
+  RV.rareBusy = true;
+  try {
+    while (RV.rareWant !== null && RV.rareWant !== undefined) {
+      const start = RV.rareWant; RV.rareWant = null;
+      for (let j = start; j < Math.min(start + 3, RV.cards.length); j++) {
+        const c = RV.cards[j];
+        if (!c || RV.rare[c.id] !== undefined) continue;
+        try {
+          const sub = c.sub ? `?sub=${c.sub}&k=3` : '?k=3';
+          const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
+          RV.rare[c.id] = d.candidates || [];
+        } catch (e) { RV.rare[c.id] = []; }
+        const el = document.getElementById('rvbtns' + j);
+        if (el && RV.cards[j] === c) el.innerHTML = rvBtnsHtml(c, j);
+        if (RV.rareWant !== null) break;
+      }
+    }
+  } finally { RV.rareBusy = false; }
+}
+
 function rvCard(c, i) {
-  const cands = (c.db && c.db.candidates || []).slice(0, 3);
   const ocr = (c.ocr || []).slice(0, 2);
   const v = RV.verdicts[c.id] || {};
-  const btns = cands.map(([ch, cov], k) =>
-    `<button data-i="${i}" data-ch="${ch}" class="rvpick${v.shape === ch ? ' pick' : ''}"
-      title="库 cov ${cov}">${k + 1}·${ch}</button>`).join('');
-  const doubts = (c.doubts || []).map(d => `<div class="rvdoubt">⚠ ${d}</div>`).join('');
+  const doubts =(c.doubts || []).map(d => `<div class="rvdoubt">⚠ ${d}</div>`).join('');
   // 「义定形未定」（variant_form）：文本两路已定语义，刻本刻的是哪个形没定。
   // 只列组内的形，点一个 = 字形取它、文意取整理本字（转换自动记上），账本下次就记住。
   const fm = c.form && c.form.state === 'open' ? c.form : null;
@@ -667,23 +736,26 @@ function rvCard(c, i) {
     <div class="rvbody">
       <img src="${c.patch}" alt="${c.id}" loading="lazy">
       <div class="rvev">
+        <div><span class="k">整理本</span> ${c.ref && c.ref.char
+          ? `<b>${c.ref.char}</b><span class="rvp">${c.ref.op}${c.ref.form ? ' · 惯刻 ' + c.ref.form : ''}</span>`
+          : '<span class="muted" title="这页没锚到整理本，或这一格对齐时没有对应字">—</span>'}</div>
         <div><span class="k">库</span> ${c.db ? c.db.verdict + ' ' + c.db.cov : '—'}</div>
-        <div><span class="k">OCR</span> ${ocr.length
-          ? ocr.map(([ch, p]) =>
-              `<button class="rvtake" data-i="${i}" data-ch="${ch}"
-                 title="采信这个字（OCR 概率 ${Number(p).toFixed(3)}）">${ch}</button>`
-              + `<span class="rvp">${Number(p).toFixed(2)}</span>`).join(' ')
-          : '—'}</div>
         <div><span class="k">上下文</span> ${c.ctx && c.ctx.char
           ? `<button class="rvtake" data-i="${i}" data-ch="${c.ctx.char}"
                title="采信上下文定的字（margin ${c.ctx.margin}）">${c.ctx.char}</button>`
             + `<span class="rvp">m=${c.ctx.margin}</span>`
           : '—'}</div>
+        <div><span class="k" title="Paddle OCR，准确率一般，只作参考">OCR</span> ${ocr.length
+          ? ocr.map(([ch, p]) =>
+              `<button class="rvtake" data-i="${i}" data-ch="${ch}"
+                 title="采信这个字（OCR 概率 ${Number(p).toFixed(3)}）">${ch}</button>`
+              + `<span class="rvp">${Number(p).toFixed(2)}</span>`).join(' ')
+          : '—'}</div>
         ${doubts}
       </div>
     </div>
     ${fbtns}
-    <div class="rvcand">${btns}
+    <div class="rvcand"><span class="rvbtns" id="rvbtns${i}">${rvBtnsHtml(c, i)}</span>
       <input class="rvin" data-i="${i}" data-f="shape" placeholder="字" value="${v.shape || ''}">
       <span class="rvread" data-i="${i}" style="display:${(needsReading(v.shape) || (v.reading && v.reading !== v.shape)) ? '' : 'none'}">
         → <input class="rvin" data-i="${i}" data-f="reading" placeholder="文意"
@@ -949,7 +1021,7 @@ async function rvLoad() {
     done = v.verdicts || {};
   } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
   RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) },
-       seen: RV.seen || {}, snapshot: null };
+       seen: RV.seen || {}, rare: RV.rare || {}, snapshot: null };
   // 卡片一进列表就算「看见」——dwell 从这里算到落裁那一刻
   const t0 = Date.now();
   d.cards.forEach(c => { if (!RV.seen[c.id]) RV.seen[c.id] = t0; });
@@ -1031,6 +1103,7 @@ function rvFocus(i) {
   document.querySelectorAll('.rvcard.cur').forEach(e => e.classList.remove('cur'));
   const el = document.getElementById('rvc' + RV.cur);
   if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
+  rvPrefetchRare(RV.cur);
 }
 
 function rvSet(i, shape, reading, done, fromInput) {
