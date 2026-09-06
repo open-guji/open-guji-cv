@@ -291,7 +291,25 @@ def next_batch(book: str, n: int = 12, store=None) -> dict:
 
 
 FIDELITY_MIN_AUDIT = 50        # E：抽审不到这么多条，不亮灯
-FIDELITY_GREEN, FIDELITY_YELLOW = 0.99, 0.97   # E：Wilson 下界
+FIDELITY_GREEN, FIDELITY_YELLOW = 0.97, 0.92   # E：Wilson 95% 下界
+"""判据 E 的灯（2026-09-06 重定）。
+
+**原先 GREEN=0.99 与 MIN_AUDIT=50 自相矛盾**：Wilson 下界在小样本上天然保守，
+50 条**全对**的下界也只有 0.9286，要 ≥0.99 得全对 **400 条**——于是 50/50 = 100%
+被判红，判据自己把自己锁死了。实测曲线：
+
+    n=50 全对 → 0.929   n=100 → 0.963   n=200 → 0.981   n=400 → 0.990
+
+改成两层，各管各的事：
+
+- **错例是硬信号**：放行档判错 = 往字形库塞错字形且会自我复制（match_ref 让下一个
+  同形位继承它），所以**只要有一条错例就红**，与样本量无关。这条在 `form_fidelity`
+  里单独判，不走下界。
+- **下界是置信度信号**：全对时它只回答「样本够不够支撑这个结论」。绿 0.97 对应约
+  150 条全对，是「这一册可以收工」的门槛；黄 0.92 对应 MIN_AUDIT=50 条全对
+  （下界 0.9286）——**门槛必须低于「达到最小样本量且全对」的下界**，否则判据自锁：
+  攒够了 50 条、一条没错，却仍然亮红，人不知道还要做什么。
+"""
 
 
 def _wilson_low(k: int, n: int, z: float = 1.96) -> float:
@@ -351,18 +369,22 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                     errors.append({"id": r.id, "pred": r.char, "human": t,
                                    "reading": r.reading, "state": f.get("state")})
     low = _wilson_low(hit, n)
-    if n < FIDELITY_MIN_AUDIT:
+    if errors:
+        # 错例是硬信号：一条都不能有（见 FIDELITY_GREEN 的说明）
+        light = RED
+    elif n < FIDELITY_MIN_AUDIT:
         light = "none"
     else:
         light = GREEN if low >= FIDELITY_GREEN else (YELLOW if low >= FIDELITY_YELLOW else RED)
-    if errors:
-        light = RED
     return {"variant_admits": n_var, "form_open": n_open,
             "audited": n, "hit": hit, "rate": (hit / n if n else None),
             "wilson_low": round(low, 4),
             "form_auto": [hit_auto, n_auto],
             "errors": errors[:10], "light": light,
-            "note": (f"抽审 {n} 条不足 {FIDELITY_MIN_AUDIT}，去组视图攒" if n < FIDELITY_MIN_AUDIT else "")}
+            "note": (f"抽审 {n} 条不足 {FIDELITY_MIN_AUDIT}，去组视图攒"
+                     if n < FIDELITY_MIN_AUDIT else
+                     (f"全对，但 {n} 条的下界上限只有 {low:.3f}；要绿灯需全对约 150 条"
+                      if not errors and light == YELLOW else ""))}
 
 
 def check(book: str, pages: list[int]) -> dict:
