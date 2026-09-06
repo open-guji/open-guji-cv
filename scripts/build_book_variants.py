@@ -142,6 +142,11 @@ REF_BOTH_MIN = 50
 REF_BOTH_EXEMPT = frozenset({frozenset("巳已"), frozenset("彛彝"),
                              frozenset("己已"), frozenset("己巳")})
 
+#: 「转换目标疑似整理本错字」的判据：目标形在整理本 ≤ RARE_MAX 次、源形一次没有，
+#: 而同组另有 ≥ COMMON_MIN 次的常用形。卽→皍（皍 全书 1 次 vs 即 563 次）就是这么捞出来的。
+REF_RARE_MAX = 2
+REF_COMMON_MIN = 50
+
 #: 人工审定的「永不并组」名单：字典说是异体、本书里其实是两个字。
 #: 频次门槛只挡得住高频那批（≥50），低频的真异体与不同字在数值上完全重叠
 #: （決/决 min=22 vs 倒/到 min=22），词汇环境 Jaccard 也分不开——只能人工定。
@@ -373,11 +378,31 @@ def main() -> int:
         }
 
     for (s, r) in sorted(all_pairs):
-        if form_index.get(s) is not None and form_index.get(s) == form_index.get(r):
+        same_group = (form_index.get(s) is not None
+                      and form_index.get(s) == form_index.get(r))
+        # 同组的一般不用管——那正是「刻本刻异体、整理本印正字」的常态。
+        # 但有一种同组对必须报：**转换目标在整理本里极罕见、而源字很常用**。
+        # 转换的目标（reading）由整理本定，整理本这一处若是错字/误录，就会把
+        # 常用字转成一个几乎不存在的形。实测 vol02:3:6:15「莫敢同異卽篇章字句」
+        # 整理本印「皍」——全书仅此 1 次，而「即」有 563 次，「皍」是排印错误；
+        # 卽/皍 在 hydzd 里有边、又同属「即」组，于是既不算 no_edge 也不算
+        # different_groups，从这份清单里漏了过去。
+        rare = (ref.get(r, 0) <= REF_RARE_MAX and ref.get(s, 0) == 0
+                and any(ref.get(m, 0) >= REF_COMMON_MIN
+                        for m in (form_index.get(s) and groups.get(form_index[s]) or ())))
+        if same_group and not rare:
             continue
         rec = _pair_rec(s, r)
         rec.update({"shape": s, "reading": r,
-                    "why": "no_edge" if not rec["sources"] else "different_groups"})
+                    "why": ("rare_reading" if rare else
+                            ("no_edge" if not rec["sources"] else "different_groups"))})
+        if rare:
+            rec["note"] = (f"整理本「{r}」全书仅 {ref.get(r, 0)} 次，"
+                           f"同组常用形有 "
+                           + "、".join(f"{m}×{ref.get(m, 0)}"
+                                      for m in sorted(groups.get(form_index.get(s), ()),
+                                                      key=lambda m: -ref.get(m, 0))[:3])
+                           + "——整理本这一处可能是错字，别据此建转换")
         unknown.append(rec)
 
     n_single = sum(1 for x in out_groups.values() if x["ref_policy"] == "single")

@@ -6,13 +6,13 @@
    "vol01",
    "vol02"
   ],
-  "built_at": "2026-09-06T21:43:07Z",
+  "built_at": "2026-09-06T21:51:35Z",
   "inputs": {
    "products_records": 47039,
-   "glyph_db_instances": 16140,
+   "glyph_db_instances": 16200,
    "corpus_tokens": 341241,
    "corpus_types": 4637,
-   "book_forms": 2427
+   "book_forms": 2443
   },
   "stats": {
    "groups": 77,
@@ -20,7 +20,7 @@
    "ref_multi": 41,
    "ref_none": 0,
    "pairs": 18,
-   "unknown_pairs": 2
+   "unknown_pairs": 3
   },
   "note": "只由 scripts/build_book_variants.py 派生，永不手编。book 计数分来源：human > products/db > align（align 是整理本形，别信）。"
  },
@@ -34,7 +34,7 @@
    "forms": {
     "五": {
      "book": {
-      "products": 97,
+      "products": 95,
       "db": 26,
       "human": 0,
       "align": 21
@@ -796,8 +796,8 @@
     "已": {
      "book": {
       "products": 0,
-      "db": 22,
-      "human": 7,
+      "db": 23,
+      "human": 8,
       "align": 15
      },
      "ref": 599,
@@ -807,8 +807,8 @@
     "巳": {
      "book": {
       "products": 0,
-      "db": 38,
-      "human": 38,
+      "db": 40,
+      "human": 40,
       "align": 0
      },
      "ref": 198,
@@ -821,8 +821,8 @@
    },
    "pairs": {
     "巳→已": {
-     "n": 33,
-     "human": 33,
+     "n": 34,
+     "human": 34,
      "auto": 0,
      "channels": {},
      "first": "vol01:8:2:11",
@@ -1162,8 +1162,8 @@
     "㫖": {
      "book": {
       "products": 16,
-      "db": 11,
-      "human": 8,
+      "db": 13,
+      "human": 10,
       "align": 0
      },
      "ref": 0,
@@ -1186,14 +1186,14 @@
    },
    "pairs": {
     "㫖→旨": {
-     "n": 13,
-     "human": 0,
+     "n": 15,
+     "human": 2,
      "auto": 13,
      "channels": {
       "dual": 5,
       "match_replace": 8
      },
-     "first": "vol01:11:4:21",
+     "first": "v2:vol01:22:4:6",
      "sources": [
       "local:keben"
      ]
@@ -2194,8 +2194,8 @@
     "秘": {
      "book": {
       "products": 20,
-      "db": 9,
-      "human": 3,
+      "db": 10,
+      "human": 4,
       "align": 2
      },
      "ref": 58,
@@ -2483,8 +2483,8 @@
     "頴": {
      "book": {
       "products": 2,
-      "db": 1,
-      "human": 0,
+      "db": 2,
+      "human": 1,
       "align": 0
      },
      "ref": 49,
@@ -2994,8 +2994,8 @@
     "冲": {
      "book": {
       "products": 0,
-      "db": 1,
-      "human": 1,
+      "db": 2,
+      "human": 2,
       "align": 0
      },
      "ref": 4,
@@ -3807,6 +3807,22 @@
   }
  },
  "unknown_pairs": [
+  {
+   "n": 1,
+   "human": 0,
+   "auto": 1,
+   "channels": {
+    "match_replace": 1
+   },
+   "first": "vol02:3:6:15",
+   "sources": [
+    "hydzd"
+   ],
+   "shape": "卽",
+   "reading": "皍",
+   "why": "rare_reading",
+   "note": "整理本「皍」全书仅 1 次，同组常用形有 即×563、皍×1、卽×0——整理本这一处可能是错字，别据此建转换"
+  },
   {
    "n": 2,
    "human": 2,
