@@ -843,6 +843,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if not (0 <= y < h) or not ink_bin[y].any():
                 continue
             sm = _seam.find_seam(ink_bin, y, band=seam_band)
+            if _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK and seam_band < _seam.SEAM_BAND_WIDE:
+                # 分级走廊：窄走廊绕不开就到宽走廊再找一次（只对"本来要放弃"的格线放宽）
+                sm = _seam.find_seam(ink_bin, y, band=_seam.SEAM_BAND_WIDE)
             if int(np.abs(sm - y).max()) == 0 or _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK:
                 continue          # 与直线重合，或绕不开墨（多半是自己的笔画）——保持直线
             up[0].seam_bottom = sm.tolist()
