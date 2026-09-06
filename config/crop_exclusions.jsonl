@@ -465,3 +465,4 @@
 {"date": "2026-09-05", "evidence": ["truncated"], "instance_id": "vol01:48:7:-1", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-44,45,46,48,49,50,51,52,53,54,55,56-decide_000014"}
 {"date": "2026-09-05", "evidence": ["truncated"], "instance_id": "vol01:53:2:16", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-44,45,46,48,49,50,51,52,53,54,55,56-decide_000017"}
 {"date": "2026-09-05", "evidence": ["truncated"], "instance_id": "vol01:53:2:17", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-44,45,46,48,49,50,51,52,53,54,55,56-decide_000018"}
+{"date": "2026-09-06", "evidence": ["contaminated"], "instance_id": "vol01:71:6:9", "note": "审查卡片人裁：contaminated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-71,79-decide_000019"}
