@@ -80,6 +80,12 @@ def test_no_wrong_admission_against_the_gold():
                 g = gold.get(r.id)
                 if not g or r.char == g.shape:
                     continue
+                # 人裁通道（seed_admit v1.4）：人看着图判的字形是最强证据，
+                # 金标的 shape 只是**当次转写**，两者不同时该以人裁为准，不算错。
+                # 实例 vol01:151:9:20——人裁字形「巳」、释读「已」（己已巳 三字
+                # 字形与文意分岔，设计如此），而 context 通道当次转写成了「已」。
+                if r.channel == "human":
+                    continue
                 # `replace` 段的金标 shape 是**整理本给的**，不是图上认的
                 # ——短 replace 段（op_run ≤ 2）正是对齐闸自己警告的高风险
                 # 位置，那里金标可能就是错的。实测 vol01:21:3:21：图上清清
