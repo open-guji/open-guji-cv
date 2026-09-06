@@ -56,6 +56,11 @@ def _expected_of(e: Event) -> dict:
             out["shape"] = p["shape"]
         if p.get("reading"):
             out["reading"] = p["reading"]
+        # `note` 要留住（2026-09-06）：四分类只说「这块图脏」，说不出**怎么脏**。
+        # 夹注段卡标的缺陷（少格 / 多格 / ab 分错边）全靠它区分——丢了这一行，
+        # 金标里就只剩一个 contaminated，将来没法按缺陷类型归因，也没法回查是哪一段。
+        if p.get("note"):
+            out["note"] = p["note"]
         return out
     if e.kind == "recrop":
         return {"old_bbox": p.get("old_bbox"), "corrected_bbox": p.get("new_bbox") or p.get("corrected_bbox")}
