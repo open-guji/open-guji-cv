@@ -1,36 +1,41 @@
-"""Step0 预清理：把扫描件上的污渍从原图里修掉，喂给 Step1 之前。
+"""Step0 预清理：把扫描件上的坏区修好，产物落盘，Step1 起自动读修好的那张。
 
-**这一步默认不开**，只对手工登记过的页生效——在 books/<book>.yaml 里写 `preclean:`。
-不改磁盘上的原图（原图是唯一真相，永远保持原样），只在 `RunContext.raw_page`
-返回前对内存里的那份做处理。
+**默认整本书什么都不做。** 只有在 books/<book>.yaml 里 `preclean:` 段登记过的页才处理 ——
+坏页是人工确认的，位置也是人工（或 scripts/scan_inverted_bands.py 辅助）定的，
+当作参数写进 yaml，不猜。
 
-目前只有一种污渍：`inverted_band`
+三件事分开
+---------
+1. **磁盘原图永不改写**（raw_dir 里那张是唯一真相）；
+2. 修好的图落在 `precleaned/<book>/<page>.png`，由 `python -m open_guji_cv.cli_v2 preclean`
+   显式生成 —— 这是个可重跑、可删掉重来的产物，不是缓存（不会被 LRU 清掉）；
+3. `RunContext.raw_page` 优先读 precleaned 里那张；没有就读原图。
+   所以 Step1 及其下游一行代码都不用改，未登记的页也完全不受影响。
+
+目前只有一种坏区：`inverted_band`
 --------------------------------
-vol02 p151 正文上部横着一条粗带，带内**黑白是反的**——纸成了黑、字成了白。
-这不是墨污，是扫描/二值化在这一带翻了极性，所以修法就是把带内的点整体反回来，
-字迹能一笔不少地还原（不像抹黑条那样会连笔画一起抹掉）。
+一条横带内**黑白是反的**（纸成黑、字成白）。不是墨污 —— 是扫描/二值化在这一带翻了极性，
+所以修法是把带内的点整体反回来，字迹一笔不少地还原（抹除法会连笔画一起抹掉，是有损的）。
 
-怎么找这条带
------------
-带的边界是一个**多段梯形**：上沿从左到右一级级抬高（648 → 645 → 641 → 615 → 608 → 600），
-下沿基本平（693，最左一段 723），中间还断开一处（x 663-724 无带）。
-所以不能用一对固定的 y，得逐列量出上下沿。
+带的边界是**多段梯形**：上沿一级级抬高，下沿基本平，中间可能断开。所以不能用一对固定的 y，
+得逐列量。量的办法是找**列间纸列** —— 上下文都无墨、本该全白的那些列；带内它们是纯黑的
+一段，且黑得干净（没有笔画混进来），一量一个准。量到的点中值滤波去异常，再线性内插到整段。
 
-量的办法是找**列间纸列**：上下文都无墨、本该全白的那些列。带内它们是黑的，
-且黑得干净（没有笔画混进来），一量一个准。量到的点做中值滤波去掉个别异常，
-再线性内插到整段宽度，就得到多边形。
-
-判据（在原图 2307×3049 上量的）
-  - 反色前带内墨占比 0.806（纸被翻成黑）；
-  - 反色后 0.194，正文正常水平是 0.152 —— 对上了；
-  - 反色后逐字核对整理本「真卿所見者四卷全本…傳寫者諱其殘缺因於書名增入卦爻二字」，
-    所見 / 者 / 缺因 都对得上，笔画完整。
+实测（vol02 p151，原图 2307×3049）：
+  反色前带内墨占比 0.806（纸被翻成黑）→ 反色后 0.194，正文正常水平 0.152，对上了。
+  逐字核对整理本「真卿所見者四卷全本…傳寫者諱其殘缺因於書名增入卦爻二字」，
+  所見 / 者 / 缺因 笔画完整。p152 同理，对上「周易要義十卷…宋魏了翁撰…僉書樞密院事」。
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from scipy.ndimage import median_filter
+
+# 修好的图落在这里。是产物不是缓存：显式生成、可删掉重来、不会被 LRU 清掉。
+PRECLEANED_DIRNAME = "precleaned"
 
 
 def _trace_band(b: np.ndarray, y_lo: int, y_hi: int, y_probe: int,
@@ -108,3 +113,49 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
         after = float((out < th).mean())
         notes.append(f"{kind}: 全页墨占比 {before:.3f} -> {after:.3f}")
     return out, notes
+
+
+# ── 产物落盘 ────────────────────────────────────────────────────────
+def precleaned_root(repo_root: Path | None = None) -> Path:
+    base = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
+    return base / PRECLEANED_DIRNAME
+
+
+def precleaned_path(book_id: str, page: int, repo_root: Path | None = None) -> Path:
+    return precleaned_root(repo_root) / book_id / f"{page}.png"
+
+
+def build_precleaned(book, pages=None, *, force: bool = False,
+                     log=print, repo_root: Path | None = None) -> list[Path]:
+    """按 book.preclean 生成修好的页图，返回写出的文件。
+
+    只处理登记过的页；已存在且非 force 就跳过。**不碰 raw_dir 里的原图。**
+    """
+    from cv2 import imread, imwrite
+
+    rules_by_page = getattr(book, "preclean", {}) or {}
+    todo = sorted(rules_by_page) if pages is None else [p for p in pages if p in rules_by_page]
+    if pages is not None:
+        missing = [p for p in pages if p not in rules_by_page]
+        if missing:
+            log(f"这些页没在 {book.id}.yaml 的 preclean 段里登记，跳过: {missing}")
+
+    written: list[Path] = []
+    for page in todo:
+        dst = precleaned_path(book.id, page, repo_root)
+        if dst.exists() and not force:
+            log(f"  p{page} 已有，跳过（--force 可重做）: {dst}")
+            continue
+        src = book.raw_path(page)
+        img = imread(str(src), 0)
+        if img is None:
+            raise FileNotFoundError(f"原图缺失: {src}")
+        out, notes = apply_preclean(img, rules_by_page[page])
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not imwrite(str(dst), out):
+            raise IOError(f"写盘失败: {dst}")
+        for n in notes:
+            log(f"  p{page} {n}")
+        log(f"  p{page} -> {dst}")
+        written.append(dst)
+    return written

@@ -83,31 +83,31 @@ class RunContext:
     # 原图（灰度 uint8）。同一页只读一次。
     def raw_page(self, page: int) -> np.ndarray:
         if page not in self._raw:
-            path = self.book.raw_path(page)
+            path = self._page_path(page)
             img = imread(str(path), 0) if path.exists() else None
             if img is None:
                 raise FileNotFoundError(f"原图缺失: {path}")
             if img.ndim == 3:
                 import cv2
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = self._preclean(page, img)
             self._raw[page] = img
         return self._raw[page]
 
-    def _preclean(self, page: int, img: np.ndarray) -> np.ndarray:
-        """Step0：抹掉手工登记过的污渍，再交给 Step1。
+    def _page_path(self, page: int) -> "Path":
+        """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
 
-        默认什么也不做——只有 book.yaml 的 `preclean` 段里登记了这一页才生效。
-        磁盘上的原图不动，处理只发生在内存里这一份。
+        产物由 `python -m open_guji_cv.cli_v2 preclean <book>` 生成，落在
+        `precleaned/<book>/<page>.png`。登记了却还没生成的，这里会提醒一句再退回原图 ——
+        免得改了 yaml 忘了跑，下游却在悄悄用脏图。
         """
-        rules = getattr(self.book, "preclean", {}).get(page)
-        if not rules:
-            return img
-        from ..utils.preclean import apply_preclean
-        out, notes = apply_preclean(img, rules)
-        for n in notes:
-            self.log(f"[Step0 预清理] {self.book.id} p{page} {n}")
-        return out
+        if page in (getattr(self.book, "preclean", {}) or {}):
+            from ..utils.preclean import precleaned_path
+            p = precleaned_path(self.book.id, page)
+            if p.exists():
+                return p
+            self.log(f"[Step0] {self.book.id} p{page} 登记了预清理但产物不存在，"
+                     f"先用原图；跑 `python -m open_guji_cv.cli_v2 preclean {self.book.id}` 生成")
+        return self.book.raw_path(page)
 
     def raw_size(self, page: int) -> tuple[int, int]:
         h, w = self.raw_page(page).shape[:2]
