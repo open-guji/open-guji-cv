@@ -31,7 +31,7 @@ class CellShrinkParams(BaseModel):
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.1", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.2", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",

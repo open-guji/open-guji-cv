@@ -108,3 +108,54 @@ def test_real_pages_no_longer_clip_slot2(page, col, slot):
         run = run + 1 if v else 0
         best = max(best, run)
     assert best < 6, f"p{page}c{col}s{slot} 紧框上方仍有 {best} 行成段字墨（又切字顶了）"
+
+
+def _col(bars: list[tuple[int, int]], strokes: list[tuple[int, int, int, int]],
+         w: int = 200, h: int = 260):
+    """列图：bars 是横贯整幅宽的版框线行段 (起, 止)；strokes 是只在
+    文字带内的字笔画 (起, 止, x0, x1)。"""
+    img = np.full((h, w), 255, np.uint8)
+    for a, b in bars:
+        img[a:b, :] = 0
+    for a, b, xa, xb in strokes:
+        img[a:b, xa:xb] = 0
+    return img
+
+
+def test_thick_frame_bar_alone_is_not_char_ink():
+    """5~8px 厚的版框线本身满足「连续多行、行墨够」，但它带外还在走——
+    不算字墨。算了字墨桩就永远钉不下去，末格整条框线进裁片（用户实审 30 例）。"""
+    img = _col([(30, 38)], [])
+    assert not _has_char_ink(img, 20, 180, 10, 50)
+
+
+def test_char_stroke_beside_the_bar_still_counts():
+    """框线之上还有一段真字墨（带内 0.3 宽、10 行、带外无墨）→ 仍是字墨，不钉。"""
+    img = _col([(40, 47)], [(20, 30, 60, 110)])
+    assert _has_char_ink(img, 20, 180, 10, 50)
+
+
+def test_wide_stroke_without_outside_ink_is_char():
+    """「二」的底横、「一」：带内行墨 ≥0.5，但到界行就停、带外无墨 → 是字。"""
+    img = _col([], [(20, 28, 25, 175)])
+    assert _has_char_ink(img, 20, 180, 10, 50)
+
+
+def test_no_probe_falls_back_to_dense_rule():
+    """探测窗取不到（条带贴满图宽）时只认第一档：满宽的密行是框线，三成宽的不是。"""
+    img = np.full((260, 180), 255, np.uint8)
+    img[30:38, :] = 0
+    assert not _has_char_ink(img, 0, 180, 10, 50)
+    img2 = np.full((260, 180), 255, np.uint8)
+    img2[20:40, :54] = 0
+    assert _has_char_ink(img2, 0, 180, 10, 50)
+
+
+def test_column_image_thin_margin_uses_dense_rule():
+    """v2 列图：内容窗口外只剩 5px 边距、框线到窗口就停（带外墨 0）。探不到
+    就只认密行——满宽 0.9 的框线行不算字墨，桩要钉得下去（vol01 p11 c3 实况）。"""
+    img = np.full((260, 190), 255, np.uint8)
+    img[30:38, 5:185] = 0
+    assert not _has_char_ink(img, 5, 185, 10, 50)
+    img[15:25, 60:110] = 0          # 框线上方再来一段真字墨 → 仍算字
+    assert _has_char_ink(img, 5, 185, 10, 50)

@@ -1836,22 +1836,64 @@ FRAME_BAND_MAX_CUT = 0.35  # 钉桩最多吃掉端格的这个比例（× 格高
 # 字墨闸：桩要跨过的那段里有这么厚的成段墨就不钉（见钉桩处注释）
 PIN_INK_ROW_T = 0.12       # 行墨率 ≥ 此值算「有墨行」（框渣行通常 <0.10）
 PIN_INK_RUN = 4            # 连续这么多有墨行 = 成段字墨，不是框渣
+PIN_PROBE_MIN = 12         # 文字带外侧探测窗至少这么宽才算「探得到」；v2 列图
+                           # 只留 3~6px 边距且框线到窗口就停，探不到时只认密行
 
 
 def _has_char_ink(page: np.ndarray, x0: int, x1: int,
                   y0: int, y1: int) -> bool:
-    """[y0,y1) × [x0,x1) 里有没有**成段字墨**（而非零星框渣）。
+    """[y0,y1) × [x0,x1) 里有没有**成段字墨**（而非零星框渣、也非版框线）。
 
     判据是「连续 PIN_INK_RUN 行、每行墨率 ≥ PIN_INK_ROW_T」。框线残渣要么
     很薄（一两行）、要么断续；字的横画连成一片。实测「非」的顶横在这段里
     是 0.17 墨率、连续十几行，框渣则达不到 PIN_INK_RUN。
+
+    版框线行不算字墨（2026-09-06 用户实审「末格底部横线」30 例回流）：桩要
+    跨过的那段 [内缘, 条带端) 里**必然**躺着版框线本身，而 5~8px 厚的框线
+    正好就是「连续 ≥PIN_INK_RUN 行、行墨 ≥PIN_INK_ROW_T」——闸把框线当成字，
+    桩就一次也钉不下去（vol01 正文 350 列量得到底框线，242 列的末格把整条
+    框线带进裁片）。判「框线行」分两步：行内先过 grid_segment 的双档
+    （行墨 ≥FRAME_ROW_T，或 ≥FRAME_ROW_T2 且最长横向段 ≥FRAME_RUN_T × 宽），
+    再看这一行在文字带**外侧**是否还在走（同 strip_frame_stub 的思路：框线
+    横贯整版，字的笔画到界行就停）。「二」的底横、「一」这类宽横画行内也
+    能过双档，但带外无墨，照旧算字墨。两侧探测窗都窄于 PIN_PROBE_MIN（v2
+    的列图只留 3~6px 边距，框线到内容窗口就停）时探不到，只认第一档密行
+    ——与 frame_band_inner 走框带用的是同一把尺，桩要跨的那段本来就在
+    内缘之外，密行只可能是框线。
     """
     if y1 <= y0 or x1 <= x0:
         return False
-    band = page[max(0, y0):max(0, y1), max(0, x0):max(0, x1)]
+    H, W = page.shape[:2]
+    ya, yb, xa, xb = max(0, y0), max(0, y1), max(0, x0), max(0, x1)
+    band = page[ya:yb, xa:xb]
     if band.size == 0:
         return False
-    rows = (band < BINARY_THRESHOLD_PATCH).mean(axis=1) >= PIN_INK_ROW_T
+    from .grid_segment import FRAME_ROW_T, FRAME_ROW_T2, FRAME_RUN_T
+    binary = band < BINARY_THRESHOLD_PATCH
+    rowink = binary.mean(axis=1)
+    w = max(1, binary.shape[1])
+    left = page[ya:yb, max(0, xa - STUB_SIDE_PROBE):xa] < BINARY_THRESHOLD_PATCH
+    right = page[ya:yb, min(W, xb):min(W, xb + STUB_SIDE_PROBE)] < BINARY_THRESHOLD_PATCH
+    probe = left.shape[1] >= PIN_PROBE_MIN or right.shape[1] >= PIN_PROBE_MIN
+
+    def is_bar(r: int) -> bool:
+        dense = rowink[r] >= FRAME_ROW_T
+        if not probe:
+            return bool(dense)
+        if not dense:
+            if rowink[r] < FRAME_ROW_T2:
+                return False
+            row = binary[r].astype(np.int8)
+            d = np.diff(np.concatenate(([0], row, [0])))
+            starts, ends = np.flatnonzero(d == 1), np.flatnonzero(d == -1)
+            run = int((ends - starts).max()) if starts.size else 0
+            if run / w < FRAME_RUN_T:
+                return False
+        lo = float(left[r].mean()) if left.shape[1] else 0.0
+        ro = float(right[r].mean()) if right.shape[1] else 0.0
+        return max(lo, ro) >= STUB_SIDE_INK
+
+    rows = [(rowink[r] >= PIN_INK_ROW_T) and not is_bar(r) for r in range(len(rowink))]
     run = best = 0
     for v in rows:
         run = run + 1 if v else 0
