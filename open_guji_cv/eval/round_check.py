@@ -89,7 +89,24 @@ def _same_char(a: str | None, b: str | None) -> bool:
 
 
 def accuracy(book: str, pages: list[int], store=None) -> dict:
-    """自动放行对两路真值的准确率。**必须成对读**：放行的本来就是容易那批。"""
+    """自动放行对两路真值的准确率。**必须成对读**：放行的本来就是容易那批。
+
+    ## ⚠️ 整理本金标里有一撮是自证的，必须剔出去单报（2026-09-06）
+
+    `v2_align` 的金标 `shape` 有三个来源（`GoldChar.source`）：`db_same`（库判 same
+    继承的字）、`context`（Step6 定的）、**`fallback`（库 top1 兜底）**。前两者虽然
+    也来自管线，但金标能成立的前提是**整理本 8-gram 锚定成功**（`align_op=equal` =
+    管线转写与整理本文本对上了），整理本是独立的文本证据；而 `fallback` 那批
+    ——`_slots_from_decision._fallback` 直接取 `match.candidates[0][0]`——拿它去验
+    「库 top1 准不准」是纯自证。
+
+    实测 vol01 全册 16,334 条金标：equal 16,244（其中 fallback 465 = 2.8% 自证）、
+    **replace 90**（整理本与管线不一致、金标取整理本——最硬的独立证据）。
+
+    所以本函数把 `gold` 拆成三个数：`gold`（全量，历史口径不动）、
+    **`gold_independent`（剔掉 fallback，该拿它当主数）**、`gold_replace`
+    （只看 replace 段，样本小但零自证）。报数时三个一起给。
+    """
     from ..core.step import page_key
     from ..gold.v2_align import align_book
     from ..products import kinds as _k  # noqa: F401
@@ -99,6 +116,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
     gold = {c.id: c for g in align_book(book, pages, st) if g.anchored for c in g.chars}
     truth = load_verdicts(book)
     okg = ng = okt = nt = 0
+    oki = ni = okr = nr = 0          # independent（剔 fallback）/ replace 段
     errors: list[dict] = []
     for pg in pages:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
@@ -114,14 +132,25 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     hit = (r.char == g.shape or r.char == g.reading
                            or _same_char(r.char, g.shape))
                     okg += hit
+                    # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
+                    if getattr(g, "source", "") != "fallback":
+                        ni += 1
+                        oki += hit
+                    if g.align_op == "replace":
+                        nr += 1
+                        okr += hit
                     if not hit:
                         errors.append({"id": r.id, "pred": r.char,
-                                       "gold": g.shape, "channel": r.channel})
+                                       "gold": g.shape, "channel": r.channel,
+                                       "source": getattr(g, "source", ""),
+                                       "op": g.align_op})
                 t = truth.get(r.id)
                 if t:
                     nt += 1
                     okt += (r.char == t or _same_char(r.char, t))
-    return {"gold": [okg, ng], "human": [okt, nt], "errors": errors[:10]}
+    return {"gold": [okg, ng], "gold_independent": [oki, ni],
+            "gold_replace": [okr, nr], "human": [okt, nt],
+            "self_evident": ng - ni, "errors": errors[:10]}
 
 
 def review_rate(book: str, pages: list[int], store=None) -> dict:
