@@ -351,6 +351,32 @@ def _wilson_low(k: int, n: int, z: float = 1.96) -> float:
     return (c - r) / d
 
 
+_LEDGER = None
+
+
+def _multi_form(char: str | None) -> bool:
+    """char 所在的账本组里，还有别的形被本书刻过（db 或 human > 0）→ 这一位机器可能写错形。"""
+    global _LEDGER
+    if not char:
+        return False
+    if _LEDGER is None:
+        try:
+            from ..variant_ledger import BookLedger
+            _LEDGER = BookLedger.load_or_empty()
+        except Exception:
+            _LEDGER = False
+    if not _LEDGER:
+        return False
+    g = _LEDGER.group_of(char)
+    if not g:
+        return False
+    for f, rec in (g.get("forms") or {}).items():
+        b = rec.get("book") or {}
+        if f != char and (int(b.get("db", 0)) + int(b.get("human", 0))) > 0:
+            return True
+    return False
+
+
 def form_fidelity(book: str, pages: list[int], store=None) -> dict:
     """判据 E（variant_strategy.md §4.5）：**字形保真率**——自动放行里，字形与人裁
     完全一致的比例。分母只取「异体位」：自动放行且 (reading ≠ char，或走了
@@ -380,8 +406,13 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                 if not r.admit:
                     n_open += f.get("state") == "open"
                     continue
+                # 分母还要算上**没记转换的异体位**（2026-09-06 补）：context / dual 通道
+                # 把整理本形直接写成 char（已、隸、變、即、歷），reading 与 char 相同，
+                # 这里看不见，E 报 50/50 时用户抽审 274 条里其实错了 25 条。
+                # 凡 char 所在的账本组还有别的形被本书刻过（db/human>0），就是可能写错形的位。
                 is_var = bool(r.reading and r.reading != r.char) \
-                    or f.get("state") in ("fixed_lib", "fixed_form")
+                    or f.get("state") in ("fixed_lib", "fixed_form") \
+                    or _multi_form(r.char)
                 if not is_var or not r.char:
                     continue
                 n_var += 1

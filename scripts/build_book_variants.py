@@ -303,7 +303,10 @@ def main() -> int:
         if not has_story:
             continue
         policy, minor = ref_policy_of({m: forms[m]["ref"] for m in forms})
-        preferred = (max(carved_pos, key=lambda m: (carved_pos[m], forms[m]["book"]["human"], -ord(m)))
+        # preferred 人裁优先（2026-09-06 改）：products 计数含机器写错的形——變 组 products 52
+        # 全是 dual 通道把整理本形当刻本形，人裁 8 次全是 𠮓，按刻次多数选就选错。
+        # 有人确认过的形先按人裁次数比，没人确认的才看刻次。
+        preferred = (max(carved_pos, key=lambda m: (forms[m]["book"]["human"], carved_pos[m], -ord(m)))
                      if carved_pos else canon)
         out_groups[canon] = {
             "canonical": canon,

@@ -100,5 +100,6 @@ def test_counts_add_up():
         if d is None:
             continue
         n = sum(len(cc.chars) for cc in d.columns if cc.ok)
-        assert d.n_auto + d.n_review == n, \
-            f"p{pg} 计数对不上：{d.n_auto}+{d.n_review} != {n}"
+        # 排除名单里的格既不自动也不人审（seed_admit v1.3 的 n_excluded），三者之和才是全部
+        assert d.n_auto + d.n_review + d.n_excluded == n, \
+            f"p{pg} 计数对不上：{d.n_auto}+{d.n_review}+{d.n_excluded} != {n}"
