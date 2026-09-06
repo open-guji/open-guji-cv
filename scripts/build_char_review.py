@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""按字复核页：把指定几个字的**全部**字位排成一页，大图 + 上下文，一眼扫过去挑错。
+"""按字复核页：把指定几个字的**全部**字位排成一页，大图 + 上下文，**当场就能改**。
 
     PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe scripts/build_char_review.py --chars 曾會
     … --chars 注註 --books vol01,vol02 --out output/review_zhu.html
@@ -8,14 +8,31 @@
 「与整理本不一致」的位，而形近字最危险的恰恰是**两边一致但两边都错**，那种位
 在对勘报告里根本不出现——所以这里按字取全集，不管对错。
 
-页面按「字 × 判定来源」分组，每格给：
-  - 目标字块大图（120px，看得清笔画）
+页面按字分组，每格给：
+  - 目标字块大图（看得清笔画）
   - 同列上下 2 格的竖条（判断上下文用）
   - 转写 ±6 字、整理本 ±6 字（有对齐时）
-  - 来源徽章（人裁 / 自动·通道 / 待审）与库候选前二（看它拿不准的是哪两个）
+  - 来源徽章（人裁 / 自动·通道 / 待审）与库候选前四（看它拿不准的是哪两个）
 
 排序把**可疑的排前面**：库 top1 与最终字不一致的、库前两名分差小的（形近字典型
 特征）、待审的，都往上提。
+
+## 能改判（2026-09-06 加）
+
+用户第一版只能看不能标：「我看到了怎么标注呢？有这两个字标反的，也有是别的字的，
+还有切分错误的」——三类问题对应三种操作，页面上都给：
+
+  - **改字**：点候选按钮，或直接在框里输入（两个字标反、认成别的字都用这个）
+  - **非字**：这一格根本不是字
+  - **切坏**：字形不完整 / 混了邻字残墨（对应 truncated / contaminated）
+
+裁决走与审查页**同一套协议**（`POST /api/events` 的 confirm / not_a_char /
+seg_defect），落同一个事件日志、同一批消费者，因此复核页改的判和审查页改的判
+完全等价，没有第二条数据通路。页面需要控制台在跑（默认 127.0.0.1:8641，
+`--api` 可改）；纯离线打开时提交按钮会说明连不上。
+
+只有 己/已/巳 分「字形 / 文意」（`needsReading`，与控制台同一条规则），
+其余字一律 reading 跟随 shape，不记转换。
 """
 from __future__ import annotations
 
@@ -207,22 +224,43 @@ def render(chars: str, entries: list[dict], meta: dict) -> str:
                if e["big"] else '<div class="big nop">无图</div>')
         strip = (f'<img class="strip" src="data:image/webp;base64,{e["strip"]}" alt="">'
                  if e["strip"] else "")
+        # 可选的字：库候选 + 整理本字 + 当前字，去重后都做成按钮，点一下就是改判
+        picks, seen = [], set()
+        for c in ([e["char"], e["ref"]] + [x for x, _ in e["cands"]]):
+            if c and c not in seen:
+                seen.add(c)
+                picks.append(c)
+        btns = "".join(
+            f'<button class="pick{" on" if c == e["char"] else ""}" data-ch="{_e(c)}">{_e(c)}</button>'
+            for c in picks)
         cands = " ".join(f'<span class="cd{" hit" if c == e["char"] else ""}">{_e(c)}<sub>{v}</sub></span>'
                          for c, v in e["cands"]) or "—"
         refline = (f'<div class="ln"><span class="k">整理本</span>'
                    f'<b class="{"bad" if e["ref"] and e["ref"] != e["char"] else ""}">{_e(e["ref"]) or "—"}</b>'
                    f'<span class="ctx">{_e(e["ref_ctx"])}</span></div>')
         cls = "card" + (" susp" if (e["lib1"] and e["lib1"] != e["char"]) or e["source"] == "待审" else "")
-        return f"""<div class="{cls}" data-src="{_e(e['source'])}" data-char="{_e(e['char'])}" data-book="{_e(e['book'])}">
+        return f"""<div class="{cls}" data-src="{_e(e['source'])}" data-char="{_e(e['char'])}"
+     data-book="{_e(e['book'])}" data-id="{_e(e['id'])}" data-orig="{_e(e['char'])}">
   <div class="imgs">{img}{strip}</div>
   <div class="body">
     <div class="hd"><b class="ch">{_e(e['char'])}</b>
       <span class="mono">{_e(e['id'])}</span>
       <span class="badge b-{_e(e['source'])}">{_e(e['source'])}{('·' + _e(e['channel'])) if e['channel'] else ''}</span>
+      <span class="state"></span>
     </div>
     <div class="ln"><span class="k">库候选</span>{cands}</div>
     <div class="ln"><span class="k">转写</span><span class="ctx">{_e(e['hyp_ctx'])}</span></div>
     {refline}
+    <div class="act">
+      <span class="k">改判</span>{btns}
+      <input class="txt" placeholder="其它字" size="4">
+      <span class="rd" hidden>→ <input class="txtrd" placeholder="文意" size="4"
+            title="只有 己/已/巳 才分字形与文意"></span>
+      <button class="mk" data-mark="non" title="这一格根本不是字">非字</button>
+      <button class="mk" data-mark="truncated" title="笔画被切掉了一部分">切坏</button>
+      <button class="mk" data-mark="contaminated" title="混进了邻字残墨/界行/版框">有噪声</button>
+      <button class="undo" title="撤销这一格的改动">↺</button>
+    </div>
   </div>
 </div>"""
 
@@ -281,6 +319,25 @@ def render(chars: str, entries: list[dict], meta: dict) -> str:
   .filters {{ position:sticky; top:0; background:var(--paper); padding:.5rem 0; z-index:5;
              border-bottom:1px solid var(--rule); font-size:.85rem;
              display:flex; gap:.9rem; flex-wrap:wrap; align-items:center; }}
+  .act {{ display:flex; gap:.25rem; align-items:center; flex-wrap:wrap; margin-top:.35rem;
+         padding-top:.35rem; border-top:1px dashed var(--rule); }}
+  .act button {{ font-family:var(--serif); font-size:.95rem; padding:.05rem .4rem;
+                border:1px solid var(--rule); background:var(--panel); color:var(--ink);
+                border-radius:3px; cursor:pointer; }}
+  .act button.on {{ background:var(--indigo); color:#fff; border-color:var(--indigo); }}
+  .act button.mk, .act button.undo {{ font-family:var(--sans); font-size:.7rem; color:var(--mute); }}
+  .act button.mk.on {{ background:var(--zhu); color:#fff; border-color:var(--zhu); }}
+  .act input {{ font-family:var(--serif); font-size:.95rem; padding:.05rem .3rem;
+               border:1px solid var(--rule); background:var(--panel); color:var(--ink); border-radius:3px; }}
+  .card.dirty {{ background:color-mix(in srgb, var(--indigo) 7%, var(--panel)); }}
+  .state {{ font-size:.68rem; color:var(--indigo); font-weight:700; }}
+  .bar {{ position:sticky; bottom:0; background:var(--panel); border-top:2px solid var(--ink);
+         padding:.6rem .8rem; margin:1.5rem -1.4rem -3rem; display:flex; gap:1rem;
+         align-items:center; flex-wrap:wrap; z-index:6; }}
+  .bar button {{ font-size:.9rem; padding:.35rem 1rem; border-radius:3px; cursor:pointer;
+                border:1px solid var(--indigo); background:var(--indigo); color:#fff; }}
+  .bar button:disabled {{ opacity:.45; cursor:default; }}
+  .bar .msg {{ font-size:.85rem; color:var(--mute); }}
   @media (max-width:640px) {{ .card {{ grid-template-columns:1fr; }} }}
 </style>
 <header>
@@ -302,8 +359,18 @@ def render(chars: str, entries: list[dict], meta: dict) -> str:
   <span id="shown" class="mono"></span>
 </div>
 {"".join(secs)}
+<div class="bar">
+  <button id="submit" disabled>提交改判</button>
+  <span class="msg" id="msg">改了 0 条</span>
+  <span class="msg">批次 <code class="mono">{_e(meta['batch'])}</code> · API <code class="mono">{_e(meta['api'])}</code></span>
+</div>
 <script>
+const API={meta['api']!r}, BATCH={meta['batch']!r};
+// 只有 己/已/巳 分字形与文意（与控制台 needsReading 同一条规则）
+const SPLIT=new Set(['己','已','巳']);
 const cards=[...document.querySelectorAll('.card')];
+const edits={{}};   // id -> {{shape, reading, mark}}
+
 function apply(){{
   const srcs=new Set([...document.querySelectorAll('.f-src:checked')].map(i=>i.value));
   const susp=document.getElementById('only-susp').checked;
@@ -318,6 +385,87 @@ function apply(){{
   document.getElementById('shown').textContent=n+' / '+cards.length;
 }}
 document.querySelectorAll('.f-src,#only-susp').forEach(i=>i.addEventListener('change',apply));
+
+function paint(card){{
+  const id=card.dataset.id, e=edits[id];
+  card.classList.toggle('dirty', !!e);
+  const st=card.querySelector('.state');
+  st.textContent = e ? (e.mark ? ({{non:'标为非字',truncated:'标为切坏',contaminated:'标为有噪声'}})[e.mark]
+                               : ('改为 '+e.shape+(e.reading&&e.reading!==e.shape?(' / 文意 '+e.reading):'')))
+                     : '';
+  card.querySelectorAll('.pick').forEach(b=>
+    b.classList.toggle('on', e&&!e.mark ? b.dataset.ch===e.shape : b.dataset.ch===card.dataset.orig));
+  card.querySelectorAll('.mk').forEach(b=>
+    b.classList.toggle('on', !!e&&e.mark===b.dataset.mark));
+  const rd=card.querySelector('.rd');
+  rd.hidden = !(e&&!e.mark&&SPLIT.has(e.shape));
+  const n=Object.keys(edits).length;
+  document.getElementById('msg').textContent='改了 '+n+' 条';
+  document.getElementById('submit').disabled = n===0;
+}}
+function setEdit(card, patch){{
+  const id=card.dataset.id;
+  if(patch===null){{ delete edits[id]; }}
+  else {{
+    const cur=edits[id]||{{}};
+    const nx={{...cur, ...patch}};
+    if(nx.shape && !nx.mark) nx.reading = SPLIT.has(nx.shape) ? (nx.reading||'') : nx.shape;
+    // 改回原样且没标记 = 等于没改
+    if(!nx.mark && nx.shape===card.dataset.orig && (!SPLIT.has(nx.shape)||!nx.reading||nx.reading===nx.shape))
+      {{ delete edits[id]; }}
+    else edits[id]=nx;
+  }}
+  paint(card);
+}}
+document.addEventListener('click', ev=>{{
+  const card=ev.target.closest('.card'); if(!card) return;
+  const p=ev.target.closest('.pick');
+  if(p) return setEdit(card, {{shape:p.dataset.ch, mark:''}});
+  const m=ev.target.closest('.mk');
+  if(m){{
+    const cur=edits[card.dataset.id];
+    return setEdit(card, (cur&&cur.mark===m.dataset.mark) ? null : {{mark:m.dataset.mark, shape:''}});
+  }}
+  if(ev.target.closest('.undo')) return setEdit(card, null);
+}});
+document.addEventListener('input', ev=>{{
+  const card=ev.target.closest('.card'); if(!card) return;
+  if(ev.target.classList.contains('txt')){{
+    const v=ev.target.value.trim();
+    setEdit(card, v ? {{shape:v, mark:''}} : null);
+  }} else if(ev.target.classList.contains('txtrd')){{
+    const cur=edits[card.dataset.id]; if(cur) setEdit(card, {{reading:ev.target.value.trim()}});
+  }}
+}});
+
+document.getElementById('submit').onclick=async()=>{{
+  const btn=document.getElementById('submit'), msg=document.getElementById('msg');
+  const rows=[], now=Date.now();
+  for(const [id,e] of Object.entries(edits)){{
+    if(e.mark==='non') rows.push({{id, v:'not_a_char', client_ts:now}});
+    else if(e.mark) rows.push({{id, v:'seg_defect', quality:e.mark, shape:'', reading:'', client_ts:now}});
+    else {{
+      const rd = SPLIT.has(e.shape) ? (e.reading||e.shape) : e.shape;
+      rows.push({{id, v:'confirm', shape:e.shape, reading:rd,
+                 conversion: rd!==e.shape ? 1 : 0, client_ts:now}});
+    }}
+  }}
+  btn.disabled=true; msg.textContent='提交中…';
+  try{{
+    const r=await fetch(API+'/api/events', {{method:'POST', headers:{{'Content-Type':'application/json'}},
+      body: JSON.stringify({{batch:BATCH, step:'seed_admit', unit:'cell', kind:'confirm', events:rows}})}});
+    if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,120));
+    const d=await r.json();
+    msg.textContent='已提交 '+rows.length+' 条'+(d.consumed!=null?('，已消费 '+JSON.stringify(d.consumed)):'')
+      +'。重跑 seed_admit 后本页需重新生成。';
+    for(const id of Object.keys(edits)) delete edits[id];
+    cards.forEach(paint);
+    document.getElementById('msg').textContent=msg.textContent;
+  }}catch(err){{
+    btn.disabled=false;
+    msg.textContent='提交失败：'+err.message+'（控制台没在跑？先起 guji-cv console）';
+  }}
+}};
 apply();
 </script>"""
 
@@ -329,6 +477,10 @@ def main() -> int:
     ap.add_argument("--pages", default="", help="页表达式；空 = 各书全部有产物的页")
     ap.add_argument("--corpus", default=DEFAULT_CORPUS)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--api", default="http://127.0.0.1:8641",
+                    help="控制台地址（页面提交改判用）")
+    ap.add_argument("--batch", default=None,
+                    help="事件批次名；默认 <书>-review-<字>")
     a = ap.parse_args()
 
     t0 = time.time()
@@ -350,9 +502,12 @@ def main() -> int:
         print(f"  {book}: {len(pages)} 页 → {len(got)} 个字位")
         entries.extend(got)
 
+    batch = a.batch or f"{a.books.split(',')[0].strip()}-review-{a.chars}"
     out = Path(a.out) if a.out else REPO / "output" / f"review_{a.chars}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(a.chars, entries, {"books": a.books}), encoding="utf-8")
+    out.write_text(render(a.chars, entries,
+                          {"books": a.books, "api": a.api.rstrip("/"), "batch": batch}),
+                   encoding="utf-8")
     cnt = Counter(e["source"] for e in entries)
     susp = sum(1 for e in entries if (e["lib1"] and e["lib1"] != e["char"]) or e["source"] == "待审")
     print(f"共 {len(entries)} 字位（{dict(cnt)}），可疑 {susp}")

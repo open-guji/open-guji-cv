@@ -27,6 +27,7 @@ from typing import Iterator
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -50,6 +51,17 @@ from ..products.store import ProductStore
 STATIC = Path(__file__).parent / "static"
 
 app = FastAPI(title="open-guji-cv 控制台", version="0.1")
+# 允许离线页面回传裁决（2026-09-06）：`scripts/build_char_review.py` 出的按字复核页是
+# 单文件 HTML，用 file:// 打开，origin 是 "null"，向 127.0.0.1 发 POST 会被 CORS 拦下
+# （preflight 没有 Access-Control-Allow-Origin）。控制台本来就只绑回环地址、只给本机用，
+# 放开跨域不扩大暴露面——不放开的话，那些页面就只能看不能改判。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # 含 file:// 的 "null" origin
+    allow_credentials=False,  # 与 allow_origins=* 不能并存，也用不到 cookie
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 runner = JobRunner()
 _engines_lock = threading.Lock()
 
