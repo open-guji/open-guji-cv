@@ -647,6 +647,10 @@ let RV = { cards: [], cur: 0, verdicts: {}, seen: {}, rare: {} };
 // 与 GlyphDB.admit_instance 的 shape/char 分岔、charset_and_lm.md §四 同源。
 const SPLIT_CHARS = new Set(['己', '已', '巳']);
 const needsReading = ch => SPLIT_CHARS.has(ch);
+// 释读只认汉字：2026-09-06 审计发现 8 条人裁释读是拼音首字母（l/m/y/x/s/z——输入法没转就提交了），
+// 字形是对的。非汉字的释读一律当没填 = 跟随字形。
+const HAN_RE = /[㐀-鿿\u{20000}-\u{3134f}]/u;
+const readingOf = v => (v.reading && HAN_RE.test(v.reading)) ? v.reading : (v.shape || '');
 
 // 候选顺序（用户 2026-09-06「没看到整理本用的是什么，应该放第一位；然后字形库最佳匹配；
 // 然后生僻字算法；paddle ocr 准确率不好」）：① 整理本用字 ② 库最佳 ③ 生僻字算法（字体模板+CNN）
@@ -1170,13 +1174,13 @@ async function rvSend() {
     // 那批 144 条 truncated + 128 条 contaminated 就是这两档的既有金标。
     if (v.done === 'truncated' || v.done === 'contaminated') {
       rows.push({ id, v: 'seg_defect', quality: v.done,
-                  shape: v.shape || '', reading: v.reading || v.shape || '',
+                  shape: v.shape || '', reading: readingOf(v),
                   client_ts: v.ts, dwell_ms: v.dwell });
       continue;
     }
     // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
-    rows.push({ id, v: 'confirm', shape: v.shape, reading: v.reading || v.shape,
-                conversion: (v.reading && v.reading !== v.shape) ? 1 : 0,
+    rows.push({ id, v: 'confirm', shape: v.shape, reading: readingOf(v),
+                conversion: (readingOf(v) !== v.shape) ? 1 : 0,
                 client_ts: v.ts, dwell_ms: v.dwell });
   }
   if (pending) {
