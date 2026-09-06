@@ -213,6 +213,11 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
     n_cell = n_rev = 0
     n_seg = n_seg_ref = n_lost = 0
     lost: list[dict] = []
+    # T1 版本注（闭集，以「本」收尾）与 T2 案語（开放文本）性质完全不同，
+    # 混着报看不出哪边是瓶颈：T1 有 78 条短语的闭集先验、T2 只能靠整理本逐字对齐。
+    # 分型只看**转写自己**（以「本」收尾且不超 20 字），不硬编码页号——
+    # 新册进来同样适用，也不会因为分型表没更新就悄悄归错。
+    by_type: dict[str, list[int]] = {"T1": [0, 0], "T2": [0, 0]}
     for pg in pages:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         if a is None:
@@ -225,12 +230,16 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
                 sset = set(seg)
                 rs = sort_by_reading([r for r in jz if r.slot in sset])
                 n_seg += 1
+                text = "".join(r.char or "" for r in rs)
+                kind = "T1" if (text.endswith("本") and len(text) <= 20) else "T2"
                 for r in rs:
                     if "excluded" in (r.doubts or []):
                         continue
                     n_cell += 1
+                    by_type[kind][1] += 1
                     if not r.admit:
                         n_rev += 1
+                        by_type[kind][0] += 1
                 # 丢字：拿整理本覆盖到的格数当参照。整段都锚上时格数才可比。
                 covered = [r for r in rs if r.id in golds]
                 if len(covered) == len(rs) and rs:
@@ -252,6 +261,9 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
         "n_lost": n_lost,
         "lost_rate": (n_lost / n_seg_ref) if n_seg_ref else None,
         "lost": lost[:10],
+        "by_type": {k: {"n_review": v[0], "n_cells": v[1],
+                        "rate": (v[0] / v[1]) if v[1] else None}
+                    for k, v in by_type.items() if v[1]},
     }
 
 
