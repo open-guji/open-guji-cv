@@ -26,7 +26,7 @@ class RowSegmentParams(BaseModel):
     raise_tol: float = 2.0
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
-    seam_band: int = 12                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
+    seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
 
 
 @register_step

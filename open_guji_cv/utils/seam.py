@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import numpy as np
 
-SEAM_BAND = 12      # 走廊半宽（px）；实验里 p90 偏离 9px，12 够用且不会绕进邻字身
+SEAM_BAND = 20      # 走廊半宽（px）。2026-09-05 折线金标 19 条：人的折线离直线最远 21px，
+                    # 12 时 16/19 缝无墨，20 时 18/19；墨的代价挡住了绕进邻字身，20 仍安全
 SEAM_STEP = 2       # 每前进一列纵向最多移动的像素
 SEAM_TURN = 0.02    # 每 1px 纵向移动的代价（一个墨像素 = 1）
 SEAM_MAX_INK = 3    # 缝上墨像素超过这个数就不用缝（保持直线切点）。60 页验收：缝上墨 0 / 1–3 px 的
