@@ -90,8 +90,24 @@ class RunContext:
             if img.ndim == 3:
                 import cv2
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = self._preclean(page, img)
             self._raw[page] = img
         return self._raw[page]
+
+    def _preclean(self, page: int, img: np.ndarray) -> np.ndarray:
+        """Step0：抹掉手工登记过的污渍，再交给 Step1。
+
+        默认什么也不做——只有 book.yaml 的 `preclean` 段里登记了这一页才生效。
+        磁盘上的原图不动，处理只发生在内存里这一份。
+        """
+        rules = getattr(self.book, "preclean", {}).get(page)
+        if not rules:
+            return img
+        from ..utils.preclean import apply_preclean
+        out, notes = apply_preclean(img, rules)
+        for n in notes:
+            self.log(f"[Step0 预清理] {self.book.id} p{page} {n}")
+        return out
 
     def raw_size(self, page: int) -> tuple[int, int]:
         h, w = self.raw_page(page).shape[:2]
