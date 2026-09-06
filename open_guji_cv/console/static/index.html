@@ -983,8 +983,13 @@ async function loadRound() {
   // F 夹注：只有本册这批页里有夹注格才亮灯（vol01 卷首一一处没有）
   if (d.F && d.F.n_cells) {
     const f = d.F;
+    const bt = f.by_type || {};
+    const tstr = ['T1', 'T2'].filter(k => bt[k]).map(k =>
+      k + (k === 'T1' ? '版本注' : '案語') + ' ' + bt[k].n_review + '/' + bt[k].n_cells
+        + ' = ' + (bt[k].rate * 100).toFixed(2) + '%').join(' · ');
     const body = '人审 ' + f.n_review + '/' + f.n_cells + ' = ' + (f.rate * 100).toFixed(2) + '%'
       + ' · 段 ' + f.n_segments + '（有整理本参照 ' + f.n_segments_with_ref + '）'
+      + (tstr ? '<div class="qs">' + tstr + '</div>' : '')
       + '<div class="qs">丢字 ' + f.n_lost + ' 段'
       + (f.lost_rate != null ? '（' + (f.lost_rate * 100).toFixed(1) + '%）' : '')
       + (f.n_no_ref ? ' · 锚不上整理本 ' + f.n_no_ref + ' 段（多为 T2 案語）' : '') + '</div>'
