@@ -63,3 +63,11 @@ output/tmp*/
 
 # 对勘报告（scripts/build_collation_report.py 产物，可再生；分享件在 overview）
 output/collation_*
+
+# 字形库 SQLite：83MB 二进制，每次提交近乎多存一份完整副本（历史里 63 版 = 3.19 GiB）。
+# 真源是 output/glyph_store/（glyph-db export 导出，进版本控制），
+# 本文件由 glyph-db rebuild 重建 —— 与库内 README「sqlite 是可重建索引，不进版本控制」一致。
+output/glyph.db
+output/glyph.db-journal
+output/glyph.db-wal
+output/glyph.db-shm
