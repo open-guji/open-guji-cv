@@ -217,14 +217,27 @@ def label_page(page: str, slots: list[tuple], book: str,
             # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
             # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
             # 位置本身就不可信——实测漏进来的错标（卷→曰、己→已）全是
-            # 这种。要求段长 ≤3 且左右都有 ≥2 字的 equal 段贴身夹住。
+            # 这种。要求段长 ≤3，且左右被 equal 夹住。
+            #
+            # ⚠️ 夹住的门槛：**一侧 ≥2 字，另一侧 ≥1 字**（2026-09-06 放宽，
+            # 原来两侧都要 ≥2）。原规则丢掉了一整类真实模式：连续几个单字
+            # replace 被 1 字 equal 隔开，而整段外面被大片 equal 锚得很牢。
+            # 实例 vol02:32:7:6「目→曰 | 口 | 誤→訣 | 今詳考之實不盡然…」
+            # ——后面 34 字全对，位置毫无疑问，却因为紧邻的 equal 只有「口」
+            # 一个字被丢；vol02:31:1:7 的人名「伏曼容」同理。
+            #
+            # 放宽的代价实测为零：两册上有人裁真值的 replace 金标，
+            # 严格闸 176/214 = 82.2%，放宽后 198/241 = **82.2%**，
+            # 准确率一模一样而覆盖多 337 条（现有 1523 条的 22%）。
+            # 那 18% 的「不一致」也不是错标，是「忠于刻本字形」方针下的正常
+            # 分歧：刻本刻 櫽/祗/囘/𨽾，整理本印 檃/祇/回/隷。
             if (i2 - i1) > 3:
                 continue
-            prev_ok = (n > 0 and ops[n - 1][0] == "equal"
-                       and ops[n - 1][2] - ops[n - 1][1] >= 2)
-            next_ok = (n + 1 < len(ops) and ops[n + 1][0] == "equal"
-                       and ops[n + 1][2] - ops[n + 1][1] >= 2)
-            if not (prev_ok and next_ok):
+            prev_run = (ops[n - 1][2] - ops[n - 1][1]
+                        if n > 0 and ops[n - 1][0] == "equal" else 0)
+            next_run = (ops[n + 1][2] - ops[n + 1][1]
+                        if n + 1 < len(ops) and ops[n + 1][0] == "equal" else 0)
+            if not (max(prev_run, next_run) >= 2 and min(prev_run, next_run) >= 1):
                 continue
         else:
             # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
