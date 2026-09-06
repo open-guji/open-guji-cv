@@ -173,8 +173,67 @@ def _patch_blank_elastic(blank_min_gap=2.0, blank_frac=None, blank_cost=0.0, ski
     return lambda: setattr(RB, "fit_row_boundaries", orig_fit)
 
 
+_INK_SLICE = {}
+
+
+def _patch_seamcost(band=20, weight=1.0):
+    """候选波谷的位置代价改成"这里能找到的最干净的缝有多少墨"（按列宽归一）。
+    挤排列里没有干净的行，但常有干净的折线；行墨代价会把锚点放到高字内部的空隙上
+    （vol01:10:5:6 典/道 偏 39px），缝代价会把它放到能绕开的地方。"""
+    import numpy as np
+    from open_guji_cv.utils.seam import find_seam, seam_ink
+    orig_proj = RB.row_ink_projection
+    orig_fit = RB.fit_row_boundaries
+
+    def proj(col_gray, x_lo=0, x_hi=None, ink_threshold=128):
+        _INK_SLICE["ink"] = (col_gray[:, x_lo:x_hi] < ink_threshold)
+        return orig_proj(col_gray, x_lo, x_hi, ink_threshold)
+
+    def fit(row_proj, dst_w, border_top, border_bottom, period, n_slots=21, eps=0.01, lam=0.3,
+            lo_ratio=0.7, hi_ratio=1.5, y1_max_frac=0.5, y2_max_frac=0.3, blank_thresh_frac=0.08,
+            synth_step=20, top_slack=0.0, snap_raw=3, blank_cost=0.05, tail_trim=True):
+        ink = _INK_SLICE.get("ink")
+        curve = RB.smooth_curve(np.asarray(row_proj, dtype=np.float64))
+        valleys_all = RB.find_valleys(curve, dst_w)
+        thresh = blank_thresh_frac * dst_w
+        intervals = RB.find_blank_intervals(curve, thresh)
+        valid = list(valleys_all)
+        def cost_of(v):
+            row = float(curve[int(v)]) / dst_w
+            if ink is None or row <= 0.02:
+                return row
+            sm = find_seam(ink, int(v), band=band)
+            return min(row, weight * seam_ink(ink, sm) / dst_w)
+        valley_ink = [cost_of(v) for v in valid]
+        synth_guard = max(6, synth_step // 3); synth = []; synth_ink = []
+        for lo, hi in intervals:
+            y = lo
+            while y <= hi:
+                if all(abs(y - v) >= synth_guard for v in valid):
+                    synth.append(float(y)); synth_ink.append(float(curve[int(y)]) / dst_w if 0 <= int(y) < len(curve) else 0.03)
+                y += synth_step
+        all_v = np.array(valid + synth, dtype=np.float64); all_i = np.array(valley_ink + synth_ink, dtype=np.float64)
+        order = np.argsort(all_v); all_v, all_i = all_v[order], all_i[order]
+        b = RB._bounded_elastic_dp(border_top, border_bottom, all_v, all_i, period, eps, lo_ratio, hi_ratio,
+                                   y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
+                                   curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim)
+        if b is None:
+            return None
+        b = RB._snap_to_raw_minimum(b, np.asarray(row_proj, dtype=np.float64), snap_raw)
+        return RB.RowBoundaryResult(boundaries=b, blank_intervals=intervals, valleys=valleys_all, period=period)
+
+    RB.row_ink_projection = proj
+    RB.fit_row_boundaries = fit
+    def restore():
+        RB.row_ink_projection = orig_proj
+        RB.fit_row_boundaries = orig_fit
+    return restore
+
+
 VARIANTS: dict[str, dict] = {
     "baseline": {},
+    "seamcost": {"patch": lambda RB_: _patch_seamcost()},
+    "seamcost30": {"patch": lambda RB_: _patch_seamcost(band=30)},
     "snap6": {"fit": {"snap_raw": 6}},
     "snap10": {"fit": {"snap_raw": 10}},
     "blank": {"patch": lambda RB_: _patch_blank_elastic()},
@@ -252,6 +311,14 @@ def main() -> int:
         pages = sorted(set(pages) | set(body_pages(book)))
 
     errs, errs_base = [], []
+    poly_new, poly_base = [], []
+    from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation
+    gold_poly = [i for i in GoldStore().list(SHARD) if i.anchor.book == book and i.status == "active"
+                 and i.expected.get("polyline") and len(i.expected["polyline"]) >= 2 and not i.expected.get("tags")]
+    by_col_poly: dict[tuple[int, int], list] = defaultdict(list)
+    for it in gold_poly:
+        by_col_poly[(it.anchor.page, it.anchor.col)].append(it)
+    pages = sorted(set(pages) | {pg for pg, _ in by_col_poly})
     rulers = Counter(); rulers_base = Counter()
     mismatch = 0; n_cols = 0; n_fail = 0
     diag_rows = []
@@ -265,7 +332,7 @@ def main() -> int:
         for gc in gate.columns:
             if not gc.admitted or gc.col not in prod:
                 continue
-            want_gold = (pg, gc.col) in by_col
+            want_gold = (pg, gc.col) in by_col or (pg, gc.col) in by_col_poly
             if not want_gold and not a.all_body:
                 continue
             path = ic.get(book, "column_image", column_key(pg, gc.col))
@@ -289,6 +356,21 @@ def main() -> int:
                 rulers[classify(prof, int(round(b)), period)] += 1
             for b in base_b[1:-1]:
                 rulers_base[classify(prof, int(round(b)), period)] += 1
+            # 折线金标：新/旧 cells 的缝 vs 人折线
+            if (pg, gc.col) in by_col_poly:
+                x0p = int(round(min(c.x0 for c in r.cells))); x1p = int(round(max(c.x1 for c in r.cells)))
+                old_cells = prod[gc.col].cells
+                for it in by_col_poly[(pg, gc.col)]:
+                    ex = it.expected
+                    gseam = polyline_to_seam(ex["polyline"], x0p, x1p)
+                    def eff(cells_, bounds_):
+                        up = next((c for c in cells_ if c.kind == "char" and c.slot == ex.get("slot_above")), None)
+                        if up is not None and getattr(up, "seam_bottom", None):
+                            return list(up.seam_bottom)
+                        yy = float(min(bounds_[1:-1], key=lambda b: abs(b - float(ex["y"]))))
+                        return [int(round(yy))] * len(gseam)
+                    poly_new.append(seam_deviation(eff(r.cells, new_b), gseam)[0])
+                    poly_base.append(seam_deviation(eff(old_cells, base_b), gseam)[0])
             for it in by_col.get((pg, gc.col), []):
                 ex = it.expected; bi = ex["bi"]
                 if not (0 < bi < len(new_b) - 1):
@@ -322,6 +404,10 @@ def main() -> int:
     print(f"变体 {a.variant}  列 {n_cols}（无解 {n_fail}，与现役产物不一致 {mismatch}）")
     print("  金标误差 现役:", stat(errs_base))
     print("  金标误差 变体:", stat(errs))
+    if poly_new:
+        pn, pb = np.array(poly_new), np.array(poly_base)
+        print(f"  折线金标 n={len(pn)} 最大偏差 现役: median {np.median(pb):.0f} p90 {np.percentile(pb,90):.0f} ≤6px {100*(pb<=6).mean():.1f}% >12px {int((pb>12).sum())}")
+        print(f"  折线金标 n={len(pn)} 最大偏差 变体: median {np.median(pn):.0f} p90 {np.percentile(pn,90):.0f} ≤6px {100*(pn<=6).mean():.1f}% >12px {int((pn>12).sum())}")
     tot_b = sum(rulers_base.values()) or 1; tot_n = sum(rulers.values()) or 1
     print("  尺子 现役:", {k: f"{v} ({100*v/tot_b:.2f}%)" for k, v in sorted(rulers_base.items())})
     print("  尺子 变体:", {k: f"{v} ({100*v/tot_n:.2f}%)" for k, v in sorted(rulers.items())})

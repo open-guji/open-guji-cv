@@ -65,3 +65,18 @@ def test_segment_column_keeps_straight_cut_when_seam_cannot_avoid_ink():
     ink[20:40, :] = True          # 20 行厚的横杠横贯整宽
     seam = find_seam(ink, 30, band=8)
     assert seam_ink(ink, seam) > SEAM_MAX_INK
+
+
+def test_segment_column_widens_corridor_only_when_narrow_seam_is_blocked():
+    """窄走廊（±20）里的最优缝要穿墨、±40 里有无墨路 → 用宽走廊的缝；
+    窄走廊已有无墨缝时不放宽（放宽会换到别的空隙，实测偏 22–41px）。"""
+    from open_guji_cv.utils.seam import SEAM_BAND_WIDE, SEAM_MAX_INK, find_seam, seam_ink
+    ink = np.zeros((120, 60), bool)
+    ink[10:50, 5:55] = True           # 上字主体 10..49
+    ink[50:64, 20:30] = True          # 上字一笔下垂到 63 行（离直线 26px，超出 ±20）
+    ink[66:110, 5:55] = True          # 下字主体 66..109；64/65 两行是唯一的无墨通道
+    y = 37                            # 直线切在上字身上（挤排列的锚点常这样）
+    narrow = find_seam(ink, y, band=20)
+    assert seam_ink(ink, narrow) > SEAM_MAX_INK
+    wide = find_seam(ink, y, band=SEAM_BAND_WIDE)
+    assert seam_ink(ink, wide) == 0 and np.abs(wide - y).max() >= 26
