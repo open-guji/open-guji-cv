@@ -36,6 +36,7 @@ def main() -> int:
     items = [i for i in gs.list(SHARD) if i.status == "active"
              and (not a.book or i.anchor.book == a.book)]
     rows, overlap, drift, missing = [], 0, 0, 0
+    seam_ok = 0
     tagged: dict[str, list] = {}
     poly_rows: list[dict] = []          # 折线金标 vs 现役缝
     for it in items:
@@ -65,6 +66,9 @@ def main() -> int:
         if v == "overlap":
             overlap += 1
             continue
+        if v == "seam_ok":
+            seam_ok += 1          # 人认可的现役缝：只进折线口径，不进直线像素误差
+            continue
         if v not in ("moved", "ok") or ex.get("y") is None:
             continue
         book, pg, col = it.anchor.book, it.anchor.page, it.anchor.col
@@ -93,7 +97,7 @@ def main() -> int:
         return 0
     e = np.array([r["err"] for r in rows])
     print(f"touching-cuts n={len(e)}（moved {sum(r['verdict']=='moved' for r in rows)} / ok {sum(r['verdict']=='ok' for r in rows)}；"
-          f"overlap 另计 {overlap}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}）")
+          f"overlap 另计 {overlap}，缝正确 {seam_ok}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}）")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
     print(f"  ≤3px {100*(e<=3).mean():.1f}%   ≤5px {100*(e<=5).mean():.1f}%   ≤10px {100*(e<=10).mean():.1f}%")
     worst = sorted(rows, key=lambda r: -r["err"])[:8]

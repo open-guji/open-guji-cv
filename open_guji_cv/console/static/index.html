@@ -123,6 +123,7 @@
   .clcard.cur { box-shadow:0 0 0 2px var(--indigo); }
   .clcard[data-done="moved"] { border-left-color:var(--ok); }
   .clcard[data-done="ok"] { border-left-color:var(--ok); border-left-style:double; }
+  .clcard[data-done="seam_ok"] { border-left-color:var(--ok); border-left-style:double; }
   .clcard[data-done="overlap"] { border-left-color:var(--ochre); }
   .clcard[data-done="idk"] { border-left-color:var(--zhu); border-left-style:dashed; }
   .clhead { display:flex; justify-content:space-between; font-size:.78rem; margin-bottom:.3rem; }
@@ -134,6 +135,7 @@
   .clsvg { position:absolute; left:0; top:0; width:100%; pointer-events:none; overflow:visible; }
   .clseam { fill:none; stroke:var(--ok); stroke-width:1.5; stroke-dasharray:4 3; opacity:.9; }
   .clpoly { fill:none; stroke:var(--zhu); stroke-width:2; }
+  .clpt { fill:var(--paper); stroke:var(--zhu); stroke-width:2; }
   .clmode.on { background:var(--indigo-soft); border-color:var(--indigo); }
   .clside { font-size:.8rem; line-height:1.6; min-width:0; }
   .clside .ch { font-family:var(--serif); font-size:1.5rem; display:inline-block; margin-right:.4rem; vertical-align:middle; }
@@ -380,9 +382,10 @@
       </div>
       <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
         在图上<b>点击或拖动</b>定位；键盘：<b>↑/↓</b> 1px（Shift 5px）· <b>回车</b> 落定（没动过 = 现切点正确）·
-        <b>O</b> 现切点正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
+        <b>O</b> 现切点正确 · <b>G</b> 绿色折线缝已正确（直接记为折线金标）· <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
         干扰标签 <b>1</b> 污点 <b>2</b> 界行/版框 <b>3</b> 邻字残墨 <b>4</b> 其他（落定前点，可多选；评测里分开算）。
-        <b>P</b> 折线模式：在图上点 ≥2 个点连成折线（<b>Backspace</b> 撤点），回车落定；蓝色虚线是现役直线切点，绿色虚线是现役折线缝。
+        <b>P</b> 折线模式：点空白处加点，<b>点中已有点可拖动</b>，<b>右键</b>删点，<b>Backspace</b> 撤最后一点，<b>X</b> 清空，回车落定；
+        <b>U</b> 重做已落定的卡（取消勾选「只看未裁」能看到已裁的卡，改完再落定，后到覆盖）。蓝色虚线 = 现役直线切点，绿色虚线 = 现役折线缝。
         每次落定立刻写入事件，刷新不丢。
       </div>
       <div id="cl_cards" class="clgrid"></div>
@@ -1218,9 +1221,12 @@ function clCard(c, i) {
         <div class="clbtns">
           <button data-i="${i}" data-v="moved" title="回车">落定</button>
           <button data-i="${i}" data-v="ok" title="O">现切点正确</button>
+          <button data-i="${i}" data-v="seam_ok" title="G：绿色虚线（现役折线缝）已经是理想切法，直接记为折线金标"${c.seam ? '' : ' disabled'}>缝正确</button>
           <button data-i="${i}" data-v="overlap" title="V">重叠·折中</button>
           <button data-i="${i}" data-v="idk" title="S">拿不准</button>
-          <button data-i="${i}" data-m="poly" class="clmode" title="P：折线模式，在图上点 ≥2 个点连成折线；Backspace 撤最后一点">折线</button>
+          <button data-i="${i}" data-m="poly" class="clmode" title="P：折线模式。点空白处加点，点中已有点可拖动，右键删点">折线</button>
+          <button data-i="${i}" data-m="clear" title="X：清空折线">清空</button>
+          <button data-i="${i}" data-m="reopen" title="U：重开这张卡，改完再落定（后到覆盖）">重做</button>
           <span class="muted" id="clpn${i}"></span>
         </div>
         <div class="clbtns cltags" title="干扰因素（可多选，落定前点；评测里分开算）">
@@ -1247,6 +1253,16 @@ function clRedrawPoly(i) {
   const pts = (CL.poly[c.id] || []).slice().sort((a, b) => a[0] - b[0]);
   const pl = document.getElementById('clpl' + i);
   if (pl) pl.setAttribute('points', pts.map(([x, yy]) => `${x * s},${(yy - c.crop_y0) * s}`).join(' '));
+  const svg = document.getElementById('clsvg' + i);
+  if (svg) {
+    svg.querySelectorAll('.clpt').forEach(e => e.remove());
+    pts.forEach(([x, yy]) => {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('class', 'clpt'); dot.setAttribute('r', '5');
+      dot.setAttribute('cx', x * s); dot.setAttribute('cy', (yy - c.crop_y0) * s);
+      svg.appendChild(dot);
+    });
+  }
   const n = document.getElementById('clpn' + i);
   if (n) n.textContent = CL.mode[c.id] === 'poly' ? `折线 ${pts.length} 点` : '';
   const el = document.getElementById('clc' + i);
@@ -1264,6 +1280,44 @@ function clAddPoint(i, x, y) {
   x = Math.round(x); y = Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)));
   (CL.poly[c.id] = CL.poly[c.id] || []).push([x, y]);
   clRedrawPoly(i);
+}
+
+// 离 (x, y)（列图坐标）最近的顶点下标；超过 hitR 像素（显示坐标）算没点中
+function clNearestPoint(i, x, y, hitR = 9) {
+  const c = CL.cases[i]; if (!c) return -1;
+  const s = CL.scales[c.id] || CL.scale;
+  let best = -1, bd = Infinity;
+  (CL.poly[c.id] || []).forEach(([px, py], k) => {
+    const d = Math.hypot((px - x) * s, (py - y) * s);
+    if (d < bd) { bd = d; best = k; }
+  });
+  return bd <= hitR ? best : -1;
+}
+
+function clMovePoint(i, k, x, y) {
+  const c = CL.cases[i]; if (!c || !CL.poly[c.id] || !CL.poly[c.id][k]) return;
+  CL.poly[c.id][k] = [Math.round(x), Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)))];
+  clRedrawPoly(i);
+}
+
+function clRemovePoint(i, k) {
+  const c = CL.cases[i]; if (!c || !CL.poly[c.id]) return;
+  CL.poly[c.id].splice(k, 1); clRedrawPoly(i);
+}
+
+function clClearPoly(i) {
+  const c = CL.cases[i]; if (!c) return;
+  CL.poly[c.id] = []; clRedrawPoly(i);
+}
+
+// 重做：把已落定的卡恢复成未裁（再次落定会写一条新事件，后到覆盖）
+function clReopen(i) {
+  const c = CL.cases[i]; if (!c) return;
+  delete CL.done[c.id];
+  const el = document.getElementById('clc' + i);
+  if (el) { el.dataset.done = ''; el.style.display = ''; el.querySelectorAll('.clbtns button[data-v]').forEach(b => b.classList.remove('on')); }
+  clFocus(i);
+  $('#cl_msg').textContent = `${c.id} 已重开，改完再落定（后到覆盖）`;
 }
 
 function clPopPoint(i) {
@@ -1314,7 +1368,14 @@ async function clDecide(i, verdict) {
   const now = Date.now();
   const tags = Object.keys(CL.tags[c.id] || {}).filter(t => CL.tags[c.id][t]);
   let polyline;
-  if (CL.mode[c.id] === 'poly') {
+  if (verdict === 'seam_ok') {
+    if (!c.seam || !c.seam.length) { $('#cl_msg').textContent = '这条格线没有现役折线缝（绿虚线），用直线口径落定'; return; }
+    // 把现役缝抽样成折线（每 6px 一个点 + 末点），记为人认可的折线金标
+    const step = 6; polyline = [];
+    for (let k = 0; k < c.seam.length; k += step) polyline.push([c.x0 + k, c.seam[k]]);
+    if ((c.seam.length - 1) % step) polyline.push([c.x0 + c.seam.length - 1, c.seam[c.seam.length - 1]]);
+    y = Math.round(c.seam.reduce((a, q) => a + q, 0) / c.seam.length);
+  } else if (CL.mode[c.id] === 'poly') {
     const pts = (CL.poly[c.id] || []).slice().sort((a, b) => a[0] - b[0]);
     if (pts.length < 2) { $('#cl_msg').textContent = '折线模式至少要点 2 个点（Backspace 撤点，P 切回直线）'; return; }
     polyline = pts;
@@ -1382,20 +1443,34 @@ function clBind() {
     const c = box.dataset && CL.cases[+box.dataset.i];
     return c ? (ev.clientX - box.getBoundingClientRect().left) / (CL.scales[c.id] || CL.scale) : null;
   };
+  let dragPt = null;   // {box, i, k}：正在拖的折线顶点
   grid.addEventListener('mousedown', ev => {
     const box = ev.target.closest('.climg');
     if (!box) return;
     const i = +box.dataset.i; clFocus(i);
     const c = CL.cases[i];
-    if (c && CL.mode[c.id] === 'poly') { clAddPoint(i, posX(box, ev), posY(box, ev)); ev.preventDefault(); return; }
+    if (c && CL.mode[c.id] === 'poly') {
+      const x = posX(box, ev), y = posY(box, ev);
+      if (ev.button === 2) { const k = clNearestPoint(i, x, y); if (k >= 0) clRemovePoint(i, k); ev.preventDefault(); return; }
+      const k = clNearestPoint(i, x, y);
+      if (k >= 0) { dragPt = { box, i, k }; }
+      else { clAddPoint(i, x, y); dragPt = { box, i, k: CL.poly[c.id].length - 1 }; }
+      ev.preventDefault(); return;
+    }
     dragging = box;
     clSetY(i, posY(box, ev)); ev.preventDefault();
   });
-  window.addEventListener('mousemove', ev => { if (dragging) clSetY(+dragging.dataset.i, posY(dragging, ev)); });
-  window.addEventListener('mouseup', () => { dragging = null; });
+  grid.addEventListener('contextmenu', ev => { if (ev.target.closest('.climg')) ev.preventDefault(); });
+  window.addEventListener('mousemove', ev => {
+    if (dragPt) { clMovePoint(dragPt.i, dragPt.k, posX(dragPt.box, ev), posY(dragPt.box, ev)); return; }
+    if (dragging) clSetY(+dragging.dataset.i, posY(dragging, ev));
+  });
+  window.addEventListener('mouseup', () => { dragging = null; dragPt = null; });
   grid.addEventListener('click', ev => {
     const b = ev.target.closest('.clbtns button');
     if (b && b.dataset.m === 'poly') { clToggleMode(+b.dataset.i); clFocus(+b.dataset.i); return; }
+    if (b && b.dataset.m === 'clear') { clClearPoly(+b.dataset.i); clFocus(+b.dataset.i); return; }
+    if (b && b.dataset.m === 'reopen') { clReopen(+b.dataset.i); return; }
     if (b && b.dataset.t) { clToggleTag(+b.dataset.i, b.dataset.t); clFocus(+b.dataset.i); return; }
     if (b) clDecide(+b.dataset.i, b.dataset.v);
     const card = ev.target.closest('.clcard');
@@ -1411,6 +1486,7 @@ function clBind() {
     else if (ev.key === 'ArrowDown') { clSetY(CL.cur, (CL.y[c.id] ?? c.y) + step); ev.preventDefault(); }
     else if (ev.key === 'Enter') { clDecide(CL.cur, 'moved'); ev.preventDefault(); }
     else if (ev.key === 'o' || ev.key === 'O') { clDecide(CL.cur, 'ok'); ev.preventDefault(); }
+    else if (ev.key === 'g' || ev.key === 'G') { clDecide(CL.cur, 'seam_ok'); ev.preventDefault(); }
     else if (ev.key === 'v' || ev.key === 'V') { clDecide(CL.cur, 'overlap'); ev.preventDefault(); }
     else if (ev.key === 's' || ev.key === 'S') { clDecide(CL.cur, 'idk'); ev.preventDefault(); }
     else if (ev.key === 'ArrowRight' || ev.key === 'j') { clFocus(CL.cur + 1); ev.preventDefault(); }
@@ -1420,6 +1496,8 @@ function clBind() {
     }
     else if (ev.key === 'p' || ev.key === 'P') { clToggleMode(CL.cur); ev.preventDefault(); }
     else if (ev.key === 'Backspace') { clPopPoint(CL.cur); ev.preventDefault(); }
+    else if (ev.key === 'x' || ev.key === 'X') { clClearPoly(CL.cur); ev.preventDefault(); }
+    else if (ev.key === 'u' || ev.key === 'U') { clReopen(CL.cur); ev.preventDefault(); }
   });
 }
 
