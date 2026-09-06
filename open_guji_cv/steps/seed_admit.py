@@ -72,6 +72,9 @@ class SeedAdmitParams(BaseModel):
     note_lexicon: str = ""              # 词表路径；空 = note_lexicon.py 默认
     note_min_sim: float = 0.70          # 段相似度下限（见 note_lexicon.MIN_SIM）
     note_fingerprint: str = ""          # 自动填：词表变了产物过期
+    use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
+    db_path: str = "output/glyph.db"    # 读人裁记录用；与 glyph_match 同一个库
+    human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
@@ -97,6 +100,11 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.exclusions import DEFAULT_PATH
             object.__setattr__(self, "exclusions_fingerprint",
                                corpus_fingerprint([self.exclusions or str(DEFAULT_PATH)]))
+        # 人裁表直接读 glyph.db，这一步自己带库指纹——上游 glyph_match 的指纹只保证
+        # 它自己重跑，不会让本步过期（人裁进库时 match 产物可能没变）。
+        if self.use_human_verdicts and not self.human_fingerprint:
+            from .glyph_match import db_fingerprint
+            object.__setattr__(self, "human_fingerprint", db_fingerprint(self.db_path))
         # 版本注词表也是派生物（scripts/build_note_lexicon.py），同理
         if self.use_note_lexicon and not self.note_fingerprint:
             from ..clustering.note_lexicon import DEFAULT_LEXICON
@@ -107,7 +115,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.3", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.4", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
@@ -141,6 +149,12 @@ class SeedAdmitStep(Step):
         _origins = tuple(s.strip() for s in (p.exclusion_origins or "").split(",") if s.strip())
         excluded = (excluded_ids(_ex_path, _origins or None)
                     if p.use_exclusions else frozenset())
+        # 人裁过的位：**人裁是最强证据，任何自动通道都不许改写它**（2026-09-06）。
+        # 实测 vol02:18:9:5——图上刻的是 曾（八字头），用户人裁 曾 且已进库
+        # （provenance=human），但整理本这一处印 會，`context` 通道就按整理本放行成了
+        # 會，判据 A 的「对你的裁决」因此掉到 210/211。库匹配、上下文、整理本对齐
+        # 全都是间接证据，人看着图下的判断不是——它该一票定案。
+        human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
 
         def excluded_note(iid: str) -> str:
             from ..clustering.exclusions import load_exclusions
@@ -206,6 +220,20 @@ class SeedAdmitStep(Step):
                         channel=None, char=None, provenance="",
                         doubts=["excluded"],
                         evidence={"excluded": excluded_note(r.id)}))
+                    continue
+                # 人裁过的位：一票定案，后面所有自动通道都不再看（2026-09-06）。
+                # 人是**看着图**判的，库匹配/上下文/整理本对齐全是间接证据；实测
+                # vol02:18:9:5 图上刻 曾、用户裁 曾 已进库，整理本这一处印 會，
+                # `context` 通道就把它放行成了 會——人裁被机器覆盖，判据 A 的
+                # 「对你的裁决」掉到 210/211。放在排除名单之后、其余通道之前。
+                hs = human_shapes.get(r.id)
+                if hs:
+                    n_auto += 1
+                    recs.append(AdmitRec(
+                        id=r.id, slot=r.slot, sub=r.sub, admit=True,
+                        channel="human", char=hs, reading=None,
+                        provenance="human", doubts=[],
+                        evidence={"human": True}))
                     continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
@@ -358,6 +386,44 @@ class SeedAdmitStep(Step):
 # ⚠️ match_ref 也在内（2026-09-05 补）：它放行的依据就是「库 top1 语义 == 整理本字」，
 # 漏掉它的后果是 vol01:18:8:6 刻「㫖」、整理本「旨」被存成 reading=None——
 # 体检判据 A 把这种异体位当成错例（99.99%），其实是转换没记下来。
+@lru_cache(maxsize=4)
+def _human_shapes(db_path: str) -> dict[str, str]:
+    """字形库里人裁过的位 → 人裁的**字形**。`{裸 id: shape}`（去掉 v2: 前缀）。
+
+    取 `provenance='human'` 的 admissions，字形从 glyphs 经 exemplars 取——
+    `admissions.char` 存的是**释读**，己/已/巳 那三个字它与字形会分岔，
+    拿它当字形会把「刻 巳 读 已」写成「刻 已」（09-06 那批 62 条脏数据就是这么来的）。
+
+    ## ⚠️ 只认 `v2:` 前缀，v1 的记录一条都不能要
+
+    库里 1,925 条人裁有 **1,021 条是 v1 的 id**（`book:page:col:idx`，idx 从 0、含
+    margin 格），与 v2 的 `book:page:col:slot`（slot 从 1）**长得一模一样但指的不是
+    同一格**——这正是 `glyphdb_admit` 当初给 v2 加前缀要隔离的东西
+    （见该消费者 docstring「v2 的 id 必须加前缀，否则会污染 15332 条已有记录」）。
+    第一版这里去掉前缀后不加区分地收，vol01 判据 A 当场从 100% 掉到 94.70%：
+    `vol01:4:1:10` 判「編」而金标「三」，整列错开。
+    """
+    import sqlite3
+    from pathlib import Path
+    if not Path(db_path).exists():
+        return {}
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return {}
+    try:
+        rows = conn.execute(
+            "SELECT a.instance_id, g.char FROM admissions a "
+            "  JOIN exemplars e ON e.instance_id = a.instance_id "
+            "  JOIN glyphs g ON g.glyph_id = e.glyph_id "
+            " WHERE a.provenance = 'human' AND a.instance_id LIKE 'v2:%'").fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        conn.close()
+    return {iid[3:]: ch for iid, ch in rows if ch}
+
+
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # note_lexicon（2026-09-06）：版本注闭集给的读法同样是**文本证据**，
                     # 与整理本那几路一个性质——`reading` 该填、字形该照录图上的形、

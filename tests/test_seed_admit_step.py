@@ -43,7 +43,9 @@ def test_auto_admissions_always_carry_a_channel_and_a_char():
                 seen += 1
                 assert r.channel, f"{r.id} 自动进库却没有通道名"
                 assert r.char, f"{r.id} 自动进库却没有字"
-                assert r.provenance in ("match", "context", "align"), \
+                # human 是 2026-09-06 加的最高优先级通道：人裁过的位一票定案，
+                # 任何自动通道都不许改写（seed_admit v1.4）
+                assert r.provenance in ("match", "context", "align", "human"), \
                     f"{r.id} provenance 不合法：{r.provenance}"
     if not seen:
         pytest.skip("还没跑过 seed_admit")
@@ -103,3 +105,40 @@ def test_counts_add_up():
         # 排除名单里的格既不自动也不人审（seed_admit v1.3 的 n_excluded），三者之和才是全部
         assert d.n_auto + d.n_review + d.n_excluded == n, \
             f"p{pg} 计数对不上：{d.n_auto}+{d.n_review}+{d.n_excluded} != {n}"
+
+
+def test_human_shapes_only_takes_v2_ids(tmp_path):
+    """人裁表只认 `v2:` 前缀——v1 的 id 是另一个命名空间，混进来会整列错位。
+
+    实测教训（2026-09-06）：库里 1,925 条人裁有 1,021 条是 v1 的
+    `book:page:col:idx`，与 v2 的 `book:page:col:slot` 长得一样但不是同一格。
+    第一版不加区分地收，vol01 判据 A 当场从 100% 掉到 94.70%
+    （vol01:4:1:10 判「編」而金标「三」）。
+    """
+    import sqlite3
+
+    from open_guji_cv.steps.seed_admit import _human_shapes
+
+    db = tmp_path / "g.db"
+    conn = sqlite3.connect(db)
+    conn.executescript("""
+        CREATE TABLE admissions (instance_id TEXT PRIMARY KEY, char TEXT, provenance TEXT);
+        CREATE TABLE exemplars (glyph_id INTEGER, instance_id TEXT);
+        CREATE TABLE glyphs (glyph_id INTEGER PRIMARY KEY, char TEXT);
+    """)
+    conn.execute("INSERT INTO glyphs VALUES (1, '曾')")
+    conn.execute("INSERT INTO glyphs VALUES (2, '三')")
+    # v2 的：该收
+    conn.execute("INSERT INTO admissions VALUES ('v2:vol01:4:1:10', '曾', 'human')")
+    conn.execute("INSERT INTO exemplars VALUES (1, 'v2:vol01:4:1:10')")
+    # v1 的（无前缀）：绝不能收，它的 4:1:10 指的不是同一格
+    conn.execute("INSERT INTO admissions VALUES ('vol01:4:1:10', '三', 'human')")
+    conn.execute("INSERT INTO exemplars VALUES (2, 'vol01:4:1:10')")
+    # 非人裁的：不收
+    conn.execute("INSERT INTO admissions VALUES ('v2:vol01:9:9:9', '三', 'match')")
+    conn.execute("INSERT INTO exemplars VALUES (2, 'v2:vol01:9:9:9')")
+    conn.commit()
+    conn.close()
+
+    got = _human_shapes(str(db))
+    assert got == {"vol01:4:1:10": "曾"}, got
