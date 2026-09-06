@@ -28,7 +28,7 @@ import numpy as np
 from PIL import Image
 
 
-def find_bands(path, min_rows=15, frac=0.30, min_paper=40, ink=128):
+def find_bands(path, min_rows=8, frac=0.20, min_paper=40, ink=128):
     g = np.array(Image.open(path).convert("L"))
     b = g < ink
     h, w = b.shape
