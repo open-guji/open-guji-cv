@@ -71,3 +71,19 @@ output/glyph.db
 output/glyph.db-journal
 output/glyph.db-wal
 output/glyph.db-shm
+
+# ── v1 中间产物（2026-09-06 清理）────────────────────────────
+# v2 流水线的产物在 products/（全书 vol01+vol02 才 87MB），phase*/step2_columns
+# 是 v1 的 extract/chars/cluster/label 链路的输出，v2 不消费它们
+# （steps/_v1_bridge.py 是 v2→v1 方向：从 v2 产物生成 v1 视图，不是反向依赖）。
+# 上面「output/ 改为入库以防容器重置」的理由对这两册已不成立：原始扫描件
+# 已全部入库（data_full/zongmu/vol01 206 张、vol02 188 张），需要时可重跑。
+# phase9_seed 里 48 条仅存于此的人裁已抢救进 glyph_store/rescued/。
+output/*/phase2_layout/
+output/*/phase3_char_grid/
+output/*/phase4_chars/
+output/*/phase5_clusters/
+output/*/phase6_labels/
+output/*/phase9_seed/
+output/*/step2_columns/
+output/*/step3_input/

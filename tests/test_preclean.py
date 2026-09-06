@@ -1,51 +1,74 @@
-"""Step0 预清理：默认不动图，登记过的页才抹污渍，且不碰磁盘原图。"""
+"""Step0 预清理：默认不动图，登记过的页才把反色带反回来，且不碰磁盘原图。"""
 import numpy as np
 import pytest
 
-from open_guji_cv.utils.preclean import apply_preclean, remove_horizontal_bar
+from open_guji_cv.utils.preclean import apply_preclean, invert_band
 
 
-def _page_with_bar():
-    """造一页：白底 + 几根竖笔 + 一条横贯的粗黑污渍条。"""
+def _page_with_inverted_band(y0=120, y1=170, x0=40, x1=360):
+    """造一页：白底 + 竖笔 + 一条带内黑白翻转的横带。
+
+    带内：纸是黑的，笔画是白的 —— 就是 vol02 p151 的情形。
+    """
     g = np.full((300, 400), 255, np.uint8)
-    for x in (60, 140, 220, 300):          # 竖笔，穿过污渍条
-        g[40:260, x:x + 6] = 0
-    g[120:150, 30:380] = 0                 # 污渍条
-    return g
+    strokes = [(60, 66), (140, 146), (220, 226), (300, 306)]
+    for a, c in strokes:
+        g[40:260, a:c] = 0
+    g[y0:y1, x0:x1] = 255 - g[y0:y1, x0:x1]      # 整带反色
+    return g, strokes
 
 
-def test_bar_removed_strokes_kept():
-    g = _page_with_bar()
-    out = remove_horizontal_bar(g, 100, 170, min_run=40, max_stroke_w=20, min_thick=10)
+def test_band_inverted_back():
+    g, strokes = _page_with_inverted_band()
+    out = invert_band(g, segments=[[40, 359]], y_lo=90, y_hi=200, y_probe=145,
+                      ctx=40, smooth=3)
 
-    bar = out[120:150]
-    assert (bar < 128).mean() < 0.10, "污渍条该基本抹干净"
-    for x in (60, 140, 220, 300):          # 竖笔在条内仍连着
-        assert (out[120:150, x:x + 6] < 128).any(), f"x={x} 的竖笔被误抹"
-    assert (out[40:110] == g[40:110]).all(), "条以外不该动"
+    band = out[120:170, 40:360]
+    assert (band < 128).mean() < 0.20, "带内应回到正常墨量（大片纸+少量笔画）"
+    for a, c in strokes:                          # 笔画在带内应恢复为黑
+        assert (out[125:165, a:c] < 128).all(), f"x={a} 的竖笔没还原"
+    # 带外分毫不动
+    assert (out[:90] == g[:90]).all() and (out[210:] == g[210:]).all()
     assert set(np.unique(out)) <= {0, 255}, "仍是二值图"
 
 
 def test_input_not_mutated():
-    g = _page_with_bar()
+    g, _ = _page_with_inverted_band()
     before = g.copy()
-    remove_horizontal_bar(g, 100, 170)
+    invert_band(g, segments=[[40, 359]], y_lo=90, y_hi=200, y_probe=145,
+                ctx=40, smooth=3)
     assert (g == before).all(), "入参不能被改"
 
 
+def test_multi_segment_skips_the_gap():
+    """带中间断开时，缺口那几列不该被反。"""
+    g, _ = _page_with_inverted_band()
+    g[120:170, 180:210] = 255 - g[120:170, 180:210]   # 把这段再翻回去 = 缺口
+    out = invert_band(g, segments=[[40, 179], [210, 359]], y_lo=90, y_hi=200,
+                      y_probe=145, ctx=40, smooth=3)
+    assert (out[120:170, 180:210] == g[120:170, 180:210]).all(), "缺口被误反"
+
+
+def test_raises_when_window_misses_band():
+    g, _ = _page_with_inverted_band()
+    with pytest.raises(ValueError, match="没量到带"):
+        invert_band(g, segments=[[40, 359]], y_lo=10, y_hi=60, y_probe=30,
+                    ctx=5, smooth=3)
+
+
 def test_apply_preclean_reports_and_rejects_unknown():
-    g = _page_with_bar()
-    out, notes = apply_preclean(g, [{"kind": "horizontal_bar", "y0": 100, "y1": 170,
-                                     "min_run": 40, "max_stroke_w": 20, "min_thick": 10}])
-    assert len(notes) == 1 and "horizontal_bar" in notes[0]
+    g, _ = _page_with_inverted_band()
+    out, notes = apply_preclean(g, [{"kind": "inverted_band", "segments": [[40, 359]],
+                                     "y_lo": 90, "y_hi": 200, "y_probe": 145,
+                                     "ctx": 40, "smooth": 3}])
+    assert len(notes) == 1 and "inverted_band" in notes[0]
     assert (out < 128).sum() < (g < 128).sum()
 
     with pytest.raises(ValueError, match="未知的 preclean 类型"):
         apply_preclean(g, [{"kind": "没这种"}])
 
 
-def test_book_without_preclean_is_untouched():
-    """没登记 preclean 的书，apply_preclean 收到空规则表就该原样返回。"""
-    g = _page_with_bar()
+def test_no_rules_is_a_noop():
+    g, _ = _page_with_inverted_band()
     out, notes = apply_preclean(g, [])
     assert notes == [] and out is g
