@@ -213,6 +213,9 @@ class SeedAdmitStep(Step):
                     ok=ok, channel=channel, align_char=align_char,
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
+                # variant_form 分支要用**改名前**的 channel 判——见下面「⚠️ dual 档判 variant_form
+                # 判早了」。这里先存一份，改名（下一段）之后再用它，别被 "dual" 字符串盖掉。
+                is_corpus_channel = channel in _CORPUS_CHANNELS
                 # `admission_decision` 给 dual 档返回 None（历史口径，别去改它
                 # ——`_pick_char` 与 seeding 的一串标定注释都按 None 写的）。但
                 # **产物里不许有匿名准入**：每条自动进库都得说清走的哪条通道，
@@ -226,9 +229,15 @@ class SeedAdmitStep(Step):
                 # 整理本对多数组只用一种形，它定得了义定不了形——刻 髪 存 髮 就是这么
                 # 来的。组里有 ≥2 个可能的形时，用形状证据（库候选 / 组内三源检索）
                 # 定形；定不了就落人审，卡片只列组内的形，人点一次账本就记住。
+                #
+                # ⚠️ dual 档判 variant_form 判早了（2026-09-06 实锤）：本该判的是
+                # 「这条通道用没用整理本」，但这里一度直接拿**改名后**的 channel 去比
+                # `_CORPUS_CHANNELS`（里面收的是 None，不是字符串 "dual"），于是 dual
+                # 档永远进不了这个分支——隸/𨽾、變/𠮓 这些账本已经改判优先形（preferred=
+                # 𨽾/𠮓）的组，dual 位还是照写库 unsure 时的整理本形，E 报 82/91 才发现。
                 form_ev = None
                 form_open = False
-                if ok and align_char and channel in _CORPUS_CHANNELS and r.verdict != "same":
+                if ok and align_char and is_corpus_channel and r.verdict != "same":
                     forms = group_forms(ledger, align_char)
                     if len(forms) >= 2:
                         ranks = None
