@@ -56,3 +56,12 @@ def test_mask_outside_removes_neighbour_pixels_only():
     # 下垂笔归上格、上探笔归下格
     assert (upper[28:46, 10:15] < 128).all()
     assert (lower[34:48, 40:47] < 128).all()
+
+
+def test_segment_column_keeps_straight_cut_when_seam_cannot_avoid_ink():
+    """一道贯穿全宽的粗横杠：任何折线都穿墨 → 不存缝，格线仍是直线（seam_ink > SEAM_MAX_INK）。"""
+    from open_guji_cv.utils.seam import SEAM_MAX_INK, find_seam, seam_ink
+    ink = np.zeros((60, 40), bool)
+    ink[20:40, :] = True          # 20 行厚的横杠横贯整宽
+    seam = find_seam(ink, 30, band=8)
+    assert seam_ink(ink, seam) > SEAM_MAX_INK
