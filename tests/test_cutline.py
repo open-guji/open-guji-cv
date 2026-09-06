@@ -73,3 +73,10 @@ def test_polyline_to_seam_interpolates_and_extends_ends():
     assert seam[15 - 5] == 105                          # x=15：10→20 的中点线性插值
     mx, mean = seam_deviation(seam, [100] * 31)
     assert mx == 10 and 0 < mean < 10
+
+
+def test_seam_ok_verdict_keeps_polyline_and_routes_like_cutline():
+    e = _evt({"y": 1980, "y_old": 1986, "verdict": "seam_ok", "polyline": [[20, 1975], [26, 1979]]})
+    ex = _expected_of(e)
+    assert ex["verdict"] == "seam_ok" and ex["polyline"] == [[20, 1975], [26, 1979]]
+    assert "char-segmentation/touching-cuts" in {d.shard for d in RouteTable.load().destinations(e)}
