@@ -542,9 +542,19 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     这个数字要防的自证）。
     """
     from ..core.book import load_book
+    from ..gold.v2_align import align_book
+    from ..variant_ledger import BookLedger
     st = ProductStore()
     bk = load_book(book)
     pgs = bk.resolve_pages(pages)
+    # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
+    # 拿 v2_align 的页对齐（`reading` = 整理本在这一位印的字），锚不上的页没有。
+    # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
+    try:
+        golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
+    except Exception:
+        golds = {}
+    ledger = BookLedger.load_or_empty()
     out: list[dict] = []
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
@@ -564,11 +574,19 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
                     continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
+                gc = golds.get(r.id)
+                ref = None
+                if gc and gc.reading:
+                    pf = ledger.preferred_form(gc.reading)
+                    ref = {"char": gc.reading, "op": gc.align_op, "run": gc.op_run,
+                           "form": pf if pf and pf != gc.reading else None}
                 out.append({
-                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot,
+                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
                     "admit": r.admit, "channel": r.channel, "char": r.char,
                     "reading": r.reading,
+                    # 整理本在这一位印的字（页对齐给的）；form = 本书惯刻的形（账本 preferred，≠整理本字时才有）
+                    "ref": ref,
                     # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
                     "form": (r.evidence or {}).get("form"),
                     "doubts": r.doubts,
