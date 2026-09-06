@@ -78,6 +78,17 @@ def _col_profile(store, book: str, pg: int, col: int) -> np.ndarray | None:
     return (img < int(INK_TH * 255)).mean(axis=1).astype(np.float64)
 
 
+def _col_ink(book: str, pg: int, col: int) -> np.ndarray | None:
+    """列图的二值墨（HxW，True = 墨），给缝后穿墨（R2c）用。"""
+    import cv2
+    from ..products.cache import ImageCache
+    path = ImageCache().get(book, "column_image", f"p{pg:04d}c{col:02d}")
+    if path is None:
+        return None
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    return None if img is None else (img < int(INK_TH * 255))
+
+
 def _runs_over(mask: np.ndarray) -> list[tuple[int, int]]:
     """连续 True 段 → [(起, 止))。"""
     if not mask.any():
@@ -118,6 +129,10 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                note="抬头列少算一格的信号")
     r4 = Ruler("R4", "紧框被切的字位", goal="0",
                note="框外连续墨 ≥%dpx；已排除版框线自身" % CLIP_MIN_PX)
+    # R2c（2026-09-05，折线切分上线后）：直线穿墨的格线里，**实际切法**（有缝用缝、没缝用直线）
+    # 仍然穿墨的比例。R2/R2s/R2x 只看直线；这把尺子看缝之后还剩多少穿字。
+    r2c = Ruler("R2c", "缝后仍穿墨的格线（占直线穿墨格线）", goal="↓",
+                note="分母 = 直线穿墨的内部格线；有缝按缝上的墨算，无缝即直线穿墨")
 
     for pg in pages:
         gate = store.read(book, "column_gate", page_key(pg), "gate_manifest")
@@ -143,9 +158,11 @@ def measure(book: str, pages: list[int], store=None) -> dict:
             if prof is None:
                 continue
             h = len(prof)
+            ink_img = None
+            cx0 = int(round(cc.content_x[0])) if cc.content_x else 0
 
             # ── R2：每条内部格线看是否穿字 ─────────────────
-            for b in cc.boundaries[1:-1]:
+            for bi, b in enumerate(cc.boundaries[1:-1], start=1):
                 y = int(round(b))
                 if not (0 <= y < h):
                     continue
@@ -154,6 +171,21 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                 r2x.den += 1
                 if prof[y] <= INK_ON_LINE:
                     continue
+                # R2c：实际切法（缝 / 直线）还穿不穿墨
+                r2c.den += 1
+                up = cc.cells[bi - 1] if bi - 1 < len(cc.cells) else None
+                seam = getattr(up, "seam_bottom", None) if up is not None else None
+                if seam:
+                    if ink_img is None:
+                        ink_img = _col_ink(book, pg, cc.col)
+                    if ink_img is not None:
+                        ys = np.clip(np.asarray(seam, dtype=int), 0, ink_img.shape[0] - 1)
+                        xs = np.clip(np.arange(len(seam)) + cx0, 0, ink_img.shape[1] - 1)
+                        if int(ink_img[ys, xs].sum()) > 0:
+                            r2c.num += 1
+                else:
+                    r2c.num += 1
+                    r2c.detail.append({"page": pg, "col": cc.col, "y": y, "why": "无缝"})
                 # 附近有没有更好的切点？有 → 可改善；没有 → 真粘连
                 lo, hi = max(0, y - 12), min(h, y + 13)
                 best = float(prof[lo:hi].min()) if hi > lo else float(prof[y])
@@ -210,7 +242,7 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                                       "px": int(n)})
 
     return {"book": book, "n_pages": len(pages),
-            "rulers": [x.to_dict() for x in (r1, r2, r2s, r2x, r3, r4)]}
+            "rulers": [x.to_dict() for x in (r1, r2, r2s, r2x, r2c, r3, r4)]}
 
 
 def _clipped_ink(prof: np.ndarray, bbox, cell, h: int) -> int:

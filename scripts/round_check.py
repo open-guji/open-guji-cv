@@ -41,10 +41,19 @@ def cmd_check(book: str, pages: list[int]) -> int:
     d = rc.check(book, pages)
     print(f"=== 本轮 {len(pages)} 页 ===")
     a = d["A"]
-    for key, label in (("gold", "对整理本金标"), ("human", "对你的裁决")):
-        o, n = a[key]
+    for key, label in (("gold", "对整理本金标"),
+                       ("gold_independent", "  └ 剔掉自证的（fallback 段）"),
+                       ("gold_replace", "  └ 只看 replace 段（零自证）"),
+                       ("human", "对你的裁决")):
+        pair = a.get(key)
+        if not pair:
+            continue
+        o, n = pair
         if n:
             print(f"A 自动放行 {label}: {o}/{n} = {o / n:.2%}")
+    if a.get("self_evident"):
+        print(f"     （其中 {a['self_evident']} 条金标的 shape 就是库 top1 兜底，"
+              f"验库是自证——主数看「剔掉自证」那行）")
     print(f"  → {MARK[a['light']]}"
           + ("" if a["light"] == "green"
              else "  ⚠ 先看图确认是管线错、金标错、还是你被坏图块误导"))
@@ -132,7 +141,7 @@ def cmd_regression(book: str) -> int:
     from open_guji_cv.core.book import load_book
     from open_guji_cv.eval.rulers import measure
     bk = load_book(book)
-    limits = {"R2": (0.2, 0.5), "R2s": (3.0, 5.0), "R2x": (0.3, 1.0), "R3": (0, 0), "R4": (0.1, 0.3)}
+    limits = {"R2": (0.2, 0.5), "R2s": (3.0, 5.0), "R2x": (0.3, 1.0), "R2c": (50.0, 70.0), "R3": (0, 0), "R4": (0.1, 0.3)}
     for r in measure(book, bk.resolve_pages("dev_set"))["rulers"]:
         k = r["key"]
         if k == "R1":
