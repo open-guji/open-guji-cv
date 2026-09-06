@@ -6,10 +6,10 @@
    "vol01",
    "vol02"
   ],
-  "built_at": "2026-09-06T02:34:28Z",
+  "built_at": "2026-09-06T03:14:20Z",
   "inputs": {
    "products_records": 46612,
-   "glyph_db_instances": 15515,
+   "glyph_db_instances": 15533,
    "corpus_tokens": 341241,
    "corpus_types": 4637,
    "book_forms": 2184
@@ -403,7 +403,7 @@
    "forms": {
     "即": {
      "book": {
-      "products": 28,
+      "products": 26,
       "db": 5,
       "human": 0,
       "align": 5
@@ -414,7 +414,7 @@
     },
     "卽": {
      "book": {
-      "products": 50,
+      "products": 53,
       "db": 39,
       "human": 26,
       "align": 0
@@ -444,10 +444,11 @@
    },
    "pairs": {
     "卽→即": {
-     "n": 54,
+     "n": 57,
      "human": 21,
-     "auto": 33,
+     "auto": 36,
      "channels": {
+      "match_ref": 3,
       "match_replace": 33
      },
      "first": "v2:vol01:60:5:20",
@@ -907,8 +908,8 @@
     "巳": {
      "book": {
       "products": 8,
-      "db": 13,
-      "human": 13,
+      "db": 26,
+      "human": 26,
       "align": 0
      },
      "ref": 198,
@@ -921,8 +922,8 @@
    },
    "pairs": {
     "巳→已": {
-     "n": 9,
-     "human": 9,
+     "n": 22,
+     "human": 22,
      "auto": 0,
      "channels": {},
      "first": "vol01:8:2:11",
@@ -995,7 +996,7 @@
    "forms": {
     "彙": {
      "book": {
-      "products": 1,
+      "products": 0,
       "db": 1,
       "human": 0,
       "align": 1
@@ -1006,7 +1007,7 @@
     },
     "彚": {
      "book": {
-      "products": 15,
+      "products": 16,
       "db": 16,
       "human": 13,
       "align": 0
@@ -1021,10 +1022,11 @@
    },
    "pairs": {
     "彚→彙": {
-     "n": 20,
+     "n": 21,
      "human": 5,
-     "auto": 15,
+     "auto": 16,
      "channels": {
+      "match_ref": 1,
       "match_replace": 15
      },
      "first": "v2:vol01:23:9:17",
@@ -1288,9 +1290,9 @@
    "forms": {
     "勅": {
      "book": {
-      "products": 5,
-      "db": 2,
-      "human": 0,
+      "products": 6,
+      "db": 3,
+      "human": 1,
       "align": 1
      },
      "ref": 23,
@@ -1333,7 +1335,7 @@
    "forms": {
     "有": {
      "book": {
-      "products": 377,
+      "products": 374,
       "db": 122,
       "human": 0,
       "align": 108
@@ -1656,7 +1658,7 @@
    "forms": {
     "厯": {
      "book": {
-      "products": 8,
+      "products": 15,
       "db": 17,
       "human": 17,
       "align": 0
@@ -1670,7 +1672,7 @@
     },
     "歷": {
      "book": {
-      "products": 19,
+      "products": 12,
       "db": 8,
       "human": 0,
       "align": 6
@@ -1682,10 +1684,11 @@
    },
    "pairs": {
     "厯→歷": {
-     "n": 24,
+     "n": 30,
      "human": 16,
-     "auto": 8,
+     "auto": 14,
      "channels": {
+      "match_ref": 6,
       "match_replace": 8
      },
      "first": "v2:vol01:137:6:19",
@@ -2711,8 +2714,8 @@
     "粃": {
      "book": {
       "products": 1,
-      "db": 1,
-      "human": 0,
+      "db": 2,
+      "human": 1,
       "align": 0
      },
      "ref": 2,
@@ -2942,9 +2945,9 @@
     },
     "籖": {
      "book": {
-      "products": 4,
-      "db": 4,
-      "human": 2,
+      "products": 5,
+      "db": 5,
+      "human": 3,
       "align": 1
      },
      "ref": 5,
@@ -3979,8 +3982,8 @@
     "顔": {
      "book": {
       "products": 1,
-      "db": 2,
-      "human": 0,
+      "db": 3,
+      "human": 1,
       "align": 2
      },
      "ref": 16,
