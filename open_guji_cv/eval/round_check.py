@@ -73,10 +73,20 @@ def _same_char(a: str | None, b: str | None) -> bool:
     """互为异体就当同一个字——刻本刻「卽」而整理本作「即」，字形层照录是对的。"""
     if not a or not b:
         return False
+    # 关系图的边分层（2026-09-06 改）：T1 纯异体直接算同字；T2「互通·一对多」只有本书用字账
+    # 记过这对（人裁或自动转换）才算——大/太、淮/准 都是 T2，整理本与刻本都分得清清楚楚，
+    # 拿它们当同字，判据 A 与对勘报告会把认错的 大 记成「异体」（vol02 预跑 大→太 ×12 就是）。
+    # T3（形近·通假·仅简繁）从不算。
     try:
-        from ..variants import are_variants
-        if are_variants(a, b):
+        from ..variants import edge_tier
+        t = edge_tier(a, b)
+        if t == "T1":
             return True
+        if t == "T2":
+            from ..variant_ledger import BookLedger
+            led = BookLedger.load_or_empty()
+            if led.pair(a, b) or led.pair(b, a):
+                return True
     except Exception:
         pass
     # variants.json 没收的字形异体（㫖/旨 这类 UCV 认同形）：VariantMap 的语义归并兜底
