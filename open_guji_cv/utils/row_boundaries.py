@@ -270,6 +270,11 @@ class Cell:
     gap_center: float | None = None
     ink_ratio: float = 0.0
     raised: bool = False
+    seam_top: list[int] | None = None
+    seam_bottom: list[int] | None = None
+    """折线切分（2026-09-05，见 `utils/seam.py`）：与上/下邻格之间的缝，列图坐标下每个 x
+    （从内容窗口 `x0` 起）一个 y。None = 直线切点处没墨，格线就是直线。上缝：行 < y 的
+    像素属上一格；下缝：行 ≥ y 的像素属下一格。只在 char–char 相邻且直线穿墨时才算。"""
 
     @property
     def sub(self) -> str | None:
@@ -691,6 +696,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     content_x: tuple[float, float] | None = None,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
+                    seam_band: int = 12,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -819,5 +825,31 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
     for i, c in enumerate(reading_order(cells), start=1):
         c.order = i
+
+    # ── 折线切分：直线格线穿墨的 char–char 相邻处，在 ±seam_band 走廊里找最小墨量缝 ──
+    # 用户 2026-09-05 观察 + 实验（doc §1.4）：人标"重叠"的 205 条里 183 条存在无墨折线。
+    # 缝只在走廊里走，"哪两个字之间"仍由上面的 DP 决定。
+    if seam_band > 0:
+        from . import seam as _seam
+        ink_bin = (col_gray[:, x_lo:x_hi] < ink_threshold)
+        by_pos: dict[int, list[Cell]] = {}
+        for c in cells:
+            by_pos.setdefault(_slot_to_pos_local(c.slot, n_raised), []).append(c)
+        for k in range(1, n_slots):
+            up, dn = by_pos.get(k, []), by_pos.get(k + 1, [])
+            if len(up) != 1 or len(dn) != 1 or up[0].kind != "char" or dn[0].kind != "char":
+                continue
+            y = int(round(bounds[k]))
+            if not (0 <= y < h) or not ink_bin[y].any():
+                continue
+            sm = _seam.find_seam(ink_bin, y, band=seam_band)
+            if int(np.abs(sm - y).max()) == 0:
+                continue
+            up[0].seam_bottom = sm.tolist()
+            dn[0].seam_top = sm.tolist()
     result.cells = cells
     return result
+
+
+def _slot_to_pos_local(slot: int, n_raised: int) -> int:
+    return slot + n_raised + 1 if slot < 0 else slot + n_raised
