@@ -40,6 +40,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..utils.jiazhu_order import sort_by_reading
+
 DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
 
 
@@ -56,6 +58,7 @@ class GoldChar:
     op_run: int = 1               # 所在对齐段长度，越长越可疑
     conversion: bool = False      # shape != reading，一次字形→文意的转换
     source: str = ""              # v2 定字来源：db_same | context | prior
+    sub: str | None = None        # 夹注半格的 a/b，正文格 None（2026-09-06）
 
 
 @dataclass
@@ -105,8 +108,8 @@ def _slots_from_decision(dec, match=None, ocr=None
             return o.topk[0][0]
         return None
 
-    slots: list[tuple[int, int, str]] = []
-    meta: dict[tuple[int, int], str] = {}
+    slots: list[tuple[int, int, str, str]] = []
+    meta: dict[tuple[int, int, str], str] = {}
     # 有 match 时以它为准列举字位——context_decision 可能整列缺席（弃权），
     # 那样按 dec 列举会把整列丢掉，锚定串又会错位。
     src = match if match is not None else dec
@@ -114,7 +117,10 @@ def _slots_from_decision(dec, match=None, ocr=None
     for cc in sorted(src.columns, key=lambda c: c.col):
         if not cc.ok:
             continue
-        for r in sorted(cc.chars, key=lambda x: (x.slot, x.sub or "")):
+        # ⚠️ **按阅读顺序**，不是 (slot, sub)（2026-09-06 修，同 context_decide）。
+        # 夹注 a/b 是两行小字，(slot, sub) 排出来交错成「兩採淮進鹽本政」，
+        # 8-gram 锚不上、difflib 还会把邻近正文一起拖进 replace 段。
+        for r in sort_by_reading(cc.chars):
             d = dmap.get(r.id)
             ch = (d.char if d and d.char else None)
             source = (d.source if d and d.char else "")
@@ -123,8 +129,9 @@ def _slots_from_decision(dec, match=None, ocr=None
                 source = "fallback"
             if not ch:
                 continue
-            slots.append((cc.col, r.slot, ch))
-            meta[(cc.col, r.slot)] = source
+            sub = r.sub or ""
+            slots.append((cc.col, r.slot, sub, ch))
+            meta[(cc.col, r.slot, sub)] = source
     return slots, meta
 
 
@@ -151,18 +158,22 @@ def align_page(book: str, page: int, store, corpus: str,
     out: list[GoldChar] = []
     n_conv = 0
     for lab in labels:
-        # AlignedLabel.instance_id 是 book:page:col:idx——我们传进去的 idx 就是 slot
+        # AlignedLabel.instance_id 是 book:page:col:slot[a|b]——idx 就是 slot，
+        # 夹注半格带 a/b 后缀（2026-09-06；此前不带，a/b 互相覆盖，
+        # gold 里一条夹注格都没有，判据 A 从来没量过夹注）。
         parts = lab.instance_id.split(":")
-        col, slot = int(parts[2]), int(parts[3])
+        col, tail = int(parts[2]), parts[3]
+        sub = tail[-1] if tail[-1:] in ("a", "b") else ""
+        slot = int(tail[:-1] if sub else tail)
         # hyp = 转写（v2 定的字形）；char = 金标（整理本给的文意读法）
         shape, reading = lab.hyp, lab.char
         conv = shape != reading
         n_conv += conv
         out.append(GoldChar(
-            id=lab.instance_id, page=page, col=col, slot=slot,
+            id=lab.instance_id, page=page, col=col, slot=slot, sub=sub or None,
             shape=shape, reading=reading,
             align_op=lab.op, op_run=lab.op_run,
-            conversion=conv, source=meta.get((col, slot), "")))
+            conversion=conv, source=meta.get((col, slot, sub), "")))
     return PageGold(book=book, page=page, anchored=True,
                     n_chars=len(out), n_conversion=n_conv, chars=out)
 

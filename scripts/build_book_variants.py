@@ -131,6 +131,16 @@ def collect_glyph_db(path: Path) -> tuple[dict[str, Counter], dict, int]:
 REF_MULTI_MIN = 2
 REF_MULTI_FRAC = 0.01
 
+#: 整理本两形都用到这个次数以上 → 不是同词异写，别并组（见 build_groups.ref_distinguishes）。
+#: 实测分界很干净：真异体组绝大多数一边是 0（整理本只用一个形），
+#: 而通假/简繁误合并的那批最小的一边也有 52（乾/干）。
+REF_BOTH_MIN = 50
+#: 例外：整理本自己就在混用的真异体对，不受上面那道闸约束。
+#: 巳/已 是用户 2026-09-04 定的「字形与文意分开」三字之一（本就该同组，靠 needsReading 分流）；
+#: 彛/彝 是同一个字的两种写法，整理本两种都印（60 / 180）。
+REF_BOTH_EXEMPT = frozenset({frozenset("巳已"), frozenset("彛彝"),
+                             frozenset("己已"), frozenset("己巳")})
+
 
 def ref_policy_of(refs: dict[str, int]) -> tuple[str, list[str]]:
     """(single | multi | none, 被当孤例忽略的形)。"""
@@ -148,12 +158,18 @@ def ref_policy_of(refs: dict[str, int]) -> tuple[str, list[str]]:
 def build_groups(g: VariantGraph, book_forms: set[str], ref: Counter,
                  pairs: set[tuple[str, str]]) -> dict[str, set[str]]:
     """书内每个形 → 一跳 **T1** 邻居（只留本书或整理本出现过的）→ 按 canonical 归并；
-    再把有转换记录的 T2 邻居并进来。
+    再把**人裁确认过**转换的 T2 邻居并进来。
 
     只走 T1 是刻意的（第一版走了 hydzd/T2 边，廳 把 聽 拉进来、歷 把 曆/厲 拉进来，
     297 组里 291 组成了「整理本多形」——那是不同的词，不是同词异形）。T2 对
     （注/註、鍾/鐘、已/巳）两头都是正字，整理本在区分它们，只有本书**记过转换**
     才有资格同组（variant_strategy.md §3.1「账本确认的 T2 对」）。
+
+    ⚠️ 那条「记过转换」必须是**人裁**的（2026-09-06 修）。原来 prod_pairs（管线自动
+    转换）也算数，于是形成正反馈：dual/match_replace 通道把刻本的「注」按整理本写成
+    「註」→ 产生 2 条 auto 转换记录 → 下次建账把 注/註 并成一组、preferred=註 →
+    整理本印「注」的 60 个字位有 58 个卡在人审（97%），而「註」只有 28%。
+    机器自己的错误不能反过来当合并的证据；人裁没确认过的 T2 对，两个字各自成组。
     """
     attested = lambda c: c in ref or c in book_forms  # noqa: E731
 
@@ -162,10 +178,28 @@ def build_groups(g: VariantGraph, book_forms: set[str], ref: Counter,
         return any(r == y and "twedu" in t for r, t in g.regulars_of(x)) \
             or any(r == x and "twedu" in t for r, t in g.regulars_of(y))
 
+    def ref_distinguishes(x: str, y: str) -> bool:
+        """整理本自己在区分这两个形——它俩各自都是本书的常用字，不是同词异写。
+
+        2026-09-06 加。中/仲、正/政、女/汝、常/裳 这些经 hydzd（含 hydzd-borrowed
+        通假）连成 T1，被并成一组；但整理本里 中 1438 次、仲 151 次，两个字都在用、
+        分工明确。整理本是本书的独立文本证据，它区分的字，刻本层面也该区分——
+        合并的代价是 preferred 会把其中一个压成人审（注/註 实测 97% vs 28%）。
+
+        门槛取「两形都 ≥ REF_BOTH_MIN 次」：真异体不会两头都这么高频
+        （厯 0 / 歷 119、㫖 0 / 旨 73——整理本只用其中一个形）。
+        REF_BOTH_EXEMPT 里的对是整理本自己就在混用的真异体，不受这道闸约束。
+        """
+        if frozenset((x, y)) in REF_BOTH_EXEMPT:
+            return False
+        return ref.get(x, 0) >= REF_BOTH_MIN and ref.get(y, 0) >= REF_BOTH_MIN
+
     def members(f: str) -> set[str]:
         out = {f}
         for b, tags in g.variants_of(f):
             if not (set(tags) & GROUP_SOURCES) or not attested(b):
+                continue
+            if ref_distinguishes(f, b):
                 continue
             tier = g.edge_tier(f, b)
             # T1 直接进；T2 里有一种是先验被噪声抬上去的：twedu 明明白白说 卽 是 即 的
@@ -257,7 +291,9 @@ def main() -> int:
     all_pairs = set(prod_pairs) | set(human_pairs)
     for (_c, r) in all_pairs:
         book_forms.add(r)
-    groups = build_groups(g, book_forms, ref, all_pairs)
+    # 并组只认**人裁**确认过的 T2 对（见 build_groups 的说明）。all_pairs 仍是全集，
+    # 用来出 forms/pairs 的账面数字与 unknown_pairs 队列——那是「记录」，不是「依据」。
+    groups = build_groups(g, book_forms, ref, set(human_pairs))
     form_index = {m: c for c, ms in groups.items() for m in ms}
 
     out_groups: dict[str, dict] = {}
