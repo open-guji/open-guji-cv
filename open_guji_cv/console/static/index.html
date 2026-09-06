@@ -980,6 +980,20 @@ async function loadRound() {
     rows += row('E', '字形保真率（自动放行的异体位，字形须与人裁完全一致）', e.light, body,
                 e.light === 'none' ? '去「异体 → 组视图」照准一批，攒够 50 条才亮灯' : '');
   }
+  // F 夹注：只有本册这批页里有夹注格才亮灯（vol01 卷首一一处没有）
+  if (d.F && d.F.n_cells) {
+    const f = d.F;
+    const body = '人审 ' + f.n_review + '/' + f.n_cells + ' = ' + (f.rate * 100).toFixed(2) + '%'
+      + ' · 段 ' + f.n_segments + '（有整理本参照 ' + f.n_segments_with_ref + '）'
+      + '<div class="qs">丢字 ' + f.n_lost + ' 段'
+      + (f.lost_rate != null ? '（' + (f.lost_rate * 100).toFixed(1) + '%）' : '')
+      + (f.n_no_ref ? ' · 锚不上整理本 ' + f.n_no_ref + ' 段（多为 T2 案語）' : '') + '</div>'
+      + ((f.lost || []).length
+          ? '<div class="qerr">' + f.lost.slice(0, 4).map(x => 'p' + x.page + ' c' + x.col + ' a' + x.a + '/b' + x.b).join(' · ') + '</div>'
+          : '');
+    rows += row('F', '夹注（雙行小注）人审率与丢字率', f.light, body,
+                f.n_lost ? '段格数与 a/b 不匹配 = 丢数据，比认错字严重，先修切分' : '');
+  }
   const nx = d.next || {};
   const nxt = (nx.batch || []).length
     ? '<div class="qs" style="margin-top:.6rem">下一批（正文页，已跳过职名/目录页）：'
