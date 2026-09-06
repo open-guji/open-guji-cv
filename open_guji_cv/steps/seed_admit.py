@@ -68,6 +68,10 @@ class SeedAdmitParams(BaseModel):
     是真有问题**——全采信会误伤约 150 个好格子（58 页上实测命中 68 条）。所以默认不含它，
     要复核时显式打开，或等重扫后逐条判。
     """
+    use_note_lexicon: bool = True       # 版本注闭集通道（段级，只作用于夹注格）
+    note_lexicon: str = ""              # 词表路径；空 = note_lexicon.py 默认
+    note_min_sim: float = 0.70          # 段相似度下限（见 note_lexicon.MIN_SIM）
+    note_fingerprint: str = ""          # 自动填：词表变了产物过期
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
@@ -93,6 +97,11 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.exclusions import DEFAULT_PATH
             object.__setattr__(self, "exclusions_fingerprint",
                                corpus_fingerprint([self.exclusions or str(DEFAULT_PATH)]))
+        # 版本注词表也是派生物（scripts/build_note_lexicon.py），同理
+        if self.use_note_lexicon and not self.note_fingerprint:
+            from ..clustering.note_lexicon import DEFAULT_LEXICON
+            object.__setattr__(self, "note_fingerprint",
+                               corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
 
 
 @register_step
@@ -107,14 +116,19 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variants",
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
-                   "open_guji_cv.clustering.align_label"),
+                   "open_guji_cv.clustering.align_label",
+                   "open_guji_cv.clustering.note_lexicon",
+                   "open_guji_cv.utils.jiazhu_order"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids
+        from ..clustering.note_lexicon import load_lexicon, match_segment
         from ..clustering.seeding import NEAR_FORM_CHARS, admission_decision
         from ..clustering.variant_form import decide_form, group_forms
         from ..clustering.variants import VariantMap
+        from ..utils.jiazhu_order import segments as jz_segments
+        from ..utils.jiazhu_order import sort_by_reading
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
@@ -147,6 +161,39 @@ class SeedAdmitStep(Step):
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
                 continue
             recs: list[AdmitRec] = []
+            # ── 版本注闭集通道（段级预扫，2026-09-06）─────────────────
+            # 夹注小字库里样本极少（16,019 例里 59 个），逐字认必然卡在
+            # cov 0.93~0.99 的灰带上落人审。但版本注是闭集（78 个短语），
+            # 整段一起认反而稳。段级判据见 clustering/note_lexicon 模块头，
+            # 三条硬约束（格数相等 / 相似度 / 唯一最佳）缺一不可。
+            # 这里只产出「这一格该读什么」的建议，**写不写库仍走下面的
+            # 逐格通道**——短语给的是读法，字形还要过账本的组内定形。
+            note_char: dict[str, str] = {}
+            note_sim: dict[str, float] = {}
+            if p.use_note_lexicon:
+                jz = [r for r in cc.chars if r.sub]
+                if jz:
+                    lex = load_lexicon(p.note_lexicon or None)
+                    for seg in jz_segments((r.slot, r.sub) for r in jz):
+                        sset = set(seg)
+                        rs = sort_by_reading([r for r in jz if r.slot in sset])
+                        cands: list[set[str]] = []
+                        for r in rs:
+                            cs = {c for c, _v in r.candidates[:5]}
+                            oo = omap.get(r.id)
+                            if oo:
+                                cs |= {c for c, _v in oo.topk[:5]}
+                            dd0 = dmap.get(r.id)
+                            if dd0 and dd0.char:
+                                cs.add(dd0.char)
+                            cands.append(cs)
+                        hit = match_segment(cands, lex, min_sim=p.note_min_sim,
+                                            semantic=vmap.semantic)
+                        if hit:
+                            phrase, sim = hit
+                            for r, ch in zip(rs, phrase):
+                                note_char[r.id] = ch
+                                note_sim[r.id] = sim
             for r in cc.chars:
                 # 排除名单命中：这块图人已判过切坏/带残留/非字。既不进库也不出
                 # 审查卡，只落一行留账（v1 的 seeding 同款处理）。放在最前面——
@@ -185,6 +232,7 @@ class SeedAdmitStep(Step):
                 align_char = al[0] if al else None
                 if al and al[1] == "replace":
                     doubts.append("replace_align")
+                note_ch = note_char.get(r.id)
                 # 账本人确认过的 T2 对（variant_strategy.md §4.3 第 6 行）：两头都是正字、
                 # 语义表不合并（注/註、鍾/鐘），但本书人裁明确记过「刻 X 读 Y」——对这一位
                 # 把 X 当 Y 的同义看，让 match_ref / match_replace 照常评。只影响这一次调用。
@@ -201,6 +249,23 @@ class SeedAdmitStep(Step):
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
                     solo_cov=p.solo_cov)
+                # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
+                # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
+                # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
+                # **整段**而不是单格，所以另立通道名，出了错能按通道归因。
+                # 四条护栏：
+                #   1. 只对夹注格（sub 非空）——正文有整理本逐字对齐，用不着它；
+                #   2. 库候选里要有语义同字的（形状不背书就不算两路互证）；
+                #   3. 形近家族、never_match/db_inconsistent 护栏照拦；
+                #   4. always_review 的字不碰（下面那道闸也会再拦一次）。
+                if (not ok and note_ch and r.sub
+                        and r.guard is None
+                        and "db_inconsistent" not in doubts):
+                    cands_sem = {vmap.semantic(c) for c, _v in r.candidates[:5]}
+                    if (vmap.semantic(note_ch) in cands_sem
+                            and note_ch not in NEAR_FORM_CHARS):
+                        ok, channel = True, "note_lexicon"
+                        align_char = align_char or note_ch
                 # 己/已/巳 永远人审（用户 2026-09-04 定）。这三个字的字形与
                 # 文意会分岔（同词异写 + 真的另一个字），任何自动通道都不该
                 # 替人决定读法——字形层护栏拦不住 align×库 这种跨源一致。
@@ -293,7 +358,13 @@ class SeedAdmitStep(Step):
 # ⚠️ match_ref 也在内（2026-09-05 补）：它放行的依据就是「库 top1 语义 == 整理本字」，
 # 漏掉它的后果是 vol01:18:8:6 刻「㫖」、整理本「旨」被存成 reading=None——
 # 体检判据 A 把这种异体位当成错例（99.99%），其实是转换没记下来。
-_CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin")
+_CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
+                    # note_lexicon（2026-09-06）：版本注闭集给的读法同样是**文本证据**，
+                    # 与整理本那几路一个性质——`reading` 该填、字形该照录图上的形、
+                    # 「义定形未定」的组内定形该走。漏进这个元组会有两个后果：
+                    # reading 不填（账本统计不到转换），以及 variant_form 整段跳过
+                    # （刻本形被整理本形盖掉，正是判据 E 82/91 那次的机制）。
+                    "note_lexicon")
 
 
 def _pick_char(ok: bool, channel: str | None, align_char: str | None,

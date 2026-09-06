@@ -22,6 +22,10 @@ class BookSpec:
     chars_per_line: int = 21          # Step3 的正文格数先验
     edition: str = "keben"
     dev_set: list[int] = field(default_factory=list)
+    #: 命名页集（yaml 的 `sets:`）：`{名字: [页号…]}`，用 `--pages <名字>` 选。
+    #: dev_set 是切分链的分层集，历史数字都挂在它上面，**不要往里塞新页**；
+    #: 要专项集（如夹注 jz）就在这里新开一个，见 vol02.yaml。
+    sets: dict[str, list[int]] = field(default_factory=dict)
     pages: list[int] = field(default_factory=list)   # 空 = 扫目录
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
@@ -48,13 +52,19 @@ class BookSpec:
         return sorted(found)
 
     def resolve_pages(self, selector: str | list[int] | None) -> list[int]:
-        """'dev_set' / 'all' / '3-6,9' / [3, 4] → 页号列表（升序去重）。"""
+        """'dev_set' / 'all' / 命名集 / '3-6,9' / [3, 4] → 页号列表（升序去重）。
+
+        命名集来自 yaml 的 `sets:`（如 vol02 的 `jz`）。名字优先于页号表达式，
+        但 `dev_set` / `all` 是保留名。
+        """
         if selector is None or selector == "dev_set":
             return list(self.dev_set) or self.all_pages()
         if selector == "all":
             return self.all_pages()
         if isinstance(selector, list):
             return sorted(set(int(p) for p in selector))
+        if isinstance(selector, str) and selector in self.sets:
+            return sorted(set(int(p) for p in self.sets[selector]))
         pages: set[int] = set()
         for part in str(selector).split(","):
             part = part.strip()
@@ -73,6 +83,7 @@ class BookSpec:
             "raw_pattern": self.raw_pattern, "expected_cols": self.expected_cols,
             "chars_per_line": self.chars_per_line, "edition": self.edition,
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
+            "sets": {k: list(v) for k, v in self.sets.items()},
             "preclean_pages": sorted(self.preclean), "notes": self.notes,
         }
 
@@ -121,6 +132,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         chars_per_line=int(d.get("chars_per_line", 21)),
         edition=d.get("edition", "keben"),
         dev_set=[int(p) for p in d.get("dev_set", [])],
+        sets={str(k): [int(p) for p in v]
+              for k, v in (d.get("sets") or {}).items()},
         pages=[int(p) for p in d.get("pages", [])],
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
