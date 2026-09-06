@@ -843,8 +843,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if not (0 <= y < h) or not ink_bin[y].any():
                 continue
             sm = _seam.find_seam(ink_bin, y, band=seam_band)
-            if int(np.abs(sm - y).max()) == 0:
-                continue
+            if int(np.abs(sm - y).max()) == 0 or _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK:
+                continue          # 与直线重合，或绕不开墨（多半是自己的笔画）——保持直线
             up[0].seam_bottom = sm.tolist()
             dn[0].seam_top = sm.tolist()
     result.cells = cells
