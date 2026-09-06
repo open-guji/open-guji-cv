@@ -213,10 +213,20 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
     n_cell = n_rev = 0
     n_seg = n_seg_ref = n_lost = 0
     lost: list[dict] = []
-    # T1 版本注（闭集，以「本」收尾）与 T2 案語（开放文本）性质完全不同，
-    # 混着报看不出哪边是瓶颈：T1 有 78 条短语的闭集先验、T2 只能靠整理本逐字对齐。
-    # 分型只看**转写自己**（以「本」收尾且不超 20 字），不硬编码页号——
-    # 新册进来同样适用，也不会因为分型表没更新就悄悄归错。
+    # T1 版本注（闭集）与 T2 案語（开放文本）性质完全不同，混着报看不出哪边是瓶颈：
+    # T1 有闭集短语先验、T2 只能靠整理本逐字对齐。
+    #
+    # ⚠️ **分型靠的是书级配置，不是写死的字**（用户 2026-09-06）：
+    # 「以『本』收尾」是《四庫全書總目》的版本注格式，换一套书就不成立了。
+    # 收尾词来自 `Book.jiazhu.note_suffixes`；**没配就不分型**，全算一档报总数——
+    # 宁可少一个维度，也不要在别的书上悄悄归错类。
+    from ..core.book import load_book
+    try:
+        bk = load_book(book)
+        suffixes = tuple(bk.jiazhu.get("note_suffixes") or ())
+        max_len = int(bk.jiazhu.get("note_max_len") or 20)
+    except Exception:
+        suffixes, max_len = (), 20
     by_type: dict[str, list[int]] = {"T1": [0, 0], "T2": [0, 0]}
     for pg in pages:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
@@ -231,7 +241,8 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
                 rs = sort_by_reading([r for r in jz if r.slot in sset])
                 n_seg += 1
                 text = "".join(r.char or "" for r in rs)
-                kind = "T1" if (text.endswith("本") and len(text) <= 20) else "T2"
+                kind = ("T1" if (suffixes and text.endswith(suffixes)
+                                 and len(text) <= max_len) else "T2")
                 for r in rs:
                     if "excluded" in (r.doubts or []):
                         continue
@@ -261,9 +272,10 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
         "n_lost": n_lost,
         "lost_rate": (n_lost / n_seg_ref) if n_seg_ref else None,
         "lost": lost[:10],
-        "by_type": {k: {"n_review": v[0], "n_cells": v[1],
-                        "rate": (v[0] / v[1]) if v[1] else None}
-                    for k, v in by_type.items() if v[1]},
+        # 没配 note_suffixes 时不报分型——全落进 T2 会让人误以为「这书全是案語」。
+        "by_type": ({k: {"n_review": v[0], "n_cells": v[1],
+                         "rate": (v[0] / v[1]) if v[1] else None}
+                     for k, v in by_type.items() if v[1]} if suffixes else {}),
     }
 
 

@@ -26,6 +26,21 @@
 「元吳澄原本」是正文句子被误判、「家禮辨定寸卷」是「六卷」讹成「寸卷」）——
 **不特判**，宁可漏三条也不要为个例加规则。
 
+## 换一套书怎么办
+
+**收尾词与「书名/注文分界」是书级约定，不是通用规则**（用户 2026-09-06 定的口径：
+依赖文字可以，但必须「这套书用、下套书不用」）。所以两者都放 `books/<id>.yaml`
+的 `jiazhu:` 段，用 `--book <id>` 取：
+
+    python scripts/build_note_lexicon.py --book vol02
+
+没配 `jiazhu.note_suffixes` 的书**直接报错退出**，不退回默认值硬跑——
+那些「採進本 / 家藏本」是《四庫全書總目》的格式，套到别的书上只会静默出一堆错词条。
+不带 `--book` 时才用模块里的兜底值，那条路只留给临时试跑。
+
+**注意夹注的探测本身与文字无关**：`utils/jiazhu_split` 走的是墨迹跨度、缝中心、
+段连缀，纯几何，换书照常工作。文字先验只用在「认字」这一层（本词表 + 判据 F 的分型）。
+
 ## count=1 的条目要当心
 
 36 条只出现一次，其中混着整理本自己的讹字：「巡撫採浙江進本」（字序错）、
@@ -47,30 +62,34 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
 DEFAULT_OUT = "config/jiazhu/version_notes.json"
 
-#: 版本注的收尾词。刻本上这些都是「……本」，用后缀而不是关键词是因为
-#: 前半段（机构/人名）开放得很，后半段才是闭集。
-SUFFIXES = ("採進本", "家藏本", "藏本", "大典本", "進本", "刊本", "抄本",
-            "寫本", "進呈本", "刻本", "通行本", "敕撰本", "原本", "舊本")
+#: 兜底值——**只在没给 `--book` 时用**，且只对《四庫全書總目》成立。
+#: 正途是 `--book <id>` 从 `Book.jiazhu` 取，见模块头。
+DEFAULT_SUFFIXES = ("採進本", "家藏本", "藏本", "大典本", "進本", "刊本", "抄本",
+                    "寫本", "進呈本", "刻本", "通行本", "敕撰本", "原本", "舊本")
 NUM = "一二三四五六七八九十百千零〇"
-#: 「N卷」或「無卷數」——书名与版本注的分界
-JUAN = re.compile(r"(?:[" + NUM + r"]+卷|無卷數)")
+#: 书名与版本注的分界（可被 Book.jiazhu.title_split 覆盖）
+DEFAULT_TITLE_SPLIT = r"(?:[" + NUM + r"]+卷|無卷數)"
 MIN_LEN, MAX_LEN = 3, 20
 
 
-def derive(corpus_text: str) -> tuple[collections.Counter, list[str]]:
-    """语料 → (短语计数, 切不动的行)。"""
+def derive(corpus_text: str, suffixes: tuple[str, ...] = DEFAULT_SUFFIXES,
+           title_split: str = DEFAULT_TITLE_SPLIT,
+           max_len: int = MAX_LEN) -> tuple[collections.Counter, list[str]]:
+    """语料 → (短语计数, 切不动的行)。`suffixes` / `title_split` 来自 Book.jiazhu。"""
     counts: collections.Counter = collections.Counter()
     skipped: list[str] = []
-    for line in corpus_text.split("\n"):
+    juan = re.compile(title_split)
+    suffixes = tuple(suffixes)
+    for line in corpus_text.split(chr(10)):
         line = line.strip()
-        if not line.endswith(SUFFIXES) or not (4 < len(line) <= 80):
+        if not line.endswith(suffixes) or not (4 < len(line) <= 80):
             continue
-        ms = list(JUAN.finditer(line))
+        ms = list(juan.finditer(line))
         if not ms:
             skipped.append(line)
             continue
-        phrase = line[ms[-1].end():].strip("　 \t")
-        if MIN_LEN <= len(phrase) <= MAX_LEN:
+        phrase = line[ms[-1].end():].strip("　 	")
+        if MIN_LEN <= len(phrase) <= max_len:
             counts[phrase] += 1
         else:
             skipped.append(line)
@@ -79,13 +98,29 @@ def derive(corpus_text: str) -> tuple[collections.Counter, list[str]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--book", default="", help="从 Book.jiazhu 取后缀/分界（推荐）")
     ap.add_argument("--corpus", default=DEFAULT_CORPUS)
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
+    suffixes, title_split, max_len = DEFAULT_SUFFIXES, DEFAULT_TITLE_SPLIT, MAX_LEN
+    if a.book:
+        import sys as _sys
+        _sys.path.insert(0, str(REPO))
+        from open_guji_cv.core.book import load_book
+        jz = load_book(a.book).jiazhu or {}
+        if not jz.get("note_suffixes"):
+            raise SystemExit(
+                f"{a.book} 的 books/*.yaml 里没有 jiazhu.note_suffixes——"
+                "版本注的收尾词是**书级约定**，不给就没法派生词表。"
+                "别退回默认值硬跑：那是《四庫全書總目》的格式，换书必错。")
+        suffixes = tuple(jz["note_suffixes"])
+        title_split = jz.get("title_split") or DEFAULT_TITLE_SPLIT
+        max_len = int(jz.get("note_max_len") or MAX_LEN)
+
     text = (REPO / a.corpus).read_text(encoding="utf-8")
-    counts, skipped = derive(text)
+    counts, skipped = derive(text, suffixes, title_split, max_len)
     phrases = [{"text": t, "count": n, "len": len(t)}
                for t, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
     chars = sorted({c for t in counts for c in t})
@@ -93,6 +128,9 @@ def main() -> None:
         "meta": {
             "what": "版本注（雙行小注）短语闭集，由 scripts/build_note_lexicon.py 从整理本派生。永不手编。",
             "corpus": a.corpus,
+            "book": a.book or "(默认约定，未指定 --book)",
+            "suffixes": list(suffixes),
+            "title_split": title_split,
             "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "n_lines": sum(counts.values()),
             "n_phrases": len(counts),

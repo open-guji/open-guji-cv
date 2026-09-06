@@ -26,6 +26,19 @@ class BookSpec:
     #: dev_set 是切分链的分层集，历史数字都挂在它上面，**不要往里塞新页**；
     #: 要专项集（如夹注 jz）就在这里新开一个，见 vol02.yaml。
     sets: dict[str, list[int]] = field(default_factory=dict)
+    #: 夹注（雙行小注）的**本书文字约定**（yaml 的 `jiazhu:`）。默认全空 = 不启用。
+    #:
+    #: ⚠️ **探测夹注本身不看文字**（`utils/jiazhu_split` 纯几何：墨迹跨度、缝中心、
+    #: 段连缀），换书照样能用。这里放的只是「这一套书的注文长什么样」这类**书级先验**：
+    #:
+    #: - `note_suffixes`：版本注的收尾词（《四庫全書總目》是「…採進本 / …藏本」）。
+    #:   给了才启用闭集短语通道与 T1/T2 分型；不给就整册按开放文本算，不会误判。
+    #: - `note_max_len`：闭集短语的长度上限（超过就当开放文本）。
+    #: - `title_split`：书名与注文的分界正则（总目是「N卷 / 無卷數」）。
+    #:
+    #: 用户 2026-09-06 定的口径：**依赖文字可以，但必须「这套书用、下套书不用」**——
+    #: 所以一律进 Book 配置，不写死在 eval / 通道代码里。
+    jiazhu: dict = field(default_factory=dict)
     pages: list[int] = field(default_factory=list)   # 空 = 扫目录
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
@@ -84,6 +97,7 @@ class BookSpec:
             "chars_per_line": self.chars_per_line, "edition": self.edition,
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
             "sets": {k: list(v) for k, v in self.sets.items()},
+            "jiazhu": dict(self.jiazhu),
             "preclean_pages": sorted(self.preclean), "notes": self.notes,
         }
 
@@ -134,6 +148,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         dev_set=[int(p) for p in d.get("dev_set", [])],
         sets={str(k): [int(p) for p in v]
               for k, v in (d.get("sets") or {}).items()},
+        jiazhu=dict(d.get("jiazhu") or {}),
         pages=[int(p) for p in d.get("pages", [])],
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
