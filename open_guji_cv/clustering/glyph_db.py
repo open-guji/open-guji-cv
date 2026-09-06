@@ -818,6 +818,19 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
+    # admissions 是**進庫審計行**（設計 §3 紀律 1：每條進庫都要留 provenance +
+    # evidence）。它不是派生物——provenance='human' 的那些是人裁決定，庫外
+    # 沒有第二份；events 表在生產庫裡是空的，重算也算不回來。首版導出漏了它，
+    # 於是 rebuild 出來的庫 admissions=0，審計鏈整條斷掉（2026-09-06 為了把
+    # sqlite 移出 Git 歷史做 export→rebuild 無損校驗時發現）。
+    counts["admissions"] = dump(
+        out / "admissions.jsonl",
+        cur.execute(
+            "SELECT a.* FROM admissions a JOIN instances i "
+            "  ON i.instance_id = a.instance_id "
+            "  JOIN sources s ON s.source_id = i.source_id "
+            " WHERE COALESCE(s.kind,'woodblock') != 'font' "
+            " ORDER BY a.instance_id"))
 
     # 事件與實例按書分檔：一本書一個檔，審查增量只動一個檔
     n_ev = n_inst = n_png = 0
@@ -927,6 +940,10 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
                     (row[0], r["instance_id"], r["role"], r["added_at"]))
         n_ex += 1
+    for r in read(store / "admissions.jsonl"):
+        cols = ",".join(r.keys())
+        cur.execute(f"INSERT OR REPLACE INTO admissions ({cols}) "
+                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
     for r in read(store / "pairs.jsonl"):
         cols = ",".join(r)
         cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
