@@ -23,6 +23,9 @@ class BookSpec:
     edition: str = "keben"
     dev_set: list[int] = field(default_factory=list)
     pages: list[int] = field(default_factory=list)   # 空 = 扫目录
+    # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
+    # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
+    preclean: dict[int, list[dict]] = field(default_factory=dict)
     notes: str = ""
 
     # ── 页 ───────────────────────────────────────────────────────────
@@ -70,12 +73,36 @@ class BookSpec:
             "raw_pattern": self.raw_pattern, "expected_cols": self.expected_cols,
             "chars_per_line": self.chars_per_line, "edition": self.edition,
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
-            "notes": self.notes,
+            "preclean_pages": sorted(self.preclean), "notes": self.notes,
         }
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
+
+
+def _load_preclean(raw) -> dict[int, list[dict]]:
+    """yaml 的 preclean 段 → {页号: [规则, ...]}。
+
+    写法（vol02.yaml 里就有一例）：
+
+        preclean:
+          151:
+            - kind: horizontal_bar
+              y0: 648
+              y1: 693
+              note: 扫描件上压着的粗黑横条
+
+    坐标是**原图像素**（raw_dir 里那张的尺度），不是任何下游产物的坐标。
+    """
+    if not raw:
+        return {}
+    out: dict[int, list[dict]] = {}
+    for page, rules in raw.items():
+        if isinstance(rules, dict):
+            rules = [rules]
+        out[int(page)] = [dict(r) for r in rules]
+    return out
 
 
 def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
@@ -95,6 +122,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         edition=d.get("edition", "keben"),
         dev_set=[int(p) for p in d.get("dev_set", [])],
         pages=[int(p) for p in d.get("pages", [])],
+        preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
     )
 
