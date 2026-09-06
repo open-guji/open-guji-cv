@@ -53,7 +53,8 @@ def cmd_check(book: str, pages: list[int]) -> int:
 
     b = d["B"]
     print(f"\nB 人审率: {b['review']}/{b['total']} = {b['rate']:.2%}"
-          f"  → {MARK[b['light']]}")
+          f"  → {MARK[b['light']]}"
+          + (f"（另有 {b['excluded']} 格在排除名单里，不进分母）" if b.get("excluded") else ""))
     if b["by_page"]:
         print("  按页:", " ".join(f"p{r['page']}:{r['n']}" for r in b["by_page"]))
 

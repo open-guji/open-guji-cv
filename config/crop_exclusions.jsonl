@@ -398,3 +398,7 @@
 {"date": "2026-08-25", "evidence": ["wide_gap"], "instance_id": "vol02:96:4:2", "note": "管线自检疑似层旗标（boundary_ink 缺陷率 27.5%，四条里三条是好的）", "origin": "pipeline-suspect", "reason": "crop_defect", "rekey_from": "vol02:96:4:2", "round": "r1"}
 {"date": "2026-08-25", "evidence": ["wide_gap"], "instance_id": "vol02:96:6:16", "note": "管线自检疑似层旗标（boundary_ink 缺陷率 27.5%，四条里三条是好的）", "origin": "pipeline-suspect", "reason": "crop_defect", "rekey_from": "vol02:96:6:16", "round": "r1"}
 {"date": "2026-08-25", "evidence": ["frame_bars"], "instance_id": "vol02:96:7:20", "note": "管线自检确定层旗标", "origin": "pipeline", "reason": "crop_defect", "rekey_from": "vol02:96:7:20", "round": "r1"}
+{"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol01:4:1:3", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_t-batch_000001"}
+{"date": "2026-09-06", "evidence": ["contaminated", "shape=畧"], "instance_id": "vol01:8:7:15", "note": "审查卡片人裁：contaminated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-variants-略_000001"}
+{"date": "2026-09-06", "evidence": ["contaminated", "shape=干"], "instance_id": "vol01:20:2:11", "note": "审查卡片人裁：contaminated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-variants-乾_000001"}
+{"date": "2026-09-06", "evidence": ["contaminated", "shape=啟"], "instance_id": "vol01:11:3:21", "note": "审查卡片人裁：contaminated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-variants-啟_000001"}

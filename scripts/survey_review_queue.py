@@ -86,7 +86,7 @@ def main() -> int:
         Path("../open-guji-dataset/feedback/events").glob(f"{a.book}-*.jsonl"))
     truth = load_truth(ev_paths)
 
-    n_tot = n_auto = 0
+    n_tot = n_auto = n_excluded = 0
     reasons: Counter = Counter()
     by_page: Counter = Counter()
     sig_gold: Counter = Counter()
@@ -114,6 +114,11 @@ def main() -> int:
 
         for cc in adm.columns:
             for r in cc.chars:
+                # 排除名单命中的不进分母：人/管线已判过「这块图不能用」，它既不是
+                # 自动放行也不是待人点的活（与 eval/round_check.review_rate 同口径）。
+                if "excluded" in (r.doubts or []):
+                    n_excluded += 1
+                    continue
                 n_tot += 1
                 if r.admit:
                     n_auto += 1
@@ -166,7 +171,8 @@ def main() -> int:
                                  + (f" [freq={freq.get(ts, 0)}]" if freq.get(ts, 0) <= 3 else "")))
 
     n_rev = n_tot - n_auto
-    print(f"字位 {n_tot}  自动 {n_auto} ({n_auto / n_tot:.1%})  人审 {n_rev} ({n_rev / n_tot:.1%})")
+    print(f"字位 {n_tot}  自动 {n_auto} ({n_auto / n_tot:.1%})  人审 {n_rev} ({n_rev / n_tot:.1%})"
+          + (f"  ＋排除名单 {n_excluded} 格（不进分母）" if n_excluded else ""))
     print("\n== 人审原因（可叠加）==")
     for k, v in reasons.most_common():
         print(f"  {v:4d}  {k}")

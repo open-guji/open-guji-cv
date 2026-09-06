@@ -139,6 +139,7 @@ class PageAdmit(BaseModel):
     page: int
     n_auto: int = 0
     n_review: int = 0
+    n_excluded: int = 0        # 命中排除名单（图块切坏/非字）：不进库也不出审查卡
     columns: list[ColumnAdmit] = Field(default_factory=list)
 
     def column(self, col: int) -> ColumnAdmit | None:

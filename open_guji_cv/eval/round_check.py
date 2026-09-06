@@ -130,7 +130,7 @@ def review_rate(book: str, pages: list[int], store=None) -> dict:
     from ..products.store import ProductStore
 
     st = store or ProductStore()
-    tot = auto = 0
+    tot = auto = excluded = 0
     per: Counter = Counter()
     for pg in pages:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
@@ -138,12 +138,18 @@ def review_rate(book: str, pages: list[int], store=None) -> dict:
             continue
         for cc in a.columns:
             for r in cc.chars:
+                # 排除名单命中的格**不进分母**：人已经判过「这块图不能用」，
+                # 它既不是自动放行也不是待人点的活。算进人审率会让「标缺陷」
+                # 看着像「人审变多」——判据 B 的意思就反了。
+                if "excluded" in (r.doubts or []):
+                    excluded += 1
+                    continue
                 tot += 1
                 if r.admit:
                     auto += 1
                 else:
                     per[pg] += 1
-    return {"total": tot, "auto": auto, "review": tot - auto,
+    return {"total": tot, "auto": auto, "review": tot - auto, "excluded": excluded,
             "rate": (tot - auto) / tot if tot else None,
             "by_page": [{"page": p, "n": per[p]} for p in pages if per[p]]}
 

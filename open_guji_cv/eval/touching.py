@@ -60,6 +60,7 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
                 up, dn = cc.cells[bi - 1], cc.cells[bi]
                 if up.kind != "char" or dn.kind != "char":
                     continue          # 夹注 / 空白旁的切线另案
+                seam = getattr(up, "seam_bottom", None)      # 现役折线缝（列图坐标，从内容窗口 x0 起）
                 out.append(dict(
                     id=f"{book}:{pg}:{cc.col}:{up.slot}",   # 以上格格位定名，parse_card_id 可解析
                     book=book, page=pg, col=cc.col, bi=bi, y=y,
@@ -68,8 +69,40 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
                     y0=int(round(up.y0)), y1=int(round(dn.y1)),
                     x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
                     col_h=h, col_w=col_w,
+                    seam=list(seam) if seam else None,
                 ))
     return out
+
+
+def polyline_to_seam(points: list, x0: int, x1: int) -> list[int]:
+    """人标的折线（列图坐标 [[x, y], …]，按 x 递增）→ 每个 x∈[x0, x1) 一个 y（线性插值；
+    两端之外取端点的 y，即水平延伸）。与 `Cell.seam_*` 同口径，可直接比。"""
+    pts = sorted((float(x), float(y)) for x, y in points)
+    if not pts:
+        return []
+    xs = [x for x, _ in pts]; ys = [y for _, y in pts]
+    out = []
+    for x in range(int(x0), int(x1)):
+        if x <= xs[0]:
+            out.append(int(round(ys[0]))); continue
+        if x >= xs[-1]:
+            out.append(int(round(ys[-1]))); continue
+        j = 1
+        while xs[j] < x:
+            j += 1
+        xa, ya, xb, yb = xs[j - 1], ys[j - 1], xs[j], ys[j]
+        t = (x - xa) / (xb - xa) if xb > xa else 0.0
+        out.append(int(round(ya + t * (yb - ya))))
+    return out
+
+
+def seam_deviation(a: list, b: list) -> tuple[float, float]:
+    """两条缝（每 x 一个 y，同起点）的 (最大, 平均) 纵向偏差，按公共长度算。"""
+    n = min(len(a), len(b))
+    if n == 0:
+        return float("nan"), float("nan")
+    d = [abs(float(a[i]) - float(b[i])) for i in range(n)]
+    return max(d), sum(d) / n
 
 
 def attach_expected(cases: list[dict], book: str, store=None) -> None:

@@ -56,3 +56,20 @@ def test_cutline_with_border_tag_also_feeds_side_rule():
     assert "char-segmentation/touching-cuts" in shards and "char-segmentation/side-rule" in shards, shards
     plain = _evt({"y": 1980, "y_old": 1980, "verdict": "ok"})
     assert "char-segmentation/side-rule" not in {d.shard for d in RouteTable.load().destinations(plain)}
+
+
+def test_cutline_expected_keeps_polyline():
+    e = _evt({"y": 1980, "y_old": 1986, "verdict": "moved", "polyline": [[20, 1975], [90, 1990], [170, 1978]]})
+    ex = _expected_of(e)
+    assert ex["polyline"] == [[20, 1975], [90, 1990], [170, 1978]] and ex["y"] == 1980
+
+
+def test_polyline_to_seam_interpolates_and_extends_ends():
+    from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation
+    seam = polyline_to_seam([[10, 100], [20, 110], [30, 100]], x0=5, x1=36)
+    assert len(seam) == 31
+    assert seam[0] == 100 and seam[-1] == 100          # 两端水平延伸
+    assert seam[20 - 5] == 110                          # 顶点 x=20
+    assert seam[15 - 5] == 105                          # x=15：10→20 的中点线性插值
+    mx, mean = seam_deviation(seam, [100] * 31)
+    assert mx == 10 and 0 < mean < 10

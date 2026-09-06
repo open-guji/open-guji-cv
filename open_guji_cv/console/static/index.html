@@ -56,11 +56,18 @@
   .vtile { position: relative; width: 56px; height: 56px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; cursor: pointer; }
   .vtile img { width: 100%; height: 100%; object-fit: contain; }
   .vtile.pending { outline: 2px dashed var(--zhu, #B3261E); outline-offset: 1px; }
+  .vtile.stale { outline: 2px dashed #B8860B; outline-offset: 1px; }   /* 已裁、产物待重跑 */
   .vtile.moved { outline: 2px solid var(--indigo); outline-offset: 1px; }
-  .vtile.non { opacity: .3; }
+  .vtile.marked { opacity: .45; outline: 2px solid var(--zhu, #B3261E); outline-offset: 1px; }
   .vtile.hum::after { content: "✓"; position: absolute; right: 1px; bottom: -2px; font-size: .7rem; color: var(--indigo); }
   .vtile i { position: absolute; left: 2px; top: 0; font-style: normal; font-size: .7rem; color: var(--indigo); background: rgba(255,255,255,.8); padding: 0 .15em; }
-  .vtile:focus-visible { outline: 2px solid var(--indigo); }
+  .vtile b { position: absolute; right: 1px; top: 0; font-size: .72rem; color: #fff; background: var(--zhu, #B3261E); padding: 0 .25em; border-radius: 2px; }
+  .vother { border: 1px dashed var(--rule); border-radius: 6px; padding: .4rem .5rem; margin-top: .6rem; }
+  .vother.empty { opacity: .55; }
+  .votile { display: flex; flex-direction: column; align-items: center; gap: .15rem; }
+  .voin { width: 3.4rem; text-align: center; font-family: "Noto Serif TC","Source Han Serif TC",serif; font-size: 1rem; }
+  .vtile:focus-visible, .vtile.sel { outline: 3px solid var(--indigo); outline-offset: 1px; }
+  .vtile.sel { box-shadow: 0 0 0 1px var(--indigo) inset; }
   .muted { color: var(--mute); font-size: .82rem; }
   .mono { font-family: var(--mono); font-size: .8rem; }
   /* 状态矩阵 */
@@ -124,6 +131,10 @@
   .climg img { display:block; image-rendering:pixelated; }
   .clline { position:absolute; left:0; right:0; height:0; border-top:2px solid var(--zhu); pointer-events:none; }
   .clline.old { border-top:1px dashed var(--indigo); opacity:.7; }
+  .clsvg { position:absolute; left:0; top:0; width:100%; pointer-events:none; overflow:visible; }
+  .clseam { fill:none; stroke:var(--ok); stroke-width:1.5; stroke-dasharray:4 3; opacity:.9; }
+  .clpoly { fill:none; stroke:var(--zhu); stroke-width:2; }
+  .clmode.on { background:var(--indigo-soft); border-color:var(--indigo); }
   .clside { font-size:.8rem; line-height:1.6; min-width:0; }
   .clside .ch { font-family:var(--serif); font-size:1.5rem; display:inline-block; margin-right:.4rem; vertical-align:middle; }
   .clside .dy { font-family:var(--mono); }
@@ -324,9 +335,11 @@
     <div class="card">
       <h2>收割与消费 <span class="muted">裁决 → 事件 → 字形库 / 测试集</span></h2>
       <div class="muted" style="font-size:.78rem;margin-bottom:.5rem;line-height:1.7">
-        在本控制台裁决的，事件已经写好了，<b>直接点「按路由表消费」</b>即可；
-        「收割」只在裁决来自<b>外部审查页</b>时才需要。三步的关系：
+        在本控制台裁决的<b>提交时就已经落库了</b>，这里不用再点一次（2026-09-05 起）；
+        下面这几个按钮是<b>补跑</b>用的：裁决来自<b>外部审查页</b>（先「收割」成事件）、
+        自动消费报错了、或想先「试算」看看。三步的关系：
         <span class="mono">外部页 →(收割)→ 事件 →(消费)→ 字形库 / 测试集</span>
+        <br>消费是幂等的，重复点不会重复写。
       </div>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
         <label class="muted">批次 <select id="h_batch"></select></label>
@@ -369,6 +382,7 @@
         在图上<b>点击或拖动</b>定位；键盘：<b>↑/↓</b> 1px（Shift 5px）· <b>回车</b> 落定（没动过 = 现切点正确）·
         <b>O</b> 现切点正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
         干扰标签 <b>1</b> 污点 <b>2</b> 界行/版框 <b>3</b> 邻字残墨 <b>4</b> 其他（落定前点，可多选；评测里分开算）。
+        <b>P</b> 折线模式：在图上点 ≥2 个点连成折线（<b>Backspace</b> 撤点），回车落定；蓝色虚线是现役直线切点，绿色虚线是现役折线缝。
         每次落定立刻写入事件，刷新不丢。
       </div>
       <div id="cl_cards" class="clgrid"></div>
@@ -400,8 +414,13 @@
         <span id="vg_stat" class="muted"></span>
       </div>
       <div id="vg_groups" class="vg_groups"></div>
+      <div id="vg_stale" class="muted" style="font-size:.78rem;margin:.2rem 0"></div>
       <p class="muted" style="font-size:.78rem;margin:.4rem 0">
-        红虚框 = 义定形未定（待审）；点格子 = 挪到下一列（改形）；<b>N</b> = 非字；提交时每格记 shape（所在列）+ reading（整理本字），两者不同即一次转换。
+        红虚框 = 义定形未定（待审）。<b>单击 = 选中</b>（蓝框），选中后才好按键；
+        <b>双击 / 空格 / ←→</b> = 挪列改形。提交时每格记 shape（所在列）+ reading（整理本字），两者不同即一次转换。
+        选中后可按：<b>O</b> 组外（两个形都不是，如标 蠹 实为 𥗤——扔进下面那栏再填字） ·
+        <b>N</b> 非字 · <b>T</b> 字形不完整 · <b>C</b> 有噪声——后三个是「这块图不能用，不是认错字」，
+        提交后写进金标与排除名单，这一格<b>以后不进库也不再出卡</b>（重扫后可按名单逐条复核放回）。
         「照准全部」把已自动放行的也确认一遍——那就是字形保真率的抽审。
       </p>
       <div id="vg_grid"></div>
@@ -789,6 +808,7 @@ async function loadRound() {
     const b = d.B;
     rows += row('B', '人审率', b.light,
       b.review + '/' + b.total + ' = ' + (b.rate * 100).toFixed(2) + '%'
+      + (b.excluded ? '<span class="qs">（另有 ' + b.excluded + ' 格在排除名单里，不进分母）</span>' : '')
       + (b.by_page.length ? '<div class="qs">' + b.by_page.map(r => 'p' + r.page + ':' + r.n).join(' ') + '</div>' : ''),
       '');
   }
@@ -812,6 +832,16 @@ async function loadRound() {
     rows += row('D', '生僻字 top-10（字体模板+CNN 融合）', x.light,
       x.hit + '/' + x.n + ' = ' + (x.rate * 100).toFixed(1) + '%' + (x.note ? ' · ' + x.note : ''),
       x.cnn ? '' : '没有 CNN checkpoint，退回纯 HOG——数字会明显低');
+  }
+  if (d.E) {
+    const e = d.E, fa = e.form_auto || [0, 0];
+    const body = (e.audited
+        ? '人裁核过 ' + e.hit + '/' + e.audited + ' = ' + (e.rate * 100).toFixed(1) + '%（Wilson 下界 ' + e.wilson_low + '；variant_form 定形 ' + fa[0] + '/' + fa[1] + '）'
+        : '还没有人裁核过的异体位')
+      + '<div class="qs">异体位自动放行 ' + e.variant_admits + ' 条 · 义定形未定待审 ' + e.form_open + ' 条' + (e.note ? ' · ' + e.note : '') + '</div>'
+      + ((e.errors || []).length ? '<div class="qerr">' + e.errors.slice(0, 4).map(x => x.id + ' 存「' + x.pred + '」人裁「' + x.human + '」').join(' · ') + '</div>' : '');
+    rows += row('E', '字形保真率（自动放行的异体位，字形须与人裁完全一致）', e.light, body,
+                e.light === 'none' ? '去「异体 → 组视图」照准一批，攒够 50 条才亮灯' : '');
   }
   const nx = d.next || {};
   const nxt = (nx.batch || []).length
@@ -1082,7 +1112,8 @@ async function rvSend() {
   $('#rv_msg').textContent = '提交中…';
   const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
-  $('#rv_msg').textContent = `已写入 ${r.n_appended ?? rows.length} 条事件 → 批次 ${batch}`;
+  $('#rv_msg').textContent = `已写入 ${r.appended ?? r.n_appended ?? rows.length} 条事件 → 批次 ${batch}`
+    + consumedMsg(r);
   loadBatches();
 }
 
@@ -1142,7 +1173,7 @@ function fillSteps() {
 // 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
 // 每张卡：上下两格的列图裁片（1:1 像素，CSS 放大 CL.scale 倍）+ 可拖横线。
 // 每次落定立刻 POST 一条 cutline 事件（刷新不丢），verdict 见 touching-cuts README。
-const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {}, tags: {}, scales: {} };
+const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {}, tags: {}, scales: {}, poly: {}, mode: {} };
 
 // 每张卡自己的显示倍率：列图裁片原宽约 180–210px，放到 ≤ 300px 且 ≤ 2 倍，
 // 卡片再窄也不会把右侧按钮挤没（用户 2026-09-05 截图：图超出卡片、按钮挤成一列）。
@@ -1178,6 +1209,7 @@ function clCard(c, i) {
         <img src="${c.img}" height="${h * s}" alt="${c.id}" loading="lazy" style="width:auto;height:${h * s}px">
         <div class="clline old" style="top:${(c.y - c.crop_y0) * s}px"></div>
         <div class="clline" id="clln${i}" style="top:${(y - c.crop_y0) * s}px"></div>
+        <svg class="clsvg" id="clsvg${i}" style="height:${h * s}px">${clSeamPath(c, s)}<polyline id="clpl${i}" class="clpoly" points=""></polyline></svg>
       </div>
       <div class="clside">
         <div><span class="ch" title="上格期望字">${c.char_above || '？'}</span><span class="muted">上格 ${c.slot_above}</span></div>
@@ -1188,6 +1220,8 @@ function clCard(c, i) {
           <button data-i="${i}" data-v="ok" title="O">现切点正确</button>
           <button data-i="${i}" data-v="overlap" title="V">重叠·折中</button>
           <button data-i="${i}" data-v="idk" title="S">拿不准</button>
+          <button data-i="${i}" data-m="poly" class="clmode" title="P：折线模式，在图上点 ≥2 个点连成折线；Backspace 撤最后一点">折线</button>
+          <span class="muted" id="clpn${i}"></span>
         </div>
         <div class="clbtns cltags" title="干扰因素（可多选，落定前点；评测里分开算）">
           <button data-i="${i}" data-t="stain" title="1">污点</button>
@@ -1198,6 +1232,43 @@ function clCard(c, i) {
       </div>
     </div>
   </div>`;
+}
+
+// 现役折线缝（case.seam：从内容窗口 x0 起、每 x 一个 y，列图坐标）画成虚线
+function clSeamPath(c, s) {
+  if (!c.seam || !c.seam.length) return '';
+  const pts = c.seam.map((yy, k) => `${(c.x0 + k) * s},${(yy - c.crop_y0) * s}`).join(' ');
+  return `<polyline class="clseam" points="${pts}"></polyline>`;
+}
+
+function clRedrawPoly(i) {
+  const c = CL.cases[i]; if (!c) return;
+  const s = CL.scales[c.id] || CL.scale;
+  const pts = (CL.poly[c.id] || []).slice().sort((a, b) => a[0] - b[0]);
+  const pl = document.getElementById('clpl' + i);
+  if (pl) pl.setAttribute('points', pts.map(([x, yy]) => `${x * s},${(yy - c.crop_y0) * s}`).join(' '));
+  const n = document.getElementById('clpn' + i);
+  if (n) n.textContent = CL.mode[c.id] === 'poly' ? `折线 ${pts.length} 点` : '';
+  const el = document.getElementById('clc' + i);
+  if (el) el.querySelectorAll('.clmode').forEach(b => b.classList.toggle('on', CL.mode[c.id] === 'poly'));
+}
+
+function clToggleMode(i) {
+  const c = CL.cases[i]; if (!c) return;
+  CL.mode[c.id] = CL.mode[c.id] === 'poly' ? 'line' : 'poly';
+  clRedrawPoly(i);
+}
+
+function clAddPoint(i, x, y) {
+  const c = CL.cases[i]; if (!c) return;
+  x = Math.round(x); y = Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)));
+  (CL.poly[c.id] = CL.poly[c.id] || []).push([x, y]);
+  clRedrawPoly(i);
+}
+
+function clPopPoint(i) {
+  const c = CL.cases[i]; if (!c || !CL.poly[c.id] || !CL.poly[c.id].length) return;
+  CL.poly[c.id].pop(); clRedrawPoly(i);
 }
 
 function clSetY(i, y) {
@@ -1242,9 +1313,17 @@ async function clDecide(i, verdict) {
   }
   const now = Date.now();
   const tags = Object.keys(CL.tags[c.id] || {}).filter(t => CL.tags[c.id][t]);
+  let polyline;
+  if (CL.mode[c.id] === 'poly') {
+    const pts = (CL.poly[c.id] || []).slice().sort((a, b) => a[0] - b[0]);
+    if (pts.length < 2) { $('#cl_msg').textContent = '折线模式至少要点 2 个点（Backspace 撤点，P 切回直线）'; return; }
+    polyline = pts;
+    y = Math.round(pts.reduce((a, q) => a + q[1], 0) / pts.length);   // 直线口径仍有个 y 可用
+    if (verdict === 'ok') verdict = 'moved';
+  }
   const row = { id: c.id, y, y_old: c.y, verdict, bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below,
                 col_h: c.col_h, char_above: c.char_above || '', char_below: c.char_below || '',
-                tags: tags.length ? tags : undefined,
+                tags: tags.length ? tags : undefined, polyline,
                 client_ts: now, dwell_ms: CL.seen[c.id] ? now - CL.seen[c.id] : undefined };
   try {
     await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1277,9 +1356,13 @@ async function clLoad() {
   const t0 = Date.now();
   d.cases.forEach(c => {
     CL.seen[c.id] = t0;
-    if (done[c.id]) { CL.done[c.id] = done[c.id].verdict; if (done[c.id].y != null) CL.y[c.id] = done[c.id].y; }
+    if (done[c.id]) {
+      CL.done[c.id] = done[c.id].verdict; if (done[c.id].y != null) CL.y[c.id] = done[c.id].y;
+      if (done[c.id].polyline) { CL.poly[c.id] = done[c.id].polyline; CL.mode[c.id] = 'poly'; }
+    }
   });
   $('#cl_cards').innerHTML = d.cases.map(clCard).join('');
+  d.cases.forEach((c, i) => { if (CL.poly[c.id]) clRedrawPoly(i); });
   if ($('#cl_todo').checked) d.cases.forEach((c, i) => { if (CL.done[c.id]) document.getElementById('clc' + i).style.display = 'none'; });
   $('#cl_msg').textContent = `本册 R2s 共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${batch}`;
   clFocus(0);
@@ -1295,16 +1378,24 @@ function clBind() {
     const c = box.dataset && CL.cases[+box.dataset.i];
     return c ? c.crop_y0 + (ev.clientY - box.getBoundingClientRect().top) / (CL.scales[c.id] || CL.scale) : null;
   };
+  const posX = (box, ev) => {
+    const c = box.dataset && CL.cases[+box.dataset.i];
+    return c ? (ev.clientX - box.getBoundingClientRect().left) / (CL.scales[c.id] || CL.scale) : null;
+  };
   grid.addEventListener('mousedown', ev => {
     const box = ev.target.closest('.climg');
     if (!box) return;
-    dragging = box; clFocus(+box.dataset.i);
-    clSetY(+box.dataset.i, posY(box, ev)); ev.preventDefault();
+    const i = +box.dataset.i; clFocus(i);
+    const c = CL.cases[i];
+    if (c && CL.mode[c.id] === 'poly') { clAddPoint(i, posX(box, ev), posY(box, ev)); ev.preventDefault(); return; }
+    dragging = box;
+    clSetY(i, posY(box, ev)); ev.preventDefault();
   });
   window.addEventListener('mousemove', ev => { if (dragging) clSetY(+dragging.dataset.i, posY(dragging, ev)); });
   window.addEventListener('mouseup', () => { dragging = null; });
   grid.addEventListener('click', ev => {
     const b = ev.target.closest('.clbtns button');
+    if (b && b.dataset.m === 'poly') { clToggleMode(+b.dataset.i); clFocus(+b.dataset.i); return; }
     if (b && b.dataset.t) { clToggleTag(+b.dataset.i, b.dataset.t); clFocus(+b.dataset.i); return; }
     if (b) clDecide(+b.dataset.i, b.dataset.v);
     const card = ev.target.closest('.clcard');
@@ -1327,6 +1418,8 @@ function clBind() {
     else if (['1', '2', '3', '4'].includes(ev.key)) {
       clToggleTag(CL.cur, ['stain', 'border', 'residue', 'other'][+ev.key - 1]); ev.preventDefault();
     }
+    else if (ev.key === 'p' || ev.key === 'P') { clToggleMode(CL.cur); ev.preventDefault(); }
+    else if (ev.key === 'Backspace') { clPopPoint(CL.cur); ev.preventDefault(); }
   });
 }
 
@@ -1384,21 +1477,46 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── 组视图：列 = 形，格 = 图块 ────────────────────────────────────
 // 数据来自 /api/variants/groups；裁决复用 /api/events 的 confirm 协议（shape/reading/conversion），
 // 与单卡裁决落到同一条路由 → glyphdb_admit → 账本下次重建就记住。
-let VG = { data: null, cur: null, state: {} };
+// 提交即消费（POST /api/events 的 consume）：把落库结果拼成一句人话。
+// 消费失败不代表裁决丢了——事件已经在盘上，「收割与消费」那块能补跑。
+function consumedMsg(r) {
+  if (r.consume_error) return `；⚠ 自动落库失败（${r.consume_error}），去「审查 → 收割与消费」补跑`;
+  const c = (r.consumed || []).filter(x => x.added || (x.errors || []).length);
+  if (!c.length) return '；已落库';
+  const errs = c.flatMap(x => x.errors || []);
+  return '；已落库（' + c.map(x => `${x.consumer} ${x.added}`).join('，') + '）'
+       + (errs.length ? ` ⚠ ${errs[0]}` : '');
+}
+
+let VG = { data: null, cur: null, state: {}, sel: null };
 async function vgLoad() {
   const book = $('#book').value, pages = $('#vg_pages').value.trim() || 'dev_set';
   $('#vg_stat').textContent = '读取中…';
   try {
     VG.data = await api(`/api/variants/groups?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`);
   } catch (e) { $('#vg_stat').textContent = e.message; return; }
-  VG.cur = null; VG.state = {};
+  VG.cur = null; VG.state = {}; VG.sel = null;
   const gs = VG.data.groups || [];
-  $('#vg_stat').textContent = `${gs.length} 组 · 待审 ${gs.reduce((a, g) => a + g.n_pending, 0)} 格 · 已自动放行 ${gs.reduce((a, g) => a + g.n_tiles - g.n_pending, 0)} 格`;
+  const nStale = gs.reduce((a, g) => a + (g.n_stale || 0), 0);
+  $('#vg_stat').textContent = `${gs.length} 组 · 待审 ${gs.reduce((a, g) => a + g.n_pending, 0)} 格 · 已自动放行 ${gs.reduce((a, g) => a + g.n_tiles - g.n_pending, 0)} 格`
+    + (nStale ? ` · 已裁待重跑 ${nStale} 格` : '');
+  // 已裁但产物没跟上的页（重跑只跑这几页，不必全量）
+  VG.stalePages = [...new Set(gs.flatMap(g => g.tiles.filter(t => t.stale).map(t => t.page)))].sort((a, b) => a - b);
+  $('#vg_stale').innerHTML = nStale
+    ? `⟳ 有 ${nStale} 格你已经裁过、但产物还是上次跑管线时的结果（<b style="color:#B8860B">黄框</b>）——`
+      + `裁决没丢，已经在库里，只是这张视图读的是产物。`
+      + `<button id="vg_resync" style="margin-left:.4rem">重跑这 ${VG.stalePages.length} 页同步</button>`
+      + `<span class="mono" style="margin-left:.4rem">p${VG.stalePages.join(' p')}</span>`
+    : '';
+  const rs = $('#vg_resync');
+  if (rs) rs.onclick = () => vgResync();
   // 有异体故事的组在前：有待审格，或这些页里真刻了 ≥2 种形。其余（账本因一条字典边把 洧 挂到
   // 有 名下这类，这些页里只刻了一种形）折到后面——它们不是抽审的靶子。
-  const story = g => g.n_pending > 0 || new Set(g.tiles.filter(t => t.char).map(t => t.char)).size >= 2;
+  // 「有故事」= 有待审格，或真刻了 ≥2 种形，或有字形→文意的转换（髪 读作 髮）——转换正是保真抽审的靶子
+  const story = g => g.n_pending > 0 || g.n_stale > 0 || new Set(g.tiles.filter(t => t.char).map(t => t.char)).size >= 2
+                     || g.tiles.some(t => t.reading && t.char && t.reading !== t.char);
   const btn = (g, k) => `<button class="vgbtn" data-k="${k}"><span class="vgl">${g.canonical}</span> ${g.members.filter(m => m !== g.canonical).join(' ')}
-       <sub>${g.n_tiles}${g.n_pending ? ' · 待审 ' + g.n_pending : ''}</sub></button>`;
+       <sub>${g.n_tiles}${g.n_pending ? ' · 待审 ' + g.n_pending : ''}${g.n_stale ? ' · 待重跑 ' + g.n_stale : ''}</sub></button>`;
   const main = gs.map((g, k) => [g, k]).filter(([g]) => story(g)), rest = gs.map((g, k) => [g, k]).filter(([g]) => !story(g));
   $('#vg_groups').innerHTML = (main.map(([g, k]) => btn(g, k)).join('') || '<span class="muted">这些页里没有待审或多形的组</span>')
     + (rest.length ? `<details class="vgrest"><summary class="muted">其余 ${rest.length} 组（这些页里只刻了一种形）</summary>${rest.map(([g, k]) => btn(g, k)).join('')}</details>` : '');
@@ -1406,8 +1524,40 @@ async function vgLoad() {
   $('#vg_grid').innerHTML = ''; $('#vg_actions').style.display = 'none';
   if (main.length) vgShow(main[0][1]); else if (gs.length) vgShow(0);
 }
+// 重跑「已裁待重跑」那几页：从 glyph_match 起（库变了才要重算匹配），跑完自动刷新视图。
+async function vgResync() {
+  const pages = (VG.stalePages || []).join(',');
+  if (!pages) return;
+  const btn = $('#vg_resync');
+  if (btn) { btn.disabled = true; btn.textContent = '重跑中…'; }
+  try {
+    const job = await api('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book: $('#book').value, pipeline: 'keben_body_v2',
+                             from_step: 'glyph_match', pages, force: true }) });
+    // 轮询到结束（这几页通常十几秒）。状态取值见 console/jobs.py：
+    // pending / running / completed / failed / cancelled
+    for (let i = 0; i < 240; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const j = await api('/api/runs/' + job.id);
+      if (btn) btn.textContent = `重跑中… ${j.duration ? j.duration + 's' : ''}`;
+      if (['completed', 'failed', 'cancelled'].includes(j.status)) {
+        if (j.status !== 'completed') {
+          $('#vg_stale').textContent = `重跑 ${j.status}（exit ${j.exit_code}）：去「运行」页看日志`;
+          return;
+        }
+        break;
+      }
+    }
+    await vgLoad();
+  } catch (e) {
+    $('#vg_stale').textContent = '重跑失败：' + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '重跑同步'; }
+  }
+}
+
 function vgShow(k) {
-  const g = VG.data.groups[k]; VG.cur = k;
+  const g = VG.data.groups[k]; VG.cur = k; VG.sel = null;
   $('#vg_groups').querySelectorAll('.vgbtn').forEach(b => b.classList.toggle('active', +b.dataset.k === k));
   // 每格当前所在列：待审的先放本书偏好形（preferred），已放行的放它存的形
   for (const t of g.tiles) {
@@ -1419,8 +1569,11 @@ function vgRender() {
   const g = VG.data.groups[VG.cur];
   const cols = g.members.slice();
   const byCol = Object.fromEntries(cols.map(c => [c, []]));
-  for (const t of g.tiles) { const s = VG.state[t.id]; (byCol[s.col] || (byCol[s.col] = [])).push(t); }
+  for (const t of g.tiles) { const s = VG.state[t.id]; if (s.other) continue; (byCol[s.col] || (byCol[s.col] = [])).push(t); }
   const fm = g.forms || {};
+  // 组外列：正确答案根本不在这一组里的格（标 蠹 实际是 𥗤——那不是异体，是认错字）。
+  // 组视图只在组内几个形之间转是不够的，这一列收容它们，字由人填。
+  const others = g.tiles.filter(t => VG.state[t.id].other);
   $('#vg_grid').innerHTML = `<div class="vgrid" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">`
     + cols.map(c => {
       const f = fm[c] || { book: {}, ref: 0 }; const b = f.book || {};
@@ -1429,36 +1582,120 @@ function vgRender() {
           <span class="muted">刻 ${Math.max(0, carved)}${b.human ? '·人' + b.human : ''} · 整理本 ${f.ref || 0}${c === g.reading_default ? ' · 文意' : ''}${c === g.preferred ? ' · 本书惯用' : ''}</span></div>
         <div class="vtiles">${(byCol[c] || []).map(t => {
           const s = VG.state[t.id];
-          const cls = ['vtile', t.pending ? 'pending' : '', s.changed ? 'moved' : '', s.mark === 'non' ? 'non' : '', t.human ? 'hum' : ''].filter(Boolean).join(' ');
-          const tip = `${t.id} · ${t.pending ? '待审' : '自动 ' + (t.channel || '')}${t.state ? ' · ' + t.state : ''}${t.human ? ' · 人裁 ' + t.human : ''}`;
-          return `<div class="${cls}" data-id="${t.id}" title="${tip}" tabindex="0"><img src="${t.patch}" loading="lazy" alt="${t.id}">${t.human ? `<i>${t.human}</i>` : ''}</div>`;
+          const cls = ['vtile', t.pending ? 'pending' : '', t.stale ? 'stale' : '', s.changed ? 'moved' : '', s.mark ? 'marked' : '', t.human ? 'hum' : '', VG.sel === t.id ? 'sel' : ''].filter(Boolean).join(' ');
+          const tip = `${t.id} · ${t.pending ? '待审' : (t.stale ? '你已裁「' + t.human + '」，产物待重跑' : '自动 ' + (t.channel || ''))}${t.state ? ' · ' + t.state : ''}${t.human ? ' · 人裁 ' + t.human : ''}\n单击=选中　双击/空格/←→=换列　O 组外　N 非字　T 字形不完整　C 有噪声`;
+          const badge = s.mark ? `<b>${{ non: 'N', truncated: 'T', contaminated: 'C' }[s.mark]}</b>` : (t.human ? `<i>${t.human}</i>` : '');
+          return `<div class="${cls}" data-id="${t.id}" title="${tip}" tabindex="0"><img src="${t.patch}" loading="lazy" alt="${t.id}">${badge}</div>`;
         }).join('')}</div></div>`;
-    }).join('') + '</div>';
+    }).join('') + '</div>'
+    + `<div class="vother${others.length ? '' : ' empty'}">
+        <div class="vhead"><span class="muted">组外（不是这一组的任何一个形；选中格子按 <b>O</b> 扔进来，再填它到底是什么字；填错了在框里按 <b>Esc</b> 放回）</span></div>
+        <div class="vtiles">${others.map(t => {
+          const s = VG.state[t.id];
+          return `<div class="votile"><div class="vtile marked" data-id="${t.id}" title="${t.id}\n再按 O 放回组内" tabindex="0"><img src="${t.patch}" loading="lazy" alt="${t.id}"><b>O</b></div>
+            <input class="voin" data-id="${t.id}" value="${s.otherChar || ''}" placeholder="是什么字" size="3" title="填图上实际刻的字；留空则提交时跳过这一格。按 Esc 放回组内"></div>`;
+        }).join('')}</div></div>`;
   $('#vg_actions').style.display = '';
-  $('#vg_grid').querySelectorAll('.vtile').forEach(el => {
-    el.onclick = () => { const s = VG.state[el.dataset.id]; const i = cols.indexOf(s.col); s.col = cols[(i + 1) % cols.length]; s.changed = s.col !== s.orig; s.mark = ''; vgRender(); };
-    el.onkeydown = ev => { if (ev.key === 'n' || ev.key === 'N') { const s = VG.state[el.dataset.id]; s.mark = s.mark === 'non' ? '' : 'non'; s.changed = true; vgRender(); } };
+  const MARKS = { n: 'non', t: 'truncated', c: 'contaminated' };
+  $('#vg_grid').querySelectorAll('.voin').forEach(inp => {
+    inp.oninput = () => { const s = VG.state[inp.dataset.id]; s.otherChar = inp.value.trim(); s.changed = true; };
+    // 退路：按 O 之后焦点在这个框里，再按 O 就是往框里打字了（本该如此——人要填字）。
+    // Esc 把这一格放回组内，焦点还给格子。
+    inp.onkeydown = ev => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      const id = inp.dataset.id, s = VG.state[id];
+      s.other = false; s.otherChar = ''; s.changed = s.col !== s.orig;
+      VG.sel = id;
+      vgRender();
+    };
   });
+  // 换列（点击 / 方向键 / 空格都走这里）
+  const moveCol = (id, dir) => {
+    const s = VG.state[id];
+    if (s.other) return;
+    const i = cols.indexOf(s.col);
+    s.col = cols[(i + dir + cols.length) % cols.length];
+    s.changed = s.col !== s.orig;
+    s.mark = '';
+    vgRender();
+  };
+  $('#vg_grid').querySelectorAll('.vtile').forEach(el => {
+    // **点击只选中，不改形**（用户 2026-09-05 实锤：「点格子就动了，永远无法取得焦点」——
+    // 此前点击既换列又是取焦点的唯一途径，vgRender 重绘还会把焦点冲掉，键盘那几个键
+    // 等于废的）。换形改用双击 / ←→ / 空格，键盘标记则先点选再按。
+    el.onclick = () => { VG.sel = el.dataset.id; el.focus(); };
+    el.ondblclick = () => moveCol(el.dataset.id, +1);
+    // N 非字 / T 字形不完整 / C 有噪声——后两个是「这块图切坏了」，与「这是什么字」
+    // 是两件事：提交后走 seg_defect → 金标 + 排除名单，这一格以后不进库也不再出卡。
+    el.onkeydown = ev => {
+      const k = ev.key.toLowerCase();
+      const id = el.dataset.id;
+      const s = VG.state[id];
+      VG.sel = id;
+      if (ev.key === 'ArrowRight' || ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); moveCol(id, +1); return; }
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); moveCol(id, -1); return; }
+      if (k === 'o') {           // 组外：正确答案不在这一组里
+        ev.preventDefault();
+        s.other = !s.other;
+        s.mark = '';
+        s.changed = s.other || s.col !== s.orig;
+        vgRender();
+        const box = $('#vg_grid').querySelector(`.voin[data-id="${CSS.escape(id)}"]`);
+        if (box) box.focus();
+        return;
+      }
+      const m = MARKS[k];
+      if (!m) return;
+      ev.preventDefault();
+      s.mark = s.mark === m ? '' : m;
+      s.changed = true;
+      vgRender();
+    };
+  });
+  // 重绘后把焦点还回选中的那一格——否则连按两个键第二下就落空了
+  if (VG.sel) {
+    const back = $('#vg_grid').querySelector(`.vtile[data-id="${CSS.escape(VG.sel)}"]`);
+    if (back) back.focus({ preventScroll: true });
+  }
 }
 async function vgSend(all) {
   const g = VG.data.groups[VG.cur]; if (!g) return;
   const book = $('#book').value, now = Date.now();
   const rows = [];
+  let skipped = 0;
   for (const t of g.tiles) {
     const s = VG.state[t.id];
     if (!all && !t.pending && !s.changed) continue;
     if (s.mark === 'non') { rows.push({ id: t.id, v: 'not_a_char', client_ts: now }); continue; }
+    // 切分缺陷：不是「这是什么字」的裁决，而是「这块图不能用」。quality 沿用
+    // char-segmentation/instances 金标的四分类；顺手认出的字一并带上（人看图时
+    // 认出来的不该丢）。下游 gold_add 落金标、crop_exclude 进排除名单。
+    if (s.mark === 'truncated' || s.mark === 'contaminated') {
+      rows.push({ id: t.id, v: 'seg_defect', quality: s.mark,
+                  shape: s.col, reading: g.reading_default || s.col, client_ts: now });
+      continue;
+    }
+    // 组外：字形与文意都取人填的那个字（它跟这一组无关，整理本字不该当它的 reading）
+    if (s.other) {
+      if (!s.otherChar) { skipped++; continue; }
+      rows.push({ id: t.id, v: 'confirm', shape: s.otherChar, reading: s.otherChar,
+                  conversion: 0, client_ts: now, group: 'out:' + g.canonical });
+      continue;
+    }
     const shape = s.col, reading = t.reading && t.reading !== t.char ? t.reading : (g.reading_default || shape);
     rows.push({ id: t.id, v: 'confirm', shape, reading: reading || shape,
                 conversion: (reading && reading !== shape) ? 1 : 0, client_ts: now, group: g.canonical });
   }
-  if (!rows.length) { $('#vg_msg').textContent = '没有要提交的格'; return; }
+  if (!rows.length) { $('#vg_msg').textContent = skipped ? `组外那 ${skipped} 格还没填字` : '没有要提交的格'; return; }
   const batch = `${book}-variants-${g.canonical}`;
   $('#vg_msg').textContent = `提交 ${rows.length} 条…`;
   try {
     const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
-    $('#vg_msg').textContent = `已写 ${r.appended} 条到批次 ${batch}；到「审查 → 收割与消费」按路由表消费，再重建用字账`;
+    $('#vg_msg').textContent = `已写 ${r.appended} 条到批次 ${batch}`
+      + (skipped ? `（组外 ${skipped} 格没填字，跳过）` : '')
+      + consumedMsg(r);
     for (const row of rows) { const s = VG.state[row.id]; s.orig = s.col; s.changed = false; }
     for (const t of g.tiles) if (rows.some(r => r.id === t.id)) { t.pending = false; t.human = VG.state[t.id].col; }
     vgRender();
