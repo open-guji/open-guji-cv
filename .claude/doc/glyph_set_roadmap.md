@@ -113,9 +113,12 @@ vol02 旧产物是早期管线跑的，人审率 16.3%。重跑结果：**见 §
 
 ### 层 2 套（glyph set）
 - 定义：`{set_id, 元数据, 样本引用, 原型索引}`。元数据字段 glyph.db 的 `sources` 表已经有
-  （`edition_tag / script_style / era / kind / collection / title / volume`），**目前全是空**。
-- 现有的套：Jigmo 四字体（其实是 4 个子套，E2 证明等权最好）；vol01（15,332 例，1,921 字）；
-  vol02 将是第二个 source，同 edition_tag。
+  （`edition_tag / script_style / era / kind / collection / title / volume`），
+  **2026-09-06 已填**（见 §5.1）。
+- 现有的套：Jigmo 四字体（其实是 4 个子套，E2 证明等权最好）；武英殿《總目》一套，
+  下辖 `vol01` 与 `v2` 两个 source（**`v2` 是同书同页的 v2 管线产出，不是第二册**）；
+  vol02 进库后才是这个套的第三个 source。
+  注意 `edition_tag` 现在被当成 source 标识用，表达不了"同套多 source"，见 §5.1 第 2 点。
 - 原型索引文件：`cache/glyph_sets/<set_id>_<ckpt指纹>.npz`，与现有 `emb_<key>.npz` 同机制。
 - 一个字在一个套里 = 该套所有已确认实例的均值向量（`glyphs.n_confirmed` 已在记）。
 
@@ -164,12 +167,33 @@ vol02 旧产物是早期管线跑的，人审率 16.3%。重跑结果：**见 §
 | 序 | 动作 | 工作量 | 产出 |
 |---|---|---|---|
 | 1 | **多跑几册**：vol02 全 186 页按 SOP 12 页一轮 | 审阅节奏 | 第二个 source；人审率跨册曲线 |
-| 2 | 填 `sources` 元数据（vol01/vol02：武英殿刻本、楷体、乾隆） | 10 分钟 | 层 2 可查询 |
+| 2 | ~~填 `sources` 元数据~~ **已做 2026-09-06** | 10 分钟 | 层 2 可查询（见 §5.1） |
 | 3 | 异体偏好表自动导出 + 进控制台读文定字的默认 reading | 半天 | 层 4 第一版（卽/即 等） |
 | 4 | 真刻例原型进模板索引（调研 A） | 1 天 | 层 2/3 的第一块砖；实测 1-shot +0.6 |
 | 5 | 套相似度脚本（E2 逻辑）落成 `scripts/glyph_set_similarity.py` | 半天 | 等第二风格时校准权重 |
 | 6 | 学习曲线小实验（§4） | 15 分钟 GPU | 决定"多跑几册"是否值得为算法做 |
 | 7 | vol03+ 备图与整理本对齐检查 | 数据准备 | 下一册可跑 |
+
+### 5.1 补记：动作 2 已落地（2026-09-06），以及它暴露的一个结构问题
+
+`sources` 两行都已填全：`collection=四庫全書總目 / title=欽定四庫全書總目 /
+script_style=woodblock_kai / era=qing_qianlong / cols_per_page=9 / chars_per_col=21`。
+
+填的时候发现两件原文没写对的事：
+
+1. **`v2` 不是第二册**。它与 `vol01` 页码完全重合（101 页 vs 108 页，同一批 page id），
+   是 v2 管线产出的实例源。所以库里现在**只有一个套的两个 source**，不是两个套。
+   原文 §3 层 2「vol02 将是第二个 source」仍待兑现——vol02 的实例还没进库。
+
+2. **`edition_tag` 改不得**。它是 `glyphs` 的连接键（`scripts/bench_font_glyphs.py:48`
+   靠 `glyphs.edition_tag = sources.edition_tag` 做 join），把它统一成 `wuyingdian_zongmu`
+   会让那个 join 返回 0 字；而且 vol01 与 v2 在 **229 个字种**上重叠，合并直接撞
+   `UNIQUE(edition_tag, char)`。这不是改个字符串的事，是一次数据迁移。
+
+第 2 点对层 2 有实质影响：**现在的 schema 表达不了"同一个套下的多个 source"**——
+`edition_tag` 同时被当成 source 标识和套标识。要么给 `sources` 加 `set_id`，要么把
+`glyphs` 的连接键换掉。这是 §5 动作 4（原型库按套聚合）的前置条件，已作为 G8 进 todo。
+
 
 **不做**：每套一个网络；大骨干；笔画序列；Slot Attention；在只有一种风格时调套权重表。
 
