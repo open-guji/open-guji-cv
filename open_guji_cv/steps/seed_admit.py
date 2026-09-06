@@ -58,8 +58,19 @@ class SeedAdmitParams(BaseModel):
     corpus_fingerprint: str = ""        # 自动填，进 params_hash（外部可变状态）
     always_review: str = "己已巳"       # 这些字永远人审（用户 2026-09-04 定）
     edition: str = "wuyingdian_zongmu"  # 本书用字账（variant_ledger）的键
+    use_exclusions: bool = True         # 查 config/crop_exclusions.jsonl（切坏的图块不进库不出卡）
+    exclusions: str = ""                # 名单路径；空 = exclusions.py 默认
+    exclusion_origins: str = "human,gate,pipeline"
+    """采信名单里的哪几档来源（逗号分隔）。
+
+    **按证据强度分级，别一刀切**（`exclusions.py` 模块头的纪律）：`human` 是人眼实锤；
+    `gate` / `pipeline` 是管线确定层旗标；`pipeline-suspect` 那 216 条**实测只有约 27%
+    是真有问题**——全采信会误伤约 150 个好格子（58 页上实测命中 68 条）。所以默认不含它，
+    要复核时显式打开，或等重扫后逐条判。
+    """
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
+    exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
 
     def model_post_init(self, _ctx) -> None:
         # 语料是**外部可变状态**：换了整理本，准入结论会变，产物必须过期。
@@ -78,6 +89,10 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.variants import DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH
             paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
             object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
+        if self.use_exclusions and not self.exclusions_fingerprint:
+            from ..clustering.exclusions import DEFAULT_PATH
+            object.__setattr__(self, "exclusions_fingerprint",
+                               corpus_fingerprint([self.exclusions or str(DEFAULT_PATH)]))
 
 
 @register_step
@@ -96,6 +111,7 @@ class SeedAdmitStep(Step):
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        from ..clustering.exclusions import excluded_ids
         from ..clustering.seeding import NEAR_FORM_CHARS, admission_decision
         from ..clustering.variant_form import decide_form, group_forms
         from ..clustering.variants import VariantMap
@@ -103,6 +119,19 @@ class SeedAdmitStep(Step):
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
         ledger = BookLedger.load_or_empty(p.edition)
+        # 排除名单：人裁标过「切坏 / 带残留 / 非字」的图块**不进库也不出审查卡**
+        # （用户 2026-08-25 定的口径，exclusions.py 模块头）。v1 的 seeding 一直
+        # 查它，v2 此前漏了——于是标了缺陷的格子下一轮照样出现在待审队列里。
+        from ..clustering.exclusions import DEFAULT_PATH as _EX_PATH
+        _ex_path = p.exclusions or str(_EX_PATH)
+        _origins = tuple(s.strip() for s in (p.exclusion_origins or "").split(",") if s.strip())
+        excluded = (excluded_ids(_ex_path, _origins or None)
+                    if p.use_exclusions else frozenset())
+
+        def excluded_note(iid: str) -> str:
+            from ..clustering.exclusions import load_exclusions
+            rec = load_exclusions(_ex_path).get(iid, {})
+            return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
@@ -112,13 +141,25 @@ class SeedAdmitStep(Step):
         amap = _align(p, match, dec, ocr, page, ctx.book.id)
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
-        n_auto = n_review = 0
+        n_auto = n_review = n_excluded = 0
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
                 continue
             recs: list[AdmitRec] = []
             for r in cc.chars:
+                # 排除名单命中：这块图人已判过切坏/带残留/非字。既不进库也不出
+                # 审查卡，只落一行留账（v1 的 seeding 同款处理）。放在最前面——
+                # 后面那些证据都建立在「这块图是完整的一个字」之上，图都不成立
+                # 就没什么可判的。
+                if r.id in excluded:
+                    n_excluded += 1
+                    recs.append(AdmitRec(
+                        id=r.id, slot=r.slot, sub=r.sub, admit=False,
+                        channel=None, char=None, provenance="",
+                        doubts=["excluded"],
+                        evidence={"excluded": excluded_note(r.id)}))
+                    continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
                 ocr_in = ({"char": o.topk[0][0], "prob": o.topk[0][1]}
@@ -228,7 +269,7 @@ class SeedAdmitStep(Step):
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
-        return {"seed_admit": PageAdmit(page=page, n_auto=n_auto,
+        return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
 
 

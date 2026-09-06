@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_guji_cv.core.step import page_key  # noqa: E402
 from open_guji_cv.eval.rulers import _col_profile  # noqa: E402
+from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.store import ProductStore  # noqa: E402
@@ -36,9 +37,26 @@ def main() -> int:
              and (not a.book or i.anchor.book == a.book)]
     rows, overlap, drift, missing = [], 0, 0, 0
     tagged: dict[str, list] = {}
+    poly_rows: list[dict] = []          # 折线金标 vs 现役缝
     for it in items:
         ex = it.expected
         v = ex.get("verdict")
+        if ex.get("polyline") and len(ex["polyline"]) >= 2 and not ex.get("tags"):
+            book, pg, col = it.anchor.book, it.anchor.page, it.anchor.col
+            cells = st.read(book, "row_segment", page_key(pg), "cells")
+            cc = next((c for c in (cells.columns if cells else []) if c.col == col and c.ok), None)
+            if cc is not None:
+                x0 = int(round(min(c.x0 for c in cc.cells))); x1 = int(round(max(c.x1 for c in cc.cells)))
+                gold_seam = polyline_to_seam(ex["polyline"], x0, x1)
+                # 现役缝：上格的 seam_bottom；没有就是直线（最近的格线）
+                up = next((c for c in cc.cells if c.kind == "char" and c.slot == ex.get("slot_above")), None)
+                if up is not None and getattr(up, "seam_bottom", None):
+                    cur_seam = list(up.seam_bottom)
+                else:
+                    yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - float(ex["y"]))))
+                    cur_seam = [int(round(yy))] * len(gold_seam)
+                mx, mean = seam_deviation(cur_seam, gold_seam)
+                poly_rows.append(dict(id=it.id, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
         if ex.get("tags"):
             # 有干扰因素（污点 / 界行 / 邻字残墨）的条目单独一档：切点本身不是算法能决定的
             for t in ex["tags"]:
@@ -82,6 +100,13 @@ def main() -> int:
     print("  最差:", [(r["id"], round(r["err"])) for r in worst])
     if tagged:
         print("  干扰另计:", {k: len(v) for k, v in tagged.items()}, {k: v[:5] for k, v in tagged.items()})
+    if poly_rows:
+        mx = np.array([r["max_dev"] for r in poly_rows]); mn = np.array([r["mean_dev"] for r in poly_rows])
+        ns = sum(r["has_seam"] for r in poly_rows)
+        print(f"  折线金标 n={len(poly_rows)}（现役有缝 {ns}）：最大偏差 mean {mx.mean():.1f} median {np.median(mx):.1f} p90 {np.percentile(mx, 90):.1f}；"
+              f"平均偏差 median {np.median(mn):.1f}；最大偏差 ≤3px {100*(mx<=3).mean():.1f}%  ≤6px {100*(mx<=6).mean():.1f}%")
+        worst = sorted(poly_rows, key=lambda r: -r["max_dev"])[:5]
+        print("  折线最差:", [(r["id"], round(r["max_dev"])) for r in worst])
     if a.json:
         Path(a.json).write_text(json.dumps({"rows": rows, "overlap": overlap, "drift": drift,
                                             "missing": missing}, ensure_ascii=False, indent=1), encoding="utf-8")

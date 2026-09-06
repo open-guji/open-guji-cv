@@ -65,8 +65,9 @@ def _expected_of(e: Event) -> dict:
         # 坐标是现役 Step2 列图（col_h 一并记，换了矫正就能察觉）。
         # tags：干扰因素（stain 污点在分界处 / border 界行或版框压进裁片 / residue 邻字残墨 / other），
         # 用户 2026-09-05 裁完第一批点名的两类特殊情况；评测里分开报，不混进像素误差。
+        # polyline：折线模式下人点的点 [[x, y], …]（列图坐标）；y 仍是折线的平均高，直线口径的评测照用。
         keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below", "tags", "note")
+                "char_above", "char_below", "tags", "note", "polyline")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
     return p
 
@@ -243,10 +244,76 @@ def glyphdb_recrop(events, **kw) -> ConsumeResult:
     return res
 
 
+def crop_exclude(events, list_path: str = "", dry_run: bool = False,
+                 **kw) -> ConsumeResult:
+    """`seg_defect` / `not_a_char` 事件 → 追加进 `config/crop_exclusions.jsonl`。
+
+    2026-09-05 补的缺口：此前人在卡片上点「有噪声」「字形不完整」「非字」，
+    事件只落进 `char-segmentation/instances` 金标，**没有任何东西把它写进排除
+    名单**——于是下一轮重跑，这一格照样出现在待审队列里，也没有闸拦着它将来
+    进库。名单才是 `exclusions.py` 里那条「不进库也不出审查卡」的执行者。
+
+    口径照 `exclusions.py` 模块头：**只追加不删除**（重扫之后按名单逐条复核），
+    `origin="human"`（人眼实锤那一档，与 gate/pipeline-suspect 分开），
+    `evidence` 记触发的判据（quality 与人顺手认出的字）。已在名单里的跳过。
+    """
+    import json
+    from pathlib import Path
+
+    from ..clustering.exclusions import DEFAULT_PATH, load_exclusions
+
+    res = ConsumeResult("crop_exclude", n_events=len(events))
+    hits = []
+    for e, _d in events:
+        p = e.payload or {}
+        if e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char"):
+            hits.append((e, "not_text", "not_a_char"))
+        elif e.kind == "confirm" and p.get("v") == "seg_defect":
+            hits.append((e, p.get("quality") or "contaminated", "seg_defect"))
+    res.skipped = len(events) - len(hits)
+    if not hits:
+        return res
+    path = Path(list_path) if list_path else DEFAULT_PATH
+    known = set(load_exclusions(path))
+    rows = []
+    for e, quality, reason in hits:
+        iid = e.target.key
+        if iid in known:
+            res.skipped += 1
+            continue
+        known.add(iid)
+        ev = [quality]
+        p = e.payload or {}
+        if p.get("shape"):
+            ev.append(f"shape={p['shape']}")
+        rows.append({
+            "date": (e.ts or "")[:10],
+            "evidence": ev,
+            "instance_id": iid,
+            "note": f"审查卡片人裁：{quality}",
+            "origin": "human",
+            "reason": reason,
+            "round": "r2",
+            "source_event": e.id,
+        })
+    if dry_run:
+        res.added = len(rows)
+        return res
+    if rows:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
+        load_exclusions.cache_clear()
+    res.added = len(rows)
+    return res
+
+
 CONSUMERS = {
     "gold_add": gold_add,
     "glyphdb_admit": glyphdb_admit,
     "glyphdb_recrop": glyphdb_recrop,
+    "crop_exclude": crop_exclude,
 }
 
 

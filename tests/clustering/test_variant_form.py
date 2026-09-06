@@ -59,6 +59,36 @@ def test_library_rival_within_margin_stays_open():
     assert d.state == "open"
 
 
+# ── 完美匹配档（2026-09-05 标定）────────────────────────────
+# 卽/即 在库里差 0.0006，永远过不了 FORM_LIB_MARGIN=0.01；但 cov 1.0000 + 人裁 21 次
+# 已经足够。见 variant_form 里那张标定表。
+
+def test_exact_match_admits_despite_tiny_margin():
+    d = vf.decide_form("即", ["卽", "即", "皍"], [("卽", 1.0), ("即", 0.9994)], _ledger())
+    assert d.state == "fixed_lib" and d.char == "卽"
+    assert d.evidence["exact"] is True
+
+
+def test_exact_match_needs_two_human_confirmations():
+    """人裁 1 次不算（𢑴 那条：组内五形彼此极像，一次误裁会自我复制）。"""
+    led = _ledger()
+    led.groups["即"]["forms"]["卽"]["book"]["human"] = 1
+    assert vf.decide_form("即", ["卽", "即"], [("卽", 1.0), ("即", 0.9994)], led).state == "open"
+
+
+def test_exact_match_still_requires_the_top_to_be_confirmed_form():
+    """cov 完美但 top1 是没人确认过的形 → 不放行（即 在账本里 human=2，卽 才是本书惯用）。"""
+    led = _ledger()
+    led.groups["即"]["forms"]["皍"]["book"]["human"] = 0
+    d = vf.decide_form("即", ["卽", "即", "皍"], [("皍", 1.0), ("卽", 0.9994)], led)
+    assert d.state == "open"
+
+
+def test_just_below_exact_falls_back_to_margin_rule():
+    # 0.9998 不到完美档，又拉不开 0.01 → 仍然人审
+    assert vf.decide_form("即", ["卽", "即"], [("卽", 0.9998), ("即", 0.9994)], _ledger()).state == "open"
+
+
 def test_library_below_cov_stays_open_without_image():
     d = vf.decide_form("髮", ["髪", "髮"], [("髪", 0.93)], _ledger())
     assert d.state == "open"

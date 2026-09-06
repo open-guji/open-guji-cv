@@ -32,7 +32,9 @@ DEFAULT_ROUTES: list[dict] = [
             {"consumer": "gold_add", "shard": "char-segmentation/instances",
              "extra": {"seed": "review_recrop"}}]},
     {"match": {"kind": "not_a_char"},
-     "to": [{"consumer": "gold_add", "shard": "char-segmentation/instances"}]},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/instances"},
+            # 判非字的图块同时进排除名单：不进库、下轮也不再出卡（2026-09-05）
+            {"consumer": "crop_exclude"}]},
     # 拖切线（2026-09-05）：粘连格线的理想切点，落 touching-cuts 金标（现役 Step2 列图坐标）
     {"match": {"kind": "cutline"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/touching-cuts"}]},
@@ -49,7 +51,12 @@ DEFAULT_ROUTES: list[dict] = [
             # **两件事**：前者答「这是什么字」，后者答「这块图能不能用」，
             # 所以同一批事件要同时喂给两个消费者，各取所需
             # （glyphdb_admit 只认 v=="confirm"，gold_add 只认 seg_defect）。
-            {"consumer": "gold_add", "shard": "char-segmentation/instances"}]},
+            {"consumer": "gold_add", "shard": "char-segmentation/instances"},
+            # 第三个去处（2026-09-05 补）：切坏的图块进排除名单。此前只落金标，
+            # 没人把它写进 crop_exclusions.jsonl，于是「标了缺陷」和「以后别再用
+            # 这块图」之间是断的——下一轮重跑照样出卡，也没有闸拦着它进库。
+            # crop_exclude 只认 seg_defect / not_a_char，定字的 confirm 一律跳过。
+            {"consumer": "crop_exclude"}]},
 ]
 
 

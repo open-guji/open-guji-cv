@@ -11,8 +11,9 @@ top1 语义一致）只能定**语义**。整理本对 1,489 个组只用一种�
 
 三档（``FormDecision.state``）：
 
-- ``fixed_lib``：库候选里组内 top1 cov ≥ FORM_LIB_COV，且组内没有对手贴到
-  FORM_LIB_MARGIN 之内，且这个形本书**人确认过**——本书原型是最硬的形证据；
+- ``fixed_lib``：本书原型是最硬的形证据，两条通道任一即可——
+  **完美匹配**（cov ≥ FORM_LIB_EXACT 且该形人确认过 ≥ FORM_EXACT_HUMAN_MIN 次），
+  或**拉开差距**（cov ≥ FORM_LIB_COV、组内没有对手贴到 FORM_LIB_MARGIN 之内、该形人确认过）；
 - ``fixed_form``：库定不了，用字体模板 + CNN 三源在组内做 closed-set 检索，三源
   top1 一致、embedding 余弦差 ≥ FORM_EMB_GAP，且该形人确认过；
 - ``open``：其余——首例、分歧、差距不够。落人审，卡片只列组内的形。
@@ -33,6 +34,30 @@ from ..variant_ledger import BookLedger
 FORM_LIB_COV = 0.95        # 库候选组内 top1 至少这么像（same 闸 0.99 之下一档）
 FORM_LIB_MARGIN = 0.01     # 组内第二名不能贴得比这更近（髪/髮 差一笔，库分得开就采）
 FORM_EMB_GAP = 0.03        # 三源一致时 embedding 余弦差还得过这条线
+
+FORM_LIB_EXACT = 0.9999    # 「完美匹配」档：与本书某个已人裁刻例几乎像素级一致
+FORM_EXACT_HUMAN_MIN = 2   # 该形至少被人确认过这么多次，才认这一档
+"""完美匹配档的标定（2026-09-05，14 条实测）。
+
+**`FORM_LIB_MARGIN` 在 cov 饱和区用错了尺度**：组内对手是同组异体，本来就长得像，
+卽/即 差 0.0006、厯/歷 差 0.0006，要求拉开 0.01 等于永远不可能——于是人裁过 21 次的
+卽、9 次的 厯，每次出现都还要再问一遍。
+
+实测那 14 条（全部人裁过、库 top1 **14/14 全对**、v1 全是 1.0000）：
+
+| 判据 | 放行已裁对的 | 放行已裁错的 | 放行没裁过的 |
+|---|---|---|---|
+| 库 top1 == 融合 top1 且人裁 ≥1 | 6 | 0 | 1 |
+| **库 cov ≥ 0.9999 且人裁 ≥2** | **12** | **0** | **0** |
+
+「融合 top1」那条**不能用**：三源融合在 卽 与 厯 上恰恰给错（说 即 / 歷），拿它当条件
+会误杀一半。真正的信号是 **cov 1.0000 + 该形本书人确认过**——前者说明与某个已确认刻例
+几乎逐像素相同，后者保证那个刻例的字形是人点头的。两条都不含「整理本怎么印」，所以
+不会把刻本形归一掉。
+
+`FORM_EXACT_HUMAN_MIN = 2` 而不是 1：𢑴 那条人裁 1 次、gap 只有 0.0014（组内五个形彼此
+极像），留给人再看一眼；这也顺带挡住「一次误裁自我复制」。
+"""
 
 
 @dataclass
@@ -83,6 +108,11 @@ def decide_form(semantic_char: str, forms: list[str],
     if lib_in:
         c1, v1 = lib_in[0]
         v2 = lib_in[1][1] if len(lib_in) > 1 else 0.0
+        # 完美匹配档：cov ≥ 0.9999 说明与本书某个刻例几乎逐像素相同，而那个刻例的
+        # 字形被人确认过 ≥2 次。此时组内第二名贴得多近都不重要——异体本来就像。
+        if v1 >= FORM_LIB_EXACT and human.get(c1, 0) >= FORM_EXACT_HUMAN_MIN:
+            ev["exact"] = True
+            return FormDecision("fixed_lib", c1, forms, ev)
         if v1 >= FORM_LIB_COV and v1 - v2 >= FORM_LIB_MARGIN and human.get(c1, 0) > 0:
             return FormDecision("fixed_lib", c1, forms, ev)
 

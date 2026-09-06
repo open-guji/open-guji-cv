@@ -360,6 +360,16 @@ class EventsIn(BaseModel):
     unit: str = "page"
     kind: str = "verdict"
     events: list[dict]        # [{id, verdict, t, ...}]
+    consume: bool = True
+    """写完就按路由表消费（2026-09-05 用户定：「审查完了就自动消费吧，有必要再点一次吗」）。
+
+    **批次是台账，不是闸**——事件既然已经落盘，再要人点一次「按路由表消费」只是重复动作，
+    而且批次一多（组视图按组分批，一轮下来十几个）就得一个个点。消费本身是幂等的：
+    `EventLog.pending` 按消费者记账，`admit_instance` 有主键幂等闸，重复调用不会重复进库。
+
+    传 `consume=false` 可以只写不消费（外部审查页回传、想先「试算」看看的场合）。
+    消费失败不影响写入结果——事件已经在盘上，「收割与消费」那块随时能补跑。
+    """
 
 
 @app.get("/api/batches")
@@ -423,7 +433,26 @@ def api_events(req: EventsIn) -> dict:
         b.status = "open"
     _batches.refresh_counts(b, _log)
     _batches.save(b)
-    return {"appended": n, "batch": req.batch, "total": len(_log.read(req.batch))}
+    out = {"appended": n, "batch": req.batch, "total": len(_log.read(req.batch))}
+    if req.consume and n:
+        # 写完直接消费（见 EventsIn.consume）。**失败不抛**：事件已经落盘，
+        # 消费只是把它送进字形库/金标，出了岔子在「收割与消费」那块补跑即可——
+        # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。
+        try:
+            table = RouteTable.load(_log.root / "routes.yaml")
+            res = route_and_consume(_log, req.batch, table, _gold)
+            out["consumed"] = [
+                {"consumer": x["consumer"], "added": x["added"],
+                 "skipped": x["skipped"], "errors": x["errors"][:3]}
+                for x in res["results"] if x["events"]]
+            out["unrouted"] = res["unrouted"]
+            b2 = _batches.get(req.batch)
+            if b2:
+                _batches.refresh_counts(b2, _log)
+                _batches.save(b2)
+        except Exception as exc:                       # noqa: BLE001
+            out["consume_error"] = f"{type(exc).__name__}: {exc}"
+    return out
 
 
 @app.get("/api/events")
@@ -1030,7 +1059,7 @@ def api_cutline_verdicts(batch: str) -> dict:
         if e.kind != "cutline":
             continue
         p = e.payload
-        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict")}
+        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline")}
     return {"batch": batch, "n": len(out), "verdicts": out}
 
 
@@ -1126,20 +1155,33 @@ def api_variants_groups(book: str, pages: str = "dev_set", edition: str = "",
                 continue
             for r in cc.chars:
                 f = (r.evidence or {}).get("form") or {}
-                pending = (not r.admit) and f.get("state") == "open"
+                # **裁过的就不再算待审**（用户 2026-09-05 实锤：「我之前标注过，点了提交
+                # 待审与改动，为什么这次刷新还在」）。产物是上次跑管线时算的，裁决进了
+                # 库、产物没重跑，`form.state` 还停在 open——但人确实已经答过了。
+                # 事件是比产物更新的事实，以它为准；产物等下次重跑自然跟上。
+                pending = (not r.admit) and f.get("state") == "open" \
+                    and r.id not in truth
+                human = truth.get(r.id)
                 if r.admit and r.char and r.char in led.form_index:
                     canon = led.form_index[r.char]
                 elif pending:
                     canon = led.canonical(f.get("semantic", ""))
+                elif human and f.get("state") == "open":
+                    # 裁过、产物还没重跑：按**人裁的字形**归组显示（否则这一格会
+                    # 整个从视图里消失——比「还在待审」更让人摸不着头脑）
+                    canon = led.form_index.get(human) or led.canonical(f.get("semantic", "") or human)
                 else:
                     continue
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 tiles.setdefault(canon, []).append({
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub,
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
-                    "char": r.char, "reading": r.reading, "channel": r.channel,
+                    # 产物落后时用人裁的字形当 char，格子才落在对的那一列
+                    "char": r.char or human, "reading": r.reading, "channel": r.channel,
                     "state": f.get("state") or ("lib_same" if r.admit else None),
-                    "pending": pending, "human": truth.get(r.id),
+                    # 裁过但产物没跟上 → 标 stale，前端提示「重跑管线后生效」
+                    "stale": bool(human and not r.admit and f.get("state") == "open"),
+                    "pending": pending, "human": human,
                     "lib": f.get("lib"), "human_n": f.get("human"),
                 })
     out = []
@@ -1148,13 +1190,14 @@ def api_variants_groups(book: str, pages: str = "dev_set", edition: str = "",
         if not g:
             continue
         n_pending = sum(1 for t in ts if t["pending"])
+        n_stale = sum(1 for t in ts if t.get("stale"))
         ts.sort(key=lambda t: (not t["pending"], t["page"], t["col"], t["slot"]))
         refd = [m for m, fm in g["forms"].items() if fm["ref"] > 0 and m not in g.get("ref_minor", [])]
         out.append({
             "canonical": canon, "members": g["members"], "forms": g["forms"],
             "ref_policy": g["ref_policy"], "preferred": g.get("preferred"),
             "reading_default": refd[0] if len(refd) == 1 else canon,
-            "n_tiles": len(ts), "n_pending": n_pending,
+            "n_tiles": len(ts), "n_pending": n_pending, "n_stale": n_stale,
             "tiles": ts[:limit_tiles], "truncated": len(ts) > limit_tiles,
         })
     out.sort(key=lambda x: (-x["n_pending"], -x["n_tiles"], x["canonical"]))
