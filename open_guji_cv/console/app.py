@@ -624,6 +624,8 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
     pgs = bk.resolve_pages(pages)
 
     # ── 准确率（对整理本金标）─────────────────────────────
+    from ..variant_ledger import BookLedger
+    ledger = BookLedger.load_or_empty("wuyingdian_zongmu")
     golds = align_book(book, pgs, store)
     gold = {c.id: c for g in golds if g.anchored for c in g.chars}
     by_ch: dict[str, list[int]] = {}
@@ -656,7 +658,15 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
                 # 第二项是「忠于刻本字形」方针（用户 2026-09-05 定）的要求：金标记过
                 # 转换（conversion）的位上，输出**刻本形**同样算对——葢/蓋、卽/即 这类
                 # 按刻本形放行是对的，不该记成错误。
-                ok = (pred == g.reading) or (g.conversion and pred == g.shape)
+                # 第三项（2026-09-06 用户裁决 禀/稟 后补）：整理本与刻本用**同一组里
+                # 不同的形**时，`conversion` 不一定为真——整理本印 稟、刻本刻 禀，两边
+                # 都在 稟 组里，v2_align 只按字面比，记的是 equal / conversion=False。
+                # 这类位上管线按账本 preferred 出刻本形是**对的**（用户 2026-09-05 定的
+                # 「忠于刻本字形」），判据不该记成错。所以：pred 与金标同组、且 pred 就是
+                # 账本给这组定的 preferred → 算对。
+                # 只认 preferred，不认「同组任一形」——否则组内选错形也会被放过。
+                ok = ((pred == g.reading) or (g.conversion and pred == g.shape)
+                      or ledger.preferred_form(g.reading) == pred)
                 slot[0] += ok
                 slot[1] += 1
                 # 分层：equal 段是自证层，replace 段才是真正的错误样本，别合成一个数看
