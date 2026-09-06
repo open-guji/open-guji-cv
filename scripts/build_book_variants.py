@@ -31,6 +31,7 @@ import sqlite3
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -141,6 +142,19 @@ REF_BOTH_MIN = 50
 REF_BOTH_EXEMPT = frozenset({frozenset("巳已"), frozenset("彛彝"),
                              frozenset("己已"), frozenset("己巳")})
 
+#: 人工审定的「永不并组」名单：字典说是异体、本书里其实是两个字。
+#: 频次门槛只挡得住高频那批（≥50），低频的真异体与不同字在数值上完全重叠
+#: （決/决 min=22 vs 倒/到 min=22），词汇环境 Jaccard 也分不开——只能人工定。
+NEVER_GROUP_PATH = REPO / "config" / "variants" / "never_group.json"
+
+
+@lru_cache(maxsize=1)
+def _never_group() -> frozenset[frozenset[str]]:
+    if not NEVER_GROUP_PATH.exists():
+        return frozenset()
+    d = json.loads(NEVER_GROUP_PATH.read_text(encoding="utf-8"))
+    return frozenset(frozenset(p) for p in d.get("pairs", []) if len(p) == 2)
+
 
 def ref_policy_of(refs: dict[str, int]) -> tuple[str, list[str]]:
     """(single | multi | none, 被当孤例忽略的形)。"""
@@ -194,12 +208,14 @@ def build_groups(g: VariantGraph, book_forms: set[str], ref: Counter,
             return False
         return ref.get(x, 0) >= REF_BOTH_MIN and ref.get(y, 0) >= REF_BOTH_MIN
 
+    never = _never_group()
+
     def members(f: str) -> set[str]:
         out = {f}
         for b, tags in g.variants_of(f):
             if not (set(tags) & GROUP_SOURCES) or not attested(b):
                 continue
-            if ref_distinguishes(f, b):
+            if frozenset((f, b)) in never or ref_distinguishes(f, b):
                 continue
             tier = g.edge_tier(f, b)
             # T1 直接进；T2 里有一种是先验被噪声抬上去的：twedu 明明白白说 卽 是 即 的
@@ -254,6 +270,8 @@ def build_groups(g: VariantGraph, book_forms: set[str], ref: Counter,
     # 只在这一处允许并组——由本书的记录驱动，不会沿字典边链式传播。
     own = {m: c for c, ms in groups.items() for m in ms}
     for s, r in sorted(pairs):
+        if frozenset((s, r)) in never:
+            continue           # 人工审定过「这是两个字」，人裁记过一次转换也不并
         if g.edge_tier(s, r) != "T2" or s not in own:
             continue
         if r in own and own[r] != own[s]:
