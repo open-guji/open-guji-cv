@@ -548,3 +548,10 @@
 {"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol01:133:7:1", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-133-140-decide_000008"}
 {"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol01:145:6:3", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-141-150-decide_000028"}
 {"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol01:145:8:17", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol01-141-150-decide_000029"}
+{"date": "2026-09-06", "evidence": ["not_text"], "instance_id": "vol02:3:5:1", "note": "审查卡片人裁：not_text", "origin": "human", "reason": "not_a_char", "round": "r2", "source_event": "evt_vol02-1-10-decide_000103"}
+{"date": "2026-09-06", "evidence": ["not_text"], "instance_id": "vol02:3:5:2", "note": "审查卡片人裁：not_text", "origin": "human", "reason": "not_a_char", "round": "r2", "source_event": "evt_vol02-1-10-decide_000105"}
+{"date": "2026-09-06", "evidence": ["not_text"], "instance_id": "vol02:3:6:1", "note": "审查卡片人裁：not_text", "origin": "human", "reason": "not_a_char", "round": "r2", "source_event": "evt_vol02-1-10-decide_000106"}
+{"date": "2026-09-06", "evidence": ["not_text"], "instance_id": "vol02:3:6:2", "note": "审查卡片人裁：not_text", "origin": "human", "reason": "not_a_char", "round": "r2", "source_event": "evt_vol02-1-10-decide_000110"}
+{"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol02:8:2:1", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol02-1-10-decide_000170"}
+{"date": "2026-09-06", "evidence": ["contaminated"], "instance_id": "vol02:9:3:21", "note": "审查卡片人裁：contaminated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol02-1-10-decide_000184"}
+{"date": "2026-09-06", "evidence": ["truncated"], "instance_id": "vol02:9:3:6", "note": "审查卡片人裁：truncated", "origin": "human", "reason": "seg_defect", "round": "r2", "source_event": "evt_vol02-1-10-decide_000186"}
