@@ -6,25 +6,65 @@
    "vol01",
    "vol02"
   ],
-  "built_at": "2026-09-06T20:25:06Z",
+  "built_at": "2026-09-06T21:43:07Z",
   "inputs": {
-   "products_records": 46924,
-   "glyph_db_instances": 16133,
+   "products_records": 47039,
+   "glyph_db_instances": 16140,
    "corpus_tokens": 341241,
    "corpus_types": 4637,
-   "book_forms": 2417
+   "book_forms": 2427
   },
   "stats": {
-   "groups": 76,
+   "groups": 77,
    "ref_single": 36,
-   "ref_multi": 40,
+   "ref_multi": 41,
    "ref_none": 0,
-   "pairs": 19,
-   "unknown_pairs": 1
+   "pairs": 18,
+   "unknown_pairs": 2
   },
   "note": "只由 scripts/build_book_variants.py 派生，永不手编。book 计数分来源：human > products/db > align（align 是整理本形，别信）。"
  },
  "groups": {
+  "五": {
+   "canonical": "五",
+   "members": [
+    "五",
+    "伍"
+   ],
+   "forms": {
+    "五": {
+     "book": {
+      "products": 97,
+      "db": 26,
+      "human": 0,
+      "align": 21
+     },
+     "ref": 1044,
+     "tier": null,
+     "sources": []
+    },
+    "伍": {
+     "book": {
+      "products": 1,
+      "db": 0,
+      "human": 0,
+      "align": 0
+     },
+     "ref": 10,
+     "tier": "T2",
+     "sources": [
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu",
+      "unihan:kSpecializedSemanticVariant"
+     ]
+    }
+   },
+   "pairs": {},
+   "ref_policy": "multi",
+   "ref_minor": [],
+   "preferred": "五"
+  },
   "健": {
    "canonical": "健",
    "members": [
@@ -269,7 +309,7 @@
     },
     "卽": {
      "book": {
-      "products": 66,
+      "products": 70,
       "db": 41,
       "human": 28,
       "align": 0
@@ -299,13 +339,13 @@
    },
    "pairs": {
     "卽→即": {
-     "n": 58,
+     "n": 61,
      "human": 0,
-     "auto": 58,
+     "auto": 61,
      "channels": {
       "dual": 4,
       "match_ref": 8,
-      "match_replace": 46
+      "match_replace": 49
      },
      "first": "vol01:7:8:15",
      "sources": [
@@ -400,7 +440,7 @@
     },
     "啟": {
      "book": {
-      "products": 18,
+      "products": 20,
       "db": 5,
       "human": 5,
       "align": 0
@@ -412,11 +452,11 @@
    },
    "pairs": {
     "啟→啓": {
-     "n": 15,
+     "n": 17,
      "human": 0,
-     "auto": 15,
+     "auto": 17,
      "channels": {
-      "match_replace": 15
+      "match_replace": 17
      },
      "first": "vol01:16:7:4",
      "sources": [
@@ -866,7 +906,7 @@
     },
     "彚": {
      "book": {
-      "products": 16,
+      "products": 17,
       "db": 16,
       "human": 13,
       "align": 0
@@ -881,12 +921,12 @@
    },
    "pairs": {
     "彚→彙": {
-     "n": 16,
+     "n": 17,
      "human": 0,
-     "auto": 16,
+     "auto": 17,
      "channels": {
       "match_ref": 1,
-      "match_replace": 15
+      "match_replace": 16
      },
      "first": "vol01:4:9:5",
      "sources": [
@@ -938,7 +978,7 @@
     },
     "彝": {
      "book": {
-      "products": 10,
+      "products": 26,
       "db": 6,
       "human": 5,
       "align": 0
@@ -949,7 +989,7 @@
     },
     "𢑴": {
      "book": {
-      "products": 11,
+      "products": 4,
       "db": 1,
       "human": 1,
       "align": 0
@@ -963,11 +1003,11 @@
    },
    "pairs": {
     "𢑴→彝": {
-     "n": 2,
+     "n": 1,
      "human": 0,
-     "auto": 2,
+     "auto": 1,
      "channels": {
-      "match_replace": 2
+      "match_replace": 1
      },
      "first": "vol01:38:5:3",
      "sources": [
@@ -1146,12 +1186,12 @@
    },
    "pairs": {
     "㫖→旨": {
-     "n": 12,
+     "n": 13,
      "human": 0,
-     "auto": 12,
+     "auto": 13,
      "channels": {
       "dual": 5,
-      "match_replace": 7
+      "match_replace": 8
      },
      "first": "vol01:11:4:21",
      "sources": [
@@ -1381,7 +1421,7 @@
    "forms": {
     "厯": {
      "book": {
-      "products": 20,
+      "products": 18,
       "db": 17,
       "human": 17,
       "align": 0
@@ -1427,7 +1467,7 @@
     },
     "歷": {
      "book": {
-      "products": 2,
+      "products": 11,
       "db": 9,
       "human": 1,
       "align": 6
@@ -1439,13 +1479,13 @@
    },
    "pairs": {
     "厯→歷": {
-     "n": 18,
+     "n": 17,
      "human": 0,
-     "auto": 18,
+     "auto": 17,
      "channels": {
-      "dual": 3,
+      "dual": 1,
       "match_ref": 7,
-      "match_replace": 8
+      "match_replace": 9
      },
      "first": "vol01:5:4:10",
      "sources": [
@@ -1562,7 +1602,7 @@
     },
     "没": {
      "book": {
-      "products": 7,
+      "products": 8,
       "db": 3,
       "human": 1,
       "align": 0
@@ -1651,7 +1691,7 @@
    "forms": {
     "冺": {
      "book": {
-      "products": 1,
+      "products": 2,
       "db": 1,
       "human": 1,
       "align": 0
@@ -2275,7 +2315,7 @@
     },
     "禀": {
      "book": {
-      "products": 4,
+      "products": 3,
       "db": 2,
       "human": 2,
       "align": 0
@@ -2305,27 +2345,7 @@
      "sources": []
     }
    },
-   "pairs": {
-    "禀→稟": {
-     "n": 1,
-     "human": 0,
-     "auto": 1,
-     "channels": {
-      "dual": 1
-     },
-     "first": "vol02:3:5:21",
-     "sources": [
-      "cjkvi-simplified",
-      "dypytz",
-      "hydzd",
-      "twedu",
-      "unihan:kSemanticVariant",
-      "unihan:kSimplifiedVariant",
-      "unihan:kTraditionalVariant",
-      "yitizi"
-     ]
-    }
-   },
+   "pairs": {},
    "ref_policy": "multi",
    "ref_minor": [
     "廪"
@@ -2462,7 +2482,7 @@
     },
     "頴": {
      "book": {
-      "products": 3,
+      "products": 2,
       "db": 1,
       "human": 0,
       "align": 0
@@ -2532,7 +2552,7 @@
    "forms": {
     "綫": {
      "book": {
-      "products": 0,
+      "products": 1,
       "db": 1,
       "human": 1,
       "align": 0
@@ -2634,7 +2654,7 @@
     },
     "考": {
      "book": {
-      "products": 139,
+      "products": 140,
       "db": 28,
       "human": 2,
       "align": 25
@@ -2823,7 +2843,7 @@
     },
     "蓋": {
      "book": {
-      "products": 25,
+      "products": 24,
       "db": 3,
       "human": 3,
       "align": 0
@@ -2835,11 +2855,11 @@
    },
    "pairs": {
     "蓋→葢": {
-     "n": 22,
+     "n": 23,
      "human": 0,
-     "auto": 22,
+     "auto": 23,
      "channels": {
-      "match_replace": 22
+      "match_replace": 23
      },
      "first": "vol01:44:7:14",
      "sources": [
@@ -3183,7 +3203,7 @@
    "forms": {
     "變": {
      "book": {
-      "products": 0,
+      "products": 1,
       "db": 3,
       "human": 0,
       "align": 3
@@ -3194,9 +3214,9 @@
     },
     "𠮓": {
      "book": {
-      "products": 15,
-      "db": 12,
-      "human": 12,
+      "products": 24,
+      "db": 13,
+      "human": 13,
       "align": 0
      },
      "ref": 0,
@@ -3208,11 +3228,11 @@
    },
    "pairs": {
     "𠮓→變": {
-     "n": 11,
+     "n": 22,
      "human": 0,
-     "auto": 11,
+     "auto": 22,
      "channels": {
-      "dual": 5,
+      "dual": 16,
       "match_replace": 6
      },
      "first": "vol01:54:4:21",
@@ -3335,7 +3355,7 @@
     },
     "迹": {
      "book": {
-      "products": 14,
+      "products": 15,
       "db": 5,
       "human": 2,
       "align": 2
@@ -3507,7 +3527,7 @@
     },
     "鉤": {
      "book": {
-      "products": 3,
+      "products": 4,
       "db": 1,
       "human": 1,
       "align": 0
@@ -3796,6 +3816,19 @@
    "sources": [],
    "shape": "巳",
    "reading": "己",
+   "why": "no_edge"
+  },
+  {
+   "n": 1,
+   "human": 0,
+   "auto": 1,
+   "channels": {
+    "note_lexicon": 1
+   },
+   "first": "vol02:157:2:12b",
+   "sources": [],
+   "shape": "木",
+   "reading": "本",
    "why": "no_edge"
   }
  ]

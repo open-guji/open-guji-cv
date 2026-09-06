@@ -49,7 +49,7 @@
 {"char": "准", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "准", "status": "sparse", "unicode_cp": 20934, "updated_at": "2026-09-06T13:00:34+00:00"}
 {"char": "凛", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "凛", "status": "sparse", "unicode_cp": 20955, "updated_at": "2026-09-05T00:24:12+00:00"}
 {"char": "凝", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "凝", "status": "sparse", "unicode_cp": 20957, "updated_at": "2026-09-06T10:27:31+00:00"}
-{"char": "出", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "出", "status": "sparse", "unicode_cp": 20986, "updated_at": "2026-09-04T15:38:55+00:00"}
+{"char": "出", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "出", "status": "sparse", "unicode_cp": 20986, "updated_at": "2026-09-06T21:41:18+00:00"}
 {"char": "別", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "別", "status": "sparse", "unicode_cp": 21029, "updated_at": "2026-09-06T13:02:34+00:00"}
 {"char": "刪", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "刪", "status": "sparse", "unicode_cp": 21034, "updated_at": "2026-09-06T20:02:28+00:00"}
 {"char": "則", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "則", "status": "sparse", "unicode_cp": 21063, "updated_at": "2026-09-06T12:57:13+00:00"}
@@ -217,8 +217,9 @@
 {"char": "曰", "edition_tag": "v2", "ids": null, "n_confirmed": 14, "semantic": "日", "status": "stable", "unicode_cp": 26352, "updated_at": "2026-09-06T19:10:11+00:00"}
 {"char": "曳", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "曳", "status": "sparse", "unicode_cp": 26355, "updated_at": "2026-09-06T14:11:46+00:00"}
 {"char": "書", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "書", "status": "sparse", "unicode_cp": 26360, "updated_at": "2026-09-06T12:57:13+00:00"}
-{"char": "曾", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "曾", "status": "sparse", "unicode_cp": 26366, "updated_at": "2026-09-06T19:16:14+00:00"}
+{"char": "曾", "edition_tag": "v2", "ids": null, "n_confirmed": 3, "semantic": "曾", "status": "stable", "unicode_cp": 26366, "updated_at": "2026-09-06T21:41:57+00:00"}
 {"char": "朂", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "朂", "status": "sparse", "unicode_cp": 26370, "updated_at": "2026-09-06T17:06:44+00:00"}
+{"char": "會", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "會", "status": "sparse", "unicode_cp": 26371, "updated_at": "2026-09-06T21:41:18+00:00"}
 {"char": "月", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "月", "status": "sparse", "unicode_cp": 26376, "updated_at": "2026-09-06T14:38:17+00:00"}
 {"char": "有", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "有", "status": "sparse", "unicode_cp": 26377, "updated_at": "2026-09-06T13:02:34+00:00"}
 {"char": "服", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "服", "status": "sparse", "unicode_cp": 26381, "updated_at": "2026-09-06T17:06:43+00:00"}
@@ -384,6 +385,7 @@
 {"char": "臺", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "臺", "status": "sparse", "unicode_cp": 33274, "updated_at": "2026-09-06T13:02:34+00:00"}
 {"char": "與", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "與", "status": "sparse", "unicode_cp": 33287, "updated_at": "2026-09-04T15:38:55+00:00"}
 {"char": "興", "edition_tag": "v2", "ids": null, "n_confirmed": 3, "semantic": "興", "status": "stable", "unicode_cp": 33288, "updated_at": "2026-09-06T19:10:11+00:00"}
+{"char": "舍", "edition_tag": "v2", "ids": null, "n_confirmed": 2, "semantic": "舍", "status": "sparse", "unicode_cp": 33293, "updated_at": "2026-09-06T21:41:57+00:00"}
 {"char": "艮", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "艮", "status": "sparse", "unicode_cp": 33390, "updated_at": "2026-09-06T10:27:31+00:00"}
 {"char": "芉", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "芉", "status": "sparse", "unicode_cp": 33417, "updated_at": "2026-09-06T14:11:46+00:00"}
 {"char": "芝", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "芝", "status": "sparse", "unicode_cp": 33437, "updated_at": "2026-09-06T10:27:31+00:00"}
@@ -541,7 +543,7 @@
 {"char": "齡", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "齡", "status": "sparse", "unicode_cp": 40801, "updated_at": "2026-09-06T10:27:31+00:00"}
 {"char": "龔", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "龔", "status": "sparse", "unicode_cp": 40852, "updated_at": "2026-09-06T14:39:30+00:00"}
 {"char": "龜", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "龜", "status": "sparse", "unicode_cp": 40860, "updated_at": "2026-09-06T13:21:17+00:00"}
-{"char": "𠮓", "edition_tag": "v2", "ids": null, "n_confirmed": 11, "semantic": "𠮓", "status": "stable", "unicode_cp": 134035, "updated_at": "2026-09-06T17:06:44+00:00"}
+{"char": "𠮓", "edition_tag": "v2", "ids": null, "n_confirmed": 12, "semantic": "𠮓", "status": "stable", "unicode_cp": 134035, "updated_at": "2026-09-06T21:41:57+00:00"}
 {"char": "𢑴", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "𢑴", "status": "sparse", "unicode_cp": 140404, "updated_at": "2026-09-06T17:02:59+00:00"}
 {"char": "𣱁", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "𣱁", "status": "sparse", "unicode_cp": 146497, "updated_at": "2026-09-06T14:11:46+00:00"}
 {"char": "𤇍", "edition_tag": "v2", "ids": null, "n_confirmed": 1, "semantic": "𤇍", "status": "sparse", "unicode_cp": 147917, "updated_at": "2026-09-06T13:21:17+00:00"}
