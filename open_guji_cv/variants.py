@@ -48,6 +48,10 @@ HIGH_CONFIDENCE_SOURCES = frozenset({
 #: 异体来源：这条边可以是「同词异形」。准入桥的候选（最终还要过用字账）。
 BRIDGE_SOURCES = frozenset({
     "twedu", "hydzd", "unihan:kSemanticVariant", "unihan:kZVariant", "yitizi",
+    # local:keben —— config/variants/local_edges.json 的手工补边。公开库一家都没收、
+    # 但**本书刻本实证过**的同字异形（首例 㫖—旨，各家资料里 㫖 是孤立点）。
+    # 刻例是我们能拿到的最硬的证据，所以进桥；准入照样还要过本书用字账。
+    "local:keben",
 })
 #: 单独出现不够格：yitizi 把 ytenx + OpenCC 混在一起且不可溯源，
 #: 只有它一家的边（來~勅、某~私、藝~芸）最可疑。

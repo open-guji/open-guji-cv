@@ -1,0 +1,18 @@
+{
+  "_note": [
+    "手工补边：公开异体字资料库（Unihan / twedu / hydzd / yitizi / dypytz / cjkvi）都没有收、",
+    "但本书刻本里确实作为同字异形出现的对。build_variants.py 在合并各来源之后叠加本文件，",
+    "所以重跑构建不会丢。**只收刻本实证过的对**，不要拿它当语义表的旁路——",
+    "group_forms 走关系图不走语义表，往这里加一条就等于让一个组多一个成员。",
+    "每条必须写 why（哪一位刻例发现的）。来源标签统一 local:keben。"
+  ],
+  "edges": [
+    {
+      "a": "㫖",
+      "b": "旨",
+      "tags": ["local:keben"],
+      "directed": {"variant": "㫖", "regular": "旨"},
+      "why": "㫖(U+3ADE) 在关系图里是孤立点：variants_of('㫖') 为空、edge_tier None，旨 那头挂了 㫑/𠮛/𣅀 等九个异体就是没有它。语义表有 semantic('㫖')=='旨'，但 group_forms 走关系图，于是 len(forms)==1、「义定形未定」整道闸跳过，vol02:9:6:17 等 5 处 match_replace 静默取库首选。武英殿本《四庫全書總目》上諭页大量用 㫖（聖旨之旨），账本 unknown_pairs 记 n=5 全自动。2026-09-06"
+    }
+  ]
+}

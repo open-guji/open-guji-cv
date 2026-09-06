@@ -139,8 +139,14 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                 g = gold.get(r.id)
                 if g:
                     ng += 1
-                    hit = (r.char == g.shape or r.char == g.reading
-                           or _same_char(r.char, g.shape))
+                    # ⚠️ 金标是 `reading`（整理本），`shape` 是**当次转写自己**
+                    # （v2_align:158 `shape, reading = lab.hyp, lab.char`）。
+                    # 无条件收 `r.char == g.shape` 等于「跟上次一样就算对」，
+                    # replace 段上会把真错也放过去。只在**记过转换**时才收刻本形
+                    # ——那是「忠于刻本字形」方针要的（葢/蓋、卽/即 按刻本形放行）。
+                    hit = (r.char == g.reading
+                           or (g.conversion and r.char == g.shape)
+                           or _same_char(r.char, g.reading))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
                     if getattr(g, "source", "") != "fallback":
@@ -151,7 +157,8 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                         okr += hit
                     if not hit:
                         errors.append({"id": r.id, "pred": r.char,
-                                       "gold": g.shape, "channel": r.channel,
+                                       "gold": g.reading, "shape": g.shape,
+                                       "channel": r.channel,
                                        "source": getattr(g, "source", ""),
                                        "op": g.align_op})
                 t = truth.get(r.id)
