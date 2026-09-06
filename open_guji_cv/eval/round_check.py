@@ -28,6 +28,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from collections import Counter
 from pathlib import Path
 
@@ -67,6 +69,13 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
                     and pl.get("v") == "confirm" and pl.get("shape"):
                 out[e["target"]["key"]] = pl["shape"]
     return out
+
+
+@lru_cache(maxsize=1)
+def _ledger():
+    """本书用字账（judging preferred 用）。缓存一份，别每个字位重读。"""
+    from ..variant_ledger import BookLedger
+    return BookLedger.load_or_empty("wuyingdian_zongmu")
 
 
 def _same_char(a: str | None, b: str | None) -> bool:
@@ -144,8 +153,12 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 无条件收 `r.char == g.shape` 等于「跟上次一样就算对」，
                     # replace 段上会把真错也放过去。只在**记过转换**时才收刻本形
                     # ——那是「忠于刻本字形」方针要的（葢/蓋、卽/即 按刻本形放行）。
+                    # 第三项见 console/app.py 同处注释：整理本与刻本用同一组里不同的形时
+                    # conversion 不一定为真（禀/稟 就是，两边都在 稟 组、v2_align 记 equal）。
+                    # 管线按账本 preferred 出刻本形是对的，只认 preferred 不认同组任一形。
                     hit = (r.char == g.reading
                            or (g.conversion and r.char == g.shape)
+                           or _ledger().preferred_form(g.reading) == r.char
                            or _same_char(r.char, g.reading))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
