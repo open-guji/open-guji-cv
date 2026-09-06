@@ -40,6 +40,9 @@ GREEN, YELLOW, RED = "green", "yellow", "red"
 # 判据阈值（改这里就改了 CLI 与控制台两边）
 ERR_GREEN, ERR_YELLOW = 0.0, 0.001        # A 自动放行错误率
 REVIEW_GREEN, REVIEW_YELLOW = 0.015, 0.03  # B 人审率
+# F 夹注人审率：目标与正文同 <2%，但起点高（第 0 步前 11.4%），先按 5%/10% 亮灯，
+# 等 jz_set 审完一轮再收紧。丢字率**不设黄档**——有一段格数对不上就是红。
+JIAZHU_GREEN, JIAZHU_YELLOW = 0.05, 0.10
 CLUSTER_RED_N, CLUSTER_RED_PAGES = 6, 3    # C 缺陷聚集：≥N 条且横跨 ≥P 页
 CLUSTER_YELLOW_N = 3
 TIGHT_GAP_MED, TIGHT_NEAR_RATIO = 2, 0.6   # C2 挤排：间隙中位 ≤2px 或 60% 不足 5px
@@ -181,6 +184,75 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
     return {"gold": [okg, ng], "gold_independent": [oki, ni],
             "gold_replace": [okr, nr], "human": [okt, nt],
             "self_evident": ng - ni, "errors": errors[:10]}
+
+
+def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
+    """夹注（雙行小注）两把尺子：**人审率**与**丢字率**。
+
+    夹注要单独报，不能混在全体里：它只占 vol02 全书 601/32k 个字位，
+    混着算永远看不出好坏（2026-09-05 实测夹注格人审率是普通字的 3.2 倍，
+    而全体人审率一直是绿灯）。与 R2s 从 R2 里拆出来同一个道理。
+
+    - **人审率**：夹注格里落人审的比例。目标与正文同 <2%，黄 5% / 红 10%。
+    - **丢字率**：段格数 ≠ 整理本对应注文字数的段占比。目标 0——
+      格数不对说明切分漏拆/多切了行，是**丢数据**，比认错字严重。
+      整理本锚不上的段（T2 案語有些锚不上）不进分母，另报 `n_no_ref`。
+    """
+    from ..core.step import page_key
+    from ..gold.v2_align import align_book
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.store import ProductStore
+    from ..utils.jiazhu_order import segments as jz_segments
+    from ..utils.jiazhu_order import sort_by_reading
+
+    st = store or ProductStore()
+    try:
+        golds = {c.id: c for g in align_book(book, pages, st) if g.anchored for c in g.chars}
+    except Exception:
+        golds = {}
+    n_cell = n_rev = 0
+    n_seg = n_seg_ref = n_lost = 0
+    lost: list[dict] = []
+    for pg in pages:
+        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        if a is None:
+            continue
+        for cc in a.columns:
+            jz = [r for r in cc.chars if r.sub]
+            if not jz:
+                continue
+            for seg in jz_segments((r.slot, r.sub) for r in jz):
+                sset = set(seg)
+                rs = sort_by_reading([r for r in jz if r.slot in sset])
+                n_seg += 1
+                for r in rs:
+                    if "excluded" in (r.doubts or []):
+                        continue
+                    n_cell += 1
+                    if not r.admit:
+                        n_rev += 1
+                # 丢字：拿整理本覆盖到的格数当参照。整段都锚上时格数才可比。
+                covered = [r for r in rs if r.id in golds]
+                if len(covered) == len(rs) and rs:
+                    n_seg_ref += 1
+                    # a/b 两半的格数差 >1 = 漏了半格（正常奇数字尾差 1）
+                    na = sum(1 for r in rs if r.sub == "a")
+                    nb = sum(1 for r in rs if r.sub == "b")
+                    if abs(na - nb) > 1:
+                        n_lost += 1
+                        lost.append({"page": pg, "col": cc.col,
+                                     "slots": seg, "a": na, "b": nb})
+    # ⚠️ 单位是**分数**不是百分比——与 review_rate 的 `rate` 一致。
+    # 阈值常量（JIAZHU_GREEN/YELLOW）也按分数写；混用会让灯永远是绿的。
+    return {
+        "n_cells": n_cell, "n_review": n_rev,
+        "rate": (n_rev / n_cell) if n_cell else None,
+        "n_segments": n_seg, "n_segments_with_ref": n_seg_ref,
+        "n_no_ref": n_seg - n_seg_ref,
+        "n_lost": n_lost,
+        "lost_rate": (n_lost / n_seg_ref) if n_seg_ref else None,
+        "lost": lost[:10],
+    }
 
 
 def review_rate(book: str, pages: list[int], store=None) -> dict:
@@ -489,6 +561,16 @@ def check(book: str, pages: list[int]) -> dict:
         if n:
             worst_err = max(worst_err, 1 - o / n)
     rv = review_rate(book, pages, st)
+    # F 夹注（2026-09-06）：只占全书 601/32k 个字位，混在 B 里永远看不出好坏
+    # （夹注格人审率曾是普通字的 3.2 倍，而 B 一直是绿灯）。与 R2s 从 R2 拆出来同理。
+    # 没有夹注的册/页（vol01 卷首一一处没有）不亮灯。
+    jz = jiazhu_rates(book, pages, st)
+    jz_light = "none"
+    if jz["n_cells"]:
+        jz_light = _light(jz["rate"], JIAZHU_GREEN, JIAZHU_YELLOW)
+        # 丢字是**丢数据**，比认错字严重：只要有一段格数对不上就直接红
+        if jz["n_lost"]:
+            jz_light = RED
     return {
         "book": book, "pages": pages,
         "A": {**acc, "light": _light(worst_err, ERR_GREEN, ERR_YELLOW)},
@@ -497,4 +579,5 @@ def check(book: str, pages: list[int]) -> dict:
         "C2": tight_pages(book, pages, st),
         "D": rare_char_recall(),
         "E": form_fidelity(book, pages, st),
+        "F": {**jz, "light": jz_light},
     }
