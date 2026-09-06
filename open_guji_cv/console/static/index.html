@@ -57,6 +57,7 @@
   .vtile img { width: 100%; height: 100%; object-fit: contain; }
   .vtile.pending { outline: 2px dashed var(--zhu, #B3261E); outline-offset: 1px; }
   .vtile.stale { outline: 2px dashed #B8860B; outline-offset: 1px; }   /* 已裁、产物待重跑 */
+  .vtile.audit { outline: 2px dotted #2F7D4F; outline-offset: 1px; }   /* 自动放行的异体位，判据 E 待抽审 */
   .vtile.moved { outline: 2px solid var(--indigo); outline-offset: 1px; }
   .vtile.marked { opacity: .45; outline: 2px solid var(--zhu, #B3261E); outline-offset: 1px; }
   .vtile.hum::after { content: "✓"; position: absolute; right: 1px; bottom: -2px; font-size: .7rem; color: var(--indigo); }
@@ -1591,10 +1592,11 @@ async function vgLoad() {
   // 有异体故事的组在前：有待审格，或这些页里真刻了 ≥2 种形。其余（账本因一条字典边把 洧 挂到
   // 有 名下这类，这些页里只刻了一种形）折到后面——它们不是抽审的靶子。
   // 「有故事」= 有待审格，或真刻了 ≥2 种形，或有字形→文意的转换（髪 读作 髮）——转换正是保真抽审的靶子
-  const story = g => g.n_pending > 0 || g.n_stale > 0 || new Set(g.tiles.filter(t => t.char).map(t => t.char)).size >= 2
+  const story = g => g.n_pending > 0 || g.n_stale > 0 || g.n_audit > 0
+                     || new Set(g.tiles.filter(t => t.char).map(t => t.char)).size >= 2
                      || g.tiles.some(t => t.reading && t.char && t.reading !== t.char);
   const btn = (g, k) => `<button class="vgbtn" data-k="${k}"><span class="vgl">${g.canonical}</span> ${g.members.filter(m => m !== g.canonical).join(' ')}
-       <sub>${g.n_tiles}${g.n_pending ? ' · 待审 ' + g.n_pending : ''}${g.n_stale ? ' · 待重跑 ' + g.n_stale : ''}</sub></button>`;
+       <sub>${g.n_tiles}${g.n_pending ? ' · 待审 ' + g.n_pending : ''}${g.n_audit ? ' · 待抽审 ' + g.n_audit : ''}${g.n_stale ? ' · 待重跑 ' + g.n_stale : ''}</sub></button>`;
   const main = gs.map((g, k) => [g, k]).filter(([g]) => story(g)), rest = gs.map((g, k) => [g, k]).filter(([g]) => !story(g));
   $('#vg_groups').innerHTML = (main.map(([g, k]) => btn(g, k)).join('') || '<span class="muted">这些页里没有待审或多形的组</span>')
     + (rest.length ? `<details class="vgrest"><summary class="muted">其余 ${rest.length} 组（这些页里只刻了一种形）</summary>${rest.map(([g, k]) => btn(g, k)).join('')}</details>` : '');
@@ -1660,10 +1662,13 @@ function vgRender() {
           <span class="muted">刻 ${Math.max(0, carved)}${b.human ? '·人' + b.human : ''} · 整理本 ${f.ref || 0}${c === g.reading_default ? ' · 文意' : ''}${c === g.preferred ? ' · 本书惯用' : ''}</span></div>
         <div class="vtiles">${(byCol[c] || []).map(t => {
           const s = VG.state[t.id];
-          const cls = ['vtile', t.pending ? 'pending' : '', t.stale ? 'stale' : '', s.changed ? 'moved' : '', s.mark ? 'marked' : '', t.human ? 'hum' : '', VG.sel === t.id ? 'sel' : ''].filter(Boolean).join(' ');
+          const cls = ['vtile', t.pending ? 'pending' : '', t.stale ? 'stale' : '', t.audit ? 'audit' : '', s.changed ? 'moved' : '', s.mark ? 'marked' : '', t.human ? 'hum' : '', VG.sel === t.id ? 'sel' : ''].filter(Boolean).join(' ');
           const tip = `${t.id} · ${t.pending ? '待审' : (t.stale ? '你已裁「' + t.human + '」，产物待重跑' : '自动 ' + (t.channel || ''))}${t.state ? ' · ' + t.state : ''}${t.human ? ' · 人裁 ' + t.human : ''}\n单击=选中　双击/空格/←→=换列　O 组外　N 非字　T 字形不完整　C 有噪声`;
           const badge = s.mark ? `<b>${{ non: 'N', truncated: 'T', contaminated: 'C' }[s.mark]}</b>` : (t.human ? `<i>${t.human}</i>` : '');
-          return `<div class="${cls}" data-id="${t.id}" title="${tip}" tabindex="0"><img src="${t.patch}" loading="lazy" alt="${t.id}">${badge}</div>`;
+          // **不用 loading="lazy"**：组视图是「一眼扫完整组」的界面，抽审时图必须都在，
+          // 懒加载会让视口外的格子空着（截图与快速滚动时尤其明显）。字块 3–4KB，
+          // 一组几十个也就百来 KB，全加载没有负担。
+          return `<div class="${cls}" data-id="${t.id}" title="${tip}" tabindex="0"><img src="${t.patch}" alt="${t.id}">${badge}</div>`;
         }).join('')}</div></div>`;
     }).join('') + '</div>'
     + `<div class="vother${others.length ? '' : ' empty'}">
