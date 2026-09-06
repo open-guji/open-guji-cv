@@ -696,7 +696,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     content_x: tuple[float, float] | None = None,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
-                    seam_band: int = 12,
+                    seam_band: int = 20,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
