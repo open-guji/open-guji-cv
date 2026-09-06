@@ -627,6 +627,7 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
     golds = align_book(book, pgs, store)
     gold = {c.id: c for g in golds if g.anchored for c in g.chars}
     by_ch: dict[str, list[int]] = {}
+    by_op: dict[str, list[int]] = {}
     errors: list[dict] = []
     n_total = 0
     for pg in pgs:
@@ -646,14 +647,30 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
                     continue
                 k = r.channel if r.admit else "人审"
                 slot = by_ch.setdefault(k, [0, 0])
-                ok = pred == g.shape
+                # ⚠️ 比 `reading` 不比 `shape`（2026-09-06 修，variant_strategy.md）。
+                # `v2_align` 里 shape = lab.hyp = **当次转写自己**，reading = lab.char
+                # 才是整理本给的金标。比 shape 的后果：equal 段恒真（自证，该模块头
+                # 「纪律 1」写过），replace 段比的是「这次跟上次一不一样」，与对错无关。
+                # 实测 vol02 p1–10：比 shape 报 5 错，比 reading 只有 1 条真错。
+                #
+                # 第二项是「忠于刻本字形」方针（用户 2026-09-05 定）的要求：金标记过
+                # 转换（conversion）的位上，输出**刻本形**同样算对——葢/蓋、卽/即 这类
+                # 按刻本形放行是对的，不该记成错误。
+                ok = (pred == g.reading) or (g.conversion and pred == g.shape)
                 slot[0] += ok
                 slot[1] += 1
+                # 分层：equal 段是自证层，replace 段才是真正的错误样本，别合成一个数看
+                lay = by_op.setdefault(g.align_op or "?", [0, 0])
+                lay[0] += ok
+                lay[1] += 1
                 if not ok:
-                    errors.append({"id": r.id, "pred": pred, "gold": g.shape,
+                    errors.append({"id": r.id, "pred": pred, "gold": g.reading,
+                                   "shape": g.shape, "align_op": g.align_op,
                                    "channel": k, "cov": (r.evidence or {}).get("cov")})
     acc = [{"channel": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}
            for k, v in sorted(by_ch.items(), key=lambda x: -x[1][1])]
+    by_align = [{"align_op": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}
+                for k, v in sorted(by_op.items(), key=lambda x: -x[1][1])]
     n_gold = sum(v[1] for v in by_ch.values())
     n_ok = sum(v[0] for v in by_ch.values())
 
@@ -691,7 +708,8 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
         "accuracy": {"overall": round(n_ok / n_gold, 4) if n_gold else None,
                       "n_gold": n_gold, "n_total": n_total,
                       "gold_coverage": round(n_gold / n_total, 4) if n_total else None,
-                      "by_channel": acc, "errors": errors[:20]},
+                      "by_channel": acc, "by_align_op": by_align,
+                      "errors": errors[:20]},
         "defects": {"n": n_def, "by_quality": top(qual_c),
                      "by_page": top(page_c), "by_col": top(col_c),
                      "by_slot": top(slot_c)},

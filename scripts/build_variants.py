@@ -377,6 +377,28 @@ def main() -> None:
     directed = directed_edges(edge_lists)
     n_directed = sum(len(rs) for rs in directed.values())
     n_pairs = sum(len(bs) for bs in pairs.values())
+    # 3.5 手工补边（config/variants/local_edges.json）——公开库都没收、但刻本实证过的对。
+    # 放在这里（合并各来源之后、统计之前）是为了让重跑构建不丢，也让它进 tag 统计。
+    # 首例 㫖—旨：㫖 在各家资料里是孤立点，语义表有而关系图无，导致 group_forms 建不起组、
+    # 「义定形未定」闸整个跳过（见 doc/variant_strategy.md）。
+    n_local = 0
+    local_path = REPO / "config" / "variants" / "local_edges.json"
+    if local_path.exists():
+        local_doc = json.loads(local_path.read_text(encoding="utf-8"))
+        for e in local_doc.get("edges", []):
+            a, b = e["a"], e["b"]
+            tags = list(e.get("tags") or ["local:keben"])
+            lo, hi = (a, b) if ord(a) < ord(b) else (b, a)
+            cur = set(pairs.setdefault(lo, {}).get(hi, ()))
+            pairs[lo][hi] = sorted(cur | set(tags))
+            d = e.get("directed")
+            if d:
+                dv, dr = d["variant"], d["regular"]
+                cur_d = set(directed.setdefault(dv, {}).get(dr, ()))
+                directed[dv][dr] = sorted(cur_d | set(tags))
+            n_local += 1
+    print(f"手工补边 {n_local} 条（{local_path}）")
+
     chars = set(pairs)
     for bs in pairs.values():
         chars.update(bs)
@@ -394,6 +416,8 @@ def main() -> None:
                     "directed[异体][正字]=来源标签列表，只收带方向的来源"
                     "（twedu/hydzd/dypytz/cjkvi-simplified/unihan 简繁）；"
                     "查询用 open_guji_cv/variants.py。",
+            "local_edges": "local:* 标签的边来自 config/variants/local_edges.json"
+                           "（手工补，公开库未收但刻本实证过的对）。",
             "caution": "unihan:kSpoofingVariant 是形近易混字不是异体字；"
                        "异体关系不传递，连通展开须限制来源（见查询模块）；"
                        "来源标签对不上 T1/T2/T3（twedu 也收古文 上/二），"
