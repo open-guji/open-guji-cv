@@ -185,12 +185,20 @@ def index_structure(index_path: str | Path,
             for p, v in per_page.items()}
 
 
-def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
+def label_page(page: str, slots: list[tuple], book: str,
                corpus: str, corpus_index: dict[str, list[int]],
                window_pad: int = WINDOW_PAD,
                ) -> tuple[list[AlignedLabel], bool]:
-    """单页对齐 → 该页可标注的实例。返回 (标签, 是否锚定成功)。"""
-    text = "".join(ch for _, _, ch in slots)
+    """单页对齐 → 该页可标注的实例。返回 (标签, 是否锚定成功)。
+
+    `slots` 是 `(col, slot, char)` 或 `(col, slot, sub, char)`（2026-09-06 加
+    `sub`，夹注半格用）。**顺序即锚定串的顺序**，调用方负责按阅读顺序给——
+    夹注两个子列若按 (slot, sub) 交错送进来，锚定串会是「兩採淮進鹽本政」，
+    连累整页对齐。`sub` 非空时 `instance_id` 带后缀（`book:page:col:slot` + `a`/`b`），
+    与 `cell_shrink` / `seed_admit` 的字位 id 一致。
+    """
+    norm = [(t[0], t[1], (t[2] or "") if len(t) > 3 else "", t[-1]) for t in slots]
+    text = "".join(ch for _, _, _, ch in norm)
     offset = anchor_page(text, corpus_index)
     if offset is None:
         return [], False
@@ -222,9 +230,9 @@ def label_page(page: str, slots: list[tuple[int, int, str]], book: str,
             # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
             continue
         for k in range(i2 - i1):
-            col, idx, hyp = slots[i1 + k]
+            col, idx, sub, hyp = norm[i1 + k]
             gold = window[j1 + k]
-            out.append(AlignedLabel(f"{book}:{page}:{col}:{idx}", page,
+            out.append(AlignedLabel(f"{book}:{page}:{col}:{idx}{sub}", page,
                                     gold, hyp, tag, i2 - i1))
     return out, True
 

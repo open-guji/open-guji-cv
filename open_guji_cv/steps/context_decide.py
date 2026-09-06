@@ -21,7 +21,11 @@ LM 是从语料训的，语料换了同一批候选的裁决就会变，而代�
 
 ## 上下文取法
 
-同列**前文**：本列已定字位里 slot 小于当前位的，按 slot 升序取最近若干个。
+同列**前文**：按**阅读顺序**（`utils/jiazhu_order.sort_by_reading`，与
+`row_boundaries.reading_order` 同源）取本列已定字位里最近的若干个。没有夹注
+的列，读序就是 slot 升序；有夹注时一段内先读 a 子列全部、再读 b 子列全部，
+**不能按 (slot, sub) 排**——那样两行小字会交错成「兩採淮進鹽本政」，前向
+n-gram 必然给不出 margin（2026-09-06 实测与修复）。
 LM 是前向 n-gram，只看前文。跨列不接（`reading_order` 的输入就是一列），
 列首字位因此没有上下文，退化成纯先验融合——`ContextResult.decision.
 used_context` 会注明。
@@ -38,6 +42,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (ColumnDecision, DecisionRec,
                                     PageDecision, PageMatch, PageOcr)
+from ..utils.jiazhu_order import sort_by_reading
 
 DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
 
@@ -89,7 +94,8 @@ class ContextDecideStep(Step):
         needs=("corpus",),
         code_deps=("open_guji_cv.clustering.context_step",
                    "open_guji_cv.clustering.recognize_flow",
-                   "open_guji_cv.clustering.lm"),
+                   "open_guji_cv.clustering.lm",
+                   "open_guji_cv.utils.jiazhu_order"),
     )
 
     def _decider(self, p: ContextDecideParams):
@@ -132,7 +138,14 @@ class ContextDecideStep(Step):
                 continue
             recs: list[DecisionRec] = []
             decided: list[tuple[int, str]] = []      # (slot, 定字)，同列前文
-            for r in sorted(cc.chars, key=lambda x: (x.slot, x.sub or "")):
+            # ⚠️ **按阅读顺序**，不是 (slot, sub)（2026-09-06 修）。夹注一段里
+            # a/b 两个子列各是一行小字，(slot, sub) 排出来是交错的：
+            #     兩(17a) 採(17b) 淮(18a) 進(18b) 鹽(19a) 本(19b) 政(20a)
+            # 前向 n-gram 看到「兩採淮進鹽本政」当然给不出 margin——实测 22 条
+            # 夹注人审里 13 条库 top == OCR top、本该 dual 放行，全被「上下文
+            # margin 不足」拦下。正确读序是 兩淮鹽政 採進本（先 a 全部再 b 全部）。
+            # 规则与 row_boundaries.reading_order 同源，见 utils/jiazhu_order。
+            for r in sort_by_reading(cc.chars):
                 # same 档直接继承——库匹配的 precision 是 1.0000 硬约束，
                 # 让 LM 去重排它只会净亏（context_step 铁律 2）。
                 if r.verdict == "same" and r.char:
