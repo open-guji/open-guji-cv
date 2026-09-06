@@ -26,16 +26,17 @@ class RowSegmentParams(BaseModel):
     raise_tol: float = 2.0
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
+    seam_band: int = 12                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
 
 
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.5", unit="column",
+        id="row_segment", title="Step3 单列文字切分", version="1.6", unit="column",
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
-                   "open_guji_cv.utils.column_projection"),
+                   "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -66,7 +67,7 @@ class RowSegmentStep(Step):
                 border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu)
+                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band)
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
@@ -86,6 +87,7 @@ class RowSegmentStep(Step):
                     x0=float(c.x0), x1=float(c.x1), kind=c.kind, sub=c.sub, order=int(c.order),
                     gap_center=None if c.gap_center is None else float(c.gap_center),
                     ink_ratio=float(c.ink_ratio), raised=bool(c.raised),
+                    seam_top=c.seam_top, seam_bottom=c.seam_bottom,
                     quad_page=(None if mapper is None else
                                [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
                 ))

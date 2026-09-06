@@ -29,6 +29,8 @@ class CellRec(BaseModel):
     ink_ratio: float = 0.0
     raised: bool = False
     quad_page: list[Point] | None = None   # 原图规范空间四角 [(x,y)…]，右上原点
+    seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 utils/seam.py
+    seam_bottom: list[int] | None = None
 
 
 class ColumnCells(BaseModel):
