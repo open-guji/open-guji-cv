@@ -1,4 +1,7 @@
-"""Step0 预清理：默认不动图，登记过的页才把反色带反回来，且不碰磁盘原图。"""
+"""Step0 预清理：默认不动图；登记过的页才把反色带反回来。
+
+产物落 precleaned/<book>/<page>.png，raw_page 优先读它；原图永不改写。
+"""
 import numpy as np
 import pytest
 
@@ -72,3 +75,46 @@ def test_no_rules_is_a_noop():
     g, _ = _page_with_inverted_band()
     out, notes = apply_preclean(g, [])
     assert notes == [] and out is g
+
+
+# ── 产物落盘 + raw_page 改道 ────────────────────────────────────────
+def _fake_book(tmp_path, preclean):
+    """造一册只有两页的书：p1 登记了预清理，p2 没有。"""
+    from dataclasses import dataclass, field
+    from pathlib import Path
+    from cv2 import imwrite
+
+    raw = tmp_path / "raw"; raw.mkdir()
+    g, _ = _page_with_inverted_band()
+    imwrite(str(raw / "1.png"), g)
+    imwrite(str(raw / "2.png"), np.full((300, 400), 255, np.uint8))
+
+    @dataclass
+    class B:
+        id: str = "faketest"
+        raw_dir: Path = raw
+        preclean: dict = field(default_factory=lambda: preclean)
+        def raw_path(self, page): return self.raw_dir / f"{page}.png"
+    return B()
+
+
+def test_build_writes_products_and_leaves_raw_alone(tmp_path):
+    from cv2 import imread
+    from open_guji_cv.utils.preclean import build_precleaned, precleaned_path
+
+    rules = {1: [{"kind": "inverted_band", "segments": [[40, 359]], "y_lo": 90,
+                  "y_hi": 200, "y_probe": 145, "ctx": 40, "smooth": 3}]}
+    book = _fake_book(tmp_path, rules)
+    before = imread(str(book.raw_path(1)), 0).copy()
+
+    written = build_precleaned(book, log=lambda s: None, repo_root=tmp_path)
+    assert len(written) == 1
+    dst = precleaned_path(book.id, 1, tmp_path)
+    assert dst.exists(), "登记页应写出产物"
+    assert not precleaned_path(book.id, 2, tmp_path).exists(), "未登记页不该产出"
+    assert (imread(str(book.raw_path(1)), 0) == before).all(), "原图被改写了"
+
+    # 已有产物默认跳过，force 才重做
+    assert build_precleaned(book, log=lambda s: None, repo_root=tmp_path) == []
+    assert len(build_precleaned(book, force=True, log=lambda s: None,
+                                repo_root=tmp_path)) == 1

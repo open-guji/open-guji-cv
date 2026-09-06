@@ -200,7 +200,27 @@ def cmd_eval(args) -> None:
     sys.exit(1 if n_bad and args.strict else 0)
 
 
+def cmd_preclean(args) -> None:
+    """Step0：按 book.yaml 的 preclean 段生成修好的页图，落在 precleaned/<book>/。
+
+    只处理登记过的页；其余页碰都不碰。生成后 Step1 起自动读修好的那张。
+    """
+    from .core.book import load_book
+    from .utils.preclean import build_precleaned, precleaned_root
+
+    book = load_book(args.book)
+    rules = getattr(book, "preclean", {}) or {}
+    if not rules:
+        print(f"{book.id} 没登记任何预清理页（books/{book.id}.yaml 的 preclean 段是空的）")
+        return
+    pages = book.resolve_pages(args.pages) if args.pages else None
+    print(f"{book.id} 登记的预清理页: {sorted(rules)}")
+    written = build_precleaned(book, pages, force=args.force)
+    print(f"写出 {len(written)} 页 -> {precleaned_root() / book.id}")
+
+
 COMMANDS_V2 = {
+    "preclean": cmd_preclean,
     "eval": cmd_eval,
     "pipeline": cmd_pipeline,
     "step": cmd_step,
@@ -236,6 +256,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     _add_pages(p)
+
+    p = sub.add_parser("preclean",
+                       help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
+    p.add_argument("book", help="books/<id>.yaml 里的书 id")
+    p.add_argument("--pages", default=None,
+                   help="只做这些页（默认：yaml 里登记的全部）")
+    p.add_argument("--force", action="store_true", help="已有产物也重做")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
