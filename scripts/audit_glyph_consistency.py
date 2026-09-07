@@ -101,7 +101,10 @@ def main() -> int:
         by_pair[(shape, top)] += 1
         if n % 2000 == 0:
             print(f"  {n}/{len(rows)}  已标 {len(flagged)}  {time.time() - t0:.0f}s", flush=True)
-    flagged.sort(key=lambda r: -(r["topcov"] - r["mine"]))
+    # 排序：**放行字在子库里有命中（mine>0）的排前面**，再按差距。原型里精准的正是这一档
+    # （42 标 / 3 真错全抓）；mine=0 的一档在 v1 刻例上被「v1 图块细、v2 人裁图块粗」的
+    # 归一化漂移淹了——自/目、固/因、雨/兩、四/曰 这些框形字整片误报，真错只有 已→巳 那一类。
+    flagged.sort(key=lambda r: (r["mine"] <= 0, -(r["topcov"] - r["mine"])))
 
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -137,14 +140,24 @@ def _render(flagged: list[dict], n_rows: int, n_skip: int, matcher: GlyphMatcher
         ok, buf = cv2.imencode(".webp", arr, [cv2.IMWRITE_WEBP_QUALITY, 80])
         return base64.b64encode(buf.tobytes()).decode("ascii") if ok else ""
 
-    # 子库刻例的图：matcher 里存的是归一图（norm），够看
+    # 子库刻例的图：matcher 里存的是归一图（norm，64×64 的 0/1 二值，1 = 墨），够看。
+    # MatchResult 只在 same 档给 matched_id，unsure 档没有——那就拿子库里该字随便一个
+    # 人裁刻例当对照（看的是「这个字长什么样」，不必是最像的那一个）。
     norm_of = {iid: p for iid, p in zip(matcher._ids, matcher._patches)}
+    any_of: dict[str, str] = {}
+    for iid, ch in zip(matcher._ids, matcher._chars):
+        any_of.setdefault(ch, iid)
 
-    def b64norm(iid: str) -> str:
-        p = norm_of.get(iid)
+    def b64norm(iid: str, ch: str) -> str:
+        p = norm_of.get(iid) if iid else None
+        if p is None:
+            p = norm_of.get(any_of.get(ch, ""))
         if p is None:
             return ""
-        arr = (p * 255).astype(np.uint8) if p.dtype != np.uint8 else p
+        arr = p.astype(np.float32)
+        if arr.max() <= 1.0:
+            arr = arr * 255.0
+        arr = (255 - arr).astype(np.uint8)          # 墨黑纸白，与左边的原图块一致
         arr = cv2.resize(arr, (96, 96), interpolation=cv2.INTER_NEAREST)
         ok, buf = cv2.imencode(".webp", arr, [cv2.IMWRITE_WEBP_QUALITY, 80])
         return base64.b64encode(buf.tobytes()).decode("ascii") if ok else ""
@@ -154,7 +167,7 @@ def _render(flagged: list[dict], n_rows: int, n_skip: int, matcher: GlyphMatcher
         cards.append(f"""<div class="c">
   <div class="imgs">
     <figure><img src="data:image/webp;base64,{b64(r['png'])}"><figcaption>库存为「{_h.escape(r['shape'])}」</figcaption></figure>
-    <figure><img src="data:image/webp;base64,{b64norm(r['top_id'])}"><figcaption>人裁「{_h.escape(r['top'])}」{_h.escape(r['top_id'])}</figcaption></figure>
+    <figure><img src="data:image/webp;base64,{b64norm(r['top_id'], r['top'])}"><figcaption>人裁「{_h.escape(r['top'])}」{_h.escape(r['top_id'] or any_of.get(r['top'], ''))}</figcaption></figure>
   </div>
   <div class="t"><b class="ch">{_h.escape(r['shape'])}</b> → 子库更像 <b class="ch alt">{_h.escape(r['top'])}</b>
     <span class="m">top1 {r['topcov']} · 自己 {r['mine']} · 差 {round(r['topcov'] - r['mine'], 4)}</span><br>
