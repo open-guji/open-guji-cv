@@ -148,7 +148,8 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
             for r in cc.chars:
                 if not r.admit or not r.char:
                     continue
-                g = gold.get(r.id)
+                # 人裁过的位不进**金标层**（见下面注释），但仍要进「对你的裁决」层
+                g = gold.get(r.id) if r.channel != "human" else None
                 if g:
                     ng += 1
                     # ⚠️ 金标是 `reading`（整理本），`shape` 是**当次转写自己**
@@ -159,6 +160,12 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 第三项见 console/app.py 同处注释：整理本与刻本用同一组里不同的形时
                     # conversion 不一定为真（禀/稟 就是，两边都在 稟 组、v2_align 记 equal）。
                     # 管线按账本 preferred 出刻本形是对的，只认 preferred 不认同组任一形。
+                    # 第四项（2026-09-07）：**人裁过的位不拿整理本判对错**。
+                    # `seed_admit` v1.4 起「人裁一票定案」，`channel="human"` 的字
+                    # 就是用户看着图定的；整理本在这一处印什么与对错无关。
+                    # 实测 vol02:18:9:5 与 35:7:13——图上刻 曾、用户裁 曾，整理本印 會，
+                    # 判据 A 于是把**用户自己的裁决**记成了两条错，灯从绿变黄。
+                    # 判据 A 量的是「自动放行准不准」，人裁不是自动放行，本就不该进这个分母。
                     hit = (r.char == g.reading
                            or (g.conversion and r.char == g.shape)
                            or _ledger().preferred_form(g.reading) == r.char
