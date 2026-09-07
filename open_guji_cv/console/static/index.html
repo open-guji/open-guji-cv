@@ -594,6 +594,8 @@ async function init() {
   document.addEventListener('keydown', ev => {
     if (!$('#view-review').classList.contains('active')) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    // 组合键放行（2026-09-07 用户：「没法 Ctrl+C 复制，会优先读取 C 标为有噪声」）
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const c = RV.cards[RV.cur];
     if (!c) return;
     if (ev.key === 'ArrowRight' || ev.key === 'j') { rvFocus(RV.cur + 1); ev.preventDefault(); }
@@ -1785,6 +1787,7 @@ function clBind() {
   document.addEventListener('keydown', ev => {
     if (!$('#view-cutline').classList.contains('active')) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;   // 组合键（Ctrl+C 复制等）放行
     const c = CL.cases[CL.cur];
     if (!c) return;
     const step = ev.shiftKey ? 5 : 1;
