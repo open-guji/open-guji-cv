@@ -57,10 +57,19 @@ def _light(v: float | None, green: float, yellow: float) -> str:
 
 
 def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
-    """用户 confirm 事件 → {字位: 字形}，后裁覆盖先裁。"""
+    """用户 confirm 事件 → {字位: 字形}，后裁覆盖先裁。
+
+    ⚠️ **按事件 `ts` 排，不按文件名**（2026-09-07 修）。批次文件名是
+    `<book>-<页段>-decide.jsonl`，字典序里数字排在字母前：
+    `vol01-141-150-decide`（09-06）排在 `vol01-dev_set-decide`（09-04）**之前**，
+    于是先裁反过来覆盖了后裁。实测 `vol01:141:3:11`——用户 09-04 裁 鐘、
+    09-06 改判 鍾；管线走 glyph.db（按写入顺序）拿的是 鍾，这里却拿 鐘，
+    判据 A 的「对你的裁决」层于是报 138/139，红灯挂了一天。
+    事件里本来就有 `ts`，按它排即可；同刻的按 (batch, seq) 兜底。
+    """
     import json
     d = (root or DATASET) / "feedback" / "events"
-    out: dict[str, str] = {}
+    evs: list[tuple] = []
     for p in sorted(d.glob(f"{book}-*.jsonl")) if d.exists() else []:
         for ln in p.read_text(encoding="utf-8").splitlines():
             try:
@@ -68,9 +77,12 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
             except json.JSONDecodeError:
                 continue
             pl = e.get("payload") or {}
-            if e.get("actor") == "user" and e.get("kind") == "confirm" \
-                    and pl.get("v") == "confirm" and pl.get("shape"):
-                out[e["target"]["key"]] = pl["shape"]
+            if e.get("actor") == "user" and e.get("kind") == "confirm"                     and pl.get("v") == "confirm" and pl.get("shape"):
+                evs.append((e.get("ts") or "", e.get("batch") or "",
+                            e.get("seq") or 0, e["target"]["key"], pl["shape"]))
+    out: dict[str, str] = {}
+    for _ts, _b, _sq, key, shape in sorted(evs):
+        out[key] = shape
     return out
 
 
