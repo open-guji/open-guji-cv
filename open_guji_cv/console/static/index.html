@@ -213,9 +213,9 @@
             border-bottom:1px solid var(--rule); }
   .rvrrow:last-child { border-bottom:none; }
   .rvpy { color:var(--mute); font-size:.72rem; min-width:3.2rem; }
-  .rvstd { color:var(--indigo); font-family:var(--serif); font-size:.9rem; white-space:nowrap; }
-  .rvin { color:var(--ok); font-size:.68rem; white-space:nowrap; }
-  .rvgloss { color:var(--ink); font-size:.72rem; flex:1; overflow:hidden;
+  .rvstd { color:var(--indigo); font-family:var(--serif); font-size:1.05rem; font-weight:700; white-space:nowrap; }
+  .rvin { color:var(--ok); font-size:.72rem; white-space:nowrap; }
+  .rvgloss { color:var(--ink); font-size:.78rem; flex:1; overflow:hidden;
              text-overflow:ellipsis; white-space:nowrap; }
   .rvzi { color:var(--mute); font-size:.68rem; white-space:nowrap; }
   .qgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(20rem,1fr)); gap:1.2rem; }
@@ -1073,19 +1073,19 @@ async function rvFetchRare(i, force) {
   try {
     const sub = c.sub ? `?sub=${c.sub}&k=10` : '?k=10';
     const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
-    // 一行一个候选：字 + 拼音 + 释义 + 整理本对应字。
-    // 用户 2026-09-05：「异体字不用显示 unicode 和 ids，最好可以显示常见意思，
-    // 以及对应哪个繁体整体字。」IDS/码点搬进 title，需要时悬停看。
+    // 一行一个候选：字 + 【整】/→ 同某字 + 释义。
+    // 用户 2026-09-05：「异体字不用显示 unicode 和 ids，最好可以显示常见意思，以及对应哪个繁体整体字。」
+    // 用户 2026-09-07：「注音不需要；整理本用字太占地方，加一个【整】即可；康熙字典也不需要说明，
+    // 留空间给正式解释；→ 同某字很重要，要保留。」拼音/IDS/码点都进 title，悬停看。
     out.innerHTML = (d.candidates || []).map(x => {
       const std = x.std
         ? `<b class="rvstd" title="整理本里用的是这个字（${x.std_freq} 次）">→ ${x.std}</b>`
-        : (x.freq ? `<span class="rvin" title="整理本里用过 ${x.freq} 次">整理本用字</span>` : '');
+        : (x.freq ? `<span class="rvin" title="整理本里用过 ${x.freq} 次">【整】</span>` : '');
       return `<div class="rvrrow">`
         + `<button class="rvpick rvrarepick" data-i="${i}" data-ch="${x.char}"
-             title="相似度 ${x.score} · ${x.font} · ${x.ids || '—'} · ${x.cp}">${x.char}</button>`
-        + (x.py ? `<span class="rvpy">${x.py}</span>` : '')
+             title="${x.py ? x.py + ' · ' : ''}相似度 ${x.score} · ${x.font} · ${x.ids || '—'} · ${x.cp}">${x.char}</button>`
         + std
-        + `<span class="rvgloss">${x.gloss || ''}</span>`
+        + `<span class="rvgloss" title="${(x.gloss || '').replace(/"/g, '&quot;')}">${x.gloss || ''}</span>`
         + `<a class="rvzi" href="${x.zi}" target="_blank" rel="noopener">字统网</a>`
         + `</div>`;
     }).join('') || '没有候选';

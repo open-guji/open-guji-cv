@@ -887,10 +887,20 @@ def _char_hint(ch: str) -> dict:
         d = (g.get("d") or "").strip()
         # 维基词典那一档偶尔混进 MediaWiki 模板标记（如 __NOTITLECONVERT__），去掉
         d = re.sub(r"__[A-Z]+__|\{\{[^}]*\}\}", "", d).strip()
-        if d:
-            # 康熙释义常是「【正字通】同丘。【風俗通】…」，取到第一个句号为止够看了
-            head = d.split("。")[0]
-            out["gloss"] = (head[:28] + "…") if len(head) > 28 else head
+        # 出处不要（用户 2026-09-07「康熙字典也不需要说明，留空间给正式解释」）：
+        # 「【唐韻】【集韻】𠀤徒弄切，音洞。【廣韻】過也。」→ 反切/注音那句整句丢，
+        # 「《康熙字典》〈補遺 酉集〉…」这种书名号引注也丢；只留释义正文。
+        d = re.sub(r"《[^》]*》〈[^〉]*〉", "", d)
+        d = re.sub(r"【[^】]*】", "", d)
+        d = re.sub(r"[-]", "", d)          # 康熙条目里的私用区乱码
+        sents = [s.strip("，, ") for s in d.split("。") if s.strip("，, ")]
+        # 反切/注音句（「𠀤徒弄切，音洞」「徒東切」）不是释义，跳过
+        sents = [s for s in sents if not re.search(r"切[，,]?(音.)?$|^音.$|^[^，,]*切$", s)]
+        if sents:
+            # 有地方了就多给几句（「姓。通「倪」。如漢代有兒寬」比只剩「姓」有用），到 40 字为止
+            head = "。".join(sents)
+            out["gloss"] = (head[:40] + "…") if len(head) > 40 else head
+        # 注音不给（用户 2026-09-07「注音不需要」）——留在 title 里悬停看
         if g.get("p"):
             out["py"] = g["p"]
     freq = _corpus_freq(DEFAULT_CORPUS)
