@@ -566,6 +566,17 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
         golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
     except Exception:
         golds = {}
+    # 第二意见：维基文库版整理本（2026-09-07）。两本人裁位上互不同的 164 处，现有整理本对 75、
+    # 维基对 8——整体信现有整理本，但维基能抓到它的几处真错（搏/摶、始/姑、棺/輨、會/曾）。
+    # 两本字不同时卡片并排给出，不改任何自动通道。
+    golds2: dict = {}
+    wiki = Path("corpus/zongmu_wikisource_reference.txt")
+    if wiki.exists():
+        try:
+            golds2 = {c.id: c for g in align_book(book, pgs, st, corpus_path=wiki)
+                      if g.anchored for c in g.chars}
+        except Exception:
+            golds2 = {}
     ledger = BookLedger.load_or_empty()
     out: list[dict] = []
     for pg in pgs:
@@ -590,8 +601,12 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
                 ref = None
                 if gc and gc.reading:
                     pf = ledger.preferred_form(gc.reading)
+                    gc2 = golds2.get(r.id)
                     ref = {"char": gc.reading, "op": gc.align_op, "run": gc.op_run,
-                           "form": pf if pf and pf != gc.reading else None}
+                           "form": pf if pf and pf != gc.reading else None,
+                           # 维基版在这一位印的字，只在与现有整理本不同时给
+                           "wiki": (gc2.reading if gc2 and gc2.reading and gc2.reading != gc.reading
+                                    else None)}
                 out.append({
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
