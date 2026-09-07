@@ -296,9 +296,20 @@ class SeedAdmitStep(Step):
                 #   2. 库候选里要有语义同字的（形状不背书就不算两路互证）；
                 #   3. 形近家族、never_match/db_inconsistent 护栏照拦；
                 #   4. always_review 的字不碰（下面那道闸也会再拦一次）。
+                #   5. **字级证据强时不许短语改写字形**（2026-09-06 异体字线实锤）：
+                #      vol02:157:2:12b 库判 same cov 0.9984、OCR top1 也同字，两路形状
+                #      证据一致，而短语把它读成了别的字——产物因此留下一条假转换，
+                #      在账本的「关系图外转换对」才露头。段级匹配的价值是「整段比逐字稳」，
+                #      但短语只差一个字也能匹配上，于是那个字被短语的读法改写。
+                #      所以：库 same 且 cov ≥ solo_cov 时，短语只能**同意**不能**改写**。
+                #      全书实测该通道只放行 5 条，加这条护栏一条都不损失。
+                lib_same_strong = (r.verdict == "same" and r.char
+                                   and r.cov >= p.solo_cov)
                 if (not ok and note_ch and r.sub
                         and r.guard is None
-                        and "db_inconsistent" not in doubts):
+                        and "db_inconsistent" not in doubts
+                        and not (lib_same_strong
+                                 and vmap.semantic(r.char) != vmap.semantic(note_ch))):
                     cands_sem = {vmap.semantic(c) for c, _v in r.candidates[:5]}
                     if (vmap.semantic(note_ch) in cands_sem
                             and note_ch not in NEAR_FORM_CHARS):
