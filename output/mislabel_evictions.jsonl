@@ -120,3 +120,5 @@
 {"instance_id": "vol01:157:2:9", "char": "已", "reason": "v1_align_stored_ref_form", "note": "库自洽审计：v1 align 通道按整理本存成 已，图上刻的是 巳（人裁子库 巳 cov 0.9999，已 无一命中）。留着会把 v2 的 巳 字块拉向 已（vol01:136:6:3 库top1=已 而人裁 巳 即此）。", "evicted_at": "2026-09-07T01:27:38Z"}
 {"instance_id": "vol01:57:9:14", "char": "已", "reason": "v1_align_stored_ref_form", "note": "库自洽审计：v1 align 通道按整理本存成 已，图上刻的是 巳（人裁子库 巳 cov 0.9997，已 无一命中）。留着会把 v2 的 巳 字块拉向 已（vol01:136:6:3 库top1=已 而人裁 巳 即此）。", "evicted_at": "2026-09-07T01:27:38Z"}
 {"instance_id": "vol01:20:1:5", "char": "已", "reason": "v1_align_stored_ref_form", "note": "库自洽审计：v1 align 通道按整理本存成 已，图上刻的是 巳（人裁子库 巳 cov 0.9966，已 无一命中）。留着会把 v2 的 巳 字块拉向 已（vol01:136:6:3 库top1=已 而人裁 巳 即此）。", "evicted_at": "2026-09-07T01:27:38Z"}
+{"instance_id": "vol01:76:8:7", "char": "倉", "reason": "contaminated_crop", "note": "库自洽审计页用户裁定：倉 字块上方有污点，不能当刻例", "evicted_at": "2026-09-07T16:54:40Z"}
+{"instance_id": "vol01:143:9:13", "char": "會", "reason": "mislabeled_v1", "note": "库自洽审计页用户裁定：图上是 曾，库里存成了别的字", "evicted_at": "2026-09-07T16:54:40Z"}
