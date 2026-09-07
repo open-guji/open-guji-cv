@@ -87,3 +87,6 @@ output/*/phase6_labels/
 output/*/phase9_seed/
 output/*/step2_columns/
 output/*/step3_input/
+
+# 字形库自洽审计产物（scripts/audit_glyph_consistency.py，可再生）
+output/audit_glyph_*

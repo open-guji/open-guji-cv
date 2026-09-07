@@ -132,8 +132,9 @@ def _reading_order(chars):
     return out
 
 
-def collect(book: str, pages: list[int], chars: set[str], st, corpus, index):
-    """→ [条目]。取**最终字**落在 chars 里的全部字位（人裁优先）。"""
+def collect(book: str, pages: list[int], chars: set[str], st, corpus, index,
+            ids: set[str] = frozenset()):
+    """→ [条目]。取**最终字**落在 chars 里、或 id 在 ids 里的全部字位（人裁优先）。"""
     truth = load_verdicts(book)
     cache = ImageCache()
     out = []
@@ -171,7 +172,7 @@ def collect(book: str, pages: list[int], chars: set[str], st, corpus, index):
                     for k in range(min(i2 - i1, j2 - j1)):
                         ref_at[i1 + k] = j1 + k
         for i, s in enumerate(page_slots):
-            if s["char"] not in chars:
+            if s["char"] not in chars and s["id"] not in ids:
                 continue
             r = s["rec"]
             mr = mm.get(s["id"])
@@ -472,7 +473,10 @@ apply();
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="按字复核页")
-    ap.add_argument("--chars", required=True, help="要复核的字，连写如 曾會")
+    ap.add_argument("--chars", default="", help="要复核的字，连写如 曾會")
+    ap.add_argument("--ids", default="", help="字位 id 清单文件（一行一个 book:page:col:slot[a|b]），"
+                                              "与 --chars 可并用；audit_glyph_consistency 的产物用这个")
+    ap.add_argument("--title", default="", help="页面标题（默认按 --chars / --ids 文件名）")
     ap.add_argument("--books", default="vol01,vol02")
     ap.add_argument("--pages", default="", help="页表达式；空 = 各书全部有产物的页")
     ap.add_argument("--corpus", default=DEFAULT_CORPUS)
@@ -485,6 +489,13 @@ def main() -> int:
 
     t0 = time.time()
     chars = set(a.chars)
+    ids: set[str] = set()
+    if a.ids:
+        ids = {ln.strip().split()[0] for ln in Path(a.ids).read_text(encoding="utf-8").splitlines()
+               if ln.strip() and not ln.startswith("#")}
+    if not chars and not ids:
+        ap.error("--chars 与 --ids 至少给一个")
+    label = a.title or a.chars or Path(a.ids).stem
     st = ProductStore()
     raw = (REPO / a.corpus).read_text(encoding="utf-8")
     corpus = "".join(c for c in raw if is_han(c))
@@ -498,14 +509,14 @@ def main() -> int:
         else:
             d = st.root / book / "seed_admit"
             pages = sorted(int(p.stem[1:]) for p in d.glob("p*.json")) if d.exists() else []
-        got = collect(book, pages, chars, st, corpus, index)
+        got = collect(book, pages, chars, st, corpus, index, ids)
         print(f"  {book}: {len(pages)} 页 → {len(got)} 个字位")
         entries.extend(got)
 
-    batch = a.batch or f"{a.books.split(',')[0].strip()}-review-{a.chars}"
-    out = Path(a.out) if a.out else REPO / "output" / f"review_{a.chars}.html"
+    batch = a.batch or f"{a.books.split(',')[0].strip()}-review-{label}"
+    out = Path(a.out) if a.out else REPO / "output" / f"review_{label}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(a.chars, entries,
+    out.write_text(render(label, entries,
                           {"books": a.books, "api": a.api.rstrip("/"), "batch": batch}),
                    encoding="utf-8")
     cnt = Counter(e["source"] for e in entries)
