@@ -200,6 +200,13 @@ def glyphdb_admit(events, db_path: str = "output/glyph.db",
     for e, _dest in admits:
         shape = e.payload.get("shape") or e.payload.get("char")
         reading = e.payload.get("reading") or shape
+        # 只有 己/已/巳 分字形与文意（用户 2026-09-04 定；审查页与组视图同规则）。
+        # 其它字的 reading 一律跟随 shape——旧组视图曾对所有组填整理本字当文意
+        # （「卽 读 即」×45），那批事件已清账，这里再守一道免得任何来源重犯。
+        if shape and shape not in ("己", "已", "巳"):
+            reading = shape
+        if reading and (len(reading) != 1 or ord(reading) < 0x2E80):
+            reading = shape                 # 拼音首字母那类（输入法没转）
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
@@ -228,6 +235,20 @@ def glyphdb_admit(events, db_path: str = "output/glyph.db",
             continue
         # v2 命名空间：见上面「id 必须加前缀」那节
         db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
+        # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
+        # 第一次裁 巳、后来改判 已，第二个事件被闸掉，库里永远是 巳——seed_admit 的
+        # 人裁通道读库就跟着错，判据 E 报「存 巳 人裁 已」（29:4:19、80:5:7；更早
+        # 蠹、32:7:10 也是它）。所以：库里已有**人裁**记录且字形或释读不同 → 撤旧再进。
+        # 机器进的（provenance 非 human）本来就该被人裁覆盖，同样撤。
+        prev = db.conn.execute(
+            "SELECT a.provenance, a.char, g.char FROM admissions a "
+            "  LEFT JOIN exemplars e ON e.instance_id = a.instance_id "
+            "  LEFT JOIN glyphs g ON g.glyph_id = e.glyph_id "
+            " WHERE a.instance_id = ?", (db_id,)).fetchone()
+        if prev is not None and (prev[2] != shape or prev[1] != reading):
+            from ..clustering.audit import evict_instance
+            evict_instance(db, db_id)
+            res.updated += 1
         ok = db.admit_instance(
             db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
             provenance="human", shape=shape,
