@@ -75,6 +75,16 @@ class SeedAdmitParams(BaseModel):
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
     db_path: str = "output/glyph.db"    # 读人裁记录用；与 glyph_match 同一个库
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
+    relax_split_ref: bool = True
+    """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
+    「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
+    实测 41 条人裁：文意对 39、字形对 40。关掉 = 回到「永远人审」。"""
+    relax_ref_agree: bool = True
+    """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
+    「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
+    文意取整理本。两册人审位实测 整理本≡库top1 10/10、==上下文 4/4，全部 1,1xx 条
+    人裁真值上反例 0。同时让「义定形未定」的位在库 top1 属组内形时直接取它当形
+    （evidence.form.state=guess，判据 E 会把它算进抽审分母）。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
@@ -115,7 +125,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.4", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
@@ -297,15 +307,26 @@ class SeedAdmitStep(Step):
                 # 己/已/巳 永远人审（用户 2026-09-04 定）。这三个字的字形与
                 # 文意会分岔（同词异写 + 真的另一个字），任何自动通道都不该
                 # 替人决定读法——字形层护栏拦不住 align×库 这种跨源一致。
-                if ok and (align_char in always
-                           or (r.candidates and r.candidates[0][0] in always)
-                           or (r.char in always)):
-                    ok, channel = False, None
+                if (align_char in always
+                        or (r.candidates and r.candidates[0][0] in always)
+                        or (r.char in always)):
+                    if p.relax_split_ref and align_char in always:
+                        # 用户 2026-09-06 改口：「己已巳 没必要每次都单独选文意，根据上下文
+                        # 或整理本直接选；字形选哪个都行，不太重要」。文意 = 整理本字，
+                        # 字形 = 库 top1（若也是这三字之一，否则跟整理本）。字形/文意
+                        # 的取值在 _pick_char 之后统一写（见下）。整理本没给字的仍人审。
+                        ok, channel = True, "split_ref"
+                    elif ok:
+                        ok, channel = False, None
 
                 char, reading = _pick_char(
                     ok=ok, channel=channel, align_char=align_char,
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
+                if channel == "split_ref":
+                    _top = r.candidates[0][0] if r.candidates else None
+                    char = _top if _top in always else align_char
+                    reading = align_char if align_char != char else None
                 # variant_form 分支要用**改名前**的 channel 判——见下面「⚠️ dual 档判 variant_form
                 # 判早了」。这里先存一份，改名（下一段）之后再用它，别被 "dual" 字符串盖掉。
                 is_corpus_channel = channel in _CORPUS_CHANNELS
@@ -340,7 +361,16 @@ class SeedAdmitStep(Step):
                             if ranks:
                                 fd = decide_form(align_char, forms, list(r.candidates), ledger, ranks)
                         form_ev = fd.to_evidence()
-                        if fd.state == "open":
+                        _top = r.candidates[0][0] if r.candidates else None
+                        if fd.state == "open" and p.relax_ref_agree and _top in forms:
+                            # 用户 2026-09-06「整理本和字形分析一致时直接放行」：组里哪个形
+                            # 没定，但库 top1 就是组内的一个形——拿它当形（最好的猜测），文意
+                            # 取整理本。证据里 state=guess，判据 E 的分母（_multi_form）会把
+                            # 它算进抽审；错了走 audit_glyph_consistency 那套人裁子库复查。
+                            char = _top
+                            reading = align_char if align_char != char else None
+                            form_ev = {**form_ev, "state": "guess"}
+                        elif fd.state == "open":
                             ok, channel, prov, form_open = False, None, "", True
                             doubts = doubts + ["form_open"]
                             char = None
@@ -364,6 +394,24 @@ class SeedAdmitStep(Step):
                         and not (r.candidates and r.candidates[0][0] in always):
                     ok, channel, char, prov = True, "context", d.char, "context"
 
+                # 整理本 × 形状/上下文 一致 → 放行（用户 2026-09-06「很多都是整理本存在时
+                # 非常明显的选择，能不能放松要求」）。走到这里还没放行的位，若整理本字与库
+                # top1 语义同字（刻本形归一后是同一个字），或与 Step6 上下文定字相同，就放行：
+                # 形取库 top1（它是刻本形），文意取整理本。两册人审位实测（关掉人裁通道的
+                # 产物）整理本≡库top1 10/10、==上下文 4/4；全部人裁真值上反例 0（relax_study）。
+                # 己已巳 不走这里（上面 split_ref 单独处理）。
+                if (not ok and p.relax_ref_agree and align_char and align_char not in always):
+                    _top = r.candidates[0][0] if r.candidates else None
+                    _d = dmap.get(r.id)
+                    if _top and _top not in always \
+                            and vmap.semantic(_top) == vmap.semantic(align_char):
+                        ok, channel, prov = True, "ref_lib", "match"
+                        char = _top
+                        reading = align_char if align_char != _top else None
+                    elif _d and _d.char and _d.char == align_char:
+                        ok, channel, prov = True, "ref_ctx", "context"
+                        char = align_char
+                        reading = None
                 if ok:
                     n_auto += 1
                 else:
