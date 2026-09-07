@@ -894,8 +894,10 @@ def _char_hint(ch: str) -> dict:
         d = re.sub(r"【[^】]*】", "", d)
         d = re.sub(r"[-]", "", d)          # 康熙条目里的私用区乱码
         sents = [s.strip("，, ") for s in d.split("。") if s.strip("，, ")]
-        # 反切/注音句（「𠀤徒弄切，音洞」「徒東切」）不是释义，跳过
-        sents = [s for s in sents if not re.search(r"切[，,]?(音.)?$|^音.$|^[^，,]*切$", s)]
+        # 反切/注音不是释义：句首连串的「側氏切阻氏切，」「𠀤徒弄切，音洞，」先剥掉，
+        # 剥完只剩反切/「音某」的整句跳过
+        sents = [re.sub(r"^(?:[^，,。\s]{1,3}切[，,]?)+(?:音.[，,]?)?", "", s).strip("，, ") for s in sents]
+        sents = [s for s in sents if s and not re.search(r"切[，,]?(音.)?$|^音.$", s)]
         if sents:
             # 有地方了就多给几句（「姓。通「倪」。如漢代有兒寬」比只剩「姓」有用），到 40 字为止
             head = "。".join(sents)
