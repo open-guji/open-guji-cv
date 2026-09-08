@@ -1043,6 +1043,59 @@ def api_round(book: str = "vol01", pages: str = "") -> dict:
     return out
 
 
+@app.get("/api/review/rate-history")
+def api_rate_history(book: str = "") -> dict:
+    """人审率台账（`scripts/track_review_rate.py` 的历史 + SEED）。
+
+    体检页的 B 行只报**当下这一跑**，而这条线最该回答的是纵向问题：一册从零开始审，
+    掉得多快、拐点在哪。台账把每次重跑记一行，这里读出来给前端画趋势。
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_track", Path(__file__).resolve().parents[2] / "scripts" / "track_review_rate.py")
+    if spec is None or spec.loader is None:
+        return {"rows": []}
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+        rows = mod._hist()
+    except Exception as e:
+        return {"rows": [], "error": str(e)}
+    if book:
+        rows = [r for r in rows if r.get("book") == book]
+    rows.sort(key=lambda r: (r.get("book", ""), r.get("ts") or r.get("date", "")))
+    return {"rows": rows}
+
+
+class RateSnapIn(BaseModel):
+    books: str = "vol01,vol02"
+    note: str = ""
+
+
+@app.post("/api/review/rate-history")
+def api_rate_snapshot(req: RateSnapIn) -> dict:
+    """记一行台账（体检页的「记一笔」按钮）。重跑完顺手点，别再事后翻聊天记录。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_track", Path(__file__).resolve().parents[2] / "scripts" / "track_review_rate.py")
+    if spec is None or spec.loader is None:
+        raise HTTPException(500, "找不到 scripts/track_review_rate.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    st = ProductStore()
+    out = []
+    with open(mod.HIST, "a", encoding="utf-8") as f:
+        for b in [x.strip() for x in req.books.split(",") if x.strip()]:
+            rec = mod.measure(b, st)
+            if rec is None:
+                continue
+            if req.note:
+                rec["note"] = req.note
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            out.append(rec)
+    return {"added": out}
+
+
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
