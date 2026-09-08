@@ -138,6 +138,22 @@ def warm(charsets: list[tuple[str, ...]], root: str = "fonts",
         _index(tuple(cs), root, backend)
 
 
+_NORM_CACHE: dict[int, np.ndarray] = {}
+
+
+def _row_norms(mat: np.ndarray) -> np.ndarray:
+    """模板矩阵的行模长，按矩阵身份缓存（`_index` 的 lru_cache 保证同一批查询同一个对象）。"""
+    key = id(mat)
+    v = _NORM_CACHE.get(key)
+    if v is None or v.shape[0] != mat.shape[0]:
+        v = np.linalg.norm(mat, axis=1)
+        v[v == 0] = 1.0
+        if len(_NORM_CACHE) > 8:
+            _NORM_CACHE.clear()
+        _NORM_CACHE[key] = v
+    return v
+
+
 def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],
                k: int = 10, root: str = "fonts",
                backend: str = "hog") -> list[FontHit]:
@@ -156,11 +172,17 @@ def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],
         return []
     q = get_feature(backend).extract(patch[None, ...].astype(np.uint8))[0]
     qn = float(np.linalg.norm(q)) or 1.0
-    norms = np.linalg.norm(mat, axis=1)
-    norms[norms == 0] = 1.0
+    # 模板矩阵的行模长只跟索引有关，**每次查询重算是白烧**：大表 8 万行 × 每次
+    # 0.1s，占了单次查询的一大半（2026-09-07 实测 HOG 大表 239ms，审查页预取因此
+    # 每张卡要等 0.35s）。按矩阵对象 id 缓存一份，索引本身有 lru_cache 保证不变。
+    norms = _row_norms(mat)
     sims = (mat @ q) / (norms * qn)
     best: dict[str, FontHit] = {}
-    for i in np.argsort(-sims):
+    # 只要前若干名，用 argpartition 拿候选池再局部排序——full argsort 对 8 万行
+    # 是纯浪费（O(n log n) vs O(n)）。池子取 k*8 且不小于 64，够去重后凑满 k 个。
+    pool = min(len(sims), max(64, k * 8))
+    cand = np.argpartition(-sims, pool - 1)[:pool]
+    for i in cand[np.argsort(-sims[cand])]:
         ch, fname = keys[int(i)]
         s = float(sims[int(i)])
         if ch not in best or s > best[ch].score:
