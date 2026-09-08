@@ -413,6 +413,11 @@
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.6rem">
         <label class="muted">册 <select id="cl_book"></select></label>
         <label class="muted">页 <input id="cl_pages" value="body" size="10" title="body = 正文页；或 3-6,9"></label>
+        <label class="muted">类型 <select id="cl_kind" title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙">
+          <option value="r2s">粘连 R2s</option>
+          <option value="split_char">切进字里</option>
+          <option value="all">两者</option>
+        </select></label>
         <label class="muted">条数 <input id="cl_limit" value="250" size="4"></label>
         <label class="muted">批次 <input id="cl_batch" size="22" placeholder="留空 = 按册自动命名"></label>
         <label class="muted"><input type="checkbox" id="cl_todo" checked> 只看未裁</label>
@@ -1443,9 +1448,11 @@ function clToggleTag(i, t) {
   if (el) el.querySelectorAll('.cltags button').forEach(b => b.classList.toggle('on', !!CL.tags[c.id][b.dataset.t]));
 }
 
-function clBatch() {
+function clBatch() {   // 批次名带类型后缀：两类切线的金标别混在一批里
   const book = $('#cl_book').value || $('#book').value;
-  return $('#cl_batch').value.trim() || `${book}-cutline`;
+  const k = ($('#cl_kind') && $('#cl_kind').value) || 'r2s';
+  const suffix = k === 'r2s' ? '' : '-' + k;
+  return $('#cl_batch').value.trim() || `${book}-cutline${suffix}`;
 }
 
 function clCard(c, i) {
@@ -1656,7 +1663,8 @@ async function clLoad() {
   let d;
   try {
     d = await api(`/api/cutline/cases?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
-                  + `&limit=${limit}&batch=${encodeURIComponent(batch)}&skip_done=${$('#cl_todo').checked}`);
+                  + `&limit=${limit}&batch=${encodeURIComponent(batch)}&skip_done=${$('#cl_todo').checked}`
+                  + `&kind=${encodeURIComponent($('#cl_kind').value)}`);
   } catch (e) { $('#cl_msg').textContent = '失败：' + e.message; return; }
   let done = {};
   try { done = (await api(`/api/cutline/verdicts?batch=${encodeURIComponent(batch)}`)).verdicts || {}; } catch (e) { /* 新批次 */ }
@@ -1672,7 +1680,8 @@ async function clLoad() {
   $('#cl_cards').innerHTML = d.cases.map(clCard).join('');
   d.cases.forEach((c, i) => { if (CL.poly[c.id]) clRedrawPoly(i); });
   if ($('#cl_todo').checked) d.cases.forEach((c, i) => { if (CL.done[c.id]) document.getElementById('clc' + i).style.display = 'none'; });
-  $('#cl_msg').textContent = `本册 R2s 共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${batch}`;
+  const kindName = {r2s: '粘连 R2s', split_char: '切进字里', all: '粘连+切进字里'}[$('#cl_kind').value] || 'R2s';
+  $('#cl_msg').textContent = `本册${kindName}共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${batch}`;
   clFocus(0);
 }
 

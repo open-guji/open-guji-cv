@@ -28,6 +28,77 @@ def body_pages(book: str) -> list[int]:
                   and (r.get("expected") or {}).get("page_type") == "body")
 
 
+def split_char_boundaries(book: str, pages: list[int], store=None,
+                          short_ratio: float = 0.80, tall_ratio: float = 1.18,
+                          gap_frac: float = 0.06) -> list[dict]:
+    """「切进字里」的格线：一矮一高相邻、切点又落在**零墨空隙**上。
+
+    与 `r2s_boundaries` 互补，两者互斥：R2s 是「切点上有墨、附近没有墨谷」（真粘连，
+    投影法无解）；这里是「切点上没什么墨」——正因为有个零墨空隙，DP 才乐意切在那儿，
+    而那个空隙是**字内部的**（「書」的横画之间、「辩」的左右部件之间），不是字距。
+
+    2026-09-08：这类占了剩余切分缺陷的主要部分（辩/書/廢/敘/亦），但**一条也不在
+    R2s 候选里**，所以攒了 250 条 R2s 金标也标不到它。判据（都相对本列格高中位数）：
+    相邻两格一个 ≤`short_ratio`、一个 ≥`tall_ratio`，且切点周围 ±`gap_frac`×格高内
+    最低墨 ≤ INK_ON_LINE——三条合起来才算，单看格高会把「留白 + 字」的首格全捞进来。
+    """
+    from ..core.step import page_key
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.store import ProductStore
+    from .rulers import INK_ON_LINE, _col_profile
+
+    st = store or ProductStore()
+    out: list[dict] = []
+    for pg in pages:
+        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        if cells is None:
+            continue
+        for cc in cells.columns:
+            if not cc.ok or len(cc.cells) != len(cc.boundaries) - 1:
+                continue
+            prof = _col_profile(st, book, pg, cc.col)
+            if prof is None:
+                continue
+            h = len(prof)
+            chars = [c for c in cc.cells if c.kind == "char"]
+            if len(chars) < 5:
+                continue
+            hs = sorted(c.y1 - c.y0 for c in chars)
+            med = float(hs[len(hs) // 2])
+            if med <= 0:
+                continue
+            col_w = int(max(c.x1 for c in cc.cells) + min(c.x0 for c in cc.cells))
+            for bi, b in enumerate(cc.boundaries[1:-1], start=1):
+                up, dn = cc.cells[bi - 1], cc.cells[bi]
+                if up.kind != "char" or dn.kind != "char":
+                    continue
+                hu, hd = up.y1 - up.y0, dn.y1 - dn.y0
+                pair = ((hu <= short_ratio * med and hd >= tall_ratio * med)
+                        or (hd <= short_ratio * med and hu >= tall_ratio * med))
+                if not pair:
+                    continue
+                y = int(round(b))
+                if not (0 <= y < h):
+                    continue
+                w = max(2, int(gap_frac * med))
+                lo, hi = max(0, y - w), min(h, y + w + 1)
+                if float(prof[lo:hi].min()) > INK_ON_LINE:
+                    continue          # 切点附近没有零墨空隙 → 是别的毛病
+                out.append(dict(
+                    id=f"{book}:{pg}:{cc.col}:{up.slot}",
+                    book=book, page=pg, col=cc.col, bi=bi, y=y,
+                    ink=round(float(prof[y]), 3), best=round(float(prof[lo:hi].min()), 3),
+                    h_above=int(hu), h_below=int(hd), h_med=int(med),
+                    slot_above=up.slot, slot_below=dn.slot,
+                    y0=int(round(up.y0)), y1=int(round(dn.y1)),
+                    x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
+                    col_h=h, col_w=col_w,
+                    seam=list(getattr(up, "seam_bottom", None) or []) or None,
+                    kind="split_char",
+                ))
+    return out
+
+
 def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
     """所有 R2s 格线（只看有现役 cells 产物的页）。"""
     from ..core.step import page_key
