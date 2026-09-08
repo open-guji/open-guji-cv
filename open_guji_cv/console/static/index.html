@@ -695,7 +695,7 @@ async function runOneEval(id, quiet) {
 // 所以每张卡收两个值：shape（图上刻的形，默认取候选）与 reading（文意，
 // 默认等于 shape）。两者不同的那些正是已/巳、卽/即 这类，事件里都带上，
 // 下游按 GlyphDB 的 shape/char 分岔存（charset_and_lm.md §四）。
-let RV = { cards: [], cur: 0, verdicts: {}, seen: {}, rare: {} };
+let RV = { cards: [], cur: 0, verdicts: {}, seen: {}, rare: {}, rareFly: new Set() };
 
 // **只有 己/已/巳 这三个字才分「字形」与「文意」**（用户 2026-09-04 定：
 // 「除了己已巳 这三个字，其他的都不用区分字形和文意」）。
@@ -761,27 +761,65 @@ function rvBtnsHtml(c, i) {
 }
 // 生僻字 top1 只为当前卡和后两张拉（k=3，约 0.5s 一张，首次 5s 热索引）。
 // 整批预取会让页面卡住（2026-09-05 教训），完整 10 个仍走「查候选」。
+// 生僻字 top1 预取。一次请求约 0.35s（后端 HOG+CNN 检索，不可能更快），所以关键是
+// **别让它挡住翻卡**：2026-09-07 用户报「页面经常卡，似乎在 load 候选字形」，实测翻卡本身
+// 只要 17ms，但串行队列 5 秒才预取到 7 张——翻得比它快就一直看到「候选加载中…」，
+// 按键 3 没反应，手感就是卡。三处改法：
+//   1. **并发** PREFETCH_CONC 条（0.35s 是网络/计算等待，并发线性提速）；
+//   2. 窗口放大到 PREFETCH_AHEAD 张，且以当前卡为中心**优先近的**，翻到哪儿都大概率已就绪；
+//   3. 回填时**只改那一个按钮的 innerHTML**，不重建整行 DOM（原来重建会把正在按的按钮换掉）。
+const PREFETCH_CHUNK = 24;
+
 async function rvPrefetchRare(i) {
   RV.rareWant = i;
   if (RV.rareBusy) return;
   RV.rareBusy = true;
+  const book = $('#rv_book').value || $('#book').value || 'vol01';
   try {
-    while (RV.rareWant !== null && RV.rareWant !== undefined) {
-      const start = RV.rareWant; RV.rareWant = null;
-      for (let j = start; j < Math.min(start + 3, RV.cards.length); j++) {
-        const c = RV.cards[j];
-        if (!c || RV.rare[c.id] !== undefined) continue;
-        try {
-          const sub = c.sub ? `?sub=${c.sub}&k=3` : '?k=3';
-          const d = await api(`/api/rare/${$('#rv_book').value || 'vol01'}/${c.page}/${c.col}/${c.slot}${sub}`);
-          RV.rare[c.id] = d.candidates || [];
-        } catch (e) { RV.rare[c.id] = []; }
-        const el = document.getElementById('rvbtns' + j);
-        if (el && RV.cards[j] === c) el.innerHTML = rvBtnsHtml(c, j);
-        if (RV.rareWant !== null) break;
+    for (;;) {
+      // 以当前卡为中心、先后再前收一批还没拉过的
+      const c0 = RV.rareWant ?? RV.cur; RV.rareWant = null;
+      const batch = [];
+      for (let d = 0; d < RV.cards.length && batch.length < PREFETCH_CHUNK; d++) {
+        for (const j of (d ? [c0 + d, c0 - d] : [c0])) {
+          const c = RV.cards[j];
+          if (c && RV.rare[c.id] === undefined && !RV.rareFly.has(c.id)) {
+            RV.rareFly.add(c.id); batch.push({ j, c });
+          }
+        }
+      }
+      if (!batch.length) return;
+      try {
+        const d = await api('/api/rare/batch', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ book, k: 3,
+            slots: batch.map(({ c }) => `${c.page}:${c.col}:${c.slot}${c.sub || ''}`) }),
+        });
+        for (const { j, c } of batch) {
+          RV.rare[c.id] = d.rare[`${c.page}:${c.col}:${c.slot}${c.sub || ''}`] || [];
+          RV.rareFly.delete(c.id);
+          // 只换那个「形」占位按钮，别重建整行——重建会打断正在进行的点击/输入
+          const el = document.getElementById('rvbtns' + j);
+          if (el && RV.cards[j] === c) {
+            const slot = el.querySelector('.rvwait');
+            if (slot) slot.outerHTML = rvOneBtnHtml(c, j);
+            else el.innerHTML = rvBtnsHtml(c, j);
+          }
+        }
+      } catch (e) {
+        for (const { c } of batch) { RV.rare[c.id] = []; RV.rareFly.delete(c.id); }
       }
     }
   } finally { RV.rareBusy = false; }
+}
+
+/** 预取回填时用：只渲染「形」那一个按钮（替换占位的 .rvwait）。 */
+function rvOneBtnHtml(c, i) {
+  const v = RV.verdicts[c.id] || {};
+  const e = rvKeyList(c).find(x => x.srcs.includes('形'));
+  if (!e || !e.ch) return `<span class="rvwait" title="生僻字算法没给出候选">·</span>`;
+  return `<button data-i="${i}" data-ch="${e.ch}" class="rvpick${v.shape === e.ch ? ' pick' : ''}"
+     title="${e.note}">${e.keys.length ? e.keys.join('/') + '·' : ''}${e.ch}<sub class="rvsrc">${e.srcs.join('·')}</sub></button>`;
 }
 
 function rvCard(c, i) {
@@ -1107,7 +1145,7 @@ async function rvLoad() {
     done = v.verdicts || {};
   } catch (e) { /* 批次还不存在就是没裁过，正常 */ }
   RV = { cards: d.cards, cur: 0, verdicts: { ...done, ...(RV.verdicts || {}) },
-       seen: RV.seen || {}, rare: RV.rare || {}, snapshot: null };
+       seen: RV.seen || {}, rare: RV.rare || {}, rareFly: new Set(), snapshot: null };
   // 卡片一进列表就算「看见」——dwell 从这里算到落裁那一刻
   const t0 = Date.now();
   d.cards.forEach(c => { if (!RV.seen[c.id]) RV.seen[c.id] = t0; });
