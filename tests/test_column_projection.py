@@ -278,10 +278,14 @@ def test_page_column_windows_extends_above_border_for_raised_column():
     在版框以上，直接没了（14 页实测 15 个抬头列各被切掉 106~200px）。"""
     box = HeadRaiseBorder(col=3, inner_y=120.0, outer_y=80.0)
     res = _result_with_tilted_top(head_raise=[box])
-    wins = {w_.col: w_ for w_ in page_column_windows(res)}
+    wins = {w_.col: w_ for w_ in page_column_windows(res, head_pad=0.0)}
     raised = wins[3]
     assert raised.raised is True
     assert raised.top_y == 120.0
+    # HEAD_PAD：线心之上再开一截，抬头字才不被窗口顶边切（2026-09-08 vol01/32「太祖」）
+    padded = {w_.col: w_ for w_ in page_column_windows(res, head_pad=30.0)}
+    assert padded[3].top_y == 90.0
+    assert padded[2].top_y == wins[2].top_y, "普通列不受 head_pad 影响"
     # 主版框在列图坐标里落在正数位置，Step 3 的 border_top 要用它
     assert raised.border_top_in_column > 80
     assert wins[2].raised is False and abs(wins[2].border_top_in_column) < 1e-6

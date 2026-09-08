@@ -1180,8 +1180,14 @@ _cutline_expected_cache: dict = {}
 
 @app.get("/api/cutline/cases")
 def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
-                      seed: int = 0, batch: str | None = None, skip_done: bool = True) -> dict:
-    """R2s 格线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。"""
+                      seed: int = 0, batch: str | None = None, skip_done: bool = True,
+                      kind: str = "r2s") -> dict:
+    """切线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。
+
+    `kind`：`r2s` 真粘连（切点有墨、附近无墨谷，投影法无解）；`split_char`
+    切进字里（一矮一高 + 切点落在字**内部**的零墨空隙，2026-09-08 新增，
+    见 `eval/touching.split_char_boundaries`）；`all` 两者都出。
+    """
     from ..eval import touching as T
 
     bk = load_book(book)
@@ -1190,7 +1196,12 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     else:
         pg = bk.resolve_pages(pages)
     st = ProductStore()
-    cases = T.r2s_boundaries(book, pg, st)
+    if kind == "split_char":
+        cases = T.split_char_boundaries(book, pg, st)
+    elif kind == "all":
+        cases = T.r2s_boundaries(book, pg, st) + T.split_char_boundaries(book, pg, st)
+    else:
+        cases = T.r2s_boundaries(book, pg, st)
     n_all = len(cases)
     done: set[str] = set()
     if skip_done:
