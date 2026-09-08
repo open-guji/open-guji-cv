@@ -217,6 +217,32 @@ def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[floa
 # 只有切分点是不够的：下游要知道每一格**是什么**（正文字/空白/双行小注的
 # 哪一半），才谈得上装配文本与隔离字形。类型口径见 `CELL_KINDS`。
 
+# 极低墨候选（见 fit_row_boundaries 里的说明）：墨量低于此比例×列宽的行直接进候选，
+# 不问凸出度。0.02 是金标标定——4 条漏网的人裁切点墨量为 0.006~0.116×列宽，取 0.02
+# 能捞回墨量最低的那两条（另两条靠「矮格墨满」代价 + 已有候选解决）。
+def _runs_of(mask: np.ndarray) -> list[tuple[int, int]]:
+    """布尔序列里连续 True 的段 [(起, 止含), ...]。"""
+    out: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, v in enumerate(mask):
+        if v and start is None:
+            start = i
+        elif not v and start is not None:
+            out.append((start, i - 1)); start = None
+    if start is not None:
+        out.append((start, len(mask) - 1))
+    return out
+
+
+# 极低墨候选（见 fit_row_boundaries 里的说明）：墨量低于此比例×列宽的行直接进候选，
+# 不问凸出度——`find_valleys` 的凸出度过滤会把「浅而干净」的谷滤掉（vol01/68 c8 的
+# 理想切点墨量只有 1px 却落选），而**代价项选不了一个不在候选集里的点**。
+# 0.12 是 47 条人裁切线金标扫出来的：0.02/0.05/0.08/0.12 四档里 0.12 命中最多
+# （moved 14/19）且不弄坏任何 ok（25/25 仍 0px）；0.05、0.08 反而各弄坏 1 条
+# ——**不是单调的，别顺手往中间调**。
+LOW_INK_FRAC = 0.12
+LOW_INK_SEP = 12          # 与已有候选的最小间距（px），免得同一条缝挤进两个点
+
 CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")
 """**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
 它们都是字，按坐标来区分位置」）。「抬头」不是一种跟"字/空白/夹注"并列的
@@ -311,7 +337,11 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          blank_cost_full: float = 0.01,
                          blank_lam_frac: float = 0.1,
                          drop_lam: float = 0.3,
-                         lam4: float = 0.0) -> list[float] | None:
+                         lam4: float = 0.0,
+                         mass_lam: float = 1.0,
+                         mass_h: float = 0.79,
+                         mass_min: float = 0.100,
+                         cell_w: float = 0.0) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -379,6 +409,22 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         return None
 
     cmax = None if curve is None else np.asarray(curve, dtype=np.float64)
+    # 曲线本身就是「每行的墨像素数」，前缀和一取就是任意区间的墨像素总数——
+    # 「矮格墨满」判据要的绝对墨量正是它，不必另喂图（2026-09-08）。
+    csum = None if cmax is None else np.concatenate(([0.0], np.cumsum(cmax)))
+
+    def _ink_mass(ya: float, yb: float) -> float:
+        """[ya, yb) 的绝对墨量 = 墨像素 ÷（一格标准面积 period × 格宽）。
+
+        分母用 **period** 而不是本格高：要问的正是「这一格里的墨够不够一个整字」，
+        拿本格高归一化会把矮格自动抹平，恰恰抹掉信号（判据来源见
+        `eval/touching.split_char_boundaries`，47 条人裁金标标定）。
+        """
+        if csum is None or cell_w <= 0:
+            return 0.0
+        a = int(np.clip(round(min(ya, yb)), 0, len(cmax)))
+        b = int(np.clip(round(max(ya, yb)), 0, len(cmax)))
+        return float(csum[b] - csum[a]) / (period * cell_w)
 
     def _is_blank(ya: float, yb: float) -> bool:
         if cmax is None:
@@ -474,9 +520,18 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         # 纠缠在同一个量（格高偏离）上，靠加条件分不开；**要分开得有切线金标说话**
         # ——现有金标 243 条里没有这类样本。参数与实测留着，等金标扩到这类样本再定。
         # 打开前必读：`.claude/doc/segmentation_v2_pipeline.md`「切分缺陷逐类清账」。
+        cost = lam * dev ** 2
+        # 「矮格墨满」代价（2026-09-08，47 条人裁金标标定）：这一格既比正常字矮
+        # （≤mass_h×period），墨量却够一个整字（≥mass_min）——那是被劈开的半个字，
+        # 不是「一」「二」那样的扁字。金标实测扁字 0.034~0.066、半个字 0.105~0.195。
+        # 只罚不禁：真有连续两个矮字时 DP 仍走得通，只是代价高一点。
+        if mass_lam > 0 and g <= mass_h * period:
+            m = _ink_mass(y_prev, y)
+            if m >= mass_min:
+                cost += mass_lam * (m - mass_min) / mass_min
         if _near_blank(y_prev, y):
-            return lam * dev ** 2
-        return lam * dev ** 2 + lam4 * dev ** 4
+            return cost
+        return cost + lam4 * dev ** 4
 
     best: tuple[float, float, list[float], float] | None = None
     drop_cost_N = {vN: drop_lam * _dropped_rows(vN, x2) / period for vN, _ in candN}
@@ -540,7 +595,10 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         blank_cost_full: float = 0.01,
                         blank_lam_frac: float = 0.1,
                         drop_lam: float = 0.3,
-                        lam4: float = 0.0) -> RowBoundaryResult | None:
+                        lam4: float = 0.0,
+                        mass_lam: float = 1.0,
+                        mass_h: float = 0.79,
+                        mass_min: float = 0.100) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -576,6 +634,25 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
     # dev_set 实测：穿字格线 693 条里 318 条（46%）附近就有这样被扔掉的干净波谷。
     valid = list(valleys_all)
     valley_ink = [curve[v] / dst_w for v in valid]
+
+    # **极低墨的行一律进候选**（2026-09-08，47 条人裁金标）：`find_valleys` 的凸出度
+    # 过滤（prom_frac=0.10）会把「浅而干净」的谷滤掉——vol01/68 c8 人裁切点 y=698 墨量
+    # 只有 1px（几乎全白，理想切点），却因为两侧抬升不够而落选，DP 只好切在 716（切进
+    # 字里）。19 条 moved 里有 4 条是这个原因，加「矮格墨满」代价也救不回来：**代价项
+    # 选不了一个不在候选集里的点**。
+    # 只补墨量 < LOW_INK_FRAC×列宽 的行，且离已有候选 ≥`synth_guard`，不放宽凸出度
+    # ——后者会让每列的候选点暴涨、把真字缝淹掉。
+    # 连成一段的低墨行**只取一个代表点**（段中心）：整段逐行进候选时，DP 会在这一段
+    # 里随便挑一个，把本来已经对的切点挤掉——实测 vol02/127 c1 人裁点 1520 自己就是
+    # 波谷，却因为 1516~1533 同样零墨、全部进了候选而被挤到 1532（差 12px）。
+    lowmask = np.asarray(curve) < LOW_INK_FRAC * dst_w
+    for a, b in _runs_of(lowmask):
+        y = (a + b) // 2
+        if in_any_interval(y, intervals):
+            continue          # 空白区间自有合成候选（synth），别在整段留白里再撒点
+        if all(abs(y - v) >= LOW_INK_SEP for v in valid):
+            valid.append(float(y))
+            valley_ink.append(float(curve[y]) / dst_w)
 
     # 空白区间里若没有真波谷，仍补一批合成候选撑住可行性——**墨量必须用真值**
     # （2026-09-03 二改）。原先一律给固定 0.03，而空白区间的判据是
@@ -614,6 +691,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
         blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
         blank_lam_frac=blank_lam_frac, drop_lam=drop_lam, lam4=lam4,
+        mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
     )
     if boundaries is None:
         return None
