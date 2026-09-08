@@ -311,7 +311,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          blank_cost_full: float = 0.01,
                          blank_lam_frac: float = 0.1,
                          drop_lam: float = 0.3,
-                         lam4: float = 15.0) -> list[float] | None:
+                         lam4: float = 0.0) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -410,7 +410,30 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         idx = np.nonzero(seg >= blank_thresh)[0]
         return float(a + int(idx[-1])) if idx.size else ya
 
-    def step_cost(y_prev: float, y: float, last: bool = False) -> float | None:
+    def _near_blank(ya: float, yb: float) -> bool:
+        """这一步的上下邻区间里有没有空白——有就别用四次方（见 step_cost）。
+
+        邻区间按**一格 period** 量，不按本步高度：本步被留白撑大时，用本步高度去量
+        会越过空白段、量到再上面的字，漏判（vol02/29 c6「不」、47 c3「言」两列的
+        首字就这么被四次方切掉顶横）。再加一条：本步区间自身若含大段零墨（首字前的
+        留白），也算挨着空白。"""
+        if cmax is None:
+            return False
+        if _is_blank(ya - period, ya) or _is_blank(yb, yb + period):
+            return True
+        a, b = int(round(ya)), int(round(yb))
+        seg = cmax[max(0, a):min(len(cmax), b)]
+        if seg.size == 0:
+            return True
+        # 本步里最长的零墨段 ≥0.45 格高 → 这一格多半是「留白 + 字」，不是纯字距
+        blank_run = best = 0
+        for v in (seg < blank_thresh):
+            blank_run = blank_run + 1 if v else 0
+            best = max(best, blank_run)
+        return best >= 0.45 * period
+
+    def step_cost(y_prev: float, y: float, last: bool = False,
+                  interior: bool = True) -> float | None:
         gap = y - y_prev
         if gap < blank_min_gap:
             return None
@@ -435,10 +458,24 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         if not (lo_eff <= g <= hi_ratio * period):
             return None
         dev = (g - period) / period
+        if not interior:
+            return lam * dev ** 2
+        # 紧挨空白格的那一步也不吃四次方：空白格的高度本来就被留白撑得不规则，
+        # 加四次方会逼 DP 少认一个空白格、把首字劈成两格（实测 vol02/37 c3「京」
+        # 0.076+0.196、41 c8「事」0.037+0.174 两列）。
         # lam4：极端偏离的四次方项（2026-09-08，vol01/36 c9「辩」、vol02/107 c8「書」）。
         # 上字与本字粘连、本字内部又有一道零墨空隙时，DP 把格线放进字内：一格 1.3P
         # + 一格 0.73P 的二次方代价只有 0.049，而切在粘连处要穿 0.15~0.3 的墨。四次方
         # 项在 ±15% 内几乎为零（0.0076×lam4/15），到 ±30% 才起作用，专治这种劈法。
+        # **默认关（lam4=0）**：它确实能治 vol01/36 c9「辩」、vol02/107 c8「書」这类
+        # 「上字粘连 + 本字内有零墨空隙」的劈字，但两册 p1–50 全量 A/B 显示它同时会把
+        # 首字的顶横切掉——不设边界时误伤 6 列（京/注/事/言/割/不），限定「不挨锚点」
+        # 后仍误伤 2 列，再补「不挨空白格」后 vol02/29 c6「不」仍救不回来。收益与代价
+        # 纠缠在同一个量（格高偏离）上，靠加条件分不开；**要分开得有切线金标说话**
+        # ——现有金标 243 条里没有这类样本。参数与实测留着，等金标扩到这类样本再定。
+        # 打开前必读：`.claude/doc/segmentation_v2_pipeline.md`「切分缺陷逐类清账」。
+        if _near_blank(y_prev, y):
+            return lam * dev ** 2
         return lam * dev ** 2 + lam4 * dev ** 4
 
     best: tuple[float, float, list[float], float] | None = None
@@ -449,7 +486,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         dp_prev = np.full((n_interior, m_count), -1, dtype=int)
         for m in range(m_count):
             y, ink = mid[m]
-            c = step_cost(v0, y)
+            c = step_cost(v0, y, interior=False)
             if c is not None:
                 dp_cost[0, m] = c + ink + eps + drop_cost_0
         for k in range(1, n_interior):
@@ -473,7 +510,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                 continue
             y, _ = mid[m]
             for vN, _inkN in candN:
-                c = step_cost(y, vN, last=True)
+                c = step_cost(y, vN, last=True, interior=False)
                 if c is None:
                     continue
                 total = dp_cost[k_last, m] + c + drop_cost_N[vN]
@@ -503,7 +540,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         blank_cost_full: float = 0.01,
                         blank_lam_frac: float = 0.1,
                         drop_lam: float = 0.3,
-                        lam4: float = 15.0) -> RowBoundaryResult | None:
+                        lam4: float = 0.0) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
