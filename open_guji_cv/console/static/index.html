@@ -212,6 +212,11 @@
   .rvrrow { display:flex; align-items:baseline; gap:.4rem; padding:.12rem 0;
             border-bottom:1px solid var(--rule); }
   .rvrrow:last-child { border-bottom:none; }
+  .rbars { display:inline-flex; align-items:flex-end; gap:2px; height:24px; margin:0 .5rem;
+           vertical-align:bottom; }
+  .rbar { display:inline-block; width:7px; background:var(--indigo); opacity:.55; border-radius:1px; }
+  .rbar:last-child { opacity:1; }
+  button.mini { font-size:.7rem; padding:.05rem .4rem; }
   .rvpy { color:var(--mute); font-size:.72rem; min-width:3.2rem; }
   .rvstd { color:var(--indigo); font-family:var(--serif); font-size:1.05rem; font-weight:700; white-space:nowrap; }
   .rvin { color:var(--ok); font-size:.72rem; white-space:nowrap; }
@@ -802,8 +807,9 @@ async function rvPrefetchRare(i) {
           const el = document.getElementById('rvbtns' + j);
           if (el && RV.cards[j] === c) {
             const slot = el.querySelector('.rvwait');
-            if (slot) slot.outerHTML = rvOneBtnHtml(c, j);
-            else el.innerHTML = rvBtnsHtml(c, j);
+            const one = slot ? rvOneBtnHtml(c, j) : null;
+            if (slot && one) slot.outerHTML = one;      // 「形」是独立按钮：只换它
+            else el.innerHTML = rvBtnsHtml(c, j);       // 合并了/没占位：整行重渲染
           }
         }
       } catch (e) {
@@ -813,11 +819,19 @@ async function rvPrefetchRare(i) {
   } finally { RV.rareBusy = false; }
 }
 
-/** 预取回填时用：只渲染「形」那一个按钮（替换占位的 .rvwait）。 */
+/** 预取回填时用：只渲染「形」那一个按钮（替换占位的 .rvwait）。
+ *
+ * ⚠️ **只在「形」是独立按钮时能这么做**。生僻字 top1 常常与整理本字/库 top1 是同一个字
+ * （vol02:128:8:4 整理本 語、rare top1 也是 語），rvKeyList 会把它们**合并成一个按钮**
+ * （键 1/3/4）——这时再往占位处插一个，就成了两个「語」并排（2026-09-07 用户报的重复按钮）。
+ * 合并了就返回 null，交给调用方整行重渲染。
+ */
 function rvOneBtnHtml(c, i) {
   const v = RV.verdicts[c.id] || {};
   const e = rvKeyList(c).find(x => x.srcs.includes('形'));
-  if (!e || !e.ch) return `<span class="rvwait" title="生僻字算法没给出候选">·</span>`;
+  if (!e) return null;
+  if (!e.ch) return `<span class="rvwait" title="生僻字算法没给出候选">·</span>`;
+  if (e.srcs.length > 1) return null;      // 与别的来源合并了，单独插会重复
   return `<button data-i="${i}" data-ch="${e.ch}" class="rvpick${v.shape === e.ch ? ' pick' : ''}"
      title="${e.note}">${e.keys.length ? e.keys.join('/') + '·' : ''}${e.ch}<sub class="rvsrc">${e.srcs.join('·')}</sub></button>`;
 }
@@ -990,6 +1004,7 @@ async function loadRound() {
     rows += row('B', '人审率', b.light,
       b.review + '/' + b.total + ' = ' + (b.rate * 100).toFixed(2) + '%'
       + (b.excluded ? '<span class="qs">（另有 ' + b.excluded + ' 格在排除名单里，不进分母）</span>' : '')
+      + '<div id="rate_hist" class="qs">台账载入中…</div>'
       + (b.by_page.length ? '<div class="qs">' + b.by_page.map(r => 'p' + r.page + ':' + r.n).join(' ') + '</div>' : ''),
       '');
   }
@@ -1056,7 +1071,41 @@ async function loadRound() {
           : '<div class="qs">没填页码，只给下一批建议。</div>') + nxt;
   const use = document.getElementById('rd_use');
   if (use) use.onclick = () => { $('#rv_pages').value = (nx.batch || []).join(','); };
+  loadRateHistory(book);
 }
+
+/** 人审率台账：B 行下面的趋势条。判据只报当下这一跑，趋势要看纵向。 */
+async function loadRateHistory(book) {
+  const box = document.getElementById('rate_hist');
+  if (!box) return;
+  let rows;
+  try { rows = (await api('/api/review/rate-history?book=' + encodeURIComponent(book))).rows || []; }
+  catch (e) { box.textContent = '台账读不出来：' + e.message; return; }
+  if (!rows.length) { box.innerHTML = '台账还没有 ' + book + ' 的记录 ' + snapBtn(); return; }
+  const first = rows[0], last = rows[rows.length - 1];
+  const max = Math.max(...rows.map(r => r.rate));
+  const bars = rows.map(r => {
+    const h = Math.max(2, Math.round(r.rate / max * 22));
+    const un = r.unseen_rate != null ? `　未审段 ${(r.unseen_rate * 100).toFixed(2)}%` : '';
+    return `<span class="rbar" style="height:${h}px" title="${r.date} ${(r.rate * 100).toFixed(2)}%${un}\n${(r.note || '').replace(/"/g, '')}"></span>`;
+  }).join('');
+  box.innerHTML = `<b>台账</b> ${first.date} <b>${(first.rate * 100).toFixed(2)}%</b>`
+    + ` → 今 <b>${(last.rate * 100).toFixed(2)}%</b>`
+    + `（降 ${((1 - last.rate / Math.max(first.rate, 1e-9)) * 100).toFixed(0)}%，${rows.length} 次记录）`
+    + (last.unseen_rate != null ? `　未审段 <b>${(last.unseen_rate * 100).toFixed(2)}%</b>` : '')
+    + `<span class="rbars">${bars}</span> ` + snapBtn();
+  const btn = document.getElementById('rate_snap');
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = '记录中…';
+    try {
+      await api('/api/review/rate-history', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ books: book, note: prompt('这次的说明（可留空）') || '' }) });
+      loadRateHistory(book);
+    } catch (e) { btn.disabled = false; btn.textContent = '记一笔失败'; }
+  };
+}
+const snapBtn = () => '<button id="rate_snap" class="mini">记一笔</button>';
 
 async function loadQuality() {
   const book = $('#rv_book').value || $('#book').value;
