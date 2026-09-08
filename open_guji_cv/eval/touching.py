@@ -28,9 +28,36 @@ def body_pages(book: str) -> list[int]:
                   and (r.get("expected") or {}).get("page_type") == "body")
 
 
+def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> float | None:
+    """一格的**绝对墨量**：墨像素 ÷（列格高中位 × 格宽）。
+
+    分母用**中位格高**而不是本格高——要问的正是「这一格里的墨够不够一个整字」，
+    拿本格高做分母会把矮格自动归一化掉，正是要避免的（见 split_char_boundaries）。
+    """
+    import cv2
+
+    from ..products.cache import ImageCache
+    from ..core.spec import column_key
+
+    p = ImageCache().get(book, "column_image", column_key(page, col))
+    if p is None:
+        return None
+    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    y0, y1 = max(0, int(cell.y0)), min(img.shape[0], int(cell.y1))
+    x0, x1 = max(0, int(cell.x0)), min(img.shape[1], int(cell.x1))
+    if y1 <= y0 or x1 <= x0:
+        return None
+    ink = int((img[y0:y1, x0:x1] < 128).sum())
+    denom = med * (x1 - x0)
+    return ink / denom if denom > 0 else None
+
+
 def split_char_boundaries(book: str, pages: list[int], store=None,
-                          short_ratio: float = 0.80, tall_ratio: float = 1.18,
-                          gap_frac: float = 0.06) -> list[dict]:
+                          short_ratio: float = 0.79, tall_ratio: float = 1.05,
+                          gap_frac: float = 0.06,
+                          ink_mass_min: float = 0.100) -> list[dict]:
     """「切进字里」的格线：一矮一高相邻、切点又落在**零墨空隙**上。
 
     与 `r2s_boundaries` 互补，两者互斥：R2s 是「切点上有墨、附近没有墨谷」（真粘连，
@@ -39,8 +66,18 @@ def split_char_boundaries(book: str, pages: list[int], store=None,
 
     2026-09-08：这类占了剩余切分缺陷的主要部分（辩/書/廢/敘/亦），但**一条也不在
     R2s 候选里**，所以攒了 250 条 R2s 金标也标不到它。判据（都相对本列格高中位数）：
-    相邻两格一个 ≤`short_ratio`、一个 ≥`tall_ratio`，且切点周围 ±`gap_frac`×格高内
-    最低墨 ≤ INK_ON_LINE——三条合起来才算，单看格高会把「留白 + 字」的首格全捞进来。
+    相邻两格一个 ≤`short_ratio`、一个 ≥`tall_ratio`，切点周围 ±`gap_frac`×格高内
+    最低墨 ≤ INK_ON_LINE，且**矮格的绝对墨量** ≥ `ink_mass_min`。
+
+    最后一条是 47 条人裁金标标定出来的**决定性判据**（2026-09-08）：矮格里若装的是
+    「一」「二」这类扁字，那是真的矮，切点没错；若装的是被劈开的半个字，格子虽矮、
+    墨量却还是一个整字的量。绝对墨量 = 矮格墨像素 ÷（列格高中位 × 格宽），金标实测
+    **ok 0.034~0.066、moved 0.105~0.195**，中间空着一半，取 0.085。
+
+    ⚠️ 这个量**只能用在矮格上**：正常字格 97.8% 都 ≥0.08（中位 0.175），单用必然全误报。
+    「格子矮 + 墨够一个整字」两条**合起来**才是信号。格高门槛也据金标放宽到 0.92/1.05
+    ——原来的 0.80/1.18 把 109:3:17（0.83）、119:6:4（0.83）、106:4:3（0.87）这些真缺陷
+    挡在门外，而放宽后的误报由绝对墨量兜住。
     """
     from ..core.step import page_key
     from ..products import kinds as _k  # noqa: F401
@@ -84,10 +121,15 @@ def split_char_boundaries(book: str, pages: list[int], store=None,
                 lo, hi = max(0, y - w), min(h, y + w + 1)
                 if float(prof[lo:hi].min()) > INK_ON_LINE:
                     continue          # 切点附近没有零墨空隙 → 是别的毛病
+                short = up if hu <= hd else dn
+                mass = _cell_ink_mass(st, book, pg, cc.col, short, med)
+                if mass is not None and mass < ink_mass_min:
+                    continue          # 矮格里是真的扁字（一/二），不是被劈的半个字
                 out.append(dict(
                     id=f"{book}:{pg}:{cc.col}:{up.slot}",
                     book=book, page=pg, col=cc.col, bi=bi, y=y,
                     ink=round(float(prof[y]), 3), best=round(float(prof[lo:hi].min()), 3),
+                    ink_mass=None if mass is None else round(mass, 3),
                     h_above=int(hu), h_below=int(hd), h_med=int(med),
                     slot_above=up.slot, slot_below=dn.slot,
                     y0=int(round(up.y0)), y1=int(round(dn.y1)),

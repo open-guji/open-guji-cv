@@ -80,3 +80,47 @@ def test_seam_ok_verdict_keeps_polyline_and_routes_like_cutline():
     ex = _expected_of(e)
     assert ex["verdict"] == "seam_ok" and ex["polyline"] == [[20, 1975], [26, 1979]]
     assert "char-segmentation/touching-cuts" in {d.shard for d in RouteTable.load().destinations(e)}
+
+
+# ── 2026-09-08：「切进字里」候选的绝对墨量判据（47 条人裁金标标定）──
+def test_split_char_ink_mass_separates_flat_chars_from_split_halves():
+    """矮格里装的是扁字（一/二）还是被劈的半个字——只有绝对墨量分得开。
+
+    金标实测：格高比例两组几乎完全重合（moved 0.70~0.79 / ok 0.66~0.80），
+    而绝对墨量（墨像素 ÷ 中位格高×格宽）ok 0.034~0.066、moved 0.105~0.195。
+    """
+    import numpy as np
+
+    from open_guji_cv.eval.touching import _cell_ink_mass
+
+    class _Cell:
+        def __init__(self, y0, y1, x0, x1):
+            self.y0, self.y1, self.x0, self.x1 = y0, y1, x0, x1
+
+    class _Cache:
+        def __init__(self, img): self.img = img
+        def get(self, *a, **k): return self.img
+
+    med, w = 115.0, 150
+    # 扁字「一」：矮格 85px，墨只有中间一条横（约 12px 高、满宽）
+    flat = np.full((300, w), 255, np.uint8)
+    flat[40:52, 20:130] = 0
+    # 被劈的半个字：同样 85px 的格，墨铺满大半格
+    half = np.full((300, w), 255, np.uint8)
+    half[8:80, 20:130] = 0
+    import cv2, tempfile, os
+    out = []
+    for img in (flat, half):
+        fd, path = tempfile.mkstemp(suffix='.png'); os.close(fd)
+        cv2.imwrite(path, img)
+        import open_guji_cv.products.cache as _c
+        orig = _c.ImageCache
+        _c.ImageCache = lambda: _Cache(path)
+        try:
+            out.append(_cell_ink_mass(None, 'vol01', 1, 1, _Cell(0, 85, 10, 140), med))
+        finally:
+            _c.ImageCache = orig
+            os.unlink(path)
+    flat_mass, half_mass = out
+    assert flat_mass < 0.100, f"扁字墨量 {flat_mass:.3f} 不该超阈值"
+    assert half_mass >= 0.100, f"半个字墨量 {half_mass:.3f} 该超阈值"
