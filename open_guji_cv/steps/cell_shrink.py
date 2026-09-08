@@ -61,7 +61,10 @@ class CellShrinkStep(Step):
             "image_size": [int(w), int(h)],
             "chars_per_line": cc.n_body_slots,
             "grid": {"shear": 0.0, "period": cc.ref_w or float(x1 - x0),
-                     "cell_h": cc.period, "head_raise_rows": 0},
+                     "cell_h": cc.period, "head_raise_rows": 0,
+                     # Step 2 量好的版框 y（列图坐标）：extractor 只在它附近认框线行，
+                     # 并把条带开到下框（见 extractor.frame_band_inner 的 hint 说明）
+                     "frame_top": cc.border_top, "frame_bottom": cc.border_bottom},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }

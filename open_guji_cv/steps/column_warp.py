@@ -21,6 +21,7 @@ from ..utils.column_projection import (ColumnWindow, clean_column, column_profil
 class ColumnWarpParams(BaseModel):
     body_pad: float = 0.0
     bottom_pad: float = 40.0          # 下界额外开的余量，见 column_projection.BOTTOM_PAD
+    head_pad: float = 30.0            # 抬头列上界在抬头框线心之上再开的余量，见 column_projection.HEAD_PAD
     ink_threshold: int = 128
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
@@ -48,7 +49,7 @@ class ColumnWarpStep(Step):
         gray = ctx.raw_page(page)
         borders: Borders = ctx.product("borders", page)
         wins = page_column_windows(borders.to_result(), body_pad=p.body_pad,
-                                   bottom_pad=p.bottom_pad)
+                                   bottom_pad=p.bottom_pad, head_pad=p.head_pad)
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow

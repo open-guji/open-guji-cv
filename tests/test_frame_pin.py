@@ -159,3 +159,80 @@ def test_column_image_thin_margin_uses_dense_rule():
     assert not _has_char_ink(img, 5, 185, 10, 50)
     img[15:25, 60:110] = 0          # 框线上方再来一段真字墨 → 仍算字
     assert _has_char_ink(img, 5, 185, 10, 50)
+
+
+# ── 2026-09-08：列图上「字的顶横被当成上框线」──────────────────────
+# measure_row_frames 是整页尺子（字最长横段 ≤0.1 页宽）；喂它一字宽的列图，
+# 「可/不/南/要/因」的顶横行墨 0.55~0.62 就成了顶端搜索窗里的第一条「框线」。
+# 两册前 50 页普查：真框线与顶边之间连续空白 ≤28 行，被误认的顶横上方空白
+# 119~156 行（整整一个空格）；「南」的顶横上方还连着自己的竖笔。
+
+
+def _col_top(bars: list[tuple[int, int]], strokes: list[tuple[int, int, int, int]],
+             w: int = 180, h: int = 2400):
+    """列图（与真列图同高，框线搜索窗按图高比例算）。"""
+    img = np.full((h, w), 255, np.uint8)
+    for a, b in bars:
+        img[a:b, :] = 0
+    for y0, y1, x0, x1 in strokes:
+        img[y0:y1, x0:x1] = 0
+    return img
+
+
+def test_top_stroke_after_a_blank_slot_is_not_a_frame():
+    """第 1 格空白、第 2 格「可」的顶横（宽 0.6 列宽）不是框线：不钉桩。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([], [(140, 146, 36, 144), (150, 230, 60, 120)])
+    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
+    assert top == 0, f"顶横被当成框线钉在 {top}"
+    top_old, _ = frame_band_inner(img)            # 不传 blank_max = 老口径
+    assert top_old == 146, "对照：老口径确实会把顶横当框线"
+
+
+def test_real_frame_at_the_very_top_is_still_pinned():
+    """真框线：贴着列图顶边（前面至多二三十行空白），照钉。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([(20, 30)], [(60, 150, 60, 120)])
+    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
+    assert top == 30
+
+
+def test_stroke_with_ink_attached_above_is_not_a_frame():
+    """「南」：顶横上方连着十字竖笔——框线之上不会挂着墨，不钉。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([], [(8, 40, 86, 94), (34, 42, 36, 144), (46, 130, 50, 130)])
+    top, _ = frame_band_inner(img, blank_max=0.35 * 112)
+    assert top == 0, f"南的顶横被当成框线钉在 {top}"
+
+
+def test_frame_touched_from_below_is_still_pinned():
+    """框线被下面的字顶住（p48「御」）不算「上方连墨」，照钉。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([(3, 15)], [(15, 120, 70, 110)])
+    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
+    assert top == 15
+
+
+def test_hinted_pin_finds_the_frame_next_to_the_hint_not_the_stroke():
+    """v2 给了 border_bottom 提示：从提示向外找最近的框线行；「至」的底横离提示 44px、
+    真下框离提示 4px，认下框。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([(2385, 2392)], [(2333, 2345, 36, 144), (2250, 2330, 60, 120)])
+    top, bot = frame_band_inner(img, blank_max=0.35 * 116, top_hint=0.0, bottom_hint=2389.0)
+    assert bot == 2385, f"下框内缘 {bot}"
+    assert top == 0
+
+
+def test_hinted_pin_gives_up_when_no_bar_near_hint():
+    """提示附近没有框线行（vol01/151 型偏差超过容差、或框根本不在图里）：检不出，不钉。"""
+    from open_guji_cv.clustering.extractor import frame_band_inner
+    img = _col_top([], [(2250, 2330, 60, 120)])
+    top, bot = frame_band_inner(img, blank_max=0.35 * 116, top_hint=0.0, bottom_hint=2389.0)
+    assert (top, bot) == (0, img.shape[0])
+
+
+def test_faint_frame_rows_are_frame_when_trusted():
+    """trust_frame：带内 0.35 墨、长横段的行是淡框线，不是字墨（vol02/81「因」）。"""
+    img = _page([(20, 26, 0.36)])          # 一段 0.36 墨率的连续横条
+    assert _has_char_ink(img, 0, 180, 10, 50)                    # 老口径：无探测窗只认密行 → 当字墨
+    assert not _has_char_ink(img, 0, 180, 10, 50, trust_frame=True)

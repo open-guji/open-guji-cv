@@ -1722,12 +1722,21 @@ def _assign_column(col_gray: np.ndarray,
                if cw <= 0.45 * col_w else None)
         if kin is not None and len(kin) == 1:
             best = next(iter(kin))
-            if not overclaims(k, best):
-                owner[labels == k] = best + 1
-                add(best, x, y, x + cw, y + ch)
+            # 归还也得过「装得下」这一关（2026-09-08 用户实审 vol01/4 1:2
+            # 「學」）：學的「子」与下字「復」粘连，直刀在格线切开后，
+            # 「子」段（43px，整个待在本格）与復同源、又窄，被当成復伸上来
+            # 的笔尾归还给了復——學削成「𦥯」、復头上多个「子」。真笔尾
+            # （捺脚/竖钩）并回本体后总高仍在一格之内；并回去要 1.27 格高
+            # 的，不是笔尾而是上字的半身，交给四级键按越格量判。
+            bx0, by0, bx1, by1 = bodies[best]
+            fits = max(by1, y + ch) - min(by0, y) <= FIT_RATIO * cell_h
+            if fits:
+                if not overclaims(k, best):
+                    owner[labels == k] = best + 1
+                    add(best, x, y, x + cw, y + ch)
+                    continue
+                merged.append(k)                      # 同源但占别格中央带
                 continue
-            merged.append(k)                          # 同源但占别格中央带
-            continue
         best, best_key = None, None
         for i, (bx0, by0, bx1, by1) in bodies.items():
             top, bot = cell_span[i]
@@ -1836,12 +1845,25 @@ FRAME_BAND_MAX_CUT = 0.35  # 钉桩最多吃掉端格的这个比例（× 格高
 # 字墨闸：桩要跨过的那段里有这么厚的成段墨就不钉（见钉桩处注释）
 PIN_INK_ROW_T = 0.12       # 行墨率 ≥ 此值算「有墨行」（框渣行通常 <0.10）
 PIN_INK_RUN = 4            # 连续这么多有墨行 = 成段字墨，不是框渣
+# ── 框线候选与图像顶边之间的空白（2026-09-08 用户实审「第 2 格顶横被切」）──
+# measure_row_frames 是为整页设计的：字的最长横段 ≤0.1 页宽，行墨 ≥0.5 只能
+# 是框线。喂它 v2 的**列图**（一字宽）时这条前提不成立——「可/不/南/要/因」
+# 的顶横行墨 0.55~0.62，第 1 格空白时它就是顶端搜索窗里第一条「框线」，
+# 桩一钉整条顶横没了。两册前 50 页普查（851 列）：真框线与顶边之间的连续
+# 空白 ≤28 行（框就在窗顶，border_top≈0），被误认的顶横上方空白 119~156 行
+# （整整一个空格）。中间空一大段，按 0.35 格高切开两不相扰。
+FRAME_PIN_BLANK_MAX = 0.35  # 候选上框行之上连续空白 ≥ 此比例 × 格高 → 那是字不是框
+FRAME_PIN_BLANK_ROW = 0.02  # 行墨率 < 此值算空白行
+FRAME_PIN_ATTACH = 6        # 候选框行的连通体向上伸出 ≥ 此行数 → 是字（南/市/卞…的竖笔）
+FRAME_PIN_ATTACH_WIN = 40   # 向上查连通的窗口行数
+FRAME_HINT_TOL = 40         # 调用方给了版框 y 提示时，从提示向外最远找这么多行的框线行
+                            # （vol01/151 c4 的下框离 Step 2 的 border_bottom 有 26px）
 PIN_PROBE_MIN = 12         # 文字带外侧探测窗至少这么宽才算「探得到」；v2 列图
                            # 只留 3~6px 边距且框线到窗口就停，探不到时只认密行
 
 
 def _has_char_ink(page: np.ndarray, x0: int, x1: int,
-                  y0: int, y1: int) -> bool:
+                  y0: int, y1: int, trust_frame: bool = False) -> bool:
     """[y0,y1) × [x0,x1) 里有没有**成段字墨**（而非零星框渣、也非版框线）。
 
     判据是「连续 PIN_INK_RUN 行、每行墨率 ≥ PIN_INK_ROW_T」。框线残渣要么
@@ -1863,6 +1885,11 @@ def _has_char_ink(page: np.ndarray, x0: int, x1: int,
     """
     if y1 <= y0 or x1 <= x0:
         return False
+    # trust_frame（2026-09-08）：调用方已按 Step 2 的版框提示定出这段带子就是框带
+    # （见 frame_band_inner 的 hint），带内的密行/长横段行**就是框线行**，不再拿侧边
+    # 探测窗定谳——vol01/35 c3「府」左边距恰 12px 够开窗、框线却没伸进边距，5 行
+    # 密行全被当成字墨；vol02/81 c2「因」的下框只有 0.34~0.45 墨、够不着密行档，
+    # 无探测窗时第二档不开，6 行框线也算字墨。两列的桩都没钉下去，框线整条进图块。
     H, W = page.shape[:2]
     ya, yb, xa, xb = max(0, y0), max(0, y1), max(0, x0), max(0, x1)
     band = page[ya:yb, xa:xb]
@@ -1878,6 +1905,16 @@ def _has_char_ink(page: np.ndarray, x0: int, x1: int,
 
     def is_bar(r: int) -> bool:
         dense = rowink[r] >= FRAME_ROW_T
+        if trust_frame:
+            if dense:
+                return True
+            if rowink[r] < FRAME_ROW_T2:
+                return False
+            row = binary[r].astype(np.int8)
+            d = np.diff(np.concatenate(([0], row, [0])))
+            starts, ends = np.flatnonzero(d == 1), np.flatnonzero(d == -1)
+            run = int((ends - starts).max()) if starts.size else 0
+            return run / w >= FRAME_RUN_T
         if not probe:
             return bool(dense)
         if not dense:
@@ -1901,8 +1938,30 @@ def _has_char_ink(page: np.ndarray, x0: int, x1: int,
     return best >= PIN_INK_RUN
 
 
-def frame_band_inner(page: np.ndarray) -> tuple[int, int]:
-    """整页上下版框带的**内缘**行号 (top_inner, bot_inner)。检不出给页界。"""
+def _nearest_bar(is_bar, hint: int, h: int) -> int | None:
+    """从 hint 向两侧交替找最近的框线行，最远 FRAME_HINT_TOL 行；找不到 None。"""
+    for k in range(FRAME_HINT_TOL + 1):
+        for y in ((hint + k, hint - k) if k else (hint,)):
+            if 0 <= y < h and is_bar(y):
+                return int(y)
+    return None
+
+
+def frame_band_inner(page: np.ndarray,
+                     blank_max: float | None = None,
+                     top_hint: float | None = None,
+                     bottom_hint: float | None = None) -> tuple[int, int]:
+    """整页上下版框带的**内缘**行号 (top_inner, bot_inner)。检不出给页界。
+
+    top_hint / bottom_hint：调用方已经知道的版框 y（v2 的 Step 2 按整页几何测出的
+    `border_top` / `border_bottom`，列图坐标）。给了就**从提示向外找最近的框线行，
+    最远 FRAME_HINT_TOL 行**，找不到即检不出；上框找到后仍过下面两道护栏——一字宽的列图上 `measure_row_frames` 的前提
+    （字的横段远短于页宽）不成立，「可/不/南」的顶横、「至」的底横都会被认成框
+    线（2026-09-08 用户实审）；整页几何给的位置是可靠的，列图只负责把线心找准。
+
+    blank_max：没有提示时的兜底——上框候选行与图像顶边之间若有 ≥ 此行数的**连续
+    空白段**，候选不是框线而是字的顶横（见 FRAME_PIN_BLANK_MAX 注）。只管上框：
+    下框之下 v2 列图常留 30~50 行空白，同一把尺会把真下框也否掉。"""
     from .grid_segment import (BINARY_THRESHOLD, FRAME_ROW_T, FRAME_ROW_T2,
                                FRAME_RUN_T, measure_row_frames)
     if page.ndim == 3:
@@ -1922,6 +1981,31 @@ def frame_band_inner(page: np.ndarray) -> tuple[int, int]:
         starts, ends = np.flatnonzero(d == 1), np.flatnonzero(d == -1)
         run = int((ends - starts).max()) if starts.size else 0
         return run / max(1, w) >= FRAME_RUN_T
+
+    if top_hint is not None:
+        ft = _nearest_bar(is_bar, int(round(top_hint)), h)
+    if bottom_hint is not None:
+        fb = _nearest_bar(is_bar, int(round(bottom_hint)), h)
+    if ft is not None and blank_max is not None and ft > 0:
+        blank = rowink[:int(ft)] < FRAME_PIN_BLANK_ROW
+        run = best = 0
+        for v in blank:
+            run = run + 1 if v else 0
+            best = max(best, run)
+        if best >= blank_max:
+            ft = None
+    if ft is not None and blank_max is not None and ft > FRAME_PIN_ATTACH:
+        # 候选框行上方连着墨（「南」的十字竖笔从顶横往上伸 26 行）：框线
+        # 之上是页边，不会有笔画挂着。只看中央 80% 宽，避开边缘界行残段。
+        a = max(0, int(ft) - FRAME_PIN_ATTACH_WIN)
+        xa, xb = int(0.1 * w), max(int(0.1 * w) + 1, int(0.9 * w))
+        sub = binary[a:int(ft) + 1, xa:xb].astype(np.uint8)
+        _n, lab = cv2.connectedComponents(sub, connectivity=8)
+        bar_labels = set(int(v) for v in np.unique(lab[-1])) - {0}
+        if bar_labels:
+            ys = np.nonzero(np.isin(lab, list(bar_labels)))[0]
+            if ys.size and (lab.shape[0] - 1 - int(ys.min())) >= FRAME_PIN_ATTACH:
+                ft = None
 
     top = 0
     if ft is not None:
@@ -1979,7 +2063,17 @@ class CharExtractor:
         if shear:
             page_img = _deshear(page_img, shear)
         img_h, img_w = page_img.shape[:2]
-        frame_in_top, frame_in_bot = frame_band_inner(page_img)
+        gmeta = grid.get("grid") or {}
+        cell_h_grid = float(gmeta.get("cell_h") or 0.0)
+        # v2 调用方（cell_shrink）把 Step 2 量好的版框 y 放在 grid.frame_top /
+        # frame_bottom（列图坐标）；有它就不在一字宽的列图上重猜框线位置。
+        frame_top_hint = gmeta.get("frame_top")
+        frame_bottom_hint = gmeta.get("frame_bottom")
+        frame_in_top, frame_in_bot = frame_band_inner(
+            page_img,
+            blank_max=(FRAME_PIN_BLANK_MAX * cell_h_grid if cell_h_grid > 0 else None),
+            top_hint=None if frame_top_hint is None else float(frame_top_hint),
+            bottom_hint=None if frame_bottom_hint is None else float(frame_bottom_hint))
         n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
         # 夹注跨度的尺子：列距（书级刚性常量）。老产物没有就退回图块宽度
         jz_ref_w = float((grid.get("grid") or {}).get("period") or 0.0) or None
@@ -2027,6 +2121,12 @@ class CharExtractor:
             sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
                                max(float(c["y_bottom"]) for c in cells) + pad_y)))
+            if frame_bottom_hint is not None:
+                # 条带一直开到下版框（2026-09-08 用户实审 vol01/60 7:21「畜」、
+                # vol02/71 7:21「殆」）：末字与下框贴近/粘连时 DP 的末格下界落在字
+                # 内，条带在「格底 + 8% pad」就截断，字的下沿再也回不来。框墨由下面
+                # 的钉桩（干净）或列末的曲线切边（粘连）处理。
+                sy1 = int(round(min(float(img_h), max(float(sy1), float(frame_bottom_hint)))))
             # 版框带内缘钉桩：框墨不进条带（理由见 frame_band_inner 上方）。
             # 硬保险两条：比例闸 FRAME_BAND_MAX_CUT，以及**字墨闸**。
             cut_lim = cell_h_ref * FRAME_BAND_MAX_CUT
@@ -2041,9 +2141,13 @@ class CharExtractor:
             # 注释），所以补一条直接看墨的闸：桩要跨过的那段里若已经有**成段
             # 字墨**（连续 ≥MIN_INK_RUN 行、行墨率 ≥INK_ROW_T），就不钉——
             # 框渣是薄的、断续的，字的横画是成段的。
-            if frame_in_top - sy0 <= cut_lim                     and not _has_char_ink(page_img, sx0, sx1, sy0, frame_in_top):
+            if frame_in_top - sy0 <= cut_lim and not _has_char_ink(
+                    page_img, sx0, sx1, sy0, frame_in_top,
+                    trust_frame=frame_top_hint is not None):
                 sy0 = max(sy0, frame_in_top)
-            if sy1 - frame_in_bot <= cut_lim                     and not _has_char_ink(page_img, sx0, sx1, frame_in_bot, sy1):
+            if sy1 - frame_in_bot <= cut_lim and not _has_char_ink(
+                    page_img, sx0, sx1, frame_in_bot, sy1,
+                    trust_frame=frame_bottom_hint is not None):
                 sy1 = min(sy1, frame_in_bot)
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
@@ -2120,7 +2224,9 @@ class CharExtractor:
                 if box is not None:
                     # 归属墨迹越出格位（出头笔画 / 与邻字粘连）时按需放宽，
                     # 但不超过 MAX_EXTEND_RATIO，避免粘连块把图块撑爆。
-                    lim = cell_h * MAX_EXTEND_RATIO
+                    # 尺子用「本格高与本列格高中位数」的较大者：被 DP 挤矮的末格
+                    # （vol02/71 7:21 只有 74px）按自己的高算余量，字的下沿装不下。
+                    lim = max(cell_h, cell_h_ref) * MAX_EXTEND_RATIO
                     y0 = max(0, int(round(max(ltop - lim, min(y0, box[1])))))
                     y1 = min(strip.shape[0],
                              int(round(min(lbot + lim, max(y1, box[3])))))
