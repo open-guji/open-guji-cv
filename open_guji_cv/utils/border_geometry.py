@@ -545,6 +545,18 @@ KNOT_SEARCH = 40          # 每个折点在直线估计的 ±这么多 px 里找
                           # 对照页 vol01/151、11、24、vol02/95 一个数都没变。
                           # 邻列界行相距 ~183px，40 不会跳到隔壁。
 KNOT_PASSES = 3           # 坐标下降轮数（实测 2 轮已收敛，第 3 轮保险）
+KNOT_GUARD_HITS: list = []   # 诊断：护栏每退回一条线记 (线序号, 该对列宽变化率)，跑批时可清空
+PAIR_WIDTH_TOL = 0.25     # 护栏：相邻两条折线之间的间距（列宽）沿高度的变化率上限。
+                          # 同一页的线是一起弯的，所以**弯页上列宽也不随高度变**——人裁认可的
+                          # 折线金标（vol01/11、119、151，83/90 段）上相邻对的变化率全部 ≤ 8%，
+                          # 两册 146 张折线页 1302 对里中位 2.3%、95 分位 12.7%。列宽沿高度
+                          # 突变只有一种解释：某条线的折点跑进字里了。2026-09-08 vol02/119
+                          # 实锤：c5|c6 共用那条界行下半段印得淡，c6 的 其/在/君/故 竖笔粗且
+                          # 连续，「墨落在线上的行数」这个目标下竖笔得分反而高，折点被吸进
+                          # c6 46px，c6 宽 175→107（变化率 62%），侧墨 0.165 过不了 L2。
+                          # ⚠️ 别拿「折线列宽 vs 直线列宽」当判据（第一版就是）：真弯页上直线
+                          # 本身就偏 30px，量到的是弯度不是错误，把金标页 119/151 的 4 条好线
+                          # 拉偏了 17~29px。
 
 
 BEND_COHERE_WIN = 9       # 局部一致性：跟相邻这么多个有效行的 x 中位比
@@ -789,6 +801,56 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
             yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
             ky = [yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb]
             out[i] = _from_knots([v.x_at(ky[j]) + med[j] for j in range(4)], ky)
+
+    # ── 护栏：折点被邻列字的竖笔勾走（见 PAIR_WIDTH_TOL 注释）────────────
+    # 折线得分只看「墨落在线上的行数」，分不清淡界行和粗竖笔；「得分不比直线高就退回」
+    # 在这种情况下不触发（勾到字上得分更高）。几何兜底：相邻两条折线的间距沿高度
+    # 变化超过 PAIR_WIDTH_TOL 就是断裂对。断裂对里退谁——看另一侧：一条线若两侧的对
+    # 都断（或它是外框线、另一侧无对），退它；否则退另一侧也断的那条；两条都只此一侧
+    # 断时退折点位移更大的那条。退回的形状用**相邻线的局部位移插值**（同页的线一起弯，
+    # 邻线怎么弯它就怎么弯），不用页级中位——中位会被少数跑飞的线带偏。最多扫两轮。
+    n_out = len(out)
+    if n_out >= 2:
+        def _ys(i):
+            xc = verticals[i].x_at(h / 2.0)
+            yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+            return [yt + 30.0, yt + (yb - yt) / 3.0, yt + (yb - yt) / 2.0, yt + 2.0 * (yb - yt) / 3.0, yb - 30.0]
+        def _pair_var(i):
+            ws = [abs(out[i + 1].x_at(y) - out[i].x_at(y)) for y in _ys(i)]
+            lo = min(ws)
+            return (max(ws) / lo - 1.0) if lo > 1e-6 else float('inf')
+        def _shift(i, y):
+            return out[i].x_at(y) - verticals[i].x_at(y)
+        def _revert(k):
+            v = verticals[k]
+            xc = v.x_at(h / 2.0)
+            yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
+            ky = [yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb]
+            nb = [j for j in (k - 1, k + 1) if 0 <= j < n_out]
+            kx = [v.x_at(y) + (sum(_shift(j, y) for j in nb) / len(nb) if nb else 0.0) for y in ky]
+            out[k] = _from_knots(kx, ky)
+        for _pass in range(2):
+            bad = [i for i in range(n_out - 1) if _pair_var(i) > PAIR_WIDTH_TOL]
+            if not bad:
+                break
+            done: set[int] = set()
+            for i in bad:
+                a, b = i, i + 1
+                if a in done or b in done:
+                    continue
+                a_other = (a == 0) or (_pair_var(a - 1) > PAIR_WIDTH_TOL)
+                b_other = (b == n_out - 1) or (_pair_var(b) > PAIR_WIDTH_TOL)
+                if a_other and not b_other:
+                    k = a
+                elif b_other and not a_other:
+                    k = b
+                else:
+                    da = max(abs(_shift(a, y)) for y in _ys(a))
+                    db = max(abs(_shift(b, y)) for y in _ys(a))
+                    k = a if da >= db else b
+                KNOT_GUARD_HITS.append((k, round(float(_pair_var(i)), 3)))
+                _revert(k)
+                done.add(k)
     return out, 3, w80_med, w80_max
 
 
