@@ -14,7 +14,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, PageCells
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..utils.row_boundaries import segment_column
+from ..utils.row_boundaries import effective_body_slots, segment_column
 from ._warpmap import ColumnMapper
 
 
@@ -51,7 +51,10 @@ class RowSegmentStep(Step):
             # 装得下几个字」（见 GateColumn.n_raised_hint）——同一页上有的抬头列
             # 多一格、有的不多，页级参数给不出这个差别，DP 只能丢掉首字。
             n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
-            base = dict(col=gc.col, n_body_slots=n_body, n_raised=n_raised_col,
+            # 版框装不下 n_body 格的页（vol01/5 只有 20 行）按实际行数切，见
+            # row_boundaries.effective_body_slots
+            n_body_col = effective_body_slots(n_body, gc.border_top, gc.border_bottom, gate.period)
+            base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
                         top_slack=gc.top_slack)
@@ -63,7 +66,7 @@ class RowSegmentStep(Step):
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
             r = segment_column(
-                img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
+                img, period=gate.period, n_body_slots=n_body_col, n_raised=n_raised_col,
                 border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
@@ -76,7 +79,7 @@ class RowSegmentStep(Step):
             if wrec is not None:
                 mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                       wrec.top_y, wrec.bottom_y)
-            n_total = n_body + n_raised_col
+            n_total = n_body_col + n_raised_col
             cells = []
             for c in r.cells:
                 pos = _slot_to_pos(c.slot, n_raised_col)

@@ -434,6 +434,11 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
 BODY_PAD = 0.0     # 普通列在版框之外额外留的余量（上界；下界见 BOTTOM_PAD）
 
 BOTTOM_PAD = 40.0
+# 抬头列上界在抬头框**内边框线心**之上再开的余量（2026-09-08 用户实审 vol01/32
+# c5「太祖」：窗口顶边 = inner_y = 307 正压在「太」的顶横上，列图第 3 行就有墨，
+# 抬头字顶被切）。线心本来就带半条线宽，字又常顶着线写；开 20px 让字完整进来，
+# 多进来的框线由 Step 3 的 top_slack 与 Step 4 的框线闸处理。20px 时「太」的竖笔尖仍顶边，取 30。
+HEAD_PAD = 30.0
 # **下界要多开一截**（2026-09-03 加）。`detect_borders` 的下版框线系统性偏上，
 # 窗口就切在末字中部：dev_set 155 列实测，下界到真实版框线之间还剩字墨
 # **中位 21px、最大 69px，83% 的列被切掉 >5px**（目视复核 vol01/60c4、
@@ -487,7 +492,8 @@ class ColumnWindow:
 
 def page_column_windows(result: BorderDetectionResult,
                          body_pad: float = BODY_PAD,
-                         bottom_pad: float = BOTTOM_PAD) -> list[ColumnWindow]:
+                         bottom_pad: float = BOTTOM_PAD,
+                         head_pad: float = HEAD_PAD) -> list[ColumnWindow]:
     """整页每一列的矫正窗口——上下界**逐列**算（委派给 `column_bounds`），
     抬头列自动用抬头框的内边框当上界。
 
@@ -513,6 +519,8 @@ def page_column_windows(result: BorderDetectionResult,
             result.top, result.bottom, head_raise_inner_y=raised_top,
             left=left_v, right=right_v)
         top_y -= body_pad
+        if raised_top is not None:
+            top_y -= head_pad                  # 见 HEAD_PAD
         bottom_y += bottom_pad
         top_y = max(0.0, min(top_y, btop))
         bottom_y = min(float(result.height - 1), max(bottom_y, bbot))

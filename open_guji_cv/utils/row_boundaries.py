@@ -306,7 +306,12 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          n_slots: int, top_slack: float = 0.0,
                          curve: np.ndarray | None = None, blank_thresh: float = 0.0,
                          blank_cost: float = 0.05, blank_min_gap: float = 2.0,
-                         tail_trim: bool = True) -> list[float] | None:
+                         tail_trim: bool = True,
+                         blank_full_ratio: float = 0.8,
+                         blank_cost_full: float = 0.01,
+                         blank_lam_frac: float = 0.1,
+                         drop_lam: float = 0.3,
+                         lam4: float = 15.0) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -320,6 +325,23 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     **列尾格按墨算高。** 列尾常有留白/版框残渣，最后一格若把它们全算进去就超过
     上界，DP 只好把倒数第二条格线往上挪进末字（金标里列尾格线占大幅错切 6/21）。
     `tail_trim` 时，到末锚点这一步的高度只算到最后一行有墨处。
+
+    **整格空白便宜，碎空白贵（2026-09-08）。** `blank_cost` 一律 0.05 时，DP 宁可把
+    首字劈成两格也不认那个空格位：vol01/17 c7「示」——首格空白 100px 后是「示」，
+    顶横与「小」之间那道字内空隙墨量为 0，切在那里两格 127/85 的间距代价只有 0.025，
+    而认空白格要 0.05，于是空格位被「示」的两半吃掉、整列格位错一位（两册前 50 页
+    同型 6 列）。反过来 vol01/5 整页每列把 120px 的首格空白劈成两个 60px 空白格
+    （21 格硬凑）。空白段高度 ≥ `blank_full_ratio`·period 的是**一个字位**，只收
+    `blank_cost_full`；短的仍收 `blank_cost`——0.05 挡的是「宽缝里白造空白格、
+    两个矮字并成一格」，那种缝远不到 0.8 格。
+
+    **锚点之外的墨要计价（2026-09-08）。** 首锚点之上、末锚点之下的墨行不属于任何
+    格，等于被丢掉，原来一分钱不收。于是 vol01/48 c5「五朝聖訓」抬头列：首锚点落
+    在「五」的字内空隙（y=54），上半个「五」扔在格外，「五」的下半与「朝」并成一格
+    （1.33 格高，代价只有 0.033），再用一个空白格凑满格数；vol01/60 c7「畜」、
+    vol02/71 c7「殆」的末锚点落在字内，字的下沿留在格外被截断。现在两端各按
+    `drop_lam × 丢掉的墨行数 / period` 计价——只数「有墨但不是框线级密行」的行
+    （行墨 ≥ blank_thresh 且 < 0.5 列宽）：版框横线是密行，不该逼着锚点往框外跑。
 
     `curve` 为 None 时退回旧行为（无空白格规则、无尾裁）。
     """
@@ -367,6 +389,18 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         seg = cmax[max(0, a):min(len(cmax), b + 1)]
         return seg.size == 0 or float(seg.max()) < blank_thresh
 
+    dense_thresh = blank_thresh * (0.5 / 0.08)   # blank_thresh = 0.08·列宽 → 0.5·列宽
+
+    def _dropped_rows(ya: float, yb: float) -> int:
+        """[ya, yb) 里会被丢掉的字墨行数：有墨、且不是框线级密行。"""
+        if cmax is None or drop_lam <= 0:
+            return 0
+        a, b = int(round(min(ya, yb))), int(round(max(ya, yb)))
+        seg = cmax[max(0, a):min(len(cmax), b)]
+        if seg.size == 0:
+            return 0
+        return int(((seg >= blank_thresh) & (seg < dense_thresh)).sum())
+
     def _ink_end(ya: float, yb: float) -> float:
         """[ya, yb] 内最后一行有墨的位置；没有就返回 ya。"""
         if cmax is None:
@@ -387,7 +421,8 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             # （vol01/141 c3：单个 160px 空白格让整列格位比人裁时少 1，裁决键全错位）。
             if gap > 1.25 * period:
                 return None
-            return blank_cost + 0.1 * lam * ((gap - period) / period) ** 2
+            base = blank_cost_full if gap >= blank_full_ratio * period else blank_cost
+            return base + blank_lam_frac * lam * ((gap - period) / period) ** 2
         g = gap
         lo_eff = lo_ratio * period
         if last and tail_trim:
@@ -399,17 +434,24 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             lo_eff = 0.5 * period
         if not (lo_eff <= g <= hi_ratio * period):
             return None
-        return lam * ((g - period) / period) ** 2
+        dev = (g - period) / period
+        # lam4：极端偏离的四次方项（2026-09-08，vol01/36 c9「辩」、vol02/107 c8「書」）。
+        # 上字与本字粘连、本字内部又有一道零墨空隙时，DP 把格线放进字内：一格 1.3P
+        # + 一格 0.73P 的二次方代价只有 0.049，而切在粘连处要穿 0.15~0.3 的墨。四次方
+        # 项在 ±15% 内几乎为零（0.0076×lam4/15），到 ±30% 才起作用，专治这种劈法。
+        return lam * dev ** 2 + lam4 * dev ** 4
 
     best: tuple[float, float, list[float], float] | None = None
+    drop_cost_N = {vN: drop_lam * _dropped_rows(vN, x2) / period for vN, _ in candN}
     for v0, _ink0 in cand0:
+        drop_cost_0 = drop_lam * _dropped_rows(x1_eff, v0) / period
         dp_cost = np.full((n_interior, m_count), np.inf)
         dp_prev = np.full((n_interior, m_count), -1, dtype=int)
         for m in range(m_count):
             y, ink = mid[m]
             c = step_cost(v0, y)
             if c is not None:
-                dp_cost[0, m] = c + ink + eps
+                dp_cost[0, m] = c + ink + eps + drop_cost_0
         for k in range(1, n_interior):
             for m in range(m_count):
                 y, ink = mid[m]
@@ -434,7 +476,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                 c = step_cost(y, vN, last=True)
                 if c is None:
                     continue
-                total = dp_cost[k_last, m] + c
+                total = dp_cost[k_last, m] + c + drop_cost_N[vN]
                 if best is None or total < best[0]:
                     path = [0.0] * n_interior
                     idx = m
@@ -456,7 +498,12 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         y1_max_frac: float = 0.5, y2_max_frac: float = 0.3,
                         blank_thresh_frac: float = 0.08, synth_step: int = 20,
                         top_slack: float = 0.0, snap_raw: int = 3,
-                        blank_cost: float = 0.05, tail_trim: bool = True) -> RowBoundaryResult | None:
+                        blank_cost: float = 0.05, tail_trim: bool = True,
+                        blank_full_ratio: float = 0.8,
+                        blank_cost_full: float = 0.01,
+                        blank_lam_frac: float = 0.1,
+                        drop_lam: float = 0.3,
+                        lam4: float = 15.0) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -528,6 +575,8 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         border_top, border_bottom, all_valleys, all_ink, period, eps,
         lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
         curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
+        blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
+        blank_lam_frac=blank_lam_frac, drop_lam=drop_lam, lam4=lam4,
     )
     if boundaries is None:
         return None
@@ -687,6 +736,26 @@ def _pos_to_slot(pos: int, n_raised: int) -> int:
     会在这一格上出错。
     """
     return pos - n_raised - 1 if pos <= n_raised else pos - n_raised
+
+
+def effective_body_slots(n_body: int, border_top: float | None, border_bottom: float | None,
+                         period: float | None, tol: float = 0.55) -> int:
+    """这一列的版框装得下几格正文：装不下 `n_body` 就少一格。
+
+    2026-09-08 两册前 50 页普查：vol01/5、vol02/26、vol02/47 的版框高只有 20.0~20.4
+    个 period（书的版式常量是 21 行），硬切 21 格时 DP 只能造一格假空白——vol01/5
+    整页每列把 120px 的首格空白劈成两个 60px 空白格，vol02/26、47 劈成三个
+    60/80/80，整列格位错一位，人裁标注的键也跟着漂。
+
+    只往下调**一格**：版框高比 `n_body - tol` 个 period 还矮就按实际行数；矮得更多
+    的（版框探测本身失败）不动，让 DP 照旧无解报错，别把探测失败静默成少切几格。
+    """
+    if border_bottom is None or not period or period <= 0:
+        return n_body
+    rows = (float(border_bottom) - max(0.0, float(border_top or 0.0))) / float(period)
+    if n_body - 1 - tol <= rows < n_body - tol:
+        return n_body - 1
+    return n_body
 
 
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
