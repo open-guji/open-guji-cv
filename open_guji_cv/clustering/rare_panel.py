@@ -213,6 +213,6 @@ def rare_batch(book: str, slots: list[str], k: int = 3,
         except Exception:
             out[s] = []
             continue
-        img = _rare_patch(book, page, col, slot, sub)
-        out[s] = _rare_for(img, k) if img is not None else []
+        img = rare_patch(book, page, col, slot, sub, cache)
+        out[s] = rare_for(img, k) if img is not None else []
     return {"book": book, "n": len(out), "rare": out}
