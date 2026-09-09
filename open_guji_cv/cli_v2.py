@@ -184,7 +184,7 @@ def cmd_eval(args) -> None:
                           if not ({"heavy", "engine", "corpus", "dump", "intermediate"} & set(s.needs))]
     reports = []
     for k in sorted(keys):
-        r = run_eval(k, timeout=args.timeout)
+        r = run_eval(k, timeout=args.timeout, from_raw=args.from_raw)
         reports.append(r)
         mark = {"ok": "✓", "regressed": "⚠", "failed": "✗", "skipped": "–"}[r.status]
         print(f"{mark} {r.summary_line()}")
@@ -309,6 +309,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--timeout", type=int, default=900)
     p.add_argument("--json", action="store_true")
     p.add_argument("--strict", action="store_true", help="有跑不起来的就以 1 退出")
+    p.add_argument("--from-raw", action="store_true",
+                   help="缺产物时从原图现跑 Step1-3 补齐（云端 clone 无 products/ 时用，"
+                        "同 seg_harness.py 的同名开关）")
 
     p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift")
     p.add_argument("action", choices=["shards", "show", "migrate", "drift"])

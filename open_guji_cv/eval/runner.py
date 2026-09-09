@@ -25,7 +25,7 @@ def repo_root() -> Path:
 
 def run_eval(key: str, dataset_root: Path | None = None, timeout: int = 900,
              allow: tuple[str, ...] = ("products",),
-             report_dir: Path | None = None) -> EvalReport:
+             report_dir: Path | None = None, from_raw: bool = False) -> EvalReport:
     spec = find_eval(key)
     if spec is None:
         return EvalReport(eval_id=key, shard="", status="failed", error=f"没有这个评测器: {key}")
@@ -41,6 +41,22 @@ def run_eval(key: str, dataset_root: Path | None = None, timeout: int = 900,
         rep.error = why
         _fill_gold(rep, store, spec)
         return rep
+
+    # `needs=("products",)` 声明了「跑得动的前提」，但没查过这台机器上产物是不是
+    # 真的齐——干净 clone 上齐不齐得跑之前现查，不能到脚本报错才知道。
+    if "products" in spec.needs:
+        missing = _missing_pages_by_book(spec, store)
+        if missing:
+            if from_raw:
+                _bootstrap_missing(missing)
+            else:
+                detail = "；".join(f"{bk} 缺第 {pgs} 页" for bk, pgs in missing.items())
+                rep.status = "failed"
+                rep.error = (f"缺产物，{detail}。"
+                             f"加 --from-raw 从原图现跑补齐，或先跑 "
+                             f"`seg_harness.py --from-raw`（不带 --pages 即全金标）")
+                _fill_gold(rep, store, spec)
+                return rep
 
     target = spec.target(ds)
     if target is not None and not target.exists():
@@ -119,11 +135,52 @@ def run_eval(key: str, dataset_root: Path | None = None, timeout: int = 900,
     elif rep.exit_code not in (0, None):
         rep.status, rep.error = "failed", (rep.stdout_tail.splitlines() or [""])[-1][:200]
     else:
+        # 确定的事实与猜测分两行报，猜测标明是猜测——别把两者糊成一句话让猜测
+        # 读起来像结论（2026-09-09 吃过一次亏：产物齐全后报错一字不变，
+        # 真根因是 parse_metrics 认不出这个脚本的输出，不是缺产物）。
         rep.status = "failed"
-        rep.error = "没有解析出任何指标（多半是缺产物：" + (rep.stdout_tail.splitlines() or [""])[-1][:120] + "）"
+        tail = (rep.stdout_tail.splitlines() or [""])[-1][:120]
+        rep.error = (f"事实：脚本以 {rep.exit_code} 退出，parse_metrics 解析到 0 条指标；"
+                     f"stdout 尾行：{tail}\n"
+                     f"猜测（未证实，别当结论）：产物已经在跑之前查过（见上面 needs 检查），"
+                     f"多半是 parse_metrics 认不出这个脚本的输出格式")
 
     _fill_gold(rep, store, spec)
     return rep
+
+
+def _missing_pages_by_book(spec: EvalSpec, store) -> dict[str, list[int]]:
+    """这个评测器的金标条目锚定在哪些 (book, page) 上，逐页查产物在不在。
+
+    按金标条目的 `anchor` 算，不是按位置参数猜——分片可能横跨多册，
+    没有 page 锚点的条目（非按页组织的分片）直接跳过，不强加语义。
+    """
+    from ..products.store import ProductStore
+    from ..utils.bootstrap import has_products
+
+    items = [i for i in store.list(spec.shard)
+             if i.status == "active" and i.anchor.book and i.anchor.page is not None]
+    by_book: dict[str, set[int]] = {}
+    for it in items:
+        by_book.setdefault(it.anchor.book, set()).add(it.anchor.page)
+    pstore = ProductStore()
+    missing: dict[str, list[int]] = {}
+    for book, pages in by_book.items():
+        miss = sorted(pg for pg in pages if not has_products(book, pg, store=pstore))
+        if miss:
+            missing[book] = miss
+    return missing
+
+
+def _bootstrap_missing(missing: dict[str, list[int]]) -> None:
+    from ..core.book import load_book
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+    from ..utils.bootstrap import ensure_products
+
+    pstore, cache = ProductStore(), ImageCache()
+    for book_id, pages in missing.items():
+        ensure_products(load_book(book_id), pages, store=pstore, cache=cache)
 
 
 # 三种写法都要认（实测）：

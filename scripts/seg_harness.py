@@ -36,43 +36,9 @@ from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.steps.row_segment import RowSegmentParams  # noqa: E402
 from open_guji_cv.utils import row_boundaries as RB  # noqa: E402
+from open_guji_cv.utils.bootstrap import BOOTSTRAP_STEPS, ensure_products  # noqa: E402,F401
 
 SHARD = "char-segmentation/touching-cuts"
-
-# 云端 clone 只有原图（data_full/ 在 git 里），products/ 与 cache/ 都不在。
-# 这三步是本台子的输入：Step1 边框 → Step2 列图 → Step3 现役 cells（做 baseline 对比用）。
-BOOTSTRAP_STEPS = ("border_detect", "column_warp", "column_gate", "row_segment")
-
-
-def ensure_products(bk, pages: list[int], *, store: ProductStore,
-                    cache: ImageCache, quiet: bool = False) -> None:
-    """缺产物时从原图现跑 Step1-3 补齐。
-
-    云端会话 clone 之后没有 products/ 与 cache/，但原图（data_full/）、金标、
-    册配置都在 git 里，所以现跑一遍就能开工——dev_set 12 页约 30 秒，
-    比想办法把产物传过去省事得多。
-
-    只补缺的页，已有产物一律不动，也不传 force——那会让本地已有的产物白重跑一遍，
-    还会因为 code_rev 变化把下游全冲掉。
-    """
-    from open_guji_cv.core.engine import Engine
-    from open_guji_cv.core.pipeline import load_pipeline
-
-    missing = [pg for pg in pages
-               if store.read(bk.id, "row_segment", page_key(pg), "cells") is None]
-    if not missing:
-        return
-    if not quiet:
-        print(f"[from-raw] {len(missing)} 页缺产物，从原图补跑 "
-              f"{' → '.join(BOOTSTRAP_STEPS)}：{missing}", flush=True)
-    log = (lambda s: None) if quiet else (lambda s: print(f"  {s}", flush=True))
-    eng = Engine(bk, load_pipeline("keben_body_v2"), store=store, cache=cache, log=log)
-    eng.run(steps=list(BOOTSTRAP_STEPS), pages=missing)
-    still = [pg for pg in missing
-             if store.read(bk.id, "row_segment", page_key(pg), "cells") is None]
-    if still and not quiet:
-        print(f"[from-raw] ⚠️ {len(still)} 页仍无产物（多半是整页 DP 无解，"
-              f"例如职名页）：{still}", flush=True)
 
 
 # ── 变体：改这里 ───────────────────────────────────────────────────
@@ -293,11 +259,19 @@ VARIANTS: dict[str, dict] = {
 
 
 def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict):
-    """与 RowSegmentStep.run_page 同一套入参。"""
+    """与 RowSegmentStep.run_page 同一套入参。
+
+    2026-09-09 台子与现役对比查出「与现役产物不一致 10」列后发现：这里漏了
+    `RowSegmentStep.run_page` 有的 `effective_body_slots` 调用——版框装不下
+    `n_body` 格的页（vol01/5 只有 20 行）现役会少切一格，台子这里此前一直按
+    标准格数硬切，两边用的 n_body_slots 就对不上了。补上后台子与现役才是
+    真的同一套入参（见 utils/row_boundaries.py::effective_body_slots 的 docstring）。
+    """
     n_body = p.n_body_slots or bk.chars_per_line
     n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
+    n_body_col = RB.effective_body_slots(n_body, gc.border_top, gc.border_bottom, gate.period)
     return RB.segment_column(
-        img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
+        img, period=gate.period, n_body_slots=n_body_col, n_raised=n_raised_col,
         border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
         top_slack=gc.top_slack, content_x=gc.content_x,
         ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
@@ -332,6 +306,9 @@ def main() -> int:
     ap.add_argument("--pages", default=None,
                     help="只在这些页上跑，逗号分隔或 dev_set。省时用，"
                          "但**报数时要说明页范围**——金标误差与尺子都随页集变")
+    ap.add_argument("--list-mismatch", action="store_true",
+                    help="baseline 与现役产物不一致时列出具体哪些列（不只报个数）——"
+                         "2026-09-09 全金标 370 列实测报「不一致 10」，只有个数查不出是谁")
     a = ap.parse_args()
     var = VARIANTS[a.variant]
     fit_kw = dict(var.get("fit", {}))
@@ -371,6 +348,7 @@ def main() -> int:
         ensure_products(bk, pages, store=st, cache=ic)
     rulers = Counter(); rulers_base = Counter()
     mismatch = 0; n_cols = 0; n_fail = 0
+    mismatch_cols: list[str] = []
     diag_rows = []
     for pg in pages:
         gate = st.read(book, "column_gate", page_key(pg), "gate_manifest")
@@ -401,6 +379,7 @@ def main() -> int:
             new_b = [float(b) for b in r.boundaries]
             if a.variant == "baseline" and [round(x) for x in base_b] != [round(x) for x in new_b]:
                 mismatch += 1
+                mismatch_cols.append(f"{book}:{pg}:{gc.col}")
             period = (base_b[-1] - base_b[0]) / max(1, len(base_b) - 1)
             for b in new_b[1:-1]:
                 rulers[classify(prof, int(round(b)), period)] += 1
@@ -452,6 +431,8 @@ def main() -> int:
                 f"max {e.max():.0f} | ≤3px {100*(e<=3).mean():.1f}% ≤10px {100*(e<=10).mean():.1f}%")
 
     print(f"变体 {a.variant}  列 {n_cols}（无解 {n_fail}，与现役产物不一致 {mismatch}）")
+    if a.list_mismatch and mismatch_cols:
+        print("  不一致列:", mismatch_cols)
     print("  金标误差 现役:", stat(errs_base))
     print("  金标误差 变体:", stat(errs))
     if poly_new:
