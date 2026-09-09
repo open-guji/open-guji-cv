@@ -204,12 +204,38 @@ def cmd_preclean(args) -> None:
     """Step0：按 book.yaml 的 preclean 段生成修好的页图，落在 precleaned/<book>/。
 
     只处理登记过的页；其余页碰都不碰。生成后 Step1 起自动读修好的那张。
+    `--calibrate` 是另一条路：不生成产物，在没登记 preclean 的「正常页」上量
+    正文本底的墨占比分布（中位/p95/p99），换书时用它重新标 `utils/preclean.py`
+    里的 `BODY_INK_GATE` 等常量。
     """
     from .core.book import load_book
-    from .utils.preclean import build_precleaned, precleaned_root
 
     book = load_book(args.book)
     rules = getattr(book, "preclean", {}) or {}
+
+    if getattr(args, "calibrate", False):
+        import numpy as np
+        from .utils.preclean import BODY_INK_GATE, sample_body_baseline
+
+        pages = book.resolve_pages(args.pages) if args.pages else book.all_pages()
+        normal_pages = [p for p in pages if p not in rules]
+        skipped = sorted(set(pages) - set(normal_pages))
+        if skipped:
+            print(f"跳过已登记 preclean 的页（本来就不是「正常页」）: {skipped}")
+        ratios = sample_body_baseline(book, normal_pages)
+        if ratios.size == 0:
+            print("没量到任何窗口——检查 --pages 是不是给对了")
+            return
+        med, p95, p99 = np.percentile(ratios, [50, 95, 99])
+        over = int((ratios > BODY_INK_GATE).sum())
+        print(f"{book.id} 本底标定：{len(normal_pages)} 个正常页，{len(ratios)} 个窗口")
+        print(f"  中位 {med:.3f} / p95 {p95:.3f} / p99 {p99:.3f} / 最大 {ratios.max():.3f}")
+        print(f"  当前闸阈 BODY_INK_GATE={BODY_INK_GATE:.3f}："
+              f"{over}/{len(ratios)}（{over / len(ratios):.2%}）个正常窗口会被误拦")
+        return
+
+    from .utils.preclean import build_precleaned, precleaned_root
+
     if not rules:
         print(f"{book.id} 没登记任何预清理页（books/{book.id}.yaml 的 preclean 段是空的）")
         return
@@ -261,8 +287,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                        help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None,
-                   help="只做这些页（默认：yaml 里登记的全部）")
+                   help="只做这些页（默认：不带 --calibrate 时是 yaml 里登记的全部，"
+                        "带 --calibrate 时是全书）")
     p.add_argument("--force", action="store_true", help="已有产物也重做")
+    p.add_argument("--calibrate", action="store_true",
+                   help="不生成产物，改在没登记 preclean 的正常页上标定闸0阈值"
+                        "（本底墨占比的中位/p95/p99），换书时用")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")

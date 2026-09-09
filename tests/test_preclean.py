@@ -5,7 +5,7 @@
 import numpy as np
 import pytest
 
-from open_guji_cv.utils.preclean import apply_preclean, invert_band
+from open_guji_cv.utils.preclean import PrecleanGateError, apply_preclean, invert_band
 
 
 def _page_with_inverted_band(y0=120, y1=170, x0=40, x1=360):
@@ -75,6 +75,27 @@ def test_no_rules_is_a_noop():
     g, _ = _page_with_inverted_band()
     out, notes = apply_preclean(g, [])
     assert notes == [] and out is g
+
+
+# ── 出口闸0：带内墨占比要回落到本底量级 ────────────────────────────
+def test_gate_passes_a_well_repaired_band():
+    """合成的「带内翻转」图，修好之后带内墨占比该落在闸内，报告里带着数字。"""
+    g, _ = _page_with_inverted_band()
+    out, notes = apply_preclean(g, [{"kind": "inverted_band", "segments": [[40, 359]],
+                                     "y_lo": 90, "y_hi": 200, "y_probe": 145,
+                                     "ctx": 40, "smooth": 3}])
+    assert "带内墨占比" in notes[0] and "过闸" in notes[0]
+    assert out is not None
+
+
+def test_gate_blocks_a_badly_repaired_band():
+    """带内除了反色，还压了一块反转也洗不掉的痂（修复后仍是浓墨）——闸必须拦下。"""
+    g, _ = _page_with_inverted_band()
+    g[130:160, 60:340] = 255      # 压在已反色的带内；反转回来后变成一块浓墨，代表修不好
+    with pytest.raises(PrecleanGateError, match="闸0未过"):
+        apply_preclean(g, [{"kind": "inverted_band", "segments": [[40, 359]],
+                            "y_lo": 90, "y_hi": 200, "y_probe": 145,
+                            "ctx": 40, "smooth": 3}])
 
 
 # ── 产物落盘 + raw_page 改道 ────────────────────────────────────────
