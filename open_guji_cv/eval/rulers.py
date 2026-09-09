@@ -234,7 +234,12 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                 if cell is None:
                     continue
                 r4.den += 1
-                n = _clipped_ink(prof, ch.bbox_col, cell, h)
+                # 有缝的格位要按缝开窗（见 _clipped_ink 文档）：ink_img 与
+                # R2c 共用同一份、按需惰性取一次。
+                if ink_img is None and (getattr(cell, "seam_top", None)
+                                         or getattr(cell, "seam_bottom", None)):
+                    ink_img = _col_ink(book, pg, cc.col)
+                n = _clipped_ink(prof, ch.bbox_col, cell, h, ink_img=ink_img, cx0=cx0)
                 if n >= CLIP_MIN_PX:
                     r4.num += 1
                     r4.detail.append({"page": pg, "col": cc.col,
@@ -245,7 +250,33 @@ def measure(book: str, pages: list[int], store=None) -> dict:
             "rulers": [x.to_dict() for x in (r1, r2, r2s, r2x, r2c, r3, r4)]}
 
 
-def _clipped_ink(prof: np.ndarray, bbox, cell, h: int) -> int:
+def _seam_masked_row_ink(ink_img: np.ndarray, seam: list[int], cx0: int,
+                          a: int, b: int, keep_from_seam: bool) -> np.ndarray:
+    """`[a, b)` 这段行墨占比，按缝逐 x 抹掉缝另一侧（邻格）的像素。
+
+    `seam` 是逐 x 一个 y 的折线缝（列图坐标，从内容窗口 `cx0` 起，见
+    `utils/seam.py::find_seam`）。`keep_from_seam=True`（上缘窗口用 `seam_top`）：
+    行 < 缝的那侧是上一格，抹掉，只留 `[缝, b)`；`keep_from_seam=False`
+    （下缘窗口用 `seam_bottom`）：行 ≥ 缝的那侧是下一格，抹掉，只留 `[a, 缝)`。
+    缝覆盖不到的 x（内容窗口之外）原样保留，不参与掐除。
+    """
+    sub = ink_img[a:b, :].astype(bool).copy()
+    w_col = ink_img.shape[1]
+    for i, sy in enumerate(seam):
+        x = cx0 + i
+        if not (0 <= x < w_col):
+            continue
+        cut = min(max(int(sy) - a, 0), b - a)
+        if keep_from_seam:
+            if cut > 0:
+                sub[:cut, x] = False
+        elif cut < b - a:
+            sub[cut:, x] = False
+    return sub.mean(axis=1)
+
+
+def _clipped_ink(prof: np.ndarray, bbox, cell, h: int,
+                  ink_img: np.ndarray | None = None, cx0: int = 0) -> int:
     """紧框上下缘之外、仍属于**本字**的最长连续墨（像素）。
 
     `bbox` 是 `char_index.bbox_col`（列图坐标 x0,y0,x1,y1），
@@ -266,19 +297,33 @@ def _clipped_ink(prof: np.ndarray, bbox, cell, h: int) -> int:
 
     首/末格的格线就是版框线，那条线本身有墨。只有墨段**紧贴紧框**
     （离紧框 ≤2px）才算被切掉的笔画；贴着格线那头的是框线残渣。
+
+    ## 有缝的格位，窗口的「格线」那头换成缝的逐 x 位置
+
+    Step3 在粘连处会落一条折线缝（`cell.seam_top` / `seam_bottom`，逐 x 一个 y，
+    见 `utils/seam.py`），缝另一侧已经是邻字的墨。`prof` 是整列宽度的行均值，
+    看不出缝——直线格线窗口会把缝抹掉、仍留在直线窗口里的邻字墨算成本字出框。
+    有缝时按 `ink_img`（该列的逐像素墨版）逐 x 掐掉缝另一侧再重算这段的行墨占比；
+    拿不到 `ink_img`（没传）时退回直线口径，行为与之前完全一致。
     """
     _x0, y0f, _x1, y1f = bbox
     y0, y1 = int(round(y0f)), int(round(y1f))
     g0, g1 = int(round(cell.y0)), int(round(cell.y1))
+    seam_top = getattr(cell, "seam_top", None)
+    seam_bottom = getattr(cell, "seam_bottom", None)
     out = 0
     a, b = max(0, g0), max(0, min(h, y0))          # 上缘窗口
     if b - a > 0:
-        for s0, e0 in _runs_over(prof[a:b] > INK_ON_LINE):
+        row_ink = (_seam_masked_row_ink(ink_img, seam_top, cx0, a, b, True)
+                   if seam_top and ink_img is not None else prof[a:b])
+        for s0, e0 in _runs_over(row_ink > INK_ON_LINE):
             if e0 >= (b - a) - 2:
                 out = max(out, e0 - s0)
     a, b = max(0, min(h, y1)), min(h, g1)          # 下缘窗口
     if b - a > 0:
-        for s0, e0 in _runs_over(prof[a:b] > INK_ON_LINE):
+        row_ink = (_seam_masked_row_ink(ink_img, seam_bottom, cx0, a, b, False)
+                   if seam_bottom and ink_img is not None else prof[a:b])
+        for s0, e0 in _runs_over(row_ink > INK_ON_LINE):
             if s0 <= 2:
                 out = max(out, e0 - s0)
     return out

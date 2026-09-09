@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_guji_cv.eval.rulers import CLIP_MIN_PX, _clipped_ink, _runs_over
+from open_guji_cv.eval.rulers import CLIP_MIN_PX, _clipped_ink, _runs_over, _seam_masked_row_ink
 
 
 class _Cell:
@@ -61,6 +61,42 @@ def test_window_never_reaches_neighbour_char():
     prof = _prof(400, [(105, 195), (210, 320)])  # 后者是邻字
     n = _clipped_ink(prof, (0, 105, 0, 195), _Cell(100, 200), 400)
     assert n < 30, f"窗口越界扫到邻字了：{n}px（整字高度量级）"
+
+
+def test_seam_top_window_excludes_neighbour_ink():
+    """有缝格位：邻字墨落在缝外（缝之上），按直线口径会被 R4 误数。
+
+    本格格线 [100,200]，紧框顶 y0=140（上缘窗口 [100,140) 共 40px）。
+    列宽 60px：左 30 列在 [100,140) 整段都有墨——这是邻字紧贴粘连留下的、
+    在直线窗口里连续贴到紧框边的墨；右 30 列全空。
+
+    直线口径（不看缝）：40px 连续贴边 → 误判被切，且 ≥ CLIP_MIN_PX。
+    缝在这批列上正好落在窗口顶（seam_top=140，整段划给邻格）——按缝开窗后
+    这段墨被掐掉，右 30 列本就没有墨，结果应为 0。
+    """
+    h, w = 300, 60
+    cell = _Cell(100, 200)
+    cell.seam_top = [140] * 30 + [100] * 30   # 折线：左半段划给邻格，右半段贴直线
+    cell.seam_bottom = None
+    ink_img = np.zeros((h, w), dtype=bool)
+    ink_img[100:140, :30] = True              # 邻字墨：只在左半段，整段贴到紧框边
+
+    bbox = (0, 140, w, 200)
+    prof = ink_img.mean(axis=1)
+    naive = _clipped_ink(prof, bbox, cell, h)
+    assert naive >= CLIP_MIN_PX, f"样例没搭对：直线口径下应先复现出误判，实际 {naive}px"
+
+    fixed = _clipped_ink(prof, bbox, cell, h, ink_img=ink_img, cx0=0)
+    assert fixed == 0, f"按缝开窗后邻字墨应被掐掉，实际仍数到 {fixed}px"
+
+
+def test_seam_masked_row_ink_keeps_own_side():
+    """缝之外（本字自己那侧）的墨不该被掐掉——只掐邻格那侧。"""
+    ink = np.zeros((10, 4), dtype=bool)
+    ink[6:, :] = True   # 本字自己的墨，紧贴窗口下沿
+    row = _seam_masked_row_ink(ink, seam=[5, 5, 5, 5], cx0=0, a=0, b=10, keep_from_seam=True)
+    assert (row[6:] > 0).all()
+    assert (row[:5] == 0).all()
 
 
 @pytest.mark.parametrize("goal_key", ["R1", "R2", "R3", "R4"])
