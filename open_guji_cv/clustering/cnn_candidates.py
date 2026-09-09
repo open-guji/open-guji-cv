@@ -31,7 +31,19 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_CKPT = Path("cache/glyph_cnn_r4/best.pt")
+def _resolve_default_ckpt() -> Path:
+    """checkpoint 不可重建（重训要 GPU + 数小时），2026-09-09 起进 Git，
+    落在 `models/glyph_cnn_r4/`（`/cache/` 整体 gitignore，云端 clone 拿不到）。
+    本机若还有旧路径 `cache/glyph_cnn_r4/best.pt`，优先用它——不强迫已有工作区搬文件，
+    也不改变本机现役 checkpoint 的 mtime（会让 fingerprint 变、下游产物被判 stale）。
+    """
+    legacy = Path("cache/glyph_cnn_r4/best.pt")
+    if legacy.exists():
+        return legacy
+    return Path("models/glyph_cnn_r4/best.pt")
+
+
+DEFAULT_CKPT = _resolve_default_ckpt()
 """现役 checkpoint。2026-09-07 从 `cache/glyph_cnn/best.pt`（run-5，纯字体补类）切到
 `glyph_cnn_r4`（训练时每类另加康熙字头 + 字统网真刻本图，`external_glyph_sources_experiment.md` §5.4）：
 分类头 unseen top-1 94.3 → 96.5，seen_test 99.5 → 99.8 无回退，异体组内定形差距拉开 12.6 倍。
