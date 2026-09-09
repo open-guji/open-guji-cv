@@ -31,7 +31,12 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_CKPT = Path("cache/glyph_cnn/best.pt")
+DEFAULT_CKPT = Path("cache/glyph_cnn_r4/best.pt")
+"""现役 checkpoint。2026-09-07 从 `cache/glyph_cnn/best.pt`（run-5，纯字体补类）切到
+`glyph_cnn_r4`（训练时每类另加康熙字头 + 字统网真刻本图，`external_glyph_sources_experiment.md` §5.4）：
+分类头 unseen top-1 94.3 → 96.5，seen_test 99.5 → 99.8 无回退，异体组内定形差距拉开 12.6 倍。
+**换 checkpoint 会让下游产物过期**（路径 + mtime 进 `fingerprint()`），相关页要重跑。
+旧 checkpoint 保留在原路径可随时切回；切回时 `HOG_WEIGHT`/`EMB_WEIGHT`/`FORM_EMB_GAP` 都要还原。"""
 RRF_K = 60
 
 
@@ -155,7 +160,19 @@ class CnnCandidates:
         from .synth import render_char
 
         cs = tuple(charset)
-        key = hashlib.sha1((fingerprint(self.ckpt) + "".join(cs)).encode("utf-8")).hexdigest()[:16]
+        # 外部真刻本模板（康熙字头 / 字统网）：每字的模板 = mean(字体渲染 ∪ 真刻本图)。
+        # 2026-09-07 上线，实测 unseen emb top-1 95.9 → 97.4（严格 94.5 → 95.6），
+        # 异体子集 83.2 → 91.6。源目录缺失时静默退回纯字体（实验数据不在仓里）。
+        extra: dict = {}
+        try:
+            from .extra_glyphs import load_many
+            specs = [sp for sp in EMB_EXTRA_SPECS if _spec_ready(sp)]
+            if specs:
+                extra = load_many(specs, cs)
+        except Exception:
+            extra = {}
+        key = hashlib.sha1((fingerprint(self.ckpt) + "".join(cs)
+                            + "|".join(sorted(extra)) ).encode("utf-8")).hexdigest()[:16]
         f = self.ckpt.parent / f"emb_{key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=False)
@@ -172,6 +189,7 @@ class CnnCandidates:
                         continue
                     if im is not None and im.any():
                         ims.append(im.astype(np.uint8))
+                ims += extra.get(ch, [])
                 if not ims:
                     continue
                 x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=self._dev)
@@ -202,10 +220,44 @@ class CnnCandidates:
         return [(names[int(i)], float(sims[int(i)])) for i in order]
 
 
-HOG_WEIGHT = 0.5
+EMB_EXTRA_SPECS = (
+    "kangxi:D:/data/glyph-sources/kangxi/crops@cache/exp_extglyph/kangxi_verified_v2.txt",
+    "zitools:D:/data/glyph-sources/zitools/p1:印,楷",
+)
+"""embedding 模板的外部真刻本源（`extra_glyphs.py` 的 spec）。
+
+康熙那条带 `@白名单`：只用交叉验证通过的切图（`scripts/kangxi_crossval.py`，
+三道独立证据，独立源不一致率 0.312%），待人审的 1,040 张不进模板。
+目录不存在时自动跳过 → 退回纯字体模板，不报错（这些数据不随仓库分发）。"""
+
+
+def _spec_ready(spec: str) -> bool:
+    """源目录/白名单在不在。不在就跳过这条 spec。"""
+    try:
+        from .extra_glyphs import parse_spec
+        kind, d, styles = parse_spec(spec)
+        if not Path(d).exists():
+            return False
+        if kind == "kangxi" and isinstance(styles, str):
+            return Path(styles).exists()
+        return True
+    except Exception:
+        return False
+
+
+HOG_WEIGHT = 0.0
 CNN_WEIGHT = 1.0
-EMB_WEIGHT = 3.0
+EMB_WEIGHT = 4.0
 """三源 RRF 权重（HOG 字体检索 / CNN 分类头 / CNN embedding 检索）。
+
+**2026-09-07 重标为 0 / 1 / 4**（外部真刻本模板上线，`external_glyph_sources_experiment.md` §5.3）。
+embedding 模板从「4 套字体渲染」换成「字体 + 康熙字头 + 字统网印楷」后，HOG 那一路
+（字体模板检索）被 embedding 完全覆盖，归零反而更好——unseen 1,327 实测三源融合
+top-1 **95.0 → 97.2**（严格 93.5 → 95.6），rare-char top-1 81.0 → 90.5。
+HOG 保留在代码里（权重 0 即不参与 RRF），换回字体模板时改回 0.5。
+
+以下是 2026-09-05 的旧标定，字体模板时代的依据，留档：
+
 
 2026-09-05 扫描（run-2 checkpoint；unseen 1,327 / rare 21，异体算对）：
 

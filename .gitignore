@@ -90,3 +90,8 @@ output/*/step3_input/
 
 # 字形库自洽审计产物（scripts/audit_glyph_consistency.py，可再生）
 output/audit_glyph_*
+
+# 一次性实验产物
+zitools_p2_rev.log
+output/corpora_disagree_ids.txt
+output/review_*.html

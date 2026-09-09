@@ -99,6 +99,11 @@ def main() -> int:
     ap.add_argument("--out", default="cache/glyph_cnn")
     ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--extra-real", action="append", default=[],
+                    help="外部真刻本字形源，可重复：kangxi:<dir> | zitools:<dir>[:印,楷]（clustering/extra_glyphs.py）。"
+                         "只进训练，不进任何测试集")
+    ap.add_argument("--extra-per-class", type=int, default=4,
+                    help="有外部图的类，每 epoch 从外部图池采几张（每张都过 degrade 增广）")
     ap.add_argument("--real-frac", type=float, default=1.0,
                     help="只用这一比例的真刻例训练（按类分层抽样）——学习曲线实验用，"
                          "测试集不受影响")
@@ -184,6 +189,19 @@ def main() -> int:
             font_imgs[ci] = lst
     print(f"字体渲染 {sum(len(v) for v in font_imgs.values())} 张 / {len(font_imgs)} 类  {time.time()-t0:.0f}s")
 
+    # 外部真刻本图（康熙字典字头 / 字统网），按类建池；测试集里的字也会有——那是允许的：
+    # unseen 协议禁的是「该字的本书刻例」，外部字典/刻本图正是要测的「替身」
+    extra_imgs: dict[int, list[np.ndarray]] = {}
+    if a.extra_real:
+        from open_guji_cv.clustering.extra_glyphs import load_many
+        t0 = time.time()
+        ex = load_many(a.extra_real, classes)
+        for ch, lst in ex.items():
+            extra_imgs[cidx[ch]] = [x.astype(np.uint8) for x in lst]
+        n_unseen_cov = len({cidx[c] for c in {i["char"] for i in items if i["split"] == "unseen"} if cidx[c] in extra_imgs})
+        print(f"外部真刻本 {sum(len(v) for v in extra_imgs.values())} 张 / {len(extra_imgs)} 类 "
+              f"(unseen 字种覆盖 {n_unseen_cov})  {time.time()-t0:.0f}s")
+
     # ── 模型 ──
     class Block(nn.Module):
         def __init__(self, i, o, s):
@@ -228,6 +246,9 @@ def main() -> int:
         for ci, lst in font_imgs.items():
             for _ in range(a.font_per_class):
                 xs.append(degrade(rng.choice(lst), rng)); ys.append(ci)
+        for ci, lst in extra_imgs.items():
+            for _ in range(a.extra_per_class):
+                xs.append(degrade(rng.choice(lst), rng)); ys.append(ci)
         idx = list(range(len(xs)))
         rng.shuffle(idx)
         for i in range(0, len(idx), a.bs):
@@ -253,7 +274,8 @@ def main() -> int:
         net.train()
         return r1 / n, r10 / n
 
-    steps_per_epoch = math.ceil((len(Xtr) + a.font_per_class * len(font_imgs)) / a.bs)
+    steps_per_epoch = math.ceil((len(Xtr) + a.font_per_class * len(font_imgs)
+                                 + a.extra_per_class * len(extra_imgs)) / a.bs)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=a.epochs * steps_per_epoch)
     best = 0.0
     out = Path(a.out)
