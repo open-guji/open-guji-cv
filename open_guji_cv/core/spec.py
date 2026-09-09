@@ -39,6 +39,27 @@ class ProductKindSpec:
 
 
 @dataclass(frozen=True)
+class GateLevel:
+    """闸的一层判据，只做文档/查询展示用——执行体仍在闸自己的 `run_page` 里，
+    这里不驱动执行，纯重组阶段不把判据拆成逐层可插拔的函数（那是改算法，不是这一轮的事）。"""
+    id: str                          # "L1" / "L1c" / "L2" / "L3" ……
+    unit: Unit                       # 这一层判到哪个粒度
+    desc: str = ""                   # 一句话判据，别写具体阈值数字（那些在 Params 里，写两处会漂）
+
+
+@dataclass(frozen=True)
+class GateSpec:
+    """挂在某个 Step 出口的闸。`id` 是这道闸自己的 Step id——它仍然是一个正常
+    注册进 `STEPS` 的 `Step`（有自己的 `consumes`/`produces`/落盘目录/指纹），
+    只是不出现在任何 pipeline yaml 的 `steps:` 列表里；引擎跑完被挂的 Step 后
+    自动接着跑它（见 `core.step.attach_gate` 与 `core.engine.Engine.run`）。"""
+    id: str
+    unit: Unit
+    levels: tuple[GateLevel, ...] = ()
+    on_fail: Literal["block", "flag", "degrade"] = "block"
+
+
+@dataclass(frozen=True)
 class StepSpec:
     id: str
     title: str
@@ -62,6 +83,9 @@ class StepSpec:
     只是**声明**，不参与指纹——同一份代码在装了引擎的机器上跑出来的产物，
     跟没装的机器上的空产物不是一回事，但那个差别由参数（如引擎名）和产物
     内容自己体现，不该混进 Step 指纹。"""
+    gate: GateSpec | None = None
+    """这个 Step 出口挂的闸（P0 只有 Step2 有），由 `core.step.attach_gate` 事后
+    挂上——不需要在这里手写，写在这里只是给类型看。"""
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────

@@ -2,6 +2,12 @@
 # 顺序必须是合法拓扑序（上游在前）；边由各步 consumes / produces 推出。
 # P0 五步 + 阶段 B 的 glyph_match；page_type_gate / grid_prior / ocr_candidates /
 # context_decide / seed_admit 待后续阶段接入时再加进来。
+#
+# 2026-09-09：Step2→3 交接闸（column_gate）不再是独立节点——它不产出新内容，
+# 只判定 column_warp 的输出够不够格进 row_segment，现在挂在 column_warp 的
+# `StepSpec.gate` 上（见 open_guji_cv/gates/column_gate.py），引擎跑完
+# column_warp 会自动接着跑它；`row_segment` 仍然 consumes `gate_manifest`，
+# 拓扑上这条边由 core/pipeline.py 认闸产出的种类，不需要闸出现在下面的列表里。
 id: keben_body_v2
 title: 刻本正文（v2 切分链）
 selector:
@@ -9,8 +15,7 @@ selector:
   page_type: [body]
 steps:
   - border_detect        # Step1 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
-  - column_warp          # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存
-  - column_gate          # Step2→3 交接闸：L1 页级 / L2 列级；页级 period / ref_w 用全部列算
+  - column_warp          # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存；出口闸见上
   - row_segment          # Step3 单列文字切分：→ 带类型字格 + 读序
   - cell_shrink          # Step4 字框收缩：沿用 CharExtractor；→ 紧框 + flags；字块走缓存
   - glyph_match          # Step5 库匹配：字块 → GlyphDB 三档判决 + 逐实例证据（指纹带库指纹）

@@ -16,6 +16,19 @@ from .step import STEPS, Step
 PIPELINES_DIR = Path(__file__).resolve().parent.parent / "pipelines"
 
 
+def _produces(step: Step) -> set[str]:
+    """一个 Step 实际能产出的种类集合，含它出口挂的闸产出的种类。
+
+    闸自己是正常注册进 `STEPS` 的 Step（有自己的 `produces`），这里只是在算拓扑时
+    把它记到被挂的 Step 头上——闸不出现在 yaml 的 `steps:` 里，但它产出的东西
+    （如 `gate_manifest`）下游 Step 仍然要能在 `Pipeline.validate()`/`upstream()`
+    里查到是谁「提供」的，否则移走闸这一个节点会让下游看起来断了链。"""
+    out = set(step.spec.produces)
+    if step.spec.gate:
+        out |= set(STEPS[step.spec.gate.id].spec.produces)
+    return out
+
+
 @dataclass
 class Pipeline:
     id: str
@@ -30,14 +43,14 @@ class Pipeline:
         return STEPS[sid]
 
     def upstream(self, sid: str) -> list[str]:
-        """直接上游：产出本步 consumes 的那些步 + needs 里显式写的。"""
+        """直接上游：产出本步 consumes 的那些步（含它们出口挂的闸产出的）+ needs 里显式写的。"""
         me = STEPS[sid]
         ups: list[str] = []
         for other in self.steps:
             if other == sid:
                 break
             o = STEPS[other]
-            if any(k in o.spec.produces for k in me.spec.consumes) or other in self.needs.get(sid, []):
+            if any(k in _produces(o) for k in me.spec.consumes) or other in self.needs.get(sid, []):
                 ups.append(other)
         return ups
 
@@ -68,7 +81,7 @@ class Pipeline:
         for sid in self.steps:
             me = STEPS[sid]
             for up in self.upstream(sid):
-                kinds = [k for k in me.spec.consumes if k in STEPS[up].spec.produces] or ["needs"]
+                kinds = [k for k in me.spec.consumes if k in _produces(STEPS[up])] or ["needs"]
                 for k in kinds:
                     out.append((up, sid, k))
         return out
@@ -79,7 +92,7 @@ class Pipeline:
             if sid not in STEPS:
                 raise ValueError(f"pipeline {self.id}: 未注册的 Step {sid!r}")
             s = STEPS[sid]
-            provided = {k for p in seen for k in STEPS[p].spec.produces}
+            provided = {k for p in seen for k in _produces(STEPS[p])}
             missing = [k for k in s.spec.consumes if k not in provided and k not in _EXTERNAL_KINDS]
             if missing:
                 raise ValueError(f"pipeline {self.id}: {sid} 需要 {missing}，但前面没有步骤产出它")

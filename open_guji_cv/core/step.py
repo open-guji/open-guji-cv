@@ -7,6 +7,7 @@ Step 是薄适配层：`run_page` 里调现有算法函数，把结果装进产�
 
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable
 import numpy as np
 from pydantic import BaseModel
 
-from .spec import ProductKindSpec, StepSpec, page_key
+from .spec import GateSpec, ProductKindSpec, StepSpec, page_key
 from ..utils.image_io import imread
 
 if TYPE_CHECKING:
@@ -59,6 +60,20 @@ def producer_of(kind_id: str) -> "Step":
         if kind_id in s.spec.produces:
             return s
     raise KeyError(f"没有 Step 产出 {kind_id!r}")
+
+
+def attach_gate(step_id: str, gate: GateSpec) -> None:
+    """把一道闸挂到某个已注册 Step 的 spec 上——只覆盖这一个实例的 `spec`
+    （`dataclasses.replace` 出一份新的、其余字段原样复制），不改该 Step 自己的
+    源文件。挂闸的 Step 与被挂的 Step 是两个不同的 `StepSpec.id`：闸自己按它
+    的 `id` 正常注册、正常落盘（见 `register_step`），这里只是让引擎知道
+    「跑完这个 Step 之后，接着自动跑那道闸」（见 `core.engine.Engine.run`）。
+
+    调用时机：闸模块（`gates/`）在 import 时调用，必须晚于它要挂的 Step 被
+    `register_step` 注册——`steps/__init__.py` 末尾 `import ..gates` 保证这个顺序。
+    """
+    step = STEPS[step_id]
+    step.spec = dataclasses.replace(step.spec, gate=gate)
 
 
 # ── 运行上下文 ───────────────────────────────────────────────────────
@@ -153,8 +168,15 @@ class Step(ABC):
 
     def describe(self) -> dict:
         s = self.spec
-        return {
+        d = {
             "id": s.id, "title": s.title, "version": s.version, "unit": s.unit,
             "consumes": list(s.consumes), "produces": list(s.produces),
             "params": s.params.model_json_schema(), "when": s.when,
         }
+        if s.gate:
+            d["gate"] = {
+                "id": s.gate.id, "unit": s.gate.unit, "on_fail": s.gate.on_fail,
+                "levels": [{"id": lv.id, "unit": lv.unit, "desc": lv.desc}
+                           for lv in s.gate.levels],
+            }
+        return d
