@@ -15,15 +15,21 @@ import pytest
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
-    """把事件/批次/金标都指到 tmp，别碰真数据。"""
-    from open_guji_cv.console import app as mod
-    from open_guji_cv.feedback.events import EventLog
-    from open_guji_cv.gold.store import GoldStore
-    from open_guji_cv.review.batches import BatchStore
+    """把事件/批次/金标都指到 tmp，别碰真数据。
 
-    monkeypatch.setattr(mod, "_log", EventLog(tmp_path / "feedback"))
-    monkeypatch.setattr(mod, "_batches", BatchStore(tmp_path / "batches"))
-    monkeypatch.setattr(mod, "_gold", GoldStore(tmp_path / "dataset"))
+    控制台重构 C1/C3 之后，这三个 Store 不再是 `console/app.py` 的模块级单例了：
+    根目录在 `console/deps.py`（那里同时是 CLI 与云端道的注入口），路由在
+    `console/routers/feedback.py`。改根的做法也跟着换成**改 deps 的根 ＋ 清缓存的单例**，
+    比 setattr 三个模块级名字更贴近真实用法（`deps.set_roots()` 走的是同一条路）。
+    两处都用 monkeypatch，teardown 自动还原，不会漏给下一个测试。
+    """
+    from open_guji_cv.console import deps
+    from open_guji_cv.console.routers import feedback as mod
+
+    for key in ("feedback", "batches", "dataset"):
+        monkeypatch.setitem(deps._roots, key, tmp_path / key)
+    for cached in ("_log", "_batches", "_gold"):
+        monkeypatch.setattr(deps, cached, None)   # 下次取时按新根重建
     return mod
 
 
@@ -64,7 +70,7 @@ def test_empty_events_do_not_trigger_consume(client):
 
 def test_consume_failure_does_not_break_the_write(client, monkeypatch):
     """消费炸了也得把「事件已保存」如实告诉前端——否则人以为裁决丢了。"""
-    from open_guji_cv.console import app as mod
+    from open_guji_cv.console.routers import feedback as mod
 
     def boom(*a, **kw):
         raise RuntimeError("路由表坏了")
