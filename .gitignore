@@ -12,7 +12,10 @@ config/variants/cache/
 config/gloss/cache/
 
 # 字形库 SQLite 索引（可由 glyph_store/ 重建，不入版本控制）
-glyph_store/glyphdb.sqlite
+# 用 **/ 前缀锚定到任意层级——不含 **/ 的 `glyph_store/glyphdb.sqlite` 只锚定
+# 到仓根，抓不到 output/glyph_store/glyphdb.sqlite；且 gitignore 对已跟踪
+# 文件本就不生效，该文件曾被提交（10.5 MB），已 `git rm --cached`（库路径 P0）。
+**/glyph_store/glyphdb.sqlite
 *.sqlite-journal
 
 # output/、data_full/ 曾经 gitignore，但容器重置会把它们连同耗时的
