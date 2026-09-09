@@ -12,15 +12,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from open_guji_cv.feedback.consumers import route_and_consume
+from open_guji_cv.clustering.glyph_db import GlyphDB
+from open_guji_cv.feedback.consumers import crop_exclude, glyphdb_admit, route_and_consume
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 from open_guji_cv.feedback.harvest import (from_marks, from_page_html, from_seed_log,
                                            from_seg_log, from_verdicts, harvest_text,
                                            parse_card_id, to_shell_verdicts)
 from open_guji_cv.feedback.routes import RouteTable
 from open_guji_cv.gold.store import GoldStore
+from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.review.batches import Batch, BatchStore, render_registry_markdown
 
 REPO = Path(__file__).resolve().parent.parent
@@ -283,3 +286,242 @@ def test_batch_refresh_counts(tmp_path):
     log.append(from_verdicts([{"id": "a", "verdict": "ok", "t": 1}], "r1", "border_detect"))
     b = store.refresh_counts(store.get("r1"), log)
     assert b.n_events == 1 and b.to_dict()["progress"] == 0.5
+
+
+# ── Step8：名分与位置 ────────────────────────────────────────────────
+def test_step8_outlets_match_consumers():
+    """Step8 的三个出口必须与 consumers.CONSUMERS 里真正在跑的消费者对上，
+    不是自己重写了一套平行的说法。"""
+    from open_guji_cv.feedback.step8 import STEP8, describe
+
+    assert {o.consumer for o in STEP8.outlets} == {"gold_add", "glyphdb_admit", "crop_exclude"}
+    d = describe()
+    assert d["id"] == "step8_feedback" and len(d["outlets"]) == 3
+
+
+# ── 落库六条纪律：glyphdb_admit（① 落字形库）────────────────────────
+def _cell_target(key: str, book: str, page: int, col: int, slot: int) -> EventTarget:
+    return EventTarget(step="seed_admit", unit="cell", key=key, book=book, page=page,
+                       col=col, slot=slot)
+
+
+def _put_char_patch(monkeypatch, tmp_path: Path, book: str, page: int, col: int,
+                    slot: int, sub: str = "") -> None:
+    """给 `glyphdb_admit` 内部硬编码的 `ImageCache()` 铺一张测试图块。
+
+    `glyphdb_admit` 自己 new 一个 `ImageCache()`，不接收 cache 参数——测试靠
+    `GUJI_CACHE_DIR` 环境变量把默认根指到 tmp_path，双方读写同一处，不碰仓内
+    真缓存。"""
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
+    cache = ImageCache(root=tmp_path / "cache")
+    img = np.full((32, 32), 40, dtype=np.uint8)
+    ckey = f"p{page:04d}c{col:02d}s{slot}{sub}"
+    cache.put(book, "char_patch", ckey, img)
+
+
+def test_glyphdb_admit_reading_forced_to_shape_outside_exception(monkeypatch, tmp_path):
+    """纪律1（字形与释读分开存）在 glyphdb_admit 这一处的守卫：非己/已/巳时，
+    reading 必须被拉回等于 shape——旧组视图曾对所有组无条件填整理本字当文意，
+    脏了 62 条，这条守卫就是防这个案底在消费者这一层重演。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 4, 1, 3)
+    t = _cell_target("vol01:4:1:3", "vol01", 4, 1, 3)
+    e = make_event("r1", 1, "confirm", t, {"shape": "卽", "reading": "即", "conversion": 1})
+    db_path = str(tmp_path / "g.db")
+    res = glyphdb_admit([(e, None)], db_path=db_path)
+    assert res.added == 1 and not res.errors
+    db = GlyphDB(db_path)
+    label = db.conn.execute("SELECT label FROM instances WHERE instance_id=?",
+                            ("v2:vol01:4:1:3",)).fetchone()[0]
+    char = db.conn.execute("SELECT char FROM admissions WHERE instance_id=?",
+                           ("v2:vol01:4:1:3",)).fetchone()[0]
+    assert label == "卽"    # instances.label 永远照录刻本形，不被文意覆盖
+    assert char == "卽"     # 非己/已/巳：admissions.char 也被拉回 shape，"即" 不採信
+
+
+def test_glyphdb_admit_ji_yi_si_exception_keeps_shape_on_label(monkeypatch, tmp_path):
+    """己/已/巳允许字形与文意分岔，但 instances.label 仍照录刻本形（唯一例外
+    也不例外的那一半）。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 9, 2, 5)
+    t = _cell_target("vol01:9:2:5", "vol01", 9, 2, 5)
+    e = make_event("r1", 1, "confirm", t, {"shape": "巳", "reading": "已", "conversion": 1})
+    db_path = str(tmp_path / "g.db")
+    res = glyphdb_admit([(e, None)], db_path=db_path)
+    assert res.added == 1
+    db = GlyphDB(db_path)
+    label = db.conn.execute("SELECT label FROM instances WHERE instance_id=?",
+                            ("v2:vol01:9:2:5",)).fetchone()[0]
+    char = db.conn.execute("SELECT char FROM admissions WHERE instance_id=?",
+                           ("v2:vol01:9:2:5",)).fetchone()[0]
+    assert label == "巳" and char == "已"
+
+
+def test_glyphdb_admit_relabel_goes_through_evict_and_readmit(monkeypatch, tmp_path):
+    """纪律2：改判必须走「撤库+重放」，不能被 `admit_instance` 的幂等闸吞掉——
+    这个坑咬过三次（29:4:19、80:5:7、32:7:10 都是它）。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 29, 4, 19)
+    t = _cell_target("vol01:29:4:19", "vol01", 29, 4, 19)
+    db_path = str(tmp_path / "g.db")
+    e1 = make_event("r1", 1, "confirm", t, {"shape": "巳"})
+    res1 = glyphdb_admit([(e1, None)], db_path=db_path)
+    assert res1.added == 1
+    e2 = make_event("r2", 1, "confirm", t, {"shape": "已"})   # 改判
+    res2 = glyphdb_admit([(e2, None)], db_path=db_path)
+    assert res2.added == 1 and res2.updated == 1              # 撤库后重进，不是被幂等闸吞掉
+    db = GlyphDB(db_path)
+    label = db.conn.execute("SELECT label FROM instances WHERE instance_id=?",
+                            ("v2:vol01:29:4:19",)).fetchone()[0]
+    assert label == "已"                                       # 库里最终是改判后的值
+
+
+def test_glyphdb_admit_duplicate_call_is_idempotent(monkeypatch, tmp_path):
+    """同一条事件（同一批）再消费一次，第二次什么也不做——不是改判，直接被幂等闸挡住。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 40, 9, 17)
+    t = _cell_target("vol01:40:9:17", "vol01", 40, 9, 17)
+    e = make_event("r1", 1, "confirm", t, {"shape": "蠹"})
+    db_path = str(tmp_path / "g.db")
+    res1 = glyphdb_admit([(e, None)], db_path=db_path)
+    assert res1.added == 1
+    res2 = glyphdb_admit([(e, None)], db_path=db_path)
+    assert res2.added == 0 and res2.skipped == 1
+
+
+def test_glyphdb_admit_provenance_is_human(monkeypatch, tmp_path):
+    """纪律3现状：glyphdb_admit 只接人裁的 confirm 事件，provenance 一律 human——
+    v2 自动放行（纪律5，方针待定）目前没有事件通道喂给这个消费者，本道按现状
+    实现即可，不替它拍板。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 6, 1, 1)
+    t = _cell_target("vol01:6:1:1", "vol01", 6, 1, 1)
+    e = make_event("r1", 1, "confirm", t, {"shape": "日"}, actor="user")
+    db_path = str(tmp_path / "g.db")
+    glyphdb_admit([(e, None)], db_path=db_path)
+    db = GlyphDB(db_path)
+    prov = db.conn.execute("SELECT provenance FROM admissions WHERE instance_id=?",
+                           ("v2:vol01:6:1:1",)).fetchone()[0]
+    assert prov == "human"
+
+
+def test_glyphdb_admit_records_per_instance_evidence(monkeypatch, tmp_path):
+    """纪律4：逐实例证据，不做盲传播——起因是 glyph_store 94 个"人工"标签全是
+    簇级传播、逐张复核 11.7% 是错的。每条 admissions.evidence 都要能各自追回
+    触发它的那条事件 id，不能两个实例共享一条证据。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 3, 1, 1)
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 3, 1, 2)
+    t1 = _cell_target("vol01:3:1:1", "vol01", 3, 1, 1)
+    t2 = _cell_target("vol01:3:1:2", "vol01", 3, 1, 2)
+    e1 = make_event("r1", 1, "confirm", t1, {"shape": "月"})
+    e2 = make_event("r1", 2, "confirm", t2, {"shape": "月"})
+    db_path = str(tmp_path / "g.db")
+    res = glyphdb_admit([(e1, None), (e2, None)], db_path=db_path)
+    assert res.added == 2
+    db = GlyphDB(db_path)
+    ev1 = json.loads(db.conn.execute(
+        "SELECT evidence FROM admissions WHERE instance_id=?", ("v2:vol01:3:1:1",)).fetchone()[0])
+    ev2 = json.loads(db.conn.execute(
+        "SELECT evidence FROM admissions WHERE instance_id=?", ("v2:vol01:3:1:2",)).fetchone()[0])
+    assert ev1["event"] == "evt_r1_000001" and ev2["event"] == "evt_r1_000002"
+    assert ev1["event"] != ev2["event"]      # 各自的证据，不是共享一条
+
+
+def test_glyphdb_admit_skips_seg_defect_events(monkeypatch, tmp_path):
+    """切分缺陷（confirm 但 payload.v=="seg_defect"）答的是"这块图能不能用"，
+    不是"这是什么字"，不能进字形库——那是 gold_add / crop_exclude 的事。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 1, 1, 1)
+    t = _cell_target("vol01:1:1:1", "vol01", 1, 1, 1)
+    e = make_event("r1", 1, "confirm", t, {"v": "seg_defect", "quality": "truncated", "shape": "月"})
+    res = glyphdb_admit([(e, None)], db_path=str(tmp_path / "g.db"))
+    assert res.added == 0 and res.skipped == 1
+
+
+# ── 落库六条纪律：crop_exclude（③ 排除名单）─────────────────────────
+def test_crop_exclude_appends_seg_defect_and_not_a_char():
+    """2026-09-05 补的缺口：标了缺陷／判非字都要写进排除名单，不能只落金标——
+    否则「标了缺陷」与「以后别再用这块图」之间就是断的。"""
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "crop_exclusions.jsonl"
+        t1 = _cell_target("vol01:5:2:9", "vol01", 5, 2, 9)
+        t2 = _cell_target("vol01:5:2:10", "vol01", 5, 2, 10)
+        e1 = make_event("r1", 1, "confirm", t1, {"v": "seg_defect", "quality": "contaminated"})
+        e2 = make_event("r1", 2, "not_a_char", t2, {})
+        res = crop_exclude([(e1, None), (e2, None)], list_path=str(path))
+        assert res.added == 2 and not res.errors
+        rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+        reasons = {r["instance_id"]: r["reason"] for r in rows}
+        assert reasons == {"vol01:5:2:9": "seg_defect", "vol01:5:2:10": "not_a_char"}
+        assert all(r["origin"] == "human" for r in rows)   # 人眼实锤这一档
+
+
+def test_crop_exclude_dedup_skips_known_id():
+    """同一实例第二批又标了一次缺陷（比如改判），不重复写进名单。"""
+    from open_guji_cv.clustering.exclusions import load_exclusions
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "crop_exclusions.jsonl"
+        t = _cell_target("vol01:5:2:9", "vol01", 5, 2, 9)
+        e1 = make_event("r1", 1, "confirm", t, {"v": "seg_defect", "quality": "contaminated"})
+        crop_exclude([(e1, None)], list_path=str(path))
+        load_exclusions.cache_clear()
+        e2 = make_event("r2", 1, "confirm", t, {"v": "seg_defect", "quality": "truncated"})
+        res = crop_exclude([(e2, None)], list_path=str(path))
+        assert res.added == 0 and res.skipped == 1
+        assert len(path.read_text(encoding="utf-8").splitlines()) == 1
+        load_exclusions.cache_clear()
+
+
+def test_crop_exclude_dry_run_does_not_write():
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "crop_exclusions.jsonl"
+        t = _cell_target("vol01:5:2:9", "vol01", 5, 2, 9)
+        e = make_event("r1", 1, "not_a_char", t, {})
+        res = crop_exclude([(e, None)], list_path=str(path), dry_run=True)
+        assert res.added == 1
+        assert not path.exists()
+
+
+# ── 落库六条纪律：金标记的是当前状态（⑥）＋ 全出口幂等（完成判据3）───
+def test_gold_add_seg_defect_quality_reflects_current_not_history(tmp_path):
+    """纪律6：金标记的是「当前切得怎么样」，不是历史问题——缺陷修好后复量要能
+    改回 clean，历史留在 source_events，不是只能越标越差。"""
+    # confirm/seg_defect 同时也会路由给 crop_exclude（甚至 glyphdb_admit）——
+    # 不显式指定 list_path/db_path 就会落到仓内真实的 config/crop_exclusions.jsonl，
+    # 这条纪律不该以「顺手弄脏真配置」为代价来验证，所以两个都指到 tmp_path。
+    excl_path = str(tmp_path / "crop_exclusions.jsonl")
+    db_path = str(tmp_path / "g.db")
+    log = EventLog(tmp_path / "feedback")
+    store = GoldStore(tmp_path / "dataset")
+    t = _cell_target("vol01:12:3:8", "vol01", 12, 3, 8)
+    log.append([make_event("r1", 1, "confirm", t, {"v": "seg_defect", "quality": "contaminated"})])
+    route_and_consume(log, "r1", RouteTable.load(None), store, list_path=excl_path, db_path=db_path)
+    item = store.get("char-segmentation/instances", "vol01:12:3:8")
+    assert item.expected["quality"] == "contaminated"
+
+    log.append([make_event("r2", 1, "confirm", t, {"v": "seg_defect", "quality": "clean"})])
+    route_and_consume(log, "r2", RouteTable.load(None), store, list_path=excl_path, db_path=db_path)
+    item = store.get("char-segmentation/instances", "vol01:12:3:8")
+    assert item.expected["quality"] == "clean"                              # 当前状态改回 clean
+    assert set(item.source_events) == {"evt_r1_000001", "evt_r2_000001"}    # 历史留在 source_events
+
+
+def test_route_and_consume_all_three_outlets_fan_out_and_idempotent(monkeypatch, tmp_path):
+    """三个出口在同一条 confirm 事件上各司其职地跑一遍，且整批（不只是 gold_add
+    那一路）再消费一次时第二次什么也不做——完成判据3要的是这个整体幂等，不是
+    只测过 gold_add 那一个出口。"""
+    _put_char_patch(monkeypatch, tmp_path, "vol01", 20, 2, 4)
+    log = EventLog(tmp_path / "feedback")
+    store = GoldStore(tmp_path / "dataset")
+    t = _cell_target("vol01:20:2:4", "vol01", 20, 2, 4)
+    log.append([make_event("r1", 1, "confirm", t, {"shape": "集"})])
+
+    db_path = str(tmp_path / "g.db")
+    excl_path = str(tmp_path / "crop_exclusions.jsonl")
+    out = route_and_consume(log, "r1", RouteTable.load(None), store,
+                            db_path=db_path, list_path=excl_path)
+    by_consumer = {r["consumer"]: r for r in out["results"]}
+    assert by_consumer["glyphdb_admit"]["added"] == 1     # 定字：进库
+    assert by_consumer["gold_add"]["skipped"] == 1        # 定字：gold_add 只管切分缺陷，跳过
+    assert by_consumer["crop_exclude"]["skipped"] == 1    # 定字：不是缺陷/非字，跳过
+
+    out2 = route_and_consume(log, "r1", RouteTable.load(None), store,
+                             db_path=db_path, list_path=excl_path)
+    assert out2["results"] == []                         # 三个出口全部什么也不做
