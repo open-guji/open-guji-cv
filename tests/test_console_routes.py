@@ -75,10 +75,28 @@ import open_guji_cv.console.app as A  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
 
 def _endpoints() -> dict:
-    """{"GET /api/books": 实现体}。C1–C3 怎么搬，这里都取得到。"""
+    """{"GET /api/books": 实现体}。C1–C3 怎么搬，这里都取得到。
+
+    ⚠️ **要递归**：C3 之后路由是 `include_router` 进来的，而这版 fastapi
+    在 `app.routes` 里放的是 `_IncludedRouter` 包装对象、**不摊平成 APIRoute**。
+    只扫一层的话 46 条会变成 0 条（本道实测踩过）。
+    """
     from fastapi.routing import APIRoute
-    return {f"{m} {r.path}": r.endpoint for r in A.app.routes
-            if isinstance(r, APIRoute) for m in sorted(r.methods - {"HEAD"})}
+
+    out: dict = {}
+
+    def walk(routes) -> None:
+        for r in routes:
+            if isinstance(r, APIRoute):
+                for m in sorted(r.methods - {"HEAD"}):
+                    out[f"{m} {r.path}"] = r.endpoint
+            elif hasattr(r, "original_router"):   # fastapi 的 _IncludedRouter 包装
+                walk(r.original_router.routes)
+            elif hasattr(r, "routes"):            # APIRouter / Mount
+                walk(r.routes)
+
+    walk(A.app.routes)
+    return out
 
 
 def _model(fn, name: str = "req"):
@@ -109,6 +127,13 @@ SANCTIONED = {
         "OperationalError: no such table: admissions —— 它当场造一个 0 字节空库再去查表；"
         "改之后正常记一行台账。这是修好了，不是改坏了。",
 }
+
+#: 这两条列的是**进程内的全局注册表**（`core.step.STEPS` / `KINDS`）。
+#: 别的测试文件会往里注册自己的试验 Step / 产物种类，**注册完不撤**——
+#: 单跑本文件是 9 步 13 种，全仓一起跑就变成 13 步 18 种。
+#: 那是注册表的进程级污染，不是这两条路由的行为变化，所以：
+#: **基线里有的必须原样都在**（少一条、改一条照样报），多出来的只提示不判错。
+REGISTRY_ROUTES = ("GET /api/steps", "GET /api/kinds")
 
 BOOK = "vol01"
 PAGES = "dev_set"          # 有产物的页集（见模块 docstring 的准备命令）
@@ -411,6 +436,18 @@ def test_route_snapshot():
         return
 
     base = json.loads(SNAP.read_text(encoding="utf-8"))
+    extra_registered: dict[str, int] = {}
+    for k in REGISTRY_ROUTES:
+        if not isinstance(base.get(k), list) or not isinstance(snap.get(k), list):
+            continue
+        ids = {e.get("id") for e in base[k] if isinstance(e, dict)}
+        kept = [e for e in snap[k] if not isinstance(e, dict) or e.get("id") in ids]
+        if len(kept) != len(snap[k]):
+            extra_registered[k] = len(snap[k]) - len(kept)
+            snap[k] = kept
+    for k, n in extra_registered.items():
+        print(f"\n（{k}：另有 {n} 条是别的测试注册进全局注册表的，已排除，见 REGISTRY_ROUTES）")
+
     changed = [k for k in sorted(set(base) | set(snap))
                if base.get(k, "<缺>") != snap.get(k, "<缺>")]
     for k in changed:
