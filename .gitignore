@@ -95,3 +95,14 @@ output/audit_glyph_*
 zitools_p2_rev.log
 output/corpora_disagree_ids.txt
 output/review_*.html
+
+# 《四庫全書總目》数据已迁 siku-zongmu-workspace 私有仓（2026-09-08）
+# 引擎仓只留 output/glyph_store 样本库供测试；跑真书设 GUJI_WORKSPACE
+/data_full/
+/output/vol*/
+/output/book*/
+/output/hanshu_yiwenzhi/
+/output/self_assess_*/
+/output/review_*/
+/output/border_review/
+/output/inner_probe/

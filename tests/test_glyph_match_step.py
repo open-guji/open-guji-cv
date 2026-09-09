@@ -23,7 +23,14 @@ from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.glyph_match import GlyphMatchParams, db_fingerprint
 
 REPO = Path(__file__).resolve().parent.parent
-RAW = REPO / "data_full" / "zongmu"
+
+
+def _ws_raw():
+    """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
+    没设则退回仓根——引擎自带的小样本仍在仓内。"""
+    from open_guji_cv.core.workspace import raw_root
+    return raw_root()
+RAW = _ws_raw() / "data_full" / "zongmu"
 needs_raw = pytest.mark.skipif(not RAW.exists(), reason="需要 data_full/zongmu 原图")
 
 

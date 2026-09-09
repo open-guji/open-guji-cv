@@ -1,12 +1,17 @@
-# 字形庫（真源）
+# 样本字形库（**不是真库**）
 
-本目錄是跨書字形庫的**持久真源**，隨倉庫版本管理。
-`glyphdb.sqlite` 是可重建的索引，不納入版本控制。
+从《四庫全書總目》真库抽的 150 个字头 / 900 条刻例 / 900 张图，**只用来跑测试**。
 
+真库（2,664 字头 / 16,557 刻例）在 `siku-zongmu-workspace` 私有仓。
+跑真书要设：
+
+```bash
+export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace
 ```
-python -m open_guji_cv glyph-db rebuild --store glyph_store
-```
 
-未導出：未標註實例的圖塊（可從掃描件重跑）、派生表示
-（norm/skeleton/feat 是原始圖的純函數，算法升級時必須重算）、
-聚類成員（過程資產）。
+重新生成：
+
+```bash
+python scripts/make_sample_store.py \
+  --src /path/to/siku-zongmu-workspace/output/glyph_store --chars 200
+```
