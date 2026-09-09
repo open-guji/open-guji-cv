@@ -146,6 +146,32 @@ class PageAdmit(BaseModel):
         return next((c for c in self.columns if c.col == col), None)
 
 
+class AlignRec(BaseModel):
+    """一个字位的整理本对齐结果（Step5-d，四路证据里的文本那一路）。
+
+    `align_char` 是过闸对齐后语料在这一位给出的字（原 `gold.v2_align.GoldChar.reading`
+    的来源），`align_op`/`ref_run` 是对齐段的性质与长度——分层读，`replace` 段
+    比 `equal` 段可疑。只收过采信闸的位（同 `clustering.align_label.label_page`
+    的闸：`equal` 全收，等长 `replace` 段长 ≤3 且被 `equal` 夹住），插入/删除/
+    不过闸的位不出现在这里。
+    """
+    id: str                                  # book:page:col:slot[a|b]
+    col: int
+    slot: int
+    sub: str | None = None
+    align_char: str
+    align_op: str                            # equal | replace
+    ref_run: int = 1
+
+
+class PageAlignRef(BaseModel):
+    page: int
+    anchored: bool = False
+    corpus_fingerprint: str = ""             # 对齐是用哪份整理本做的，见 align_ref 模块头
+    note: str = ""                           # 未锚定时的原因
+    chars: list[AlignRec] = Field(default_factory=list)
+
+
 GLYPH_MATCH = register_kind(ProductKindSpec(
     id="glyph_match", title="Step5 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
@@ -161,3 +187,7 @@ CONTEXT_DECISION = register_kind(ProductKindSpec(
 SEED_ADMIT = register_kind(ProductKindSpec(
     id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
     schema=PageAdmit, coord_space=COLUMN_PX))
+
+ALIGN_REF = register_kind(ProductKindSpec(
+    id="align_ref", title="Step5-d 整理本对齐", storage="numeric", unit="cell",
+    schema=PageAlignRef, coord_space=COLUMN_PX))
