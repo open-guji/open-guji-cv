@@ -112,6 +112,28 @@ _STRATUM_DETAIL = re.compile(r"^\s{2,}\S.*?\bn=\s*\d+")
 # 行首的分层名：「body 页 12 列 108 …」
 _STRATUM = re.compile(r"^\s*(?P<s>[a-z_]{3,14}|全部|总体)\s+页")
 
+# 「mean/median/p90/max」这类统计量成组出现、数字后不带单位：
+# 「像素误差 mean 1.1  median 0.0  p90 2.0  max 31」。前面几条规则都要求数值独立
+# 可比或紧跟单位，这类行全漏（touching-cuts、row-boundaries 的像素误差都是这个形状）。
+_STAT_WORDS = ("mean", "median", "p90", "p50", "p95", "max", "min", "std")
+_STAT_RUN = re.compile(
+    r"(?P<label>[一-鿿][一-鿿\w]{0,10})\s*[:：]?\s*"
+    r"(?P<body>(?:(?:" + "|".join(_STAT_WORDS) + r")\s+[\d.]+\s*)+)")
+_STAT_PAIR = re.compile(r"(" + "|".join(_STAT_WORDS) + r")\s+([\d.]+)")
+
+# 「≤3px 91.5%   ≤5px 94.2%   ≤10px 96.9%」——门槛名以 ≤/≥/</> 开头，不是中文，
+# 前面几条规则都要求名字以中文开头，这类行全漏。可选带一段中文前缀区分同名门槛
+# （「最大偏差 ≤3px」vs 裸的「≤3px」，两者是不同的量，不能互相覆盖）。
+_THRESH_RUN = re.compile(
+    r"(?:(?P<label>[一-鿿][一-鿿\w]{0,10})\s*[:：]?\s*)?"
+    r"(?P<body>(?:[≤≥<>]=?\s*\d+(?:px|字|条|列)?\s*[\d.]+%\s*)+)")
+_THRESH_PAIR = re.compile(r"([≤≥<>]=?\s*\d+(?:px|字|条|列)?)\s*([\d.]+)%")
+
+# 「touching-cuts n=258（moved 77 / ok 181；…）」「折线金标 n=231（现役有缝 219）」：
+# 样本量声明本身是关键指标，后面的括号是它的构成说明，原样存进 note，不逐项拆解
+# （逐项拆会碰到「moved 77 / ok 181」这类非中文起首的标签，成本远大于收益）。
+_N_COUNT = re.compile(r"(?P<label>[一-鿿][一-鿿\w]{0,10})?\s*\bn=(?P<n>\d+)(?:（(?P<note>[^）]*)）)?")
+
 
 # 逐类明细行的表头词：这些行是「每一类各多少」，不是总体指标。
 # 抓进来会把六行同名的「策略判对」堆满 limit，把真正的总体指标挤掉。
@@ -144,7 +166,7 @@ def _parse_summary_lines(lines: list[str], add) -> None:
                 add(name, num, "")
 
 
-def parse_metrics(text: str, limit: int = 12) -> list[Metric]:
+def parse_metrics(text: str, limit: int = 24) -> list[Metric]:
     out: list[Metric] = []
     seen: set[str] = set()
     tally: dict[str, list[int]] = {}     # 分层明细行的同名分数累加
@@ -215,6 +237,23 @@ def parse_metrics(text: str, limit: int = 12) -> list[Metric]:
                 continue
             add(prefix + m.group("name"), val, m.group("unit"),
                 int(n_cols.group(1)) if n_cols else None)
+        # 「mean/median/p90/max」成组的统计量、「≤Npx 92%」成组的门槛、
+        # 「xxx n=NNN（…）」样本量声明——三种都不要求数字带独立单位或行内唯一，
+        # 跟上面几条规则并存，谁都不覆盖谁（同名才去重，见 add() 的 seen 集合）。
+        for sm in _STAT_RUN.finditer(line):
+            label = sm.group("label")
+            for stat, val in _STAT_PAIR.findall(sm.group("body")):
+                add(f"{label} {stat}", float(val))
+        for tm in _THRESH_RUN.finditer(line):
+            label = tm.group("label")
+            for name, val in _THRESH_PAIR.findall(tm.group("body")):
+                nm = f"{label} {name}" if label else name
+                add(nm, float(val), "%")
+        for nc in _N_COUNT.finditer(line):
+            label = nc.group("label")
+            nm = f"{label} n" if label else "n"
+            if add(nm, int(nc.group("n"))) and nc.group("note"):
+                out[-1].note = nc.group("note")
 
     # 兜底：正文里一个百分比指标都没抠到（全是逐条明细 + 一行尾部汇总），
     # 才去解析尾部汇总行。放在最后，免得把 instance_quality 那种本来就有
