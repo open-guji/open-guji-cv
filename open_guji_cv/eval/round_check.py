@@ -131,7 +131,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
     继承的字）、`context`（Step6 定的）、**`fallback`（库 top1 兜底）**。前两者虽然
     也来自管线，但金标能成立的前提是**整理本 8-gram 锚定成功**（`align_op=equal` =
     管线转写与整理本文本对上了），整理本是独立的文本证据；而 `fallback` 那批
-    ——`_slots_from_decision._fallback` 直接取 `match.candidates[0][0]`——拿它去验
+    ——`align_ref.slots_from_decision._fallback` 直接取 `match.candidates[0][0]`——拿它去验
     「库 top1 准不准」是纯自证。
 
     实测 vol01 全册 16,334 条金标：equal 16,244（其中 fallback 465 = 2.8% 自证）、

@@ -4,9 +4,26 @@
 1359 个 same 里有几个是对的，不量就不知道。这个模块用整理本给大部分字位
 自动落金标，把人工从「逐字标 1933 条」降到「裁几百条难例」。
 
-## 怎么锚
+## 两个身份分开了（2026-09-09，Step5-d 归位）
 
-复用 `clustering/align_label.label_page`：定字串 → 8-gram 锚到整理本 →
+**对齐**（8-gram 锚定 + `difflib` 过闸，产出逐字位 `align_char`/`align_op`）
+挪去了 `steps/align_ref.py`，成了与 `glyph_match`/`ocr_candidates`/
+`context_decision` 平级的正式 Step——它同时是四路证据里的文本那一路，
+之前挤在这个「金标生成器」模块里，导致它的产物没有独立指纹与过期传播。
+
+本模块现在只做**金标派生**：优先读 `align_ref` 的产物（指纹对得上才用，
+见 `_aligned_chars`），把 `shape`（v2 定的刻本形，仍从 `context_decision`/
+`glyph_match`/`ocr_candidates` 现算——这部分本来就不是"对齐"）与
+`align_ref` 给的 `reading`/`align_op`/`op_run` 拼成 `GoldChar`。
+
+调用方传了非默认 `corpus_path`（`build_rare_char_set.py`/
+`survey_review_queue.py` 的 `--corpus`）、或还没跑过 `align_ref` 时，
+**现算一遍兜底**（复用同一份 `clustering.align_label.label_page`，算法不变）
+——不能让脚本传自定义语料却读到 `align_ref` 缓存的默认语料结果。
+
+## 怎么锚（算法在 `align_ref` 里，这里只是简述）
+
+`clustering/align_label.label_page`：定字串 → 8-gram 锚到整理本 →
 `difflib` 对齐 → **采信闸**（`equal` 段全收；等长 `replace` 段要求段长 ≤3
 且左右各有 ≥2 字的 `equal` 段贴身夹住）。闸是 G5 那边踩出来的，漏进来的
 错标（卷→曰、己→已）全是长 replace 段或没被夹住的，不能松。
@@ -40,8 +57,6 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from ..utils.jiazhu_order import sort_by_reading
-
 DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
 
 
@@ -72,91 +87,30 @@ class PageGold:
     note: str = ""
 
 
-def _slots_from_decision(dec, match=None, ocr=None
-                        ) -> tuple[list[tuple[int, int, str]], dict]:
-    """Step6 的 `context_decision` → `label_page` 要的 slots + 溯源表。
+def _aligned_chars(book: str, page: int, store, slots: list[tuple[int, int, str, str]],
+                   corpus_text: str, corpus_index: dict, corpus_path: str | Path,
+                   ) -> dict[tuple[int, int, str], tuple[str, str, int]] | None:
+    """{(col, slot, sub): (align_char, align_op, ref_run)}——过闸位才在里面。
 
-    ## 弃权位要用库/OCR 兜底填上，不能跳过（2026-09-04 改）
-
-    原先只收**定了字**的位。理由当时是「弃权位没有假设可对齐」，但这恰好
-    弄反了 `difflib` 的工作方式：对齐要的是一条**位位对应**的串，跳过一个
-    位不会「留空」，而是把后面的字全部前移一格——弃权越多，错位越狠。
-
-    实测代价极大：**p70 整页锚不上**（132 位只定出 72 个），而那页的文字
-    在整理本里明明有（「繭紙朱題芸帙之名蟠屈鸞章」）。它是生僻字密集页，
-    库里没样本、OCR 字表也不够，于是定字最少、最需要整理本帮忙的那些页，
-    反而是最锚不上的——正好把整理本这路证据挡在了最该用它的地方。
-
-    改成逐级兜底：**定字 → 库 kNN top1 → OCR top1**。兜底字只是**对齐载体**
-    （`AlignedLabel.hyp`），金标取的是整理本给的 `char`，所以兜底字错了也
-    不会污染金标，最多让那一位落进 `replace` 段（本来就该分层读）。
-
-    实测 vol01 dev_set：锚上的金标 **1619 → 1897 / 1933**（83.8% → 98.1%），
-    p70 从 0 → 115。
-
-    `match` / `ocr` 传 None 时退回旧行为（只收定字位）。
+    优先读 `align_ref` 的产物（省一次 8-gram 锚定 + difflib，且吃得到它的
+    指纹过期传播）；产物缺失、未锚定、或调用方传的语料与产物指纹对不上
+    （脚本用 `--corpus` 传了非默认语料）时现算一遍兜底——算法与 `align_ref`
+    内部完全相同（同一份 `clustering.align_label.label_page`），只是不进
+    Step 缓存。返回 None 代表锚不上。
     """
-    mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
-    omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
-
-    def _fallback(rid: str) -> str | None:
-        m = mmap.get(rid)
-        if m and m.candidates:
-            return m.candidates[0][0]
-        o = omap.get(rid)
-        if o and o.topk:
-            return o.topk[0][0]
-        return None
-
-    slots: list[tuple[int, int, str, str]] = []
-    meta: dict[tuple[int, int, str], str] = {}
-    # 有 match 时以它为准列举字位——context_decision 可能整列缺席（弃权），
-    # 那样按 dec 列举会把整列丢掉，锚定串又会错位。
-    src = match if match is not None else dec
-    dmap = {r.id: r for cc in dec.columns for r in cc.chars} if dec else {}
-    for cc in sorted(src.columns, key=lambda c: c.col):
-        if not cc.ok:
-            continue
-        # ⚠️ **按阅读顺序**，不是 (slot, sub)（2026-09-06 修，同 context_decide）。
-        # 夹注 a/b 是两行小字，(slot, sub) 排出来交错成「兩採淮進鹽本政」，
-        # 8-gram 锚不上、difflib 还会把邻近正文一起拖进 replace 段。
-        for r in sort_by_reading(cc.chars):
-            d = dmap.get(r.id)
-            ch = (d.char if d and d.char else None)
-            source = (d.source if d and d.char else "")
-            if ch is None and (match is not None or ocr is not None):
-                ch = _fallback(r.id)
-                source = "fallback"
-            if not ch:
-                continue
-            sub = r.sub or ""
-            slots.append((cc.col, r.slot, sub, ch))
-            meta[(cc.col, r.slot, sub)] = source
-    return slots, meta
-
-
-def align_page(book: str, page: int, store, corpus: str,
-               corpus_index: dict) -> PageGold:
-    from ..clustering.align_label import label_page
     from ..core.spec import page_key
+    from ..steps.context_decide import corpus_fingerprint
+    fp = corpus_fingerprint([str(corpus_path)]) if corpus_path else ""
+    ref = store.read(book, "align_ref", page_key(page), "align_ref")
+    if ref is not None and ref.anchored and fp and ref.corpus_fingerprint == fp:
+        return {(c.col, c.slot, c.sub or ""): (c.align_char, c.align_op, c.ref_run)
+                for c in ref.chars}
 
-    dec = store.read(book, "context_decide", page_key(page), "context_decision")
-    if dec is None:
-        return PageGold(book=book, page=page, anchored=False, note="没有定字产物")
-    # 库/OCR 供弃权位兜底（见 _slots_from_decision）；缺了也能跑，只是覆盖低
-    match = store.read(book, "glyph_match", page_key(page), "glyph_match")
-    ocr = store.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
-    slots, meta = _slots_from_decision(dec, match, ocr)
-    if len(slots) < 12:
-        return PageGold(book=book, page=page, anchored=False,
-                        note=f"定字太少（{len(slots)}），锚不住")
-
-    labels, ok = label_page(str(page), slots, book, corpus, corpus_index)
+    from ..clustering.align_label import label_page
+    labels, ok = label_page(str(page), slots, book, corpus_text, corpus_index)
     if not ok:
-        return PageGold(book=book, page=page, anchored=False, note="8-gram 锚定失败")
-
-    out: list[GoldChar] = []
-    n_conv = 0
+        return None
+    out: dict[tuple[int, int, str], tuple[str, str, int]] = {}
     for lab in labels:
         # AlignedLabel.instance_id 是 book:page:col:slot[a|b]——idx 就是 slot，
         # 夹注半格带 a/b 后缀（2026-09-06；此前不带，a/b 互相覆盖，
@@ -165,14 +119,44 @@ def align_page(book: str, page: int, store, corpus: str,
         col, tail = int(parts[2]), parts[3]
         sub = tail[-1] if tail[-1:] in ("a", "b") else ""
         slot = int(tail[:-1] if sub else tail)
-        # hyp = 转写（v2 定的字形）；char = 金标（整理本给的文意读法）
-        shape, reading = lab.hyp, lab.char
-        conv = shape != reading
+        out[(col, slot, sub)] = (lab.char, lab.op, lab.op_run)
+    return out
+
+
+def align_page(book: str, page: int, store, corpus: str, corpus_index: dict,
+               corpus_path: str | Path = "") -> PageGold:
+    from ..core.spec import page_key
+    from ..steps.align_ref import slots_from_decision
+
+    dec = store.read(book, "context_decide", page_key(page), "context_decision")
+    if dec is None:
+        return PageGold(book=book, page=page, anchored=False, note="没有定字产物")
+    # 库/OCR 供弃权位兜底（见 slots_from_decision）；缺了也能跑，只是覆盖低
+    match = store.read(book, "glyph_match", page_key(page), "glyph_match")
+    ocr = store.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
+    slots, meta = slots_from_decision(dec, match, ocr)
+    if len(slots) < 12:
+        return PageGold(book=book, page=page, anchored=False,
+                        note=f"定字太少（{len(slots)}），锚不住")
+
+    aligns = _aligned_chars(book, page, store, slots, corpus, corpus_index, corpus_path)
+    if aligns is None:
+        return PageGold(book=book, page=page, anchored=False, note="8-gram 锚定失败")
+
+    out: list[GoldChar] = []
+    n_conv = 0
+    for col, slot, sub, hyp in slots:
+        al = aligns.get((col, slot, sub))
+        if al is None:
+            continue          # 没过闸（insert/delete/长 replace/没被 equal 夹住）
+        reading, op, op_run = al
+        # hyp = 转写（v2 定的字形）；reading = 金标（整理本给的文意读法）
+        conv = hyp != reading
         n_conv += conv
+        iid = f"{book}:{page}:{col}:{slot}{sub}"
         out.append(GoldChar(
-            id=lab.instance_id, page=page, col=col, slot=slot, sub=sub or None,
-            shape=shape, reading=reading,
-            align_op=lab.op, op_run=lab.op_run,
+            id=iid, page=page, col=col, slot=slot, sub=sub or None,
+            shape=hyp, reading=reading, align_op=op, op_run=op_run,
             conversion=conv, source=meta.get((col, slot, sub), "")))
     return PageGold(book=book, page=page, anchored=True,
                     n_chars=len(out), n_conversion=n_conv, chars=out)
@@ -183,7 +167,7 @@ def align_book(book: str, pages: list[int], store,
     from ..clustering.align_label import build_ngram_index
     text = Path(corpus_path).read_text(encoding="utf-8")
     index = build_ngram_index(text)
-    return [align_page(book, pg, store, text, index) for pg in pages]
+    return [align_page(book, pg, store, text, index, corpus_path) for pg in pages]
 
 
 def write_jsonl(golds: list[PageGold], out: str | Path) -> int:

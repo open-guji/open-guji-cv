@@ -44,9 +44,8 @@ from pydantic import BaseModel
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
-                                    PageDecision, PageMatch, PageOcr)
-
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+                                    PageAlignRef, PageDecision, PageMatch,
+                                    PageOcr)
 
 
 class SeedAdmitParams(BaseModel):
@@ -54,10 +53,11 @@ class SeedAdmitParams(BaseModel):
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
-    corpus: str = DEFAULT_CORPUS        # 整理本；空字符串 = 不用整理本通道
-    corpus_fingerprint: str = ""        # 自动填，进 params_hash（外部可变状态）
     always_review: str = "己已巳"       # 这些字永远人审（用户 2026-09-04 定）
     edition: str = "wuyingdian_zongmu"  # 本书用字账（variant_ledger）的键
+    # 整理本通道原来在这里配 corpus/corpus_fingerprint，2026-09-09 挪去了
+    # `align_ref`（Step5-d，正式 Step，产物带自己的语料指纹）——本步只消费
+    # 它的产物，通道开不开看 `align_ref` 锚没锚上，不用再在这里配一份。
     use_exclusions: bool = True         # 查 config/crop_exclusions.jsonl（切坏的图块不进库不出卡）
     exclusions: str = ""                # 名单路径；空 = exclusions.py 默认
     exclusion_origins: str = "human,gate,pipeline"
@@ -93,13 +93,7 @@ class SeedAdmitParams(BaseModel):
         if not self.db_path:
             from ..core.workspace import glyph_db_path
             object.__setattr__(self, "db_path", str(glyph_db_path()))
-        # 语料是**外部可变状态**：换了整理本，准入结论会变，产物必须过期。
-        # 与 glyph_match 的 db_fingerprint、context_decide 的 corpus_fingerprint
-        # 同一套做法（见 context_decide 模块头）。
         from ..steps.context_decide import corpus_fingerprint
-        if self.corpus and not self.corpus_fingerprint:
-            object.__setattr__(self, "corpus_fingerprint",
-                               corpus_fingerprint([self.corpus]))
         # 用字账与语义表同理（2026-09-05）：两张表都是派生物，重建就该让准入重跑
         if not self.ledger_fingerprint:
             from ..variant_ledger import ledger_path
@@ -129,7 +123,7 @@ class SeedAdmitParams(BaseModel):
 class SeedAdmitStep(Step):
     spec = StepSpec(
         id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
-        consumes=("glyph_match", "ocr_candidates", "context_decision"),
+        consumes=("glyph_match", "ocr_candidates", "context_decision", "align_ref"),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -137,7 +131,6 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variants",
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
-                   "open_guji_cv.clustering.align_label",
                    "open_guji_cv.clustering.note_lexicon",
                    "open_guji_cv.utils.jiazhu_order"),
     )
@@ -180,7 +173,7 @@ class SeedAdmitStep(Step):
 
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
-        amap = _align(p, match, dec, ocr, page, ctx.book.id)
+        amap = _align(ctx, page)
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
@@ -550,43 +543,19 @@ def _pick_char(ok: bool, channel: str | None, align_char: str | None,
     return char, (reading if reading and reading != char else None)
 
 
-@lru_cache(maxsize=4)
-def _corpus_text(path: str) -> str:
-    from pathlib import Path
-    f = Path(path)
-    return f.read_text(encoding="utf-8") if f.exists() else ""
+def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:
+    """`align_ref` 的产物 → {字位: (整理本字, equal|replace)}。
 
-
-@lru_cache(maxsize=4)
-def _corpus_index(path: str):
-    """8-gram 索引建一次就好——整本书每页都要用，重建一次约 1 秒。"""
-    from ..clustering.align_label import build_ngram_index
-    return build_ngram_index(_corpus_text(path))
-
-
-def _align(p, match, dec, ocr, page: int, book: str = "") -> dict[str, tuple[str, str]]:
-    """整页锚到整理本 → {字位: (整理本字, equal|replace)}。
-
-    锚不上就返回空表——那样所有整理本通道自动失效，退回本次改动之前的行为，
-    不会把错的对齐硬塞进准入。这是「拿不准就保持基线」在这一层的落法。
+    Step5-d 已经把 8-gram 锚定 + difflib 挪成正式 Step（`steps/align_ref.py`）：
+    这里只读它的产物，不再自己 import `gold.v2_align` 的私有函数现算一遍——
+    那是任务书点名的"绕道读金标"，对齐这个动作因此在两处各算一遍、互相漂移。
+    产物缺失或未锚定就返回空表，所有整理本通道自动失效，退回改动之前的行为，
+    不会把错的/缺的对齐硬塞进准入。这是「拿不准就保持基线」在这一层的落法。
     """
-    if not p.corpus:
+    ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+    if ref is None or not ref.anchored:
         return {}
-    from ..clustering.align_label import label_page
-    from ..gold.v2_align import _slots_from_decision
-    text = _corpus_text(p.corpus)
-    if not text:
-        return {}
-    slots, _meta = _slots_from_decision(dec, match, ocr)
-    if len(slots) < 12:
-        return {}
-    # ⚠️ book 必须传真名：`label_page` 拼的是 `book:page:col:idx`，传空字符串
-    # 会得到 ":24:1:2" 这种键，与产物的 "vol01:24:1:2" 对不上——**查表全 miss，
-    # 不报错，只是整理本通道一条都不触发**（本轮实际踩到，靠比对键样例才发现）。
-    labs, ok = label_page(str(page), slots, book, text, _corpus_index(p.corpus))
-    if not ok:
-        return {}
-    return {l.instance_id: (l.char, l.op) for l in labs}
+    return {c.id: (c.align_char, c.align_op) for c in ref.chars}
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
