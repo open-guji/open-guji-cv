@@ -97,6 +97,19 @@ SNAP = Path(os.environ.get("GUJI_ROUTE_SNAP")
             or Path(tempfile.gettempdir()) / "guji_console_routes_baseline.json")
 WRITE = os.environ.get("GUJI_ROUTE_SNAP_WRITE") == "1"
 
+#: **有意的行为变化**，比对时放行（但仍然打印出来）。
+#:
+#: 重构轮的规矩是「行为一模一样」，所以这张表**只能由任务书点名**才加得进来，
+#: 且必须写清为什么。目前只有一条：
+SANCTIONED = {
+    "POST /api/review/rate-history":
+        "C2 把 measure() 从 scripts/track_review_rate.py 搬进 eval/rate_history.py 时，"
+        "顺带把硬编码的 REPO/output/glyph.db 换成 core.workspace.glyph_db_path()"
+        "（后端任务书 §三·2 点名要消掉的）。改之前这条在云端必然抛 "
+        "OperationalError: no such table: admissions —— 它当场造一个 0 字节空库再去查表；"
+        "改之后正常记一行台账。这是修好了，不是改坏了。",
+}
+
 BOOK = "vol01"
 PAGES = "dev_set"          # 有产物的页集（见模块 docstring 的准备命令）
 PAGE = 24
@@ -398,15 +411,22 @@ def test_route_snapshot():
         return
 
     base = json.loads(SNAP.read_text(encoding="utf-8"))
-    diffs = [k for k in sorted(set(base) | set(snap))
-             if base.get(k, "<缺>") != snap.get(k, "<缺>")]
+    changed = [k for k in sorted(set(base) | set(snap))
+               if base.get(k, "<缺>") != snap.get(k, "<缺>")]
+    for k in changed:
+        if k in SANCTIONED:
+            print(f"\n──── 有意的变化 {k}\n  {SANCTIONED[k]}")
+    diffs = [k for k in changed if k not in SANCTIONED]
     if diffs:
         for k in diffs:
             print(f"\n──── 差异 {k}")
             for path, a, b in _deep_diff(base.get(k), snap.get(k))[:8]:
                 print(f"  {path or '<根>'}\n    基线: {a}\n    现在: {b}")
     assert not diffs, f"{len(diffs)}/46 条与基线不同：{diffs}"
-    print(f"\n46 条快照零差异（基线 {SNAP}）")
+    n_ok = 46 - len([k for k in changed if k in SANCTIONED])
+    print(f"\n{n_ok}/46 条快照零差异"
+          + (f"，另 {46 - n_ok} 条是 SANCTIONED 里点名的有意变化" if n_ok < 46 else "")
+          + f"（基线 {SNAP}）")
 
 
 EXPECTED_ROUTES = [

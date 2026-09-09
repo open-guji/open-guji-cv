@@ -35,8 +35,16 @@ from . import deps
 from .errors import maps_http
 from .jobs import JobSpec
 from .sse import sse
-from ..errors import (EncodeFailed, GujiError, ImageMissing, NotFound,
-                      ProductMissing, Unsupported)
+from ..clustering.rare_panel import (rare_batch, rare_for, rare_patch,
+                                     warm_font_index)
+from ..errors import EncodeFailed, ImageMissing, NotFound
+from ..eval import rate_history
+from ..eval.quality import quality
+from ..render.overlay import overlay
+from ..review.cards import cards
+from ..review.group_view import group_view
+from ..review.jiazhu_cards import jiazhu_segments
+from ..review.verdict_view import cutline_verdicts, review_verdicts
 from ..feedback.consumers import route_and_consume
 from ..feedback.events import EventTarget, make_event
 from ..feedback.harvest import harvest_text
@@ -245,85 +253,10 @@ def api_cache(book: str, kind: str, key: str) -> Response:
 
 
 # ── 叠图 ─────────────────────────────────────────────────────────────
-def _draw_vline(img: np.ndarray, v: dict, W: int, H: int, color, thick: int = 3) -> None:
-    pts = []
-    for y in range(0, H, 16):
-        if v.get("k2") is None or y <= v["y1"]:
-            x = v["x_at_top"] + v["slope"] * y
-        elif y <= v["y2"]:
-            x = v["x_at_top"] + v["slope"] * v["y1"] + v["k2"] * (y - v["y1"])
-        else:
-            x = (v["x_at_top"] + v["slope"] * v["y1"] + v["k2"] * (v["y2"] - v["y1"])
-                 + v["k3"] * (y - v["y2"]))
-        pts.append((int(round(x_tr_to_tl(x, W))), y))
-    cv2.polylines(img, [np.array(pts, dtype=np.int32)], False, color, thick)
-
-
-def _overlay(book: str, step: str, page: int) -> np.ndarray:
-    b = load_book(book)
-    st = deps.product_store()
-    img = cv2.imread(str(b.raw_path(page)))
-    if img is None:
-        raise ImageMissing("原图缺失")
-    H, W = img.shape[:2]
-    d = st.read_raw(book, step, page_key(page))
-    if d is None:
-        raise ProductMissing("没有这份产物")
-    if step == "border_detect":
-        bd = d["borders"]
-        for v in bd["verticals"]:
-            _draw_vline(img, v, W, H, (0, 0, 255))
-        for h in (bd["top"], bd["bottom"]):
-            p0 = (W - 1, int(round(h["y_at_right"])))
-            p1 = (0, int(round(h["y_at_right"] + h["slope"] * (W - 1))))
-            cv2.line(img, p0, p1, (255, 0, 0), 3)
-        for hr in bd.get("head_raise", []):
-            cv2.putText(img, f"HR c{hr['col']}", (W // 2, int(hr["inner_y"])), cv2.FONT_HERSHEY_SIMPLEX,
-                        1.2, (0, 140, 255), 3)
-    elif step == "column_warp":
-        for c in d["column_windows"]["columns"]:
-            _draw_vline(img, c["left_line"], W, H, (0, 0, 255), 2)
-            _draw_vline(img, c["right_line"], W, H, (0, 0, 255), 2)
-            y0, y1 = int(c["top_y"]), int(c["bottom_y"])
-            xr = int(round(x_tr_to_tl(c["right_line"]["x_at_top"], W)))
-            cv2.putText(img, f"c{c['col']}", (xr - 60, max(30, y0 - 10)), cv2.FONT_HERSHEY_SIMPLEX,
-                        1.0, (0, 140, 255), 2)
-    elif step == "column_gate":
-        gm = d["gate_manifest"]
-        for c in gm["columns"]:
-            color = (0, 160, 0) if c["admitted"] else (0, 0, 220)
-            cv2.putText(img, f"c{c['col']} {'ok' if c['admitted'] else 'x'}", (40 + 250 * (c["col"] - 1), 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
-        cv2.putText(img, f"period {gm['period']} ref_w {gm['ref_w']} {' | '.join(gm['reject'])}",
-                    (40, H - 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 220), 2)
-    elif step == "row_segment":
-        for col in d["cells"]["columns"]:
-            for c in col["cells"]:
-                q = c.get("quad_page")
-                if not q:
-                    continue
-                pts = np.array([(int(round(x_tr_to_tl(x, W))), int(round(y))) for x, y in q], dtype=np.int32)
-                color = {"char": (0, 160, 0), "blank": (160, 160, 160)}.get(c["kind"], (200, 0, 200))
-                cv2.polylines(img, [pts], True, color, 2)
-    elif step == "cell_shrink":
-        for col in d["char_index"]["columns"]:
-            for c in col["chars"]:
-                bb = c.get("bbox_page")
-                if not bb:
-                    continue
-                x0, y0, x1, y1 = bb
-                X0, X1 = int(round(x_tr_to_tl(x1, W))), int(round(x_tr_to_tl(x0, W)))
-                color = (0, 0, 220) if c["flags"] else (0, 160, 0)
-                cv2.rectangle(img, (X0, int(y0)), (X1, int(y1)), color, 2)
-    else:
-        raise Unsupported(f"{step} 还没有叠图画法")
-    return img
-
-
 @app.get("/api/overlay/{book}/{step}/{page}.png")
 @maps_http
 def api_overlay(book: str, step: str, page: int, scale: float = 0.35) -> Response:
-    return _png(_overlay(book, step, page), scale)
+    return _png(overlay(book, step, page, deps.product_store()), scale)
 
 
 # ── 反馈：批次 / 事件 / 收割 / 路由 ──────────────────────────────────
@@ -528,209 +461,16 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
                      only: str = "review") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
-    `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
-    all = 全出。**抽查自动档是必要的**——只看人审那批，永远只能证明
-    「拿不准的我确实拿不准」，证不出自动那批有没有错（那正是 100% 准确率
-    这个数字要防的自证）。
+    装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
     """
-    from ..core.book import load_book
-    from ..gold.v2_align import align_book
-    from ..variant_ledger import BookLedger
-    st = deps.product_store()
-    bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
-    # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
-    # 拿 v2_align 的页对齐（`reading` = 整理本在这一位印的字），锚不上的页没有。
-    # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
-    try:
-        golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
-    except Exception:
-        golds = {}
-    # 第二意见：维基文库版整理本（2026-09-07）。两本人裁位上互不同的 164 处，现有整理本对 75、
-    # 维基对 8——整体信现有整理本，但维基能抓到它的几处真错（搏/摶、始/姑、棺/輨、會/曾）。
-    # 两本字不同时卡片并排给出，不改任何自动通道。
-    golds2: dict = {}
-    wiki = Path("corpus/zongmu_wikisource_reference.txt")
-    if wiki.exists():
-        try:
-            golds2 = {c.id: c for g in align_book(book, pgs, st, corpus_path=wiki)
-                      if g.anchored for c in g.chars}
-        except Exception:
-            golds2 = {}
-    ledger = BookLedger.load_or_empty()
-    out: list[dict] = []
-    for pg in pgs:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
-        m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
-        d = st.read(book, "context_decide", page_key(pg), "context_decision")
-        if a is None:
-            continue
-        mm = {r.id: r for cc in (m.columns if m else []) for r in cc.chars}
-        dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
-        for cc in a.columns:
-            if not cc.ok:
-                continue
-            for r in cc.chars:
-                if only == "review" and r.admit:
-                    continue
-                if only == "auto" and not r.admit:
-                    continue
-                mr, dr = mm.get(r.id), dd.get(r.id)
-                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
-                gc = golds.get(r.id)
-                ref = None
-                if gc and gc.reading:
-                    pf = ledger.preferred_form(gc.reading)
-                    gc2 = golds2.get(r.id)
-                    ref = {"char": gc.reading, "op": gc.align_op, "run": gc.op_run,
-                           "form": pf if pf and pf != gc.reading else None,
-                           # 维基版在这一位印的字，只在与现有整理本不同时给
-                           "wiki": (gc2.reading if gc2 and gc2.reading and gc2.reading != gc.reading
-                                    else None)}
-                out.append({
-                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
-                    "patch": f"/api/cache/{book}/char_patch/{key}.png",
-                    "admit": r.admit, "channel": r.channel, "char": r.char,
-                    "reading": r.reading,
-                    # 整理本在这一位印的字（页对齐给的）；form = 本书惯刻的形（账本 preferred，≠整理本字时才有）
-                    "ref": ref,
-                    # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
-                    "form": (r.evidence or {}).get("form"),
-                    "doubts": r.doubts,
-                    "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
-                           "wmax": round(mr.wmax, 1),
-                           "candidates": mr.candidates[:5]} if mr else None,
-                    "ocr": (r.evidence or {}).get("ocr", []),
-                    "ctx": {"char": dr.char, "margin": dr.margin,
-                            "source": dr.source} if dr else None,
-                })
-                if len(out) >= limit:
-                    return {"book": book, "cards": out, "truncated": True}
-    return {"book": book, "cards": out, "truncated": False}
+    return cards(book, pages, limit, only, deps.product_store())
 
 
 @app.get("/api/quality")
 def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
-    """**质量看板**：当前准确率 + 缺陷聚集在哪。
-
-    人裁完之后最该回答两个问题——「准了没有」和「下一刀该切哪」。此前两个都
-    要手写脚本查，这个接口把它们做成一次调用。
-
-    - **准确率**：拿整理本自动金标（`gold/v2_align`）对当前定字，按通道分层。
-      金标只覆盖锚得上的页，所以同时报覆盖率，别拿它当全量准确率。
-    - **缺陷聚集**：人裁标的切分缺陷按 页 / 列 / slot 聚。**孤例是个案，
-      扎堆才是系统性问题**——v1 时代 `report_intrusions.py` 就是靠列级聚集
-      找出「13 列整列偏移」的（手册「版面线侵入」一节）。
-    """
-    from ..core.book import load_book
-    from ..gold.v2_align import align_book
-    import collections
-
-    store = deps.product_store()
-    bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
-
-    # ── 准确率（对整理本金标）─────────────────────────────
-    from ..variant_ledger import BookLedger
-    ledger = BookLedger.load_or_empty("wuyingdian_zongmu")
-    golds = align_book(book, pgs, store)
-    gold = {c.id: c for g in golds if g.anchored for c in g.chars}
-    by_ch: dict[str, list[int]] = {}
-    by_op: dict[str, list[int]] = {}
-    errors: list[dict] = []
-    n_total = 0
-    for pg in pgs:
-        a = store.read(book, "seed_admit", page_key(pg), "seed_admit")
-        d = store.read(book, "context_decide", page_key(pg), "context_decision")
-        if a is None:
-            continue
-        dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
-        for cc in a.columns:
-            for r in cc.chars:
-                n_total += 1
-                g = gold.get(r.id)
-                if g is None:
-                    continue
-                pred = r.char if r.admit else (dd[r.id].char if r.id in dd else None)
-                if pred is None:
-                    continue
-                k = r.channel if r.admit else "人审"
-                slot = by_ch.setdefault(k, [0, 0])
-                # ⚠️ 比 `reading` 不比 `shape`（2026-09-06 修，variant_strategy.md）。
-                # `v2_align` 里 shape = lab.hyp = **当次转写自己**，reading = lab.char
-                # 才是整理本给的金标。比 shape 的后果：equal 段恒真（自证，该模块头
-                # 「纪律 1」写过），replace 段比的是「这次跟上次一不一样」，与对错无关。
-                # 实测 vol02 p1–10：比 shape 报 5 错，比 reading 只有 1 条真错。
-                #
-                # 第二项是「忠于刻本字形」方针（用户 2026-09-05 定）的要求：金标记过
-                # 转换（conversion）的位上，输出**刻本形**同样算对——葢/蓋、卽/即 这类
-                # 按刻本形放行是对的，不该记成错误。
-                # 第三项（2026-09-06 用户裁决 禀/稟 后补）：整理本与刻本用**同一组里
-                # 不同的形**时，`conversion` 不一定为真——整理本印 稟、刻本刻 禀，两边
-                # 都在 稟 组里，v2_align 只按字面比，记的是 equal / conversion=False。
-                # 这类位上管线按账本 preferred 出刻本形是**对的**（用户 2026-09-05 定的
-                # 「忠于刻本字形」），判据不该记成错。所以：pred 与金标同组、且 pred 就是
-                # 账本给这组定的 preferred → 算对。
-                # 只认 preferred，不认「同组任一形」——否则组内选错形也会被放过。
-                ok = ((pred == g.reading) or (g.conversion and pred == g.shape)
-                      or ledger.preferred_form(g.reading) == pred)
-                slot[0] += ok
-                slot[1] += 1
-                # 分层：equal 段是自证层，replace 段才是真正的错误样本，别合成一个数看
-                lay = by_op.setdefault(g.align_op or "?", [0, 0])
-                lay[0] += ok
-                lay[1] += 1
-                if not ok:
-                    errors.append({"id": r.id, "pred": pred, "gold": g.reading,
-                                   "shape": g.shape, "align_op": g.align_op,
-                                   "channel": k, "cov": (r.evidence or {}).get("cov")})
-    acc = [{"channel": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}
-           for k, v in sorted(by_ch.items(), key=lambda x: -x[1][1])]
-    by_align = [{"align_op": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}
-                for k, v in sorted(by_op.items(), key=lambda x: -x[1][1])]
-    n_gold = sum(v[1] for v in by_ch.values())
-    n_ok = sum(v[0] for v in by_ch.values())
-
-    # ── 缺陷聚集（人裁标的切分问题）───────────────────────
-    from ..gold.store import GoldStore
-    gs = GoldStore()
-    page_c: collections.Counter = collections.Counter()
-    col_c: collections.Counter = collections.Counter()
-    slot_c: collections.Counter = collections.Counter()
-    qual_c: collections.Counter = collections.Counter()
-    n_def = 0
-    try:
-        for it in gs.list("char-segmentation/instances"):
-            q = (it.expected or {}).get("quality")
-            if q not in ("truncated", "contaminated"):
-                continue
-            an = it.anchor
-            if getattr(an, "book", None) != book or getattr(an, "page", None) not in pgs:
-                continue
-            n_def += 1
-            qual_c[q] += 1
-            page_c[an.page] += 1
-            if an.col is not None:
-                col_c[an.col] += 1
-            if an.slot is not None:
-                slot_c[an.slot] += 1
-    except Exception:
-        pass
-
-    def top(c, k=6):
-        return [{"key": str(a), "n": b} for a, b in c.most_common(k)]
-
-    return {
-        "book": book, "pages": len(pgs),
-        "accuracy": {"overall": round(n_ok / n_gold, 4) if n_gold else None,
-                      "n_gold": n_gold, "n_total": n_total,
-                      "gold_coverage": round(n_gold / n_total, 4) if n_total else None,
-                      "by_channel": acc, "by_align_op": by_align,
-                      "errors": errors[:20]},
-        "defects": {"n": n_def, "by_quality": top(qual_c),
-                     "by_page": top(page_c), "by_col": top(col_c),
-                     "by_slot": top(slot_c)},
-    }
+    """质量看板：当前准确率 ＋ 缺陷聚集在哪。判准在 `eval/quality.py`（C2 搬出去的），
+    与 `eval/rulers.py`、`eval/round_check.py` 同级。"""
+    return quality(book, pages, deps.product_store())
 
 
 @app.get("/api/rulers")
@@ -777,7 +517,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     from ..products.cache import ImageCache
     from ..steps.seed_admit import DEFAULT_CORPUS
 
-    img = _rare_patch(book, page, col, slot, sub)
+    img = rare_patch(book, page, col, slot, sub, deps.image_cache())
     if img is None:
         raise ImageMissing(f"没有字块 p{page:04d}c{col:02d}s{slot}{sub or ''}")
     # ── 两档字表：小表定名次，大表保召回 ──────────────────
@@ -799,67 +539,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     # 有效的是**位次合并**：小表 top3 占据前三名（那里最可能是对的），
     # 其后接大表结果补召回。实测 top1 43% / top10 76%，两头都拿到。
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
-            "candidates": _rare_for(img, k)}
-
-
-def _rare_patch(book: str, page: int, col: int, slot: int, sub: str = ""):
-    """字块图；没有就 None。"""
-    ck = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
-    path = deps.image_cache().get(book, "char_patch", ck)
-    if path is None:
-        return None
-    return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-
-
-def _rare_for(img, k: int) -> list[dict]:
-    """一张字块图 → top-k 候选（含释义等修饰）。单查与批量共用这一份。"""
-    from ..clustering.font_candidates import candidates
-    from ..clustering.ids_guard import ids_of
-    from ..clustering.normalize import normalize_patch
-    from ..steps.seed_admit import DEFAULT_CORPUS
-
-    cs_small, cs_big = _rare_charsets()
-    norm = normalize_patch(img)
-    a = candidates(norm, cs_small, k=max(k, 10))
-    b = candidates(norm, cs_big, k=max(k, 10))
-    hog_order, seen = [], set()
-    for h in list(a[:3]) + list(b) + list(a[3:]):
-        if h.char not in seen:
-            seen.add(h.char)
-            hog_order.append(h.char)
-    by_char = {h.char: h for h in list(a) + list(b)}
-
-    # ── 第四源：CNN（scripts/train_glyph_cnn.py），与 HOG 做倒数排名融合 ──
-    # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**RRF 86.7/98.3**（top1/top10）。
-    # 两者看的东西不一样（整体轮廓 vs 部件局部），融合比任一单源 top-1 高 11 个点。
-    # 没有 checkpoint 时静默退回 HOG，界面照常。
-    from ..clustering.cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT,
-                                             rrf, shared)
-    cnn = shared()
-    cnn_order = [c for c, _ in cnn.topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
-    # 第五源：同一网络的 embedding 对字体模板做余弦检索——同网络换读法就高 8 个点
-    # （unseen top-1 分类头 83.9 → 检索 91.9），见 cnn_candidates.emb_topk。
-    emb_order = [c for c, _ in cnn.emb_topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
-    if cnn_order and emb_order:
-        order = rrf(hog_order, cnn_order, emb_order, k=k,
-                    weights=(HOG_WEIGHT, CNN_WEIGHT, EMB_WEIGHT))
-    elif cnn_order:
-        order = rrf(hog_order, cnn_order, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT))
-    else:
-        order = hog_order[:k]
-    hits = []
-    for ch in order:
-        h = by_char.get(ch)
-        hits.append(h if h is not None else type("H", (), {"char": ch, "score": 0.0, "font": "cnn"})())
-    freq = _corpus_freq(DEFAULT_CORPUS)
-    return [{
-        "char": h.char, "score": round(h.score, 4), "font": h.font,
-        "ids": ids_of(h.char),
-        "freq": freq.get(h.char, 0),
-        "cp": f"U+{ord(h.char):04X}" if len(h.char) == 1 else "",
-        "zi": f"https://zi.tools/zi/{h.char}",
-        **_char_hint(h.char),
-    } for h in hits]
+            "candidates": rare_for(img, k)}
 
 
 class RareBatchIn(BaseModel):
@@ -871,136 +551,12 @@ class RareBatchIn(BaseModel):
 
 @app.post("/api/rare/batch")
 def api_rare_batch(req: RareBatchIn) -> dict:
-    """**批量版**（2026-09-07）。单查一条 0.35s，审查页要预取几十张，串行等不起、
-    并发 4 条也只是把 7s 压到 2s——瓶颈在每条都要过一遍 HTTP + 两次字表检索 + CNN 前向。
+    """**批量版**（2026-09-07）：一次问一批字位，字表与 CNN 索引只热一次。
 
-    这里一次算一批：字表与 CNN 索引只热一次，图块顺序读，返回 {字位: 候选}。
-    实测一页（约 30 个待审位）从 ~10s 降到 ~2s。缺图的位返回空数组，不报错——
-    批量里一个坏位不该让整批失败。
+    引擎在 `clustering/rare_panel.py`（C2 搬出去的）。实测一页（约 30 个待审位）
+    从 ~10s 降到 ~2s。
     """
-    out: dict[str, list] = {}
-    for s in req.slots[:400]:
-        try:
-            parts = s.split(":")
-            page, col, tail = int(parts[0]), int(parts[1]), parts[2]
-            sub = tail[-1] if tail[-1:] in ("a", "b") else ""
-            slot = int(tail[:-1] if sub else tail)
-        except Exception:
-            out[s] = []
-            continue
-        img = _rare_patch(req.book, page, col, slot, sub)
-        out[s] = _rare_for(img, req.k) if img is not None else []
-    return {"book": req.book, "n": len(out), "rare": out}
-
-
-def _char_hint(ch: str) -> dict:
-    """给一个候选字配「常见意思」和「对应哪个繁体正字」。
-
-    用户 2026-09-05：「异体字不用显示 unicode 和 ids，最好可以显示常见意思，
-    以及对应哪个繁体整体字。」
-
-    - `gloss`：`config/gloss/gloss.json`（69,835 字，康熙/教育部/维基词典/Unihan 汇编）
-      的释义首句 + 拼音。释义可以很长（康熙的整段引证），这里截到一句话。
-    - `std`：这个字在**整理本**里对应哪个字。做法不是查"哪个是正字"（异体组里没有
-      客观正字），而是**在异体组里找整理本实际用过的那个**——整理本是繁体传承字形，
-      它用哪个就是这本书要录的那个。㕔 → 廳、䙝 → 褻 都能对上；候选自己就在整理本里
-      用过（freq > 0）时不再重复标。
-    """
-    from ..steps.seed_admit import DEFAULT_CORPUS
-
-    out: dict = {}
-    g = _gloss().get(ch)
-    if g:
-        d = (g.get("d") or "").strip()
-        # 维基词典那一档偶尔混进 MediaWiki 模板标记（如 __NOTITLECONVERT__），去掉
-        d = re.sub(r"__[A-Z]+__|\{\{[^}]*\}\}", "", d).strip()
-        # 出处不要（用户 2026-09-07「康熙字典也不需要说明，留空间给正式解释」）：
-        # 「【唐韻】【集韻】𠀤徒弄切，音洞。【廣韻】過也。」→ 反切/注音那句整句丢，
-        # 「《康熙字典》〈補遺 酉集〉…」这种书名号引注也丢；只留释义正文。
-        d = re.sub(r"《[^》]*》〈[^〉]*〉", "", d)
-        d = re.sub(r"【[^】]*】", "", d)
-        d = re.sub(r"[-]", "", d)          # 康熙条目里的私用区乱码
-        sents = [s.strip("，, ") for s in d.split("。") if s.strip("，, ")]
-        # 反切/注音不是释义：句首连串的「側氏切阻氏切，」「𠀤徒弄切，音洞，」先剥掉，
-        # 剥完只剩反切/「音某」的整句跳过
-        sents = [re.sub(r"^(?:[^，,。\s]{1,3}切[，,]?)+(?:音.[，,]?)?", "", s).strip("，, ") for s in sents]
-        sents = [s for s in sents if s and not re.search(r"切[，,]?(音.)?$|^音.$", s)]
-        if sents:
-            # 有地方了就多给几句（「姓。通「倪」。如漢代有兒寬」比只剩「姓」有用），到 40 字为止
-            head = "。".join(sents)
-            out["gloss"] = (head[:40] + "…") if len(head) > 40 else head
-        # 注音不给（用户 2026-09-07「注音不需要」）——留在 title 里悬停看
-        if g.get("p"):
-            out["py"] = g["p"]
-    freq = _corpus_freq(DEFAULT_CORPUS)
-    if not freq.get(ch):
-        try:
-            from ..variants import variants_of
-            best, best_n = "", 0
-            for v, _src in variants_of(ch):
-                n = freq.get(v, 0)
-                if n > best_n:
-                    best, best_n = v, n
-            if best:
-                out["std"] = best
-                out["std_freq"] = best_n
-        except Exception:
-            pass
-    return out
-
-
-@lru_cache(maxsize=1)
-def _gloss() -> dict:
-    """单字速查释义表（`config/gloss/README.md` 列了各源授权）。8 MB，进程内只读一次。"""
-    import json
-    f = Path(__file__).resolve().parent.parent.parent / "config" / "gloss" / "gloss.json"
-    if not f.exists():
-        return {}
-    try:
-        return json.loads(f.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-@lru_cache(maxsize=1)
-def _rare_charsets() -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """两档字表各算一次。元组身份稳定，`font_candidates._index` 的缓存才命中。
-
-    此前每次请求重新拼 `tuple(sorted(big))`，lru_cache 按值哈希本该命中，
-    但大表第一次建就是 8 分钟，且进程重启就丢——现在索引本身也落盘了
-    （见 font_candidates._index）。
-    """
-    from ..clustering.font_candidates import book_charset
-    from ..steps.seed_admit import DEFAULT_CORPUS
-    small = tuple(book_charset(DEFAULT_CORPUS))
-    big = set(small)
-    try:
-        from ..variants import variants_of
-        for ch in small:
-            big.update(v[0] if isinstance(v, (tuple, list)) else v
-                       for v in (variants_of(ch) or ()))
-    except Exception:
-        pass
-    return small, tuple(sorted(big))
-
-
-def _warm_font_index() -> None:
-    """后台线程预热字体索引。首次建大表要几分钟，别让第一个点按钮的人等。"""
-    try:
-        from ..clustering.font_candidates import warm
-        warm(list(_rare_charsets()))
-    except Exception:
-        pass
-
-
-@lru_cache(maxsize=2)
-def _corpus_freq(path: str) -> dict:
-    from collections import Counter
-    f = Path(path)
-    if not f.exists():
-        return {}
-    return Counter(ch for ch in f.read_text(encoding="utf-8")
-                   if "㐀" <= ch <= "鿿")
+    return rare_batch(req.book, req.slots, req.k, deps.image_cache())
 
 
 @app.get("/api/round")
@@ -1025,24 +581,15 @@ def api_round(book: str = "vol01", pages: str = "") -> dict:
 
 @app.get("/api/review/rate-history")
 def api_rate_history(book: str = "") -> dict:
-    """人审率台账（`scripts/track_review_rate.py` 的历史 + SEED）。
+    """人审率台账（`eval/rate_history.py` 的历史 ＋ SEED）。
 
     体检页的 B 行只报**当下这一跑**，而这条线最该回答的是纵向问题：一册从零开始审，
     掉得多快、拐点在哪。台账把每次重跑记一行，这里读出来给前端画趋势。
+
+    C2 之前这里是用 `importlib.spec_from_file_location` 反射进
+    `scripts/track_review_rate.py` 的——全仓唯一一处「路由 import scripts/」。
     """
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "_track", Path(__file__).resolve().parents[2] / "scripts" / "track_review_rate.py")
-    if spec is None or spec.loader is None:
-        return {"rows": []}
-    mod = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(mod)
-        rows = mod._hist()
-    except Exception as e:
-        return {"rows": [], "error": str(e)}
-    if book:
-        rows = [r for r in rows if r.get("book") == book]
+    rows = [r for r in rate_history.history() if not book or r.get("book") == book]
     rows.sort(key=lambda r: (r.get("book", ""), r.get("ts") or r.get("date", "")))
     return {"rows": rows}
 
@@ -1056,18 +603,12 @@ class RateSnapIn(BaseModel):
 @maps_http
 def api_rate_snapshot(req: RateSnapIn) -> dict:
     """记一行台账（体检页的「记一笔」按钮）。重跑完顺手点，别再事后翻聊天记录。"""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "_track", Path(__file__).resolve().parents[2] / "scripts" / "track_review_rate.py")
-    if spec is None or spec.loader is None:
-        raise GujiError("找不到 scripts/track_review_rate.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
     st = deps.product_store()
     out = []
-    with open(mod.HIST, "a", encoding="utf-8") as f:
+    rate_history.HIST.parent.mkdir(parents=True, exist_ok=True)
+    with open(rate_history.HIST, "a", encoding="utf-8") as f:
         for b in [x.strip() for x in req.books.split(",") if x.strip()]:
-            rec = mod.measure(b, st)
+            rec = rate_history.measure(b, st)
             if rec is None:
                 continue
             if req.note:
@@ -1079,31 +620,8 @@ def api_rate_snapshot(req: RateSnapIn) -> dict:
 
 @app.get("/api/review/verdicts")
 def api_review_verdicts(batch: str) -> dict:
-    """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
-
-    裁决本来就落成事件了（`/api/events`），但前端只在内存里记 `RV.verdicts`，
-    一刷新就空。这个接口把事件读回成同样的形状，载入卡片时合并进去。
-
-    同一 id 多次裁决按 (batch, seq) 升序**后到覆盖**——沿用 seed_queue 的
-    纪律，人改主意时最后一次说了算。
-    """
-    out: dict[str, dict] = {}
-    for e in sorted(deps.event_log().read(batch), key=lambda x: (x.batch, x.seq)):
-        p = e.payload
-        v = p.get("v") or e.kind
-        if v == "not_a_char":
-            out[e.target.key] = {"shape": "", "reading": "", "done": "non"}
-        elif v == "skip":
-            out[e.target.key] = {"shape": "", "reading": "", "done": "skip"}
-        elif v == "seg_defect":
-            out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "reading": p.get("reading") or "",
-                                 "done": p.get("quality") or "contaminated"}
-        elif v == "confirm":
-            out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "reading": p.get("reading") or p.get("shape") or "",
-                                 "done": "1"}
-    return {"batch": batch, "n": len(out), "verdicts": out}
+    """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。装配在 `review/verdict_view.py`。"""
+    return review_verdicts(batch, deps.event_log())
 
 
 @app.get("/api/review/column/{book}/{page}/{col}")
@@ -1232,102 +750,19 @@ def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) ->
 @app.get("/api/jiazhu/segments")
 def api_jiazhu_segments(book: str = "vol02", pages: str = "jz",
                         only: str = "all", batch: str | None = None) -> dict:
-    """夹注**段**卡：一张卡 = 一段雙行小注，不是一格一张。
+    """夹注**段**卡：一张卡 = 一段雙行小注，不是一格一张。装配在 `review/jiazhu_cards.py`。
 
-    一段版本注 5–19 字，人一眼能读整句；逐格出卡等于把一句话拆成十几道题，
-    既慢又看不出「这段到底通不通」。所以段是审阅单位：列条裁图 + a/b 两串
-    并排 + 整理本对应注文，三个动作（整段确认 / 改某一格 / 标切分缺陷）。
-
+    一段版本注 5–19 字，人一眼能读整句；逐格出卡等于把一句话拆成十几道题。
     `only`：all（默认）| review 只出含待审格的段 | auto 只出全自动的段（抽查用）。
-    抽查自动段与 `/api/review/cards` 的 `only=auto` 同理——只看待审的那批，
-    永远只能证明「拿不准的确实拿不准」。
     """
-    from ..gold.v2_align import align_book
-    from ..utils.jiazhu_order import segments as jz_segments
-    from ..utils.jiazhu_order import sort_by_reading
-
-    st = deps.product_store()
-    bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
-    try:
-        golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
-    except Exception:
-        golds = {}
-    done: dict[str, dict] = {}
-    if batch:
-        for e in sorted(deps.event_log().read(batch), key=lambda x: (x.batch, x.seq)):
-            if e.kind in ("confirm", "seg_defect"):
-                done[e.target.key] = dict(e.payload)
-
-    out: list[dict] = []
-    for pg in pgs:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
-        cells = st.read(book, "row_segment", page_key(pg), "cells")
-        if a is None:
-            continue
-        cellmap = {}
-        for c in (cells.columns if cells else []):
-            for cell in c.cells:
-                cellmap[(c.col, cell.slot, cell.sub or "")] = cell
-        for cc in a.columns:
-            jz = [r for r in cc.chars if r.sub]
-            if not jz:
-                continue
-            for seg in jz_segments((r.slot, r.sub) for r in jz):
-                sset = set(seg)
-                rs = sort_by_reading([r for r in jz if r.slot in sset])
-                if not rs:
-                    continue
-                ys = [cellmap.get((cc.col, r.slot, r.sub or ""))
-                      for r in rs]
-                ys = [c for c in ys if c is not None]
-                if not ys:
-                    continue
-                y0 = int(min(c.y0 for c in ys)) - 30
-                y1 = int(max(c.y1 for c in ys)) + 30
-                cellsjs = []
-                for r in rs:
-                    g = golds.get(r.id)
-                    cellsjs.append({
-                        "id": r.id, "slot": r.slot, "sub": r.sub,
-                        "char": r.char, "admit": r.admit, "channel": r.channel,
-                        "ref": g.reading if g else None,
-                        "patch": (f"/api/cache/{book}/char_patch/"
-                                  f"{cell_key(pg, cc.col, r.slot)}{r.sub or ''}.png"),
-                        "done": done.get(r.id),
-                    })
-                n_rev = sum(1 for r in rs if not r.admit)
-                if only == "review" and not n_rev:
-                    continue
-                if only == "auto" and n_rev:
-                    continue
-                a_txt = "".join(c["char"] or "□" for c in cellsjs if c["sub"] == "a")
-                b_txt = "".join(c["char"] or "□" for c in cellsjs if c["sub"] == "b")
-                ref_txt = "".join(c["ref"] or "·" for c in cellsjs)
-                out.append({
-                    "id": f"{book}:{pg}:{cc.col}:{seg[0]}",
-                    "book": book, "page": pg, "col": cc.col,
-                    "slots": seg, "n": len(rs), "n_review": n_rev,
-                    "a": a_txt, "b": b_txt, "text": a_txt + b_txt,
-                    "ref": ref_txt,
-                    "img": (f"/api/cutline/img/{book}/{pg}/{cc.col}.png"
-                            f"?y0={max(0, y0)}&y1={y1}"),
-                    "cells": cellsjs,
-                })
-    return {"book": book, "pages": pgs, "n": len(out),
-            "n_review": sum(1 for s in out if s["n_review"]), "segments": out}
+    return jiazhu_segments(book, pages, only, batch,
+                           deps.product_store(), deps.event_log())
 
 
 @app.get("/api/cutline/verdicts")
 def api_cutline_verdicts(batch: str) -> dict:
-    """读回本批已拖过的切线（刷新不重做；同 id 后到覆盖）。"""
-    out: dict[str, dict] = {}
-    for e in sorted(deps.event_log().read(batch), key=lambda x: (x.batch, x.seq)):
-        if e.kind != "cutline":
-            continue
-        p = e.payload
-        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline")}
-    return {"batch": batch, "n": len(out), "verdicts": out}
+    """读回本批已拖过的切线（刷新不重做；同 id 后到覆盖）。装配在 `review/verdict_view.py`。"""
+    return cutline_verdicts(batch, deps.event_log())
 
 
 @app.post("/api/gold/{shard:path}/migrate")
@@ -1400,93 +835,9 @@ def api_variants_groups(book: str, pages: str = "dev_set", edition: str = "",
                         limit_tiles: int = 400) -> dict:
     """组视图（variant_strategy.md §5.1）：按异体组把字位摊成「列 = 形、格 = 图块」。
 
-    每组两类格：**已自动放行**的（char 在组内；抽审字形保真率用）与**义定形未定**的
-    （落人审、`evidence.form.state == open`；首例确认用）。人裁过的格带 `human`。
-    组按待审数、再按格数排。裁决走既有的 confirm 事件协议，这里只出数据。
+    装配在 `review/group_view.py`（C2 搬出去的）——**判据 E 的分母就在那里算**。
     """
-    from ..core.book import load_book
-    from ..eval.round_check import load_verdicts
-    from ..variant_ledger import DEFAULT_EDITION, BookLedger
-
-    led = BookLedger.load_or_empty(edition or DEFAULT_EDITION)
-    if not len(led):
-        raise NotFound("没有用字账——先跑 python scripts/build_book_variants.py")
-    st = deps.product_store()
-    bk = load_book(book)
-    truth = load_verdicts(book)
-    tiles: dict[str, list[dict]] = {}
-    for pg in bk.resolve_pages(pages):
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
-        if a is None:
-            continue
-        for cc in a.columns:
-            if not cc.ok:
-                continue
-            for r in cc.chars:
-                f = (r.evidence or {}).get("form") or {}
-                # **裁过的就不再算待审**（用户 2026-09-05 实锤：「我之前标注过，点了提交
-                # 待审与改动，为什么这次刷新还在」）。产物是上次跑管线时算的，裁决进了
-                # 库、产物没重跑，`form.state` 还停在 open——但人确实已经答过了。
-                # 事件是比产物更新的事实，以它为准；产物等下次重跑自然跟上。
-                pending = (not r.admit) and f.get("state") == "open" \
-                    and r.id not in truth
-                human = truth.get(r.id)
-                if r.admit and r.char and r.char in led.form_index:
-                    canon = led.form_index[r.char]
-                elif pending:
-                    canon = led.canonical(f.get("semantic", ""))
-                elif human and f.get("state") == "open":
-                    # 裁过、产物还没重跑：按**人裁的字形**归组显示（否则这一格会
-                    # 整个从视图里消失——比「还在待审」更让人摸不着头脑）
-                    canon = led.form_index.get(human) or led.canonical(f.get("semantic", "") or human)
-                else:
-                    continue
-                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
-                tiles.setdefault(canon, []).append({
-                    "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub,
-                    "patch": f"/api/cache/{book}/char_patch/{key}.png",
-                    # 产物落后时用人裁的字形当 char，格子才落在对的那一列
-                    "char": r.char or human, "reading": r.reading, "channel": r.channel,
-                    "state": f.get("state") or ("lib_same" if r.admit else None),
-                    # 裁过但产物没跟上 → 标 stale，前端提示「重跑管线后生效」
-                    "stale": bool(human and not r.admit and f.get("state") == "open"),
-                    # 判据 E 的分母：自动放行的**异体位**（reading≠char，或走了 variant_form
-                    # 定形）。`audit` 标出「还没人核过的异体位」——那才是抽审该点的格；
-                    # 「有/洧」「正/政」这种账本噪声组即便 100 格也一条都不贡献。
-                    "variant": bool(r.admit and r.char
-                                    and ((r.reading and r.reading != r.char)
-                                         or f.get("state") in ("fixed_lib", "fixed_form"))),
-                    "audit": bool(r.admit and r.char and r.id not in truth
-                                  and ((r.reading and r.reading != r.char)
-                                       or f.get("state") in ("fixed_lib", "fixed_form"))),
-                    "pending": pending, "human": human,
-                    "lib": f.get("lib"), "human_n": f.get("human"),
-                })
-    out = []
-    for canon, ts in tiles.items():
-        g = led.groups.get(canon)
-        if not g:
-            continue
-        n_pending = sum(1 for t in ts if t["pending"])
-        n_stale = sum(1 for t in ts if t.get("stale"))
-        n_audit = sum(1 for t in ts if t.get("audit"))
-        # 待审在前，其次「待抽审的异体位」——判据 E 只认这些格，人该先点它们
-        ts.sort(key=lambda t: (not t["pending"], not t.get("audit"),
-                               t["page"], t["col"], t["slot"]))
-        refd = [m for m, fm in g["forms"].items() if fm["ref"] > 0 and m not in g.get("ref_minor", [])]
-        out.append({
-            "canonical": canon, "members": g["members"], "forms": g["forms"],
-            "ref_policy": g["ref_policy"], "preferred": g.get("preferred"),
-            "reading_default": refd[0] if len(refd) == 1 else canon,
-            "n_tiles": len(ts), "n_pending": n_pending, "n_stale": n_stale,
-            "n_audit": n_audit,
-            "tiles": ts[:limit_tiles], "truncated": len(ts) > limit_tiles,
-        })
-    # 排序：待审 > 待抽审（判据 E 的分母）> 格数。此前只按格数排，结果排最前的是
-    # 「有/洧」125 格、「正/政」60 格这类账本噪声组——它们一条都不贡献 E，而真正
-    # 要抽的 卽/彚/㫖 被挤到后面。
-    out.sort(key=lambda x: (-x["n_pending"], -x["n_audit"], -x["n_tiles"], x["canonical"]))
-    return {"book": book, "pages": pages, "groups": out}
+    return group_view(book, pages, edition, limit_tiles, deps.product_store())
 
 
 @app.get("/api/batches.md", response_class=Response)
@@ -1509,6 +860,6 @@ def serve(port: int = 8640, open_browser: bool = True) -> None:
     print(f"控制台: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    threading.Thread(target=_warm_font_index, name="font-index-warm",
+    threading.Thread(target=warm_font_index, name="font-index-warm",
                      daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
