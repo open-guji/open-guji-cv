@@ -1,16 +1,22 @@
 # 语义层自动表：异体字 → 整理本用形（LM 统计 / 阅读辅助用），由 scripts/build_semantic_variants.py 派生。
 # 格式：异体字	代表字	来源(ledger|graph)。手工表 config/dicts/variants.tsv 覆盖本表。
 # 字形层标签永远保留精确异体字形，绝不按此表合并。
-# edition=wuyingdian_zongmu  entries=9075
+# edition=wuyingdian_zongmu  entries=9081
 㓂	寇	ledger
 㕔	廳	ledger
+㝠	冥	ledger
 㫖	旨	ledger
 㽣	域	ledger
 䙝	褻	ledger
+䟦	跋	ledger
+偁	稱	ledger
 刼	刦	ledger
 劫	刦	ledger
 効	效	ledger
+卞	其	ledger
 卽	即	ledger
+厯	歷	ledger
+叅	參	ledger
 啟	啓	ledger
 宮	宫	ledger
 宼	寇	ledger
@@ -20,6 +26,7 @@
 懽	歡	ledger
 敕	勅	ledger
 檃	櫽	ledger
+歴	歷	ledger
 溫	温	ledger
 煙	烟	ledger
 牓	榜	ledger
@@ -28,6 +35,7 @@
 皍	即	ledger
 盖	葢	ledger
 秕	粃	ledger
+籕	抽	ledger
 籤	籖	ledger
 綫	線	ledger
 舡	船	ledger
@@ -645,7 +653,6 @@
 䟎	趲	graph
 䟑	躍	graph
 䟠	越	graph
-䟦	跋	graph
 䟺	跋	graph
 䠁	躋	graph
 䠂	楚	graph
@@ -1667,7 +1674,6 @@
 歬	前	graph
 歯	齒	graph
 歱	踵	graph
-歴	曆	graph
 歽	折	graph
 殇	殤	graph
 残	殘	graph

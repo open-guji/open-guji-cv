@@ -142,7 +142,8 @@ class SeedAdmitStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids
         from ..clustering.note_lexicon import load_lexicon, match_segment
-        from ..clustering.seeding import NEAR_FORM_CHARS, admission_decision
+        from ..clustering.seeding import (MATCH_SOLO_OCR_COV, NEAR_FORM_CHARS,
+                                          admission_decision)
         from ..clustering.variant_form import decide_form, group_forms
         from ..clustering.variants import VariantMap
         from ..utils.jiazhu_order import segments as jz_segments
@@ -280,13 +281,20 @@ class SeedAdmitStep(Step):
                         and vmap.semantic(lib_top) != vmap.semantic(align_char)
                         and ledger.pair_confirmed(lib_top, align_char)):
                     vm_here = _PairAwareMap(vmap, {lib_top: vmap.semantic(align_char)})
+                # CNN 字形背书（match_solo_cnn 用）：只在**灰区且无整理本**时才算，
+                # 别的档一律不看它——避免把一路弱独立证据混进已经成立的两路里。
+                # 取图有代价（要读 char_patch 并过网络），所以先判档位再算。
+                cnn_char = None
+                if (align_char is None and r.verdict != "same" and r.candidates
+                        and max(c for _, c in r.candidates) >= MATCH_SOLO_OCR_COV):
+                    cnn_char = _cnn_top(ctx.book.id, page, cc.col, r.slot, r.sub)
                 ok, channel = admission_decision(
                     ocr=ocr_in, align_char=align_char, ref_char=None,
                     doubts=doubts, vmap=vm_here,
                     match_char=r.char if r.verdict == "same" else None,
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
-                    solo_cov=p.solo_cov)
+                    solo_cov=p.solo_cov, cnn_char=cnn_char)
                 # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
                 # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
                 # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
@@ -598,6 +606,33 @@ class _PairAwareMap:
 
     def __getattr__(self, name):
         return getattr(self._base, name)
+
+
+def _cnn_top(book: str, page: int, col: int, slot: int, sub: str | None) -> str | None:
+    """CNN embedding 检索的 top1 字（模板 = 字体 + 康熙字头 + 字统网真刻本）。
+
+    只给 `match_solo_cnn` 用：无整理本 + 库形状落在 0.95~0.99 灰区时的第二路背书。
+    没图 / 没 checkpoint → None（通道自动不触发）。
+    """
+    try:
+        import cv2
+
+        from ..clustering.cnn_candidates import shared
+        from ..clustering.font_candidates import book_charset
+        from ..clustering.normalize import normalize_patch
+        from ..products.cache import ImageCache
+        key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
+        path = ImageCache().get(book, "char_patch", key)
+        if path is None:
+            return None
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return None
+        cc = shared()
+        top = cc.emb_topk(normalize_patch(img), tuple(book_charset()), k=1)
+        return top[0][0] if top else None
+    except Exception:
+        return None
 
 
 def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,

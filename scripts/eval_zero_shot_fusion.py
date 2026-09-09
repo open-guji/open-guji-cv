@@ -33,6 +33,13 @@ def main() -> int:
                     help="模板向量：mean=4 字体均值（生产）；max=逐字体取最大相似；aug=均值里掺退化渲染")
     ap.add_argument("--emb", action="store_true",
                     help="第三源：CNN embedding 对字体模板做余弦检索（CCR-CLIP-lite）")
+    ap.add_argument("--emb-extra", action="append", default=[],
+                    help="外部真刻本模板源，可重复：kangxi:<dir> | zitools:<dir>[:印,楷]（见 clustering/extra_glyphs.py）")
+    ap.add_argument("--emb-extra-only", action="store_true", help="模板只用 --emb-extra，不用字体渲染")
+    ap.add_argument("--eval-chars", default=None,
+                    help="只评这个文件里出现的字（UTF-8 文本）——做「外部源已覆盖的字」配对比较用")
+    ap.add_argument("--variant-subset", action="store_true",
+                    help="只评异体子集：char 在 config/charset/variants.tsv 里映射到别字的实例")
     ap.add_argument("--wear", type=float, default=0.0,
                     help="评测时给查询图加磨损：0=不加；0.5=腐蚀+抹白一次；1=两次")
     a = ap.parse_args()
@@ -52,6 +59,19 @@ def main() -> int:
             import random
             random.Random(1).shuffle(items)
             items = items[:a.n]
+    if a.eval_chars:
+        allow_ch = set(Path(a.eval_chars).read_text(encoding="utf-8"))
+        items = [i for i in items if i["char"] in allow_ch]
+        print(f"限定字表 {a.eval_chars}: n={len(items)}（{len({i['char'] for i in items})} 字种）")
+    if a.variant_subset:
+        vm = {}
+        for l in Path("config/charset/variants.tsv").read_text(encoding="utf-8").splitlines():
+            if l.strip() and not l.startswith("#"):
+                r = l.split("	")
+                if len(r) >= 2:
+                    vm[r[0]] = r[1]
+        items = [i for i in items if vm.get(i["char"], i["char"]) != i["char"]]
+        print(f"异体子集 n={len(items)}（{len({i['char'] for i in items})} 字种）")
     cs = tuple(book_charset(a.corpus))
 
     ck = torch.load(a.model, map_location="cpu", weights_only=False)
@@ -95,9 +115,40 @@ def main() -> int:
         cc_ = CnnCandidates(a.model)
         cc_._ensure()
         cc_._net = cc_._net.to("cpu"); cc_._dev = "cpu"
-        if a.emb_mode == "mean":
+        if a.emb_mode == "mean" and not a.emb_extra:
             emb_mat, emb_chars = cc_._emb_index(cs)
             emb_owner = None
+        elif a.emb_extra:
+            # 外部真刻本模板：每字 = mean(字体渲染向量 ∪ 外部图向量)（--emb-extra-only 时只用外部图）
+            from open_guji_cv.clustering.extra_glyphs import load_many
+            from open_guji_cv.clustering.font_candidates import _font_files
+            from open_guji_cv.clustering.synth import render_char
+            extra = load_many(a.emb_extra, cs)
+            n_ex = sum(len(v) for v in extra.values())
+            print(f"外部模板 {n_ex} 张 / {len(extra)} 字（字表 {len(cs)} 字，覆盖 {len(extra)/len(cs):.1%}）")
+            fonts = _font_files()
+            vecs, owner = [], []
+            with torch.no_grad():
+                for ch in cs:
+                    ims = []
+                    if not a.emb_extra_only:
+                        for fp in fonts:
+                            try:
+                                im = render_char(ch, fp, size=64)
+                            except Exception:
+                                continue
+                            if im is not None and im.any():
+                                ims.append(im.astype(np.uint8))
+                    ims += extra.get(ch, [])
+                    if not ims:
+                        continue
+                    x = torch.tensor(np.stack(ims)[:, None].astype(np.float32))
+                    e, _, _ = net(x)
+                    e = e / (e.norm(dim=1, keepdim=True) + 1e-9)
+                    v = e.mean(0); vecs.append((v / (v.norm() + 1e-9)).numpy()); owner.append(ch)
+            emb_mat = np.stack(vecs).astype(np.float32)
+            emb_chars = owner
+            emb_owner = owner
         else:
             # 实验用：不落盘。max = 每字体一条向量，检索时按字取最大相似；
             # aug = 每字 4 字体 × (原图 + 腐蚀 + 膨胀) 的均值——让模板分布更像刻本。
@@ -148,6 +199,11 @@ def main() -> int:
         r = next((i + 1 for i, c in enumerate(order) if c == g or are_variants(c, g)), 999)
         return r
 
+    def hit_strict(order, g):
+        return next((i + 1 for i, c in enumerate(order) if c == g), 999)
+
+    rk_strict = {k: Counter() for k in ("hog", "cnn", "emb", "rrf")}
+
     rk = {k: Counter() for k in ("hog", "cnn", "emb", "rrf")}
     n = 0
     with torch.no_grad():
@@ -195,10 +251,18 @@ def main() -> int:
             for name, order in pairs:
                 r = hit(order, g)
                 rk[name]["t1"] += r == 1; rk[name]["t5"] += r <= 5; rk[name]["t10"] += r <= 10
+                r = hit_strict(order, g)
+                rk_strict[name]["t1"] += r == 1; rk_strict[name]["t5"] += r <= 5; rk_strict[name]["t10"] += r <= 10
     tag = "rare-char" if a.rare else f"{a.split}"
     print(f"{tag} n={n}（异体算对）")
     for name in ("hog", "cnn", "emb", "rrf"):
         c = rk[name]
+        if not sum(c.values()) and name == "emb":
+            continue
+        print(f"  {name:4s} top1 {c['t1']/n:5.1%}  top5 {c['t5']/n:5.1%}  top10 {c['t10']/n:5.1%}")
+    print(f"{tag} n={n}（严格：只认同一码位）")
+    for name in ("hog", "cnn", "emb", "rrf"):
+        c = rk_strict[name]
         if not sum(c.values()) and name == "emb":
             continue
         print(f"  {name:4s} top1 {c['t1']/n:5.1%}  top5 {c['t5']/n:5.1%}  top10 {c['t10']/n:5.1%}")

@@ -96,12 +96,24 @@ def test_library_below_cov_stays_open_without_image():
 
 
 def test_fixed_by_image_when_three_sources_agree():
+    # emb 差 0.20 —— 2026-09-07 FORM_EMB_GAP 0.03 → 0.12 后，夹具从 0.07 抬到 0.20。
+    # 0.07 是「字体模板 + run-5」时代的典型差距（那时同组平均只有 0.0138），
+    # R4 + 真刻本模板下同组平均 0.1734，0.20 才是现在的「三源明确一致」形态。
     ranks = {"hog": [("髪", 0.81), ("髮", 0.78)],
              "cls": [("髪", 0.7), ("髮", 0.3)],
-             "emb": [("髪", 0.91), ("髮", 0.84)]}
+             "emb": [("髪", 0.91), ("髮", 0.71)]}
     d = vf.decide_form("髮", ["髪", "髮"], [], _ledger(), ranks)
     assert d.state == "fixed_form" and d.char == "髪"
-    assert d.evidence["agree"] is True and d.evidence["emb_gap"] == pytest.approx(0.07)
+    assert d.evidence["agree"] is True and d.evidence["emb_gap"] == pytest.approx(0.20)
+
+
+def test_gap_below_threshold_stays_open_even_when_sources_agree():
+    """三源一致但差距不够 → 仍落人审。守住 FORM_EMB_GAP 这道闸本身。"""
+    ranks = {"hog": [("髪", 0.81), ("髮", 0.78)],
+             "cls": [("髪", 0.7), ("髮", 0.3)],
+             "emb": [("髪", 0.91), ("髮", 0.84)]}       # 差 0.07 < 0.12
+    d = vf.decide_form("髮", ["髪", "髮"], [], _ledger(), ranks)
+    assert d.state == "open" and d.evidence["agree"] is True
 
 
 def test_image_disagreement_or_small_gap_stays_open():

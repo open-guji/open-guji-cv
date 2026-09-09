@@ -266,6 +266,7 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                        match_guard: str | None = None,
                        match_wmax: float = 0.0,
                        solo_cov: float = MATCH_SOLO_COV,
+                       cnn_char: str | None = None,
                        ) -> tuple[bool, str | None]:
     """进库裁决：返回 (可自动进库, 通道名 None|"match_ref"|"match_solo")。
 
@@ -399,6 +400,25 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                 and c1 not in NEAR_FORM_CHARS
                 and ocr_char not in NEAR_FORM_CHARS):
             return True, "match_solo_ocr"
+        # CNN 字形背书档（2026-09-07 加，`external_glyph_sources_experiment.md` §5.9）：
+        # 同一个灰区（形状 0.95~0.99），OCR 读不出或读错时，换 CNN embedding 检索
+        # （模板 = 字体 + 康熙字头 + 字统网真刻本）的 top1 做背书。
+        #
+        # **为什么这不违反「两路误差独立」**：CNN 与库匹配确实同输入同归一，但实测
+        # P(CNN 错 | 形状路错) 只有 8.8%（CNN 无条件错误率 3.4%），**两路错到同一个
+        # 字**只占形状路错误的 3.2% —— 相关但远非同源。更关键的是这一档**本来就没有
+        # 第二路**（OCR 缺席时只能落人审），补一路弱独立证据是净收益，不是拿它替换
+        # 已有的独立证据（dual 的 OCR 那一路一动不动）。
+        #
+        # bench seen_test 实测（2,480 位，排除 己已巳/人入/日目 等护栏字）：
+        # 灰区 1,432 位里 CNN 背书 1,408（98.3%）、**错 0**；不背书的 31 位里库本来
+        # 就错 16（51.6%）——它既放行也挡。整体放行 39.4% → 96.2%，精度 99.83%。
+        # 护栏与 OCR 档完全一致（rival95 / NEAR_FORM_CHARS 两侧都拦）。
+        if (cnn_char is not None and cov1 >= MATCH_SOLO_OCR_COV and not rival95
+                and vmap.semantic(cnn_char) == vmap.semantic(c1)
+                and c1 not in NEAR_FORM_CHARS
+                and cnn_char not in NEAR_FORM_CHARS):
+            return True, "match_solo_cnn"
     # match_margin（用户 2026-08-27 定，见 MATCH_MARGIN_THRESH 注释）：
     # 兜底通道——上面全部通道都没吃到的，最后看一眼「有没有 competitor」。
     # 不管疑问是什么组合（db_inconsistent 除外——它说的是库本身对不上，
