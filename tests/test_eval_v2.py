@@ -111,6 +111,38 @@ def test_parse_metrics_shapes():
     assert m["回归门"].value == 100.0 and m["回归门"].numerator == 31
 
 
+def test_parse_metrics_touching_cuts_shape():
+    """2026-09-09 修复：eval_touching_cuts.py 的输出此前一条指标都解析不出来
+    （见 open_guji_cv/eval/runner.py 里那段"事实/猜测"分行的注释）。
+    这四行是它的真实 stdout（数字取自协调者云端实测的基线）。"""
+    text = (
+        "touching-cuts n=258（moved 77 / ok 181；overlap 另计 219，缝正确 250，"
+        "干扰另计 17，漂移跳过 4，缺产物 2）\n"
+        "  像素误差 mean 1.1  median 0.0  p90 2.0  max 31\n"
+        "  ≤3px 91.5%   ≤5px 94.2%   ≤10px 96.9%\n"
+        "  最差: [('vol01:47:6:17', 32)]\n"
+        "  折线金标 n=231（现役有缝 219）：最大偏差 mean 4.3 median 2.0 p90 6.0；"
+        "平均偏差 median 0.0；最大偏差 ≤3px 83.1%  ≤6px 91.8%\n"
+        "  折线最差: [('vol01:47:6:17', 32)]"
+    )
+    m = {x.name: x for x in parse_metrics(text)}
+    assert m["n"].value == 258 and "moved 77 / ok 181" in m["n"].note
+    assert m["像素误差 mean"].value == 1.1
+    assert m["像素误差 median"].value == 0.0
+    assert m["像素误差 p90"].value == 2.0
+    assert m["像素误差 max"].value == 31.0
+    assert m["≤3px"].value == 91.5 and m["≤3px"].unit == "%"
+    assert m["≤5px"].value == 94.2
+    assert m["≤10px"].value == 96.9
+    assert m["最大偏差 mean"].value == 4.3
+    assert m["最大偏差 median"].value == 2.0
+    assert m["最大偏差 p90"].value == 6.0
+    assert m["平均偏差 median"].value == 0.0
+    assert m["最大偏差 ≤3px"].value == 83.1     # 与裸的 ≤3px 不是同一条，不能互相覆盖
+    assert m["最大偏差 ≤6px"].value == 91.8
+    assert m["折线金标 n"].value == 231 and "现役有缝 219" in m["折线金标 n"].note
+
+
 def test_parse_metrics_skips_per_class_detail():
     """逐类明细行会把 limit 吃光，把真正的总体指标挤掉。"""
     text = ("  body      (切分) n= 294  策略判对  294    100%\n"
@@ -118,6 +150,42 @@ def test_parse_metrics_skips_per_class_detail():
             "网格策略准确率 99.5%（394 页）")
     names = [m.name for m in parse_metrics(text)]
     assert "网格策略准确率" in names
+
+
+# ── 跑之前查产物 ─────────────────────────────────────────────────────
+def test_missing_pages_by_book_uses_gold_anchors(monkeypatch):
+    """按金标条目的 anchor 算需要哪些页，不按位置参数猜；
+    retired 条目与没有页锚点的条目都不计入。"""
+    from open_guji_cv.eval import runner
+    from open_guji_cv.gold.item import Anchor, GoldItem
+
+    class FakeGoldStore:
+        def list(self, shard):
+            return [
+                GoldItem(id="a", anchor=Anchor(book="vol01", page=1), status="active"),
+                GoldItem(id="b", anchor=Anchor(book="vol01", page=2), status="active"),
+                GoldItem(id="c", anchor=Anchor(book="vol02", page=5), status="active"),
+                GoldItem(id="d", anchor=Anchor(book="vol01", page=3), status="retired"),
+                GoldItem(id="e", anchor=Anchor(book=None, page=None), status="active"),
+            ]
+
+    have = {("vol01", 1)}
+    monkeypatch.setattr("open_guji_cv.utils.bootstrap.has_products",
+                        lambda book, pg, store: (book, pg) in have)
+    missing = runner._missing_pages_by_book(EVALS["touching_cuts"], FakeGoldStore())
+    assert missing == {"vol01": [2], "vol02": [5]}
+
+
+def test_bootstrap_missing_calls_ensure_products_per_book(monkeypatch):
+    from open_guji_cv.eval import runner
+
+    called = []
+    monkeypatch.setattr("open_guji_cv.utils.bootstrap.ensure_products",
+                        lambda bk, pages, store, cache: called.append((bk.id, sorted(pages))))
+    monkeypatch.setattr("open_guji_cv.core.book.load_book",
+                        lambda bid: type("FakeBook", (), {"id": bid})())
+    runner._bootstrap_missing({"vol01": [2], "vol02": [5]})
+    assert sorted(called) == [("vol01", [2]), ("vol02", [5])]
 
 
 # ── 报告 ─────────────────────────────────────────────────────────────
