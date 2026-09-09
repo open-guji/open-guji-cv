@@ -77,4 +77,4 @@ exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
 open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/*",
-                "web/index.html", "clustering/review/static/*"]
+                "clustering/review/static/*"]
