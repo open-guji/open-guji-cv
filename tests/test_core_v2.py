@@ -20,9 +20,10 @@ import open_guji_cv.steps  # noqa: F401  —— 注册 raw_page 等产物种类�
 from open_guji_cv.core.book import BookSpec
 from open_guji_cv.core.engine import BLOCKED, FAILED, FRESH, MISSING, STALE, Engine
 from open_guji_cv.core.pipeline import Pipeline
-from open_guji_cv.core.spec import (ProductKindSpec, StepSpec, cell_key, column_key, page_key,
-                                    parse_key)
-from open_guji_cv.core.step import KINDS, STEPS, RunContext, Step, register_kind, register_step
+from open_guji_cv.core.spec import (GateSpec, ProductKindSpec, StepSpec, cell_key, column_key,
+                                    page_key, parse_key)
+from open_guji_cv.core.step import (KINDS, STEPS, RunContext, Step, attach_gate, register_kind,
+                                    register_step)
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
 
@@ -130,6 +131,50 @@ def test_pipeline_dag(world):
     bad = Pipeline(id="bad", title="", steps=["t_step_b"])
     with pytest.raises(ValueError):
         bad.validate()
+
+
+# ── 挂在别的步上的闸不能单独 `step <gate_id>`（库路径 P0 §二·②）─────────
+if "t_gate_host" not in STEPS:
+    register_kind(ProductKindSpec(id="t_gate_host_out", title="host 产出",
+                                  storage="numeric", unit="page", schema=NumA))
+    register_kind(ProductKindSpec(id="t_gate_child_out", title="闸产出",
+                                  storage="numeric", unit="page", schema=NumA))
+
+    @register_step
+    class GateHostStep(Step):
+        spec = StepSpec(id="t_gate_host", title="闸的宿主", version="1", unit="page",
+                        consumes=(), produces=("t_gate_host_out",), params=ParamsB)
+
+        def run_page(self, ctx, page):
+            return {"t_gate_host_out": NumA(page=page, mean=0.0)}
+
+    @register_step
+    class GateChildStep(Step):
+        spec = StepSpec(id="t_gate_child", title="挂出去的闸", version="1", unit="page",
+                        consumes=(), produces=("t_gate_child_out",), params=ParamsB)
+
+        def run_page(self, ctx, page):
+            return {"t_gate_child_out": NumA(page=page, mean=0.0)}
+
+    attach_gate("t_gate_host", GateSpec(id="t_gate_child", unit="page", on_fail="block"))
+
+
+def test_slice_rejects_gate_id_with_clear_message():
+    """`step <闸的 id>` 曾直接 `ValueError: '<id>' is not in list`（2026-09-09 回归，
+    `column_gate` 就是这么炸的）——闸不出现在 `pipeline.steps` 里，`self.steps.index`
+    自然找不到它。修复后要么能跑（本测试不要求），要么把报错换成指名宿主步骤的提示。
+    """
+    pl = Pipeline(id="tg", title="", steps=["t_gate_host"])
+    pl.validate()
+    assert pl.slice("t_gate_host") == ["t_gate_host"]
+    with pytest.raises(ValueError, match="t_gate_host"):
+        pl.slice("t_gate_child")
+
+
+def test_slice_unknown_step_still_raises_a_named_error():
+    pl = Pipeline(id="tg2", title="", steps=["t_gate_host"])
+    with pytest.raises(ValueError, match="没有步骤"):
+        pl.slice("not_a_real_step")
 
 
 # ── 产物仓 ───────────────────────────────────────────────────────────

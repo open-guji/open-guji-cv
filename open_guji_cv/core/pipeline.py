@@ -68,9 +68,37 @@ class Pipeline:
                     stack.append(d)
         return [s for s in self.steps if s in seen]
 
+    def _gate_host(self, gate_id: str) -> str | None:
+        """`gate_id` 是不是挂在本 pipeline 某个步骤出口的闸；是则返回那个步骤的 id。
+
+        闸（`attach_gate` 挂的那种）不出现在 yaml 的 `steps:` 里、也不在
+        `self.steps` 中——它跟着被挂的那个 Step 自动跑（见 `Engine.run`）。
+        """
+        for sid in self.steps:
+            g = STEPS[sid].spec.gate
+            if g and g.id == gate_id:
+                return sid
+        return None
+
+    def _index(self, sid: str | None) -> int | None:
+        if sid is None:
+            return None
+        if sid in self.steps:
+            return self.steps.index(sid)
+        host = self._gate_host(sid)
+        if host:
+            raise ValueError(
+                f"{sid!r} 是挂在 {host!r} 出口的闸，不是独立的 pipeline 步骤，"
+                f"不能单独 `step {sid}`——用 `step {host}` 代替"
+                f"（跑完 {host} 会自动跟着跑 {sid}）。"
+            )
+        raise ValueError(f"pipeline {self.id} 没有步骤 {sid!r}")
+
     def slice(self, from_step: str | None = None, to_step: str | None = None) -> list[str]:
-        i = self.steps.index(from_step) if from_step else 0
-        j = self.steps.index(to_step) + 1 if to_step else len(self.steps)
+        i = self._index(from_step)
+        i = i if i is not None else 0
+        j = self._index(to_step)
+        j = j + 1 if j is not None else len(self.steps)
         if i >= j:
             raise ValueError(f"步骤范围为空: {from_step} → {to_step}")
         return self.steps[i:j]
