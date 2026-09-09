@@ -1,5 +1,12 @@
 """Step2 → Step3 交接闸：只把「确实是一列、且过了闸」的列推给 Step3。
 
+2026-09-09 从 `steps/column_gate.py` 迁到这里（交接闸道，纯重组，判据一个字
+没动）：`ColumnGateStep` 本身不变——照旧注册进 `STEPS`、照旧落
+`products/<book>/column_gate/`；只是不再出现在 `pipelines/keben_body_v2.yaml`
+的 `steps:` 列表里，改用 `core.step.attach_gate` 挂在 `column_warp`（Step2）的
+`StepSpec.gate` 上，引擎跑完 Step2 后自动接着跑它（见 `core.engine.Engine.run`）。
+落盘目录名特意原样保留，免得触发一次全量重跑（见任务书 §五「本步踩过的坑」）。
+
 判据分三层：
 - **L1 页级**（只看几何）：探出的列数 = 版式列数。整页性的问题才放这里；
 - **L1c 列级**：本列宽偏离本页中位数超 ±15% —— 多半是把界行圈进了列窗。
@@ -21,8 +28,8 @@ import numpy as np
 
 from pydantic import BaseModel
 
-from ..core.spec import StepSpec, column_key
-from ..core.step import RunContext, Step, register_step
+from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
+from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
@@ -190,3 +197,20 @@ class ColumnGateStep(Step):
         return {"gate_manifest": GateManifest(
             page=page, admitted=page_ok, reject=page_reject, period=period, ref_w=ref_w,
             column_widths=widths, median_width=med_w, columns=recs, contract=CONTRACT)}
+
+
+# 挂到 Step2（column_warp）出口——levels 的 desc 只描述层次，不重复具体阈值数字
+# （阈值在 ColumnGateParams 里，写两处会漂）。
+attach_gate("column_warp", GateSpec(
+    id="column_gate", unit="column", on_fail="block",
+    levels=(
+        GateLevel(id="L1", unit="page",
+                  desc="探出的列数是否等于版式列数——整页性的问题才放这一层"),
+        GateLevel(id="L1c", unit="column",
+                  desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗"),
+        GateLevel(id="L2", unit="column",
+                  desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端"),
+        GateLevel(id="L3", unit="column",
+                  desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
+    ),
+))

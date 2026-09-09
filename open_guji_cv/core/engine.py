@@ -164,9 +164,32 @@ class Engine:
             return FAILED, entry
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
+    def _page_status_row(self, step: Step, pages: list[int],
+                          upstream_fresh: dict[int, bool]) -> tuple[dict, dict[int, str]]:
+        """算一个 Step（普通 Step 或闸）逐页状态，返回 (给 status() 用的行, {页: 状态} 供下游查过期)。"""
+        per_page: dict[int, dict] = {}
+        counts = {FRESH: 0, STALE: 0, MISSING: 0, FAILED: 0, BLOCKED: 0}
+        page_state: dict[int, str] = {}
+        for pg in pages:
+            st, entry = self.page_status(step, pg)
+            upstream_stale = st == FRESH and not upstream_fresh.get(pg, True)
+            if upstream_stale:
+                st = STALE
+            page_state[pg] = st
+            counts[st] += 1
+            per_page[pg] = {"status": st, "upstream_stale": upstream_stale,
+                            "ts": entry.ts if entry else None,
+                            "elapsed": entry.elapsed if entry else None,
+                            "error": entry.error if entry else None}
+        return {"counts": counts, "pages": per_page}, page_state
+
     def status(self, pages: list[int] | None = None, steps: list[str] | None = None) -> dict:
         """每步每页的状态。**过期沿 DAG 向下传**：某页的任一直接上游不是 fresh，本步该页
-        即使指纹还对得上也标 stale（`upstream_stale=True`）——上游一改，下游整链过期。"""
+        即使指纹还对得上也标 stale（`upstream_stale=True`）——上游一改，下游整链过期。
+
+        闸（`step.spec.gate`）不出现在 `pipeline.steps` 里，但仍按它挂的那个 Step
+        刚算完的新鲜度接着算一行，用闸自己的 `id`（如 `column_gate`）作 key——
+        跟闸迁移前、它还是 pipeline 里一个独立节点时的 status 输出**同名同形**。"""
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         steps = steps or self.pipeline.steps
         out: dict[str, dict] = {}
@@ -174,84 +197,107 @@ class Engine:
         for sid in self.pipeline.steps:          # 按拓扑序算，保证上游先有结果
             step = STEPS[sid]
             ups = [u for u in self.pipeline.upstream(sid) if u in seen]
-            per_page: dict[int, dict] = {}
-            counts = {FRESH: 0, STALE: 0, MISSING: 0, FAILED: 0, BLOCKED: 0}
-            seen[sid] = {}
-            for pg in pages:
-                st, entry = self.page_status(step, pg)
-                upstream_stale = st == FRESH and any(seen[u].get(pg) != FRESH for u in ups)
-                if upstream_stale:
-                    st = STALE
-                seen[sid][pg] = st
-                counts[st] += 1
-                per_page[pg] = {"status": st, "upstream_stale": upstream_stale,
-                                "ts": entry.ts if entry else None,
-                                "elapsed": entry.elapsed if entry else None,
-                                "error": entry.error if entry else None}
+            upstream_fresh = {pg: all(seen[u].get(pg) == FRESH for u in ups) for pg in pages}
+            row, page_state = self._page_status_row(step, pages, upstream_fresh)
+            seen[sid] = page_state
             if sid in steps:
-                out[sid] = {"counts": counts, "pages": per_page}
+                out[sid] = row
+            gate = step.spec.gate
+            if gate:
+                gate_step = STEPS[gate.id]
+                gate_upstream_fresh = {pg: page_state.get(pg) == FRESH for pg in pages}
+                grow, gpage_state = self._page_status_row(gate_step, pages, gate_upstream_fresh)
+                seen[gate.id] = gpage_state
+                out[gate.id] = grow
         return {"book": self.book.id, "pipeline": self.pipeline.id, "pages": pages, "steps": out}
 
     # ── 执行 ─────────────────────────────────────────────────────────
+    def _run_one_step(self, step: Step, pages: list[int], report: RunReport,
+                       force: bool, stop_on_error: bool, total: int, done: int) -> tuple[int, bool]:
+        """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。"""
+        sid = step.spec.id
+        manifest = self.store.manifest(self.book.id, sid)
+        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页")
+        for pg in pages:
+            done += 1
+            key = page_key(pg)
+            fp, ups, ph = self.fingerprint(step, pg)
+            pct = int(done * 100 / max(total, 1))
+            if fp is None:
+                msg = f"上游缺失: {[k for k in step.spec.consumes]}"
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
+                manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
+                                           upstream={}, code_rev=self._rev,
+                                           status="failed", error=msg))
+                if stop_on_error:
+                    return done, True
+                continue
+            entry = manifest.get(key)
+            if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
+                    and self.store.exists(self.book.id, sid, key)):
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
+                report.outcomes.append(PageOutcome(sid, pg, "skipped"))
+                continue
+            t0 = time.time()
+            try:
+                products = step.run_page(self.ctx, pg)
+                for k in products:
+                    if k not in step.spec.produces:
+                        raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
+                    if kind_of(k).storage != "numeric":
+                        raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
+                _, sha = self.store.write(self.book.id, sid, key, products)
+                elapsed = time.time() - t0
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
+                                           params_hash=ph, upstream=ups or {},
+                                           code_rev=self._rev, elapsed=round(elapsed, 3)))
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
+                report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
+            except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
+                elapsed = time.time() - t0
+                err = f"{type(e).__name__}: {e}"
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                           upstream=ups or {}, code_rev=self._rev,
+                                           elapsed=round(elapsed, 3), status="failed", error=err))
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 失败 {err}")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
+                if stop_on_error:
+                    return done, True
+        return done, False
+
     def run(self, steps: list[str] | None = None, pages: list[int] | None = None,
             force: bool = False, stop_on_error: bool = False) -> RunReport:
+        """按 `steps`（默认 pipeline 的 `steps:` 列表）逐个跑。
+
+        **闸跟着它挂的 Step 自动跑**，不需要出现在 `steps` 里：`step.spec.gate`
+        非空时，这个 Step 跑完当前这批页之后紧接着跑 `STEPS[gate.id]`——这就是
+        「框架统一跑闸」，调用方（含 `steps=[...]` 显式点名到某个旧 Step id 的
+        历史调用，如 `scripts/seg_harness.py` 的 `BOOTSTRAP_STEPS`）不用改。
+        显式把闸的 id 也点在 `steps` 里仍然安全：闸第二次跑到时指纹已新鲜，
+        直接跳过。
+        """
         steps = steps or self.pipeline.steps
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         report = RunReport(self.book.id, self.pipeline.id, list(steps), list(pages))
-        total = len(steps) * len(pages)
+        gated_extra = [STEPS[s].spec.gate.id for s in steps
+                       if STEPS[s].spec.gate and STEPS[s].spec.gate.id not in steps]
+        total = len(pages) * (len(steps) + len(gated_extra))
         done = 0
         for sid in steps:
             step = STEPS[sid]
-            manifest = self.store.manifest(self.book.id, sid)
-            self.log(f"== {sid} {step.spec.title}：{len(pages)} 页")
-            for pg in pages:
-                done += 1
-                key = page_key(pg)
-                fp, ups, ph = self.fingerprint(step, pg)
-                pct = int(done * 100 / max(total, 1))
-                if fp is None:
-                    msg = f"上游缺失: {[k for k in step.spec.consumes]}"
-                    self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
-                    manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
-                                               upstream={}, code_rev=self._rev,
-                                               status="failed", error=msg))
-                    if stop_on_error:
-                        report.finished_at = time.time()
-                        return report
-                    continue
-                entry = manifest.get(key)
-                if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
-                        and self.store.exists(self.book.id, sid, key)):
-                    self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
-                    report.outcomes.append(PageOutcome(sid, pg, "skipped"))
-                    continue
-                t0 = time.time()
-                try:
-                    products = step.run_page(self.ctx, pg)
-                    for k in products:
-                        if k not in step.spec.produces:
-                            raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
-                        if kind_of(k).storage != "numeric":
-                            raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
-                    _, sha = self.store.write(self.book.id, sid, key, products)
-                    elapsed = time.time() - t0
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
-                                               params_hash=ph, upstream=ups or {},
-                                               code_rev=self._rev, elapsed=round(elapsed, 3)))
-                    self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
-                    report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
-                except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
-                    elapsed = time.time() - t0
-                    err = f"{type(e).__name__}: {e}"
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev,
-                                               elapsed=round(elapsed, 3), status="failed", error=err))
-                    self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 失败 {err}")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
-                    if stop_on_error:
-                        report.finished_at = time.time()
-                        return report
+            done, stopped = self._run_one_step(step, pages, report, force, stop_on_error, total, done)
+            if stopped:
+                report.finished_at = time.time()
+                return report
+            gate = step.spec.gate
+            if gate and gate.id not in steps:
+                gate_step = STEPS[gate.id]
+                done, stopped = self._run_one_step(gate_step, pages, report, force,
+                                                    stop_on_error, total, done)
+                if stopped:
+                    report.finished_at = time.time()
+                    return report
         report.finished_at = time.time()
         c = report.counts()
         self.log("完成：" + "；".join(f"{s} ok {v['ok']} / 跳过 {v['skipped']} / 失败 {v['failed']}"
