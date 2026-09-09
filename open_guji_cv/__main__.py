@@ -636,20 +636,33 @@ def cmd_review_ingest(args):
 
 
 def cmd_glyph_db(args):
-    """M8 跨书字形数据库：import 收尾入库 / stats 概览。"""
-    from .clustering.glyph_db import GlyphDB
+    """M8 跨书字形数据库：import 收尾入库 / stats 概览。
 
-    db = GlyphDB(Path(args.store) / "glyphdb.sqlite")
+    索引库（SQLite）的落盘位置统一交给 `core.workspace.glyph_db_path()` 解析
+    （`GUJI_GLYPH_DB` → `GUJI_WORKSPACE/output/glyph.db` → 仓内默认），不再由
+    `--store` 推出——`--store` 只表示「真源（JSONL+PNG）在哪」，是 rebuild 的
+    读入口、export 的写出口。库路径只有这一处说了算，`glyph_match` /
+    `seed_admit` 读的是同一个 `glyph_db_path()`，rebuild 之后不必手工搬库。
+    （库路径 P0：以前这里写的是 `<store>/glyphdb.sqlite`，与真正被读取的
+    `glyph_db_path()` 不是同一个文件——干净环境上 rebuild 看着成功，
+    `glyph_match` 却读到空库，静默出错、exit 0。）
+    """
+    from .clustering.glyph_db import GlyphDB
+    from .core.workspace import glyph_db_path
+
+    db_path = glyph_db_path()
+    db = GlyphDB(db_path)
     try:
         if args.action == "export":
             from .clustering.glyph_db import export_store
             summary = export_store(db, args.store)
         elif args.action == "rebuild":
-            from .clustering.glyph_db import rebuild_from_store
+            from .clustering.glyph_db import (assert_db_not_silently_empty,
+                                              rebuild_from_store)
             db.close()
-            summary = rebuild_from_store(args.store,
-                                         Path(args.store) / "glyphdb.sqlite")
+            summary = rebuild_from_store(args.store, db_path)
             db = None
+            assert_db_not_silently_empty(db_path, args.store)
         elif args.action == "drop-edition":
             if not args.edition:
                 print("drop-edition 需要 --edition"); sys.exit(1)
