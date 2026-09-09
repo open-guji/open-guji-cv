@@ -138,7 +138,10 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         d = yaml.safe_load(f) or {}
     raw_dir = Path(d["raw_dir"])
     if not raw_dir.is_absolute():
-        raw_dir = _repo_root() / raw_dir
+        # 相对路径优先按工作区解释（原图已随书迁到 siku-zongmu-workspace），
+        # 没设 GUJI_WORKSPACE 时退回仓根——引擎自带的小样本仍在仓内。
+        from .workspace import raw_root
+        raw_dir = raw_root() / raw_dir
     return BookSpec(
         id=d.get("id", book_id), title=d.get("title", book_id), raw_dir=raw_dir,
         raw_pattern=d.get("raw_pattern", "{page}.png"),
