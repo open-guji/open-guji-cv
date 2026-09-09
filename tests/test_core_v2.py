@@ -29,6 +29,13 @@ from open_guji_cv.products.store import ProductStore
 REPO = Path(__file__).resolve().parent.parent
 
 
+def _ws_raw():
+    """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
+    没设则退回仓根——引擎自带的小样本仍在仓内。"""
+    from open_guji_cv.core.workspace import raw_root
+    return raw_root()
+
+
 # ── 合成种类与步骤 ───────────────────────────────────────────────────
 class NumA(BaseModel):
     page: int
@@ -238,7 +245,7 @@ def test_engine_rejects_image_kind_returned_as_numeric(world):
 
 
 # ── 真实链路（有原图才跑）────────────────────────────────────────────
-RAW_24 = REPO / "data_full" / "zongmu" / "vol01" / "24.png"
+RAW_24 = _ws_raw() / "data_full" / "zongmu" / "vol01" / "24.png"
 
 
 @pytest.mark.skipif(not RAW_24.exists(), reason="需要 data_full/zongmu/vol01/24.png")

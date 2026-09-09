@@ -17,7 +17,13 @@ from open_guji_cv.feedback.consumers import glyphdb_admit
 from open_guji_cv.feedback.events import EventTarget, make_event
 
 REPO = Path(__file__).resolve().parent.parent
-DB = REPO / "output" / "glyph.db"
+
+
+def _ws_db():
+    """字形库：优先 GUJI_WORKSPACE / GUJI_GLYPH_DB。"""
+    from open_guji_cv.core.workspace import glyph_db_path
+    return glyph_db_path()
+DB = _ws_db()
 needs_db = pytest.mark.skipif(not DB.exists(), reason="需要 output/glyph.db")
 
 
