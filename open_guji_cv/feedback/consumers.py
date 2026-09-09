@@ -147,7 +147,7 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
 
 
 # ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
-def glyphdb_admit(events, db_path: str = "output/glyph.db",
+def glyphdb_admit(events, db_path: str | None = None,
                   dry_run: bool = False, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
 
@@ -192,10 +192,11 @@ def glyphdb_admit(events, db_path: str = "output/glyph.db",
         return res
 
     from ..clustering.glyph_db import GlyphDB
+    from ..core.workspace import glyph_db_path
     from ..products.cache import ImageCache
     import cv2
 
-    db = GlyphDB(db_path)
+    db = GlyphDB(str(glyph_db_path(db_path)))
     cache = ImageCache()
     for e, _dest in admits:
         shape = e.payload.get("shape") or e.payload.get("char")

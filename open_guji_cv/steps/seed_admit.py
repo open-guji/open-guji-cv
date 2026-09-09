@@ -73,7 +73,7 @@ class SeedAdmitParams(BaseModel):
     note_min_sim: float = 0.70          # 段相似度下限（见 note_lexicon.MIN_SIM）
     note_fingerprint: str = ""          # 自动填：词表变了产物过期
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
-    db_path: str = "output/glyph.db"    # 读人裁记录用；与 glyph_match 同一个库
+    db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
@@ -90,6 +90,9 @@ class SeedAdmitParams(BaseModel):
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
 
     def model_post_init(self, _ctx) -> None:
+        if not self.db_path:
+            from ..core.workspace import glyph_db_path
+            object.__setattr__(self, "db_path", str(glyph_db_path()))
         # 语料是**外部可变状态**：换了整理本，准入结论会变，产物必须过期。
         # 与 glyph_match 的 db_fingerprint、context_decide 的 corpus_fingerprint
         # 同一套做法（见 context_decide 模块头）。

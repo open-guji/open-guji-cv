@@ -39,12 +39,20 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.chars import PageChars
 from ..products.kinds.recog import ColumnMatch, MatchRec, PageMatch
 
+def _default_db() -> str:
+    """默认库路径。空串表示「按 workspace 解析」——不在导入时定死，
+    因为 `GUJI_WORKSPACE` 可能在导入之后才设（测试、控制台切册都会）。"""
+    from ..core.workspace import glyph_db_path
+    return str(glyph_db_path())
+
+
+# 兼容旧引用；新代码用 _default_db() 或 core.workspace.glyph_db_path()
 DEFAULT_DB = "output/glyph.db"
 
 
-def db_fingerprint(path: str | Path = DEFAULT_DB) -> str:
+def db_fingerprint(path: str | Path | None = None) -> str:
     """库的轻量指纹：(mtime_ns, size, exemplars 行数) 的哈希。见模块头。"""
-    p = Path(path)
+    p = Path(path or _default_db())
     if not p.exists():
         return "nodb"
     st = p.stat()
@@ -60,7 +68,10 @@ def db_fingerprint(path: str | Path = DEFAULT_DB) -> str:
 
 
 class GlyphMatchParams(BaseModel):
-    db_path: str = DEFAULT_DB
+    db_path: str = ""
+    """字形库路径。**留空 = 运行时按 workspace 解析**（`GUJI_GLYPH_DB` →
+    `GUJI_WORKSPACE/output/glyph.db` → 仓内样本库），不在导入时定死——
+    引擎与书的数据已分仓，路径得能指到别处。显式传值则原样用。"""
     db_fingerprint: str = ""
     """库指纹。**留空会在构造时自动填**（见下面的校验器）——它必须是参数的一
     部分，`params_hash` 才会把它算进 Step 指纹，库一变产物就自动 stale。
@@ -70,9 +81,11 @@ class GlyphMatchParams(BaseModel):
     max_candidates: int = 5       # unsure 档往产物里存几个候选
 
     def model_post_init(self, _ctx) -> None:
+        # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
+        # 但直接赋值会再触发一轮 validate）——用 object.__setattr__ 最干净。
+        if not self.db_path:
+            object.__setattr__(self, "db_path", _default_db())
         if not self.db_fingerprint:
-            # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
-            # 但直接赋值会再触发一轮 validate）——用 object.__setattr__ 最干净。
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
 
 
