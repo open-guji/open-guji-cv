@@ -259,11 +259,19 @@ VARIANTS: dict[str, dict] = {
 
 
 def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict):
-    """与 RowSegmentStep.run_page 同一套入参。"""
+    """与 RowSegmentStep.run_page 同一套入参。
+
+    2026-09-09 台子与现役对比查出「与现役产物不一致 10」列后发现：这里漏了
+    `RowSegmentStep.run_page` 有的 `effective_body_slots` 调用——版框装不下
+    `n_body` 格的页（vol01/5 只有 20 行）现役会少切一格，台子这里此前一直按
+    标准格数硬切，两边用的 n_body_slots 就对不上了。补上后台子与现役才是
+    真的同一套入参（见 utils/row_boundaries.py::effective_body_slots 的 docstring）。
+    """
     n_body = p.n_body_slots or bk.chars_per_line
     n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
+    n_body_col = RB.effective_body_slots(n_body, gc.border_top, gc.border_bottom, gate.period)
     return RB.segment_column(
-        img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
+        img, period=gate.period, n_body_slots=n_body_col, n_raised=n_raised_col,
         border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
         top_slack=gc.top_slack, content_x=gc.content_x,
         ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
