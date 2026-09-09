@@ -106,8 +106,11 @@ class GlyphMatchStep(Step):
         cached = getattr(self, "_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
-        from ..clustering.glyph_db import GlyphDB
+        from ..clustering.glyph_db import GlyphDB, assert_db_not_silently_empty
         from ..clustering.seeding import load_matcher_from_db
+        # 库路径 P0 自检：库路径解析错了、读到空库/别的文件时直接报错，
+        # 不许静默出全 diff（见 glyph_db.assert_db_not_silently_empty 模块头）。
+        assert_db_not_silently_empty(p.db_path)
         db = GlyphDB(p.db_path)
         matcher, _chars = load_matcher_from_db(db, edition=p.edition, knn_k=p.knn_k)
         self._cache = (key, matcher)      # type: ignore[attr-defined]

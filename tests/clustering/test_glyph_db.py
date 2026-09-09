@@ -180,6 +180,49 @@ def test_query_cache_invalidates_on_new_glyphs(tmp_path):
     db.close()
 
 
+# ── 库路径 P0 §二·①：空库自检 ──────────────────────────────────────
+def test_empty_db_with_nonempty_store_raises(tmp_path):
+    """库路径解析错了会造成「库空真源非空」——这个状态必须报错退出，不许静默过。"""
+    from open_guji_cv.clustering.glyph_db import assert_db_not_silently_empty
+
+    db_path = tmp_path / "empty.sqlite"
+    GlyphDB(db_path).close()          # 打开即建表，instances 仍是 0 行
+
+    store = tmp_path / "store"
+    (store / "instances").mkdir(parents=True)
+    (store / "instances" / "src.jsonl").write_text(
+        '{"instance_id": "x"}\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="字形库为空"):
+        assert_db_not_silently_empty(db_path, store)
+
+
+def test_empty_db_with_empty_or_missing_store_is_fine(tmp_path):
+    """真源本来就没有实例（全新工作区、单测用的临时空库）不算异常。"""
+    from open_guji_cv.clustering.glyph_db import assert_db_not_silently_empty
+
+    db_path = tmp_path / "empty.sqlite"
+    GlyphDB(db_path).close()
+
+    assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")   # 真源不存在
+
+    empty_store = tmp_path / "empty_store"
+    (empty_store / "instances").mkdir(parents=True)
+    assert_db_not_silently_empty(db_path, empty_store)                 # 真源没有 jsonl
+
+
+def test_nonempty_db_never_raises_regardless_of_store(tmp_path, synth_book):
+    """库里已经有数据就不该报——自检只管「空库」这一种状态。"""
+    from open_guji_cv.clustering.glyph_db import assert_db_not_silently_empty
+
+    db_path = tmp_path / "g.sqlite"
+    db = GlyphDB(db_path)
+    db.import_book(synth_book, edition_tag="ed1")
+    db.close()
+
+    assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
+
+
 def _seed_one_glyph(db, char, norm):
     """直接塞一个 glyph+exemplar+derived，绕开 import_book 的整书依赖。"""
     from open_guji_cv.clustering.glyph_db import _now, _png
