@@ -293,7 +293,34 @@ def test_engine_rejects_image_kind_returned_as_numeric(world):
 RAW_24 = _ws_raw() / "data_full" / "zongmu" / "vol01" / "24.png"
 
 
+def _glyph_db_built() -> bool:
+    """字形库重建过没有。
+
+    2026-09-09（库路径 P0 收尾）：`glyph_match` 新增 `assert_db_not_silently_empty`
+    自检——库空而真源非空就报错，因为那必定是路径解析错或忘了 rebuild。
+    这条真实链路测试会走到 `glyph_match`，所以**它要求库已经重建过**。
+
+    ⚠️ 这不是把失败藏起来：库没建时跳过并在 reason 里写清怎么建，
+    是**声明前提**；库建好了它照常跑，自检也照常拦得住真的路径错。
+    在此之前这条测试是**绿在错误行为上**的——空库让 `glyph_match` 跑出全 `diff`
+    却不报错，测试只断言「没有 error」所以一直过。
+    """
+    import sqlite3
+    from open_guji_cv.core.workspace import glyph_db_path
+    db = glyph_db_path()
+    if not db.exists():
+        return False
+    try:
+        with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as c:
+            return c.execute("SELECT COUNT(*) FROM instances").fetchone()[0] > 0
+    except sqlite3.Error:
+        return False
+
+
 @pytest.mark.skipif(not RAW_24.exists(), reason="需要 data_full/zongmu/vol01/24.png")
+@pytest.mark.skipif(not _glyph_db_built(),
+                    reason="字形库未重建，先跑 `python -m open_guji_cv glyph-db rebuild "
+                           "--store $GUJI_WORKSPACE/output/glyph_store`")
 def test_keben_body_v2_on_vol01_page24(tmp_path):
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.pipeline import load_pipeline
