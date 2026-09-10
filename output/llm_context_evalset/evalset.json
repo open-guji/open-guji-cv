@@ -1,0 +1,9724 @@
+{
+ "meta": {
+  "source_dataset": "../open-guji-dataset/context-correction",
+  "selection_rule": "生产口径 gated_ngram(margin_gate=0.70, context_window=6) 最终判错、且金标落在候选集合内的槽位——ngram 已经稳赢的位不选，见脚本头注释",
+  "production_config": {
+   "strategy": "gated_ngram",
+   "margin_gate": 0.7,
+   "context_window": 6,
+   "book_weight": 0.9,
+   "general_corpus": "corpus/external/daizhige_zhaoling.txt",
+   "book_corpus": "corpus/zongmu_wuyingdian_reference.txt",
+   "book_chars_removed_as_holdout": 2237
+  },
+  "book_titles": {
+   "vol01": "欽定四庫全書總目·卷首一（vol01）"
+  },
+  "window_chars": 10,
+  "stats": {
+   "n_total_slots": 1681,
+   "n_wrong_unrescuable_gold_not_in_candidates": 167,
+   "n_wrong_rescuable": 359,
+   "by_origin_total": {
+    "align": 1152,
+    "human": 529
+   },
+   "by_origin_wrong_rescuable": {
+    "align": 262,
+    "human": 97
+   }
+  },
+  "n_selected": 150,
+  "sample_seed": 20260910,
+  "known_limitation": [
+   "上下文为教师强制（列内前文/后文用金标拼接），是评测上界口径，不是生产真实前文（生产前文可能带错）——同 context-correction 数据集本身的口径",
+   "context_after 只服务本评测集的 LLM 题面，生产 ngram 仍是纯前向、不吃后文",
+   "候选集合冻结自 context-correction 数据集，随其 pipeline_version 走"
+  ]
+ },
+ "items": [
+  {
+   "id": "vol01:10:1:1",
+   "column_id": "vol01:10:1",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "籍",
+   "context_after": "源乃因各韻轇轕於易先",
+   "candidates": [
+    {
+     "char": "檢",
+     "prob": 0.138047,
+     "source": "glyph",
+     "semantic": "檢"
+    },
+    {
+     "char": "校",
+     "prob": 0.136143,
+     "source": "glyph",
+     "semantic": "校"
+    },
+    {
+     "char": "類",
+     "prob": 0.134605,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "棟",
+     "prob": 0.131001,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "議",
+     "prob": 0.130796,
+     "source": "glyph",
+     "semantic": "議"
+    },
+    {
+     "char": "機",
+     "prob": 0.130181,
+     "source": "glyph",
+     "semantic": "機"
+    },
+    {
+     "char": "識",
+     "prob": 0.126065,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "根",
+     "prob": 0.073162,
+     "source": "rapidocr",
+     "semantic": "根"
+    }
+   ],
+   "candidates_chars": [
+    "檢",
+    "校",
+    "類",
+    "棟",
+    "議",
+    "機",
+    "識",
+    "根"
+   ],
+   "gold": "根",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "檢",
+    "raw_pick": "檢",
+    "raw_margin": 0.297,
+    "final_decision": "檢",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:2:2",
+   "column_id": "vol01:10:2",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "列蒙卦於詩先列大東於",
+   "context_after": "禮先列冬官且採用各字",
+   "candidates": [
+    {
+     "char": "屬",
+     "prob": 0.183432,
+     "source": "glyph",
+     "semantic": "屬"
+    },
+    {
+     "char": "屑",
+     "prob": 0.182668,
+     "source": "glyph",
+     "semantic": "屑"
+    },
+    {
+     "char": "原",
+     "prob": 0.179435,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "用",
+     "prob": 0.179161,
+     "source": "glyph",
+     "semantic": "用"
+    },
+    {
+     "char": "庸",
+     "prob": 0.177379,
+     "source": "glyph",
+     "semantic": "庸"
+    },
+    {
+     "char": "周",
+     "prob": 0.053859,
+     "source": "rapidocr",
+     "semantic": "周"
+    },
+    {
+     "char": "週",
+     "prob": 0.022033,
+     "source": "rapidocr",
+     "semantic": "周"
+    },
+    {
+     "char": "賙",
+     "prob": 0.022033,
+     "source": "rapidocr",
+     "semantic": "賙"
+    }
+   ],
+   "candidates_chars": [
+    "屬",
+    "屑",
+    "原",
+    "用",
+    "庸",
+    "周",
+    "週",
+    "賙"
+   ],
+   "gold": "周",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "屬",
+    "raw_pick": "周",
+    "raw_margin": 0.1872,
+    "final_decision": "屬",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:10:2:6",
+   "column_id": "vol01:10:2",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "詩先列大東於周禮先列",
+   "context_after": "官且採用各字不論易書",
+   "candidates": [
+    {
+     "char": "各",
+     "prob": 0.394147,
+     "source": "glyph",
+     "semantic": "各"
+    },
+    {
+     "char": "名",
+     "prob": 0.391966,
+     "source": "glyph",
+     "semantic": "名"
+    },
+    {
+     "char": "冬",
+     "prob": 0.117638,
+     "source": "rapidocr",
+     "semantic": "冬"
+    },
+    {
+     "char": "鼕",
+     "prob": 0.096249,
+     "source": "rapidocr",
+     "semantic": "冬"
+    }
+   ],
+   "candidates_chars": [
+    "各",
+    "名",
+    "冬",
+    "鼕"
+   ],
+   "gold": "冬",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "各",
+    "raw_pick": "名",
+    "raw_margin": 0.1744,
+    "final_decision": "各",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:2:8",
+   "column_id": "vol01:10:2",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "列大東於周禮先列冬官",
+   "context_after": "採用各字不論易書詩禮",
+   "candidates": [
+    {
+     "char": "宜",
+     "prob": 0.640064,
+     "source": "glyph",
+     "semantic": "宜"
+    },
+    {
+     "char": "且",
+     "prob": 0.359936,
+     "source": "rapidocr",
+     "semantic": "且"
+    }
+   ],
+   "candidates_chars": [
+    "宜",
+    "且"
+   ],
+   "gold": "且",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "宜",
+    "raw_pick": "宜",
+    "raw_margin": 0.4797,
+    "final_decision": "宜",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:3:0",
+   "column_id": "vol01:10:3",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "用各字不論易書詩禮春",
+   "context_after": "之序前後錯互甚至載入",
+   "candidates": [
+    {
+     "char": "啟",
+     "prob": 0.160824,
+     "source": "glyph",
+     "semantic": "啓"
+    },
+    {
+     "char": "裁",
+     "prob": 0.152563,
+     "source": "glyph",
+     "semantic": "裁"
+    },
+    {
+     "char": "嚴",
+     "prob": 0.152305,
+     "source": "glyph",
+     "semantic": "嚴"
+    },
+    {
+     "char": "祇",
+     "prob": 0.150356,
+     "source": "glyph",
+     "semantic": "子"
+    },
+    {
+     "char": "藏",
+     "prob": 0.149442,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "林",
+     "prob": 0.148614,
+     "source": "glyph",
+     "semantic": "林"
+    },
+    {
+     "char": "秋",
+     "prob": 0.047243,
+     "source": "rapidocr",
+     "semantic": "秋"
+    },
+    {
+     "char": "鞦",
+     "prob": 0.038653,
+     "source": "rapidocr",
+     "semantic": "秋"
+    }
+   ],
+   "candidates_chars": [
+    "啟",
+    "裁",
+    "嚴",
+    "祇",
+    "藏",
+    "林",
+    "秋",
+    "鞦"
+   ],
+   "gold": "秋",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "啟",
+    "raw_pick": "啟",
+    "raw_margin": 0.0083,
+    "final_decision": "啟",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:3:13",
+   "column_id": "vol01:10:3",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "前後錯互甚至載入六書",
+   "context_after": "𨽾真草字樣摭拾米芾趙",
+   "candidates": [
+    {
+     "char": "蒙",
+     "prob": 0.139409,
+     "source": "glyph",
+     "semantic": "蒙"
+    },
+    {
+     "char": "家",
+     "prob": 0.138941,
+     "source": "glyph",
+     "semantic": "家"
+    },
+    {
+     "char": "錄",
+     "prob": 0.132929,
+     "source": "glyph",
+     "semantic": "錄"
+    },
+    {
+     "char": "策",
+     "prob": 0.132636,
+     "source": "glyph",
+     "semantic": "策"
+    },
+    {
+     "char": "多",
+     "prob": 0.130047,
+     "source": "glyph",
+     "semantic": "多"
+    },
+    {
+     "char": "採",
+     "prob": 0.128043,
+     "source": "glyph",
+     "semantic": "採"
+    },
+    {
+     "char": "朱",
+     "prob": 0.127779,
+     "source": "glyph",
+     "semantic": "朱"
+    },
+    {
+     "char": "篆",
+     "prob": 0.070217,
+     "source": "rapidocr",
+     "semantic": "篆"
+    }
+   ],
+   "candidates_chars": [
+    "蒙",
+    "家",
+    "錄",
+    "策",
+    "多",
+    "採",
+    "朱",
+    "篆"
+   ],
+   "gold": "篆",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "蒙",
+    "raw_pick": "錄",
+    "raw_margin": 0.1894,
+    "final_decision": "蒙",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:3:16",
+   "column_id": "vol01:10:3",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "互甚至載入六書篆𨽾真",
+   "context_after": "字樣摭拾米芾趙孟頫字",
+   "candidates": [
+    {
+     "char": "萃",
+     "prob": 0.15866,
+     "source": "glyph",
+     "semantic": "萃"
+    },
+    {
+     "char": "章",
+     "prob": 0.155243,
+     "source": "glyph",
+     "semantic": "章"
+    },
+    {
+     "char": "單",
+     "prob": 0.153025,
+     "source": "glyph",
+     "semantic": "單"
+    },
+    {
+     "char": "專",
+     "prob": 0.152108,
+     "source": "glyph",
+     "semantic": "專"
+    },
+    {
+     "char": "軍",
+     "prob": 0.151792,
+     "source": "glyph",
+     "semantic": "軍"
+    },
+    {
+     "char": "率",
+     "prob": 0.145823,
+     "source": "glyph",
+     "semantic": "率"
+    },
+    {
+     "char": "草",
+     "prob": 0.083348,
+     "source": "rapidocr",
+     "semantic": "草"
+    }
+   ],
+   "candidates_chars": [
+    "萃",
+    "章",
+    "單",
+    "專",
+    "軍",
+    "率",
+    "草"
+   ],
+   "gold": "草",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "萃",
+    "raw_pick": "章",
+    "raw_margin": 0.0797,
+    "final_decision": "萃",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:3:17",
+   "column_id": "vol01:10:3",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "甚至載入六書篆𨽾真草",
+   "context_after": "樣摭拾米芾趙孟頫字格",
+   "candidates": [
+    {
+     "char": "序",
+     "prob": 0.290233,
+     "source": "glyph",
+     "semantic": "序"
+    },
+    {
+     "char": "年",
+     "prob": 0.284494,
+     "source": "glyph",
+     "semantic": "年"
+    },
+    {
+     "char": "手",
+     "prob": 0.274628,
+     "source": "glyph",
+     "semantic": "手"
+    },
+    {
+     "char": "字",
+     "prob": 0.150646,
+     "source": "rapidocr",
+     "semantic": "字"
+    }
+   ],
+   "candidates_chars": [
+    "序",
+    "年",
+    "手",
+    "字"
+   ],
+   "gold": "字",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "序",
+    "raw_pick": "序",
+    "raw_margin": 0.0167,
+    "final_decision": "序",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:3:7",
+   "column_id": "vol01:10:3",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "詩禮春秋之序前後錯互",
+   "context_after": "至載入六書篆𨽾真草字",
+   "candidates": [
+    {
+     "char": "蓄",
+     "prob": 0.401722,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "書",
+     "prob": 0.38629,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "甚",
+     "prob": 0.211988,
+     "source": "rapidocr",
+     "semantic": "甚"
+    }
+   ],
+   "candidates_chars": [
+    "蓄",
+    "書",
+    "甚"
+   ],
+   "gold": "甚",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "蓄",
+    "raw_pick": "書",
+    "raw_margin": 0.6377,
+    "final_decision": "蓄",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:4:11",
+   "column_id": "vol01:10:4",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "米芾趙孟頫字格描頭畫",
+   "context_after": "支離無謂至儒書之外闌",
+   "candidates": [
+    {
+     "char": "周",
+     "prob": 0.224371,
+     "source": "glyph",
+     "semantic": "周"
+    },
+    {
+     "char": "屑",
+     "prob": 0.219698,
+     "source": "glyph",
+     "semantic": "屑"
+    },
+    {
+     "char": "月",
+     "prob": 0.216317,
+     "source": "glyph",
+     "semantic": "月"
+    },
+    {
+     "char": "售",
+     "prob": 0.215422,
+     "source": "glyph",
+     "semantic": "售"
+    },
+    {
+     "char": "角",
+     "prob": 0.124192,
+     "source": "rapidocr",
+     "semantic": "角"
+    }
+   ],
+   "candidates_chars": [
+    "周",
+    "屑",
+    "月",
+    "售",
+    "角"
+   ],
+   "gold": "角",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "周",
+    "raw_pick": "周",
+    "raw_margin": 0.1793,
+    "final_decision": "周",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:4:12",
+   "column_id": "vol01:10:4",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "芾趙孟頫字格描頭畫角",
+   "context_after": "離無謂至儒書之外闌入",
+   "candidates": [
+    {
+     "char": "文",
+     "prob": 0.226128,
+     "source": "glyph",
+     "semantic": "文"
+    },
+    {
+     "char": "夾",
+     "prob": 0.22492,
+     "source": "glyph",
+     "semantic": "夾"
+    },
+    {
+     "char": "吏",
+     "prob": 0.215811,
+     "source": "glyph",
+     "semantic": "吏"
+    },
+    {
+     "char": "史",
+     "prob": 0.212405,
+     "source": "glyph",
+     "semantic": "史"
+    },
+    {
+     "char": "支",
+     "prob": 0.120735,
+     "source": "rapidocr",
+     "semantic": "支"
+    }
+   ],
+   "candidates_chars": [
+    "文",
+    "夾",
+    "吏",
+    "史",
+    "支"
+   ],
+   "gold": "支",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "文",
+    "raw_pick": "文",
+    "raw_margin": 0.2118,
+    "final_decision": "文",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:4:17",
+   "column_id": "vol01:10:4",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "格描頭畫角支離無謂至",
+   "context_after": "書之外闌入釋典道經於",
+   "candidates": [
+    {
+     "char": "舊",
+     "prob": 0.189317,
+     "source": "glyph",
+     "semantic": "舊"
+    },
+    {
+     "char": "條",
+     "prob": 0.187911,
+     "source": "glyph",
+     "semantic": "條"
+    },
+    {
+     "char": "備",
+     "prob": 0.185495,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "編",
+     "prob": 0.180029,
+     "source": "glyph",
+     "semantic": "編"
+    },
+    {
+     "char": "係",
+     "prob": 0.174087,
+     "source": "glyph",
+     "semantic": "繫"
+    },
+    {
+     "char": "儒",
+     "prob": 0.083162,
+     "source": "rapidocr",
+     "semantic": "儒"
+    }
+   ],
+   "candidates_chars": [
+    "舊",
+    "條",
+    "備",
+    "編",
+    "係",
+    "儒"
+   ],
+   "gold": "儒",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "舊",
+    "raw_pick": "係",
+    "raw_margin": 0.0986,
+    "final_decision": "舊",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:4:8",
+   "column_id": "vol01:10:4",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "樣摭拾米芾趙孟頫字格",
+   "context_after": "頭畫角支離無謂至儒書",
+   "candidates": [
+    {
+     "char": "摘",
+     "prob": 0.135305,
+     "source": "glyph",
+     "semantic": "摘"
+    },
+    {
+     "char": "極",
+     "prob": 0.134885,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "插",
+     "prob": 0.133597,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "揮",
+     "prob": 0.133322,
+     "source": "glyph",
+     "semantic": "揮"
+    },
+    {
+     "char": "摺",
+     "prob": 0.13322,
+     "source": "glyph",
+     "semantic": "翼"
+    },
+    {
+     "char": "撮",
+     "prob": 0.133134,
+     "source": "glyph",
+     "semantic": "撮"
+    },
+    {
+     "char": "擾",
+     "prob": 0.128994,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "描",
+     "prob": 0.067544,
+     "source": "rapidocr",
+     "semantic": "描"
+    }
+   ],
+   "candidates_chars": [
+    "摘",
+    "極",
+    "插",
+    "揮",
+    "摺",
+    "撮",
+    "擾",
+    "描"
+   ],
+   "gold": "描",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "摘",
+    "raw_pick": "極",
+    "raw_margin": 0.0455,
+    "final_decision": "摘",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:5:18",
+   "column_id": "vol01:10:5",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "古柱下史專掌藏書守先",
+   "context_after": "後之義尤爲鑿枘不合朕",
+   "candidates": [
+    {
+     "char": "詩",
+     "prob": 0.294203,
+     "source": "glyph",
+     "semantic": "詩"
+    },
+    {
+     "char": "得",
+     "prob": 0.276942,
+     "source": "glyph",
+     "semantic": "得"
+    },
+    {
+     "char": "德",
+     "prob": 0.271703,
+     "source": "glyph",
+     "semantic": "德"
+    },
+    {
+     "char": "待",
+     "prob": 0.157152,
+     "source": "rapidocr",
+     "semantic": "待"
+    }
+   ],
+   "candidates_chars": [
+    "詩",
+    "得",
+    "德",
+    "待"
+   ],
+   "gold": "待",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "詩",
+    "raw_pick": "得",
+    "raw_margin": 0.1175,
+    "final_decision": "詩",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:6:1",
+   "column_id": "vol01:10:6",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "史專掌藏書守先待後之",
+   "context_after": "尤爲鑿枘不合朕意從來",
+   "candidates": [
+    {
+     "char": "善",
+     "prob": 0.128876,
+     "source": "glyph",
+     "semantic": "善"
+    },
+    {
+     "char": "藝",
+     "prob": 0.123169,
+     "source": "glyph",
+     "semantic": "藝"
+    },
+    {
+     "char": "著",
+     "prob": 0.123141,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "載",
+     "prob": 0.123087,
+     "source": "glyph",
+     "semantic": "載"
+    },
+    {
+     "char": "美",
+     "prob": 0.121112,
+     "source": "glyph",
+     "semantic": "美"
+    },
+    {
+     "char": "詩",
+     "prob": 0.120758,
+     "source": "glyph",
+     "semantic": "詩"
+    },
+    {
+     "char": "肆",
+     "prob": 0.118605,
+     "source": "glyph",
+     "semantic": "四"
+    },
+    {
+     "char": "詳",
+     "prob": 0.117025,
+     "source": "glyph",
+     "semantic": "詳"
+    },
+    {
+     "char": "義",
+     "prob": 0.024226,
+     "source": "rapidocr",
+     "semantic": "義"
+    }
+   ],
+   "candidates_chars": [
+    "善",
+    "藝",
+    "著",
+    "載",
+    "美",
+    "詩",
+    "肆",
+    "詳",
+    "義"
+   ],
+   "gold": "義",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "善",
+    "raw_pick": "詩",
+    "raw_margin": 0.0162,
+    "final_decision": "善",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:7:15",
+   "column_id": "vol01:10:7",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "輯分儲實古今不易之法",
+   "context_after": "書既遺編淵海若準此以",
+   "candidates": [
+    {
+     "char": "足",
+     "prob": 0.157817,
+     "source": "glyph",
+     "semantic": "足"
+    },
+    {
+     "char": "運",
+     "prob": 0.153443,
+     "source": "glyph",
+     "semantic": "運"
+    },
+    {
+     "char": "見",
+     "prob": 0.153218,
+     "source": "glyph",
+     "semantic": "見"
+    },
+    {
+     "char": "呈",
+     "prob": 0.152164,
+     "source": "glyph",
+     "semantic": "呈"
+    },
+    {
+     "char": "定",
+     "prob": 0.148637,
+     "source": "glyph",
+     "semantic": "定"
+    },
+    {
+     "char": "羅",
+     "prob": 0.148292,
+     "source": "glyph",
+     "semantic": "羅"
+    },
+    {
+     "char": "是",
+     "prob": 0.086429,
+     "source": "rapidocr",
+     "semantic": "是"
+    }
+   ],
+   "candidates_chars": [
+    "足",
+    "運",
+    "見",
+    "呈",
+    "定",
+    "羅",
+    "是"
+   ],
+   "gold": "是",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "足",
+    "raw_pick": "見",
+    "raw_margin": 0.2534,
+    "final_decision": "足",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:8:1",
+   "column_id": "vol01:10:8",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "不易之法是書既遺編淵",
+   "context_after": "若準此以採擷所登用廣",
+   "candidates": [
+    {
+     "char": "潛",
+     "prob": 0.12084,
+     "source": "glyph",
+     "semantic": "潛"
+    },
+    {
+     "char": "撫",
+     "prob": 0.1186,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "傅",
+     "prob": 0.118264,
+     "source": "glyph",
+     "semantic": "傅"
+    },
+    {
+     "char": "恒",
+     "prob": 0.117992,
+     "source": "glyph",
+     "semantic": "恒"
+    },
+    {
+     "char": "流",
+     "prob": 0.11785,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "庫",
+     "prob": 0.115429,
+     "source": "glyph",
+     "semantic": "庫"
+    },
+    {
+     "char": "傳",
+     "prob": 0.11495,
+     "source": "glyph",
+     "semantic": "傳"
+    },
+    {
+     "char": "每",
+     "prob": 0.111365,
+     "source": "glyph",
+     "semantic": "每"
+    },
+    {
+     "char": "海",
+     "prob": 0.06471,
+     "source": "rapidocr",
+     "semantic": "海"
+    }
+   ],
+   "candidates_chars": [
+    "潛",
+    "撫",
+    "傅",
+    "恒",
+    "流",
+    "庫",
+    "傳",
+    "每",
+    "海"
+   ],
+   "gold": "海",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "潛",
+    "raw_pick": "海",
+    "raw_margin": 0.1125,
+    "final_decision": "潛",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:10:9:17",
+   "column_id": "vol01:10:9",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "際華裘曰修爲總裁官卽",
+   "context_after": "同遴",
+   "candidates": [
+    {
+     "char": "令",
+     "prob": 0.442126,
+     "source": "glyph",
+     "semantic": "令"
+    },
+    {
+     "char": "合",
+     "prob": 0.40661,
+     "source": "glyph",
+     "semantic": "合"
+    },
+    {
+     "char": "今",
+     "prob": 0.151264,
+     "source": "rapidocr",
+     "semantic": "今"
+    }
+   ],
+   "candidates_chars": [
+    "令",
+    "合",
+    "今"
+   ],
+   "gold": "令",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "令",
+    "raw_pick": "今",
+    "raw_margin": 0.729,
+    "final_decision": "今",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:9:3",
+   "column_id": "vol01:10:9",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "渠金匱之藏較爲有益著",
+   "context_after": "添派王際華裘曰修爲總",
+   "candidates": [
+    {
+     "char": "再",
+     "prob": 0.355878,
+     "source": "glyph",
+     "semantic": "再"
+    },
+    {
+     "char": "專",
+     "prob": 0.224668,
+     "source": "glyph",
+     "semantic": "專"
+    },
+    {
+     "char": "胥",
+     "prob": 0.210772,
+     "source": "glyph",
+     "semantic": "胥"
+    },
+    {
+     "char": "書",
+     "prob": 0.208683,
+     "source": "glyph",
+     "semantic": "書"
+    }
+   ],
+   "candidates_chars": [
+    "再",
+    "專",
+    "胥",
+    "書"
+   ],
+   "gold": "再",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "再",
+    "raw_pick": "書",
+    "raw_margin": 0.7433,
+    "final_decision": "書",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:10:9:4",
+   "column_id": "vol01:10:9",
+   "page": "10",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "金匱之藏較爲有益著再",
+   "context_after": "派王際華裘曰修爲總裁",
+   "candidates": [
+    {
+     "char": "插",
+     "prob": 0.136323,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "流",
+     "prob": 0.134516,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "歷",
+     "prob": 0.134383,
+     "source": "glyph",
+     "semantic": "曆"
+    },
+    {
+     "char": "厯",
+     "prob": 0.133237,
+     "source": "glyph",
+     "semantic": "厯"
+    },
+    {
+     "char": "派",
+     "prob": 0.130152,
+     "source": "glyph",
+     "semantic": "派"
+    },
+    {
+     "char": "源",
+     "prob": 0.129476,
+     "source": "glyph",
+     "semantic": "源"
+    },
+    {
+     "char": "應",
+     "prob": 0.128477,
+     "source": "glyph",
+     "semantic": "應"
+    },
+    {
+     "char": "添",
+     "prob": 0.073436,
+     "source": "rapidocr",
+     "semantic": "添"
+    }
+   ],
+   "candidates_chars": [
+    "插",
+    "流",
+    "歷",
+    "厯",
+    "派",
+    "源",
+    "應",
+    "添"
+   ],
+   "gold": "添",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "插",
+    "raw_pick": "應",
+    "raw_margin": 0.0368,
+    "final_decision": "插",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:12:3:7",
+   "column_id": "vol01:12:3",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "具奏欽此乾隆三十八年",
+   "context_after": "月十七日奉諭前經降㫖",
+   "candidates": [
+    {
+     "char": "互",
+     "prob": 0.64531,
+     "source": "glyph",
+     "semantic": "互"
+    },
+    {
+     "char": "五",
+     "prob": 0.35469,
+     "source": "rapidocr",
+     "semantic": "五"
+    }
+   ],
+   "candidates_chars": [
+    "互",
+    "五"
+   ],
+   "gold": "五",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "互",
+    "raw_pick": "五",
+    "raw_margin": 0.636,
+    "final_decision": "互",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:4:5",
+   "column_id": "vol01:12:4",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "月十七日奉諭前經降㫖",
+   "context_after": "採遺編彚爲四庫全書用",
+   "candidates": [
+    {
+     "char": "得",
+     "prob": 0.137566,
+     "source": "glyph",
+     "semantic": "得"
+    },
+    {
+     "char": "傳",
+     "prob": 0.137097,
+     "source": "glyph",
+     "semantic": "傳"
+    },
+    {
+     "char": "傅",
+     "prob": 0.136466,
+     "source": "glyph",
+     "semantic": "傅"
+    },
+    {
+     "char": "購",
+     "prob": 0.130097,
+     "source": "glyph",
+     "semantic": "購"
+    },
+    {
+     "char": "體",
+     "prob": 0.129085,
+     "source": "glyph",
+     "semantic": "體"
+    },
+    {
+     "char": "詩",
+     "prob": 0.128366,
+     "source": "glyph",
+     "semantic": "詩"
+    },
+    {
+     "char": "備",
+     "prob": 0.12797,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "博",
+     "prob": 0.073354,
+     "source": "rapidocr",
+     "semantic": "博"
+    }
+   ],
+   "candidates_chars": [
+    "得",
+    "傳",
+    "傅",
+    "購",
+    "體",
+    "詩",
+    "備",
+    "博"
+   ],
+   "gold": "博",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "得",
+    "raw_pick": "傳",
+    "raw_margin": 0.116,
+    "final_decision": "得",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:12:4:6",
+   "column_id": "vol01:12:4",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "十七日奉諭前經降㫖博",
+   "context_after": "遺編彚爲四庫全書用昭",
+   "candidates": [
+    {
+     "char": "樣",
+     "prob": 0.145136,
+     "source": "glyph",
+     "semantic": "樣"
+    },
+    {
+     "char": "採",
+     "prob": 0.141813,
+     "source": "glyph",
+     "semantic": "採"
+    },
+    {
+     "char": "撮",
+     "prob": 0.140671,
+     "source": "glyph",
+     "semantic": "撮"
+    },
+    {
+     "char": "綴",
+     "prob": 0.135799,
+     "source": "glyph",
+     "semantic": "綴"
+    },
+    {
+     "char": "擾",
+     "prob": 0.133679,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "林",
+     "prob": 0.133273,
+     "source": "glyph",
+     "semantic": "林"
+    },
+    {
+     "char": "校",
+     "prob": 0.128973,
+     "source": "glyph",
+     "semantic": "校"
+    },
+    {
+     "char": "探",
+     "prob": 0.040656,
+     "source": "rapidocr",
+     "semantic": "探"
+    }
+   ],
+   "candidates_chars": [
+    "樣",
+    "採",
+    "撮",
+    "綴",
+    "擾",
+    "林",
+    "校",
+    "探"
+   ],
+   "gold": "採",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "樣",
+    "raw_pick": "採",
+    "raw_margin": 0.6767,
+    "final_decision": "樣",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:5:17",
+   "column_id": "vol01:12:5",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "旋據浙江江南督撫及兩",
+   "context_after": "鹽政等奏到購求呈送之",
+   "candidates": [
+    {
+     "char": "惟",
+     "prob": 0.160241,
+     "source": "glyph",
+     "semantic": "惟"
+    },
+    {
+     "char": "洎",
+     "prob": 0.158642,
+     "source": "glyph",
+     "semantic": "洎"
+    },
+    {
+     "char": "流",
+     "prob": 0.153396,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "旋",
+     "prob": 0.15245,
+     "source": "glyph",
+     "semantic": "旋"
+    },
+    {
+     "char": "海",
+     "prob": 0.151745,
+     "source": "glyph",
+     "semantic": "海"
+    },
+    {
+     "char": "應",
+     "prob": 0.146947,
+     "source": "glyph",
+     "semantic": "應"
+    },
+    {
+     "char": "淮",
+     "prob": 0.076578,
+     "source": "rapidocr",
+     "semantic": "淮"
+    }
+   ],
+   "candidates_chars": [
+    "惟",
+    "洎",
+    "流",
+    "旋",
+    "海",
+    "應",
+    "淮"
+   ],
+   "gold": "淮",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "惟",
+    "raw_pick": "淮",
+    "raw_margin": 0.5768,
+    "final_decision": "惟",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:5:4",
+   "column_id": "vol01:12:5",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "書用昭石渠美備並以嘉",
+   "context_after": "藝林旋據浙江江南督撫",
+   "candidates": [
+    {
+     "char": "意",
+     "prob": 0.137789,
+     "source": "glyph",
+     "semantic": "意"
+    },
+    {
+     "char": "專",
+     "prob": 0.136471,
+     "source": "glyph",
+     "semantic": "專"
+    },
+    {
+     "char": "慮",
+     "prob": 0.135183,
+     "source": "glyph",
+     "semantic": "慮"
+    },
+    {
+     "char": "覆",
+     "prob": 0.131684,
+     "source": "glyph",
+     "semantic": "復"
+    },
+    {
+     "char": "春",
+     "prob": 0.130556,
+     "source": "glyph",
+     "semantic": "春"
+    },
+    {
+     "char": "書",
+     "prob": 0.128272,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "畫",
+     "prob": 0.127028,
+     "source": "glyph",
+     "semantic": "畫"
+    },
+    {
+     "char": "惠",
+     "prob": 0.073016,
+     "source": "rapidocr",
+     "semantic": "惠"
+    }
+   ],
+   "candidates_chars": [
+    "意",
+    "專",
+    "慮",
+    "覆",
+    "春",
+    "書",
+    "畫",
+    "惠"
+   ],
+   "gold": "惠",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "意",
+    "raw_pick": "惠",
+    "raw_margin": 0.6285,
+    "final_decision": "意",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:5:8",
+   "column_id": "vol01:12:5",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "渠美備並以嘉惠藝林旋",
+   "context_after": "浙江江南督撫及兩淮鹽",
+   "candidates": [
+    {
+     "char": "樣",
+     "prob": 0.120075,
+     "source": "glyph",
+     "semantic": "樣"
+    },
+    {
+     "char": "棟",
+     "prob": 0.118787,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "撮",
+     "prob": 0.118315,
+     "source": "glyph",
+     "semantic": "撮"
+    },
+    {
+     "char": "𨽾",
+     "prob": 0.118021,
+     "source": "glyph",
+     "semantic": "𨽾"
+    },
+    {
+     "char": "採",
+     "prob": 0.117601,
+     "source": "glyph",
+     "semantic": "採"
+    },
+    {
+     "char": "派",
+     "prob": 0.117345,
+     "source": "glyph",
+     "semantic": "派"
+    },
+    {
+     "char": "源",
+     "prob": 0.116185,
+     "source": "glyph",
+     "semantic": "源"
+    },
+    {
+     "char": "揮",
+     "prob": 0.115292,
+     "source": "glyph",
+     "semantic": "揮"
+    },
+    {
+     "char": "據",
+     "prob": 0.058379,
+     "source": "rapidocr",
+     "semantic": "據"
+    }
+   ],
+   "candidates_chars": [
+    "樣",
+    "棟",
+    "撮",
+    "𨽾",
+    "採",
+    "派",
+    "源",
+    "揮",
+    "據"
+   ],
+   "gold": "據",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "樣",
+    "raw_pick": "據",
+    "raw_margin": 0.0426,
+    "final_decision": "樣",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:6:4",
+   "column_id": "vol01:12:6",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "撫及兩淮鹽政等奏到購",
+   "context_after": "呈送之書已不下四五千",
+   "candidates": [
+    {
+     "char": "來",
+     "prob": 0.236051,
+     "source": "glyph",
+     "semantic": "來"
+    },
+    {
+     "char": "未",
+     "prob": 0.222886,
+     "source": "glyph",
+     "semantic": "未"
+    },
+    {
+     "char": "家",
+     "prob": 0.209353,
+     "source": "glyph",
+     "semantic": "家"
+    },
+    {
+     "char": "本",
+     "prob": 0.209353,
+     "source": "glyph",
+     "semantic": "本"
+    },
+    {
+     "char": "求",
+     "prob": 0.122357,
+     "source": "rapidocr",
+     "semantic": "求"
+    }
+   ],
+   "candidates_chars": [
+    "來",
+    "未",
+    "家",
+    "本",
+    "求"
+   ],
+   "gold": "求",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "來",
+    "raw_pick": "本",
+    "raw_margin": 0.1087,
+    "final_decision": "來",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:12:7:16",
+   "column_id": "vol01:12:7",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "舊書呈獻者固屬踴躍奉",
+   "context_after": "尚未能深喻朕意方今文",
+   "candidates": [
+    {
+     "char": "分",
+     "prob": 0.647262,
+     "source": "glyph",
+     "semantic": "分"
+    },
+    {
+     "char": "公",
+     "prob": 0.352738,
+     "source": "rapidocr",
+     "semantic": "公"
+    }
+   ],
+   "candidates_chars": [
+    "分",
+    "公"
+   ],
+   "gold": "公",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "分",
+    "raw_pick": "公",
+    "raw_margin": 0.0255,
+    "final_decision": "分",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:12:8:1",
+   "column_id": "vol01:12:8",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "固屬踴躍奉公尚未能深",
+   "context_after": "朕意方今文治光昭典籍",
+   "candidates": [
+    {
+     "char": "檢",
+     "prob": 0.154831,
+     "source": "glyph",
+     "semantic": "檢"
+    },
+    {
+     "char": "翰",
+     "prob": 0.152804,
+     "source": "glyph",
+     "semantic": "翰"
+    },
+    {
+     "char": "給",
+     "prob": 0.152578,
+     "source": "glyph",
+     "semantic": "給"
+    },
+    {
+     "char": "撿",
+     "prob": 0.152249,
+     "source": "glyph",
+     "semantic": "撿"
+    },
+    {
+     "char": "除",
+     "prob": 0.152197,
+     "source": "glyph",
+     "semantic": "除"
+    },
+    {
+     "char": "論",
+     "prob": 0.151816,
+     "source": "glyph",
+     "semantic": "論"
+    },
+    {
+     "char": "喻",
+     "prob": 0.083525,
+     "source": "rapidocr",
+     "semantic": "喻"
+    }
+   ],
+   "candidates_chars": [
+    "檢",
+    "翰",
+    "給",
+    "撿",
+    "除",
+    "論",
+    "喻"
+   ],
+   "gold": "喻",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "檢",
+    "raw_pick": "論",
+    "raw_margin": 0.1258,
+    "final_decision": "檢",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:12:9:17",
+   "column_id": "vol01:12:9",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "蒐輯俾無遺佚冀以闡疑",
+   "context_after": "闕所",
+   "candidates": [
+    {
+     "char": "前",
+     "prob": 0.15719,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "稽",
+     "prob": 0.153842,
+     "source": "glyph",
+     "semantic": "稽"
+    },
+    {
+     "char": "請",
+     "prob": 0.153756,
+     "source": "glyph",
+     "semantic": "請"
+    },
+    {
+     "char": "關",
+     "prob": 0.153533,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "誦",
+     "prob": 0.151765,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "枘",
+     "prob": 0.149928,
+     "source": "glyph",
+     "semantic": "枘"
+    },
+    {
+     "char": "補",
+     "prob": 0.079986,
+     "source": "rapidocr",
+     "semantic": "補"
+    }
+   ],
+   "candidates_chars": [
+    "前",
+    "稽",
+    "請",
+    "關",
+    "誦",
+    "枘",
+    "補"
+   ],
+   "gold": "補",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "前",
+    "raw_pick": "前",
+    "raw_margin": 0.1946,
+    "final_decision": "前",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:12:9:6",
+   "column_id": "vol01:12:9",
+   "page": "12",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "山石室儲蓄尚多用是廣",
+   "context_after": "蒐輯俾無遺佚冀以闡疑",
+   "candidates": [
+    {
+     "char": "為",
+     "prob": 0.574507,
+     "source": "glyph",
+     "semantic": "爲"
+    },
+    {
+     "char": "爲",
+     "prob": 0.425493,
+     "source": "glyph",
+     "semantic": "爲"
+    }
+   ],
+   "candidates_chars": [
+    "為",
+    "爲"
+   ],
+   "gold": "爲",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "為",
+    "raw_pick": "為",
+    "raw_margin": 1.0,
+    "final_decision": "為",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:13:2:2",
+   "column_id": "vol01:13:2",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "永樂大典內現有各詳加",
+   "context_after": "勘分別刊抄擇其中罕見",
+   "candidates": [
+    {
+     "char": "根",
+     "prob": 0.186589,
+     "source": "glyph",
+     "semantic": "根"
+    },
+    {
+     "char": "校",
+     "prob": 0.181412,
+     "source": "glyph",
+     "semantic": "校"
+    },
+    {
+     "char": "檢",
+     "prob": 0.178923,
+     "source": "glyph",
+     "semantic": "檢"
+    },
+    {
+     "char": "棟",
+     "prob": 0.178567,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "該",
+     "prob": 0.17586,
+     "source": "glyph",
+     "semantic": "該"
+    },
+    {
+     "char": "核",
+     "prob": 0.054257,
+     "source": "rapidocr",
+     "semantic": "核"
+    },
+    {
+     "char": "覈",
+     "prob": 0.044392,
+     "source": "rapidocr",
+     "semantic": "覈"
+    }
+   ],
+   "candidates_chars": [
+    "根",
+    "校",
+    "檢",
+    "棟",
+    "該",
+    "核",
+    "覈"
+   ],
+   "gold": "核",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "根",
+    "raw_pick": "校",
+    "raw_margin": 0.6402,
+    "final_decision": "根",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:13:5:2",
+   "column_id": "vol01:13:5",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "謬者止存書名彚爲目以",
+   "context_after": "右文之盛此採擇四庫全",
+   "candidates": [
+    {
+     "char": "轇",
+     "prob": 0.135609,
+     "source": "glyph",
+     "semantic": "轇"
+    },
+    {
+     "char": "專",
+     "prob": 0.13339,
+     "source": "glyph",
+     "semantic": "專"
+    },
+    {
+     "char": "藝",
+     "prob": 0.13292,
+     "source": "glyph",
+     "semantic": "藝"
+    },
+    {
+     "char": "義",
+     "prob": 0.132832,
+     "source": "glyph",
+     "semantic": "義"
+    },
+    {
+     "char": "奏",
+     "prob": 0.131876,
+     "source": "glyph",
+     "semantic": "奏"
+    },
+    {
+     "char": "華",
+     "prob": 0.130377,
+     "source": "glyph",
+     "semantic": "華"
+    },
+    {
+     "char": "萃",
+     "prob": 0.12954,
+     "source": "glyph",
+     "semantic": "萃"
+    },
+    {
+     "char": "彰",
+     "prob": 0.073456,
+     "source": "rapidocr",
+     "semantic": "彰"
+    }
+   ],
+   "candidates_chars": [
+    "轇",
+    "專",
+    "藝",
+    "義",
+    "奏",
+    "華",
+    "萃",
+    "彰"
+   ],
+   "gold": "彰",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "轇",
+    "raw_pick": "義",
+    "raw_margin": 0.2675,
+    "final_decision": "轇",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:13:5:6",
+   "column_id": "vol01:13:5",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "書名彚爲目以彰右文之",
+   "context_after": "此採擇四庫全書本指也",
+   "candidates": [
+    {
+     "char": "鹽",
+     "prob": 0.183502,
+     "source": "glyph",
+     "semantic": "鹽"
+    },
+    {
+     "char": "庫",
+     "prob": 0.180687,
+     "source": "glyph",
+     "semantic": "庫"
+    },
+    {
+     "char": "種",
+     "prob": 0.179933,
+     "source": "glyph",
+     "semantic": "種"
+    },
+    {
+     "char": "查",
+     "prob": 0.177037,
+     "source": "glyph",
+     "semantic": "查"
+    },
+    {
+     "char": "屬",
+     "prob": 0.176874,
+     "source": "glyph",
+     "semantic": "屬"
+    },
+    {
+     "char": "盛",
+     "prob": 0.101968,
+     "source": "rapidocr",
+     "semantic": "盛"
+    }
+   ],
+   "candidates_chars": [
+    "鹽",
+    "庫",
+    "種",
+    "查",
+    "屬",
+    "盛"
+   ],
+   "gold": "盛",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "鹽",
+    "raw_pick": "盛",
+    "raw_margin": 0.1127,
+    "final_decision": "鹽",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:13:6:6",
+   "column_id": "vol01:13:6",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "指也今外進到之書大小",
+   "context_after": "短參差不一既無當於編",
+   "candidates": [
+    {
+     "char": "擾",
+     "prob": 0.183429,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "美",
+     "prob": 0.182937,
+     "source": "glyph",
+     "semantic": "美"
+    },
+    {
+     "char": "畫",
+     "prob": 0.181565,
+     "source": "glyph",
+     "semantic": "畫"
+    },
+    {
+     "char": "撮",
+     "prob": 0.179271,
+     "source": "glyph",
+     "semantic": "撮"
+    },
+    {
+     "char": "呈",
+     "prob": 0.17495,
+     "source": "glyph",
+     "semantic": "呈"
+    },
+    {
+     "char": "長",
+     "prob": 0.097848,
+     "source": "rapidocr",
+     "semantic": "長"
+    }
+   ],
+   "candidates_chars": [
+    "擾",
+    "美",
+    "畫",
+    "撮",
+    "呈",
+    "長"
+   ],
+   "gold": "長",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "擾",
+    "raw_pick": "長",
+    "raw_margin": 0.143,
+    "final_decision": "擾",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:13:6:7",
+   "column_id": "vol01:13:6",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "也今外進到之書大小長",
+   "context_after": "參差不一既無當於編列",
+   "candidates": [
+    {
+     "char": "類",
+     "prob": 0.190457,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "通",
+     "prob": 0.178214,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "極",
+     "prob": 0.177125,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "編",
+     "prob": 0.175811,
+     "source": "glyph",
+     "semantic": "編"
+    },
+    {
+     "char": "定",
+     "prob": 0.175688,
+     "source": "glyph",
+     "semantic": "定"
+    },
+    {
+     "char": "短",
+     "prob": 0.102705,
+     "source": "rapidocr",
+     "semantic": "短"
+    }
+   ],
+   "candidates_chars": [
+    "類",
+    "通",
+    "極",
+    "編",
+    "定",
+    "短"
+   ],
+   "gold": "短",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "類",
+    "raw_pick": "短",
+    "raw_margin": 0.4444,
+    "final_decision": "類",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:13:7:0",
+   "column_id": "vol01:13:7",
+   "page": "13",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "差不一既無當於編列縹",
+   "context_after": "業已或刻或抄其原書又",
+   "candidates": [
+    {
+     "char": "向",
+     "prob": 0.414089,
+     "source": "glyph",
+     "semantic": "向"
+    },
+    {
+     "char": "聞",
+     "prob": 0.390043,
+     "source": "glyph",
+     "semantic": "聞"
+    },
+    {
+     "char": "而",
+     "prob": 0.195867,
+     "source": "rapidocr",
+     "semantic": "而"
+    }
+   ],
+   "candidates_chars": [
+    "向",
+    "聞",
+    "而"
+   ],
+   "gold": "而",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "向",
+    "raw_pick": "向",
+    "raw_margin": 0.024,
+    "final_decision": "向",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:1:1",
+   "column_id": "vol01:14:1",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "",
+   "context_after": "朕肯之所有各家進到之",
+   "candidates": [
+    {
+     "char": "光",
+     "prob": 0.456177,
+     "source": "glyph",
+     "semantic": "水"
+    },
+    {
+     "char": "大",
+     "prob": 0.427074,
+     "source": "glyph",
+     "semantic": "大"
+    },
+    {
+     "char": "允",
+     "prob": 0.116749,
+     "source": "rapidocr",
+     "semantic": "允"
+    }
+   ],
+   "candidates_chars": [
+    "光",
+    "大",
+    "允"
+   ],
+   "gold": "允",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "光",
+    "raw_pick": "光",
+    "raw_margin": 0.0291,
+    "final_decision": "光",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:1:18",
+   "column_id": "vol01:14:1",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "之所有各家進到之書校",
+   "context_after": "仍行給原獻之家但現在",
+   "candidates": [
+    {
+     "char": "先",
+     "prob": 0.39495,
+     "source": "glyph",
+     "semantic": "先"
+    },
+    {
+     "char": "嘉",
+     "prob": 0.389858,
+     "source": "glyph",
+     "semantic": "嘉"
+    },
+    {
+     "char": "完",
+     "prob": 0.215192,
+     "source": "rapidocr",
+     "semantic": "完"
+    }
+   ],
+   "candidates_chars": [
+    "先",
+    "嘉",
+    "完"
+   ],
+   "gold": "完",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "先",
+    "raw_pick": "先",
+    "raw_margin": 0.2217,
+    "final_decision": "先",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:3:2",
+   "column_id": "vol01:14:3",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "在各省所進書籍屬不少",
+   "context_after": "後自必續加多其如何分",
+   "candidates": [
+    {
+     "char": "闕",
+     "prob": 0.190036,
+     "source": "glyph",
+     "semantic": "闕"
+    },
+    {
+     "char": "闌",
+     "prob": 0.185117,
+     "source": "glyph",
+     "semantic": "闌"
+    },
+    {
+     "char": "關",
+     "prob": 0.179391,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "開",
+     "prob": 0.178072,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "間",
+     "prob": 0.171717,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "嗣",
+     "prob": 0.095667,
+     "source": "rapidocr",
+     "semantic": "嗣"
+    }
+   ],
+   "candidates_chars": [
+    "闕",
+    "闌",
+    "關",
+    "開",
+    "間",
+    "嗣"
+   ],
+   "gold": "嗣",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "闕",
+    "raw_pick": "間",
+    "raw_margin": 0.4289,
+    "final_decision": "闕",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:4:3",
+   "column_id": "vol01:14:4",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "何分別標記俾還本不致",
+   "context_after": "混失之處著該總裁等奏",
+   "candidates": [
+    {
+     "char": "洎",
+     "prob": 0.158891,
+     "source": "glyph",
+     "semantic": "洎"
+    },
+    {
+     "char": "淮",
+     "prob": 0.157871,
+     "source": "glyph",
+     "semantic": "淮"
+    },
+    {
+     "char": "韻",
+     "prob": 0.156228,
+     "source": "glyph",
+     "semantic": "韻"
+    },
+    {
+     "char": "潛",
+     "prob": 0.154828,
+     "source": "glyph",
+     "semantic": "潛"
+    },
+    {
+     "char": "備",
+     "prob": 0.151716,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "謄",
+     "prob": 0.151093,
+     "source": "glyph",
+     "semantic": "謄"
+    },
+    {
+     "char": "淆",
+     "prob": 0.069374,
+     "source": "rapidocr",
+     "semantic": "淆"
+    }
+   ],
+   "candidates_chars": [
+    "洎",
+    "淮",
+    "韻",
+    "潛",
+    "備",
+    "謄",
+    "淆"
+   ],
+   "gold": "淆",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "洎",
+    "raw_pick": "備",
+    "raw_margin": 0.0813,
+    "final_decision": "洎",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:8:14",
+   "column_id": "vol01:14:8",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "進呈朕親加披予題見其",
+   "context_after": "訂分排具有條理撰提要",
+   "candidates": [
+    {
+     "char": "者",
+     "prob": 0.655618,
+     "source": "glyph",
+     "semantic": "者"
+    },
+    {
+     "char": "考",
+     "prob": 0.344382,
+     "source": "rapidocr",
+     "semantic": "考"
+    }
+   ],
+   "candidates_chars": [
+    "者",
+    "考"
+   ],
+   "gold": "考",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "者",
+    "raw_pick": "者",
+    "raw_margin": 0.202,
+    "final_decision": "者",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:8:17",
+   "column_id": "vol01:14:8",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "親加披予題見其考訂分",
+   "context_after": "具有條理撰提要然可觀",
+   "candidates": [
+    {
+     "char": "撫",
+     "prob": 0.183456,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "描",
+     "prob": 0.182595,
+     "source": "glyph",
+     "semantic": "描"
+    },
+    {
+     "char": "插",
+     "prob": 0.181837,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "詳",
+     "prob": 0.179193,
+     "source": "glyph",
+     "semantic": "詳"
+    },
+    {
+     "char": "非",
+     "prob": 0.177861,
+     "source": "glyph",
+     "semantic": "非"
+    },
+    {
+     "char": "排",
+     "prob": 0.095058,
+     "source": "rapidocr",
+     "semantic": "排"
+    }
+   ],
+   "candidates_chars": [
+    "撫",
+    "描",
+    "插",
+    "詳",
+    "非",
+    "排"
+   ],
+   "gold": "排",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "撫",
+    "raw_pick": "非",
+    "raw_margin": 0.0755,
+    "final_decision": "撫",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:9:3",
+   "column_id": "vol01:14:9",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "見其考訂分排具有條理",
+   "context_after": "提要然可觀則成於錫手",
+   "candidates": [
+    {
+     "char": "撫",
+     "prob": 0.137676,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "擇",
+     "prob": 0.137059,
+     "source": "glyph",
+     "semantic": "擇"
+    },
+    {
+     "char": "擾",
+     "prob": 0.133387,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "校",
+     "prob": 0.132096,
+     "source": "glyph",
+     "semantic": "校"
+    },
+    {
+     "char": "議",
+     "prob": 0.13168,
+     "source": "glyph",
+     "semantic": "議"
+    },
+    {
+     "char": "類",
+     "prob": 0.130274,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "揮",
+     "prob": 0.128265,
+     "source": "glyph",
+     "semantic": "揮"
+    },
+    {
+     "char": "撰",
+     "prob": 0.069563,
+     "source": "rapidocr",
+     "semantic": "撰"
+    }
+   ],
+   "candidates_chars": [
+    "撫",
+    "擇",
+    "擾",
+    "校",
+    "議",
+    "類",
+    "揮",
+    "撰"
+   ],
+   "gold": "撰",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "撫",
+    "raw_pick": "類",
+    "raw_margin": 0.3435,
+    "final_decision": "撫",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:14:9:5",
+   "column_id": "vol01:14:9",
+   "page": "14",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "其考訂分排具有條理撰",
+   "context_after": "要然可觀則成於錫手",
+   "candidates": [
+    {
+     "char": "描",
+     "prob": 0.15736,
+     "source": "glyph",
+     "semantic": "描"
+    },
+    {
+     "char": "擇",
+     "prob": 0.154562,
+     "source": "glyph",
+     "semantic": "擇"
+    },
+    {
+     "char": "撰",
+     "prob": 0.153506,
+     "source": "glyph",
+     "semantic": "撰"
+    },
+    {
+     "char": "撮",
+     "prob": 0.151612,
+     "source": "glyph",
+     "semantic": "撮"
+    },
+    {
+     "char": "擾",
+     "prob": 0.151562,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "疑",
+     "prob": 0.14764,
+     "source": "glyph",
+     "semantic": "疑"
+    },
+    {
+     "char": "提",
+     "prob": 0.083758,
+     "source": "rapidocr",
+     "semantic": "提"
+    }
+   ],
+   "candidates_chars": [
+    "描",
+    "擇",
+    "撰",
+    "撮",
+    "擾",
+    "疑",
+    "提"
+   ],
+   "gold": "提",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "描",
+    "raw_pick": "撰",
+    "raw_margin": 0.0058,
+    "final_decision": "描",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:1:6",
+   "column_id": "vol01:4:1",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "學復開館纂修",
+   "context_after": "目三編通鑑輯覽及三通",
+   "candidates": [
+    {
+     "char": "領",
+     "prob": 0.319923,
+     "source": "glyph",
+     "semantic": "領"
+    },
+    {
+     "char": "備",
+     "prob": 0.314618,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "讀",
+     "prob": 0.313734,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "綱",
+     "prob": 0.051724,
+     "source": "rapidocr",
+     "semantic": "綱"
+    }
+   ],
+   "candidates_chars": [
+    "領",
+    "備",
+    "讀",
+    "綱"
+   ],
+   "gold": "綱",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "領",
+    "raw_pick": "備",
+    "raw_margin": 0.0219,
+    "final_decision": "領",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:3:9",
+   "column_id": "vol01:4:3",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "第念讀書固在得其要領",
+   "context_after": "多識前言往行以蓄其德",
+   "candidates": [
+    {
+     "char": "前",
+     "prob": 0.395885,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "所",
+     "prob": 0.385882,
+     "source": "glyph",
+     "semantic": "所"
+    },
+    {
+     "char": "而",
+     "prob": 0.218233,
+     "source": "rapidocr",
+     "semantic": "而"
+    }
+   ],
+   "candidates_chars": [
+    "前",
+    "所",
+    "而"
+   ],
+   "gold": "而",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "前",
+    "raw_pick": "而",
+    "raw_margin": 0.0975,
+    "final_decision": "前",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:4:4:7",
+   "column_id": "vol01:4:4",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "蓄其德惟蒐羅益廣則研",
+   "context_after": "愈精如康熙年間所修圖",
+   "candidates": [
+    {
+     "char": "前",
+     "prob": 0.66954,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "討",
+     "prob": 0.33046,
+     "source": "rapidocr",
+     "semantic": "討"
+    }
+   ],
+   "candidates_chars": [
+    "前",
+    "討"
+   ],
+   "gold": "討",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "前",
+    "raw_pick": "前",
+    "raw_margin": 0.666,
+    "final_decision": "前",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:5:12",
+   "column_id": "vol01:4:5",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "部兼收並錄極方策之大",
+   "context_after": "引用諸編率屬因類取裁",
+   "candidates": [
+    {
+     "char": "輯",
+     "prob": 0.141903,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "讀",
+     "prob": 0.140921,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "既",
+     "prob": 0.136087,
+     "source": "glyph",
+     "semantic": "既"
+    },
+    {
+     "char": "開",
+     "prob": 0.130044,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "在",
+     "prob": 0.129832,
+     "source": "glyph",
+     "semantic": "在"
+    },
+    {
+     "char": "成",
+     "prob": 0.129772,
+     "source": "glyph",
+     "semantic": "成"
+    },
+    {
+     "char": "誦",
+     "prob": 0.129107,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "觀",
+     "prob": 0.062333,
+     "source": "rapidocr",
+     "semantic": "觀"
+    }
+   ],
+   "candidates_chars": [
+    "輯",
+    "讀",
+    "既",
+    "開",
+    "在",
+    "成",
+    "誦",
+    "觀"
+   ],
+   "gold": "觀",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "輯",
+    "raw_pick": "成",
+    "raw_margin": 0.2175,
+    "final_decision": "輯",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:6:0",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "之大觀引用諸編率屬因",
+   "context_after": "取裁勢不能悉載全文使",
+   "candidates": [
+    {
+     "char": "讀",
+     "prob": 0.165081,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "領",
+     "prob": 0.161594,
+     "source": "glyph",
+     "semantic": "領"
+    },
+    {
+     "char": "誦",
+     "prob": 0.157952,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "通",
+     "prob": 0.149959,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "部",
+     "prob": 0.149373,
+     "source": "glyph",
+     "semantic": "部"
+    },
+    {
+     "char": "逸",
+     "prob": 0.147405,
+     "source": "glyph",
+     "semantic": "逸"
+    },
+    {
+     "char": "類",
+     "prob": 0.068636,
+     "source": "rapidocr",
+     "semantic": "類"
+    }
+   ],
+   "candidates_chars": [
+    "讀",
+    "領",
+    "誦",
+    "通",
+    "部",
+    "逸",
+    "類"
+   ],
+   "gold": "類",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "讀",
+    "raw_pick": "讀",
+    "raw_margin": 0.0035,
+    "final_decision": "讀",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:6:10",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "類取裁勢不能悉載全文",
+   "context_after": "閱者沿流溯源一一徵其",
+   "candidates": [
+    {
+     "char": "修",
+     "prob": 0.230198,
+     "source": "glyph",
+     "semantic": "修"
+    },
+    {
+     "char": "家",
+     "prob": 0.215478,
+     "source": "glyph",
+     "semantic": "家"
+    },
+    {
+     "char": "史",
+     "prob": 0.215254,
+     "source": "glyph",
+     "semantic": "史"
+    },
+    {
+     "char": "德",
+     "prob": 0.214581,
+     "source": "glyph",
+     "semantic": "德"
+    },
+    {
+     "char": "使",
+     "prob": 0.124489,
+     "source": "rapidocr",
+     "semantic": "使"
+    }
+   ],
+   "candidates_chars": [
+    "修",
+    "家",
+    "史",
+    "德",
+    "使"
+   ],
+   "gold": "使",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "修",
+    "raw_pick": "家",
+    "raw_margin": 0.005,
+    "final_decision": "修",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:6:14",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "不能悉載全文使閱者沿",
+   "context_after": "溯源一一徵其來處今內",
+   "candidates": [
+    {
+     "char": "備",
+     "prob": 0.154606,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "德",
+     "prob": 0.154291,
+     "source": "glyph",
+     "semantic": "德"
+    },
+    {
+     "char": "識",
+     "prob": 0.152329,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "輯",
+     "prob": 0.152276,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "府",
+     "prob": 0.149613,
+     "source": "glyph",
+     "semantic": "府"
+    },
+    {
+     "char": "慮",
+     "prob": 0.149297,
+     "source": "glyph",
+     "semantic": "慮"
+    },
+    {
+     "char": "流",
+     "prob": 0.087588,
+     "source": "rapidocr",
+     "semantic": "流"
+    }
+   ],
+   "candidates_chars": [
+    "備",
+    "德",
+    "識",
+    "輯",
+    "府",
+    "慮",
+    "流"
+   ],
+   "gold": "流",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "備",
+    "raw_pick": "流",
+    "raw_margin": 0.3429,
+    "final_decision": "備",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:4:6:2",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "觀引用諸編率屬因類取",
+   "context_after": "勢不能悉載全文使閱者",
+   "candidates": [
+    {
+     "char": "識",
+     "prob": 0.225164,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "成",
+     "prob": 0.21937,
+     "source": "glyph",
+     "semantic": "成"
+    },
+    {
+     "char": "數",
+     "prob": 0.217921,
+     "source": "glyph",
+     "semantic": "數"
+    },
+    {
+     "char": "或",
+     "prob": 0.212901,
+     "source": "glyph",
+     "semantic": "或"
+    },
+    {
+     "char": "裁",
+     "prob": 0.124644,
+     "source": "rapidocr",
+     "semantic": "裁"
+    }
+   ],
+   "candidates_chars": [
+    "識",
+    "成",
+    "數",
+    "或",
+    "裁"
+   ],
+   "gold": "裁",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "識",
+    "raw_pick": "裁",
+    "raw_margin": 0.1145,
+    "final_decision": "識",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:4:6:7",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "率屬因類取裁勢不能悉",
+   "context_after": "全文使閱者沿流溯源一",
+   "candidates": [
+    {
+     "char": "輯",
+     "prob": 0.143517,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "識",
+     "prob": 0.141405,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "諸",
+     "prob": 0.138931,
+     "source": "glyph",
+     "semantic": "諸"
+    },
+    {
+     "char": "誦",
+     "prob": 0.138238,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "讀",
+     "prob": 0.13682,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "或",
+     "prob": 0.135985,
+     "source": "glyph",
+     "semantic": "或"
+    },
+    {
+     "char": "備",
+     "prob": 0.13537,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "載",
+     "prob": 0.029734,
+     "source": "rapidocr",
+     "semantic": "載"
+    }
+   ],
+   "candidates_chars": [
+    "輯",
+    "識",
+    "諸",
+    "誦",
+    "讀",
+    "或",
+    "備",
+    "載"
+   ],
+   "gold": "載",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "輯",
+    "raw_pick": "備",
+    "raw_margin": 0.0448,
+    "final_decision": "輯",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:6:9",
+   "column_id": "vol01:4:6",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "因類取裁勢不能悉載全",
+   "context_after": "使閱者沿流溯源一一徵",
+   "candidates": [
+    {
+     "char": "史",
+     "prob": 0.650996,
+     "source": "glyph",
+     "semantic": "史"
+    },
+    {
+     "char": "文",
+     "prob": 0.349004,
+     "source": "rapidocr",
+     "semantic": "文"
+    }
+   ],
+   "candidates_chars": [
+    "史",
+    "文"
+   ],
+   "gold": "文",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "史",
+    "raw_pick": "文",
+    "raw_margin": 0.2309,
+    "final_decision": "史",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:4:7:1",
+   "column_id": "vol01:4:7",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "閱者沿流溯源一一徵其",
+   "context_after": "處今內府藏書插架不爲",
+   "candidates": [
+    {
+     "char": "家",
+     "prob": 0.743339,
+     "source": "glyph",
+     "semantic": "家"
+    },
+    {
+     "char": "來",
+     "prob": 0.256661,
+     "source": "rapidocr",
+     "semantic": "來"
+    }
+   ],
+   "candidates_chars": [
+    "家",
+    "來"
+   ],
+   "gold": "來",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "家",
+    "raw_pick": "家",
+    "raw_margin": 0.4575,
+    "final_decision": "家",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:7:13",
+   "column_id": "vol01:4:7",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "今內府藏書插架不爲不",
+   "context_after": "然古今來著作之手無慮",
+   "candidates": [
+    {
+     "char": "當",
+     "prob": 0.190755,
+     "source": "glyph",
+     "semantic": "當"
+    },
+    {
+     "char": "書",
+     "prob": 0.185118,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "藝",
+     "prob": 0.177799,
+     "source": "glyph",
+     "semantic": "藝"
+    },
+    {
+     "char": "康",
+     "prob": 0.177285,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "言",
+     "prob": 0.170501,
+     "source": "glyph",
+     "semantic": "言"
+    },
+    {
+     "char": "富",
+     "prob": 0.098542,
+     "source": "rapidocr",
+     "semantic": "富"
+    }
+   ],
+   "candidates_chars": [
+    "當",
+    "書",
+    "藝",
+    "康",
+    "言",
+    "富"
+   ],
+   "gold": "富",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "當",
+    "raw_pick": "言",
+    "raw_margin": 0.2629,
+    "final_decision": "當",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:7:9",
+   "column_id": "vol01:4:7",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "徵其來處今內府藏書插",
+   "context_after": "不爲不富然古今來著作",
+   "candidates": [
+    {
+     "char": "誦",
+     "prob": 0.184165,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "集",
+     "prob": 0.182915,
+     "source": "glyph",
+     "semantic": "集"
+    },
+    {
+     "char": "輯",
+     "prob": 0.178489,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "策",
+     "prob": 0.177834,
+     "source": "glyph",
+     "semantic": "策"
+    },
+    {
+     "char": "兼",
+     "prob": 0.174269,
+     "source": "glyph",
+     "semantic": "兼"
+    },
+    {
+     "char": "架",
+     "prob": 0.102328,
+     "source": "rapidocr",
+     "semantic": "架"
+    }
+   ],
+   "candidates_chars": [
+    "誦",
+    "集",
+    "輯",
+    "策",
+    "兼",
+    "架"
+   ],
+   "gold": "架",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "誦",
+    "raw_pick": "集",
+    "raw_margin": 0.0863,
+    "final_decision": "誦",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:4:8:16",
+   "column_id": "vol01:4:8",
+   "page": "4",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "百家或逸在名山未登柱",
+   "context_after": "正宜及",
+   "candidates": [
+    {
+     "char": "史",
+     "prob": 0.637389,
+     "source": "glyph",
+     "semantic": "史"
+    },
+    {
+     "char": "家",
+     "prob": 0.362611,
+     "source": "glyph",
+     "semantic": "家"
+    }
+   ],
+   "candidates_chars": [
+    "史",
+    "家"
+   ],
+   "gold": "史",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "史",
+    "raw_pick": "家",
+    "raw_margin": 0.8239,
+    "final_decision": "家",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:1:12",
+   "column_id": "vol01:5:1",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "學政等通飭所屬加意購",
+   "context_after": "除坊肆所售舉業文及民",
+   "candidates": [
+    {
+     "char": "前",
+     "prob": 0.232957,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "館",
+     "prob": 0.230235,
+     "source": "glyph",
+     "semantic": "館"
+    },
+    {
+     "char": "諸",
+     "prob": 0.228847,
+     "source": "glyph",
+     "semantic": "諸"
+    },
+    {
+     "char": "識",
+     "prob": 0.225209,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "訪",
+     "prob": 0.082752,
+     "source": "rapidocr",
+     "semantic": "訪"
+    }
+   ],
+   "candidates_chars": [
+    "前",
+    "館",
+    "諸",
+    "識",
+    "訪"
+   ],
+   "gold": "訪",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "前",
+    "raw_pick": "諸",
+    "raw_margin": 0.1038,
+    "final_decision": "前",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:1:14",
+   "column_id": "vol01:5:1",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "等通飭所屬加意購訪除",
+   "context_after": "肆所售舉業文及民間無",
+   "candidates": [
+    {
+     "char": "訪",
+     "prob": 0.392385,
+     "source": "glyph",
+     "semantic": "訪"
+    },
+    {
+     "char": "第",
+     "prob": 0.389059,
+     "source": "glyph",
+     "semantic": "第"
+    },
+    {
+     "char": "坊",
+     "prob": 0.218556,
+     "source": "rapidocr",
+     "semantic": "坊"
+    }
+   ],
+   "candidates_chars": [
+    "訪",
+    "第",
+    "坊"
+   ],
+   "gold": "坊",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "訪",
+    "raw_pick": "第",
+    "raw_margin": 0.3573,
+    "final_decision": "訪",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:1:19",
+   "column_id": "vol01:5:1",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "加意購訪除坊肆所售舉",
+   "context_after": "文及民間無用之族譜尺",
+   "candidates": [
+    {
+     "char": "集",
+     "prob": 0.161561,
+     "source": "glyph",
+     "semantic": "集"
+    },
+    {
+     "char": "第",
+     "prob": 0.160153,
+     "source": "glyph",
+     "semantic": "第"
+    },
+    {
+     "char": "策",
+     "prob": 0.158041,
+     "source": "glyph",
+     "semantic": "策"
+    },
+    {
+     "char": "架",
+     "prob": 0.156273,
+     "source": "glyph",
+     "semantic": "架"
+    },
+    {
+     "char": "裁",
+     "prob": 0.148889,
+     "source": "glyph",
+     "semantic": "裁"
+    },
+    {
+     "char": "其",
+     "prob": 0.148408,
+     "source": "glyph",
+     "semantic": "其"
+    },
+    {
+     "char": "業",
+     "prob": 0.066675,
+     "source": "rapidocr",
+     "semantic": "業"
+    }
+   ],
+   "candidates_chars": [
+    "集",
+    "第",
+    "策",
+    "架",
+    "裁",
+    "其",
+    "業"
+   ],
+   "gold": "業",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "集",
+    "raw_pick": "其",
+    "raw_margin": 0.1951,
+    "final_decision": "集",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:1:3",
+   "column_id": "vol01:5:1",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "撫學",
+   "context_after": "等通飭所屬加意購訪除",
+   "candidates": [
+    {
+     "char": "取",
+     "prob": 0.139884,
+     "source": "glyph",
+     "semantic": "取"
+    },
+    {
+     "char": "成",
+     "prob": 0.134517,
+     "source": "glyph",
+     "semantic": "成"
+    },
+    {
+     "char": "收",
+     "prob": 0.133408,
+     "source": "glyph",
+     "semantic": "收"
+    },
+    {
+     "char": "藏",
+     "prob": 0.131013,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "載",
+     "prob": 0.129224,
+     "source": "glyph",
+     "semantic": "載"
+    },
+    {
+     "char": "數",
+     "prob": 0.129032,
+     "source": "glyph",
+     "semantic": "數"
+    },
+    {
+     "char": "及",
+     "prob": 0.129003,
+     "source": "glyph",
+     "semantic": "及"
+    },
+    {
+     "char": "政",
+     "prob": 0.073919,
+     "source": "rapidocr",
+     "semantic": "政"
+    }
+   ],
+   "candidates_chars": [
+    "取",
+    "成",
+    "收",
+    "藏",
+    "載",
+    "數",
+    "及",
+    "政"
+   ],
+   "gold": "政",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "取",
+    "raw_pick": "政",
+    "raw_margin": 0.5049,
+    "final_decision": "取",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:1:9",
+   "column_id": "vol01:5:1",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "撫學政等通飭所屬",
+   "context_after": "意購訪除坊肆所售舉業",
+   "candidates": [
+    {
+     "char": "部",
+     "prob": 0.395665,
+     "source": "glyph",
+     "semantic": "部"
+    },
+    {
+     "char": "如",
+     "prob": 0.38454,
+     "source": "glyph",
+     "semantic": "如"
+    },
+    {
+     "char": "加",
+     "prob": 0.219794,
+     "source": "rapidocr",
+     "semantic": "加"
+    }
+   ],
+   "candidates_chars": [
+    "部",
+    "如",
+    "加"
+   ],
+   "gold": "加",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "部",
+    "raw_pick": "如",
+    "raw_margin": 0.0753,
+    "final_decision": "部",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:2:10",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "業文及民間無用之族譜",
+   "context_after": "牘屏幛壽戶等類又其本",
+   "candidates": [
+    {
+     "char": "凡",
+     "prob": 0.638567,
+     "source": "glyph",
+     "semantic": "凡"
+    },
+    {
+     "char": "尺",
+     "prob": 0.361433,
+     "source": "rapidocr",
+     "semantic": "尺"
+    }
+   ],
+   "candidates_chars": [
+    "凡",
+    "尺"
+   ],
+   "gold": "尺",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "凡",
+    "raw_pick": "凡",
+    "raw_margin": 0.4749,
+    "final_decision": "凡",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:2:12",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "及民間無用之族譜尺牘",
+   "context_after": "幛壽戶等類又其本無實",
+   "candidates": [
+    {
+     "char": "屬",
+     "prob": 0.396971,
+     "source": "glyph",
+     "semantic": "屬"
+    },
+    {
+     "char": "康",
+     "prob": 0.381599,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "屏",
+     "prob": 0.22143,
+     "source": "rapidocr",
+     "semantic": "屏"
+    }
+   ],
+   "candidates_chars": [
+    "屬",
+    "康",
+    "屏"
+   ],
+   "gold": "屏",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "屬",
+    "raw_pick": "康",
+    "raw_margin": 0.0314,
+    "final_decision": "屬",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:2:16",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "用之族譜尺牘屏幛壽戶",
+   "context_after": "類又其本無實學不過嫁",
+   "candidates": [
+    {
+     "char": "德",
+     "prob": 0.225334,
+     "source": "glyph",
+     "semantic": "德"
+    },
+    {
+     "char": "書",
+     "prob": 0.219824,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "蓄",
+     "prob": 0.215043,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "第",
+     "prob": 0.214741,
+     "source": "glyph",
+     "semantic": "第"
+    },
+    {
+     "char": "等",
+     "prob": 0.125058,
+     "source": "rapidocr",
+     "semantic": "等"
+    }
+   ],
+   "candidates_chars": [
+    "德",
+    "書",
+    "蓄",
+    "第",
+    "等"
+   ],
+   "gold": "等",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "德",
+    "raw_pick": "書",
+    "raw_margin": 0.3416,
+    "final_decision": "德",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:2:18",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "族譜尺牘屏幛壽戶等類",
+   "context_after": "其本無實學不過嫁名馳",
+   "candidates": [
+    {
+     "char": "文",
+     "prob": 0.407482,
+     "source": "glyph",
+     "semantic": "文"
+    },
+    {
+     "char": "及",
+     "prob": 0.391475,
+     "source": "glyph",
+     "semantic": "及"
+    },
+    {
+     "char": "又",
+     "prob": 0.201043,
+     "source": "rapidocr",
+     "semantic": "又"
+    }
+   ],
+   "candidates_chars": [
+    "文",
+    "及",
+    "又"
+   ],
+   "gold": "又",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "文",
+    "raw_pick": "又",
+    "raw_margin": 0.0174,
+    "final_decision": "文",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:2:8",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "售舉業文及民間無用之",
+   "context_after": "譜尺牘屏幛壽戶等類又",
+   "candidates": [
+    {
+     "char": "康",
+     "prob": 0.155726,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "成",
+     "prob": 0.154833,
+     "source": "glyph",
+     "semantic": "成"
+    },
+    {
+     "char": "業",
+     "prob": 0.154627,
+     "source": "glyph",
+     "semantic": "業"
+    },
+    {
+     "char": "其",
+     "prob": 0.151519,
+     "source": "glyph",
+     "semantic": "其"
+    },
+    {
+     "char": "觀",
+     "prob": 0.150575,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "藏",
+     "prob": 0.148308,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "族",
+     "prob": 0.084413,
+     "source": "rapidocr",
+     "semantic": "族"
+    }
+   ],
+   "candidates_chars": [
+    "康",
+    "成",
+    "業",
+    "其",
+    "觀",
+    "藏",
+    "族"
+   ],
+   "gold": "族",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "康",
+    "raw_pick": "其",
+    "raw_margin": 0.5998,
+    "final_decision": "康",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:2:9",
+   "column_id": "vol01:5:2",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "舉業文及民間無用之族",
+   "context_after": "尺牘屏幛壽戶等類又其",
+   "candidates": [
+    {
+     "char": "諸",
+     "prob": 0.163671,
+     "source": "glyph",
+     "semantic": "諸"
+    },
+    {
+     "char": "識",
+     "prob": 0.157249,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "誦",
+     "prob": 0.152458,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "精",
+     "prob": 0.151099,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "前",
+     "prob": 0.147922,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "備",
+     "prob": 0.145136,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "譜",
+     "prob": 0.082464,
+     "source": "rapidocr",
+     "semantic": "譜"
+    }
+   ],
+   "candidates_chars": [
+    "諸",
+    "識",
+    "誦",
+    "精",
+    "前",
+    "備",
+    "譜"
+   ],
+   "gold": "譜",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "諸",
+    "raw_pick": "譜",
+    "raw_margin": 0.2202,
+    "final_decision": "諸",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:3:13",
+   "column_id": "vol01:5:3",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "實學不過嫁名馳騖編刻",
+   "context_after": "倡詩文瑣屑無者均無庸",
+   "candidates": [
+    {
+     "char": "則",
+     "prob": 0.388471,
+     "source": "glyph",
+     "semantic": "則"
+    },
+    {
+     "char": "誦",
+     "prob": 0.387708,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "酬",
+     "prob": 0.223821,
+     "source": "rapidocr",
+     "semantic": "酬"
+    }
+   ],
+   "candidates_chars": [
+    "則",
+    "誦",
+    "酬"
+   ],
+   "gold": "酬",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "則",
+    "raw_pick": "則",
+    "raw_margin": 0.83,
+    "final_decision": "則",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:3:18",
+   "column_id": "vol01:5:3",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "名馳騖編刻酬倡詩文瑣",
+   "context_after": "無者均無庸採取其厯代",
+   "candidates": [
+    {
+     "char": "屬",
+     "prob": 0.163769,
+     "source": "glyph",
+     "semantic": "屬"
+    },
+    {
+     "char": "倡",
+     "prob": 0.153435,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "屏",
+     "prob": 0.152051,
+     "source": "glyph",
+     "semantic": "屏"
+    },
+    {
+     "char": "因",
+     "prob": 0.150941,
+     "source": "glyph",
+     "semantic": "因"
+    },
+    {
+     "char": "用",
+     "prob": 0.148601,
+     "source": "glyph",
+     "semantic": "用"
+    },
+    {
+     "char": "圖",
+     "prob": 0.145937,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "屑",
+     "prob": 0.085266,
+     "source": "rapidocr",
+     "semantic": "屑"
+    }
+   ],
+   "candidates_chars": [
+    "屬",
+    "倡",
+    "屏",
+    "因",
+    "用",
+    "圖",
+    "屑"
+   ],
+   "gold": "屑",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "屬",
+    "raw_pick": "屑",
+    "raw_margin": 0.3904,
+    "final_decision": "屬",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:3:3",
+   "column_id": "vol01:5:3",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "屏幛壽戶等類又其本無",
+   "context_after": "學不過嫁名馳騖編刻酬",
+   "candidates": [
+    {
+     "char": "富",
+     "prob": 0.107042,
+     "source": "glyph",
+     "semantic": "富"
+    },
+    {
+     "char": "者",
+     "prob": 0.10703,
+     "source": "glyph",
+     "semantic": "者"
+    },
+    {
+     "char": "錄",
+     "prob": 0.106924,
+     "source": "glyph",
+     "semantic": "錄"
+    },
+    {
+     "char": "意",
+     "prob": 0.106371,
+     "source": "glyph",
+     "semantic": "意"
+    },
+    {
+     "char": "讀",
+     "prob": 0.105417,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "因",
+     "prob": 0.104698,
+     "source": "glyph",
+     "semantic": "因"
+    },
+    {
+     "char": "廣",
+     "prob": 0.104675,
+     "source": "glyph",
+     "semantic": "廣"
+    },
+    {
+     "char": "康",
+     "prob": 0.104439,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "圖",
+     "prob": 0.101719,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "實",
+     "prob": 0.051684,
+     "source": "rapidocr",
+     "semantic": "實"
+    }
+   ],
+   "candidates_chars": [
+    "富",
+    "者",
+    "錄",
+    "意",
+    "讀",
+    "因",
+    "廣",
+    "康",
+    "圖",
+    "實"
+   ],
+   "gold": "實",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "富",
+    "raw_pick": "意",
+    "raw_margin": 0.0085,
+    "final_decision": "富",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:4:17",
+   "column_id": "vol01:5:4",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "其厯代流傳舊書內有闡",
+   "context_after": "性學法關繫世道人心者",
+   "candidates": [
+    {
+     "char": "溯",
+     "prob": 0.186091,
+     "source": "glyph",
+     "semantic": "溯"
+    },
+    {
+     "char": "固",
+     "prob": 0.179506,
+     "source": "glyph",
+     "semantic": "固"
+    },
+    {
+     "char": "讀",
+     "prob": 0.177958,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "閱",
+     "prob": 0.176885,
+     "source": "glyph",
+     "semantic": "閱"
+    },
+    {
+     "char": "間",
+     "prob": 0.176369,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "明",
+     "prob": 0.10319,
+     "source": "rapidocr",
+     "semantic": "明"
+    }
+   ],
+   "candidates_chars": [
+    "溯",
+    "固",
+    "讀",
+    "閱",
+    "間",
+    "明"
+   ],
+   "gold": "明",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "溯",
+    "raw_pick": "明",
+    "raw_margin": 0.6505,
+    "final_decision": "溯",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:4:18",
+   "column_id": "vol01:5:4",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "厯代流傳舊書內有闡明",
+   "context_after": "學法關繫世道人心者自",
+   "candidates": [
+    {
+     "char": "柱",
+     "prob": 0.225668,
+     "source": "glyph",
+     "semantic": "柱"
+    },
+    {
+     "char": "往",
+     "prob": 0.224689,
+     "source": "glyph",
+     "semantic": "往"
+    },
+    {
+     "char": "在",
+     "prob": 0.218796,
+     "source": "glyph",
+     "semantic": "在"
+    },
+    {
+     "char": "極",
+     "prob": 0.208745,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "性",
+     "prob": 0.122102,
+     "source": "rapidocr",
+     "semantic": "性"
+    }
+   ],
+   "candidates_chars": [
+    "柱",
+    "往",
+    "在",
+    "極",
+    "性"
+   ],
+   "gold": "性",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "柱",
+    "raw_pick": "在",
+    "raw_margin": 0.1102,
+    "final_decision": "柱",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:4:4",
+   "column_id": "vol01:5:4",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "酬倡詩文瑣屑無者均無",
+   "context_after": "採取其厯代流傳舊書內",
+   "candidates": [
+    {
+     "char": "屑",
+     "prob": 0.158431,
+     "source": "glyph",
+     "semantic": "屑"
+    },
+    {
+     "char": "康",
+     "prob": 0.157059,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "倡",
+     "prob": 0.15577,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "備",
+     "prob": 0.151803,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "慮",
+     "prob": 0.149258,
+     "source": "glyph",
+     "semantic": "慮"
+    },
+    {
+     "char": "府",
+     "prob": 0.144438,
+     "source": "glyph",
+     "semantic": "府"
+    },
+    {
+     "char": "庸",
+     "prob": 0.083241,
+     "source": "rapidocr",
+     "semantic": "庸"
+    }
+   ],
+   "candidates_chars": [
+    "屑",
+    "康",
+    "倡",
+    "備",
+    "慮",
+    "府",
+    "庸"
+   ],
+   "gold": "庸",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "屑",
+    "raw_pick": "庸",
+    "raw_margin": 0.5025,
+    "final_decision": "屑",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:5:18",
+   "column_id": "vol01:5:5",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "者自當首先購覔至若發",
+   "context_after": "傅攷覈典章旁暨九流百",
+   "candidates": [
+    {
+     "char": "插",
+     "prob": 0.145714,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "流",
+     "prob": 0.144802,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "輯",
+     "prob": 0.142226,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "極",
+     "prob": 0.140851,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "部",
+     "prob": 0.140067,
+     "source": "glyph",
+     "semantic": "部"
+    },
+    {
+     "char": "無",
+     "prob": 0.139827,
+     "source": "glyph",
+     "semantic": "無"
+    },
+    {
+     "char": "通",
+     "prob": 0.137443,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "揮",
+     "prob": 0.00907,
+     "source": "rapidocr",
+     "semantic": "揮"
+    }
+   ],
+   "candidates_chars": [
+    "插",
+    "流",
+    "輯",
+    "極",
+    "部",
+    "無",
+    "通",
+    "揮"
+   ],
+   "gold": "揮",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "插",
+    "raw_pick": "揮",
+    "raw_margin": 0.0363,
+    "final_decision": "插",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:5:5",
+   "column_id": "vol01:5:5",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "內有闡明性學法關繫世",
+   "context_after": "人心者自當首先購覔至",
+   "candidates": [
+    {
+     "char": "通",
+     "prob": 0.141321,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "逸",
+     "prob": 0.140493,
+     "source": "glyph",
+     "semantic": "逸"
+    },
+    {
+     "char": "鑑",
+     "prob": 0.134832,
+     "source": "glyph",
+     "semantic": "鑑"
+    },
+    {
+     "char": "購",
+     "prob": 0.128668,
+     "source": "glyph",
+     "semantic": "購"
+    },
+    {
+     "char": "慮",
+     "prob": 0.128181,
+     "source": "glyph",
+     "semantic": "慮"
+    },
+    {
+     "char": "羅",
+     "prob": 0.1279,
+     "source": "glyph",
+     "semantic": "羅"
+    },
+    {
+     "char": "覽",
+     "prob": 0.126555,
+     "source": "glyph",
+     "semantic": "覽"
+    },
+    {
+     "char": "道",
+     "prob": 0.07205,
+     "source": "rapidocr",
+     "semantic": "道"
+    }
+   ],
+   "candidates_chars": [
+    "通",
+    "逸",
+    "鑑",
+    "購",
+    "慮",
+    "羅",
+    "覽",
+    "道"
+   ],
+   "gold": "道",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "通",
+    "raw_pick": "道",
+    "raw_margin": 0.0726,
+    "final_decision": "通",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:6:4",
+   "column_id": "vol01:5:6",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "購覔至若發揮傅攷覈典",
+   "context_after": "旁暨九流百家之言有裨",
+   "candidates": [
+    {
+     "char": "意",
+     "prob": 0.141183,
+     "source": "glyph",
+     "semantic": "意"
+    },
+    {
+     "char": "實",
+     "prob": 0.136848,
+     "source": "glyph",
+     "semantic": "實"
+    },
+    {
+     "char": "者",
+     "prob": 0.13213,
+     "source": "glyph",
+     "semantic": "者"
+    },
+    {
+     "char": "幛",
+     "prob": 0.131366,
+     "source": "glyph",
+     "semantic": "幛"
+    },
+    {
+     "char": "萃",
+     "prob": 0.129514,
+     "source": "glyph",
+     "semantic": "萃"
+    },
+    {
+     "char": "書",
+     "prob": 0.129191,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "率",
+     "prob": 0.12634,
+     "source": "glyph",
+     "semantic": "率"
+    },
+    {
+     "char": "章",
+     "prob": 0.073428,
+     "source": "rapidocr",
+     "semantic": "章"
+    }
+   ],
+   "candidates_chars": [
+    "意",
+    "實",
+    "者",
+    "幛",
+    "萃",
+    "書",
+    "率",
+    "章"
+   ],
+   "gold": "章",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "意",
+    "raw_pick": "者",
+    "raw_margin": 0.1256,
+    "final_decision": "意",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:8:16",
+   "column_id": "vol01:5:8",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "沈潛經史原本風雅如顧",
+   "context_after": "高陳祖任啟運沈德潛輩",
+   "candidates": [
+    {
+     "char": "極",
+     "prob": 0.111494,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "精",
+     "prob": 0.110707,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "類",
+     "prob": 0.108895,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "原",
+     "prob": 0.108335,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "觀",
+     "prob": 0.107917,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "源",
+     "prob": 0.107142,
+     "source": "glyph",
+     "semantic": "源"
+    },
+    {
+     "char": "插",
+     "prob": 0.106415,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "林",
+     "prob": 0.104782,
+     "source": "glyph",
+     "semantic": "林"
+    },
+    {
+     "char": "策",
+     "prob": 0.104067,
+     "source": "glyph",
+     "semantic": "策"
+    },
+    {
+     "char": "棟",
+     "prob": 0.030246,
+     "source": "rapidocr",
+     "semantic": "棟"
+    }
+   ],
+   "candidates_chars": [
+    "極",
+    "精",
+    "類",
+    "原",
+    "觀",
+    "源",
+    "插",
+    "林",
+    "策",
+    "棟"
+   ],
+   "gold": "棟",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "極",
+    "raw_pick": "棟",
+    "raw_margin": 0.2182,
+    "final_decision": "極",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:5:8:18",
+   "column_id": "vol01:5:8",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "經史原本風雅如顧棟高",
+   "context_after": "祖任啟運沈德潛輩亦各",
+   "candidates": [
+    {
+     "char": "源",
+     "prob": 0.120637,
+     "source": "glyph",
+     "semantic": "源"
+    },
+    {
+     "char": "除",
+     "prob": 0.120611,
+     "source": "glyph",
+     "semantic": "除"
+    },
+    {
+     "char": "顧",
+     "prob": 0.119796,
+     "source": "glyph",
+     "semantic": "顧"
+    },
+    {
+     "char": "棟",
+     "prob": 0.118462,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "開",
+     "prob": 0.115808,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "原",
+     "prob": 0.114073,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "固",
+     "prob": 0.114047,
+     "source": "glyph",
+     "semantic": "固"
+    },
+    {
+     "char": "間",
+     "prob": 0.112778,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "陳",
+     "prob": 0.063789,
+     "source": "rapidocr",
+     "semantic": "陳"
+    }
+   ],
+   "candidates_chars": [
+    "源",
+    "除",
+    "顧",
+    "棟",
+    "開",
+    "原",
+    "固",
+    "間",
+    "陳"
+   ],
+   "gold": "陳",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "源",
+    "raw_pick": "原",
+    "raw_margin": 0.0139,
+    "final_decision": "源",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:5:9:1",
+   "column_id": "vol01:5:9",
+   "page": "5",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "原本風雅如顧棟高陳祖",
+   "context_after": "啟運沈德潛輩亦各著成",
+   "candidates": [
+    {
+     "char": "在",
+     "prob": 0.226458,
+     "source": "glyph",
+     "semantic": "在"
+    },
+    {
+     "char": "往",
+     "prob": 0.217622,
+     "source": "glyph",
+     "semantic": "往"
+    },
+    {
+     "char": "倡",
+     "prob": 0.215198,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "插",
+     "prob": 0.214719,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "任",
+     "prob": 0.126004,
+     "source": "rapidocr",
+     "semantic": "任"
+    }
+   ],
+   "candidates_chars": [
+    "在",
+    "往",
+    "倡",
+    "插",
+    "任"
+   ],
+   "gold": "任",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "在",
+    "raw_pick": "在",
+    "raw_margin": 0.0088,
+    "final_decision": "在",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:1:15",
+   "column_id": "vol01:6:1",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "行查明在坊肆者或量給",
+   "context_after": "家藏者或官爲裝印其有",
+   "candidates": [
+    {
+     "char": "領",
+     "prob": 0.124066,
+     "source": "glyph",
+     "semantic": "領"
+    },
+    {
+     "char": "倡",
+     "prob": 0.120481,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "類",
+     "prob": 0.119393,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "牘",
+     "prob": 0.118344,
+     "source": "glyph",
+     "semantic": "牘"
+    },
+    {
+     "char": "讀",
+     "prob": 0.116103,
+     "source": "glyph",
+     "semantic": "讀"
+    },
+    {
+     "char": "實",
+     "prob": 0.115092,
+     "source": "glyph",
+     "semantic": "實"
+    },
+    {
+     "char": "因",
+     "prob": 0.114273,
+     "source": "glyph",
+     "semantic": "因"
+    },
+    {
+     "char": "傳",
+     "prob": 0.112455,
+     "source": "glyph",
+     "semantic": "傳"
+    },
+    {
+     "char": "價",
+     "prob": 0.059793,
+     "source": "rapidocr",
+     "semantic": "價"
+    }
+   ],
+   "candidates_chars": [
+    "領",
+    "倡",
+    "類",
+    "牘",
+    "讀",
+    "實",
+    "因",
+    "傳",
+    "價"
+   ],
+   "gold": "價",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "領",
+    "raw_pick": "傳",
+    "raw_margin": 0.0991,
+    "final_decision": "領",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:1:20",
+   "column_id": "vol01:6:1",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "肆者或量給價家藏者或",
+   "context_after": "爲裝印其有未經鐫刊祇",
+   "candidates": [
+    {
+     "char": "言",
+     "prob": 0.18868,
+     "source": "glyph",
+     "semantic": "言"
+    },
+    {
+     "char": "富",
+     "prob": 0.184501,
+     "source": "glyph",
+     "semantic": "富"
+    },
+    {
+     "char": "書",
+     "prob": 0.178374,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "高",
+     "prob": 0.174838,
+     "source": "glyph",
+     "semantic": "高"
+    },
+    {
+     "char": "當",
+     "prob": 0.173331,
+     "source": "glyph",
+     "semantic": "當"
+    },
+    {
+     "char": "官",
+     "prob": 0.100276,
+     "source": "rapidocr",
+     "semantic": "官"
+    }
+   ],
+   "candidates_chars": [
+    "言",
+    "富",
+    "書",
+    "高",
+    "當",
+    "官"
+   ],
+   "gold": "官",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "言",
+    "raw_pick": "當",
+    "raw_margin": 0.0057,
+    "final_decision": "言",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:1:5",
+   "column_id": "vol01:6:1",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "均應概行",
+   "context_after": "明在坊肆者或量給價家",
+   "candidates": [
+    {
+     "char": "暨",
+     "prob": 0.121691,
+     "source": "glyph",
+     "semantic": "暨"
+    },
+    {
+     "char": "覔",
+     "prob": 0.121639,
+     "source": "glyph",
+     "semantic": "覔"
+    },
+    {
+     "char": "薈",
+     "prob": 0.119538,
+     "source": "glyph",
+     "semantic": "薈"
+    },
+    {
+     "char": "望",
+     "prob": 0.117978,
+     "source": "glyph",
+     "semantic": "望"
+    },
+    {
+     "char": "登",
+     "prob": 0.116225,
+     "source": "glyph",
+     "semantic": "登"
+    },
+    {
+     "char": "壽",
+     "prob": 0.114382,
+     "source": "glyph",
+     "semantic": "壽"
+    },
+    {
+     "char": "輩",
+     "prob": 0.113441,
+     "source": "glyph",
+     "semantic": "輩"
+    },
+    {
+     "char": "宜",
+     "prob": 0.110669,
+     "source": "glyph",
+     "semantic": "宜"
+    },
+    {
+     "char": "查",
+     "prob": 0.064436,
+     "source": "rapidocr",
+     "semantic": "查"
+    }
+   ],
+   "candidates_chars": [
+    "暨",
+    "覔",
+    "薈",
+    "望",
+    "登",
+    "壽",
+    "輩",
+    "宜",
+    "查"
+   ],
+   "gold": "查",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "暨",
+    "raw_pick": "輩",
+    "raw_margin": 0.1862,
+    "final_decision": "暨",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:2:14",
+   "column_id": "vol01:6:2",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "其有未經鐫刊祇係抄本",
+   "context_after": "留者不妨繕錄副本仍將",
+   "candidates": [
+    {
+     "char": "亦",
+     "prob": 0.281397,
+     "source": "glyph",
+     "semantic": "亦"
+    },
+    {
+     "char": "在",
+     "prob": 0.280607,
+     "source": "glyph",
+     "semantic": "在"
+    },
+    {
+     "char": "有",
+     "prob": 0.279943,
+     "source": "glyph",
+     "semantic": "有"
+    },
+    {
+     "char": "存",
+     "prob": 0.158053,
+     "source": "rapidocr",
+     "semantic": "存"
+    }
+   ],
+   "candidates_chars": [
+    "亦",
+    "在",
+    "有",
+    "存"
+   ],
+   "gold": "存",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "亦",
+    "raw_pick": "亦",
+    "raw_margin": 0.6077,
+    "final_decision": "亦",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:2:18",
+   "column_id": "vol01:6:2",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "鐫刊祇係抄本存留者不",
+   "context_after": "繕錄副本仍將原書給還",
+   "candidates": [
+    {
+     "char": "訪",
+     "prob": 0.186137,
+     "source": "glyph",
+     "semantic": "訪"
+    },
+    {
+     "char": "插",
+     "prob": 0.182117,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "如",
+     "prob": 0.180219,
+     "source": "glyph",
+     "semantic": "如"
+    },
+    {
+     "char": "嫁",
+     "prob": 0.17729,
+     "source": "glyph",
+     "semantic": "嫁"
+    },
+    {
+     "char": "族",
+     "prob": 0.173795,
+     "source": "glyph",
+     "semantic": "族"
+    },
+    {
+     "char": "妨",
+     "prob": 0.100441,
+     "source": "rapidocr",
+     "semantic": "妨"
+    }
+   ],
+   "candidates_chars": [
+    "訪",
+    "插",
+    "如",
+    "嫁",
+    "族",
+    "妨"
+   ],
+   "gold": "妨",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "訪",
+    "raw_pick": "如",
+    "raw_margin": 0.0872,
+    "final_decision": "訪",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:3:16",
+   "column_id": "vol01:6:3",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "書給還並嚴飭所屬一切",
+   "context_after": "爲經理毋使吏胥藉端滋",
+   "candidates": [
+    {
+     "char": "等",
+     "prob": 0.225733,
+     "source": "glyph",
+     "semantic": "等"
+    },
+    {
+     "char": "書",
+     "prob": 0.222437,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "著",
+     "prob": 0.216893,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "若",
+     "prob": 0.212889,
+     "source": "glyph",
+     "semantic": "若"
+    },
+    {
+     "char": "善",
+     "prob": 0.122048,
+     "source": "rapidocr",
+     "semantic": "善"
+    }
+   ],
+   "candidates_chars": [
+    "等",
+    "書",
+    "著",
+    "若",
+    "善"
+   ],
+   "gold": "善",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "等",
+    "raw_pick": "著",
+    "raw_margin": 0.3329,
+    "final_decision": "等",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:3:20",
+   "column_id": "vol01:6:3",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "嚴飭所屬一切善爲經理",
+   "context_after": "使吏胥藉端滋擾但各省",
+   "candidates": [
+    {
+     "char": "世",
+     "prob": 0.804829,
+     "source": "glyph",
+     "semantic": "世"
+    },
+    {
+     "char": "毋",
+     "prob": 0.195171,
+     "source": "rapidocr",
+     "semantic": "毋"
+    }
+   ],
+   "candidates_chars": [
+    "世",
+    "毋"
+   ],
+   "gold": "毋",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "世",
+    "raw_pick": "世",
+    "raw_margin": 0.483,
+    "final_decision": "世",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:3:4",
+   "column_id": "vol01:6:3",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "存留者不妨繕錄副本仍",
+   "context_after": "原書給還並嚴飭所屬一",
+   "candidates": [
+    {
+     "char": "府",
+     "prob": 0.142456,
+     "source": "glyph",
+     "semantic": "府"
+    },
+    {
+     "char": "時",
+     "prob": 0.137591,
+     "source": "glyph",
+     "semantic": "時"
+    },
+    {
+     "char": "屑",
+     "prob": 0.136707,
+     "source": "glyph",
+     "semantic": "屑"
+    },
+    {
+     "char": "庸",
+     "prob": 0.136707,
+     "source": "glyph",
+     "semantic": "庸"
+    },
+    {
+     "char": "歷",
+     "prob": 0.135914,
+     "source": "glyph",
+     "semantic": "曆"
+    },
+    {
+     "char": "潛",
+     "prob": 0.131842,
+     "source": "glyph",
+     "semantic": "潛"
+    },
+    {
+     "char": "備",
+     "prob": 0.129768,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "將",
+     "prob": 0.049016,
+     "source": "rapidocr",
+     "semantic": "將"
+    }
+   ],
+   "candidates_chars": [
+    "府",
+    "時",
+    "屑",
+    "庸",
+    "歷",
+    "潛",
+    "備",
+    "將"
+   ],
+   "gold": "將",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "府",
+    "raw_pick": "將",
+    "raw_margin": 0.1475,
+    "final_decision": "府",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:3:8",
+   "column_id": "vol01:6:3",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "妨繕錄副本仍將原書給",
+   "context_after": "並嚴飭所屬一切善爲經",
+   "candidates": [
+    {
+     "char": "通",
+     "prob": 0.137523,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "過",
+     "prob": 0.137406,
+     "source": "glyph",
+     "semantic": "過"
+    },
+    {
+     "char": "運",
+     "prob": 0.135966,
+     "source": "glyph",
+     "semantic": "運"
+    },
+    {
+     "char": "道",
+     "prob": 0.135312,
+     "source": "glyph",
+     "semantic": "道"
+    },
+    {
+     "char": "逸",
+     "prob": 0.131122,
+     "source": "glyph",
+     "semantic": "逸"
+    },
+    {
+     "char": "鑑",
+     "prob": 0.13086,
+     "source": "glyph",
+     "semantic": "鑑"
+    },
+    {
+     "char": "插",
+     "prob": 0.127049,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "還",
+     "prob": 0.064761,
+     "source": "rapidocr",
+     "semantic": "還"
+    }
+   ],
+   "candidates_chars": [
+    "通",
+    "過",
+    "運",
+    "道",
+    "逸",
+    "鑑",
+    "插",
+    "還"
+   ],
+   "gold": "還",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "通",
+    "raw_pick": "還",
+    "raw_margin": 0.357,
+    "final_decision": "通",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:4:2",
+   "column_id": "vol01:6:4",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "所屬一切善爲經理毋使",
+   "context_after": "胥藉端滋擾但各省蒐輯",
+   "candidates": [
+    {
+     "char": "史",
+     "prob": 0.229909,
+     "source": "glyph",
+     "semantic": "史"
+    },
+    {
+     "char": "文",
+     "prob": 0.218903,
+     "source": "glyph",
+     "semantic": "文"
+    },
+    {
+     "char": "使",
+     "prob": 0.217292,
+     "source": "glyph",
+     "semantic": "使"
+    },
+    {
+     "char": "其",
+     "prob": 0.212012,
+     "source": "glyph",
+     "semantic": "其"
+    },
+    {
+     "char": "吏",
+     "prob": 0.121883,
+     "source": "rapidocr",
+     "semantic": "吏"
+    }
+   ],
+   "candidates_chars": [
+    "史",
+    "文",
+    "使",
+    "其",
+    "吏"
+   ],
+   "gold": "吏",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "史",
+    "raw_pick": "其",
+    "raw_margin": 0.316,
+    "final_decision": "史",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:4:3",
+   "column_id": "vol01:6:4",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "屬一切善爲經理毋使吏",
+   "context_after": "藉端滋擾但各省蒐輯之",
+   "candidates": [
+    {
+     "char": "蓄",
+     "prob": 0.185896,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "舊",
+     "prob": 0.182996,
+     "source": "glyph",
+     "semantic": "舊"
+    },
+    {
+     "char": "書",
+     "prob": 0.179331,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "有",
+     "prob": 0.178156,
+     "source": "glyph",
+     "semantic": "有"
+    },
+    {
+     "char": "薈",
+     "prob": 0.177372,
+     "source": "glyph",
+     "semantic": "薈"
+    },
+    {
+     "char": "胥",
+     "prob": 0.09625,
+     "source": "rapidocr",
+     "semantic": "胥"
+    }
+   ],
+   "candidates_chars": [
+    "蓄",
+    "舊",
+    "書",
+    "有",
+    "薈",
+    "胥"
+   ],
+   "gold": "胥",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "蓄",
+    "raw_pick": "胥",
+    "raw_margin": 0.2787,
+    "final_decision": "蓄",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:4:4",
+   "column_id": "vol01:6:4",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "一切善爲經理毋使吏胥",
+   "context_after": "端滋擾但各省蒐輯之書",
+   "candidates": [
+    {
+     "char": "蓄",
+     "prob": 0.120567,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "藏",
+     "prob": 0.119517,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "舊",
+     "prob": 0.118688,
+     "source": "glyph",
+     "semantic": "舊"
+    },
+    {
+     "char": "庸",
+     "prob": 0.117444,
+     "source": "glyph",
+     "semantic": "庸"
+    },
+    {
+     "char": "騖",
+     "prob": 0.117055,
+     "source": "glyph",
+     "semantic": "騖"
+    },
+    {
+     "char": "著",
+     "prob": 0.11686,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "書",
+     "prob": 0.115201,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "若",
+     "prob": 0.11178,
+     "source": "glyph",
+     "semantic": "若"
+    },
+    {
+     "char": "藉",
+     "prob": 0.062888,
+     "source": "rapidocr",
+     "semantic": "借"
+    }
+   ],
+   "candidates_chars": [
+    "蓄",
+    "藏",
+    "舊",
+    "庸",
+    "騖",
+    "著",
+    "書",
+    "若",
+    "藉"
+   ],
+   "gold": "藉",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "蓄",
+    "raw_pick": "書",
+    "raw_margin": 0.1851,
+    "final_decision": "蓄",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:4:5",
+   "column_id": "vol01:6:4",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "切善爲經理毋使吏胥藉",
+   "context_after": "滋擾但各省蒐輯之書卷",
+   "candidates": [
+    {
+     "char": "精",
+     "prob": 0.182976,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "編",
+     "prob": 0.180346,
+     "source": "glyph",
+     "semantic": "編"
+    },
+    {
+     "char": "均",
+     "prob": 0.178876,
+     "source": "glyph",
+     "semantic": "均"
+    },
+    {
+     "char": "輯",
+     "prob": 0.178275,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "插",
+     "prob": 0.176888,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "端",
+     "prob": 0.102639,
+     "source": "rapidocr",
+     "semantic": "端"
+    }
+   ],
+   "candidates_chars": [
+    "精",
+    "編",
+    "均",
+    "輯",
+    "插",
+    "端"
+   ],
+   "gold": "端",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "精",
+    "raw_pick": "編",
+    "raw_margin": 0.1591,
+    "final_decision": "精",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:5:17",
+   "column_id": "vol01:6:5",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "呈送煩複皆所不免著該",
+   "context_after": "撫等先將各書敘列目錄",
+   "candidates": [
+    {
+     "char": "書",
+     "prob": 0.158878,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "蓄",
+     "prob": 0.15833,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "庸",
+     "prob": 0.152034,
+     "source": "glyph",
+     "semantic": "庸"
+    },
+    {
+     "char": "著",
+     "prob": 0.152018,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "薈",
+     "prob": 0.150622,
+     "source": "glyph",
+     "semantic": "薈"
+    },
+    {
+     "char": "胥",
+     "prob": 0.145075,
+     "source": "glyph",
+     "semantic": "胥"
+    },
+    {
+     "char": "督",
+     "prob": 0.083043,
+     "source": "rapidocr",
+     "semantic": "督"
+    }
+   ],
+   "candidates_chars": [
+    "書",
+    "蓄",
+    "庸",
+    "著",
+    "薈",
+    "胥",
+    "督"
+   ],
+   "gold": "督",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "書",
+    "raw_pick": "督",
+    "raw_margin": 0.6816,
+    "final_decision": "書",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:5:4",
+   "column_id": "vol01:6:5",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "書卷帙必多若不加之鑑",
+   "context_after": "悉令呈送煩複皆所不免",
+   "candidates": [
+    {
+     "char": "副",
+     "prob": 0.390005,
+     "source": "glyph",
+     "semantic": "副"
+    },
+    {
+     "char": "則",
+     "prob": 0.388677,
+     "source": "glyph",
+     "semantic": "則"
+    },
+    {
+     "char": "別",
+     "prob": 0.221317,
+     "source": "rapidocr",
+     "semantic": "別"
+    }
+   ],
+   "candidates_chars": [
+    "副",
+    "則",
+    "別"
+   ],
+   "gold": "別",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "副",
+    "raw_pick": "則",
+    "raw_margin": 0.6066,
+    "final_decision": "副",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:6:19",
+   "column_id": "vol01:6:6",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "係某朝某人所著書中要",
+   "context_after": "何在簡明開載具摺奏聞",
+   "candidates": [
+    {
+     "char": "自",
+     "prob": 0.225092,
+     "source": "glyph",
+     "semantic": "自"
+    },
+    {
+     "char": "官",
+     "prob": 0.218924,
+     "source": "glyph",
+     "semantic": "官"
+    },
+    {
+     "char": "富",
+     "prob": 0.218138,
+     "source": "glyph",
+     "semantic": "富"
+    },
+    {
+     "char": "當",
+     "prob": 0.215213,
+     "source": "glyph",
+     "semantic": "當"
+    },
+    {
+     "char": "旨",
+     "prob": 0.122633,
+     "source": "rapidocr",
+     "semantic": "旨"
+    }
+   ],
+   "candidates_chars": [
+    "自",
+    "官",
+    "富",
+    "當",
+    "旨"
+   ],
+   "gold": "旨",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "自",
+    "raw_pick": "旨",
+    "raw_margin": 0.2687,
+    "final_decision": "自",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:6:20",
+   "column_id": "vol01:6:6",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "某朝某人所著書中要旨",
+   "context_after": "在簡明開載具摺奏聞候",
+   "candidates": [
+    {
+     "char": "倡",
+     "prob": 0.221835,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "價",
+     "prob": 0.219355,
+     "source": "glyph",
+     "semantic": "價"
+    },
+    {
+     "char": "備",
+     "prob": 0.218829,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "仍",
+     "prob": 0.214846,
+     "source": "glyph",
+     "semantic": "仍"
+    },
+    {
+     "char": "何",
+     "prob": 0.125135,
+     "source": "rapidocr",
+     "semantic": "何"
+    }
+   ],
+   "candidates_chars": [
+    "倡",
+    "價",
+    "備",
+    "仍",
+    "何"
+   ],
+   "gold": "何",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "倡",
+    "raw_pick": "仍",
+    "raw_margin": 0.1287,
+    "final_decision": "倡",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:7:9",
+   "column_id": "vol01:6:7",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "旨何在簡明開載具摺奏",
+   "context_after": "候彚齊後令廷臣撿覈有",
+   "candidates": [
+    {
+     "char": "間",
+     "prob": 0.145344,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "閱",
+     "prob": 0.141277,
+     "source": "glyph",
+     "semantic": "閱"
+    },
+    {
+     "char": "闡",
+     "prob": 0.138366,
+     "source": "glyph",
+     "semantic": "闡"
+    },
+    {
+     "char": "開",
+     "prob": 0.137555,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "關",
+     "prob": 0.135815,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "誦",
+     "prob": 0.133548,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "圖",
+     "prob": 0.130967,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "聞",
+     "prob": 0.037128,
+     "source": "rapidocr",
+     "semantic": "聞"
+    }
+   ],
+   "candidates_chars": [
+    "間",
+    "閱",
+    "闡",
+    "開",
+    "關",
+    "誦",
+    "圖",
+    "聞"
+   ],
+   "gold": "聞",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "間",
+    "raw_pick": "圖",
+    "raw_margin": 0.0284,
+    "final_decision": "間",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:8:18",
+   "column_id": "vol01:6:8",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "知取進庶幾副在石渠用",
+   "context_after": "乙覽從此四庫七畧益昭",
+   "candidates": [
+    {
+     "char": "關",
+     "prob": 0.159869,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "諸",
+     "prob": 0.159715,
+     "source": "glyph",
+     "semantic": "諸"
+    },
+    {
+     "char": "備",
+     "prob": 0.15213,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "簡",
+     "prob": 0.149339,
+     "source": "glyph",
+     "semantic": "簡"
+    },
+    {
+     "char": "譜",
+     "prob": 0.148603,
+     "source": "glyph",
+     "semantic": "譜"
+    },
+    {
+     "char": "倡",
+     "prob": 0.148414,
+     "source": "glyph",
+     "semantic": "倡"
+    },
+    {
+     "char": "儲",
+     "prob": 0.081929,
+     "source": "rapidocr",
+     "semantic": "儲"
+    }
+   ],
+   "candidates_chars": [
+    "關",
+    "諸",
+    "備",
+    "簡",
+    "譜",
+    "倡",
+    "儲"
+   ],
+   "gold": "儲",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "關",
+    "raw_pick": "諸",
+    "raw_margin": 0.1015,
+    "final_decision": "關",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:8:4",
+   "column_id": "vol01:6:8",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "令廷臣撿覈有堪備閱者",
+   "context_after": "開單行知取進庶幾副在",
+   "candidates": [
+    {
+     "char": "著",
+     "prob": 0.221465,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "有",
+     "prob": 0.219067,
+     "source": "glyph",
+     "semantic": "有"
+    },
+    {
+     "char": "百",
+     "prob": 0.218588,
+     "source": "glyph",
+     "semantic": "百"
+    },
+    {
+     "char": "齊",
+     "prob": 0.214675,
+     "source": "glyph",
+     "semantic": "齊"
+    },
+    {
+     "char": "再",
+     "prob": 0.126205,
+     "source": "rapidocr",
+     "semantic": "再"
+    }
+   ],
+   "candidates_chars": [
+    "著",
+    "有",
+    "百",
+    "齊",
+    "再"
+   ],
+   "gold": "再",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "著",
+    "raw_pick": "有",
+    "raw_margin": 0.3302,
+    "final_decision": "著",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:8:8",
+   "column_id": "vol01:6:8",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "覈有堪備閱者再開單行",
+   "context_after": "取進庶幾副在石渠用儲",
+   "candidates": [
+    {
+     "char": "如",
+     "prob": 0.406111,
+     "source": "glyph",
+     "semantic": "如"
+    },
+    {
+     "char": "加",
+     "prob": 0.391036,
+     "source": "glyph",
+     "semantic": "加"
+    },
+    {
+     "char": "知",
+     "prob": 0.202853,
+     "source": "rapidocr",
+     "semantic": "知"
+    }
+   ],
+   "candidates_chars": [
+    "如",
+    "加",
+    "知"
+   ],
+   "gold": "知",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "如",
+    "raw_pick": "如",
+    "raw_margin": 0.1352,
+    "final_decision": "如",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:6:9:15",
+   "column_id": "vol01:6:9",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "七畧益昭美備稱朕意焉",
+   "context_after": "此",
+   "candidates": [
+    {
+     "char": "敘",
+     "prob": 0.167074,
+     "source": "glyph",
+     "semantic": "敘"
+    },
+    {
+     "char": "錄",
+     "prob": 0.162713,
+     "source": "glyph",
+     "semantic": "錄"
+    },
+    {
+     "char": "數",
+     "prob": 0.161495,
+     "source": "glyph",
+     "semantic": "數"
+    },
+    {
+     "char": "飭",
+     "prob": 0.15664,
+     "source": "glyph",
+     "semantic": "飭"
+    },
+    {
+     "char": "鑑",
+     "prob": 0.15265,
+     "source": "glyph",
+     "semantic": "鑑"
+    },
+    {
+     "char": "無",
+     "prob": 0.151502,
+     "source": "glyph",
+     "semantic": "無"
+    },
+    {
+     "char": "欽",
+     "prob": 0.047926,
+     "source": "rapidocr",
+     "semantic": "欽"
+    }
+   ],
+   "candidates_chars": [
+    "敘",
+    "錄",
+    "數",
+    "飭",
+    "鑑",
+    "無",
+    "欽"
+   ],
+   "gold": "欽",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "敘",
+    "raw_pick": "欽",
+    "raw_margin": 0.191,
+    "final_decision": "敘",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:9:3",
+   "column_id": "vol01:6:9",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "副在石渠用儲乙覽從此",
+   "context_after": "庫七畧益昭美備稱朕意",
+   "candidates": [
+    {
+     "char": "目",
+     "prob": 0.135725,
+     "source": "glyph",
+     "semantic": "目"
+    },
+    {
+     "char": "固",
+     "prob": 0.135619,
+     "source": "glyph",
+     "semantic": "固"
+    },
+    {
+     "char": "關",
+     "prob": 0.132175,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "圖",
+     "prob": 0.130804,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "溯",
+     "prob": 0.130377,
+     "source": "glyph",
+     "semantic": "溯"
+    },
+    {
+     "char": "開",
+     "prob": 0.129692,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "閱",
+     "prob": 0.129661,
+     "source": "glyph",
+     "semantic": "閱"
+    },
+    {
+     "char": "四",
+     "prob": 0.075946,
+     "source": "rapidocr",
+     "semantic": "四"
+    }
+   ],
+   "candidates_chars": [
+    "目",
+    "固",
+    "關",
+    "圖",
+    "溯",
+    "開",
+    "閱",
+    "四"
+   ],
+   "gold": "四",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "目",
+    "raw_pick": "四",
+    "raw_margin": 0.0083,
+    "final_decision": "目",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:9:4",
+   "column_id": "vol01:6:9",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "在石渠用儲乙覽從此四",
+   "context_after": "七畧益昭美備稱朕意焉",
+   "candidates": [
+    {
+     "char": "原",
+     "prob": 0.144506,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "庸",
+     "prob": 0.140606,
+     "source": "glyph",
+     "semantic": "庸"
+    },
+    {
+     "char": "章",
+     "prob": 0.139961,
+     "source": "glyph",
+     "semantic": "章"
+    },
+    {
+     "char": "康",
+     "prob": 0.138341,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "厯",
+     "prob": 0.136826,
+     "source": "glyph",
+     "semantic": "厯"
+    },
+    {
+     "char": "單",
+     "prob": 0.135941,
+     "source": "glyph",
+     "semantic": "單"
+    },
+    {
+     "char": "慮",
+     "prob": 0.13267,
+     "source": "glyph",
+     "semantic": "慮"
+    },
+    {
+     "char": "庫",
+     "prob": 0.03115,
+     "source": "rapidocr",
+     "semantic": "庫"
+    }
+   ],
+   "candidates_chars": [
+    "原",
+    "庸",
+    "章",
+    "康",
+    "厯",
+    "單",
+    "慮",
+    "庫"
+   ],
+   "gold": "庫",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "原",
+    "raw_pick": "庫",
+    "raw_margin": 0.3088,
+    "final_decision": "原",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:6:9:9",
+   "column_id": "vol01:6:9",
+   "page": "6",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "乙覽從此四庫七畧益昭",
+   "context_after": "備稱朕意焉欽此",
+   "candidates": [
+    {
+     "char": "集",
+     "prob": 0.154527,
+     "source": "glyph",
+     "semantic": "集"
+    },
+    {
+     "char": "裝",
+     "prob": 0.153642,
+     "source": "glyph",
+     "semantic": "裝"
+    },
+    {
+     "char": "某",
+     "prob": 0.153503,
+     "source": "glyph",
+     "semantic": "某"
+    },
+    {
+     "char": "業",
+     "prob": 0.15116,
+     "source": "glyph",
+     "semantic": "業"
+    },
+    {
+     "char": "藏",
+     "prob": 0.150934,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "其",
+     "prob": 0.149458,
+     "source": "glyph",
+     "semantic": "其"
+    },
+    {
+     "char": "美",
+     "prob": 0.086776,
+     "source": "rapidocr",
+     "semantic": "美"
+    }
+   ],
+   "candidates_chars": [
+    "集",
+    "裝",
+    "某",
+    "業",
+    "藏",
+    "其",
+    "美"
+   ],
+   "gold": "美",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "集",
+    "raw_pick": "其",
+    "raw_margin": 0.2505,
+    "final_decision": "集",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:1:10",
+   "column_id": "vol01:7:1",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "乾隆三十八年二月",
+   "context_after": "六日奉旨軍機大臣議覆",
+   "candidates": [
+    {
+     "char": "朝",
+     "prob": 0.188335,
+     "source": "glyph",
+     "semantic": "朝"
+    },
+    {
+     "char": "別",
+     "prob": 0.17852,
+     "source": "glyph",
+     "semantic": "別"
+    },
+    {
+     "char": "研",
+     "prob": 0.17736,
+     "source": "glyph",
+     "semantic": "研"
+    },
+    {
+     "char": "副",
+     "prob": 0.176967,
+     "source": "glyph",
+     "semantic": "副"
+    },
+    {
+     "char": "裨",
+     "prob": 0.176118,
+     "source": "glyph",
+     "semantic": "裨"
+    },
+    {
+     "char": "初",
+     "prob": 0.102699,
+     "source": "rapidocr",
+     "semantic": "初"
+    }
+   ],
+   "candidates_chars": [
+    "朝",
+    "別",
+    "研",
+    "副",
+    "裨",
+    "初"
+   ],
+   "gold": "初",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "朝",
+    "raw_pick": "初",
+    "raw_margin": 0.2934,
+    "final_decision": "朝",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:1:3",
+   "column_id": "vol01:7:1",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "乾",
+   "context_after": "三十八年二月初六日奉",
+   "candidates": [
+    {
+     "char": "圖",
+     "prob": 0.122918,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "蓄",
+     "prob": 0.119263,
+     "source": "glyph",
+     "semantic": "蓄"
+    },
+    {
+     "char": "望",
+     "prob": 0.118771,
+     "source": "glyph",
+     "semantic": "望"
+    },
+    {
+     "char": "應",
+     "prob": 0.116126,
+     "source": "glyph",
+     "semantic": "應"
+    },
+    {
+     "char": "庫",
+     "prob": 0.11501,
+     "source": "glyph",
+     "semantic": "庫"
+    },
+    {
+     "char": "固",
+     "prob": 0.114505,
+     "source": "glyph",
+     "semantic": "固"
+    },
+    {
+     "char": "廷",
+     "prob": 0.114159,
+     "source": "glyph",
+     "semantic": "廷"
+    },
+    {
+     "char": "臣",
+     "prob": 0.113016,
+     "source": "glyph",
+     "semantic": "臣"
+    },
+    {
+     "char": "隆",
+     "prob": 0.066231,
+     "source": "rapidocr",
+     "semantic": "隆"
+    }
+   ],
+   "candidates_chars": [
+    "圖",
+    "蓄",
+    "望",
+    "應",
+    "庫",
+    "固",
+    "廷",
+    "臣",
+    "隆"
+   ],
+   "gold": "隆",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "圖",
+    "raw_pick": "隆",
+    "raw_margin": 0.6168,
+    "final_decision": "圖",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:2:17",
+   "column_id": "vol01:7:2",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "朱筠條奏內將永樂大典",
+   "context_after": "取繕寫各自爲書一節議",
+   "candidates": [
+    {
+     "char": "撫",
+     "prob": 0.114128,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "擇",
+     "prob": 0.113613,
+     "source": "glyph",
+     "semantic": "擇"
+    },
+    {
+     "char": "極",
+     "prob": 0.111274,
+     "source": "glyph",
+     "semantic": "極"
+    },
+    {
+     "char": "揮",
+     "prob": 0.109508,
+     "source": "glyph",
+     "semantic": "揮"
+    },
+    {
+     "char": "觀",
+     "prob": 0.10904,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "擾",
+     "prob": 0.10876,
+     "source": "glyph",
+     "semantic": "擾"
+    },
+    {
+     "char": "運",
+     "prob": 0.107274,
+     "source": "glyph",
+     "semantic": "運"
+    },
+    {
+     "char": "通",
+     "prob": 0.105344,
+     "source": "glyph",
+     "semantic": "通"
+    },
+    {
+     "char": "裨",
+     "prob": 0.10497,
+     "source": "glyph",
+     "semantic": "裨"
+    },
+    {
+     "char": "操",
+     "prob": 0.016088,
+     "source": "rapidocr",
+     "semantic": "操"
+    }
+   ],
+   "candidates_chars": [
+    "撫",
+    "擇",
+    "極",
+    "揮",
+    "觀",
+    "擾",
+    "運",
+    "通",
+    "裨",
+    "操"
+   ],
+   "gold": "擇",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "撫",
+    "raw_pick": "通",
+    "raw_margin": 0.0365,
+    "final_decision": "撫",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:2:2",
+   "column_id": "vol01:7:2",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "八年二月初六日奉旨軍",
+   "context_after": "大臣議覆朱筠條奏內將",
+   "candidates": [
+    {
+     "char": "後",
+     "prob": 0.185475,
+     "source": "glyph",
+     "semantic": "後"
+    },
+    {
+     "char": "撫",
+     "prob": 0.183386,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "棟",
+     "prob": 0.182214,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "識",
+     "prob": 0.181218,
+     "source": "glyph",
+     "semantic": "識"
+    },
+    {
+     "char": "載",
+     "prob": 0.17204,
+     "source": "glyph",
+     "semantic": "載"
+    },
+    {
+     "char": "機",
+     "prob": 0.095667,
+     "source": "rapidocr",
+     "semantic": "機"
+    }
+   ],
+   "candidates_chars": [
+    "後",
+    "撫",
+    "棟",
+    "識",
+    "載",
+    "機"
+   ],
+   "gold": "機",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "後",
+    "raw_pick": "機",
+    "raw_margin": 0.201,
+    "final_decision": "後",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:2:7",
+   "column_id": "vol01:7:2",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "六日奉旨軍機大臣議覆",
+   "context_after": "筠條奏內將永樂大典擇",
+   "candidates": [
+    {
+     "char": "未",
+     "prob": 0.300109,
+     "source": "glyph",
+     "semantic": "未"
+    },
+    {
+     "char": "先",
+     "prob": 0.275849,
+     "source": "glyph",
+     "semantic": "先"
+    },
+    {
+     "char": "兼",
+     "prob": 0.270154,
+     "source": "glyph",
+     "semantic": "兼"
+    },
+    {
+     "char": "朱",
+     "prob": 0.084638,
+     "source": "rapidocr",
+     "semantic": "朱"
+    },
+    {
+     "char": "硃",
+     "prob": 0.069249,
+     "source": "rapidocr",
+     "semantic": "朱"
+    }
+   ],
+   "candidates_chars": [
+    "未",
+    "先",
+    "兼",
+    "朱",
+    "硃"
+   ],
+   "gold": "朱",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "未",
+    "raw_pick": "先",
+    "raw_margin": 0.0975,
+    "final_decision": "未",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:2:8",
+   "column_id": "vol01:7:2",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "日奉旨軍機大臣議覆朱",
+   "context_after": "條奏內將永樂大典擇取",
+   "candidates": [
+    {
+     "char": "鐫",
+     "prob": 0.22471,
+     "source": "glyph",
+     "semantic": "鐫"
+    },
+    {
+     "char": "集",
+     "prob": 0.22053,
+     "source": "glyph",
+     "semantic": "集"
+    },
+    {
+     "char": "精",
+     "prob": 0.216351,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "等",
+     "prob": 0.215579,
+     "source": "glyph",
+     "semantic": "等"
+    },
+    {
+     "char": "筠",
+     "prob": 0.122829,
+     "source": "rapidocr",
+     "semantic": "筠"
+    }
+   ],
+   "candidates_chars": [
+    "鐫",
+    "集",
+    "精",
+    "等",
+    "筠"
+   ],
+   "gold": "筠",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "鐫",
+    "raw_pick": "集",
+    "raw_margin": 0.0708,
+    "final_decision": "鐫",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:2:9",
+   "column_id": "vol01:7:2",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "奉旨軍機大臣議覆朱筠",
+   "context_after": "奏內將永樂大典擇取繕",
+   "candidates": [
+    {
+     "char": "係",
+     "prob": 0.136519,
+     "source": "glyph",
+     "semantic": "繫"
+    },
+    {
+     "char": "撫",
+     "prob": 0.135896,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "傳",
+     "prob": 0.13565,
+     "source": "glyph",
+     "semantic": "傳"
+    },
+    {
+     "char": "修",
+     "prob": 0.133607,
+     "source": "glyph",
+     "semantic": "修"
+    },
+    {
+     "char": "錄",
+     "prob": 0.130085,
+     "source": "glyph",
+     "semantic": "錄"
+    },
+    {
+     "char": "備",
+     "prob": 0.128854,
+     "source": "glyph",
+     "semantic": "備"
+    },
+    {
+     "char": "無",
+     "prob": 0.127492,
+     "source": "glyph",
+     "semantic": "無"
+    },
+    {
+     "char": "條",
+     "prob": 0.071897,
+     "source": "rapidocr",
+     "semantic": "條"
+    }
+   ],
+   "candidates_chars": [
+    "係",
+    "撫",
+    "傳",
+    "修",
+    "錄",
+    "備",
+    "無",
+    "條"
+   ],
+   "gold": "條",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "係",
+    "raw_pick": "傳",
+    "raw_margin": 0.0569,
+    "final_decision": "係",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:3:10",
+   "column_id": "vol01:7:3",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "寫各自爲書一節議請分",
+   "context_after": "各館修書翰林等官前往",
+   "candidates": [
+    {
+     "char": "棟",
+     "prob": 0.136574,
+     "source": "glyph",
+     "semantic": "棟"
+    },
+    {
+     "char": "類",
+     "prob": 0.134593,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "應",
+     "prob": 0.13336,
+     "source": "glyph",
+     "semantic": "應"
+    },
+    {
+     "char": "流",
+     "prob": 0.13289,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "觀",
+     "prob": 0.132743,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "原",
+     "prob": 0.132156,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "源",
+     "prob": 0.124848,
+     "source": "glyph",
+     "semantic": "源"
+    },
+    {
+     "char": "派",
+     "prob": 0.072836,
+     "source": "rapidocr",
+     "semantic": "派"
+    }
+   ],
+   "candidates_chars": [
+    "棟",
+    "類",
+    "應",
+    "流",
+    "觀",
+    "原",
+    "源",
+    "派"
+   ],
+   "gold": "派",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "棟",
+    "raw_pick": "類",
+    "raw_margin": 0.1823,
+    "final_decision": "棟",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:3:8",
+   "column_id": "vol01:7:3",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "取繕寫各自爲書一節議",
+   "context_after": "分派各館修書翰林等官",
+   "candidates": [
+    {
+     "char": "諸",
+     "prob": 0.159905,
+     "source": "glyph",
+     "semantic": "諸"
+    },
+    {
+     "char": "該",
+     "prob": 0.157151,
+     "source": "glyph",
+     "semantic": "該"
+    },
+    {
+     "char": "譜",
+     "prob": 0.157085,
+     "source": "glyph",
+     "semantic": "譜"
+    },
+    {
+     "char": "誦",
+     "prob": 0.152896,
+     "source": "glyph",
+     "semantic": "誦"
+    },
+    {
+     "char": "詩",
+     "prob": 0.152396,
+     "source": "glyph",
+     "semantic": "詩"
+    },
+    {
+     "char": "訪",
+     "prob": 0.142851,
+     "source": "glyph",
+     "semantic": "訪"
+    },
+    {
+     "char": "請",
+     "prob": 0.077716,
+     "source": "rapidocr",
+     "semantic": "請"
+    }
+   ],
+   "candidates_chars": [
+    "諸",
+    "該",
+    "譜",
+    "誦",
+    "詩",
+    "訪",
+    "請"
+   ],
+   "gold": "請",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "諸",
+    "raw_pick": "諸",
+    "raw_margin": 0.0285,
+    "final_decision": "諸",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:4:13",
+   "column_id": "vol01:7:4",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "恐責成不專徒致歲月久",
+   "context_after": "汗青無日葢此書移貯年",
+   "candidates": [
+    {
+     "char": "稱",
+     "prob": 0.098598,
+     "source": "glyph",
+     "semantic": "稱"
+    },
+    {
+     "char": "精",
+     "prob": 0.097282,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "舊",
+     "prob": 0.096874,
+     "source": "glyph",
+     "semantic": "舊"
+    },
+    {
+     "char": "摺",
+     "prob": 0.096268,
+     "source": "glyph",
+     "semantic": "翼"
+    },
+    {
+     "char": "藉",
+     "prob": 0.096237,
+     "source": "glyph",
+     "semantic": "借"
+    },
+    {
+     "char": "宿",
+     "prob": 0.096122,
+     "source": "glyph",
+     "semantic": "宿"
+    },
+    {
+     "char": "者",
+     "prob": 0.094972,
+     "source": "glyph",
+     "semantic": "者"
+    },
+    {
+     "char": "潛",
+     "prob": 0.090688,
+     "source": "glyph",
+     "semantic": "潛"
+    },
+    {
+     "char": "悉",
+     "prob": 0.090458,
+     "source": "glyph",
+     "semantic": "悉"
+    },
+    {
+     "char": "有",
+     "prob": 0.090343,
+     "source": "glyph",
+     "semantic": "有"
+    },
+    {
+     "char": "稽",
+     "prob": 0.052157,
+     "source": "rapidocr",
+     "semantic": "稽"
+    }
+   ],
+   "candidates_chars": [
+    "稱",
+    "精",
+    "舊",
+    "摺",
+    "藉",
+    "宿",
+    "者",
+    "潛",
+    "悉",
+    "有",
+    "稽"
+   ],
+   "gold": "稽",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "稱",
+    "raw_pick": "有",
+    "raw_margin": 0.0012,
+    "final_decision": "稱",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:5:1",
+   "column_id": "vol01:7:5",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "月久稽汗青無日葢此書",
+   "context_after": "貯年久既多殘缺又原編",
+   "candidates": [
+    {
+     "char": "稽",
+     "prob": 0.108887,
+     "source": "glyph",
+     "semantic": "稽"
+    },
+    {
+     "char": "舊",
+     "prob": 0.107324,
+     "source": "glyph",
+     "semantic": "舊"
+    },
+    {
+     "char": "稱",
+     "prob": 0.106689,
+     "source": "glyph",
+     "semantic": "稱"
+    },
+    {
+     "char": "書",
+     "prob": 0.106055,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "複",
+     "prob": 0.105409,
+     "source": "glyph",
+     "semantic": "復"
+    },
+    {
+     "char": "齊",
+     "prob": 0.103891,
+     "source": "glyph",
+     "semantic": "齊"
+    },
+    {
+     "char": "類",
+     "prob": 0.103234,
+     "source": "glyph",
+     "semantic": "類"
+    },
+    {
+     "char": "薈",
+     "prob": 0.102079,
+     "source": "glyph",
+     "semantic": "薈"
+    },
+    {
+     "char": "騖",
+     "prob": 0.100244,
+     "source": "glyph",
+     "semantic": "騖"
+    },
+    {
+     "char": "移",
+     "prob": 0.056188,
+     "source": "rapidocr",
+     "semantic": "移"
+    }
+   ],
+   "candidates_chars": [
+    "稽",
+    "舊",
+    "稱",
+    "書",
+    "複",
+    "齊",
+    "類",
+    "薈",
+    "騖",
+    "移"
+   ],
+   "gold": "移",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "稽",
+    "raw_pick": "稽",
+    "raw_margin": 0.0016,
+    "final_decision": "稽",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:6:12",
+   "column_id": "vol01:7:6",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "裂全文首尾難期貫串特",
+   "context_after": "當時採摭甚博其中或有",
+   "candidates": [
+    {
+     "char": "應",
+     "prob": 0.391942,
+     "source": "glyph",
+     "semantic": "應"
+    },
+    {
+     "char": "插",
+     "prob": 0.388684,
+     "source": "glyph",
+     "semantic": "插"
+    },
+    {
+     "char": "因",
+     "prob": 0.219374,
+     "source": "rapidocr",
+     "semantic": "因"
+    }
+   ],
+   "candidates_chars": [
+    "應",
+    "插",
+    "因"
+   ],
+   "gold": "因",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "應",
+    "raw_pick": "因",
+    "raw_margin": 0.4099,
+    "final_decision": "應",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:6:18",
+   "column_id": "vol01:7:6",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "期貫串特因當時採摭甚",
+   "context_after": "其中或有古書善本世不",
+   "candidates": [
+    {
+     "char": "間",
+     "prob": 0.289857,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "簡",
+     "prob": 0.276207,
+     "source": "glyph",
+     "semantic": "簡"
+    },
+    {
+     "char": "闡",
+     "prob": 0.27438,
+     "source": "glyph",
+     "semantic": "闡"
+    },
+    {
+     "char": "博",
+     "prob": 0.159556,
+     "source": "rapidocr",
+     "semantic": "博"
+    }
+   ],
+   "candidates_chars": [
+    "間",
+    "簡",
+    "闡",
+    "博"
+   ],
+   "gold": "博",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "間",
+    "raw_pick": "簡",
+    "raw_margin": 0.1263,
+    "final_decision": "間",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:6:2",
+   "column_id": "vol01:7:6",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "體例係分韻類次先巳割",
+   "context_after": "全文首尾難期貫串特因",
+   "candidates": [
+    {
+     "char": "書",
+     "prob": 0.160624,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "羅",
+     "prob": 0.158066,
+     "source": "glyph",
+     "semantic": "羅"
+    },
+    {
+     "char": "典",
+     "prob": 0.156761,
+     "source": "glyph",
+     "semantic": "典"
+    },
+    {
+     "char": "瑣",
+     "prob": 0.154521,
+     "source": "glyph",
+     "semantic": "瑣"
+    },
+    {
+     "char": "某",
+     "prob": 0.154238,
+     "source": "glyph",
+     "semantic": "某"
+    },
+    {
+     "char": "其",
+     "prob": 0.152951,
+     "source": "glyph",
+     "semantic": "其"
+    },
+    {
+     "char": "裂",
+     "prob": 0.06284,
+     "source": "rapidocr",
+     "semantic": "裂"
+    }
+   ],
+   "candidates_chars": [
+    "書",
+    "羅",
+    "典",
+    "瑣",
+    "某",
+    "其",
+    "裂"
+   ],
+   "gold": "裂",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "書",
+    "raw_pick": "裂",
+    "raw_margin": 0.4747,
+    "final_decision": "書",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:6:7",
+   "column_id": "vol01:7:6",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "類次先巳割裂全文首尾",
+   "context_after": "期貫串特因當時採摭甚",
+   "candidates": [
+    {
+     "char": "勦",
+     "prob": 0.128085,
+     "source": "glyph",
+     "semantic": "勦"
+    },
+    {
+     "char": "羅",
+     "prob": 0.123478,
+     "source": "glyph",
+     "semantic": "羅"
+    },
+    {
+     "char": "概",
+     "prob": 0.122721,
+     "source": "glyph",
+     "semantic": "槩"
+    },
+    {
+     "char": "購",
+     "prob": 0.122254,
+     "source": "glyph",
+     "semantic": "購"
+    },
+    {
+     "char": "撫",
+     "prob": 0.119833,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "典",
+     "prob": 0.119214,
+     "source": "glyph",
+     "semantic": "典"
+    },
+    {
+     "char": "雅",
+     "prob": 0.118499,
+     "source": "glyph",
+     "semantic": "雅"
+    },
+    {
+     "char": "無",
+     "prob": 0.117963,
+     "source": "glyph",
+     "semantic": "無"
+    },
+    {
+     "char": "難",
+     "prob": 0.027954,
+     "source": "rapidocr",
+     "semantic": "難"
+    }
+   ],
+   "candidates_chars": [
+    "勦",
+    "羅",
+    "概",
+    "購",
+    "撫",
+    "典",
+    "雅",
+    "無",
+    "難"
+   ],
+   "gold": "難",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "勦",
+    "raw_pick": "無",
+    "raw_margin": 0.5079,
+    "final_decision": "勦",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:6:8",
+   "column_id": "vol01:7:6",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "次先巳割裂全文首尾難",
+   "context_after": "貫串特因當時採摭甚博",
+   "candidates": [
+    {
+     "char": "朝",
+     "prob": 0.410145,
+     "source": "glyph",
+     "semantic": "朝"
+    },
+    {
+     "char": "輯",
+     "prob": 0.372384,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "期",
+     "prob": 0.217471,
+     "source": "rapidocr",
+     "semantic": "期"
+    }
+   ],
+   "candidates_chars": [
+    "朝",
+    "輯",
+    "期"
+   ],
+   "gold": "期",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "朝",
+    "raw_pick": "朝",
+    "raw_margin": 0.2388,
+    "final_decision": "朝",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:7:10",
+   "column_id": "vol01:7:7",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "中或有古書善本世不恒",
+   "context_after": "今就各門彚訂可以湊合",
+   "candidates": [
+    {
+     "char": "風",
+     "prob": 0.303146,
+     "source": "glyph",
+     "semantic": "風"
+    },
+    {
+     "char": "蒐",
+     "prob": 0.302533,
+     "source": "glyph",
+     "semantic": "蒐"
+    },
+    {
+     "char": "免",
+     "prob": 0.291951,
+     "source": "glyph",
+     "semantic": "免"
+    },
+    {
+     "char": "見",
+     "prob": 0.10237,
+     "source": "rapidocr",
+     "semantic": "見"
+    }
+   ],
+   "candidates_chars": [
+    "風",
+    "蒐",
+    "免",
+    "見"
+   ],
+   "gold": "見",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "風",
+    "raw_pick": "風",
+    "raw_margin": 0.6685,
+    "final_decision": "風",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:7:12",
+   "column_id": "vol01:7:7",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "有古書善本世不恒見今",
+   "context_after": "各門彚訂可以湊合成部",
+   "candidates": [
+    {
+     "char": "購",
+     "prob": 0.223654,
+     "source": "glyph",
+     "semantic": "購"
+    },
+    {
+     "char": "藏",
+     "prob": 0.22353,
+     "source": "glyph",
+     "semantic": "藏"
+    },
+    {
+     "char": "乾",
+     "prob": 0.21814,
+     "source": "glyph",
+     "semantic": "乾"
+    },
+    {
+     "char": "前",
+     "prob": 0.211043,
+     "source": "glyph",
+     "semantic": "前"
+    },
+    {
+     "char": "就",
+     "prob": 0.123634,
+     "source": "rapidocr",
+     "semantic": "就"
+    }
+   ],
+   "candidates_chars": [
+    "購",
+    "藏",
+    "乾",
+    "前",
+    "就"
+   ],
+   "gold": "就",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "購",
+    "raw_pick": "乾",
+    "raw_margin": 0.0424,
+    "final_decision": "購",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:7:19",
+   "column_id": "vol01:7:7",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "恒見今就各門彚訂可以",
+   "context_after": "合成部者亦足廣名山石",
+   "candidates": [
+    {
+     "char": "奏",
+     "prob": 0.12705,
+     "source": "glyph",
+     "semantic": "奏"
+    },
+    {
+     "char": "康",
+     "prob": 0.120181,
+     "source": "glyph",
+     "semantic": "康"
+    },
+    {
+     "char": "撫",
+     "prob": 0.119192,
+     "source": "glyph",
+     "semantic": "撫"
+    },
+    {
+     "char": "輯",
+     "prob": 0.118827,
+     "source": "glyph",
+     "semantic": "輯"
+    },
+    {
+     "char": "擇",
+     "prob": 0.117418,
+     "source": "glyph",
+     "semantic": "擇"
+    },
+    {
+     "char": "流",
+     "prob": 0.116754,
+     "source": "glyph",
+     "semantic": "流"
+    },
+    {
+     "char": "實",
+     "prob": 0.116564,
+     "source": "glyph",
+     "semantic": "實"
+    },
+    {
+     "char": "嚴",
+     "prob": 0.115236,
+     "source": "glyph",
+     "semantic": "嚴"
+    },
+    {
+     "char": "湊",
+     "prob": 0.048778,
+     "source": "rapidocr",
+     "semantic": "湊"
+    }
+   ],
+   "candidates_chars": [
+    "奏",
+    "康",
+    "撫",
+    "輯",
+    "擇",
+    "流",
+    "實",
+    "嚴",
+    "湊"
+   ],
+   "gold": "湊",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "奏",
+    "raw_pick": "實",
+    "raw_margin": 0.0605,
+    "final_decision": "奏",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:8:5",
+   "column_id": "vol01:7:8",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "彚訂可以湊合成部者亦",
+   "context_after": "廣名山石室之藏著卽派",
+   "candidates": [
+    {
+     "char": "見",
+     "prob": 0.63907,
+     "source": "glyph",
+     "semantic": "見"
+    },
+    {
+     "char": "足",
+     "prob": 0.36093,
+     "source": "rapidocr",
+     "semantic": "足"
+    }
+   ],
+   "candidates_chars": [
+    "見",
+    "足"
+   ],
+   "gold": "足",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "見",
+    "raw_pick": "足",
+    "raw_margin": 0.3077,
+    "final_decision": "見",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:7:8:7",
+   "column_id": "vol01:7:8",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "可以湊合成部者亦足廣",
+   "context_after": "山石室之藏著卽派軍機",
+   "candidates": [
+    {
+     "char": "各",
+     "prob": 0.58288,
+     "source": "glyph",
+     "semantic": "各"
+    },
+    {
+     "char": "名",
+     "prob": 0.41712,
+     "source": "glyph",
+     "semantic": "名"
+    }
+   ],
+   "candidates_chars": [
+    "各",
+    "名"
+   ],
+   "gold": "名",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "各",
+    "raw_pick": "各",
+    "raw_margin": 0.0562,
+    "final_decision": "各",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:7:9:13",
+   "column_id": "vol01:7:9",
+   "page": "7",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "官仍於翰林等官內選定",
+   "context_after": "數責令及時專司",
+   "candidates": [
+    {
+     "char": "價",
+     "prob": 0.645004,
+     "source": "glyph",
+     "semantic": "價"
+    },
+    {
+     "char": "員",
+     "prob": 0.354996,
+     "source": "rapidocr",
+     "semantic": "員"
+    }
+   ],
+   "candidates_chars": [
+    "價",
+    "員"
+   ],
+   "gold": "員",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "價",
+    "raw_pick": "價",
+    "raw_margin": 0.2614,
+    "final_decision": "價",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:2:11",
+   "column_id": "vol01:8:2",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "其未經採錄而實在流傳",
+   "context_after": "久尚可裒綴成編者先行",
+   "candidates": [
+    {
+     "char": "巳",
+     "prob": 0.554441,
+     "source": "glyph",
+     "semantic": "巳"
+    },
+    {
+     "char": "已",
+     "prob": 0.445559,
+     "source": "glyph",
+     "semantic": "已"
+    }
+   ],
+   "candidates_chars": [
+    "巳",
+    "已"
+   ],
+   "gold": "巳",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "巳",
+    "raw_pick": "已",
+    "raw_margin": 0.8127,
+    "final_decision": "已",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:2:13",
+   "column_id": "vol01:8:2",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "經採錄而實在流傳巳久",
+   "context_after": "可裒綴成編者先行摘開",
+   "candidates": [
+    {
+     "char": "間",
+     "prob": 0.634545,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "尚",
+     "prob": 0.365455,
+     "source": "rapidocr",
+     "semantic": "尚"
+    }
+   ],
+   "candidates_chars": [
+    "間",
+    "尚"
+   ],
+   "gold": "尚",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "間",
+    "raw_pick": "間",
+    "raw_margin": 0.0173,
+    "final_decision": "間",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:3:16",
+   "column_id": "vol01:8:3",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "奏聞候朕裁定其應如何",
+   "context_after": "定規條卽著派出之大臣",
+   "candidates": [
+    {
+     "char": "副",
+     "prob": 0.226929,
+     "source": "glyph",
+     "semantic": "副"
+    },
+    {
+     "char": "圖",
+     "prob": 0.21871,
+     "source": "glyph",
+     "semantic": "圖"
+    },
+    {
+     "char": "關",
+     "prob": 0.217163,
+     "source": "glyph",
+     "semantic": "關"
+    },
+    {
+     "char": "酬",
+     "prob": 0.216275,
+     "source": "glyph",
+     "semantic": "酬"
+    },
+    {
+     "char": "酌",
+     "prob": 0.120922,
+     "source": "rapidocr",
+     "semantic": "酌"
+    }
+   ],
+   "candidates_chars": [
+    "副",
+    "圖",
+    "關",
+    "酬",
+    "酌"
+   ],
+   "gold": "酌",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "副",
+    "raw_pick": "酌",
+    "raw_margin": 0.6316,
+    "final_decision": "副",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:8:3:20",
+   "column_id": "vol01:8:3",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "裁定其應如何酌定規條",
+   "context_after": "著派出之大臣詳悉議奏",
+   "candidates": [
+    {
+     "char": "印",
+     "prob": 0.296505,
+     "source": "glyph",
+     "semantic": "印"
+    },
+    {
+     "char": "卽",
+     "prob": 0.249103,
+     "source": "glyph",
+     "semantic": "即"
+    },
+    {
+     "char": "如",
+     "prob": 0.227311,
+     "source": "glyph",
+     "semantic": "如"
+    },
+    {
+     "char": "部",
+     "prob": 0.227082,
+     "source": "glyph",
+     "semantic": "部"
+    }
+   ],
+   "candidates_chars": [
+    "印",
+    "卽",
+    "如",
+    "部"
+   ],
+   "gold": "卽",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "印",
+    "raw_pick": "如",
+    "raw_margin": 0.1964,
+    "final_decision": "印",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:3:7",
+   "column_id": "vol01:8:3",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "成編者先行摘開目錄奏",
+   "context_after": "候朕裁定其應如何酌定",
+   "candidates": [
+    {
+     "char": "開",
+     "prob": 0.247963,
+     "source": "glyph",
+     "semantic": "開"
+    },
+    {
+     "char": "聞",
+     "prob": 0.192447,
+     "source": "glyph",
+     "semantic": "聞"
+    },
+    {
+     "char": "閱",
+     "prob": 0.189998,
+     "source": "glyph",
+     "semantic": "閱"
+    },
+    {
+     "char": "間",
+     "prob": 0.188682,
+     "source": "glyph",
+     "semantic": "間"
+    },
+    {
+     "char": "關",
+     "prob": 0.180909,
+     "source": "glyph",
+     "semantic": "關"
+    }
+   ],
+   "candidates_chars": [
+    "開",
+    "聞",
+    "閱",
+    "間",
+    "關"
+   ],
+   "gold": "聞",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "開",
+    "raw_pick": "聞",
+    "raw_margin": 0.2923,
+    "final_decision": "開",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:8:5:15",
+   "column_id": "vol01:8:5",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "大旨敘於本書卷首之處",
+   "context_after": "欲悉仿劉向校書序錄成",
+   "candidates": [
+    {
+     "char": "若",
+     "prob": 0.447051,
+     "source": "glyph",
+     "semantic": "若"
+    },
+    {
+     "char": "葢",
+     "prob": 0.27682,
+     "source": "glyph",
+     "semantic": "葢"
+    },
+    {
+     "char": "著",
+     "prob": 0.276129,
+     "source": "glyph",
+     "semantic": "著"
+    }
+   ],
+   "candidates_chars": [
+    "若",
+    "葢",
+    "著"
+   ],
+   "gold": "若",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "若",
+    "raw_pick": "葢",
+    "raw_margin": 0.7369,
+    "final_decision": "葢",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:5:16",
+   "column_id": "vol01:8:5",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "旨敘於本書卷首之處若",
+   "context_after": "悉仿劉向校書序錄成規",
+   "candidates": [
+    {
+     "char": "帙",
+     "prob": 0.099575,
+     "source": "glyph",
+     "semantic": "帙"
+    },
+    {
+     "char": "觀",
+     "prob": 0.098077,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "復",
+     "prob": 0.097386,
+     "source": "glyph",
+     "semantic": "復"
+    },
+    {
+     "char": "飭",
+     "prob": 0.094782,
+     "source": "glyph",
+     "semantic": "飭"
+    },
+    {
+     "char": "概",
+     "prob": 0.094601,
+     "source": "glyph",
+     "semantic": "槩"
+    },
+    {
+     "char": "校",
+     "prob": 0.094293,
+     "source": "glyph",
+     "semantic": "校"
+    },
+    {
+     "char": "缺",
+     "prob": 0.094006,
+     "source": "glyph",
+     "semantic": "缺"
+    },
+    {
+     "char": "總",
+     "prob": 0.091881,
+     "source": "glyph",
+     "semantic": "總"
+    },
+    {
+     "char": "敘",
+     "prob": 0.091753,
+     "source": "glyph",
+     "semantic": "敘"
+    },
+    {
+     "char": "欽",
+     "prob": 0.091413,
+     "source": "glyph",
+     "semantic": "欽"
+    },
+    {
+     "char": "欲",
+     "prob": 0.028728,
+     "source": "rapidocr",
+     "semantic": "欲"
+    },
+    {
+     "char": "慾",
+     "prob": 0.023504,
+     "source": "rapidocr",
+     "semantic": "欲"
+    }
+   ],
+   "candidates_chars": [
+    "帙",
+    "觀",
+    "復",
+    "飭",
+    "概",
+    "校",
+    "缺",
+    "總",
+    "敘",
+    "欽",
+    "欲",
+    "慾"
+   ],
+   "gold": "欲",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "帙",
+    "raw_pick": "欲",
+    "raw_margin": 0.2095,
+    "final_decision": "帙",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:8:5:18",
+   "column_id": "vol01:8:5",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "於本書卷首之處若欲悉",
+   "context_after": "劉向校書序錄成規未免",
+   "candidates": [
+    {
+     "char": "坊",
+     "prob": 0.289559,
+     "source": "glyph",
+     "semantic": "坊"
+    },
+    {
+     "char": "訪",
+     "prob": 0.277711,
+     "source": "glyph",
+     "semantic": "訪"
+    },
+    {
+     "char": "飭",
+     "prob": 0.273603,
+     "source": "glyph",
+     "semantic": "飭"
+    },
+    {
+     "char": "仿",
+     "prob": 0.08752,
+     "source": "rapidocr",
+     "semantic": "仿"
+    },
+    {
+     "char": "彷",
+     "prob": 0.071607,
+     "source": "rapidocr",
+     "semantic": "髣"
+    }
+   ],
+   "candidates_chars": [
+    "坊",
+    "訪",
+    "飭",
+    "仿",
+    "彷"
+   ],
+   "gold": "仿",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "坊",
+    "raw_pick": "坊",
+    "raw_margin": 0.1855,
+    "final_decision": "坊",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:5:2",
+   "column_id": "vol01:8:5",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "朱筠所奏每書必校其得",
+   "context_after": "撮舉大旨敘於本書卷首",
+   "candidates": [
+    {
+     "char": "朱",
+     "prob": 0.289113,
+     "source": "glyph",
+     "semantic": "朱"
+    },
+    {
+     "char": "先",
+     "prob": 0.286743,
+     "source": "glyph",
+     "semantic": "先"
+    },
+    {
+     "char": "次",
+     "prob": 0.270399,
+     "source": "glyph",
+     "semantic": "次"
+    },
+    {
+     "char": "失",
+     "prob": 0.153744,
+     "source": "rapidocr",
+     "semantic": "失"
+    }
+   ],
+   "candidates_chars": [
+    "朱",
+    "先",
+    "次",
+    "失"
+   ],
+   "gold": "失",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "朱",
+    "raw_pick": "失",
+    "raw_margin": 0.3194,
+    "final_decision": "朱",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:8:6:3",
+   "column_id": "vol01:8:6",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "align",
+   "context_before": "之處若欲悉仿劉向校書",
+   "context_after": "錄成規未免過於繁冗但",
+   "candidates": [
+    {
+     "char": "原",
+     "prob": 0.644256,
+     "source": "glyph",
+     "semantic": "原"
+    },
+    {
+     "char": "序",
+     "prob": 0.355744,
+     "source": "rapidocr",
+     "semantic": "序"
+    }
+   ],
+   "candidates_chars": [
+    "原",
+    "序"
+   ],
+   "gold": "序",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "原",
+    "raw_pick": "原",
+    "raw_margin": 0.1504,
+    "final_decision": "原",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:8:8:7",
+   "column_id": "vol01:8:8",
+   "page": "8",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "夾本書之內者於檢查洵",
+   "context_after": "有益應俟移取各省購書",
+   "candidates": [
+    {
+     "char": "爲",
+     "prob": 0.321758,
+     "source": "glyph",
+     "semantic": "爲"
+    },
+    {
+     "char": "屬",
+     "prob": 0.310624,
+     "source": "glyph",
+     "semantic": "屬"
+    },
+    {
+     "char": "屑",
+     "prob": 0.304394,
+     "source": "glyph",
+     "semantic": "屑"
+    },
+    {
+     "char": "為",
+     "prob": 0.063225,
+     "source": "rapidocr",
+     "semantic": "爲"
+    }
+   ],
+   "candidates_chars": [
+    "爲",
+    "屬",
+    "屑",
+    "為"
+   ],
+   "gold": "為",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "爲",
+    "raw_pick": "爲",
+    "raw_margin": 0.0555,
+    "final_decision": "爲",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:1:5",
+   "column_id": "vol01:9:1",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "副頁右方用",
+   "context_after": "觀覽餘依議欽此乾隆三",
+   "candidates": [
+    {
+     "char": "使",
+     "prob": 0.122269,
+     "source": "glyph",
+     "semantic": "使"
+    },
+    {
+     "char": "價",
+     "prob": 0.120826,
+     "source": "glyph",
+     "semantic": "價"
+    },
+    {
+     "char": "但",
+     "prob": 0.118134,
+     "source": "glyph",
+     "semantic": "但"
+    },
+    {
+     "char": "親",
+     "prob": 0.116743,
+     "source": "glyph",
+     "semantic": "親"
+    },
+    {
+     "char": "領",
+     "prob": 0.116061,
+     "source": "glyph",
+     "semantic": "領"
+    },
+    {
+     "char": "觀",
+     "prob": 0.115056,
+     "source": "glyph",
+     "semantic": "觀"
+    },
+    {
+     "char": "後",
+     "prob": 0.114811,
+     "source": "glyph",
+     "semantic": "後"
+    },
+    {
+     "char": "俚",
+     "prob": 0.111797,
+     "source": "glyph",
+     "semantic": "俚"
+    },
+    {
+     "char": "便",
+     "prob": 0.064303,
+     "source": "rapidocr",
+     "semantic": "便"
+    }
+   ],
+   "candidates_chars": [
+    "使",
+    "價",
+    "但",
+    "親",
+    "領",
+    "觀",
+    "後",
+    "俚",
+    "便"
+   ],
+   "gold": "便",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "使",
+    "raw_pick": "後",
+    "raw_margin": 0.1944,
+    "final_decision": "使",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:6:19",
+   "column_id": "vol01:9:6",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "四庫及攷之書中別部區",
+   "context_after": "編韻分字意在貪多務得",
+   "candidates": [
+    {
+     "char": "且",
+     "prob": 0.286199,
+     "source": "glyph",
+     "semantic": "且"
+    },
+    {
+     "char": "軍",
+     "prob": 0.279898,
+     "source": "glyph",
+     "semantic": "軍"
+    },
+    {
+     "char": "宜",
+     "prob": 0.277377,
+     "source": "glyph",
+     "semantic": "宜"
+    },
+    {
+     "char": "函",
+     "prob": 0.156526,
+     "source": "rapidocr",
+     "semantic": "函"
+    }
+   ],
+   "candidates_chars": [
+    "且",
+    "軍",
+    "宜",
+    "函"
+   ],
+   "gold": "函",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "且",
+    "raw_pick": "且",
+    "raw_margin": 0.0473,
+    "final_decision": "且",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:6:3",
+   "column_id": "vol01:9:6",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "序交其言採掇蒐羅頗稱",
+   "context_after": "博謂足津逮四庫及攷之",
+   "candidates": [
+    {
+     "char": "潛",
+     "prob": 0.108356,
+     "source": "glyph",
+     "semantic": "潛"
+    },
+    {
+     "char": "洎",
+     "prob": 0.106773,
+     "source": "glyph",
+     "semantic": "洎"
+    },
+    {
+     "char": "法",
+     "prob": 0.106357,
+     "source": "glyph",
+     "semantic": "法"
+    },
+    {
+     "char": "稽",
+     "prob": 0.105905,
+     "source": "glyph",
+     "semantic": "稽"
+    },
+    {
+     "char": "售",
+     "prob": 0.103585,
+     "source": "glyph",
+     "semantic": "售"
+    },
+    {
+     "char": "淮",
+     "prob": 0.103311,
+     "source": "glyph",
+     "semantic": "淮"
+    },
+    {
+     "char": "注",
+     "prob": 0.103074,
+     "source": "glyph",
+     "semantic": "注"
+    },
+    {
+     "char": "精",
+     "prob": 0.101931,
+     "source": "glyph",
+     "semantic": "精"
+    },
+    {
+     "char": "進",
+     "prob": 0.10123,
+     "source": "glyph",
+     "semantic": "進"
+    },
+    {
+     "char": "浩",
+     "prob": 0.059478,
+     "source": "rapidocr",
+     "semantic": "浩"
+    }
+   ],
+   "candidates_chars": [
+    "潛",
+    "洎",
+    "法",
+    "稽",
+    "售",
+    "淮",
+    "注",
+    "精",
+    "進",
+    "浩"
+   ],
+   "gold": "浩",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "潛",
+    "raw_pick": "法",
+    "raw_margin": 0.0043,
+    "final_decision": "潛",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:6:7",
+   "column_id": "vol01:9:6",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "採掇蒐羅頗稱浩博謂足",
+   "context_after": "逮四庫及攷之書中別部",
+   "candidates": [
+    {
+     "char": "庫",
+     "prob": 0.159976,
+     "source": "glyph",
+     "semantic": "庫"
+    },
+    {
+     "char": "海",
+     "prob": 0.156552,
+     "source": "glyph",
+     "semantic": "海"
+    },
+    {
+     "char": "擇",
+     "prob": 0.156007,
+     "source": "glyph",
+     "semantic": "擇"
+    },
+    {
+     "char": "法",
+     "prob": 0.150641,
+     "source": "glyph",
+     "semantic": "法"
+    },
+    {
+     "char": "旨",
+     "prob": 0.146689,
+     "source": "glyph",
+     "semantic": "旨"
+    },
+    {
+     "char": "淮",
+     "prob": 0.14599,
+     "source": "glyph",
+     "semantic": "淮"
+    },
+    {
+     "char": "津",
+     "prob": 0.084145,
+     "source": "rapidocr",
+     "semantic": "津"
+    }
+   ],
+   "candidates_chars": [
+    "庫",
+    "海",
+    "擇",
+    "法",
+    "旨",
+    "淮",
+    "津"
+   ],
+   "gold": "津",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "庫",
+    "raw_pick": "法",
+    "raw_margin": 0.0199,
+    "final_decision": "庫",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:7:8",
+   "column_id": "vol01:9:7",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "區函編韻分字意在貪多",
+   "context_after": "得不出類書窠臼是以蹖",
+   "candidates": [
+    {
+     "char": "移",
+     "prob": 0.121424,
+     "source": "glyph",
+     "semantic": "移"
+    },
+    {
+     "char": "著",
+     "prob": 0.120567,
+     "source": "glyph",
+     "semantic": "著"
+    },
+    {
+     "char": "奏",
+     "prob": 0.11954,
+     "source": "glyph",
+     "semantic": "奏"
+    },
+    {
+     "char": "書",
+     "prob": 0.118449,
+     "source": "glyph",
+     "semantic": "書"
+    },
+    {
+     "char": "齊",
+     "prob": 0.116735,
+     "source": "glyph",
+     "semantic": "齊"
+    },
+    {
+     "char": "督",
+     "prob": 0.114462,
+     "source": "glyph",
+     "semantic": "督"
+    },
+    {
+     "char": "格",
+     "prob": 0.114254,
+     "source": "glyph",
+     "semantic": "格"
+    },
+    {
+     "char": "騖",
+     "prob": 0.11315,
+     "source": "glyph",
+     "semantic": "騖"
+    },
+    {
+     "char": "務",
+     "prob": 0.06142,
+     "source": "rapidocr",
+     "semantic": "務"
+    }
+   ],
+   "candidates_chars": [
+    "移",
+    "著",
+    "奏",
+    "書",
+    "齊",
+    "督",
+    "格",
+    "騖",
+    "務"
+   ],
+   "gold": "務",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "移",
+    "raw_pick": "務",
+    "raw_margin": 0.5823,
+    "final_decision": "移",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:9:8:16",
+   "column_id": "vol01:9:8",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "未能協卽如所用韻次不",
+   "context_after": "唐宋舊部惟以洪武正韻",
+   "candidates": [
+    {
+     "char": "俟",
+     "prob": 0.159421,
+     "source": "glyph",
+     "semantic": "俟"
+    },
+    {
+     "char": "使",
+     "prob": 0.155922,
+     "source": "glyph",
+     "semantic": "使"
+    },
+    {
+     "char": "係",
+     "prob": 0.15492,
+     "source": "glyph",
+     "semantic": "繫"
+    },
+    {
+     "char": "欽",
+     "prob": 0.15244,
+     "source": "glyph",
+     "semantic": "欽"
+    },
+    {
+     "char": "條",
+     "prob": 0.149876,
+     "source": "glyph",
+     "semantic": "條"
+    },
+    {
+     "char": "仿",
+     "prob": 0.144491,
+     "source": "glyph",
+     "semantic": "仿"
+    },
+    {
+     "char": "依",
+     "prob": 0.082929,
+     "source": "rapidocr",
+     "semantic": "依"
+    }
+   ],
+   "candidates_chars": [
+    "俟",
+    "使",
+    "係",
+    "欽",
+    "條",
+    "仿",
+    "依"
+   ],
+   "gold": "依",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "俟",
+    "raw_pick": "使",
+    "raw_margin": 0.0784,
+    "final_decision": "俟",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:8:8",
+   "column_id": "vol01:9:8",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "以蹖駁乖離於體例未能",
+   "context_after": "卽如所用韻次不依唐宋",
+   "candidates": [
+    {
+     "char": "勘",
+     "prob": 0.425177,
+     "source": "glyph",
+     "semantic": "勘"
+    },
+    {
+     "char": "摘",
+     "prob": 0.410825,
+     "source": "glyph",
+     "semantic": "摘"
+    },
+    {
+     "char": "協",
+     "prob": 0.163998,
+     "source": "rapidocr",
+     "semantic": "協"
+    }
+   ],
+   "candidates_chars": [
+    "勘",
+    "摘",
+    "協"
+   ],
+   "gold": "協",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "勘",
+    "raw_pick": "摘",
+    "raw_margin": 0.0753,
+    "final_decision": "勘",
+    "gate_would_rescue_if_lowered": false
+   }
+  },
+  {
+   "id": "vol01:9:9:17",
+   "column_id": "vol01:9:9",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "爲斷巳覺凌雜不倫況經",
+   "context_after": "爲羣",
+   "candidates": [
+    {
+     "char": "朝",
+     "prob": 0.184921,
+     "source": "glyph",
+     "semantic": "朝"
+    },
+    {
+     "char": "諭",
+     "prob": 0.184778,
+     "source": "glyph",
+     "semantic": "諭"
+    },
+    {
+     "char": "副",
+     "prob": 0.183732,
+     "source": "glyph",
+     "semantic": "副"
+    },
+    {
+     "char": "割",
+     "prob": 0.182502,
+     "source": "glyph",
+     "semantic": "割"
+    },
+    {
+     "char": "溯",
+     "prob": 0.174568,
+     "source": "glyph",
+     "semantic": "溯"
+    },
+    {
+     "char": "訓",
+     "prob": 0.089498,
+     "source": "rapidocr",
+     "semantic": "訓"
+    }
+   ],
+   "candidates_chars": [
+    "朝",
+    "諭",
+    "副",
+    "割",
+    "溯",
+    "訓"
+   ],
+   "gold": "訓",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "朝",
+    "raw_pick": "訓",
+    "raw_margin": 0.0202,
+    "final_decision": "朝",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:9:9:3",
+   "column_id": "vol01:9:9",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "韻次不依唐宋舊部惟以",
+   "context_after": "武正韻爲斷巳覺凌雜不",
+   "candidates": [
+    {
+     "char": "候",
+     "prob": 0.287861,
+     "source": "glyph",
+     "semantic": "候"
+    },
+    {
+     "char": "淺",
+     "prob": 0.277984,
+     "source": "glyph",
+     "semantic": "淺"
+    },
+    {
+     "char": "較",
+     "prob": 0.273609,
+     "source": "glyph",
+     "semantic": "較"
+    },
+    {
+     "char": "洪",
+     "prob": 0.160546,
+     "source": "rapidocr",
+     "semantic": "洪"
+    }
+   ],
+   "candidates_chars": [
+    "候",
+    "淺",
+    "較",
+    "洪"
+   ],
+   "gold": "洪",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "候",
+    "raw_pick": "洪",
+    "raw_margin": 0.051,
+    "final_decision": "候",
+    "gate_would_rescue_if_lowered": true
+   }
+  },
+  {
+   "id": "vol01:9:9:9",
+   "column_id": "vol01:9:9",
+   "page": "9",
+   "source_item": "vol01",
+   "origin": "human",
+   "context_before": "舊部惟以洪武正韻爲斷",
+   "context_after": "覺凌雜不倫況經訓爲羣",
+   "candidates": [
+    {
+     "char": "已",
+     "prob": 0.550934,
+     "source": "glyph",
+     "semantic": "已"
+    },
+    {
+     "char": "巳",
+     "prob": 0.449066,
+     "source": "glyph",
+     "semantic": "巳"
+    }
+   ],
+   "candidates_chars": [
+    "已",
+    "巳"
+   ],
+   "gold": "巳",
+   "current_strategy": {
+    "name": "gated_ngram",
+    "margin_gate": 0.7,
+    "context_window": 6,
+    "baseline_top1": "已",
+    "raw_pick": "已",
+    "raw_margin": 0.3016,
+    "final_decision": "已",
+    "gate_would_rescue_if_lowered": false
+   }
+  }
+ ]
+}
