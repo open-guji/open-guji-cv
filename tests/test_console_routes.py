@@ -65,10 +65,30 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 
 # ── 沙箱：必须在 import console.app 之前设好（模块级单例在 import 时就构造）──
+_SANDBOX_ENV = ("GUJI_FEEDBACK_DIR", "GUJI_BATCHES_DIR", "GUJI_DATASET_DIR")
+_SAVED_ENV = {k: os.environ.get(k) for k in _SANDBOX_ENV}
 _SANDBOX = Path(tempfile.mkdtemp(prefix="guji_console_snap_"))
 os.environ["GUJI_FEEDBACK_DIR"] = str(_SANDBOX / "feedback")
 os.environ["GUJI_BATCHES_DIR"] = str(_SANDBOX / "batches")
 os.environ["GUJI_DATASET_DIR"] = str(_SANDBOX / "dataset")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_sandbox_env():
+    """本文件跑完把这三个环境变量还原。
+
+    模块级设置是必须的（要赶在 import console.app 之前），但**不还原就会漏给
+    后面的测试文件**：pytest 按字母序跑，`test_console_routes` 在 `test_eval_v2`
+    之前，于是后者去这个已被删掉的临时沙箱里找金标，报
+    「金标路径不存在: /tmp/guji_console_snap_xxxx/dataset/char-normalization」。
+    2026-09-10 集成三条分支时实测到——单跑本文件看不见，跑全仓才暴露。
+    """
+    yield
+    for k, v in _SAVED_ENV.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 for _m in [m for m in list(sys.modules) if m.startswith("open_guji_cv.console")]:
     del sys.modules[_m]
 
