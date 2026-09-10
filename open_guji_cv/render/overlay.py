@@ -25,8 +25,19 @@ import numpy as np
 from ..core.anchor import x_tr_to_tl
 from ..core.book import load_book
 from ..core.spec import page_key
-from ..errors import ImageMissing, ProductMissing, Unsupported
+from ..errors import EncodeFailed, ImageMissing, ProductMissing, Unsupported
 from ..products.store import ProductStore
+
+
+def encode_png(img: np.ndarray, scale: float | None = None) -> bytes:
+    """缩放并编成 PNG 字节。控制台的 `_png` 与 `guji product raw|overlay|patch`
+    共用这一份——「同参同输出」是 C5 的验收判据，两边各写一遍就没法保证。"""
+    if scale and scale != 1.0:
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".png", img)
+    if not ok:
+        raise EncodeFailed("编码失败")
+    return buf.tobytes()
 
 
 def draw_vline(img: np.ndarray, v: dict, W: int, H: int, color, thick: int = 3) -> None:
