@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ..core.spec import StepSpec, column_key
 from ..core.step import RunContext, Step, register_step
-from ..products.kinds.cells import CellRec, ColumnCells, PageCells
+from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..utils.row_boundaries import effective_body_slots, segment_column
@@ -32,7 +32,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.6", unit="column",
+        id="row_segment", title="Step3 单列文字切分", version="1.7", unit="column",
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -95,7 +95,15 @@ class RowSegmentStep(Step):
                                [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
                 ))
             out.append(ColumnCells(ok=True, boundaries=[float(b) for b in r.boundaries],
-                                   cells=cells, **base))
+                                   cells=cells, cut_candidates=[
+                                       CutPointCandidates(
+                                           k=cp.k, y=cp.y, slot_above=cp.slot_above,
+                                           slot_below=cp.slot_below, chosen=cp.chosen,
+                                           candidates=[SeamCandidate(
+                                               kind=c.kind, y=c.y, seam_ink=c.seam_ink,
+                                               dev_max=c.dev_max) for c in cp.candidates],
+                                       ) for cp in r.cut_candidates],
+                                   **base))
         return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}
 
 
