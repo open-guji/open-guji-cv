@@ -53,7 +53,7 @@ ENDPOINTS: dict[str, dict] = {
     "glm": {
         "env": "GLM_API_KEY",
         "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-        "model": "glm-4-plus",
+        "model": "glm-4-plus",   # 协调者 2026-09-10 实测同题正确；glm-4-flash 便宜但答错过，见方案文档
     },
     "qwen": {
         "env": "DASHSCOPE_API_KEY",
@@ -64,11 +64,56 @@ ENDPOINTS: dict[str, dict] = {
 
 
 class NoAPIKeyError(RuntimeError):
-    """没有对应环境变量。调用方必须显式捕获并跳过、说明原因——
+    """两处都没找到对应 key。调用方必须显式捕获并跳过、说明原因——
 
     不许捕获后悄悄改用 ngram 兜底：那样上线后 key 失效/欠费，
     产物看起来仍然正常，只是又不知不觉地退回了旧策略。
     """
+
+
+# ── key 查找：环境变量 → overview 仓 .secret/api-keys.cfg ─────────────
+# 用户 2026-09-10 把两个 key 放进了 overview/.secret/api-keys.cfg（私有仓，
+# 已在 main）。**不写死绝对路径**——用本文件的实际位置反推工作区根，
+# 兼容 D:\workspace、WSL、云端三种布局（子会话须知 §一）。
+
+def _api_keys_cfg_path() -> Path:
+    override = os.environ.get("GUJI_API_KEYS_CFG")
+    if override:
+        return Path(override)
+    repo_root = Path(__file__).resolve().parents[2]     # open-guji-cv 仓根
+    return repo_root.parent / "overview" / ".secret" / "api-keys.cfg"
+
+
+def _parse_cfg(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        out[k.strip()] = v.strip()
+    return out
+
+
+def find_api_key(env_name: str) -> tuple[str | None, str]:
+    """(key 或 None, 来源说明)。来源只给「哪里」，绝不带 key 本身。"""
+    v = os.environ.get(env_name)
+    if v:
+        return v, "环境变量"
+    cfg_path = _api_keys_cfg_path()
+    cfg = _parse_cfg(cfg_path)
+    if env_name in cfg:
+        return cfg[env_name], str(cfg_path)
+    return None, f"环境变量 与 {cfg_path} 都没有"
+
+
+def redact_key(key: str) -> str:
+    """打日志前脱敏：只印前 6 位 + 长度（任务书 §二明确要求）。"""
+    if not key:
+        return "(empty)"
+    return f"{key[:6]}...(len={len(key)})"
 
 
 # ── 回答解析 ────────────────────────────────────────────────────────
@@ -170,6 +215,8 @@ class LLMAnswer:
     latency_s: float
     cached: bool = False
     error: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 class LLMContextJudge:
@@ -180,21 +227,24 @@ class LLMContextJudge:
 
     def __init__(self, provider: str, *, model: str | None = None,
                  cache_path: str | Path | None = None,
-                 timeout: float = 20.0, max_retries: int = 2):
+                 timeout: float = 20.0, max_retries: int = 2,
+                 rate_limit_s: float = 0.0):
         if provider not in ENDPOINTS:
             raise KeyError(f"未知 provider: {provider!r}（可用: {sorted(ENDPOINTS)}）")
         cfg = ENDPOINTS[provider]
-        key = os.environ.get(cfg["env"])
+        key, source = find_api_key(cfg["env"])
         if not key:
             raise NoAPIKeyError(
-                f"没有设环境变量 {cfg['env']}，跳过 provider={provider}。"
+                f"没找到 {cfg['env']}（{source}），跳过 provider={provider}。"
                 "调用方必须显式说明跳过原因，不许静默退回 ngram。")
         self.provider = provider
         self.model = model or cfg["model"]
+        self.key_source = source            # 只记「哪里」，不记 key 本身
         self._url = cfg["url"]
         self._api_key = key
         self._timeout = timeout
         self._max_retries = max_retries
+        self._rate_limit_s = rate_limit_s   # 每次真请求后的固定延迟，别把整批打爆
         self.cache_path = Path(cache_path) if cache_path else None
         self._cache: dict[str, dict] = {}
         if self.cache_path and self.cache_path.exists():
@@ -219,12 +269,14 @@ class LLMContextJudge:
             return LLMAnswer(item_id=item_id, provider=self.provider,
                              model=self.model, raw_text=c["raw_text"],
                              parsed_char=c["parsed_char"], parse_ok=c["parse_ok"],
-                             latency_s=0.0, cached=True)
+                             latency_s=0.0, cached=True,
+                             prompt_tokens=c.get("prompt_tokens", 0),
+                             completion_tokens=c.get("completion_tokens", 0))
         body = json.dumps({
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0,
-            "max_tokens": 64,
+            "max_tokens": 200,   # candidates 版要 JSON+理由时留够余量
         }).encode("utf-8")
         req = urllib.request.Request(
             self._url, data=body, method="POST",
@@ -239,14 +291,21 @@ class LLMContextJudge:
                     data = json.loads(resp.read().decode("utf-8"))
                 latency = time.time() - t0
                 text = data["choices"][0]["message"]["content"].strip()
+                usage = data.get("usage") or {}
+                ptoks = int(usage.get("prompt_tokens") or 0)
+                ctoks = int(usage.get("completion_tokens") or 0)
                 parsed, ok = parse_answer(text)
                 self._cache[ck] = {"raw_text": text, "parsed_char": parsed,
-                                   "parse_ok": ok}
+                                   "parse_ok": ok, "prompt_tokens": ptoks,
+                                   "completion_tokens": ctoks}
                 self._save_cache()
+                if self._rate_limit_s:
+                    time.sleep(self._rate_limit_s)
                 return LLMAnswer(item_id=item_id, provider=self.provider,
                                  model=self.model, raw_text=text,
                                  parsed_char=parsed, parse_ok=ok,
-                                 latency_s=latency)
+                                 latency_s=latency, prompt_tokens=ptoks,
+                                 completion_tokens=ctoks)
             except (urllib.error.URLError, urllib.error.HTTPError,
                    TimeoutError, ValueError, KeyError) as e:
                 last_err = e
