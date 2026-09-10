@@ -24,6 +24,7 @@ class ConsumeResult:
     added: int = 0
     updated: int = 0
     skipped: int = 0
+    no_lib: int = 0            # 正常裁决但按 no_glyph_lib 标志不建库的条数（非错误）
     errors: list[str] = None   # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -32,7 +33,8 @@ class ConsumeResult:
 
     def to_dict(self) -> dict:
         return {"consumer": self.consumer, "events": self.n_events, "added": self.added,
-                "updated": self.updated, "skipped": self.skipped, "errors": self.errors}
+                "updated": self.updated, "skipped": self.skipped, "no_lib": self.no_lib,
+                "errors": self.errors}
 
 
 # ── gold_add ─────────────────────────────────────────────────────────
@@ -172,6 +174,14 @@ def glyphdb_admit(events, db_path: str | None = None,
     `not_a_char` / `skip` 事件不进库（前者是判非字，后者是存疑跳过）。
     图块从 v2 的 `char_patch` 缓存取——那正是被裁决的那张图。
 
+    ## `no_glyph_lib`：选字正常裁决，但这张图不建库（2026-09-09）
+
+    字形有些无法修复的噪声（污墨、裂纹等），人仍能认出字、正常选字，但**这张
+    图不该进字形匹配索引**——写进去等于让污染样本参与以后所有形近字的比对。
+    审查卡片上勾了这个复选框的事件带 `no_glyph_lib=true`：照常算已裁决（不
+    进 `res.skipped`/`res.errors`，不是错误），只是跳过 `admit_instance` 这
+    一步，不落 `glyphs`/`exemplars`/matcher 索引。
+
     ## ⚠️ v2 的 id 必须加前缀，否则会污染 15332 条已有记录
 
     v1 的 `book:page:col:idx`（idx 从 0、含 margin 格）与 v2 的
@@ -211,6 +221,9 @@ def glyphdb_admit(events, db_path: str | None = None,
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
+            continue
+        if e.payload.get("no_glyph_lib"):
+            res.no_lib += 1
             continue
         book = e.target.book or (e.target.key.split(":")[0] if ":" in e.target.key else "")
         # 图块键：p{page}c{col}s{slot}[a|b]，与 Step4 落缓存时一致

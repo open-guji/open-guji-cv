@@ -81,7 +81,10 @@ class Pipeline:
         return None
 
     def _index(self, sid: str | None) -> int | None:
-        if sid is None:
+        # 空字符串按「不设限」处理，同 None——表单/查询串里留空传的是
+        # `''` 不是 `null`，两者混过来都该是「不设下限/上限」（2026-09-09
+        # 控制台「跑这批」实锤：前端漏转，'' 被当真步骤名查，报「没有步骤 ''」）。
+        if not sid:
             return None
         if sid in self.steps:
             return self.steps.index(sid)

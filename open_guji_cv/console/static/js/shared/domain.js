@@ -21,9 +21,11 @@ export const readingOf = v => (v.reading && HAN_RE.test(v.reading)) ? v.reading 
 // 消费失败不代表裁决丢了——事件已经在盘上，「收割与消费」那块能补跑。
 export function consumedMsg(r) {
   if (r.consume_error) return `；⚠ 自动落库失败（${r.consume_error}），去「审查 → 收割与消费」补跑`;
-  const c = (r.consumed || []).filter(x => x.added || (x.errors || []).length);
+  const c = (r.consumed || []).filter(x => x.added || x.no_lib || (x.errors || []).length);
   if (!c.length) return '；已落库';
   const errs = c.flatMap(x => x.errors || []);
+  const noLib = c.reduce((s, x) => s + (x.no_lib || 0), 0);
   return '；已落库（' + c.map(x => `${x.consumer} ${x.added}`).join('，') + '）'
+       + (noLib ? `，${noLib} 条按「字形不入库」跳过建库` : '')
        + (errs.length ? ` ⚠ ${errs[0]}` : '');
 }

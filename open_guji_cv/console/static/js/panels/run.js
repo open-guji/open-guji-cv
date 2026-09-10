@@ -18,8 +18,12 @@ export async function submitRun(ev) {
   let params = {};
   const raw = $('#params').value.trim();
   if (raw) { try { params = JSON.parse(raw); } catch (e) { $('#runmsg').textContent = '参数 JSON 不合法：' + e.message; return; } }
-  const body = { book: $('#book').value, pipeline: $('#pipeline').value, from_step: $('#from_step').value,
-    to_step: $('#to_step').value, pages: $('#run_pages').value || 'dev_set', force: $('#force').checked, params };
+  // 空下拉框的 `.value` 是 `''`，不是 `null`——直接传给后端，`pipeline.slice('', '')`
+  // 会把 '' 当真步骤名去查，查不到就报「没有步骤 ''」（2026-09-09 用户实锤）。
+  // 后端按 `from_step is None` 判「不设下限」，所以空值这里就该转成 null。
+  const body = { book: $('#book').value, pipeline: $('#pipeline').value,
+    from_step: $('#from_step').value || null, to_step: $('#to_step').value || null,
+    pages: $('#run_pages').value || 'dev_set', force: $('#force').checked, params };
   try {
     const job = await api('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     $('#runmsg').textContent = `已入队 ${job.id}`;
