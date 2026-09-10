@@ -155,7 +155,9 @@ open_guji_cv/clustering/
   feedback.py          # M7 标签消费：阈值标定、kNN 训练、语料更新
   glyph_library.py     # M8
   synth.py             # 合成刻本数据生成器（测试/benchmark 用）
-  review/              # M6 Web 审查（复用 open_guji_cv/web 的 server 骨架）
+  review/              # M6 Web 审查（复用 open_guji_cv/web 的 server 骨架；
+                        # web/ 已于 2026-09-10 随控制台重构删除，骨架已在
+                        # clustering/review/ 里独立存活，不再依赖 web/）
     server.py
     static/index.html
 ```
@@ -431,7 +433,9 @@ O(n²) 不可行（一本书数万字），采用 **分块(blocking) → 近邻�
 ### 职责
 
 以最小人力消化 suspects 队列，产出机器可消费的标签事件流。复用
-`open_guji_cv/web/server.py` 的本地 HTTP 骨架，新增 `clustering/review/`。
+`open_guji_cv/web/server.py` 的本地 HTTP 骨架，新增 `clustering/review/`
+（**`web/server.py` 已于 2026-09-10 随控制台重构删除**；`clustering/review/`
+早已把骨架抄成自己的独立实现，不受影响）。
 
 ### 交互设计（三个视图）
 
