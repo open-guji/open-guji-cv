@@ -63,6 +63,10 @@ def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set
     st["params"] = overrides or {}
     running = deps.runner().running()
     st["running"] = running.to_dict() if running else None
+    # 当前库来源常驻可见（2026-09-09 教训：漏设 GUJI_WORKSPACE 时完全无提示，
+    # 对着仓内示例库跑了一批才在产物指纹里事后发现）——这里跟入队闸同一份判断。
+    from ...core.workspace import describe, using_sample_db
+    st["workspace"] = {**describe(), "is_sample_db": using_sample_db()}
     return st
 
 
@@ -76,11 +80,24 @@ class RunRequest(BaseModel):
     pages: str = "dev_set"
     force: bool = False
     params: dict = {}
+    allow_sample_db: bool = False
+    """没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」
+    （2026-09-09：控制台本机重启漏带这个变量，vol02 101-150 页对着示例库
+    跑了一遍，status:ok 但库匹配全错——现在漏设直接拒绝入队，得这里勾了
+    才放行，同 CLI 的 --allow-sample-db）。"""
 
 
 
 @router.post("/api/runs")
 def api_run(req: RunRequest) -> dict:
+    if req.allow_sample_db:
+        import os
+        os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
+    from ...core.workspace import assert_workspace_declared
+    try:
+        assert_workspace_declared()
+    except RuntimeError as e:
+        raise HTTPException(400, str(e)) from e
     eng = _engine(req.book, req.pipeline)            # 校验 book / pipeline / 步骤范围
     try:
         eng.pipeline.slice(req.from_step, req.to_step)

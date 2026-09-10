@@ -29,7 +29,7 @@
 <main>
   <section id="view-overview" class="view active">
     <div class="card">
-      <h2>管线</h2>
+      <h2>管线 <span id="ws_note" class="mono" style="margin-left:.6rem"></span></h2>
       <div id="dag" class="dag"></div>
       <div id="notes" class="muted"></div>
     </div>
@@ -57,6 +57,8 @@
         <label>页 <input id="run_pages" type="text" value="dev_set"></label>
         <label><span>参数覆盖（JSON，可空）</span><textarea id="params" placeholder='{"column_gate": {"width_tol": 0.2}}'></textarea></label>
         <label style="flex-direction:row;align-items:center;gap:.4rem"><input id="force" type="checkbox"> 强制重跑（无视指纹）</label>
+        <label style="flex-direction:row;align-items:center;gap:.4rem" title="没设 GUJI_WORKSPACE 时默认拒绝入队——2026-09-09 教训：漏设这个变量会静默用仓内几百条的示例库跑批，产物看着 ok 实际全错。真要跑书请设 GUJI_WORKSPACE，这个勾选只用于本地示例库试跑">
+          <input id="allow_sample_db" type="checkbox"> 允许用本地示例库（没设 GUJI_WORKSPACE 时勾选才能入队）</label>
         <div><button class="primary" type="submit">入队</button></div>
       </form>
       <div id="runmsg" class="muted"></div>

@@ -23,7 +23,8 @@ export async function submitRun(ev) {
   // 后端按 `from_step is None` 判「不设下限」，所以空值这里就该转成 null。
   const body = { book: $('#book').value, pipeline: $('#pipeline').value,
     from_step: $('#from_step').value || null, to_step: $('#to_step').value || null,
-    pages: $('#run_pages').value || 'dev_set', force: $('#force').checked, params };
+    pages: $('#run_pages').value || 'dev_set', force: $('#force').checked, params,
+    allow_sample_db: $('#allow_sample_db').checked };
   try {
     const job = await api('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     $('#runmsg').textContent = `已入队 ${job.id}`;

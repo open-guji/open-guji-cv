@@ -33,6 +33,11 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
 
 
 def cmd_pipeline(args) -> None:
+    if getattr(args, "allow_sample_db", False):
+        import os
+        os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
+    from .core.workspace import assert_workspace_declared
+    assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = eng.pipeline.slice(getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
@@ -515,6 +520,10 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
+    p.add_argument("--allow-sample-db", action="store_true",
+                   help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
+                        "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"
+                        "对着示例库跑了一批，产物 status:ok 但库匹配全错，锚不上整理本）")
 
 
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
