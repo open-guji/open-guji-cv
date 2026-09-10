@@ -30,9 +30,17 @@ export async function loadProduct() {
   try {
     const d = await api(`/api/products/${book}/${step}/${key}`);
     const m = d.manifest || {};
-    $('#p_meta').textContent = `${key} · 指纹 ${m.fingerprint || '-'} · ${m.status || ''} · ${m.elapsed != null ? m.elapsed + 's' : ''} · ${m.code_rev || ''}`;
+    $('#p_meta').textContent = `${key} · 指纹 ${m.fingerprint || '-'} · ${m.status || ''} · ${m.elapsed != null ? m.elapsed + 's' : ''} · ${fmtTs(m.ts)} · ${m.code_rev || ''}`;
     $('#p_json').textContent = JSON.stringify(d.products, null, 1);
   } catch (e) { $('#p_meta').textContent = ''; $('#p_json').textContent = e.message; }
+}
+
+/** 产物时间戳（秒）→ 本地时间；没有就不显示。跑完一眼能看出产物是几时的。 */
+function fmtTs(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 export const refresh = loadProduct;

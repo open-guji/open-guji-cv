@@ -60,6 +60,9 @@ def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set
     except ValueError as e:
         raise HTTPException(400, f"页号表达式错误: {e}") from e
     st = eng.status(pages=pg)
+    # 页下拉要能选**任意**页——矩阵按 dev_set 显示是状态视图的口径，
+    # 但看产物不该被跑批范围挡住（2026-09-10：跑完 69 页却在页面里选不到）。
+    st["all_pages"] = eng.book.all_pages()
     st["params"] = overrides or {}
     running = deps.runner().running()
     st["running"] = running.to_dict() if running else None

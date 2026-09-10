@@ -48,7 +48,11 @@ export async function refreshStatus() {
   }
   $('#matrix').innerHTML = html + '</tbody>';
   $('#matrix').querySelectorAll('td.cell').forEach(td => td.onclick = () => { _openProduct(td.dataset.step, td.dataset.page); });
-  $('#p_page').innerHTML = pageList.map(p => `<option value="${p}">${p}</option>`).join('');
+  // 页下拉用全页列表：矩阵只显示 dev_set 是**状态视图**的口径，但看产物不该被跑批范围挡住
+  const allPages = st.all_pages || pageList;
+  const cur = $('#p_page').value;
+  $('#p_page').innerHTML = allPages.map(p => `<option value="${p}">${p}</option>`).join('');
+  if (cur && allPages.includes(Number(cur))) $('#p_page').value = cur;
   $('#running').textContent = st.running ? `运行中：${st.running.id}` : '';
 }
 
