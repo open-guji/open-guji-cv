@@ -50,7 +50,7 @@ claude.ai Artifact 审查页和 `artifacts/README.md` 手写台账里的东西�
 
 | 现有 | 干什么 | 问题 |
 |---|---|---|
-| `open_guji_cv/web/server.py` + `runner.py` | 跑 cut / recognize-profile / preprocess / extract / run，SSE 日志 | 命令表写死，v2 的 Step 一个都不认；任务不落盘，重启即失 |
+| `open_guji_cv/web/server.py` + `runner.py`（**已于 2026-09-10 删除**，见 §7、控制台重构 `a200e37`；接盘的是 `console/jobs.py`） | 跑 cut / recognize-profile / preprocess / extract / run，SSE 日志 | 命令表写死，v2 的 Step 一个都不认；任务不落盘，重启即失 |
 | `clustering/review/server.py` + `state.py` | 簇审查，事件写 `phase7_review/labels.jsonl` | 绑死在 phase5/6 产物布局上 |
 | open-guji-dataset `server.py`（已废）/ `index.html` | 浏览器 File System Access 直接改 expected.json | 只认 samples/NNN 布局 |
 | Artifact 审查页（`review-artifact` skill、`_review_shell.py`、`persist_js.py`、`shells/*.html`） | 自存式 HTML；事后 `Artifact read` → `harvest_verdicts.py` | 事件格式四种：`verdicts {id,verdict,t}`、`GUJI-SEED-EVENT`、`GUJI-SEG-REVIEW`、`marks/patch_review_marks.json`；URL 台账手写；每轮「读回 → 收割 → build shard → 两仓提交」全手工，且发布前必须先读回否则覆盖掉未收割的裁决 |
@@ -338,6 +338,11 @@ Step 自己**不写图像产物**。缓存目录不入 git、不进快照，容�
 
 ### 4.2 前端：七个视图
 
+> **计划稿。实际落地是 8 个 tab，名称与拆分都不同**，见 `console_manual.md`
+> §9「重构后的新事实」与 `open_guji_cv/console/static/index.html` 的 `data-view`：
+> 总览／运行／产物／审查／切线／夹注／评测／异体——金标与反馈流合进了「审查」tab，
+> 另加了切线／夹注／异体三个计划里没有的 tab。以下七条留作设计意图存档。
+
 1. **总览**：每册一张 DAG，节点着色 = 新鲜 / 过期 / 缺失 / 运行中；旁边是该步最近评测对基线的差值。
 2. **运行**：选册、选页（默认 dev_set）、选起止步、改参数、入队；实时日志；历史。
 3. **产物**：按页浏览各步产物的叠图；两版本并排 diff——改了参数先肉眼看，再跑评测。
@@ -415,9 +420,13 @@ CLI：`guji step run <step> <book> [--pages]`、`guji run <pipeline> <book> --fr
 
 ## 7. 现有模块 → 新家
 
+> **这张表是重构前的搬迁计划，写在提交之前。控制台重构已于 2026-09-10 合入 main
+> （`a200e37`），下表按当时的设想写死「去向」，个别行的实际落点与此不完全一致——
+> 以代码现状为准（见 `console_manual.md` §9）。**
+
 | 现有 | 去向 |
 |---|---|
-| `web/server.py` + `runner.py` | `console/jobs.py`：保留子进程模型，加持久化与队列 |
+| `web/server.py` + `runner.py`（**已完成，2026-09-10**：`web/` 已删） | `console/jobs.py`：保留子进程模型，加持久化与队列 |
 | `clustering/review/server.py` + `state.py` | 一种批次类型（cluster）跑在 EventLog 上；`labels.jsonl` 变成消费者视图 |
 | `persist_js.py`、`_review_shell.py`、`shells/*.html` | `review/shell.py` + 两个 transport |
 | `harvest_verdicts.py` | `feedback/harvest.py`，四种旧格式各一个解析器 |
