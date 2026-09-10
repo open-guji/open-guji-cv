@@ -44,9 +44,13 @@ def api_manifest(book: str, step: str) -> dict:
 
 
 def _png(img: np.ndarray, scale: float | None = None) -> Response:
-    """编码在 `render/overlay.encode_png`（与 CLI 共用），这里只包一层 HTTP。"""
+    """编码在 `render/overlay.encode_png`（与 CLI 共用），这里只包一层 HTTP。
+
+    **不缓存**：叠图画的是产物，重跑一步就变了。原先带 `max-age=60`，
+    结果「重跑完点开一看还是旧图」，还以为是算法没生效（2026-09-10 踩过）。
+    """
     return Response(encode_png(img, scale), media_type="image/png",
-                    headers={"Cache-Control": "max-age=60"})
+                    headers={"Cache-Control": "no-store"})
 
 
 

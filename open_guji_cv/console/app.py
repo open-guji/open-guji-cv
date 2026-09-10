@@ -42,6 +42,16 @@ app.add_middleware(
 # 没有这个挂载，切分后的 js/css 全部 404（控制台重构 C1，前端道的前置）。
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
+
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    """静态前端不缓存。改完 js/css 直接刷新就生效，不用每次提醒强刷
+    （2026-09-10 踩过：`products.js` 改了时间显示，浏览器一直给旧文件）。"""
+    resp = await call_next(request)
+    if request.url.path.startswith("/static/") or request.url.path == "/":
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 for _r in ROUTERS:
     app.include_router(_r.router)
 

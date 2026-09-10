@@ -38,15 +38,23 @@ class ColumnMapper:
             y += out_h
         self.bands, self.out_w, self.out_h = bands, out_w, int(y)
 
-    def _inv_for(self, y: float) -> np.ndarray:
+    def _inv_for(self, y: float) -> tuple[float, np.ndarray]:
+        """带内 y 对应的 (带顶在列图里的 y, 逆矩阵)。
+
+        逆矩阵的 dst 是**带内局部坐标** `[0, out_h]`（`column_warp_matrix` 的
+        `dst` 就是这么建的），而列图坐标是**全列累加**的，所以调用方必须把
+        `y` 减去带顶才是矩阵认的那个 y。原先只返回矩阵、把 `lo` 丢了，
+        三段页从第二带起全错位——`to_page_tl(500, 805.1)` 会算出原图 y=1941，
+        而相邻的 804.9 算出 1136，跨带界整个跳一个带高（2026-09-10 定位）。
+        """
         for lo, hi, inv in self.bands:
             if y < hi:
-                return inv
-        return self.bands[-1][2]
+                return lo, inv
+        return self.bands[-1][0], self.bands[-1][2]
 
     def to_page_tl(self, x: float, y: float) -> Point:
-        inv = self._inv_for(y)
-        v = inv @ np.array([x, y, 1.0])
+        lo, inv = self._inv_for(y)
+        v = inv @ np.array([x, y - lo, 1.0])
         return float(v[0] / v[2]), float(v[1] / v[2])
 
     def to_page_tr(self, x: float, y: float) -> Point:
