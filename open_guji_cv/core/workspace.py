@@ -92,3 +92,36 @@ def describe() -> dict[str, str]:
         "glyph_store": str(glyph_store_path()),
         "raw_root": str(raw_root()),
     }
+
+
+def using_sample_db() -> bool:
+    """跑批会不会落到「仓内小样本库」这条分支——不看库内容，只看**路径来源**。
+
+    2026-09-09 实锤：`GUJI_WORKSPACE` 没设 → 静默退回 `output/glyph.db`
+    （310 条示例记录，不是空库，`assert_db_not_silently_empty` 那道闸认的是
+    「空」不认「小」，拦不住）。控制台在本机重启漏带这个变量，vol02 101-150
+    页就这样对着示例库跑了一遍，`glyph_match` 全给 `unsure`、`context_decide`
+    弃权 80%+、最后连 8-gram 锚定整理本都锚不上——过程里全程 `status: ok`，
+    唯一的破绽是产物 `code_rev`/`params_hash` 事后才能翻出来。
+    """
+    return not (os.environ.get("GUJI_WORKSPACE") or os.environ.get("GUJI_GLYPH_DB"))
+
+
+def assert_workspace_declared() -> None:
+    """跑批前必须显式声明库来源——用仓内小样本库也要**声明**，不能是漏设的默认值。
+
+    `GUJI_ALLOW_SAMPLE_DB=1`（CLI 的 `--allow-sample-db`、控制台跑批表单的
+    「允许用本地示例库」都落到这个变量）显式放行；`pytest` 走的是
+    `conftest.py`/各测试自己传 `db_path=str(DB)`，不经过这个函数，不受影响。
+    """
+    if not using_sample_db():
+        return
+    if os.environ.get("GUJI_ALLOW_SAMPLE_DB") == "1":
+        return
+    raise RuntimeError(
+        "没设 GUJI_WORKSPACE（也没设 GUJI_GLYPH_DB）——这一跑会落到仓内那份"
+        f"小样本库（{glyph_db_path()}，几百条，不是你在用的工作区库）。\n"
+        "真跑书：export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace\n"
+        "确实想用仓内示例库（本地试跑/开发）：加 --allow-sample-db"
+        "（或设 GUJI_ALLOW_SAMPLE_DB=1）显式声明。"
+    )

@@ -25,6 +25,14 @@ export async function refreshStatus() {
   const pbar = $('#params_note');
   if (pbar) pbar.textContent = raw ? `按参数覆盖看：${raw}` : '';
   const st = state.status;
+  // 库来源常驻提示（2026-09-09 教训：漏设 GUJI_WORKSPACE 会静默用仓内示例
+  // 库跑批，产物看着 ok 实际全错，事后只能从产物指纹里翻出来）。
+  const wsEl = $('#ws_note');
+  if (wsEl && st.workspace) {
+    const w = st.workspace;
+    wsEl.textContent = w.is_sample_db ? '⚠ 用的是仓内示例库（未设 GUJI_WORKSPACE）' : `库：${w.workspace}`;
+    wsEl.style.color = w.is_sample_db ? 'var(--zhu, #c00)' : '';
+  }
   const pageList = st.pages;
   let html = '<thead><tr><th class="step">步骤</th><th>汇总</th>' + pageList.map(p => `<th>${p}</th>`).join('') + '</tr></thead><tbody>';
   for (const [sid, d] of Object.entries(st.steps)) {
