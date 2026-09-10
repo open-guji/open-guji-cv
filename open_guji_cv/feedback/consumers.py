@@ -367,18 +367,27 @@ def route_and_consume(log: EventLog, batch: str | None = None,
     指向库副本，别动真库。"""
     table = table or RouteTable.load(log.root / "routes.yaml")
     results: list[ConsumeResult] = []
-    all_pending: list[Event] = []
     for consumer, fn in CONSUMERS.items():
         pending = log.pending(consumer, batch)
         pairs = [(e, d) for e in pending for d in table.destinations(e) if d.consumer == consumer]
         if not pairs:
             continue
-        all_pending.extend(e for e, _ in pairs)
         res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
                else fn(pairs, dry_run=dry_run, **consumer_kw))
         results.append(res)
         if not dry_run and not res.errors:
-            log.mark_consumed(consumer, [e for e, _ in pairs], note=batch or "")
+            # ⚠️ 一个事件命中同一消费者的多条路由（如 cutline+border 同时进
+            # touching-cuts 与 side-rule，两条去向都是 gold_add）时，`pairs`
+            # 里同一个事件会出现两次——`consumed/<consumer>.jsonl` 因此被
+            # 写两行。`consumed_ids()` 用 set 收，不影响幂等判定，但账本本身
+            # 失真（2026-09-10 金标对账道实测：`consumed/gold_add.jsonl` 里
+            # `evt_vol02-cutline_000032`/`000042` 各记了两次，是「事件数 507
+            # vs gold_add 记账 509」这 2 条差值的全部来源）。按事件 id 去重
+            # 再记账，金标本身（各分片各写一条）不受影响。
+            seen: dict[str, Event] = {}
+            for e, _ in pairs:
+                seen.setdefault(e.id, e)
+            log.mark_consumed(consumer, seen.values(), note=batch or "")
     evs = log.read(batch) if batch else list(log.iter_all())
     return {"batch": batch, "dry_run": dry_run,
             "results": [r.to_dict() for r in results],
