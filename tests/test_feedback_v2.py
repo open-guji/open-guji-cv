@@ -158,6 +158,32 @@ def test_routes_match_and_unrouted():
     assert {d.consumer for d in table.destinations(recrop)} == {"glyphdb_recrop", "gold_add"}
 
 
+def test_route_and_consume_dedupes_mark_consumed_for_multi_dest_events(tmp_path):
+    """同一事件命中同一消费者的多条路由（cutline+border 同时进 touching-cuts
+    与 side-rule）时，`consumed/gold_add.jsonl` 只该记一行，不是两行。
+
+    2026-09-10 金标对账道实测：`route_and_consume` 把 `pairs`（含同一事件的
+    多条 (event, destination) 组合）原样传给 `mark_consumed`，同一事件被记
+    两次——`consumed_ids()` 用 set 收，不影响幂等判定，但账本行数失真（是
+    `consumed/gold_add.jsonl` 总行数比唯一事件数多出来的全部原因）。
+    """
+    log = EventLog(tmp_path / "feedback")
+    store = GoldStore(tmp_path / "dataset")
+    e = make_event("r1", 1, "cutline",
+                    EventTarget(step="row_segment", unit="cell", key="vol02:1:1:1"),
+                    {"y": 10, "y_old": 12, "verdict": "moved", "tags": ["border"]})
+    log.append([e])
+    route_and_consume(log, "r1", RouteTable.load(None), store)
+    # 金标本身：两个分片各写一条，没有丢
+    assert len(store.list("char-segmentation/touching-cuts")) == 1
+    assert len(store.list("char-segmentation/side-rule")) == 1
+    # 记账：consumed/gold_add.jsonl 只该有一行，不是两行
+    consumed_path = log.consumed_dir / "gold_add.jsonl"
+    lines = consumed_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["event"] == e.id
+
+
 # ── 端到端：收割 → 路由 → 金标 ──────────────────────────────────────
 def test_route_and_consume_to_gold(tmp_path):
     log = EventLog(tmp_path / "feedback")
