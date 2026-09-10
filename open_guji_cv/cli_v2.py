@@ -77,6 +77,33 @@ def cmd_cache(args) -> None:
         limit = int(args.limit_gb * (1 << 30)) if args.limit_gb is not None else None
         freed = cache.prune(limit)
         print(f"释放 {freed / (1 << 20):.1f} MB")
+    elif args.action == "get":
+        # 缺图就现算（与 GET /api/cache/… 同一条路：ctx.materialize）
+        from .core.book import load_book
+        from .core.step import KINDS, RunContext
+        from .products.store import ProductStore
+        from . import steps as _s  # noqa: F401
+        if args.kind not in KINDS or KINDS[args.kind].storage != "image_cache":
+            print(f"不是缓存图像种类: {args.kind}"); sys.exit(1)
+        ctx = RunContext(load_book(args.book), ProductStore(), cache, log=lambda _: None)
+        try:
+            path = ctx.materialize(args.kind, args.key)
+        except Exception as e:                                  # noqa: BLE001
+            print(f"拿不到图像: {e}"); sys.exit(1)
+        _write(args.out, Path(path).read_bytes())
+    elif args.action == "column":
+        import cv2
+        from .core.spec import column_key
+        path = cache.get(args.book, "column_image", column_key(args.page, args.col))
+        if path is None:
+            print("没有列图"); sys.exit(1)
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            print("列图读不出来"); sys.exit(1)
+        h = img.shape[0]
+        y0 = max(0, min(h - 1, args.y0)); y1 = max(y0 + 1, min(h, args.y1 or h))
+        from .render.overlay import encode_png
+        _write(args.out, encode_png(img[y0:y1]))
 
 
 def cmd_batch(args) -> None:
@@ -130,6 +157,11 @@ def cmd_events(args) -> None:
         table = RouteTable.load(log.root / "routes.yaml")
         out = route_and_consume(log, args.batch, table, GoldStore(), dry_run=args.dry_run)
         print(json.dumps(out, ensure_ascii=False, indent=1))
+    elif args.action == "verdicts":
+        # 读回本批已裁的字位／已拖的切线。与控制台的两条 verdicts 路由同一份装配
+        from .review.verdict_view import cutline_verdicts, review_verdicts
+        fn = cutline_verdicts if args.kind == "cutline" else review_verdicts
+        _out(fn(args.batch, log))
     elif args.action == "list":
         evs = log.read(args.batch) if args.batch else sorted(log.iter_all(), key=lambda e: e.order)
         for e in evs[-args.limit:]:
@@ -245,6 +277,216 @@ def cmd_preclean(args) -> None:
     print(f"写出 {len(written)} 页 -> {precleaned_root() / book.id}")
 
 
+
+# ── C5：把控制台能干的事开到命令行 ────────────────────────────────────
+#
+# 控制台重构方案 §二 实测出来的那个数字：**本地专属面积 = 0/46**。46 条路由
+# 在无 HTTP、无浏览器、无 GPU、无人在场的云端各真调了一次，45 条跑通，唯一
+# 失败那条是缺数据不是耦合。也就是说「控制台现在能干的事，云端道现在就能干，
+# 只差一层 CLI 出口」——下面这几个子命令就是那层出口。
+#
+# 纪律：**每个命令与对应路由调的是同一个领域函数**，不另写一份。
+# 「同参同输出」是 C5 的验收判据（tests/test_console_routes.py::test_cli_matches_routes
+# 逐条比对 CLI 的 JSON 与路由的返回值）。
+
+
+def _out(d) -> None:
+    """统一出 JSON。管道接 jq 用。"""
+    print(json.dumps(d, ensure_ascii=False, indent=1, default=str))
+
+
+def _write(path: str, data: bytes) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes(data)
+    print(f"{path}  {len(data) / 1024:.1f} KB")
+
+
+def cmd_product(args) -> None:
+    """产物与图像：show | manifest | raw | overlay | patch。
+
+    对应控制台第二类 6 条路由。图像类要 `--out`——云端跑完把 PNG 交回本地看，
+    这是「云端能出叠图」那条路的落点。
+    """
+    from .core.spec import cell_key, page_key
+    from .products.cache import ImageCache
+    from .products.store import ProductStore
+    from .render.overlay import encode_png, overlay
+    import cv2
+
+    st = ProductStore()
+    if args.action == "show":
+        d = st.read_raw(args.book, args.step, args.key)
+        if d is None:
+            print(f"没有这份产物: {args.book}/{args.step}/{args.key}"); sys.exit(1)
+        entry = st.manifest(args.book, args.step).get(args.key)
+        _out({"book": args.book, "step": args.step, "key": args.key,
+              "manifest": (entry.__dict__ if entry else None), "products": d})
+    elif args.action == "manifest":
+        _out({k: v.__dict__ for k, v in st.manifest(args.book, args.step).all().items()})
+    elif args.action == "raw":
+        from .core.book import load_book
+        f = load_book(args.book).raw_path(args.page)
+        if not f.exists():
+            print("原图缺失"); sys.exit(1)
+        _write(args.out, encode_png(cv2.imread(str(f)), args.scale))
+    elif args.action == "overlay":
+        _write(args.out, encode_png(overlay(args.book, args.step, args.page, st), args.scale))
+    elif args.action == "patch":
+        key = cell_key(args.page, args.col, args.slot) + (args.sub or "")
+        f = ImageCache().get(args.book, "char_patch", key)
+        if f is None:
+            print(f"没有字块 {key}"); sys.exit(1)
+        _write(args.out, Path(f).read_bytes())
+
+
+def cmd_check(args) -> None:
+    """判据与体检：quality | rulers | round | rate。
+
+    对应控制台第五类。四条判准的事实源全在 `eval/` 下（quality.py / rulers.py /
+    round_check.py / rate_history.py），控制台与这里读的是同一份，**阈值只写一处**。
+    """
+    from .core.book import load_book
+    from .products.store import ProductStore
+
+    st = ProductStore()
+    if args.action == "quality":
+        from .eval.quality import quality
+        _out(quality(args.book, args.pages, st))
+    elif args.action == "rulers":
+        from .eval.rulers import measure
+        _out(measure(args.book, load_book(args.book).resolve_pages(args.pages), st))
+    elif args.action == "round":
+        from .eval import round_check as rc
+        out = {"next": rc.next_batch(args.book)}
+        if args.pages:
+            out.update(rc.check(args.book, load_book(args.book).resolve_pages(args.pages)))
+        _out(out)
+    elif args.action == "rate":
+        from .eval import rate_history
+        if args.snapshot:
+            rate_history.HIST.parent.mkdir(parents=True, exist_ok=True)
+            added = []
+            with open(rate_history.HIST, "a", encoding="utf-8") as f:
+                for b in [x.strip() for x in args.book.split(",") if x.strip()]:
+                    rec = rate_history.measure(b, st)
+                    if rec is None:
+                        continue
+                    if args.note:
+                        rec["note"] = args.note
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                    added.append(rec)
+            _out({"added": added})
+        else:
+            rows = [r for r in rate_history.history()
+                    if not args.book or r.get("book") == args.book]
+            rows.sort(key=lambda r: (r.get("book", ""), r.get("ts") or r.get("date", "")))
+            _out({"rows": rows})
+
+
+def cmd_cards(args) -> None:
+    """待审卡片的数据：dingzi | cutline | jiazhu | groups，一律出 JSON。
+
+    对应控制台第六类。**这不是给人看卡片用的**——是给云端道用来
+    「统计还剩多少待审、抽查自动放行那批、量一刀改动前后的待审率变化」
+    （方案 §二 第六类：需要人在场的是浏览器里那个页面，不是这些接口）。
+    """
+    from .feedback.events import EventLog
+    from .products.store import ProductStore
+
+    st = ProductStore()
+    if args.action == "dingzi":
+        from .review.cards import cards
+        _out(cards(args.book, args.pages, args.limit, args.only, st))
+    elif args.action == "jiazhu":
+        from .review.jiazhu_cards import jiazhu_segments
+        _out(jiazhu_segments(args.book, args.pages, args.only, args.batch, st, EventLog()))
+    elif args.action == "groups":
+        from .review.group_view import group_view
+        _out(group_view(args.book, args.pages, args.edition, args.limit, st))
+    elif args.action == "cutline":
+        from .eval import touching as T
+        from .core.book import load_book
+        pg = (T.body_pages(args.book) if args.pages == "body"
+              else load_book(args.book).resolve_pages(args.pages))
+        if args.kind == "split_char":
+            cases = T.split_char_boundaries(args.book, pg, st)
+        elif args.kind == "all":
+            cases = T.r2s_boundaries(args.book, pg, st) + T.split_char_boundaries(args.book, pg, st)
+        else:
+            cases = T.r2s_boundaries(args.book, pg, st)
+        n_all = len(cases)
+        done = T.gold_ids() if args.skip_done else set()
+        if args.batch:
+            done |= {e.target.key for e in EventLog().read(args.batch) if e.kind == "cutline"}
+        cases = [c for c in cases if c["id"] not in done]
+        _out({"book": args.book, "n_r2s": n_all, "n_done": len(done),
+              "n": len(cases), "cases": T.pick_cases(cases, args.limit, seed=args.seed)})
+
+
+def cmd_rare(args) -> None:
+    """生僻字候选：单查一个字位，或 `--slots` 批量。
+
+    引擎在 `clustering/rare_panel.py`，与控制台同一份。**不需要 GPU**
+    （CNN checkpoint 走 CPU 前向）。⚠️ 首次要建字体索引，方案 §十一·4 实测
+    112 秒，之后 0.1 秒——别当它挂了。
+    """
+    from .clustering.rare_panel import rare_batch, rare_for, rare_patch
+
+    if args.slots:
+        _out(rare_batch(args.book, [x.strip() for x in args.slots.split(",") if x.strip()], args.k))
+        return
+    img = rare_patch(args.book, args.page, args.col, args.slot, args.sub)
+    if img is None:
+        print(f"没有字块 p{args.page:04d}c{args.col:02d}s{args.slot}{args.sub or ''}")
+        sys.exit(1)
+    _out({"id": f"{args.book}:{args.page}:{args.col}:{args.slot}{args.sub or ''}",
+          "candidates": rare_for(img, args.k)})
+
+
+def cmd_variants(args) -> None:
+    """本书用字账（只读）。账本由 `scripts/build_book_variants.py` 派生，这里不算任何东西。"""
+    from .variant_ledger import DEFAULT_EDITION, ledger_path
+    p = ledger_path(args.edition or DEFAULT_EDITION)
+    if not p.exists():
+        print(f"没有用字账 {p.name}——先跑 python scripts/build_book_variants.py "
+              f"--edition {args.edition or DEFAULT_EDITION}")
+        sys.exit(1)
+    _out(json.loads(p.read_text(encoding="utf-8")))
+
+
+def cmd_runs(args) -> None:
+    """控制台的任务队列：list | show | cancel | log。
+
+    队列是**控制台进程内**的（`console/jobs.py` 的单 worker），所以这几条读的是
+    它落在 `runs/` 下的记录。控制台没在跑的时候 list 是空的，这不是错。
+    """
+    from .console.jobs import JobRunner
+    runner = JobRunner()
+    if args.action == "list":
+        _out(runner.list(args.limit))
+    elif args.action == "show":
+        job = runner.get(args.id)
+        if not job:
+            print("没有这个任务"); sys.exit(1)
+        _out(job.to_dict())
+    elif args.action == "cancel":
+        _out({"ok": runner.cancel(args.id)})
+    elif args.action == "log":
+        f = runner.log_path(args.id)
+        if not f.exists():
+            print("还没有日志"); sys.exit(1)
+        if not args.follow:
+            print(f.read_text(encoding="utf-8", errors="replace"), end="")
+            return
+        from .console.sse import tail_job
+        for ev in tail_job(runner, args.id):
+            if ev is None:
+                continue
+            print(ev.get("line") or f"[{ev['type']}]", flush=True)
+            if ev["type"] in ("complete", "error"):
+                return
+
+
 COMMANDS_V2 = {
     "preclean": cmd_preclean,
     "eval": cmd_eval,
@@ -256,6 +498,12 @@ COMMANDS_V2 = {
     "batch": cmd_batch,
     "events": cmd_events,
     "gold": cmd_gold,
+    "product": cmd_product,
+    "check": cmd_check,
+    "cards": cmd_cards,
+    "rare": cmd_rare,
+    "variants": cmd_variants,
+    "runs": cmd_runs,
 }
 
 
@@ -304,9 +552,17 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--port", type=int, default=DEFAULT_CONSOLE_PORT)
     p.add_argument("--no-browser", action="store_true")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune")
-    p.add_argument("action", choices=["usage", "prune"])
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column")
+    p.add_argument("action", choices=["usage", "prune", "get", "column"])
     p.add_argument("--limit-gb", type=float, default=None)
+    p.add_argument("--book", default="")
+    p.add_argument("--kind", default="char_patch", help="get：产物种类")
+    p.add_argument("--key", default="", help="get：缓存键，如 p0024c01s10")
+    p.add_argument("--page", type=int, default=0, help="column：页号")
+    p.add_argument("--col", type=int, default=0, help="column：列号")
+    p.add_argument("--y0", type=int, default=0)
+    p.add_argument("--y1", type=int, default=0, help="column：裁到哪（0 = 到底）")
+    p.add_argument("--out", default="", help="get / column 的输出路径")
 
     p = sub.add_parser("batch", help="[v2] 审查批次：list | new | show")
     p.add_argument("action", choices=["list", "new", "show"])
@@ -323,8 +579,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--json", action="store_true")
     p.add_argument("--md", action="store_true", help="出台账 markdown")
 
-    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list")
-    p.add_argument("action", choices=["harvest", "route", "list"])
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts")
+    p.add_argument("action", choices=["harvest", "route", "list", "verdicts"])
     p.add_argument("batch", nargs="?", default=None)
     p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
     p.add_argument("--step", default=None)
@@ -348,6 +604,60 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("shard", nargs="?", default=None)
     p.add_argument("--dry-run", action="store_true", help="migrate：只报数不写")
     p.add_argument("--apply", action="store_true", help="drift：把漂移条目标成 stale")
+
+    # ── C5：控制台的出口（与对应路由同参同输出）────────────────────
+    p = sub.add_parser("product", help="[v2] 产物与图像：show | manifest | raw | overlay | patch")
+    p.add_argument("action", choices=["show", "manifest", "raw", "overlay", "patch"])
+    p.add_argument("book")
+    p.add_argument("step", nargs="?", default="", help="show / manifest / overlay 要")
+    p.add_argument("--key", default="", help="show：产物键，如 p0024")
+    p.add_argument("--page", type=int, default=0)
+    p.add_argument("--col", type=int, default=0)
+    p.add_argument("--slot", type=int, default=0)
+    p.add_argument("--sub", default="", help="夹注 a/b")
+    p.add_argument("--scale", type=float, default=0.35, help="raw / overlay 的缩放")
+    p.add_argument("--out", default="", help="图像输出路径（raw / overlay / patch 必给）")
+
+    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate")
+    p.add_argument("action", choices=["quality", "rulers", "round", "rate"])
+    p.add_argument("book", nargs="?", default="vol01")
+    p.add_argument("--pages", default="dev_set")
+    p.add_argument("--snapshot", action="store_true", help="rate：记一行台账（默认只读）")
+    p.add_argument("--note", default="", help="rate --snapshot 的说明")
+
+    p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
+    p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
+    p.add_argument("book")
+    p.add_argument("--pages", default="dev_set")
+    p.add_argument("--only", default="review", choices=["review", "auto", "all"],
+                   help="dingzi 默认 review；jiazhu 默认 all")
+    p.add_argument("--limit", type=int, default=400)
+    p.add_argument("--edition", default="", help="groups：用字账版本")
+    p.add_argument("--batch", default=None, help="cutline / jiazhu：跳过这批已裁的")
+    p.add_argument("--kind", default="r2s", choices=["r2s", "split_char", "all"],
+                   help="cutline：用例类型")
+    p.add_argument("--seed", type=int, default=0, help="cutline：抽样种子")
+    p.add_argument("--no-skip-done", dest="skip_done", action="store_false",
+                   help="cutline：连已进金标的也出")
+
+    p = sub.add_parser("rare", help="[v2] 生僻字候选（单查或 --slots 批量）")
+    p.add_argument("book")
+    p.add_argument("page", nargs="?", type=int, default=0)
+    p.add_argument("col", nargs="?", type=int, default=0)
+    p.add_argument("slot", nargs="?", type=int, default=0)
+    p.add_argument("--sub", default="")
+    p.add_argument("-k", type=int, default=10, help="出几个候选")
+    p.add_argument("--slots", default="", help='批量："24:1:10,24:2:3a"')
+
+    p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
+    p.add_argument("action", nargs="?", default="book", choices=["book"])
+    p.add_argument("--edition", default="")
+
+    p = sub.add_parser("runs", help="[v2] 控制台任务：list | show | cancel | log")
+    p.add_argument("action", choices=["list", "show", "cancel", "log"])
+    p.add_argument("id", nargs="?", default=None)
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("-f", "--follow", action="store_true", help="log：跟着刷")
 
 
 def main(argv: list[str] | None = None) -> None:
