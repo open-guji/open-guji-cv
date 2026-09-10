@@ -169,6 +169,19 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("confusable_lm", "confusable-context", pythonpath=True,
        title="形近字上下文", needs=("corpus", "heavy"),
        note="位置参数是 cases.json 文件"),
+    # 外部大模型上下文裁决（Step6，2026-09-10 立项，未接生产）：位置参数不是
+    # 数据集分片，是本仓自产的评测集文件 output/llm_context_evalset/evalset.json
+    # （build_llm_context_evalset.py 从 context-correction 金标里挖出「现有
+    # gated_ngram 判错」的槽位建出来的），所以 arg_kind=none、把路径放进 extra。
+    # 注册表只挂安全默认 --provider mock（不发网络请求、不用花钱）；真跑 GLM/
+    # 千问要设 GLM_API_KEY / DASHSCOPE_API_KEY，另外手动带 --provider 跑，
+    # 见 open-guji/overview Step6-上下文裁决/方案-外部LLM.md。
+    _e("llm_context", "llm_context_evalset", arg_kind="none", pythonpath=True,
+       title="外部 LLM 上下文裁决（mock 默认）",
+       extra=("output/llm_context_evalset/evalset.json", "--provider", "mock",
+             "--prompt-version", "candidates"),
+       note="注册表默认跑 mock（验证链路，不代表真实准确率）；"
+           "真调用需要 API key，见方案文档"),
     _e("font_fallback", "char-ocr", arg_kind="book_out", pythonpath=True,
        title="字体回退", needs=("products", "engine")),
     _e("guard_ceiling", "glyph-match/triplets", arg_kind="none", pythonpath=True,
