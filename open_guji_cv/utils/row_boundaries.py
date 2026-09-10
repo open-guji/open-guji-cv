@@ -313,6 +313,26 @@ class Cell:
 
 
 @dataclass
+class SeamCandidate:
+    """切点的一条可选切线（列图坐标）。见 `products/kinds/cells.py` 同名模型。"""
+    kind: str                      # straight | seam_narrow | seam_wide
+    y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
+    seam_ink: int = 0
+    dev_max: int = 0
+
+
+@dataclass
+class CutPointCandidates:
+    """第 k 个切点（slot k 与 slot k+1 之间）的全部候选。见 `products/kinds/cells.py`。"""
+    k: int
+    y: float                       # 直线位置（= boundaries[k]）
+    slot_above: int
+    slot_below: int
+    candidates: list[SeamCandidate] = field(default_factory=list)
+    chosen: int | None = None
+
+
+@dataclass
 class RowBoundaryResult:
     boundaries: list[float]  # n_slots+1 个点，boundaries[k]..boundaries[k+1] 是第 k 格
     blank_intervals: list[tuple[int, int]]
@@ -324,6 +344,8 @@ class RowBoundaryResult:
     Step 2 的列图）才会填。"""
     content_x: tuple[float, float] | None = None
     """内容窗口 `[x_lo, x_hi)`：列图两侧的界行/版框竖线剥掉之后剩下的范围。"""
+    cut_candidates: list[CutPointCandidates] = field(default_factory=list)
+    """直线格线穿墨的 char–char 相邻处的全部候选切线；下游可据此选切分方案。"""
 
 
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
@@ -1013,12 +1035,18 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # ── 折线切分：直线格线穿墨的 char–char 相邻处，在 ±seam_band 走廊里找最小墨量缝 ──
     # 用户 2026-09-05 观察 + 实验（doc §1.4）：人标"重叠"的 205 条里 183 条存在无墨折线。
     # 缝只在走廊里走，"哪两个字之间"仍由上面的 DP 决定。
+    #
+    # 2026-09-10：候选不再丢弃。每个切点把「直线／窄走廊／宽走廊」三条都记进
+    # `cut_candidates`，`chosen` 标出现役规则选中的那条——**选择规则一字未改**，
+    # 下游（Step5）可据此对每个候选各认一次上下两字再挑。留着的候选是攒给
+    # 打分函数的样本（用户 2026-09-10：样本多了就容易设计新的）。
     if seam_band > 0:
         from . import seam as _seam
         ink_bin = (col_gray[:, x_lo:x_hi] < ink_threshold)
         by_pos: dict[int, list[Cell]] = {}
         for c in cells:
             by_pos.setdefault(_slot_to_pos_local(c.slot, n_raised), []).append(c)
+        cut_cands: list[CutPointCandidates] = []
         for k in range(1, n_slots):
             up, dn = by_pos.get(k, []), by_pos.get(k + 1, [])
             if len(up) != 1 or len(dn) != 1 or up[0].kind != "char" or dn[0].kind != "char":
@@ -1026,14 +1054,36 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             y = int(round(bounds[k]))
             if not (0 <= y < h) or not ink_bin[y].any():
                 continue
+            # 1) 直线永远是候选（dev_max=0，也是不切时的兜底）
+            cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
             sm = _seam.find_seam(ink_bin, y, band=seam_band)
+            if int(np.abs(sm - y).max()) > 0:
+                cands.append(SeamCandidate(kind="seam_narrow", y=sm.tolist(),
+                                           seam_ink=int(_seam.seam_ink(ink_bin, sm)),
+                                           dev_max=int(np.abs(sm - y).max())))
             if _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK and seam_band < _seam.SEAM_BAND_WIDE:
                 # 分级走廊：窄走廊绕不开就到宽走廊再找一次（只对"本来要放弃"的格线放宽）
                 sm = _seam.find_seam(ink_bin, y, band=_seam.SEAM_BAND_WIDE)
+                if int(np.abs(sm - y).max()) > 0:
+                    cands.append(SeamCandidate(kind="seam_wide", y=sm.tolist(),
+                                               seam_ink=int(_seam.seam_ink(ink_bin, sm)),
+                                               dev_max=int(np.abs(sm - y).max())))
+            # 2) 现役选择规则（原样）：走完上面两步后的 sm，就是现役会采用的那条；
+            #    若它重合于直线或绕不开墨，则现役保持直线（不写 seam_*）。
             if int(np.abs(sm - y).max()) == 0 or _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK:
-                continue          # 与直线重合，或绕不开墨（多半是自己的笔画）——保持直线
-            up[0].seam_bottom = sm.tolist()
-            dn[0].seam_top = sm.tolist()
+                chosen = 0
+            else:
+                chosen = len(cands) - 1
+                if cands[chosen].y is None or not np.array_equal(sm, np.asarray(cands[chosen].y)):
+                    chosen = 0        # 防御：算出来的 sm 不在候选池里（不应发生）
+            cp = CutPointCandidates(k=k, y=float(bounds[k]),
+                                    slot_above=up[0].slot, slot_below=dn[0].slot,
+                                    candidates=cands, chosen=chosen)
+            cut_cands.append(cp)
+            if chosen != 0:            # 现役行为：选中折线才写 seam_*
+                up[0].seam_bottom = cands[chosen].y
+                dn[0].seam_top = cands[chosen].y
+        result.cut_candidates = cut_cands
     result.cells = cells
     return result
 

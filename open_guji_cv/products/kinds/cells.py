@@ -33,6 +33,32 @@ class CellRec(BaseModel):
     seam_bottom: list[int] | None = None
 
 
+class SeamCandidate(BaseModel):
+    """一个「切点候选」在某个 char–char 相邻处的一条可选切线（列图坐标）。
+
+    候选的单位是**切点**不是格位：一个切点同时决定 slot k 的下边界与 slot k+1 的上边界。
+    所以候选挂在 `ColumnCells` 上，与 `boundaries` 对齐，而不是挂在 `CellRec` 上
+    （那样同一组数据要存两份，且表达不了「同时动上下两格」）。
+    """
+    kind: str                      # straight | seam_narrow | seam_wide
+    y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
+    seam_ink: int = 0              # 这条线穿过的墨量（下游打分可用，也便于审计）
+    dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
+
+
+class CutPointCandidates(BaseModel):
+    """第 k 个切点（slot k 与 slot k+1 之间）的全部候选。
+
+    `chosen` 是现役算法选中的下标；其余候选**留着不删**——它们是攒给下游打分函数的样本。
+    """
+    k: int                         # 切点序号，与 boundaries 对齐
+    y: float                       # 直线位置（= boundaries[k]），便于下游不查表
+    slot_above: int
+    slot_below: int
+    candidates: list[SeamCandidate] = Field(default_factory=list)
+    chosen: int | None = None      # 现役规则选中的候选下标；None = 这个切点没有候选
+
+
 class ColumnCells(BaseModel):
     col: int
     ok: bool                       # segment_column 有解
@@ -47,6 +73,8 @@ class ColumnCells(BaseModel):
     top_slack: float = 0.0
     boundaries: list[float] = Field(default_factory=list)
     cells: list[CellRec] = Field(default_factory=list)
+    cut_candidates: list[CutPointCandidates] = Field(default_factory=list)
+    """直线格线穿墨的 char–char 相邻处的全部候选切线；不下传候选时为空。"""
 
 
 class PageCells(BaseModel):
