@@ -29,7 +29,7 @@ from .font_candidates import book_charset, candidates
 from .ids_guard import ids_of
 from .normalize import normalize_patch
 from ..products.cache import ImageCache
-from ..steps.seed_admit import DEFAULT_CORPUS
+from ..steps.align_ref import DEFAULT_CORPUS
 
 
 def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",

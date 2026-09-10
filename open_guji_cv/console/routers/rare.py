@@ -47,7 +47,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     from ...clustering.ids_guard import ids_of
     from ...clustering.normalize import normalize_patch
     from ...products.cache import ImageCache
-    from ...steps.seed_admit import DEFAULT_CORPUS
+    from ...steps.align_ref import DEFAULT_CORPUS
 
     img = rare_patch(book, page, col, slot, sub, deps.image_cache())
     if img is None:
