@@ -21,8 +21,9 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 
 控制台只监听 `127.0.0.1`。要在 iPad 上用就走 Tailscale 连到这台机器。
 
-**四个视图**：总览、运行、产物、审查、评测。顶栏的「册 / 管线 / 页」是全局选择，
-换了它下面所有视图跟着变。
+**8 个 tab**：总览、运行、产物、审查、切线、夹注、评测、异体。顶栏的「册 / 管线 / 页」
+是全局选择，换了它下面所有视图跟着变。（本手册目前只详细讲前四个 + 评测，切线／夹注／
+异体三个 tab 的用法待补——先看 §9「重构后的新事实」了解代码在哪。）
 
 ---
 
@@ -279,3 +280,34 @@ PYTHONPATH=. .venv/Scripts/python scripts/verify_gold_migration.py --all   # 校
 
 v2 链与 v1 产物完全解耦：Step1 直接吃原始扫描，Step4 由控制台把列图传给
 `CharExtractor.extract_page`，不走它那个按 `s4_deskew` 等目录名找图源的整册入口。
+
+---
+
+## 9. 重构后的新事实（2026-09-10 补，控制台重构 `a200e37` 已合入 main）
+
+- **46 条路由**现在在 `console/routers/` 下按**七类事**分成 11 个文件，`app.py`
+  只做装配（建 app、挂中间件与静态、`include_router` ×11）。分类见
+  `routers/__init__.py` 的表：`registry.py`(5)／`runs.py`(7)／`products.py`(6)／
+  `feedback.py`(8)／`gold.py`(3)／`evals.py`(7)／`review.py`(3)／`cutline.py`(2)／
+  `jiazhu.py`(1)／`rare.py`(2)／`variants.py`(2)。加一条路由先找它属于哪一类，
+  写进那个文件即可，`app.py` 不用动。
+- **领域逻辑搬到了 `console/` 之外**：`render/overlay.py`（叠图）、
+  `review/cards.py`（待审卡片）、`eval/quality.py`（评测质量看板）、
+  `clustering/rare_panel.py`（生僻字候选）等——路由文件只做参数解析与调用，
+  真正的逻辑独立成模块，**CLI 与云端道可以直接 import，不必经过 HTTP**。
+- **CLI 出口**：v2 子命令从 10 个涨到 16 个，现在是 `pipeline`／`step`／`preclean`／
+  `status`／`console`／`cache`／`batch`／`events`／`eval`／`gold`／`product`（产物与
+  图像：show/manifest/raw/overlay/patch）／`check`（判据与体检：quality/rulers/
+  round/rate）／`cards`（待审卡片数据：dingzi/cutline/jiazhu/groups）／`rare`
+  （生僻字候选）／`variants`（本书用字账，只读）／`runs`（控制台任务：
+  list/show/cancel/log）。**这份列表照 `cli_v2.py` 的 `add_parser` 实况写，
+  方案文档是计划，代码才是实况。**
+- **前端切成了 `static/js/panels/*.js`**（`overview.js`／`run.js`／`products.js`／
+  `review.js`／`cutline.js`／`jiazhu.js`／`evals.js`／`variants.js`，另有
+  `groups.js`／`harvest.js`／`health.js` 等子面板），公共逻辑在 `js/api.js`／
+  `js/state.js`／`js/shared/domain.js`，`js/main.js` 只做装配。**改一个面板**：
+  先改对应 `panels/<名字>.js`，涉及新接口再改 `console/routers/<那一类>.py`，
+  样式在 `css/panels.css`。
+
+**改控制台之后跑这两条验收关**：`tests/test_console_routes.py`（路由）、
+`tests/test_console_tabs.py`（8 个 tab 都渲染得出来）。

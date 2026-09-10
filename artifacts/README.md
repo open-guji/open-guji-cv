@@ -3,7 +3,12 @@
 本项目的人机协作靠一组发布在 claude.ai 上的交互审查页（Artifact）。
 **URL 是持久资产**：用户的书签、页面里的浏览器本地状态都锚在 URL 上，
 更新内容必须**重发布到同一 URL**（发布时带 `url` 参数），千万别新开。
-本目录存各页的 HTML 快照（可离线看、可回滚），README 是唯一的 URL 台账。
+本目录存各页的 HTML 快照（可离线看、可回滚）。**真源不是这份 README**——
+批次登记已随控制台重构（2026-09-10，`a200e37`）落地：真源是
+`review/batches/*.json`（批次表），本档由 `GET /api/batches.md` 从那边
+生成（人读用，勿手改条目；生成器见 `open_guji_cv/review/batches.py` 的
+`render_registry_markdown`）。要看当下有哪些活跃批次，起控制台走「审查」tab，
+或调 `/api/batches.md`。
 
 ## 活跃页面（vol01 进库工作流）
 
