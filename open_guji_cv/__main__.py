@@ -96,12 +96,6 @@ def _parse_range(range_str: str | None, folder: Path) -> set[str] | None:
 
 # ─── 命令处理函数 ──────────────────────────────────────────
 
-def cmd_ui(args):
-    """启动 Web 界面。"""
-    from .web.server import start_server
-    start_server(port=args.port, open_browser=not args.no_browser)
-
-
 def cmd_cut(args):
     """检测切分类型并执行切分。
 
@@ -777,11 +771,6 @@ def main():
     from .cli_v2 import register_subcommands, COMMANDS_V2
     register_subcommands(sub)
 
-    # ── ui ───────────────────────────────────────────────
-    p = sub.add_parser("ui", help="启动 Web 界面")
-    p.add_argument("--port", type=int, default=8632, help="端口号（默认: 8632）")
-    p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
-
     # ── cut ──────────────────────────────────────────────
     p = sub.add_parser("cut",
                        help="检测切分类型并执行切分 → cut.json")
@@ -1087,7 +1076,6 @@ def main():
 
     commands = {
         **COMMANDS_V2,
-        "ui":                cmd_ui,
         "cut":               cmd_cut,
         "recognize-profile": cmd_recognize_profile,
         "analyze":           cmd_recognize_profile,  # 兼容别名
