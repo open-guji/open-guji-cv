@@ -51,6 +51,7 @@ python -m open_guji_cv pipeline keben_body_v2 vol01 --pages 24,42   # 两页产�
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -484,3 +485,121 @@ EXPECTED_ROUTES = [
     "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/rate-history",
     "POST /api/runs", "POST /api/runs/{job_id}/cancel",
 ]
+
+
+# ── C5：CLI 出口与路由「同参同输出」 ────────────────────────────────
+#
+# 方案 §二 量出来的那个数字是「本地专属面积 = 0/46」，结论是「控制台能干的事
+# 云端道现在就能干，只差一层 CLI 出口」。C5 把那层出口开出来，这条测试就是
+# 判据：**同一件事，命令行与路由必须给出同一个答案**。两边各写一份实现的话，
+# 迟早只改一边——所以下面每一对都必须落到同一个领域函数上。
+
+CLI_PAIRS = [
+    # (子命令 argv, 路由, 路由参数)
+    (["check", "quality", BOOK, "--pages", PAGES], "GET /api/quality",
+     dict(book=BOOK, pages=PAGES)),
+    (["check", "rulers", BOOK, "--pages", PAGES], "GET /api/rulers",
+     dict(book=BOOK, pages=PAGES)),
+    (["check", "round", BOOK, "--pages", PAGES], "GET /api/round",
+     dict(book=BOOK, pages=PAGES)),
+    (["check", "rate", BOOK], "GET /api/review/rate-history", dict(book=BOOK)),
+    (["cards", "dingzi", BOOK, "--pages", PAGES, "--limit", "20"], "GET /api/review/cards",
+     dict(book=BOOK, pages=PAGES, limit=20)),
+    (["cards", "jiazhu", JZ_BOOK, "--pages", JZ_PAGES, "--only", "all"],
+     "GET /api/jiazhu/segments", dict(book=JZ_BOOK, pages=JZ_PAGES)),
+    (["cards", "groups", BOOK, "--pages", PAGES], "GET /api/variants/groups",
+     dict(book=BOOK, pages=PAGES)),
+    (["rare", BOOK, str(PAGE), str(COL), str(SLOT), "-k", "5"],
+     "GET /api/rare/{book}/{page}/{col}/{slot}", dict()),
+    (["variants", "book"], "GET /api/variants/book", dict(edition="")),
+    (["product", "show", BOOK, "border_detect", "--key", page_key(PAGE)],
+     "GET /api/products/{book}/{step}/{key}", dict()),
+    (["product", "manifest", BOOK, "border_detect"], "GET /api/manifest/{book}/{step}", dict()),
+]
+
+
+def _cli_json(argv: list[str]) -> dict:
+    """跑一条子命令，把它印出来的 JSON 读回来。"""
+    import contextlib
+    import io as _io
+
+    from open_guji_cv.cli_v2 import COMMANDS_V2, register_subcommands
+
+    ap = argparse.ArgumentParser()
+    register_subcommands(ap.add_subparsers(dest="command"))
+    args = ap.parse_args(argv)
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        COMMANDS_V2[argv[0]](args)
+    return json.loads(buf.getvalue())
+
+
+def test_cli_matches_routes():
+    """C5 的验收：11 对「命令行 vs 路由」逐条同输出。"""
+    if not os.environ.get("GUJI_WORKSPACE"):
+        pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
+    if not (REPO / "products" / BOOK / "seed_admit").exists():
+        pytest.skip(f"缺 {BOOK} 产物")
+    EP = _endpoints()
+    bad = []
+    for argv, route, kw in CLI_PAIRS:
+        if route == "GET /api/rare/{book}/{page}/{col}/{slot}":
+            want = _norm(EP[route](BOOK, PAGE, COL, SLOT, k=5))
+        elif route == "GET /api/products/{book}/{step}/{key}":
+            want = _norm(EP[route](BOOK, "border_detect", page_key(PAGE)))
+        elif route == "GET /api/manifest/{book}/{step}":
+            want = _norm(EP[route](BOOK, "border_detect"))
+        else:
+            want = _norm(EP[route](**kw))
+        got = _norm(_cli_json(argv))
+        if got != want:
+            bad.append((" ".join(argv), route, _deep_diff(want, got)[:3]))
+    for cmd, route, d in bad:
+        print(f"\n──── guji {cmd}  ≠  {route}")
+        for path, a, b in d:
+            print(f"  {path or '<根>'}\n    路由: {a}\n    命令: {b}")
+    assert not bad, f"{len(bad)}/{len(CLI_PAIRS)} 对命令行与路由输出不同"
+    print(f"\n{len(CLI_PAIRS)}/{len(CLI_PAIRS)} 对「命令行 vs 路由」同输出")
+
+
+def test_cli_image_exits(tmp_path):
+    """图像类三条（product raw / overlay / patch、cache get / column）与路由出**同样的字节**。"""
+    if not os.environ.get("GUJI_WORKSPACE"):
+        pytest.skip("要 GUJI_WORKSPACE")
+    EP = _endpoints()
+    ck = cell_key(PAGE, COL, SLOT)
+    cases = [
+        (["product", "raw", BOOK, "--page", str(PAGE), "--scale", "0.35",
+          "--out", str(tmp_path / "raw.png")], EP["GET /api/raw/{book}/{page}.png"],
+         (BOOK, PAGE), {"scale": 0.35}, tmp_path / "raw.png"),
+        (["product", "overlay", BOOK, "border_detect", "--page", str(PAGE),
+          "--scale", "0.35", "--out", str(tmp_path / "ov.png")],
+         EP["GET /api/overlay/{book}/{step}/{page}.png"],
+         (BOOK, "border_detect", PAGE), {"scale": 0.35}, tmp_path / "ov.png"),
+        (["cache", "column", "--book", BOOK, "--page", str(PAGE), "--col", str(COL),
+          "--y0", "0", "--y1", "400", "--out", str(tmp_path / "col.png")],
+         EP["GET /api/cutline/img/{book}/{page}/{col}.png"],
+         (BOOK, PAGE, COL, 0, 400), {}, tmp_path / "col.png"),
+    ]
+    bad = []
+    for argv, ep, a, kw, out in cases:
+        _cli_run(argv)
+        want = _norm(ep(*a, **kw))["sha256"]
+        got = _sha(out.read_bytes())
+        if got != want:
+            bad.append((" ".join(argv), want, got))
+    assert not bad, f"字节不同：{bad}"
+    print(f"\n{len(cases)}/{len(cases)} 条图像出口与路由字节相同")
+
+
+def _cli_run(argv: list[str]) -> None:
+    import contextlib
+    import io as _io
+
+    from open_guji_cv.cli_v2 import COMMANDS_V2, register_subcommands
+
+    ap = argparse.ArgumentParser()
+    register_subcommands(ap.add_subparsers(dest="command"))
+    args = ap.parse_args(argv)
+    with contextlib.redirect_stdout(_io.StringIO()):
+        COMMANDS_V2[argv[0]](args)

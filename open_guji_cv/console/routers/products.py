@@ -18,7 +18,7 @@ from ..errors import maps_http
 from ...core.book import load_book
 from ...core.step import KINDS, RunContext
 from ...errors import EncodeFailed, ImageMissing
-from ...render.overlay import overlay
+from ...render.overlay import encode_png, overlay
 
 router = APIRouter()
 
@@ -44,12 +44,8 @@ def api_manifest(book: str, step: str) -> dict:
 
 
 def _png(img: np.ndarray, scale: float | None = None) -> Response:
-    if scale and scale != 1.0:
-        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    ok, buf = cv2.imencode(".png", img)
-    if not ok:
-        raise EncodeFailed("编码失败")
-    return Response(buf.tobytes(), media_type="image/png",
+    """编码在 `render/overlay.encode_png`（与 CLI 共用），这里只包一层 HTTP。"""
+    return Response(encode_png(img, scale), media_type="image/png",
                     headers={"Cache-Control": "max-age=60"})
 
 
