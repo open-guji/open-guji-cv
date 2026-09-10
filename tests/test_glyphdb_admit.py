@@ -139,6 +139,29 @@ def test_not_a_char_and_skip_do_not_enter_the_library(tmp_path):
     assert r.added == 0 and r.skipped == 2
 
 
+@needs_db
+def test_no_glyph_lib_skips_admit_but_is_not_an_error(tmp_path):
+    """勾了「字形不入库」：正常裁决（不算 skipped/errors），但不落 GlyphDB。"""
+    db = tmp_path / "g.db"
+    shutil.copy(DB, db)
+    key = _free_key(db)
+    if key is None:
+        pytest.skip("dev_set 的字块都进过库了，没有干净的 id 可测")
+    pg, col, slot = key
+    c = sqlite3.connect(db)
+    before = c.execute("select count(*) from admissions").fetchone()[0]
+    c.close()
+    r = glyphdb_admit([_ev(f"vol01:{pg}:{col}:{slot}",
+                          {"v": "confirm", "shape": "次", "reading": "次",
+                           "no_glyph_lib": True}, pg, col, slot)], db_path=str(db))
+    c = sqlite3.connect(db)
+    after = c.execute("select count(*) from admissions").fetchone()[0]
+    c.close()
+    assert before == after, "no_glyph_lib 的事件不该写进 GlyphDB"
+    assert r.no_lib == 1
+    assert r.added == 0 and r.skipped == 0 and not r.errors
+
+
 def test_dry_run_writes_nothing(tmp_path):
     if not DB.exists():
         pytest.skip("需要库")

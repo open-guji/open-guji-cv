@@ -22,6 +22,8 @@ export function mount(root, deps = {}) {
   $('#rv_cards').addEventListener('click', (ev) => {
     const b = ev.target.closest('.rvrarebtn');
     if (b) rvFetchRare(+b.dataset.i, true);
+    const cb = ev.target.closest('.rvctxbtn');
+    if (cb) rvToggleCtxImg(+cb.dataset.i);
   });
   $('#rv_send').onclick = rvSend;
   $('#rv_todo').onchange = () => { RV.snapshot = null; rvFilter(); };
@@ -56,6 +58,16 @@ export function mount(root, deps = {}) {
     const i = +b.dataset.i;
     rvFocus(i);
     rvSet(i, b.dataset.ch);
+  });
+  $('#rv_cards').addEventListener('change', ev => {
+    const ck = ev.target.closest('.rvnolibck');
+    if (!ck) return;
+    const i = +ck.dataset.i, c = RV.cards[i];
+    if (!c) return;
+    const v = RV.verdicts[c.id] || (RV.verdicts[c.id] = { done: '' });
+    v.noGlyphLib = ck.checked;
+    const el = document.getElementById('rvc' + i);
+    if (el) el.dataset.nolib = ck.checked ? '1' : '';
   });
   $('#rv_cards').addEventListener('input', ev => {
     const el = ev.target.closest('.rvin');
@@ -233,10 +245,16 @@ function rvCard(c, i) {
           return `<button class="rvformpick${v.shape === f ? ' pick' : ''}" data-i="${i}" data-ch="${f}" data-rd="${fm.semantic}"
              title="${hn ? '本书人裁确认过 ' + hn + ' 次' : '本书还没人确认过这个形（首例）'}${lib ? ' · 库 cov ' + lib[1] : ''}">${f}<sub>${hn ? '人' + hn : '新'}</sub></button>`;
         }).join('') + `</div>` : '';
-  return `<div class="rvcard" data-i="${i}" data-done="${v.done || ''}" id="rvc${i}">
-    <div class="rvhead"><b class="rvsel">${c.id}</b><span class="muted">${c.channel || '待审'}</span></div>
+  return `<div class="rvcard" data-i="${i}" data-done="${v.done || ''}" data-nolib="${v.noGlyphLib ? '1' : ''}" id="rvc${i}">
+    <div class="rvhead"><b class="rvsel">${c.id}</b><span class="muted">${c.channel || '待审'}</span>
+      <label class="rvnolib" title="字形有无法修复的噪声（污墨/裂纹等），这次选字正常裁决，但这张图不进字形库，避免污染字形匹配索引">
+        <input type="checkbox" data-i="${i}" class="rvnolibck"${v.noGlyphLib ? ' checked' : ''}> 字形不入库</label>
+    </div>
     <div class="rvbody">
-      <img src="${c.patch}" alt="${c.id}" loading="lazy">
+      <div class="rvimgcol">
+        <img src="${c.patch}" alt="${c.id}" loading="lazy">
+        <button class="rvctxbtn" data-i="${i}" title="切分/缩框前的列图原样，上下各带 2 格——排查是不是切分或缩框改坏了这一格">看原图</button>
+      </div>
       <div class="rvev">
         <div><span class="k">整理本</span> ${c.ref && c.ref.char
           ? `<b>${c.ref.char}</b><span class="rvp">${c.ref.op}${c.ref.form ? ' · 惯刻 ' + c.ref.form : ''}${c.ref.wiki ? ' · <b style="color:var(--zhu)">维基 ' + c.ref.wiki + '</b>' : ''}</span>`
@@ -256,6 +274,7 @@ function rvCard(c, i) {
         ${doubts}
       </div>
     </div>
+    <div class="rvctximg" id="rvctximg${i}" style="display:none"></div>
     ${fbtns}
     <div class="rvcand"><span class="rvbtns" id="rvbtns${i}">${rvBtnsHtml(c, i)}</span>
       <input class="rvin" data-i="${i}" data-f="shape" placeholder="字" value="${v.shape || ''}">
@@ -279,6 +298,23 @@ function rvCard(c, i) {
       <span class="muted">字体模板 + CNN 融合，10 个；带释义与整理本对应字</span></div>
     <div class="rvrareout" id="rvrare${i}"></div>
   </div>`;
+}
+
+// 「看原图」：切分/缩框前的列图原样（用户 2026-09-09：「防止切分和缩框等等改变了图片」）。
+// 图不会变，取一次就地缓存（data-src），再点只是显/隐——不重复打后端。
+async function rvToggleCtxImg(i) {
+  const c = RV.cards[i];
+  const box = document.getElementById('rvctximg' + i);
+  if (!c || !box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  box.style.display = '';
+  if (!box.dataset.done) {
+    box.dataset.done = '1';
+    box.textContent = '加载中…';
+    const book = $('#rv_book').value || $('#book').value || 'vol01';
+    const src = `/api/review/context-img/${book}/${c.page}/${c.col}/${c.slot}.png?around=2`;
+    box.innerHTML = `<img src="${src}" alt="上下文原图">`;
+  }
 }
 
 async function rvFetchRare(i, force) {
@@ -334,30 +370,32 @@ export async function rvLoad() {
   rvFocus(0);
   // 候选不再自动预取：一批 100 张卡就是 100 次 0.32s 的后端调用（并发 2 要 16 秒），
   // 载入时整页发卡。用户 2026-09-05 反馈「一打开裁决卡了好久」。改成点「查候选」按需拉。
-  // 列上下文按需拉，一列只拉一次
-  const seen = new Set();
-  for (let i = 0; i < d.cards.length; i++) {
-    const c = d.cards[i], key = `${c.page}:${c.col}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    api(`/api/review/column/${book}/${c.page}/${c.col}`).then(col => {
-      d.cards.forEach((x, j) => {
-        if (x.page !== c.page || x.col !== c.col) return;
-        const el = document.getElementById('rvctx' + j);
-        if (!el) return;
-        const slots = col.slots || [];
-        const at = slots.findIndex(s => s.slot === x.slot);
-        // 读文定字：本位高亮，**其他待审位标虚线**（提醒这几个字还没定，
-        // 别拿它们当可靠上下文），库/OCR 兜底来的字标灰（不是 Step6 定的）。
-        el.innerHTML = slots.map((s, k) => {
-          const ch = s.char || '□';
-          if (k === at) return `<mark>${ch}</mark>`;
-          const cls = s.review ? 'ctx-rev' : (s.source === 'db' || s.source === 'ocr' ? 'ctx-w' : '');
-          return cls ? `<span class="${cls}">${ch}</span>` : ch;
-        }).join('');
-      });
-    }).catch(() => {});
-  }
+  // 上下文批量拉：跨列/跨页凑够前后各 10 个字（用户 2026-09-09：「文字在
+  // 第一个或最后一个字时看不到上下文，应该动态加载前十后十，不论是否在一
+  // 行」）。**不能再按列分组只拉一次**——同一列的卡「本位」不同，拼接结果
+  // 也不同；但一批 400 张卡逐个请求 = 逐个重读所在页产物，会重演「候选加载
+  // 卡顿」那次教训，所以走批量接口，一页产物在后端只读一次。
+  api('/api/review/around/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ book, before: 10, after: 10,
+      items: d.cards.map(c => ({ page: c.page, col: c.col, slot: c.slot })) }),
+  }).then(r => {
+    const around = r.around || {};
+    d.cards.forEach((c, i) => {
+      const ctx = around[`${c.page}:${c.col}:${c.slot}`];
+      const el = document.getElementById('rvctx' + i);
+      if (!el || !ctx) return;
+      const slots = ctx.slots || [];
+      const at = ctx.at;
+      // 读文定字：本位高亮，**其他待审位标虚线**（提醒这几个字还没定，
+      // 别拿它们当可靠上下文），库/OCR 兜底来的字标灰（不是 Step6 定的）。
+      el.innerHTML = slots.map((s, k) => {
+        const ch = s.char || '□';
+        if (k === at) return `<mark>${ch}</mark>`;
+        const cls = s.review ? 'ctx-rev' : (s.source === 'db' || s.source === 'ocr' ? 'ctx-w' : '');
+        return cls ? `<span class="${cls}">${ch}</span>` : ch;
+      }).join('');
+    });
+  }).catch(() => {});
 }
 
 // 只看未裁决：纯前端过滤，不重新载入——裁完一张就让它消失，
@@ -479,8 +517,12 @@ async function rvSend() {
       continue;
     }
     // 字形 / 文意分开带上；不同就是一次转换，下游按 shape/char 分岔存
+    // no_glyph_lib（用户 2026-09-09）：字形本身有无法修复的噪声（污墨/裂纹等），
+    // 字仍正常选，但这张图不该进 GlyphDB（会污染字形匹配索引）——
+    // 只是不建库，不是不裁决，所以照常走 confirm，只多带一个标志给 glyphdb_admit 看。
     rows.push({ id, v: 'confirm', shape: v.shape, reading: readingOf(v),
                 conversion: (readingOf(v) !== v.shape) ? 1 : 0,
+                no_glyph_lib: !!v.noGlyphLib,
                 client_ts: v.ts, dwell_ms: v.dwell });
   }
   if (pending) {

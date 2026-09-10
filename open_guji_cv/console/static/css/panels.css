@@ -71,8 +71,15 @@
   .rvcard.cur { outline:2px solid var(--indigo); outline-offset:1px; }
   .rvhead { display:flex; justify-content:space-between; align-items:baseline; gap:.4rem; }
   .rvhead b { font-family:var(--mono); font-size:.72rem; font-weight:500; }
+  .rvnolib { margin-left:auto; font-size:.7rem; color:var(--mute); white-space:nowrap; cursor:pointer; user-select:none; }
+  .rvnolib input { vertical-align:-1px; margin-right:.15rem; }
+  .rvcard[data-nolib="1"] .rvnolib { color:var(--zhu); }
   .rvbody { display:flex; gap:.6rem; margin:.4rem 0; align-items:flex-start; }
   .rvbody img { width:76px; height:76px; object-fit:contain; background:#fff; border:1px solid var(--rule); }
+  .rvimgcol { display:flex; flex-direction:column; align-items:center; gap:.2rem; }
+  .rvctxbtn { font-size:.65rem; padding:.05rem .35rem; color:var(--mute); }
+  .rvctximg { margin:.3rem 0; padding:.3rem; border:1px solid var(--rule); border-radius:4px; background:#fff; }
+  .rvctximg img { max-width:100%; display:block; margin:0 auto; }
   .rvev { flex:1; min-width:0; line-height:1.5; }
   .rvev .k { color:var(--mute); font-size:.7rem; letter-spacing:.03em; }
   .rvcand button { font-size:.9rem; padding:.1rem .45rem; margin:.1rem .2rem .1rem 0; }

@@ -37,7 +37,8 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
         elif v == "confirm":
             out[e.target.key] = {"shape": p.get("shape") or "",
                                  "reading": p.get("reading") or p.get("shape") or "",
-                                 "done": "1"}
+                                 "done": "1",
+                                 "noGlyphLib": bool(p.get("no_glyph_lib"))}
     return {"batch": batch, "n": len(out), "verdicts": out}
 
 

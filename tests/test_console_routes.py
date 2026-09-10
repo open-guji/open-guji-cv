@@ -267,9 +267,9 @@ def _call(fn, *args, mode: str = "value", **kw):
     return _shape(out) if mode == "shape" else out
 
 
-# ── 46 条：逐条调一次 ────────────────────────────────────────────────
+# ── 49 条：逐条调一次 ────────────────────────────────────────────────
 def _collect() -> dict:
-    """返回 {"METHOD /path": 归一化结果}，共 46 条。"""
+    """返回 {"METHOD /path": 归一化结果}，共 49 条。"""
     from open_guji_cv.console.jobs import TERMINAL
 
     EP = _endpoints()
@@ -350,9 +350,14 @@ def _collect() -> dict:
     rs = EP["POST /api/review/rate-history"]
     call("POST /api/review/rate-history", _model(rs)(books=BOOK, note="snap"))
 
-    # 八 · 专项审查页（10）
+    # 八 · 专项审查页（13）
     call("GET /api/review/cards", book=BOOK, pages=PAGES, limit=20)
     call("GET /api/review/column/{book}/{page}/{col}", BOOK, PAGE, COL)
+    call("GET /api/review/around/{book}/{page}/{col}/{slot}", BOOK, PAGE, COL, SLOT)
+    ab = EP["POST /api/review/around/batch"]
+    call("POST /api/review/around/batch",
+         _model(ab)(book=BOOK, items=[{"page": PAGE, "col": COL, "slot": SLOT}]))
+    call("GET /api/review/context-img/{book}/{page}/{col}/{slot}.png", BOOK, PAGE, COL, SLOT)
     call("GET /api/review/verdicts", batch=BATCH)
     call("GET /api/cutline/cases", book=BOOK, pages=PAGES, limit=5, seed=0, skip_done=False)
     call("GET /api/cutline/verdicts", batch=BATCH)
@@ -423,20 +428,23 @@ def _cleanup(hist_before: bytes | None) -> None:
 
 # ── 测试 ─────────────────────────────────────────────────────────────
 def test_route_inventory():
-    """46 条路由一条不少、一条不多，且 method+path 逐条对得上。
+    """49 条路由一条不少、一条不多，且 method+path 逐条对得上。
 
     C3 把 `app.py` 拆成 11 个 router，最怕的就是**漏挂一个 router**——
     那时快照测试会因为拿不到实现体而报别的错，这条先把账对清楚。
+
+    （原始 46 条是 C3 落定时的数；2026-09-09 加「字形不入库」的跨列/跨页
+    上下文与切分前原图，`review.py` 添了 3 条，46 → 49。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 46, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 49, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
 
 
 def test_route_snapshot():
-    """46 条路由各调一次，与基线逐条比对。"""
+    """49 条路由各调一次，与基线逐条比对。"""
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
     if not (REPO / "products" / BOOK / "seed_admit").exists():
@@ -448,12 +456,12 @@ def test_route_snapshot():
         snap = _collect()
     finally:
         _cleanup(hist_before)
-    assert len(snap) == 46, f"只采到 {len(snap)} 条"
+    assert len(snap) == 49, f"只采到 {len(snap)} 条"
 
     if WRITE or not SNAP.exists():
         SNAP.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True),
                         encoding="utf-8")
-        print(f"\n基线已落盘：{SNAP}（46 条）。重构每推一步再跑一次比对。")
+        print(f"\n基线已落盘：{SNAP}（49 条）。重构每推一步再跑一次比对。")
         return
 
     base = json.loads(SNAP.read_text(encoding="utf-8"))
@@ -480,10 +488,10 @@ def test_route_snapshot():
             print(f"\n──── 差异 {k}")
             for path, a, b in _deep_diff(base.get(k), snap.get(k))[:8]:
                 print(f"  {path or '<根>'}\n    基线: {a}\n    现在: {b}")
-    assert not diffs, f"{len(diffs)}/46 条与基线不同：{diffs}"
-    n_ok = 46 - len([k for k in changed if k in SANCTIONED])
-    print(f"\n{n_ok}/46 条快照零差异"
-          + (f"，另 {46 - n_ok} 条是 SANCTIONED 里点名的有意变化" if n_ok < 46 else "")
+    assert not diffs, f"{len(diffs)}/49 条与基线不同：{diffs}"
+    n_ok = 49 - len([k for k in changed if k in SANCTIONED])
+    print(f"\n{n_ok}/49 条快照零差异"
+          + (f"，另 {49 - n_ok} 条是 SANCTIONED 里点名的有意变化" if n_ok < 49 else "")
           + f"（基线 {SNAP}）")
 
 
@@ -495,14 +503,17 @@ EXPECTED_ROUTES = [
     "GET /api/kinds", "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
     "GET /api/pipelines", "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
+    "GET /api/review/around/{book}/{page}/{col}/{slot}",
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",
+    "GET /api/review/context-img/{book}/{page}/{col}/{slot}.png",
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
     "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/steps",
     "GET /api/variants/book", "GET /api/variants/groups",
     "POST /api/batches", "POST /api/batches/{batch_id}/harvest", "POST /api/batches/{batch_id}/route",
     "POST /api/events", "POST /api/evals/{eval_id}/run", "POST /api/gold/{shard:path}/drift",
-    "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/rate-history",
+    "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/around/batch",
+    "POST /api/review/rate-history",
     "POST /api/runs", "POST /api/runs/{job_id}/cancel",
 ]
 
