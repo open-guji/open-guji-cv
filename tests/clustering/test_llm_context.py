@@ -14,9 +14,44 @@ import json
 import pytest
 
 from open_guji_cv.clustering.llm_context import (LLMContextJudge, MockJudge,
-                                                  NoAPIKeyError, parse_answer,
-                                                  prompt_direct,
-                                                  prompt_with_candidates)
+                                                  NoAPIKeyError, find_api_key,
+                                                  parse_answer, prompt_direct,
+                                                  prompt_with_candidates,
+                                                  redact_key)
+
+
+# ── key 查找：环境变量优先，其次 overview 仓 .secret/api-keys.cfg ──────
+
+def test_find_api_key_prefers_env_var(monkeypatch, tmp_path):
+    cfg = tmp_path / "api-keys.cfg"
+    cfg.write_text("GLM_API_KEY=from-cfg\n", encoding="utf-8")
+    monkeypatch.setenv("GUJI_API_KEYS_CFG", str(cfg))
+    monkeypatch.setenv("GLM_API_KEY", "from-env")
+    key, source = find_api_key("GLM_API_KEY")
+    assert key == "from-env" and source == "环境变量"
+
+
+def test_find_api_key_falls_back_to_cfg_file(monkeypatch, tmp_path):
+    cfg = tmp_path / "api-keys.cfg"
+    cfg.write_text("# 注释行\nGLM_API_KEY=from-cfg\n", encoding="utf-8")
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.setenv("GUJI_API_KEYS_CFG", str(cfg))
+    key, source = find_api_key("GLM_API_KEY")
+    assert key == "from-cfg" and source == str(cfg)
+
+
+def test_find_api_key_neither_place_has_it(monkeypatch, tmp_path):
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.setenv("GUJI_API_KEYS_CFG", str(tmp_path / "missing.cfg"))
+    key, source = find_api_key("GLM_API_KEY")
+    assert key is None and "没有" in source
+
+
+def test_redact_key_never_leaks_full_value():
+    r = redact_key("sk-abcdefghijklmnop")
+    assert r.startswith("sk-abc")
+    assert "abcdefghijklmnop" not in r
+    assert "len=" in r
 
 
 # ── parse_answer ──────────────────────────────────────────────────────
@@ -106,9 +141,13 @@ def test_prompt_with_candidates_reason_variant_differs():
 
 # ── 没 key：显式抛异常，不许静默退化 ──────────────────────────────────
 
-def test_no_api_key_raises(monkeypatch):
+def test_no_api_key_raises(monkeypatch, tmp_path):
     monkeypatch.delenv("GLM_API_KEY", raising=False)
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    # 这台机器的 overview 仓真的有 .secret/api-keys.cfg（任务书 2026-09-10
+    # 更新后用户已把 key 放进仓）——测「两处都没有」要把 cfg 的查找路径也
+    # 指去一个空目录，不然会读到真 key，这条测试就测不出「真的没找到」了。
+    monkeypatch.setenv("GUJI_API_KEYS_CFG", str(tmp_path / "no-such-file.cfg"))
     with pytest.raises(NoAPIKeyError):
         LLMContextJudge("glm")
     with pytest.raises(NoAPIKeyError):
