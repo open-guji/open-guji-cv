@@ -1,0 +1,15 @@
+# 《欽定四庫全書總目》武英殿刻本 經部六~七·易類六~易類存目一·卷六~卷七（IA 06061303.cn），vol04
+#
+# 218 页，与 IA 元数据 imagecount 一致（vol03 那条「188页」标错，这条没问题）。
+# 首页核实为「卷六」，末页页眉「易類存目」对应卷七收尾，与网页描述吻合
+# （2026-09-10，未逐页核实卷六→卷七的精确分界页）。
+id: vol04
+title: 欽定四庫全書總目·經部六~七·易類六~易類存目一·卷六~卷七（vol04）
+edition: keben
+raw_dir: data_full/zongmu/vol04
+raw_pattern: "{page}.png"
+expected_cols: 9
+chars_per_line: 21
+dev_set: []
+notes: |
+  2026-09-10 首次拉取转换，尚未跑过任何 Step，未逐页核实版式。

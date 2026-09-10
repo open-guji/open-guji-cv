@@ -1,0 +1,14 @@
+# 《欽定四庫全書總目》武英殿刻本 經部八~九·易類存目·卷八~卷九（IA 06061304.cn），vol05
+#
+# 188 页，与 IA 元数据 imagecount 一致。首页核实为「卷八」（2026-09-10），
+# 与网页描述「卷八~卷九」吻合，未逐页核实卷八→卷九的精确分界页。
+id: vol05
+title: 欽定四庫全書總目·經部八~九·易類存目·卷八~卷九（vol05）
+edition: keben
+raw_dir: data_full/zongmu/vol05
+raw_pattern: "{page}.png"
+expected_cols: 9
+chars_per_line: 21
+dev_set: []
+notes: |
+  2026-09-10 首次拉取转换，尚未跑过任何 Step，未逐页核实版式。
