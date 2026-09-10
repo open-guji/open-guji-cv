@@ -1,0 +1,15 @@
+# 《欽定四庫全書總目》武英殿刻本 經部十四·書類存目二·卷十四（IA 06061307.cn），vol08
+#
+# 69 页，全册只一卷，与 IA 元数据 imagecount 一致（未逐页核实，采信网页
+# 描述——同批 vol04/vol05 已逐页核实卷次描述与实际内容一致，此册未单独
+# 核实）。
+id: vol08
+title: 欽定四庫全書總目·經部十四·書類存目二·卷十四（vol08）
+edition: keben
+raw_dir: data_full/zongmu/vol08
+raw_pattern: "{page}.png"
+expected_cols: 9
+chars_per_line: 21
+dev_set: []
+notes: |
+  2026-09-10 首次拉取转换，尚未跑过任何 Step，未逐页核实版式。

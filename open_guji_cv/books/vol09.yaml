@@ -1,0 +1,14 @@
+# 《欽定四庫全書總目》武英殿刻本 經部十五~十八·詩類一~存目二·卷十五~卷十八（IA 06061308.cn），vol09
+#
+# 262 页，与 IA 元数据 imagecount 一致（未逐页核实，采信网页描述——
+# 同批 vol04/vol05 已逐页核实卷次描述与实际内容一致，此册未单独核实）。
+id: vol09
+title: 欽定四庫全書總目·經部十五~十八·詩類一~存目二·卷十五~卷十八（vol09）
+edition: keben
+raw_dir: data_full/zongmu/vol09
+raw_pattern: "{page}.png"
+expected_cols: 9
+chars_per_line: 21
+dev_set: []
+notes: |
+  2026-09-10 首次拉取转换，尚未跑过任何 Step，未逐页核实版式。
