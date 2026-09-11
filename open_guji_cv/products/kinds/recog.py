@@ -119,6 +119,11 @@ class DecisionRec(BaseModel):
     source: str = ""                         # db_same | context | prior | none
     used_context: bool = False
     ranked: list[tuple[str, float]] = Field(default_factory=list)
+    llm_suggestion: str | None = None
+    """线上外部大模型给的候选内答案（未过门槛时才会问，见 context_decide
+    模块头【2026-09-10】）。只调 `ranked` 顺序，不参与 `char`/`source`——
+    是否采信仍由人审决定，这个字段只是给审阅界面一个「模型觉得是这个」
+    的提示。None＝没问过，或问了但答案不在候选内／解析失败。"""
 
 
 class ColumnDecision(BaseModel):
