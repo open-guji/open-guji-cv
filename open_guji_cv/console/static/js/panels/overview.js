@@ -54,6 +54,21 @@ export async function refreshStatus() {
   $('#p_page').innerHTML = allPages.map(p => `<option value="${p}">${p}</option>`).join('');
   if (cur && allPages.includes(Number(cur))) $('#p_page').value = cur;
   $('#running').textContent = st.running ? `运行中：${st.running.id}` : '';
+  refreshLlmOnlineNote(book);
+}
+
+// 线上大模型裁决的真实正确率（日志 join 人审事件，见 eval/llm_online_accuracy.py）。
+// 独立小请求，跟状态矩阵不是同一条查询——没数据时静默留空，不喧宾夺主。
+async function refreshLlmOnlineNote(book) {
+  const el = $('#llm_online_note');
+  if (!el) return;
+  try {
+    const r = await api(`/api/llm_online_stats?book=${encodeURIComponent(book)}`);
+    if (!r.has_data) { el.textContent = ''; return; }
+    const acc = r.accuracy != null ? `${(r.accuracy * 100).toFixed(1)}%` : '还没人审判定';
+    el.textContent = `线上大模型裁决：${r.n_total_calls} 次调用 · `
+      + `${r.n_resolved} 条已核对人审 · 正确率 ${acc}`;
+  } catch (e) { el.textContent = ''; }
 }
 
 export const refresh = refreshStatus;
