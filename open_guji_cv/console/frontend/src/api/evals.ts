@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { EvalRunResult, EvalSpec, RoundResponse, RulersResponse } from '../types/evals'
+import type { EvalRunResult, EvalSpec, RoundResponse, RulersResponse, ThroughputResponse } from '../types/evals'
 
 export const fetchEvals = () => api<EvalSpec[]>('/api/evals')
 
@@ -9,6 +9,11 @@ export function runEval(id: string, timeout = 900) {
 
 export function fetchRulers(book: string, pages = 'dev_set') {
   return api<RulersResponse>(`/api/rulers?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`)
+}
+
+export function fetchThroughput(book: string, pages = '') {
+  const qs = `book=${encodeURIComponent(book)}` + (pages ? `&pages=${encodeURIComponent(pages)}&all_pages=false` : '')
+  return api<ThroughputResponse>(`/api/throughput?${qs}`)
 }
 
 export function fetchRound(book: string, pages: string) {

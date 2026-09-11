@@ -86,6 +86,19 @@ def api_round(book: str = "vol01", pages: str = "") -> dict:
 
 
 
+@router.get("/api/throughput")
+def api_throughput(book: str = "vol01", pages: str = "", all_pages: bool = True) -> dict:
+    """吞吐量三件套：逐页输入输出 / 自动放行通道占比 / 各步 performance。
+
+    只读现有产物聚合，不重跑管线、不重新计时——见 `eval/throughput.py` 头注。
+    `all_pages=True`（默认）统计全书已有产物的页；传 `pages` 则改统计那个子集
+    （如 `dev_set`），此时 `all_pages` 自动失效。
+    """
+    from ...eval import throughput as tp
+    p = None if (all_pages and not pages) else (pages or "dev_set")
+    return tp.full_report(book, p, deps.product_store())
+
+
 @router.get("/api/llm_online_stats")
 def api_llm_online_stats(book: str = "") -> dict:
     """线上外部大模型（Step6 `context_decide.enable_online_llm`）的真实

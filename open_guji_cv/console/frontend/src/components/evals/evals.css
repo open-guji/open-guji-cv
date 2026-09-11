@@ -1,4 +1,6 @@
 /* 评测/体检看板样式，照抄 v1 static/css/panels.css。 */
+.section-head { font-size: .82rem; font-weight: 600; letter-spacing: .04em; color: var(--ink-2);
+  margin: 1.4rem 0 .5rem; padding-top: .6rem; border-top: 1px solid var(--rule); }
 .evals-toolbar { display: flex; gap: .6rem; margin-bottom: .6rem; align-items: center; }
 .evals-out { margin-top: .6rem; max-height: 18rem; }
 .ruler-note { margin-top: .5rem; line-height: 1.7; }
