@@ -23,10 +23,19 @@ needs_dataset = pytest.mark.skipif(not DATASET.exists(), reason="需要 open-guj
 
 
 # ── 注册表 ───────────────────────────────────────────────────────────
+# 不进注册表的 eval_*.py：`EvalSpec.argv()` 只会拼「数据集路径 + 固定 extra」，
+# 跑不了需要**每次手选**外部产物路径的脚本。控制台没有「调用时再问一个参数」
+# 的机制，硬塞一份写死的 --answers 会把注册表锁死在一次性快照上，比不注册更误导。
+NOT_REGISTRY_SHAPED = {
+    "oracle_llm",  # --answers 是 required 的外部答案表路径（run_llm_context_eval.py
+                   # 的产物，同一次可传多份对比 provider），不是数据集分片
+}
+
+
 def test_registry_covers_every_eval_script():
     scripts = {p.stem[len("eval_"):] for p in
                (Path(__file__).resolve().parent.parent / "scripts").glob("eval_*.py")}
-    missing = scripts - set(EVALS)
+    missing = scripts - set(EVALS) - NOT_REGISTRY_SHAPED
     assert not missing, f"这些评测脚本没进注册表: {sorted(missing)}"
 
 
