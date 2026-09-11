@@ -92,6 +92,7 @@
   .b-completed { background: var(--ok-soft); color: var(--ok); }
   .b-failed, .b-cancelled { background: var(--zhu-soft); color: var(--zhu); }
   .b-pending { background: var(--faint-soft); color: var(--faint); }
+  .b-warn { background: var(--ochre-soft); color: var(--ochre); }
   pre.log { font-family: var(--mono); font-size: .76rem; line-height: 1.45; background: #1b1f22; color: #d8d6cc; padding: .7rem .9rem;
     border-radius: 6px; max-height: 24rem; overflow: auto; white-space: pre-wrap; margin: 0; }
   pre.log .fail { color: #f0a097; } pre.log .ok { color: #9fd0a1; } pre.log .skip { color: #9aa0a3; }

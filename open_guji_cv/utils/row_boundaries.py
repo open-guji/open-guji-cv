@@ -297,8 +297,9 @@ class Cell:
     gap_center: float | None = None
     ink_ratio: float = 0.0
     raised: bool = False
-    suspect_jiazhu_tail: bool = False  # 段尾可能吞了整宽正文字，见
-                                        # jiazhu_split.suspect_full_width_tail；
+    suspect_jiazhu_body: bool = False  # 这一格可能是被缝位骗过的整宽正文字
+                                        # （型 1），见
+                                        # jiazhu_split.suspect_full_width_cells；
                                         # 只标记不改切分，人工审查用
     seam_top: list[int] | None = None
     seam_bottom: list[int] | None = None
@@ -1039,6 +1040,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
+    suspect: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
@@ -1049,7 +1051,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         runs = jiazhu_split.link_runs(entries)
         runs, tail_a = jiazhu_split.adopt_run_tails(
             runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
-        suspect_tail = jiazhu_split.suspect_full_width_tail(runs, patches, ink_threshold)
+        suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
 
     cells: list[Cell] = []
     for k in range(n_slots):
@@ -1073,7 +1075,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 cells.append(Cell(slot=slot, y0=y0, y1=y1,
                                   x0=float(x_lo + xs), x1=float(x_lo + xe),
                                   kind=kind, gap_center=cx, raised=raised,
-                                  ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
+                                  ink_ratio=round(_ink_ratio(half, ink_threshold), 4),
+                                  suspect_jiazhu_body=(pos in suspect)))
             continue
         kind = "blank" if pos not in nonblank else "char"
         cells.append(Cell(slot=slot, y0=y0, y1=y1, x0=float(x_lo), x1=float(x_hi),

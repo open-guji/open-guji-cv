@@ -198,43 +198,22 @@ def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
     return out
 
 
-def suspect_full_width_tail(runs: dict[int, float], patches: dict[int, np.ndarray],
-                            ink_threshold: int = INK_THRESHOLD) -> int | None:
-    """段尾疑似标记：段的最后一格**可能**是被缝位骗过的整宽正文字，返回其
-    格号；拿不准就返回 `None`。**只标记，不裁剪**——见模块头「2026-09-10
-    用生产数据核实」那段记录：18 处几何判据命中里 16 处是假阳性（真夹注
-    小字笔画粗、缝窄，与整宽字骗过缝检测的墨量特征重叠），裁段的代价
-    （把真夹注小字错判成正文丢弃）比漏检贵得多，所以这道闸不改 `runs`，
-    只把段尾格标出来送人工审查。
-
-    `link_runs` 只看缝中心是否对齐、段的连通体中位数是否够——不看**段尾这
-    一格本身像不像夹注**。整宽字（子/此……）若恰好在缝位附近有竖笔，
-    `gap_center` 量得出一条「缝」，缝对齐、连通体也够，就被收进段。这道闸
-    只看段尾，不动段中间——`adopt_run_tails` 已经证明段中间的夹注格必然
-    紧跟在另一个已确认的夹注格后面，被整宽字打断的情况只出现在段尾。
+def _straddles_seam(patch: np.ndarray, cx: int, ink_threshold: int = INK_THRESHOLD) -> bool:
+    """单格判据：这一格是不是被缝位骗过的整宽字（型 1）。
 
     判据：缝 ±2px 内若有连通体贯穿（左右都有该连通体的像素），且这个连通
     体的面积占本格总墨量 ≥ `TAIL_SUSPECT_STRADDLE_FRAC`——一个字被劈成两
     半时，两半本是同一路笔画，贯穿缝位的连通体会占掉这个字的大部分墨；
     两个独立夹注小字即便笔画粗到不小心碰缝，各自的连通体仍以本字为主，
-    跨缝那一小段占比低。**仍是启发式，不保证测开所有案例**（同一次核实里
-    `vol02:57:4:21`「能」这类真阳性也没测到，字形结构本身分左右两半时缝
-    可能不落在贯穿笔画上），漏检留给人工审查兜底，宁可漏不可错杀。
+    跨缝那一小段占比低。
     """
-    if not runs:
-        return None
-    tail = max(runs)
-    patch = patches.get(tail)
-    if patch is None:
-        return None
-    cx = int(round(runs[tail]))
     h, w = patch.shape[:2]
     if cx <= 0 or cx >= w:
-        return None
+        return False
     binary = _binary(patch, ink_threshold)
     total_ink = int(binary.sum())
     if total_ink == 0:
-        return None
+        return False
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
     straddle_area = 0
     for lbl in range(1, n):
@@ -243,9 +222,32 @@ def suspect_full_width_tail(runs: dict[int, float], patches: dict[int, np.ndarra
             continue
         if xs.min() <= cx - 2 and xs.max() >= cx + 2:
             straddle_area = max(straddle_area, int(stats[lbl, 4]))
-    if straddle_area / total_ink >= TAIL_SUSPECT_STRADDLE_FRAC:
-        return tail
-    return None
+    return straddle_area / total_ink >= TAIL_SUSPECT_STRADDLE_FRAC
+
+
+def suspect_full_width_cells(runs: dict[int, float], patches: dict[int, np.ndarray],
+                             ink_threshold: int = INK_THRESHOLD) -> set[int]:
+    """段内疑似标记：段里**可能**被缝位骗过的整宽正文字格号集合。
+    **只标记，不裁剪**——见模块头「2026-09-10 用生产数据核实」那段记录：
+    最初只用几何判据自动裁剪时，18 处命中里 16 处是假阳性（真夹注小字
+    笔画粗、缝窄，与整宽字骗过缝检测的墨量特征重叠），裁段的代价（把真
+    夹注小字错判成正文丢弃）比漏检贵得多，所以这道闸不改 `runs`，只把
+    可疑格标出来送人工审查。
+
+    `link_runs` 只看缝中心是否对齐、段的连通体中位数是否够——不看**每一
+    格本身像不像夹注**。整宽字（子/此/府……）若恰好在缝位附近有竖笔，
+    `gap_center` 量得出一条「缝」，缝对齐、连通体也够，就被收进段——见证
+    过的案例横跨段中间（`vol02:57:4:20`「子」，段尾另有一格「能」）和段尾
+    （`vol02:100:4:17`「此」、`vol02:97:9:21`「府」），**不能只查段尾**。
+
+    每格独立跑 `_straddles_seam`，2026-09-10 全书 417 个夹注格实测 3 处
+    命中、0 假阳性（`vol02:57:4:21`「能」这类真阳性未测到——字形结构本身
+    分左右两半时缝可能不落在贯穿笔画上，漏检留给人工审查兜底，宁可漏不
+    可错杀，仍是启发式，不保证测开所有案例）。
+    """
+    return {i for i, cx in runs.items()
+            if (patch := patches.get(i)) is not None
+            and _straddles_seam(patch, int(round(cx)), ink_threshold)}
 
 
 def adopt_run_tails(runs: dict[int, float], patches: dict[int, np.ndarray],
