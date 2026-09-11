@@ -1,26 +1,6 @@
 # 外部整理本語料
 
-## zongmu_wuyingdian_reference.txt
-
-《欽定四庫全書總目》整理本（用戶提供），覆蓋卷首一~四 + 卷一~二十七，
-約 34.6 萬字，無標點、傳承字形（爲/説…）。
-
-用途：
-1. **對齊校驗**：與轉寫逐頁對齊量真實字準確率（scripts 見設計文檔 18.11）；
-2. **真 LM 語料**：`refine --with-lm --corpus corpus/…` 的訓練數據
-   （自舉語料 15% 噪聲已被消融證明有害，此為 M5 設計的正途）；
-3. **本版用字習慣**：統計表面形頻次（爲 vs 為），補入/重排同語義候選。
-
-實測（book9all 卷首，對齊 177 頁）：76.70% → **84.16%**（+7.5%），
-傅/傳、寶/實、説/說、為/爲 等系統性混淆清零。
-
-## zongmu_wikisource_reference.txt
-
-維基文庫《四庫全書總目提要》條目（普通 wikitext 頁面，非 ProofreadPage）抽取，
-覆蓋卷首一~四 + 卷001~027，約 2026-09-06 抓取。用途：與現有整理本互校，抓到過
-`vol02:57:6:14` 摶/搏 等現有整理本的真錯（見 `variant_strategy.md` §8 09-07（二））。
-
-## zongmu_wenyuange_wikisource.txt
+## zongmu_wenyuange_wikisource.txt —— 現役，`align_ref`／`context_decide`／`gold.v2_align` 唯一語料
 
 維基文庫《文淵閣四庫全書》0001-0005冊 ProofreadPage 校對本抽取，經 MediaWiki
 API 在線逐頁拉取（本地 dump title-index 對這批 Page: 條目有缺失，09-10 實測
@@ -36,9 +16,19 @@ API 在線逐頁拉取（本地 dump title-index 對這批 Page: 條目有缺失
 | 0005 | 集部（二）　卷一百八十六至卷二百 | **Progress=OCR（僅機器 OCR，未經人工校對）** | 21.8 萬 |
 
 合計約 265 萬字。0005 冊質量明顯低於前四冊，使用時應區別對待（可能有較多
-OCR 原始錯誤未清）。與 `zongmu_wikisource_reference.txt` 是兩個獨立來源
-（不同底本、不同校對工程），可互相佐證；與 `zongmu_wuyingdian_reference.txt`
-（用戶提供整理本）比對時同樣只當「第二意見」，不改動任何自動通道。
+OCR 原始錯誤未清）。
+
+## 已退役（保留在目錄裡備查，pipeline 不再讀取）
+
+2026-09-11 起 `align_ref.py`／`context_decide.py`／`gold/v2_align.py` 三處
+`DEFAULT_CORPUS` 及 `review/cards.py` 的對齊語料統一改指向上面這份新語料；
+舊的兩份語料——`zongmu_wuyingdian_reference.txt`（用戶提供整理本，覆蓋卷首
+一~四 + 卷一~二十七，約 34.6 萬字）與 `zongmu_wikisource_reference.txt`
+（維基文庫《四庫全書總目提要》wikitext 版，覆蓋卷首一~四 + 卷001~027，約
+2026-09-06 抓取）——文件仍留在本目錄，但不再被任何生產代碼默認讀取。
+`review/cards.py` 里原有的「維基第二意見」（`ref.wiki` 字段、卡片「維基」
+候選按鈕）已一併撤掉，因為新舊語料已合一，「兩份整理本互校」的概念不再
+成立。歷史細節見 `variant_strategy.md` §8 09-07（二）及其 09-11 更新註。
 
 ## external/ —— 通用古文語料（派生產物）
 

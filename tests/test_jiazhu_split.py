@@ -107,37 +107,34 @@ def test_link_runs_vetoes_noise_run_by_median_strength():
 
 
 def _full_width_char_patch(seam: int = 92) -> np.ndarray:
-    """整宽正文字：一条竖笔恰好压在缝位上，两侧都有可观的墨（子/此类）。"""
+    """整宽正文字：一整块连通的墨横跨缝位，两侧都有可观的墨（子/此类）——
+    与 `_jiazhu_patch` 的左右两个**分离**子列小字相对，模拟同一路笔画被
+    缝位骗过、误判为两个夹注格的情况。"""
     p = _blank()
-    _box(p, 20, seam - 2, 15, 95)          # 字身左半
-    _box(p, seam - 1, seam + 2, 10, 100)   # 跨缝竖笔
-    _box(p, seam + 3, W - 20, 15, 95)      # 字身右半
+    _box(p, 20, W - 20, 15, 95)
     return p
 
 
-def test_trim_full_width_tail_drops_char_split_by_seam():
+def test_suspect_full_width_tail_flags_char_split_by_seam():
     patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: _full_width_char_patch()}
-    runs = jz.trim_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches)
-    assert set(runs) == {3, 4}
+    assert jz.suspect_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches) == 5
 
 
-def test_trim_full_width_tail_leaves_single_char_tail_alone():
+def test_suspect_full_width_tail_leaves_single_char_tail_alone():
     """单字尾（奇数字末行只剩右半一个小字）b 侧墨量为 0，不该被这道闸挡住。"""
     tail = _blank()
     _box(tail, 100, W - 15, 20, 90)
     patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: tail}
-    runs = jz.trim_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches)
-    assert set(runs) == {3, 4, 5}
+    assert jz.suspect_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches) is None
 
 
-def test_trim_full_width_tail_leaves_real_jiazhu_tail_alone():
+def test_suspect_full_width_tail_leaves_real_jiazhu_tail_alone():
     patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: _jiazhu_patch()}
-    runs = jz.trim_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches)
-    assert set(runs) == {3, 4, 5}
+    assert jz.suspect_full_width_tail({3: 92.0, 4: 92.0, 5: 92.0}, patches) is None
 
 
-def test_trim_full_width_tail_noop_on_empty_runs():
-    assert jz.trim_full_width_tail({}, {}) == {}
+def test_suspect_full_width_tail_noop_on_empty_runs():
+    assert jz.suspect_full_width_tail({}, {}) is None
 
 
 # ── 段端收编 ────────────────────────────────────────────────
