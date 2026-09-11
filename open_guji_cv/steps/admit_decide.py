@@ -48,7 +48,7 @@ from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageOcr)
 
 
-class SeedAdmitParams(BaseModel):
+class AdmitDecideParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
@@ -120,12 +120,12 @@ class SeedAdmitParams(BaseModel):
 
 
 @register_step
-class SeedAdmitStep(Step):
+class AdmitDecideStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
+        id="admit_decide", title="C1 进库准入", version="1.5", unit="cell",
         consumes=("glyph_match", "ocr_candidates", "context_decision", "align_ref"),
-        produces=("seed_admit",),
-        params=SeedAdmitParams,
+        produces=("admit_decide",),
+        params=AdmitDecideParams,
         needs=("db",),
         code_deps=("open_guji_cv.clustering.seeding",
                    "open_guji_cv.clustering.variants",
@@ -145,7 +145,7 @@ class SeedAdmitStep(Step):
         from ..utils.jiazhu_order import segments as jz_segments
         from ..utils.jiazhu_order import sort_by_reading
         from ..variant_ledger import BookLedger
-        p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
+        p: AdmitDecideParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
         ledger = BookLedger.load_or_empty(p.edition)
         # 排除名单：人裁标过「切坏 / 带残留 / 非字」的图块**不进库也不出审查卡**
@@ -348,7 +348,7 @@ class SeedAdmitStep(Step):
                 # `admission_decision` 给 dual 档返回 None（历史口径，别去改它
                 # ——`_pick_char` 与 seeding 的一串标定注释都按 None 写的）。但
                 # **产物里不许有匿名准入**：每条自动进库都得说清走的哪条通道，
-                # 否则出了错没法按通道归因（test_seed_admit_step 有护栏）。
+                # 否则出了错没法按通道归因（test_admit_decide_step 有护栏）。
                 # 所以在取完字之后、写产物之前补上名字。
                 if ok and channel is None:
                     channel = "dual"
@@ -441,7 +441,7 @@ class SeedAdmitStep(Step):
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
-        return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
+        return {"admit_decide": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
 
 

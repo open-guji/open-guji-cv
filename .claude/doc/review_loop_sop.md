@@ -73,7 +73,7 @@
 .venv/Scripts/python scripts/round_check.py --next
 ```
 
-它按「page-type 金标里 page_type == body」且「没跑过 seed_admit」顺序取 12 页。
+它按「page-type 金标里 page_type == body」且「没跑过 admit_decide」顺序取 12 页。
 **不要按页号顺推**：vol01 的 p89-113 是职名页、p61/159-182 是目录页，
 用正文的 21 格先验跑必然全灭（配置注释里记着 p119 混进 dev_set 的教训）。
 

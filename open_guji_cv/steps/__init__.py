@@ -19,5 +19,5 @@
 from ..products import kinds  # noqa: F401  —— 先注册产物种类
 from . import (border_detect, column_warp, row_segment,  # noqa: F401
                cell_shrink, glyph_match, ocr_candidates, context_decide,
-               align_ref, seed_admit)
+               align_ref, admit_decide)
 from .. import gates  # noqa: F401  —— 闸挂在对应 Step 的 spec 上，必须晚于上面几行

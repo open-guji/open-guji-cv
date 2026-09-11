@@ -7,7 +7,7 @@
 
 **永不手编**——每次重跑整份重建（确定性输出，便于 diff）。三处来源：
 
-1. ``seed_admit`` 产物 ``AdmitRec(char, reading, channel, admit)``：v2 管线自动放行的
+1. ``admit_decide`` 产物 ``AdmitRec(char, reading, channel, admit)``：v2 管线自动放行的
    刻本形与转换对（``reading ≠ char`` 就是一次 字形→文意 转换）；
 2. ``glyph.db`` ``admissions × instances``：全部已进库实例的字形标签，按 provenance
    分 human / match / context / align；人裁的 ``evidence.shape/reading/conversion`` 与
@@ -55,7 +55,7 @@ _AUTO_CHANNELS_WITH_READING = {"dual", "match_ref", "match_replace",
 # ── 采集 ─────────────────────────────────────────────────
 
 def collect_products(books: list[str]) -> tuple[Counter, dict, int]:
-    """v2 seed_admit 产物 → (刻本形计数, 转换对, 记录数)。
+    """v2 admit_decide 产物 → (刻本形计数, 转换对, 记录数)。
 
     只数 ``admit=True`` 的：人审位还没定字。转换对键 (char, reading)，值带通道与首例。
     """
@@ -68,14 +68,14 @@ def collect_products(books: list[str]) -> tuple[Counter, dict, int]:
     n = 0
     for book in books:
         try:
-            keys = st.keys(book, "seed_admit")
+            keys = st.keys(book, "admit_decide")
         except Exception:
             keys = []
         for k in keys:
-            raw = st.read_raw(book, "seed_admit", k)
+            raw = st.read_raw(book, "admit_decide", k)
             if not raw:
                 continue
-            pa = raw.get("seed_admit") or raw
+            pa = raw.get("admit_decide") or raw
             for col in pa.get("columns", []):
                 for rec in col.get("chars", []):
                     n += 1

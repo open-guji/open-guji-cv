@@ -18,7 +18,7 @@ from open_guji_cv.feedback.routes import RouteTable
 
 def _ev(key: str, kind: str, payload: dict, seq: int = 1):
     return make_event("b", seq, kind,
-                      EventTarget(step="seed_admit", unit="cell", key=key,
+                      EventTarget(step="admit_decide", unit="cell", key=key,
                                   book="vol01", page=40, col=9, slot=17),
                       payload, source_format="server")
 

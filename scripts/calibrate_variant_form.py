@@ -15,7 +15,7 @@
 
 ## 数据从哪来
 
-产物 `seed_admit` 的 `evidence.form`（`decide_form` 把三源分数全记下了），
+产物 `admit_decide` 的 `evidence.form`（`decide_form` 把三源分数全记下了），
 无需重跑管线。含 `open` 档（人已裁过的，正是「本该放行却没放」的样本）。
 
 ## 三条报数纪律
@@ -50,7 +50,7 @@ def collect(book: str, pages: list[int]) -> list[dict]:
     truth = load_verdicts(book)
     out = []
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:

@@ -184,8 +184,8 @@ CONTEXT_DECISION = register_kind(ProductKindSpec(
     id="context_decision", title="Step6 上下文定字", storage="numeric", unit="cell",
     schema=PageDecision, coord_space=COLUMN_PX))
 
-SEED_ADMIT = register_kind(ProductKindSpec(
-    id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
+ADMIT_DECIDE = register_kind(ProductKindSpec(
+    id="admit_decide", title="C1 进库准入裁决", storage="numeric", unit="cell",
     schema=PageAdmit, coord_space=COLUMN_PX))
 
 ALIGN_REF = register_kind(ProductKindSpec(

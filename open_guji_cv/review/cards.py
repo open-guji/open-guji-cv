@@ -55,7 +55,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     ledger = BookLedger.load_or_empty()
     out: list[dict] = []
     for pg in pgs:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
         d = st.read(book, "context_decide", page_key(pg), "context_decision")
         if a is None:

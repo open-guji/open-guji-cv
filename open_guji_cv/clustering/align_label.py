@@ -195,7 +195,7 @@ def label_page(page: str, slots: list[tuple], book: str,
     `sub`，夹注半格用）。**顺序即锚定串的顺序**，调用方负责按阅读顺序给——
     夹注两个子列若按 (slot, sub) 交错送进来，锚定串会是「兩採淮進鹽本政」，
     连累整页对齐。`sub` 非空时 `instance_id` 带后缀（`book:page:col:slot` + `a`/`b`），
-    与 `cell_shrink` / `seed_admit` 的字位 id 一致。
+    与 `cell_shrink` / `admit_decide` 的字位 id 一致。
     """
     norm = [(t[0], t[1], (t[2] or "") if len(t) > 3 else "", t[-1]) for t in slots]
     text = "".join(ch for _, _, _, ch in norm)

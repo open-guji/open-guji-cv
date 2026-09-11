@@ -38,7 +38,7 @@
 - [ ] **B3** `uv pip install rapidocr-onnxruntime`
 
 ### 阶段 C — Step 6 + 进库闭环
-- [ ] **C1** `seed_admit` Step：十条通道→自动发 `confirm`（路由已有 `glyphdb_admit`）/ 待审进队列
+- [ ] **C1** `admit_decide` Step：十条通道→自动发 `confirm`（路由已有 `glyphdb_admit`）/ 待审进队列
 - [ ] **C2** `review/seed_export.py` 包进 `review/shell.py`，收割→路由→进库
 - [ ] **C3** `ContextDecider` 加 `llm` 策略，门槛化不变
 - [ ] **C4** vol02 全书六步端到端，报字位定字准确率

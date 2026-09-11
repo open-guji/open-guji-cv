@@ -7,12 +7,12 @@
 那一路**——`match_ref`（库 × 整理本）、`match_replace`、`dual`（OCR × 整理本）
 这些准入通道都要用它的结果，且是四路里唯一能与形状路凑成零同源双信号的一路
 （`step5_step6_benchmark.md` 数字）。一个东西担两个身份，后果是它的产物没有
-独立指纹与过期传播：`seed_admit` 要用 `align_char` 得绕道 import
+独立指纹与过期传播：`admit_decide` 要用 `align_char` 得绕道 import
 `gold.v2_align` 里带下划线的私有函数、自己再算一遍对齐，`gold` 那边的产物
 又完全不经过 Step 缓存/指纹体系。
 
 归位之后：本 Step 产出逐字位 `{align_char, align_op, ref_run}`，与
-`glyph_match`／`ocr_candidates`／`context_decision` 三路平级；`seed_admit`
+`glyph_match`／`ocr_candidates`／`context_decision` 三路平级；`admit_decide`
 改读这个产物；`gold.v2_align` 的金标派生也改读它（见该模块模块头），
 `GoldChar{shape, reading, conversion, source}` 的两个身份（金标 vs 文本证据）
 从此分开。

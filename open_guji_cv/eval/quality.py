@@ -51,7 +51,7 @@ def quality(book: str = "vol01", pages: str = "dev_set",
     errors: list[dict] = []
     n_total = 0
     for pg in pgs:
-        a = store.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = store.read(book, "admit_decide", page_key(pg), "admit_decide")
         d = store.read(book, "context_decide", page_key(pg), "context_decision")
         if a is None:
             continue

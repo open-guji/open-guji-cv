@@ -1,7 +1,7 @@
 # 刻本正文（v2 切分链）—— 本设计唯一建模的链。
 # 顺序必须是合法拓扑序（上游在前）；边由各步 consumes / produces 推出。
 # P0 五步 + 阶段 B 的 glyph_match；page_type_gate / grid_prior / ocr_candidates /
-# context_decide / seed_admit 待后续阶段接入时再加进来。
+# context_decide / admit_decide 待后续阶段接入时再加进来。
 #
 # 2026-09-09：Step2→3 交接闸（column_gate）不再是独立节点——它不产出新内容，
 # 只判定 column_warp 的输出够不够格进 row_segment，现在挂在 column_warp 的
@@ -22,7 +22,7 @@ steps:
   - ocr_candidates       # Step5 OCR 候选：字块 → RapidOCR CTC top-k + 简→繁扩展（needs=engine）
   - context_decide       # Step6 上下文裁决：库+OCR 候选融合 → 门槛化定字（needs=corpus，指纹带语料指纹）
   - align_ref            # Step5-d 整理本对齐：文本证据一路 → 逐字位 align_char/align_op/ref_run（needs=corpus，指纹带语料指纹）
-  - seed_admit           # C1 进库准入：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
+  - admit_decide         # C1 进库准入：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
 notes: |
   坐标：Step1 产物存规范空间 raw_page_px@top-right；Step2–4 的列内坐标是 column_px，
   另带回到原图的 quad_page / bbox_page。

@@ -318,17 +318,17 @@ def _collect() -> dict:
     call("GET /api/batches")
     mk = EP["POST /api/batches"]
     call("POST /api/batches",
-         _model(mk)(id=BATCH, title="快照批次", step="seed_admit", book=BOOK))
+         _model(mk)(id=BATCH, title="快照批次", step="admit_decide", book=BOOK))
     ev = EP["POST /api/events"]
     call("POST /api/events", _model(ev)(
-        batch=BATCH, step="seed_admit", unit="cell", kind="verdict", consume=False,
+        batch=BATCH, step="admit_decide", unit="cell", kind="verdict", consume=False,
         events=[{"id": f"{BOOK}:{PAGE}:{COL}:{SLOT}", "v": "confirm",
                  "shape": "一", "reading": "一", "t": 1}]))
     call("GET /api/events", batch=BATCH)
     call("GET /api/batches/{batch_id}", BATCH)
     hv = EP["POST /api/batches/{batch_id}/harvest"]
     call("POST /api/batches/{batch_id}/harvest", BATCH,
-         _model(hv)(batch=BATCH, step="seed_admit", unit="cell",
+         _model(hv)(batch=BATCH, step="admit_decide", unit="cell",
                     content=json.dumps({"id": f"{BOOK}:{PAGE}:{COL}:{SLOT + 1}",
                                         "v": "confirm", "shape": "二", "reading": "二"},
                                        ensure_ascii=False)))
@@ -447,7 +447,7 @@ def test_route_snapshot():
     """49 条路由各调一次，与基线逐条比对。"""
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
-    if not (REPO / "products" / BOOK / "seed_admit").exists():
+    if not (REPO / "products" / BOOK / "admit_decide").exists():
         pytest.skip(f"缺 {BOOK} 产物，先跑 "
                     f"python -m open_guji_cv pipeline keben_body_v2 {BOOK} --pages {PAGES}")
     hist = _hist_path()
@@ -569,7 +569,7 @@ def test_cli_matches_routes():
     """C5 的验收：11 对「命令行 vs 路由」逐条同输出。"""
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
-    if not (REPO / "products" / BOOK / "seed_admit").exists():
+    if not (REPO / "products" / BOOK / "admit_decide").exists():
         pytest.skip(f"缺 {BOOK} 产物")
     EP = _endpoints()
     bad = []

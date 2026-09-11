@@ -6,7 +6,7 @@
 ## 现象
 
 `--pages all --from glyph_match` 跑完、退出码 0、日志显示 752/752 全成功，
-但 `guji status` 立刻报 `seed_admit 过期 188`。反复跑三轮，每轮结束都过期。
+但 `guji status` 立刻报 `admit_decide 过期 188`。反复跑三轮，每轮结束都过期。
 
 ## 根因：库指纹按 **mtime** 算，而库是**全书共享**的
 
@@ -16,7 +16,7 @@
 raw = f"{st.st_mtime_ns}:{st.st_size}:{exemplars 行数}"
 ```
 
-`glyph_match` 的 `params_hash` 含它，`seed_admit` 也自带一份（v1.4 起为了让人裁
+`glyph_match` 的 `params_hash` 含它，`admit_decide` 也自带一份（v1.4 起为了让人裁
 进库能触发重跑）。于是：
 
 **任何一次对 `output/glyph.db` 的写入，都会让所有册、所有页的这两步立刻过期。**
@@ -24,11 +24,11 @@ raw = f"{st.st_mtime_ns}:{st.st_size}:{exemplars 行数}"
 而写库的路径很多，且都是正常操作：
 
 - 控制台提交裁决 → `glyphdb_admit` 消费者写库；
-- 别人跑 `seed_admit`（哪怕是**另一册**）；
+- 别人跑 `admit_decide`（哪怕是**另一册**）；
 - 库自洽审计撤例、`seed-ingest` 等维护脚本。
 
 2026-09-07 09:55 实测：另一会话在跑 **vol01** 的 `--from glyph_match --force`，
-与我的 vol02 **产物毫无交集**，但它的 `seed_admit` 一写库，我这边 vol02
+与我的 vol02 **产物毫无交集**，但它的 `admit_decide` 一写库，我这边 vol02
 188 页全部过期。
 
 ## 这不是纯粹的误报

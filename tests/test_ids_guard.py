@@ -1,7 +1,7 @@
 """IDS 护栏的回归 + **它为什么没有接进准入**的实测记录。
 
 护栏本身是对的：麗/麓、玉/王、數/敷 这些手工表漏掉的对，它都能算出来。
-但 2026-09-04 在 vol01 dev_set 上量过成本之后**没有接进 `seed_admit`**，
+但 2026-09-04 在 vol01 dev_set 上量过成本之后**没有接进 `admit_decide`**，
 理由记在 `test_guard_would_cost_more_than_it_saves` 里——别看见「有这个模块
 却没用上」就顺手接进去。
 """
@@ -65,7 +65,7 @@ def test_near_form_in_scans_candidate_list():
 
 
 def test_guard_would_cost_more_than_it_saves():
-    """**负结果记录**：护栏没有接进 `seed_admit`，因为在实测数据上净亏。
+    """**负结果记录**：护栏没有接进 `admit_decide`，因为在实测数据上净亏。
 
     2026-09-04 vol01 dev_set（A 刀之后，自动放行 1869 / 人审 64）实测：
 

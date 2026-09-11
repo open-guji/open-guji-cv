@@ -636,7 +636,7 @@ def cmd_glyph_db(args):
     （`GUJI_GLYPH_DB` → `GUJI_WORKSPACE/output/glyph.db` → 仓内默认），不再由
     `--store` 推出——`--store` 只表示「真源（JSONL+PNG）在哪」，是 rebuild 的
     读入口、export 的写出口。库路径只有这一处说了算，`glyph_match` /
-    `seed_admit` 读的是同一个 `glyph_db_path()`，rebuild 之后不必手工搬库。
+    `admit_decide` 读的是同一个 `glyph_db_path()`，rebuild 之后不必手工搬库。
     （库路径 P0：以前这里写的是 `<store>/glyphdb.sqlite`，与真正被读取的
     `glyph_db_path()` 不是同一个文件——干净环境上 rebuild 看着成功，
     `glyph_match` 却读到空库，静默出错、exit 0。）

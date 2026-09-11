@@ -34,7 +34,7 @@ def client(tmp_path, monkeypatch):
 
 
 def _post(client, events, **kw):
-    body = {"batch": "t-batch", "step": "seed_admit", "unit": "cell",
+    body = {"batch": "t-batch", "step": "admit_decide", "unit": "cell",
             "kind": "confirm", "events": events, **kw}
     return client.api_events(client.EventsIn(**body))
 

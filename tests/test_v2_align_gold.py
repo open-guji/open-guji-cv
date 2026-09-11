@@ -77,7 +77,7 @@ def test_no_wrong_admission_against_the_gold():
     bad: list = []
     soft: list = []          # replace 段的不符：金标自身可能错，分开看
     for pg in bk.dev_set:
-        a = st.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        a = st.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:
@@ -87,7 +87,7 @@ def test_no_wrong_admission_against_the_gold():
                 g = gold.get(r.id)
                 if not g or r.char == g.shape:
                     continue
-                # 人裁通道（seed_admit v1.4）：人看着图判的字形是最强证据，
+                # 人裁通道（admit_decide v1.4）：人看着图判的字形是最强证据，
                 # 金标的 shape 只是**当次转写**，两者不同时该以人裁为准，不算错。
                 # 实例 vol01:151:9:20——人裁字形「巳」、释读「已」（己已巳 三字
                 # 字形与文意分岔，设计如此），而 context 通道当次转写成了「已」。
@@ -121,7 +121,7 @@ def test_near_form_families_never_auto_admit_on_shape_alone():
     st = ProductStore()
     bk = load_book("vol01")
     for pg in bk.dev_set:
-        a = st.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        a = st.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         m = st.read("vol01", "glyph_match", page_key(pg), "glyph_match")
         if a is None or m is None:
             continue

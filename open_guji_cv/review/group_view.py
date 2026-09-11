@@ -35,7 +35,7 @@ def group_view(book: str, pages: str = "dev_set", edition: str = "",
     truth = load_verdicts(book)
     tiles: dict[str, list[dict]] = {}
     for pg in bk.resolve_pages(pages):
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:

@@ -26,7 +26,7 @@ guji pipeline keben_body_v2 vol01 --pages dev_set
 pytest tests/ -s -p no:cacheprovider
 ```
 
-⚠️ **库路径变了，产物就该过期**——`glyph_match` / `seed_admit` 的指纹带库指纹，
+⚠️ **库路径变了，产物就该过期**——`glyph_match` / `admit_decide` 的指纹带库指纹，
 换库等于换了上游。这是对的，不是 bug。
 """
 from __future__ import annotations

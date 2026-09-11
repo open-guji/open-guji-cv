@@ -29,7 +29,7 @@ router = APIRouter()
 # ── 定字审查（C2：审查搬进控制台，不再走外部 artifact）────────────────
 #
 # 用户 2026-09-04 定：「审查也放控制台。之前的审查页需要复用的话，也迁移到
-# 控制台。」这一组 API 就是那件事的后端：待审卡片从 `seed_admit` 产物来，
+# 控制台。」这一组 API 就是那件事的后端：待审卡片从 `admit_decide` 产物来，
 # 裁决直接 POST /api/events（既有接口），再走既有的路由 → glyphdb_admit。
 # **不新造协议**——事件信封、批次登记、路由表全部沿用。
 
@@ -63,7 +63,7 @@ def _page_maps(st, book: str, page: int, cache: dict):
         d = st.read(book, "context_decide", page_key(page), "context_decision")
         m = st.read(book, "glyph_match", page_key(page), "glyph_match")
         o = st.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
-        a = st.read(book, "seed_admit", page_key(page), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(page), "admit_decide")
         dm = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         om = {r.id: r for cc in (o.columns if o else []) for r in cc.chars}
         am = {r.id: r for cc in (a.columns if a else []) for r in cc.chars}
@@ -91,7 +91,7 @@ def _column_slots(st, book: str, page: int, col: int, cache: dict) -> list[dict]
             ch, src = oo.topk[0][0], "ocr"
         out.append({"slot": r.slot, "sub": r.sub, "id": r.id, "page": page, "col": col,
                     "char": ch, "source": src,
-                    # 待审 = seed_admit 没放行；前端据此高亮
+                    # 待审 = admit_decide 没放行；前端据此高亮
                     "review": bool(aa is not None and not aa.admit)})
     return out
 

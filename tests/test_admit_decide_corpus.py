@@ -37,7 +37,7 @@ def test_dual_channel_has_no_name(vmap):
         match_candidates=[("數", 0.957), ("敷", 0.955)],
         match_guard=None, match_wmax=17.1)
     assert ok is True
-    assert channel is None, "dual 档不该有通道名——改了它就要同步改 seed_admit 取字"
+    assert channel is None, "dual 档不该有通道名——改了它就要同步改 admit_decide 取字"
 
 
 def test_dual_unsure_does_not_take_db_guess_as_shape(vmap):
@@ -47,7 +47,7 @@ def test_dual_unsure_does_not_take_db_guess_as_shape(vmap):
     而 align × OCR 两路零同源证据都指向「敷」，且「敷」根本不在库候选里。
     unsure 的字面意思就是「库不知道这是什么」，此时它没资格定字形。
     """
-    from open_guji_cv.steps.seed_admit import _pick_char
+    from open_guji_cv.steps.admit_decide import _pick_char
 
     ok, channel = admission_decision(
         ocr={"char": "敷", "prob": 0.91}, align_char="敷", ref_char=None,
@@ -67,7 +67,7 @@ def test_variant_keeps_carved_shape_and_records_reading():
     刻本刻「㫖」而整理本作「旨」——字形库存前者，文本录入用后者。
     用整理本改 char 会污染字形库（charset_and_lm.md §四）。
     """
-    from open_guji_cv.steps.seed_admit import _pick_char
+    from open_guji_cv.steps.admit_decide import _pick_char
     char, reading = _pick_char(ok=True, channel="match_replace", align_char="旨",
                                match_char="㫖", verdict="same",
                                candidates=[("㫖", 0.99)])
@@ -77,7 +77,7 @@ def test_variant_keeps_carved_shape_and_records_reading():
 
 def test_match_solo_still_uses_db_top1():
     """没有整理本时仍取库 top1——别把上面两条修过头。"""
-    from open_guji_cv.steps.seed_admit import _pick_char
+    from open_guji_cv.steps.admit_decide import _pick_char
     char, reading = _pick_char(ok=True, channel="match_solo", align_char=None,
                                match_char=None, verdict="unsure",
                                candidates=[("書", 0.995)])
@@ -107,6 +107,6 @@ def test_split_chars_never_auto_admitted(ch, vmap):
     这三个字的字形与文意会分岔，字形层护栏拦不住 align × 库 这种跨源一致，
     所以要在准入侧兜一道。
     """
-    from open_guji_cv.steps.seed_admit import SeedAdmitParams
-    p = SeedAdmitParams()
+    from open_guji_cv.steps.admit_decide import AdmitDecideParams
+    p = AdmitDecideParams()
     assert ch in set(p.always_review)

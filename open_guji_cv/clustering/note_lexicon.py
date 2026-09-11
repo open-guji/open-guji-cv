@@ -36,7 +36,7 @@
 
 - **不引入候选外的字**（`context_step` 铁律 1）：短语给的是**读法**，进库的
   字形仍要过账本的 preferred/组内定形。这里只产出 `(id, char)` 建议，
-  写不写库由 `seed_admit` 按原有规则决定。
+  写不写库由 `admit_decide` 按原有规则决定。
 - **不猜段界**：段由 `jiazhu_order.segments` 给（slot 连续 + 有 sub），
   与 `row_boundaries.reading_order` 同源。
 - **不管 T2 案語**：那是开放文本，词表里没有，`match(...)` 自然返回 None。

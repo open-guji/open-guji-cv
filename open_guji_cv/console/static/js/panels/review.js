@@ -1,6 +1,6 @@
 // ── 定字裁决（C2）：审查搬进控制台 ──────────────────────────────
 // 从 index.html 的 <script> 段搬出（C4 前端切分）。
-// 卡片来自 /api/review/cards（seed_admit 产物），裁决直接 POST /api/events，
+// 卡片来自 /api/review/cards（admit_decide 产物），裁决直接 POST /api/events，
 // 再走既有的路由 → glyphdb_admit。**不新造协议**。
 //
 // 一条口径（用户 2026-09-04 定）：**先读字形，文本录入按文意，记录转换**。
@@ -534,7 +534,7 @@ async function rvSend() {
   if (!rows.length) { $('#rv_msg').textContent = '还没有裁决'; return; }
   $('#rv_msg').textContent = '提交中…';
   const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
+    body: JSON.stringify({ batch, step: 'admit_decide', unit: 'cell', kind: 'confirm', events: rows }) });
   $('#rv_msg').textContent = `已写入 ${r.appended ?? r.n_appended ?? rows.length} 条事件 → 批次 ${batch}`
     + consumedMsg(r);
   _onSubmitted();

@@ -67,7 +67,7 @@ def main() -> int:
 
     books = {b.strip() for b in a.books.split(",") if b.strip()}
     # ⚠️ 机器刻例全是 v1 时代的（provenance align/context/match，id 无 v2: 前缀）：
-    # v2 管线的自动放行**不进库**（seed_admit 模块头「进库不在这一步做」，走
+    # v2 管线的自动放行**不进库**（admit_decide 模块头「进库不在这一步做」，走
     # 事件→消费者的只有人裁）。所以 glyph_match 用的库 = v1 机器刻例 + v2 人裁刻例，
     # 要审的正是前者。v1 id 对不上 v2 字位，页面直接用库里的图块，改判走撤库。
     rows = cur.execute("""
