@@ -70,6 +70,8 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .preclean-page h3 { font-size: .88rem; margin: 0 0 .5rem; }
 .preclean-rule { margin-bottom: .6rem; }
 .preclean-kind { color: var(--indigo); font-size: .8rem; margin-bottom: .3rem; }
+.preclean-report-rule { margin-bottom: .4rem; }
+.pv-toggle { margin-left: .6rem; font-size: .78rem; padding: .1rem .5rem; }
 
 /* 书总览：DAG 图、线上大模型提示条（照抄 v1 base.css/overview.js） */
 .dag { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; margin-bottom: .6rem; }
