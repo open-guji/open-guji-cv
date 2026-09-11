@@ -1,17 +1,12 @@
-"""scripts/measure_llm_online_accuracy.py 的拼接逻辑：日志 join 反馈事件。"""
+"""open_guji_cv.eval.llm_online_accuracy 的拼接逻辑：日志 join 反馈事件。"""
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "scripts"))
-
-import measure_llm_online_accuracy as mla  # noqa: E402
-from open_guji_cv.feedback.events import EventLog, EventTarget, make_event  # noqa: E402
+from open_guji_cv.eval import llm_online_accuracy as mla
+from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 
 
 def _write_log(tmp_path: Path, book: str, rows: list[dict]) -> Path:
@@ -45,7 +40,7 @@ def test_load_online_calls_dedupes_by_id_keeping_latest_ts(tmp_path):
     assert rows[0]["llm_parsed_char"] == "乙"   # 更晚的那条
 
 
-def test_main_accuracy_matches_resolved_human_verdicts(tmp_path, monkeypatch, capsys):
+def test_compute_report_matches_resolved_human_verdicts(tmp_path):
     log_dir = _write_log(tmp_path, "vol01", [
         {"id": "vol01:1:1:0", "ts": "t1", "book": "vol01", "page": 1,
          "provider": "qwen", "model": "qwen-plus",
@@ -74,14 +69,7 @@ def test_main_accuracy_matches_resolved_human_verdicts(tmp_path, monkeypatch, ca
                   payload={"shape": "丙"}),      # LLM 答错（说丁，人审是丙）
     ])
 
-    import argparse
-    monkeypatch.setattr(sys, "argv", ["measure_llm_online_accuracy.py",
-                                      "--log-dir", str(log_dir),
-                                      "--feedback-root", str(feedback_root),
-                                      "--out", str(tmp_path / "report.json")])
-    mla.main()
-
-    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    report = mla.compute_report(log_dir, feedback_root=feedback_root)
     assert report["n_total_calls"] == 4
     assert report["n_answered_in_candidates"] == 3
     assert report["n_resolved"] == 2          # 只有前两条有人审

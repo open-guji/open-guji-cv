@@ -18,6 +18,16 @@ export async function submitRun(ev) {
   let params = {};
   const raw = $('#params').value.trim();
   if (raw) { try { params = JSON.parse(raw); } catch (e) { $('#runmsg').textContent = '参数 JSON 不合法：' + e.message; return; } }
+  // 勾选框只管 context_decide.enable_online_llm 这一个键，其余手写在
+  // #params 里的覆盖（含 context_decide 的别的参数，如 margin_gate）原样
+  // 保留——不是整段覆盖。勾选框状态永远说了算：手写过 true 但现在没勾，
+  // 这里会把它改回 false，避免「以为关了其实没关」。
+  if ($('#llm_enable') && $('#llm_enable').checked) {
+    params.context_decide = { ...(params.context_decide || {}),
+      enable_online_llm: true, llm_provider: $('#llm_provider').value };
+  } else if (params.context_decide && 'enable_online_llm' in params.context_decide) {
+    params.context_decide.enable_online_llm = false;
+  }
   // 空下拉框的 `.value` 是 `''`，不是 `null`——直接传给后端，`pipeline.slice('', '')`
   // 会把 '' 当真步骤名去查，查不到就报「没有步骤 ''」（2026-09-09 用户实锤）。
   // 后端按 `from_step is None` 判「不设下限」，所以空值这里就该转成 null。
