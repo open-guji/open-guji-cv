@@ -78,6 +78,37 @@ class PageOcr(BaseModel):
         return next((c for c in self.columns if c.col == col), None)
 
 
+class RareCand(BaseModel):
+    """一个候选字 + 打分（`clustering.rare_panel.rare_for` 的原样输出，字段照抄
+    ——释义/IDS/频次等修饰留给调用方按需现算，产物只存候选本身与融合分）。"""
+    char: str
+    score: float = 0.0
+    font: str = ""          # 命中来源：某字体文件名 | "cnn"
+
+
+class RareRec(BaseModel):
+    id: str
+    slot: int
+    sub: str | None = None
+    candidates: list[RareCand] = Field(default_factory=list)
+
+
+class ColumnRare(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[RareRec] = Field(default_factory=list)
+
+
+class PageRare(BaseModel):
+    page: int
+    model_fingerprint: str = ""      # checkpoint + 模板集指纹，见 steps.rare_candidates
+    columns: list[ColumnRare] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnRare | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
 class DecisionRec(BaseModel):
     """一个字位的最终定字 + 证据（Step6）。"""
     id: str
@@ -173,12 +204,16 @@ class PageAlignRef(BaseModel):
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
-    id="glyph_match", title="Step5 库匹配判决", storage="numeric", unit="cell",
+    id="glyph_match", title="Step5-a 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
 
 OCR_CANDIDATES = register_kind(ProductKindSpec(
-    id="ocr_candidates", title="Step5 OCR 候选", storage="numeric", unit="cell",
+    id="ocr_candidates", title="Step5-c OCR 候选", storage="numeric", unit="cell",
     schema=PageOcr, coord_space=COLUMN_PX))
+
+RARE_CANDIDATES = register_kind(ProductKindSpec(
+    id="rare_candidates", title="Step5-b 生僻字候选", storage="numeric", unit="cell",
+    schema=PageRare, coord_space=COLUMN_PX))
 
 CONTEXT_DECISION = register_kind(ProductKindSpec(
     id="context_decision", title="Step6 上下文定字", storage="numeric", unit="cell",

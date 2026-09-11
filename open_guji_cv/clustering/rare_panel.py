@@ -25,7 +25,7 @@ from pathlib import Path
 
 import cv2
 
-from .font_candidates import book_charset, candidates
+from .font_candidates import book_charset, candidates, candidates_batch
 from .ids_guard import ids_of
 from .normalize import normalize_patch
 from ..products.cache import ImageCache
@@ -42,50 +42,129 @@ def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
     return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
 
 
-def rare_for(img, k: int) -> list[dict]:
-    """一张字块图 → top-k 候选（含释义等修饰）。单查与批量共用这一份。"""
-    cs_small, cs_big = _rare_charsets()
-    norm = normalize_patch(img)
-    a = candidates(norm, cs_small, k=max(k, 10))
-    b = candidates(norm, cs_big, k=max(k, 10))
-    hog_order, seen = [], set()
-    for h in list(a[:3]) + list(b) + list(a[3:]):
-        if h.char not in seen:
-            seen.add(h.char)
-            hog_order.append(h.char)
-    by_char = {h.char: h for h in list(a) + list(b)}
+def _fuse(a, b, cnn_topk, emb_topk, k: int) -> list[dict]:
+    """HOG（两档字表，`cnn.available` 为 False 时才有）+ CNN 分类 + CNN
+    embedding → 融合后的候选字典列表。
 
-    # ── 第四源：CNN（scripts/train_glyph_cnn.py），与 HOG 做倒数排名融合 ──
-    # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**RRF 86.7/98.3**（top1/top10）。
-    # 两者看的东西不一样（整体轮廓 vs 部件局部），融合比任一单源 top-1 高 11 个点。
-    # 没有 checkpoint 时静默退回 HOG，界面照常。
-    from .cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT,
-                                             rrf, shared)
-    cnn = shared()
-    cnn_order = [c for c, _ in cnn.topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
-    # 第五源：同一网络的 embedding 对字体模板做余弦检索——同网络换读法就高 8 个点
-    # （unseen top-1 分类头 83.9 → 检索 91.9），见 cnn_candidates.emb_topk。
-    emb_order = [c for c, _ in cnn.emb_topk(norm, cs_big, k=max(k, 10))] if cnn.available else []
-    if cnn_order and emb_order:
-        order = rrf(hog_order, cnn_order, emb_order, k=k,
-                    weights=(HOG_WEIGHT, CNN_WEIGHT, EMB_WEIGHT))
-    elif cnn_order:
-        order = rrf(hog_order, cnn_order, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT))
+    `rare_for`（单查）与 `rare_for_batch`（批量）在拿到各自的 `candidates()`/
+    `topk()`/`emb_topk()` 原始结果后，共用这一份融合与释义修饰——融合算法
+    本身跟单查/批量无关，一行没变，只是把它从 `rare_for` 里抽出来复用。
+
+    ## 2026-09-10：CNN 可用时不再跑 HOG
+
+    `HOG_WEIGHT=0.0` 已经把 HOG 排出 RRF 排名之外三天了（2026-09-07 起）——
+    vol01 全部 12 页 dev_set（1934 字）实测：跑不跑 HOG，最终候选逐字比对
+    **零差异**。之前 HOG 还留着算，是因为它同时给 `by_char` 供了展示用的
+    `score`/`font` 字段（CNN-only 命中的字之前退化成写死的 `score=0.0`）。
+    现在 CNN 命中的字改用 CNN 自己的真实分数（`font` 标 `cnn`/`emb`），
+    HOG 的 `candidates()` 调用（两档字表各一次矩阵乘法，是 `rare_for` 全链路
+    里最贵的部分，见 `font_candidates.candidates_batch` 模块头）就完全不用
+    跑了——`a`/`b` 只在 CNN 不可用时才现算，见 `rare_for`/`rare_for_batch`。
+    """
+    from .cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT, rrf
+    cnn_order = [c for c, _ in cnn_topk]
+    emb_order = [c for c, _ in emb_topk]
+
+    if cnn_order or emb_order:
+        # CNN 可用：不跑 HOG，by_char 直接用 CNN/embedding 自己的分数
+        # （命中两边时优先 embedding——它是最强单源，见模块头引用的实测）。
+        by_char = {c: ("cnn", p) for c, p in cnn_topk}
+        by_char.update({c: ("emb", p) for c, p in emb_topk})
+        if cnn_order and emb_order:
+            order = rrf(cnn_order, emb_order, k=k, weights=(CNN_WEIGHT, EMB_WEIGHT))
+        else:
+            order = (cnn_order or emb_order)[:k]
+        hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
     else:
+        # 没有 checkpoint：唯一的候选来源，算法不变（两档字表位次合并）。
+        hog_order, seen = [], set()
+        for h in list(a[:3]) + list(b) + list(a[3:]):
+            if h.char not in seen:
+                seen.add(h.char)
+                hog_order.append(h.char)
+        by_char_hog = {h.char: h for h in list(a) + list(b)}
         order = hog_order[:k]
-    hits = []
-    for ch in order:
-        h = by_char.get(ch)
-        hits.append(h if h is not None else type("H", (), {"char": ch, "score": 0.0, "font": "cnn"})())
+        hits = [(ch, by_char_hog[ch].font, by_char_hog[ch].score)
+                if ch in by_char_hog else (ch, "cnn", 0.0) for ch in order]
+
     freq = _corpus_freq(DEFAULT_CORPUS)
     return [{
-        "char": h.char, "score": round(h.score, 4), "font": h.font,
-        "ids": ids_of(h.char),
-        "freq": freq.get(h.char, 0),
-        "cp": f"U+{ord(h.char):04X}" if len(h.char) == 1 else "",
-        "zi": f"https://zi.tools/zi/{h.char}",
-        **char_hint(h.char),
-    } for h in hits]
+        "char": ch, "score": round(score, 4), "font": font,
+        "ids": ids_of(ch),
+        "freq": freq.get(ch, 0),
+        "cp": f"U+{ord(ch):04X}" if len(ch) == 1 else "",
+        "zi": f"https://zi.tools/zi/{ch}",
+        **char_hint(ch),
+    } for ch, font, score in hits]
+
+
+def rare_for(img, k: int) -> list[dict]:
+    """一张字块图 → top-k 候选（含释义等修饰）。单查用这个；一页多个字块
+    用 `rare_for_batch`——五路检索改成矩阵-矩阵乘法/网络批前向，快数倍
+    （2026-09-10，见 `font_candidates.candidates_batch` 与
+    `cnn_candidates.emb_topk_batch` 模块头）。"""
+    norm = normalize_patch(img)
+
+    from .cnn_candidates import shared
+    cnn = shared()
+    # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**CNN+embedding RRF
+    # 86.7/98.3**（top1/top10）。CNN 可用时 HOG_WEIGHT=0.0 早已让 HOG 出局
+    # （见 _fuse 模块头「2026-09-10」一节），这里索性不跑它，省下两档字表
+    # 各一次矩阵乘法——checkpoint 缺席才现算 HOG 当唯一候选源。
+    a = b = []
+    cnn_topk = emb_topk = []
+    if cnn.available:
+        cs_big = _rare_charsets()[1]
+        cnn_topk = cnn.topk(norm, cs_big, k=max(k, 10))
+        emb_topk = cnn.emb_topk(norm, cs_big, k=max(k, 10))
+    else:
+        cs_small, cs_big = _rare_charsets()
+        a = candidates(norm, cs_small, k=max(k, 10))
+        b = candidates(norm, cs_big, k=max(k, 10))
+    return _fuse(a, b, cnn_topk, emb_topk, k)
+
+
+def rare_for_batch(imgs: list, k: int) -> list[list[dict]]:
+    """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
+
+    ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
+
+    `RareCandidatesStep.run_page` 原先对页里每个字都单独调一次 `rare_for`，
+    而检索里模板矩阵/网络权重整页不变，变的只是查询图——单独查是拿一个
+    查询向量对几万行模板矩阵做矩阵-向量乘法（GEMV）、网络也单独前向
+    一次，逐字重复地付出「加载/调度」成本。这一版把整页的归一化图一次性
+    传给 `candidates_batch`（矩阵-矩阵乘法，GEMM）与
+    `topk_batch`/`emb_topk_batch`（网络一次前向吃满 batch）。融合逻辑
+    （`_fuse`）与单查完全一致，结果逐字比对为位级相同（同一份归一化、
+    同一套索引，只是批处理 IO）。
+
+    ## CNN 可用时不跑 HOG（同一天第二次改）
+
+    `_fuse` 已经改成 CNN 可用时完全不用 HOG 的候选（`HOG_WEIGHT=0.0` 三天了，
+    vol01 全量实测零差异，见 `_fuse` 模块头）。批处理版同步：`cnn.available`
+    时 `a_list`/`b_list` 传空，省下 `candidates_batch` 那两次大矩阵乘法——
+    它是 `rare_for` 全链路里最贵的部分（HOG 6.4×、CNN 2.9×，见旧版基准）。
+    checkpoint 缺席时才现算 HOG batch，当唯一候选源，与单查同一条口径。
+    """
+    if not imgs:
+        return []
+    norms = [normalize_patch(img) for img in imgs]
+
+    from .cnn_candidates import shared
+    cnn = shared()
+    if cnn.available:
+        cs_big = _rare_charsets()[1]
+        a_list = b_list = [[] for _ in norms]
+        cnn_list = cnn.topk_batch(norms, cs_big, k=max(k, 10))
+        emb_list = cnn.emb_topk_batch(norms, cs_big, k=max(k, 10))
+    else:
+        cs_small, cs_big = _rare_charsets()
+        a_list = candidates_batch(norms, cs_small, k=max(k, 10))
+        b_list = candidates_batch(norms, cs_big, k=max(k, 10))
+        cnn_list = emb_list = [[] for _ in norms]
+
+    return [_fuse(a, b, cnn_topk, emb_topk, k)
+            for a, b, cnn_topk, emb_topk in zip(a_list, b_list, cnn_list, emb_list)]
 
 
 def char_hint(ch: str) -> dict:
