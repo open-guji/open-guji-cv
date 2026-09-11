@@ -4,6 +4,8 @@ import { HomePage } from './pages/HomePage'
 import { BookOverviewPage } from './pages/BookOverviewPage'
 import { StepPage } from './pages/StepPage'
 import { Step0Page } from './pages/Step0Page'
+import { Step1Page } from './pages/Step1Page'
+import { Step2Page } from './pages/Step2Page'
 import { Step3Page } from './pages/Step3Page'
 import { Step5Page } from './pages/Step5Page'
 import { Step7Page } from './pages/Step7Page'
@@ -23,6 +25,8 @@ export default function App() {
         <Route path="/variantlib/" element={<VariantLibraryPage />} />
         <Route path="/:book/" element={<BookOverviewPage />} />
         <Route path="/:book/step/step0/" element={<Step0Page />} />
+        <Route path="/:book/step/step1/" element={<Step1Page />} />
+        <Route path="/:book/step/step2/" element={<Step2Page />} />
         <Route path="/:book/step/step3/" element={<Step3Page />} />
         <Route path="/:book/step/step5/" element={<Step5Page />} />
         <Route path="/:book/step/step5/:sub/" element={<Step5Page />} />

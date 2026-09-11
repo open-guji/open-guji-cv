@@ -1,0 +1,16 @@
+.br-howto { font-size: .8rem; margin: -.2rem 0 .6rem; max-width: 46rem; }
+.br-toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; margin-bottom: .6rem; }
+
+.brgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; }
+.brcard { border: 1px solid var(--rule); border-left-width: 3px; border-radius: 4px; padding: .5rem .6rem; background: var(--paper); min-width: 0; }
+.brcard[data-v="ok"], .brcard[data-v="clean"], .brcard[data-v="yes"] { border-left-color: var(--ok); }
+.brcard[data-v="miss"], .brcard[data-v="extra"], .brcard[data-v="glued"], .brcard[data-v="in"], .brcard[data-v="out"] { border-left-color: var(--zhu); }
+.brcard[data-v="idk"] { border-left-color: var(--faint); border-left-style: dashed; }
+.brcard[data-v="none"] { border-left-color: var(--ochre); }
+.brcard h3 { margin: 0 0 .4rem; font-family: var(--mono); font-size: .78rem; font-weight: 500; color: var(--mute); }
+.brcard h3 em { font-style: normal; margin-left: .4rem; }
+.brcard img { width: 100%; background: var(--paper-2); border-radius: 2px; display: block; }
+.brcard img.br-img-pixelated { image-rendering: pixelated; }
+.br-verdicts { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .5rem; }
+.br-verdicts button { font-size: .76rem; padding: .2rem .55rem; min-height: 30px; white-space: nowrap; }
+.br-verdicts button:active { filter: brightness(.95); }
