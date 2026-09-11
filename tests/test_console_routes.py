@@ -267,9 +267,9 @@ def _call(fn, *args, mode: str = "value", **kw):
     return _shape(out) if mode == "shape" else out
 
 
-# ── 49 条：逐条调一次 ────────────────────────────────────────────────
+# ── 50 条：逐条调一次 ────────────────────────────────────────────────
 def _collect() -> dict:
-    """返回 {"METHOD /path": 归一化结果}，共 49 条。"""
+    """返回 {"METHOD /path": 归一化结果}，共 50 条。"""
     from open_guji_cv.console.jobs import TERMINAL
 
     EP = _endpoints()
@@ -340,7 +340,7 @@ def _collect() -> dict:
     call("POST /api/gold/{shard:path}/migrate", "char-segmentation/instances", dry_run=True)
     call("POST /api/gold/{shard:path}/drift", "char-segmentation/instances", apply=False)
 
-    # 七 · 评测与判据（7）
+    # 七 · 评测与判据（8）
     call("GET /api/evals")
     call("POST /api/evals/{eval_id}/run", EVAL_ID, timeout=120)
     call("GET /api/quality", book=BOOK, pages=PAGES)
@@ -349,6 +349,8 @@ def _collect() -> dict:
     call("GET /api/review/rate-history", book=BOOK)
     rs = EP["POST /api/review/rate-history"]
     call("POST /api/review/rate-history", _model(rs)(books=BOOK, note="snap"))
+    # 没开过 enable_online_llm 就没有日志，has_data:false 是正常态，不是错
+    call("GET /api/llm_online_stats", book=BOOK)
 
     # 八 · 专项审查页（13）
     call("GET /api/review/cards", book=BOOK, pages=PAGES, limit=20)
@@ -428,23 +430,24 @@ def _cleanup(hist_before: bytes | None) -> None:
 
 # ── 测试 ─────────────────────────────────────────────────────────────
 def test_route_inventory():
-    """49 条路由一条不少、一条不多，且 method+path 逐条对得上。
+    """50 条路由一条不少、一条不多，且 method+path 逐条对得上。
 
     C3 把 `app.py` 拆成 11 个 router，最怕的就是**漏挂一个 router**——
     那时快照测试会因为拿不到实现体而报别的错，这条先把账对清楚。
 
     （原始 46 条是 C3 落定时的数；2026-09-09 加「字形不入库」的跨列/跨页
-    上下文与切分前原图，`review.py` 添了 3 条，46 → 49。）
+    上下文与切分前原图，`review.py` 添了 3 条，46 → 49；2026-09-10 加
+    `GET /api/llm_online_stats`（线上大模型裁决正确率），49 → 50。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 49, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 50, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
 
 
 def test_route_snapshot():
-    """49 条路由各调一次，与基线逐条比对。"""
+    """50 条路由各调一次，与基线逐条比对。"""
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
     if not (REPO / "products" / BOOK / "seed_admit").exists():
@@ -456,7 +459,7 @@ def test_route_snapshot():
         snap = _collect()
     finally:
         _cleanup(hist_before)
-    assert len(snap) == 49, f"只采到 {len(snap)} 条"
+    assert len(snap) == 50, f"只采到 {len(snap)} 条"
 
     if WRITE or not SNAP.exists():
         SNAP.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True),
@@ -500,7 +503,8 @@ EXPECTED_ROUTES = [
     "GET /api/books", "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gold", "GET /api/jiazhu/segments",
-    "GET /api/kinds", "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
+    "GET /api/kinds", "GET /api/llm_online_stats",
+    "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
     "GET /api/pipelines", "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
     "GET /api/review/around/{book}/{page}/{col}/{slot}",

@@ -44,6 +44,7 @@
         <span class="s-fresh">✓ 新鲜</span><span class="s-stale">~ 过期（指纹失配）</span><span class="s-missing">· 缺失</span><span class="s-failed">✗ 失败</span><span class="s-blocked">⊘ 阻塞（上游缺）</span>
       </div>
       <div style="overflow-x:auto"><table id="matrix" class="matrix"></table></div>
+      <div id="llm_online_note" class="muted mono" style="margin-top:.4rem"></div>
     </div>
   </section>
 
@@ -55,6 +56,12 @@
         <label>到步骤 <select id="to_step"></select></label>
         <label>页 <input id="run_pages" type="text" value="dev_set"></label>
         <label><span>参数覆盖（JSON，可空）</span><textarea id="params" placeholder='{"column_gate": {"width_tol": 0.2}}'></textarea></label>
+        <label style="flex-direction:row;align-items:center;gap:.4rem" title="Step6 上下文裁决：候选内字位过不了 margin_gate 门槛时，线上真问一次大模型调候选顺序——不自动放行，仍要人审。会产生 API 账单，见 context_decide.py 模块头【2026-09-10】">
+          <input id="llm_enable" type="checkbox"> 启用线上大模型裁决（会产生 API 费用）
+          <select id="llm_provider" style="margin-left:.4rem">
+            <option value="qwen">qwen（离线评测最优，推荐）</option>
+            <option value="glm">glm</option>
+          </select></label>
         <label style="flex-direction:row;align-items:center;gap:.4rem"><input id="force" type="checkbox"> 强制重跑（无视指纹）</label>
         <label style="flex-direction:row;align-items:center;gap:.4rem" title="没设 GUJI_WORKSPACE 时默认拒绝入队——2026-09-09 教训：漏设这个变量会静默用仓内几百条的示例库跑批，产物看着 ok 实际全错。真要跑书请设 GUJI_WORKSPACE，这个勾选只用于本地示例库试跑">
           <input id="allow_sample_db" type="checkbox"> 允许用本地示例库（没设 GUJI_WORKSPACE 时勾选才能入队）</label>

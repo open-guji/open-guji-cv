@@ -53,11 +53,13 @@ TABS = ["overview", "run", "products", "review", "cutline", "jiazhu", "evals", "
 # 实测出的基线：8 个 tab 全部 active、DOM id 集合、逐 tab 新增 JS 错误数。
 BASELINE = {
     "overview": {
-        "ids": ["dag", "legend", "matrix", "notes", "params_note", "rl_go", "rl_out"],
+        "ids": ["dag", "legend", "llm_online_note", "matrix", "notes",
+                "params_note", "rl_go", "rl_out"],
     },
     "run": {
-        "ids": ["force", "from_step", "jobs", "log", "logtitle", "params",
-                "run_pages", "runform", "runmsg", "to_step"],
+        "ids": ["force", "from_step", "jobs", "llm_enable", "llm_provider",
+                "log", "logtitle", "params", "run_pages", "runform",
+                "runmsg", "to_step"],
     },
     "products": {
         "ids": ["p_img", "p_json", "p_load", "p_meta", "p_page", "p_step"],

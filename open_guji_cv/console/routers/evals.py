@@ -86,6 +86,28 @@ def api_round(book: str = "vol01", pages: str = "") -> dict:
 
 
 
+@router.get("/api/llm_online_stats")
+def api_llm_online_stats(book: str = "") -> dict:
+    """线上外部大模型（Step6 `context_decide.enable_online_llm`）的真实
+    正确率——`eval/llm_online_accuracy.py` 把线上调用日志
+    （`output/llm_online_calls/<book>.jsonl`）跟人审最终判定（反馈事件）
+    拼起来算，供控制台状态矩阵旁露一眼。开关本身在「运行」面板，见
+    `context_decide.py` 模块头【2026-09-10】——默认关闭，没开过就是
+    「还没有日志」，不是接口坏了。
+    """
+    from pathlib import Path
+
+    from ...eval.llm_online_accuracy import compute_report
+
+    log_dir = Path("output") / "llm_online_calls"
+    if not log_dir.exists() or not any(log_dir.glob("*.jsonl")):
+        return {"has_data": False, "n_total_calls": 0}
+    report = compute_report(log_dir, book or None)
+    report["has_data"] = True
+    return report
+
+
+
 @router.get("/api/review/rate-history")
 def api_rate_history(book: str = "") -> dict:
     """人审率台账（`eval/rate_history.py` 的历史 ＋ SEED）。
