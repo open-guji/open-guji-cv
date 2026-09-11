@@ -75,7 +75,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
 
 
 def slots_from_decision(dec, match=None, ocr=None

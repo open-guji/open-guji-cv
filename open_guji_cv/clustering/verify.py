@@ -176,6 +176,12 @@ ELASTIC_TAU = 1.5       # 高斯软覆盖的尺度（像素）
 ELASTIC_BLOCK = 16      # 弹性块边长（64 归一图 = 4×4 块）
 ELASTIC_LOCAL = 1       # 每块在全局位移之上的额外搜索半径（像素）
 
+# scale=1.0 优先试、分数已经远超 same 档所需（校准表里 raw≈0.96 才够上
+# cov_high=0.996，这里留出到 0.99 的安全边）就跳过 0.95/1.05——省下的是
+# 明显同字这一大批的搜索，边界/困难对仍然照旧扫完三档，判据不因此变松。
+# 2026-09-10 实测（triplets + pairs 金标）：与不设早退逐位打平后才定这个值。
+ELASTIC_EARLY_EXIT_RAW: float | None = 0.99
+
 # elastic 的 same 闸，两个消费方各标各的——它们的**证据强度和错的代价
 # 都不一样**：
 #
@@ -303,11 +309,17 @@ def _blocks(binary: np.ndarray, block: int, n_side: int
 
 
 def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
-                   scales: tuple[float, ...], tau: float, block: int, local: int
+                   scales: tuple[float, ...], tau: float, block: int, local: int,
+                   early_exit_raw: float | None = None
                    ) -> tuple[float, tuple[int, int], float, np.ndarray | None]:
     """搜最优 (scale, dx, dy)：目标是分块弹性软覆盖率本身。
 
     末位一并返回胜出档的 b_s，省得调用方再 `_rescale` 一遍。
+
+    ``early_exit_raw``：先试 scale=1.0，分数够高就跳过其余档——ties 本就偏向
+    `abs(scale-1.0)` 更小的那个（见下面的 key），1.0 已经是这一项的最小值
+    （=0），所以只有另一档给出**严格更高**的 cov 才可能反超；分数已经远高于
+    same 档所需时，认为这种反超不会改变判决，省下 0.95/1.05 两档的搜索。
     """
     size = a.shape[0]
     na = int(a.sum())
@@ -322,7 +334,8 @@ def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
     # 一样，但报告出来的 shift/scale 才读得懂，wmax 也从最居中的那次量。
     best, best_key, best_shift, best_scale = -1.0, None, (0, 0), 1.0
     best_bs: np.ndarray | None = None
-    for scale in scales:
+    ordered = (1.0, *[s for s in scales if s != 1.0]) if 1.0 in scales else scales
+    for scale in ordered:
         b_s, nb, wb, base_b, sb = _prepare(b, scale, tau, block, span, stride,
                                            n_side)
         if nb == 0:
@@ -341,6 +354,8 @@ def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
             best_shift = (max_shift - k % (2 * max_shift + 1),
                           max_shift - k // (2 * max_shift + 1))
             best_scale = scale
+        if scale == 1.0 and early_exit_raw is not None and top >= early_exit_raw:
+            break
     return best, best_shift, best_scale, best_bs
 
 
@@ -386,7 +401,8 @@ def verify_pair_elastic(a: np.ndarray, b: np.ndarray,
                         miss_wmax: float = MISS_WMAX,
                         tau: float = ELASTIC_TAU,
                         block: int = ELASTIC_BLOCK,
-                        local: int = ELASTIC_LOCAL) -> PairVerdict:
+                        local: int = ELASTIC_LOCAL,
+                        early_exit_raw: float | None = ELASTIC_EARLY_EXIT_RAW) -> PairVerdict:
     """elastic 判据：软覆盖 + 分块弹性对齐。字段语义与 verify_pair_cov 一致
     （f1 放覆盖率、diff_blob_ratio 放窗口残差），数值已校准回 coverage 刻度。
     """
@@ -398,7 +414,7 @@ def verify_pair_elastic(a: np.ndarray, b: np.ndarray,
         return PairVerdict("diff", 0.0, 0.0, (0, 0), 1.0, 0.0)
 
     raw, (dx, dy), scale, b_s = _elastic_align(a, b, max_shift, scales, tau,
-                                               block, local)
+                                               block, local, early_exit_raw)
     if b_s is None:
         return PairVerdict("diff", 0.0, 0.0, (0, 0), 1.0, 0.0)
     padded = np.zeros((size + 2 * max_shift, size + 2 * max_shift), dtype=np.uint8)

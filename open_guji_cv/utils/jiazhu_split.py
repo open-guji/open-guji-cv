@@ -65,6 +65,21 @@ ROW_B_CC = 250             # 分型看 b 侧最大连通体：≥此是真笔画
                            # **分型不能拿墨占比**——vol02/4:5:20 末行「一|璉」
                            # 的「一」只占 18% 墨，被比例判据划成残渣、整个字
                            # 被丢掉，是红线事故。
+# 段尾疑似闸（型 1：夹注段多延一格，把整宽正文字劈成两半）
+# 判据见 `.claude/doc/jiazhu_defects_for_segmentation.md` 的原始报告（2 处
+# 案例：vol02:57:4「子」、vol02:100:4:17「此」）。**2026-09-10 用生产真实
+# 数据全书核实过一版"缝跨墨行占比 + b 墨量"的自动裁剪判据，18 处命中里
+# 16 处是假阳性**（「內府藏本」「吳玉搢家藏本」一类真夹注小字，笔画粗、
+# 缝窄，墨量特征和整宽字骗过缝检测的案例高度重叠，纯几何/墨量测不开）。
+# 结论与正文粘连切分同构（文档 §三：图像信号到头，要识别引导）——这道闸
+# 只能做**疑似标记**、绝不能自动裁段，裁段的假阳性会把真夹注小字错误地
+# 当正文丢弃，是比漏检更贵的错误。
+# 现在的判据（跨缝连通体面积占比）比旧版（行占比+b墨量）更贴近真实区分
+# 特征，但仍不完美（vol02:57:4:21「能」这类真阳性也测不到，见上述复核
+# 记录）——**宁可漏检也不误标**，标记的用途是把段尾送进人工审查队列，
+# 不是自动改切分。
+TAIL_SUSPECT_STRADDLE_FRAC = 0.8  # 缝 ±2px 内被同一连通体跨越，且该连通体
+                                   # 面积占本格总墨量的比例下限
 
 
 def _binary(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> np.ndarray:
@@ -181,6 +196,56 @@ def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
         prev_i = i
     _commit(run)
     return out
+
+
+def suspect_full_width_tail(runs: dict[int, float], patches: dict[int, np.ndarray],
+                            ink_threshold: int = INK_THRESHOLD) -> int | None:
+    """段尾疑似标记：段的最后一格**可能**是被缝位骗过的整宽正文字，返回其
+    格号；拿不准就返回 `None`。**只标记，不裁剪**——见模块头「2026-09-10
+    用生产数据核实」那段记录：18 处几何判据命中里 16 处是假阳性（真夹注
+    小字笔画粗、缝窄，与整宽字骗过缝检测的墨量特征重叠），裁段的代价
+    （把真夹注小字错判成正文丢弃）比漏检贵得多，所以这道闸不改 `runs`，
+    只把段尾格标出来送人工审查。
+
+    `link_runs` 只看缝中心是否对齐、段的连通体中位数是否够——不看**段尾这
+    一格本身像不像夹注**。整宽字（子/此……）若恰好在缝位附近有竖笔，
+    `gap_center` 量得出一条「缝」，缝对齐、连通体也够，就被收进段。这道闸
+    只看段尾，不动段中间——`adopt_run_tails` 已经证明段中间的夹注格必然
+    紧跟在另一个已确认的夹注格后面，被整宽字打断的情况只出现在段尾。
+
+    判据：缝 ±2px 内若有连通体贯穿（左右都有该连通体的像素），且这个连通
+    体的面积占本格总墨量 ≥ `TAIL_SUSPECT_STRADDLE_FRAC`——一个字被劈成两
+    半时，两半本是同一路笔画，贯穿缝位的连通体会占掉这个字的大部分墨；
+    两个独立夹注小字即便笔画粗到不小心碰缝，各自的连通体仍以本字为主，
+    跨缝那一小段占比低。**仍是启发式，不保证测开所有案例**（同一次核实里
+    `vol02:57:4:21`「能」这类真阳性也没测到，字形结构本身分左右两半时缝
+    可能不落在贯穿笔画上），漏检留给人工审查兜底，宁可漏不可错杀。
+    """
+    if not runs:
+        return None
+    tail = max(runs)
+    patch = patches.get(tail)
+    if patch is None:
+        return None
+    cx = int(round(runs[tail]))
+    h, w = patch.shape[:2]
+    if cx <= 0 or cx >= w:
+        return None
+    binary = _binary(patch, ink_threshold)
+    total_ink = int(binary.sum())
+    if total_ink == 0:
+        return None
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    straddle_area = 0
+    for lbl in range(1, n):
+        xs = np.flatnonzero((labels == lbl).any(axis=0))
+        if xs.size == 0:
+            continue
+        if xs.min() <= cx - 2 and xs.max() >= cx + 2:
+            straddle_area = max(straddle_area, int(stats[lbl, 4]))
+    if straddle_area / total_ink >= TAIL_SUSPECT_STRADDLE_FRAC:
+        return tail
+    return None
 
 
 def adopt_run_tails(runs: dict[int, float], patches: dict[int, np.ndarray],

@@ -125,10 +125,6 @@ function rvCandList(c) {
                 note: '整理本在这一位印的字' + (c.ref.op === 'replace' ? '（对齐段是 replace，位置可能错开一两格）' : '') });
     if (c.ref.form) list.push({ ch: c.ref.form, src: '刻本惯用', nokey: true,
                                 note: `整理本印「${c.ref.char}」时本书惯刻这个形（用字账）` });
-    // 维基文库版整理本与现有整理本不同时给第二意见（无键，点即选）。两本互不同的人裁位
-    // 164 处里现有整理本对 75、维基对 8——整体信整理本，但 搏/摶、始/姑 这类整理本错字它能抓到。
-    if (c.ref.wiki) list.push({ ch: c.ref.wiki, src: '维基', nokey: true,
-                                note: `维基文库版整理本这一位印「${c.ref.wiki}」，与现有整理本「${c.ref.char}」不同` });
   }
   if (db[0]) list.push({ ch: db[0][0], src: '库', note: '字形库最佳匹配 cov ' + db[0][1] });
   if (rare && rare[0]) list.push({ ch: rare[0].char, src: '形', note: '生僻字算法（字体模板+CNN）相似度 ' + rare[0].score });
@@ -257,7 +253,7 @@ function rvCard(c, i) {
       </div>
       <div class="rvev">
         <div><span class="k">整理本</span> ${c.ref && c.ref.char
-          ? `<b>${c.ref.char}</b><span class="rvp">${c.ref.op}${c.ref.form ? ' · 惯刻 ' + c.ref.form : ''}${c.ref.wiki ? ' · <b style="color:var(--zhu)">维基 ' + c.ref.wiki + '</b>' : ''}</span>`
+          ? `<b>${c.ref.char}</b><span class="rvp">${c.ref.op}${c.ref.form ? ' · 惯刻 ' + c.ref.form : ''}</span>`
           : '<span class="muted" title="这页没锚到整理本，或这一格对齐时没有对应字">—</span>'}</div>
         <div><span class="k">库</span> ${c.db ? c.db.verdict + ' ' + c.db.cov : '—'}</div>
         <div><span class="k">上下文</span> ${c.ctx && c.ctx.char

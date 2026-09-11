@@ -61,7 +61,7 @@ function jzRender() {
           <div class="jzline"><span class="jzlab">整理本</span><span class="mono jzrefline">${s.ref || '—'}</span></div>
           <div class="jzacts">
             <button data-act="ok" data-i="${i}">整段确认</button>
-            <button data-act="defect" data-i="${i}" class="${dfl ? 'on' : ''}">标切分缺陷${dfl ? '（已标）' : ''}</button>
+            <button data-act="defect" data-i="${i}" class="${dfl ? 'on' : ''}">标切分缺陷${dfl ? `（${dfl.note}）` : ''}</button>
             <span class="muted jzhint">点某一格可改字</span>
           </div>
         </div>
@@ -97,9 +97,32 @@ function jzBind(root) {
       jzRender();
       $('#jz_msg').textContent = `已标记整段 ${s.id}（${s.n} 格），记得点「提交裁决」`;
     } else {
-      const why = prompt('切分缺陷类型：少格 / 多格 / ab分错边 / 其他', JZ.defect[s.id] || '少格');
-      if (why === null) return;
-      if (why.trim()) JZ.defect[s.id] = why.trim(); else delete JZ.defect[s.id];
+      // 结构化缺陷类型：quality 沿用四分类（truncated/contaminated），
+      // defect 是细分子类——夹注被当正文 / 夹注被截断是本轮新加的两类，
+      // 之前全靠自由文本 note 事后人工阅读才能发现（见
+      // .claude/doc/jiazhu_defects_for_segmentation.md 型1/型2）。
+      const options = [
+        { key: 'jiazhu_as_body', label: '夹注被当正文（整宽正文字被劈成a/b两半）', quality: 'contaminated' },
+        { key: 'jiazhu_truncated', label: '夹注被截断（子列右/左缘裁进笔画）', quality: 'truncated' },
+        { key: 'jiazhu_too_few', label: '少格（漏拆，字数比实际注文少）', quality: 'truncated' },
+        { key: 'jiazhu_too_many', label: '多格（多切，字数比实际注文多）', quality: 'contaminated' },
+        { key: 'jiazhu_ab_swapped', label: 'ab分错边', quality: 'contaminated' },
+        { key: 'other', label: '其他', quality: 'contaminated' },
+      ];
+      const cur = JZ.defect[s.id]?.key || 'jiazhu_too_few';
+      const menu = options.map((o, i) => `${i + 1}. ${o.label}`).join('\n');
+      const pick = prompt(`切分缺陷类型（输入序号）：\n${menu}`,
+                           String(options.findIndex(o => o.key === cur) + 1 || 1));
+      if (pick === null) return;
+      const idx = parseInt(pick.trim(), 10) - 1;
+      const opt = options[idx];
+      if (!opt) { $('#jz_msg').textContent = '序号无效，未记录'; return; }
+      let note = opt.label;
+      if (opt.key === 'other') {
+        const free = prompt('具体说明：', '');
+        if (free && free.trim()) note = free.trim();
+      }
+      JZ.defect[s.id] = { key: opt.key, quality: opt.quality, note };
       jzRender();
     }
   };
@@ -120,16 +143,16 @@ async function jzSubmit() {
   }
   // 段级切分缺陷：落在**段首格**上（金标信封按字位锚定，没有段级锚点），
   // 与审查页同一条协议——`kind` 仍是 confirm，`v: 'seg_defect'` 才是载荷判别，
-  // quality 沿用 char-segmentation/instances 的四分类（不另造词），
-  // 段里出的是「格数/分边」问题，图块本身是脏的 → contaminated；
-  // 段的具体毛病写进 note，路由到金标时带过去。
+  // quality 沿用 char-segmentation/instances 的四分类（不另造词）；
+  // defect 是新加的结构化子类（jiazhu_as_body / jiazhu_truncated / …），
+  // 之前这一层全靠自由文本 note，无法批量检索统计（2026-09-10 改）。
   const defects = [];
   for (const s of JZ.segs) {
     const why = JZ.defect[s.id];
     if (!why) continue;
-    defects.push({ id: s.cells[0].id, v: 'seg_defect', quality: 'contaminated',
+    defects.push({ id: s.cells[0].id, v: 'seg_defect', quality: why.quality, defect: why.key,
                    shape: s.cells[0].char || '', reading: s.cells[0].char || '',
-                   note: `jiazhu_split ${s.id} ${s.n}格 ${why}`,
+                   note: `jiazhu_split ${s.id} ${s.n}格 ${why.note}`,
                    client_ts: Date.now() / 1000 });
   }
   if (!rows.length && !defects.length) { $('#jz_msg').textContent = '还没有裁决'; return; }

@@ -297,6 +297,9 @@ class Cell:
     gap_center: float | None = None
     ink_ratio: float = 0.0
     raised: bool = False
+    suspect_jiazhu_tail: bool = False  # 段尾可能吞了整宽正文字，见
+                                        # jiazhu_split.suspect_full_width_tail；
+                                        # 只标记不改切分，人工审查用
     seam_top: list[int] | None = None
     seam_bottom: list[int] | None = None
     """折线切分（2026-09-05，见 `utils/seam.py`）：与上/下邻格之间的缝，列图坐标下每个 x
@@ -1046,6 +1049,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         runs = jiazhu_split.link_runs(entries)
         runs, tail_a = jiazhu_split.adopt_run_tails(
             runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
+        suspect_tail = jiazhu_split.suspect_full_width_tail(runs, patches, ink_threshold)
 
     cells: list[Cell] = []
     for k in range(n_slots):

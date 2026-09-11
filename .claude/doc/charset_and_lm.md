@@ -12,7 +12,8 @@
 识别引擎的字表覆盖不到的字，**排序再好也出不来**。这不是精度问题，
 是可达性问题，两者要分开量。
 
-在本书整理本（《總目》，341,241 字 / 4,637 字种）上实测：
+在本书整理本（《總目》，341,241 字 / 4,637 字种，旧语料 `zongmu_wuyingdian_reference.txt`
+实测，**2026-09-11 起 pipeline 已换用 `zongmu_wenyuange_wikisource.txt`，本节数字未重测**）：
 
 | 字表 | 规模 | 本书不可达字种 | 不可达字次 |
 |---|---|---|---|
@@ -43,7 +44,7 @@
 ```bash
 # Unihan：https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip 解压
 python scripts/build_charset.py --unihan <解压目录> \
-    --corpus corpus/zongmu_wuyingdian_reference.txt --ocr-dict \
+    --corpus corpus/zongmu_wenyuange_wikisource.txt --ocr-dict \
     --font <FS001.ttf> --font <FS002.ttf>
 ```
 
@@ -104,7 +105,7 @@ python scripts/build_charset.py --unihan <解压目录> \
 
 ```bash
 python -m open_guji_cv refine book9 \
-    --corpus corpus/zongmu_wuyingdian_reference.txt \
+    --corpus corpus/zongmu_wenyuange_wikisource.txt \
     --general-corpus corpus/external/daizhige_zhaoling.txt \
     --general-weight 0.1 --lam 0.65
 ```
@@ -200,7 +201,7 @@ margin ≥ 0.70 才动手）：混合 +2.32%（救 41/坏 2），仍优于纯本
 python scripts/prepare_corpus.py --src <殆知阁 史藏/诏令奏议> --src ... \
     --out corpus/external/daizhige_zhaoling.txt \
     --max-chars 5000000 --max-per-file 50000 --to-traditional \
-    --holdout corpus/zongmu_wuyingdian_reference.txt
+    --holdout corpus/zongmu_wenyuange_wikisource.txt
 ```
 
 三个要点：

@@ -44,7 +44,7 @@ from ..products.kinds.recog import (ColumnDecision, DecisionRec,
                                     PageDecision, PageMatch, PageOcr)
 from ..utils.jiazhu_order import sort_by_reading
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
 
 
 def corpus_fingerprint(paths: list[str]) -> str:

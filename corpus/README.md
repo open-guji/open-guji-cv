@@ -14,6 +14,32 @@
 實測（book9all 卷首，對齊 177 頁）：76.70% → **84.16%**（+7.5%），
 傅/傳、寶/實、説/說、為/爲 等系統性混淆清零。
 
+## zongmu_wikisource_reference.txt
+
+維基文庫《四庫全書總目提要》條目（普通 wikitext 頁面，非 ProofreadPage）抽取，
+覆蓋卷首一~四 + 卷001~027，約 2026-09-06 抓取。用途：與現有整理本互校，抓到過
+`vol02:57:6:14` 摶/搏 等現有整理本的真錯（見 `variant_strategy.md` §8 09-07（二））。
+
+## zongmu_wenyuange_wikisource.txt
+
+維基文庫《文淵閣四庫全書》0001-0005冊 ProofreadPage 校對本抽取，經 MediaWiki
+API 在線逐頁拉取（本地 dump title-index 對這批 Page: 條目有缺失，09-10 實測
+線上有正文而本地索引查不到，故改走在線 API，不依賴本地 dump）。覆蓋《欽定
+四庫全書總目》全二百卷：
+
+| 冊 | 內容 | 校對狀態 | 字數 |
+|---|---|---|---|
+| 0001 | 經部　卷首一至卷首四、卷一至卷四十四 | Progress=C（已完成） | 59.6 萬 |
+| 0002 | 史部　卷四十五至卷九十 | Progress=C | 51.9 萬 |
+| 0003 | 子部　卷九十一至卷一百四十七 | Progress=C | 70.8 萬 |
+| 0004 | 集部（一）　卷一百四十八至卷一百八十五 | Progress=C | 60.4 萬 |
+| 0005 | 集部（二）　卷一百八十六至卷二百 | **Progress=OCR（僅機器 OCR，未經人工校對）** | 21.8 萬 |
+
+合計約 265 萬字。0005 冊質量明顯低於前四冊，使用時應區別對待（可能有較多
+OCR 原始錯誤未清）。與 `zongmu_wikisource_reference.txt` 是兩個獨立來源
+（不同底本、不同校對工程），可互相佐證；與 `zongmu_wuyingdian_reference.txt`
+（用戶提供整理本）比對時同樣只當「第二意見」，不改動任何自動通道。
+
 ## external/ —— 通用古文語料（派生產物）
 
 由 `scripts/prepare_corpus.py` 從殆知閣古代文獻（`garychowcmu/daizhigev20`）
