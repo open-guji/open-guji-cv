@@ -101,7 +101,7 @@ dev_set 12 页只含 **4 段 T1、0 段 T2**（95:8、108:1、152:2、171:2）�
 
 ### 第 0 步 · 修三处 bug（半天，先做，不做后面都是白算）
 
-1. `context_decide` / `v2_align` / `seed_admit` 里所有 `sorted(key=(slot, sub))` 改为按 `cells.order`
+1. `context_decide` / `v2_align` / `admit_decide` 里所有 `sorted(key=(slot, sub))` 改为按 `cells.order`
    （读 `row_segment` 产物 join；或直接调 `reading_order`）。
 2. `v2_align`：`slots` 带 sub、id 带 sub、`meta` 键 `(col, slot, sub)`。
 3. 验收：p4 / p13 的 gold 出现 a/b 条目；jz_set 夹注人审率下降；含注页正文的 replace 段数下降。
@@ -111,7 +111,7 @@ dev_set 12 页只含 **4 段 T1、0 段 T2**（95:8、108:1、152:2、171:2）�
 - 词表 `config/jiazhu/version_notes.json`：从语料派生（同 `build_book_variants` 纪律：**永不手编**，
   脚本重建）。派生规则改成「书名行去掉 `…[一二三四五六七八九十百]+卷` 之前的部分」，比本次调研用的
   机构前缀正则稳；100 条单例要人过一遍。
-- `seed_admit` 新通道 **`note_lexicon`**：**段级**证据——把段的 a+b 读序串对词表做编辑距离匹配，
+- `admit_decide` 新通道 **`note_lexicon`**：**段级**证据——把段的 a+b 读序串对词表做编辑距离匹配，
   段长 3–19、≥70% 位与库/OCR 一致 → 整段按短语放行；否则逐位回落现有通道。它与库/OCR 误差独立
   （与 `match_ref` 的「文本 × 形状同源性为零」同理），可以做双信号的一路。
 - 三条护栏：短语必须以「本」收尾；段前一格必须是 char（书名末字）；**段格数 = 短语长度**（丢字直接拒，
@@ -166,9 +166,9 @@ T2 是开放文本，但语料里有原文 → bug 修好后 `match_ref` / `dual
 ## 附：本次调研的复现
 
 - 逐页夹注格统计：`products/vol02/row_segment/*.json` 按 `sub` 计数；
-- 段文本：`seed_admit` + `context_decide` 产物按列拼 a/b；
+- 段文本：`admit_decide` + `context_decide` 产物按列拼 a/b；
 - 词表：语料以 `採進本|家藏本|藏本|大典本|進本` 收尾的行；
-- 人审归因：`seed_admit.doubts` × `glyph_match.candidates` × `ocr_candidates.topk`；
+- 人审归因：`admit_decide.doubts` × `glyph_match.candidates` × `ocr_candidates.topk`；
 - 样张：`scratchpad/jz/{T1_p95c8,T1_p152c2,T2_p4c3,T2_p13c7}.png`（蓝 b / 红 a / 绿紧框）。
 
 ---

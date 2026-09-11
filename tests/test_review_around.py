@@ -17,7 +17,7 @@ from open_guji_cv.products.kinds.recog import (ColumnDecision, DecisionRec,
 
 class FakeStore:
     """只认 `context_decide`/`context_decision`；够 `_column_slots` 用了——
-    它 `m is None and d is None` 才算空页，其余三路（glyph_match/ocr/seed_admit）
+    它 `m is None and d is None` 才算空页，其余三路（glyph_match/ocr/admit_decide）
     留 None 也不影响拼字符串本身。"""
 
     def __init__(self, pages: dict[int, PageDecision]):

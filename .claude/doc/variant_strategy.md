@@ -143,7 +143,7 @@
 
 | 来源 | 字段 | 现有数据 |
 |---|---|---|
-| `seed_admit` 产物 `AdmitRec(char, reading, channel)` | 自动转换对 | 41,366 条记录，自动进库且 `reading≠char` 的 38 条：卽→即 ×19、彚→彙 ×10、㫖→旨 ×5、厯→歷、櫽→檃、𨽾→隸、註→注 各 1；全部走 `match_replace` |
+| `admit_decide` 产物 `AdmitRec(char, reading, channel)` | 自动转换对 | 41,366 条记录，自动进库且 `reading≠char` 的 38 条：卽→即 ×19、彚→彙 ×10、㫖→旨 ×5、厯→歷、櫽→檃、𨽾→隸、註→注 各 1；全部走 `match_replace` |
 | 人裁 confirm 事件 `(shape, reading, conversion)` | 人确认的转换对（含 己/已/巳） | 273 + 132 条裁决；`instances.label≠semantic` 的有 卽→即 13、註→注 12、㫖→旨 9、巳→已 5、彚→彙 5… |
 | 整理本语料字频 | 整理本用形 | 341,240 字次 / 4,636 字种 |
 
@@ -332,7 +332,7 @@ dwell 已有；组视图按组计时，报「每组秒数」与「每格秒数�
 
 **用字账**（`open_guji_cv/variant_ledger.py`、`scripts/build_book_variants.py`、
 `config/variants/books/wuyingdian_zongmu.json`，控制台「异体」页 + `GET /api/variants/book`）：
-- 输入：seed_admit 产物 41,366 条、glyph.db 15,482 例、整理本 341,240 字次。
+- 输入：admit_decide 产物 41,366 条、glyph.db 15,482 例、整理本 341,240 字次。
 - 结果 **87 组**（整理本单形 29 / 多形 58），转换对 7，关系图外 2（㫖→旨 ×5、巳→己 ×1——
   正是 §3.3 预言的两类）。髮 组：`{髪, 髮}` single、preferred 髪、尚无转换对（那 4 条还在人审）。
 - 分组走过两版弯路，都记下来：① 第一版沿 hydzd/T2 边走一跳，廳 把 聽 拉进来、歷 把 曆/厲 拉进来，
@@ -364,7 +364,7 @@ dwell 已有；组视图按组计时，报「每组秒数」与「每格秒数�
 提前占位（含 审→審、笃→篤 这类简体形：OCR 会吐它们，LM 该认）。两头都在整理本的一律不派生
 （无/無、注/註、已/巳、中/仲 都被这条挡住）。与手工表冲突 0。
 
-**准入**（`clustering/variant_form.py`、`steps/seed_admit.py` v1.3）：整理本通道放行且库未 same 时，
+**准入**（`clustering/variant_form.py`、`steps/admit_decide.py` v1.3）：整理本通道放行且库未 same 时，
 取账本组内的形；≥2 个就进三档——`fixed_lib`（库候选组内 top1 cov ≥ 0.95、对手不贴到 0.01 内、
 该形本书**人确认过**）/ `fixed_form`（组内 closed-set 三源 HOG+CNN+embedding 一致、余弦差 ≥ 0.03、
 人确认过）/ `open`（落人审，`doubts` 记 `form_open`，卡片只列组内形，上下文通道**不**兜底——它定得了
@@ -372,7 +372,7 @@ dwell 已有；组视图按组计时，报「每组秒数」与「每格秒数�
 只影响那一次 `admission_decision`）。产物参数加 `ledger_fingerprint` / `variants_fingerprint`，两张表
 重建就过期。三个阈值是起点，产物里把三源分数全记了，抽审后重定不用重跑。
 
-**回放**（`--force` 重跑 seed_admit）：
+**回放**（`--force` 重跑 admit_decide）：
 | 集 | 字位 | 自动 | 人审 | A 对整理本 | A 对人裁 | 义定形未定 |
 |---|---|---|---|---|---|---|
 | dev_set 12 页（改前） | 1,936 | 1,914 | 22（1.14%） | 9,848/9,848（60 页口径） | 132/132 | — |
@@ -429,7 +429,7 @@ same），人裁核过 3/3——**要去组视图攒**。
    只落 `char-segmentation/instances` 金标，**没有任何东西把它写进 `config/crop_exclusions.jsonl`**
    ——「标了缺陷」与「以后别再用这块图」之间是断的：下一轮重跑照样出卡，也没有闸拦着它进库。
    新消费者只追加不删除（重扫后按名单复核），`origin=human`，幂等。
-2. **v2 准入查排除名单**。`clustering/seeding.py`（v1）一直查它，`steps/seed_admit.py` 漏了。
+2. **v2 准入查排除名单**。`clustering/seeding.py`（v1）一直查它，`steps/admit_decide.py` 漏了。
    现在命中即 `admit=False` + `doubts=["excluded"]`，产物加 `n_excluded`，参数加
    `use_exclusions` / `exclusions` / `exclusions_fingerprint`（名单变了产物过期）。
    **判据 B 的分母把 excluded 剔出去**——人已经判过「这块图不能用」，它既不是自动放行也不是
@@ -493,7 +493,7 @@ cov 0.9993。追下去发现库里那个「蠹」原型是 v1 的 `vol01:40:9:16
 | 消费后 | 9,602 | 9,517 | **85（0.89%）** | 58（不进分母） | **9,454/9,454** | **160/160** |
 
 **判据 E 第一次亮红，而且抓对了**：`vol01:60:4:15` 产物存 髪 / 人裁 髮、`vol01:32:7:10` 存 𠮓 /
-人裁 變——都是「产物落后于人裁」。重跑 `glyph_match` + `seed_admit` 后第一条自动跟上（`char=髮`），
+人裁 變——都是「产物落后于人裁」。重跑 `glyph_match` + `admit_decide` 后第一条自动跟上（`char=髮`），
 第二条转成 `form_open` 待审（𠮓 是首例，规则如此）。**E 的价值就在这里**：判据 A 把异体算作同字，
 这两条在 A 里是「对」的，只有 E 能看见。
 
@@ -541,7 +541,7 @@ Esc 放回 ✓。零报错。
 
 用户：「我之前标注过，点了提交待审与改动，为什么这次刷新还在」。查下来是**两层**问题：
 
-**① 视图读产物，产物落后于裁决。** 组视图的 `pending` 只看 `seed_admit` 产物的
+**① 视图读产物，产物落后于裁决。** 组视图的 `pending` 只看 `admit_decide` 产物的
 `form.state == open`，而产物是上次跑管线时算的——裁决进了库，产物没重跑，那格就一直红着。
 7 格待审里 **6 格其实已经裁过、也已进库**（`label_status=human`）。
 
@@ -860,7 +860,7 @@ context 通道 16/18 错：整理本印「已」、刻本刻「巳」，`char` �
 249/274 = 90.9%**。修：
 - `form_fidelity` 分母加 `_multi_form(char)`：char 所在账本组还有别的形被本书刻过（db/human>0）
   就算异体位。E 会先掉下来，那是它该有的数。
-- `seed_admit` 的 context 通道也守「己/已/巳 永远人审」（原来那道闸只拦 admission_decision，
+- `admit_decide` 的 context 通道也守「己/已/巳 永远人审」（原来那道闸只拦 admission_decision，
   context 是后接的，直接绕过）。vol01 30 条 context 放行的 已/巳 → 人审，B 涨约 0.18%。
 - 账本 `preferred` 改人裁优先（human 次数 > 刻次 > 码点）：變 组 products 52 全是机器写的，
   人裁 8 次全是 𠮓。重建后 隸→𨽾、變→𠮓、即→卽、歷→厯。dual 位的 `decide_form` 走
@@ -889,7 +889,7 @@ context 通道 16/18 错：整理本印「已」、刻本刻「巳」，`char` �
 对勘报告同口径。淮/准 同理（T2）。
 
 修完后 rerun5（vol01 108 页）→ 接着 vol02 全书 Step5/6（188 页，字形库是审完第一册的）。
-补跑 vol02 的 seed_admit（rerun5 早于本节的 bug 修复启动，没吃到）后见 09-06（八）节。
+补跑 vol02 的 admit_decide（rerun5 早于本节的 bug 修复启动，没吃到）后见 09-06（八）节。
 
 ### 2026-09-06（七）：dual 通道 variant_form 判早了——channel 改名前后的变量混用
 
@@ -902,7 +902,7 @@ variant_form」这条分支从写下那天起就没生效过。`admission_decisi
 整理本形」的旧逻辑照写，跟账本完全脱节。
 
 修：改名前先存一份 `is_corpus_channel = channel in _CORPUS_CHANNELS`，分支判断改用这份快照。
-rerun6（只重跑 seed_admit，很快）验证：
+rerun6（只重跑 admit_decide，很快）验证：
 
 |  | rerun5（bug 仍在） | rerun6（修复后） |
 |---|---|---|
@@ -923,7 +923,7 @@ E 的错例清零。判据 A 那 1 条不一致是 [vol01:73:5:19](../../cache/v
 ### 2026-09-06（八）：vol02 全书 Step5/6 首跑——尚未人审，先记基线
 
 字形库沿用第一册审完的（没有单独为 vol02 重开）。全书 188 页 Step5/6 跑完后，另补跑一次
-`seed_admit`（rerun5 启动早于 09-06（七）节的 dual 通道修复，没吃到）。
+`admit_decide`（rerun5 启动早于 09-06（七）节的 dual 通道修复，没吃到）。
 
 **判据（对整理本金标；无人裁真值——用户还没审过这本书）**：A 25,939/25,941 = 99.99%（剔自证
 21,709/21,711、replace 段零自证 133/133）；B 人审率 2,579/29,362 = 8.78%，红灯——但**均匀分布
@@ -1223,7 +1223,7 @@ shape、`conversion=0`。批次名默认 `<书>-review-<字>`，`--batch` 可改
 
 **量化前先解决一个方法问题**：人裁通道（09-06 十一节）把有真值的位全都放行了，
 当前人审队列里真值为 0，没法量。办法是用 `--params` 关掉人裁通道与放松开关重跑
-seed_admit，得到「人裁之前」那批人审位（1,405 条，113 条有真值且有整理本字），量完再恢复。
+admit_decide，得到「人裁之前」那批人审位（1,405 条，113 条有真值且有整理本字），量完再恢复。
 > 坑：量的时候**别同时重跑管线**——有一份分析在收集产物时被我中途重跑覆盖，数字是混合
 > 状态的，作废重来。
 
@@ -1297,7 +1297,7 @@ form_guess 104。A 的不一致仍是那几条已知的人裁 vs 整理本分歧
 
 库撤 15 条刻例后两册从 glyph_match 全量重跑（vol01 40 分钟、vol02 55 分钟）。判据 E 在 vol01
 报 106/108 红——`vol01:29:4:19` / `80:5:7` 存 巳、人裁 已。查时间线：用户先裁 巳、后改判 已，
-第二个事件被 `admit_instance` 的幂等闸挡住，库里永远是第一次的 巳；seed_admit 的人裁通道读库
+第二个事件被 `admit_instance` 的幂等闸挡住，库里永远是第一次的 巳；admit_decide 的人裁通道读库
 就跟着错。**同一个坑第三次咬人**（蠹、32:7:10 在前），这次根治：
 
 - `glyphdb_admit` 消费者：库里已有记录且字形或释读与本次人裁不同 → 撤旧再进（`updated` 计数）；

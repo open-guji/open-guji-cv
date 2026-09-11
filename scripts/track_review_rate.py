@@ -76,7 +76,7 @@ def main() -> int:
             for book in [b.strip() for b in a.books.split(",") if b.strip()]:
                 rec = measure(book, st)
                 if rec is None:
-                    print(f"  {book}: 没有 seed_admit 产物，跳过")
+                    print(f"  {book}: 没有 admit_decide 产物，跳过")
                     continue
                 if a.note:
                     rec["note"] = a.note

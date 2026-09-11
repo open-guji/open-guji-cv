@@ -44,7 +44,7 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
 
     out: list[dict] = []
     for pg in pgs:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         cells = st.read(book, "row_segment", page_key(pg), "cells")
         if a is None:
             continue

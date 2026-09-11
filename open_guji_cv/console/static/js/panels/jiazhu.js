@@ -1,6 +1,6 @@
 // ── 夹注段卡 ───────────────────────────────────────────────────────
 // 从 index.html 的 <script> 段搬出（C4 前端切分）。
-// 数据来自 /api/jiazhu/segments（seed_admit + row_segment + 整理本对齐）。
+// 数据来自 /api/jiazhu/segments（admit_decide + row_segment + 整理本对齐）。
 // **段是审阅单位**：一段版本注 5–19 字，人一眼读完整句就知道通不通；
 // 逐格出卡等于把一句话拆成十几道题，既慢又看不出段本身对不对。
 // 裁决复用现成协议：整段确认/改格 → confirm 事件；切分缺陷 → seg_defect。
@@ -138,12 +138,12 @@ async function jzSubmit() {
   try {
   if (rows.length) {
     const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
+      body: JSON.stringify({ batch, step: 'admit_decide', unit: 'cell', kind: 'confirm', events: rows }) });
     n += r.appended ?? rows.length; msg += consumedMsg(r);
   }
   if (defects.length) {
     const r2 = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: defects }) });
+      body: JSON.stringify({ batch, step: 'admit_decide', unit: 'cell', kind: 'confirm', events: defects }) });
     n += r2.appended ?? defects.length;
   }
   } catch (e) {

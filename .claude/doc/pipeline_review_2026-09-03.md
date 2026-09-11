@@ -317,7 +317,7 @@ dev_set 逐格人审 rand 层 400 格，Wilson 95% 下界 ≥ 99%。
 
 ### 4.3 阶段 C：Step 6 + 进库闭环
 
-**C1 · `seed_admit` Step**（unit=column）：`admission_decision` 十条通道 →
+**C1 · `admit_decide` Step**（unit=column）：`admission_decision` 十条通道 →
 自动进库的直接发 `confirm` 事件（路由已有 `confirm → glyphdb_admit`）；待审的进
 队列产物。队列是 numeric 产物，人裁结果是 Event。
 
@@ -340,7 +340,7 @@ dev_set 逐格人审 rand 层 400 格，Wilson 95% 下界 ≥ 99%。
 
 | 视图 | 加什么 |
 |---|---|
-| 管线 | yaml 加 `normalize / glyph_match / ocr_candidates / context_decide / seed_admit`；`needs=engine` 的步在状态矩阵里显示 blocked 原因 |
+| 管线 | yaml 加 `normalize / glyph_match / ocr_candidates / context_decide / admit_decide`；`needs=engine` 的步在状态矩阵里显示 blocked 原因 |
 | 产物 | 字块 + 候选 overlay：一格点开看 patch、库 top-3（cov）、OCR top-3、上下文定字与 margin |
 | 审查 | 定字审查页（C2）；Step 3 格线二选一页（A1）；Step 4 紧框拖框页（A4）|
 | 评测 | heavy 的四个评测器（db_match / char_ocr / context_correction / confusable_lm）金标重键后解锁 |

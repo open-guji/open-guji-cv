@@ -100,7 +100,7 @@ def main() -> int:
     rest: list = []
 
     for pg in pgs:
-        adm = st.read(a.book, "seed_admit", page_key(pg), "seed_admit")
+        adm = st.read(a.book, "admit_decide", page_key(pg), "admit_decide")
         if adm is None:
             continue
         mt = st.read(a.book, "glyph_match", page_key(pg), "glyph_match")

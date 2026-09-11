@@ -327,7 +327,7 @@ def test_step8_outlets_match_consumers():
 
 # ── 落库六条纪律：glyphdb_admit（① 落字形库）────────────────────────
 def _cell_target(key: str, book: str, page: int, col: int, slot: int) -> EventTarget:
-    return EventTarget(step="seed_admit", unit="cell", key=key, book=book, page=page,
+    return EventTarget(step="admit_decide", unit="cell", key=key, book=book, page=page,
                        col=col, slot=slot)
 
 

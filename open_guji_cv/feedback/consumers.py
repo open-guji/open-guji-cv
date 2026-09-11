@@ -250,7 +250,7 @@ def glyphdb_admit(events, db_path: str | None = None,
         # v2 命名空间：见上面「id 必须加前缀」那节
         db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
         # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
-        # 第一次裁 巳、后来改判 已，第二个事件被闸掉，库里永远是 巳——seed_admit 的
+        # 第一次裁 巳、后来改判 已，第二个事件被闸掉，库里永远是 巳——admit_decide 的
         # 人裁通道读库就跟着错，判据 E 报「存 巳 人裁 已」（29:4:19、80:5:7；更早
         # 蠹、32:7:10 也是它）。所以：库里已有**人裁**记录且字形或释读不同 → 撤旧再进。
         # 机器进的（provenance 非 human）本来就该被人裁覆盖，同样撤。

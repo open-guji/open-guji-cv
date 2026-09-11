@@ -25,7 +25,7 @@ LM / 准入用的代表字，从前两层派生）。
 }
 ```
 
-``book`` 四个计数分来源：``products``（v2 seed_admit 自动放行）、``db``（glyph.db
+``book`` 四个计数分来源：``products``（v2 admit_decide 自动放行）、``db``（glyph.db
 全部实例）、``human``（其中人裁的）、``align``（其中 v1 整理本对齐直接贴的标签——
 最不可信，它本来就是整理本形）。**读数先看 human，再看 products/db，别信 align。**
 

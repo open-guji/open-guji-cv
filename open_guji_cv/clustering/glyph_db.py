@@ -960,7 +960,7 @@ def assert_db_not_silently_empty(db_path: str | Path,
     """自检（库路径 P0）：库打开后若 `instances` 为 0、而真源非空，直接报错。
 
     这个 bug 的伤害全部来自「空库不报错」——库路径解析错了，`glyph_match` /
-    `seed_admit` 会对着一个空库（或压根是另一个文件）跑，产物看着全过
+    `admit_decide` 会对着一个空库（或压根是另一个文件）跑，产物看着全过
     （exit 0、ok N/N），逐字判 diff、候选全空，唯一露出来的破绽是单页耗时
     0.1~0.2 秒（真在算距离时是 7~21 秒），而没有任何东西会去看这个数字。
 
@@ -988,6 +988,6 @@ def assert_db_not_silently_empty(db_path: str | Path,
         f"字形库为空（instances=0）：{db_path}\n"
         f"但真源 glyph_store 非空：{store}\n"
         "多半是库路径解析错了——写库（rebuild/import）与读库（glyph_match/"
-        "seed_admit）用的不是同一个文件。查 GUJI_GLYPH_DB / GUJI_WORKSPACE 是否"
+        "admit_decide）用的不是同一个文件。查 GUJI_GLYPH_DB / GUJI_WORKSPACE 是否"
         "一致，或重新 `glyph-db rebuild` 一次。"
     )

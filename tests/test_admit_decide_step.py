@@ -30,8 +30,8 @@ needs_raw = pytest.mark.skipif(not RAW.exists(), reason="需要 data_full/zongmu
 
 
 def test_registered():
-    assert "seed_admit" in STEPS and "seed_admit" in KINDS
-    assert "db" in STEPS["seed_admit"].spec.needs
+    assert "admit_decide" in STEPS and "admit_decide" in KINDS
+    assert "db" in STEPS["admit_decide"].spec.needs
 
 
 @needs_raw
@@ -40,7 +40,7 @@ def test_auto_admissions_always_carry_a_channel_and_a_char():
     store = ProductStore()
     seen = 0
     for pg in load_book("vol01").dev_set[:6]:
-        d = store.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        d = store.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         if d is None:
             continue
         for cc in d.columns:
@@ -51,11 +51,11 @@ def test_auto_admissions_always_carry_a_channel_and_a_char():
                 assert r.channel, f"{r.id} 自动进库却没有通道名"
                 assert r.char, f"{r.id} 自动进库却没有字"
                 # human 是 2026-09-06 加的最高优先级通道：人裁过的位一票定案，
-                # 任何自动通道都不许改写（seed_admit v1.4）
+                # 任何自动通道都不许改写（admit_decide v1.4）
                 assert r.provenance in ("match", "context", "align", "human"), \
                     f"{r.id} provenance 不合法：{r.provenance}"
     if not seen:
-        pytest.skip("还没跑过 seed_admit")
+        pytest.skip("还没跑过 admit_decide")
 
 
 @needs_raw
@@ -68,7 +68,7 @@ def test_match_solo_requires_the_cov_cutoff():
     store = ProductStore()
     checked = 0
     for pg in load_book("vol01").dev_set[:6]:
-        a = store.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        a = store.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:
@@ -88,7 +88,7 @@ def test_review_items_say_why():
     store = ProductStore()
     seen = 0
     for pg in load_book("vol01").dev_set[:6]:
-        d = store.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        d = store.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         if d is None:
             continue
         for cc in d.columns:
@@ -105,11 +105,11 @@ def test_review_items_say_why():
 def test_counts_add_up():
     store = ProductStore()
     for pg in load_book("vol01").dev_set[:4]:
-        d = store.read("vol01", "seed_admit", page_key(pg), "seed_admit")
+        d = store.read("vol01", "admit_decide", page_key(pg), "admit_decide")
         if d is None:
             continue
         n = sum(len(cc.chars) for cc in d.columns if cc.ok)
-        # 排除名单里的格既不自动也不人审（seed_admit v1.3 的 n_excluded），三者之和才是全部
+        # 排除名单里的格既不自动也不人审（admit_decide v1.3 的 n_excluded），三者之和才是全部
         assert d.n_auto + d.n_review + d.n_excluded == n, \
             f"p{pg} 计数对不上：{d.n_auto}+{d.n_review}+{d.n_excluded} != {n}"
 
@@ -124,7 +124,7 @@ def test_human_shapes_only_takes_v2_ids(tmp_path):
     """
     import sqlite3
 
-    from open_guji_cv.steps.seed_admit import _human_shapes
+    from open_guji_cv.steps.admit_decide import _human_shapes
 
     db = tmp_path / "g.db"
     conn = sqlite3.connect(db)

@@ -153,7 +153,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
     oki = ni = okr = nr = 0          # independent（剔 fallback）/ replace 段
     errors: list[dict] = []
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:
@@ -173,7 +173,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # conversion 不一定为真（禀/稟 就是，两边都在 稟 组、v2_align 记 equal）。
                     # 管线按账本 preferred 出刻本形是对的，只认 preferred 不认同组任一形。
                     # 第四项（2026-09-07）：**人裁过的位不拿整理本判对错**。
-                    # `seed_admit` v1.4 起「人裁一票定案」，`channel="human"` 的字
+                    # `admit_decide` v1.4 起「人裁一票定案」，`channel="human"` 的字
                     # 就是用户看着图定的；整理本在这一处印什么与对错无关。
                     # 实测 vol02:18:9:5 与 35:7:13——图上刻 曾、用户裁 曾，整理本印 會，
                     # 判据 A 于是把**用户自己的裁决**记成了两条错，灯从绿变黄。
@@ -248,7 +248,7 @@ def jiazhu_rates(book: str, pages: list[int], store=None) -> dict:
         suffixes, max_len = (), 20
     by_type: dict[str, list[int]] = {"T1": [0, 0], "T2": [0, 0]}
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:
@@ -307,7 +307,7 @@ def review_rate(book: str, pages: list[int], store=None) -> dict:
     tot = auto = excluded = 0
     per: Counter = Counter()
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:
@@ -439,7 +439,7 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
 
 
 def next_batch(book: str, n: int = 12, store=None) -> dict:
-    """下一批页码：正文页里没跑过 seed_admit 的，顺序取 n 个。
+    """下一批页码：正文页里没跑过 admit_decide 的，顺序取 n 个。
 
     ⚠️ 不能按页号顺推——vol01 的 p89-113 是职名页、p61/159-182 是目录页，
     用正文的 21 格先验跑必然全灭（见 books/vol01.yaml 里 p119 的教训）。
@@ -459,7 +459,7 @@ def next_batch(book: str, n: int = 12, store=None) -> dict:
                   and (r.get("expected") or {}).get("page_type") == "body")
     st = store or ProductStore()
     todo = [p for p in body
-            if st.read(book, "seed_admit", page_key(p), "seed_admit") is None]
+            if st.read(book, "admit_decide", page_key(p), "admit_decide") is None]
     return {"body_total": len(body), "done": len(body) - len(todo),
             "todo": len(todo), "batch": todo[:n]}
 
@@ -542,7 +542,7 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
     hit_auto = n_auto = 0
     errors: list[dict] = []
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         for cc in a.columns:

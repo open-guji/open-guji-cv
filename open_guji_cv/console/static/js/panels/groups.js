@@ -229,7 +229,7 @@ async function vgSend(all) {
   $('#vg_msg').textContent = `提交 ${rows.length} 条…`;
   try {
     const r = await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows }) });
+      body: JSON.stringify({ batch, step: 'admit_decide', unit: 'cell', kind: 'confirm', events: rows }) });
     $('#vg_msg').textContent = `已写 ${r.appended} 条到批次 ${batch}`
       + (skipped ? `（组外 ${skipped} 格没填字，跳过）` : '')
       + consumedMsg(r);

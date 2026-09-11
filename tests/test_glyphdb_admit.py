@@ -59,7 +59,7 @@ def _free_key(db):
 
 def _ev(key, payload, page, col, slot):
     return (make_event("t", 1, "confirm",
-                       EventTarget(step="seed_admit", unit="cell", key=key,
+                       EventTarget(step="admit_decide", unit="cell", key=key,
                                    book="vol01", page=page, col=col, slot=slot),
                        payload), None)
 

@@ -69,7 +69,7 @@ vol01:151:4:4 的「已」——用户定的规则本来就是己已巳永远人
 Step 5-6，而且**不是算法弱，是证据没用上**：
 
 - 人审 152 条里，**65% 能被「整理本 × 库形状」通道吃掉**（127 条真值上 83 自动、82 对）
-  ——这条通道 v1 标定过（144/144、70/70、102/102），v2 的 `seed_admit` 却传的
+  ——这条通道 v1 标定过（144/144、70/70、102/102），v2 的 `admit_decide` 却传的
   `align_char=None`，一条都没接。
 - 锚定串只收「定了字的位」，p70 整页锚不上；改用库 kNN top1 填满，整理本覆盖
   **1619 → 1897 / 1933**（83.8% → 98.1%）。
@@ -172,7 +172,7 @@ OCR 仍然只供候选不投票——但候选里**有没有那个字**，决定
 
 ### Step 6 上下文：v2 少接了最强的一路
 
-- `seed_admit` 传 `align_char=None, ref_char=None`。v1 标定过的 match_ref、
+- `admit_decide` 传 `align_char=None, ref_char=None`。v1 标定过的 match_ref、
   match_replace、match_ref_weak、match_margin 在 v2 一条都不生效。
 - 锚定串（`v2_align._slots_from_decision`）只收 `char` 非空的位；改用库 kNN top1
   填满（弃权位也填），实测 12 页全锚上，equal 段 1849。
@@ -202,7 +202,7 @@ OCR 仍然只供候选不投票——但候选里**有没有那个字**，决定
 **A · 接整理本通道进 v2 + 改锚定串**（收益最大、成本最低，1-2 天）
 
 1. `_slots_from_decision` 改为：定字 → 库 top1 → OCR top1 逐级兜底，位位有字。
-2. `seed_admit` 跑 `label_page`，把逐位 `align_char` / `op` 喂给 `admission_decision`
+2. `admit_decide` 跑 `label_page`，把逐位 `align_char` / `op` 喂给 `admission_decision`
    ——match_ref / match_replace / match_margin 原样复用，一行标定都不用重做。
 3. 己已巳三字硬编码永远人审（`SPLIT_CHARS` 已有，准入侧也加）。
 

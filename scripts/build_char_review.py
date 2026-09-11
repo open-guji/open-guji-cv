@@ -139,7 +139,7 @@ def collect(book: str, pages: list[int], chars: set[str], st, corpus, index,
     cache = ImageCache()
     out = []
     for pg in pages:
-        a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
+        a = st.read(book, "admit_decide", page_key(pg), "admit_decide")
         if a is None:
             continue
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -454,11 +454,11 @@ document.getElementById('submit').onclick=async()=>{{
   btn.disabled=true; msg.textContent='提交中…';
   try{{
     const r=await fetch(API+'/api/events', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{batch:BATCH, step:'seed_admit', unit:'cell', kind:'confirm', events:rows}})}});
+      body: JSON.stringify({{batch:BATCH, step:'admit_decide', unit:'cell', kind:'confirm', events:rows}})}});
     if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,120));
     const d=await r.json();
     msg.textContent='已提交 '+rows.length+' 条'+(d.consumed!=null?('，已消费 '+JSON.stringify(d.consumed)):'')
-      +'。重跑 seed_admit 后本页需重新生成。';
+      +'。重跑 admit_decide 后本页需重新生成。';
     for(const id of Object.keys(edits)) delete edits[id];
     cards.forEach(paint);
     document.getElementById('msg').textContent=msg.textContent;
@@ -507,7 +507,7 @@ def main() -> int:
         if a.pages:
             pages = bk.resolve_pages(a.pages)
         else:
-            d = st.root / book / "seed_admit"
+            d = st.root / book / "admit_decide"
             pages = sorted(int(p.stem[1:]) for p in d.glob("p*.json")) if d.exists() else []
         got = collect(book, pages, chars, st, corpus, index, ids)
         print(f"  {book}: {len(pages)} 页 → {len(got)} 个字位")
