@@ -40,8 +40,9 @@ needs_raw = pytest.mark.skipif(not RAW.exists(), reason="需要 data_full/zongmu
 def test_registered():
     assert "align_ref" in STEPS and "align_ref" in KINDS
     assert "corpus" in STEPS["align_ref"].spec.needs
-    assert set(STEPS["align_ref"].spec.consumes) >= {
-        "context_decision", "glyph_match", "ocr_candidates"}
+    # 2026-09-10 去掉对 context_decision 的依赖（不再借 Step6 的定字拼锚定串，
+    # 见 align_ref.py 模块头「2026-09-10」一节）——四路才真正互相独立。
+    assert set(STEPS["align_ref"].spec.consumes) == {"glyph_match", "ocr_candidates"}
 
 
 def test_corpus_fingerprint_lands_in_params_and_moves_the_hash():

@@ -82,6 +82,43 @@ def test_cnn_topk_contract():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
 
 
+@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+def test_topk_batch_matches_sequential():
+    """`topk_batch` 必须与逐次调用 `topk` 位级相同（2026-09-10 生僻字候选
+    提速：整页字块一次前向，不能悄悄改变候选或排名）。"""
+    c = CnnCandidates()
+    cs = ["一", "二", "三", "十", "土", "王"]
+    qs = [np.zeros((64, 64), np.uint8) for _ in range(3)]
+    qs[0][20:44, 8:56] = 1
+    qs[1][10:30, 10:30] = 1
+    qs[2][30:50, 20:60] = 1
+    seq = [c.topk(q, cs, k=4) for q in qs]
+    batch = c.topk_batch(qs, cs, k=4)
+    # 批处理与逐次调用的矩阵运算求和顺序不同，允许浮点噪声（1e-4 量级），
+    # 但字符与排名必须完全一致。
+    for s, b in zip(seq, batch):
+        assert [ch for ch, _ in s] == [ch for ch, _ in b]
+        for (_, ps), (_, pb) in zip(s, b):
+            assert abs(ps - pb) < 1e-4
+
+
+@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+def test_emb_topk_batch_matches_sequential():
+    """同上，`emb_topk_batch` 对 `emb_topk`。"""
+    c = CnnCandidates()
+    cs = ["一", "二", "三", "十", "土", "王"]
+    qs = [np.zeros((64, 64), np.uint8) for _ in range(3)]
+    qs[0][20:44, 8:56] = 1
+    qs[1][10:30, 10:30] = 1
+    qs[2][30:50, 20:60] = 1
+    seq = [c.emb_topk(q, cs, k=4) for q in qs]
+    batch = c.emb_topk_batch(qs, cs, k=4)
+    for s, b in zip(seq, batch):
+        assert [ch for ch, _ in s] == [ch for ch, _ in b]
+        for (_, ps), (_, pb) in zip(s, b):
+            assert abs(ps - pb) < 1e-4
+
+
 @pytest.mark.skipif(not Path(DEFAULT_CKPT).exists()
                     or not Path("../open-guji-dataset/rare-char/items.jsonl").exists(),
                     reason="没有 checkpoint 或 rare-char 集")

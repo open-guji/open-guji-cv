@@ -399,6 +399,15 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
 
     集在 `rare-char/items.jsonl`（参考答案来自用户裁决）。没有集或没装字体就报
     `none`。CNN checkpoint 缺席时退回纯 HOG——数字会明显低，界面上要能看出来。
+
+    融合逻辑走 `clustering.rare_panel.rare_for`——`rare_candidates` Step、
+    `/api/rare` 与这里判据 D 三处共用同一份实现，不再各自重复一遍位次合并 +
+    RRF（此前这里内联过一份，Step 包出来之后就是重复）。
+
+    2026-09-10 改口径后 rare-char 21 条从 21/21 掉到 20/21（漏「巳」）：旧实现
+    自己拼小字表并把金标答案注入进去，字表比 `rare_for` 真实两档字表（4636 小 /
+    20060 大）小得多，排名天然更乐观，不反映 `/api/rare` 实际给用户看到的候选。
+    新数字（95.2%，绿）才是产物口径的真实数，别拿旧的 100% 当回归基线。
     """
     import json
 
@@ -407,28 +416,19 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
         return {"light": "none", "note": "没有 rare-char 集"}
     try:
         import cv2
-        from ..clustering.cnn_candidates import (CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT,
-                                                 rrf, shared)
-        from ..clustering.font_candidates import book_charset, candidates
-        from ..clustering.normalize import normalize_patch
+        from ..clustering.cnn_candidates import shared
+        from ..clustering.rare_panel import rare_for
         from ..variants import are_variants
     except Exception as e:
         return {"light": "none", "note": f"依赖缺失：{e}"}
     items = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
-    cs = tuple(book_charset("corpus/zongmu_wuyingdian_reference.txt",
-                            [i["expected"]["char"] for i in items]))
     cnn = shared()
     hit = n = 0
     for it in items:
         img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
-        q = normalize_patch(img)
-        hog = [h.char for h in candidates(q, cs, k=k)]
-        cn = [c for c, _ in cnn.topk(q, cs, k=k)] if cnn.available else []
-        em = [c for c, _ in cnn.emb_topk(q, cs, k=k)] if cnn.available else []
-        order = (rrf(hog, cn, em, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT, EMB_WEIGHT)) if (cn and em)
-                 else (rrf(hog, cn, k=k, weights=(HOG_WEIGHT, CNN_WEIGHT)) if cn else hog))
+        order = [h["char"] for h in rare_for(img, k)]
         g = it["expected"]["char"]
         n += 1
         hit += any(c == g or are_variants(c, g) for c in order)
