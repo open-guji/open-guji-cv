@@ -43,6 +43,29 @@ CLIP_MIN_PX = 20
 INK_TH = 0.35
 
 
+def classify_boundary(prof: np.ndarray, y: int, period: float
+                      ) -> tuple[str, float, float] | None:
+    """单条格线的穿墨分类，供 `measure()` 与 `gates/row_segment_gate.py` 共用
+    ——闸3判据必须与这把尺子算的是同一个量，不能各写一份（Step0 闸 0 曾经
+    栽在「文档说的量」和「代码实际算的量」对不上，这里用同一个函数杜绝分叉）。
+
+    返回 `None`（干净）或 `(分类, best, far)`：分类是 `"r2"`（可改善）/
+    `"r2x"`（错切：半格内有净谷）/ `"r2s"`（真粘连：半格内也无谷）；`best` 是
+    ±12px 内的最低墨占比，`far` 是半格窗口内的最低墨占比（诊断用，"r2" 时
+    far 未算，给 best 占位）。`y` 是列图坐标，`prof` 是整列墨占比曲线。
+    """
+    h = len(prof)
+    if not (0 <= y < h) or prof[y] <= INK_ON_LINE:
+        return None
+    lo, hi = max(0, y - 12), min(h, y + 13)
+    best = float(prof[lo:hi].min()) if hi > lo else float(prof[y])
+    if best <= STUCK_FLOOR:
+        return "r2", best, best
+    half = max(13, int((period or 40) / 2))
+    far = float(prof[max(0, y - half):min(h, y + half + 1)].min())
+    return ("r2x" if far <= STUCK_FLOOR else "r2s"), best, far
+
+
 @dataclass
 class Ruler:
     key: str
@@ -187,17 +210,15 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                     r2c.num += 1
                     r2c.detail.append({"page": pg, "col": cc.col, "y": y, "why": "无缝"})
                 # 附近有没有更好的切点？有 → 可改善；没有 → 真粘连
-                lo, hi = max(0, y - 12), min(h, y + 13)
-                best = float(prof[lo:hi].min()) if hi > lo else float(prof[y])
-                if best <= STUCK_FLOOR:
-                    r2.num += 1
-                    r2.detail.append({"page": pg, "col": cc.col,
-                                      "y": y, "ink": round(float(prof[y]), 3),
-                                      "best": round(best, 3)})
-                else:
-                    half = max(13, int((cc.period or 40) / 2))
-                    far = float(prof[max(0, y - half):min(h, y + half + 1)].min())
-                    if far <= STUCK_FLOOR:
+                result = classify_boundary(prof, y, cc.period or 40)
+                if result is not None:
+                    cls, best, far = result
+                    if cls == "r2":
+                        r2.num += 1
+                        r2.detail.append({"page": pg, "col": cc.col,
+                                          "y": y, "ink": round(float(prof[y]), 3),
+                                          "best": round(best, 3)})
+                    elif cls == "r2x":
                         r2x.num += 1
                         r2x.detail.append({"page": pg, "col": cc.col, "y": y,
                                            "ink": round(float(prof[y]), 3), "far": round(far, 3)})
