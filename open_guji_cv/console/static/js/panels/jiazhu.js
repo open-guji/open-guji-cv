@@ -39,18 +39,25 @@ function jzRender() {
       const ed = JZ.edit[c.id];
       const shown = ed !== undefined ? ed : (c.char || '□');
       const cls = ed !== undefined ? 'jzc-edit' : (c.admit ? 'jzc-auto' : 'jzc-rev');
+      const suspectCls = c.suspect ? ' jzc-suspect' : '';
       const ref = c.ref && c.ref !== shown ? `<span class="jzref">${c.ref}</span>` : '';
-      return `<span class="jzcell ${cls}" data-i="${i}" data-j="${j}" title="${c.id} · ${c.channel || '待审'}">`
+      const title = c.suspect ? `${c.id} · ${c.channel || '待审'} · 疑似整宽字被误劈` : `${c.id} · ${c.channel || '待审'}`;
+      return `<span class="jzcell ${cls}${suspectCls}" data-i="${i}" data-j="${j}" title="${title}">`
         + `<img src="${c.patch}" alt="" loading="lazy"><b>${shown}</b>${ref}</span>`;
     }).join('');
     const same = s.ref && s.ref.replace(/·/g, '') === s.text.replace(/□/g, '');
     const badge = s.n_review
       ? `<span class="badge b-pending">待审 ${s.n_review}</span>`
       : '<span class="badge b-completed">全自动</span>';
+    // 疑似型 1（夹注被当正文）：jiazhu_split.suspect_full_width_cells 标出的
+    // 段，几何判据只是提示，最终要不要认定为「夹注被当正文」由人在这里裁决
+    // （见 review-feedback：2026-09-10 全书核实，几何判据不能自动裁剪）。
+    const suspectBadge = s.n_suspect
+      ? `<span class="badge b-warn">疑似整宽字被误劈 ${s.n_suspect}</span>` : '';
     const dfl = JZ.defect[s.id];
-    return `<div class="jzcard" id="jzs${i}">
+    return `<div class="jzcard${s.n_suspect ? ' jzcard-suspect' : ''}" id="jzs${i}">
       <div class="jzhead">
-        <span class="mono">${s.id}</span> ${badge}
+        <span class="mono">${s.id}</span> ${badge} ${suspectBadge}
         <span class="muted">${s.n} 格 · a ${s.a.length} / b ${s.b.length}</span>
         ${same ? '<span class="badge b-completed">与整理本一致</span>' : '<span class="badge b-pending">与整理本有出入</span>'}
       </div>
@@ -109,7 +116,9 @@ function jzBind(root) {
         { key: 'jiazhu_ab_swapped', label: 'ab分错边', quality: 'contaminated' },
         { key: 'other', label: '其他', quality: 'contaminated' },
       ];
-      const cur = JZ.defect[s.id]?.key || 'jiazhu_too_few';
+      // 机器已标疑似型 1（跨缝连通体面积占比高）时，把默认序号指向对应选项，
+      // 减少一次多余的挑选——最终仍由人确认，机器判据不自动生效。
+      const cur = JZ.defect[s.id]?.key || (s.n_suspect ? 'jiazhu_as_body' : 'jiazhu_too_few');
       const menu = options.map((o, i) => `${i + 1}. ${o.label}`).join('\n');
       const pick = prompt(`切分缺陷类型（输入序号）：\n${menu}`,
                            String(options.findIndex(o => o.key === cur) + 1 || 1));

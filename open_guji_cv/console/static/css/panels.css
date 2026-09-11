@@ -15,6 +15,7 @@
   .jzcard { border:1px solid var(--rule); border-left:4px solid var(--rule); border-radius:6px;
             padding:.45rem .55rem; background:var(--paper); margin-bottom:.55rem; }
   .jzcard:has(.badge.b-pending) { border-left-color:var(--ochre); }
+  .jzcard.jzcard-suspect { border-left-color:var(--zhu); }
   .jzhead { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; font-size:.8rem; margin-bottom:.4rem; }
   .jzbody { display:flex; gap:.7rem; align-items:flex-start; }
   /* 列条按**宽度**缩，不设 max-height——夹注段可长到 27 格（p4c6），
@@ -34,6 +35,7 @@
   .jzcell.jzc-rev b { color:var(--zhu); }
   .jzcell.jzc-auto b { color:var(--ink-2); }
   .jzcell.jzc-edit { border-color:var(--indigo); background:var(--indigo-soft); }
+  .jzcell.jzc-suspect { border-color:var(--zhu); box-shadow:0 0 0 1px var(--zhu); }
   .jzref { font-size:.62rem; color:var(--ochre); line-height:1; }
   .jzrefline { font-size:.9rem; letter-spacing:.06em; }
   .jzacts { display:flex; gap:.4rem; align-items:center; margin-top:.15rem; }

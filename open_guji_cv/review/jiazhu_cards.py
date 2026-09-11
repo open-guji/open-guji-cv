@@ -71,6 +71,7 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
                 cellsjs = []
                 for r in rs:
                     g = golds.get(r.id)
+                    cell = cellmap.get((cc.col, r.slot, r.sub or ""))
                     cellsjs.append({
                         "id": r.id, "slot": r.slot, "sub": r.sub,
                         "char": r.char, "admit": r.admit, "channel": r.channel,
@@ -78,8 +79,13 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
                         "patch": (f"/api/cache/{book}/char_patch/"
                                   f"{cell_key(pg, cc.col, r.slot)}{r.sub or ''}.png"),
                         "done": done.get(r.id),
+                        # 型 1 疑似标记（jiazhu_split.suspect_full_width_cells）：
+                        # 这一格可能是被缝位骗过的整宽正文字，不是真夹注。
+                        # 只标记不改切分，人工审查用。
+                        "suspect": bool(cell and cell.suspect_jiazhu_body),
                     })
                 n_rev = sum(1 for r in rs if not r.admit)
+                n_suspect = sum(1 for c in cellsjs if c["suspect"])
                 if only == "review" and not n_rev:
                     continue
                 if only == "auto" and n_rev:
@@ -91,6 +97,7 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
                     "id": f"{book}:{pg}:{cc.col}:{seg[0]}",
                     "book": book, "page": pg, "col": cc.col,
                     "slots": seg, "n": len(rs), "n_review": n_rev,
+                    "n_suspect": n_suspect,
                     "a": a_txt, "b": b_txt, "text": a_txt + b_txt,
                     "ref": ref_txt,
                     "img": (f"/api/cutline/img/{book}/{pg}/{cc.col}.png"
@@ -98,4 +105,5 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
                     "cells": cellsjs,
                 })
     return {"book": book, "pages": pgs, "n": len(out),
-            "n_review": sum(1 for s in out if s["n_review"]), "segments": out}
+            "n_review": sum(1 for s in out if s["n_review"]),
+            "n_suspect": sum(1 for s in out if s["n_suspect"]), "segments": out}
