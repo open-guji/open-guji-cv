@@ -255,9 +255,18 @@ class AlignRefStep(Step):
         labs, ok = label_page(str(page), slots, ctx.book.id, text,
                               _corpus_index(p.corpus))
         if not ok:
+            # label_page 内部已经跑过一次 anchor_page，这里为了拿判据明细
+            # 重算一次 anchor_page_diag——多一次 8-gram 投票，索引已缓存，
+            # 只在锚定失败这条本就罕见的路径上多花这一点，换来的是不用再
+            # 像本次一样临时写脚本复算才知道卡在票数还是占比/优势上。
+            from ..clustering.align_eval import anchor_page_diag
+            query = "".join(t[-1] for t in slots)
+            diag = anchor_page_diag(query, _corpus_index(p.corpus))
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
-                note="8-gram 锚定失败")}
+                note=f"8-gram 锚定失败：{diag.reason}" if diag.reason else "8-gram 锚定失败",
+                n_grams=diag.n_grams, n_votes=diag.n_votes,
+                vote_frac=diag.vote_frac, dominance=diag.dominance)}
 
         chars = [AlignRec(id=lab.instance_id, col=_col_of(lab.instance_id),
                           slot=_slot_of(lab.instance_id), sub=_sub_of(lab.instance_id),

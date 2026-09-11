@@ -204,7 +204,11 @@ class PageAlignRef(BaseModel):
     page: int
     anchored: bool = False
     corpus_fingerprint: str = ""             # 对齐是用哪份整理本做的，见 align_ref 模块头
-    note: str = ""                           # 未锚定时的原因
+    note: str = ""                           # 未锚定时的原因（人读一句话）
+    n_grams: int = 0                         # 锚定失败时的判据明细，见 align_eval.AnchorDiag
+    n_votes: int = 0                         # ——四个都是 0 表示锚定在 8-gram 投票之前就
+    vote_frac: float = 0.0                   #   已经放弃（候选太少/没有产物/语料读不到），
+    dominance: float | None = None           #   不是投票判据本身没过线
     chars: list[AlignRec] = Field(default_factory=list)
 
 
