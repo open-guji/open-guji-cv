@@ -55,6 +55,7 @@ DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失�
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -435,6 +436,27 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     # 「矮格墨满」判据要的绝对墨量正是它，不必另喂图（2026-09-08）。
     csum = None if cmax is None else np.concatenate(([0.0], np.cumsum(cmax)))
 
+    # 性能（2026-09-10）：这几个内部函数在一列的 DP 里要调 3~8 万次，每次都是
+    # 几十元素的小数组——numpy 的调用开销（连续几次 dtype 检查/ufunc 分派）比
+    # 数据本身的计算量还大。数值上完全等价的前提下，改用 Python list + 前缀和，
+    # 把「跨语言边界」的次数从 O(调用数×4) 降到 O(1)（这里，一次性转换）。
+    cmax_list: list[float] = [] if cmax is None else cmax.tolist()
+    csum_list: list[float] = [] if csum is None else csum.tolist()
+    n_cmax = len(cmax_list)
+
+    # 记忆化（2026-09-10）：DP 表填充时同一个候选点会在不同 (k, mp) 组合里反复
+    # 当 y_prev/y 用——实测同一列里 round() 的实参重复率 99.8%（128 万次调用只有
+    # 1948 个不同取值）。这几个函数只依赖取整后的 (a, b) 整数区间，缓存住就把
+    # 「同一区间是否空白/墨量多少」的重复计算免掉，不改变任何返回值。
+
+    @functools.lru_cache(maxsize=None)
+    def _ink_mass_i(a: int, b: int) -> float:
+        if not csum_list or cell_w <= 0:
+            return 0.0
+        a = min(max(a, 0), n_cmax)
+        b = min(max(b, 0), n_cmax)
+        return (csum_list[b] - csum_list[a]) / (period * cell_w)
+
     def _ink_mass(ya: float, yb: float) -> float:
         """[ya, yb) 的绝对墨量 = 墨像素 ÷（一格标准面积 period × 格宽）。
 
@@ -442,41 +464,74 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         拿本格高归一化会把矮格自动抹平，恰恰抹掉信号（判据来源见
         `eval/touching.split_char_boundaries`，47 条人裁金标标定）。
         """
-        if csum is None or cell_w <= 0:
-            return 0.0
-        a = int(np.clip(round(min(ya, yb)), 0, len(cmax)))
-        b = int(np.clip(round(max(ya, yb)), 0, len(cmax)))
-        return float(csum[b] - csum[a]) / (period * cell_w)
+        return _ink_mass_i(round(min(ya, yb)), round(max(ya, yb)))
 
-    def _is_blank(ya: float, yb: float) -> bool:
-        if cmax is None:
+    @functools.lru_cache(maxsize=None)
+    def _is_blank_i(a: int, b: int) -> bool:
+        if not cmax_list:
             return False
-        a, b = int(round(min(ya, yb))), int(round(max(ya, yb)))
         if b <= a:
             return True
-        seg = cmax[max(0, a):min(len(cmax), b + 1)]
-        return seg.size == 0 or float(seg.max()) < blank_thresh
+        lo, hi = max(0, a), min(n_cmax, b + 1)
+        if lo >= hi:
+            return True
+        # 手写短路循环，不切片：一旦见到 ≥ 阈值的行就能提前退出，不必扫完整段
+        # 再取 max——「是否空白」本来就是「有没有一行墨够多」，不需要真的求最大值。
+        for i in range(lo, hi):
+            if cmax_list[i] >= blank_thresh:
+                return False
+        return True
+
+    def _is_blank(ya: float, yb: float) -> bool:
+        return _is_blank_i(round(min(ya, yb)), round(max(ya, yb)))
 
     dense_thresh = blank_thresh * (0.5 / 0.08)   # blank_thresh = 0.08·列宽 → 0.5·列宽
 
+    @functools.lru_cache(maxsize=None)
+    def _dropped_rows_i(a: int, b: int) -> int:
+        if not cmax_list or drop_lam <= 0:
+            return 0
+        lo, hi = max(0, a), min(n_cmax, b)
+        if lo >= hi:
+            return 0
+        return sum(1 for i in range(lo, hi) if blank_thresh <= cmax_list[i] < dense_thresh)
+
     def _dropped_rows(ya: float, yb: float) -> int:
         """[ya, yb) 里会被丢掉的字墨行数：有墨、且不是框线级密行。"""
-        if cmax is None or drop_lam <= 0:
-            return 0
-        a, b = int(round(min(ya, yb))), int(round(max(ya, yb)))
-        seg = cmax[max(0, a):min(len(cmax), b)]
-        if seg.size == 0:
-            return 0
-        return int(((seg >= blank_thresh) & (seg < dense_thresh)).sum())
+        return _dropped_rows_i(round(min(ya, yb)), round(max(ya, yb)))
+
+    @functools.lru_cache(maxsize=None)
+    def _ink_end_i(a: int, b: int) -> int | None:
+        """返回最后一行有墨的下标；没有就 None（由外层退回原始 ya）。"""
+        lo, hi = max(0, a), min(n_cmax, b + 1)
+        for i in range(hi - 1, lo - 1, -1):
+            if cmax_list[i] >= blank_thresh:
+                return i
+        return None
 
     def _ink_end(ya: float, yb: float) -> float:
         """[ya, yb] 内最后一行有墨的位置；没有就返回 ya。"""
-        if cmax is None:
+        if not cmax_list:
             return yb
-        a, b = int(round(ya)), int(round(yb))
-        seg = cmax[max(0, a):min(len(cmax), b + 1)]
-        idx = np.nonzero(seg >= blank_thresh)[0]
-        return float(a + int(idx[-1])) if idx.size else ya
+        i = _ink_end_i(round(ya), round(yb))
+        return ya if i is None else float(i)
+
+    @functools.lru_cache(maxsize=None)
+    def _near_blank_i(a: int, b: int) -> bool:
+        lo, hi = max(0, a), min(n_cmax, b)
+        if lo >= hi:
+            return True
+        # 本步里最长的零墨段 ≥0.45 格高 → 这一格多半是「留白 + 字」，不是纯字距
+        need = 0.45 * period
+        blank_run = 0
+        for i in range(lo, hi):
+            if cmax_list[i] < blank_thresh:
+                blank_run += 1
+                if blank_run >= need:
+                    return True
+            else:
+                blank_run = 0
+        return False
 
     def _near_blank(ya: float, yb: float) -> bool:
         """这一步的上下邻区间里有没有空白——有就别用四次方（见 step_cost）。
@@ -485,20 +540,11 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         会越过空白段、量到再上面的字，漏判（vol02/29 c6「不」、47 c3「言」两列的
         首字就这么被四次方切掉顶横）。再加一条：本步区间自身若含大段零墨（首字前的
         留白），也算挨着空白。"""
-        if cmax is None:
+        if not cmax_list:
             return False
         if _is_blank(ya - period, ya) or _is_blank(yb, yb + period):
             return True
-        a, b = int(round(ya)), int(round(yb))
-        seg = cmax[max(0, a):min(len(cmax), b)]
-        if seg.size == 0:
-            return True
-        # 本步里最长的零墨段 ≥0.45 格高 → 这一格多半是「留白 + 字」，不是纯字距
-        blank_run = best = 0
-        for v in (seg < blank_thresh):
-            blank_run = blank_run + 1 if v else 0
-            best = max(best, blank_run)
-        return best >= 0.45 * period
+        return _near_blank_i(round(ya), round(yb))
 
     def step_cost(y_prev: float, y: float, last: bool = False,
                   interior: bool = True) -> float | None:
