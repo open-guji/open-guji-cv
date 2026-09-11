@@ -12,10 +12,44 @@
 又完全不经过 Step 缓存/指纹体系。
 
 归位之后：本 Step 产出逐字位 `{align_char, align_op, ref_run}`，与
-`glyph_match`／`ocr_candidates`／`context_decision` 三路平级；`seed_admit`
-改读这个产物；`gold.v2_align` 的金标派生也改读它（见该模块模块头），
-`GoldChar{shape, reading, conversion, source}` 的两个身份（金标 vs 文本证据）
-从此分开。
+`glyph_match`／`ocr_candidates` 平级；`seed_admit` 改读这个产物；
+`gold.v2_align` 的金标派生也改读它（见该模块模块头），`GoldChar{shape,
+reading, conversion, source}` 的两个身份（金标 vs 文本证据）从此分开。
+
+## 2026-09-10 去掉对 Step6（`context_decision`）的依赖
+
+此前锚定串优先取 `context_decision` 的定字，只在弃权位才退到库/OCR
+top1（`slots_from_decision`，见下方旧版说明）。这让 Step5-d 名义上是
+「Step5 四路证据之一」，实际却吃 Step6 的输出，`consumes` 也因此带上
+`context_decision`，把它锁死在 `context_decide` 之后——四路本该互相独立、
+并行收集证据，Step5-d 却不是。
+
+改成 `slots_from_evidence`：**每个字位只在 `glyph_match` 与
+`ocr_candidates` 之间取信度最高的候选**，不碰 Step6：
+
+- `glyph_match` verdict 为 `same` 时用它的 `char`，信度＝`cov`（该档
+  ≥0.996，几乎总赢）；
+- 否则比较 `glyph_match.candidates[0]` 的 `(char, cov)` 与
+  `ocr_candidates.topk[0]` 的 `(char, prob)`，取信度高的那个——两者量纲
+  不同（cov 是 kNN 覆盖度，prob 是 OCR softmax），但都落在 [0,1]，这里
+  只是拼锚定用的查询串、不是最终定字，量纲不严格对齐不影响锚定质量
+  （见下方实测）。
+
+实测 vol01 dev_set（12 页，`exp_align_anchor.py`）：换掉 Step6 依赖后
+锚定 **12/12 全部成功**，与旧版（依赖 Step6）持平；p70（生僻字密集、
+旧版曾整页锚不上的难页）这里同样能锚上——库/OCR 兜底本身已经够撑起
+锚定串，不需要 Step6 的判断再垫一层。
+
+## 编辑距离定位：实测跟现有 n-gram 投票打平，不换
+
+评估过把锚定阶段整体换成「n-gram 投票选出候选簇 → 对候选窗口精确算编辑
+距离、取距离最小的」。vol01 12 页实测两者都 12/12 锚定成功；3 页两法选的
+偏移差 1 字，逐一验证互有胜负（无一方显著更准）。锚定环节本就只需要**先
+用 n-gram 投票圈出几个候选窗口**，n-gram 索引建一次只要 0.12s（345K 字
+语料，已缓存），不是全文暴力扫描，所以「先按卷分段减少计算量」在当前
+两段式设计下也没有实质收益。综合考虑不引入新依赖（无编辑距离库）、不
+增加复杂度，**保留现有 `anchor_page` n-gram 投票 + `difflib` 局部对齐**，
+只换了喂给它的查询串来源。
 
 ## 指纹要带语料指纹
 
@@ -27,10 +61,6 @@
 复用 `clustering/align_label.label_page`：定字串 → 8-gram 锚到整理本 →
 `difflib` 对齐 → **采信闸**（`equal` 段全收；等长 `replace` 段要求段长 ≤3
 且左右各有 ≥2 字的 `equal` 段贴身夹住，一侧 ≥2、另一侧 ≥1 即可）。
-
-定字串（对齐载体）来自 `slots_from_decision`：优先取 `context_decision` 的
-定字，弃权位逐级兜底 **库 kNN top1 → OCR top1**（2026-09-04 改，兜底字只是
-对齐载体，不进 `align_char`，最多让那一位落进 `replace` 段）。
 """
 
 from __future__ import annotations
@@ -42,8 +72,7 @@ from pydantic import BaseModel
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
-from ..products.kinds.recog import (AlignRec, PageAlignRef, PageDecision,
-                                    PageMatch, PageOcr)
+from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
 DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
@@ -51,7 +80,13 @@ DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
 
 def slots_from_decision(dec, match=None, ocr=None
                        ) -> tuple[list[tuple[int, int, str, str]], dict]:
-    """Step6 的 `context_decision`（+ 库/OCR 兜底）→ 对齐要的 slots + 溯源表。
+    """Step6 的 `context_decision`（+ 库/OCR 兜底）→ 金标要的 slots + 溯源表。
+
+    **只给 `gold/v2_align.py` 用**——`GoldChar.shape`（刻本字形金标）要的是
+    「管线当前认为这一位是什么字」这个事实本身，Step6 融合了上下文的判断
+    天然比单纯库/OCR top1 更准，这里就该用它，跟 `align_ref` 锚定串要不要
+    依赖 Step6 是两回事（`align_ref` 2026-09-10 改用 `slots_from_evidence`，
+    见模块头）。这个函数留着不删，只是不再喂给锚定。
 
     ## 弃权位要用库/OCR 兜底填上，不能跳过（2026-09-04 改）
 
@@ -113,6 +148,47 @@ def slots_from_decision(dec, match=None, ocr=None
     return slots, meta
 
 
+def slots_from_evidence(match, ocr) -> list[tuple[int, int, str, str]]:
+    """`glyph_match` + `ocr_candidates` → 对齐要的 slots，不碰 Step6。
+
+    每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
+    `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
+    「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
+    但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
+    """
+    mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
+    omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
+
+    def _best(rid: str) -> str | None:
+        m = mmap.get(rid)
+        if m and m.verdict == "same" and m.char:
+            return m.char
+        ch, conf = None, -1.0
+        if m and m.candidates:
+            ch, conf = m.candidates[0][0], m.candidates[0][1]
+        o = omap.get(rid)
+        if o and o.topk and o.topk[0][1] > conf:
+            ch = o.topk[0][0]
+        return ch
+
+    slots: list[tuple[int, int, str, str]] = []
+    src = match if match is not None else ocr
+    if src is None:
+        return slots
+    for cc in sorted(src.columns, key=lambda c: c.col):
+        if not cc.ok:
+            continue
+        # ⚠️ **按阅读顺序**，不是 (slot, sub)（2026-09-06 修，同 context_decide）。
+        # 夹注 a/b 是两行小字，(slot, sub) 排出来交错成「兩採淮進鹽本政」，
+        # 8-gram 锚不上、difflib 还会把邻近正文一起拖进 replace 段。
+        for r in sort_by_reading(cc.chars):
+            ch = _best(r.id)
+            if not ch:
+                continue
+            slots.append((cc.col, r.slot, r.sub or "", ch))
+    return slots
+
+
 class AlignRefParams(BaseModel):
     corpus: str = DEFAULT_CORPUS
     corpus_fingerprint: str = ""
@@ -140,8 +216,8 @@ def _corpus_index(path: str):
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="1.0", unit="cell",
-        consumes=("context_decision", "glyph_match", "ocr_candidates"),
+        id="align_ref", title="Step5-d 整理本对齐", version="2.0", unit="cell",
+        consumes=("glyph_match", "ocr_candidates"),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
@@ -151,13 +227,12 @@ class AlignRefStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
-        dec: PageDecision | None = _opt(ctx, "context_decision", page)
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
-        if dec is None:
+        if match is None and ocr is None:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
-                note="没有定字产物")}
+                note="没有库匹配或 OCR 候选产物")}
         if not p.corpus:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -167,11 +242,11 @@ class AlignRefStep(Step):
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
                 note="整理本读不到")}
-        slots, _meta = slots_from_decision(dec, match, ocr)
+        slots = slots_from_evidence(match, ocr)
         if len(slots) < 12:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
-                note=f"定字太少（{len(slots)}），锚不住")}
+                note=f"候选太少（{len(slots)}），锚不住")}
 
         from ..clustering.align_label import label_page
         # ⚠️ book 必须传真名：`label_page` 拼的是 `book:page:col:idx`，传空字符串
