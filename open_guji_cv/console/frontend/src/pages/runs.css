@@ -1,0 +1,11 @@
+/* 运行页样式，照抄 v1 static/css/base.css。 */
+button.danger { color: var(--zhu); border-color: var(--zhu); }
+form.run { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .6rem 1rem; align-items: end; }
+form.run label { display: flex; flex-direction: column; gap: .2rem; font-size: .82rem; color: var(--mute); }
+form.run label.run-row { flex-direction: row; align-items: center; gap: .4rem; }
+form.run textarea { font-family: var(--mono); font-size: .78rem; min-height: 2.4rem; }
+pre.log { font-family: var(--mono); font-size: .76rem; line-height: 1.45; background: #1b1f22; color: #d8d6cc; padding: .7rem .9rem;
+  border-radius: 6px; max-height: 24rem; overflow: auto; white-space: pre-wrap; margin: 0; }
+pre.log .fail { color: #f0a097; }
+pre.log .ok { color: #9fd0a1; }
+pre.log .skip { color: #9aa0a3; }

@@ -50,6 +50,22 @@ def api_kinds() -> list[dict]:
 
 
 # ── 静态 ─────────────────────────────────────────────────────────────
+#
+# v2（控制台重构v2，overview 仓 进度/控制台重构v2/方案.md）：React + 按
+# <book>/step/<step>/ 的 URL 路由取代 v1 的单页 8-tab。`/` 发 v2 的
+# `static/dist/index.html`；SPA 兜底路由在 `spa_fallback.py`（独立文件，
+# `app.py` 里放在 ROUTERS 最后 include——它注册一个吃掉所有路径的
+# `/{full_path:path}`，必须最后注册，否则会抢在其他 router 的 /api/* 前面）。
+# v1 页面**没有删**，先保留在 /v1/（旧的 index.html + js/css 原样在 static/ 下），
+# 供对照与回滚；v2 功能覆盖齐全后再退役。
+_V2_INDEX = STATIC / "dist" / "index.html"
+
+
+@router.get("/v1/", response_class=HTMLResponse)
+def index_v1() -> str:
+    return (STATIC / "index.html").read_text(encoding="utf-8")
+
+
 @router.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return (STATIC / "index.html").read_text(encoding="utf-8")
+    return _V2_INDEX.read_text(encoding="utf-8")

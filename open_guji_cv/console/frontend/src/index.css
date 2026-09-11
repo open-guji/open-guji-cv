@@ -1,0 +1,109 @@
+/* 令牌与通用样式照抄 v1 static/css/base.css（方案 §四：css 原样/部分复用）。
+   布局部分（.app-shell/.sidebar 等）是 v2 新增——v1 是 tab 切换，v2 是左侧导航。 */
+:root {
+  --paper: #F4F5F1; --paper-2: #EBEDE7; --ink: #1E2326; --ink-2: #3E464A; --mute: #6B7275;
+  --rule: #D3D8D0; --indigo: #2F4E7E; --indigo-soft: #DCE4F1;
+  --ok: #4C7A4F; --ok-soft: #DCE8DA; --zhu: #B23A2E; --zhu-soft: #F3DCD8;
+  --ochre: #A8781C; --ochre-soft: #F1E6C9; --faint: #9AA0A3; --faint-soft: #E4E7E3;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #171A1C; --paper-2: #1F2427; --ink: #E6E4DC; --ink-2: #C9C8C0; --mute: #9AA0A3;
+    --rule: #2E3437; --indigo: #8FB0E0; --indigo-soft: #23334B; --ok: #7DB07F; --ok-soft: #22321F;
+    --zhu: #E0776A; --zhu-soft: #46251F; --ochre: #D6A44A; --ochre-soft: #3E3116;
+    --faint: #7C8386; --faint-soft: #2A2F32; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+  font: 14px/1.6 "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+a { color: var(--indigo); }
+select, input[type=text], textarea, button { font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 4px; padding: .25rem .5rem; }
+button { cursor: pointer; }
+button.primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
+.card h2 { font-size: .95rem; margin: 0 0 .6rem; }
+.muted { color: var(--mute); font-size: .82rem; }
+.mono { font-family: var(--mono); font-size: .8rem; }
+.error { color: var(--zhu); }
+
+/* 状态矩阵，照抄 v1 */
+table.matrix { border-collapse: collapse; font-size: .78rem; }
+table.matrix th, table.matrix td { border: 1px solid var(--rule); padding: .15rem .35rem; text-align: center; }
+table.matrix th.step { text-align: left; white-space: nowrap; min-width: 9rem; }
+table.matrix td.cell { width: 2.6rem; font-family: var(--mono); }
+.s-fresh { background: var(--ok-soft); color: var(--ok); }
+.s-stale { background: var(--ochre-soft); color: var(--ochre); }
+.s-missing { background: var(--faint-soft); color: var(--faint); }
+.s-failed { background: var(--zhu-soft); color: var(--zhu); }
+.s-blocked { background: repeating-linear-gradient(45deg, var(--faint-soft), var(--faint-soft) 4px, transparent 4px, transparent 8px); color: var(--faint); }
+.counts { display: flex; gap: .6rem; flex-wrap: wrap; font-size: .78rem; }
+.counts span { padding: 0 .4rem; border-radius: 3px; }
+
+/* 通用 JSON 输出框，各面板共用（照抄 v1 base.css） */
+pre.json { font-family: var(--mono); font-size: .74rem; background: var(--paper-2); border: 1px solid var(--rule); padding: .6rem .8rem;
+  border-radius: 6px; max-height: 40rem; overflow: auto; white-space: pre; margin: 0; }
+
+/* 通用数据表，各面板共用（照抄 v1 base.css） */
+table.jobs { width: 100%; border-collapse: collapse; font-size: .8rem; }
+table.jobs td, table.jobs th { border-bottom: 1px solid var(--rule); padding: .3rem .4rem; text-align: left; }
+table.jobs tr.sel { background: var(--indigo-soft); }
+
+/* 徽标，各面板共用（照抄 v1 base.css） */
+.badge { display: inline-block; padding: 0 .45rem; border-radius: 3px; font-family: var(--mono); font-size: .72rem; }
+.b-running { background: var(--indigo-soft); color: var(--indigo); }
+.b-completed { background: var(--ok-soft); color: var(--ok); }
+.b-failed, .b-cancelled { background: var(--zhu-soft); color: var(--zhu); }
+.b-pending { background: var(--faint-soft); color: var(--faint); }
+
+.step-status-summary { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+/* 产物查看（各 Step 页面共用），照抄 v1 base.css */
+.pv-toolbar { display: flex; gap: .6rem; align-items: end; margin-bottom: .8rem; flex-wrap: wrap; }
+.products { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(20rem, 1fr); gap: 1rem; }
+.products img { width: 100%; height: auto; border: 1px solid var(--rule); background: #fff; }
+@media (max-width: 60rem) { .products { grid-template-columns: 1fr; } }
+
+/* Step0 预清理规则展示 */
+.preclean-page { margin-top: .8rem; }
+.preclean-page h3 { font-size: .88rem; margin: 0 0 .5rem; }
+.preclean-rule { margin-bottom: .6rem; }
+.preclean-kind { color: var(--indigo); font-size: .8rem; margin-bottom: .3rem; }
+
+/* 书总览：DAG 图、线上大模型提示条（照抄 v1 base.css/overview.js） */
+.dag { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; margin-bottom: .6rem; }
+.dag .node { padding: .15rem .6rem; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+.dag .arrow { color: var(--mute); }
+.ws-note { margin-left: .6rem; font-weight: 400; }
+.llm-online-note { margin-top: .4rem; }
+
+/* 首页书列表 */
+.book-list { list-style: none; padding: 0; margin: 0; }
+.book-list li { padding: .3rem 0; border-bottom: 1px solid var(--rule); }
+.book-list li:last-child { border-bottom: none; }
+
+/* 布局：左侧导航（v2 新增，取代 v1 的顶部 tab） */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 14rem; flex-shrink: 0; background: var(--paper-2); border-right: 1px solid var(--rule);
+  padding: 1rem .8rem; display: flex; flex-direction: column; gap: .3rem; }
+.sidebar h1 { font-size: .95rem; margin: 0 0 .8rem; }
+.sidebar h1 a { color: var(--indigo); text-decoration: none; }
+.sidebar a { display: block; padding: .3rem .5rem; border-radius: 4px; color: var(--ink-2); text-decoration: none; font-size: .85rem; }
+.sidebar a.active, .sidebar a:hover { background: var(--indigo-soft); color: var(--indigo); }
+.sidebar-book-select { display: flex; flex-direction: column; gap: .2rem; font-size: .78rem; margin-bottom: .2rem; }
+.sidebar-book-select select { width: 100%; }
+.sidebar-rule { border: none; border-top: 1px solid var(--rule); margin: .5rem 0; }
+.sidebar-steps { display: flex; flex-direction: column; }
+.sidebar-cross { display: flex; flex-direction: column; }
+.sidebar-libs { display: flex; flex-direction: column; }
+.sidebar-hint { padding: .3rem .5rem; }
+/* Step5 二级子菜单：永久展开，不用点进 Step5 才看到（用户 2026-09-11 反馈） */
+.sidebar-step5-subs { display: flex; flex-direction: column; padding-left: 1rem; }
+.sidebar-step5-subs a { font-size: .78rem; color: var(--mute); }
+.content { flex: 1; padding: 1rem 1.2rem 3rem; max-width: 72rem; }
+
+@media (max-width: 50rem) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--rule); }
+}

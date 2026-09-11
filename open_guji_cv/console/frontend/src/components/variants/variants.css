@@ -1,0 +1,40 @@
+/* 异体（用字账 + 组视图）样式，照抄 v1 static/css/base.css。 */
+.var-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: .6rem; }
+.var-help { font-size: .78rem; margin: .4rem 0 .6rem; }
+.var-unknown { font-size: .8rem; margin-top: .6rem; }
+
+table.vtbl td { vertical-align: top; }
+table.vtbl td.vgl { font-size: 1.2rem; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+table.vtbl sub { font-family: var(--mono); font-size: .66em; color: var(--mute); margin-left: .08em; }
+table.vtbl .vpref { font-weight: 700; color: var(--indigo); }
+
+.vg_groups { display: flex; flex-wrap: wrap; gap: .3rem; margin: .5rem 0; align-items: center; }
+.vgrest { flex-basis: 100%; font-size: .85rem; }
+.vgrest summary { cursor: pointer; }
+.vgbtn { font-size: .85rem; }
+.vgbtn.active { border-color: var(--indigo); color: var(--indigo); }
+.vgbtn .vgl { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.15rem; }
+.vgbtn sub { font-family: var(--mono); font-size: .68em; color: var(--mute); margin-left: .2em; }
+.vg-stale { margin-bottom: .6rem; }
+
+.vgrid { display: grid; gap: .6rem; margin-top: .5rem; }
+.vcol { border: 1px solid var(--rule); border-radius: 6px; padding: .4rem .5rem; min-height: 6rem; }
+.vhead { display: flex; gap: .5rem; align-items: baseline; border-bottom: 1px solid var(--rule); padding-bottom: .25rem; margin-bottom: .4rem; font-size: .78rem; }
+.vhead .vgl { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.4rem; }
+.vtiles { display: flex; flex-wrap: wrap; gap: .3rem; }
+.vtile { position: relative; width: 56px; height: 56px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; cursor: pointer; }
+.vtile img { width: 100%; height: 100%; object-fit: contain; }
+.vtile.pending { outline: 2px dashed var(--zhu, #B3261E); outline-offset: 1px; }
+.vtile.stale { outline: 2px dashed #B8860B; outline-offset: 1px; }
+.vtile.audit { outline: 2px dotted #2F7D4F; outline-offset: 1px; }
+.vtile.moved { outline: 2px solid var(--indigo); outline-offset: 1px; }
+.vtile.marked { opacity: .45; outline: 2px solid var(--zhu, #B3261E); outline-offset: 1px; }
+.vtile.hum::after { content: "✓"; position: absolute; right: 1px; bottom: -2px; font-size: .7rem; color: var(--indigo); }
+.vtile i { position: absolute; left: 2px; top: 0; font-style: normal; font-size: .7rem; color: var(--indigo); background: rgba(255,255,255,.8); padding: 0 .15em; }
+.vtile b { position: absolute; right: 1px; top: 0; font-size: .72rem; color: #fff; background: var(--zhu, #B3261E); padding: 0 .25em; border-radius: 2px; }
+.vtile:focus-visible, .vtile.sel { outline: 3px solid var(--indigo); outline-offset: 1px; }
+.vtile.sel { box-shadow: 0 0 0 1px var(--indigo) inset; }
+.vother { border: 1px dashed var(--rule); border-radius: 6px; padding: .4rem .5rem; margin-top: .6rem; }
+.vother.empty { opacity: .55; }
+.votile { display: flex; flex-direction: column; align-items: center; gap: .15rem; }
+.voin { width: 3.4rem; text-align: center; font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1rem; }
