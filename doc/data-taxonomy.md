@@ -30,6 +30,14 @@
 集中、命名统一（统一金标信封 `items.jsonl`），见该仓 [STEP_MAP.md](https://github.com/open-guji/open-guji-dataset/blob/main/STEP_MAP.md)
 按 Step 索引。这一类目前状态最好，不需要额外整理。
 
+**2026-09-11 补充（Step2 数据盘点核实）**：`char-segmentation/column-warp`
+115 条与 STEP_MAP.md 记的一致，但**同一分片下还有一个子目录
+`legacy-page-anchor/`（25 条）没有单独出现在这份文档里**（STEP_MAP.md 本身
+已经把它列成单独一行，只是本文档之前没提）——两者不是同一坐标系（前者是
+"算法边线+逐列窗口"，后者是"人工金标边线+页级锚点"，见
+`.claude/CLAUDE.md`"金标按输入口径拆成两套"那段），评测脚本
+（`eval_column_warp.py`）不能把两套数字混着报，读这个分片时要注意区分。
+
 ### guardrail——`open-guji-cv` 仓，分散在 `config/` 与代码常量里
 
 `config/` 目录里**混杂着护栏与非护栏配置**，需要先分辨：
@@ -63,6 +71,20 @@
 被读取用于拦截——判断"这份 guardrail 归哪个 Step"时，要分清"谁写入"和
 "谁读取来拦截"，不能只看写入来源。
 
+**2026-09-11 补充（Step2 数据盘点核实）**：Step2 三个核心文件
+（`steps/column_warp.py`、`utils/column_projection.py`、`gates/column_gate.py`）
+逐个 `grep "config"` 实测**零匹配**——一个 `config/` 文件都不读，不止不读
+护栏文件，连非护栏的字典/字体资源都不读。与 Step3 的结论（"完全不引用任何
+`config/` 文件"）一致，Step1-2 这段几何层看起来都不碰 `config/`。
+
+顺手核实了一个容易看错的地方：`feedback/routes.py` 里有两条命中
+`target.step: column_warp` 的路由（`kind: band` 与 `kind: border_class`），
+乍看像是"Step2 的路由规则"，但**这条路由表本身不是 guardrail**——它不拦截
+任何决策，只是把人裁事件转发给 `gold_add` 消费者写入
+`char-segmentation/column-warp` 分片，本质是"喂 benchmark 的管线代码"，
+不满足 guardrail"运行时真的会拦"这条定义，判断时不要被"路由表"这个名字
+和"写着 Step2 名字"这两点误导进 guardrail 类。
+
 ### statistics——分散在两个仓
 
 | 文件/目录 | 仓 | 内容 |
@@ -91,6 +113,30 @@
 `throughput.py` 是同一种"跑一次现查"的 statistics，本文档此前完全没提到
 这个模块，属于盘点空白，现予补全归类：**R1-R4 归 statistics**，不是
 benchmark（不含 gold standard、不是静态考卷）也不是 guardrail（不拦截）。
+
+**2026-09-11 补充（Step2 数据盘点核实，新发现一类本文档三分类都装不下的东西）**：
+`gate_manifest`（`column_gate` 落盘在 `products/<book>/column_gate/`，
+Step3 `row_segment.py` 与引擎 `core/pipeline.py` 都会读它）**不属于
+benchmark / guardrail / statistics 里的任何一类**：
+
+- 不是 benchmark——它不含人工标注答案，也不是拿来"离线评这一步准不准"的。
+- 不是 guardrail——虽然它确实在运行时被下游读取来决定"这一列能不能往下走"，
+  但 guardrail 的定义是**人工维护的静态名单/规则**（写死的阈值表、排除名单），
+  `gate_manifest` 是**每次运行现算出来的裁决结果**，跟着输入图像和算法版本变，
+  不是人在维护的一张表。
+- 不是 statistics——它不是"发生了什么"的既成事实账本，是**流水线里游到下一步
+  的正式产物**，`row_segment.py` 靠它决定要不要处理某一列，删掉它下游会跑不动，
+  这跟"人看趋势用的台账"性质完全不同。
+
+这是**交接产物**（pipeline product / 闸的裁决结果），本文档目前的三分类框架
+是从"这份数据服务什么目的"切的，没打算覆盖"Step 之间流转的正式产物"这条线——
+`products/` 目录下的东西本来就有自己的一套体系（`ProductStore`/`Manifest`，
+见 `doc/console_architecture.md`），不需要也不应该被塞进 benchmark/guardrail/
+statistics 三选一。**这条留给协调者定夺**：如果确实需要给"交接产物"单独立
+一类，应该在本文档加一节说明"哪些属于 `products/`、不在本文档管辖范围"，
+而不是勉强把 `gate_manifest` 分到三类之一；`eval/rulers.py` 的 R1 是"读
+`gate_manifest` 现算出来的统计量"，这条本身仍然成立、不受此结论影响
+（R1 是 statistics，`gate_manifest` 是它的输入，两者是不同的东西）。
 
 ## 以后新数据往哪放（判断规则，不要求现在搬旧数据）
 
