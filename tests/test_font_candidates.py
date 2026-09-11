@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 
 from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
-                                                     _font_files)
+                                                     candidates_batch, _font_files)
 
 FONTS_OK = bool(glob.glob("fonts/*/*.ttf"))
 needs_fonts = pytest.mark.skipif(not FONTS_OK, reason="没有字体文件")
@@ -70,6 +70,22 @@ def test_candidates_are_deduped_and_ranked():
     assert len(chars) == len(set(chars)), f"候选里有重复：{chars}"
     assert hits[0].char == "袤", f"自己对自己都没排第一：{chars}"
     assert all(hits[i].score >= hits[i + 1].score for i in range(len(hits) - 1))
+
+
+@needs_fonts
+def test_candidates_batch_matches_sequential():
+    """`candidates_batch` 必须与逐个调用 `candidates` 位级相同（2026-09-10，
+    生僻字候选提速：一页多字改成一次矩阵-矩阵乘法，不能悄悄改变排名）。"""
+    from open_guji_cv.clustering.synth import render_char
+    cs = ["袤", "袠", "褻", "衣", "矛", "一", "二", "三"]
+    fonts = _font_files()
+    patches = [render_char(ch, fonts[0], size=64).astype(np.uint8)
+               for ch in ("袤", "衣", "三")]
+    seq = [candidates(p, cs, k=5) for p in patches]
+    batch = candidates_batch(patches, cs, k=5)
+    for s, b in zip(seq, batch):
+        assert [(h.char, round(h.score, 6), h.font) for h in s] == \
+               [(h.char, round(h.score, 6), h.font) for h in b]
 
 
 def test_book_charset_excludes_non_han(tmp_path):

@@ -55,7 +55,7 @@ class OcrCandidatesParams(BaseModel):
 @register_step
 class OcrCandidatesStep(Step):
     spec = StepSpec(
-        id="ocr_candidates", title="Step5 OCR 候选", version="1.0", unit="cell",
+        id="ocr_candidates", title="Step5-c OCR 候选", version="1.0", unit="cell",
         consumes=("char_index", "char_patch"), produces=("ocr_candidates",),
         params=OcrCandidatesParams,
         needs=("engine",),

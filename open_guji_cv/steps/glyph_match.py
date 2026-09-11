@@ -92,7 +92,7 @@ class GlyphMatchParams(BaseModel):
 @register_step
 class GlyphMatchStep(Step):
     spec = StepSpec(
-        id="glyph_match", title="Step5 库匹配", version="1.0", unit="cell",
+        id="glyph_match", title="Step5-a 库匹配", version="1.0", unit="cell",
         consumes=("char_index", "char_patch"), produces=("glyph_match",),
         params=GlyphMatchParams,
         code_deps=("open_guji_cv.clustering.match", "open_guji_cv.clustering.verify",

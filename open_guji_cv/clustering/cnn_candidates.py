@@ -109,6 +109,10 @@ class CnnCandidates:
         self._net = None
         self._classes: list[str] = []
         self._cidx: dict[str, int] = {}
+        self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
+        """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
+        「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
+        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。"""
 
     @property
     def available(self) -> bool:
@@ -153,6 +157,31 @@ class CnnCandidates:
             top = pr.topk(min(k, len(idx)))
         return [(self._classes[idx[int(i)]], float(p)) for p, i in zip(top.values, top.indices)]
 
+    def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
+                   ) -> list[list[tuple[str, float]]]:
+        """`topk()` 的批量版：一页多个字块一次前向，见 `emb_topk_batch` 模块头
+        「2026-09-10」一节——同样的道理，网络前向也是一次一批比一次一个快。
+        """
+        if not self._ensure():
+            return [[] for _ in norm_patches]
+        import torch
+        idx = [self._cidx[c] for c in charset if c in self._cidx]
+        if not idx or not norm_patches:
+            return [[] for _ in norm_patches]
+        idx_t = torch.tensor(idx, device=self._dev)
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            _, lg, _ = self._net(x)                     # (N, n_cls)
+            sub = lg[:, idx_t]                           # (N, len(idx))
+            pr = torch.softmax(sub, 1)
+            top = pr.topk(min(k, len(idx)), dim=1)
+        out = []
+        for values, indices in zip(top.values, top.indices):
+            out.append([(self._classes[idx[int(i)]], float(p))
+                        for p, i in zip(values, indices)])
+        return out
+
     # ── embedding 检索（第三源）────────────────────────────────────
     #
     # 2026-09-05 实测（unseen 1,327，异体算对）：分类头 83.9 / 96.8 / 98.2，
@@ -166,6 +195,27 @@ class CnnCandidates:
     # 4,636 字 × 4 字体首建约 1 分钟，之后毫秒级。
 
     def _emb_index(self, charset) -> tuple[np.ndarray, list[str]]:
+        """归一化 64² 图 → 字表 embedding 索引 `(mat, names)`，按 charset 记忆化。
+
+        ## 2026-09-10 修：逐字调用把每页拖慢了 100 倍
+
+        `rare_for` 对页里**每一个字**都调一次 `emb_topk`→`_emb_index`，而
+        charset（两档字表之一）整页、整本书都不变。改之前这里每次都先跑一遍
+        `load_many`（扫 `kangxi` 源目录的全部文件、解压 `zitools` 的大 npz）
+        只为了拼缓存 key，磁盘缓存命中与否是**之后**才判断的——于是「查磁盘
+        缓存」本身比缓存要省的活还贵。实测 vol01 单页 179 字从预期的毫秒级
+        变成 88s（`open_guji_cv.clustering.extra_glyphs.load_extra_glyphs`
+        的目录 glob + zlib 解压吃掉了几乎全部时间，见 cProfile：14 次调用
+        8.75s，`_read1`/`decompress` top）。
+
+        现在按 `charset` 的对象身份（`_rare_charsets()` 返回稳定元组，同一
+        进程内是同一个 tuple 对象，`is` 比较比整表 `==` 更快也更严格）在实例
+        上记一次，同一整理本/字表跑一遍只算一次 key、只探一次磁盘缓存，
+        换字表（不同书）会自然重算。
+        """
+        if self._emb_cache is not None and self._emb_cache[0] is charset:
+            return self._emb_cache[1], self._emb_cache[2]
+
         import hashlib
         import torch
         from .font_candidates import _font_files
@@ -188,7 +238,9 @@ class CnnCandidates:
         f = self.ckpt.parent / f"emb_{key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=False)
-            return z["mat"], z["chars"].tolist()
+            mat, names = z["mat"], z["chars"].tolist()
+            self._emb_cache = (charset, mat, names)
+            return mat, names
         fonts = _font_files()
         vecs, names = [], []
         with torch.no_grad():
@@ -212,6 +264,7 @@ class CnnCandidates:
         mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
         f.parent.mkdir(parents=True, exist_ok=True)
         np.savez(f, mat=mat, chars=np.array(names))
+        self._emb_cache = (charset, mat, names)
         return mat, names
 
     def emb_topk(self, norm_patch: np.ndarray, charset, k: int = 10) -> list[tuple[str, float]]:
@@ -231,6 +284,38 @@ class CnnCandidates:
         order = np.argsort(-sims)[:k]
         return [(names[int(i)], float(sims[int(i)])) for i in order]
 
+    def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
+                       ) -> list[list[tuple[str, float]]]:
+        """`emb_topk()` 的批量版：网络前向与模板矩阵检索都改一次一批。
+
+        ## 2026-09-10 生僻字候选提速第二轮：批处理网络前向 + 矩阵-矩阵乘法
+
+        与 `font_candidates.candidates_batch` 同一个道理：`rare_for` 原先
+        对页里每个字都单独调一次 `emb_topk`——CNN 前向单独跑一次、跟模板矩阵
+        的余弦检索也单独做一次矩阵-向量乘法（GEMV）。这一页所有字块一起
+        过网络（一次前向吃满 batch，torch 本身就支持）、检索也改成矩阵-矩阵
+        乘法（GEMM）——两处都是"同一份模板/同一张网络，换一批输入"，批处理
+        没有精度代价，只是把 IO/调度开销摊到一批里。
+        """
+        if not self._ensure():
+            return [[] for _ in norm_patches]
+        import torch
+        mat, names = self._emb_index(charset)
+        if mat.shape[0] == 0 or not norm_patches:
+            return [[] for _ in norm_patches]
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            e, _, _ = self._net(x)                        # (N, 256)
+            Q = e / (e.norm(dim=1, keepdim=True) + 1e-9)
+            Q = Q.cpu().numpy()
+        sims = mat @ Q.T                                   # (rows, N)
+        out = []
+        for j in range(sims.shape[1]):
+            order = np.argsort(-sims[:, j])[:k]
+            out.append([(names[int(i)], float(sims[i, j])) for i in order])
+        return out
+
 
 EMB_EXTRA_SPECS = (
     "kangxi:D:/data/glyph-sources/kangxi/crops@cache/exp_extglyph/kangxi_verified_v2.txt",
@@ -241,6 +326,39 @@ EMB_EXTRA_SPECS = (
 康熙那条带 `@白名单`：只用交叉验证通过的切图（`scripts/kangxi_crossval.py`，
 三道独立证据，独立源不一致率 0.312%），待人审的 1,040 张不进模板。
 目录不存在时自动跳过 → 退回纯字体模板，不报错（这些数据不随仓库分发）。"""
+
+
+def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
+    """外部模板集指纹：每条 spec 的目录/白名单 stamp 拼起来。
+
+    只对**就绪**的 spec 取 stamp（`_spec_ready`），源目录缺失时该 spec 不参与
+    ——与 `_emb_index` 静默退回纯字体模板同一条口径，换机器（有/无这批数据）
+    不会互相污染对方的指纹。stamp 复用 `extra_glyphs.load_extra_glyphs` 那把
+    尺子（zitools 用 manifest.tsv 大小，kangxi 用白名单文件行数/切图张数）。
+    """
+    from .extra_glyphs import parse_spec
+
+    parts = []
+    for spec in specs:
+        if not _spec_ready(spec):
+            continue
+        kind, d, styles = parse_spec(spec)
+        if kind == "kangxi" and isinstance(styles, str):
+            stamp = len(Path(styles).read_text(encoding="utf-8").split())
+        elif kind == "zitools":
+            man = d / "manifest.tsv"
+            stamp = man.stat().st_size if man.exists() else 0
+        else:
+            stamp = len(list(d.glob("KX*.png")))
+        parts.append(f"{spec}:{stamp}")
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
+                      specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
+    """生僻字候选栈的完整指纹：checkpoint + 外部模板集。进 Step 参数才能让
+    `rare_candidates` 产物在换模型/换模板时正确过期（见 `steps/rare_candidates.py`）。"""
+    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}"
 
 
 def _spec_ready(spec: str) -> bool:
