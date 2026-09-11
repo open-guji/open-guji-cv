@@ -351,8 +351,9 @@ export async function rvLoad() {
   const pages = $('#rv_pages').value || 'dev_set';
   const only = $('#rv_only').value;
   const batch = rvBatch();
+  const gate = $('#rv_gate').checked ? 'true' : 'false';
   $('#rv_msg').textContent = '载入中…';
-  const d = await api(`/api/review/cards?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}&only=${only}&limit=400`);
+  const d = await api(`/api/review/cards?book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}&only=${only}&gate_cut=${gate}&limit=400`);
   // **把已裁过的读回来**——裁决早就落成事件了，前端此前只记在内存里，
   // 一刷新就要重审一遍（用户 2026-09-04 实锤）。同 id 后到覆盖。
   let done = {};
@@ -365,6 +366,15 @@ export async function rvLoad() {
   // 卡片一进列表就算「看见」——dwell 从这里算到落裁那一刻
   const t0 = Date.now();
   d.cards.forEach(c => { if (!RV.seen[c.id]) RV.seen[c.id] = t0; });
+  // 顺序闸挡下的（格位旁边那条切线有多种切法、还没 review）：不是错误，
+  // 是「先去切线面板把这几位裁了」。给条出路，别让人对着空列表猜。
+  const nb = (d.blocked || []).length;
+  const bg = $('#rv_gate_note');
+  if (bg) bg.innerHTML = nb ? `⊘ ${nb} 位被顺序闸挡下——它们的格线有<b>多种切法</b>还没 review。
+    <a href="#" id="rv_gate_go">去切线面板</a>` : '';
+  if (bg) bg.style.color = nb ? 'var(--ochre)' : '';
+  const go = document.getElementById('rv_gate_go');
+  if (go) go.onclick = (e) => { e.preventDefault(); document.querySelector('nav button[data-view="cutline"]').click(); };
   $('#rv_cards').innerHTML = d.cards.map(rvCard).join('');
   rvFilter();
   rvFocus(0);

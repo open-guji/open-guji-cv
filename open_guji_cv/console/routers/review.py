@@ -36,12 +36,16 @@ router = APIRouter()
 
 @router.get("/api/review/cards")
 def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
-                     only: str = "review") -> dict:
+                     only: str = "review", gate_cut: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
+
+    `gate_cut`：顺序闸——格位旁边那条切分线有**多种切法**且还没 review 时，
+    这个字位先不出卡（用户 2026-09-10：先 review 切分线，再 review 字符）。
+    被挡下的在返回值的 `blocked` 里，面板显示剩余条数。
     """
-    return cards(book, pages, limit, only, deps.product_store())
+    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut)
 
 
 
