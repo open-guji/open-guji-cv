@@ -1,0 +1,187 @@
+{
+ "dataset": "../open-guji-dataset/context-correction",
+ "provenance": {
+  "book_weight": 0.9,
+  "gate": 0.7,
+  "general_corpus": "corpus/external/daizhige_zhaoling.txt",
+  "book_corpus": "corpus/zongmu_wuyingdian_reference.txt",
+  "book_chars_removed_as_holdout": 2237
+ },
+ "baseline_gated_ngram": {
+  "n": 1681,
+  "gate_margin": 0.7,
+  "baseline_top1": 0.6752,
+  "top1": 0.6883,
+  "top1_gain": 0.0131,
+  "flips": 35,
+  "rescued": 26,
+  "harmed": 4,
+  "harmful_flip_rate": 0.0035,
+  "flip_precision": 0.7429,
+  "by_origin": {
+   "human": {
+    "n": 529,
+    "baseline_top1": 0.4915,
+    "top1": 0.5028,
+    "flips": 14
+   },
+   "align": {
+    "n": 1152,
+    "baseline_top1": 0.7595,
+    "top1": 0.7734,
+    "flips": 21
+   }
+  },
+  "glyph_layer_immutability": true
+ },
+ "oracle_llm_reports": [
+  {
+   "answers_source": "output/llm_context_evalset/report_qwen_qwen-plus_candidates.json",
+   "provider": "qwen",
+   "model": "qwen-plus",
+   "prompt_version": "candidates",
+   "report_n": 100,
+   "report_llm_accuracy": 0.47,
+   "answers_usable": 99,
+   "result": {
+    "n": 1681,
+    "gate_margin": 0.7,
+    "oracle_hits": 99,
+    "baseline_top1": 0.6752,
+    "top1": 0.7151,
+    "top1_gain": 0.0399,
+    "flips": 123,
+    "rescued": 73,
+    "harmed": 6,
+    "harmful_flip_rate": 0.0053,
+    "flip_precision": 0.5935,
+    "by_origin": {
+     "human": {
+      "n": 529,
+      "baseline_top1": 0.4915,
+      "top1": 0.535,
+      "flips": 36
+     },
+     "align": {
+      "n": 1152,
+      "baseline_top1": 0.7595,
+      "top1": 0.7977,
+      "flips": 87
+     }
+    },
+    "glyph_layer_immutability": true
+   }
+  },
+  {
+   "answers_source": "output/llm_context_evalset/report_glm_glm-4-plus_candidates.json",
+   "provider": "glm",
+   "model": "glm-4-plus",
+   "prompt_version": "candidates",
+   "report_n": 100,
+   "report_llm_accuracy": 0.27,
+   "answers_usable": 98,
+   "result": {
+    "n": 1681,
+    "gate_margin": 0.7,
+    "oracle_hits": 98,
+    "baseline_top1": 0.6752,
+    "top1": 0.7032,
+    "top1_gain": 0.028,
+    "flips": 99,
+    "rescued": 51,
+    "harmed": 4,
+    "harmful_flip_rate": 0.0035,
+    "flip_precision": 0.5152,
+    "by_origin": {
+     "human": {
+      "n": 529,
+      "baseline_top1": 0.4915,
+      "top1": 0.5123,
+      "flips": 27
+     },
+     "align": {
+      "n": 1152,
+      "baseline_top1": 0.7595,
+      "top1": 0.7908,
+      "flips": 72
+     }
+    },
+    "glyph_layer_immutability": true
+   }
+  },
+  {
+   "answers_source": "output/llm_context_evalset/report_glm_glm-4-flash_candidates.json",
+   "provider": "glm",
+   "model": "glm-4-flash",
+   "prompt_version": "candidates",
+   "report_n": 100,
+   "report_llm_accuracy": 0.32,
+   "answers_usable": 100,
+   "result": {
+    "n": 1681,
+    "gate_margin": 0.7,
+    "oracle_hits": 100,
+    "baseline_top1": 0.6752,
+    "top1": 0.7061,
+    "top1_gain": 0.0309,
+    "flips": 117,
+    "rescued": 55,
+    "harmed": 3,
+    "harmful_flip_rate": 0.0026,
+    "flip_precision": 0.4701,
+    "by_origin": {
+     "human": {
+      "n": 529,
+      "baseline_top1": 0.4915,
+      "top1": 0.5293,
+      "flips": 33
+     },
+     "align": {
+      "n": 1152,
+      "baseline_top1": 0.7595,
+      "top1": 0.7873,
+      "flips": 84
+     }
+    },
+    "glyph_layer_immutability": true
+   }
+  },
+  {
+   "answers_source": "output/llm_context_evalset/report_glm_glm-4-plus_direct.json",
+   "provider": "glm",
+   "model": "glm-4-plus",
+   "prompt_version": "direct",
+   "report_n": 100,
+   "report_llm_accuracy": 0.02,
+   "answers_usable": 4,
+   "result": {
+    "n": 1681,
+    "gate_margin": 0.7,
+    "oracle_hits": 4,
+    "baseline_top1": 0.6752,
+    "top1": 0.6895,
+    "top1_gain": 0.0143,
+    "flips": 39,
+    "rescued": 28,
+    "harmed": 4,
+    "harmful_flip_rate": 0.0035,
+    "flip_precision": 0.7179,
+    "by_origin": {
+     "human": {
+      "n": 529,
+      "baseline_top1": 0.4915,
+      "top1": 0.5047,
+      "flips": 15
+     },
+     "align": {
+      "n": 1152,
+      "baseline_top1": 0.7595,
+      "top1": 0.7743,
+      "flips": 24
+     }
+    },
+    "glyph_layer_immutability": true
+   }
+  }
+ ]
+}
