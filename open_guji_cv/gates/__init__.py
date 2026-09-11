@@ -22,3 +22,4 @@
 
 from .. import steps as _steps  # noqa: F401 —— 兜底：确保 Step 先注册
 from . import column_gate  # noqa: F401
+from . import row_segment_gate  # noqa: F401
