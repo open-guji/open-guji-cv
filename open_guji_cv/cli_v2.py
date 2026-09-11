@@ -386,6 +386,10 @@ def cmd_check(args) -> None:
                     if not args.book or r.get("book") == args.book]
             rows.sort(key=lambda r: (r.get("book", ""), r.get("ts") or r.get("date", "")))
             _out({"rows": rows})
+    elif args.action == "throughput":
+        from .eval import throughput as tp
+        pages = None if args.all_pages else args.pages
+        _out(tp.full_report(args.book, pages, st))
 
 
 def cmd_cards(args) -> None:
@@ -627,12 +631,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--scale", type=float, default=0.35, help="raw / overlay 的缩放")
     p.add_argument("--out", default="", help="图像输出路径（raw / overlay / patch 必给）")
 
-    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate")
-    p.add_argument("action", choices=["quality", "rulers", "round", "rate"])
+    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput")
+    p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput"])
     p.add_argument("book", nargs="?", default="vol01")
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--snapshot", action="store_true", help="rate：记一行台账（默认只读）")
     p.add_argument("--note", default="", help="rate --snapshot 的说明")
+    p.add_argument("--all-pages", action="store_true",
+                   help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
 
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
