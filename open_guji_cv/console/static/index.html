@@ -112,11 +112,14 @@
           </select></label>
         <label class="muted">批次 <input id="rv_batch" size="22" placeholder="留空 = 按册页自动命名"></label>
         <label class="muted"><input type="checkbox" id="rv_todo"> 只看未裁决</label>
+        <label class="muted" title="顺序闸（用户 2026-09-10）：字位旁边那条切分线有**多种切法**且还没 review 时，这个字位先不出卡——先把切分线看过，再来看这个字。只挡多候选切点，算法只有一种切法的不拦（否则 vol01 dev_set 要先把上千条格线裁完才出得了第一张卡）。取消勾选可整批看全部（抽审、跑评测用）。">
+          <input type="checkbox" id="rv_gate" checked> 先切线后字符</label>
         <button id="rv_run">跑这批</button>
         <button id="rv_load">载入</button>
         <button id="rv_send">提交裁决</button>
         <span id="rv_msg" class="muted"></span>
       </div>
+      <div id="rv_gate_note" class="muted" style="font-size:.78rem;margin-bottom:.4rem"></div>
       <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
         键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>C</b> 有噪声 ·
         <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡。

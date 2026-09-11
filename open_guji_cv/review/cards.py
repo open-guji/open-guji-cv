@@ -23,13 +23,18 @@ from ..variant_ledger import BookLedger
 
 
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
-          only: str = "review", store: ProductStore | None = None) -> dict:
+          only: str = "review", store: ProductStore | None = None,
+          gate_cut: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
     all = 全出。**抽查自动档是必要的**——只看人审那批，永远只能证明
     「拿不准的我确实拿不准」，证不出自动那批有没有错（那正是 100% 准确率
     这个数字要防的自证）。
+
+    `gate_cut`：顺序闸（用户 2026-09-10）——切分线还没 review 的格位先不出字卡。
+    被挡下的进返回值的 `blocked`，面板据此显示「还有 N 位等着先看切线」。
+    默认开；传 False 可整批看全部（判据 E 抽审、跑评测要用）。
     """
     st = store or ProductStore()
     bk = load_book(book)
@@ -54,6 +59,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
             golds2 = {}
     ledger = BookLedger.load_or_empty()
     out: list[dict] = []
+    out_blocked: list[dict] = []
+    blocked = cut_pending(book, pgs, st) if gate_cut else {}
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -69,6 +76,13 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 if only == "review" and r.admit:
                     continue
                 if only == "auto" and not r.admit:
+                    continue
+                # 顺序闸（用户 2026-09-10 定）：这一位旁边有一条**还没 review 的切线**时，
+                # 先别出字卡——先把切分线看过，再来看这个字。粒度是格位，不整页挡。
+                _pend = blocked.get((pg, cc.col, r.slot))
+                if _pend is not None:
+                    out_blocked.append({"id": r.id, "page": pg, "col": cc.col,
+                                        "slot": r.slot, "pending": _pend})
                     continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
@@ -100,5 +114,75 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                             "source": dr.source} if dr else None,
                 })
                 if len(out) >= limit:
-                    return {"book": book, "cards": out, "truncated": True}
-    return {"book": book, "cards": out, "truncated": False}
+                    return {"book": book, "cards": out, "truncated": True,
+                            "blocked": out_blocked}
+    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked}
+
+
+def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
+    """还等着 review 的切线，按格位索引：`(页, 列, 格位) → 说明`。
+
+    **判据（用户 2026-09-10 定：按「格位」挡）**：一条切线的**上格与下格**都是
+    被它切出来的字位——切法改了，这两个字的图块就跟着变。所以这两格的字卡在
+    切线 review 完之前不出来，其余格位照常。
+
+    **只挡多候选的切点**（用户定「只挡多候选切点」）。实测这条很要紧：一格上格
+    位全挡的话，vol01 dev_set 11 页要**先裁 ~1041 条**格线才出得了第一张字卡
+    （34 张全挡，出卡 0）——而候选下传之后 98% 的切点都是多候选，逐条裁不现实。
+    只挡多候选 = 只在**算法自己拿不准**（给了 2+ 种切法）的地方要人先看；
+    单一候选的切线说明算法有把握，不拦字卡。
+
+    ⚠️⚠️ **数据源必须与切线面板用的那批用例逐条相同**，否则闸门会挡下一张
+    **面板根本出不了卡**的切点——人被告知「先去切线」，去了却找不到那条。
+    实测踩过两次：
+
+    1. 先拿 `eval.touching.r2s_boundaries` 当数据源 → 在 34 张待审卡上命中 **0**。
+       r2s 只收「切点有墨、附近无墨谷」的真粘连，而待审字位上的 char/char 切点
+       墨量多为 0，投影法本就解得开，压根不进 r2s。
+    2. 改成直接读产物「有 2+ 候选就挡」 → 挡住 52 条，与面板能出的 729 条用例
+       **交集为 0**。产物里的多候选按 `cut_candidates` 记，面板的用例另有
+       「切点有墨 + 附近无墨谷 + 上下都是 char」的过滤，两者不是一回事。
+
+    所以这里调**面板自己那个函数**取用例（r2s + split_char），再按上面的格位
+    规则展开。面板将来换了挑用例的口径，这里跟着变，不会再错位。
+    """
+    from ..console import deps
+    from ..eval import touching as T
+
+    try:
+        cases = (T.r2s_boundaries(book, pgs, st)
+                 + T.split_char_boundaries(book, pgs, st))
+    except Exception:
+        return {}   # 取不到用例（无产物/无金标）就当没有闸，不挡人
+
+    done = T.gold_ids()
+    try:
+        for e in deps.event_log().read():
+            if e.kind == "cutline":
+                done.add(e.target.key)
+    except Exception:
+        pass    # 没有事件日志（新工作区）不该让整个审查面板挂掉
+
+    # 产物里哪些切点是多候选的（key = (页, 列, 上格格位)）
+    multi: dict = {}
+    for pg in pgs:
+        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        if cells is None:
+            continue
+        for cc in cells.columns:
+            for cp in (getattr(cc, "cut_candidates", None) or []):
+                if len(cp.candidates) >= 2:
+                    multi[(pg, cc.col, cp.slot_above)] = len(cp.candidates)
+
+    out: dict = {}
+    for c in cases:                     # 只走面板真能出卡的那些
+        if c["id"] in done:
+            continue                    # 已经 review 过了
+        n = multi.get((c["page"], c["col"], c["slot_above"]))
+        if not n:                       # 单一候选 = 算法有把握，不拦
+            continue
+        why = f"格线 {c['col']}:{c['bi']} 有 {n} 种切法待 review"
+        # 上格与下格都是被这条切线切出来的字位，两张卡一起挡
+        out[(c["page"], c["col"], c["slot_above"])] = why
+        out[(c["page"], c["col"], c["slot_below"])] = why
+    return out
