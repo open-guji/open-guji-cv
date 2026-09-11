@@ -437,10 +437,18 @@ def test_route_inventory():
 
     （原始 46 条是 C3 落定时的数；2026-09-09 加「字形不入库」的跨列/跨页
     上下文与切分前原图，`review.py` 添了 3 条，46 → 49；2026-09-10 加
-    `GET /api/llm_online_stats`（线上大模型裁决正确率），49 → 50。）
+    `GET /api/llm_online_stats`（线上大模型裁决正确率），49 → 50；2026-09-11
+    Step0 预清理专用可视化（数值报告 + 专用叠图 + 前后对比），`products.py`
+    添了 4 条，50 → 54；同日边框类裁决（Step1 列探测/抬头/外框外延、Step2
+    上下版框核校）从 artifact 迁入控制台，新增 `border_review.py` 3 条，
+    54 → 57；另一并行改动把控制台前端换成 Vite React 构建，`registry.py`
+    加 `GET /v1/`（旧静态前端兜底）、`spa_fallback.py` 加
+    `GET /{full_path:path}`（history 模式路由兜底），57 → 59；另一并行改动
+    加 `GET /api/throughput`（吞吐统计）、`GET /api/gate/{book}/summary`
+    （闸汇总），59 → 61。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 50, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 61, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -500,20 +508,27 @@ def test_route_snapshot():
 
 EXPECTED_ROUTES = [
     "GET /", "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
-    "GET /api/books", "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
+    "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
+    "GET /api/border-review/verdicts",
+    "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
-    "GET /api/evals", "GET /api/events", "GET /api/gold", "GET /api/jiazhu/segments",
+    "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
+    "GET /api/gold", "GET /api/jiazhu/segments",
     "GET /api/kinds", "GET /api/llm_online_stats",
     "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
-    "GET /api/pipelines", "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
+    "GET /api/pipelines", "GET /api/preclean/{book}/{page}",
+    "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",
+    "GET /api/preclean/{book}/{page}/after.png",
+    "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
     "GET /api/review/around/{book}/{page}/{col}/{slot}",
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",
     "GET /api/review/context-img/{book}/{page}/{col}/{slot}.png",
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
-    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/steps",
+    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/steps", "GET /api/throughput",
     "GET /api/variants/book", "GET /api/variants/groups",
+    "GET /v1/", "GET /{full_path:path}",
     "POST /api/batches", "POST /api/batches/{batch_id}/harvest", "POST /api/batches/{batch_id}/route",
     "POST /api/events", "POST /api/evals/{eval_id}/run", "POST /api/gold/{shard:path}/drift",
     "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/around/batch",

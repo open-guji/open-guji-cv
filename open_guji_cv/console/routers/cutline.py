@@ -32,14 +32,21 @@ _cutline_expected_cache: dict = {}
 @router.get("/api/cutline/cases")
 def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
                       seed: int = 0, batch: str | None = None, skip_done: bool = True,
-                      kind: str = "r2s") -> dict:
+                      kind: str = "r2s", scope: str = "all") -> dict:
     """切线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。
 
     `kind`：`r2s` 真粘连（切点有墨、附近无墨谷，投影法无解）；`split_char`
     切进字里（一矮一高 + 切点落在字**内部**的零墨空隙，2026-09-08 新增，
     见 `eval/touching.split_char_boundaries`）；`all` 两者都出。
+
+    `scope`：`all`（默认，Step3 用）= 上面 `kind` 决定的全量用例；`blocking`
+    （Step7「切分裁决」板块用）= 只出**顺序闸正在挡住字卡**的那批（`kind`
+    参数被忽略——挡卡的判据本就是 r2s+split_char 两者都要查，见
+    `review/cards.py::blocking_cutline_cases`）。两处共用同一份判据，
+    不重新发明一套（那样两边会对不上号，见该函数 docstring 里踩过的坑）。
     """
     from ...eval import touching as T
+    from ...review.cards import blocking_cutline_cases
 
     bk = load_book(book)
     if pages == "body":
@@ -47,7 +54,9 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     else:
         pg = bk.resolve_pages(pages)
     st = deps.product_store()
-    if kind == "split_char":
+    if scope == "blocking":
+        cases = blocking_cutline_cases(book, pg, st)
+    elif kind == "split_char":
         cases = T.split_char_boundaries(book, pg, st)
     elif kind == "all":
         cases = T.r2s_boundaries(book, pg, st) + T.split_char_boundaries(book, pg, st)
@@ -55,7 +64,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         cases = T.r2s_boundaries(book, pg, st)
     n_all = len(cases)
     done: set[str] = set()
-    if skip_done:
+    if skip_done and scope != "blocking":  # blocking 的 cases 已经是「待办」，不用再滤一遍
         done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}

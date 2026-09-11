@@ -22,7 +22,9 @@ export interface Verdict {
 
 const PREFETCH_CHUNK = 24
 
-export function ReviewPanel({ book, onSubmitted }: { book: string; onSubmitted: () => void }) {
+export function ReviewPanel({ book, onSubmitted, reloadSignal }: {
+  book: string; onSubmitted: () => void; reloadSignal?: number
+}) {
   const [pages, setPages] = useState('dev_set')
   const [only, setOnly] = useState<'review' | 'auto' | 'all'>('review')
   const [batchInput, setBatchInput] = useState('')
@@ -227,6 +229,17 @@ export function ReviewPanel({ book, onSubmitted }: { book: string; onSubmitted: 
       setMsg('提交失败：' + (e as Error).message)
     }
   }
+
+  // 外层（Step7「切分裁决」板块）裁完一条切分方案后 bump 这个信号，通知这里
+  // 重新载入——刚被那条切线挡住的字卡才会跟着解锁。首次挂载不触发（还没人
+  // 点过「载入」，没有 batch/verdicts 状态可续）。
+  const reloadedOnce = useRef(false)
+  useEffect(() => {
+    if (reloadSignal === undefined) return
+    if (!reloadedOnce.current) { reloadedOnce.current = true; return }
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadSignal])
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
