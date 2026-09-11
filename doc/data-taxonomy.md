@@ -38,6 +38,15 @@
 `.claude/CLAUDE.md`"金标按输入口径拆成两套"那段），评测脚本
 （`eval_column_warp.py`）不能把两套数字混着报，读这个分片时要注意区分。
 
+**2026-09-11 补充（Step5-d 数据盘点核实）**：`open-guji-dataset` 仓
+[STEP_MAP.md](https://github.com/open-guji/open-guji-dataset/blob/main/STEP_MAP.md)
+第39行已经写明"Step5-d 整理本匹配：对齐金标是自动生成，无独立分片；人裁两本
+对比未落 dataset 仓分片"，"已知空白"一节也把 Step5-d 与 Step0、Step7 并列为
+"不受统一金标信封机制约束"——`align_label.py` 产出的 `AlignedLabel`（`equal`/
+`replace` 采信闸过滤后的逐字位标签）**已有明确归类结论，不是盘点遗漏**：
+它服务的是聚类/进库流程的对齐载体，不作为独立 benchmark 分片维护，现状与
+STEP_MAP.md 记载一致，不需要改动。
+
 ### guardrail——`open-guji-cv` 仓，分散在 `config/` 与代码常量里
 
 `config/` 目录里**混杂着护栏与非护栏配置**，需要先分辨：
@@ -55,7 +64,9 @@
 
 代码常量形式的护栏（不落文件，写在 `.py` 里）：`NEVER_MATCH_FAMILIES`、
 `SEMANTIC_MERGED_PAIRS` 等。这类天然没有"存放位置"问题，本文档不管它们，
-只管落成文件的那部分。
+只管落成文件的那部分。`align_label.py::clean_labels()` 的 `ink_ratio < 0.05`
+近空格位判据、`frame_bars` 版框横线判据同属此类——运行时会拦 `replace` 段
+标签是否采信，但判据写死在代码里、不落配置文件，本文档不单独立目。
 
 **现状问题**：真正的护栏文件（5 个）淹没在 `config/` 三十多个文件里，
 不看内容分不出哪些是"运行时会拦人"的规则、哪些只是普通配置数据。
@@ -138,6 +149,14 @@ statistics 三选一。**这条留给协调者定夺**：如果确实需要给"�
 `gate_manifest` 现算出来的统计量"，这条本身仍然成立、不受此结论影响
 （R1 是 statistics，`gate_manifest` 是它的输入，两者是不同的东西）。
 
+**2026-09-11 补充（Step5-d 数据盘点核实）**：`products/<book>/align_ref/p*.json`
+（`PageAlignRef`，Step5-d 输出）与 `gate_manifest` 同属这一类交接产物——
+`seed_admit` 等下游 Step 直接消费它，不是人工维护的静态规则、也不是离线
+评测用的考卷+答案、更不是"发生了什么"的既成事实账本。与 `gate_manifest`
+唯一的区别是它不参与拦截判定（`align_ref` 本身不是闸，四路证据里任一路
+缺席只降级不阻塞，见 `Step5-字符识别/README.md`），但这不影响它归入
+"交接产物"这条待定类别——判断标准是"下游是否靠它继续跑"，不是"是否拦截"。
+
 ## 以后新数据往哪放（判断规则，不要求现在搬旧数据）
 
 新增一份数据前，先问三句话：
@@ -155,6 +174,14 @@ statistics 三选一。**这条留给协调者定夺**：如果确实需要给"�
 
 不属于以上三类之一的（字典、字体、术语表、派生的关系图），按现状继续放
 `config/` 或 `corpus/`，不是本文档管的范围。
+
+**2026-09-11 补充（Step5-d 数据盘点核实）**：`corpus/zongmu_wenyuange_wikisource.txt`
+（现役，`align_ref`/`context_decide` 的默认整理本语料）与已退役的
+`zongmu_wuyingdian_reference.txt`、`zongmu_wikisource_reference.txt` 同属
+这条兜底——是跨步骤共享的输入资源（Step5-d 对齐、Step6 上下文裁决都读），
+不是样本+答案、不拦截决策、不是既成事实记录，性质与 `books/*.yaml` 的
+版式常量一档，继续放 `corpus/` 即可，之前盘点 Step2/Step3 时没提到这一项，
+现补记。
 
 **2026-09-11 补充**：`open_guji_cv/books/*.yaml`（如 `vol01.yaml`，记
 `chars_per_line`/`expected_cols` 等版式常量）也不属于以上三类——它是
