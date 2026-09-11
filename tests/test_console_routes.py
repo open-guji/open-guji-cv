@@ -445,10 +445,11 @@ def test_route_inventory():
     加 `GET /v1/`（旧静态前端兜底）、`spa_fallback.py` 加
     `GET /{full_path:path}`（history 模式路由兜底），57 → 59；另一并行改动
     加 `GET /api/throughput`（吞吐统计）、`GET /api/gate/{book}/summary`
-    （闸汇总），59 → 61。）
+    （闸汇总），59 → 61；2026-09-11 Step5-d 整理本对齐锚定汇总面板，加
+    `GET /api/align-ref/{book}/summary`，61 → 62。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 61, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 62, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -507,7 +508,8 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
-    "GET /", "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
+    "GET /", "GET /api/align-ref/{book}/summary",
+    "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
     "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
