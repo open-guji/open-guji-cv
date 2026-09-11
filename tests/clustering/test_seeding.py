@@ -47,7 +47,7 @@ PAGES = {
     "5": "弔民伐罪周發殷湯愛育黎首臣伏戎羌",
     "6": "遐邇壹體率賓歸王鳴鳳在樹白駒食場",
     "7": "化被草木賴及萬方",          # 不进语料 → 整页无对齐
-    # 8: idx10「已」是 SEMANTIC_MERGED_PAIRS 成员（已/巳 同词异写，
+    # 8: idx10「已」是 CONFUSABLE_GROUPS 成员（己已巳同词异写，
     # 2026-08-26 用户定：字形不重要，上下文文意才是判据）。载体故意
     # 给成家族搭档「巳」→ signal_conflict + near_form + replace_align
     # 三条疑问都命中，换作表里任何别的形近字这里就该卡人审——但
@@ -260,7 +260,7 @@ def test_semantic_merged_pair_context_bypasses_near_form(seeded):
     （近形护栏防的是形状判据自己会认错），但文意判断不该被同一道闸
     挡下。这条位载体故意给错成家族搭档「巳」，三条疑问全命中
     （signal_conflict + near_form + replace_align），换作表里任何别的
-    形近字这里就该卡人审——但 SEMANTIC_MERGED_PAIRS 让它照走 context
+    形近字这里就该卡人审——但 CONFUSABLE_GROUPS 让它照走 context
     通道，按上下文判「已」自动进库。"""
     it = _queue(seeded)[f"{BOOK}:8:1:10"]
     assert it.ocr["char"] == "巳" and it.align == {"char": "已", "op": "replace"}

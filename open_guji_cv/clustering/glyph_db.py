@@ -36,6 +36,21 @@ K_MAX = 12           # 每字形類 exemplar 上限（該版總數 ≤ 上限則
 DUP_F1 = 0.95        # 近重複判定
 ALGO_VERSIONS = {"norm": "n1", "skeleton": "s1", "feat": "f1"}
 
+# 「易混字組」——同一組內的字在刻本裡經常混用（技術限制/書手習慣），字形
+# 分不出組內具體是哪個字，準入只能靠文意判斷（見 `admit_instance` 與
+# `clustering.seeding` 的用法）。目前只有一組：己/已/巳（用戶 2026-09-11
+# 定，推翻此前「己是真的另一個字」的舊考據——見 doc/charset_and_lm.md §四）。
+# 結構特意留成「元組的元組」而非兩兩一對，將來加「日/曰」之類新組直接追加。
+CONFUSABLE_GROUPS: tuple[frozenset[str], ...] = (frozenset({"己", "已", "巳"}),)
+CONFUSABLE_CHARS: frozenset[str] = frozenset(
+    c for group in CONFUSABLE_GROUPS for c in group)
+# 易混字組每個字形只需要少量樣本就夠字形匹配層認出「這是這一組裡的某個
+# 形」——組內具體是哪個字不由字形定，樣本再多也不增加判斷力，反而白佔庫
+# 空間、稀釋检索。達到這個數之後 `admit_instance` 對這一組字不再新增
+# exemplar（但審計行 `admissions`/`instances` 仍照常寫，準入計數不受影響，
+# 見該函式實現）。用戶 2026-09-11 定「每個積累 5 個左右就夠」。
+CONFUSABLE_SAMPLE_CAP = 5
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
     source_id TEXT PRIMARY KEY,
@@ -469,12 +484,18 @@ class GlyphDB:
         且是 ``semantic`` 缺省值的來源——絕大多數字符字形=釋讀，兩者
         本就同值）；``shape`` 是字形識別鍵（餵給 ``glyphs``/``exemplars``/
         ``GlyphMatcher`` 索引的那個），缺省等於 ``char``。二者只在
-        「同詞異寫、字形不重要」的窄類（已/巳，見
-        ``seeding.SEMANTIC_MERGED_PAIRS``）才會分岔——那類字用文意判
-        釋讀，但字形庫必須按刻本上實際刻的形狀分類，否則未來一個真的
-        刻成巳形、該讀巳的實例會錯誤繼承這次的釋讀（2026-08-26 用戶
-        定：「字形是什麼我們就錄什麼，這三個字才按語意改，但這個修改
-        不能污染字形匹配層」）。
+        「同詞異寫、字形不重要」的窄類（``CONFUSABLE_GROUPS``，目前只有
+        己/已/巳）才會分岔——那類字用文意判釋讀，但字形庫必須按刻本上
+        實際刻的形狀分類，否則未來一個真的刻成巳形、該讀巳的實例會錯誤
+        繼承這次的釋讀（2026-08-26 用戶定：「字形是什麼我們就錄什麼，
+        這幾個字才按語意改，但這個修改不能污染字形匹配層」）。
+
+        ``shape`` 屬於 ``CONFUSABLE_CHARS`` 且該 ``(edition_tag, shape)``
+        已有 ``CONFUSABLE_SAMPLE_CAP`` 個 exemplar 時，跳過 ``glyphs``/
+        ``exemplars`` 的寫入（字形匹配層不再為這一組字繼續累積樣本——
+        組內具體是哪個字不由字形定，見 ``CONFUSABLE_SAMPLE_CAP`` 注釋），
+        但 ``instances``/``admissions`` 照常寫，準入審計與冪等閘不受影響
+        （用戶 2026-09-11 定）。
 
         冪等：同一 instance_id 第二次調用直接返回 False，什麼都不寫。
         """
@@ -512,21 +533,28 @@ class GlyphDB:
              ink_ratio, width, height, None,
              shape, provenance, 1.0, sem, cp, None, _now()))
         self._write_derived(cur, instance_id, norm)
-        cur.execute(
-            f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
-                  ids, status, n_confirmed, updated_at)
-                VALUES (?,?,?,?,?,'sparse',1,?)
-                ON CONFLICT(edition_tag, char) DO UPDATE SET
-                  n_confirmed = n_confirmed + 1,
-                  status = CASE WHEN n_confirmed + 1 >= {K_MIN}
-                           THEN 'stable' ELSE status END,
-                  updated_at=excluded.updated_at""",
-            (edition, shape, sem, cp, None, _now()))
-        gid = cur.execute(
-            "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-            (edition, shape)).fetchone()[0]
-        cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
-                    (gid, instance_id, "seed", _now()))
+        capped = False
+        if shape in CONFUSABLE_CHARS:
+            row = cur.execute(
+                "SELECT n_confirmed FROM glyphs WHERE edition_tag=? AND char=?",
+                (edition, shape)).fetchone()
+            capped = bool(row) and row[0] >= CONFUSABLE_SAMPLE_CAP
+        if not capped:
+            cur.execute(
+                f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
+                      ids, status, n_confirmed, updated_at)
+                    VALUES (?,?,?,?,?,'sparse',1,?)
+                    ON CONFLICT(edition_tag, char) DO UPDATE SET
+                      n_confirmed = n_confirmed + 1,
+                      status = CASE WHEN n_confirmed + 1 >= {K_MIN}
+                               THEN 'stable' ELSE status END,
+                      updated_at=excluded.updated_at""",
+                (edition, shape, sem, cp, None, _now()))
+            gid = cur.execute(
+                "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
+                (edition, shape)).fetchone()[0]
+            cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
+                        (gid, instance_id, "seed", _now()))
         cur.execute("INSERT INTO admissions VALUES (?,?,?,?,?)",
                     (instance_id, char, provenance,
                      json.dumps(evidence, ensure_ascii=False)

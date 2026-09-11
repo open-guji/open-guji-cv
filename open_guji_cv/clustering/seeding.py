@@ -41,7 +41,7 @@ from .align_label import (carrier_slots, clean_labels, is_han, label_book,
                           page_reference)
 from .crop_quality import assess_crop, detect_intrusion
 from .extractor import CharInstance, load_index
-from .glyph_db import GlyphDB, _unpng
+from .glyph_db import CONFUSABLE_CHARS, CONFUSABLE_GROUPS, GlyphDB, _unpng
 from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
 from .context_step import build_strategy
@@ -65,19 +65,22 @@ DEFAULT_PROB_THRESHOLD = 0.85
 # 形近否决家族的全部成员（near_form 疑问用；单一事实源在 match.py）
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 
-# 「同词异写」而非「认错字」的形近对（用户 2026-08-26 定；考据见
-# charset_and_lm.md §四）。已/巳 历史上就是同一个词的两种写法（段玉裁：
-# 巳久已用为「已然」之已），config/variants/variants.json 里
-# 已→巳 登记为 hydzd/yitizi 异体关系——字形层拦得对（近形护栏防的是
-# **形状判据**自己会错认），但**上下文/语言模型的文意判断**不该被同一
-# 道闸挡下：这道题字形本就不重要，文意才是唯一相关的证据。
+# 「同词异写」而非「认错字」的易混字组（考据见 charset_and_lm.md §四）。
+# 已/巳 历史上就是同一个词的两种写法（段玉裁：巳久已用为「已然」之已），
+# config/variants/variants.json 里已→巳 登记为 hydzd/yitizi 异体关系；
+# 己 与已/巳 长得像，此前的考据认为它是「真的另一个字」（自己 vs 已经/
+# 地支，vol01:21:3:19 曾实锤把己错认成巳/已），2026-08-26～09-06 因此
+# 一直把己排除在外、单独按「永远人审」处理。
 #
-# 严格窄集，不等于 NEAR_FORM_CHARS：己 长得像已/巳但是**真的另一个字**
-# （自己 vs 已经/地支），vol01:21:3:19 实锤过把己错认成巳/已——己不进
-# 这张表，上下文通道对它照样要拦，仍然人审。
-SEMANTIC_MERGED_PAIRS: frozenset[tuple[str, str]] = frozenset({("已", "巳")})
-SEMANTIC_MERGED_CHARS = frozenset(
-    c for pair in SEMANTIC_MERGED_PAIRS for c in pair)
+# 用户 2026-09-11 改口：**推翻**上面这条区分——这一套刻本里己/已/巳
+# 三字实际就是混用，字形层拦得对（近形护栏防的是**形状判据**自己会
+# 错认），但**上下文/语言模型的文意判断**不该被同一道闸挡下：这道题
+# 字形本就不重要，文意才是唯一相关的证据。三字统一进易混字组。
+#
+# 组本身定义在 glyph_db.py（更底层，字形库的样本封顶策略也要用它，
+# 而 glyph_db 不能反过来依赖本模块）——`CONFUSABLE_GROUPS` 是「易混字组」
+# 的元组，结构不限两两一对，将来加「日/曰」之类新组直接在那边追加。
+SEMANTIC_MERGED_CHARS = CONFUSABLE_CHARS
 
 SEED_DIR = "phase9_seed"
 
@@ -939,9 +942,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                     and vmap.semantic(surface) ==
                                     vmap.semantic(corpus_char)))
                         if surface and sem_margin >= context_margin and safe:
-                            # 字形/释读分岔（只在 SEMANTIC_MERGED_PAIRS 触发，
-                            # 用户 2026-08-26 定：字形是什么就录什么，已/巳
-                            # 这三个字才按语意改——但改的是**释读**，不能
+                            # 字形/释读分岔（只在 CONFUSABLE_GROUPS 触发，
+                            # 用户 2026-08-26 定、2026-09-11 扩到己已巳三字：
+                            # 字形是什么就录什么，这几个字才按语意改——但改的是**释读**，不能
                             # 污染字形匹配层。字形库/GlyphMatcher 必须按
                             # OCR 这个纯视觉信号归类（它不掺文意判断），
                             # 不然未来一个真该读「巳」的同形实例会错误

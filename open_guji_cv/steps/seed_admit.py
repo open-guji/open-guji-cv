@@ -53,7 +53,11 @@ class SeedAdmitParams(BaseModel):
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
-    always_review: str = "己已巳"       # 这些字永远人审（用户 2026-09-04 定）
+    always_review: str = "己已巳"
+    """这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
+    「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
+    （整理本给字）与下面的 context 通道（Step6 上下文判定）能不能定下来；两条都没有
+    结果才落人审。"""
     edition: str = "wuyingdian_zongmu"  # 本书用字账（variant_ledger）的键
     # 整理本通道原来在这里配 corpus/corpus_fingerprint，2026-09-09 挪去了
     # `align_ref`（Step5-d，正式 Step，产物带自己的语料指纹）——本步只消费
@@ -78,7 +82,8 @@ class SeedAdmitParams(BaseModel):
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
-    实测 41 条人裁：文意对 39、字形对 40。关掉 = 回到「永远人审」。"""
+    实测 41 条人裁：文意对 39、字形对 40。关掉不等于「永远人审」——下面的 context
+    通道（2026-09-11 起对己已巳不再排除）仍可能在没有整理本时单独放行。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -319,9 +324,10 @@ class SeedAdmitStep(Step):
                             and note_ch not in NEAR_FORM_CHARS):
                         ok, channel = True, "note_lexicon"
                         align_char = align_char or note_ch
-                # 己/已/巳 永远人审（用户 2026-09-04 定）。这三个字的字形与
-                # 文意会分岔（同词异写 + 真的另一个字），任何自动通道都不该
-                # 替人决定读法——字形层护栏拦不住 align×库 这种跨源一致。
+                # 己/已/巳 不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11
+                # 改口己也算同词异写）。这几个字的字形与文意会分岔，字形层护栏拦不住
+                # align×库 这种跨源一致，任何自动通道都不该替人决定读法——但清空判决
+                # 不等于直接人审，下面 split_ref/context 两条通道仍可能重新放行。
                 if (align_char in always
                         or (r.candidates and r.candidates[0][0] in always)
                         or (r.char in always)):
@@ -397,16 +403,20 @@ class SeedAdmitStep(Step):
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
                 # 上下文只能定义，定不了形。
-                # ⚠️ 己/已/巳 的「永远人审」在这里也要守（2026-09-06 补）。上面那道闸只拦
-                # admission_decision 的通道，context 这条是后接的，此前直接绕过去了：
-                # vol01 有 30 条 context 放行的 已/巳，用户抽审 18 条里 16 条形不对（刻 巳
-                # 存成整理本的 已）。字形库本身没脏——glyphdb_admit 把人裁的 shape 单独存
-                # 字形层，审计 617 条里字形只错 2 条；脏的是产物里的 char 与判据 E 的分母。
+                # 己/已/巳 现在**允许**走 context 通道（用户 2026-09-11 改口，推翻下面
+                # 2026-09-06 那版「永远人审」）：「没有整理本兜底时，也允许走 Step6 上下文
+                # 判定通道」——这道题字形本就不重要，只要文意判定给了结果就该放行，没结果
+                # 才降级人审。
+                #
+                # 历史教训存档，不再适用：2026-09-06 曾在这里加过 `d.char not in always`
+                # 排除，因为 vol01 有 30 条 context 放行的 已/巳，抽审 18 条里 16 条「形不对」
+                # （刻 巳 存成整理本的 已）。但那次担心的是「字形库被污染」——2026-09-11 起
+                # 己已巳组的样本数在 `glyph_db.admit_instance` 里被封顶（见
+                # `CONFUSABLE_SAMPLE_CAP`），达到上限后这组字不再新增 exemplar，字形匹配层
+                # 不会继续被这条通道的判决污染，旧顾虑不再成立。
                 d = dmap.get(r.id)
                 if not ok and not form_open and p.use_context and d and d.source == "context" \
-                        and d.char and d.margin >= p.context_margin \
-                        and d.char not in always \
-                        and not (r.candidates and r.candidates[0][0] in always):
+                        and d.char and d.margin >= p.context_margin:
                     ok, channel, char, prov = True, "context", d.char, "context"
 
                 # 整理本 × 形状/上下文 一致 → 放行（用户 2026-09-06「很多都是整理本存在时

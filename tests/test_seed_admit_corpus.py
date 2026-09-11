@@ -9,7 +9,10 @@
    兜底：判决对、存进去的字却是第三方的。实测一次判错 9 条金标
    （vol01:42:3:20 align/OCR 都读「敷」，库 top1「數」0.957 vs 0.955）。
 
-所以这里的用例专盯这两处，外加「己已巳永远人审」这条用户定的规则。
+所以这里的用例专盯这两处，外加「己已巳不采信字形/OCR 通道」这条用户定的规则
+（2026-09-04 定「永远人审」，2026-09-11 改口：没有文意依据才人审，见
+`SeedAdmitParams.always_review` 与 `open_guji_cv.steps.seed_admit` 里 context
+通道那段注释）。
 """
 
 from __future__ import annotations
@@ -101,11 +104,14 @@ def test_align_label_ids_need_real_book_name():
 
 
 @pytest.mark.parametrize("ch", ["己", "已", "巳"])
-def test_split_chars_never_auto_admitted(ch, vmap):
-    """己/已/巳 永远人审（用户 2026-09-04 定）。
+def test_split_chars_in_always_review_set(ch, vmap):
+    """己/已/巳 都在 `always_review` 里——命中时先清空字形/OCR 通道的判决。
 
     这三个字的字形与文意会分岔，字形层护栏拦不住 align × 库 这种跨源一致，
-    所以要在准入侧兜一道。
+    所以要在准入侧兜一道。**不等于「永远人审」**（2026-09-11 改口）：清空之后
+    仍可能被 `relax_split_ref`（整理本给字）或 context 通道（Step6 上下文）
+    重新放行，两条都没有结果才真正落人审——见 `seed_admit.py` 里这段判定的
+    实现与注释。
     """
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     p = SeedAdmitParams()
