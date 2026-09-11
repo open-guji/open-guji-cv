@@ -113,6 +113,16 @@ def _polygon_mask(shape: tuple[int, int], segments: list[list[int]],
     return mask
 
 
+def band_boundary(gray: np.ndarray, *, y_lo: int, y_hi: int, y_probe: int,
+                  ink_threshold: int = 128, ctx: int = 170,
+                  smooth: int = 31) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """量出带的上下沿，不铺 mask。供控制台画"当初判定的这条带在哪"用——
+    比 `band_mask` 早一步，画图只需要边界折线，不需要整块布尔图。
+    """
+    b = gray < ink_threshold
+    return _trace_band(b, y_lo, y_hi, y_probe, ctx, smooth)
+
+
 def band_mask(gray: np.ndarray, *, segments: list[list[int]],
              y_lo: int, y_hi: int, y_probe: int,
              ink_threshold: int = 128, ctx: int = 170,
@@ -120,8 +130,8 @@ def band_mask(gray: np.ndarray, *, segments: list[list[int]],
     """量出带的多段梯形区域，只返回布尔 mask（不反转）。供闸0核算带内墨占比用，
     入参与 `invert_band` 同一套，量出来的边界也一样。
     """
-    b = gray < ink_threshold
-    xs, t, bo = _trace_band(b, y_lo, y_hi, y_probe, ctx, smooth)
+    xs, t, bo = band_boundary(gray, y_lo=y_lo, y_hi=y_hi, y_probe=y_probe,
+                              ink_threshold=ink_threshold, ctx=ctx, smooth=smooth)
     return _polygon_mask(gray.shape, segments, xs, t, bo)
 
 
