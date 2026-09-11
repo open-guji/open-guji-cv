@@ -1,0 +1,33 @@
+/* 拖切线卡片样式，照抄 v1 static/css/panels.css（方案 §四：css 部分复用）。 */
+.cl-toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; margin-bottom: .6rem; }
+.cl-help { font-size: .76rem; margin-bottom: .5rem; }
+
+.clgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32rem, 1fr)); gap: .6rem; }
+.clcard { border: 1px solid var(--rule); border-left-width: 4px; border-radius: 6px; padding: .4rem .5rem; background: var(--paper); min-width: 0; }
+.clcard.cur { box-shadow: 0 0 0 2px var(--indigo); }
+.clcard[data-done="moved"] { border-left-color: var(--ok); }
+.clcard[data-done="ok"] { border-left-color: var(--ok); border-left-style: double; }
+.clcard[data-done="seam_ok"] { border-left-color: var(--ok); border-left-style: double; }
+.clcard[data-done="overlap"] { border-left-color: var(--ochre); }
+.clcard[data-done="idk"] { border-left-color: var(--zhu); border-left-style: dashed; }
+.clhead { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: .3rem; }
+.clbody { display: grid; grid-template-columns: auto minmax(10rem, 1fr); gap: .7rem; align-items: start; }
+.climg { position: relative; user-select: none; max-width: 100%; overflow: hidden; }
+.climg img { display: block; image-rendering: pixelated; pointer-events: none; }
+.clline { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--zhu); pointer-events: none; }
+.clline.old { border-top: 1px dashed var(--indigo); opacity: .7; }
+.clsvg { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; overflow: visible; }
+.clseam { fill: none; stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .9; }
+.clcand { fill: none; stroke-width: 1.5; stroke-dasharray: 2 4; opacity: .85; }
+.clcand.narrow { stroke: var(--indigo); }
+.clcand.wide { stroke: var(--ochre); }
+.clpoly { fill: none; stroke: var(--zhu); stroke-width: 2; }
+.clpt { fill: var(--paper); stroke: var(--zhu); stroke-width: 2; }
+.clmode.on { background: var(--indigo-soft); border-color: var(--indigo); }
+.clside { font-size: .8rem; line-height: 1.6; min-width: 0; }
+.clside .ch { font-size: 1.5rem; display: inline-block; margin-right: .4rem; vertical-align: middle; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.clside .dy { font-family: var(--mono); }
+.clbtns { margin-top: .4rem; display: flex; gap: .3rem; flex-wrap: wrap; }
+.clbtns button { font-size: .76rem; padding: .15rem .5rem; white-space: nowrap; }
+.clbtns button.on { background: var(--indigo-soft); border-color: var(--indigo); }
+.cltags button { opacity: .75; }

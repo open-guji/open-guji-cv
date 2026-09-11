@@ -98,7 +98,9 @@ class BookSpec:
             "dev_set": list(self.dev_set), "n_pages": len(self.all_pages()),
             "sets": {k: list(v) for k, v in self.sets.items()},
             "jiazhu": dict(self.jiazhu),
-            "preclean_pages": sorted(self.preclean), "notes": self.notes,
+            "preclean_pages": sorted(self.preclean),
+            "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
+            "notes": self.notes,
         }
 
 

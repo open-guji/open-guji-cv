@@ -1,0 +1,31 @@
+/* 夹注段卡样式，照抄 v1 static/css/panels.css（方案 §四：css 部分复用）。 */
+.jz-toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; margin-bottom: .6rem; }
+.jz-help { font-size: .76rem; margin-bottom: .8rem; }
+.jz-red { color: var(--zhu); }
+.jz-mute { color: var(--mute); }
+
+.jzcard { border: 1px solid var(--rule); border-left: 4px solid var(--rule); border-radius: 6px;
+          padding: .45rem .55rem; background: var(--paper); margin-bottom: .55rem; }
+.jzcard:has(.badge.b-pending) { border-left-color: var(--ochre); }
+.jzhead { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; font-size: .8rem; margin-bottom: .4rem; }
+.jzbody { display: flex; gap: .7rem; align-items: flex-start; }
+.jzstrip { width: 5.2rem; height: auto; image-rendering: pixelated;
+           border: 1px solid var(--rule); border-radius: 3px; flex: none; align-self: stretch;
+           object-fit: contain; object-position: top; }
+.jztext { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .35rem; }
+.jzline { display: flex; gap: .25rem; align-items: flex-start; flex-wrap: wrap; }
+.jzlab { color: var(--mute); font-size: .72rem; width: 3.2rem; flex: none; }
+.jzcell { display: inline-flex; flex-direction: column; align-items: center; gap: 1px;
+          border: 1px solid var(--rule); border-radius: 3px; padding: 1px 2px; cursor: pointer;
+          background: var(--paper-2); }
+.jzcell:hover { box-shadow: 0 0 0 2px var(--indigo); }
+.jzcell img { width: 2.1rem; height: 2.1rem; object-fit: contain; image-rendering: pixelated; }
+.jzcell b { font-size: .9rem; line-height: 1; }
+.jzcell.jzc-rev b { color: var(--zhu); }
+.jzcell.jzc-auto b { color: var(--ink-2); }
+.jzcell.jzc-edit { border-color: var(--indigo); background: var(--indigo-soft); }
+.jzref { font-size: .62rem; color: var(--ochre); line-height: 1; }
+.jzrefline { font-size: .9rem; letter-spacing: .06em; }
+.jzacts { display: flex; gap: .4rem; align-items: center; margin-top: .15rem; }
+.jzacts button.on { background: var(--ochre-soft); border-color: var(--ochre); }
+.jzhint { font-size: .72rem; }

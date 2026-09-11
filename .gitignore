@@ -4,8 +4,15 @@ __pycache__/
 # scripts）——只有**新增**的文件会被静默漏掉：pipeline_handbook.md 写完
 # 提交时就这么丢过一次。这里是项目的设计文档与协作约定，本来就该入库。
 dist/
+# 例外：控制台 v2 前端构建产物**要入库**（用户 2026-09-11 定，见 overview 仓
+# 进度/控制台重构v2/方案.md §一/§七：开发工作台与 open-guji-cv 运行环境分离，
+# 不能假设每个要跑控制台的地方都装了 node/npm）。改前端后记得 `npm run build`
+# 再一起提交，否则会出现"仓里代码是新的、跑起来是旧的"这类事故。
+!open_guji_cv/console/static/dist/
+!open_guji_cv/console/static/dist/**
 build/
 *.egg-info/
+# frontend/node_modules 由 frontend/.gitignore 覆盖，这里不重复
 # 异体字关系层的下载缓存（Unihan.zip / cjkvi / yitizi 原始文件，
 # 可由 scripts/build_variants.py 重新下载；产物 variants.json 入库）
 config/variants/cache/
