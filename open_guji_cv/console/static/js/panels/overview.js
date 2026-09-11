@@ -13,7 +13,11 @@ export function mount(root, deps = {}) {
 }
 
 export async function refreshStatus() {
-  const book = $('#book').value, pl = $('#pipeline').value, pages = $('#pages').value || 'dev_set';
+  const book = $('#book').value, pl = $('#pipeline').value;
+  // 矩阵按 dev_set 显示是**状态视图**的口径，不是一个可调的过滤框——原先顶栏那个
+  // 「页」输入框只喂这一处，却让人以为它管着全站，跑完 69 页在产物里选不到还以为是漏跑。
+  // 要过滤页数在各面板自己的框里填（运行/审查/切线/夹注/异体各有一个），见 2026-09-10。
+  const pages = 'dev_set';
   // 状态是相对某套参数的：用覆盖参数跑出的产物，在默认参数视角下永远显示过期。
   // 所以把「运行」里填的那套覆盖一并带上，跑完才能看到它变绿。
   const raw = ($('#params') && $('#params').value.trim()) || '';

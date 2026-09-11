@@ -54,6 +54,8 @@ def _expected_of(e: Event) -> dict:
         # （clean / truncated / contaminated / not_text），不另造词。
         # 字形/文意若已填也一并留着——人看图时顺手认出的字不该丢。
         out = {"quality": p.get("quality") or "contaminated"}
+        if p.get("defect"):
+            out["defect"] = p["defect"]
         if p.get("shape"):
             out["shape"] = p["shape"]
         if p.get("reading"):
