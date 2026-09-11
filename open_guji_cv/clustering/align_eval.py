@@ -38,6 +38,23 @@ POOL_RADIUS = 3        # 相邻偏移合并半径：一次漏字/多字只把偏
 
 
 @dataclass
+class AnchorDiag:
+    """`anchor_page` 判据明细，供锚定失败时诊断卡在哪条线上（不影响锚定本身）。
+
+    `n_grams` 为 0（页文本短于 `GRAM`）或 `votes` 全空（语料里一个 n-gram 都
+    没命中）时，`n_votes`/`vote_frac`/`dominance` 都是 0，`reason` 直接说明。
+    """
+    anchored: bool
+    offset: int | None
+    n_grams: int
+    n_votes: int
+    vote_frac: float
+    runner_up: int
+    dominance: float | None      # None = 次高票为 0（優势判据自动通过之外的展示态）
+    reason: str
+
+
+@dataclass
 class PageAlign:
     page: str
     anchored: bool
@@ -77,20 +94,35 @@ def anchor_page(text: str, corpus_index: dict[str, list[int]],
     6/10 → 9/10。真正的伪命中会在各偏移间近乎均匀打散，合并半径 3 位
     凑不出一堆。
     """
+    return anchor_page_diag(text, corpus_index, gram).offset
+
+
+def anchor_page_diag(text: str, corpus_index: dict[str, list[int]],
+                     gram: int = GRAM) -> AnchorDiag:
+    """`anchor_page` 的诊断版：判据明细全带出来，供失败时报卡在哪条线上。
+
+    算法与 `anchor_page` 完全一致（本就是同一段逻辑，`anchor_page` 现在
+    只是取 `.offset`），只是把中间量摊开成 `AnchorDiag` 返回，不再是
+    锚定成功与否的二元结果。
+    """
     if len(text) < gram:
-        return None
+        return AnchorDiag(False, None, 0, 0, 0.0, 0, None,
+                          f"页文本过短（{len(text)} 字 < {gram}-gram 长度）")
     votes: Counter[int] = Counter()
     n_grams = len(text) - gram + 1
     for i in range(n_grams):
         for pos in index_lookup(corpus_index, text[i:i + gram]):
             votes[pos - i] += 1
     if not votes:
-        return None
+        return AnchorDiag(False, None, n_grams, 0, 0.0, 0, None,
+                          "语料里一个 n-gram 都没命中")
     peak = votes.most_common(1)[0][0]
     near = [o for o in votes if abs(o - peak) <= POOL_RADIUS]
     n_votes = sum(votes[o] for o in near)
     if n_votes < MIN_VOTES:
-        return None
+        return AnchorDiag(False, None, n_grams, n_votes,
+                          n_votes / n_grams, 0, None,
+                          f"最高票簇仅 {n_votes} 票，低于绝对下限 {MIN_VOTES}")
     # 次高票同样按簇算：孤立地取第二名会把「同一锚点的另一半票」误当竞争者
     rest = {o: v for o, v in votes.items() if abs(o - peak) > POOL_RADIUS}
     runner_up = 0
@@ -98,13 +130,21 @@ def anchor_page(text: str, corpus_index: dict[str, list[int]],
         peak2 = max(rest, key=rest.get)
         runner_up = sum(v for o, v in rest.items()
                         if abs(o - peak2) <= POOL_RADIUS)
-    by_frac = n_votes >= MIN_VOTE_FRAC * n_grams
+    vote_frac = n_votes / n_grams
+    dominance = None if runner_up == 0 else n_votes / runner_up
+    by_frac = vote_frac >= MIN_VOTE_FRAC
     by_dominance = runner_up == 0 or n_votes >= MIN_DOMINANCE * runner_up
     if not (by_frac or by_dominance):
-        return None
+        return AnchorDiag(
+            False, None, n_grams, n_votes, vote_frac, runner_up, dominance,
+            f"占比 {vote_frac:.3f} 未达 {MIN_VOTE_FRAC}，优势 "
+            f"{'∞' if dominance is None else f'{dominance:.2f}'} 未达 "
+            f"{MIN_DOMINANCE}（次高票簇 {runner_up}）")
     # 取簇内最小偏移：窗口宁可起得早一点，右侧有 WINDOW_PAD 兜住长度差；
     # 起得晚会把页首几个字挤出窗口，那几个字会被整段判为不可对齐。
-    return min(near)
+    offset = min(near)
+    return AnchorDiag(True, offset, n_grams, n_votes, vote_frac, runner_up,
+                      dominance, "")
 
 
 def index_lookup(index: dict[str, list[int]], gram: str) -> list[int]:

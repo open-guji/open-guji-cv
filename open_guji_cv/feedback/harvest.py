@@ -28,6 +28,10 @@ _SEG_PREFIX = "GUJI-SEG-REVIEW"
 
 # 卡片 id → (book, page, col, slot)
 _ID_PATTERNS = [
+    # colborder:vol01:47:2:top —— 边框类裁决，带列号 + 端点后缀（非数字，不进 slot）
+    re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+):[a-z]+$"),
+    # outer:vol01:47:top —— 边框类裁决，带端点后缀（非数字，不进任何字段）
+    re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):[a-z]+$"),
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+)$"),          # cols:vol02:171
     re.compile(r"^(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+):(?P<slot>-?\d+)(?P<sub>[ab])?$"),  # vol01:22:5:4
     re.compile(r"^(?P<book>vol\d+|book\d+)/(?P<page>\d+):(?P<col>\d+):(?P<slot>-?\d+)$"), # vol01/50:7:21
