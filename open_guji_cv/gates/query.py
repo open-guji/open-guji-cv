@@ -38,7 +38,60 @@ from ..products.store import ProductStore
 GATES: dict[str, tuple[str, str]] = {
     "column_gate": ("column_gate", "gate_manifest"),
     "row_segment_gate": ("row_segment_gate", "row_segment_gate_manifest"),
+    "border_detect_gate": ("border_detect_gate", "border_detect_gate_manifest"),
 }
+
+
+#: 叠图 / 前端汇总共用的分层配色——顺序即优先级（一列可能同时命中多层拒因，
+#: 取 reject 列表里**第一条**命中的层级，因为 column_gate.py 按 L1c → L2 → L3
+#: 顺序 append，先出现的就是最先挡住它的那一层）。
+GATE_TIER_COLOR: dict[str, tuple[int, int, int]] = {
+    "ok": (0, 160, 0), "L1": (0, 0, 220), "L1c": (0, 140, 255),
+    "L2": (0, 220, 220), "L3": (180, 0, 180),
+}
+
+
+def gate_column_tier(reject: list[str]) -> str:
+    """从一列的 `reject` 拒因文本里取第一条命中的层级 id（L1/L1c/L2/L3），没有则 "ok"。"""
+    for r in reject:
+        for tier in ("L1c", "L1", "L2", "L3"):
+            if r.startswith(tier):
+                return tier
+    return "ok"
+
+
+def gate_summary(book_id: str, pages: list[int] | None = None,
+                  store: ProductStore | None = None,
+                  gate: str = "column_gate") -> dict:
+    """逐页汇总某道闸的准入情况：过闸/未过闸列数、各层拦了几列——控制台汇总面板用，
+    不用再去 47 个 JSON 里自己累加。"""
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    step_id, kind_id = GATES[gate]
+    rows: list[dict] = []
+    tier_totals: dict[str, int] = {}
+    for pg in pages:
+        g = store.read(book_id, step_id, page_key(pg), kind_id)
+        if g is None:
+            rows.append({"page": pg, "status": "missing"})
+            continue
+        # 不是所有闸都有列级子项——闸1（border_detect_gate）是纯页级判据，
+        # 没有 `columns` 字段，`getattr` 兜底而不是假设它总存在。
+        columns = getattr(g, "columns", ())
+        tiers = [gate_column_tier(c.reject) for c in columns]
+        admitted = sum(1 for t in tiers if t == "ok")
+        for t in tiers:
+            if t != "ok":
+                tier_totals[t] = tier_totals.get(t, 0) + 1
+        rows.append({
+            "page": pg, "status": "ok" if g.admitted else "page_blocked",
+            "page_reject": g.reject, "n_columns": len(columns),
+            "n_admitted": admitted, "tiers": tiers,
+            # 闸1 特有的 flag 级信息（列级闸没有这个字段，getattr 兜底）。
+            "flags": getattr(g, "flags", []),
+        })
+    return {"gate": gate, "pages": rows, "tier_totals": tier_totals}
 
 
 def blocked_units(book_id: str, pages: list[int] | None = None,
@@ -62,7 +115,9 @@ def blocked_units(book_id: str, pages: list[int] | None = None,
         if not g.admitted:
             out.append({"page": pg, "status": "page_blocked", "reason": g.reject})
             continue
-        for c in g.columns:
+        # 闸1（border_detect_gate）是纯页级判据，没有列级子项——`columns`
+        # 不是所有闸的通用字段，`getattr` 兜底而不是假设它总存在。
+        for c in getattr(g, "columns", ()):
             if not c.admitted:
                 out.append({"page": pg, "column": c.col, "status": "column_blocked",
                             "reason": c.reject})

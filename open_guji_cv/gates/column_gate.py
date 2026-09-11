@@ -48,6 +48,9 @@ class ColumnGateParams(BaseModel):
     width_tol: float = 0.15
     side_floor_max: float = 0.045
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
+    # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
+    # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
+    # （2026-09-11 Step2 数据盘点核实时发现容易误读，记一笔避免下次又查一遍）。
     ink_threshold: int = 128
     bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
     chars_per_line: int | None = None   # None = Book.chars_per_line；算 n_raised_hint 的基准

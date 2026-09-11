@@ -18,7 +18,8 @@ from ..errors import maps_http
 from ...core.book import load_book
 from ...core.step import KINDS, RunContext
 from ...errors import EncodeFailed, ImageMissing
-from ...render.overlay import encode_png, overlay
+from ...gates.query import GATES, gate_summary
+from ...render.overlay import encode_png, overlay, preclean_overlay, preclean_report
 
 router = APIRouter()
 
@@ -86,6 +87,61 @@ def api_cache(book: str, kind: str, key: str) -> Response:
 @maps_http
 def api_overlay(book: str, step: str, page: int, scale: float = 0.35) -> Response:
     return _png(overlay(book, step, page, deps.product_store()), scale)
+
+
+
+@router.get("/api/preclean/{book}/{page}")
+@maps_http
+def api_preclean_report(book: str, page: int) -> dict:
+    """Step0 数值报告：每条规则修复前后的带内墨占比，不用再去读 JSON 猜。"""
+    return preclean_report(book, page)
+
+
+
+@router.get("/api/preclean/{book}/{page}/overlay.png")
+@maps_http
+def api_preclean_overlay(book: str, page: int, scale: float = 0.35) -> Response:
+    """Step0 专用叠图：当初判定的反色带边界画在原图上（红=上沿/蓝=下沿/青=探测行）。"""
+    return _png(preclean_overlay(book, page), scale)
+
+
+
+@router.get("/api/preclean/{book}/{page}/before.png")
+@maps_http
+def api_preclean_before(book: str, page: int, scale: float = 0.35) -> Response:
+    """原图（修复前），供前端与 precleaned 产物并排/切换对比。"""
+    b = load_book(book)
+    p = b.raw_path(page)
+    if not p.exists():
+        raise ImageMissing("原图缺失")
+    return _png(cv2.imread(str(p)), scale)
+
+
+
+@router.get("/api/preclean/{book}/{page}/after.png")
+@maps_http
+def api_preclean_after(book: str, page: int, scale: float = 0.35) -> Response:
+    """修复后的产物图（precleaned/<book>/<page>.png）。没生成就报 404 并提示怎么生成。"""
+    from ...utils.preclean import precleaned_path
+
+    p = precleaned_path(book, page)
+    if not p.exists():
+        raise ImageMissing(f"还没生成，先跑 python -m open_guji_cv.cli_v2 preclean {book}")
+    return _png(cv2.imread(str(p)), scale)
+
+
+
+@router.get("/api/gate/{book}/summary")
+@maps_http
+def api_gate_summary(book: str, gate: str = "column_gate", pages: str | None = None) -> dict:
+    """闸的逐页/逐层汇总——控制台 Step2 面板用，避免前端自己在几十份 gate_manifest 里累加。
+    `gate` 见 `gates.query.GATES`；`pages` 同 CLI 的 `--pages`（'90-132' | '3,4,5'），不传就全书。
+    """
+    if gate not in GATES:
+        raise HTTPException(404, f"没有这道闸：{gate}")
+    b = load_book(book)
+    page_list = b.resolve_pages(pages) if pages else None
+    return gate_summary(book, page_list, deps.product_store(), gate=gate)
 
 
 
