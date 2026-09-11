@@ -57,7 +57,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
 
 
 @dataclass
