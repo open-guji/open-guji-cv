@@ -65,3 +65,29 @@ export interface GateSummary {
 export function fetchGateSummary(book: string, gate = 'column_gate') {
   return api<GateSummary>(`/api/gate/${encodeURIComponent(book)}/summary?gate=${encodeURIComponent(gate)}`)
 }
+
+export interface AlignRefPageSummary {
+  page: number
+  status: 'anchored' | 'not_anchored' | 'missing'
+  n_chars?: number
+  note?: string
+  n_grams?: number
+  n_votes?: number
+  vote_frac?: number
+  dominance?: number | null
+}
+
+export interface AlignRefSummary {
+  pages: AlignRefPageSummary[]
+  n_pages: number
+  n_anchored: number
+  n_missing: number
+  n_not_anchored: number
+}
+
+// Step5-d 整理本对齐可视化用，见 open_guji_cv/steps/align_ref.py::align_ref_summary。
+// 不是闸，不经过 fetchGateSummary 那套（不拦截，只上报证据可用性）。
+export function fetchAlignRefSummary(book: string, pages?: string) {
+  const q = pages ? `?pages=${encodeURIComponent(pages)}` : ''
+  return api<AlignRefSummary>(`/api/align-ref/${encodeURIComponent(book)}/summary${q}`)
+}

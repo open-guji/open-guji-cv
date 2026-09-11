@@ -299,3 +299,42 @@ def _sub_of(instance_id: str) -> str | None:
     tail = instance_id.split(":")[3]
     sub = tail[-1] if tail[-1:] in ("a", "b") else ""
     return sub or None
+
+
+def align_ref_summary(book_id: str, pages: list[int] | None = None,
+                      store=None) -> dict:
+    """逐页汇总 `align_ref` 的锚定情况——控制台 5-d 面板/人工排查用，不用
+    再像本次一样临时写脚本复算判据卡在哪。风格照抄 `gates.query.gate_summary`，
+    但不进 `GATES` 表：`align_ref` 不是闸（不拦截，四路证据里任一路缺席只
+    降级不阻塞，见 `Step5-字符识别/README.md`），是证据可用性上报。
+    """
+    from ..core.book import load_book
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    rows: list[dict] = []
+    n_anchored = 0
+    for pg in pages:
+        ar: PageAlignRef | None = store.read(book_id, "align_ref", page_key(pg), "align_ref")
+        if ar is None:
+            rows.append({"page": pg, "status": "missing"})
+            continue
+        if ar.anchored:
+            n_anchored += 1
+            rows.append({"page": pg, "status": "anchored", "n_chars": len(ar.chars)})
+            continue
+        rows.append({
+            "page": pg, "status": "not_anchored", "note": ar.note,
+            "n_grams": ar.n_grams, "n_votes": ar.n_votes,
+            "vote_frac": ar.vote_frac, "dominance": ar.dominance,
+        })
+    n_pages = len(rows)
+    n_missing = sum(1 for r in rows if r["status"] == "missing")
+    return {
+        "pages": rows,
+        "n_pages": n_pages, "n_anchored": n_anchored, "n_missing": n_missing,
+        "n_not_anchored": n_pages - n_anchored - n_missing,
+    }

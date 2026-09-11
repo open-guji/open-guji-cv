@@ -145,6 +145,21 @@ def api_gate_summary(book: str, gate: str = "column_gate", pages: str | None = N
 
 
 
+@router.get("/api/align-ref/{book}/summary")
+@maps_http
+def api_align_ref_summary(book: str, pages: str | None = None) -> dict:
+    """Step5-d 整理本对齐的逐页锚定汇总——控制台面板用，未锚定页带判据明细
+    （n_grams/n_votes/vote_frac/dominance），不用再临时写脚本复算。
+    `align_ref` 不是闸，不进 `gates.query.GATES`，见 `steps.align_ref.align_ref_summary`。
+    """
+    from ...steps.align_ref import align_ref_summary
+
+    b = load_book(book)
+    page_list = b.resolve_pages(pages) if pages else None
+    return align_ref_summary(book, page_list, deps.product_store())
+
+
+
 @router.get("/api/cutline/img/{book}/{page}/{col}.png")
 @maps_http
 def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) -> Response:
