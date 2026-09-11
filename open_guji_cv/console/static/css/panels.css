@@ -55,6 +55,11 @@
   .clline.old { border-top:1px dashed var(--indigo); opacity:.7; }
   .clsvg { position:absolute; left:0; top:0; width:100%; pointer-events:none; overflow:visible; }
   .clseam { fill:none; stroke:var(--ok); stroke-width:1.5; stroke-dasharray:4 3; opacity:.9; }
+  /* 多切分候选（Step3 产物，只读）：每种切法一条线，颜色与下方「切法」按钮一一对应。
+     直线候选画的是现役那条（紫虚线），不另画，否则两条线重叠看不清。 */
+  .clcand { fill:none; stroke-width:1.5; stroke-dasharray:2 4; opacity:.85; }
+  .clcand.narrow { stroke:var(--indigo); }
+  .clcand.wide { stroke:var(--ochre); }
   .clpoly { fill:none; stroke:var(--zhu); stroke-width:2; }
   .clpt { fill:var(--paper); stroke:var(--zhu); stroke-width:2; }
   .clmode.on { background:var(--indigo-soft); border-color:var(--indigo); }

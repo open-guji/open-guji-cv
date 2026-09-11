@@ -10,7 +10,7 @@ import { state } from '../state.js';
 
 export const id = 'cutline';
 
-const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {}, tags: {}, scales: {}, poly: {}, mode: {} };
+const CL = { cases: [], cur: 0, y: {}, done: {}, scale: 2, seen: {}, tags: {}, scales: {}, poly: {}, mode: {}, pick: {} };
 
 // 每张卡自己的显示倍率：列图裁片原宽约 180–210px，放到 ≤ 300px 且 ≤ 2 倍，
 // 卡片再窄也不会把右侧按钮挤没（用户 2026-09-05 截图：图超出卡片、按钮挤成一列）。
@@ -37,10 +37,20 @@ function clBatch() {   // 批次名带类型后缀：两类切线的金标别混
   return $('#cl_batch').value.trim() || `${book}-cutline${suffix}`;
 }
 
+// 算法给的候选有几种切法？≤1 就不显示「切法」那一行（多数格线只有直线一种）。
+function clCands(c) { return c.candidates || []; }
+
 function clCard(c, i) {
   const y = CL.y[c.id] ?? c.y;
   const d = CL.done[c.id] || '';
   const h = (c.crop_y1 - c.crop_y0), s = clScale(c);
+  const cands = clCands(c);
+  const pick = CL.pick[c.id] ?? c.chosen;
+  const pickRow = cands.length > 1 ? `<div class="clbtns clcandbtns" title="算法给的切法候选（只读，看清了再选一种落定）">
+      ${cands.map((cd, k) => `<button data-i="${i}" data-c="${k}" class="${k === pick ? 'on' : ''}"
+        title="墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px">${CL_KIND[cd.kind] || cd.kind}</button>`).join('')}
+      <span class="muted">墨/偏移：${cands.map(cd => `${cd.seam_ink}/${cd.dev_max}`).join(' · ')}</span>
+    </div>` : '';
   return `<div class="clcard" id="clc${i}" data-i="${i}" data-done="${d}">
     <div class="clhead"><b>${c.id}</b><span class="muted">p${c.page} 列${c.col} 格线${c.bi} · 墨 ${c.ink}</span></div>
     <div class="clbody">
@@ -48,16 +58,18 @@ function clCard(c, i) {
         <img src="${c.img}" height="${h * s}" alt="${c.id}" loading="lazy" style="width:auto;height:${h * s}px">
         <div class="clline old" style="top:${(c.y - c.crop_y0) * s}px"></div>
         <div class="clline" id="clln${i}" style="top:${(y - c.crop_y0) * s}px"></div>
-        <svg class="clsvg" id="clsvg${i}" style="height:${h * s}px">${clSeamPath(c, s)}<polyline id="clpl${i}" class="clpoly" points=""></polyline></svg>
+        <svg class="clsvg" id="clsvg${i}" style="height:${h * s}px">${clSeamPath(c, s)}${clCandPaths(c, s)}<polyline id="clpl${i}" class="clpoly" points=""></polyline></svg>
       </div>
       <div class="clside">
         <div><span class="ch" title="上格期望字">${c.char_above || '？'}</span><span class="muted">上格 ${c.slot_above}</span></div>
         <div><span class="ch" title="下格期望字">${c.char_below || '？'}</span><span class="muted">下格 ${c.slot_below}</span></div>
         <div class="dy" id="cldy${i}">Δ ${y - c.y}px</div>
+        ${pickRow}
         <div class="clbtns">
           <button data-i="${i}" data-v="moved" title="回车">落定</button>
           <button data-i="${i}" data-v="ok" title="O">现切点正确</button>
           <button data-i="${i}" data-v="seam_ok" title="G：绿色虚线（现役折线缝）已经是理想切法，直接记为折线金标"${c.seam ? '' : ' disabled'}>缝正确</button>
+          <button data-i="${i}" data-v="cand" title="C：按上面选中的那条算法候选线落定，直接记为折线金标"${pick > 0 && cands[pick] && cands[pick].y ? '' : ' disabled'}>切法正确</button>
           <button data-i="${i}" data-v="overlap" title="V">重叠·折中</button>
           <button data-i="${i}" data-v="idk" title="S">拿不准</button>
           <button data-i="${i}" data-m="poly" class="clmode" title="P：折线模式。点空白处加点，点中已有点可拖动，右键删点">折线</button>
@@ -76,11 +88,35 @@ function clCard(c, i) {
   </div>`;
 }
 
+const CL_KIND = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊' };
+
 // 现役折线缝（case.seam：从内容窗口 x0 起、每 x 一个 y，列图坐标）画成虚线
 function clSeamPath(c, s) {
   if (!c.seam || !c.seam.length) return '';
   const pts = c.seam.map((yy, k) => `${(c.x0 + k) * s},${(yy - c.crop_y0) * s}`).join(' ');
   return `<polyline class="clseam" points="${pts}"></polyline>`;
+}
+
+// 算法候选线（只读展示）。直线候选就是那条紫虚线（clline.old / clseam），不重复画。
+function clCandPaths(c, s) {
+  return clCands(c).map(cd => {
+    if (!cd.y || !cd.y.length) return '';
+    const cls = cd.kind === 'seam_wide' ? 'wide' : 'narrow';
+    const pts = cd.y.map((yy, k) => `${(c.x0 + k) * s},${(yy - c.crop_y0) * s}`).join(' ');
+    return `<polyline class="clcand ${cls}" points="${pts}"></polyline>`;
+  }).join('');
+}
+
+// 点候选数：记下人工选了第几种切法（画面上把该按钮点亮）
+function clPick(i, k) {
+  const c = CL.cases[i]; if (!c) return;
+  CL.pick[c.id] = k;
+  const el = document.getElementById('clc' + i);
+  if (el) el.querySelectorAll('.clcandbtns button').forEach(b => b.classList.toggle('on', +b.dataset.c === k));
+  const btn = el && el.querySelector('button[data-v="cand"]');
+  if (btn) btn.disabled = !(k > 0 && clCands(c)[k] && clCands(c)[k].y);
+  $('#cl_msg').textContent = k === 0 ? '选的是「直线」——落定请用「落定 / 现切点正确」'
+                                     : `选了「${CL_KIND[clCands(c)[k].kind] || ''}」，按 C 或点「切法正确」落定`;
 }
 
 function clRedrawPoly(i) {
@@ -203,7 +239,7 @@ async function clDecide(i, verdict) {
   }
   const now = Date.now();
   const tags = Object.keys(CL.tags[c.id] || {}).filter(t => CL.tags[c.id][t]);
-  let polyline;
+  let polyline, cand;
   if (verdict === 'seam_ok') {
     if (!c.seam || !c.seam.length) { $('#cl_msg').textContent = '这条格线没有现役折线缝（绿虚线），用直线口径落定'; return; }
     // 把现役缝抽样成折线（每 6px 一个点 + 末点），记为人认可的折线金标
@@ -211,6 +247,17 @@ async function clDecide(i, verdict) {
     for (let k = 0; k < c.seam.length; k += step) polyline.push([c.x0 + k, c.seam[k]]);
     if ((c.seam.length - 1) % step) polyline.push([c.x0 + c.seam.length - 1, c.seam[c.seam.length - 1]]);
     y = Math.round(c.seam.reduce((a, q) => a + q, 0) / c.seam.length);
+  } else if (verdict === 'cand') {
+    // 人认可的是**算法候选里的某一条**——记下是哪一种（下游打分函数要的正是这个：
+    // 哪种切法被人选中了）。直线候选没有 y，走「落定」口径，不该按 C。
+    const k = CL.pick[c.id] ?? c.chosen;
+    const cd = clCands(c)[k];
+    if (!cd || !cd.y || !cd.y.length) { $('#cl_msg').textContent = '选中的是「直线」，用「落定 / 现切点正确」'; return; }
+    cand = cd.kind;
+    const step = 6; polyline = [];
+    for (let j = 0; j < cd.y.length; j += step) polyline.push([c.x0 + j, cd.y[j]]);
+    if ((cd.y.length - 1) % step) polyline.push([c.x0 + cd.y.length - 1, cd.y[cd.y.length - 1]]);
+    y = Math.round(cd.y.reduce((a, q) => a + q, 0) / cd.y.length);
   } else if (CL.mode[c.id] === 'poly') {
     const pts = (CL.poly[c.id] || []).slice().sort((a, b) => a[0] - b[0]);
     if (pts.length < 2) { $('#cl_msg').textContent = '折线模式至少要点 2 个点（Backspace 撤点，P 切回直线）'; return; }
@@ -220,7 +267,7 @@ async function clDecide(i, verdict) {
   }
   const row = { id: c.id, y, y_old: c.y, verdict, bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below,
                 col_h: c.col_h, char_above: c.char_above || '', char_below: c.char_below || '',
-                tags: tags.length ? tags : undefined, polyline,
+                tags: tags.length ? tags : undefined, polyline, cand,
                 client_ts: now, dwell_ms: CL.seen[c.id] ? now - CL.seen[c.id] : undefined };
   try {
     await api('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -250,13 +297,19 @@ async function clLoad() {
   } catch (e) { $('#cl_msg').textContent = '失败：' + e.message; return; }
   let done = {};
   try { done = (await api(`/api/cutline/verdicts?batch=${encodeURIComponent(batch)}`)).verdicts || {}; } catch (e) { /* 新批次 */ }
-  CL.cases = d.cases; CL.cur = 0; CL.y = {}; CL.done = {}; CL.seen = {};
+  CL.cases = d.cases; CL.cur = 0; CL.y = {}; CL.done = {}; CL.seen = {}; CL.pick = {};
   const t0 = Date.now();
   d.cases.forEach(c => {
     CL.seen[c.id] = t0;
     if (done[c.id]) {
       CL.done[c.id] = done[c.id].verdict; if (done[c.id].y != null) CL.y[c.id] = done[c.id].y;
       if (done[c.id].polyline) { CL.poly[c.id] = done[c.id].polyline; CL.mode[c.id] = 'poly'; }
+      // 上次按「切法正确」落定的，把选中的那条恢复成选中态（不恢复的话重开后
+      // 手一点候选就跳回算法默认那条，人会以为自己的裁决没记住）
+      if (done[c.id].cand) {
+        const k = (c.candidates || []).findIndex(x => x.kind === done[c.id].cand);
+        if (k >= 0) CL.pick[c.id] = k;
+      }
     }
   });
   $('#cl_cards').innerHTML = d.cases.map(clCard).join('');
@@ -306,6 +359,7 @@ export function mount(root) {
   window.addEventListener('mouseup', () => { dragging = null; dragPt = null; });
   grid.addEventListener('click', ev => {
     const b = ev.target.closest('.clbtns button');
+    if (b && b.dataset.c != null) { clPick(+b.dataset.i, +b.dataset.c); clFocus(+b.dataset.i); return; }
     if (b && b.dataset.m === 'poly') { clToggleMode(+b.dataset.i); clFocus(+b.dataset.i); return; }
     if (b && b.dataset.m === 'clear') { clClearPoly(+b.dataset.i); clFocus(+b.dataset.i); return; }
     if (b && b.dataset.m === 'reopen') { clReopen(+b.dataset.i); return; }
@@ -326,6 +380,7 @@ export function mount(root) {
     else if (ev.key === 'Enter') { clDecide(CL.cur, 'moved'); ev.preventDefault(); }
     else if (ev.key === 'o' || ev.key === 'O') { clDecide(CL.cur, 'ok'); ev.preventDefault(); }
     else if (ev.key === 'g' || ev.key === 'G') { clDecide(CL.cur, 'seam_ok'); ev.preventDefault(); }
+    else if (ev.key === 'c' || ev.key === 'C') { clDecide(CL.cur, 'cand'); ev.preventDefault(); }
     else if (ev.key === 'v' || ev.key === 'V') { clDecide(CL.cur, 'overlap'); ev.preventDefault(); }
     else if (ev.key === 's' || ev.key === 'S') { clDecide(CL.cur, 'idk'); ev.preventDefault(); }
     else if (ev.key === 'ArrowRight' || ev.key === 'j') { clFocus(CL.cur + 1); ev.preventDefault(); }

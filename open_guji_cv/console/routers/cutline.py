@@ -69,6 +69,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     else:
         for c in picked:
             c["char_above"], c["char_below"] = _cutline_expected_cache[key].get(c["id"], ("", ""))
+    _attach_candidates(st, book, picked)
     for c in picked:
         pad = 6
         c["crop_y0"] = max(0, c["y0"] - pad)
@@ -77,6 +78,34 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                     f"?y0={c['crop_y0']}&y1={c['crop_y1']}")
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
             "n": len(picked), "cases": picked}
+
+
+def _attach_candidates(st, book: str, picked: list[dict]) -> None:
+    """把 row_segment 产物里的多切分候选挂到用例上（用户 2026-09-10：先让候选露出来）。
+
+    产物只对**跑过的页**存在；没产物的页留空，面板就只显示现役缝，与改动前一致。
+    配对按 (页, 列, 上格格位)：`r2s_boundaries` 用 up.slot 定名，`CutPointCandidates`
+    用 slot_above —— 本用例这一列恰好就是产物里那个上格，唯一命中。
+    候选的 y 是**列图坐标**（从内容窗口 x0 起，每 x 一个），与 case.seam 同口径。
+    """
+    from ...core.step import page_key
+
+    per_page: dict[int, dict] = {}
+    for c in picked:
+        pg = c["page"]
+        if pg not in per_page:
+            cells = st.read(book, "row_segment", page_key(pg), "cells")
+            m: dict = {}
+            for cc in (cells.columns if cells else []):
+                for cp in (getattr(cc, "cut_candidates", None) or []):
+                    m[(cc.col, cp.slot_above)] = cp
+            per_page[pg] = m
+        cp = per_page[pg].get((c["col"], c["slot_above"]))
+        # 坐标起点：本用例的 x0/宽度（现役缝同源），与产物列宽不一致时下游自己兜
+        c["candidates"] = ([] if cp is None else
+                           [dict(kind=x.kind, y=x.y, seam_ink=x.seam_ink, dev_max=x.dev_max)
+                            for x in cp.candidates])
+        c["chosen"] = None if cp is None else cp.chosen
 
 
 
