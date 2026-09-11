@@ -1036,10 +1036,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 用户 2026-09-05 观察 + 实验（doc §1.4）：人标"重叠"的 205 条里 183 条存在无墨折线。
     # 缝只在走廊里走，"哪两个字之间"仍由上面的 DP 决定。
     #
-    # 2026-09-10：候选不再丢弃。每个切点把「直线／窄走廊／宽走廊」三条都记进
+    # 2026-09-10：候选不再丢弃。每个切点把「直线／窄走廊／宽走廊」记进
     # `cut_candidates`，`chosen` 标出现役规则选中的那条——**选择规则一字未改**，
     # 下游（Step5）可据此对每个候选各认一次上下两字再挑。留着的候选是攒给
     # 打分函数的样本（用户 2026-09-10：样本多了就容易设计新的）。
+    # 当日查「多候选但差异极小」：结论是**池子已经是最小的**——全册 2798 条入池折线
+    # 候选里，0 条不省墨（即每一条都既偏了又真绕开了墨）。下面第 2 步的过滤是把这个
+    # 不变量**显式写出来**，现在恒不触发，是留给将来放宽 append 条件时的守卫。
     if seam_band > 0:
         from . import seam as _seam
         ink_bin = (col_gray[:, x_lo:x_hi] < ink_threshold)
@@ -1056,6 +1059,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 continue
             # 1) 直线永远是候选（dev_max=0，也是不切时的兜底）
             cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
+            straight_ink = int(ink_bin[y].sum())
             sm = _seam.find_seam(ink_bin, y, band=seam_band)
             if int(np.abs(sm - y).max()) > 0:
                 cands.append(SeamCandidate(kind="seam_narrow", y=sm.tolist(),
@@ -1068,14 +1072,46 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cands.append(SeamCandidate(kind="seam_wide", y=sm.tolist(),
                                                seam_ink=int(_seam.seam_ink(ink_bin, sm)),
                                                dev_max=int(np.abs(sm - y).max())))
-            # 2) 现役选择规则（原样）：走完上面两步后的 sm，就是现役会采用的那条；
-            #    若它重合于直线或绕不开墨，则现役保持直线（不写 seam_*）。
-            if int(np.abs(sm - y).max()) == 0 or _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK:
-                chosen = 0
-            else:
-                chosen = len(cands) - 1
-                if cands[chosen].y is None or not np.array_equal(sm, np.asarray(cands[chosen].y)):
-                    chosen = 0        # 防御：算出来的 sm 不在候选池里（不应发生）
+            # 2) 现役选择规则 + 候选池过滤，**两件事分开算**。
+            #
+            # `chosen` 是「现役本来走直线还是折线」的开关（决定要不要写 `seam_*`），
+            # 规则一字未改：走完上面两步后的 `sm` 若绕不开墨就保持直线。
+            # `chosen` 用**旧池**下标算完再随过滤重指，不跟过滤后的列表长度互相推
+            # （两者耦合过：过滤一旦真的删掉东西，`len(cands)-1` 就指错了）。
+            #
+            # `candidates` 是**攒给下游打分函数的样本池**（见 products/kinds/cells.py
+            # 的 `CutPointCandidates`），它的职责不是被现役的选法裁剪。过滤判据按
+            # 「这条缝值不值得记为一条**不同的**切线」定，而**不能按偏离量**：
+            # 实测（vol01 全册 2651 条有墨格线）偏离量与「直线穿墨量」单调正相关
+            # （dev 0–2px 时直线平均 2.8 墨，dev 20px+ 时 15.0 墨）——偏离大是直线
+            # 本身更差的结果，拿它当尺度会优先砍掉干活最多的候选。用户 2026-09-10：
+            # 「一个字上面少 5px 有时还是很明显」——偏得小但绕开了墨，是真的切得好些。
+            #
+            # 所以判据用**省墨量**：`seam_ink >= straight_ink` 的缝与直线是同一把刀。
+            # 但注意这条**现在恒不成立**：上面两处 append 都要求 `dev > 0`，而实测
+            # 每条 `dev > 0` 的缝都省墨（`find_seam` 的代价函数本身在最小化路径墨量）。
+            # 也就是说过滤现在一条都删不掉，全册 A/B 与不设过滤逐位相同。
+            # 留着它是因为它把「入池的必须真的绕开了墨」这条不变量写在代码里——
+            # 将来若放宽 append 条件（如允许记 `dev == 0` 的缝），它就会开始起作用。
+            #
+            # 上面第 1057 行的 `ink_bin[y].any()` 保证走到这里直线一定有墨，
+            # 所以 `straight_ink >= 1`，判据不会因直线本来无墨而空转。
+            chosen = 0 if (int(np.abs(sm - y).max()) == 0
+                           or _seam.seam_ink(ink_bin, sm) > _seam.SEAM_MAX_INK) else len(cands) - 1
+            # 过滤：剔掉一点墨都不省的折线候选（与直线是同一把刀），直线恒在池首。
+            # 现在恒删不掉任何一条，理由见上面长注释；`chosen` 仍按旧池下标定位、
+            # 随过滤重指，这样将来过滤真的生效时它不会指错。
+            chosen_seam = None if chosen == 0 else cands[chosen].y
+            kept = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
+            chosen = 0
+            for c in cands[1:]:
+                if c.seam_ink >= straight_ink:
+                    continue
+                if chosen_seam is not None and np.array_equal(np.asarray(c.y),
+                                                              np.asarray(chosen_seam)):
+                    chosen = len(kept)
+                kept.append(c)
+            cands = kept
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen)

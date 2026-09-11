@@ -12,7 +12,6 @@
   <h1>open-guji-cv 控制台</h1>
   <label>册 <select id="book"></select></label>
   <label>管线 <select id="pipeline"></select></label>
-  <label>页 <input id="pages" type="text" value="dev_set" size="14" title="dev_set | all | 3-6,9"></label>
   <button id="refresh">刷新状态</button>
   <span id="running" class="muted"></span>
   <nav class="tabs">
@@ -93,7 +92,7 @@
     <div class="card">
       <h2>本轮体检 <span class="muted">四个判据决定：继续跑，还是停下修算法</span>
         <button id="rd_go" style="float:right">体检</button></h2>
-      <div id="rd_out" class="muted">点「体检」——用上面「页」框里的页码</div>
+      <div id="rd_out" class="muted">点「体检」——用下面「定字裁决」里那个页框的页码</div>
     </div>
     <div class="card">
       <h2>质量看板 <span class="muted">裁完先看这里：准了没有、下一刀切哪</span>
@@ -184,10 +183,12 @@
       </div>
       <div class="muted" style="font-size:.76rem;margin-bottom:.5rem">
         在图上<b>点击或拖动</b>定位；键盘：<b>↑/↓</b> 1px（Shift 5px）· <b>回车</b> 落定（没动过 = 现切点正确）·
-        <b>O</b> 现切点正确 · <b>G</b> 绿色折线缝已正确（直接记为折线金标）· <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
+        <b>O</b> 现切点正确 · <b>G</b> 绿色折线缝已正确（直接记为折线金标）·
+        <b>切法</b>（算法一次给几种切法时才有这一行，只读）：点一种选中它，<b>C</b> 记为该切法正确 · <b>V</b> 上下字重叠、切在哪都伤字（线放折中处）· <b>S</b> 拿不准 · <b>←/→</b> 翻卡 ·
         干扰标签 <b>1</b> 污点 <b>2</b> 界行/版框 <b>3</b> 邻字残墨 <b>4</b> 其他（落定前点，可多选；评测里分开算）。
         <b>P</b> 折线模式：点空白处加点，<b>点中已有点可拖动</b>，<b>右键</b>删点，<b>Backspace</b> 撤最后一点，<b>X</b> 清空，回车落定；
-        <b>U</b> 重做已落定的卡（取消勾选「只看未裁」能看到已裁的卡，改完再落定，后到覆盖）。蓝色虚线 = 现役直线切点，绿色虚线 = 现役折线缝。
+        <b>U</b> 重做已落定的卡（取消勾选「只看未裁」能看到已裁的卡，改完再落定，后到覆盖）。蓝色虚线 = 现役直线切点，绿色虚线 = 现役折线缝，
+        蓝点虚线 = 窄走廊候选，黄点虚线 = 宽走廊候选（后两条是 Step3 攒给下游打分函数的样本，只有跑过产物的页才有）。
         每次落定立刻写入事件，刷新不丢。
       </div>
       <div id="cl_cards" class="clgrid"></div>

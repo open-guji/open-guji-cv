@@ -73,8 +73,11 @@ def _expected_of(e: Event) -> dict:
         # tags：干扰因素（stain 污点在分界处 / border 界行或版框压进裁片 / residue 邻字残墨 / other），
         # 用户 2026-09-05 裁完第一批点名的两类特殊情况；评测里分开报，不混进像素误差。
         # polyline：折线模式下人点的点 [[x, y], …]（列图坐标）；y 仍是折线的平均高，直线口径的评测照用。
+        # cand：verdict == "cand" 时**算法候选里被人选中的那一种**（straight / seam_narrow /
+        # seam_wide）。这是攒给下游打分函数的样本——哪条缝被人看上了，比 y 更能说明问题
+        # （2026-09-10）。
         keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below", "tags", "note", "polyline")
+                "char_above", "char_below", "tags", "note", "polyline", "cand")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
     return p
 
