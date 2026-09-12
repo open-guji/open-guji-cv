@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fetchJiazhuSegments } from '../../api/jiazhu'
 import { postEvents } from '../../api/events'
 import { needsReading, consumedMsg } from '../../domain'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { JiazhuSegment } from '../../types/jiazhu'
 import './jiazhu.css'
 
@@ -21,7 +22,7 @@ const DEFECT_OPTIONS = [
 interface DefectChoice { key: string; quality: string; note: string }
 
 export function JiazhuPanel({ book }: { book: string }) {
-  const [pages, setPages] = useState('jz')
+  const [pages, setPages] = usePersistedPages('jiazhu', book, 'jz')
   const [only, setOnly] = useState<'all' | 'review' | 'auto'>('all')
   const [batchInput, setBatchInput] = useState('')
   const [segs, setSegs] = useState<JiazhuSegment[]>([])

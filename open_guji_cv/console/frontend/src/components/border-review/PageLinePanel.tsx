@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchPageLineCards, fetchPageLineVerdicts } from '../../api/borderPageLine'
 import { postEvents } from '../../api/events'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { PageLineCard as Card } from '../../types/borderPageLine'
 import { PageLineCard } from './PageLineCard'
 import type { LineState } from './PageLineCard'
@@ -16,7 +17,7 @@ import './borderReview.css'
 const STEP = 'border_detect'
 
 export function PageLinePanel({ book }: { book: string }) {
-  const [pages, setPages] = useState('dev_set')
+  const [pages, setPages] = usePersistedPages('pageline', book, 'dev_set')
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cards, setCards] = useState<Card[]>([])

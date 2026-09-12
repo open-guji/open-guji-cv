@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchCutlineCases, fetchCutlineVerdicts } from '../../api/cutline'
 import { postEvents } from '../../api/events'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { CutlineCase } from '../../types/cutline'
 import { CutlineCard, type CardState } from './CutlineCard'
 import './cutline.css'
@@ -18,7 +19,7 @@ import './cutline.css'
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊' }
 
 export function CutlinePanel({ book }: { book: string }) {
-  const [pages, setPages] = useState('body')
+  const [pages, setPages] = usePersistedPages('cutline', book, 'body')
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
   const [limit, setLimit] = useState(250)
   const [batchInput, setBatchInput] = useState('')
