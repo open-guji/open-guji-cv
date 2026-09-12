@@ -118,3 +118,26 @@ table.jobs tr.sel { background: var(--indigo-soft); }
   .app-shell { flex-direction: column; }
   .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--rule); }
 }
+
+/* Step9：9.1/9.2 视图切换 tab + 9.2 阅读版段落卡片 */
+.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--rule); margin-bottom: 1rem; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; padding: .5rem .8rem; color: var(--mute); }
+.tabs button:hover:not(:disabled) { border-color: transparent; color: var(--ink-2); }
+.tabs button.active { color: var(--indigo); border-bottom-color: var(--indigo); font-weight: 600; }
+
+.reflow-page-mark { font-family: var(--mono); font-size: .72rem; color: var(--faint);
+  letter-spacing: .04em; margin: 1.6rem 0 .3rem; padding-top: .6rem; border-top: 1px dashed var(--rule); }
+.reflow-page-mark:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+.reflow-para { font-size: .98rem; line-height: 1.9; margin: 0 0 .9rem; text-align: justify; max-width: 62ch; }
+.reflow-para.is-title { display: inline-block; max-width: 100%; font-weight: 600;
+  color: var(--indigo); background: var(--indigo-soft); padding: .15rem .5rem; border-radius: 4px; }
+
+.reflow-notes { margin: .3rem 0 1.2rem; }
+.reflow-notes summary { cursor: pointer; font-size: .76rem; color: var(--zhu); }
+.reflow-notes ul { margin: .4rem 0 0; padding-left: 1.2rem; font-size: .76rem; color: var(--mute); }
+.reflow-notes li { margin-bottom: .2rem; }
+
+.reflow-stale { font-size: .78rem; color: var(--zhu); background: var(--zhu-soft);
+  border-radius: var(--r); padding: .5rem .7rem; margin-bottom: 1rem; }
