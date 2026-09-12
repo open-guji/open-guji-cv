@@ -8,6 +8,7 @@ import { Step1Page } from './pages/Step1Page'
 import { Step2Page } from './pages/Step2Page'
 import { Step3Page } from './pages/Step3Page'
 import { Step5Page } from './pages/Step5Page'
+import { Step6Page } from './pages/Step6Page'
 import { Step7Page } from './pages/Step7Page'
 import { Step8Page } from './pages/Step8Page'
 import { RunsPage } from './pages/RunsPage'
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/:book/step/step3/" element={<Step3Page />} />
         <Route path="/:book/step/step5/" element={<Step5Page />} />
         <Route path="/:book/step/step5/:sub/" element={<Step5Page />} />
+        <Route path="/:book/step/step6/" element={<Step6Page />} />
         <Route path="/:book/step/step7/" element={<Step7Page />} />
         <Route path="/:book/step/step8/" element={<Step8Page />} />
         <Route path="/:book/step/:step/" element={<StepPage />} />

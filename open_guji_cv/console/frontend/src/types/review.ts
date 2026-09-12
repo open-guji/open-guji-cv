@@ -16,6 +16,8 @@ export interface ReviewCardDb {
 export interface ReviewCardCtx {
   char?: string
   margin?: number
+  source?: string
+  llm_suggestion?: string | null
 }
 
 export interface ReviewCardForm {

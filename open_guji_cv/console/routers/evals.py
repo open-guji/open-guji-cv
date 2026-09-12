@@ -99,6 +99,44 @@ def api_throughput(book: str = "vol01", pages: str = "", all_pages: bool = True)
     return tp.full_report(book, p, deps.product_store())
 
 
+@router.get("/api/overview_summary")
+def api_overview_summary(book: str = "vol01") -> dict:
+    """总览页用的轻量摘要：总进度 + 待办 + 异常数据。
+
+    刻意只拼**读产物就有、不用跑重判据**的几样（人审率台账 ~0.7s、三道闸汇总
+    各 ~0.05s、align-ref 锚定 ~0.06s），全书全跑一遍 `round.check`（判据A-F）
+    要 10+ 秒（判据D 生僻字候选要读 CNN/字体候选），总览页一进来就等 10 秒
+    不合理——完整判据体检留给「统计数据」页手动点，这里只给"有没有事要看"。
+    """
+    from ...gates.query import GATES, gate_summary
+    from ...eval import round_check as rc
+    from ...steps.align_ref import align_ref_summary
+
+    st = deps.product_store()
+    rate = rate_history.measure(book, st) or {}
+
+    gates_out = []
+    for gid in GATES:
+        try:
+            g = gate_summary(book, None, st, gate=gid)
+        except Exception:  # noqa: BLE001  闸没跑过这本书时，别把整个摘要拖垮
+            continue
+        blocked = sum(1 for p in g["pages"] if p["status"] == "page_blocked")
+        gates_out.append({"gate": gid, "n_pages": len(g["pages"]), "n_blocked": blocked,
+                          "tier_totals": g["tier_totals"]})
+
+    align = align_ref_summary(book, None, st)
+
+    return {
+        "book": book,
+        "rate": rate,               # 判据B：人审率台账当下快照
+        "next": rc.next_batch(book),  # 待办：下一批要跑的正文页
+        "gates": gates_out,         # 异常：三道闸各自的整页拦截数与列级拒因分层
+        "align_ref": {"n_pages": align["n_pages"], "n_anchored": align["n_anchored"],
+                      "n_not_anchored": align["n_not_anchored"], "n_missing": align["n_missing"]},
+    }
+
+
 @router.get("/api/llm_online_stats")
 def api_llm_online_stats(book: str = "") -> dict:
     """线上外部大模型（Step6 `context_decide.enable_online_llm`）的真实
@@ -118,6 +156,30 @@ def api_llm_online_stats(book: str = "") -> dict:
     report = compute_report(log_dir, book or None)
     report["has_data"] = True
     return report
+
+
+@router.get("/api/llm_online_calls/{book}")
+def api_llm_online_calls(book: str, page: int = 0, limit: int = 200) -> dict:
+    """逐条线上大模型调用明细——`llm_online_stats` 只给聚合数字，这里给
+    Step6 展示页看「某一次调用具体问了什么、模型答了什么」用。
+
+    直接读 `<book>.jsonl` 原始行（`context_decide.py::_log_llm_call` 写的
+    那些字段，逐条原样透出，不做聚合/口径转换），按 `page` 过滤、按 `ts`
+    倒序（最近的调用排前面），`limit` 做简单分页——一册跑几百条不算多，
+    不做游标分页。
+    """
+    from pathlib import Path
+
+    from ...eval.llm_online_accuracy import load_online_calls
+
+    log_dir = Path("output") / "llm_online_calls"
+    rows = load_online_calls(log_dir, book)
+    if page:
+        rows = [r for r in rows if r.get("page") == page]
+    rows.sort(key=lambda r: r.get("ts", ""), reverse=True)
+    total = len(rows)
+    return {"book": book, "page": page or None, "total": total,
+            "rows": rows[:limit]}
 
 
 
