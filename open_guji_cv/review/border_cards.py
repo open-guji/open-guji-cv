@@ -25,6 +25,15 @@
 `border_bottom_y + BOTTOM_PAD`，这条线在任何列、任何页都落在裁剪图同一
 行，只是给人一把固定的尺子，不能当成"算法探测"介绍给标注者。判"没有线"
 用 `no_line` 逃生按钮，不强迫在看不出线的页上瞎标一个坐标。
+
+`pageline:{book}:{page}`  整页下版框偏移金标（overview 2026-09-12 下发）。
+`linebot` 头一批 329 条标注抽查发现：窄列裁剪图里版框墨条常与相邻字缝
+糊在一起分不清，人标的位置系统性偏向"字开始的地方"而非墨条本身
+（vol02/22/3 等核对过），而且这类误判整页一致（同页各列同向同量），
+不是列级噪声。整页通栏宽带能一眼看出哪条才是贯穿全页的印刷直线，比
+窄列裁剪图清楚得多，效率也高——一页拖一条线（保留现有斜率，只调整
+整体偏移量），不必逐列点。落 `border-detection/bottom-offset`，字段
+只有 `offset`（页面像素，加在 `bottom.y_at_right` 上）+ `verdict`。
 """
 
 from __future__ import annotations
@@ -245,3 +254,42 @@ def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: s
     else:
         crop, pslice = core[h - CROP_ROWS:][::-1], prof[h - CROP_ROWS:][::-1]
     return crop, [float(v) for v in pslice]
+
+
+PAGE_BAND_MARGIN = 150  # 通栏带在线两端各留多少像素做视觉参照（够看清有没有贴墨条）
+
+
+def page_bottom_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:
+    """整页下版框偏移金标卡：一页一张，带现役线在通栏带坐标里的两端点。"""
+    out = []
+    for pg in pages:
+        res = _borders(store, book, pg)
+        if res is None:
+            continue
+        gray = _read_gray(book, pg)
+        h, w = gray.shape
+        bottom = res.bottom
+        y_right = bottom.y_at_right          # 原图坐标，x_tl = w-1 处
+        y_left = bottom.y_at_right + bottom.slope * (w - 1)  # x_tl = 0 处
+        crop_top = max(0.0, min(y_left, y_right) - PAGE_BAND_MARGIN)
+        crop_bottom = min(float(h), max(y_left, y_right) + PAGE_BAND_MARGIN)
+        out.append(dict(
+            id=f"pageline:{book}:{pg}", kind="pageline", book=book, page=pg,
+            page_w=w, crop_top=round(crop_top, 1),
+            y_left=round(y_left - crop_top, 2), y_right=round(y_right - crop_top, 2),
+            img=f"/api/border-review/img/{book}/{pg}.jpg?kind=pageline"))
+    return out
+
+
+def render_pageline_img(store: ProductStore, book: str, page: int) -> np.ndarray:
+    """整页下版框通栏带：原图按现役线位置裁一条横带，不烧线——线由前端叠加、
+    人可拖，图只给像素上下文。"""
+    res = _need_borders(store, book, page)
+    gray = _read_gray(book, page)
+    h, w = gray.shape
+    bottom = res.bottom
+    y_right = bottom.y_at_right
+    y_left = bottom.y_at_right + bottom.slope * (w - 1)
+    crop_top = int(max(0.0, min(y_left, y_right) - PAGE_BAND_MARGIN))
+    crop_bottom = int(min(float(h), max(y_left, y_right) + PAGE_BAND_MARGIN))
+    return gray[crop_top:crop_bottom]

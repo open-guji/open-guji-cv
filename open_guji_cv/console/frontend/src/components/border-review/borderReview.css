@@ -24,3 +24,11 @@
 .blline { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--zhu); pointer-events: none; }
 .blline.old { border-top: 1px dashed var(--faint); }
 .bl-info { font-size: .76rem; margin-top: .3rem; }
+
+.plcard { grid-column: 1 / -1; }
+.plcard.cur { box-shadow: 0 0 0 2px var(--indigo); }
+.plimg { position: relative; cursor: ns-resize; background: var(--paper-2); border-radius: 2px; }
+.plimg img { width: 100%; height: auto; display: block; user-select: none; }
+.plsvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.plline { stroke: var(--zhu); stroke-width: 2; }
+.plline.old { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 6 4; }

@@ -48,6 +48,11 @@ DEFAULT_ROUTES: list[dict] = [
     # 金标（外延/内沿/中心口径混杂）分开存，避免再次污染。
     {"match": {"kind": "border_line"},
      "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-line"}]},
+    # 整页拖版框（2026-09-12）：linebot 头一批标注抽查发现窄列裁剪图容易把
+    # 字缝认成版框墨条，且误判整页同向——改用整页通栏带一页拖一条线，落
+    # 单独分片，不与逐列坐标金标混在一起。
+    {"match": {"kind": "border_offset"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-offset"}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，

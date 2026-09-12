@@ -30,12 +30,13 @@ _CARD_BUILDERS = {
     "outer": bc.outer_cards,
     "colborder": bc.colborder_cards,
     "linebot": bc.colborder_line_cards,
+    "pageline": bc.page_bottom_cards,
 }
 
 
 @router.get("/api/border-review/cards")
 def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dict:
-    """五类之一的卡片列表。`kind`：cols / head / outer / colborder / linebot。"""
+    """六类之一的卡片列表。`kind`：cols / head / outer / colborder / linebot / pageline。"""
     build = _CARD_BUILDERS.get(kind)
     if build is None:
         raise HTTPException(404, f"没有这一类裁决卡：{kind}")
@@ -49,19 +50,26 @@ def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dic
 def api_border_review_verdicts(batch: str) -> dict:
     """读回某批次已裁的边框类卡片——刷新页面不该重审一遍（同 id 后到覆盖）。
 
-    `border_line`（linebot 坐标金标）额外带 `y`：没有它前端就没法在刷新后
-    把线画回人上次拖定的位置，只剩一个"已裁"的空壳。
+    `border_line`（linebot 坐标金标）额外带 `y`；`border_offset`（pageline
+    整页偏移金标）额外带 `offset`——没有它们前端就没法在刷新后把线画回人
+    上次拖定的位置，只剩一个"已裁"的空壳。
     """
     log = deps.event_log()
     out: dict[str, dict] = {}
     for e in sorted(log.read(batch), key=lambda x: (x.batch, x.seq)):
-        if e.kind not in ("verdict", "border_class", "border_line"):
+        if e.kind not in ("verdict", "border_class", "border_line", "border_offset"):
             continue
         if e.kind == "border_line":
             v = e.payload.get("verdict")
             if v is None:
                 continue
             out[e.target.key] = {"verdict": v, "y": e.payload.get("y")}
+            continue
+        if e.kind == "border_offset":
+            v = e.payload.get("verdict")
+            if v is None:
+                continue
+            out[e.target.key] = {"verdict": v, "offset": e.payload.get("offset")}
             continue
         v = e.payload.get("verdict") or e.payload.get("border_class")
         if v is None:
@@ -106,4 +114,6 @@ def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
         out = cv2.cvtColor(np.concatenate([crop, np.full((h, 4), 200, dtype=np.uint8), strip], axis=1),
                            cv2.COLOR_GRAY2BGR)
         return _encode(out)
+    if kind == "pageline":
+        return _encode(bc.render_pageline_img(st, book, page), q=88)
     raise HTTPException(404, f"没有这一类图：{kind}")
