@@ -77,7 +77,13 @@ export function ReviewCardView({
             ? <><button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.char!) }}
                         title={`采信上下文定的字（margin ${c.ctx.margin}）`}>{c.ctx.char}</button>
                 <span className="rvp">m={c.ctx.margin}</span></>
-            : '—'}</div>
+            : '—'}
+            {c.ctx?.llm_suggestion && (
+              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.llm_suggestion!) }}
+                      title="Step6 上下文裁决 margin 不够时问了线上大模型，这是它的建议（只调过候选顺序，未自动放行，见 Step6 大模型调用记录页）">
+                🤖{c.ctx.llm_suggestion}
+              </button>
+            )}</div>
           <div><span className="k" title="Paddle OCR，准确率一般，只作参考">OCR</span> {ocr.length
             ? ocr.map(([ch, p], i) => (
                 <span key={i}>

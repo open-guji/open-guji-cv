@@ -351,6 +351,8 @@ def _collect() -> dict:
     call("POST /api/review/rate-history", _model(rs)(books=BOOK, note="snap"))
     # 没开过 enable_online_llm 就没有日志，has_data:false 是正常态，不是错
     call("GET /api/llm_online_stats", book=BOOK)
+    call("GET /api/llm_online_calls/{book}", BOOK)
+    call("GET /api/overview_summary", book=BOOK)
 
     # 八 · 专项审查页（13）
     call("GET /api/review/cards", book=BOOK, pages=PAGES, limit=20)
@@ -446,10 +448,13 @@ def test_route_inventory():
     `GET /{full_path:path}`（history 模式路由兜底），57 → 59；另一并行改动
     加 `GET /api/throughput`（吞吐统计）、`GET /api/gate/{book}/summary`
     （闸汇总），59 → 61；2026-09-11 Step5-d 整理本对齐锚定汇总面板，加
-    `GET /api/align-ref/{book}/summary`，61 → 62。）
+    `GET /api/align-ref/{book}/summary`，61 → 62；另一并行改动加
+    `GET /api/overview_summary`（总览页轻量摘要），62 → 63；同日 Step6
+    大模型调用记录页（overview 下发，展示单次线上大模型调用的输入/输出/
+    决定），加 `GET /api/llm_online_calls/{book}`，63 → 64。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 62, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 64, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -516,8 +521,9 @@ EXPECTED_ROUTES = [
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/gold", "GET /api/jiazhu/segments",
-    "GET /api/kinds", "GET /api/llm_online_stats",
+    "GET /api/kinds", "GET /api/llm_online_stats", "GET /api/llm_online_calls/{book}",
     "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
+    "GET /api/overview_summary",
     "GET /api/pipelines", "GET /api/preclean/{book}/{page}",
     "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",
     "GET /api/preclean/{book}/{page}/after.png",

@@ -94,7 +94,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                            "candidates": mr.candidates[:5]} if mr else None,
                     "ocr": (r.evidence or {}).get("ocr", []),
                     "ctx": {"char": dr.char, "margin": dr.margin,
-                            "source": dr.source} if dr else None,
+                            "source": dr.source,
+                            "llm_suggestion": dr.llm_suggestion} if dr else None,
                 })
                 if len(out) >= limit:
                     return {"book": book, "cards": out, "truncated": True,
