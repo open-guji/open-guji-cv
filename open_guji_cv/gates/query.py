@@ -90,6 +90,10 @@ def gate_summary(book_id: str, pages: list[int] | None = None,
             "n_admitted": admitted, "tiers": tiers,
             # 闸1 特有的 flag 级信息（列级闸没有这个字段，getattr 兜底）。
             "flags": getattr(g, "flags", []),
+            # 闸1 的探出列数 vs 版式列数（页面类型分类用，见控制台 Step1
+            # ProgressGatePanel typeBreakdown）——列级闸没有这两个字段。
+            "n_cols": getattr(g, "n_cols", None),
+            "expected_cols": getattr(g, "expected_cols", None),
         })
     return {"gate": gate, "pages": rows, "tier_totals": tier_totals}
 
