@@ -37,7 +37,7 @@ from pydantic import BaseModel
 from ..core.spec import StepSpec, cell_key, column_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.chars import PageChars
-from ..products.kinds.recog import ColumnMatch, MatchRec, PageMatch
+from ..products.kinds.recog import CandidateMatch, ColumnMatch, MatchRec, PageMatch
 
 def _default_db() -> str:
     """默认库路径。空串表示「按 workspace 解析」——不在导入时定死，
@@ -137,13 +137,24 @@ class GlyphMatchStep(Step):
                                          verdict="diff", guard=f"no_patch:{e}"))
                     continue
                 m = matcher.match(normalize_patch(img))
+                cand_variants: list[CandidateMatch] = []
+                for cv in (r.cand_variants or []):
+                    try:
+                        cimg = ctx.image("char_patch", cv.patch_key)
+                    except Exception:
+                        continue    # 候选试切图块再生不出来就跳过，不炸整页
+                    cm = matcher.match(normalize_patch(cimg))
+                    cand_variants.append(CandidateMatch(
+                        side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
+                        cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2)))
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
                     verdict=m.verdict, char=m.char, matched_id=m.matched_id,
                     cov=round(float(m.cov), 4), wmax=round(float(m.wmax), 2),
                     candidates=[(c, round(float(v), 4))
                                 for c, v in m.candidates[:p.max_candidates]],
-                    guard=m.guard, n_verified=int(m.n_verified)))
+                    guard=m.guard, n_verified=int(m.n_verified),
+                    cand_variants=cand_variants))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=db_fingerprint(p.db_path), columns=out)}

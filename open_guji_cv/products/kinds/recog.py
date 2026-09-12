@@ -21,6 +21,23 @@ from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
 
 
+class CandidateMatch(BaseModel):
+    """`CharRec.cand_variants` 里某一个候选试切字块的库匹配结果（Step5-a）。
+
+    字段是 `MatchRec` 的精简版——只取候选选择用得上的几项，不重复
+    `matched_id`/`guard`/`n_verified` 这类审计细节（真要看，落定后
+    `chosen` 那条自然会走一遍完整 `MatchRec`）。`(side, cand_idx)` 与
+    `CharRec.cand_variants` 对应元素相同的一对才是同一候选——`cand_idx`
+    单独不唯一，见 `CandidatePatch` 的说明。
+    """
+    side: str                                # above | below，见 CandidatePatch
+    cand_idx: int
+    verdict: str                             # same | unsure | diff
+    char: str | None = None
+    cov: float = 0.0
+    wmax: float = 0.0
+
+
 class MatchRec(BaseModel):
     """一个字位对库的匹配判决（沿用 `clustering.match.MatchResult` 的语义）。"""
     id: str                                  # book:page:col:slot[a|b]
@@ -35,6 +52,10 @@ class MatchRec(BaseModel):
     #                                        # unsure 档：字 → cov 先验，降序
     guard: str | None = None                 # never_match | conflict
     n_verified: int = 0
+    cand_variants: list[CandidateMatch] = Field(default_factory=list)
+    """`char_index` 里同字位 `CharRec.cand_variants` 每个候选试切字块各自的
+    库匹配结果；空列表 = 该字位两侧都是单一候选，见 `CharRec.cand_variants`
+    的说明。用于 Step7「切分裁决」板块给人看「选这个切法，库认得出来吗」。"""
 
 
 class ColumnMatch(BaseModel):
