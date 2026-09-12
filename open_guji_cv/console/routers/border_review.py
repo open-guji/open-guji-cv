@@ -29,12 +29,13 @@ _CARD_BUILDERS = {
     "head": bc.head_cards,
     "outer": bc.outer_cards,
     "colborder": bc.colborder_cards,
+    "linebot": bc.colborder_line_cards,
 }
 
 
 @router.get("/api/border-review/cards")
 def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dict:
-    """四类之一的卡片列表。`kind`：cols / head / outer / colborder。"""
+    """五类之一的卡片列表。`kind`：cols / head / outer / colborder / linebot。"""
     build = _CARD_BUILDERS.get(kind)
     if build is None:
         raise HTTPException(404, f"没有这一类裁决卡：{kind}")
@@ -46,11 +47,21 @@ def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dic
 
 @router.get("/api/border-review/verdicts")
 def api_border_review_verdicts(batch: str) -> dict:
-    """读回某批次已裁的边框类卡片——刷新页面不该重审一遍（同 id 后到覆盖）。"""
+    """读回某批次已裁的边框类卡片——刷新页面不该重审一遍（同 id 后到覆盖）。
+
+    `border_line`（linebot 坐标金标）额外带 `y`：没有它前端就没法在刷新后
+    把线画回人上次拖定的位置，只剩一个"已裁"的空壳。
+    """
     log = deps.event_log()
     out: dict[str, dict] = {}
     for e in sorted(log.read(batch), key=lambda x: (x.batch, x.seq)):
-        if e.kind not in ("verdict", "border_class"):
+        if e.kind not in ("verdict", "border_class", "border_line"):
+            continue
+        if e.kind == "border_line":
+            v = e.payload.get("verdict")
+            if v is None:
+                continue
+            out[e.target.key] = {"verdict": v, "y": e.payload.get("y")}
             continue
         v = e.payload.get("verdict") or e.payload.get("border_class")
         if v is None:
