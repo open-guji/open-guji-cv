@@ -153,6 +153,40 @@ def test_stamp_noise_catches_the_stamp_contaminated_column_only():
         f"clean 上限 {max(clean):.4f} 应该低于印章列 {mixed[stamp_key]:.4f}")
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parent.parent / "output" / "vol02"
+         / "step2_columns" / "3" / "windows.json").exists(),
+    reason="需要先跑 scripts/regen_step2_columns.py vol02 3 --clean 生成产物")
+def test_stamp_noise_flags_columns_without_blocking_them(tmp_path):
+    """端到端钉死 flag 语义：`vol02/3` 整页 9 列全部命中 L2b（背景印章），
+    但 `admitted` 不该因此变 `False`——只由页级 / L2 两条 block 判据决定。
+    这条测试直接跑 `main()`，不是重新拼一遍判定逻辑，避免测试和实现各自
+    维护一份"如果 stamp 超标该怎样"的认知、改了一边忘了另一边。
+    """
+    import sys
+    argv = sys.argv
+    sys.argv = ["export_step3_input.py", "--book", "vol02",
+                "--src", str(REPO / "output" / "vol02" / "step2_columns"),
+                "-o", str(tmp_path / "step3_input"), "--tier", "gate"]
+    try:
+        mod.main()
+    finally:
+        sys.argv = argv
+
+    manifest = json.loads((tmp_path / "step3_input" / "manifest.json").read_text(encoding="utf-8"))
+    page3 = next(p for p in manifest["pages"] if p["page"] == "3")
+    flagged = [c for c in page3["columns"] if c["flags"]]
+    assert len(flagged) == 9, f"vol02/3 全页 9 列都该被 L2b 标记，实际 {len(flagged)}"
+    assert all("L2b" in f for c in flagged for f in c["flags"])
+    # c2/c7/c8/c9 同时踩了 L2（side_floor，block 级）——那是 L2 自己的活，
+    # L2b 不该替它背锅，也不该反过来被 L2 挡住就不算数。只要求：命中 L2b
+    # 但没命中任何 block 级判据的列，一定还是 admitted=True。
+    flagged_only = [c for c in flagged if not c["reject"]]
+    assert flagged_only, "这页应该至少有几列只踩 L2b、没踩 L2，用来验证 flag 不拦截"
+    assert all(c["admitted"] for c in flagged_only), (
+        "L2b 命中不该单独拦截——只踩 L2b 的列应该仍然 admitted=True、正常推给 Step3")
+
+
 @pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
 def test_stamp_noise_cannot_see_jiazhu_or_local_bent_rule():
     """记录 `stamp_noise_density` 结构性看不见的两种污染，别拿它当万能判据。

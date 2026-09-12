@@ -2,6 +2,15 @@
 
 对齐 scripts/export_step3_input.py 的 manifest.json：页级 period / ref_w 用**全部列**算，
 列级 content_x / border_top / border_bottom / top_slack 随图传。
+
+`admitted` 只由 **block 级**判据决定（L1/L1c/L2：几何错位 / 两侧墨量归零失败）；
+**flag 级**判据（L2b：整列噪点密度，2026-09-11 新增）写进 `flags`，不影响
+`admitted`——`GateSpec.on_fail` 是整道闸单一的处置策略，分不出「同一道闸里这条
+block 那条 flag」，这道闸自己在 `run_page` 里按判据分别决定写 `reject`（block）
+还是 `flags`（flag）。L2b 只在 115 列金标上验证过一种机制（背景印章），不确定
+未来会不会在没见过的书页上误伤，先用 flag 形式进生产、积累人审证据，跟
+`row_segment_gate.py` 的 R2/R2s 先例一致（见 `.claude/doc/segmentation_v2_pipeline.md`
+「Step2→3 交接」节的 2026-09-11 记录）。
 """
 
 from __future__ import annotations
@@ -16,6 +25,9 @@ class GateColumn(BaseModel):
     col: int
     admitted: bool
     reject: list[str] = Field(default_factory=list)
+    """block 级判据命中的原因；非空则 `admitted=False`。"""
+    flags: list[str] = Field(default_factory=list)
+    """flag 级判据命中的原因；不影响 `admitted`，下游按需读取。"""
     tier: str = "gate"                      # gate | gold
     content_x: tuple[float, float]          # 列图坐标里的文字带 [x_lo, x_hi)
     border_top: float

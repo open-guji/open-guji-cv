@@ -13,9 +13,13 @@
   ⚠️ 这条**原先错放在页级**，一列坏就整页作废（vol01/42 八列完好只因 c9 坏而全废，
   vol02 全书 27 页被拦、其中 17 页只坏 c1 一列）。2026-09-03 改为列级；
 - **L2 列级**：两侧外 25% 最低墨占比 <= 0.045（已知几乎没有独立筛选力，只挡极端）；
-- **L2b 列级**（2026-09-11 新增）：中等面积孤立墨点密度 <= 0.007
-  （`stamp_noise_density`，见 `column_projection.py` 文档字符串）——专挡
-  **整列散布的背景印章噪点**，`side_floor` 只看两侧外沿看不见这种污染。
+- **L2b 列级 —— flag，不是 block**（2026-09-11 新增）：中等面积孤立墨点
+  密度 > 0.007（`stamp_noise_density`，见 `column_projection.py` 文档
+  字符串）——专挡**整列散布的背景印章噪点**，`side_floor` 只看两侧外沿
+  看不见这种污染。命中只写进 `GateColumn.flags`，**不影响 `admitted`**：
+  只在 115 列金标上验证过背景印章这一种机制，没见过的书页上会不会有
+  没测到的误伤先例还不确定，参照 `row_segment_gate.py` R2/R2s 的先例，
+  新判据先以 flag 形式进生产、积累人审证据，不直接硬拦。
   ⚠️ **这条只覆盖四种已知 mixed 机制里的一种**：115 列金标复核，`vol01/146`
   夹注列、`vol02/188` c3/c4 局部弯界行这三条在这个量上跟 clean 完全重叠
   （0.0017~0.0028），不是参数没调对，是这类统计量本身分不开"字身贴边书写"
@@ -171,6 +175,7 @@ class ColumnGateStep(Step):
         recs: list[GateColumn] = []
         for c in cols:
             reasons: list[str] = []
+            flags: list[str] = []
             if not page_ok:
                 reasons.append("页级未过 L1")
             if c.col in wide_cols:
@@ -179,12 +184,14 @@ class ColumnGateStep(Step):
             if c.side_floor > p.side_floor_max:
                 reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
             if c.stamp_noise > p.stamp_noise_max:
-                reasons.append(f"L2b：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
-                                "（疑似背景印章污染）")
+                # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，
+                # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
+                flags.append(f"L2b：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
+                             "（疑似背景印章污染，flag 不算错）")
             if p.tier == "gold":
                 reasons.append("L3：金标准入尚未接入（P2）")
             recs.append(GateColumn(
-                col=c.col, admitted=not reasons, reject=reasons, tier=p.tier,
+                col=c.col, admitted=not reasons, reject=reasons, flags=flags, tier=p.tier,
                 content_x=(float(c.band[0]), float(c.band[1])),
                 border_top=float(c.border_top_in_column),
                 # **下界给列图底部，不是版框线**（2026-09-03 改，A4）。
@@ -227,8 +234,8 @@ attach_gate("column_warp", GateSpec(
         GateLevel(id="L2", unit="column",
                   desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端"),
         GateLevel(id="L2b", unit="column",
-                  desc="整列中等面积孤立墨点密度是否超界——专挡背景印章噪点，"
-                       "只覆盖四种已知污染机制里的一种"),
+                  desc="整列中等面积孤立墨点密度是否超界——flag 不是 block，"
+                       "专挡背景印章噪点，只覆盖四种已知污染机制里的一种"),
         GateLevel(id="L3", unit="column",
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
     ),

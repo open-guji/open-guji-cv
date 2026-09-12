@@ -15,26 +15,19 @@
 卡片 id 规则（喂给 `feedback/harvest.parse_card_id`）：
     cols:{book}:{page}            outer:{book}:{page}:{top|bottom}
     head:{book}:{page}            colborder:{book}:{page}:{col}:{top|bot}
-    linebot:{book}:{page}:{col}   下版框坐标金标（overview 2026-09-11 下发，
-                                  见 `border_bottom_line` 消费者）
+    pageline:{book}:{page}        下版框整页坐标金标（overview 2026-09-12 下发）
 
-`linebot` 卡只出下端（`01-下版框根修先造金标.md` 只要下版框），复用
-`colborder` 同一张裁剪图+投影（图像端点不新增，`kind=colborder&side=bot`
-即可），前端在图上叠一条可拖的线，初值 = 现役 `BOTTOM_PAD` 常量假设出的
-位置——**不是**逐列检测结果：`ColumnWindow.bottom_y` 本就定义成
-`border_bottom_y + BOTTOM_PAD`，这条线在任何列、任何页都落在裁剪图同一
-行，只是给人一把固定的尺子，不能当成"算法探测"介绍给标注者。判"没有线"
-用 `no_line` 逃生按钮，不强迫在看不出线的页上瞎标一个坐标。
+`pageline` 卡只出下端（`01-下版框根修先造金标.md` 只要下版框）：整页
+通栏宽带（原图按现役下版框线位置裁一条横跨全宽的带），一页拖一条线
+（保留现役斜率，只调整整体偏移），一眼能看出哪条才是贯穿全页的印刷
+直线。线两端各自可拖（现役斜率本身也可能探错，只给整体平移改不了
+斜率）。落 `border-detection/bottom-offset`，字段是 `y_left`/`y_right`
+（通栏带裁剪图坐标，两点定线自带斜率）+ `verdict`。
 
-`pageline:{book}:{page}`  整页下版框坐标金标（overview 2026-09-12 下发）。
-`linebot` 头一批 329 条标注抽查发现：窄列裁剪图里版框墨条常与相邻字缝
-糊在一起分不清，人标的位置系统性偏向"字开始的地方"而非墨条本身
-（vol02/22/3 等核对过），而且这类误判整页一致（同页各列同向同量），
-不是列级噪声。整页通栏宽带能一眼看出哪条才是贯穿全页的印刷直线，比
-窄列裁剪图清楚得多，效率也高——一页拖一条线，不必逐列点。线两端各自
-可拖（用户 2026-09-12 指出：现役斜率本身也可能探错，只给整体平移改
-不了斜率），落 `border-detection/bottom-offset`，字段是 `y_left`/
-`y_right`（通栏带裁剪图坐标，两点定线自带斜率）+ `verdict`。
+（原先还有个逐列裁剪图标注 `linebot`，窄列裁剪图里版框墨条常与相邻字缝
+糊在一起分不清，标注系统性偏向"字开始的地方"而非墨条本身，且这类误判
+整页一致——不是列级噪声，说明窄裁剪图本身就不该拿来标这个。已用上面的
+`pageline` 取代，2026-09-12 删除，标注结果一并作废。）
 """
 
 from __future__ import annotations
@@ -138,38 +131,6 @@ def colborder_cards(store: ProductStore, book: str, pages: list[int]) -> list[di
                     book=book, page=pg, col=win.col, end=end, raised=win.raised,
                     img=(f"/api/border-review/img/{book}/{pg}.jpg"
                         f"?kind=colborder&col={win.col}&side={end}")))
-    return out
-
-
-def colborder_line_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:
-    """下版框坐标金标卡：一列一张（只出下端），带可拖线的初值与裁剪高度。
-
-    `y0` 是算法当前估的版框线，换算到**显示图坐标**（与 `render_colborder_img`
-    吐出的裁剪图同一原点）。`end="bot"` 那张图被 `core[h-CROP_ROWS:][::-1]`
-    翻转过（版框转到显示图上端、字身向下延伸），这里要复刻同一次翻转，
-    不能只算未翻转前的裁剪偏移——**踩过一次坑**：只减 `crop_top` 不翻转，
-    算出来的 y0 是「裁剪窗口高度 − BOTTOM_PAD」这个与列无关的常数
-    （BOTTOM_PAD 抵消掉了，任何列都是同一个数），翻转之后才是真正贴着
-    显示图里版框那条线的位置（约等于 `BOTTOM_PAD`，因为版框离原始列图
-    底边正好 `BOTTOM_PAD`，翻转后自然落到显示图顶部附近）。
-    """
-    out = []
-    for pg in pages:
-        res = _borders(store, book, pg)
-        if res is None:
-            continue
-        for win in page_column_windows(res):
-            col_h = win.bottom_y - win.top_y
-            crop_top = max(0.0, col_h - CROP_ROWS)
-            crop_len = col_h - crop_top
-            y0_unflipped = win.border_bottom_in_column - crop_top
-            y0 = crop_len - 1 - y0_unflipped
-            out.append(dict(
-                id=f"linebot:{book}:{pg}:{win.col}", kind="linebot",
-                book=book, page=pg, col=win.col, col_h=round(float(crop_len), 1),
-                y0=round(float(y0), 2), raised=win.raised,
-                img=(f"/api/border-review/img/{book}/{pg}.jpg"
-                    f"?kind=colborder&col={win.col}&side=bot")))
     return out
 
 

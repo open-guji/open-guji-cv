@@ -15,14 +15,7 @@
 .br-verdicts button { font-size: .76rem; padding: .2rem .55rem; min-height: 30px; white-space: nowrap; }
 .br-verdicts button:active { filter: brightness(.95); }
 
-.blcard[data-v="moved"], .blcard[data-v="ok"] { border-left-color: var(--ok); }
-.blcard[data-v="no_line"] { border-left-color: var(--faint); border-left-style: dashed; }
-.blcard.cur { box-shadow: 0 0 0 2px var(--indigo); }
 .br-help { font-size: .76rem; margin: -.2rem 0 .5rem; }
-.blimg { position: relative; cursor: ns-resize; overflow: hidden; background: var(--paper-2); border-radius: 2px; }
-.blimg img { width: auto; height: 100%; display: block; user-select: none; }
-.blline { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--zhu); pointer-events: none; }
-.blline.old { border-top: 1px dashed var(--faint); }
 .bl-info { font-size: .76rem; margin-top: .3rem; }
 
 .plcard { grid-column: 1 / -1; }

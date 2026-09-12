@@ -43,14 +43,9 @@ DEFAULT_ROUTES: list[dict] = [
     {"match": {"kind": "cutline", "payload.tags": "border"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/side-rule",
              "extra": {"seed": "cutline_border"}}]},
-    # 拖版框线（2026-09-11）：下版框坐标金标，`01-下版框根修先造金标.md`
-    # 点名要的「口径统一的直接坐标金标」，与既有 border-detection 14 页
-    # 金标（外延/内沿/中心口径混杂）分开存，避免再次污染。
-    {"match": {"kind": "border_line"},
-     "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-line"}]},
-    # 整页拖版框（2026-09-12）：linebot 头一批标注抽查发现窄列裁剪图容易把
-    # 字缝认成版框墨条，且误判整页同向——改用整页通栏带一页拖一条线，落
-    # 单独分片，不与逐列坐标金标混在一起。
+    # 整页拖版框（2026-09-12）：下版框整页坐标金标，`01-下版框根修先造
+    # 金标.md` 点名要的「口径统一的直接坐标金标」，与既有 border-detection
+    # 14 页金标（外延/内沿/中心口径混杂）分开存，避免再次污染。
     {"match": {"kind": "border_offset"},
      "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-offset"}]},
     {"match": {"kind": "confirm"},
