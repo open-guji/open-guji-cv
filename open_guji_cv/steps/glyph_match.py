@@ -100,20 +100,16 @@ class GlyphMatchStep(Step):
     )
 
     def _matcher(self, p: GlyphMatchParams):
-        """库 → 内存匹配器。按 (db_path, 指纹, k, edition) 缓存在实例上——
-        一次 run 里几十页共用同一个库，每页重建要几秒。"""
-        key = (p.db_path, db_fingerprint(p.db_path), p.knn_k, p.edition)
-        cached = getattr(self, "_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        from ..clustering.glyph_db import GlyphDB, assert_db_not_silently_empty
-        from ..clustering.seeding import load_matcher_from_db
+        """库 → 内存匹配器。走 `seeding.cached_matcher_from_db` 的进程级
+        缓存（控制台 `/api/glyph-match/*` 单点查询路由也走这份），一次
+        run 里几十页共用同一个库，每页重建要几秒。"""
+        from ..clustering.glyph_db import assert_db_not_silently_empty
+        from ..clustering.seeding import cached_matcher_from_db
         # 库路径 P0 自检：库路径解析错了、读到空库/别的文件时直接报错，
         # 不许静默出全 diff（见 glyph_db.assert_db_not_silently_empty 模块头）。
         assert_db_not_silently_empty(p.db_path)
-        db = GlyphDB(p.db_path)
-        matcher, _chars = load_matcher_from_db(db, edition=p.edition, knn_k=p.knn_k)
-        self._cache = (key, matcher)      # type: ignore[attr-defined]
+        matcher, _chars = cached_matcher_from_db(
+            p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=p.knn_k)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -158,3 +154,39 @@ class GlyphMatchStep(Step):
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=db_fingerprint(p.db_path), columns=out)}
+
+
+def glyph_match_summary(book_id: str, pages: list[int] | None = None,
+                        store=None) -> dict:
+    """Step5-a 板块②聚合数字：匹配档位分布（same/unsure/diff 计数）+
+    护栏触发计数。`glyph_match` 产物落盘的是逐字位 `MatchRec`，没有跨页
+    聚合统计——07号任务卡已指出这个缺口，风格照抄 `align_ref_summary`。
+    """
+    from ..core.book import load_book
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    n_pages = 0
+    n_missing = 0
+    verdict_counts = {"same": 0, "unsure": 0, "diff": 0}
+    guard_counts: dict[str, int] = {}
+    for pg in pages:
+        pm: PageMatch | None = store.read(book_id, "glyph_match", page_key(pg), "glyph_match")
+        if pm is None:
+            n_missing += 1
+            continue
+        n_pages += 1
+        for col in pm.columns:
+            if not col.ok:
+                continue
+            for r in col.chars:
+                verdict_counts[r.verdict] = verdict_counts.get(r.verdict, 0) + 1
+                if r.guard:
+                    guard_counts[r.guard] = guard_counts.get(r.guard, 0) + 1
+    return {
+        "n_pages": n_pages, "n_missing": n_missing,
+        "verdict_counts": verdict_counts, "guard_counts": guard_counts,
+    }

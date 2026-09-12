@@ -1,0 +1,19 @@
+.gm-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; margin-bottom: .6rem; }
+.gm-help { font-size: .78rem; margin-bottom: .6rem; }
+
+.gm-compare { display: flex; gap: 1.2rem; align-items: flex-start; margin-bottom: .8rem; }
+.gm-compare-cell { text-align: center; }
+.gm-compare-cell img { width: 5.5rem; height: 5.5rem; object-fit: contain; border: 1px solid var(--rule); background: #fff; }
+.gm-compare-label { font-size: .74rem; color: var(--mute); margin-top: .2rem; }
+
+.gm-verdict { font-weight: 700; padding: .1rem .5rem; border-radius: 4px; }
+.gm-verdict-same { background: var(--ok-soft); color: var(--ok); }
+.gm-verdict-unsure { color: var(--mute); background: var(--paper); border: 1px solid var(--rule); }
+.gm-verdict-diff { background: var(--zhu-soft); color: var(--zhu); }
+
+.gm-cands { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+.gm-cand { display: flex; flex-direction: column; align-items: center; gap: .2rem;
+          border: 1px solid var(--rule); border-radius: 4px; padding: .4rem .6rem; min-width: 3.5rem; }
+.gm-cand img { width: 3rem; height: 3rem; object-fit: contain; border: 1px solid var(--rule); background: #fff; }
+.gm-cand-char { font-size: 1.1rem; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.gm-cand-cov { font-size: .7rem; color: var(--mute); }
