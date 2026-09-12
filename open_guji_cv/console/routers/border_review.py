@@ -51,8 +51,10 @@ def api_border_review_verdicts(batch: str) -> dict:
     """读回某批次已裁的边框类卡片——刷新页面不该重审一遍（同 id 后到覆盖）。
 
     `border_line`（linebot 坐标金标）额外带 `y`；`border_offset`（pageline
-    整页偏移金标）额外带 `offset`——没有它们前端就没法在刷新后把线画回人
-    上次拖定的位置，只剩一个"已裁"的空壳。
+    整页坐标金标）额外带 `y_left`/`y_right`（两端点各自坐标，不是单一
+    偏移量——现役斜率本身也可能探错，见 `page_bottom_cards` 模块头）——
+    没有它们前端就没法在刷新后把线画回人上次拖定的位置，只剩一个"已裁"
+    的空壳。
     """
     log = deps.event_log()
     out: dict[str, dict] = {}
@@ -69,7 +71,8 @@ def api_border_review_verdicts(batch: str) -> dict:
             v = e.payload.get("verdict")
             if v is None:
                 continue
-            out[e.target.key] = {"verdict": v, "offset": e.payload.get("offset")}
+            out[e.target.key] = {"verdict": v, "y_left": e.payload.get("y_left"),
+                                  "y_right": e.payload.get("y_right")}
             continue
         v = e.payload.get("verdict") or e.payload.get("border_class")
         if v is None:
