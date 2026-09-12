@@ -77,6 +77,7 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
     ordered = sort_by_reading(admit_recs)
 
     prefix = "^" * n_raised if n_raised > 0 else ""
+    prefix += "." * _lead_blank_count(cells_by_key)
 
     def lookup(r: AdmitRec) -> CellRec | None:
         """查一次记一次，调用点只许有这一个，避免同一条记录被记两遍。"""
@@ -124,6 +125,11 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
             continue
 
         if kind == "blank":
+            # 行首连续 blank 已经从 cells_by_key 直接量出、写进 prefix 的
+            # 挪抬 `.` 里（见 _lead_blank_count）；这里遍历到的 blank
+            # ——不管是行首那几个还是行中偶尔出现的——一律只是"跳过不占位"，
+            # 不在这个循环里重复计数，避免两处各算一遍、或者行中 blank
+            # 被误当挪抬。
             i += 1
             continue
 
@@ -140,6 +146,30 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
         i += 1
 
     return prefix + "".join(out)
+
+
+def _lead_blank_count(cells_by_key: dict[tuple[int, str], CellRec]) -> int:
+    """行首挪抬格数：从 `slot=1` 开始、`sub=None`（正文位置，非夹注半格）
+    连续多少个 `kind=="blank"`。
+
+    **必须从 Step3 `cells` 数出来，不能从 Step7 `seed_admit` 数**——
+    2026-09-11 实测确认：Step7 对 `blank` 格根本不产出 `AdmitRec`
+    （`vol02 p0004 col3`：`cells` 里 slot 1/2 是 blank，`seed_admit`
+    里最小的 slot 直接是 3），所以想在遍历 `admit_recs` 的主循环里
+    「顺便」数出行首 blank 是死代码，永远数不到。
+
+    用户 2026-09-11 裁：guji-markdown 的挪抬 `.` 就是记「字前空出 n 格」
+    这个版面事实本身，不要求先判定"是不是敬语"——不管这几格空白的
+    几何成因是什么（哪怕是版框顶边到首字的固定间距被切分算法切出来的，
+    调研实测 vol02/vol03 全书 85%+ 的列固定如此），只要行首确实空着，
+    就该标 `.`。
+    """
+    n = 0
+    slot = 1
+    while cells_by_key.get((slot, "")) is not None and cells_by_key[(slot, "")].kind == "blank":
+        n += 1
+        slot += 1
+    return n
 
 
 def _is_excluded(rec: AdmitRec) -> bool:
