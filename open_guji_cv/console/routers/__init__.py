@@ -17,6 +17,7 @@
 | `border_review.py` | 3 | Step1 列探测/抬头/外框外延、Step2 上下版框核校的卡片与图（原 artifact 迁入，2026-09-11） |
 | `jiazhu.py` | 1 | 夹注段卡 |
 | `rare.py` | 2 | 生僻字单查与批量 |
+| `glyph_match.py` | 3 | Step5-a 字形库匹配单查、候选缩略图、档位分布聚合（2026-09-11） |
 | `variants.py` | 2 | 本书用字账、组视图 |
 | `spa_fallback.py` | 0（非业务） | v2 React 前端路由兜底，**必须最后 include** |
 

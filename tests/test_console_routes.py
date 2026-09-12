@@ -456,10 +456,14 @@ def test_route_inventory():
     `GET /api/ocr-candidates/{book}/summary`，64 → 65；同日另一并行改动
     给 `EvalsPage` 加 `GET /api/align-ref/summary`（book 走 query 参数，
     跟 `/api/align-ref/{book}/summary` 的 path 参数版并存，服务不同页面），
-    65 → 66。）
+    65 → 66；同日 Step5-a 字形库匹配调试视图（方案见 overview 仓
+    Step5-字符识别/08-5a方案-字形库匹配调试视图.md），新增
+    `glyph_match.py` 3 条：单点查询 `GET /api/glyph-match/{book}/{page}/{col}/{slot}`、
+    候选缩略图 `GET /api/glyph-match/exemplar/{instance_id}.png`、板块②聚合
+    `GET /api/glyph-match/{book}/summary`，66 → 69。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 66, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 69, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -525,6 +529,8 @@ EXPECTED_ROUTES = [
     "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
+    "GET /api/glyph-match/exemplar/{instance_id}.png",
+    "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",
     "GET /api/gold", "GET /api/jiazhu/segments",
     "GET /api/kinds", "GET /api/llm_online_stats", "GET /api/llm_online_calls/{book}",
     "GET /api/manifest/{book}/{step}", "GET /api/ocr-candidates/{book}/summary",

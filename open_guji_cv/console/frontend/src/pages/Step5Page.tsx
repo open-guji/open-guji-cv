@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { STEP5_SUBS } from '../steps'
 import { RarePanel } from '../components/rare/RarePanel'
+import { GlyphMatchPanel } from '../components/glyph-match/GlyphMatchPanel'
 import { fetchAlignRefSummary, fetchOcrCandidatesSummary } from '../api/products'
 import type { AlignRefSummary, OcrCandidatesSummary } from '../api/products'
+import { fetchGlyphMatchSummary } from '../api/glyphMatch'
+import type { GlyphMatchSummary } from '../api/glyphMatch'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { fetchStatus } from '../api/status'
@@ -11,6 +14,7 @@ import type { StatusResponse } from '../types/status'
 
 const ALIGN_REF_STEP_ID = 'step5-align-ref'
 const OCR_CANDIDATES_STEP_ID = 'step5-ocr-candidates'
+const GLYPH_MATCH_STEP_ID = 'step5-glyph-match'
 
 // 四小步各自对应的后端 step id（core/step.py 的 StepSpec.id），供总览页
 // 查 /api/status 的 steps 字典拿 fresh/stale/missing 计数——四路都是全字位
@@ -33,6 +37,10 @@ export function Step5Page() {
 
   if (!sub) {
     return <Step5Overview book={book} />
+  }
+
+  if (sub === 'glyph-match') {
+    return <GlyphMatchOverview book={book} />
   }
 
   if (sub === 'rare') {
@@ -109,6 +117,48 @@ function Step5Overview({ book }: { book: string }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// Step5-a 字形库匹配：此前完全没有独立查询/查看方式，是四小步里缺口最大
+// 的一路（见 overview Step5-字符识别/08-5a方案-字形库匹配调试视图.md）。
+// 板块①页面选择器 + 板块②匹配档位分布聚合数字（same/unsure/diff 计数 +
+// 护栏触发计数）+ 板块③ GlyphMatchPanel 单点查询调试工具。
+// ④产物、⑤标注同 5-c/5-d 的结论：本次不接，留给以后需要时再补。
+function GlyphMatchOverview({ book }: { book: string }) {
+  const [pageSel, setPageSel] = useState(() => loadSavedPageRange(GLYPH_MATCH_STEP_ID, book))
+  const [summary, setSummary] = useState<GlyphMatchSummary | null>(null)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    setPageSel(loadSavedPageRange(GLYPH_MATCH_STEP_ID, book))
+  }, [book])
+
+  useEffect(() => {
+    setSummary(null)
+    setErr('')
+    if (!book) return
+    fetchGlyphMatchSummary(book, pageSel).then(setSummary).catch((e) => setErr((e as Error).message))
+  }, [book, pageSel])
+
+  const total = summary ? summary.verdict_counts.same + summary.verdict_counts.unsure + summary.verdict_counts.diff : 0
+  const metrics = summary ? [
+    { label: 'same（继承）', value: total ? `${summary.verdict_counts.same}（${(summary.verdict_counts.same / total * 100).toFixed(1)}%）` : '0', tone: 'ok' as const },
+    { label: 'unsure（候选）', value: total ? `${summary.verdict_counts.unsure}（${(summary.verdict_counts.unsure / total * 100).toFixed(1)}%）` : '0' },
+    { label: 'diff（库里没有）', value: total ? `${summary.verdict_counts.diff}（${(summary.verdict_counts.diff / total * 100).toFixed(1)}%）` : '0',
+      tone: (summary.verdict_counts.diff > 0 ? 'bad' : 'ok') as 'bad' | 'ok' },
+    { label: '护栏触发', value: Object.entries(summary.guard_counts).map(([g, n]) => `${g} ×${n}`).join(' ') || '无',
+      tone: (Object.keys(summary.guard_counts).length > 0 ? 'bad' : 'ok') as 'bad' | 'ok' },
+    { label: '缺产物页数', value: String(summary.n_missing), tone: (summary.n_missing > 0 ? 'bad' : 'ok') as 'bad' | 'ok' },
+  ] : undefined
+
+  return (
+    <div>
+      <PageRangeSelector book={book} stepId={GLYPH_MATCH_STEP_ID} value={pageSel} onChange={setPageSel} />
+      {err && <div className="card"><p className="muted">{err}</p></div>}
+      {!err && <ProgressGatePanel book={book} title="Step5-a 字形库匹配 —— 匹配档位分布" customMetrics={metrics} />}
+      <GlyphMatchPanel book={book} />
     </div>
   )
 }

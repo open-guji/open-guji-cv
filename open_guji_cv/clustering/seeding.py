@@ -192,6 +192,33 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     return matcher, chars
 
 
+_MATCHER_CACHE: dict[tuple, tuple[GlyphMatcher, set[str]]] = {}
+
+
+def cached_matcher_from_db(db_path: str, db_fingerprint: str,
+                           edition: str | None = None,
+                           knn_k: int = 10) -> tuple[GlyphMatcher, set[str]]:
+    """`load_matcher_from_db` 的进程级缓存包装——按
+    `(db_path, db_fingerprint, edition, knn_k)` 做 key，库长大/改判后
+    指纹变了自动重建，同一指纹下复用同一个 matcher。
+
+    `GlyphMatchStep._matcher()`（管线批跑）与控制台 `/api/glyph-match/*`
+    单点查询路由共用这份缓存——两边都是"一次会话内几十次查询共用同一个
+    库"的场景，各自维护一份内存索引没有意义（`glyph_db_path.py` 库读入
+    内存要秒级到几十秒级，见 `steps/glyph_match.py` 模块头）。字典键含
+    `db_path` 而不是只按 fingerprint，避免不同书指向不同库路径时误命中。
+    """
+    key = (db_path, db_fingerprint, edition, knn_k)
+    cached = _MATCHER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    _MATCHER_CACHE.clear()   # 只保留最近一个库状态，避免多版本无限堆积内存
+    db = GlyphDB(db_path)
+    result = load_matcher_from_db(db, edition=edition, knn_k=knn_k)
+    _MATCHER_CACHE[key] = result
+    return result
+
+
 # ── 疑问判定（纯函数，可单测）─────────────────────────────────────────
 
 def judge_doubts(ocr: dict | None, align: dict | None, tier: str,
