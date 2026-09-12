@@ -96,25 +96,88 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
     配对按 (页, 列, 上格格位)：`r2s_boundaries` 用 up.slot 定名，`CutPointCandidates`
     用 slot_above —— 本用例这一列恰好就是产物里那个上格，唯一命中。
     候选的 y 是**列图坐标**（从内容窗口 x0 起，每 x 一个），与 case.seam 同口径。
+
+    每个候选再挂上 Step4/5 打通的识别信息（overview 2026-09-11 下发）：选这个
+    候选切法，上格/下格分别被库匹配认成什么字。数据来自 `char_index`
+    （`CharRec.cand_variants`，给出候选试切字块）与 `glyph_match`
+    （`MatchRec.cand_variants`，给出该字块的库匹配结果），按 `(side, cand_idx)`
+    与 `cut_candidates[k].candidates` 的下标配对——上格用它的 `below` 候选，
+    下格用它的 `above` 候选（`side` 是**格位视角**：见 `cell_shrink.py`
+    `multi_above`/`multi_below` 的模块内注释，上格"往下看"这条切点用 below）。
+    没跑过 Step4/5、或该格位/候选没有匹配结果时留空，前端按"没有识别信息"处理，
+    不是错误。
     """
     from ...core.step import page_key
 
     per_page: dict[int, dict] = {}
+    match_cache: dict[tuple[int, int], dict] = {}   # (page, slot) → {side: {cand_idx: MatchRec-ish dict}}
+
+    def _match_map(pg: int, slot: int) -> dict:
+        """这一格的候选匹配结果，外加它自己**当前**（chosen 那条）的匹配结果
+        ——chosen 候选没有 `cand_variants`（Step4 不重复切它），它的识别信息
+        就是这一格正式的 `MatchRec` 本身，存在 `out["chosen"]` 里，拼候选列表
+        时按 `i == cp.chosen` 取用，不与其他候选混进同一个 side 字典。
+
+        产物是外部磁盘状态，读取/解析失败（旧版本 schema 的存量产物、跑到
+        一半的文件……）都不该让整个请求 500——候选信息本就是"有则显示、
+        没有不算错"的增强项，见模块头。实测踩过一次：`glyph_match`
+        `CandidateMatch` 加 `side` 字段前跑出的旧产物，pydantic 拿新
+        schema 读会直接报 `Field required`。
+        """
+        key = (pg, slot)
+        if key in match_cache:
+            return match_cache[key]
+        out: dict = {"above": {}, "below": {}, "chosen": None}
+        try:
+            mrec = st.read(book, "glyph_match", page_key(pg), "glyph_match")
+        except Exception:
+            mrec = None
+        for cc in (mrec.columns if mrec else []):
+            for r in cc.chars:
+                if r.slot != slot or r.sub:
+                    continue
+                out["chosen"] = {"verdict": r.verdict, "char": r.char,
+                                 "cov": r.cov, "wmax": r.wmax}
+                for cv in (r.cand_variants or []):
+                    out[cv.side][cv.cand_idx] = {
+                        "verdict": cv.verdict, "char": cv.char,
+                        "cov": cv.cov, "wmax": cv.wmax}
+                break
+        match_cache[key] = out
+        return out
+
     for c in picked:
         pg = c["page"]
         if pg not in per_page:
-            cells = st.read(book, "row_segment", page_key(pg), "cells")
+            try:
+                cells = st.read(book, "row_segment", page_key(pg), "cells")
+            except Exception:
+                cells = None
             m: dict = {}
             for cc in (cells.columns if cells else []):
                 for cp in (getattr(cc, "cut_candidates", None) or []):
                     m[(cc.col, cp.slot_above)] = cp
             per_page[pg] = m
         cp = per_page[pg].get((c["col"], c["slot_above"]))
-        # 坐标起点：本用例的 x0/宽度（现役缝同源），与产物列宽不一致时下游自己兜
-        c["candidates"] = ([] if cp is None else
-                           [dict(kind=x.kind, y=x.y, seam_ink=x.seam_ink, dev_max=x.dev_max)
-                            for x in cp.candidates])
-        c["chosen"] = None if cp is None else cp.chosen
+        if cp is None:
+            c["candidates"], c["chosen"] = [], None
+            continue
+        # 上格（slot_above）的 below 候选 = 上格"往下看"这条切点；
+        # 下格（slot_below）的 above 候选 = 下格"往上看"这条切点。两者
+        # 是同一批候选的两个视角，逐 cand_idx 一一对应；chosen 那条没有
+        # cand_variants（Step4 不重切它），改取这一格正式的 MatchRec。
+        above_map = _match_map(pg, c["slot_above"])
+        below_map = _match_map(pg, c["slot_below"])
+
+        def _pick(m: dict, side: str, i: int) -> dict | None:
+            return m["chosen"] if i == cp.chosen else m[side].get(i)
+
+        c["candidates"] = [
+            dict(kind=x.kind, y=x.y, seam_ink=x.seam_ink, dev_max=x.dev_max,
+                 match_above=_pick(above_map, "below", i),
+                 match_below=_pick(below_map, "above", i))
+            for i, x in enumerate(cp.candidates)]
+        c["chosen"] = cp.chosen
 
 
 

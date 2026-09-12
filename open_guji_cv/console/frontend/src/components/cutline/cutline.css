@@ -31,3 +31,12 @@
 .clbtns button { font-size: .76rem; padding: .15rem .5rem; white-space: nowrap; }
 .clbtns button.on { background: var(--indigo-soft); border-color: var(--indigo); }
 .cltags button { opacity: .75; }
+
+/* Step7「切分裁决」专用卡片（BlockingCutlineCard） */
+.clcand-pick { stroke-width: 2.5; opacity: 1; }
+.bcc-expect { margin-bottom: .3rem; }
+.bcc-cands { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.bcc-cands td { padding: .2rem .35rem; border-bottom: 1px solid var(--rule); cursor: pointer; }
+.bcc-cands tr.on td { background: var(--indigo-soft); }
+.bcc-cands .bcc-kind { white-space: nowrap; }
+.clm-hit { color: var(--ok); font-weight: 600; }
