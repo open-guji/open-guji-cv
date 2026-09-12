@@ -71,11 +71,14 @@ from pydantic import BaseModel
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
+from ..core.workspace import corpus_path
 from ..products.kinds.recog import (ColumnDecision, DecisionRec,
                                     PageDecision, PageMatch, PageOcr)
 from ..utils.jiazhu_order import sort_by_reading
 
-DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 align_ref.py 模块头
+# 「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本而非工作区真语料。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wenyuange_wikisource.txt"))
 DEFAULT_LLM_LOG_DIR = "output/llm_online_calls"
 
 

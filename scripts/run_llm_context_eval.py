@@ -45,6 +45,7 @@ import build_llm_context_evalset as bld  # noqa: E402
 from open_guji_cv.clustering.llm_context import (  # noqa: E402
     LLMContextJudge, MockJudge, NoAPIKeyError, prompt_direct,
     prompt_with_candidates, redact_key)
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 
 def build_prompt(item: dict, book_title: str, version: str, with_reason: bool) -> str:
@@ -79,7 +80,7 @@ def main() -> None:
     ap.add_argument("--general-corpus",
                     default=str(REPO / "corpus" / "external" / "daizhige_zhaoling.txt"))
     ap.add_argument("--book-corpus",
-                    default=str(REPO / "corpus" / "zongmu_wuyingdian_reference.txt"))
+                    default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--book-weight", type=float, default=bld.DEFAULT_BOOK_WEIGHT)
     ap.add_argument("--gate", type=float, default=bld.DEFAULT_MARGIN_GATE)
     ap.add_argument("--context-window", type=int, default=bld.DEFAULT_CONTEXT_WINDOW)

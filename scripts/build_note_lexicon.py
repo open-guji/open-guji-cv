@@ -55,11 +55,18 @@ import argparse
 import collections
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+sys.path.insert(0, str(REPO))
+
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
+
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wuyingdian_reference.txt"))
 DEFAULT_OUT = "config/jiazhu/version_notes.json"
 
 #: 兜底值——**只在没给 `--book` 时用**，且只对《四庫全書總目》成立。

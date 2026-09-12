@@ -22,6 +22,7 @@ import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.core.engine import params_hash
 from open_guji_cv.core.spec import page_key
 from open_guji_cv.core.step import KINDS, STEPS
+from open_guji_cv.core.workspace import corpus_path
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.align_ref import AlignRefParams
 
@@ -87,7 +88,7 @@ def test_gold_derivation_matches_between_cached_and_live_recompute(tmp_path):
     # 内容相同、路径不同的语料副本：指纹（按路径 mtime/size 算）必然对不上
     # 缓存的 corpus_fingerprint，强制走现算兜底路径。
     copy = tmp_path / "corpus_copy.txt"
-    copy.write_text(Path("corpus/zongmu_wuyingdian_reference.txt").read_text(encoding="utf-8"),
+    copy.write_text(corpus_path("zongmu_wuyingdian_reference.txt").read_text(encoding="utf-8"),
                     encoding="utf-8")
     live = align_book("vol01", [24], store, corpus_path=copy)
 

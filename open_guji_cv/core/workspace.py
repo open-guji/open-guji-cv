@@ -83,6 +83,19 @@ def raw_root(override: str | Path | None = None) -> Path:
     return workspace_root() or REPO_ROOT
 
 
+def corpus_path(name: str) -> Path:
+    """整理本语料（`corpus/<name>`）。只有文件名，没有整库那种专属环境变量——
+    跟库/图一样走 `workspace_root()`，没设 `GUJI_WORKSPACE` 就退回仓内样本。
+
+    2026-09-11 实锤：`DEFAULT_CORPUS = "corpus/xxx.txt"` 这种硬编码相对路径
+    绕过了这整套机制，靠进程 cwd 解析——在 cv 仓根下跑会读到仓内那份过期
+    小样本，在 `GUJI_WORKSPACE` 下跑才读到工作区真语料，两边一度分叉 4680 行
+    却完全无感知（`align_ref` 锚定失败诊断明明很详细，但没人想到是读错了文件）。
+    """
+    ws = workspace_root()
+    return (ws or REPO_ROOT) / "corpus" / name
+
+
 def describe() -> dict[str, str]:
     """当前解析结果，供控制台与诊断打印——路径错了要看得见。"""
     ws = workspace_root()

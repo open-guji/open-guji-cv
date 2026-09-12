@@ -1,5 +1,14 @@
 # 外部整理本語料
 
+> **2026-09-11 起本目錄只存小樣本（各 6000 字），不存全量**——完整語料只在
+> `siku-zongmu-workspace` 工作區（`export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace`）。
+> 代碼一律走 `core.workspace.corpus_path()` 解析（沒設環境變量退回本目錄樣本，
+> 設了就讀工作區真語料），不要再寫死 `"corpus/xxx.txt"` 這種相對路徑字符串——
+> 那種寫法靠進程 cwd 解析，曾導致仓内样本与工作区真语料悄悄分叉 4680 行却
+> 无人发现（`align_ref` 锚定诊断字段明明很详细，但没人想到是读错了文件）。
+> 依赖完整字表覆盖率的统计型测试（如 `test_two_tier_charset_beats_single_table`）
+> 用小样本会失真，已加 `skipif` 守卫，不是代码错。
+
 ## zongmu_wenyuange_wikisource.txt —— 現役，`align_ref`／`context_decide`／`gold.v2_align` 唯一語料
 
 維基文庫《文淵閣四庫全書》0001-0005冊 ProofreadPage 校對本抽取，經 MediaWiki

@@ -56,6 +56,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_guji_cv.clustering.match import GlyphMatcher  # noqa: E402
 from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 
 # 已记账的金标标签问题（与 normalize 回归门的 known_defect 同思路：不进
@@ -297,7 +298,7 @@ def main() -> None:
                          "缓存没有的实例退化用 --carrier-tmpl 的 top1")
     ap.add_argument("--carrier-tmpl",
                     default="output/{book}/phase4_chars/ocr_carrier.jsonl")
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt",
+    ap.add_argument("--corpus", default=str(corpus_path("zongmu_wuyingdian_reference.txt")),
                     help="--with-branches 的 LM 语料（本书整理本）")
     args = ap.parse_args()
 

@@ -49,6 +49,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
+
 SCRATCH = Path("/tmp/claude-0/-home-user-open-guji-cv/"
                "601db0f8-3aac-51ba-9e83-49d1f06c4bda/scratchpad")
 
@@ -201,7 +203,7 @@ def main() -> None:
     ap.add_argument("--pipeline-rev", default=None,
                     help="默认取 build_clustering_dataset.PIPELINE_REV")
     ap.add_argument("--corpus",
-                    default="corpus/zongmu_wuyingdian_reference.txt")
+                    default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--carrier",
                     default="output/vol02/phase4_chars/ocr_carrier.jsonl")
     ap.add_argument("--cache", default=str(SCRATCH / "ocr_topk_vol02.jsonl"))

@@ -30,6 +30,7 @@ sys.path.insert(0, str(REPO))
 import open_guji_cv.steps  # noqa: E402,F401
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.eval.round_check import load_verdicts  # noqa: E402
 from open_guji_cv.gold.item import Anchor, GoldItem  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
@@ -40,7 +41,9 @@ from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.variant_ledger import han_counter  # noqa: E402
 
 SHARD = "char-ocr"
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wuyingdian_reference.txt"))
 
 
 def main() -> int:

@@ -72,10 +72,15 @@ from pydantic import BaseModel
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
+from ..core.workspace import corpus_path
 from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
-DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
+# ⚠️ 走 `core.workspace.corpus_path`，不要再写死 "corpus/xxx.txt" 这种相对
+# 路径字符串——那种写法靠进程 cwd 解析，在 cv 仓根下跑会读到仓内样本、在
+# GUJI_WORKSPACE 下跑才读到工作区真语料。两份一度分叉 4680 行却完全无感知
+# （2026-09-11 实锤，见 corpus_path 模块头）。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wenyuange_wikisource.txt"))
 
 
 def slots_from_decision(dec, match=None, ocr=None

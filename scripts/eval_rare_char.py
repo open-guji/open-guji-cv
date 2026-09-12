@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 DS = Path("../open-guji-dataset/rare-char")
 
@@ -23,7 +27,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default=str(DS))
     ap.add_argument("--k", type=int, default=10)
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
+    ap.add_argument("--corpus", default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--paddle", action="store_true",
                     help="加 PP-OCRv5 一列（子进程 worker，见 candidates.PaddleOcrSource）")

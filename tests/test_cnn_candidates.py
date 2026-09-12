@@ -13,6 +13,7 @@ import pytest
 
 from open_guji_cv.clustering.candidates import BAR_ASPECT, _bar_rule
 from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT, CnnCandidates, rrf
+from open_guji_cv.core.workspace import corpus_path
 
 
 # ── RRF ──────────────────────────────────────────────────────────
@@ -134,7 +135,7 @@ def test_cnn_rare_char_top10():
 
     items = [json.loads(l) for l in
              Path("../open-guji-dataset/rare-char/items.jsonl").read_text(encoding="utf-8").splitlines()]
-    cs = book_charset("corpus/zongmu_wuyingdian_reference.txt",
+    cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
                       [i["expected"]["char"] for i in items])
     c = CnnCandidates()
     hit = n = 0
