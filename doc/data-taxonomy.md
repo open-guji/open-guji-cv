@@ -143,11 +143,27 @@ benchmark / guardrail / statistics 里的任何一类**：
 是从"这份数据服务什么目的"切的，没打算覆盖"Step 之间流转的正式产物"这条线——
 `products/` 目录下的东西本来就有自己的一套体系（`ProductStore`/`Manifest`，
 见 `doc/console_architecture.md`），不需要也不应该被塞进 benchmark/guardrail/
-statistics 三选一。**这条留给协调者定夺**：如果确实需要给"交接产物"单独立
-一类，应该在本文档加一节说明"哪些属于 `products/`、不在本文档管辖范围"，
-而不是勉强把 `gate_manifest` 分到三类之一；`eval/rulers.py` 的 R1 是"读
-`gate_manifest` 现算出来的统计量"，这条本身仍然成立、不受此结论影响
-（R1 是 statistics，`gate_manifest` 是它的输入，两者是不同的东西）。
+statistics 三选一。`eval/rulers.py` 的 R1 是"读 `gate_manifest` 现算出来的
+统计量"，这条本身仍然成立、不受下面的结论影响（R1 是 statistics，
+`gate_manifest` 是它的输入，两者是不同的东西）。
+
+**2026-09-11 协调者拍板（Step2/Step5-d 两次数据盘点都独立跑出同一个"留给
+协调者定夺"的问题，在此一并回答，不再留待定）**：**不给"交接产物"立第四类。**
+
+理由：本文档三分类的切分依据是"这份数据服务什么目的"——离线评一步准不准
+（benchmark）、运行时拦不拦（guardrail）、事后给人看发生了什么（statistics），
+三者的共同点是**都面向"人"或"离线评测"这两类读者**。交接产物（`gate_manifest`、
+`align_ref` 的 `PageAlignRef` 等）服务的是完全不同的读者——**下一个 Step 的
+代码本身**，回答的是"下一步该怎么继续跑"，不是这三个问题里的任何一个。
+硬塞进来不会让分类更完整，只会让文档同时试图回答两个不相关的问题，
+两边都讲不清楚。
+
+**结论落地**：交接产物不属于本文档管辖范围，明确排除（已并入下面「不做的事」
+一节）；它们已经有自己的体系（`ProductStore`/`Manifest`），不需要另立标准。
+以后再遇到"这是不是交接产物"的疑问，判断标准就是 Step2/Step5-d 两次盘点
+共同验证过的那条：**下游 Step 的代码是否直接靠它才能继续跑**——是，就是
+交接产物，出本文档管辖范围，去查 `doc/console_architecture.md`；不是，
+才回到 benchmark/guardrail/statistics 三选一。
 
 **2026-09-11 补充（Step5-d 数据盘点核实）**：`products/<book>/align_ref/p*.json`
 （`PageAlignRef`，Step5-d 输出）与 `gate_manifest` 同属这一类交接产物——
@@ -205,6 +221,11 @@ Step1-8 各步都会读的版式先验配置，性质与"字典/字体/术语表
 - 不建 `guardrails/`、`statistics/` 新目录——即便只做软链接，也要处理
   Windows 符号链接的额外权限问题，收益（换个地方能找到）小于成本，
   上面的表格已经起到"从文档能查到实际在哪"的作用。
+- **不给"交接产物"（`gate_manifest`、`PageAlignRef` 等 Step 间流转的正式
+  产物）立第四类**——它们服务下游代码续跑，不是离线评测/在线拦截/事后
+  看趋势里的任何一种，本就不在本文档三分类的问题域里，去查
+  `doc/console_architecture.md` 的 `ProductStore`/`Manifest` 体系。
+  判断标准：下游 Step 的代码是否直接靠它才能继续跑——是就出本文档管辖。
 
 如果以后确实需要物理重组（比如 `config/` 文件数量继续涨到分不清），
 再另开一个任务书评估搬移成本，本文档到那时候可以升级为迁移计划的基础。
