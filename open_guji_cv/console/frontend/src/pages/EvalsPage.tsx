@@ -7,6 +7,7 @@ import { RoundPanel } from '../components/evals/RoundPanel'
 import { QualityPanel } from '../components/evals/QualityPanel'
 import { AlignRefPanel } from '../components/evals/AlignRefPanel'
 import { EvalsPanel } from '../components/evals/EvalsPanel'
+import { usePersistedPages } from '../hooks/usePersistedPages'
 
 // D6 + 2026-09-11 重构（原名"评测页"，改叫"统计数据"——页面里真正在用的
 // 是判据体检/吞吐量这类统计数据，"评测器列表"反而是用得最少的一块）：
@@ -29,7 +30,7 @@ import { EvalsPanel } from '../components/evals/EvalsPanel'
 //      直接接了面板，还没有面板的（各步的详细数据总结文字）先留占位。
 export function EvalsPage() {
   const { book = '' } = useParams()
-  const [pages, setPages] = useState('dev_set')
+  const [pages, setPages] = usePersistedPages('evals-recog', book, 'dev_set')
   const [showEvals, setShowEvals] = useState(false)
 
   return (

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { listPipelines } from '../api/registry'
 import { submitRun, fetchRuns, cancelRun } from '../api/runs'
 import { fmtDur } from '../api/client'
+import { usePersistedPages } from '../hooks/usePersistedPages'
 import type { Pipeline, StepDescribe } from '../types/registry'
 import type { RunJob, LogEvent } from '../types/runs'
 import './runs.css'
@@ -15,7 +16,7 @@ export function RunsPage() {
   const [pipelineId, setPipelineId] = useState('keben_body_v2')
   const [fromStep, setFromStep] = useState('')
   const [toStep, setToStep] = useState('')
-  const [pages, setPages] = useState('dev_set')
+  const [pages, setPages] = usePersistedPages('runs', book, 'dev_set')
   const [paramsText, setParamsText] = useState('')
   const [llmEnable, setLlmEnable] = useState(false)
   const [llmProvider, setLlmProvider] = useState('qwen')

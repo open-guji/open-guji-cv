@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { fetchBorderReviewCards, fetchBorderReviewVerdicts } from '../../api/borderReview'
 import { postEvents } from '../../api/events'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import { BORDER_REVIEW_SPECS } from '../../types/borderReview'
 import type { BorderReviewCard, BorderReviewKind } from '../../types/borderReview'
 import './borderReview.css'
@@ -18,7 +19,9 @@ const STEP_OF: Record<BorderReviewKind, string> = {
 
 export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderReviewKind }) {
   const spec = BORDER_REVIEW_SPECS[kind]
-  const [pages, setPages] = useState('dev_set')
+  // id 带 kind：这一个组件被 cols/head/outer/colborder 四个 tab 复用，
+  // 页范围各自记各自的，不共享（用户 2026-09-12 定）。
+  const [pages, setPages] = usePersistedPages(`border-review-${kind}`, book, 'dev_set')
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cards, setCards] = useState<BorderReviewCard[]>([])

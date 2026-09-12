@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchBorderLineCards, fetchBorderLineVerdicts } from '../../api/borderLine'
 import { postEvents } from '../../api/events'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { BorderLineCard as Card } from '../../types/borderLine'
 import { BorderLineCard } from './BorderLineCard'
 import type { LineState } from './BorderLineCard'
@@ -15,7 +16,7 @@ import './borderReview.css'
 const STEP = 'border_detect'
 
 export function BorderLinePanel({ book }: { book: string }) {
-  const [pages, setPages] = useState('dev_set')
+  const [pages, setPages] = usePersistedPages('linebot', book, 'dev_set')
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cards, setCards] = useState<Card[]>([])

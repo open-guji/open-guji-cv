@@ -3,6 +3,7 @@ import { fetchVariantGroups } from '../../api/variants'
 import { submitRun, fetchRun } from '../../api/runs'
 import { postEvents } from '../../api/events'
 import { needsReading, consumedMsg } from '../../domain'
+import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { GroupTile, VariantGroupView } from '../../types/variants'
 import './variants.css'
 
@@ -19,7 +20,7 @@ interface TileState {
 }
 
 export function GroupsPanel({ book }: { book: string }) {
-  const [pages, setPages] = useState('dev_set')
+  const [pages, setPages] = usePersistedPages('variants-groups', book, 'dev_set')
   const [data, setData] = useState<VariantGroupView[] | null>(null)
   const [cur, setCur] = useState<number | null>(null)
   const [stat, setStat] = useState('')
