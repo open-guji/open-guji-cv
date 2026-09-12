@@ -7,8 +7,11 @@ export interface LineState {
 }
 
 interface Props {
+  idx: number
   c: Card
   st: LineState
+  isCurrent: boolean
+  onFocus: () => void
   onSetY: (y: number) => void
   onDecide: (verdict: string) => void
 }
@@ -16,7 +19,7 @@ interface Props {
 // 图是服务端现算的 jpg（裁剪图 + 拼接的投影带），宽度不固定，靠 onLoad 读
 // naturalHeight 换算显示高度——照抄 CutlineCard 的思路，但这里没有服务端
 // 传回的 col_w，只能等图加载完才知道要按多大比例拖线。
-export function BorderLineCard({ c, st, onSetY, onDecide }: Props) {
+export function BorderLineCard({ idx, c, st, isCurrent, onFocus, onSetY, onDecide }: Props) {
   const [dispH, setDispH] = useState(0)
   const [naturalH, setNaturalH] = useState(0)
   const dragging = useRef(false)
@@ -32,6 +35,7 @@ export function BorderLineCard({ c, st, onSetY, onDecide }: Props) {
   }
 
   function onMouseDown(ev: React.MouseEvent) {
+    onFocus()
     dragging.current = true
     onSetY(yFromEvent(ev))
     ev.preventDefault()
@@ -47,7 +51,7 @@ export function BorderLineCard({ c, st, onSetY, onDecide }: Props) {
   }
 
   return (
-    <article className="brcard blcard" data-v={st.done || ''}>
+    <article id={`blc${idx}`} className={`brcard blcard${isCurrent ? ' cur' : ''}`} data-v={st.done || ''}>
       <h3>{c.book}/{c.page} <em>第 {c.col} 列 · 下端{c.raised ? '（抬头列）' : ''}</em></h3>
       <div className="blimg" ref={boxRef} style={{ height: dispH || undefined }}
            onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={endDrag}>
@@ -66,9 +70,9 @@ export function BorderLineCard({ c, st, onSetY, onDecide }: Props) {
       </div>
       <div className="bl-info muted">y = {st.y.toFixed(1)} · Δ算法 {(st.y - c.y0).toFixed(1)}px</div>
       <div className="br-verdicts">
-        <button aria-pressed={st.done === 'moved'} onClick={() => onDecide('moved')}>落定此线</button>
-        <button aria-pressed={st.done === 'ok'} onClick={() => onDecide('ok')}>淡色线位置就对</button>
-        <button aria-pressed={st.done === 'no_line'} onClick={() => onDecide('no_line')}>看不出线</button>
+        <button title="回车" aria-pressed={st.done === 'moved'} onClick={() => onDecide('moved')}>落定此线</button>
+        <button title="O" aria-pressed={st.done === 'ok'} onClick={() => onDecide('ok')}>淡色线位置就对</button>
+        <button title="N" aria-pressed={st.done === 'no_line'} onClick={() => onDecide('no_line')}>看不出线</button>
       </div>
     </article>
   )
