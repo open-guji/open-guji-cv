@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from ..utils.image_io import imread, imwrite
+from ..utils.seam import mask_outside
 from .ids import make_id
 from .normalize import NORM_SIZE, normalize_patch
 
@@ -1258,7 +1259,8 @@ def _patch_ink_ratio(gray: np.ndarray) -> float:
 
 
 
-# ── 列级连通体归属（避免边框与邻字残余混入）──────────────
+# ── 列级连通体归属（2026-09-12 起 extract_page 不再调用，见其文档字符串；
+#    函数本体保留供既有单元测试直接调用 _assign_column/clean_patch）──────
 
 MIN_COMP_AREA_RATIO = 0.004   # 连通体面积 < 格面积此比例 → 噪点，丢弃
                               # ——只对**边缘带**生效（条带左右缘 ±10px、
@@ -2028,11 +2030,19 @@ class CharExtractor:
     def __init__(self, padding_ratio: float = PADDING_RATIO,
                  min_ink_ratio: float = MIN_INK_RATIO,
                  strategy: str = "component_owner"):
-        """strategy: 格内墨迹归属算法。
+        """strategy: 历史遗留参数，两个取值现在行为完全一致，仅保留签名
+        兼容与合法性校验。
 
-        component_owner  列级连通体归属（默认，见 _assign_column）
-        padding_box      旧做法：按格线裁框 + 固定外扩，框内墨迹全收
-                         （保留作对照与回滚；benchmark 里是基线）
+        2026-09-12 之前，`component_owner` 会调 `_assign_column` 做列级
+        连通体归属（猜"这块墨该归哪格"），`padding_box` 按格线裁框、框内
+        墨迹全收。用户定：格与格之间的上下边界改为**严格信任 Step3**
+        （矩形 `y_top`/`y_bottom`，或选中折线时的 `seam_top`/`seam_bottom`），
+        不再做归属判断——`_assign_column` 在归属本身没错时也会被上游一条
+        切错的折线带偏（vol02:135:3:5"其"字八字底一撇被 Step3 折线误判给
+        下一格，`_assign_column` 只是忠实执行了这条错误折线）；反过来说，
+        格界内的墨迹不需要再猜是不是"自己的"。`_assign_column`/`clean_patch`
+        函数本体还在（供既有单元测试直接调用），只是 `extract_page` 不再
+        调它们。
         """
         if strategy not in ("component_owner", "padding_box"):
             raise ValueError(f"未知切分策略：{strategy}")
@@ -2050,9 +2060,10 @@ class CharExtractor:
         坐标系约定：grid 中的坐标即 page_img 的像素坐标
         （Phase 3 在最终预处理图上检测，本函数输入必须是同一坐标系的图）。
 
-        切分策略：**列级连通体归属**。整列一次二值化 + 连通体分析，每块
-        墨迹按「主体落在哪一格」归属；界行竖线在列级丢弃。逐格裁框时再
-        把不属于本格的墨迹抹白，从根上解决左右边框混入与上下邻字残余。
+        格与格之间的上下边界严格信任 Step3（矩形 y_top/y_bottom，或选中
+        折线时按 seam_top/seam_bottom 逐列抹掉折线外的墨迹），不做连通体
+        归属判断——见 CharExtractor.__init__ 的说明。列内左右方向（版框
+        竖线/横线剔除、左右缘救援、曲线切边等）仍按原逻辑处理。
         """
         if page_img.ndim == 3:
             page_img = cv2.cvtColor(page_img, cv2.COLOR_BGR2GRAY)
@@ -2196,13 +2207,17 @@ class CharExtractor:
                 strip, local, int(round(left_x)) - sx0,
                 int(round(right_x)) - sx0, cell_h_ref,
                 right_ext=right_delta, left_ext=left_delta)
-            if self.strategy == "component_owner":
-                boxes, owner = _assign_column(strip, local, cell_h_ref,
-                                              float(sx1 - sx0),
-                                              left_ext=left_delta,
-                                              right_ext=right_delta)
-            else:
-                boxes, owner = {}, None
+            # 格与格之间的上下边界**严格信任 Step3**（矩形 y_top/y_bottom，
+            # 或 Step3 选中了折线时的 seam_top/seam_bottom），不再自己按
+            # 连通体猜"这块墨该归哪格"（2026-09-12 用户定：`_assign_column`
+            # 的贪心匹配+四级键在归属判断本身没错时也会被上游一条切错的
+            # 折线带偏——vol02:135:3:5"其"字八字底一撇被 Step3 折线错误
+            # 划给了下一格，_assign_column 只是忠实执行了这条错误的折线；
+            # 反过来说，格界内的墨迹不需要再猜是不是"自己的"，Step3 已经
+            # 决定了这一格该有什么）。列内左右方向（版框钉桩/左右缘救援/
+            # 界行剔除/曲线切边）不受影响，仍按原逻辑走。
+            seam_of = {int(c["index"]): (c.get("seam_top"), c.get("seam_bottom"))
+                      for c in cells}
 
             # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
@@ -2220,20 +2235,19 @@ class CharExtractor:
                 pad = cell_h * self.padding_ratio
                 y0 = max(0, int(round(ltop - pad)))
                 y1 = min(strip.shape[0], int(round(lbot + pad)))
-                box = boxes.get(idx)
-                if box is not None:
-                    # 归属墨迹越出格位（出头笔画 / 与邻字粘连）时按需放宽，
-                    # 但不超过 MAX_EXTEND_RATIO，避免粘连块把图块撑爆。
-                    # 尺子用「本格高与本列格高中位数」的较大者：被 DP 挤矮的末格
-                    # （vol02/71 7:21 只有 74px）按自己的高算余量，字的下沿装不下。
-                    lim = max(cell_h, cell_h_ref) * MAX_EXTEND_RATIO
-                    y0 = max(0, int(round(max(ltop - lim, min(y0, box[1])))))
-                    y1 = min(strip.shape[0],
-                             int(round(min(lbot + lim, max(y1, box[3])))))
                 if y1 <= y0:
                     continue
-                patch = (strip[y0:y1].copy() if owner is None
-                         else clean_patch(strip, owner, idx, y0, y1))
+                patch = strip[y0:y1].copy()
+                seam_top, seam_bottom = seam_of.get(idx, (None, None))
+                if seam_top is not None or seam_bottom is not None:
+                    # Step3 选中了折线：折线之外严格不属于本格，抹白。
+                    # 折线数组是**列图坐标的绝对值**（原点在内容窗口 x_lo，
+                    # y 是列图绝对行号）；patch 顶边在列图坐标系的绝对 y 是
+                    # sy0+y0（strip 已经先减过 sy0，y0 只是相对 strip 的局部
+                    # 偏移，两层要叠加，只传 y0 会把折线错位一个 sy0，
+                    # 曾经把整格抹白——2026-09-12 实测复现）。
+                    patch = mask_outside(patch, seam_top, seam_bottom,
+                                        y0=sy0 + y0, x0=sx0 - int(round(left_x)))
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
@@ -2264,7 +2278,7 @@ class CharExtractor:
                 flags: list[str] = []
                 if idx in end_cand:
                     end_patches[idx] = (patch.copy(), cell_h)
-                if (owner is not None and box is None) or ink < self.min_ink_ratio:
+                if ink < self.min_ink_ratio:
                     flags.append("suspect_empty")
                 # 缺陷自检：确定层按成因分开标，疑似层兜底送审查。
                 # 旧的 rule_like（单条满宽扁横条即报）已退休——它把 5 个
