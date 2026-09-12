@@ -6,7 +6,8 @@
 `GUJI_WORKSPACE`。
 
 `expected.text` 是**固化的当前真实输出**，不是"已验证绝对正确"的人工金标
-——`render:vol01:89` 那条甚至是已知的过期数据案例（见分片 README）。
+——`render:vol01:89` 那条甚至是已知的过期数据案例，`render:vol02:3` 专门
+覆盖 excluded（排除名单）与真阙文混在一起的情形（见分片 README）。
 这条回归集守的是"改 `render_column`/`render_page` 时行为别悄悄跑偏"，
 不是"输出内容语义正确"（内容对不对要靠人核对原图，另一件事）。
 """
@@ -43,7 +44,7 @@ def _cells_by_key(col_snap: dict):
 
 def _admit_recs(col_snap: dict):
     return [AdmitRec(id="", slot=c["slot"], sub=c["sub"], admit=c["admit"],
-                      char=c["char"], reading=c["reading"])
+                      char=c["char"], reading=c["reading"], doubts=c.get("doubts", []))
             for c in col_snap["chars"]]
 
 
@@ -80,6 +81,6 @@ def test_bench_covers_known_pages():
     ids = {it["id"] for it in _load_items()}
     expected_ids = {
         "render:vol01:10", "render:vol01:33",
-        "render:vol01:89", "render:vol01:146",
+        "render:vol01:89", "render:vol01:146", "render:vol02:3",
     }
     assert expected_ids <= ids, f"缺失案例：{expected_ids - ids}"
