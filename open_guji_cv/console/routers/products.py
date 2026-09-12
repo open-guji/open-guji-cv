@@ -160,6 +160,21 @@ def api_align_ref_summary(book: str, pages: str | None = None) -> dict:
 
 
 
+@router.get("/api/ocr-candidates/{book}/summary")
+@maps_http
+def api_ocr_candidates_summary(book: str, pages: str | None = None) -> dict:
+    """Step5-c OCR 候选板块②聚合数字：引擎在线状态 + 候选覆盖率。
+    见 `steps.ocr_candidates.ocr_candidates_summary`——07号任务卡判断这一路
+    不需要独立查询页，此接口只服务聚合数字，不是单点查询。
+    """
+    from ...steps.ocr_candidates import ocr_candidates_summary
+
+    b = load_book(book)
+    page_list = b.resolve_pages(pages) if pages else None
+    return ocr_candidates_summary(book, page_list, deps.product_store())
+
+
+
 @router.get("/api/cutline/img/{book}/{page}/{col}.png")
 @maps_http
 def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) -> Response:
