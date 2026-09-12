@@ -12,12 +12,13 @@ import { Step5Page } from './pages/Step5Page'
 import { Step6Page } from './pages/Step6Page'
 import { Step7Page } from './pages/Step7Page'
 import { Step8Page } from './pages/Step8Page'
+import { Step9Page } from './pages/Step9Page'
 import { RunsPage } from './pages/RunsPage'
 import { EvalsPage } from './pages/EvalsPage'
 import { GlyphLibraryPage } from './pages/GlyphLibraryPage'
 import { VariantLibraryPage } from './pages/VariantLibraryPage'
 
-// 路由表见方案 §二。Step9（结果整理）路由已加（用户 2026-09-11 改口），页面暂时空。
+// 路由表见方案 §二。Step9（结果整理）2026-09-11 落地第一件事：坐标转字符位。
 export default function App() {
   return (
     <Routes>
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/:book/step/step6/" element={<Step6Page />} />
         <Route path="/:book/step/step7/" element={<Step7Page />} />
         <Route path="/:book/step/step8/" element={<Step8Page />} />
+        <Route path="/:book/step/step9/" element={<Step9Page />} />
         <Route path="/:book/step/:step/" element={<StepPage />} />
         <Route path="/:book/runs/" element={<RunsPage />} />
         <Route path="/:book/evals/" element={<EvalsPage />} />

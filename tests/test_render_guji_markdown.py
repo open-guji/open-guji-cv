@@ -14,16 +14,17 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
+from open_guji_cv.products.kinds.cells import CellRec
+from open_guji_cv.products.kinds.recog import AdmitRec
+from open_guji_cv.render.guji_markdown import render_column
+
 DATASET = Path(__file__).resolve().parent.parent.parent / "open-guji-dataset"
 ITEMS = DATASET / "guji-markdown-render" / "items.jsonl"
 needs_dataset = pytest.mark.skipif(not ITEMS.exists(), reason="需要 open-guji-dataset")
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 
 def _load_items() -> list[dict]:
@@ -34,7 +35,6 @@ def _load_items() -> list[dict]:
 
 
 def _cells_by_key(col_snap: dict):
-    from open_guji_cv.products.kinds.cells import CellRec
     return {(c["slot"], c["sub"] or ""): CellRec(slot=c["slot"], pos=0, y0=0, y1=0,
                                                   x0=0, x1=0, kind=c["kind"],
                                                   sub=c["sub"], order=0)
@@ -42,7 +42,6 @@ def _cells_by_key(col_snap: dict):
 
 
 def _admit_recs(col_snap: dict):
-    from open_guji_cv.products.kinds.recog import AdmitRec
     return [AdmitRec(id="", slot=c["slot"], sub=c["sub"], admit=c["admit"],
                       char=c["char"], reading=c["reading"])
             for c in col_snap["chars"]]
@@ -51,8 +50,6 @@ def _admit_recs(col_snap: dict):
 @needs_dataset
 @pytest.mark.parametrize("item", _load_items(), ids=lambda it: it["id"])
 def test_render_matches_expected(item: dict):
-    from render_guji_markdown import render_column
-
     cells_by_col = {c["col"]: c for c in item["input"]["cells"]}
     page = item["input"]["page"]
 
