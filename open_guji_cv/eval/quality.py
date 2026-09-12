@@ -109,10 +109,12 @@ def quality(book: str = "vol01", pages: str = "dev_set",
     col_c: collections.Counter = collections.Counter()
     slot_c: collections.Counter = collections.Counter()
     qual_c: collections.Counter = collections.Counter()
+    defect_c: collections.Counter = collections.Counter()
     n_def = 0
     try:
         for it in gs.list("char-segmentation/instances"):
-            q = (it.expected or {}).get("quality")
+            exp = it.expected or {}
+            q = exp.get("quality")
             if q not in ("truncated", "contaminated"):
                 continue
             an = it.anchor
@@ -120,6 +122,8 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 continue
             n_def += 1
             qual_c[q] += 1
+            if exp.get("defect"):
+                defect_c[exp["defect"]] += 1
             page_c[an.page] += 1
             if an.col is not None:
                 col_c[an.col] += 1
@@ -139,6 +143,7 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                       "by_channel": acc, "by_align_op": by_align,
                       "errors": errors[:20]},
         "defects": {"n": n_def, "by_quality": top(qual_c),
+                     "by_defect": top(defect_c),
                      "by_page": top(page_c), "by_col": top(col_c),
                      "by_slot": top(slot_c)},
     }
