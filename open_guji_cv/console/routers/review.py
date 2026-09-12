@@ -23,6 +23,7 @@ from ...errors import EncodeFailed, ImageMissing
 from ...review.cards import cards
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts
+from ...steps._warpmap import ColumnMapper
 
 router = APIRouter()
 
@@ -299,17 +300,23 @@ def api_cell_shrink_rand_sample(n: int = 400, seed: int = 20260911, tag: str = "
 def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
                                  pad: int = 28, scale: float = 1.0) -> Response:
     """原图裁一块，供随机层裁决台的语境图用：**红框=Step4 紧裁框**，
-    **蓝框=Step3 切分原框**（`row_segment` 的 `quad_page`，收缩前的格线）。
+    **蓝线=Step3 实际折线切缝**（`row_segment` 的 `seam_top`/`seam_bottom`，
+    逐列映射回原图，不是矩形近似）。
 
-    两条框叠在一起，才看得出「框小了但没伤字」和「框小了且切掉笔画」的区别
-    ——只看紧裁框看不出收缩本身削了多少（用户 2026-09-12 反馈：`vol02:135:3`
-    的「其」字右下角一点被切掉了，紧裁框单独看发现不了，得跟 Step3 原框对比）。
-    Step3 没有这一格的产物（列切分失败等）时静默跳过蓝框，不报错——语境图
-    仍然可看，只是少一条参考线。
+    2026-09-12 教训：最初这里画的是 `quad_page`（矩形外接框），把真实的
+    折线抹平成了直线——`vol02:135:3:5`「其」字八字底右边一撇被切掉，
+    原以为是 Step4 `_assign_column` 判错了方向，实际是 **Step3 的折线本身
+    在这里贴着撇画左侧凹陷抄近道，把整撇划给了下一格**；矩形框看不出
+    折线会拐弯，把这条线索盖住了。折线用 `ColumnMapper`（与 `row_segment.py`
+    产出 `quad_page` 时同一套映射，重建自 `column_windows` 的窗口参数）
+    逐点映射，不能直接拿 `quad_page` 的四个角点连线。
 
-    `bbox_page`/`quad_page` 都是 raw_page_px@top-right（右上原点、x 向左），
-    cv2 读的图是左上原点、x 向右——换算与 `render/overlay.py::overlay` 的
-    cell_shrink 分支一致（`x_tr_to_tl`，左右两边各自转换后互换）。
+    Step3 没有这一格的产物、或没有 `column_windows`（切分失败/尚未跑）时
+    静默跳过蓝线，不报错——语境图仍然可看，只是少一条参考线。
+
+    `bbox_page` 是 raw_page_px@top-right（右上原点、x 向左），cv2 读的图是
+    左上原点、x 向右——换算与 `render/overlay.py::overlay` 的 cell_shrink
+    分支一致（`x_tr_to_tl`，左右两边各自转换后互换）。
     """
     ci = deps.product_store().read(book, "cell_shrink", page_key(page), "char_index")
     cc = ci.column(col) if ci else None
@@ -330,26 +337,19 @@ def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
     x0, x1 = x_tr_to_tl(bx1, w), x_tr_to_tl(bx0, w)
     x0, y0, x1, y1 = int(round(x0)), int(round(by0)), int(round(x1)), int(round(by1))
 
-    quad_tl: list[tuple[int, int]] | None = None
-    step3 = deps.product_store().read(book, "row_segment", page_key(page), "cells")
-    step3_col = step3.column(col) if step3 else None
-    step3_cell = next((r for r in (step3_col.cells if step3_col else [])
-                       if r.slot == slot), None) if step3_col else None
-    if step3_cell is not None and step3_cell.quad_page:
-        quad_tl = [(int(round(x_tr_to_tl(qx, w))), int(round(qy)))
-                  for qx, qy in step3_cell.quad_page]
+    seam_lines = _step3_seam_lines(deps.product_store(), book, page, col, slot)
 
-    all_x = [x0, x1] + ([q[0] for q in quad_tl] if quad_tl else [])
-    all_y = [y0, y1] + ([q[1] for q in quad_tl] if quad_tl else [])
+    all_x = [x0, x1] + [px for line in seam_lines for px, _ in line]
+    all_y = [y0, y1] + [py for line in seam_lines for _, py in line]
     cx0, cy0 = max(0, min(all_x) - pad), max(0, min(all_y) - pad)
     cx1, cy1 = min(w, max(all_x) + pad), min(h, max(all_y) + pad)
     if cx1 <= cx0 or cy1 <= cy0:
         raise ImageMissing("裁切区域超出原图范围")
     c = cv2.cvtColor(img[cy0:cy1, cx0:cx1], cv2.COLOR_GRAY2BGR)
-    if quad_tl:
+    for line in seam_lines:
         import numpy as np
-        pts = np.array([(qx - cx0, qy - cy0) for qx, qy in quad_tl], dtype=np.int32)
-        cv2.polylines(c, [pts], True, (255, 120, 0), 1)
+        pts = np.array([(px - cx0, py - cy0) for px, py in line], dtype=np.int32)
+        cv2.polylines(c, [pts], False, (255, 120, 0), 1)
     cv2.rectangle(c, (x0 - cx0, y0 - cy0), (x1 - cx0 - 1, y1 - cy0 - 1), (0, 0, 255), 1)
     if scale != 1.0:
         c = cv2.resize(c, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -358,3 +358,36 @@ def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
         raise EncodeFailed("编码失败")
     return Response(content=buf.tobytes(), media_type="image/png",
                     headers={"Cache-Control": "no-store"})
+
+
+def _step3_seam_lines(store, book: str, page: int, col: int, slot: int
+                      ) -> list[list[tuple[int, int]]]:
+    """这一格上下两条切缝，映射回原图（左上原点）的折线点列。
+
+    `seam_top`/`seam_bottom` 是列图局部坐标（逐 x 一个 y，x 从
+    `content_x[0]` 起）；没有这条切缝（列首/列尾贴版框）时该侧为 `None`，
+    静默跳过，不补一条假线。
+    """
+    step3 = store.read(book, "row_segment", page_key(page), "cells")
+    col3 = step3.column(col) if step3 else None
+    cell3 = next((r for r in (col3.cells if col3 else []) if r.slot == slot), None)
+    if cell3 is None or col3.content_x is None:
+        return []
+    windows = store.read(book, "column_windows", page_key(page), "column_windows")
+    wrec = windows.column(col) if windows else None
+    if wrec is None:
+        return []
+    mapper = ColumnMapper(windows.page_size[0], wrec.left_line.to_vline(),
+                          wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y)
+    page_w = windows.page_size[0]
+    x0 = col3.content_x[0]
+    lines = []
+    for seam in (cell3.seam_top, cell3.seam_bottom):
+        if not seam:
+            continue
+        pts = []
+        for i, y in enumerate(seam):
+            px_tr, py = mapper.to_page_tr(x0 + i, y)
+            pts.append((int(round(x_tr_to_tl(px_tr, page_w))), int(round(py))))
+        lines.append(pts)
+    return lines
