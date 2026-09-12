@@ -32,12 +32,15 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
 
   const batch = () => `${book}-cutline-blocking`
 
+  // 用户 2026-09-11：一次载入 250 条太多，多数一屏都刷不完；限到 30。
+  const LOAD_LIMIT = 30
+
   async function load() {
     const b = batch()
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages, 250, b, true, 'all', 'blocking')
+      d = await fetchCutlineCases(book, pages, LOAD_LIMIT, b, true, 'all', 'blocking')
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
@@ -66,7 +69,12 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     cardState.current = next
     setCases(d.cases)
     setCur(0)
-    setMsg(d.n === 0 ? '没有待裁的切分方案——字卡不会被挡' : `${d.n} 条切点待裁 → 批次 ${b}`)
+    if (d.n === 0) {
+      setMsg('没有待裁的切分方案——字卡不会被挡')
+    } else {
+      const more = d.n_r2s > d.n ? `，全部待裁 ${d.n_r2s} 条，裁完这批再刷新拿下一批` : ''
+      setMsg(`本次载入 ${d.n} 条${more} → 批次 ${b}`)
+    }
   }
 
   // 挂载时自动载入一次；Step7 顶部统一页数选择区切页时跟着重载。

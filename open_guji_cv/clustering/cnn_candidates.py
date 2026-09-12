@@ -317,15 +317,26 @@ class CnnCandidates:
         return out
 
 
-EMB_EXTRA_SPECS = (
-    "kangxi:D:/data/glyph-sources/kangxi/crops@cache/exp_extglyph/kangxi_verified_v2.txt",
-    "zitools:D:/data/glyph-sources/zitools/p1:印,楷",
-)
-"""embedding 模板的外部真刻本源（`extra_glyphs.py` 的 spec）。
+EMB_EXTRA_SPECS: tuple[str, ...] = ()
+"""embedding 模板的外部真刻本图源（`extra_glyphs.py` 的 spec）。
 
-康熙那条带 `@白名单`：只用交叉验证通过的切图（`scripts/kangxi_crossval.py`，
-三道独立证据，独立源不一致率 0.312%），待人审的 1,040 张不进模板。
-目录不存在时自动跳过 → 退回纯字体模板，不报错（这些数据不随仓库分发）。"""
+**2026-09-08 起清空**——改用 `fonts/kangxi/` 的康熙字典体（见 `font_candidates.FONT_ORDER`）。
+用户裁定：效果差不多就直接用字体。实测依据（`external_glyph_sources_experiment.md` §5.11）：
+
+| 模板 | unseen 严格 top-1 | 体积 | 文件数 |
+|---|---|---|---|
+| 4 套字体（基线）| 95.9% | — | — |
+| **+ 康熙字典体 OTF** | **96.4%** | 54.9 MB | 1 |
+| + 自切康熙扫描图 | 96.0% | 180 MB（原始扫描另 1.4 GB）| 44,634 |
+
+字体赢在**覆盖率 100% vs 76%**，不是赢在还原度：逐字比「谁更像我们书里的真刻例」，
+扫描图仍赢 36% 的字；形态上扫描图的墨占比 0.1948 贴近真刻例 0.1972（字体 0.1690 偏细 14%），
+但它的连通块数 4.60 远高于真刻例 3.36（断笔/噪点），噪声抵消了真实性优势。
+
+**切图资产保留**在 `D:/data/glyph-sources/kangxi/crops`（32,898 张，交叉验证过，
+独立源不一致率 0.312%），随时可以填回本元组重新启用；若日后给扫描图做了去噪
+（把连通块压到 3.4 左右），值得再比一次。
+"""
 
 
 def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:

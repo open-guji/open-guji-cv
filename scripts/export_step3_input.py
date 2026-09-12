@@ -83,6 +83,34 @@ Step3 准不准。所以这里先立一道准入闸，只把「确实是一列�
 调参或扩样本能解决的——`mixed` 样本已经从 n=2 扩到 n=11、覆盖四种不同
 机制，指标依然分不开，说明问题出在指标本身的设计范围，不是标注量不够。
 
+## L2b：整列噪点密度判据（2026-09-11 新增，只解决四种机制里的一种）
+
+按上面「结论」的方向找了一条独立维度——`stamp_noise_density`（整列
+**未去噪原图**上中等面积 3~60px 孤立连通体的像素密度，见
+`column_projection.py` 同名函数文档）。115 列现行金标（`verdict` 只有
+`clean`/`mixed` 两档，115 = 111 clean + 4 mixed）实测：
+
+* **对印章类污染干净分开**：clean 组 p95=0.0045、max=0.0060；人判 mixed
+  的印章列 `vol02/3` c9 单独 0.0201，**3.4 倍间隙、零重叠**。
+* **对另外两种机制没有筛选力**：`vol01/146`（夹注列）、`vol02/188` c3/c4
+  （局部弯界行探入）这 3 条 mixed 在这个量上是 0.0017~0.0028，落在 clean
+  分布内部——不是参数问题，是这类统计量分不清"字身笔画贴边"和"污染贴边"，
+  两者像素层面本来就长得一样（同样在 `column_projection.py` 记录）。
+
+全语料验证（vol01+vol02 已生成产物 76 页 684 列，`output/<book>/step2_columns/`）：
+门槛 0.007~0.012 区间内命中集合完全一致，只挡下 `vol02/3` 整页 9 列里的
+8 列——`vol02/3` 是卷端目录页，大面积印章覆盖整页上半，人当时只标了 c9
+一列金标，但 L2b 命中的其余 8 列目视复核确认同样脏（详见图，此处从略），
+说明这条判据不仅复现了金标，还多找出了同页没被抽到的同类污染。门槛低到
+0.006 会连带误杀 `vol02/151` c2（人判 `clean`，候选标签"弯界行"），故取
+**0.007**、离 clean 组 max（0.0060）留一点边际、离 mixed 命中值（0.0201）
+还有 2.3 倍余量。
+
+**这条判据只解决四种已知机制里的一种**，`vol01/146`（夹注）和
+`vol02/188`（局部弯界行探入）仍然没有自动判据，继续靠人审兜底——
+按用户 2026-09-11 的裁定，不追求单一统一判据，改成"每种机制一条独立
+判据、任一命中就拦"的多通道策略，这是这个策略下先落地的第一条通道。
+
 ## 两条口径约定（Step3 侧要知道）
 
 1. **页级共享量用该页「全部 9 列」算，不是只用准入的那几列**。
@@ -129,7 +157,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from open_guji_cv.utils.column_projection import (  # noqa: E402
-    clean_column, column_profile, denoise_column,
+    clean_column, column_profile, denoise_column, stamp_noise_density,
 )
 from open_guji_cv.utils.row_boundaries import (  # noqa: E402
     estimate_shared_period, row_ink_projection,
@@ -140,6 +168,8 @@ WIDTH_TOL = 0.15         # L1：中间列宽度偏离本页中位数的上限
 OUTER_WIDTH_TOL = 0.35   # L1：**最外两列**（c1/c9）放宽到这里，理由见模块头
 SIDE_FLOOR_LOOK = 0.25   # L2：从两侧各看进去多少比例的宽度
 SIDE_FLOOR_MAX = 0.045   # L2：那段里的最低墨占比上限；2026-09-03 按 114 列金标重定，见模块头
+STAMP_NOISE_MAX = 0.007  # L2b：整列中等面积孤立墨点密度上限，专挡背景印章噪点
+                         # （2026-09-11 新增，只覆盖四种已知 mixed 机制里的一种，见模块头）
 N_BODY_SLOTS = 21        # 版式常量（这两册）
 
 
@@ -212,7 +242,8 @@ def main() -> None:
         # 逐列清理（页级先验要用全部列，所以不管准不准入都先算）
         cols, projs, borders, dst_ws, band_ws = [], [], [], [], []
         for c in wins:
-            raw = denoise_column(cv2.imread(str(wf.parent / c["file"]), cv2.IMREAD_GRAYSCALE))
+            unwarped = cv2.imread(str(wf.parent / c["file"]), cv2.IMREAD_GRAYSCALE)
+            raw = denoise_column(unwarped)
             cleaned, diag = clean_column(raw)
             b0, b1 = diag["band"]
             bt = float(c["border_top_in_column"])
@@ -222,7 +253,11 @@ def main() -> None:
             dst_ws.append(b1 - b0)
             band_ws.append(b1 - b0)
             cols.append(dict(win=c, img=cleaned, band=(b0, b1), diag=diag,
-                             border=(bt, bb), floor=side_floor(raw)))
+                             border=(bt, bb), floor=side_floor(raw),
+                             # stamp_noise 必须在**未去噪原图**上量——denoise_column
+                             # 会先清掉 <6px 的噪点，印章噪点很多恰好在这个量级，
+                             # 去噪之后密度被腰斩，标定用的口径就是原图，见模块头。
+                             stamp=stamp_noise_density(unwarped)))
 
         # 页级共享量：用**全部 9 列**算，理由见模块头「两条口径约定」第 1 条
         period = ref_w = None
@@ -241,18 +276,22 @@ def main() -> None:
             g = gold.get((args.book, page, col))
             ok_gold, why_gold = gold_admits(g)
             ok_gate = c["floor"] <= SIDE_FLOOR_MAX
+            ok_stamp = c["stamp"] <= STAMP_NOISE_MAX
             reasons = list(page_reject)
             if not ok_gate:
                 reasons.append(f"L2：两侧最低墨 {c['floor']:.4f} > {SIDE_FLOOR_MAX}"
                                 "（找不到墨量归零的边界）")
+            if not ok_stamp:
+                reasons.append(f"L2b：整列噪点密度 {c['stamp']:.4f} > {STAMP_NOISE_MAX}"
+                                "（疑似背景印章污染）")
             if args.tier == "gold" and not ok_gold:
                 reasons.append(f"L3：{why_gold}")
-            admitted = page_ok and ok_gate and (ok_gold or args.tier == "gate")
+            admitted = page_ok and ok_gate and ok_stamp and (ok_gold or args.tier == "gate")
             b0, b1 = c["band"]
             bt, bb = c["border"]
             rec = dict(
                 col=col, admitted=admitted, reject=reasons,
-                tier=("gold" if ok_gold else ("gate" if ok_gate and page_ok else None)),
+                tier=("gold" if ok_gold else ("gate" if ok_gate and ok_stamp and page_ok else None)),
                 content_x=[int(b0), int(b1)],
                 border_top=bt, border_bottom=bb,
                 top_slack=(bt if w["raised"] else 0.0),
@@ -264,6 +303,7 @@ def main() -> None:
                 border_trim_px={"top": c["diag"]["top"]["px"],
                                  "bottom": c["diag"]["bottom"]["px"]},
                 side_floor=round(c["floor"], 4),
+                stamp_noise=round(c["stamp"], 4),
                 gold=({"verdict": g.get("verdict"),
                        "border_class": g.get("border_class")} if g else None),
             )
@@ -287,7 +327,8 @@ def main() -> None:
         book=args.book, tier=args.tier,
         n_body_slots=N_BODY_SLOTS,
         gate=dict(expected_cols=EXPECTED_COLS, width_tol=WIDTH_TOL,
-                  side_floor_look=SIDE_FLOOR_LOOK, side_floor_max=SIDE_FLOOR_MAX),
+                  side_floor_look=SIDE_FLOOR_LOOK, side_floor_max=SIDE_FLOOR_MAX,
+                  stamp_noise_max=STAMP_NOISE_MAX),
         contract=[
             "图是 clean_column 的输出：抹白不裁切，坐标系跟 Step2 矫正图完全一致，"
             "border_top/border_bottom 仍是版框线原来的 y（墨被抹掉了，位置没动）。",

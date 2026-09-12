@@ -15,7 +15,8 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders, VLineRec
 from ..products.kinds.columns import BorderTrim, ColumnWindowRec, PageWindows
 from ..utils.column_projection import (ColumnWindow, clean_column, column_profile,
-                                       denoise_column, page_column_windows, warp_column)
+                                       denoise_column, page_column_windows,
+                                       stamp_noise_density, warp_column)
 
 
 class ColumnWarpParams(BaseModel):
@@ -37,7 +38,7 @@ def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) ->
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.1", unit="column",
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.2", unit="column",
         consumes=("raw_page", "borders"), produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
         code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry"),
@@ -53,12 +54,12 @@ class ColumnWarpStep(Step):
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow
-                ) -> tuple[np.ndarray, np.ndarray, dict]:
+                ) -> tuple[np.ndarray, np.ndarray, dict, np.ndarray]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y)
         raw = denoise_column(warped, ink_threshold=p.ink_threshold, min_blob_area=p.min_blob_area)
         cleaned, diag = clean_column(raw, ink_threshold=p.ink_threshold)
-        return raw, cleaned, diag
+        return raw, cleaned, diag, warped
 
     # ── Step 接口 ─────────────────────────────────────────────────────
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -66,7 +67,7 @@ class ColumnWarpStep(Step):
         gray, borders, wins = self._windows(ctx, page)
         recs: list[ColumnWindowRec] = []
         for win in wins:
-            raw, cleaned, diag = self._images(ctx, gray, win)
+            raw, cleaned, diag, warped = self._images(ctx, gray, win)
             key = column_key(page, win.col)
             ctx.cache.put(ctx.book.id, "column_raw", key, raw)
             ctx.cache.put(ctx.book.id, "column_image", key, cleaned)
@@ -85,6 +86,7 @@ class ColumnWarpStep(Step):
                 trim_top=BorderTrim(px=int(diag["top"]["px"]), case=str(diag["top"]["case"])),
                 trim_bottom=BorderTrim(px=int(diag["bottom"]["px"]), case=str(diag["bottom"]["case"])),
                 side_floor=round(side_floor(raw, p.side_floor_look, p.ink_threshold), 4),
+                stamp_noise=round(stamp_noise_density(warped, p.ink_threshold), 4),
             ))
         h, w = gray.shape[:2]
         return {"column_windows": PageWindows(
@@ -99,5 +101,5 @@ class ColumnWarpStep(Step):
         win = next((w for w in wins if w.col == col), None)
         if win is None:
             raise KeyError(f"第 {page} 页没有第 {col} 列")
-        raw, cleaned, _ = self._images(ctx, gray, win)
+        raw, cleaned, _, _ = self._images(ctx, gray, win)
         return raw if kind_id == "column_raw" else cleaned

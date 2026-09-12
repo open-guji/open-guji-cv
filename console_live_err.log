@@ -1,0 +1,1346 @@
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\cutline.py", line 55, in api_cutline_cases
+    pg = bk.resolve_pages(pages)
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\core\book.py", line 88, in resolve_pages
+    pages.update(range(int(a), int(b) + 1))
+                               ^^^^^^
+ValueError: invalid literal for int() with base 10: ''
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\review.py", line 48, in api_review_cards
+    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\review\cards.py", line 39, in cards
+    pgs = bk.resolve_pages(pages)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\core\book.py", line 88, in resolve_pages
+    pages.update(range(int(a), int(b) + 1))
+                               ^^^^^^
+ValueError: invalid literal for int() with base 10: ''
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\cutline.py", line 76, in api_cutline_cases
+    T.attach_expected(picked, book, st)
+  File "D:\workspace\open-guji-cv\open_guji_cv\eval\touching.py", line 230, in attach_expected
+    gold = {c.id: c for g in align_book(book, pages, st) if g.anchored for c in g.chars}
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\gold\v2_align.py", line 175, in align_book
+    return [align_page(book, pg, store, text, index, corpus_path) for pg in pages]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\gold\v2_align.py", line 140, in align_page
+    match = store.read(book, "glyph_match", page_key(page), "glyph_match")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\products\store.py", line 88, in read
+    return schema.model_validate(d[kind_id])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 68 validation errors for PageMatch
+columns.0.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 15.88}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 44.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.71}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.21}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.85}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.7.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.79}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.29}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.39}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.18.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 20.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.55}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.01}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.10.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 19.83}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 16.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 4.38}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 14.25}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 22.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.07}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 10.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.24}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.16.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.44}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.08}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 12.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...: 'unsure', 'wmax': 2.8}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.58}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.19}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\evals.py", line 64, in api_rulers
+    return measure(book, bk.resolve_pages(pages), deps.product_store())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\eval\rulers.py", line 167, in measure
+    ci = store.read(book, "cell_shrink", page_key(pg), "char_index")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\products\store.py", line 88, in read
+    return schema.model_validate(d[kind_id])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 68 validation errors for PageChars
+columns.0.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [51.0, 708.0...ey': 'p0031c01s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [49.0, 800.0...ey': 'p0031c01s8_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1156....y': 'p0031c01s11_cand1'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1156....y': 'p0031c01s11_cand2'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1256....y': 'p0031c01s12_cand1'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1256....y': 'p0031c01s12_cand2'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [27.0, 1596....y': 'p0031c01s15_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 1709....y': 'p0031c01s16_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 563.0...ey': 'p0031c02s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 660.0...ey': 'p0031c02s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [27.0, 780.0...ey': 'p0031c02s8_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [34.0, 886.0...ey': 'p0031c02s9_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [34.0, 884.0...ey': 'p0031c02s9_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.7.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 996.0...y': 'p0031c02s10_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [33.0, 216.0...ey': 'p0031c03s3_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 322.0...ey': 'p0031c03s4_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 320.0...ey': 'p0031c03s4_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 424.0...ey': 'p0031c03s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 422.0...ey': 'p0031c03s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 524.0...ey': 'p0031c03s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 522.0...ey': 'p0031c03s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [62.0, 634.0...ey': 'p0031c03s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 1634....y': 'p0031c03s16_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1757....y': 'p0031c03s17_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [34.0, 2116....y': 'p0031c03s20_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.18.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 2232....y': 'p0031c03s21_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 831.0...ey': 'p0031c04s8_cand1'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 831.0...ey': 'p0031c04s8_cand2'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 947.0...ey': 'p0031c04s9_cand1'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 947.0...ey': 'p0031c04s9_cand2'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 467.0...ey': 'p0031c05s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 563.0...ey': 'p0031c05s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [35.0, 244.0...ey': 'p0031c06s3_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [34.0, 362.0...ey': 'p0031c06s4_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.10.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [36.0, 1370....y': 'p0031c06s13_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1473....y': 'p0031c06s14_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1471....y': 'p0031c06s14_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1587....y': 'p0031c06s15_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1124....y': 'p0031c07s11_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1235....y': 'p0031c07s12_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1791....y': 'p0031c07s17_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 1910....y': 'p0031c07s18_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 345.0...ey': 'p0031c08s4_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [46.0, 453.0...ey': 'p0031c08s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [44.0, 451.0...ey': 'p0031c08s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 552.0...ey': 'p0031c08s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 550.0...ey': 'p0031c08s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 664.0...ey': 'p0031c08s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 662.0...ey': 'p0031c08s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 769.0...ey': 'p0031c08s8_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 766.0...ey': 'p0031c08s8_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [33.0, 877.0...ey': 'p0031c08s9_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [27.0, 1543....y': 'p0031c08s15_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1658....y': 'p0031c08s16_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 1774....y': 'p0031c08s17_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 1883....y': 'p0031c08s18_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.16.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [37.0, 2008....y': 'p0031c08s19_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [27.0, 2115....y': 'p0031c08s20_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 352.0...ey': 'p0031c09s4_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 464.0...ey': 'p0031c09s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 462.0...ey': 'p0031c09s5_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [28.0, 573.0...ey': 'p0031c09s6_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [32.0, 684.0...ey': 'p0031c09s7_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [30.0, 792.0...ey': 'p0031c09s8_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [27.0, 1120....y': 'p0031c09s11_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [31.0, 1229....y': 'p0031c09s12_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 1671....y': 'p0031c09s16_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'bbox_col': [29.0, 1794....y': 'p0031c09s17_cand0'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\errors.py", line 60, in wrapper
+    return fn(*a, **kw)
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\glyph_match.py", line 97, in api_glyph_match_summary
+    return glyph_match_summary(book, page_list, deps.product_store())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\steps\glyph_match.py", line 177, in glyph_match_summary
+    pm: PageMatch | None = store.read(book_id, "glyph_match", page_key(pg), "glyph_match")
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\products\store.py", line 88, in read
+    return schema.model_validate(d[kind_id])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 68 validation errors for PageMatch
+columns.0.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 15.88}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 44.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.71}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.21}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.85}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.7.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.79}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.29}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.39}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.18.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 20.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.55}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.01}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.10.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 19.83}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 16.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 4.38}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 14.25}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 22.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.07}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 10.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.24}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.16.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.44}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.08}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 12.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...: 'unsure', 'wmax': 2.8}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.58}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.19}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\app.py", line 52, in _no_cache_static
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\errors.py", line 60, in wrapper
+    return fn(*a, **kw)
+           ^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\console\routers\glyph_match.py", line 97, in api_glyph_match_summary
+    return glyph_match_summary(book, page_list, deps.product_store())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\steps\glyph_match.py", line 177, in glyph_match_summary
+    pm: PageMatch | None = store.read(book_id, "glyph_match", page_key(pg), "glyph_match")
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\open_guji_cv\products\store.py", line 88, in read
+    return schema.model_validate(d[kind_id])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\workspace\open-guji-cv\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 68 validation errors for PageMatch
+columns.0.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 15.88}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.8.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 22.16}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.9.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N... 'unsure', 'wmax': 6.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 44.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.0.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.71}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.21}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.85}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 28.95}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.1.chars.7.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.79}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.1.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 11.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 9.94}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.93}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.29}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.39}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.2.chars.18.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 20.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 16.72}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 1, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.3.chars.6.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 2, 'char': N...'unsure', 'wmax': 41.98}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.4.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.0.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.55}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.01}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.10.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 19.83}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.11.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.5.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 16.56}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.77}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 4.38}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.31}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.6.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 14.25}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 22.15}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...t': 'same', 'wmax': 2.7}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.3.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 5.12}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.4.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.69}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.5.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 8.32}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.6.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 7.07}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.12.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.63}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 10.06}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.15.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 2.24}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.16.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.44}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.7.chars.17.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 6.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.1.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 17.08}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.2.cand_variants.1.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.41}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.3.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 12.46}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.4.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 18.65}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.5.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 1.73}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.8.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...: 'unsure', 'wmax': 2.8}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.9.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': '...': 'same', 'wmax': 2.58}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.13.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N... 'unsure', 'wmax': 4.59}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+columns.8.chars.14.cand_variants.0.side
+  Field required [type=missing, input_value={'cand_idx': 0, 'char': N...'unsure', 'wmax': 13.19}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing

@@ -177,6 +177,43 @@ def column_bounds(top: HLine, bottom: HLine,
     return _border_y(top, left, right), _border_y(bottom, left, right)
 
 
+def stamp_noise_density(raw_gray: np.ndarray, ink_threshold: int = 128,
+                         lo_area: int = 3, hi_area: int = 60) -> float:
+    """整列（未去噪原图）里「中等面积孤立墨点」占全列像素的比例——
+    专门抓**背景印章导致的整列散布噪点**，`side_floor`（只看两侧外 25%）天生
+    看不见这种不贴边的污染（见 `column-warp` 金标 `vol02/3` 一页，字缝间到处
+    是印章残墨的麻点）。
+
+    面积下限 `lo_area=3` 避开单像素级扫描灰尘（`denoise_column` 已经按
+    `min_blob_area=6` 清掉更小的，这里在**未去噪的原图**上量、下限故意比它低，
+    连最细小的麻点也计入密度）；上限 `hi_area=60` 排除掉字身笔画本体的连通体
+    （单个笔画随便也有上百像素）。
+
+    115 列金标实测（`open-guji-dataset/char-segmentation/column-warp`）：
+    clean 组 p95=0.0045、max=0.0060；人判 `mixed` 的印章列（`vol02/3` c9）
+    单独一条 0.0201，**3.4 倍间隙、零重叠**——注意这条判据只对「印章」这一种
+    机制有效，`column-warp` 里另外 3 条 `mixed`（夹注列 `vol01/146` c8、
+    局部弯界行 `vol02/188` c3/c4）在这个量上跟 clean 完全混在一起，
+    读它们的值仍然落在 0.0017~0.0028，说明这条判据设计范围本来就只覆盖
+    「整列噪点」这一族，不是万能判据（延续 `SIDE_FLOOR_MAX` 那次的教训：
+    这类池子做不到单指标覆盖四种机制，只能按机制分别做判据、任一命中就拦）。
+
+    全语料验证（vol01+vol02 已生成产物 76 页 684 列）：门槛取 0.007~0.012
+    区间内结果完全一致——只拦下 `vol02/3` 整页 9 列里的 8 列（该页目录页
+    大面积印章覆盖，人只标了 c9 但其余列同样脏，命中符合预期），
+    没有一列 clean 金标被误伤；门槛低到 0.006 会连带误杀 `vol02/151` c2
+    （候选·弯界行、人判 clean），故取 **0.007** 留出安全边际。
+    """
+    mask = (raw_gray < ink_threshold).astype(np.uint8)
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    noise_px = sum(int(stats[i, cv2.CC_STAT_AREA]) for i in range(1, n_labels)
+                   if lo_area <= stats[i, cv2.CC_STAT_AREA] <= hi_area)
+    return float(noise_px / mask.size)
+
+
+STAMP_NOISE_MAX = 0.007
+
+
 def column_profile(warped_gray: np.ndarray, ink_threshold: int = 128) -> np.ndarray:
     """矫正图**沿竖直方向的投影**：长度 = 图宽，每个 x 上的墨占比（0~1）。
 

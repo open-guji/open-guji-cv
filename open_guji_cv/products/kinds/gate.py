@@ -39,6 +39,7 @@ class GateColumn(BaseModel):
     head_raise_inner_y: float | None = None
     warped_size: tuple[int, int]            # (w, h)
     side_floor: float | None = None
+    stamp_noise: float | None = None
     band_width: float
 
 

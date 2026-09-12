@@ -117,6 +117,25 @@ class Engine:
         self.ctx = RunContext(book, self.store, self.cache, resolved, self.log)
         self._rev = git_rev()
 
+    # ── 按 book 配置关掉的可选步骤 ───────────────────────────────────────
+    def _enabled(self, steps: list[str]) -> list[str]:
+        """过滤掉本书没开启的可选步骤。目前唯一的可选步骤是 `ocr_candidates`
+        （Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）——
+        只跳过执行，不改 pipeline 拓扑，`context_decide` 本来就处理得了
+        「这一位没有 OCR 候选」（见 context_decide.py run_page）。"""
+        if self.book.ocr_candidates:
+            return steps
+        return [s for s in steps if s != "ocr_candidates"]
+
+    def _default_steps(self, steps: list[str] | None) -> tuple[list[str], bool]:
+        """`steps` 为 None（调用方走默认整条 pipeline）时应用可选步骤开关；
+        调用方显式点名了子集（如控制台单独跑 `ocr_candidates` 调试）则原样
+        尊重——开关只管「常规批量跑不跑」，不挡人手工点名。返回
+        (steps, was_default)。"""
+        if steps is None:
+            return self._enabled(self.pipeline.steps), True
+        return steps, False
+
     # ── 指纹 ─────────────────────────────────────────────────────────
     def upstream_shas(self, step: Step, page: int) -> dict[str, str] | None:
         """{kind: sha}；任一上游缺失返回 None（blocked）。"""
@@ -191,7 +210,7 @@ class Engine:
         刚算完的新鲜度接着算一行，用闸自己的 `id`（如 `column_gate`）作 key——
         跟闸迁移前、它还是 pipeline 里一个独立节点时的 status 输出**同名同形**。"""
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
-        steps = steps or self.pipeline.steps
+        steps, _ = self._default_steps(steps)
         out: dict[str, dict] = {}
         seen: dict[str, dict[int, str]] = {}
         for sid in self.pipeline.steps:          # 按拓扑序算，保证上游先有结果
@@ -277,7 +296,7 @@ class Engine:
         显式把闸的 id 也点在 `steps` 里仍然安全：闸第二次跑到时指纹已新鲜，
         直接跳过。
         """
-        steps = steps or self.pipeline.steps
+        steps, _ = self._default_steps(steps)
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         report = RunReport(self.book.id, self.pipeline.id, list(steps), list(pages))
         gated_extra = [STEPS[s].spec.gate.id for s in steps

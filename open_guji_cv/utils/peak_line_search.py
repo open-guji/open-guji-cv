@@ -521,7 +521,8 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
                             secondary_window: int = 60, secondary_dead_zone: int = 15,
-                            secondary_ratio_thresh: float = 0.2) -> LineMatch:
+                            secondary_ratio_thresh: float = 0.2,
+                            boundary_slack: int = 3) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -537,15 +538,47 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
     的方案，结果远处噪声峰把好几个本来正确的页面带崩了，见
     `.claude/doc/peak_line_search.md`）找一个"比 primary 更靠近页面中心、
     且匹配度达到 primary 一定比例"的候选，找到就换成它，否则保留 primary。
+
+    **搜索带边界锁死**（2026-09-12 补，vol03/7、vol02/26 实测，仅 `bottom`）：
+    `primary` 精确落在搜索带跟页面中心那一侧的边界上，本身就是退化信号——
+    真实版框线被截断带外/带内更深处，这不是"探到了这个位置"，是搜索窗口
+    边缘的伪影（常见于文字异常贴近页边、把带边界切进了密集文字里）。这种
+    情况下"更靠近中心才可信"的护栏毫无意义（primary 本来就不可信，没有
+    "偏"这回事可防），改成直接在整条搜索带内找最强的非边界峰当新 primary，
+    再按原逻辑走后续的次选纠偏。
+
+    **只对 `side="bottom"` 生效**：`side="top"` 试过同一逻辑，vol01/33
+    实测直接踩雷——那页抬头，主版框恰好也贴近带边界触发这条修复，但整带
+    内最强的非边界峰是抬头装饰墨迹（比主版框墨更浓更粗），结果从"差不多
+    对"的主版框换成了错误的抬头墨迹，正中"更靠中心才可信"这条护栏本来
+    要防的那个坑（`vol01/49` 那一类）。顶部的边界锁死交给
+    `detect_head_raise` 那条专门链路处理，不在这里碰。
     """
     h, w = mask.shape
     band = max(10, int(h * band_frac))
     if side == "top":
         lo, hi = 0, band
+        inner_edge = hi
     else:
         lo, hi = h - band, h - 1
+        inner_edge = lo
 
     primary = joint_search_coarse_to_fine(mask, "h", lo, hi, alpha=alpha, hyst=hyst)
+
+    if side == "bottom" and abs(primary.position - inner_edge) <= boundary_slack:
+        positions, curve = sample_line_curve(mask, "h", lo, hi, primary.slope)
+        best_full: dict | None = None
+        for i in local_maxima(curve, radius=5):
+            pos = float(positions[i])
+            if abs(pos - inner_edge) <= boundary_slack:
+                continue
+            wd, sc = half_height_score_at(curve, i, alpha, hyst)
+            if best_full is None or sc > best_full["score"]:
+                best_full = dict(position=pos, score=sc, width=wd, proj=float(curve[i]))
+        if best_full is not None:
+            primary = LineMatch(position=best_full["position"], slope=primary.slope,
+                                score=best_full["score"], width=best_full["width"],
+                                proj=best_full["proj"])
 
     center = h / 2.0
     primary_dist = abs(primary.position - center)
