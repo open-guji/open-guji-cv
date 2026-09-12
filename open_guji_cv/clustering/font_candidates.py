@@ -46,7 +46,18 @@ from pathlib import Path
 import numpy as np
 
 # 传承字形优先——刻本用的是旧字形
-FONT_ORDER = ("iming", "jigmo")
+FONT_ORDER = ("iming", "jigmo", "kangxi")
+"""模板字体，按优先级。
+
+- `iming` I.Ming 一点明朝体：传承字形（旧字形），用字习惯与刻本最吻合
+- `jigmo` 字雲（CC0）：覆盖 Unicode 全部汉字，兜底
+- `kangxi` **TypeLand 康熙字典体**（2026-09-08 加，`external_glyph_sources_experiment.md` §5.11）：
+  摹康熙字典的商业字体，bench 1,958 字种覆盖 **100%**。实测加进模板后 unseen 严格
+  top-1 **95.9 → 96.4**，比自切康熙扫描图（96.0）还高——不是它更还原刻本，而是
+  **覆盖率 100% vs 76%**。**注意它不能单用**：只留它、去掉 iming/jigmo 会掉到 94.5%，
+  多套字体「同字多写法取平均」的作用它一套顶不了。
+  ⚠️ 商业字体（字语 TypeLand），字形轮廓受版权保护，与公版古籍扫描图性质不同；
+  进可分发产物前须确认授权。"""
 NORM = 64
 
 
@@ -63,7 +74,8 @@ class FontHit:
 def _font_files(root: str = "fonts") -> list[str]:
     out: list[str] = []
     for name in FONT_ORDER:
-        out.extend(sorted(glob.glob(str(Path(root) / name / "*.ttf"))))
+        for ext in ("*.ttf", "*.otf"):     # 康熙体是 otf，只 glob ttf 会静默漏掉
+            out.extend(sorted(glob.glob(str(Path(root) / name / ext))))
     return out
 
 

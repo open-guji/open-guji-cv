@@ -44,6 +44,12 @@ class BookSpec:
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
     notes: str = ""
+    #: Step5-c OCR候选（yaml 的 `ocr_candidates:`）。**默认关闭**——用户
+    #: 2026-09-11 定的口径：整理本已经足够准，主要靠 5-a 库匹配 + 5-b 生僻字
+    #: 候选，5-c 只在个别书需要时按需显式打开（`ocr_candidates: true`）。
+    #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
+    #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
+    ocr_candidates: bool = False
 
     # ── 页 ───────────────────────────────────────────────────────────
     def raw_path(self, page: int) -> Path:
@@ -101,6 +107,7 @@ class BookSpec:
             "preclean_pages": sorted(self.preclean),
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
+            "ocr_candidates": self.ocr_candidates,
         }
 
 
@@ -157,6 +164,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pages=[int(p) for p in d.get("pages", [])],
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
+        ocr_candidates=bool(d.get("ocr_candidates", False)),
     )
 
 

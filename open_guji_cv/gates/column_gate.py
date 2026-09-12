@@ -13,6 +13,14 @@
   ⚠️ 这条**原先错放在页级**，一列坏就整页作废（vol01/42 八列完好只因 c9 坏而全废，
   vol02 全书 27 页被拦、其中 17 页只坏 c1 一列）。2026-09-03 改为列级；
 - **L2 列级**：两侧外 25% 最低墨占比 <= 0.045（已知几乎没有独立筛选力，只挡极端）；
+- **L2b 列级**（2026-09-11 新增）：中等面积孤立墨点密度 <= 0.007
+  （`stamp_noise_density`，见 `column_projection.py` 文档字符串）——专挡
+  **整列散布的背景印章噪点**，`side_floor` 只看两侧外沿看不见这种污染。
+  ⚠️ **这条只覆盖四种已知 mixed 机制里的一种**：115 列金标复核，`vol01/146`
+  夹注列、`vol02/188` c3/c4 局部弯界行这三条在这个量上跟 clean 完全重叠
+  （0.0017~0.0028），不是参数没调对，是这类统计量本身分不开"字身贴边书写"
+  和"界行局部探入/夹注贴边"——两者像素层面长得一样，要分需要形状/上下文
+  信息，留给人审兜底。别指望调这条判据的阈值能顺带扩大覆盖。
 - **L3 金标**：P0 不接（tier=gate）。
 
 页级共享量 period / ref_w 用**几何正常的列**算（剔掉 L1c 命中的列）——那些列的
@@ -47,6 +55,7 @@ class ColumnGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
     width_tol: float = 0.15
     side_floor_max: float = 0.045
+    stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
     # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
@@ -62,7 +71,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.3", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.4", unit="column",
         consumes=("column_windows", "column_image"), produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
@@ -169,6 +178,9 @@ class ColumnGateStep(Step):
                                f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行）")
             if c.side_floor > p.side_floor_max:
                 reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
+            if c.stamp_noise > p.stamp_noise_max:
+                reasons.append(f"L2b：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
+                                "（疑似背景印章污染）")
             if p.tier == "gold":
                 reasons.append("L3：金标准入尚未接入（P2）")
             recs.append(GateColumn(
@@ -195,6 +207,7 @@ class ColumnGateStep(Step):
                 n_raised_hint=n_raised_hint.get(c.col, 0),
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
                 warped_size=c.warped_size, side_floor=c.side_floor,
+                stamp_noise=c.stamp_noise,
                 band_width=float(c.band[1] - c.band[0]),
             ))
         return {"gate_manifest": GateManifest(
@@ -213,6 +226,9 @@ attach_gate("column_warp", GateSpec(
                   desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗"),
         GateLevel(id="L2", unit="column",
                   desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端"),
+        GateLevel(id="L2b", unit="column",
+                  desc="整列中等面积孤立墨点密度是否超界——专挡背景印章噪点，"
+                       "只覆盖四种已知污染机制里的一种"),
         GateLevel(id="L3", unit="column",
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
     ),

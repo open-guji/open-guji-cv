@@ -36,6 +36,7 @@ class ColumnWindowRec(BaseModel):
     trim_top: BorderTrim
     trim_bottom: BorderTrim
     side_floor: float              # 两侧外 25% 最低墨占比（原始矫正图上量）
+    stamp_noise: float = 0.0       # 中等面积孤立墨点密度（原始矫正图上量，抓整列噪点污染）
 
 
 class PageWindows(BaseModel):

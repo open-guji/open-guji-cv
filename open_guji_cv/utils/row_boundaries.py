@@ -1165,11 +1165,28 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     chosen = len(kept)
                 kept.append(c)
             cands = kept
+            # 3) 窄走廊「零墨且贴着直线」、且现役本就选中了它时，直线不算真
+            # 候选——用户 2026-09-11 实测：Step7 待裁里 72%（vol02 181/250）
+            # 是「直线穿墨、窄走廊完全绕开且偏移 <10px」这类，窄走廊明显
+            # 更好，不该占用人力去比。判据三个都要：**现役已选中这条折线**
+            # （`chosen == 1`，不改变现役切分行为，只是不再挡人）+ **零墨**
+            # （不是"省墨"，是绕得干干净净）+ **偏移小**（用户原话「一个字
+            # 上面少 5px 有时还是很明显」——偏移大时仍是真候选，留给人判）。
+            # 只在「唯一折线候选就是它」时收，别处（如还有 seam_wide）留给
+            # 下游打分，不在这里拍。
+            #
+            # ⚠️ 收缩后 `chosen` 恒为 0，但那是「候选池第 0 项」不是「选中了
+            # 直线」——下面第 1183 行判断改用 `cands[chosen].kind != "straight"`，
+            # 不能再用 `chosen != 0`（候选池不再保证 straight 恒在池首）。
+            if (chosen == 1 and len(cands) == 2 and cands[1].kind == "seam_narrow"
+                    and cands[1].seam_ink == 0 and cands[1].dev_max < 10):
+                cands = [cands[1]]
+                chosen = 0
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen)
             cut_cands.append(cp)
-            if chosen != 0:            # 现役行为：选中折线才写 seam_*
+            if cands[chosen].kind != "straight":   # 现役行为：选中折线才写 seam_*
                 up[0].seam_bottom = cands[chosen].y
                 dn[0].seam_top = cands[chosen].y
         result.cut_candidates = cut_cands
