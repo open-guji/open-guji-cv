@@ -142,7 +142,9 @@ class GlyphMatchStep(Step):
                     cm = matcher.match(normalize_patch(cimg))
                     cand_variants.append(CandidateMatch(
                         side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
-                        cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2)))
+                        cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
+                        candidates=[(cc, round(float(vv), 4))
+                                    for cc, vv in cm.candidates[:p.max_candidates]]))
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
                     verdict=m.verdict, char=m.char, matched_id=m.matched_id,

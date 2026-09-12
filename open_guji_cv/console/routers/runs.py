@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from .. import deps
 from ..jobs import JobSpec
 from ..sse import sse
-from ...core.book import load_book
+from ...core.book import load_book, set_ocr_candidates
 from ...core.engine import Engine
 from ...core.pipeline import load_pipeline
 
@@ -70,7 +70,28 @@ def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set
     # 对着仓内示例库跑了一批才在产物指纹里事后发现）——这里跟入队闸同一份判断。
     from ...core.workspace import describe, using_sample_db
     st["workspace"] = {**describe(), "is_sample_db": using_sample_db()}
+    st["ocr_candidates_enabled"] = eng.book.ocr_candidates
     return st
+
+
+
+# ── 本书运行参数（写 book yaml） ────────────────────────────────────────
+class OcrCandidatesUpdate(BaseModel):
+    enabled: bool
+
+
+@router.put("/api/books/{book}/ocr_candidates")
+def api_set_ocr_candidates(book: str, req: OcrCandidatesUpdate) -> dict:
+    """控制台"运行参数"卡片的 Step5-c 开关：写回 `books/<book>.yaml` 的
+    `ocr_candidates:` 字段（`core.book.set_ocr_candidates` 做定向文本编辑，
+    不动其余手写注释）。先 `load_book` 校验这本书存在，返回写后的最新值
+    给前端对齐 checkbox 状态。"""
+    try:
+        load_book(book)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    set_ocr_candidates(book, req.enabled)
+    return {"book": book, "ocr_candidates": req.enabled}
 
 
 

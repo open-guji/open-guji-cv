@@ -5,12 +5,21 @@
 带 `content_x`/`border_top` 这类要喂给 Step3 的量，这里没有），字段不同、
 不该共用一个 schema。
 
-`admitted` 只由 **block 级**判据决定（L1：列数不对——整页性的问题，
-`column_warp` 拿不到正确的列窗口就没法往下走）；**flag 级**判据（L2 界行
-w80、L3 版框墨、L4 抬头框）写进 `flags`，不影响 `admitted`——这几条现在
-都没有已验证的"超了就该整页作废"的判准，只适合先标出来供人复核
-（同 `row_segment_gate.py` 的分法：block 与 flag 是这道闸自己在
+`admitted` 由 **block 级**判据决定：L0（页型判定为 skip 类——封面/书签/
+空白/牌记，没有正文栏格，套列窗口是无中生有）与 L1（列数不对——整页性的
+问题，`column_warp` 拿不到正确的列窗口就没法往下走）；**flag 级**判据
+（L2 界行 w80、L3 版框墨、L4 抬头框）写进 `flags`，不影响 `admitted`——
+这几条现在都没有已验证的"超了就该整页作废"的判准，只适合先标出来供人
+复核（同 `row_segment_gate.py` 的分法：block 与 flag 是这道闸自己在
 `run_page` 里按判据决定的，`GateSpec.on_fail` 只是整道闸的默认处置）。
+
+`page_type`/`policy` 来自 `clustering.page_type.classify_page_type`——只判
+三种结构上分得干净的 skip 类页型（blank/cover/label），判不准时兜底
+`("body", "standard")`（误跳过一页正文的代价远大于多切一页废页，见
+`page_type.py` 模块头）。`custom`（edict：上諭/表文类，列数少于正文）与
+`uncertain` 现在都不 block，只记录供人复核——custom 类还没有专门的窄列
+处理逻辑，硬拦会把这些页堵死在 Step1 出不去；uncertain 本来就是"判不准"，
+不该被当成"判定为异常"来拦。
 """
 
 from __future__ import annotations
@@ -34,6 +43,10 @@ class BorderDetectGateManifest(BaseModel):
     top_outer_offset: float | None = None
     bottom_outer_offset: float | None = None
     n_head_raise: int = 0
+    page_type: str = "body"
+    """`clustering.page_type.PAGE_TYPES` 之一；判不准兜底 "body"。"""
+    page_type_policy: str = "standard"
+    """"skip" / "custom" / "standard"——见 `clustering.page_type.policy_of`。"""
 
 
 BORDER_DETECT_GATE_MANIFEST = register_kind(ProductKindSpec(

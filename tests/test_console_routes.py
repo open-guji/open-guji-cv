@@ -460,10 +460,12 @@ def test_route_inventory():
     Step5-字符识别/08-5a方案-字形库匹配调试视图.md），新增
     `glyph_match.py` 3 条：单点查询 `GET /api/glyph-match/{book}/{page}/{col}/{slot}`、
     候选缩略图 `GET /api/glyph-match/exemplar/{instance_id}.png`、板块②聚合
-    `GET /api/glyph-match/{book}/summary`，66 → 69。）
+    `GET /api/glyph-match/{book}/summary`，66 → 69；2026-09-12 总览页「运行
+    参数」卡片按书开关 Step5-c OCR候选，`runs.py` 加
+    `PUT /api/books/{book}/ocr_candidates`（写回 book yaml），69 → 70。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 69, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 70, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -554,6 +556,7 @@ EXPECTED_ROUTES = [
     "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/around/batch",
     "POST /api/review/rate-history",
     "POST /api/runs", "POST /api/runs/{job_id}/cancel",
+    "PUT /api/books/{book}/ocr_candidates",
 ]
 
 

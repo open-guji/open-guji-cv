@@ -4,7 +4,7 @@ import { fetchGateSummary } from '../api/evals'
 import { BorderReviewPanel } from '../components/border-review/BorderReviewPanel'
 import { PageLinePanel } from '../components/border-review/PageLinePanel'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
-import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
+import { ProgressGatePanel, foldPageRanges } from '../components/common/ProgressGatePanel'
 import type { TypeBreakdownItem } from '../components/common/ProgressGatePanel'
 import { ProductViewer } from '../components/ProductViewer'
 import { usePages } from '../hooks/usePages'
@@ -30,16 +30,18 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 
 const STEP_ID = 'step1'
 
-// 页面类型分类（overview 任务书-页面结构统一.md 点名的例子）：现在没有独立的
-// 「封面/职名页/正文」判据产物，唯一现成、可复用的信号是闸1
-// （border_detect_gate）L1 判据——探出列数 != 版式列数。列数对不上大概率是
-// 非正文页（封面/职名页版式不同），但不细分具体是哪一类——细分需要新的判据，
-// 不是本任务范围（任务书原话：没有现成分类逻辑就先写清楚判据方案，不凭空造）。
-type TypeFilterValue = 'all' | 'body' | 'nonbody'
+// 页面类型分类：2026-09-12 起闸1（border_detect_gate）接入
+// clustering.page_type.classify_page_type，会给每页判 page_type/policy——
+// 只是结构量粗判（skip: blank/cover/label；custom: edict；standard 类里
+// body/roster/toc 还未细分，roster 的细化要靠切分产物，见 page_type.py
+// refine_page_type，不在 Step1 能做到的范围内）。之前用闸1 L1（列数对不对）
+// 权宜替代的做法（"疑似正文/疑似非正文"）已经被真判据取代。
+type TypeFilterValue = 'all' | 'skip' | 'custom' | 'standard'
 const TYPE_FILTER_OPTIONS = [
   { value: 'all', label: '全部' },
-  { value: 'body', label: '列数正常（疑似正文）' },
-  { value: 'nonbody', label: '列数异常（疑似非正文）' },
+  { value: 'standard', label: '正文类（standard）' },
+  { value: 'custom', label: '窄列类（custom，如上諭）' },
+  { value: 'skip', label: '非正文（skip：封面/书签/空白/牌记）' },
 ]
 
 export function Step1Page() {
@@ -60,17 +62,21 @@ export function Step1Page() {
     fetchGateSummary(book, 'border_detect_gate', pageSel).then(setGateSummary).catch(() => setGateSummary(null))
   }, [book, pageSel])
 
-  const nonbodyPages = gateSummary
-    ? gateSummary.pages.filter((p) => p.n_cols != null && p.expected_cols != null && p.n_cols !== p.expected_cols).map((p) => p.page)
+  const skipPages = gateSummary
+    ? gateSummary.pages.filter((p) => p.page_type_policy === 'skip').map((p) => p.page)
     : []
-  const bodyPages = gateSummary
-    ? gateSummary.pages.filter((p) => p.n_cols != null && p.expected_cols != null && p.n_cols === p.expected_cols).map((p) => p.page)
+  const customPages = gateSummary
+    ? gateSummary.pages.filter((p) => p.page_type_policy === 'custom').map((p) => p.page)
+    : []
+  const standardPages = gateSummary
+    ? gateSummary.pages.filter((p) => p.page_type_policy === 'standard').map((p) => p.page)
     : []
 
   const typeBreakdown: TypeBreakdownItem[] = gateSummary
     ? [
-        { label: '疑似正文（列数正常）', count: bodyPages.length },
-        { label: '疑似非正文（列数异常）', count: nonbodyPages.length },
+        { label: '正文类（standard）', count: standardPages.length, ranges: foldPageRanges(standardPages) },
+        { label: '窄列类（custom）', count: customPages.length, ranges: foldPageRanges(customPages) },
+        { label: '非正文（skip）', count: skipPages.length, ranges: foldPageRanges(skipPages) },
         { label: '无产物', count: gateSummary.pages.filter((p) => p.status === 'missing').length },
       ]
     : []
@@ -78,7 +84,10 @@ export function Step1Page() {
   // typeFilter 只影响板块④产物查看的页码列表——板块③裁决台（BorderReviewPanel）
   // 保留自己的页范围输入，不吃这个筛选（03-Step页面统一设计.md §2.4：待裁决区
   // 刻意不抽象成统一联动，各面板形态差异大，硬联动只会两头不讨好）。
-  const filteredPages = typeFilter === 'body' ? bodyPages : typeFilter === 'nonbody' ? nonbodyPages : pages
+  const filteredPages = typeFilter === 'skip' ? skipPages
+    : typeFilter === 'custom' ? customPages
+    : typeFilter === 'standard' ? standardPages
+    : pages
 
   return (
     <div>
@@ -107,7 +116,12 @@ export function Step1Page() {
         </div>
       </div>
       {tab === 'pageline' ? <PageLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
-      <ProductViewer book={book} step="border_detect" pages={filteredPages} />
+      <ProductViewer
+        book={book}
+        step="border_detect"
+        pages={filteredPages}
+        pageTypeOf={(p) => gateSummary?.pages.find((r) => r.page === p)?.page_type ?? undefined}
+      />
     </div>
   )
 }

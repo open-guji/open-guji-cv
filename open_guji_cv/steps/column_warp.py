@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..core.spec import StepSpec, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
+from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders, VLineRec
 from ..products.kinds.columns import BorderTrim, ColumnWindowRec, PageWindows
 from ..utils.column_projection import (ColumnWindow, clean_column, column_profile,
@@ -38,8 +39,9 @@ def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) ->
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.2", unit="column",
-        consumes=("raw_page", "borders"), produces=("column_windows", "column_raw", "column_image"),
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.3", unit="column",
+        consumes=("raw_page", "borders", "border_detect_gate_manifest"),
+        produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
         code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry"),
     )
@@ -64,6 +66,18 @@ class ColumnWarpStep(Step):
     # ── Step 接口 ─────────────────────────────────────────────────────
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
+        gate: BorderDetectGateManifest = ctx.product("border_detect_gate_manifest", page)
+        if gate.page_type_policy == "skip":
+            # 闸1 判定这页没有正文栏格（封面/书签/空白/牌记）——射影/去噪/清理
+            # 都是白费功夫（page_type.py 模块头实测：书签页照切会切出 126 个
+            # 无意义的块）。产出空列表，闸2 的 L1（探出列数!=版式列数）会自然
+            # 拒收，不用在这里重复判一次「该不该拦」。
+            gray = ctx.raw_page(page)
+            h, w = gray.shape[:2]
+            borders: Borders = ctx.product("borders", page)
+            return {"column_windows": PageWindows(
+                page=page, page_size=(int(w), int(h)),
+                vline_segments=int(borders.vline_segments), denoised=True, columns=[])}
         gray, borders, wins = self._windows(ctx, page)
         recs: list[ColumnWindowRec] = []
         for win in wins:
@@ -97,6 +111,9 @@ class ColumnWarpStep(Step):
         page, col, _ = parse_key(key)
         if col is None:
             raise ValueError(f"{kind_id} 的键必须带列号: {key}")
+        gate: BorderDetectGateManifest = ctx.product("border_detect_gate_manifest", page)
+        if gate.page_type_policy == "skip":
+            raise KeyError(f"第 {page} 页页型判定为「{gate.page_type}」，没有列产物")
         gray, _, wins = self._windows(ctx, page)
         win = next((w for w in wins if w.col == col), None)
         if win is None:

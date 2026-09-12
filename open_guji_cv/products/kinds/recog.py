@@ -36,6 +36,10 @@ class CandidateMatch(BaseModel):
     char: str | None = None
     cov: float = 0.0
     wmax: float = 0.0
+    candidates: list[tuple[str, float]] = Field(default_factory=list)
+    """unsure 档没有单一 `char` 时的候选池（字 → cov，降序，最多几个见
+    `GlyphMatchParams.max_candidates`）。Step7「切分裁决」板块靠它才不用
+    在 `char is None` 时只能显示一个问号——见该模块头 2026-09-11 补记。"""
 
 
 class MatchRec(BaseModel):

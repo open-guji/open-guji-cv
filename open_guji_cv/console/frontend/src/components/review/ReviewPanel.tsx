@@ -49,7 +49,11 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
 
   const batch = () => batchInput.trim() || `${book}-${pages || 'dev_set'}-decide`
 
-  async function load() {
+  // `scrollOnLoad=false`：外部信号（切分裁决联动、切页）触发的静默刷新——
+  // 只更新数据，不把页面滚去「定字裁决」区域。用户 2026-09-11 实测踩到：
+  // 每次在「切分裁决」落定一条，画面会被强行跳到定字裁决第一张卡，打断
+  // 正在做的操作。手动点「载入」按钮才应该滚（那是用户主动要看结果）。
+  async function load(scrollOnLoad = true) {
     setMsg('载入中…')
     const b = batch()
     const d = await fetchReviewCards(book, pages || 'dev_set', only, gate)
@@ -70,7 +74,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const nb = (d.blocked || []).length
     setGateNote(nb ? { n: nb } : null)
     filterMsg(d.cards)
-    focus(0, d.cards)
+    focus(0, d.cards, scrollOnLoad)
 
     fetchAroundBatch(book, 10, 10, d.cards.map((c) => ({ page: c.page, col: c.col, slot: c.slot })))
       .then((r) => { around.current = r.around || {}; bump() })
@@ -96,7 +100,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     return !!(todoOnly && snapshot.current && !snapshot.current.has(c.id))
   }
 
-  function focus(i: number, list?: ReviewCard[]) {
+  function focus(i: number, list?: ReviewCard[], scroll = true) {
     const arr = list ?? cards
     if (!arr.length) return
     const dir = i >= cur ? 1 : -1
@@ -107,7 +111,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     }
     if (j < 0 || j >= arr.length) j = Math.max(0, Math.min(i, arr.length - 1))
     setCur(j)
-    document.getElementById(`rvc${j}`)?.scrollIntoView({ block: 'nearest' })
+    if (scroll) document.getElementById(`rvc${j}`)?.scrollIntoView({ block: 'nearest' })
     prefetchRare(j, arr)
   }
 
@@ -236,7 +240,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   useEffect(() => {
     if (reloadSignal === undefined) return
     if (!reloadedOnce.current) { reloadedOnce.current = true; return }
-    load()
+    load(false)   // 静默刷新，不抢用户在切分裁决那边的操作焦点
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadSignal])
 
@@ -288,7 +292,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         <label className="muted" title="顺序闸：字位旁边那条切分线有多种切法且还没 review 时，这个字位先不出卡。取消勾选可整批看全部。">
           <input type="checkbox" checked={gate} onChange={(e) => setGate(e.target.checked)} /> 先切线后字符
         </label>
-        <button onClick={load}>载入</button>
+        <button onClick={() => load()}>载入</button>
         <button onClick={submit}>提交裁决</button>
         <span className="muted">{msg}</span>
       </div>

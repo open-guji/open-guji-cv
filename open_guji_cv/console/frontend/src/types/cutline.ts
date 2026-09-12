@@ -6,6 +6,9 @@ export interface CandidateMatch {
   char: string | null
   cov: number
   wmax: number
+  // unsure 档没有单一 char 时的候选池（字, cov），降序，最多 3 个
+  // （overview 2026-09-11 下发：char 为 null 不该只显示问号）
+  candidates?: Array<[string, number]>
 }
 
 export interface CutCandidate {

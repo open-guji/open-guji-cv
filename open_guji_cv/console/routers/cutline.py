@@ -137,11 +137,13 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
                 if r.slot != slot or r.sub:
                     continue
                 out["chosen"] = {"verdict": r.verdict, "char": r.char,
-                                 "cov": r.cov, "wmax": r.wmax}
+                                 "cov": r.cov, "wmax": r.wmax,
+                                 "candidates": r.candidates[:3]}
                 for cv in (r.cand_variants or []):
                     out[cv.side][cv.cand_idx] = {
                         "verdict": cv.verdict, "char": cv.char,
-                        "cov": cv.cov, "wmax": cv.wmax}
+                        "cov": cv.cov, "wmax": cv.wmax,
+                        "candidates": cv.candidates[:3]}
                 break
         match_cache[key] = out
         return out

@@ -160,6 +160,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import open_guji_cv.gates  # noqa: E402,F401  —— 注册产物种类（含 border_detect_gate_manifest）
+from open_guji_cv.core.spec import page_key  # noqa: E402
+from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
     clean_column, column_profile, denoise_column, stamp_noise_density,
 )
@@ -222,11 +225,16 @@ def main() -> None:
     if args.tier == "gold" and not gold:
         raise SystemExit("--tier gold 需要 --gold 指向 column-warp 金标目录")
 
+    store = ProductStore()
+
     pages = []
     n_written = 0
     for wf in sorted(src.glob("*/windows.json"), key=lambda p: int(p.parent.name)):
         d = json.loads(wf.read_text(encoding="utf-8"))
         page = wf.parent.name
+        gate = store.read(args.book, "border_detect_gate", page_key(int(page)),
+                          "border_detect_gate_manifest")
+        page_type = gate.page_type if gate else "body"
         wins = d["columns"]
         widths = [c["warped_size"]["width"] for c in wins]
         med_w = statistics.median(widths)
@@ -325,7 +333,7 @@ def main() -> None:
         pages.append(dict(page=page, admitted=page_ok, reject=page_reject,
                           period=period, ref_w=ref_w,
                           column_widths=widths, median_width=med_w,
-                          columns=recs))
+                          page_type=page_type, columns=recs))
 
     out.mkdir(parents=True, exist_ok=True)
     manifest = dict(
@@ -347,6 +355,10 @@ def main() -> None:
             "n_raised 不给：raised 只是几何标记，抬头列可能多一格也可能不多，"
             "纯信号判据不可靠（见 row_boundaries_design.md「抬头列」节），"
             "由调用方按版式先验/人工核校定。",
+            "page_type 来自 Step1 闸（border_detect_gate_manifest.page_type，"
+            "clustering.page_type.classify_page_type 的判定），取不到就兜底 "
+            "\"body\"；只是粗判（skip/custom/standard 三类里能分出 "
+            "blank/cover/label，body 里混着未细分的 roster/toc），不是精确分类。",
         ],
         pages=pages,
     )
