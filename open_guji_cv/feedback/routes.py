@@ -43,6 +43,11 @@ DEFAULT_ROUTES: list[dict] = [
     {"match": {"kind": "cutline", "payload.tags": "border"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/side-rule",
              "extra": {"seed": "cutline_border"}}]},
+    # 拖版框线（2026-09-11）：下版框坐标金标，`01-下版框根修先造金标.md`
+    # 点名要的「口径统一的直接坐标金标」，与既有 border-detection 14 页
+    # 金标（外延/内沿/中心口径混杂）分开存，避免再次污染。
+    {"match": {"kind": "border_line"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-line"}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，
