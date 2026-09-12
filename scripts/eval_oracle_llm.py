@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 
 import eval_context_correction as ecc  # noqa: E402
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 
 def load_answer_table(report_path: Path) -> tuple[dict[str, str], dict]:
@@ -125,7 +126,7 @@ def main() -> None:
     ap.add_argument("--general-corpus",
                     default=str(REPO / "corpus" / "external" / "daizhige_zhaoling.txt"))
     ap.add_argument("--book-corpus",
-                    default=str(REPO / "corpus" / "zongmu_wuyingdian_reference.txt"))
+                    default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--book-weight", type=float, default=0.9)
     ap.add_argument("--gate", type=float, default=0.70)
     ap.add_argument("--lam", type=float, default=0.55)

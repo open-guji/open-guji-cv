@@ -10,6 +10,7 @@ import pytest
 import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.spec import page_key
+from open_guji_cv.core.workspace import corpus_path, raw_root
 from open_guji_cv.gold.v2_align import align_book
 from open_guji_cv.products.store import ProductStore
 
@@ -19,10 +20,9 @@ REPO = Path(__file__).resolve().parent.parent
 def _ws_raw():
     """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
     没设则退回仓根——引擎自带的小样本仍在仓内。"""
-    from open_guji_cv.core.workspace import raw_root
     return raw_root()
 RAW = _ws_raw() / "data_full" / "zongmu"
-CORPUS = REPO / "corpus" / "zongmu_wuyingdian_reference.txt"
+CORPUS = corpus_path("zongmu_wuyingdian_reference.txt")
 needs = pytest.mark.skipif(not (RAW.exists() and CORPUS.exists()),
                            reason="需要原图与整理本")
 

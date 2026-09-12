@@ -36,12 +36,16 @@ import argparse
 import json
 import math
 import random
+import sys
 import time
 from collections import Counter
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 BENCH = Path("cache/glyph_bench")
 SIZE = 64
@@ -97,7 +101,7 @@ def main() -> int:
     ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--font-per-class", type=int, default=4, help="每类每 epoch 采几张字体渲染")
     ap.add_argument("--out", default="cache/glyph_cnn")
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
+    ap.add_argument("--corpus", default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--extra-real", action="append", default=[],
                     help="外部真刻本字形源，可重复：kangxi:<dir> | zitools:<dir>[:印,楷]（clustering/extra_glyphs.py）。"

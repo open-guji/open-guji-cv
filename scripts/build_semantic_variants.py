@@ -33,12 +33,15 @@ sys.path.insert(0, str(REPO))
 from open_guji_cv.clustering.confusable import NEVER_MATCH_FAMILIES  # noqa: E402
 from open_guji_cv.clustering.variants import (DEFAULT_AUTO_PATH,  # noqa: E402
                                               DEFAULT_VARIANTS_PATH, VariantMap)
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.variant_ledger import (DEFAULT_EDITION, BookLedger,  # noqa: E402
                                          han_counter)
 from open_guji_cv.variants import (BRIDGE_SOURCES, WEAK_ALONE_SOURCES,  # noqa: E402
                                    VariantGraph)
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wuyingdian_reference.txt"))
 STRONG = BRIDGE_SOURCES - WEAK_ALONE_SOURCES
 NEVER_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 

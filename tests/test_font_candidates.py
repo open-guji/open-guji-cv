@@ -26,6 +26,7 @@ import pytest
 
 from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
                                                      candidates_batch, _font_files)
+from open_guji_cv.core.workspace import corpus_path
 
 FONTS_OK = bool(glob.glob("fonts/*/*.ttf"))
 needs_fonts = pytest.mark.skipif(not FONTS_OK, reason="没有字体文件")
@@ -115,7 +116,7 @@ def test_recall_on_rare_char_set():
     items = [json.loads(l) for l in ds.read_text(encoding="utf-8").splitlines()]
     hard = [i for i in items if not i["expected"]["in_candidates"]]
     assert hard, "集里没有「三路都没答案」的样本，这条用例失去意义"
-    cs = book_charset("corpus/zongmu_wuyingdian_reference.txt",
+    cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
                       [i["expected"]["char"] for i in items])
     hit = 0
     for it in hard:
@@ -160,7 +161,14 @@ def test_two_tier_charset_beats_single_table():
     from open_guji_cv.variants import variants_of
 
     items = [json.loads(l) for l in ds.read_text(encoding="utf-8").splitlines()]
-    small = tuple(book_charset("corpus/zongmu_wuyingdian_reference.txt"))
+    small = tuple(book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt"))))
+    # 这条靠字表规模统计 top1/top10 召回率，不是单纯验证代码逻辑——没设
+    # GUJI_WORKSPACE 时仓内只有语料小样本（~1100 字种），docstring 里的
+    # 4636 字种、43%/71% 这些数字全部基于完整语料，小样本测出来的召回率
+    # 统计失真（不是代码错），该跳过而不是硬跑给假阳性失败。
+    if len(small) < 4000:
+        pytest.skip(f"字表只有 {len(small)} 字种（需要完整整理本 ~4636 字种），"
+                    "没设 GUJI_WORKSPACE 时仓内只有语料小样本")
     big = set(small)
     for ch in small:
         big.update(v[0] if isinstance(v, (tuple, list)) else v

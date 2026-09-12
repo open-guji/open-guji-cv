@@ -37,12 +37,15 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.variant_ledger import (DEFAULT_EDITION, SCHEMA_VERSION,  # noqa: E402
                                          han_counter, ledger_path)
 from open_guji_cv.variants import (BRIDGE_SOURCES, NEVER_SOURCES,  # noqa: E402
                                    SIMPLIFIED_SOURCES, T2_SOURCES, VariantGraph)
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wuyingdian_reference.txt"))
 DEFAULT_DB = "output/glyph.db"
 #: 分组时走的边：异体 + 互通 + 简繁（简繁边只用来把 无/無 这类俗字连起来，
 #: 边本身是不是刻本异体由 tier 与 ref_policy 说话）。形近/通假永不走。

@@ -57,7 +57,12 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-DEFAULT_CORPUS = "corpus/zongmu_wenyuange_wikisource.txt"
+from ..core.workspace import corpus_path as _resolve_corpus_path
+
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节。本模块下面 align_book() 的参数名也叫
+# corpus_path，这里用别名 _resolve_corpus_path 避免撞名。
+DEFAULT_CORPUS = str(_resolve_corpus_path("zongmu_wenyuange_wikisource.txt"))
 
 
 @dataclass

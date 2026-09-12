@@ -24,11 +24,15 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 from collections import Counter
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 BENCH = Path("cache/glyph_bench")
 
@@ -75,7 +79,7 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--k", type=int, default=50)
     ap.add_argument("--split", default="unseen")
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
+    ap.add_argument("--corpus", default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
 

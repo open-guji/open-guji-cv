@@ -60,11 +60,14 @@ from open_guji_cv.clustering.align_label import is_han  # noqa: E402
 from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
+from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 
-DEFAULT_CORPUS = "corpus/zongmu_wuyingdian_reference.txt"
+# ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
+# 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
+DEFAULT_CORPUS = str(corpus_path("zongmu_wuyingdian_reference.txt"))
 KINDS = ("substitution", "missing", "extra", "unreadable", "variant")
 KIND_LABEL = {"variant": "异体（同字异形）", "substitution": "改（同位置不同字）",
               "extra": "刻本多出（整理本无）", "missing": "整理本多出（刻本缺）",
