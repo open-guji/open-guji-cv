@@ -71,6 +71,65 @@ export interface ThroughputResponse {
   timing: { book: string; steps: ThroughputStepTiming[] }
 }
 
+// 对应 GET /api/gate/{book}/summary（console/routers/products.py::api_gate_summary，
+// 引擎在 gates/query.py::gate_summary）。三道闸（GATE_IDS）共用同一形状。
+export interface GateSummaryPageRow {
+  page: number
+  status: 'ok' | 'page_blocked' | 'missing'
+  page_reject?: string[]
+  n_columns?: number
+  n_admitted?: number
+  tiers?: string[]
+  flags?: string[]
+  n_cols?: number | null
+  expected_cols?: number | null
+}
+
+export interface GateSummaryResponse {
+  gate: string
+  pages: GateSummaryPageRow[]
+  tier_totals: Record<string, number>
+}
+
+// 对应 GET /api/align-ref/summary（console/routers/evals.py::api_align_ref_summary，
+// 领域逻辑在 steps/align_ref.py::align_ref_summary）。不是闸——四路证据里
+// 任一路缺席只降级不阻塞，这里只是把"哪页锚不上、卡在哪条判据"列出来。
+export interface AlignRefPageRow {
+  page: number
+  status: 'anchored' | 'not_anchored' | 'missing'
+  n_chars?: number
+  note?: string
+  n_grams?: number
+  n_votes?: number
+  vote_frac?: number | null
+  dominance?: number | null
+}
+
+export interface AlignRefSummaryResponse {
+  pages: AlignRefPageRow[]
+  n_pages: number
+  n_anchored: number
+  n_missing: number
+  n_not_anchored: number
+}
+
+// 对应 GET /api/overview_summary（console/routers/evals.py::api_overview_summary）。
+// 总览页 2026-09-11 重构用的轻量摘要：总进度（另走 fetchStatus）之外的
+// 待办 + 异常数据，字段照后端 dict 原样反推。
+export interface OverviewSummaryResponse {
+  book: string
+  rate: {
+    rate?: number | null
+    review?: number
+    slots?: number
+    unseen_rate?: number | null
+    [k: string]: unknown
+  }
+  next: { body_total: number; done: number; todo: number; batch: number[]; error?: string }
+  gates: Array<{ gate: string; n_pages: number; n_blocked: number; tier_totals: Record<string, number> }>
+  align_ref: { n_pages: number; n_anchored: number; n_not_anchored: number; n_missing: number }
+}
+
 export interface RoundResponse {
   next?: { batch: number[]; body_total: number; done: number; todo: number }
   A?: RoundLight & { gold: [number, number]; human: [number, number]; errors: Array<{ id: string; pred: string; gold: string }> }

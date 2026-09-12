@@ -65,6 +65,20 @@ def api_rulers(book: str = "vol01", pages: str = "dev_set") -> dict:
 
 
 
+@router.get("/api/align-ref/summary")
+def api_align_ref_summary(book: str = "vol01", pages: str = "") -> dict:
+    """Step5-d 整理本锚定统计：逐页锚上没有、锚不上卡在哪条判据。
+
+    不是闸（四路证据任一路缺席只降级不阻塞），是证据可用性上报——见
+    `align_ref_summary` docstring。`pages` 留空＝全书（该函数默认口径）。
+    """
+    from ...core.book import load_book
+    from ...steps.align_ref import align_ref_summary
+    pg = load_book(book).resolve_pages(pages) if pages else None
+    return align_ref_summary(book, pg, deps.product_store())
+
+
+
 @router.get("/api/round")
 def api_round(book: str = "vol01", pages: str = "") -> dict:
     """**一轮体检**：四个判据 + 下一批页码，判断跟命令行同一套。
