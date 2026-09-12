@@ -33,8 +33,12 @@ Step7 `seed_admit`（每字位的定字结果）本身不带版式信息，要�
    改成只读 Step7 产物，要重新看这条。
 2. **挪抬 `.` 不产出**——现有数据完全没有对应的几何信号，这版直接跳过，不编
    映射公式（设计档 §三·1 结论、§五"不要碰"）。
-3. **阙文 `[[…]]`**：`admit=False and char is None` 时输出，这是协调者按现有
-   字段定的规则，不是 Step7 的既有枚举值。
+3. **阙文 `[[…]]`**：`admit=False and char is None` **且不是 excluded** 时才输出
+   ——2026-09-11 用户核实 vol02 p1-20 时发现最初版本把"排除名单"（切坏图块/
+   非字，`doubts` 含 `"excluded"`）也标成了 `[[]]`：20 处里 19 处其实是
+   excluded，不是真识别失败，混在一起会把"这一格本不该存在"和"这格是字但
+   认不出"读成同一件事。现在 excluded 跟 `blank` 一样直接跳过，不占位，
+   见 `_is_excluded`。
 4. `<…>` 夹注转行 `|` 与后缀属性 `{k=v}`（这版脚本目前只用到夹注 `|`）已在
    `guji-markdown` 分支 `claude/attrs-and-jz-break-0911` 实现并测试通过，
    但**尚未合并到 guji-markdown main**——用这份输出去跑下游解析器之前，
@@ -97,6 +101,7 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
         if kind in ("jiazhu_a", "jiazhu_b"):
             # 收集这一段连续夹注：sort_by_reading 已经把同一段的 a 全部排在
             # b 全部之前，这里只要顺着走、按 sub 分桶即可，不用重新判断相邻性。
+            # excluded 的格子（切坏/非字）在夹注段里同样直接丢弃，不占位。
             a_chars: list[str] = []
             b_chars: list[str] = []
             c: CellRec | None = cell
@@ -106,18 +111,28 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
                 if k not in ("jiazhu_a", "jiazhu_b"):
                     pending = c  # 留给外层用，不重查
                     break
-                ch = _char_text(r)
-                (a_chars if k == "jiazhu_a" else b_chars).append(ch)
+                if not _is_excluded(r):
+                    (a_chars if k == "jiazhu_a" else b_chars).append(_char_text(r))
                 i += 1
                 if i < len(ordered):
                     c = lookup(ordered[i])
             if a_chars and b_chars:
                 out.append("<" + "".join(a_chars) + "|" + "".join(b_chars) + ">")
-            else:
+            elif a_chars or b_chars:
                 out.append("<" + "".join(a_chars) + "".join(b_chars) + ">")
+            # a_chars、b_chars 都空（这一段夹注全被排除）——整段不输出，连 <> 都不留
             continue
 
         if kind == "blank":
+            i += 1
+            continue
+
+        if _is_excluded(rec):
+            # 排除名单：这一格根本不是字（切坏图块/墨污），不是「缺一个字」，
+            # 跟 blank 一样直接跳过，不能也标 [[]]——那会把「本不存在的格」
+            # 和「确实是字但认不出」混成同一个记号，见 2026-09-11 用户核实
+            # vol02 p1-20：20 处 [[]] 里 19 处其实是 excluded，只有 1 处是
+            # 真识别失败。
             i += 1
             continue
 
@@ -127,8 +142,18 @@ def render_column(admit_recs: list[AdmitRec], cells_by_key: dict[tuple[int, str]
     return prefix + "".join(out)
 
 
+def _is_excluded(rec: AdmitRec) -> bool:
+    """命中排除名单（`config/crop_exclusions.jsonl`）：切坏的图块/非字，
+    不进库也不出审查卡，见 `products/kinds/recog.py::PageAdmit.n_excluded`。
+    """
+    return "excluded" in rec.doubts
+
+
 def _char_text(rec: AdmitRec) -> str:
-    """一个字位的输出文本。`admit=False and char is None` 视为阙文（设计档 §三·2）。"""
+    """一个字位的输出文本，只在**不是** `_is_excluded` 时调用。
+    `admit=False and char is None` 视为阙文——真识别失败，不是排除
+    （设计档 §三·2；两者的区分见 `_is_excluded` 与调用点）。
+    """
     if not rec.admit and rec.char is None:
         return "[[]]"
     return rec.reading or rec.char or "[[]]"
