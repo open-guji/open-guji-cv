@@ -30,9 +30,6 @@ _SEG_PREFIX = "GUJI-SEG-REVIEW"
 _ID_PATTERNS = [
     # colborder:vol01:47:2:top —— 边框类裁决，带列号 + 端点后缀（非数字，不进 slot）
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+):[a-z]+$"),
-    # linebot:vol01:47:2 —— 下版框坐标金标，带列号、没有端点后缀（只出下端，
-    # 端点已经固化在 kind 里，不必再编进 id）
-    re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+)$"),
     # outer:vol01:47:top —— 边框类裁决，带端点后缀（非数字，不进任何字段）
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):[a-z]+$"),
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+)$"),          # cols:vol02:171

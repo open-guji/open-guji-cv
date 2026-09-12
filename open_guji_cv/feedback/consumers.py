@@ -81,13 +81,6 @@ def _expected_of(e: Event) -> dict:
         keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
                 "char_above", "char_below", "tags", "note", "polyline", "cand")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
-    if e.kind == "border_line":
-        # 下版框坐标金标。verdict：moved（拖到 y）/ ok（算法初值就对，
-        # y == y_old）/ no_line（这页版框印不出来，逃生按钮，不硬标坐标）。
-        # 坐标口径：裁剪图坐标（`colborder_line_cards` 的 `y0` 同一原点），
-        # 换算回页面坐标是导出脚本的事，不在标注这一步做。
-        keys = ("y", "y_old", "verdict", "col_h")
-        return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
     if e.kind == "border_offset":
         # 整页下版框坐标金标（`page_bottom_cards`）。verdict：moved（两端
         # 拖到 y_left/y_right）/ ok（现役线位置就对，等于 c.y_left/y_right）/

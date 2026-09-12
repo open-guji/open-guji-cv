@@ -29,14 +29,13 @@ _CARD_BUILDERS = {
     "head": bc.head_cards,
     "outer": bc.outer_cards,
     "colborder": bc.colborder_cards,
-    "linebot": bc.colborder_line_cards,
     "pageline": bc.page_bottom_cards,
 }
 
 
 @router.get("/api/border-review/cards")
 def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dict:
-    """六类之一的卡片列表。`kind`：cols / head / outer / colborder / linebot / pageline。"""
+    """五类之一的卡片列表。`kind`：cols / head / outer / colborder / pageline。"""
     build = _CARD_BUILDERS.get(kind)
     if build is None:
         raise HTTPException(404, f"没有这一类裁决卡：{kind}")
@@ -50,22 +49,15 @@ def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dic
 def api_border_review_verdicts(batch: str) -> dict:
     """读回某批次已裁的边框类卡片——刷新页面不该重审一遍（同 id 后到覆盖）。
 
-    `border_line`（linebot 坐标金标）额外带 `y`；`border_offset`（pageline
-    整页坐标金标）额外带 `y_left`/`y_right`（两端点各自坐标，不是单一
-    偏移量——现役斜率本身也可能探错，见 `page_bottom_cards` 模块头）——
-    没有它们前端就没法在刷新后把线画回人上次拖定的位置，只剩一个"已裁"
-    的空壳。
+    `border_offset`（pageline 整页坐标金标）额外带 `y_left`/`y_right`
+    （两端点各自坐标，不是单一偏移量——现役斜率本身也可能探错，见
+    `page_bottom_cards` 模块头）——没有它就没法在刷新后把线画回人上次
+    拖定的位置，只剩一个"已裁"的空壳。
     """
     log = deps.event_log()
     out: dict[str, dict] = {}
     for e in sorted(log.read(batch), key=lambda x: (x.batch, x.seq)):
-        if e.kind not in ("verdict", "border_class", "border_line", "border_offset"):
-            continue
-        if e.kind == "border_line":
-            v = e.payload.get("verdict")
-            if v is None:
-                continue
-            out[e.target.key] = {"verdict": v, "y": e.payload.get("y")}
+        if e.kind not in ("verdict", "border_class", "border_offset"):
             continue
         if e.kind == "border_offset":
             v = e.payload.get("verdict")
@@ -93,7 +85,7 @@ def _encode(img, q: int = 82) -> Response:
 @maps_http
 def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
                           col: int = 0, w: int = 560) -> Response:
-    """四类卡片各自的图。**不缓存**——画的是产物，重跑一步就变了（同
+    """各类卡片各自的图。**不缓存**——画的是产物，重跑一步就变了（同
     `products.py::_png` 的教训：2026-09-10 缓存过一次「重跑完还是旧图」）。
     """
     st = deps.product_store()

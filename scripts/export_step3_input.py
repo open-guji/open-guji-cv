@@ -83,12 +83,16 @@ Step3 准不准。所以这里先立一道准入闸，只把「确实是一列�
 调参或扩样本能解决的——`mixed` 样本已经从 n=2 扩到 n=11、覆盖四种不同
 机制，指标依然分不开，说明问题出在指标本身的设计范围，不是标注量不够。
 
-## L2b：整列噪点密度判据（2026-09-11 新增，只解决四种机制里的一种）
+## L2b：整列噪点密度判据（2026-09-11 新增，flag 级，只解决四种机制里的一种）
 
 按上面「结论」的方向找了一条独立维度——`stamp_noise_density`（整列
 **未去噪原图**上中等面积 3~60px 孤立连通体的像素密度，见
-`column_projection.py` 同名函数文档）。115 列现行金标（`verdict` 只有
-`clean`/`mixed` 两档，115 = 111 clean + 4 mixed）实测：
+`column_projection.py` 同名函数文档）。**这条判据命中只写进 `flags`，
+不进 `reject`、不影响 `admitted`**——只在 115 列金标上验证过背景印章这
+一种机制，没见过的书页上有没有漏测到的误伤先例还不确定，参照
+`row_segment_gate.py` R2/R2s 的先例（新判据先以 flag 形式进生产、积累
+人审证据，不直接硬拦），别一上来就当 block 用。115 列现行金标
+（`verdict` 只有 `clean`/`mixed` 两档，115 = 111 clean + 4 mixed）实测：
 
 * **对印章类污染干净分开**：clean 组 p95=0.0045、max=0.0060；人判 mixed
   的印章列 `vol02/3` c9 单独 0.0201，**3.4 倍间隙、零重叠**。
@@ -278,20 +282,23 @@ def main() -> None:
             ok_gate = c["floor"] <= SIDE_FLOOR_MAX
             ok_stamp = c["stamp"] <= STAMP_NOISE_MAX
             reasons = list(page_reject)
+            flags = []
             if not ok_gate:
                 reasons.append(f"L2：两侧最低墨 {c['floor']:.4f} > {SIDE_FLOOR_MAX}"
                                 "（找不到墨量归零的边界）")
             if not ok_stamp:
-                reasons.append(f"L2b：整列噪点密度 {c['stamp']:.4f} > {STAMP_NOISE_MAX}"
-                                "（疑似背景印章污染）")
+                # flag 级，不影响 admitted：只在 115 列金标上验证过背景印章这一种
+                # 机制，没见过的书页上有没有误伤先例不确定，见模块头「L2b」一节。
+                flags.append(f"L2b：整列噪点密度 {c['stamp']:.4f} > {STAMP_NOISE_MAX}"
+                             "（疑似背景印章污染，flag 不算错）")
             if args.tier == "gold" and not ok_gold:
                 reasons.append(f"L3：{why_gold}")
-            admitted = page_ok and ok_gate and ok_stamp and (ok_gold or args.tier == "gate")
+            admitted = page_ok and ok_gate and (ok_gold or args.tier == "gate")
             b0, b1 = c["band"]
             bt, bb = c["border"]
             rec = dict(
-                col=col, admitted=admitted, reject=reasons,
-                tier=("gold" if ok_gold else ("gate" if ok_gate and ok_stamp and page_ok else None)),
+                col=col, admitted=admitted, reject=reasons, flags=flags,
+                tier=("gold" if ok_gold else ("gate" if ok_gate and page_ok else None)),
                 content_x=[int(b0), int(b1)],
                 border_top=bt, border_bottom=bb,
                 top_slack=(bt if w["raised"] else 0.0),
@@ -370,6 +377,9 @@ def main() -> None:
         print("\n准入页上被扣下的列，按理由：")
         for why, n in sorted(held.items(), key=lambda kv: -kv[1]):
             print(f"  {n:>3}  {why}")
+        n_flagged = sum(1 for p in pages for c in p["columns"] if c.get("flags"))
+        if n_flagged:
+            print(f"\n推给 Step3 但带 flag 的列（不拦，供人审）：{n_flagged}")
 
 
 if __name__ == "__main__":
