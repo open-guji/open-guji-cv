@@ -72,6 +72,7 @@ export interface QualityResponse {
   defects: {
     n: number
     by_quality: Array<{ key: string; n: number }>
+    by_defect: Array<{ key: string; n: number }>
     by_page: Array<{ key: string; n: number }>
     by_col: Array<{ key: string; n: number }>
     by_slot: Array<{ key: string; n: number }>

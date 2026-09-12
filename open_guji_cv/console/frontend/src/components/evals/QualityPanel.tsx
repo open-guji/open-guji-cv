@@ -53,6 +53,7 @@ export function QualityPanel({ book, pages }: { book: string; pages: string }) {
           <div>
             <div className="qk">人裁标出的切分缺陷 <b>{d.defects.n}</b> 条</div>
             <div className="qs" style={{ margin: '.3rem 0' }}>类型 {chips(d.defects.by_quality)}</div>
+            <div className="qs">缺陷细类 {chips(d.defects.by_defect)}</div>
             <div className="qs">按页 {chips(d.defects.by_page)}</div>
             <div className="qs">按列 {chips(d.defects.by_col)}</div>
             <div className="qs">按格位 {chips(d.defects.by_slot)}</div>
