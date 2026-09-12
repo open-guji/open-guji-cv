@@ -88,6 +88,13 @@ def _expected_of(e: Event) -> dict:
         # 换算回页面坐标是导出脚本的事，不在标注这一步做。
         keys = ("y", "y_old", "verdict", "col_h")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "border_offset":
+        # 整页下版框偏移金标（`page_bottom_cards`）。verdict：moved（拖了
+        # offset px）/ ok（现役线位置就对，offset==0）/ no_line（这页
+        # 版框太淡看不出线）。offset 加在 `bottom.y_at_right` 上、保留
+        # 现有斜率，不是逐列独立坐标——一页一个数，换算见 shard README。
+        keys = ("offset", "verdict")
+        return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
     return p
 
 

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { fetchGateSummary } from '../api/evals'
 import { BorderLinePanel } from '../components/border-review/BorderLinePanel'
 import { BorderReviewPanel } from '../components/border-review/BorderReviewPanel'
+import { PageLinePanel } from '../components/border-review/PageLinePanel'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import type { TypeBreakdownItem } from '../components/common/ProgressGatePanel'
@@ -17,15 +18,16 @@ import type { BorderReviewKind } from '../types/borderReview'
 // 判的是「Step2 单列矫正削上下版框削得对不对」，但输入是 border_detect 的产物
 // （page_column_windows），放这一页比另开 Step2 专页更贴近人裁的心智模型
 // （见 overview 项目 02-控制台可视化.md 的现状查证）。
-// 'linebot' 不在 BorderReviewKind 里——它不是"点类别"那四张卡的形状（要拖坐标），
-// 用独立组件 BorderLinePanel，这里只借 TABS 做页内切换。
-type TabKey = BorderReviewKind | 'linebot'
+// 'linebot'/'pageline' 不在 BorderReviewKind 里——都不是"点类别"那四张卡的
+// 形状（要拖坐标/拖偏移），各用独立组件，这里只借 TABS 做页内切换。
+type TabKey = BorderReviewKind | 'linebot' | 'pageline'
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'cols', label: '列探测' },
   { key: 'head', label: '抬头有无' },
   { key: 'outer', label: '外框外延' },
   { key: 'colborder', label: 'Step2 上下版框核校' },
-  { key: 'linebot', label: '下版框坐标金标' },
+  { key: 'linebot', label: '下版框坐标金标（逐列）' },
+  { key: 'pageline', label: '下版框坐标金标（整页）' },
 ]
 
 const STEP_ID = 'step1'
@@ -106,7 +108,9 @@ export function Step1Page() {
           ))}
         </div>
       </div>
-      {tab === 'linebot' ? <BorderLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
+      {tab === 'linebot' ? <BorderLinePanel book={book} />
+        : tab === 'pageline' ? <PageLinePanel book={book} />
+        : <BorderReviewPanel book={book} kind={tab} />}
       <ProductViewer book={book} step="border_detect" pages={filteredPages} />
     </div>
   )
