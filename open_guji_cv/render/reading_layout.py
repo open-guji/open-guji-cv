@@ -28,36 +28,41 @@
 `blank` 干脆没有记录，见 `guji_markdown.py::_lead_blank_count` 的
 同款教训）。
 
-## 分段判据（用户 2026-09-12 定，第二版——第一版滑动窗口猜基线的方案
-用真实数据（vol02 p11）验证是错的：抬头行天然写不满，把它的「没排满」
-当分段信号会把一段连续敬语拆得七零八落，已废弃）
+## 分段判据（用户 2026-09-12 定，第四版）
 
-**基线是外部给定的已知常量**（`baseline_kg`，默认 2），不是统计出来的。
-每一行的「开头点数」`kg`（`.`/`..` 的点数）与基线比较，只认三种情况，
-碰到没覆盖的组合**不猜，记进 `notes` 里向上抛**：
+- **第一版**（滑动窗口猜基线）用 vol02 p11 验证是错的：抬头行天然
+  写不满，拿它的「没排满」当分段信号会把连续敬语拆得七零八落。
+- **第二版**（固定基线 + `_SECTION_MARKERS` 引导词表如"謹按"）用
+  vol02 p6/p7 验证又不够：「經部／易類」这类分类标题后接一段稳定在
+  新点数（如 3）的正文，开头不是"謹按"而是随文而异的内容首字——
+  四库分类名有几十个，逐个加进词表不是办法。
+- **第三版**把"基线切换"的判据从"词表命中"改成"连续 ≥`_SECTION_RUN`
+  行稳定在同一新点数"，不再需要维护 `_SECTION_MARKERS`；"謹按/謹案"
+  那一行本身点数已经等于后续正文的点数（实测 vol02 p10 尾行"謹按
+  唐徐堅初學記"就是 4 点，跟后面 p11 c1~c3 同值），天然被这条通用
+  规则覆盖，不用再单列引导词。
+- **第四版**（当前）把"标题行"判据从"只认 `eff==0`"放宽成"任何
+  不命中抬头词表、不满足连续切换的孤立单行"——vol02 p6"經部"点数
+  是 1、"易類"点数是 2，跟"夏易傳十一卷"那种 `eff==0` 的标题同性质，
+  只是点数不是 0，没有理由只认 0 这一个值。
 
-1. `kg == baseline_kg`：正常行。若上一行没排满 → 分段；排满则接着拼。
-2. `kg < baseline_kg`（含抬头 `^`，按"抬头 n 级 == 点数 -n"折算）：
-   **只有开头词命中 `_TAITOU_WORDS` 词表才判定为抬头**——抬头不分段，
-   直接接着拼（抬头是强制换行，不是新段落的开始，见 vol02 p11 教训）。
-   `kg == 0` 时另有一条分支（见下），其余不命中词表的记进 `notes`，
-   不要在没有依据的时候擅自分段。
-2a. `kg == 0` 且**连续 ≥2 行**（自己已经在 0 区间里，或下一行也是 0）：
-    判定为**这一段的基线本来就是 0**（如 vol02 p3 整页顶格不挪抬），
-    按当前基线（0）走情况 1 的排满/分段逻辑，不是逐行标题。
-    `kg == 0` 但**孤立单行**（前后都不是 0）：书目条目标题行（如
-    "夏易傳十一卷<內府藏本>"），前后都强制分段、独立成段。用户
-    2026-09-12 两次裁：先按"点数=0 且不在抬头词表里"识别成标题，
-    后用 vol02 p3 真实数据验证"连续多行都是 0"不是标题是基线，
-    补上"连续 2 行以上才算基线 0，单独 1 行才算标题"这条区分。
-3. `kg > baseline_kg` 且开头命中 `_SECTION_MARKERS`（如"謹案"）：
-   判定为**连续几行的基线切换**——从这一行起，后续判断改用新基线
-   （新基线就是这一行的 `kg`），直到再遇到下一次切换信号。
-   这不是"这一行要不要分段"的问题，是"这一段接下来该用哪个基线"。
-4. 其余没覆盖的组合（`kg > baseline_kg` 但开头不是已知的按语引导词，等）：
-   记进 `notes`，按当前基线不变、不分段处理，等着人核实。
+**基线是外部给定的已知常量**（`baseline_kg`，默认 2）。每一行的
+「开头点数」`eff`（`.` 折成正数、`^` 折成负数，同一数轴）跟当前基线
+比较，判断顺序固定（互斥，先命中的分支生效）：
 
-分段本身只发生在情况 1（正常行 + 上一行没排满）。
+1. `eff == baseline`：正常行。若上一条正常行没排满 → 分段；排满则
+   接着拼。
+2. 开头词命中 `_TAITOU_WORDS`（不论 `eff` 比基线大还是小）：抬头，
+   强制换行、不分段——**优先级高于"连续同值"**，即使碰巧连续多行
+   都是同一个抬头点数，只要命中词表就认抬头，不认基线切换。
+3. 不命中抬头词表，且 `eff`（不论正负、不论跟基线比大小）**连续
+   ≥`_SECTION_RUN` 行稳定在同一个值**：基线切换到这个新值，从这一行
+   起按新基线走情况 1 的排满/分段逻辑。这条判在"孤立单行"之前——
+   先排除"是切换的一部分"，才轮到下面的兜底猜测。
+4. 都不是（孤立单行，前后都跟当前状态对不上）：**当标题行处理**
+   （前后强制分段、独立成段），仍记一条轻量的 `notes`（"按标题行
+   处理，供复核"，不是"需要人核实的疑问"）——这条比真正不确定的
+   情况语气弱，是"已按规则处理，标注供检查"。
 """
 from __future__ import annotations
 
@@ -76,6 +81,9 @@ ADMIT_KIND = "seed_admit"
 
 DEFAULT_BASELINE_KG = 2
 
+#: 连续几行稳定在同一新点数才认定"基线切换"，见模块头情况 4。
+_SECTION_RUN = 2
+
 #: 抬头常见开头词——初始小表，用户 2026-09-12 定："先用一个小初始表
 #: （如御、聳、指示、欽定、朝廷类），不够用时问你"。碰到不在表里的
 #: 抬头候选，`reflow_page` 记进 `notes` 而不是自己瞎猜要不要认。
@@ -83,11 +91,6 @@ _TAITOU_WORDS = (
     "御", "聖", "欽定", "欽奉", "朝廷", "指示", "命", "詔", "勅", "旨",
     "皇上", "皇帝", "天", "祖宗", "本朝",
 )
-
-#: 基线切换引导词——命中即认为从这一行起，连续几行换成新基线（用新的
-#: `kg` 值本身作为新基线）。目前只有"謹案"（谨案）这一条，用户原话
-#: "碰到'谨案'基线变成4"，其余引导词未验证，先不猜。
-_SECTION_MARKERS = ("謹按", "謹案")
 
 _PREFIX_RE = re.compile(r"^(\^*)(\.*)")
 _JIAZHU_RE = re.compile(r"<([^<>|]*)\|([^<>]*)>")
@@ -166,11 +169,13 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
     `guji_markdown.render_page()` 的直接返回值。
 
     `baseline_kg`：这一页/这一段正常行的挪抬点数（已知常量，不是统计出来
-    的），默认 2。
+    的），默认 2。**基线可以跨页延续**——调用方处理连续页时，把上一页
+    返回后的当前基线传给下一页的 `baseline_kg`（本函数不自动记忆跨页
+    状态，也不主动查页码是否连续，交给调用方决定要不要延续）。
 
-    `notes`：遇到规则覆盖不到的组合（抬头候选不在词表里、或点数异常但
-    不是已知的基线切换引导词）时，追加一条人类可读的说明到这里——
-    **不要在没有依据的时候擅自判定**，交给调用方汇总、必要时提交给人核实。
+    `notes`：遇到规则覆盖不到的组合（抬头候选不在词表里、点数异常但
+    连续行数不够、等）时，追加一条人类可读的说明到这里——**不要在没有
+    依据的时候擅自判定**，交给调用方汇总、必要时提交给人核实。
     """
     if notes is None:
         notes = []
@@ -185,8 +190,14 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
     paragraphs: list[str] = []
     current: list[str] = []
     baseline = baseline_kg
-    prev_full: bool | None = None  # 上一条"正常行"是否排满；抬头/基线切换行不更新这个
-    in_zero_run = False  # 是否已经处于"连续 kg=0 的段落基线"区间内，见下
+    prev_full: bool | None = None  # 上一条"正常行"是否排满；抬头/切换/标题行不更新这个
+    in_run = False  # 是否已经处于"连续同值基线切换"区间内，见情况 4
+
+    def is_stable_run(idx: int, value: int) -> bool:
+        """从 idx 起（含）连续 `_SECTION_RUN` 行是否都等于 value——
+        用来判断"新点数是不是稳定出现"，不是偶然一行。"""
+        window = effs[idx:idx + _SECTION_RUN]
+        return len(window) >= _SECTION_RUN and all(v == value for v in window)
 
     for i, (raised, kg, rest) in enumerate(parsed):
         text = _strip_jiazhu_break(rest)
@@ -201,7 +212,7 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
 
         if eff == baseline:
             # 情况 1：正常行。上一条正常行没排满就分段。
-            in_zero_run = False
+            in_run = False
             if prev_full is False:
                 paragraphs.append("".join(current))
                 current = [text]
@@ -210,61 +221,45 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
             prev_full = is_column_full(store, book, page, col)
             continue
 
-        if eff < baseline:
-            if any(rest.startswith(w) for w in _TAITOU_WORDS):
-                # 情况 2：确认是抬头——强制换行，不是新段落开始，不分段
-                # （vol02 p11 教训：抬头行天然写不满，不能拿来判断要不要分段）。
-                in_zero_run = False
+        if any(rest.startswith(w) for w in _TAITOU_WORDS):
+            # 情况 2：确认是抬头——优先级高于"连续同值"，强制换行、
+            # 不是新段落开始，不分段（vol02 p11 教训：抬头行天然写
+            # 不满，不能拿来判断要不要分段）。
+            in_run = False
+            current.append(text)
+            continue  # 不更新 prev_full
+
+        if in_run or is_stable_run(i, eff):
+            # 情况 3：连续同值——基线真的切换了（含 eff=0 连续多行的
+            # 情形，如 vol02 p3 整页顶格不挪抬），走正常行的排满/分段
+            # 逻辑。判在"孤立单行=标题"之前——先确认不是切换，才轮到
+            # 兜底的标题猜测。
+            baseline = eff
+            in_run = True
+            if prev_full is False:
+                paragraphs.append("".join(current))
+                current = [text]
+            else:
                 current.append(text)
-                continue  # 不更新 prev_full
-
-            if eff == 0:
-                # 情况 3a：连续 ≥2 行都是 kg=0——这一段的基线本来就是 0
-                # （如 vol02 p3 整页顶格不挪抬），**不是**逐行标题。
-                # 用户 2026-09-12 裁："连续2行以上kg=0才算基线0，单独1行
-                # 才算标题"——先看"已经在 0 基线区间里"或"下一行也是 0"。
-                next_is_zero = i + 1 < len(effs) and effs[i + 1] == 0
-                if in_zero_run or next_is_zero:
-                    in_zero_run = True
-                    if prev_full is False:
-                        paragraphs.append("".join(current))
-                        current = [text]
-                    else:
-                        current.append(text)
-                    prev_full = is_column_full(store, book, page, col)
-                    continue
-
-                # 情况 3b：孤立的单行 kg=0——书目条目标题行
-                # （如"夏易傳十一卷<內府藏本>"），前后都强制分段。
-                if current:
-                    paragraphs.append("".join(current))
-                paragraphs.append(text)
-                current = []
-                prev_full = None  # 标题行前后都分段，不参与"排满"判据
-                continue
-
-            in_zero_run = False
-            notes.append(
-                f"col{col}: 开头点数 {eff}（基线 {baseline}）但开头词"
-                f"「{rest[:4]}」不在抬头词表 _TAITOU_WORDS 里，也不是"
-                f"点数=0 的标题/连续基线0情形，按不分段处理，需要人核实")
-            current.append(text)
-            continue  # 不更新 prev_full：这一行状态不明
-
-        # eff > baseline：可能是基线切换（如"謹案"），也可能是没见过的情况。
-        in_zero_run = False
-        if any(rest.startswith(w) for w in _SECTION_MARKERS):
-            baseline = eff  # 切换基线，后续行按新基线判断
-            current.append(text)
             prev_full = is_column_full(store, book, page, col)
             continue
 
+        # 情况 4：既不命中抬头词表、也不满足连续切换——孤立单行。
+        # 用户 2026-09-12 定（第二次放宽）：不再限定 eff==0，任何孤立
+        # 单行都当标题处理（vol02 p6"經部"点数是 1、"易類"点数是 2 但
+        # 前后不连续，跟"夏易傳十一卷"那种 eff=0 的标题同性质，只是
+        # 点数不是 0）。仍记一条轻量记录供复核，不是"需要人核实的疑问"
+        # ——这条比 notes 的疑问性质弱，是"已按规则处理，标注供检查"。
+        in_run = False
         notes.append(
-            f"col{col}: 开头点数 {eff}（当前基线 {baseline}）比基线多，"
-            f"但开头词「{rest[:4]}」不在基线切换词表 _SECTION_MARKERS 里，"
-            f"按不分段、基线不变处理，需要人核实")
-        current.append(text)
-        # 不更新 prev_full——这一行本身状态不明，不能拿来做分段判据
+            f"col{col}: 开头点数 {eff}（当前基线 {baseline}），孤立单行、"
+            f"不命中抬头词表，按标题行处理（独立成段），供复核："
+            f"「{rest[:6]}」")
+        if current:
+            paragraphs.append("".join(current))
+        paragraphs.append(text)
+        current = []
+        prev_full = None  # 标题行前后都分段，不参与"排满"判据
 
     if current:
         paragraphs.append("".join(current))
