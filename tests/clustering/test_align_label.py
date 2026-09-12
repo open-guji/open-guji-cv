@@ -52,6 +52,49 @@ def test_insertion_segment_is_dropped_not_forced():
         assert got[f"tb:7:1:{i}"] == spliced[i]
 
 
+def test_newline_wrapped_variant_char_is_not_dropped():
+    """语料里被换行夹住的单字（刻本抬头礉制常见：`...字A\n字B\n字C...`），
+    当它还恰好是个异体字（字形不同但同一个字）时，`difflib` 没法靠"贪心
+    找最长公共子串"把它单独切出来——转写与语料两侧字符都不同，换行这
+    1~2 个多余字符直接让这一位从"等长 replace"变成"不等长"，整段丢弃。
+
+    2026-09-11 实测 vol01 p86「蒙」：语料异体字「𫎇」夹在 `\n𫎇\n` 里，
+    旧版因此整段丢弃；全书扫过这种「单字被换行夹住」模式有 733 处，
+    不是孤例。`difflib` 的贪心算法在两侧字符相同时能自己避开换行
+    （见 test_newline_wrapped_same_char_already_survives_without_fix），
+    只有字符不同（异体字/转写错）时才真正需要这处修复。
+    """
+    before, after = CORPUS[10:30], CORPUS[30:50]
+    corpus_with_newline = before + "\n傅\n" + after
+    index = build_ngram_index(corpus_with_newline)
+
+    text = before + "傳" + after   # 转写串认成「傳」，语料该位是异体字「傅」——两侧都不同，换行必须清洗掉才能对上
+    labels, anchored = label_page("7", _slots(text), "tb", corpus_with_newline, index)
+
+    assert anchored
+    ids = {x.instance_id: x for x in labels}
+    hit = ids[f"tb:7:1:{len(before)}"]
+    assert hit.char == "傅" and hit.hyp == "傳" and hit.op == "replace"
+    # 前后两大段 equal 照样收齐，不因为中间多了一个换行符就整段受影响
+    assert len(labels) == len(text)
+
+
+def test_newline_wrapped_same_char_already_survives_without_fix():
+    """对照组：两侧字符相同时，`difflib` 自己就能把换行独立切开成
+    insert，不需要本次修复——用来标注"这条修复到底在救什么"的边界，
+    不要把所有换行场景都当成需要改的坑。"""
+    before, after = CORPUS[10:30], CORPUS[30:50]
+    corpus_with_newline = before + "\n傅\n" + after
+    index = build_ngram_index(corpus_with_newline)
+
+    text = before + "傅" + after
+    labels, anchored = label_page("7", _slots(text), "tb", corpus_with_newline, index)
+
+    assert anchored
+    ids = {x.instance_id: x for x in labels}
+    assert ids[f"tb:7:1:{len(before)}"].op == "equal"
+
+
 def test_unanchorable_page_yields_nothing():
     labels, anchored = label_page("7", _slots("一二三四五六七八九十"), "tb",
                                   CORPUS, build_ngram_index(CORPUS))

@@ -205,7 +205,15 @@ def label_page(page: str, slots: list[tuple], book: str,
 
     lo = max(0, offset)
     hi = min(len(corpus), offset + len(text) + window_pad)
-    window = corpus[lo:hi]
+    # ⚠️ 去掉语料自带的换行——刻本抬头礉制会把正文里的字单独顶格另起一行
+    # （`\n蒙\n` 这种），而 `text` 是 slots 拼出来的纯字符流、从不含 \n。
+    # 不清洗的话，equal 两边明明是同一个字（或该走 replace 的异体字），
+    # 因为多出 1~2 个 \n 字符而被 difflib 判成"不等长"，整段跟着丢弃——
+    # 2026-09-11 实测 vol01 p86「蒙」（语料异体字「𫎇」夹在 `\n𫎇\n` 里）
+    # 就是这样被冲掉的。全书扫过，语料里单字被换行夹住的模式有 733 处，
+    # 不是孤例。清洗后只是把 \n 从两边的比较对象中去掉，不影响取出来的
+    # gold 字符本身（取的就是清洗后字符串里的字，天然是汉字）。
+    window = corpus[lo:hi].replace("\n", "")
     sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
 
     out: list[AlignedLabel] = []
@@ -267,7 +275,7 @@ def page_reference(page: str, slots: list[tuple[int, int, str]],
         return {}
     lo = max(0, offset)
     hi = min(len(corpus), offset + len(text) + window_pad)
-    window = corpus[lo:hi]
+    window = corpus[lo:hi].replace("\n", "")  # 见 label_page「2026-09-11」一节
     sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
     out: dict[tuple[int, int], tuple[str | None, str]] = {}
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
