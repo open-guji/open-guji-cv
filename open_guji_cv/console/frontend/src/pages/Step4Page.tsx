@@ -155,9 +155,10 @@ export function Step4Page() {
         <span className="muted">{msg}</span>
       </div>
       <div className="rv-help">
-        左边是<b>语境图</b>（原图裁一块，红框=紧裁框），回答「这个框圈的是不是恰好一个整字」；
-        右边是<b>成品图块</b>，回答「下游拿到的是什么」。这批候选是从全书正文页字格里等概率随机
-        抽的（现有产物范围：vol01/vol02），不叠任何算法判断——判的时候只看图。
+        左边是<b>语境图</b>（原图裁一块，<span style={{ color: '#c00' }}>红框</span>=Step4 紧裁框，
+        <span style={{ color: '#0078f0' }}>蓝框</span>=Step3 切分原框），回答「这个框圈的是不是恰好
+        一个整字」；右边是<b>成品图块</b>，回答「下游拿到的是什么」。这批候选是从全书正文页字格里
+        等概率随机抽的（现有产物范围：vol01/vol02），不叠任何算法判断——判的时候只看图。
         键盘：<b>1</b> clean · <b>2</b> truncated · <b>3</b> contaminated · <b>4</b> not_text ·
         <b>←/→</b>（或 <b>k/j</b>）翻卡。
       </div>
@@ -170,7 +171,7 @@ export function Step4Page() {
               data-done={v} onClick={() => focus(i)}
             >
               <div className="rvhead">
-                <b>{r.book} {r.page}:{r.col}</b>
+                <b>{r.id}</b>
               </div>
               <div className="rvbody">
                 <div className="rvimgcol">
