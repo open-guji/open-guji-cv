@@ -10,18 +10,15 @@ import './cutline.css'
 // 核心交互（直线拖拽 / 折线多点编辑 / 键盘快捷键）逐条保留，只是从「一个全局
 // 可变对象 + 手动 DOM 操作」换成「每张卡一份 React state」。
 //
-// `scope`（overview 2026-09-11 下发）：'all'（默认，Step3 用）= 全量 r2s/split_char
-// 审阅，页范围/类型/条数/批次都能手填；'blocking'（Step7「切分裁决」板块用）=
-// 只出顺序闸正在挡住字卡的那批（`review/cards.py::blocking_cutline_cases`），
-// 工具栏收窄成「载入」+ 状态，批次名固定，不需要人再选页范围/类型。
+// Step7「切分裁决」板块用的是独立的 `BlockingCutlinePanel`/`BlockingCutlineCard`
+// （overview 2026-09-11 下发），不是这个组件加 scope 开关——那边只需要「选一个
+// 候选、落定」，状态形状比这里的拖直线/画折线/干扰标签简单得多，两边硬塞进
+// 同一份状态机反而互相绕。
 
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊' }
 
-export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided }: {
-  book: string; scope?: 'all' | 'blocking'; pages?: string; onDecided?: () => void
-}) {
-  const blocking = scope === 'blocking'
-  const [pages, setPages] = useState(pagesProp || 'body')
+export function CutlinePanel({ book }: { book: string }) {
+  const [pages, setPages] = useState('body')
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
   const [limit, setLimit] = useState(250)
   const [batchInput, setBatchInput] = useState('')
@@ -37,7 +34,6 @@ export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided 
   const bump = () => forceRender((n) => n + 1)
 
   const batch = () => {
-    if (blocking) return `${book}-cutline-blocking`
     const suffix = kind === 'r2s' ? '' : '-' + kind
     return batchInput.trim() || `${book}-cutline${suffix}`
   }
@@ -47,8 +43,7 @@ export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided 
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages || 'body', limit || 250, b, onlyTodo, kind,
-                                   blocking ? 'blocking' : 'all')
+      d = await fetchCutlineCases(book, pages || 'body', limit || 250, b, onlyTodo, kind)
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
@@ -80,21 +75,9 @@ export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided 
     cardState.current = next
     setCases(d.cases)
     setCur(0)
-    if (blocking) {
-      setMsg(d.n === 0 ? '没有待裁的切分方案——字卡不会被挡' : `${d.n} 条切点待裁 → 批次 ${b}`)
-    } else {
-      const kindName = { r2s: '粘连 R2s', split_char: '切进字里', all: '粘连+切进字里' }[kind] || 'R2s'
-      setMsg(`本册${kindName}共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${b}`)
-    }
+    const kindName = { r2s: '粘连 R2s', split_char: '切进字里', all: '粘连+切进字里' }[kind] || 'R2s'
+    setMsg(`本册${kindName}共 ${d.n_r2s} 条，已有金标/已裁 ${d.n_done}，本次载入 ${d.n} 条 → 批次 ${b}`)
   }
-
-  // blocking 模式：挂载时自动载入一次；Step7 切换页范围（pagesProp 变）时跟着重载。
-  useEffect(() => {
-    if (!blocking) return
-    setPages(pagesProp || 'body')
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocking, book, pagesProp])
 
   function focus(i: number) {
     if (!cases.length) return
@@ -247,7 +230,6 @@ export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided 
       await postEvents({ batch: batch(), step: 'row_segment', unit: 'boundary', kind: 'cutline', events: [row] })
       const n = Object.values(cardState.current).filter((s) => s.done).length
       setMsg(`已落 ${n} / ${cases.length} 条 → 批次 ${batch()}`)
-      onDecided?.()   // blocking 模式：通知外层（Step7）字卡可能已解锁，去重载一下
     } catch (e) {
       setMsg('写入失败：' + (e as Error).message)
       st.done = undefined
@@ -293,29 +275,21 @@ export function CutlinePanel({ book, scope = 'all', pages: pagesProp, onDecided 
 
   return (
     <div className="card">
-      {blocking ? (
-        <h2>切分裁决 <span className="muted">顺序闸挡住的多候选切点：裁完这批，被挡的字卡才会出来</span></h2>
-      ) : (
-        <h2>拖切线 <span className="muted">粘连格线（R2s）：把横线拖到你认为该切的位置，攒成 touching-cuts 金标</span></h2>
-      )}
+      <h2>拖切线 <span className="muted">粘连格线（R2s）：把横线拖到你认为该切的位置，攒成 touching-cuts 金标</span></h2>
       <div className="cl-toolbar">
-        {!blocking && (
-          <>
-            <label className="muted">页 <input value={pages} onChange={(e) => setPages(e.target.value)} size={10} title="body = 正文页；或 3-6,9" /></label>
-            <label className="muted">类型
-              <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}
-                      title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙">
-                <option value="r2s">粘连 R2s</option>
-                <option value="split_char">切进字里</option>
-                <option value="all">两者</option>
-              </select>
-            </label>
-            <label className="muted">条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 250)} size={4} /></label>
-            <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册自动命名" /></label>
-            <label className="muted"><input type="checkbox" checked={onlyTodo} onChange={(e) => setOnlyTodo(e.target.checked)} /> 只看未裁</label>
-          </>
-        )}
-        <button onClick={load}>{blocking ? '刷新' : '载入'}</button>
+        <label className="muted">页 <input value={pages} onChange={(e) => setPages(e.target.value)} size={10} title="body = 正文页；或 3-6,9" /></label>
+        <label className="muted">类型
+          <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}
+                  title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙">
+            <option value="r2s">粘连 R2s</option>
+            <option value="split_char">切进字里</option>
+            <option value="all">两者</option>
+          </select>
+        </label>
+        <label className="muted">条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 250)} size={4} /></label>
+        <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册自动命名" /></label>
+        <label className="muted"><input type="checkbox" checked={onlyTodo} onChange={(e) => setOnlyTodo(e.target.checked)} /> 只看未裁</label>
+        <button onClick={load}>载入</button>
         <span className="muted">{msg}</span>
       </div>
       {cases.length > 0 && (

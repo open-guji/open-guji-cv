@@ -1,11 +1,22 @@
 // 对应 GET /api/cutline/cases 与 /api/cutline/verdicts，字段照
 // v1 static/js/panels/cutline.js 的用法反推（原样复用后端契约，见方案 §一）。
 
+export interface CandidateMatch {
+  verdict: 'same' | 'unsure' | 'diff' | string
+  char: string | null
+  cov: number
+  wmax: number
+}
+
 export interface CutCandidate {
   kind: 'straight' | 'seam_narrow' | 'seam_wide' | string
   y: number[] | null
   seam_ink: number
   dev_max: number
+  // 选这个切法，上格/下格库匹配认出的字（overview 2026-09-11 下发）。
+  // null = 没跑过 Step4/5 或没有匹配结果，前端按"无识别信息"处理。
+  match_above?: CandidateMatch | null
+  match_below?: CandidateMatch | null
 }
 
 export interface CutlineCase {
