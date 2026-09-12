@@ -67,6 +67,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from ..core.spec import page_key
 from ..errors import ProductMissing
@@ -94,6 +95,14 @@ _TAITOU_WORDS = (
 
 _PREFIX_RE = re.compile(r"^(\^*)(\.*)")
 _JIAZHU_RE = re.compile(r"<([^<>|]*)\|([^<>]*)>")
+
+
+@dataclass
+class Paragraph:
+    """9.2 排版结果的一段。`is_title` 标记这段是不是被规则情况 4
+    判成的"孤立单行标题"——给控制台前端高亮用，不是排版本身需要。"""
+    text: str
+    is_title: bool
 
 
 def _parse_line(line: str) -> tuple[int, int, str]:
@@ -160,10 +169,13 @@ def is_column_full(store: ProductStore, book: str, page: int, col: int) -> bool:
     return last >= total
 
 
-def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
-                 baseline_kg: int = DEFAULT_BASELINE_KG,
-                 notes: list[str] | None = None) -> str:
-    """把 9.1 的一页分行文本（`render_page` 的返回值）转成可阅读排版文本。
+def reflow_page_structured(store: ProductStore, book: str, page: int, page_text: str,
+                            baseline_kg: int = DEFAULT_BASELINE_KG,
+                            notes: list[str] | None = None) -> list[Paragraph]:
+    """把 9.1 的一页分行文本（`render_page` 的返回值）转成结构化段落列表
+    ——`reflow_page` 的字符串版是对这份结果做 `"\\n\\n".join(p.text ...)`
+    的薄封装。控制台等需要区分"哪些段是标题"的调用方应该用这个函数，
+    不要从拼好的字符串或 `notes` 文本里正则反推。
 
     `page_text`：**不带** `#第N页` 页眉的那一部分，一行对应一列，来自
     `guji_markdown.render_page()` 的直接返回值。
@@ -182,12 +194,12 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
 
     lines = [ln for ln in page_text.split("\n") if ln != ""]
     if not lines:
-        return ""
+        return []
 
     parsed = [_parse_line(ln) for ln in lines]
     effs = [_effective_kg(raised, kg) for raised, kg, _ in parsed]
 
-    paragraphs: list[str] = []
+    paragraphs: list[Paragraph] = []
     current: list[str] = []
     baseline = baseline_kg
     prev_full: bool | None = None  # 上一条"正常行"是否排满；抬头/切换/标题行不更新这个
@@ -198,6 +210,10 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
         用来判断"新点数是不是稳定出现"，不是偶然一行。"""
         window = effs[idx:idx + _SECTION_RUN]
         return len(window) >= _SECTION_RUN and all(v == value for v in window)
+
+    def flush_current() -> None:
+        if current:
+            paragraphs.append(Paragraph(text="".join(current), is_title=False))
 
     for i, (raised, kg, rest) in enumerate(parsed):
         text = _strip_jiazhu_break(rest)
@@ -214,7 +230,7 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
             # 情况 1：正常行。上一条正常行没排满就分段。
             in_run = False
             if prev_full is False:
-                paragraphs.append("".join(current))
+                flush_current()
                 current = [text]
             else:
                 current.append(text)
@@ -237,7 +253,7 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
             baseline = eff
             in_run = True
             if prev_full is False:
-                paragraphs.append("".join(current))
+                flush_current()
                 current = [text]
             else:
                 current.append(text)
@@ -255,13 +271,22 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
             f"col{col}: 开头点数 {eff}（当前基线 {baseline}），孤立单行、"
             f"不命中抬头词表，按标题行处理（独立成段），供复核："
             f"「{rest[:6]}」")
-        if current:
-            paragraphs.append("".join(current))
-        paragraphs.append(text)
+        flush_current()
+        paragraphs.append(Paragraph(text=text, is_title=True))
         current = []
         prev_full = None  # 标题行前后都分段，不参与"排满"判据
 
-    if current:
-        paragraphs.append("".join(current))
+    flush_current()
 
-    return "\n\n".join(paragraphs)
+    return paragraphs
+
+
+def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
+                 baseline_kg: int = DEFAULT_BASELINE_KG,
+                 notes: list[str] | None = None) -> str:
+    """`reflow_page_structured` 的字符串版：段落用空行（`"\\n\\n"`）分隔，
+    丢弃"哪段是标题"这个信息。CLI／回归测试用这个；需要区分标题的调用方
+    （控制台前端渲染）应该直接用 `reflow_page_structured`。
+    """
+    paragraphs = reflow_page_structured(store, book, page, page_text, baseline_kg, notes)
+    return "\n\n".join(p.text for p in paragraphs)
