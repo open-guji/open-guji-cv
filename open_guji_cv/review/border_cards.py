@@ -26,14 +26,15 @@
 行，只是给人一把固定的尺子，不能当成"算法探测"介绍给标注者。判"没有线"
 用 `no_line` 逃生按钮，不强迫在看不出线的页上瞎标一个坐标。
 
-`pageline:{book}:{page}`  整页下版框偏移金标（overview 2026-09-12 下发）。
+`pageline:{book}:{page}`  整页下版框坐标金标（overview 2026-09-12 下发）。
 `linebot` 头一批 329 条标注抽查发现：窄列裁剪图里版框墨条常与相邻字缝
 糊在一起分不清，人标的位置系统性偏向"字开始的地方"而非墨条本身
 （vol02/22/3 等核对过），而且这类误判整页一致（同页各列同向同量），
 不是列级噪声。整页通栏宽带能一眼看出哪条才是贯穿全页的印刷直线，比
-窄列裁剪图清楚得多，效率也高——一页拖一条线（保留现有斜率，只调整
-整体偏移量），不必逐列点。落 `border-detection/bottom-offset`，字段
-只有 `offset`（页面像素，加在 `bottom.y_at_right` 上）+ `verdict`。
+窄列裁剪图清楚得多，效率也高——一页拖一条线，不必逐列点。线两端各自
+可拖（用户 2026-09-12 指出：现役斜率本身也可能探错，只给整体平移改
+不了斜率），落 `border-detection/bottom-offset`，字段是 `y_left`/
+`y_right`（通栏带裁剪图坐标，两点定线自带斜率）+ `verdict`。
 """
 
 from __future__ import annotations
@@ -256,7 +257,7 @@ def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: s
     return crop, [float(v) for v in pslice]
 
 
-PAGE_BAND_MARGIN = 150  # 通栏带在线两端各留多少像素做视觉参照（够看清有没有贴墨条）
+PAGE_BAND_MARGIN = 260  # 通栏带在线两端各留多少像素做视觉参照（够看清有没有贴墨条）
 
 
 def page_bottom_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:

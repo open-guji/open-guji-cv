@@ -89,11 +89,14 @@ def _expected_of(e: Event) -> dict:
         keys = ("y", "y_old", "verdict", "col_h")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
     if e.kind == "border_offset":
-        # 整页下版框偏移金标（`page_bottom_cards`）。verdict：moved（拖了
-        # offset px）/ ok（现役线位置就对，offset==0）/ no_line（这页
-        # 版框太淡看不出线）。offset 加在 `bottom.y_at_right` 上、保留
-        # 现有斜率，不是逐列独立坐标——一页一个数，换算见 shard README。
-        keys = ("offset", "verdict")
+        # 整页下版框坐标金标（`page_bottom_cards`）。verdict：moved（两端
+        # 拖到 y_left/y_right）/ ok（现役线位置就对，等于 c.y_left/y_right）/
+        # no_line（这页版框太淡看不出线）。两端各自可调（2026-09-12 改，
+        # 起初只给整体平移，改不了现役斜率本身探错的情况）——两点坐标带
+        # 齐斜率信息，不是单一偏移量。坐标口径：通栏带裁剪图坐标
+        # （`page_bottom_cards` 的 `y_left`/`y_right` 同一原点，crop_top
+        # 对齐），换算回页面坐标是导出脚本的事。
+        keys = ("y_left", "y_right", "verdict")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
     return p
 

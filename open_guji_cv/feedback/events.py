@@ -36,7 +36,7 @@ Kind = Literal[
     "note",           # 纯文字批注
     "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
     "border_line",    # 拖版框线：下版框坐标金标（payload: y / y_old / verdict / col_h）
-    "border_offset",  # 整页拖版框：下版框整页偏移金标（payload: offset / verdict）
+    "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
 ]
 
 Actor = Literal["user", "model", "align"]
