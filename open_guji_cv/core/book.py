@@ -173,3 +173,25 @@ def list_books(books_dir: Path | None = None) -> list[str]:
     if not d.exists():
         return []
     return sorted(p.stem for p in d.glob("*.yaml"))
+
+
+_OCR_CANDIDATES_LINE_RE = re.compile(r"^ocr_candidates:\s*(true|false)\s*$", re.MULTILINE)
+
+
+def set_ocr_candidates(book_id: str, enabled: bool, books_dir: Path | None = None) -> None:
+    """定向文本编辑 book yaml 的顶层 `ocr_candidates:` 字段，写控制台的
+    开关用。这份 yaml 满是手写中文注释（版本考据、专项集来由等），用
+    `yaml.safe_dump` 整体重写会把这些注释全部冲掉，所以只在原文里
+    改/插这一行，不碰其余内容。"""
+    path = (books_dir or BOOKS_DIR) / f"{book_id}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"没有这册书的定义: {path}")
+    text = path.read_text(encoding="utf-8")
+    line = f"ocr_candidates: {'true' if enabled else 'false'}"
+    if _OCR_CANDIDATES_LINE_RE.search(text):
+        text = _OCR_CANDIDATES_LINE_RE.sub(line, text, count=1)
+    else:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += line + "\n"
+    path.write_text(text, encoding="utf-8")

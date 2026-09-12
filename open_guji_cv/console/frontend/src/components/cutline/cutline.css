@@ -32,7 +32,11 @@
 .clbtns button.on { background: var(--indigo-soft); border-color: var(--indigo); }
 .cltags button { opacity: .75; }
 
-/* Step7「切分裁决」专用卡片（BlockingCutlineCard） */
+/* Step7「切分裁决」专用卡片（BlockingCutlineCard）：故意不用 .clgrid/.clbody
+   ——那两个是给 Step3 拖切线（宽卡、图文左右并排）定的尺寸，这里要窄卡、
+   一排三张，图文改成上下叠放。 */
+.bccgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; }
+.bcc-body { display: flex; flex-direction: column; gap: .4rem; }
 .clcand-pick { stroke-width: 2.5; opacity: 1; }
 .bcc-expect { margin-bottom: .3rem; }
 .bcc-cands { width: 100%; border-collapse: collapse; font-size: .78rem; }
@@ -40,3 +44,6 @@
 .bcc-cands tr.on td { background: var(--indigo-soft); }
 .bcc-cands .bcc-kind { white-space: nowrap; }
 .clm-hit { color: var(--ok); font-weight: 600; }
+.bcc-unsure { display: inline-flex; gap: .3rem; }
+.bcc-cov { font-size: .68rem; opacity: .7; margin-left: .1rem; }
+.bcc-drawhint { display: block; margin-top: .2rem; font-size: .7rem; }

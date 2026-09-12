@@ -18,4 +18,6 @@ export interface StatusResponse {
   steps: Record<string, StepStatus>
   workspace?: { workspace: string; is_sample_db: boolean }
   running?: { id: string } | null
+  /** 本书 book yaml 里的 `ocr_candidates:` 开关（Step5-c，默认 false，2026-09-11）。 */
+  ocr_candidates_enabled?: boolean
 }

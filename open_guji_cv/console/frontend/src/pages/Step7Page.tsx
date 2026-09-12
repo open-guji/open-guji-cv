@@ -30,21 +30,10 @@ function loadSavedPages(book: string): string {
   }
 }
 
-export function Step7Page() {
-  const { book = '' } = useParams()
+function Step7PageInner({ book }: { book: string }) {
   const pages = usePages(book)
   const [reloadSignal, setReloadSignal] = useState(0)
-  // 用 book 做 key 惰性初始化——首次渲染直接拿到该册上次的选择，不必等一次
-  // effect 才把状态从 dev_set 纠正过去（避免一次多余的级联渲染/网络请求）。
   const [pageSel, setPageSel] = useState(() => loadSavedPages(book))
-  const [loadedBook, setLoadedBook] = useState(book)
-  if (book !== loadedBook) {
-    // 路由切了册（同一个 Step7Page 实例，book 参数变了）：渲染期间同步纠正，
-    // 而不是走 effect——这正是 React 官方推荐的"响应 prop 变化重置 state"
-    // 写法，比 useEffect 里 setState 少一次渲染。
-    setLoadedBook(book)
-    setPageSel(loadSavedPages(book))
-  }
 
   function setPages(v: string) {
     setPageSel(v)
@@ -70,4 +59,14 @@ export function Step7Page() {
       <ProductViewer book={book} step="seed_admit" pages={pages} />
     </div>
   )
+}
+
+// `key={book}` 让换册时整个内层组件树重新挂载，而不是手写"渲染期间同步
+// 纠正 state"那套——之前那套在 book 首次从路由解析出来时触发了一次多余
+// 的 pageSel 变化，被 ReviewPanel 内"pages 变化就 load()"的 effect 当成
+// 真实的用户切页，造成"还没点载入就自动加载"（用户 2026-09-11 实测踩到）。
+// key 重挂载更简单也更不容易出这类时序 bug。
+export function Step7Page() {
+  const { book = '' } = useParams()
+  return <Step7PageInner key={book} book={book} />
 }

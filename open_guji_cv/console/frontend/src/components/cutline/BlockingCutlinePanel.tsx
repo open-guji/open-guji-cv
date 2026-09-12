@@ -17,6 +17,12 @@ import './cutline.css'
 interface CardState {
   pick: number | null
   done?: string
+  // 用户 2026-09-11：「有时几个备选都不对，要让我自己画」——`drawing` 开启
+  // 手画模式，`poly` 是正在画的折线点。落定时若 `poly.length >= 2`，优先
+  // 用它而不是 `pick` 指的候选（两者互斥：一旦开始画，pick 的候选只作
+  // 背景参考，不再是落定对象）。
+  drawing: boolean
+  poly: Array<[number, number]>
 }
 
 export function BlockingCutlinePanel({ book, pages, onDecided }: {
@@ -55,7 +61,7 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     const t0 = Date.now()
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
-      const st: CardState = { pick: c.chosen ?? null, done: undefined }
+      const st: CardState = { pick: c.chosen ?? null, done: undefined, drawing: false, poly: [] }
       const dv = done[c.id]
       if (dv) {
         st.done = dv.verdict
@@ -98,7 +104,49 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
   function pick(i: number, k: number) {
     const c = cases[i]
     if (!c) return
-    cardState.current[c.id].pick = k
+    const st = cardState.current[c.id]
+    st.pick = k
+    st.drawing = false   // 选了算法候选就退出手画模式，两者互斥
+    bump()
+  }
+
+  function toggleDrawing(i: number) {
+    const c = cases[i]
+    if (!c) return
+    const st = cardState.current[c.id]
+    st.drawing = !st.drawing
+    bump()
+  }
+
+  function addPoint(i: number, x: number, y: number) {
+    const c = cases[i]
+    if (!c) return
+    const st = cardState.current[c.id]
+    const yy = Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)))
+    st.poly.push([Math.round(x), yy])
+    bump()
+  }
+
+  function movePoint(i: number, k: number, x: number, y: number) {
+    const c = cases[i]
+    if (!c) return
+    const st = cardState.current[c.id]
+    if (!st.poly[k]) return
+    st.poly[k] = [Math.round(x), Math.max(c.crop_y0 + 1, Math.min(c.crop_y1 - 1, Math.round(y)))]
+    bump()
+  }
+
+  function removePoint(i: number, k: number) {
+    const c = cases[i]
+    if (!c) return
+    cardState.current[c.id].poly.splice(k, 1)
+    bump()
+  }
+
+  function clearPoly(i: number) {
+    const c = cases[i]
+    if (!c) return
+    cardState.current[c.id].poly = []
     bump()
   }
 
@@ -107,14 +155,21 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     if (!c) return
     const st = cardState.current[c.id]
     const k = st.pick
-    if (verdict === 'confirmed' && k == null) { setMsg('先选一个候选切法再落定'); return }
-    const cd = k != null ? c.candidates[k] : undefined
+    const drawn = st.poly.length >= 2
+    if (verdict === 'confirmed' && k == null && !drawn) {
+      setMsg('先选一个候选切法，或自己画一条线再落定'); return
+    }
+    const cd = !drawn && k != null ? c.candidates[k] : undefined
 
     const now = Date.now()
     let y = c.y
     let polyline: Array<[number, number]> | undefined
     let cand: string | undefined
-    if (verdict === 'confirmed' && cd) {
+    if (verdict === 'confirmed' && drawn) {
+      const pts = st.poly.slice().sort((a, b) => a[0] - b[0])
+      polyline = pts
+      y = Math.round(pts.reduce((a, q) => a + q[1], 0) / pts.length)
+    } else if (verdict === 'confirmed' && cd) {
       cand = cd.kind
       if (cd.y && cd.y.length) {
         const step = 6
@@ -125,7 +180,8 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
       }
     }
     const row = {
-      id: c.id, y, y_old: c.y, verdict: verdict === 'confirmed' ? (k === c.chosen ? 'ok' : 'moved') : 'idk',
+      id: c.id, y, y_old: c.y,
+      verdict: verdict === 'idk' ? 'idk' : (drawn ? 'moved' : (k === c.chosen ? 'ok' : 'moved')),
       bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below, col_h: c.col_h,
       char_above: c.char_above || '', char_below: c.char_below || '',
       polyline, cand, client_ts: now,
@@ -167,23 +223,30 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
       </div>
       {cases.length > 0 && (
         <p className="muted cl-help">
-          每行是一种切法：<b>字</b>是选它之后 Step5 库匹配认出的上/下格字，<b>百分比</b>是匹配置信度，
-          <span className="clm-hit">绿色</span>＝与整理本期望字一致。点一行选中，「落定」确认，
-          「拿不准」跳过留给下一轮。图上高亮的虚线＝当前选中的切法。
+          每行是一种切法：<b>字</b>是选它之后 Step5 库匹配认出的上/下格字，<b>百分比</b>是匹配置信度
+          （没有单一答案时列出库给的候选池），<span className="clm-hit">绿色</span>＝与整理本期望字一致。
+          点一行选中，「落定」确认，「拿不准」跳过留给下一轮。都不对时点「自己画」：
+          点图空白处加点、拖动已有点、右键删点，画完直接「落定」。
         </p>
       )}
-      <div className="clgrid">
+      <div className="bccgrid">
         {cases.map((c, i) => {
           const st = cardState.current[c.id]
           if (!st || st.done) return null
           return (
             <BlockingCutlineCard
               key={c.id} idx={i} c={c} pick={st.pick} done={st.done} isCurrent={i === cur}
+              drawing={st.drawing} poly={st.poly}
               onFocus={() => setCur(i)}
               onPick={(k) => pick(i, k)}
               onConfirm={() => decide(i, 'confirmed')}
               onIdk={() => decide(i, 'idk')}
               onReopen={() => reopen(i)}
+              onToggleDrawing={() => toggleDrawing(i)}
+              onAddPoint={(x, y) => addPoint(i, x, y)}
+              onMovePoint={(k, x, y) => movePoint(i, k, x, y)}
+              onRemovePoint={(k) => removePoint(i, k)}
+              onClearPoly={() => clearPoly(i)}
             />
           )
         })}

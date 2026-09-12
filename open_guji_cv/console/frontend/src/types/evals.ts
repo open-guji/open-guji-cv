@@ -83,6 +83,8 @@ export interface GateSummaryPageRow {
   flags?: string[]
   n_cols?: number | null
   expected_cols?: number | null
+  page_type?: string | null
+  page_type_policy?: string | null
 }
 
 export interface GateSummaryResponse {

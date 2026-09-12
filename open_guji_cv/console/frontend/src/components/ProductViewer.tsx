@@ -13,7 +13,14 @@ function fmtTs(ts?: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-export function ProductViewer({ book, step, pages }: { book: string; step: string; pages: number[] }) {
+export function ProductViewer({ book, step, pages, pageTypeOf }: {
+  book: string
+  step: string
+  pages: number[]
+  /** 可选：页码 → 页型标签，Step1 用闸1 的 page_type 判定喂进来，在 metaLine
+   * 里显示"这一页是什么类型"，不用去数值产物里翻 JSON 找。 */
+  pageTypeOf?: (page: number) => string | undefined
+}) {
   // 下拉框只在 all_pages 有数据时管用；示例库/未设 GUJI_WORKSPACE 时
   // all_pages 常是空的（2026-09-11 走查发现：dev_set 全 blocked 时下拉框
   // 一直是空的"选一页"，用户完全查不了任何产物）。v1 原本是自由文本输入，
@@ -43,8 +50,10 @@ export function ProductViewer({ book, step, pages }: { book: string; step: strin
   }
 
   const m = manifest
+  const pageNum = Number.parseInt(page, 10)
+  const pageType = pageTypeOf && Number.isFinite(pageNum) ? pageTypeOf(pageNum) : undefined
   const metaLine = m
-    ? `${page.padStart(4, '0')} · 指纹 ${m.fingerprint || '-'} · ${m.status || ''} · ${m.elapsed != null ? m.elapsed + 's' : ''} · ${fmtTs(m.ts)} · ${m.code_rev || ''}`
+    ? `${page.padStart(4, '0')} · 指纹 ${m.fingerprint || '-'} · ${m.status || ''} · ${m.elapsed != null ? m.elapsed + 's' : ''} · ${fmtTs(m.ts)} · ${m.code_rev || ''}${pageType ? ` · 页型 ${pageType}` : ''}`
     : msg
 
   return (

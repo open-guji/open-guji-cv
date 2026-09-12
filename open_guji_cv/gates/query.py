@@ -4,13 +4,17 @@
 `GateColumn.reject`），只是散在 `products/<book>/column_gate/p*.json` 里，
 没人把它们收成一份清单。这里只做收拢，不算新判据。
 
-**局限**：keben_body_v2 管线的 `selector.page_type: [body]` 目前是外部选页
-（跑批时人/脚本按页号挑，管线自己分不出 body/roster/toc——见仓库
-`.claude/CLAUDE.md`「当前策略」一节），所以从来没跑过闸的页（比如 vol01
-p90–132 那 41 页职名页）在 `gate_manifest` 里根本没有记录，`page_type` 本身
-也不在这个仓库的产物里。这份清单只能把「有没有闸产物」这件事本身摆出来
-（`missing`），做不到自动分辨「没产物是因为是职名页」还是「因为还没跑」——
-那需要 `open-guji-dataset` 的 page-type 金标（只读），本轮没接，留给下一道。
+**局限**：闸1（`border_detect_gate`）2026-09-12 起接了
+`clustering.page_type.classify_page_type`，会把 `page_type`/`page_type_policy`
+写进 `border_detect_gate_manifest`，但这只是**结构量粗判**（skip/custom/
+standard 三档，body 里混着未细分的 roster/toc/edict）。keben_body_v2 管线的
+`selector.page_type: [body]` 目前仍是外部选页（跑批时人/脚本按页号挑，
+管线自己分不出 roster/toc——见仓库 `.claude/CLAUDE.md`「当前策略」一节），
+所以从来没跑过闸的页（比如 vol01 p90–132 那 41 页职名页，若未跑过闸1本身）
+在 `gate_manifest` 里根本没有记录。这份清单只能把「有没有闸产物」这件事
+本身摆出来（`missing`），要更细的 body/roster/toc 分类，仍需要
+`open-guji-dataset` 的 page-type 金标（只读）或 `refine_page_type` 接入
+切分产物之后的细化，本轮没接，留给下一道。
 
 用法：
     python -m open_guji_cv.gates.query vol01
@@ -94,6 +98,10 @@ def gate_summary(book_id: str, pages: list[int] | None = None,
             # ProgressGatePanel typeBreakdown）——列级闸没有这两个字段。
             "n_cols": getattr(g, "n_cols", None),
             "expected_cols": getattr(g, "expected_cols", None),
+            # 闸1 的页型判定（clustering.page_type.classify_page_type）——
+            # 列级闸没有这两个字段。
+            "page_type": getattr(g, "page_type", None),
+            "page_type_policy": getattr(g, "page_type_policy", None),
         })
     return {"gate": gate, "pages": rows, "tier_totals": tier_totals}
 

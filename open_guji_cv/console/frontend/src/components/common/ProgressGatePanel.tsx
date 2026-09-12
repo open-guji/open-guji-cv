@@ -19,6 +19,26 @@ export interface CustomMetric {
 export interface TypeBreakdownItem {
   label: string
   count: number
+  /** 该类型对应的页码，已折叠成连续区间（如 "12-15"）；用于总览一眼看出
+   * 这批页里哪几页是这个类型，不用逐页翻。 */
+  ranges?: string
+}
+
+/** 把一组页码折叠成连续区间的逗号列表，如 [1,2,3,7,9,10] → "1-3, 7, 9-10"。 */
+export function foldPageRanges(pages: number[]): string {
+  const sorted = [...pages].sort((a, b) => a - b)
+  const parts: string[] = []
+  let start = 0
+  for (let i = 0; i <= sorted.length; i++) {
+    if (i === sorted.length || sorted[i] !== sorted[i - 1] + 1) {
+      if (i > start) {
+        const a = sorted[start], b = sorted[i - 1]
+        parts.push(a === b ? `${a}` : `${a}-${b}`)
+      }
+      start = i
+    }
+  }
+  return parts.join(', ')
 }
 
 export interface ProgressGatePanelProps {
@@ -54,7 +74,10 @@ export function ProgressGatePanel({ book, title, gateId, pages, customMetrics, t
       {typeBreakdown && typeBreakdown.length > 0 && (
         <div className="counts" style={{ marginBottom: '.6rem' }}>
           {typeBreakdown.map((t) => (
-            <span key={t.label} className="qchip">{t.label}<b>{t.count}</b></span>
+            <span key={t.label} className="qchip" title={t.ranges || undefined}>
+              {t.label}<b>{t.count}</b>
+              {t.ranges && <span className="muted"> （{t.ranges}）</span>}
+            </span>
           ))}
         </div>
       )}

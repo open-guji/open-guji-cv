@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { fetchStatus } from '../api/status'
+import { fetchStatus, setOcrCandidates } from '../api/status'
 import { fetchOverviewSummary } from '../api/evals'
 import { fetchLlmOnlineStats } from '../api/llmOnline'
 import type { StatusResponse } from '../types/status'
@@ -29,18 +29,34 @@ export function BookOverviewPage() {
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null)
   const [llmStats, setLlmStats] = useState<LlmOnlineStats | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrErr, setOcrErr] = useState<string | null>(null)
 
   useEffect(() => {
     setStatus(null)
     setSummary(null)
     setLlmStats(null)
     setError(null)
+    setOcrErr(null)
     fetchStatus(book, 'keben_body_v2').then(setStatus).catch((e) => setError(String(e)))
     fetchOverviewSummary(book).then(setSummary).catch((e) => setError(String(e)))
     fetchLlmOnlineStats(book).then(setLlmStats).catch(() => setLlmStats(null))
   }, [book])
 
   const total = status?.pages.length || 0
+
+  async function toggleOcrCandidates(next: boolean) {
+    setOcrBusy(true)
+    setOcrErr(null)
+    try {
+      await setOcrCandidates(book, next)
+      setStatus((s) => (s ? { ...s, ocr_candidates_enabled: next } : s))
+    } catch (e) {
+      setOcrErr(String(e))
+    } finally {
+      setOcrBusy(false)
+    }
+  }
 
   return (
     <div>
@@ -123,6 +139,28 @@ export function BookOverviewPage() {
             )}
           </>
         )}
+      </div>
+
+      <div className="card">
+        <h2>运行参数 <span className="muted">按本书写回 books/{book}.yaml</span></h2>
+        {!status && !error && <p className="muted">加载中…</p>}
+        {status && (
+          <label className="qs" style={{ display: 'flex', alignItems: 'center', gap: '.5rem', cursor: ocrBusy ? 'wait' : 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={!!status.ocr_candidates_enabled}
+              disabled={ocrBusy}
+              onChange={(e) => toggleOcrCandidates(e.target.checked)}
+            />
+            <span>
+              启用 Step5-c OCR候选
+              <span className="muted">
+                {' '}（默认关闭：整理本已足够准，主要依赖 5-a 库匹配 + 5-b 生僻字候选；勾选后本书批量跑会带上 5-c）
+              </span>
+            </span>
+          </label>
+        )}
+        {ocrErr && <p className="error">{ocrErr}</p>}
       </div>
     </div>
   )
