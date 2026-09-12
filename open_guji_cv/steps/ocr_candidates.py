@@ -117,3 +117,51 @@ class OcrCandidatesStep(Step):
                                    topk=[(c, round(float(v), 4)) for c, v in topk]))
             out.append(ColumnOcr(col=cc.col, ok=True, chars=recs))
         return {"ocr_candidates": PageOcr(page=page, engine=p.engine, columns=out)}
+
+
+def ocr_candidates_summary(book_id: str, pages: list[int] | None = None,
+                           store=None) -> dict:
+    """Step5-c 板块②聚合数字：引擎在线状态 + 候选覆盖率。
+
+    07号任务卡判断 OCR 候选大概率不需要独立查询页——它是逐字全自动跑给下游
+    融合用的中间产物（Step7 卡片已能看 top-2），不像 5-b 生僻字那样有「人查
+    某个字位候选」的场景。本任务书（2026-09-11）核实这个判断仍成立，所以
+    这里不建单点查询接口，只给板块②要的聚合数字。风格照抄
+    `align_ref.align_ref_summary`。
+    """
+    from ..core.book import load_book
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    n_pages = 0
+    n_missing = 0
+    n_unavailable = 0
+    engines: dict[str, int] = {}
+    n_chars = 0
+    n_with_candidates = 0
+    for pg in pages:
+        po: PageOcr | None = store.read(book_id, "ocr_candidates", page_key(pg), "ocr_candidates")
+        if po is None:
+            n_missing += 1
+            continue
+        n_pages += 1
+        if po.engine.startswith("unavailable:"):
+            n_unavailable += 1
+        else:
+            engines[po.engine] = engines.get(po.engine, 0) + 1
+        for col in po.columns:
+            if not col.ok:
+                continue
+            for r in col.chars:
+                n_chars += 1
+                if r.topk:
+                    n_with_candidates += 1
+    return {
+        "n_pages": n_pages, "n_missing": n_missing, "n_unavailable": n_unavailable,
+        "engines": engines,
+        "n_chars": n_chars, "n_with_candidates": n_with_candidates,
+        "coverage": round(n_with_candidates / n_chars, 4) if n_chars else None,
+    }

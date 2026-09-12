@@ -46,26 +46,6 @@ export function precleanAfterUrl(book: string, page: number, scale = 0.5) {
   return `/api/preclean/${encodeURIComponent(book)}/${page}/after.png?scale=${scale}&t=${Date.now()}`
 }
 
-export interface GatePageSummary {
-  page: number
-  status: 'ok' | 'page_blocked' | 'missing'
-  page_reject?: string[]
-  n_columns?: number
-  n_admitted?: number
-  tiers?: string[]
-}
-
-export interface GateSummary {
-  gate: string
-  pages: GatePageSummary[]
-  tier_totals: Record<string, number>
-}
-
-// Step2 闸2（column_gate）可视化用，见 open_guji_cv/gates/query.py::gate_summary。
-export function fetchGateSummary(book: string, gate = 'column_gate') {
-  return api<GateSummary>(`/api/gate/${encodeURIComponent(book)}/summary?gate=${encodeURIComponent(gate)}`)
-}
-
 export interface AlignRefPageSummary {
   page: number
   status: 'anchored' | 'not_anchored' | 'missing'
@@ -90,4 +70,22 @@ export interface AlignRefSummary {
 export function fetchAlignRefSummary(book: string, pages?: string) {
   const q = pages ? `?pages=${encodeURIComponent(pages)}` : ''
   return api<AlignRefSummary>(`/api/align-ref/${encodeURIComponent(book)}/summary${q}`)
+}
+
+export interface OcrCandidatesSummary {
+  n_pages: number
+  n_missing: number
+  n_unavailable: number
+  engines: Record<string, number>
+  n_chars: number
+  n_with_candidates: number
+  coverage: number | null
+}
+
+// Step5-c OCR 候选板块②聚合数字（引擎在线状态+候选覆盖率），见
+// open_guji_cv/steps/ocr_candidates.py::ocr_candidates_summary。07号任务卡
+// 判断这一路不需要独立查询页，此接口只服务聚合数字。
+export function fetchOcrCandidatesSummary(book: string, pages?: string) {
+  const q = pages ? `?pages=${encodeURIComponent(pages)}` : ''
+  return api<OcrCandidatesSummary>(`/api/ocr-candidates/${encodeURIComponent(book)}/summary${q}`)
 }
