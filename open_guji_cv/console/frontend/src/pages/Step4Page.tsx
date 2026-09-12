@@ -145,14 +145,17 @@ export function Step4Page() {
       else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
         const v = VERDICT_ORDER[+ev.key - 1]
         setVerdictAt(cur, v)
-        focus(cur + 1)
+        // 「只看未裁」时裁完这张卡会从列表里消失，同一个 cur 索引指向的
+        // 已经是收缩后列表的下一张——再 focus(cur+1) 就会跳过一张，
+        // 焦点看着像瞎跳。这个筛选模式下干脆不自动前进，原地停留。
+        if (!todoOnly) focus(cur + 1)
         ev.preventDefault()
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, cur])
+  }, [visible, cur, todoOnly])
 
   return (
     <div className="card">
