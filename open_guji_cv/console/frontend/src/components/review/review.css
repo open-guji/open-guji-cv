@@ -13,6 +13,7 @@
 .rvcard[data-done="need_reading"] .rvread input { border-color: var(--ochre); background: var(--ochre-soft); }
 .rvcard[data-done="truncated"] { border-left-color: var(--zhu); border-left-style: dashed; }
 .rvcard[data-done="contaminated"] { border-left-color: var(--ochre); border-left-style: dashed; }
+.rvcard[data-done="upstream_miscut"] { border-left-color: var(--indigo); border-left-style: double; border-left-width: 6px; }
 .rvseg { margin-top: .3rem; display: flex; gap: .3rem; flex-wrap: wrap; }
 .rvseg button { font-size: .72rem; padding: .05rem .4rem; color: var(--mute); }
 .rvseg button.on { background: var(--zhu); color: #fff; border-color: var(--zhu); }

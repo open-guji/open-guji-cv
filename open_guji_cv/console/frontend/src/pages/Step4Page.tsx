@@ -19,17 +19,29 @@ import '../components/review/review.css'
 // （head-raise-presence 那批的教训）。
 //
 // 裁决走既有的 POST /api/events（kind=confirm, payload.v=seg_defect,
-// payload.quality=<clean|truncated|contaminated|not_text>），落
+// payload.quality=<clean|upstream_miscut|truncated|contaminated|not_text>），落
 // char-segmentation/instances，stratum=rand_human 与既有的 self_assess
 // 系列和其余定向层分开，报数时不能合并算。
+//
+// `upstream_miscut`（用户 2026-09-12 加）：格子本身从 Step3 行切分就切错了
+// 位置/范围（不是「Step4 收缩没收干净」那种量级的问题）——混进来的是实质性
+// 的另一部分内容（如相邻字的一大截笔画），Step4 收缩无论怎么调都救不回来，
+// 这一步测不出、也修不了，得反馈给 Step3。与 `contaminated`（收缩阶段留了
+// 一点残留：界行线/版框条/邻字一点点残墨）分开统计，别把上游的锅记在
+// Step4 头上。
 
-type Verdict = 'clean' | 'truncated' | 'contaminated' | 'not_text'
-const VERDICT_ORDER: Verdict[] = ['clean', 'truncated', 'contaminated', 'not_text']
+type Verdict = 'clean' | 'upstream_miscut' | 'truncated' | 'contaminated' | 'not_text'
+const VERDICT_ORDER: Verdict[] = ['clean', 'upstream_miscut', 'truncated', 'contaminated', 'not_text']
 const VERDICT_LABEL: Record<Verdict, string> = {
-  clean: 'clean · 框准字全', truncated: 'truncated · 字被切掉',
-  contaminated: 'contaminated · 混进杂物', not_text: 'not_text · 不是一个字',
+  clean: 'clean · 框准字全',
+  upstream_miscut: 'upstream_miscut · 上游切分错了',
+  truncated: 'truncated · 字被切掉',
+  contaminated: 'contaminated · 混进杂物',
+  not_text: 'not_text · 不是一个字',
 }
-const VERDICT_KEY: Record<Verdict, string> = { clean: '1', truncated: '2', contaminated: '3', not_text: '4' }
+const VERDICT_KEY: Record<Verdict, string> = {
+  clean: '1', upstream_miscut: '2', truncated: '3', contaminated: '4', not_text: '5',
+}
 
 function slotOf(id: string): number {
   const parts = id.split(':')
@@ -130,7 +142,7 @@ export function Step4Page() {
       if (!visible.length) return
       if (ev.key === 'ArrowRight' || ev.key === 'j') { focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'ArrowLeft' || ev.key === 'k') { focus(cur - 1); ev.preventDefault() }
-      else if (['1', '2', '3', '4'].includes(ev.key)) {
+      else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
         const v = VERDICT_ORDER[+ev.key - 1]
         setVerdictAt(cur, v)
         focus(cur + 1)
@@ -159,8 +171,11 @@ export function Step4Page() {
         <span style={{ color: '#0078f0' }}>蓝框</span>=Step3 切分原框），回答「这个框圈的是不是恰好
         一个整字」；右边是<b>成品图块</b>，回答「下游拿到的是什么」。这批候选是从全书正文页字格里
         等概率随机抽的（现有产物范围：vol01/vol02），不叠任何算法判断——判的时候只看图。
-        键盘：<b>1</b> clean · <b>2</b> truncated · <b>3</b> contaminated · <b>4</b> not_text ·
-        <b>←/→</b>（或 <b>k/j</b>）翻卡。
+        键盘：<b>1</b> clean · <b>2</b> upstream_miscut · <b>3</b> truncated ·
+        <b>4</b> contaminated · <b>5</b> not_text · <b>←/→</b>（或 <b>k/j</b>）翻卡。
+        <b>upstream_miscut</b> 跟 <b>contaminated</b> 的区别：前者是 Step3 格子本身切错了位置/范围
+        （混进来的是相邻字的一大截，Step4 收缩救不回来，得反馈给 Step3）；后者是 Step4 收缩
+        留了一点残留（界行线/邻字一点残墨），是这一步自己的问题。
       </div>
       <div className="rvgrid">
         {visible.map((r, i) => {
