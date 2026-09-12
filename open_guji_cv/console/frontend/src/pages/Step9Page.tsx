@@ -40,7 +40,7 @@ export function Step9Page() {
   const { book = '' } = useParams()
   const [pageSel, setPageSel] = useState(() => loadSavedPageRange('step9', book, ''))
   const [baselineKg, setBaselineKg] = useState(() => loadSavedBaseline(book))
-  const [view, setView] = useState<View>('reflow')
+  const [view, setView] = useState<View>('render')
 
   const [renderResult, setRenderResult] = useState<Step9RenderResponse | null>(null)
   const [renderMsg, setRenderMsg] = useState('')
@@ -97,11 +97,11 @@ export function Step9Page() {
       <PageRangeSelector book={book} stepId="step9" value={pageSel} onChange={setPageSel} />
 
       <div className="tabs">
-        <button className={view === 'reflow' ? 'active' : ''} onClick={() => setView('reflow')}>
-          9.2 可阅读排版
-        </button>
         <button className={view === 'render' ? 'active' : ''} onClick={() => setView('render')}>
           9.1 坐标转字符位
+        </button>
+        <button className={view === 'reflow' ? 'active' : ''} onClick={() => setView('reflow')}>
+          9.2 可阅读排版
         </button>
       </div>
 
