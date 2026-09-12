@@ -451,10 +451,15 @@ def test_route_inventory():
     `GET /api/align-ref/{book}/summary`，61 → 62；另一并行改动加
     `GET /api/overview_summary`（总览页轻量摘要），62 → 63；同日 Step6
     大模型调用记录页（overview 下发，展示单次线上大模型调用的输入/输出/
-    决定），加 `GET /api/llm_online_calls/{book}`，63 → 64。）
+    决定），加 `GET /api/llm_online_calls/{book}`，63 → 64；同日 Step5-c
+    OCR 候选板块②聚合数字，`products.py` 加
+    `GET /api/ocr-candidates/{book}/summary`，64 → 65；同日另一并行改动
+    给 `EvalsPage` 加 `GET /api/align-ref/summary`（book 走 query 参数，
+    跟 `/api/align-ref/{book}/summary` 的 path 参数版并存，服务不同页面），
+    65 → 66。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 64, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 66, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -513,7 +518,7 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
-    "GET /", "GET /api/align-ref/{book}/summary",
+    "GET /", "GET /api/align-ref/summary", "GET /api/align-ref/{book}/summary",
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
@@ -522,7 +527,8 @@ EXPECTED_ROUTES = [
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/gold", "GET /api/jiazhu/segments",
     "GET /api/kinds", "GET /api/llm_online_stats", "GET /api/llm_online_calls/{book}",
-    "GET /api/manifest/{book}/{step}", "GET /api/overlay/{book}/{step}/{page}.png",
+    "GET /api/manifest/{book}/{step}", "GET /api/ocr-candidates/{book}/summary",
+    "GET /api/overlay/{book}/{step}/{page}.png",
     "GET /api/overview_summary",
     "GET /api/pipelines", "GET /api/preclean/{book}/{page}",
     "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",

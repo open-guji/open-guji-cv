@@ -6,8 +6,11 @@ import type { Book } from '../types/registry'
 
 // 顶层布局：左侧导航。用户 2026-09-11 测试反馈 §1/§4 重排过一次：
 // 换书下拉框置顶 → 分割线 → 总览 → Step0-9（Step5 四小步永久展开为二级
-// 菜单，不用先点进 Step5 才看到）→ 分割线 → 运行 → 评测；字形库／异体字库
-// 是独立于书之外的顶级栏目（§4），常驻侧边栏最下方，不需要先选书。
+// 菜单，不用先点进 Step5 才看到）→ 分割线 → 运行 → 统计数据（原叫"评测"，
+// 2026-09-11 改名——页面里真正在用的是判据体检/吞吐量这类统计数据，
+// "评测器列表"反而是用得最少的一块，见 EvalsPage.tsx 头注）；
+// 字形库／异体字库是独立于书之外的顶级栏目（§4），常驻侧边栏最下方，
+// 不需要先选书。
 export function AppLayout() {
   const { book } = useParams()
   const navigate = useNavigate()
@@ -50,7 +53,7 @@ export function AppLayout() {
             <hr className="sidebar-rule" />
             <nav className="sidebar-cross">
               <NavLink to={`/${book}/runs/`}>运行</NavLink>
-              <NavLink to={`/${book}/evals/`}>评测</NavLink>
+              <NavLink to={`/${book}/evals/`}>统计数据</NavLink>
             </nav>
           </>
         ) : (

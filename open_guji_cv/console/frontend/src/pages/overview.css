@@ -1,0 +1,18 @@
+/* 总览页专属样式，2026-09-11 重构：进度条 + 待办/异常卡片。 */
+.ov-progress-row { display: flex; align-items: center; gap: .6rem; padding: .3rem 0; font-size: .82rem; }
+.ov-progress-label { width: 9rem; flex: 0 0 auto; }
+.ov-progress-label a { color: inherit; }
+.ov-progress-track { flex: 1; height: 10px; background: var(--paper); border-radius: 3px; overflow: hidden; }
+.ov-progress-fill { height: 100%; border-radius: 3px 0 0 3px; }
+.ov-progress-fill.full { background: var(--ok); }
+.ov-progress-fill.partial { background: var(--indigo); opacity: .7; }
+.ov-progress-fill.empty { background: transparent; }
+.ov-progress-nums { width: 6rem; flex: 0 0 auto; text-align: right; font-family: var(--mono); color: var(--ink-2); }
+
+.ov-alert-row { display: flex; align-items: baseline; gap: .5rem; padding: .25rem 0; font-size: .82rem; }
+.ov-alert-row.ov-ok { color: var(--ok); }
+.ov-alert-row.ov-warn { color: var(--zhu); }
+.ov-alert-row a { color: inherit; text-decoration: underline; }
+
+.ov-todo-batch { font-family: var(--mono); font-size: .8rem; background: var(--paper);
+  padding: .3rem .5rem; border-radius: 4px; margin-top: .3rem; word-break: break-all; }

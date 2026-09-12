@@ -1,82 +1,39 @@
-import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { fetchGateSummary } from '../api/products'
+import { useState } from 'react'
 import { ProductViewer } from '../components/ProductViewer'
+import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { usePages } from '../hooks/usePages'
-import type { GateSummary } from '../api/products'
 
-// 闸2（column_gate）分层配色，与后端 gates/query.py::GATE_TIER_COLOR 对齐
-// （BGR→CSS 顺手换算，颜色本身以后端为准，这里只是给人看的图例）。
-const TIER_LABEL: Record<string, string> = {
-  L1: '整页列数不对', L1c: '列宽偏离中位数（多半圈进界行）',
-  L2: '两侧外沿墨占比超界', L3: '人裁金标（P2 未接，不生效）',
-}
-const TIER_COLOR: Record<string, string> = {
-  L1: '#dc0000', L1c: '#ff8c00', L2: '#00b8b8', L3: '#b400b4',
-}
-
-function GateSummaryPanel({ book }: { book: string }) {
-  const [summary, setSummary] = useState<GateSummary | null>(null)
-  const [err, setErr] = useState('')
-
-  useEffect(() => {
-    setSummary(null)
-    setErr('')
-    if (!book) return
-    fetchGateSummary(book).then(setSummary).catch((e) => setErr((e as Error).message))
-  }, [book])
-
-  if (err) return <div className="card"><p className="muted">{err}</p></div>
-  if (!summary) return <div className="card"><p className="muted">加载中…</p></div>
-
-  const known = summary.pages.filter((p) => p.status !== 'missing')
-  const totalCols = known.reduce((s, p) => s + (p.n_columns ?? 0), 0)
-  const admittedCols = known.reduce((s, p) => s + (p.n_admitted ?? 0), 0)
-  const blockedPages = known.filter((p) => p.status === 'page_blocked')
-
-  return (
-    <div className="card">
-      <h2>闸2（Step2→3 交接闸）<span className="muted">L1 页级 / L1c、L2 列级；L3 尚未接入</span></h2>
-      <div className="counts" style={{ marginBottom: '.6rem' }}>
-        <span className="muted">{known.length} 页有闸产物（{summary.pages.length - known.length} 页缺产物）</span>
-        <span className="s-fresh">列过闸 {admittedCols}/{totalCols}</span>
-        {Object.entries(summary.tier_totals).map(([tier, n]) => (
-          <span key={tier} style={{ background: `${TIER_COLOR[tier]}22`, color: TIER_COLOR[tier] }}>
-            {tier} 拦 {n} 列
-          </span>
-        ))}
-      </div>
-      <div className="counts" style={{ marginBottom: '.6rem' }}>
-        {Object.entries(TIER_LABEL).map(([tier, label]) => (
-          <span key={tier} className="muted">
-            <b style={{ color: TIER_COLOR[tier] }}>{tier}</b> {label}
-          </span>
-        ))}
-      </div>
-      {blockedPages.length > 0 && (
-        <div className="mono" style={{ fontSize: '.8rem' }}>
-          整页未过 L1（{blockedPages.length} 页）：
-          {blockedPages.map((p) => (
-            <div key={p.page} className="preclean-report-rule">
-              第 {p.page} 页：{(p.page_reject ?? []).join('；')}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+const STEP_ID = 'step2'
 
 // Step2 单列射影 + 闸2 可视化（overview 2026-09-11 下发，正本
-// 项目进展/图片初步数字化/进度/Step2-单列射影/03-控制台可视化.md）。
-// 闸2 的 L1/L1c/L2 都有现成产物，直接汇总展示；L3 人裁金标目前只是代码占位
-// （tier=gate 时不生效，见 gates/column_gate.py），不当作已实现来做界面。
+// 项目进展/图片初步数字化/进度/Step2-单列射影/03-控制台可视化.md；
+// 2026-09-11 页面结构统一核对，见同目录 任务书-页面结构统一.md）。
+//
+// 板块①：PageRangeSelector 控制板块②③④（03-Step页面统一设计.md §三 落位表）。
+// 板块②：闸2（column_gate）是唯一已实现的闸，直接接 ProgressGatePanel + gateId，
+// 不再本地重写一份——原本这里有一份重复的 GateSummaryPanel，跟
+// components/evals/GateSummaryPanel.tsx 撞名但服务不同页面，两者都打同一个
+// 后端 `/api/gate/{book}/summary`，统一走 ProgressGatePanel 之后不必再维护第三份。
+// 板块③（列级 mixed/clean 人裁）：现状是空白——裁决数据只是
+// `gold/column-warp/samples/*.json` 里的本地文件，没有后端 API 也没有前端入口，
+// 不是"页面结构没摆对位置"，是这个板块本身还没做，另开任务处理，不在本次范围内。
+// 板块⑤（列级准入候选标注）：01 号任务未产出，本次不设计不存在的判据界面。
 export function Step2Page() {
   const { book = '' } = useParams()
-  const pages = usePages(book)
+  const [pageSel, setPageSel] = useState(() => loadSavedPageRange(STEP_ID, book))
+  const [loadedBook, setLoadedBook] = useState(book)
+  if (book !== loadedBook) {
+    setLoadedBook(book)
+    setPageSel(loadSavedPageRange(STEP_ID, book))
+  }
+  const pages = usePages(book, pageSel)
+
   return (
     <div>
-      <GateSummaryPanel book={book} />
+      <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
+      <ProgressGatePanel book={book} title="闸2（Step2→3 交接闸）" gateId="column_gate" pages={pageSel} />
       <ProductViewer book={book} step="column_gate" pages={pages} />
     </div>
   )

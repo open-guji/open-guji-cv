@@ -6,29 +6,33 @@ import { fetchAlignRefSummary, fetchOcrCandidatesSummary } from '../api/products
 import type { AlignRefSummary, OcrCandidatesSummary } from '../api/products'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
+import { fetchStatus } from '../api/status'
+import type { StatusResponse } from '../types/status'
 
 const ALIGN_REF_STEP_ID = 'step5-align-ref'
 const OCR_CANDIDATES_STEP_ID = 'step5-ocr-candidates'
 
+// 四小步各自对应的后端 step id（core/step.py 的 StepSpec.id），供总览页
+// 查 /api/status 的 steps 字典拿 fresh/stale/missing 计数——四路都是全字位
+// 跑一遍的正式 Step（含 5-b，见 rare_candidates.py 模块头「不逐字位限定，
+// 全字位批处理」），不是只对部分字位产出，所以都能查到有意义的覆盖率。
+const STEP5_BACKEND_IDS: Record<string, string> = {
+  'glyph-match': 'glyph_match',
+  'rare': 'rare_candidates',
+  'ocr': 'ocr_candidates',
+  'align-ref': 'align_ref',
+}
+
 // Step5 分四小步，路由 /<book>/step/step5/<sub>/，见方案 §二。
 // D7：生僻字候选（rare.py，原本嵌在定字卡片里）独立成 5-b 的可视化。
-// 5-d（整理本对齐）2026-09-11 接入锚定汇总面板。5-a/5-c 仍是骨架。
+// 5-d（整理本对齐）2026-09-11 接入锚定汇总面板。5-a 仍是骨架（方案已出，
+// 见 overview Step5-字符识别/08-5a方案-字形库匹配调试视图.md）。
 export function Step5Page() {
   const { book = '', sub } = useParams()
   const meta = sub ? STEP5_SUBS.find((s) => s.id === sub) : undefined
 
   if (!sub) {
-    return (
-      <div className="card">
-        <h2>Step5 字符识别</h2>
-        <p className="muted">四路并行，互不投票（流程与模块.md §4）：</p>
-        <ul>
-          {STEP5_SUBS.map((s) => (
-            <li key={s.id}><Link to={`/${book}/step/step5/${s.id}/`}>{s.title}</Link></li>
-          ))}
-        </ul>
-      </div>
-    )
+    return <Step5Overview book={book} />
   }
 
   if (sub === 'rare') {
@@ -47,6 +51,64 @@ export function Step5Page() {
     <div className="card">
       <h2>{meta?.title ?? sub}</h2>
       <p className="muted">{book} · 这一路的可视化还没有搬进来（v2 骨架阶段）。</p>
+    </div>
+  )
+}
+
+// Step5 总览：四小步各一行，链接 + fresh/total 覆盖率，风格照抄
+// BookOverviewPage 的全书总览行（ov-progress-row 系列 class 复用现成样式，
+// 不新起一套）。数据来自通用的 /api/status（fetchStatus），四路 Step id
+// 都已注册在 keben_body_v2 pipeline 里，零后端改动就能拿到有意义的计数——
+// 这比等 5-a 聚合接口做完才给总览更实际："看到概况"这个诉求不该被 5-a
+// 还没实现挡住。5-a 有独立聚合接口后（见方案 §五），这里可以换成更细的
+// same/unsure/diff 分布，但产物级 fresh 覆盖率现在就能用、就是真实数据。
+function Step5Overview({ book }: { book: string }) {
+  const [status, setStatus] = useState<StatusResponse | null>(null)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    setStatus(null)
+    setErr('')
+    if (!book) return
+    fetchStatus(book, 'keben_body_v2', 'all').then(setStatus).catch((e) => setErr((e as Error).message))
+  }, [book])
+
+  const total = status?.pages.length || 0
+
+  return (
+    <div className="card">
+      <h2>Step5 字符识别 <span className="muted">四路并行，互不投票（流程与模块.md §4）</span></h2>
+      {err && <p className="muted">状态加载失败：{err}（下面的链接仍可点开各自查看）</p>}
+      {!err && !status && <p className="muted">加载中…</p>}
+      {STEP5_SUBS.map((s) => {
+        const backendId = STEP5_BACKEND_IDS[s.id]
+        const d = status?.steps[backendId]
+        return (
+          <div className="ov-progress-row" key={s.id}>
+            <div className="ov-progress-label"><Link to={`/${book}/step/step5/${s.id}/`}>{s.title}</Link></div>
+            {d ? (
+              <>
+                <div className="ov-progress-track">
+                  <div
+                    className={`ov-progress-fill ${d.counts.fresh === 0 ? 'empty' : (d.counts.fresh >= total ? 'full' : 'partial')}`}
+                    style={{ width: `${total ? Math.min(100, d.counts.fresh / total * 100) : 0}%` }}
+                  />
+                </div>
+                <div className="ov-progress-nums">
+                  {d.counts.fresh}/{total}
+                  {(d.counts.stale > 0 || d.counts.failed > 0) && (
+                    <span className="muted">
+                      {' '}（{d.counts.stale > 0 ? `过期 ${d.counts.stale} ` : ''}{d.counts.failed > 0 ? `失败 ${d.counts.failed}` : ''}）
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="muted">{status ? '无产物' : ''}</div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

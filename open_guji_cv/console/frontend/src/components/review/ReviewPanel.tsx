@@ -22,10 +22,9 @@ export interface Verdict {
 
 const PREFETCH_CHUNK = 24
 
-export function ReviewPanel({ book, onSubmitted, reloadSignal }: {
-  book: string; onSubmitted: () => void; reloadSignal?: number
+export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
+  book: string; pages: string; onSubmitted: () => void; reloadSignal?: number
 }) {
-  const [pages, setPages] = useState('dev_set')
   const [only, setOnly] = useState<'review' | 'auto' | 'all'>('review')
   const [batchInput, setBatchInput] = useState('')
   const [todoOnly, setTodoOnly] = useState(false)
@@ -241,6 +240,16 @@ export function ReviewPanel({ book, onSubmitted, reloadSignal }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadSignal])
 
+  // `pages` 现在是 Step7 顶部统一页数选择区传下来的受控值（overview
+  // 2026-09-11 下发）；切页时随之重新载入，跟点「载入」按钮等效。同样
+  // 跳过首次挂载——初始页数由外层决定，不该一进页面就自动拉取。
+  const pagesLoadedOnce = useRef(false)
+  useEffect(() => {
+    if (!pagesLoadedOnce.current) { pagesLoadedOnce.current = true; return }
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages])
+
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
       const target = ev.target as HTMLElement
@@ -267,7 +276,6 @@ export function ReviewPanel({ book, onSubmitted, reloadSignal }: {
     <div className="card">
       <h2>定字裁决 <span className="muted">待审字位就在这里裁，不必再发外部 artifact</span></h2>
       <div className="rv-toolbar">
-        <label className="muted">页 <input value={pages} onChange={(e) => setPages(e.target.value)} size={10} /></label>
         <label className="muted">范围
           <select value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
             <option value="review">只看待审</option>

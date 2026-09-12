@@ -1,29 +1,36 @@
-/* 令牌与通用样式照抄 v1 static/css/base.css（方案 §四：css 原样/部分复用）。
-   布局部分（.app-shell/.sidebar 等）是 v2 新增——v1 是 tab 切换，v2 是左侧导航。 */
+/* 令牌与通用样式跟 dev-console（overview 仓 web/style.css）同一套配色——
+   古籍印刷取向：微偏蓝的墨色中性 + 印泥青强调色。变量名维持 v1 沿用下来的
+   旧名（--indigo/--rule/--zhu 等），只换里面的颜色值，这样十几个组件 css
+   不用逐个改引用。 */
 :root {
-  --paper: #F4F5F1; --paper-2: #EBEDE7; --ink: #1E2326; --ink-2: #3E464A; --mute: #6B7275;
-  --rule: #D3D8D0; --indigo: #2F4E7E; --indigo-soft: #DCE4F1;
-  --ok: #4C7A4F; --ok-soft: #DCE8DA; --zhu: #B23A2E; --zhu-soft: #F3DCD8;
-  --ochre: #A8781C; --ochre-soft: #F1E6C9; --faint: #9AA0A3; --faint-soft: #E4E7E3;
-  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --paper: #f7f6f3; --paper-2: #f0eeea; --ink: #14171c; --ink-2: #3d434e; --mute: #6b7280;
+  --rule: #ddd9d2; --indigo: #1a5d7a; --indigo-soft: #dbe7ec;
+  --ok: #3d6b4a; --ok-soft: #e3ede5; --zhu: #8c3a2e; --zhu-soft: #f6e2de;
+  --ochre: #8a6410; --ochre-soft: #f5ecd6; --faint: #9aa1ad; --faint-soft: #e9e6e0;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --r: 4px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #171A1C; --paper-2: #1F2427; --ink: #E6E4DC; --ink-2: #C9C8C0; --mute: #9AA0A3;
-    --rule: #2E3437; --indigo: #8FB0E0; --indigo-soft: #23334B; --ok: #7DB07F; --ok-soft: #22321F;
-    --zhu: #E0776A; --zhu-soft: #46251F; --ochre: #D6A44A; --ochre-soft: #3E3116;
-    --faint: #7C8386; --faint-soft: #2A2F32; color-scheme: dark; }
+  :root { --paper: #16181b; --paper-2: #1d2024; --ink: #e8e6e1; --ink-2: #b8b4ad; --mute: #8b8880;
+    --rule: #333840; --indigo: #6bb3d0; --indigo-soft: #1c3946; --ok: #7fb890; --ok-soft: #1e2f24;
+    --zhu: #e0857a; --zhu-soft: #3a201c; --ochre: #d4ab54; --ochre-soft: #33290f;
+    --faint: #63615b; --faint-soft: #2a2e34; color-scheme: dark; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink);
-  font: 14px/1.6 "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Noto Sans SC", "PingFang SC", sans-serif;
+  -webkit-font-smoothing: antialiased; }
 a { color: var(--indigo); }
-select, input[type=text], textarea, button { font: inherit; color: var(--ink); background: var(--paper);
-  border: 1px solid var(--rule); border-radius: 4px; padding: .25rem .5rem; }
+select, input[type=text], textarea, button { font: inherit; font-size: .89rem; color: var(--ink-2); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: var(--r); padding: .25rem .5rem; transition: background .12s, border-color .12s, color .12s; }
 button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--indigo); color: var(--indigo); }
+button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); color: #fff; }
 .card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
-.card h2 { font-size: .95rem; margin: 0 0 .6rem; }
+.card h2 { font-size: .95rem; margin: 0 0 .6rem; font-weight: 600; }
 .muted { color: var(--mute); font-size: .82rem; }
 .mono { font-family: var(--mono); font-size: .8rem; }
 .error { color: var(--zhu); }
@@ -89,9 +96,11 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar { width: 14rem; flex-shrink: 0; background: var(--paper-2); border-right: 1px solid var(--rule);
   padding: 1rem .8rem; display: flex; flex-direction: column; gap: .3rem; }
-.sidebar h1 { font-size: .95rem; margin: 0 0 .8rem; }
-.sidebar h1 a { color: var(--indigo); text-decoration: none; }
-.sidebar a { display: block; padding: .3rem .5rem; border-radius: 4px; color: var(--ink-2); text-decoration: none; font-size: .85rem; }
+.sidebar h1 { font: 600 1rem/1.2 'Noto Serif SC', 'Songti SC', 'SimSun', Georgia, serif;
+  letter-spacing: .02em; margin: 0 0 .8rem; }
+.sidebar h1 a { color: var(--ink); text-decoration: none; }
+.sidebar a { display: block; padding: .3rem .5rem; border-radius: var(--r); color: var(--ink-2); text-decoration: none; font-size: .85rem;
+  transition: background .12s, color .12s; }
 .sidebar a.active, .sidebar a:hover { background: var(--indigo-soft); color: var(--indigo); }
 .sidebar-book-select { display: flex; flex-direction: column; gap: .2rem; font-size: .78rem; margin-bottom: .2rem; }
 .sidebar-book-select select { width: 100%; }
