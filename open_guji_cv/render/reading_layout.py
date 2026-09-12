@@ -40,8 +40,16 @@
 2. `kg < baseline_kg`（含抬头 `^`，按"抬头 n 级 == 点数 -n"折算）：
    **只有开头词命中 `_TAITOU_WORDS` 词表才判定为抬头**——抬头不分段，
    直接接着拼（抬头是强制换行，不是新段落的开始，见 vol02 p11 教训）。
-   不命中词表：记进 `notes`，仍按"不分段、接着拼"处理但会被报告出来，
+   `kg == 0` 时另有一条分支（见下），其余不命中词表的记进 `notes`，
    不要在没有依据的时候擅自分段。
+2a. `kg == 0` 且**连续 ≥2 行**（自己已经在 0 区间里，或下一行也是 0）：
+    判定为**这一段的基线本来就是 0**（如 vol02 p3 整页顶格不挪抬），
+    按当前基线（0）走情况 1 的排满/分段逻辑，不是逐行标题。
+    `kg == 0` 但**孤立单行**（前后都不是 0）：书目条目标题行（如
+    "夏易傳十一卷<內府藏本>"），前后都强制分段、独立成段。用户
+    2026-09-12 两次裁：先按"点数=0 且不在抬头词表里"识别成标题，
+    后用 vol02 p3 真实数据验证"连续多行都是 0"不是标题是基线，
+    补上"连续 2 行以上才算基线 0，单独 1 行才算标题"这条区分。
 3. `kg > baseline_kg` 且开头命中 `_SECTION_MARKERS`（如"謹案"）：
    判定为**连续几行的基线切换**——从这一行起，后续判断改用新基线
    （新基线就是这一行的 `kg`），直到再遇到下一次切换信号。
@@ -172,15 +180,17 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
         return ""
 
     parsed = [_parse_line(ln) for ln in lines]
+    effs = [_effective_kg(raised, kg) for raised, kg, _ in parsed]
 
     paragraphs: list[str] = []
     current: list[str] = []
     baseline = baseline_kg
     prev_full: bool | None = None  # 上一条"正常行"是否排满；抬头/基线切换行不更新这个
+    in_zero_run = False  # 是否已经处于"连续 kg=0 的段落基线"区间内，见下
 
     for i, (raised, kg, rest) in enumerate(parsed):
         text = _strip_jiazhu_break(rest)
-        eff = _effective_kg(raised, kg)
+        eff = effs[i]
         col = i + 1  # col 从 1 起
 
         if i == 0:
@@ -191,6 +201,7 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
 
         if eff == baseline:
             # 情况 1：正常行。上一条正常行没排满就分段。
+            in_zero_run = False
             if prev_full is False:
                 paragraphs.append("".join(current))
                 current = [text]
@@ -203,13 +214,28 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
             if any(rest.startswith(w) for w in _TAITOU_WORDS):
                 # 情况 2：确认是抬头——强制换行，不是新段落开始，不分段
                 # （vol02 p11 教训：抬头行天然写不满，不能拿来判断要不要分段）。
+                in_zero_run = False
                 current.append(text)
                 continue  # 不更新 prev_full
 
             if eff == 0:
-                # 情况 3：顶格、无挪抬、不是已知抬头词——书目条目标题行
-                # （如"夏易傳十一卷<內府藏本>"），前后都强制分段。用户
-                # 2026-09-12 定："先只按点数=0 且不在抬头词表里识别"。
+                # 情况 3a：连续 ≥2 行都是 kg=0——这一段的基线本来就是 0
+                # （如 vol02 p3 整页顶格不挪抬），**不是**逐行标题。
+                # 用户 2026-09-12 裁："连续2行以上kg=0才算基线0，单独1行
+                # 才算标题"——先看"已经在 0 基线区间里"或"下一行也是 0"。
+                next_is_zero = i + 1 < len(effs) and effs[i + 1] == 0
+                if in_zero_run or next_is_zero:
+                    in_zero_run = True
+                    if prev_full is False:
+                        paragraphs.append("".join(current))
+                        current = [text]
+                    else:
+                        current.append(text)
+                    prev_full = is_column_full(store, book, page, col)
+                    continue
+
+                # 情况 3b：孤立的单行 kg=0——书目条目标题行
+                # （如"夏易傳十一卷<內府藏本>"），前后都强制分段。
                 if current:
                     paragraphs.append("".join(current))
                 paragraphs.append(text)
@@ -217,14 +243,16 @@ def reflow_page(store: ProductStore, book: str, page: int, page_text: str,
                 prev_full = None  # 标题行前后都分段，不参与"排满"判据
                 continue
 
+            in_zero_run = False
             notes.append(
                 f"col{col}: 开头点数 {eff}（基线 {baseline}）但开头词"
                 f"「{rest[:4]}」不在抬头词表 _TAITOU_WORDS 里，也不是"
-                f"点数=0 的标题行情形，按不分段处理，需要人核实")
+                f"点数=0 的标题/连续基线0情形，按不分段处理，需要人核实")
             current.append(text)
             continue  # 不更新 prev_full：这一行状态不明
 
         # eff > baseline：可能是基线切换（如"謹案"），也可能是没见过的情况。
+        in_zero_run = False
         if any(rest.startswith(w) for w in _SECTION_MARKERS):
             baseline = eff  # 切换基线，后续行按新基线判断
             current.append(text)
