@@ -9,17 +9,19 @@
 from __future__ import annotations
 
 import cv2
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
 from ..errors import maps_http
+from ...core.anchor import x_tr_to_tl
 from ...core.book import load_book
 from ...core.spec import column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.cards import cards
+from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts
 
 router = APIRouter()
@@ -275,3 +277,61 @@ def api_review_context_img(book: str, page: int, col: int, slot: int, around: in
     if not ok:
         raise EncodeFailed("编码失败")
     return Response(content=buf.tobytes(), media_type="image/png")
+
+
+
+# ── Step4 随机层裁决（overview 2026-09-11 下发：01-补随机层金标.md）───
+#
+# Step4 现在报 R4 = 0.51%，但没有人工核校的独立基准说这个数对不对。
+# `self_assess_r1~r4` 虽然也叫 rand，但 label_origin 全是 model（算法自评），
+# 不能当验收基准。这一组接口出等概率随机抽样的候选，裁决走既有的
+# POST /api/events（kind=confirm, payload.v=seg_defect），落
+# char-segmentation/instances，stratum=rand_human 与既有各层分开算。
+
+
+@router.get("/api/cell-shrink-rand/sample")
+def api_cell_shrink_rand_sample(n: int = 400, seed: int = 20260911, tag: str = "r1") -> dict:
+    return rand_sample(n=n, seed=seed, tag=tag, store=deps.product_store())
+
+
+@router.get("/api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png")
+@maps_http
+def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
+                                 pad: int = 28, scale: float = 1.0) -> Response:
+    """原图裁一块（红框=紧裁框），供随机层裁决台的语境图用。
+
+    `bbox_page` 是 raw_page_px@top-right（右上原点、x 向左），cv2 读的图是
+    左上原点、x 向右——换算与 `render/overlay.py::overlay` 的 cell_shrink
+    分支一致（`x_tr_to_tl`，左右两边各自转换后互换）。
+    """
+    ci = deps.product_store().read(book, "cell_shrink", page_key(page), "char_index")
+    cc = ci.column(col) if ci else None
+    if cc is None:
+        raise ImageMissing("没有这一列的字框")
+    ch = next((r for r in cc.chars if r.slot == slot), None)
+    if ch is None or ch.bbox_page is None:
+        raise ImageMissing("没有这一格的字框")
+    b = load_book(book)
+    p = b.raw_path(page)
+    if not p.exists():
+        raise ImageMissing("原图缺失")
+    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise ImageMissing("原图读不出来")
+    h, w = img.shape
+    bx0, by0, bx1, by1 = ch.bbox_page
+    x0, x1 = x_tr_to_tl(bx1, w), x_tr_to_tl(bx0, w)
+    x0, y0, x1, y1 = int(round(x0)), int(round(by0)), int(round(x1)), int(round(by1))
+    cx0, cy0 = max(0, x0 - pad), max(0, y0 - pad)
+    cx1, cy1 = min(w, x1 + pad), min(h, y1 + pad)
+    if cx1 <= cx0 or cy1 <= cy0:
+        raise ImageMissing("裁切区域超出原图范围")
+    c = cv2.cvtColor(img[cy0:cy1, cx0:cx1], cv2.COLOR_GRAY2BGR)
+    cv2.rectangle(c, (x0 - cx0, y0 - cy0), (x1 - cx0 - 1, y1 - cy0 - 1), (0, 0, 255), 1)
+    if scale != 1.0:
+        c = cv2.resize(c, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".png", c)
+    if not ok:
+        raise EncodeFailed("编码失败")
+    return Response(content=buf.tobytes(), media_type="image/png",
+                    headers={"Cache-Control": "no-store"})

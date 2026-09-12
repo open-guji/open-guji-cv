@@ -68,3 +68,6 @@
 .rvp { font-size: .68rem; color: var(--mute); margin: 0 .35rem 0 .15rem; }
 .rvsel { user-select: text; cursor: text; }
 .rvcard, .rvctx { user-select: text; }
+.rvseg button kbd { font-family: var(--mono); font-size: .68rem; color: var(--mute);
+  border: 1px solid var(--rule); border-radius: 2px; padding: 0 .25rem; margin-right: .2rem; }
+.rvseg button.on kbd { color: #fff; border-color: rgba(255,255,255,.6); }

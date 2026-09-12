@@ -323,8 +323,13 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
         p = e.payload or {}
         if e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char"):
             hits.append((e, "not_text", "not_a_char"))
-        elif e.kind == "confirm" and p.get("v") == "seg_defect":
-            hits.append((e, p.get("quality") or "contaminated", "seg_defect"))
+        elif (e.kind == "confirm" and p.get("v") == "seg_defect"
+              and p.get("quality") not in (None, "clean")):
+            # quality=="clean" 是「这块图没毛病」——随机层裁决台（Step4）把 clean
+            # 也算作一档正常裁决（不像旧的定向富集页只出可疑样本），不能落进
+            # 排除名单（2026-09-11/12 两次实测都复现：cell_shrink 随机层批次
+            # 把 clean 也写进了 crop_exclusions.jsonl，是这里没挡的缺口）。
+            hits.append((e, p["quality"], "seg_defect"))
     res.skipped = len(events) - len(hits)
     if not hits:
         return res
