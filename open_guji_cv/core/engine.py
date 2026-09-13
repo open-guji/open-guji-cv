@@ -25,6 +25,7 @@ from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
 from ..products.store import ProductStore
+from ..utils.preclean import effective_raw_path
 
 FRESH, STALE, MISSING, FAILED, BLOCKED = "fresh", "stale", "missing", "failed", "blocked"
 
@@ -142,7 +143,7 @@ class Engine:
         out: dict[str, str] = {}
         for kind in step.spec.consumes:
             if kind == "raw_page":
-                p = self.book.raw_path(page)
+                p = effective_raw_path(self.book, page)
                 if not p.exists():
                     return None
                 out[kind] = self.store.raw_sha(self.book.id, p)
