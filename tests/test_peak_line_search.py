@@ -2,6 +2,7 @@
 import numpy as np
 
 from open_guji_cv.utils.peak_line_search import (
+    BOTTOM_SAFETY_MARGIN,
     LineMatch,
     _dedup_by_position,
     _sample_line_curve_naive,
@@ -265,7 +266,9 @@ def test_rescue_bottom_keeps_result_when_already_consistent():
     base = find_horizontal_border(mask, "bottom")
     same = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
                                   book_gap=h - base.position)
-    assert same.position == base.position
+    # 下版框一律会加 BOTTOM_SAFETY_MARGIN（判定口径不对称的补偿，与救援
+    # 是否出手无关），所以比较时要把它扣掉——这里要断言的是"救援没有换线"。
+    assert same.position - BOTTOM_SAFETY_MARGIN == base.position
     assert same.slope == base.slope
 
 
@@ -281,4 +284,4 @@ def test_rescue_bottom_refuses_when_nothing_near_reference():
     # 把基准指到一个根本没有线的位置（页面正中），邻域内必然无候选
     out = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
                                  book_gap=float(h // 2))
-    assert out.position == cur.position
+    assert out.position - BOTTOM_SAFETY_MARGIN == cur.position
