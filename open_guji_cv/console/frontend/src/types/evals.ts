@@ -85,6 +85,11 @@ export interface GateSummaryPageRow {
   expected_cols?: number | null
   page_type?: string | null
   page_type_policy?: string | null
+  /** 闸3 专有：这页是否「版式未支持」（职名/目录类，每列字数非版式格数且逐列
+   * 不同）。判定在后端落盘（`row_segment_gate.py` L0u），前端只读不算。 */
+  unsupported_layout?: boolean | null
+  /** 闸3 专有：本页「弹性 DP 无解」的列数，判据原始计数。 */
+  n_unsupported_columns?: number | null
 }
 
 export interface GateSummaryResponse {

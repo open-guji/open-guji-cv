@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchGateSummary } from '../../api/evals'
-import type { GateSummaryResponse } from '../../types/evals'
+import type { GateSummaryPageRow, GateSummaryResponse } from '../../types/evals'
 import '../evals/evals.css'
 
 // 板块②：进度摘要 + 闸判据，各 Step 页面共用（overview 03-Step页面统一设计.md
@@ -66,6 +66,19 @@ export function ProgressGatePanel({ book, title, gateId, pages, customMetrics, t
   const missing = d ? d.pages.filter((p) => p.status === 'missing') : []
   const ok = d ? d.pages.filter((p) => p.status === 'ok') : []
   const flagged = d ? d.pages.filter((p) => (p.flags?.length ?? 0) > 0) : []
+  // 闸2/闸3 2026-09-12 起把「闸1判定 skip」的页级 reject 写成 L0 开头——
+  // 从「整页被拦」里单独拆出来，别让"跳过的非正文页"和"真正探测/切分
+  // 失败"混在一个数字里，前者是预期行为不是错误。
+  const isSkipBlocked = (p: GateSummaryPageRow) => (p.page_reject || []).some((r) => r.startsWith('L0：'))
+  // 闸3 2026-09-13 起单列「版式未支持」（职名/目录：每列字数非版式格数且逐列
+  // 不同，21 格先验必然无解）——非故障，同样不该混进「整页被拦（异常）」。
+  // 判定由后端落盘（`unsupported_layout`），这里只读不算；老产物没有这个字段
+  // 时退回按 L0u 前缀认，免得没重跑闸的册子显示成异常。
+  const isUnsupported = (p: GateSummaryPageRow) =>
+    p.unsupported_layout ?? (p.page_reject || []).some((r) => r.startsWith('L0u'))
+  const skipBlocked = blocked.filter((p) => isSkipBlocked(p) && !isUnsupported(p))
+  const unsupported = blocked.filter(isUnsupported)
+  const realBlocked = blocked.filter((p) => !isSkipBlocked(p) && !isUnsupported(p))
 
   return (
     <div className="card">
@@ -98,14 +111,30 @@ export function ProgressGatePanel({ book, title, gateId, pages, customMetrics, t
         <div className="qgrid">
           <div>
             <div className="qk">页级状态</div>
-            <div className={`qv ${blocked.length ? 'qbad' : 'qok'}`}>{ok.length}/{d.pages.length}</div>
-            <div className="qs">过闸 {ok.length} · 整页被拦 {blocked.length} · 无产物 {missing.length} · 带 flag {flagged.length}</div>
-            {blocked.length > 0 && (
+            <div className={`qv ${realBlocked.length ? 'qbad' : 'qok'}`}>{ok.length}/{d.pages.length}</div>
+            <div className="qs">
+              过闸 {ok.length} · 非正文跳过 {skipBlocked.length} ·
+              {unsupported.length > 0 && <> 版式未支持 {unsupported.length} · </>}
+              整页被拦（异常）{realBlocked.length} ·
+              无产物 {missing.length} · 带 flag {flagged.length}
+            </div>
+            {realBlocked.length > 0 && (
               <div className="qerr">
-                {blocked.slice(0, 8).map((p) => (
+                {realBlocked.slice(0, 8).map((p) => (
                   <div key={p.page}>p{p.page}：{(p.page_reject || []).join('；')}</div>
                 ))}
-                {blocked.length > 8 && <div className="qs">…另 {blocked.length - 8} 页</div>}
+                {realBlocked.length > 8 && <div className="qs">…另 {realBlocked.length - 8} 页</div>}
+              </div>
+            )}
+            {skipBlocked.length > 0 && (
+              <div className="qs" style={{ marginTop: '.4rem' }}>
+                非正文跳过（页型判定，非异常）：{foldPageRanges(skipBlocked.map((p) => p.page))}
+              </div>
+            )}
+            {unsupported.length > 0 && (
+              <div className="qs" style={{ marginTop: '.4rem' }}>
+                版式未支持（职名/目录类，每列字数非版式格数且逐列不同，非异常）：
+                {foldPageRanges(unsupported.map((p) => p.page))}
               </div>
             )}
           </div>

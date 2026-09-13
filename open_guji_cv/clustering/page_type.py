@@ -212,8 +212,50 @@ ROSTER_EL_T = 0.5          # 弹性列比例达到此值才判 roster。阈值�
 ROSTER_EL_MIN = 3          # 至少这么多条弹性列（绝对数，防少列页碰运气）
 
 
+# ── v2：切不动的页（职名/目录）──────────────────────────────
+# 判据是「弹性 DP 无解的列占比」，不是 refine_page_type 那个「弹性列比例」。
+# 换量的原因是**观测对象没了**：refine_page_type 读的是切成功之后每列的
+# `layout`，而 v2 里职名页 44 页有 38 页**整页一列都没切出来**（396 列只有
+# 43 列 ok）——要判的恰恰是没有 cells 可看的页。所以从「切出来什么样」
+# 改成「切不出来」，这个量对整页无解的页反而最强。
+#
+# 2026-09-13 在 page-type 金标 394 页上实测（products/ 现成产物，未重跑）：
+#
+#   页型              n     无解列比例 min/中位/max   >0 的页数
+#   body (vol01+02)  294    0.000 / 0.000 / 0.000       0
+#   roster (vol01)    44    0.000 / 1.000 / 1.000      39
+#   toc    (vol01)    47    0.000 / 0.000 / 1.000       7
+#
+# **294 页正文没有一列无解**，分离是完全的、不是留余量——所以「body 误判
+# 必须 0」这条红线由判据本身保证，不靠调阈值。门槛取 >0 即判，不设比例
+# 阈值：任何一个正数在正文页上都没出现过，设比例反而是凭空收紧。
+#
+# **不细分 roster / toc**（用户 2026-09-13 定）：toc 有 7 页（p159/165/195/
+# 196/198/200/202）与 roster 在这个量上完全重叠，其中 3 页整页无解，分不开。
+# refine_page_type 的注释里早写明「toc 不判」，同一个道理。所以这里判出的
+# 类别叫**「版式未支持」**，只断言「非正文、现有 21 格先验切不了」，不谎称
+# 能分文学类别。细分是 keben_roster.yaml 那件事。
+UNSUPPORTED_LAYOUT_ERROR = "弹性 DP 无解"
+
+
+def unsupported_layout_columns(columns: list[dict]) -> int:
+    """这一页有几列是「版式未支持」而无解的。
+
+    只数 `UNSUPPORTED_LAYOUT_ERROR` 这一种拒因——DP 无解还有别的来路
+    （未过交接闸、页级 period 缺失），那些是上游的事，混进来会把闸1 漏判的
+    空白页（vol01 p62/p158/p206，Step2 估不出周期）也算成版式未支持。
+    """
+    return sum(1 for c in columns
+               if not c.get("ok") and c.get("error") == UNSUPPORTED_LAYOUT_ERROR)
+
+
 def refine_page_type(result: dict) -> str:
     """用**切分产物**把 body 细分出 roster（职名页）。
+
+    ⚠️ **v1 专用**。v2 链上判职名页走 `unsupported_layout_columns()`，
+    原因见其上方注释（这里读的 `columns[i].layout` 是 v1 `grid_segment.py`
+    的产物形状，v2 `products/kinds/cells.py` 没有这个字段；更要紧的是
+    v2 职名页整页切不出来，压根没有列可看）。
 
     classify_page_type 在切分前跑，只看得到灰度统计，分不开 body/roster/
     toc（实测 roster 31 页、toc 47 页全被归into body）。切分之后强特征

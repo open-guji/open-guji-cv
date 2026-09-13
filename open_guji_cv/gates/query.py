@@ -12,9 +12,13 @@ standard 三档，body 里混着未细分的 roster/toc/edict）。keben_body_v2
 管线自己分不出 roster/toc——见仓库 `.claude/CLAUDE.md`「当前策略」一节），
 所以从来没跑过闸的页（比如 vol01 p90–132 那 41 页职名页，若未跑过闸1本身）
 在 `gate_manifest` 里根本没有记录。这份清单只能把「有没有闸产物」这件事
-本身摆出来（`missing`），要更细的 body/roster/toc 分类，仍需要
-`open-guji-dataset` 的 page-type 金标（只读）或 `refine_page_type` 接入
-切分产物之后的细化，本轮没接，留给下一道。
+本身摆出来（`missing`）。
+
+2026-09-13 补：闸3（`row_segment_gate`）现在会判「版式未支持」并写进
+`unsupported_layout`，职名/目录类页至此**有清单跟踪了**，不再混在异常里。
+但它**只分「正文 / 切不了」两档，不细分 roster/toc**（两者在判据上重叠，
+见 `row_segment_gate.py` 的 L0u 一节）。要真正的 body/roster/toc 三分类，
+仍需 `open-guji-dataset` 的 page-type 金标（只读）。
 
 用法：
     python -m open_guji_cv.gates.query vol01
@@ -102,6 +106,11 @@ def gate_summary(book_id: str, pages: list[int] | None = None,
             # 列级闸没有这两个字段。
             "page_type": getattr(g, "page_type", None),
             "page_type_policy": getattr(g, "page_type_policy", None),
+            # 闸3 的「版式未支持」判定（职名/目录类，见 row_segment_gate.py
+            # 的 L0u 一节）——别的闸没有这两个字段。前端据此单列一桶，
+            # 不再计进「整页被拦（异常）」。
+            "unsupported_layout": getattr(g, "unsupported_layout", None),
+            "n_unsupported_columns": getattr(g, "n_unsupported_columns", None),
         })
     return {"gate": gate, "pages": rows, "tier_totals": tier_totals}
 
