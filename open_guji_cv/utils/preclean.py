@@ -32,11 +32,27 @@
 一个单点上。`apply_preclean` 现在自己算带内墨占比（修前/修后），跟 `BODY_INK_GATE`
 比——过了算过闸，没过就抛 `PrecleanGateError`。`BODY_INK_GATE` 的来历见下面常量区，
 换书要重新标，用 `sample_body_baseline` 或 `cli_v2 preclean <book> --calibrate`。
+
+**个别页可以单页放宽闸**（`gate_override` + `gate_reason`，见 `_check_gate`），
+但**不许为了让某页过闸去调 `BODY_INK_GATE`** —— 那是全局闸，调松了别的页修坏了
+也拦不住。单页的例外就单页记，记在 yaml 里，日志上看得见。
+
+已登记的反色带（2026-09-12，十册 1695 页全扫后）
+------------------------------------------------
+共 11 页：vol01 p48；vol02 p151/152/153；vol04 p17；vol05 p22/p178；
+vol08 p13；vol09 p174/p175；vol10 p135。各册本底墨占比分布高度一致
+（中位 0.167-0.185 / p99 0.240-0.255），所以 `BODY_INK_GATE=0.25` 各册通用，
+不必按册重标。唯一的例外是 vol05 p178（带压在字最粗的一段上，修完 0.261），
+走单页 `gate_override: 0.27`。
+
+找候选用 `scripts/scan_inverted_bands.py`（判据已改成按页自量，不含固定像素；
+**贴着版框的带是它的已知盲区，要另跑 `--edge`**）。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 from scipy.ndimage import median_filter
@@ -160,11 +176,55 @@ def invert_band(gray: np.ndarray, *, segments: list[list[int]],
 _OPS = {"inverted_band": invert_band}
 
 
+def _check_gate(kind: str, before: float, after: float,
+                override: float | None, reason: str | None) -> str:
+    """闸0核对。过闸返回说明；没过抛 `PrecleanGateError`。
+
+    `gate_override` 是**单页**放宽的阈值，必须同时写 `gate_reason` 说明为什么 ——
+    否则拒绝放行。设它的前提是已经证明「超阈不是修复不彻底，是这一带本来字就密」：
+    办法是把同形状 mask 平移到上下无带的正常文本区量一遍，若量得同量级，
+    那这点墨就是字本身的，不是残留（vol05 p178 就是这么定的，见其 yaml note）。
+
+    **不要为了让某页过闸去调 `BODY_INK_GATE`**：那是全局闸，调松了别的页
+    修坏了也拦不住。单页的例外就单页记，记在 yaml 里，看得见。
+    """
+    gate = BODY_INK_GATE
+    tag = ""
+    if override is not None:
+        if not reason:
+            raise PrecleanGateError(
+                f"{kind} 写了 gate_override={override} 却没写 gate_reason —— "
+                f"单页放宽闸必须说明理由（并先证明超阈不是修复不彻底），不放行。"
+            )
+        if override < BODY_INK_GATE:
+            raise PrecleanGateError(
+                f"{kind} 的 gate_override={override:.3f} 比全局闸 "
+                f"{BODY_INK_GATE:.3f} 还严 —— 这个字段是用来单页**放宽**的，"
+                f"要收紧请直接改全局常量。"
+            )
+        gate = float(override)
+        tag = f"（单页放宽至 {gate:.3f}：{reason}）"
+
+    note = (f"{kind}: 带内墨占比 {before:.3f} -> {after:.3f}"
+            f"（本底中位 {BODY_INK_MEDIAN:.3f} / p95 {BODY_INK_P95:.3f} / "
+            f"闸 {gate:.3f}） {'过闸' if after <= gate else '✗ 超阈未过闸'}{tag}")
+    if after > gate:
+        raise PrecleanGateError(
+            f"闸0未过：{kind} 修完带内墨占比仍是 {after:.3f}，高于阈值 "
+            f"{gate:.3f}（本底中位 {BODY_INK_MEDIAN:.3f} / "
+            f"p99 {BODY_INK_P99:.3f}）—— 修复没有把带内墨量带回正文水平。"
+        )
+    return note
+
+
 def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, list[str]]:
     """按 book.yaml 里登记的规则依次处理一页。返回 (新图, 每条规则的说明)。
 
     `inverted_band` 会核对闸0：带内墨占比修完要回落到 `BODY_INK_GATE` 以内，
     没回落就抛 `PrecleanGateError`（拦下，不放行）——阈值来历见模块顶部常量区。
+
+    个别页可以用 `gate_override` 单页放宽闸（见 `_check_gate`）——**只能单页放宽，
+    不许改全局常量**：闸是给所有页的，为一页调松了，别的页修坏了就拦不住。
     """
     notes: list[str] = []
     out = gray
@@ -173,7 +233,8 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
         fn = _OPS.get(kind)
         if fn is None:
             raise ValueError(f"未知的 preclean 类型: {kind}（可用: {sorted(_OPS)}）")
-        kw = {k: v for k, v in r.items() if k not in ("kind", "page", "note")}
+        kw = {k: v for k, v in r.items()
+              if k not in ("kind", "page", "note", "gate_override", "gate_reason")}
         th = kw.get("ink_threshold", 128)
 
         if kind == "inverted_band":
@@ -183,18 +244,8 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
             before = band_ink_ratio(out, mask, th)
             out = fn(out, **kw)
             after = band_ink_ratio(out, mask, th)
-            passed = after <= BODY_INK_GATE
-            notes.append(
-                f"{kind}: 带内墨占比 {before:.3f} -> {after:.3f}"
-                f"（本底中位 {BODY_INK_MEDIAN:.3f} / p95 {BODY_INK_P95:.3f} / "
-                f"闸 {BODY_INK_GATE:.3f}） {'过闸' if passed else '✗ 超阈未过闸'}"
-            )
-            if not passed:
-                raise PrecleanGateError(
-                    f"闸0未过：{kind} 修完带内墨占比仍是 {after:.3f}，高于阈值 "
-                    f"{BODY_INK_GATE:.3f}（本底中位 {BODY_INK_MEDIAN:.3f} / "
-                    f"p99 {BODY_INK_P99:.3f}）—— 修复没有把带内墨量带回正文水平。"
-                )
+            notes.append(_check_gate(kind, before, after,
+                                     r.get("gate_override"), r.get("gate_reason")))
         else:
             before = float((out < th).mean())
             out = fn(out, **kw)
@@ -238,6 +289,26 @@ def precleaned_root(repo_root: Path | None = None) -> Path:
 
 def precleaned_path(book_id: str, page: int, repo_root: Path | None = None) -> Path:
     return precleaned_root(repo_root) / book_id / f"{page}.png"
+
+
+def effective_raw_path(book, page: int, *, log: Callable[[str], None] | None = None,
+                       repo_root: Path | None = None) -> Path:
+    """这一页该从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
+
+    `RunContext.raw_page`（Step1 及下游管线）与叠图 `render.overlay.overlay`
+    （控制台展示）**必须读同一张图**——叠图画的是"管线实际处理的产物"，
+    不能悄悄换成原图，否则登记过 preclean 的页会出现"叠图看着不对、
+    实跑却是对的"这种两边对不上的假象（2026-09-12 发现：Step1 起的叠图
+    一直在读原图，没走这条判断）。
+    """
+    if page in (getattr(book, "preclean", {}) or {}):
+        p = precleaned_path(book.id, page, repo_root)
+        if p.exists():
+            return p
+        if log:
+            log(f"[Step0] {book.id} p{page} 登记了预清理但产物不存在，"
+                f"先用原图；跑 `python -m open_guji_cv.cli_v2 preclean {book.id}` 生成")
+    return book.raw_path(page)
 
 
 def build_precleaned(book, pages=None, *, force: bool = False,
