@@ -139,3 +139,45 @@ def test_build_writes_products_and_leaves_raw_alone(tmp_path):
     assert build_precleaned(book, log=lambda s: None, repo_root=tmp_path) == []
     assert len(build_precleaned(book, force=True, log=lambda s: None,
                                 repo_root=tmp_path)) == 1
+
+
+# ── 闸0 单页放宽 gate_override ──────────────────────────────────────
+def test_gate_override_needs_reason():
+    """写了 gate_override 却不说理由 —— 不放行。例外要留得下痕迹。"""
+    from open_guji_cv.utils.preclean import _check_gate, PrecleanGateError
+
+    with pytest.raises(PrecleanGateError, match="gate_reason"):
+        _check_gate("inverted_band", 0.74, 0.261, 0.27, None)
+
+
+def test_gate_override_cannot_tighten():
+    """gate_override 只能放宽。要收紧请改全局常量，别在单页偷偷卡严。"""
+    from open_guji_cv.utils.preclean import (_check_gate, BODY_INK_GATE,
+                                             PrecleanGateError)
+
+    with pytest.raises(PrecleanGateError, match="还严"):
+        _check_gate("inverted_band", 0.74, 0.20, BODY_INK_GATE - 0.05, "理由")
+
+
+def test_gate_override_passes_and_records_reason():
+    """放宽生效，且理由写进说明里 —— 日志上看得见这页是例外。"""
+    from open_guji_cv.utils.preclean import _check_gate
+
+    note = _check_gate("inverted_band", 0.74, 0.261, 0.27, "字本来就密")
+    assert "过闸" in note and "单页放宽至 0.270" in note and "字本来就密" in note
+
+
+def test_gate_still_blocks_without_override():
+    """没写 override 的页，超阈照拦 —— 放宽是单页的，不外溢。"""
+    from open_guji_cv.utils.preclean import _check_gate, PrecleanGateError
+
+    with pytest.raises(PrecleanGateError, match="闸0未过"):
+        _check_gate("inverted_band", 0.74, 0.261, None, None)
+
+
+def test_gate_override_beyond_its_own_threshold_still_blocked():
+    """放宽了也不是不设防：超过放宽后的阈值照样拦。"""
+    from open_guji_cv.utils.preclean import _check_gate, PrecleanGateError
+
+    with pytest.raises(PrecleanGateError, match="闸0未过"):
+        _check_gate("inverted_band", 0.80, 0.35, 0.27, "理由")
