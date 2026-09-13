@@ -79,7 +79,12 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
       setMsg('没有待裁的切分方案——字卡不会被挡')
     } else {
       const more = d.n_r2s > d.n ? `，全部待裁 ${d.n_r2s} 条，裁完这批再刷新拿下一批` : ''
-      setMsg(`本次载入 ${d.n} 条${more} → 批次 ${b}`)
+      // 整理本期望是裁切法的主要依据，锚不上就等于蒙着裁——宁可吵一点也要说破。
+      // d.warn 是语料本身读错了（环境变量漏带）；n_expect 是语料对但这批页锚不上。
+      const bad = d.warn
+        ? `　⚠️ ${d.warn}`
+        : (d.n_expect === 0 ? '　⚠️ 本批一条都没锚上整理本，「整理本期望」不可信' : '')
+      setMsg(`本次载入 ${d.n} 条${more} → 批次 ${b}${bad}`)
     }
   }
 

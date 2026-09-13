@@ -96,14 +96,43 @@ def corpus_path(name: str) -> Path:
     return (ws or REPO_ROOT) / "corpus" / name
 
 
+#: 仓内样本语料的量级上限。工作区真语料 275 万字（8.2 MB）、仓内样本各 6000 字
+#: （17 KB），中间差两个半数量级，这条线怎么画都不会误判。
+SAMPLE_CORPUS_MAX_BYTES = 1_000_000
+
+
+def using_sample_corpus(name: str = "zongmu_wenyuange_wikisource.txt") -> bool:
+    """这次会不会读到「仓内小样本语料」——与 `using_sample_db` 同类的哑失败检测。
+
+    2026-09-12 实锤（Step7 切分裁决那批卡片）：控制台进程没有 `GUJI_WORKSPACE`
+    （它只写在 `~/.bashrc` 里，从 PowerShell / VS Code 起就读不到），于是
+    `corpus_path()` 静默退回仓内 17 KB 样本，vol02 全书 188 页 8-gram 锚定
+    **186 页失败**、`anchored` 页数为 0。面板照常渲染，只是「整理本期望」那两个
+    字全是拿样本硬锚出来的噪声——用户看到的现象是「附带信息非常不准确，没法读」，
+    过程中没有任何报错。
+
+    `using_sample_db` 只看**路径来源**（环境变量设没设），这里必须看**文件大小**：
+    `GUJI_WORKSPACE` 指对了但工作区语料没同步下来、或指到了一个半空的工作区，
+    路径来源是"正确"的，读到的仍是小样本。
+    """
+    p = corpus_path(name)
+    try:
+        return p.stat().st_size < SAMPLE_CORPUS_MAX_BYTES
+    except OSError:
+        return True     # 读不到就是不可用，按"不能拿来锚定"处理
+
+
 def describe() -> dict[str, str]:
     """当前解析结果，供控制台与诊断打印——路径错了要看得见。"""
     ws = workspace_root()
+    corpus = corpus_path("zongmu_wenyuange_wikisource.txt")
     return {
         "workspace": str(ws) if ws else "(未设 GUJI_WORKSPACE，用仓内默认)",
         "glyph_db": str(glyph_db_path()),
         "glyph_store": str(glyph_store_path()),
         "raw_root": str(raw_root()),
+        # 语料读错了整理本对齐会静默全空（见 using_sample_corpus），所以摆到台面上
+        "corpus": str(corpus) + ("  ⚠️ 仓内小样本，锚不住整理本" if using_sample_corpus() else ""),
     }
 
 

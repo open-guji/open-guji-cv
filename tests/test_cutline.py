@@ -124,3 +124,49 @@ def test_split_char_ink_mass_separates_flat_chars_from_split_halves():
     flat_mass, half_mass = out
     assert flat_mass < 0.100, f"扁字墨量 {flat_mass:.3f} 不该超阈值"
     assert half_mass >= 0.100, f"半个字墨量 {half_mass:.3f} 该超阈值"
+
+
+def test_blocking_gate_reads_all_event_batches(monkeypatch, tmp_path):
+    """裁过的切线要**立刻**退出顺序闸，不必等 harvest 收进金标。
+
+    2026-09-12 回归：原先 `blocking_cutline_cases` 里写的是无参
+    `deps.event_log().read()`，而 `EventLog.read(batch)` 是必填参数——
+    抛的 `TypeError` 被裸 `except Exception: pass` 吞掉，事件去重从未生效。
+    这里断言的是**行为**（事件里的 id 不再出现在待裁集合里），不是调用形式，
+    所以换实现也不会误报。
+    """
+    from open_guji_cv.console import deps
+    from open_guji_cv.eval import touching as T
+    from open_guji_cv.review import cards as C
+
+    case = {"id": "volX:7:3:5", "page": 7, "col": 3, "bi": 5,
+            "slot_above": 5, "slot_below": 6}
+
+    monkeypatch.setattr(T, "r2s_boundaries", lambda *a, **k: [dict(case)])
+    monkeypatch.setattr(T, "split_char_boundaries", lambda *a, **k: [])
+    monkeypatch.setattr(T, "gold_ids", lambda *a, **k: set())
+
+    class _CP:
+        slot_above, chosen = 5, 0
+        candidates = [object(), object()]          # 多候选 → 该挡
+    class _Col:
+        col, cut_candidates = 3, [_CP()]
+    class _Cells:
+        columns = [_Col()]
+    class _St:
+        def read(self, *a, **k): return _Cells()
+
+    class _Log:
+        def __init__(self, keys): self.keys = keys
+        def iter_all(self):
+            for k in self.keys:
+                yield type("E", (), {"kind": "cutline",
+                                     "target": type("T", (), {"key": k})()})()
+        def read(self, batch):                      # 有 batch 才给，模拟真实签名
+            raise AssertionError("不该按单批次读——要跨所有批次去重")
+
+    monkeypatch.setattr(deps, "event_log", lambda: _Log([]))
+    assert len(C.blocking_cutline_cases("volX", [7], _St())) == 1, "没裁过时应当挡住"
+
+    monkeypatch.setattr(deps, "event_log", lambda: _Log(["volX:7:3:5"]))
+    assert C.blocking_cutline_cases("volX", [7], _St()) == [], "裁过之后应立刻放行"
