@@ -7,6 +7,7 @@ from open_guji_cv.utils.peak_line_search import (
     _sample_line_curve_naive,
     _shift_blocks,
     find_horizontal_border,
+    flank_dirty_frac,
     half_height_score_at,
     joint_search_coarse_to_fine,
     projection,
@@ -109,6 +110,32 @@ def test_find_horizontal_border_prefers_secondary_closer_to_center():
     assert abs(result.position - true_y) <= 3
 
 
+# ── flank_dirty_frac：诊断量，不接入自动选线（见函数 docstring 的负结果记录）──
+
+
+def test_flank_dirty_frac_low_for_continuous_line():
+    """一条贯穿整页的连续细线：两翼处处是纸白，脏分段应接近 0。"""
+    mask = _blank_mask()
+    y = 200
+    mask[y - 2:y + 3, :] = 1.0  # 通栏细线，两翼全是白纸
+    frac = flank_dirty_frac(mask, y, width=5.0, w=W)
+    assert frac < 0.05
+
+
+def test_flank_dirty_frac_high_for_text_baseline_peak():
+    """若干"字块"底边恰好对齐成一条假峰：多数分段两翼都紧挨着字块本体，
+    应判出较高的脏分段占比（这是"多次穿过字体"要抓的典型情形）。"""
+    mask = _blank_mask()
+    y = 200
+    char_w, gap = 20, 40
+    x = 5
+    while x + char_w < W:
+        mask[y - 20:y + 3, x:x + char_w] = 1.0  # 字块：从峰往上一大段都是墨（笔画本体）
+        x += char_w + gap
+    frac = flank_dirty_frac(mask, y, width=5.0, w=W)
+    assert frac > 0.5
+
+
 def _lm(position, score):
     return LineMatch(position=position, slope=0.0, score=score, width=5.0, proj=score * 5)
 
@@ -192,3 +219,66 @@ def test_sample_line_curve_far_edge_weight_is_not_clipped():
     _, block = sample_line_curve(mask, "v", 0, 5, -1e-9)
     assert abs(naive[5] - 0.999) < 1e-9            # 0.1% 被挪到了第 4 列（那列没墨）
     assert abs(block[5] - 1.0) < 1e-6              # 真值：该行的墨全在第 5 列
+
+
+# ── 下版框跨页先验救援 ────────────────────────────────────────────
+
+
+def _page_with_text_and_bottom_bar(bar_y: int, text_rows: list[int],
+                                   n_cols: int = 9, h: int = 3000, w: int = 2400):
+    """造一页：n_cols 条竖界行 + 若干行文字 + bar_y 处一条细下版框。
+
+    文字行故意做得比版框线"投影更高"——这正是现实里真线被压过的情形
+    （68 页金标上约 1/3 的页就是这样）。
+    """
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs = np.linspace(300, w - 300, n_cols).astype(int)
+    for x in xs:                                   # 竖界行，贯穿版心
+        mask[200:bar_y, x:x + 3] = 1.0
+    for ty in text_rows:                           # 文字行：又宽又浓
+        for x in xs[:-1]:
+            mask[ty:ty + 46, x + 12:x + 150] = 1.0
+    mask[bar_y:bar_y + 4, 300:w - 300] = 1.0       # 下版框：细
+    return mask, xs
+
+
+def _vlines_from_xs(xs):
+    return [LineMatch(position=float(x), slope=0.0, score=300.0, width=3.0, proj=900.0)
+            for x in xs]
+
+
+# ⚠️ 这里**没有**"救援把线从错误位置换到真线"的正向单测，是刻意的：
+# 合成图复现不了那个真实失败模式。试过三种造法（文字实心块 / 带笔画间隙的
+# 文字 / 两条横线二选一），版框线横跨全宽、投影总是赢，压不过去；把竖界行
+# 画到下线为止又会让下线的投影被竖线端点污染，两条线地位不对等。真实页面里
+# 真线之所以输，是因为**它自己磨损断续**——那需要真图，不是合成图。
+# 正向效果由 68 页整页坐标金标回归覆盖（mean 12.3→8.5、max 110.8→39.9），
+# 见 `03-下边框优化.md` 的"2026-09-12 续二"。下面两条只钉住**保守分支**：
+# 不该出手时不出手、邻域内没候选时不瞎换。
+
+
+def test_rescue_bottom_keeps_result_when_already_consistent():
+    """现役结果已经跟全册基准一致时，救援不该出手（dev 未超门限）。"""
+    h = 3000
+    bar_y = h - 330
+    mask, xs = _page_with_text_and_bottom_bar(bar_y, text_rows=[bar_y - 500])
+    base = find_horizontal_border(mask, "bottom")
+    same = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
+                                  book_gap=h - base.position)
+    assert same.position == base.position
+    assert same.slope == base.slope
+
+
+def test_rescue_bottom_refuses_when_nothing_near_reference():
+    """基准邻域内没有任何候选时必须保留现役结果，不能瞎换。
+
+    护栏的"不救"分支：vol01 dev_set 页60、以及每册 3~5 页非金标页都走这条。
+    """
+    h = 3000
+    bar_y = h - 330
+    mask, xs = _page_with_text_and_bottom_bar(bar_y, text_rows=[bar_y - 210])
+    cur = find_horizontal_border(mask, "bottom")
+    # 把基准指到一个根本没有线的位置（页面正中），邻域内必然无候选
+    out = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
+                                 book_gap=float(h // 2))
+    assert out.position == cur.position

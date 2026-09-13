@@ -28,7 +28,7 @@ from ..core.spec import page_key
 from ..errors import EncodeFailed, ImageMissing, NotFound, ProductMissing, Unsupported
 from ..gates.query import GATE_TIER_COLOR, gate_column_tier
 from ..products.store import ProductStore
-from ..utils.preclean import band_boundary, band_ink_ratio, precleaned_path
+from ..utils.preclean import band_boundary, band_ink_ratio, effective_raw_path, precleaned_path
 
 
 def encode_png(img: np.ndarray, scale: float | None = None) -> bytes:
@@ -58,10 +58,16 @@ def draw_vline(img: np.ndarray, v: dict, W: int, H: int, color, thick: int = 3) 
 
 def overlay(book: str, step: str, page: int,
             store: ProductStore | None = None) -> np.ndarray:
-    """把某一步的产物画回原图。画法逐字照搬自 `console/app.py::_overlay`。"""
+    """把某一步的产物画回底图。
+
+    底图走 `effective_raw_path`——登记过预清理且产物已生成的页，管线（Step1
+    起）实际处理的是 precleaned 那张，叠图也必须画在同一张上，不能悄悄用
+    原图（2026-09-12 修复：原来这里直接读 `b.raw_path`，登记过 preclean 的
+    页叠图会显示反色带还在，跟管线实际结果对不上）。
+    """
     b = load_book(book)
     st = store or ProductStore()
-    img = cv2.imread(str(b.raw_path(page)))
+    img = cv2.imread(str(effective_raw_path(b, page)))
     if img is None:
         raise ImageMissing("原图缺失")
     H, W = img.shape[:2]
@@ -137,7 +143,9 @@ def preclean_overlay(book: str, page: int) -> np.ndarray:
 
     走 `book.preclean` 里登记的规则现算边界，不经 ProductStore——preclean 不是
     `core/step.py` 注册的 Step，没有数值产物可读（见 utils/preclean.py 模块说明）。
-    原图右上角原点与其它叠图一致，这里用 `x_tr_to_tl` 转成 cv2 的左上角原点画。
+    `band_boundary` 直接在标准 cv2/numpy 数组上算，xs 已经是左上角原点、
+    从左到右——不经过 anchor 那套右上角原点体系，画图不用再转换，
+    转了反而会把边界左右镜像（2026-09-12 修复过一次这个坑）。
     """
     b = load_book(book)
     rules = (b.preclean or {}).get(page)
@@ -147,7 +155,6 @@ def preclean_overlay(book: str, page: int) -> np.ndarray:
     if img is None:
         raise ImageMissing("原图缺失")
     gray = cv2.imread(str(b.raw_path(page)), cv2.IMREAD_GRAYSCALE)
-    H, W = gray.shape[:2]
     for r in rules:
         if r.get("kind", "inverted_band") != "inverted_band":
             continue
@@ -160,15 +167,13 @@ def preclean_overlay(book: str, page: int) -> np.ndarray:
             seg = (xs >= x0) & (xs <= x1)
             if not seg.any():
                 continue
-            top_pts = np.array([(int(round(x_tr_to_tl(x, W))), int(y))
+            top_pts = np.array([(int(x), int(y))
                                 for x, y in zip(xs[seg], top[seg])], dtype=np.int32)
-            bot_pts = np.array([(int(round(x_tr_to_tl(x, W))), int(y))
+            bot_pts = np.array([(int(x), int(y))
                                 for x, y in zip(xs[seg], bot[seg])], dtype=np.int32)
             cv2.polylines(img, [top_pts], False, (0, 0, 255), 3)
             cv2.polylines(img, [bot_pts], False, (255, 0, 0), 3)
-            xr = int(round(x_tr_to_tl(int(x1), W)))
-            xl = int(round(x_tr_to_tl(int(x0), W)))
-            cv2.line(img, (xl, y_probe), (xr, y_probe), (0, 200, 200), 1)
+            cv2.line(img, (int(x0), y_probe), (int(x1), y_probe), (0, 200, 200), 1)
     return img
 
 

@@ -188,12 +188,39 @@ HR_FAT_WD_MAX = 32
 HR_FAT_INK_MIN = 0.75
 HR_PAIR_MIN = 20          # 内外边框峰间距，实测 23~38
 HR_PAIR_MAX = 55
-HR_DIST_MIN = 90          # 内边框离主上边框多远，实测 117~137
+HR_DIST_MIN = 75          # 内边框离主上边框多远。vol01 实测 117~137，**vol02 有 80.3**
+                          # （p101 c6「聖祖仁皇帝」），90 把它挡在门外。放到 75 在
+                          # 两份金标上都无代价，见 HR_WALL_MIN_FRAC 的记录。
 HR_DIST_MAX = 210
 HR_CLUSTER_DY = 18        # 同一抬头块内相邻列的 inner_y 容差，实测差 2~8
 HR_WALL_STRIP_W = 6
 HR_WALL_SEARCH = 25       # 墙线在名义界行 x 附近的搜索半径
-HR_WALL_MIN_FRAC = 0.5
+HR_WALL_MIN_FRAC = 0.40
+# **0.5 → 0.40，与 HR_DIST_MIN 90 → 75 是同一次改动**（2026-09-12）。
+#
+# 起因：vol02/vol03 整册 head_raise 探到 0 个，下游代价是 Step2 把列图裁在
+# 版框线上、抬头字整个落在图外，Step3 丢首字（vol02 p11 c4/c5 丢「御」、
+# p101 c6 丢「聖」，且 Step9 文本层读着通顺、不报阙文，**丢字看不见**）。
+#
+# 查下来**不是算法坏了，是两个常数卡在边界上**——原算法（水平投影找内/外
+# 边框 + 墙线校验）本身是对的，vol01 18 列金标复核 15/18 命中、零误报、
+# inner_y 中位误差 0.55px：
+#   - vol02/11 c4/c5：内边框**找到了**（dist=143.5、ink=1.00），块被墙线判据
+#     拒掉，墙覆盖率 **0.48 vs 门槛 0.50**，差两个百分点；
+#   - vol02/101 c6：内边框 dist=**80.3**，差 HR_DIST_MIN 不到 10px。
+# 两处都是"就差一点"，不是判据选错了量。
+#
+# 改动代价实测（两份金标都跑了）：
+#   | 判据 | vol01 列级金标 18 列 | 页级金标 70 页（8 页有抬头）| vol02 全书 |
+#   |---|---|---|---|
+#   | 90 / 0.50（旧）| 命中 15 漏 3 误报 0 | 命中 **6/8** 误报 0 | 1 列 |
+#   | 75 / 0.40（新）| 命中 15 漏 3 误报 0 | 命中 **8/8** 误报 0 | 6 列 / 3 页 |
+# vol01 逐位不变，页级召回 6/8 → 8/8，两份金标零误报。vol01/32 那 3 条仍漏
+# （`estimated=true`，外边框根本没印上），那是另一回事，不在本次范围。
+#
+# ⚠️ 别再往下放：0.35 时 vol01 金标才多命中 1 条，而墙线判据是挡"普通页把
+# 装饰墨迹当台阶"的唯一防线（`detect_head_raise` 文档串记过：不看墙线时
+# 9/14/142 三页的"上諭"全是假阳性）。0.40 是"两份金标都零误报"的下沿。
 HR_DEFAULT_PAIR_GAP = 38  # 外边框整条没印上时，按实测中位间距推
 
 
@@ -854,13 +881,46 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     return out, 3, w80_med, w80_max
 
 
+def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
+    """整册「页高 − 下版框 y」的中位数，给下版框跨页先验救援当基准。
+
+    **不需要金标**：三册实测，整册算法输出的中位数与金标真基准只差 0~1px
+    （vol02 完全相等 327.0，vol03 差 1.0）；截尾均值反而更差，众数分箱在
+    vol02 上差 5.5px，都不如直接取中位数。三册的值也高度一致（325/327/326），
+    但仍按册现算而不写死常数——换一种版式的书就未必是这个数。
+
+    异常页高的扫描要先排掉（封面类整页近全黑的图会给出荒谬的"版框"，
+    实测 vol01/1 等页高 1359 vs 正常 ~3100）。这里按页高中位数 ±15% 过滤；
+    这类页在生产里本来也已被闸1判为 skip。
+    """
+    hs = [g.shape[0] for g in grays]
+    if not hs:
+        return None
+    med_h = float(np.median(hs))
+    vals = []
+    for g in grays:
+        h, w = g.shape[:2]
+        if abs(h - med_h) > 0.15 * med_h:
+            continue
+        mask = (g < ink_threshold).astype(np.float64)
+        m = find_horizontal_border(mask, "bottom")
+        vals.append(h - (m.position + m.slope * ((w - 1) / 2.0 - w / 2.0)))
+    return float(np.median(vals)) if vals else None
+
+
 def detect_borders(gray: np.ndarray, expected_cols: int,
-                    ink_threshold: int = 128) -> BorderDetectionResult:
+                    ink_threshold: int = 128,
+                    book_bottom_gap: float | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
     一 + N-1 条内部界行），跟 `peak_line_search.find_vertical_lines` 的
     `expected_count` 用法一致。
+
+    `book_bottom_gap`：整册「页高 − 下版框 y」的中位数，用于下版框的跨页先验
+    救援（见 `peak_line_search._rescue_bottom`）。不传就不救，行为与改动前
+    逐位相同——单页函数拿不到整册统计，只能由调用方按册算好传进来，
+    `measure_book_bottom_gap()` 就是干这个的。
     """
     h, w = gray.shape[:2]
     mask = (gray < ink_threshold).astype(np.float64)
@@ -869,7 +929,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     # 上下边框曾经各 1.4s、并成 2 线程有收益；分块 BLAS 之后各只剩 0.17s，
     # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
     top_old = find_horizontal_border(mask, "top")
-    bottom_old = find_horizontal_border(mask, "bottom")
+    bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
+                                        book_gap=book_bottom_gap)
 
     verticals = [_vline_to_new(m, w, h) for m in vlines_old]
     # 新坐标系 x 向左递增：旧坐标里越靠右(x_old越大) -> 新坐标x_new越小，
