@@ -39,6 +39,34 @@ class BookSpec:
     #: 用户 2026-09-06 定的口径：**依赖文字可以，但必须「这套书用、下套书不用」**——
     #: 所以一律进 Book 配置，不写死在 eval / 通道代码里。
     jiazhu: dict = field(default_factory=dict)
+    #: 下版框跨页先验的基准：整册「页高 − 下版框 y」的中位数（yaml 的
+    #: `bottom_gap:`）。给了才启用 Step1 的下版框救援，不给则行为与加这套
+    #: 机制之前逐位相同。
+    #:
+    #: **怎么标定**：`utils/border_geometry.measure_book_bottom_gap(整册灰度图)`
+    #: 跑一次，把数写进 yaml。不在流水线里现算是因为 `border_detect` 是逐页
+    #: step，现算等于每页重跑一遍全书。**不需要金标**：三册实测，整册算法
+    #: 输出中位数与金标真基准只差 0~1px。
+    #:
+    #: ⚠️ 换书必须重新标定，别抄。三册恰好都落在 325~327px，但那是同一套
+    #: 《四庫全書總目》武英殿本的版式，换一种版式没有理由仍是这个数。
+    bottom_gap: float | None = None
+    #: 页级字格高（period）的书级先验（yaml 的 `period_prior:`）。给了才启用
+    #: 闸2 的**空栏页兜底**：栏内没有字的页推不出纵向节律，`estimate_shared_period`
+    #: 必然抛错（vol01 p62/p158/p206 就是这样整页被拦的）。这类页界行是齐的、
+    #: 九列切得出来，该正常产出一个"各格皆空"的页，不该算异常。
+    #:
+    #: **只在估不出来时兜底**，能估出来的页一律用当场估的值——所以给了这个数
+    #: 也不会改变任何正常页的产物（有单测守着）。
+    #:
+    #: **怎么标定**：`utils/row_boundaries.measure_book_period()`，或直接取整册
+    #: 已有产物里正文页 period 的中位数。**不需要金标**：正文页的 period 是
+    #: 书级常量，vol01 正文 108 页实测 115.0±1.67px、vol02 186 页 113.0±2.37px。
+    #:
+    #: ⚠️ 别拿全书页混着算——职名/目录页的字距本来就不同（vol01 roster 中位
+    #: 70、std 15.6），混进来会把中位数拉偏。只用 page_type == body 的页。
+    #: 换书必须重新标定。
+    period_prior: float | None = None
     pages: list[int] = field(default_factory=list)   # 空 = 扫目录
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
@@ -84,8 +112,14 @@ class BookSpec:
             return sorted(set(int(p) for p in selector))
         if isinstance(selector, str) and selector in self.sets:
             return sorted(set(int(p) for p in self.sets[selector]))
+        # 中文输入法下全角逗号/连字符/空格极常见（控制台页码框实测踩到：
+        # 输入 "161，51" 直接 500）。切分前统一归一化，顺带把空格也当分隔符。
+        expr = (str(selector).replace("，", ",").replace("、", ",")
+                .replace("－", "-").replace("—", "-").replace("~", "-")
+                .replace("　", " "))
+        expr = ",".join(expr.split())          # 空格分隔也认
         pages: set[int] = set()
-        for part in str(selector).split(","):
+        for part in expr.split(","):
             part = part.strip()
             if not part:
                 continue
@@ -161,6 +195,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         sets={str(k): [int(p) for p in v]
               for k, v in (d.get("sets") or {}).items()},
         jiazhu=dict(d.get("jiazhu") or {}),
+        bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
+        period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
         pages=[int(p) for p in d.get("pages", [])],
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),

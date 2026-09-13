@@ -38,6 +38,11 @@ def _run_gate(book: str, page: int):
     ctx = RunContext(bk, store, cache)
     if not ctx.has_product("cells", page):
         return None
+    # 2026-09-12 闸3接了闸1的 page_type（consumes 里的强依赖）——历史上
+    # 在闸1接入页型判据之前就跑过 Step3 的页，没有闸1产物，引擎层面会先
+    # 判「上游缺失」而不会跑到闸3，这里跟引擎口径一致地跳过，不是回避 bug。
+    if not ctx.has_product("border_detect_gate_manifest", page):
+        return None
     gate_step = STEPS["row_segment_gate"]
     out = gate_step.run_page(ctx, page)
     return out["row_segment_gate_manifest"]

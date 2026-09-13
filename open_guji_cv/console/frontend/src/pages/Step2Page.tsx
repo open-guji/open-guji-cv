@@ -33,7 +33,7 @@ export function Step2Page() {
   return (
     <div>
       <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
-      <ProgressGatePanel book={book} title="闸2（Step2→3 交接闸）" gateId="column_gate" pages={pageSel} />
+      <ProgressGatePanel book={book} title="总览" gateId="column_gate" pages={pageSel} />
       <ProductViewer book={book} step="column_gate" pages={pages} />
     </div>
   )
