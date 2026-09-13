@@ -15,7 +15,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-LabelOrigin = Literal["human", "align", "synth", "model"]
+LabelOrigin = Literal["human", "align", "synth", "model", "derived"]
+"""human=人工标注；align=v2 对齐产生，带噪声；synth=合成；model=模型自评（不能当验收基准）；
+derived=算法某次运行的确定性输出，经人核实后固化为**行为回归基准**（不是标"世界的真值"，
+是标"这段逻辑当时该给出的正确答案"）。2026-09-13 补充：2026-09-11 新增的三个回归集分片——
+`char-segmentation/align-anchor`（Step5-d 锚定判据回归）、`char-segmentation/align-gate`
+（Step5-d 采信闸回归）、`guji-markdown-render`（Step9 坐标转字符位回归）——一直用这个值
+（各分片 100% derived，无缝隙），但这个 Literal 当时没跟着扩。不是数据脏，是类型定义
+漏更新：这三类都是「用户验证过某次算法输出符合预期，把这次输出本身当回归金标钉死」，
+与 align（对齐算法当场产生、允许噪声、需要人再筛）语义不同，不能合并成同一个值。"""
 Status = Literal["active", "stale", "uncertain", "retired"]
 
 

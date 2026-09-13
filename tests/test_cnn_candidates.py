@@ -168,7 +168,11 @@ def test_rrf_weights_tilt_toward_heavier_source():
     rev = rrf(hog, cnn, k=3, weights=(2.0, 1.0))
     assert rev[0] == "甲", f"权重反过来该换边：{rev}"
     # 生产权重的序：embedding 检索最强（91.9%）、HOG 最弱且怕磨损——扫描定的
-    assert EMB_WEIGHT >= CNN_WEIGHT >= HOG_WEIGHT > 0
+    # 2026-09-07 起 HOG_WEIGHT 改为 0.0（不是账本漂移，是有意关停）：换真刻本切图
+    # 模板后 embedding 已完全覆盖 HOG 能给的信号，HOG 检索不再参与 RRF 加权；
+    # checkpoint 缺席时仍保留兜底调用路径，旧权重可随时调回（见
+    # cnn_candidates.py 模块 docstring "HOG/CNN 检索批处理化" 一节）。
+    assert EMB_WEIGHT >= CNN_WEIGHT >= HOG_WEIGHT >= 0
 
 
 @pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")

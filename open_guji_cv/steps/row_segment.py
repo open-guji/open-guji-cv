@@ -45,6 +45,10 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
+        # 人裁回流：touching-cuts 金标里这本书已裁决的切点，按 (页,列) 筛出
+        # slot_above → kind 的小表传给 segment_column 收敛（见其 docstring）。
+        from ..eval.touching import resolved_cuts as _resolved_cuts
+        book_resolved = _resolved_cuts(ctx.book.id)
         out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
@@ -65,12 +69,15 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
+            col_resolved = {slot: kind for (pg, col, slot), kind in book_resolved.items()
+                            if pg == page and col == gc.col}
             r = segment_column(
                 img, period=gate.period, n_body_slots=n_body_col, n_raised=n_raised_col,
                 border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band)
+                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
+                resolved_cuts=col_resolved or None)
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
@@ -90,6 +97,7 @@ class RowSegmentStep(Step):
                     x0=float(c.x0), x1=float(c.x1), kind=c.kind, sub=c.sub, order=int(c.order),
                     gap_center=None if c.gap_center is None else float(c.gap_center),
                     ink_ratio=float(c.ink_ratio), raised=bool(c.raised),
+                    suspect_jiazhu_body=bool(getattr(c, "suspect_jiazhu_body", False)),
                     seam_top=c.seam_top, seam_bottom=c.seam_bottom,
                     quad_page=(None if mapper is None else
                                [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),

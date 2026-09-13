@@ -97,6 +97,7 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
 
     bad = 0
     added_fields = 0
+    healed = 0
     for k in sorted(set(legacy) & set(new)):
         a, b = norm(legacy[k]), norm(new[k])
         # **新增字段不算迁移失败，丢字段才算**（2026-09-04）。
@@ -108,6 +109,16 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
         if extra and {f: a.get(f) for f in set(a)} == {f: b.get(f) for f in set(a)}:
             added_fields += 1
             continue
+        # 2026-09-13 补：上面这条只认「纯新增字段、旧字段一字不动」，但
+        # `healed_by` 场景恰恰是**字段值也变了**（quality: truncated → clean
+        # 才叫「治好」），字面符合本注释举的例子却被下面 `a != b` 当失败——
+        # 注释写的意图和代码判据本来就对不上，不是本轮改坏的。收紧口径：
+        # 只有 `healed_by` 是本轮新加、且非空（写明了理由）时才算「已解释的
+        # 修正」，避免把没写 healed_by 理由的静默值变化也放过。
+        healed_by_new = b.get("healed_by") and not a.get("healed_by")
+        if healed_by_new and a != b:
+            healed += 1
+            continue
         if a != b:
             bad += 1
             if bad <= 3:
@@ -115,6 +126,8 @@ def compare(shard: str, store: GoldStore) -> tuple[bool, list[str]]:
                 msgs.append(f"  ✗ {k}: {json.dumps(diff, ensure_ascii=False)[:220]}")
     if added_fields:
         msgs.append(f"  {added_fields} 条只是**新增**了字段（注解，不算失败）")
+    if healed:
+        msgs.append(f"  {healed} 条带 healed_by 说明的**已解释修正**（复核改判，注明了理由，不算失败）")
     ok = bad == 0
     msgs.insert(0, f"{shard}: 共 {len(new)} 条，逐条比对 {'一致 ✓' if ok else f'有 {bad} 条不一致 ✗'}")
     return ok, msgs
