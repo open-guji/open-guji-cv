@@ -170,3 +170,55 @@ def test_blocking_gate_reads_all_event_batches(monkeypatch, tmp_path):
 
     monkeypatch.setattr(deps, "event_log", lambda: _Log(["volX:7:3:5"]))
     assert C.blocking_cutline_cases("volX", [7], _St()) == [], "裁过之后应立刻放行"
+
+
+def _gold_item(page, col, slot, verdict, cand, status="active", book="vol02"):
+    from open_guji_cv.gold.item import Anchor, GoldItem
+    return GoldItem(id=f"{book}:{page}:{col}:{slot}",
+                    anchor=Anchor(book=book, page=page, col=col, slot=slot),
+                    expected={"verdict": verdict, "cand": cand}, status=status)
+
+
+def test_resolved_cuts_only_keeps_ok_and_moved_with_a_known_kind(monkeypatch):
+    """人裁回流的数据源：只收 `verdict in (ok, moved)` 且 `cand` 是候选池
+    认识的 kind——`overlap`（切哪都伤字）、`idk`（拿不准）是真难例，不收敛，
+    见 `.claude/doc/row_boundaries_design.md`「5 条都不对」节。"""
+    from open_guji_cv.eval.touching import resolved_cuts
+    from open_guji_cv.gold.store import GoldStore
+
+    items = [
+        _gold_item(5, 8, 14, "ok", "seam_narrow"),
+        _gold_item(6, 4, 17, "moved", "straight"),
+        _gold_item(9, 1, 3, "overlap", None),
+        _gold_item(9, 1, 9, "idk", None),
+        _gold_item(20, 2, 2, "ok", "seam_narrow", status="retired"),
+    ]
+    monkeypatch.setattr(GoldStore, "list", lambda self, shard: items)
+
+    out = resolved_cuts("vol02")
+    assert out == {(5, 8, 14): "seam_narrow", (6, 4, 17): "straight"}
+
+
+def test_resolved_cuts_scopes_to_the_requested_book(monkeypatch):
+    from open_guji_cv.eval.touching import resolved_cuts
+    from open_guji_cv.gold.store import GoldStore
+
+    items = [_gold_item(5, 8, 14, "ok", "seam_narrow", book="vol01"),
+             _gold_item(5, 8, 14, "ok", "seam_wide", book="vol02")]
+    monkeypatch.setattr(GoldStore, "list", lambda self, shard: items)
+
+    assert resolved_cuts("vol01") == {(5, 8, 14): "seam_narrow"}
+    assert resolved_cuts("vol02") == {(5, 8, 14): "seam_wide"}
+
+
+def test_resolved_cuts_empty_when_store_unavailable(monkeypatch):
+    """没有金标数据集（新工作区/取不到）时返回空表，不炸——与 `gold_ids()`
+    同一容错口径。"""
+    from open_guji_cv.eval.touching import resolved_cuts
+    from open_guji_cv.gold.store import GoldStore
+
+    def boom(self, shard):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(GoldStore, "list", boom)
+    assert resolved_cuts("vol02") == {}

@@ -3,6 +3,7 @@ import numpy as np
 
 from open_guji_cv.utils import row_boundaries as fit_mod
 from open_guji_cv.utils.row_boundaries import (
+    _apply_resolved_cut,
     estimate_period,
     estimate_shared_period,
     find_blank_intervals,
@@ -304,6 +305,84 @@ def test_segment_column_returns_none_when_dp_has_no_solution():
     img = _synth_column_image()
     # 只有 21 格的信号，硬要切 40 格：候选撑不出来，应当判无解而不是给错结果
     assert fit_mod.segment_column(img, period=SLOT_H, n_body_slots=40) is None
+
+
+# ── 人裁回流：resolved_cuts 收敛候选池 ──────────────────────────
+
+def _straight_and_seam_narrow():
+    return [fit_mod.SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0),
+            fit_mod.SeamCandidate(kind="seam_narrow", y=[100] * 5, seam_ink=0, dev_max=8)]
+
+
+def test_apply_resolved_cut_collapses_to_the_gold_candidate():
+    """人裁回流：金标认定 `seam_narrow` 时，候选池收敛成那一条，`chosen` 归零
+    （池子只剩一条，指向它自己）——顺序闸按 `len(candidates)>=2` 挡人，收敛后
+    这条切点自动放行，不用另改闸的代码。"""
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), chosen=1,
+                                        resolved_kind="seam_narrow")
+    assert [c.kind for c in cands] == ["seam_narrow"]
+    assert chosen == 0
+
+
+def test_apply_resolved_cut_ignored_when_kind_not_in_pool():
+    """金标认定的 kind 不在当前候选池里（比如几何变了、这次没算出这种切法）
+    时按兵不动——静默套错误的收敛比继续挡人更危险。"""
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, chosen=0, resolved_kind="seam_wide")
+    assert cands == original
+    assert chosen == 0
+
+
+def test_apply_resolved_cut_noop_when_unresolved():
+    """没有金标裁决（`resolved_kind=None`）时原样返回，行为与改动前完全一致。"""
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, chosen=1, resolved_kind=None)
+    assert cands == original
+    assert chosen == 1
+
+
+def test_segment_column_resolved_cuts_param_reaches_the_named_slot(monkeypatch):
+    """`segment_column(resolved_cuts=...)` 按 `slot_above` 把裁决转发到
+    `_apply_resolved_cut`，其余切点不受影响。
+
+    DP 是弹性的：贴局部墨块会被它绕开，很难在合成图上稳定地"钉死"某条边界
+    恰好落在墨点上（试过多种贴墨方案，DP 总能找到附近代价更低的位置移开几
+    像素）。所以这里 monkeypatch `fit_row_boundaries` 的返回值，把 3 号边界
+    强按到贴墨的 y——只解耦"边界位置"与"DP 怎么找边界"这两件事，候选生成
+    以下的真实逻辑（`ink_bin`/`find_seam`/`_apply_resolved_cut`）照常跑。"""
+    calls: list[tuple[int, str | None]] = []
+    real_apply = fit_mod._apply_resolved_cut
+
+    def spy(cands, chosen, resolved_kind):
+        calls.append((len(cands), resolved_kind))
+        return real_apply(cands, chosen, resolved_kind)
+
+    monkeypatch.setattr(fit_mod, "_apply_resolved_cut", spy)
+
+    img = _synth_column_image()
+    y = GRID_Y0 + 3 * SLOT_H
+    img[y - 1:y + 2, 37:148] = 0              # 3 号格线贴一条墨带（模拟粘连）
+
+    real_fit = fit_mod.fit_row_boundaries
+
+    def pinned_fit(*a, **kw):
+        res = real_fit(*a, **kw)
+        if res is not None:
+            b = list(res.boundaries)
+            b[3] = float(y)                   # 钉死 3 号边界落在贴墨处
+            res.boundaries = b
+        return res
+
+    monkeypatch.setattr(fit_mod, "fit_row_boundaries", pinned_fit)
+
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
+                               resolved_cuts={3: "seam_narrow"})
+    assert r is not None
+    assert len(calls) == 1                    # 全列唯一有墨的格线，只有它进候选生成分支
+    assert calls[0][1] == "seam_narrow"        # 转发的正是 3 号的金标 kind
+    cp = next(c for c in r.cut_candidates if c.slot_above == 3)
+    assert [c.kind for c in cp.candidates] == ["seam_narrow"]   # 已按金标收敛
+    assert cp.chosen == 0
 
 
 # ── 负数 slot：抬头多出来的格 ────────────────────────────────

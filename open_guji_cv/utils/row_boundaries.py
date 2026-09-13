@@ -945,6 +945,24 @@ def effective_body_slots(n_body: int, border_top: float | None, border_bottom: f
     return n_body
 
 
+def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
+                         resolved_kind: str | None) -> tuple[list[SeamCandidate], int]:
+    """人裁回流（2026-09-13）：`resolved_kind` 是 touching-cuts 金标对这条切点
+    的裁决（`straight`/`seam_narrow`/`seam_wide`），命中候选池里同 kind 的那条
+    就把候选收敛成它一个——顺序闸按 `len(candidates)>=2` 判阻塞
+    （`review/cards.py::cut_pending`），收敛后自动放行，不用改闸的代码。
+
+    `resolved_kind` 为 None（未裁决）或候选池里没有这个 kind（比如几何变了、
+    这次没算出金标认定的那种切法）时原样返回——静默套错误的收敛比继续挡人
+    更危险。"""
+    if resolved_kind is None:
+        return cands, chosen
+    match_idx = next((i for i, c in enumerate(cands) if c.kind == resolved_kind), None)
+    if match_idx is None:
+        return cands, chosen
+    return [cands[match_idx]], 0
+
+
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
@@ -953,6 +971,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
                     seam_band: int = 20,
+                    resolved_cuts: dict[int, str] | None = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -997,6 +1016,16 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       额外的格。
     - `detect_jiazhu`：关掉就只出 char/blank 两类（`raised` 仍照算，它跟
       夹注判定完全独立）。
+    - `resolved_cuts`：`{slot_above: 候选 kind}`，人裁回流用（2026-09-13）。
+      命中的切点直接把 `cut_candidates` 收敛成那一条候选（`chosen=0`），
+      不再是"多候选"——顺序闸（`review/cards.py::cut_pending`）按
+      `len(candidates)>=2` 判阻塞，收敛之后这条切点自动放行，不用改闸的代码。
+      调用方（`steps/row_segment.py`）从 `eval/touching.py::resolved_cuts()`
+      按本页本列筛出这本书的金标传入；只收 `verdict in (ok, moved)` 的裁决
+      （`overlap`/`idk` 是真难例，仍要留给人，见
+      `.claude/doc/row_boundaries_design.md`「5 条都不对」节）。金标里没有
+      对应 kind 的候选（比如几何变了，候选池不再产出 `seam_narrow`）时
+      **原样不收敛**——按旧逻辑走多候选，静默套错误的收敛比继续挡人更危险。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1182,6 +1211,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     and cands[1].seam_ink == 0 and cands[1].dev_max < 10):
                 cands = [cands[1]]
                 chosen = 0
+            # 4) 人裁回流：见 `_apply_resolved_cut` docstring。
+            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot))
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen)
