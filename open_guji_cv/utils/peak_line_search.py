@@ -679,10 +679,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
         # 探到线之后整体再往下让 BOTTOM_SAFETY_MARGIN——补的是判定口径的
         # 不对称（往下无害、往上切字），不是算法有偏。详见该常数上方的说明。
-        if BOTTOM_SAFETY_MARGIN:
-            result = LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
-                               slope=result.slope, score=result.score,
-                               width=result.width, proj=result.proj)
+        result = LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
+                           slope=result.slope, score=result.score,
+                           width=result.width, proj=result.proj)
     return result
 
 
