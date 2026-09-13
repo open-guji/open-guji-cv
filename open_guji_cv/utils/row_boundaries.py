@@ -1196,3 +1196,43 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
 def _slot_to_pos_local(slot: int, n_raised: int) -> int:
     return slot + n_raised + 1 if slot < 0 else slot + n_raised
+
+
+def measure_book_period(store, book_id: str, pages=None,
+                        body_pages=None) -> float | None:
+    """整册正文页 `period` 的中位数，给 `Book.period_prior` 当标定值。
+
+    **不需要金标**：正文页的字格高是版式常量，实测 vol01 正文 108 页
+    115.0±1.67px、vol02 186 页 113.0±2.37px——std 不到 2.5px，比逐页当场估
+    稳得多（与 `border_geometry.measure_book_bottom_gap` 那条跨页一致性先验
+    同一个套路）。
+
+    ⚠️ **只能用正文页**。职名/目录页的字距本来就不同（vol01 roster 中位 70、
+    std 15.6，toc std 13.2），混进来会把中位数拉偏十几个 px。`body_pages`
+    不给时用一个粗筛兜底：取全书 period 的中位数并剔掉偏离超过 15% 的页
+    ——那批偏得远的正是职名/目录页。**能拿到 page_type 金标时应当直接传
+    `body_pages`**，粗筛只是没有金标时的退路。
+
+    读现成的闸2产物，不重跑管线；返回 None 表示可用样本不足。
+    """
+    import statistics
+
+    from ..core.spec import page_key
+
+    vals: list[float] = []
+    for pg in (pages if pages is not None else []):
+        if body_pages is not None and pg not in body_pages:
+            continue
+        g = store.read(book_id, "column_gate", page_key(pg), "gate_manifest")
+        # 兜底来的 period 不能再参与标定——那是循环论证（拿先验算先验）。
+        if g is None or not g.period or getattr(g, "period_from_prior", False):
+            continue
+        vals.append(float(g.period))
+    if len(vals) < 5:
+        return None
+    if body_pages is None:
+        med = statistics.median(vals)
+        vals = [v for v in vals if abs(v - med) <= 0.15 * med]
+        if len(vals) < 5:
+            return None
+    return round(statistics.median(vals), 2)

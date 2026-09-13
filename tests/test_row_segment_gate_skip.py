@@ -130,8 +130,10 @@ def test_partially_solved_page_is_not_unsupported(tmp_path):
 def test_mixed_reject_reasons_stay_anomalous(tmp_path):
     """整页全拒、但拒因**掺了别的来路**（未过交接闸）→ 不判版式未支持。
 
-    这条是红线：vol01 p62/p158/p206 就是这个形态（闸1 漏判的空白页，Step2
-    估不出周期），它们该留在异常里被查，不能被静默归进"非异常"桶。"""
+    这条是红线：真故障会表现成"整页全拒但拒因杂"，必须留在异常里被查，
+    不能被静默归进"非异常"桶。（vol01 p62/p158/p206 一度是这个形态——
+    空栏页估不出页级周期；那条已由闸2 的 period_prior 兜底根治，见
+    test_column_gate_period_prior.py。这里守的是判据本身的严格性。）"""
     out = _run(tmp_path, PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=1, ok=False, error="弹性 DP 无解", n_body_slots=21),
         ColumnCells(col=2, ok=False, error="未过交接闸: 页级未过 L1", n_body_slots=21),
@@ -143,8 +145,8 @@ def test_mixed_reject_reasons_stay_anomalous(tmp_path):
 def test_skip_page_takes_precedence_over_unsupported(tmp_path):
     """闸1 已判 skip 的页：L0 优先，不重复判 L0u——页型只有闸1一个权威来源。"""
     gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["L0：页型判定为「blank」，无正文栏格，不套列窗口"],
-        n_cols=9, expected_cols=9, page_type="blank", page_type_policy="skip")
+        page=PAGE, admitted=False, reject=["L0：页型判定为「cover」，无正文栏格，不套列窗口"],
+        n_cols=9, expected_cols=9, page_type="cover", page_type_policy="skip")
     ctx = _ctx(tmp_path, gate1, PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=i, ok=False, error="弹性 DP 无解", n_body_slots=21)
         for i in range(1, 10)]))

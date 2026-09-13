@@ -717,11 +717,25 @@ def _body_page(h=2400, w=1700):
     return g
 
 
-def test_page_type_gate_skips_blank_cover_label():
+def test_page_type_gate_skips_cover_and_label():
+    """没有正文栏格的页才 skip。**blank 不在此列**——见下一条。"""
     from open_guji_cv.clustering.page_type import classify_page_type
-    assert classify_page_type(_blank_page())[1] == "skip"
     assert classify_page_type(_cover_page())[1] == "skip"
     assert classify_page_type(_label_page())[1] == "skip"
+
+
+def test_blank_is_a_body_subtype_not_skip():
+    """空栏页是 body 的子类，策略 standard（2026-09-13 用户定分类层级）。
+
+    界行分成九列的就算 body；blank 只是「栏内没字」这个子类。它的界行是齐
+    的、九列切得出来，该正常切、产出「各格皆空」的页，不该跳过。
+    判成 skip 会让它整页无产物，还会混进异常台账（vol01 p62/p158/p206 的
+    老毛病就是这么来的）。"""
+    from open_guji_cv.clustering.page_type import (BODY_SUBTYPES, SKIP_TYPES,
+                                                   classify_page_type)
+    assert classify_page_type(_blank_page()) == ("blank", "standard")
+    assert "blank" in BODY_SUBTYPES
+    assert "blank" not in SKIP_TYPES
 
 
 def test_page_type_gate_keeps_body():

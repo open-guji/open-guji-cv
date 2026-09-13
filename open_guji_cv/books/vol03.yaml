@@ -12,6 +12,9 @@ raw_dir: data_full/zongmu/vol03
 raw_pattern: "{page}.png"
 expected_cols: 9
 chars_per_line: 21
+# 页级字格高的书级先验：闸2 估不出页级周期时兜底（空栏页栏内无字、推不出纵向节律）。38 页（粗筛，本册尚无 page-type 金标）。
+# 2026-09-13 用 measure_book_period() 标定；只在估不出来时用，正常页一律用当场估的值。换书要重标。
+period_prior: 115.0
 # dev_set 待定：这是全新册第一次跑，还没实测哪些页有弯界行/截断/抬头等
 # 特殊情况——先用连续页试跑，观察后再挑代表页填回来（同 vol01/vol02 的
 # dev_set 选法：踩过坑的页才收进来）。

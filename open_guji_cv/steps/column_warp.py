@@ -68,7 +68,7 @@ class ColumnWarpStep(Step):
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         gate: BorderDetectGateManifest = ctx.product("border_detect_gate_manifest", page)
         if gate.page_type_policy == "skip":
-            # 闸1 判定这页没有正文栏格（封面/书签/空白/牌记）——射影/去噪/清理
+            # 闸1 判定这页没有正文栏格（封面/书签/牌记）——射影/去噪/清理
             # 都是白费功夫（page_type.py 模块头实测：书签页照切会切出 126 个
             # 无意义的块）。产出空列表，闸2 的 L1（探出列数!=版式列数）会自然
             # 拒收，不用在这里重复判一次「该不该拦」。
