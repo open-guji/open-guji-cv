@@ -340,7 +340,9 @@ def _collect() -> dict:
     call("POST /api/gold/{shard:path}/migrate", "char-segmentation/instances", dry_run=True)
     call("POST /api/gold/{shard:path}/drift", "char-segmentation/instances", apply=False)
 
-    # 七 · 评测与判据（8）
+    # 七 · 评测与判据（10）——此前一直标「8」，`llm_online_calls`/`overview_summary`
+    # 加进来时（对应 `EXPECTED_ROUTES` 账本 63→64、62→63）忘了同步这行标签，
+    # 实际早就是 10 条；2026-09-13 对账补标，不是本次新增的调用
     call("GET /api/evals")
     call("POST /api/evals/{eval_id}/run", EVAL_ID, timeout=120)
     call("GET /api/quality", book=BOOK, pages=PAGES)
@@ -462,17 +464,33 @@ def test_route_inventory():
     候选缩略图 `GET /api/glyph-match/exemplar/{instance_id}.png`、板块②聚合
     `GET /api/glyph-match/{book}/summary`，66 → 69；2026-09-12 总览页「运行
     参数」卡片按书开关 Step5-c OCR候选，`runs.py` 加
-    `PUT /api/books/{book}/ocr_candidates`（写回 book yaml），69 → 70。）
+    `PUT /api/books/{book}/ocr_candidates`（写回 book yaml），69 → 70。
+
+    2026-09-13 对账发现漏记的 4 条（都是先前几次并行改动就已合入，只是这条
+    账本没跟上，不是这次新加的 bug）：`review.py` Step4 随机层裁决台
+    （commit d615c6e2ab/f10c0a6143，2026-09-11）加 `GET /api/cell-shrink-rand/sample`、
+    `GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png`；
+    `step9.py` Step9 坐标转字符位现场渲染面板（commit 65fdcf9b14/428e8c1ee9，
+    2026-09-11～12）加 `GET /api/step9/render/{book}`、
+    `GET /api/step9/reflow/{book}`。这 4 条都先于「69→70」那次批量提交
+    （f7c7c6e54e）就已合入主干，该次提交只顺手记了它自己新加的
+    `ocr_candidates` 一条，没有回头补记，70 → 74。）
     """
     got = sorted(_endpoints())
-    assert len(got) == 70, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 74, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
 
 
 def test_route_snapshot():
-    """50 条路由各调一次，与基线逐条比对。"""
+    """52 条路由各调一次，与基线逐条比对。
+
+    2026-09-13：期望数从 50 改成 52——不是新加了调用，是「七 · 评测与判据」
+    这一节早先加了 `GET /api/llm_online_calls/{book}` 与 `GET /api/overview_summary`
+    两条调用（随 `EXPECTED_ROUTES` 账本 63→64、62→63 同一批改动进来），但这条
+    断言和那行段落标签一直没跟着改，实测本来就是 52，不是本轮改坏。
+    """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
     if not (REPO / "products" / BOOK / "seed_admit").exists():
@@ -484,12 +502,12 @@ def test_route_snapshot():
         snap = _collect()
     finally:
         _cleanup(hist_before)
-    assert len(snap) == 50, f"只采到 {len(snap)} 条"
+    assert len(snap) == 52, f"只采到 {len(snap)} 条"
 
     if WRITE or not SNAP.exists():
         SNAP.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True),
                         encoding="utf-8")
-        print(f"\n基线已落盘：{SNAP}（49 条）。重构每推一步再跑一次比对。")
+        print(f"\n基线已落盘：{SNAP}（{len(snap)} 条）。重构每推一步再跑一次比对。")
         return
 
     base = json.loads(SNAP.read_text(encoding="utf-8"))
@@ -516,10 +534,11 @@ def test_route_snapshot():
             print(f"\n──── 差异 {k}")
             for path, a, b in _deep_diff(base.get(k), snap.get(k))[:8]:
                 print(f"  {path or '<根>'}\n    基线: {a}\n    现在: {b}")
-    assert not diffs, f"{len(diffs)}/49 条与基线不同：{diffs}"
-    n_ok = 49 - len([k for k in changed if k in SANCTIONED])
-    print(f"\n{n_ok}/49 条快照零差异"
-          + (f"，另 {49 - n_ok} 条是 SANCTIONED 里点名的有意变化" if n_ok < 49 else "")
+    n_total = len(snap)
+    assert not diffs, f"{len(diffs)}/{n_total} 条与基线不同：{diffs}"
+    n_ok = n_total - len([k for k in changed if k in SANCTIONED])
+    print(f"\n{n_ok}/{n_total} 条快照零差异"
+          + (f"，另 {n_total - n_ok} 条是 SANCTIONED 里点名的有意变化" if n_ok < n_total else "")
           + f"（基线 {SNAP}）")
 
 
@@ -528,7 +547,10 @@ EXPECTED_ROUTES = [
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
-    "GET /api/cache/{book}/{kind}/{key}.png", "GET /api/cutline/cases",
+    "GET /api/cache/{book}/{kind}/{key}.png",
+    "GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png",
+    "GET /api/cell-shrink-rand/sample",
+    "GET /api/cutline/cases",
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/glyph-match/exemplar/{instance_id}.png",
@@ -548,7 +570,8 @@ EXPECTED_ROUTES = [
     "GET /api/review/context-img/{book}/{page}/{col}/{slot}.png",
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
-    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/steps", "GET /api/throughput",
+    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/reflow/{book}",
+    "GET /api/step9/render/{book}", "GET /api/steps", "GET /api/throughput",
     "GET /api/variants/book", "GET /api/variants/groups",
     "GET /v1/", "GET /{full_path:path}",
     "POST /api/batches", "POST /api/batches/{batch_id}/harvest", "POST /api/batches/{batch_id}/route",

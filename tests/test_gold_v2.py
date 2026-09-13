@@ -298,10 +298,31 @@ def test_real_migrated_shards_are_items():
     #                （10 truncated + 1 contaminated，页 11/151/137/60/70）
     #                核实办法：带 source_events 的条目共 23 条，其中
     #                只挂 1 个事件的 11 条就是本轮新增——不是迁移漏条。
-    # 数字对不上时先查是「金标长大了」还是「迁移漏了」，别直接改数。
-    expect = {"border-detection/column-split": 60,
+    #   instances   614 → 1024：不是一次性跳变，是 open-guji-dataset 里 16 条
+    #                已提交历史（commit db01e024 起到 bf168364）逐批累积——
+    #                vol01/vol02 大批正文人审事件回流、rand_human 分片新增
+    #                （Step4 随机层真人核校）、多轮标注账复核（愈合/保留改判）。
+    #                核实办法：`git log --oneline -- char-segmentation/instances/items.jsonl`
+    #                能看到全部落地的提交，且该文件在 dataset 仓 `git status`
+    #                里干净（无未提交改动）——是已经定档的金标，不是迁移漏条。
+    #   column-split 60 → 130：**不是本轮改坏，是 dataset 仓有 70 条未提交的
+    #                新增**（`git status` 在 open-guji-dataset 里能看到
+    #                `border-detection/column-split/items.jsonl` 有本地改动未
+    #                commit）。新增的 70 条 id 前缀全是 `head:`（如
+    #                `head:vol01:26`），是 2026-09-12～13 新上线的「抬头列级
+    #                标注台」（commit 3ecd2e07b8 附近，overview 任务卡
+    #                「Step1 抬头检测」）产出的人裁金标（label_origin=human，
+    #                source_events 指向 `evt_vol0{1,2}-head-review_*`），verdict
+    #                取值是 yes/no（8 yes / 62 no），与原来 60 条 `cols:` 前缀
+    #                的 ok/extra/miss verdict 体系是两套并存的判据，不冲突。
+    #                原 60 条 `cols:` 条目内容与分布完全未变（仍是
+    #                ok 56 / extra 2 / miss 2，见下方断言）。数字对不上先查
+    #                是「金标长大了」还是「迁移漏了」，别直接改数——这次两条
+    #                都是长大：一条是已提交的真实历史演进，一条是同仓另一
+    #                功能刚产出、还没来得及 commit 的真实新金标。
+    expect = {"border-detection/column-split": 130,
               "char-segmentation/column-warp": 115,
-              "char-segmentation/instances": 614,
+              "char-segmentation/instances": 1024,
               "page-type": 394,
               "column-layout": 36}
     for sh, n in expect.items():
@@ -309,12 +330,20 @@ def test_real_migrated_shards_are_items():
             pytest.skip(f"{sh} 还没迁")
         assert store.carrier(sh) == "items"
         assert len(store.list(sh)) == n
-    # 第一轮界行裁决：ok 56 / extra 2 / miss 2
+    # 第一轮界行裁决（id 前缀 cols:，60 条）：ok 56 / extra 2 / miss 2。
+    # 2026-09-13 起同一分片里并存第二套判据——抬头列级标注台产出的
+    # id 前缀 head:（70 条，verdict 取 yes/no）——按前缀分开统计，
+    # 不然两套 verdict 词表混在一个 dist 里对不上任何一边的账。
     dist: dict[str, int] = {}
+    head_dist: dict[str, int] = {}
     for i in store.list("border-detection/column-split"):
         v = i.expected.get("verdict")
-        dist[v] = dist.get(v, 0) + 1
+        if i.id.startswith("head:"):
+            head_dist[v] = head_dist.get(v, 0) + 1
+        else:
+            dist[v] = dist.get(v, 0) + 1
     assert dist == {"ok": 56, "extra": 2, "miss": 2}
+    assert head_dist == {"yes": 8, "no": 62}
 
 
 @needs_dataset

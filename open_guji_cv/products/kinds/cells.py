@@ -28,6 +28,7 @@ class CellRec(BaseModel):
     gap_center: float | None = None
     ink_ratio: float = 0.0
     raised: bool = False
+    suspect_jiazhu_body: bool = False      # 疑似被缝位骗过的整宽正文字（jiazhu_split.suspect_full_width_cells）
     quad_page: list[Point] | None = None   # 原图规范空间四角 [(x,y)…]，右上原点
     seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 utils/seam.py
     seam_bottom: list[int] | None = None

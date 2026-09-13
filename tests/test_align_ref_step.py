@@ -87,9 +87,24 @@ def test_gold_derivation_matches_between_cached_and_live_recompute(tmp_path):
     cached = align_book("vol01", [24], store)
     # 内容相同、路径不同的语料副本：指纹（按路径 mtime/size 算）必然对不上
     # 缓存的 corpus_fingerprint，强制走现算兜底路径。
+    #
+    # 2026-09-13 订正：这里曾经复制的是 `zongmu_wuyingdian_reference.txt`
+    # （武英殿参考本，34.5 万字）而不是 `align_book`/`AlignRefStep` 两边
+    # `DEFAULT_CORPUS` 真正用的 `zongmu_wenyuange_wikisource.txt`（文渊阁
+    # wikisource 本，278.8 万字）——两个文件内容完全不同（不是同内容换
+    # 路径），"现算"分支实际是拿一部小得多的参考本去锚同一批字位。字位本身
+    # 179/179 全部锚上且逐字相同，只有 `op_run`（equal/replace 段长度，
+    # 由 `difflib` 按整段上下文切出来）从 63 变 139——语料越短，能与查询串
+    # 连续匹配的窗口越容易被判成一整段大 equal，段长自然变。这是**测试
+    # fixture 抄错了文件名**（`eb7f93c2e7` 建这条测试时就写死了这个文件，
+    # 一直没被执行到，直到 vol01 page24 的 align_ref 产物就位才真正跑到这
+    # 里），不是 `align_page`/`_aligned_chars`/`label_page` 算法在两条路径
+    # 上分叉——把复制源换成默认语料自身（同内容、只是落盘到另一个临时路径，
+    # 才是这条测试真正想测的「缓存 vs 现算，语料给的信息完全一致时必须逐条
+    # 相同」）后，两边逐条相同，包括 op_run。
+    from open_guji_cv.gold.v2_align import DEFAULT_CORPUS as GOLD_DEFAULT_CORPUS
     copy = tmp_path / "corpus_copy.txt"
-    copy.write_text(corpus_path("zongmu_wuyingdian_reference.txt").read_text(encoding="utf-8"),
-                    encoding="utf-8")
+    copy.write_text(Path(GOLD_DEFAULT_CORPUS).read_text(encoding="utf-8"), encoding="utf-8")
     live = align_book("vol01", [24], store, corpus_path=copy)
 
     assert cached[0].anchored and live[0].anchored

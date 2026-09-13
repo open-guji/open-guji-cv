@@ -187,6 +187,18 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("guard_ceiling", "glyph-match/triplets", arg_kind="none", pythonpath=True,
        title="护栏天花板", needs=("heavy", "dump"),
        note="没有位置参数；--dump 必填，输入是 eval_match_pairs --dump 的 npz"),
+    # 下版框：金标路径写死在脚本里（frozen_absolute.jsonl），没有位置参数。
+    _e("bottom_offset_gold", "border-detection/bottom-offset", arg_kind="none",
+       out_flag="--json-out",
+       note="金标路径写死在脚本里（frozen_absolute.jsonl），不接受位置参数；"
+           "--hard-only 只跑困难页子集"),
+    _e("bottom_offset_oneside", "border-detection/bottom-offset", arg_kind="none",
+       out_flag="--json-out",
+       note="下版框单侧口径（宁下勿上）；金标路径同 bottom_offset_gold，写死在脚本里"),
+    _e("unsupported_layout", "page-type", arg_kind="none", out_flag="",
+       needs=("products",),
+       note="金标路径写死在脚本里（page-type/expected.json）；--book/--products 可选，"
+           "不走注册表的位置参数机制；只读现成 cells 产物，不重跑管线"),
 ]}
 
 
