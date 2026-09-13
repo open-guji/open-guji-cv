@@ -111,18 +111,11 @@ class RunContext:
     def _page_path(self, page: int) -> "Path":
         """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
 
-        产物由 `python -m open_guji_cv.cli_v2 preclean <book>` 生成，落在
-        `precleaned/<book>/<page>.png`。登记了却还没生成的，这里会提醒一句再退回原图 ——
-        免得改了 yaml 忘了跑，下游却在悄悄用脏图。
+        逻辑见 `utils.preclean.effective_raw_path`——叠图（`render.overlay`）
+        与这里必须共用同一份判断，不能各写一遍。
         """
-        if page in (getattr(self.book, "preclean", {}) or {}):
-            from ..utils.preclean import precleaned_path
-            p = precleaned_path(self.book.id, page)
-            if p.exists():
-                return p
-            self.log(f"[Step0] {self.book.id} p{page} 登记了预清理但产物不存在，"
-                     f"先用原图；跑 `python -m open_guji_cv.cli_v2 preclean {self.book.id}` 生成")
-        return self.book.raw_path(page)
+        from ..utils.preclean import effective_raw_path
+        return effective_raw_path(self.book, page, log=self.log)
 
     def raw_size(self, page: int) -> tuple[int, int]:
         h, w = self.raw_page(page).shape[:2]
