@@ -12,8 +12,18 @@
 3. `RunContext.raw_page` 优先读 precleaned 里那张；没有就读原图。
    所以 Step1 及其下游一行代码都不用改，未登记的页也完全不受影响。
 
-目前只有一种坏区：`inverted_band`
---------------------------------
+两种坏区：`inverted_band`（梯形带）与 `inverted_rect`（矩形）
+------------------------------------------------------------
+挑哪个看**坏区的形状**，不是看大小：
+
+- `inverted_band` —— 边界是多段梯形、要逐列量出来的（扫描时的横向故障）；
+- `inverted_rect` —— 边界本来就是齐整矩形（抬头框整格被翻，如 vol07 p46 的
+  「勅祇」两格，四边就是框线本身）。这种**不能**用 band：band 靠「列间纸列在
+  区内是一整段纯黑」定上下沿，格内的字笔画会把那段黑截断，量出来的沿顺着笔画跑，
+  实测把「祇」啃成几块黑斑。规则形状直接给四个数，不要去"量"。
+
+下面讲的是 `inverted_band`
+--------------------------
 一条横带内**黑白是反的**（纸成黑、字成白）。不是墨污 —— 是扫描/二值化在这一带翻了极性，
 所以修法是把带内的点整体反回来，字迹一笔不少地还原（抹除法会连笔画一起抹掉，是有损的）。
 
@@ -39,11 +49,12 @@
 
 已登记的反色带（2026-09-12，十册 1695 页全扫后）
 ------------------------------------------------
-共 11 页：vol01 p48；vol02 p151/152/153；vol04 p17；vol05 p22/p178；
-vol08 p13；vol09 p174/p175；vol10 p135。各册本底墨占比分布高度一致
-（中位 0.167-0.185 / p99 0.240-0.255），所以 `BODY_INK_GATE=0.25` 各册通用，
-不必按册重标。唯一的例外是 vol05 p178（带压在字最粗的一段上，修完 0.261），
-走单页 `gate_override: 0.27`。
+共 14 页：vol01 p48；vol02 p136/151/152/153；vol04 p17；vol05 p22/p178；
+vol07 p46（`inverted_rect`）/p78；vol08 p13；vol09 p174/p175；vol10 p135。
+各册本底墨占比分布高度一致（中位 0.167-0.185 / p99 0.240-0.255），
+所以 `BODY_INK_GATE=0.25` 各册通用，不必按册重标。两处例外走单页 `gate_override`：
+vol05 p178（带压在字最粗的一段上，0.267 → 闸 0.28）、
+vol07 p46（矩形把抬头框的框线圈了进来，那是真墨，0.290 → 闸 0.30）。
 
 找候选用 `scripts/scan_inverted_bands.py`（判据已改成按页自量，不含固定像素；
 **贴着版框的带是它的已知盲区，要另跑 `--edge`**）。
@@ -173,7 +184,33 @@ def invert_band(gray: np.ndarray, *, segments: list[list[int]],
     return out
 
 
-_OPS = {"inverted_band": invert_band}
+def invert_rect(gray: np.ndarray, *, x0: int, x1: int, y0: int, y1: int,
+                ink_threshold: int = 128) -> np.ndarray:
+    """把一个**矩形**区域整体黑白反转，返回新图；入参不改。四边都是闭区间。
+
+    什么时候用它而不是 `inverted_band`：坏区边界本来就是**齐整的矩形**时。
+    典型是抬头框整格被翻（vol07 p46 的「勅祇」两格）——那种坏区的四边就是
+    框线本身，不是「一级级抬高的梯形」。
+
+    `inverted_band` 的逐列量法在这种区上会**把字啃坏**：它靠「列间纸列在带内
+    是一整段纯黑」定上下沿，而矩形内的字笔画会把那段黑截断，量出来的沿就顺着
+    笔画跑（实测 p46 的「祇」被啃成几块黑斑）。矩形是已知的规则形状，直接给
+    四个数，不要去"量"。
+    """
+    out = gray.copy()
+    out[y0:y1 + 1, x0:x1 + 1] = 255 - gray[y0:y1 + 1, x0:x1 + 1]
+    return out
+
+
+def rect_mask(shape: tuple[int, int], *, x0: int, x1: int,
+              y0: int, y1: int) -> np.ndarray:
+    """`invert_rect` 反转的那块区域，布尔 mask。供闸0核算墨占比用。"""
+    m = np.zeros(shape, bool)
+    m[y0:y1 + 1, x0:x1 + 1] = True
+    return m
+
+
+_OPS = {"inverted_band": invert_band, "inverted_rect": invert_rect}
 
 
 def _check_gate(kind: str, before: float, after: float,
@@ -237,10 +274,14 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
               if k not in ("kind", "page", "note", "gate_override", "gate_reason")}
         th = kw.get("ink_threshold", 128)
 
-        if kind == "inverted_band":
-            mask = band_mask(out, segments=kw["segments"], y_lo=kw["y_lo"], y_hi=kw["y_hi"],
-                             y_probe=kw["y_probe"], ink_threshold=th,
-                             ctx=kw.get("ctx", 170), smooth=kw.get("smooth", 31))
+        if kind in ("inverted_band", "inverted_rect"):
+            if kind == "inverted_band":
+                mask = band_mask(out, segments=kw["segments"], y_lo=kw["y_lo"],
+                                 y_hi=kw["y_hi"], y_probe=kw["y_probe"], ink_threshold=th,
+                                 ctx=kw.get("ctx", 170), smooth=kw.get("smooth", 31))
+            else:
+                mask = rect_mask(out.shape, x0=kw["x0"], x1=kw["x1"],
+                                 y0=kw["y0"], y1=kw["y1"])
             before = band_ink_ratio(out, mask, th)
             out = fn(out, **kw)
             after = band_ink_ratio(out, mask, th)

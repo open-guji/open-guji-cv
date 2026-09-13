@@ -181,3 +181,53 @@ def test_gate_override_beyond_its_own_threshold_still_blocked():
 
     with pytest.raises(PrecleanGateError, match="闸0未过"):
         _check_gate("inverted_band", 0.80, 0.35, 0.27, "理由")
+
+
+# ── inverted_rect：坏区本来就是齐整矩形 ──────────────────────────────
+def _rect_page(h=300, w=400, rect=(80, 320, 90, 210)):
+    """造一页：白纸黑字（墨占比约 0.15，与正文本底同量级），rect 这块整体反色。"""
+    g = np.full((h, w), 255, np.uint8)
+    for x in range(40, w - 40, 60):          # 几道竖着的"字"
+        g[60:260, x:x + 10] = 0
+    x0, x1, y0, y1 = rect
+    g[y0:y1 + 1, x0:x1 + 1] = 255 - g[y0:y1 + 1, x0:x1 + 1]
+    return g
+
+
+def test_invert_rect_restores_and_leaves_outside_alone():
+    """矩形内反回来、矩形外一个像素都不动。"""
+    from open_guji_cv.utils.preclean import invert_rect
+
+    rect = (80, 320, 90, 210)
+    orig = _rect_page(rect=(0, -1, 0, -1))   # 不反色的"干净版"
+    bad = _rect_page(rect=rect)
+    x0, x1, y0, y1 = rect
+
+    out = invert_rect(bad, x0=x0, x1=x1, y0=y0, y1=y1)
+    assert (out[y0:y1 + 1, x0:x1 + 1] == orig[y0:y1 + 1, x0:x1 + 1]).all(), "矩形内没还原"
+    outside = np.ones(bad.shape, bool)
+    outside[y0:y1 + 1, x0:x1 + 1] = False
+    assert (out[outside] == bad[outside]).all(), "矩形外被动了"
+    assert (bad == _rect_page(rect=rect)).all(), "入参被就地改了"
+
+
+def test_apply_preclean_routes_inverted_rect_through_gate():
+    """inverted_rect 也走闸0（不是只有 inverted_band 才核算）。"""
+    rect = (80, 320, 90, 210)
+    x0, x1, y0, y1 = rect
+    rules = [{"kind": "inverted_rect", "x0": x0, "x1": x1, "y0": y0, "y1": y1}]
+
+    out, notes = apply_preclean(_rect_page(rect=rect), rules)
+    assert "inverted_rect" in notes[0] and "过闸" in notes[0]
+    assert "带内墨占比" in notes[0], "报的应是区内墨占比，不是全页"
+
+
+def test_inverted_rect_over_gate_is_blocked():
+    """矩形反完仍然墨太多 —— 闸照拦，没有因为换了算子就放水。
+
+    构造：区内本来就是大片白纸，反完成了大片黑，墨占比远超闸。
+    """
+    g = np.full((200, 200), 255, np.uint8)
+    rules = [{"kind": "inverted_rect", "x0": 50, "x1": 149, "y0": 50, "y1": 149}]
+    with pytest.raises(PrecleanGateError, match="闸0未过"):
+        apply_preclean(g, rules)
