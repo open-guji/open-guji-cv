@@ -6,6 +6,9 @@ raw_dir: data_full/zongmu/vol01     # 1-bit 扫描存成 PNG；与 rebuild_src �
 raw_pattern: "{page}.png"
 expected_cols: 9
 chars_per_line: 21
+# 页级字格高的书级先验：闸2 估不出页级周期时兜底（空栏页栏内无字、推不出纵向节律）。108 页正文 115.0±1.67px。
+# 2026-09-13 用 measure_book_period() 标定；只在估不出来时用，正常页一律用当场估的值。换书要重标。
+period_prior: 115.0
 # dev_set：固定的分层小页集，控制台默认对它跑。清楚页 / 抬头页 / 已知难页各取几张，
 # 与 border-detection 金标页（14 页）和实审点名页有交集，便于对照。
 # ⚠️ **只放正文页**（page_type == body）。原先混进过 vol01/119，它是**职名页**：

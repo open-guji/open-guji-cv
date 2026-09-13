@@ -75,7 +75,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.4", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.5", unit="column",
         consumes=("column_windows", "column_image"), produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
@@ -118,6 +118,8 @@ class ColumnGateStep(Step):
             band_ws.append(float(b1 - b0))
 
         period = ref_w = None
+        page_flags: list[str] = []
+        period_from_prior = False
         if not page_reject:
             if len(projs) < max(2, expected // 2):
                 page_reject.append(
@@ -126,7 +128,26 @@ class ColumnGateStep(Step):
                 try:
                     period = round(float(estimate_shared_period(projs, borders, dst_ws)), 2)
                 except ValueError as e:
-                    page_reject.append(f"L1：页级周期估不出来（{e}）")
+                    # 空栏页兜底（2026-09-13）：栏内没有字就推不出纵向节律，
+                    # 这不是故障——界行齐全、九列切得出来，该正常产出一个
+                    # 「各格皆空」的页。用书级 period 先验顶上。
+                    #
+                    # 为什么书级常量靠得住：正文页的 period 是版式常量，实测
+                    # vol01 正文 108 页 115.0±1.67px、vol02 186 页 113.0±2.37px
+                    # （与 `bottom_gap` 那条跨页一致性先验同一个套路）。
+                    #
+                    # **只在估不出来时兜底**——能估出来的页一律用当场估的值，
+                    # 所以配了这个数也不会改变任何正常页的产物。
+                    if ctx.book.period_prior:
+                        period = float(ctx.book.period_prior)
+                        period_from_prior = True
+                        page_flags.append(
+                            f"L1f：页级周期估不出来（{e}），已用书级先验 "
+                            f"{period:g}px 兜底——多半是空栏页（栏内无字，无纵向节律）")
+                    else:
+                        page_reject.append(
+                            f"L1：页级周期估不出来（{e}）"
+                            f"；本册未配 period_prior，空栏页无法兜底")
                 ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
 
@@ -159,12 +180,41 @@ class ColumnGateStep(Step):
                 b0, b1 = c.band
                 prof = (img[:, int(b0):int(b1)] < p.ink_threshold).mean(axis=1)
 
-                ink = np.flatnonzero(prof > p.span_ink)
-                if ink.size:
-                    span = float(ink[-1] - ink[0])
-                    extra = int(span / period - expected_slots + p.span_margin)
-                    if extra > 0:
-                        n_raised_hint[c.col] = min(extra, p.max_raised_hint)
+                # ⚠️ **hint 是「探测失败时的兜底」，跟抬头框互斥，不能叠加**
+                # （2026-09-12 修）。原设计本来就是二选一：
+                #   探到抬头框 → 窗口抬到框上（`border_top_in_column > 0`），
+                #                 多出来的格由 DP 按窗口高度自己切出来；
+                #   没探到     → 窗口裁在版框线上，靠墨跨度 hint 补格数。
+                # 两条路各算一次「多几格」，同时生效就会**把同一格数加两遍**。
+                #
+                # 此前一直不暴露，是因为 vol02/vol03 的抬头框一个都没探到
+                # （`HR_DIST_MIN`/`HR_WALL_MIN_FRAC` 卡在边界，同日已修），
+                # 只有兜底那条在跑。抬头框一恢复探测，21 列立刻双算：
+                # vol02/11 c4「御定易經通注」、101 c6「聖祖仁皇帝」人裁 n_raised=1，
+                # 算法给 2——`slot -2` 才是真在框上的字，`slot -1`（定/祖）是被
+                # 推进负号区的普通正文字。vol01 那 18 列是**历史遗留的同一个 bug**
+                # （vol01 探测一直是好的，只是没人对过账）。
+                #
+                # 跨度这个量本身也只在「裁在版框线上」时才准：实测同一列
+                # 旧裁法 21.40~21.56（hint 0~1，对），抬到框上 22.52~22.65
+                # （hint 2，错）——它量的是「窗口里装得下几个字」，窗口一变
+                # 基准就没了。所以这里按窗口来源分流，而不是去调 `span_margin`。
+                if c.border_top_in_column > 1.0:
+                    # 探到抬头框：格数**由窗口高度定**，不再量墨跨度。
+                    # 窗口上界已经抬到抬头框内沿之上（`page_column_windows` 减了
+                    # `HEAD_PAD=30`），所以框上高度 / period 就是「框上装得下几格」。
+                    # 实测零重叠：抬头列 1.02~1.55（vol02 三条、vol01 十二条），
+                    # 普通列恒 0.00 —— `int()` 取整即可，不需要再标定阈值。
+                    n_raised_hint[c.col] = min(
+                        max(1, int(c.border_top_in_column / period)),
+                        p.max_raised_hint)
+                else:
+                    ink = np.flatnonzero(prof > p.span_ink)
+                    if ink.size:
+                        span = float(ink[-1] - ink[0])
+                        extra = int(span / period - expected_slots + p.span_margin)
+                        if extra > 0:
+                            n_raised_hint[c.col] = min(extra, p.max_raised_hint)
 
                 if c.raised or c.border_top_in_column > 1.0:
                     continue                      # 真抬头列的 top_slack 走原路
@@ -218,7 +268,8 @@ class ColumnGateStep(Step):
                 band_width=float(c.band[1] - c.band[0]),
             ))
         return {"gate_manifest": GateManifest(
-            page=page, admitted=page_ok, reject=page_reject, period=period, ref_w=ref_w,
+            page=page, admitted=page_ok, reject=page_reject, flags=page_flags,
+            period=period, ref_w=ref_w, period_from_prior=period_from_prior,
             column_widths=widths, median_width=med_w, columns=recs, contract=CONTRACT)}
 
 
@@ -229,6 +280,9 @@ attach_gate("column_warp", GateSpec(
     levels=(
         GateLevel(id="L1", unit="page",
                   desc="探出的列数是否等于版式列数——整页性的问题才放这一层"),
+        GateLevel(id="L1f", unit="page",
+                  desc="页级周期估不出来时是否用书级 period_prior 兜底——flag，"
+                       "不拦（空栏页栏内无字、推不出纵向节律，不是故障）"),
         GateLevel(id="L1c", unit="column",
                   desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗"),
         GateLevel(id="L2", unit="column",

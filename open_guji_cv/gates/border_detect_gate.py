@@ -101,7 +101,7 @@ attach_gate("border_detect", GateSpec(
     id="border_detect_gate", unit="page", on_fail="block",
     levels=(
         GateLevel(id="L0", unit="page",
-                  desc="页型是否判定为 skip 类（封面/书签/空白/牌记）——block 级，"
+                  desc="页型是否判定为 skip 类（封面/书签/牌记）——block 级，"
                        "这些页没有正文栏格，套列窗口是无中生有"),
         GateLevel(id="L0c", unit="page",
                   desc="页型是否为 custom（如上諭，列数与正文不同）或判不准——"

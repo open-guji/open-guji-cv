@@ -59,6 +59,13 @@ class GateManifest(BaseModel):
     page: int
     admitted: bool                          # L1 页级
     reject: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+    """页级 flag（不影响 `admitted`）。现有一种：L1f——页级周期估不出来但用
+    书级 `period_prior` 兜底了（多半是空栏页）。与列级 `GateColumn.flags`
+    分开：那个说的是某一列的毛病，这个说的是整页共享量怎么来的。"""
+    period_from_prior: bool = False
+    """`period` 是书级先验兜底来的，不是这一页估出来的。**判定落盘**，
+    下游/复核要能直接读，不必去解析 `flags` 里的中文句子。"""
     period: float | None                    # 页级纵向字距（全部列算）
     ref_w: float | None                     # 页级列距中位数（全部列算）
     column_widths: list[float]
