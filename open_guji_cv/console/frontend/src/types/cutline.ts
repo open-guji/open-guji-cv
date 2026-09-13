@@ -53,6 +53,11 @@ export interface CutlineCasesResponse {
   n_r2s: number
   n_done: number
   n: number
+  // 本批里真拿到「整理本期望」两字的条数——锚定失败时是 0，但页面照常渲染，
+  // 所以要显式报出来（2026-09-12）。
+  n_expect?: number
+  // 语料读成仓内小样本时的警告文案；null = 正常。
+  warn?: string | null
   cases: CutlineCase[]
 }
 

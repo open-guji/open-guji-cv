@@ -85,8 +85,19 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         c["crop_y1"] = min(c["col_h"], c["y1"] + pad)
         c["img"] = (f"/api/cutline/img/{book}/{c['page']}/{c['col']}.png"
                     f"?y0={c['crop_y0']}&y1={c['crop_y1']}")
+    # 语料读错了（控制台进程没带 GUJI_WORKSPACE）→ 整理本锚不上，卡片上
+    # 「整理本期望」那两个字是拿 6000 字样本硬锚出来的噪声。这种情况下页面
+    # 照常渲染、没有任何报错，人只会觉得「附带信息不准确」而不会想到是环境
+    # 变量——所以必须把它摆到返回值里，让面板显式警告。2026-09-12 实锤。
+    from ...core.workspace import corpus_path, using_sample_corpus
+    warn = None
+    if using_sample_corpus():
+        warn = (f"读到的是仓内小样本语料（{corpus_path('zongmu_wenyuange_wikisource.txt')}），"
+                "整理本锚不上，「整理本期望」不可信。"
+                "起控制台前 export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace")
+    n_expect = sum(1 for c in picked if c.get("char_above") and c.get("char_below"))
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
-            "n": len(picked), "cases": picked}
+            "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked}
 
 
 def _attach_candidates(st, book: str, picked: list[dict]) -> None:

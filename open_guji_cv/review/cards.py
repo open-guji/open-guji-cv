@@ -135,11 +135,16 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
         return []   # 取不到用例（无产物/无金标）就当没有闸，不挡人
 
     done = T.gold_ids()
+    # `read()` 要 batch 名；这里要的是**所有**批次，走 `iter_all()`。
+    # 2026-09-12 修：原先写成无参 `read()`，`TypeError` 被下面的裸 except
+    # 吞掉，整个循环从未执行过——裁完一条切线，要等有人跑 harvest 把事件
+    # 收进 `touching-cuts` 金标，顺序闸才认账；面板「落定 → 字卡放行」这条
+    # 即时反馈链一直是哑的。
     try:
-        for e in deps.event_log().read():
+        for e in deps.event_log().iter_all():
             if e.kind == "cutline":
                 done.add(e.target.key)
-    except Exception:
+    except FileNotFoundError:
         pass    # 没有事件日志（新工作区）不该让整个审查面板挂掉
 
     # 产物里哪些切点是多候选的（key = (页, 列, 上格格位) → 候选条数）

@@ -69,6 +69,19 @@ def cmd_status(args) -> None:
 
 def cmd_console(args) -> None:
     from .console.app import serve
+    from .core.workspace import describe, using_sample_corpus, using_sample_db
+
+    # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
+    # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
+    # `GUJI_WORKSPACE` 只写在 ~/.bashrc 里，从 PowerShell/VS Code 起的控制台
+    # 读到仓内 17 KB 样本语料，vol02 全书 186 页锚定失败、Step7 卡片上的
+    # 「整理本期望」全是噪声，排查了很久才想到是环境变量。
+    for k, v in describe().items():
+        print(f"  {k:12} {v}")
+    if using_sample_db() or using_sample_corpus():
+        print("\n  ⚠️  没设 GUJI_WORKSPACE（或工作区数据不全）——库/语料会落到仓内小样本，\n"
+              "     整理本锚不上、库匹配全是 unsure。真跑书请先：\n"
+              "     export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace\n")
     serve(port=args.port, open_browser=not args.no_browser)
 
 
