@@ -41,6 +41,15 @@ class RowSegmentGateManifest(BaseModel):
     admitted: bool
     reject: list[str] = Field(default_factory=list)
     columns: list[RowSegmentGateColumn] = Field(default_factory=list)
+    unsupported_layout: bool = False
+    """这页是否「版式未支持」（职名/目录类：每列字数非版式格数且逐列不同）。
+
+    **判定落盘、不在前端算**——前端从 `reject` 文本里 startswith 前缀分桶只是
+    显示层的事，谁要复核判据得能直接读这个字段与 `n_unsupported_columns`，
+    不必去解析中文句子。判据见 `clustering/page_type.py`。
+    """
+    n_unsupported_columns: int = 0
+    """本页「弹性 DP 无解」的列数（判据的原始计数，供复核）。"""
 
     def admitted_columns(self) -> list[RowSegmentGateColumn]:
         return [c for c in self.columns if c.admitted] if self.admitted else []
