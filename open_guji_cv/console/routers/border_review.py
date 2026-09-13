@@ -27,6 +27,7 @@ router = APIRouter()
 _CARD_BUILDERS = {
     "cols": bc.cols_cards,
     "head": bc.head_cards,
+    "headcol": bc.headcol_cards,
     "outer": bc.outer_cards,
     "colborder": bc.colborder_cards,
     "pageline": bc.page_bottom_cards,
@@ -57,7 +58,18 @@ def api_border_review_verdicts(batch: str) -> dict:
     log = deps.event_log()
     out: dict[str, dict] = {}
     for e in sorted(log.read(batch), key=lambda x: (x.batch, x.seq)):
-        if e.kind not in ("verdict", "border_class", "border_offset"):
+        if e.kind not in ("verdict", "border_class", "border_offset", "head_raise"):
+            continue
+        if e.kind == "head_raise":
+            # 列级抬头：三个字段一起回读（`raised` 当 verdict 用，卡片的
+            # 已裁高亮靠它），否则刷新后「抬高几格」「首字被切」两栏会空着，
+            # 人会以为没存上而重标一遍。
+            v = e.payload.get("raised")
+            if v is None:
+                continue
+            out[e.target.key] = {"verdict": v, "raised": v,
+                                  "n_raised": e.payload.get("n_raised"),
+                                  "head_cut": e.payload.get("head_cut")}
             continue
         if e.kind == "border_offset":
             v = e.payload.get("verdict")
@@ -84,7 +96,7 @@ def _encode(img, q: int = 82) -> Response:
 @router.get("/api/border-review/img/{book}/{page}.jpg")
 @maps_http
 def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
-                          col: int = 0, w: int = 560) -> Response:
+                          col: int = 0, w: int = 560, overlay: int = 1) -> Response:
     """各类卡片各自的图。**不缓存**——画的是产物，重跑一步就变了（同
     `products.py::_png` 的教训：2026-09-10 缓存过一次「重跑完还是旧图」）。
     """
@@ -93,6 +105,9 @@ def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
         return _encode(bc.render_cols_img(st, book, page, page_w=w))
     if kind == "head":
         return _encode(bc.render_head_img(st, book, page))
+    if kind == "headcol":
+        return _encode(bc.render_headcol_img(st, book, page, col,
+                                             overlay=bool(overlay)), q=88)
     if kind == "outer":
         return _encode(bc.render_outer_img(st, book, page, side))
     if kind == "colborder":

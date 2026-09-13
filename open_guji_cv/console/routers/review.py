@@ -24,6 +24,7 @@ from ...review.cards import cards
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts
 from ...steps._warpmap import ColumnMapper
+from ...utils.preclean import effective_raw_path
 
 router = APIRouter()
 
@@ -326,7 +327,7 @@ def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
     if ch is None or ch.bbox_page is None:
         raise ImageMissing("没有这一格的字框")
     b = load_book(book)
-    p = b.raw_path(page)
+    p = effective_raw_path(b, page)
     if not p.exists():
         raise ImageMissing("原图缺失")
     img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)

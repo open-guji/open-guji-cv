@@ -32,6 +32,11 @@ _ID_PATTERNS = [
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+):[a-z]+$"),
     # outer:vol01:47:top —— 边框类裁决，带端点后缀（非数字，不进任何字段）
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):[a-z]+$"),
+    # headcol:vol02:11:4 —— 列级裁决，末段是**列号**没有端点后缀（2026-09-12）。
+    # 必须排在下面那条「prefix:book:page」之前：那条以 `$` 收尾匹配不到带列号的
+    # id，于是会一路掉到最后返回 {}，金标 anchor 就只剩一个 key（book/page/col
+    # 全空）。上面两条带后缀的更специфич，先匹配，互不抢。
+    re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+)$"),
     re.compile(r"^(?P<prefix>[a-z_]+):(?P<book>vol\d+|book\d+):(?P<page>\d+)$"),          # cols:vol02:171
     re.compile(r"^(?P<book>vol\d+|book\d+):(?P<page>\d+):(?P<col>\d+):(?P<slot>-?\d+)(?P<sub>[ab])?$"),  # vol01:22:5:4
     re.compile(r"^(?P<book>vol\d+|book\d+)/(?P<page>\d+):(?P<col>\d+):(?P<slot>-?\d+)$"), # vol01/50:7:21

@@ -15,6 +15,28 @@
 .br-verdicts button { font-size: .76rem; padding: .2rem .55rem; min-height: 30px; white-space: nowrap; }
 .br-verdicts button:active { filter: brightness(.95); }
 
+/* 列级抬头精标：一张卡三问（抬头 / 几格 / 首字），列带图又窄又高，
+   卡片比四类边框裁决窄一些，一屏能多排几列。 */
+.hrcard { display: flex; flex-direction: column; }
+.hrcard[data-v="yes"] { border-left-color: var(--ochre); }
+.hrcard[data-v="no"] { border-left-color: var(--ok); }
+.hrcard[data-v="idk"] { border-left-color: var(--faint); border-left-style: dashed; }
+/* 列带图又窄又高（约 300×1004），而且**要数格子线**——压到 22rem 时红线挤成
+   一团分不开，格数就数不出来了（这张卡存在的意义就是数格数）。给足高度，
+   卡片自己纵向滚动，不靠缩图。
+   ⚠️ `aspect-ratio` 不能省：图是 `loading=lazy` 的，没加载前高度为 0，
+   网格行会整排塌成空白（2026-09-12 实测 9 张卡只有第 1 张显示出来）。
+   先按实际比例把位置占住，图到了再填进去。 */
+.hrcard .hr-img-wrap { max-height: 34rem; overflow-y: auto; background: var(--paper-2); border-radius: 2px; }
+.hrcard .hr-img-wrap img { width: 100%; max-height: none; display: block; aspect-ratio: 300 / 1004; }
+.hr-susp { color: var(--zhu); font-size: .7rem; }
+.hr-det-tag { color: var(--ok); font-size: .7rem; }
+.hr-row { display: flex; gap: .25rem; align-items: center; flex-wrap: wrap; margin-top: .4rem; }
+.hr-row button { font-size: .74rem; padding: .15rem .45rem; min-height: 28px; white-space: nowrap; }
+.hr-lab { font-size: .72rem; color: var(--mute); width: 2.2rem; flex: none; }
+.hr-det { font-size: .68rem; margin: .45rem 0 0; line-height: 1.4; }
+.hr-ok { color: var(--ok); }
+
 .br-help { font-size: .76rem; margin: -.2rem 0 .5rem; }
 .bl-info { font-size: .76rem; margin-top: .3rem; }
 

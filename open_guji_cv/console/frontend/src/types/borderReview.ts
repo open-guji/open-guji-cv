@@ -62,8 +62,10 @@ export const BORDER_REVIEW_SPECS: Record<BorderReviewKind, {
     ],
   },
   head: {
-    title: '抬头有无裁决台',
-    howto: '这是每页上版框那一条横带的原图，没有叠任何算法结果。判「这页有没有抬头」——判据是版框线本身有台阶，不是「有字比别的高」。',
+    // 2026-09-12 从 Step1 搬到 Step3，与「列级抬头精标」同卡两 tab，改名
+    // 「页级抬头标注」——两级是同一件事的粗细两档，名字要能看出层级。
+    title: '页级抬头标注',
+    howto: '这是每页上版框那一条横带的原图，没有叠任何算法结果——这一档量的是 Step1 抬头框探测器的召回率，卡上印了机器判断人就会顺着点。判「这页有没有抬头」，判据是版框线本身有台阶，不是「有字比别的高」。判 yes 的页再切到「列级抬头精标」逐列标格数（那一档是要数格子，所以反过来必须叠线）。',
     eventKind: 'verdict',
     options: [
       { key: 'yes', label: '有抬头', color: 'var(--ochre)', soft: 'var(--ochre-soft)' },

@@ -48,6 +48,14 @@ DEFAULT_ROUTES: list[dict] = [
     # 14 页金标（外延/内沿/中心口径混杂）分开存，避免再次污染。
     {"match": {"kind": "border_offset"},
      "to": [{"consumer": "gold_add", "shard": "border-detection/bottom-offset"}]},
+    # 列级抬头精标（2026-09-12，overview `Step3-逐字切分/03-抬头综合优化.md`）。
+    # **单独一个 kind，不复用 `verdict`**：`verdict` + `target.step=row_segment`
+    # 已经被上面那条规则占着，会把列级抬头一并灌进 `char-segmentation/row-boundaries`
+    # ——那个分片是旧坐标系、**已退役**。新开分片跟页级
+    # `border-detection/head-raise-presence` 也分开存：两级的锚点粒度不同
+    # （页 vs 列），塞一个分片里 eval 口径会打架。
+    {"match": {"kind": "head_raise"},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/head-raise-columns"}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { fetchRulers } from '../api/evals'
 import { CutlinePanel } from '../components/cutline/CutlinePanel'
+import { HeadRaiseCard } from '../components/border-review/HeadRaiseCard'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import type { CustomMetric } from '../components/common/ProgressGatePanel'
@@ -51,12 +52,13 @@ export function Step3Page() {
       <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
       <ProgressGatePanel
         book={book}
-        title="Step3→4 交接闸（闸3）"
+        title="总览"
         gateId="row_segment_gate"
         pages={pageSel}
         customMetrics={customMetrics}
       />
       <CutlinePanel book={book} />
+      <HeadRaiseCard book={book} />
       <JiazhuPanel book={book} />
       <ProductViewer book={book} step="row_segment" pages={pages} />
     </div>
