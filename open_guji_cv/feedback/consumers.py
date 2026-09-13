@@ -86,11 +86,34 @@ def _expected_of(e: Event) -> dict:
         # 拖到 y_left/y_right）/ ok（现役线位置就对，等于 c.y_left/y_right）/
         # no_line（这页版框太淡看不出线）。两端各自可调（2026-09-12 改，
         # 起初只给整体平移，改不了现役斜率本身探错的情况）——两点坐标带
-        # 齐斜率信息，不是单一偏移量。坐标口径：通栏带裁剪图坐标
-        # （`page_bottom_cards` 的 `y_left`/`y_right` 同一原点，crop_top
-        # 对齐），换算回页面坐标是导出脚本的事。
-        keys = ("y_left", "y_right", "verdict")
+        # 齐斜率信息，不是单一偏移量。
+        #
+        # ⚠️ **以 `y_left_abs`/`y_right_abs`（原图绝对坐标）为准**
+        # （用户 2026-09-13 定："坐标应该只基于原始图片"）。`y_left`/`y_right`
+        # 是相对通栏带 `crop_top` 的，而 crop_top 由**算法输出**算出来——算法
+        # 一改，历史金标的绝对位置就整体漂移：vol02/161 实测偏 83.2px（标注
+        # 之后加了 `_fix_wild_angle` 角度护栏，恰好改动了该页下版框），人标
+        # 对的线被换算到纯白处。同一个坑 09-12 那批已经栽过一次。相对坐标
+        # 与 crop_top 仍一并存下，只为排查历史问题，**不要拿它当基准**。
+        keys = ("y_left", "y_right", "y_left_abs", "y_right_abs", "crop_top", "verdict")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "head_raise":
+        # 列级抬头精标（overview `Step3-逐字切分/03-抬头综合优化.md`）。三件事
+        # 一张卡：`raised` 这一列是不是抬头 / `n_raised` 抬高几格 / `head_cut`
+        # 首字有没有被切掉。
+        #
+        # **`head_cut` 不是抬头的属性**，是顺带收的丢字维度：vol02 p11 c4/c5
+        # 的首字「御」被 Step3 整个切在格外，而 Step9 渲染出来的文本读着通顺、
+        # 不报阙文，**丢字在文本层完全看不见**，这是目前唯一能量到它的入口。
+        # 别为它单开一轮标注。
+        #
+        # `n_raised` 只在 `raised == "yes"` 时有意义；判 no 的列不写这个键，
+        # 免得金标里躺着一堆 `n_raised=0` 的假数据污染分布统计。
+        keys = ("raised", "n_raised", "head_cut", "note")
+        out = {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+        if out.get("raised") != "yes":
+            out.pop("n_raised", None)
+        return out
     return p
 
 

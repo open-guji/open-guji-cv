@@ -20,9 +20,10 @@ import type { BorderReviewKind } from '../types/borderReview'
 // 'pageline' 不在 BorderReviewKind 里——不是"点类别"那四张卡的形状
 // （要拖坐标），用独立组件，这里只借 TABS 做页内切换。
 type TabKey = BorderReviewKind | 'pageline'
+// 「抬头有无」2026-09-12 搬到 Step3（改名「页级抬头标注」，与列级精标同卡两 tab）：
+// 抬头终判在 Step3，两级粗细档分在两个 Step 的页面上，人要来回跳。
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'cols', label: '列探测' },
-  { key: 'head', label: '抬头有无' },
   { key: 'outer', label: '外框外延' },
   { key: 'colborder', label: 'Step2 上下版框核校' },
   { key: 'pageline', label: '下版框坐标金标' },
@@ -100,7 +101,7 @@ export function Step1Page() {
       />
       <ProgressGatePanel
         book={book}
-        title="Step1→2 交接闸（闸1）"
+        title="总览"
         gateId="border_detect_gate"
         pages={pageSel}
         typeBreakdown={typeBreakdown}

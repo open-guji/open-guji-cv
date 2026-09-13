@@ -74,9 +74,17 @@ export function PageLinePanel({ book }: { book: string }) {
     states.current[c.id] = { yLeft, yRight, done: verdict }
     bump()
     try {
+      // ⚠️ 必须同时写**原图绝对坐标**：y_left/y_right 是相对 crop_top 的，
+      // 而 crop_top 由算法输出算出——算法一改，历史金标就整体漂移
+      // （vol02/161 实测偏 83.2px）。绝对坐标让金标自带参照系。
+      const off = c.crop_top ?? 0
       await postEvents({
         batch: batch(), step: STEP, unit: 'page', kind: 'border_offset',
-        events: [{ id: c.id, y_left: yLeft, y_right: yRight, verdict, t: Date.now() }],
+        events: [{
+          id: c.id, y_left: yLeft, y_right: yRight,
+          y_left_abs: yLeft + off, y_right_abs: yRight + off,
+          crop_top: off, verdict, t: Date.now(),
+        }],
       })
       const n = Object.values(states.current).filter((s) => s.done).length
       setMsg(`已裁 ${n} / ${cards.length} → 批次 ${batch()}`)
