@@ -156,6 +156,7 @@ class GlyphMatcher:
         same_hits: list[tuple[float, float, str, str]] = []   # cov,wmax,char,id
         unsure_best: dict[str, float] = {}                    # char -> max cov
         best_cov, best_wmax = 0.0, 0.0
+        best_char: str | None = None       # 最好那次验证对应的库字，diff 档拿它当唯一候选
         n_verified = 0
         for j in top:
             j = int(j)
@@ -165,6 +166,7 @@ class GlyphMatcher:
             n_verified += 1
             if v.f1 > best_cov:
                 best_cov, best_wmax = v.f1, v.diff_blob_ratio
+                best_char = self._chars[j]
             if v.verdict == "same":
                 same_hits.append((v.f1, v.diff_blob_ratio,
                                   self._chars[j], self._ids[j]))
@@ -202,5 +204,20 @@ class GlyphMatcher:
                 "unsure", None, None, best_cov, best_wmax,
                 sorted(unsure_best.items(), key=lambda t: -t[1]),
                 n_verified=n_verified)
+        # diff 档也要把「最像的那个字」带出来。逐对 verify 全判 diff 时
+        # `unsure_best` 是空的，这里原先返回空 candidates——于是界面上只剩
+        # 一个「? 99%」：cov 明明 0.99，却连它像哪个字都不说。
+        #
+        # 2026-09-12 实测（vol02 顺序闸那 1078 条待裁切线）：空候选池的 2702
+        # 个候选变体里 p50 cov=0.984、810 个 ≥0.99——都是 `verify.py` 那条
+        # 「cov≥0.996 **且** wmax≤12」里 cov 够而 wmax 超标（形近护栏）掉下来的。
+        # 人要拿这个信息裁切法，只给问号等于没给。
+        #
+        # ⚠️ 只补证据，不动判决：verdict 仍是 diff、char 仍是 None，下游
+        # （seed_admit/context_decide）该弃权还是弃权。候选带 cov 供人和
+        # 自动判据参考，不是"库认了这个字"。
+        best_cand: list[tuple[str, float]] = []
+        if best_char is not None:
+            best_cand = [(best_char, best_cov)]
         return MatchResult("diff", None, None, best_cov, best_wmax,
-                           n_verified=n_verified)
+                           best_cand, n_verified=n_verified)
