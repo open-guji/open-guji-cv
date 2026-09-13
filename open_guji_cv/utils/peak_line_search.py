@@ -30,12 +30,18 @@
 - 顶部边框在部分页面上信号本身就弱（磨损/浓墨粘连导致没有突兀尖峰，只有
   跟正文行同量级的宽驼峰），这种情况下即使方法本身没问题，找到的"最佳点"
   置信度也不如底部/竖直界行高——分数本身就能反映这一点，不需要额外判定。
+- `flank_dirty_frac`（2026-09-12 新增）：诊断"候选线是否多次穿过字体"的
+  分段两翼干净度，68 页金标上跟像素误差确实正相关，但拿它改
+  `find_horizontal_border` 的候选排序/否决在整体指标上都是负收益，**没有
+  接入自动选线逻辑**，只作为诊断量导出——细节和试过的几种失败整合方式见
+  函数自身的 docstring。
 
 详见 `.claude/doc/peak_line_search.md`（算法设计记录 + 踩过的坑 + 五页试跑结果）。
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -291,6 +297,64 @@ def flank_ratio(curve: np.ndarray, idx: int, width: float, sides: str = "both") 
     return max(vals) / v if vals else 0.0
 
 
+FLANK_SEG_STEP = 40    # 分段宽度：粗于单字笔画（几像素）、细于列距（180~250px），
+                       # 让每段大致对应"半个字到一个字"的尺度
+FLANK_SEG_DIRTY_TH = 0.05  # 单段两翼墨占比超过这个就算这段"脏"
+
+
+def flank_dirty_frac(mask: np.ndarray, y: int, width: float, w: int,
+                     step: int = FLANK_SEG_STEP, gap: int = FLANK_GAP, span: int = FLANK_SPAN,
+                     dirty_th: float = FLANK_SEG_DIRTY_TH) -> float:
+    """诊断量"沿候选水平线多次穿过字体"（2026-09-12 新增，用户任务卡原话）：
+    把 `flank_ratio` 的"看两翼干不干净"从整条线只测 1~2 个点，改成沿整条线
+    切成 `step` px 的小段、每段各自测两翼——真实版框线是一条贯穿全页的连续
+    印刷直线，理论上沿线各处两翼都该是纸白；如果候选线实际上是"多列文字
+    恰好在同一高度对齐"拼出来的假峰，则只有恰好压中字尾的那几段两翼干净，
+    其余大多数段的两翼都会因为紧挨着字身而"脏"。返回"两翼脏的分段"占比，
+    越高越像文字对齐拼出来的假线，越低越像连续印刷直线。
+
+    ## 实测结论（68 页金标）：相关但不足以单独当判据，没有接入 `find_horizontal_border`
+
+    68 页金标上量过：这个值跟"算法最终结果的像素误差"确实正相关
+    （Pearson r≈0.26；按中位数分两组，dirty_frac 高的一组平均误差 22.0px，
+    低的一组 8.8px）——**方向是对的，是真信号，不是噪声**。
+
+    但拿它做候选重排/否决都试过，68 页整体指标不升反降：
+    - 直接用 `score * (1-dirty)^p` 重排候选（替换现有次选纠偏的纯分数比较）：
+      p=1~3 全部让 68 页 mean 从 12.3px 涨到 21.6~21.8px，>20px 页数 41→63。
+    - 只加一条"候选比 primary 更脏就否决"的护栏（不改排序，只加否决）：
+      margin 0~0.3 全部让指标变差或持平（最松的 margin=0.3 也只是 12.32→12.45，
+      >20px 页数 41→43，没有一档是净改善）。
+    - 只在候选分数"接近平局"时用它当 tie-break（更保守的用法）：
+      margin 0.05~0.5 全部跟 baseline 持平或略差，从没有更好。
+
+    原因：真实的版框线一旦磨损到需要救的程度（这批 40 页正是"次选纠偏已经
+    在生效但换到的候选本身不够准"那批），它自己的墨迹也是断续的（跟假峰
+    一样"多次穿过"），这个判据的 68 页中位数分组差异虽然存在，但落到具体
+    某一页时区分度不够稳定（同一页假峰可能比真线还"干净"，见 vol02/68：
+    err=(29.4,22.6) 但 longest_run_frac=0.76，比大多数正确页还高）。
+
+    **结论：先留作诊断量（暴露给上层做人工复核/跨页一致性分析用），不接入
+    `find_horizontal_border` 的自动选线逻辑**——这条路目前证明是死路，跟
+    `.claude/doc/peak_line_search.md` 记录的"扩窗口/降阈值"是同一类教训：
+    单页内的几何判据已经吃干榨尽，下一步大概率要靠跨页先验（同一本书同一
+    版式，真实版框位置应该聚在窄范围内）才可能破局。
+    """
+    n_perp = mask.shape[0]
+    a = int(round(width / 2.0))
+    dirty, total = 0, 0
+    for x0 in range(0, w, step):
+        x1 = min(w, x0 + step)
+        left = mask[max(0, y - a - gap - span):max(0, y - a - gap), x0:x1]
+        right = mask[min(n_perp, y + a + gap):min(n_perp, y + a + gap + span), x0:x1]
+        l_ratio = float(left.mean()) if left.size else 0.0
+        r_ratio = float(right.mean()) if right.size else 0.0
+        total += 1
+        if max(l_ratio, r_ratio) > dirty_th:
+            dirty += 1
+    return dirty / total if total else 0.0
+
+
 def best_in_curve(curve: np.ndarray, alpha: float = DEFAULT_ALPHA,
                    hyst: int = DEFAULT_HYST, radius: int = 2,
                    idx_lo: int = 0, idx_hi: int | None = None,
@@ -522,7 +586,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
                             secondary_window: int = 60, secondary_dead_zone: int = 15,
                             secondary_ratio_thresh: float = 0.2,
-                            boundary_slack: int = 3) -> LineMatch:
+                            boundary_slack: int = 3,
+                            verticals: list[LineMatch] | None = None,
+                            book_gap: float | None = None) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -580,6 +646,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                                 score=best_full["score"], width=best_full["width"],
                                 proj=best_full["proj"])
 
+    if verticals:
+        primary = _fix_wild_angle(mask, primary, verticals, lo, hi, alpha, hyst)
+
     center = h / 2.0
     primary_dist = abs(primary.position - center)
     wlo = max(lo, int(round(primary.position)) - secondary_window)
@@ -600,7 +669,191 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
             best_secondary = dict(position=pos, score=sc, width=wd, proj=float(curve[i]))
 
     if best_secondary is None:
+        result = primary
+    else:
+        result = LineMatch(position=best_secondary["position"], slope=primary.slope,
+                           score=best_secondary["score"], width=best_secondary["width"],
+                           proj=best_secondary["proj"])
+
+    if side == "bottom" and verticals and book_gap is not None:
+        result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
+    return result
+
+
+# ── 角度失控护栏：版框该大致垂直于界行 ──────────────────────────
+# `joint_search_coarse_to_fine` 在 ±0.05 的斜率范围内自由搜角度，**完全不看
+# 界行**。2400px 宽的页上 0.05 的斜率差 = 端点摆动 120px，所以一旦搜飞，
+# 一端安全另一端就深切进字里。vol02/161 实测：算法选了 -0.04706（几乎顶到
+# 搜索边界），而界行垂直方向是 +0.00782——**符号相反、大小差 6 倍**，端点
+# 张口 123px。用正确角度重投影后，带内最强候选分 31.6，比它选中那条（9.3）
+# 强 3 倍多：投影法没问题，是角度自由度害的。
+#
+# ⚠️ **只能是软约束，不能强制垂直**（186 页实测）：偏角 >1° 的 20 页里有
+# **19 页算法与金标偏得分毫不差、端点张口 0px**（vol02/120 双方都 -1.74°、
+# vol03/6 都 +1.31°…）——这套书的版框本来就不严格垂直于界行（刻版、纸张
+# 变形），算法跟着实际版框走是对的。强制垂直会把张口中位数从 0.0 抬到
+# 14.3px、p90 从 13.6 抬到 39.5px，把大批正确页弄坏。
+#
+# 所以阈值取 2.5°：金标偏角实测最大 1.74°，2.5° 拦得住 161 的 3.21°，
+# 又碰不到那 19 页真实倾斜的页。186 页实测：**只改动 1 页**
+# （vol02/161 从 -61.4 修成 +23.1），其余 185 页逐位不变。
+WILD_ANGLE_MAX_DEG = 2.5
+_WILD_ANGLE_STEPS = 41
+
+
+def _fix_wild_angle(mask: np.ndarray, primary: LineMatch, verticals: list[LineMatch],
+                    lo: int, hi: int, alpha: float, hyst: int) -> LineMatch:
+    """primary 的倾角偏离「界行垂直方向」太多时，在合理角度窗内重搜一条。"""
+    if len(verticals) < 2:
         return primary
-    return LineMatch(position=best_secondary["position"], slope=primary.slope,
-                      score=best_secondary["score"], width=best_secondary["width"],
-                      proj=best_secondary["proj"])
+    perp = -float(np.median([v.slope for v in verticals]))
+    dev_deg = abs(np.degrees(np.arctan(primary.slope)) - np.degrees(np.arctan(perp)))
+    if dev_deg <= WILD_ANGLE_MAX_DEG:
+        return primary
+    lim = float(np.tan(np.radians(WILD_ANGLE_MAX_DEG)))
+    best: tuple[float, float, float, float, float] | None = None
+    for s in np.linspace(perp - lim, perp + lim, _WILD_ANGLE_STEPS):
+        _, curve = sample_line_curve(mask, "h", lo, hi, float(s))
+        for i in local_maxima(curve, radius=5):
+            y = lo + i
+            if abs(y - lo) <= 3 or abs(y - hi) <= 3:      # 带边界退化值
+                continue
+            wd, sc = half_height_score_at(curve, i, alpha, hyst)
+            if best is None or sc > best[2]:
+                best = (float(y), float(s), sc, wd, float(curve[i]))
+    if best is None:
+        return primary
+    y, s, sc, wd, proj = best
+    return LineMatch(position=y, slope=s, score=sc, width=wd, proj=proj)
+
+
+# ── 下版框跨页先验救援 ────────────────────────────────────────────
+# 上面那套（primary + 次选纠偏 + 边界锁死）在 68 页整页坐标金标上仍有约 1/3
+# 的页误差 >20px：真线得分被文字驼峰压过，而**峰形本身分不开真假**——68 页
+# 实测金标峰与"远处最强假峰"在绝对宽(5~120 vs 4~92)、相对宽、墨浓度、峰顶
+# 平坦度四个量上完全重叠，浓度和平坦度甚至反向。所以不可能靠加一条局部判据
+# 解决，只能引入这一页之外的信息。
+#
+# 能分开的只有**跨页一致性**：同一册同一版式，下版框离页底的距离极稳定——
+# 三册金标实测 `页高 - y` 的 std 只有 6.3/8.8px，中位数 325/327/326px 高度
+# 一致；而算法逐页输出的 std 是 24~26px。于是"这一页偏离全册中位数多少"
+# （dev）就是一个可靠的可疑信号，且**生产时不需要金标**：整册算法输出的
+# 中位数与金标真基准只差 0~1px（vol02 完全相等）。
+#
+# 救援动作用三条判据重搜（都是用户 2026-09-12 给的方向，逐条实测过）：
+#   1. **跳开左右竖边框拐角**：拐角处墨团会灌水分数。只用最外两条竖线之间
+#      再各内缩 RESCUE_MARGIN 的区域投影。
+#   2. **界行垂直方向作先验角度**：竖线斜率取反即水平线斜率，只在其 ±0.006
+#      内微调。自由搜角实测更差（68 页 mean 39.7 vs 29.1）。
+#   3. **只看下翼干净**：下版框上方紧挨正文末行，上翼本来就脏，要求两翼都
+#      干净会把真线闸掉（vol02/60 真线下翼 0.48、vol02/22 0.62 都会被误杀）。
+#      每档宽度上限下 "只看下翼" 都胜过 "两翼都要"。
+#
+# 两条护栏，缺一不可：
+#   - **落点必须在基准邻域内**（RESCUE_GUARD_D）。vol03/25 实测：真线 y=2745
+#     （分 15.3、离金标 5px）输给弱候选 y=2815（分仅 1.0）纯因为后者在更多
+#     斜率档上出现、票数多（21:6）。加了这条护栏后 D=25~60 全都选回 y=2745，
+#     对 D 不敏感——是有原则的修法，不是调参。不加护栏则 68 页上必有 1 页
+#     被改坏，加了之后弄坏 0。
+#   - **宽度上限 RESCUE_WMAX 不能放宽**。放宽到 20/30/60/120 即使有护栏也
+#     全面变差（救回 8→4→2、弄坏 0→3→4），因为粗文字驼峰会在别的页上赢走。
+#     代价是真线本身就是粗墨条的页救不回来（vol02/64 真线宽 113、vol02/70
+#     宽 108），这是本方法有据可依的天花板。
+#
+# 68 页金标实测（per-endpoint）：mean 12.3→8.4、p90 34.5→24.4、max 110.8→42.9、
+# >20px 41→28，救回 8、弄坏 0；困难子集 mean 20.8→13.0。
+# ⚠️ 下面这组常数 2026-09-13 按**单侧口径**重调过（原先按对称像素误差调的
+# 25/40 是另一套目标）。186 页金标实测（TOL=30，"高于金标即切字，不给容差"）：
+#   现状            切字 49 / 过 136 / 太低 1
+#   本组常数        切字 34 / 过 144 / 太低 8   （修好 17、弄坏 2）
+# 弄坏的 2 页里 vol02/181 只挪了 1px（浮点边界，无实际影响），真正改差的只有
+# vol02/94（现役 +13.6 → 重搜选了更强但更远的峰）。
+RESCUE_DEV_MIN = 15.0     # 偏离全册基准超过这么多才出手。单侧口径下 25 太保守：
+                          # 22 页切字页的 dev 落在 15~25，够不着救援；放到 15
+                          # 多修 5 页。再往下到 10 则"太低"从 8 涨到 20，不划算。
+RESCUE_SELF_OK_SCORE = 100.0   # 现役线自身分数达到这个就不动它。**dev 大不等于
+                          # 错**：vol02/175 dev=44 却完全正确（worst=-0.0），
+                          # vol02/55（分190）、112（分150）同理。加这条后弄坏
+                          # 从 5 页压到 2 页，是这组常数里最关键的一条。
+RESCUE_DOWN_ONLY = True   # 重搜结果不许比现役更靠上（用户原则：宁可留白不可切字）
+RESCUE_MARGIN = 45        # 最外竖线再往内缩多少，避开拐角墨团
+RESCUE_WMAX = 14.0        # 候选半高宽上限，见上"不能放宽"
+RESCUE_FLANK_MAX = 0.5    # 只测下翼（页边空白那侧）的脏度上限
+RESCUE_GUARD_D = 80.0     # 落点离基准推算位置的最大距离。单侧口径下从 40 放到
+                          # 80：往下多留白无害，卡太紧反而挡掉真线（实测 80 比
+                          # 60 多修 2 页，弄坏不变）。
+RESCUE_SLOPE_SPAN = 0.006
+RESCUE_SLOPE_N = 25
+
+
+def _rescue_bottom(mask: np.ndarray, cur: LineMatch, verticals: list[LineMatch],
+                   book_gap: float, alpha: float, hyst: int) -> LineMatch:
+    """现役结果偏离全册基准太多时，用跨页先验重搜一条。详见上方大段说明。
+
+    **单侧口径**（用户 2026-09-13 定）："宁肯再往下一点，留点空白或污点，
+    也绝不要靠上，切到最后一行字。" 所以两条约束：
+      1. `RESCUE_DOWN_ONLY`：重搜结果不许比现役更靠上——往上一点就切字，
+         往下只是多留白。186 页实测，这条把"弄坏"从 8 页压到 4 页。
+      2. `RESCUE_SELF_OK_SCORE`：现役线自身够强就不动它。**"偏离全册基准"
+         不等于错**——vol02/175 的 dev 高达 44 却完全正确（worst=-0.0），
+         vol02/55/112 同理。加这条后"弄坏"再从 4 压到 2。
+    """
+    h, w = mask.shape
+    cur_mid = cur.position
+    if abs((h - cur_mid) - book_gap) <= RESCUE_DEV_MIN:
+        return cur
+    if cur.score >= RESCUE_SELF_OK_SCORE:      # 现役自身足够可信，不冒险动它
+        return cur
+
+    xs = sorted(v.position for v in verticals)
+    x0, x1 = int(xs[0]) + RESCUE_MARGIN, int(xs[-1]) - RESCUE_MARGIN
+    if x1 - x0 < 200:
+        return cur
+    sub = mask[:, x0:x1]
+    cx = (x1 - x0) / 2.0
+    base = -float(np.median([v.slope for v in verticals]))
+    band = max(10, int(h * 0.15))
+    lo, hi = h - band, h - 1
+
+    # 每档倾角各选一个最优候选，再对这些赢家投票——不能把所有档的候选汇成
+    # 一池再投票（那样弱候选靠"在很多档上重复出现"就能刷票胜出）。
+    per: list[tuple[float, float, float, float]] = []
+    for s in np.linspace(base - RESCUE_SLOPE_SPAN, base + RESCUE_SLOPE_SPAN, RESCUE_SLOPE_N):
+        _, curve = sample_line_curve(sub, "h", lo, hi, float(s))
+        best = None
+        for i in local_maxima(curve, radius=5):
+            y = lo + i
+            if abs(y - lo) <= 3 or abs(y - hi) <= 3:       # 带边界退化值
+                continue
+            if RESCUE_DOWN_ONLY and y < cur_mid - 1.0:     # 只许往下，不许往上
+                continue
+            wd, sc = half_height_score_at(curve, i, alpha, hyst)
+            if wd > RESCUE_WMAX:
+                continue
+            a = int(round(wd / 2)) + 4
+            dn = curve[min(len(curve), i + a):min(len(curve), i + a + 12)]
+            if len(dn) and float(dn.min()) / max(curve[i], 1e-9) > RESCUE_FLANK_MAX:
+                continue
+            if best is None or sc > best[2]:
+                best = (float(y), float(s), sc, wd, float(curve[i]))
+        if best is not None:
+            per.append(best)
+    if not per:
+        return cur
+
+    ref_y = h - book_gap
+    votes = Counter(int(round(p[0] / 10)) * 10 for p in per)
+    mode_y = votes.most_common(1)[0][0]
+    near = [p for p in per if abs(p[0] - mode_y) <= 15]
+    pick = max(near or per, key=lambda p: p[2])
+    if abs(pick[0] - ref_y) > RESCUE_GUARD_D:             # 护栏：落点越界就改选
+        pool = [p for p in per if abs(p[0] - ref_y) <= RESCUE_GUARD_D]
+        if not pool:
+            return cur                                     # 邻域内无候选，不救
+        pick = max(pool, key=lambda p: p[2])
+
+    y, s, sc, wd, proj = pick
+    # sub 坐标 → 整页：sample_line_curve 对 axis="h" 用 n_perp=sub.shape[1]，
+    # 中心是 sub 自己的中心，不是整页 w/2。这里换算错过一次，整页偏 130~145px。
+    pos_full = y + s * ((w / 2.0 - x0) - cx)
+    return LineMatch(position=pos_full, slope=s, score=sc, width=wd, proj=proj)

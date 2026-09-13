@@ -31,5 +31,8 @@ class BorderDetectStep(Step):
         p: BorderDetectParams = ctx.params_for(self)  # type: ignore[assignment]
         cols = p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
-        res = detect_borders(gray, expected_cols=cols, ink_threshold=p.ink_threshold)
+        # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
+        # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
+        res = detect_borders(gray, expected_cols=cols, ink_threshold=p.ink_threshold,
+                             book_bottom_gap=ctx.book.bottom_gap)
         return {"borders": Borders.from_result(res, cols)}
