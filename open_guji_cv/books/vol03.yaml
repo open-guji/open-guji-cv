@@ -12,6 +12,9 @@ raw_dir: data_full/zongmu/vol03
 raw_pattern: "{page}.png"
 expected_cols: 9
 chars_per_line: 21
+# 下版框跨页先验的基准（整册「页高 − 下版框 y」中位数），启用 Step1 下版框救援。
+# 2026-09-12 用 measure_book_bottom_gap() 在全册 107 页上标定。换书要重标。
+bottom_gap: 326.0
 # 页级字格高的书级先验：闸2 估不出页级周期时兜底（空栏页栏内无字、推不出纵向节律）。38 页（粗筛，本册尚无 page-type 金标）。
 # 2026-09-13 用 measure_book_period() 标定；只在估不出来时用，正常页一律用当场估的值。换书要重标。
 period_prior: 115.0
