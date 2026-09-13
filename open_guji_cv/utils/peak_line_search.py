@@ -677,6 +677,12 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
 
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
+        # 探到线之后整体再往下让 BOTTOM_SAFETY_MARGIN——补的是判定口径的
+        # 不对称（往下无害、往上切字），不是算法有偏。详见该常数上方的说明。
+        if BOTTOM_SAFETY_MARGIN:
+            result = LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
+                               slope=result.slope, score=result.score,
+                               width=result.width, proj=result.proj)
     return result
 
 
@@ -784,6 +790,25 @@ RESCUE_GUARD_D = 80.0     # 落点离基准推算位置的最大距离。单侧�
                           # 60 多修 2 页，弄坏不变）。
 RESCUE_SLOPE_SPAN = 0.006
 RESCUE_SLOPE_N = 25
+
+# ── 安全余量：探到线之后整体再往下让一点 ──────────────────────────
+# 用户的口径是**不对称**的："宁肯再往下一点，留点空白或污点，也绝不要靠上，
+# 切到最后一个字。" 而算法是**对称**地去拟合墨条中心的——186 页实测，
+# |算法−金标|<15px 的 140 页里 median=+0.0、mean=-0.1、std=2.1px：
+# **没有系统性偏移，算法平均就压在金标上**。问题恰恰在这里：既然散布 std≈2px
+# 而零点就在切字边缘上，那必然有一半左右的页会掉到上方去。
+#
+# 所以不该去追"压得更准"，而应该整体让出一点余量。186 页实测：
+#   余量 0 → 切字 33 / 过 145 / 太低 8
+#   余量 6 → 切字 18 / 过 156 / 太低 12   ← 拐点
+#   余量 8 → 切字 15 / 过 155 / 太低 16
+#   余量10 → 切字 13 / 过 151 / 太低 22（过反而开始跌，不划算）
+# 取 6：切字直接砍掉近一半，代价只是 4 页从"过"变成"留白略多"。
+#
+# ⚠️ 这是**下版框专用**，且只在 `book_gap` 已标定（即启用救援）时生效——
+# 它补的是"判定口径不对称"，不是"算法有偏"。`side="top"` 不适用：上版框
+# 往下让等于切掉首行字，方向正好相反。
+BOTTOM_SAFETY_MARGIN = 6.0
 
 
 def _rescue_bottom(mask: np.ndarray, cur: LineMatch, verticals: list[LineMatch],
