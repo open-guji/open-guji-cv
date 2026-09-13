@@ -28,6 +28,24 @@
 那次是运气好滤掉了误报，反过来版框沉到 y>450 的页就会冒充正文区反色带报出来
 （同类毛病见 Step3 抬头 HR_DIST 绝对像素跨版式失效）。
 
+界行救援：带落在「抬头空栏」里，判据 1 量不到墨
+------------------------------------------------
+判据 1 假定带的上下都有字，但有一类带不满足：**落在版框内侧的抬头空栏里**。
+vol02 p136 就是——那页版面整体下沉约 110px（真上版框在 y≈328，别页在 y≈290），
+带落在 y402-417，上下都是空栏，量到上 0.08 / 下 0.05，与版框无异，被判为版框。
+两次误判都栽在这里。
+
+**分辨它们的是界行**（用户指出）：界行（列间竖线）在 x=325/875/1069/1268 处
+**穿过这条粗线继续往上**，一直到 y≈328 才收 —— 说明 328 那条才是上版框，
+402-417 这条在**版框以内**；版框以内不会横贯一条粗线，只能是缺陷。
+所以判据 1 不过时再看一眼：带上下各 `RULE_CTX` 行里都数得出 ≥ `MIN_RULES` 条界行，
+就放行（`count_rules`）。版框外侧是页边，一条界行都没有，捞不进来。
+
+代价：抬头页的抬头列本身向上突出，看着也像「界行穿过版框」，会被捞进来
+（vol04 p11/p30/p44、vol06 p40/p41、vol09 p109 都是这种，看图即可排除）。
+十册合计多出 26 页候选，换来 **3 页此前完全扫不到的真带**：
+vol02 p136、vol07 p46、p78 —— 其中 vol07 此前是「零候选册」。这笔买卖是划算的。
+
 已知盲区：贴着版框的带，默认滤法会漏
 ------------------------------------
 判据 1 要求两侧都有字，所以**压在上/下版框上的反色带扫不出来** —— 已知 vol01 p48
@@ -44,8 +62,10 @@ vol01 从 38 页涨到 120+ 页，等于没滤。实测还比过「到页边的�
 实测（2026-09-12，十册全扫）：
   默认滤法 vol02 188 页 → 3 页（151/152/153），正是 yaml 登记的那三页，零误报零漏报；
   vol03/06/07 零候选；vol04 4、vol05 2、vol08 1、vol09 2、vol10 1。
-  其中**新发现七页真反色带**并已登记修复：vol04 p17、vol05 p22/p178、vol08 p13、
-  vol09 p174/p175、vol10 p135（vol04 另外 3 页是墨污不是反色带，本工具只管反色带）。
+  其中**新发现九页真反色带**，八页已登记修复：vol02 p136、vol04 p17、
+  vol05 p22/p178、vol07 p78、vol08 p13、vol09 p174/p175、vol10 p135
+  （vol07 p46 也是真带，几何还没量准，见 vol07.yaml 的 notes；
+  vol04 另外 3 页是墨污不是反色带，本工具只管反色带）。
 
   vol01 206 页 → 38 页，**已人工确认全是误报**（旧 `--body` 滤法 62 页）：
   vol01 是卷首，職名頁/目錄頁密集，整版九列重复同一个字且横向严格对齐
@@ -79,10 +99,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-# 判据阈值。两条都是按页自量的相对量，不是像素常数，所以换书一般不用动。
+# 判据阈值。都是按页自量的相对量，不是像素常数，所以换书一般不用动。
 MIN_SOLID = 0.85    # 带内纸列的「实黑度」：反色带 0.92-1.00，重复字/表格线 0.60-0.74
 MIN_CTX_INK = 0.15  # 带上下两侧字列的墨占比：反色带两侧都 0.20-0.45，版框空白侧 0.00-0.08
 CTX = 120           # 往带上下各看多少行
+MIN_RULES = 2       # 界行救援：带上下各自要有几条界行穿过来（版框外侧是页边，一条都没有）
+RULE_CTX = 70       # 数界行时往带上下各看多少行（要小于「带到真版框」的距离）
 
 
 def find_bands(path, min_rows=8, frac=0.20, min_paper=40, ink=128):
@@ -108,11 +130,25 @@ def find_bands(path, min_rows=8, frac=0.20, min_paper=40, ink=128):
     return [(int(s[0]), int(s[-1]), round(float(rows[s].mean()), 3)) for s in segs]
 
 
+def count_rules(b, y_from, y_to, min_frac=0.8):
+    """这一段里有几条**界行**（列间竖线）。用来判断带是不是落在版框以内。"""
+    seg = b[y_from:y_to]
+    if seg.shape[0] < 12:
+        return 0
+    cand = np.flatnonzero(seg.mean(axis=0) > min_frac)
+    if not len(cand):
+        return 0
+    return 1 + int((np.diff(cand) > 3).sum())   # 相邻列聚成一条
+
+
 def looks_inverted(gray, y0, y1, *, ink=128, ctx=CTX,
-                   min_solid=MIN_SOLID, min_ctx_ink=MIN_CTX_INK, edge=False):
+                   min_solid=MIN_SOLID, min_ctx_ink=MIN_CTX_INK, edge=False,
+                   min_rules=MIN_RULES, rule_ctx=RULE_CTX):
     """这条横带像不像反色带。返回 (是否像, 实黑度, 上侧墨, 下侧墨)。
 
     两条判据见模块头：上下都夹着正文 + 带内纸列纯黑，都按页自量，无像素常数。
+    另有**界行救援**：带上下各 `rule_ctx` 行里都有 ≥ `min_rules` 条界行穿过时，
+    判据 1 可以不看墨（见模块头「界行救援」）。
 
     `edge=True` 把判据 1 放宽成「上下取大者」，用来复查压在版框上的带
     （如 vol01 p48）——代价是上下版框会大量涌入，见模块头「已知盲区」。
@@ -142,8 +178,13 @@ def looks_inverted(gray, y0, y1, *, ink=128, ctx=CTX,
     d = float(dn.mean()) if dn.size else 0.0
 
     side = max(u, d) if edge else min(u, d)
-    ok = solid >= min_solid and side >= min_ctx_ink
-    return ok, solid, u, d
+    ok = side >= min_ctx_ink
+    if not ok:
+        # 界行救援：带上下都有界行穿过来 => 带在版框以内，不是版框线本身。
+        # 专治「带落在抬头空栏里」——那一带本来没字，判据 1 量不到墨（vol02 p136）。
+        ok = (count_rules(b, max(0, y0 - rule_ctx), y0) >= min_rules
+              and count_rules(b, y1 + 1, min(h, y1 + 1 + rule_ctx)) >= min_rules)
+    return ok and solid >= min_solid, solid, u, d
 
 
 def main():
@@ -183,7 +224,7 @@ def main():
     print(f"\n{len(pages)} 页里 {n} 页有候选"
           f"{'（粗筛全量，未滤）' if args.raw else
              '（已滤：贴版框模式，上下取大者 + 带内纸列纯黑）' if args.edge else
-             '（已滤：上下夹正文 + 带内纸列纯黑；贴版框的带看 --edge）'}")
+             '（已滤：上下夹正文 或 界行穿过，+ 带内纸列纯黑；贴版框的带看 --edge）'}")
     print("下一步：人工看图确认，再把位置写进 books/<book>.yaml 的 preclean 段")
 
 
