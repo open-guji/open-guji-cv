@@ -107,4 +107,6 @@
   规则「分歧最大块 ≥150 才换 U-Net」px 均 14.7 / ≤20px 85.4% / blob≥60 4.2% / ≥150 1.6%。A 做 07 时可直接拿 `rule` 字段与 `dis.blobs`。
   **注意**：U-Net 归属对墨像素取 pA vs pB（`exp6_selector.unet_owner`）比 eval_gold 的三类 argmax 好（px 27.2→20.2），落地用前者。
   `out/unet_partition_unet_v2_cc400/` 已用新金标重跑（summary_frame_ok.json 同步）；`exp3 --tag v3` 还在跑（→ out/exp3_glyph_v3）。
+- 15:1x（B）：exp3 v3 跑完（注意目录名是 `out/exp3_glyphv3`，tag 没加下划线），已 restrat。n=673：模板归属 px 36.9 / blob≥150 5.1%，
+  **没有增益**；候选池 {直线,窄,宽} 上限 0.7%，+U-Net 0.0%（`exp6_join.py`）。07 建议候选池不带模板归属。数字已写 05 / 07 卡。
 
