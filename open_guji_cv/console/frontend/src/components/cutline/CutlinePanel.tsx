@@ -60,7 +60,7 @@ export function CutlinePanel({ book }: { book: string }) {
     const t0 = Date.now()
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
-      const st: CardState = { y: c.y, mode: 'line', poly: [], pick: c.chosen ?? 0, tags: {}, done: undefined, hidden: false }
+      const st: CardState = { y: c.y, mode: 'line', poly: [], pick: c.chosen ?? 0, pickTouched: false, tags: {}, done: undefined, hidden: false }
       let dv: DoneRec | undefined = done[c.id]
       // drift 档：批次里可能躺着这些 id 的**历史**裁决（批次框留空落到 vol02-cutline 这种老批次，
       // 当初的金标就是那里裁的）。坐标系已过期的不算已裁，更不能把旧折线画到新图上
@@ -123,10 +123,11 @@ export function CutlinePanel({ book }: { book: string }) {
     const c = cases[i]
     if (!c) return
     cardState.current[c.id].pick = k
+    cardState.current[c.id].pickTouched = true
     bump()
     const cd = c.candidates[k]
-    setMsg(k === 0 ? '选的是「直线」——落定请用「落定 / 现切点正确」'
-      : `选了「${CL_KIND[cd?.kind ?? ''] || ''}」，按 C 或点「切法正确」落定`)
+    setMsg(k === 0 ? '选的是「直线」——回车 = 现切点正确'
+      : `选了「${CL_KIND[cd?.kind ?? ''] || ''}」，回车 / C 落定为「切法正确」`)
   }
 
   function toggleMode(i: number) {
@@ -196,6 +197,10 @@ export function CutlinePanel({ book }: { book: string }) {
     if (st.done) { setMsg(`${c.id} 已落定（${st.done}），要改先按 U 重做`); return }
     let verdict = verdictIn
     let y = st.y
+    // 回车 = 「把当前状态落定」：人刚点过一种非直线切法、线没动、也没在画折线 → 就是「切法正确」
+    // （用户 2026-09-14：「点了宽走廊再回车，是会确认为宽走廊吧？」——此前回车只记直线 ok，选中态被丢掉）
+    if (verdict === 'moved' && st.pickTouched && st.pick > 0 && y === c.y && st.mode !== 'poly'
+        && (c.candidates || []).length > 1) verdict = 'cand'
     if (verdict === 'moved' && y === c.y) verdict = 'ok'
     if (verdict === 'ok') y = c.y
 
@@ -317,7 +322,7 @@ export function CutlinePanel({ book }: { book: string }) {
           <div className="cl-help-grid">
             <div><b>判定（点一个即落定）</b>
               O 现切点正确 · ↵ 把线拖到位后落定（没动过 = 现切点正确）· G 绿色折线缝已正确 ·
-              C 选中的算法切法正确（算法给出多种切法时才出现这一行）· V 上下字重叠、切在哪都伤字，线放折中处 · S 拿不准</div>
+              C 选中的算法切法正确（算法给出多种切法时才出现这一行；点过切法后直接回车也算）· V 上下字重叠、切在哪都伤字，线放折中处 · S 拿不准</div>
             <div><b>干扰（可多选，落定前点，评测里分开算）</b>
               1 污点 · 2 界行/版框 · 3 邻字残墨 · 4 其他</div>
             <div><b>工具</b>

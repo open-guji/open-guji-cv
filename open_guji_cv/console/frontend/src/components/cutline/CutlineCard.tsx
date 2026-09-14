@@ -6,6 +6,8 @@ export interface CardState {
   mode: 'line' | 'poly'
   poly: Array<[number, number]>
   pick: number
+  /** 人主动点过切法（回车即按所选切法落定） */
+  pickTouched?: boolean
   tags: Record<string, boolean>
   done?: string
   hidden: boolean

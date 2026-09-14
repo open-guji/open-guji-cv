@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from .. import deps
 from ..errors import maps_http
@@ -51,7 +51,18 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     bk = load_book(book)
     st = deps.product_store()
     drift_skipped: dict = {}
-    drift = pages in ("drift", "stale")
+    drift = pages in ("drift", "stale") or pages.startswith("list:")
+    only_ids: set[str] | None = None
+    if pages.startswith("list:"):
+        # 复核清单模式（2026-09-14）：页码框填 list:<名字>，读 workspace feedback/lists/<名字>.txt
+        # （一行一个金标 id，# 开头是注释），按 id 出卡、不管过没过期。用途：机器筛出「多候选卡上
+        # 按了 ok，可能本想选切法」之类的可疑条目，让人回头只看这几张。
+        from ...core.workspace import feedback_root
+        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+        if not lp.exists():
+            raise HTTPException(404, f"清单不存在：{lp}")
+        only_ids = {ln.strip() for ln in lp.read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.startswith("#")}
     if drift:
         # 「坐标过期重标」模式（2026-09-14）：页码框填 drift，出**金标 col_h 与当前列图高不一致**
         # 的那批切点（按 slot 对回当前 cells，id 沿用金标 id）。它们本来就在金标里，所以
@@ -64,7 +75,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
             for e in deps.event_log().read(batch):
                 if e.kind == "cutline" and e.payload.get("col_h"):
                     relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
-        cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None)
+        cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None, only_ids=only_ids)
         pg = sorted({c["page"] for c in cases})
     elif pages == "body":
         pg = [p for p in T.body_pages(book)]
