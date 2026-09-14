@@ -230,7 +230,7 @@ export function CutlinePanel({ book }: { book: string }) {
     try {
       await postEvents({ batch: batch(), step: 'row_segment', unit: 'boundary', kind: 'cutline', events: [row] })
       const n = Object.values(cardState.current).filter((s) => s.done).length
-      setMsg(`已落 ${n} / ${cases.length} 条 → 批次 ${batch()}`)
+      setMsg(`已落 ${n} / ${cases.length} 条 → 批次 ${batch()}　上一张 ${c.id}（标错了：取消「只看未裁」→ ← 回去 → U 重做）`)
     } catch (e) {
       setMsg('写入失败：' + (e as Error).message)
       st.done = undefined
@@ -289,7 +289,14 @@ export function CutlinePanel({ book }: { book: string }) {
         </label>
         <label className="muted">条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 250)} size={4} /></label>
         <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册自动命名" /></label>
-        <label className="muted"><input type="checkbox" checked={onlyTodo} onChange={(e) => setOnlyTodo(e.target.checked)} /> 只看未裁</label>
+        <label className="muted" title="勾上：落定后的卡立刻收起；取消：已裁的卡按判定配色显示，可按 U 重做"><input type="checkbox" checked={onlyTodo} onChange={(e) => {
+          // 2026-09-14 用户「标错了一张，卡不见了，这个按钮是不是失效了」：
+          // 原来只在「载入」时生效，改成即时——取消勾选立刻把已裁的卡放回来。
+          const v = e.target.checked
+          setOnlyTodo(v)
+          for (const st of Object.values(cardState.current)) st.hidden = v && !!st.done
+          bump()
+        }} /> 只看未裁</label>
         <button onClick={load}>载入</button>
         <span className="muted">{msg}</span>
       </div>
