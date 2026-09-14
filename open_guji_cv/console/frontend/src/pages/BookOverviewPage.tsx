@@ -7,6 +7,18 @@ import type { StatusResponse } from '../types/status'
 import type { OverviewSummaryResponse } from '../types/evals'
 import type { LlmOnlineStats } from '../api/llmOnline'
 import { STEPS } from '../steps'
+
+// Step5「字符识别」在 steps.ts 里 backendIds 是空的（它是四小步的容器，没有单一
+// 后端 step），于是总进度里整个 Step5 看不见——而 5-a/5-b/5-d 恰恰是全书跑得最
+// 慢的三步。2026-09-13 补：总览页单独把它们展开成子行（5-c OCR 候选默认关闭，
+// 只在本书启用时才显示）。这里不动 steps.ts 的 backendIds，因为 StepPage 拿
+// backendIds[0] 当唯一后端步用，填上会让 Step5 页面错关联到 5-a。
+const STEP5_ROWS: { id: string; title: string; backendId: string; optional?: boolean }[] = [
+  { id: 'glyph-match', title: '　5-a 字形库匹配', backendId: 'glyph_match' },
+  { id: 'rare', title: '　5-b 生僻字候选', backendId: 'rare_candidates' },
+  { id: 'ocr', title: '　5-c OCR 候选', backendId: 'ocr_candidates', optional: true },
+  { id: 'align-ref', title: '　5-d 整理本匹配', backendId: 'align_ref' },
+]
 import './overview.css'
 
 // D2 → 2026-09-11 重构：用户反馈"总览完全没用、状态矩阵太乱"——原版第一个
@@ -26,6 +38,7 @@ import './overview.css'
 export function BookOverviewPage() {
   const { book = '' } = useParams()
   const [status, setStatus] = useState<StatusResponse | null>(null)
+  const [devStatus, setDevStatus] = useState<StatusResponse | null>(null)
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null)
   const [llmStats, setLlmStats] = useState<LlmOnlineStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -34,16 +47,23 @@ export function BookOverviewPage() {
 
   useEffect(() => {
     setStatus(null)
+    setDevStatus(null)
     setSummary(null)
     setLlmStats(null)
     setError(null)
     setOcrErr(null)
-    fetchStatus(book, 'keben_body_v2').then(setStatus).catch((e) => setError(String(e)))
+    // 总进度是**全书**口径（`all`，vol01 为 206 页，实测 ~2.5s）。2026-09-13 修：
+    // 此前不传 pages，走 fetchStatus 的默认 `dev_set`，只统计 12 页分层小集，
+    // 标题却写「全书页数」——名实不符，看着像整本书跑完了，其实只跑了 12 页。
+    // dev_set 那份仍单独取一份并列显示，调参时照样能一眼看到小集进度。
+    fetchStatus(book, 'keben_body_v2', 'all').then(setStatus).catch((e) => setError(String(e)))
+    fetchStatus(book, 'keben_body_v2', 'dev_set').then(setDevStatus).catch(() => setDevStatus(null))
     fetchOverviewSummary(book).then(setSummary).catch((e) => setError(String(e)))
     fetchLlmOnlineStats(book).then(setLlmStats).catch(() => setLlmStats(null))
   }, [book])
 
   const total = status?.pages.length || 0
+  const devTotal = devStatus?.pages.length || 0
 
   async function toggleOcrCandidates(next: boolean) {
     setOcrBusy(true)
@@ -66,21 +86,34 @@ export function BookOverviewPage() {
       )}
 
       <div className="card">
-        <h2>{book} 总进度 <span className="muted">每步 fresh 产物 / 全书页数</span></h2>
-        {!status && !error && <p className="muted">加载中…</p>}
-        {status && STEPS.filter((s) => s.backendIds.length > 0).map((s) => {
-          const sid = s.backendIds[0]
-          const d = status.steps[sid]
+        <h2>{book} 总进度 <span className="muted">每步 fresh 产物 / 全书 {total || '…'} 页（括号内为 dev_set {devTotal || '…'} 页小集）</span></h2>
+        {!status && !error && <p className="muted">加载中…（全书状态约需数秒）</p>}
+        {status && STEPS.flatMap((s) => {
+          // Step5 展开成 5-a/5-b/(5-c)/5-d 四条子行；其余步一步一行。
+          if (s.id === 'step5') {
+            return STEP5_ROWS
+              .filter((r) => !r.optional || status.ocr_candidates_enabled)
+              .map((r) => ({ key: `step5-${r.id}`, href: `/${book}/step/step5/${r.id}/`,
+                             title: r.title, sid: r.backendId }))
+          }
+          if (s.backendIds.length === 0) return []
+          return [{ key: s.id, href: `/${book}/step/${s.id}/`, title: s.title, sid: s.backendIds[0] }]
+        }).map((row) => {
+          const d = status.steps[row.sid]
           if (!d) return null
           const fresh = d.counts.fresh
           const cls = fresh === 0 ? 'empty' : (fresh >= total ? 'full' : 'partial')
+          const dev = devStatus?.steps[row.sid]?.counts.fresh
           return (
-            <div className="ov-progress-row" key={s.id}>
-              <div className="ov-progress-label"><Link to={`/${book}/step/${s.id}/`}>{s.title}</Link></div>
+            <div className="ov-progress-row" key={row.key}>
+              <div className="ov-progress-label"><Link to={row.href}>{row.title}</Link></div>
               <div className="ov-progress-track">
                 <div className={`ov-progress-fill ${cls}`} style={{ width: `${total ? Math.min(100, fresh / total * 100) : 0}%` }} />
               </div>
-              <div className="ov-progress-nums">{fresh}/{total}</div>
+              <div className="ov-progress-nums">
+                {fresh}/{total}
+                {dev != null && <span className="muted"> ({dev}/{devTotal})</span>}
+              </div>
             </div>
           )
         })}
