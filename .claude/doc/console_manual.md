@@ -315,3 +315,14 @@ v2 链与 v1 产物完全解耦：Step1 直接吃原始扫描，Step4 由控制�
 
 **改控制台之后跑这两条验收关**：`tests/test_console_routes.py`（路由）、
 `tests/test_console_tabs.py`（8 个 tab 都渲染得出来）。
+
+## 切线 tab · 「坐标过期重标」模式（2026-09-14）
+
+页码框填 **`drift`**（其余照常：条数、批次、只看未裁），载入的是**金标 `col_h` 与当前列图高不一致**的那批
+切点——列图在标注后被 Step2 重矫正过，旧金标的 `y`/`polyline` 已不在当前坐标系（2026-09-14 实测 381 条，
+其中 302 条能按 slot 对回当前 cells）。卡片 id 沿用金标 id，人重裁后 `cutline` 事件经 gold_add **按 id upsert**，
+`y / col_h / polyline` 换成当前坐标系。这一档不按「已在金标里」跳过（它们本来就在），只按本批次事件去重；
+`kind` 选项忽略；期望字沿用金标（不重新对齐整理本）。返回值里 `drift_skipped` 列出对不上的原因
+（`column_not_ok` 当前产物不可用 / `slots_not_found` 格数结构变了 / `no_col_h(cand-verdict)` 新式「选切分方案」裁决本就不算过期）。
+批次名建议 `<册>-cutline-drift`。裁完照常 `guji gold import --shard char-segmentation/touching-cuts` 进数据集。
+代码：`eval/touching.py::drifted_boundaries`、`console/routers/cutline.py`；由来见 overview `Step3-逐字切分/09-切线金标坐标过期重标.md`。
