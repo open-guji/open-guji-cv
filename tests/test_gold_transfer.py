@@ -84,6 +84,18 @@ def test_import_dry_run_writes_nothing(stores):
     assert dst.list(SHARD) == []
 
 
+def test_export_copies_dataset_shard_into_workspace_verdicts(stores):
+    """反向：书的事实类分片（page-type）从测试集仓复制到 workspace，出卡时不再读 dataset。"""
+    from open_guji_cv.gold.transfer import export_to_workspace
+    src, dst = stores              # 这里 dst 当 dataset、src 当 workspace
+    dst.upsert("page-type", [_item(1, 0, 0, page_type="body"), _item(2, 0, 0, page_type="toc"),
+                             _item(3, 0, 0, status="retired", page_type="body")])
+    res = export_to_workspace("page-type", dst, src)
+    assert (res.n_source, res.n_selected, res.added) == (3, 2, 2)
+    assert {i.anchor.page for i in src.list("page-type")} == {1, 2}
+    assert export_to_workspace("page-type", dst, src).unchanged == 2
+
+
 def test_rebuild_verdicts_replays_events_into_the_verdict_store(tmp_path):
     """裁决表是事件日志的派生物：从事件重放能重建，且不看 consumed 记账、重放幂等。"""
     log = EventLog(tmp_path / "feedback")

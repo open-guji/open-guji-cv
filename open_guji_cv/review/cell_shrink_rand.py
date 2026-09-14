@@ -22,27 +22,20 @@ rand_human`），落 `gold_add` → `char-segmentation/instances`，与既有的
 """
 from __future__ import annotations
 
-import json
 import random
 from functools import lru_cache
-from pathlib import Path
 
 from ..products.store import ProductStore
 
-DATASET = Path(__file__).resolve().parent.parent.parent.parent / "open-guji-dataset"
 BOOKS = ("vol01", "vol02")   # 有 cell_shrink 产物 + page-type 金标的书
 DEFAULT_SEED = 20260911
 
 
 @lru_cache(maxsize=8)
 def _body_pages(book: str) -> frozenset[int]:
-    f = DATASET / "page-type" / "items.jsonl"
-    if not f.exists():
-        return frozenset()
-    rows = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
-    return frozenset(int(r["anchor"]["page"]) for r in rows
-                     if r["anchor"]["book"] == book
-                     and (r.get("expected") or {}).get("page_type") == "body")
+    """正文页：读 workspace 裁决表的 page-type 分片（不读 open-guji-dataset，2026-09-13）。"""
+    from ..eval.touching import body_pages
+    return frozenset(body_pages(book))
 
 
 def _load_pool(store: ProductStore) -> list[dict]:

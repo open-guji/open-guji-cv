@@ -9,23 +9,24 @@ R2s 的判据与 `eval/rulers.py` 完全一致（格线处墨占比 > INK_ON_LIN
 """
 from __future__ import annotations
 
-import json
 import random
-from pathlib import Path
 
-DATASET = Path(__file__).resolve().parent.parent.parent.parent / "open-guji-dataset"
 SHARD = "char-segmentation/touching-cuts"
 
 
 def body_pages(book: str) -> list[int]:
-    """page-type 金标里判为正文的页（职名页 / 目录页不用 21 格先验，先不出卡片）。"""
-    f = DATASET / "page-type" / "items.jsonl"
-    if not f.exists():
+    """page-type 标注里判为正文的页（职名页 / 目录页不用 21 格先验，先不出卡片）。
+
+    读 **workspace 裁决表**的 `page-type` 分片（`guji gold export page-type` 从测试集仓
+    复制过来，是「这本书的事实」），不读 open-guji-dataset——出卡是运行时（2026-09-13）。"""
+    from ..feedback.consumers import verdict_store
+    try:
+        items = verdict_store().list("page-type", legacy=False)
+    except Exception:
         return []
-    rows = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
-    return sorted(int(r["anchor"]["page"]) for r in rows
-                  if str(r.get("anchor", {}).get("book")) == book
-                  and (r.get("expected") or {}).get("page_type") == "body")
+    return sorted(int(i.anchor.page) for i in items
+                  if str(i.anchor.book) == book and i.anchor.page is not None
+                  and (i.expected or {}).get("page_type") == "body")
 
 
 def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> float | None:

@@ -197,6 +197,8 @@ class Engine:
             return (FAILED if entry and entry.status == "failed" else MISSING), entry
         if entry.status == "failed":
             return FAILED, entry
+        if entry.invalidated:
+            return STALE, entry        # 显式失效（人裁落定等），见 ManifestEntry.invalidated
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
     def _page_status_row(self, step: Step, pages: list[int],
@@ -270,7 +272,7 @@ class Engine:
                 continue
             entry = manifest.get(key)
             if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
-                    and self.store.exists(self.book.id, sid, key)):
+                    and not entry.invalidated and self.store.exists(self.book.id, sid, key)):
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
                 report.outcomes.append(PageOutcome(sid, pg, "skipped"))
                 continue

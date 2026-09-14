@@ -945,19 +945,47 @@ def effective_body_slots(n_body: int, border_top: float | None, border_bottom: f
     return n_body
 
 
+RESOLVED_CHOSEN = "chosen"
+"""`ResolvedCut.kind` 的特殊值：人说「现役那条折线就对」（`seam_ok`），收敛到
+`cands[chosen]`——前提是现役选中的确实是折线，现役走直线时这条裁决对不上，不动。"""
+
+RESOLVED_Y_TOL = 3.0
+"""裁决带参考 y 时，现役直线切点与它差超过这个像素数就不套用：裁决是对着**当时**
+的切点做的（touching-cuts README「坐标系」节），切点挪了就不是同一条格线了。
+touching-cuts 评测口径 ≤3 / ≤5 / ≤10 px，取最严一档。"""
+
+
+@dataclass
+class ResolvedCut:
+    """一条切点的人裁结论（来自 workspace 裁决表，见 `feedback/lookup.py`）。"""
+    kind: str                      # straight / seam_narrow / seam_wide / RESOLVED_CHOSEN
+    y_ref: float | None = None     # 裁决时的直线切点 y（列图坐标）；None = 不设护栏
+
+
 def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
-                         resolved_kind: str | None) -> tuple[list[SeamCandidate], int]:
-    """人裁回流（2026-09-13）：`resolved_kind` 是 touching-cuts 金标对这条切点
-    的裁决（`straight`/`seam_narrow`/`seam_wide`），命中候选池里同 kind 的那条
-    就把候选收敛成它一个——顺序闸按 `len(candidates)>=2` 判阻塞
+                         resolved: "str | ResolvedCut | None",
+                         y_line: float | None = None) -> tuple[list[SeamCandidate], int]:
+    """人裁回流（2026-09-13）：`resolved` 是裁决表对这条切点的结论，命中候选池里
+    同 kind 的那条就把候选收敛成它一个——顺序闸按 `len(candidates)>=2` 判阻塞
     （`review/cards.py::cut_pending`），收敛后自动放行，不用改闸的代码。
 
-    `resolved_kind` 为 None（未裁决）或候选池里没有这个 kind（比如几何变了、
-    这次没算出金标认定的那种切法）时原样返回——静默套错误的收敛比继续挡人
-    更危险。"""
-    if resolved_kind is None:
+    三种不动的情况（静默套错误的收敛比继续挡人更危险）：
+    - `resolved` 为 None（未裁决）；
+    - 候选池里没有这个 kind（几何变了、这次没算出裁决认定的那种切法）；
+    - 裁决带 `y_ref` 而现役直线 `y_line` 与它差 > `RESOLVED_Y_TOL`（切点已不是当时那条）。
+    `kind == RESOLVED_CHOSEN`（`seam_ok`）收敛到现役选中的折线；现役是直线时不动。"""
+    if resolved is None:
         return cands, chosen
-    match_idx = next((i for i, c in enumerate(cands) if c.kind == resolved_kind), None)
+    if isinstance(resolved, str):
+        resolved = ResolvedCut(resolved)
+    if (resolved.y_ref is not None and y_line is not None
+            and abs(float(y_line) - float(resolved.y_ref)) > RESOLVED_Y_TOL):
+        return cands, chosen
+    if resolved.kind == RESOLVED_CHOSEN:
+        if not cands or cands[chosen].kind == "straight":
+            return cands, chosen
+        return [cands[chosen]], 0
+    match_idx = next((i for i, c in enumerate(cands) if c.kind == resolved.kind), None)
     if match_idx is None:
         return cands, chosen
     return [cands[match_idx]], 0
@@ -971,7 +999,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     ink_threshold: int = 128, min_ink_ratio: float = 0.01,
                     raise_tol: float = 2.0, detect_jiazhu: bool = True,
                     seam_band: int = 20,
-                    resolved_cuts: dict[int, str] | None = None,
+                    resolved_cuts: "dict[int, str | ResolvedCut] | None" = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1016,7 +1044,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       额外的格。
     - `detect_jiazhu`：关掉就只出 char/blank 两类（`raised` 仍照算，它跟
       夹注判定完全独立）。
-    - `resolved_cuts`：`{slot_above: 候选 kind}`，人裁回流用（2026-09-13）。
+    - `resolved_cuts`：`{slot_above: 候选 kind 或 ResolvedCut}`，人裁回流用（2026-09-13）。
+      `ResolvedCut` 可带 `y_ref`（裁决时的直线 y）做护栏，`kind=RESOLVED_CHOSEN`
+      表示「现役折线就对」；细节见 `_apply_resolved_cut`。
       命中的切点直接把 `cut_candidates` 收敛成那一条候选（`chosen=0`），
       不再是"多候选"——顺序闸（`review/cards.py::cut_pending`）按
       `len(candidates)>=2` 判阻塞，收敛之后这条切点自动放行，不用改闸的代码。
@@ -1213,7 +1243,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 cands = [cands[1]]
                 chosen = 0
             # 4) 人裁回流：见 `_apply_resolved_cut` docstring。
-            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot))
+            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot),
+                                                y_line=float(bounds[k]))
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen)

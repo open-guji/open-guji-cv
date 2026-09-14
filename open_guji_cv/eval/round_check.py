@@ -33,7 +33,9 @@ from functools import lru_cache
 from collections import Counter
 from pathlib import Path
 
-DATASET = Path("../open-guji-dataset")
+from ..gold.store import default_dataset_root
+
+DATASET = default_dataset_root()     # 评测读测试集仓是正当的；别再用 cwd 相对路径
 
 GREEN, YELLOW, RED = "green", "yellow", "red"
 

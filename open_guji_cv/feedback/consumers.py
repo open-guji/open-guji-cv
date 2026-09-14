@@ -407,11 +407,50 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
     return res
 
 
+def product_invalidate(events, product_store=None, dry_run: bool = False, **kw) -> ConsumeResult:
+    """人裁落定 → 该页的某步产物显式失效（`ManifestEntry.invalidated`），引擎据此
+    标 stale、下次跑批重算，下游沿 DAG 跟着过期。
+
+    路由 `extra.step` 指定失效哪一步（cutline → row_segment）。只标不跑。
+    没跑过的页（manifest 里没条目）算 skipped，不是错。
+
+    ⚠️ 新接到既有路由上时，历史事件对这个消费者全是 pending——首次会把所有裁过的
+    页一起标失效（vol02 就是 160 页 Step3 及下游）。要不追溯就先把历史事件对
+    `product_invalidate` 记账（`guji events route --dry-run` 先看数）。
+    """
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    st = product_store or ProductStore()
+    res = ConsumeResult("product_invalidate", n_events=len(events))
+    done: set[tuple[str, str, str]] = set()
+    for e, d in events:
+        step = (d.extra or {}).get("step")
+        t = e.target
+        if not step or t.book is None or t.page is None:
+            res.skipped += 1
+            res.errors.append(f"{e.id}: 路由没给 extra.step 或事件没 book/page")
+            continue
+        key = (t.book, step, page_key(t.page))
+        if key in done:
+            continue
+        done.add(key)
+        if dry_run:
+            res.added += 1
+            continue
+        if st.manifest(t.book, step).invalidate(key[2], f"人裁 {e.kind} {e.id}"):
+            res.added += 1
+        else:
+            res.skipped += 1
+    return res
+
+
 CONSUMERS = {
     "gold_add": gold_add,
     "glyphdb_admit": glyphdb_admit,
     "glyphdb_recrop": glyphdb_recrop,
     "crop_exclude": crop_exclude,
+    "product_invalidate": product_invalidate,
 }
 
 

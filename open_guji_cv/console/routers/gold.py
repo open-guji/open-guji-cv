@@ -20,17 +20,32 @@ router = APIRouter()
 
 
 @router.get("/api/gold")
-def api_gold(shard: str | None = None, limit: int = 300) -> dict:
+def api_gold(shard: str | None = None, limit: int = 300, verdicts: bool = False) -> dict:
+    """`verdicts=1` 看 workspace 裁决表（feedback/verdicts）而不是测试集仓；两边同格式。"""
+    gs = deps.verdict_store() if verdicts else deps.gold_store()
     if shard:
-        return {"summary": deps.gold_store().summary(shard), "carrier": deps.gold_store().carrier(shard),
+        return {"summary": gs.summary(shard), "carrier": gs.carrier(shard),
                 "items": [i.model_dump(mode="json", exclude_none=True)
-                          for i in deps.gold_store().list(shard)][:limit]}
+                          for i in gs.list(shard)][:limit]}
     out = []
-    for s in deps.gold_store().shards():
-        d = deps.gold_store().summary(s)
-        d["carrier"] = deps.gold_store().carrier(s)
+    for s in gs.shards():
+        d = gs.summary(s)
+        d["carrier"] = gs.carrier(s)
         out.append(d)
-    return {"shards": out}
+    return {"shards": out, "source": "verdicts" if verdicts else "dataset"}
+
+
+@router.post("/api/gold/{shard:path}/import")
+def api_gold_import(shard: str, book: str | None = None, pages: str | None = None,
+                    stratum: str | None = None, include_uncertain: bool = False,
+                    why: str = "", dry_run: bool = True) -> dict:
+    """workspace 裁决表 → 测试集仓：唯一往 dataset 写人裁数据的入口，**默认 dry_run**，
+    看清清单再 `dry_run=false`。同 CLI `guji gold import`。"""
+    from ...gold.transfer import ImportFilter, import_to_dataset, parse_pages
+    flt = ImportFilter(book=book, pages=parse_pages(pages), stratum=stratum,
+                       include_uncertain=include_uncertain)
+    return import_to_dataset(shard, deps.verdict_store(), deps.gold_store(), flt,
+                             why=why, dry_run=dry_run).to_dict()
 
 
 

@@ -24,6 +24,11 @@ class ManifestEntry:
     elapsed: float = 0.0
     status: str = "ok"
     error: str | None = None
+    invalidated: str | None = None
+    """显式失效理由（2026-09-13）。指纹只认「代码 / 参数 / 上游产物」三样，人裁
+    不在里面——一条切线裁决落定后该页 Step3 该重跑，却没有任何指纹会变。这里给
+    消费者一个入口：置了理由，引擎就把这一页当 stale（`engine.page_status`），
+    重跑写回新条目时自然清空。只标不自动跑，与指纹过期同一纪律。"""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -60,6 +65,18 @@ class Manifest:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(entry.to_json() + "\n")
+
+    def invalidate(self, key: str, reason: str) -> bool:
+        """把 `key` 的最新条目标成显式失效（追加一条带 `invalidated` 的副本）。
+        没有条目（从没跑过）返回 False——没产物就没什么可失效的。"""
+        cur = self.get(key)
+        if cur is None:
+            return False
+        if cur.invalidated:
+            return True
+        new = ManifestEntry(**{**asdict(cur), "invalidated": reason, "ts": time.time()})
+        self.put(new)
+        return True
 
     def compact(self) -> None:
         """重写文件，只留每个 key 的最后一条。"""
