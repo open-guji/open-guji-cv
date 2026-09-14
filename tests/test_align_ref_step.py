@@ -43,7 +43,16 @@ def test_registered():
     assert "corpus" in STEPS["align_ref"].spec.needs
     # 2026-09-10 去掉对 context_decision 的依赖（不再借 Step6 的定字拼锚定串，
     # 见 align_ref.py 模块头「2026-09-10」一节）——四路才真正互相独立。
-    assert set(STEPS["align_ref"].spec.consumes) == {"glyph_match", "ocr_candidates"}
+    #
+    # 2026-09-13：`ocr_candidates` 从 consumes 挪到 optional_consumes。**吃的证据
+    # 没变**（仍是库匹配 + OCR 两路），变的是缺席时怎么办：它是书级开关
+    # `BookSpec.ocr_candidates` 控制的可选步骤（默认关，`Engine._enabled` 直接把它
+    # 滤出 steps），写在 consumes 里会让指纹层 `upstream_shas` 认它是硬依赖、短路
+    # 阻塞整步——而 `run_page` 早就用 `_opt()` 兜住了缺席（只在 match 和 ocr 都缺
+    # 时才报错）。声明与实现对不上，vol01（开关关着）因此**整条 Step5-d/6/C1 全部
+    # 阻塞**，`test_core_v2.test_keben_body_v2_on_vol01_page24` 一直挂在这上面。
+    assert set(STEPS["align_ref"].spec.consumes) == {"glyph_match"}
+    assert set(STEPS["align_ref"].spec.optional_consumes) == {"ocr_candidates"}
 
 
 def test_corpus_fingerprint_lands_in_params_and_moves_the_hash():

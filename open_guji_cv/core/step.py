@@ -41,7 +41,7 @@ def register_step(cls: type["Step"]) -> type["Step"]:
     sid = inst.spec.id
     if sid in STEPS and type(STEPS[sid]) is not cls:
         raise ValueError(f"Step 重复注册: {sid}")
-    for k in (*inst.spec.consumes, *inst.spec.produces):
+    for k in (*inst.spec.consumes, *inst.spec.optional_consumes, *inst.spec.produces):
         if k not in KINDS:
             raise ValueError(f"Step {sid} 引用了未注册的产物种类 {k!r}")
     STEPS[sid] = inst
@@ -163,7 +163,8 @@ class Step(ABC):
         s = self.spec
         d = {
             "id": s.id, "title": s.title, "version": s.version, "unit": s.unit,
-            "consumes": list(s.consumes), "produces": list(s.produces),
+            "consumes": list(s.consumes), "optional_consumes": list(s.optional_consumes),
+            "produces": list(s.produces),
             "params": s.params.model_json_schema(), "when": s.when,
         }
         if s.gate:

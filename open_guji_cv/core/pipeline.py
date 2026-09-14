@@ -43,14 +43,21 @@ class Pipeline:
         return STEPS[sid]
 
     def upstream(self, sid: str) -> list[str]:
-        """直接上游：产出本步 consumes 的那些步（含它们出口挂的闸产出的）+ needs 里显式写的。"""
+        """直接上游：产出本步 consumes / optional_consumes 的那些步（含它们出口挂的
+        闸产出的）+ needs 里显式写的。
+
+        **可选上游也算图上的边**——硬/可选的区别只在"缺席时阻不阻塞"（见
+        `StepSpec.optional_consumes`），拓扑序与过期传播两件事上两者一样：
+        `ocr_candidates` 重跑了，`align_ref` 那一页照样该标 stale。
+        """
         me = STEPS[sid]
+        wants = (*me.spec.consumes, *me.spec.optional_consumes)
         ups: list[str] = []
         for other in self.steps:
             if other == sid:
                 break
             o = STEPS[other]
-            if any(k in _produces(o) for k in me.spec.consumes) or other in self.needs.get(sid, []):
+            if any(k in _produces(o) for k in wants) or other in self.needs.get(sid, []):
                 ups.append(other)
         return ups
 
@@ -111,8 +118,9 @@ class Pipeline:
         out = []
         for sid in self.steps:
             me = STEPS[sid]
+            wants = (*me.spec.consumes, *me.spec.optional_consumes)
             for up in self.upstream(sid):
-                kinds = [k for k in me.spec.consumes if k in _produces(STEPS[up])] or ["needs"]
+                kinds = [k for k in wants if k in _produces(STEPS[up])] or ["needs"]
                 for k in kinds:
                     out.append((up, sid, k))
         return out
@@ -124,7 +132,10 @@ class Pipeline:
                 raise ValueError(f"pipeline {self.id}: 未注册的 Step {sid!r}")
             s = STEPS[sid]
             provided = {k for p in seen for k in _produces(STEPS[p])}
-            missing = [k for k in s.spec.consumes if k not in provided and k not in _EXTERNAL_KINDS]
+            # 可选上游也要有生产者排在前面——"可选"是指**运行时**可以缺席（书级开关
+            # 关掉），不是指 pipeline 里可以没有它。
+            wants = (*s.spec.consumes, *s.spec.optional_consumes)
+            missing = [k for k in wants if k not in provided and k not in _EXTERNAL_KINDS]
             if missing:
                 raise ValueError(f"pipeline {self.id}: {sid} 需要 {missing}，但前面没有步骤产出它")
             seen.add(sid)

@@ -65,10 +65,24 @@ class StepSpec:
     title: str
     version: str                     # 输出语义变了才升；参与指纹
     unit: Unit
-    consumes: tuple[str, ...]        # 产物种类 id
+    consumes: tuple[str, ...]        # 产物种类 id（**硬依赖**：缺一个就阻塞整步）
     produces: tuple[str, ...]
     params: type[BaseModel]          # 参数 schema，默认值 = 生产配置
     when: str | None = None          # 单位级条件，P0 只记录不求值
+    optional_consumes: tuple[str, ...] = field(default=())
+    """**可选上游**：缺了照跑，只是这一路证据没有，`run_page` 自己兜住（拿到 None）。
+
+    与 `consumes` 的区别只在**缺席时怎么办**：硬依赖缺席 → `upstream_shas` 返回
+    None、整步阻塞；可选上游缺席 → 不阻塞，只是不进指纹（在的时候照常进，改了
+    照样让下游过期）。
+
+    2026-09-13 加：`ocr_candidates`（Step5-c）是书级开关 `BookSpec.ocr_candidates`
+    控制的可选步骤（默认关），关掉时 `Engine._enabled` 直接把它从 steps 里滤掉。
+    但 `align_ref`/`context_decide`/`seed_admit` 当初把它写进了 `consumes`，于是
+    指纹层 `upstream_shas` 认它是硬依赖、短路返回 None，**三步全部阻塞**——而这
+    三步的 `run_page` 其实早就写好了容错（`seed_admit._opt` docstring 直说"可选
+    上游：缺了就 None，不炸"；`align_ref` 只在 match 和 ocr 都缺时才报错），那些
+    代码根本没机会跑到。声明与实现对不上，这个字段就是用来把实现的意图表达出来的。"""
     code_deps: tuple[str, ...] = field(default=())
     """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
     needs: tuple[str, ...] = field(default=())
