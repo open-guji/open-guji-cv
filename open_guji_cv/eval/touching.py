@@ -219,7 +219,19 @@ def seam_deviation(a: list, b: list) -> tuple[float, float]:
 
 
 def attach_expected(cases: list[dict], book: str, store=None) -> None:
-    """把整理本对齐金标的期望字挂到 char_above / char_below（没有就留空）。"""
+    """把整理本对齐金标的期望字挂到 char_above / char_below（没有就留空）。
+
+    取 `reading`（整理本给的文意读法），**不是** `shape`（v2 定字认的刻本形）
+    ——卡片上那栏写着「整理本期望」，就得真是整理本说的字。2026-09-13 实锤：
+    vol02:33:2:9 语料原文是「大象引何**妥**說」，卡片却显示「何**安**」，因为
+    这里一直取的是 `shape`：那条金标 `shape='安' reading='妥' conversion=True
+    source='fallback'`——v2 定字自己就没把握（fallback 兜底），定出来的形还被
+    当成「整理本期望」摆给人看，等于拿一个更不可信的来源冒充金标。
+
+    两层都留着（`shape_above`/`shape_below`），差异由前端显式呈现为一次转换
+    （见 `v2_align` 模块头「字形 / 释读分开记」）；`conversion` 位也一并带出，
+    省得前端拿两个字符串比对再猜。
+    """
     from ..gold.v2_align import align_book
     from ..products.store import ProductStore
 
@@ -231,8 +243,12 @@ def attach_expected(cases: list[dict], book: str, store=None) -> None:
     for c in cases:
         gu = gold.get(f"{book}:{c['page']}:{c['col']}:{c['slot_above']}")
         gd = gold.get(f"{book}:{c['page']}:{c['col']}:{c['slot_below']}")
-        c["char_above"] = gu.shape if gu else ""
-        c["char_below"] = gd.shape if gd else ""
+        c["char_above"] = gu.reading if gu else ""
+        c["char_below"] = gd.reading if gd else ""
+        c["shape_above"] = gu.shape if gu else ""
+        c["shape_below"] = gd.shape if gd else ""
+        c["conv_above"] = bool(gu.conversion) if gu else False
+        c["conv_below"] = bool(gd.conversion) if gd else False
 
 
 def pick_cases(cases: list[dict], limit: int, seed: int = 0, per_page: int | None = None) -> list[dict]:

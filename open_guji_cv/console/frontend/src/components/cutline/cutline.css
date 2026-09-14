@@ -44,6 +44,9 @@
 .bcc-cands tr.on td { background: var(--indigo-soft); }
 .bcc-cands .bcc-kind { white-space: nowrap; }
 .clm-hit { color: var(--ok); font-weight: 600; }
+/* 整理本读法与 v2 定字刻本形不一致的格位：摆成「读法(形)」，形小一号弱化 */
+.bcc-conv { border-bottom: 1px dotted var(--rule); }
+.bcc-shape { font-size: .72rem; opacity: .65; margin-left: .05rem; }
 .bcc-unsure { display: inline-flex; gap: .3rem; }
 .bcc-cov { font-size: .68rem; opacity: .7; margin-left: .1rem; }
 .bcc-drawhint { display: block; margin-top: .2rem; font-size: .7rem; }

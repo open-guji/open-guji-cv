@@ -677,8 +677,17 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
 
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
-        # 探到线之后整体再往下让 BOTTOM_SAFETY_MARGIN——补的是判定口径的
-        # 不对称（往下无害、往上切字），不是算法有偏。详见该常数上方的说明。
+        # 先按页把线挪到墨条下沿（详见 `_descend_to_ink_bottom` 上方说明），
+        # 再让一个很小的固定余量补判定口径的不对称（往下无害、往上切字）。
+        lo2 = max(0, int(round(result.position)) - EDGE_MAX_WALK)
+        hi2 = min(h - 1, int(round(result.position)) + EDGE_MAX_WALK * 2)
+        pos2, curve2 = sample_line_curve(mask, "h", lo2, hi2, result.slope)
+        if len(curve2):
+            i0 = int(np.clip(round(result.position) - lo2, 0, len(curve2) - 1))
+            i1 = _descend_to_ink_bottom(curve2, i0)
+            result = LineMatch(position=float(pos2[i1]), slope=result.slope,
+                               score=result.score, width=result.width,
+                               proj=result.proj)
         result = LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
                            slope=result.slope, score=result.score,
                            width=result.width, proj=result.proj)
@@ -810,6 +819,64 @@ RESCUE_SLOPE_N = 25
 BOTTOM_SAFETY_MARGIN = 6.0
 
 
+# ── 下版框锚到墨条下沿 ────────────────────────────────────────
+# 2026-09-13：金标修正后重看 7 页深切字（vol02/64,70,71,79,93,155,182），
+# 病因完全一致：**算法把线压在墨条的上沿，而人标的是下沿**。投影峰的
+# 「顶点」落在墨条中部偏上，可下版框的语义是「正文到此为止」——墨条整条
+# 都属于版框，所以该取它的**下**边缘。
+#
+# 这也解释了 `BOTTOM_SAFETY_MARGIN=6` 为什么不够：墨条实测厚 25~50px，
+# 6px 补不过一整条。而且加大余量是**全局**的，会把本来就落在下沿的正确页
+# 一起推进空白里（实测 B=10 时"过"反而从 156 跌到 151）。
+#
+# 正确做法是**按页自适应**：从峰位沿曲线往下走，走到墨结束的地方。墨条薄
+# 的页自然只挪几 px，厚的页挪几十 px，不需要一个放之四海的常数。
+#
+# `EDGE_ALPHA` 比 `DEFAULT_ALPHA`(0.5) 低：半高(0.5)还在墨条内部，要的是
+# 墨真正淡下去的位置，所以取 0.25。`EDGE_MAX_WALK` 封顶，防止在"墨条下面
+# 紧跟着书口脏迹"的页上一路滑下去。
+EDGE_ALPHA = 0.25
+EDGE_MAX_WALK = 60
+EDGE_HYST = 3
+
+
+def _descend_to_ink_bottom(curve: np.ndarray, idx: int,
+                           alpha: float | None = None,
+                           max_walk: int | None = None,
+                           hyst: int | None = None) -> int:
+    """从峰位 `idx` 沿曲线往下走到墨条下沿，返回新的下标（>= idx）。
+
+    判据跟 `half_height_score_at` 的 `walk` 同构（连续 `hyst` 个点低于阈值
+    才算出界），但阈值更低、且**只往下**走。找不到更下沿就原地返回。
+
+    ⚠️ 三个参数默认 `None`、在**函数体里**取模块常数，不能写成
+    `alpha: float = EDGE_ALPHA` 那样的默认值——默认值在 def 执行时就绑死了，
+    调参脚本改 `P.EDGE_ALPHA` 根本传不进来。2026-09-13 的扫描就栽在这上面：
+    四档 alpha 跑出**逐字节相同**的结果，白跑一轮才发现是这个坑。
+    """
+    alpha = EDGE_ALPHA if alpha is None else alpha
+    max_walk = EDGE_MAX_WALK if max_walk is None else max_walk
+    hyst = EDGE_HYST if hyst is None else hyst
+    v = float(curve[idx])
+    if v <= 0:
+        return idx
+    thresh = v * alpha
+    n = len(curve)
+    pos, last_above, consec_below = idx, idx, 0
+    while pos - idx < max_walk:
+        nxt = pos + 1
+        if nxt >= n:
+            break
+        if curve[nxt] >= thresh:
+            last_above, consec_below = nxt, 0
+        else:
+            consec_below += 1
+            if consec_below >= hyst:
+                break
+        pos = nxt
+    return last_above
+
+
 def _rescue_bottom(mask: np.ndarray, cur: LineMatch, verticals: list[LineMatch],
                    book_gap: float, alpha: float, hyst: int) -> LineMatch:
     """现役结果偏离全册基准太多时，用跨页先验重搜一条。详见上方大段说明。
@@ -830,7 +897,13 @@ def _rescue_bottom(mask: np.ndarray, cur: LineMatch, verticals: list[LineMatch],
         return cur
 
     xs = sorted(v.position for v in verticals)
-    x0, x1 = int(xs[0]) + RESCUE_MARGIN, int(xs[-1]) - RESCUE_MARGIN
+    # 界行位置可能落在图外（封面/扉页这类没有版框的页，find_vertical_lines
+    # 会给出 x<0 的伪界行）。**必须先夹回 [0, w]**：负的 x0 会让
+    # `mask[:, x0:x1]` 变成 numpy 的反向切片而得到**空**数组，`x1-x0`
+    # 却还是个大正数，护栏看不出来，一路错到 `_shift_blocks` 才炸
+    # （vol03/p0001：xs[0]=-74 → x0=-29 → 切出 0 列 → IndexError）。
+    x0 = max(0, int(xs[0]) + RESCUE_MARGIN)
+    x1 = min(w, int(xs[-1]) - RESCUE_MARGIN)
     if x1 - x0 < 200:
         return cur
     sub = mask[:, x0:x1]

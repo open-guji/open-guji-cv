@@ -3,8 +3,10 @@ import numpy as np
 
 from open_guji_cv.utils.peak_line_search import (
     BOTTOM_SAFETY_MARGIN,
+    EDGE_MAX_WALK,
     LineMatch,
     _dedup_by_position,
+    _descend_to_ink_bottom,
     _sample_line_curve_naive,
     _shift_blocks,
     find_horizontal_border,
@@ -14,6 +16,22 @@ from open_guji_cv.utils.peak_line_search import (
     projection,
     sample_line_curve,
 )
+
+
+def _post_bottom(mask, m: LineMatch) -> float:
+    """复刻 `find_horizontal_border` 对下版框做的、与救援无关的后处理。
+
+    两步：锚到墨条下沿，再加安全余量。测"救援没换线"时拿它把基线也过一遍，
+    否则断言会把后处理的位移误当成救援出手。
+    """
+    h = mask.shape[0]
+    lo = max(0, int(round(m.position)) - EDGE_MAX_WALK)
+    hi = min(h - 1, int(round(m.position)) + EDGE_MAX_WALK * 2)
+    pos, curve = sample_line_curve(mask, "h", lo, hi, m.slope)
+    if not len(curve):
+        return m.position + BOTTOM_SAFETY_MARGIN
+    i0 = int(np.clip(round(m.position) - lo, 0, len(curve) - 1))
+    return float(pos[_descend_to_ink_bottom(curve, i0)]) + BOTTOM_SAFETY_MARGIN
 
 H, W = 400, 300
 
@@ -266,9 +284,10 @@ def test_rescue_bottom_keeps_result_when_already_consistent():
     base = find_horizontal_border(mask, "bottom")
     same = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
                                   book_gap=h - base.position)
-    # 下版框一律会加 BOTTOM_SAFETY_MARGIN（判定口径不对称的补偿，与救援
-    # 是否出手无关），所以比较时要把它扣掉——这里要断言的是"救援没有换线"。
-    assert same.position - BOTTOM_SAFETY_MARGIN == base.position
+    # 下版框在探到线之后一律还要做两步与救援无关的后处理：锚到墨条下沿
+    # (`_descend_to_ink_bottom`) + 加 BOTTOM_SAFETY_MARGIN。这里要断言的是
+    # "救援没有换线"，所以拿 base 走一遍同样的后处理再比。
+    assert same.position == _post_bottom(mask, base)
     assert same.slope == base.slope
 
 
@@ -284,4 +303,4 @@ def test_rescue_bottom_refuses_when_nothing_near_reference():
     # 把基准指到一个根本没有线的位置（页面正中），邻域内必然无候选
     out = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
                                  book_gap=float(h // 2))
-    assert out.position - BOTTOM_SAFETY_MARGIN == cur.position
+    assert out.position == _post_bottom(mask, cur)

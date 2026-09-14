@@ -70,14 +70,18 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
     cases = [c for c in cases if c["id"] not in done]
     picked = T.pick_cases(cases, limit, seed=seed)
-    # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）
+    # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）。
+    # 缓存的字段清单要与 `attach_expected` 写出的那批**一致**——少列一个，
+    # 缓存命中的那条路径就会静默丢字段（首次请求有、刷新一次就没了）。
+    _EXP_KEYS = ("char_above", "char_below", "shape_above", "shape_below",
+                 "conv_above", "conv_below")
     key = (book, tuple(sorted({c["page"] for c in picked})))
     if key not in _cutline_expected_cache:
         T.attach_expected(picked, book, st)
-        _cutline_expected_cache[key] = {c["id"]: (c.get("char_above", ""), c.get("char_below", "")) for c in picked}
+        _cutline_expected_cache[key] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in picked}
     else:
         for c in picked:
-            c["char_above"], c["char_below"] = _cutline_expected_cache[key].get(c["id"], ("", ""))
+            c.update(_cutline_expected_cache[key].get(c["id"], {k: "" for k in _EXP_KEYS}))
     _attach_candidates(st, book, picked)
     for c in picked:
         pad = 6
@@ -121,13 +125,21 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
     from ...core.step import page_key
 
     per_page: dict[int, dict] = {}
-    match_cache: dict[tuple[int, int], dict] = {}   # (page, slot) → {side: {cand_idx: MatchRec-ish dict}}
+    match_cache: dict[tuple[int, int, int], dict] = {}  # (page, col, slot) → {side: {cand_idx: MatchRec-ish dict}}
 
-    def _match_map(pg: int, slot: int) -> dict:
+    def _match_map(pg: int, col: int, slot: int) -> dict:
         """这一格的候选匹配结果，外加它自己**当前**（chosen 那条）的匹配结果
         ——chosen 候选没有 `cand_variants`（Step4 不重复切它），它的识别信息
         就是这一格正式的 `MatchRec` 本身，存在 `out["chosen"]` 里，拼候选列表
         时按 `i == cp.chosen` 取用，不与其他候选混进同一个 side 字典。
+
+        ⚠️ 格位是 `(col, slot)` 两维，**只按 slot 找会串列**。2026-09-13 实锤：
+        这里一度漏了 `cc.col != col` 这一句，`break` 又只跳出内层，于是外层
+        逐列覆盖 `out`，最后留下的是**同页最后一列**那个同 slot 格的识别结果。
+        vol02:152:5:9（列图上明明是「史/本」，产物里也是「史/本」）卡片上显示
+        成 彖/象/家 与 象/彖/篆——那是 col9 的候选池。页面照常渲染、无任何报错，
+        人看到的现象是「候选与这两个字毫无关系，坐标好像乱了」。
+        `match_cache` 的 key 同理必须带 col，否则第一列的结果会被后面各列复用。
 
         产物是外部磁盘状态，读取/解析失败（旧版本 schema 的存量产物、跑到
         一半的文件……）都不该让整个请求 500——候选信息本就是"有则显示、
@@ -135,7 +147,7 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
         `CandidateMatch` 加 `side` 字段前跑出的旧产物，pydantic 拿新
         schema 读会直接报 `Field required`。
         """
-        key = (pg, slot)
+        key = (pg, col, slot)
         if key in match_cache:
             return match_cache[key]
         out: dict = {"above": {}, "below": {}, "chosen": None}
@@ -144,6 +156,8 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
         except Exception:
             mrec = None
         for cc in (mrec.columns if mrec else []):
+            if cc.col != col:
+                continue
             for r in cc.chars:
                 if r.slot != slot or r.sub:
                     continue
@@ -156,6 +170,7 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
                         "cov": cv.cov, "wmax": cv.wmax,
                         "candidates": cv.candidates[:3]}
                 break
+            break
         match_cache[key] = out
         return out
 
@@ -179,8 +194,8 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
         # 下格（slot_below）的 above 候选 = 下格"往上看"这条切点。两者
         # 是同一批候选的两个视角，逐 cand_idx 一一对应；chosen 那条没有
         # cand_variants（Step4 不重切它），改取这一格正式的 MatchRec。
-        above_map = _match_map(pg, c["slot_above"])
-        below_map = _match_map(pg, c["slot_below"])
+        above_map = _match_map(pg, c["col"], c["slot_above"])
+        below_map = _match_map(pg, c["col"], c["slot_below"])
 
         def _pick(m: dict, side: str, i: int) -> dict | None:
             return m["chosen"] if i == cp.chosen else m[side].get(i)

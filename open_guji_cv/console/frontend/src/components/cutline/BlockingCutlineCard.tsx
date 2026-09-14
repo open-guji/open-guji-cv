@@ -35,6 +35,9 @@ interface Props {
   onClearPoly: () => void
 }
 
+// `expect` 传的是**期望的刻本形**（shape，没有转换时就等于整理本读法）：
+// 库匹配认的是刻本上刻的形，拿文意读法去比会在 conversion 位上假性不命中
+// （vol02:33:2:9 刻的是「安」、整理本作「妥」，库认出「安」是对的）。
 function matchLabel(m: CandidateMatch | null | undefined, expect?: string) {
   if (!m) return <span className="muted">无识别</span>
   if (m.char) {
@@ -56,6 +59,24 @@ function matchLabel(m: CandidateMatch | null | undefined, expect?: string) {
           {ch}<span className="bcc-cov">{(cov * 100).toFixed(0)}</span>
         </span>
       ))}
+    </span>
+  )
+}
+
+// 一个格位的期望字。`ch` = 整理本读法（reading），`shape` = v2 定字认的刻本形。
+// 两者不同就是一次转换，摆成「读法(形)」并标出来——此前卡片只显示 shape 却写着
+// 「整理本期望」，v2 定错字时人就照着一个错的"期望"去裁切线（2026-09-13 实锤：
+// vol02:33:2:9 语料是「何妥」，卡片显示「何安」）。
+function ExpectChar({ ch, shape, conv, where }: {
+  ch?: string; shape?: string; conv?: boolean; where: string
+}) {
+  if (!ch) return <span className="ch" title={`${where}期望字`}>？</span>
+  if (!conv || !shape || shape === ch) {
+    return <span className="ch" title={`${where}期望字（整理本）`}>{ch}</span>
+  }
+  return (
+    <span className="ch bcc-conv" title={`${where}：整理本作「${ch}」，v2 定字认作刻本形「${shape}」`}>
+      {ch}<span className="bcc-shape">({shape})</span>
     </span>
   )
 }
@@ -147,8 +168,8 @@ export function BlockingCutlineCard({
         </div>
         <div className="clside">
           <div className="bcc-expect">
-            <span className="ch" title="上格期望字">{c.char_above || '？'}</span>
-            <span className="ch" title="下格期望字">{c.char_below || '？'}</span>
+            <ExpectChar ch={c.char_above} shape={c.shape_above} conv={c.conv_above} where="上格" />
+            <ExpectChar ch={c.char_below} shape={c.shape_below} conv={c.conv_below} where="下格" />
             <span className="muted">← 整理本期望</span>
           </div>
           <table className="bcc-cands">
@@ -157,8 +178,8 @@ export function BlockingCutlineCard({
                 <tr key={k} className={k === pick && !drawn ? 'on' : ''}
                     onClick={(e) => { e.stopPropagation(); onPick(k) }}>
                   <td className="bcc-kind">{CL_KIND[cd.kind] || cd.kind}{k === c.chosen ? ' ·现役' : ''}</td>
-                  <td>{matchLabel(cd.match_above, c.char_above)}</td>
-                  <td>{matchLabel(cd.match_below, c.char_below)}</td>
+                  <td>{matchLabel(cd.match_above, c.shape_above || c.char_above)}</td>
+                  <td>{matchLabel(cd.match_below, c.shape_below || c.char_below)}</td>
                 </tr>
               ))}
             </tbody>

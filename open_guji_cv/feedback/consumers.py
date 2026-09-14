@@ -78,8 +78,14 @@ def _expected_of(e: Event) -> dict:
         # cand：verdict == "cand" 时**算法候选里被人选中的那一种**（straight / seam_narrow /
         # seam_wide）。这是攒给下游打分函数的样本——哪条缝被人看上了，比 y 更能说明问题
         # （2026-09-10）。
+        # char_above/below：**整理本读法**（v2_align 的 `reading`）。
+        # shape_above/below：v2 定字认的刻本形（`shape`）。两者不同即一次转换。
+        # ⚠️ 2026-09-13 之前 `char_*` 存进来的其实是 `shape`（卡片取错了字段，
+        # 标签却写着「整理本期望」）——那之前的历史事件里 `char_*` 要按 shape
+        # 理解，且没有 `shape_*` 位。回读老金标做统计时别把两段混着算。
         keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below", "tags", "note", "polyline", "cand")
+                "char_above", "char_below", "shape_above", "shape_below",
+                "tags", "note", "polyline", "cand")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
     if e.kind == "border_offset":
         # 整页下版框坐标金标（`page_bottom_cards`）。verdict：moved（两端
