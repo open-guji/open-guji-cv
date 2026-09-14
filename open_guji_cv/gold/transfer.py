@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+from .atomic import merge_expected
 from .item import GoldItem
 from .store import GoldStore
 
@@ -84,7 +85,8 @@ def import_to_dataset(shard: str, src: GoldStore, dst: GoldStore, flt: ImportFil
 
     合并口径与 `consumers.gold_add` 一致：目标分片里已有同 id 条目时，`expected` /
     `input` 按键合并（旧值打底、新值覆盖），不整体替换——v1 时代的字段不能被抹掉
-    （2026-09-04 教训，见 gold_add）。`source_events` 由 `GoldStore.upsert` 并集。
+    （2026-09-04 教训，见 gold_add）；但 `gold/atomic.py` 登记的整组键（切线几何）整组替换。
+    `source_events` 由 `GoldStore.upsert` 并集。
     """
     flt = flt or ImportFilter()
     res = TransferResult(shard=shard, dry_run=dry_run)
@@ -101,7 +103,9 @@ def import_to_dataset(shard: str, src: GoldStore, dst: GoldStore, flt: ImportFil
         if old is None:
             res.added += 1
             continue
-        it.expected = {**old.expected, **it.expected}
+        # 整组键（切线几何）按裁决表整组替换，别把 dataset 里旧坐标系的折线留回来
+        # （2026-09-14 实锤：drift 重标后导入，ok 判定的条目带回了旧折线，评测红线画到窗口顶上）
+        it.expected = merge_expected(shard, old.expected, it.expected)
         it.input = {**(old.input or {}), **(it.input or {})}
         if old.expected == it.expected and old.status == it.status:
             res.unchanged += 1

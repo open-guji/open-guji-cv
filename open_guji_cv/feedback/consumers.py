@@ -129,11 +129,8 @@ def verdict_store() -> GoldStore:
     return GoldStore(verdicts_root())
 
 
-# 切线事件写进 touching-cuts 的全部键。它们是**一次判定的整体**（同一坐标系下的
-# y / col_h / 折线 / 候选 / 干扰标签），重裁时要一起换，不能只覆盖新事件带的那几个。
-CUTLINE_KEYS = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below", "shape_above", "shape_below",
-                "tags", "note", "polyline", "cand")
+# 切线事件写进 touching-cuts 的全部键（正本在 gold/atomic.py，导入/导出也用它整组替换）。
+from ..gold.atomic import CUTLINE_KEYS, merge_expected  # noqa: E402
 
 
 def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = None,
@@ -198,13 +195,11 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             old = prev.get(it.id)
             if old is None:
                 continue
-            base = old.expected
-            if it.id in cutline_ids.get(shard, ()):
-                # 切线重裁：旧判定的几何字段**整组丢掉**，只保留非切线的遗留字段。
-                # 2026-09-14 实锤：drift 重标改判 ok（事件不带 polyline），旧坐标系的
-                # 折线原样留在 expected 里——评测优先读折线，等于金标没修。24 条。
-                base = {k: v for k, v in old.expected.items() if k not in CUTLINE_KEYS}
-            it.expected = {**base, **it.expected}
+            # 切线重裁：旧判定的几何字段**整组丢掉**，只保留非切线的遗留字段
+            # （gold/atomic.py；2026-09-14 实锤：drift 重标改判 ok 的事件不带 polyline，
+            # 旧坐标系折线原样留在 expected 里——评测优先读折线，等于金标没修。24 条）。
+            it.expected = merge_expected(shard, old.expected, it.expected,
+                                         atomic=it.id in cutline_ids.get(shard, ()))
             # `input` 同理：v1 条目把 seed / 载体信息记在这里，人裁事件不带
             # 这些字段，直接写就会把它们清空（upsert 是整体替换）。
             it.input = {**(old.input or {}), **(it.input or {})}
