@@ -188,6 +188,99 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
     return out
 
 
+def drifted_boundaries(book: str, store=None, tol: int = 2) -> tuple[list[dict], dict]:
+    """金标**坐标系过期**的切点：裁决表里 `col_h` 与当前列图高度差 > tol 的条目。
+
+    2026-09-14 实测 982 条 active 金标里 **381 条**（vol01 120 / vol02 167 / vol03 94，
+    即 vol02、vol03 的全部）的列图在标注后被 Step2 重矫正过，`y`/`polyline` 落在旧
+    坐标系，偏 30–80px 且不是简单缩放——离线实验只能把它们过滤掉（见 overview
+    `Step3-逐字切分/05-高级切分算法.md`「金标坐标系过期」）。这里把它们**按 slot**
+    对回当前 cells 出成与 `r2s_boundaries` 同形的用例，卡片 id 沿用金标 id，人重裁后
+    `cutline` 事件经 gold_add **按 id upsert**，`y`/`col_h`/`polyline` 就换成当前坐标系。
+
+    只按 `(slot_above, slot_below)` 对位，不按 y 找最近格线——坐标系都变了，y 不可信。
+    对不上（格数结构变了、列被拒）的条目计入返回的 `skipped` 供人查。
+    `char_above/char_below` 直接沿用金标（已由 06 卡洗过），不再重新对齐整理本。
+    """
+    import cv2
+
+    from ..core.step import page_key
+    from ..feedback.consumers import verdict_store
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+    from .rulers import INK_ON_LINE, _col_profile
+
+    st = store or ProductStore()
+    ic = ImageCache()
+    items = [i for i in verdict_store().list(SHARD)
+             if i.anchor.book == book and getattr(i, "status", "active") == "active"]
+    out: list[dict] = []
+    skipped: dict[str, int] = {}
+    cells_cache: dict[int, object] = {}
+    h_cache: dict[tuple[int, int], int | None] = {}
+
+    def col_height(pg: int, col: int) -> int | None:
+        k = (pg, col)
+        if k not in h_cache:
+            p = ic.get(book, "column_image", f"p{pg:04d}c{col:02d}")
+            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
+            h_cache[k] = None if img is None else int(img.shape[0])
+        return h_cache[k]
+
+    for it in items:
+        a, ex = it.anchor, it.expected
+        pg, col = int(a.page), int(a.col)
+        h = col_height(pg, col)
+        if h is None:
+            skipped["no_column_image"] = skipped.get("no_column_image", 0) + 1
+            continue
+        gold_h = ex.get("col_h")
+        if not gold_h:
+            # 没记 col_h 的是 2026-09-13 起「选切分方案」卡的裁决（只有 cand 没有 y），
+            # 本来就是对当前候选裁的，不算过期
+            skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
+            continue
+        if abs(int(gold_h) - h) <= tol:
+            continue                                  # 坐标系没变，不用重裁
+        if pg not in cells_cache:
+            cells_cache[pg] = st.read(book, "row_segment", page_key(pg), "cells")
+        cells = cells_cache[pg]
+        cc = cells.column(col) if cells is not None else None
+        if cc is None or not cc.ok or len(cc.cells) != len(cc.boundaries) - 1:
+            skipped["column_not_ok"] = skipped.get("column_not_ok", 0) + 1
+            continue
+        sa, sb = ex.get("slot_above"), ex.get("slot_below")
+        bi = next((i for i in range(1, len(cc.cells))
+                   if cc.cells[i - 1].slot == sa and cc.cells[i].slot == sb), None)
+        if bi is None:
+            skipped["slots_not_found"] = skipped.get("slots_not_found", 0) + 1
+            continue
+        up, dn = cc.cells[bi - 1], cc.cells[bi]
+        if up.kind != "char" or dn.kind != "char":
+            skipped["not_char_char"] = skipped.get("not_char_char", 0) + 1
+            continue
+        prof = _col_profile(st, book, pg, col)
+        y = int(round(cc.boundaries[bi]))
+        col_w = int(max(c.x1 for c in cc.cells) + min(c.x0 for c in cc.cells))
+        seam = getattr(up, "seam_bottom", None)
+        out.append(dict(
+            id=it.id, book=book, page=pg, col=col, bi=bi, y=y,
+            ink=round(float(prof[y]), 3) if prof is not None and 0 <= y < len(prof) else None,
+            best=None,
+            slot_above=up.slot, slot_below=dn.slot,
+            y0=int(round(up.y0)), y1=int(round(dn.y1)),
+            x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
+            col_h=h, col_w=col_w,
+            seam=list(seam) if seam else None,
+            kind="drift",
+            drift_from_col_h=int(gold_h) if gold_h else None,
+            gold_verdict=ex.get("verdict"),
+            char_above=ex.get("char_above", ""), char_below=ex.get("char_below", ""),
+        ))
+    return out, skipped
+
+
 def polyline_to_seam(points: list, x0: int, x1: int) -> list[int]:
     """人标的折线（列图坐标 [[x, y], …]，按 x 递增）→ 每个 x∈[x0, x1) 一个 y（线性插值；
     两端之外取端点的 y，即水平延伸）。与 `Cell.seam_*` 同口径，可直接比。"""

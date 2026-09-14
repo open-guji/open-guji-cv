@@ -49,12 +49,22 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     from ...review.cards import blocking_cutline_cases
 
     bk = load_book(book)
-    if pages == "body":
+    st = deps.product_store()
+    drift_skipped: dict = {}
+    drift = pages in ("drift", "stale")
+    if drift:
+        # 「坐标过期重标」模式（2026-09-14）：页码框填 drift，出**金标 col_h 与当前列图高不一致**
+        # 的那批切点（按 slot 对回当前 cells，id 沿用金标 id）。它们本来就在金标里，所以
+        # 这一档不按 gold_ids 跳过，只按本批次事件跳过；`kind` 忽略。见 eval.touching.drifted_boundaries。
+        cases, drift_skipped = T.drifted_boundaries(book, st)
+        pg = sorted({c["page"] for c in cases})
+    elif pages == "body":
         pg = [p for p in T.body_pages(book)]
     else:
         pg = bk.resolve_pages(pages)
-    st = deps.product_store()
-    if scope == "blocking":
+    if drift:
+        pass
+    elif scope == "blocking":
         cases = blocking_cutline_cases(book, pg, st)
     elif kind == "split_char":
         cases = T.split_char_boundaries(book, pg, st)
@@ -65,7 +75,8 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     n_all = len(cases)
     done: set[str] = set()
     if skip_done and scope != "blocking":  # blocking 的 cases 已经是「待办」，不用再滤一遍
-        done |= T.gold_ids()
+        if not drift:                      # drift 那批本来就在金标里，只按本批次事件去重
+            done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
     cases = [c for c in cases if c["id"] not in done]
@@ -76,7 +87,12 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     _EXP_KEYS = ("char_above", "char_below", "shape_above", "shape_below",
                  "conv_above", "conv_below")
     key = (book, tuple(sorted({c["page"] for c in picked})))
-    if key not in _cutline_expected_cache:
+    if drift:
+        # 期望字沿用金标里的（06 卡人裁洗过），不再重新对齐整理本
+        for c in picked:
+            for k in _EXP_KEYS:
+                c.setdefault(k, "")
+    elif key not in _cutline_expected_cache:
         T.attach_expected(picked, book, st)
         _cutline_expected_cache[key] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in picked}
     else:
@@ -101,7 +117,8 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                 "起控制台前 export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace")
     n_expect = sum(1 for c in picked if c.get("char_above") and c.get("char_below"))
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
-            "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked}
+            "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked,
+            "drift_skipped": drift_skipped}
 
 
 def _attach_candidates(st, book: str, picked: list[dict]) -> None:
