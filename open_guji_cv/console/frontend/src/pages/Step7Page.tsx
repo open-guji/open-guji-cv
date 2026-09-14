@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useDeepLink } from '../hooks/useDeepLink'
 import { ReviewPanel } from '../components/review/ReviewPanel'
 import { BlockingCutlinePanel } from '../components/cutline/BlockingCutlinePanel'
 import { ProductViewer } from '../components/ProductViewer'
@@ -32,8 +33,12 @@ function loadSavedPages(book: string): string {
 
 function Step7PageInner({ book }: { book: string }) {
   const pages = usePages(book)
+  const deep = useDeepLink()
   const [reloadSignal, setReloadSignal] = useState(0)
-  const [pageSel, setPageSel] = useState(() => loadSavedPages(book))
+  // 深链带了页号就用它当初始页范围（对勘报告「跳去改」进来的情形），
+  // 否则照常读 localStorage。只影响初始值——进来之后改页范围不会被拽回去。
+  const [pageSel, setPageSel] = useState(() =>
+    deep.active ? String(deep.page) : loadSavedPages(book))
 
   function setPages(v: string) {
     setPageSel(v)
@@ -54,6 +59,15 @@ function Step7PageInner({ book }: { book: string }) {
         </label>
         <span className="muted" style={{ marginLeft: '.6rem' }}>控制下面「切分裁决」与「定字裁决」两个板块，记住你上次的选择</span>
       </div>
+      {deep.active && (
+        <div className="card" style={{ borderLeft: '3px solid #7a5c2e' }}>
+          从对勘报告跳转而来：<b>{deep.id || `p${deep.page}`}</b>
+          {deep.col !== null && <> · 第 {deep.col} 列</>}
+          <span className="muted" style={{ marginLeft: '.6rem' }}>
+            已把页范围设为 p{deep.page}；在下面「定字裁决」里找这一格改判
+          </span>
+        </div>
+      )}
       <BlockingCutlinePanel book={book} pages={pageSel} onDecided={() => setReloadSignal((n) => n + 1)} />
       <ReviewPanel book={book} pages={pageSel} onSubmitted={() => {}} reloadSignal={reloadSignal} />
       <ProductViewer book={book} step="seed_admit" pages={pages} />
