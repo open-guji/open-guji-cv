@@ -23,6 +23,10 @@ export interface CutCandidate {
 }
 
 export interface CutlineCase {
+  /** drift 档（坐标过期重标）：kind === 'drift'；redo = 本批次已对当前坐标系裁过（只看未裁取消时才出） */
+  kind?: string
+  redo?: boolean
+  drift_from_col_h?: number | null
   id: string
   page: number
   col: number
@@ -73,6 +77,8 @@ export interface CutlineVerdict {
   y?: number
   polyline?: Array<[number, number]>
   cand?: string
+  /** 裁决时的列图高，drift 档据此判断是否对当前坐标系裁的 */
+  col_h?: number
 }
 
 export interface CutlineVerdictsResponse {
