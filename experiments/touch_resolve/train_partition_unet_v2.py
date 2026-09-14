@@ -178,7 +178,7 @@ def eval_gold(a) -> None:
     net = build_model().to(dev); net.load_state_dict(torch.load(ck, map_location=dev)["state"]); net.eval()
     L = Loader(); R = Recognizer()
     exp1 = {r["id"]: r for r in json.loads((OUT_ROOT / "exp1" / "per_case.json").read_text(encoding="utf-8"))}
-    out = OUT_ROOT / f"unet_{ck.stem}"; (out / "viz").mkdir(parents=True, exist_ok=True)
+    out = OUT_ROOT / (f"unet_{ck.stem}" + (f"_cc{a.cc_max}" if a.cc_max is not None else "")); (out / "viz").mkdir(parents=True, exist_ok=True)
     per = []; norms = []; keys = []; cases = []
     for it in L.gold_items(books=a.books.split(",")):
         c, _ = L.resolve(it)
@@ -199,10 +199,14 @@ def eval_gold(a) -> None:
         else:
             pred = pred[:h, :w]
         raw_owner = np.where(W > 0, np.where(pred == 0, 2, pred), 0).astype(np.uint8)
-        # 连通体多数票平滑（与 templates.Registrar.partition 同精神）
+        # 连通体多数票平滑（与 templates.Registrar.partition 同精神）。
+        # 2026-09-14：08 卡的笔画级原型评测发现，多数票在「同一连通体两边都占」的真粘连大连通体上会把整块翻边，
+        # 是大块错（≥150 px）的主要来源（unet_raw 0.9% vs unet 3.3%）；`--cc-max N` 让多数票只对面积 ≤ N 的小连通体生效。
         owner = raw_owner.copy()
-        n_cc, lab = cv2.connectedComponents(W, connectivity=8)
+        n_cc, lab, st, _ = cv2.connectedComponentsWithStats(W, connectivity=8)
         for i in range(1, n_cc):
+            if a.cc_max is not None and st[i, cv2.CC_STAT_AREA] > a.cc_max:
+                continue
             m = lab == i; v = raw_owner[m]; nA, nB = int((v == 1).sum()), int((v == 2).sum())
             if nA >= 0.85 * (nA + nB):
                 owner[m] = 1
@@ -263,6 +267,7 @@ def main() -> int:
     ap.add_argument("--data", default="D:/data/touch_synth/vol01,D:/data/touch_synth/vol02")
     ap.add_argument("--epochs", type=int, default=16); ap.add_argument("--bs", type=int, default=24); ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--ckpt", default=None); ap.add_argument("--books", default="vol01,vol02,vol03")
+    ap.add_argument("--cc-max", type=int, default=None, help="连通体多数票只对面积 ≤ N 的连通体生效（None = 全部）")
     a = ap.parse_args()
     if a.train:
         train(a)
