@@ -22,6 +22,8 @@ import pytest
 from open_guji_cv.products.kinds.cells import CellRec
 from open_guji_cv.products.kinds.recog import AdmitRec
 from open_guji_cv.render.guji_markdown import render_column
+from open_guji_cv.report.slots import _to_slot
+from open_guji_cv.utils.jiazhu_order import sort_by_reading
 
 DATASET = Path(__file__).resolve().parent.parent.parent / "open-guji-dataset"
 ITEMS = DATASET / "guji-markdown-render" / "items.jsonl"
@@ -40,6 +42,16 @@ def _cells_by_key(col_snap: dict):
                                                   x0=0, x1=0, kind=c["kind"],
                                                   sub=c["sub"], order=0)
             for c in col_snap["cells"]}
+
+
+def _lead_blank(cells_by_key: dict) -> int:
+    """行首连续 blank 格数 → 挪抬 `.` 个数。与 `guji_markdown._lead_blank`
+    同口径，只是那边吃 `ColumnCells`、这边吃快照转出来的 dict。"""
+    n, slot = 0, 1
+    while cells_by_key.get((slot, "")) is not None and cells_by_key[(slot, "")].kind == "blank":
+        n += 1
+        slot += 1
+    return n
 
 
 def _admit_recs(col_snap: dict):
@@ -62,11 +74,18 @@ def test_render_matches_expected(item: dict):
         cells_by_key = _cells_by_key(col_snap)
         n_raised = col_snap.get("n_raised", 0)
         recs = _admit_recs(col_admit)
-        col_stale: list[str] = []
-        lines.append(render_column(recs, cells_by_key, n_raised, col_stale, col))
-        # render_page() 给每条 stale 加 p{page} 前缀，这里手动复现同一约定，
-        # 否则 expected.stale（由 render_page 生成）永远对不上。
-        stale.extend(f"p{page}{s}" for s in col_stale)
+        # 2026-09-13：join 挪去 report/slots.py（9.1 与 9.3 共用），这里照
+        # page_slots() 的同一条路把快照转成 SlotRec 流——测的仍是"同样的
+        # Step3/Step7 输入 → 同样的 md"，只是中间多了字位流这一层。
+        col_slots = []
+        for rec in sort_by_reading(recs):
+            cell = cells_by_key.get((rec.slot, rec.sub or ""))
+            if cell is None:
+                # render_page() 给每条 stale 加 p{page} 前缀，这里复现同一约定，
+                # 否则 expected.stale（由 render_page 生成）永远对不上。
+                stale.append(f"p{page}col{col}:slot{rec.slot}{rec.sub or ''}")
+            col_slots.append(_to_slot("", page, col, rec, cell))
+        lines.append(render_column(col_slots, n_raised, _lead_blank(cells_by_key)))
 
     text = "\n".join(lines)
 
