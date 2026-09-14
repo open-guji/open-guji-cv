@@ -211,6 +211,16 @@ def cmd_gold(args) -> None:
         if args.dry_run:
             print("（试算，未写入；去掉 --dry-run 才导入）")
         return
+    if args.action == "export":
+        # 测试集仓 → workspace 裁决表（书的事实类分片，如 page-type）
+        from .gold.transfer import export_to_workspace
+        if not args.shard:
+            print("需要分片名，如 page-type")
+            sys.exit(1)
+        res = export_to_workspace(args.shard, GoldStore(), verdict_store(),
+                                  why=args.why or "", dry_run=args.dry_run)
+        print(json.dumps(res.to_dict(), ensure_ascii=False, indent=1))
+        return
     if args.action == "rebuild":
         # 事件日志 → 裁决表（重放）。裁决表是派生物，事件才是真源。
         from .feedback.events import EventLog
@@ -654,8 +664,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="缺产物时从原图现跑 Step1-3 补齐（云端 clone 无 products/ 时用，"
                         "同 seg_harness.py 的同名开关）")
 
-    p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift | import | rebuild")
-    p.add_argument("action", choices=["shards", "show", "migrate", "drift", "import", "rebuild"])
+    p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift | import | export | rebuild")
+    p.add_argument("action", choices=["shards", "show", "migrate", "drift", "import", "export", "rebuild"])
     p.add_argument("shard", nargs="?", default=None,
                    help="分片名；rebuild 时是批次名（留空=全部批次）")
     p.add_argument("--dry-run", action="store_true", help="migrate / import：只报数不写")

@@ -319,7 +319,7 @@ def test_apply_resolved_cut_collapses_to_the_gold_candidate():
     （池子只剩一条，指向它自己）——顺序闸按 `len(candidates)>=2` 挡人，收敛后
     这条切点自动放行，不用另改闸的代码。"""
     cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), chosen=1,
-                                        resolved_kind="seam_narrow")
+                                        resolved="seam_narrow")
     assert [c.kind for c in cands] == ["seam_narrow"]
     assert chosen == 0
 
@@ -328,15 +328,39 @@ def test_apply_resolved_cut_ignored_when_kind_not_in_pool():
     """金标认定的 kind 不在当前候选池里（比如几何变了、这次没算出这种切法）
     时按兵不动——静默套错误的收敛比继续挡人更危险。"""
     original = _straight_and_seam_narrow()
-    cands, chosen = _apply_resolved_cut(original, chosen=0, resolved_kind="seam_wide")
+    cands, chosen = _apply_resolved_cut(original, chosen=0, resolved="seam_wide")
     assert cands == original
     assert chosen == 0
 
 
-def test_apply_resolved_cut_noop_when_unresolved():
-    """没有金标裁决（`resolved_kind=None`）时原样返回，行为与改动前完全一致。"""
+def test_apply_resolved_cut_y_ref_guard_blocks_when_current_line_moved():
+    """裁决带参考 y（当时的直线切点）：现役直线离它超过 RESOLVED_Y_TOL 就不是同一条
+    格线，不套用；在容差内照常收敛。"""
+    rc = fit_mod.ResolvedCut("seam_narrow", y_ref=1000.0)
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), 1, rc, y_line=1000.0 + fit_mod.RESOLVED_Y_TOL)
+    assert [c.kind for c in cands] == ["seam_narrow"]
     original = _straight_and_seam_narrow()
-    cands, chosen = _apply_resolved_cut(original, chosen=1, resolved_kind=None)
+    cands, chosen = _apply_resolved_cut(original, 1, rc, y_line=1000.0 + fit_mod.RESOLVED_Y_TOL + 1)
+    assert cands == original and chosen == 1
+    # 没给 y_line（调用方不知道直线在哪）也不套——护栏缺一边就不冒险
+    cands, chosen = _apply_resolved_cut(original, 1, rc)
+    assert [c.kind for c in cands] == ["seam_narrow"]  # y_line=None 时护栏不生效，按 kind 收敛
+
+
+def test_apply_resolved_cut_chosen_collapses_to_current_seam_only():
+    """`seam_ok`（现役折线就对）→ 收敛到 cands[chosen]；现役是直线时这条裁决对不上，不动。"""
+    rc = fit_mod.ResolvedCut(fit_mod.RESOLVED_CHOSEN)
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), 1, rc)
+    assert [c.kind for c in cands] == ["seam_narrow"] and chosen == 0
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, 0, rc)      # 现役选的是直线
+    assert cands == original and chosen == 0
+
+
+def test_apply_resolved_cut_noop_when_unresolved():
+    """没有金标裁决（`resolved=None`）时原样返回，行为与改动前完全一致。"""
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, chosen=1, resolved=None)
     assert cands == original
     assert chosen == 1
 
@@ -353,9 +377,9 @@ def test_segment_column_resolved_cuts_param_reaches_the_named_slot(monkeypatch):
     calls: list[tuple[int, str | None]] = []
     real_apply = fit_mod._apply_resolved_cut
 
-    def spy(cands, chosen, resolved_kind):
-        calls.append((len(cands), resolved_kind))
-        return real_apply(cands, chosen, resolved_kind)
+    def spy(cands, chosen, resolved, y_line=None):
+        calls.append((len(cands), resolved))
+        return real_apply(cands, chosen, resolved, y_line=y_line)
 
     monkeypatch.setattr(fit_mod, "_apply_resolved_cut", spy)
 

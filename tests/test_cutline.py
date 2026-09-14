@@ -174,9 +174,9 @@ def test_blocking_gate_reads_all_event_batches(monkeypatch, tmp_path):
 
 # ── 人裁回流：Step3 从 workspace 裁决表取已裁决的切点 ─────────────────
 
-def _verdict(page, col, slot, verdict, cand, status="active", book="vol02"):
+def _verdict(page, col, slot, verdict, cand, status="active", book="vol02", **extra):
     from open_guji_cv.gold.item import Anchor, GoldItem
-    exp = {"verdict": verdict}
+    exp = {"verdict": verdict, **extra}
     if cand is not None:
         exp["cand"] = cand
     return GoldItem(id=f"{book}:{page}:{col}:{slot}",
@@ -225,9 +225,30 @@ def test_resolved_cuts_accepts_any_verdict_word_with_a_known_cand(monkeypatch):
         _verdict(22, 2, 2, "confirmed", "polyline"),       # 自画折线，不是候选 kind
         _verdict(5, 8, 14, "confirmed", "seam_narrow", book="vol01"),
     ])
-    assert resolved_cuts("vol02") == {(5, 8, 14): "seam_narrow", (6, 4, 17): "straight",
-                                      (7, 1, 1): "seam_wide"}
-    assert resolved_cuts("vol01") == {(5, 8, 14): "seam_narrow"}
+    got = {k: v.kind for k, v in resolved_cuts("vol02").items()}
+    assert got == {(5, 8, 14): "seam_narrow", (6, 4, 17): "straight", (7, 1, 1): "seam_wide"}
+    assert {k: v.kind for k, v in resolved_cuts("vol01").items()} == {(5, 8, 14): "seam_narrow"}
+
+
+def test_resolved_cuts_ok_and_seam_ok_resolve_with_y_guard(monkeypatch):
+    """切线卡的 `ok`（现役直线就对）→ straight，`seam_ok`（现役折线就对）→ 现役折线；
+    两者都带当时的 y 当护栏（`_apply_resolved_cut` 里比）。`moved` 无 cand 收不了。"""
+    from open_guji_cv.feedback.lookup import resolved_cuts
+    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN
+    _patch_verdicts(monkeypatch, [
+        _verdict(1, 1, 1, "ok", None, y=1980, y_old=1980),
+        _verdict(1, 1, 2, "seam_ok", None, y=1990, y_old=1986, polyline=[[0, 1990], [60, 1992]]),
+        _verdict(1, 1, 3, "seam_ok", None, y=1995),
+        _verdict(1, 1, 4, "moved", None, y=1970, y_old=1986),
+        _verdict(1, 1, 5, "ok", None),                       # 老事件没 y_old：没护栏不敢收
+        _verdict(1, 1, 6, "confirmed", "seam_narrow", y_old=1200),
+    ])
+    r = resolved_cuts("vol02")
+    assert (r[(1, 1, 1)].kind, r[(1, 1, 1)].y_ref) == ("straight", 1980.0)
+    assert (r[(1, 1, 2)].kind, r[(1, 1, 2)].y_ref) == (RESOLVED_CHOSEN, 1986.0)
+    assert (r[(1, 1, 3)].kind, r[(1, 1, 3)].y_ref) == (RESOLVED_CHOSEN, 1995.0)
+    assert (1, 1, 4) not in r and (1, 1, 5) not in r
+    assert (r[(1, 1, 6)].kind, r[(1, 1, 6)].y_ref) == ("seam_narrow", 1200.0)
 
 
 def test_resolved_cuts_empty_when_store_unavailable(monkeypatch):

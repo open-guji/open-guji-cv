@@ -37,7 +37,10 @@ DEFAULT_ROUTES: list[dict] = [
             {"consumer": "crop_exclude"}]},
     # 拖切线（2026-09-05）：粘连格线的理想切点，落 touching-cuts 金标（现役 Step2 列图坐标）
     {"match": {"kind": "cutline"},
-     "to": [{"consumer": "gold_add", "shard": "char-segmentation/touching-cuts"}]},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/touching-cuts"},
+            # 裁决落定 → 该页 Step3 产物显式失效（2026-09-13 人裁回流）：
+            # segment_column 下次重跑时按裁决表收敛候选，不失效就永远等不到重跑
+            {"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     # 切线卡片上标了「界行/版框压进裁片」的，同时反馈给上游：这一格是 side-rule（侧边界行
     # 残余）的正样本——用户 2026-09-05：「带边框的应该反馈到上游，我们希望边框都被清除了」。
     {"match": {"kind": "cutline", "payload.tags": "border"},

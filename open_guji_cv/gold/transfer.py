@@ -113,6 +113,34 @@ def import_to_dataset(shard: str, src: GoldStore, dst: GoldStore, flt: ImportFil
     return res
 
 
+def export_to_workspace(shard: str, src: GoldStore, dst: GoldStore,
+                        why: str = "", dry_run: bool = False) -> TransferResult:
+    """测试集仓 → workspace 裁决表：整分片复制（非 retired），给「书的事实」类分片用
+    （如 `page-type`：出卡要挑正文页，运行时不能读 dataset，先把标注搬一份过来）。
+    与 `import_to_dataset` 反向，合并口径相同。"""
+    res = TransferResult(shard=shard, dry_run=dry_run)
+    items = src.list(shard)
+    res.n_source = len(items)
+    picked = [it.model_copy(deep=True) for it in items if it.status != "retired"]
+    res.n_selected = len(picked)
+    res.sample_ids = [it.id for it in picked[:5]]
+    if not picked:
+        return res
+    prev = {i.id: i for i in dst.list(shard, legacy=False)}
+    for it in picked:
+        old = prev.get(it.id)
+        if old is None:
+            res.added += 1
+        elif old.expected == it.expected and old.status == it.status:
+            res.unchanged += 1
+        else:
+            res.updated += 1
+    if dry_run:
+        return res
+    dst.upsert(shard, picked, why or "从测试集仓复制到 workspace（guji gold export）")
+    return res
+
+
 def rebuild_verdicts(log, store: GoldStore, table=None, batches: Iterable[str] | None = None,
                      why: str = "从事件日志重放") -> dict:
     """事件日志 → 裁决表：把所有（或指定批次的）事件按路由表重放给 `gold_add`。
