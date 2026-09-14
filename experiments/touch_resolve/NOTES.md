@@ -82,3 +82,11 @@
 - 2026-09-14 13:0x（B）**动了两处生产代码**（用户要求用控制台卡片复核过期金标）：`eval/touching.py` 加 `drifted_boundaries()`，
   `console/routers/cutline.py` 的 `/api/cutline/cases` 加 `pages=drift` 模式；纯新增分支，普通模式行为不变；手册已补。
   控制台已由 B 起在 8640（`console_drift.log`）。三册 drift 用例 109 / 99 / 94。
+
+## B 2026-09-14 12:30 · 金标合并规则变了 + 24 条已修，drift 重标进度
+- `feedback/consumers.gold_add` 对 cutline 事件改成**整组替换**切线几何字段（`CUTLINE_KEYS`），不再用旧 expected 打底。
+  之前 drift 重标改判 ok 的条目留着旧坐标系 polyline（21 条）/ 旧 tags（3 条），工作区裁决表已按最新事件修好。
+  如果你的脚本缓存过 touching-cuts（frame_ok.json 等），vol01 那 109 条现在 col_h 都是当前值，重跑 restrat 前先重读。
+- drift 进度：vol01 109/109（事件在批次 `vol02-cutline-drift`，名字填错了，不影响数据）、vol02 4/99（`vol2-drift`）、vol03 0/94。
+- 控制台 8640 已重启一次（12:2x），带 GUJI_WORKSPACE；前端 dist 换到 index-XdD2ur-W.js。
+
