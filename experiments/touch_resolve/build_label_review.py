@@ -22,7 +22,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from common import INK_TH, Loader, OUT_ROOT, half_patch, jdump, seam_gold, side_masks, window
+from common import INK_TH, Loader, OUT_ROOT, half_patch, jdump, seam_chosen, seam_gold, side_masks, window
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / ".claude/skills/review-artifact/scripts"))
@@ -42,7 +42,7 @@ def card_image(win: np.ndarray, mask: np.ndarray, hp: np.ndarray) -> np.ndarray:
     """左：双格窗口，问的那一半正常、另一半淡化；右：那一半放大。统一高 150。"""
     H = 150
     faded = win.copy().astype(np.float32)
-    faded[~mask] = 255 - (255 - faded[~mask]) * 0.25
+    faded[~mask] = 255 - (255 - faded[~mask]) * 0.12
     left = faded.astype(np.uint8)
     s = H / left.shape[0]
     left = cv2.resize(left, (max(1, int(left.shape[1] * s)), H), interpolation=cv2.INTER_AREA)
@@ -60,6 +60,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(OUT_ROOT / "label_review.html"))
     ap.add_argument("--controls", type=int, default=10)
+    ap.add_argument("--verdicts", default=None, help="上一版读回的 HTML，带着已有裁决重发")
     a = ap.parse_args()
     per = json.loads((OUT_ROOT / "exp1" / "per_case.json").read_text(encoding="utf-8"))
     L = Loader()
@@ -83,7 +84,8 @@ def main() -> int:
             continue
         img = L.image_of(c)
         win, y0, _ = window(c, img)
-        above, below = side_masks(win.shape, seam_gold(c), y0)
+        # 用**当前管线**的缝分上下：金标缝有 33/59 条坐标系过期（用户 2026-09-14 反馈「有的字切分不对」）
+        above, below = side_masks(win.shape, seam_chosen(c), y0)
         mask = above if side == "above" else below
         hp = half_patch(win, mask)
         if hp is None:
@@ -132,9 +134,9 @@ const BODY = `
 <div class="wrap">
   <details class="intro" id="intro" open>
     <summary>怎么裁</summary>
-    <p>每张卡问一个字：左图是上下两个字的窗口，问的那个字正常显示、另一个淡化；右图是它单独放大。
-       下面的候选字里点<b>你读出来的那个</b>；都不是就点「都不是」（我事后再问你是什么）；
-       字磨损或粘连到读不出就点「看不清」。点错再点一次取消。裁决自动存回本页，右上角牌子显示存没存上。</p>
+    <p>每张卡只问一件事：<b>这个位置刻的是哪个字</b>。不评价切分、不管污渍。左图是上下两字的窗口，问的那个字正常显示、邻字淡成浅灰；右图是它按当前切线单独放大——切线可能不准，以左图整体读字为准。
+       下面的候选字里点<b>你读出来的那个</b>；候选里没有你读出的字才点「都不是」（我事后再问）；
+       只有字本身磨损、粘连或被切坏到读不出才点「看不清」。点错再点一次取消。裁决自动存回本页，右上角牌子显示存没存上。</p>
   </details>
   <div class="ctrl">
     <div class="seg" id="filter">
@@ -187,7 +189,13 @@ function payload(){
   }).join('\\n');
 }
 """.replace("__TITLE__", TITLE)
-    html = render(TITLE, KEY, verdicts={}, css=css, page_js=page_js, payload={"rows": rows, "imgs": imgs})
+    verdicts = {}
+    if a.verdicts:
+        import re
+        m = re.search(r'<script[^>]*id="data"[^>]*>(.*?)</script>', Path(a.verdicts).read_text(encoding="utf-8"), re.S)
+        verdicts = json.loads(m.group(1).replace("<" + chr(92) + "/", "</")).get("verdicts", {}) if m else {}
+        print(f"带上已有裁决 {len(verdicts)} 条")
+    html = render(TITLE, KEY, verdicts=verdicts, css=css, page_js=page_js, payload={"rows": rows, "imgs": imgs})
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     print(f"{out}  {len(html)/1024:.0f} KB")
