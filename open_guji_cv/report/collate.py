@@ -294,7 +294,7 @@ def _col_diffs(text_slots: list[SlotRec], pos_of: dict[str, int],
     """列结构裁定：每列首字的证人 offset 是否落在行首、列长是否等于行长。
 
     **独立于 difflib 的增删判断**——只要首字对上了，长度差就是硬信号
-    （05 §二：全量 2866 列里 95.2% 长度相等，不等的主型是我们少一个字）。
+    （05 §二：命中行首的 2,867 列里 87.2% 长度相等，不等的主型是我们少一个字）。
     首字没进 `pos_of`（落在被丢弃的 insert/delete 段里）的列跳过，不猜。
     """
     by_col: dict[int, list[SlotRec]] = {}
