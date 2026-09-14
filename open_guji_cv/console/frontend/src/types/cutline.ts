@@ -43,8 +43,15 @@ export interface CutlineCase {
   chosen: number | null
   slot_above: number
   slot_below: number
+  // 「整理本期望」= 整理本给的文意读法（v2_align 的 `reading`）。
   char_above?: string
   char_below?: string
+  // v2 定字认的刻本形（`shape`）。与 reading 不同即一次转换，conv_* 为 true；
+  // 此前卡片把 shape 当成「整理本期望」显示，两层混为一谈（2026-09-13 修）。
+  shape_above?: string
+  shape_below?: string
+  conv_above?: boolean
+  conv_below?: boolean
 }
 
 export interface CutlineCasesResponse {
