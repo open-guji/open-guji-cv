@@ -94,3 +94,13 @@
   `tests/test_console_routes.py::test_route_inventory` 现在红：多出 `POST /api/gold/{shard:path}/import`（7e730962d4 加的，账没记），不是切线改动。
 - 13:05 补：前端 drift 档只认 col_h≈当前列高的批次裁决（老批次历史裁决曾被当已裁、旧折线画到新图上）；`/api/cutline/verdicts` 带 col_h/cand。控制台 pid 39080，dist index-FQg-toGG.js。
 
+## B 2026-09-14 14:5x · 金标已导入数据集（frame_ok 601→906）、两处合并坑已修、评测重跑中
+- drift 重标 301 条（vol03:7:9:3 一条未标）已 `guji gold import` 进 open-guji-dataset（5e397015 → 631b7e9f → 3c0d4f4c）。
+  `out/frame_ok.json` 已重算：**906 条**（旧 601 已删）。你若有缓存的分层结果请按新 frame_ok 重跑 restrat。
+- 坑 1：导入把 06 卡 38 处改字覆盖回旧值（改字当时只写了 dataset）。已用 `replay_label_events.py` 重放进裁决表再导入，改字全部恢复。
+- 坑 2：导入「旧值打底」把 dataset 里旧坐标系 polyline 留给了 ok 判定（75 条），评测红线画到窗口顶上。
+  已加 `gold/atomic.py`（CUTLINE_KEYS 整组替换，gold_add / import / export 共用）并重导。
+- 正在跑（用修好的金标）：`train_partition_unet_v2.py --eval-gold --cc-max 400` → `out/unet_partition_unet_v2_cc400/`（覆盖）、
+  `exp3_partition_eval.py --source glyph --tag v3` → `out/exp3_glyph_v3/`；日志 `out/B_*.log`。之后 restrat 出 summary_frame_ok。
+- 控制台：切线卡分组 / 回车=所选切法 / `list:<名字>` 复核清单模式 / drift 档只认当前坐标系裁决；pid 21888，dist index-DKMh9dUA.js。
+
