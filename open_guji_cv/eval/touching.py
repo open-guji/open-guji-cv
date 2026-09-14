@@ -189,7 +189,8 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
 
 
 def drifted_boundaries(book: str, store=None, tol: int = 2,
-                       include_relabeled: dict[str, set[int]] | None = None) -> tuple[list[dict], dict]:
+                       include_relabeled: dict[str, set[int]] | None = None,
+                       only_ids: set[str] | None = None) -> tuple[list[dict], dict]:
     """金标**坐标系过期**的切点：裁决表里 `col_h` 与当前列图高度差 > tol 的条目。
 
     2026-09-14 实测 982 条 active 金标里 **381 条**（vol01 120 / vol02 167 / vol03 94，
@@ -210,6 +211,9 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
     **不按批次名前缀判**：用户把批次框留空时事件落进 `vol03-cutline` 这种老批次，那里面
     历史事件（旧坐标系）成百上千，按名字算全是「已裁」——实测 vol03 94 条只剩 4 条可裁。
     同理这一档**不按批次事件跳过**已裁：重裁过的条目 col_h 已是当前值，自己就出池了。
+
+    `only_ids`：只出这些金标 id，**不管过没过期**（复核清单模式，控制台页码框 `list:<名字>`）。
+    没过期的按 `redo=True` 出，前端照批次裁决显示成已裁/未裁。
     """
     import cv2
 
@@ -238,6 +242,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         return h_cache[k]
 
     for it in items:
+        if only_ids is not None and it.id not in only_ids:
+            continue
         a, ex = it.anchor, it.expected
         pg, col = int(a.page), int(a.col)
         h = col_height(pg, col)
@@ -253,6 +259,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         drifted = abs(int(gold_h) - h) > tol
         redo = (not drifted and bool(include_relabeled)
                 and any(abs(int(v) - h) <= tol for v in include_relabeled.get(it.id, ())))
+        if only_ids is not None and not drifted:
+            redo = True
         if not drifted and not redo:
             continue                                  # 坐标系没变，不用重裁
         if pg not in cells_cache:
