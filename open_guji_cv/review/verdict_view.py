@@ -49,5 +49,9 @@ def cutline_verdicts(batch: str, log: EventLog | None = None) -> dict:
         if e.kind != "cutline":
             continue
         p = e.payload
-        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline")}
+        # col_h：前端 drift 档据此判断这条裁决是不是对**当前**坐标系裁的（老批次里的历史事件
+        # 坐标系已过期，不能拿来当「已裁」，更不能把旧折线画到新图上——2026-09-14 实锤）。
+        # cand：「选切分方案」裁决选中的候选，刷新后恢复选中态。
+        out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline"),
+                             "col_h": p.get("col_h"), "cand": p.get("cand")}
     return {"batch": batch, "n": len(out), "verdicts": out}

@@ -49,7 +49,8 @@ export function CutlinePanel({ book }: { book: string }) {
       setMsg('失败：' + (e as Error).message)
       return
     }
-    let done: Record<string, { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string }> = {}
+    type DoneRec = { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string; col_h?: number }
+    let done: Record<string, DoneRec> = {}
     try {
       done = (await fetchCutlineVerdicts(b)).verdicts || {}
     } catch {
@@ -60,7 +61,14 @@ export function CutlinePanel({ book }: { book: string }) {
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
       const st: CardState = { y: c.y, mode: 'line', poly: [], pick: c.chosen ?? 0, tags: {}, done: undefined, hidden: false }
-      const dv = done[c.id]
+      let dv: DoneRec | undefined = done[c.id]
+      // drift 档：批次里可能躺着这些 id 的**历史**裁决（批次框留空落到 vol02-cutline 这种老批次，
+      // 当初的金标就是那里裁的）。坐标系已过期的不算已裁，更不能把旧折线画到新图上
+      // （用户 2026-09-14：「只看未裁没卡片，不选有奇怪的连续折线点」）。只认对当前列高裁过的。
+      if (dv && c.kind === 'drift') {
+        const sameFrame = dv.col_h != null && Math.abs(dv.col_h - c.col_h) <= 2
+        if (!c.redo && !sameFrame) dv = undefined
+      }
       if (dv) {
         st.done = dv.verdict
         if (dv.y != null) st.y = dv.y
