@@ -27,6 +27,7 @@
   cache/<book>/<kind>/         派生图像 LRU 缓存（不进 git）
   review/batches/              人裁批次登记
   feedback/{events,consumed}/  人裁事件日志与消费记账
+  feedback/verdicts/<shard>/   裁决表（事件消费后的落点；金标同格式，导入测试集从这里挑）
   config/crop_exclusions.jsonl 图块排除名单
 ```
 
@@ -64,6 +65,7 @@ CACHE_REL = "cache"
 BATCHES_REL = "review/batches"
 EXCLUSIONS_REL = "config/crop_exclusions.jsonl"
 FEEDBACK_REL = "feedback"
+VERDICTS_REL = "feedback/verdicts"
 
 
 def workspace_root() -> Path | None:
@@ -124,6 +126,16 @@ def feedback_root() -> Path:
     09-03 设计把它放在 open-guji-dataset/feedback/，09-13 改归 workspace：事件是
     「这本书」审查过程的账，不是测试集；进测试集要走显式导入。"""
     return _resolve("GUJI_FEEDBACK_DIR", FEEDBACK_REL)
+
+
+def verdicts_root() -> Path:
+    """人裁**裁决表** `feedback/verdicts/<shard>/items.jsonl`——事件经路由消费后的落点，
+    管线回流、面板去重都读这里。`GUJI_VERDICTS_DIR` > 工作区 > 仓内。
+
+    载体与 open-guji-dataset 的金标分片**同一格式**（`gold.store.GoldStore` 直接指过来），
+    所以「导入测试集」只是从这里挑一批复制到 dataset 同名分片（`guji gold import`），
+    不用转格式。它是事件日志的派生物，丢了可从事件重放（`guji gold rebuild`）。"""
+    return _resolve("GUJI_VERDICTS_DIR", VERDICTS_REL)
 
 
 def raw_root(override: str | Path | None = None) -> Path:
@@ -189,6 +201,7 @@ def describe() -> dict[str, str]:
         "cache": str(cache_root()),
         "batches": str(batches_root()),
         "feedback": str(feedback_root()),
+        "verdicts": str(verdicts_root()),
         "exclusions": str(exclusions_path()),
         # 语料读错了整理本对齐会静默全空（见 using_sample_corpus），所以摆到台面上
         "corpus": str(corpus) + ("  ⚠️ 仓内小样本，锚不住整理本" if using_sample_corpus() else ""),

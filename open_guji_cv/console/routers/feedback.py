@@ -133,7 +133,7 @@ def api_events(req: EventsIn) -> dict:
         # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。
         try:
             table = RouteTable.load(deps.event_log().root / "routes.yaml")
-            res = route_and_consume(deps.event_log(), req.batch, table, deps.gold_store())
+            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store())
             out["consumed"] = [
                 {"consumer": x["consumer"], "added": x["added"],
                  "skipped": x["skipped"], "errors": x["errors"][:3]}
@@ -199,7 +199,7 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
 @router.post("/api/batches/{batch_id}/route")
 def api_route(batch_id: str, dry_run: bool = False) -> dict:
     table = RouteTable.load(deps.event_log().root / "routes.yaml")
-    out = route_and_consume(deps.event_log(), batch_id, table, deps.gold_store(),
+    out = route_and_consume(deps.event_log(), batch_id, table, deps.verdict_store(),
                             dry_run=dry_run)
     b = deps.batch_store().get(batch_id)
     if b:

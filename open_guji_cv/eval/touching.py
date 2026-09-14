@@ -280,9 +280,13 @@ def pick_cases(cases: list[dict], limit: int, seed: int = 0, per_page: int | Non
 
 
 def gold_ids() -> set[str]:
-    """已经有 touching-cuts 金标的格线 id（含 uncertain），出卡片时跳过。"""
-    from ..gold.store import GoldStore
+    """已经裁过的格线 id（含 uncertain），出卡片时跳过。
+
+    读的是 **workspace 裁决表**（`feedback/verdicts/`），不是 open-guji-dataset
+    ——面板是运行时，不读测试集仓（2026-09-13）。裁决表是事件的派生物，
+    `review/cards.py` 另外还按事件日志去重，两层兜着。"""
+    from ..feedback.consumers import verdict_store
     try:
-        return {i.id for i in GoldStore().list(SHARD)}
+        return {i.id for i in verdict_store().list(SHARD)}
     except Exception:
         return set()

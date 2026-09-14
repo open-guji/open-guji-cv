@@ -94,6 +94,15 @@ def test_gold_derivation_matches_between_cached_and_live_recompute(tmp_path):
         pytest.skip("还没跑过 align_ref")
 
     cached = align_book("vol01", [24], store)
+    # ⚠️ 有产物 ≠ 锚得上：**同名语料有两份**，仓内 `corpus/` 那份只有 17KB
+    # （样本），工作区那份 8.2MB（真语料），差 470 倍。默认环境（什么都不设）
+    # 下 `DEFAULT_CORPUS` 解析到仓内样本，拿它去锚真产物必然「8-gram 锚定失败」。
+    # 上面那道 skip 只查了产物在不在，漏了语料够不够——锚不上时根本没有 GoldChar
+    # 可比，这条测试也就无从测起。要真跑它：**只设 GUJI_WORKSPACE**，让 corpus /
+    # products / cache 三者配套指向工作区（别额外设 GUJI_PRODUCTS_DIR，会让
+    # products 与 cache 分家，见 test_v2_align_gold 模块头）。
+    if not cached[0].anchored:
+        pytest.skip(f"锚不上（{cached[0].note}）——多半是在用仓内样本语料")
     # 内容相同、路径不同的语料副本：指纹（按路径 mtime/size 算）必然对不上
     # 缓存的 corpus_fingerprint，强制走现算兜底路径。
     #

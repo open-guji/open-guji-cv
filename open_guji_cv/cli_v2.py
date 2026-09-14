@@ -172,8 +172,10 @@ def cmd_events(args) -> None:
         n = log.append(evs)
         print(f"解析 {len(evs)} 条，新增 {n} 条 → {log.batch_path(args.batch)}")
     elif args.action == "route":
+        # 消费落 workspace 裁决表，不落 open-guji-dataset（2026-09-13 三仓边界）
+        from .feedback.consumers import verdict_store
         table = RouteTable.load(log.root / "routes.yaml")
-        out = route_and_consume(log, args.batch, table, GoldStore(), dry_run=args.dry_run)
+        out = route_and_consume(log, args.batch, table, verdict_store(), dry_run=args.dry_run)
         print(json.dumps(out, ensure_ascii=False, indent=1))
     elif args.action == "verdicts":
         # 读回本批已裁的字位／已拖的切线。与控制台的两条 verdicts 路由同一份装配
@@ -188,8 +190,35 @@ def cmd_events(args) -> None:
 
 
 def cmd_gold(args) -> None:
+    from .feedback.consumers import verdict_store
     from .gold.store import GoldStore
-    store = GoldStore()
+    # 默认看测试集仓；--verdicts 看 workspace 裁决表（同格式，同一套命令）
+    store = verdict_store() if getattr(args, "verdicts", False) else GoldStore()
+    if args.action == "import":
+        # 裁决表 → 测试集：唯一往 dataset 写人裁数据的入口，必须人显式发起
+        from .gold.transfer import ImportFilter, import_to_dataset, parse_pages
+        if not args.shard:
+            print("需要分片名，如 char-segmentation/touching-cuts")
+            sys.exit(1)
+        ids = None
+        if args.ids:
+            ids = {l.strip() for l in Path(args.ids).read_text(encoding="utf-8").splitlines() if l.strip()}
+        flt = ImportFilter(book=args.book, pages=parse_pages(args.pages), stratum=args.stratum,
+                           ids=ids, include_uncertain=args.include_uncertain)
+        res = import_to_dataset(args.shard, verdict_store(), GoldStore(), flt,
+                                why=args.why or "", dry_run=args.dry_run)
+        print(json.dumps(res.to_dict(), ensure_ascii=False, indent=1))
+        if args.dry_run:
+            print("（试算，未写入；去掉 --dry-run 才导入）")
+        return
+    if args.action == "rebuild":
+        # 事件日志 → 裁决表（重放）。裁决表是派生物，事件才是真源。
+        from .feedback.events import EventLog
+        from .gold.transfer import rebuild_verdicts
+        out = rebuild_verdicts(EventLog(), verdict_store(),
+                               batches=[args.shard] if args.shard else None)
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+        return
     if args.action == "shards":
         for s in store.shards():
             d = store.summary(s)
@@ -625,11 +654,22 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="缺产物时从原图现跑 Step1-3 补齐（云端 clone 无 products/ 时用，"
                         "同 seg_harness.py 的同名开关）")
 
-    p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift")
-    p.add_argument("action", choices=["shards", "show", "migrate", "drift"])
-    p.add_argument("shard", nargs="?", default=None)
-    p.add_argument("--dry-run", action="store_true", help="migrate：只报数不写")
+    p = sub.add_parser("gold", help="[v2] 金标：shards | show | migrate | drift | import | rebuild")
+    p.add_argument("action", choices=["shards", "show", "migrate", "drift", "import", "rebuild"])
+    p.add_argument("shard", nargs="?", default=None,
+                   help="分片名；rebuild 时是批次名（留空=全部批次）")
+    p.add_argument("--dry-run", action="store_true", help="migrate / import：只报数不写")
     p.add_argument("--apply", action="store_true", help="drift：把漂移条目标成 stale")
+    p.add_argument("--verdicts", action="store_true",
+                   help="shards / show 看 workspace 裁决表而不是测试集仓")
+    # import：裁决表 → 测试集的过滤条件（都可省；省了就是整个分片的 active 条目）
+    p.add_argument("--book", default=None, help="import：只导这本书")
+    p.add_argument("--pages", default=None, help="import：页号表达式，如 1-50,60")
+    p.add_argument("--stratum", default=None, help="import：只导这个分层，如 flip_unique_top1")
+    p.add_argument("--ids", default=None, help="import：id 清单文件（一行一个）")
+    p.add_argument("--include-uncertain", action="store_true",
+                   help="import：连 uncertain（idk）也导；默认只导 active")
+    p.add_argument("--why", default="", help="import：写进 history 的理由")
 
     # ── C5：控制台的出口（与对应路由同参同输出）────────────────────
     p = sub.add_parser("product", help="[v2] 产物与图像：show | manifest | raw | overlay | patch")
