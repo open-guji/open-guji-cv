@@ -56,7 +56,8 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         # 「坐标过期重标」模式（2026-09-14）：页码框填 drift，出**金标 col_h 与当前列图高不一致**
         # 的那批切点（按 slot 对回当前 cells，id 沿用金标 id）。它们本来就在金标里，所以
         # 这一档不按 gold_ids 跳过，只按本批次事件跳过；`kind` 忽略。见 eval.touching.drifted_boundaries。
-        cases, drift_skipped = T.drifted_boundaries(book, st)
+        # 「只看未裁」取消时把本批次已重标的也出出来（col_h 已换成当前，否则找不回），供 U 重做
+        cases, drift_skipped = T.drifted_boundaries(book, st, include_batch=None if skip_done else batch)
         pg = sorted({c["page"] for c in cases})
     elif pages == "body":
         pg = [p for p in T.body_pages(book)]

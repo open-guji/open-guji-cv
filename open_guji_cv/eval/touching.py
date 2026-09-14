@@ -188,7 +188,8 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
     return out
 
 
-def drifted_boundaries(book: str, store=None, tol: int = 2) -> tuple[list[dict], dict]:
+def drifted_boundaries(book: str, store=None, tol: int = 2,
+                       include_batch: str | None = None) -> tuple[list[dict], dict]:
     """金标**坐标系过期**的切点：裁决表里 `col_h` 与当前列图高度差 > tol 的条目。
 
     2026-09-14 实测 982 条 active 金标里 **381 条**（vol01 120 / vol02 167 / vol03 94，
@@ -201,6 +202,11 @@ def drifted_boundaries(book: str, store=None, tol: int = 2) -> tuple[list[dict],
     只按 `(slot_above, slot_below)` 对位，不按 y 找最近格线——坐标系都变了，y 不可信。
     对不上（格数结构变了、列被拒）的条目计入返回的 `skipped` 供人查。
     `char_above/char_below` 直接沿用金标（已由 06 卡洗过），不再重新对齐整理本。
+
+    `include_batch`：重裁一落定，条目的 col_h 就是当前值、不再「过期」，刷新后在这一档
+    里找不回来（用户 2026-09-14：标错一张想改）。给了批次名就把**该批次事件已写过的**
+    条目也出出来（`redo=True`，`drift_from_col_h=None`），前端按批次裁决把它们显示成已裁，
+    人可以按 U 重做。控制台在「只看未裁」取消时传本批次名。
     """
     import cv2
 
@@ -241,7 +247,10 @@ def drifted_boundaries(book: str, store=None, tol: int = 2) -> tuple[list[dict],
             # 本来就是对当前候选裁的，不算过期
             skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
             continue
-        if abs(int(gold_h) - h) <= tol:
+        drifted = abs(int(gold_h) - h) > tol
+        redo = (not drifted and include_batch is not None
+                and any(s.startswith(f"evt_{include_batch}_") for s in (it.source_events or [])))
+        if not drifted and not redo:
             continue                                  # 坐标系没变，不用重裁
         if pg not in cells_cache:
             cells_cache[pg] = st.read(book, "row_segment", page_key(pg), "cells")
@@ -274,7 +283,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2) -> tuple[list[dict],
             col_h=h, col_w=col_w,
             seam=list(seam) if seam else None,
             kind="drift",
-            drift_from_col_h=int(gold_h) if gold_h else None,
+            drift_from_col_h=int(gold_h) if drifted else None,
+            redo=redo,
             gold_verdict=ex.get("verdict"),
             char_above=ex.get("char_above", ""), char_below=ex.get("char_below", ""),
         ))
