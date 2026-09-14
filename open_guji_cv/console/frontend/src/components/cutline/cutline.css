@@ -50,3 +50,19 @@
 .bcc-unsure { display: inline-flex; gap: .3rem; }
 .bcc-cov { font-size: .68rem; opacity: .7; margin-left: .1rem; }
 .bcc-drawhint { display: block; margin-top: .2rem; font-size: .7rem; }
+
+/* 2026-09-14 右栏分组（用户：「选项太多了有点乱，至少要分几个部分」）：判定 / 干扰 / 工具 三组，
+   快捷键做成按钮里的 <kbd> 角标，顶部长段说明折叠成分栏速查表。 */
+.clpair { display: flex; gap: .8rem; align-items: baseline; flex-wrap: wrap; }
+.clgroup { margin-top: .45rem; padding: .3rem .45rem .4rem; border: 1px solid var(--rule); border-radius: 5px; }
+.clgroup .clbtns { margin-top: 0; }
+.clcap { font-size: .68rem; color: var(--muted); letter-spacing: .05em; margin-bottom: .25rem; font-weight: 600; }
+.clcap .muted { font-weight: 400; margin-left: .35rem; letter-spacing: 0; }
+.clbtns kbd { font-family: var(--mono); font-size: .6rem; margin-left: .35rem; padding: 0 .25rem; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); line-height: 1.3; vertical-align: 1px; }
+.clbtns button.on kbd { color: inherit; border-color: currentColor; opacity: .8; }
+.clcandbtns { margin-bottom: .3rem; }
+.cltools button { opacity: .85; }
+.cl-help summary { cursor: pointer; font-weight: 600; }
+.cl-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .35rem .9rem; margin-top: .35rem; }
+.cl-help-grid div { line-height: 1.55; }
+.cl-help-grid b { display: block; margin-bottom: .1rem; }
