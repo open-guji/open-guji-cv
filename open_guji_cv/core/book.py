@@ -85,7 +85,7 @@ class BookSpec:
     #: `quality` 用于多证人不一致时**加权**，不是简单多数——三份整理本来历与
     #: 质量分级见 overview 仓 `Step9-结果整理/05-整理本清单.md`（唯一真相源）。
     #: `line_is_column` 标记「这份证人的一行 ＝ 我们刻本的一列」：四库光盘版
-    #: 实测如此（vol01 列首命中行首 93.7%、列长相等 95.2%），据此可以做
+    #: 实测如此（vol01 列首命中行首 94.7%、命中者列长相等 87.2%），据此可以做
     #: **独立于字符对齐**的丢格检测，见 `report/witness.py::col_verdict`。
     references: list[dict] = field(default_factory=list)
 
