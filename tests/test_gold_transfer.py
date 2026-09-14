@@ -76,6 +76,22 @@ def test_import_merges_expected_instead_of_replacing(stores):
     assert got.expected == {"verdict": "ok", "cand": "seam_narrow", "legacy_field": "keep-me"}
 
 
+def test_import_replaces_cutline_geometry_as_a_group(stores):
+    """2026-09-14 实锤：drift 重标后从裁决表导入，dataset 里旧坐标系的 polyline 被「旧值打底」留了回来
+    （ok 判定不带折线），评测里红线画到窗口顶上。切线几何键（gold/atomic.CUTLINE_KEYS）整组替换，
+    非切线的遗留字段照旧保留。"""
+    src, dst = stores
+    dst.upsert(SHARD, [_item(5, 8, 14, verdict="seam_ok", y=816, col_h=2295,
+                             polyline=[[5, 821], [183, 815]], tags=["stain"], legacy_field="keep-me")])
+    src.upsert(SHARD, [_item(5, 8, 14, verdict="ok", y=927, col_h=2458)])
+    res = import_to_dataset(SHARD, src, dst)
+    assert res.updated == 1
+    got = dst.get(SHARD, "vol02:5:8:14").expected
+    assert got["verdict"] == "ok" and got["y"] == 927 and got["col_h"] == 2458
+    assert "polyline" not in got and "tags" not in got, got
+    assert got["legacy_field"] == "keep-me"
+
+
 def test_import_dry_run_writes_nothing(stores):
     src, dst = stores
     src.upsert(SHARD, [_item(5, 8, 14)])
