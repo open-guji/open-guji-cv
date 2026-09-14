@@ -476,9 +476,12 @@ def test_route_inventory():
     `GET /api/step9/reflow/{book}`。这 4 条都先于「69→70」那次批量提交
     （f7c7c6e54e）就已合入主干，该次提交只顺手记了它自己新加的
     `ocr_candidates` 一条，没有回头补记，70 → 74。）
+
+    2026-09-13 人裁落 workspace 裁决表、进测试集改为显式导入（7e730962d4），
+    `gold.py` 加 `POST /api/gold/{shard:path}/import`，账 2026-09-14 补记，74 → 75。
     """
     got = sorted(_endpoints())
-    assert len(got) == 74, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 75, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -577,6 +580,7 @@ EXPECTED_ROUTES = [
     "GET /v1/", "GET /{full_path:path}",
     "POST /api/batches", "POST /api/batches/{batch_id}/harvest", "POST /api/batches/{batch_id}/route",
     "POST /api/events", "POST /api/evals/{eval_id}/run", "POST /api/gold/{shard:path}/drift",
+    "POST /api/gold/{shard:path}/import",
     "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/around/batch",
     "POST /api/review/rate-history",
     "POST /api/runs", "POST /api/runs/{job_id}/cancel",
