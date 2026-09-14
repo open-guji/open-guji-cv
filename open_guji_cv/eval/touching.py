@@ -270,32 +270,3 @@ def gold_ids() -> set[str]:
         return {i.id for i in GoldStore().list(SHARD)}
     except Exception:
         return set()
-
-
-def resolved_cuts(book: str) -> dict[tuple[int, int, int], str]:
-    """已裁决、可直接收敛的切点：`(page, col, slot_above) → 候选 kind`。
-
-    只收 `verdict in (ok, moved)` 且 `cand` 落在候选池的 kind 词表内——`overlap`
-    （切哪都伤字）、`idk`（拿不准）不收，那两类是真难例，仍要留给人看（见
-    `.claude/doc/row_boundaries_design.md`「5 条都不对」节）。`moved` 只收 `cand`
-    这个类别标签，不搬人拖动后的自定义 y——候选池里没有「人手动挪到的那个具体
-    位置」这个候选，能收敛的只是「候选池里已经算出来的哪一条是对的」。
-    """
-    from ..gold.store import GoldStore
-    out: dict[tuple[int, int, int], str] = {}
-    try:
-        items = GoldStore().list(SHARD)
-    except Exception:
-        return out
-    for it in items:
-        if it.status != "active" or str(it.anchor.book) != book:
-            continue
-        verdict = it.expected.get("verdict")
-        cand = it.expected.get("cand")
-        if verdict not in ("ok", "moved") or cand not in ("straight", "seam_narrow", "seam_wide"):
-            continue
-        page, col, slot = it.anchor.page, it.anchor.col, it.anchor.slot
-        if page is None or col is None or slot is None:
-            continue
-        out[(page, col, slot)] = cand
-    return out
