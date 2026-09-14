@@ -183,6 +183,9 @@ export function CutlinePanel({ book }: { book: string }) {
     const c = cases[i]
     if (!c) return
     const st = cardState.current[c.id]
+    // 已落定的卡不再接键盘/按钮：2026-09-14 事件里出现同 id 相隔 1 秒的两条——
+    // 写入未返回、焦点还没挪到下一张时又按了一次。要改就先按 U 重开。
+    if (st.done) { setMsg(`${c.id} 已落定（${st.done}），要改先按 U 重做`); return }
     let verdict = verdictIn
     let y = st.y
     if (verdict === 'moved' && y === c.y) verdict = 'ok'
