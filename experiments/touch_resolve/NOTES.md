@@ -92,4 +92,5 @@
 - 12:50 补：drift 进度 vol01 109/109、vol02 52/99、vol03 4/94；后续事件落在默认批次 `vol02-cutline` / `vol03-cutline`。
   drift 档改为不按批次事件跳过（老批次历史事件会把整册算成已裁），重做池按事件 col_h≈当前列高判。控制台又重启一次（pid 5016）。
   `tests/test_console_routes.py::test_route_inventory` 现在红：多出 `POST /api/gold/{shard:path}/import`（7e730962d4 加的，账没记），不是切线改动。
+- 13:05 补：前端 drift 档只认 col_h≈当前列高的批次裁决（老批次历史裁决曾被当已裁、旧折线画到新图上）；`/api/cutline/verdicts` 带 col_h/cand。控制台 pid 39080，dist index-FQg-toGG.js。
 
