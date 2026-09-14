@@ -55,9 +55,16 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     if drift:
         # 「坐标过期重标」模式（2026-09-14）：页码框填 drift，出**金标 col_h 与当前列图高不一致**
         # 的那批切点（按 slot 对回当前 cells，id 沿用金标 id）。它们本来就在金标里，所以
-        # 这一档不按 gold_ids 跳过，只按本批次事件跳过；`kind` 忽略。见 eval.touching.drifted_boundaries。
-        # 「只看未裁」取消时把本批次已重标的也出出来（col_h 已换成当前，否则找不回），供 U 重做
-        cases, drift_skipped = T.drifted_boundaries(book, st, include_batch=None if skip_done else batch)
+        # 这一档不按 gold_ids 跳过、也不按批次事件跳过（重裁过的 col_h 已是当前值，自己出池）；`kind` 忽略。
+        # 「只看未裁」取消时把本批次已重标的也出出来（col_h 已换成当前，否则找不回），供 U 重做。
+        # 「已重标」= 本批次里有一条切线事件的 col_h 就是当前列高；不按批次名判（批次框留空时
+        # 事件落进 vol03-cutline 这种老批次，按名字算全成了「已裁」，2026-09-14 实测只剩 4 条可裁）。
+        relabeled: dict[str, set[int]] = {}
+        if batch and not skip_done:
+            for e in deps.event_log().read(batch):
+                if e.kind == "cutline" and e.payload.get("col_h"):
+                    relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
+        cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None)
         pg = sorted({c["page"] for c in cases})
     elif pages == "body":
         pg = [p for p in T.body_pages(book)]
@@ -75,9 +82,10 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         cases = T.r2s_boundaries(book, pg, st)
     n_all = len(cases)
     done: set[str] = set()
-    if skip_done and scope != "blocking":  # blocking 的 cases 已经是「待办」，不用再滤一遍
-        if not drift:                      # drift 那批本来就在金标里，只按本批次事件去重
-            done |= T.gold_ids()
+    if skip_done and scope != "blocking" and not drift:
+        # blocking 的 cases 已经是「待办」，不用再滤一遍；drift 那批重裁后 col_h 变成当前值、
+        # 自己出池，也不能按批次事件滤（老批次里的历史事件会把整批都算成已裁）
+        done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
     cases = [c for c in cases if c["id"] not in done]

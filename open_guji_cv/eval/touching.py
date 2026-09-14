@@ -189,7 +189,7 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
 
 
 def drifted_boundaries(book: str, store=None, tol: int = 2,
-                       include_batch: str | None = None) -> tuple[list[dict], dict]:
+                       include_relabeled: dict[str, set[int]] | None = None) -> tuple[list[dict], dict]:
     """金标**坐标系过期**的切点：裁决表里 `col_h` 与当前列图高度差 > tol 的条目。
 
     2026-09-14 实测 982 条 active 金标里 **381 条**（vol01 120 / vol02 167 / vol03 94，
@@ -203,10 +203,13 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
     对不上（格数结构变了、列被拒）的条目计入返回的 `skipped` 供人查。
     `char_above/char_below` 直接沿用金标（已由 06 卡洗过），不再重新对齐整理本。
 
-    `include_batch`：重裁一落定，条目的 col_h 就是当前值、不再「过期」，刷新后在这一档
-    里找不回来（用户 2026-09-14：标错一张想改）。给了批次名就把**该批次事件已写过的**
-    条目也出出来（`redo=True`，`drift_from_col_h=None`），前端按批次裁决把它们显示成已裁，
-    人可以按 U 重做。控制台在「只看未裁」取消时传本批次名。
+    `include_relabeled`：重裁一落定，条目的 col_h 就是当前值、不再「过期」，刷新后在这一档
+    里找不回来（用户 2026-09-14：标错一张想改）。传 {金标 id: 本批次切线事件里出现过的 col_h}，
+    其中有一条 col_h ≈ 当前列高的（= 对着当前坐标系裁过）就也出出来（`redo=True`，
+    `drift_from_col_h=None`），前端按批次裁决把它们显示成已裁，人可以按 U 重做。
+    **不按批次名前缀判**：用户把批次框留空时事件落进 `vol03-cutline` 这种老批次，那里面
+    历史事件（旧坐标系）成百上千，按名字算全是「已裁」——实测 vol03 94 条只剩 4 条可裁。
+    同理这一档**不按批次事件跳过**已裁：重裁过的条目 col_h 已是当前值，自己就出池了。
     """
     import cv2
 
@@ -248,8 +251,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
             skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
             continue
         drifted = abs(int(gold_h) - h) > tol
-        redo = (not drifted and include_batch is not None
-                and any(s.startswith(f"evt_{include_batch}_") for s in (it.source_events or [])))
+        redo = (not drifted and bool(include_relabeled)
+                and any(abs(int(v) - h) <= tol for v in include_relabeled.get(it.id, ())))
         if not drifted and not redo:
             continue                                  # 坐标系没变，不用重裁
         if pg not in cells_cache:

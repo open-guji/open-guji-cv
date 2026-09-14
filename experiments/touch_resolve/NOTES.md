@@ -89,4 +89,7 @@
   如果你的脚本缓存过 touching-cuts（frame_ok.json 等），vol01 那 109 条现在 col_h 都是当前值，重跑 restrat 前先重读。
 - drift 进度：vol01 109/109（事件在批次 `vol02-cutline-drift`，名字填错了，不影响数据）、vol02 4/99（`vol2-drift`）、vol03 0/94。
 - 控制台 8640 已重启一次（12:2x），带 GUJI_WORKSPACE；前端 dist 换到 index-XdD2ur-W.js。
+- 12:50 补：drift 进度 vol01 109/109、vol02 52/99、vol03 4/94；后续事件落在默认批次 `vol02-cutline` / `vol03-cutline`。
+  drift 档改为不按批次事件跳过（老批次历史事件会把整册算成已裁），重做池按事件 col_h≈当前列高判。控制台又重启一次（pid 5016）。
+  `tests/test_console_routes.py::test_route_inventory` 现在红：多出 `POST /api/gold/{shard:path}/import`（7e730962d4 加的，账没记），不是切线改动。
 
