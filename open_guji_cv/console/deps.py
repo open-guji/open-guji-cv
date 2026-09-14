@@ -41,18 +41,19 @@ _runner: JobRunner | None = None
 _log: EventLog | None = None
 _batches: BatchStore | None = None
 _gold: GoldStore | None = None
+_verdicts: GoldStore | None = None
 
 
 def set_roots(*, feedback: Path | None = None, batches: Path | None = None,
               dataset: Path | None = None, products: Path | None = None,
               cache: Path | None = None) -> None:
     """换根并重建单例。只传要换的那个，其余保持原样。"""
-    global _log, _batches, _gold
+    global _log, _batches, _gold, _verdicts
     for k, v in (("feedback", feedback), ("batches", batches), ("dataset", dataset),
                  ("products", products), ("cache", cache)):
         if v is not None:
             _roots[k] = Path(v)
-    _log = _batches = _gold = None
+    _log = _batches = _gold = _verdicts = None
 
 
 def runner() -> JobRunner:
@@ -78,10 +79,25 @@ def batch_store() -> BatchStore:
 
 
 def gold_store() -> GoldStore:
+    """**测试集仓**（open-guji-dataset）——只给金标管理视图（分片表 / 迁移 / 漂移）用。
+    事件消费**不能**用它，用 `verdict_store()`（2026-09-13 三仓边界）。"""
     global _gold
     if _gold is None:
         _gold = GoldStore(_roots["dataset"])
     return _gold
+
+
+def verdict_store() -> GoldStore:
+    """workspace 的裁决表 `feedback/verdicts/`——事件路由消费的落点、面板去重的数据源。
+    根随 `feedback` 根走（`<feedback>/verdicts`），`set_roots(feedback=…)` 一起换。"""
+    global _verdicts
+    if _verdicts is None:
+        if _roots["feedback"] is not None:
+            _verdicts = GoldStore(_roots["feedback"] / "verdicts")
+        else:
+            from ..feedback.consumers import verdict_store as _default
+            _verdicts = _default()
+    return _verdicts
 
 
 def product_store() -> ProductStore:

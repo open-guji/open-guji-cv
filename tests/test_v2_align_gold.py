@@ -10,7 +10,8 @@ import pytest
 import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.spec import page_key
-from open_guji_cv.core.workspace import corpus_path, raw_root
+from open_guji_cv.core.workspace import raw_root
+from open_guji_cv.gold.v2_align import DEFAULT_CORPUS as GOLD_CORPUS
 from open_guji_cv.gold.v2_align import align_book
 from open_guji_cv.products.store import ProductStore
 
@@ -22,9 +23,26 @@ def _ws_raw():
     没设则退回仓根——引擎自带的小样本仍在仓内。"""
     return raw_root()
 RAW = _ws_raw() / "data_full" / "zongmu"
-CORPUS = corpus_path("zongmu_wuyingdian_reference.txt")
+# ⚠️ 跳过判据要查的是 `align_book` **真正会读**的那份语料，不是随便一份整理本。
+# 2026-09-13 订正：这里原本查 `zongmu_wuyingdian_reference.txt`（武英殿本，仍在
+# 现役，但那是字表/字形/训练那批脚本用的），而 `gold.v2_align.DEFAULT_CORPUS`
+# 走的是 `zongmu_wenyuange_wikisource.txt`（文渊阁本）——查 A 跑 B，A 在 B 不在
+# 时就会跑进来然后锚不上。
+#
+# 更要命的是**同名语料有两份**：仓内 `corpus/` 那份只有 17KB（样本，够跑单元
+# 测试），工作区那份 8.2MB（真语料），差 470 倍。`core.workspace` 专门有个
+# `using_sample_corpus()` 就是为这个坑设的。于是：
+#   什么都不设            → 样本语料 + 仓内产物 → 8-gram 锚定失败，本条 skip
+#   export GUJI_WORKSPACE → 真语料 + 工作区产物 + 工作区 cache → 锚上 12/12
+# 要真跑它就**只设 GUJI_WORKSPACE**，让 corpus / products / cache 三者配套指向
+# 工作区。⚠️ 别再额外设 `GUJI_PRODUCTS_DIR` 去钉产物：vol01 的 23472 个字块缓存
+# 只在工作区，把 products 单独指回仓内会让 products 与 cache 分家，
+# test_rulers / test_v1_bridge / test_font_candidates 那批读图块的会整片报
+# 「分母为 0」「0/179 个 char 实例落了图块」——那是环境拆错了，不是算法坏了。
+# 两种环境都不会报假绿：锚不上就 skip，不会假装通过。
+CORPUS = Path(GOLD_CORPUS)
 needs = pytest.mark.skipif(not (RAW.exists() and CORPUS.exists()),
-                           reason="需要原图与整理本")
+                           reason="需要原图与整理本（GOLD_CORPUS 指的那份）")
 
 
 @needs
@@ -92,6 +110,30 @@ def test_no_wrong_admission_against_the_gold():
                 # 实例 vol01:151:9:20——人裁字形「巳」、释读「已」（己已巳 三字
                 # 字形与文意分岔，设计如此），而 context 通道当次转写成了「已」。
                 if r.channel == "human":
+                    continue
+                # `source == "fallback"`：Step6 **弃权**的位，`shape` 是
+                # `slots_from_decision` 逐级兜底（库 kNN top1 → OCR top1）填的
+                # **对齐载体**，不是"管线认为这一位是什么字"。该函数 docstring
+                # 自己写着「兜底字只是对齐载体…所以兜底字错了也不会污染
+                # `align_char`」——既然声明了它可能是错的，就不能拿它当零容忍
+                # 金标。实例 vol01:26:5:-1：Step6 char=None（margin 0.0126，
+                # source=prior，排序 正 0.395 / 玉 0.383 / 世 0.222），兜底取了
+                # 库 top1「正」写进 shape；而该列读作「世祖章皇帝曾降…」，
+                # slot=-1 正是避讳抬头位，文意与格式都锁死了是「世」。
+                # dev_set 1930 个金标位里 84 位是 fallback，都属此类。
+                if g.source == "fallback":
+                    continue
+                # 异体字对上 Step6 的 LM 微弱打分差：`shape` 取的是 Step6 定字，
+                # 而 Step6 在异体字上靠上下文模型打分，两个形分数常常只差几个点
+                # ——这个量级分不出「刻本上刻的是哪个形」，但 `align_char`（8-gram
+                # 锚定后与整理本原文逐字比对）分得出。实例 vol01:141:7:2 与
+                # vol01:11:4:21：Step6 排序「旨 0.52 / 㫖 0.46」取了旨，而整理本
+                # 原文两处都作㫖——「諭㫖各註某家藏本」「撮取著書大㫖」，且都是
+                # op=equal 严丝合缝对齐；文渊阁本全书用㫖 1292 次、用旨 684 次。
+                # C1 走的正是 `_pick_char` 里「库 unsure 时整理本字是更好的字形
+                # 估计」那条路（见 seed_admit.py 该函数 docstring），采信 align_char
+                # 比采信 LM 打分更可信。这类位以 align_char 为准，不算管线的错。
+                if g.reading and r.char == g.reading:
                     continue
                 # `replace` 段的金标 shape 是**整理本给的**，不是图上认的
                 # ——短 replace 段（op_run ≤ 2）正是对齐闸自己警告的高风险
