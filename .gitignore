@@ -118,3 +118,6 @@ output/review_*.html
 /output/review_*/
 /output/border_review/
 /output/inner_probe/
+
+# 粘连切点实验（scripts/touch_resolve/）的产出：图与 json 可由脚本重算，不入库
+scripts/touch_resolve/out/
