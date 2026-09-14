@@ -103,4 +103,8 @@
 - 正在跑（用修好的金标）：`train_partition_unet_v2.py --eval-gold --cc-max 400` → `out/unet_partition_unet_v2_cc400/`（覆盖）、
   `exp3_partition_eval.py --source glyph --tag v3` → `out/exp3_glyph_v3/`；日志 `out/B_*.log`。之后 restrat 出 summary_frame_ok。
 - 控制台：切线卡分组 / 回车=所选切法 / `list:<名字>` 复核清单模式 / drift 档只认当前坐标系裁决；pid 21888，dist index-DKMh9dUA.js。
+- 15:0x 补（B）：实验六 `exp6_selector.py` → `out/exp6/`（frame_ok 906 / label_ok 673）：chosen 大块错 5.2%、U-Net 1.3%、二选一上限 0.1%；
+  规则「分歧最大块 ≥150 才换 U-Net」px 均 14.7 / ≤20px 85.4% / blob≥60 4.2% / ≥150 1.6%。A 做 07 时可直接拿 `rule` 字段与 `dis.blobs`。
+  **注意**：U-Net 归属对墨像素取 pA vs pB（`exp6_selector.unet_owner`）比 eval_gold 的三类 argmax 好（px 27.2→20.2），落地用前者。
+  `out/unet_partition_unet_v2_cc400/` 已用新金标重跑（summary_frame_ok.json 同步）；`exp3 --tag v3` 还在跑（→ out/exp3_glyph_v3）。
 
