@@ -237,7 +237,12 @@ open-guji-dataset/<step_id>/<shard>/
  "payload": {"verdict": "ok"}}
 ```
 
-- 存 `open-guji-dataset/feedback/events/<batch>.jsonl`（只追加；小；人产生 → git）。
+- ~~存 `open-guji-dataset/feedback/events/<batch>.jsonl`~~ → **2026-09-13 改：存
+  `<workspace>/feedback/events/<batch>.jsonl`**（`core.workspace.feedback_root()`）。
+  用户裁定三仓边界：管线运行时只读写 workspace；open-guji-dataset 是测试集，只放
+  显式导入的标注，运行时不读不写。消费者 `gold_add` 的落点相应改成 workspace 的
+  裁决表 `feedback/verdicts/<shard>/items.jsonl`（与 dataset 分片同格式），进测试集走
+  `guji gold import`。正本：overview `进度/数据边界-三仓各管什么.md`。
 - 四种旧格式在收割时映射成 `kind`；`seed_queue` 的疑问码、状态机原样放进 payload，
   `labels.jsonl` 的 confirm / relabel / split / merge / mark / flag 直接就是 kind。
 - **路由表** `feedback/routes.yaml`：`kind × target.step → 消费者`：
@@ -375,7 +380,7 @@ Step1 现在 1.8 s/页，dev_set 一轮不到半分钟；聚类 / 识别那些�
 
 | 层 | 放什么 | 在哪 | 为什么 |
 |---|---|---|---|
-| **A 长期（git）** | 代码、pipeline / book yaml、金标 items + 小 assets、事件日志、批次登记、评测基线与历史、`glyph_store/` 真源、重键回执、`profile.json`、各步 `_manifest.jsonl`、**`pins/` 钉住的数值产物** | open-guji-cv / open-guji-dataset | 人产生或不可再生；小（pins 每册每步几 MB） |
+| **A 长期（git）** | 代码、pipeline / book yaml、金标 items + 小 assets、事件日志、批次登记、评测基线与历史、`glyph_store/` 真源、重键回执、`profile.json`、各步 `_manifest.jsonl`、**`pins/` 钉住的数值产物** | open-guji-cv（代码）/ **workspace 仓**（事件日志、裁决表、批次登记、排除名单、glyph_store）/ open-guji-dataset（只放显式导入的金标）——**2026-09-13 起按三仓边界分，引擎仓不落书的数据** | 人产生或不可再生；小（pins 每册每步几 MB） |
 | **B 中期（本地快照目录）** | 原始扫描（`data_full/`、`rebuild_src/`）、`glyph.db`；可选：图像缓存的冷备 | 仓库外的本地目录（如 `D:\guji-snapshots\` 或 NAS，`GUJI_SNAPSHOT_DIR` 指定）；可选免费镜像 GitHub Release assets | 只给自己和少数开发者看，存免费的地方、优先本地（用户裁定）；大；可再生但慢 |
 | **C 短期（工作副本）** | `products/` 数值产物工作副本、**图像缓存**（列图 / 字块 / 归一图块，LRU 有上限）、`features*.npz`、LM 缓存、审查页 HTML 快照、per-item 评测报告、`runs/` 日志 | .gitignore | 随时可重算 |
 
