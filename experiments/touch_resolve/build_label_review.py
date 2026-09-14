@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """金标字对可疑侧的人裁页：这个半字到底是哪个字？
 
-    python scripts/touch_resolve/build_label_review.py [--out out/label_review.html] [--controls 10]
+    python experiments/touch_resolve/build_label_review.py [--out out/label_review.html] [--controls 10]
 
 出题纪律（review-artifact skill）：
 - 卡上**不印**哪个候选是金标、哪个是识别器认的；候选顺序按卡 id 打散；

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验五：像素归属对「身份假设」有多敏感？（用户 2026-09-13：识别有微小错误不影响，交界处笔画类似就能分开）
 
-    python scripts/touch_resolve/exp5_identity_robustness.py [--limit N]
+    python experiments/touch_resolve/exp5_identity_robustness.py [--limit N]
 
 同一套模板归属（templates.Registrar v2），身份分别取：
   gold   = 金标字对（有整理本的上界）

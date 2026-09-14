@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """探针：金标 → 当下产物 对得上多少；出几张双格窗口图肉眼核对坐标口径。
 
-    python scripts/touch_resolve/probe.py [--n 8] [--out DIR]
+    python experiments/touch_resolve/probe.py [--n 8] [--out DIR]
 
 图上：蓝 = 现役直线格线；绿 = 现役实际切法（缝）；红 = 人工金标（折线或直线）。
 """

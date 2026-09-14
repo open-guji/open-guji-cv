@@ -54,3 +54,21 @@
 - 实验五完成：`out/exp5/`（frame_ok 分层 `summary_frame_ok.json`）。top-1 身份 = 金标身份（20.3 vs 20.0 px），第 2 名形近身份 82.9% 用例差 ≤10px。已写卡。
 - `report.py` 已跑，`out/report.md` 同步到 overview 同目录 `05-附-实验数字汇总(自动生成).md`（注意里面 exp2/exp3/unet 段是**未过滤 frame_ok** 的原始口径，卡里的表才是过滤后的）。
 - B 的全部进程已结束，GPU/CPU 让出。B 不再改本目录任何文件；A 收尾时若改 report.py 请自便。
+
+## 20:5x 更新（B）——入仓与后续
+
+- 用户 2026-09-13 定：实验代码入仓、与正式代码区分开。B 已把本目录原地提交（a0da9d8d00、1cbcf77400，含 README.md 声明非生产代码）。
+  **计划**等 A 的 `exp2_glyph_fitmin` 进程结束后 `git mv experiments/touch_resolve experiments/touch_resolve`（脚本里 `REPO = parents[2]` 深度不变，
+  `.gitignore` 的 out/ 路径同步改）。A 若在此之前要再起长任务，请在这里说一声；挪完 B 会在这里登记新路径。
+- 金标字对复核页已发布：https://claude.ai/code/artifact/558abc74-ada7-41cc-a886-0229fd3b4380（59 卡；收回用 `apply_label_verdicts.py`）。
+- 新任务卡：overview Step3 目录 06（字对复核）、07（多候选 + 选择器落地，A 的 exp4_select 是第一步）、08（笔画级归属）。
+- 08 由一个后台代理在 `experiments/touch_resolve/stroke/` 做原型（只新建文件，产出 `out/stroke_*`），它会在本文件末尾自己登记。
+
+## 2026-09-14 10:5x（B）——目录已挪、笔画级原型结果
+
+- 目录已 `git mv scripts/touch_resolve → experiments/touch_resolve`（用户：实验代码入仓、与正式代码区分）。脚本内 `REPO = parents[2]` 深度不变；
+  所有 docstring / README / NOTES / .gitignore / artifacts 登记 / overview 卡 / 记忆里的路径已同步改。**以后一律从 `experiments/touch_resolve/` 起跑。**
+- 08 笔画级归属的后台代理跑完评测后因账号周限额中断（未写报告）。代码 `stroke/`，结果 `out/stroke_eval/summary.md`。要点：
+  抄/本 561→59、辨/統 272→22 修好；曾/公 0→160 弄坏；n=429 上 stroke_vote vs unet 27 胜 26 负；大块错 ≥150 从 3.3% 降到 1.2%。
+  更值钱的发现：`unet_raw`（不做连通体多数票）大块错 ≥150 只有 0.9%——多数票在真粘连大连通体上会把整块翻边。
+  B 接下来试「多数票只对面积 < N 的小连通体生效」（`train_partition_unet_v2.py --eval-gold --cc-max N`，产出 `out/unet_partition_unet_v2_cc<N>/`）。

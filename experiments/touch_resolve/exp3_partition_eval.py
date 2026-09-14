@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验三：模板给像素归属，换更锋利的尺子量。
 
-    python scripts/touch_resolve/exp3_partition_eval.py [--source glyph|font] [--limit N]
+    python experiments/touch_resolve/exp3_partition_eval.py [--source glyph|font] [--limit N]
 
 只配准**真字对**（有整理本的情形），对每条金标比四种归属：
   partition = 模板配准后的逐像素归属；chosen = 现役缝；straight = 直线；best_cand = 候选里离金标最近的。

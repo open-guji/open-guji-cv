@@ -6,8 +6,8 @@
   3. 增广：随机纵向偏移 0–40px、随机纵向缩放 0.85–1.05、轻微水平偏移——切断「第 N 行必是 A」的捷径；
   4. vol01 + vol02 两份合成对（4 万）全预载内存，16 轮。
 
-    python scripts/touch_resolve/train_partition_unet_v2.py --train --data D:/data/touch_synth/vol01,D:/data/touch_synth/vol02 --epochs 16
-    python scripts/touch_resolve/train_partition_unet_v2.py --eval-gold
+    python experiments/touch_resolve/train_partition_unet_v2.py --train --data D:/data/touch_synth/vol01,D:/data/touch_synth/vol02 --epochs 16
+    python experiments/touch_resolve/train_partition_unet_v2.py --eval-gold
 评测复用 v1 的 eval_gold（同尺子），只换模型与输入。
 """
 from __future__ import annotations

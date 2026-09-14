@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """档 3 地板：类别无关的逐像素归属网络（小 U-Net），只用合成粘连对训练，零人工标注、不看字是什么。
 
-    python scripts/touch_resolve/train_partition_unet.py --train --data D:/data/touch_synth/vol01 --epochs 8
-    python scripts/touch_resolve/train_partition_unet.py --eval-gold [--ckpt ...]
+    python experiments/touch_resolve/train_partition_unet.py --train --data D:/data/touch_synth/vol01 --epochs 8
+    python experiments/touch_resolve/train_partition_unet.py --eval-gold [--ckpt ...]
 
 输入：灰度双格窗口（贴到 256×192 白底画布左上角）；输出：每像素 3 类（背景 / 上字 A / 下字 B）。
 合成真值里的「两者都有墨」(3) 像素不算损失（ignore）。评测在 touching-cuts 金标上，尺子同实验三

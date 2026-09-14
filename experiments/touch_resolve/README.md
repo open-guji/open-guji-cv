@@ -22,6 +22,6 @@
 | `train_partition_unet.py` `train_partition_unet_v2.py` | 类别无关归属 U-Net（v1 负结果 / v2 现役） |
 | `report.py` | 汇总成 `out/report.md` |
 
-跑法：一律从仓根用 `.venv` 启动，例如 `.venv/Scripts/python scripts/touch_resolve/exp1_hypothesis.py`
+跑法：一律从仓根用 `.venv` 启动，例如 `.venv/Scripts/python experiments/touch_resolve/exp1_hypothesis.py`
 （`Recognizer()` 依赖 CNN 检查点的相对路径）。实验依赖 `out/exp1/per_case.json`（识别 top-k）与
 `out/frame_ok.json`（金标坐标系一致的 601 条），先跑 `exp1_hypothesis.py` 与 `restrat.py`。

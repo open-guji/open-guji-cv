@@ -2,7 +2,7 @@
 """从实验一产出里导出「金标字对可疑」清单：gold 切法下识别 fused@5 都没命中真字、且 cls top-1 置信 ≥0.5 的侧。
 这些多半是整理本对齐错位或整理本与刻本用字不同，该交人裁后回写 touching-cuts 的 char_above/char_below。
 
-    python scripts/touch_resolve/exp1_label_suspects.py   → out/exp1/label_suspects.json
+    python experiments/touch_resolve/exp1_label_suspects.py   → out/exp1/label_suspects.json
 """
 from __future__ import annotations
 import json

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """把 exp1 / exp2 / exp3 / unet 的产出汇总成一份 markdown（stdout + out/report.md）。
 
-    python scripts/touch_resolve/report.py
+    python experiments/touch_resolve/report.py
 """
 from __future__ import annotations
 

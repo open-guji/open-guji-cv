@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """实验二汇总：成对校验按「标签可信」分层，比较 cov / CNN 乘积 / 两者名次相加 三种排序下真字对排第一的比例。
-    python scripts/touch_resolve/exp2_summary.py glyph|font
+    python experiments/touch_resolve/exp2_summary.py glyph|font
 """
 import json, sys
 import numpy as np

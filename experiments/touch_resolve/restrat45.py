@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验四（字形库纯度 out/exp4）与实验五（身份敏感度 out/exp5）按 frame_ok 重分层。
 
-    python scripts/touch_resolve/restrat45.py
+    python experiments/touch_resolve/restrat45.py
 """
 from __future__ import annotations
 

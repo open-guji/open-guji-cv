@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验四：身份条件下的**选择**——在 {直线, 窄走廊缝, 宽走廊缝, 模板归属} 里按模板贴合度选一个。
 
-    python scripts/touch_resolve/exp4_select.py [--source glyph|font] [--limit N]
+    python experiments/touch_resolve/exp4_select.py [--source glyph|font] [--limit N]
 
 实验三说明模板归属本身不如现役缝稳（现役缝对的地方它会引入新错），但在现役缝错的地方更好。
 部署形态因此应是「多候选 + 身份条件选择器」而非替换。这里测选择器：

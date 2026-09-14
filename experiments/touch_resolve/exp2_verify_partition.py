@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验二 + 三：成对校验（先认后切）与模板给像素归属。
 
-    python scripts/touch_resolve/exp2_verify_partition.py [--source glyph|font] [--limit N] [--viz 40]
+    python experiments/touch_resolve/exp2_verify_partition.py [--source glyph|font] [--limit N] [--viz 40]
 
 对每条带上下字的 touching-cuts 金标：
   假设集 = 真字对 ∪ 识别器（实验一 chosen 切法 fused top-3 × top-3）给出的竞争字对；

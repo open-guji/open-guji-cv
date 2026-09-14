@@ -2,7 +2,7 @@
 """把「粘连点金标字对复核」审查页的人裁结果收回并回写 touching-cuts 金标（显式导入这一步）。
 
     # 1) Artifact action:"read" 把线上页读回本地（大页会落成文件），然后：
-    python scripts/touch_resolve/apply_label_verdicts.py read_back.html [--apply]
+    python experiments/touch_resolve/apply_label_verdicts.py read_back.html [--apply]
 
 不带 --apply 只报：每张卡人裁 → 与金标一致 / 改成别的字 / 都不是 / 看不清；对照卡的一致率（人的基线）。
 带 --apply：

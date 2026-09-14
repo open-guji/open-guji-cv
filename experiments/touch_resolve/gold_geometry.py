@@ -2,7 +2,7 @@
 """量真实粘连点的几何：按人工金标缝分上下后，B 的墨顶行 − A 的墨底行 − 1（g，负 = 纵向交错），
 以及直线能达到的最优归属一致率——用来校准合成器的 GAP_MIX，并回答「缝表达不了的占多少」。
 
-    python scripts/touch_resolve/gold_geometry.py
+    python experiments/touch_resolve/gold_geometry.py
 """
 from __future__ import annotations
 import json

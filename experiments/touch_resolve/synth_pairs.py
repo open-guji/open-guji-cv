@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """合成粘连字对：从本书干净字格纵向叠放，产出逐像素归属真值 + 字标签（零人工标注）。
 
-    python scripts/touch_resolve/synth_pairs.py --book vol01 --n 20000 --out D:/data/touch_synth/vol01
+    python experiments/touch_resolve/synth_pairs.py --book vol01 --n 20000 --out D:/data/touch_synth/vol01
 
 「干净格」= Step3 判为 char、两侧格线都不穿墨（不在 cut_candidates 里）、墨外接框完整落在格内。
 两格来自同一列（保留天然的水平错位），按墨外接框对齐叠放：

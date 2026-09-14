@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验一的漏网分析：真字对没进 fused 5×5 假设集的用例——是切坏、磨损、异体还是标签错？
 
-    python scripts/touch_resolve/exp1_misses.py
+    python experiments/touch_resolve/exp1_misses.py
 
 读 out/exp1/per_case.json，列出漏网条目（gold 切法下 fused rank>5 或 None 的侧），
 并出一张对照图 out/exp1/misses.png：每行一个用例 = 双格窗口 + 两半 + 文字（真字 / top3）。

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验一：无整理本时，识别器 top-k 能把粘连点的真字对装进假设集的比例。
 
-    python scripts/touch_resolve/exp1_hypothesis.py [--k 10] [--books vol01,vol02,vol03]
+    python experiments/touch_resolve/exp1_hypothesis.py [--k 10] [--books vol01,vol02,vol03]
 
 对每条带上下字的 touching-cuts 金标，用三种切法切出上下两张半字图：
   straight = 现役直线格线；chosen = 现役实际切法（缝）；gold = 人工金标折线/直线。

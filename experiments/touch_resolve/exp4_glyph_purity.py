@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """实验四：归属好坏的下游价值尺子——切出来的字块与字形库同字刻例的弹性贴合度（入库纯度）。
 
-    python scripts/touch_resolve/exp4_glyph_purity.py [--unet CKPT] [--limit N]
+    python experiments/touch_resolve/exp4_glyph_purity.py [--unet CKPT] [--limit N]
 
 识别对切法不敏感（实验一 / 三），但字形库要的是干净字块：邻字残笔混进来会拉低与同字刻例的 cov、
 甚至被 never-match 护栏挡掉。对每条标签可信的金标，四种归属各切出上下两半，归一化到 64² 后与

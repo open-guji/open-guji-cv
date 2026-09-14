@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """按「金标坐标系与当下列图一致」(frame_ok: |col_h_gold − img_h| ≤ 2) 重新分层统计 exp3 / unet 的 per_case。
 
-    python scripts/touch_resolve/restrat.py out/exp3_glyph out/exp3_glyph_v2 out/unet_partition_unet_vol01
+    python experiments/touch_resolve/restrat.py out/exp3_glyph out/exp3_glyph_v2 out/unet_partition_unet_vol01
 """
 from __future__ import annotations
 import json, sys
