@@ -74,3 +74,6 @@
   B 接下来试「多数票只对面积 < N 的小连通体生效」（`train_partition_unet_v2.py --eval-gold --cc-max N`，产出 `out/unet_partition_unet_v2_cc<N>/`）。
 - 2026-09-14 11:2x（B）条件多数票结果：`--cc-max 400` 在 frame_ok+label_ok n=429 上 err 25.0 / 大块错 ≥150 **0.9%**（原 28.7 / 3.3%；现役缝 34.0 / 5.4%），
   moved / ok 类大块错 0%；代价是散点中位 8→13 px。U-Net 候选以后默认 `--cc-max 400`。产出 `out/unet_partition_unet_v2_cc400/`、`out/unet_cc_restrat.log`。
+- 2026-09-14 12:0x（B）金标字对复核回写完成：59/59 人裁，对照 10/10，改判 29 处（`open-guji-dataset 77a4bf1f`），事件在 workspace `feedback/touch_label_verdicts.jsonl`。
+  **`out/exp1/per_case.json` 已按新金标重跑**（旧版存为 `per_case_before_labelfix.json`）——A 若用 label_ok 分层，注意分母变了：pair@5x5 94.7%→97.9%。
+  标注页曾因 33/59 卡金标切线坐标过期被用户指出「切分不对」，已改用 `seam_chosen` 重发（build_label_review.py 支持 `--verdicts` 续裁）。
