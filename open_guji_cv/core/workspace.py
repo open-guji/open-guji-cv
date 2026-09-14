@@ -66,6 +66,7 @@ BATCHES_REL = "review/batches"
 EXCLUSIONS_REL = "config/crop_exclusions.jsonl"
 FEEDBACK_REL = "feedback"
 VERDICTS_REL = "feedback/verdicts"
+REPORTS_REL = "reports"
 
 
 def workspace_root() -> Path | None:
@@ -188,6 +189,17 @@ def using_sample_corpus(name: str = "zongmu_wenyuange_wikisource.txt") -> bool:
         return True     # 读不到就是不可用，按"不能拿来锚定"处理
 
 
+def reports_root() -> Path:
+    """Step9 汇总产物 `reports/<book>/`——比对报告、体检表。
+    `GUJI_REPORTS_DIR` > 工作区 > 仓内。
+
+    **不是页级产物**：它跨页跨册，不属于任何一页，所以不进 `products/`、
+    不注册 `ProductKindSpec`（理由同 Step8，见 `feedback/step8.py` 模块头）。
+    可再生，不进 git。
+    """
+    return _resolve("GUJI_REPORTS_DIR", REPORTS_REL)
+
+
 def describe() -> dict[str, str]:
     """当前解析结果，供控制台与诊断打印——路径错了要看得见。"""
     ws = workspace_root()
@@ -202,6 +214,7 @@ def describe() -> dict[str, str]:
         "batches": str(batches_root()),
         "feedback": str(feedback_root()),
         "verdicts": str(verdicts_root()),
+        "reports": str(reports_root()),
         "exclusions": str(exclusions_path()),
         # 语料读错了整理本对齐会静默全空（见 using_sample_corpus），所以摆到台面上
         "corpus": str(corpus) + ("  ⚠️ 仓内小样本，锚不住整理本" if using_sample_corpus() else ""),
