@@ -45,6 +45,11 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
+        # 人裁回流：workspace 裁决表里这本书已裁决的切点（feedback/lookup.py，
+        # **不读 open-guji-dataset**），按 (页,列) 筛出 slot_above → kind 传给
+        # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
+        from ..feedback.lookup import resolved_cuts as _resolved_cuts
+        book_resolved = _resolved_cuts(ctx.book.id)
         out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
@@ -65,15 +70,15 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
-            # 人裁回流（segment_column 的 resolved_cuts 参数）暂不接：裁决表要先落
-            # workspace，生产管线不读 open-guji-dataset（用户 2026-09-13 裁定，见
-            # overview 进度/数据边界-三仓各管什么.md）。
+            col_resolved = {slot: kind for (pg, col, slot), kind in book_resolved.items()
+                            if pg == page and col == gc.col}
             r = segment_column(
                 img, period=gate.period, n_body_slots=n_body_col, n_raised=n_raised_col,
                 border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band)
+                raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
+                resolved_cuts=col_resolved or None)
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue

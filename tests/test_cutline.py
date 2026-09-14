@@ -170,3 +170,72 @@ def test_blocking_gate_reads_all_event_batches(monkeypatch, tmp_path):
 
     monkeypatch.setattr(deps, "event_log", lambda: _Log(["volX:7:3:5"]))
     assert C.blocking_cutline_cases("volX", [7], _St()) == [], "裁过之后应立刻放行"
+
+
+# ── 人裁回流：Step3 从 workspace 裁决表取已裁决的切点 ─────────────────
+
+def _verdict(page, col, slot, verdict, cand, status="active", book="vol02"):
+    from open_guji_cv.gold.item import Anchor, GoldItem
+    exp = {"verdict": verdict}
+    if cand is not None:
+        exp["cand"] = cand
+    return GoldItem(id=f"{book}:{page}:{col}:{slot}",
+                    anchor=Anchor(book=book, page=page, col=col, slot=slot),
+                    expected=exp, status=status)
+
+
+def _patch_verdicts(monkeypatch, items):
+    from open_guji_cv.gold.store import GoldStore
+    monkeypatch.setattr(GoldStore, "list", lambda self, shard, legacy=True: items)
+
+
+def test_resolved_cuts_reads_workspace_verdicts_not_dataset(monkeypatch, tmp_path):
+    """数据源是 workspace 的裁决表（feedback/verdicts）——生产管线运行时不读测试集仓。"""
+    from open_guji_cv.feedback import lookup
+    from open_guji_cv.gold.store import GoldStore
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    for k in ("GUJI_VERDICTS_DIR", "GUJI_FEEDBACK_DIR"):
+        monkeypatch.delenv(k, raising=False)
+    seen = {}
+
+    def spy(self, shard, legacy=True):
+        seen["root"], seen["shard"] = self.root, shard
+        return []
+
+    monkeypatch.setattr(GoldStore, "list", spy)
+    assert lookup.resolved_cuts("vol02") == {}
+    assert seen["root"] == tmp_path / "feedback" / "verdicts"
+    assert seen["shard"] == lookup.TOUCHING_CUTS_SHARD
+    assert "open-guji-dataset" not in str(seen["root"])
+
+
+def test_resolved_cuts_accepts_any_verdict_word_with_a_known_cand(monkeypatch):
+    """判据是 cand（人选中了候选池里哪一条），不是 verdict 的具体词：Step7 裁决台发
+    `confirmed`，切线卡发 `ok`/`moved`，都认；`overlap`/`idk`、retired、无 cand 的不收。"""
+    from open_guji_cv.feedback.lookup import resolved_cuts
+    _patch_verdicts(monkeypatch, [
+        _verdict(5, 8, 14, "confirmed", "seam_narrow"),
+        _verdict(6, 4, 17, "ok", "straight"),
+        _verdict(7, 1, 1, "moved", "seam_wide"),
+        _verdict(9, 1, 3, "overlap", None),
+        _verdict(9, 1, 9, "idk", None),
+        _verdict(9, 2, 2, "confirmed", "seam_narrow", status="uncertain"),
+        _verdict(20, 2, 2, "confirmed", "seam_narrow", status="retired"),
+        _verdict(21, 2, 2, "moved", None),                 # 人自己拖的位置，不在候选池里
+        _verdict(22, 2, 2, "confirmed", "polyline"),       # 自画折线，不是候选 kind
+        _verdict(5, 8, 14, "confirmed", "seam_narrow", book="vol01"),
+    ])
+    assert resolved_cuts("vol02") == {(5, 8, 14): "seam_narrow", (6, 4, 17): "straight",
+                                      (7, 1, 1): "seam_wide"}
+    assert resolved_cuts("vol01") == {(5, 8, 14): "seam_narrow"}
+
+
+def test_resolved_cuts_empty_when_store_unavailable(monkeypatch):
+    from open_guji_cv.feedback.lookup import resolved_cuts
+    from open_guji_cv.gold.store import GoldStore
+
+    def boom(self, shard, legacy=True):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(GoldStore, "list", boom)
+    assert resolved_cuts("vol02") == {}
