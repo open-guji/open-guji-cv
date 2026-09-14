@@ -326,3 +326,9 @@ v2 链与 v1 产物完全解耦：Step1 直接吃原始扫描，Step4 由控制�
 （`column_not_ok` 当前产物不可用 / `slots_not_found` 格数结构变了 / `no_col_h(cand-verdict)` 新式「选切分方案」裁决本就不算过期）。
 批次名建议 `<册>-cutline-drift`。裁完照常 `guji gold import --shard char-segmentation/touching-cuts` 进数据集。
 代码：`eval/touching.py::drifted_boundaries`、`console/routers/cutline.py`；由来见 overview `Step3-逐字切分/09-切线金标坐标过期重标.md`。
+
+**标错了怎么改（2026-09-14）**：取消「只看未裁」即时生效，已裁的卡按判定配色回到列表，← 回去按 U 重做。
+刷新过页面：批次名照旧、取消「只看未裁」再载入——drift 档会把**本批次事件写过的**条目也出出来（`redo=True`），
+因为重标一落定 col_h 就是当前值、不再「过期」，不带批次名就找不回。批次名只管过滤，数据按 id upsert，与批次名无关。
+右栏按钮分「判定 / 干扰 / 工具」三组，快捷键印在按钮角标上；顶部说明折叠在「怎么裁 · 快捷键速查」里。
+
