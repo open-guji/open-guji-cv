@@ -83,10 +83,7 @@ def _expected_of(e: Event) -> dict:
         # ⚠️ 2026-09-13 之前 `char_*` 存进来的其实是 `shape`（卡片取错了字段，
         # 标签却写着「整理本期望」）——那之前的历史事件里 `char_*` 要按 shape
         # 理解，且没有 `shape_*` 位。回读老金标做统计时别把两段混着算。
-        keys = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
-                "char_above", "char_below", "shape_above", "shape_below",
-                "tags", "note", "polyline", "cand")
-        return {k: p[k] for k in keys if k in p and p[k] not in (None, "", [])}
+        return {k: p[k] for k in CUTLINE_KEYS if k in p and p[k] not in (None, "", [])}
     if e.kind == "border_offset":
         # 整页下版框坐标金标（`page_bottom_cards`）。verdict：moved（两端
         # 拖到 y_left/y_right）/ ok（现役线位置就对，等于 c.y_left/y_right）/
@@ -132,11 +129,19 @@ def verdict_store() -> GoldStore:
     return GoldStore(verdicts_root())
 
 
+# 切线事件写进 touching-cuts 的全部键。它们是**一次判定的整体**（同一坐标系下的
+# y / col_h / 折线 / 候选 / 干扰标签），重裁时要一起换，不能只覆盖新事件带的那几个。
+CUTLINE_KEYS = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
+                "char_above", "char_below", "shape_above", "shape_below",
+                "tags", "note", "polyline", "cand")
+
+
 def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = None,
              why: str = "", dry_run: bool = False) -> ConsumeResult:
     store = store or verdict_store()
     res = ConsumeResult("gold_add", n_events=len(events))
     by_shard: dict[str, list[GoldItem]] = {}
+    cutline_ids: dict[str, set[str]] = {}       # shard → 本批由切线事件产生的 item id
     for e, d in events:
         # `confirm` 事件同时路由给 glyphdb_admit 与这里：定字那部分归前者，
         # 切分缺陷那部分归这里。不分流的话，每条定字都会往 instances 金标里
@@ -168,6 +173,8 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
         if d.extra:
             item.input = {**item.input, **d.extra}
         by_shard.setdefault(d.shard, []).append(item)
+        if e.kind == "cutline" and not d.shard.endswith("/side-rule"):
+            cutline_ids.setdefault(d.shard, set()).add(item.id)
     for shard, items in by_shard.items():
         if dry_run:
             # 试算要和真消费口径一致：内容相同的不算「更新」，否则试算说会改 2 条、
@@ -191,7 +198,13 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             old = prev.get(it.id)
             if old is None:
                 continue
-            it.expected = {**old.expected, **it.expected}
+            base = old.expected
+            if it.id in cutline_ids.get(shard, ()):
+                # 切线重裁：旧判定的几何字段**整组丢掉**，只保留非切线的遗留字段。
+                # 2026-09-14 实锤：drift 重标改判 ok（事件不带 polyline），旧坐标系的
+                # 折线原样留在 expected 里——评测优先读折线，等于金标没修。24 条。
+                base = {k: v for k, v in old.expected.items() if k not in CUTLINE_KEYS}
+            it.expected = {**base, **it.expected}
             # `input` 同理：v1 条目把 seed / 载体信息记在这里，人裁事件不带
             # 这些字段，直接写就会把它们清空（upsert 是整体替换）。
             it.input = {**(old.input or {}), **(it.input or {})}

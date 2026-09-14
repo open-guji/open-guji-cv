@@ -260,3 +260,37 @@ def test_resolved_cuts_empty_when_store_unavailable(monkeypatch):
 
     monkeypatch.setattr(GoldStore, "list", boom)
     assert resolved_cuts("vol02") == {}
+
+
+def test_cutline_relabel_drops_stale_geometry_from_previous_verdict(tmp_path):
+    """2026-09-14 drift 重标实锤：第一次判 seam_ok 带折线（旧坐标系），重矫正后重裁判 ok
+    （事件不带 polyline / tags），gold_add 按旧 expected 打底合并，旧折线原样留下——评测优先
+    读折线，等于金标没修（24 条）。切线几何字段是一次判定的整体，重裁要整组换掉；
+    非切线的遗留字段（v1 的 layout 之类）照旧保留。"""
+    from open_guji_cv.feedback.consumers import route_and_consume
+    from open_guji_cv.feedback.events import EventLog
+    from open_guji_cv.gold.store import GoldStore
+
+    log = EventLog(tmp_path / "feedback")
+    store = GoldStore(tmp_path / "dataset")
+    shard = "char-segmentation/touching-cuts"
+    tgt = EventTarget(step="row_segment", unit="boundary", key="vol02:153:7:8",
+                      book="vol02", page=153, col=7, slot=8)
+    e1 = make_event("b1", 1, "cutline", tgt,
+                    {"y": 816, "y_old": 782, "verdict": "seam_ok", "col_h": 2295,
+                     "polyline": [[5, 821], [183, 815]], "tags": ["stain"], "slot_above": 8, "slot_below": 9})
+    log.append([e1])
+    route_and_consume(log, "b1", RouteTable.load(None), store)
+    it = store.get(shard, "vol02:153:7:8")
+    it.expected["layout"] = "v1-legacy"                # 非切线遗留字段
+    store.upsert(shard, [it], "test")
+
+    e2 = make_event("b2", 1, "cutline", tgt,
+                    {"y": 927, "y_old": 927, "verdict": "ok", "col_h": 2458, "slot_above": 8, "slot_below": 9})
+    log.append([e2])
+    route_and_consume(log, "b2", RouteTable.load(None), store)
+    ex = store.get(shard, "vol02:153:7:8").expected
+    assert ex["verdict"] == "ok" and ex["y"] == 927 and ex["col_h"] == 2458
+    assert "polyline" not in ex and "tags" not in ex, ex
+    assert ex["layout"] == "v1-legacy"
+
