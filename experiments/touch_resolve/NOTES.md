@@ -77,3 +77,5 @@
 - 2026-09-14 12:0x（B）金标字对复核回写完成：59/59 人裁，对照 10/10，改判 29 处（`open-guji-dataset 77a4bf1f`），事件在 workspace `feedback/touch_label_verdicts.jsonl`。
   **`out/exp1/per_case.json` 已按新金标重跑**（旧版存为 `per_case_before_labelfix.json`）——A 若用 label_ok 分层，注意分母变了：pair@5x5 94.7%→97.9%。
   标注页曾因 33/59 卡金标切线坐标过期被用户指出「切分不对」，已改用 `seam_chosen` 重发（build_label_review.py 支持 `--verdicts` 续裁）。
+- 2026-09-14 12:2x（B）第二轮回写：11 侧「都不是」用户在对话里报字（韓/人/章/旁/吉/官/唐/唐/志/章/心），已改金标（dataset d7c6aeb0）并追加事件。
+  touching-cuts 的 char_above/char_below 这批 59 侧全部洗完；`out/exp1/per_case.json` 再次重跑为最终口径。
