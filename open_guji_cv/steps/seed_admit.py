@@ -109,9 +109,9 @@ class SeedAdmitParams(BaseModel):
             paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
             object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
         if self.use_exclusions and not self.exclusions_fingerprint:
-            from ..clustering.exclusions import DEFAULT_PATH
+            from ..clustering.exclusions import default_path as _ex_default
             object.__setattr__(self, "exclusions_fingerprint",
-                               corpus_fingerprint([self.exclusions or str(DEFAULT_PATH)]))
+                               corpus_fingerprint([self.exclusions or str(_ex_default())]))
         # 人裁表直接读 glyph.db，这一步自己带库指纹——上游 glyph_match 的指纹只保证
         # 它自己重跑，不会让本步过期（人裁进库时 match 产物可能没变）。
         if self.use_human_verdicts and not self.human_fingerprint:
@@ -157,8 +157,8 @@ class SeedAdmitStep(Step):
         # 排除名单：人裁标过「切坏 / 带残留 / 非字」的图块**不进库也不出审查卡**
         # （用户 2026-08-25 定的口径，exclusions.py 模块头）。v1 的 seeding 一直
         # 查它，v2 此前漏了——于是标了缺陷的格子下一轮照样出现在待审队列里。
-        from ..clustering.exclusions import DEFAULT_PATH as _EX_PATH
-        _ex_path = p.exclusions or str(_EX_PATH)
+        from ..clustering.exclusions import default_path as _ex_default
+        _ex_path = p.exclusions or str(_ex_default())
         _origins = tuple(s.strip() for s in (p.exclusion_origins or "").split(",") if s.strip())
         excluded = (excluded_ids(_ex_path, _origins or None)
                     if p.use_exclusions else frozenset())

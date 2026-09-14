@@ -18,10 +18,9 @@ from .manifest import Manifest
 
 
 def default_products_root() -> Path:
-    env = os.environ.get("GUJI_PRODUCTS_DIR")
-    if env:
-        return Path(env)
-    return Path(__file__).resolve().parent.parent.parent / "products"
+    """`GUJI_PRODUCTS_DIR` > `GUJI_WORKSPACE`/products > 仓内 products（core.workspace）。"""
+    from ..core.workspace import products_root
+    return products_root()
 
 
 def sha256_bytes(data: bytes) -> str:

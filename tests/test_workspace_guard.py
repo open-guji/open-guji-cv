@@ -13,16 +13,73 @@ import os
 
 import pytest
 
+from open_guji_cv.core import workspace as W
 from open_guji_cv.core.workspace import (assert_workspace_declared,
                                          using_sample_db)
+
+_RUNTIME_ENV = ("GUJI_PRODUCTS_DIR", "GUJI_CACHE_DIR", "GUJI_BATCHES_DIR",
+                "GUJI_EXCLUSIONS", "GUJI_FEEDBACK_DIR")
 
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    """三个相关环境变量本测试内独立，不受运行环境影响、不泄漏出去。"""
-    for k in ("GUJI_WORKSPACE", "GUJI_GLYPH_DB", "GUJI_ALLOW_SAMPLE_DB"):
+    """相关环境变量本测试内独立，不受运行环境影响、不泄漏出去。"""
+    for k in ("GUJI_WORKSPACE", "GUJI_GLYPH_DB", "GUJI_ALLOW_SAMPLE_DB", *_RUNTIME_ENV):
         monkeypatch.delenv(k, raising=False)
     yield
+
+
+# ── 运行时数据五个根全部跟着 GUJI_WORKSPACE 走（用户 2026-09-13 裁定） ──
+
+_RUNTIME_ROOTS = [
+    (W.products_root, "GUJI_PRODUCTS_DIR", W.PRODUCTS_REL),
+    (W.cache_root, "GUJI_CACHE_DIR", W.CACHE_REL),
+    (W.batches_root, "GUJI_BATCHES_DIR", W.BATCHES_REL),
+    (W.exclusions_path, "GUJI_EXCLUSIONS", W.EXCLUSIONS_REL),
+    (W.feedback_root, "GUJI_FEEDBACK_DIR", W.FEEDBACK_REL),
+]
+
+
+@pytest.mark.parametrize("fn,env,rel", _RUNTIME_ROOTS, ids=[r[2] for r in _RUNTIME_ROOTS])
+def test_runtime_roots_follow_workspace(monkeypatch, tmp_path, fn, env, rel):
+    """设了 GUJI_WORKSPACE，产物 / 缓存 / 批次 / 排除名单 / 事件日志都落在工作区里，
+    不再各自默认回引擎仓——引擎仓不落任何一本书的运行数据。"""
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert fn() == tmp_path / rel
+
+
+@pytest.mark.parametrize("fn,env,rel", _RUNTIME_ROOTS, ids=[r[2] for r in _RUNTIME_ROOTS])
+def test_runtime_roots_specific_env_wins(monkeypatch, tmp_path, fn, env, rel):
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path / "ws"))
+    monkeypatch.setenv(env, str(tmp_path / "explicit"))
+    assert fn() == tmp_path / "explicit"
+
+
+@pytest.mark.parametrize("fn,env,rel", _RUNTIME_ROOTS, ids=[r[2] for r in _RUNTIME_ROOTS])
+def test_runtime_roots_fall_back_to_repo_when_nothing_set(fn, env, rel):
+    """什么都不设走仓内默认——pytest / 本地试跑不受影响。"""
+    assert fn() == W.REPO_ROOT / rel
+
+
+def test_feedback_root_no_longer_points_at_dataset(monkeypatch, tmp_path):
+    """事件日志不再默认写 open-guji-dataset（09-03 设计）——那是测试集仓，运行时不写。"""
+    from open_guji_cv.feedback.events import EventLog
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert "open-guji-dataset" not in str(EventLog().root)
+    assert EventLog().root == tmp_path / "feedback"
+
+
+def test_default_stores_resolve_workspace_at_call_time(monkeypatch, tmp_path):
+    """默认根在**调用时**解析，不在导入时定死——GUJI_WORKSPACE 常在模块导入之后才设。"""
+    from open_guji_cv.products.cache import ImageCache
+    from open_guji_cv.products.store import ProductStore
+    from open_guji_cv.review.batches import default_batches_root
+    from open_guji_cv.clustering.exclusions import default_path
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert ProductStore().root == tmp_path / "products"
+    assert ImageCache().root == tmp_path / "cache"
+    assert default_batches_root() == tmp_path / "review" / "batches"
+    assert default_path() == tmp_path / "config" / "crop_exclusions.jsonl"
 
 
 def test_using_sample_db_true_when_nothing_set():

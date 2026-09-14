@@ -22,10 +22,9 @@ DEFAULT_LIMIT_BYTES = 20 * (1 << 30)   # 20 GB
 
 
 def default_cache_root() -> Path:
-    env = os.environ.get("GUJI_CACHE_DIR")
-    if env:
-        return Path(env)
-    return Path(__file__).resolve().parent.parent.parent / "cache"
+    """`GUJI_CACHE_DIR` > `GUJI_WORKSPACE`/cache > 仓内 cache（core.workspace）。"""
+    from ..core.workspace import cache_root
+    return cache_root()
 
 
 class ImageCache:

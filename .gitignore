@@ -57,15 +57,17 @@ output/column_border_review.html
 output/*/step3_input/*/
 
 # ── 四个抽象（console_architecture.md）──────────────────────────────
-# 数值产物本地工作副本、图像缓存、控制台任务记录：都能由 原图 × 代码 现算/重跑，
-# 不入库；要冻结某版产物用 `guji pin`（进 pins/）。新 venv 用 uv 建在 .venv/。
+# 2026-09-13 起运行时数据全部归书的 workspace（core/workspace.py：产物 / 缓存 / 批次 /
+# 排除名单 / 事件日志五个根都跟 GUJI_WORKSPACE 走）。下面这些只在**没设 workspace**
+# 的本地试跑 / pytest 时才会在仓内出现，仍然忽略，免得误提交一本书的运行数据。
 # 前导 / 锚定到仓库根：否则 `products/` 会连源码包 open_guji_cv/products/ 一起忽略
 /products/
 /cache/
 /runs/
 /.venv/
-# 审查批次登记的本地副本（真源随数据集仓走；控制台用 GUJI_BATCHES_DIR 指定）
 /review/batches/
+/feedback/
+/config/crop_exclusions*.jsonl
 
 # 临时目录（2026-09-05：git add -A 误带过一次）
 output/_grid_test/
