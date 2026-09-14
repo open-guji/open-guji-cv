@@ -15,6 +15,23 @@
 
 `GUJI_WORKSPACE` 是最省事的一个：指到工作区仓根，库与产物都按约定布局往下找。
 
+## 工作区布局（2026-09-13 起运行时数据**全部**在这里，引擎仓不落任何一本书的数据）
+
+```
+<workspace>/
+  books/<book>.yaml            册配置
+  data_full/…                  原图（raw_root）
+  corpus/<name>.txt            整理本语料
+  output/glyph.db, glyph_store/  字形库索引 + 真源
+  products/<book>/<step>/      数值产物（可重算，不进 git）
+  cache/<book>/<kind>/         派生图像 LRU 缓存（不进 git）
+  review/batches/              人裁批次登记
+  feedback/{events,consumed}/  人裁事件日志与消费记账
+  config/crop_exclusions.jsonl 图块排除名单
+```
+
+`open-guji-dataset`（测试集仓）**不在这张图里**：运行时不读不写，只放显式导入的标注。
+
 ## 用法
 
 ```bash
@@ -39,6 +56,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # 工作区内的约定布局（与仓内 output/ 保持一致，迁移时不必改结构）
 GLYPH_DB_REL = "output/glyph.db"
 GLYPH_STORE_REL = "output/glyph_store"
+# 2026-09-13 起运行时数据全部归 workspace（用户裁定：引擎仓不落任何一本书的运行数据；
+# 测试集仓 open-guji-dataset 只放显式导入的标注，运行时不读不写）。相对路径与引擎仓内
+# 旧默认一致，`git mv` 过去即可。
+PRODUCTS_REL = "products"
+CACHE_REL = "cache"
+BATCHES_REL = "review/batches"
+EXCLUSIONS_REL = "config/crop_exclusions.jsonl"
+FEEDBACK_REL = "feedback"
 
 
 def workspace_root() -> Path | None:
@@ -70,6 +95,35 @@ def glyph_db_path(override: str | Path | None = None) -> Path:
 def glyph_store_path(override: str | Path | None = None) -> Path:
     """字形库真源（PNG + JSONL），进 git。"""
     return _resolve("GUJI_GLYPH_STORE", GLYPH_STORE_REL, override)
+
+
+def products_root() -> Path:
+    """数值产物 `products/<book>/<step>/`。`GUJI_PRODUCTS_DIR` > 工作区 > 仓内默认。"""
+    return _resolve("GUJI_PRODUCTS_DIR", PRODUCTS_REL)
+
+
+def cache_root() -> Path:
+    """派生图像缓存（列图 / 字块 / 归一图块，LRU）。`GUJI_CACHE_DIR` > 工作区 > 仓内。"""
+    return _resolve("GUJI_CACHE_DIR", CACHE_REL)
+
+
+def batches_root() -> Path:
+    """人裁批次登记。`GUJI_BATCHES_DIR` > 工作区 > 仓内。"""
+    return _resolve("GUJI_BATCHES_DIR", BATCHES_REL)
+
+
+def exclusions_path() -> Path:
+    """图块排除名单（人裁 / 闸判定的坏图块）。`GUJI_EXCLUSIONS` > 工作区 > 仓内。"""
+    return _resolve("GUJI_EXCLUSIONS", EXCLUSIONS_REL)
+
+
+def feedback_root() -> Path:
+    """人裁事件日志与消费记账 `feedback/{events,consumed}/`、路由表 `routes.yaml`。
+    `GUJI_FEEDBACK_DIR` > 工作区 > 仓内。
+
+    09-03 设计把它放在 open-guji-dataset/feedback/，09-13 改归 workspace：事件是
+    「这本书」审查过程的账，不是测试集；进测试集要走显式导入。"""
+    return _resolve("GUJI_FEEDBACK_DIR", FEEDBACK_REL)
 
 
 def raw_root(override: str | Path | None = None) -> Path:
@@ -131,6 +185,11 @@ def describe() -> dict[str, str]:
         "glyph_db": str(glyph_db_path()),
         "glyph_store": str(glyph_store_path()),
         "raw_root": str(raw_root()),
+        "products": str(products_root()),
+        "cache": str(cache_root()),
+        "batches": str(batches_root()),
+        "feedback": str(feedback_root()),
+        "exclusions": str(exclusions_path()),
         # 语料读错了整理本对齐会静默全空（见 using_sample_corpus），所以摆到台面上
         "corpus": str(corpus) + ("  ⚠️ 仓内小样本，锚不住整理本" if using_sample_corpus() else ""),
     }

@@ -50,7 +50,8 @@ RARE_FREQ = 3          # 整理本频次 ≤ 此值算稀有
 
 def load_user_verdicts(book: str) -> dict[str, str]:
     """用户 confirm 事件 → {字位: 字形}。这是与整理本无关的独立真值。"""
-    root = Path("../open-guji-dataset/feedback/events")
+    from open_guji_cv.feedback.events import EventLog
+    root = EventLog().events_dir          # workspace 的事件日志（GUJI_WORKSPACE / GUJI_FEEDBACK_DIR）
     out: dict[str, str] = {}
     for p in sorted(root.glob(f"{book}-*.jsonl")) if root.exists() else []:
         for ln in p.read_text(encoding="utf-8").splitlines():

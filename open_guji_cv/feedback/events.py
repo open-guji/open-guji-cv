@@ -81,11 +81,12 @@ def make_event(batch: str, seq: int, kind: Kind, target: EventTarget, payload: d
 
 
 def default_feedback_root() -> Path:
-    """默认放数据集仓的 feedback/ 下（数据集仓独立存在，用相对路径找）。"""
-    env = os.environ.get("GUJI_FEEDBACK_DIR")
-    if env:
-        return Path(env)
-    return Path(__file__).resolve().parent.parent.parent.parent / "open-guji-dataset" / "feedback"
+    """`GUJI_FEEDBACK_DIR` > `GUJI_WORKSPACE`/feedback > 仓内 feedback（core.workspace）。
+
+    09-03 设计放在 open-guji-dataset/feedback/，09-13 改归 workspace（用户裁定：
+    人裁事件是这本书审查过程的账，运行时不该写测试集仓）。"""
+    from ..core.workspace import feedback_root
+    return feedback_root()
 
 
 class EventLog:

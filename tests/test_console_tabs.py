@@ -29,7 +29,9 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 CHROMIUM = Path("/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
-PROBE_PRODUCT = REPO / "products" / "vol01" / "border_detect" / "p0024.json"
+from open_guji_cv.core.workspace import products_root  # noqa: E402
+
+PROBE_PRODUCT = products_root() / "vol01" / "border_detect" / "p0024.json"
 
 playwright_sync = pytest.importorskip("playwright.sync_api", reason="需要 `uv pip install playwright`")
 pytest.importorskip("uvicorn", reason="需要 `uv pip install uvicorn`")

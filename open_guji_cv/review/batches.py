@@ -20,10 +20,9 @@ STATUSES = ("draft", "open", "harvested", "closed")
 
 
 def default_batches_root() -> Path:
-    env = os.environ.get("GUJI_BATCHES_DIR")
-    if env:
-        return Path(env)
-    return Path(__file__).resolve().parent.parent.parent / "review" / "batches"
+    """`GUJI_BATCHES_DIR` > `GUJI_WORKSPACE`/review/batches > 仓内（core.workspace）。"""
+    from ..core.workspace import batches_root
+    return batches_root()
 
 
 @dataclass

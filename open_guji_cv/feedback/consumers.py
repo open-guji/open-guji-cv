@@ -344,7 +344,7 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
     import json
     from pathlib import Path
 
-    from ..clustering.exclusions import DEFAULT_PATH, load_exclusions
+    from ..clustering.exclusions import default_path, load_exclusions
 
     res = ConsumeResult("crop_exclude", n_events=len(events))
     hits = []
@@ -362,7 +362,7 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
     res.skipped = len(events) - len(hits)
     if not hits:
         return res
-    path = Path(list_path) if list_path else DEFAULT_PATH
+    path = Path(list_path) if list_path else default_path()
     known = set(load_exclusions(path))
     rows = []
     for e, quality, reason in hits:

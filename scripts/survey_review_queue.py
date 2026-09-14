@@ -82,8 +82,9 @@ def main() -> int:
     freq = Counter(ch for ch in text if "㐀" <= ch <= "鿿")
     gold = {c.id: c for g in align_book(a.book, pgs, st, a.corpus) if g.anchored for c in g.chars}
 
+    from open_guji_cv.feedback.events import EventLog
     ev_paths = [Path(p) for p in a.events] if a.events else sorted(
-        Path("../open-guji-dataset/feedback/events").glob(f"{a.book}-*.jsonl"))
+        EventLog().events_dir.glob(f"{a.book}-*.jsonl"))
     truth = load_truth(ev_paths)
 
     n_tot = n_auto = n_excluded = 0

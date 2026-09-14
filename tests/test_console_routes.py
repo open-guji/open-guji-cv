@@ -94,6 +94,7 @@ for _m in [m for m in list(sys.modules) if m.startswith("open_guji_cv.console")]
 
 import open_guji_cv.console.app as A  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
+from open_guji_cv.core.workspace import products_root  # noqa: E402
 
 def _endpoints() -> dict:
     """{"GET /api/books": 实现体}。C1–C3 怎么搬，这里都取得到。
@@ -493,7 +494,7 @@ def test_route_snapshot():
     """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
-    if not (REPO / "products" / BOOK / "seed_admit").exists():
+    if not (products_root() / BOOK / "seed_admit").exists():
         pytest.skip(f"缺 {BOOK} 产物，先跑 "
                     f"python -m open_guji_cv pipeline keben_body_v2 {BOOK} --pages {PAGES}")
     hist = _hist_path()
@@ -634,7 +635,7 @@ def test_cli_matches_routes():
     """C5 的验收：11 对「命令行 vs 路由」逐条同输出。"""
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
-    if not (REPO / "products" / BOOK / "seed_admit").exists():
+    if not (products_root() / BOOK / "seed_admit").exists():
         pytest.skip(f"缺 {BOOK} 产物")
     EP = _endpoints()
     bad = []
