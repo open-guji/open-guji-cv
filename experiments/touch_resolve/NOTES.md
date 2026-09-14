@@ -72,3 +72,5 @@
   抄/本 561→59、辨/統 272→22 修好；曾/公 0→160 弄坏；n=429 上 stroke_vote vs unet 27 胜 26 负；大块错 ≥150 从 3.3% 降到 1.2%。
   更值钱的发现：`unet_raw`（不做连通体多数票）大块错 ≥150 只有 0.9%——多数票在真粘连大连通体上会把整块翻边。
   B 接下来试「多数票只对面积 < N 的小连通体生效」（`train_partition_unet_v2.py --eval-gold --cc-max N`，产出 `out/unet_partition_unet_v2_cc<N>/`）。
+- 2026-09-14 11:2x（B）条件多数票结果：`--cc-max 400` 在 frame_ok+label_ok n=429 上 err 25.0 / 大块错 ≥150 **0.9%**（原 28.7 / 3.3%；现役缝 34.0 / 5.4%），
+  moved / ok 类大块错 0%；代价是散点中位 8→13 px。U-Net 候选以后默认 `--cc-max 400`。产出 `out/unet_partition_unet_v2_cc400/`、`out/unet_cc_restrat.log`。
