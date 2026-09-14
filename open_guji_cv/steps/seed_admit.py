@@ -128,7 +128,8 @@ class SeedAdmitParams(BaseModel):
 class SeedAdmitStep(Step):
     spec = StepSpec(
         id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
-        consumes=("glyph_match", "ocr_candidates", "context_decision", "align_ref"),
+        consumes=("glyph_match", "context_decision", "align_ref"),
+        optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),

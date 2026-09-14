@@ -139,27 +139,42 @@ class Engine:
 
     # ── 指纹 ─────────────────────────────────────────────────────────
     def upstream_shas(self, step: Step, page: int) -> dict[str, str] | None:
-        """{kind: sha}；任一上游缺失返回 None（blocked）。"""
+        """{kind: sha}；**硬依赖**（`consumes`）任一缺失返回 None（blocked）。
+
+        `optional_consumes` 里的可选上游缺席不阻塞，只是不进指纹——在的时候照常
+        进，所以它一改下游照样过期；不在的时候下游按"这一路证据没有"跑（见
+        `StepSpec.optional_consumes`）。
+        """
         out: dict[str, str] = {}
         for kind in step.spec.consumes:
-            if kind == "raw_page":
-                p = effective_raw_path(self.book, page)
-                if not p.exists():
-                    return None
-                out[kind] = self.store.raw_sha(self.book.id, p)
-                continue
-            from .step import producer_of
-            prod = producer_of(kind)
-            entry = self.store.manifest(self.book.id, prod.spec.id).get(page_key(page))
-            if entry and entry.status == "ok" and entry.sha256 and \
-                    self.store.exists(self.book.id, prod.spec.id, page_key(page)):
-                out[kind] = entry.sha256
-                continue
-            sha = self.store.sha(self.book.id, prod.spec.id, page_key(page))
+            sha = self._upstream_sha(kind, page)
             if sha is None:
                 return None
             out[kind] = sha
+        for kind in step.spec.optional_consumes:
+            sha = self._upstream_sha(kind, page)
+            if sha is not None:
+                out[kind] = sha
         return out
+
+    def _upstream_sha(self, kind: str, page: int) -> str | None:
+        """一个上游种类这一页的 sha，拿不到返回 None（调用方决定算不算阻塞）。"""
+        if kind == "raw_page":
+            p = effective_raw_path(self.book, page)
+            if not p.exists():
+                return None
+            return self.store.raw_sha(self.book.id, p)
+        from .step import producer_of
+        prod = producer_of(kind)
+        entry = self.store.manifest(self.book.id, prod.spec.id).get(page_key(page))
+        if entry and entry.status == "ok" and entry.sha256 and \
+                self.store.exists(self.book.id, prod.spec.id, page_key(page)):
+            return entry.sha256
+        return self.store.sha(self.book.id, prod.spec.id, page_key(page))
+
+    def missing_upstream(self, step: Step, page: int) -> list[str]:
+        """真正缺的那些硬依赖——报错要点名它们，不是把 `consumes` 整串印出来。"""
+        return [k for k in step.spec.consumes if self._upstream_sha(k, page) is None]
 
     def fingerprint(self, step: Step, page: int) -> tuple[str | None, dict[str, str] | None, str]:
         ups = self.upstream_shas(step, page)
@@ -244,7 +259,7 @@ class Engine:
             fp, ups, ph = self.fingerprint(step, pg)
             pct = int(done * 100 / max(total, 1))
             if fp is None:
-                msg = f"上游缺失: {[k for k in step.spec.consumes]}"
+                msg = f"上游缺失: {self.missing_upstream(step, pg)}"
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
                 report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
                 manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,

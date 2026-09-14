@@ -222,7 +222,7 @@ def _corpus_index(path: str):
 class AlignRefStep(Step):
     spec = StepSpec(
         id="align_ref", title="Step5-d 整理本对齐", version="2.0", unit="cell",
-        consumes=("glyph_match", "ocr_candidates"),
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),

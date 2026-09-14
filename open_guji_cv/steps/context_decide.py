@@ -141,7 +141,8 @@ class ContextDecideParams(BaseModel):
 class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
-        consumes=("glyph_match", "ocr_candidates"), produces=("context_decision",),
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
+        produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
         code_deps=("open_guji_cv.clustering.context_step",
