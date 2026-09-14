@@ -515,6 +515,42 @@ def cmd_variants(args) -> None:
     _out(json.loads(p.read_text(encoding="utf-8")))
 
 
+def cmd_collate(args) -> None:
+    """Step9-9.3 对勘：字位流 × 整理本 → JSON 正本（＋可选 HTML）。
+
+    证人默认读书配置的 `references:`，没配就退回单证人（光盘版）。
+    **不进管线**：跨页跨册汇总，不属于任何一页，同 Step8（见 `report/__init__.py`）。
+    """
+    from .core.book import load_book
+    from .report.html import write_html
+    from .report.run import body_pages, collate_book, write_report
+    from .report.witness import load_witnesses
+
+    bk = load_book(args.book)
+    pages = bk.resolve_pages(args.pages) if args.pages else body_pages(args.book)
+    witnesses = load_witnesses(bk.references)
+    print(f"{args.book}：{len(pages)} 页，证人 "
+          + "、".join(f"{w.label}({w.quality})" for w in witnesses), flush=True)
+
+    def progress(n, total, page):
+        if n % 20 == 0 or n == total:
+            print(f"  {n}/{total} …p{page}", flush=True)
+
+    doc = collate_book(args.book, pages, witnesses, progress=progress)
+    out = write_report(doc, args.out)
+    print(f"JSON → {out}")
+    if not args.no_html:
+        h = write_html(doc, out.with_suffix(".html"), args.console)
+        print(f"HTML → {h}  ({h.stat().st_size / 1e6:.1f} MB)")
+    for label, s in doc["summary"]["by_witness"].items():
+        c = s["counts"]
+        print(f"  {label}：一致 {s['n_equal']:,} · "
+              + " · ".join(f"{k} {v}" for k, v in sorted(c.items(), key=lambda kv: -kv[1]))
+              + (f" · 列 {s['cols']}" if s["cols"] else ""))
+    un = {k: len(v) for k, v in doc["unanchored"].items()}
+    print(f"  未锚定页：{un}" + (f" · 数据版本不同步 {len(doc['stale'])} 处" if doc["stale"] else ""))
+
+
 def cmd_runs(args) -> None:
     """控制台的任务队列：list | show | cancel | log。
 
@@ -564,6 +600,7 @@ COMMANDS_V2 = {
     "cards": cmd_cards,
     "rare": cmd_rare,
     "variants": cmd_variants,
+    "collate": cmd_collate,
     "runs": cmd_runs,
 }
 
@@ -730,6 +767,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])
     p.add_argument("--edition", default="")
+
+    p = sub.add_parser("collate", help="[v2] Step9-9.3 与整理本对勘（出 JSON + HTML）")
+    p.add_argument("book")
+    p.add_argument("--pages", default="", help="页表达式；空 = 全部有 Step7 产物的页")
+    p.add_argument("--out", default=None,
+                   help="JSON 落点（默认 <workspace>/reports/<book>/collation_<时间>.json）")
+    p.add_argument("--console", default="http://127.0.0.1:8640",
+                   help="HTML 里深链指向的控制台地址；空串则不出链接")
+    p.add_argument("--no-html", action="store_true", help="只出 JSON")
 
     p = sub.add_parser("runs", help="[v2] 控制台任务：list | show | cancel | log")
     p.add_argument("action", choices=["list", "show", "cancel", "log"])
