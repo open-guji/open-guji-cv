@@ -39,3 +39,21 @@ preclean:
         （vol02 本底闸 BODY_INK_GATE=0.25，压线过闸；换册后本底分布未重新标定，
         仅供参考，见 preclean.py 模块说明）。反色后逐字核对：御注/殊批/五朝/御批/列聖，
         笔画完整，与相邻「聖義」列风格一致。
+
+# Step9-9.3 对勘的证人（整理本）。来历与质量分级见 overview 仓
+# 项目进展/图片初步数字化/进度/Step9-结果整理/05-整理本清单.md（唯一真相源）。
+# quality 用于多证人不一致时加权，不是简单多数。
+references:
+  # 用户 2026-09-13 订正：这份**是四库光盘版**，不是维基文库抓取的文淵閣本。
+  # 待改名 siku_guangpan.txt——改名会让语料指纹变、align_ref/context_decide
+  # 全部产物过期，所以要跟一次重跑合并做（见 05 卡 §四）。
+  - file: zongmu_wenyuange_wikisource.txt
+    quality: best
+    label: 四库光盘版
+    # 它的一行 = 我们刻本的一列（行首两格版式留白不录，19 字）。实测 vol01
+    # 列首命中行首 94.7%、命中者列长相等 87.2%，据此可做独立于字符对齐的丢格检测。
+    line_is_column: true
+  # 朋友「杳冥」自己整理，只覆盖卷首一~四 + 卷一~二十七（够 vol01~vol10）。
+  - file: zongmu_wuyingdian_reference.txt
+    quality: mid
+    label: 杳冥整理本
