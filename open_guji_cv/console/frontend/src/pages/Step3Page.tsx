@@ -8,6 +8,7 @@ import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import type { CustomMetric } from '../components/common/ProgressGatePanel'
 import { JiazhuPanel } from '../components/jiazhu/JiazhuPanel'
 import { ProductViewer } from '../components/ProductViewer'
+import { useDeepLink } from '../hooks/useDeepLink'
 import { usePages } from '../hooks/usePages'
 import type { RulerRow } from '../types/evals'
 
@@ -26,7 +27,10 @@ const STEP_ID = 'step3'
 export function Step3Page() {
   const { book = '' } = useParams()
   const pages = usePages(book)
-  const [pageSel, setPageSel] = useState(() => loadSavedPageRange(STEP_ID, book))
+  const deep = useDeepLink()
+  // 深链（对勘报告的 missing/extra/列结构条目）带页号就用它当初始页范围
+  const [pageSel, setPageSel] = useState(() =>
+    deep.active ? String(deep.page) : loadSavedPageRange(STEP_ID, book))
   const [loadedBook, setLoadedBook] = useState(book)
   if (book !== loadedBook) {
     setLoadedBook(book)
@@ -49,6 +53,15 @@ export function Step3Page() {
 
   return (
     <div>
+      {deep.active && (
+        <div className="card" style={{ borderLeft: '3px solid #7a5c2e' }}>
+          从对勘报告跳转而来：<b>p{deep.page}</b>
+          {deep.col !== null && <> · 第 {deep.col} 列</>}
+          <span className="muted" style={{ marginLeft: '.6rem' }}>
+            整理本在这一列比我们多字（漏切）——在下面「切线」里看这一列的切分
+          </span>
+        </div>
+      )}
       <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
       <ProgressGatePanel
         book={book}
