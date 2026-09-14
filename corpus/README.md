@@ -11,6 +11,19 @@
 
 ## zongmu_wenyuange_wikisource.txt —— 現役，`align_ref`／`context_decide`／`gold.v2_align` 唯一語料
 
+> ⚠️ **2026-09-13 用戶訂正：這份是「四庫光盤版」，不是維基文庫抓取的文淵閣本。**
+> 下面那段「維基文庫 ProofreadPage 校對本、MediaWiki API 逐頁拉取」的來歷描述
+> **是錯的**，保留在下面只為說明抽取管線（雙行小注怎麼處理那幾條仍然有效）。
+> 檔名待改 `siku_guangpan.txt`——**改名會讓語料指紋變**（指紋＝name+mtime+size），
+> `align_ref`／`context_decide` 全部產物過期、三冊要重跑，所以**要跟一次重跑合併做**。
+>
+> 三份整理本的來歷、質量分級（光盤版 best／杳冥 mid／維基 low）與結構實測，
+> 見 overview 倉 `項目進展/圖片初步數字化/進度/Step9-結果整理/05-整理本清單.md`。
+>
+> ⭐ **它的一行 ＝ 我們刻本的一列**（行首兩格版式留白不錄，餘 19 字）：
+> vol01 列首命中行首 94.7%、vol02 98.2%，命中者列長相等 87.2%。
+> Step9-9.3 據此做**獨立於字符對齊**的丟格檢測（`report/witness.py::col_verdict`）。
+
 維基文庫《文淵閣四庫全書》0001-0005冊 ProofreadPage 校對本抽取，經 MediaWiki
 API 在線逐頁拉取（本地 dump title-index 對這批 Page: 條目有缺失，09-10 實測
 線上有正文而本地索引查不到，故改走在線 API，不依賴本地 dump）。覆蓋《欽定
@@ -43,8 +56,8 @@ OCR 原始錯誤未清）。
 
 2026-09-11 起 `align_ref.py`／`context_decide.py`／`gold/v2_align.py` 三處
 `DEFAULT_CORPUS` 及 `review/cards.py` 的對齊語料統一改指向上面這份新語料；
-舊的兩份語料——`zongmu_wuyingdian_reference.txt`（用戶提供整理本，覆蓋卷首
-一~四 + 卷一~二十七，約 34.6 萬字）與 `zongmu_wikisource_reference.txt`
+舊的兩份語料——`zongmu_wuyingdian_reference.txt`（**朋友「杳冥」自己整理的**，
+質量中等，覆蓋卷首一~四 + 卷一~二十七，約 34.6 萬字）與 `zongmu_wikisource_reference.txt`
 （維基文庫《四庫全書總目提要》wikitext 版，覆蓋卷首一~四 + 卷001~027，約
 2026-09-06 抓取）——文件仍留在本目錄，但不再被任何生產代碼默認讀取。
 `review/cards.py` 里原有的「維基第二意見」（`ref.wiki` 字段、卡片「維基」
