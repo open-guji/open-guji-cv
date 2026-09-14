@@ -1020,11 +1020,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       命中的切点直接把 `cut_candidates` 收敛成那一条候选（`chosen=0`），
       不再是"多候选"——顺序闸（`review/cards.py::cut_pending`）按
       `len(candidates)>=2` 判阻塞，收敛之后这条切点自动放行，不用改闸的代码。
-      调用方（`steps/row_segment.py`）从 `eval/touching.py::resolved_cuts()`
-      按本页本列筛出这本书的金标传入；只收 `verdict in (ok, moved)` 的裁决
-      （`overlap`/`idk` 是真难例，仍要留给人，见
-      `.claude/doc/row_boundaries_design.md`「5 条都不对」节）。金标里没有
-      对应 kind 的候选（比如几何变了，候选池不再产出 `seam_narrow`）时
+      **数据来源必须是 workspace 里的裁决表**，不能是 `open-guji-dataset` 的金标
+      ——生产管线运行时不读测试集仓（用户裁定；第一版从 dataset 取、已撤）。
+      裁决表落地前 `steps/row_segment.py` 不传这个参数。取的时候只收
+      `verdict in (ok, moved)` 的裁决（`overlap`/`idk` 是真难例，仍要留给人，见
+      `.claude/doc/row_boundaries_design.md`「5 条都不对」节）。裁决认定的 kind
+      不在候选池里（比如几何变了，候选池不再产出 `seam_narrow`）时
       **原样不收敛**——按旧逻辑走多候选，静默套错误的收敛比继续挡人更危险。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
