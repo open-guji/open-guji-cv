@@ -37,6 +37,22 @@ class GlyphBank:
         self.ft = FontTemplates()
         self.cache: dict[str, np.ndarray | None] = {}
 
+    def get_raw(self, ch: str | None) -> np.ndarray | None:
+        """字形紧裁二值（uint8 0/1，原始比例），对齐模式用；渲染不出返回 None。"""
+        if not ch or len(ch) != 1:
+            return None
+        key = "raw:" + ch
+        if key not in self.cache:
+            got = self.ft.render(ch)
+            out = None
+            if got is not None:
+                b = got[1]
+                ys, xs = np.nonzero(b)
+                if ys.size:
+                    out = b[ys.min(): ys.max() + 1, xs.min(): xs.max() + 1].astype(np.uint8)
+            self.cache[key] = out
+        return self.cache[key]
+
     def get(self, ch: str | None) -> np.ndarray | None:
         """字形 → (G_H, G_W) float32 0/1，居中等比；渲染不出返回 None。"""
         if not ch or len(ch) != 1:
@@ -75,6 +91,69 @@ def make_input_v3(img: np.ndarray, up: np.ndarray | None, dn: np.ndarray | None)
     base = make_input(img)                        # (2, H, W)
     g = torch.from_numpy(glyph_channels(up, dn))
     return torch.cat([base, g], 0)
+
+
+def bbox_of(mask: np.ndarray):
+    ys, xs = np.nonzero(mask)
+    if not ys.size:
+        return None
+    return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+
+
+def jitter_box(box, rng: random.Random, fy=0.25, fx=0.05):
+    """训练时抖动框的边：真实评测时框来自直线切点两侧的墨，会比真字范围少/多一截。"""
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    h, w = y1 - y0, x1 - x0
+    y0 += int(rng.uniform(-fy, fy) * h)
+    y1 += int(rng.uniform(-fy, fy) * h)
+    x0 += int(rng.uniform(-fx, fx) * w)
+    x1 += int(rng.uniform(-fx, fx) * w)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(CANVAS_W, max(x0 + 4, x1)), min(CANVAS_H, max(y0 + 4, y1))
+    return [x0, y0, x1, y1]
+
+
+def glyph_channels_aligned(up_raw, dn_raw, box_a, box_b) -> np.ndarray:
+    """对齐模式：把字形拉伸贴进各自的字框（画布坐标 [x0, y0, x1, y1]）。"""
+    ch = np.zeros((2, CANVAS_H, CANVAS_W), np.float32)
+    for k, (g, box) in enumerate(((up_raw, box_a), (dn_raw, box_b))):
+        if g is None or box is None:
+            continue
+        x0, y0, x1, y1 = box
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        r = cv2.resize(g, (x1 - x0, y1 - y0), interpolation=cv2.INTER_AREA)
+        ch[k, y0:y1, x0:x1] = (r > 0).astype(np.float32)
+    return ch
+
+
+def make_input_v3a(img: np.ndarray, up_raw, dn_raw, box_a, box_b):
+    import torch
+    base = make_input(img)
+    g = torch.from_numpy(glyph_channels_aligned(up_raw, dn_raw, box_a, box_b))
+    return torch.cat([base, g], 0)
+
+
+def eval_boxes(win: np.ndarray, cut: int, s: float, top: int):
+    """评测时的字框：直线切点上/下两侧的墨外接框（窗口坐标）→ 画布坐标。"""
+    from common import INK_TH
+    W = win < INK_TH
+    h = win.shape[0]
+    cut = int(min(max(cut, 1), h - 1))
+    out = []
+    for idx, m in enumerate((W[:cut], W[cut:])):
+        b = bbox_of(m)
+        if b is None:
+            out.append(None)
+            continue
+        x0, y0, x1, y1 = b
+        if idx == 1:
+            y0 += cut
+            y1 += cut
+        out.append([int(x0 * s), int(y0 * s) + top, int(x1 * s), int(y1 * s) + top])
+    return out[0], out[1]
 
 
 def build_model_v3():
@@ -121,13 +200,18 @@ def init_from_v2(net, dev):
     net.load_state_dict(own)
 
 
-def owner_v3(net, dev, win: np.ndarray, up, dn, cc_max: int | None):
-    """同 exp6.unet_owner：墨像素取上/下两类谁大，连通体多数票只对 ≤cc_max 生效。"""
+def owner_v3(net, dev, win: np.ndarray, up, dn, cc_max: int | None, align_cut: int | None = None):
+    """同 exp6.unet_owner：墨像素取上/下两类谁大，连通体多数票只对 ≤cc_max 生效。
+    `align_cut` 给了（窗口坐标的直线切点）就走对齐模式：up/dn 是紧裁字形，按切点两侧墨框贴入。"""
     import torch
     from common import INK_TH
     W = (win < INK_TH).astype(np.uint8)
     cimg, _, s = to_canvas(win, top=8)
-    x = make_input_v3(cimg, up, dn)[None].to(dev)
+    if align_cut is not None:
+        ba, bb = eval_boxes(win, align_cut, s, 8)
+        x = make_input_v3a(cimg, up, dn, ba, bb)[None].to(dev)
+    else:
+        x = make_input_v3(cimg, up, dn)[None].to(dev)
     with torch.no_grad():
         prob = torch.softmax(net(x)[0], 0).cpu().numpy()
     prob = prob[:, 8:]
@@ -177,8 +261,8 @@ def train(a) -> Path:
         o = cv2.imread(str(root / "pairs" / f"{m['i']:06d}_own.png"), 0)
         if g is None or o is None:
             continue
-        up = gb.get(m["A"].get("label"))
-        dn = gb.get(m["B"].get("label"))
+        up = gb.get_raw(m["A"].get("label")) if a.align else gb.get(m["A"].get("label"))
+        dn = gb.get_raw(m["B"].get("label")) if a.align else gb.get(m["B"].get("label"))
         n_glyph += int(up is not None) + int(dn is not None)
         items.append((g, o, up, dn))
     val, tr = items[:n_val], items[n_val:]
@@ -190,8 +274,9 @@ def train(a) -> Path:
     steps_per_ep = len(tr) // a.bs
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=a.epochs * steps_per_ep, pct_start=0.1)
     cw = torch.tensor([0.2, 1.0, 1.0], device=dev)
-    ck = MODEL_DIR / "partition_unet_v3.pt"
+    ck = MODEL_DIR / ("partition_unet_v3a.pt" if a.align else "partition_unet_v3.pt")
     best = 1e9
+    rng = random.Random(7)
 
     def sample(g, o, up, dn, augment: bool):
         top = 0
@@ -207,6 +292,12 @@ def train(a) -> Path:
                 up, dn = None, None
         img, own, _ = to_canvas(g, o, top=top)
         y = torch.from_numpy(own.astype(np.int64)); y[y == 3] = -1
+        if a.align:
+            ba = bbox_of((own == 1) | (own == 3))
+            bb = bbox_of((own == 2) | (own == 3))
+            if augment:
+                ba, bb = jitter_box(ba, rng), jitter_box(bb, rng)
+            return make_input_v3a(img, up, dn, ba, bb), y
         return make_input_v3(img, up, dn), y
 
     print(f"train {len(tr)} / val {len(val)} device={dev} epochs={a.epochs} steps={a.epochs * steps_per_ep}", flush=True)
@@ -252,14 +343,16 @@ def eval_gold(a) -> None:
     from templates import owner_from_seam
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     net = build_model_v3().to(dev)
-    net.load_state_dict(torch.load(Path(a.ckpt) if a.ckpt else MODEL_DIR / "partition_unet_v3.pt", map_location=dev)["state"])
+    default_ck = MODEL_DIR / ("partition_unet_v3a.pt" if a.align else "partition_unet_v3.pt")
+    net.load_state_dict(torch.load(Path(a.ckpt) if a.ckpt else default_ck, map_location=dev)["state"])
     net.eval()
     gb = GlyphBank()
     L = Loader()
     frame_ok = set(json.loads((OUT_ROOT / "frame_ok.json").read_text(encoding="utf-8")))
     exp1 = {r["id"]: r for r in json.loads((OUT_ROOT / "exp1" / "per_case.json").read_text(encoding="utf-8"))}
     base7 = {r["id"]: r for r in json.loads((OUT_ROOT / "exp7" / "per_case.json").read_text(encoding="utf-8"))}
-    out = OUT_ROOT / (f"unet_v3_cc{a.cc_max}" if a.cc_max is not None else "unet_v3")
+    tag = "unet_v3a" if a.align else "unet_v3"
+    out = OUT_ROOT / (f"{tag}_cc{a.cc_max}" if a.cc_max is not None else tag)
     (out / "viz").mkdir(parents=True, exist_ok=True)
     per = []
     keep = []
@@ -273,9 +366,13 @@ def eval_gold(a) -> None:
         label_ok = bool(rk.get("fused_above") and rk["fused_above"] <= 5 and rk.get("fused_below") and rk["fused_below"] <= 5)
         img = L.image_of(c)
         win, y0, _ = window(c, img)
-        up, dn = gb.get(c.char_above), gb.get(c.char_below)
-        W, o3, conf = owner_v3(net, dev, win, up, dn, a.cc_max)
-        _, o3n, _ = owner_v3(net, dev, win, None, None, a.cc_max)        # 消融：无身份
+        cut = int(round(c.straight_y - y0)) if a.align else None
+        if a.align:
+            up, dn = gb.get_raw(c.char_above), gb.get_raw(c.char_below)
+        else:
+            up, dn = gb.get(c.char_above), gb.get(c.char_below)
+        W, o3, conf = owner_v3(net, dev, win, up, dn, a.cc_max, align_cut=cut)
+        _, o3n, _ = owner_v3(net, dev, win, None, None, a.cc_max, align_cut=cut)        # 消融：无身份
         ink = W > 0
         cw = conf[ink]
         og = owner_from_seam(W, seam_gold(c) - y0)
@@ -372,6 +469,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--ckpt", default=None); ap.add_argument("--books", default="vol01,vol02,vol03")
     ap.add_argument("--cc-max", type=int, default=400)
+    ap.add_argument("--align", action="store_true", help="字形按字框对齐贴入（v3a），而不是贴在画布顶/底")
     a = ap.parse_args()
     if a.train:
         train(a)
