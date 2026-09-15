@@ -289,6 +289,60 @@ def cmd_eval(args) -> None:
     sys.exit(1 if n_bad and args.strict else 0)
 
 
+def cmd_split(args) -> None:
+    """Step0 分页：按 book.yaml 的 page_split 段把扫描页裁成逻辑页，写进 raw_dir。
+
+    一张扫描页装着多页原书（上下两栏拼一页）时用；逻辑页才是管线的「原图」。
+    `--pages` 是**扫描页**号（不是逻辑页）。见 utils/page_split.py。
+    """
+    from .core.book import load_book
+    from .utils.page_split import split_book
+
+    book = load_book(args.book)
+    pages = None
+    if args.pages:
+        pages = book.resolve_pages(args.pages)      # 只当页号表达式用；dev_set 之类的名字不适用
+    recs = split_book(book, pages=pages, force=args.force)
+    n_empty = sum(1 for r in recs if r.empty)
+    print(f"分出 {len(recs)} 个逻辑页（其中空栏 {n_empty}），产物在 {book.raw_dir}")
+
+
+def cmd_import_pdf(args) -> None:
+    """把 PDF 逐页抽成灰度 PNG（`<out>/<页号>.png`，从 1 起）。
+
+    不带 --dpi 时按 1:1 矩阵渲染——扫描 PDF 的页尺寸（pt）通常就等于内嵌图像的
+    像素数，这样拿到的是原生分辨率；矢量/文字 PDF 请显式给 --dpi。
+    """
+    from pathlib import Path
+    import pymupdf
+
+    doc = pymupdf.open(args.pdf)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sel = None
+    if args.pages:
+        sel = set()
+        for part in args.pages.split(","):
+            a, _, b = part.partition("-")
+            sel.update(range(int(a), int(b or a) + 1))
+    n = 0
+    for i in range(len(doc)):
+        page_no = i + 1
+        if sel is not None and page_no not in sel:
+            continue
+        target = out / f"{page_no}.png"
+        if target.exists() and not args.force:
+            continue
+        pg = doc[i]
+        if args.dpi:
+            pix = pg.get_pixmap(dpi=args.dpi, colorspace=pymupdf.csGRAY)
+        else:
+            pix = pg.get_pixmap(matrix=pymupdf.Matrix(1, 1), colorspace=pymupdf.csGRAY)
+        pix.save(str(target))
+        n += 1
+    print(f"抽出 {n} 页 → {out}（共 {len(doc)} 页）")
+
+
 def cmd_preclean(args) -> None:
     """Step0：按 book.yaml 的 preclean 段生成修好的页图，落在 precleaned/<book>/。
 
@@ -586,6 +640,8 @@ def cmd_runs(args) -> None:
 
 COMMANDS_V2 = {
     "preclean": cmd_preclean,
+    "split": cmd_split,
+    "import-pdf": cmd_import_pdf,
     "eval": cmd_eval,
     "pipeline": cmd_pipeline,
     "step": cmd_step,
@@ -643,6 +699,19 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--calibrate", action="store_true",
                    help="不生成产物，改在没登记 preclean 的正常页上标定闸0阈值"
                         "（本底墨占比的中位/p95/p99），换书时用")
+
+    p = sub.add_parser("split",
+                       help="[v2] Step0 分页：按 yaml 的 page_split 段把扫描页裁成逻辑页（上下两栏拼一页的影印本）")
+    p.add_argument("book", help="books/<id>.yaml 里的书 id")
+    p.add_argument("--pages", default=None, help="只做这些**扫描页**（页号表达式，如 1-5,9）；默认全部")
+    p.add_argument("--force", action="store_true", help="已有产物也重做")
+
+    p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
+    p.add_argument("pdf")
+    p.add_argument("--out", required=True, help="输出目录")
+    p.add_argument("--dpi", type=int, default=None, help="渲染 dpi；不给 = 1:1（扫描 PDF 的原生分辨率）")
+    p.add_argument("--pages", default=None, help="只抽这些页，如 1-5,9")
+    p.add_argument("--force", action="store_true")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")

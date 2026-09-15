@@ -37,10 +37,32 @@ class Pipeline:
     selector: dict = field(default_factory=dict)
     needs: dict[str, list[str]] = field(default_factory=dict)   # 显式补充的边
     notes: str = ""
+    #: yaml 的 `params:` 段——**这条管线下**各 Step（含闸）的默认参数覆盖
+    #: `{step_id: {字段: 值}}`（2026-09-14 加，三模式方案「地基 1」）。同一份 Step 代码在
+    #: 刻本链与现代链里默认参数不同，差异写在这里而不是分叉代码；CLI `--params` /
+    #: 控制台的覆盖仍然优先于它（见 `Engine.__init__`）。
+    params: dict[str, dict] = field(default_factory=dict)
 
     # ── 图 ───────────────────────────────────────────────────────────
     def step(self, sid: str) -> Step:
         return STEPS[sid]
+
+    def producer_of(self, kind_id: str) -> Step:
+        """**本管线里**产出 `kind_id` 的 Step（含各 Step 出口挂的闸）；本管线没有再退回
+        全局注册表（`core.step.producer_of`）。
+
+        2026-09-14 加（三模式方案「地基 2」）：同一种产物可以有多个产出者——刻本链
+        `border_detect` 与现代链 `line_detect` 都产 `borders`，各自的闸都产
+        `border_detect_gate_manifest`。全局注册表按注册顺序取第一个，会让现代链读到
+        刻本 Step 的产物目录；查产物必须按当前管线来。"""
+        for sid in self.steps:
+            s = STEPS[sid]
+            if kind_id in s.spec.produces:
+                return s
+            if s.spec.gate and kind_id in STEPS[s.spec.gate.id].spec.produces:
+                return STEPS[s.spec.gate.id]
+        from .step import producer_of as _global
+        return _global(kind_id)
 
     def upstream(self, sid: str) -> list[str]:
         """直接上游：产出本步 consumes / optional_consumes 的那些步（含它们出口挂的
@@ -161,16 +183,44 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
     with open(path, encoding="utf-8") as f:
         d = yaml.safe_load(f) or {}
+    params_raw = d.get("params") or {}
+    if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
+        raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
     p = Pipeline(
         id=d.get("id", pid), title=d.get("title", pid),
         steps=[str(s) for s in d.get("steps", [])],
         selector=d.get("selector") or {}, needs=d.get("needs") or {},
         notes=d.get("notes", ""),
+        params={str(k): dict(v) for k, v in params_raw.items()},
     )
     p.validate()
+    for sid in p.params:
+        if sid not in STEPS:
+            raise ValueError(f"pipeline {pid} 的 params: 里有未注册的 Step {sid!r}")
     return p
 
 
 def list_pipelines(pipelines_dir: Path | None = None) -> list[str]:
     d = pipelines_dir or PIPELINES_DIR
     return sorted(p.stem for p in d.glob("*.yaml")) if d.exists() else []
+
+
+DEFAULT_PIPELINE_ID = "keben_body_v2"
+
+
+def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
+    """这册书默认走哪条管线：`selector.edition` 与 `Book.edition` 相同的那条
+    （唯一时）；找不到或多于一条都退回 `keben_body_v2`——刻本链是历史默认，
+    不能因为多了一条现代链就变。`selector` 在此之前只是文档，没人校验。"""
+    edition = getattr(book, "edition", None)
+    hits = []
+    for pid in list_pipelines(pipelines_dir):
+        try:
+            pl = load_pipeline(pid, pipelines_dir)
+        except Exception:      # noqa: BLE001 —— 一条坏 yaml 不该让选默认管线炸
+            continue
+        if pl.selector.get("edition") == edition:
+            hits.append(pid)
+    if edition == "keben" or len(hits) != 1:
+        return DEFAULT_PIPELINE_ID
+    return hits[0]
