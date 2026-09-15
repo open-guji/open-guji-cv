@@ -1061,8 +1061,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       不在候选池里（比如几何变了，候选池不再产出 `seam_narrow`）时
       **原样不收敛**——按旧逻辑走多候选，静默套错误的收敛比继续挡人更危险。
     - `cut_judge`：候选池裁判（`utils/cut_select.get_judge()` 的 U-Net），None = 只用现役规则。
-      候选池经现役规则与收缩后仍 ≥2 条时，用它给每条候选打一致率、改选最高者
-      （平手保留现役选中）；人裁回流仍在它之后、优先级最高。见 `utils/cut_select.py` 模块头。
+      候选池经现役规则、收缩、**人裁回流**之后仍 ≥2 条（人没裁过）时，用它给每条候选打一致率、
+      改选高出门槛的最优者。人裁在前：`seam_ok` 收敛的是人当时看到的现役折线。见 `utils/cut_select.py` 模块头。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1249,12 +1249,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 cands = [cands[1]]
                 chosen = 0
             chosen_by = "rule"
-            # 3.5) U-Net 裁判（2026-09-14，`utils/cut_select.py`）：池里还剩 ≥2 条时，让类别无关
-            # 归属网络给每条候选打「置信加权一致率」，改选最高者（平手保留现役选中）。
-            # 放在第 3 步之后：评测（05 卡实验七 S1）就是在收缩后的池上做的——现役已收成
-            # 单条窄走廊的不再让裁判翻；放在第 4 步之前：人裁回流优先级最高。
-            # 裁判判不了（返回 None）就原样按规则走。改选要过门槛 `JUDGE_MARGIN`（一致率高出 ≥0.005），
-            # 没过门槛保留现役选中、`chosen_by` 仍记 rule（但 `agree` 已填，审计能看出裁判跑过）。
+            # 4) 人裁回流：见 `_apply_resolved_cut` docstring。**必须在裁判之前**——`seam_ok` 类裁决的含义是
+            # 「人当时看到的现役折线就对」，`RESOLVED_CHOSEN` 收敛到 `cands[chosen]`；若裁判先改了 chosen，
+            # 收敛到的就是裁判选的那条而不是人确认过的那条（2026-09-14 vol02 p33 c9 s18 实锤：人确认窄走廊，
+            # 裁判改成宽走廊，seam_ok 反而把宽走廊当成了人裁）。人裁先落地，裁判只在人没裁过的切点上出手。
+            n_before = len(cands)
+            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot),
+                                                y_line=float(bounds[k]))
+            if len(cands) < n_before:
+                chosen_by = "human"
+            # 5) U-Net 裁判（2026-09-14，`utils/cut_select.py`）：池里还剩 ≥2 条（人没裁过）时，让类别无关
+            # 归属网络给每条候选打「置信加权一致率」，最优比现役选中高出 ≥ `JUDGE_MARGIN` 才改选。
+            # 放在第 3 步之后：评测（05 卡实验七 S1）就是在收缩后的池上做的——现役已收成单条窄走廊的不再让裁判翻。
+            # 裁判判不了（返回 None）或没过门槛就原样按规则走（`agree` 已填，审计能看出裁判跑过）。
             if cut_judge is not None and len(cands) >= 2:
                 sc = cut_judge.scores(col_gray, x_lo, x_hi, int(round(up[0].y0)), int(round(dn[0].y1)),
                                       float(bounds[k]), [c.y for c in cands], ink_threshold=ink_threshold)
@@ -1265,13 +1272,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     best = max(range(len(cands)), key=lambda i: (sc[i], i == chosen))
                     if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN:
                         chosen = best
-                        chosen_by = "unet"          # 只有真改选了才记 unet；裁判跑过的痕迹在 agree 里
-            # 4) 人裁回流：见 `_apply_resolved_cut` docstring。
-            n_before = len(cands)
-            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot),
-                                                y_line=float(bounds[k]))
-            if len(cands) < n_before:
-                chosen_by = "human"
+                        chosen_by = "unet"          # 只有真改选了才记 unet
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by)
