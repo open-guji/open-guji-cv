@@ -1260,8 +1260,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         def _resolve_and_probe(cands, chosen, up_c, dn_c, k_):
             """第 4 步人裁回流 + 第 5 步 U-Net 探针/裁判；两类切点（粘连 / L0′ 嫌疑）共用。"""
             chosen_by = "rule"
+            resolved = (resolved_cuts or {}).get(up_c.slot)
             n_before = len(cands)
-            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up_c.slot),
+            cands, chosen = _apply_resolved_cut(cands, chosen, resolved,
                                                 y_line=float(bounds[k_]), x_lo=int(x_lo))
             if len(cands) < n_before:
                 chosen_by = "human"
@@ -1284,6 +1285,16 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                         escalate = True
                         escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
                         cands = _expand_pool(cands, up_c, dn_c, k_)
+                        # 人裁**指向 L3 才生成的候选**（unet_seam / period_*）时，第 4 步收敛必然落空
+                        # ——那时池里还没有这个 kind。扩池之后再试一次（2026-09-15 实锤：147 条人裁里
+                        # 119 条因此没生效）。收敛成功就不再是「升级」，人是终审。
+                        if resolved is not None and chosen_by != "human":
+                            n2_ = len(cands)
+                            cands, chosen = _apply_resolved_cut(cands, chosen, resolved,
+                                                               y_line=float(bounds[k_]), x_lo=int(x_lo))
+                            if len(cands) < n2_:
+                                chosen_by = "human"
+                                escalate, escalate_reason = False, None
             return cands, chosen, chosen_by, escalate, escalate_reason
 
         def _expand_pool(cands, up_c, dn_c, k_):

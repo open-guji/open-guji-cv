@@ -337,3 +337,24 @@ def test_escalated_cut_gets_expanded_pool_but_selection_unchanged():
     cp2 = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j2))
     assert cp2.escalate is False and "unet_seam" not in [c.kind for c in cp2.candidates]
 
+
+
+def test_human_pick_of_an_l3_candidate_converges_after_expansion():
+    """人裁指向 L3 扩池才生成的 kind（unet_seam）时，第 4 步收敛落空（那时池里没有它），
+    扩池后要再试一次——否则人裁永远不生效（2026-09-15 实锤：147 条里 119 条没落地）。"""
+    import numpy as np
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+
+    class _J(_FakeJudge):
+        def guided_seam(self, col_gray, x_lo, x_hi, y0, y1, y_line, ink_threshold=128, band=45):
+            return np.full(x_hi - x_lo, int(round(y_line)) + 17)
+    img = _touching_column()
+    j = _J({"straight": 0.80, "seam": 0.99}, dis={"seam": ESCALATE_BLOB + 50, "straight": 300})
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j,
+                          resolved_cuts={5: "unet_seam"})
+    cp = _cut(r)
+    assert [c.kind for c in cp.candidates] == ["unet_seam"]      # 收敛到人选的那条
+    assert cp.chosen == 0 and cp.chosen_by == "human"
+    assert cp.escalate is False                                  # 人是终审，不再升级出卡
+    up = next(c for c in r.cells if c.slot == 5)
+    assert up.seam_bottom is not None                            # 折线候选被选中 → 写 seam_*
