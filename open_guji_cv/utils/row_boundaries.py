@@ -609,6 +609,21 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
 
     best: tuple[float, float, list[float], float] | None = None
     drop_cost_N = {vN: drop_lam * _dropped_rows(vN, x2) / period for vN, _ in candN}
+    # 性能（2026-09-14）：内部转移代价 step_cost(mid[mp], mid[m]) 只依赖 (mp, m)，与格序 k、
+    # 首锚点 v0 都无关，原来却在 k × v0 的循环里反复算（一列 150 万次调用，占 Step3 94% 时间）。
+    # 先算一张 (m_count × m_count) 的代价矩阵 C（mp ≥ m 置 inf，等价于原来只遍历 mp < m），
+    # 再按 k 向量化填表。**数值逐位相同**：total 的加法顺序保持 ((prev + c) + ink) + eps，
+    # argmin 取首个最小值 = 原来「严格小于才更新」的取法（最小的 mp 胜出）。
+    mid_y = [y for y, _ in mid]
+    mid_ink = np.array([ink for _, ink in mid], dtype=np.float64)
+    C = np.full((m_count, m_count), np.inf)
+    for m in range(m_count):
+        y = mid_y[m]
+        for mp in range(m):
+            c = step_cost(mid_y[mp], y)
+            if c is not None:
+                C[mp, m] = c
+    col_idx = np.arange(m_count)
     for v0, _ink0 in cand0:
         drop_cost_0 = drop_lam * _dropped_rows(x1_eff, v0) / period
         dp_cost = np.full((n_interior, m_count), np.inf)
@@ -619,20 +634,14 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             if c is not None:
                 dp_cost[0, m] = c + ink + eps + drop_cost_0
         for k in range(1, n_interior):
-            for m in range(m_count):
-                y, ink = mid[m]
-                best_c, best_p = np.inf, -1
-                for mp in range(m):
-                    if not np.isfinite(dp_cost[k - 1, mp]):
-                        continue
-                    c = step_cost(mid[mp][0], y)
-                    if c is None:
-                        continue
-                    total = dp_cost[k - 1, mp] + c + ink + eps
-                    if total < best_c:
-                        best_c, best_p = total, mp
-                dp_cost[k, m] = best_c
-                dp_prev[k, m] = best_p
+            tot = dp_cost[k - 1][:, None] + C
+            tot = tot + mid_ink[None, :]
+            tot = tot + eps
+            arg = np.argmin(tot, axis=0)
+            mn = tot[arg, col_idx]
+            fin = np.isfinite(mn)
+            dp_cost[k, fin] = mn[fin]
+            dp_prev[k, fin] = arg[fin]
         k_last = n_interior - 1
         for m in range(m_count):
             if not np.isfinite(dp_cost[k_last, m]):
