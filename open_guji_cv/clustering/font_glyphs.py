@@ -68,10 +68,15 @@ class FontRenderer:
     """單套字體（可多檔）的字形渲染器，緩存 PIL font 與 cmap。"""
 
     def __init__(self, font_paths: list[Path], target: int = RENDER_TARGET,
-                 canvas: int = RENDER_CANVAS):
+                 canvas: int = RENDER_CANVAS, stroke_width: int = 0):
+        """``stroke_width``：渲染时给每笔描边加粗（PIL ``stroke_width``，单侧像素，画布尺度
+        canvas=384、字面 190px）。默认 0 = 原样。2026-09-15 加：现代排印本的扫描件（1-bit、
+        墨扩）笔画比字体渲染粗一截——北行日錄归一到 64px 后书 5.5px、方正/Noto 渲染 2.7px，
+        不加粗时匹配分数主要在量粗细差，字体排名与笔宽严格同序。"""
         from PIL import ImageFont
         self.canvas = canvas
         self.target = target
+        self.stroke_width = int(stroke_width)
         self._fonts = []
         for p in font_paths:
             # size 給字面高的 1.15 倍：字體 em 框含上下留白，實際墨高
@@ -96,7 +101,11 @@ class FontRenderer:
         bbox = draw.textbbox((0, 0), char, font=font)
         x = (self.canvas - (bbox[2] - bbox[0])) // 2 - bbox[0]
         y = (self.canvas - (bbox[3] - bbox[1])) // 2 - bbox[1]
-        draw.text((x, y), char, fill=0, font=font)
+        if self.stroke_width > 0:
+            draw.text((x, y), char, fill=0, font=font,
+                      stroke_width=self.stroke_width, stroke_fill=0)
+        else:
+            draw.text((x, y), char, fill=0, font=font)
         arr = np.asarray(img, dtype=np.uint8)
         if int((arr < 128).sum()) < MIN_INK_PIXELS:
             return None                      # 字體聲稱有、實際渲染為空
