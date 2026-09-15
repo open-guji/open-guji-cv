@@ -143,9 +143,10 @@ class GlyphMatcher:
             feat = self._feature.extract(norm[None, ...])[0]
         # 性能（2026-09-14）：库有几万条时 `np.asarray(self._feats)` 每次要把整张特征表重新堆一遍
         # （一页 179 字位 6.3s，占 Step5-a 43%）。堆一次缓存起来，`add()` 时失效；矩阵内容逐位相同。
-        if self._F is None or self._F.shape[0] != len(self._feats):
-            self._F = np.asarray(self._feats)
-        F = self._F
+        F = getattr(self, "_F", None)          # getattr：测试里有绕过 __init__ 构造的 matcher
+        if F is None or F.shape[0] != len(self._feats):
+            F = np.asarray(self._feats)
+            self._F = F
         sims = F @ np.asarray(feat, dtype=np.float32)
         if exclude_id is not None:
             # 摘自身：把相似度压到最低，排序自然把它甩到末尾。
