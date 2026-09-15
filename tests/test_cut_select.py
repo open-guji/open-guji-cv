@@ -317,7 +317,9 @@ def test_guided_seam_from_owner_follows_the_partition():
 
 
 def test_escalated_cut_gets_expanded_pool_but_selection_unchanged():
-    """L3：升级的切点补 unet_seam / period_* 候选（带 agree、dis_unet），chosen 不动；没升级的池不变。"""
+    """L3：**要交给人或下游的**切点（dis_unet >= PENDING_BLOB）补 unet_seam / period_* 候选，chosen 不动；
+    分歧小的（不挡人、不升级）池不变——2026-09-15 夜：原来只在 >=ESCALATE_BLOB 时扩池，
+    60-100 这一档人裁时卡上没有 U-Net 缝可选。"""
     import numpy as np
     from open_guji_cv.utils.cut_select import ESCALATE_BLOB
 
@@ -336,6 +338,23 @@ def test_escalated_cut_gets_expanded_pool_but_selection_unchanged():
     j2 = _J({"straight": 0.80, "seam": 0.99}, dis={"seam": 5, "straight": 300})
     cp2 = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j2))
     assert cp2.escalate is False and "unet_seam" not in [c.kind for c in cp2.candidates]
+
+
+def test_pending_band_also_gets_expanded_pool():
+    """60-100 这一档：顺序闸要挡（人要裁），所以也必须扩池——否则卡上没有 U-Net 缝可选。"""
+    import numpy as np
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB, PENDING_BLOB
+
+    class _J(_FakeJudge):
+        def guided_seam(self, col_gray, x_lo, x_hi, y0, y1, y_line, ink_threshold=128, band=45):
+            return np.full(x_hi - x_lo, int(round(y_line)) + 17)
+    mid = (PENDING_BLOB + ESCALATE_BLOB) // 2          # 60 <= mid < 100
+    img = _touching_column()
+    cp = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
+                                cut_judge=_J({"straight": 0.80, "seam": 0.99}, dis={"seam": mid, "straight": 300})))
+    assert "unet_seam" in [c.kind for c in cp.candidates]     # 扩池了
+    assert cp.escalate is False                                # 但没到升级门槛
+    assert cp.chosen_by == "rule" and cp.candidates[cp.chosen].kind.startswith("seam_")
 
 
 
