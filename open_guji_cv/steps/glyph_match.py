@@ -77,8 +77,15 @@ class GlyphMatchParams(BaseModel):
     部分，`params_hash` 才会把它算进 Step 指纹，库一变产物就自动 stale。
     显式传值只在一种场合有用：想按某个历史库的判决重放。"""
     knn_k: int = 10
-    edition: str | None = None    # 只用某一版本的字形当库
+    edition: str | None = None    # 只用某一版本的字形当库；None 且 Book.edition=modern 时 = modern:<book>
     max_candidates: int = 5       # unsure 档往产物里存几个候选
+    norm_stroke: int | None = None
+    """两边都骨架化再统一细化到 N px 再比（2026-09-15，现代印刷链）。1-bit 扫描的粗笔画
+    （北行日錄归一后 5.5px）让软覆盖饱和：同书留一法错误命中 cov 最高 0.9996、same 闸漏
+    2 个假 same；细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链保持 None。"""
+    exclude_self: bool = False
+    """匹配时把字位自己摘出库（`GlyphMatcher.match(exclude_id=)`）。播种过的书（modern:<book>
+    的实例就是这本书的字位）不摘就是自证 cov 1.0。刻本链默认不摘，行为不变。"""
 
     def model_post_init(self, _ctx) -> None:
         # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
@@ -109,13 +116,20 @@ class GlyphMatchStep(Step):
         # 不许静默出全 diff（见 glyph_db.assert_db_not_silently_empty 模块头）。
         assert_db_not_silently_empty(p.db_path)
         matcher, _chars = cached_matcher_from_db(
-            p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=p.knn_k)
+            p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=p.knn_k,
+            norm_stroke=p.norm_stroke)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        from ..clustering.normalize import normalize_patch
+        from ..clustering.normalize import normalize_patch as _normalize_patch
         p: GlyphMatchParams = ctx.params_for(self)  # type: ignore[assignment]
+        if p.edition is None and getattr(ctx.book, "edition", "keben") == "modern":
+            # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
+            p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
         matcher = self._matcher(p)
+
+        def normalize_patch(img):
+            return _normalize_patch(img, stroke_width=p.norm_stroke)
         chars: PageChars = ctx.product("char_index", page)
         out: list[ColumnMatch] = []
         for cc in chars.columns:
@@ -132,14 +146,14 @@ class GlyphMatchStep(Step):
                     recs.append(MatchRec(id=r.id, slot=r.slot, sub=r.sub,
                                          verdict="diff", guard=f"no_patch:{e}"))
                     continue
-                m = matcher.match(normalize_patch(img))
+                m = matcher.match(normalize_patch(img), exclude_id=(r.id if p.exclude_self else None))
                 cand_variants: list[CandidateMatch] = []
                 for cv in (r.cand_variants or []):
                     try:
                         cimg = ctx.image("char_patch", cv.patch_key)
                     except Exception:
                         continue    # 候选试切图块再生不出来就跳过，不炸整页
-                    cm = matcher.match(normalize_patch(cimg))
+                    cm = matcher.match(normalize_patch(cimg), exclude_id=(r.id if p.exclude_self else None))
                     cand_variants.append(CandidateMatch(
                         side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),

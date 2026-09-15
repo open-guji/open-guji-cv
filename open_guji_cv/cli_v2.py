@@ -358,14 +358,30 @@ def cmd_calibrate_font(args) -> None:
     book = load_book(args.book)
     labels_path = Path(args.labels) if args.labels else products_root() / book.id / "witness_align" / "labels.jsonl"
     labels = load_labels(labels_path, max_per_char=args.per_char, max_chars=args.max_chars)
-    db = GlyphDB(glyph_db_path())
-    try:
-        editions = args.editions.split(",") if args.editions else [
-            r[0] for r in db.conn.execute("SELECT DISTINCT edition_tag FROM sources WHERE kind='font' ORDER BY 1")]
-        scores = score_fonts(db, book.id, labels, cache_root(), editions, k=args.k,
-                             exclude_self=args.exclude_self)
-    finally:
-        db.close()
+    if args.manifest:
+        # 直接比对（不经库）：字体按书的笔宽加粗后再比，见 utils/font_calibrate_direct.py
+        from .clustering.font_glyphs import load_charset, load_manifest
+        from .utils.font_calibrate_direct import score_fonts_direct
+        specs, data = load_manifest(args.manifest)
+        if args.editions:
+            want = args.editions.split(",")
+            specs = [sp for sp in specs if sp.edition_tag in want]
+        charset = load_charset(args.charset or data["charset"])
+        strokes = None
+        if args.strokes:
+            strokes = {kv.split("=")[0]: int(kv.split("=")[1]) for kv in args.strokes.split(",")}
+        scores = score_fonts_direct(book.id, labels, cache_root(), specs, charset, k=args.k,
+                                    strokes=strokes, match_stroke=not args.no_stroke_match,
+                                    norm_stroke=args.norm_stroke)
+    else:
+        db = GlyphDB(glyph_db_path())
+        try:
+            editions = args.editions.split(",") if args.editions else [
+                r[0] for r in db.conn.execute("SELECT DISTINCT edition_tag FROM sources WHERE kind='font' ORDER BY 1")]
+            scores = score_fonts(db, book.id, labels, cache_root(), editions, k=args.k,
+                                 exclude_self=args.exclude_self)
+        finally:
+            db.close()
     print(format_table(scores))
     if args.json:
         Path(args.json).write_text(json.dumps([s.__dict__ for s in scores], ensure_ascii=False, indent=1),
@@ -814,6 +830,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--k", type=int, default=5)
     p.add_argument("--exclude-self", action="store_true",
                    help="留一法：查询字位自己已在库里（modern:<book>）时摘掉再检索")
+    p.add_argument("--manifest", default=None,
+                   help="给了就走直接比对（不经库）：按清单渲染字体、按书的笔宽加粗后再比")
+    p.add_argument("--charset", default=None, help="直接比对用的模板字表；默认清单里的")
+    p.add_argument("--strokes", default=None, help="显式加粗值，如 font:simsun=2,font:zhonghuasong=4")
+    p.add_argument("--no-stroke-match", action="store_true", help="直接比对时不按笔宽加粗")
+    p.add_argument("--norm-stroke", type=int, default=None,
+                   help="直接比对时两边都骨架化再统一细化到 N px（加粗那条路会饱和，见 font_calibrate_direct.py）")
     p.add_argument("--json", default=None)
 
     p = sub.add_parser("seed-witness",

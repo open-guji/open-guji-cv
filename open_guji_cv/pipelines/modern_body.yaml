@@ -27,6 +27,10 @@ params:
     count_mode: detected     # 列数由 line_detect 探出，不与版式常量比
     width_tol: 0.5           # L1c 防的是「界行圈进列窗」，现代页没有界行；卷题页列位不在等距网格上
                              # （北行日錄 p53 实测列距 2.5 / 2 / 1.08 个 pitch），窗口宽窄不一是正常的
+  glyph_match:
+    norm_stroke: 3           # 两边骨架化细到 3px 再比：粗笔画 1-bit 扫描下软覆盖饱和（北行日錄留一法
+                             # 不归一错误命中最高 0.9996；细到 3px 后 0.922、591 对 0 错）
+    exclude_self: true       # 库就是这本书自己播种的字位，不摘自己就是自证
 notes: |
   坐标：与刻本链相同——Step1 产物在规范空间 raw_page_px@top-right，Step2–4 列内坐标
   column_px 另带 quad_page / bbox_page。分页（一张扫描页两栏）在 Step0 `guji split` 做，
