@@ -45,6 +45,7 @@ class SeamCandidate(BaseModel):
     y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
     seam_ink: int = 0              # 这条线穿过的墨量（下游打分可用，也便于审计）
     dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
+    agree: float | None = None     # U-Net 裁判的置信加权一致率 [0,1]（utils/cut_select.py）；没过裁判为 None
 
 
 class CutPointCandidates(BaseModel):
@@ -57,7 +58,8 @@ class CutPointCandidates(BaseModel):
     slot_above: int
     slot_below: int
     candidates: list[SeamCandidate] = Field(default_factory=list)
-    chosen: int | None = None      # 现役规则选中的候选下标；None = 这个切点没有候选
+    chosen: int | None = None      # 现役选中的候选下标；None = 这个切点没有候选
+    chosen_by: str | None = None   # 谁选的：rule（现役规则）| unet（裁判改选，2026-09-14 起）| human（裁决表收敛）
 
 
 class ColumnCells(BaseModel):
