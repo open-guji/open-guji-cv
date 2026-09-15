@@ -957,16 +957,50 @@ RESOLVED_Y_TOL = 3.0
 touching-cuts 评测口径 ≤3 / ≤5 / ≤10 px，取最严一档。"""
 
 
+RESOLVED_SEAM_TOL = 4.0
+"""`seam_ok` 收敛的折线护栏：候选折线与人当时看到的折线（裁决里的 polyline）逐 x 最大偏差
+超过这个像素数就不是同一条缝。2026-09-14 vol02 p33 c9 s18 实锤：人确认的是窄走廊（偏 12px），
+重跑后规则改选了宽走廊（偏 21px、直线 y 没变），`RESOLVED_CHOSEN` 按「现役选中」收敛就把宽走廊
+当成了人裁（金标误差 8→198px）。有 polyline 就按折线找，池里没有一致的就**不收敛**（留给裁判/人）。"""
+
+
+def _polyline_to_seam(points: list, x0: int, x1: int) -> list[int]:
+    """人标折线（列图坐标 [[x, y], …]）→ 每个 x∈[x0, x1) 一个 y（线性插值，两端水平延伸）。
+    与 `eval/touching.polyline_to_seam` 同口径（utils 不 import eval，抄一份）。"""
+    pts = sorted((float(x), float(y)) for x, y in points)
+    if not pts:
+        return []
+    xs = [x for x, _ in pts]
+    ys = [y for _, y in pts]
+    out = []
+    for x in range(int(x0), int(x1)):
+        if x <= xs[0]:
+            out.append(int(round(ys[0])))
+            continue
+        if x >= xs[-1]:
+            out.append(int(round(ys[-1])))
+            continue
+        j = 1
+        while xs[j] < x:
+            j += 1
+        xa, ya, xb, yb = xs[j - 1], ys[j - 1], xs[j], ys[j]
+        t = (x - xa) / (xb - xa) if xb > xa else 0.0
+        out.append(int(round(ya + t * (yb - ya))))
+    return out
+
+
 @dataclass
 class ResolvedCut:
     """一条切点的人裁结论（来自 workspace 裁决表，见 `feedback/lookup.py`）。"""
     kind: str                      # straight / seam_narrow / seam_wide / RESOLVED_CHOSEN
     y_ref: float | None = None     # 裁决时的直线切点 y（列图坐标）；None = 不设护栏
+    seam_ref: list | None = None   # `seam_ok` 时人看到的折线 [[x, y], …]（列图坐标）；None = 老裁决，按现役选中收敛
 
 
 def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
                          resolved: "str | ResolvedCut | None",
-                         y_line: float | None = None) -> tuple[list[SeamCandidate], int]:
+                         y_line: float | None = None,
+                         x_lo: int | None = None) -> tuple[list[SeamCandidate], int]:
     """人裁回流（2026-09-13）：`resolved` 是裁决表对这条切点的结论，命中候选池里
     同 kind 的那条就把候选收敛成它一个——顺序闸按 `len(candidates)>=2` 判阻塞
     （`review/cards.py::cut_pending`），收敛后自动放行，不用改闸的代码。
@@ -975,7 +1009,10 @@ def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
     - `resolved` 为 None（未裁决）；
     - 候选池里没有这个 kind（几何变了、这次没算出裁决认定的那种切法）；
     - 裁决带 `y_ref` 而现役直线 `y_line` 与它差 > `RESOLVED_Y_TOL`（切点已不是当时那条）。
-    `kind == RESOLVED_CHOSEN`（`seam_ok`）收敛到现役选中的折线；现役是直线时不动。"""
+    `kind == RESOLVED_CHOSEN`（`seam_ok`）：裁决带 `seam_ref`（人看到的折线）且给了 `x_lo` 时，
+    在池里找逐 x 最大偏差 ≤ `RESOLVED_SEAM_TOL` 的折线候选（现役选中优先）收敛，找不到就不动
+    ——规则这次选的缝可能已不是人看到的那条；没有 `seam_ref`（老裁决）沿用旧口径：收敛到现役选中的折线，
+    现役是直线时不动。"""
     if resolved is None:
         return cands, chosen
     if isinstance(resolved, str):
@@ -984,6 +1021,15 @@ def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
             and abs(float(y_line) - float(resolved.y_ref)) > RESOLVED_Y_TOL):
         return cands, chosen
     if resolved.kind == RESOLVED_CHOSEN:
+        if resolved.seam_ref and x_lo is not None and cands:
+            for i in [chosen] + [j for j in range(len(cands)) if j != chosen]:
+                c = cands[i]
+                if c.y is None:
+                    continue
+                ref = _polyline_to_seam(resolved.seam_ref, x_lo, x_lo + len(c.y))
+                if len(ref) == len(c.y) and max(abs(int(a) - int(b)) for a, b in zip(c.y, ref)) <= RESOLVED_SEAM_TOL:
+                    return [c], 0
+            return cands, chosen
         if not cands or cands[chosen].kind == "straight":
             return cands, chosen
         return [cands[chosen]], 0
@@ -1255,7 +1301,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             # 裁判改成宽走廊，seam_ok 反而把宽走廊当成了人裁）。人裁先落地，裁判只在人没裁过的切点上出手。
             n_before = len(cands)
             cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot),
-                                                y_line=float(bounds[k]))
+                                                y_line=float(bounds[k]), x_lo=int(x_lo))
             if len(cands) < n_before:
                 chosen_by = "human"
             # 5) U-Net 裁判（2026-09-14，`utils/cut_select.py`）：池里还剩 ≥2 条（人没裁过）时，让类别无关

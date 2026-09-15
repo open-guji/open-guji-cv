@@ -180,3 +180,22 @@ def test_seam_ok_resolution_collapses_to_the_rule_seam_not_the_judge_choice():
     assert len(cp.candidates) == 1 and cp.candidates[0].y == rule_seam and cp.chosen_by == "human"
     assert cp.candidates[0].agree is None                       # 人裁过的切点裁判根本没跑
 
+
+def test_seam_ok_with_polyline_collapses_to_the_matching_seam_not_the_current_choice():
+    """`seam_ok` 带人看到的折线：池里与它一致的那条才是人裁的，哪怕规则这次选中了别的；
+    池里没有一致的就不收敛（留给裁判）。2026-09-14 vol02 p33 c9 s18 实锤。"""
+    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut, SeamCandidate, _apply_resolved_cut
+    narrow = SeamCandidate("seam_narrow", y=[100] * 5 + [112] * 5, seam_ink=4, dev_max=12)
+    wide = SeamCandidate("seam_wide", y=[100] * 5 + [121] * 5, seam_ink=2, dev_max=21)
+    pool = [SeamCandidate("straight"), narrow, wide]
+    poly_narrow = [[10, 100], [14, 100], [15, 112], [19, 112]]       # 人当时看到的是窄走廊那条
+    rc = ResolvedCut(RESOLVED_CHOSEN, y_ref=None, seam_ref=poly_narrow)
+    cands, chosen = _apply_resolved_cut(pool, chosen=2, resolved=rc, x_lo=10)   # 规则这次选了宽走廊
+    assert [c.kind for c in cands] == ["seam_narrow"] and chosen == 0
+    rc2 = ResolvedCut(RESOLVED_CHOSEN, y_ref=None, seam_ref=[[10, 100], [19, 140]])   # 池里没有这条
+    cands, chosen = _apply_resolved_cut(pool, chosen=2, resolved=rc2, x_lo=10)
+    assert cands == pool and chosen == 2
+    # 没给 seam_ref（老裁决）沿用旧口径：收敛到现役选中
+    cands, chosen = _apply_resolved_cut(pool, chosen=2, resolved=ResolvedCut(RESOLVED_CHOSEN), x_lo=10)
+    assert [c.kind for c in cands] == ["seam_wide"]
+

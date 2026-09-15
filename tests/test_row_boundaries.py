@@ -377,9 +377,9 @@ def test_segment_column_resolved_cuts_param_reaches_the_named_slot(monkeypatch):
     calls: list[tuple[int, str | None]] = []
     real_apply = fit_mod._apply_resolved_cut
 
-    def spy(cands, chosen, resolved, y_line=None):
+    def spy(cands, chosen, resolved, y_line=None, **kw):
         calls.append((len(cands), resolved))
-        return real_apply(cands, chosen, resolved, y_line=y_line)
+        return real_apply(cands, chosen, resolved, y_line=y_line, **kw)
 
     monkeypatch.setattr(fit_mod, "_apply_resolved_cut", spy)
 
