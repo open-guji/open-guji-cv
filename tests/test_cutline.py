@@ -294,3 +294,41 @@ def test_cutline_relabel_drops_stale_geometry_from_previous_verdict(tmp_path):
     assert "polyline" not in ex and "tags" not in ex, ex
     assert ex["layout"] == "v1-legacy"
 
+
+
+def test_escalated_boundaries_reads_escalate_flag_from_products(tmp_path, monkeypatch):
+    """`pages=escalated` 的数据源：直接读 Step3 产物里 `escalate=True` 的切点（含 L0′ split_suspect
+    与 L3 扩池候选），不重新跑图像判据——升级切点多半不在金标里，`list:` 模式出不来（2026-09-15）。"""
+    import numpy as np
+    from open_guji_cv.eval import touching as T
+    from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
+
+    cells = PageCells(page=3, period=100.0, ref_w=150.0, columns=[ColumnCells(
+        col=1, ok=True, n_body_slots=3, content_x=(5.0, 155.0), boundaries=[0.0, 100.0, 200.0, 300.0],
+        cells=[CellRec(slot=s, pos=s, y0=(s - 1) * 100.0, y1=s * 100.0, x0=5.0, x1=155.0,
+                       kind="char", order=s, ink_ratio=0.2) for s in (1, 2, 3)],
+        cut_candidates=[
+            CutPointCandidates(k=1, y=100.0, slot_above=1, slot_below=2, chosen=0, escalate=False,
+                               candidates=[SeamCandidate(kind="straight")]),
+            CutPointCandidates(k=2, y=200.0, slot_above=2, slot_below=3, chosen=0, escalate=True,
+                               escalate_reason="split_suspect dis_unet=983>=100 n_cand=1", origin="split_suspect",
+                               candidates=[SeamCandidate(kind="straight"),
+                                           SeamCandidate(kind="unet_seam", y=[210] * 150, dis_unet=5)]),
+        ])])
+
+    class _St:
+        def read(self, book, step, key, kind):
+            return cells if step == "row_segment" else None
+
+    class _IC:
+        def get(self, *a, **kw):
+            return "x.png"
+
+    monkeypatch.setattr(T, "_col_profile", lambda *a, **kw: np.zeros(400), raising=False)
+    monkeypatch.setattr("open_guji_cv.products.cache.ImageCache", lambda *a, **kw: _IC())
+    monkeypatch.setattr("cv2.imread", lambda *a, **kw: np.zeros((400, 160), np.uint8))
+    out, skipped = T.escalated_boundaries("vol02", [3], _St())
+    assert [c["id"] for c in out] == ["vol02:3:1:2"]          # 只出 escalate 的那条
+    c = out[0]
+    assert c["origin"] == "split_suspect" and c["kind"] == "escalated" and c["col_h"] == 400
+    assert c["slot_above"] == 2 and c["slot_below"] == 3 and c["y"] == 200

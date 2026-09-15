@@ -479,6 +479,9 @@ def test_route_inventory():
 
     2026-09-13 人裁落 workspace 裁决表、进测试集改为显式导入（7e730962d4），
     `gold.py` 加 `POST /api/gold/{shard:path}/import`，账 2026-09-14 补记，74 → 75。
+
+    2026-09-15 梯次裁决（overview 10 卡）只改了 `GET /api/cutline/cases` 的 `pages` 取值
+    （新增 `escalated`），**没有新增路由**，75 不变。
     """
     got = sorted(_endpoints())
     assert len(got) == 75, f"路由数变了：{len(got)} 条\n" + "\n".join(got)

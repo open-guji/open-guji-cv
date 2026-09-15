@@ -77,12 +77,19 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                     relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
         cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None, only_ids=only_ids)
         pg = sorted({c["page"] for c in cases})
-    elif pages == "body":
+    elif pages in ("escalated", "esc"):
+        # 升级切点模式（2026-09-15，10 卡 L5）：直接读 Step3 产物里 `escalate=True` 的切点——
+        # L2′/L0′ 说「本层拿不准」的那些，池里已由 L3 补过 unet_seam / period_* 候选。
+        # 与 `list:` 模式的区别：那个只能出**已在裁决表里**的金标 id（152 条升级点里只有 7 条），
+        # 这个直接从产物出，新切点也能出卡。
         pg = [p for p in T.body_pages(book)]
     else:
         pg = bk.resolve_pages(pages)
     if drift:
         pass
+    elif pages in ("escalated", "esc"):
+        cases, esc_skipped = T.escalated_boundaries(book, pg, st)
+        drift_skipped = {**drift_skipped, **esc_skipped}
     elif scope == "blocking":
         cases = blocking_cutline_cases(book, pg, st)
     elif kind == "split_char":
@@ -93,12 +100,17 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         cases = T.r2s_boundaries(book, pg, st)
     n_all = len(cases)
     done: set[str] = set()
-    if skip_done and scope != "blocking" and not drift:
+    esc_mode = pages in ("escalated", "esc")
+    if skip_done and scope != "blocking" and not drift and not esc_mode:
         # blocking 的 cases 已经是「待办」，不用再滤一遍；drift 那批重裁后 col_h 变成当前值、
         # 自己出池，也不能按批次事件滤（老批次里的历史事件会把整批都算成已裁）
         done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
+    elif skip_done and esc_mode and batch:
+        # 升级模式：**不按 gold_ids 滤**（152 条升级切点里只有 7 条在金标里，滤了就几乎全没了），
+        # 只按本批次已裁的事件滤——人裁完一条它就从「未裁」里消失。
+        done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
     cases = [c for c in cases if c["id"] not in done]
     picked = T.pick_cases(cases, limit, seed=seed)
     # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）。

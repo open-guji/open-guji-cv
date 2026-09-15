@@ -14,6 +14,9 @@ export interface CardState {
 }
 
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊', unet_seam: 'U-Net缝', period_up: '按格高↑', period_dn: '按格高↓' }
+// 候选线一条一色（2026-09-15：L3 扩池后一张卡可能有 6 条候选，原来只有两种颜色、选中也不高亮，人分不出点了哪条）。
+// 按**池内下标**取色，与右侧按钮上的色点一一对应；选中的那条画成实线加粗。
+const CL_COLORS = ['#2f6fb5', '#c47f17', '#1f9e78', '#b5484e', '#7a5bbd', '#0f8ea8']
 
 // 每张卡自己的显示倍率，照抄 v1 clScale：列图裁片原宽约 180-210px，
 // 放到 ≤300px 且 ≤2 倍，卡片再窄也不会把右侧按钮挤没。
@@ -108,15 +111,19 @@ export function CutlineCard({
   }
 
   const pickRow = cands.length > 1 ? (
-    <div className="clbtns clcandbtns" title="算法给的几种切法（图上虚线）：先点一种选中，再按「切法正确」">
-      <span className="muted">切法：</span>
-      {cands.map((cd, k) => (
-        <button key={k} className={k === st.pick ? 'on' : ''} title={`墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px`}
-                onClick={() => onPick(k)}>
-          {CL_KIND[cd.kind] || cd.kind}
-        </button>
-      ))}
-      <span className="muted">墨/偏移：{cands.map((cd) => `${cd.seam_ink}/${cd.dev_max}`).join(' · ')}</span>
+    <div className="clbtns clcandbtns" title="算法给的几种切法：点一种选中（图上同色线加粗），再按「切法正确」">
+      <div className="clcandlist">
+        {cands.map((cd, k) => (
+          <button key={k} className={`clcandbtn${k === st.pick ? ' on' : ''}`}
+                  style={{ ['--cc' as string]: CL_COLORS[k % CL_COLORS.length] }}
+                  title={`墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px${cd.agree != null ? ` · 与 U-Net 一致 ${(cd.agree * 100).toFixed(1)}%` : ''}${cd.dis_unet != null ? ` · 分歧块 ${cd.dis_unet}px` : ''}`}
+                  onClick={() => onPick(k)}>
+            <i className="cldot" />
+            <span className="clk">{CL_KIND[cd.kind] || cd.kind}</span>
+            <span className="muted">墨{cd.seam_ink}·偏{cd.dev_max}{cd.dis_unet != null ? `·歧${cd.dis_unet}` : ''}</span>
+          </button>
+        ))}
+      </div>
     </div>
   ) : null
 
@@ -140,11 +147,13 @@ export function CutlineCard({
               <polyline className="clseam" points={c.seam.map((yy, k) => `${(c.x0 + k) * s},${(yy - c.crop_y0) * s}`).join(' ')} />
             )}
             {cands.map((cd, k) => {
-              if (!cd.y || !cd.y.length) return null
-              const cls = cd.kind === 'seam_wide' ? 'wide' : 'narrow'
+              const pts = (cd.y && cd.y.length)
+                ? cd.y.map((yy, j) => `${(c.x0 + j) * s},${(yy - c.crop_y0) * s}`).join(' ')
+                // 直线候选没有逐列 y：按切点位置画一条横线，否则它在图上根本不显示，人无从比较
+                : `${c.x0 * s},${(c.y - c.crop_y0) * s} ${c.x1 * s},${(c.y - c.crop_y0) * s}`
               return (
-                <polyline key={k} className={`clcand ${cls}`}
-                          points={cd.y.map((yy, j) => `${(c.x0 + j) * s},${(yy - c.crop_y0) * s}`).join(' ')} />
+                <polyline key={k} className={`clcand${k === st.pick ? ' clcand-pick' : ''}`}
+                          stroke={CL_COLORS[k % CL_COLORS.length]} points={pts} />
               )
             })}
             <polyline className="clpoly" points={sortedPoly.map(([x, yy]) => `${x * s},${(yy - c.crop_y0) * s}`).join(' ')} />
