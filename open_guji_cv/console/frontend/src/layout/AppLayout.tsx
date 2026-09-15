@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { STEPS, STEP5_SUBS } from '../steps'
 import { listBooks } from '../api/registry'
+import { getWorkspace, switchWorkspace } from '../api/workspace'
+import type { WorkspaceState } from '../api/workspace'
 import type { Book } from '../types/registry'
 
 // 顶层布局：左侧导航。用户 2026-09-11 测试反馈 §1/§4 重排过一次：
@@ -15,15 +17,54 @@ export function AppLayout() {
   const { book } = useParams()
   const navigate = useNavigate()
   const [books, setBooks] = useState<Book[]>([])
+  const [ws, setWs] = useState<WorkspaceState | null>(null)
+  const [wsBusy, setWsBusy] = useState(false)
+  const [wsErr, setWsErr] = useState('')
 
   useEffect(() => {
     listBooks().then(setBooks).catch(() => {})
+    getWorkspace().then(setWs).catch(() => setWs(null))
   }, [])
+
+  // 热切工作区：后端换 GUJI_WORKSPACE 并重建 Store，进程不重启。切完册列表
+  // 立刻就变，所以要顺手把当前选中的册清掉——它多半不在新工作区里。
+  async function onSwitchWorkspace(path: string) {
+    if (!path || path === ws?.workspace) return
+    setWsBusy(true); setWsErr('')
+    try {
+      const next = await switchWorkspace(path)
+      setWs(next)
+      const bs = await listBooks()
+      setBooks(bs)
+      // 跳回首页：原来那本书通常不属于新工作区，留在它的页面上只会看到一片空
+      navigate('/')
+    } catch (e) {
+      setWsErr((e as Error).message)
+    } finally {
+      setWsBusy(false)
+    }
+  }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <h1><NavLink to="/">open-guji-cv 控制台</NavLink></h1>
+        {ws && ws.available.length > 0 && (
+          <label className="sidebar-book-select muted">工作区
+            <select
+              value={ws.workspace ?? ''}
+              disabled={wsBusy}
+              onChange={(e) => onSwitchWorkspace(e.target.value)}
+            >
+              {ws.available.map((w) => (
+                <option key={w.path} value={w.path}>
+                  {w.name}{w.books.length ? `（${w.books.length} 册）` : '（空）'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {wsErr && <p className="sidebar-ws-err">{wsErr}</p>}
         <label className="sidebar-book-select muted">册
           <select value={book ?? ''} onChange={(e) => e.target.value && navigate(`/${e.target.value}/`)}>
             <option value="" disabled>选一本书</option>

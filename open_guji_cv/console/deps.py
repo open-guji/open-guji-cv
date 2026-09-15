@@ -56,6 +56,22 @@ def set_roots(*, feedback: Path | None = None, batches: Path | None = None,
     _log = _batches = _gold = _verdicts = None
 
 
+def reset_roots() -> None:
+    """把四个根清回「按环境变量解析」并重建单例——**热切工作区**用（2026-09-15）。
+
+    与 `set_roots()` 的区别：那个是「显式指定某个根」，这个是「忘掉显式指定，
+    回去问 `core/workspace.py`」。切工作区改的是 `GUJI_WORKSPACE`，而这几个
+    Store 构造时就把根算进了实例，不重建就还拿着上一个工作区的路径——
+    产物、人裁批次、裁决表会安静地读错地方。
+
+    `runner()` 不重建：worker 线程带着队列，重建等于把在跑/排队的任务丢了。
+    切换入口（routers/workspace.py）在有任务跑的时候直接拒绝，不走到这里。"""
+    global _log, _batches, _gold, _verdicts
+    for k in _roots:
+        _roots[k] = None
+    _log = _batches = _gold = _verdicts = None
+
+
 def runner() -> JobRunner:
     """任务队列。自带单 worker 线程，一个进程只能有一个。"""
     global _runner

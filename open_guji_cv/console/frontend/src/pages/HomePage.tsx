@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listBooks } from '../api/registry'
+import { WORKSPACE_CHANGED } from '../api/workspace'
 import type { Book } from '../types/registry'
 
 // D2：首页——最近在整理的书 + 最近进展（方案 §二 `/`）。
@@ -10,7 +11,14 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    listBooks().then(setBooks).catch((e) => setError(String(e)))
+    const load = () => {
+      setBooks(null); setError(null)
+      listBooks().then(setBooks).catch((e) => setError(String(e)))
+    }
+    load()
+    // 热切工作区之后册列表整个换了一套，这张卡要跟着重取
+    window.addEventListener(WORKSPACE_CHANGED, load)
+    return () => window.removeEventListener(WORKSPACE_CHANGED, load)
   }, [])
 
   return (
@@ -20,7 +28,9 @@ export function HomePage() {
       {!books && !error && <p className="muted">加载中…</p>}
       {books && (
         <ul className="book-list">
-          {books.map((b) => (
+          {/* 只列属于当前工作区的册：册列表是「引擎仓 books/ ∪ 工作区 books/」的
+              并集，别的工作区那些册原图不在这儿，页数 0、点进去全空。 */}
+          {books.filter((b) => b.in_workspace !== false).map((b) => (
             <li key={b.id}>
               <Link to={`/${b.id}/`}>{b.id} · {b.title}</Link>
               <span className="muted"> {b.n_pages} 页</span>

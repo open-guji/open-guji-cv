@@ -482,9 +482,14 @@ def test_route_inventory():
 
     2026-09-15 梯次裁决（overview 10 卡）只改了 `GET /api/cutline/cases` 的 `pages` 取值
     （新增 `escalated`），**没有新增路由**，75 不变。
+
+    2026-09-15 工作区热切（用户要求「可以随时切换工作区」）：新增 `workspace.py`
+    2 条——`GET /api/workspace`（当前工作区、各个根、可切换清单）与
+    `POST /api/workspace`（改 `GUJI_WORKSPACE` + 重建进程内 Store，不重启进程；
+    有任务在跑时回 409），75 → 77。
     """
     got = sorted(_endpoints())
-    assert len(got) == 75, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 77, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -551,6 +556,7 @@ def test_route_snapshot():
 
 EXPECTED_ROUTES = [
     "GET /", "GET /api/align-ref/summary", "GET /api/align-ref/{book}/summary",
+    "GET /api/workspace", "POST /api/workspace",
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
