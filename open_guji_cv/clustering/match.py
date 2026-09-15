@@ -90,6 +90,7 @@ class GlyphMatcher:
         self._chars: list[str] = []
         self._patches: list[np.ndarray] = []
         self._feats: list[np.ndarray] = []
+        self._F: np.ndarray | None = None      # _feats 堆成的矩阵缓存（add 时失效）
         self._char_set: set[str] = set()
         # 护栏 1 要不要求「对家的字已经在库里」。
         #
@@ -115,6 +116,7 @@ class GlyphMatcher:
         self._chars.append(char)
         self._patches.append(norm)
         self._feats.append(np.asarray(feat, dtype=np.float32))
+        self._F = None
         self._char_set.add(char)
 
     def extract(self, patches: np.ndarray) -> np.ndarray:
@@ -139,7 +141,11 @@ class GlyphMatcher:
             return MatchResult("diff", None, None, 0.0, 0.0)
         if feat is None:
             feat = self._feature.extract(norm[None, ...])[0]
-        F = np.asarray(self._feats)
+        # 性能（2026-09-14）：库有几万条时 `np.asarray(self._feats)` 每次要把整张特征表重新堆一遍
+        # （一页 179 字位 6.3s，占 Step5-a 43%）。堆一次缓存起来，`add()` 时失效；矩阵内容逐位相同。
+        if self._F is None or self._F.shape[0] != len(self._feats):
+            self._F = np.asarray(self._feats)
+        F = self._F
         sims = F @ np.asarray(feat, dtype=np.float32)
         if exclude_id is not None:
             # 摘自身：把相似度压到最低，排序自然把它甩到末尾。
@@ -190,7 +196,9 @@ class GlyphMatcher:
             if self.guard_needs_partner_in_db:
                 partners = partners & self._char_set
             if partners:                                       # 护栏 1
-                for p in partners:
+                # sorted：frozenset 的迭代顺序随进程哈希种子变，同分（0.0）候选的先后
+                # 原来每次跑都不一样，产物逐字节不可复现（2026-09-14 对比时发现）。
+                for p in sorted(partners):
                     cands.setdefault(p, 0.0)
                 return MatchResult(
                     "unsure", None, None, cov, wmax,
