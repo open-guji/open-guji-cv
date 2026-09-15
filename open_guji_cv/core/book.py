@@ -176,7 +176,20 @@ class BookSpec:
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "font": dict(self.font),
+            "pipeline": self.default_pipeline_id(),
         }
+
+    def default_pipeline_id(self) -> str:
+        """这册书默认走哪条管线。控制台按它选后端 Step id 与状态矩阵的管线
+        （2026-09-15）：前端此前硬编码 `keben_body_v2`，现代印刷本在台上
+        每一步都显示「没有产物」——它的产物在 `line_detect/column_crop/
+        row_segment_runs` 名下。循环导入：`core.pipeline` 反过来要 `Book`，
+        所以在方法里 import。"""
+        try:
+            from .pipeline import default_pipeline_id
+            return default_pipeline_id(self)
+        except Exception:
+            return "keben_body_v2"
 
 
 def _repo_root() -> Path:
