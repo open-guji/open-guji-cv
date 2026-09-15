@@ -125,7 +125,7 @@ def _worker_render(char: str):
     canon = _WORKER["r"].render(char)
     if canon is None:
         return None
-    norm = normalize_patch(canon)
+    norm = normalize_patch(canon, strip_lines=False)    # 字体没有版框，细横不是界行
     if not norm.any():
         return None
     return (char, encode_png(canon), float((canon < 128).mean()), norm)
@@ -218,7 +218,7 @@ def _worker_render_serial(renderer, char):
     canon = renderer.render(char)
     if canon is None:
         return None
-    norm = normalize_patch(canon)
+    norm = normalize_patch(canon, strip_lines=False)
     if not norm.any():
         return None
     return (char, encode_png(canon), float((canon < 128).mean()), norm)

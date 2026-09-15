@@ -187,12 +187,12 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     cur = db.conn.cursor()
     if norm_stroke:
         from .normalize import normalize_patch
-        sql = """SELECT g.char, e.instance_id, i.patch_png
+        sql = """SELECT g.char, e.instance_id, i.patch_png, g.edition_tag
                  FROM exemplars e
                  JOIN glyphs g ON g.glyph_id = e.glyph_id
                  JOIN instances i ON i.instance_id = e.instance_id"""
     else:
-        sql = """SELECT g.char, e.instance_id, d.data
+        sql = """SELECT g.char, e.instance_id, d.data, g.edition_tag
                  FROM exemplars e
                  JOIN glyphs g ON g.glyph_id = e.glyph_id
                  JOIN derived d ON d.instance_id = e.instance_id AND d.kind='norm'"""
@@ -200,12 +200,14 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     if edition:
         sql += " WHERE g.edition_tag = ?"
         args = (edition,)
-    for char, iid, data in cur.execute(sql, args).fetchall():
+    for char, iid, data, ed in cur.execute(sql, args).fetchall():
         if norm_stroke:
             canon = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
             if canon is None:
                 continue
-            norm = normalize_patch(canon, stroke_width=norm_stroke)
+            # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）
+            norm = normalize_patch(canon, stroke_width=norm_stroke,
+                                   strip_lines=not str(ed).startswith("font:"))
         else:
             norm = _unpng(data)
         matcher.add(iid, char, norm)
