@@ -340,6 +340,7 @@ class CutPointCandidates:
     chosen_by: str | None = None   # rule（现役规则）| unet（裁判改选）| human（裁决表收敛）
     escalate: bool = False         # L2′：所选切法与 U-Net 分歧块 ≥ ESCALATE_BLOB，本层拿不准，交下游再审（不改选法）
     escalate_reason: str | None = None
+    origin: str = "touching"       # touching（直线穿墨的粘连切点）| split_suspect（L0′：直线干净但一矮一高且矮格墨满）
 
 
 @dataclass
@@ -970,6 +971,14 @@ touching-cuts 评测口径 ≤3 / ≤5 / ≤10 px，取最严一档。"""
 
 
 RESOLVED_SEAM_TOL = 4.0
+
+SPLIT_SHORT, SPLIT_TALL, SPLIT_MASS_MIN = 0.79, 1.05, 0.10
+"""L0′「切进字里」嫌疑（2026-09-15，10 卡）：直线格线不穿墨、看着干净，但相邻两格一个 ≤0.79·中位格高、
+一个 ≥1.05·中位格高，且**矮格的绝对墨量**（墨像素 ÷ 中位格高×格宽）≥0.10——矮格里装的不是「一」「二」那种扁字
+而是被劈开的半个字。判据与门槛照搬 `eval/touching.split_char_boundaries`（47 条人裁金标标定：ok 0.034~0.066、
+moved 0.105~0.195）。vol02 全书 23089 条干净 char–char 格线里一高一矮的 109 条（0.6/页），再经墨量过滤更少。
+这类格线以前根本不建切点（文言 vol02:163:1:6：DP 把言的顶横切给文，直线落在言字内部的空隙上，全链路视而不见）；
+现在建一个只有直线的切点并过 U-Net 探针，分歧大就 `escalate`，选法不改。"""
 """`seam_ok` 收敛的折线护栏：候选折线与人当时看到的折线（裁决里的 polyline）逐 x 最大偏差
 超过这个像素数就不是同一条缝。2026-09-14 vol02 p33 c9 s18 实锤：人确认的是窄走廊（偏 12px），
 重跑后规则改选了宽走廊（偏 21px、直线 y 没变），`RESOLVED_CHOSEN` 按「现役选中」收敛就把宽走廊
@@ -1227,12 +1236,79 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for c in cells:
             by_pos.setdefault(_slot_to_pos_local(c.slot, n_raised), []).append(c)
         cut_cands: list[CutPointCandidates] = []
+        char_hs = sorted(c.y1 - c.y0 for c in cells if c.kind == "char" and c.sub is None)
+        med_h = float(char_hs[len(char_hs) // 2]) if char_hs else 0.0
+        content_w = max(1, x_hi - x_lo)
+
+        def _split_suspect(u: Cell, d: Cell) -> bool:
+            """L0′ 嫌疑：一矮一高，且矮格墨满（见 SPLIT_* 常量）。"""
+            if med_h <= 0:
+                return False
+            hu, hd = u.y1 - u.y0, d.y1 - d.y0
+            if hu <= SPLIT_SHORT * med_h and hd >= SPLIT_TALL * med_h:
+                short = u
+            elif hd <= SPLIT_SHORT * med_h and hu >= SPLIT_TALL * med_h:
+                short = d
+            else:
+                return False
+            a, b = max(0, int(round(short.y0))), min(h, int(round(short.y1)))
+            if b <= a:
+                return False
+            mass = float(ink_bin[a:b].sum()) / (med_h * content_w)
+            return mass >= SPLIT_MASS_MIN
+
+        def _resolve_and_probe(cands, chosen, up_c, dn_c, k_):
+            """第 4 步人裁回流 + 第 5 步 U-Net 探针/裁判；两类切点（粘连 / L0′ 嫌疑）共用。"""
+            chosen_by = "rule"
+            n_before = len(cands)
+            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up_c.slot),
+                                                y_line=float(bounds[k_]), x_lo=int(x_lo))
+            if len(cands) < n_before:
+                chosen_by = "human"
+            escalate, escalate_reason = False, None
+            if cut_judge is not None and cands:
+                res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
+                                       float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)
+                if res is not None and len(res[0]) == len(cands):
+                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN
+                    sc, dis = res
+                    for c, s_, d_ in zip(cands, sc, dis):
+                        c.agree = s_
+                        c.dis_unet = int(d_)
+                    if len(cands) >= 2:
+                        best = max(range(len(cands)), key=lambda i: (sc[i], i == chosen))
+                        if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN and chosen_by != "human":
+                            chosen = best
+                            chosen_by = "unet"          # 只有真改选了才记 unet
+                    if chosen_by != "human" and dis[chosen] >= ESCALATE_BLOB:
+                        escalate = True
+                        escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
+            return cands, chosen, chosen_by, escalate, escalate_reason
+
         for k in range(1, n_slots):
             up, dn = by_pos.get(k, []), by_pos.get(k + 1, [])
             if len(up) != 1 or len(dn) != 1 or up[0].kind != "char" or dn[0].kind != "char":
                 continue
             y = int(round(bounds[k]))
-            if not (0 <= y < h) or not ink_bin[y].any():
+            if not (0 <= y < h):
+                continue
+            if not ink_bin[y].any():
+                # L0′（2026-09-15）：干净格线里的「切进字里」嫌疑也建切点（只有直线一条）并过探针，
+                # 其余干净格线仍旧不建切点。见 SPLIT_* 常量的说明。
+                if not _split_suspect(up[0], dn[0]):
+                    continue
+                cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
+                cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k)
+                if escalate_reason:
+                    escalate_reason = "split_suspect " + escalate_reason
+                cut_cands.append(CutPointCandidates(k=k, y=float(bounds[k]),
+                                                    slot_above=up[0].slot, slot_below=dn[0].slot,
+                                                    candidates=cands, chosen=chosen, chosen_by=chosen_by,
+                                                    escalate=escalate, escalate_reason=escalate_reason,
+                                                    origin="split_suspect"))
+                if cands[chosen].kind != "straight":   # 人裁收敛到折线时照写 seam_*
+                    up[0].seam_bottom = cands[chosen].y
+                    dn[0].seam_top = cands[chosen].y
                 continue
             # 1) 直线永远是候选（dev_max=0，也是不切时的兜底）
             cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
@@ -1306,41 +1382,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     and cands[1].seam_ink == 0 and cands[1].dev_max < 10):
                 cands = [cands[1]]
                 chosen = 0
-            chosen_by = "rule"
-            # 4) 人裁回流：见 `_apply_resolved_cut` docstring。**必须在裁判之前**——`seam_ok` 类裁决的含义是
-            # 「人当时看到的现役折线就对」，`RESOLVED_CHOSEN` 收敛到 `cands[chosen]`；若裁判先改了 chosen，
-            # 收敛到的就是裁判选的那条而不是人确认过的那条（2026-09-14 vol02 p33 c9 s18 实锤：人确认窄走廊，
-            # 裁判改成宽走廊，seam_ok 反而把宽走廊当成了人裁）。人裁先落地，裁判只在人没裁过的切点上出手。
-            n_before = len(cands)
-            cands, chosen = _apply_resolved_cut(cands, chosen, (resolved_cuts or {}).get(up[0].slot),
-                                                y_line=float(bounds[k]), x_lo=int(x_lo))
-            if len(cands) < n_before:
-                chosen_by = "human"
-            # 5) U-Net 裁判（2026-09-14，`utils/cut_select.py`）：池里还剩 ≥2 条（人没裁过）时，让类别无关
-            # 归属网络给每条候选打「置信加权一致率」，最优比现役选中高出 ≥ `JUDGE_MARGIN` 才改选。
-            # 放在第 3 步之后：评测（05 卡实验七 S1）就是在收缩后的池上做的——现役已收成单条窄走廊的不再让裁判翻。
-            # 裁判判不了（返回 None）或没过门槛就原样按规则走（`agree` 已填，审计能看出裁判跑过）。
-            # L2′ 分歧探针（2026-09-15，10 卡）：**所有**粘连切点（含单候选、含人裁收敛后的）都过一次 U-Net，
-            # 记下每条候选的一致率与分歧块；池 ≥2 时按门槛改选（L2）；最终所选的分歧块 ≥ ESCALATE_BLOB 就标
-            # `escalate`（人裁过的不标——人是终审）。只记录不改选法：拿不准的交下游再审，不在这里早下结论。
-            escalate, escalate_reason = False, None
-            if cut_judge is not None and cands:
-                res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up[0].y0)), int(round(dn[0].y1)),
-                                       float(bounds[k]), [c.y for c in cands], ink_threshold=ink_threshold)
-                if res is not None and len(res[0]) == len(cands):
-                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN
-                    sc, dis = res
-                    for c, s_, d_ in zip(cands, sc, dis):
-                        c.agree = s_
-                        c.dis_unet = int(d_)
-                    if len(cands) >= 2:
-                        best = max(range(len(cands)), key=lambda i: (sc[i], i == chosen))
-                        if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN and chosen_by != "human":
-                            chosen = best
-                            chosen_by = "unet"          # 只有真改选了才记 unet
-                    if chosen_by != "human" and dis[chosen] >= ESCALATE_BLOB:
-                        escalate = True
-                        escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
+            # 4) 人裁回流（必须在裁判之前——`seam_ok` 收敛的是人当时看到的现役折线；2026-09-14 vol02 p33 实锤）
+            # 5) L2 裁判 + L2′ 分歧探针（2026-09-15，10 卡）：所有粘连切点（含单候选、含人裁收敛后的）都过一次
+            #    U-Net，记一致率与分歧块；池 ≥2 时按门槛改选；所选分歧块 ≥ ESCALATE_BLOB 标 `escalate`（人裁过的
+            #    不标）。只记录不改选法：拿不准的交下游再审。两步都在 `_resolve_and_probe` 里，与 L0′ 嫌疑切点共用。
+            cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, chosen, up[0], dn[0], k)
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
