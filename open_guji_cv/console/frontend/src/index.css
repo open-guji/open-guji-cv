@@ -141,3 +141,11 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 
 .reflow-stale { font-size: .78rem; color: var(--zhu); background: var(--zhu-soft);
   border-radius: var(--r); padding: .5rem .7rem; margin-bottom: 1rem; }
+
+/* 工作区切换失败的提示（热切被 409 挡下时会出现） */
+.sidebar-ws-err {
+  margin: .2rem 0 .4rem;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #a8342a;
+}
