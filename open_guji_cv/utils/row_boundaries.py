@@ -325,6 +325,7 @@ class SeamCandidate:
     seam_ink: int = 0
     dev_max: int = 0
     agree: float | None = None     # U-Net 裁判给的一致率 [0,1]（utils/cut_select.py）；没过裁判为 None
+    dis_unet: int | None = None    # 与 U-Net 归属分歧的最大连通块面积 px（L2′ 升级门槛看它）
 
 
 @dataclass
@@ -337,6 +338,8 @@ class CutPointCandidates:
     candidates: list[SeamCandidate] = field(default_factory=list)
     chosen: int | None = None
     chosen_by: str | None = None   # rule（现役规则）| unet（裁判改选）| human（裁决表收敛）
+    escalate: bool = False         # L2′：所选切法与 U-Net 分歧块 ≥ ESCALATE_BLOB，本层拿不准，交下游再审（不改选法）
+    escalate_reason: str | None = None
 
 
 @dataclass
@@ -1317,20 +1320,31 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             # 归属网络给每条候选打「置信加权一致率」，最优比现役选中高出 ≥ `JUDGE_MARGIN` 才改选。
             # 放在第 3 步之后：评测（05 卡实验七 S1）就是在收缩后的池上做的——现役已收成单条窄走廊的不再让裁判翻。
             # 裁判判不了（返回 None）或没过门槛就原样按规则走（`agree` 已填，审计能看出裁判跑过）。
-            if cut_judge is not None and len(cands) >= 2:
-                sc = cut_judge.scores(col_gray, x_lo, x_hi, int(round(up[0].y0)), int(round(dn[0].y1)),
-                                      float(bounds[k]), [c.y for c in cands], ink_threshold=ink_threshold)
-                if sc is not None and len(sc) == len(cands):
-                    from .cut_select import JUDGE_MARGIN
-                    for c, s_ in zip(cands, sc):
+            # L2′ 分歧探针（2026-09-15，10 卡）：**所有**粘连切点（含单候选、含人裁收敛后的）都过一次 U-Net，
+            # 记下每条候选的一致率与分歧块；池 ≥2 时按门槛改选（L2）；最终所选的分歧块 ≥ ESCALATE_BLOB 就标
+            # `escalate`（人裁过的不标——人是终审）。只记录不改选法：拿不准的交下游再审，不在这里早下结论。
+            escalate, escalate_reason = False, None
+            if cut_judge is not None and cands:
+                res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up[0].y0)), int(round(dn[0].y1)),
+                                       float(bounds[k]), [c.y for c in cands], ink_threshold=ink_threshold)
+                if res is not None and len(res[0]) == len(cands):
+                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN
+                    sc, dis = res
+                    for c, s_, d_ in zip(cands, sc, dis):
                         c.agree = s_
-                    best = max(range(len(cands)), key=lambda i: (sc[i], i == chosen))
-                    if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN:
-                        chosen = best
-                        chosen_by = "unet"          # 只有真改选了才记 unet
+                        c.dis_unet = int(d_)
+                    if len(cands) >= 2:
+                        best = max(range(len(cands)), key=lambda i: (sc[i], i == chosen))
+                        if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN and chosen_by != "human":
+                            chosen = best
+                            chosen_by = "unet"          # 只有真改选了才记 unet
+                    if chosen_by != "human" and dis[chosen] >= ESCALATE_BLOB:
+                        escalate = True
+                        escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
             cp = CutPointCandidates(k=k, y=float(bounds[k]),
                                     slot_above=up[0].slot, slot_below=dn[0].slot,
-                                    candidates=cands, chosen=chosen, chosen_by=chosen_by)
+                                    candidates=cands, chosen=chosen, chosen_by=chosen_by,
+                                    escalate=escalate, escalate_reason=escalate_reason)
             cut_cands.append(cp)
             if cands[chosen].kind != "straight":   # 现役行为：选中折线才写 seam_*
                 up[0].seam_bottom = cands[chosen].y

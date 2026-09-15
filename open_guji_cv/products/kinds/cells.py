@@ -47,6 +47,7 @@ class SeamCandidate(BaseModel):
     seam_ink: int = 0              # 这条线穿过的墨量（下游打分可用，也便于审计）
     dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
     agree: float | None = None     # U-Net 裁判的置信加权一致率 [0,1]（utils/cut_select.py）；没过裁判为 None
+    dis_unet: int | None = None    # 与 U-Net 归属分歧的最大连通块 px（2026-09-15 L2′ 升级门槛看它）
 
 
 class CutPointCandidates(BaseModel):
@@ -61,6 +62,8 @@ class CutPointCandidates(BaseModel):
     candidates: list[SeamCandidate] = Field(default_factory=list)
     chosen: int | None = None      # 现役选中的候选下标；None = 这个切点没有候选
     chosen_by: str | None = None   # 谁选的：rule（现役规则）| unet（裁判改选，2026-09-14 起）| human（裁决表收敛）
+    escalate: bool = False         # L2′（2026-09-15）：所选切法与 U-Net 分歧块 ≥100px，本层拿不准，交下游再审；顺序闸按它出卡
+    escalate_reason: str | None = None
 
 
 class ColumnCells(BaseModel):

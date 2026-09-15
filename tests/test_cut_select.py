@@ -48,15 +48,26 @@ class _FakeJudge:
         self.prefer = prefer
         self.calls = 0
 
-    def scores(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
+    def __init__(self, prefer: dict[str, float] | None, dis: dict[str, int] | None = None):  # noqa: F811
+        self.prefer = prefer
+        self.dis = dis or {}
+        self.calls = 0
+
+    def assess(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
         self.calls += 1
         if self.prefer is None:
             return None
         # seams[i] 为 None = 直线；其余按长度识别不了 kind，这里靠调用方候选顺序：直线恒在池首
-        out = []
-        for i, sm in enumerate(seams):
-            out.append(self.prefer["straight"] if sm is None else self.prefer["seam"])
-        return out
+        sc, dis = [], []
+        for sm in seams:
+            key = "straight" if sm is None else "seam"
+            sc.append(self.prefer[key])
+            dis.append(self.dis.get(key, 0))
+        return sc, dis
+
+    def scores(self, *a, **kw):
+        r = self.assess(*a, **kw)
+        return None if r is None else r[0]
 
 
 def _cut(r, slot_above=5):
@@ -178,7 +189,7 @@ def test_seam_ok_resolution_collapses_to_the_rule_seam_not_the_judge_choice():
                           resolved_cuts={5: ResolvedCut(RESOLVED_CHOSEN)})
     cp = _cut(r)
     assert len(cp.candidates) == 1 and cp.candidates[0].y == rule_seam and cp.chosen_by == "human"
-    assert cp.candidates[0].agree is None                       # 人裁过的切点裁判根本没跑
+    assert cp.escalate is False                                 # 人是终审：探针照记 agree/dis_unet，但不升级
 
 
 def test_seam_ok_with_polyline_collapses_to_the_matching_seam_not_the_current_choice():
@@ -199,3 +210,45 @@ def test_seam_ok_with_polyline_collapses_to_the_matching_seam_not_the_current_ch
     cands, chosen = _apply_resolved_cut(pool, chosen=2, resolved=ResolvedCut(RESOLVED_CHOSEN), x_lo=10)
     assert [c.kind for c in cands] == ["seam_wide"]
 
+
+def test_escalate_flag_set_when_chosen_disagrees_with_unet_by_a_big_blob():
+    """L2′：所选切法与 U-Net 分歧块 ≥ ESCALATE_BLOB → escalate=True，但**选法不变**（只记录，交下游再审）。"""
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+    img = _touching_column()
+    j = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"seam": ESCALATE_BLOB + 50, "straight": 300})
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j)
+    cp = _cut(r)
+    assert cp.chosen == 1 and cp.chosen_by == "rule"            # 规则选的折线没被改
+    assert cp.escalate is True and "dis_unet=" in (cp.escalate_reason or "")
+    assert [c.dis_unet for c in cp.candidates] == [300, ESCALATE_BLOB + 50]
+    j2 = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"seam": 10, "straight": 300})
+    cp2 = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j2))
+    assert cp2.escalate is False and cp2.escalate_reason is None
+
+
+def test_single_candidate_cut_is_also_probed_and_can_escalate():
+    """单候选（例：文言 vol02:163:1:6，池里只有直线）也要过探针：U-Net 说差一大块就升级，选法仍是直线。"""
+    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+    # 用人裁把池收成单候选之外的办法：monkeypatch 让缝搜索不产出折线 → 只剩直线
+    img = _touching_column()
+    j = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"straight": ESCALATE_BLOB + 1})
+    import open_guji_cv.utils.seam as seam_mod
+    orig = seam_mod.find_seam
+    try:
+        seam_mod.find_seam = lambda ink, y, band=20, **kw: __import__("numpy").full(ink.shape[1], y, dtype=int)
+        r = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j)
+    finally:
+        seam_mod.find_seam = orig
+    cp = _cut(r)
+    assert len(cp.candidates) == 1 and cp.candidates[0].kind == "straight"
+    assert cp.candidates[0].dis_unet == ESCALATE_BLOB + 1 and cp.escalate is True
+
+
+def test_human_resolved_cut_never_escalates():
+    img = _touching_column()
+    j = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"straight": 999, "seam": 999})
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j, resolved_cuts={5: "straight"})
+    cp = _cut(r)
+    assert cp.chosen_by == "human" and cp.escalate is False
+    assert cp.candidates[0].dis_unet == 999                      # 但探针结果照记，供审计

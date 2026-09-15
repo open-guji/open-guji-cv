@@ -147,7 +147,9 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
     except FileNotFoundError:
         pass    # 没有事件日志（新工作区）不该让整个审查面板挂掉
 
-    # 产物里哪些切点是多候选的（key = (页, 列, 上格格位) → 候选条数）
+    # 产物里哪些切点要挡（key = (页, 列, 上格格位) → 候选条数）：多候选的，以及 L2′ 标了 `escalate`
+    # 的（2026-09-15，10 卡：所选切法与 U-Net 分歧块 ≥100px——哪怕只有一条候选，算法也没把握，
+    # 交人再审；用户原则「拿不准不早下结论」）。
     multi: dict = {}
     for pg in pgs:
         cells = st.read(book, "row_segment", page_key(pg), "cells")
@@ -155,15 +157,15 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
             continue
         for cc in cells.columns:
             for cp in (getattr(cc, "cut_candidates", None) or []):
-                if len(cp.candidates) >= 2:
-                    multi[(pg, cc.col, cp.slot_above)] = len(cp.candidates)
+                if len(cp.candidates) >= 2 or getattr(cp, "escalate", False):
+                    multi[(pg, cc.col, cp.slot_above)] = max(len(cp.candidates), 1)
 
     out = []
     for c in cases:                     # 只走面板真能出卡的那些
         if c["id"] in done:
             continue                    # 已经 review 过了
         n = multi.get((c["page"], c["col"], c["slot_above"]))
-        if not n:                       # 单一候选 = 算法有把握，不拦
+        if not n:                       # 单一候选且未升级 = 算法有把握，不拦
             continue
         c = {**c, "n_candidates": n}    # 挂候选条数，供 cut_pending 拼说明
         out.append(c)
