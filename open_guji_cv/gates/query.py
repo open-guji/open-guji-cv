@@ -47,6 +47,11 @@ GATES: dict[str, tuple[str, str]] = {
     "column_gate": ("column_gate", "gate_manifest"),
     "row_segment_gate": ("row_segment_gate", "row_segment_gate_manifest"),
     "border_detect_gate": ("border_detect_gate", "border_detect_gate_manifest"),
+    # 现代印刷链的闸1。Step id 不同（line_detect_gate），产物 kind 与刻本链共用
+    # 同一个 `border_detect_gate_manifest`（见 gates/line_detect_gate.py 的
+    # produces）。没登记在这儿时控制台 Step1 页拿不到页型统计，整页显示
+    # 「无产物 80」——产物明明在（2026-09-15）。
+    "line_detect_gate": ("line_detect_gate", "border_detect_gate_manifest"),
 }
 
 

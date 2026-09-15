@@ -11,6 +11,11 @@ import { ProductViewer } from '../components/ProductViewer'
 import { useDeepLink } from '../hooks/useDeepLink'
 import { usePages } from '../hooks/usePages'
 import type { RulerRow } from '../types/evals'
+import type { Book } from '../types/registry'
+import { getBook } from '../api/registry'
+import { fetchStatus } from '../api/status'
+import { backendIdFor, findStep } from '../steps'
+import type { TypeBreakdownItem } from '../components/common/ProgressGatePanel'
 
 // D3：Step3 逐字切分。切线（v1 cutline tab）与夹注（v1 jiazhu tab）按方案 §三
 // 都归 Step3——都是 row_segment 的一部分（jiazhu_split 是 Step3 的子模块，
@@ -37,6 +42,37 @@ export function Step3Page() {
     setPageSel(loadSavedPageRange(STEP_ID, book))
   }
   const [rulers, setRulers] = useState<RulerRow[] | null>(null)
+  const [bookMeta, setBookMeta] = useState<Book | null>(null)
+  // 现代印刷链（modern_body）这一步叫 row_segment_runs，而且**没有闸3**
+  // ——它是墨段 DP 切分，不走刻本那套格数判据。写死 row_segment_gate 会让
+  // 整块总览显示「无产物 80」，写死 row_segment 会让产物查看全空（2026-09-15）。
+  const isModern = bookMeta?.edition === 'modern'
+  const step3Id = backendIdFor(findStep('step3'), bookMeta?.edition) ?? 'row_segment'
+
+  const [modernCounts, setModernCounts] = useState<TypeBreakdownItem[]>([])
+
+  useEffect(() => {
+    if (!book) { setBookMeta(null); return }
+    getBook(book).then((b) => setBookMeta(b ?? null)).catch(() => setBookMeta(null))
+  }, [book])
+
+  // 现代链这一步没有闸，总览就没有「过闸/被拦」可报。改报逐页产物状态
+  // （状态矩阵里现成的 fresh/stale/missing），至少让人看得出跑到哪了，
+  // 而不是一张空卡片。
+  useEffect(() => {
+    if (!book || !isModern) { setModernCounts([]); return }
+    fetchStatus(book, bookMeta?.pipeline || 'modern_body', 'all')
+      .then((st) => {
+        const c = st.steps[step3Id]?.counts
+        setModernCounts(c ? [
+          { label: '产物最新（fresh）', count: c.fresh },
+          { label: '产物过期（stale）', count: c.stale },
+          { label: '无产物（missing）', count: c.missing },
+          { label: '失败（failed）', count: c.failed },
+        ] : [])
+      })
+      .catch(() => setModernCounts([]))
+  }, [book, isModern, step3Id, bookMeta?.pipeline])
 
   useEffect(() => {
     if (!book) { setRulers(null); return }
@@ -66,14 +102,17 @@ export function Step3Page() {
       <ProgressGatePanel
         book={book}
         title="总览"
-        gateId="row_segment_gate"
+        gateId={isModern ? undefined : 'row_segment_gate'}
         pages={pageSel}
-        customMetrics={customMetrics}
+        customMetrics={isModern ? [] : customMetrics}
+        typeBreakdown={isModern ? modernCounts : undefined}
       />
-      <CutlinePanel book={book} />
+      {/* 切线／抬头／夹注三块都是刻本链的判据（格线穿字、抬头框、双行小注切分），
+          现代印刷本没有这些形态，显示出来只会是三块空面板。 */}
+      {!isModern && <><CutlinePanel book={book} />
       <HeadRaiseCard book={book} />
-      <JiazhuPanel book={book} />
-      <ProductViewer book={book} step="row_segment" pages={pages} />
+      <JiazhuPanel book={book} /></>}
+      <ProductViewer book={book} step={step3Id} pages={pages} />
     </div>
   )
 }

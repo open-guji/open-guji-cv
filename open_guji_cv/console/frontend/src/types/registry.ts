@@ -16,6 +16,8 @@ export interface Book {
   edition?: string
   /** 这册书默认走的管线 id（后端 core/book.py::default_pipeline_id）。 */
   pipeline?: string
+  /** 原图在不在当前 GUJI_WORKSPACE 下。false = 换个工作区才看得到它的数据。 */
+  in_workspace?: boolean
   dev_set: number[]
   sets: Record<string, number[]>
   notes: string

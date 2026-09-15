@@ -10,6 +10,9 @@ import { ProductViewer } from '../components/ProductViewer'
 import { usePages } from '../hooks/usePages'
 import type { GateSummaryResponse } from '../types/evals'
 import type { BorderReviewKind } from '../types/borderReview'
+import type { Book } from '../types/registry'
+import { getBook } from '../api/registry'
+import { gate1IdFor } from '../steps'
 
 // Step1 边框与界行探测。裁决台（列探测/抬头/外框外延）用户 2026-09-11 定「以后
 // 完全不走 artifact，都走控制台」后从 scripts/build_border_gold_reviews.py
@@ -57,11 +60,20 @@ export function Step1Page() {
   }
   const [typeFilter, setTypeFilter] = useState<TypeFilterValue>('all')
   const [gateSummary, setGateSummary] = useState<GateSummaryResponse | null>(null)
+  const [bookMeta, setBookMeta] = useState<Book | null>(null)
+  // 闸1 的 step id 分链（刻本 border_detect_gate / 现代 line_detect_gate），
+  // 所以要先知道这册书是什么版式再去要汇总。
+  const gate1 = gate1IdFor(bookMeta?.edition)
+
+  useEffect(() => {
+    if (!book) { setBookMeta(null); return }
+    getBook(book).then((b) => setBookMeta(b ?? null)).catch(() => setBookMeta(null))
+  }, [book])
 
   useEffect(() => {
     if (!book) { setGateSummary(null); return }
-    fetchGateSummary(book, 'border_detect_gate', pageSel).then(setGateSummary).catch(() => setGateSummary(null))
-  }, [book, pageSel])
+    fetchGateSummary(book, gate1, pageSel).then(setGateSummary).catch(() => setGateSummary(null))
+  }, [book, pageSel, gate1])
 
   const skipPages = gateSummary
     ? gateSummary.pages.filter((p) => p.page_type_policy === 'skip').map((p) => p.page)
@@ -102,7 +114,7 @@ export function Step1Page() {
       <ProgressGatePanel
         book={book}
         title="总览"
-        gateId="border_detect_gate"
+        gateId={gate1}
         pages={pageSel}
         typeBreakdown={typeBreakdown}
       />

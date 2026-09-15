@@ -1,9 +1,12 @@
 import { useParams } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ProductViewer } from '../components/ProductViewer'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { usePages } from '../hooks/usePages'
+import { getBook } from '../api/registry'
+import type { Book } from '../types/registry'
+import { backendIdFor, findStep } from '../steps'
 
 const STEP_ID = 'step2'
 
@@ -29,11 +32,21 @@ export function Step2Page() {
     setPageSel(loadSavedPageRange(STEP_ID, book))
   }
   const pages = usePages(book, pageSel)
+  const [bookMeta, setBookMeta] = useState<Book | null>(null)
+  const step2Id = backendIdFor(findStep('step2'), bookMeta?.edition) ?? 'column_warp'
+
+  useEffect(() => {
+    if (!book) { setBookMeta(null); return }
+    getBook(book).then((b) => setBookMeta(b ?? null)).catch(() => setBookMeta(null))
+  }, [book])
 
   return (
     <div>
       <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
       <ProgressGatePanel book={book} title="总览" gateId="column_gate" pages={pageSel} />
+      {/* 闸2 两条链共用，但**列窗口产物**不是：刻本 column_warp / 现代 column_crop。
+          这里原来看的是 column_gate（闸的判定），看不到列窗口本身（2026-09-15）。 */}
+      <ProductViewer book={book} step={step2Id} pages={pages} />
       <ProductViewer book={book} step="column_gate" pages={pages} />
     </div>
   )
