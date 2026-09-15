@@ -120,4 +120,9 @@
   （學亦、曾公、臺釐、修集、文言）。两边瓶颈都是 U-Net 在真数据上的准头。
 - 正在跑 `finetune_unet_gold.py`（按页 5 折，从 v2 起微调 15 轮 + 等量合成对混训，overlap 不进训练），日志 `out/B_unet_ft.log`，
   折外结果 → `out/unet_ft/`，折模型 `D:/data/touch_synth/models/ft/fold{k}.pt`。GPU 占用中，约 15 分钟。
+- 17:3x（B）真金标五折微调结果（`out/unet_ft/`）：折外 U-Net px 20.2→18.2、blob≥60 7.1%→5.8%、**blob≥150 1.3%→1.3% 不动**；
+  当裁判 S1 1.6%。残余 10 条几乎没变（426→428…）——微调压不动它们的信念，真数据每类模式只有几例。
+- 17:4x（B）起训 **v3 身份条件 U-Net**（`train_partition_unet_v3.py`）：输入加两通道 = 上/下期望字的字体字形（I.Ming/Jigmo，贴在画布顶/底），
+  从 v2 权重起、合成对训 6 轮、15% 样本抹掉字形通道。日志 `out/B_unet_v3_train.log`，模型 `models/partition_unet_v3.pt`（冒烟版已覆盖，正式版训完覆盖）。
+  评测 `--eval-gold` → `out/unet_v3_cc400/`，带「字形通道置零」消融。GPU 占用约 25 分钟。
 
