@@ -60,6 +60,13 @@ export function backendIdFor(meta: StepMeta | undefined, edition?: string): stri
   return meta.backendIds[0]
 }
 
+/** 闸1（边框界行出口）的 id：两条链的 Step id 不同，产物 kind 同名。
+ * 写死 border_detect_gate 会让现代印刷本的 Step1 页拿不到页型统计，
+ * 整页显示「无产物 80」——产物其实都在（2026-09-15）。 */
+export function gate1IdFor(edition?: string): string {
+  return edition === 'modern' ? 'line_detect_gate' : 'border_detect_gate'
+}
+
 /** 按后端 core/step.py 的 step id（比如 border_detect）反查前端 Step 页面。 */
 export function findStepByBackendId(backendId: string): StepMeta | undefined {
   return STEPS.find((s) => s.backendIds.includes(backendId))

@@ -27,7 +27,17 @@ export function AppLayout() {
         <label className="sidebar-book-select muted">册
           <select value={book ?? ''} onChange={(e) => e.target.value && navigate(`/${e.target.value}/`)}>
             <option value="" disabled>选一本书</option>
-            {books.map((b) => <option key={b.id} value={b.id}>{b.id} · {b.title}</option>)}
+            {/* 册列表是「引擎仓 books/ ∪ 工作区 books/」的并集，于是每个工作区下都会
+                看到别的工作区那些册（原图不在这儿、页数 0、产物全空）。分成两组，
+                不属于本工作区的沉到「其他工作区」里，免得点开一片空白还以为跑挂了。 */}
+            {books.filter((b) => b.in_workspace !== false)
+                  .map((b) => <option key={b.id} value={b.id}>{b.id} · {b.title}</option>)}
+            {books.some((b) => b.in_workspace === false) && (
+              <optgroup label="其他工作区（本工作区无原图）">
+                {books.filter((b) => b.in_workspace === false)
+                      .map((b) => <option key={b.id} value={b.id}>{b.id} · {b.title}</option>)}
+              </optgroup>
+            )}
           </select>
         </label>
         {book ? (

@@ -177,7 +177,25 @@ class BookSpec:
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),
+            "in_workspace": self.in_workspace(),
         }
+
+    def in_workspace(self) -> bool:
+        """这册书的**原图**在不在当前 `GUJI_WORKSPACE` 下。
+
+        `list_books()` 取的是「引擎仓 books/ ∪ 工作区 books/」的并集，于是**每个**
+        工作区下都会看见引擎仓自带的那十册四庫（vol01–vol10），而切到北行日錄工作区
+        后它们的原图并不在那里——页数 0、所有产物全空。控制台的册选择器要能把这类
+        册标出来，否则切完工作区满屏都是点开全空的册（2026-09-15）。
+
+        判据用**原图目录存不存在**，不用「工作区 books/ 有没有这份 yaml」——
+        四庫十册里只有 vol01/vol02 的 yaml 迁进了工作区，vol03–vol10 的 yaml 仍在
+        引擎仓，但原图和产物都在工作区里、是能正常跑的册。按 yaml 判会把这八册
+        误标成「不属于本工作区」。"""
+        try:
+            return self.raw_dir.exists()
+        except Exception:
+            return True
 
     def default_pipeline_id(self) -> str:
         """这册书默认走哪条管线。控制台按它选后端 Step id 与状态矩阵的管线
