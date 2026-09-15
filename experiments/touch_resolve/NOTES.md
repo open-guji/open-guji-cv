@@ -143,4 +143,7 @@
 - 21:5x（B）vol02 1–50 全管线重跑三遍（`out/B_vol02_p1_50_run*.log`），产物已是新版；对比脚本 `compare_rerun.py`（快照在会话临时目录）。
   顺带修了两处人裁回流的坑（人裁先于裁判；seam_ok 按 polyline 收敛，`ResolvedCut.seam_ref`）——`c55ce4adb7`、`031823438d`。
   vol01 / vol02 其余页 / vol03 仍过期。
+- 2026-09-15 00:2x（B）vol02 全书 188 页全部新鲜（日志 `out/B_vol02_all_run{,2,3,4}.log`）。51–188 页对比：裁判改选 193 处，
+  79 条金标 px 55.5→18.8、blob≥150 8.9%→2.5%、10 条改选全变好。另：Step3 DP 向量化 9.7×、库匹配矩阵缓存 2.7×、CLI 套 OCR 开关。
+  00:06 有人起了 `calibrate-font bxrl`（不是 B）。vol01 / vol03 仍过期。
 
