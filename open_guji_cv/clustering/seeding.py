@@ -205,9 +205,11 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
             canon = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
             if canon is None:
                 continue
-            # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）
+            # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）；
+            # 标点条目走等比归一（宽高比是判据，见 normalize.normalize_patch 的 isotropic）。
             norm = normalize_patch(canon, stroke_width=norm_stroke,
-                                   strip_lines=not str(ed).startswith("font:"))
+                                   strip_lines=not str(ed).startswith("font:"),
+                                   isotropic=(char in _PUNCT_CHARS))
         else:
             norm = _unpng(data)
         matcher.add(iid, char, norm)
@@ -216,6 +218,11 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
 
 
 _MATCHER_CACHE: dict[tuple, tuple[GlyphMatcher, set[str]]] = {}
+
+
+#: 标点集合——库里这些字头的条目用等比归一（宽高比是它们的判据）。与
+#: `utils/witness_align.PUNCT` 同一份字面量，改一处要改两处（跨模块不引，避免循环导入）。
+_PUNCT_CHARS = frozenset("，。、；：「」『』（）《》〈〉！？…—·")
 
 
 def cached_matcher_from_db(db_path: str, db_fingerprint: str,

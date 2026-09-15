@@ -27,7 +27,7 @@ SKIP_FLAGS = ("boundary_ink", "truncated", "contaminated", "frame_bars", "bad_se
 
 
 def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_editions: list[str],
-                      edition_tag: str | None = None, kinds=("char",), limit: int | None = None,
+                      edition_tag: str | None = None, kinds=("char", "punct"), limit: int | None = None,
                       products_root: Path | None = None, skip_flags=SKIP_FLAGS,
                       norm_stroke: int | None = None, log=print) -> dict:
     """两阶段：先对全部字位做字体检索（只读，检索缓存稳定），再逐条进库（只写）。
@@ -40,6 +40,15 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     from ..core.spec import cell_key
 
     edition = edition_tag or f"modern:{book.id}"
+    # 标点也播种（2026-09-15）。此前只收 `kind=char`，于是库里一个逗号句号都没有，
+    # 全书 3,572 个标点字位在 Step5-a 全部落进 diff/unsure——覆盖率的最大单项缺口。
+    # 标点的图块 Step4 早就有了（Step3 的 punct 格照样出 patch，只是 cell_type 记成 char），
+    # 缺的只是这道闸放行。**标点必须用等比归一**（`isotropic=True`）：它的宽高比本身就是
+    # 判据（，0.65 / 、1.04 / 。1.00 / ：0.48，方差 ±0.02），默认那 ±20% 各向异性拉伸
+    # 会把判据抹平——实测 `，`/`、` 的间隔从 +0.336 掉到 +0.044。
+    def norm_of(d, img):
+        return normalize_patch(to_canonical(img), stroke_width=norm_stroke,
+                               isotropic=(d.get("cell_kind") == "punct"))
     # 形状证人这一路必须与 Step5-a 用同一把尺子（笔宽归一 `norm_stroke`）。2026-09-15 北行日錄
     # 实锤：不归一时书块 4.6px vs 字体 2.7px，cov 0.6～0.8 量的是粗细，字→宇、旦→且、宣→宜/直
     # 在两套字体下**每个实例**都反，于是 字/旦/宣 一个都没进库，Step5-a 只剩形近字可配——
@@ -77,7 +86,7 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
         if not ln.strip():
             continue
         d = json.loads(ln)
-        if d.get("kind") not in kinds or d.get("cell_kind") != "char":
+        if d.get("kind") not in kinds or d.get("cell_kind") not in ("char", "punct"):
             continue
         fl = cell_flags.get((d["page"], d["col"], d["slot"]), ())
         hit = [f for f in fl if f in bad_flags]
@@ -106,7 +115,7 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
             continue
         png = p.read_bytes()
         g = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
-        norm = normalize_patch(to_canonical(g), stroke_width=norm_stroke)
+        norm = norm_of(d, g)
         ch = d["char"]
         agreed, tops = [], {}
         for ed in font_editions:
