@@ -125,4 +125,8 @@
 - 17:4x（B）起训 **v3 身份条件 U-Net**（`train_partition_unet_v3.py`）：输入加两通道 = 上/下期望字的字体字形（I.Ming/Jigmo，贴在画布顶/底），
   从 v2 权重起、合成对训 6 轮、15% 样本抹掉字形通道。日志 `out/B_unet_v3_train.log`，模型 `models/partition_unet_v3.pt`（冒烟版已覆盖，正式版训完覆盖）。
   评测 `--eval-gold` → `out/unet_v3_cc400/`，带「字形通道置零」消融。GPU 占用约 25 分钟。
+- 18:5x（B）v3（字形贴画布顶/底）结果 `out/unet_v3_cc400/`：label_ok 673 上 px 20.9 / blob≥150 1.6%，**与「字形通道置零」消融完全相同**
+  ——网络没用上字形通道（放得离缝太远、零初始化、合成对靠墨就够分）。合成验证 err 从 14.6 降到 10.7 只是多训了 6 轮。
+- 19:0x（B）改成 **v3a 对齐版**（`--align`）：字形拉伸贴进各自字框（训练用 owner 真框 + 边抖动 ±25%，评测用直线切点两侧墨框），
+  正在训 6 轮并训完自动评测：`out/B_unet_v3a_train.log` → `out/unet_v3a_cc400/`，模型 `models/partition_unet_v3a.pt`。
 
