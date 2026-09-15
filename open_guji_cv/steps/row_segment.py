@@ -7,13 +7,14 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ..core.spec import StepSpec, column_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
+from ..utils.cut_select import ckpt_fingerprint, get_judge
 from ..utils.row_boundaries import effective_body_slots, segment_column
 from ._warpmap import ColumnMapper
 
@@ -27,16 +28,27 @@ class RowSegmentParams(BaseModel):
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
+    cut_judge: str = "unet"              # 候选池裁判：unet（utils/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
+
+    @model_validator(mode="after")
+    def _fill_judge_fingerprint(self):
+        # 与 glyph_match.GlyphMatchParams.db_fingerprint 同一套路：模型是外部可变状态，
+        # 不进指纹的话换了权重产物还显示 fresh。权重缺失时为空串 → 与裁判可用时指纹不同。
+        if self.cut_judge == "unet" and not self.judge_fingerprint:
+            object.__setattr__(self, "judge_fingerprint", ckpt_fingerprint())
+        return self
 
 
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.7", unit="column",
+        id="row_segment", title="Step3 单列文字切分", version="1.8", unit="column",
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
-                   "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam"),
+                   "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
+                   "open_guji_cv.utils.cut_select"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -50,6 +62,8 @@ class RowSegmentStep(Step):
         # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
         from ..feedback.lookup import resolved_cuts as _resolved_cuts
         book_resolved = _resolved_cuts(ctx.book.id)
+        # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
+        judge = get_judge() if p.cut_judge == "unet" else None
         out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
@@ -78,7 +92,7 @@ class RowSegmentStep(Step):
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
                 raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
-                resolved_cuts=col_resolved or None)
+                resolved_cuts=col_resolved or None, cut_judge=judge)
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
@@ -108,9 +122,10 @@ class RowSegmentStep(Step):
                                        CutPointCandidates(
                                            k=cp.k, y=cp.y, slot_above=cp.slot_above,
                                            slot_below=cp.slot_below, chosen=cp.chosen,
+                                           chosen_by=cp.chosen_by,
                                            candidates=[SeamCandidate(
                                                kind=c.kind, y=c.y, seam_ink=c.seam_ink,
-                                               dev_max=c.dev_max) for c in cp.candidates],
+                                               dev_max=c.dev_max, agree=c.agree) for c in cp.candidates],
                                        ) for cp in r.cut_candidates],
                                    **base))
         return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}

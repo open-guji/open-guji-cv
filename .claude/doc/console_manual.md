@@ -343,3 +343,6 @@ drift 档的「只看未裁」**不按批次事件跳过**（重裁过的自己�
 按 id 出卡，不管坐标过没过期。用途：机器筛出可疑条目让人只看这几张。首个清单 `cand_recheck`（28 条：drift 重标里
 多候选卡上按了 ok 的，可能本想选切法）。批次名建议 `<册>-cutline-recheck`。
 
+**切线卡里的候选（2026-09-14 起）**：产物 `cut_candidates` 每条候选多了 `agree`（U-Net 裁判的置信加权一致率），切点多了 `chosen_by`
+（rule / unet / human）。`chosen_by=unet` 表示裁判改选过；`agree` 全为 None 表示这个切点没过裁判（池里只剩一条，或裁判不可用）。
+

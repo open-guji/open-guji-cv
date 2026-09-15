@@ -134,3 +134,10 @@
   今天到此为止。可落地的形态：候选池 {直线,窄,宽} + U-Net v2 裁判（exp7 S1，或 exp6 dis_T150 规则）→ 大块错 5.2%→1.5%、px 31→14。
   模型文件：v2 现役 `partition_unet_v2.pt`；v3/v3a/ft 折模型留档不用。GPU 已让出。
 
+## B 2026-09-14 21:xx · 已落地：Step3 候选池 U-Net 裁判（v1.8）
+- 生产代码：`utils/cut_select.py`（裁判）、`segment_column(cut_judge=)`、`steps/row_segment.py`（`cut_judge="unet"` 默认开、
+  `judge_fingerprint` 进指纹、spec 1.8）、产物字段 `SeamCandidate.agree` / `CutPointCandidates.chosen_by`。权重 `models/partition_unet_v2/model.pt` 进 Git。
+- 改选门槛 `JUDGE_MARGIN=0.005`（`verify_prod_judge.py` 扫的：δ=0 改选 81 变差 34；δ=0.005 改选 47 变差 11，收益不变）。
+- **Step3 指纹变了**：三册 row_segment 及下游全部过期，需要重跑；A 若要跑批请先在这里说一声，跑批期间别改 Step2–4 代码。
+- 实验里的 `exp6_selector.unet_owner` 与生产 `cut_select.UNetJudge.owner` 同口径（pA vs pB + cc≤400 多数票）。
+
