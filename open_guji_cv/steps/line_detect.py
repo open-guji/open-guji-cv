@@ -26,8 +26,12 @@ class LineDetectParams(BaseModel):
     body_lo: float = 0.75           # 正文列宽下限（× em）
     body_hi: float = 1.35           # 正文列宽上限（× em），更宽标 wide
     margin_gap_frac: float = 1.5    # 小字列离正文块超过 × 列距 → 书口小字
-    pad_frac: float = 0.6           # 上下框在正文块外的余量（× em）。要 > Step4
-    # extractor 找框线行的窗口 FRAME_HINT_TOL=40px，否则首末字的横笔会被当框线
+    pad_frac: float = 1.0
+    """上下框在正文块外的余量（× em）。Step4 extractor 在窗口上下沿 ±40px（FRAME_HINT_TOL）
+    里找「框线行」，末字的底横落进这 40px 就会被当框线抹掉——0.6 em（62px）时仍有列被啃：
+    正文块下沿取的是全页各列最低点，撑满的列各自长短差 20～30px，短一截的列末字离窗口底
+    只剩 37px（北行日錄 p29 c7 s18「宣」底横被抹，Step4 打 boundary_ink，库里三个「宣」全是
+    列末字、全截断，害得 p52 的「宣」配到「直」）。1.0 em 让最短的列末字也离窗口底 ≥ 70px。"""
 
 
 @register_step

@@ -166,7 +166,7 @@ def wide_row_runs(ink: np.ndarray, y0: int, y1: int, wide_frac: float = 0.1,
     return [(lo, hi)]
 
 
-def split_two_rows(gray: np.ndarray, *, scan: int, pad: int = 30, sep_pad: int = 20,
+def split_two_rows(gray: np.ndarray, *, scan: int, pad: int = 130, sep_pad: int = 20,
                    ink_threshold: int = 128, sep_min_frac: float = 0.3,
                    wide_frac: float = 0.1) -> tuple[list[SplitRec], list[np.ndarray]]:
     """一张扫描页 → [(上栏记录, 下栏记录)], [上栏图, 下栏图]。"""
@@ -224,7 +224,10 @@ def split_book(book, *, pages: list[int] | None = None, force: bool = False,
           mode: two_rows_hline
           source_dir: data_full/bxrl/scan     # 扫描页目录，相对 raw_root（同 raw_dir 的解释）
           source_pattern: "{page}.png"
-          pad: 30                              # 块外留白
+          pad: 130                             # 块外留白。**必须 ≥ 一个字身再多一点**（北行日錄字身 103px）：
+                                               # 逻辑页图就是管线的原图，Step1 的上下框余量撑不出图外；余量不够时
+                                               # Step4 在窗口底沿 ±40px 找框线，会把列末字的底横钉成版框抹掉
+                                               # （2026-09-15 用 30 时全书 102 个 boundary_ink、库里三个「宣」全截断）
           sep_pad: 20                          # 分界线两侧各让开多少
           sep_min_frac: 0.3                    # 分界线整行墨占比下限
           wide_frac: 0.1                       # 「强正文行段」x 跨度 / 页宽（另有密度门槛与弱段接力，见 wide_row_runs）
@@ -275,7 +278,7 @@ def split_book(book, *, pages: list[int] | None = None, force: bool = False,
         if gray is None:
             log(f"[split] 扫描页 {scan}: 读不到 {src}，跳过")
             continue
-        recs, imgs = split_two_rows(gray, scan=scan, pad=int(cfg.get("pad", 30)),
+        recs, imgs = split_two_rows(gray, scan=scan, pad=int(cfg.get("pad", 130)),
                                     sep_pad=int(cfg.get("sep_pad", 20)),
                                     sep_min_frac=float(cfg.get("sep_min_frac", 0.3)),
                                     wide_frac=float(cfg.get("wide_frac", 0.1)))

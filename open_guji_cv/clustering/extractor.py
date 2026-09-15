@@ -2029,9 +2029,16 @@ class CharExtractor:
 
     def __init__(self, padding_ratio: float = PADDING_RATIO,
                  min_ink_ratio: float = MIN_INK_RATIO,
-                 strategy: str = "component_owner"):
+                 strategy: str = "component_owner",
+                 frame_guard: bool = True):
         """strategy: 历史遗留参数，两个取值现在行为完全一致，仅保留签名
         兼容与合法性校验。
+
+        frame_guard（2026-09-15 加）：要不要在首/末格端区抹「版框横条行」
+        （`mask_frame_bars_outside`）。刻本默认开；**现代排印本必须关**——没有版框，
+        列末字的底横（宣/亘/血/皿……宋体里是独立连通块、宽近满格）会被当版框线
+        抹掉：北行日錄全书 102 个 `boundary_ink` 字位、82 个在列末，库里三个「宣」
+        全截断、整本书的「宣」配到「直」。
 
         2026-09-12 之前，`component_owner` 会调 `_assign_column` 做列级
         连通体归属（猜"这块墨该归哪格"），`padding_box` 按格线裁框、框内
@@ -2049,6 +2056,7 @@ class CharExtractor:
         self.padding_ratio = padding_ratio
         self.min_ink_ratio = min_ink_ratio
         self.strategy = strategy
+        self.frame_guard = bool(frame_guard)
 
     # ── 纯函数核心 ────────────────────────────────────────
 
@@ -2203,10 +2211,11 @@ class CharExtractor:
             local = [(int(c["index"]),
                       float(c["y_top"]) - sy0,
                       float(c["y_bottom"]) - sy0) for c in cells]
-            strip = mask_frame_bars_outside(
-                strip, local, int(round(left_x)) - sx0,
-                int(round(right_x)) - sx0, cell_h_ref,
-                right_ext=right_delta, left_ext=left_delta)
+            if self.frame_guard:
+                strip = mask_frame_bars_outside(
+                    strip, local, int(round(left_x)) - sx0,
+                    int(round(right_x)) - sx0, cell_h_ref,
+                    right_ext=right_delta, left_ext=left_delta)
             # 格与格之间的上下边界**严格信任 Step3**（矩形 y_top/y_bottom，
             # 或 Step3 选中了折线时的 seam_top/seam_bottom），不再自己按
             # 连通体猜"这块墨该归哪格"（2026-09-12 用户定：`_assign_column`
