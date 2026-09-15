@@ -57,6 +57,7 @@ CONTRACT = [
 
 class ColumnGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
+    count_mode: str = "exact"           # exact：列数必须等于版式列数 | detected：列数由 Step1 探出，只要求 ≥1（现代链）
     width_tol: float = 0.15
     side_floor_max: float = 0.045
     stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
@@ -90,7 +91,10 @@ class ColumnGateStep(Step):
         widths = [float(c.warped_size[0]) for c in cols]
         med_w = statistics.median(widths) if widths else None
         page_reject: list[str] = []
-        if len(cols) != expected:
+        if p.count_mode == "detected":
+            if not cols:
+                page_reject.append("L1：没有列（Step1 未探到正文列）")
+        elif len(cols) != expected:
             page_reject.append(f"L1：只探出 {len(cols)} 列（版式应为 {expected}）")
 
         # **列宽偏离是列级判据，不是页级**（2026-09-03 改）。
@@ -121,7 +125,8 @@ class ColumnGateStep(Step):
         page_flags: list[str] = []
         period_from_prior = False
         if not page_reject:
-            if len(projs) < max(2, expected // 2):
+            need = max(1, len(cols) // 2) if p.count_mode == "detected" else max(2, expected // 2)
+            if len(projs) < need:
                 page_reject.append(
                     f"L1：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
             else:
@@ -275,7 +280,7 @@ class ColumnGateStep(Step):
 
 # 挂到 Step2（column_warp）出口——levels 的 desc 只描述层次，不重复具体阈值数字
 # （阈值在 ColumnGateParams 里，写两处会漂）。
-attach_gate("column_warp", GateSpec(
+COLUMN_GATE_SPEC = GateSpec(
     id="column_gate", unit="column", on_fail="block",
     levels=(
         GateLevel(id="L1", unit="page",
@@ -293,4 +298,8 @@ attach_gate("column_warp", GateSpec(
         GateLevel(id="L3", unit="column",
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
     ),
-))
+)
+attach_gate("column_warp", COLUMN_GATE_SPEC)
+# 现代印刷链的 Step2（column_crop）出口挂同一道闸：产物种类相同，判据里列数比对由
+# `count_mode=detected`（modern_body.yaml 的 params）放开。
+attach_gate("column_crop", COLUMN_GATE_SPEC)

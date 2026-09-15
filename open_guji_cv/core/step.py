@@ -82,13 +82,30 @@ class RunContext:
 
     def __init__(self, book: "BookSpec", store: "ProductStore", cache: "ImageCache",
                  params: dict[str, BaseModel] | None = None,
-                 log: Callable[[str], None] | None = None):
+                 log: Callable[[str], None] | None = None,
+                 pipeline=None):
         self.book = book
         self.store = store
         self.cache = cache
         self.params: dict[str, BaseModel] = params or {}
         self.log = log or (lambda s: print(s, flush=True))
         self._raw: dict[int, np.ndarray] = {}
+        #: 查「谁产出这种产物」按这条管线来（2026-09-14，三模式方案「地基 2」）。
+        #: 不传就按册的 edition 选默认管线（`core.pipeline.default_pipeline_id`）——
+        #: 控制台 / CLI 那些不经 Engine 直接建 RunContext 的调用点不用改。
+        self._pipeline = pipeline
+
+    @property
+    def pipeline(self):
+        if self._pipeline is None:
+            from .pipeline import default_pipeline_id, load_pipeline
+            self._pipeline = load_pipeline(default_pipeline_id(self.book))
+        return self._pipeline
+
+    def producer(self, kind_id: str) -> "Step":
+        """本管线里产出 `kind_id` 的 Step；同一种产物有多个产出者时（刻本链 /
+        现代链各一个）以当前管线为准，别用全局的 `producer_of`。"""
+        return self.pipeline.producer_of(kind_id)
 
     # 参数
     def params_for(self, step: "Step") -> BaseModel:
@@ -123,19 +140,19 @@ class RunContext:
 
     # 上游数值产物
     def product(self, kind_id: str, page: int) -> Any:
-        step = producer_of(kind_id)
+        step = self.producer(kind_id)
         obj = self.store.read(self.book.id, step.spec.id, page_key(page), kind_id)
         if obj is None:
             raise FileNotFoundError(f"上游产物缺失: {kind_id} {page_key(page)}（先跑 {step.spec.id}）")
         return obj
 
     def has_product(self, kind_id: str, page: int) -> bool:
-        step = producer_of(kind_id)
+        step = self.producer(kind_id)
         return self.store.exists(self.book.id, step.spec.id, page_key(page))
 
     # 派生图像：查缓存，没有就让产出它的 Step 现算
     def materialize(self, kind_id: str, key: str) -> Path:
-        step = producer_of(kind_id)
+        step = self.producer(kind_id)
         return self.cache.materialize(
             self.book.id, kind_id, key,
             lambda: step.render(self, kind_id, key))

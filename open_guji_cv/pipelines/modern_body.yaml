@@ -1,0 +1,33 @@
+# 现代印刷正文（竖排；横排按三模式方案 §三 在原图入口旋转后共用，尚未接入）。
+# 设计见 overview 仓 项目进展/图片初步数字化/进度/总览/05-三模式管线方案.md。
+#
+# 与刻本链 keben_body_v2 的差别只在切分线前三步：
+#   line_detect       顶替 border_detect  ——无版框界行，按墨柱找列，产同一种 borders
+#   column_crop       顶替 column_warp    ——不剥界行不削版框；出口挂同一道 column_gate
+#   row_segment_runs  顶替 row_segment    ——墨段 + 字身盒模型 DP，项数不定、标点半格
+# Step4 起（cell_shrink / glyph_match / …）原样复用。字形库按 Book.edition 分域。
+id: modern_body
+title: 现代印刷正文（竖排）
+selector:
+  edition: modern
+  page_type: [body]
+steps:
+  - line_detect          # Step1 行探测：原图 → 正文列虚拟界行 + line_index（列类型）
+  - column_crop          # Step2 裁列 + 去噪：→ column_windows / 列图；出口闸 column_gate
+  - row_segment_runs     # Step3 墨段切分：→ cells（char / punct / blank）
+  - cell_shrink          # Step4 字框收缩（复用）
+  - glyph_match          # Step5-a 库匹配（复用；库域 edition=modern:<book>）
+  - ocr_candidates       # Step5-c OCR 候选（复用；Book.ocr_candidates 控制）
+  - rare_candidates      # Step5-b 生僻字候选（复用）
+  - align_ref            # Step5-d 整理本对齐（复用）
+  - context_decide       # Step6 上下文裁决（复用）
+  - seed_admit           # Step7 进库准入（复用）
+params:
+  column_gate:
+    count_mode: detected     # 列数由 line_detect 探出，不与版式常量比
+    width_tol: 0.5           # L1c 防的是「界行圈进列窗」，现代页没有界行；卷题页列位不在等距网格上
+                             # （北行日錄 p53 实测列距 2.5 / 2 / 1.08 个 pitch），窗口宽窄不一是正常的
+notes: |
+  坐标：与刻本链相同——Step1 产物在规范空间 raw_page_px@top-right，Step2–4 列内坐标
+  column_px 另带 quad_page / bbox_page。分页（一张扫描页两栏）在 Step0 `guji split` 做，
+  管线看到的「原图」已经是逻辑页。

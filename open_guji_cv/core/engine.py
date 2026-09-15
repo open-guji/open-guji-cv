@@ -112,10 +112,15 @@ class Engine:
         self.store = store or ProductStore()
         self.cache = cache or ImageCache()
         self.log = log or (lambda s: print(s, flush=True))
+        # 参数三层：Step 默认值 < 管线 yaml 的 `params:`（这条链的默认） < 调用方覆盖
+        # （CLI `--params` / 控制台表单）。同一 Step 两层都有时按字段合并，调用方优先。
         resolved: dict[str, BaseModel] = {}
+        merged: dict[str, dict] = {sid: dict(v) for sid, v in (pipeline.params or {}).items()}
         for sid, override in (params or {}).items():
-            resolved[sid] = STEPS[sid].spec.params(**override)
-        self.ctx = RunContext(book, self.store, self.cache, resolved, self.log)
+            merged.setdefault(sid, {}).update(override)
+        for sid, kv in merged.items():
+            resolved[sid] = STEPS[sid].spec.params(**kv)
+        self.ctx = RunContext(book, self.store, self.cache, resolved, self.log, pipeline=pipeline)
         self._rev = git_rev()
 
     # ── 按 book 配置关掉的可选步骤 ───────────────────────────────────────
@@ -164,8 +169,7 @@ class Engine:
             if not p.exists():
                 return None
             return self.store.raw_sha(self.book.id, p)
-        from .step import producer_of
-        prod = producer_of(kind)
+        prod = self.pipeline.producer_of(kind)
         entry = self.store.manifest(self.book.id, prod.spec.id).get(page_key(page))
         if entry and entry.status == "ok" and entry.sha256 and \
                 self.store.exists(self.book.id, prod.spec.id, page_key(page)):

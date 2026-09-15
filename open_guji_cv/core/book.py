@@ -88,6 +88,27 @@ class BookSpec:
     #: 实测如此（vol01 列首命中行首 94.7%、命中者列长相等 87.2%），据此可以做
     #: **独立于字符对齐**的丢格检测，见 `report/witness.py::col_verdict`。
     references: list[dict] = field(default_factory=list)
+    #: ── 三模式（古籍 / 现代竖排 / 现代横排）的版式属性（2026-09-14 加，见 overview
+    #: `图片初步数字化/进度/总览/05-三模式管线方案.md` §二、§六）。旧册 yaml 不写就是
+    #: 默认值，行为与加这些字段之前逐位相同。
+    #:
+    #: `writing_mode`：`vertical-rl`（竖排，默认）| `horizontal-tb`（横排——页面在
+    #: 原图入口顺时针旋转 90° 后按竖排处理，见方案 §三；**尚未实现**，现在只登记）。
+    writing_mode: str = "vertical-rl"
+    #: `frame`：`ruled`（有版框界行，Step1 走 `border_detect`，默认）|
+    #: `none`（无版框，Step1 走 `line_detect`）。管线 yaml 决定实际跑哪个 Step，
+    #: 这个字段只用来选默认管线与给控制台看。
+    frame: str = "ruled"
+    #: `script`：`trad`（繁体，默认）| `simp`（简体）——字表/语料/OCR 字典按它选。
+    script: str = "trad"
+    #: 字距（沿列方向的字身 pitch）像素先验；现代模式 Step3 `runs` 切分估不出
+    #: 字身大小时兜底。同 `period_prior` 只在估不出来时用。
+    pitch_prior: float | None = None
+    #: Step0 分页（yaml 的 `page_split:`）：一张扫描页含多页原书时（上下两栏拼一页、
+    #: 对开等），先裁成逻辑页再进管线。见 `utils/page_split.py`。空 = 不分页。
+    page_split: dict = field(default_factory=dict)
+    #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
+    font: dict = field(default_factory=dict)
 
     # ── 页 ───────────────────────────────────────────────────────────
     def raw_path(self, page: int) -> Path:
@@ -152,6 +173,9 @@ class BookSpec:
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
+            "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
+            "pitch_prior": self.pitch_prior,
+            "page_split": dict(self.page_split), "font": dict(self.font),
         }
 
 
@@ -183,8 +207,34 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
     return out
 
 
+def _workspace_books_dir() -> Path | None:
+    """工作区里的 `books/`（有 `GUJI_WORKSPACE` 才有）。
+
+    2026-09-14 起**优先于引擎仓的 `books/`**：册配置是「这本书的数据」，按数据边界
+    （overview `数据边界-三仓各管什么.md`）该落工作区；此前 `load_book` 只认引擎仓那份，
+    工作区里同名 yaml 改了静默无效（记忆里那条「books.yaml 有两份」的坑）。
+    引擎仓 `books/` 仍然认——vol01～vol10 还留在那里，且跑测试时没有工作区。
+    """
+    from .workspace import workspace_root
+    ws = workspace_root()
+    if ws is None:
+        return None
+    d = ws / "books"
+    return d if d.is_dir() else None
+
+
+def _book_yaml_path(book_id: str, books_dir: Path | None = None) -> Path:
+    """显式 `books_dir` > 工作区 `books/`（有该册时） > 引擎仓 `books/`。"""
+    if books_dir is not None:
+        return books_dir / f"{book_id}.yaml"
+    ws_dir = _workspace_books_dir()
+    if ws_dir is not None and (ws_dir / f"{book_id}.yaml").exists():
+        return ws_dir / f"{book_id}.yaml"
+    return BOOKS_DIR / f"{book_id}.yaml"
+
+
 def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
-    path = (books_dir or BOOKS_DIR) / f"{book_id}.yaml"
+    path = _book_yaml_path(book_id, books_dir)
     if not path.exists():
         raise FileNotFoundError(f"没有这册书的定义: {path}")
     with open(path, encoding="utf-8") as f:
@@ -212,14 +262,24 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
         references=[dict(r) for r in (d.get("references") or [])],
+        writing_mode=str(d.get("writing_mode", "vertical-rl")),
+        frame=str(d.get("frame", "ruled")),
+        script=str(d.get("script", "trad")),
+        pitch_prior=(None if d.get("pitch_prior") is None else float(d["pitch_prior"])),
+        page_split=dict(d.get("page_split") or {}),
+        font=dict(d.get("font") or {}),
     )
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:
-    d = books_dir or BOOKS_DIR
-    if not d.exists():
-        return []
-    return sorted(p.stem for p in d.glob("*.yaml"))
+    """引擎仓 `books/` 与工作区 `books/` 的并集（显式传 `books_dir` 则只看它）。"""
+    if books_dir is not None:
+        return sorted(p.stem for p in books_dir.glob("*.yaml")) if books_dir.exists() else []
+    ids: set[str] = set()
+    for d in (BOOKS_DIR, _workspace_books_dir()):
+        if d is not None and d.exists():
+            ids.update(p.stem for p in d.glob("*.yaml"))
+    return sorted(ids)
 
 
 _OCR_CANDIDATES_LINE_RE = re.compile(r"^ocr_candidates:\s*(true|false)\s*$", re.MULTILINE)
@@ -230,7 +290,7 @@ def set_ocr_candidates(book_id: str, enabled: bool, books_dir: Path | None = Non
     开关用。这份 yaml 满是手写中文注释（版本考据、专项集来由等），用
     `yaml.safe_dump` 整体重写会把这些注释全部冲掉，所以只在原文里
     改/插这一行，不碰其余内容。"""
-    path = (books_dir or BOOKS_DIR) / f"{book_id}.yaml"
+    path = _book_yaml_path(book_id, books_dir)
     if not path.exists():
         raise FileNotFoundError(f"没有这册书的定义: {path}")
     text = path.read_text(encoding="utf-8")

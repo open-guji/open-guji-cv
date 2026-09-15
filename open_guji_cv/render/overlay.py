@@ -74,7 +74,7 @@ def overlay(book: str, step: str, page: int,
     d = st.read_raw(book, step, page_key(page))
     if d is None:
         raise ProductMissing("没有这份产物")
-    if step == "border_detect":
+    if step in ("border_detect", "line_detect"):
         bd = d["borders"]
         for v in bd["verticals"]:
             draw_vline(img, v, W, H, (0, 0, 255))
@@ -85,7 +85,21 @@ def overlay(book: str, step: str, page: int,
         for hr in bd.get("head_raise", []):
             cv2.putText(img, f"HR c{hr['col']}", (W // 2, int(hr["inner_y"])), cv2.FONT_HERSHEY_SIMPLEX,
                         1.2, (0, 140, 255), 3)
-    elif step == "column_warp":
+        # 现代链：line_index 里每一列按类型画框（body 绿 / footnote 橙 / margin 灰 / wide 紫）
+        li = d.get("line_index")
+        if li:
+            colors = {"body": (0, 160, 0), "footnote": (0, 140, 255), "margin": (150, 150, 150),
+                      "wide": (200, 0, 200), "noise": (0, 0, 200)}
+            for ln in li.get("lines", []):
+                x0 = int(round(x_tr_to_tl(ln["x1"], W))); x1 = int(round(x_tr_to_tl(ln["x0"], W)))
+                y0, y1 = int(ln["y0"]), int(ln["y1"])
+                c = colors.get(ln["kind"], (0, 0, 200))
+                cv2.rectangle(img, (x0, y0), (x1, y1), c, 2)
+                label = f"c{ln['col']}" if ln.get("col") else ln["kind"]
+                cv2.putText(img, label, (x0, max(30, y0 - 12)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, c, 2)
+            txt = f"em {li.get('em') and round(li['em'])} pitch {li.get('pitch') and round(li['pitch'], 1)} body {li.get('n_body')}"
+            cv2.putText(img, txt, (40, H - 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 220), 2)
+    elif step in ("column_warp", "column_crop"):
         for c in d["column_windows"]["columns"]:
             draw_vline(img, c["left_line"], W, H, (0, 0, 255), 2)
             draw_vline(img, c["right_line"], W, H, (0, 0, 255), 2)
@@ -95,7 +109,8 @@ def overlay(book: str, step: str, page: int,
                         1.0, (0, 140, 255), 2)
     elif step == "column_gate":
         gm = d["gate_manifest"]
-        wins = st.read_raw(book, "column_warp", page_key(page))
+        wins = (st.read_raw(book, "column_warp", page_key(page))
+                or st.read_raw(book, "column_crop", page_key(page)))
         win_by_col = {c["col"]: c for c in wins["column_windows"]["columns"]} if wins else {}
         for c in gm["columns"]:
             tier = gate_column_tier(c["reject"])
@@ -114,14 +129,15 @@ def overlay(book: str, step: str, page: int,
                             cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
         cv2.putText(img, f"period {gm['period']} ref_w {gm['ref_w']} {' | '.join(gm['reject'])}",
                     (40, H - 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 220), 2)
-    elif step == "row_segment":
+    elif step in ("row_segment", "row_segment_runs"):
         for col in d["cells"]["columns"]:
             for c in col["cells"]:
                 q = c.get("quad_page")
                 if not q:
                     continue
                 pts = np.array([(int(round(x_tr_to_tl(x, W))), int(round(y))) for x, y in q], dtype=np.int32)
-                color = {"char": (0, 160, 0), "blank": (160, 160, 160)}.get(c["kind"], (200, 0, 200))
+                color = {"char": (0, 160, 0), "blank": (160, 160, 160),
+                         "punct": (255, 120, 0)}.get(c["kind"], (200, 0, 200))
                 cv2.polylines(img, [pts], True, color, 2)
     elif step == "cell_shrink":
         for col in d["char_index"]["columns"]:

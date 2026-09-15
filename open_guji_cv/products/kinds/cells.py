@@ -22,7 +22,7 @@ class CellRec(BaseModel):
     y1: float
     x0: float
     x1: float
-    kind: str                      # char | blank | jiazhu_a | jiazhu_b
+    kind: str                      # char | blank | jiazhu_a | jiazhu_b | punct（现代链）
     sub: str | None = None         # a / b / None
     order: int
     gap_center: float | None = None
@@ -32,6 +32,7 @@ class CellRec(BaseModel):
     quad_page: list[Point] | None = None   # 原图规范空间四角 [(x,y)…]，右上原点
     seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 utils/seam.py
     seam_bottom: list[int] | None = None
+    flags: list[str] = Field(default_factory=list)   # 现代链 row_segment_runs 的项级标记（small / tall / punct_absorbed）
 
 
 class SeamCandidate(BaseModel):
@@ -78,6 +79,9 @@ class ColumnCells(BaseModel):
     cells: list[CellRec] = Field(default_factory=list)
     cut_candidates: list[CutPointCandidates] = Field(default_factory=list)
     """直线格线穿墨的 char–char 相邻处的全部候选切线；不下传候选时为空。"""
+    em: float | None = None            # 现代链：本列字身高估计
+    pitch: float | None = None         # 现代链：本列字–字中心距
+    flags: list[str] = Field(default_factory=list)   # 现代链列级标记（suspect_jiazhu / empty）
 
 
 class PageCells(BaseModel):
