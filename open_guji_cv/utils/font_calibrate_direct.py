@@ -41,7 +41,7 @@ def calibrate_stroke(font_paths: list[Path], chars: list[str], target_w: float,
         for ch in chars:
             im = r.render(ch)
             if im is not None:
-                ws.append(stroke_width_px(normalize_patch(im)))
+                ws.append(stroke_width_px(normalize_patch(im, strip_lines=False)))
         if not ws:
             continue
         med = float(np.median(ws))
@@ -71,6 +71,9 @@ def score_fonts_direct(book_id: str, labels: list[dict], cache_root: Path, fonts
     def norm(img):
         return normalize_patch(img, stroke_width=norm_stroke)
 
+    def norm_font(img):      # 字体渲染没有版框：不删「贴边细线」（否则 旦 变 日、宣 变 亘）
+        return normalize_patch(img, stroke_width=norm_stroke, strip_lines=False)
+
     hog = HogFeature()
     queries: list[tuple[dict, np.ndarray]] = []
     for d in labels:
@@ -97,7 +100,7 @@ def score_fonts_direct(book_id: str, labels: list[dict], cache_root: Path, fonts
             if im is None:
                 continue
             t_chars.append(ch)
-            t_norms.append(norm(im))
+            t_norms.append(norm_font(im))
         tF = hog.extract(np.stack(t_norms))
         has = set(t_chars)
         r1 = r5 = covered = n_same = 0

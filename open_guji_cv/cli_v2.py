@@ -403,7 +403,8 @@ def cmd_seed_witness(args) -> None:
     try:
         stats = seed_from_witness(db, book, labels_path=labels_path, cache_root=cache_root(),
                                   font_editions=args.fonts.split(","), edition_tag=args.edition,
-                                  limit=args.limit)
+                                  limit=args.limit, products_root=products_root(),
+                                  norm_stroke=args.norm_stroke)
     finally:
         db.close()
     out = products_root() / book.id / "witness_align" / "seed_stats.json"
@@ -846,6 +847,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--labels", default=None)
     p.add_argument("--edition", default=None, help="默认 modern:<book>")
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--norm-stroke", type=int, default=None,
+                   help="形状证人这一路两边骨架化再细化到 N px——要与管线 glyph_match.norm_stroke 一致（现代链 3）；"
+                        "不给就走库检索（不归一，量的是粗细，字/旦/宣 会整批被拒）")
 
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")

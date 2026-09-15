@@ -38,8 +38,17 @@ def sauvola_binarize(gray: np.ndarray, window: int = SAUVOLA_WINDOW,
 
 
 def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
-                       margins: tuple[int, int] | None = None) -> np.ndarray:
+                       margins: tuple[int, int] | None = None,
+                       strip_lines: bool = True) -> np.ndarray:
     """删除切分/裁切残留（P3 重写，2026-08-23）。
+
+    `strip_lines=False` 关掉规则 2（2026-09-15 加）。规则 2 的前提是「版框/界行 2～5px、
+    本书笔画 8～14px，两个分布不重叠」——这是刻本切分块的经验，对**字体渲染**不成立：
+    256px 画布上宋体的横笔只有 7px（thin_cap 11.5），旦 的底横、宣 的宝盖和底横、二 的
+    上横、亘/立/高/齊……都被当版框删了（I.Ming 全字表 2091 字里 84 个中招；书上的字块
+    抽 3000 个一个没中）。后果：库里的字体模板 旦 是个「日」、宣 是个「亘」，播种闸拿它
+    们当形状证人，书上每个 旦/宣 都被判成 且/直、整批拒进库，Step5-a 只剩形近字可配。
+    字体渲染本就干净，走 `strip_lines=False`；刻本/书块默认不变。
 
     旧判据（贴边 + shallow_tb/lr + 贴边细线）被废除：它既**漏**（不贴边的
     版框线/界行线一条都够不着——golden 集三轮切分版本下 4 个缺陷同根因），
@@ -93,6 +102,8 @@ def remove_edge_specks(binary: np.ndarray, noise_area: int = NOISE_AREA,
             out[labels == i] = 0
             continue
         if area == largest:
+            continue
+        if not strip_lines:
             continue
         long_side = max(bw, bh)
         thickness = area / max(1, long_side)
@@ -180,8 +191,11 @@ def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
                     margin_ratio: float = MARGIN_RATIO,
                     noise_area: int = NOISE_AREA,
                     stroke_width: int | None = None,
-                    margins: tuple[int, int] | None = None) -> np.ndarray:
+                    margins: tuple[int, int] | None = None,
+                    strip_lines: bool = True) -> np.ndarray:
     """灰度图块 → S×S uint8 {0,1} 归一二值图。
+
+    `strip_lines=False`：不删「贴边细线」（字体渲染用，见 `remove_edge_specks`）。
 
     墨迹外接框等比缩放到内容区（size × (1 - 2*margin)），
     再平移使墨迹质心对准图心（clamp 保证不出界）。
@@ -190,7 +204,7 @@ def normalize_patch(gray: np.ndarray, size: int = NORM_SIZE,
     if gray.ndim == 3:
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     binary = sauvola_binarize(gray)
-    binary = remove_edge_specks(binary, noise_area, margins=margins)
+    binary = remove_edge_specks(binary, noise_area, margins=margins, strip_lines=strip_lines)
 
     binary = _drop_stray_components(binary)
     bbox = ink_bbox(binary)
