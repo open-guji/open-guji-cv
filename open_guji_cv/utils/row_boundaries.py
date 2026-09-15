@@ -1276,7 +1276,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)
                 if res is not None and len(res[0]) == len(cands):
-                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN
+                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
                     sc, dis = res
                     for c, s_, d_ in zip(cands, sc, dis):
                         c.agree = s_
@@ -1286,14 +1286,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                         if best != chosen and sc[best] - sc[chosen] >= JUDGE_MARGIN and chosen_by != "human":
                             chosen = best
                             chosen_by = "unet"          # 只有真改选了才记 unet
-                    if chosen_by != "human" and dis[chosen] >= ESCALATE_BLOB:
-                        escalate = True
-                        escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
+                    if chosen_by != "human" and dis[chosen] >= PENDING_BLOB:
+                        # L3 扩池的触发点与**顺序闸**同门槛（2026-09-15 夜改）：原来只在 ≥ESCALATE_BLOB(100)
+                        # 时扩池，于是 60–100 这一档（顺序闸要挡、人要裁的那 82 条）卡片上根本没有 U-Net 缝
+                        # 可选——用户实裁时发现「这些 U-Net 都能找到更好结果」。凡是要交给人或下游的切点，
+                        # 都该先把候选补齐（原则 ①：给人最好的选项）。
                         cands = _expand_pool(cands, up_c, dn_c, k_)
+                        if dis[chosen] >= ESCALATE_BLOB:
+                            escalate = True
+                            escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
                         # 人裁**指向 L3 才生成的候选**（unet_seam / period_*）时，第 4 步收敛必然落空
                         # ——那时池里还没有这个 kind。扩池之后再试一次（2026-09-15 实锤：147 条人裁里
                         # 119 条因此没生效）。收敛成功就不再是「升级」，人是终审。
-                        if resolved is not None and chosen_by != "human":
+                        if resolved is not None and chosen_by != "human":   # 扩池后人裁可能才匹配得上
                             n2_ = len(cands)
                             cands, chosen = _apply_resolved_cut(cands, chosen, resolved,
                                                                y_line=float(bounds[k_]), x_lo=int(x_lo))
