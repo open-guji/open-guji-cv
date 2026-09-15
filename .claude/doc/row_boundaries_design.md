@@ -269,3 +269,7 @@ Step3 按旧规则走并在日志里警告一次；`judge_fingerprint` 为空串
 
 **关掉**：`RowSegmentParams(cut_judge="rule")`。
 
+**落地核对记录（2026-09-14 晚，vol02 1–50 页全管线重跑）**：668 个切点、格线不动、裁判改选 19 处；这些页上 20 条坐标系一致的金标
+px 11.4→6.5、blob≥60 10%→5%、无变差。重跑暴露并修掉：人裁回流须在裁判之前；`seam_ok` 收敛须按人看到的折线（`ResolvedCut.seam_ref`，
+`RESOLVED_SEAM_TOL=4`），规则这次选的缝可能已不是当时那条。
+

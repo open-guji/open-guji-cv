@@ -140,4 +140,7 @@
 - 改选门槛 `JUDGE_MARGIN=0.005`（`verify_prod_judge.py` 扫的：δ=0 改选 81 变差 34；δ=0.005 改选 47 变差 11，收益不变）。
 - **Step3 指纹变了**：三册 row_segment 及下游全部过期，需要重跑；A 若要跑批请先在这里说一声，跑批期间别改 Step2–4 代码。
 - 实验里的 `exp6_selector.unet_owner` 与生产 `cut_select.UNetJudge.owner` 同口径（pA vs pB + cc≤400 多数票）。
+- 21:5x（B）vol02 1–50 全管线重跑三遍（`out/B_vol02_p1_50_run*.log`），产物已是新版；对比脚本 `compare_rerun.py`（快照在会话临时目录）。
+  顺带修了两处人裁回流的坑（人裁先于裁判；seam_ok 按 polyline 收敛，`ResolvedCut.seam_ref`）——`c55ce4adb7`、`031823438d`。
+  vol01 / vol02 其余页 / vol03 仍过期。
 
