@@ -124,6 +124,7 @@ class RowSegmentStep(Step):
                                            slot_below=cp.slot_below, chosen=cp.chosen,
                                            chosen_by=cp.chosen_by,
                                            escalate=cp.escalate, escalate_reason=cp.escalate_reason,
+                                           origin=cp.origin,
                                            candidates=[SeamCandidate(
                                                kind=c.kind, y=c.y, seam_ink=c.seam_ink,
                                                dev_max=c.dev_max, agree=c.agree, dis_unet=c.dis_unet)

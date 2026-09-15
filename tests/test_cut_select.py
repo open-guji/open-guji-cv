@@ -252,3 +252,51 @@ def test_human_resolved_cut_never_escalates():
     cp = _cut(r)
     assert cp.chosen_by == "human" and cp.escalate is False
     assert cp.candidates[0].dis_unet == 999                      # 但探针结果照记，供审计
+
+
+def test_clean_line_between_short_and_tall_cells_with_full_ink_becomes_probe_cut(monkeypatch):
+    """L0′：直线不穿墨（DP 切在字内空隙），但一矮一高且矮格墨满 → 建一个只有直线的切点、过探针；
+    U-Net 分歧大就升级；选法仍是直线。文言 vol02:163:1:6 的形态：言的顶横被切给文，格线落在言内部的空隙。"""
+    import numpy as np
+    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+    h = GRID_Y0 + N_SLOTS * SLOT_H + 20
+    img = np.full((h, COL_W), 255, dtype=np.uint8)
+    img[:, :RULE_W] = 0; img[:, -RULE_W:] = 0; img[0:4, :] = 0; img[h - 4:, :] = 0
+    for k in range(N_SLOTS):
+        y0 = GRID_Y0 + k * SLOT_H + 20
+        img[y0:y0 + 70, 37:148] = 0
+    # 第 6 格的字：顶横（8 行）在主体上方 30 行处，中间 22 行空白——像「言」
+    y6 = GRID_Y0 + 5 * SLOT_H + 20
+    img[y6:y6 + 70, 37:148] = 255
+    img[y6 + 30:y6 + 70, 37:148] = 0          # 主体
+    img[y6:y6 + 8, 50:135] = 0                # 顶横
+    gap_y = y6 + 19                           # 顶横与主体之间的空隙行（干净）
+    real_fit = RBm.fit_row_boundaries
+
+    def pinned(*a, **kw):
+        res = real_fit(*a, **kw)
+        if res is not None:
+            b = list(res.boundaries); b[5] = float(gap_y); res.boundaries = b
+        return res
+    monkeypatch.setattr(RBm, "fit_row_boundaries", pinned)
+    j = _FakeJudge({"straight": 0.5, "seam": 0.5}, dis={"straight": ESCALATE_BLOB + 20})
+    r = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, cut_judge=j)
+    cp = next(c for c in r.cut_candidates if c.slot_above == 5)
+    assert cp.origin == "split_suspect" and [c.kind for c in cp.candidates] == ["straight"]
+    assert cp.escalate is True and cp.escalate_reason.startswith("split_suspect")
+    assert cp.chosen == 0 and cp.chosen_by == "rule"
+    # 同样几何、U-Net 不觉得有问题 → 建了切点但不升级
+    r2 = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
+                            cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}, dis={"straight": 5}))
+    cp2 = next(c for c in r2.cut_candidates if c.slot_above == 5)
+    assert cp2.origin == "split_suspect" and cp2.escalate is False
+
+
+def test_clean_line_between_normal_cells_builds_no_cut_point():
+    """干净且格高正常的格线照旧不建切点（L0 直接放行），行为与改动前一致。"""
+    img = _touching_column()
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}))
+    assert {cp.slot_above for cp in r.cut_candidates} == {5}      # 只有 5/6 那条粘连
+    assert all(cp.origin == "touching" for cp in r.cut_candidates)
+

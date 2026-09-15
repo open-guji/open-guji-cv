@@ -64,6 +64,7 @@ class CutPointCandidates(BaseModel):
     chosen_by: str | None = None   # 谁选的：rule（现役规则）| unet（裁判改选，2026-09-14 起）| human（裁决表收敛）
     escalate: bool = False         # L2′（2026-09-15）：所选切法与 U-Net 分歧块 ≥100px，本层拿不准，交下游再审；顺序闸按它出卡
     escalate_reason: str | None = None
+    origin: str = "touching"       # touching（直线穿墨）| split_suspect（L0′：直线干净但一矮一高且矮格墨满，只为探针而建）
 
 
 class ColumnCells(BaseModel):
