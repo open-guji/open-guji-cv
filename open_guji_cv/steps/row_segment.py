@@ -43,7 +43,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.8", unit="column",
+        id="row_segment", title="Step3 单列文字切分", version="1.9", unit="column",
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -123,9 +123,11 @@ class RowSegmentStep(Step):
                                            k=cp.k, y=cp.y, slot_above=cp.slot_above,
                                            slot_below=cp.slot_below, chosen=cp.chosen,
                                            chosen_by=cp.chosen_by,
+                                           escalate=cp.escalate, escalate_reason=cp.escalate_reason,
                                            candidates=[SeamCandidate(
                                                kind=c.kind, y=c.y, seam_ink=c.seam_ink,
-                                               dev_max=c.dev_max, agree=c.agree) for c in cp.candidates],
+                                               dev_max=c.dev_max, agree=c.agree, dis_unet=c.dis_unet)
+                                               for c in cp.candidates],
                                        ) for cp in r.cut_candidates],
                                    **base))
         return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}

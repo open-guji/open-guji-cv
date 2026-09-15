@@ -37,6 +37,12 @@ CC_MAX = 400
 MAJORITY = 0.85
 INK_TH = 128
 JUDGE_MARGIN = 0.005
+ESCALATE_BLOB = 100
+"""L2′ 分歧探针（2026-09-15，overview 10 卡「梯次裁决」）：最终选中的切法与 U-Net 归属的**分歧最大连通块**
+≥ 这么多像素，就把这个切点标成 `escalate=True`——不改选法，只是「本层拿不准，给下游再审」：
+顺序闸把它当待审出卡，将来 L3（扩池）/ L4（识别置信否决）只对这些条目干活。
+门槛来历：673 条金标里选对的条目分歧块 p95=51 / p99=124 px；几何候选全错、只有 U-Net 对的 4 条 241–983 px。
+100 把后者全部抓住、误升级约 5%（升级总量 ≈3% 的粘连切点，≈0.4 条/页）。"""
 """改选门槛：最优候选的一致率要比现役规则选中的高出这么多才改选。2026-09-14 在 673 条金标列上扫过
 （`experiments/touch_resolve/verify_prod_judge.py`）：δ=0 改选 81 条（变好 47 / 变差 34），δ=0.005 改选 47 条
 （36 / 11），大块错都是 5.6%→1.9%，≤20px 85.7%→86.8%——同样的收益，少引入三分之二的小倒退。"""
@@ -160,7 +166,14 @@ class UNetJudge:
 
     def scores(self, col_gray: np.ndarray, x_lo: int, x_hi: int, y0: int, y1: int, y_line: float,
                seams: list, ink_threshold: int = INK_TH) -> list[float] | None:
-        """每条候选的 U-Net 置信加权一致率。`seams[i]` 是列图坐标的逐 x y（长度 x_hi−x_lo）或 None（直线 y_line）。"""
+        """每条候选的 U-Net 置信加权一致率（`assess()` 的第一项）。"""
+        r = self.assess(col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold)
+        return None if r is None else r[0]
+
+    def assess(self, col_gray: np.ndarray, x_lo: int, x_hi: int, y0: int, y1: int, y_line: float,
+               seams: list, ink_threshold: int = INK_TH) -> tuple[list[float], list[int]] | None:
+        """每条候选的 (U-Net 置信加权一致率, 与 U-Net 归属分歧的最大连通块面积 px)。
+        `seams[i]` 是列图坐标的逐 x y（长度 x_hi−x_lo）或 None（直线 y_line）。判不了返回 None。"""
         try:
             y0, y1 = int(max(0, y0)), int(min(col_gray.shape[0], y1))
             if y1 - y0 < 4 or x_hi - x_lo < 4:
@@ -174,7 +187,9 @@ class UNetJudge:
             denom = float(cw.sum())
             if denom <= 1e-6:
                 return None
-            out = []
+            import cv2
+            out: list[float] = []
+            dis: list[int] = []
             n = x_hi - x_lo
             for sm in seams:
                 arr = np.full(n, int(round(y_line))) if sm is None else np.asarray(sm, dtype=int)
@@ -183,7 +198,13 @@ class UNetJudge:
                 o = owner_from_seam(W, arr - y0)
                 eq = (o[ink] == ou[ink])
                 out.append(round(float((cw * eq).sum() / denom), 4))
-            return out
+                m = ink & (o != ou)
+                if m.any():
+                    _, _, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
+                    dis.append(int(st[1:, cv2.CC_STAT_AREA].max()))
+                else:
+                    dis.append(0)
+            return out, dis
         except Exception as e:  # 裁判出错不能拖垮切分：按旧规则走
             log.warning("cut judge failed at y=%s: %s", y_line, e)
             return None
