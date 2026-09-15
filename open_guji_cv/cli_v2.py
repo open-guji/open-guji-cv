@@ -32,6 +32,24 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
     return Engine(book, pl, params=overrides, log=(lambda s: None) if quiet else None)
 
 
+def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
+    """`guji pipeline` 要跑的步骤：按 --from/--to 切片，再套**书级可选步骤开关**。
+
+    2026-09-15 实锤：`Engine._default_steps` 只在 steps=None 时应用 `BookSpec.ocr_candidates`
+    开关，而这里总是先切片再传显式列表——于是 vol02（整理本质量高、开关默认关）跑
+    `guji pipeline keben_body_v2 vol02` 时 Step5-c OCR 候选照跑不误，一页 7 秒、188 页 22 分钟白花。
+    控制台同一条 pipeline 走的是 steps=None，开关生效，CLI 与控制台不同参不同输出。
+    只有 `guji step ocr_candidates`（from == to == 那一步，人手工点名）才不套开关。"""
+    steps = eng.pipeline.slice(from_step, to_step)
+    if from_step is not None and from_step == to_step:
+        return steps
+    enabled = eng._enabled(steps)
+    skipped = [s for s in steps if s not in enabled]
+    if skipped:
+        print(f"按书级开关跳过：{', '.join(skipped)}（{eng.book.id}.yaml ocr_candidates: false）", flush=True)
+    return enabled
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -39,7 +57,7 @@ def cmd_pipeline(args) -> None:
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
-    steps = eng.pipeline.slice(getattr(args, "from_step", None), getattr(args, "to_step", None))
+    steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error)
     if getattr(args, "json", False):
@@ -305,6 +323,77 @@ def cmd_split(args) -> None:
     recs = split_book(book, pages=pages, force=args.force)
     n_empty = sum(1 for r in recs if r.empty)
     print(f"分出 {len(recs)} 个逻辑页（其中空栏 {n_empty}），产物在 {book.raw_dir}")
+
+
+def cmd_witness_align(args) -> None:
+    """列级证人对齐：`line_is_column` 的整理本 → 逐字位候选标签（utils/witness_align.py）。
+
+    影印页码与扫描页的对应由 `--first-page`（扫描页 1 对应的影印页码）给；不给则读
+    book.yaml `references[0].first_page_no`。
+    """
+    from .core.book import load_book
+    from .core.workspace import corpus_path, products_root
+    from .utils.witness_align import align_book
+
+    book = load_book(args.book)
+    ref = (book.references or [{}])[0]
+    first = args.first_page if args.first_page is not None else ref.get("first_page_no")
+    if first is None:
+        print("需要 --first-page（扫描页 1 对应的影印页码），或在 book.yaml references[0] 写 first_page_no")
+        sys.exit(1)
+    witness = Path(args.witness) if args.witness else corpus_path(ref["file"])
+    stats = align_book(book, first_page_no=int(first), witness=witness, products_root=products_root())
+    print(json.dumps(stats, ensure_ascii=False))
+
+
+def cmd_calibrate_font(args) -> None:
+    """字体判定（三模式方案 §五.1）：拿 witness-align / 人裁的标签当查询，逐套字体量
+    recall@1/@5 与可分性 margin（utils/font_calibrate.py）。字体字形先用
+    `glyph-db import-font --manifest <工作区清单>` 导进工作区库。"""
+    from .clustering.glyph_db import GlyphDB
+    from .core.book import load_book
+    from .core.workspace import cache_root, glyph_db_path, products_root
+    from .utils.font_calibrate import format_table, load_labels, score_fonts
+
+    book = load_book(args.book)
+    labels_path = Path(args.labels) if args.labels else products_root() / book.id / "witness_align" / "labels.jsonl"
+    labels = load_labels(labels_path, max_per_char=args.per_char, max_chars=args.max_chars)
+    db = GlyphDB(glyph_db_path())
+    try:
+        editions = args.editions.split(",") if args.editions else [
+            r[0] for r in db.conn.execute("SELECT DISTINCT edition_tag FROM sources WHERE kind='font' ORDER BY 1")]
+        scores = score_fonts(db, book.id, labels, cache_root(), editions, k=args.k,
+                             exclude_self=args.exclude_self)
+    finally:
+        db.close()
+    print(format_table(scores))
+    if args.json:
+        Path(args.json).write_text(json.dumps([s.__dict__ for s in scores], ensure_ascii=False, indent=1),
+                                   encoding="utf-8")
+        print(f"→ {args.json}")
+
+
+def cmd_seed_witness(args) -> None:
+    """从证人标签播种字形库（utils/seed_witness.py）：证人字 × 字体 top-1 一致才进
+    `modern:<book>`。先跑 witness-align 与 glyph-db import-font。"""
+    from .clustering.glyph_db import GlyphDB
+    from .core.book import load_book
+    from .core.workspace import cache_root, glyph_db_path, products_root
+    from .utils.seed_witness import seed_from_witness
+
+    book = load_book(args.book)
+    labels_path = Path(args.labels) if args.labels else products_root() / book.id / "witness_align" / "labels.jsonl"
+    db = GlyphDB(glyph_db_path())
+    try:
+        stats = seed_from_witness(db, book, labels_path=labels_path, cache_root=cache_root(),
+                                  font_editions=args.fonts.split(","), edition_tag=args.edition,
+                                  limit=args.limit)
+    finally:
+        db.close()
+    out = products_root() / book.id / "witness_align" / "seed_stats.json"
+    out.write_text(json.dumps(stats, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps({k: v for k, v in stats.items() if k != "reject_samples"}, ensure_ascii=False))
+    print(f"→ {out}")
 
 
 def cmd_import_pdf(args) -> None:
@@ -642,6 +731,9 @@ COMMANDS_V2 = {
     "preclean": cmd_preclean,
     "split": cmd_split,
     "import-pdf": cmd_import_pdf,
+    "witness-align": cmd_witness_align,
+    "calibrate-font": cmd_calibrate_font,
+    "seed-witness": cmd_seed_witness,
     "eval": cmd_eval,
     "pipeline": cmd_pipeline,
     "step": cmd_step,
@@ -705,6 +797,32 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None, help="只做这些**扫描页**（页号表达式，如 1-5,9）；默认全部")
     p.add_argument("--force", action="store_true", help="已有产物也重做")
+
+    p = sub.add_parser("witness-align",
+                       help="[v2] 列级证人对齐：一行一列的整理本 → 逐字位候选标签（现代链播种/评测用）")
+    p.add_argument("book")
+    p.add_argument("--first-page", type=int, default=None, help="扫描页 1 对应的影印页码")
+    p.add_argument("--witness", default=None, help="整理本文件；默认 references[0].file")
+
+    p = sub.add_parser("calibrate-font",
+                       help="[v2] 字体判定：标签字位在各套字体来源里的 recall@1/@5 与可分性 margin")
+    p.add_argument("book")
+    p.add_argument("--labels", default=None, help="labels.jsonl；默认 products/<book>/witness_align/labels.jsonl")
+    p.add_argument("--editions", default=None, help="逗号分隔的 edition_tag；默认库里全部 kind=font 的来源")
+    p.add_argument("--per-char", type=int, default=3)
+    p.add_argument("--max-chars", type=int, default=600)
+    p.add_argument("--k", type=int, default=5)
+    p.add_argument("--exclude-self", action="store_true",
+                   help="留一法：查询字位自己已在库里（modern:<book>）时摘掉再检索")
+    p.add_argument("--json", default=None)
+
+    p = sub.add_parser("seed-witness",
+                       help="[v2] 证人标签 × 字体 top-1 一致 → 播种 modern:<book> 字形库")
+    p.add_argument("book")
+    p.add_argument("--fonts", default="font:simsun,font:iming", help="逗号分隔的字体 edition_tag（任一 top-1 一致即可）")
+    p.add_argument("--labels", default=None)
+    p.add_argument("--edition", default=None, help="默认 modern:<book>")
+    p.add_argument("--limit", type=int, default=None)
 
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")
