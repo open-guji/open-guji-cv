@@ -22,6 +22,26 @@ from ...errors import ImageMissing
 router = APIRouter()
 
 
+def _params_for_book(book: str, k: int):
+    """这册书跑 `glyph_match` 时实际用的参数：管线 yaml 的 `params.glyph_match`
+    覆盖在 `GlyphMatchParams` 默认值上，再补 Step 自己对现代书的 edition 缺省。
+    台上看到的证据必须与管线判的是同一次匹配，否则人裁的是幻觉。"""
+    from ...core.pipeline import default_pipeline_id, load_pipeline
+    from ...steps.glyph_match import GlyphMatchParams
+
+    b = load_book(book)
+    overrides: dict = {}
+    try:
+        overrides = dict(load_pipeline(default_pipeline_id(b)).params.get("glyph_match") or {})
+    except Exception:
+        pass                      # 管线读不出来就退回裸默认值，不让调试视图整个挂掉
+    overrides["knn_k"] = k
+    p = GlyphMatchParams(**overrides)
+    if p.edition is None and getattr(b, "edition", "keben") == "modern":
+        p = p.model_copy(update={"edition": f"modern:{b.id}"})
+    return p
+
+
 @router.get("/api/glyph-match/{book}/{page}/{col}/{slot}")
 @maps_http
 def api_glyph_match_query(book: str, page: int, col: int, slot: int,
@@ -39,6 +59,11 @@ def api_glyph_match_query(book: str, page: int, col: int, slot: int,
     不传 `exclude_id`：调试视图要看的恰恰是「这个字位在库里查会不会查到
     自己」，跟正式识别流程摘除自身的防自证需求不同（见 `match.py`
     `GlyphMatcher.match` 的 `exclude_id` 说明）。
+
+    **参数取自这册书实际走的管线**（`pipelines/<pid>.yaml` 的 `params.glyph_match`），
+    不是 `GlyphMatchParams` 的裸默认值（2026-09-15 修）。此前写死默认值，现代印刷链
+    在台上看到的是另一把尺子——管线跑的是笔宽归一 3px、库域 `modern:<book>`，调试视图
+    却拿不归一的全库比，人照着台上的证据判，判的是不存在的那次匹配。
     """
     from ...clustering.normalize import normalize_patch
     from ...clustering.seeding import cached_matcher_from_db
@@ -51,15 +76,17 @@ def api_glyph_match_query(book: str, page: int, col: int, slot: int,
     import cv2
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
 
-    p = GlyphMatchParams(knn_k=k)
+    p = _params_for_book(book, k)
     matcher, _chars = cached_matcher_from_db(
-        p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=k)
-    m = matcher.match(normalize_patch(img))
+        p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=k,
+        norm_stroke=p.norm_stroke)
+    m = matcher.match(normalize_patch(img, stroke_width=p.norm_stroke))
     return {
         "id": f"{book}:{page}:{col}:{slot}{sub or ''}",
         "verdict": m.verdict, "char": m.char, "matched_id": m.matched_id,
         "cov": round(float(m.cov), 4), "wmax": round(float(m.wmax), 2),
         "guard": m.guard, "n_verified": int(m.n_verified),
+        "edition": p.edition, "norm_stroke": p.norm_stroke,
         "candidates": [{"char": c, "cov": round(float(v), 4)}
                        for c, v in m.candidates],
     }
