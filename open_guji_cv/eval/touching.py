@@ -302,6 +302,72 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
     return out, skipped
 
 
+def escalated_boundaries(book: str, pages: list[int], store=None) -> tuple[list[dict], dict]:
+    """**升级切点**（`CutPointCandidates.escalate`）：Step3 的 L2′/L0′ 探针说「本层拿不准」的那些。
+
+    与 `r2s_boundaries` / `split_char_boundaries` 的区别：那两个是按图像判据**重新找**用例，这里直接读
+    Step3 产物里已经标好的 `escalate`，因此**含 L0′ 的 split_suspect（直线不穿墨、一矮一高且矮格墨满）
+    与 L3 扩池后的全部候选**（unet_seam / period_up / period_dn）。2026-09-15 加，见 overview
+    `Step3-逐字切分/10-切点梯次裁决设计.md`。出的用例与另两个同形，控制台切线 tab 页码框填 `escalated` 即可。
+    """
+    from ..core.step import page_key
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.store import ProductStore
+    from .rulers import _col_profile
+    import cv2
+    from ..core.spec import column_key
+    from ..products.cache import ImageCache
+    st = store or ProductStore()
+    ic = ImageCache()
+    out: list[dict] = []
+    skipped: dict[str, int] = {}
+    h_cache: dict[tuple[int, int], int | None] = {}
+
+    def col_height(pg_: int, col_: int) -> int | None:
+        k_ = (pg_, col_)
+        if k_ not in h_cache:
+            p_ = ic.get(book, "column_image", column_key(pg_, col_))
+            img = cv2.imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
+            h_cache[k_] = None if img is None else int(img.shape[0])
+        return h_cache[k_]
+
+    for pg in pages:
+        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        if cells is None:
+            continue
+        for cc in cells.columns:
+            if not cc.ok or len(cc.cells) != len(cc.boundaries) - 1:
+                continue
+            esc = [cp for cp in (cc.cut_candidates or []) if getattr(cp, "escalate", False)]
+            if not esc:
+                continue
+            ch = col_height(pg, cc.col)
+            if ch is None:
+                skipped["no_column_image"] = skipped.get("no_column_image", 0) + 1
+                continue
+            prof = _col_profile(st, book, pg, cc.col)
+            cmap = {c.slot: c for c in cc.cells if c.sub is None}
+            for cp in esc:
+                up, dn = cmap.get(cp.slot_above), cmap.get(cp.slot_below)
+                if up is None or dn is None:
+                    skipped["slots_not_found"] = skipped.get("slots_not_found", 0) + 1
+                    continue
+                y = int(round(cp.y))
+                col_w = int(max(c.x1 for c in cc.cells) + min(c.x0 for c in cc.cells))
+                out.append(dict(
+                    id=f"{book}:{pg}:{cc.col}:{cp.slot_above}", book=book, page=pg, col=cc.col,
+                    bi=cp.k, y=y,
+                    ink=round(float(prof[y]), 3) if prof is not None and 0 <= y < len(prof) else None,
+                    best=None, slot_above=up.slot, slot_below=dn.slot,
+                    y0=int(round(up.y0)), y1=int(round(dn.y1)),
+                    x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
+                    col_h=ch, col_w=col_w,
+                    seam=list(up.seam_bottom) if getattr(up, "seam_bottom", None) else None,
+                    kind="escalated", escalate_reason=cp.escalate_reason, origin=getattr(cp, "origin", "touching"),
+                ))
+    return out, skipped
+
+
 def polyline_to_seam(points: list, x0: int, x1: int) -> list[int]:
     """人标的折线（列图坐标 [[x, y], …]，按 x 递增）→ 每个 x∈[x0, x1) 一个 y（线性插值；
     两端之外取端点的 y，即水平延伸）。与 `Cell.seam_*` 同口径，可直接比。"""

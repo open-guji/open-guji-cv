@@ -16,6 +16,10 @@ export interface CutCandidate {
   y: number[] | null
   seam_ink: number
   dev_max: number
+  /** U-Net 裁判的置信加权一致率 [0,1]；没过裁判为空（2026-09-14） */
+  agree?: number | null
+  /** 与 U-Net 归属分歧的最大连通块 px（L2′ 升级门槛看它；2026-09-15） */
+  dis_unet?: number | null
   // 选这个切法，上格/下格库匹配认出的字（overview 2026-09-11 下发）。
   // null = 没跑过 Step4/5 或没有匹配结果，前端按"无识别信息"处理。
   match_above?: CandidateMatch | null

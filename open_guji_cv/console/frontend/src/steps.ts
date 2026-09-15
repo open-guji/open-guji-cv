@@ -7,15 +7,24 @@ export interface StepMeta {
   id: string
   title: string
   /** 后端 core/step.py 里对应的 step id 前缀，用于关联 /api/steps 的产物；
-   * 没有代码对应的（Step0/1/2/4 现在控制台没有面板）留空数组。*/
+   * 没有代码对应的（Step0/1/2/4 现在控制台没有面板）留空数组。
+   * **一个 Step 页可以对多条链**：刻本链与现代印刷链在 Step1–3 是不同的
+   * step id（见下），用 `backendIdFor(meta, edition)` 按册书取那一个。*/
   backendIds: string[]
+  /** 现代印刷链（pipelines/modern_body.yaml）在这一步的 step id，
+   * 缺省 = 与刻本链同名。*/
+  modernId?: string
 }
 
+// 现代印刷链（pipelines/modern_body.yaml）与刻本链一一对位，占同一个 Step 页：
+// line_detect ↔ border_detect（Step1）、column_crop ↔ column_warp（Step2）、
+// row_segment_runs ↔ row_segment（Step3）。同一页下两条链的产物种类相同
+// （line_index 是 Step1 的新种类），叠图 render/overlay.py 两边都认。
 export const STEPS: StepMeta[] = [
   { id: 'step0', title: 'Step0 预清理', backendIds: ['preclean'] },
-  { id: 'step1', title: 'Step1 边框界行', backendIds: ['border_detect'] },
-  { id: 'step2', title: 'Step2 单列射影', backendIds: ['column_warp'] },
-  { id: 'step3', title: 'Step3 逐字切分', backendIds: ['row_segment'] },
+  { id: 'step1', title: 'Step1 边框界行', backendIds: ['border_detect', 'line_detect'], modernId: 'line_detect' },
+  { id: 'step2', title: 'Step2 单列射影', backendIds: ['column_warp', 'column_crop'], modernId: 'column_crop' },
+  { id: 'step3', title: 'Step3 逐字切分', backendIds: ['row_segment', 'row_segment_runs'], modernId: 'row_segment_runs' },
   { id: 'step4', title: 'Step4 字框收缩', backendIds: ['cell_shrink'] },
   // 用户 2026-09-11 测试反馈 §5：Step5 改名"字符识别"（只改这一级标题，
   // 四个小步 5-a/5-b/5-c/5-d 名字不变）
@@ -41,6 +50,14 @@ export const STEP5_SUBS: Step5Sub[] = [
 
 export function findStep(id: string): StepMeta | undefined {
   return STEPS.find((s) => s.id === id)
+}
+
+/** 这册书在这一步跑的后端 step id：现代印刷本（Book.edition === 'modern'）
+ * 走 `modernId`，其余走 `backendIds[0]`。返回 undefined = 这一步没有后端 Step。 */
+export function backendIdFor(meta: StepMeta | undefined, edition?: string): string | undefined {
+  if (!meta) return undefined
+  if (edition === 'modern' && meta.modernId) return meta.modernId
+  return meta.backendIds[0]
 }
 
 /** 按后端 core/step.py 的 step id（比如 border_detect）反查前端 Step 页面。 */

@@ -6,7 +6,9 @@ import { fetchLlmOnlineStats } from '../api/llmOnline'
 import type { StatusResponse } from '../types/status'
 import type { OverviewSummaryResponse } from '../types/evals'
 import type { LlmOnlineStats } from '../api/llmOnline'
-import { STEPS } from '../steps'
+import { STEPS, backendIdFor } from '../steps'
+import { getBook } from '../api/registry'
+import type { Book } from '../types/registry'
 
 // Step5「字符识别」在 steps.ts 里 backendIds 是空的（它是四小步的容器，没有单一
 // 后端 step），于是总进度里整个 Step5 看不见——而 5-a/5-b/5-d 恰恰是全书跑得最
@@ -44,6 +46,7 @@ export function BookOverviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ocrErr, setOcrErr] = useState<string | null>(null)
+  const [bookMeta, setBookMeta] = useState<Book | null>(null)
 
   useEffect(() => {
     setStatus(null)
@@ -56,8 +59,17 @@ export function BookOverviewPage() {
     // 此前不传 pages，走 fetchStatus 的默认 `dev_set`，只统计 12 页分层小集，
     // 标题却写「全书页数」——名实不符，看着像整本书跑完了，其实只跑了 12 页。
     // dev_set 那份仍单独取一份并列显示，调参时照样能一眼看到小集进度。
-    fetchStatus(book, 'keben_body_v2', 'all').then(setStatus).catch((e) => setError(String(e)))
-    fetchStatus(book, 'keben_body_v2', 'dev_set').then(setDevStatus).catch(() => setDevStatus(null))
+    setBookMeta(null)
+    // 管线按册书取（2026-09-15）：写死刻本链时，现代印刷本的总进度条全是 0/80。
+    getBook(book).then((b) => {
+      setBookMeta(b ?? null)
+      const pid = b?.pipeline || 'keben_body_v2'
+      fetchStatus(book, pid, 'all').then(setStatus).catch((e) => setError(String(e)))
+      fetchStatus(book, pid, 'dev_set').then(setDevStatus).catch(() => setDevStatus(null))
+    }).catch(() => {
+      fetchStatus(book, 'keben_body_v2', 'all').then(setStatus).catch((e) => setError(String(e)))
+      fetchStatus(book, 'keben_body_v2', 'dev_set').then(setDevStatus).catch(() => setDevStatus(null))
+    })
     fetchOverviewSummary(book).then(setSummary).catch((e) => setError(String(e)))
     fetchLlmOnlineStats(book).then(setLlmStats).catch(() => setLlmStats(null))
   }, [book])
@@ -96,8 +108,9 @@ export function BookOverviewPage() {
               .map((r) => ({ key: `step5-${r.id}`, href: `/${book}/step/step5/${r.id}/`,
                              title: r.title, sid: r.backendId }))
           }
-          if (s.backendIds.length === 0) return []
-          return [{ key: s.id, href: `/${book}/step/${s.id}/`, title: s.title, sid: s.backendIds[0] }]
+          const sid = backendIdFor(s, bookMeta?.edition)
+          if (!sid) return []
+          return [{ key: s.id, href: `/${book}/step/${s.id}/`, title: s.title, sid }]
         }).map((row) => {
           const d = status.steps[row.sid]
           if (!d) return null

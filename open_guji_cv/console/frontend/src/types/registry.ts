@@ -12,6 +12,10 @@ export interface Book {
   id: string
   title: string
   n_pages: number
+  /** 'keben'（刻本，默认）| 'modern'（现代排印本）——决定 Step1–3 的后端 step id。 */
+  edition?: string
+  /** 这册书默认走的管线 id（后端 core/book.py::default_pipeline_id）。 */
+  pipeline?: string
   dev_set: number[]
   sets: Record<string, number[]>
   notes: string

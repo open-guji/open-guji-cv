@@ -18,9 +18,9 @@
 .clline.old { border-top: 1px dashed var(--indigo); opacity: .7; }
 .clsvg { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; overflow: visible; }
 .clseam { fill: none; stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .9; }
-.clcand { fill: none; stroke-width: 1.5; stroke-dasharray: 2 4; opacity: .85; }
-.clcand.narrow { stroke: var(--indigo); }
-.clcand.wide { stroke: var(--ochre); }
+.clcand { fill: none; stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .55; }
+/* 选中的候选：实线 + 加粗 + 不透明，和右侧按钮上的色点同色（2026-09-15） */
+.clcand-pick { stroke-width: 3; stroke-dasharray: none; opacity: 1; }
 .clpoly { fill: none; stroke: var(--zhu); stroke-width: 2; }
 .clpt { fill: var(--paper); stroke: var(--zhu); stroke-width: 2; }
 .clmode.on { background: var(--indigo-soft); border-color: var(--indigo); }
@@ -37,7 +37,16 @@
    一排三张，图文改成上下叠放。 */
 .bccgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; }
 .bcc-body { display: flex; flex-direction: column; gap: .4rem; }
-.clcand-pick { stroke-width: 2.5; opacity: 1; }
+.clcandlist { display: flex; flex-direction: column; gap: .2rem; width: 100%; }
+.clcandbtn { display: flex; align-items: center; gap: .35rem; text-align: left; width: 100%;
+  border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); padding: .2rem .4rem; cursor: pointer; }
+.clcandbtn .cldot { width: .62rem; height: .62rem; border-radius: 50%; background: var(--cc); flex: none;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15) inset; }
+.clcandbtn .clk { font-weight: 600; }
+.clcandbtn .muted { margin-left: auto; font-size: .7rem; }
+.clcandbtn.on { border-color: var(--cc); border-width: 2px; padding: calc(.2rem - 1px) calc(.4rem - 1px);
+  background: color-mix(in srgb, var(--cc) 12%, var(--surface)); }
+.clcandbtn.on .clk { color: var(--cc); }
 .bcc-expect { margin-bottom: .3rem; }
 .bcc-cands { width: 100%; border-collapse: collapse; font-size: .78rem; }
 .bcc-cands td { padding: .2rem .35rem; border-bottom: 1px solid var(--rule); cursor: pointer; }
