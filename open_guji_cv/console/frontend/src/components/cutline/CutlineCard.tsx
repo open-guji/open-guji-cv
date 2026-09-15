@@ -13,7 +13,7 @@ export interface CardState {
   hidden: boolean
 }
 
-const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊' }
+const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊', unet_seam: 'U-Net缝', period_up: '按格高↑', period_dn: '按格高↓' }
 
 // 每张卡自己的显示倍率，照抄 v1 clScale：列图裁片原宽约 180-210px，
 // 放到 ≤300px 且 ≤2 倍，卡片再窄也不会把右侧按钮挤没。

@@ -283,9 +283,10 @@ def test_clean_line_between_short_and_tall_cells_with_full_ink_becomes_probe_cut
     j = _FakeJudge({"straight": 0.5, "seam": 0.5}, dis={"straight": ESCALATE_BLOB + 20})
     r = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, cut_judge=j)
     cp = next(c for c in r.cut_candidates if c.slot_above == 5)
-    assert cp.origin == "split_suspect" and [c.kind for c in cp.candidates] == ["straight"]
+    assert cp.origin == "split_suspect" and cp.candidates[0].kind == "straight"
     assert cp.escalate is True and cp.escalate_reason.startswith("split_suspect")
-    assert cp.chosen == 0 and cp.chosen_by == "rule"
+    assert cp.chosen == 0 and cp.chosen_by == "rule"           # 升级后 L3 会补候选（period_up 等），但选法不动
+    assert all(c.kind in ("straight", "unet_seam", "period_up", "period_dn") for c in cp.candidates)
     # 同样几何、U-Net 不觉得有问题 → 建了切点但不升级
     r2 = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
                             cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}, dis={"straight": 5}))
@@ -299,4 +300,40 @@ def test_clean_line_between_normal_cells_builds_no_cut_point():
     r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}))
     assert {cp.slot_above for cp in r.cut_candidates} == {5}      # 只有 5/6 那条粘连
     assert all(cp.origin == "touching" for cp in r.cut_candidates)
+
+
+def test_guided_seam_from_owner_follows_the_partition():
+    """两块墨：上块 U-Net 判上、下块判下，中间空 20 行 → 引导缝走在两块之间；下块顶部一条横被判成上字时，缝绕到它下面。"""
+    import numpy as np
+    from open_guji_cv.utils.cut_select import guided_seam_from_owner
+    owner = np.zeros((150, 60), np.uint8)
+    owner[10:60, 10:50] = 1
+    owner[80:130, 10:50] = 2
+    sm = guided_seam_from_owner(owner, 70)
+    assert sm is not None and len(sm) == 60 and (60 <= sm).all() and (sm <= 80).all()
+    owner[80:86, 10:50] = 1                       # 下块顶横其实属于上字
+    sm2 = guided_seam_from_owner(owner, 70)
+    assert (sm2[10:50] >= 86).all()               # 缝从横的下面过
+
+
+def test_escalated_cut_gets_expanded_pool_but_selection_unchanged():
+    """L3：升级的切点补 unet_seam / period_* 候选（带 agree、dis_unet），chosen 不动；没升级的池不变。"""
+    import numpy as np
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+
+    class _J(_FakeJudge):
+        def guided_seam(self, col_gray, x_lo, x_hi, y0, y1, y_line, ink_threshold=128, band=45):
+            return np.full(x_hi - x_lo, int(round(y_line)) + 17)
+    img = _touching_column()
+    j = _J({"straight": 0.80, "seam": 0.99}, dis={"seam": ESCALATE_BLOB + 50, "straight": 300})
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j)
+    cp = _cut(r)
+    kinds = [c.kind for c in cp.candidates]
+    assert cp.escalate is True and "unet_seam" in kinds
+    assert cp.chosen == 1 and cp.candidates[cp.chosen].kind.startswith("seam_") and cp.chosen_by == "rule"
+    ext = next(c for c in cp.candidates if c.kind == "unet_seam")
+    assert ext.agree is not None and ext.dis_unet is not None and ext.dev_max == 17
+    j2 = _J({"straight": 0.80, "seam": 0.99}, dis={"seam": 5, "straight": 300})
+    cp2 = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j2))
+    assert cp2.escalate is False and "unet_seam" not in [c.kind for c in cp2.candidates]
 

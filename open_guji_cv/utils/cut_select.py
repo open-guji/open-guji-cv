@@ -49,6 +49,60 @@ ESCALATE_BLOB = 100
 
 DEFAULT_CKPT = Path(__file__).resolve().parents[2] / "models" / "partition_unet_v2" / "model.pt"
 
+GUIDED_BAND = 45
+"""L3 扩池：U-Net 引导缝的走廊半宽。升级切点的正确缝常在现役直线 25–35 px 外（文言 −25、學亦 +24），
+窄走廊 ±20 够不着，±40 的宽走廊只在窄走廊穿墨时才开；这里给 ±45。"""
+
+
+def guided_seam_from_owner(owner: np.ndarray, y_line_local: int, band: int = GUIDED_BAND,
+                           step: int = 2, turn: float = 0.02) -> np.ndarray | None:
+    """U-Net **引导**的缝：在直线 ±band 走廊里走一条每列最多移 step 行的路径，代价 = 这一列切在 y 时
+    归属错的墨像素数（U-Net 说是下字却在缝上方的 + 说是上字却在缝下方的）+ turn×纵向移动。
+    2026-09-15 实验十：按列取「换手行」会画出字的轮廓（归属交错 / 整字翻边时根本不是一条切线），
+    有约束的 seam DP 才给出可用的切线；三条有金标的升级点（學亦、文言、119:9:15）正确缝由它进池。
+    返回窗口局部坐标的逐 x 行号；owner 全空返回 None。"""
+    h, w = owner.shape
+    if h < 3 or w < 1 or not (owner > 0).any():
+        return None
+    up = (owner == 1).astype(np.int32)
+    dn = (owner == 2).astype(np.int32)
+    cum_dn = np.cumsum(dn, axis=0)
+    cum_up = np.cumsum(up, axis=0)
+    tot_up = cum_up[-1]
+    ys = np.arange(h)[:, None]
+    prev = np.clip(ys - 1, 0, h - 1)
+    above_dn = np.where(ys > 0, np.take_along_axis(cum_dn, prev, axis=0), 0)
+    below_up = tot_up[None, :] - np.where(ys > 0, np.take_along_axis(cum_up, prev, axis=0), 0)
+    mis = (above_dn + below_up).astype(np.float64)
+    lo, hi = max(0, y_line_local - band), min(h - 1, y_line_local + band)
+    if hi <= lo:
+        return None
+    n = hi - lo + 1
+    rows = np.arange(lo, hi + 1)
+    tie = 1e-4 * np.abs(rows - y_line_local)
+    cost = mis[lo:hi + 1, 0] + tie
+    back = np.zeros((w, n), dtype=np.int16)
+    offsets = np.arange(-step, step + 1)
+    for x in range(1, w):
+        cand = np.full((len(offsets), n), np.inf)
+        for i, d in enumerate(offsets):
+            if d >= 0:
+                cand[i, d:] = cost[:n - d] + turn * d
+            else:
+                cand[i, :n + d] = cost[-d:] + turn * (-d)
+        best_i = np.argmin(cand, axis=0)
+        cost = cand[best_i, np.arange(n)] + mis[lo:hi + 1, x] + tie
+        back[x] = offsets[best_i]
+    j = int(np.argmin(cost))
+    out = np.empty(w, dtype=int)
+    for x in range(w - 1, -1, -1):
+        out[x] = lo + j
+        if x > 0:
+            j = int(np.clip(j - int(back[x, j]), 0, n - 1))
+    return out
+
+
+
 
 def ckpt_fingerprint(path: str | Path | None = None) -> str:
     """权重文件的轻量指纹 (mtime_ns, size)；文件不存在返回空串（= 裁判不可用，按旧规则）。"""
@@ -169,6 +223,21 @@ class UNetJudge:
         """每条候选的 U-Net 置信加权一致率（`assess()` 的第一项）。"""
         r = self.assess(col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold)
         return None if r is None else r[0]
+
+    def guided_seam(self, col_gray: np.ndarray, x_lo: int, x_hi: int, y0: int, y1: int, y_line: float,
+                    ink_threshold: int = INK_TH, band: int = GUIDED_BAND) -> np.ndarray | None:
+        """L3 扩池用：U-Net 引导缝（**列图坐标**，长度 x_hi−x_lo）。判不了返回 None。"""
+        try:
+            y0, y1 = int(max(0, y0)), int(min(col_gray.shape[0], y1))
+            if y1 - y0 < 4 or x_hi - x_lo < 4:
+                return None
+            win = col_gray[y0:y1, x_lo:x_hi]
+            _, ou, _ = self.owner(win, ink_threshold)
+            sm = guided_seam_from_owner(ou, int(round(y_line)) - y0, band=band)
+            return None if sm is None else sm + y0
+        except Exception as e:
+            log.warning("guided seam failed at y=%s: %s", y_line, e)
+            return None
 
     def assess(self, col_gray: np.ndarray, x_lo: int, x_hi: int, y0: int, y1: int, y_line: float,
                seams: list, ink_threshold: int = INK_TH) -> tuple[list[float], list[int]] | None:

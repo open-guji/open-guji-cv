@@ -10,7 +10,7 @@ from __future__ import annotations
 from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
 
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
-CUT_KINDS = ("straight", "seam_narrow", "seam_wide")
+CUT_KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")   # 后三种 = L3 扩池（2026-09-15）
 
 
 def _resolve(expected: dict) -> ResolvedCut | None:
