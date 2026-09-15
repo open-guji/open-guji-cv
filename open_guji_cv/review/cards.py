@@ -127,6 +127,7 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
     """
     from ..console import deps
     from ..eval import touching as T
+    from ..utils.cut_select import PENDING_BLOB
 
     try:
         cases = (T.r2s_boundaries(book, pgs, st)
@@ -157,8 +158,20 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
             continue
         for cc in cells.columns:
             for cp in (getattr(cc, "cut_candidates", None) or []):
-                if len(cp.candidates) >= 2 or getattr(cp, "escalate", False):
+                # 2026-09-15：多候选**不再一律挡**。60 条分层抽样实测（10 卡第十一节）：
+                # 所选切法与 U-Net 分歧块 <20px 的 779 条里 0/20 切坏，20–60 的 5%，60–100 的 **35%**。
+                # 所以只挡 `dis_unet >= PENDING_BLOB`（60）的，人工省 92%、放行里漏 1.0%。
+                # `escalate`（≥100）照旧挡——那是 L2′ 判定「本层拿不准」的。
+                if getattr(cp, "escalate", False):
                     multi[(pg, cc.col, cp.slot_above)] = max(len(cp.candidates), 1)
+                    continue
+                if len(cp.candidates) < 2 or cp.chosen is None:
+                    continue
+                ch = cp.candidates[cp.chosen]
+                d = getattr(ch, "dis_unet", None)
+                # 裁判没跑过（dis_unet 缺）时保守挡——没有信息就不该替人放行（用户原则③）
+                if d is None or d >= PENDING_BLOB:
+                    multi[(pg, cc.col, cp.slot_above)] = len(cp.candidates)
 
     out = []
     for c in cases:                     # 只走面板真能出卡的那些

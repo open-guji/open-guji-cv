@@ -370,3 +370,11 @@ def test_human_pick_straight_recreates_it_when_shrink_rule_dropped_it():
     # 几何真的变了（人裁指向 seam_wide 而池里没有）→ 不动
     cands2, chosen2 = _apply_resolved_cut(pool, 0, ResolvedCut("seam_wide", y_ref=100.0), y_line=100.0)
     assert cands2 == pool and chosen2 == 0
+
+
+def test_pending_blob_threshold_is_calibrated_and_ordered():
+    """顺序闸门槛 < 升级门槛：60 挡人、100 升级；两者衔接，别互换。"""
+    from open_guji_cv.utils.cut_select import ESCALATE_BLOB, PENDING_BLOB
+    assert PENDING_BLOB == 60 and ESCALATE_BLOB == 100
+    assert PENDING_BLOB < ESCALATE_BLOB
+
