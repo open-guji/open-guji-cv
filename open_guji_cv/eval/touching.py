@@ -302,7 +302,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
     return out, skipped
 
 
-def escalated_boundaries(book: str, pages: list[int], store=None) -> tuple[list[dict], dict]:
+def escalated_boundaries(book: str, pages: list[int], store=None,
+                         include_pending: bool = True) -> tuple[list[dict], dict]:
     """**升级切点**（`CutPointCandidates.escalate`）：Step3 的 L2′/L0′ 探针说「本层拿不准」的那些。
 
     与 `r2s_boundaries` / `split_char_boundaries` 的区别：那两个是按图像判据**重新找**用例，这里直接读
@@ -338,7 +339,20 @@ def escalated_boundaries(book: str, pages: list[int], store=None) -> tuple[list[
         for cc in cells.columns:
             if not cc.ok or len(cc.cells) != len(cc.boundaries) - 1:
                 continue
-            esc = [cp for cp in (cc.cut_candidates or []) if getattr(cp, "escalate", False)]
+            # 出卡的口径与顺序闸一致（2026-09-15）：`escalate`（L2′ 说拿不准）+ 多候选且所选与 U-Net
+            # 分歧 ≥ PENDING_BLOB 的（60 条抽样标定：这一档坏率 35%，<20 的一条都不坏）。
+            # 人裁过的不出（人是终审）。`include_pending=False` 只出 escalate 那几条。
+            from ..utils.cut_select import PENDING_BLOB
+            esc = []
+            for cp in (cc.cut_candidates or []):
+                if getattr(cp, "chosen_by", None) == "human":
+                    continue
+                if getattr(cp, "escalate", False):
+                    esc.append(cp)
+                elif include_pending and len(cp.candidates) >= 2 and cp.chosen is not None:
+                    d = getattr(cp.candidates[cp.chosen], "dis_unet", None)
+                    if d is None or d >= PENDING_BLOB:
+                        esc.append(cp)
             if not esc:
                 continue
             ch = col_height(pg, cc.col)
@@ -363,7 +377,9 @@ def escalated_boundaries(book: str, pages: list[int], store=None) -> tuple[list[
                     x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
                     col_h=ch, col_w=col_w,
                     seam=list(up.seam_bottom) if getattr(up, "seam_bottom", None) else None,
-                    kind="escalated", escalate_reason=cp.escalate_reason, origin=getattr(cp, "origin", "touching"),
+                    kind="escalated", escalate_reason=cp.escalate_reason or
+                        f"pending dis_unet={getattr(cp.candidates[cp.chosen], 'dis_unet', None)}",
+                    origin=getattr(cp, "origin", "touching"),
                 ))
     return out, skipped
 
