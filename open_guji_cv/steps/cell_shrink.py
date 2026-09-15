@@ -26,6 +26,9 @@ class CellShrinkParams(BaseModel):
     strategy: str = "component_owner"     # | padding_box
     padding_ratio: float = 0.08
     min_ink_ratio: float = 0.01
+    frame_guard: bool = True
+    """首/末格端区抹「版框横条行」（extractor.mask_frame_bars_outside）。刻本开；现代排印本
+    （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
 
 
 @register_step
@@ -79,7 +82,7 @@ class CellShrinkStep(Step):
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
         ex = CharExtractor(padding_ratio=p.padding_ratio, min_ink_ratio=p.min_ink_ratio,
-                           strategy=p.strategy)
+                           strategy=p.strategy, frame_guard=p.frame_guard)
         return ex.extract_page(img, grid, ctx.book.id, str(page))
 
     # ── 多候选试切（Step7「切分裁决」板块要看的数据）────────────────────

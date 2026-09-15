@@ -51,6 +51,7 @@ class LineRun:
     kind: str = "body"
     col: int | None = None   # 列位号（body / empty），右→左从 1；其他 None
     flags: list[str] = field(default_factory=list)
+    row_ink: float = 0.0     # 段内有墨的行占其 y 跨度的比例：文字列 0.6～0.85，竖线 ≈ 1
 
     @property
     def cx(self) -> float:
@@ -134,7 +135,12 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
         work[max(0, a - rule_pad):min(H, b + rule_pad), :] = False
 
     colfrac = work.mean(axis=0)
-    segs = _runs(colfrac > col_ink_min, 3)
+    # 迟滞：段的**范围**按低门槛（col_ink_min/4）取，段**成立**要求峰值 ≥ col_ink_min。
+    # 单一绝对门槛对短列不稳：`colfrac` 是按整幅高平均的，图高一变（分页余量从 30 到 130，
+    # 多出 200 行白）短列两侧的边缘笔画就掉到门槛下，列宽缩水——北行日錄 p69「二月」列从
+    # 100px 缩成 72px、被判成小字列，整页列数少一，校對本标签整页错位（2026-09-15）。
+    low = col_ink_min / 4.0
+    segs = [(a, b) for a, b in _runs(colfrac > low, 3) if float(colfrac[a:b].max()) >= col_ink_min]
     if not segs:
         return LineLayout(W, H, None, None, rules_v, rules_h, [], None)
     widths = np.array([b - a for a, b in segs], dtype=float)
@@ -146,7 +152,19 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
         if w < min_width_frac * em:
             continue
         rows = np.flatnonzero(work[:, a:b].any(axis=1))
-        runs.append(LineRun(x0=a, x1=b, y0=int(rows[0]), y1=int(rows[-1]), width=w))
+        runs.append(LineRun(x0=a, x1=b, y0=int(rows[0]), y1=int(rows[-1]), width=w,
+                            row_ink=float(rows.size / (rows[-1] - rows[0] + 1))))
+    # 斜了的栏线：一条 20px 宽、2200px 高的线只要歪 1° 就横跨 40px，没有哪一列的墨占比到得了
+    # long_rules 的 0.5，于是它成了一个「段」——窄、满墨（row_ink ≈ 1）、几乎通页高。这样的段
+    # 是竖线不是列，补进 rules_v 并从段里拿掉（北行日錄 p7/p8 书口栏线，2026-09-15：它被当成
+    # 小字列后，与书眉小字的中心距 59px 成了列距的最小族，整页插满空列位）。
+    keep = []
+    for r in runs:
+        if r.width < 0.35 * em and r.row_ink >= 0.95 and (r.y1 - r.y0) >= 0.5 * H:
+            rules_v = list(rules_v) + [(r.x0, r.x1)]
+        else:
+            keep.append(r)
+    runs = keep
     if not runs:
         return LineLayout(W, H, em, None, rules_v, rules_h, [], None)
     runs.sort(key=lambda r: -r.x0)          # 右→左
@@ -156,14 +174,73 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
         if body_lo * em <= r.width <= body_hi * em:
             r.kind = "body"
         elif r.width < body_lo * em:
-            r.kind = "footnote"          # 先当脚注，下面再按位置改成 jiazhu 子列 / margin
+            r.kind = "footnote"          # 先当脚注，下面再按位置改成 margin / jiazhu 子列 / small_col
         else:
             r.kind = "wide"
             r.flags.append(f"宽 {r.width}px = {r.width / em:.2f} em，疑似并列/粘连")
 
+    def _pitch_of(body_runs):
+        if len(body_runs) < 2:
+            return None
+        d = np.sort(-np.diff([r.cx for r in body_runs]))   # 右→左，取正
+        # 空列位让部分差成倍数，取最小那一族——但族得站得住：至少 2 个、且不少于差数的 1/4。
+        # 一对挨得近的杂段（书口栏线渣 + 书眉小字）能造出一个孤零零的 59px「最小差」，
+        # 全页列距就跟着它走（p7，2026-09-15）。
+        need = max(2, int(np.ceil(0.25 * d.size)))
+        for base in d:
+            near = d[(d >= base) & (d <= base * 1.5)]
+            if near.size >= need:
+                return float(np.median(near))
+        return float(np.median(d))
+
+    # 列位网格：相位取「与最多正文列同相」的那一列。书口小字（卷次/页码）不在网格上，
+    # 脚注列、小注整列在网格上——这是分「块外杂物」与「块内窄列」最硬的判据。
+    body = [r for r in runs if r.kind == "body"]
+    pitch0 = _pitch_of(body)
+
+    def grid_dev(r) -> float:
+        if not pitch0 or len(body) < 3:
+            return 0.0
+        best = 0
+        dev = 0.0
+        for anchor in body:
+            ds = [abs(((s.cx - anchor.cx) + pitch0 / 2) % pitch0 - pitch0 / 2) for s in body]
+            n_on = sum(1 for d in ds if d <= 0.15 * pitch0)
+            if n_on > best:
+                best = n_on
+                dev = abs(((r.cx - anchor.cx) + pitch0 / 2) % pitch0 - pitch0 / 2) / pitch0
+        return dev
+
+    # 书口小字（margin）——**先于配对**判，否则卷次小字会跟旁边的栏线渣配成「双行小注列」
+    # （2026-09-15 北行日錄 p7/p8）。判据：在长竖线外侧；或整段在正文块之外且（离块超过
+    # margin_gap_frac × 列距，或不在列位网格上）——页码「一八三四」宽 80px 够得上正文宽度、
+    # 离块只 0.6 列距，但不在网格上（p10）。
+    regular = [r for r in body if grid_dev(r) <= 0.25]
+    if len(regular) < 3:
+        regular = body                       # 卷题页列位本就不等距，网格判据在这种页上不作数
+    ref_pitch = pitch0 or em * 1.8
+    if regular:
+        bx0, bx1 = min(r.x0 for r in regular), max(r.x1 for r in regular)
+        bh = max(r.y1 for r in body) - min(r.y0 for r in body)
+        for r in runs:
+            outside_rule = any((r.x1 <= a and a <= bx0) or (r.x0 >= b and b >= bx1)
+                               for a, b in rules_v)
+            beyond = r.x1 <= bx0 or r.x0 >= bx1
+            gap = min(abs(r.x0 - bx1), abs(bx0 - r.x1)) if beyond else 0
+            # 卷次/页码/书眉都短（≤ 1/3 块高）；卷题列（「攻媿先生文集卷第一百十九」12 个大字）
+            # 是高的——它离正文块 2.5 列距、也不在网格上，只有「高」能把它从书口小字里救出来。
+            short = (r.y1 - r.y0) < 0.35 * bh
+            off_grid = grid_dev(r) > 0.25
+            if outside_rule or (beyond and short and (gap > margin_gap_frac * ref_pitch or off_grid)):
+                r.kind = "margin"
+    else:
+        for r in runs:
+            if r.kind == "footnote":
+                r.kind = "margin"
+
     # 双行小注**整列**：两条相邻窄段（各约半个 em 宽、缝 ≤ 0.25 em）拼起来正好一个字身宽
     # → 一个列位（北行日錄 p52 实测 48+45px、缝 13px）。Step3 还切不了它（两个子列在
-    # y 投影上交错），先把列位与序号占对，标 jiazhu_pair 留给 M3。
+    # y 投影上交错），先把列位与序号占对，标 jiazhu_pair 留给 M3。只配块内的窄段。
     paired: list[LineRun] = []
     i = 0
     while i < len(runs):
@@ -171,7 +248,8 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
         if r.kind == "footnote" and i + 1 < len(runs) and runs[i + 1].kind == "footnote":
             s = runs[i + 1]                       # s 在左
             gap, tot = r.x0 - s.x1, r.x1 - s.x0
-            if 0 <= gap <= 0.25 * em and body_lo * em <= tot <= body_hi * em:
+            textlike = all(x.width >= 0.35 * em and x.row_ink <= 0.92 for x in (r, s))
+            if textlike and 0 <= gap <= 0.25 * em and body_lo * em <= tot <= body_hi * em:
                 paired.append(LineRun(x0=s.x0, x1=r.x1, y0=min(r.y0, s.y0), y1=max(r.y1, s.y1),
                                       width=tot, kind="body", flags=["jiazhu_pair"]))
                 i += 2
@@ -197,27 +275,7 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
     runs = merged
 
     body = [r for r in runs if r.kind == "body"]
-    pitch = None
-    if len(body) >= 2:
-        d = np.diff([r.cx for r in body])            # 右→左，负数
-        d = -d
-        # 中心距的「基本单位」：最小的那一族（空列位让部分差成倍数）
-        base = float(np.min(d))
-        near = d[d <= base * 1.5]
-        pitch = float(np.median(near)) if near.size else base
-    ref_pitch = pitch or em * 1.8
-
-    # 书口小字：在长竖线外侧，或离正文块太远
     if body:
-        bx0, bx1 = min(r.x0 for r in body), max(r.x1 for r in body)
-        for r in runs:
-            if r.kind != "footnote":
-                continue
-            outside_rule = any((r.x1 <= a and a <= bx0) or (r.x0 >= b and b >= bx1)
-                               for a, b in rules_v)
-            gap = min(abs(r.x0 - bx1), abs(bx0 - r.x1)) if (r.x1 <= bx0 or r.x0 >= bx1) else 0
-            if outside_rule or gap > margin_gap_frac * ref_pitch:
-                r.kind = "margin"
         # 小字整列：块内、够长（≥ small_col_frac × 正文块高）的窄段是一列小字——脚注列、
         # 单行小注整列。它占一个列位、在校對本里也是一行，所以当 body 编号，标 small_col。
         bh = max(r.y1 for r in body) - min(r.y0 for r in body)
@@ -225,11 +283,8 @@ def detect_lines(gray: np.ndarray, *, ink_threshold: int = 128, col_ink_min: flo
             if r.kind == "footnote" and (r.y1 - r.y0) >= small_col_frac * bh:
                 r.kind = "body"
                 r.flags.append("small_col")
-    else:
-        for r in runs:
-            if r.kind == "footnote":
-                r.kind = "margin"
     body = [r for r in runs if r.kind == "body"]
+    pitch = _pitch_of(body)
 
     # 空列位：相邻正文列中心距 ≈ k × 列距（k ≥ 2）时补 k−1 个
     if pitch and len(body) >= 2:

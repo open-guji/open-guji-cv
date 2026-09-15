@@ -131,6 +131,13 @@ def align_book(book, *, first_page_no: int, witness: Path, products_root: Path,
             cols = all_cols.get(k, [])
             if not lines or not cols:
                 continue
+            # **页级列数不等就整页不给**（2026-09-15 北行日錄 p70 教训）：只按列逐条比项数时，
+            # 一列多探/漏探会让后面每一列都对上邻列的那一行——满列都是 18 项，项数照样相等，
+            # 于是整页标签错一列，Step5-a 对账凭空多出 50 个「错」。
+            if len(cols) != len(lines):
+                n_cols += len(cols)
+                log(f"[witness-align] 扫描页 {k}（影印 {pno}）探出 {len(cols)} 列 vs 校對本 {len(lines)} 行，整页不给标签")
+                continue
             for i, ((pg, col, items), line) in enumerate(zip(cols, lines)):
                 n_cols += 1
                 if items is None or len(items) != len(line):
