@@ -1056,6 +1056,11 @@ def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
         return [cands[chosen]], 0
     match_idx = next((i for i, c in enumerate(cands) if c.kind == resolved.kind), None)
     if match_idx is None:
+        # 人裁说「直线就对」，但第 3 步的收缩规则（窄走廊零墨且贴线 → 直线不算真候选）把直线删了：
+        # 卡片上仍画着直线、人也能选它，收敛却落空（2026-09-15 实锤 23 条）。直线不依赖几何搜索，
+        # 按切点位置补回一条即可；其余 kind 找不到仍原样不动（那是几何真的变了）。
+        if resolved.kind == "straight":
+            return [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)], 0
         return cands, chosen
     return [cands[match_idx]], 0
 

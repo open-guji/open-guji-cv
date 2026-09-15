@@ -358,3 +358,15 @@ def test_human_pick_of_an_l3_candidate_converges_after_expansion():
     assert cp.escalate is False                                  # 人是终审，不再升级出卡
     up = next(c for c in r.cells if c.slot == 5)
     assert up.seam_bottom is not None                            # 折线候选被选中 → 写 seam_*
+
+
+def test_human_pick_straight_recreates_it_when_shrink_rule_dropped_it():
+    """第 3 步「窄走廊零墨且贴线」把直线从池里删了，但卡片仍画直线、人能选它。
+    人裁 straight 时按切点补回一条（2026-09-15 实锤 23 条因此没生效）；其余 kind 找不到仍不动。"""
+    from open_guji_cv.utils.row_boundaries import ResolvedCut, SeamCandidate, _apply_resolved_cut
+    pool = [SeamCandidate("seam_narrow", y=[100] * 10, seam_ink=0, dev_max=3)]      # 收缩后只剩折线
+    cands, chosen = _apply_resolved_cut(pool, 0, ResolvedCut("straight", y_ref=100.0), y_line=100.0)
+    assert [c.kind for c in cands] == ["straight"] and chosen == 0 and cands[0].y is None
+    # 几何真的变了（人裁指向 seam_wide 而池里没有）→ 不动
+    cands2, chosen2 = _apply_resolved_cut(pool, 0, ResolvedCut("seam_wide", y_ref=100.0), y_line=100.0)
+    assert cands2 == pool and chosen2 == 0
