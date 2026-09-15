@@ -403,3 +403,4 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
   （体检页与对勘页真源本就在仓库内，不必拷）。
 - **事件回收**：所有审查页共用 `GUJI-SEED-EVENT` 前缀三层持久化
   （persist_js.py），从 artifact 存档提取事件行即可回收。
+| 北行日錄 库匹配 same 档 vs 校對本 41 例 | https://claude.ai/artifact/2B2id71yUuaneP8hGdUJYR | **HTML 快照不入库**（工作区 `beixingrilu-workspace/review/same_mismatch_review.html`，41 卡 155 张 16 级灰缩略图约 267KB，裁决自存） | 现代链 Step5-a（`norm_stroke=3, exclude_self`，库 `modern:bxrl`）全书 same 档 13,283 里与校對本不一致的 41 个字位。每卡三张图（书上字位 / 库命中样本 / 库里「应为」字样本——后者 41 张只有 1 张有，说明校對本用的那个码在库里几乎没实例、播种时字体 top-1 全给了另一个码）+ SimSun/I.Ming 两个码的标准形 + 校對本三行原文（该字高亮）。四档：同形异码 / 校對本录错 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review.py`（2026-09-15） |
