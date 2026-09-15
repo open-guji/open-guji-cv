@@ -20,7 +20,7 @@ def _resolve(expected: dict) -> ResolvedCut | None:
     |---|---|---|
     | `cand` ∈ CUT_KINDS（Step7 裁决台 `confirmed`、切线卡 `cand`）| 那个 kind | 有 `y_old` 就按它 |
     | `ok`（现役直线切点就对）| `straight` | `y_old`（= 当时的直线 y）|
-    | `seam_ok`（现役折线缝就对）| 现役选中的折线（`RESOLVED_CHOSEN`）| `y_old`，没有则 `y` |
+    | `seam_ok`（现役折线缝就对）| 池里与人看到的折线一致的那条（`RESOLVED_CHOSEN` + `seam_ref`=polyline）| `y_old`，没有则 `y`；折线偏差 ≤ RESOLVED_SEAM_TOL |
     | `moved` 无 cand（人拖到别处）| — | 候选池里没有「人挪到的位置」|
     | `overlap` / `idk` | — | 真难例，留给人 |
 
@@ -38,7 +38,9 @@ def _resolve(expected: dict) -> ResolvedCut | None:
         return ResolvedCut("straight", float(y_old))
     if verdict == "seam_ok":
         y_ref = y_old if y_old is not None else expected.get("y")
-        return ResolvedCut(RESOLVED_CHOSEN, None if y_ref is None else float(y_ref))
+        poly = expected.get("polyline")
+        return ResolvedCut(RESOLVED_CHOSEN, None if y_ref is None else float(y_ref),
+                           seam_ref=poly if poly and len(poly) >= 2 else None)
     return None
 
 
