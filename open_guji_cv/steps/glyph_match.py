@@ -128,8 +128,10 @@ class GlyphMatchStep(Step):
             p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
         matcher = self._matcher(p)
 
-        def normalize_patch(img):
-            return _normalize_patch(img, stroke_width=p.norm_stroke)
+        def normalize_patch(img, punct: bool = False):
+            # 标点走等比归一（见 seed_witness 与 normalize.normalize_patch 的 isotropic 说明）：
+            # 播种与匹配必须用同一把尺子，否则库被一把尺子筛、又被另一把尺子查。
+            return _normalize_patch(img, stroke_width=p.norm_stroke, isotropic=punct)
         chars: PageChars = ctx.product("char_index", page)
         out: list[ColumnMatch] = []
         for cc in chars.columns:
@@ -146,14 +148,17 @@ class GlyphMatchStep(Step):
                     recs.append(MatchRec(id=r.id, slot=r.slot, sub=r.sub,
                                          verdict="diff", guard=f"no_patch:{e}"))
                     continue
-                m = matcher.match(normalize_patch(img), exclude_id=(r.id if p.exclude_self else None))
+                is_punct = (getattr(r, "step3_kind", None) == "punct")
+                m = matcher.match(normalize_patch(img, is_punct),
+                                  exclude_id=(r.id if p.exclude_self else None))
                 cand_variants: list[CandidateMatch] = []
                 for cv in (r.cand_variants or []):
                     try:
                         cimg = ctx.image("char_patch", cv.patch_key)
                     except Exception:
                         continue    # 候选试切图块再生不出来就跳过，不炸整页
-                    cm = matcher.match(normalize_patch(cimg), exclude_id=(r.id if p.exclude_self else None))
+                    cm = matcher.match(normalize_patch(cimg, is_punct),
+                                       exclude_id=(r.id if p.exclude_self else None))
                     cand_variants.append(CandidateMatch(
                         side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),

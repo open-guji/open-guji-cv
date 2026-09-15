@@ -54,9 +54,11 @@ class CellShrinkStep(Step):
         by_pos: dict[int, dict] = {}
         for c in cc.cells:
             d = by_pos.setdefault(c.pos, {"index": c.pos - 1, "y_top": c.y0, "y_bottom": c.y1,
-                                          "type": "empty", "kinds": set(),
+                                          "type": "empty", "kinds": set(), "is_punct": False,
                                           "seam_top": None, "seam_bottom": None})
             d["kinds"].add(c.kind)
+            if c.kind == "punct":
+                d["is_punct"] = True
             d["y_top"], d["y_bottom"] = min(d["y_top"], c.y0), max(d["y_bottom"], c.y1)
             if c.kind != "blank":
                 d["type"] = "char"
@@ -65,8 +67,10 @@ class CellShrinkStep(Step):
             if pos_count[c.pos] == 1:
                 d["seam_top"] = c.seam_top
                 d["seam_bottom"] = c.seam_bottom
+        # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
+        # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
-                  "y_bottom": float(d["y_bottom"]),
+                  "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
                   "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"]}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))

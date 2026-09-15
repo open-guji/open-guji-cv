@@ -2298,10 +2298,16 @@ class CharExtractor:
                 if "frame_bars" not in flags and _bar_crosses_column(
                         page_img, patch, int(x0), int(x1), int(py0)):
                     flags.append("frame_bars")
-                # 切分异常提示：字块长宽比离谱（粘连/切半）
-                aspect = cell_h / max(col_w, 1e-6)
-                if aspect > 1.8 or aspect < 0.3:
-                    flags.append("bad_seg")
+                # 切分异常提示：字块长宽比离谱（粘连/切半）。
+                # **标点格不扣**（2026-09-15）：这个判据量的是「格框」高宽比，前提是
+                # 一格 = 一个字身。标点格的高是 Step3 给这个记号留的竖向空间（`，` 挤在
+                # 半格、`、` 占小半格），与粘连/切半无关——北行日錄实测 574 个 bad_seg
+                # 里 574 个全在标点上（`、` 82%、`，` 15%），而汉字只有 0.3%。
+                # 播种把 bad_seg 列进排除名单，不修这里的话标点刚开闸就被挡掉三成。
+                if not cell.get("is_punct"):
+                    aspect = cell_h / max(col_w, 1e-6)
+                    if aspect > 1.8 or aspect < 0.3:
+                        flags.append("bad_seg")
 
                 # 夹注缝在**格框图块**上量（判据阈值按格框几何标定：单字
                 # 只占 0.6~0.7 列宽是唯一不重叠的量，裁紧后谁都是满宽）
