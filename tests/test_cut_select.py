@@ -164,3 +164,19 @@ def test_real_judge_prefers_seam_that_respects_two_blobs():
     sc = judge.scores(col, 0, 120, 0, 150, 70.0, [None, good, bad])
     assert sc is not None and len(sc) == 3
     assert sc[1] > sc[2] and sc[0] == sc[1]          # 直线 y=70 与 good 同一条线
+
+
+def test_seam_ok_resolution_collapses_to_the_rule_seam_not_the_judge_choice():
+    """`seam_ok`（RESOLVED_CHOSEN）= 人当时看到的现役折线就对。裁判想改直线也不行，而且收敛到的必须是规则选的那条折线
+    （2026-09-14 vol02 p33 实锤：裁判先改选、seam_ok 再收敛，就把裁判的选择当成了人裁）。"""
+    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
+    img = _touching_column()
+    base = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS))
+    rule_seam = base.candidates[base.chosen].y
+    j = _FakeJudge({"straight": 0.99, "seam": 0.80})           # 裁判强烈想改直线
+    r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j,
+                          resolved_cuts={5: ResolvedCut(RESOLVED_CHOSEN)})
+    cp = _cut(r)
+    assert len(cp.candidates) == 1 and cp.candidates[0].y == rule_seam and cp.chosen_by == "human"
+    assert cp.candidates[0].agree is None                       # 人裁过的切点裁判根本没跑
+
