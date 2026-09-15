@@ -320,7 +320,7 @@ class Cell:
 @dataclass
 class SeamCandidate:
     """切点的一条可选切线（列图坐标）。见 `products/kinds/cells.py` 同名模型。"""
-    kind: str                      # straight | seam_narrow | seam_wide
+    kind: str                      # straight | seam_narrow | seam_wide | unet_seam | period_up | period_dn（后三种是 L3 扩池加的）
     y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
     seam_ink: int = 0
     dev_max: int = 0
@@ -1283,7 +1283,49 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     if chosen_by != "human" and dis[chosen] >= ESCALATE_BLOB:
                         escalate = True
                         escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
+                        cands = _expand_pool(cands, up_c, dn_c, k_)
             return cands, chosen, chosen_by, escalate, escalate_reason
+
+        def _expand_pool(cands, up_c, dn_c, k_):
+            """L3 扩池（2026-09-15，10 卡）：只对升级的切点，**只加候选不改选法**。
+            新候选：`unet_seam`（U-Net 引导缝，见 cut_select.guided_seam_from_owner）、`period_up`/`period_dn`
+            （以「上格顶 + 中位格高」「下格底 − 中位格高」为中心搜的最小墨缝——DP 把格线放偏时正确缝常在这里）。
+            与池里已有的逐 x 相同就不重复加；每条都补 agree / dis_unet 供下游（L4 / 人）比较。
+            实验十（vol02 152 条升级点）：有金标的 3 条正确缝全部由 unet_seam 进池；扩池后仍与 U-Net 分歧 ≥100 的 33 条
+            是整字翻边 / 两字并一格这类结构性错，留给人。"""
+            y_line = float(bounds[k_])
+            n = x_hi - x_lo
+            extra: list[tuple[str, np.ndarray]] = []
+            gs = getattr(cut_judge, "guided_seam", None)
+            if gs is not None:
+                sm = gs(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)), y_line, ink_threshold=ink_threshold)
+                if sm is not None and len(sm) == n:
+                    extra.append(("unet_seam", np.asarray(sm, dtype=int)))
+            if med_h > 0:
+                from . import seam as _seam2
+                for kind, center in (("period_up", int(round(up_c.y0 + med_h))), ("period_dn", int(round(dn_c.y1 - med_h)))):
+                    if 0 < center < h and abs(center - y_line) >= 4:
+                        sm = _seam2.find_seam(ink_bin, center, band=_seam2.SEAM_BAND)
+                        extra.append((kind, np.asarray(sm, dtype=int)))
+            have = [tuple(int(v) for v in (c.y if c.y is not None else np.full(n, int(round(y_line))))) for c in cands]
+            new_c: list[SeamCandidate] = []
+            for kind, sm in extra:
+                key = tuple(int(v) for v in sm)
+                if key in have:
+                    continue
+                have.append(key)
+                new_c.append(SeamCandidate(kind=kind, y=[int(v) for v in sm],
+                                           seam_ink=int(ink_bin[np.clip(sm, 0, h - 1), np.arange(n)].sum()),
+                                           dev_max=int(np.abs(sm - y_line).max())))
+            if not new_c:
+                return cands
+            res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)), y_line,
+                                   [c.y for c in new_c], ink_threshold=ink_threshold)
+            if res is not None and len(res[0]) == len(new_c):
+                for c, s_, d_ in zip(new_c, res[0], res[1]):
+                    c.agree = s_
+                    c.dis_unet = int(d_)
+            return list(cands) + new_c
 
         for k in range(1, n_slots):
             up, dn = by_pos.get(k, []), by_pos.get(k + 1, [])

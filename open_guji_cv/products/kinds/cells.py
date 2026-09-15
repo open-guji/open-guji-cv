@@ -42,7 +42,7 @@ class SeamCandidate(BaseModel):
     所以候选挂在 `ColumnCells` 上，与 `boundaries` 对齐，而不是挂在 `CellRec` 上
     （那样同一组数据要存两份，且表达不了「同时动上下两格」）。
     """
-    kind: str                      # straight | seam_narrow | seam_wide
+    kind: str                      # straight | seam_narrow | seam_wide | unet_seam | period_up | period_dn（后三种 = L3 扩池，只在升级切点上出现）
     y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
     seam_ink: int = 0              # 这条线穿过的墨量（下游打分可用，也便于审计）
     dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
