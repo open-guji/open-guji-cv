@@ -35,7 +35,8 @@ class BorderDetectStep(Step):
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期
-        book_deps=("leaf_layout", "expected_cols", "bottom_gap"),
+        book_deps=("leaf_layout", "expected_cols", "bottom_gap",
+                   "top_band_frac", "bottom_band_frac"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -46,7 +47,9 @@ class BorderDetectStep(Step):
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         res = detect_borders(gray, expected_cols=cols, ink_threshold=p.ink_threshold,
-                             book_bottom_gap=ctx.book.bottom_gap)
+                             book_bottom_gap=ctx.book.bottom_gap,
+                             top_band_frac=ctx.book.top_band_frac,
+                             bottom_band_frac=ctx.book.bottom_band_frac)
         borders = Borders.from_result(res, cols)
 
         # 列类型：`borders.verticals` 已是右上原点空间、x 升序（右→左），与
