@@ -4,7 +4,7 @@
 > `open_guji_cv/core/workspace.py` 顶部的 docstring 与其中的 `*_REL` 常量——
 > 改布局要**先改那边、再改这里**，两边不一致时以代码为准。
 >
-> 三个工作区（`siku-zongmu` / `beixingrilu` / `yiwenzhi`）已按此对齐；
+> 四个工作区（`siku-zongmu` / `beixingrilu` / `yiwenzhi` / `beixing-guben`）已按此对齐；
 > 各自当下状态与迁移记账在 overview 仓
 > `项目进展/图片初步数字化/进度/总览/08-工作区目录约定.md`。
 
@@ -130,3 +130,33 @@ git init
 现代印刷链的新字段见 `modern_print_pipeline.md` §二），
 `guji import-pdf` 把 PDF 抽成 `data_full/<book>_scan/`，
 需要分页再 `guji split <book>`。控制台起来后该工作区就会出现在列表里。
+
+### 抽原图的两个坑（`import-pdf` 已内建拦截，但要看它的告警）
+
+1. **页框 pt 数 ≠ 内嵌图像素数**时，按页框渲染会**静默降分辨率**。
+   北行日錄刻本那两个 PDF 页框 672×562 pt、内嵌图 2801×2343 px，
+   旧实现抽出来只有 1/4.17，字身 71px → 17px。
+   现在默认 `--mode embedded`（直接取内嵌像素）；显式 `--mode render` 时若
+   渲染结果小 >1.2 倍会告警并算出该用的 `--dpi`。**矢量/文字 PDF 才该用 render。**
+2. **JPEG2000 末 tile 残缺 → MuPDF 给一张全白图并且 exit 0**（静默坏页）。
+   现在内嵌路径解不开会自动截断末 SOT 补 EOC 抢救，并提示务必目视核对。
+
+抽完**一定要看它的逐页体检**：近乎全白/全黑的页、全目录尺寸不一致都会报出来。
+**全白页 exit 0 是最难发现的一类坏数据**——它会一路往下跑，到 Step3 才莫名其妙零列。
+
+### 筒子页（一整版两个半叶）不必先分页
+
+`beixing-guben`（北行日錄知不足齋叢書刻本）实测：**整版直接跑就行**，
+Step2 一行没改，19/20 列过闸。因为 `page_column_windows` 把列定义成**相邻两条
+`verticals` 之间**，版心两侧的书口栏线在它眼里就是普通界行；上下版框虽名义上
+左右半叶各一条，实测两半**几乎共线**（版心处 y 差 0.1~8.9px，远小于
+`column_bounds` 已在处理的 14.5px 锚点漂移），一条 `HLine` 够用。
+
+代价是**版心占掉一个列位**（该书 `expected_cols: 20` = 10 + 版心 + 10），
+下游必须把它排除在正文之外。**判法只能用位置**（跨版框中点的那一列，8 页全中、
+离中点 −8~+5px）；「列内最长空白段」「列内墨占比」两个统计判据**是负结果**——
+卷题页/卷末页的短正文列比版心更空，8 页里 3 页认错。
+
+正解是给刻本链补一个**列类型**概念，照现代链 `products/kinds/line_index.py` 的
+`LineRec.kind`（`body | empty | footnote | margin | wide | noise`，docstring 里
+点名就有「书口小字列」）。**这件事还没做。**
