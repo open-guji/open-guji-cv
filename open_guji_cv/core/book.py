@@ -174,6 +174,8 @@ class BookSpec:
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
+            # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
+            "n_references": len(self.references),
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),

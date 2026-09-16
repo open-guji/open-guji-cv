@@ -5,6 +5,7 @@ import { listBooks } from '../api/registry'
 import { getWorkspace, switchWorkspace } from '../api/workspace'
 import type { WorkspaceState } from '../api/workspace'
 import type { Book } from '../types/registry'
+import { useBookCaps } from '../hooks/useBookCaps'
 
 // 顶层布局：左侧导航。用户 2026-09-11 测试反馈 §1/§4 重排过一次：
 // 换书下拉框置顶 → 分割线 → 总览 → Step0-9（Step5 四小步永久展开为二级
@@ -20,6 +21,8 @@ export function AppLayout() {
   const [ws, setWs] = useState<WorkspaceState | null>(null)
   const [wsBusy, setWsBusy] = useState(false)
   const [wsErr, setWsErr] = useState('')
+  // 侧边栏也按能力裁：点进去只会看到「这本书没开这一路」的子项就别列出来
+  const { caps } = useBookCaps(book ?? '')
 
   useEffect(() => {
     listBooks().then(setBooks).catch(() => {})
@@ -92,7 +95,11 @@ export function AppLayout() {
                   <div key={s.id} className="sidebar-step5">
                     <NavLink to={`/${book}/step/step5/`} end>{s.title}</NavLink>
                     <div className="sidebar-step5-subs">
-                      {STEP5_SUBS.map((sub) => (
+                      {STEP5_SUBS.filter((sub) => (
+                        sub.id === 'ocr' ? caps.hasOcrCandidates
+                          : sub.id === 'align-ref' ? caps.hasReference
+                            : true
+                      )).map((sub) => (
                         <NavLink key={sub.id} to={`/${book}/step/step5/${sub.id}/`}>{sub.title}</NavLink>
                       ))}
                     </div>

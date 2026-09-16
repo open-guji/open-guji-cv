@@ -10,9 +10,8 @@ import { ProductViewer } from '../components/ProductViewer'
 import { usePages } from '../hooks/usePages'
 import type { GateSummaryResponse } from '../types/evals'
 import type { BorderReviewKind } from '../types/borderReview'
-import type { Book } from '../types/registry'
-import { getBook } from '../api/registry'
 import { backendIdFor, findStep, gate1IdFor } from '../steps'
+import { useBookCaps } from '../hooks/useBookCaps'
 
 // Step1 边框与界行探测。裁决台（列探测/抬头/外框外延）用户 2026-09-11 定「以后
 // 完全不走 artifact，都走控制台」后从 scripts/build_border_gold_reviews.py
@@ -60,18 +59,13 @@ export function Step1Page() {
   }
   const [typeFilter, setTypeFilter] = useState<TypeFilterValue>('all')
   const [gateSummary, setGateSummary] = useState<GateSummaryResponse | null>(null)
-  const [bookMeta, setBookMeta] = useState<Book | null>(null)
+  const { meta: bookMeta, caps } = useBookCaps(book)
   // 闸1 的 step id 分链（刻本 border_detect_gate / 现代 line_detect_gate），
   // 所以要先知道这册书是什么版式再去要汇总。
   const gate1 = gate1IdFor(bookMeta?.edition)
   // 产物也分链：刻本 border_detect / 现代 line_detect。写死前者时现代书
   // 这一格永远是「没有这份产物」（2026-09-15 用户截图）。
   const step1Id = backendIdFor(findStep('step1'), bookMeta?.edition) ?? 'border_detect'
-
-  useEffect(() => {
-    if (!book) { setBookMeta(null); return }
-    getBook(book).then((b) => setBookMeta(b ?? null)).catch(() => setBookMeta(null))
-  }, [book])
 
   useEffect(() => {
     if (!book) { setGateSummary(null); return }
@@ -121,17 +115,23 @@ export function Step1Page() {
         pages={pageSel}
         typeBreakdown={typeBreakdown}
       />
-      <div className="card">
-        <h2>Step1 边框探测 <span className="muted">版框、界行、抬头框</span></h2>
-        <div className="seg" style={{ display: 'inline-flex', gap: '.3rem' }}>
-          {TABS.map((t) => (
-            <button key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
-              {t.label}
-            </button>
-          ))}
+      {/* 边框探测的四类裁决（列探测/外框外延/上下版框核校/下版框坐标金标）与
+          页级界行标注，量的都是**版框界行**。`frame: none` 的书（现代排印本）
+          没有这些东西，接口实测回 0 条卡——显示出来只是一排空面板。
+          见 src/capabilities.ts。 */}
+      {caps.hasFrame && (<>
+        <div className="card">
+          <h2>Step1 边框探测 <span className="muted">版框、界行、抬头框</span></h2>
+          <div className="seg" style={{ display: 'inline-flex', gap: '.3rem' }}>
+            {TABS.map((t) => (
+              <button key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      {tab === 'pageline' ? <PageLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
+        {tab === 'pageline' ? <PageLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
+      </>)}
       <ProductViewer
         book={book}
         step={step1Id}

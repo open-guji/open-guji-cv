@@ -1,12 +1,11 @@
 import { useParams } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ProductViewer } from '../components/ProductViewer'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { usePages } from '../hooks/usePages'
-import { getBook } from '../api/registry'
-import type { Book } from '../types/registry'
 import { backendIdFor, findStep } from '../steps'
+import { useBookCaps } from '../hooks/useBookCaps'
 
 const STEP_ID = 'step2'
 
@@ -32,13 +31,8 @@ export function Step2Page() {
     setPageSel(loadSavedPageRange(STEP_ID, book))
   }
   const pages = usePages(book, pageSel)
-  const [bookMeta, setBookMeta] = useState<Book | null>(null)
+  const { meta: bookMeta } = useBookCaps(book)
   const step2Id = backendIdFor(findStep('step2'), bookMeta?.edition) ?? 'column_warp'
-
-  useEffect(() => {
-    if (!book) { setBookMeta(null); return }
-    getBook(book).then((b) => setBookMeta(b ?? null)).catch(() => setBookMeta(null))
-  }, [book])
 
   return (
     <div>

@@ -18,6 +18,16 @@ export interface Book {
   pipeline?: string
   /** 原图在不在当前 GUJI_WORKSPACE 下。false = 换个工作区才看得到它的数据。 */
   in_workspace?: boolean
+  /** 'ruled'（有版框界行，默认）| 'none'（无版框）。界行类裁决台据此显隐。 */
+  frame?: string
+  /** 'vertical-rl'（竖排，默认）| 'horizontal-tb'（横排，尚未实现）。 */
+  writing_mode?: string
+  /** 'trad' | 'simp'。 */
+  script?: string
+  /** 是否启用 Step5-c OCR 候选。 */
+  ocr_candidates?: boolean
+  /** 登记的整理本数量；0 = Step5-d 锚定没有意义。 */
+  n_references?: number
   dev_set: number[]
   sets: Record<string, number[]>
   notes: string
