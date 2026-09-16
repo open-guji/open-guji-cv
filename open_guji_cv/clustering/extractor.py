@@ -1168,15 +1168,27 @@ def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     return out if bottom else out[::-1]
 
 
-# ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
+# ── 列端渣格闸（2026-08-24 自评回流；2026-09-16 补 frame_guard 分支）───
 # 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
 # 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
 # 输出（几乎全在 idx 末端，tail 层 48 格里 18 个）。判据在**格框图块**
 # （裁紧前、清理后）上算。危险邻例是列尾的扁字（实测「二」：两笔各高
 # ~18px 但只占 0.78 墙距、两笔纵向跨度≈整格），故「字证据」看两条：
 # 非满宽连通体的纵向总跨度，或单个够高的连通体。
+#
+# 「满宽且矮＝条渣」这条判据的物理前提是**版框存在**：框线两端钉死在
+# 墙上，穿墙是条渣的物理特征。北行日錄（modern_body，`frame: none`）
+# 没有版框，不可能有框线残渣；而它这本书的「一」字本身就是一条满宽
+# 的细横笔（实测 area 499~798、恰好卡在 TAIL_JUNK_ONE_INK=1000 逃生口
+# 门槛之下——那道门槛是按刻本「一」字标定的，刻本笔画粗，这本现代
+# 排印本的宋体「一」笔画细，同一套阈值把真字当条渣（2026-09-16 塌缩
+# 诊断：p4/c9/pos2、p8/c12/pos1 等 34 例逐一核实，图块里就是印着「一」
+# 的单条横笔＋右端小衬线，不是任何形式的框线）。故 `frame_guard=False`
+# 时跳过这条判据——没有物理框就不可能有框渣，满宽矮体只能是真字
+# （「一」）或极稀薄的噪点，后者仍受 TAIL_JUNK_MIN_INK/h<4 兜底过滤。
 TAIL_JUNK_W2W = 0.92       # 连通体宽 ≥ 此比例 × 墙距 → 满宽条渣（字笔画到
                            #   文字带就停，条痕物理上穿墙，裁到图块边）
+                           #   ——只在 frame_guard=True（有物理版框）时生效
 TAIL_JUNK_W2W_H = 0.35     # 满宽体高 ≥ 此比例 × 格高 → 不是条渣是「字粘条」
                            #   （字与条连成一个连通体时整体满宽；实测纯条渣
                            #   高 ≤0.26 格，字粘条 ≥0.6 格）
@@ -1185,16 +1197,41 @@ TAIL_JUNK_CC_H = 0.30      # 单连通体高 ≥ 此比例 × 格高 → 直接�
 TAIL_JUNK_SPAN = 0.35      # 字证据连通体纵向总跨度 ≥ 此比例 × 格高 → 字
 TAIL_JUNK_ONE_INK = 1000   # 孤「一」逃生口：单连通体墨量下限（实测条渣
 TAIL_JUNK_ONE_W = 0.45     #   非满宽块 ≤725）、宽度下限（× 墙距）
-TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）
+TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）——仅 frame_guard=True
+                           #   时使用；frame_guard=False 时不需要这道逃生口
+                           #   （满宽矮体本身已经不被当条渣，不必再单独救）
 
 
-def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
-    """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。"""
+def is_end_cell_junk(patch: np.ndarray, cell_h: float,
+                      frame_guard: bool = True) -> bool:
+    """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。
+
+    `frame_guard`：本书有没有物理版框（同 `CharExtractor.frame_guard`）。
+
+    True（刻本默认）沿用原判据：「满宽且矮＝条渣」是主判据，只信个头
+    够高的连通体或跨度撑得起整格的多笔组合是字，另开「孤一逃生口」
+    把墨够厚的「一」字单独捞回来（阈值按刻本「一」字的笔画粗细标定）。
+
+    False（现代排印本，如 `modern_body.yaml` 的北行日錄）时，「满宽
+    矮体＝条渣」这条判据本身不成立——没有物理版框就不可能有框线
+    残渣，能通过 TAIL_JUNK_MIN_INK/h<4 两道噪点闸的连通体，物理上
+    只能是文字墨迹（含这本书偏细的「一」，area 499~798，远低于刻本
+    「一」标定的 1000 逃生口门槛，也接不住 TAIL_JUNK_CC_H/SPAN 的
+    高度判据——2026-09-16 塌缩诊断：34 例逐一核实图块内容全是真字，
+    无一例外）。因此 frame_guard=False 时不做任何高度/跨度判据，
+    只要有一个连通体通过了两道噪点闸就直接判定不是渣。
+    """
     binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
     if not binary.any():
         return True
     W = patch.shape[1]
     n, _lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if not frame_guard:
+        for k in range(1, n):
+            h, area = int(st[k, 3]), int(st[k, 4])
+            if area >= TAIL_JUNK_MIN_INK and h >= 4:
+                return False               # 无版框书：过了噪点闸就是字，不设高度门槛
+        return True
     top, bot = None, None
     for k in range(1, n):
         x, y, w, h, area = (int(st[k, 0]), int(st[k, 1]), int(st[k, 2]),
@@ -2374,7 +2411,7 @@ class CharExtractor:
                         break
                     if "tail_junk" in inst.flags:
                         continue
-                    if not is_end_cell_junk(*info):
+                    if not is_end_cell_junk(*info, frame_guard=self.frame_guard):
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")
