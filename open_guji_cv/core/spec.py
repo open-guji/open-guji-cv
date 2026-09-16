@@ -85,6 +85,17 @@ class StepSpec:
     代码根本没机会跑到。声明与实现对不上，这个字段就是用来把实现的意图表达出来的。"""
     code_deps: tuple[str, ...] = field(default=())
     """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
+    book_deps: tuple[str, ...] = field(default=())
+    """参与指纹的 **`BookSpec` 字段名**。
+
+    指纹只认 `params` + `code` + `upstream`，**册配置不在其中**——于是「改了
+    `books/<id>.yaml` 里一个影响输出的字段，已有产物却照报『新鲜』」。
+    参数的默认值写 `None`（"None = 用 Book 的 X"）也救不了：`None` 在两本书上
+    哈希出来一模一样。
+
+    2026-09-15 `leaf_layout` 踩到（改成 `folio` 后 Step1 该把版心标 `margin`，
+    却整页跳过）。凡是 `run_page` 里读了 `ctx.book.X` 且 X 会改变产物的，
+    都要在这里声明 X。"""
     needs: tuple[str, ...] = field(default=())
     """跑得起来的**外部**前提，控制台据此把跑不了的步骤置灰而不是让人点了才失败。
     口径与 `eval/registry.py` 的 `needs` 一致：

@@ -124,6 +124,19 @@ class BookSpec:
     #: Step0 分页（yaml 的 `page_split:`）：一张扫描页含多页原书时（上下两栏拼一页、
     #: 对开等），先裁成逻辑页再进管线。见 `utils/page_split.py`。空 = 不分页。
     page_split: dict = field(default_factory=dict)
+    #: `leaf_layout`：`single`（一页 = 一个半叶，默认）| `folio`（**筒子页**：一页 =
+    #: 一整版 = 两个半叶，中间夹版心/书口）。
+    #:
+    #: 筒子页**不必先分页**（beixing-guben 实测：Step1 21 条竖线全探到、Step2 一行
+    #: 没改、19/20 列过闸）——`page_column_windows` 把列定义成相邻两条 `verticals`
+    #: 之间，版心两侧的书口栏线在它眼里就是普通界行；上下版框虽名义上左右半叶各一条，
+    #: 实测两半几乎共线（版心处 y 差 0.1~8.9px，远小于 `column_bounds` 已在处理的
+    #: 14.5px 锚点漂移），一条 `HLine` 够用。
+    #:
+    #: 代价是**版心占掉一个列位**：`expected_cols` 要按整版填（10 + 版心 + 10 = 20），
+    #: 且下游必须把版心那一列排除在正文之外——这就是 `border_detect` 产
+    #: `line_index` 把它标成 `margin` 的原因。
+    leaf_layout: str = "single"
     #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
     font: dict = field(default_factory=dict)
 
@@ -194,7 +207,8 @@ class BookSpec:
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
             "pitch_prior": self.pitch_prior,
-            "page_split": dict(self.page_split), "font": dict(self.font),
+            "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
+            "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
         }
@@ -362,6 +376,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         script=str(d.get("script", "trad")),
         pitch_prior=(None if d.get("pitch_prior") is None else float(d["pitch_prior"])),
         page_split=dict(d.get("page_split") or {}),
+        leaf_layout=str(d.get("leaf_layout", "single")),
         font=dict(d.get("font") or {}),
     )
 
