@@ -31,11 +31,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ..core.workspace import reset_workspace_override, set_workspace_override
 
 HEADER = "X-Guji-Workspace"
+QUERY = "ws"       # 图片类 URL 走查询参数（<img src> 带不了头）
 
 
 class WorkspaceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        # 头优先；`?ws=` 是给**图片类出口**用的后路——`<img src>` 发不出自定义
+        # 请求头，叠图/原图/字块只能把工作区放查询串里（api/client.ts 的
+        # `withWorkspace()`）。两边同名同义，认哪个都一样。
         raw = request.headers.get(HEADER)
+        if raw is None:
+            raw = request.query_params.get(QUERY)
         token = None
         if raw is not None:
             from .routers.workspace import allowed_workspaces

@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, withWorkspace } from './client'
 import type {
   AroundContext, RareCandidate, ReviewCardsResponse, ReviewVerdictsResponse,
 } from '../types/review'
@@ -37,5 +37,5 @@ export function fetchAroundBatch(
 }
 
 export function contextImgUrl(book: string, page: number, col: number, slot: number) {
-  return `/api/review/context-img/${encodeURIComponent(book)}/${page}/${col}/${slot}.png?around=2`
+  return withWorkspace(`/api/review/context-img/${encodeURIComponent(book)}/${page}/${col}/${slot}.png?around=2`)
 }

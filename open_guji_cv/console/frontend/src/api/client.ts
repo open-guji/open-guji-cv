@@ -32,6 +32,17 @@ export function setWorkspacePref(path: string | null): void {
 
 let memo: string | null | undefined
 
+/** 给**图片类 URL** 带上工作区。
+ *
+ * `<img src>` 发不出自定义请求头，所以图片出口只能把工作区放查询串里。
+ * 服务端中间件头和 `ws=` 两边都认（console/middleware.py）。
+ * 凡是要塞进 `src`／`href`／`window.open` 的 /api 图片 URL，都过一道这个。 */
+export function withWorkspace(url: string): string {
+  const ws = memo !== undefined ? memo : getWorkspacePref()
+  if (ws === null || ws === undefined) return url
+  return url + (url.includes('?') ? '&' : '?') + 'ws=' + encodeURIComponent(ws)
+}
+
 export async function api<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
   // 每个请求都带上本标签页的工作区。服务端据此解析 products / cache /
   // 字形库等所有根（console/middleware.py），不持有「当前工作区」。
