@@ -39,10 +39,15 @@ class BorderDetectStep(Step):
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
-        # `column_grid` / `col_pitch` / `vline_polyline` 决定竖线走哪条路，同理
+        # `column_grid` / `col_pitch` / `frame_height` / `vline_polyline` 决定竖线
+        # 走哪条路、用哪组阈值，同理。
+        # ⚠️ 2026-09-16 加 `frame_height` 时，**没有任何一本书写这个字段**（全 None），
+        # 输出逐位不变，但指纹变了 → siku 504 页 + bxgb 55 页 Step1 连同下游一次性
+        # 过期重跑。这是有意付的代价：漏声明的后果是「改了 yaml 产物还报新鲜」，
+        # 那种静默错误比一次重跑贵得多（见「指纹不认册配置」那条教训）。
         book_deps=("leaf_layout", "expected_cols", "bottom_gap",
                    "top_band_frac", "bottom_band_frac", "column_grid", "col_pitch",
-                   "vline_polyline"),
+                   "frame_height", "vline_polyline"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -58,6 +63,7 @@ class BorderDetectStep(Step):
                              bottom_band_frac=ctx.book.bottom_band_frac,
                              column_grid=ctx.book.column_grid,
                              col_pitch=ctx.book.col_pitch,
+                             frame_height=ctx.book.frame_height,
                              vline_polyline=ctx.book.vline_polyline)
         borders = Borders.from_result(res, cols)
 
