@@ -124,7 +124,17 @@ def _char_patch_binarized(book: str, key: str) -> Response | None:
     g = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if g is None:
         return None
-    x0, y0, x1, y1 = (int(round(v)) for v in box)
+    # ⚠️ `bbox_page` 是**右上原点规范空间**（x 向左递增，见 `core/anchor.py` 与
+    # `border_geometry` 的坐标约定），而磁盘上的图是左上原点。裁之前必须把 x
+    # 镜像回去：`x_img = (W-1) - x_canon`，左右边界同时翻所以要互换。
+    # 不翻的后果是**静默裁到另一个字**——实测 p3 c11 s11「鳳」的 bbox_page
+    # x=1467，真实位置 x=1243，正好差 (W-1)-1557；y 一点不差，所以看着像
+    # 「图没对齐」而不像「坐标系错了」。模板匹配一量就现形（score 0.973）。
+    W = g.shape[1]
+    bx0, by0, bx1, by1 = (float(v) for v in box)
+    x0 = int(round((W - 1) - bx1))
+    x1 = int(round((W - 1) - bx0))
+    y0, y1 = int(round(by0)), int(round(by1))
     x0, y0 = max(0, x0), max(0, y0)
     x1, y1 = min(g.shape[1], x1), min(g.shape[0], y1)
     if x1 <= x0 or y1 <= y0:

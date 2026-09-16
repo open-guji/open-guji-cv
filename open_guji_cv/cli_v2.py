@@ -461,7 +461,8 @@ def cmd_seed_witness(args) -> None:
                                   font_editions=args.fonts.split(","), edition_tag=args.edition,
                                   limit=args.limit, products_root=products_root(),
                                   norm_stroke=args.norm_stroke, jobs=args.jobs,
-                                  only_chars=args.only_chars, source_kind=args.source_kind)
+                                  only_chars=args.only_chars, source_kind=args.source_kind,
+                                  binarize=not args.keep_gray)
     finally:
         db.close()
     out = products_root() / book.id / "witness_align" / "seed_stats.json"
@@ -1106,6 +1107,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--only-chars", default=None,
                    help="只播这些字头（连写，如 「」《》）。进库幂等，可反复补播——"
                         "修好某一类字的形状证人后补这一类，不必全量重播")
+    p.add_argument("--keep-gray", action="store_true",
+                   help="进库存灰度裁片（旧行为）。缺省存**二值**——用户 2026-09-16："
+                        "最后进字形库的一定是二值的，灰度值会干扰")
     p.add_argument("--source-kind", default="print", choices=["print", "woodblock"],
                    help="这本书的来源类型（默认 print，现代排印本）。**刻本必须传 woodblock**："
                         "候选检索默认只查 kinds=('woodblock',)，记成 print 会让播进去的字形"

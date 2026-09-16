@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import { withWorkspace } from '../../api/client'
 import { fetchJiazhuSegments } from '../../api/jiazhu'
 import { postEvents } from '../../api/events'
@@ -196,7 +197,7 @@ export function JiazhuPanel({ book }: { book: string }) {
                       return (
                         <span key={c.id} className={`jzcell ${cls}`} title={`${c.id} · ${c.channel || '待审'}`}
                               onClick={() => editCell(i, j)}>
-                          <img src={withWorkspace(c.patch)} alt="" loading="lazy" /><b>{shown}</b>{ref}
+                          <BinaryToggleImage src={c.patch} showToggle={false} /><b>{shown}</b>{ref}
                         </span>
                       )
                     })}

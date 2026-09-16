@@ -211,7 +211,7 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
 
 # ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
 def glyphdb_admit(events, db_path: str | None = None,
-                  dry_run: bool = False, **kw) -> ConsumeResult:
+                  dry_run: bool = False, binarize: bool = True, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
 
     这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
@@ -265,6 +265,7 @@ def glyphdb_admit(events, db_path: str | None = None,
     from ..clustering.glyph_db import GlyphDB
     from ..core.workspace import glyph_db_path
     from ..products.cache import ImageCache
+    from ..utils.binarized import binarize_page
     import cv2
 
     db = GlyphDB(str(glyph_db_path(db_path)))
@@ -308,6 +309,13 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.errors.append(f"{e.target.key}: 图块读不出来")
             res.skipped += 1
             continue
+        # **进库的一定是二值的**（用户 2026-09-16）：字块缓存存的是灰度裁片，
+        # 灰度值会干扰后续比对，而且「用哪把尺子二值化」一路推迟到每次读取
+        # （`_unpng` 固定阈 128 / `normalize_patch` Sauvola，两处可能不一致）。
+        # 与播种（`seed_witness`）和整页副本（`utils/binarized`）**共用同一个
+        # 二值化**，保证库里那张 = 人裁看到那张 = 播种进去那张。
+        if binarize:
+            img = binarize_page(img)
         # v2 命名空间：见上面「id 必须加前缀」那节
         db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
         # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
