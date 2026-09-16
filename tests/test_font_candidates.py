@@ -19,10 +19,10 @@
 from __future__ import annotations
 
 import glob
-from pathlib import Path
 
 import numpy as np
 import pytest
+import rare_char_set  # noqa: E402 —— 同目录辅助：按 patch_key 解析字块图，见其 docstring
 
 from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
                                                      candidates_batch, _font_files)
@@ -104,26 +104,18 @@ def test_recall_on_rare_char_set():
     这条是 C 刀的验收线。跑得慢（要建 4600 字 × 4 字体的索引），
     但它是唯一能证明「字体模板对生僻字有用」的用例。
     """
-    ds = Path("../open-guji-dataset/rare-char/items.jsonl")
-    if not ds.exists():
+    if not rare_char_set.available():
         pytest.skip("没有 rare-char 集，先跑 scripts/build_rare_char_set.py")
-    import json
-
-    import cv2
 
     from open_guji_cv.clustering.normalize import normalize_patch
 
-    items = [json.loads(l) for l in ds.read_text(encoding="utf-8").splitlines()]
-    hard = [i for i in items if not i["expected"]["in_candidates"]]
+    loaded = rare_char_set.load_items()
+    hard = [(it, img) for it, img in loaded if not it["expected"]["in_candidates"]]
     assert hard, "集里没有「三路都没答案」的样本，这条用例失去意义"
     cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
-                      [i["expected"]["char"] for i in items])
+                      [it["expected"]["char"] for it, _ in loaded])
     hit = 0
-    for it in hard:
-        p = it["input"]["patch"]
-        img = cv2.imread(p, cv2.IMREAD_GRAYSCALE) if p else None
-        if img is None:
-            continue
+    for it, img in hard:
         got = [h.char for h in candidates(normalize_patch(img), cs, k=10)]
         hit += it["expected"]["char"] in got
     rate = hit / len(hard)
@@ -150,17 +142,12 @@ def test_two_tier_charset_beats_single_table():
     本来就罕见，频次先验反着起作用；异体身份加权 67% → 62%；相似度闸控扩表
     从不触发，因为小表 top1 分数恒 >0.84，**错的时候也高**。
     """
-    ds = Path("../open-guji-dataset/rare-char/items.jsonl")
-    if not ds.exists() or not FONTS_OK:
+    if not rare_char_set.available() or not FONTS_OK:
         pytest.skip("没有 rare-char 集或字体")
-    import json
-
-    import cv2
 
     from open_guji_cv.clustering.normalize import normalize_patch
     from open_guji_cv.variants import variants_of
 
-    items = [json.loads(l) for l in ds.read_text(encoding="utf-8").splitlines()]
     small = tuple(book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt"))))
     # 这条靠字表规模统计 top1/top10 召回率，不是单纯验证代码逻辑——没设
     # GUJI_WORKSPACE 时仓内只有语料小样本（~1100 字种），docstring 里的
@@ -176,11 +163,7 @@ def test_two_tier_charset_beats_single_table():
     big = tuple(sorted(big))
 
     t1 = t10 = n = 0
-    for it in items:
-        p = it["input"]["patch"]
-        img = cv2.imread(p, cv2.IMREAD_GRAYSCALE) if p else None
-        if img is None:
-            continue
+    for it, img in rare_char_set.load_items():
         norm = normalize_patch(img)
         a = candidates(norm, small, k=10)
         b = candidates(norm, big, k=10)

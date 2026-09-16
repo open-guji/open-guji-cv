@@ -77,11 +77,12 @@ def test_skip_page_then_column_gate_rejects(tmp_path):
     改动前闸2会自己重新猜一次 L1（"只探出 0 列"），这条断言钉死新行为：
     闸2优先读闸1的判定，不再让人看着列数字猜真实原因。
 
-    ⚠️ **本条当前是失败的，且不是哪次改动弄坏的**（2026-09-13 核实）：闸2
-    `column_gate.py` 里至今没有读 `border_detect_gate_manifest` 的代码，
-    实跑仍返回 "L1：只探出 0 列（版式应为 9）"。即 2026-09-12 那轮"闸2/闸3
-    都直接读闸1"只在闸3 落地了，闸2 这半边没写完。测试先于实现存在。
-    （同日另有一处 fixture 订正：页型从 blank 换成 cover——blank 已改归
+    2026-09-15 补齐：此前这条一直红着——2026-09-12 那轮「闸2/闸3 都直接读闸1」
+    只在闸3 落了地，闸2 `column_gate.py` 里没有读 `border_detect_gate_manifest`
+    的代码，实跑仍返回 "L1：只探出 0 列（版式应为 9）"，测试先于实现存在。现在
+    闸2 照闸3 的写法查 `ctx.product`，L0 写页型、不再报列数（`column_gate` 版本
+    1.5 → 1.6）。
+    （2026-09-13 另有一处 fixture 订正：页型从 blank 换成 cover——blank 已改归
     body 子类，blank+skip 这个组合现在造不出来了。）"""
     gray = np.full((1400, 900), 255, dtype=np.uint8)
     gate1 = BorderDetectGateManifest(

@@ -1,18 +1,20 @@
 {
   "layout": "cut_half",
+  "banxin_position": "right",
   "content_format": "regular",
+  "font_type": "printed",
   "lines_per_page": 9,
+  "fixed_chars_per_line": false,
   "chars_per_line": null,
   "has_marginal_notes": false,
   "color_mode": "colored",
-  "background_color": "orange",
+  "background_color": "xuan",
   "text_color": "black",
-  "border_color": "orange",
+  "border_color": "red",
   "border_style": "double",
   "border_wear": "medium",
-  "interferences": [
-    "stains"
-  ],
+  "interferences": [],
+  "margin_color": null,
   "skip_pages": [],
   "skip_steps": [],
   "auto_detected": true,
@@ -20,10 +22,10 @@
     "color_mode": 1.0,
     "layout": 1.0,
     "lines_per_page": 0.8,
-    "stains": 0.9135596228751044,
-    "border_style": 1.0,
+    "border_style": 0.55,
     "border_wear": 0.75,
     "chars_per_line": 0.3,
-    "has_marginal_notes": 1.0
+    "has_marginal_notes": 1.0,
+    "font_type": 1.0
   }
 }

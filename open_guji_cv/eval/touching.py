@@ -14,8 +14,8 @@ import random
 SHARD = "char-segmentation/touching-cuts"
 
 
-def body_pages(book: str) -> list[int]:
-    """page-type 标注里判为正文的页（职名页 / 目录页不用 21 格先验，先不出卡片）。
+def _pages_of_type(book: str, types: frozenset[str]) -> list[int]:
+    """page-type 裁决表里属于 `types` 的页。
 
     读 **workspace 裁决表**的 `page-type` 分片（`guji gold export page-type` 从测试集仓
     复制过来，是「这本书的事实」），不读 open-guji-dataset——出卡是运行时（2026-09-13）。"""
@@ -26,7 +26,25 @@ def body_pages(book: str) -> list[int]:
         return []
     return sorted(int(i.anchor.page) for i in items
                   if str(i.anchor.book) == book and i.anchor.page is not None
-                  and (i.expected or {}).get("page_type") == "body")
+                  and (i.expected or {}).get("page_type") in types)
+
+
+def body_pages(book: str) -> list[int]:
+    """严格的正文页。标定（`utils/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
+    return _pages_of_type(book, frozenset({"body"}))
+
+
+#: **21 格标准版式**的页型：正文与目录同一个待遇（2026-09-16 用户定）。
+#: 实测 vol01：目录 99/108 列通过、每列格数 21 为主（20–23），与正文（108/108、全 21）基本一致。
+#: `roster` 职名页**不在此列**——它是「大字官职 + 小字『臣某某』」混排，周期估计器锁到小字的 80px
+#: （正文 115），44 页里 37 页有列切失败、20 多页整页 9 列全废。那是 Step3 周期估计要单独修的活，
+#: 不是人裁能解决的，出卡也没有意义（0 格的列产生不了切点）。
+STD_GRID_TYPES = frozenset({"body", "toc", "colophon", "edict"})
+
+
+def std_grid_pages(book: str) -> list[int]:
+    """走 21 格标准版式的页——切线出卡用这个口径，见 `STD_GRID_TYPES`。"""
+    return _pages_of_type(book, STD_GRID_TYPES)
 
 
 def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> float | None:

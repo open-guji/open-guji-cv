@@ -82,7 +82,10 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         # L2′/L0′ 说「本层拿不准」的那些，池里已由 L3 补过 unet_seam / period_* 候选。
         # 与 `list:` 模式的区别：那个只能出**已在裁决表里**的金标 id（152 条升级点里只有 7 条），
         # 这个直接从产物出，新切点也能出卡。
-        pg = [p for p in T.body_pages(book)]
+        # 口径是「21 格标准版式」（正文 + 目录 + 牌记/诏令），不是纯正文——2026-09-16：
+        # vol01 近一半页是目录/职名，只取 body 会把 201 条升级切点挡掉 166 条。
+        # 职名页仍排除在外（大小字混排，列切本身是坏的，见 STD_GRID_TYPES 注释）。
+        pg = [p for p in T.std_grid_pages(book)]
     else:
         pg = bk.resolve_pages(pages)
     if drift:

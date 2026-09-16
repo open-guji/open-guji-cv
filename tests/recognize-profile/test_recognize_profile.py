@@ -85,8 +85,14 @@ def update_snapshots(books: list[str]) -> None:
             print(f"  失败: {e}")
 
 
-def test_snapshots(books: list[str]) -> bool:
-    """比对识别结果与快照，返回是否全部通过。"""
+def check_snapshots(books: list[str]) -> bool:
+    """比对识别结果与快照，返回是否全部通过。
+
+    **别叫 `test_snapshots`**：本文件是个独立命令行脚本（见模块头「用法」），
+    不是 pytest 用例——它带位置参数 `books`，pytest 收集到 `test_` 开头的函数
+    会把 `books` 当 fixture 找，找不到就报 `fixture 'books' not found`，整个
+    测试套件多一条 collection ERROR。2026-09-15 改名消掉。
+    """
     all_pass = True
     results = []
 
@@ -171,7 +177,7 @@ def main():
         update_snapshots(books)
         return 0
     else:
-        ok = test_snapshots(books)
+        ok = check_snapshots(books)
         return 0 if ok else 1
 
 

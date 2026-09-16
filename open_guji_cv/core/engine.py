@@ -247,13 +247,21 @@ class Engine:
 
         闸（`step.spec.gate`）不出现在 `pipeline.steps` 里，但仍按它挂的那个 Step
         刚算完的新鲜度接着算一行，用闸自己的 `id`（如 `column_gate`）作 key——
-        跟闸迁移前、它还是 pipeline 里一个独立节点时的 status 输出**同名同形**。"""
+        跟闸迁移前、它还是 pipeline 里一个独立节点时的 status 输出**同名同形**。
+
+        DAG 传播必须按 `self._enabled(...)` 过滤后的列表遍历，不能用原始
+        `self.pipeline.steps`：书级开关关掉的 step（如 `ocr_candidates`）若
+        manifest 里留着旧记录，指纹对不上当前代码/上游会判 stale；`run()`
+        看开关是 false 根本不会去跑它，这条 stale 永远洗不掉。之前遍历未过滤
+        列表时，这个 stale 会被记进 `seen`，沿 DAG 一路拖垮 `align_ref` 等
+        以它为上游的下游 step——不管补跑多少次都好不了（2026-09-16 排查
+        `test_route_snapshot` 不稳定时查出）。"""
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         steps, _ = self._default_steps(steps)
         out: dict[str, dict] = {}
         seen: dict[str, dict[int, str]] = {}
-        for sid in self.pipeline.steps:          # 按拓扑序算，保证上游先有结果
-            step = STEPS[sid]
+        for sid in self._enabled(self.pipeline.steps):  # 按拓扑序算，保证上游先有结果；
+            step = STEPS[sid]                            # 书级开关关掉的 step 不进 seen，见下
             ups = [u for u in self.pipeline.upstream(sid) if u in seen]
             upstream_fresh = {pg: all(seen[u].get(pg) == FRESH for u in ups) for pg in pages}
             row, page_state = self._page_status_row(step, pages, upstream_fresh)
