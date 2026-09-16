@@ -70,8 +70,10 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     #
     # 有效的是**位次合并**：小表 top3 占据前三名（那里最可能是对的），
     # 其后接大表结果补召回。实测 top1 43% / top10 76%，两头都拿到。
+    # 字表按这册书的整理本算，不写死刻本链那份（2026-09-15，见 rare_panel.rare_batch）
+    from ...steps.align_ref import book_corpus
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
-            "candidates": rare_for(img, k)}
+            "candidates": rare_for(img, k, book_corpus(book))}
 
 
 

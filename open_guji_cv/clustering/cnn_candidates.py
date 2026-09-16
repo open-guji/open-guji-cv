@@ -37,10 +37,19 @@ def _resolve_default_ckpt() -> Path:
     本机若还有旧路径 `cache/glyph_cnn_r4/best.pt`，优先用它——不强迫已有工作区搬文件，
     也不改变本机现役 checkpoint 的 mtime（会让 fingerprint 变、下游产物被判 stale）。
     """
-    legacy = Path("cache/glyph_cnn_r4/best.pt")
-    if legacy.exists():
-        return legacy
-    return Path("models/glyph_cnn_r4/best.pt")
+    # **按引擎仓定位，不按调用方的 cwd**（2026-09-15）：checkpoint 随引擎仓走
+    # （`models/` 进 Git），而运行时的 cwd 常常是工作区——北行日錄实测：从
+    # `beixingrilu-workspace` 下跑，两个相对路径都不存在，`cnn.available` 悄悄变成
+    # False，生僻字面板于是**返回空候选而不报错**（CNN 不可用时本该退回 HOG，
+    # 但 `_fuse` 走的是「两边都空 → 空列表」那条路）。控制台碰巧在引擎仓下起，
+    # 所以网页上是好的、脚本里是空的，差一个 cwd。
+    here = Path(__file__).resolve().parents[2]          # …/open-guji-cv
+    for rel in ("cache/glyph_cnn_r4/best.pt", "models/glyph_cnn_r4/best.pt"):
+        for base in (Path.cwd(), here):                 # 先认 cwd（本机旧习惯），再认引擎仓
+            cand = base / rel
+            if cand.exists():
+                return cand
+    return here / "models/glyph_cnn_r4/best.pt"
 
 
 DEFAULT_CKPT = _resolve_default_ckpt()
