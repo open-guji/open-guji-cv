@@ -150,6 +150,48 @@ SANCTIONED = {
         "改之后正常记一行台账。这是修好了，不是改坏了。",
 }
 
+#: 生僻字候选的两条路由：内容取决于 CNN 候选源在不在（torch 是可选依赖）。
+#: 见 `test_route_snapshot` 里 `_CNN_OK` 那段注释。
+_CNN_ROUTES = ("GET /api/rare/{book}/{page}/{col}/{slot}", "POST /api/rare/batch")
+
+
+def _cnn_ok() -> bool:
+    from open_guji_cv.clustering.cnn_candidates import CnnCandidates
+    return CnnCandidates().available
+
+
+_CNN_OK = _cnn_ok()
+
+#: 这两条路由的 `score` 是 CNN 前向的输出，**跨设备不是位级可复现的**：同一份
+#: checkpoint、同一张图，CUDA 与 CPU 算出来能差 1e-4（实测基线 0.7414 / CPU 轮子
+#: 0.7415）。分数本身已经 `round(score, 4)`（`rare_panel.py`），`_norm` 又 round 到 6，
+#: 两道都拦不住这种差。基线是在有 GPU 的机器上落的，换 CPU 轮子跑就红一次。
+#:
+#: 所以对这两条**只放宽分数的数值比对**（下面 `_blur_scores`），字与名次照旧严格比——
+#: 真出问题的样子是候选字变了或名次换了（没装 torch 时首位从 emb「坡」变成
+#: TypeLand-KhangXiDict「掇」那种），那仍然会红。别把整条路由排除掉。
+_SCORE_TOL = 5e-4   # 吃掉 1e-4 级的设备噪声；再大的分数变化照样露出来
+
+
+def _same_but_score_noise(a, b) -> bool:
+    """结构与所有非 score 字段**完全相同**，且每个 `score` 的差 ≤ `_SCORE_TOL`。
+
+    ⚠️ 别用「round 到更少位数再比」那招：`round(0.7414,3)=0.741` 而
+    `round(0.7415,3)=0.742`——噪声正好骑在进位边界上时照样不等（2026-09-15
+    第一版就栽在这儿）。要吃掉噪声只能比差值。
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        if a.keys() != b.keys():
+            return False
+        return all(_same_but_score_noise(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_but_score_noise(x, y) for x, y in zip(a, b))
+    if (isinstance(a, float) or isinstance(b, float)) and \
+            isinstance(a, (int, float)) and isinstance(b, (int, float)) and \
+            not isinstance(a, bool) and not isinstance(b, bool):
+        return abs(a - b) <= _SCORE_TOL
+    return a == b
+
 #: 这两条列的是**进程内的全局注册表**（`core.step.STEPS` / `KINDS`）。
 #: 别的测试文件会往里注册自己的试验 Step / 产物种类，**注册完不撤**——
 #: 单跑本文件是 9 步 13 种，全仓一起跑就变成 13 步 18 种。
@@ -349,7 +391,12 @@ def _collect() -> dict:
     call("GET /api/quality", book=BOOK, pages=PAGES)
     call("GET /api/rulers", book=BOOK, pages=PAGES)
     call("GET /api/round", book=BOOK, pages=PAGES)
-    call("GET /api/review/rate-history", book=BOOK)
+    # `mode="shape"`：这条读的是 `output/review_rate_history.jsonl` 台账，而下面
+    # 那个 POST 每跑一次就往里追加一行——落基线时算进去的行数，跑完 `_cleanup`
+    # 又把文件还原了，于是下一次跑必然比基线多/少一行，永远对不上（2026-09-15
+    # 查出来：连跑三次都只差这一条，行数 4→5）。行数是本测试自己的副作用，
+    # 不是被测行为，比结构就够。
+    call("GET /api/review/rate-history", book=BOOK, mode="shape")
     rs = EP["POST /api/review/rate-history"]
     call("POST /api/review/rate-history", _model(rs)(books=BOOK, note="snap"))
     # 没开过 enable_online_llm 就没有日志，has_data:false 是正常态，不是错
@@ -514,6 +561,11 @@ def test_route_snapshot():
     **下次再红，照这个流程办**：先把差异逐条摊开（比对新旧 JSON 的叶子节点），
     确认每一条都对得上某次有意的改动，再重落；**别一红就直接重落**——那等于
     把这个测试关掉。
+
+    2026-09-15 又红两条（`/api/rare/...`），这次**不是**该重落的那种：本机 venv
+    里没装 torch，`rare_panel` 的 CNN 分类 + embedding 两个候选源整个退场，只剩
+    字体 HOG，候选字与名次自然全变。这是缺件下的合法降级，重落会把一份没有 CNN
+    的快照焊死。改成没 torch 时这两条不参与比对（见下面 `_CNN_OK` 一段）。
     """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
@@ -553,6 +605,25 @@ def test_route_snapshot():
         if k in SANCTIONED:
             print(f"\n──── 有意的变化 {k}\n  {SANCTIONED[k]}")
     diffs = [k for k in changed if k not in SANCTIONED]
+
+    # 生僻字候选的两条路由**不是环境无关的**，分两种情况：
+    # ① 没装 torch：候选源里的 CNN 分类与 embedding（`rare_panel.py` 的
+    #    `if cnn.available:`）整个退场、只剩字体 HOG，候选字与名次全变（实测基线
+    #    首位 emb「坡」0.8396 → TypeLand-KhangXiDict「掇」0.7412）。这是缺件下的
+    #    合法降级，不是漂移，重落基线只会把一份没有 CNN 的快照焊死 → 整条排除；
+    # ② 装了 torch 但换了设备：只有分数有 1e-4 级噪声 → 只放宽分数，字与名次照旧严格比。
+    if not _CNN_OK:
+        skipped_cnn = [k for k in diffs if k in _CNN_ROUTES]
+        if skipped_cnn:
+            print(f"\n（没装 torch，CNN/embedding 候选源退场，{skipped_cnn} 不参与比对；"
+                  "装上 torch 再跑才能覆盖这两条）")
+            diffs = [k for k in diffs if k not in _CNN_ROUTES]
+    else:
+        for k in list(diffs):
+            if k in _CNN_ROUTES and _same_but_score_noise(base.get(k), snap.get(k)):
+                print(f"\n（{k}：只差在 CNN 分数的末位（跨 CPU/CUDA 的 1e-4 噪声），"
+                      "字与名次一致，不算漂移）")
+                diffs.remove(k)
     if diffs:
         for k in diffs:
             print(f"\n──── 差异 {k}")
