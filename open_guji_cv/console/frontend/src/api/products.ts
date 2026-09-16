@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, withWorkspace } from './client'
 import type { ProductResponse } from '../types/products'
 
 export function fetchProduct(book: string, step: string, page: number) {
@@ -7,7 +7,7 @@ export function fetchProduct(book: string, step: string, page: number) {
 }
 
 export function overlayUrl(book: string, step: string, page: number, scale = 0.35) {
-  return `/api/overlay/${encodeURIComponent(book)}/${encodeURIComponent(step)}/${page}.png?scale=${scale}&t=${Date.now()}`
+  return withWorkspace(`/api/overlay/${encodeURIComponent(book)}/${encodeURIComponent(step)}/${page}.png?scale=${scale}&t=${Date.now()}`)
 }
 
 export interface PrecleanRuleReport {
@@ -35,15 +35,15 @@ export function fetchPrecleanReport(book: string, page: number) {
 }
 
 export function precleanOverlayUrl(book: string, page: number, scale = 0.5) {
-  return `/api/preclean/${encodeURIComponent(book)}/${page}/overlay.png?scale=${scale}&t=${Date.now()}`
+  return withWorkspace(`/api/preclean/${encodeURIComponent(book)}/${page}/overlay.png?scale=${scale}&t=${Date.now()}`)
 }
 
 export function precleanBeforeUrl(book: string, page: number, scale = 0.5) {
-  return `/api/preclean/${encodeURIComponent(book)}/${page}/before.png?scale=${scale}&t=${Date.now()}`
+  return withWorkspace(`/api/preclean/${encodeURIComponent(book)}/${page}/before.png?scale=${scale}&t=${Date.now()}`)
 }
 
 export function precleanAfterUrl(book: string, page: number, scale = 0.5) {
-  return `/api/preclean/${encodeURIComponent(book)}/${page}/after.png?scale=${scale}&t=${Date.now()}`
+  return withWorkspace(`/api/preclean/${encodeURIComponent(book)}/${page}/after.png?scale=${scale}&t=${Date.now()}`)
 }
 
 export interface AlignRefPageSummary {

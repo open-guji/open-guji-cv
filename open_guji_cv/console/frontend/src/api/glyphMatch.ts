@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, withWorkspace } from './client'
 
 // Step5-a 字形库匹配调试视图，见 console/routers/glyph_match.py 与 overview
 // 仓 项目进展/图片初步数字化/进度/Step5-字符识别/08-5a方案-字形库匹配调试视图.md。
@@ -28,7 +28,7 @@ export function fetchGlyphMatch(book: string, page: number, col: number, slot: n
 // exemplar 缩略图——same 档候选第一名才有（见 GlyphMatchResult.matched_id），
 // 其余候选字没有唯一对应的具体刻例，不配图（见后端路由 docstring）。
 export function glyphMatchExemplarUrl(instanceId: string) {
-  return `/api/glyph-match/exemplar/${encodeURIComponent(instanceId)}.png`
+  return withWorkspace(`/api/glyph-match/exemplar/${encodeURIComponent(instanceId)}.png`)
 }
 
 export interface GlyphMatchSummary {
