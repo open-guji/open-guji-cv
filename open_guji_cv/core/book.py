@@ -23,8 +23,12 @@ class BookSpec:
     title: str
     raw_dir: Path                     # 原始扫描目录
     raw_pattern: str = "{page}.png"   # 页号 → 文件名
-    expected_cols: int = 9            # Step1 的列数先验
-    chars_per_line: int = 21          # Step3 的正文格数先验
+    #: Step1 的列数先验。**现代链可以是 None**——列/行数由 `line_detect` 探出，
+    #: 册配置写 `expected_cols: null`（三模式方案 §六.1）。刻本链仍是版式常量，
+    #: 闸 `count_mode=exact` 拿它当硬判据；现代链走 `count_mode=detected` 不读它。
+    expected_cols: int | None = 9
+    #: Step3 的正文格数先验。同上，现代链是 None（由块宽 ÷ pitch 推）。
+    chars_per_line: int | None = 21
     edition: str = "keben"
     dev_set: list[int] = field(default_factory=list)
     #: 命名页集（yaml 的 `sets:`）：`{名字: [页号…]}`，用 `--pages <名字>` 选。
@@ -98,7 +102,12 @@ class BookSpec:
     #: 默认值，行为与加这些字段之前逐位相同。
     #:
     #: `writing_mode`：`vertical-rl`（竖排，默认）| `horizontal-tb`（横排——页面在
-    #: 原图入口顺时针旋转 90° 后按竖排处理，见方案 §三；**尚未实现**，现在只登记）。
+    #: 原图入口顺时针旋转 90° 后按竖排处理，见方案 §三）。
+    #:
+    #: 2026-09-15：**旋转已实现**（`core/step.py::RunContext.raw_page`），算法链
+    #: 跑得动；但 `core/anchor.py` 的 `to_original()` 还没有，所以产物坐标是
+    #: 读序空间、控制台叠图看着是横躺的。面向人的三处（叠图/金标/Step9 导出）
+    #: 要等那一半补上，见方案 §三与 §九.10。
     writing_mode: str = "vertical-rl"
     #: `frame`：`ruled`（有版框界行，Step1 走 `border_detect`，默认）|
     #: `none`（无版框，Step1 走 `line_detect`）。管线 yaml 决定实际跑哪个 Step，
@@ -294,8 +303,12 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
     return BookSpec(
         id=d.get("id", book_id), title=d.get("title", book_id), raw_dir=raw_dir,
         raw_pattern=d.get("raw_pattern", "{page}.png"),
-        expected_cols=int(d.get("expected_cols", 9)),
-        chars_per_line=int(d.get("chars_per_line", 21)),
+        # yaml 里显式写 null = 现代链「由探测给」，不是「没写、用默认」——两者要分开：
+        # 没写走刻本默认（9 / 21），写了 null 就是 None。2026-09-15 加，见三模式方案 §六.1。
+        expected_cols=(None if "expected_cols" in d and d["expected_cols"] is None
+                       else int(d.get("expected_cols", 9))),
+        chars_per_line=(None if "chars_per_line" in d and d["chars_per_line"] is None
+                        else int(d.get("chars_per_line", 21))),
         edition=d.get("edition", "keben"),
         dev_set=[int(p) for p in d.get("dev_set", [])],
         sets={str(k): [int(p) for p in v]
