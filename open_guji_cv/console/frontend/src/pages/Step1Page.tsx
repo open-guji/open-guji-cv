@@ -12,7 +12,7 @@ import type { GateSummaryResponse } from '../types/evals'
 import type { BorderReviewKind } from '../types/borderReview'
 import type { Book } from '../types/registry'
 import { getBook } from '../api/registry'
-import { gate1IdFor } from '../steps'
+import { backendIdFor, findStep, gate1IdFor } from '../steps'
 
 // Step1 边框与界行探测。裁决台（列探测/抬头/外框外延）用户 2026-09-11 定「以后
 // 完全不走 artifact，都走控制台」后从 scripts/build_border_gold_reviews.py
@@ -64,6 +64,9 @@ export function Step1Page() {
   // 闸1 的 step id 分链（刻本 border_detect_gate / 现代 line_detect_gate），
   // 所以要先知道这册书是什么版式再去要汇总。
   const gate1 = gate1IdFor(bookMeta?.edition)
+  // 产物也分链：刻本 border_detect / 现代 line_detect。写死前者时现代书
+  // 这一格永远是「没有这份产物」（2026-09-15 用户截图）。
+  const step1Id = backendIdFor(findStep('step1'), bookMeta?.edition) ?? 'border_detect'
 
   useEffect(() => {
     if (!book) { setBookMeta(null); return }
@@ -131,7 +134,7 @@ export function Step1Page() {
       {tab === 'pageline' ? <PageLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
       <ProductViewer
         book={book}
-        step="border_detect"
+        step={step1Id}
         pages={filteredPages}
         pageTypeOf={(p) => gateSummary?.pages.find((r) => r.page === p)?.page_type ?? undefined}
       />
