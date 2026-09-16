@@ -154,6 +154,23 @@ class BookSpec:
     #: 这就是 `border_detect` 产 `line_index` 把它标成 `margin` 的原因。
     #: ⚠️ 这个数曾被写成 20（多算了页边那条假线），Step1 因此每页被迫多收一条线。
     leaf_layout: str = "single"
+    #: `norm_stroke`（yaml 同名）：字形归一时**两边都骨架化再统一细化到 N px**
+    #: （`normalize.stroke_normalize`）。None = 不做（缺省，四庫總目那批就是）。
+    #:
+    #: **这是册级属性，不是链级**——它取决于「这本书的笔宽 vs 字体模板的笔宽」
+    #: 差多少，所以放在册配置里，不写进 `keben_body_v2.yaml`（那会把四庫總目
+    #: 一起改掉）。北行日錄刻本实测（都归一到 64×64 之后）：
+    #: 书块笔宽 p50 **4.65px**、I.Ming 模板 **3.82px**，差近 1px，`cov` 会把
+    #: 「粗细差」当成「形状差」——不归一时 字→宇、旦→且、宣→宜/直 每个实例都反，
+    #: 字/旦/宣 一个都进不了库（seed_witness 2026-09-15 实锤）。
+    #:
+    #: ⚠️ **播种与 Step5-a 必须用同一个值**，否则库被一把尺子筛、又被另一把尺子查，
+    #: 等于白播。`seed-witness --norm-stroke` 与 `glyph_match` 都读这个字段。
+    #:
+    #: ⚠️ 它**不是免费的**：`stroke_normalize` 的 docstring 记着 2026-08-24 撤掉它的
+    #: 理由——膨胀到 3px 会把 已/巳、日/曰 这类开口糊死。所以只在「书与模板笔宽
+    #: 确实差得多」的册上开，别当默认值抄。
+    norm_stroke: int | None = None
     #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
     #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
     #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
@@ -255,6 +272,7 @@ class BookSpec:
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
             "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
             "font": dict(self.font),
@@ -430,6 +448,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         bottom_band_frac=(None if d.get("bottom_band_frac") is None
                           else float(d["bottom_band_frac"])),
         column_grid=bool(d.get("column_grid", False)),
+        norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         frame_height=(None if d.get("frame_height") is None
                       else float(d["frame_height"])),
