@@ -213,6 +213,45 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     focus(0)   // 落定的卡从「待裁」里消失，下一张自然顶上来
   }
 
+  // 键盘快捷键（用户 2026-09-16：「切分裁决卡片不支持键盘控制」）。按键
+  // 语义尽量与 Step3 `CutlinePanel` 对齐（Enter 落定 / S 拿不准 / J·K 或
+  // ←→ 换卡 / P 自己画 / X 清空 / Backspace 删最后一点 / U 重做），另加
+  // 1–9 选候选——这个板块的核心动作就是「选第几种切法」。
+  //
+  // ⚠️ `cur` 是 `cases` 的下标，而落定过的卡片不渲染；直接 cur±1 会走进
+  // 已隐藏的卡里（看着像按键没反应）。所以导航一律在 `visibleCases()` 的
+  // 序里走，与 `focus()` 的口径一致。
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      const target = ev.target as HTMLElement
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return
+      const vis = visibleCases()
+      if (!vis.length) return
+      // cur 指的卡若已落定（刚裁完那张），退到可见序的开头。
+      const c = cases[cur]
+      const vi = c && !cardState.current[c.id]?.done ? vis.indexOf(c) : 0
+      const i = cases.indexOf(vis[vi])
+      const st = cardState.current[vis[vi].id]
+      if (ev.key === 'Enter') { decide(i, 'confirmed'); ev.preventDefault() }
+      else if (ev.key === 's' || ev.key === 'S') { decide(i, 'idk'); ev.preventDefault() }
+      else if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown' || ev.key === 'j') { focus(vi + 1); ev.preventDefault() }
+      else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' || ev.key === 'k') { focus(vi - 1); ev.preventDefault() }
+      else if (/^[1-9]$/.test(ev.key)) {
+        const k = +ev.key - 1
+        if (k < (vis[vi].candidates || []).length) { pick(i, k); ev.preventDefault() }
+      } else if (ev.key === 'p' || ev.key === 'P') { toggleDrawing(i); ev.preventDefault() }
+      else if (ev.key === 'Backspace') {
+        if (st.poly.length) removePoint(i, st.poly.length - 1)
+        ev.preventDefault()
+      } else if (ev.key === 'x' || ev.key === 'X') { clearPoly(i); ev.preventDefault() }
+      else if (ev.key === 'u' || ev.key === 'U') { reopen(i); ev.preventDefault() }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cases, cur])
+
   function reopen(i: number) {
     const c = cases[i]
     if (!c) return
@@ -236,6 +275,10 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
           （没有单一答案时列出库给的候选池），<span className="clm-hit">绿色</span>＝与整理本期望字一致。
           点一行选中，「落定」确认，「拿不准」跳过留给下一轮。都不对时点「自己画」：
           点图空白处加点、拖动已有点、右键删点，画完直接「落定」。
+          <br />
+          键盘：<b>1–9</b> 选第几行切法 · <b>Enter</b> 落定 · <b>S</b> 拿不准 ·
+          <b> J/K</b> 或 <b>←→↑↓</b> 换卡 · <b>P</b> 自己画 · <b>Backspace</b> 删最后一点 ·
+          <b> X</b> 清空 · <b>U</b> 重做
         </p>
       )}
       <div className="bccgrid">
