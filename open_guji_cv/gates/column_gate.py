@@ -89,12 +89,15 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.7", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.8", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
+        # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
+        # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
+        book_deps=("period_prior", "expected_cols", "chars_per_line"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -176,7 +179,8 @@ class ColumnGateStep(Step):
                     f"L1：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
             else:
                 try:
-                    period = round(float(estimate_shared_period(projs, borders, dst_ws)), 2)
+                    period = round(float(estimate_shared_period(
+                        projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
                 except ValueError as e:
                     # 空栏页兜底（2026-09-13）：栏内没有字就推不出纵向节律，
                     # 这不是故障——界行齐全、九列切得出来，该正常产出一个

@@ -104,11 +104,16 @@ def test_without_prior_the_page_is_still_rejected(tmp_path):
 def test_prior_never_overrides_a_page_that_can_estimate(tmp_path):
     """**最要紧的一条**：能估出来的页一律用当场估的值，兜底不得插手。
 
-    配一个与真实周期差很远的先验（999），正常页的 period 必须仍是估出来的
-    那个数、`period_from_prior` 必须是 False——否则等于全书的页级周期被一个
-    书级常量悄悄顶替，正常页的产物会跟着变。
+    先验配成真周期 60，正常页的 period 必须是**估出来的** 60（窗口 [42, 84] 含真值），
+    且 `period_from_prior` 必须是 False——否则等于全书的页级周期被一个书级常量悄悄
+    顶替，正常页的产物会跟着变。
+
+    ⚠️ 这里**不能**拿一个离谱的先验（比如 999）来试：`period_prior` 现在还派生
+    自相关窗口（`estimate_shared_period`），999 会把窗口推到 [699, 1398]，估出来的
+    就是个 720 的假数——那样即使兜底逻辑坏了这条也会"通过"，测不到它想测的东西。
+    先验取真值本身，才能让"估出来的" 和 "先验顶上来的" 在数值上区分不开时，
+    仍由 `period_from_prior` 这个标志把两者分开。
     """
-    gm = _run(_ctx(tmp_path, _body_page(), period_prior=999.0))
-    assert gm.period is not None and gm.period != 999.0, (
-        f"正常页不该用先验，实得 period={gm.period}")
-    assert gm.period_from_prior is False
+    gm = _run(_ctx(tmp_path, _body_page(), period_prior=60.0))
+    assert gm.period == 60.0, f"正常页该估出真周期 60，实得 period={gm.period}"
+    assert gm.period_from_prior is False, "这一页估得出来，不该走兜底"

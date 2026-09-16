@@ -178,6 +178,17 @@ def estimate_period(curve: np.ndarray, lag_lo: int = 70, lag_hi: int = 160) -> i
 
     `lag_lo/lag_hi`：只在合理的单字高度量级里找峰，避开"半个字"和"两个字"
     这类谐波峰——范围本身不依赖任何一列的版框位置。
+
+    ⚠️ **窗口必须含真周期、且把 2x 谐波关在外面**，两个条件缺一不可。
+    缺省的 70–160 是给《四庫全書總目》标的（真值 113~115，稳稳落在窗口中间）。
+    **真值顶在 `lag_lo` 上就会出事**：北行日錄刻本真值 70.6，窗口勉强表示得了它，
+    却对 2x 谐波 141 敞开——自相关在 70 和 141 两处都有峰，逐列各自锁哪个看运气，
+    全书 30.4% 的列锁到谐波。而 `estimate_shared_period` 取逐列中位数，两堆各半时
+    中位落进中间的空档，给出一个**物理上不存在**的 106.5，DP 拿它当先验必然无解。
+    所以窗口要由册的 `period_prior` 派生（见 `estimate_shared_period`），别写死。
+
+    ⚠️ 另一条死路：**别换成另一组固定窄窗**。试过 [55,100]，北行日錄是好了，
+    四庫總目当场全毁（115 被上界截成 99，抽 12 页里 10 页中位都变）。
     """
     seg = curve - curve.mean()
     n = len(seg)
@@ -189,15 +200,34 @@ def estimate_period(curve: np.ndarray, lag_lo: int = 70, lag_hi: int = 160) -> i
     return best_lag
 
 
+#: `period_prior` 派生自相关窗口的系数。真周期的逐页波动远小于 ±30%
+#: （四庫總目 vol01 正文 108 页 115.0±1.67px），取这么宽是留足标定误差的余量；
+#: 上界 1.4 < 2.0 保证 2x 谐波一定被关在窗外，这是这组数唯一的硬约束。
+PERIOD_WINDOW_LO, PERIOD_WINDOW_HI = 0.7, 1.4
+
+
 def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[float, float]],
-                            dst_ws: list[int], blank_thresh_frac: float = 0.08) -> float:
+                            dst_ws: list[int], blank_thresh_frac: float = 0.08,
+                            period_prior: float | None = None) -> float:
     """页面级共享周期：每列自己 trim+估计一次，取中位数。
 
     单列自己的估计可能有系统性偏差（本列字距天生不齐时尤其明显），中位数
     对个别列的偏差不敏感，比直接用某一列自己的估计更适合当所有列共享的
     先验（vol02/135 九列实测：中位数 108.4px，个别列自己的估计低至 104px、
     高至 115px）。
+
+    `period_prior`（册的 `BookSpec.period_prior`）：给了就用它派生自相关窗口
+    `[0.7×prior, 1.4×prior]`，把 2x 谐波关在窗外；不给就沿用 `estimate_period`
+    的缺省 70–160，**行为逐位不变**。为什么必须跟着书走、以及固定窄窗为什么
+    是死路，见 `estimate_period` 的 docstring。
+
+    实测（北行日錄刻本 prior=70.6 → 窗口 [49, 98]）：884 列锁 2x 谐波 30.4% → 0%，
+    页级中位偏离真值 >10px 的页 3 → 0；四庫總目三册 501 页页级 period 逐页不变。
     """
+    kw = {}
+    if period_prior:
+        kw = {"lag_lo": max(2, int(period_prior * PERIOD_WINDOW_LO)),
+              "lag_hi": max(4, int(period_prior * PERIOD_WINDOW_HI))}
     periods = []
     for row_proj, (x1, x2), dst_w in zip(row_projs, borders, dst_ws):
         curve = smooth_curve(np.asarray(row_proj, dtype=np.float64))
@@ -205,7 +235,7 @@ def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[floa
         cs, ce = trim_content_span(curve, x1, x2, thresh)
         if ce - cs < 20:
             continue
-        periods.append(float(estimate_period(curve[cs:ce])))
+        periods.append(float(estimate_period(curve[cs:ce], **kw)))
     if not periods:
         raise ValueError("no column produced a usable period estimate")
     return float(np.median(periods))
