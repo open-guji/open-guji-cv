@@ -4,8 +4,10 @@
  "charset": "gbk",
  "n_classes": 20902,
  "degrade": "print",
+ "norm_stroke": 0,
  "val_top1": 0.9373160682754561,
  "val_top10": 0.9911712772218952,
  "epochs": 14,
- "seed": 0
+ "seed": 0,
+ "note": "训练图原样 render（不过 normalize_patch）——A/B 实测这样最好，见 train_font_cnn.py 渲染段的表"
 }
