@@ -47,6 +47,13 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+# 每请求的工作区：`X-Guji-Workspace` 头 → contextvar（见 console/middleware.py）。
+# 工作区是浏览器的状态，不是服务端的——这样两个标签页能各自在不同工作区上干活。
+from .middleware import WorkspaceMiddleware       # noqa: E402
+
+app.add_middleware(WorkspaceMiddleware)
+
+
 @app.middleware("http")
 async def _no_cache_static(request, call_next):
     """静态前端不缓存。改完 js/css 直接刷新就生效，不用每次提醒强刷

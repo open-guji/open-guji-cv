@@ -50,6 +50,7 @@ pytest tests/ -s -p no:cacheprovider
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -69,8 +70,37 @@ VERDICTS_REL = "feedback/verdicts"
 REPORTS_REL = "reports"
 
 
+#: 每请求（或每任务）的工作区覆盖。**优先于环境变量**。
+#:
+#: 2026-09-15：控制台要支持「开两个标签页，各自在不同工作区上干活」，
+#: 于是工作区不能是进程级的全局状态——它只存在于浏览器，每个请求用
+#: `X-Guji-Workspace` 头带过来，中间件塞进这个 contextvar（见
+#: `console/middleware.py`）。`contextvars` 天然按请求/任务隔离，
+#: 并发请求之间不会串。
+#:
+#: CLI 与跑批子进程不设这个，仍然走 `GUJI_WORKSPACE` 环境变量——
+#: 那边一个进程就是一个工作区，本来就不需要隔离。
+_WORKSPACE_OVERRIDE: ContextVar[str | None] = ContextVar("guji_workspace", default=None)
+
+
+def set_workspace_override(path: str | None):
+    """设本上下文的工作区，返回 token（用 `reset_workspace_override` 还原）。"""
+    return _WORKSPACE_OVERRIDE.set(path)
+
+
+def reset_workspace_override(token) -> None:
+    _WORKSPACE_OVERRIDE.reset(token)
+
+
 def workspace_root() -> Path | None:
-    """`GUJI_WORKSPACE` 指向的工作区仓根；没设返回 None（用仓内默认）。"""
+    """当前工作区仓根；没有返回 None（用仓内默认）。
+
+    解析顺序：**本请求的覆盖**（contextvar）> `GUJI_WORKSPACE` 环境变量 > 无。
+    覆盖排在最前，是为了让控制台做到「每个标签页各自一个工作区」而进程本身
+    不持有状态。"""
+    over = _WORKSPACE_OVERRIDE.get()
+    if over is not None:
+        return Path(over).expanduser().resolve() if over else None
     env = os.environ.get("GUJI_WORKSPACE")
     return Path(env).expanduser().resolve() if env else None
 

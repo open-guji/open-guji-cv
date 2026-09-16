@@ -39,6 +39,20 @@ class JobSpec:
     pages: str = "dev_set"
     force: bool = False
     params: dict = field(default_factory=dict)
+    workspace: str | None = None
+    """这次跑批在哪个工作区跑——**工单的一部分**，入队时定死，此后不再变。
+
+    2026-09-15 用户定的边界：控制台进程的 `GUJI_WORKSPACE` 只是**看板状态**
+    （用户现在在看哪个工作区），**不能给 job 用**。两者必须分开：
+
+    - 看板状态是会变的（控制台支持随时热切工作区）；
+    - 工单一旦入队就该是确定的，跑到一半或排队期间被人切了看板，产物不能
+      跟着跑到别的工作区去——那种错不报错，只是安静地写错地方。
+
+    所以子进程的 `GUJI_WORKSPACE` 只从这个字段来（见 `_run`），不从
+    `os.environ` 继承。入队方（`routers/runs.py`）负责在建工单时把当时看的那个
+    工作区显式写进来。
+    """
 
     def argv(self) -> list[str]:
         cmd = [sys.executable, "-m", "open_guji_cv", "pipeline", self.pipeline, self.book,
@@ -116,6 +130,11 @@ class JobRunner:
 
     # ── 对外 ─────────────────────────────────────────────────────────
     def submit(self, spec: JobSpec) -> Job:
+        if spec.workspace is None:
+            # 不兜底成「当前看板那个」——那正是要避免的耦合。入队方必须显式给，
+            # 空串表示「明确不用工作区」（跑仓内样本），与 None 区分开。
+            raise ValueError("JobSpec.workspace 未指定：工作区是工单的一部分，"
+                             "必须由入队方显式写明（空串 = 用仓内样本库）")
         job = Job(id=f"job_{int(time.time())}_{uuid.uuid4().hex[:6]}", spec=spec, argv=spec.argv())
         with self._lock:
             self.jobs[job.id] = job
@@ -159,6 +178,13 @@ class JobRunner:
         env = os.environ.copy()
         env.setdefault("PYTHONIOENCODING", "utf-8")
         env.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+        # 工作区**只认工单**，不继承控制台进程的那个（它是看板状态，会变）。
+        # 原先这里直接 `os.environ.copy()` 带走 GUJI_WORKSPACE，于是排队中的任务
+        # 会拿到「轮到它开跑那一刻」的看板值——中途切一次工作区，后面排队的
+        # 任务就把产物写到别的工作区去了（见 JobSpec.workspace）。
+        env.pop("GUJI_WORKSPACE", None)
+        if job.spec.workspace:
+            env["GUJI_WORKSPACE"] = job.spec.workspace
         log = self.log_path(job.id)
         with open(log, "w", encoding="utf-8") as f:
             f.write("$ " + " ".join(job.argv) + "\n")

@@ -26,15 +26,16 @@ export function AppLayout() {
     getWorkspace().then(setWs).catch(() => setWs(null))
   }, [])
 
-  // 热切工作区：后端换 GUJI_WORKSPACE 并重建 Store，进程不重启。切完册列表
-  // 立刻就变，所以要顺手把当前选中的册清掉——它多半不在新工作区里。
+  // 切工作区 = 改**本标签页**自己的偏好（sessionStorage），不通知服务端——
+  // 下一个请求自然带上新的头。所以另一个标签页完全不受影响，两个页面可以
+  // 同时在两个工作区上干活（用户 2026-09-15 定的形态）。
   async function onSwitchWorkspace(path: string) {
     if (!path || path === ws?.workspace) return
     setWsBusy(true); setWsErr('')
     try {
-      const next = await switchWorkspace(path)
+      switchWorkspace(path)                     // 纯前端，立即生效
+      const [next, bs] = await Promise.all([getWorkspace(), listBooks()])
       setWs(next)
-      const bs = await listBooks()
       setBooks(bs)
       // 跳回首页：原来那本书通常不属于新工作区，留在它的页面上只会看到一片空
       navigate('/')

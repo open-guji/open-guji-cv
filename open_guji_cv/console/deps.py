@@ -70,6 +70,7 @@ def reset_roots() -> None:
     for k in _roots:
         _roots[k] = None
     _log = _batches = _gold = _verdicts = None
+    _by_root.clear()
 
 
 def runner() -> JobRunner:
@@ -80,44 +81,59 @@ def runner() -> JobRunner:
     return _runner
 
 
+#: 按「解析出来的根」缓存的 Store。**不能做成进程级单例**——工作区是每请求
+#: 一个（`core/workspace` 的 contextvar，见 `console/middleware.py`），单例会
+#: 把第一个请求那个工作区的根一直用下去，第二个标签页就读到别人的数据了。
+#: 同一个工作区复用同一个实例：`EventLog`/`GoldStore` 内部有自己的缓存，
+#: 每次新建会丢掉、也白读一遍盘。
+_by_root: dict[tuple[str, str], object] = {}
+
+
+def _cached(kind: str, root: Path, make):
+    key = (kind, str(root))
+    inst = _by_root.get(key)
+    if inst is None:
+        inst = _by_root[key] = make(root)
+    return inst
+
+
 def event_log() -> EventLog:
-    global _log
-    if _log is None:
-        _log = EventLog(_roots["feedback"])
-    return _log
+    from ..core.workspace import feedback_root
+    root = _roots["feedback"] or feedback_root()
+    return _cached("feedback", root, EventLog)          # type: ignore[return-value]
 
 
 def batch_store() -> BatchStore:
-    global _batches
-    if _batches is None:
-        _batches = BatchStore(_roots["batches"])
-    return _batches
+    from ..core.workspace import batches_root
+    root = _roots["batches"] or batches_root()
+    return _cached("batches", root, BatchStore)         # type: ignore[return-value]
 
 
 def gold_store() -> GoldStore:
     """**测试集仓**（open-guji-dataset）——只给金标管理视图（分片表 / 迁移 / 漂移）用。
-    事件消费**不能**用它，用 `verdict_store()`（2026-09-13 三仓边界）。"""
+    事件消费**不能**用它，用 `verdict_store()`（2026-09-13 三仓边界）。
+
+    测试集仓不随工作区走（它是独立的第三个仓），但根仍可能由 `set_roots` 指定，
+    所以一样按根缓存。"""
+    if _roots["dataset"] is not None:
+        return _cached("dataset", _roots["dataset"], GoldStore)   # type: ignore[return-value]
     global _gold
     if _gold is None:
-        _gold = GoldStore(_roots["dataset"])
+        _gold = GoldStore(None)
     return _gold
 
 
 def verdict_store() -> GoldStore:
     """workspace 的裁决表 `feedback/verdicts/`——事件路由消费的落点、面板去重的数据源。
-    根随 `feedback` 根走（`<feedback>/verdicts`），`set_roots(feedback=…)` 一起换。"""
-    global _verdicts
-    if _verdicts is None:
-        if _roots["feedback"] is not None:
-            _verdicts = GoldStore(_roots["feedback"] / "verdicts")
-        else:
-            from ..feedback.consumers import verdict_store as _default
-            _verdicts = _default()
-    return _verdicts
+    根随 `feedback` 根走（`<feedback>/verdicts`）。"""
+    from ..core.workspace import verdicts_root
+    root = (_roots["feedback"] / "verdicts") if _roots["feedback"] is not None else verdicts_root()
+    return _cached("verdicts", root, GoldStore)         # type: ignore[return-value]
 
 
 def product_store() -> ProductStore:
-    """**每次新建**——manifest 是按实例缓存的，见模块 docstring。"""
+    """**每次新建**——manifest 是按实例缓存的，见模块 docstring。
+    根不传就由 `ProductStore` 自己按本请求的工作区解析（contextvar）。"""
     return ProductStore(_roots["products"])
 
 
