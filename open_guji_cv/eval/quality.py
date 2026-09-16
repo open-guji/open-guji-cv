@@ -62,7 +62,11 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 g = gold.get(r.id)
                 if g is None:
                     continue
-                pred = r.char if r.admit else (dd[r.id].char if r.id in dd else None)
+                # ⚠️ 自动放行位比**文意** `reading`，不是字形 `char`（2026-09-16 修，
+                # 同 round_check 判据 A）：两者不同正是一次有意的「字形→文意」转换
+                # （己/已/巳 那条通道：字形取库 top1、文意取整理本）。拿 char 去比
+                # 金标的 reading，等于把设计成要分岔的两层当成一层比，管线没错也报错。
+                pred = (r.reading or r.char) if r.admit else (dd[r.id].char if r.id in dd else None)
                 if pred is None:
                     continue
                 k = r.channel if r.admit else "人审"

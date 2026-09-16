@@ -180,10 +180,19 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 实测 vol02:18:9:5 与 35:7:13——图上刻 曾、用户裁 曾，整理本印 會，
                     # 判据 A 于是把**用户自己的裁决**记成了两条错，灯从绿变黄。
                     # 判据 A 量的是「自动放行准不准」，人裁不是自动放行，本就不该进这个分母。
-                    hit = (r.char == g.reading
+                    # ⚠️ 比**文意**要拿 `reading`，不是 `char`（2026-09-16 修）。
+                    # `char` 是字形层（照录图上的形），`reading` 是文意层；两者不同
+                    # 正是一次有意的「字形→文意」转换（AdmitRec.reading 的 docstring）。
+                    # 己/已/巳 那条通道（用户 2026-09-06 定）就是这么走的：字形取库
+                    # top1、文意取整理本。拿 char 去比 g.reading，等于把**设计成
+                    # 要分岔的两层**当成一层比——北行日錄 20 页实测，4 条「错」全是
+                    # 这一类：seed_admit 存的是 char=已 / reading=己，Step6 也判的是
+                    # 己（margin 0.78~0.90），管线一点没错，判据自己算错了。
+                    pred = r.reading or r.char
+                    hit = (pred == g.reading
                            or (g.conversion and r.char == g.shape)
-                           or _ledger().preferred_form(g.reading) == r.char
-                           or _same_char(r.char, g.reading))
+                           or _ledger().preferred_form(g.reading) == pred
+                           or _same_char(pred, g.reading))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
                     if getattr(g, "source", "") != "fallback":
@@ -193,7 +202,8 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                         nr += 1
                         okr += hit
                     if not hit:
-                        errors.append({"id": r.id, "pred": r.char,
+                        errors.append({"id": r.id, "pred": pred,
+                                       "char": r.char, "reading": r.reading,
                                        "gold": g.reading, "shape": g.shape,
                                        "channel": r.channel,
                                        "source": getattr(g, "source", ""),
