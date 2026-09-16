@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useWsPath } from '../hooks/useWsPath'
 import { listBooks } from '../api/registry'
-import { WORKSPACE_CHANGED } from '../api/workspace'
 import type { Book } from '../types/registry'
 
 // D2：首页——最近在整理的书 + 最近进展（方案 §二 `/`）。
 // 第一版先列出全部书，"最近"的排序与"最近进展"摘要留待接入 /api/status 之后再做。
 export function HomePage() {
+  const wsPath = useWsPath()
   const [books, setBooks] = useState<Book[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -16,9 +17,6 @@ export function HomePage() {
       listBooks().then(setBooks).catch((e) => setError(String(e)))
     }
     load()
-    // 热切工作区之后册列表整个换了一套，这张卡要跟着重取
-    window.addEventListener(WORKSPACE_CHANGED, load)
-    return () => window.removeEventListener(WORKSPACE_CHANGED, load)
   }, [])
 
   return (
@@ -32,7 +30,7 @@ export function HomePage() {
               并集，别的工作区那些册原图不在这儿，页数 0、点进去全空。 */}
           {books.filter((b) => b.in_workspace !== false).map((b) => (
             <li key={b.id}>
-              <Link to={`/${b.id}/`}>{b.id} · {b.title}</Link>
+              <Link to={wsPath(`/${b.id}/`)}>{b.id} · {b.title}</Link>
               <span className="muted"> {b.n_pages} 页</span>
             </li>
           ))}

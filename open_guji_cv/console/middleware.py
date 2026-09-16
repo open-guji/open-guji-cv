@@ -9,7 +9,7 @@
 B 的下一次请求就跟着变了。
 
 于是：
-- 前端每次请求带 `X-Guji-Workspace: <工作区绝对路径>`（`api/client.ts` 统一注入，
+- 前端每次请求带 `X-Guji-Workspace: <工作区 id>`（`api/client.ts` 统一注入，
   值存在 `localStorage`，每个标签页可以不同）；
 - 这个中间件把它塞进 `core/workspace._WORKSPACE_OVERRIDE`，该请求内所有
   路径解析（products / cache / glyph_db / feedback …）都跟着走；
@@ -44,13 +44,15 @@ class WorkspaceMiddleware(BaseHTTPMiddleware):
             raw = request.query_params.get(QUERY)
         token = None
         if raw is not None:
-            from .routers.workspace import allowed_workspaces
-            allowed = allowed_workspaces()
-            # 空串是合法值：「明确用仓内样本库」。其余必须在白名单里，
-            # 不在就忽略（退回环境变量），不报错——刷新页面时 localStorage
-            # 里可能还留着上一台机器/已删掉的工作区。
-            if raw == "" or raw in allowed:
-                token = set_workspace_override(raw)
+            from .routers.workspace import allowed_workspaces, resolve_workspace_id
+            # 传的是**工作区 id**（URL 上露出来的那个，如 `beixingrilu`）。
+            # 兼容绝对路径：早先的前端传的是路径，浏览器里可能还留着。
+            path = "" if raw == "" else (resolve_workspace_id(raw)
+                                         or (raw if raw in allowed_workspaces() else None))
+            # 认不出就忽略（退回环境变量），不报错——换了机器、改了目录名、
+            # 或者手敲错 id 时，页面还能打开，只是落在默认工作区。
+            if path is not None:
+                token = set_workspace_override(path)
         try:
             return await call_next(request)
         finally:

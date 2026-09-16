@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useWsPath } from '../hooks/useWsPath'
 import { fetchStatus, setOcrCandidates } from '../api/status'
 import { fetchOverviewSummary } from '../api/evals'
 import { fetchLlmOnlineStats } from '../api/llmOnline'
@@ -38,6 +39,7 @@ import './overview.css'
 // （那要10+秒，判据D读CNN候选是耗时大户）——总览页一进来就等 10 秒不合理，
 // 完整体检留给「统计数据」页手动点。
 export function BookOverviewPage() {
+  const wsPath = useWsPath()
   const { book = '' } = useParams()
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const [devStatus, setDevStatus] = useState<StatusResponse | null>(null)
@@ -141,7 +143,7 @@ export function BookOverviewPage() {
               <p className="qs">正文页共 {summary.next.body_total} 页，已处理 {summary.next.done} 页，剩 {summary.next.todo} 页</p>
               {summary.next.batch.length > 0 && <div className="ov-todo-batch">{summary.next.batch.join(', ')}</div>}
               <p className="qs" style={{ marginTop: '.4rem' }}>
-                <Link to={`/${book}/runs/`}>去运行页入队</Link>
+                <Link to={wsPath(`/${book}/runs/`)}>去运行页入队</Link>
               </p>
             </>
           ) : (
@@ -162,7 +164,7 @@ export function BookOverviewPage() {
                   {summary.rate.unseen_rate != null && <> · 未审段 {(summary.rate.unseen_rate * 100).toFixed(2)}%</>}
                 </>
               ) : '还没有人审率数据'}
-              <Link to={`/${book}/evals/`}>查体检</Link>
+              <Link to={wsPath(`/${book}/evals/`)}>查体检</Link>
             </div>
             {summary.gates.map((g) => (
               <div key={g.gate} className={`ov-alert-row ${g.n_blocked ? 'ov-warn' : 'ov-ok'}`}>
@@ -175,7 +177,7 @@ export function BookOverviewPage() {
             <div className={`ov-alert-row ${summary.align_ref.n_not_anchored ? 'ov-warn' : 'ov-ok'}`}>
               整理本锚定 {summary.align_ref.n_anchored}/{summary.align_ref.n_pages - summary.align_ref.n_missing}
               {summary.align_ref.n_not_anchored > 0 && <>（未锚定 {summary.align_ref.n_not_anchored} 页）</>}
-              <Link to={`/${book}/evals/`}>看明细</Link>
+              <Link to={wsPath(`/${book}/evals/`)}>看明细</Link>
             </div>
             {llmStats?.has_data && (
               <div className="ov-alert-row muted">
