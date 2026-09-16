@@ -254,7 +254,12 @@ class ContextDecideStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.recognize_flow import fuse_priors
+        from .align_ref import _with_book_corpus
         p: ContextDecideParams = ctx.params_for(self)  # type: ignore[assignment]
+        # 没显式指定就用这册书自己的整理本——理由与踩过的坑见 `_with_book_corpus`。
+        # 本步尤其要紧：语料错了 n-gram 会退化成「只有两份泛古籍语料」，
+        # 「人」比「入」常见，于是每个「入」都判成「人」（见 `book_corpus` docstring）。
+        p = _with_book_corpus(p, ctx)
         match: PageMatch = ctx.product("glyph_match", page)
         try:
             ocr: PageOcr | None = ctx.product("ocr_candidates", page)

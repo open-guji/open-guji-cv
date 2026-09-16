@@ -721,6 +721,11 @@ class GlyphDB:
         用於剪掉不再需要的字體庫或導入到一半的殘局。只認 kind='font' 之外
         的來源時要當心：刻本來源的真源在 glyph_store/，這裡刪的只是索引，
         `rebuild` 會把它們拉回來——真要棄掉刻本來源得動導出目錄。
+
+        **`admissions` 準入台賬一併刪掉**（2026-09-16 補）：`admit_instance` 靠
+        台賬判重，台賬留著而實例沒了，重播時整批被當成 duplicate 跳過——庫看著
+        「播過了」其實是空的，而且不報錯。北行日錄踩過：1001 個字位重播只進了
+        114 個字頭，其餘 887 全被跳過，查了半天才發現是台賬沒清。
         """
         cur = self.conn.cursor()
         iids = [r[0] for r in cur.execute(
@@ -740,6 +745,9 @@ class GlyphDB:
             cur.execute(f"DELETE FROM derived WHERE instance_id IN ({ph})",
                         chunk)
             cur.execute(f"DELETE FROM instances WHERE instance_id IN ({ph})",
+                        chunk)
+            # 台賬跟著實例一起走，否則重播全被判重跳過（見 docstring）
+            cur.execute(f"DELETE FROM admissions WHERE instance_id IN ({ph})",
                         chunk)
         cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
         self.conn.commit()
