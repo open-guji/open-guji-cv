@@ -144,7 +144,7 @@ def classify_runs(runs: list[InkRun], em: float, band_w: int, *, small_frac: flo
 def _group_dp(runs: list[InkRun], em: float, pitch: float, *, max_span_frac: float = 1.15,
               punct_pitch_frac: float = 0.6, punct_weight: float = 0.3,
               punct_in_char_cost: float = 0.6, punct_group_span_frac: float = 0.6,
-              max_group: int = 6) -> list[tuple[int, int, str]]:
+              max_group: int = 6, trans_weight: float = 1.0) -> list[tuple[int, int, str]]:
     """墨段序列 → [(起, 止, 项类型)]。DP：`best[i]` = 前 i 段的最小代价与最后一项。
 
     标点项 = 一个靠右小墨块，或**几个靠右小墨块合起来跨度 ≤ punct_group_span_frac em**
@@ -177,7 +177,10 @@ def _group_dp(runs: list[InkRun], em: float, pitch: float, *, max_span_frac: flo
             if k0 == "":
                 trans = 0.0
             elif k0 == "char" and kind == "char":
-                trans = abs((cen - cen0) - pitch) / pitch
+                # `trans_weight` > 1 = 刚性网格：偏离 pitch 罚得更重（见
+                # `segment_column_runs` 的 rigid 说明）。标点那一路不加权——
+                # 标点本来就不在网格上（占 0.35～0.7 格）。
+                trans = trans_weight * abs((cen - cen0) - pitch) / pitch
             else:
                 trans = punct_weight * abs((cen - cen0) - punct_pitch_frac * pitch) / pitch
             tot = c0 + item_cost + trans
@@ -210,14 +213,34 @@ def segment_column_runs(col_gray: np.ndarray, *, content_x: tuple[float, float] 
                         border_top: float = 0.0, border_bottom: float | None = None,
                         ink_threshold: int = 128, em_hint: float | None = None,
                         pitch_hint: float | None = None, blank_min_frac: float = 0.8,
-                        small_char_frac: float = 0.8, extend_max_frac: float = 0.6
+                        small_char_frac: float = 0.8, extend_max_frac: float = 0.6,
+                        rigid: bool = False, rigid_weight: float = 3.0,
+                        interior_blank: bool = False, blank_gap_frac: float = 0.55
                         ) -> RunSegResult | None:
     """Step3（现代链）正门：清理后的单列灰度图 → 带类型的项（char / punct / blank）。
 
     - `content_x`：内容窗口（闸2 给的文字带）；
     - `border_top` / `border_bottom`：只在这个 y 范围内找墨（列图坐标）；
     - `em_hint` / `pitch_hint`：估不出来时的兜底（册级先验）。
+    - `rigid`：**刚性网格模式**（三模式方案 §四.2）。见下。
+    - `interior_blank`：项与项之间的墨缝宽到能装下整格时，补 `blank` 项（**项内空格位**）。
+      默认关——北行日錄是撑满排版，列内没有真正的空格位，开了会把宽字缝误判成空格。
+      考補萃編这类方格排版必须开：空格是「著者 ∥ 書名」的分隔符，吞掉就丢结构。
     返回 None 表示这一列没有墨。
+
+    ## 刚性 vs 弹性（2026-09-15 加）
+
+    两本现代书给出了相反的版式，所以这里是个开关而不是一条路：
+
+    - **北行日錄（竖排）不刚性**：标点挤压 + 撑满列长，字距随列在 111～132px 间调整。
+      pitch 必须**逐列估**、还要用第一轮结果重估一次——这是默认 (`rigid=False`)。
+    - **考補萃編（横排）刚性**：全角方格排版，pitch 45.5px、跨页 σ<1px。
+      这时逐列估 pitch 是**有害的**：短行（书目体只有五六个字）样本太少，
+      估出来的中位数会被一两个宽字带偏；而页级 pitch 是排版常量，本来就更准。
+
+    `rigid=True` 时：① pitch 锁死用 `pitch_hint`（页级/册级常量），不逐列估、
+    不做第二轮重估；② DP 的 char→char 转移代价乘 `rigid_weight`，
+    偏离网格惩罚更重，等价于「格心必须落在网格上」。
     """
     H, W = col_gray.shape[:2]
     x_lo, x_hi = (0, W) if content_x is None else (int(round(content_x[0])), int(round(content_x[1])))
@@ -238,21 +261,27 @@ def segment_column_runs(col_gray: np.ndarray, *, content_x: tuple[float, float] 
     if em_hint and em < 0.9 * em_hint:
         em = float(em_hint)
     classify_runs(runs, em, band_w)
-    pitch = _estimate_pitch(runs, em, pitch_hint)
-    if pitch_hint and pitch < 0.85 * pitch_hint:
+    if rigid and pitch_hint:
+        # 刚性：pitch 是页级排版常量，逐列估只会被短行的少数样本带偏。
         pitch = float(pitch_hint)
-    groups = _group_dp(runs, em, pitch)
-    # 用第一轮结果重估 pitch（字–字中心距），再切一次；两轮足够收敛
-    cen = [(runs[i].y0 + runs[j - 1].y1 - 1) / 2.0 for i, j, _ in groups]
-    kinds = [k for _, _, k in groups]
-    ds = [cen[t + 1] - cen[t] for t in range(len(cen) - 1) if kinds[t] == kinds[t + 1] == "char"]
-    if len(ds) >= 3:
-        p2 = float(np.median(ds))
-        if pitch_hint and p2 < 0.85 * pitch_hint:
-            p2 = float(pitch_hint)
-        if abs(p2 - pitch) > 1.0:
-            pitch = p2
-            groups = _group_dp(runs, em, pitch)
+        groups = _group_dp(runs, em, pitch, trans_weight=rigid_weight)
+    else:
+        pitch = _estimate_pitch(runs, em, pitch_hint)
+        if pitch_hint and pitch < 0.85 * pitch_hint:
+            pitch = float(pitch_hint)
+        groups = _group_dp(runs, em, pitch)
+        # 用第一轮结果重估 pitch（字–字中心距），再切一次；两轮足够收敛
+        cen = [(runs[i].y0 + runs[j - 1].y1 - 1) / 2.0 for i, j, _ in groups]
+        kinds = [k for _, _, k in groups]
+        ds = [cen[t + 1] - cen[t] for t in range(len(cen) - 1)
+              if kinds[t] == kinds[t + 1] == "char"]
+        if len(ds) >= 3:
+            p2 = float(np.median(ds))
+            if pitch_hint and p2 < 0.85 * pitch_hint:
+                p2 = float(pitch_hint)
+            if abs(p2 - pitch) > 1.0:
+                pitch = p2
+                groups = _group_dp(runs, em, pitch)
 
     flags: list[str] = []
     # 双行小注嫌疑：内容窗口的 x 投影出现两个分离的峰
@@ -280,7 +309,54 @@ def segment_column_runs(col_gray: np.ndarray, *, content_x: tuple[float, float] 
     # 首尾空白：块内空出 ≥ blank_min_frac em 的段落成一个 blank 项
     if items[0][0] - y_lo >= blank_min_frac * em + ext:
         cells.append(RunCell(y0=float(y_lo), y1=bounds[0], kind="blank"))
+    # **项内空格位**（2026-09-15 加）：相邻两项的墨缝宽到能装下整格时，
+    # 中间是排版上的空格，不是「上一个字很宽」。
+    #
+    # 不补的后果不是难看，是**丢结构**：考補萃編的书目体用空格分隔
+    # 「著者 ∥ 書名」（張華集二卷　又　詩一卷），空格位被吞掉，Step9 就分不出
+    # 哪里是著者哪里是書名；而且格心距会变成 1.75～1.91 × pitch，
+    # 量漏切时全部记成漏切（p301 c9 那两条就是）。
+    #
+    # 只按**墨缝**判，不按项跨度判：项跨度里含 ext 外扩，判不准。
+    # gap / pitch 四舍五入 ≥1 就补几个空格位，均分这段缝。
+    # 判据用**墨缝**（上一项墨尾 → 本项墨头）而不是格跨度；补出来的空格位
+    # 占的是**格位**，所以按 pitch 算个数：缝里除掉两侧各半个字身，还能站下几个整格。
+    # 只在 char↔char 之间补——标点本来就不占整格（0.35～0.7），它两侧的缝是挤压，
+    # 不是空格（p301 c9 的「卷␣」缝 35px 就是被这条挡住的）。
+    interior: dict[int, int] = {}          # t → 这一项之前要补几个空格位
+    if interior_blank and pitch > 0:
+        for t in range(1, len(items)):
+            if items[t - 1][2] != "char" or items[t][2] != "char":
+                continue
+            # 格心距比 pitch 多出来的部分就是空出来的格数
+            cen_prev = (items[t - 1][0] + items[t - 1][1]) / 2.0
+            cen_cur = (items[t][0] + items[t][1]) / 2.0
+            n_blank = int(round((cen_cur - cen_prev) / pitch)) - 1
+            if n_blank >= 1:
+                interior[t] = n_blank
+        # 补了空格位的地方，两侧格边界要重新定：原来的 `bounds` 是墨缝中点，
+        # 整条缝都算给了相邻两格，空格位就只剩几个像素。改成把缝按
+        # 「上一项吃一点、空格位站中间、本项吃一点」三份分：
+        # 两侧各让出的余量取墨缝的 1/(n+2)，保证空格位拿到接近一格的宽度。
+        # ⚠️ 别用 `ext`（0.6 em ≈ 23px）当余量——54px 的缝被两侧各吃 23px
+        # 只剩 8px，空格位会瘦成一条线（2026-09-15 第一版就是这么错的）。
+        for t in list(interior):
+            n_b = interior[t]
+            g0, g1 = items[t - 1][1], items[t][0]
+            share = (g1 - g0) / (n_b + 2)
+            lo, hi = g0 + share, g1 - share
+            if hi > lo:
+                bounds[t] = lo
+                interior[t] = (n_b, lo, hi)        # type: ignore[assignment]
+            else:
+                interior.pop(t)
     for t, (a0, a1, kind, i, j) in enumerate(items):
+        ent = interior.get(t)
+        if ent:
+            n_b, lo, hi = ent                      # type: ignore[misc]
+            step = (hi - lo) / n_b if hi > lo else 0.0
+            for b in range(n_b):
+                cells.append(RunCell(y0=lo + b * step, y1=lo + (b + 1) * step, kind="blank"))
         seg = ink[a0 - y_lo:a1 - y_lo]
         ratio = float(seg.mean()) if seg.size else 0.0
         fl: list[str] = []
@@ -292,7 +368,18 @@ def segment_column_runs(col_gray: np.ndarray, *, content_x: tuple[float, float] 
                 fl.append("punct_absorbed")  # 一个靠右小墨块被并进了字：可能是真字的点，也可能是漏切的标点
             if h > 1.2 * em:
                 fl.append("tall")            # 高出字身两成：两项粘连、或字与标点连在一起
-        cells.append(RunCell(y0=bounds[t], y1=bounds[t + 1], kind=kind, ink_y0=a0, ink_y1=a1,
+        # `h` 是**墨高**（a1 - a0），不是格高——格高含外扩与均分的缝，
+        # 一个正常句点的格能有 32px 而墨只有 11px，拿格高判会把好标点也标上。
+        if kind == "punct" and pitch > 0 and h < 0.30 * pitch:
+            # 墨高不到三成格：多半不是标点，而是**注码 ①②** 或被劈开的标点碎片
+            # （考補萃編五页实测 12 处 = 0.64%，如「束哲集一卷①」的 ① 被切成 8px + 43px 两项）。
+            # 只标不改切法：它们在 Step5 配不上库、会自己落到 unsure 交人裁，
+            # 这个旗标是给人和体检看的线索。
+            fl.append("tiny")
+        # 补过空格位的项，起点跟着最后一个空格位走（不再是墨缝中点），
+        # 否则本项会跨在空格上、格心又落回 1.5 pitch 处。
+        y0 = cells[-1].y1 if interior.get(t) else bounds[t]
+        cells.append(RunCell(y0=y0, y1=bounds[t + 1], kind=kind, ink_y0=a0, ink_y1=a1,
                              ink_ratio=round(ratio, 4), flags=fl, n_runs=j - i))
     if y_hi - items[-1][1] >= blank_min_frac * em + ext:
         cells.append(RunCell(y0=bounds[-1], y1=float(y_hi), kind="blank"))
