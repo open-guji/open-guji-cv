@@ -17,7 +17,9 @@ export interface CardState {
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊', unet_seam: 'U-Net缝', period_up: '按格高↑', period_dn: '按格高↓' }
 // 候选线一条一色（2026-09-15：L3 扩池后一张卡可能有 6 条候选，原来只有两种颜色、选中也不高亮，人分不出点了哪条）。
 // 按**池内下标**取色，与右侧按钮上的色点一一对应；选中的那条画成实线加粗。
-const CL_COLORS = ['#2f6fb5', '#c47f17', '#1f9e78', '#b5484e', '#7a5bbd', '#0f8ea8']
+// Step7 的 BlockingCutlineCard 也用这一套（两处卡片的候选色必须一致，否则
+// 同一条候选在两个面板里颜色不同，人对不上号）。
+export const CL_COLORS = ['#2f6fb5', '#c47f17', '#1f9e78', '#b5484e', '#7a5bbd', '#0f8ea8']
 
 // 每张卡自己的显示倍率，照抄 v1 clScale：列图裁片原宽约 180-210px，
 // 放到 ≤300px 且 ≤2 倍，卡片再窄也不会把右侧按钮挤没。
