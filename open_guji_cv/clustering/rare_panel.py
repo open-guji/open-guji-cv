@@ -98,7 +98,7 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int) -> list[dict]:
     } for ch, font, score in hits]
 
 
-def rare_for(img, k: int) -> list[dict]:
+def rare_for(img, k: int, corpus: str | None = None) -> list[dict]:
     """一张字块图 → top-k 候选（含释义等修饰）。单查用这个；一页多个字块
     用 `rare_for_batch`——五路检索改成矩阵-矩阵乘法/网络批前向，快数倍
     （2026-09-10，见 `font_candidates.candidates_batch` 与
@@ -114,17 +114,17 @@ def rare_for(img, k: int) -> list[dict]:
     a = b = []
     cnn_topk = emb_topk = []
     if cnn.available:
-        cs_big = _rare_charsets()[1]
+        cs_big = _rare_charsets(corpus)[1]
         cnn_topk = cnn.topk(norm, cs_big, k=max(k, 10))
         emb_topk = cnn.emb_topk(norm, cs_big, k=max(k, 10))
     else:
-        cs_small, cs_big = _rare_charsets()
+        cs_small, cs_big = _rare_charsets(corpus)
         a = candidates(norm, cs_small, k=max(k, 10))
         b = candidates(norm, cs_big, k=max(k, 10))
     return _fuse(a, b, cnn_topk, emb_topk, k)
 
 
-def rare_for_batch(imgs: list, k: int) -> list[list[dict]]:
+def rare_for_batch(imgs: list, k: int, corpus: str | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
@@ -153,12 +153,12 @@ def rare_for_batch(imgs: list, k: int) -> list[list[dict]]:
     from .cnn_candidates import shared
     cnn = shared()
     if cnn.available:
-        cs_big = _rare_charsets()[1]
+        cs_big = _rare_charsets(corpus)[1]
         a_list = b_list = [[] for _ in norms]
         cnn_list = cnn.topk_batch(norms, cs_big, k=max(k, 10))
         emb_list = cnn.emb_topk_batch(norms, cs_big, k=max(k, 10))
     else:
-        cs_small, cs_big = _rare_charsets()
+        cs_small, cs_big = _rare_charsets(corpus)
         a_list = candidates_batch(norms, cs_small, k=max(k, 10))
         b_list = candidates_batch(norms, cs_big, k=max(k, 10))
         cnn_list = emb_list = [[] for _ in norms]
@@ -235,14 +235,14 @@ def _gloss() -> dict:
 
 
 @lru_cache(maxsize=1)
-def _rare_charsets() -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _rare_charsets(corpus: str | None = None) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """两档字表各算一次。元组身份稳定，`font_candidates._index` 的缓存才命中。
 
     此前每次请求重新拼 `tuple(sorted(big))`，lru_cache 按值哈希本该命中，
     但大表第一次建就是 8 分钟，且进程重启就丢——现在索引本身也落盘了
     （见 font_candidates._index）。
     """
-    small = tuple(book_charset(DEFAULT_CORPUS))
+    small = tuple(book_charset(corpus or DEFAULT_CORPUS))
     big = set(small)
     try:
         from ..variants import variants_of
@@ -283,6 +283,10 @@ def rare_batch(book: str, slots: list[str], k: int = 3,
     不该让整批失败。
     """
     out: dict[str, list] = {}
+    # 字表按这册书的整理本算（`references[0].file`）——写死刻本链那份语料的话，
+    # 换一本书就指向一个不存在的文件，整个面板 500（2026-09-15 北行日錄实测）。
+    from ..steps.align_ref import book_corpus
+    corpus = book_corpus(book)
     for s in slots[:400]:
         try:
             parts = s.split(":")
@@ -293,5 +297,5 @@ def rare_batch(book: str, slots: list[str], k: int = 3,
             out[s] = []
             continue
         img = rare_patch(book, page, col, slot, sub, cache)
-        out[s] = rare_for(img, k) if img is not None else []
+        out[s] = rare_for(img, k, corpus) if img is not None else []
     return {"book": book, "n": len(out), "rare": out}

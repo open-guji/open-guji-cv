@@ -83,6 +83,26 @@ from ..utils.jiazhu_order import sort_by_reading
 DEFAULT_CORPUS = str(corpus_path("zongmu_wenyuange_wikisource.txt"))
 
 
+def book_corpus(book: str) -> str:
+    """这册书的整理本语料路径：`books/<id>.yaml` 的 `references[0].file`。
+
+    2026-09-15 加。此前几处直接用 `DEFAULT_CORPUS`（刻本链那份总目语料），
+    换一本书就指向一个不存在的文件——北行日錄的生僻字面板因此整个 500，
+    Step6 的 n-gram 也悄悄退化成「只有两份泛古籍语料」（`人` 比 `入` 常见，
+    于是每个「入」都判成「人」）。查不到就退回 `DEFAULT_CORPUS`，行为不变。
+    """
+    try:
+        from ..core.book import load_book
+        refs = load_book(book).references
+        if refs and refs[0].get("file"):
+            p = corpus_path(str(refs[0]["file"]))
+            if Path(p).exists():
+                return str(p)
+    except Exception:
+        pass
+    return DEFAULT_CORPUS
+
+
 def slots_from_decision(dec, match=None, ocr=None
                        ) -> tuple[list[tuple[int, int, str, str]], dict]:
     """Step6 的 `context_decision`（+ 库/OCR 兜底）→ 金标要的 slots + 溯源表。

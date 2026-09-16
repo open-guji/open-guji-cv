@@ -41,6 +41,8 @@ CNN checkpoint、康熙白名单、字统网模板都是**外部可变状态**�
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel
 
 from ..core.spec import StepSpec
@@ -94,7 +96,20 @@ class RareCandidatesStep(Step):
                 queue.append((cc.col, r))
                 imgs.append(img)
 
-        hits_list = rare_for_batch(imgs, p.k) if imgs else []
+        # 字表按这册书的整理本算——Step5-b 此前也是写死刻本链那份语料，
+        # 换书就 FileNotFoundError（北行日錄 1–10 页全部失败，2026-09-15）。
+        #
+        # 2026-09-15 再补一层：**这册书压根没有语料时要降级，不能炸**。
+        # `book_corpus` 查不到会退回刻本链那份 `DEFAULT_CORPUS`，而那个文件
+        # 只在四庫工作区里有；考補萃編（`references: []`，无证人整理本）第一次
+        # 跑全链时 6 页全部 FileNotFoundError。生僻字候选是**可选的一路**
+        # （方案 §四 Step5-b），没有字表就不出候选，让 Step6/7 照常走。
+        from .align_ref import book_corpus
+        corpus = book_corpus(ctx.book.id)
+        if imgs and not Path(corpus).exists():
+            ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
+            imgs = []
+        hits_list = rare_for_batch(imgs, p.k, corpus) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,
