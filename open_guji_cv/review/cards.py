@@ -36,7 +36,26 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     """
     st = store or ProductStore()
     bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
+    # 点名清单模式（2026-09-16）：`pages` 填 `list:<名字>`，读 workspace
+    # `feedback/lists/<名字>.txt`（一行一个字位 id，`#` 开头是注释），**只出这几张卡**。
+    # 与切线面板的 `list:` 同一套约定（`console/routers/cutline.py`），同一个目录。
+    # 用途：机器筛出可疑的几十个字（如「这轮重跑后与整理本不一致的」），让人只审这些，
+    # 不必按页翻。页范围由清单自己决定——出现在清单里的页才读产物。
+    only_ids: set[str] | None = None
+    if pages.startswith("list:"):
+        from ..core.workspace import feedback_root
+        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+        if not lp.exists():
+            raise FileNotFoundError(f"清单不存在：{lp}")
+        # 行尾注释也要剥掉：这些清单是机器生成给人看的，每行都带
+        # `vol02:11:9:8    # 意 -> 憲` 这样的说明，不剥的话整行当 id，一张卡也出不来。
+        only_ids = {ln.split("#", 1)[0].strip() for ln in lp.read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.lstrip().startswith("#")}
+        only_ids.discard("")
+        # id 形如 `vol02:11:9:8`（书:页:列:格，末尾可带 sub 字母）→ 取页号
+        pgs = sorted({int(i.split(":")[1]) for i in only_ids if i.count(":") >= 3})
+    else:
+        pgs = bk.resolve_pages(pages)
     # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
     # 拿 v2_align 的页对齐（`reading` = 整理本在这一位印的字），锚不上的页没有。
     # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
@@ -60,14 +79,21 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
             if not cc.ok:
                 continue
             for r in cc.chars:
-                if only == "review" and r.admit:
-                    continue
-                if only == "auto" and not r.admit:
-                    continue
+                # 点名清单：只认 id，**不受 only / 顺序闸约束**——点名要看的就得出得来，
+                # 否则「这个字自动进库了」或「旁边切线没裁」会把它静默吞掉，人对着空面板
+                # 不知道是没问题还是没出卡。
+                if only_ids is not None:
+                    if r.id not in only_ids:
+                        continue
+                else:
+                    if only == "review" and r.admit:
+                        continue
+                    if only == "auto" and not r.admit:
+                        continue
                 # 顺序闸（用户 2026-09-10 定）：这一位旁边有一条**还没 review 的切线**时，
                 # 先别出字卡——先把切分线看过，再来看这个字。粒度是格位，不整页挡。
                 _pend = blocked.get((pg, cc.col, r.slot))
-                if _pend is not None:
+                if _pend is not None and only_ids is None:
                     out_blocked.append({"id": r.id, "page": pg, "col": cc.col,
                                         "slot": r.slot, "pending": _pend})
                     continue
