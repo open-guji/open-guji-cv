@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { withWorkspace } from '../../api/client'
+import { CL_COLORS } from './CutlineCard'
 import type { CandidateMatch, CutlineCase } from '../../types/cutline'
 
 // Step7「切分裁决」板块专用卡片（overview 2026-09-11 下发）。
@@ -153,7 +154,13 @@ export function BlockingCutlineCard({
               if (!cd.y || !cd.y.length) return null
               const cls = cd.kind === 'seam_wide' ? 'wide' : 'narrow'
               return (
+                // ⚠️ `stroke` 必须走**行内属性**：`.clcand` 只定了 fill/宽度/虚线，
+                // 颜色一直是逐条给的（见 CutlineCard 的 CL_COLORS 注释）。
+                // 这里原来只给 `wide`/`narrow` 两个 class，而 cutline.css 里根本
+                // 没有这两条规则 —— 于是 stroke 解析成 none，线在 DOM 里、
+                // 几何也对，就是一个像素都不画（用户 2026-09-16 实测「看不到线」）。
                 <polyline key={k} className={`clcand ${cls}${k === pick && !drawn ? ' clcand-pick' : ''}`}
+                          stroke={CL_COLORS[k % CL_COLORS.length]}
                           points={cd.y.map((yy, j) => `${(c.x0 + j) * scale},${(yy - c.crop_y0) * scale}`).join(' ')} />
               )
             })}
