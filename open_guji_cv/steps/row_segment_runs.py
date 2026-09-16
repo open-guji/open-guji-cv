@@ -26,12 +26,23 @@ class RowSegmentRunsParams(BaseModel):
     blank_min_frac: float = 0.8      # 首尾空出 ≥ 此 × em 才记一个 blank 项
     small_char_frac: float = 0.8     # 字高 < 此 × em 标 small
     extend_max_frac: float = 0.6     # 首末项向外最多扩多少 em
+    #: **刚性网格模式**（三模式方案 §四.2）。两本现代书版式相反，所以这是开关不是路：
+    #: 北行日錄（竖排）标点挤压撑满、字距逐列变 → 默认 False，逐列估 pitch；
+    #: 考補萃編（横排）全角方格、pitch 跨页 σ<1px → True，pitch 锁页级常量不逐列估。
+    #: 开了才有意义的前提是 `pitch_hint` 给得准（册配置 `pitch_prior` 或页级中位）。
+    rigid: bool = False
+    rigid_weight: float = 3.0        # 刚性时 char→char 转移代价的倍率
+    #: **项内空格位**：项与项之间的墨缝能装下整格时补 `blank` 项。
+    #: 默认关（北行日錄撑满排版，列内没有真空格）；方格排版的书要开——
+    #: 空格是「著者 ∥ 書名」的分隔符，吞掉就丢结构，还会被误记成漏切。
+    interior_blank: bool = False
+    blank_gap_frac: float = 0.55     # 墨缝 ≥ 此 × pitch 才考虑补空格位
 
 
 @register_step
 class RowSegmentRunsStep(Step):
     spec = StepSpec(
-        id="row_segment_runs", title="Step3 单列切分（墨段盒模型，现代印刷）", version="1.0",
+        id="row_segment_runs", title="Step3 单列切分（墨段盒模型，现代印刷）", version="1.1",
         unit="column",
         consumes=("gate_manifest", "column_windows", "column_image", "line_index"), produces=("cells",),
         params=RowSegmentRunsParams,
@@ -54,7 +65,9 @@ class RowSegmentRunsStep(Step):
                 border_bottom=gc.border_bottom, ink_threshold=p.ink_threshold,
                 em_hint=em_hint, pitch_hint=pitch_hint,
                 blank_min_frac=p.blank_min_frac,
-                small_char_frac=p.small_char_frac, extend_max_frac=p.extend_max_frac)
+                small_char_frac=p.small_char_frac, extend_max_frac=p.extend_max_frac,
+                rigid=p.rigid, rigid_weight=p.rigid_weight,
+                interior_blank=p.interior_blank, blank_gap_frac=p.blank_gap_frac)
 
         # 小字整列（脚注列，line_index 标 small_col）字号本来就小，不拿页级 em/pitch 去套；
         # 页级值也不从它们身上取

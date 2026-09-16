@@ -76,7 +76,10 @@ class BookSpec:
     #: 70、std 15.6），混进来会把中位数拉偏。只用 page_type == body 的页。
     #: 换书必须重新标定。
     period_prior: float | None = None
-    pages: list[int] = field(default_factory=list)   # 空 = 扫目录
+    #: 这册书有哪些页。空 = 扫 `raw_dir` 目录。yaml 里可写整数，也可写区间
+    #: 字符串 `pages: ["10-380"]`（见 `_expand_pages`）——一卷书里装了多种著作时，
+    #: 几本册配置共用同一批原图、各自用 `pages:` 划范围，不必复制图像。
+    pages: list[int] = field(default_factory=list)
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
@@ -230,6 +233,39 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+def _expand_pages(raw) -> list[int]:
+    """页号表达式 → 页号列表。整数照收，字符串支持 `"10-380"` 与 `"3,9,12-15"`。
+
+    2026-09-15 加。起因：一卷书里装了五种著作（考補萃編第二十卷），五本册配置
+    **共用同一批原图**、靠 `pages:` 划分页范围——最长的一本 371 页，
+    直接写成整数列表是 371 个数字铺满一行，人没法核对也没法改。
+    写 `pages: ["10-380"]` 就一眼看得出边界。
+
+    与 `--pages` 的页号表达式**不是同一套**（那个还支持 `dev_set` 等命名页集，
+    见 `cli_v2._parse_pages`）；这里只认数字与区间，因为册配置里不该出现
+    「集合名」这种需要回头查自己的东西。
+    """
+    out: list[int] = []
+    for item in raw or []:
+        if isinstance(item, int):
+            out.append(item)
+            continue
+        for part in str(item).replace("，", ",").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part[1:]:                      # 负号不算区间符
+                a, _, b = part.partition("-")
+                lo, hi = int(a), int(b)
+                if hi < lo:
+                    raise ValueError(f"pages 区间倒置: {part!r}")
+                out.extend(range(lo, hi + 1))
+            else:
+                out.append(int(part))
+    seen: set[int] = set()
+    return [p for p in out if not (p in seen or seen.add(p))]
+
+
 def _load_preclean(raw) -> dict[int, list[dict]]:
     """yaml 的 preclean 段 → {页号: [规则, ...]}。
 
@@ -316,7 +352,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         jiazhu=dict(d.get("jiazhu") or {}),
         bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
-        pages=[int(p) for p in d.get("pages", [])],
+        pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
