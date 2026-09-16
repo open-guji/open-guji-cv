@@ -346,6 +346,36 @@ def cmd_witness_align(args) -> None:
     print(json.dumps(stats, ensure_ascii=False))
 
 
+def cmd_witness_align_stream(args) -> None:
+    """字流证人对齐：换行与刻本不同的证人（`line_is_column: false`）→ 逐字位标签
+    （utils/witness_align_stream.py）。同书异版用这条，列级那条对不上。
+
+    OCR 只当锚，标签一律取证人字；只收长度 ≥ `--min-block` 的 `equal` 块。
+    """
+    from .core.book import load_book
+    from .core.workspace import corpus_path, products_root
+    from .utils.witness_align_stream import align_stream, write_labels
+
+    book = load_book(args.book)
+    ref = (book.references or [{}])[0]
+    witness = Path(args.witness) if args.witness else corpus_path(ref["file"])
+    res = align_stream(book, witness=witness, products_root=products_root(),
+                       min_block=args.min_block)
+    out = products_root() / book.id / "witness_align" / "labels.jsonl"
+    write_labels(res, out)
+    blocks = sorted(res.blocks, reverse=True)
+    stats = {
+        "n_cells": res.n_cells, "n_witness": res.n_witness, "n_ocr": res.n_ocr,
+        "n_equal": res.n_equal, "n_labeled": res.n_labeled,
+        "coverage": round(res.n_labeled / max(1, res.n_cells), 4),
+        "ocr_agree_at_labels": res.ocr_agree,
+        "n_blocks": len(blocks), "longest_blocks": blocks[:10],
+        "min_block": args.min_block,
+    }
+    print(json.dumps(stats, ensure_ascii=False, indent=1))
+    print(f"→ {out}")
+
+
 def cmd_calibrate(args) -> None:
     """册级先验复核：把 `measure_*` 跑一遍，和 `books/<id>.yaml` 里的现值对照。
 
@@ -923,6 +953,7 @@ COMMANDS_V2 = {
     "split": cmd_split,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
+    "witness-align-stream": cmd_witness_align_stream,
     "calibrate": cmd_calibrate,
     "calibrate-font": cmd_calibrate_font,
     "seed-witness": cmd_seed_witness,
@@ -995,6 +1026,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--first-page", type=int, default=None, help="扫描页 1 对应的影印页码")
     p.add_argument("--witness", default=None, help="整理本文件；默认 references[0].file")
+
+    p = sub.add_parser("witness-align-stream",
+                       help="[v2] 字流证人对齐：换行与刻本不同的证人（同书异版）→ 逐字位标签")
+    p.add_argument("book")
+    p.add_argument("--witness", default=None, help="证人文件；默认 references[0].file")
+    p.add_argument("--min-block", type=int, default=8,
+                   help="只收长度 ≥ 这个的 equal 块（默认 8，与 align_label 的 8-gram 同量级）")
 
     p = sub.add_parser("calibrate",
                        help="[v2] 册级先验复核：measure_* 实测 vs books/<id>.yaml 现值的对照表（不改 yaml）")

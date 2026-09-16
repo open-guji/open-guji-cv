@@ -6,14 +6,23 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
+import rare_char_set  # 同目录辅助：按 patch_key 解析字块图，见其 docstring
 
 from open_guji_cv.clustering.candidates import BAR_ASPECT, _bar_rule
 from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT, CnnCandidates, rrf
 from open_guji_cv.core.workspace import corpus_path
+
+# 守卫要跟 `CnnCandidates.available` 同一条件——**光看 checkpoint 在不在不够**。
+# torch 是可选依赖（没装时 available=False、topk 返回空，调用方退回 HOG，这是
+# 设计的静默降级，见 test_cnn_unavailable_is_silent）。只守 ckpt 的话，venv 里
+# 没 torch 时这些用例照跑不误，拿到的全是空列表：`len([]) <= 3`、两个空列表相等
+# 之类的弱断言会**假通过**，只有 `0 < len(out)`、`hit/n >= 0.85` 这种才红——
+# 同一批用例一半绿一半红，病因还看不出来。统一守 available。
+CNN_OK = CnnCandidates().available
+needs_cnn = pytest.mark.skipif(
+    not CNN_OK, reason=f"没有 checkpoint（{DEFAULT_CKPT}）或没装 torch")
 
 
 # ── RRF ──────────────────────────────────────────────────────────
@@ -70,7 +79,7 @@ def test_cnn_unavailable_is_silent(tmp_path):
     assert c.topk(np.zeros((64, 64), np.uint8), ["甲"], k=3) == []
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_cnn_topk_contract():
     """有模型时：只返回字表内的字、概率降序、条数 ≤ k。"""
     c = CnnCandidates()
@@ -83,7 +92,7 @@ def test_cnn_topk_contract():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_topk_batch_matches_sequential():
     """`topk_batch` 必须与逐次调用 `topk` 位级相同（2026-09-10 生僻字候选
     提速：整页字块一次前向，不能悄悄改变候选或排名）。"""
@@ -103,7 +112,7 @@ def test_topk_batch_matches_sequential():
             assert abs(ps - pb) < 1e-4
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_emb_topk_batch_matches_sequential():
     """同上，`emb_topk_batch` 对 `emb_topk`。"""
     c = CnnCandidates()
@@ -120,29 +129,20 @@ def test_emb_topk_batch_matches_sequential():
             assert abs(ps - pb) < 1e-4
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists()
-                    or not Path("../open-guji-dataset/rare-char/items.jsonl").exists(),
-                    reason="没有 checkpoint 或 rare-char 集")
+@needs_cnn
+@pytest.mark.skipif(not rare_char_set.available(), reason="没有 rare-char 集")
 def test_cnn_rare_char_top10():
     """rare-char 21 条，CNN 单独 top-10 不该掉到 85% 以下（实测 100%）。"""
-    import json
-
-    import cv2
-
     from open_guji_cv.clustering.font_candidates import book_charset
     from open_guji_cv.clustering.normalize import normalize_patch
     from open_guji_cv.variants import are_variants
 
-    items = [json.loads(l) for l in
-             Path("../open-guji-dataset/rare-char/items.jsonl").read_text(encoding="utf-8").splitlines()]
+    loaded = rare_char_set.load_items()
     cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
-                      [i["expected"]["char"] for i in items])
+                      [it["expected"]["char"] for it, _ in loaded])
     c = CnnCandidates()
     hit = n = 0
-    for it in items:
-        img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            continue
+    for it, img in loaded:
         n += 1
         g = it["expected"]["char"]
         top = [ch for ch, _ in c.topk(normalize_patch(img), cs, k=10)]
@@ -175,7 +175,7 @@ def test_rrf_weights_tilt_toward_heavier_source():
     assert EMB_WEIGHT >= CNN_WEIGHT >= HOG_WEIGHT >= 0
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_emb_topk_contract_and_cache():
     """embedding 检索：只返回字表内的字、相似度降序；模板向量落盘复用。"""
     c = CnnCandidates()

@@ -46,6 +46,19 @@ gpu = [
 onnx = [
     "rapidocr-onnxruntime>=1.3",
 ]
+# torch 模型：生僻字 CNN 候选（clustering/cnn_candidates.py：分类头 + embedding 检索）
+# 与切点 U-Net 判官（utils/cut_select.py）。两处都**懒导入 + 缺件降级**，不装也能跑
+# （`CnnCandidates.available` 为 False 时候选退回字体 HOG，UNetJudge 任何异常返回 None），
+# 所以它是 extra 不是核心依赖——与 paddle 同一个理由：装哪个轮子（CPU / CUDA 版本）
+# 得由环境定，写死在 dependencies 里会逼所有人拖一个几百 MB 的包。
+#
+# ⚠️ 不装的代价是**测试会静默少覆盖**：2026-09-15 实测本机 venv 没装 torch，
+# tests/test_cnn_candidates.py 5 条全跳过；更早之前守卫只查 checkpoint 不查 torch，
+# 其中 3 条断言太弱（`len([]) <= 3`）一直在假通过，另 2 条才红出来。
+# 跑测试想覆盖 CNN 那几条就装这个 extra；推理只用 CPU 轮子就够（两处都 CPU/CUDA 自适应）。
+torch = [
+    "torch>=2.0",
+]
 # 开发依赖：pip install open-guji-cv[dev]
 # 本地控制台：pip install open-guji-cv[console]
 console = [
