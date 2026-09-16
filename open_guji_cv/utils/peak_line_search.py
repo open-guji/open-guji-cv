@@ -544,13 +544,30 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     里 `expected_cols` 的用法一致）——按匹配度只留分数最高的 N 条，比猜一个
     通用阈值更稳。不传的话把所有候选原样返回，由调用方按分数自行判断。
     """
+    results, _ = _vline_pool(mask, min_dist, nms_percentile, edge_margin, alpha, hyst)
+    if not results:
+        return []
+
+    if expected_count is not None and len(results) > expected_count:
+        results = results[:expected_count]
+
+    results.sort(key=lambda r: r.position)
+    return results
+
+
+def _vline_pool(mask: np.ndarray, min_dist: int, nms_percentile: float, edge_margin: int,
+                alpha: float, hyst: int
+                ) -> tuple[list[LineMatch], tuple[int, dict[float, np.ndarray]] | None]:
+    """`find_vertical_lines` 截断之前的候选池：粗筛 → 逐窗口联合精搜 → 去重。
+    返回 (按分数降序的候选, 粗扫曲线库)。`find_vertical_lines` 与
+    `find_vertical_lines_grid` 共用这一段，前者的行为逐位不变。"""
     h, w = mask.shape
     curve = projection(mask, "v")
     _, scores = full_sweep_scores(curve, alpha, hyst)
     thresh = float(np.percentile(scores, nms_percentile))
     candidates = find_peaks_nms(scores, min_dist, thresh)
     if not candidates:
-        return []
+        return [], None
 
     windows = _windows_from_candidates(candidates, 0, w - 1, edge_margin, edge_margin)
     # 粗扫 35 档倾角整页只算一次再按窗口切片：原来 17 个窗口 × 35 档 = 595 次
@@ -573,13 +590,120 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
     # 走，挤掉别处一条本该收进来的真实列线（vol01/141 col8 实测复现：x≈1633
     # 和x≈1648两个窗口各出一条线，双双挤进前10，页面最右一条真实列线被
     # 顶掉）。用跟前面候选级 NMS 相同的间距假设去重（真实列距远大于 min_dist）。
-    results = _dedup_by_position(results, min_dist)
+    return _dedup_by_position(results, min_dist), bank
 
-    if expected_count is not None and len(results) > expected_count:
-        results = results[:expected_count]
 
-    results.sort(key=lambda r: r.position)
-    return results
+# ── 网格模式：列数已知、列距均匀 → 逐槽验线、缺槽补线 ──────────────────
+# 北行日錄刻本（灰度扫描、筒子页 9+版心+9 = 19 列）实测：全书 972 个界行槽位里
+# 120 个（12.3%）**根本没印出界行**（p41 左半叶整片空白，只有右半叶有线；54 页里
+# 只有 15 页界行齐全）。自由模式按分数取前 N 条时，这些槽位只能拿字身竖向对齐的
+# 假峰凑数（半高宽 50+px、分数 ~10），而 `expected_cols` 多写 1 又逼它每页收一条
+# 页边。四庫總目那批是 1-bit 双色扫描，界行条条实黑，从来没有「槽位空着」这回事，
+# 所以自由模式在 14 页金标上中位误差 0.05px——不是算法坏了，是这本书缺线。
+#
+# 网格模式的做法：版框两条线定死，列距 = 框宽 / (N−1)，每个槽位只在 ±GRID_SLOT_TOL
+# 里做位置+角度联合精搜；找不到细线（分数低于 GRID_MIN_SCORE，或半高宽超过
+# GRID_MAX_WIDTH）就按相邻已验线**线性插值**，并把该槽标成 filled。于是每条线要么是
+# 验过的细线、要么是几何插值——永远不会落在字上。
+GRID_SLOT_TOL = 18       # px。p20/p41 实测等距网格离真线最多 7~9px，留一倍余量；
+                         # 再大就够到字身边缘（栏缝约 40px 宽）
+GRID_MIN_SCORE = 20.0    # 半高宽匹配分。同书实测：真界行 27~222、字身假峰 ~10、空槽 ~1
+GRID_MAX_WIDTH = 12.0    # 细线；字身假峰半高宽 50+。与 INNER_WIDTH_MAX 同量级
+GRID_PITCH_TOL = 0.08    # 版框对的隐含列距与 col_pitch 的容差（逐页列距实测 p10–p90 ±2%）
+
+
+def find_vertical_lines_grid(mask: np.ndarray, n_lines: int, col_pitch: float | None = None,
+                             *, slot_tol: int = GRID_SLOT_TOL, min_score: float = GRID_MIN_SCORE,
+                             max_width: float = GRID_MAX_WIDTH,
+                             pitch_tol_frac: float = GRID_PITCH_TOL,
+                             min_dist: int = 60, nms_percentile: float = 90,
+                             edge_margin: int = 200,
+                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST
+                             ) -> tuple[list[LineMatch], list[bool]]:
+    """列数已知（`n_lines` = 列数 + 1）、列距均匀的页：返回恰好 `n_lines` 条线
+    （按 x 升序）和同长度的 `filled` 标记（True = 该槽位没探到细线、按几何插值）。
+
+    1. 版框对：候选池里两两配对，隐含列距 (b−a)/(n_lines−1) 与 `col_pitch` 差在
+       `pitch_tol_frac` 内（没给 `col_pitch` 就只要求列距 ≥ min_dist）；按「有多少
+       槽位落着细线」排，同分再按两条线的投影和排——版框是整页最实的两条竖线，
+       页边那条假线（北行日錄 54/54 页都有）隐含列距不对、支持数也低，选不上。
+    2. 逐槽：在 `a + k·pitch ± slot_tol` 里 `joint_search_coarse_to_fine`（两翼都要干净），
+       分数 ≥ `min_score` 且半高宽 ≤ `max_width` 才算探到。
+    3. 缺槽：相邻已验线（含版框）之间线性插值位置和斜率，`score/width/proj` 记 0。
+
+    ⚠️ `n_lines` 必须是这本书的真值——写错了网格整体错位，任何一槽都验不上，
+    最后全靠插值（闸2 会看到列宽异常）。北行日錄刻本曾把 expected_cols 写成 20
+    （实际 19），就是这种情况。
+    """
+    if n_lines < 2:
+        raise ValueError(f"n_lines must be >= 2, got {n_lines}")
+    pool, bank = _vline_pool(mask, min_dist, nms_percentile, edge_margin, alpha, hyst)
+    if len(pool) < 2:
+        pool.sort(key=lambda r: r.position)
+        return pool, [False] * len(pool)
+    h, w = mask.shape
+    n_gap = n_lines - 1
+    thin = [r for r in pool if 0.0 < r.width <= max_width and r.score >= min_score]
+
+    def support(a: LineMatch, b: LineMatch) -> int:
+        p = (b.position - a.position) / n_gap
+        return sum(1 for k in range(1, n_gap)
+                   if any(abs(r.position - (a.position + k * p)) <= slot_tol for r in thin))
+
+    best: tuple[tuple[int, float], LineMatch, LineMatch] | None = None
+    for a in pool:
+        for b in pool:
+            span = b.position - a.position
+            if span <= 0:
+                continue
+            p = span / n_gap
+            if col_pitch is not None:
+                if abs(p - col_pitch) > pitch_tol_frac * col_pitch:
+                    continue
+            elif p < min_dist:
+                # 列距不可能小于候选 NMS 间距（相邻两条线本来就会被合掉）。
+                # 别写成 2×min_dist：那会把 119px 的列距（北行日錄）直接拒掉。
+                continue
+            key = (support(a, b), a.proj + b.proj)
+            if best is None or key > best[0]:
+                best = (key, a, b)
+    if best is None:
+        # 没有任何一对满足列距约束——版框本身没探到，退回自由模式的截断，
+        # 让闸1 按列数拒掉这一页
+        pool = pool[:n_lines]
+        pool.sort(key=lambda r: r.position)
+        return pool, [False] * len(pool)
+
+    _, a, b = best
+    a = _snap_to_inner_rule(mask, a, "right", alpha, hyst)
+    b = _snap_to_inner_rule(mask, b, "left", alpha, hyst)
+    left, right = a.position, b.position
+    pitch = (right - left) / n_gap
+
+    lines: list[LineMatch | None] = [a] + [None] * (n_gap - 1) + [b]
+    filled = [False] * n_lines
+    for k in range(1, n_gap):
+        c = left + k * pitch
+        lo, hi = max(0, int(round(c - slot_tol))), min(w - 1, int(round(c + slot_tol)))
+        r = joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst,
+                                        coarse_bank=bank, flank_sides="both")
+        if r.score >= min_score and 0.0 < r.width <= max_width:
+            lines[k] = r
+        else:
+            filled[k] = True
+
+    known = [i for i in range(n_lines) if lines[i] is not None]
+    for i in range(n_lines):
+        if lines[i] is not None:
+            continue
+        j = max(x for x in known if x < i)
+        k = min(x for x in known if x > i)
+        lj, lk = lines[j], lines[k]
+        t = (i - j) / (k - j)
+        lines[i] = LineMatch(position=lj.position + t * (lk.position - lj.position),
+                             slope=lj.slope + t * (lk.slope - lj.slope),
+                             score=0.0, width=0.0, proj=0.0)
+    return [ln for ln in lines if ln is not None], filled
 
 
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,

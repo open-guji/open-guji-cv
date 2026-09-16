@@ -84,6 +84,9 @@ class Borders(BaseModel):
     vline_segments: int = 1
     bend_w80_med: float | None = None
     bend_w80_max: float | None = None
+    # 与 verticals 一一对应；True = 网格模式下该槽位没探到细线、按几何插值
+    # （见 `find_vertical_lines_grid`）。自由模式 / 旧产物为空或全 False。
+    vline_filled: list[bool] = Field(default_factory=list)
 
     @classmethod
     def from_result(cls, r: BorderDetectionResult, expected_cols: int) -> "Borders":
@@ -97,6 +100,7 @@ class Borders(BaseModel):
             v_outer_side=r.v_outer_side, v_outer_offset=_f(r.v_outer_offset),
             vline_segments=int(r.vline_segments),
             bend_w80_med=_f(r.bend_w80_med), bend_w80_max=_f(r.bend_w80_max),
+            vline_filled=[bool(x) for x in (r.vline_filled or [])],
         )
 
     def to_result(self) -> BorderDetectionResult:
@@ -108,6 +112,7 @@ class Borders(BaseModel):
             top_outer_offset=self.top_outer_offset, bottom_outer_offset=self.bottom_outer_offset,
             v_outer_side=self.v_outer_side, v_outer_offset=self.v_outer_offset,
             vline_segments=self.vline_segments,
+            vline_filled=list(self.vline_filled),
             bend_w80_med=self.bend_w80_med, bend_w80_max=self.bend_w80_max,
             verticals_straight=[v.to_vline() for v in self.verticals_straight],
         )

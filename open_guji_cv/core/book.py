@@ -142,16 +142,34 @@ class BookSpec:
     #: `leaf_layout`：`single`（一页 = 一个半叶，默认）| `folio`（**筒子页**：一页 =
     #: 一整版 = 两个半叶，中间夹版心/书口）。
     #:
-    #: 筒子页**不必先分页**（beixing-guben 实测：Step1 21 条竖线全探到、Step2 一行
-    #: 没改、19/20 列过闸）——`page_column_windows` 把列定义成相邻两条 `verticals`
-    #: 之间，版心两侧的书口栏线在它眼里就是普通界行；上下版框虽名义上左右半叶各一条，
-    #: 实测两半几乎共线（版心处 y 差 0.1~8.9px，远小于 `column_bounds` 已在处理的
-    #: 14.5px 锚点漂移），一条 `HLine` 够用。
+    #: 筒子页**不必先分页**（beixing-guben 实测：Step2 一行没改就跑通）——
+    #: `page_column_windows` 把列定义成相邻两条 `verticals` 之间，版心两侧的书口栏线
+    #: 在它眼里就是普通界行；上下版框虽名义上左右半叶各一条，实测两半几乎共线
+    #: （版心处 y 差 0.1~8.9px，远小于 `column_bounds` 已在处理的 14.5px 锚点漂移），
+    #: 一条 `HLine` 够用。
     #:
-    #: 代价是**版心占掉一个列位**：`expected_cols` 要按整版填（10 + 版心 + 10 = 20），
-    #: 且下游必须把版心那一列排除在正文之外——这就是 `border_detect` 产
-    #: `line_index` 把它标成 `margin` 的原因。
+    #: 代价是**版心占掉一个列位**：`expected_cols` 要按整版填（北行日錄刻本：
+    #: 9 + 版心 + 9 = **19**，版心是第 10 列；版心宽 117px vs 正文 119px，只窄 2px，
+    #: **不能**靠宽度认它，只能靠位置），且下游必须把版心那一列排除在正文之外——
+    #: 这就是 `border_detect` 产 `line_index` 把它标成 `margin` 的原因。
+    #: ⚠️ 这个数曾被写成 20（多算了页边那条假线），Step1 因此每页被迫多收一条线。
     leaf_layout: str = "single"
+    #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
+    #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
+    #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
+    #: 自由模式在这些槽只能拿字身假峰凑数。前提是 `expected_cols` 是真值。
+    #: 默认 False = 自由模式，四庫總目那批不受影响。
+    column_grid: bool = False
+    #: `col_pitch`（yaml 同名）：**列距**（相邻界行间距，含界行本身）像素先验，
+    #: 网格模式用它过滤版框对。量法：版框宽 / 列数，逐页取中位。北行日錄刻本 119。
+    #: ⚠️ 与 `pitch_prior` 不是一回事——那个是沿列方向的**字距**，给现代链 Step3 用。
+    col_pitch: float | None = None
+    #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
+    #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
+    #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
+    #: p40/p41 实测 33~39px，闸2 只剩 1/19 列）。关了只量 w80 不拟合，整页直线。
+    #: 四庫總目那批界行实黑、w80 3~6，默认 True 行为不变。
+    vline_polyline: bool = True
     #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
     font: dict = field(default_factory=dict)
 
@@ -224,6 +242,8 @@ class BookSpec:
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
+            "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "vline_polyline": self.vline_polyline,
             "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
@@ -396,6 +416,9 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         top_band_frac=(None if d.get("top_band_frac") is None else float(d["top_band_frac"])),
         bottom_band_frac=(None if d.get("bottom_band_frac") is None
                           else float(d["bottom_band_frac"])),
+        column_grid=bool(d.get("column_grid", False)),
+        col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
+        vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
     )
 
