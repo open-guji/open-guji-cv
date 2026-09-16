@@ -46,6 +46,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| **[workspace_layout.md](doc/workspace_layout.md)** | **开新书 / 找数据先看这份**：工作区 = 一本书的数据仓（标准布局表、哪些进 git）；**字库与模型的三层落点**（A 通用源料在引擎仓 `fonts/` `models/`、B 共享库、C 本书字形在工作区 `output/glyph_store/`），一本书的字形先落工作区、整理完才谈升格；已知缺口：跨书共享刻例库尚不存在、北行日錄的库只在 db 里没有 store。人读正本，代码正本是 `core/workspace.py` |
 | **[console_manual.md](doc/console_manual.md)** | **要用这套东西干活先看这份**：控制台 8 个 tab（总览／运行／产物／审查／切线／夹注／评测／异体）、命令行等价写法、三条典型工作流、排错表 |
 | [modern_print_pipeline.md](doc/modern_print_pipeline.md) | **现代印刷链 `modern_body`**（2026-09-14）：Step0 分页 `guji split` / Step1 `line_detect` / Step2 `column_crop` / Step3 `row_segment_runs` 顶替刻本链前三步，产同种产物、Step4 起复用；三处地基（yaml `params:`、按管线找产物、工作区 `books/` 优先）；北行日錄实测与校對本对账 29/40 页全等。横排旋转未接 |
 | [console_architecture.md](doc/console_architecture.md) | **总体架构**：Step / Product / Gold / Event 四个抽象 + 本地控制台 + 存储分层 + 分阶段落地记录（P0–P2 已完成，§8.1–8.4）。改这套东西之前先读 |
