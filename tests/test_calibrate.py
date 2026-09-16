@@ -50,6 +50,34 @@ def test_有比对且都一致时报成功且说清比了几个():
     assert "1 个" in txt          # 只有 period_prior 真比上了，bottom_gap 未测出不算
 
 
+def test_产物过期时不认那个一致():
+    """**第二条红线。**
+
+    `period_prior` 是从闸2 产物**读**出来的——产物陈旧就等于拿旧算法的结果去
+    复核新配置。2026-09-16 bxgb 实测踩到：册 yaml 把 `expected_cols` 从 20 改成
+    19 之后产物全过期，`calibrate` 照样把旧产物平均了印出「✅ 一致」。
+    数值碰巧相符不代表复核过了。
+    """
+    rows = [Row("period_prior", 70.6, 72.0, "")]
+    diag = {"pages": 54, "body_pages": 54, "body_source": "闸1 page_type",
+            "stale": 19, "checked": 54}
+    txt = format_table(rows, diag, "bxgb")
+    assert "✅" not in txt
+    assert "过期" in txt
+    assert "不作数" in txt
+
+
+def test_产物新鲜时照常报成功():
+    """过期数为 0 / 查不到（None）时不该平白多出警告。"""
+    rows = [Row("period_prior", 115.0, 114.0, "")]
+    for st in (0, None):
+        diag = {"pages": 206, "body_pages": 204, "body_source": "闸1 page_type",
+                "stale": st, "checked": 206}
+        txt = format_table(rows, diag, "vol01")
+        assert "✅" in txt
+        assert "过期" not in txt
+
+
 def test_漂了时提示不自动改yaml():
     """漂了要给的是「去查为什么」，不是「照抄实测值」——自动回写是明确不做的事。"""
     rows = [Row("period_prior", 70.6, 106.5, "")]

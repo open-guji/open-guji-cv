@@ -113,6 +113,36 @@ def _measured_ref_w(store, book_id: str, pages: list[int],
     return round(statistics.median(vals), 2), len(vals)
 
 
+def _stale_pages(book, store, pages: list[int]) -> tuple[int, int] | None:
+    """闸2 产物里有多少页已过期，返回 `(过期数, 查到数)`；查不了返回 None。
+
+    ⚠️ **这条不能省**：`period_prior` 是从闸2 产物**读**出来的，产物陈旧就等于
+    拿旧算法的结果去复核新配置，结论反过来也不知道。2026-09-16 实测踩到：
+    册 yaml 把 `expected_cols` 从 20 改成 19（多算了页边假线）之后，产物全部
+    过期，而 `calibrate` 照样把旧产物平均了一遍、印出「✅ 一致」——
+    这正是它要防的那种错，自己却先犯了。
+    """
+    try:
+        from ..core.engine import Engine
+        from ..core.pipeline import default_pipeline_id, load_pipeline
+        from ..core.step import STEPS
+
+        eng = Engine(book, load_pipeline(default_pipeline_id(book)),
+                     store=store, log=lambda _s: None)
+        step = STEPS["column_gate"]
+        stale = seen = 0
+        for pg in pages:
+            st, entry = eng.page_status(step, pg)
+            if entry is None:
+                continue
+            seen += 1
+            if st != "fresh":
+                stale += 1
+        return (stale, seen) if seen else None
+    except Exception:
+        return None       # 拿不到就算了，不因为体检失败而让标定跑不动
+
+
 def calibrate(book, store, pages: list[int] | None = None,
               with_bottom_gap: bool = False) -> tuple[list[Row], dict]:
     """跑标定，返回 `(对照表, 诊断)`。**只读，不改任何文件。**
@@ -128,10 +158,13 @@ def calibrate(book, store, pages: list[int] | None = None,
     # 不能只认 `book.pages`——四庫總目那十册都没写 `pages:`，会得到 0 页而静默什么都没测。
     pgs = list(pages) if pages is not None else (list(book.pages) or book.all_pages())
     body = _body_pages(store, book.id, pgs)
+    st = _stale_pages(book, store, pgs)
     diag = {
         "pages": len(pgs),
         "body_pages": (len(body) if body is not None else None),
         "body_source": ("闸1 page_type" if body is not None else "无页型产物，用 measure_* 的粗筛兜底"),
+        "stale": (st[0] if st else None),
+        "checked": (st[1] if st else None),
     }
 
     rows: list[Row] = []
@@ -199,6 +232,15 @@ def format_table(rows: list[Row], diag: dict, book_id: str) -> str:
         pct = "—" if r.drift_pct is None else f"{r.drift_pct:+.1f}%"
         out.append(f"{r.field:<16}{cur:>12}{mea:>12}{pct:>10}  {r.verdict:<8}{r.note}")
     out.append("")
+    # 产物陈旧的警告排在结论**之前**——陈旧时下面那些判定全都不可信，
+    # 得让人先看见这条（2026-09-16 bxgb 实测教训，见 `_stale_pages`）。
+    stale, checked = diag.get("stale"), diag.get("checked")
+    if stale:
+        out.append(f"🔴 闸2 产物 {stale}/{checked} 页**已过期**——下面的「实测」是拿"
+                   f"旧产物算的，不能用来复核当前 yaml。")
+        out.append("   先重跑（guji pipeline <链> <册> --to-step column_gate）再标定。")
+        out.append("")
+
     drifted = [r for r in rows if r.verdict == "漂了"]
     compared = [r for r in rows if r.verdict in ("漂了", "一致")]
     if drifted:
@@ -206,6 +248,10 @@ def format_table(rows: list[Row], diag: dict, book_id: str) -> str:
                    + "、".join(r.field for r in drifted))
         out.append("   **不会自动改 yaml**——先看清是先验过期了，还是这次量得不对"
                    "（产物陈旧？页型混了职名/目录页？），再手改。")
+    elif compared and stale:
+        # 数字碰巧对不上不代表复核过了——产物是旧的，这一致是偶然。
+        out.append(f"⚠️ 比对上的 {len(compared)} 个先验数值与 yaml 相符，"
+                   f"但**产物过期，这个「相符」不作数**。")
     elif compared:
         out.append(f"✅ 实际比对上的 {len(compared)} 个先验都与 yaml 一致。")
     else:
