@@ -8,6 +8,16 @@
 落盘目录名特意原样保留，免得触发一次全量重跑（见任务书 §五「本步踩过的坑」）。
 
 判据分三层：
+- **L0c 列级**（读 Step1 的 `line_index`，不看几何）：Step1 判定不是正文的列位
+  ——筒子页的**版心**（`margin`）、版框外的**页边**（`edge`）——直接拒，拒因说
+  「版式如此」。这类列位在几何上完全正常，靠 L1c/L2 拦不住（版心宽度跟正文一样），
+  而且**拒因说错会误导人**：报「列宽偏离」会让人去查切列算法，真实原因是这一列
+  本来就不是正文。`line_index` 是可选上游，老书的 Step1 产物里没有，缺了就当全是
+  正文——行为与加这套东西之前逐位一致。判据与两条负结果见 `utils/column_types.py`；
+- **L0 页级**（读闸1，不看几何）：闸1 判 `page_type_policy == "skip"` 的页
+  （封面/书签/牌记）直接拒，拒因写页型。这类页 Step2 根本没切列，列数必然
+  是 0，再按列数报一句 L1「只探出 0 列」会把人引去查切列算法。page_type 只有
+  闸1 一个权威来源，这道闸直接查（与闸3 `row_segment_gate.py` 同一写法）；
 - **L1 页级**（只看几何）：探出的列数 = 版式列数。整页性的问题才放这里；
 - **L1c 列级**：本列宽偏离本页中位数超 ±15% —— 多半是把界行圈进了列窗。
   ⚠️ 这条**原先错放在页级**，一列坏就整页作废（vol01/42 八列完好只因 c9 坏而全废，
@@ -27,8 +37,9 @@
   信息，留给人审兜底。别指望调这条判据的阈值能顺带扩大覆盖。
 - **L3 金标**：P0 不接（tier=gate）。
 
-页级共享量 period / ref_w 用**几何正常的列**算（剔掉 L1c 命中的列）——那些列的
-投影带着一条整界行，不该参与共识。实测剔掉后 period 变化 ≤1.5、ref_w ≤5px。
+页级共享量 period / ref_w 用**几何正常的正文列**算（剔掉 L1c 与 L0c 命中的列）：
+L1c 那些列的投影带着一条整界行；L0c 的非正文列（版心只有几个书口小字、页边整片
+空白）纵向节律与正文无关。实测剔掉宽度异常列后 period 变化 ≤1.5、ref_w ≤5px。
 若正常列不足半数则整页拒绝，因为共识已无意义。
 """
 
@@ -42,12 +53,14 @@ from pydantic import BaseModel
 
 from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
 from ..core.step import RunContext, Step, attach_gate, register_step
+from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
 
 CONTRACT = [
-    "页级共享量 period / ref_w 用该页全部列算，不只用准入的列",
+    "页级共享量 period / ref_w 用该页的正文列算（剔掉 L1c 宽度异常与 L0c 非正文列），"
+    "不按 admitted 筛——L2/L2b 拒掉的列几何仍是正文，照样参与共识",
     "content_x 随图传：交出去的列图抹白不裁切，Step3 内部找不到墙",
     "border_top / border_bottom 沿用 windows 的 *_in_column；抬头列 top_slack = border_top，"
     "顶格列（版框平齐但顶端有字墨）top_slack = 0.5×period",
@@ -76,8 +89,10 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.5", unit="column",
-        consumes=("column_windows", "column_image"), produces=("gate_manifest",),
+        id="column_gate", title="Step2→3 交接闸", version="1.7", unit="column",
+        consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
+        optional_consumes=("line_index",),
+        produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
     )
@@ -91,7 +106,21 @@ class ColumnGateStep(Step):
         widths = [float(c.warped_size[0]) for c in cols]
         med_w = statistics.median(widths) if widths else None
         page_reject: list[str] = []
-        if p.count_mode == "detected":
+
+        # 闸1 判 skip 的页（封面/书签/牌记），Step2 根本没切列，列数必然是 0。
+        # 这里**不能**再按列数猜一句 L1「只探出 0 列」——page_type 是事实性信息、
+        # 只有闸1一个权威来源，拒因说「列数不对」会让人对着 0 列去查切列算法，
+        # 真实原因却是这页压根不是正文。与闸3（`row_segment_gate.py`）同一写法：
+        # 直接查 `ctx.product`，不经 Step2 转手抄一份。
+        # （2026-09-12 那轮「闸2/闸3 都直接读闸1」当时只在闸3 落了地，闸2 这半边
+        # 留了个失败的用例 `test_skip_page_then_column_gate_rejects` 挂着，
+        # 2026-09-15 补齐。）
+        page_type_gate: BorderDetectGateManifest = ctx.product(
+            "border_detect_gate_manifest", page)
+        if page_type_gate.page_type_policy == "skip":
+            page_reject.append(
+                f"L0：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
+        elif p.count_mode == "detected":
             if not cols:
                 page_reject.append("L1：没有列（Step1 未探到正文列）")
         elif len(cols) != expected:
@@ -107,15 +136,31 @@ class ColumnGateStep(Step):
                      for c, w in zip(cols, widths)
                      if med_w and abs(w - med_w) > p.width_tol * med_w}
 
-        # 逐列：页级先验要用**几何正常的列**算。
-        # 宽度异常的列多半是把界行圈进了列窗，它的投影带着一条整线，
-        # 不该参与页级周期/列距的共识。实测剔掉后 period 变化 ≤1.5、ref_w ≤5px。
+        # L0c：Step1 已判定不是正文的列位（筒子页的版心 `margin`、版框外的页边
+        # `edge`）。**拒因要说清是版式如此，不是几何坏了**——版心本来就该在那儿，
+        # 报「列宽偏离」会让人去查切列算法。`line_index` 是可选上游：老书的
+        # Step1 产物里没有这一种，缺了就当全是正文（行为与加这套东西之前一致）。
+        non_body: dict[int, tuple[str, str]] = {}
+        try:
+            li = ctx.product("line_index", page)
+        except Exception:
+            li = None
+        if li is not None:
+            for ln in li.lines:
+                if ln.col is not None and ln.kind != "body":
+                    non_body[ln.col] = (ln.kind, (ln.flags or [""])[0])
+
+        # 逐列：页级先验要用**几何正常的正文列**算。
+        # 宽度异常的列多半是把界行圈进了列窗，它的投影带着一条整线；
+        # 非正文列（版心只有几个书口小字、页边整片空白）更不该参与——
+        # 它们的纵向节律与正文无关，会把 period / ref_w 带偏。
+        # 实测剔掉宽度异常列后 period 变化 ≤1.5、ref_w ≤5px。
         projs, borders, dst_ws, band_ws = [], [], [], []
         for c in cols:
+            if c.col in wide_cols or c.col in non_body:
+                continue
             cleaned = ctx.image("column_image", column_key(page, c.col))
             b0, b1 = c.band
-            if c.col in wide_cols:
-                continue
             projs.append(row_ink_projection(cleaned, b0, b1, ink_threshold=p.ink_threshold))
             borders.append((c.border_top_in_column, c.border_bottom_in_column))
             dst_ws.append(b1 - b0)
@@ -175,7 +220,12 @@ class ColumnGateStep(Step):
         # 判据用**墨跨度**而不是「顶端有没有墨」——后者分不开「顶格写」与「多一个字」。
         top_ink_slack: dict[int, float] = {}
         n_raised_hint: dict[int, int] = {}
-        if page_ok and period:
+        # `expected_slots is None` = 现代链（册配置 `chars_per_line: null`，格数由块宽 ÷ pitch 推）。
+        # 这一整块量的是「抬头列比版式常量多几格」，**是刻本的概念**：现代印刷没有版框、
+        # 没有抬头框，也没有「版式应有 21 格」这个基准，跨度 hint 无从算起。
+        # 2026-09-15：不跳过就会在 `span / period - expected_slots` 上 float - None 崩掉
+        # （考補萃編横排书第一次跑 Step2 撞到）。
+        if page_ok and period and expected_slots is not None:
             probe = max(20, int(round(period * 0.6)))
             for c in cols:
                 try:
@@ -231,6 +281,11 @@ class ColumnGateStep(Step):
         for c in cols:
             reasons: list[str] = []
             flags: list[str] = []
+            if c.col in non_body:
+                kind, why = non_body[c.col]
+                label = {"margin": "版心（书口）", "edge": "版框外页边"}.get(kind, kind)
+                reasons.append(f"L0c：Step1 判定本列位是{label}，非正文"
+                               + (f"——{why}" if why else ""))
             if not page_ok:
                 reasons.append("页级未过 L1")
             if c.col in wide_cols:
@@ -283,6 +338,9 @@ class ColumnGateStep(Step):
 COLUMN_GATE_SPEC = GateSpec(
     id="column_gate", unit="column", on_fail="block",
     levels=(
+        GateLevel(id="L0c", unit="column",
+                  desc="Step1 判定本列位不是正文（筒子页版心 / 版框外页边）——"
+                       "版式如此，不是几何坏了"),
         GateLevel(id="L1", unit="page",
                   desc="探出的列数是否等于版式列数——整页性的问题才放这一层"),
         GateLevel(id="L1f", unit="page",

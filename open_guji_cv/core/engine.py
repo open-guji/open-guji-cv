@@ -51,6 +51,17 @@ def code_hash(step: Step) -> str:
     return h.hexdigest()[:16]
 
 
+def _jsonable(v):
+    """`book_deps` 取到的值 → 可稳定 json 化（Path 等按字符串）。"""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in sorted(v.items(), key=lambda kv: str(kv[0]))}
+    return str(v)
+
+
 def params_hash(params: BaseModel) -> str:
     return hashlib.sha256(json.dumps(params.model_dump(mode="json"), sort_keys=True,
                                      ensure_ascii=False).encode()).hexdigest()[:16]
@@ -188,6 +199,12 @@ class Engine:
             return None, None, ph
         payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
                    "code": code_hash(step), "upstream": ups}
+        # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
+        # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
+        # 保证现有产物的指纹逐位不变、不触发全量重跑。
+        if step.spec.book_deps:
+            payload["book"] = {k: _jsonable(getattr(self.book, k, None))
+                               for k in sorted(step.spec.book_deps)}
         fp = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return fp, ups, ph
 
