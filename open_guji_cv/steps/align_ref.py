@@ -65,6 +65,7 @@ top1（`slots_from_decision`，见下方旧版说明）。这让 Step5-d 名义�
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -250,10 +251,26 @@ class AlignRefParams(BaseModel):
                                corpus_fingerprint([self.corpus]))
 
 
+#: 锚定载体是**刻本字位**：没有标点、没有整理者补的注记。语料这一侧必须同样
+#: 只留汉字，否则 8-gram 永远对不上——`真定在春秋時屬鮮虞國` 在原文里是
+#: `……行者。真定在春秋時屬鮮虞國，爲晉所滅。` 中间夹着句读。
+#: 四庫總目那份语料标点密度 0.000（几乎没有标点），所以这条一直没暴露；
+#: 北行日錄校對本是 0.215，7/7 页全部锚定失败（"语料里一个 n-gram 都没命中"）。
+_NON_HAN_RE = re.compile(r"[^一-鿿]")
+
+
 @lru_cache(maxsize=4)
 def _corpus_text(path: str) -> str:
+    """语料 → **只留汉字**的一维字流。
+
+    ⚠️ 必须与 `_corpus_index` 用同一个字符串：`label_page` 拿 `anchor_page` 给的
+    偏移去切 `corpus[lo:hi]` 当窗口，文本与索引不同源的话偏移就错位了。
+    两者都走本函数（本函数带 lru_cache），保证同源。
+    """
     p = Path(path)
-    return p.read_text(encoding="utf-8") if p.exists() else ""
+    if not p.exists():
+        return ""
+    return _NON_HAN_RE.sub("", p.read_text(encoding="utf-8"))
 
 
 @lru_cache(maxsize=4)
