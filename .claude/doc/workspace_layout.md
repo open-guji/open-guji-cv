@@ -157,6 +157,17 @@ Step2 一行没改，19/20 列过闸。因为 `page_column_windows` 把列定义
 离中点 −8~+5px）；「列内最长空白段」「列内墨占比」两个统计判据**是负结果**——
 卷题页/卷末页的短正文列比版心更空，8 页里 3 页认错。
 
-正解是给刻本链补一个**列类型**概念，照现代链 `products/kinds/line_index.py` 的
-`LineRec.kind`（`body | empty | footnote | margin | wide | noise`，docstring 里
-点名就有「书口小字列」）。**这件事还没做。**
+**已落地**（2026-09-15）：刻本链补了列类型概念，照现代链
+`products/kinds/line_index.py` 的 `LineRec.kind` 那套——
+
+- 册配置写 `leaf_layout: folio`（见 `BookSpec.leaf_layout`）；
+- Step1 `border_detect` 也产 `line_index`，逐列标 `body | margin | edge`
+  （判据与两条负结果见 `utils/column_types.py` 的 docstring）；
+- Step2 闸新增 **L0c 列级**拒因，把版心/页边拒在正文外，并剔出页级
+  period/ref_w 共识。拒因写「版式如此」而不是「列宽偏离」。
+
+一页一个半叶的书（`leaf_layout: single`，默认）只会标出 `edge`，其余全 `body`
+——zongmu vol01 实测 9/9 全 body、过闸 9/9、period 114/116 不变。
+
+北行日錄刻本全书 54 页：54/54 页恰好标出 1 个版心，过闸中位 18/20，
+页级 period 中位 71.0（版式真值 70.6）。
