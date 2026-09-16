@@ -168,9 +168,24 @@ def align_page(book: str, page: int, store, corpus: str, corpus_index: dict,
 
 
 def align_book(book: str, pages: list[int], store,
-               corpus_path: str | Path = DEFAULT_CORPUS) -> list[PageGold]:
+               corpus_path: str | Path | None = None) -> list[PageGold]:
+    """整本按页对齐。`corpus_path` 不给就用**这册书自己的**整理本。
+
+    两条与 `steps/align_ref` 同源的坑（2026-09-16 一起修，那边有详解）：
+
+    - 缺省值曾是 `DEFAULT_CORPUS`（四庫總目那份语料），换一本书就拿总目去锚它。
+      本函数有六个调用方（review 卡片、jiazhu 卡片、eval 三处），全都用的缺省值,
+      所以北行日錄的审查卡片整片 `reading: null`——不报错，只是没有整理本对应字。
+    - 语料要**只留汉字**再建索引：锚定载体是刻本字位（无标点），语料带着句读就
+      永远凑不出一个能命中的 8-gram。四庫總目那份标点密度 0.000 所以一直没暴露，
+      北行日錄校對本是 0.215，7/7 页全部锚定失败。
+    """
     from ..clustering.align_label import build_ngram_index
-    text = Path(corpus_path).read_text(encoding="utf-8")
+    from ..steps.align_ref import _corpus_text, book_corpus
+    if corpus_path is None:
+        corpus_path = book_corpus(book)
+    # 与 `steps/align_ref` 共用同一个规范化 + 缓存，保证两边锚到同一个字流上
+    text = _corpus_text(str(corpus_path))
     index = build_ngram_index(text)
     return [align_page(book, pg, store, text, index, corpus_path) for pg in pages]
 
