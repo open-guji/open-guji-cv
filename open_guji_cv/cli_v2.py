@@ -461,7 +461,7 @@ def cmd_seed_witness(args) -> None:
                                   font_editions=args.fonts.split(","), edition_tag=args.edition,
                                   limit=args.limit, products_root=products_root(),
                                   norm_stroke=args.norm_stroke, jobs=args.jobs,
-                                  only_chars=args.only_chars)
+                                  only_chars=args.only_chars, source_kind=args.source_kind)
     finally:
         db.close()
     out = products_root() / book.id / "witness_align" / "seed_stats.json"
@@ -1077,6 +1077,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--only-chars", default=None,
                    help="只播这些字头（连写，如 「」《》）。进库幂等，可反复补播——"
                         "修好某一类字的形状证人后补这一类，不必全量重播")
+    p.add_argument("--source-kind", default="print", choices=["print", "woodblock"],
+                   help="这本书的来源类型（默认 print，现代排印本）。**刻本必须传 woodblock**："
+                        "候选检索默认只查 kinds=('woodblock',)，记成 print 会让播进去的字形"
+                        "在检索里静默查不到")
 
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")
