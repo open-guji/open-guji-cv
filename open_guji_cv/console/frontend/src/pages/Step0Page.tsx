@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useWsPath } from '../hooks/useWsPath'
 import { fetchPrecleanReport, precleanAfterUrl, precleanBeforeUrl, precleanOverlayUrl } from '../api/products'
 import { listBooks } from '../api/registry'
 import { fetchStatus } from '../api/status'
@@ -67,6 +68,7 @@ function PrecleanPanel({ book, page }: { book: string; page: number }) {
 // 段的规则原样显示出来（vol02 有真实配置：151/152 两页的反色带修复）。
 // 只对手工登记过的页生效，不改磁盘原图，见 open-guji-cv utils/preclean.py。
 export function Step0Page() {
+  const wsPath = useWsPath()
   const { book = '' } = useParams()
   const [b, setB] = useState<Book | null>(null)
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -96,7 +98,7 @@ export function Step0Page() {
               <span className="s-failed">✗{stepStatus.counts.failed}</span>
               <span className="s-blocked">⊘{stepStatus.counts.blocked}</span>
             </span>
-            <Link to={`/${book}/`}>回总览看逐页详情</Link>
+            <Link to={wsPath(`/${book}/`)}>回总览看逐页详情</Link>
           </div>
         )}
         {b && precleanPages.length === 0 && <p className="muted">这本书没有登记 preclean 规则（本来就不用修）。</p>}

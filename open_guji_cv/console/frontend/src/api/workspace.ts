@@ -1,7 +1,8 @@
-import { api, getWorkspacePref, setWorkspacePref } from './client'
+import { api, currentWorkspaceId } from './client'
 
-/** 一个可切换的工作区。`books` 是它 books/ 下的册 id。 */
+/** 一个可切换的工作区。`id` 是 URL 上露出来的那一段。 */
 export interface WorkspaceEntry {
+  id: string
   path: string
   name: string
   books: string[]
@@ -14,16 +15,13 @@ export interface WorkspaceState {
   available: WorkspaceEntry[]
 }
 
-/** 本标签页当前在哪个工作区（服务端按请求头回，所以回的就是本标签页的）。 */
+/** 本页面当前在哪个工作区（服务端按请求头回，所以回的就是本页面的）。 */
 export const getWorkspace = () => api<WorkspaceState>('/api/workspace')
 
-export const WORKSPACE_CHANGED = 'guji:workspace-changed'
-
-/** 切工作区 = 改本标签页自己的偏好，**不通知服务端**——下一个请求自然就带
- * 新的了。所以另一个标签页完全不受影响，两个页面可以同时在两个工作区上干活。 */
-export function switchWorkspace(path: string): void {
-  setWorkspacePref(path)
-  window.dispatchEvent(new CustomEvent(WORKSPACE_CHANGED, { detail: path }))
+/** 切工作区 = **换 URL 的第一段**，不通知服务端，也不存任何地方。
+ * 由调用方拿这个结果去 `navigate()`。 */
+export function workspaceHref(wsId: string, rest = '/'): string {
+  return `/${encodeURIComponent(wsId)}${rest.startsWith('/') ? rest : '/' + rest}`
 }
 
-export { getWorkspacePref }
+export { currentWorkspaceId }

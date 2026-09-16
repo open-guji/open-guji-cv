@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useWsPath } from '../hooks/useWsPath'
 import { STEP5_SUBS } from '../steps'
 import { RarePanel } from '../components/rare/RarePanel'
 import { GlyphMatchPanel } from '../components/glyph-match/GlyphMatchPanel'
@@ -71,6 +72,7 @@ export function Step5Page() {
 // 还没实现挡住。5-a 有独立聚合接口后（见方案 §五），这里可以换成更细的
 // same/unsure/diff 分布，但产物级 fresh 覆盖率现在就能用、就是真实数据。
 function Step5Overview({ book }: { book: string }) {
+  const wsPath = useWsPath()
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const [err, setErr] = useState('')
 
@@ -93,7 +95,7 @@ function Step5Overview({ book }: { book: string }) {
         const d = status?.steps[backendId]
         return (
           <div className="ov-progress-row" key={s.id}>
-            <div className="ov-progress-label"><Link to={`/${book}/step/step5/${s.id}/`}>{s.title}</Link></div>
+            <div className="ov-progress-label"><Link to={wsPath(`/${book}/step/step5/${s.id}/`)}>{s.title}</Link></div>
             {d ? (
               <>
                 <div className="ov-progress-track">

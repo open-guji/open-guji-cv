@@ -17,30 +17,36 @@ import { RunsPage } from './pages/RunsPage'
 import { EvalsPage } from './pages/EvalsPage'
 import { GlyphLibraryPage } from './pages/GlyphLibraryPage'
 import { VariantLibraryPage } from './pages/VariantLibraryPage'
+import { WorkspacePickerPage } from './pages/WorkspacePickerPage'
 
 // 路由表见方案 §二。Step9（结果整理）2026-09-11 落地第一件事：坐标转字符位。
 export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/glyphlib/" element={<GlyphLibraryPage />} />
-        <Route path="/variantlib/" element={<VariantLibraryPage />} />
-        <Route path="/:book/" element={<BookOverviewPage />} />
-        <Route path="/:book/step/step0/" element={<Step0Page />} />
-        <Route path="/:book/step/step1/" element={<Step1Page />} />
-        <Route path="/:book/step/step2/" element={<Step2Page />} />
-        <Route path="/:book/step/step3/" element={<Step3Page />} />
-        <Route path="/:book/step/step4/" element={<Step4Page />} />
-        <Route path="/:book/step/step5/" element={<Step5Page />} />
-        <Route path="/:book/step/step5/:sub/" element={<Step5Page />} />
-        <Route path="/:book/step/step6/" element={<Step6Page />} />
-        <Route path="/:book/step/step7/" element={<Step7Page />} />
-        <Route path="/:book/step/step8/" element={<Step8Page />} />
-        <Route path="/:book/step/step9/" element={<Step9Page />} />
-        <Route path="/:book/step/:step/" element={<StepPage />} />
-        <Route path="/:book/runs/" element={<RunsPage />} />
-        <Route path="/:book/evals/" element={<EvalsPage />} />
+        {/* 工作区 id 是 URL 第一段（用户 2026-09-15：「这个 id 应该直接反映在
+            url 上，而不是隐藏在浏览器 tab 里。这样更直观」）。
+            `/` 不带工作区：落到 WorkspacePickerPage，让人先选一个。
+            字形库/异体字库跟着工作区走（库在工作区里），所以也在 /:ws 下。 */}
+        <Route path="/" element={<WorkspacePickerPage />} />
+        <Route path="/:ws/" element={<HomePage />} />
+        <Route path="/:ws/glyphlib/" element={<GlyphLibraryPage />} />
+        <Route path="/:ws/variantlib/" element={<VariantLibraryPage />} />
+        <Route path="/:ws/:book/" element={<BookOverviewPage />} />
+        <Route path="/:ws/:book/step/step0/" element={<Step0Page />} />
+        <Route path="/:ws/:book/step/step1/" element={<Step1Page />} />
+        <Route path="/:ws/:book/step/step2/" element={<Step2Page />} />
+        <Route path="/:ws/:book/step/step3/" element={<Step3Page />} />
+        <Route path="/:ws/:book/step/step4/" element={<Step4Page />} />
+        <Route path="/:ws/:book/step/step5/" element={<Step5Page />} />
+        <Route path="/:ws/:book/step/step5/:sub/" element={<Step5Page />} />
+        <Route path="/:ws/:book/step/step6/" element={<Step6Page />} />
+        <Route path="/:ws/:book/step/step7/" element={<Step7Page />} />
+        <Route path="/:ws/:book/step/step8/" element={<Step8Page />} />
+        <Route path="/:ws/:book/step/step9/" element={<Step9Page />} />
+        <Route path="/:ws/:book/step/:step/" element={<StepPage />} />
+        <Route path="/:ws/:book/runs/" element={<RunsPage />} />
+        <Route path="/:ws/:book/evals/" element={<EvalsPage />} />
       </Route>
     </Routes>
   )

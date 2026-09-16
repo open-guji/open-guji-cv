@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useWsPath } from '../hooks/useWsPath'
 import { backendIdFor, findStep } from '../steps'
 import { fetchStatus } from '../api/status'
 import { getBook } from '../api/registry'
@@ -12,6 +13,7 @@ import type { Book } from '../types/registry'
 // 不重新设计这几步的可视化——那是本轮范围外的事，这里只做到"看得到这一步
 // 现在跑得怎么样、看得到产物、能跳回总览细看"。
 export function StepPage() {
+  const wsPath = useWsPath()
   const { book = '', step } = useParams()
   const meta = step ? findStep(step) : undefined
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -55,7 +57,7 @@ export function StepPage() {
               <span className="s-failed">✗{stepStatus.counts.failed}</span>
               <span className="s-blocked">⊘{stepStatus.counts.blocked}</span>
             </span>
-            <Link to={`/${book}/`}>回总览看逐页详情</Link>
+            <Link to={wsPath(`/${book}/`)}>回总览看逐页详情</Link>
           </div>
         )}
       </div>

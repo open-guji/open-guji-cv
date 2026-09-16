@@ -3,7 +3,6 @@ import { getBook } from '../api/registry'
 import { capsOf } from '../capabilities'
 import type { Caps } from '../capabilities'
 import type { Book } from '../types/registry'
-import { WORKSPACE_CHANGED } from '../api/workspace'
 
 /** 这册书的版式声明 + 由它推出的面板可见性。
  *
@@ -21,9 +20,8 @@ export function useBookCaps(book: string): { meta: Book | null; caps: Caps } {
         .catch(() => { if (alive) setMeta(null) })
     }
     load()
-    // 换工作区后这本册可能压根不在新工作区里，得重取（拿不到就退回「全开」）
-    window.addEventListener(WORKSPACE_CHANGED, load)
-    return () => { alive = false; window.removeEventListener(WORKSPACE_CHANGED, load) }
+    // 换工作区 = 换 URL，整棵路由重挂，这个 effect 自然重跑，不必再听事件
+    return () => { alive = false }
   }, [book])
 
   return { meta, caps: capsOf(meta) }

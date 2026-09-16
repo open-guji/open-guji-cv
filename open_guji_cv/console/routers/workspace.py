@@ -37,6 +37,27 @@ from ...core.workspace import describe, workspace_root
 router = APIRouter()
 
 
+def _ws_id(d: Path) -> str:
+    """工作区的 id——**URL 上露出来的就是这个**（`/<ws>/<book>/step/...`）。
+
+    默认取目录名去掉 `-workspace` 后缀（`siku-zongmu-workspace` → `siku-zongmu`）：
+    短、稳定、一眼看得出是哪本书。工作区里放一个 `workspace.yaml` 写
+    `id: 自定义` 可以覆盖——目录名将来改了、或者两台机器上叫法不同时，
+    URL 不必跟着变。
+    """
+    import yaml
+    f = d / "workspace.yaml"
+    if f.is_file():
+        try:
+            got = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("id")
+            if got:
+                return str(got)
+        except Exception:
+            pass                        # 写坏了就退回目录名，不让整个列表挂掉
+    name = d.name
+    return name[: -len("-workspace")] if name.endswith("-workspace") else name
+
+
 def discover_workspaces(current: Path | None = None) -> list[dict]:
     """能切到哪些工作区。`current` 不给就按本请求解析出来的那个。"""
     if current is None:
@@ -58,9 +79,24 @@ def discover_workspaces(current: Path | None = None) -> list[dict]:
         ids = sorted(y.stem for y in books.glob("*.yaml"))
         if not ids and d.resolve() != cur_res:
             continue                      # 空工作区不列（当前这个除外，免得自己消失）
-        out.append({"path": str(d.resolve()), "name": d.name, "books": ids,
-                    "current": d.resolve() == cur_res})
+        out.append({"id": _ws_id(d), "path": str(d.resolve()), "name": d.name,
+                    "books": ids, "current": d.resolve() == cur_res})
     return out
+
+
+def resolve_workspace_id(ws_id: str) -> str | None:
+    """工作区 id → 绝对路径。认不出返回 None（中间件据此忽略，退回默认）。
+
+    URL 里带的是 id，落到磁盘要变成路径；这一步同时**就是白名单校验**
+    ——只有 `discover_workspaces()` 列出来的 id 才认，浏览器塞个别的进来
+    解析不出路径，不会变成「让服务端读写任意目录」。
+    """
+    env = os.environ.get("GUJI_WORKSPACE")
+    base = Path(env).expanduser().resolve() if env else None
+    for w in discover_workspaces(base):
+        if w["id"] == ws_id:
+            return w["path"]
+    return None
 
 
 def allowed_workspaces() -> set[str]:
