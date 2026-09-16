@@ -31,10 +31,28 @@ class CellShrinkParams(BaseModel):
     （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
 
 
+def _upright(ctx: RunContext, patch):
+    """字块转回正。
+
+    横排书在 `RunContext.raw_page` 入口整页顺时针转了 90°（三模式方案 §三），
+    列图与格坐标都在读序空间——**但字块必须是正的**：Step5 之后（库匹配、
+    OCR、字形库、人裁审查页）全都假设 `char_patch` 是端正的字。
+    方案 §三 的落地表第三行写的就是这件事，2026-09-15 补上。
+
+    没有它的后果不是难看：OCR 把躺着的「曹」读成「量」「聯」「海」，
+    字形库存进去的也是躺着的字，跨书永远配不上。
+    """
+    if patch is None or getattr(patch, "size", 0) == 0:
+        return patch
+    if getattr(ctx.book, "writing_mode", "vertical-rl") != "horizontal-tb":
+        return patch
+    return np.rot90(patch, 1).copy()      # 入口转了 -1（顺时针），这里转回来
+
+
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.2", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.3", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
@@ -136,7 +154,7 @@ class CellShrinkStep(Step):
                 # `_KEY_RE` 的语法。side 入 key：同一格两侧可能各有一个
                 # cand_idx=0（都是 straight），不带 side 会互相覆盖缓存文件。
                 key = cell_key(page, cc.col, slot) + f"_{side}{i}"
-                ctx.cache.put(ctx.book.id, "char_patch", key, masked_patch)
+                ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, masked_patch))
                 variants.append(CandidatePatch(
                     side=side, cand_idx=i, kind=cand.kind, patch_key=key,
                     bbox_col=tuple(float(v) for v in masked_bbox)))
@@ -196,7 +214,7 @@ class CellShrinkStep(Step):
                         ctx, page, cc, img, inst, slot, seams.get(pos),
                         multi_above.get(pos), multi_below.get(pos))
                 if patch is not None and getattr(patch, "size", 0) > 0 and inst.cell_type == "char":
-                    ctx.cache.put(ctx.book.id, "char_patch", key, patch)
+                    ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
                 recs.append(CharRec(
                     id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
