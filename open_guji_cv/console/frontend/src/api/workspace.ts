@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, getWorkspacePref, setWorkspacePref } from './client'
 
 /** 一个可切换的工作区。`books` 是它 books/ 下的册 id。 */
 export interface WorkspaceEntry {
@@ -14,21 +14,16 @@ export interface WorkspaceState {
   available: WorkspaceEntry[]
 }
 
+/** 本标签页当前在哪个工作区（服务端按请求头回，所以回的就是本标签页的）。 */
 export const getWorkspace = () => api<WorkspaceState>('/api/workspace')
 
-/** 热切工作区：后端改 GUJI_WORKSPACE 并重建进程内的 Store，**不重启进程**。
- * 有任务在跑时后端回 409（切了会把后半批产物写到另一个工作区）。 */
 export const WORKSPACE_CHANGED = 'guji:workspace-changed'
 
-export async function switchWorkspace(path: string) {
-  const r = await api<WorkspaceState & { previous: string | null }>('/api/workspace', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  })
-  // 册列表、产物、字形库全都换了一套。凡是在 mount 时取过数据的视图都得重取——
-  // 首页那张「最近在整理的书」就是只在 mount 取一次，不广播的话切完还显示旧
-  // 工作区的册和页数（2026-09-15 实测）。
-  window.dispatchEvent(new CustomEvent(WORKSPACE_CHANGED, { detail: r }))
-  return r
+/** 切工作区 = 改本标签页自己的偏好，**不通知服务端**——下一个请求自然就带
+ * 新的了。所以另一个标签页完全不受影响，两个页面可以同时在两个工作区上干活。 */
+export function switchWorkspace(path: string): void {
+  setWorkspacePref(path)
+  window.dispatchEvent(new CustomEvent(WORKSPACE_CHANGED, { detail: path }))
 }
+
+export { getWorkspacePref }

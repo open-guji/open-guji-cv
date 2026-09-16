@@ -489,7 +489,7 @@ def test_route_inventory():
     有任务在跑时回 409），75 → 77。
     """
     got = sorted(_endpoints())
-    assert len(got) == 77, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 76, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -502,6 +502,13 @@ def test_route_snapshot():
     这一节早先加了 `GET /api/llm_online_calls/{book}` 与 `GET /api/overview_summary`
     两条调用（随 `EXPECTED_ROUTES` 账本 63→64、62→63 同一批改动进来），但这条
     断言和那行段落标签一直没跟着改，实测本来就是 52，不是本轮改坏。
+
+    2026-09-15 工作区改成每请求一个之后，job 的响应里多了 `spec.workspace`
+    （工单自带工作区，见 `console/jobs.py::JobSpec.workspace`），于是
+    `POST /api/runs`、`GET /api/runs`、`GET /api/runs/{job_id}` 三条的 shape
+    与基线不同——**这是有意的契约变化**，不是回归。基线文件里还另有 14 条
+    先前就已漂移（本次改动前跑同样失败，逐条一致），一并等哪次专门核对过
+    之后用 `GUJI_WRITE_SNAPSHOT=1` 重落。
     """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
@@ -556,7 +563,7 @@ def test_route_snapshot():
 
 EXPECTED_ROUTES = [
     "GET /", "GET /api/align-ref/summary", "GET /api/align-ref/{book}/summary",
-    "GET /api/workspace", "POST /api/workspace",
+    "GET /api/workspace",
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",

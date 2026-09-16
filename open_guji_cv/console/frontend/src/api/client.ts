@@ -4,8 +4,41 @@ export const STATUS_MARK: Record<string, string> = {
   fresh: '✓', stale: '~', missing: '·', failed: '✗', blocked: '⊘',
 }
 
+/** 本标签页的工作区（绝对路径）。空串 = 明确用仓内样本库；null = 没选过，
+ * 服务端按它自己的 GUJI_WORKSPACE 环境变量来。
+ *
+ * **存在浏览器里，不存服务端**（用户 2026-09-15 定）：这样开两个标签页可以
+ * 各自在不同工作区上干活。用 sessionStorage 而不是 localStorage——前者按
+ * 标签页隔离，后者同源共享，用了就又变成「切一个全变」了。 */
+const WS_KEY = 'guji.workspace'
+
+export function getWorkspacePref(): string | null {
+  try {
+    return sessionStorage.getItem(WS_KEY)
+  } catch {
+    return null                      // 隐私模式/禁用存储：退回服务端默认
+  }
+}
+
+export function setWorkspacePref(path: string | null): void {
+  try {
+    if (path === null) sessionStorage.removeItem(WS_KEY)
+    else sessionStorage.setItem(WS_KEY, path)
+  } catch {
+    // 存不上就只在本次会话内存里生效（下面的 memo），不报错
+  }
+  memo = path
+}
+
+let memo: string | null | undefined
+
 export async function api<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
-  const r = await fetch(path, opts)
+  // 每个请求都带上本标签页的工作区。服务端据此解析 products / cache /
+  // 字形库等所有根（console/middleware.py），不持有「当前工作区」。
+  const ws = memo !== undefined ? memo : getWorkspacePref()
+  const headers = new Headers(opts?.headers)
+  if (ws !== null && ws !== undefined) headers.set('X-Guji-Workspace', ws)
+  const r = await fetch(path, { ...opts, headers })
   if (!r.ok) {
     let t = await r.text()
     try {

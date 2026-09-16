@@ -128,9 +128,17 @@ def api_run(req: RunRequest) -> dict:
         eng.book.resolve_pages(req.pages)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    # 工作区是**工单的一部分**，这里显式写进去（用户 2026-09-15 定的边界：
+    # 工作区是浏览器的状态，不能让 job 去读什么全局值）。`workspace_root()` 读的是
+    # **本请求**那个（X-Guji-Workspace 头 → contextvar），也就是「下单的这个标签页
+    # 当时在看哪个工作区」。写进工单之后就定死了：别的标签页切来切去、这个标签页
+    # 自己再切，都影响不到这张已经下出去的单子。
+    from ...core.workspace import workspace_root
+    ws = workspace_root()
     job = deps.runner().submit(JobSpec(
         book=req.book, pipeline=req.pipeline, from_step=req.from_step,
-        to_step=req.to_step, pages=req.pages, force=req.force, params=req.params))
+        to_step=req.to_step, pages=req.pages, force=req.force, params=req.params,
+        workspace=str(ws) if ws else ""))
     return job.to_dict()
 
 
