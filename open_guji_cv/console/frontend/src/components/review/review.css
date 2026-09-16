@@ -27,6 +27,7 @@
 .rvbody img { width: 76px; height: 76px; object-fit: contain; background: #fff; border: 1px solid var(--rule); }
 .rvimgcol { display: flex; flex-direction: column; align-items: center; gap: .2rem; }
 .rvctxbtn { font-size: .65rem; padding: .05rem .35rem; color: var(--mute); }
+.rvimgbtns { display: flex; gap: .25rem; }
 .rvctximg { margin: .3rem 0; padding: .3rem; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
 .rvctximg img { max-width: 100%; display: block; margin: 0 auto; }
 .rvev { flex: 1; min-width: 0; line-height: 1.5; }
