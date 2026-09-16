@@ -18,6 +18,27 @@ import './cutline.css'
 
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊' }
 
+/** 卡片默认选中哪条候选（2026-09-15 用户定：「默认 U-Net，准确率最高」）。
+ *
+ * 169 条人裁实测命中率：算法选中的 `chosen` **14.2%** / U-Net 缝优先 **61.5%** / 一致率最高 63.3%。
+ * `chosen` 这么低是因为会出卡的本来就是「算法多半选错了」的那些——拿它当默认等于让人先撤销一次。
+ * 一致率最高只高 1.8 个百分点，但它在难例上不稳（10 卡第八节：升级的难例上只有 57.6%，且 margin 越大越差），
+ * 所以取 U-Net 缝优先，没有它才回落到一致率最高，再没有就用 `chosen`。
+ * 这只是**默认选中**，人点别的照旧；产物里的现役切法仍由 `chosen` 决定，不受影响。
+ */
+function defaultPick(c: CutlineCase): number {
+  const cands = c.candidates || []
+  const u = cands.findIndex((x) => x.kind === 'unet_seam')
+  if (u >= 0) return u
+  let best = -1
+  for (let i = 0; i < cands.length; i++) {
+    const a = cands[i].agree
+    if (a == null) continue
+    if (best < 0 || a > (cands[best].agree ?? -1)) best = i
+  }
+  return best >= 0 ? best : (c.chosen ?? 0)
+}
+
 export function CutlinePanel({ book }: { book: string }) {
   const [pages, setPages] = usePersistedPages('cutline', book, 'body')
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
@@ -60,7 +81,7 @@ export function CutlinePanel({ book }: { book: string }) {
     const t0 = Date.now()
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
-      const st: CardState = { y: c.y, mode: 'line', poly: [], pick: c.chosen ?? 0, pickTouched: false, tags: {}, done: undefined, hidden: false }
+      const st: CardState = { y: c.y, mode: 'line', poly: [], pick: defaultPick(c), pickTouched: false, tags: {}, done: undefined, hidden: false }
       let dv: DoneRec | undefined = done[c.id]
       // drift 档：批次里可能躺着这些 id 的**历史**裁决（批次框留空落到 vol02-cutline 这种老批次，
       // 当初的金标就是那里裁的）。坐标系已过期的不算已裁，更不能把旧折线画到新图上
