@@ -68,10 +68,21 @@ def api_raw(book: str, page: int, scale: float = 0.35) -> Response:
 
 
 @router.get("/api/cache/{book}/{kind}/{key}.png")
-def api_cache(book: str, kind: str, key: str) -> Response:
+def api_cache(book: str, kind: str, key: str, src: str = "raw") -> Response:
+    """缓存图像。`src=bin` 时从**整页二值副本**上按同一个 bbox 重裁一张。
+
+    用户 2026-09-16：进字形库的一定是二值的，审阅时也该看二值的。字块缓存
+    存的是灰度裁片，所以二值那一路不能读缓存，得拿 `char_index` 里的
+    `bbox_page` 去 `binarized/<book>/<page>.png` 上重裁——**同一个坐标、两套图**，
+    人可以对照着看。二值副本没生成时**退回灰度**（不报错，页面照常出图）。
+    """
     import open_guji_cv.steps  # noqa: F401
     if kind not in KINDS or KINDS[kind].storage != "image_cache":
         raise HTTPException(404, "不是缓存图像种类")
+    if src == "bin" and kind == "char_patch":
+        got = _char_patch_binarized(book, key)
+        if got is not None:
+            return got
     ctx = RunContext(load_book(book), deps.product_store(), deps.image_cache(),
                      log=lambda s: None)
     try:
@@ -79,6 +90,49 @@ def api_cache(book: str, kind: str, key: str) -> Response:
     except Exception as e:   # noqa: BLE001
         raise HTTPException(404, f"拿不到图像: {e}") from e
     return FileResponse(path, media_type="image/png")
+
+
+def _char_patch_binarized(book: str, key: str) -> Response | None:
+    """`p0030c01s1` → 从二值页上按该字位的 `bbox_page` 重裁。拿不到就 None（调用方退回灰度）。"""
+    import re
+
+    from ...core.step import page_key
+    from ...utils.binarized import binarized_or_none
+
+    m = re.fullmatch(r"p(\d+)c(\d+)s(-?\d+)([ab]?)", key)
+    if not m:
+        return None
+    page, col, slot, sub = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+    path = binarized_or_none(book, page)
+    if path is None:
+        return None
+    try:
+        ci = deps.product_store().read(book, "cell_shrink", page_key(page), "char_index")
+    except Exception:   # noqa: BLE001
+        return None
+    box = None
+    for cc in ci.columns:
+        if cc.col != col:
+            continue
+        for ch in cc.chars:
+            if ch.slot == slot and (ch.sub or "") == sub and ch.bbox_page:
+                box = ch.bbox_page
+                break
+        break
+    if not box:
+        return None
+    g = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if g is None:
+        return None
+    x0, y0, x1, y1 = (int(round(v)) for v in box)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(g.shape[1], x1), min(g.shape[0], y1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    ok, buf = cv2.imencode(".png", g[y0:y1, x0:x1])
+    if not ok:
+        return None
+    return Response(content=buf.tobytes(), media_type="image/png")
 
 
 

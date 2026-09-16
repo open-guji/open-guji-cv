@@ -653,6 +653,25 @@ def cmd_import_pdf(args) -> None:
         print("  ⚠️ " + p)
 
 
+def cmd_binarize(args) -> None:
+    """整页二值副本：灰度扫描 → `binarized/<book>/<page>.png`（白底黑字）。
+
+    进字形库的图一定是二值的（用户 2026-09-16），审阅时看二值的也更准。
+    这条把二值化统一到**页级**做一次落盘，而不是每个消费点各二值各的。
+    默认 Sauvola 31/0.2 —— 固定阈 128 会砍掉一半界行，见 `utils/binarized.py`。
+    """
+    from .core.book import load_book
+    from .utils.binarized import binarized_root, build_binarized
+
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else book.all_pages()
+    written = build_binarized(book, pages, force=args.force,
+                              window=args.window, k=args.k)
+    print(json.dumps({"book": book.id, "pages": len(pages), "written": len(written),
+                      "dir": str(binarized_root() / book.id),
+                      "window": args.window, "k": args.k}, ensure_ascii=False))
+
+
 def cmd_preclean(args) -> None:
     """Step0：按 book.yaml 的 preclean 段生成修好的页图，落在 precleaned/<book>/。
 
@@ -950,6 +969,7 @@ def cmd_runs(args) -> None:
 
 COMMANDS_V2 = {
     "preclean": cmd_preclean,
+    "binarize": cmd_binarize,
     "split": cmd_split,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
@@ -1003,6 +1023,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     _add_pages(p)
+
+    p = sub.add_parser("binarize",
+                       help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
+    p.add_argument("book", help="books/<id>.yaml 里的书 id")
+    p.add_argument("--pages", default=None, help="只做这些页（默认全书）")
+    p.add_argument("--force", action="store_true", help="已有也重做")
+    p.add_argument("--window", type=int, default=31,
+                   help="Sauvola 窗口（默认 31，与 normalize_patch 同一组常数）")
+    p.add_argument("--k", type=float, default=0.2, help="Sauvola k（默认 0.2）")
 
     p = sub.add_parser("preclean",
                        help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
