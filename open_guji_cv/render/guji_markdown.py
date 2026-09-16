@@ -48,10 +48,7 @@ from ..core.spec import page_key
 from ..errors import ProductMissing
 from ..products.kinds.cells import PageCells
 from ..products.store import ProductStore
-from ..report.slots import SlotRec, page_slots
-
-CELLS_STEP = "row_segment"
-CELLS_KIND = "cells"
+from ..report.slots import CELLS_KIND, SlotRec, cells_step, page_slots
 
 
 def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str:
@@ -120,9 +117,10 @@ def render_page(store: ProductStore, book: str, page: int, stale: list[str]) -> 
     """
     slots = page_slots(store, book, page, stale)
 
-    cells: PageCells | None = store.read(book, CELLS_STEP, page_key(page), CELLS_KIND)  # type: ignore[assignment]
+    step = cells_step(book)
+    cells: PageCells | None = store.read(book, step, page_key(page), CELLS_KIND)  # type: ignore[assignment]
     if cells is None:
-        raise ProductMissing(f"{book} 第 {page} 页没有 {CELLS_STEP} 产物（先跑到 Step3）")
+        raise ProductMissing(f"{book} 第 {page} 页没有 {step} 产物（先跑到 Step3）")
     n_raised_by_col = {c.col: c.n_raised for c in cells.columns}
     lead_blank_by_col = {c.col: _lead_blank(c) for c in cells.columns}
 
