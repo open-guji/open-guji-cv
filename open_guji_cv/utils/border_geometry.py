@@ -26,6 +26,7 @@ from .peak_line_search import (
     find_horizontal_border,
     find_vertical_lines,
     find_vertical_lines_grid,
+    grid_thresholds,
     half_height_score_at,
     local_maxima,
 )
@@ -928,6 +929,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     bottom_band_frac: float | None = None,
                     column_grid: bool = False,
                     col_pitch: float | None = None,
+                    frame_height: float | None = None,
                     vline_polyline: bool = True) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
@@ -940,6 +942,18 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     给**界行没印全**的书用（北行日錄刻本 12.3% 的槽位没线，自由模式只能拿字身
     假峰凑数）。不开就是加这套之前的行为，逐位不变。`col_pitch` 是列距先验
     （`BookSpec.col_pitch`），给了用来过滤版框对。
+
+    ⚠️ **网格模式不是自由模式的超集**，不要拿它当默认。没有 `col_pitch` 约束时
+    选版框对可能挑到被拉伸（甚至半列距）的一对，反而比自由模式差——四庫總目
+    vol02/176 实测：无先验时选中列距 93.22（真值 ~185），10 条线全挤到页面右半边、
+    齐刷刷穿字；给上 `col_pitch=184` 就选对了。vol02/3 是同一病的轻症。
+    两本书 394 页实测：381 页两模式逐位相同，差异集中在版框一端只有粗外条的页。
+    见 overview 仓 `图片初步数字化/进度/北行日录古本/03-竖线探测模块化.md` §A。
+
+    `col_pitch` / `frame_height`：网格模式那几个阈值原本是在北行日錄刻本
+    （列距 119、框高 1482）上标的**绝对像素**，这两个先验给了就按
+    `peak_line_search.grid_thresholds()` 换算到本书尺度。不给则退回那组绝对值
+    ——**换一本分辨率差一倍的书不报错、只静默退化**（整页插值或整页验不上）。
 
     `vline_polyline=False`：界行不做三段折线拟合，只量 w80。理由见
     `fit_vlines_polyline` 的 `fit` 参数。
@@ -964,8 +978,11 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     mask = (gray < ink_threshold).astype(np.float64)
 
     if column_grid:
-        vlines_old, filled_old = find_vertical_lines_grid(mask, n_lines=expected_cols + 1,
-                                                          col_pitch=col_pitch)
+        # 阈值按本书的列距/框高换算；两个先验都不给时 grid_thresholds 原样返回
+        # 北行日錄那组标定值，与加这套之前逐位相同。
+        vlines_old, filled_old = find_vertical_lines_grid(
+            mask, n_lines=expected_cols + 1, col_pitch=col_pitch,
+            **grid_thresholds(col_pitch, frame_height))
     else:
         vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
         filled_old = [False] * len(vlines_old)

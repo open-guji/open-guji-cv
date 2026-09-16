@@ -159,6 +159,12 @@ WRITE = os.environ.get("GUJI_ROUTE_SNAP_WRITE") == "1"
 #: 重构轮的规矩是「行为一模一样」，所以这张表**只能由任务书点名**才加得进来，
 #: 且必须写清为什么。目前只有一条：
 SANCTIONED = {
+    "GET /api/books":
+        "BookSpec 新增 `frame_height`（框高像素中位，册级统计），`to_dict()` 跟着多一个键。"
+        "网格模式的 GRID_MIN_SCORE 原本是在北行日錄刻本（框高 1482）上标的绝对像素，"
+        "换一本分辨率差一倍的书直接失效且**不报错**，只静默退化成整页插值；"
+        "`peak_line_search.grid_thresholds()` 用这个先验把阈值换算过去。"
+        "所有册 yaml 都还没写这个字段，值一律是 null——是多一个键，不是哪本书的值变了。",
     "POST /api/review/rate-history":
         "C2 把 measure() 从 scripts/track_review_rate.py 搬进 eval/rate_history.py 时，"
         "顺带把硬编码的 REPO/output/glyph.db 换成 core.workspace.glyph_db_path()"

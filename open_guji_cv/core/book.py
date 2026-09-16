@@ -164,6 +164,18 @@ class BookSpec:
     #: 网格模式用它过滤版框对。量法：版框宽 / 列数，逐页取中位。北行日錄刻本 119。
     #: ⚠️ 与 `pitch_prior` 不是一回事——那个是沿列方向的**字距**，给现代链 Step3 用。
     col_pitch: float | None = None
+    #: `frame_height`（yaml 同名）：**框高**（下版框 y − 上版框 y）像素中位，册级统计。
+    #: 网格模式用它把 `GRID_MIN_SCORE` 换算到本书的尺度——半高宽匹配分 =
+    #: 沿线投影行数 / 半高宽，**跟框高成正比**，在 2801×2343 / 框高 1482 上标的
+    #: 那个 20.0 换一本分辨率差一倍的书直接失效。
+    #:
+    #: ⚠️ **不给不报错，只静默退化**：偏小 → 真界行被拒、整页插值；偏大 → 字身假峰
+    #: 混进来。跟 `top_band_frac` 同型的坑。给了才换算，不给就用北行日錄那组绝对值。
+    #:
+    #: **怎么标定**：`peak_line_search.measure_book_frame_height(整册 mask)` 跑一次
+    #: 写进 yaml。跟 `bottom_gap` 一样不在流水线里现算——`border_detect` 是逐页 step，
+    #: 现算等于每页重跑全书。⚠️ 换书必须重标，别抄。
+    frame_height: float | None = None
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -243,6 +255,7 @@ class BookSpec:
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
             "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
             "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),
@@ -418,6 +431,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                           else float(d["bottom_band_frac"])),
         column_grid=bool(d.get("column_grid", False)),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
+        frame_height=(None if d.get("frame_height") is None
+                      else float(d["frame_height"])),
         vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
     )
