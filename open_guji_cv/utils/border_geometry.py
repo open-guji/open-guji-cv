@@ -25,6 +25,7 @@ from .peak_line_search import (
     LineMatch,
     find_horizontal_border,
     find_vertical_lines,
+    find_vertical_lines_grid,
     half_height_score_at,
     local_maxima,
 )
@@ -160,6 +161,9 @@ class BorderDetectionResult:
     # 三段页的 verticals[i].x_at_top/slope 是第一段外推到 y=0 的值，拿它当
     # "原直线"是错的（量法踩过：改前数字全被第一段的斜率带偏）。直线页两者相同。
     verticals_straight: list[VLine] = field(default_factory=list)
+    # 网格模式（`detect_borders(column_grid=True)`）下与 verticals 一一对应：True =
+    # 该槽位没探到细线、位置是相邻已验线之间的几何插值。自由模式全 False。
+    vline_filled: list[bool] = field(default_factory=list)
 
 
 def _hline_to_new(m: LineMatch, w: int, kind: str) -> HLine:
@@ -720,10 +724,17 @@ def _from_knots(kx: list[float], ky: list[float]) -> VLine:
 
 
 def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
-                        verticals: list[VLine], w: int, h: int
+                        verticals: list[VLine], w: int, h: int, fit: bool = True
                         ) -> tuple[list[VLine], int, float | None, float | None]:
     """按弯度决定整页用直线还是三段折线，弯就逐线拟合折线。
     返回 (verticals, segments, w80_med, w80_max)。
+
+    `fit=False`：只量 w80（给闸1 的 L2 旗标用），**不拟合**，整页保持直线。
+    给界行淡而断的书用（`BookSpec.vline_polyline: false`）：那种书上 w80 量的是
+    "线有多断"不是"线有多弯"——北行日錄刻本平直扫描页 w80 中位 41、远超
+    BEND_W80_MED=7，整页被判成弯页；折点得分在淡线上是噪声，某条线找到一个
+    假最优、失败的邻居再照抄它的位移，全页 20 条线齐刷刷平移 33~39px 落到空白
+    纸上（p40/p41 实测），闸2 因此只剩 1/19 列过闸。
 
     **先量再改**：先在直线拟合下算每条线的 w80，页级中位 >= BEND_W80_MED 或任
     一条 >= BEND_W80_MAX 才进入三段；否则原样返回、segments=1。**整页统一**——
@@ -748,6 +759,8 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     if not w80s:
         return verticals, 1, None, None
     w80_med, w80_max = float(np.median(w80s)), float(max(w80s))
+    if not fit:
+        return verticals, 1, w80_med, w80_max
     if w80_med < BEND_W80_MED and w80_max < BEND_W80_MAX:
         return verticals, 1, w80_med, w80_max
 
@@ -912,12 +925,24 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     ink_threshold: int = 128,
                     book_bottom_gap: float | None = None,
                     top_band_frac: float | None = None,
-                    bottom_band_frac: float | None = None) -> BorderDetectionResult:
+                    bottom_band_frac: float | None = None,
+                    column_grid: bool = False,
+                    col_pitch: float | None = None,
+                    vline_polyline: bool = True) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
     一 + N-1 条内部界行），跟 `peak_line_search.find_vertical_lines` 的
     `expected_count` 用法一致。
+
+    `column_grid` / `col_pitch`：竖线走**网格模式**（`find_vertical_lines_grid`）——
+    版框定死、列距均匀、逐槽验线、缺槽插值，结果里 `vline_filled` 标出插值的槽。
+    给**界行没印全**的书用（北行日錄刻本 12.3% 的槽位没线，自由模式只能拿字身
+    假峰凑数）。不开就是加这套之前的行为，逐位不变。`col_pitch` 是列距先验
+    （`BookSpec.col_pitch`），给了用来过滤版框对。
+
+    `vline_polyline=False`：界行不做三段折线拟合，只量 w80。理由见
+    `fit_vlines_polyline` 的 `fit` 参数。
 
     `book_bottom_gap`：整册「页高 − 下版框 y」的中位数，用于下版框的跨页先验
     救援（见 `peak_line_search._rescue_bottom`）。不传就不救，行为与改动前
@@ -938,7 +963,12 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     h, w = gray.shape[:2]
     mask = (gray < ink_threshold).astype(np.float64)
 
-    vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
+    if column_grid:
+        vlines_old, filled_old = find_vertical_lines_grid(mask, n_lines=expected_cols + 1,
+                                                          col_pitch=col_pitch)
+    else:
+        vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
+        filled_old = [False] * len(vlines_old)
     # 上下边框曾经各 1.4s、并成 2 线程有收益；分块 BLAS 之后各只剩 0.17s，
     # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
     top_kw = {} if top_band_frac is None else {"band_frac": float(top_band_frac)}
@@ -947,10 +977,13 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
                                         book_gap=book_bottom_gap, **bot_kw)
 
-    verticals = [_vline_to_new(m, w, h) for m in vlines_old]
     # 新坐标系 x 向左递增：旧坐标里越靠右(x_old越大) -> 新坐标x_new越小，
     # 按 x_at_top 升序排列正好就是"从右到左"，对应列号从1开始递增。
-    verticals.sort(key=lambda v: v.x_at_top)
+    # filled 标记跟着线一起排。
+    pairs = sorted(zip((_vline_to_new(m, w, h) for m in vlines_old), filled_old),
+                   key=lambda t: t[0].x_at_top)
+    verticals = [v for v, _ in pairs]
+    vline_filled = [bool(f) for _, f in pairs]
 
     top = _hline_to_new(top_old, w, "top")
     bottom = _hline_to_new(bottom_old, w, "bottom")
@@ -958,7 +991,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     # 之后，折点 y 取自这条线跟上下版框的交点
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom,
-                                                            verticals, w, h)
+                                                            verticals, w, h,
+                                                            fit=vline_polyline)
     head_raise = detect_head_raise(mask, top, verticals, w)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
@@ -966,4 +1000,5 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                                   vline_segments=vseg, bend_w80_med=w80_med,
                                   bend_w80_max=w80_max,
                                   verticals_straight=verticals_straight,
+                                  vline_filled=vline_filled,
                                   **outer)

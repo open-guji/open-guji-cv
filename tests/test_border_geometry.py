@@ -372,6 +372,16 @@ def test_bent_page_switches_whole_page_to_three_segments_and_tracks_rule():
         assert v.slope > 0 and abs(v.k2) < 0.01 and v.k3 < 0
 
 
+def test_fit_false_measures_w80_but_keeps_page_straight():
+    """`vline_polyline: false`（界行淡而断的书）：同一张弯页，只量 w80、不拟合，
+    线原样返回、整页 segments=1。w80 仍要给出来——闸1 的 L2 旗标靠它。"""
+    mask, top, bottom, verts, xs, ky = _bent_page(bend=22.0)
+    out, seg, w80m, w80x = fit_vlines_polyline(mask, top, bottom, verts, 1400, 2400, fit=False)
+    assert seg == 1 and w80m is not None and w80m >= 10
+    assert all(v.segments == 1 for v in out)
+    assert [(v.x_at_top, v.slope) for v in out] == [(v.x_at_top, v.slope) for v in verts]
+
+
 def test_polyline_x_at_is_continuous_at_knots():
     v = VLine(x_at_top=100.0, slope=0.02, k2=-0.03, k3=0.01, y1=800.0, y2=1600.0)
     for y in (800.0, 1600.0):
