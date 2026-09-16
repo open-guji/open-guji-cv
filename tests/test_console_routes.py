@@ -33,13 +33,30 @@ python -m open_guji_cv pipeline keben_body_v2 vol01 --pages 24,42   # 两页产�
 - 重落基线：`GUJI_ROUTE_SNAP_WRITE=1`。
 - ⚠️ `pytest` 必须带 `-s`（子会话须知 §五：不带会 `ValueError: I/O operation on closed file`）。
 
-## 三处「天然不可比」怎么处理（方案 §九）
+## 四处「天然不可比」怎么处理（方案 §九）
 
 1. **`/api/runs` 系列**带 job id 与时间戳 → `mode="shape"`，**比结构不比值**
    （每个标量换成它的类型名，键与嵌套形状照比）。
 2. **二进制响应**（`/api/cache`、`/api/overlay`、`/api/raw`、`/api/cutline/img`）
    → 比 `sha256` 与字节数，不比字节本身。
 3. **产物清单里的 `ts`/`elapsed`** 等时间字段 → 换成 `<volatile>`。
+4. **举例数据**（`SAMPLE_KEYS`，如尺子的 `detail`）→ `_sample_shape`，只留元素
+   结构，不比挑中了哪几条、也不比挑了几条。
+
+## 「举例」与「输出」的界线（2026-09-16）
+
+第 4 条是这次加的，起因：重跑一次 vol01 的 Step1–3，`/api/rulers` 当场变红，
+差异全在 `rulers[].detail`——举例的格线从 p141c1 换成 p24c9。**可测的行为一点没变，
+变的是被测数据**，这种红是噪声，会训练人「跑红了先重落基线」，那这个测试就废了。
+
+判据是**这个值是不是路由的输出本身**：
+
+- **是输出** → 逐值严比。`/api/cutline/cases` 的 `cases`、`/api/review/cards` 的
+  `cards` 都是「这个 URL 就是为了给你这批东西」，值变了就是行为变了，该红。
+  它们同样绑产物，但那是这个测试的**前提**（见下：产物得先跑出来），不是缺陷。
+- **是举例** → 进 `SAMPLE_KEYS`。尺子的 `detail` 是「满足条件的有 45 条，挑几条
+  给人看看长什么样」，挑中谁不是行为。聚合量 `num`/`den`/`value` 照旧严比——
+  真出了切分回归，是那三个数变，不是举例变。
 
 ## 写路由怎么做到可重复
 
@@ -210,7 +227,23 @@ BATCH = "snap-batch"       # 沙箱里现建的批次，不碰真台账
 
 # 时间/耗时类字段：同一份产物两次读出来也可能不同，或与本次重构无关
 VOLATILE = {"ts", "elapsed", "harvested_at", "created_at", "updated_at",
-            "started_at", "finished_at", "queued_at", "submitted_at", "t"}
+            "started_at", "finished_at", "queued_at", "submitted_at", "t",
+            # 2026-09-16：产物指纹里的 `code_rev` 是**当前 HEAD 的短 sha**，
+            # `fingerprint` 由它派生 —— 任何人往仓里提一笔（哪怕改的是别的模块、
+            # 哪怕只是文档），下次跑这个测试的 3 条路由必红。那是「代码变过」，
+            # 不是「路由行为变了」。产物是否**新鲜**由 `/api/status` 的 counts 管，
+            # 那个照旧严比；这里只是不拿 sha 当行为。
+            "code_rev", "fingerprint"}
+
+#: **举例数据**：值随产物变、但不是被测行为的键。这些键的值一律只比**结构**
+#: （`_shape`：标量换类型名、列表只留首元素＋省略号），不比具体是哪一页哪一列。
+#:
+#: 2026-09-16 加：`/api/rulers` 的 `detail` 是「哪些格线穿字」的**样例清单**——
+#: 重跑一次 vol01 的 Step1–3，举例就从 p141c1 换成 p24c9，测试当场变红，可测的
+#: 行为却一点没变。尺子本身的 `num`/`den`/`value` 照旧逐值严比（那才是回归要看的），
+#: 只有举例是谁不比。判据：**这个键的值是「从满足条件的东西里挑几个给人看」吗**——
+#: 是就进这里；是聚合量（计数、比率、分母）就不进。
+SAMPLE_KEYS = {"detail"}
 
 
 # ── 归一化 ───────────────────────────────────────────────────────────
@@ -245,7 +278,19 @@ def _norm(v):
         # 键一律转成字符串：`/api/status` 的 `steps.<step>.pages` 是 **int 键**，
         # 存进基线 JSON 再读回来就成了 str，不转的话每次都报「差异」。
         # 走 HTTP 时 fastapi 也是这么序列化的，转了才是它真正发出去的形状。
-        return {str(k): ("<volatile>" if k in VOLATILE else _norm(x)) for k, x in v.items()}
+        out = {}
+        for k, x in v.items():
+            ks = str(k)
+            if k in VOLATILE:
+                out[ks] = "<volatile>"
+            elif k in SAMPLE_KEYS:
+                # 举例清单：只留**元素结构**，既不比挑中了哪几条、也不比挑了几条
+                # （`_shape` 自身会把「1 条」和「多条」编码成不同结构，而举例条数
+                # 同样随产物变——R2 的 detail 在同一份产物上就是 7 条、重跑后 5 条）
+                out[ks] = _sample_shape(_norm(x))
+            else:
+                out[ks] = _norm(x)
+        return out
     if isinstance(v, (list, tuple)):
         return [_norm(x) for x in v]
     if isinstance(v, float):
@@ -290,6 +335,23 @@ def _frame_kind(frame: bytes | None) -> str:
     return "<other>"
 
 
+def _sample_shape(v):
+    """举例清单的归一：空与非空要分开（「有没有举例」是行为），但**非空之间
+    不比条数、不比挑中谁**——只留合并后的元素结构。给 SAMPLE_KEYS 用。"""
+    if not isinstance(v, (list, tuple)):
+        return _shape(v)
+    if not v:
+        return []
+    merged: dict = {}
+    for item in v:
+        s = _shape(item)
+        if isinstance(s, dict):
+            merged.update(s)
+        else:                       # 标量举例（如 id 清单）：留一个类型名就够
+            return [s, "…"]
+    return [merged, "…"]
+
+
 def _shape(v):
     """比结构不比值：每个标量换成类型名。给 /api/runs 系列用。"""
     if isinstance(v, dict):
@@ -331,8 +393,12 @@ def _collect() -> dict:
     html = EP["GET /"]()
     snap["GET /"] = {"len": len(html), "sha256": _sha(html.encode())}
 
-    # 二 · 状态（1）
-    call("GET /api/status", book=BOOK, pages=PAGES)
+    # 二 · 状态（1）——`mode="shape"`：这条报的是**产物新鲜度**，而新鲜度按定义
+    # 就是「产物指纹 vs 当前代码指纹」。仓里提一笔代码、或谁重跑了一页，counts 的
+    # fresh/stale 就变（2026-09-16 实测：并行会话提了一个提交，fresh 9→1、stale 3→11）。
+    # 那是环境状态，不是这条路由的行为。行为＝「有没有按 step×page 报出 counts 与
+    # 每页 status」，比结构就够；真要守新鲜度，那是 `guji status` 与跑批的事。
+    call("GET /api/status", book=BOOK, pages=PAGES, mode="shape")
 
     # 三 · 管线执行（6）——全部比结构不比值（带 job id 与时间戳）
     run_ep = EP["POST /api/runs"]
