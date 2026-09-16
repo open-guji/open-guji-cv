@@ -346,6 +346,32 @@ def cmd_witness_align(args) -> None:
     print(json.dumps(stats, ensure_ascii=False))
 
 
+def cmd_calibrate(args) -> None:
+    """册级先验复核：把 `measure_*` 跑一遍，和 `books/<id>.yaml` 里的现值对照。
+
+    **只印表，不改 yaml**（理由见 `utils/calibrate.py` 模块头：自动回写会让一次
+    坏标定悄悄固化，还容易冲掉人写的 note）。
+    """
+    from .core.book import load_book
+    from .products.store import ProductStore
+    from .utils.calibrate import calibrate, format_table
+
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else None
+    rows, diag = calibrate(book, ProductStore(), pages=pages,
+                           with_bottom_gap=args.with_bottom_gap)
+    print(format_table(rows, diag, book.id))
+    if args.json:
+        payload = {"book": book.id, "diag": diag,
+                   "rows": [{"field": r.field, "current": r.current, "measured": r.measured,
+                             "verdict": r.verdict, "drift_pct": r.drift_pct, "note": r.note}
+                            for r in rows]}
+        Path(args.json).write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                                   encoding="utf-8")
+        print("")
+        print("已写 " + str(args.json))
+
+
 def cmd_calibrate_font(args) -> None:
     """字体判定（三模式方案 §五.1）：拿 witness-align / 人裁的标签当查询，逐套字体量
     recall@1/@5 与可分性 margin（utils/font_calibrate.py）。字体字形先用
@@ -897,6 +923,7 @@ COMMANDS_V2 = {
     "split": cmd_split,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
+    "calibrate": cmd_calibrate,
     "calibrate-font": cmd_calibrate_font,
     "seed-witness": cmd_seed_witness,
     "eval": cmd_eval,
@@ -968,6 +995,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--first-page", type=int, default=None, help="扫描页 1 对应的影印页码")
     p.add_argument("--witness", default=None, help="整理本文件；默认 references[0].file")
+
+    p = sub.add_parser("calibrate",
+                       help="[v2] 册级先验复核：measure_* 实测 vs books/<id>.yaml 现值的对照表（不改 yaml）")
+    p.add_argument("book")
+    p.add_argument("--pages", default=None, help="页号表达式；默认 yaml 的 pages")
+    p.add_argument("--with-bottom-gap", action="store_true",
+                   help="连 bottom_gap 一起量（要读整册原图，慢）")
+    p.add_argument("--json", default=None)
 
     p = sub.add_parser("calibrate-font",
                        help="[v2] 字体判定：标签字位在各套字体来源里的 recall@1/@5 与可分性 margin")
