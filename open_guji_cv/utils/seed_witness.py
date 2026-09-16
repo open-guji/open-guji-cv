@@ -48,6 +48,25 @@ def _prep_one(args):
                                          isotropic=isotropic))
 
 
+def _binarized_png(gray: "np.ndarray") -> bytes:
+    """字块灰度 → **二值** PNG bytes（白底黑字），进库存这张。
+
+    用户 2026-09-16 定的口径：**最后进字形库的一定是二值的，灰度值会干扰**。
+    此前存的是缓存里的灰度裁片（189~198 个灰阶），等于把「用哪把尺子二值化」
+    推迟到每次读取——`glyph_db._unpng` 用固定阈 128、`normalize_patch` 用
+    Sauvola，同一个字块在检索与匹配两处拿到的二值图可以不一样。
+
+    与整页副本 `utils/binarized.binarize_page` **共用同一个二值化**（Sauvola
+    31/0.2），所以「库里那张」与「人裁看的那张」是同一把尺子出来的。
+    """
+    import cv2
+    from .binarized import binarize_page
+    ok, buf = cv2.imencode(".png", binarize_page(gray))
+    if not ok:
+        raise RuntimeError("PNG 编码失败")
+    return buf.tobytes()
+
+
 def _prep_patches(rows, cache_root: Path, book_id: str, norm_stroke, jobs: int = 1) -> dict:
     """批量把字块读进来并归一。`jobs>1` 走进程池（纯 CPU、无状态，这段占检索三分之一）。"""
     from ..core.spec import cell_key
@@ -76,7 +95,7 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
                       products_root: Path | None = None, skip_flags=SKIP_FLAGS,
                       norm_stroke: int | None = None, jobs: int = 1,
                       only_chars: str | None = None, source_kind: str = "print",
-                      log=print) -> dict:
+                      binarize: bool = True, log=print) -> dict:
     """两阶段：先对全部字位做字体检索（只读，检索缓存稳定），再逐条进库（只写）。
 
     第一版是边检索边进库——每 `admit_instance` 一条就让 `GlyphDB.query` 的特征缓存失效
@@ -201,6 +220,8 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     n_admit = n_dup = 0
     for j, (d, png, g, agreed, tops) in enumerate(plan):
         iid = f"{book.id}:{d['page']}:{d['col']}:{d['slot']}"
+        if binarize:
+            png = _binarized_png(g)
         ok = db.admit_instance(
             iid, d["char"], png, provenance="align", edition_tag=edition,
             evidence={"witness_page": d.get("witness_page"), "line_idx": d.get("line_idx"),

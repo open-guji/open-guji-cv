@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { withWorkspace } from '../../api/client'
+import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import { fetchVariantGroups } from '../../api/variants'
 import { submitRun, fetchRun } from '../../api/runs'
 import { postEvents } from '../../api/events'
@@ -295,7 +295,7 @@ export function GroupsPanel({ book }: { book: string }) {
                              onClick={(ev) => { selRef.current = t.id; ev.currentTarget.focus(); bump() }}
                              onDoubleClick={() => moveCol(g, t.id, 1)}
                              onKeyDown={(ev) => onTileKeyDown(g, t, ev)}>
-                          <img src={withWorkspace(t.patch)} alt={t.id} />{badge}
+                          <BinaryToggleImage src={t.patch} alt={t.id} showToggle={false} />{badge}
                         </div>
                       )
                     })}
@@ -312,7 +312,7 @@ export function GroupsPanel({ book }: { book: string }) {
                 return (
                   <div className="votile" key={t.id}>
                     <div className="vtile marked" title={`${t.id}\n再按 O 放回组内`} tabIndex={0}>
-                      <img src={withWorkspace(t.patch)} alt={t.id} loading="lazy" /><b>O</b>
+                      <BinaryToggleImage src={t.patch} alt={t.id} showToggle={false} /><b>O</b>
                     </div>
                     <input className="voin" value={s.otherChar || ''} placeholder="是什么字" size={3}
                            title="填图上实际刻的字；留空则提交时跳过这一格。按 Esc 放回组内"

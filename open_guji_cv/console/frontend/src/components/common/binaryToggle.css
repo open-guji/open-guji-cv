@@ -1,0 +1,4 @@
+.bti { display: flex; flex-direction: column; align-items: center; gap: .2rem; }
+.bti img { display: block; image-rendering: pixelated; }
+.bti-btns { display: flex; gap: .25rem; }
+.bti-btn { font-size: .65rem; padding: .05rem .35rem; color: var(--mute); }

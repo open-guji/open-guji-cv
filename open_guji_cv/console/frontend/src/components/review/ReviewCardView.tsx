@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { withWorkspace } from '../../api/client'
+import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import { needsReading } from '../../domain'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
 import type { KeyItem } from './candidates'
@@ -30,8 +30,6 @@ export function ReviewCardView({
   const v = verdict || { shape: '', reading: '', done: '' }
   // shape/reading 的唯一改动入口都在本组件内（候选点击、输入框、标记按钮），
   // 所以本地 state 与 verdict 不会失步；不用受控于 prop。
-  // 缺省二值：库里最终存的就是二值，审阅该看同一个形（用户 2026-09-16）
-  const [binView, setBinView] = useState(true)
   const [shapeInput, setShapeInput] = useState(v.shape || '')
   const [readingInput, setReadingInput] = useState(v.reading || '')
 
@@ -66,23 +64,12 @@ export function ReviewCardView({
         </label>
       </div>
       <div className="rvbody">
-        <div className="rvimgcol">
-          {/* `<img src>` 发不出自定义请求头，工作区只能走查询串——不带就是 500
-              （服务端按默认工作区找不到这本书的 cache）。见 api/client.withWorkspace。
-              **缺省看二值图**（用户 2026-09-16）：进字形库的一定是二值的，
-              审阅时看到的就该是库里那个形，灰度会干扰判断。`?src=bin` 从整页二值
-              副本上按同一 bbox 重裁；副本没生成时服务端自动退回灰度。 */}
-          <img src={withWorkspace(c.patch + (binView ? '?src=bin' : ''))}
-               alt={c.id} loading="lazy" />
-          <div className="rvimgbtns">
-            <button className="rvctxbtn" onClick={(e) => { e.stopPropagation(); setBinView(!binView) }}
-                    title="二值 = 进库那张（Sauvola 整页二值副本）；灰度 = 扫描原样">
-              {binView ? '看灰度' : '看二值'}
-            </button>
-            <button className="rvctxbtn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
+        <BinaryToggleImage
+          src={c.patch} alt={c.id}
+          extra={
+            <button className="bti-btn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
                     title="切分/缩框前的列图原样，上下各带 2 格">看原图</button>
-          </div>
-        </div>
+          } />
         <div className="rvev">
           <div><span className="k">整理本</span> {c.ref?.char
             ? <><b>{c.ref.char}</b><span className="rvp">{c.ref.op}{c.ref.form ? ` · 惯刻 ${c.ref.form}` : ''}</span></>
