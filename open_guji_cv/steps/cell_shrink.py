@@ -216,15 +216,31 @@ class CellShrinkStep(Step):
                 if patch is not None and getattr(patch, "size", 0) > 0 and inst.cell_type == "char":
                     ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
+                flags = list(inst.flags)
+                s3_kind = step3_kind.get(pos, "char")
+                # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
+                # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——
+                # 无论是列端渣格闸误杀（tail_junk）、`patch.size == 0`
+                # 的极端情况，还是以后任何新引入的路径——下游（Step5-c
+                # OCR、glyph_match、人裁审查页）一律按 pos 遍历 char_index，
+                # patch_key=None 会被默默跳过，字就凭空消失在产物里、
+                # 不报错也不留痕（旧行为——本卡起点的那 63 个丢字就是
+                # 这样被发现的）。这里补一个确定性 flag：只要满足
+                # 「Step3 说有字」+「Step4 没给出可用图块」，就打
+                # `lost_patch`，下游/人审能靠这个 flag 筛出「Step4 认为
+                # 这里没有可交付的图块，但 Step3 认为这里应该有字」的
+                # 格位，而不是永远无声无息。
+                if patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags:
+                    flags.append("lost_patch")
                 recs.append(CharRec(
                     id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
                     slot=slot, pos=pos, idx=int(inst.idx), sub=inst.sub,
-                    cell_type=inst.cell_type, step3_kind=step3_kind.get(pos, "char"),
+                    cell_type=inst.cell_type, step3_kind=s3_kind,
                     bbox_col=bbox,
                     bbox_page=(None if mapper is None else
                                tuple(round(v, 2) for v in mapper.bbox_tr(*bbox))),
                     ink_ratio=float(inst.ink_ratio), height=float(bbox[3] - bbox[1]), width=float(bbox[2] - bbox[0]),
-                    flags=list(inst.flags), patch_key=patch_key,
+                    flags=flags, patch_key=patch_key,
                     cand_variants=cand_variants,
                 ))
             out.append(ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs))
