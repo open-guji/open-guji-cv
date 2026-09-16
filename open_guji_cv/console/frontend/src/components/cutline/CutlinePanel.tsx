@@ -21,7 +21,7 @@ const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄�
 export function CutlinePanel({ book }: { book: string }) {
   const [pages, setPages] = usePersistedPages('cutline', book, 'body')
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
-  const [limit, setLimit] = useState(250)
+  const [limit, setLimit] = useState(30)          // 一屏能裁完的量；大批量再手改（2026-09-15 用户定）
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cases, setCases] = useState<CutlineCase[]>([])
@@ -44,7 +44,7 @@ export function CutlinePanel({ book }: { book: string }) {
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages || 'body', limit || 250, b, onlyTodo, kind)
+      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind)
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
@@ -303,7 +303,7 @@ export function CutlinePanel({ book }: { book: string }) {
             <option value="all">两者</option>
           </select>
         </label>
-        <label className="muted">条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 250)} size={4} /></label>
+        <label className="muted">条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} /></label>
         <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册自动命名" /></label>
         <label className="muted" title="勾上：落定后的卡立刻收起；取消：已裁的卡按判定配色显示，可按 U 重做"><input type="checkbox" checked={onlyTodo} onChange={(e) => {
           // 2026-09-14 用户「标错了一张，卡不见了，这个按钮是不是失效了」：
