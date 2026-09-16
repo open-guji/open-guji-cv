@@ -100,6 +100,11 @@ def main() -> None:
     ap.add_argument("--name", required=True, help="模型名，落 models/font_cnn_<name>/")
     ap.add_argument("--charset", default="gbk", help="gbk | 文件路径（一行一字或连写）")
     ap.add_argument("--degrade", default="print", choices=("print", "keben"))
+    ap.add_argument("--norm-stroke", type=int, default=0,
+                    help="训练图骨架化再细化到 N px。**默认 0（不做）**——实测开了更差："
+                         "字体渲染 3.8px vs 扫描 5.1px 的笔宽差确实存在，但把训练图细化"
+                         "会连同字面比例一起改，而字面比例是真判据（见上面渲染那段的表）。"
+                         "Step5-a 的 norm_stroke=3 是**两边都细化后逐对比**，与这里不是一回事")
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--bs", type=int, default=256)
     ap.add_argument("--lr", type=float, default=2e-3)
@@ -133,7 +138,24 @@ def main() -> None:
         chars = sorted({c for c in txt if "\u3400" <= c <= "\u9fff"})
     print(f"字表 {len(chars)}（{a.charset}）")
 
-    # ── 渲染：一套字体，每类一张 ──
+    # ── 渲染：一套字体，每类一张。**原样用，不要再过 `normalize_patch`** ──
+    #
+    # 直觉会说「训练和推理的预处理要一致」——推理时真实字块过 `normalize_patch`，
+    # 那训练图也该过。**试过，更差**（2026-09-15/16 三轮 A/B，2,995 个真实字块）：
+    #
+    # | 训练图 | 推理 normalize | 推理 normalize+stroke3 |
+    # |---|---|---|
+    # | 原样 render（本版）| **top-1 0.913 / top-10 0.993** | 0.846 / 0.966 |
+    # | 过 normalize+stroke3 | 0.882 / 0.951 | 0.878 / 0.951 |
+    #
+    # 原因：`normalize_patch` 做**受限各向异性拉伸（±20%）**，把墨框撑满内容区。
+    # 对真实字块这是去抖动（切分 bbox 有噪声，该抹平）；但对**字体渲染图**，
+    # 字面比例是**真判据**——口 0.89 / 日 0.72 / 目 0.65 / 田 0.90 / 甲 0.84，
+    # 归一后全被压到 0.90~1.00。训练图自己先把判据丢了，网络无从学起。
+    #
+    # 换句话说：训练图要**保留字体的真实形态**，让网络去学「这个字长什么样」；
+    # 推理侧的归一化是在对齐**这一次切分**的抖动，两者目的不同，不该强行一致。
+    # 笔宽归一（`--norm-stroke`）同理，默认关。
     t0 = time.time()
     imgs: dict[str, np.ndarray] = {}
     for ch in chars:
@@ -191,6 +213,8 @@ def main() -> None:
             if g is None:
                 continue
             from open_guji_cv.clustering.normalize import normalize_patch
+            # 验证侧走**推理的现行口径**（`normalize_patch` 不带 stroke_width），
+            # 这才是上线时字块的样子
             val_x.append(normalize_patch(g).astype(np.uint8))
             val_y.append(cidx[ch]); seen[ch] += 1
         val_kind = f"真实字块（{a.val_name}，{len(set(val_y))} 个字头）"
@@ -202,7 +226,6 @@ def main() -> None:
     Yva = torch.tensor(np.array(val_y), device=dev)
     print(f"验证 {len(val_y)} 张 —— {val_kind}")
 
-    # `render_char` 出来就是 64×64 {0,1}，不要再过 `normalize_patch`（那个吃灰度图）
 
     class Block(nn.Module):
         def __init__(self, cin, cout, stride):
@@ -284,11 +307,12 @@ def main() -> None:
         if a1 > best:
             best = a1
             torch.save({"state": net.state_dict(), "classes": classes, "comps": comps,
-                        "font": a.font, "charset": a.charset, "degrade": a.degrade},
+                        "font": a.font, "charset": a.charset, "degrade": a.degrade,
+                        "norm_stroke": a.norm_stroke},
                        out / "best.pt")
             (out / "meta.json").write_text(json.dumps(
                 {"name": a.name, "font": a.font, "charset": a.charset, "n_classes": len(classes),
-                 "degrade": a.degrade, "val_top1": a1, "val_top10": a10,
+                 "degrade": a.degrade, "norm_stroke": a.norm_stroke, "val_top1": a1, "val_top10": a10,
                  "epochs": a.epochs, "seed": a.seed}, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"最好 val top1 {best:.4f} → {out}/best.pt")
 
