@@ -26,6 +26,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   book: string; pages: string; onSubmitted: () => void; reloadSignal?: number
 }) {
   const [only, setOnly] = useState<'review' | 'auto' | 'all'>('review')
+  // 一屏能裁完的量（与 Step3 切分裁决同一个口径与缺省值，用户 2026-09-16）：
+  // 一次拉 400 张人看不过来，滚到后面也累得裁不准了。大批量再手改。
+  const [limit, setLimit] = useState(30)
   const [batchInput, setBatchInput] = useState('')
   const [todoOnly, setTodoOnly] = useState(false)
   const [gate, setGate] = useState(true)
@@ -56,7 +59,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   async function load(scrollOnLoad = true) {
     setMsg('载入中…')
     const b = batch()
-    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate)
+    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30)
     let done: Record<string, Verdict> = {}
     try {
       done = (await fetchReviewVerdicts(b)).verdicts || {}
@@ -286,6 +289,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
             <option value="auto">抽查自动档</option>
             <option value="all">全部</option>
           </select>
+        </label>
+        <label className="muted" title="一次载入多少张卡。缺省 30 = 一屏能裁完的量；调大再按「重新载入」。">
+          条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} />
         </label>
         <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册页自动命名" /></label>
         <label className="muted"><input type="checkbox" checked={todoOnly} onChange={(e) => { setTodoOnly(e.target.checked); snapshot.current = null; filterMsg(cards) }} /> 只看未裁决</label>

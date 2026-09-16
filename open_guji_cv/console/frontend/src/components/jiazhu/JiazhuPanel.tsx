@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { fetchJiazhuSegments } from '../../api/jiazhu'
 import { postEvents } from '../../api/events'
 import { needsReading, consumedMsg } from '../../domain'
@@ -183,7 +184,7 @@ export function JiazhuPanel({ book }: { book: string }) {
                   : <span className="badge b-pending">与整理本有出入</span>}
               </div>
               <div className="jzbody">
-                <img className="jzstrip" src={s.img} alt="列条" loading="lazy" />
+                <img className="jzstrip" src={withWorkspace(s.img)} alt="列条" loading="lazy" />
                 <div className="jztext">
                   <div className="jzline">
                     <span className="jzlab">转写</span>
@@ -195,7 +196,7 @@ export function JiazhuPanel({ book }: { book: string }) {
                       return (
                         <span key={c.id} className={`jzcell ${cls}`} title={`${c.id} · ${c.channel || '待审'}`}
                               onClick={() => editCell(i, j)}>
-                          <img src={c.patch} alt="" loading="lazy" /><b>{shown}</b>{ref}
+                          <img src={withWorkspace(c.patch)} alt="" loading="lazy" /><b>{shown}</b>{ref}
                         </span>
                       )
                     })}

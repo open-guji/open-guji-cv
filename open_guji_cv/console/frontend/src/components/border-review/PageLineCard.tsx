@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import type { PageLineCard as Card } from '../../types/borderPageLine'
 
 export interface LineState {
@@ -68,7 +69,7 @@ export function PageLineCard({ idx, c, st, isCurrent, onFocus, onSetLine, onDeci
       <h3>{c.book}/{c.page}</h3>
       <div className="plimg"
            onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={endDrag}>
-        <img src={c.img} alt="" loading="lazy"
+        <img src={withWorkspace(c.img)} alt="" loading="lazy"
              onLoad={(ev) => {
                const img = ev.currentTarget
                setNaturalW(img.naturalWidth)
