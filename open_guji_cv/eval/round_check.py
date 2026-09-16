@@ -440,7 +440,7 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
             "cnn": cnn.available, "note": "" if cnn.available else "无 CNN checkpoint，纯 HOG"}
 
 
-def next_batch(book: str, n: int = 12, store=None) -> dict:
+def next_batch(book: str, n: int = 12, store=None, root=None) -> dict:
     """下一批页码：正文页里没跑过 seed_admit 的，顺序取 n 个。
 
     ⚠️ 不能按页号顺推——vol01 的 p89-113 是职名页、p61/159-182 是目录页，
@@ -452,7 +452,11 @@ def next_batch(book: str, n: int = 12, store=None) -> dict:
     from ..products import kinds as _k  # noqa: F401
     from ..products.store import ProductStore
 
-    f = DATASET / "page-type" / "items.jsonl"
+    # `root or DATASET`：与本模块其余读金标的函数（criterion_a / rare 那几个）
+    # 保持一致。原先只认模块级 `DATASET`——它在 import 时就定死，测试把
+    # `GUJI_DATASET_DIR` 指到沙箱、或调用方显式传 root 时都绕不过去
+    # （2026-09-15 核对路由快照漂移时发现）。
+    f = (root or DATASET) / "page-type" / "items.jsonl"
     if not f.exists():
         return {"error": "没有 page-type 金标，无法判断正文页"}
     rows = [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()]
