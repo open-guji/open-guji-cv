@@ -104,6 +104,9 @@ class GlyphMatchStep(Step):
         params=GlyphMatchParams,
         code_deps=("open_guji_cv.clustering.match", "open_guji_cv.clustering.verify",
                    "open_guji_cv.clustering.normalize", "open_guji_cv.clustering.features"),
+        # `norm_stroke` 来自册配置且直接改归一结果——不进指纹的话改了 yaml
+        # 产物还报「新鲜」（与 leaf_layout 当初同一个坑）
+        book_deps=("norm_stroke",),
     )
 
     def _matcher(self, p: GlyphMatchParams):
@@ -123,6 +126,12 @@ class GlyphMatchStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.normalize import normalize_patch as _normalize_patch
         p: GlyphMatchParams = ctx.params_for(self)  # type: ignore[assignment]
+        # 笔宽归一是**册级**属性（取决于这本书的笔宽 vs 字体模板笔宽），
+        # 参数没显式给就用册配置的 `BookSpec.norm_stroke`。必须与播种
+        # （`seed-witness --norm-stroke`）同值，否则库被一把尺子筛、又被另一把
+        # 尺子查，等于白播。
+        if p.norm_stroke is None and getattr(ctx.book, "norm_stroke", None):
+            p = p.model_copy(update={"norm_stroke": int(ctx.book.norm_stroke)})
         if p.edition is None and getattr(ctx.book, "edition", "keben") == "modern":
             # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
             p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})

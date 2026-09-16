@@ -454,6 +454,11 @@ def cmd_seed_witness(args) -> None:
     from .utils.seed_witness import seed_from_witness
 
     book = load_book(args.book)
+    # 不显式传就用册配置的（与 Step5-a 读同一个字段）——两边必须同一把尺子，
+    # 否则库被一把尺子筛、又被另一把尺子查，等于白播。
+    if args.norm_stroke is None and getattr(book, "norm_stroke", None):
+        args.norm_stroke = int(book.norm_stroke)
+        print(f"[seed] --norm-stroke 取册配置 {args.norm_stroke}")
     labels_path = Path(args.labels) if args.labels else products_root() / book.id / "witness_align" / "labels.jsonl"
     db = GlyphDB(glyph_db_path())
     try:
