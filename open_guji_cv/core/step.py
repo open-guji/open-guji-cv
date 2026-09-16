@@ -114,6 +114,18 @@ class RunContext:
 
     # 原图（灰度 uint8）。同一页只读一次。
     def raw_page(self, page: int) -> np.ndarray:
+        """读序空间的「原图」。
+
+        **横排书在这里顺时针旋转 90°**（三模式方案 §三）：转完之后原图第一行
+        变成最右列、行内第一个字变成最上格，恰好落进竖排的规范空间
+        `raw_page_px@top-right`，于是 Step1–4 那几百行按「列竖直」写的几何代码
+        一行不用改。管线其余部分看到的永远是「竖排」。
+
+        代价记在这里，别让后人找：**产物坐标从此是读序空间，不是原图坐标**。
+        面向人的三处（控制台叠图、金标锚点、Step9 导出）要转回去，走
+        `core/anchor.py` 的 `to_original()`；那部分尚未实现，所以横排书现在
+        跑得了算法、叠图看着是横躺的。
+        """
         if page not in self._raw:
             path = self._page_path(page)
             img = imread(str(path), 0) if path.exists() else None
@@ -122,6 +134,8 @@ class RunContext:
             if img.ndim == 3:
                 import cv2
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
+                img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
             self._raw[page] = img
         return self._raw[page]
 
