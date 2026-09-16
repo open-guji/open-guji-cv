@@ -64,14 +64,32 @@ def font_codepoints(path: str | Path) -> set[int]:
     return cps
 
 
+#: 竖排时**整字旋转 90°** 的标点（`vertical-rl`）。这些符号在竖排版面里是横放的：
+#: 北行日錄实测书上的 `「` 是 84×33 的扁框，字体原样渲染出来近方形，两者 cov 只有
+#: 0.12；字体顺时针转 90° 后 0.9998（书上同符号自比也是 0.9998）。不转的后果：播种时
+#: 字体 top-1 把每个 `「` 判成 `一`、`」` 判成 `—`，两套字体一致地反 → 全书 170 个引号
+#: 一个都没进库 → Step5-a 只能给出候选 `一`，Step9 文本里引号全变成「一」。
+#: **逗号句号顿号不在此列**（实测转了反而从 0.97 掉到 0.24）——它们在竖排里只是挪位置、
+#: 不转向。中文标点的竖排形态本就分这两类，别一刀切。
+VERTICAL_ROTATED_PUNCT = frozenset("「」『』（）《》〈〉【】〔〕｛｝")
+
+
 class FontRenderer:
     """單套字體（可多檔）的字形渲染器，緩存 PIL font 與 cmap。"""
 
     def __init__(self, font_paths: list[Path], target: int = RENDER_TARGET,
-                 canvas: int = RENDER_CANVAS):
+                 canvas: int = RENDER_CANVAS, stroke_width: int = 0,
+                 vertical: bool = False):
+        """``stroke_width``：渲染时给每笔描边加粗（PIL ``stroke_width``，单侧像素，画布尺度
+        canvas=384、字面 190px）。默认 0 = 原样。2026-09-15 加：现代排印本的扫描件（1-bit、
+        墨扩）笔画比字体渲染粗一截——北行日錄归一到 64px 后书 5.5px、方正/Noto 渲染 2.7px，
+        不加粗时匹配分数主要在量粗细差，字体排名与笔宽严格同序。"""
         from PIL import ImageFont
         self.canvas = canvas
         self.target = target
+        self.stroke_width = int(stroke_width)
+        #: 竖排：`VERTICAL_ROTATED_PUNCT` 里的符号渲染后顺时针转 90°（见该常量的说明）。
+        self.vertical = bool(vertical)
         self._fonts = []
         for p in font_paths:
             # size 給字面高的 1.15 倍：字體 em 框含上下留白，實際墨高
@@ -96,10 +114,16 @@ class FontRenderer:
         bbox = draw.textbbox((0, 0), char, font=font)
         x = (self.canvas - (bbox[2] - bbox[0])) // 2 - bbox[0]
         y = (self.canvas - (bbox[3] - bbox[1])) // 2 - bbox[1]
-        draw.text((x, y), char, fill=0, font=font)
+        if self.stroke_width > 0:
+            draw.text((x, y), char, fill=0, font=font,
+                      stroke_width=self.stroke_width, stroke_fill=0)
+        else:
+            draw.text((x, y), char, fill=0, font=font)
         arr = np.asarray(img, dtype=np.uint8)
         if int((arr < 128).sum()) < MIN_INK_PIXELS:
             return None                      # 字體聲稱有、實際渲染為空
+        if self.vertical and char in VERTICAL_ROTATED_PUNCT:
+            arr = np.rot90(arr, 3).copy()    # 顺时针 90°：竖排里括号类标点是横放的
         # 字體本就乾淨，關掉為刻本切分寫的邊緣殘渣啟發式
         return to_canonical(arr, clean=False)
 
@@ -107,8 +131,8 @@ class FontRenderer:
 _WORKER: dict = {}
 
 
-def _worker_init(font_paths: list[str]) -> None:
-    _WORKER["r"] = FontRenderer([Path(p) for p in font_paths])
+def _worker_init(font_paths: list[str], vertical: bool = False) -> None:
+    _WORKER["r"] = FontRenderer([Path(p) for p in font_paths], vertical=vertical)
 
 
 def _worker_render(char: str):
@@ -116,20 +140,24 @@ def _worker_render(char: str):
     canon = _WORKER["r"].render(char)
     if canon is None:
         return None
-    norm = normalize_patch(canon)
+    norm = normalize_patch(canon, strip_lines=False)    # 字体没有版框，细横不是界行
     if not norm.any():
         return None
     return (char, encode_png(canon), float((canon < 128).mean()), norm)
 
 
 def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
-                progress_every: int = 0, jobs: int = 1) -> dict:
+                progress_every: int = 0, jobs: int = 1,
+                vertical: bool = False) -> dict:
     """按字表渲染一套字體並入庫（冪等：重跑覆寫同 instance_id）。
 
     每字一個實例、一個 glyph、一個 exemplar（role='render'）。
     glyph.status 一律 'sparse'——字體每字僅一形，下游據此降權。
+
+    `vertical=True`：括号类标点渲染后转 90°（见 `VERTICAL_ROTATED_PUNCT`）。
+    竖排本的字体模板必须这样建，否则 `「」《》` 在库里是竖放的、跟书上对不上。
     """
-    renderer = FontRenderer([Path(p) for p in spec.font_paths])
+    renderer = FontRenderer([Path(p) for p in spec.font_paths], vertical=vertical)
     t0 = time.time()
     cur = db.conn.cursor()
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -151,7 +179,7 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
     if jobs > 1:
         import multiprocessing as mp
         pool = mp.Pool(jobs, initializer=_worker_init,
-                       initargs=([str(p) for p in spec.font_paths],))
+                       initargs=([str(x) for x in spec.font_paths], vertical))
         produced = pool.imap(_worker_render, chars, chunksize=64)
     else:
         pool = None
@@ -209,7 +237,7 @@ def _worker_render_serial(renderer, char):
     canon = renderer.render(char)
     if canon is None:
         return None
-    norm = normalize_patch(canon)
+    norm = normalize_patch(canon, strip_lines=False)
     if not norm.any():
         return None
     return (char, encode_png(canon), float((canon < 128).mean()), norm)
@@ -271,6 +299,7 @@ def load_manifest(path: str | Path) -> tuple[list[FontSpec], dict]:
 
 
 def import_fonts_from_manifest(db, manifest_path: str | Path,
+                               vertical: bool = False,
                                only: str | None = None,
                                charset: str | Path | None = None,
                                limit: int | None = None,
@@ -294,7 +323,7 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
                             "hint": "该字体未随仓库提交，需自行下载到 "
                                     "$GUJI_FONT_DIR（见 fonts/README.md）"})
             continue
-        results.append(import_font(db, spec, chars,
+        results.append(import_font(db, spec, chars, vertical=vertical,
                                    progress_every=progress_every, jobs=jobs))
     return {"charset_size": len(chars), "imported": results,
             "skipped": skipped}

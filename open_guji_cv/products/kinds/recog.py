@@ -1,0 +1,262 @@
+"""Step5 识别层的产物：`glyph_match`（库匹配）与 `ocr_candidates`（OCR 候选）。
+
+两者都是 **numeric**：逐字位存判决与候选，图块本身仍在 `char_patch` 缓存里。
+归一图（64×64 {0,1}）不单独立产物——它是 `normalize_patch` 的确定性输出，
+现算只要几毫秒，存了反而多一份要失效的东西（设计 §3.8「数值长期、图像即算」）。
+
+## 为什么 `glyph_match` 的指纹要带库指纹
+
+`GlyphMatcher` 查的是 `output/glyph.db`，那是**外部可变状态**：库长大了、
+某个条目改判了，同一张图块的判决就会变，而 Step 的代码、参数、上游产物
+一个都没动。指纹里不带它，产物就永远显示 fresh、拿着过期判决往下走。
+所以 `GlyphMatchStep` 把库的 `(mtime, size, 条目数)` 摘进参数，见那一步的
+`db_fingerprint()`。
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from ...core.spec import COLUMN_PX, ProductKindSpec
+from ...core.step import register_kind
+
+
+class CandidateMatch(BaseModel):
+    """`CharRec.cand_variants` 里某一个候选试切字块的库匹配结果（Step5-a）。
+
+    字段是 `MatchRec` 的精简版——只取候选选择用得上的几项，不重复
+    `matched_id`/`guard`/`n_verified` 这类审计细节（真要看，落定后
+    `chosen` 那条自然会走一遍完整 `MatchRec`）。`(side, cand_idx)` 与
+    `CharRec.cand_variants` 对应元素相同的一对才是同一候选——`cand_idx`
+    单独不唯一，见 `CandidatePatch` 的说明。
+    """
+    side: str                                # above | below，见 CandidatePatch
+    cand_idx: int
+    verdict: str                             # same | unsure | diff
+    char: str | None = None
+    cov: float = 0.0
+    wmax: float = 0.0
+    candidates: list[tuple[str, float]] = Field(default_factory=list)
+    """unsure 档没有单一 `char` 时的候选池（字 → cov，降序，最多几个见
+    `GlyphMatchParams.max_candidates`）。Step7「切分裁决」板块靠它才不用
+    在 `char is None` 时只能显示一个问号——见该模块头 2026-09-11 补记。"""
+
+
+class MatchRec(BaseModel):
+    """一个字位对库的匹配判决（沿用 `clustering.match.MatchResult` 的语义）。"""
+    id: str                                  # book:page:col:slot[a|b]
+    slot: int
+    sub: str | None = None
+    verdict: str                             # same | unsure | diff
+    char: str | None = None                  # same 档继承的 surface char
+    matched_id: str | None = None            # same 档命中的库条目
+    cov: float = 0.0
+    wmax: float = 0.0
+    candidates: list[tuple[str, float]] = Field(default_factory=list)
+    #                                        # unsure 档：字 → cov 先验，降序
+    guard: str | None = None                 # never_match | conflict
+    n_verified: int = 0
+    cand_variants: list[CandidateMatch] = Field(default_factory=list)
+    """`char_index` 里同字位 `CharRec.cand_variants` 每个候选试切字块各自的
+    库匹配结果；空列表 = 该字位两侧都是单一候选，见 `CharRec.cand_variants`
+    的说明。用于 Step7「切分裁决」板块给人看「选这个切法，库认得出来吗」。"""
+
+
+class ColumnMatch(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[MatchRec] = Field(default_factory=list)
+
+
+class PageMatch(BaseModel):
+    page: int
+    db_fingerprint: str = ""                 # 判决是对**哪个库**做的，见模块头
+    columns: list[ColumnMatch] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnMatch | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+class OcrRec(BaseModel):
+    id: str
+    slot: int
+    sub: str | None = None
+    topk: list[tuple[str, float]] = Field(default_factory=list)
+    #                                        # (字, prob)，已含简→繁扩展
+    engine: str = ""
+
+
+class ColumnOcr(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[OcrRec] = Field(default_factory=list)
+
+
+class PageOcr(BaseModel):
+    page: int
+    engine: str = ""
+    columns: list[ColumnOcr] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnOcr | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+class RareCand(BaseModel):
+    """一个候选字 + 打分（`clustering.rare_panel.rare_for` 的原样输出，字段照抄
+    ——释义/IDS/频次等修饰留给调用方按需现算，产物只存候选本身与融合分）。"""
+    char: str
+    score: float = 0.0
+    font: str = ""          # 命中来源：某字体文件名 | "cnn"
+
+
+class RareRec(BaseModel):
+    id: str
+    slot: int
+    sub: str | None = None
+    candidates: list[RareCand] = Field(default_factory=list)
+
+
+class ColumnRare(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[RareRec] = Field(default_factory=list)
+
+
+class PageRare(BaseModel):
+    page: int
+    model_fingerprint: str = ""      # checkpoint + 模板集指纹，见 steps.rare_candidates
+    columns: list[ColumnRare] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnRare | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+class DecisionRec(BaseModel):
+    """一个字位的最终定字 + 证据（Step6）。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    char: str | None = None                  # None = 弃权，落回人审
+    margin: float = 0.0
+    source: str = ""                         # db_same | context | prior | none
+    used_context: bool = False
+    ranked: list[tuple[str, float]] = Field(default_factory=list)
+    llm_suggestion: str | None = None
+    """线上外部大模型给的候选内答案（未过门槛时才会问，见 context_decide
+    模块头【2026-09-10】）。只调 `ranked` 顺序，不参与 `char`/`source`——
+    是否采信仍由人审决定，这个字段只是给审阅界面一个「模型觉得是这个」
+    的提示。None＝没问过，或问了但答案不在候选内／解析失败。"""
+
+
+class ColumnDecision(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[DecisionRec] = Field(default_factory=list)
+
+
+class PageDecision(BaseModel):
+    page: int
+    strategy: str = ""
+    corpus_fingerprint: str = ""             # 裁决是用**哪份语料**做的，见 context_decide
+    columns: list[ColumnDecision] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnDecision | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+class AdmitRec(BaseModel):
+    """一个字位的进库裁决 + 证据（C1）。进库本身走 Event → glyphdb_admit。"""
+    id: str
+    slot: int
+    sub: str | None = None
+    admit: bool = False
+    channel: str | None = None          # match_solo | match_solo_ocr | context | ...
+    char: str | None = None             # 拟进库的字（字形层，照录图上的形）
+    reading: str | None = None
+    """文意读法（语义层）。与 `char` 不同就是一次**字形→文意的转换**。
+
+    刻本刻「㫖」而整理本作「旨」、刻「彚」而整理本作「彙」——字形库存前者，
+    文本录入用后者，两条线不许互相污染（charset_and_lm.md §四）。整理本参与
+    的通道（dual / match_replace / match_ref_weak / match_margin）会填这一栏，
+    `char` 仍照录图上的形。None = 与 `char` 相同。
+    """
+    provenance: str = ""                # match | align | context —— 设计 §3.2 分级
+    doubts: list[str] = Field(default_factory=list)
+    evidence: dict = Field(default_factory=dict)
+
+
+class ColumnAdmit(BaseModel):
+    col: int
+    ok: bool = True
+    error: str | None = None
+    chars: list[AdmitRec] = Field(default_factory=list)
+
+
+class PageAdmit(BaseModel):
+    page: int
+    n_auto: int = 0
+    n_review: int = 0
+    n_excluded: int = 0        # 命中排除名单（图块切坏/非字）：不进库也不出审查卡
+    columns: list[ColumnAdmit] = Field(default_factory=list)
+
+    def column(self, col: int) -> ColumnAdmit | None:
+        return next((c for c in self.columns if c.col == col), None)
+
+
+class AlignRec(BaseModel):
+    """一个字位的整理本对齐结果（Step5-d，四路证据里的文本那一路）。
+
+    `align_char` 是过闸对齐后语料在这一位给出的字（原 `gold.v2_align.GoldChar.reading`
+    的来源），`align_op`/`ref_run` 是对齐段的性质与长度——分层读，`replace` 段
+    比 `equal` 段可疑。只收过采信闸的位（同 `clustering.align_label.label_page`
+    的闸：`equal` 全收，等长 `replace` 段长 ≤3 且被 `equal` 夹住），插入/删除/
+    不过闸的位不出现在这里。
+    """
+    id: str                                  # book:page:col:slot[a|b]
+    col: int
+    slot: int
+    sub: str | None = None
+    align_char: str
+    align_op: str                            # equal | replace
+    ref_run: int = 1
+
+
+class PageAlignRef(BaseModel):
+    page: int
+    anchored: bool = False
+    corpus_fingerprint: str = ""             # 对齐是用哪份整理本做的，见 align_ref 模块头
+    note: str = ""                           # 未锚定时的原因（人读一句话）
+    n_grams: int = 0                         # 锚定失败时的判据明细，见 align_eval.AnchorDiag
+    n_votes: int = 0                         # ——四个都是 0 表示锚定在 8-gram 投票之前就
+    vote_frac: float = 0.0                   #   已经放弃（候选太少/没有产物/语料读不到），
+    dominance: float | None = None           #   不是投票判据本身没过线
+    chars: list[AlignRec] = Field(default_factory=list)
+
+
+GLYPH_MATCH = register_kind(ProductKindSpec(
+    id="glyph_match", title="Step5-a 库匹配判决", storage="numeric", unit="cell",
+    schema=PageMatch, coord_space=COLUMN_PX))
+
+OCR_CANDIDATES = register_kind(ProductKindSpec(
+    id="ocr_candidates", title="Step5-c OCR 候选", storage="numeric", unit="cell",
+    schema=PageOcr, coord_space=COLUMN_PX))
+
+RARE_CANDIDATES = register_kind(ProductKindSpec(
+    id="rare_candidates", title="Step5-b 生僻字候选", storage="numeric", unit="cell",
+    schema=PageRare, coord_space=COLUMN_PX))
+
+CONTEXT_DECISION = register_kind(ProductKindSpec(
+    id="context_decision", title="Step6 上下文定字", storage="numeric", unit="cell",
+    schema=PageDecision, coord_space=COLUMN_PX))
+
+SEED_ADMIT = register_kind(ProductKindSpec(
+    id="seed_admit", title="C1 进库准入裁决", storage="numeric", unit="cell",
+    schema=PageAdmit, coord_space=COLUMN_PX))
+
+ALIGN_REF = register_kind(ProductKindSpec(
+    id="align_ref", title="Step5-d 整理本对齐", storage="numeric", unit="cell",
+    schema=PageAlignRef, coord_space=COLUMN_PX))

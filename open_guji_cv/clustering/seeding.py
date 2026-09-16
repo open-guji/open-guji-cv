@@ -41,7 +41,7 @@ from .align_label import (carrier_slots, clean_labels, is_han, label_book,
                           page_reference)
 from .crop_quality import assess_crop, detect_intrusion
 from .extractor import CharInstance, load_index
-from .glyph_db import GlyphDB, _unpng
+from .glyph_db import CONFUSABLE_CHARS, CONFUSABLE_GROUPS, GlyphDB, _unpng
 from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
 from .context_step import build_strategy
@@ -65,19 +65,22 @@ DEFAULT_PROB_THRESHOLD = 0.85
 # 形近否决家族的全部成员（near_form 疑问用；单一事实源在 match.py）
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 
-# 「同词异写」而非「认错字」的形近对（用户 2026-08-26 定；考据见
-# charset_and_lm.md §四）。已/巳 历史上就是同一个词的两种写法（段玉裁：
-# 巳久已用为「已然」之已），config/variants/variants.json 里
-# 已→巳 登记为 hydzd/yitizi 异体关系——字形层拦得对（近形护栏防的是
-# **形状判据**自己会错认），但**上下文/语言模型的文意判断**不该被同一
-# 道闸挡下：这道题字形本就不重要，文意才是唯一相关的证据。
+# 「同词异写」而非「认错字」的易混字组（考据见 charset_and_lm.md §四）。
+# 已/巳 历史上就是同一个词的两种写法（段玉裁：巳久已用为「已然」之已），
+# config/variants/variants.json 里已→巳 登记为 hydzd/yitizi 异体关系；
+# 己 与已/巳 长得像，此前的考据认为它是「真的另一个字」（自己 vs 已经/
+# 地支，vol01:21:3:19 曾实锤把己错认成巳/已），2026-08-26～09-06 因此
+# 一直把己排除在外、单独按「永远人审」处理。
 #
-# 严格窄集，不等于 NEAR_FORM_CHARS：己 长得像已/巳但是**真的另一个字**
-# （自己 vs 已经/地支），vol01:21:3:19 实锤过把己错认成巳/已——己不进
-# 这张表，上下文通道对它照样要拦，仍然人审。
-SEMANTIC_MERGED_PAIRS: frozenset[tuple[str, str]] = frozenset({("已", "巳")})
-SEMANTIC_MERGED_CHARS = frozenset(
-    c for pair in SEMANTIC_MERGED_PAIRS for c in pair)
+# 用户 2026-09-11 改口：**推翻**上面这条区分——这一套刻本里己/已/巳
+# 三字实际就是混用，字形层拦得对（近形护栏防的是**形状判据**自己会
+# 错认），但**上下文/语言模型的文意判断**不该被同一道闸挡下：这道题
+# 字形本就不重要，文意才是唯一相关的证据。三字统一进易混字组。
+#
+# 组本身定义在 glyph_db.py（更底层，字形库的样本封顶策略也要用它，
+# 而 glyph_db 不能反过来依赖本模块）——`CONFUSABLE_GROUPS` 是「易混字组」
+# 的元组，结构不限两两一对，将来加「日/曰」之类新组直接在那边追加。
+SEMANTIC_MERGED_CHARS = CONFUSABLE_CHARS
 
 SEED_DIR = "phase9_seed"
 
@@ -166,27 +169,85 @@ def margins_of(rec: CharInstance) -> tuple[int, int]:
 
 
 def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
-                         knn_k: int = 10) -> tuple[GlyphMatcher, set[str]]:
+                         knn_k: int = 10, norm_stroke: int | None = None
+                         ) -> tuple[GlyphMatcher, set[str]]:
     """GlyphDB 的 exemplar（含种子准入实例）→ 内存匹配器 + 库内字集合。
 
     返回的字集合供 db_inconsistent 疑问（§3.5 条目 5）判「库里有没有
     这个字」——GlyphMatcher 不对外暴露字表，这里自己记账。
+
+    `norm_stroke`（2026-09-15 加，现代印刷链用）：不用库里存的 `derived.norm`，改从
+    canonical 图块（`instances.patch_png`）现算 `normalize_patch(stroke_width=norm_stroke)`
+    ——骨架化再统一细化到这个宽度。北行日錄（1-bit 扫描、笔画归一后 5.5px）实测：不做
+    笔宽归一时同书留一法错误命中 cov 最高 0.9996、刻本 same 闸 800 例漏进 2 个假 same；
+    细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链不传（None），行为逐位不变。
     """
     matcher = GlyphMatcher(k=knn_k)
     chars: set[str] = set()
     cur = db.conn.cursor()
-    sql = """SELECT g.char, e.instance_id, d.data
-             FROM exemplars e
-             JOIN glyphs g ON g.glyph_id = e.glyph_id
-             JOIN derived d ON d.instance_id = e.instance_id AND d.kind='norm'"""
+    if norm_stroke:
+        from .normalize import normalize_patch
+        sql = """SELECT g.char, e.instance_id, i.patch_png, g.edition_tag
+                 FROM exemplars e
+                 JOIN glyphs g ON g.glyph_id = e.glyph_id
+                 JOIN instances i ON i.instance_id = e.instance_id"""
+    else:
+        sql = """SELECT g.char, e.instance_id, d.data, g.edition_tag
+                 FROM exemplars e
+                 JOIN glyphs g ON g.glyph_id = e.glyph_id
+                 JOIN derived d ON d.instance_id = e.instance_id AND d.kind='norm'"""
     args: tuple = ()
     if edition:
         sql += " WHERE g.edition_tag = ?"
         args = (edition,)
-    for char, iid, data in cur.execute(sql, args).fetchall():
-        matcher.add(iid, char, _unpng(data))
+    for char, iid, data, ed in cur.execute(sql, args).fetchall():
+        if norm_stroke:
+            canon = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
+            if canon is None:
+                continue
+            # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）；
+            # 标点条目走等比归一（宽高比是判据，见 normalize.normalize_patch 的 isotropic）。
+            norm = normalize_patch(canon, stroke_width=norm_stroke,
+                                   strip_lines=not str(ed).startswith("font:"),
+                                   isotropic=(char in _PUNCT_CHARS))
+        else:
+            norm = _unpng(data)
+        matcher.add(iid, char, norm)
         chars.add(char)
     return matcher, chars
+
+
+_MATCHER_CACHE: dict[tuple, tuple[GlyphMatcher, set[str]]] = {}
+
+
+#: 标点集合——库里这些字头的条目用等比归一（宽高比是它们的判据）。与
+#: `utils/witness_align.PUNCT` 同一份字面量，改一处要改两处（跨模块不引，避免循环导入）。
+_PUNCT_CHARS = frozenset("，。、；：「」『』（）《》〈〉！？…—·")
+
+
+def cached_matcher_from_db(db_path: str, db_fingerprint: str,
+                           edition: str | None = None,
+                           knn_k: int = 10,
+                           norm_stroke: int | None = None) -> tuple[GlyphMatcher, set[str]]:
+    """`load_matcher_from_db` 的进程级缓存包装——按
+    `(db_path, db_fingerprint, edition, knn_k)` 做 key，库长大/改判后
+    指纹变了自动重建，同一指纹下复用同一个 matcher。
+
+    `GlyphMatchStep._matcher()`（管线批跑）与控制台 `/api/glyph-match/*`
+    单点查询路由共用这份缓存——两边都是"一次会话内几十次查询共用同一个
+    库"的场景，各自维护一份内存索引没有意义（`glyph_db_path.py` 库读入
+    内存要秒级到几十秒级，见 `steps/glyph_match.py` 模块头）。字典键含
+    `db_path` 而不是只按 fingerprint，避免不同书指向不同库路径时误命中。
+    """
+    key = (db_path, db_fingerprint, edition, knn_k, norm_stroke)
+    cached = _MATCHER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    _MATCHER_CACHE.clear()   # 只保留最近一个库状态，避免多版本无限堆积内存
+    db = GlyphDB(db_path)
+    result = load_matcher_from_db(db, edition=edition, knn_k=knn_k, norm_stroke=norm_stroke)
+    _MATCHER_CACHE[key] = result
+    return result
 
 
 # ── 疑问判定（纯函数，可单测）─────────────────────────────────────────
@@ -266,6 +327,7 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                        match_guard: str | None = None,
                        match_wmax: float = 0.0,
                        solo_cov: float = MATCH_SOLO_COV,
+                       cnn_char: str | None = None,
                        ) -> tuple[bool, str | None]:
     """进库裁决：返回 (可自动进库, 通道名 None|"match_ref"|"match_solo")。
 
@@ -399,6 +461,25 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                 and c1 not in NEAR_FORM_CHARS
                 and ocr_char not in NEAR_FORM_CHARS):
             return True, "match_solo_ocr"
+        # CNN 字形背书档（2026-09-07 加，`external_glyph_sources_experiment.md` §5.9）：
+        # 同一个灰区（形状 0.95~0.99），OCR 读不出或读错时，换 CNN embedding 检索
+        # （模板 = 字体 + 康熙字头 + 字统网真刻本）的 top1 做背书。
+        #
+        # **为什么这不违反「两路误差独立」**：CNN 与库匹配确实同输入同归一，但实测
+        # P(CNN 错 | 形状路错) 只有 8.8%（CNN 无条件错误率 3.4%），**两路错到同一个
+        # 字**只占形状路错误的 3.2% —— 相关但远非同源。更关键的是这一档**本来就没有
+        # 第二路**（OCR 缺席时只能落人审），补一路弱独立证据是净收益，不是拿它替换
+        # 已有的独立证据（dual 的 OCR 那一路一动不动）。
+        #
+        # bench seen_test 实测（2,480 位，排除 己已巳/人入/日目 等护栏字）：
+        # 灰区 1,432 位里 CNN 背书 1,408（98.3%）、**错 0**；不背书的 31 位里库本来
+        # 就错 16（51.6%）——它既放行也挡。整体放行 39.4% → 96.2%，精度 99.83%。
+        # 护栏与 OCR 档完全一致（rival95 / NEAR_FORM_CHARS 两侧都拦）。
+        if (cnn_char is not None and cov1 >= MATCH_SOLO_OCR_COV and not rival95
+                and vmap.semantic(cnn_char) == vmap.semantic(c1)
+                and c1 not in NEAR_FORM_CHARS
+                and cnn_char not in NEAR_FORM_CHARS):
+            return True, "match_solo_cnn"
     # match_margin（用户 2026-08-27 定，见 MATCH_MARGIN_THRESH 注释）：
     # 兜底通道——上面全部通道都没吃到的，最后看一眼「有没有 competitor」。
     # 不管疑问是什么组合（db_inconsistent 除外——它说的是库本身对不上，
@@ -919,9 +1000,9 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                     and vmap.semantic(surface) ==
                                     vmap.semantic(corpus_char)))
                         if surface and sem_margin >= context_margin and safe:
-                            # 字形/释读分岔（只在 SEMANTIC_MERGED_PAIRS 触发，
-                            # 用户 2026-08-26 定：字形是什么就录什么，已/巳
-                            # 这三个字才按语意改——但改的是**释读**，不能
+                            # 字形/释读分岔（只在 CONFUSABLE_GROUPS 触发，
+                            # 用户 2026-08-26 定、2026-09-11 扩到己已巳三字：
+                            # 字形是什么就录什么，这几个字才按语意改——但改的是**释读**，不能
                             # 污染字形匹配层。字形库/GlyphMatcher 必须按
                             # OCR 这个纯视觉信号归类（它不掺文意判断），
                             # 不然未来一个真该读「巳」的同形实例会错误

@@ -36,6 +36,21 @@ K_MAX = 12           # 每字形類 exemplar 上限（該版總數 ≤ 上限則
 DUP_F1 = 0.95        # 近重複判定
 ALGO_VERSIONS = {"norm": "n1", "skeleton": "s1", "feat": "f1"}
 
+# 「易混字組」——同一組內的字在刻本裡經常混用（技術限制/書手習慣），字形
+# 分不出組內具體是哪個字，準入只能靠文意判斷（見 `admit_instance` 與
+# `clustering.seeding` 的用法）。目前只有一組：己/已/巳（用戶 2026-09-11
+# 定，推翻此前「己是真的另一個字」的舊考據——見 doc/charset_and_lm.md §四）。
+# 結構特意留成「元組的元組」而非兩兩一對，將來加「日/曰」之類新組直接追加。
+CONFUSABLE_GROUPS: tuple[frozenset[str], ...] = (frozenset({"己", "已", "巳"}),)
+CONFUSABLE_CHARS: frozenset[str] = frozenset(
+    c for group in CONFUSABLE_GROUPS for c in group)
+# 易混字組每個字形只需要少量樣本就夠字形匹配層認出「這是這一組裡的某個
+# 形」——組內具體是哪個字不由字形定，樣本再多也不增加判斷力，反而白佔庫
+# 空間、稀釋检索。達到這個數之後 `admit_instance` 對這一組字不再新增
+# exemplar（但審計行 `admissions`/`instances` 仍照常寫，準入計數不受影響，
+# 見該函式實現）。用戶 2026-09-11 定「每個積累 5 個左右就夠」。
+CONFUSABLE_SAMPLE_CAP = 5
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
     source_id TEXT PRIMARY KEY,
@@ -469,12 +484,18 @@ class GlyphDB:
         且是 ``semantic`` 缺省值的來源——絕大多數字符字形=釋讀，兩者
         本就同值）；``shape`` 是字形識別鍵（餵給 ``glyphs``/``exemplars``/
         ``GlyphMatcher`` 索引的那個），缺省等於 ``char``。二者只在
-        「同詞異寫、字形不重要」的窄類（已/巳，見
-        ``seeding.SEMANTIC_MERGED_PAIRS``）才會分岔——那類字用文意判
-        釋讀，但字形庫必須按刻本上實際刻的形狀分類，否則未來一個真的
-        刻成巳形、該讀巳的實例會錯誤繼承這次的釋讀（2026-08-26 用戶
-        定：「字形是什麼我們就錄什麼，這三個字才按語意改，但這個修改
-        不能污染字形匹配層」）。
+        「同詞異寫、字形不重要」的窄類（``CONFUSABLE_GROUPS``，目前只有
+        己/已/巳）才會分岔——那類字用文意判釋讀，但字形庫必須按刻本上
+        實際刻的形狀分類，否則未來一個真的刻成巳形、該讀巳的實例會錯誤
+        繼承這次的釋讀（2026-08-26 用戶定：「字形是什麼我們就錄什麼，
+        這幾個字才按語意改，但這個修改不能污染字形匹配層」）。
+
+        ``shape`` 屬於 ``CONFUSABLE_CHARS`` 且該 ``(edition_tag, shape)``
+        已有 ``CONFUSABLE_SAMPLE_CAP`` 個 exemplar 時，跳過 ``glyphs``/
+        ``exemplars`` 的寫入（字形匹配層不再為這一組字繼續累積樣本——
+        組內具體是哪個字不由字形定，見 ``CONFUSABLE_SAMPLE_CAP`` 注釋），
+        但 ``instances``/``admissions`` 照常寫，準入審計與冪等閘不受影響
+        （用戶 2026-09-11 定）。
 
         冪等：同一 instance_id 第二次調用直接返回 False，什麼都不寫。
         """
@@ -512,21 +533,28 @@ class GlyphDB:
              ink_ratio, width, height, None,
              shape, provenance, 1.0, sem, cp, None, _now()))
         self._write_derived(cur, instance_id, norm)
-        cur.execute(
-            f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
-                  ids, status, n_confirmed, updated_at)
-                VALUES (?,?,?,?,?,'sparse',1,?)
-                ON CONFLICT(edition_tag, char) DO UPDATE SET
-                  n_confirmed = n_confirmed + 1,
-                  status = CASE WHEN n_confirmed + 1 >= {K_MIN}
-                           THEN 'stable' ELSE status END,
-                  updated_at=excluded.updated_at""",
-            (edition, shape, sem, cp, None, _now()))
-        gid = cur.execute(
-            "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-            (edition, shape)).fetchone()[0]
-        cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
-                    (gid, instance_id, "seed", _now()))
+        capped = False
+        if shape in CONFUSABLE_CHARS:
+            row = cur.execute(
+                "SELECT n_confirmed FROM glyphs WHERE edition_tag=? AND char=?",
+                (edition, shape)).fetchone()
+            capped = bool(row) and row[0] >= CONFUSABLE_SAMPLE_CAP
+        if not capped:
+            cur.execute(
+                f"""INSERT INTO glyphs (edition_tag, char, semantic, unicode_cp,
+                      ids, status, n_confirmed, updated_at)
+                    VALUES (?,?,?,?,?,'sparse',1,?)
+                    ON CONFLICT(edition_tag, char) DO UPDATE SET
+                      n_confirmed = n_confirmed + 1,
+                      status = CASE WHEN n_confirmed + 1 >= {K_MIN}
+                               THEN 'stable' ELSE status END,
+                      updated_at=excluded.updated_at""",
+                (edition, shape, sem, cp, None, _now()))
+            gid = cur.execute(
+                "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
+                (edition, shape)).fetchone()[0]
+            cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
+                        (gid, instance_id, "seed", _now()))
         cur.execute("INSERT INTO admissions VALUES (?,?,?,?,?)",
                     (instance_id, char, provenance,
                      json.dumps(evidence, ensure_ascii=False)
@@ -818,6 +846,19 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
+    # admissions 是**進庫審計行**（設計 §3 紀律 1：每條進庫都要留 provenance +
+    # evidence）。它不是派生物——provenance='human' 的那些是人裁決定，庫外
+    # 沒有第二份；events 表在生產庫裡是空的，重算也算不回來。首版導出漏了它，
+    # 於是 rebuild 出來的庫 admissions=0，審計鏈整條斷掉（2026-09-06 為了把
+    # sqlite 移出 Git 歷史做 export→rebuild 無損校驗時發現）。
+    counts["admissions"] = dump(
+        out / "admissions.jsonl",
+        cur.execute(
+            "SELECT a.* FROM admissions a JOIN instances i "
+            "  ON i.instance_id = a.instance_id "
+            "  JOIN sources s ON s.source_id = i.source_id "
+            " WHERE COALESCE(s.kind,'woodblock') != 'font' "
+            " ORDER BY a.instance_id"))
 
     # 事件與實例按書分檔：一本書一個檔，審查增量只動一個檔
     n_ev = n_inst = n_png = 0
@@ -927,6 +968,10 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
                     (row[0], r["instance_id"], r["role"], r["added_at"]))
         n_ex += 1
+    for r in read(store / "admissions.jsonl"):
+        cols = ",".join(r.keys())
+        cur.execute(f"INSERT OR REPLACE INTO admissions ({cols}) "
+                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
     for r in read(store / "pairs.jsonl"):
         cols = ",".join(r)
         cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
@@ -936,3 +981,41 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
     db.close()
     return {"instances": n_inst, "derived_recomputed": n_der,
             "exemplars": n_ex, **stats}
+
+
+def assert_db_not_silently_empty(db_path: str | Path,
+                                 store_dir: str | Path | None = None) -> None:
+    """自检（库路径 P0）：库打开后若 `instances` 为 0、而真源非空，直接报错。
+
+    这个 bug 的伤害全部来自「空库不报错」——库路径解析错了，`glyph_match` /
+    `seed_admit` 会对着一个空库（或压根是另一个文件）跑，产物看着全过
+    （exit 0、ok N/N），逐字判 diff、候选全空，唯一露出来的破绽是单页耗时
+    0.1~0.2 秒（真在算距离时是 7~21 秒），而没有任何东西会去看这个数字。
+
+    只在「库存在但是空的」时才可能误判——真源不存在或本来就没有实例
+    （如全新工作区、单测里的临时空库）不算异常，直接放行。
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            n = c.execute("SELECT COUNT(*) FROM instances").fetchone()[0]
+    except sqlite3.Error:
+        return  # 打不开/表还没建，不是本检查的职责——下游自己会报更明确的错
+    if n > 0:
+        return
+    if store_dir is None:
+        from ..core.workspace import glyph_store_path
+        store_dir = glyph_store_path()
+    store = Path(store_dir)
+    store_nonempty = store.exists() and any(store.glob("instances/*.jsonl"))
+    if not store_nonempty:
+        return
+    raise RuntimeError(
+        f"字形库为空（instances=0）：{db_path}\n"
+        f"但真源 glyph_store 非空：{store}\n"
+        "多半是库路径解析错了——写库（rebuild/import）与读库（glyph_match/"
+        "seed_admit）用的不是同一个文件。查 GUJI_GLYPH_DB / GUJI_WORKSPACE 是否"
+        "一致，或重新 `glyph-db rebuild` 一次。"
+    )

@@ -1,0 +1,213 @@
+"""Step5-a 库匹配：字块 → 与 GlyphDB 已验证字形比对，三档判决 + 逐实例证据。
+
+包的是 `clustering/match.GlyphMatcher`（HOG kNN + `verify_pair_elastic` +
+形近家族护栏），**算法一行没改**——它有 glyph-match/triplets 与 pairs 两套
+金标和一串负结果记录（提分辨率、密度自适应半径、骨架失配都实测否掉了），
+重写是浪费。这一步只负责：喂图、带上库指纹、把证据落成 numeric 产物。
+
+## 三档语义（沿用设计 §2）
+
+| 档 | 条件 | 下游怎么用 |
+|---|---|---|
+| same | cov ≥ 0.996 且 wmax ≤ 12 | 直接继承库里的字，记 (库条目 id, cov, wmax) 为证据 |
+| unsure | 0.85 ≤ cov < 0.996 | 命中的字进候选集（带 cov 当先验），与 OCR 合并交上下文裁决 |
+| diff | 对全部 kNN 候选都 < 0.85 | 库里多半没有这个字，纯 OCR + 上下文 |
+
+## ⚠️ 库是外部状态，指纹必须带上它
+
+`GlyphMatcher` 查的是 `output/glyph.db`。库长大了、某个条目改判了，同一张
+图块的判决就会变，而 Step 的代码、参数、上游产物一个都没动——指纹里不带它，
+产物就永远显示 fresh、拿着过期判决往下走。所以 `db_fingerprint` 进了
+`GlyphMatchParams`（参数参与指纹），换库或库变大之后这一步会自动标 stale。
+
+指纹取 `(mtime_ns, size, exemplars 行数)`：前两个便宜，行数防「同尺寸不同内容」
+（compact/vacuum 之后 size 可能巧合相同）。**不哈希整库**——77 MB 每次读一遍
+太贵，而这三个量联合变化的概率低到可以忽略。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+import numpy as np
+from pydantic import BaseModel
+
+from ..core.spec import StepSpec, cell_key, column_key
+from ..core.step import RunContext, Step, register_step
+from ..products.kinds.chars import PageChars
+from ..products.kinds.recog import CandidateMatch, ColumnMatch, MatchRec, PageMatch
+
+def _default_db() -> str:
+    """默认库路径。空串表示「按 workspace 解析」——不在导入时定死，
+    因为 `GUJI_WORKSPACE` 可能在导入之后才设（测试、控制台切册都会）。"""
+    from ..core.workspace import glyph_db_path
+    return str(glyph_db_path())
+
+
+# 兼容旧引用；新代码用 _default_db() 或 core.workspace.glyph_db_path()
+DEFAULT_DB = "output/glyph.db"
+
+
+def db_fingerprint(path: str | Path | None = None) -> str:
+    """库的轻量指纹：(mtime_ns, size, exemplars 行数) 的哈希。见模块头。"""
+    p = Path(path or _default_db())
+    if not p.exists():
+        return "nodb"
+    st = p.stat()
+    n = ""
+    try:
+        import sqlite3
+        with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as c:
+            n = str(c.execute("SELECT count(*) FROM exemplars").fetchone()[0])
+    except Exception:
+        n = "?"
+    raw = f"{st.st_mtime_ns}:{st.st_size}:{n}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+class GlyphMatchParams(BaseModel):
+    db_path: str = ""
+    """字形库路径。**留空 = 运行时按 workspace 解析**（`GUJI_GLYPH_DB` →
+    `GUJI_WORKSPACE/output/glyph.db` → 仓内样本库），不在导入时定死——
+    引擎与书的数据已分仓，路径得能指到别处。显式传值则原样用。"""
+    db_fingerprint: str = ""
+    """库指纹。**留空会在构造时自动填**（见下面的校验器）——它必须是参数的一
+    部分，`params_hash` 才会把它算进 Step 指纹，库一变产物就自动 stale。
+    显式传值只在一种场合有用：想按某个历史库的判决重放。"""
+    knn_k: int = 10
+    edition: str | None = None    # 只用某一版本的字形当库；None 且 Book.edition=modern 时 = modern:<book>
+    max_candidates: int = 5       # unsure 档往产物里存几个候选
+    norm_stroke: int | None = None
+    """两边都骨架化再统一细化到 N px 再比（2026-09-15，现代印刷链）。1-bit 扫描的粗笔画
+    （北行日錄归一后 5.5px）让软覆盖饱和：同书留一法错误命中 cov 最高 0.9996、same 闸漏
+    2 个假 same；细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链保持 None。"""
+    exclude_self: bool = False
+    """匹配时把字位自己摘出库（`GlyphMatcher.match(exclude_id=)`）。播种过的书（modern:<book>
+    的实例就是这本书的字位）不摘就是自证 cov 1.0。刻本链默认不摘，行为不变。"""
+
+    def model_post_init(self, _ctx) -> None:
+        # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
+        # 但直接赋值会再触发一轮 validate）——用 object.__setattr__ 最干净。
+        if not self.db_path:
+            object.__setattr__(self, "db_path", _default_db())
+        if not self.db_fingerprint:
+            object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
+
+
+@register_step
+class GlyphMatchStep(Step):
+    spec = StepSpec(
+        id="glyph_match", title="Step5-a 库匹配", version="1.0", unit="cell",
+        consumes=("char_index", "char_patch"), produces=("glyph_match",),
+        params=GlyphMatchParams,
+        code_deps=("open_guji_cv.clustering.match", "open_guji_cv.clustering.verify",
+                   "open_guji_cv.clustering.normalize", "open_guji_cv.clustering.features"),
+    )
+
+    def _matcher(self, p: GlyphMatchParams):
+        """库 → 内存匹配器。走 `seeding.cached_matcher_from_db` 的进程级
+        缓存（控制台 `/api/glyph-match/*` 单点查询路由也走这份），一次
+        run 里几十页共用同一个库，每页重建要几秒。"""
+        from ..clustering.glyph_db import assert_db_not_silently_empty
+        from ..clustering.seeding import cached_matcher_from_db
+        # 库路径 P0 自检：库路径解析错了、读到空库/别的文件时直接报错，
+        # 不许静默出全 diff（见 glyph_db.assert_db_not_silently_empty 模块头）。
+        assert_db_not_silently_empty(p.db_path)
+        matcher, _chars = cached_matcher_from_db(
+            p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=p.knn_k,
+            norm_stroke=p.norm_stroke)
+        return matcher
+
+    def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        from ..clustering.normalize import normalize_patch as _normalize_patch
+        p: GlyphMatchParams = ctx.params_for(self)  # type: ignore[assignment]
+        if p.edition is None and getattr(ctx.book, "edition", "keben") == "modern":
+            # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
+            p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
+        matcher = self._matcher(p)
+
+        def normalize_patch(img, punct: bool = False):
+            # 标点走等比归一（见 seed_witness 与 normalize.normalize_patch 的 isotropic 说明）：
+            # 播种与匹配必须用同一把尺子，否则库被一把尺子筛、又被另一把尺子查。
+            return _normalize_patch(img, stroke_width=p.norm_stroke, isotropic=punct)
+        chars: PageChars = ctx.product("char_index", page)
+        out: list[ColumnMatch] = []
+        for cc in chars.columns:
+            if not cc.ok:
+                out.append(ColumnMatch(col=cc.col, ok=False, error=cc.error))
+                continue
+            recs: list[MatchRec] = []
+            for r in cc.chars:
+                if r.cell_type != "char" or not r.patch_key:
+                    continue
+                try:
+                    img = ctx.image("char_patch", r.patch_key)
+                except Exception as e:              # 图块再生不出来就跳过，不炸整页
+                    recs.append(MatchRec(id=r.id, slot=r.slot, sub=r.sub,
+                                         verdict="diff", guard=f"no_patch:{e}"))
+                    continue
+                is_punct = (getattr(r, "step3_kind", None) == "punct")
+                m = matcher.match(normalize_patch(img, is_punct),
+                                  exclude_id=(r.id if p.exclude_self else None))
+                cand_variants: list[CandidateMatch] = []
+                for cv in (r.cand_variants or []):
+                    try:
+                        cimg = ctx.image("char_patch", cv.patch_key)
+                    except Exception:
+                        continue    # 候选试切图块再生不出来就跳过，不炸整页
+                    cm = matcher.match(normalize_patch(cimg, is_punct),
+                                       exclude_id=(r.id if p.exclude_self else None))
+                    cand_variants.append(CandidateMatch(
+                        side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
+                        cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
+                        candidates=[(cc, round(float(vv), 4))
+                                    for cc, vv in cm.candidates[:p.max_candidates]]))
+                recs.append(MatchRec(
+                    id=r.id, slot=r.slot, sub=r.sub,
+                    verdict=m.verdict, char=m.char, matched_id=m.matched_id,
+                    cov=round(float(m.cov), 4), wmax=round(float(m.wmax), 2),
+                    candidates=[(c, round(float(v), 4))
+                                for c, v in m.candidates[:p.max_candidates]],
+                    guard=m.guard, n_verified=int(m.n_verified),
+                    cand_variants=cand_variants))
+            out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
+        return {"glyph_match": PageMatch(
+            page=page, db_fingerprint=db_fingerprint(p.db_path), columns=out)}
+
+
+def glyph_match_summary(book_id: str, pages: list[int] | None = None,
+                        store=None) -> dict:
+    """Step5-a 板块②聚合数字：匹配档位分布（same/unsure/diff 计数）+
+    护栏触发计数。`glyph_match` 产物落盘的是逐字位 `MatchRec`，没有跨页
+    聚合统计——07号任务卡已指出这个缺口，风格照抄 `align_ref_summary`。
+    """
+    from ..core.book import load_book
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    n_pages = 0
+    n_missing = 0
+    verdict_counts = {"same": 0, "unsure": 0, "diff": 0}
+    guard_counts: dict[str, int] = {}
+    for pg in pages:
+        pm: PageMatch | None = store.read(book_id, "glyph_match", page_key(pg), "glyph_match")
+        if pm is None:
+            n_missing += 1
+            continue
+        n_pages += 1
+        for col in pm.columns:
+            if not col.ok:
+                continue
+            for r in col.chars:
+                verdict_counts[r.verdict] = verdict_counts.get(r.verdict, 0) + 1
+                if r.guard:
+                    guard_counts[r.guard] = guard_counts.get(r.guard, 0) + 1
+    return {
+        "n_pages": n_pages, "n_missing": n_missing,
+        "verdict_counts": verdict_counts, "guard_counts": guard_counts,
+    }

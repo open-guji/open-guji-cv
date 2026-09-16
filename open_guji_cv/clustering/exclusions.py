@@ -30,13 +30,17 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-DEFAULT_PATH = Path(__file__).resolve().parents[2] / "config" / "crop_exclusions.jsonl"
+def default_path() -> Path:
+    """`GUJI_EXCLUSIONS` > `GUJI_WORKSPACE`/config/crop_exclusions.jsonl > 仓内。
+    运行时解析，不在导入时定死——`GUJI_WORKSPACE` 可能在模块导入之后才设。"""
+    from ..core.workspace import exclusions_path
+    return exclusions_path()
 
 
 @lru_cache(maxsize=4)
-def load_exclusions(path: str | Path = DEFAULT_PATH) -> dict[str, dict]:
+def load_exclusions(path: str | Path | None = None) -> dict[str, dict]:
     """→ {instance_id: 记录}。名单不存在时返回空字典（不是错误）。"""
-    p = Path(path)
+    p = Path(path) if path else default_path()
     if not p.exists():
         return {}
     out = {}
@@ -47,7 +51,7 @@ def load_exclusions(path: str | Path = DEFAULT_PATH) -> dict[str, dict]:
     return out
 
 
-def excluded_ids(path: str | Path = DEFAULT_PATH,
+def excluded_ids(path: str | Path | None = None,
                  origins: tuple[str, ...] | None = None) -> frozenset[str]:
     """排除名单的实例 id 集合；`origins` 可只取某几个来源（如只取 human）。"""
     ex = load_exclusions(path)

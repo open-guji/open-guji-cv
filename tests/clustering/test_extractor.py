@@ -286,3 +286,37 @@ def test_frame_band_clamp_keeps_the_tail_char_and_drops_the_bar():
     assert ink_rows.size, "末格全空了"
     # 末格的墨块高 70px（y 250~320）：框线一行都不许进来
     assert int(ink_rows.max() - ink_rows.min()) + 1 <= 74, "下框线混进末格"
+
+
+def test_kin_return_must_still_fit_one_cell():
+    """拆分前连通的窄部件归还同源字身，也得过「并入后装得下一格」的闸。
+
+    2026-09-08 用户实审 vol01/4 1:2「學」：學的「子」与下字「復」粘连，直刀
+    在格线切开后「子」段（本格内、窄）被当成復伸上来的笔尾归还给復。并回
+    去总高 1.27 格——不是笔尾。真笔尾（捺脚）并回去仍在一格之内，照旧归还。
+    """
+    from open_guji_cv.clustering.extractor import assign_components
+    h, w, cell_h = 360, 120, 120.0
+    img = np.full((h, w), 235, np.uint8)
+    # 格 0：學的冠（独立连通体）+ 子（窄竖，贴着格线与下字粘连）
+    img[10:70, 20:100] = 30                 # 冠
+    img[78:120, 55:66] = 30                 # 子：竖笔，跨过格线 120 与下字相连
+    img[120:230, 20:100] = 30               # 格 1：復，整块
+    cells = [(0, 0.0, 120.0), (1, 120.0, 240.0), (2, 240.0, 360.0)]
+    boxes = assign_components(img, cells, cell_h, float(w))
+    assert boxes[0][3] >= 118, f"學的子被送给下字了：格 0 框 {boxes[0]}"
+    assert boxes[1][1] >= 118, f"復头上多了个子：格 1 框 {boxes[1]}"
+
+
+def test_kin_return_keeps_a_true_tail():
+    """对照：下字的捺脚伸进上格 12px 与上字粘连，切开后仍归还下字（r10 口径）。"""
+    from open_guji_cv.clustering.extractor import assign_components
+    h, w, cell_h = 360, 120, 120.0
+    img = np.full((h, w), 235, np.uint8)
+    img[20:118, 20:100] = 30                # 格 0：上字，底到 118（压线）
+    img[116:150, 70:82] = 30                # 下字的笔尾：从 116 伸到 150，与上字粘连
+    img[150:235, 20:100] = 30               # 格 1：下字本体
+    cells = [(0, 0.0, 120.0), (1, 120.0, 240.0), (2, 240.0, 360.0)]
+    boxes = assign_components(img, cells, cell_h, float(w))
+    assert boxes[1][1] <= 123, f"下字的笔尾没归还：格 1 框 {boxes[1]}"
+    assert boxes[0][3] <= 123, f"上字吃了下字的笔尾：格 0 框 {boxes[0]}"

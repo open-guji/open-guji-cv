@@ -29,7 +29,7 @@ from .border_geometry import BorderDetectionResult, HLine, VLine
 
 
 def column_warp_matrix(page_width: int, left: VLine, right: VLine,
-                        top_y: float, bottom_y: float
+                        top_y: float, bottom_y: float, out_w: int | None = None
                         ) -> tuple[np.ndarray, int, int]:
     """算这一列的射影矩阵和输出尺寸，返回 `(M, out_w, out_h)`。
 
@@ -37,6 +37,11 @@ def column_warp_matrix(page_width: int, left: VLine, right: VLine,
     需要 `M` 的逆。金标一旦有了原图坐标的锚，上游改边线/窗口之后就能把标注
     重新投影到新列图上，而不是整批作废重标（见
     `scripts/migrate_column_warp_gold.py`）。
+
+    ⚠️ 这个矩阵只对**直线**边线成立。三段折线的页（`vline_segments == 3`）
+    `warp_column` 会按折点分带、每带一个矩阵——要反算列图坐标得先按 y 落在
+    哪一带找对应的矩阵（带界见 `_strip_bounds`）。`out_w` 可外给，分带时三带
+    要共用一个宽度。
     """
     if bottom_y <= top_y:
         raise ValueError(f"bottom_y({bottom_y}) must be > top_y({top_y})")
@@ -47,7 +52,8 @@ def column_warp_matrix(page_width: int, left: VLine, right: VLine,
     lx_top, rx_top = to_old_x(left, top_y), to_old_x(right, top_y)
     lx_bot, rx_bot = to_old_x(left, bottom_y), to_old_x(right, bottom_y)
 
-    out_w = int(round(max(abs(rx_top - lx_top), abs(rx_bot - lx_bot))))
+    if out_w is None:
+        out_w = int(round(max(abs(rx_top - lx_top), abs(rx_bot - lx_bot))))
     out_h = int(round(bottom_y - top_y))
     if out_w <= 0 or out_h <= 0:
         raise ValueError(f"warped column size invalid: {out_w}x{out_h}")
@@ -80,9 +86,32 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     h, w = gray.shape[:2]
     if bottom_y is None:
         bottom_y = float(h - 1)
-    m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
-    return cv2.warpPerspective(gray, m, (out_w, out_h),
-                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    if left.segments == 1 and right.segments == 1:
+        m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
+        return cv2.warpPerspective(gray, m, (out_w, out_h),
+                                    flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    # 三段折线：一个单应变换表示不了折线，按折点把列切成横带各自射影、竖向拼接。
+    # 相邻带共享同一组源角点，拼缝天然对齐；out_w 三带取同一个（最大者），否则
+    # 拼不起来。左右两条线的折点 y 差几 px（版框有斜率），取均值当带界——那几
+    # px 里把线当直线，误差亚像素。
+    strips = _strip_bounds(left, right, top_y, bottom_y)
+    mats = [column_warp_matrix(w, left, right, a, b) for a, b in strips]
+    out_w = max(m[1] for m in mats)
+    parts = []
+    for (a, b), (_, _, out_h) in zip(strips, mats):
+        m, _, _ = column_warp_matrix(w, left, right, a, b, out_w=out_w)
+        parts.append(cv2.warpPerspective(gray, m, (out_w, out_h), flags=cv2.INTER_LINEAR,
+                                         borderMode=cv2.BORDER_REPLICATE))
+    return np.vstack(parts)
+
+
+def _strip_bounds(left: VLine, right: VLine, top_y: float, bottom_y: float
+                  ) -> list[tuple[float, float]]:
+    """按两条边线的折点把 [top_y, bottom_y] 切成横带。"""
+    ks = sorted(set((a + b) / 2.0 for a, b in zip(left.knots() or right.knots(),
+                                                 right.knots() or left.knots())))
+    cuts = [top_y] + [k for k in ks if top_y + 2 < k < bottom_y - 2] + [bottom_y]
+    return [(cuts[i], cuts[i + 1]) for i in range(len(cuts) - 1)]
 
 
 def denoise_column(warped_gray: np.ndarray, ink_threshold: int = 128,
@@ -146,6 +175,43 @@ def column_bounds(top: HLine, bottom: HLine,
     if head_raise_inner_y is not None:
         return float(head_raise_inner_y), _border_y(bottom, left, right)
     return _border_y(top, left, right), _border_y(bottom, left, right)
+
+
+def stamp_noise_density(raw_gray: np.ndarray, ink_threshold: int = 128,
+                         lo_area: int = 3, hi_area: int = 60) -> float:
+    """整列（未去噪原图）里「中等面积孤立墨点」占全列像素的比例——
+    专门抓**背景印章导致的整列散布噪点**，`side_floor`（只看两侧外 25%）天生
+    看不见这种不贴边的污染（见 `column-warp` 金标 `vol02/3` 一页，字缝间到处
+    是印章残墨的麻点）。
+
+    面积下限 `lo_area=3` 避开单像素级扫描灰尘（`denoise_column` 已经按
+    `min_blob_area=6` 清掉更小的，这里在**未去噪的原图**上量、下限故意比它低，
+    连最细小的麻点也计入密度）；上限 `hi_area=60` 排除掉字身笔画本体的连通体
+    （单个笔画随便也有上百像素）。
+
+    115 列金标实测（`open-guji-dataset/char-segmentation/column-warp`）：
+    clean 组 p95=0.0045、max=0.0060；人判 `mixed` 的印章列（`vol02/3` c9）
+    单独一条 0.0201，**3.4 倍间隙、零重叠**——注意这条判据只对「印章」这一种
+    机制有效，`column-warp` 里另外 3 条 `mixed`（夹注列 `vol01/146` c8、
+    局部弯界行 `vol02/188` c3/c4）在这个量上跟 clean 完全混在一起，
+    读它们的值仍然落在 0.0017~0.0028，说明这条判据设计范围本来就只覆盖
+    「整列噪点」这一族，不是万能判据（延续 `SIDE_FLOOR_MAX` 那次的教训：
+    这类池子做不到单指标覆盖四种机制，只能按机制分别做判据、任一命中就拦）。
+
+    全语料验证（vol01+vol02 已生成产物 76 页 684 列）：门槛取 0.007~0.012
+    区间内结果完全一致——只拦下 `vol02/3` 整页 9 列里的 8 列（该页目录页
+    大面积印章覆盖，人只标了 c9 但其余列同样脏，命中符合预期），
+    没有一列 clean 金标被误伤；门槛低到 0.006 会连带误杀 `vol02/151` c2
+    （候选·弯界行、人判 clean），故取 **0.007** 留出安全边际。
+    """
+    mask = (raw_gray < ink_threshold).astype(np.uint8)
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    noise_px = sum(int(stats[i, cv2.CC_STAT_AREA]) for i in range(1, n_labels)
+                   if lo_area <= stats[i, cv2.CC_STAT_AREA] <= hi_area)
+    return float(noise_px / mask.size)
+
+
+STAMP_NOISE_MAX = 0.007
 
 
 def column_profile(warped_gray: np.ndarray, ink_threshold: int = 128) -> np.ndarray:
@@ -402,7 +468,29 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
 
 # ── 逐列的矫正窗口 ───────────────────────────────────────────
 
-BODY_PAD = 0.0     # 普通列在版框之外额外留的余量
+BODY_PAD = 0.0     # 普通列在版框之外额外留的余量（上界；下界见 BOTTOM_PAD）
+
+BOTTOM_PAD = 40.0
+# 抬头列上界在抬头框**内边框线心**之上再开的余量（2026-09-08 用户实审 vol01/32
+# c5「太祖」：窗口顶边 = inner_y = 307 正压在「太」的顶横上，列图第 3 行就有墨，
+# 抬头字顶被切）。线心本来就带半条线宽，字又常顶着线写；开 20px 让字完整进来，
+# 多进来的框线由 Step 3 的 top_slack 与 Step 4 的框线闸处理。20px 时「太」的竖笔尖仍顶边，取 30。
+HEAD_PAD = 30.0
+# **下界要多开一截**（2026-09-03 加）。`detect_borders` 的下版框线系统性偏上，
+# 窗口就切在末字中部：dev_set 155 列实测，下界到真实版框线之间还剩字墨
+# **中位 21px、最大 69px，83% 的列被切掉 >5px**（目视复核 vol01/60c4、
+# vol02/181c5、vol01/137c6、vol01/24c1，红线切断「托」「更」「著」「淵」下半）。
+# 偏差呈双峰：45% 的列 ≤0（定位准），38% >15px，长尾整页出现
+# （01/60、02/3、02/181、01/137 多列同时偏），是下版框定位问题不是随机噪声。
+#
+# ⚠️ **别用连通体高度差量这个偏差**——笔画被切断后就不再与列图内的部分相连，
+# 那样只能量到 2px，低估整整一个量级。要量「下界到版框线上沿之间还有多少字墨」。
+#
+# 多开进来的版框线不用担心：`clean_column` 的 `column_border_trim` 本来就负责
+# 抹掉上下版框，它在文字带宽度内按水平投影归零判边，版框线进到列图里正是它
+# 设计要处理的输入。40px 覆盖实测最大切幅 69px 里的绝大多数，又不至于把下一
+# 页/页边噪声卷进来。见 doc/step3_error_survey.md 戊类、
+# 反馈批次 2026-09-03-step1-bottom-clip。
 
 
 @dataclass
@@ -440,13 +528,19 @@ class ColumnWindow:
 
 
 def page_column_windows(result: BorderDetectionResult,
-                         body_pad: float = BODY_PAD) -> list[ColumnWindow]:
+                         body_pad: float = BODY_PAD,
+                         bottom_pad: float = BOTTOM_PAD,
+                         head_pad: float = HEAD_PAD) -> list[ColumnWindow]:
     """整页每一列的矫正窗口——上下界**逐列**算（委派给 `column_bounds`），
     抬头列自动用抬头框的内边框当上界。
 
     `result` 直接用 `border_geometry.detect_borders()` 的输出：`head_raise`
     已经由 `detect_head_raise()` 填好，调用方不需要再给抬头先验。同一列若有
     多级台阶，取 `inner_y` **最小**的那个（最高的一级）。
+
+    `bottom_pad` 与 `body_pad` **分开**：下版框探测系统性偏上，下界要多开一截
+    才不会切掉末字下半，多进来的版框线由 `clean_column` 抹掉。理由与实测见
+    `BOTTOM_PAD`。
     """
     hr: dict[int, float] = {}
     for b in result.head_raise:
@@ -462,7 +556,9 @@ def page_column_windows(result: BorderDetectionResult,
             result.top, result.bottom, head_raise_inner_y=raised_top,
             left=left_v, right=right_v)
         top_y -= body_pad
-        bottom_y += body_pad
+        if raised_top is not None:
+            top_y -= head_pad                  # 见 HEAD_PAD
+        bottom_y += bottom_pad
         top_y = max(0.0, min(top_y, btop))
         bottom_y = min(float(result.height - 1), max(bottom_y, bbot))
         out.append(ColumnWindow(

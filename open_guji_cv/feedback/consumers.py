@@ -1,0 +1,499 @@
+"""消费者：把事件落到该去的地方。
+
+P1 只实现 `gold_add`（事件 → 金标条目），另外两个（glyphdb_admit / glyphdb_recrop）
+先给出接口与显式的「未实现」，避免路由表里悄悄丢事件。
+
+**幂等**：每个消费者只处理 `EventLog.pending(consumer)` 里的事件，处理完记账。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..gold.item import Anchor, GoldItem
+from ..gold.store import GoldStore
+from .events import Event, EventLog
+from .routes import Destination, RouteTable
+
+
+@dataclass
+class ConsumeResult:
+    consumer: str
+    n_events: int = 0
+    added: int = 0
+    updated: int = 0
+    skipped: int = 0
+    no_lib: int = 0            # 正常裁决但按 no_glyph_lib 标志不建库的条数（非错误）
+    errors: list[str] = None   # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.errors is None:
+            self.errors = []
+
+    def to_dict(self) -> dict:
+        return {"consumer": self.consumer, "events": self.n_events, "added": self.added,
+                "updated": self.updated, "skipped": self.skipped, "no_lib": self.no_lib,
+                "errors": self.errors}
+
+
+# ── gold_add ─────────────────────────────────────────────────────────
+def _expected_of(e: Event) -> dict:
+    """事件 payload → 金标 expected。不同 kind 的金标内容不同。"""
+    p = dict(e.payload)
+    if e.kind == "verdict":
+        return {"verdict": p.get("verdict")}
+    if e.kind == "band":
+        return {"band": p.get("band")}
+    if e.kind == "border_class":
+        return {"border_class": p.get("border_class") or p.get("verdict")}
+    if e.kind == "not_a_char":
+        return {"quality": "not_text"}
+    if e.kind == "confirm" and p.get("v") == "seg_defect":
+        # 切分缺陷：quality 沿用 char-segmentation/instances 的四分类
+        # （clean / truncated / contaminated / not_text），不另造词。
+        # 字形/文意若已填也一并留着——人看图时顺手认出的字不该丢。
+        out = {"quality": p.get("quality") or "contaminated"}
+        if p.get("defect"):
+            out["defect"] = p["defect"]
+        if p.get("shape"):
+            out["shape"] = p["shape"]
+        if p.get("reading"):
+            out["reading"] = p["reading"]
+        # `note` 要留住（2026-09-06）：四分类只说「这块图脏」，说不出**怎么脏**。
+        # 夹注段卡标的缺陷（少格 / 多格 / ab 分错边）全靠它区分——丢了这一行，
+        # 金标里就只剩一个 contaminated，将来没法按缺陷类型归因，也没法回查是哪一段。
+        if p.get("note"):
+            out["note"] = p["note"]
+        return out
+    if e.kind == "recrop":
+        return {"old_bbox": p.get("old_bbox"), "corrected_bbox": p.get("new_bbox") or p.get("corrected_bbox")}
+    if e.kind == "cutline":
+        # 粘连格线的理想切点。verdict：moved（拖到 y）/ ok（现切点就对，y == y_old）/
+        # overlap（上下字重叠，切在哪都伤字，y 是折中位置）/ idk（拿不准 → uncertain）。
+        # 坐标是现役 Step2 列图（col_h 一并记，换了矫正就能察觉）。
+        # tags：干扰因素（stain 污点在分界处 / border 界行或版框压进裁片 / residue 邻字残墨 / other），
+        # 用户 2026-09-05 裁完第一批点名的两类特殊情况；评测里分开报，不混进像素误差。
+        # polyline：折线模式下人点的点 [[x, y], …]（列图坐标）；y 仍是折线的平均高，直线口径的评测照用。
+        # cand：verdict == "cand" 时**算法候选里被人选中的那一种**（straight / seam_narrow /
+        # seam_wide）。这是攒给下游打分函数的样本——哪条缝被人看上了，比 y 更能说明问题
+        # （2026-09-10）。
+        # char_above/below：**整理本读法**（v2_align 的 `reading`）。
+        # shape_above/below：v2 定字认的刻本形（`shape`）。两者不同即一次转换。
+        # ⚠️ 2026-09-13 之前 `char_*` 存进来的其实是 `shape`（卡片取错了字段，
+        # 标签却写着「整理本期望」）——那之前的历史事件里 `char_*` 要按 shape
+        # 理解，且没有 `shape_*` 位。回读老金标做统计时别把两段混着算。
+        return {k: p[k] for k in CUTLINE_KEYS if k in p and p[k] not in (None, "", [])}
+    if e.kind == "border_offset":
+        # 整页下版框坐标金标（`page_bottom_cards`）。verdict：moved（两端
+        # 拖到 y_left/y_right）/ ok（现役线位置就对，等于 c.y_left/y_right）/
+        # no_line（这页版框太淡看不出线）。两端各自可调（2026-09-12 改，
+        # 起初只给整体平移，改不了现役斜率本身探错的情况）——两点坐标带
+        # 齐斜率信息，不是单一偏移量。
+        #
+        # ⚠️ **以 `y_left_abs`/`y_right_abs`（原图绝对坐标）为准**
+        # （用户 2026-09-13 定："坐标应该只基于原始图片"）。`y_left`/`y_right`
+        # 是相对通栏带 `crop_top` 的，而 crop_top 由**算法输出**算出来——算法
+        # 一改，历史金标的绝对位置就整体漂移：vol02/161 实测偏 83.2px（标注
+        # 之后加了 `_fix_wild_angle` 角度护栏，恰好改动了该页下版框），人标
+        # 对的线被换算到纯白处。同一个坑 09-12 那批已经栽过一次。相对坐标
+        # 与 crop_top 仍一并存下，只为排查历史问题，**不要拿它当基准**。
+        keys = ("y_left", "y_right", "y_left_abs", "y_right_abs", "crop_top", "verdict")
+        return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "head_raise":
+        # 列级抬头精标（overview `Step3-逐字切分/03-抬头综合优化.md`）。三件事
+        # 一张卡：`raised` 这一列是不是抬头 / `n_raised` 抬高几格 / `head_cut`
+        # 首字有没有被切掉。
+        #
+        # **`head_cut` 不是抬头的属性**，是顺带收的丢字维度：vol02 p11 c4/c5
+        # 的首字「御」被 Step3 整个切在格外，而 Step9 渲染出来的文本读着通顺、
+        # 不报阙文，**丢字在文本层完全看不见**，这是目前唯一能量到它的入口。
+        # 别为它单开一轮标注。
+        #
+        # `n_raised` 只在 `raised == "yes"` 时有意义；判 no 的列不写这个键，
+        # 免得金标里躺着一堆 `n_raised=0` 的假数据污染分布统计。
+        keys = ("raised", "n_raised", "head_cut", "note")
+        out = {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+        if out.get("raised") != "yes":
+            out.pop("n_raised", None)
+        return out
+    return p
+
+
+def verdict_store() -> GoldStore:
+    """`gold_add` 的默认落点：**workspace 的裁决表**（`core.workspace.verdicts_root()`），
+    不是 open-guji-dataset。2026-09-13 用户裁定：运行时不写测试集仓；人裁先落
+    workspace，`guji gold import` 显式挑一批进 dataset。消费者名字仍叫 gold_add
+    ——改名会让 consumed/gold_add.jsonl 记账失效、全部事件重灌一遍。"""
+    from ..core.workspace import verdicts_root
+    return GoldStore(verdicts_root())
+
+
+# 切线事件写进 touching-cuts 的全部键（正本在 gold/atomic.py，导入/导出也用它整组替换）。
+from ..gold.atomic import CUTLINE_KEYS, merge_expected  # noqa: E402
+
+
+def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = None,
+             why: str = "", dry_run: bool = False) -> ConsumeResult:
+    store = store or verdict_store()
+    res = ConsumeResult("gold_add", n_events=len(events))
+    by_shard: dict[str, list[GoldItem]] = {}
+    cutline_ids: dict[str, set[str]] = {}       # shard → 本批由切线事件产生的 item id
+    for e, d in events:
+        # `confirm` 事件同时路由给 glyphdb_admit 与这里：定字那部分归前者，
+        # 切分缺陷那部分归这里。不分流的话，每条定字都会往 instances 金标里
+        # 塞一条没有 quality 的空条目。
+        if e.kind == "confirm" and e.payload.get("v") != "seg_defect":
+            res.skipped += 1
+            continue
+        if not d.shard:
+            res.skipped += 1
+            res.errors.append(f"{e.id}: 路由没给 shard")
+            continue
+        t = e.target
+        expected = _expected_of(e)
+        if e.kind == "cutline" and d.shard.endswith("/side-rule"):
+            # 同一条切线事件路由到上游 side-rule 时，金标语义变成「这一格有界行残余」，
+            # 不带切点字段（那是 touching-cuts 的事）。
+            expected = {"side_rule": True, "note": e.payload.get("note") or "切线卡片：界行/版框压进裁片"}
+        item = GoldItem(
+            id=t.key,
+            anchor=Anchor(book=t.book, page=t.page, col=t.col, slot=t.slot,
+                          **(t.anchor or {})),
+            expected=expected,
+            label_origin="human" if e.actor == "user" else ("align" if e.actor == "align" else "model"),
+            stratum=e.payload.get("stratum"),
+            stratum_weight=e.payload.get("stratum_weight"),
+            status="uncertain" if e.payload.get("verdict") in ("idk", "uncertain") else "active",
+            source_events=[e.id],
+        )
+        if d.extra:
+            item.input = {**item.input, **d.extra}
+        by_shard.setdefault(d.shard, []).append(item)
+        if e.kind == "cutline" and not d.shard.endswith("/side-rule"):
+            cutline_ids.setdefault(d.shard, set()).add(item.id)
+    for shard, items in by_shard.items():
+        if dry_run:
+            # 试算要和真消费口径一致：内容相同的不算「更新」，否则试算说会改 2 条、
+            # 真跑却改 0 条，人会以为消费没生效。
+            have = {i.id: i.expected for i in store.list(shard)}
+            res.added += sum(1 for i in items if i.id not in have)
+            res.updated += sum(1 for i in items
+                               if i.id in have and have[i.id] != i.expected)
+            continue
+        # ⚠️ **合并 expected，不整体替换**（2026-09-04）。
+        #
+        # 同一个字位可能既有 v1 时代的金标（带 review_verdict / layout /
+        # defect / healed 等字段），又有新的人裁事件。人裁说的只是「切分
+        # 质量是 truncated 还是 clean」，凭什么把别人记的字段一起抹掉？
+        # 实测：vol01:22:9:2 被人裁事件覆盖后，v1 的四个字段全没了，
+        # `verify_gold_migration` 当成数据丢失报错——**报得对**。
+        #
+        # 所以按 id 取回旧 expected 打底，新值覆盖同名键，其余保留。
+        prev = {i.id: i for i in store.list(shard)}
+        for it in items:
+            old = prev.get(it.id)
+            if old is None:
+                continue
+            # 切线重裁：旧判定的几何字段**整组丢掉**，只保留非切线的遗留字段
+            # （gold/atomic.py；2026-09-14 实锤：drift 重标改判 ok 的事件不带 polyline，
+            # 旧坐标系折线原样留在 expected 里——评测优先读折线，等于金标没修。24 条）。
+            it.expected = merge_expected(shard, old.expected, it.expected,
+                                         atomic=it.id in cutline_ids.get(shard, ()))
+            # `input` 同理：v1 条目把 seed / 载体信息记在这里，人裁事件不带
+            # 这些字段，直接写就会把它们清空（upsert 是整体替换）。
+            it.input = {**(old.input or {}), **(it.input or {})}
+        a, u = store.upsert(shard, items, why or "由人裁事件自动落入")
+        res.added += a
+        res.updated += u
+    return res
+
+
+# ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
+def glyphdb_admit(events, db_path: str | None = None,
+                  dry_run: bool = False, **kw) -> ConsumeResult:
+    """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
+
+    这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
+    此前只能手动跑 `seed-ingest`，人裁结果与控制台脱节。
+
+    ## 字形 / 释读分开写（用户 2026-09-04 定）
+
+    「碰到已/巳、人/入 这类，先读字形，但是文本录入要按文意录（最好能记录
+    这个转换）」。事件 payload 因此带两个值：
+
+    - `shape`：图上刻的形 → `admit_instance(shape=...)`，进 `glyphs` /
+      `exemplars` / `GlyphMatcher` 的**字形索引**；
+    - `reading`：文意读法 → `admit_instance(char=...)`，进 `admissions.char`
+      与 `instances.semantic`。
+
+    两者不同就是一次转换（`conversion=1`）。**字形永远照录**，连已/巳 也不
+    例外——字形层的 near_form 护栏本来就是防「形状判据自己会认错」，字形库
+    要是被释读污染，将来一个真刻成这形状、该读别的字的实例会错误继承这次的
+    释读，字形匹配整条链就失真（charset_and_lm.md §四的实锤）。
+
+    `not_a_char` / `skip` 事件不进库（前者是判非字，后者是存疑跳过）。
+    图块从 v2 的 `char_patch` 缓存取——那正是被裁决的那张图。
+
+    ## `no_glyph_lib`：选字正常裁决，但这张图不建库（2026-09-09）
+
+    字形有些无法修复的噪声（污墨、裂纹等），人仍能认出字、正常选字，但**这张
+    图不该进字形匹配索引**——写进去等于让污染样本参与以后所有形近字的比对。
+    审查卡片上勾了这个复选框的事件带 `no_glyph_lib=true`：照常算已裁决（不
+    进 `res.skipped`/`res.errors`，不是错误），只是跳过 `admit_instance` 这
+    一步，不落 `glyphs`/`exemplars`/matcher 索引。
+
+    ## ⚠️ v2 的 id 必须加前缀，否则会污染 15332 条已有记录
+
+    v1 的 `book:page:col:idx`（idx 从 0、含 margin 格）与 v2 的
+    `book:page:col:slot`（slot 从 1）**长得一模一样但指的不是同一格**。
+    实测 vol01/24 c1：库里 `vol01:24:1:2` 是「每」，v2 的 `1:2` 是「書」，
+    整体差一格——170 个同 id 命中里 **0 个一致**。不隔离就是把 v1 的记录
+    按 v2 的口径改写。所以 v2 事件一律以 `v2:` 开头存库，跟 v1 分居两个
+    命名空间；将来要合并得先做真正的重键（阶段 B2），不是靠巧合对齐。
+    """
+    res = ConsumeResult("glyphdb_admit", n_events=len(events))
+    admits = [(e, d) for e, d in events
+              if e.kind == "confirm" and (e.payload.get("v") or "confirm") == "confirm"]
+    res.skipped = len(events) - len(admits)
+    if not admits:
+        return res
+    if dry_run:
+        res.added = len(admits)
+        return res
+
+    from ..clustering.glyph_db import GlyphDB
+    from ..core.workspace import glyph_db_path
+    from ..products.cache import ImageCache
+    import cv2
+
+    db = GlyphDB(str(glyph_db_path(db_path)))
+    cache = ImageCache()
+    for e, _dest in admits:
+        shape = e.payload.get("shape") or e.payload.get("char")
+        reading = e.payload.get("reading") or shape
+        # 只有 己/已/巳 分字形与文意（用户 2026-09-04 定；审查页与组视图同规则）。
+        # 其它字的 reading 一律跟随 shape——旧组视图曾对所有组填整理本字当文意
+        # （「卽 读 即」×45），那批事件已清账，这里再守一道免得任何来源重犯。
+        if shape and shape not in ("己", "已", "巳"):
+            reading = shape
+        if reading and (len(reading) != 1 or ord(reading) < 0x2E80):
+            reading = shape                 # 拼音首字母那类（输入法没转）
+        if not shape:
+            res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
+            res.skipped += 1
+            continue
+        if e.payload.get("no_glyph_lib"):
+            res.no_lib += 1
+            continue
+        book = e.target.book or (e.target.key.split(":")[0] if ":" in e.target.key else "")
+        # 图块键：p{page}c{col}s{slot}[a|b]，与 Step4 落缓存时一致
+        try:
+            _b, pg, col, slot = e.target.key.split(":")
+            sub = ""
+            if slot and slot[-1] in "ab":
+                slot, sub = slot[:-1], slot[-1]
+            ckey = f"p{int(pg):04d}c{int(col):02d}s{int(slot)}{sub}"
+        except Exception as exc:
+            res.errors.append(f"{e.target.key}: 键解析不了（{exc}）")
+            res.skipped += 1
+            continue
+        path = cache.get(book, "char_patch", ckey)
+        if path is None:
+            res.errors.append(f"{e.target.key}: 缓存里没有字块 {ckey}")
+            res.skipped += 1
+            continue
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            res.errors.append(f"{e.target.key}: 图块读不出来")
+            res.skipped += 1
+            continue
+        # v2 命名空间：见上面「id 必须加前缀」那节
+        db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
+        # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
+        # 第一次裁 巳、后来改判 已，第二个事件被闸掉，库里永远是 巳——seed_admit 的
+        # 人裁通道读库就跟着错，判据 E 报「存 巳 人裁 已」（29:4:19、80:5:7；更早
+        # 蠹、32:7:10 也是它）。所以：库里已有**人裁**记录且字形或释读不同 → 撤旧再进。
+        # 机器进的（provenance 非 human）本来就该被人裁覆盖，同样撤。
+        prev = db.conn.execute(
+            "SELECT a.provenance, a.char, g.char FROM admissions a "
+            "  LEFT JOIN exemplars e ON e.instance_id = a.instance_id "
+            "  LEFT JOIN glyphs g ON g.glyph_id = e.glyph_id "
+            " WHERE a.instance_id = ?", (db_id,)).fetchone()
+        if prev is not None and (prev[2] != shape or prev[1] != reading):
+            from ..clustering.audit import evict_instance
+            evict_instance(db, db_id)
+            res.updated += 1
+        ok = db.admit_instance(
+            db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
+            provenance="human", shape=shape,
+            evidence={"event": e.id, "batch": e.batch,
+                      "conversion": bool(e.payload.get("conversion")),
+                      "shape": shape, "reading": reading},
+            page=str(e.target.page or ""), col=int(e.target.col or 0),
+            idx=int(e.target.slot or 0))
+        if ok:
+            res.added += 1
+        else:
+            res.skipped += 1        # admit_instance 的幂等闸：已进过库
+    return res
+
+
+def glyphdb_recrop(events, **kw) -> ConsumeResult:
+    res = ConsumeResult("glyphdb_recrop", n_events=len(events), skipped=len(events))
+    res.errors.append("glyphdb_recrop 尚未接入（P1 之后）：请照旧走 `seed-ingest` + build_recrop_shard.py")
+    return res
+
+
+def crop_exclude(events, list_path: str = "", dry_run: bool = False,
+                 **kw) -> ConsumeResult:
+    """`seg_defect` / `not_a_char` 事件 → 追加进 `config/crop_exclusions.jsonl`。
+
+    2026-09-05 补的缺口：此前人在卡片上点「有噪声」「字形不完整」「非字」，
+    事件只落进 `char-segmentation/instances` 金标，**没有任何东西把它写进排除
+    名单**——于是下一轮重跑，这一格照样出现在待审队列里，也没有闸拦着它将来
+    进库。名单才是 `exclusions.py` 里那条「不进库也不出审查卡」的执行者。
+
+    口径照 `exclusions.py` 模块头：**只追加不删除**（重扫之后按名单逐条复核），
+    `origin="human"`（人眼实锤那一档，与 gate/pipeline-suspect 分开），
+    `evidence` 记触发的判据（quality 与人顺手认出的字）。已在名单里的跳过。
+    """
+    import json
+    from pathlib import Path
+
+    from ..clustering.exclusions import default_path, load_exclusions
+
+    res = ConsumeResult("crop_exclude", n_events=len(events))
+    hits = []
+    for e, _d in events:
+        p = e.payload or {}
+        if e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char"):
+            hits.append((e, "not_text", "not_a_char"))
+        elif (e.kind == "confirm" and p.get("v") == "seg_defect"
+              and p.get("quality") not in (None, "clean")):
+            # quality=="clean" 是「这块图没毛病」——随机层裁决台（Step4）把 clean
+            # 也算作一档正常裁决（不像旧的定向富集页只出可疑样本），不能落进
+            # 排除名单（2026-09-11/12 两次实测都复现：cell_shrink 随机层批次
+            # 把 clean 也写进了 crop_exclusions.jsonl，是这里没挡的缺口）。
+            hits.append((e, p["quality"], "seg_defect"))
+    res.skipped = len(events) - len(hits)
+    if not hits:
+        return res
+    path = Path(list_path) if list_path else default_path()
+    known = set(load_exclusions(path))
+    rows = []
+    for e, quality, reason in hits:
+        iid = e.target.key
+        if iid in known:
+            res.skipped += 1
+            continue
+        known.add(iid)
+        ev = [quality]
+        p = e.payload or {}
+        if p.get("shape"):
+            ev.append(f"shape={p['shape']}")
+        rows.append({
+            "date": (e.ts or "")[:10],
+            "evidence": ev,
+            "instance_id": iid,
+            "note": f"审查卡片人裁：{quality}",
+            "origin": "human",
+            "reason": reason,
+            "round": "r2",
+            "source_event": e.id,
+        })
+    if dry_run:
+        res.added = len(rows)
+        return res
+    if rows:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
+        load_exclusions.cache_clear()
+    res.added = len(rows)
+    return res
+
+
+def product_invalidate(events, product_store=None, dry_run: bool = False, **kw) -> ConsumeResult:
+    """人裁落定 → 该页的某步产物显式失效（`ManifestEntry.invalidated`），引擎据此
+    标 stale、下次跑批重算，下游沿 DAG 跟着过期。
+
+    路由 `extra.step` 指定失效哪一步（cutline → row_segment）。只标不跑。
+    没跑过的页（manifest 里没条目）算 skipped，不是错。
+
+    ⚠️ 新接到既有路由上时，历史事件对这个消费者全是 pending——首次会把所有裁过的
+    页一起标失效（vol02 就是 160 页 Step3 及下游）。要不追溯就先把历史事件对
+    `product_invalidate` 记账（`guji events route --dry-run` 先看数）。
+    """
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+
+    st = product_store or ProductStore()
+    res = ConsumeResult("product_invalidate", n_events=len(events))
+    done: set[tuple[str, str, str]] = set()
+    for e, d in events:
+        step = (d.extra or {}).get("step")
+        t = e.target
+        if not step or t.book is None or t.page is None:
+            res.skipped += 1
+            res.errors.append(f"{e.id}: 路由没给 extra.step 或事件没 book/page")
+            continue
+        key = (t.book, step, page_key(t.page))
+        if key in done:
+            continue
+        done.add(key)
+        if dry_run:
+            res.added += 1
+            continue
+        if st.manifest(t.book, step).invalidate(key[2], f"人裁 {e.kind} {e.id}"):
+            res.added += 1
+        else:
+            res.skipped += 1
+    return res
+
+
+CONSUMERS = {
+    "gold_add": gold_add,
+    "glyphdb_admit": glyphdb_admit,
+    "glyphdb_recrop": glyphdb_recrop,
+    "crop_exclude": crop_exclude,
+    "product_invalidate": product_invalidate,
+}
+
+
+def route_and_consume(log: EventLog, batch: str | None = None,
+                      table: RouteTable | None = None,
+                      store: GoldStore | None = None,
+                      dry_run: bool = False, **consumer_kw) -> dict:
+    """把未消费的事件按路由表分发给各消费者；成功的记账。
+
+    `consumer_kw` 透传给消费者（如 `glyphdb_admit` 的 `db_path`）——测试要
+    指向库副本，别动真库。"""
+    table = table or RouteTable.load(log.root / "routes.yaml")
+    results: list[ConsumeResult] = []
+    for consumer, fn in CONSUMERS.items():
+        pending = log.pending(consumer, batch)
+        pairs = [(e, d) for e in pending for d in table.destinations(e) if d.consumer == consumer]
+        if not pairs:
+            continue
+        res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
+               else fn(pairs, dry_run=dry_run, **consumer_kw))
+        results.append(res)
+        if not dry_run and not res.errors:
+            # ⚠️ 一个事件命中同一消费者的多条路由（如 cutline+border 同时进
+            # touching-cuts 与 side-rule，两条去向都是 gold_add）时，`pairs`
+            # 里同一个事件会出现两次——`consumed/<consumer>.jsonl` 因此被
+            # 写两行。`consumed_ids()` 用 set 收，不影响幂等判定，但账本本身
+            # 失真（2026-09-10 金标对账道实测：`consumed/gold_add.jsonl` 里
+            # `evt_vol02-cutline_000032`/`000042` 各记了两次，是「事件数 507
+            # vs gold_add 记账 509」这 2 条差值的全部来源）。按事件 id 去重
+            # 再记账，金标本身（各分片各写一条）不受影响。
+            seen: dict[str, Event] = {}
+            for e, _ in pairs:
+                seen.setdefault(e.id, e)
+            log.mark_consumed(consumer, seen.values(), note=batch or "")
+    evs = log.read(batch) if batch else list(log.iter_all())
+    return {"batch": batch, "dry_run": dry_run,
+            "results": [r.to_dict() for r in results],
+            "unrouted": [e.id for e in table.unrouted(evs)]}

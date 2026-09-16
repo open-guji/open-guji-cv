@@ -1,0 +1,1268 @@
+{
+  "filter": {
+    "inner_clear": 0.45,
+    "outer_clear": 0.6,
+    "inner_w_max": 10.0
+  },
+  "n_pages_scanned": 90,
+  "stats": {
+    "top": {
+      "inner_w": [
+        5.848536585365854,
+        0.6733337554456086
+      ],
+      "bar_w": [
+        16.288292682926826,
+        5.471351062664693
+      ],
+      "near": [
+        19.64780487804878,
+        4.6371124910455155
+      ],
+      "far": [
+        35.93536585365854,
+        6.604786179423767
+      ],
+      "n": 41
+    },
+    "bottom": {
+      "inner_w": [
+        5.665625,
+        0.6343103415324395
+      ],
+      "bar_w": [
+        16.42625,
+        3.2624643197282635
+      ],
+      "near": [
+        17.831250000000004,
+        2.4425572536790203
+      ],
+      "far": [
+        34.25812500000001,
+        3.7188224257653117
+      ],
+      "n": 16
+    },
+    "vert_right": {
+      "inner_w": [
+        4.4365000000000006,
+        0.5110897670664126
+      ],
+      "bar_w": [
+        19.437499999999993,
+        2.317099210219537
+      ],
+      "near": [
+        21.031,
+        2.1656774921488195
+      ],
+      "far": [
+        40.46849999999999,
+        3.4774937455012056
+      ],
+      "n": 20
+    },
+    "vert_left": {
+      "inner_w": [
+        4.605172413793104,
+        0.575755100533834
+      ],
+      "bar_w": [
+        19.84551724137931,
+        1.9519920615421122
+      ],
+      "near": [
+        20.023793103448277,
+        2.303281637581779
+      ],
+      "far": [
+        39.869310344827596,
+        2.7638016434570227
+      ],
+      "n": 29
+    },
+    "asym": {
+      "top": [
+        4.218695652173912,
+        6.513515917154466,
+        3.5899999999999963,
+        23
+      ],
+      "bottom": [
+        6.339166666666666,
+        3.9282681899562575,
+        6.805,
+        12
+      ]
+    }
+  },
+  "records": [
+    {
+      "book": "vol01",
+      "page": "4",
+      "kind": "top",
+      "inner_peak": 0.507,
+      "outer_peak": 0.998,
+      "inner_w": 4.63,
+      "near": 24.28,
+      "far": 43.39,
+      "bar_w": 19.11
+    },
+    {
+      "book": "vol01",
+      "page": "6",
+      "kind": "top",
+      "inner_peak": 0.765,
+      "outer_peak": 0.999,
+      "inner_w": 5.07,
+      "near": 20.82,
+      "far": 42.51,
+      "bar_w": 21.68
+    },
+    {
+      "book": "vol01",
+      "page": "10",
+      "kind": "top",
+      "inner_peak": 0.903,
+      "outer_peak": 0.648,
+      "inner_w": 6.69,
+      "near": 16.87,
+      "far": 29.36,
+      "bar_w": 12.5
+    },
+    {
+      "book": "vol01",
+      "page": "12",
+      "kind": "top",
+      "inner_peak": 0.899,
+      "outer_peak": 0.996,
+      "inner_w": 5.99,
+      "near": 13.09,
+      "far": 33.3,
+      "bar_w": 20.21
+    },
+    {
+      "book": "vol01",
+      "page": "12",
+      "kind": "vert_left",
+      "inner_peak": 0.484,
+      "outer_peak": 0.642,
+      "inner_w": 3.64,
+      "near": 19.09,
+      "far": 39.06,
+      "bar_w": 19.96
+    },
+    {
+      "book": "vol01",
+      "page": "14",
+      "kind": "top",
+      "inner_peak": 0.879,
+      "outer_peak": 0.654,
+      "inner_w": 6.41,
+      "near": 15.21,
+      "far": 20.76,
+      "bar_w": 5.56
+    },
+    {
+      "book": "vol01",
+      "page": "14",
+      "kind": "bottom",
+      "inner_peak": 0.73,
+      "outer_peak": 0.967,
+      "inner_w": 5.69,
+      "near": 17.31,
+      "far": 31.31,
+      "bar_w": 14.0
+    },
+    {
+      "book": "vol01",
+      "page": "14",
+      "kind": "vert_left",
+      "inner_peak": 0.457,
+      "outer_peak": 0.995,
+      "inner_w": 3.75,
+      "near": 17.23,
+      "far": 36.81,
+      "bar_w": 19.58
+    },
+    {
+      "book": "vol01",
+      "page": "16",
+      "kind": "top",
+      "inner_peak": 0.933,
+      "outer_peak": 0.999,
+      "inner_w": 5.86,
+      "near": 14.14,
+      "far": 31.36,
+      "bar_w": 17.22
+    },
+    {
+      "book": "vol01",
+      "page": "16",
+      "kind": "vert_left",
+      "inner_peak": 0.675,
+      "outer_peak": 0.982,
+      "inner_w": 3.9,
+      "near": 18.99,
+      "far": 35.67,
+      "bar_w": 16.68
+    },
+    {
+      "book": "vol01",
+      "page": "18",
+      "kind": "top",
+      "inner_peak": 0.705,
+      "outer_peak": 0.979,
+      "inner_w": 5.87,
+      "near": 18.11,
+      "far": 32.39,
+      "bar_w": 14.28
+    },
+    {
+      "book": "vol01",
+      "page": "18",
+      "kind": "bottom",
+      "inner_peak": 0.548,
+      "outer_peak": 0.911,
+      "inner_w": 4.46,
+      "near": 22.58,
+      "far": 34.52,
+      "bar_w": 11.94
+    },
+    {
+      "book": "vol01",
+      "page": "20",
+      "kind": "top",
+      "inner_peak": 0.784,
+      "outer_peak": 0.991,
+      "inner_w": 6.19,
+      "near": 18.65,
+      "far": 38.43,
+      "bar_w": 19.78
+    },
+    {
+      "book": "vol01",
+      "page": "20",
+      "kind": "bottom",
+      "inner_peak": 0.734,
+      "outer_peak": 0.951,
+      "inner_w": 5.7,
+      "near": 19.02,
+      "far": 35.21,
+      "bar_w": 16.19
+    },
+    {
+      "book": "vol01",
+      "page": "20",
+      "kind": "vert_left",
+      "inner_peak": 0.694,
+      "outer_peak": 0.946,
+      "inner_w": 5.26,
+      "near": 21.14,
+      "far": 37.25,
+      "bar_w": 16.11
+    },
+    {
+      "book": "vol01",
+      "page": "22",
+      "kind": "top",
+      "inner_peak": 0.727,
+      "outer_peak": 0.974,
+      "inner_w": 5.08,
+      "near": 15.47,
+      "far": 31.54,
+      "bar_w": 16.08
+    },
+    {
+      "book": "vol01",
+      "page": "22",
+      "kind": "vert_left",
+      "inner_peak": 0.794,
+      "outer_peak": 1.0,
+      "inner_w": 5.17,
+      "near": 20.86,
+      "far": 38.51,
+      "bar_w": 17.65
+    },
+    {
+      "book": "vol01",
+      "page": "24",
+      "kind": "top",
+      "inner_peak": 0.978,
+      "outer_peak": 1.0,
+      "inner_w": 6.16,
+      "near": 17.93,
+      "far": 37.11,
+      "bar_w": 19.18
+    },
+    {
+      "book": "vol01",
+      "page": "24",
+      "kind": "bottom",
+      "inner_peak": 0.7,
+      "outer_peak": 1.0,
+      "inner_w": 6.16,
+      "near": 17.32,
+      "far": 35.57,
+      "bar_w": 18.25
+    },
+    {
+      "book": "vol01",
+      "page": "24",
+      "kind": "vert_left",
+      "inner_peak": 0.889,
+      "outer_peak": 0.982,
+      "inner_w": 4.91,
+      "near": 24.81,
+      "far": 44.93,
+      "bar_w": 20.12
+    },
+    {
+      "book": "vol01",
+      "page": "26",
+      "kind": "top",
+      "inner_peak": 0.538,
+      "outer_peak": 0.804,
+      "inner_w": 6.69,
+      "near": 19.66,
+      "far": 27.84,
+      "bar_w": 8.19
+    },
+    {
+      "book": "vol01",
+      "page": "26",
+      "kind": "bottom",
+      "inner_peak": 0.739,
+      "outer_peak": 0.998,
+      "inner_w": 5.16,
+      "near": 15.78,
+      "far": 31.31,
+      "bar_w": 15.53
+    },
+    {
+      "book": "vol01",
+      "page": "26",
+      "kind": "vert_left",
+      "inner_peak": 0.848,
+      "outer_peak": 0.987,
+      "inner_w": 4.78,
+      "near": 22.78,
+      "far": 41.33,
+      "bar_w": 18.55
+    },
+    {
+      "book": "vol01",
+      "page": "28",
+      "kind": "top",
+      "inner_peak": 0.667,
+      "outer_peak": 0.983,
+      "inner_w": 5.17,
+      "near": 21.63,
+      "far": 39.38,
+      "bar_w": 17.75
+    },
+    {
+      "book": "vol01",
+      "page": "30",
+      "kind": "top",
+      "inner_peak": 0.717,
+      "outer_peak": 0.907,
+      "inner_w": 7.12,
+      "near": 17.87,
+      "far": 38.21,
+      "bar_w": 20.34
+    },
+    {
+      "book": "vol01",
+      "page": "30",
+      "kind": "bottom",
+      "inner_peak": 0.92,
+      "outer_peak": 0.964,
+      "inner_w": 5.88,
+      "near": 20.89,
+      "far": 37.82,
+      "bar_w": 16.93
+    },
+    {
+      "book": "vol01",
+      "page": "30",
+      "kind": "vert_left",
+      "inner_peak": 0.806,
+      "outer_peak": 0.658,
+      "inner_w": 4.11,
+      "near": 20.84,
+      "far": 41.99,
+      "bar_w": 21.15
+    },
+    {
+      "book": "vol01",
+      "page": "32",
+      "kind": "vert_left",
+      "inner_peak": 0.777,
+      "outer_peak": 1.0,
+      "inner_w": 4.42,
+      "near": 26.63,
+      "far": 48.41,
+      "bar_w": 21.78
+    },
+    {
+      "book": "vol01",
+      "page": "34",
+      "kind": "top",
+      "inner_peak": 0.866,
+      "outer_peak": 0.998,
+      "inner_w": 5.92,
+      "near": 16.72,
+      "far": 37.93,
+      "bar_w": 21.21
+    },
+    {
+      "book": "vol01",
+      "page": "34",
+      "kind": "bottom",
+      "inner_peak": 0.623,
+      "outer_peak": 0.906,
+      "inner_w": 6.51,
+      "near": 20.64,
+      "far": 40.87,
+      "bar_w": 20.23
+    },
+    {
+      "book": "vol01",
+      "page": "34",
+      "kind": "vert_left",
+      "inner_peak": 0.912,
+      "outer_peak": 0.996,
+      "inner_w": 4.0,
+      "near": 18.81,
+      "far": 38.17,
+      "bar_w": 19.36
+    },
+    {
+      "book": "vol01",
+      "page": "36",
+      "kind": "top",
+      "inner_peak": 0.954,
+      "outer_peak": 0.999,
+      "inner_w": 5.46,
+      "near": 18.56,
+      "far": 40.14,
+      "bar_w": 21.58
+    },
+    {
+      "book": "vol01",
+      "page": "36",
+      "kind": "bottom",
+      "inner_peak": 0.724,
+      "outer_peak": 0.832,
+      "inner_w": 5.77,
+      "near": 22.26,
+      "far": 37.53,
+      "bar_w": 15.27
+    },
+    {
+      "book": "vol01",
+      "page": "38",
+      "kind": "top",
+      "inner_peak": 0.877,
+      "outer_peak": 1.0,
+      "inner_w": 7.1,
+      "near": 18.26,
+      "far": 37.56,
+      "bar_w": 19.3
+    },
+    {
+      "book": "vol01",
+      "page": "38",
+      "kind": "bottom",
+      "inner_peak": 0.577,
+      "outer_peak": 0.988,
+      "inner_w": 6.98,
+      "near": 16.85,
+      "far": 32.45,
+      "bar_w": 15.6
+    },
+    {
+      "book": "vol01",
+      "page": "38",
+      "kind": "vert_left",
+      "inner_peak": 0.869,
+      "outer_peak": 0.985,
+      "inner_w": 4.96,
+      "near": 22.06,
+      "far": 40.5,
+      "bar_w": 18.44
+    },
+    {
+      "book": "vol01",
+      "page": "40",
+      "kind": "bottom",
+      "inner_peak": 0.806,
+      "outer_peak": 0.99,
+      "inner_w": 6.04,
+      "near": 14.38,
+      "far": 31.51,
+      "bar_w": 17.13
+    },
+    {
+      "book": "vol01",
+      "page": "40",
+      "kind": "vert_left",
+      "inner_peak": 0.587,
+      "outer_peak": 0.955,
+      "inner_w": 4.82,
+      "near": 20.52,
+      "far": 36.77,
+      "bar_w": 16.25
+    },
+    {
+      "book": "vol01",
+      "page": "44",
+      "kind": "vert_left",
+      "inner_peak": 0.459,
+      "outer_peak": 0.949,
+      "inner_w": 3.83,
+      "near": 19.9,
+      "far": 42.04,
+      "bar_w": 22.14
+    },
+    {
+      "book": "vol01",
+      "page": "50",
+      "kind": "vert_left",
+      "inner_peak": 0.769,
+      "outer_peak": 0.826,
+      "inner_w": 5.04,
+      "near": 20.57,
+      "far": 41.11,
+      "bar_w": 20.54
+    },
+    {
+      "book": "vol01",
+      "page": "54",
+      "kind": "vert_left",
+      "inner_peak": 0.91,
+      "outer_peak": 0.999,
+      "inner_w": 4.52,
+      "near": 19.48,
+      "far": 39.72,
+      "bar_w": 20.24
+    },
+    {
+      "book": "vol01",
+      "page": "56",
+      "kind": "vert_left",
+      "inner_peak": 0.737,
+      "outer_peak": 0.982,
+      "inner_w": 4.66,
+      "near": 20.74,
+      "far": 38.1,
+      "bar_w": 17.36
+    },
+    {
+      "book": "vol01",
+      "page": "58",
+      "kind": "vert_left",
+      "inner_peak": 0.72,
+      "outer_peak": 0.919,
+      "inner_w": 4.32,
+      "near": 19.84,
+      "far": 39.23,
+      "bar_w": 19.39
+    },
+    {
+      "book": "vol01",
+      "page": "60",
+      "kind": "vert_left",
+      "inner_peak": 0.615,
+      "outer_peak": 0.979,
+      "inner_w": 4.13,
+      "near": 19.66,
+      "far": 37.96,
+      "bar_w": 18.3
+    },
+    {
+      "book": "vol01",
+      "page": "64",
+      "kind": "vert_left",
+      "inner_peak": 0.679,
+      "outer_peak": 0.996,
+      "inner_w": 4.9,
+      "near": 21.03,
+      "far": 39.9,
+      "bar_w": 18.87
+    },
+    {
+      "book": "vol01",
+      "page": "66",
+      "kind": "top",
+      "inner_peak": 0.828,
+      "outer_peak": 0.99,
+      "inner_w": 7.15,
+      "near": 16.54,
+      "far": 36.71,
+      "bar_w": 20.17
+    },
+    {
+      "book": "vol01",
+      "page": "66",
+      "kind": "vert_left",
+      "inner_peak": 0.662,
+      "outer_peak": 0.957,
+      "inner_w": 4.86,
+      "near": 16.16,
+      "far": 36.46,
+      "bar_w": 20.3
+    },
+    {
+      "book": "vol01",
+      "page": "68",
+      "kind": "top",
+      "inner_peak": 0.668,
+      "outer_peak": 1.0,
+      "inner_w": 5.19,
+      "near": 16.43,
+      "far": 38.34,
+      "bar_w": 21.91
+    },
+    {
+      "book": "vol01",
+      "page": "68",
+      "kind": "bottom",
+      "inner_peak": 0.515,
+      "outer_peak": 1.0,
+      "inner_w": 4.66,
+      "near": 17.35,
+      "far": 38.1,
+      "bar_w": 20.75
+    },
+    {
+      "book": "vol01",
+      "page": "68",
+      "kind": "vert_left",
+      "inner_peak": 0.675,
+      "outer_peak": 0.91,
+      "inner_w": 5.41,
+      "near": 20.73,
+      "far": 44.88,
+      "bar_w": 24.16
+    },
+    {
+      "book": "vol01",
+      "page": "72",
+      "kind": "bottom",
+      "inner_peak": 0.577,
+      "outer_peak": 0.984,
+      "inner_w": 5.16,
+      "near": 15.79,
+      "far": 29.79,
+      "bar_w": 14.0
+    },
+    {
+      "book": "vol01",
+      "page": "74",
+      "kind": "vert_left",
+      "inner_peak": 0.578,
+      "outer_peak": 0.711,
+      "inner_w": 3.82,
+      "near": 17.61,
+      "far": 39.76,
+      "bar_w": 22.15
+    },
+    {
+      "book": "vol01",
+      "page": "78",
+      "kind": "top",
+      "inner_peak": 0.788,
+      "outer_peak": 0.995,
+      "inner_w": 6.44,
+      "near": 17.76,
+      "far": 41.39,
+      "bar_w": 23.63
+    },
+    {
+      "book": "vol01",
+      "page": "78",
+      "kind": "vert_left",
+      "inner_peak": 0.472,
+      "outer_peak": 0.993,
+      "inner_w": 4.32,
+      "near": 17.5,
+      "far": 38.48,
+      "bar_w": 20.98
+    },
+    {
+      "book": "vol01",
+      "page": "80",
+      "kind": "top",
+      "inner_peak": 0.483,
+      "outer_peak": 0.843,
+      "inner_w": 5.96,
+      "near": 31.7,
+      "far": 41.29,
+      "bar_w": 9.59
+    },
+    {
+      "book": "vol01",
+      "page": "80",
+      "kind": "bottom",
+      "inner_peak": 0.493,
+      "outer_peak": 0.996,
+      "inner_w": 5.62,
+      "near": 16.42,
+      "far": 25.6,
+      "bar_w": 9.18
+    },
+    {
+      "book": "vol01",
+      "page": "80",
+      "kind": "vert_left",
+      "inner_peak": 0.508,
+      "outer_peak": 1.0,
+      "inner_w": 5.48,
+      "near": 16.42,
+      "far": 39.12,
+      "bar_w": 22.7
+    },
+    {
+      "book": "vol01",
+      "page": "82",
+      "kind": "top",
+      "inner_peak": 0.478,
+      "outer_peak": 0.993,
+      "inner_w": 5.37,
+      "near": 19.57,
+      "far": 40.85,
+      "bar_w": 21.28
+    },
+    {
+      "book": "vol01",
+      "page": "82",
+      "kind": "vert_left",
+      "inner_peak": 0.852,
+      "outer_peak": 0.946,
+      "inner_w": 5.55,
+      "near": 16.92,
+      "far": 39.75,
+      "bar_w": 22.84
+    },
+    {
+      "book": "vol01",
+      "page": "84",
+      "kind": "top",
+      "inner_peak": 0.47,
+      "outer_peak": 1.0,
+      "inner_w": 4.3,
+      "near": 20.52,
+      "far": 41.06,
+      "bar_w": 20.54
+    },
+    {
+      "book": "vol01",
+      "page": "84",
+      "kind": "vert_left",
+      "inner_peak": 0.641,
+      "outer_peak": 0.996,
+      "inner_w": 4.4,
+      "near": 19.17,
+      "far": 39.04,
+      "bar_w": 19.87
+    },
+    {
+      "book": "vol01",
+      "page": "86",
+      "kind": "vert_left",
+      "inner_peak": 0.942,
+      "outer_peak": 0.807,
+      "inner_w": 4.22,
+      "near": 19.58,
+      "far": 39.95,
+      "bar_w": 20.37
+    },
+    {
+      "book": "vol01",
+      "page": "88",
+      "kind": "vert_left",
+      "inner_peak": 0.747,
+      "outer_peak": 0.988,
+      "inner_w": 4.62,
+      "near": 18.97,
+      "far": 38.16,
+      "bar_w": 19.19
+    },
+    {
+      "book": "vol01",
+      "page": "134",
+      "kind": "top",
+      "inner_peak": 0.457,
+      "outer_peak": 0.888,
+      "inner_w": 6.3,
+      "near": 28.05,
+      "far": 43.63,
+      "bar_w": 15.58
+    },
+    {
+      "book": "vol01",
+      "page": "136",
+      "kind": "top",
+      "inner_peak": 0.626,
+      "outer_peak": 0.649,
+      "inner_w": 5.75,
+      "near": 18.7,
+      "far": 25.82,
+      "bar_w": 7.12
+    },
+    {
+      "book": "vol01",
+      "page": "138",
+      "kind": "top",
+      "inner_peak": 0.582,
+      "outer_peak": 0.87,
+      "inner_w": 5.84,
+      "near": 19.17,
+      "far": 30.34,
+      "bar_w": 11.17
+    },
+    {
+      "book": "vol01",
+      "page": "138",
+      "kind": "vert_left",
+      "inner_peak": 0.664,
+      "outer_peak": 0.794,
+      "inner_w": 5.75,
+      "near": 22.65,
+      "far": 43.15,
+      "bar_w": 20.49
+    },
+    {
+      "book": "vol02",
+      "page": "3",
+      "kind": "top",
+      "inner_peak": 0.759,
+      "outer_peak": 0.977,
+      "inner_w": 6.31,
+      "near": 20.75,
+      "far": 36.03,
+      "bar_w": 15.28
+    },
+    {
+      "book": "vol02",
+      "page": "11",
+      "kind": "top",
+      "inner_peak": 0.734,
+      "outer_peak": 0.773,
+      "inner_w": 5.74,
+      "near": 14.55,
+      "far": 34.38,
+      "bar_w": 19.83
+    },
+    {
+      "book": "vol02",
+      "page": "11",
+      "kind": "bottom",
+      "inner_peak": 0.983,
+      "outer_peak": 1.0,
+      "inner_w": 6.2,
+      "near": 15.0,
+      "far": 37.07,
+      "bar_w": 22.07
+    },
+    {
+      "book": "vol02",
+      "page": "15",
+      "kind": "top",
+      "inner_peak": 0.672,
+      "outer_peak": 1.0,
+      "inner_w": 5.63,
+      "near": 15.02,
+      "far": 35.43,
+      "bar_w": 20.41
+    },
+    {
+      "book": "vol02",
+      "page": "19",
+      "kind": "top",
+      "inner_peak": 0.591,
+      "outer_peak": 0.849,
+      "inner_w": 6.1,
+      "near": 17.94,
+      "far": 34.6,
+      "bar_w": 16.66
+    },
+    {
+      "book": "vol02",
+      "page": "19",
+      "kind": "vert_right",
+      "inner_peak": 0.678,
+      "outer_peak": 0.994,
+      "inner_w": 3.89,
+      "near": 21.44,
+      "far": 38.19,
+      "bar_w": 16.74
+    },
+    {
+      "book": "vol02",
+      "page": "23",
+      "kind": "vert_right",
+      "inner_peak": 0.564,
+      "outer_peak": 0.675,
+      "inner_w": 4.18,
+      "near": 18.59,
+      "far": 38.23,
+      "bar_w": 19.65
+    },
+    {
+      "book": "vol02",
+      "page": "27",
+      "kind": "top",
+      "inner_peak": 0.542,
+      "outer_peak": 1.0,
+      "inner_w": 4.98,
+      "near": 23.87,
+      "far": 47.62,
+      "bar_w": 23.75
+    },
+    {
+      "book": "vol02",
+      "page": "39",
+      "kind": "vert_right",
+      "inner_peak": 0.518,
+      "outer_peak": 0.961,
+      "inner_w": 3.88,
+      "near": 24.44,
+      "far": 46.3,
+      "bar_w": 21.86
+    },
+    {
+      "book": "vol02",
+      "page": "67",
+      "kind": "vert_right",
+      "inner_peak": 0.908,
+      "outer_peak": 0.88,
+      "inner_w": 4.17,
+      "near": 24.75,
+      "far": 45.66,
+      "bar_w": 20.91
+    },
+    {
+      "book": "vol02",
+      "page": "71",
+      "kind": "vert_right",
+      "inner_peak": 0.459,
+      "outer_peak": 0.958,
+      "inner_w": 4.86,
+      "near": 19.3,
+      "far": 38.44,
+      "bar_w": 19.14
+    },
+    {
+      "book": "vol02",
+      "page": "75",
+      "kind": "vert_right",
+      "inner_peak": 0.485,
+      "outer_peak": 0.958,
+      "inner_w": 3.87,
+      "near": 18.52,
+      "far": 39.22,
+      "bar_w": 20.7
+    },
+    {
+      "book": "vol02",
+      "page": "79",
+      "kind": "top",
+      "inner_peak": 0.741,
+      "outer_peak": 0.774,
+      "inner_w": 6.27,
+      "near": 17.51,
+      "far": 27.29,
+      "bar_w": 9.78
+    },
+    {
+      "book": "vol02",
+      "page": "83",
+      "kind": "vert_right",
+      "inner_peak": 0.66,
+      "outer_peak": 0.705,
+      "inner_w": 5.67,
+      "near": 20.85,
+      "far": 44.02,
+      "bar_w": 23.17
+    },
+    {
+      "book": "vol02",
+      "page": "91",
+      "kind": "top",
+      "inner_peak": 0.661,
+      "outer_peak": 0.993,
+      "inner_w": 5.1,
+      "near": 31.54,
+      "far": 39.6,
+      "bar_w": 8.06
+    },
+    {
+      "book": "vol02",
+      "page": "95",
+      "kind": "bottom",
+      "inner_peak": 0.542,
+      "outer_peak": 0.895,
+      "inner_w": 5.51,
+      "near": 16.26,
+      "far": 36.35,
+      "bar_w": 20.08
+    },
+    {
+      "book": "vol02",
+      "page": "95",
+      "kind": "vert_right",
+      "inner_peak": 0.463,
+      "outer_peak": 0.821,
+      "inner_w": 4.83,
+      "near": 21.89,
+      "far": 43.18,
+      "bar_w": 21.29
+    },
+    {
+      "book": "vol02",
+      "page": "99",
+      "kind": "top",
+      "inner_peak": 0.888,
+      "outer_peak": 1.0,
+      "inner_w": 4.88,
+      "near": 16.12,
+      "far": 37.52,
+      "bar_w": 21.4
+    },
+    {
+      "book": "vol02",
+      "page": "99",
+      "kind": "vert_right",
+      "inner_peak": 0.669,
+      "outer_peak": 0.87,
+      "inner_w": 4.48,
+      "near": 16.36,
+      "far": 35.19,
+      "bar_w": 18.83
+    },
+    {
+      "book": "vol02",
+      "page": "103",
+      "kind": "vert_right",
+      "inner_peak": 0.71,
+      "outer_peak": 0.6,
+      "inner_w": 5.18,
+      "near": 24.39,
+      "far": 42.78,
+      "bar_w": 18.39
+    },
+    {
+      "book": "vol02",
+      "page": "107",
+      "kind": "vert_right",
+      "inner_peak": 0.57,
+      "outer_peak": 0.901,
+      "inner_w": 4.45,
+      "near": 19.96,
+      "far": 35.82,
+      "bar_w": 15.86
+    },
+    {
+      "book": "vol02",
+      "page": "111",
+      "kind": "top",
+      "inner_peak": 0.709,
+      "outer_peak": 0.995,
+      "inner_w": 5.66,
+      "near": 21.17,
+      "far": 42.86,
+      "bar_w": 21.7
+    },
+    {
+      "book": "vol02",
+      "page": "111",
+      "kind": "vert_right",
+      "inner_peak": 0.581,
+      "outer_peak": 0.914,
+      "inner_w": 3.88,
+      "near": 19.68,
+      "far": 38.37,
+      "bar_w": 18.69
+    },
+    {
+      "book": "vol02",
+      "page": "115",
+      "kind": "top",
+      "inner_peak": 0.984,
+      "outer_peak": 0.96,
+      "inner_w": 6.84,
+      "near": 18.29,
+      "far": 39.22,
+      "bar_w": 20.92
+    },
+    {
+      "book": "vol02",
+      "page": "115",
+      "kind": "bottom",
+      "inner_peak": 0.533,
+      "outer_peak": 0.991,
+      "inner_w": 5.15,
+      "near": 17.45,
+      "far": 33.12,
+      "bar_w": 15.67
+    },
+    {
+      "book": "vol02",
+      "page": "115",
+      "kind": "vert_right",
+      "inner_peak": 0.78,
+      "outer_peak": 0.999,
+      "inner_w": 4.82,
+      "near": 21.82,
+      "far": 40.36,
+      "bar_w": 18.54
+    },
+    {
+      "book": "vol02",
+      "page": "119",
+      "kind": "vert_right",
+      "inner_peak": 0.491,
+      "outer_peak": 0.639,
+      "inner_w": 4.4,
+      "near": 21.07,
+      "far": 39.72,
+      "bar_w": 18.65
+    },
+    {
+      "book": "vol02",
+      "page": "123",
+      "kind": "top",
+      "inner_peak": 0.906,
+      "outer_peak": 0.912,
+      "inner_w": 5.88,
+      "near": 15.8,
+      "far": 23.48,
+      "bar_w": 7.68
+    },
+    {
+      "book": "vol02",
+      "page": "127",
+      "kind": "vert_right",
+      "inner_peak": 0.478,
+      "outer_peak": 0.886,
+      "inner_w": 3.74,
+      "near": 19.44,
+      "far": 40.26,
+      "bar_w": 20.82
+    },
+    {
+      "book": "vol02",
+      "page": "131",
+      "kind": "top",
+      "inner_peak": 0.68,
+      "outer_peak": 0.995,
+      "inner_w": 5.4,
+      "near": 18.95,
+      "far": 26.7,
+      "bar_w": 7.75
+    },
+    {
+      "book": "vol02",
+      "page": "131",
+      "kind": "vert_right",
+      "inner_peak": 0.519,
+      "outer_peak": 0.66,
+      "inner_w": 5.05,
+      "near": 22.74,
+      "far": 47.84,
+      "bar_w": 25.1
+    },
+    {
+      "book": "vol02",
+      "page": "135",
+      "kind": "vert_right",
+      "inner_peak": 0.558,
+      "outer_peak": 0.714,
+      "inner_w": 4.68,
+      "near": 20.64,
+      "far": 39.73,
+      "bar_w": 19.09
+    },
+    {
+      "book": "vol02",
+      "page": "139",
+      "kind": "vert_right",
+      "inner_peak": 0.608,
+      "outer_peak": 0.977,
+      "inner_w": 4.51,
+      "near": 19.14,
+      "far": 35.41,
+      "bar_w": 16.27
+    },
+    {
+      "book": "vol02",
+      "page": "143",
+      "kind": "top",
+      "inner_peak": 0.807,
+      "outer_peak": 0.994,
+      "inner_w": 5.96,
+      "near": 20.95,
+      "far": 31.89,
+      "bar_w": 10.94
+    },
+    {
+      "book": "vol02",
+      "page": "143",
+      "kind": "vert_right",
+      "inner_peak": 0.519,
+      "outer_peak": 0.844,
+      "inner_w": 4.35,
+      "near": 22.89,
+      "far": 38.79,
+      "bar_w": 15.9
+    },
+    {
+      "book": "vol02",
+      "page": "147",
+      "kind": "vert_right",
+      "inner_peak": 0.857,
+      "outer_peak": 0.789,
+      "inner_w": 3.84,
+      "near": 22.71,
+      "far": 41.86,
+      "bar_w": 19.15
+    },
+    {
+      "book": "vol02",
+      "page": "171",
+      "kind": "top",
+      "inner_peak": 0.823,
+      "outer_peak": 0.992,
+      "inner_w": 5.17,
+      "near": 30.4,
+      "far": 42.52,
+      "bar_w": 12.12
+    },
+    {
+      "book": "vol02",
+      "page": "175",
+      "kind": "top",
+      "inner_peak": 0.712,
+      "outer_peak": 0.666,
+      "inner_w": 5.73,
+      "near": 17.17,
+      "far": 23.71,
+      "bar_w": 6.54
+    },
+    {
+      "book": "vol02",
+      "page": "179",
+      "kind": "top",
+      "inner_peak": 0.74,
+      "outer_peak": 0.976,
+      "inner_w": 6.43,
+      "near": 29.82,
+      "far": 49.86,
+      "bar_w": 20.04
+    }
+  ]
+}

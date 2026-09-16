@@ -1,0 +1,82 @@
+"""gate_manifest：Step2 → Step3 交接闸的裁决（numeric，页级 + 列级）。
+
+对齐 scripts/export_step3_input.py 的 manifest.json：页级 period / ref_w 用**全部列**算，
+列级 content_x / border_top / border_bottom / top_slack 随图传。
+
+`admitted` 只由 **block 级**判据决定（L1/L1c/L2：几何错位 / 两侧墨量归零失败）；
+**flag 级**判据（L2b：整列噪点密度，2026-09-11 新增）写进 `flags`，不影响
+`admitted`——`GateSpec.on_fail` 是整道闸单一的处置策略，分不出「同一道闸里这条
+block 那条 flag」，这道闸自己在 `run_page` 里按判据分别决定写 `reject`（block）
+还是 `flags`（flag）。L2b 只在 115 列金标上验证过一种机制（背景印章），不确定
+未来会不会在没见过的书页上误伤，先用 flag 形式进生产、积累人审证据，跟
+`row_segment_gate.py` 的 R2/R2s 先例一致（见 `.claude/doc/segmentation_v2_pipeline.md`
+「Step2→3 交接」节的 2026-09-11 记录）。
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from ...core.spec import COLUMN_PX, ProductKindSpec
+from ...core.step import register_kind
+
+
+class GateColumn(BaseModel):
+    col: int
+    admitted: bool
+    reject: list[str] = Field(default_factory=list)
+    """block 级判据命中的原因；非空则 `admitted=False`。"""
+    flags: list[str] = Field(default_factory=list)
+    """flag 级判据命中的原因；不影响 `admitted`，下游按需读取。"""
+    tier: str = "gate"                      # gate | gold
+    content_x: tuple[float, float]          # 列图坐标里的文字带 [x_lo, x_hi)
+    border_top: float
+    border_bottom: float
+    top_slack: float = 0.0
+    n_raised_hint: int = 0
+    """这一列比版式常量**多出来**的字位数（2026-09-03 加）。
+
+    `n_raised` 原先只有页级参数一个来源，可「抬头多一个字」是**逐列**的
+    ——同一页上有的抬头列多一格、有的只是整体上挪（vol01/33 四个抬头列
+    实测 3 个多一字、1 个不多）。给不出逐列值时 DP 只能在 21 格里硬塞
+    22 个字，唯一可行解就是**丢掉首字**：实测 vol01/26c6、33c7/c8、
+    47c6/c9、vol02/3c3~c5 这 8 列的墨跨度 / period 是 21.4~22.2，
+    首字整个落在首格之上。
+
+    判据是**墨跨度**（首墨到末墨）÷ period，不是「顶端有没有墨」——后者
+    分不开「顶格写」和「多一个字」。Step3 用 `n_raised = max(页级参数,
+    本列 hint)`，所以给 0 就是不动。
+    """
+    raised: bool = False
+    head_raise_inner_y: float | None = None
+    warped_size: tuple[int, int]            # (w, h)
+    side_floor: float | None = None
+    stamp_noise: float | None = None
+    band_width: float
+
+
+class GateManifest(BaseModel):
+    page: int
+    admitted: bool                          # L1 页级
+    reject: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+    """页级 flag（不影响 `admitted`）。现有一种：L1f——页级周期估不出来但用
+    书级 `period_prior` 兜底了（多半是空栏页）。与列级 `GateColumn.flags`
+    分开：那个说的是某一列的毛病，这个说的是整页共享量怎么来的。"""
+    period_from_prior: bool = False
+    """`period` 是书级先验兜底来的，不是这一页估出来的。**判定落盘**，
+    下游/复核要能直接读，不必去解析 `flags` 里的中文句子。"""
+    period: float | None                    # 页级纵向字距（全部列算）
+    ref_w: float | None                     # 页级列距中位数（全部列算）
+    column_widths: list[float]
+    median_width: float | None
+    columns: list[GateColumn]
+    contract: list[str] = Field(default_factory=list)
+
+    def admitted_columns(self) -> list[GateColumn]:
+        return [c for c in self.columns if c.admitted] if self.admitted else []
+
+
+GATE_MANIFEST = register_kind(ProductKindSpec(
+    id="gate_manifest", title="Step2→3 交接闸裁决", storage="numeric", unit="column",
+    schema=GateManifest, coord_space=COLUMN_PX))

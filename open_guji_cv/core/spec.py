@@ -1,0 +1,145 @@
+"""Step / ProductKind 的声明，以及单位键的编码。
+
+**存储粒度 = 页。** `unit` 只描述语义（这一步的最小重跑单位），P0 的产物文件与
+指纹都按页落（column / cell 单位的产物是页文件里的列表）。要更细的粒度，
+改 engine 的 key 选择即可，Step 接口不用动。
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Literal
+
+from pydantic import BaseModel
+
+Storage = Literal["numeric", "image_cache", "image_keep"]
+Unit = Literal["book", "page", "column", "cell"]
+
+# 坐标空间标识（见 anchor.py）
+RAW_TR = "raw_page_px@top-right"   # 规范空间：右上原点，x 向左，y 向下
+RAW_TL = "raw_page_px@top-left"    # OpenCV / 旧 v1 产物
+COLUMN_PX = "column_px"            # Step2 矫正后的列图坐标
+
+
+@dataclass(frozen=True)
+class ProductKindSpec:
+    """一种产物。numeric 的必须给 pydantic schema；图像类不用。"""
+    id: str
+    title: str
+    storage: Storage
+    unit: Unit
+    schema: type[BaseModel] | None = None
+    coord_space: str | None = None
+    ext: str = "png"          # 图像类的文件扩展名
+
+    def __post_init__(self) -> None:
+        if self.storage == "numeric" and self.schema is None:
+            raise ValueError(f"numeric 产物 {self.id!r} 必须声明 schema")
+
+
+@dataclass(frozen=True)
+class GateLevel:
+    """闸的一层判据，只做文档/查询展示用——执行体仍在闸自己的 `run_page` 里，
+    这里不驱动执行，纯重组阶段不把判据拆成逐层可插拔的函数（那是改算法，不是这一轮的事）。"""
+    id: str                          # "L1" / "L1c" / "L2" / "L3" ……
+    unit: Unit                       # 这一层判到哪个粒度
+    desc: str = ""                   # 一句话判据，别写具体阈值数字（那些在 Params 里，写两处会漂）
+
+
+@dataclass(frozen=True)
+class GateSpec:
+    """挂在某个 Step 出口的闸。`id` 是这道闸自己的 Step id——它仍然是一个正常
+    注册进 `STEPS` 的 `Step`（有自己的 `consumes`/`produces`/落盘目录/指纹），
+    只是不出现在任何 pipeline yaml 的 `steps:` 列表里；引擎跑完被挂的 Step 后
+    自动接着跑它（见 `core.step.attach_gate` 与 `core.engine.Engine.run`）。"""
+    id: str
+    unit: Unit
+    levels: tuple[GateLevel, ...] = ()
+    on_fail: Literal["block", "flag", "degrade"] = "block"
+
+
+@dataclass(frozen=True)
+class StepSpec:
+    id: str
+    title: str
+    version: str                     # 输出语义变了才升；参与指纹
+    unit: Unit
+    consumes: tuple[str, ...]        # 产物种类 id（**硬依赖**：缺一个就阻塞整步）
+    produces: tuple[str, ...]
+    params: type[BaseModel]          # 参数 schema，默认值 = 生产配置
+    when: str | None = None          # 单位级条件，P0 只记录不求值
+    optional_consumes: tuple[str, ...] = field(default=())
+    """**可选上游**：缺了照跑，只是这一路证据没有，`run_page` 自己兜住（拿到 None）。
+
+    与 `consumes` 的区别只在**缺席时怎么办**：硬依赖缺席 → `upstream_shas` 返回
+    None、整步阻塞；可选上游缺席 → 不阻塞，只是不进指纹（在的时候照常进，改了
+    照样让下游过期）。
+
+    2026-09-13 加：`ocr_candidates`（Step5-c）是书级开关 `BookSpec.ocr_candidates`
+    控制的可选步骤（默认关），关掉时 `Engine._enabled` 直接把它从 steps 里滤掉。
+    但 `align_ref`/`context_decide`/`seed_admit` 当初把它写进了 `consumes`，于是
+    指纹层 `upstream_shas` 认它是硬依赖、短路返回 None，**三步全部阻塞**——而这
+    三步的 `run_page` 其实早就写好了容错（`seed_admit._opt` docstring 直说"可选
+    上游：缺了就 None，不炸"；`align_ref` 只在 match 和 ocr 都缺时才报错），那些
+    代码根本没机会跑到。声明与实现对不上，这个字段就是用来把实现的意图表达出来的。"""
+    code_deps: tuple[str, ...] = field(default=())
+    """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
+    book_deps: tuple[str, ...] = field(default=())
+    """参与指纹的 **`BookSpec` 字段名**。
+
+    指纹只认 `params` + `code` + `upstream`，**册配置不在其中**——于是「改了
+    `books/<id>.yaml` 里一个影响输出的字段，已有产物却照报『新鲜』」。
+    参数的默认值写 `None`（"None = 用 Book 的 X"）也救不了：`None` 在两本书上
+    哈希出来一模一样。
+
+    2026-09-15 `leaf_layout` 踩到（改成 `folio` 后 Step1 该把版心标 `margin`，
+    却整页跳过）。凡是 `run_page` 里读了 `ctx.book.X` 且 X 会改变产物的，
+    都要在这里声明 X。"""
+    needs: tuple[str, ...] = field(default=())
+    """跑得起来的**外部**前提，控制台据此把跑不了的步骤置灰而不是让人点了才失败。
+    口径与 `eval/registry.py` 的 `needs` 一致：
+
+        engine    要 OCR 引擎 / GPU（rapidocr 等）
+        corpus    要语料文件
+        db        要 GlyphDB
+        heavy     分钟级以上
+
+    只是**声明**，不参与指纹——同一份代码在装了引擎的机器上跑出来的产物，
+    跟没装的机器上的空产物不是一回事，但那个差别由参数（如引擎名）和产物
+    内容自己体现，不该混进 Step 指纹。"""
+    gate: GateSpec | None = None
+    """这个 Step 出口挂的闸（P0 只有 Step2 有），由 `core.step.attach_gate` 事后
+    挂上——不需要在这里手写，写在这里只是给类型看。"""
+
+
+# ── 单位键 ───────────────────────────────────────────────────────────
+# p0042 / p0042c03 / p0042c03s17 —— 页从 1 起、列从右到左从 1 起、slot 见 Step3
+
+_KEY_RE = re.compile(r"^p(\d{4})(?:c(\d{2}))?(?:s(-?\d+))?$")
+
+
+def page_key(page: int) -> str:
+    return f"p{page:04d}"
+
+
+def column_key(page: int, col: int) -> str:
+    return f"p{page:04d}c{col:02d}"
+
+
+def cell_key(page: int, col: int, slot: int) -> str:
+    return f"p{page:04d}c{col:02d}s{slot}"
+
+
+def parse_key(key: str) -> tuple[int, int | None, int | None]:
+    m = _KEY_RE.match(key)
+    if not m:
+        raise ValueError(f"非法单位键: {key!r}")
+    page = int(m.group(1))
+    col = int(m.group(2)) if m.group(2) else None
+    slot = int(m.group(3)) if m.group(3) else None
+    return page, col, slot
+
+
+def page_of(key: str) -> int:
+    return parse_key(key)[0]

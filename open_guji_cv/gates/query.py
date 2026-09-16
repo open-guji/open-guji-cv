@@ -1,0 +1,171 @@
+"""查询一册书里被闸拦下的单位——不再是「没有任何东西在跟踪」。
+
+`gate_manifest` 本身早就记着每一页/每一列的拒因（`GateManifest.reject` /
+`GateColumn.reject`），只是散在 `products/<book>/column_gate/p*.json` 里，
+没人把它们收成一份清单。这里只做收拢，不算新判据。
+
+**局限**：闸1（`border_detect_gate`）2026-09-12 起接了
+`clustering.page_type.classify_page_type`，会把 `page_type`/`page_type_policy`
+写进 `border_detect_gate_manifest`，但这只是**结构量粗判**（skip/custom/
+standard 三档，body 里混着未细分的 roster/toc/edict）。keben_body_v2 管线的
+`selector.page_type: [body]` 目前仍是外部选页（跑批时人/脚本按页号挑，
+管线自己分不出 roster/toc——见仓库 `.claude/CLAUDE.md`「当前策略」一节），
+所以从来没跑过闸的页（比如 vol01 p90–132 那 41 页职名页，若未跑过闸1本身）
+在 `gate_manifest` 里根本没有记录。这份清单只能把「有没有闸产物」这件事
+本身摆出来（`missing`）。
+
+2026-09-13 补：闸3（`row_segment_gate`）现在会判「版式未支持」并写进
+`unsupported_layout`，职名/目录类页至此**有清单跟踪了**，不再混在异常里。
+但它**只分「正文 / 切不了」两档，不细分 roster/toc**（两者在判据上重叠，
+见 `row_segment_gate.py` 的 L0u 一节）。要真正的 body/roster/toc 三分类，
+仍需 `open-guji-dataset` 的 page-type 金标（只读）。
+
+用法：
+    python -m open_guji_cv.gates.query vol01
+    python -m open_guji_cv.gates.query vol01 --pages 90-132
+    python -m open_guji_cv.gates.query vol01 --gate row_segment_gate
+
+2026-09-11 补闸3：新增 `--gate` 选项，同一条命令按闸 id 切换查哪道闸的
+`*_manifest` 产物——闸2（`column_gate`）与闸3（`row_segment_gate`）的产物
+kind id 与 store step id 不同名（`gate_manifest` vs `row_segment_gate_manifest`），
+用 `GATES` 表登记对应关系，不新开一条命令。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+
+from ..core.book import load_book
+from ..core.spec import page_key
+from ..products.store import ProductStore
+
+# 闸 id → (store 读取用的 step id, 产物 kind id)。两道闸各自的 Step id 与
+# 产物 kind id 恰好同名（`column_gate`/`gate_manifest` 是历史命名，新闸
+# `row_segment_gate` 干脆让 step id 与产物名共用前缀，不再引入新的映射坑）。
+GATES: dict[str, tuple[str, str]] = {
+    "column_gate": ("column_gate", "gate_manifest"),
+    "row_segment_gate": ("row_segment_gate", "row_segment_gate_manifest"),
+    "border_detect_gate": ("border_detect_gate", "border_detect_gate_manifest"),
+    # 现代印刷链的闸1。Step id 不同（line_detect_gate），产物 kind 与刻本链共用
+    # 同一个 `border_detect_gate_manifest`（见 gates/line_detect_gate.py 的
+    # produces）。没登记在这儿时控制台 Step1 页拿不到页型统计，整页显示
+    # 「无产物 80」——产物明明在（2026-09-15）。
+    "line_detect_gate": ("line_detect_gate", "border_detect_gate_manifest"),
+}
+
+
+#: 叠图 / 前端汇总共用的分层配色——顺序即优先级（一列可能同时命中多层拒因，
+#: 取 reject 列表里**第一条**命中的层级，因为 column_gate.py 按 L1c → L2 → L3
+#: 顺序 append，先出现的就是最先挡住它的那一层）。
+GATE_TIER_COLOR: dict[str, tuple[int, int, int]] = {
+    "ok": (0, 160, 0), "L1": (0, 0, 220), "L1c": (0, 140, 255),
+    "L2": (0, 220, 220), "L3": (180, 0, 180),
+}
+
+
+def gate_column_tier(reject: list[str]) -> str:
+    """从一列的 `reject` 拒因文本里取第一条命中的层级 id（L1/L1c/L2/L3），没有则 "ok"。"""
+    for r in reject:
+        for tier in ("L1c", "L1", "L2", "L3"):
+            if r.startswith(tier):
+                return tier
+    return "ok"
+
+
+def gate_summary(book_id: str, pages: list[int] | None = None,
+                  store: ProductStore | None = None,
+                  gate: str = "column_gate") -> dict:
+    """逐页汇总某道闸的准入情况：过闸/未过闸列数、各层拦了几列——控制台汇总面板用，
+    不用再去 47 个 JSON 里自己累加。"""
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    step_id, kind_id = GATES[gate]
+    rows: list[dict] = []
+    tier_totals: dict[str, int] = {}
+    for pg in pages:
+        g = store.read(book_id, step_id, page_key(pg), kind_id)
+        if g is None:
+            rows.append({"page": pg, "status": "missing"})
+            continue
+        # 不是所有闸都有列级子项——闸1（border_detect_gate）是纯页级判据，
+        # 没有 `columns` 字段，`getattr` 兜底而不是假设它总存在。
+        columns = getattr(g, "columns", ())
+        tiers = [gate_column_tier(c.reject) for c in columns]
+        admitted = sum(1 for t in tiers if t == "ok")
+        for t in tiers:
+            if t != "ok":
+                tier_totals[t] = tier_totals.get(t, 0) + 1
+        rows.append({
+            "page": pg, "status": "ok" if g.admitted else "page_blocked",
+            "page_reject": g.reject, "n_columns": len(columns),
+            "n_admitted": admitted, "tiers": tiers,
+            # 闸1 特有的 flag 级信息（列级闸没有这个字段，getattr 兜底）。
+            "flags": getattr(g, "flags", []),
+            # 闸1 的探出列数 vs 版式列数（页面类型分类用，见控制台 Step1
+            # ProgressGatePanel typeBreakdown）——列级闸没有这两个字段。
+            "n_cols": getattr(g, "n_cols", None),
+            "expected_cols": getattr(g, "expected_cols", None),
+            # 闸1 的页型判定（clustering.page_type.classify_page_type）——
+            # 列级闸没有这两个字段。
+            "page_type": getattr(g, "page_type", None),
+            "page_type_policy": getattr(g, "page_type_policy", None),
+            # 闸3 的「版式未支持」判定（职名/目录类，见 row_segment_gate.py
+            # 的 L0u 一节）——别的闸没有这两个字段。前端据此单列一桶，
+            # 不再计进「整页被拦（异常）」。
+            "unsupported_layout": getattr(g, "unsupported_layout", None),
+            "n_unsupported_columns": getattr(g, "n_unsupported_columns", None),
+        })
+    return {"gate": gate, "pages": rows, "tier_totals": tier_totals}
+
+
+def blocked_units(book_id: str, pages: list[int] | None = None,
+                   store: ProductStore | None = None,
+                   gate: str = "column_gate") -> list[dict]:
+    """逐页查某道闸的 manifest，收拢成一份清单：
+    页级 admitted=False、列级 admitted=False、或者压根没有闸产物（missing）。
+    `gate` 是闸 id（见 `GATES`），默认闸2（`column_gate`），向后兼容旧调用方。"""
+    store = store or ProductStore()
+    book = load_book(book_id)
+    pages = pages if pages is not None else book.all_pages()
+    step_id, kind_id = GATES[gate]
+    out: list[dict] = []
+    for pg in pages:
+        g = store.read(book_id, step_id, page_key(pg), kind_id)
+        if g is None:
+            out.append({"page": pg, "status": "missing",
+                        "reason": "没有闸产物——不在这轮跑过的页里（可能是非正文页，"
+                                  "也可能是还没跑），需要 page-type 金标才能分清"})
+            continue
+        if not g.admitted:
+            out.append({"page": pg, "status": "page_blocked", "reason": g.reject})
+            continue
+        # 闸1（border_detect_gate）是纯页级判据，没有列级子项——`columns`
+        # 不是所有闸的通用字段，`getattr` 兜底而不是假设它总存在。
+        for c in getattr(g, "columns", ()):
+            if not c.admitted:
+                out.append({"page": pg, "column": c.col, "status": "column_blocked",
+                            "reason": c.reject})
+    return out
+
+
+def _main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("book")
+    ap.add_argument("--pages", default=None, help="'all'（默认）| '90-132' | '3,4,5'")
+    ap.add_argument("--gate", default="column_gate", choices=sorted(GATES),
+                    help="查哪道闸，默认 column_gate（闸2）")
+    args = ap.parse_args()
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else None
+    rows = blocked_units(args.book, pages, gate=args.gate)
+    print(json.dumps(rows, ensure_ascii=False, indent=2))
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    print(f"共 {len(rows)} 条：" + "；".join(f"{k} {v}" for k, v in counts.items()))
+
+
+if __name__ == "__main__":
+    _main()

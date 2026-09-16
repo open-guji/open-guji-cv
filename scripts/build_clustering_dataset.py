@@ -59,6 +59,7 @@ from open_guji_cv.clustering.crop_quality import assess_crop
 from open_guji_cv.clustering.match import NEVER_MATCH_FAMILIES
 from open_guji_cv.clustering.normalize import (MARGIN_RATIO, NOISE_AREA,
                                                NORM_SIZE, normalize_patch)
+from open_guji_cv.core.workspace import corpus_path
 
 SOURCE_ITEM = "06061300.cn"        # 武英殿刻本《欽定四庫全書總目》卷首（page-type 同源）
 PIPELINE_REV = "502fa04d0c"        # 冻结的上游产物版本（见文件头 --pipeline-rev）
@@ -481,7 +482,7 @@ def main() -> None:
     ap.add_argument("--carrier-dir", default=None,
                     help="OCR 载体目录（含 carrier_{book}.jsonl，"
                          "由 scripts/build_ocr_carrier.py 生成）。给定时不再依赖 phase6 转写")
-    ap.add_argument("--corpus", default="corpus/zongmu_wuyingdian_reference.txt")
+    ap.add_argument("--corpus", default=str(corpus_path("zongmu_wuyingdian_reference.txt")))
     ap.add_argument("--page-type", default="../open-guji-dataset/page-type/expected.json")
     ap.add_argument("--glyph-store", default="glyph_store")
     ap.add_argument("--max-instances", type=int, default=3000, help="每个对齐分片的实例上限")

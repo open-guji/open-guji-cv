@@ -18,39 +18,102 @@ Step3 准不准。所以这里先立一道准入闸，只把「确实是一列�
 ## 准入闸：三级，逐级独立
 
 **L1 页级 —— Step1 有没有把这一页切对列**。判据只用几何：探出 9 列、且每列
-矫正图宽度都在本页中位数 ±15% 内（跟 Step3 那节做分层用的是同一条，不另立
-门户）。这是**页级**的：一页里只要有一条竖直线探错，整页的列编号和窗口一起
-错位，同页其它列也不能单独救。14 页里 vol01/47 被这条挡下（列宽
-`[192,187,184,186,197,197,224,212,185]`，224/192=1.17 超线）。
+矫正图宽度在本页中位数的容差内。这是**页级**的：一页里只要有一条竖直线探错，
+整页的列编号和窗口一起错位，同页其它列也不能单独救。
+
+**容差分两档**（2026-09-03 定，用户裁定 + 全语料标定）：中间列（c2~c8）
+`±15%`，**最外两列（c1/c9）`±35%`**。放宽最外列不是和稀泥，是因为那里有一种
+**已知且可接受**的形态——用户明确裁过：「有些页边缘只能探测到外边框、探测不到
+内边框，所以第一列或最后一列偏大，但可以接受」。多算的正是内框到外框那一段
+（文档记的竖直「内心→外条外延」40.1±3.1px，对 187px 的列宽约 +21%）。
+
+**这个放宽是有界的，不会把真错放进来**——2655 列实测把两类分得很开：
+
+| | 中位 | p90 | p99 | max |
+|---|---|---|---|---|
+| 中间列 c2~c8 | 1.1% | 3.2% | 7.5% | **89.4%** |
+| 最外列 c1/c9 | 1.6~2.1% | 6.9% | 25.4% | **30.3%** |
+
+最外列的超宽**封顶在 30.3%**（就是多吃一个外框的量级），而真正的错切——少探到
+一条线、两列并成一列——是 **+66%~+89%**，量级差一倍。±35% 卡在这两族中间。
+实测收益：挡下的页从 33 降到 **7**（+234 列进池），而**剩下这 7 页全部栽在中间
+列**（+32%~+89%），没有一页是因为最外列被挡——判据现在只拦真错。
 
 **L2 列级自检 —— 这一列两侧有没有「墨量归零」的边界**。量的是原始（未抹侧）
-投影在两侧外 25% 范围内的**最低墨占比**：正常列总能找到一段零区（金标 30 条
-clean 实测最高 0.0109、中位 0.0012），人判 `mixed`（"压根找不到归零的边界"）
-的两条是 0.0136 / 0.0261。门槛取 `SIDE_FLOOR_MAX=0.012`。
+投影在两侧外 25% 范围内的**最低墨占比**，门槛 `SIDE_FLOOR_MAX=0.045`。
+⚠️ **这条判据分不开 clean/mixed**（两轮扩标都证实，见下面负结果 3），门槛
+现在只当「挡极端情形」用，标定原则是**零误杀**：114 列金标里 clean 的
+`side_floor` 最高 0.0417，所以门槛放在它上面一点，代价是 6 条 mixed 只捕到 2 条。
 
-**L3 人裁 —— column-warp 金标**。`verdict == "clean"`，且 `border_class`
-两端都不是 `idk`。
+**为什么从 0.012 抬到 0.045**：0.012 是 2026-09-02 在 n=2 的 mixed 上定的，
+当时的偏置是"误杀便宜、误放贵"（手上只有 126 列）。扩到 114 列金标 + 全语料
+2331 列之后这个偏置反过来了——0.012 会**误杀 12/108 = 11.1% 的 clean**
+（全语料上挡 49 列 = 2.1%），而全书 mixed 率实测只有 **0.5%**（约 12 条）。
+拿 49 列好数据换 10 条坏数据是亏的。0.045 在全语料上只挡 3 列（0.1%）、
+金标上零误杀。**放过去的那些 mixed 交给下游**：Step3 的弹性 DP 本来就有
+"约束不满足返回 None"的兜底，比在这里瞎猜强。
 
-`--tier gold`（默认）= L1 ∧ L3；`--tier gate` = L1 ∧ L2（不要求标过）。
+## 记下来的负结果：L2 这条自检**几乎没有独立筛选力**（现在知道是结构性的，不是样本小）
 
-## 记下来的负结果：L2 这条自检**几乎没有独立筛选力**
-
-试过两条列级判据，一条不成立、一条区分不出来：
+试过三条列级判据，全部不成立或不够用：
 
 1. **「清理后带内靠边 12px 的残墨」是循环论证** —— 带边界本来就是按"墨量
    接近 0"挑的，量它必然小。实测两条 `mixed` 列 0.008/0.003，反而比一批
    `clean` 列（最高 0.088）还低。**不能用**。
 2. **「带宽偏离本页中位数」区分不出来** —— 126 列的偏离 p95 只有 5.5%、
    最大 19.5%，最大的那条恰是人判 clean 的列。
-3. L2 现在用的「两侧最低墨」确实分得开，但 clean 上限 0.0109 与 mixed
-   下限 0.0136 只差 24%，而 mixed 只有 n=2。**它在现有 14 页上一条都没
-   多筛掉**（两条 mixed 都在 vol01/47，L1 已经先挡了整页）。所以别把它
-   当已验证的判据看——它是给"L1 放过的页面上出现 mixed 形态"留的一道备用
-   闸，门槛按"误杀便宜、误放贵"往紧里取（手上 126 列，少几列不心疼；放一
-   条坏列进去会污染 Step3 的量法）。
+3. **「两侧最低墨」（现在的 L2）曾经能分开，扩金标之后分不开了，而且是
+   结构性分不开**。114 列金标复核：clean 的 `side_floor` 上到 **0.0417**、
+   mixed 低到 **0.0038**，**完全重叠**；扫遍所有可能的门槛，最优也只能做到
+   误杀 3 / 放过 1。（第一轮 n=11 时的数字是 clean 上限 0.0111 vs mixed
+   下限 0.0044，同样重叠——扩样本只让重叠区更宽，没让它分开。）
+   根因不是阈值没调好，是这条判据**只看两侧外 25%**，
+   而两种真实污染都不贴边：`vol01/151 c4` 是弯界行只探进列**中段**；
+   `vol02/3 c9`（vol02 首次抽样金标测出来的）是**背景印章导致整列散布
+   噪点**，同样不集中在边缘。这两种污染 `side_floor` 天生看不见——护栏
+   `tests/test_export_step3_input.py::test_side_floor_cannot_see_whole_column_contamination`
+   把这条焊死，`test_gate_threshold_still_separates_the_human_verdicts`
+   改成了 `xfail(strict=True)`（留活证据：谁要是手滑调阈值让它"又通过了"，
+   strict xfail 会立刻报警，而不是被当成判据修好了）。
 
-**结论：目前唯一经过验证的筛选力来自 L1（页级列切分）。** 想要更细的列级
-准入，得先扩金标 —— 现在 `mixed` 只有 2 条，任何列级判据都是在 n=2 上标定。
+**结论没变，只是证据更硬了：目前唯一经过验证的筛选力来自 L1（页级列切
+分）。** L2 现在的作用只是"至少不会误杀已知 clean 列"，不是真的能拦 mixed。
+要拦"背景印章"/"局部弯界行"这类不贴边的污染，得要一条**跟"两侧墨量"完全
+不同维度**的判据（比如整列噪点密度、连通域碎片数），不是在现有指标上
+调参或扩样本能解决的——`mixed` 样本已经从 n=2 扩到 n=11、覆盖四种不同
+机制，指标依然分不开，说明问题出在指标本身的设计范围，不是标注量不够。
+
+## L2b：整列噪点密度判据（2026-09-11 新增，flag 级，只解决四种机制里的一种）
+
+按上面「结论」的方向找了一条独立维度——`stamp_noise_density`（整列
+**未去噪原图**上中等面积 3~60px 孤立连通体的像素密度，见
+`column_projection.py` 同名函数文档）。**这条判据命中只写进 `flags`，
+不进 `reject`、不影响 `admitted`**——只在 115 列金标上验证过背景印章这
+一种机制，没见过的书页上有没有漏测到的误伤先例还不确定，参照
+`row_segment_gate.py` R2/R2s 的先例（新判据先以 flag 形式进生产、积累
+人审证据，不直接硬拦），别一上来就当 block 用。115 列现行金标
+（`verdict` 只有 `clean`/`mixed` 两档，115 = 111 clean + 4 mixed）实测：
+
+* **对印章类污染干净分开**：clean 组 p95=0.0045、max=0.0060；人判 mixed
+  的印章列 `vol02/3` c9 单独 0.0201，**3.4 倍间隙、零重叠**。
+* **对另外两种机制没有筛选力**：`vol01/146`（夹注列）、`vol02/188` c3/c4
+  （局部弯界行探入）这 3 条 mixed 在这个量上是 0.0017~0.0028，落在 clean
+  分布内部——不是参数问题，是这类统计量分不清"字身笔画贴边"和"污染贴边"，
+  两者像素层面本来就长得一样（同样在 `column_projection.py` 记录）。
+
+全语料验证（vol01+vol02 已生成产物 76 页 684 列，`output/<book>/step2_columns/`）：
+门槛 0.007~0.012 区间内命中集合完全一致，只挡下 `vol02/3` 整页 9 列里的
+8 列——`vol02/3` 是卷端目录页，大面积印章覆盖整页上半，人当时只标了 c9
+一列金标，但 L2b 命中的其余 8 列目视复核确认同样脏（详见图，此处从略），
+说明这条判据不仅复现了金标，还多找出了同页没被抽到的同类污染。门槛低到
+0.006 会连带误杀 `vol02/151` c2（人判 `clean`，候选标签"弯界行"），故取
+**0.007**、离 clean 组 max（0.0060）留一点边际、离 mixed 命中值（0.0201）
+还有 2.3 倍余量。
+
+**这条判据只解决四种已知机制里的一种**，`vol01/146`（夹注）和
+`vol02/188`（局部弯界行探入）仍然没有自动判据，继续靠人审兜底——
+按用户 2026-09-11 的裁定，不追求单一统一判据，改成"每种机制一条独立
+判据、任一命中就拦"的多通道策略，这是这个策略下先落地的第一条通道。
 
 ## 两条口径约定（Step3 侧要知道）
 
@@ -97,17 +160,23 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import open_guji_cv.gates  # noqa: E402,F401  —— 注册产物种类（含 border_detect_gate_manifest）
+from open_guji_cv.core.spec import page_key  # noqa: E402
+from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
-    clean_column, column_profile, denoise_column,
+    clean_column, column_profile, denoise_column, stamp_noise_density,
 )
 from open_guji_cv.utils.row_boundaries import (  # noqa: E402
     estimate_shared_period, row_ink_projection,
 )
 
 EXPECTED_COLS = 9        # 版式常量（这两册）
-WIDTH_TOL = 0.15         # L1：列宽偏离本页中位数的上限
+WIDTH_TOL = 0.15         # L1：中间列宽度偏离本页中位数的上限
+OUTER_WIDTH_TOL = 0.35   # L1：**最外两列**（c1/c9）放宽到这里，理由见模块头
 SIDE_FLOOR_LOOK = 0.25   # L2：从两侧各看进去多少比例的宽度
-SIDE_FLOOR_MAX = 0.012   # L2：那段里的最低墨占比上限
+SIDE_FLOOR_MAX = 0.045   # L2：那段里的最低墨占比上限；2026-09-03 按 114 列金标重定，见模块头
+STAMP_NOISE_MAX = 0.007  # L2b：整列中等面积孤立墨点密度上限，专挡背景印章噪点
+                         # （2026-09-11 新增，只覆盖四种已知 mixed 机制里的一种，见模块头）
 N_BODY_SLOTS = 21        # 版式常量（这两册）
 
 
@@ -156,28 +225,37 @@ def main() -> None:
     if args.tier == "gold" and not gold:
         raise SystemExit("--tier gold 需要 --gold 指向 column-warp 金标目录")
 
+    store = ProductStore()
+
     pages = []
     n_written = 0
     for wf in sorted(src.glob("*/windows.json"), key=lambda p: int(p.parent.name)):
         d = json.loads(wf.read_text(encoding="utf-8"))
         page = wf.parent.name
+        gate = store.read(args.book, "border_detect_gate", page_key(int(page)),
+                          "border_detect_gate_manifest")
+        page_type = gate.page_type if gate else "body"
         wins = d["columns"]
         widths = [c["warped_size"]["width"] for c in wins]
         med_w = statistics.median(widths)
+        n_col = len(wins)
         bad_w = [c["col"] for c, w in zip(wins, widths)
-                 if abs(w - med_w) > WIDTH_TOL * med_w]
+                 if abs(w - med_w) > (OUTER_WIDTH_TOL if c["col"] in (1, n_col)
+                                       else WIDTH_TOL) * med_w]
         page_reject = []
         if len(wins) != EXPECTED_COLS:
             page_reject.append(f"L1：只探出 {len(wins)} 列（版式应为 {EXPECTED_COLS}）")
         if bad_w:
             page_reject.append(
-                f"L1：列宽偏离本页中位数 {med_w:.0f}px 超过 ±{WIDTH_TOL:.0%} 的列 "
-                f"{bad_w}（{[widths[c['col'] - 1] for c in wins if c['col'] in bad_w]}）")
+                f"L1：列宽偏离本页中位数 {med_w:.0f}px 超容差的列 {bad_w}"
+                f"（{[widths[c['col'] - 1] for c in wins if c['col'] in bad_w]}；"
+                f"中间列 ±{WIDTH_TOL:.0%} / 最外列 ±{OUTER_WIDTH_TOL:.0%}）")
 
         # 逐列清理（页级先验要用全部列，所以不管准不准入都先算）
         cols, projs, borders, dst_ws, band_ws = [], [], [], [], []
         for c in wins:
-            raw = denoise_column(cv2.imread(str(wf.parent / c["file"]), cv2.IMREAD_GRAYSCALE))
+            unwarped = cv2.imread(str(wf.parent / c["file"]), cv2.IMREAD_GRAYSCALE)
+            raw = denoise_column(unwarped)
             cleaned, diag = clean_column(raw)
             b0, b1 = diag["band"]
             bt = float(c["border_top_in_column"])
@@ -187,7 +265,11 @@ def main() -> None:
             dst_ws.append(b1 - b0)
             band_ws.append(b1 - b0)
             cols.append(dict(win=c, img=cleaned, band=(b0, b1), diag=diag,
-                             border=(bt, bb), floor=side_floor(raw)))
+                             border=(bt, bb), floor=side_floor(raw),
+                             # stamp_noise 必须在**未去噪原图**上量——denoise_column
+                             # 会先清掉 <6px 的噪点，印章噪点很多恰好在这个量级，
+                             # 去噪之后密度被腰斩，标定用的口径就是原图，见模块头。
+                             stamp=stamp_noise_density(unwarped)))
 
         # 页级共享量：用**全部 9 列**算，理由见模块头「两条口径约定」第 1 条
         period = ref_w = None
@@ -206,17 +288,24 @@ def main() -> None:
             g = gold.get((args.book, page, col))
             ok_gold, why_gold = gold_admits(g)
             ok_gate = c["floor"] <= SIDE_FLOOR_MAX
+            ok_stamp = c["stamp"] <= STAMP_NOISE_MAX
             reasons = list(page_reject)
+            flags = []
             if not ok_gate:
                 reasons.append(f"L2：两侧最低墨 {c['floor']:.4f} > {SIDE_FLOOR_MAX}"
                                 "（找不到墨量归零的边界）")
+            if not ok_stamp:
+                # flag 级，不影响 admitted：只在 115 列金标上验证过背景印章这一种
+                # 机制，没见过的书页上有没有误伤先例不确定，见模块头「L2b」一节。
+                flags.append(f"L2b：整列噪点密度 {c['stamp']:.4f} > {STAMP_NOISE_MAX}"
+                             "（疑似背景印章污染，flag 不算错）")
             if args.tier == "gold" and not ok_gold:
                 reasons.append(f"L3：{why_gold}")
             admitted = page_ok and ok_gate and (ok_gold or args.tier == "gate")
             b0, b1 = c["band"]
             bt, bb = c["border"]
             rec = dict(
-                col=col, admitted=admitted, reject=reasons,
+                col=col, admitted=admitted, reject=reasons, flags=flags,
                 tier=("gold" if ok_gold else ("gate" if ok_gate and page_ok else None)),
                 content_x=[int(b0), int(b1)],
                 border_top=bt, border_bottom=bb,
@@ -229,6 +318,7 @@ def main() -> None:
                 border_trim_px={"top": c["diag"]["top"]["px"],
                                  "bottom": c["diag"]["bottom"]["px"]},
                 side_floor=round(c["floor"], 4),
+                stamp_noise=round(c["stamp"], 4),
                 gold=({"verdict": g.get("verdict"),
                        "border_class": g.get("border_class")} if g else None),
             )
@@ -243,7 +333,7 @@ def main() -> None:
         pages.append(dict(page=page, admitted=page_ok, reject=page_reject,
                           period=period, ref_w=ref_w,
                           column_widths=widths, median_width=med_w,
-                          columns=recs))
+                          page_type=page_type, columns=recs))
 
     out.mkdir(parents=True, exist_ok=True)
     manifest = dict(
@@ -252,7 +342,8 @@ def main() -> None:
         book=args.book, tier=args.tier,
         n_body_slots=N_BODY_SLOTS,
         gate=dict(expected_cols=EXPECTED_COLS, width_tol=WIDTH_TOL,
-                  side_floor_look=SIDE_FLOOR_LOOK, side_floor_max=SIDE_FLOOR_MAX),
+                  side_floor_look=SIDE_FLOOR_LOOK, side_floor_max=SIDE_FLOOR_MAX,
+                  stamp_noise_max=STAMP_NOISE_MAX),
         contract=[
             "图是 clean_column 的输出：抹白不裁切，坐标系跟 Step2 矫正图完全一致，"
             "border_top/border_bottom 仍是版框线原来的 y（墨被抹掉了，位置没动）。",
@@ -264,6 +355,10 @@ def main() -> None:
             "n_raised 不给：raised 只是几何标记，抬头列可能多一格也可能不多，"
             "纯信号判据不可靠（见 row_boundaries_design.md「抬头列」节），"
             "由调用方按版式先验/人工核校定。",
+            "page_type 来自 Step1 闸（border_detect_gate_manifest.page_type，"
+            "clustering.page_type.classify_page_type 的判定），取不到就兜底 "
+            "\"body\"；只是粗判（skip/custom/standard 三类里能分出 "
+            "blank/cover/label，body 里混着未细分的 roster/toc），不是精确分类。",
         ],
         pages=pages,
     )
@@ -294,6 +389,9 @@ def main() -> None:
         print("\n准入页上被扣下的列，按理由：")
         for why, n in sorted(held.items(), key=lambda kv: -kv[1]):
             print(f"  {n:>3}  {why}")
+        n_flagged = sum(1 for p in pages for c in p["columns"] if c.get("flags"))
+        if n_flagged:
+            print(f"\n推给 Step3 但带 flag 的列（不拦，供人审）：{n_flagged}")
 
 
 if __name__ == "__main__":

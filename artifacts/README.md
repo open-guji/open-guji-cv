@@ -3,7 +3,12 @@
 本项目的人机协作靠一组发布在 claude.ai 上的交互审查页（Artifact）。
 **URL 是持久资产**：用户的书签、页面里的浏览器本地状态都锚在 URL 上，
 更新内容必须**重发布到同一 URL**（发布时带 `url` 参数），千万别新开。
-本目录存各页的 HTML 快照（可离线看、可回滚），README 是唯一的 URL 台账。
+本目录存各页的 HTML 快照（可离线看、可回滚）。**真源不是这份 README**——
+批次登记已随控制台重构（2026-09-10，`a200e37`）落地：真源是
+`review/batches/*.json`（批次表），本档由 `GET /api/batches.md` 从那边
+生成（人读用，勿手改条目；生成器见 `open_guji_cv/review/batches.py` 的
+`render_registry_markdown`）。要看当下有哪些活跃批次，起控制台走「审查」tab，
+或调 `/api/batches.md`。
 
 ## 活跃页面（vol01 进库工作流）
 
@@ -19,24 +24,81 @@
 |---|---|---|---|
 | **下版框存墨判读**（下内框印上了没有）| https://claude.ai/code/artifact/cd2e4252-01ff-46bb-915f-a266f9378a10 | [border_bottom_review.html](border_bottom_review.html) | `python scripts/build_border_bottom_review.py`（默认 vol01 的 24,137,138,141——第一页是印得好的参照）|
 
-判的是一句话：vol01/137、138、141 的下内框是**印糊了**（按残墨重标金标）还是
-**根本没印上**（标成缺失）。定位靠这本书的下框几何「细内框线 + 约 17px 白 +
-约 19px 粗外条」——粗外条即使磨损也认得出，用**外条起点 − 17px** 反推内框该
-在哪，常数取自 5 页印得好的正文页（24/26/65/33/14 实测 17/15/16/17/18px）。
-⚠️ 别跟金标的 `bottom_outer_offset` 混：那个量的是外条**外延**（远沿），
-外条本身约 19px 厚，两个数不冲突但口径不同。
+**已判：vol01/137、138、141 的下内框都印上了，只是磨得极淡，金标是对的。**
+（此前「138 根本没印上」「141 算法本来就对」两条结论作废。）
 
-当前读数（参照页 vol01/24 自洽：推定内框 = 算法线，墨 0.70）：
+判据换成两条——绝对墨门槛对糊页太粗暴：
+1. **相对本底的局部峰**：本底（内框与外条之间那段白）实测 0.000，金标处
+   0.02~0.10 的墨已是本底的 8~39 倍；清楚页 250~450 倍、淡但明确的页
+   105~180 倍——是连续衰减谱，不是有无之分。
+2. **空间相干性**：真线的墨沿 x 连成长横条，噪点是散点。量「覆盖率+最长连段」
+   并跟同页确定空白的对照行比：24（清楚）0.719/188px vs 0.002/2px；
+   138 是 0.095/37px vs 0.009/4px；137 是 0.027/25px vs 0.000/0px；
+   141 只剩 0.017/17px，下内框基本磨没了。
 
-| 页 | 推定内框处墨 | 结论 |
-|---|---|---|
-| 137 | 0.102（健康页的 1/7，位置分毫不差）| 印上了，磨成虚线 |
-| 138 | 0.002（整条白纸）| 根本没印上 |
-| 141 | 0.407（三页里最结实）| 印上了，**算法本来就对**，金标偏上 28px |
+**算法在这三页反而都是错的**：137/138 咬在末行字的墨上，141 落在外框粗条上。
 
-**没有自动改金标**：两版自动重拟都被粗外条骗走（外条比磨损的内框黑约 3 倍；
-拿金标自己的 `bottom_outer_offset` 挖也不行，它相对同一条画错的内框量的）。
-体检脚本 `open-guji-dataset/scripts/report_border_hlines_offtarget.py`。
+页面同时给出**版框几何常数**（清楚页实测，px，均值±标准差）：
+
+| 边 | 页数 | 内框线宽 | 外框条宽 | 内心→外条近沿 | 内心→外条外延 |
+|---|---|---|---|---|---|
+| 上框 | 4 | 6.5 ± 0.1 | 13.0 ± 6.2 | 17.8 ± 1.4 | 30.8 ± 6.8 |
+| 下框 | 5 | 5.6 ± 0.5 | 17.2 ± 2.1 | 16.7 ± 0.8 | 33.9 ± 2.1 |
+| 竖直 | 5 | 4.6 ± 0.4 | 19.2 ± 1.2 | 20.6 ± 2.7 | 39.8 ± 3.3 |
+
+两条要点：**版框四边不等距**（竖直外延间距比上框大 10.8±4.5px、比下框大
+5.9±4.2px）；**外条近沿不可用、只有远沿稳**（外条从内侧磨掉，近沿 +15→+34
+漂，远沿只 +33→+45）——拿近沿反推内框会错十几 px，审查页第一版就是这么错的。
+
+## Step1 金标标注（三个裁决台，2026-09-02）
+
+素材共用一次探测（`scripts/export_border_review_cards.py`，60 页正文页，一页
+10~40s，各跑一遍太浪费）；页面由 `scripts/build_border_gold_reviews.py` 拼。
+卡的 id **冻在** `output/border_review/cards.jsonl` 里，重出一版页面照旧读它——
+否则 id 一变，上一轮的裁决就对不上号了。
+
+| 页面 | URL | 卡数 | 判什么 |
+|---|---|---|---|
+| **界行切分裁决台** | https://claude.ai/code/artifact/12a167f9-b3e1-443a-9702-af89de5a3be1 | 63 | 红虚线是探到的界行，判是不是都落在字缝上。4 档：都在缝上 / 有缝漏切 / 线压在字上 / 拿不准 |
+| **抬头有无裁决台** | https://claude.ai/code/artifact/1353ce9a-2a54-4170-bcde-1118b7765893 | 60 | 上版框横带的原图，判有没有抬头。3 档：有 / 没有 / 拿不准 |
+| **外框外延裁决台** | https://claude.ai/code/artifact/e8cdb7b4-1057-402b-8e31-aaa8ed966cbc | 108 | 红虚线是算法量的外条最外沿，判位置。5 档：在外沿上 / 偏内 / 偏外 / 没有外框 / 拿不准 |
+| **切分裁决台**（格线 A/B 盲裁）**已裁完·判据证伪** | https://claude.ai/code/artifact/89c2a1a1-009f-4178-8bdd-323cddb34684 | 64 | 同一块图两种切法并排（蓝线/黄线），判哪条把整理本那两个字切对了。**结果：ok 52 / moved 6 / overlap 5**，判据准确率 10%，已证伪（见下）。金标已落 touching-cuts；出卡脚本已删，身份对账表留在 `cutline_flip_cards.jsonl` |
+
+各自补的缺口：**界行切分**是文档里记的准确率封顶因素（40 页里 13 页没切对，
+Step2/Step3 全部连坐）；**抬头**金标只有 6 页 18 例，`HR_*` 那批形态常数有过拟合
+风险；**外框外延**的上框金标口径不统一（外延6/中心3/内沿1），已证实 vol01/14
+的 `top_outer_offset` 错了 17px。
+
+**切分裁决台**（2026-09-12）**已裁完，判据证伪**。原假设：库匹配 diff 档带出
+候选字后，「某候选上下两格 top1 都命中整理本期望字」可用来自动裁切分——
+vol02 1-50 页 145 条待裁里 65 条唯一命中（覆盖 44%），其中 64 条指向
+「现役切错了」，64:1 一度像是 `chosen` 规则本身有问题。
+
+**64 条盲裁结果：判据说「现役错」而人认同的只有 6 条，人说现役是对的 52 条，
+准确率 6/58 = 10%**，比瞎猜还差且系统性偏向 straight——字形库刻例多为
+straight 切出，切法一致就更像，**是数据自证的循环**，与切得对不对无关。
+同时确认 `chosen` 规则基本正确（人选中 seam_narrow 50 / straight 4，与现役
+分布几乎一致），**别照着 64:1 去改阈值**。详见
+`.claude/doc/row_boundaries_design.md` 的「负结果」一节。
+
+这轮**盲裁的做法救了一次**：若把「算法说现役错了」印在卡上，人多半顺着点，
+就会拿到一个假的高准确率，然后把一个本来正确的规则改坏。实测 A 位
+chosen 34 / flip 30，128 张图逐像素核验过颜色与标签零串色。
+
+出题上守的几条：**抬头页不叠任何探测结果**（要量的是漏检率，卡上印了机器的判断
+人就顺着点，测出来的是机器自己）；卡序打散（固定种子）；每页留「拿不准」一档；
+外延页不写偏移量。三页定点自检都过（v3 == v2，裁决嵌得进页里）。
+
+**第一轮已收工（2026-09-02）**：60 页全裁完，`ok` 56 / `extra` 2 / `miss` 2 /
+`idk` 0，**正确率 93.3%**。裁决存进
+`open-guji-dataset/border-detection/column-split/verdicts_r1.jsonl`。有问题的四页：
+vol01/87、vol02/45（线压在字上），vol02/69、vol02/177（有缝漏切）。
+第二轮补入用户点名的 vol01/151、11、119（弯折界行一族），共 63 卡，已带着第一轮
+裁决重发到同一 URL（**一条没丢**）。
+
+收回：`Artifact action:"read"` 拿到 HTML，喂
+`.claude/skills/review-artifact/scripts/harvest_verdicts.py` 出 JSONL。
+续裁：`build_border_gold_reviews.py --verdicts 上一轮.jsonl`，**重发到同一 URL**。
 
 ## 切分审查（G1/G2 工作流）
 
@@ -106,6 +168,51 @@
 **第一轮已收**（2026-08-31）：32 列全部标完、全部判「分得开」，全部动过界。
 人标点处的墨占比均值 0.0010 / 最大 0.0097，全落在平坦零区——标注质量很好。
 金标已导入 `open-guji-dataset/char-segmentation/column-warp`。
+
+**第二轮已发布待收**（2026-09-02）：追加 11 张新卡（页面筛新页，不动前 32
+张的裁决）。起因是 Step2→Step3 交接闸的 L2 阈值只在 2 条 `mixed` 金标上标定
+过（都在 vol01/47），筛选办法见下。追加的 11 列按发现的三种新形态分组：
+`候选·弯界行`（3 列：11 c1、151 c2/c7——界行本身是弯的，只在列的一端探进
+带里，跟原有 47 那种「淡墨糊满整侧」是不同的失效机制）、`候选·夹注列`
+（1 列：146 c8——列内混了正文和双行小注，小注字距边缘更近，导致按全列
+聚合的投影在夹注那一段margin变窄）、`候选·临界`（4 列：146 c9、151 c1/c5/c9
+——两侧最低墨落在 0.008~0.013，正卡在现有 clean 上限 0.0109 和 mixed 下限
+0.0136 之间）、`候选·对照(同页)`（2 列：151 c3/c4——同一张"整页左侧偏高"的
+页面上表现正常的列，检验是不是页面级污染）、`候选·文字顶边`（1 列：42
+c9——没有残留界行，是字身本身没留出零墨边距，整侧持续 0.24~0.31）。
+
+筛选办法：用 `data_full/zongmu/vol01/<page>.png` 当 `regen_step2_columns.py`
+的备用源（原 `RAW_ROOT=/home/user/rebuild_src` 这台容器上不存在，已加
+fallback，page_size 逐位核对是同一张源图），跑 94 个还没金标的正文页（按
+`open-guji-dataset/page-type` 的 `page_type=="body"` 筛，vol01 全书均匀抽 40
++ 剩余 54 全跑），逐列量"两侧外 25% 的最低墨"，挑分数最高的一批，人工目视
+复核过图像再收进候选（排除了检测本身出错的页，比如 143——那页只切出 135px
+的窄列，`page_ok=False`，L1 已经先挡了，不是"列级判据该不该收"的例子）。
+
+**第二轮已收**（2026-09-02）：11 列全部标完——**8 mixed / 2 clean / 1 idk**。
+`export_column_warp_gold.py` 并入金标，现有 43 clean + 11 mixed + 1 idk = 55 列。
+
+> ⚠️ **负结果，L2 那条「两侧最低墨」阈值已被坐实推翻**：扩标之后 clean 上限
+> 0.0111 vs mixed 下限 **0.0044**（vol01/151 c4），跟一条 clean 列
+> （vol01/141 c1，同样 0.0044）**分数完全一样**——这条单一指标结构上就
+> 分不开。原因是它只看两侧外 25% 的墨，而 151 c4 是"弯界行只探进列中段"、
+> 不贴边，天生测不到。测试从硬断言改成了 `xfail(strict=True)`（留活证据，
+> 别人手滑调阈值让它"看起来又过了"会立刻报警），另加一条
+> `test_side_floor_cannot_see_whole_column_contamination` 把这条负结果焊死。
+> 详见 `scripts/export_step3_input.py` 和 `tests/test_export_step3_input.py`。
+
+**第三轮已收（vol02 首次抽样，2026-09-02）**：Step2 刚扩页跑完 vol02 27 页
+（见 pipeline_handbook），但 vol02 上一条 Step2 人裁都没有。补标 12 列（按
+算法探测线自算的倾斜/梯形/锚点偏差三条难例各挑 3 页 + 3 页对照，跟 vol01
+`pick_columns()` 同一个思路，但几何量是从 `output/vol02/step2_columns/`
+的算法探测线直接算的——vol02 没有 border-detection 人工金标可用）。结果
+**11 clean / 1 mixed**，跟 vol01 的高 clean 率一致，**Step2 在 vol02 上没
+跑偏**。唯一的 mixed（vol02/3 c9）用户目视核实：**背景有印章、整列散布
+噪点**——这是第四种 mixed 机制（跟"弯界行"/"夹注列"/"文字顶边"都不同，
+是外部污染不是版式或矫正问题），而且**再次印证 `side_floor` 看不见这类
+污染**（噪点不贴边）。vol02/3 这一页在 L1 也被挡了（c1 列宽 229 对中位数
+186，见 pipeline_handbook「Step2 扩页」），一页两处独立信号都指向同一页
+有问题，不是巧合。
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
@@ -274,7 +381,9 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | Step1边框探测金标标注 第二批 | https://claude.ai/code/artifact/2b1f11ee-dfe0-4919-a81b-2b54fbf81f05 | **HTML 快照不入库**（base64 内嵌 6 页整页图，约 4.1MB，交互页会自存） | **已人工核对/保存**，导出进 `open-guji-dataset/border-detection`。新增2个普通页(vol01/24、65) + 4个"曾以为是抬头、核校后不是"的页面(vol01/9、14、142、141——9/14/142的"上諭"字紧贴边框但边框本身是直线没有台阶，不算真抬头，`likely_raised` 已按核校结果改回false；141核校时发现`find_vertical_lines`把同一条竖直线收了两条(x≈1633和1648只差15px)，用户手动挪开，回查代码复现根因见下方bug修复条目)。选页方法：`build_top_contact_sheets.py` 把 vol01 108个body页最上方一条带批量裁图人眼扫过，第二批当时用的判据("边框上方有清晰字迹凸出")不准，第三批已修正 |
 | Step1边框探测金标标注 第三批 | https://claude.ai/code/artifact/0159b634-59bb-4ab9-a1cd-d2cf4a24e1be | **HTML 快照不入库**（base64 内嵌 3 页整页图，约 1.9MB，交互页会自存，手柄放大到26px方便拖） | **已人工核对/保存**，导出进 `open-guji-dataset/border-detection`（金标共14页）。第二批抬头候选核校后全军覆没，回看vol01/32、33、49这三个已确认真抬头页发现共同特征：**边框线本身在该列位置有个台阶**(向上凸一截+竖直连接线)，不是"字紧贴边框"。按这个特征重新筛，vol01/26(2抬头列)、47(4抬头列，其中1列2级台阶)、51(3抬头列) 确认有台阶——47/51 是"序/凡例"性质的段落，罗列多个尊称词("聖諭""聖裁""御批""列朝""欽定"等)各自不同高度抬起。14页accuracy eval额外测出47这页 `find_vertical_lines` 10条竖直线系统性偏斜(顶13-39px/底1.5-3.6px)的新失败模式，未修，记在`segmentation_v2_pipeline.md`。脚本（未入库）`gen_border_gold_seed_r3.py` + `build_border_gold_tool_r3.py` + `export_border_gold_r3.py` |
 | row-boundaries 金标审阅 | https://claude.ai/code/artifact/e88bd40a-f979-41b4-bf15-db45796fb9b3 | **HTML 快照不入库**（base64 内嵌 18 列裁切图，约 1.4MB，裁决自存） | Step3 定版时对 `char-segmentation/row-boundaries` 金标(vol02/135 九列+vol01/33 九列)做的例行体检：扫等差(连续≥4次间距相等)段落，命中 vol01/33 col2(3段)/col3(1段)。拿 `peak_line_search.find_vertical_lines` 重新配对该页竖线(与金标 left_x/right_x 误差≤2px)、精确射影矫正裁出列图核对——**col2 是"天而永"3字抬头句读到此断开、后面一大段真空白纸，col3 是写满后最后3~4格空白**，等差段是空白区无信号只能均匀撒的正常现象，不是标注错误；但均匀撒的具体位置未经人工核校，可信度跟其余16列不同。审查页默认只显示这2列，供用户确认这个判读、决定要不要在 metadata 里补一条"短列/空白尾"的已知类型。**已人工核对**：用户在页面上把两列都判"占位合理"，结论写回 `row_boundaries_design.md`。生成脚本（未入库）`gen_review_images.py` + `build_row_boundaries_review.py` |
-| Step3 格类型试点金标 | https://claude.ai/code/artifact/ee5f2e65-68ed-4ace-a6a7-49e10bee9e8e | **HTML 快照不入库**（base64 内嵌 39 格裁切图，约 117KB，裁决自存） | `row_boundaries.Cell.kind`（字/空白/抬头/夹注）此前完全没有独立人工金标——`row-boundaries` 数据集只标了切分点 y 坐标；夹注判据的"准确率"此前只对照过生产 `phase4_chars` 存量输出，不是真金标。这批是**先测标注流程好不好用**的试点（用户 2026-08-31 定：先只标类型、不细到夹注缝的精确 x；先出个位数列）：5 列 39 格，跑 Step1→2→3 真实管线截出物理格图块（不给标注人看算法自己的判断），覆盖短(2格)/中(4格)/长(7格，贴列尾)三种夹注段长度、一个已知的生产漏检段端单字尾(`vol02/19` col9)、一个抬头+句读提前结束的空白尾列(`vol01/33` col2，用跟上一行同一套验证过的射影矫正配对复现)。算法自己的判断存进候选文件（不入库，scratchpad）供裁决收回后核对，不进页面文案（避免机器判断带偏人工标注）。生成脚本（未入库）`build_kind_gold_candidates.py` + `build_kind_gold_label.py` |
+| Step3 截断候选复核 | https://claude.ai/code/artifact/c2597865-a793-4069-b835-3e6721c4ad1d | **HTML 快照不入库**（base64 内嵌 38 条裁切图，约 395KB，裁决自存） | 用户提议的截断判据：字若被切分线截断，切口 1~2px 内必有余墨，不用逐格人工核校精确边界，先自动初筛再人裁。跟老管线 `extractor._boundary_ink_frac`（10%边缘带墨占比）是同一条思路，改成只看**紧贴切分线的 1~2px**（不是 10% 带）。4 列 84 格全扫：`max(top_frac,bot_frac) > 3%` 筛出 30 格候选（45 格边缘干净、9 格阈值以下非零）。抽样核对 5 格里 4 格是真实截断（邻字的撇捺/横画明显切过切分线），判据有效。**v2（用户反馈"上下余墨"含义不清）**：改成按**边**出卡（一格两边都被质疑就拆两张，各判各的，30 格→38 条）+ 三选一：a 正确没切到墨 / b 重叠·唯一切法（两字的墨本来就连着，换哪儿切都躲不开）/ c 不正确·有更好切法（紧挨着还有真正干净的空隙，算法没切在那儿）——比"上/下余墨"更直接地问到"这一刀对不对、能不能修"。生成脚本（未入库）`scan_edge_ink.py`（先出分布）+ `gen_truncation_candidates_v2.py` + `build_truncation_review_v2.py` |
+| Step3 格类型试点金标 | https://claude.ai/code/artifact/ee5f2e65-68ed-4ace-a6a7-49e10bee9e8e | **HTML 快照不入库**（base64 内嵌 39 格裁切图，约 117KB，裁决自存） | `row_boundaries.Cell.kind` 此前完全没有独立人工金标——`row-boundaries` 数据集只标了切分点 y 坐标；夹注判据的"准确率"此前只对照过生产 `phase4_chars` 存量输出，不是真金标。这批是**先测标注流程好不好用**的试点（用户 2026-08-31 定：先只标类型、不细到夹注缝的精确 x；先出个位数列）：5 列 39 格，跑 Step1→2→3 真实管线截出物理格图块（不给标注人看算法自己的判断），覆盖短(2格)/中(4格)/长(7格，贴列尾)三种夹注段长度、一个已知的生产漏检段端单字尾(`vol02/19` col9)、一个抬头+句读提前结束的空白尾列(`vol01/33` col2，用跟上一行同一套验证过的射影矫正配对复现)。**已人工核对（2026-09-01）：39/39 全对**——原始四选一(字/空白/抬头/夹注)有 2 格分歧(`vol01/33 col2` 的"天""而"，算法判抬头、人判字)，但那不是标错，是"抬头"塞进 `kind` 枚举本身问岔了：单格裁紧图看不出相对位置，用户当场定案「不需要区分抬头和普通字，它们都是字，按坐标来区分位置」——`CELL_KINDS` 收窄成 char/blank/jiazhu_a/jiazhu_b 四种，`raised` 独立成 `Cell.raised: bool` 字段（纯几何量，跟 y0 比 border_top 算），改完这两格自动对上，不用重标。夹注/空白两类满分(17/17、12/12)。生成脚本（未入库）`build_kind_gold_candidates.py` + `build_kind_gold_label.py` |
+| 粘连点金标字对复核 | https://claude.ai/code/artifact/558abc74-ada7-41cc-a886-0229fd3b4380 | **HTML 快照不入库**（`experiments/touch_resolve/out/label_review.html`，59 张卡内嵌 16 级灰缩略图约 374KB，裁决自存） | `touching-cuts` 金标的 `char_above/char_below` 来自整理本对齐，实验一（`experiments/touch_resolve/exp1_*`）发现 41 条识别漏网里约半数是**金标字对与图像不符**（整格错位、整理本与刻本用字不同）。本页把可疑的 49 侧半字 + 10 张对照卡出题：只显示字形与 ≤3 个候选字（金标字、识别 top-1/top-2，**不标来源、顺序打散**）+「都不是」「看不清」。收回：`Artifact action:"read"` → `experiments/touch_resolve/apply_label_verdicts.py read_back.html [--apply]`（先落 workspace `feedback/touch_label_verdicts.jsonl`，再改数据集金标并记 history）。生成脚本 `experiments/touch_resolve/build_label_review.py`（2026-09-13） |
 
 ## 历史页面（早期会话，无本地快照，URL 备查）
 
@@ -294,3 +403,5 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
   （体检页与对勘页真源本就在仓库内，不必拷）。
 - **事件回收**：所有审查页共用 `GUJI-SEED-EVENT` 前缀三层持久化
   （persist_js.py），从 artifact 存档提取事件行即可回收。
+| 北行日錄 库匹配 same 档 vs 校對本 41 例 | https://claude.ai/artifact/2B2id71yUuaneP8hGdUJYR | **HTML 快照不入库**（工作区 `beixingrilu-workspace/review/same_mismatch_review.html`，41 卡 155 张 16 级灰缩略图约 267KB，裁决自存） | 现代链 Step5-a（`norm_stroke=3, exclude_self`，库 `modern:bxrl`）全书 same 档 13,283 里与校對本不一致的 41 个字位。每卡三张图（书上字位 / 库命中样本 / 库里「应为」字样本——后者 41 张只有 1 张有，说明校對本用的那个码在库里几乎没实例、播种时字体 top-1 全给了另一个码）+ SimSun/I.Ming 两个码的标准形 + 校對本三行原文（该字高亮）。四档：同形异码 / 校對本录错 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review.py`（2026-09-15） |
+| 北行日錄 不一致复核 r2（**只取训练段**）| https://claude.ai/artifact/Pn1QogrKMojPhMcgqwAJGJ | [bxrl_same_mismatch_r2.html](bxrl_same_mismatch_r2.html)（32 卡 116 图 212KB，裁决自存，定点已验）| **库修好后**重跑的第二轮。第一轮的 5 例「真形近误判」全部消失——根因是库缺字：播种闸走不归一笔宽的老协议、且字体模板的细横被归一化当版框删了（旦变日、宣变亘），见 `.claude/doc/modern_print_pipeline.md` §五.4。**取样只从逻辑页 ≥21**：用户 2026-09-15 定 1–20 页为测试集、不做任何人工干预（第一轮的「揚楊」证人字位在逻辑页 13，已从 `config/confusable_human.json` 撤出）。32 例的字对里 10 对的证人码在库里 0 个样本（內/卻/呂/墙/強/戶/搖/澀/稅/衞），是「校對本录错」的硬旁证；`换/換` 两例互为对方的命中样本（同一个字形、证人给了两个码）。四档：校對本录错 / 同形异码 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards_r2.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review_r2.py`（2026-09-15）|

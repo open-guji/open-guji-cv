@@ -2,13 +2,36 @@
 import numpy as np
 
 from open_guji_cv.utils.peak_line_search import (
+    BOTTOM_SAFETY_MARGIN,
+    EDGE_MAX_WALK,
     LineMatch,
     _dedup_by_position,
+    _descend_to_ink_bottom,
+    _sample_line_curve_naive,
+    _shift_blocks,
     find_horizontal_border,
+    flank_dirty_frac,
     half_height_score_at,
     joint_search_coarse_to_fine,
     projection,
+    sample_line_curve,
 )
+
+
+def _post_bottom(mask, m: LineMatch) -> float:
+    """复刻 `find_horizontal_border` 对下版框做的、与救援无关的后处理。
+
+    两步：锚到墨条下沿，再加安全余量。测"救援没换线"时拿它把基线也过一遍，
+    否则断言会把后处理的位移误当成救援出手。
+    """
+    h = mask.shape[0]
+    lo = max(0, int(round(m.position)) - EDGE_MAX_WALK)
+    hi = min(h - 1, int(round(m.position)) + EDGE_MAX_WALK * 2)
+    pos, curve = sample_line_curve(mask, "h", lo, hi, m.slope)
+    if not len(curve):
+        return m.position + BOTTOM_SAFETY_MARGIN
+    i0 = int(np.clip(round(m.position) - lo, 0, len(curve) - 1))
+    return float(pos[_descend_to_ink_bottom(curve, i0)]) + BOTTOM_SAFETY_MARGIN
 
 H, W = 400, 300
 
@@ -106,6 +129,32 @@ def test_find_horizontal_border_prefers_secondary_closer_to_center():
     assert abs(result.position - true_y) <= 3
 
 
+# ── flank_dirty_frac：诊断量，不接入自动选线（见函数 docstring 的负结果记录）──
+
+
+def test_flank_dirty_frac_low_for_continuous_line():
+    """一条贯穿整页的连续细线：两翼处处是纸白，脏分段应接近 0。"""
+    mask = _blank_mask()
+    y = 200
+    mask[y - 2:y + 3, :] = 1.0  # 通栏细线，两翼全是白纸
+    frac = flank_dirty_frac(mask, y, width=5.0, w=W)
+    assert frac < 0.05
+
+
+def test_flank_dirty_frac_high_for_text_baseline_peak():
+    """若干"字块"底边恰好对齐成一条假峰：多数分段两翼都紧挨着字块本体，
+    应判出较高的脏分段占比（这是"多次穿过字体"要抓的典型情形）。"""
+    mask = _blank_mask()
+    y = 200
+    char_w, gap = 20, 40
+    x = 5
+    while x + char_w < W:
+        mask[y - 20:y + 3, x:x + char_w] = 1.0  # 字块：从峰往上一大段都是墨（笔画本体）
+        x += char_w + gap
+    frac = flank_dirty_frac(mask, y, width=5.0, w=W)
+    assert frac > 0.5
+
+
 def _lm(position, score):
     return LineMatch(position=position, slope=0.0, score=score, width=5.0, proj=score * 5)
 
@@ -139,3 +188,119 @@ def test_find_horizontal_border_rejects_secondary_farther_from_center():
 
     result = find_horizontal_border(mask, "top", band_frac=0.2)
     assert abs(result.position - true_y) <= 3
+
+
+# ── 分块 BLAS 采样：跟朴素花式索引实现的等价性护栏 ──────────────
+
+
+def test_shift_blocks_cover_all_rows_and_are_contiguous():
+    """分块采样成立的前提：整数位移相同的行必须是**连续**区间，且不重不漏。"""
+    for n, slope in ((3077, 0.05), (3077, -0.05), (400, 0.0071), (37, -1e-9), (60, 0.0)):
+        blocks = _shift_blocks(n, slope)
+        assert blocks[0][0] == 0 and blocks[-1][1] == n
+        for (a, b, _), (c, _, _) in zip(blocks, blocks[1:]):
+            assert a < b == c                      # 首尾相接、不重不漏
+        t = np.arange(n, dtype=np.float64)
+        want = np.floor(slope * (t - n / 2.0)).astype(np.int64)
+        for a, b, k in blocks:
+            assert (want[a:b] == k).all()
+
+
+def test_sample_line_curve_matches_naive_reference():
+    """分块 BLAS 实现必须跟朴素 gather 实现在数值上一致（求和次序不同，只允许
+    浮点级差）。两个方向、越界窗口、空窗口、正负倾角都要覆盖。
+
+    唯一的例外是朴素实现自己的 clip 瑕疵：它先 `clip(coord, 0, limit-1.001)`
+    再 `floor`，`coord` 落进 [limit-1.001, limit-1) 这条 0.001px 宽的缝时会把
+    0.1% 的权重错挪一列。真实倾角网格下够不着，所以这里只测真实倾角。"""
+    rng = np.random.default_rng(0)
+    slopes = list(np.linspace(-0.05, 0.05, 9)) + [0.0071, -0.0123]
+    for shape in ((37, 29), (60, 60), (11, 53)):
+        mask = (rng.random(shape) < 0.3).astype(np.float64)
+        h, w = shape
+        for axis, limit in (("v", w), ("h", h)):
+            for lo, hi in [(0, limit - 1), (-20, limit + 19), (-5, 3),
+                           (limit - 4, limit + 9), (7, 7), (10, 4)]:
+                for s in slopes:
+                    pn, cn = _sample_line_curve_naive(mask, axis, lo, hi, float(s))
+                    pb, cb = sample_line_curve(mask, axis, lo, hi, float(s))
+                    assert pn.shape == pb.shape and cn.shape == cb.shape
+                    if cn.size:
+                        assert np.abs(cn - cb).max() < 1e-9
+
+
+def test_sample_line_curve_far_edge_weight_is_not_clipped():
+    """朴素实现在最外沿有 0.1% 的权重错挪（clip 到 limit-1.001 再 floor），
+    分块实现给的是真值。这条钉住的是「分块版更对」，不是「两版一样」。"""
+    mask = np.zeros((4, 6))
+    mask[:, 5] = 1.0
+    _, naive = _sample_line_curve_naive(mask, "v", 0, 5, -1e-9)
+    _, block = sample_line_curve(mask, "v", 0, 5, -1e-9)
+    assert abs(naive[5] - 0.999) < 1e-9            # 0.1% 被挪到了第 4 列（那列没墨）
+    assert abs(block[5] - 1.0) < 1e-6              # 真值：该行的墨全在第 5 列
+
+
+# ── 下版框跨页先验救援 ────────────────────────────────────────────
+
+
+def _page_with_text_and_bottom_bar(bar_y: int, text_rows: list[int],
+                                   n_cols: int = 9, h: int = 3000, w: int = 2400):
+    """造一页：n_cols 条竖界行 + 若干行文字 + bar_y 处一条细下版框。
+
+    文字行故意做得比版框线"投影更高"——这正是现实里真线被压过的情形
+    （68 页金标上约 1/3 的页就是这样）。
+    """
+    mask = np.zeros((h, w), dtype=np.float64)
+    xs = np.linspace(300, w - 300, n_cols).astype(int)
+    for x in xs:                                   # 竖界行，贯穿版心
+        mask[200:bar_y, x:x + 3] = 1.0
+    for ty in text_rows:                           # 文字行：又宽又浓
+        for x in xs[:-1]:
+            mask[ty:ty + 46, x + 12:x + 150] = 1.0
+    mask[bar_y:bar_y + 4, 300:w - 300] = 1.0       # 下版框：细
+    return mask, xs
+
+
+def _vlines_from_xs(xs):
+    return [LineMatch(position=float(x), slope=0.0, score=300.0, width=3.0, proj=900.0)
+            for x in xs]
+
+
+# ⚠️ 这里**没有**"救援把线从错误位置换到真线"的正向单测，是刻意的：
+# 合成图复现不了那个真实失败模式。试过三种造法（文字实心块 / 带笔画间隙的
+# 文字 / 两条横线二选一），版框线横跨全宽、投影总是赢，压不过去；把竖界行
+# 画到下线为止又会让下线的投影被竖线端点污染，两条线地位不对等。真实页面里
+# 真线之所以输，是因为**它自己磨损断续**——那需要真图，不是合成图。
+# 正向效果由 68 页整页坐标金标回归覆盖（mean 12.3→8.5、max 110.8→39.9），
+# 见 `03-下边框优化.md` 的"2026-09-12 续二"。下面两条只钉住**保守分支**：
+# 不该出手时不出手、邻域内没候选时不瞎换。
+
+
+def test_rescue_bottom_keeps_result_when_already_consistent():
+    """现役结果已经跟全册基准一致时，救援不该出手（dev 未超门限）。"""
+    h = 3000
+    bar_y = h - 330
+    mask, xs = _page_with_text_and_bottom_bar(bar_y, text_rows=[bar_y - 500])
+    base = find_horizontal_border(mask, "bottom")
+    same = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
+                                  book_gap=h - base.position)
+    # 下版框在探到线之后一律还要做两步与救援无关的后处理：锚到墨条下沿
+    # (`_descend_to_ink_bottom`) + 加 BOTTOM_SAFETY_MARGIN。这里要断言的是
+    # "救援没有换线"，所以拿 base 走一遍同样的后处理再比。
+    assert same.position == _post_bottom(mask, base)
+    assert same.slope == base.slope
+
+
+def test_rescue_bottom_refuses_when_nothing_near_reference():
+    """基准邻域内没有任何候选时必须保留现役结果，不能瞎换。
+
+    护栏的"不救"分支：vol01 dev_set 页60、以及每册 3~5 页非金标页都走这条。
+    """
+    h = 3000
+    bar_y = h - 330
+    mask, xs = _page_with_text_and_bottom_bar(bar_y, text_rows=[bar_y - 210])
+    cur = find_horizontal_border(mask, "bottom")
+    # 把基准指到一个根本没有线的位置（页面正中），邻域内必然无候选
+    out = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
+                                 book_gap=float(h // 2))
+    assert out.position == _post_bottom(mask, cur)

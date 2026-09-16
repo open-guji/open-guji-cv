@@ -135,3 +135,42 @@ def test_is_cjk_char():
     assert not bv.is_cjk_char("ab")
     assert not bv.is_cjk_char("⿰")          # IDS 算符不是汉字
     assert not bv.is_cjk_char("虜[田]")
+
+
+# ── 方向（2026-09-05：关系层保留 正字→异体 方向）───────────
+
+def test_unihan_traditional_variant_is_flipped_to_regular_first():
+    # 发(U+53D1) kTraditionalVariant 發(U+767C) 髮(U+9AEE)：键是简体，
+    # 繁体才是我们的正字 → 边统一成 (正字, 异体)
+    text = "U+53D1\tkTraditionalVariant\tU+767C U+9AEE\nU+767C\tkSimplifiedVariant\tU+53D1\n"
+    edges, _ = bv.parse_unihan_variants(text)
+    assert ("發", "发", "unihan:kTraditionalVariant") in edges
+    assert ("髮", "发", "unihan:kTraditionalVariant") in edges
+    assert ("發", "发", "unihan:kSimplifiedVariant") in edges   # 键繁值简，顺序本来就对
+
+
+def test_cjkvi_traditional_relation_is_flipped():
+    sample = "㑮,cjkvi/simplified,𫝈\n𫝈,cjkvi/traditional,㑮\n"
+    edges, _ = bv.parse_cjkvi_variants(sample, "cjkvi-simplified")
+    assert edges == [("㑮", "𫝈", "cjkvi-simplified")] * 2
+
+
+def test_directed_edges_only_directed_tags_and_keyed_by_variant():
+    d = bv.directed_edges([
+        [("略", "畧", "twedu"), ("略", "畧", "hydzd"),
+         ("葢", "蓋", "unihan:kSemanticVariant"),          # 无向来源不进
+         ("發", "发", "unihan:kTraditionalVariant"),
+         ("髮", "发", "unihan:kTraditionalVariant")],
+    ])
+    assert d["畧"] == {"略": ["hydzd", "twedu"]}
+    assert "葢" not in d and "蓋" not in d
+    assert set(d["发"]) == {"發", "髮"}                      # 一对多
+
+
+def test_one_to_many_stats_respects_sources():
+    d = {"发": {"發": ["unihan:kTraditionalVariant"], "髮": ["unihan:kTraditionalVariant"]},
+         "畧": {"略": ["twedu"]},
+         "囘": {"回": ["twedu"], "迴": ["twedu"]}}
+    assert bv.one_to_many_stats(d, None)["n"] == 2
+    only_variant = bv.one_to_many_stats(d, frozenset({"twedu", "hydzd"}))
+    assert only_variant["n"] == 1 and only_variant["sample"] == ["囘→回迴"]

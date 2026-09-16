@@ -1,0 +1,207 @@
+"""Step 基类、注册表、RunContext。
+
+Step 是薄适配层：`run_page` 里调现有算法函数，把结果装进产物 schema 返回；
+图像只经 `ctx.cache` 走缓存，Step 自己不写图像产物（设计 §3.8）。
+注册方式沿用 `clustering/context_step.py` 的 STRATEGIES：模块级字典 + 装饰器。
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable
+
+import numpy as np
+from pydantic import BaseModel
+
+from .spec import GateSpec, ProductKindSpec, StepSpec, page_key
+from ..utils.image_io import imread
+
+if TYPE_CHECKING:
+    from .book import BookSpec
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+
+
+# ── 注册表 ───────────────────────────────────────────────────────────
+STEPS: dict[str, "Step"] = {}
+KINDS: dict[str, ProductKindSpec] = {}
+
+
+def register_kind(kind: ProductKindSpec) -> ProductKindSpec:
+    if kind.id in KINDS and KINDS[kind.id] is not kind:
+        raise ValueError(f"产物种类重复注册: {kind.id}")
+    KINDS[kind.id] = kind
+    return kind
+
+
+def register_step(cls: type["Step"]) -> type["Step"]:
+    inst = cls()
+    sid = inst.spec.id
+    if sid in STEPS and type(STEPS[sid]) is not cls:
+        raise ValueError(f"Step 重复注册: {sid}")
+    for k in (*inst.spec.consumes, *inst.spec.optional_consumes, *inst.spec.produces):
+        if k not in KINDS:
+            raise ValueError(f"Step {sid} 引用了未注册的产物种类 {k!r}")
+    STEPS[sid] = inst
+    return cls
+
+
+def kind_of(kind_id: str) -> ProductKindSpec:
+    try:
+        return KINDS[kind_id]
+    except KeyError:
+        raise KeyError(f"未注册的产物种类: {kind_id}") from None
+
+
+def producer_of(kind_id: str) -> "Step":
+    for s in STEPS.values():
+        if kind_id in s.spec.produces:
+            return s
+    raise KeyError(f"没有 Step 产出 {kind_id!r}")
+
+
+def attach_gate(step_id: str, gate: GateSpec) -> None:
+    """把一道闸挂到某个已注册 Step 的 spec 上——只覆盖这一个实例的 `spec`
+    （`dataclasses.replace` 出一份新的、其余字段原样复制），不改该 Step 自己的
+    源文件。挂闸的 Step 与被挂的 Step 是两个不同的 `StepSpec.id`：闸自己按它
+    的 `id` 正常注册、正常落盘（见 `register_step`），这里只是让引擎知道
+    「跑完这个 Step 之后，接着自动跑那道闸」（见 `core.engine.Engine.run`）。
+
+    调用时机：闸模块（`gates/`）在 import 时调用，必须晚于它要挂的 Step 被
+    `register_step` 注册——`steps/__init__.py` 末尾 `import ..gates` 保证这个顺序。
+    """
+    step = STEPS[step_id]
+    step.spec = dataclasses.replace(step.spec, gate=gate)
+
+
+# ── 运行上下文 ───────────────────────────────────────────────────────
+class RunContext:
+    """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
+
+    def __init__(self, book: "BookSpec", store: "ProductStore", cache: "ImageCache",
+                 params: dict[str, BaseModel] | None = None,
+                 log: Callable[[str], None] | None = None,
+                 pipeline=None):
+        self.book = book
+        self.store = store
+        self.cache = cache
+        self.params: dict[str, BaseModel] = params or {}
+        self.log = log or (lambda s: print(s, flush=True))
+        self._raw: dict[int, np.ndarray] = {}
+        #: 查「谁产出这种产物」按这条管线来（2026-09-14，三模式方案「地基 2」）。
+        #: 不传就按册的 edition 选默认管线（`core.pipeline.default_pipeline_id`）——
+        #: 控制台 / CLI 那些不经 Engine 直接建 RunContext 的调用点不用改。
+        self._pipeline = pipeline
+
+    @property
+    def pipeline(self):
+        if self._pipeline is None:
+            from .pipeline import default_pipeline_id, load_pipeline
+            self._pipeline = load_pipeline(default_pipeline_id(self.book))
+        return self._pipeline
+
+    def producer(self, kind_id: str) -> "Step":
+        """本管线里产出 `kind_id` 的 Step；同一种产物有多个产出者时（刻本链 /
+        现代链各一个）以当前管线为准，别用全局的 `producer_of`。"""
+        return self.pipeline.producer_of(kind_id)
+
+    # 参数
+    def params_for(self, step: "Step") -> BaseModel:
+        p = self.params.get(step.spec.id)
+        return p if p is not None else step.spec.params()
+
+    # 原图（灰度 uint8）。同一页只读一次。
+    def raw_page(self, page: int) -> np.ndarray:
+        """读序空间的「原图」。
+
+        **横排书在这里顺时针旋转 90°**（三模式方案 §三）：转完之后原图第一行
+        变成最右列、行内第一个字变成最上格，恰好落进竖排的规范空间
+        `raw_page_px@top-right`，于是 Step1–4 那几百行按「列竖直」写的几何代码
+        一行不用改。管线其余部分看到的永远是「竖排」。
+
+        代价记在这里，别让后人找：**产物坐标从此是读序空间，不是原图坐标**。
+        面向人的三处（控制台叠图、金标锚点、Step9 导出）要转回去，走
+        `core/anchor.py` 的 `to_original()`；那部分尚未实现，所以横排书现在
+        跑得了算法、叠图看着是横躺的。
+        """
+        if page not in self._raw:
+            path = self._page_path(page)
+            img = imread(str(path), 0) if path.exists() else None
+            if img is None:
+                raise FileNotFoundError(f"原图缺失: {path}")
+            if img.ndim == 3:
+                import cv2
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
+                img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
+            self._raw[page] = img
+        return self._raw[page]
+
+    def _page_path(self, page: int) -> "Path":
+        """这一页从哪读：登记过预清理且产物已生成的，读修好的那张；否则读原图。
+
+        逻辑见 `utils.preclean.effective_raw_path`——叠图（`render.overlay`）
+        与这里必须共用同一份判断，不能各写一遍。
+        """
+        from ..utils.preclean import effective_raw_path
+        return effective_raw_path(self.book, page, log=self.log)
+
+    def raw_size(self, page: int) -> tuple[int, int]:
+        h, w = self.raw_page(page).shape[:2]
+        return w, h
+
+    # 上游数值产物
+    def product(self, kind_id: str, page: int) -> Any:
+        step = self.producer(kind_id)
+        obj = self.store.read(self.book.id, step.spec.id, page_key(page), kind_id)
+        if obj is None:
+            raise FileNotFoundError(f"上游产物缺失: {kind_id} {page_key(page)}（先跑 {step.spec.id}）")
+        return obj
+
+    def has_product(self, kind_id: str, page: int) -> bool:
+        step = self.producer(kind_id)
+        return self.store.exists(self.book.id, step.spec.id, page_key(page))
+
+    # 派生图像：查缓存，没有就让产出它的 Step 现算
+    def materialize(self, kind_id: str, key: str) -> Path:
+        step = self.producer(kind_id)
+        return self.cache.materialize(
+            self.book.id, kind_id, key,
+            lambda: step.render(self, kind_id, key))
+
+    def image(self, kind_id: str, key: str) -> np.ndarray:
+        img = imread(str(self.materialize(kind_id, key)), 0)
+        if img is None:
+            raise FileNotFoundError(f"缓存图像读不出来: {kind_id} {key}")
+        return img
+
+
+# ── Step 基类 ─────────────────────────────────────────────────────────
+class Step(ABC):
+    spec: StepSpec
+
+    @abstractmethod
+    def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        """处理一页，返回 {numeric 产物种类 id: schema 实例}。
+        图像类产物在这里顺手 `ctx.cache.put(...)`，并实现 `render` 以便缓存丢失时再生。"""
+
+    def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
+        raise NotImplementedError(f"{self.spec.id} 不会再生 {kind_id}")
+
+    def describe(self) -> dict:
+        s = self.spec
+        d = {
+            "id": s.id, "title": s.title, "version": s.version, "unit": s.unit,
+            "consumes": list(s.consumes), "optional_consumes": list(s.optional_consumes),
+            "produces": list(s.produces),
+            "params": s.params.model_json_schema(), "when": s.when,
+        }
+        if s.gate:
+            d["gate"] = {
+                "id": s.gate.id, "unit": s.gate.unit, "on_fail": s.gate.on_fail,
+                "levels": [{"id": lv.id, "unit": lv.unit, "desc": lv.desc}
+                           for lv in s.gate.levels],
+            }
+        return d

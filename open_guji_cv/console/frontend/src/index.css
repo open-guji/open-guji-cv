@@ -1,0 +1,151 @@
+/* 令牌与通用样式跟 dev-console（overview 仓 web/style.css）同一套配色——
+   古籍印刷取向：微偏蓝的墨色中性 + 印泥青强调色。变量名维持 v1 沿用下来的
+   旧名（--indigo/--rule/--zhu 等），只换里面的颜色值，这样十几个组件 css
+   不用逐个改引用。 */
+:root {
+  --paper: #f7f6f3; --paper-2: #f0eeea; --ink: #14171c; --ink-2: #3d434e; --mute: #6b7280;
+  --rule: #ddd9d2; --indigo: #1a5d7a; --indigo-soft: #dbe7ec;
+  --ok: #3d6b4a; --ok-soft: #e3ede5; --zhu: #8c3a2e; --zhu-soft: #f6e2de;
+  --ochre: #8a6410; --ochre-soft: #f5ecd6; --faint: #9aa1ad; --faint-soft: #e9e6e0;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --r: 4px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #16181b; --paper-2: #1d2024; --ink: #e8e6e1; --ink-2: #b8b4ad; --mute: #8b8880;
+    --rule: #333840; --indigo: #6bb3d0; --indigo-soft: #1c3946; --ok: #7fb890; --ok-soft: #1e2f24;
+    --zhu: #e0857a; --zhu-soft: #3a201c; --ochre: #d4ab54; --ochre-soft: #33290f;
+    --faint: #63615b; --faint-soft: #2a2e34; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "Noto Sans SC", "PingFang SC", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+a { color: var(--indigo); }
+select, input[type=text], textarea, button { font: inherit; font-size: .89rem; color: var(--ink-2); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: var(--r); padding: .25rem .5rem; transition: background .12s, border-color .12s, color .12s; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--indigo); color: var(--indigo); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); color: #fff; }
+.card { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1rem; }
+.card h2 { font-size: .95rem; margin: 0 0 .6rem; font-weight: 600; }
+.muted { color: var(--mute); font-size: .82rem; }
+.mono { font-family: var(--mono); font-size: .8rem; }
+.error { color: var(--zhu); }
+
+/* 状态矩阵，照抄 v1 */
+table.matrix { border-collapse: collapse; font-size: .78rem; }
+table.matrix th, table.matrix td { border: 1px solid var(--rule); padding: .15rem .35rem; text-align: center; }
+table.matrix th.step { text-align: left; white-space: nowrap; min-width: 9rem; }
+table.matrix td.cell { width: 2.6rem; font-family: var(--mono); }
+.s-fresh { background: var(--ok-soft); color: var(--ok); }
+.s-stale { background: var(--ochre-soft); color: var(--ochre); }
+.s-missing { background: var(--faint-soft); color: var(--faint); }
+.s-failed { background: var(--zhu-soft); color: var(--zhu); }
+.s-blocked { background: repeating-linear-gradient(45deg, var(--faint-soft), var(--faint-soft) 4px, transparent 4px, transparent 8px); color: var(--faint); }
+.counts { display: flex; gap: .6rem; flex-wrap: wrap; font-size: .78rem; }
+.counts span { padding: 0 .4rem; border-radius: 3px; }
+
+/* 通用 JSON 输出框，各面板共用（照抄 v1 base.css） */
+pre.json { font-family: var(--mono); font-size: .74rem; background: var(--paper-2); border: 1px solid var(--rule); padding: .6rem .8rem;
+  border-radius: 6px; max-height: 40rem; overflow: auto; white-space: pre; margin: 0; }
+
+/* 通用数据表，各面板共用（照抄 v1 base.css） */
+table.jobs { width: 100%; border-collapse: collapse; font-size: .8rem; }
+table.jobs td, table.jobs th { border-bottom: 1px solid var(--rule); padding: .3rem .4rem; text-align: left; }
+table.jobs tr.sel { background: var(--indigo-soft); }
+
+/* 徽标，各面板共用（照抄 v1 base.css） */
+.badge { display: inline-block; padding: 0 .45rem; border-radius: 3px; font-family: var(--mono); font-size: .72rem; }
+.b-running { background: var(--indigo-soft); color: var(--indigo); }
+.b-completed { background: var(--ok-soft); color: var(--ok); }
+.b-failed, .b-cancelled { background: var(--zhu-soft); color: var(--zhu); }
+.b-pending { background: var(--faint-soft); color: var(--faint); }
+
+.step-status-summary { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+/* 产物查看（各 Step 页面共用），照抄 v1 base.css */
+.pv-toolbar { display: flex; gap: .6rem; align-items: end; margin-bottom: .8rem; flex-wrap: wrap; }
+.products { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(20rem, 1fr); gap: 1rem; }
+.products img { width: 100%; height: auto; border: 1px solid var(--rule); background: #fff; }
+@media (max-width: 60rem) { .products { grid-template-columns: 1fr; } }
+
+/* Step0 预清理规则展示 */
+.preclean-page { margin-top: .8rem; }
+.preclean-page h3 { font-size: .88rem; margin: 0 0 .5rem; }
+.preclean-rule { margin-bottom: .6rem; }
+.preclean-kind { color: var(--indigo); font-size: .8rem; margin-bottom: .3rem; }
+.preclean-report-rule { margin-bottom: .4rem; }
+.pv-toggle { margin-left: .6rem; font-size: .78rem; padding: .1rem .5rem; }
+
+/* 书总览：DAG 图、线上大模型提示条（照抄 v1 base.css/overview.js） */
+.dag { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; margin-bottom: .6rem; }
+.dag .node { padding: .15rem .6rem; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+.dag .arrow { color: var(--mute); }
+.ws-note { margin-left: .6rem; font-weight: 400; }
+.llm-online-note { margin-top: .4rem; }
+
+/* 首页书列表 */
+.book-list { list-style: none; padding: 0; margin: 0; }
+.book-list li { padding: .3rem 0; border-bottom: 1px solid var(--rule); }
+.book-list li:last-child { border-bottom: none; }
+
+/* 布局：左侧导航（v2 新增，取代 v1 的顶部 tab） */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 14rem; flex-shrink: 0; background: var(--paper-2); border-right: 1px solid var(--rule);
+  padding: 1rem .8rem; display: flex; flex-direction: column; gap: .3rem; }
+.sidebar h1 { font: 600 1rem/1.2 'Noto Serif SC', 'Songti SC', 'SimSun', Georgia, serif;
+  letter-spacing: .02em; margin: 0 0 .8rem; }
+.sidebar h1 a { color: var(--ink); text-decoration: none; }
+.sidebar a { display: block; padding: .3rem .5rem; border-radius: var(--r); color: var(--ink-2); text-decoration: none; font-size: .85rem;
+  transition: background .12s, color .12s; }
+.sidebar a.active, .sidebar a:hover { background: var(--indigo-soft); color: var(--indigo); }
+.sidebar-book-select { display: flex; flex-direction: column; gap: .2rem; font-size: .78rem; margin-bottom: .2rem; }
+.sidebar-book-select select { width: 100%; }
+.sidebar-rule { border: none; border-top: 1px solid var(--rule); margin: .5rem 0; }
+.sidebar-steps { display: flex; flex-direction: column; }
+.sidebar-cross { display: flex; flex-direction: column; }
+.sidebar-libs { display: flex; flex-direction: column; }
+.sidebar-hint { padding: .3rem .5rem; }
+/* Step5 二级子菜单：永久展开，不用点进 Step5 才看到（用户 2026-09-11 反馈） */
+.sidebar-step5-subs { display: flex; flex-direction: column; padding-left: 1rem; }
+.sidebar-step5-subs a { font-size: .78rem; color: var(--mute); }
+.content { flex: 1; padding: 1rem 1.2rem 3rem; max-width: 72rem; }
+
+@media (max-width: 50rem) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--rule); }
+}
+
+/* Step9：9.1/9.2 视图切换 tab + 9.2 阅读版段落卡片 */
+.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--rule); margin-bottom: 1rem; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; padding: .5rem .8rem; color: var(--mute); }
+.tabs button:hover:not(:disabled) { border-color: transparent; color: var(--ink-2); }
+.tabs button.active { color: var(--indigo); border-bottom-color: var(--indigo); font-weight: 600; }
+
+.reflow-page-mark { font-family: var(--mono); font-size: .72rem; color: var(--faint);
+  letter-spacing: .04em; margin: 1.6rem 0 .3rem; padding-top: .6rem; border-top: 1px dashed var(--rule); }
+.reflow-page-mark:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+.reflow-para { font-size: .98rem; line-height: 1.9; margin: 0 0 .9rem; text-align: justify; max-width: 62ch; }
+.reflow-para.is-title { display: inline-block; max-width: 100%; font-weight: 600;
+  color: var(--indigo); background: var(--indigo-soft); padding: .15rem .5rem; border-radius: 4px; }
+
+.reflow-notes { margin: .3rem 0 1.2rem; }
+.reflow-notes summary { cursor: pointer; font-size: .76rem; color: var(--zhu); }
+.reflow-notes ul { margin: .4rem 0 0; padding-left: 1.2rem; font-size: .76rem; color: var(--mute); }
+.reflow-notes li { margin-bottom: .2rem; }
+
+.reflow-stale { font-size: .78rem; color: var(--zhu); background: var(--zhu-soft);
+  border-radius: var(--r); padding: .5rem .7rem; margin-bottom: 1rem; }
+
+/* 工作区切换失败的提示（热切被 409 挡下时会出现） */
+.sidebar-ws-err {
+  margin: .2rem 0 .4rem;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #a8342a;
+}

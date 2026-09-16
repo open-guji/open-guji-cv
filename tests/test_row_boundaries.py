@@ -3,6 +3,7 @@ import numpy as np
 
 from open_guji_cv.utils import row_boundaries as fit_mod
 from open_guji_cv.utils.row_boundaries import (
+    _apply_resolved_cut,
     estimate_period,
     estimate_shared_period,
     find_blank_intervals,
@@ -124,13 +125,18 @@ def test_fit_row_boundaries_top_slack_recovers_content_above_border_top():
 
     no_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
                                    period=GAP, n_slots=n_slots)
-    assert no_slack is None
-
     with_slack = fit_row_boundaries(curve, DST_W, fake_border_top, border_bottom,
                                      period=GAP, n_slots=n_slots, top_slack=2 * GAP)
     assert with_slack is not None
     assert len(with_slack.boundaries) == n_slots + 1
     assert abs(with_slack.boundaries[0] - 0.0) < GAP * 0.3
+    # 2026-09-05 起空白格可以很矮（空白格不吃间距下界，见 _bounded_elastic_dp）：
+    # 不给 slack 时 DP 不再判无解，而是把开头两个空白格压在 border_top 之后。
+    # 契约改成：**字格的边界不能因此挪动**——从第 lead 条起与给了 slack 的结果一致。
+    if no_slack is not None:
+        assert len(no_slack.boundaries) == n_slots + 1
+        for a, b in zip(no_slack.boundaries[lead:], with_slack.boundaries[lead:]):
+            assert abs(a - b) <= 3, (no_slack.boundaries, with_slack.boundaries)
 
 
 def test_fit_row_boundaries_returns_none_when_not_enough_candidates():
@@ -179,6 +185,10 @@ def _synth_column_image(jiazhu_slots=(), blank_slots=(), n_slots=N_SLOTS,
 
 def _kinds(result):
     return {c.slot: c.kind for c in result.cells if c.sub is None}
+
+
+def _raised(result):
+    return {c.slot: c.raised for c in result.cells if c.sub is None}
 
 
 def test_find_content_window_strips_the_rules_on_both_sides():
@@ -275,21 +285,128 @@ def test_segment_column_detect_jiazhu_off_keeps_whole_cells():
 
 def test_segment_column_marks_cells_above_the_top_border_as_raised():
     """抬头列：Step 2 多矫正了一截页顶（列图顶端那条线是这一列自己的抬头框），
-    页面主版框在列图里的 y 由调用方告诉 Step 3；首格落到它上面 → 标 raised。"""
+    页面主版框在列图里的 y 由调用方告诉 Step 3；首格落到它上面 → `raised=True`。
+
+    `raised` 不是一种 `kind`（用户 2026-08-31 定：「不需要区分抬头和普通字，
+    它们都是字，按坐标来区分位置」）——这一格的 `kind` 仍然是 `"char"`，
+    只是 `raised` 这个独立的几何字段为真。"""
     img = _synth_column_image()          # 顶端那条线 = 抬头框，网格从 y=10 起
     r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS,
                                border_top=60.0,      # 主版框在列图里的位置
                                top_slack=SLOT_H)
     assert r is not None
-    kinds = _kinds(r)
-    assert kinds[1] == "raised"
-    assert all(k == "char" for s, k in kinds.items() if s != 1)
+    kinds, raised = _kinds(r), _raised(r)
+    assert all(k == "char" for k in kinds.values())    # kind 不区分抬头/正文
+    assert raised[1] is True
+    assert all(v is False for s, v in raised.items() if s != 1)
 
 
 def test_segment_column_returns_none_when_dp_has_no_solution():
     img = _synth_column_image()
     # 只有 21 格的信号，硬要切 40 格：候选撑不出来，应当判无解而不是给错结果
     assert fit_mod.segment_column(img, period=SLOT_H, n_body_slots=40) is None
+
+
+# ── 人裁回流：resolved_cuts 收敛候选池 ──────────────────────────
+
+def _straight_and_seam_narrow():
+    return [fit_mod.SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0),
+            fit_mod.SeamCandidate(kind="seam_narrow", y=[100] * 5, seam_ink=0, dev_max=8)]
+
+
+def test_apply_resolved_cut_collapses_to_the_gold_candidate():
+    """人裁回流：金标认定 `seam_narrow` 时，候选池收敛成那一条，`chosen` 归零
+    （池子只剩一条，指向它自己）——顺序闸按 `len(candidates)>=2` 挡人，收敛后
+    这条切点自动放行，不用另改闸的代码。"""
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), chosen=1,
+                                        resolved="seam_narrow")
+    assert [c.kind for c in cands] == ["seam_narrow"]
+    assert chosen == 0
+
+
+def test_apply_resolved_cut_ignored_when_kind_not_in_pool():
+    """金标认定的 kind 不在当前候选池里（比如几何变了、这次没算出这种切法）
+    时按兵不动——静默套错误的收敛比继续挡人更危险。"""
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, chosen=0, resolved="seam_wide")
+    assert cands == original
+    assert chosen == 0
+
+
+def test_apply_resolved_cut_y_ref_guard_blocks_when_current_line_moved():
+    """裁决带参考 y（当时的直线切点）：现役直线离它超过 RESOLVED_Y_TOL 就不是同一条
+    格线，不套用；在容差内照常收敛。"""
+    rc = fit_mod.ResolvedCut("seam_narrow", y_ref=1000.0)
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), 1, rc, y_line=1000.0 + fit_mod.RESOLVED_Y_TOL)
+    assert [c.kind for c in cands] == ["seam_narrow"]
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, 1, rc, y_line=1000.0 + fit_mod.RESOLVED_Y_TOL + 1)
+    assert cands == original and chosen == 1
+    # 没给 y_line（调用方不知道直线在哪）也不套——护栏缺一边就不冒险
+    cands, chosen = _apply_resolved_cut(original, 1, rc)
+    assert [c.kind for c in cands] == ["seam_narrow"]  # y_line=None 时护栏不生效，按 kind 收敛
+
+
+def test_apply_resolved_cut_chosen_collapses_to_current_seam_only():
+    """`seam_ok`（现役折线就对）→ 收敛到 cands[chosen]；现役是直线时这条裁决对不上，不动。"""
+    rc = fit_mod.ResolvedCut(fit_mod.RESOLVED_CHOSEN)
+    cands, chosen = _apply_resolved_cut(_straight_and_seam_narrow(), 1, rc)
+    assert [c.kind for c in cands] == ["seam_narrow"] and chosen == 0
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, 0, rc)      # 现役选的是直线
+    assert cands == original and chosen == 0
+
+
+def test_apply_resolved_cut_noop_when_unresolved():
+    """没有金标裁决（`resolved=None`）时原样返回，行为与改动前完全一致。"""
+    original = _straight_and_seam_narrow()
+    cands, chosen = _apply_resolved_cut(original, chosen=1, resolved=None)
+    assert cands == original
+    assert chosen == 1
+
+
+def test_segment_column_resolved_cuts_param_reaches_the_named_slot(monkeypatch):
+    """`segment_column(resolved_cuts=...)` 按 `slot_above` 把裁决转发到
+    `_apply_resolved_cut`，其余切点不受影响。
+
+    DP 是弹性的：贴局部墨块会被它绕开，很难在合成图上稳定地"钉死"某条边界
+    恰好落在墨点上（试过多种贴墨方案，DP 总能找到附近代价更低的位置移开几
+    像素）。所以这里 monkeypatch `fit_row_boundaries` 的返回值，把 3 号边界
+    强按到贴墨的 y——只解耦"边界位置"与"DP 怎么找边界"这两件事，候选生成
+    以下的真实逻辑（`ink_bin`/`find_seam`/`_apply_resolved_cut`）照常跑。"""
+    calls: list[tuple[int, str | None]] = []
+    real_apply = fit_mod._apply_resolved_cut
+
+    def spy(cands, chosen, resolved, y_line=None, **kw):
+        calls.append((len(cands), resolved))
+        return real_apply(cands, chosen, resolved, y_line=y_line, **kw)
+
+    monkeypatch.setattr(fit_mod, "_apply_resolved_cut", spy)
+
+    img = _synth_column_image()
+    y = GRID_Y0 + 3 * SLOT_H
+    img[y - 1:y + 2, 37:148] = 0              # 3 号格线贴一条墨带（模拟粘连）
+
+    real_fit = fit_mod.fit_row_boundaries
+
+    def pinned_fit(*a, **kw):
+        res = real_fit(*a, **kw)
+        if res is not None:
+            b = list(res.boundaries)
+            b[3] = float(y)                   # 钉死 3 号边界落在贴墨处
+            res.boundaries = b
+        return res
+
+    monkeypatch.setattr(fit_mod, "fit_row_boundaries", pinned_fit)
+
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
+                               resolved_cuts={3: "seam_narrow"})
+    assert r is not None
+    assert len(calls) == 1                    # 全列唯一有墨的格线，只有它进候选生成分支
+    assert calls[0][1] == "seam_narrow"        # 转发的正是 3 号的金标 kind
+    cp = next(c for c in r.cut_candidates if c.slot_above == 3)
+    assert [c.kind for c in cp.candidates] == ["seam_narrow"]   # 已按金标收敛
+    assert cp.chosen == 0
 
 
 # ── 负数 slot：抬头多出来的格 ────────────────────────────────
@@ -306,7 +423,7 @@ def test_pos_to_slot_skips_zero_and_matches_n_raised_zero_to_identity():
 def test_segment_column_numbers_extra_raised_slots_negative():
     """抬头多出 2 格：列图顶端多画 2 个"抬头字"，物理上紧挨着正文第一格。
     body 从 1 编到 21，多出来的 2 格编 -2/-1（不是 22/23，也不是把正文往后
-    挤），且都应该落进 raised（伸到 border_top 以上）。"""
+    挤）；`kind` 一律是 `"char"`，`raised` 这个独立字段才区分位置。"""
     n_raised = 2
     img = _synth_column_image(n_slots=N_SLOTS + n_raised)   # 造 23 个连续画满的格
     border_top = float(GRID_Y0 + n_raised * SLOT_H)          # 正文第一格顶 = 主版框
@@ -316,9 +433,10 @@ def test_segment_column_numbers_extra_raised_slots_negative():
     assert r is not None
     slots = sorted({c.slot for c in r.cells})
     assert slots == [-2, -1] + list(range(1, N_SLOTS + 1))   # 跳过 0，body 没被挤号
-    kinds = _kinds(r)
-    assert kinds[-2] == "raised" and kinds[-1] == "raised"   # 多出来的两格顶到版框线以上
-    assert kinds[1] == "char"                                 # 正文第一格没被顶上去
+    kinds, raised = _kinds(r), _raised(r)
+    assert all(k == "char" for k in kinds.values())           # kind 不区分抬头/正文
+    assert raised[-2] is True and raised[-1] is True          # 多出来的两格顶到版框线以上
+    assert raised[1] is False                                  # 正文第一格没被顶上去
     # order 仍是一条不断号的 1..N 序，负数区排在最前面（物理上在最上面）
     ordered_slots = [c.slot for c in sorted(r.cells, key=lambda c: c.order)]
     assert ordered_slots == slots
@@ -339,3 +457,85 @@ def test_reading_order_treats_minus_one_and_one_as_adjacent_for_jiazhu_runs():
     seq = [(c.slot, c.sub) for c in fit_mod.reading_order(cells)]
     # 整段(-1,1)先 a 后 b，说明 -1/1 被当成了相邻格、没有被 0 的空号截断
     assert seq == [(-1, "a"), (1, "a"), (-1, "b"), (1, "b"), (2, None)]
+
+
+def test_synth_candidates_carry_their_real_ink_not_a_constant():
+    """空白区间补的合成候选，墨量必须是**该处真值**，不是固定 0.03。
+
+    钉住 2026-09-03 的第二刀。空白区间按 `blank_thresh_frac`（默认 0.08）切，
+    所以区间内某一行的真实墨量最高可到 0.08——给固定 0.03 是系统性低报，
+    DP 拿它跟真波谷比就被骗：实测 vol01/26c2 格3 选中的合成点真墨 0.231，
+    旁边 23px 处真波谷墨 0.000，代价 0.2554 vs 0.0524 却没选上。
+    dev_set 落盘实测这一刀把「可改善」格线从 90 条降到 80 条。
+    """
+    n = 900
+    curve = np.zeros(n, dtype=np.float64)
+    dst_w = 100
+    # 造一段「空白区间」：整体低于 0.08*dst_w=8，但中间有一处冲到 6（=0.06）
+    curve[:] = 0.5
+    curve[300:360] = 0.5          # 一段空白
+    curve[330:334] = 6.0          # 空白区间内部的一处高墨（仍 < 8，不断开区间）
+    # 字身
+    for c in range(0, n, 120):
+        curve[c + 20:c + 100] = 40.0
+    curve[300:360] = 0.5
+    curve[330:334] = 6.0
+
+    intervals = find_blank_intervals(curve, 0.08 * dst_w)
+    seg = next((iv for iv in intervals if iv[0] <= 330 <= iv[1]), None)
+    assert seg is not None, "330 附近应当落在一个空白区间里"
+
+    # 直接查 fit_row_boundaries 用的候选墨量：在 330 处补出来的合成点，
+    # 墨量应当接近 6/100=0.06，而不是 0.03。
+    valleys = find_valleys(curve, dst_w)
+    guard = max(6, 20 // 3)
+    synth_ink_at_330 = None
+    for lo, hi in intervals:
+        y = lo
+        while y <= hi:
+            if all(abs(y - v) >= guard for v in valleys):
+                if abs(y - 330) <= 2:
+                    synth_ink_at_330 = float(curve[int(y)]) / dst_w
+            y += 20
+    if synth_ink_at_330 is not None:
+        assert synth_ink_at_330 > 0.03, \
+            f"合成点墨量 {synth_ink_at_330} 应当是真值（≈0.06），不是固定 0.03"
+
+
+def test_snap_to_raw_minimum_recovers_a_narrow_seam_smoothing_erased():
+    """DP 定完位后，边界要在**原始**投影上微调到更低点。
+
+    钉住 2026-09-03 的第三刀。DP 跑在 `smooth_curve`（5 点均值）上——平滑是
+    必须的（否则笔画间小凹陷制造噪声候选），代价是**只有一两行宽的真字缝被
+    抹平**：实测 vol01/70c1 原始投影 y=1495 是 0.0000 的真缝，平滑后 0.0365
+    反而高于 y=1494 的 0.0343，DP 选了 1494、格线压在笔画上。
+    dev_set 落盘实测这一刀把可改善格线 80 → 20 条（2.00% → 0.50%）。
+    """
+    raw = np.full(200, 30.0)
+    raw[100] = 0.0            # 一行宽的真缝
+    raw[99] = 28.0
+    raw[101] = 28.0
+    # 平滑把这条缝从 0 抹成 23.2，与邻近的 23.6 几乎无差——DP 在平滑曲线上
+    # 分辨不出它（真页上这个差反了号，见 vol01/70c1 的实测）。
+    sm = smooth_curve(raw)
+    assert sm[100] > 20.0, "平滑应当把 0 的缝抬到跟邻居同量级"
+
+    # DP 挑到平滑曲线上邻近的点（这里模拟成 98），微调该把它拉回原始极小 100
+    out = fit_mod._snap_to_raw_minimum([98.0], raw, radius=3)
+    assert out[0] == 100.0, f"应当吸附到原始极小 100，实际 {out[0]}"
+
+    # radius=0 关掉
+    assert fit_mod._snap_to_raw_minimum([98.0], raw, radius=0) == [98.0]
+    # 原选已是最低时不动
+    assert fit_mod._snap_to_raw_minimum([100.0], raw, radius=3) == [100.0]
+
+
+def test_snap_to_raw_minimum_never_moves_more_than_radius():
+    """微调幅度硬性受 radius 限制——不许改变格位归属。"""
+    rng = np.random.default_rng(0)
+    raw = rng.random(500) * 40
+    bounds = [50.0, 150.0, 250.0, 350.0]
+    for r in (1, 3, 6):
+        out = fit_mod._snap_to_raw_minimum(bounds, raw, radius=r)
+        for b, o in zip(bounds, out):
+            assert abs(o - b) <= r, f"radius={r} 却挪了 {abs(o - b)}px"

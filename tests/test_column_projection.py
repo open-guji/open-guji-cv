@@ -9,6 +9,7 @@ from open_guji_cv.utils.border_geometry import (
     VLine,
 )
 from open_guji_cv.utils.column_projection import (
+    BOTTOM_PAD,
     column_border_trim,
     column_bounds,
     column_profile,
@@ -277,10 +278,14 @@ def test_page_column_windows_extends_above_border_for_raised_column():
     在版框以上，直接没了（14 页实测 15 个抬头列各被切掉 106~200px）。"""
     box = HeadRaiseBorder(col=3, inner_y=120.0, outer_y=80.0)
     res = _result_with_tilted_top(head_raise=[box])
-    wins = {w_.col: w_ for w_ in page_column_windows(res)}
+    wins = {w_.col: w_ for w_ in page_column_windows(res, head_pad=0.0)}
     raised = wins[3]
     assert raised.raised is True
     assert raised.top_y == 120.0
+    # HEAD_PAD：线心之上再开一截，抬头字才不被窗口顶边切（2026-09-08 vol01/32「太祖」）
+    padded = {w_.col: w_ for w_ in page_column_windows(res, head_pad=30.0)}
+    assert padded[3].top_y == 90.0
+    assert padded[2].top_y == wins[2].top_y, "普通列不受 head_pad 影响"
     # 主版框在列图坐标里落在正数位置，Step 3 的 border_top 要用它
     assert raised.border_top_in_column > 80
     assert wins[2].raised is False and abs(wins[2].border_top_in_column) < 1e-6
@@ -301,3 +306,64 @@ def test_warp_page_columns_returns_one_image_per_column():
     for wnd, img in out:
         assert img.shape[0] == int(round(wnd.bottom_y - wnd.top_y))
         assert img.shape[1] > 0
+
+
+def test_warp_column_three_segment_stacks_strips_seamlessly():
+    """折线边线：按折点分三带射影后拼接，总高 = 窗口高，宽度三带一致，
+    且一条随折线弯的竖直墨线在列图里必须变成一根直的竖线。"""
+    import numpy as np
+    from open_guji_cv.utils.border_geometry import VLine
+    from open_guji_cv.utils.column_projection import warp_column
+    w, h = 800, 1500
+    gray = np.full((h, w), 255, np.uint8)
+    # 左边线折线：中段往左鼓 20px；右边线直
+    left = VLine(x_at_top=500.0, slope=0.0, k2=0.0, k3=0.0, y1=600.0, y2=1000.0)
+    # 手工构造中段偏移：k1 使 x(600)=520，k2=0 保持，k3 回到 500 at 1400
+    left = VLine(x_at_top=500.0 - (20 / 600.0) * 0, slope=20.0 / 600.0,
+                 k2=0.0, k3=-20.0 / 400.0, y1=600.0, y2=1000.0)
+    right = VLine(x_at_top=320.0, slope=0.0)
+    # 在左边线内侧 10px 画一根"跟着弯"的墨线
+    for y in range(200, 1400):
+        xo = (w - 1) - int(round(left.x_at(y) - 10))
+        gray[y, xo - 1:xo + 2] = 0
+    img = warp_column(gray, left, right, 200.0, 1400.0)
+    assert img.shape[0] == 1200
+    # 拼出来的列图里，那根墨线在各带的 x 应一致（直了）
+    xs = []
+    for y in (100, 500, 700, 900, 1100):
+        row = img[y]
+        dark = np.where(row < 128)[0]
+        assert len(dark) > 0
+        xs.append(dark.mean())
+    assert max(xs) - min(xs) <= 3.0
+
+
+def test_bottom_pad_opens_window_below_detected_border():
+    """下界要开到探出的下版框之外——`detect_borders` 的下版框系统性偏上。
+
+    钉住 2026-09-03 的修复：原先上下界都是零余量，列窗切在末字中部，
+    dev_set 155 列实测下界外还剩字墨中位 21px、最大 69px，83% 的列切掉 >5px
+    （目视：vol01/60c4、vol02/181c5、vol01/137c6、vol01/24c1 的
+    「托」「更」「著」「淵」下半被切）。多开进来的版框线由 clean_column 抹掉。
+    """
+    res = _result_with_tilted_top()
+    wins = {w.col: w for w in page_column_windows(res)}
+    for w in wins.values():
+        assert w.bottom_y > w.border_bottom_y, (
+            f"c{w.col} 下界 {w.bottom_y} 没开到版框 {w.border_bottom_y} 之外")
+        assert w.bottom_y - w.border_bottom_y <= BOTTOM_PAD + 1e-6
+
+    # body_pad 只管上界，不该再影响下界
+    a = page_column_windows(res, body_pad=0.0)
+    b = page_column_windows(res, body_pad=30.0)
+    assert [w.bottom_y for w in a] == [w.bottom_y for w in b], \
+        "body_pad 不该动下界（下界归 bottom_pad 管）"
+    assert all(y2 < y1 for y1, y2 in zip((w.top_y for w in a), (w.top_y for w in b))), \
+        "body_pad 应当只把上界往上开"
+
+
+def test_bottom_pad_zero_restores_old_behaviour():
+    """bottom_pad=0 时回到「下界=版框」，保证这个参数是纯增量、可关掉。"""
+    res = _result_with_tilted_top()
+    for w in page_column_windows(res, bottom_pad=0.0):
+        assert abs(w.bottom_y - w.border_bottom_y) < 1e-6

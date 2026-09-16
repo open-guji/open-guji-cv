@@ -96,12 +96,6 @@ def _parse_range(range_str: str | None, folder: Path) -> set[str] | None:
 
 # ─── 命令处理函数 ──────────────────────────────────────────
 
-def cmd_ui(args):
-    """启动 Web 界面。"""
-    from .web.server import start_server
-    start_server(port=args.port, open_browser=not args.no_browser)
-
-
 def cmd_cut(args):
     """检测切分类型并执行切分。
 
@@ -636,20 +630,41 @@ def cmd_review_ingest(args):
 
 
 def cmd_glyph_db(args):
-    """M8 跨书字形数据库：import 收尾入库 / stats 概览。"""
-    from .clustering.glyph_db import GlyphDB
+    """M8 跨书字形数据库：import 收尾入库 / stats 概览。
 
-    db = GlyphDB(Path(args.store) / "glyphdb.sqlite")
+    索引库（SQLite）的落盘位置统一交给 `core.workspace.glyph_db_path()` 解析
+    （`GUJI_GLYPH_DB` → `GUJI_WORKSPACE/output/glyph.db` → 仓内默认），不再由
+    `--store` 推出——`--store` 只表示「真源（JSONL+PNG）在哪」，是 rebuild 的
+    读入口、export 的写出口。库路径只有这一处说了算，`glyph_match` /
+    `seed_admit` 读的是同一个 `glyph_db_path()`，rebuild 之后不必手工搬库。
+    （库路径 P0：以前这里写的是 `<store>/glyphdb.sqlite`，与真正被读取的
+    `glyph_db_path()` 不是同一个文件——干净环境上 rebuild 看着成功，
+    `glyph_match` 却读到空库，静默出错、exit 0。）
+
+    （库路径 P0 另一半：`--store` 同样不能就地当裸路径用——它以前是相对 CWD
+    的字面量，即使 `GUJI_WORKSPACE` 设对了也不会跟着走，在仓根跑会读到仓根
+    遗留的 `glyph_store/`（94 条）而不是工作区里的 `output/glyph_store/`
+    （16,557 条），且不报错、只让下游数字全线变小。现在统一过
+    `core.workspace.glyph_store_path()`：不传按工作区解析，传相对路径按工作区
+    解释，传绝对路径当覆盖。）
+    """
+    from .clustering.glyph_db import GlyphDB
+    from .core.workspace import glyph_db_path, glyph_store_path
+
+    db_path = glyph_db_path()
+    store_dir = glyph_store_path(args.store)
+    db = GlyphDB(db_path)
     try:
         if args.action == "export":
             from .clustering.glyph_db import export_store
-            summary = export_store(db, args.store)
+            summary = export_store(db, store_dir)
         elif args.action == "rebuild":
-            from .clustering.glyph_db import rebuild_from_store
+            from .clustering.glyph_db import (assert_db_not_silently_empty,
+                                              rebuild_from_store)
             db.close()
-            summary = rebuild_from_store(args.store,
-                                         Path(args.store) / "glyphdb.sqlite")
+            summary = rebuild_from_store(store_dir, db_path)
             db = None
+            assert_db_not_silently_empty(db_path, store_dir)
         elif args.action == "drop-edition":
             if not args.edition:
                 print("drop-edition 需要 --edition"); sys.exit(1)
@@ -659,7 +674,7 @@ def cmd_glyph_db(args):
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
-                jobs=args.jobs)
+                jobs=args.jobs, vertical=args.vertical)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -760,10 +775,9 @@ def main():
 
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
-    # ── ui ───────────────────────────────────────────────
-    p = sub.add_parser("ui", help="启动 Web 界面")
-    p.add_argument("--port", type=int, default=8632, help="端口号（默认: 8632）")
-    p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    # ── v2 四个抽象（pipeline / step / status / console / cache），见 cli_v2.py ──
+    from .cli_v2 import register_subcommands, COMMANDS_V2
+    register_subcommands(sub)
 
     # ── cut ──────────────────────────────────────────────
     p = sub.add_parser("cut",
@@ -1018,12 +1032,20 @@ def main():
                    choices=["import", "stats", "export", "rebuild",
                             "import-font", "drop-edition"])
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
-    p.add_argument("--store", default="glyph_store", help="字形库目录")
+    p.add_argument("--store", default=None,
+                   help="字形库目录（真源）。不传按 core.workspace 解析"
+                        "（GUJI_WORKSPACE 设了就是 <工作区>/output/glyph_store，"
+                        "没设就是仓内样本库）；传相对路径按工作区解释，"
+                        "传绝对路径当覆盖")
     p.add_argument("--edition", default=None,
                    help="版本 edition_tag（import 默认=书名；"
                         "import-font 用于只导 manifest 里的某一套字体）")
     p.add_argument("--manifest", default="config/fonts/manifest.json",
                    help="字体清单（import-font 用）")
+    p.add_argument("--vertical", action="store_true",
+                   help="竖排本：括号类标点（「」《》…）渲染后转 90° 再入库——"
+                        "竖排里它们是横放的，不转的话库里的模板跟书上对不上"
+                        "（见 font_glyphs.VERTICAL_ROTATED_PUNCT）")
     p.add_argument("--charset", default=None,
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,
@@ -1069,7 +1091,7 @@ def main():
     args = parser.parse_args()
 
     commands = {
-        "ui":                cmd_ui,
+        **COMMANDS_V2,
         "cut":               cmd_cut,
         "recognize-profile": cmd_recognize_profile,
         "analyze":           cmd_recognize_profile,  # 兼容别名

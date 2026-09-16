@@ -4,15 +4,25 @@ __pycache__/
 # scripts）——只有**新增**的文件会被静默漏掉：pipeline_handbook.md 写完
 # 提交时就这么丢过一次。这里是项目的设计文档与协作约定，本来就该入库。
 dist/
+# 例外：控制台 v2 前端构建产物**要入库**（用户 2026-09-11 定，见 overview 仓
+# 进度/控制台重构v2/方案.md §一/§七：开发工作台与 open-guji-cv 运行环境分离，
+# 不能假设每个要跑控制台的地方都装了 node/npm）。改前端后记得 `npm run build`
+# 再一起提交，否则会出现"仓里代码是新的、跑起来是旧的"这类事故。
+!open_guji_cv/console/static/dist/
+!open_guji_cv/console/static/dist/**
 build/
 *.egg-info/
+# frontend/node_modules 由 frontend/.gitignore 覆盖，这里不重复
 # 异体字关系层的下载缓存（Unihan.zip / cjkvi / yitizi 原始文件，
 # 可由 scripts/build_variants.py 重新下载；产物 variants.json 入库）
 config/variants/cache/
 config/gloss/cache/
 
 # 字形库 SQLite 索引（可由 glyph_store/ 重建，不入版本控制）
-glyph_store/glyphdb.sqlite
+# 用 **/ 前缀锚定到任意层级——不含 **/ 的 `glyph_store/glyphdb.sqlite` 只锚定
+# 到仓根，抓不到 output/glyph_store/glyphdb.sqlite；且 gitignore 对已跟踪
+# 文件本就不生效，该文件曾被提交（10.5 MB），已 `git rm --cached`（库路径 P0）。
+**/glyph_store/glyphdb.sqlite
 *.sqlite-journal
 
 # output/、data_full/ 曾经 gitignore，但容器重置会把它们连同耗时的
@@ -38,3 +48,76 @@ output/column_warp_review.html
 
 # 上下版框标注页的 HTML 快照——同上，`scripts/build_column_border_review.py` 可再生
 output/column_border_review.html
+
+# Step2→Step3 交接的列图：131MB，但**由已入库的 output/<book>/step2_columns/
+# 确定性再生**，`python scripts/export_step3_input.py --book <book> --tier gate`
+# 几秒钟跑完（clean_column 每页 0.03s）。跟 step2_columns 不一样——那个要跑
+# Step1 的 detect_borders（每页 1.8s，全书 5 分钟），值得入库；这个不值得。
+# manifest.json 照常入库：准入裁决、period/ref_w、逐页拒绝理由都在里面。
+output/*/step3_input/*/
+
+# ── 四个抽象（console_architecture.md）──────────────────────────────
+# 2026-09-13 起运行时数据全部归书的 workspace（core/workspace.py：产物 / 缓存 / 批次 /
+# 排除名单 / 事件日志五个根都跟 GUJI_WORKSPACE 走）。下面这些只在**没设 workspace**
+# 的本地试跑 / pytest 时才会在仓内出现，仍然忽略，免得误提交一本书的运行数据。
+# 前导 / 锚定到仓库根：否则 `products/` 会连源码包 open_guji_cv/products/ 一起忽略
+/products/
+/cache/
+/runs/
+/.venv/
+/review/batches/
+/feedback/
+/config/crop_exclusions*.jsonl
+
+# 临时目录（2026-09-05：git add -A 误带过一次）
+output/_grid_test/
+output/tmp*/
+
+# 对勘报告（scripts/build_collation_report.py 产物，可再生；分享件在 overview）
+output/collation_*
+
+# 字形库 SQLite：83MB 二进制，每次提交近乎多存一份完整副本（历史里 63 版 = 3.19 GiB）。
+# 真源是 output/glyph_store/（glyph-db export 导出，进版本控制），
+# 本文件由 glyph-db rebuild 重建 —— 与库内 README「sqlite 是可重建索引，不进版本控制」一致。
+output/glyph.db
+output/glyph.db-journal
+output/glyph.db-wal
+output/glyph.db-shm
+
+# ── v1 中间产物（2026-09-06 清理）────────────────────────────
+# v2 流水线的产物在 products/（全书 vol01+vol02 才 87MB），phase*/step2_columns
+# 是 v1 的 extract/chars/cluster/label 链路的输出，v2 不消费它们
+# （steps/_v1_bridge.py 是 v2→v1 方向：从 v2 产物生成 v1 视图，不是反向依赖）。
+# 上面「output/ 改为入库以防容器重置」的理由对这两册已不成立：原始扫描件
+# 已全部入库（data_full/zongmu/vol01 206 张、vol02 188 张），需要时可重跑。
+# phase9_seed 里 48 条仅存于此的人裁已抢救进 glyph_store/rescued/。
+output/*/phase2_layout/
+output/*/phase3_char_grid/
+output/*/phase4_chars/
+output/*/phase5_clusters/
+output/*/phase6_labels/
+output/*/phase9_seed/
+output/*/step2_columns/
+output/*/step3_input/
+
+# 字形库自洽审计产物（scripts/audit_glyph_consistency.py，可再生）
+output/audit_glyph_*
+
+# 一次性实验产物
+zitools_p2_rev.log
+output/corpora_disagree_ids.txt
+output/review_*.html
+
+# 《四庫全書總目》数据已迁 siku-zongmu-workspace 私有仓（2026-09-08）
+# 引擎仓只留 output/glyph_store 样本库供测试；跑真书设 GUJI_WORKSPACE
+/data_full/
+/output/vol*/
+/output/book*/
+/output/hanshu_yiwenzhi/
+/output/self_assess_*/
+/output/review_*/
+/output/border_review/
+/output/inner_probe/
+
+# 粘连切点实验（experiments/touch_resolve/）的产出：图与 json 可由脚本重算，不入库
+experiments/touch_resolve/out/
