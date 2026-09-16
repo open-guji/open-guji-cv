@@ -674,7 +674,7 @@ def cmd_glyph_db(args):
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
-                jobs=args.jobs)
+                jobs=args.jobs, vertical=args.vertical)
         elif args.action == "import":
             if not args.path:
                 print("import 需要书目录参数"); sys.exit(1)
@@ -1042,6 +1042,10 @@ def main():
                         "import-font 用于只导 manifest 里的某一套字体）")
     p.add_argument("--manifest", default="config/fonts/manifest.json",
                    help="字体清单（import-font 用）")
+    p.add_argument("--vertical", action="store_true",
+                   help="竖排本：括号类标点（「」《》…）渲染后转 90° 再入库——"
+                        "竖排里它们是横放的，不转的话库里的模板跟书上对不上"
+                        "（见 font_glyphs.VERTICAL_ROTATED_PUNCT）")
     p.add_argument("--charset", default=None,
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,

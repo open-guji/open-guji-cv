@@ -47,10 +47,31 @@ from ..products.kinds.recog import AdmitRec, PageAdmit
 from ..products.store import ProductStore
 from ..utils.jiazhu_order import sort_by_reading
 
-CELLS_STEP = "row_segment"
+CELLS_STEP = "row_segment"          # 刻本链的产出者；现代链是 row_segment_runs，见 cells_step()
 CELLS_KIND = "cells"
 ADMIT_STEP = "seed_admit"
 ADMIT_KIND = "seed_admit"
+
+
+def cells_step(book: str) -> str:
+    """这册书的 `cells` 是哪一步产的。
+
+    同一种产物在两条链上由不同的 Step 产出（刻本 `row_segment` / 现代印刷
+    `row_segment_runs`），管线里本来就有 `Pipeline.producer_of` 负责这件事
+    （三模式方案「地基 2」）。Step9 不进管线、自己读产物，所以要自己查一次——
+    写死 `row_segment` 会让现代印刷本在 9.1 直接报「没有 Step3 产物」
+    （2026-09-15 北行日錄实测）。查不出来就退回刻本链那个，行为不变。
+    """
+    try:
+        from ..core.book import load_book
+        from ..core.pipeline import default_pipeline_id, load_pipeline
+        bk = load_book(book)
+        producer = load_pipeline(default_pipeline_id(bk)).producer_of(CELLS_KIND)
+        if producer is not None:
+            return producer.spec.id            # producer_of 给的是 Step 对象，id 在 spec 上
+    except Exception:
+        pass
+    return CELLS_STEP
 
 
 @dataclass
@@ -89,12 +110,13 @@ def page_slots(store: ProductStore, book: str, page: int,
     if stale is None:
         stale = []
     key = page_key(page)
-    cells: PageCells | None = store.read(book, CELLS_STEP, key, CELLS_KIND)  # type: ignore[assignment]
+    step = cells_step(book)
+    cells: PageCells | None = store.read(book, step, key, CELLS_KIND)  # type: ignore[assignment]
     admit: PageAdmit | None = store.read(book, ADMIT_STEP, key, ADMIT_KIND)  # type: ignore[assignment]
     if admit is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {ADMIT_STEP} 产物（先跑到 Step7）")
     if cells is None:
-        raise ProductMissing(f"{book} 第 {page} 页没有 {CELLS_STEP} 产物（先跑到 Step3）")
+        raise ProductMissing(f"{book} 第 {page} 页没有 {step} 产物（先跑到 Step3）")
 
     cells_by_col: dict[int, dict[tuple[int, str], CellRec]] = {}
     for col_cells in cells.columns:

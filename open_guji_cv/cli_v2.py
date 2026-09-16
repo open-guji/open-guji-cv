@@ -404,7 +404,8 @@ def cmd_seed_witness(args) -> None:
         stats = seed_from_witness(db, book, labels_path=labels_path, cache_root=cache_root(),
                                   font_editions=args.fonts.split(","), edition_tag=args.edition,
                                   limit=args.limit, products_root=products_root(),
-                                  norm_stroke=args.norm_stroke)
+                                  norm_stroke=args.norm_stroke, jobs=args.jobs,
+                                  only_chars=args.only_chars)
     finally:
         db.close()
     out = products_root() / book.id / "witness_align" / "seed_stats.json"
@@ -850,6 +851,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--norm-stroke", type=int, default=None,
                    help="形状证人这一路两边骨架化再细化到 N px——要与管线 glyph_match.norm_stroke 一致（现代链 3）；"
                         "不给就走库检索（不归一，量的是粗细，字/旦/宣 会整批被拒）")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="读图+归一并行进程数（检索本身不并行：matcher 带着上千模板的特征矩阵，"
+                        "进程间传它比算还贵）")
+    p.add_argument("--only-chars", default=None,
+                   help="只播这些字头（连写，如 「」《》）。进库幂等，可反复补播——"
+                        "修好某一类字的形状证人后补这一类，不必全量重播")
 
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")

@@ -23,13 +23,59 @@ import cv2
 import numpy as np
 
 
+#: 播种检索时每次 match 精验几个候选。只取 top-1，k 大了纯属浪费——见 `seed_from_witness`
+#: 里建 matcher 处的实测表。
+SEED_KNN_K = 5
+
 SKIP_FLAGS = ("boundary_ink", "truncated", "contaminated", "frame_bars", "bad_seg", "rule_bar", "edge_blob")
+
+
+def _prep_one(args):
+    """一个字位：读 png → 解码 → 归一。进程池的 worker（模块级函数才能 pickle）。"""
+    key, path, isotropic, norm_stroke = args
+    import cv2
+    import numpy as np
+    from ..clustering.canonical import to_canonical
+    from ..clustering.normalize import normalize_patch
+    p = Path(path)
+    if not p.exists():
+        return key, None
+    png = p.read_bytes()
+    g = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if g is None:
+        return key, None
+    return key, (png, g, normalize_patch(to_canonical(g), stroke_width=norm_stroke,
+                                         isotropic=isotropic))
+
+
+def _prep_patches(rows, cache_root: Path, book_id: str, norm_stroke, jobs: int = 1) -> dict:
+    """批量把字块读进来并归一。`jobs>1` 走进程池（纯 CPU、无状态，这段占检索三分之一）。"""
+    from ..core.spec import cell_key
+    tasks = []
+    for d in rows:
+        key = cell_key(d["page"], d["col"], d["slot"])
+        tasks.append((key, str(cache_root / book_id / "char_patch" / (key + ".png")),
+                      d.get("cell_kind") == "punct", norm_stroke))
+    out: dict = {}
+    if jobs and jobs > 1:
+        import multiprocessing as mp
+        with mp.Pool(jobs) as pool:
+            for key, got in pool.imap(_prep_one, tasks, chunksize=64):
+                if got is not None:
+                    out[key] = got
+        return out
+    for t in tasks:
+        key, got = _prep_one(t)
+        if got is not None:
+            out[key] = got
+    return out
 
 
 def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_editions: list[str],
                       edition_tag: str | None = None, kinds=("char", "punct"), limit: int | None = None,
                       products_root: Path | None = None, skip_flags=SKIP_FLAGS,
-                      norm_stroke: int | None = None, log=print) -> dict:
+                      norm_stroke: int | None = None, jobs: int = 1,
+                      only_chars: str | None = None, log=print) -> dict:
     """两阶段：先对全部字位做字体检索（只读，检索缓存稳定），再逐条进库（只写）。
 
     第一版是边检索边进库——每 `admit_instance` 一条就让 `GlyphDB.query` 的特征缓存失效
@@ -57,8 +103,15 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     if norm_stroke:
         from ..clustering.seeding import load_matcher_from_db
         for ed in font_editions:
-            matchers[ed], _ = load_matcher_from_db(db, edition=ed, norm_stroke=norm_stroke)
-            log(f"[seed] 字体 {ed} 模板按 norm_stroke={norm_stroke} 现算完毕")
+            # `knn_k=5`：播种只用 top-1（下面 `font_top1` 只读第一名），k 是**精验几个候选**。
+            # 每次 match 的开销几乎全在这 k 次 elastic 精验上。北行日錄实测（399 个字位）：
+            #   k=10 → 21.1 ms/次，top-1 一致 96.49%
+            #   k= 5 →  9.2 ms/次，top-1 一致 96.49%   ← 一致率一模一样，快 2.3 倍
+            #   k= 3 →  6.1 ms/次，top-1 一致 95.49%   ← 开始掉，不取
+            # 全书两套字体：12 分钟 → 5 分钟。
+            matchers[ed], _ = load_matcher_from_db(db, edition=ed, norm_stroke=norm_stroke,
+                                                   knn_k=SEED_KNN_K)
+            log(f"[seed] 字体 {ed} 模板按 norm_stroke={norm_stroke} 现算完毕（k={SEED_KNN_K}）")
 
     def font_top1(norm_img, ed):
         """→ (字, cov) 或 None：归一协议走内存匹配器的候选表，否则走库检索。"""
@@ -97,6 +150,13 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
             continue
         d["step4_flags"] = list(fl)
         rows.append(d)
+    if only_chars:
+        # 只播这些字头（`admit_instance` 幂等，已在库的算 n_dup）。修好某一类字的形状
+        # 证人之后补播用——北行日錄 2026-09-15：字体模板转 90° 修好引号，只需补 170 个
+        # 引号字位，没必要为它把两万条全检索一遍（全量 ~8 分钟，只补引号 ~5 秒）。
+        want = set(only_chars)
+        rows = [d for d in rows if d["char"] in want]
+        log(f"[seed] 只播 {len(want)} 个字头：{only_chars} → {len(rows)} 个字位")
     if limit:
         rows = rows[:limit]
     n_seen = len(rows)
@@ -107,15 +167,16 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     n_font_reject = n_missing = 0
     rejects: list[dict] = []
     agree_by = Counter()
+    # 读图 + 解码 + 归一是纯 CPU、无状态的一段，占检索总时长的三分之一，先并行做完再检索。
+    # （检索本身不并行：matcher 带着 2000 个模板的特征矩阵，进程间传它比算还贵。）
+    prepped = _prep_patches(rows, cache_root, book.id, norm_stroke, jobs=jobs)
     for i, d in enumerate(rows):
         key = cell_key(d["page"], d["col"], d["slot"])
-        p = cache_root / book.id / "char_patch" / (key + ".png")
-        if not p.exists():
+        got = prepped.get(key)
+        if got is None:
             n_missing += 1
             continue
-        png = p.read_bytes()
-        g = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
-        norm = norm_of(d, g)
+        png, g, norm = got
         ch = d["char"]
         agreed, tops = [], {}
         for ed in font_editions:
