@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { fetchBorderReviewCards, fetchBorderReviewVerdicts } from '../../api/borderReview'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
@@ -95,7 +96,7 @@ export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderRe
                 {kind === 'outer' && <em>{c.side === 'top' ? '上框' : '下框'}</em>}
                 {kind === 'colborder' && <em>第 {c.col} 列 · {c.end === 'top' ? '上端' : '下端（已翻转）'}</em>}
               </h3>
-              <img src={c.img} alt="" loading="lazy" className={kind === 'colborder' ? 'br-img-pixelated' : ''} />
+              <img src={withWorkspace(c.img)} alt="" loading="lazy" className={kind === 'colborder' ? 'br-img-pixelated' : ''} />
               <div className="br-verdicts">
                 {spec.options.map((opt) => (
                   <button

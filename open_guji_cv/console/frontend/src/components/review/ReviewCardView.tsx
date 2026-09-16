@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { needsReading } from '../../domain'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
 import type { KeyItem } from './candidates'
@@ -64,7 +65,9 @@ export function ReviewCardView({
       </div>
       <div className="rvbody">
         <div className="rvimgcol">
-          <img src={c.patch} alt={c.id} loading="lazy" />
+          {/* `<img src>` 发不出自定义请求头，工作区只能走查询串——不带就是 500
+              （服务端按默认工作区找不到这本书的 cache）。见 api/client.withWorkspace。 */}
+          <img src={withWorkspace(c.patch)} alt={c.id} loading="lazy" />
           <button className="rvctxbtn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
                   title="切分/缩框前的列图原样，上下各带 2 格">看原图</button>
         </div>

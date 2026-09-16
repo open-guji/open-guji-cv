@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { fetchHeadColCards, fetchHeadColVerdicts } from '../../api/headRaise'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
@@ -152,7 +153,7 @@ export function HeadRaisePanel({ book }: { book: string }) {
                   「容器还没高度」会整排不触发（实测 9 张卡只显示第 1 张）。
                   一页 9 张列带图，直接加载代价可以接受。 */}
               <div className="hr-img-wrap">
-                <img src={`${c.img}&overlay=${overlay ? 1 : 0}`} alt="" />
+                <img src={withWorkspace(`${c.img}&overlay=${overlay ? 1 : 0}`)} alt="" />
               </div>
               <div className="hr-row">
                 <span className="hr-lab">抬头</span>

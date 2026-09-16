@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { withWorkspace } from '../../api/client'
 import type { CandidateMatch, CutlineCase } from '../../types/cutline'
 
 // Step7「切分裁决」板块专用卡片（overview 2026-09-11 下发）。
@@ -145,7 +146,8 @@ export function BlockingCutlineCard({
         <div className="climg" ref={boxRef} style={{ height: h * scale, width: w * scale, cursor: drawing ? 'crosshair' : 'default' }}
              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={endDrag}
              onContextMenu={(ev) => ev.preventDefault()}>
-          <img src={c.img} height={h * scale} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * scale }} />
+          {/* 同 ReviewCardView：图片出口的工作区只能放查询串 */}
+          <img src={withWorkspace(c.img)} height={h * scale} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * scale }} />
           <svg className="clsvg" style={{ height: h * scale }}>
             {cands.map((cd, k) => {
               if (!cd.y || !cd.y.length) return null

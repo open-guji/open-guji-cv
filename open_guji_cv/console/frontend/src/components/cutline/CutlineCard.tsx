@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { withWorkspace } from '../../api/client'
 import type { CutlineCase } from '../../types/cutline'
 
 export interface CardState {
@@ -139,7 +140,8 @@ export function CutlineCard({
         <div className="climg" ref={boxRef} style={{ height: h * s, cursor: st.mode === 'poly' ? 'crosshair' : 'ns-resize' }}
              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={endDrag}
              onContextMenu={(ev) => ev.preventDefault()}>
-          <img src={c.img} height={h * s} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * s }} />
+          {/* 同 ReviewCardView：图片出口的工作区只能放查询串 */}
+          <img src={withWorkspace(c.img)} height={h * s} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * s }} />
           <div className="clline old" style={{ top: (c.y - c.crop_y0) * s }} />
           <div className="clline" style={{ top: (st.y - c.crop_y0) * s }} />
           <svg className="clsvg" style={{ height: h * s }}>
