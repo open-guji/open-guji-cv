@@ -124,6 +124,21 @@ class BookSpec:
     #: Step0 分页（yaml 的 `page_split:`）：一张扫描页含多页原书时（上下两栏拼一页、
     #: 对开等），先裁成逻辑页再进管线。见 `utils/page_split.py`。空 = 不分页。
     page_split: dict = field(default_factory=dict)
+    #: 上 / 下版框的**搜索带占页高的比例**（yaml 的 `top_band_frac` /
+    #: `bottom_band_frac`）。不写 = 用 `find_horizontal_border` 的默认 0.15。
+    #:
+    #: ⚠️ **天头（或地脚）比页高的 15% 还宽的书必须调大**，否则真版框根本不在
+    #: 搜索窗口里。探测器**不会报错**——它只是在天头空白里挑一个峰，给出偏上
+    #: 几百 px 的 `top`，下游列窗整体上移、列图切歪，最后表现成闸2 大批列
+    #: `side_floor` 超标（看着像「界行没剥干净」，其实是窗口压根没对）。
+    #:
+    #: **怎么标定**：量整册「版框上沿 y / 页高」的最大值，再留一截余量。
+    #: 北行日錄刻本（筒子页，天头 ≈585px / 页高 2343px = 25%）实测：0.15 时
+    #: 54/54 页全部落空、误差中位 440px；0.26 起误差中位 12px，且一直到 0.40
+    #: 结果逐页不变——**不是卡在临界值上**，所以取 0.30 留足余量。
+    #: 换书要重标；一页一个半叶的书天头窄，默认 0.15 就够。
+    top_band_frac: float | None = None
+    bottom_band_frac: float | None = None
     #: `leaf_layout`：`single`（一页 = 一个半叶，默认）| `folio`（**筒子页**：一页 =
     #: 一整版 = 两个半叶，中间夹版心/书口）。
     #:
@@ -208,6 +223,7 @@ class BookSpec:
             "n_references": len(self.references),
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
+            "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
             "font": dict(self.font),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
@@ -377,6 +393,9 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pitch_prior=(None if d.get("pitch_prior") is None else float(d["pitch_prior"])),
         page_split=dict(d.get("page_split") or {}),
         leaf_layout=str(d.get("leaf_layout", "single")),
+        top_band_frac=(None if d.get("top_band_frac") is None else float(d["top_band_frac"])),
+        bottom_band_frac=(None if d.get("bottom_band_frac") is None
+                          else float(d["bottom_band_frac"])),
         font=dict(d.get("font") or {}),
     )
 

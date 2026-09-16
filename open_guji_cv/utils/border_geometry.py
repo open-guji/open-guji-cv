@@ -910,7 +910,9 @@ def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
 
 def detect_borders(gray: np.ndarray, expected_cols: int,
                     ink_threshold: int = 128,
-                    book_bottom_gap: float | None = None) -> BorderDetectionResult:
+                    book_bottom_gap: float | None = None,
+                    top_band_frac: float | None = None,
+                    bottom_band_frac: float | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -921,6 +923,17 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     救援（见 `peak_line_search._rescue_bottom`）。不传就不救，行为与改动前
     逐位相同——单页函数拿不到整册统计，只能由调用方按册算好传进来，
     `measure_book_bottom_gap()` 就是干这个的。
+
+    `top_band_frac` / `bottom_band_frac`：上/下版框的**搜索带占页高的比例**，
+    不传就用 `find_horizontal_border` 的默认 0.15。
+
+    ⚠️ **天头比页高的 15% 还宽时必须调大 `top_band_frac`**，否则真版框根本
+    不在搜索窗口里，探测器只能在天头空白/书名装饰里挑一个峰——而且它**不报错**，
+    只是给出一个偏上几百 px 的 `top`，下游列窗整体上移、列图切歪，最后表现为
+    闸2 大批列 `side_floor` 超标（看着像"界行没剥干净"，其实是窗口就没对）。
+    北行日錄刻本（筒子页，天头 ≈585px / 页高 2343px = 25%）实测：0.15 时
+    54/54 页全部落空、误差中位 440px；0.26 起误差中位 12px 且到 0.40 稳定不变
+    （不是卡在临界值上）。见 `BookSpec.top_band_frac`。
     """
     h, w = gray.shape[:2]
     mask = (gray < ink_threshold).astype(np.float64)
@@ -928,9 +941,11 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)
     # 上下边框曾经各 1.4s、并成 2 线程有收益；分块 BLAS 之后各只剩 0.17s，
     # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
-    top_old = find_horizontal_border(mask, "top")
+    top_kw = {} if top_band_frac is None else {"band_frac": float(top_band_frac)}
+    bot_kw = {} if bottom_band_frac is None else {"band_frac": float(bottom_band_frac)}
+    top_old = find_horizontal_border(mask, "top", **top_kw)
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
-                                        book_gap=book_bottom_gap)
+                                        book_gap=book_bottom_gap, **bot_kw)
 
     verticals = [_vline_to_new(m, w, h) for m in vlines_old]
     # 新坐标系 x 向左递增：旧坐标里越靠右(x_old越大) -> 新坐标x_new越小，
