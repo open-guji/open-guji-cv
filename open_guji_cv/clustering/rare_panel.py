@@ -42,7 +42,89 @@ def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
     return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
 
 
-def _fuse(a, b, cnn_topk, emb_topk, k: int) -> list[dict]:
+def _book_norm_stroke(book: str | None) -> int | None:
+    """这册书的笔宽归一（`font.norm_stroke`）——与 Step5-a 同一把尺子。"""
+    if not book:
+        return None
+    try:
+        from ..core.book import load_book
+        return (load_book(book).font or {}).get("norm_stroke")
+    except Exception:
+        return None
+
+
+def book_font_editions(book: str) -> list[str]:
+    """这册书标定选用的字体域（`books/<id>.yaml` 的 `font.editions`）。
+
+    2026-09-15 加。此前生僻字面板的模板候选走 `font_candidates._index`，那是
+    **另一套东西**：写死 `fonts/` 目录下的 iming/jigmo/kangxi 三套（刻本链标定的），
+    与字形库里的字体域毫无关系。后果是——我们为这本书标定了 I.Ming + SimSun
+    并把它们导进了库，面板却在用刻本那三套，**SimSun 根本不在候选源里**。
+    查不到就返回空列表，调用方退回原来那条路。
+    """
+    try:
+        from ..core.book import load_book
+        eds = (load_book(book).font or {}).get("editions") or []
+        return [str(e) for e in eds]
+    except Exception:
+        return []
+
+
+def db_font_topk(norm, editions: list[str], k: int, norm_stroke: int | None = None):
+    """库里这些字体域 → top-k 候选 [(字, 分)]。
+
+    与 Step5-a 用同一个 `GlyphMatcher`/同一套归一协议（`norm_stroke`），
+    所以面板上看到的排序与管线判的是同一把尺子——差一把尺子的教训见
+    `modern_print_pipeline.md` §五.4。
+    """
+    if not editions:
+        return []
+    from .glyph_db import GlyphDB
+    from .seeding import cached_matcher_from_db
+    from ..steps.glyph_match import db_fingerprint, _default_db
+    path = _default_db()
+    out: dict[str, float] = {}
+    for ed in editions:
+        try:
+            m, _ = cached_matcher_from_db(path, db_fingerprint(path), edition=ed,
+                                          knn_k=max(k, 10), norm_stroke=norm_stroke)
+        except Exception:
+            continue
+        r = m.match(norm)
+        for ch, cov in (r.candidates or []):
+            if cov > out.get(ch, 0.0):
+                out[ch] = float(cov)
+    return sorted(out.items(), key=lambda t: -t[1])[:k]
+
+
+def _db_topk_batch(norms: list, editions: list[str], k: int, norm_stroke: int | None = None):
+    """库字体域的批量检索：**每套字体的 matcher 只建一次**，再逐图查。
+
+    `cached_matcher_from_db` 的缓存只留最近一个 key（见 seeding.py 里的
+    `_MATCHER_CACHE.clear()`），所以「逐字位 × 逐字体」地调它，两套字体会
+    互相把对方挤出缓存，等于每次都重建索引。这里把循环顺序倒过来：
+    外层字体、内层字位。
+    """
+    if not editions or not norms:
+        return [[] for _ in norms]
+    from .seeding import cached_matcher_from_db
+    from ..steps.glyph_match import _default_db, db_fingerprint
+    path = _default_db()
+    acc: list[dict] = [{} for _ in norms]
+    for ed in editions:
+        try:
+            m, _ = cached_matcher_from_db(path, db_fingerprint(path), edition=ed,
+                                          knn_k=max(k, 10), norm_stroke=norm_stroke)
+        except Exception:
+            continue
+        for i, n in enumerate(norms):
+            for ch, cov in (m.match(n).candidates or []):
+                if cov > acc[i].get(ch, 0.0):
+                    acc[i][ch] = float(cov)
+    return [sorted(d.items(), key=lambda t: -t[1])[:k] for d in acc]
+
+
+def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
     """HOG（两档字表，`cnn.available` 为 False 时才有）+ CNN 分类 + CNN
     embedding → 融合后的候选字典列表。
 
@@ -64,8 +146,24 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int) -> list[dict]:
     from .cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT, rrf
     cnn_order = [c for c, _ in cnn_topk]
     emb_order = [c for c, _ in emb_topk]
+    db_order = [c for c, _ in (db_topk or [])]
 
-    if cnn_order or emb_order:
+    if db_order and (cnn_order or emb_order):
+        # 三路 RRF：库里这册书标定的字体域 + CNN 分类 + CNN embedding。
+        # 字体模板权重取 CNN 那一档（它是**这本书实际印刷字形**的证人，
+        # 比通用 CNN 更贴题；但单套字体覆盖有限，不给到 embedding 那么高）。
+        by_char = {c: ("cnn", p) for c, p in cnn_topk}
+        by_char.update({c: ("emb", p) for c, p in emb_topk})
+        by_char.update({c: ("font", p) for c, p in (db_topk or [])})
+        orders = [o for o in (db_order, cnn_order, emb_order) if o]
+        weights = tuple(w for o, w in ((db_order, CNN_WEIGHT), (cnn_order, CNN_WEIGHT),
+                                       (emb_order, EMB_WEIGHT)) if o)
+        order = rrf(*orders, k=k, weights=weights)
+        hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
+    elif db_order and not (cnn_order or emb_order):
+        # CNN 不可用（没 checkpoint）：字体域单撑，好过返回空列表
+        hits = [(ch, "font", p) for ch, p in (db_topk or [])[:k]]
+    elif cnn_order or emb_order:
         # CNN 可用：不跑 HOG，by_char 直接用 CNN/embedding 自己的分数
         # （命中两边时优先 embedding——它是最强单源，见模块头引用的实测）。
         by_char = {c: ("cnn", p) for c, p in cnn_topk}
@@ -98,7 +196,8 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int) -> list[dict]:
     } for ch, font, score in hits]
 
 
-def rare_for(img, k: int, corpus: str | None = None) -> list[dict]:
+def rare_for(img, k: int, corpus: str | None = None,
+             book: str | None = None) -> list[dict]:
     """一张字块图 → top-k 候选（含释义等修饰）。单查用这个；一页多个字块
     用 `rare_for_batch`——五路检索改成矩阵-矩阵乘法/网络批前向，快数倍
     （2026-09-10，见 `font_candidates.candidates_batch` 与
@@ -121,10 +220,13 @@ def rare_for(img, k: int, corpus: str | None = None) -> list[dict]:
         cs_small, cs_big = _rare_charsets(corpus)
         a = candidates(norm, cs_small, k=max(k, 10))
         b = candidates(norm, cs_big, k=max(k, 10))
-    return _fuse(a, b, cnn_topk, emb_topk, k)
+    db_topk = db_font_topk(norm, book_font_editions(book), max(k, 10),
+                           _book_norm_stroke(book)) if book else []
+    return _fuse(a, b, cnn_topk, emb_topk, k, db_topk)
 
 
-def rare_for_batch(imgs: list, k: int, corpus: str | None = None) -> list[list[dict]]:
+def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
+                   book: str | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
@@ -163,8 +265,15 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None) -> list[list[d
         b_list = candidates_batch(norms, cs_big, k=max(k, 10))
         cnn_list = emb_list = [[] for _ in norms]
 
-    return [_fuse(a, b, cnn_topk, emb_topk, k)
-            for a, b, cnn_topk, emb_topk in zip(a_list, b_list, cnn_list, emb_list)]
+    eds = book_font_editions(book) if book else []
+    ns = _book_norm_stroke(book) if book else None
+    # matcher 建一次、批量查（`db_font_topk` 每次调用都要 `cached_matcher_from_db`，
+    # 缓存只保留最近一个 key，两套字体轮流查会互相把对方挤掉 → 每个字位重建两次
+    # 索引，163 个字位跑了一个多小时也没完，2026-09-15 实测）。
+    db_list = _db_topk_batch(norms, eds, max(k, 10), ns) if eds else [[]] * len(norms)
+    return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
+            for a, b, cnn_topk, emb_topk, dbk
+            in zip(a_list, b_list, cnn_list, emb_list, db_list)]
 
 
 def char_hint(ch: str) -> dict:
@@ -297,5 +406,5 @@ def rare_batch(book: str, slots: list[str], k: int = 3,
             out[s] = []
             continue
         img = rare_patch(book, page, col, slot, sub, cache)
-        out[s] = rare_for(img, k, corpus) if img is not None else []
+        out[s] = rare_for(img, k, corpus, book) if img is not None else []
     return {"book": book, "n": len(out), "rare": out}

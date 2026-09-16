@@ -109,7 +109,7 @@ class RareCandidatesStep(Step):
         if imgs and not Path(corpus).exists():
             ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
             imgs = []
-        hits_list = rare_for_batch(imgs, p.k, corpus) if imgs else []
+        hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,

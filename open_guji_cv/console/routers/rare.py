@@ -73,7 +73,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     # 字表按这册书的整理本算，不写死刻本链那份（2026-09-15，见 rare_panel.rare_batch）
     from ...steps.align_ref import book_corpus
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
-            "candidates": rare_for(img, k, book_corpus(book))}
+            "candidates": rare_for(img, k, book_corpus(book), book)}
 
 
 
