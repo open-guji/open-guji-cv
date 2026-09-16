@@ -414,14 +414,86 @@ def cmd_seed_witness(args) -> None:
     print(f"→ {out}")
 
 
+def _pdf_embedded_image(doc, pg):
+    """扫描页里那张**唯一的内嵌图**的 (xref, 宽, 高)；不是「一页一张图」就返回 None。
+
+    扫描 PDF 的正常形态是一页一张整版位图。有多张（或没有）的页多半是矢量/文字页
+    或拼贴页，只能走渲染。
+    """
+    try:
+        imgs = pg.get_images(full=True)
+    except Exception:
+        return None
+    if len(imgs) != 1:
+        return None
+    xref = imgs[0][0]
+    try:
+        info = doc.extract_image(xref)
+    except Exception:
+        return None
+    return xref, info.get("width", 0), info.get("height", 0)
+
+
+def _salvage_jpx(raw: bytes) -> bytes:
+    """JPEG2000 末 tile 残缺时的抢救：在最后一个 SOT 处截断、补 EOC。
+
+    国图北行日錄刻本实测：某页 25 个 tile-part 的最后一个数据不全，**MuPDF 渲染
+    出一张全白图并且 exit 0**（静默坏页），OpenCV 报 `Stream too short`。丢掉残缺
+    的那个 tile 就能解出其余的——丢的那块通常只占页面一小角。
+    """
+    sots: list[int] = []
+    i = 0
+    while i < len(raw) - 1:
+        if raw[i] == 0xFF and raw[i + 1] == 0x90:          # SOT
+            lsot = int.from_bytes(raw[i + 2:i + 4], "big")
+            sots.append(i)
+            i += 2 + max(lsot, 2)
+            continue
+        i += 1
+    if not sots:
+        return raw
+    return raw[:sots[-1]] + b"\xff\xd9"
+
+
+def _warn_downscale(problems: list, page_no: int, pg, got, dpi) -> None:
+    """渲染出来比内嵌图小很多时告警——这是「静默降分辨率」那个坑的正面拦截。"""
+    if got is None or not got[1]:
+        return
+    pr = pg.rect
+    if not pr.width:
+        return
+    eff = (dpi / 72.0) if dpi else 1.0
+    ratio = got[1] / (float(pr.width) * eff)
+    if ratio > 1.2:
+        problems.append(
+            f"页 {page_no}：**渲染结果比内嵌图小 {ratio:.2f} 倍**"
+            f"（页框 {pr.width:.0f}×{pr.height:.0f} pt vs 内嵌图 {got[1]}×{got[2]} px）"
+            f"——分辨率丢了，改用 --mode embedded，或 --dpi {int(round(72 * ratio * eff))}")
+
+
 def cmd_import_pdf(args) -> None:
     """把 PDF 逐页抽成灰度 PNG（`<out>/<页号>.png`，从 1 起）。
 
-    不带 --dpi 时按 1:1 矩阵渲染——扫描 PDF 的页尺寸（pt）通常就等于内嵌图像的
-    像素数，这样拿到的是原生分辨率；矢量/文字 PDF 请显式给 --dpi。
+    ## 默认取**内嵌图**，不是渲染
+
+    扫描 PDF 的页框尺寸（pt）**不一定**等于内嵌图像的像素数。北行日錄刻本那两个
+    PDF 页框 672×562 pt、内嵌图 2801×2343 px——按页框 1:1 渲染只有原生分辨率的
+    1/4.17，字身从 71px 缩到 17px，Step3 根本没法切，而且 exit 0 不报任何警告。
+
+    所以默认路径是 `extract_image` 取内嵌码流（`--mode embedded`，缺省）：
+    一页一张图时直接拿原始像素，拿不到才退回渲染并**明确告知**。
+    `--mode render` 强制渲染（矢量/文字 PDF、或内嵌图是分块拼的）；给了 `--dpi`
+    即隐含 render。
+
+    ## 每页都体检
+
+    抽完逐页报「尺寸异常 / 近乎全白全黑」——**静默坏页是最难发现的一类坏数据**，
+    全白页会一路往下跑，到 Step3 才莫名其妙零列。见 `_salvage_jpx`。
     """
     from pathlib import Path
+    import numpy as np
     import pymupdf
+    from .utils.image_io import imwrite
 
     doc = pymupdf.open(args.pdf)
     out = Path(args.out)
@@ -432,22 +504,97 @@ def cmd_import_pdf(args) -> None:
         for part in args.pages.split(","):
             a, _, b = part.partition("-")
             sel.update(range(int(a), int(b or a) + 1))
-    n = 0
+
+    mode = args.mode
+    if args.dpi and mode == "embedded":
+        mode = "render"                      # 显式给了 dpi 就是要渲染
+
+    def _render(pg) -> np.ndarray:
+        if args.dpi:
+            pix = pg.get_pixmap(dpi=args.dpi, colorspace=pymupdf.csGRAY)
+        else:
+            pix = pg.get_pixmap(matrix=pymupdf.Matrix(1, 1), colorspace=pymupdf.csGRAY)
+        return np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+
+    n = n_skip = 0
+    n_embedded = n_render = n_salvaged = 0
+    problems: list[str] = []
+    tmp = out / "_import_tmp.bin"
+
     for i in range(len(doc)):
         page_no = i + 1
         if sel is not None and page_no not in sel:
             continue
         target = out / f"{page_no}.png"
         if target.exists() and not args.force:
+            n_skip += 1
             continue
         pg = doc[i]
-        if args.dpi:
-            pix = pg.get_pixmap(dpi=args.dpi, colorspace=pymupdf.csGRAY)
+        img = None
+
+        if mode == "embedded":
+            got = _pdf_embedded_image(doc, pg)
+            if got is not None:
+                xref, iw, ih = got
+                import cv2
+                raw = doc.extract_image(xref)["image"]
+                tmp.write_bytes(raw)
+                img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                if img is None:                      # 码流坏了，试抢救
+                    tmp.write_bytes(_salvage_jpx(raw))
+                    img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                    if img is not None:
+                        n_salvaged += 1
+                        problems.append(f"页 {page_no}：内嵌码流残缺，已截断末 tile 抢救"
+                                        f"（丢失部分通常在页面一角，**务必目视核对**）")
+                if img is not None:
+                    if img.ndim == 3:
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    n_embedded += 1
+                else:
+                    problems.append(f"页 {page_no}：内嵌图解不开（抢救也失败），退回渲染")
+            if img is None:
+                img = _render(pg)
+                n_render += 1
+                _warn_downscale(problems, page_no, pg, got, args.dpi)
         else:
-            pix = pg.get_pixmap(matrix=pymupdf.Matrix(1, 1), colorspace=pymupdf.csGRAY)
-        pix.save(str(target))
+            img = _render(pg)
+            n_render += 1
+            _warn_downscale(problems, page_no, pg,
+                            _pdf_embedded_image(doc, pg), args.dpi)
+
+        if img is None:
+            problems.append(f"页 {page_no}：抽不出图，已跳过")
+            continue
+
+        ink = float((img < 192).mean())
+        if ink < 0.002:
+            problems.append(f"页 {page_no}：**近乎全白**（墨占比 {ink:.4f}）——疑似坏页或空页")
+        elif ink > 0.98:
+            problems.append(f"页 {page_no}：近乎全黑（墨占比 {ink:.4f}）——疑似扫描背面或封面")
+        imwrite(str(target), img)
         n += 1
-    print(f"抽出 {n} 页 → {out}（共 {len(doc)} 页）")
+
+    tmp.unlink(missing_ok=True)
+
+    sizes: dict[tuple[int, int], int] = {}
+    for f in out.glob("*.png"):
+        try:
+            import cv2
+            im = cv2.imread(str(f), cv2.IMREAD_UNCHANGED)
+            if im is not None:
+                sizes[(im.shape[1], im.shape[0])] = sizes.get((im.shape[1], im.shape[0]), 0) + 1
+        except Exception:
+            pass
+
+    print(f"抽出 {n} 页（内嵌 {n_embedded} / 渲染 {n_render}"
+          f"{f' / 抢救 {n_salvaged}' if n_salvaged else ''}），"
+          f"跳过 {n_skip} 页 → {out}（PDF 共 {len(doc)} 页）")
+    if len(sizes) > 1:
+        top = sorted(sizes.items(), key=lambda kv: -kv[1])
+        print("  ⚠️ 尺寸不一致：" + "；".join(f"{w}×{h} × {c} 页" for (w, h), c in top[:4]))
+    for p in problems:
+        print("  ⚠️ " + p)
 
 
 def cmd_preclean(args) -> None:
@@ -861,7 +1008,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")
     p.add_argument("--out", required=True, help="输出目录")
-    p.add_argument("--dpi", type=int, default=None, help="渲染 dpi；不给 = 1:1（扫描 PDF 的原生分辨率）")
+    p.add_argument("--mode", choices=["embedded", "render"], default="embedded",
+                   help="embedded（缺省）= 取内嵌图原始像素，扫描 PDF 用这个；"
+                        "render = 按页框渲染，矢量/文字 PDF 用这个（给了 --dpi 即隐含 render）")
+    p.add_argument("--dpi", type=int, default=None,
+                   help="渲染 dpi（隐含 --mode render）；不给且走 render 时按页框 1:1——"
+                        "⚠️ 页框 pt 数不一定等于内嵌图像素数，那样会静默降分辨率")
     p.add_argument("--pages", default=None, help="只抽这些页，如 1-5,9")
     p.add_argument("--force", action="store_true")
 
