@@ -503,12 +503,17 @@ def test_route_snapshot():
     两条调用（随 `EXPECTED_ROUTES` 账本 63→64、62→63 同一批改动进来），但这条
     断言和那行段落标签一直没跟着改，实测本来就是 52，不是本轮改坏。
 
-    2026-09-15 工作区改成每请求一个之后，job 的响应里多了 `spec.workspace`
-    （工单自带工作区，见 `console/jobs.py::JobSpec.workspace`），于是
-    `POST /api/runs`、`GET /api/runs`、`GET /api/runs/{job_id}` 三条的 shape
-    与基线不同——**这是有意的契约变化**，不是回归。基线文件里还另有 14 条
-    先前就已漂移（本次改动前跑同样失败，逐条一致），一并等哪次专门核对过
-    之后用 `GUJI_WRITE_SNAPSHOT=1` 重落。
+    **基线会过时，这是设计使然。** 它落在临时目录、绑定这台机器的产物与库
+    （见模块 docstring），功能一加就该变。2026-09-15 核对过一次 17 条漂移，
+    逐条都有主：`in_workspace`/`spec.workspace`（工作区改每请求一个）、
+    `invalidated`（人裁回流让页显式失效）、`drift_skipped`（切线 escalated 模式）、
+    `pipelines` 多一条（现代印刷链）、`kinds` 多一条、夹注/判据/人审率等数字
+    随两天的跑批与人裁而动——没有一条是回归，于是用 `GUJI_ROUTE_SNAP_WRITE=1`
+    重落了基线。
+
+    **下次再红，照这个流程办**：先把差异逐条摊开（比对新旧 JSON 的叶子节点），
+    确认每一条都对得上某次有意的改动，再重落；**别一红就直接重落**——那等于
+    把这个测试关掉。
     """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
