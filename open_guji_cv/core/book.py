@@ -8,6 +8,11 @@ from pathlib import Path
 
 import yaml
 
+#: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
+#: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
+#: `siku-zongmu-workspace/books/`。这里只留一个空目录兜底与一条报错提示：
+#: 万一有人往这儿放 yaml，`load_book` 会明确告诉他放错地方了，而不是静默生效
+#: ——那正是「books.yaml 有两份」那条坑的根源（工作区改了没反应，因为读的是这份）。
 BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
 _NUM_RE = re.compile(r"(\d+)")
 
@@ -243,10 +248,9 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
 def _workspace_books_dir() -> Path | None:
     """工作区里的 `books/`（有 `GUJI_WORKSPACE` 才有）。
 
-    2026-09-14 起**优先于引擎仓的 `books/`**：册配置是「这本书的数据」，按数据边界
-    （overview `数据边界-三仓各管什么.md`）该落工作区；此前 `load_book` 只认引擎仓那份，
-    工作区里同名 yaml 改了静默无效（记忆里那条「books.yaml 有两份」的坑）。
-    引擎仓 `books/` 仍然认——vol01～vol10 还留在那里，且跑测试时没有工作区。
+    2026-09-14 起优先于引擎仓；**2026-09-15 起是唯一来源**（用户裁定）。
+    册配置是「这本书的数据」，按数据边界（overview `数据边界-三仓各管什么.md`）
+    该落工作区。十册四庫的 yaml 已迁进 `siku-zongmu-workspace/books/`。
     """
     from .workspace import workspace_root
     ws = workspace_root()
@@ -257,13 +261,22 @@ def _workspace_books_dir() -> Path | None:
 
 
 def _book_yaml_path(book_id: str, books_dir: Path | None = None) -> Path:
-    """显式 `books_dir` > 工作区 `books/`（有该册时） > 引擎仓 `books/`。"""
+    """显式 `books_dir` > 工作区 `books/`。**不再回退引擎仓**（2026-09-15）。
+
+    册配置是「这本书的数据」，按三仓数据边界该落工作区。此前引擎仓 `books/`
+    是兜底，结果两边同名 yaml 打架：四庫工作区那份 vol01 是 18 行精简版，
+    盖住引擎仓 59 行的完整版，`references` 段静默丢掉——而它的 `align_ref`
+    产物明明跑出来了。这种「改了没反应 / 声明莫名其妙少一块」的坑不该留。
+    """
     if books_dir is not None:
         return books_dir / f"{book_id}.yaml"
     ws_dir = _workspace_books_dir()
-    if ws_dir is not None and (ws_dir / f"{book_id}.yaml").exists():
-        return ws_dir / f"{book_id}.yaml"
-    return BOOKS_DIR / f"{book_id}.yaml"
+    if ws_dir is None:
+        raise FileNotFoundError(
+            f"没设 GUJI_WORKSPACE，找不到册 {book_id} 的定义。"
+            f"册配置只读工作区的 books/（2026-09-15 起），"
+            f"跑真书前先 export GUJI_WORKSPACE=/path/to/<书>-workspace")
+    return ws_dir / f"{book_id}.yaml"
 
 
 def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
@@ -305,14 +318,15 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:
-    """引擎仓 `books/` 与工作区 `books/` 的并集（显式传 `books_dir` 则只看它）。"""
-    if books_dir is not None:
-        return sorted(p.stem for p in books_dir.glob("*.yaml")) if books_dir.exists() else []
-    ids: set[str] = set()
-    for d in (BOOKS_DIR, _workspace_books_dir()):
-        if d is not None and d.exists():
-            ids.update(p.stem for p in d.glob("*.yaml"))
-    return sorted(ids)
+    """工作区 `books/` 里的册（显式传 `books_dir` 则只看它）。
+
+    2026-09-15 起**不再并上引擎仓那份**：并集会让每个工作区都看见别的工作区的册
+    （切到北行日錄还列着十册四庫，页数全 0、产物全空），也是两份 yaml 打架的由来。
+    """
+    d = books_dir if books_dir is not None else _workspace_books_dir()
+    if d is None or not d.exists():
+        return []
+    return sorted(p.stem for p in d.glob("*.yaml"))
 
 
 _OCR_CANDIDATES_LINE_RE = re.compile(r"^ocr_candidates:\s*(true|false)\s*$", re.MULTILINE)

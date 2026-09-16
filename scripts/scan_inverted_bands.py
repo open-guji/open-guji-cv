@@ -1,7 +1,7 @@
 """扫一册书，找可能的反色带（Step0 预清理的候选页）。
 
 **这是辅助工具，不是自动化**：它给候选，人工看图确认，再把位置写进
-`open_guji_cv/books/<book>.yaml` 的 `preclean:` 段。位置是参数，不猜。
+`$GUJI_WORKSPACE/books/<book>.yaml` 的 `preclean:` 段。位置是参数，不猜。
 
 判据
 ----
