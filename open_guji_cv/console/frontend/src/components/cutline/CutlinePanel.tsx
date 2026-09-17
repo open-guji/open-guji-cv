@@ -3,8 +3,13 @@ import { fetchCutlineCases, fetchCutlineVerdicts } from '../../api/cutline'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { CutlineCase } from '../../types/cutline'
-import { CutlineCard, type CardState } from './CutlineCard'
+import { CL_MINE, CL_STYLE, CutlineCard, type CardState } from './CutlineCard'
 import './cutline.css'
+
+/** 字母 → 切法类型（`CL_STYLE` 的反表）。按一下 = 选中该类型并落定。 */
+const CAND_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(CL_STYLE).map(([kind, s]) => [s.key, kind]),
+)
 
 // 迁移自 v1 static/js/panels/cutline.js（398 行，方案 §四标注「改造复用（分文件）」）。
 // 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
@@ -292,11 +297,22 @@ export function CutlinePanel({ book }: { book: string }) {
       if (ev.key === 'ArrowUp') { setY(cur, st.y - step); ev.preventDefault() }
       else if (ev.key === 'ArrowDown') { setY(cur, st.y + step); ev.preventDefault() }
       else if (ev.key === 'Enter') { decide(cur, 'moved'); ev.preventDefault() }
-      else if (ev.key === 'o' || ev.key === 'O') { decide(cur, 'ok'); ev.preventDefault() }
       else if (ev.key === 'g' || ev.key === 'G') { decide(cur, 'seam_ok'); ev.preventDefault() }
-      else if (ev.key === 'c' || ev.key === 'C') { decide(cur, 'cand'); ev.preventDefault() }
-      else if (ev.key === 'v' || ev.key === 'V') { decide(cur, 'overlap'); ev.preventDefault() }
       else if (ev.key === 's' || ev.key === 'S') { decide(cur, 'idk'); ev.preventDefault() }
+      else if (CAND_KEY[ev.key.toUpperCase()]) {
+        // 切法类型的固定字母（2026-09-17 用户定）：一类一个键，按下 = 选中并落定。
+        // 此前是「先选候选、再按 C 确认」两步，而 O/↵/G/C 四个动作语义交叉（折线正确时
+        // 四个都说得通，人不知道点哪个）。类型本身就是判定项，一步到位。
+        const want = CAND_KEY[ev.key.toUpperCase()]
+        const k = (c.candidates || []).findIndex((x) => x.kind === want)
+        if (k >= 0) {
+          pick(cur, k)
+          decide(cur, want === 'straight' ? 'ok' : 'cand')
+        } else {
+          setMsg(`这条格线没有「${CL_STYLE[want]?.label || want}」候选`)
+        }
+        ev.preventDefault()
+      }
       else if (ev.key === 'ArrowRight' || ev.key === 'j') { focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'ArrowLeft' || ev.key === 'k') { focus(cur - 1); ev.preventDefault() }
       else if (['1', '2', '3', '4'].includes(ev.key)) {
@@ -342,15 +358,23 @@ export function CutlinePanel({ book }: { book: string }) {
           <summary>怎么裁 · 快捷键速查</summary>
           <div className="cl-help-grid">
             <div><b>判定（点一个即落定）</b>
-              O 现切点正确 · ↵ 把线拖到位后落定（没动过 = 现切点正确）· G 绿色折线缝已正确 ·
-              C 选中的算法切法正确（算法给出多种切法时才出现这一行；点过切法后直接回车也算）· V 上下字重叠、切在哪都伤字，线放折中处 · S 拿不准</div>
+              判定项 = **切法类型**，一类一个固定字母与颜色，点按钮或按键**直接落定**：
+              A 格线（直线）· D 折线·窄 · F 折线·宽 · W U-Net · R/T 按格高 · G 现役折线缝。
+              自己拖格线或画折线（P）之后会多出一条「自选」，按 ↵ 确认入库。拿不准按 S 跳过。</div>
             <div><b>干扰（可多选，落定前点，评测里分开算）</b>
               1 污点 · 2 界行/版框 · 3 邻字残墨 · 4 其他</div>
             <div><b>工具</b>
               在图上点击或拖动定位 · ↑/↓ 1px（Shift 5px）· ←/→ 翻卡 ·
               P 折线模式：点空白处加点、点中已有点可拖动、右键删点、Backspace 撤最后一点、X 清空、↵ 落定 · U 重做已落定的卡</div>
             <div><b>图例</b>
-              蓝虚线 = 现役直线切点 · 绿虚线 = 现役折线缝 · 蓝点虚线 = 窄走廊候选 · 黄点虚线 = 宽走廊候选。每次落定立刻写入事件，刷新不丢。</div>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.straight.color }}>格线</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.seam_narrow.color }}>折线·窄</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.seam_wide.color }}>折线·宽</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.unet_seam.color }}>U-Net</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.period_up.color }}>按格高↑</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.period_dn.color }}>按格高↓</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_MINE }}>自选（你拖/画的）</span>
+              　颜色与右侧判定按钮一一对应；选中的那条会加粗变实线。每次落定立刻写入事件，刷新不丢。</div>
           </div>
         </details>
       )}
