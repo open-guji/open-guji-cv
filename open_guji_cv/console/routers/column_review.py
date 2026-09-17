@@ -52,6 +52,16 @@ def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
     review: list[dict] = []
     clean: list[dict] = []
     for pg in pgs:
+        # 闸1 判为 skip 的页（封面/书签/牌记）不出卡：那些页本就没有正文栏格，
+        # 列图是整片灰或大块黑白，任何列级判据在上面都只会给出噪声
+        # （实测 vol01 p1 cover / p2 label 贡献了 7/7 的 eat 误报）。
+        try:
+            gate = st.read(book, "border_detect_gate", page_key(pg),
+                           "border_detect_gate_manifest")
+            if getattr(gate, "page_type_policy", "") == "skip":
+                continue
+        except Exception:                                    # noqa: BLE001
+            pass                                             # 没有闸产物就不拦，照常出卡
         try:
             wins = st.read(book, "column_warp", page_key(pg), "column_windows")
         except Exception:                                    # noqa: BLE001
