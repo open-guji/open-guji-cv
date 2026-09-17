@@ -62,6 +62,19 @@ import numpy as np
 
 from . import jiazhu_split
 
+#: 空白格的**下界**（× period）。空白格代表「这里本该有个字、但它是空的」，
+#: 所以它的高度应当接近一格；此前只给了上界 1.25·period，没有下界，于是 DP 可以
+#: 造出 8~20px 的「碎空白格」来凑够 `n_slots`——代价只有 `blank_cost`=0.05 加
+#: 十分之一的间距惩罚（`blank_lam_frac`），比把两个字并成一格更划算。
+#:
+#: 后果是**相位错位**：北行日錄 p8c1 slot2 被塞成 13.5px 的空白格，后面每一格
+#: 往上挤，累积到 slot12~14 变成 90/98.5/96px 的超大格，一格装两个字（人裁标
+#: 「季+鷹」「鷹+陳」各半）。这类列格数是对的（21），所以字数对账查不出来。
+#:
+#: 0.6 的依据：全书 1842 个 blank 格的高/period 分布 p5=0.82、p50=1.07、p99=1.20，
+#: 而 <0.5 的只有 43 个（正是凑数的那批）——0.6 落在两堆中间的空档里，两边都有余量。
+BLANK_MIN_RATIO = 0.6
+
 
 # ── 波谷 / 空白区间探测 ──────────────────────────────────────────
 
@@ -399,6 +412,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          blank_full_ratio: float = 0.8,
                          blank_cost_full: float = 0.01,
                          blank_lam_frac: float = 0.1,
+                         blank_min_ratio: float = BLANK_MIN_RATIO,
                          drop_lam: float = 0.3,
                          lam4: float = 0.0,
                          mass_lam: float = 1.0,
@@ -598,6 +612,12 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             # （vol01/141 c3：单个 160px 空白格让整列格位比人裁时少 1，裁决键全错位）。
             if gap > 1.25 * period:
                 return None
+            # 下界（2026-09-17）：空白格是「一个空着的字位」，不该只有十几像素。
+            # 没有下界时 DP 会造碎空白格凑格数，害得后面整列相位错位——理由与
+            # 实测分布见 BLANK_MIN_RATIO。首尾锚点那两段不走这里（它们由
+            # y1_max/y2_max 管），所以这条只约束**列内**的空白格。
+            if gap < blank_min_ratio * period:
+                return None
             base = blank_cost_full if gap >= blank_full_ratio * period else blank_cost
             return base + blank_lam_frac * lam * ((gap - period) / period) ** 2
         g = gap
@@ -711,6 +731,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         blank_full_ratio: float = 0.8,
                         blank_cost_full: float = 0.01,
                         blank_lam_frac: float = 0.1,
+                        blank_min_ratio: float = BLANK_MIN_RATIO,
                         drop_lam: float = 0.3,
                         lam4: float = 0.0,
                         mass_lam: float = 1.0,
@@ -807,9 +828,24 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
         curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
         blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
-        blank_lam_frac=blank_lam_frac, drop_lam=drop_lam, lam4=lam4,
+        blank_lam_frac=blank_lam_frac, blank_min_ratio=blank_min_ratio,
+        drop_lam=drop_lam, lam4=lam4,
         mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
     )
+    if boundaries is None and blank_min_ratio > 0.0:
+        # 空白格下界是**偏好**不是硬约束：它挡的是「造碎空白格凑格数」，可有些列
+        # （版式本身就有半格留白、或列尾残段）加了下界就整列无解——无解比相位错位
+        # 更糟（这一列一个字都切不出来）。北行日錄全书 952 列实测：不回退时 7 列
+        # 由有解变无解，回退后 0 列。所以先按下界解，解不出来再放开重来。
+        boundaries = _bounded_elastic_dp(
+            border_top, border_bottom, all_valleys, all_ink, period, eps,
+            lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
+            curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
+            blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
+            blank_lam_frac=blank_lam_frac, blank_min_ratio=0.0,
+            drop_lam=drop_lam, lam4=lam4,
+            mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
+        )
     if boundaries is None:
         return None
     boundaries = _snap_to_raw_minimum(boundaries, np.asarray(row_proj, dtype=np.float64),
