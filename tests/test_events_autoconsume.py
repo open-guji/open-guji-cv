@@ -79,3 +79,28 @@ def test_consume_failure_does_not_break_the_write(client, monkeypatch):
     d = _post(client, [{"id": "vol01:4:1:3", "v": "seg_defect", "quality": "truncated"}])
     assert d["appended"] == 1
     assert "路由表坏了" in d["consume_error"]
+
+
+def test_batch_name_with_colon_does_not_create_ntfs_stream(tmp_path):
+    """批次名带冒号时，仍要落成一个正常的 .jsonl 并读得回来。
+
+    2026-09-16 线上事故：定字面板批次名默认 `<book>-<pages>-decide`，用户把页码框
+    填成 `list:<清单名>`，批次名就带了冒号。Windows 上冒号是 NTFS 数据流分隔符，
+    `open("…/list:x.jsonl","a")` **不报错**，而是往名为 `list` 的 0 字节文件里写一条
+    隐藏流。结果：裁了 30 条、面板正常、目录里看不到 jsonl、读回来是空的——静默丢数据。
+    """
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+
+    el = EventLog(tmp_path)
+    batch = "vol02-list:regress_p1_30-decide"
+    ev = make_event(batch, 1, "confirm",
+                    EventTarget(book="vol02", page=11, col=9, slot=8,
+                                unit="cell", step="seed_admit", key="vol02:11:9:8"),
+                    {"v": "confirm"})
+    assert el.append([ev]) == 1
+
+    files = sorted(p.name for p in (tmp_path / "events").glob("*"))
+    assert files == ["vol02-list-regress_p1_30-decide.jsonl"], files
+    # 事件内容里的 batch 字段保持原样（只有文件名被净化）
+    back = el.read(batch)
+    assert len(back) == 1 and back[0].batch == batch
