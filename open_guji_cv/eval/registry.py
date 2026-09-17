@@ -133,6 +133,14 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("zero_shot_fusion", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
        title="零样本·HOG/CNN/融合", needs=("products", "heavy"),
        note="需要 cache/glyph_cnn/best.pt；全 unseen 1,327 条约 3 分钟"),
+    # 类外评测：金标字落在 CNN classes **之外**的真刻例（2026-09-17 建）。
+    # 上面那几个零样本集 100% 落在 classes 内，量不出类外泛化——而扩字表的收益
+    # 全由 embedding 兑现，分类头对类外字 top-10 恒为 0。集与基线见
+    # scripts/build_oov_bench.py、cache/oov_bench/baseline.json。
+    _e("oov", "glyph-bench", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="类外泛化·emb", needs=("products", "heavy"),
+       note="集在 cache/oov_bench（本地派生物，由 build_oov_bench.py 建，"
+            "不在数据集仓）；314 条 / 138 字种"),
     # 粘连格线理想切点（用户在控制台「切线」页拖出来的），现役 Step2 列图坐标。
     _e("touching_cuts", "char-segmentation/touching-cuts", arg_kind="none", out_flag="--json", pythonpath=True,
        title="粘连切点误差", needs=("products",),

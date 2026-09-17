@@ -165,6 +165,13 @@ SANCTIONED = {
         "换一本分辨率差一倍的书直接失效且**不报错**，只静默退化成整页插值；"
         "`peak_line_search.grid_thresholds()` 用这个先验把阈值换算过去。"
         "所有册 yaml 都还没写这个字段，值一律是 null——是多一个键，不是哪本书的值变了。",
+    "GET /api/evals":
+        "评测注册表新增 `oov`（类外泛化·emb），36 → 37 条，其余条目一字未动。"
+        "此前所有零样本评测集（glyph-bench 的 unseen/seen/mid、rare-char 21 条）"
+        "**100% 落在 CNN 的 4,654 类内**，量不出类外泛化——而扩字表的收益全由 "
+        "embedding 兑现，分类头对类外字 top-10 恒为 0。"
+        "集由 scripts/build_oov_bench.py 建（314 条 / 138 字种，全是真刻例），"
+        "基线在 cache/oov_bench/baseline.json。",
     "POST /api/review/rate-history":
         "C2 把 measure() 从 scripts/track_review_rate.py 搬进 eval/rate_history.py 时，"
         "顺带把硬编码的 REPO/output/glyph.db 换成 core.workspace.glyph_db_path()"

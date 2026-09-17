@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import glob
 
 import numpy as np
 import pytest
@@ -28,8 +27,12 @@ from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
                                                      candidates_batch, _font_files)
 from open_guji_cv.core.workspace import corpus_path
 
-FONTS_OK = bool(glob.glob("fonts/*/*.ttf"))
-needs_fonts = pytest.mark.skipif(not FONTS_OK, reason="没有字体文件")
+# 用生产代码那个 `_font_files()` 判，不要自己 glob 相对路径（2026-09-17）：
+# 它按引擎仓定位、认 .otf（康熙体是 otf），而 `glob("fonts/*/*.ttf")` 靠 cwd、
+# 还漏 otf——守卫与被测代码认两套路径，迟早给出不一致的结论。
+FONTS_OK = bool(_font_files())
+needs_fonts = pytest.mark.skipif(
+    not FONTS_OK, reason="没有字体文件（fonts/ 下的 ttf/otf，随引擎仓走）")
 
 
 @needs_fonts
@@ -105,7 +108,7 @@ def test_recall_on_rare_char_set():
     但它是唯一能证明「字体模板对生僻字有用」的用例。
     """
     if not rare_char_set.available():
-        pytest.skip("没有 rare-char 集，先跑 scripts/build_rare_char_set.py")
+        pytest.skip(rare_char_set.SKIP_REASON)
 
     from open_guji_cv.clustering.normalize import normalize_patch
 
@@ -142,8 +145,10 @@ def test_two_tier_charset_beats_single_table():
     本来就罕见，频次先验反着起作用；异体身份加权 67% → 62%；相似度闸控扩表
     从不触发，因为小表 top1 分数恒 >0.84，**错的时候也高**。
     """
-    if not rare_char_set.available() or not FONTS_OK:
-        pytest.skip("没有 rare-char 集或字体")
+    if not FONTS_OK:
+        pytest.skip("没有字体文件（fonts/ 下的 ttf/otf，随引擎仓走）")
+    if not rare_char_set.available():
+        pytest.skip(rare_char_set.SKIP_REASON)
 
     from open_guji_cv.clustering.normalize import normalize_patch
     from open_guji_cv.variants import variants_of
