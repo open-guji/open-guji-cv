@@ -151,9 +151,25 @@ export function CutlinePanel({ book }: { book: string }) {
     cardState.current[c.id].pick = k
     cardState.current[c.id].pickTouched = true
     bump()
-    const cd = c.candidates[k]
-    setMsg(k === 0 ? '选的是「直线」——回车 = 现切点正确'
-      : `选了「${CL_KIND[cd?.kind ?? ''] || ''}」，回车 / C 落定为「切法正确」`)
+  }
+
+  /** 鼠标点判定项：**先选中高亮**，让人看到图上那条线，回车才落定
+   *  （用户 2026-09-17：键盘一步到位，鼠标两步）。 */
+  function arm(i: number, k: number, verdict: string) {
+    const c = cases[i]
+    if (!c) return
+    const st = cardState.current[c.id]
+    if (st.done) { setMsg(`${c.id} 已落定（${st.done}），要改先按 U 重做`); return }
+    if (k >= 0) { st.pick = k; st.pickTouched = true }
+    // 再点一次同一项 = 确认（等价于回车），省得鼠标党还要去够键盘
+    if (st.armed === verdict) { decide(i, verdict); return }
+    st.armed = verdict
+    bump()
+    focus(i)
+    const name = k >= 0
+      ? (CL_STYLE[c.candidates?.[k]?.kind ?? '']?.label || CL_KIND[c.candidates?.[k]?.kind ?? ''] || '这条')
+      : ({ seam_ok: '现役折线缝', idk: '跳过·拿不准' }[verdict] || verdict)
+    setMsg(`已选中「${name}」——看一眼图上的线，回车确认（或再点一次）`)
   }
 
   function toggleMode(i: number) {
@@ -208,6 +224,7 @@ export function CutlinePanel({ book }: { book: string }) {
     if (!c) return
     const st = cardState.current[c.id]
     st.done = undefined
+    st.armed = undefined
     st.hidden = false
     bump()
     focus(i)
@@ -267,6 +284,7 @@ export function CutlinePanel({ book }: { book: string }) {
       client_ts: now, dwell_ms: seenAt.current[c.id] ? now - seenAt.current[c.id] : undefined,
     }
     st.done = verdict
+    st.armed = undefined      // 落定后清掉「待确认」高亮，免得重开时还亮着
     if (onlyTodo) st.hidden = true
     bump()
     try {
@@ -296,7 +314,8 @@ export function CutlinePanel({ book }: { book: string }) {
       const st = cardState.current[c.id]
       if (ev.key === 'ArrowUp') { setY(cur, st.y - step); ev.preventDefault() }
       else if (ev.key === 'ArrowDown') { setY(cur, st.y + step); ev.preventDefault() }
-      else if (ev.key === 'Enter') { decide(cur, 'moved'); ev.preventDefault() }
+      // 回车：有鼠标点中待确认的就落定它；否则落定「自选」（拖/画出来的线）
+      else if (ev.key === 'Enter') { decide(cur, st.armed || 'moved'); ev.preventDefault() }
       else if (ev.key === 'g' || ev.key === 'G') { decide(cur, 'seam_ok'); ev.preventDefault() }
       else if (ev.key === 's' || ev.key === 'S') { decide(cur, 'idk'); ev.preventDefault() }
       else if (CAND_KEY[ev.key.toUpperCase()]) {
@@ -358,9 +377,11 @@ export function CutlinePanel({ book }: { book: string }) {
           <summary>怎么裁 · 快捷键速查</summary>
           <div className="cl-help-grid">
             <div><b>判定（点一个即落定）</b>
-              判定项 = **切法类型**，一类一个固定字母与颜色，点按钮或按键**直接落定**：
-              A 格线（直线）· D 折线·窄 · F 折线·宽 · W U-Net · R/T 按格高 · G 现役折线缝。
-              自己拖格线或画折线（P）之后会多出一条「自选」，按 ↵ 确认入库。拿不准按 S 跳过。</div>
+              判定项 = **切法类型**，一类一个固定字母与颜色。
+              <b>键盘</b>按字母 = 直接落定：A 格线（直线）· D 折线·窄 · F 折线·宽 · W U-Net ·
+              R/T 按格高 · G 现役折线缝 · S 跳过。
+              <b>鼠标</b>点一下只**选中**（虚框高亮，图上那条线变粗），看清楚再按 ↵（或再点一次）确认。
+              自己拖格线或画折线（P）之后会多出一条朱红的「自选」，同样按 ↵ 确认。</div>
             <div><b>干扰（可多选，落定前点，评测里分开算）</b>
               1 污点 · 2 界行/版框 · 3 邻字残墨 · 4 其他</div>
             <div><b>工具</b>
@@ -392,7 +413,7 @@ export function CutlinePanel({ book }: { book: string }) {
               onMovePoint={(k, x, y) => movePoint(i, k, x, y)}
               onRemovePoint={(k) => removePoint(i, k)}
               onDecide={(v) => decide(i, v)}
-              onPick={(k) => pick(i, k)}
+              onArm={(k, v) => arm(i, k, v)}
               onToggleMode={() => toggleMode(i)}
               onClearPoly={() => clearPoly(i)}
               onReopen={() => reopen(i)}

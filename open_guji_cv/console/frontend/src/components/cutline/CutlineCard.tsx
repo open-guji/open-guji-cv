@@ -9,6 +9,9 @@ export interface CardState {
   pick: number
   /** 人主动点过切法（回车即按所选切法落定） */
   pickTouched?: boolean
+  /** 鼠标点中、**尚未确认**的判定（2026-09-17 用户定：键盘一步到位，鼠标先高亮
+   *  让人看到线的位置，再回车确认）。键盘走的是另一条路，不经过这里。 */
+  armed?: string
   tags: Record<string, boolean>
   done?: string
   hidden: boolean
@@ -65,7 +68,9 @@ interface Props {
   onMovePoint: (k: number, x: number, y: number) => void
   onRemovePoint: (k: number) => void
   onDecide: (verdict: string) => void
-  onPick: (k: number) => void
+  /** 鼠标点判定项：先选中并高亮（`st.armed`），回车才落定。`k<0` = 不涉及候选下标。
+   *  （取代了原来的 `onPick`——选中与待确认现在是同一个动作。） */
+  onArm: (k: number, verdict: string) => void
   onToggleMode: () => void
   onClearPoly: () => void
   onReopen: () => void
@@ -74,7 +79,7 @@ interface Props {
 
 export function CutlineCard({
   idx, c, st, isCurrent, onFocus, onSetY, onAddPoint, onMovePoint, onRemovePoint,
-  onDecide, onPick, onToggleMode, onClearPoly, onReopen, onToggleTag,
+  onDecide, onArm, onToggleMode, onClearPoly, onReopen, onToggleTag,
 }: Props) {
   const s = scaleOf(c)
   const h = c.crop_y1 - c.crop_y0
@@ -191,26 +196,27 @@ export function CutlineCard({
                   // 这一条被人选中后直接落定：`straight` 记 ok（现切点就对），其余记 cand
                   const v = cd.kind === 'straight' ? 'ok' : 'cand'
                   const on = st.done === v && (v === 'ok' || st.pick === k)
+                  const armed = !st.done && st.armed === v && st.pick === k
                   return (
-                    <button key={k} className={`clcandbtn${st.pick === k ? ' sel' : ''}${on ? ' on' : ''}`}
+                    <button key={k} className={`clcandbtn${st.pick === k ? ' sel' : ''}${armed ? ' armed' : ''}${on ? ' on' : ''}`}
                             style={{ ['--cc' as string]: sty.color }}
-                            title={`${sty.label}：点一下直接落定。墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px${cd.agree != null ? ` · 与 U-Net 一致 ${(cd.agree * 100).toFixed(1)}%` : ''}`}
-                            onClick={() => { onPick(k); onDecide(v) }}>
+                            title={`${sty.label}：点一下先选中看效果，回车确认（按 ${sty.key} 直接落定）。墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px${cd.agree != null ? ` · 与 U-Net 一致 ${(cd.agree * 100).toFixed(1)}%` : ''}`}
+                            onClick={() => onArm(k, v)}>
                       <i className="cldot" />
                       <span className="clk">{sty.label}</span>
                       <span className="muted">墨{cd.seam_ink}·偏{cd.dev_max}</span>
-                      {sty.key && <kbd>{sty.key}</kbd>}
+                      {armed ? <kbd>↵</kbd> : sty.key ? <kbd>{sty.key}</kbd> : null}
                     </button>
                   )
                 })}
                 {c.seam && c.seam.length > 0 && !cands.some((x) => x.kind === 'seam_narrow') && (
-                  <button className={`clcandbtn${st.done === 'seam_ok' ? ' on' : ''}`}
+                  <button className={`clcandbtn${!st.done && st.armed === 'seam_ok' ? ' armed' : ''}${st.done === 'seam_ok' ? ' on' : ''}`}
                           style={{ ['--cc' as string]: CL_STYLE.seam_narrow.color }}
-                          title="现役折线缝就是理想切法，点一下直接落定"
-                          onClick={() => onDecide('seam_ok')}>
+                          title="现役折线缝就是理想切法。点一下先选中，回车确认（按 G 直接落定）"
+                          onClick={() => onArm(-1, 'seam_ok')}>
                     <i className="cldot" />
                     <span className="clk">现役折线缝</span>
-                    <kbd>G</kbd>
+                    <kbd>{!st.done && st.armed === 'seam_ok' ? '↵' : 'G'}</kbd>
                   </button>
                 )}
                 {mine && (
@@ -226,7 +232,9 @@ export function CutlineCard({
               </div>
             </div>
             <div className="clbtns">
-              <button title="S：拿不准，跳过这条" className={st.done === 'idk' ? 'on' : ''} onClick={() => onDecide('idk')}>跳过·拿不准<kbd>S</kbd></button>
+              <button title="拿不准，跳过这条。点一下先选中，回车确认（按 S 直接落定）"
+                      className={`${!st.done && st.armed === 'idk' ? 'armed ' : ''}${st.done === 'idk' ? 'on' : ''}`}
+                      onClick={() => onArm(-1, 'idk')}>跳过·拿不准<kbd>{!st.done && st.armed === 'idk' ? '↵' : 'S'}</kbd></button>
             </div>
           </div>
 
