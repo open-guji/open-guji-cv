@@ -83,3 +83,8 @@
 .clcandbtn.sel { border-color: var(--cc); }
 .clcandbtn.mine { border-style: dashed; }
 .clcandbtn kbd { margin-left: .35rem; }
+/* 鼠标点中、待回车确认：同色但用虚线描边 + 浅底，与「已落定」(.on 实线粗边) 区分。 */
+.clcandbtn.armed { border-color: var(--cc); border-style: dashed; border-width: 2px;
+  padding: calc(.2rem - 1px) calc(.4rem - 1px); background: color-mix(in srgb, var(--cc) 10%, transparent); }
+.clcandbtn.armed .clk { color: var(--cc); font-weight: 700; }
+.clbtns button.armed { border-color: var(--zhu); border-style: dashed; font-weight: 700; }
