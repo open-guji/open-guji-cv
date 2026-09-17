@@ -191,4 +191,12 @@
   （qwen-vl-plus/max、glm-4v-plus 全 ≤39% < 现役 45%，给上下字更差），但全答对學亦。④ `exp15_combine.py`：墨闸+U-Net 39 > 墨闸+VLM 36。
   ⑤ 金标漂移 706 条全是 vol01（今日 Step1 重跑），scale 1.004 等比救不回，要按 slot 重锚。`pool_vs_gold.py` 是这套分析的底座。
   注：exp15 读同目录的 exp13_out.txt / pvg.json / exp14_*.json，先跑 pool_vs_gold --dump 与 exp13 > 文件。
+- 2026-09-16 夜（B）**金标「漂移」706 条：666 条根本没漂**（实验十六/十七，用户提议「试试整体移动」）。`exp16_drift_fit.py`
+  用每条金标自带的锚点对（`y_old` ↔ 当前同格线）拟合 y_new=f(y_old)：**恒等**留出残差中位 0.0 / p90 2.0、94% ≤3px；
+  列高 +10px 全长在底部，格线没动。上午的等比缩放是把误差加上去的（1500×1.004=6px）。`exp17_recover_gold.py` 按
+  `|boundaries[bi]−y_old|≤3` 恢复：664 恒等 + 2 序号错位可救，40 真漂移（30 页、每页 1–3 列重新分格）；恢复批行为与匹配批一致。
+  **已修**：`eval/touching.py` 加 `ANCHOR_TOL=3` / `gold_anchor_shift` / `gold_anchor_ok`，eval 脚本与 `drifted_boundaries` 在 col_h
+  不一致后再锚点复核；`tests/test_gold_anchor.py` 钉三种情形。评测 n 239→488、漂移跳过 275→26、≤3px 91.2→93.4%，vol01 漂移卡 706→41。
+  边角：`vol01:33:7:-2`（抬头格 −2 并入顶边，新分格已满足金标，eval 只比内部格线报 102）——评测口径问题，另议。
+  **教训：判「坐标系变没变」看格线本身，别看列高。**
 

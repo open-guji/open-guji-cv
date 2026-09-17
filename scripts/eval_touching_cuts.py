@@ -79,8 +79,13 @@ def main() -> int:
             continue
         prof = _col_profile(st, book, pg, col)
         if prof is not None and ex.get("col_h") and abs(len(prof) - int(ex["col_h"])) > 2:
-            drift += 1
-            continue
+            # col_h 对不上只是「可能漂移」；再按原格线锚点复核（eval.touching.gold_anchor_ok）。
+            # 2026-09-16：vol01 重跑后 706 条 col_h 不一致，其中 666 条格线坐标其实没动（列只是底部变长），
+            # 老判据把它们全跳过，评测样本从 ~900 掉到 239。
+            from open_guji_cv.eval.touching import gold_anchor_ok
+            if not gold_anchor_ok(cc, ex):
+                drift += 1
+                continue
         # 金标是一个物理位置（"该切在这两个字之间"），不是"第 bi 条格线"——切分把空白格
         # 放到别处后格线序号会整体错位（2026-09-05 实测按序号比会报出 115–132px 的假偏差）。
         # 口径：金标位置到最近一条内部格线的距离；bi 只作展示。
