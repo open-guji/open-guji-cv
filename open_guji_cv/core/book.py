@@ -171,6 +171,22 @@ class BookSpec:
     #: 理由——膨胀到 3px 会把 已/巳、日/曰 这类开口糊死。所以只在「书与模板笔宽
     #: 确实差得多」的册上开，别当默认值抄。
     norm_stroke: int | None = None
+    #: `frame_bar_strategy`（yaml 同名）：Step4 认「版框横条」用哪套判据。
+    #: 取值见 `clustering/frame_bar_strategy.py`：
+    #:
+    #: - `side_gap`（缺省，历史行为）：靠「横条填满文字带两侧空档」。
+    #:   前提是**字的横笔不满宽**，对「巨/雲/二/亘」这类上下横横贯全字宽的字
+    #:   不成立——bxgb p4 实测「巨」上横行墨 0.60 > 阈值 0.55，整条上横被抹掉，
+    #:   人裁时表现成「最上一横不见了」。
+    #: - `border_line`：用 Step1 拟合的**整页版框直线**定位，只抹贴线且够厚的段。
+    #:   bxgb 全书 400 列图实测：厚≥6 且在端区 61 段（真框，抹）、厚<6 在端区
+    #:   57 段（字横，放过——正是老判据误抹的那批）、厚≥6 在中部 0 段（无误伤）。
+    #: - `off`：不抹（没有版框的现代排印本）。
+    #:
+    #: ⚠️ **版框被抬头突破、或版框模糊的册不能用 `border_line`**：四庫總目正是
+    #: 这两条都占（抬头字越过版框线，位置判据会把抬头笔画当框），所以缺省保持
+    #: `side_gap`，只在确认过版框清晰且不被突破的册上开。
+    frame_bar_strategy: str = "side_gap"
     #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
     #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
     #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
@@ -449,6 +465,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                           else float(d["bottom_band_frac"])),
         column_grid=bool(d.get("column_grid", False)),
         norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
+        frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         frame_height=(None if d.get("frame_height") is None
                       else float(d["frame_height"])),
