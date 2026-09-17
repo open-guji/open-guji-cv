@@ -104,8 +104,24 @@ class EventLog:
     def consumed_dir(self) -> Path:
         return self.root / "consumed"
 
+    #: 批次名里不能进文件名的字符 → 统一换成 `-`。
+    #:
+    #: 2026-09-16 吃过一次亏：定字面板的批次名默认是 `<book>-<pages>-decide`，
+    #: 用户把页码框填成 `list:regress_vol02_p1_30`（点名清单模式），批次名就带了冒号。
+    #: **Windows 上冒号是 NTFS 数据流分隔符**——`open("…/list:x.jsonl","a")` 不报错，
+    #: 而是往名为 `list` 的 0 字节文件里写一条隐藏流 `x.jsonl`。于是：裁了 30 条、
+    #: 面板显示正常、`ls` 看不到任何 jsonl、下次读回来是空的。静默丢数据，最坏的一种。
+    #: （那批数据事后用 `Get-Content -Stream` 捞回来了，见 vol02-regress-p1-30-decide.jsonl）
+    _BAD_IN_NAME = ':*?"<>|/\\\x00'
+
+    @classmethod
+    def safe_batch_name(cls, batch: str) -> str:
+        """批次名 → 可安全当文件名的形式。只改文件名，事件里的 `batch` 字段保持原样。"""
+        out = "".join("-" if c in cls._BAD_IN_NAME else c for c in batch)
+        return out.strip(". ") or "batch"
+
     def batch_path(self, batch: str) -> Path:
-        return self.events_dir / f"{batch}.jsonl"
+        return self.events_dir / f"{self.safe_batch_name(batch)}.jsonl"
 
     # ── 读写 ─────────────────────────────────────────────────────────
     def append(self, events: Iterable[Event]) -> int:
