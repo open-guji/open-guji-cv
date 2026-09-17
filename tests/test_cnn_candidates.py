@@ -130,7 +130,7 @@ def test_emb_topk_batch_matches_sequential():
 
 
 @needs_cnn
-@pytest.mark.skipif(not rare_char_set.available(), reason="没有 rare-char 集")
+@pytest.mark.skipif(not rare_char_set.available(), reason=rare_char_set.SKIP_REASON)
 def test_cnn_rare_char_top10():
     """rare-char 21 条，CNN 单独 top-10 不该掉到 85% 以下（实测 100%）。"""
     from open_guji_cv.clustering.font_candidates import book_charset

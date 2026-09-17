@@ -23,9 +23,41 @@ import numpy as np
 
 DATASET = Path("../open-guji-dataset/rare-char/items.jsonl")
 
+#: 三处 skipif 共用的理由。**写清缺什么、怎么补**——云端看到 skip 时要能
+#: 自己判断「这是环境本来就没有」还是「这里藏了个真失败」。
+SKIP_REASON = (
+    "rare-char 集不可用：要 ../open-guji-dataset/rare-char/items.jsonl "
+    "＋ cache/<book>/char_patch/ 里的字块图（后者是本地跑批的派生缓存，"
+    "云端没有，可由 `python -m open_guji_cv pipeline keben_body_v2 vol01` 重建）"
+)
+
 
 def available() -> bool:
-    return DATASET.exists()
+    """这个集**现在能不能用**——集子在、且字块图读得到。
+
+    ⚠️ **两个条件都要查**（2026-09-17 订正）。原先只查 `DATASET.exists()`，
+    于是 `skipif` 在云端把三条用例**放行**，它们再在 `load_items()` 里
+    `FileNotFoundError` 红掉：
+
+    - `test_cnn_candidates.py::test_cnn_rare_char_top10`
+    - `test_font_candidates.py::test_recall_on_rare_char_set`
+    - `test_font_candidates.py::test_two_tier_charset_beats_single_table`
+
+    本地一直是绿的，因为本机**恰好**有四庫工作区的 `cache/vol01/char_patch/`。
+    `items.jsonl` 在公开的 `open-guji-dataset` 里、云端 clone 得到，
+    **字块图却是本地跑批的派生缓存，云端不可能有**——判据查了前者、
+    漏了后者，两台机器于是给出不同结论。
+
+    这不是「用 skip 把失败藏回去」：集子依赖的字块缓存云端本来就不该有
+    （派生物，可由 `pipeline keben_body_v2 vol01` 重建），
+    判据补全到「真的依赖什么就检查什么」正是该做的事。
+    """
+    if not DATASET.exists():
+        return False
+    try:
+        return bool(load_items(require_patch=False))
+    except Exception:
+        return False
 
 
 def resolve_patch(item: dict) -> Path | None:
