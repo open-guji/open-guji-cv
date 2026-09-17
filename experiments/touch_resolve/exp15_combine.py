@@ -5,14 +5,20 @@
  2. 组合策略：ink_line<τ → 直线；否则 → {U-Net(turn=10) | VLM 多数票 | 现役}，三选一比。
  3. 高墨支路上 VLM vs U-Net 逐条对照。
 """
+import argparse
 import glob
 import json
 import re
 from collections import Counter
 from pathlib import Path
 
-S = Path(__file__).parent
-T = 6.0
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--dir", default=str(Path(__file__).parent),
+                 help="放 exp13_out.txt / pvg.json / exp14_*_blind.json 的目录")
+_ap.add_argument("--tol", type=float, default=6.0)
+_a = _ap.parse_args()
+S = Path(_a.dir)
+T = _a.tol
 
 # ── 读实验十三逐条 ──
 rows = {}

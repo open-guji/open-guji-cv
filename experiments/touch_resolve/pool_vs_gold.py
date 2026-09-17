@@ -22,7 +22,7 @@ import numpy as np
 
 from open_guji_cv.core.spec import column_key
 from open_guji_cv.core.step import page_key
-from open_guji_cv.eval.touching import SHARD
+from open_guji_cv.eval.touching import SHARD, gold_anchor_ok
 from open_guji_cv.feedback.consumers import verdict_store
 from open_guji_cv.products import kinds as _k  # noqa: F401
 from open_guji_cv.products.cache import ImageCache
@@ -100,9 +100,12 @@ def main():
         if h is None or gh is None:
             skip["无列高"] += 1
             continue
-        if abs(h - int(gh)) > 2:
+        # 坐标系是否还有效：col_h 只当粗筛，**按原格线锚点复核**（eval.touching.gold_anchor_ok）。
+        # 2026-09-16 实验十六：vol01 706 条 col_h 不一致里 666 条格线一根没动（列只是底部变长），
+        # 老判据把它们全跳过；等比缩放（--rescale）反而把误差加上去，别再用。
+        if abs(h - int(gh)) > 2 and not gold_anchor_ok(cc, ex):
             if not a.rescale:
-                skip["漂移(未回收)"] += 1
+                skip["真漂移(锚点复核)"] += 1
                 continue
             scale = h / float(gh)
         cp = next((x for x in (cc.cut_candidates or []) if x.slot_above == slot), None)
