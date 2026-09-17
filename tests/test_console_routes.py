@@ -606,9 +606,15 @@ def test_route_inventory():
     2 条——`GET /api/workspace`（当前工作区、各个根、可切换清单）与
     `POST /api/workspace`（改 `GUJI_WORKSPACE` + 重建进程内 Store，不重启进程；
     有任务在跑时回 409），75 → 77。
+
+    2026-09-17 Step2 列清理人裁（用户「上下、左右都做审阅台，人审结果进测试集」）：
+    新增 `column_review.py` 3 条——`GET /api/column-review/cases`（按分诊类别分层
+    抽样出待裁列）、`GET /api/column-review/verdicts`（读回本批已裁）、
+    `GET /api/column-review/profile/{book}/{page}/{col}`（两条投影曲线，拖线时看），
+    76 → 79。
     """
     got = sorted(_endpoints())
-    assert len(got) == 76, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 79, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -715,6 +721,9 @@ EXPECTED_ROUTES = [
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
+    # Step2 列清理人裁（2026-09-17）
+    "GET /api/column-review/cases", "GET /api/column-review/verdicts",
+    "GET /api/column-review/profile/{book}/{page}/{col}",
     "GET /api/cache/{book}/{kind}/{key}.png",
     "GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png",
     "GET /api/cell-shrink-rand/sample",

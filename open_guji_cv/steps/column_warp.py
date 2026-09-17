@@ -14,7 +14,8 @@ from ..core.spec import StepSpec, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders, VLineRec
-from ..products.kinds.columns import BorderTrim, ColumnWindowRec, PageWindows
+from ..products.kinds.columns import BorderTrim, ColumnTriage, ColumnWindowRec, PageWindows
+from ..utils.column_triage import triage_column
 from ..utils.column_projection import (ColumnWindow, clean_column, column_profile,
                                        denoise_column, page_column_windows,
                                        stamp_noise_density, warp_column)
@@ -43,7 +44,8 @@ class ColumnWarpStep(Step):
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
-        code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry"),
+        code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry",
+                   "open_guji_cv.utils.column_triage"),
     )
 
     # ── 共用的一列计算 ─────────────────────────────────────────────────
@@ -101,6 +103,9 @@ class ColumnWarpStep(Step):
                 trim_bottom=BorderTrim(px=int(diag["bottom"]["px"]), case=str(diag["bottom"]["case"])),
                 side_floor=round(side_floor(raw, p.side_floor_look, p.ink_threshold), 4),
                 stamp_noise=round(stamp_noise_density(warped, p.ink_threshold), 4),
+                # 分诊在**清理前**的 `raw` 上做：要判的正是「这一列清得拿不拿得准」，
+                # 清完再判就只能看到清理的结果，看不到它当初面对的形态。
+                triage=ColumnTriage(**{k: v for k, v in triage_column(raw).items() if k != "band"}),
             ))
         h, w = gray.shape[:2]
         return {"column_windows": PageWindows(

@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDeepLink } from '../hooks/useDeepLink'
 import { ReviewPanel } from '../components/review/ReviewPanel'
+import { CellLookupPanel } from '../components/review/CellLookupPanel'
 import { BlockingCutlinePanel } from '../components/cutline/BlockingCutlinePanel'
-import { ProductViewer } from '../components/ProductViewer'
-import { usePages } from '../hooks/usePages'
 
 // D4：Step7 放行判定：定字裁决（v1 review tab 的核心）。
 // 用户 2026-09-11 测试反馈 §4：异体用字账 / 组视图移出 Step7，升格成左侧栏
@@ -32,7 +31,6 @@ function loadSavedPages(book: string): string {
 }
 
 function Step7PageInner({ book }: { book: string }) {
-  const pages = usePages(book)
   const deep = useDeepLink()
   const [reloadSignal, setReloadSignal] = useState(0)
   // 深链带了页号就用它当初始页范围（对勘报告「跳去改」进来的情形），
@@ -68,9 +66,9 @@ function Step7PageInner({ book }: { book: string }) {
           </span>
         </div>
       )}
+      <CellLookupPanel book={book} />
       <BlockingCutlinePanel book={book} pages={pageSel} onDecided={() => setReloadSignal((n) => n + 1)} />
       <ReviewPanel book={book} pages={pageSel} onSubmitted={() => {}} reloadSignal={reloadSignal} />
-      <ProductViewer book={book} step="seed_admit" pages={pages} />
     </div>
   )
 }

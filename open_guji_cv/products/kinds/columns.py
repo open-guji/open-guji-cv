@@ -16,7 +16,26 @@ from .borders import VLineRec
 
 class BorderTrim(BaseModel):
     px: int
-    case: str          # a / b / c / d
+    case: str          # a / b / c / d / e（见 column_projection.column_border_trim）
+
+
+class ColumnTriage(BaseModel):
+    """这一列清得「拿得准还是拿不准」（2026-09-17，见 utils/column_triage.py）。
+
+    Step2 此前只输出「削了几行」，把**拿得准与拿不准的区别**丢掉了：两种列在
+    产物里长得一模一样，人不知道该复核哪些。这里显式记下来，供审阅台按类抽样、
+    供闸按类决定拦不拦。
+
+    `side_class`：clean / mixed（没零区，人也标不出唯一坐标）/ eat（已吃进字身）
+    `top_class` / `bot_class`：none / clean / glued（框粘字，切不出界）/ idk
+    `pad_top` / `pad_bottom`：走峰法给的「该削几行」，**只在 clean 时有意义**；
+      其余为 0——拿不准时宁可留残墨也不切字。
+    """
+    side_class: str
+    top_class: str
+    bot_class: str
+    pad_top: int = 0
+    pad_bottom: int = 0
 
 
 class ColumnWindowRec(BaseModel):
@@ -35,6 +54,7 @@ class ColumnWindowRec(BaseModel):
     band: tuple[int, int]          # 文字带 [x_lo, x_hi)，列图坐标
     trim_top: BorderTrim
     trim_bottom: BorderTrim
+    triage: ColumnTriage | None = None   # 老产物没有这一项
     side_floor: float              # 两侧外 25% 最低墨占比（原始矫正图上量）
     stamp_noise: float = 0.0       # 中等面积孤立墨点密度（原始矫正图上量，抓整列噪点污染）
 

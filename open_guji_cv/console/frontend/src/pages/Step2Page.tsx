@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { ProductViewer } from '../components/ProductViewer'
+import { ColumnReviewPanel } from '../components/column-review/ColumnReviewPanel'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { usePages } from '../hooks/usePages'
@@ -38,6 +39,7 @@ export function Step2Page() {
     <div>
       <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
       <ProgressGatePanel book={book} title="总览" gateId="column_gate" pages={pageSel} />
+      <ColumnReviewPanel book={book} pages={pageSel} />
       {/* 列窗口产物分链：刻本 column_warp / 现代 column_crop。原来这里看的是
           column_gate（闸的判定），看不到列窗口本身；但也不该并排摆两个产物台
           （2026-09-15 用户反馈「有两个重复的产物台」）——闸的判定在上面那张

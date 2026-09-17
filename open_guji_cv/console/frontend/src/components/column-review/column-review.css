@@ -1,0 +1,18 @@
+.colrev-bar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.colrev-bar input[type="number"] { width: 4rem; }
+.colrev-nav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0; }
+.colrev .tag { padding: .05rem .4rem; border-radius: 3px; font-size: .85em; }
+.colrev .tag.ok { background: #e7f3e7; color: #2c5c2c; }
+.colrev .tag.warn { background: #fdf3df; color: #7a5c2e; }
+.colrev .tag.bad { background: #fbe4e4; color: #8c2f27; }
+.colrev-main { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.colrev-strips { display: flex; gap: .8rem; align-items: flex-start; }
+.colrev-strips figure { margin: 0; text-align: center; }
+.colrev-strips figcaption { font-size: .8em; color: #666; margin-top: .2rem; }
+.colrev-strips .clip { overflow: hidden; border: 1px solid #ccc; background: #fff; }
+.colrev-strips .clip img { display: block; }
+.colrev-strips .whole img { border: 1px solid #ccc; background: #fff; }
+.colrev-forms { display: flex; flex-direction: column; gap: .6rem; min-width: 16rem; }
+.colrev-forms fieldset { border: 1px solid #ddd; border-radius: 4px; padding: .4rem .6rem; }
+.colrev-forms legend { font-size: .85em; color: #555; padding: 0 .3rem; }
+.colrev-forms label { display: block; font-size: .92em; padding: .12rem 0; cursor: pointer; }
