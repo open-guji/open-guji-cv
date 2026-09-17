@@ -252,6 +252,30 @@ def test_force_reruns_fresh_pages(world):
     assert all(o.status == "ok" for o in rep.outcomes)
 
 
+def test_rerun_invalidates_stale_image_cache_for_that_page(world):
+    """步骤重跑前必须清掉**这一页、这一步产出的图像种类**的旧缓存（2026-09-17）。
+
+    `ImageCache.materialize` 是「有就返回」：产物 JSON 重写了，缓存里的图还是上一版
+    切的。实锤 bxgb p4 c14 s1「巨」——cell_shrink 产物 bbox 已含上横，控制台 /api/cache
+    给出的图块却是旧的 59×61，用户对着旧图裁了一批「顶横被切」。`run_page` 里的
+    `cache.put` 只覆盖它这次产出的键，被合并/删除的格位、惰性 render 的键都覆盖不到。
+    """
+    book, pl, store, cache, _ = world
+    eng = make_engine(world)
+    eng.run()
+    # 埋一个「上一版切出来、这一版不再产出」的陈旧键（同页前缀），以及把别页的图记下来
+    stale = cache.path("tb", "t_img", "p0001c99")
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(stale), np.zeros((5, 5), np.uint8))
+    other = cache.path("tb", "t_img", "p0002")
+    other_mtime = other.stat().st_mtime_ns
+    rep = eng.run(pages=[1], force=True)
+    assert all(o.status == "ok" for o in rep.outcomes)
+    assert not stale.exists(), "重跑 p1 后，p1 前缀下的陈旧缓存必须被清掉"
+    assert cache.path("tb", "t_img", "p0001").exists(), "重跑后该页的图要重新产出"
+    assert other.exists() and other.stat().st_mtime_ns == other_mtime, "别的页的缓存不能被误清"
+
+
 # ── 图像缓存 ─────────────────────────────────────────────────────────
 def test_cache_materialize_regenerates(world):
     book, pl, store, cache, _ = world
