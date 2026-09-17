@@ -18,9 +18,22 @@ Step2 的职责是「射影变换 + 完整识别边框信息」，下游 Step3/4
 
 | 类 | 含义 | 处置 |
 |---|---|---|
-| `clean` | 两侧都有零区，边界落在里面 | 放行 |
-| `mixed` | 某侧**压根没有零区**（一路 0.01~0.09）——人也标不出唯一坐标 | 复审 |
-| `eat`  | 边界处墨 > `EAT_T`，**边界已经吃进字身** | **拦** |
+| `clean` | 边界处墨低，没有切进字身 | 放行 |
+| `eat`  | 边界处墨 > `EAT_T` × 腹地墨，**边界已经吃进字身** | **拦** |
+
+**`mixed` 这一档已取消**（2026-09-17，用户定）。它的语义是「这一列压根找不到
+墨量归零的边界」——README 原话——**那是个程度问题，不是二元判据**，用任何单一
+阈值切都会在中间地带大批误判：
+
+- 写死绝对阈值 0.01 时，bxgb 88% 判 mixed、vol01 44%（两书带外底噪中位
+  0.0124 vs 0.0080，阈值正好卡在 bxgb 的分布中间），复审率虚高到 85%；
+- 换成相对腹地墨的自适应阈值，跨书一致了，但拿金标验分不开：
+  人判 mixed 的 4 条相对值中位 0.139，人判 clean 的 111 条 p90 已到 0.162，
+  阈值 0.1 时 mixed 判对 75%、clean 误判 14.4%。**而 mixed 只有 4 条，
+  统计上立不住**。
+
+所以只留 `eat` 这个**有向**判据（边界处墨高 = 切到字了），它分得开。
+等上下方向的人裁金标攒够，再用同一批样本回头标定左右要不要重新引入 mixed。
 
 上下（`end_class`，README 定义过但一直没标）：
 
@@ -33,9 +46,15 @@ Step2 的职责是「射影变换 + 完整识别边框信息」，下游 Step3/4
 
 ## 阈值的来历
 
-- `ZERO_T = 0.01`：金标 README 的走廊判据。人标点处墨占比均值 0.0010、
-  最大 0.0097——取 0.005 会把大批 `clean` 误判成 `mixed`（实测 bxgb 87% 全判
-  mixed，而金标 115 条里 111 条是 clean）。
+- `EAT_T = 0.35`：边界处墨相对**文字带内 p90 墨**的比例。
+  用相对量而不是绝对量——两书带外底噪中位 0.0124（bxgb）vs 0.0080（vol01），
+  绝对阈值在一本上标好、换一本就整体偏移（同 `project_taitou_vol02_zero_recall`
+  记的「绝对像素判据跨版式失效」）。
+  基准取 **p90 而不是中位**：中位随「这一列有几个字」大幅变化——字少、留白多的
+  列腹地中位只有 0.029（实测 p3c19），`0.35×` 之后阈值 0.010 比边界底噪
+  （0.012~0.020）还低，整列被误判成 eat（8/8 抽样全是误报，字身其实完好）。
+  p90 量的是「有字处的墨」，不受留白稀释：实测边界/p90 中位 0.042（bxgb）、
+  0.027（vol01），比腹地中位的 0.056/0.032 更紧且跨书更一致。
 - `HI_T = 0.55` / `DROP = 0.45`：走峰法。**不能只看第一行**——框的边缘是渐变的，
   剥掉留白后第一行常是 0.03~0.22（实测 p21c5 0.03 / p40c11 0.12 / p6c14 0.22），
   第 3 行起才是 0.9~1.0 的框，所以在开头 `LEAD` 行的窗口里找峰。
@@ -50,10 +69,17 @@ from __future__ import annotations
 
 import numpy as np
 
-#: 走廊判据：边界处墨 ≤ 此值算「落在零区里」（金标 README 口径）
-ZERO_T = 0.010
-#: 边界处墨 > 此值 = 已经吃进字身（拦）
-EAT_T = 0.020
+#: 边界处墨 > 此比例 × 文字带内 p90 墨 = 已经吃进字身（拦）。相对量，见模块头。
+EAT_T = 0.35
+#: 算基准时取文字带中间这个比例的区段（避开两侧界行残墨的影响）
+CORE_FRAC = 0.5
+#: 基准用带内的这个分位（不是中位——中位随留白多少大幅变化，见模块头）
+CORE_Q = 90
+#: 基准墨低于此值就不下 `eat` 断言，改判 `idk`（复审）。
+#: 稀疏列（整列只有一两个字）的带内 p90 只有 0.034，与边界底噪 0.014 太近，
+#: `0.35×` 之后阈值 0.012 落在噪声里——实测 bxgb p8c6（整列一个「及」字）
+#: 就是这么被误判成 eat 的。没有足够的字当基准，就不该断言「切到字了」。
+MIN_BODY = 0.05
 #: 端部：开头窗口里的峰要 ≥ 此值才算「有框墨」
 HI_T = 0.55
 #: 端部：墨跌到峰高的此比例 → 峰过去了
@@ -67,27 +93,24 @@ LOW_T = 0.20
 
 
 def side_class(col_prof: np.ndarray, band: tuple[int, int],
-               zero_t: float = ZERO_T, eat_t: float = EAT_T) -> str:
-    """左右分诊。`col_prof` 是列向（逐 x）墨占比，`band` 是 `column_text_band` 的返回。"""
+               eat_t: float = EAT_T, core_frac: float = CORE_FRAC) -> str:
+    """左右分诊。`col_prof` 是列向（逐 x）墨占比，`band` 是 `column_text_band` 的返回。
+
+    只判「有没有切进字身」（`eat`），不判「这条边界准不准」——后者就是取消掉的
+    `mixed`，是程度问题，没有金标支撑定不出线（见模块头）。
+    """
     lo, hi = int(band[0]), int(band[1])
-    out: list[str] = []
-    for edge, idx in (("left", lo), ("right", hi - 1)):
-        if idx < 0 or idx >= len(col_prof):
-            out.append("idk")
-            continue
-        seg = col_prof[:idx + 1] if edge == "left" else col_prof[idx:]
-        if seg.size == 0:
-            out.append("idk")
-        elif float(col_prof[idx]) > eat_t:
-            out.append("eat")
-        elif float(seg.min()) <= zero_t:
-            out.append("clean")
-        else:
-            out.append("mixed")
-    # 两侧取最坏：一侧吃字就是 eat，一侧没零区就是 mixed
-    for worst in ("eat", "mixed", "idk"):
-        if worst in out:
-            return worst
+    if hi - lo < 4 or lo < 0 or hi > len(col_prof):
+        return "idk"
+    k = int((hi - lo) * (1 - core_frac) / 2)
+    core = col_prof[lo + k:hi - k]
+    body = float(np.percentile(core, CORE_Q)) if core.size else 0.0
+    if body < MIN_BODY:
+        # 空白列 / 稀疏列：没有足够的字当基准，不下 eat 断言（见 MIN_BODY）
+        return "idk" if body > 0 else "none"
+    for idx in (lo, hi - 1):
+        if float(col_prof[idx]) > eat_t * body:
+            return "eat"
     return "clean"
 
 
@@ -145,7 +168,7 @@ def triage_column(gray: np.ndarray) -> dict:
 #: 会丢字、必须人裁才能走下一步的类别
 BLOCKING = {"side": ("eat",), "end": ("glued",)}
 #: 可疑但放行、事后抽审的类别
-REVIEW = {"side": ("mixed", "idk"), "end": ("idk",)}
+REVIEW = {"side": ("idk",), "end": ("idk",)}
 
 
 def is_blocking(t: dict) -> bool:
