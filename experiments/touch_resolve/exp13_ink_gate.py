@@ -58,7 +58,9 @@ def main():
     pt = {(str(i.anchor.book), int(i.anchor.page)): (i.expected or {}).get("page_type")
           for i in verdict_store().list("page-type", legacy=False) if i.anchor.page is not None}
     sel = [r for r in rows if r["n_cand"] >= 2 and r["book"] != "vol03"
-           and pt.get((r["book"], int(r["id"].split(":")[1]))) == "body"]
+           and pt.get((r["book"], int(r["id"].split(":")[1]))) == "body"
+           and r["verdict"] != "overlap"]        # overlap=切在哪都伤字，eval 也不计
+
     gold = {f"{i.anchor.book}:{i.anchor.page}:{i.anchor.col}:{i.anchor.slot}": (i.expected or {})
             for i in verdict_store().list(SHARD)}
     st, ic = ProductStore(), ImageCache()
