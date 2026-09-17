@@ -55,8 +55,11 @@ class CellShrinkStep(Step):
         id="cell_shrink", title="Step4 字框收缩", version="1.3", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
+        # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
+        # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
+        book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.utils.seam"),
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -99,7 +102,12 @@ class CellShrinkStep(Step):
                      "cell_h": cc.period, "head_raise_rows": 0,
                      # Step 2 量好的版框 y（列图坐标）：extractor 只在它附近认框线行，
                      # 并把条带开到下框（见 extractor.frame_band_inner 的 hint 说明）
-                     "frame_top": cc.border_top, "frame_bottom": cc.border_bottom},
+                     "frame_top": cc.border_top, "frame_bottom": cc.border_bottom,
+                     # 册级判据（见 BookSpec.frame_bar_strategy）。`border_line`
+                     # 用下面这两条线定位版框，它们是**列图坐标**：border_top=0 表示
+                     # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
+                     # 落在 y≈0 与 y≈border_bottom 附近。
+                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap")},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }

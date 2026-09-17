@@ -35,7 +35,6 @@ def _prep_one(args):
     key, path, isotropic, norm_stroke = args
     import cv2
     import numpy as np
-    from ..clustering.canonical import to_canonical
     from ..clustering.normalize import normalize_patch
     p = Path(path)
     if not p.exists():
@@ -44,7 +43,14 @@ def _prep_one(args):
     g = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
     if g is None:
         return key, None
-    return key, (png, g, normalize_patch(to_canonical(g), stroke_width=norm_stroke,
+    # ⚠️ **不要先过 `to_canonical`**（2026-09-16 修）。Step5-a（`glyph_match`）是拿
+    # 字块**直接** `normalize_patch` 的；播种这边多垫一层 canonical，两边就成了两把尺子。
+    # 而且这层不只是「多余」，是**有害**：canonical 把 70×77 的字块摆进 256×256 画布
+    # 且「只缩不放」，墨只占画布 1%（实测 卯 ink 0.0096）；normalize_patch 接着把这个
+    # 小图再放大 2.7 倍填满 64×64，纸纹跟着放大成整片黑。实测 十 变成一个方块 → 字体
+    # top-1 给 由，之 给 國。300 个随机字位的字体一致率：
+    #   canonical→norm  22.3%     直接 norm  **74.0%**
+    return key, (png, g, normalize_patch(g, stroke_width=norm_stroke,
                                          isotropic=isotropic))
 
 
@@ -101,7 +107,6 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     第一版是边检索边进库——每 `admit_instance` 一条就让 `GlyphDB.query` 的特征缓存失效
     （缓存键含 exemplar 条数），下一次检索重建整张表，25 分钟只进了 4,101 条；
     拆成两阶段后检索 ~15ms/次、进库 ~10ms/条。"""
-    from ..clustering.canonical import to_canonical
     from ..clustering.normalize import normalize_patch
     from ..core.spec import cell_key
 
@@ -113,7 +118,8 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # 判据（，0.65 / 、1.04 / 。1.00 / ：0.48，方差 ±0.02），默认那 ±20% 各向异性拉伸
     # 会把判据抹平——实测 `，`/`、` 的间隔从 +0.336 掉到 +0.044。
     def norm_of(d, img):
-        return normalize_patch(to_canonical(img), stroke_width=norm_stroke,
+        # 与 `_prep_one` 同：**不垫 `to_canonical`**，与 Step5-a 同一把尺子（理由见那里）
+        return normalize_patch(img, stroke_width=norm_stroke,
                                isotropic=(d.get("cell_kind") == "punct"))
     # 形状证人这一路必须与 Step5-a 用同一把尺子（笔宽归一 `norm_stroke`）。2026-09-15 北行日錄
     # 实锤：不归一时书块 4.6px vs 字体 2.7px，cov 0.6～0.8 量的是粗细，字→宇、旦→且、宣→宜/直
