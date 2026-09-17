@@ -307,6 +307,16 @@ class Engine:
                 continue
             t0 = time.time()
             try:
+                # 重跑前先把**这一页、这一步产出的图像类产物**的缓存删掉（2026-09-17）。
+                # `ImageCache.materialize` 是「有就返回」，从不比对新旧：产物 JSON 重写了，
+                # 缓存里的图块还是上一版代码切的。实锤 bxgb p4 c14 s1「巨」：cell_shrink
+                # 产物 bbox 高 68.2（上横在框内），控制台 /api/cache 返回的图块却是
+                # 59×61（少了上横那 9 行）——用户对着旧图裁了一整批「顶横被切」。
+                # run_page 里的 cache.put 只覆盖它这次产出的键，被合并/删除的格位与
+                # 惰性 render 的键都不会被覆盖，所以必须在跑之前按页前缀整体清掉。
+                for k in step.spec.produces:
+                    if kind_of(k).storage == "image_cache":
+                        self.ctx.cache.invalidate(self.book.id, k, key_prefix=key)
                 products = step.run_page(self.ctx, pg)
                 for k in products:
                     if k not in step.spec.produces:

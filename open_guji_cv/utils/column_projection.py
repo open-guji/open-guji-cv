@@ -348,13 +348,80 @@ def column_row_profile(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     return (warped_gray[:, lo:hi] < ink_threshold).astype(np.float64).mean(axis=1)
 
 
+#: e 档（薄框接低平底）的三个尺子，bxgb 54 页 1026 列 column_raw 上标定（2026-09-17）：
+#: - `FLOOR_T` 低平底上限。b 档误判的根源是框后面那段 0.03~0.14 的底噪（界行残迹、
+#:   纸纹）超过 `ink_eps`=0.02，把框和整个字身连成一段（71~372 行）；0.25 把它
+#:   收进「底」里，而字身行墨中位 0.598，不会被当成底。
+#: - `FLOOR_RUN` 低平底至少持续几行。版框与首字之间是天头（`top_slack` ≈ 35px），
+#:   字的横笔下方几行内必接其余笔画：上端 b 档 109 列里 floor ≥6 的占 94%、a 档
+#:   （已正确切掉的 900 列）99%——同一把尺子在 a 档上给出的切点与现行削行 |d|≤2。
+#: - `FLUSH_MAX` 「贴边」的定义。非抬头列的矫正图第 0 行**就是 Step1 拟合的版框线**
+#:   （`page_column_windows`：top_y = btop，BODY_PAD=0），贴边的高墨薄段只能是框，
+#:   首字离它还有整个天头——所以上端贴边时不需要边距证据。
+FLOOR_T = 0.25
+FLOOR_RUN = 6
+FLUSH_MAX = 3
+#: 贴边端的低平底只需这么几行。贴边时框的身份由位置定死（第 0 行就是 Step1 的版框
+#: 线），低平底只是用来找**框的下沿**，不必再当「天头」证据；首字离框近（天头 < 6 行）
+#: 的列用 6 行会漏：bxgb 1026 个贴边上端里 6 列（p4c3「聞」等）漏抹，改 2 行后 0 列，
+#: vol01 1669 个贴边上端零变化。非贴边（下端/抬头列）仍用 FLOOR_RUN + 边距证据。
+FLOOR_RUN_FLUSH = 2
+#: 非贴边（下端的框被 BOTTOM_PAD 内缩 ~40 行；抬头列的框被 HEAD_PAD 内缩）时要
+#: **边距证据**：版框横贯整列宽，文字带外的边距里也是墨；字的横笔止于文字带，
+#: 边距里只有界行底噪。实测框行边距墨中位 1.000（p5 0.75），首字行 0.333（p95 0.667）；
+#: 阈值 0.7：框行 96.5% 过、首字行 4.9% 过。边距合计不足 `MARGIN_MIN_PX` 时没有证据，
+#: 不判 e、退回原有 b/c——宁可留框渣，绝不切「一/二/三」。
+MARGIN_T = 0.7
+MARGIN_MIN_PX = 6
+
+
+def _thin_bar_then_floor(p: np.ndarray, blank: int, bar_coverage: float,
+                         floor_t: float, floor_run: int, cap: int = 40
+                         ) -> tuple[int, int] | None:
+    """从 `blank` 起在 `cap` 行内找「高墨薄段（≥bar_coverage）→ 低平底（≤floor_t，
+    连续 ≥floor_run 行）」；找到返回 `(bar_start, bar_end)`，`bar_end` 是第一行低平底
+    的下标（切到这里正好把框的下沿含进去）。框的下沿常有一两行 0.3~0.5 的过渡，
+    过渡行既不算框也不算底，跳过继续看。"""
+    n = len(p)
+    seen = False
+    start: int | None = None
+    for j in range(blank, min(n, blank + cap)):
+        v = float(p[j])
+        if v >= bar_coverage:
+            if start is None:
+                start = j
+            seen = True
+        elif seen and v < floor_t:
+            k = j
+            while k < n and k < j + floor_run and p[k] <= floor_t:
+                k += 1
+            if k - j >= floor_run and start is not None:
+                return start, j
+            return None
+    return None
+
+
 def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
                         ink_threshold: int = 128, ink_eps: float = 0.02,
                         border_max_rows: int = 30, inset_look: int = 70,
                         glue_px: int = 3, bar_probe: int = 8,
-                        bar_coverage: float = 0.65, inset_min_peak: float = 0.15
+                        bar_coverage: float = 0.65, inset_min_peak: float = 0.15,
+                        margin_profile: np.ndarray | None = None,
+                        floor_t: float = FLOOR_T, floor_run: int = FLOOR_RUN,
+                        flush_max: int = FLUSH_MAX, margin_t: float = MARGIN_T
                         ) -> tuple[tuple[int, str], tuple[int, str]]:
     """上下版框残墨该削掉几行 —— 返回 `((top_px, top_case), (bottom_px, bottom_case))`。
+
+    **e 档（2026-09-17 加，bxgb 列端残框 89 列的病根）**：边缘一段薄高墨、之后是一段
+    **持续的低平底**、再往里才是首字——这是「版框 → 天头 → 首字」的形态，框应当整段
+    削掉。此前它落进 b 档只削 `glue_px`=3 行，框剩 3~7 行留在列图里，Step4 再把它
+    带进首字的图块（人裁看到的「含有边框噪点」）。原因是天头那段有 0.03~0.14 的
+    界行/纸纹底噪，超过 `ink_eps`，于是 `run` 一路走到字身、`thick` 71~372 行，被
+    当成「框粘着字」。判 e 要两条：`_thin_bar_then_floor` 找到形态，且 **贴边**
+    （`blank <= flush_max`，见 FLUSH_MAX 注）或 **边距里也是墨**（`margin_profile`，
+    见 MARGIN_T 注）二者之一。只在 `thick > border_max_rows` 这一支里判——a/d 档
+    的行为一位不动。`margin_profile` 由 `clean_column` 在 **抹界行之前** 的图上算，
+    别的调用方不传就只认贴边这一条。
 
     上下界用的是 `column_bounds` 的口径（页面右端 x=0 锚点），落点未必正好压在
     版框上，所以矫正图的头尾常常带进一截版框线。判据在水平投影上分四档：
@@ -388,7 +455,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     """
     prof = column_row_profile(warped_gray, band, ink_threshold)
 
-    def one(p: np.ndarray) -> tuple[int, str]:
+    def one(p: np.ndarray, m: np.ndarray | None) -> tuple[int, str]:
         blank = 0
         while blank < len(p) and p[blank] <= ink_eps:
             blank += 1
@@ -407,6 +474,17 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if float(p[blank:run].max()) >= inset_min_peak:
                 return run, "d"
             return 0, "c"
+        # e 档：run 很长只是因为天头底噪 > ink_eps。头部若是「薄高墨段 → 持续低平底」，
+        # 那就是框接天头，不是框粘着字（理由与实测见函数 docstring 及 FLOOR_T 注）。
+        flush = blank <= flush_max
+        e = _thin_bar_then_floor(p, blank, bar_coverage, floor_t,
+                                 min(floor_run, FLOOR_RUN_FLUSH) if flush else floor_run)
+        if e is not None:
+            bar_start, bar_end = e
+            margin_ok = (m is not None and bar_end > bar_start
+                         and float(np.median(m[bar_start:bar_end])) >= margin_t)
+            if flush or margin_ok:
+                return bar_end, "e"
         # 厚墨段：是版框粘着字，还是**压根就是字**？看起始陡度——版框线一上来
         # 就满宽（头 3~4 行冲到 0.74~0.93），字的顶/底边必然是细的、缓起。
         # 这一条以前只在内缩档用，贴边档一律判 b（粘连），结果把"末字顶到
@@ -415,7 +493,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return blank + glue_px, "b"        # 版框粘着字，只削一点
         return 0, "c"                           # 是字不是版框，什么都不削
 
-    return one(prof), one(prof[::-1])
+    mrev = None if margin_profile is None else margin_profile[::-1]
+    return one(prof, margin_profile), one(prof[::-1], mrev)
 
 
 def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
@@ -454,8 +533,16 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
     denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
     band = column_text_band(denoised, ink_threshold=ink_threshold)
     no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold)
+    # e 档的边距证据必须在**抹界行之前**的图上算——抹白之后带外全是白，
+    # 版框横贯整列这一特征就看不见了（见 column_border_trim 的 MARGIN_T 注）。
+    margin_profile = None
+    lo, hi = band
+    if lo + (denoised.shape[1] - hi) >= MARGIN_MIN_PX:
+        binm = denoised < ink_threshold
+        margin_profile = np.concatenate([binm[:, :lo], binm[:, hi:]], axis=1).mean(axis=1)
     (top_px, top_case), (bot_px, bot_case) = column_border_trim(
-        no_rules, band, ink_threshold=ink_threshold, **kwargs)
+        no_rules, band, ink_threshold=ink_threshold, margin_profile=margin_profile,
+        **kwargs)
     out = no_rules.copy()
     if top_px:
         out[:top_px] = 255
