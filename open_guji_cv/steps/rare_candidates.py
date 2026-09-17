@@ -119,5 +119,16 @@ class RareCandidatesStep(Step):
         out = [ColumnRare(col=cc.col, ok=cc.ok, error=cc.error,
                           chars=col_recs.get(cc.col, []) if cc.ok else [])
                for cc in chars.columns]
+
+        # 各路出了多少条候选（见 PageRare.sources）。embedding 是最强单源，
+        # 它一死候选就退化成分类头独撑、classes 外的字全查不到，而这在产物里
+        # 原本看不出来——北行日錄那一轮就是这么漏过去的，所以这里记一笔并出声。
+        from collections import Counter
+        srcs = Counter(c.font for cr in out for r in cr.chars for c in r.candidates)
+        if hits_list and not srcs.get("emb"):
+            ctx.log(f"⚠️ Step5-b p{page}：embedding 一条候选都没出（来源 {dict(srcs)}）"
+                    f"——候选已退化为分类头独撑，classes 外的字会整个查不到，请查 emb 索引")
+
         return {"rare_candidates": PageRare(
-            page=page, model_fingerprint=full_fingerprint(), columns=out)}
+            page=page, model_fingerprint=full_fingerprint(),
+            sources=dict(srcs), columns=out)}
