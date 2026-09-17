@@ -18,11 +18,33 @@ from ..core.spec import cell_key, page_key
 from ..gold.v2_align import align_book
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
+from .verdict_view import decided_cells
+
+
+def parse_cells_spec(pages: str, book: str) -> set[str]:
+    """`cells:4:1:21,6:8:1` → `{"bxgb:4:1:21", "bxgb:6:8:1"}`（2026-09-17）。
+
+    用户「输入 4:1:21 就显示那张卡」：人裁时报出一个字位要立刻调卡对着看，
+    不必先猜它在哪一页。书号可省（省了补 `book`），逗号/空格/中文逗号都当分隔符。
+
+    返回值进 `cards()` 的 `only_ids`，与点名清单 `list:` 同一条通路，因此同样
+    **不受 only / 顺序闸 / 已裁去重约束**——点名要看的就得出得来，否则「它已自动
+    进库」或「旁边切线没裁」会把它静默吞掉，人对着空面板分不清是没问题还是被吞了。
+    """
+    raw = pages[len("cells:"):].replace("，", ",").replace(" ", ",")
+    ids = {tok if tok.count(":") >= 3 else f"{book}:{tok}"
+           for tok in (t.strip() for t in raw.split(",")) if tok}
+    if not ids:
+        raise ValueError(f"cells: 里没有可用的坐标：{pages!r}")
+    bad = sorted(i for i in ids if i.count(":") < 3 or not i.split(":")[1].isdigit())
+    if bad:
+        raise ValueError(f"坐标要写成 页:列:格（可带书号），这些不对：{bad}")
+    return ids
 
 
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
-          gate_cut: bool = True) -> dict:
+          gate_cut: bool = True, skip_decided: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -33,6 +55,15 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     `gate_cut`：顺序闸（用户 2026-09-10）——切分线还没 review 的格位先不出字卡。
     被挡下的进返回值的 `blocked`，面板据此显示「还有 N 位等着先看切线」。
     默认开；传 False 可整批看全部（判据 E 抽审、跑评测要用）。
+
+    `skip_decided`（用户 2026-09-16 定）：跳过**全书所有批次**已经裁过的字位，
+    于是 `limit` 数的是**净新卡**——载入 30 张就是 30 张真待裁的。以前这里不看
+    事件日志，每次都从第一页重数，把上轮裁过的又端出来（实测重复率见
+    `verdict_view.decided_cells` 的注释）。传 False 回到旧行为（复核自己裁过的、
+    或想改主意时用）。`n_decided` 一并返回，面板显示「全书已裁 N」。
+
+    ⚠️ 点名清单模式（`pages=list:…`）**不受本开关约束**——点名要看的就得出得来，
+    与 `only` / 顺序闸同一条纪律：别让人对着空面板猜是没问题还是被吞了。
     """
     st = store or ProductStore()
     bk = load_book(book)
@@ -42,7 +73,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     # 用途：机器筛出可疑的几十个字（如「这轮重跑后与整理本不一致的」），让人只审这些，
     # 不必按页翻。页范围由清单自己决定——出现在清单里的页才读产物。
     only_ids: set[str] | None = None
-    if pages.startswith("list:"):
+    if pages.startswith("cells:"):
+        only_ids = parse_cells_spec(pages, book)
+        pgs = sorted({int(i.split(":")[1]) for i in only_ids})
+    elif pages.startswith("list:"):
         from ..core.workspace import feedback_root
         lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
         if not lp.exists():
@@ -67,6 +101,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     out: list[dict] = []
     out_blocked: list[dict] = []
     blocked = cut_pending(book, pgs, st) if gate_cut else {}
+    # 全书已裁字位（跨批次）。点名清单模式不去重——见 docstring。
+    decided = decided_cells(book) if (skip_decided and only_ids is None) else set()
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -86,6 +122,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     if r.id not in only_ids:
                         continue
                 else:
+                    if r.id in decided:
+                        continue
                     if only == "review" and r.admit:
                         continue
                     if only == "auto" and not r.admit:
@@ -125,8 +163,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 })
                 if len(out) >= limit:
                     return {"book": book, "cards": out, "truncated": True,
-                            "blocked": out_blocked}
-    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked}
+                            "blocked": out_blocked, "n_decided": len(decided)}
+    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked,
+            "n_decided": len(decided)}
 
 
 def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[dict]:
