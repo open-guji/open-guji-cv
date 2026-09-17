@@ -86,6 +86,11 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         # vol01 近一半页是目录/职名，只取 body 会把 201 条升级切点挡掉 166 条。
         # 职名页仍排除在外（大小字混排，列切本身是坏的，见 STD_GRID_TYPES 注释）。
         pg = [p for p in T.std_grid_pages(book)]
+    elif pages == "body":
+        # 文档一直写着「pages='body' = page-type 金标判为正文的页」，但分支漏了，
+        # 落到 `resolve_pages("body")` → `int("body")` 500（2026-09-17 北行日錄实测）。
+        # 口径同 `escalated`：`std_grid_pages`（21 格标准版式），不是纯 `body_pages`。
+        pg = [p for p in T.std_grid_pages(book)]
     else:
         pg = bk.resolve_pages(pages)
     if drift:
