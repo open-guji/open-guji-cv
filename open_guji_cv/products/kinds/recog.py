@@ -128,6 +128,11 @@ class ColumnRare(BaseModel):
 class PageRare(BaseModel):
     page: int
     model_fingerprint: str = ""      # checkpoint + 模板集指纹，见 steps.rare_candidates
+    #: 这一页各候选源各出了多少条（`{"emb": 3400, "cnn": 12, ...}`）。
+    #: 2026-09-17 加：此前产物里看不出哪一路干了活，北行日錄整条 embedding 路
+    #: 静默死掉、候选全由分类头独撑，是靠逐条数 `font` 字段才反推出来的。
+    #: 正常刻本页应当以 `emb` 为主；`emb` 为 0 就是那一路又死了，立刻查。
+    sources: dict[str, int] = Field(default_factory=dict)
     columns: list[ColumnRare] = Field(default_factory=list)
 
     def column(self, col: int) -> ColumnRare | None:

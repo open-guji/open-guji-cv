@@ -26,6 +26,7 @@ rare-char 21 条上 CNN 单独 top-10 100%。
 from __future__ import annotations
 
 import hashlib
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -248,8 +249,15 @@ class CnnCandidates:
         if f.exists():
             z = np.load(f, allow_pickle=False)
             mat, names = z["mat"], z["chars"].tolist()
-            self._emb_cache = (charset, mat, names)
-            return mat, names
+            # 历史遗留的空缓存（2026-09-17 之前可能已落盘）不当数，重建一次。
+            if mat.shape[0] == 0:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+            else:
+                self._emb_cache = (charset, mat, names)
+                return mat, names
         fonts = _font_files()
         vecs, names = [], []
         with torch.no_grad():
@@ -271,18 +279,36 @@ class CnnCandidates:
                 vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
                 names.append(ch)
         mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+        # **空索引绝不落盘**（2026-09-17）。此前无条件 savez：建索引失败（模板目录
+        # 缺失、渲染全挂、中途被打断）会把 (0, 256) 存进缓存，之后 `f.exists()`
+        # 永远命中，`emb_topk`/`emb_topk_batch` 于是**静默返回空**——不报错、
+        # 产物里也看不出，整条 embedding 路就此永久死掉，候选退化成分类头独撑
+        # （分类头对 classes 外的字是硬零，北行日錄 top-10 因此只有 79.1%）。
+        # 与 2026-09-15「cnn.available 悄悄变 False」同一个病根：降级路径不出声。
+        if mat.shape[0] == 0:
+            raise RuntimeError(
+                f"embedding 索引建成 0 行（字表 {len(cs)} 字）——字体模板或渲染全部失败，"
+                f"不落盘。检查 fonts/ 目录与 EMB_EXTRA_SPECS。")
         f.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(f, mat=mat, chars=np.array(names))
+        # 先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下
+        # 只建了一半的索引冒充完整缓存。
+        # ⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补** .npz 后缀，所以临时文件
+        # 必须自己以 .npz 结尾，否则 savez 写的是 `x.tmp.npz`、replace 找的是 `x.tmp`。
+        tmp = f.with_name(f.name + ".tmp.npz")
+        np.savez(tmp, mat=mat, chars=np.array(names))
+        os.replace(tmp, f)
         self._emb_cache = (charset, mat, names)
         return mat, names
 
     def emb_topk(self, norm_patch: np.ndarray, charset, k: int = 10) -> list[tuple[str, float]]:
         """归一化 64² 二值图 → 与字体模板 embedding 的余弦 top-k。"""
         if not self._ensure():
+            _warn_emb_down("checkpoint 不可用")
             return []
         import torch
         mat, names = self._emb_index(charset)
         if mat.shape[0] == 0:
+            _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
             return []
         with torch.no_grad():
             x = torch.tensor(norm_patch[None, None].astype(np.float32), device=self._dev)
@@ -307,9 +333,12 @@ class CnnCandidates:
         没有精度代价，只是把 IO/调度开销摊到一批里。
         """
         if not self._ensure():
+            _warn_emb_down("checkpoint 不可用")
             return [[] for _ in norm_patches]
         import torch
         mat, names = self._emb_index(charset)
+        if mat.shape[0] == 0 and norm_patches:
+            _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
         if mat.shape[0] == 0 or not norm_patches:
             return [[] for _ in norm_patches]
         with torch.no_grad():
@@ -395,6 +424,26 @@ def _spec_ready(spec: str) -> bool:
         return False
 
 
+_EMB_DOWN_SEEN: set[str] = set()
+
+
+def _warn_emb_down(why: str) -> None:
+    """embedding 这一路失效时**出声**（2026-09-17）。
+
+    这一路是候选栈里最强的单源（unseen top-1 97.4%），它一死候选就只剩
+    分类头独撑，而分类头对 `classes` 外的字是硬零——北行日錄 54 页
+    181,680 条候选全部标 `cnn`、一条 `emb` 都没有，top-10 因此只有 79.1%
+    （同字表下修好应为 95.6%）。此前这条路静默 `return []`，产物里也看不出，
+    于是藏了一整轮。同一进程里同一个原因只喊一次，不刷屏。
+    """
+    if why in _EMB_DOWN_SEEN:
+        return
+    _EMB_DOWN_SEEN.add(why)
+    import warnings
+    warnings.warn(f"CNN embedding 候选路失效（{why}）——候选将退化为分类头独撑，"
+                  f"classes 外的字会整个查不到。", RuntimeWarning, stacklevel=3)
+
+
 HOG_WEIGHT = 0.0
 CNN_WEIGHT = 1.0
 EMB_WEIGHT = 4.0
@@ -430,14 +479,77 @@ def rrf(*orders: list[str], k: int = 10, c: int = RRF_K,
         weights: tuple[float, ...] | None = None) -> list[str]:
     """倒数排名融合。只看名次，不看分数——各源量纲不同，分数相加没有意义。
 
-    `weights` 与 `orders` 一一对应；缺省全 1。生产里 HOG=1、CNN=CNN_WEIGHT。
+    `weights` 与 `orders` 一一对应；缺省全 1。生产权重见
+    `HOG_WEIGHT`/`CNN_WEIGHT`/`EMB_WEIGHT`（现行 0 / 1 / 4）。
     """
     score: dict[str, float] = {}
     ws = weights or (1.0,) * len(orders)
     for order, w in zip(orders, ws):
+        if w <= 0:
+            continue
         for r, ch in enumerate(order):
             score[ch] = score.get(ch, 0.0) + w / (c + r)
     return [ch for ch, _ in sorted(score.items(), key=lambda kv: -kv[1])[:k]]
+
+
+#: 软门控看 embedding 前几名来判「这个字位像不像类外字」。
+#: 3 是实测最优（北行 383 条：top1=82.8%；取 1 太硬、类内掉 5.7 点，取 5 太钝）。
+CLS_GATE_TOPM = 3
+
+
+def shared_classes() -> set[str]:
+    """现役 checkpoint 的类表（分类头的输出空间）。checkpoint 缺席时返回空集。
+
+    空集会让 `cls_gate_weight` 恒给 `lo`——分类头本来也没输出，不影响结果。
+    """
+    try:
+        c = shared()
+        if not c._ensure():
+            return set()
+        return set(c._classes)
+    except Exception:
+        return set()
+
+
+def cls_gate_weight(emb_order: list[str], classes: set[str],
+                    hi: float = CNN_WEIGHT, lo: float = 0.0,
+                    topm: int = CLS_GATE_TOPM) -> float:
+    """分类头在这个字位该占多少权重（2026-09-17 加）。
+
+    ## 为什么需要它
+
+    分类头的输出空间**锁死在训练时的 4,654 类**，类外字它根本给不出——
+    `cache/oov_bench` 314 条类外真刻例实测，`cls` 的 top-1 / top-5 / top-10
+    **全是 0.0%**。可它在 RRF 里照样占着 `CNN_WEIGHT=1.0`，拿一串错字去压
+    embedding 的正确答案：同一个集上 emb 单源 top-1 **67.8%**，
+    两路 RRF 反而只有 **26.4%**——分类头白白拖掉 41 个点。
+
+    ## 判据
+
+    没法预先知道一个字位是不是类外字，但 **embedding 的前几名给了很强的暗示**：
+    它不受类表限制，如果它的前 `topm` 名大多落在 `classes` 外，
+    这个字位多半就是类外字，分类头的意见不该算数。按落在类内的比例插值：
+
+        w = lo + (hi - lo) · |{前 topm 名 ∩ classes}| / topm
+
+    ## 实测（北行 383 条用户裁决，类内 314 / 类外 69）
+
+    | 方案 | 全体 top-1 | 类内 top-1 | 类外 top-1 |
+    |---|---|---|---|
+    | 现行（恒 w=1.0）| 75.7% | 89.8% | 11.6% |
+    | 固定降权 w=0.1 | 82.0% | 87.9% | 55.1% |
+    | 硬门控（topm=1）| 82.2% | **84.1%** | 73.9% |
+    | **软门控 topm=3** | **82.8%** | **89.5%** | 52.2% |
+
+    topm=3 两头都不牺牲：类内只掉 0.3 点，全体最高。硬门控类外最好看，
+    但 emb top-1 一猜错就把分类头整路关掉，类内要赔 5.7 点，不值。
+    top-10 在所有方案下都是 94.8%，不受影响——这是**排序**问题，不是召回问题。
+    """
+    head = list(emb_order or [])[:topm]
+    if not head:
+        return hi
+    frac = sum(1 for ch in head if ch in classes) / len(head)
+    return lo + (hi - lo) * frac
 
 
 @lru_cache(maxsize=1)

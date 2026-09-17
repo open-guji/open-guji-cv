@@ -188,3 +188,26 @@ def test_emb_topk_contract_and_cache():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
     # 第二次走缓存，结果一致
     assert [ch for ch, _ in c.emb_topk(q, cs, k=4)] == [ch for ch, _ in out]
+
+
+def test_cls_gate_weight():
+    """分类头门控：emb 前 3 名落在 classes 内的比例决定 cls 权重。
+
+    类外字位上分类头的输出全是错的（`cache/oov_bench` 314 条实测 top-10 = 0%），
+    恒权会把 embedding 的正确答案压下去——同集 emb 单源 top-1 67.8%，
+    两路恒权 RRF 只剩 26.4%。
+    """
+    from open_guji_cv.clustering.cnn_candidates import CNN_WEIGHT, cls_gate_weight
+
+    S = {"一", "二", "三"}
+    # 前三名全在类内 → 满权重
+    assert cls_gate_weight(["一", "二", "三", "x"], S) == CNN_WEIGHT
+    # 全在类外 → 归零，分类头不参与
+    assert cls_gate_weight(["𠀀", "𠀁", "𠀂"], S) == 0.0
+    # 各半 → 按比例插值
+    w = cls_gate_weight(["一", "𠀀", "二"], S)
+    assert 0.0 < w < CNN_WEIGHT
+    # 空 order（emb 没给候选）不该把分类头也关掉
+    assert cls_gate_weight([], S) == CNN_WEIGHT
+    # 空 classes（没 checkpoint）：分类头本来也没输出，给 lo 不影响结果
+    assert cls_gate_weight(["一"], set()) == 0.0

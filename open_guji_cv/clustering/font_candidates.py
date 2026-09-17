@@ -71,12 +71,31 @@ class FontHit:
         return (self.char, self.score)
 
 
+#: 引擎仓根（`…/open-guji-cv`）——字体随仓走，不随调用方的 cwd 走。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _font_files(root: str = "fonts") -> list[str]:
-    out: list[str] = []
-    for name in FONT_ORDER:
-        for ext in ("*.ttf", "*.otf"):     # 康熙体是 otf，只 glob ttf 会静默漏掉
-            out.extend(sorted(glob.glob(str(Path(root) / name / ext))))
-    return out
+    """字体文件清单。
+
+    **按引擎仓定位，不按调用方的 cwd**（2026-09-17）。`root` 缺省是相对路径
+    `fonts`，原先直接 glob 它——运行时 cwd 常常是**工作区**（北行日錄、四庫
+    各自一个目录），那里没有 `fonts/`，于是返回空列表：HOG 候选悄悄变空，
+    embedding 模板也建不出来（它同样调这个函数取字体）。
+    与 `cnn_candidates._resolve_default_ckpt` 2026-09-15 那次是同一类病：
+    **仓内资源用相对路径找，换个 cwd 就静默失效**。
+
+    显式传绝对路径的照用；传相对路径时先认 cwd（本机旧习惯），再认引擎仓。
+    """
+    cands = [Path(root)] if Path(root).is_absolute() else [Path(root), _REPO_ROOT / root]
+    for base in cands:
+        out: list[str] = []
+        for name in FONT_ORDER:
+            for ext in ("*.ttf", "*.otf"):   # 康熙体是 otf，只 glob ttf 会静默漏掉
+                out.extend(sorted(glob.glob(str(base / name / ext))))
+        if out:
+            return out
+    return []
 
 
 INDEX_DIR = Path("cache/font_index")
