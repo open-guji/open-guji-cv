@@ -217,6 +217,45 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
     return out
 
 
+#: 金标「坐标系是否还有效」的判据：金标记的**原格线** `y_old` 与当前**同一格线**的位移 ≤ 这个数就算没变。
+#:
+#: 2026-09-16 实测（实验十六/十七）：vol01 按新 Step1 重跑后 706 条金标 `col_h` 对不上，按旧判据全算「漂移」；
+#: 可 `y_new − y_old` 中位 0.0、p90 2.0——列只是**底部变长了 10px**，格线一根没动。等比缩放反而把误差加上去
+#: （y=1500 × 1.004 = 平移 6px）。按这个判据复核：666 条可直接用、40 条真漂移（个别列重新分格了）。
+#: `col_h` 只能当「可能变了」的粗筛，不能当「确实变了」的结论。
+ANCHOR_TOL = 3.0
+
+
+def gold_anchor_shift(cc, ex: dict) -> float | None:
+    """金标原格线 `y_old` 到当前同一格线的位移（当前 − 旧）。找不到那条格线返回 None。
+
+    先按 (slot_above, slot_below) 对回当前 cells 找格线（slot 比序号稳，重新分格后序号会整体错位）；
+    对不上再退到「离 y_old 最近的内部格线」——序号错位而坐标没变的情况靠这一步救回来。
+    """
+    yo = ex.get("y_old", ex.get("y"))
+    if yo is None or cc is None or not getattr(cc, "boundaries", None):
+        return None
+    yo = float(yo)
+    sa, sb = ex.get("slot_above"), ex.get("slot_below")
+    cells = getattr(cc, "cells", None) or []
+    if sa is not None and sb is not None and len(cells) == len(cc.boundaries) - 1:
+        bi = next((i for i in range(1, len(cells))
+                   if cells[i - 1].slot == sa and cells[i].slot == sb), None)
+        if bi is not None:
+            return float(cc.boundaries[bi]) - yo
+    inner = list(cc.boundaries[1:-1])
+    if not inner:
+        return None
+    near = min(inner, key=lambda b: abs(float(b) - yo))
+    return float(near) - yo
+
+
+def gold_anchor_ok(cc, ex: dict, tol: float = ANCHOR_TOL) -> bool:
+    """金标坐标系对当前产物仍然有效（原格线位移 ≤ tol）。"""
+    d = gold_anchor_shift(cc, ex)
+    return d is not None and abs(d) <= tol
+
+
 def drifted_boundaries(book: str, store=None, tol: int = 2,
                        include_relabeled: dict[str, set[int]] | None = None,
                        only_ids: set[str] | None = None) -> tuple[list[dict], dict]:
@@ -286,6 +325,16 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
             skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
             continue
         drifted = abs(int(gold_h) - h) > tol
+        if drifted:
+            # col_h 变了只是粗筛；原格线还在原处的不算漂移（见 ANCHOR_TOL 注释：vol01 706 条里 666 条是这种），
+            # 否则会让人把没坏的金标重标一遍。
+            if pg not in cells_cache:
+                cells_cache[pg] = st.read(book, "row_segment", page_key(pg), "cells")
+            _cells = cells_cache[pg]
+            _cc = _cells.column(col) if _cells is not None else None
+            if _cc is not None and _cc.ok and gold_anchor_ok(_cc, ex):
+                drifted = False
+                skipped["anchor_ok(col_h_changed_only)"] = skipped.get("anchor_ok(col_h_changed_only)", 0) + 1
         redo = (not drifted and bool(include_relabeled)
                 and any(abs(int(v) - h) <= tol for v in include_relabeled.get(it.id, ())))
         if only_ids is not None and not drifted:
