@@ -15,6 +15,32 @@ export interface CardState {
 }
 
 const CL_KIND: Record<string, string> = { straight: '直线', seam_narrow: '窄走廊', seam_wide: '宽走廊', unet_seam: 'U-Net缝', period_up: '按格高↑', period_dn: '按格高↓' }
+
+/** 切法类型 → 固定的颜色与快捷键（2026-09-17 用户定）。
+ *
+ * 此前判定项是「现切点正确 / 拖线落定 / 缝正确 / 切法正确」四个**动作**，语义互相
+ * 交叉——折线正确时这四个都「有道理」，人不知道点哪个；而图上的线按**候选下标**
+ * 取色（`CL_COLORS[k]`），同一种切法在不同卡上颜色还会变，图例说的「蓝虚线 = 直线」
+ * 其实是候选 0 的颜色，用户实测看到的蓝色是折线缝。
+ *
+ * 改成：判定项 = **切法类型本身**，一类一个固定颜色 + 固定字母，图上线与按钮同色。
+ * 点一下（或按键）= 选中并立即落定，不用再点第二个「确认」。
+ *
+ * ⚠️ 键位避开已占用的：1-4 干扰、P 折线、X 清空、U 重做、S 拿不准。
+ */
+export const CL_STYLE: Record<string, { color: string; key: string; label: string }> = {
+  straight: { color: '#2f6fb5', key: 'A', label: '格线' },
+  seam_narrow: { color: '#1f9e78', key: 'D', label: '折线·窄' },
+  seam_wide: { color: '#c47f17', key: 'F', label: '折线·宽' },
+  unet_seam: { color: '#7a5bbd', key: 'W', label: 'U-Net' },
+  period_up: { color: '#b5484e', key: 'R', label: '按格高↑' },
+  period_dn: { color: '#0f8ea8', key: 'T', label: '按格高↓' },
+}
+/** 人自己拖/画出来的那条线的颜色——与任何算法候选都不同色，一眼分得出。 */
+export const CL_MINE = '#d9480f'
+export function candStyle(kind: string, k: number) {
+  return CL_STYLE[kind] || { color: CL_COLORS[k % CL_COLORS.length], key: '', label: CL_KIND[kind] || kind }
+}
 // 候选线一条一色（2026-09-15：L3 扩池后一张卡可能有 6 条候选，原来只有两种颜色、选中也不高亮，人分不出点了哪条）。
 // 按**池内下标**取色，与右侧按钮上的色点一一对应；选中的那条画成实线加粗。
 // Step7 的 BlockingCutlineCard 也用这一套（两处卡片的候选色必须一致，否则
@@ -113,27 +139,10 @@ export function CutlineCard({
     dragRef.current = null
   }
 
-  const pickRow = cands.length > 1 ? (
-    <div className="clbtns clcandbtns" title="算法给的几种切法：点一种选中（图上同色线加粗），再按「切法正确」">
-      <div className="clcandlist">
-        {cands.map((cd, k) => (
-          <button key={k} className={`clcandbtn${k === st.pick ? ' on' : ''}`}
-                  style={{ ['--cc' as string]: CL_COLORS[k % CL_COLORS.length] }}
-                  title={`墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px${cd.agree != null ? ` · 与 U-Net 一致 ${(cd.agree * 100).toFixed(1)}%` : ''}${cd.dis_unet != null ? ` · 分歧块 ${cd.dis_unet}px` : ''}`}
-                  onClick={() => onPick(k)}>
-            <i className="cldot" />
-            <span className="clk">{CL_KIND[cd.kind] || cd.kind}</span>
-            <span className="muted">墨{cd.seam_ink}·偏{cd.dev_max}{cd.dis_unet != null ? `·歧${cd.dis_unet}` : ''}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  ) : null
-
-  const pickedCand = cands[st.pick]
-  const candDisabled = !(st.pick > 0 && pickedCand && pickedCand.y)
-
   const sortedPoly = st.poly.slice().sort((a, b) => a[0] - b[0])
+  // 「人自己动过线」——拖了格线，或画了折线。只有这时才出「自选」，且要回车确认
+  // （用户 2026-09-17：点一下就入库对算法候选合适，自己画的那条得有个确认动作）。
+  const mine = st.mode === 'poly' ? sortedPoly.length >= 2 : st.y !== c.y
 
   return (
     <div id={`clc${idx}`} className={`clcard${isCurrent ? ' cur' : ''}`} data-done={st.done || ''}>
@@ -157,7 +166,7 @@ export function CutlineCard({
                 : `${c.x0 * s},${(c.y - c.crop_y0) * s} ${c.x1 * s},${(c.y - c.crop_y0) * s}`
               return (
                 <polyline key={k} className={`clcand${k === st.pick ? ' clcand-pick' : ''}`}
-                          stroke={CL_COLORS[k % CL_COLORS.length]} points={pts} />
+                          stroke={candStyle(cd.kind, k).color} points={pts} />
               )
             })}
             <polyline className="clpoly" points={sortedPoly.map(([x, yy]) => `${x * s},${(yy - c.crop_y0) * s}`).join(' ')} />
@@ -174,19 +183,50 @@ export function CutlineCard({
           </div>
 
           <div className="clgroup">
-            <div className="clcap">判定 <span className="muted">点一个即落定</span></div>
-            {pickRow}
+            <div className="clcap">判定 <span className="muted">点一个即落定 · 图上同色线</span></div>
+            <div className="clbtns clcandbtns">
+              <div className="clcandlist">
+                {cands.map((cd, k) => {
+                  const sty = candStyle(cd.kind, k)
+                  // 这一条被人选中后直接落定：`straight` 记 ok（现切点就对），其余记 cand
+                  const v = cd.kind === 'straight' ? 'ok' : 'cand'
+                  const on = st.done === v && (v === 'ok' || st.pick === k)
+                  return (
+                    <button key={k} className={`clcandbtn${st.pick === k ? ' sel' : ''}${on ? ' on' : ''}`}
+                            style={{ ['--cc' as string]: sty.color }}
+                            title={`${sty.label}：点一下直接落定。墨 ${cd.seam_ink} · 离直线 ${cd.dev_max}px${cd.agree != null ? ` · 与 U-Net 一致 ${(cd.agree * 100).toFixed(1)}%` : ''}`}
+                            onClick={() => { onPick(k); onDecide(v) }}>
+                      <i className="cldot" />
+                      <span className="clk">{sty.label}</span>
+                      <span className="muted">墨{cd.seam_ink}·偏{cd.dev_max}</span>
+                      {sty.key && <kbd>{sty.key}</kbd>}
+                    </button>
+                  )
+                })}
+                {c.seam && c.seam.length > 0 && !cands.some((x) => x.kind === 'seam_narrow') && (
+                  <button className={`clcandbtn${st.done === 'seam_ok' ? ' on' : ''}`}
+                          style={{ ['--cc' as string]: CL_STYLE.seam_narrow.color }}
+                          title="现役折线缝就是理想切法，点一下直接落定"
+                          onClick={() => onDecide('seam_ok')}>
+                    <i className="cldot" />
+                    <span className="clk">现役折线缝</span>
+                    <kbd>G</kbd>
+                  </button>
+                )}
+                {mine && (
+                  <button className={`clcandbtn mine${st.done === 'moved' ? ' on' : ''}`}
+                          style={{ ['--cc' as string]: CL_MINE }}
+                          title="你自己拖/画的这条线。回车确认入库"
+                          onClick={() => onDecide('moved')}>
+                    <i className="cldot" />
+                    <span className="clk">自选（{st.mode === 'poly' ? `折线 ${sortedPoly.length} 点` : `Δ${st.y - c.y}px`}）</span>
+                    <kbd>↵</kbd>
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="clbtns">
-              <button title="O：现役切点（蓝虚线）位置就对" className={st.done === 'ok' ? 'on' : ''} onClick={() => onDecide('ok')}>现切点正确<kbd>O</kbd></button>
-              <button title="回车：把线拖到理想位置后落定（= moved；没动过 = 现切点正确）" className={st.done === 'moved' ? 'on' : ''} onClick={() => onDecide('moved')}>拖线落定<kbd>↵</kbd></button>
-              <button title="G：绿色虚线（现役折线缝）已经是理想切法，直接记为折线金标" disabled={!c.seam}
-                      className={st.done === 'seam_ok' ? 'on' : ''} onClick={() => onDecide('seam_ok')}>缝正确<kbd>G</kbd></button>
-              {cands.length > 1 && (
-                <button title="C：按上面选中的那条算法候选线落定，直接记为折线金标" disabled={candDisabled}
-                        className={st.done === 'cand' ? 'on' : ''} onClick={() => onDecide('cand')}>切法正确<kbd>C</kbd></button>
-              )}
-              <button title="V：上下字重叠、切在哪都伤字，线放折中处" className={st.done === 'overlap' ? 'on' : ''} onClick={() => onDecide('overlap')}>重叠·折中<kbd>V</kbd></button>
-              <button title="S：拿不准" className={st.done === 'idk' ? 'on' : ''} onClick={() => onDecide('idk')}>拿不准<kbd>S</kbd></button>
+              <button title="S：拿不准，跳过这条" className={st.done === 'idk' ? 'on' : ''} onClick={() => onDecide('idk')}>跳过·拿不准<kbd>S</kbd></button>
             </div>
           </div>
 

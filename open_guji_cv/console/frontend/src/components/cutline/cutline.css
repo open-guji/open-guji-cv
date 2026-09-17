@@ -75,3 +75,11 @@
 .cl-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .35rem .9rem; margin-top: .35rem; }
 .cl-help-grid div { line-height: 1.55; }
 .cl-help-grid b { display: block; margin-bottom: .1rem; }
+
+/* 图例色块（2026-09-17）：颜色与判定按钮、图上的线三处一致。 */
+.cllg { display: inline-flex; align-items: center; gap: .25rem; margin-right: .5rem; }
+.cllg::before { content: ''; width: 1.1rem; height: 0; border-top: 3px solid var(--cc); }
+/* 选中但未落定：细边框；已落定：粗边框 + 底色（.on，见上） */
+.clcandbtn.sel { border-color: var(--cc); }
+.clcandbtn.mine { border-style: dashed; }
+.clcandbtn kbd { margin-left: .35rem; }
