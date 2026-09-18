@@ -172,6 +172,14 @@ def gap_center(patch: np.ndarray, ref_w: float | None = None,
 SOLO_SPAN_MAX = 0.62       # 跨度/列距上限
 SOLO_RIGHT_FRAC = 0.93     # 墨落在右半的比例下限
 SOLO_MIN_INK = 600         # 总墨下限（px），滤掉纸缘残墨/污点
+SOLO_COL_INK_MIN = 2       # 量跨度时，每列墨量低于此的**不算有墨**。
+                           # 跨度取「最外侧有墨的列」，拿绝对最外点的话
+                           # **一个孤立像素就能毁掉判据**：p8c2s5「袤」在 x=0
+                           # 处有 1px 纸缘残渣，跨度从 ~0.5 被撑到 1.009，
+                           # 右半墨占比 0.995 完全正确却因此落选。
+                           # 全书实测：门槛 1（即不过滤）76 格、2 和 3 都是
+                           # 79 格（多捞回「袤」「茂」「子」，均已看图确认是
+                           # 真小注），2 与 3 结果相同说明不是卡在临界值上。
 
 COLUMN_FRAC_T = 0.25       # 整列判据：非空白格里有这个比例以上量得出缝，就认这是
                            # 一条**夹注列**（交接闸据此豁免 L1c/L2，见
@@ -228,10 +236,11 @@ def solo_notes(patches: dict[int, np.ndarray], runs: dict[int, float],
             continue
         w = binary.shape[1]
         xp = binary.sum(axis=0)
-        ink = np.flatnonzero(xp > 0)
-        if ink.size < 10:
+        # 跨度按「墨量够厚的列」量，不取绝对最外点——见 SOLO_COL_INK_MIN。
+        solid = np.flatnonzero(xp >= SOLO_COL_INK_MIN)
+        if solid.size < 5:
             continue
-        x0, x1 = int(ink[0]), int(ink[-1])
+        x0, x1 = int(solid[0]), int(solid[-1])
         if (x1 - x0 + 1) / float(ref_w or w) >= SOLO_SPAN_MAX:
             continue
         if int(binary[:, w // 2:].sum()) / total <= SOLO_RIGHT_FRAC:

@@ -73,12 +73,20 @@ def _binarized_png(gray: "np.ndarray") -> bytes:
     return buf.tobytes()
 
 
+def _cell_key(d: dict) -> str:
+    """标签行 → `char_patch` 的键。**夹注半格要带 `sub`**（`p0004c03s10a`）——
+    a/b 两半 slot 相同，不带后缀两半会撞成同一个键、图块互相覆盖。
+    命名与 `steps/cell_shrink.py` 落盘时的 `cell_key(...) + (inst.sub or "")` 同一口径。
+    """
+    from ..core.spec import cell_key
+    return cell_key(d["page"], d["col"], d["slot"]) + (d.get("sub") or "")
+
+
 def _prep_patches(rows, cache_root: Path, book_id: str, norm_stroke, jobs: int = 1) -> dict:
     """批量把字块读进来并归一。`jobs>1` 走进程池（纯 CPU、无状态，这段占检索三分之一）。"""
-    from ..core.spec import cell_key
     tasks = []
     for d in rows:
-        key = cell_key(d["page"], d["col"], d["slot"])
+        key = _cell_key(d)
         tasks.append((key, str(cache_root / book_id / "char_patch" / (key + ".png")),
                       d.get("cell_kind") == "punct", norm_stroke))
     out: dict = {}
@@ -165,7 +173,9 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
         if not ln.strip():
             continue
         d = json.loads(ln)
-        if d.get("kind") not in kinds or d.get("cell_kind") not in ("char", "punct"):
+        # `jiazhu` 是夹注半格（2026-09-17 起字流对齐也收它们）。它们跟正文格
+        # 一样是**一个字**，同样要过字体那一路互证，没有理由挡在播种之外。
+        if d.get("kind") not in kinds or d.get("cell_kind") not in ("char", "punct", "jiazhu"):
             continue
         fl = cell_flags.get((d["page"], d["col"], d["slot"]), ())
         hit = [f for f in fl if f in bad_flags]
@@ -197,7 +207,7 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # （检索本身不并行：matcher 带着 2000 个模板的特征矩阵，进程间传它比算还贵。）
     prepped = _prep_patches(rows, cache_root, book.id, norm_stroke, jobs=jobs)
     for i, d in enumerate(rows):
-        key = cell_key(d["page"], d["col"], d["slot"])
+        key = _cell_key(d)
         got = prepped.get(key)
         if got is None:
             n_missing += 1
@@ -225,7 +235,10 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # ── 阶段二：进库（只写）──
     n_admit = n_dup = 0
     for j, (d, png, g, agreed, tops) in enumerate(plan):
-        iid = f"{book.id}:{d['page']}:{d['col']}:{d['slot']}"
+        # 夹注半格带 a/b 后缀，与全仓一致（cell_shrink / glyph_match / rare / gold
+        # 都是 `{book}:{page}:{col}:{slot}{sub}`）。不带的话两半是同一个 iid，
+        # 进库时后一半会被当成重复丢掉。
+        iid = f"{book.id}:{d['page']}:{d['col']}:{d['slot']}{d.get('sub') or ''}"
         if binarize:
             png = _binarized_png(g)
         ok = db.admit_instance(

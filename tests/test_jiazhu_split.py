@@ -225,6 +225,18 @@ def test_solo_notes_rejects_speck():
     assert jz.solo_notes({5: p}, runs={}, ref_w=W) == {}
 
 
+def test_solo_notes_survives_a_single_stray_pixel_at_the_edge():
+    """跨度不能被一个孤立像素毁掉。
+
+    实锤 bxgb p8c2s5「袤」：x=0 处 1px 纸缘残渣，跨度从 ~0.5 被撑到 1.009，
+    右半墨占比 0.995 完全正确却因此落选。跨度改按「墨量 ≥SOLO_COL_INK_MIN
+    的列」量之后捞回（全书 76 → 79 格）。
+    """
+    p = _solo_note_patch()
+    p[H // 2, 0] = 0                      # 左边缘一个孤立墨点
+    assert set(jz.solo_notes({5: p}, runs={}, ref_w=W)) == {5}
+
+
 def test_solo_notes_skips_cells_already_in_a_double_run():
     """双行段里的格不重判——半格本来就偏在一侧，重判会把 b 半抢走。"""
     patches = {3: _solo_note_patch(), 4: _solo_note_patch()}
