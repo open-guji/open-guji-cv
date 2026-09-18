@@ -123,3 +123,8 @@ output/review_*.html
 experiments/touch_resolve/out/
 # 度量损失实验（experiments/metric_loss/）的产出：checkpoint 与日志可重算，不入库
 experiments/metric_loss/out/
+# embedding 模板索引缓存：`cnn_candidates._emb_index` 按「checkpoint 指纹 + 字表」
+# 落在 checkpoint 旁边（`models/<ckpt>/emb_<key>.npz`）。可由字体/外部源现算重建，
+# 但**单个几十 MB、总量已 482MB**（2026-09-17），而 models/ 是入库目录——
+# 不 ignore 的话一次 `git add -A` 就把半个 G 的可重算缓存提交进去。
+models/*/emb_*.npz
