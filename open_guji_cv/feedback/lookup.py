@@ -44,6 +44,38 @@ def _resolve(expected: dict) -> ResolvedCut | None:
     return None
 
 
+SLOT_COUNT_SHARD = "char-segmentation/column-slots"
+
+
+def resolved_slots(book: str) -> dict[tuple[int, int], int]:
+    """已裁决的逐列字数覆盖：`(page, col) → n_slots`。
+
+    数据源、生效时机跟 `resolved_cuts` 完全同一套路（见该函数 docstring）——
+    `row_segment` 在该页重跑时按这张表覆盖 `effective_body_slots` 算出的
+    `n_body_col`；裁决不进指纹，靠 `product_invalidate` 显式失效驱动重跑。
+
+    卡片 id 是 `book:page:col`（三段，`review/slot_count_cards.py`），
+    `parse_card_id` 走的是既有 `bxgb:3:1` 模式（Step2 列清理同一条正则，
+    2026-09-17 加），anchor 里没有 `slot` 字段——这里不需要它。
+    """
+    from .consumers import verdict_store
+    out: dict[tuple[int, int], int] = {}
+    try:
+        items = verdict_store().list(SLOT_COUNT_SHARD, legacy=False)
+    except Exception:
+        return out
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book:
+            continue
+        page, col = it.anchor.page, it.anchor.col
+        if page is None or col is None:
+            continue
+        n = it.expected.get("n_slots")
+        if isinstance(n, int) and n > 0:
+            out[(page, col)] = n
+    return out
+
+
 def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     """已裁决、可收敛的切点：`(page, col, slot_above) → ResolvedCut`。判据见 `_resolve`。
 

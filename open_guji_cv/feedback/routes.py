@@ -59,6 +59,13 @@ DEFAULT_ROUTES: list[dict] = [
     # （页 vs 列），塞一个分片里 eval 口径会打架。
     {"match": {"kind": "head_raise"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/head-raise-columns"}]},
+    # 逐列字数人裁（2026-09-18，`review/slot_count_cards.py`）：`chars_per_line`
+    # 页级常量在个别列不成立（比如实际比常量多一个字）时的兜底。同 cutline 一条
+    # 双消费者：落金标 + 该页 Step3 显式失效，下次重跑 `feedback/lookup.resolved_slots()`
+    # 读回来覆盖 `effective_body_slots` 算出的格数。
+    {"match": {"kind": "n_body_slots"},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-slots"},
+            {"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，

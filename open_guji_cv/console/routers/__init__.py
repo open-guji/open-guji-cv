@@ -16,6 +16,8 @@
 | `review.py` | 3 | 定字待审卡、裁决回读、一列的上下文 |
 | `cutline.py` | 2 | 拖切线用例与裁决回读 |
 | `border_review.py` | 3 | Step1 列探测/抬头/外框外延、Step2 上下版框核校的卡片与图（原 artifact 迁入，2026-09-11） |
+| `column_review.py` | 4 | Step2 列清理人裁：左右文字带 + 上下端部类别（2026-09-17） |
+| `slot_count_review.py` | 3 | Step3 逐列字数人裁：`chars_per_line` 常量在个别列不成立时的兜底（2026-09-18） |
 | `jiazhu.py` | 1 | 夹注段卡 |
 | `rare.py` | 2 | 生僻字单查与批量 |
 | `glyph_match.py` | 3 | Step5-a 字形库匹配单查、候选缩略图、档位分布聚合（2026-09-11） |
