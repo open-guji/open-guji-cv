@@ -55,7 +55,10 @@ function Step7PageInner({ book }: { book: string }) {
           </span>
         </div>
       ) : null}
-      overview={<CellLookupPanel book={book} />}
+      // Step7 没有页级产物台（定字是 cell 粒度），板块④用「按坐标」那一种：
+      // 点名要看某一格时直接调出它的卡。只读不裁——裁决仍在上面的裁决台里做，
+      // 两处都能提交的话批次归属/touched/已裁去重要各维护一套（计划书 §1.5）。
+      product={<CellLookupPanel book={book} />}
       reviews={[
         { id: 'cutline', label: '切分裁决',
           node: <BlockingCutlinePanel book={book} pages={pageSel}

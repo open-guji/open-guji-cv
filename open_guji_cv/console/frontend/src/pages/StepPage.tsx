@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useWsPath } from '../hooks/useWsPath'
+import { useParams } from 'react-router-dom'
 import { backendIdFor, findStep } from '../steps'
 import { fetchStatus } from '../api/status'
 import { getBook } from '../api/registry'
 import { ProductViewer } from '../components/ProductViewer'
+import { StepStatusSummary } from '../components/common/StepStatusSummary'
 import type { StatusResponse } from '../types/status'
 import type { Book } from '../types/registry'
 
@@ -13,7 +13,6 @@ import type { Book } from '../types/registry'
 // 不重新设计这几步的可视化——那是本轮范围外的事，这里只做到"看得到这一步
 // 现在跑得怎么样、看得到产物、能跳回总览细看"。
 export function StepPage() {
-  const wsPath = useWsPath()
   const { book = '', step } = useParams()
   const meta = step ? findStep(step) : undefined
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -47,19 +46,7 @@ export function StepPage() {
           {book} · 这一步的具体面板还没有搬进来（v2 骨架阶段）。
           {backendId && <> 对应后端 Step：{backendId}。</>}
         </p>
-        {stepStatus && (
-          <div className="muted step-status-summary">
-            状态矩阵里这一步：
-            <span className="counts">
-              <span className="s-fresh">✓{stepStatus.counts.fresh}</span>
-              <span className="s-stale">~{stepStatus.counts.stale}</span>
-              <span className="s-missing">·{stepStatus.counts.missing}</span>
-              <span className="s-failed">✗{stepStatus.counts.failed}</span>
-              <span className="s-blocked">⊘{stepStatus.counts.blocked}</span>
-            </span>
-            <Link to={wsPath(`/${book}/`)}>回总览看逐页详情</Link>
-          </div>
-        )}
+        <StepStatusSummary book={book} status={stepStatus} />
       </div>
       {backendId && <ProductViewer book={book} step={backendId} pages={pages} />}
     </div>
