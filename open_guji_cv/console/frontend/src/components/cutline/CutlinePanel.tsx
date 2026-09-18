@@ -44,8 +44,13 @@ function defaultPick(c: CutlineCase): number {
   return best >= 0 ? best : (c.chosen ?? 0)
 }
 
-export function CutlinePanel({ book }: { book: string }) {
-  const [pages, setPages] = usePersistedPages('cutline', book, 'body')
+export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?: string }) {
+  // `pages` 由页面（StepLayout 的板块①）传下来时以它为准；不传则退回
+  // 面板自己记的那份。此前只有后者，于是 Step3 的切线台与 Step7 的阻塞
+  // 切线台圈的是不同批页，看起来「两个台不重合」（计划书 §1.2 实测）。
+  const [ownPages, setOwnPages] = usePersistedPages('cutline', book, 'body')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
   const [limit, setLimit] = useState(30)          // 一屏能裁完的量；大批量再手改（2026-09-15 用户定）
   const [batchInput, setBatchInput] = useState('')
