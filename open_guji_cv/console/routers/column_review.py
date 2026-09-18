@@ -21,7 +21,7 @@ import random
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from ...core.book import load_book
 from ...core.spec import column_key, page_key
@@ -129,6 +129,73 @@ def api_column_review_verdicts(batch: str) -> dict:
     except FileNotFoundError:
         pass                                    # 批次还不存在 = 没裁过
     return {"verdicts": out}
+
+
+@router.get("/api/column-review/img/{book}/{page}/{col}.png")
+def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
+                          mark: bool = True, end: str = "all", pad: int = 90) -> Response:
+    """列图 + **把算法的线画上去**。人裁时看不到线就没法判「削到哪了对不对」。
+
+    `src`：`bin`（缺省）用 **Sauvola k=0.10** 二值化后再画线——与字形库、定字审阅
+    同一把尺子（用户 2026-09-16 定：进库的一定是二值的，审阅看二值的也更准）。
+    Step2 内部的判据仍是固定阈 `<128`，两者在本书上差 15%~38% 的墨量，这正是
+    要让人看二值图的理由：人判的和机器判的得是同一张图，否则裁决对不上号。
+    `raw` 给原灰度，对照用。
+
+    线（都按列图局部坐标画）：
+      红 —— 文字带左右边界 `band`（Step2 已有的左右 padding）
+      绿 —— 上端削到的行 `trim_top.px`
+      蓝 —— 下端削到的行（从底往上量 `trim_bottom.px`）
+    `end`：`top`/`bottom` 只出该端 `pad` 行的放大图，`all` 出整列。
+    """
+    import cv2
+    import numpy as np
+
+    from ...utils.binarized import binarize_page
+    from ...utils.column_projection import column_text_band, denoise_column
+
+    p = deps.image_cache().get(book, "column_raw", column_key(page, col))
+    if p is None:
+        raise HTTPException(404, "没有这一列的矫正图（先跑 Step2）")
+    g = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if g is None:
+        raise HTTPException(404, "列图读不出来")
+    shown = binarize_page(g) if src == "bin" else g
+    im = cv2.cvtColor(shown, cv2.COLOR_GRAY2BGR)
+    h, w = im.shape[:2]
+
+    if mark:
+        st = deps.product_store()
+        lo = hi = None
+        tpx = bpx = 0
+        try:
+            wins = st.read(book, "column_warp", page_key(page), "column_windows")
+            rec = next((x for x in wins.columns if x.col == col), None)
+            if rec is not None:
+                lo, hi = int(rec.band[0]), int(rec.band[1])
+                tpx, bpx = int(rec.trim_top.px), int(rec.trim_bottom.px)
+        except Exception:                                    # noqa: BLE001
+            pass
+        if lo is None:                                       # 没产物就现算，别让人看空图
+            lo, hi = column_text_band(denoise_column(g))
+        for x in (lo, hi - 1):
+            if 0 <= x < w:
+                cv2.line(im, (x, 0), (x, h - 1), (0, 0, 220), 1)
+        if tpx:
+            cv2.line(im, (0, tpx), (w - 1, tpx), (0, 170, 0), 1)
+        if bpx:
+            y = h - 1 - bpx
+            if 0 <= y < h:
+                cv2.line(im, (0, y), (w - 1, y), (220, 120, 0), 1)
+
+    if end == "top":
+        im = im[:min(pad, h)]
+    elif end == "bottom":
+        im = im[max(0, h - pad):]
+    ok, buf = cv2.imencode(".png", im)
+    if not ok:
+        raise HTTPException(500, "编码失败")
+    return Response(content=buf.tobytes(), media_type="image/png")
 
 
 @router.get("/api/column-review/profile/{book}/{page}/{col}")

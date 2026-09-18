@@ -9,8 +9,8 @@
 .colrev-strips { display: flex; gap: .8rem; align-items: flex-start; }
 .colrev-strips figure { margin: 0; text-align: center; }
 .colrev-strips figcaption { font-size: .8em; color: #666; margin-top: .2rem; }
-.colrev-strips .clip { overflow: hidden; border: 1px solid #ccc; background: #fff; }
-.colrev-strips .clip img { display: block; }
+.colrev-strips img.zoom { display: block; border: 1px solid #ccc; background: #fff;
+  image-rendering: pixelated; transform-origin: top left; width: 260px; }
 .colrev-strips .whole img { border: 1px solid #ccc; background: #fff; }
 .colrev-forms { display: flex; flex-direction: column; gap: .6rem; min-width: 16rem; }
 .colrev-forms fieldset { border: 1px solid #ddd; border-radius: 4px; padding: .4rem .6rem; }
