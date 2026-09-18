@@ -18,11 +18,16 @@ const STEP_OF: Record<BorderReviewKind, string> = {
   cols: 'border_detect', head: 'border_detect', outer: 'border_detect', colborder: 'column_warp',
 }
 
-export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderReviewKind }) {
+export function BorderReviewPanel({ book, kind, pages: pagesProp }:
+                                  { book: string; kind: BorderReviewKind; pages?: string }) {
   const spec = BORDER_REVIEW_SPECS[kind]
   // id 带 kind：这一个组件被 cols/head/outer/colborder 四个 tab 复用，
   // 页范围各自记各自的，不共享（用户 2026-09-12 定）。
-  const [pages, setPages] = usePersistedPages(`border-review-${kind}`, book, 'dev_set')
+  // 2026-09-18：页面（StepLayout 板块①）传了 `pages` 就以它为准——页范围
+  // 唯一源（计划书 §1.2）；不传仍退回各 tab 自己那份，非 Step 页面照用。
+  const [ownPages, setOwnPages] = usePersistedPages(`border-review-${kind}`, book, 'dev_set')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cards, setCards] = useState<BorderReviewCard[]>([])

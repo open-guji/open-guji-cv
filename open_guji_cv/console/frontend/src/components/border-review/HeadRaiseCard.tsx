@@ -13,7 +13,7 @@ import { HeadRaisePanel } from './HeadRaisePanel'
 
 type Level = 'head' | 'headcol'
 
-export function HeadRaiseCard({ book }: { book: string }) {
+export function HeadRaiseCard({ book, pages }: { book: string; pages?: string }) {
   const [level, setLevel] = useState<Level>('headcol')
   return (
     <>
@@ -30,7 +30,8 @@ export function HeadRaiseCard({ book }: { book: string }) {
           <button aria-pressed={level === 'headcol'} onClick={() => setLevel('headcol')}>列级抬头精标</button>
         </div>
       </div>
-      {level === 'head' ? <BorderReviewPanel book={book} kind="head" /> : <HeadRaisePanel book={book} />}
+      {level === 'head' ? <BorderReviewPanel book={book} kind="head" pages={pages} />
+                        : <HeadRaisePanel book={book} pages={pages} />}
     </>
   )
 }

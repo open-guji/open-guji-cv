@@ -4,7 +4,8 @@ import { fetchRulers } from '../api/evals'
 import { CutlinePanel } from '../components/cutline/CutlinePanel'
 import { HeadRaiseCard } from '../components/border-review/HeadRaiseCard'
 import { SlotCountPanel } from '../components/slot-count/SlotCountPanel'
-import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { StepLayout, type StepLayoutReviewTab } from '../components/common/StepLayout'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import type { CustomMetric } from '../components/common/ProgressGatePanel'
 import { JiazhuPanel } from '../components/jiazhu/JiazhuPanel'
@@ -81,35 +82,41 @@ export function Step3Page() {
       return { label: `${r.key} ${r.title}`, value: v, tone: good === null ? undefined : (good ? 'ok' : 'bad') }
     })
 
+  // 四个裁决台各按各的能力判，不再一刀切按版式名（见 src/capabilities.ts）：
+  // 拖切线量的是「格线穿字」——只有固定格数的格位切分才有这回事；抬头是刻本的
+  // 版式特征；夹注指双行小注切分。三个接口在现代排印本上实测都回 0 条。
+  const reviews: StepLayoutReviewTab[] = []
+  if (caps.hasGridCells) {
+    reviews.push({ id: 'cutline', label: '拖切线', node: <CutlinePanel book={book} pages={pageSel} /> })
+    reviews.push({ id: 'slotcount', label: '逐列字数', node: <SlotCountPanel book={book} pages={pageSel} /> })
+  }
+  if (caps.hasHeadRaise) reviews.push({ id: 'head', label: '抬头标注', node: <HeadRaiseCard book={book} pages={pageSel} /> })
+  if (caps.hasJiazhu) reviews.push({ id: 'jiazhu', label: '夹注', node: <JiazhuPanel book={book} pages={pageSel} /> })
+
   return (
-    <div>
-      {deep.active && (
+    <StepLayout
+      book={book} stepId={STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      banner={deep.active ? (
         <div className="card" style={{ borderLeft: '3px solid #7a5c2e' }}>
           从对勘报告跳转而来：<b>p{deep.page}</b>
           {deep.col !== null && <> · 第 {deep.col} 列</>}
           <span className="muted" style={{ marginLeft: '.6rem' }}>
-            整理本在这一列比我们多字（漏切）——在下面「切线」里看这一列的切分
+            整理本在这一列比我们多字（漏切）——在下面「拖切线」里看这一列的切分
           </span>
         </div>
-      )}
-      <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
-      <ProgressGatePanel
-        book={book}
-        title="总览"
-        gateId={caps.hasStep3Gate ? 'row_segment_gate' : undefined}
-        pages={pageSel}
-        customMetrics={caps.hasStep3Gate ? customMetrics : []}
-        typeBreakdown={caps.hasStep3Gate ? undefined : modernCounts}
-      />
-      {/* 三块各按各的能力判，不再一刀切按版式名（见 src/capabilities.ts）：
-          拖切线量的是「格线穿字」——只有固定格数的格位切分才有这回事；
-          抬头是刻本的版式特征；夹注指双行小注切分。三个接口在现代排印本上
-          实测都回 0 条。 */}
-      {caps.hasGridCells && <CutlinePanel book={book} />}
-      {caps.hasGridCells && <SlotCountPanel book={book} />}
-      {caps.hasHeadRaise && <HeadRaiseCard book={book} />}
-      {caps.hasJiazhu && <JiazhuPanel book={book} />}
-      <ProductViewer book={book} step={step3Id} pages={pages} />
-    </div>
+      ) : null}
+      overview={
+        <ProgressGatePanel
+          book={book}
+          title="总览"
+          gateId={caps.hasStep3Gate ? 'row_segment_gate' : undefined}
+          pages={pageSel}
+          customMetrics={caps.hasStep3Gate ? customMetrics : []}
+          typeBreakdown={caps.hasStep3Gate ? undefined : modernCounts}
+        />
+      }
+      reviews={reviews}
+      product={<ProductViewer book={book} step={step3Id} pages={pages} />}
+    />
   )
 }

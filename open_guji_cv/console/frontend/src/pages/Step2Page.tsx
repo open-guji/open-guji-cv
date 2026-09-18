@@ -2,7 +2,8 @@ import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { ProductViewer } from '../components/ProductViewer'
 import { ColumnReviewPanel } from '../components/column-review/ColumnReviewPanel'
-import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { StepLayout } from '../components/common/StepLayout'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { usePages } from '../hooks/usePages'
 import { backendIdFor, findStep } from '../steps'
@@ -36,15 +37,16 @@ export function Step2Page() {
   const step2Id = backendIdFor(findStep('step2'), bookMeta?.edition) ?? 'column_warp'
 
   return (
-    <div>
-      <PageRangeSelector book={book} stepId={STEP_ID} value={pageSel} onChange={setPageSel} />
-      <ProgressGatePanel book={book} title="总览" gateId="column_gate" pages={pageSel} />
-      <ColumnReviewPanel book={book} pages={pageSel} />
-      {/* 列窗口产物分链：刻本 column_warp / 现代 column_crop。原来这里看的是
-          column_gate（闸的判定），看不到列窗口本身；但也不该并排摆两个产物台
-          （2026-09-15 用户反馈「有两个重复的产物台」）——闸的判定在上面那张
-          总览卡里已经有了，这里只留列窗口。 */}
-      <ProductViewer book={book} step={step2Id} pages={pages} />
-    </div>
+    <StepLayout
+      book={book} stepId={STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      overview={<ProgressGatePanel book={book} title="总览" gateId="column_gate" pages={pageSel} />}
+      reviews={[{ id: 'column', label: '列清理裁决',
+                  node: <ColumnReviewPanel book={book} pages={pageSel} /> }]}
+      // 产物台：列窗口产物分链（刻本 column_warp / 现代 column_crop）。这里
+      // 曾经看的是 column_gate（闸的判定）而非列窗口本身；也不该并排摆两个
+      // 产物台（2026-09-15 用户反馈「有两个重复的产物台」）——闸的判定在
+      // 上面那张总览卡里已经有了，这里只留列窗口。
+      product={<ProductViewer book={book} step={step2Id} pages={pages} />}
+    />
   )
 }

@@ -23,8 +23,14 @@ const DEFECT_OPTIONS = [
 
 interface DefectChoice { key: string; quality: string; note: string }
 
-export function JiazhuPanel({ book }: { book: string }) {
-  const [pages, setPages] = usePersistedPages('jiazhu', book, 'jz')
+export function JiazhuPanel({ book, pages: pagesProp }: { book: string; pages?: string }) {
+  // `pages` 由页面（StepLayout 的板块①）传下来时以它为准；不传则退回
+  // 面板自己记的那份。此前只有后者，于是 Step3 的切线台与 Step7 的阻塞
+  // 切线台圈的是不同批页，看起来「两个台不重合」——而机制上
+  // blocking ⊆ all 恒成立（计划书 §1.2 实测）。
+  const [ownPages, setOwnPages] = usePersistedPages('jiazhu', book, 'jz')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [only, setOnly] = useState<'all' | 'review' | 'auto'>('all')
   const [batchInput, setBatchInput] = useState('')
   const [segs, setSegs] = useState<JiazhuSegment[]>([])
