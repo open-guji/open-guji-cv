@@ -59,7 +59,8 @@ def cmd_pipeline(args) -> None:
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
-    rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error)
+    rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
+                  jobs=getattr(args, "jobs", 1))
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
     n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
@@ -1004,12 +1005,19 @@ COMMANDS_V2 = {
 
 # ── parsers ──────────────────────────────────────────────────────────
 def _add_pages(p: argparse.ArgumentParser) -> None:
+    import os
     p.add_argument("--pages", default="dev_set",
                    help="dev_set（默认）| all | 3-6,9 之类的页号表达式")
     p.add_argument("--force", action="store_true", help="无视指纹，强制重跑")
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
+    p.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                   help="页级并行进程数（默认=本机 CPU 数）。只对声明过 "
+                        "`StepSpec.parallel_safe=True` 的 Step 生效，其余 Step 仍串行，"
+                        "混跑一条 pipeline 时不用分开调。别超过 CPU 数——超订只会更慢，"
+                        "有一次性初始化（模型/字形库）的 Step 并行时这部分开销按进程数摊，"
+                        "不是按页摊，进程数越多单个 worker 越快建好摊得越薄，但仍不该超核数")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"

@@ -40,6 +40,9 @@ class LineDetectStep(Step):
         id="line_detect", title="Step1 行探测（现代印刷）", version="1.0", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=LineDetectParams,
         code_deps=("open_guji_cv.utils.line_layout",),
+        # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
+        # 与 border_detect 同构（同一批 sha256 三方验证方法核对过）。
+        parallel_safe=True,
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
