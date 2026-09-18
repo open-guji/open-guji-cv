@@ -66,7 +66,21 @@ def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
             wins = st.read(book, "column_warp", page_key(pg), "column_windows")
         except Exception:                                    # noqa: BLE001
             continue
+        # 版心列（书口）不出卡（用户 2026-09-17 实测反馈「bxgb:28:10 是版心列，
+        # 不用处理」）：那一列印的是书名/叶次/丛书名这类小字，不是正文，列清理
+        # 的判据（文字带、上下框与首末字的间隙）对它没有意义。
+        # `line_index` 已经把它标成 `margin`——Step1 按位置判定（版心是跨版框
+        # 中点的那一列，见 project_keben_column_types），这里直接用，不重判。
+        skip_cols: set[int] = set()
+        try:
+            li = st.read(book, "border_detect", page_key(pg), "line_index")
+            skip_cols = {i for i, ln in enumerate(li.lines, 1)
+                         if getattr(ln, "kind", "body") != "body"}
+        except Exception:                                    # noqa: BLE001
+            pass                                             # 没有 line_index 就不排除
         for w in wins.columns:
+            if w.col in skip_cols:
+                continue
             t = w.triage.model_dump() if w.triage else None
             if t is None:
                 continue
