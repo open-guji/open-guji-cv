@@ -108,10 +108,16 @@ def test_fixed_by_image_when_three_sources_agree():
 
 
 def test_gap_below_threshold_stays_open_even_when_sources_agree():
-    """三源一致但差距不够 → 仍落人审。守住 FORM_EMB_GAP 这道闸本身。"""
+    """三源一致但差距不够 → 仍落人审。守住 FORM_EMB_GAP 这道闸本身。
+
+    夹具的差距**跟着阈值走**（2026-09-17 r5 上线，阈值 0.12 → 0.03，
+    差距从 0.07 降到 0.02）：这个测试要守的是「闸存在」，不是某个具体差值。
+    写死 0.07 会在阈值下调后变成「0.07 > 0.03 该放行」而误报失败。
+    """
+    gap = vf.FORM_EMB_GAP / 1.5                        # 明确低于阈值，随阈值缩放
     ranks = {"hog": [("髪", 0.81), ("髮", 0.78)],
              "cls": [("髪", 0.7), ("髮", 0.3)],
-             "emb": [("髪", 0.91), ("髮", 0.84)]}       # 差 0.07 < 0.12
+             "emb": [("髪", 0.91), ("髮", 0.91 - gap)]}
     d = vf.decide_form("髮", ["髪", "髮"], [], _ledger(), ranks)
     assert d.state == "open" and d.evidence["agree"] is True
 

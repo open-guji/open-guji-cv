@@ -65,6 +65,15 @@ class RareCandidatesStep(Step):
         code_deps=("open_guji_cv.clustering.rare_panel",
                    "open_guji_cv.clustering.cnn_candidates",
                    "open_guji_cv.clustering.font_candidates"),
+        # `run_page` → `rare_for_batch` 读的是 `ctx.book.font`（`charset` 的
+        # base/escalate/escalate_threshold/corpus/variants/allow，以及 `norm_stroke`），
+        # 这些全都改变候选内容与排序，必须进指纹。
+        #
+        # 2026-09-17 踩到：把本册 `escalate_threshold` 从 0.85 改 0.95（换 r5 后
+        # 重标，见 `books/bxgb.yaml` 那段注释）再跑，54 页**全部报「新鲜，跳过」**
+        # ——阈值不在指纹里，产物于是停在旧阈值上，而状态显示一切正常。
+        # 这类静默失效最贵：数字看着对，其实量的是旧配置。
+        book_deps=("font",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

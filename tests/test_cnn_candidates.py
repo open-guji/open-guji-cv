@@ -92,6 +92,19 @@ def test_cnn_topk_contract():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
 
 
+#: 批处理 vs 逐次的分数容差。**只放宽分数，字与名次照旧严格比**。
+#:
+#: 1e-4 在 r4 上够（实测最大 6.4e-05），换 r5 后超了（3.3e-04）：
+#: 权重变了，GPU 上批处理的累加顺序差异被放大一个量级。同一份图跑三次
+#: 分差完全相同——是确定性的求和顺序偏差，不是随机噪声。
+#: 按设备拆：cuda 3.3e-04、cpu 2.4e-07，确认来源是 GPU 批处理。
+#:
+#: 与 `tests/test_console_routes.py` 的 `_SCORE_TOL = 5e-4` 同一类问题、同一个值。
+#: ⚠️ 别用「round 到更少位数再比」那招——噪声骑在进位边界上照样不等
+#: （那边 2026-09-15 栽过），要吃掉噪声只能比差值。
+_BATCH_SCORE_TOL = 5e-4
+
+
 @needs_cnn
 def test_topk_batch_matches_sequential():
     """`topk_batch` 必须与逐次调用 `topk` 位级相同（2026-09-10 生僻字候选
@@ -104,12 +117,12 @@ def test_topk_batch_matches_sequential():
     qs[2][30:50, 20:60] = 1
     seq = [c.topk(q, cs, k=4) for q in qs]
     batch = c.topk_batch(qs, cs, k=4)
-    # 批处理与逐次调用的矩阵运算求和顺序不同，允许浮点噪声（1e-4 量级），
+    # 批处理与逐次调用的矩阵运算求和顺序不同，允许浮点噪声，
     # 但字符与排名必须完全一致。
     for s, b in zip(seq, batch):
         assert [ch for ch, _ in s] == [ch for ch, _ in b]
         for (_, ps), (_, pb) in zip(s, b):
-            assert abs(ps - pb) < 1e-4
+            assert abs(ps - pb) < _BATCH_SCORE_TOL
 
 
 @needs_cnn
@@ -126,7 +139,7 @@ def test_emb_topk_batch_matches_sequential():
     for s, b in zip(seq, batch):
         assert [ch for ch, _ in s] == [ch for ch, _ in b]
         for (_, ps), (_, pb) in zip(s, b):
-            assert abs(ps - pb) < 1e-4
+            assert abs(ps - pb) < _BATCH_SCORE_TOL
 
 
 @needs_cnn

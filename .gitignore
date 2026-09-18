@@ -121,3 +121,5 @@ output/review_*.html
 
 # 粘连切点实验（experiments/touch_resolve/）的产出：图与 json 可由脚本重算，不入库
 experiments/touch_resolve/out/
+# 度量损失实验（experiments/metric_loss/）的产出：checkpoint 与日志可重算，不入库
+experiments/metric_loss/out/
