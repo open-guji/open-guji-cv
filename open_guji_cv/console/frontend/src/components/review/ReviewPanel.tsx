@@ -30,16 +30,23 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 一次拉 400 张人看不过来，滚到后面也累得裁不准了。大批量再手改。
   const [limit, setLimit] = useState(30)
   const [batchInput, setBatchInput] = useState('')
-  const [todoOnly, setTodoOnly] = useState(false)
+  // 「含已裁决」（用户 2026-09-16）：默认关 = 后端只出全书从未裁过的字位，
+  // 于是「条数」数的是**净新卡**。以前是「载入 N 张，再在前端把已裁的隐藏掉」，
+  // 每次都从第一页重数——实测 bxgb 载入 30 张里 30 张全是裁过的，净新卡为 0。
+  const [inclDecided, setInclDecided] = useState(false)
   const [gate, setGate] = useState(true)
   const [cards, setCards] = useState<ReviewCard[]>([])
   const [cur, setCur] = useState(0)
   const [msg, setMsg] = useState('')
   const [gateNote, setGateNote] = useState<{ n: number } | null>(null)
+  const [nDecided, setNDecided] = useState(0)   // 全书累计已裁字位数（后端跨批次去重后给的）
   const [, forceRender] = useState(0)
   const bump = () => forceRender((n) => n + 1)
 
   const verdicts = useRef<Record<string, Verdict>>({})
+  // 本轮人**真正动过**的字位。`verdicts.current` 里还混着从服务端读回的历史裁决，
+  // 提交时若不区分，就会把没改的也重写一遍（见 `submit` 里的注释）。
+  const touched = useRef<Set<string>>(new Set())
   const seen = useRef<Record<string, number>>({})
   const rare = useRef<Record<string, RareCandidate[]>>({})
   const rareFly = useRef<Set<string>>(new Set())
@@ -59,7 +66,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   async function load(scrollOnLoad = true) {
     setMsg('载入中…')
     const b = batch()
-    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30)
+    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30, !inclDecided)
     let done: Record<string, Verdict> = {}
     try {
       done = (await fetchReviewVerdicts(b)).verdicts || {}
@@ -67,6 +74,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 批次还不存在就是没裁过
     }
     verdicts.current = { ...done, ...verdicts.current }
+    // 注意**不清** `touched`：静默刷新（切线联动 reloadSignal）会走到这里，
+    // 而此时人可能已裁了几张还没提交，清掉就等于把这几张的裁决静默丢了。
+    // 已提交的在 `submit` 里逐条移除，留在这里的都是真·未落盘。
     rare.current = {}
     rareFly.current = new Set()
     snapshot.current = null
@@ -76,7 +86,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     d.cards.forEach((c) => { if (!seen.current[c.id]) seen.current[c.id] = t0 })
     const nb = (d.blocked || []).length
     setGateNote(nb ? { n: nb } : null)
-    filterMsg(d.cards)
+    const nDec = d.n_decided || 0
+    setNDecided(nDec)
+    filterMsg(d.cards, nDec)
     focus(0, d.cards, scrollOnLoad)
 
     fetchAroundBatch(book, 10, 10, d.cards.map((c) => ({ page: c.page, col: c.col, slot: c.slot })))
@@ -84,23 +96,24 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       .catch(() => {})
   }
 
-  function filterMsg(list: ReviewCard[]) {
-    const todo = todoOnly
-    if (todo && !snapshot.current) {
-      snapshot.current = new Set(list.filter((c) => !(verdicts.current[c.id] && verdicts.current[c.id].done)).map((c) => c.id))
-    }
-    if (!todo) snapshot.current = null
+  // `nDec` 显式传入，不走 state：`load()` 里 setState 还没生效，闭包读到的是上一轮的值。
+  function filterMsg(list: ReviewCard[], nDec = nDecided) {
     const n = list.length
     const st = (c: ReviewCard) => verdicts.current[c.id]?.done
+    // 「已裁」= 本轮在这一屏里刚裁的。已裁过的卡默认压根不载入（后端 skip_decided），
+    // 所以这个数从 0 涨到 n 就是本屏的进度条；`nDecided` 是全书累计，另计。
     const nDone = list.filter((c) => st(c) && st(c) !== 'need_reading').length
     const nNeed = list.filter((c) => st(c) === 'need_reading').length
-    const shown = todo && snapshot.current ? list.filter((c) => snapshot.current!.has(c.id)).length : n
-    setMsg(`${n} 张 · 已裁 ${nDone}` + (nNeed ? ` · 待填文意 ${nNeed}` : '') + (todo ? ` · 本轮待裁 ${shown}` : ''))
+    setMsg(`${n} 张 · 已裁 ${nDone}`
+      + (nNeed ? ` · 待填文意 ${nNeed}` : '')
+      + (nDec ? ` · 全书已裁 ${nDec}${inclDecided ? '（含在本屏）' : '，已跳过'}` : ''))
     bump()
   }
 
-  function isHidden(c: ReviewCard): boolean {
-    return !!(todoOnly && snapshot.current && !snapshot.current.has(c.id))
+  // 卡片一律显示：该不出的在后端就没出。（旧版这里按 snapshot 在前端隐藏，
+  // 是「先载入再藏」那套机制的残留，已随 skip_decided 废止。）
+  function isHidden(_c: ReviewCard): boolean {
+    return false
   }
 
   function focus(i: number, list?: ReviewCard[], scroll = true) {
@@ -168,6 +181,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       shape, reading: needsReading(shape) ? rd : (rd || shape),
       done: mark, ts: now, dwell, noGlyphLib: prevNoGlyphLib,
     }
+    touched.current.add(c.id)
     bump()
   }
 
@@ -176,6 +190,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     if (!c) return
     const v = verdicts.current[c.id] || { shape: '', reading: '', done: '' }
     verdicts.current[c.id] = { ...v, noGlyphLib: checked }
+    touched.current.add(c.id)
     bump()
   }
 
@@ -206,6 +221,13 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     for (const [id, v] of Object.entries(verdicts.current)) {
       if (v.done === 'need_reading') { pending++; continue }
       if (!v.done) continue
+      // 只发**本轮真正动过的**（用户 2026-09-16「反复 confirm 要合并，只记后面的」）。
+      // `verdicts.current` 里混着 `load()` 从服务端读回的历史裁决（`{...done, ...current}`），
+      // 以前整个 Object.entries 一股脑提交，于是每点一次「提交裁决」就把全部历史
+      // 原样重写一遍——实测 bxgb 1620 条 confirm 只覆盖 312 个字位，批次之间完全
+      // 包含，`bxgb:3:1:19` 累计写了 13 次。重放语义（后到覆盖）一直是对的，
+      // 错的是**每次都把没改的也写进去**。`touched` 由裁决动作登记，见 `mark()`。
+      if (!touched.current.has(id)) continue
       if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue }
       if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue }
       if (v.done === 'truncated' || v.done === 'contaminated') {
@@ -229,6 +251,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     setMsg('提交中…')
     try {
       const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
+      // 已落盘的不再算「动过」——否则下次提交又把它们重写一遍，重复照旧。
+      // 只清本次提交的这批：提交是 await 的，其间人可能已经裁了新卡。
+      for (const row of rows) touched.current.delete(row.id as string)
       setMsg(`已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r))
       onSubmitted()
     } catch (e) {
@@ -294,7 +319,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
           条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} />
         </label>
         <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册页自动命名" /></label>
-        <label className="muted"><input type="checkbox" checked={todoOnly} onChange={(e) => { setTodoOnly(e.target.checked); snapshot.current = null; filterMsg(cards) }} /> 只看未裁决</label>
+        <label className="muted" title="默认只出全书从未裁过的字位（跨批次去重），所以「条数」数的是净新卡。勾上则把已裁过的也一并载入——复核自己裁过的、或想改主意时用。">
+          <input type="checkbox" checked={inclDecided} onChange={(e) => setInclDecided(e.target.checked)} /> 含已裁决
+        </label>
         <label className="muted" title="顺序闸：字位旁边那条切分线有多种切法且还没 review 时，这个字位先不出卡。取消勾选可整批看全部。">
           <input type="checkbox" checked={gate} onChange={(e) => setGate(e.target.checked)} /> 先切线后字符
         </label>

@@ -13,6 +13,44 @@ from __future__ import annotations
 from ..feedback.events import EventLog
 
 
+#: 算「这个字位已经裁过了」的动作。`relabel`（改判字）也算——人已经对它表过态。
+#: `cutline` 不在此列：那是切线裁决，`unit` 是 boundary，key 形状却与字位一样
+#: （`bxgb:39:19:12`），只按 key 去重会把没裁过的字位误当已裁。必须按 kind 过滤。
+DECIDED_KINDS = frozenset({"confirm", "not_a_char", "skip", "seg_defect", "relabel"})
+
+
+def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
+    """这本书**所有批次**里已经裁过的字位 id。
+
+    给定字审查的载入用（用户 2026-09-16）：以前后端不看事件、只按页序数满
+    `limit` 就返回，前端再把已裁的隐藏掉——于是每次载入都从第一页重数，稳定
+    地把上轮裁过的那批又端出来，真正的新卡只剩零星几张。
+
+    **必须跨批次**。实测（bxgb，2026-09-16）：四个批次的已裁字位是完全包含关系，
+    `1-30` 的 76 个字位在其余三批里各被重裁了一遍，`bxgb:3:1:19` 累计裁了 13 次，
+    1620 条 confirm 事件只覆盖 312 个不同字位。只按当前批次去重救不了这个——
+    换个 pages 范围批次名就变了，老裁决全部不算数。
+
+    按 key 前缀认书：事件的 `target.book` 实测多为 None（写入方没填），而 key
+    形如 `<book>:<页>:<列>:<格>`，前缀是可靠的。
+    """
+    out: set[str] = set()
+    pre = f"{book}:"
+    try:
+        evs = (log or EventLog()).iter_all()
+    except FileNotFoundError:
+        return out     # 新工作区还没有事件目录
+    for e in evs:
+        if e.kind not in DECIDED_KINDS:
+            continue
+        if e.target.unit != "cell":
+            continue
+        k = e.target.key
+        if k.startswith(pre):
+            out.add(k)
+    return out
+
+
 def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
 

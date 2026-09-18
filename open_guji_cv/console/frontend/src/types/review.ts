@@ -47,6 +47,8 @@ export interface ReviewCard {
 export interface ReviewCardsResponse {
   cards: ReviewCard[]
   blocked?: unknown[]
+  /** 全书所有批次已裁过的字位数（后端跨批次去重）。skip_decided 开时这些卡已被跳过。 */
+  n_decided?: number
 }
 
 export interface ReviewVerdict {

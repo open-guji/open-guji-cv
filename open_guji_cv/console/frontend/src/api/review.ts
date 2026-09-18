@@ -3,9 +3,11 @@ import type {
   AroundContext, RareCandidate, ReviewCardsResponse, ReviewVerdictsResponse,
 } from '../types/review'
 
-export function fetchReviewCards(book: string, pages: string, only: string, gateCut: boolean, limit = 400) {
+// `skipDecided`：跳过全书所有批次已裁过的字位（默认开），于是 `limit` 数的是净新卡。
+export function fetchReviewCards(book: string, pages: string, only: string, gateCut: boolean,
+                                 limit = 400, skipDecided = true) {
   const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
-    + `&only=${only}&gate_cut=${gateCut}&limit=${limit}`
+    + `&only=${only}&gate_cut=${gateCut}&limit=${limit}&skip_decided=${skipDecided}`
   return api<ReviewCardsResponse>(`/api/review/cards?${qs}`)
 }
 
