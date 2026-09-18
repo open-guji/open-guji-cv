@@ -57,6 +57,8 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
   const [scope, setScope] = useState<'all' | 'blocking' | 'review'>('blocking')
   const [limit, setLimit] = useState(30)
   const [imgSrc, setImgSrc] = useState<'bin' | 'raw'>('bin')
+  const [jumpPage, setJumpPage] = useState('')
+  const [jumpCol, setJumpCol] = useState('')
   const [cases, setCases] = useState<Case[]>([])
   const [msg, setMsg] = useState('')
   const [cur, setCur] = useState(0)
@@ -87,6 +89,30 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
       setMsg(`${d.cases.length} 列（全书 拦 ${d.counts.blocking} / 复审 ${d.counts.review} / 干净 ${d.counts.clean}）`)
     } catch (e) {
       setMsg(`载入失败：${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // 直达某页某列（用户 2026-09-17：「既要可以按分诊抽样出卡，也要可以直接输入
+  // 33/16 跳到指定列」）。列号留空＝整页所有列，按列号排序——查「同一页逐列
+  // 切线齐不齐」时抽样卡永远凑不齐一页。
+  async function jump() {
+    const pg = parseInt(jumpPage, 10)
+    if (!Number.isFinite(pg)) { setMsg('页码填个数字'); return }
+    const cl = parseInt(jumpCol, 10)
+    setMsg('载入中…')
+    try {
+      const qs = `book=${encodeURIComponent(book)}&page=${pg}`
+        + (Number.isFinite(cl) ? `&col=${cl}` : '')
+      const d = await api<{ cases: Case[] }>(`/api/column-review/case?${qs}`)
+      setCases(d.cases); setCur(0)
+      try {
+        const v = await api<{ verdicts: Record<string, Verdict> }>(
+          `/api/column-review/verdicts?batch=${encodeURIComponent(batch())}`)
+        verdicts.current = { ...v.verdicts, ...verdicts.current }
+      } catch { /* 批次还不存在 = 没裁过 */ }
+      setMsg(`p${pg}${Number.isFinite(cl) ? ` 第 ${cl} 列` : ' 整页'}：${d.cases.length} 列`)
+    } catch (e) {
+      setMsg(`跳转失败：${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -175,6 +201,15 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
         <label>条数 <input type="number" value={limit} min={1} max={300}
                           onChange={(e) => setLimit(+e.target.value || 30)} size={4} /></label>
         <button onClick={load}>载入</button>
+        <span className="colrev-jump">
+          <label>页 <input type="number" value={jumpPage} placeholder="33" size={4}
+                           onChange={(e) => setJumpPage(e.target.value)}
+                           onKeyDown={(e) => { if (e.key === 'Enter') jump() }} /></label>
+          <label>列 <input type="number" value={jumpCol} placeholder="全页" size={4}
+                           onChange={(e) => setJumpCol(e.target.value)}
+                           onKeyDown={(e) => { if (e.key === 'Enter') jump() }} /></label>
+          <button onClick={jump}>跳转</button>
+        </span>
         <button onClick={submit} disabled={!touched.current.size}>
           提交裁决{touched.current.size ? `（${touched.current.size}）` : ''}
         </button>
@@ -253,6 +288,11 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
 function ColumnStrips({ cse, src }: { cse: Case; src: 'bin' | 'raw' }) {
   const base = `/api/column-review/img/${cse.book}/${cse.page}/${cse.col}.png?src=${src}`
   const PAD = 130
+  // 整列图**纵向压 8 倍、横向一比一**（用户 2026-09-17：「展示左右的切线位置时，
+  // 需要把上下压缩到比较小，不然看不清」）。以前靠 maxHeight 让浏览器等比缩，
+  // 1500px 高缩进 420px 时横向也被缩到 1/3.6，红线与字身糊成一团、判不了「红线
+  // 有没有切进字」。服务端只压纵向，宽度一像素不丢。
+  const SQUEEZE = 8
   return (
     <div className="colrev-strips">
       <figure>
@@ -264,8 +304,8 @@ function ColumnStrips({ cse, src }: { cse: Case; src: 'bin' | 'raw' }) {
         <figcaption>下端（蓝线=削到这里）</figcaption>
       </figure>
       <figure className="whole">
-        <img src={withWorkspace(`${base}&end=all`)} alt="整列" style={{ maxHeight: 420 }} />
-        <figcaption>整列（红线=左右带）</figcaption>
+        <img src={withWorkspace(`${base}&end=all&squeeze=${SQUEEZE}`)} alt="整列" />
+        <figcaption>整列（红线=左右带，纵向压 {SQUEEZE}×）</figcaption>
       </figure>
     </div>
   )

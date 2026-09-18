@@ -31,6 +31,24 @@ from .. import deps
 router = APIRouter()
 
 
+def _case_rec(book: str, pg: int, w) -> dict | None:
+    """一列的卡片记录。抽样出卡与「跳到指定列」共用，免得两处字段漂。"""
+    t = w.triage.model_dump() if w.triage else None
+    if t is None:
+        return None
+    return {
+        "id": f"{book}:{pg}:{w.col}",
+        "book": book, "page": pg, "col": w.col,
+        "triage": t,
+        "band": list(w.band),
+        "trim_top": w.trim_top.model_dump(),
+        "trim_bottom": w.trim_bottom.model_dump(),
+        "size": list(w.warped_size),
+        "raised": bool(w.raised),
+        "img": f"/api/cache/{book}/column_raw/{column_key(pg, w.col)}.png",
+    }
+
+
 @router.get("/api/column-review/cases")
 def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
                             seed: int = 0, scope: str = "all") -> dict:
@@ -81,20 +99,10 @@ def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
         for w in wins.columns:
             if w.col in skip_cols:
                 continue
-            t = w.triage.model_dump() if w.triage else None
-            if t is None:
+            rec = _case_rec(book, pg, w)
+            if rec is None:
                 continue
-            rec = {
-                "id": f"{book}:{pg}:{w.col}",
-                "book": book, "page": pg, "col": w.col,
-                "triage": t,
-                "band": list(w.band),
-                "trim_top": w.trim_top.model_dump(),
-                "trim_bottom": w.trim_bottom.model_dump(),
-                "size": list(w.warped_size),
-                "raised": bool(w.raised),
-                "img": f"/api/cache/{book}/column_raw/{column_key(pg, w.col)}.png",
-            }
+            t = rec["triage"]
             hard = (t["side_class"] in BLOCKING["side"]
                     or t["top_class"] in BLOCKING["end"]
                     or t["bot_class"] in BLOCKING["end"])
@@ -117,6 +125,33 @@ def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
         out = blocking + review[:rest - n_clean] + clean[:n_clean]
     return {"cases": out,
             "counts": {"blocking": len(blocking), "review": len(review), "clean": len(clean)}}
+
+
+@router.get("/api/column-review/case")
+def api_column_review_case(book: str, page: int, col: int | None = None) -> dict:
+    """跳到指定页（可指定列）——抽样出卡之外的直达入口（用户 2026-09-17）。
+
+    不给 `col` 就出**整页所有列**，按列号排序：要看「同一页逐列切线齐不齐」
+    时，抽样卡永远凑不齐一页。这里**不套 skip_cols / 分诊过滤**——人既然点名
+    要看这一页，版心列也照出，由人自己判。
+    """
+    st = deps.product_store()
+    try:
+        wins = st.read(book, "column_warp", page_key(page), "column_windows")
+    except Exception as e:                                   # noqa: BLE001
+        raise HTTPException(404, f"没有这一页的 Step2 产物：{e}") from e
+    if wins is None:            # 读不到返回 None，不抛异常
+        raise HTTPException(404, f"没有 {book} p{page} 的 Step2 产物（先跑 Step2）")
+    out: list[dict] = []
+    for w in sorted(wins.columns, key=lambda x: x.col):
+        if col is not None and w.col != col:
+            continue
+        rec = _case_rec(book, page, w)
+        if rec is not None:
+            out.append(rec)
+    if not out:
+        raise HTTPException(404, f"{book} p{page} 没有列 {col}")
+    return {"cases": out, "counts": {"blocking": 0, "review": 0, "clean": len(out)}}
 
 
 @router.get("/api/column-review/verdicts")
@@ -147,7 +182,8 @@ def api_column_review_verdicts(batch: str) -> dict:
 
 @router.get("/api/column-review/img/{book}/{page}/{col}.png")
 def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
-                          mark: bool = True, end: str = "all", pad: int = 90) -> Response:
+                          mark: bool = True, end: str = "all", pad: int = 90,
+                          squeeze: int = 1) -> Response:
     """列图 + **把算法的线画上去**。人裁时看不到线就没法判「削到哪了对不对」。
 
     `src`：`bin`（缺省）用 **Sauvola k=0.10** 二值化后再画线——与字形库、定字审阅
@@ -161,6 +197,13 @@ def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
       绿 —— 上端削到的行 `trim_top.px`
       蓝 —— 下端削到的行（从底往上量 `trim_bottom.px`）
     `end`：`top`/`bottom` 只出该端 `pad` 行的放大图，`all` 出整列。
+
+    `squeeze`：**只压纵向**的整数倍率（用户 2026-09-17：「展示左右的切线位置时，
+    需要把上下压缩到比较小，不然看不清」）。列图高 1500+px，整列塞进屏幕时浏览器
+    等比缩到十几分之一，左右那两条红线连同字身一起糊成一团，判不了「红线有没有
+    切进字」。纵向压 `squeeze` 倍、**横向一比一**，宽度信息一像素不丢。
+    压缩必须在画线**之后**做：先压后画会让线画在压过的坐标上、位置对不上；
+    而 `INTER_AREA` 压 1px 宽的线会把它抹淡，所以线加粗到 `squeeze` 像素补偿。
     """
     import cv2
     import numpy as np
@@ -192,20 +235,26 @@ def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
             pass
         if lo is None:                                       # 没产物就现算，别让人看空图
             lo, hi = column_text_band(denoise_column(g))
+        # 横线按 squeeze 加粗：纵向压缩用 INTER_AREA 取的是区间均值，1px 的横线
+        # 压 8 倍后只剩 1/8 的对比度，肉眼就没了。竖线不受影响（沿 y 连续）。
+        hw = max(1, squeeze)
         for x in (lo, hi - 1):
             if 0 <= x < w:
                 cv2.line(im, (x, 0), (x, h - 1), (0, 0, 220), 1)
         if tpx:
-            cv2.line(im, (0, tpx), (w - 1, tpx), (0, 170, 0), 1)
+            cv2.line(im, (0, tpx), (w - 1, tpx), (0, 170, 0), hw)
         if bpx:
             y = h - 1 - bpx
             if 0 <= y < h:
-                cv2.line(im, (0, y), (w - 1, y), (220, 120, 0), 1)
+                cv2.line(im, (0, y), (w - 1, y), (220, 120, 0), hw)
 
     if end == "top":
         im = im[:min(pad, h)]
     elif end == "bottom":
         im = im[max(0, h - pad):]
+    if squeeze > 1 and im.shape[0] // squeeze >= 1:
+        im = cv2.resize(im, (im.shape[1], im.shape[0] // squeeze),
+                        interpolation=cv2.INTER_AREA)
     ok, buf = cv2.imencode(".png", im)
     if not ok:
         raise HTTPException(500, "编码失败")

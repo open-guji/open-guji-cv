@@ -291,6 +291,25 @@ def _runs_of(mask: np.ndarray) -> list[tuple[int, int]]:
 LOW_INK_FRAC = 0.12
 LOW_INK_SEP = 12          # 与已有候选的最小间距（px），免得同一条缝挤进两个点
 
+#: 切点墨量项的权重（`ink_lam`）。DP 每一步都加一份「切在这里要穿多少墨」，
+#: 原先权重恒为 1，与间距项 `lam·dev²` **量级差两个数量级**——北行日錄全书实测
+#: λ·dev² 中位 0.0005、p95 0.0120，而一条**真字缝**的墨量是 0.02~0.06。于是
+#: 「一条真字缝」抵得上四十到一百多个格子的间距偏差，间距先验形同虚设。
+#:
+#: 后果是 DP **专挑绝对干净的位置切，哪怕那是字肚子里**：刻本里「三」「二」
+#: 「一」这类横画分离的字，字内空隙比真字缝还干净（字缝下方常挂着下一个字的
+#: 起笔）。bxgb p33c16「三節」实测：切在「三」第二、三横之间墨量 0.0000、
+#: 切在「三」「節」之间墨量 0.0364，于是「三」被腰斩、上两横独占一格、第三横
+#: 跟「節」挤一格。**格高统计查不出来**（64/95 px 对 period=70.5，两格都在
+#: 正常波动内），只有对着图叠线才看得见。
+#:
+#: 0.8 是全书 970 列 A/B 扫出来的：修好 10 列切字（含上述 p33c16），另 35 列是
+#: 空白格区内部的等价平移（新旧切点墨量皆 0，不碰字），**0 列变差**，还顺带
+#: 把 2 列无解救回。**别再往下调**：0.5 时修好的涨到 36 列，但 p33c18/p48c02
+#: 两列整列下移、切线从零墨位置挪到墨量 6~20 的字身上沿（逐列叠图确认），
+#: 墨量项被压得太轻就不再拦「切在字上」了。0.8 与 0.5 之间没有再细扫。
+INK_LAM = 0.8
+
 CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")
 """**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
 它们都是字，按坐标来区分位置」）。「抬头」不是一种跟"字/空白/夹注"并列的
@@ -422,7 +441,8 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          mass_lam: float = 1.0,
                          mass_h: float = 0.79,
                          mass_min: float = 0.100,
-                         cell_w: float = 0.0) -> list[float] | None:
+                         cell_w: float = 0.0,
+                         ink_lam: float = INK_LAM) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -673,7 +693,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     # 再按 k 向量化填表。**数值逐位相同**：total 的加法顺序保持 ((prev + c) + ink) + eps，
     # argmin 取首个最小值 = 原来「严格小于才更新」的取法（最小的 mp 胜出）。
     mid_y = [y for y, _ in mid]
-    mid_ink = np.array([ink for _, ink in mid], dtype=np.float64)
+    mid_ink = ink_lam * np.array([ink for _, ink in mid], dtype=np.float64)
     C = np.full((m_count, m_count), np.inf)
     for m in range(m_count):
         y = mid_y[m]
@@ -690,7 +710,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             y, ink = mid[m]
             c = step_cost(v0, y, interior=False)
             if c is not None:
-                dp_cost[0, m] = c + ink + eps + drop_cost_0
+                dp_cost[0, m] = c + ink_lam * ink + eps + drop_cost_0
         for k in range(1, n_interior):
             tot = dp_cost[k - 1][:, None] + C
             tot = tot + mid_ink[None, :]
@@ -740,7 +760,8 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         lam4: float = 0.0,
                         mass_lam: float = 1.0,
                         mass_h: float = 0.79,
-                        mass_min: float = 0.100) -> RowBoundaryResult | None:
+                        mass_min: float = 0.100,
+                        ink_lam: float = INK_LAM) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -835,6 +856,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         blank_lam_frac=blank_lam_frac, blank_min_ratio=blank_min_ratio,
         drop_lam=drop_lam, lam4=lam4,
         mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
+        ink_lam=ink_lam,
     )
     if boundaries is None and blank_min_ratio > 0.0:
         # 空白格下界是**偏好**不是硬约束：它挡的是「造碎空白格凑格数」，可有些列
@@ -849,6 +871,7 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
             blank_lam_frac=blank_lam_frac, blank_min_ratio=0.0,
             drop_lam=drop_lam, lam4=lam4,
             mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
+            ink_lam=ink_lam,
         )
     if boundaries is None:
         return None

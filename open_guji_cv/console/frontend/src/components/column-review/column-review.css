@@ -11,7 +11,12 @@
 .colrev-strips figcaption { font-size: .8em; color: #666; margin-top: .2rem; }
 .colrev-strips img.zoom { display: block; border: 1px solid #ccc; background: #fff;
   image-rendering: pixelated; transform-origin: top left; width: 260px; }
-.colrev-strips .whole img { border: 1px solid #ccc; background: #fff; }
+/* 整列图已由服务端纵向压过（squeeze），这里只放大横向看红线，不再等比缩高。
+   `pixelated` 保证放大后红线仍是硬边，不被插值抹成一片粉。 */
+.colrev-strips .whole img { border: 1px solid #ccc; background: #fff;
+  width: 260px; image-rendering: pixelated; }
+.colrev-jump { display: inline-flex; align-items: center; gap: .3rem;
+  padding-left: .5rem; border-left: 1px solid #ddd; }
 .colrev-forms { display: flex; flex-direction: column; gap: .6rem; min-width: 16rem; }
 .colrev-forms fieldset { border: 1px solid #ddd; border-radius: 4px; padding: .4rem .6rem; }
 .colrev-forms legend { font-size: .85em; color: #555; padding: 0 .3rem; }

@@ -633,9 +633,14 @@ def test_route_inventory():
     `GET /api/slot-count-review/verdicts`（读回本批已裁）、
     `GET /api/slot-count-review/img/{book}/{page}/{col}.png`（整列图 + 现有
     格线，人逐格数字数用）。80 → 83。
+
+    2026-09-18 Step2 裁决台加「跳到指定页/列」（用户「既要可以按分诊抽样出卡，
+    也要可以直接输入 33/16 跳到指定列」）：新增
+    `GET /api/column-review/case`（单列直达；列号留空出整页所有列，按列号排序
+    ——查「同一页逐列切线齐不齐」时抽样卡永远凑不齐一页）。83 → 84。
     """
     got = sorted(_endpoints())
-    assert len(got) == 83, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 84, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -743,6 +748,7 @@ EXPECTED_ROUTES = [
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
     # Step2 列清理人裁（2026-09-17）
+    "GET /api/column-review/case",
     "GET /api/column-review/cases", "GET /api/column-review/verdicts",
     "GET /api/column-review/profile/{book}/{page}/{col}",
     "GET /api/column-review/img/{book}/{page}/{col}.png",
