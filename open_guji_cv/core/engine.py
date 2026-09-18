@@ -285,8 +285,16 @@ class Engine:
 
     # ── 执行 ─────────────────────────────────────────────────────────
     def _run_one_step(self, step: Step, pages: list[int], report: RunReport,
-                       force: bool, stop_on_error: bool, total: int, done: int) -> tuple[int, bool]:
-        """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。"""
+                       force: bool, stop_on_error: bool, total: int, done: int,
+                       jobs: int = 1) -> tuple[int, bool]:
+        """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。
+
+        `jobs > 1` 且 `step.spec.parallel_safe` 时走页级并行（见 `_run_one_step_parallel`）；
+        否则串行——`parallel_safe=False` 是默认值，没标过的 Step 一律串行，标记本身
+        就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
+        if jobs > 1 and step.spec.parallel_safe:
+            return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
+                                               total, done, jobs)
         sid = step.spec.id
         manifest = self.store.manifest(self.book.id, sid)
         self.log(f"== {sid} {step.spec.title}：{len(pages)} 页")
@@ -348,8 +356,100 @@ class Engine:
                     return done, True
         return done, False
 
+    def _run_one_step_parallel(self, step: Step, pages: list[int], report: RunReport,
+                                force: bool, stop_on_error: bool, total: int, done: int,
+                                jobs: int) -> tuple[int, bool]:
+        """`_run_one_step` 的并行版：**计算在子进程、落盘在主进程**——子进程各自
+        `load_book`/`load_pipeline` 建一份独立 `RunContext`（不 pickle `self.ctx`，
+        它拖带 `store`/`cache` 这类跨进程共享不安全的对象），只跑纯函数
+        `step.run_page`；指纹判断、`store.write`、`manifest.put`、图像缓存失效
+        全部留在主进程串行做，与 `_run_one_step` 落盘代码逐行同形，保证产物
+        sha256 与串行跑法逐位一致（`scripts/parallel_border_detect.py` 已验证过
+        这个拆法：单进程/多进程/`guji step` 三方 sha 对得上）。
+
+        `stop_on_error` 在并行分支里只能是「整批提交完、发现失败就不再继续下一批
+        page」的近似语义，不能像串行那样跑到哪页失败就精确停在那页——`jobs`
+        张页是同时提交的，无法半路收回已经在跑的任务。"""
+        sid = step.spec.id
+        manifest = self.store.manifest(self.book.id, sid)
+        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页（{jobs} 进程并行）")
+
+        todo: list[int] = []
+        fps: dict[int, tuple[str, dict, str]] = {}
+        for pg in pages:
+            done += 1
+            key = page_key(pg)
+            fp, ups, ph = self.fingerprint(step, pg)
+            pct = int(done * 100 / max(total, 1))
+            if fp is None:
+                msg = f"上游缺失: {self.missing_upstream(step, pg)}"
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
+                manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
+                                           upstream={}, code_rev=self._rev,
+                                           status="failed", error=msg))
+                if stop_on_error:
+                    return done, True
+                continue
+            entry = manifest.get(key)
+            if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
+                    and not entry.invalidated and self.store.exists(self.book.id, sid, key)):
+                self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
+                report.outcomes.append(PageOutcome(sid, pg, "skipped"))
+                continue
+            for k in step.spec.produces:
+                if kind_of(k).storage == "image_cache":
+                    self.ctx.cache.invalidate(self.book.id, k, key_prefix=key)
+            fps[pg] = (fp, ups, ph)
+            todo.append(pg)
+
+        if not todo:
+            return done, False
+
+        from concurrent.futures import ProcessPoolExecutor
+        any_failed = False
+        # `initializer`：重资源 Step（`glyph_match` 的字形库、`row_segment` 的
+        # U-Net 权重等）在 worker **进程启动时**建一次 `RunContext`，之后这个
+        # worker 处理的每一页都复用它——不是每页各自冷启动。`initializer` 只在
+        # 进程刚起时跑一次，跟 worker 后续处理几页无关，工作量小的 Step（如
+        # `border_detect`）多这一次 `load_book`/`load_pipeline` 也无害。
+        with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
+                                 initargs=(self.book.id, self.pipeline.id, sid)) as ex:
+            for pg, products, err, elapsed in ex.map(_parallel_worker, todo, chunksize=1):
+                fp, ups, ph = fps[pg]
+                key = page_key(pg)
+                if err is not None:
+                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                               upstream=ups or {}, code_rev=self._rev,
+                                               elapsed=round(elapsed, 3), status="failed", error=err))
+                    self.log(f"{sid} p{pg}: 失败 {err}")
+                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
+                    any_failed = True
+                    continue
+                try:
+                    for k in products:
+                        if k not in step.spec.produces:
+                            raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
+                        if kind_of(k).storage != "numeric":
+                            raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
+                    _, sha = self.store.write(self.book.id, sid, key, products)
+                    manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
+                                               params_hash=ph, upstream=ups or {},
+                                               code_rev=self._rev, elapsed=round(elapsed, 3)))
+                    self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
+                    report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
+                except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
+                    err2 = f"{type(e).__name__}: {e}"
+                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                               upstream=ups or {}, code_rev=self._rev,
+                                               elapsed=round(elapsed, 3), status="failed", error=err2))
+                    self.log(f"{sid} p{pg}: 失败 {err2}")
+                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))
+                    any_failed = True
+        return done, any_failed and stop_on_error
+
     def run(self, steps: list[str] | None = None, pages: list[int] | None = None,
-            force: bool = False, stop_on_error: bool = False) -> RunReport:
+            force: bool = False, stop_on_error: bool = False, jobs: int = 1) -> RunReport:
         """按 `steps`（默认 pipeline 的 `steps:` 列表）逐个跑。
 
         **闸跟着它挂的 Step 自动跑**，不需要出现在 `steps` 里：`step.spec.gate`
@@ -358,6 +458,13 @@ class Engine:
         历史调用，如 `scripts/seg_harness.py` 的 `BOOTSTRAP_STEPS`）不用改。
         显式把闸的 id 也点在 `steps` 里仍然安全：闸第二次跑到时指纹已新鲜，
         直接跳过。
+
+        `jobs > 1`：页级并行只对 `step.spec.parallel_safe=True` 的 Step 生效
+        （见 `StepSpec.parallel_safe`），其余 Step 不受影响、照常串行——同一次
+        `run()` 里几个 Step 的并行与否可以不一样，调用方不用分开调。闸目前都
+        不是 `parallel_safe`（闸很快，见 `scripts/parallel_border_detect.py`
+        的实测：<0.1s/页），跟 Step 本体一起传 `jobs` 也没有额外风险，只是
+        闸内部判断到没标记会自动退回串行。
         """
         steps, _ = self._default_steps(steps)
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
@@ -368,7 +475,8 @@ class Engine:
         done = 0
         for sid in steps:
             step = STEPS[sid]
-            done, stopped = self._run_one_step(step, pages, report, force, stop_on_error, total, done)
+            done, stopped = self._run_one_step(step, pages, report, force, stop_on_error,
+                                               total, done, jobs)
             if stopped:
                 report.finished_at = time.time()
                 return report
@@ -376,7 +484,7 @@ class Engine:
             if gate and gate.id not in steps:
                 gate_step = STEPS[gate.id]
                 done, stopped = self._run_one_step(gate_step, pages, report, force,
-                                                    stop_on_error, total, done)
+                                                    stop_on_error, total, done, jobs)
                 if stopped:
                     report.finished_at = time.time()
                     return report
@@ -385,3 +493,38 @@ class Engine:
         self.log("完成：" + "；".join(f"{s} ok {v['ok']} / 跳过 {v['skipped']} / 失败 {v['failed']}"
                                     for s, v in c.items()))
         return report
+
+
+# worker 进程级状态——每个子进程一份，`_parallel_worker_init` 在进程启动时填好，
+# 之后这个进程处理的每一页都复用，不重新 `load_book`/建 `RunContext`。
+_worker_ctx: "RunContext | None" = None
+_worker_step: "Step | None" = None
+
+
+def _parallel_worker_init(book_id: str, pipeline_id: str, step_id: str) -> None:
+    """`ProcessPoolExecutor(initializer=...)`：每个 worker 进程启动时跑一次。
+    像 `glyph_match`（字形库）、`row_segment`（U-Net 权重）这类 Step 把重资源
+    缓存在 `Step` 实例的 `self.<attr>` 上（进程内单例，见各 Step 源码），这里
+    建的 `step` 实例正是后续 `run_page` 调用会用到的那个，一次初始化、整个
+    worker 生命周期内的所有页都复用，不是每页各自冷启动。"""
+    global _worker_ctx, _worker_step
+    from .book import load_book
+    from .pipeline import load_pipeline
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+    book = load_book(book_id)
+    pipeline = load_pipeline(pipeline_id)
+    _worker_step = STEPS[step_id]
+    _worker_ctx = RunContext(book, ProductStore(), ImageCache(), log=lambda s: None, pipeline=pipeline)
+
+
+def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float]:
+    """`_run_one_step_parallel` 的子进程体：用 `_parallel_worker_init` 建好的
+    进程级 ctx/step，只算不写盘。模块级函数（不是方法）——`ProcessPoolExecutor`
+    要能 pickle 它；实际状态在 `_worker_ctx`/`_worker_step`，不在参数里。"""
+    t0 = time.time()
+    try:
+        products = _worker_step.run_page(_worker_ctx, page)
+        return page, products, None, time.time() - t0
+    except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整批
+        return page, None, f"{type(e).__name__}: {e}", time.time() - t0

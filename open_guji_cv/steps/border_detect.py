@@ -48,6 +48,10 @@ class BorderDetectStep(Step):
         book_deps=("leaf_layout", "expected_cols", "bottom_gap",
                    "top_band_frac", "bottom_band_frac", "column_grid", "col_pitch",
                    "frame_height", "vline_polyline"),
+        # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
+        # `scripts/parallel_border_detect.py` 已验证页级并行与串行 sha256 逐位一致
+        # （2026-09-17，见 .claude/doc/segmentation_v2_pipeline.md「Step 1 性能」）。
+        parallel_safe=True,
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

@@ -434,6 +434,35 @@ bottom 外延8/内沿3/中心1），所以剩下那点差**部分是标注口径
 `best_in_curve` 的 `half_height_score_at` while 循环；再往下要动 Python 级
 `walk`，封顶大概再 1.5x，先停。Step2 自己 <0.1s。
 
+**向量化 `half_height_score_at`（否掉，2026-09-17）**：用贴近真实分布的合成
+投影曲线（3000点、190个候选、半高宽中位41px）实测——批量向量化版（构造
+候选数×曲线长度的布尔矩阵 + cumsum 找游程）**6730us/批，比原 Python while
+循环 2468us/批还慢 2.7x**。原因跟上面「BLAS 线程数没区别」是同一类教训：
+候选数（~150-200）和曲线长度（~3000）撑不起向量化的固定成本——原循环的
+实际工作量只正比于收敛路径长度（中位41步），先分配大矩阵反而更贵。而且
+批量版在曲线首尾边界（`walk` 撞墙但 `hyst` 未积满时该停在「最后一次
+above」而非数组边界）上一度写出了 off-by-one，语义对齐的代价也不低。
+**结论：函数级向量化到此为止，不会再降；要继续提速只能走页级并行。**
+
+**页级并行从脚本升级为引擎通用机制（2026-09-17）**：不再是
+`regen_step2_columns.py --jobs` 这种绕开 `Engine` 单独写落盘的脚本，而是
+`StepSpec.parallel_safe`（`core/spec.py`）+ `Engine.run(jobs=N)`
+（`core/engine.py`）——标记过的 Step 才走页级 `ProcessPoolExecutor`（子进程
+只跑 `step.run_page` 纯计算，指纹判断/`store.write`/`manifest.put`/闸的
+串行触发全部留在主进程，逐行照抄 `_run_one_step` 串行分支，产物 sha256
+三方比对逐位一致），未标记的 Step 照常串行，同一次 `run()` 里可以混跑。
+`ProcessPoolExecutor(initializer=...)` 让每个 worker 进程只建一次
+`RunContext`/`Step` 单例，之后该 worker 分到的每一页都复用，不是每页冷
+启动——这是为了给后续可能标记的重资源 Step（字形库/模型权重）留口子，
+`border_detect` 本身不需要但无害。CLI `guji pipeline`/`guji step` 新增
+`--jobs`（默认=本机 CPU 数），**同样不要超过 CPU 数**（上面的教训原样成立，
+超订只会更慢）。当前只标记了 `border_detect` 和 `line_detect`（两条链各自
+的 Step1，均已 sha256 验证）；`glyph_match`/`ocr_candidates`/
+`context_decide`/`row_segment`/`rare_candidates` 审查过无跨页冲突但涉及
+字形库/模型权重的重资源初始化与可能的非只读访问，标记前要逐个深入验证，
+暂缓。16 核机器实测 `border_detect` 4 进程 12 页：11.4s → 6.6s（多页读图/
+调度有开销，非线性 4x）。
+
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 
 把一条界行整条投到 x 轴上——线越直，墨全落在同一个 x 上，峰就越高越窄；线越弯，
