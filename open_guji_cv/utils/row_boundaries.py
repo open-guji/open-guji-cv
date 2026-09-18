@@ -4,8 +4,12 @@
 （弹性 DP：位置代价看墨量、步长容许伸缩），但这里是从 `char-segmentation/
 row-boundaries` 数据集上的单页（vol02/135）逐轮试出来的独立实现，重点解决的
 是"整列往错误的相邻字缝滑一格"这一类失败——过程详见
-`.claude/doc/row_boundaries_design.md`。**尚未接入生产管线**，只在这一页上
-验证过，先作为可复用工具落地。
+`.claude/doc/row_boundaries_design.md`。
+
+**已是生产实现**（`steps/row_segment.py` 直接调 `segment_column`）；下面
+"已知局限"里"只在 vol02/135 一页验证过"那几条是**当初的**情况，现已跨册
+跑过（四庫 vol01-03 + 北行日錄刻本/现代排印本），参数几经标定。要看当下
+实测状态用 `guji status`，别信这段文字的年份。
 
 ## 核心设计
 
