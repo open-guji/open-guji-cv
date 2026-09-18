@@ -45,20 +45,41 @@ def _resolve_default_ckpt() -> Path:
     # 但 `_fuse` 走的是「两边都空 → 空列表」那条路）。控制台碰巧在引擎仓下起，
     # 所以网页上是好的、脚本里是空的，差一个 cwd。
     here = Path(__file__).resolve().parents[2]          # …/open-guji-cv
-    for rel in ("cache/glyph_cnn_r4/best.pt", "models/glyph_cnn_r4/best.pt"):
+    # r5 优先（2026-09-17 起现役，见下方 DEFAULT_CKPT 文档）；找不到才退回 r4。
+    for rel in ("models/glyph_cnn_r5/best.pt",
+                "cache/glyph_cnn_r4/best.pt", "models/glyph_cnn_r4/best.pt"):
         for base in (Path.cwd(), here):                 # 先认 cwd（本机旧习惯），再认引擎仓
             cand = base / rel
             if cand.exists():
                 return cand
-    return here / "models/glyph_cnn_r4/best.pt"
+    return here / "models/glyph_cnn_r5/best.pt"
 
 
 DEFAULT_CKPT = _resolve_default_ckpt()
-"""现役 checkpoint。2026-09-07 从 `cache/glyph_cnn/best.pt`（run-5，纯字体补类）切到
-`glyph_cnn_r4`（训练时每类另加康熙字头 + 字统网真刻本图，`external_glyph_sources_experiment.md` §5.4）：
-分类头 unseen top-1 94.3 → 96.5，seen_test 99.5 → 99.8 无回退，异体组内定形差距拉开 12.6 倍。
+"""现役 checkpoint。
+
+**2026-09-17 起 `glyph_cnn_r5`**（`experiments/metric_loss/`，结论正本在 overview
+`Step5-字符识别/5b-生僻字候选/06-给embedding加独立度量损失.md` §九）。
+r5 与 r4 **同一份配方、同一份数据，只把训练轮数 160 → 60**：
+
+| 指标（类外 314 条真刻例 `cache/oov_bench`） | r4 | **r5** |
+|---|---|---|
+| emb top-1 | 67.8% | **73.2%** |
+| emb top-10 | 89.2% | **90.4%** |
+| unseen 1,327 emb top-1（严格，护栏） | 95.4% | **96.9%** |
+| unseen 1,327 cls top-1（严格，护栏） | 94.0% | **96.8%** |
+
+长训练在**拿类外泛化换类内精度**：类外能力 3 个 epoch 就到顶，后段 epoch 只涨
+`seen_test`。度量损失（ArcFace / CosFace / 纯余弦头）在真刻例上**一律为负**，
+三个配置同向，已证伪、不采纳。
+
+⚠️ **`FORM_EMB_GAP` 必须跟着 r5 改成 0.03**（见 `variant_form.py` 那行注释）：
+r5 的组内定形 top1−top2 差比 r4 小 3.8 倍（0.048 vs 0.184），沿用 0.12 会让
+`fixed_form` 放行率从 76.1% 塌到 **0.6%**（通道等于关掉）。改 0.03 后是 77.4% 零错。
+
 **换 checkpoint 会让下游产物过期**（路径 + mtime 进 `fingerprint()`），相关页要重跑。
-旧 checkpoint 保留在原路径可随时切回；切回时 `HOG_WEIGHT`/`EMB_WEIGHT`/`FORM_EMB_GAP` 都要还原。"""
+旧 checkpoint 保留在 `models/glyph_cnn_r4/` 可随时切回；
+切回时 `HOG_WEIGHT`/`EMB_WEIGHT`/`FORM_EMB_GAP` 都要一起还原。"""
 RRF_K = 60
 
 
