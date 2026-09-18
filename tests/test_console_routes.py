@@ -638,14 +638,22 @@ def test_route_inventory():
     也要可以直接输入 33/16 跳到指定列」）：新增
     `GET /api/column-review/case`（单列直达；列号留空出整页所有列，按列号排序
     ——查「同一页逐列切线齐不齐」时抽样卡永远凑不齐一页）。83 → 84。
+
+    2026-09-18 阶段二 2.4「读回接口收敛」：新增 `GET /api/verdicts`
+    （通用读回，可按 `question` 过滤，返回原始 payload）。此前「读回本批已裁」
+    有四份实现、四种返回形状（review / cutline / column_review /
+    slot_count_review / border_review），新增裁决台就要再抄一遍。
+    去重按 `(question, key)` 而非 key——切线与定字的 key 形状完全相同
+    （`bxgb:39:19:12`），只按 key 去重会把没裁过的字位误当已裁。84 → 85。
     """
     got = sorted(_endpoints())
-    assert len(got) == 84, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 85, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
 
 
+@pytest.mark.manual
 def test_route_snapshot():
     """52 条路由各调一次，与基线逐条比对。
 
@@ -776,6 +784,7 @@ EXPECTED_ROUTES = [
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",
     "GET /api/review/context-img/{book}/{page}/{col}/{slot}.png",
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
+    "GET /api/verdicts",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
     "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/reflow/{book}",
     "GET /api/step9/render/{book}", "GET /api/steps", "GET /api/throughput",

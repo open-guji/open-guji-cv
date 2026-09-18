@@ -93,3 +93,43 @@ def cutline_verdicts(batch: str, log: EventLog | None = None) -> dict:
         out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline"),
                              "col_h": p.get("col_h"), "cand": p.get("cand")}
     return {"batch": batch, "n": len(out), "verdicts": out}
+
+
+def verdicts_by_question(batch: str, question: str | None = None,
+                         log: EventLog | None = None) -> dict:
+    """通用读回：本批（可按 question 过滤）已裁条目的**原始 payload**。
+
+    ## 为什么要有这一个
+
+    此前「读回本批已裁」有**四份实现、四种返回形状**：本模块两个函数、
+    `console/routers/column_review.py`、`slot_count_review.py`、
+    `border_review.py`（内含 3 分支）。新增一个裁决台就要再抄一遍，
+    而每一份都各自决定「怎么算已裁」「返回什么键」，抄漏一条就是一个静默 bug。
+
+    ## 为什么返回原始 payload 而不是统一形状
+
+    四个前端消费的形状本就不同（定字台要 `{shape, reading, done}`，
+    列清理台要 `{side_verdict, top_class, bot_class}`）。硬统一成一种形状
+    要改写全部前端——那是阶段三裁决台改造的事。这里统一的是**接口与去重
+    规则**，形状仍由各 question 自己决定：给回原始 payload，前端取自己要的键。
+
+    ## 去重
+
+    同一 `(question, key)` 多次裁决按 `(batch, seq)` 升序**后到覆盖**
+    ——沿用 seed_queue 的纪律，人改主意时最后一次说了算。
+
+    **按 question 而不是 key 去重**是必须的：切线裁决与定字裁决的 key 形状
+    完全一样（都是 `bxgb:39:19:12`），只按 key 去重会把没裁过的字位误当已裁
+    （这正是 `DECIDED_KINDS` 那条注释记的坑）。`question` 比 `kind` 更精确
+    ——`kind=verdict` 底下有三个不同的问题。
+
+    没带 `question` 的历史事件按 `kind` 兜底归类，不丢。
+    """
+    out: dict[str, dict] = {}
+    for e in sorted((log or EventLog()).read(batch), key=lambda x: (x.batch, x.seq)):
+        p = dict(e.payload or {})
+        q = p.get("question") or e.kind          # 历史事件没有 question，用 kind 兜底
+        if question is not None and q != question:
+            continue
+        out[e.target.key] = p
+    return {"batch": batch, "question": question, "n": len(out), "verdicts": out}

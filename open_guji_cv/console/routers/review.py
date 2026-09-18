@@ -22,7 +22,7 @@ from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.cards import cards
 from ...review.cell_shrink_rand import rand_sample
-from ...review.verdict_view import review_verdicts
+from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
 from ...utils.preclean import effective_raw_path
 
@@ -62,6 +62,18 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。装配在 `review/verdict_view.py`。"""
     return review_verdicts(batch, deps.event_log())
+
+
+@router.get("/api/verdicts")
+def api_verdicts(batch: str, question: str | None = None) -> dict:
+    """**通用读回**：本批（可按 question 过滤）已裁条目的原始 payload。
+
+    收敛此前的四份实现（本文件 + cutline / column_review / slot_count_review /
+    border_review 各一份，返回形状四种）。新增裁决台直接用这条，不必再抄。
+    去重按 `(question, key)` 而非 key——切线与定字的 key 形状完全一样，
+    只按 key 去重会把没裁过的字位误当已裁。详见 `verdicts_by_question`。
+    """
+    return verdicts_by_question(batch, question, deps.event_log())
 
 
 
