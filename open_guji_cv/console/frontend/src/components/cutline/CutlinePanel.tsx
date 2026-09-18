@@ -52,6 +52,10 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
   const pages = pagesProp ?? ownPages
   const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
+  // 第一级筛选：按**处置状态**（计划书 §1.4b）。后端 `scope` 早就支持，
+  // 前端一直没暴露——而这正是 Step3 拖切线台与 Step7 切分裁决台的唯一区别
+  // （后者写死 scope='blocking'）。暴露之后两个台就是同一个台的两个预设。
+  const [scope, setScope] = useState<'all' | 'blocking'>('all')
   const [limit, setLimit] = useState(30)          // 一屏能裁完的量；大批量再手改（2026-09-15 用户定）
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
@@ -75,7 +79,7 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind)
+      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind, scope)
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
@@ -356,9 +360,17 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
       <h2>拖切线 <span className="muted">粘连格线（R2s）：把横线拖到你认为该切的位置，攒成 touching-cuts 金标</span></h2>
       <div className="cl-toolbar">
         <label className="muted">页 <input value={pages} onChange={(e) => setPages(e.target.value)} size={10} title="body = 正文页；或 3-6,9" /></label>
+        <label className="muted">范围
+          <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}
+                  title="全部 = 判据筛出的所有可疑切点；只看闸拦下的 = 顺序闸正挡着字卡的那批（与 Step7「切分裁决」同一批）">
+            <option value="all">全部</option>
+            <option value="blocking">只看闸拦下的</option>
+          </select>
+        </label>
         <label className="muted">类型
           <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}
-                  title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙">
+                  disabled={scope === 'blocking'}
+                  title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙。选「只看闸拦下的」时本项不生效——挡卡的判据本就是两者都查">
             <option value="r2s">粘连 R2s</option>
             <option value="split_char">切进字里</option>
             <option value="all">两者</option>

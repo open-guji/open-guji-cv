@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useWsPath } from '../hooks/useWsPath'
+import { StepStatusSummary } from '../components/common/StepStatusSummary'
+import { useParams } from 'react-router-dom'
 import { fetchPrecleanReport, precleanAfterUrl, precleanBeforeUrl, precleanOverlayUrl } from '../api/products'
 import { listBooks } from '../api/registry'
 import { fetchStatus } from '../api/status'
@@ -68,7 +68,6 @@ function PrecleanPanel({ book, page }: { book: string; page: number }) {
 // 段的规则原样显示出来（vol02 有真实配置：151/152 两页的反色带修复）。
 // 只对手工登记过的页生效，不改磁盘原图，见 open-guji-cv utils/preclean.py。
 export function Step0Page() {
-  const wsPath = useWsPath()
   const { book = '' } = useParams()
   const [b, setB] = useState<Book | null>(null)
   const [status, setStatus] = useState<StatusResponse | null>(null)
@@ -88,19 +87,7 @@ export function Step0Page() {
     <div>
       <div className="card">
         <h2>Step0 预清理 <span className="muted">修反色带等扫描缺陷，原图永不改写</span></h2>
-        {stepStatus && (
-          <div className="muted step-status-summary">
-            状态矩阵里这一步：
-            <span className="counts">
-              <span className="s-fresh">✓{stepStatus.counts.fresh}</span>
-              <span className="s-stale">~{stepStatus.counts.stale}</span>
-              <span className="s-missing">·{stepStatus.counts.missing}</span>
-              <span className="s-failed">✗{stepStatus.counts.failed}</span>
-              <span className="s-blocked">⊘{stepStatus.counts.blocked}</span>
-            </span>
-            <Link to={wsPath(`/${book}/`)}>回总览看逐页详情</Link>
-          </div>
-        )}
+        <StepStatusSummary book={book} status={stepStatus} />
         {b && precleanPages.length === 0 && <p className="muted">这本书没有登记 preclean 规则（本来就不用修）。</p>}
       </div>
       {precleanPages.map((p) => (
