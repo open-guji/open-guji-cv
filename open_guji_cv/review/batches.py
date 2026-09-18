@@ -90,7 +90,16 @@ class BatchStore:
         """从 EventLog 回填事件数与消费数。log: feedback.EventLog"""
         evs = log.read(b.id)
         b.n_events = len(evs)
-        done = log.consumed_ids("gold_add") | log.consumed_ids("glyphdb")
+        # **按记账目录里实际有的消费者取并集**（2026-09-18 修）。原先写死
+        # `gold_add | glyphdb` 两个名字，其中 `glyphdb` 根本不存在——真实文件叫
+        # `glyphdb_admit`，于是那一路恒为空集，定字裁决的 `n_consumed` 一直是 0；
+        # 同时漏掉 `crop_exclude`（2088 条）与 `product_invalidate`（8 条）。
+        # 并集而非交集：一条事件可能只该由其中一个消费者处理（`cutline` 走
+        # gold_add + product_invalidate，`confirm` 按 payload.v 分流），
+        # 「被任一消费者处理过」才是「消费过」。
+        done: set[str] = set()
+        for c in log.consumers():
+            done |= log.consumed_ids(c)
         b.n_consumed = sum(1 for e in evs if e.id in done)
         if b.n_events and b.status == "open":
             b.status = "harvested" if b.n_consumed >= b.n_events else "open"
