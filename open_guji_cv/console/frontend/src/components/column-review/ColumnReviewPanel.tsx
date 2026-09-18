@@ -28,18 +28,26 @@ type Verdict = {
   side_verdict?: string; note?: string
 }
 
+// 选项顺序：**最常见的正确答案排第一**（用户 2026-09-17）。人裁几百列时，
+// 正确项在第一位能少移一次鼠标；也与下面的「默认预选」对齐——预选的就是第一项。
 const END_CLASSES = [
-  { k: 'none', label: '无框墨', hint: '边缘没有版框残墨' },
   { k: 'clean', label: '有框·有间隙', hint: '框与首字之间断得开' },
+  { k: 'none', label: '无框墨', hint: '边缘没有版框残墨' },
   { k: 'glued', label: '有框·粘字', hint: '框和字连在一起，切不出界' },
   { k: 'idk', label: '拿不准', hint: '' },
 ]
 const SIDE_VERDICTS = [
-  { k: 'clean', label: '两侧都对' },
+  { k: 'clean', label: '两侧都对', hint: '红线落在字外的空白里，留一点界行残墨是预期的' },
+  { k: 'eat', label: '切到字了', hint: '红线切进字身' },
   { k: 'mixed', label: '没有零区', hint: '一路都有墨，标不出唯一坐标' },
-  { k: 'eat', label: '切到字了' },
   { k: 'idk', label: '拿不准' },
 ]
+
+//: 进卡就预选的默认值（用户 2026-09-17：「没问题我就什么不选直接进下一个」）。
+//: **翻过即认可**——用户明确定过：默认值也当一条裁决存进金标，不区分「明确点选」
+//: 与「默认翻过」。所以这里选的必须是**最常见的正确答案**，而不是「最安全的」：
+//: 全书 1026 列里 990 列分诊为 clean，预选 clean 与实际分布一致。
+const DEFAULT_VERDICT: Verdict = { top_class: 'clean', bot_class: 'clean', side_verdict: 'clean' }
 
 function cls(t: string) {
   return t === 'eat' || t === 'glued' ? 'bad' : t === 'mixed' || t === 'idk' ? 'warn' : 'ok'
@@ -57,7 +65,11 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
   const [, bump] = useState(0)
   const rerender = () => bump((n) => n + 1)
 
-  const batch = () => `${book}-${pages || 'dev_set'}-column`
+  // 批次名**不带页范围**：列裁决是「这一列清得对不对」，与人当时挑的页范围无关。
+  // 带上的话同一批裁决会因为页码框写 `3-56` 还是 `all` 分到两个批次
+  // （实测踩到：5 条落在 bxgb-all-column，另一批落在 bxgb-3-56-column），
+  // 「读回本批已裁」也就跟着失灵，同一列会被重复端出来裁第二遍。
+  const batch = () => `${book}-column`
 
   async function load() {
     setMsg('载入中…')
@@ -122,8 +134,34 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
 
   useEffect(() => { setCases([]); setMsg('') }, [book, pages])
 
+  // 进卡就把默认值落进 verdicts 并计入 touched：**翻过即认可**（用户 2026-09-17）。
+  // 不落 touched 的话，人一路翻过去 submit 时一条都不会提交——「什么不选直接进
+  // 下一个」就成了「什么都没记下来」。已经裁过的（从服务端读回或本轮改过的）不覆盖。
+  useEffect(() => {
+    const c0 = cases[cur]
+    if (!c0 || verdicts.current[c0.id]) return
+    verdicts.current[c0.id] = { ...DEFAULT_VERDICT }
+    touched.current.add(c0.id)
+    rerender()
+  }, [cur, cases])
+
+  // ← → 翻页：「没问题就直接进下一个」的主路径，手不用离开键盘。
+  // 焦点在输入框/下拉里时不接管（那时方向键是编辑用的）。
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (!cases.length) return
+      const t = ev.target as HTMLElement | null
+      if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) && (t as HTMLInputElement).type !== 'radio') return
+      if (ev.key === 'ArrowRight') { setCur((i) => Math.min(cases.length - 1, i + 1)); ev.preventDefault() }
+      else if (ev.key === 'ArrowLeft') { setCur((i) => Math.max(0, i - 1)); ev.preventDefault() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [cases])
+
   const c = cases[cur]
   const v = c ? (verdicts.current[c.id] || {}) : {}
+  const nDone = cases.filter((x) => verdicts.current[x.id]).length
 
   return (
     <div className="card colrev">
@@ -150,6 +188,7 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
             <span>{cur + 1} / {cases.length}</span>
             <button onClick={() => setCur((i) => Math.min(cases.length - 1, i + 1))}
                     disabled={cur >= cases.length - 1}>→</button>
+            <span className="muted">已认可 {nDone}</span>
             <b>{c.id}</b>
             {c.raised && <span className="tag warn">抬头列</span>}
             <span className={`tag ${cls(c.triage.side_class)}`}>左右 {c.triage.side_class}</span>
