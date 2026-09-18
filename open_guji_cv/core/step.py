@@ -136,6 +136,12 @@ class RunContext:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
                 img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
+            if getattr(self.book, "binarized_input", False):
+                # 整页二值副本（`book.binarized_input`）。放在旋转**之后**：
+                # Sauvola 的窗口是各向同性的，先转后转结果一样，但纸缘护栏
+                # 按的是「转完之后」的四条边，与下游几何看到的边一致。
+                from ..utils.binarized import binarize_page
+                img = binarize_page(img)
             self._raw[page] = img
         return self._raw[page]
 
