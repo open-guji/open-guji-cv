@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { fetchRulers } from '../api/evals'
 import { CutlinePanel } from '../components/cutline/CutlinePanel'
 import { HeadRaiseCard } from '../components/border-review/HeadRaiseCard'
+import { SlotCountPanel } from '../components/slot-count/SlotCountPanel'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import type { CustomMetric } from '../components/common/ProgressGatePanel'
@@ -105,6 +106,7 @@ export function Step3Page() {
           抬头是刻本的版式特征；夹注指双行小注切分。三个接口在现代排印本上
           实测都回 0 条。 */}
       {caps.hasGridCells && <CutlinePanel book={book} />}
+      {caps.hasGridCells && <SlotCountPanel book={book} />}
       {caps.hasHeadRaise && <HeadRaiseCard book={book} />}
       {caps.hasJiazhu && <JiazhuPanel book={book} />}
       <ProductViewer book={book} step={step3Id} pages={pages} />

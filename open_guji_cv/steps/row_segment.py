@@ -61,7 +61,14 @@ class RowSegmentStep(Step):
         # **不读 open-guji-dataset**），按 (页,列) 筛出 slot_above → kind 传给
         # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
         from ..feedback.lookup import resolved_cuts as _resolved_cuts
+        from ..feedback.lookup import resolved_slots as _resolved_slots
         book_resolved = _resolved_cuts(ctx.book.id)
+        # 同一条回流路径的兄弟：逐列字数覆盖（`review/slot_count_cards.py`）。
+        # `chars_per_line` 是页级版式常量，DP 硬切；少数列真的比常量多/少刻了
+        # 一个字时（bxgb p33c19 实测 22 字 vs 常量 21），没有可靠的几何信号能
+        # 自动探测（格高/period 比值测过，两个方向都不可靠，见
+        # feedback_cell_height_not_merge_signal），只能人核对后写回。
+        book_slots = _resolved_slots(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
         out: list[ColumnCells] = []
@@ -73,6 +80,11 @@ class RowSegmentStep(Step):
             # 版框装不下 n_body 格的页（vol01/5 只有 20 行）按实际行数切，见
             # row_boundaries.effective_body_slots
             n_body_col = effective_body_slots(n_body, gc.border_top, gc.border_bottom, gate.period)
+            # 人裁逐列字数覆盖优先于上面两条自动判据——人是终审，跟
+            # `_apply_resolved_cut` 里"人裁收敛成功就不再是升级"同一条纪律。
+            slot_override = book_slots.get((page, gc.col))
+            if slot_override is not None:
+                n_body_col = slot_override
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,

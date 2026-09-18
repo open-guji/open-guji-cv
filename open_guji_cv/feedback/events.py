@@ -37,6 +37,7 @@ Kind = Literal[
     "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
     "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
     "head_raise",     # 列级抬头精标（payload: raised / n_raised / head_cut / note）
+    "n_body_slots",   # 逐列字数人裁：chars_per_line 常量在个别列不成立时的覆盖（payload: n_slots）
 ]
 
 Actor = Literal["user", "model", "align"]
@@ -146,6 +147,44 @@ class EventLog:
                     seen.add((e.batch, e.seq))
                     n += 1
         return n
+
+    def compact(self, batch: str, dry_run: bool = False) -> dict:
+        """同一 target.key 的重复裁决只留**最后一条**（用户 2026-09-16）。
+
+        重放语义（后到覆盖）一直是对的，日志膨胀才是问题：定字面板以前每点一次
+        「提交裁决」，就把 `verdicts.current` 里**全部**裁决重写一遍——包括刚从
+        服务端读回、本轮根本没动过的那些。实测 bxgb：1620 条 confirm 只覆盖 312
+        个字位，`bxgb:3:1:19` 累计写了 13 次。前端已改成只发本轮动过的，这个方法
+        是把**已经攒下的**重复压掉。
+
+        ⚠️ **保留被留下那条的原 `id` 与 `seq`，绝不重编号**。幂等记账
+        （`consumed/<consumer>.jsonl`）认的就是 `evt_<batch>_<seq>` 这个 id，
+        重编会让已消费的事件对不上账，被当成新事件**再消费一遍**——压实本是
+        为了消重，结果在下游制造重复，那就反了。
+
+        分组键是 `(kind, target.unit, target.key)`：`cutline` 与字位裁决的 key
+        形状相同（`bxgb:39:19:12`）而 unit 不同，混在一起会互相顶掉。
+        """
+        evs = self.read(batch)
+        if not evs:
+            return {"batch": batch, "before": 0, "after": 0, "removed": 0, "dry_run": dry_run}
+        keep: dict[tuple, Event] = {}
+        for e in evs:                       # read() 已按 (batch, seq) 升序 → 后到覆盖
+            keep[(e.kind, e.target.unit, e.target.key)] = e
+        kept_ids = {e.id for e in keep.values()}
+        out = [e for e in evs if e.id in kept_ids]
+        res = {"batch": batch, "before": len(evs), "after": len(out),
+               "removed": len(evs) - len(out), "dry_run": dry_run}
+        if dry_run or not res["removed"]:
+            return res
+        path = self.batch_path(batch)
+        tmp = path.with_suffix(".jsonl.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            for e in out:                   # 原顺序、原 id、原 seq
+                f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
+                                   sort_keys=True) + "\n")
+        os.replace(tmp, path)               # 原子替换：中途挂掉不会留半个日志
+        return res
 
     def read(self, batch: str) -> list[Event]:
         path = self.batch_path(batch)

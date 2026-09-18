@@ -625,9 +625,17 @@ def test_route_inventory():
     蓝=下端削到的行）。用户实测反馈「你需要划线不然我不知道在哪」——看不到线
     就没法判「削到哪了对不对」；二值化是为了与字形库/定字审阅同一把尺子。
     79 → 80。
+
+    2026-09-18 Step3 逐列字数人裁（用户「现在就设计人工标注这个环节」——
+    格高/period 比值判不出「一格塞两字」，两个方向都测过假阳性/假阴性，
+    见 `cv-segmentation` skill §三）：新增 `slot_count_review.py` 3 条——
+    `GET /api/slot-count-review/cards`（逐列出卡，附现有格数）、
+    `GET /api/slot-count-review/verdicts`（读回本批已裁）、
+    `GET /api/slot-count-review/img/{book}/{page}/{col}.png`（整列图 + 现有
+    格线，人逐格数字数用）。80 → 83。
     """
     got = sorted(_endpoints())
-    assert len(got) == 80, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 83, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -738,6 +746,8 @@ EXPECTED_ROUTES = [
     "GET /api/column-review/cases", "GET /api/column-review/verdicts",
     "GET /api/column-review/profile/{book}/{page}/{col}",
     "GET /api/column-review/img/{book}/{page}/{col}.png",
+    "GET /api/slot-count-review/cards", "GET /api/slot-count-review/verdicts",
+    "GET /api/slot-count-review/img/{book}/{page}/{col}.png",
     "GET /api/cache/{book}/{kind}/{key}.png",
     "GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png",
     "GET /api/cell-shrink-rand/sample",
