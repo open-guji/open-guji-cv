@@ -62,17 +62,54 @@ from ..clustering.normalize import SAUVOLA_K, SAUVOLA_WINDOW, sauvola_binarize
 BINARIZED_DIRNAME = "binarized"
 
 
+#: 纸缘 `EDGE_MARGIN` px 内**强制判纸**（2026-09-17）。
+#:
+#: 扫描件最外一圈是纸张边缘的**浅灰渐变**（bxgb p3 页底实测 185→157）。灰度链路
+#: 用固定阈 `<128` 判墨，这一圈全在阈值之上、等于不存在；换成 Sauvola 局部阈，
+#: 渐变处「比邻域略暗」就算墨，这一圈整片变黑。
+#:
+#: 后果是**几何探测被带走**，不是「图不好看」：
+#:
+#: * 下版框——`find_horizontal_border` 的 `score = proj / 半高宽`，**窄峰分母小**。
+#:   纸缘那条伪响应又窄又强（p3: proj 15→661、宽仅 5 → score 5.0→132.2），
+#:   反超真框的 66.8。10 页里 **7 页**锁到 y≈2339（真框在 y≈2080）。
+#: * 竖界行——右纸缘列墨 0.04→0.41，`find_vertical_lines` 全幅搜索，
+#:   p33/p40 的线位偏出 26~30px。
+#:
+#: 真框自身在两种图上几乎没动（p3 下框 score 69.8→66.8）——坏的只是**多出来的
+#: 那个候选**，所以修在「纸缘不参选」，不动 Sauvola 的参数。
+#:
+#: ⚠️ 试过但无效：在 `binarize_page` 里按「局部方差低就判纸」拦。纸缘是**渐变**
+#: 不是平坦区（局部 std 6.6~8.7，与淡笔画同量级），按方差砍要么砍不掉、要么
+#: 连淡笔画一起砍。这与 `feedback_sauvola_synthetic_block` 是同一族坑的**另一面**：
+#: 那次是均匀实心块内部被判成纸，这次是缓变浅灰被判成墨。
+#:
+#: 取 20px：bxgb 10 页实测四缘异常深度 上 4 / 下 9 / 左 10 / **右 16**，20 留余量。
+#: 版框离纸缘最近也有 250px 以上，这一圈里不可能有正文或版框。
+EDGE_MARGIN = 20
+
+
 def binarize_page(gray: np.ndarray, window: int = SAUVOLA_WINDOW,
-                  k: float = SAUVOLA_K) -> np.ndarray:
+                  k: float = SAUVOLA_K,
+                  edge_margin: int = EDGE_MARGIN) -> np.ndarray:
     """灰度页 → uint8 {0,255} 的**白底黑字**页图（与原图同尺寸，可直接看）。
 
     `sauvola_binarize` 返回 {0,1}、1=墨；这里翻成给人看的白底黑字，
     落盘的 PNG 打开就是一张正常的黑白书页。
+
+    **纸缘留白**（`edge_margin`，见上）：最外一圈强制判纸，否则纸张边缘的浅灰
+    渐变会被局部阈判成墨，把版框/界行探测带走。
     """
     if gray.ndim == 3:
         import cv2
         gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
     ink = sauvola_binarize(gray.astype(np.uint8), window=window, k=k)
+    m = int(edge_margin)
+    if m > 0 and ink.shape[0] > 2 * m and ink.shape[1] > 2 * m:
+        ink[:m, :] = 0
+        ink[-m:, :] = 0
+        ink[:, :m] = 0
+        ink[:, -m:] = 0
     return np.where(ink > 0, 0, 255).astype(np.uint8)
 
 
