@@ -38,9 +38,17 @@ class ConsumeResult:
 
 
 # ── gold_add ─────────────────────────────────────────────────────────
+#: 传输/审计用的元数据，**不属于金标内容**，一律不进 `expected`。
+#: `question` 是路由分流用的（2026-09-18 加）；`client_ts`/`dwell_ms` 是量
+#: 人裁耗时的（事件自己的 `ts` 是收割时间，量不出来）。
+#: 走 `return p` 那条兜底分支的 kind（如 `n_body_slots`）会把 payload 原样
+#: 透传，不剔掉的话这些键会混进金标——实测 `{"n_slots": 21, "question": ...}`。
+_META_KEYS = ("question", "client_ts", "dwell_ms", "t")
+
+
 def _expected_of(e: Event) -> dict:
     """事件 payload → 金标 expected。不同 kind 的金标内容不同。"""
-    p = dict(e.payload)
+    p = {k: v for k, v in e.payload.items() if k not in _META_KEYS}
     if e.kind == "verdict":
         return {"verdict": p.get("verdict")}
     if e.kind == "band":

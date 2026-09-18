@@ -95,6 +95,39 @@ def api_batch_get(batch_id: str) -> dict:
 
 
 
+def _product_anchor(step: str, ids: dict) -> dict | None:
+    """裁决是**对哪一版产物**做的——写进 `target.anchor.product_key`。
+
+    ## 为什么要有
+
+    `Anchor` 设计时就写着「product_key 允许失效，bbox + content_sha 不失效」，
+    可实测这三个字段**填充率全是 0%**（2984 条裁决表条目里一条都没有），
+    「产物重生后仍可定位」这个核心能力从来没兑现过。
+
+    后果是真实的：2026-09-18 改了 Step3 的 `ink_lam` 重跑全书，切线坐标基准
+    随之变化，而金标里没有任何东西能判断「这条裁决是对哪一版产物裁的」——
+    只能靠人记得。切线台自己发明了一个补丁（把 `col_h` 塞进 payload，233/233
+    条都有，前端 drift 档据此判断裁决是否过期），但那是**私有解法**，
+    别的台没有。这里把它提升成通用字段，由写入路径统一填，不靠各台自觉。
+
+    取不到指纹就返回 None（页号解析不出、产物还没跑、step 不产页级产物），
+    **不抛异常**——anchor 是锦上添花，不该让裁决写不进去。
+    """
+    pg = ids.get("page")
+    if not step or pg is None:
+        return None
+    try:
+        from ...core.spec import page_key
+        man = deps.product_store().manifest(ids.get("book") or "", step)
+        rec = man.get(page_key(int(pg))) if man else None
+        fp = getattr(rec, "fingerprint", None)
+        if not fp:
+            return None
+        return {"product_key": {"step": step, "key": page_key(int(pg)), "fingerprint": fp}}
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
 @router.post("/api/events")
 def api_events(req: EventsIn) -> dict:
     """审查页直连写入。seq 从当前最大值续，保证同批不撞号。"""
@@ -108,9 +141,10 @@ def api_events(req: EventsIn) -> dict:
         # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
         # 指标就是这个耗时，没有它 D 刀无法证伪。
         from ...feedback.harvest import parse_card_id
+        ids = parse_card_id(row["id"])
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
-                                          **parse_card_id(row["id"])),
+                                          anchor=_product_anchor(req.step, ids), **ids),
                               payload, source_format="server"))
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(req.batch)
