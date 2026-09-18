@@ -189,3 +189,47 @@ def validate(qid: str, answer: str) -> bool:
     if q is None:
         return False
     return True if not q.answers else answer in q.answers
+
+
+def default_batch(book: str, qid: str | None = None, variant: str = "",
+                  kind: str | None = None) -> str:
+    """这次裁决默认记到哪个批次。
+
+    ## 形状
+
+        <book>-<step 段>[-<variant>]
+
+    `step 段` 取自 question id 的第一段（`row_segment.boundary.cut_y` → `row_segment`）；
+    `qid` 给不出时用 `kind` 兜底。`variant` 给同一步下需要分账的批次用
+    （如切线的 `blocking` 与全量分开记）。
+
+    ## **不带日期**
+
+    计划书原稿写的是 `<book>-<step>-<yyyymmdd>`，**实测否掉了**：
+    「读回本批已裁」是按批次名查的，批次名一天一换，跨天就读不回昨天的裁决
+    ——人刷新页面会看到自己裁过的卡重新变成未裁。bxgb 实测 cutline 的裁决
+    横跨 2026-09-16/17/18 三天却在同一批次里，按日期切会被打散成 3 个。
+    同型事故 `ColumnReviewPanel` 那条注释记过一次（批次名带页范围，同一批
+    裁决分到两个批次，读回失灵）。
+
+    ## 为什么是「默认值」而不是强制
+
+    多数面板允许人手填批次名（`batchInput.trim() || 默认值`），那是有用的
+    ——分轮次、分标注人时要能自己开一批。这里统一的是**默认值的算法**，
+    不是剥夺覆盖能力。
+
+    ## ⚠️ 现有 11 处前端**不要**改用这个（2026-09-18 实测结论）
+
+    计划书 §2.2(3) 原本要「11 处前端硬编码删除」，改造前先量了一遍代价：
+    bxgb 的 10 个批次会**全部改名、1149 条裁决读不回**；更糟的是新规则把
+    `bxgb-cutline` / `bxgb-cutline-blocking` / `bxgb-slotcount-*` 合并成
+    同一个 `bxgb-row_segment`，**分账信息丢失**——而那三批本就是按用途分开记的。
+
+    根因是计划书那条假设错了：批次的实际分界不是「哪个 step」，而是
+    「哪一轮、哪个台、什么范围」，这是**人的组织方式**，不该由 step 推导。
+    所以本函数只作为**新增裁决台的默认值**；存量台保持原名不动。
+    真要统一，得先有批次别名/迁移机制，那是另一件事。
+    """
+    seg = (qid or "").split(".")[0] if qid else (kind or "review")
+    parts = [book, seg] + ([variant] if variant else [])
+    return "-".join(p for p in parts if p)

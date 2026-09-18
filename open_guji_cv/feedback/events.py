@@ -21,19 +21,33 @@ from pydantic import BaseModel, Field
 
 # 人裁动作。前四种是 P1 就要用的；其余对齐既有 labels.jsonl / seed 事件的动词，
 # 收割旧格式时映射到这里，不新造词。
+#: ⚠️ **枚举里有 9 个值没有任何前端出口**（2026-09-18 实测：扫全部事件日志 +
+#: 前端源码 + 路由表）。别照着它推断「系统支持哪些裁决」——真正的分类真源是
+#: `feedback/questions.py` 的问题登记表，`kind` 只是传输层的粗分类。
+#:
+#: 其中两个容易看走眼：`not_a_char` 与 `skip` **确实在用**，但身份是
+#: `payload.v` 的取值（前端整批发 `kind="confirm"`，靠 `v` 二次分流），
+#: 不是 kind。后端两条路都认（`consumers.py` 里
+#: `e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char")`），
+#: 走的一直是后一条。
+#:
+#: **不删这些值**：`Kind` 是 `Literal`，删了之后任何遗留事件（含别人机器上的、
+#: 未推送的日志）在 `gold rebuild` 重放时会直接校验失败——而重放是金标的重建
+#: 路径，炸在这里等于金标重建不了。标注比删除安全，"误导"这个实际问题靠注释解决。
 Kind = Literal[
     "verdict",        # 一档裁决（ok / miss / extra / idk 之类，取值在 payload.verdict）
     "band",           # 拖出的边界（文字带左右、切分点…）
     "border_class",   # 类别裁决（clean / glued / none / idk）
-    "recrop",         # 拖框重切（payload: old_bbox / new_bbox）
-    "not_a_char",     # 判非字
+    "recrop",         # 【无出口】拖框重切。消费器 `glyphdb_recrop` 自己就报
+                      #   "尚未接入（P1 之后）"，路由表那条规则是死的
+    "not_a_char",     # 【无 kind 出口，但语义在用】判非字——实走 confirm + payload.v
     "confirm",        # 确认字（payload: char, admit）
-    "relabel",        # 改判字
-    "skip",           # 存疑跳过
-    "mark",           # 实例级标记
-    "flag",           # 簇级标记
-    "split", "merge", # 簇操作
-    "note",           # 纯文字批注
+    "relabel",        # 【无出口】改判字
+    "skip",           # 【无 kind 出口，但语义在用】存疑跳过——实走 confirm + payload.v
+    "mark",           # 【无出口】实例级标记
+    "flag",           # 【无出口】簇级标记
+    "split", "merge", # 【无出口】簇操作
+    "note",           # 【无出口】纯文字批注
     "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
     "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
     "head_raise",     # 列级抬头精标（payload: raised / n_raised / head_cut / note）

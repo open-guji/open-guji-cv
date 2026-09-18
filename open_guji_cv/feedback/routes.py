@@ -58,6 +58,13 @@ DEFAULT_ROUTES: list[dict] = [
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
     {"match": {"kind": "verdict", "target.step": "row_segment"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/row-boundaries"}]},
+    # ⚠️ 下面两条**当前没有事件会命中**（2026-09-18 实测：事件日志与前端源码都没有
+    # 以它们为 kind 的出口）。留着不删的理由各不相同：
+    # - `recrop`：消费器 `glyphdb_recrop` 自己就报「尚未接入（P1 之后）」，
+    #   整条链路是半成品。删了规则等于把这件未办的事抹掉痕迹。
+    # - `not_a_char`：语义**在用**，但走的是 `confirm` + `payload.v == "not_a_char"`
+    #   那条（见下面 confirm 规则里的 crop_exclude）。这条 kind 级规则是早期
+    #   设计的残留，`consumers.crop_exclude` 至今两条都认。
     {"match": {"kind": "recrop"},
      "to": [{"consumer": "glyphdb_recrop"},
             {"consumer": "gold_add", "shard": "char-segmentation/instances",
