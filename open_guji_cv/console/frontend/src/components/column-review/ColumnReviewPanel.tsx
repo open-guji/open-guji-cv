@@ -48,6 +48,7 @@ function cls(t: string) {
 export function ColumnReviewPanel({ book, pages }: { book: string; pages: string }) {
   const [scope, setScope] = useState<'all' | 'blocking' | 'review'>('blocking')
   const [limit, setLimit] = useState(30)
+  const [imgSrc, setImgSrc] = useState<'bin' | 'raw'>('bin')
   const [cases, setCases] = useState<Case[]>([])
   const [msg, setMsg] = useState('')
   const [cur, setCur] = useState(0)
@@ -154,12 +155,19 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
             <span className={`tag ${cls(c.triage.side_class)}`}>左右 {c.triage.side_class}</span>
             <span className={`tag ${cls(c.triage.top_class)}`}>上 {c.triage.top_class}</span>
             <span className={`tag ${cls(c.triage.bot_class)}`}>下 {c.triage.bot_class}</span>
-            <span className="muted">算法削 上{c.trim_top.px}({c.trim_top.case}) / 下{c.trim_bottom.px}({c.trim_bottom.case})</span>
+            <span className="muted">
+              算法削 上{c.trim_top.px}px({c.trim_top.case}) / 下{c.trim_bottom.px}px({c.trim_bottom.case})
+              ・左右带 [{c.band[0]}, {c.band[1]}]px / 宽{c.size[0]}
+            </span>
+            <label className="muted" style={{ marginLeft: 'auto' }}>
+              <input type="checkbox" checked={imgSrc === 'bin'}
+                     onChange={(e) => setImgSrc(e.target.checked ? 'bin' : 'raw')} /> 二值图
+            </label>
           </div>
 
           <div className="colrev-main">
             {/* 整列图：上下端各截一段放大，中间缩略 */}
-            <ColumnStrips cse={c} />
+            <ColumnStrips cse={c} src={imgSrc} />
             <div className="colrev-forms">
               <fieldset>
                 <legend>上端</legend>
@@ -197,27 +205,28 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
   )
 }
 
-// 端部各截 110px 放大给人看——整列缩成一条没法判「框和字断没断开」。
-function ColumnStrips({ cse }: { cse: Case }) {
-  const src = withWorkspace(cse.img)
-  const h = cse.size[1]
+// 端部各截一段放大给人看——整列缩成一条没法判「框和字断没断开」。
+// 图走 `/api/column-review/img`：**二值化（Sauvola k=0.10）+ 把算法的线画上去**。
+//   红=文字带左右边界（左右 padding）　绿=上端削到的行　蓝=下端削到的行
+// 看不到线就没法判「削到哪了对不对」；二值化是为了与字形库/定字审阅同一把尺子
+// （Step2 内部判据仍是固定阈 128，两者在本书上差 15%~38% 墨量——正因为如此，
+// 人看的那张必须标明是哪一张，否则裁决对不上号）。
+function ColumnStrips({ cse, src }: { cse: Case; src: 'bin' | 'raw' }) {
+  const base = `/api/column-review/img/${cse.book}/${cse.page}/${cse.col}.png?src=${src}`
+  const PAD = 130
   return (
     <div className="colrev-strips">
       <figure>
-        <div className="clip" style={{ height: 150 }}>
-          <img src={src} alt="上端" style={{ marginTop: 0 }} />
-        </div>
-        <figcaption>上端</figcaption>
+        <img src={withWorkspace(`${base}&end=top&pad=${PAD}`)} alt="上端" className="zoom" />
+        <figcaption>上端（绿线=削到这里）</figcaption>
       </figure>
       <figure>
-        <div className="clip" style={{ height: 150 }}>
-          <img src={src} alt="下端" style={{ marginTop: -(h - 150) }} />
-        </div>
-        <figcaption>下端</figcaption>
+        <img src={withWorkspace(`${base}&end=bottom&pad=${PAD}`)} alt="下端" className="zoom" />
+        <figcaption>下端（蓝线=削到这里）</figcaption>
       </figure>
       <figure className="whole">
-        <img src={src} alt="整列" style={{ maxHeight: 420 }} />
-        <figcaption>整列</figcaption>
+        <img src={withWorkspace(`${base}&end=all`)} alt="整列" style={{ maxHeight: 420 }} />
+        <figcaption>整列（红线=左右带）</figcaption>
       </figure>
     </div>
   )

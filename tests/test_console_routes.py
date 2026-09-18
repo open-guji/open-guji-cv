@@ -619,9 +619,15 @@ def test_route_inventory():
     抽样出待裁列）、`GET /api/column-review/verdicts`（读回本批已裁）、
     `GET /api/column-review/profile/{book}/{page}/{col}`（两条投影曲线，拖线时看），
     76 → 79。
+
+    2026-09-17 同一批：再加 `GET /api/column-review/img/{book}/{page}/{col}.png`
+    （列图**二值化 + 把算法的线画上去**：红=文字带左右边界、绿=上端削到的行、
+    蓝=下端削到的行）。用户实测反馈「你需要划线不然我不知道在哪」——看不到线
+    就没法判「削到哪了对不对」；二值化是为了与字形库/定字审阅同一把尺子。
+    79 → 80。
     """
     got = sorted(_endpoints())
-    assert len(got) == 79, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 80, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -731,6 +737,7 @@ EXPECTED_ROUTES = [
     # Step2 列清理人裁（2026-09-17）
     "GET /api/column-review/cases", "GET /api/column-review/verdicts",
     "GET /api/column-review/profile/{book}/{page}/{col}",
+    "GET /api/column-review/img/{book}/{page}/{col}.png",
     "GET /api/cache/{book}/{kind}/{key}.png",
     "GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png",
     "GET /api/cell-shrink-rand/sample",
