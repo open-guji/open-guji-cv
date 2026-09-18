@@ -106,7 +106,16 @@ class ColumnGateStep(Step):
         expected_slots = p.chars_per_line or ctx.book.chars_per_line
         wins: PageWindows = ctx.product("column_windows", page)
         cols = wins.columns
-        widths = [float(c.warped_size[0]) for c in cols]
+        # **量文字带宽（`band`），不量整列图宽（`warped_size[0]`）**（2026-09-18 修）。
+        # 后者含两侧 padding，一列紧贴一条界行时 padding 被撑大、总宽虚高，闸却拿这个
+        # 虚高值去判「是不是把界行圈进来了」——band 早就把界行排除在文字带外，闸没用它，
+        # 等于拿「排除界行之前」的量去证明「排除界行没排干净」，判据和它自己的说法矛盾。
+        # 实锤 bxgb p33c19：warped_size 145px（含左侧界行）判 +20% 拒收，band 127px
+        # 只比中位数高 14%——这一列 21 格里被拦到一格都没切出来，是这本书唯一一处
+        # Step3 完全空转的列。全书改用 band 后重算：只此一处从「拒」变「收」，
+        # 没有新增误报——顺带真拦住了一处此前漏判的（p56c2：band 130px vs 中位 111px，
+        # 图上核实是夹注双栏内容被误切成单列，band 判据在这正确起作用）。
+        widths = [float(c.band[1] - c.band[0]) for c in cols]
         med_w = statistics.median(widths) if widths else None
         page_reject: list[str] = []
 
@@ -293,8 +302,9 @@ class ColumnGateStep(Step):
             if not page_ok:
                 reasons.append("页级未过 L1")
             if c.col in wide_cols:
-                reasons.append(f"L1c：本列宽 {c.warped_size[0]}px 偏离本页中位数 "
-                               f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行）")
+                band_w = c.band[1] - c.band[0]
+                reasons.append(f"L1c：本列文字带宽 {band_w}px 偏离本页中位数 "
+                               f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行/夹注双栏）")
             if c.side_floor > p.side_floor_max:
                 reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
             if c.stamp_noise > p.stamp_noise_max:
