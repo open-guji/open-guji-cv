@@ -1260,6 +1260,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         runs, tail_a = jiazhu_split.adopt_run_tails(
             runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
+        # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
+        # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
+        # 只在非空白、且不属于双行段的格上找；找到的一律只发 a 半。
+        solo = jiazhu_split.solo_notes(
+            {p: patches[p] for p in nonblank}, runs, ruler, ink_threshold)
+        runs.update(solo)
+        tail_a |= set(solo)
 
     cells: list[Cell] = []
     for k in range(n_slots):

@@ -56,7 +56,36 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
+from ..utils import jiazhu_split
 from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
+
+
+def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
+                        border_top: float, border_bottom: float,
+                        period: float | None, ref_w: float | None,
+                        ink_threshold: int = 128) -> float:
+    """这一列有多大比例的非空白格像双列小字（`jiazhu_split.column_frac` 的列图版）。
+
+    闸跑在 Step3 之前，拿不到 Step3 的格边界，所以这里按 `period` 均匀分格来
+    量——**判据只需要"整列比例"这个粗量，不需要精确的格边界**（实测按均匀
+    格分与按 Step3 真边界分，三条夹注列的比例分别是 0.44/0.76/1.00 与
+    0.44/0.76/1.00，逐列相同）。`period` 缺失时返回 0（不豁免）。
+    """
+    if not period or period <= 0:
+        return 0.0
+    x_lo, x_hi = int(band[0]), int(band[1])
+    y0, y1 = max(0.0, border_top), min(float(cleaned.shape[0]), border_bottom)
+    if x_hi - x_lo < 8 or y1 - y0 < period:
+        return 0.0
+    n = max(1, int(round((y1 - y0) / period)))
+    patches = {}
+    for k in range(n):
+        a = int(round(y0 + k * (y1 - y0) / n))
+        b = int(round(y0 + (k + 1) * (y1 - y0) / n))
+        if b - a >= 8:
+            patches[k] = cleaned[a:b, x_lo:x_hi]
+    return jiazhu_split.column_frac(patches, ref_w, ink_threshold)
+
 
 CONTRACT = [
     "页级共享量 period / ref_w 用该页的正文列算（剔掉 L1c 宽度异常与 L0c 非正文列），"
@@ -74,6 +103,7 @@ class ColumnGateParams(BaseModel):
     width_tol: float = 0.15
     side_floor_max: float = 0.045
     stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
+    jiazhu_frac_min: float = jiazhu_split.COLUMN_FRAC_T  # 夹注列豁免门槛，见 L1c/L2 的豁免说明
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
     # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
@@ -290,6 +320,23 @@ class ColumnGateStep(Step):
                 if head.size and float(head.max()) > 0.08:
                     top_ink_slack[c.col] = round(float(period) * 0.5, 2)
 
+        # 夹注列比例：**只对「本来要被 L1c/L2 拒掉」的列算**（每列要逐格跑
+        # 一遍缝判据，不便全列算；正常列算了也用不上——豁免只在有拒因时才有
+        # 意义）。非正文列（版心/页边）不算：L0c 不在豁免范围内。
+        jz_fracs: dict[int, float] = {}
+        for c in cols:
+            if c.col in non_body:
+                continue
+            if c.col not in wide_cols and c.side_floor <= p.side_floor_max:
+                continue
+            try:
+                cleaned = ctx.image("column_image", column_key(page, c.col))
+            except Exception:
+                continue
+            jz_fracs[c.col] = round(jiazhu_column_frac(
+                cleaned, c.band, c.border_top_in_column, c.border_bottom_in_column,
+                period, ref_w, p.ink_threshold), 3)
+
         recs: list[GateColumn] = []
         for c in cols:
             reasons: list[str] = []
@@ -301,11 +348,30 @@ class ColumnGateStep(Step):
                                + (f"——{why}" if why else ""))
             if not page_ok:
                 reasons.append("页级未过 L1")
-            if c.col in wide_cols:
+            # **夹注列豁免**（2026-09-17）：L1c 与 L2 都建立在「正文列 = 一列
+            # 居中的大字」这个前提上——L1c 认为超宽是圈进了界行，L2 认为两侧
+            # 外沿有墨是列窗没对齐。**大段双行小注把这两个前提同时打破**：
+            # 两个小字并排合起来本来就顶满列宽（两侧外沿当然有墨），排得密的
+            # 列文字带也确实比正文列宽。
+            # 实锤：bxgb p56c1/c2、p8c13 三列被这两条拒掉，Step3 根本没跑；
+            # 绕过闸直接切，夹注 a/b 全部切对（p56c2 读序出来正是
+            # 「二里此云過永康數里飯至李」），是闸在丢好数据，不是切分不行。
+            # 判据用 `jiazhu_column_frac`——全书 931 列实测普通列 p99 0.048、
+            # 这三列 0.44/0.76/1.00，两个分布中间空一大档（标定见
+            # `jiazhu_split.COLUMN_FRAC_T`）。
+            # ⚠️ 只豁免这两条**几何前提被版式打破**的闸；L0c（版心/页边，版式
+            # 事实）与 L2b（噪点 flag）不在豁免范围内——版心就算印得像夹注也
+            # 不是正文。
+            jz_frac = jz_fracs.get(c.col, 0.0)
+            is_jiazhu_col = jz_frac >= p.jiazhu_frac_min
+            if is_jiazhu_col:
+                flags.append(f"L1c/L2 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
+                             "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")
+            if c.col in wide_cols and not is_jiazhu_col:
                 band_w = c.band[1] - c.band[0]
                 reasons.append(f"L1c：本列文字带宽 {band_w}px 偏离本页中位数 "
                                f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行/夹注双栏）")
-            if c.side_floor > p.side_floor_max:
+            if c.side_floor > p.side_floor_max and not is_jiazhu_col:
                 reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
             if c.stamp_noise > p.stamp_noise_max:
                 # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，

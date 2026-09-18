@@ -182,6 +182,78 @@ def test_adopt_run_tails_skips_blank_cells():
     assert set(runs) == {3, 4}
 
 
+# ── 單行小注（小字只占右半、左半空着） ──────────────────────
+# zongmu 两册没有这种版式（全书 317 个 a 半格没有一个是孤立的），bxgb 大量用
+# 它给人名作注。判据方向与雙行相反：跨度**比正文还窄**，见模块头 SOLO_* 标定。
+
+
+def _solo_note_patch(w: int = W) -> np.ndarray:
+    """單行小注：一个小字挤在右半，左半整片空白。"""
+    p = _blank(w=w)
+    _box(p, int(w * 0.58), w - 12, 20, 90)
+    return p
+
+
+def test_solo_notes_finds_half_width_note_in_right_column():
+    got = jz.solo_notes({5: _solo_note_patch()}, runs={}, ref_w=W)
+    assert set(got) == {5}
+    assert got[5] > W * 0.5          # 缝中心在右半
+
+
+def test_solo_notes_does_not_need_a_run():
+    """孤立一格也要认——bxgb 74 格里 34 格是孤立的（p6c13 的「瀛」「楫」都是），
+    `link_runs` 的 MIN_RUN 保护在这里不成立。"""
+    assert set(jz.solo_notes({9: _solo_note_patch()}, runs={}, ref_w=W)) == {9}
+
+
+def test_solo_notes_rejects_normal_centered_char():
+    assert jz.solo_notes({5: _single_char_patch()}, runs={}, ref_w=W) == {}
+
+
+def test_solo_notes_rejects_narrow_but_centered_char():
+    """窄正文字（下/十/上）跨度也小，但墨是居中的——只卡跨度会误伤，
+    必须同时要求墨压在右半（实测最近的落选右墨占比 0.903）。"""
+    p = _blank()
+    _box(p, 70, 115, 15, 95)
+    assert jz.solo_notes({5: p}, runs={}, ref_w=W) == {}
+
+
+def test_solo_notes_rejects_speck():
+    """纸缘残墨/污点：偏在右半、又窄，全靠墨量下限挡（实测 12 格全是残渣）。"""
+    p = _blank()
+    _box(p, 150, 156, 40, 46)
+    assert jz.solo_notes({5: p}, runs={}, ref_w=W) == {}
+
+
+def test_solo_notes_skips_cells_already_in_a_double_run():
+    """双行段里的格不重判——半格本来就偏在一侧，重判会把 b 半抢走。"""
+    patches = {3: _solo_note_patch(), 4: _solo_note_patch()}
+    assert jz.solo_notes(patches, runs={3: 92.0, 4: 92.0}, ref_w=W) == {}
+
+
+# ── 整列判据（交接闸豁免用） ─────────────────────────────────
+
+
+def test_column_frac_high_on_jiazhu_column():
+    patches = {i: _jiazhu_patch() for i in range(1, 11)}
+    assert jz.column_frac(patches, ref_w=W) == 1.0
+
+
+def test_column_frac_zero_on_normal_column():
+    patches = {i: _single_char_patch() for i in range(1, 11)}
+    assert jz.column_frac(patches, ref_w=W) == 0.0
+
+
+def test_column_frac_ignores_blank_cells():
+    """空白格不进分母——半列空白的夹注列不该因此被稀释到门槛以下。"""
+    patches = {1: _jiazhu_patch(), 2: _jiazhu_patch(), 3: _blank(), 4: _blank()}
+    assert jz.column_frac(patches, ref_w=W) == 1.0
+
+
+def test_column_frac_empty_column_is_zero():
+    assert jz.column_frac({1: _blank()}, ref_w=W) == 0.0
+
+
 # ── 漂移护栏 ────────────────────────────────────────────────
 
 
