@@ -19,7 +19,38 @@ from .events import Event
 
 # 内置默认表 —— 与设计 §3.6 的 routes.yaml 一致
 DEFAULT_ROUTES: list[dict] = [
-    {"match": {"kind": "verdict", "target.step": "border_detect"},
+    # 闸1 的三类页级裁决（2026-09-18 拆开）。此前一条 `verdict + border_detect`
+    # 通吃，**三个问题落进同一个分片**：cols 问「界行在不在缝上」(ok/miss/extra)、
+    # head 问「这页有没有抬头」(yes/no)、outer 问「外沿线准不准」(ok/in/out/none)。
+    # 实测污染：siku column-split 分片 205 条里有 **70 条是 head 的 yes/no**
+    # ——档位完全不同，拿这个分片评测会把 70 条答非所问的条目算进去。
+    # 靠 `payload.question` 分流；前端三种卡各自声明自己问的是什么。
+    # `question` 是《计划书-控制台四板块统一》§2.2 的一等字段，阶段二会正式化，
+    # 这里先以 payload 落地（止血优先，不提前引入机制）。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.has_head_raise"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/head-raise-presence"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.outer_edge"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/outer-edge"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.vline_on_seam"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/column-split"}]},
+    # ── 历史事件（2026-09-18 之前，没有 `question`）按卡片 id 前缀分流 ──
+    # `gold rebuild` 会重放整个事件日志，这三条保证重放结果与新裁的一致；
+    # 存量 70 条 head 裁决正是靠它们从 column-split 迁出的。
+    # `payload.question: None` = 「没带 question」，与上面三条互斥，
+    # 不写的话带 question 的事件会同时命中专用规则和兜底，落进两个分片。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None, "target.key": "prefix:head:"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/head-raise-presence"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None, "target.key": "prefix:outer:"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/outer-edge"}]},
+    # 其余（`cols:` 前缀与更早的无前缀 id）仍落 column-split——那是它本来的归属。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None,
+               "target.key": "not-prefix:head:|outer:"},
      "to": [{"consumer": "gold_add", "shard": "border-detection/column-split"}]},
     {"match": {"kind": "band", "target.step": "column_warp"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
@@ -101,6 +132,26 @@ class Route:
             # 实际值是列表（如 payload.tags）时，规则写一个标量表示"包含"
             if isinstance(got, list) and not isinstance(want, list):
                 if want not in got:
+                    return False
+                continue
+            # `"prefix:xxx"` 写法（2026-09-18）：值以 xxx 开头就算命中。
+            # 只为**历史事件**而加——2026-09-18 之前的 cols/head/outer 裁决没有
+            # `payload.question`，唯一能分辨它们的就是卡片 id 前缀（`head:` /
+            # `outer:`）。给历史事件日志补字段等于改真源，风险远大于在路由层按
+            # 既成事实的前缀分流，所以走这条。新事件一律靠 `question`，
+            # 阶段二统一卡片 id（去前缀）之后，这些 prefix 规则连同前缀一起退役。
+            if isinstance(want, str) and want.startswith("prefix:"):
+                if not (isinstance(got, str) and got.startswith(want[7:])):
+                    return False
+                continue
+            # `"not-prefix:a|b"` —— 都不以这些前缀开头才算命中。兜底规则要用它把
+            # 已有专用去向的前缀排掉：`match` 是「所有条件与」，表达不了「非」，
+            # 而 `destinations` 把**每条**命中规则的去向累加，不是首条命中即止
+            # ——少了这个，一条历史 head 裁决会同时落进 head-raise-presence 和
+            # column-split 两个分片（实测确认过，不是假想）。
+            if isinstance(want, str) and want.startswith("not-prefix:"):
+                pres = [x for x in want[11:].split("|") if x]
+                if isinstance(got, str) and any(got.startswith(x) for x in pres):
                     return False
                 continue
             if got != want:

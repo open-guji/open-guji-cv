@@ -219,6 +219,19 @@ class EventLog:
         return out
 
     # ── 幂等消费 ─────────────────────────────────────────────────────
+    def consumers(self) -> list[str]:
+        """记账目录里实际存在的消费者名。
+
+        2026-09-18 加：`refresh_counts` 原先写死 `{"gold_add", "glyphdb"}` 两个名字，
+        而真实记账文件叫 **`glyphdb_admit`**——`consumed_ids("glyphdb")` 恒返回空集，
+        定字裁决的消费数一直算作 0；另外还漏了 `crop_exclude` / `product_invalidate`。
+        写死名字就会随消费者改名而静默失准，改成按目录实际内容取。
+        """
+        d = self.consumed_dir
+        if not d.exists():
+            return []
+        return sorted(p.stem for p in d.glob("*.jsonl"))
+
     def consumed_ids(self, consumer: str) -> set[str]:
         path = self.consumed_dir / f"{consumer}.jsonl"
         if not path.exists():

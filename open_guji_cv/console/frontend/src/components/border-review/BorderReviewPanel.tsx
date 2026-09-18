@@ -62,7 +62,10 @@ export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderRe
     try {
       await postEvents({
         batch: batch(), step: STEP_OF[kind], unit: kind === 'colborder' ? 'column' : 'page',
-        kind: spec.eventKind, events: [{ id: card.id, [payloadKey]: v, t: Date.now() }],
+        // `question` 随裁决一起发（2026-09-18）：cols/head/outer 三类的 kind 与 step
+        // 完全相同，路由只能靠它分辨该落哪个金标分片，见 feedback/routes.py 的说明。
+        kind: spec.eventKind,
+        events: [{ id: card.id, [payloadKey]: v, question: spec.question, t: Date.now() }],
       })
       const n = Object.keys(verdicts.current).length
       setMsg(`已裁 ${n} / ${cards.length} → 批次 ${batch()}`)

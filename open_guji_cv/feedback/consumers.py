@@ -46,7 +46,20 @@ def _expected_of(e: Event) -> dict:
     if e.kind == "band":
         return {"band": p.get("band")}
     if e.kind == "border_class":
-        return {"border_class": p.get("border_class") or p.get("verdict")}
+        # 上下端是**两个独立的问题**（列图上端框墨形态 / 下端框墨形态），
+        # 列清理台一次裁两个，各自的答案在 `top_class` / `bot_class`。
+        # 2026-09-18 之前这里只取 `border_class` 一个键，两个独立答案被整个丢掉
+        # ——实测 bxgb column-warp 分片 31 条里 `top_class` 出现 0 次，
+        # 全靠前端顺手多塞的拼接串 `"top=clean,bot=clean"` 兜住语义。那是巧合
+        # 不是设计：串里 `bot=-` 表示「这一端没裁」，机器要靠解析字符串才知道。
+        # 现在三个键都留：拼接串保持向后兼容（旧评测在读它），两个独立键是正解。
+        # 阶段二拆成 `column_warp.column.end_class_top/bottom` 两个 question 之后，
+        # 拼接串退役。
+        out = {"border_class": p.get("border_class") or p.get("verdict")}
+        for k in ("top_class", "bot_class"):
+            if p.get(k):
+                out[k] = p[k]
+        return out
     if e.kind == "not_a_char":
         return {"quality": "not_text"}
     if e.kind == "confirm" and p.get("v") == "seg_defect":
