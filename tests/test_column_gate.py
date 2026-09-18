@@ -246,3 +246,44 @@ def test_vol01_33_head_raise_columns_differ():
     hints = {c["col"]: c.get("n_raised_hint", 0) for c in d["gate_manifest"]["columns"]}
     assert hints.get(7) or hints.get(8), "33 c7/c8 的墨跨度够 22 字，该给 hint"
     assert not all(hints.values()), "同页不该所有列都多一格"
+
+
+# ── 夹注列豁免（2026-09-17）────────────────────────────────
+
+
+def _synth_column(h: int, w: int, period: float, seam: int | None) -> np.ndarray:
+    """合成列图：`seam=None` 出一列居中大字，给了就出双列小字。"""
+    img = np.full((h, w), 255, dtype=np.uint8)
+    n = int(h / period)
+    for k in range(n):
+        y0, y1 = int(k * period) + 8, int((k + 1) * period) - 8
+        if seam is None:
+            img[y0:y1, int(w * 0.20):int(w * 0.80)] = 0
+        else:
+            img[y0:y1, 6:seam - 4] = 0
+            img[y0:y1, seam + 4:w - 6] = 0
+    return img
+
+
+def test_jiazhu_column_frac_separates_jiazhu_from_normal_column():
+    """豁免判据的分辨力：夹注列该高、正文列该 0。
+
+    真实标定（bxgb 全书 931 列）：正文列中位 0.000 / p99 0.048，
+    三条真夹注列 0.44 / 0.76 / 1.00 —— 中间空一大档，门槛取 0.25。
+    """
+    from open_guji_cv.gates.column_gate import jiazhu_column_frac
+
+    h, w, period = 1470, 110, 70.0
+    normal = _synth_column(h, w, period, seam=None)
+    jiazhu = _synth_column(h, w, period, seam=w // 2)
+    f_normal = jiazhu_column_frac(normal, (0.0, float(w)), 0.0, float(h), period, float(w))
+    f_jiazhu = jiazhu_column_frac(jiazhu, (0.0, float(w)), 0.0, float(h), period, float(w))
+    assert f_normal < 0.25 <= f_jiazhu
+
+
+def test_jiazhu_column_frac_zero_without_period():
+    """period 缺失时不豁免——宁可照旧拒，也不要凭空放行。"""
+    from open_guji_cv.gates.column_gate import jiazhu_column_frac
+
+    img = _synth_column(700, 110, 70.0, seam=55)
+    assert jiazhu_column_frac(img, (0.0, 110.0), 0.0, 700.0, None, 110.0) == 0.0
