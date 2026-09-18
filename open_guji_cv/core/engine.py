@@ -205,6 +205,12 @@ class Engine:
         if step.spec.book_deps:
             payload["book"] = {k: _jsonable(getattr(self.book, k, None))
                                for k in sorted(step.spec.book_deps)}
+        # `binarized_input` 换掉的是 `ctx.raw_page` 本身，**凡是读原图的步都受影响**
+        # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
+        # `book_deps` 覆盖全，所以在这里统一进指纹。
+        # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
+        if getattr(self.book, "binarized_input", False):
+            payload["bin_input"] = True
         fp = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return fp, ups, ph
 

@@ -187,6 +187,20 @@ class BookSpec:
     #: 这两条都占（抬头字越过版框线，位置判据会把抬头笔画当框），所以缺省保持
     #: `side_gap`，只在确认过版框清晰且不被突破的册上开。
     frame_bar_strategy: str = "side_gap"
+    #: `binarized_input`（yaml 同名）：Step1 起的**几何链路读整页二值副本**，
+    #: 而不是灰度原图（`utils/binarized.binarize_page`，Sauvola 31/k=0.10）。
+    #:
+    #: 为什么值得开：界行是**浅灰细线**（沿线 p50≈150、纸≈205），固定阈 `<128`
+    #: 砍掉一半——这正是北行日錄刻本当初不得不上 `column_grid` 的原因。局部阈
+    #: 留得住。实测 bxgb 全书 54/54 页竖线稳定 20 条；以「线距均匀度」这把独立
+    #: 尺子衡量（与两条链路都无关），二值比灰度更匀的 10 页、更差 4 页、持平 13。
+    #:
+    #: ⚠️ 缺省 `False`，**只在逐册验过之后开**：`ink_threshold`、`side_floor`
+    #: 0.045、`GRID_MIN_SCORE` 20 那一堆几何常数是在灰度上一起标定的
+    #: （见 `utils/binarized` 模块 docstring 的警告）。bxgb 上实测这些阈值几乎
+    #: 都不用动（`side_floor` 比值 1.000、`FRAME_ROW_T=0.5` 仍分得开框与正文），
+    #: 但这是**这一册**的结论，不能推广到四庫那种版框模糊的册。
+    binarized_input: bool = False
     #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
     #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
     #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
@@ -466,6 +480,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         column_grid=bool(d.get("column_grid", False)),
         norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
+        binarized_input=bool(d.get("binarized_input", False)),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         frame_height=(None if d.get("frame_height") is None
                       else float(d["frame_height"])),
