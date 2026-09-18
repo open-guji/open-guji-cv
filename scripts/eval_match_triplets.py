@@ -60,6 +60,18 @@ def main() -> None:
         if n0 != len(triplets):
             print(f"排除名单跳过 {n0 - len(triplets)} 组，剩 {len(triplets)} 组")
 
+    # 金标自洽性：三元组的性质是「**同字**比**形近异字**更匹配」，
+    # `same` 与 `other` 同字的条目**永远判不对**，白占一个失败名额。
+    # 2026-09-17 实测揪出 1 条（row00118「彖 vs 彖」，seed=inversion_review_r2）：
+    # 它建集当天 build_cov_other 0.9880 就已经 > build_cov_same 0.9858——
+    # 不是难例，是无效金标。`add_inversion_triplets.py` 没有这道校验，
+    # 所以放在这里拦，量之前先报出来。
+    invalid = [t for t in triplets if t.get("char") == t.get("other_char")]
+    if invalid:
+        ids = [f'{t["anchor"]}({t.get("char")})' for t in invalid]
+        print(f"⚠️ 跳过 {len(invalid)} 组无效金标（same/other 同字，判不对也说明不了问题）：{ids}")
+        triplets = [t for t in triplets if t.get("char") != t.get("other_char")]
+
     norms: dict[str, np.ndarray] = {}
 
     def norm_of(iid: str) -> np.ndarray:
