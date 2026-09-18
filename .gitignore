@@ -104,7 +104,6 @@ output/*/step3_input/
 output/audit_glyph_*
 
 # 一次性实验产物
-zitools_p2_rev.log
 output/corpora_disagree_ids.txt
 output/review_*.html
 
@@ -128,3 +127,12 @@ experiments/metric_loss/out/
 # 但**单个几十 MB、总量已 482MB**（2026-09-17），而 models/ 是入库目录——
 # 不 ignore 的话一次 `git add -A` 就把半个 G 的可重算缓存提交进去。
 models/*/emb_*.npz
+
+# ── 运行日志一律进 logs/ （2026-09-17 清理）────────────────────────
+# 之前跑管线/pytest/控制台随手 `> run_vol02_r5.log` 落在仓根，攒到 23 个；
+# 其中 5 个还被提交进了版本控制（console_live_err.log 单文件 1.3MB，每次
+# 重跑就是一份全新快照，diff 无意义）。约定：**所有运行日志写到 logs/**，
+# 整个目录不入库。要留给别人看的结论写进 NOTES.md / overview 仓，别留日志。
+/logs/
+# 顺手兜底：仓根的散落日志（万一又忘了写 logs/ 前缀）
+/*.log
