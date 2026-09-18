@@ -13,6 +13,13 @@ cv2 = pytest.importorskip("cv2")
 from open_guji_cv.utils.binarized import binarize_page
 
 
+#: 本文件一律 `edge_margin=0`：`binarize_page` 默认会把纸缘 20px 强制判纸
+#: （挡扫描纸边的浅灰渐变，见该函数 docstring），而这里的合成记号有意贴在
+#: 图像边上。这几个用例验的是**规范空间 ↔ 图像坐标的 x 翻转**，跟纸缘护栏
+#: 是两回事，不该被它影响。
+_BIN = dict(edge_margin=0)
+
+
 def _page_with_marks(w=400, h=200):
     """左右各放一个可区分的记号：左边一根竖条，右边一个方框。"""
     g = np.full((h, w), 205, np.uint8)
@@ -38,7 +45,7 @@ def test_mirror_maps_canonical_x_back_to_image_x():
 def test_crop_by_mirrored_bbox_lands_on_the_right_mark():
     """按镜像后的坐标裁，拿到的必须是**右侧方框**那块，不是左侧竖条。"""
     g = _page_with_marks()
-    b = binarize_page(g)
+    b = binarize_page(g, **_BIN)
     w = g.shape[1]
     canon_x0, canon_x1 = (w - 1) - 392, (w - 1) - 330      # 规范空间里的右侧方框
     x0, x1 = (w - 1) - canon_x1, (w - 1) - canon_x0
@@ -52,7 +59,7 @@ def test_crop_by_mirrored_bbox_lands_on_the_right_mark():
 def test_not_mirroring_would_grab_the_wrong_mark():
     """反面证据：**不翻** x 直接拿规范坐标去裁，会裁到左侧那根实心竖条上。"""
     g = _page_with_marks()
-    b = binarize_page(g)
+    b = binarize_page(g, **_BIN)
     w = g.shape[1]
     canon_x0, canon_x1 = (w - 1) - 392, (w - 1) - 330
     wrong = b[60:140, canon_x0:canon_x1]                   # 忘了翻
