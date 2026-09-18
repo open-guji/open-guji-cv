@@ -7,7 +7,9 @@
 
 所以这条把两边都拉成**一维字流**再做全局对齐：
 
-- 刻本侧：Step3 的 `char` 格按阅读序（页 → 列右→左 → 格上→下）展开，
+- 刻本侧：Step3 的字格按阅读序（页 → 列右→左 → 格上→下；夹注段先 a 全部再 b
+  全部）展开，**正文格与夹注半格都收**（见 `book_cell_stream`——证人流里本来就
+  有注文的字，刻本侧漏掉夹注格会让两边对不齐、每处小注断一次块）；
   版心（`line_index.kind == "margin"`）与非 `body` 列一律跳过；
 - 证人侧：去掉标点、页码行、脚注行，只留汉字；
 - 用 OCR top-1 当**锚**：`difflib.SequenceMatcher` 在「OCR 字流 ↔ 证人字流」上求最长
@@ -23,8 +25,12 @@
 
 输出（工作区 `products/<book>/witness_align/labels.jsonl`，一行一个字位，
 格式与 `witness_align` 一致，`seed-witness` 直接消费）：
-    {"page", "col", "slot", "char", "kind": "char", "cell_kind": "char",
+    {"page", "col", "slot", "sub", "char", "kind": "char",
+     "cell_kind": "char" | "jiazhu",
      "witness_idx": 证人字流下标, "block_len": 所在 equal 块长度}
+
+`sub` 是夹注半格的 `"a"`/`"b"`（正文格为 None）——a/b 两半 slot 相同，
+少了它无法唯一定位字位。
 """
 
 from __future__ import annotations
@@ -49,6 +55,9 @@ class CellRef:
     page: int
     col: int
     slot: int
+    sub: str | None = None      # 夹注半格的 "a"/"b"；正文格为 None。
+                                # **不能省**：a/b 两半 slot 相同，只有加上它
+                                # 才能唯一定位一个字位（下游 seed-witness 也照这个键取图块）
 
 
 @dataclass
@@ -75,7 +84,24 @@ def witness_char_stream(path: Path) -> str:
 
 
 def book_cell_stream(products_root: Path, book_id: str) -> list[CellRef]:
-    """刻本侧字流：Step3 `char` 格按阅读序。跳过版心与非 body 列。"""
+    """刻本侧字流：Step3 的字格按阅读序。跳过版心与非 body 列。
+
+    **夹注格照收**（2026-09-17）。这里原先只收 `kind == "char"`——那时候
+    Step3 只产 `char`/`blank` 两类，口径是等价的。加了小注检测之后就不等价了：
+    证人侧的汉字流**包含**小注的字（校對本用【】标出来，但 `witness_char_stream`
+    只滤标点、不滤【】，注文的字照样在流里），刻本侧要是把夹注格漏掉，两边
+    字数就对不上，`SequenceMatcher` 在每一处小注上断块。
+    bxgb 全书实测（含 164 个夹注格）：
+
+        只收 char ：字位 18169，给标签 13610，equal 块 1552 段，最长 100
+        夹注照收 ：字位 18333，给标签 **13763**，equal 块 **1520** 段，最长 109
+
+    多给 153 个标签、少断 32 段，最长块也变长——正是"漏字导致断块"被补上的样子。
+
+    夹注段内用 `order`（Step3 已按「先 a 全部、再 b 全部」算好，见
+    `row_boundaries.reading_order`），不是 `slot`：同一个 slot 上的 a/b 两半
+    slot 相同，按 slot 排会把两个子列交错成拉链，读序全乱。
+    """
     cells: list[CellRef] = []
     rs_dir = products_root / book_id / "row_segment"
     bd_dir = products_root / book_id / "border_detect"
@@ -93,15 +119,20 @@ def book_cell_stream(products_root: Path, book_id: str) -> list[CellRef]:
                 continue
             if kinds and kinds.get(col["col"]) != "body":
                 continue
-            for cell in sorted(col["cells"], key=lambda x: x["slot"]):
-                if cell.get("kind") == "char":
-                    cells.append(CellRef(page, col["col"], cell["slot"]))
+            for cell in sorted(col["cells"], key=lambda x: x.get("order") or x["slot"]):
+                if cell.get("kind") == "char" or str(cell.get("kind", "")).startswith("jiazhu"):
+                    cells.append(CellRef(page, col["col"], cell["slot"], cell.get("sub")))
     return cells
 
 
-def ocr_top1(products_root: Path, book_id: str) -> dict[tuple[int, int, int], str]:
-    """(page, col, slot) → OCR top-1 字。缺页/缺格就没有这个键。"""
-    out: dict[tuple[int, int, int], str] = {}
+def ocr_top1(products_root: Path, book_id: str
+             ) -> dict[tuple[int, int, int, str | None], str]:
+    """(page, col, slot, sub) → OCR top-1 字。缺页/缺格就没有这个键。
+
+    键里**必须带 `sub`**：夹注 a/b 两半的 `slot` 相同（见 `Cell.slot`），
+    只用 (page,col,slot) 的话两半会互相覆盖，一段夹注有一半字位取不到锚。
+    """
+    out: dict[tuple[int, int, int, str | None], str] = {}
     d = products_root / book_id / "ocr_candidates"
     if not d.is_dir():
         return out
@@ -112,7 +143,7 @@ def ocr_top1(products_root: Path, book_id: str) -> dict[tuple[int, int, int], st
                 continue
             for ch in col["chars"]:
                 if ch.get("topk"):
-                    out[(doc["page"], col["col"], ch["slot"])] = ch["topk"][0][0]
+                    out[(doc["page"], col["col"], ch["slot"], ch.get("sub"))] = ch["topk"][0][0]
     return out
 
 
@@ -126,7 +157,7 @@ def align_stream(book, *, witness: Path, products_root: Path,
     res.n_cells, res.n_witness = len(cells), len(wit)
 
     # OCR 字流：没有 OCR 结果的字位用 '�' 占位，保持与 cells 逐位对应
-    ocr_seq = [ocr.get((c.page, c.col, c.slot), "�") for c in cells]
+    ocr_seq = [ocr.get((c.page, c.col, c.slot, c.sub), "�") for c in cells]
     res.n_ocr = sum(1 for c in ocr_seq if c != "�")
     if not cells or not wit:
         log("[stream-align] 字位或证人为空，放弃")
@@ -147,8 +178,9 @@ def align_stream(book, *, witness: Path, products_root: Path,
             c = cells[a + k]
             ch = wit[b + k]
             res.labels.append({
-                "page": c.page, "col": c.col, "slot": c.slot,
-                "char": ch, "kind": "char", "cell_kind": "char",
+                "page": c.page, "col": c.col, "slot": c.slot, "sub": c.sub,
+                "char": ch, "kind": "char",
+                "cell_kind": "jiazhu" if c.sub else "char",
                 "witness_idx": b + k, "block_len": n,
             })
             if ocr_seq[a + k] == ch:
