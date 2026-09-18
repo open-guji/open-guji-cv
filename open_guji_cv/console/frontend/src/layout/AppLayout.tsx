@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
-import { STEPS, STEP5_SUBS } from '../steps'
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { STEPS, STEP5_SUBS, findStep } from '../steps'
 import { listBooks } from '../api/registry'
 import { getWorkspace } from '../api/workspace'
 import type { WorkspaceState } from '../api/workspace'
@@ -19,6 +19,7 @@ export function AppLayout() {
   // 工作区 id 是 URL 第一段，页面内所有链接都要带上它
   const at = (rest: string) => `/${encodeURIComponent(wsId)}${rest}`
   const navigate = useNavigate()
+  const location = useLocation()
   const [books, setBooks] = useState<Book[]>([])
   const [ws, setWs] = useState<WorkspaceState | null>(null)
   // 切工作区现在只是一次 navigate，没有异步、也不会失败，忙碌/报错状态一并去掉
@@ -29,6 +30,15 @@ export function AppLayout() {
     listBooks().then(setBooks).catch(() => {})
     getWorkspace().then(setWs).catch(() => setWs(null))
   }, [])
+
+  // 标签页标题：工作区 + Step 名。SPA 切路由不刷新 HTML，静态 <title> 只在
+  // 整页刷新时生效一次，得在路由变化时手动写 document.title（用户 2026-09-17）。
+  useEffect(() => {
+    const stepId = location.pathname.match(/\/step\/([^/]+)\//)?.[1]
+    const stepTitle = stepId ? findStep(stepId)?.title : undefined
+    const parts = [wsId, stepTitle].filter(Boolean)
+    document.title = parts.length ? `${parts.join(' · ')} - open-guji-cv 控制台` : 'open-guji-cv 控制台'
+  }, [wsId, location.pathname])
 
   // 切工作区 = **换 URL 的第一段**，不存任何地方、也不通知服务端。
   // 跳到新工作区的首页：原来那本书通常不属于新工作区，带着册号跳过去只会
