@@ -26,6 +26,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from open_guji_cv.clustering.glyph_db import GlyphDB  # noqa: E402
+from open_guji_cv.core.workspace import glyph_db_path, glyph_store_path  # noqa: E402
 from open_guji_cv.clustering.normalize import normalize_patch  # noqa: E402
 
 
@@ -35,13 +36,15 @@ def pct(xs: list[float], q: float) -> float:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--store", default="glyph_store")
+    # 同 eval_font_fallback：缺省走统一解析层，别写死相对路径。
+    ap.add_argument("--store", default=None)
     ap.add_argument("--json", default=None, help="结果写入 JSON")
     ap.add_argument("--k", type=int, default=5)
     args = ap.parse_args()
-    store = Path(args.store)
+    store = Path(args.store) if args.store else glyph_store_path()
 
-    db = GlyphDB(store / "glyphdb.sqlite")
+    db = GlyphDB(glyph_db_path() if args.store is None
+                 else store / "glyphdb.sqlite")
     editions = [(r[0], r[1], r[2]) for r in db.conn.execute(
         """SELECT s.edition_tag, COALESCE(s.kind,'woodblock'),
                   COUNT(DISTINCT g.char)

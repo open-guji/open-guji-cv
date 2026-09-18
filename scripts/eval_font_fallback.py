@@ -32,6 +32,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from open_guji_cv.clustering.glyph_db import GlyphDB          # noqa: E402
+from open_guji_cv.core.workspace import glyph_db_path            # noqa: E402
 from open_guji_cv.clustering.normalize import normalize_patch  # noqa: E402
 from open_guji_cv.clustering.variants import VariantMap        # noqa: E402
 
@@ -54,7 +55,10 @@ def db_tier(row: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="字体兜底候选的召回实测")
     ap.add_argument("book_out_dir")
-    ap.add_argument("--store", default="glyph_store")
+    # 缺省走统一解析层（None → glyph_store_path()），不要写死相对路径：
+    # `"glyph_store"` 靠 cwd 解析，从工作区跑就指到一个不存在的目录，
+    # 再拼 `glyphdb.sqlite` 得到一个空库——库路径 P0 修掉的正是这个反模式。
+    ap.add_argument("--store", default=None)
     ap.add_argument("--editions", default="font:iming",
                     help="字体来源，逗号分隔")
     ap.add_argument("--k", type=int, default=10)
@@ -87,7 +91,7 @@ def main() -> int:
 
     editions = [e.strip() for e in args.editions.split(",") if e.strip()]
     if args.decide:
-        st = decide_ab(book_dir, Path(args.store), editions,
+        st = decide_ab(book_dir, Path(args.store) if args.store else None, editions,
                        args.corpus or ["corpus/zongmu_wuyingdian_reference.txt",
                                        "corpus/vol01_supplement.txt"],
                        args.k, args.gate, args.font_weight,
@@ -106,7 +110,8 @@ def main() -> int:
               - (st["base"]["admit"] - st["base"]["admit_ok"]))
         print(f"\n定字对 {d1:+d}　门槛进库对 {d2:+d}　门槛进库错 {d3:+d}")
         return 0
-    db = GlyphDB(Path(args.store) / "glyphdb.sqlite")
+    db = GlyphDB(glyph_db_path() if args.store is None
+                 else Path(args.store) / "glyphdb.sqlite")
     have = {r[0] for r in db.conn.execute(
         "SELECT DISTINCT edition_tag FROM glyphs")}
     missing = [e for e in editions if e not in have]
@@ -189,7 +194,7 @@ def main() -> int:
 
 # ── 决策层 A/B：把字体候选喂进去，最终定字会不会更好 ──────────────
 
-def decide_ab(book_dir: Path, store: Path, editions: list[str],
+def decide_ab(book_dir: Path, store: Path | None, editions: list[str],
               corpus_paths: list[str], k: int, gate: float,
               weight: float, cov_gate: float, sample: int | None) -> dict:
     """同一批字位，加/不加字体候选各跑一遍门槛化裁决，比最终定字。
@@ -219,7 +224,7 @@ def decide_ab(book_dir: Path, store: Path, editions: list[str],
                             for p in corpus_paths if Path(p).exists())
     lm = build_seed_lm(corpus_text, sorted(Path("corpus/external").glob("*.txt")))
     decider = build_strategy("gated_ngram", lm=lm, semantic_fn=vm.semantic)
-    db = GlyphDB(store / "glyphdb.sqlite")
+    db = GlyphDB(glyph_db_path() if store is None else store / "glyphdb.sqlite")
 
     # 同列前文（金标，教师强制口径——与 context-correction 评测一致）
     by_col: dict[tuple, list] = {}

@@ -91,7 +91,11 @@ def main() -> int:
     write_jsonl(dst / "glyphs.jsonl", keep)
     write_jsonl(dst / "exemplars.jsonl", keep_ex)
     write_jsonl(dst / "admissions.jsonl", keep_adm)
-    for name in ("sources.jsonl", "pairs.jsonl", "_snapshot.json"):
+    # ⚠️ `_snapshot.json` **不能照抄**（2026-09-17 修）：它记的是实例条数，
+    # 抄过来就是**真库**的数字（16,557），而样本库只有 900 条。
+    # `scripts/verify_cloud_glyphdb.py` 拿它跟重建结果比，对着样本库跑就会
+    # 报一次**假的「不一致 ⚠️」**。它在下面 instances 数完之后重写。
+    for name in ("sources.jsonl", "pairs.jsonl"):
         if (src / name).exists():
             shutil.copy2(src / name, dst / name)
 
@@ -102,6 +106,11 @@ def main() -> int:
         if rows:
             write_jsonl(dst / "instances" / sp.name, rows)
             n_inst += len(rows)
+
+    # 快照按**这个库自己**的实例数写，不抄源库的（见上面那段注释）。
+    (dst / "_snapshot.json").write_text(
+        json.dumps({"instances": n_inst}, ensure_ascii=False, indent=1) + "\n",
+        encoding="utf-8")
 
     # patches：文件名是 instance_id 把冒号换成下划线
     n_img = 0
