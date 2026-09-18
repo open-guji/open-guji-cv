@@ -113,24 +113,26 @@ export function SlotCountPanel({ book }: { book: string }) {
           const changed = isDone && draftVal !== '' && parseInt(draftVal, 10) !== done[c.id]
           return (
             <article key={c.id} className="sccard" data-v={isDone ? 'done' : ''}>
-              <h3>
-                {c.book}/{c.page} <em>第 {c.col} 列</em>
-                <span className="sc-det muted">现有 {c.det_n_slots ?? '—'} 格{c.det_ok === false ? '（未过闸）' : ''}</span>
-              </h3>
               <div className="sc-img-wrap">
                 <img src={withWorkspace(c.img)} alt="" />
               </div>
-              <div className="sc-row">
-                <input
-                  type="number" min={1} className="sc-input"
-                  value={draftVal}
-                  placeholder={String(c.det_n_slots ?? DEFAULT_CHARS_PER_LINE)}
-                  onChange={(e) => onInput(c, e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') onConfirm(c) }}
-                />
-                <button onClick={() => onConfirm(c)}>{isDone ? '改' : '确认'}</button>
-                {isDone && !changed && <b className="sc-ok"> ✓ 已存 {done[c.id]} 字</b>}
-                {changed && <span className="sc-pending"> 未提交改动</span>}
+              <div className="sc-body">
+                <h3>
+                  {c.book}/{c.page} <em>第 {c.col} 列</em>
+                  <span className="sc-det muted">现有 {c.det_n_slots ?? '—'} 格{c.det_ok === false ? '（未过闸）' : ''}</span>
+                </h3>
+                <div className="sc-row">
+                  <input
+                    type="number" min={1} className="sc-input"
+                    value={draftVal}
+                    placeholder={String(c.det_n_slots ?? DEFAULT_CHARS_PER_LINE)}
+                    onChange={(e) => onInput(c, e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onConfirm(c) }}
+                  />
+                  <button onClick={() => onConfirm(c)}>{isDone ? '改' : '确认'}</button>
+                </div>
+                {isDone && !changed && <b className="sc-ok">✓ 已存 {done[c.id]} 字</b>}
+                {changed && <span className="sc-pending">未提交改动</span>}
               </div>
             </article>
           )

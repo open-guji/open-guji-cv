@@ -1,15 +1,25 @@
 .sc-howto { font-size: .8rem; margin: -.2rem 0 .6rem; max-width: 46rem; }
 .sc-toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
-.scgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; }
-.sccard { display: flex; flex-direction: column; border-left: 3px solid transparent;
-  padding-left: .5rem; }
+/* 用户 2026-09-18 反馈：原先按卡片网格横排、图片撑满卡片宽度再等比缩放，
+   一整列（如 145×1554px）缩放后高度远超容器、只能靠滚动条看，数字数时
+   数着数着就要滚一下，很难数。改成**单列纵排、图不缩放、不设 max-height**
+   ——横向空间换成图片的原始/接近原始尺寸，纵向多长都摊开显示，不滚动。
+   代价是每页要滚很多屏，但这是用户明确要的权衡（"哪怕上下空间很长也可以"）。*/
+.scgrid { display: flex; flex-direction: column; gap: .8rem; }
+.sccard { display: flex; flex-direction: row; align-items: flex-start; gap: .6rem;
+  border-left: 3px solid transparent; padding-left: .5rem; }
 .sccard[data-v="done"] { border-left-color: var(--ok); }
-.sccard h3 { font-size: .82rem; margin: 0 0 .3rem; display: flex; align-items: baseline; gap: .4rem; }
+.sccard h3 { font-size: .82rem; margin: 0 0 .3rem; display: flex; align-items: baseline; gap: .4rem;
+  writing-mode: horizontal-tb; }
 .sc-det { font-size: .7rem; }
-.sc-img-wrap { max-height: 34rem; overflow-y: auto; background: var(--paper-2); border-radius: 2px; }
-.sc-img-wrap img { width: 100%; max-height: none; display: block; }
+.sc-body { display: flex; flex-direction: column; min-width: 9rem; }
+/* 图不设 max-height、不 overflow：整列图完整展开，靠页面纵向滚动看，
+   不靠图内滚动条——数字数时视线不用在小窗口里上下拖。宽度锁一个固定值
+   （不随容器拉伸），保证字迹清晰又不至于占满整屏宽度。 */
+.sc-img-wrap { background: var(--paper-2); border-radius: 2px; flex: none; }
+.sc-img-wrap img { width: 220px; height: auto; max-width: none; display: block; }
 .sc-row { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; margin-top: .4rem; }
 .sc-input { width: 4.5rem; font-size: .85rem; padding: .15rem .3rem; }
 .sc-row button { font-size: .78rem; padding: .18rem .5rem; min-height: 28px; }
-.sc-ok { color: var(--ok); font-size: .78rem; }
-.sc-pending { color: var(--ochre); font-size: .72rem; }
+.sc-ok { color: var(--ok); font-size: .78rem; display: block; margin-top: .3rem; }
+.sc-pending { color: var(--ochre); font-size: .72rem; display: block; margin-top: .3rem; }
