@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom'
 import { fetchGateSummary } from '../api/evals'
 import { BorderReviewPanel } from '../components/border-review/BorderReviewPanel'
 import { PageLinePanel } from '../components/border-review/PageLinePanel'
-import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { StepLayout, type StepLayoutReviewTab } from '../components/common/StepLayout'
 import { ProgressGatePanel, foldPageRanges } from '../components/common/ProgressGatePanel'
 import type { TypeBreakdownItem } from '../components/common/ProgressGatePanel'
 import { ProductViewer } from '../components/ProductViewer'
@@ -50,7 +51,6 @@ const TYPE_FILTER_OPTIONS = [
 export function Step1Page() {
   const { book = '' } = useParams()
   const pages = usePages(book)
-  const [tab, setTab] = useState<TabKey>('cols')
   const [pageSel, setPageSel] = useState(() => loadSavedPageRange(STEP_ID, book))
   const [loadedBook, setLoadedBook] = useState(book)
   if (book !== loadedBook) {
@@ -99,45 +99,39 @@ export function Step1Page() {
     : typeFilter === 'standard' ? standardPages
     : pages
 
+  // 四类边框裁决量的都是**版框界行**。`frame: none` 的书（现代排印本）没有
+  // 这些东西，接口实测回 0 条卡——显示出来只是一排空面板。见 src/capabilities.ts。
+  //
+  // ⚠️ 这些台**不吃页面级 pageSel**，保留各自的页范围输入：
+  // 03-Step页面统一设计.md §2.4「待裁决区刻意不抽象成统一联动，各面板形态
+  // 差异大，硬联动只会两头不讨好」。同理 typeFilter 也只影响板块④。
+  const reviews: StepLayoutReviewTab[] = caps.hasFrame
+    ? TABS.map((t) => ({
+        id: t.key, label: t.label,
+        node: t.key === 'pageline'
+          ? <PageLinePanel book={book} />
+          : <BorderReviewPanel book={book} kind={t.key} />,
+      }))
+    : []
+
   return (
-    <div>
-      <PageRangeSelector
-        book={book}
-        stepId={STEP_ID}
-        value={pageSel}
-        onChange={setPageSel}
-        typeFilter={{ options: TYPE_FILTER_OPTIONS, value: typeFilter, onChange: (v) => setTypeFilter(v as TypeFilterValue) }}
-      />
-      <ProgressGatePanel
-        book={book}
-        title="总览"
-        gateId={gate1}
-        pages={pageSel}
-        typeBreakdown={typeBreakdown}
-      />
-      {/* 边框探测的四类裁决（列探测/外框外延/上下版框核校/下版框坐标金标）与
-          页级界行标注，量的都是**版框界行**。`frame: none` 的书（现代排印本）
-          没有这些东西，接口实测回 0 条卡——显示出来只是一排空面板。
-          见 src/capabilities.ts。 */}
-      {caps.hasFrame && (<>
-        <div className="card">
-          <h2>Step1 边框探测 <span className="muted">版框、界行、抬头框</span></h2>
-          <div className="seg" style={{ display: 'inline-flex', gap: '.3rem' }}>
-            {TABS.map((t) => (
-              <button key={t.key} aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {tab === 'pageline' ? <PageLinePanel book={book} /> : <BorderReviewPanel book={book} kind={tab} />}
-      </>)}
-      <ProductViewer
-        book={book}
-        step={step1Id}
-        pages={filteredPages}
-        pageTypeOf={(p) => gateSummary?.pages.find((r) => r.page === p)?.page_type ?? undefined}
-      />
-    </div>
+    <StepLayout
+      book={book} stepId={STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      typeFilter={{ options: TYPE_FILTER_OPTIONS, value: typeFilter,
+                    onChange: (v) => setTypeFilter(v as TypeFilterValue) }}
+      overview={
+        <ProgressGatePanel book={book} title="总览" gateId={gate1}
+                           pages={pageSel} typeBreakdown={typeBreakdown} />
+      }
+      reviews={reviews}
+      product={
+        <ProductViewer
+          book={book}
+          step={step1Id}
+          pages={filteredPages}
+          pageTypeOf={(p) => gateSummary?.pages.find((r) => r.page === p)?.page_type ?? undefined}
+        />
+      }
+    />
   )
 }
