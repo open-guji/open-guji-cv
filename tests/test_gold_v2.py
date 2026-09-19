@@ -305,22 +305,22 @@ def test_real_migrated_shards_are_items():
     #                核实办法：`git log --oneline -- char-segmentation/instances/items.jsonl`
     #                能看到全部落地的提交，且该文件在 dataset 仓 `git status`
     #                里干净（无未提交改动）——是已经定档的金标，不是迁移漏条。
-    #   column-split 60 → 130：**不是本轮改坏，是 dataset 仓有 70 条未提交的
-    #                新增**（`git status` 在 open-guji-dataset 里能看到
-    #                `border-detection/column-split/items.jsonl` 有本地改动未
-    #                commit）。新增的 70 条 id 前缀全是 `head:`（如
-    #                `head:vol01:26`），是 2026-09-12～13 新上线的「抬头列级
-    #                标注台」（commit 3ecd2e07b8 附近，overview 任务卡
-    #                「Step1 抬头检测」）产出的人裁金标（label_origin=human，
-    #                source_events 指向 `evt_vol0{1,2}-head-review_*`），verdict
-    #                取值是 yes/no（8 yes / 62 no），与原来 60 条 `cols:` 前缀
-    #                的 ok/extra/miss verdict 体系是两套并存的判据，不冲突。
-    #                原 60 条 `cols:` 条目内容与分布完全未变（仍是
-    #                ok 56 / extra 2 / miss 2，见下方断言）。数字对不上先查
-    #                是「金标长大了」还是「迁移漏了」，别直接改数——这次两条
-    #                都是长大：一条是已提交的真实历史演进，一条是同仓另一
-    #                功能刚产出、还没来得及 commit 的真实新金标。
-    expect = {"border-detection/column-split": 130,
+    #   column-split 130 → 60（2026-09-18）：那 70 条 `head:` 前缀的条目**迁走了**，
+    #                回到它们该在的 `border-detection/head-raise-presence`。
+    #                上一版注释判断它们「与 cols: 的 ok/extra/miss 体系是两套并存
+    #                的判据，不冲突」——**那个判断是错的**：head 问「这页有没有
+    #                抬头」(yes/no)、cols 问「界行在不在缝上」(ok/miss/extra)，
+    #                是两个不同的问题，档位都对不上。混在一个分片里，谁拿它做
+    #                评测就会把 70 条答非所问的条目算进分母。
+    #                根因是路由表一条 `verdict + border_detect` 通吃三个问题
+    #                （cols/head/outer），靠 id 前缀才勉强分得开。已改为按
+    #                `payload.question` 分流（`feedback/routes.py`），存量走
+    #                `gold rebuild` 重放归位，再从 column-split 删掉重复副本
+    #                （删前逐条核对已在新分片存在，零丢失）。
+    #                现在两个分片口径纯净：column-split 60 条全是 cols 的
+    #                ok 56 / extra 2 / miss 2；head-raise-presence 117 条全是
+    #                head 的 yes/no。
+    expect = {"border-detection/column-split": 60,
               "char-segmentation/column-warp": 115,
               "char-segmentation/instances": 1024,
               "page-type": 394,
@@ -330,20 +330,27 @@ def test_real_migrated_shards_are_items():
             pytest.skip(f"{sh} 还没迁")
         assert store.carrier(sh) == "items"
         assert len(store.list(sh)) == n
-    # 第一轮界行裁决（id 前缀 cols:，60 条）：ok 56 / extra 2 / miss 2。
-    # 2026-09-13 起同一分片里并存第二套判据——抬头列级标注台产出的
-    # id 前缀 head:（70 条，verdict 取 yes/no）——按前缀分开统计，
-    # 不然两套 verdict 词表混在一个 dist 里对不上任何一边的账。
+    # 界行裁决（60 条）：ok 56 / extra 2 / miss 2。
+    #
+    # **这个分片只许有一种 verdict 词表**（2026-09-18）。2026-09-13～18 之间它
+    # 混进过 70 条抬头裁决（yes/no），当时被当成「两套判据并存，不冲突」，
+    # 实际是两个不同的问题落错了分片——谁拿它评测就会把答非所问的条目算进分母。
+    # 现在 head 有自己的 `border-detection/head-raise-presence`，这里断言
+    # **不许再有 yes/no 回流**：真回流了说明路由表的 question 分流又漏了。
     dist: dict[str, int] = {}
-    head_dist: dict[str, int] = {}
     for i in store.list("border-detection/column-split"):
-        v = i.expected.get("verdict")
-        if i.id.startswith("head:"):
-            head_dist[v] = head_dist.get(v, 0) + 1
-        else:
-            dist[v] = dist.get(v, 0) + 1
-    assert dist == {"ok": 56, "extra": 2, "miss": 2}
-    assert head_dist == {"yes": 8, "no": 62}
+        dist[i.expected.get("verdict")] = dist.get(i.expected.get("verdict"), 0) + 1
+    assert dist == {"ok": 56, "extra": 2, "miss": 2}, \
+        f"column-split 的 verdict 词表被污染了：{dist}"
+
+    # 迁出去的那批在新分片里，且只有 yes/no 一种词表。
+    head_dist: dict[str, int] = {}
+    for i in store.list("border-detection/head-raise-presence"):
+        head_dist[i.expected.get("verdict")] = head_dist.get(i.expected.get("verdict"), 0) + 1
+    assert set(head_dist) <= {"yes", "no", "idk"}, \
+        f"head-raise-presence 混进了别的词表：{head_dist}"
+    assert sum(head_dist.values()) >= 70, \
+        f"head-raise-presence 少于迁入的 70 条：{head_dist}"
 
 
 @needs_dataset
