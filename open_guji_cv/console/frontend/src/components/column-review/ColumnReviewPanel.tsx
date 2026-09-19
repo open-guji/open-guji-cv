@@ -20,6 +20,7 @@ type Case = {
   id: string; book: string; page: number; col: number
   triage: Triage; band: [number, number]
   trim_top: { px: number; case: string }; trim_bottom: { px: number; case: string }
+  frame_residue?: [number, number]   // 削完后上/下端残留满宽段行数；老产物没有
   size: [number, number]; raised: boolean; img: string
 }
 type Verdict = {
@@ -233,6 +234,16 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
               算法削 上{c.trim_top.px}px({c.trim_top.case}) / 下{c.trim_bottom.px}px({c.trim_bottom.case})
               ・左右带 [{c.band[0]}, {c.band[1]}]px / 宽{c.size[0]}
             </span>
+            {/* 削完之后还剩不剩框墨。只显示「判了哪一档」会误导：bxgb:16:17
+                下端判 c「没带进版框」，下版框却明明在列图里。把验后的量并排
+                摆出来，判据和图对不上时人一眼能看见。 */}
+            {c.frame_residue && (c.frame_residue[0] >= 3 || c.frame_residue[1] >= 3) && (
+              <span className="tag warn" title="清理后端部仍有满宽连续段，版框没削干净（闸2 frame_residue）">
+                残框 {c.frame_residue[0] >= 3 ? `上${c.frame_residue[0]}行` : ''}
+                {c.frame_residue[0] >= 3 && c.frame_residue[1] >= 3 ? ' ' : ''}
+                {c.frame_residue[1] >= 3 ? `下${c.frame_residue[1]}行` : ''}
+              </span>
+            )}
             <label className="muted" style={{ marginLeft: 'auto' }}>
               <input type="checkbox" checked={imgSrc === 'bin'}
                      onChange={(e) => setImgSrc(e.target.checked ? 'bin' : 'raw')} /> 二值图
