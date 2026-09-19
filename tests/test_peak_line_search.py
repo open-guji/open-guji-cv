@@ -304,3 +304,48 @@ def test_rescue_bottom_refuses_when_nothing_near_reference():
     out = find_horizontal_border(mask, "bottom", verticals=_vlines_from_xs(xs),
                                  book_gap=float(h // 2))
     assert out.position == _post_bottom(mask, cur)
+
+
+def test_find_horizontal_border_top_recovers_from_band_edge_artifact():
+    """顶部 primary 贴在搜索带边界上 = 截断伪影，应放宽带重搜纠正。
+
+    实测来源 bxgb p53：搜索带 [0,702]，primary 落在 y=702（正好是带边界），
+    半高宽只有 2.0——曲线在边界被截断，`half_height_score_at` 找不到右侧
+    下降沿，算出极窄的半高宽，而评分的分母正是半高宽，于是这个伪响应拿了
+    最高分（57246），把真框（y≈534，半高宽 17）的 2852 分压了 20 倍。
+
+    后果是整页版框下移 170px：Step1 把真框当成「抬头框」（16 列全判抬头），
+    Step3 于是把版框上方两个字编成负 slot，整列 21 格变 23 格。
+
+    这里用合成图复现：带边界处放一条只覆盖窗口内半边的强墨（模拟被截断的
+    密集文字），真框在更上方。
+    """
+    mask = _blank_mask()
+    band_frac = 0.25
+    band = int(H * band_frac)          # 100
+    true_y = 40
+    mask[true_y - 4:true_y + 5, :] = 1.0          # 真框：有实际宽度的通栏线
+    mask[band - 1:band + 40, :] = 1.0            # 带边界起一大片墨（被带切断）
+
+    result = find_horizontal_border(mask, "top", band_frac=band_frac)
+    assert abs(result.position - true_y) <= 6, (
+        f"应纠正到真框 {true_y} 附近，实际 {result.position}")
+
+
+def test_find_horizontal_border_top_keeps_true_line_at_band_edge():
+    """真框恰好落在带边界附近时，放宽带**不该**把它换到别处去。
+
+    这是上一条的反例护栏，对应文档里 vol01/33 的教训：那页贴边的 primary
+    其实就是真框被截，若照搬 bottom 那条「在整带内找最强的非边界峰」，
+    会换成抬头装饰墨迹，更错。放宽带重搜时它只会微调几像素（实测 485→490）。
+    """
+    mask = _blank_mask()
+    band_frac = 0.25
+    band = int(H * band_frac)          # 100
+    true_y = band - 2                  # 真框就在带边界内侧
+    mask[true_y - 3:true_y + 4, :] = 1.0
+    mask[15:22, :120] = 1.0            # 更靠上的干扰（只覆盖部分宽度）
+
+    result = find_horizontal_border(mask, "top", band_frac=band_frac)
+    assert abs(result.position - true_y) <= 8, (
+        f"真框在带边界附近时不该被换走，期望 ≈{true_y}，实际 {result.position}")
