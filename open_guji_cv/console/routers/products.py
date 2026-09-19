@@ -83,9 +83,9 @@ def api_cache(book: str, kind: str, key: str, src: str = "raw") -> Response:
         got = _char_patch_binarized(book, key)
         if got is not None:
             return got
-    ctx = RunContext(load_book(book), deps.product_store(), deps.image_cache(),
-                     log=lambda s: None)
     try:
+        ctx = RunContext(load_book(book), deps.product_store(), deps.image_cache(),
+                         log=lambda s: None)
         path = ctx.materialize(kind, key)
     except Exception as e:   # noqa: BLE001
         raise HTTPException(404, f"拿不到图像: {e}") from e
