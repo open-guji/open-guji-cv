@@ -336,7 +336,14 @@ def glyphdb_admit(events, db_path: str | None = None,
         # 与播种（`seed_witness`）和整页副本（`utils/binarized`）**共用同一个
         # 二值化**，保证库里那张 = 人裁看到那张 = 播种进去那张。
         if binarize:
-            img = binarize_page(img)
+            # ⚠️ `edge_margin=0`（2026-09-19）。`binarize_page` 是给**整页**用的，2026-09-17 起
+            # 最外 20px 强制判纸（挡扫描纸缘的浅灰渐变）；字块只有 64×88 上下，套上去等于
+            # 把四边各 20px 的笔画全抹掉，只剩中间一小块。后果：09-18/19 入库的 405 条人裁
+            # 刻例 canonical 里字高只有画布 0.12（正常 0.26）、归一后笔画断成碎片，拿字位
+            # 自己的图块去查库，自身相似度中位 0.43、99% 低于 0.7——人裁 7 次的「宐」在
+            # 候选里根本不出现，用户反映「很多字反复审了很多遍」。整页与字块共用同一把
+            # Sauvola 尺子这条纪律不变，只是纸缘留白不属于字块。
+            img = binarize_page(img, edge_margin=0)
         # v2 命名空间：见上面「id 必须加前缀」那节
         db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
         # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
