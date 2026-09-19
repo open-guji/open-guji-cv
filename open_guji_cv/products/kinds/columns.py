@@ -57,6 +57,10 @@ class ColumnWindowRec(BaseModel):
     triage: ColumnTriage | None = None   # 老产物没有这一项
     side_floor: float              # 两侧外 25% 最低墨占比（原始矫正图上量）
     stamp_noise: float = 0.0       # 中等面积孤立墨点密度（原始矫正图上量，抓整列噪点污染）
+    # 清理**之后**上/下端残留的满宽连续段行数，0 = 削干净了。闸2 `frame_residue`
+    # 判据用；见 `steps/column_warp.FRAME_RESIDUE_*` 的标定记录。老产物没有这两项。
+    frame_residue_top: int = 0
+    frame_residue_bottom: int = 0
 
 
 class PageWindows(BaseModel):
