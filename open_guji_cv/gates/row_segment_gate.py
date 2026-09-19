@@ -74,12 +74,19 @@ class RowSegmentGateParams(BaseModel):
     expected_slots: int | None = None   # None = Book.chars_per_line
     slot_tol: int = 1                   # n_body_slots 与版式格数的容许偏差
                                          # （effective_body_slots 正当下调 1 格）
+    #: L4 碎格判据（2026-09-18）：格高低于 `sliver_ratio × period` 就算碎格。
+    #: 0.35 的依据——bxgb 全书 20446 格的格高分布里，正常格最低也在 0.7·period
+    #: 上下（DP 的 `lo_ratio` 硬约束卡着），而实测命中的 16 个碎格是 11~25px
+    #: 对 period≈72，比值 0.15~0.35，中间空着一大段。取 0.35 落在空档上沿，
+    #: 两边都有余量。**只 flag 不 block**：碎格列的字多数仍切得对（p53 逐列
+    #: 看图确认「焚香致敬」四字各一格），拦下来会连累整列作废。
+    sliver_ratio: float = 0.35
 
 
 @register_step
 class RowSegmentGateStep(Step):
     spec = StepSpec(
-        id="row_segment_gate", title="Step3→4 交接闸", version="1.2", unit="column",
+        id="row_segment_gate", title="Step3→4 交接闸", version="1.3", unit="column",
         consumes=("cells", "border_detect_gate_manifest"), produces=("row_segment_gate_manifest",),
         params=RowSegmentGateParams,
         code_deps=("open_guji_cv.eval.rulers", "open_guji_cv.clustering.page_type"),
@@ -134,10 +141,26 @@ class RowSegmentGateStep(Step):
                 if n_r2s:
                     flags.append(f"L2：{n_r2s} 条格线真粘连（R2s），图像极限，flag 不算错")
 
+            # L4 碎格（2026-09-18，格子级——闸3 此前只有页级/列级两层）。
+            # DP 凑格数时会造出十几像素的格，它让后面每格往上挤、累积成相位
+            # 错位，而**列格数是对的，逐列字数对账查不出来**
+            # （`row_boundaries.BLANK_MIN_RATIO` 注释记过这个病）。
+            sliver: list[int] = []
+            if not reject and cc.ok and (cc.period or 0) > 0:
+                lim = p.sliver_ratio * cc.period
+                for k, cell in enumerate(cc.cells):
+                    if (cell.y1 - cell.y0) < lim:
+                        sliver.append(cell.slot)
+            if sliver:
+                flags.append(
+                    f"L4：{len(sliver)} 个碎格（高 < {p.sliver_ratio:g}×格高），"
+                    f"slot {sliver}——DP 凑格数造的，会让整列相位往上挤")
+
             recs.append(RowSegmentGateColumn(
                 col=cc.col, admitted=not reject, reject=reject, flags=flags,
                 n_body_slots=cc.n_body_slots if cc.ok else None,
                 n_r2=n_r2, n_r2s=n_r2s, n_r2x=n_r2x,
+                sliver_slots=sliver,
             ))
 
         page_admitted = any(c.admitted for c in recs) if recs else False
@@ -200,5 +223,7 @@ attach_gate("row_segment", GateSpec(
                   desc="R2 可改善格线数——flag，不拦（该修但不算作废这一列）"),
         GateLevel(id="L2", unit="column",
                   desc="R2s 真粘连格线数——flag，不拦（图像极限，不算错）"),
+        GateLevel(id="L4", unit="cell",
+                  desc="碎格：格高远小于一格——flag，不拦（列里多数字仍切得对）"),
     ),
 ))
