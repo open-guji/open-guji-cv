@@ -124,7 +124,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.9", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.10", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -389,9 +389,16 @@ class ColumnGateStep(Step):
             # 拦下来等于永久卡死；(2) 框墨留在列图里不影响切分本身——Step3 切的是
             # 字缝，框墨在格子边缘，真正受影响的是 Step4 字块质量，那步有
             # `strip_frame_debris`；(3) 闸的既有纪律就是「图像极限只标记不拦」。
-            residue = [(end, run) for end, run in
-                       (("上", c.frame_residue_top), ("下", c.frame_residue_bottom))
-                       if run >= p.frame_residue_min_run]
+            #
+            # **非正文列不标**（2026-09-19，实跑定的）：版心（书口）那一列本来
+            # 就横贯着版框线，判据当然命中，可「版心里有框墨」不是缺陷、也没人
+            # 要去修它。bxgb 全书 53 个命中里 43 个是 c10 版心，占 81%——照单
+            # 全收等于让裁决台 5 条里有 4 条是废话，真正要看的 10 条正文列反而
+            # 被淹掉。这一列已经由 `non_body_column` 拒收，不必再叠一个 flag。
+            residue = [] if c.col in non_body else [
+                (end, run) for end, run in
+                (("上", c.frame_residue_top), ("下", c.frame_residue_bottom))
+                if run >= p.frame_residue_min_run]
             if residue:
                 flags.append("frame_residue：" + "、".join(
                     f"{end}端残留满宽段 {run} 行" for end, run in residue)
