@@ -10,8 +10,29 @@
 | 档 | 条件 | 下游怎么用 |
 |---|---|---|
 | same | cov ≥ 0.996 且 wmax ≤ 12 | 直接继承库里的字，记 (库条目 id, cov, wmax) 为证据 |
+| same（共识升档） | unsure 档里 top 字 cov ≥ 0.99、比次优**异字**高 ≥ 0.03、且该字已有 ≥ 3 例人裁 | 同上，`via="consensus:<n>"`，无 matched_id |
 | unsure | 0.85 ≤ cov < 0.996 | 命中的字进候选集（带 cov 当先验），与 OCR 合并交上下文裁决 |
 | diff | 对全部 kNN 候选都 < 0.85 | 库里多半没有这个字，纯 OCR + 上下文 |
+
+## 共识升档（2026-09-19，bxgb 人裁 648 格标定）
+
+单对 cov ≥ 0.996 是给「同一版同一字的两次印」标的，刻本同字异印的 cov 常落在 0.99~0.996：
+「𠊓」人裁 18 次进库，top 候选仍是 0.9903 的 unsure，于是每一处都再出卡——用户反映
+「很多字反复审了很多遍」。按人裁 confirm 当真值量 top 候选的精确率：
+
+| cov 区间 | n | top 正确 |
+|---|---|---|
+| ≥ 0.996 | 353 | 96.6% |
+| [0.99, 0.996) | 49 | 89.8% |
+| [0.985, 0.99) | 23 | 82.6% |
+| [0.98, 0.985) | 24 | 54.2% |
+
+单靠降 cov 门槛到 0.99 精确率 95.8%，比现役 same 档（96.7%）还低，不行。再加两条：
+与次优**异字**的差距 ≥ 0.03（骑在两字之间的不升）、该字已有 ≥ 3 例人裁（库里只有一两例
+时 kNN 邻域太薄）——真值内 79 格 **100%**，全书新增 155 个 same（现役 7910）；把 cov 放到
+0.985 是 85 格 100%、新增 206，先取保守的 0.99。护栏照旧：匹配器判了 never_match /
+conflict 的不升档。`n_confirmed` 只数人裁（`glyphs.n_confirmed`，排除 `font:*` 版），
+产物里 `via` 记来源，出了错能按通道归因。
 
 ## ⚠️ 库是外部状态，指纹必须带上它
 
@@ -86,6 +107,9 @@ class GlyphMatchParams(BaseModel):
     exclude_self: bool = False
     """匹配时把字位自己摘出库（`GlyphMatcher.match(exclude_id=)`）。播种过的书（modern:<book>
     的实例就是这本书的字位）不摘就是自证 cov 1.0。刻本链默认不摘，行为不变。"""
+    consensus_cov: float = 0.99          # 共识升档三条件，见模块头；min_confirmed = 0 关掉
+    consensus_margin: float = 0.03
+    consensus_min_confirmed: int = 3
 
     def model_post_init(self, _ctx) -> None:
         # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
@@ -96,10 +120,53 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
 
 
+def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
+                   min_confirmed: int) -> tuple[str, int] | None:
+    """unsure 档能不能按「共识」升成 same：返回 (字, 该字人裁例数) 或 None。
+
+    三条件缺一不可（标定见模块头）：top 候选 cov ≥ cov_min；比次优**异字**高 ≥ margin_min
+    （次优同字不算——同一字的多个刻例挨着很正常）；top 字已有 ≥ min_confirmed 例人裁。
+    没有异字候选时，差距按 0.85（unsure 档下界）算。
+    """
+    if min_confirmed <= 0 or not candidates:
+        return None
+    top, cov = candidates[0]
+    if cov < cov_min:
+        return None
+    nxt = next((v for c, v in candidates[1:] if c != top), None)
+    if cov - (nxt if nxt is not None else 0.85) < margin_min:
+        return None
+    n = int(n_confirmed_of(top) or 0)
+    if n < min_confirmed:
+        return None
+    return top, n
+
+
+def human_confirmed_counts(db_path: str) -> dict[str, int]:
+    """每个字的**人裁**例数：`admissions.provenance = 'human'` 的条目按 `instances.label` 计数。
+
+    不能用 `glyphs.n_confirmed`：那一列机器准入也累加——bxgb 库里 v1 的 3748 条全是
+    `align` 通道（整理本对齐）进的、字体模板版每字都是 1。按它数，bxgb 现役产物上会升档
+    2349 格（真值只覆盖 29 格）；只数人裁是 126 格、真值 20/20。共识的前提是「人看过
+    这个字的刻例」，机器自证不算。"""
+    import sqlite3
+    out: dict[str, int] = {}
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            for ch, n in c.execute(
+                    "SELECT i.label, COUNT(*) FROM admissions a "
+                    "JOIN instances i ON i.instance_id = a.instance_id "
+                    "WHERE a.provenance = 'human' AND i.label IS NOT NULL GROUP BY i.label"):
+                out[str(ch)] = int(n or 0)
+    except Exception:
+        return {}
+    return out
+
+
 @register_step
 class GlyphMatchStep(Step):
     spec = StepSpec(
-        id="glyph_match", title="Step5-a 库匹配", version="1.0", unit="cell",
+        id="glyph_match", title="Step5-a 库匹配", version="1.1", unit="cell",
         consumes=("char_index", "char_patch"), produces=("glyph_match",),
         params=GlyphMatchParams,
         code_deps=("open_guji_cv.clustering.match", "open_guji_cv.clustering.verify",
@@ -136,6 +203,12 @@ class GlyphMatchStep(Step):
             # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
             p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
         matcher = self._matcher(p)
+        # 共识升档要的人裁例数：一次 run 里几十页共用，按库指纹缓存在 step 实例上
+        key = (p.db_path, p.db_fingerprint)
+        if getattr(self, "_confirmed_key", None) != key:
+            self._confirmed = human_confirmed_counts(p.db_path) if p.consensus_min_confirmed > 0 else {}
+            self._confirmed_key = key
+        confirmed = self._confirmed
 
         def normalize_patch(img, punct: bool = False):
             # 标点走等比归一（见 seed_witness 与 normalize.normalize_patch 的 isotropic 说明）：
@@ -173,13 +246,21 @@ class GlyphMatchStep(Step):
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
                         candidates=[(cc, round(float(vv), 4))
                                     for cc, vv in cm.candidates[:p.max_candidates]]))
+                verdict, char, via = m.verdict, m.char, None
+                if verdict == "unsure" and m.guard is None:
+                    # 共识升档（见模块头）。匹配器判了护栏（never_match / conflict）的不动。
+                    hit = consensus_same(list(m.candidates), confirmed.get,
+                                         p.consensus_cov, p.consensus_margin,
+                                         p.consensus_min_confirmed)
+                    if hit:
+                        verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
-                    verdict=m.verdict, char=m.char, matched_id=m.matched_id,
+                    verdict=verdict, char=char, matched_id=m.matched_id,
                     cov=round(float(m.cov), 4), wmax=round(float(m.wmax), 2),
                     candidates=[(c, round(float(v), 4))
                                 for c, v in m.candidates[:p.max_candidates]],
-                    guard=m.guard, n_verified=int(m.n_verified),
+                    guard=m.guard, n_verified=int(m.n_verified), via=via,
                     cand_variants=cand_variants))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         return {"glyph_match": PageMatch(
