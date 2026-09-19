@@ -43,8 +43,24 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 > 只统计 12 页，标题却写「全书页数」——看着像整本书跑完了，其实只跑了 12 页。
 > 现在固定按 `all` 取（vol01 206 页，实测 ~1.3s，不必另做聚合接口）。
 
-进度条大面积显示「过期」是正常的：指纹含 code_rev，改过管线代码的那天，
-已跑的页会全部转 stale。要不要重跑看改动是否影响那一步。
+进度条大面积显示「过期」常常是正常的，但**别照着 code_rev 去理解**
+（2026-09-18 实测订正）：指纹里参与比对的是 `code_hash`——**这一步自己的模块
+加上它声明的 `code_deps` 的源码字节哈希**，不是 `code_rev`（git HEAD）。
+`code_rev` 只写进 manifest 记账，不参与判新鲜。
+
+所以：改了与某步无关的代码，那一步**不会**过期；只有改到它的 module 或
+`code_deps` 里列的模块才会。查「为什么过期」按这个顺序：
+
+```
+现算 fingerprint ≠ manifest.fingerprint
+  → 比 params_hash：不同 = 参数变了
+  → 比 upstream：不同 = 上游产物变了（那就去看上游）
+  → 都相同 = code_hash 变了，看这一步的 module 与 code_deps 最近谁动过
+```
+
+实例：bxgb 的 `border_detect` 显示过期，`params_hash` 与 `upstream` 都一致
+——查下来是它的 `code_deps`（`border_geometry` / `peak_line_search`）在
+9-16、9-17 被改过，而产物是 9-15 跑的。这是指纹机制在正常工作。
 
 **待办**给的是**正文页**口径（`page_type == body`，vol01 为 108 页），
 与总进度的全书 206 页不是一个分母——总进度含目录页 / 职名页等非正文页。
@@ -315,6 +331,48 @@ v2 链与 v1 产物完全解耦：Step1 直接吃原始扫描，Step4 由控制�
 
 **改控制台之后跑这两条验收关**：`tests/test_console_routes.py`（路由）、
 `tests/test_console_tabs.py`（8 个 tab 都渲染得出来）。
+
+## 10. 页面结构：四板块（2026-09-18）
+
+§9 写的前端是 `static/js/panels/*.js` 那一版；现在是 `frontend/src`（React+Vite），
+**且每个 Step 页面固定四板块**。改页面前先认这个结构。
+
+```
+① 页范围   PageRangeSelector   ← 唯一源，控制下面所有板块
+② 总览     ProgressGatePanel（闸摘要）/ StepStatusSummary（产物新鲜度）
+③ 裁决台   各步自己的面板；多个时 StepLayout 自动排成 tab
+④ 产物台   ProductViewer（按页）/ CellLookupPanel（按坐标）
+```
+
+骨架是 `components/common/StepLayout.tsx`，四个槽位都收 ReactNode，
+它只管顺序与 tab，不替各页决定内容。
+
+### 改页面怎么落手
+
+| 想做什么 | 改哪 |
+|---|---|
+| 给某步加一个裁决台 | 页面的 `reviews` 数组加一项；面板接 `pages?: string` |
+| 加一种页范围取值 | `PAGE_RANGE_PRESETS`（前端只是暴露，后端 `resolve_pages` 早就支持） |
+| 加一个裁决问题 | **先在 `feedback/questions.py` 登记**，再改路由表，最后前端发 `payload.question` |
+| 改总览指标 | `ProgressGatePanel` 的 `customMetrics` |
+
+### 三条容易踩的
+
+- **页范围只能有一个源**。面板内部那份 `usePersistedPages` 是兜底（非 Step
+  页面还在用），页面传了 `pages` 就以页面为准。两个台各用各的页范围时，
+  同一批用例会看起来「不重合」——Step3 拖切线台与 Step7 切分裁决台就这么
+  误会过很久，而机制上 `blocking ⊆ all` 恒成立。
+- **裁决台只做可裁，自由浏览归板块④**。让两处都能提交的话，批次归属、
+  touched 集合、已裁去重要各维护一套。
+- **不是每页都该有四块**。Step6（LLM 调用日志）、Step8（收割台账）与页无关；
+  Step9 没有对应的后端 Step id（现场渲染，不是「选一页看产物」）。
+  硬套只会造出空面板。
+
+### 验收关
+
+改控制台跑这几条：`tests/test_console_routes.py`（路由清单 + 行为快照，
+加路由要同步改那份账本）、`tests/test_questions.py`（登记表与路由表一致）、
+`npx tsc -b`（前端类型）。
 
 ## 切线 tab · 「坐标过期重标」模式（2026-09-14）
 
