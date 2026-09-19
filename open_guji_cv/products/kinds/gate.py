@@ -52,6 +52,10 @@ class GateColumn(BaseModel):
     warped_size: tuple[int, int]            # (w, h)
     side_floor: float | None = None
     stamp_noise: float | None = None
+    # 清理后上/下端残留的满宽连续段行数（`frame_residue` 判据的量）。
+    # 老产物没有这两项——闸2 只在 >= 门槛时写 flag，缺省 0 不会误报。
+    frame_residue_top: int = 0
+    frame_residue_bottom: int = 0
     band_width: float
 
 

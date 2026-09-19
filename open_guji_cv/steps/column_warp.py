@@ -37,10 +37,64 @@ def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) ->
     return max(float(prof[:k].min()), float(prof[-k:].min()))
 
 
+#: `frame_residue` 判据的三个常数。量的是「清理**之后**上下两端还剩不剩版框墨」，
+#: 所以必须在 `cleaned` 上量、在**文字带宽度内**量（带外本来就是界行）。
+#:
+#: 判据选型是实测定的，另一个候选**被证伪**（bxgb 全书 2052 个端口）：
+#: 「端部最大行墨占比」分不开框墨与字墨——削干净的 d/e 档 p50 也有 0.43~0.47，
+#: 与漏判的 c 档（0.548）几乎重叠，因为削到框下沿之后紧邻的就是字，
+#: 字的横笔一行也能到 0.5~0.7。**别再往峰值这个方向调阈值**。
+#:
+#: 取的是「满宽连续段」——框线横贯整列宽且连续若干行，字的横笔不满宽也不连续：
+#:
+#:     档  个数  bar_run p50  p99  ≥3 占比
+#:     a   952   0            11   4.6%
+#:     b     9   6            10   88.9%
+#:     c    26   0             7   3.8%
+#:     d   895   0             0   0.0%      ← 正常削干净
+#:     e   170   0             0   0.0%      ← 正常削干净
+#:
+#: d/e 两档 1065 个端口**零误报**（最长段恒为 0），全书命中 53 个端口
+#: （a 44 / b 8 / c 1）。
+#:
+#: 余量只在 d/e 这一侧是干净的（恒 0，离门槛 3 还差 3）。**b 档这一侧没有余量**：
+#: 非零值是 [2,4,5,6,6,7,8,9,10]，门槛 3 正落在里面，那个 2 是漏的。
+#: 这可以接受——b 档本来就是已知的图像极限（框字粘连成一个连通体，不可剥），
+#: 标出来也只是交给人看；真要紧的是别把削干净的列误报成脏，那一侧是零误报。
+#: 想往下调到 2 之前先想清楚：a 档的 ≥2 会跟着涨，而 a 档是「贴着边缘削掉几行」，
+#: 多数本来就干净。
+FRAME_RESIDUE_PROBE = 45      # 端部探测深度（约 0.6 格）
+FRAME_RESIDUE_COV = 0.85      # 比 clean_column 内部的 0.65 更严：只认「几乎满宽」
+FRAME_RESIDUE_MIN_RUN = 3     # 连续多少行才算一条框线
+
+
+def frame_residue(cleaned: np.ndarray, band: tuple[int, int],
+                  probe: int = FRAME_RESIDUE_PROBE,
+                  cov: float = FRAME_RESIDUE_COV,
+                  ink_threshold: int = 128) -> tuple[int, int]:
+    """清理后上/下端各 probe 行内，最长的「满宽连续段」行数。
+
+    返回 `(top_run, bottom_run)`。0 表示这一端没有残留框墨。
+    """
+    b0, b1 = int(band[0]), int(band[1])
+    if b1 <= b0 or cleaned.size == 0:
+        return 0, 0
+    prof = (cleaned[:, b0:b1] < ink_threshold).mean(axis=1)
+
+    def longest(seg: np.ndarray) -> int:
+        best = run = 0
+        for v in seg >= cov:
+            run = run + 1 if v else 0
+            best = max(best, run)
+        return int(best)
+
+    return longest(prof[:probe]), longest(prof[-probe:])
+
+
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.3", unit="column",
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.4", unit="column",
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
@@ -103,6 +157,10 @@ class ColumnWarpStep(Step):
                 trim_bottom=BorderTrim(px=int(diag["bottom"]["px"]), case=str(diag["bottom"]["case"])),
                 side_floor=round(side_floor(raw, p.side_floor_look, p.ink_threshold), 4),
                 stamp_noise=round(stamp_noise_density(warped, p.ink_threshold), 4),
+                # 在 `cleaned` 上量——判的是「削完之后还剩不剩框墨」，
+                # 拿 raw/warped 量就成了「削之前有没有框」，那是另一件事
+                **dict(zip(("frame_residue_top", "frame_residue_bottom"),
+                           frame_residue(cleaned, (b0, b1), ink_threshold=p.ink_threshold))),
                 # 分诊在**清理前**的 `raw` 上做：要判的正是「这一列清得拿不拿得准」，
                 # 清完再判就只能看到清理的结果，看不到它当初面对的形态。
                 triage=ColumnTriage(**{k: v for k, v in triage_column(raw).items() if k != "band"}),

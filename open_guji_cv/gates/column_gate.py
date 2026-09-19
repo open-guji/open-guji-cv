@@ -114,12 +114,17 @@ class ColumnGateParams(BaseModel):
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
+    #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
+    #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
+    #: 而 b 档（框字粘连）最小 6，两侧都有余量。标定见
+    #: `steps/column_warp.FRAME_RESIDUE_*`（含被证伪的「端部峰值」候选）。
+    frame_residue_min_run: int = 3
 
 
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.8", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.9", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -378,6 +383,19 @@ class ColumnGateStep(Step):
                 # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
                 flags.append(f"stamp_noise：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
                              "（疑似背景印章污染，flag 不算错）")
+            # 端部残留版框墨：`column_border_trim` 判「怎么削」，这一条验「削干净没有」。
+            # flag 不 block，三条理由：(1) b 档那 9 个端口是**已知的图像极限**
+            # （框与字粘连成一个连通体，按红线不能剥，见 frame-strip README），
+            # 拦下来等于永久卡死；(2) 框墨留在列图里不影响切分本身——Step3 切的是
+            # 字缝，框墨在格子边缘，真正受影响的是 Step4 字块质量，那步有
+            # `strip_frame_debris`；(3) 闸的既有纪律就是「图像极限只标记不拦」。
+            residue = [(end, run) for end, run in
+                       (("上", c.frame_residue_top), ("下", c.frame_residue_bottom))
+                       if run >= p.frame_residue_min_run]
+            if residue:
+                flags.append("frame_residue：" + "、".join(
+                    f"{end}端残留满宽段 {run} 行" for end, run in residue)
+                    + f"（≥{p.frame_residue_min_run} 行判为版框没削干净，flag 不算错）")
             if p.tier == "gold":
                 reasons.append("human_verdict：金标准入尚未接入（P2）")
             recs.append(GateColumn(
@@ -405,6 +423,8 @@ class ColumnGateStep(Step):
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
                 warped_size=c.warped_size, side_floor=c.side_floor,
                 stamp_noise=c.stamp_noise,
+                frame_residue_top=c.frame_residue_top,
+                frame_residue_bottom=c.frame_residue_bottom,
                 band_width=float(c.band[1] - c.band[0]),
             ))
         return {"gate_manifest": GateManifest(
@@ -433,6 +453,10 @@ COLUMN_GATE_SPEC = GateSpec(
         GateLevel(id="L2b", unit="column",
                   desc="整列中等面积孤立墨点密度是否超界——flag 不是 block，"
                        "专挡背景印章噪点，只覆盖四种已知污染机制里的一种", name="stamp_noise"),
+        GateLevel(id="L4e", unit="column",
+                  desc="清理后上/下端还剩不剩版框墨（满宽连续段）——flag 不是 block，"
+                       "b 档框字粘连是已知图像极限，拦下来等于永久卡死",
+                  name="frame_residue"),
         GateLevel(id="L3", unit="column",
                   desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
