@@ -66,16 +66,21 @@ export function ProgressGatePanel({ book, title, gateId, pages, customMetrics, t
   const missing = d ? d.pages.filter((p) => p.status === 'missing') : []
   const ok = d ? d.pages.filter((p) => p.status === 'ok') : []
   const flagged = d ? d.pages.filter((p) => (p.flags?.length ?? 0) > 0) : []
-  // 闸2/闸3 2026-09-12 起把「闸1判定 skip」的页级 reject 写成 L0 开头——
-  // 从「整页被拦」里单独拆出来，别让"跳过的非正文页"和"真正探测/切分
-  // 失败"混在一个数字里，前者是预期行为不是错误。
-  const isSkipBlocked = (p: GateSummaryPageRow) => (p.page_reject || []).some((r) => r.startsWith('L0：'))
+  // 闸2/闸3 2026-09-12 起把「闸1判定 skip」的页级 reject 单独标出来——
+  // 从「整页被拦」里拆出去，别让"跳过的非正文页"和"真正探测/切分失败"
+  // 混在一个数字里，前者是预期行为不是错误。
+  // 2026-09-18 起前缀由层号 `L0` 改成 name `page_type_skip`（层号在消息里
+  // 是复用的，L1 就同时指 DP 无解/格数偏离/产物缺失三件事，看不出判的是
+  // 什么）。**两个前缀都要认**：已落盘的老产物还是 L0，不重跑闸就不会变。
+  const isSkipBlocked = (p: GateSummaryPageRow) =>
+    (p.page_reject || []).some((r) => r.startsWith('page_type_skip') || r.startsWith('L0：'))
   // 闸3 2026-09-13 起单列「版式未支持」（职名/目录：每列字数非版式格数且逐列
   // 不同，21 格先验必然无解）——非故障，同样不该混进「整页被拦（异常）」。
   // 判定由后端落盘（`unsupported_layout`），这里只读不算；老产物没有这个字段
-  // 时退回按 L0u 前缀认，免得没重跑闸的册子显示成异常。
+  // 时退回按前缀认，免得没重跑闸的册子显示成异常。
   const isUnsupported = (p: GateSummaryPageRow) =>
-    p.unsupported_layout ?? (p.page_reject || []).some((r) => r.startsWith('L0u'))
+    p.unsupported_layout
+    ?? (p.page_reject || []).some((r) => r.startsWith('layout_unsupported') || r.startsWith('L0u'))
   const skipBlocked = blocked.filter((p) => isSkipBlocked(p) && !isUnsupported(p))
   const unsupported = blocked.filter(isUnsupported)
   const realBlocked = blocked.filter((p) => !isSkipBlocked(p) && !isUnsupported(p))

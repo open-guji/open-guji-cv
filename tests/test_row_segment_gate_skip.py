@@ -37,11 +37,11 @@ def _ctx(tmp_path, gate_manifest: BorderDetectGateManifest, cells: PageCells | N
     return ctx
 
 
-def test_skip_page_gets_clear_l0_reject_not_dp_symptoms(tmp_path):
-    """skip 页即使凑巧有 cells 记录（不该发生，但防御式验证），L0 优先于
+def test_skip_page_gets_clear_page_type_reject_not_dp_symptoms(tmp_path):
+    """skip 页即使凑巧有 cells 记录（不该发生，但防御式验证），页型判据优先于
     列级判据——不该显示 DP 无解/格数偏离这些下游症状。"""
     gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["L0：页型判定为「cover」，无正文栏格，不套列窗口"],
+        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
         n_cols=0, expected_cols=9, page_type="cover", page_type_policy="skip")
     cells = PageCells(page=PAGE, period=None, ref_w=None, columns=[])
     ctx = _ctx(tmp_path, gate1, cells)
@@ -49,7 +49,7 @@ def test_skip_page_gets_clear_l0_reject_not_dp_symptoms(tmp_path):
     out = step.run_page(ctx, PAGE)["row_segment_gate_manifest"]
     assert out.admitted is False
     assert len(out.reject) == 1
-    assert "L0" in out.reject[0] and "cover" in out.reject[0]
+    assert out.reject[0].startswith("page_type_skip") and "cover" in out.reject[0]
 
 
 def test_standard_page_all_columns_rejected_gets_page_level_summary(tmp_path):
@@ -107,14 +107,14 @@ def _run(tmp_path, cells: PageCells):
 
 
 def test_all_dp_unsolved_is_unsupported_layout_not_anomaly(tmp_path):
-    """整页各列都是「弹性 DP 无解」→ 判版式未支持，写进产物、页级 reject 带 L0u。"""
+    """整页各列都是「弹性 DP 无解」→ 判版式未支持，写进产物、页级 reject 带 layout_unsupported。"""
     out = _run(tmp_path, PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=i, ok=False, error="弹性 DP 无解", n_body_slots=21)
         for i in range(1, 10)]))
     assert out.admitted is False
     assert out.unsupported_layout is True
     assert out.n_unsupported_columns == 9
-    assert out.reject[0].startswith("L0u"), out.reject
+    assert out.reject[0].startswith("layout_unsupported"), out.reject
 
 
 def test_partially_solved_page_is_not_unsupported(tmp_path):
@@ -139,17 +139,17 @@ def test_mixed_reject_reasons_stay_anomalous(tmp_path):
         ColumnCells(col=2, ok=False, error="未过交接闸: 页级未过 L1", n_body_slots=21),
     ]))
     assert out.unsupported_layout is False, "拒因不纯时不该判版式未支持"
-    assert not out.reject[0].startswith("L0u")
+    assert not out.reject[0].startswith("layout_unsupported")
 
 
 def test_skip_page_takes_precedence_over_unsupported(tmp_path):
     """闸1 已判 skip 的页：L0 优先，不重复判 L0u——页型只有闸1一个权威来源。"""
     gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["L0：页型判定为「cover」，无正文栏格，不套列窗口"],
+        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
         n_cols=9, expected_cols=9, page_type="cover", page_type_policy="skip")
     ctx = _ctx(tmp_path, gate1, PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=i, ok=False, error="弹性 DP 无解", n_body_slots=21)
         for i in range(1, 10)]))
     out = STEPS["row_segment_gate"].run_page(ctx, PAGE)["row_segment_gate_manifest"]
     assert out.unsupported_layout is False
-    assert out.reject[0].startswith("L0："), out.reject
+    assert out.reject[0].startswith("page_type_skip"), out.reject

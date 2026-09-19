@@ -87,7 +87,10 @@ def test_empty_ruled_page_falls_back_to_book_period(tmp_path):
     assert gm.period == 115.0
     assert gm.period_from_prior is True
     assert gm.admitted is True, "空栏页界行齐全，该过闸正常切"
-    assert any("L1f" in f for f in gm.flags)
+    # 兜底成功与兜底失败共用判据名 `period_fallback`——判的是同一件事
+    # （页级周期估不出来），区别只在处置，而处置由落在 flags 还是 reject
+    # 表达，不该靠两个名字（2026-09-18 起判据前缀由层号改成词）。
+    assert any(f.startswith("period_fallback") for f in gm.flags)
     assert not any("周期" in r for r in gm.reject), "兜底成功就不该再写 reject"
 
 
