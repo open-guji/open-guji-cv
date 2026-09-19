@@ -835,6 +835,12 @@ def find_vertical_lines_grid(mask: np.ndarray, n_lines: int, col_pitch: float | 
     return interpolate_missing(lines)
 
 
+#: 顶部搜索带贴边时放宽多少倍重搜（见 `find_horizontal_border` 里的说明）。
+#: 1.15 够把 bxgb p53 的真框（距原带边界 140px）纳进来，也不至于把带开到
+#: 页面中部去；实测再放宽到 1.30 结果不变，说明一档就收敛。
+WIDEN_RATIO = 1.15
+
+
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
                             secondary_window: int = 60, secondary_dead_zone: int = 15,
@@ -883,6 +889,38 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
         inner_edge = lo
 
     primary = joint_search_coarse_to_fine(mask, "h", lo, hi, alpha=alpha, hyst=hyst)
+
+    if side == "top" and abs(primary.position - inner_edge) <= boundary_slack:
+        # **顶部贴边 = 放宽带重搜**（2026-09-18，bxgb p53 实测）。
+        #
+        # primary 精确落在搜索带内侧边界上，说明曲线在那里被**截断**了：
+        # `half_height_score_at` 找不到右侧下降沿，算出极窄的半高宽（实测 2.0），
+        # 而评分的分母是半高宽，于是这个伪响应反而拿最高分。bxgb p53 实测：
+        # 伪影 y=702 得分 57246，真框 y=562（半高宽 58）只有 2852，被压 20 倍。
+        # 后果是整页版框下移 140px，Step1 把真框当成「抬头框」，Step3 于是把
+        # 版框上方两个字编成负 slot，整列 21 格变 23 格。
+        #
+        # **不能照搬 bottom 那条**（在整带内找最强的非边界峰）：文档记过
+        # vol01/33 踩雷——那页贴边的 primary 其实就是真框被截，整带最强的
+        # 非边界峰是抬头装饰墨迹，换过去更错。
+        #
+        # 也**不能靠半高宽区分**：实测 vol01/33 的边界峰半高宽同样是 2.0，
+        # 两种情形在峰形上分不开。
+        #
+        # 用的判据是「放宽带重搜，看它跟不跟着动」——真框线的位置是物理事实，
+        # 放宽不会让它移动；截断伪影永远贴着新边界。实测四个样本干净分开：
+        #   bxgb p53   702 → 534（位移 -168）  伪影，纠正
+        #   vol01 p33  485 → 490（位移   +5）  真框被截，微调即可
+        #   bxgb p33 / vol01 p49  不贴边，根本不触发
+        # 放宽一次就收敛（再放宽结果不变），所以只放宽一档。
+        wider = min(int(band * WIDEN_RATIO), h - 1)
+        if wider > hi:
+            cand = joint_search_coarse_to_fine(mask, "h", lo, wider,
+                                               alpha=alpha, hyst=hyst)
+            # 放宽后仍贴新边界 = 带还是不够，这页的先验本来就配错了，
+            # 交给调用方的 `top_band_frac` 去调，这里不再递归放宽。
+            if abs(cand.position - wider) > boundary_slack:
+                primary = cand
 
     if side == "bottom" and abs(primary.position - inner_edge) <= boundary_slack:
         positions, curve = sample_line_curve(mask, "h", lo, hi, primary.slope)
