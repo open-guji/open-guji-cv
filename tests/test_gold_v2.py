@@ -320,9 +320,14 @@ def test_real_migrated_shards_are_items():
     #                现在两个分片口径纯净：column-split 60 条全是 cols 的
     #                ok 56 / extra 2 / miss 2；head-raise-presence 117 条全是
     #                head 的 yes/no。
+    #   column-warp 115 → 146、instances 1024 → 1108（2026-09-19）：bxgb 切分审阅
+    #                导入测试集（dataset commit b4876fdb）——column-warp +31 端部
+    #                裁决、instances +84 seg_defect（truncated 67 / contaminated 17），
+    #                作首尾横笔/相位漂移那一轮算法迭代的回归集。同批 touching-cuts
+    #                +234 不在这张表里。核实：`gold import --dry-run` 报 added 31/84。
     expect = {"border-detection/column-split": 60,
-              "char-segmentation/column-warp": 115,
-              "char-segmentation/instances": 1024,
+              "char-segmentation/column-warp": 146,
+              "char-segmentation/instances": 1108,
               "page-type": 394,
               "column-layout": 36}
     for sh, n in expect.items():
