@@ -52,7 +52,7 @@ def _upright(ctx: RunContext, patch):
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.4", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.5", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略

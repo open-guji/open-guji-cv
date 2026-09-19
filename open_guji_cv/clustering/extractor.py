@@ -697,6 +697,36 @@ def mask_frame_bars_outside(strip: np.ndarray,
     return out
 
 
+def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float) -> np.ndarray:
+    """抹掉图块上下 pad 带里**不伸进格内**的连通体——那是邻字伸过来的笔尖（2026-09-19）。
+
+    图块按格界外扩 8% 裁（pad 是给略微越界的本字笔画留的），可紧裁又是「图块内所有墨的
+    外接框」，于是邻字压在格界外几像素的笔尖也被框进来：bxgb 4 页 1422 格里 161 格
+    （11.3%）的紧框因此多出中位 6px 的邻字墨（水/高/山/五/里/王/張/柏/漢/不/道/云/二/十/間
+    …逐格看过，抹掉的全是邻字的笔尖）。用户审阅标的「contaminated」大半是它。
+
+    判据只用格界（严格信任 Step3，与折线 `mask_outside` 同一纪律）：连通体整体落在
+    `[0, cell_top)` 或 `[cell_bot, H)` 里的抹掉；跨过格界、哪怕只沾进一像素的都留——
+    本字越界的笔画正是 pad 要保住的。列端格的框残渣同样在 pad 带里，顺带抹掉，
+    后面的端格剥离少一道活。
+    """
+    t0, t1 = int(round(cell_top)), int(round(cell_bot))
+    if t0 <= 0 and t1 >= patch.shape[0]:
+        return patch
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    out = patch
+    for k in range(1, n):
+        y, h = int(st[k, 1]), int(st[k, 3])
+        if y + h <= t0 or y >= t1:
+            if out is patch:
+                out = patch.copy()
+            out[lab == k] = 255
+    return out
+
+
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     """抹掉最外侧的界行残条（磨损界行断成的短竖段/虚线链）。
 
@@ -2444,6 +2474,8 @@ class CharExtractor:
                     # 曾经把整格抹白——2026-09-12 实测复现）。
                     patch = mask_outside(patch, seam_top, seam_bottom,
                                         y0=sy0 + y0, x0=sx0 - int(round(left_x)))
+                # pad 带里邻字伸过来的笔尖：不跨格界的连通体一律抹掉（见函数注释）
+                patch = drop_pad_only_components(patch, ltop - y0, lbot - y0)
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
