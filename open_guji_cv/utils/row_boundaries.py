@@ -15,6 +15,8 @@ row-boundaries` 数据集上的单页（vol02/135）逐轮试出来的独立实�
 
 1. **候选只从波谷来**：局部最小值 + 凸出度过滤，不直接对每个像素算代价——
    笔画间的小凹陷会制造大量噪声候选，之前踩过（见设计文档"波谷候选"节）。
+   后来补了三类定向候选：极低墨行（浅而干净的缝）、空白区合成点（撑可行性）、
+   **周期锚定点**（v±period，2026-09-19：粘连缝没有波谷时 DP 会整段错相位）。
 2. **空白区间单独探测**、其中补一批等间隔的"合成候选"（墨量给个统一的低值），
    保证没有真实波谷的空白段也有地方可选，不会因为没候选就整列判"无解"。
 3. **周期(gap)不是常数，也不是本列自己算的**——单列自己拟合的周期可能有
@@ -290,6 +292,17 @@ def _runs_of(mask: np.ndarray) -> list[tuple[int, int]]:
 # ——**不是单调的，别顺手往中间调**。
 LOW_INK_FRAC = 0.12
 LOW_INK_SEP = 12          # 与已有候选的最小间距（px），免得同一条缝挤进两个点
+
+#: 周期锚定候选（2026-09-19）：每个候选 v 在 v±period 处、±这么多像素内没有候选就补一个
+#: （取那一小段里曲线最低的行）。0 = 关。为什么要有它见 `fit_row_boundaries` 里的注释。
+PERIOD_CAND_GUARD = 6.0
+#: 只在首/末锚点窗口之外补（True）——首锚点窗口有自己的一套（顶格/抬头补窗顶候选）。
+PERIOD_CAND_INTERIOR_ONLY = True
+#: 落点是低墨行、且 ±这么多像素内已有一个**同样干净**的候选时不补（那条缝早有代表点，
+#: 再补只是把同一条缝挤成两个点，DP 在零墨段里按间距挑，本来切在缝中心的格线会挪几
+#: 像素）。附近的候选不干净（切在墨上的波谷）就照补——干净的锚定点正是要替掉它。
+#: 0 = 关。
+PERIOD_CAND_LOWINK_SEP = 0.0
 
 #: 切点墨量项的权重（`ink_lam`）。DP 每一步都加一份「切在这里要穿多少墨」，
 #: 原先权重恒为 1，与间距项 `lam·dev²` **量级差两个数量级**——北行日錄全书实测
@@ -838,6 +851,62 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                 synth.append(float(y))
                 synth_ink.append(float(curve[int(y)]) / dst_w if 0 <= int(y) < len(curve) else 0.03)
             y += synth_step
+
+    # **周期锚定候选**（2026-09-19，bxgb 切线金标 234 条）。候选只来自波谷 + 低墨行 +
+    # 空白区合成点，可两字**粘连**时那一条真缝既不是局部极小（凸出度够不着 0.10·W，
+    # 旁边几像素就有更低的点）、也不是孤立的低墨行——它就不在候选集里。DP 面对
+    # 「缺一个候选」的段只能错相位，而且一错就是一整段：bxgb p15c16 实测，868 之后
+    # 候选 883/913/955，真缝 937 缺席；955→1004 只有 49px < 0.7·71 不可行，DP 从 955
+    # 起一路偏 20~34px 切了 7 格，每条都切在墨 0.12~0.19 上（真缝墨 0~0.03）。代价
+    # 函数没错——真缝路径总代价 0.28 对现役 1.14——是**选不了一个不在候选集里的点**，
+    # 与上面低墨候选那条同一根因。
+    # 给每个候选 v 在 v±period 处补一个候选（±PERIOD_CAND_GUARD 内没有候选才补，取那
+    # 一小段里曲线最低的一行，墨量用真值）：只是把「按周期该有一条缝」的位置放进候选
+    # 集，选不选仍由墨量 + 间距代价定。实测（scripts/seg_harness.py，内存里新旧对比）：
+    #   bxgb 切线金标（最近格线口径）≤10px 80.4% → 92.8%，p90 21 → 7.8px，mean 6.1 → 3.4；
+    #   R2x 42 → 21、R2 28 → 24（切在墨上的格线少了一半），折线金标 10 条好转 / 1 条变差
+    #   （那 1 条是 p33c18，台子没套人裁的 n_slots=22，不作数）；
+    #   「切在墨上且离最近零墨缝 ≥10px」探针全书 439 → 410 条，p15c16 从 8 条降到 0；
+    #   vol01 522 条金标 ≤10px 97.1% → 97.7%，折线金标逐条无变差，R2 49 → 44。
+    # 候选多了一到两成，DP 代价矩阵是 m² 的，单列耗时相应上去一点，可接受。
+    # 两条边界，都是为了**只在需要的地方补**、不改动已经切对的列：
+    # - 只补列**内部**（首/末锚点窗口之外）。首锚点窗口有自己的一套（顶格/抬头补窗顶
+    #   候选、top_slack），往那里撒点会改抬头列的首格；
+    # - 落点是低墨行（< LOW_INK_FRAC·W）、且 ±PERIOD_CAND_LOWINK_SEP 内已有一个同样干净的
+    #   候选时不补——那条缝早已由波谷/低墨行代表，再补只是把同一条缝挤成两个点，DP 在
+    #   零墨段里按间距挑一个，本来切在缝中心的格线会挪几像素（单测里 8px）。附近候选
+    #   不干净时照补：bxgb 实测把这条守卫写成「附近有任何候选就不补」会把收益吐回去
+    #   一小半（≤10px 92.8% → 91.5%，R2 24 → 30），因为要替掉的正是那些切在墨上的波谷。
+    if PERIOD_CAND_GUARD > 0 and period > 0:
+        if PERIOD_CAND_INTERIOR_ONLY:
+            lo_in, hi_in = border_top + y1_max_frac * period, border_bottom - y2_max_frac * period
+        else:
+            lo_in, hi_in = border_top - 1, border_bottom + 1
+        low_ink = LOW_INK_FRAC * dst_w
+        base = sorted(set(valid + synth))
+        have = list(base)
+        extra: list[float] = []
+        for v in base:
+            for cand in (v - period, v + period):
+                if not (lo_in <= cand <= hi_in):
+                    continue
+                if any(abs(cand - u) < PERIOD_CAND_GUARD for u in have):
+                    continue
+                a = max(0, int(round(cand - PERIOD_CAND_GUARD)))
+                b = min(len(curve) - 1, int(round(cand + PERIOD_CAND_GUARD)))
+                if b <= a:
+                    continue
+                y = float(a + int(np.argmin(curve[a:b + 1])))
+                if any(abs(y - u) < PERIOD_CAND_GUARD for u in have):
+                    continue
+                if (PERIOD_CAND_LOWINK_SEP > 0 and curve[int(y)] < low_ink
+                        and any(abs(y - u) < PERIOD_CAND_LOWINK_SEP and curve[int(u)] < low_ink
+                                for u in have)):
+                    continue          # 这条干净缝已有干净的代表点，不挤第二个
+                have.append(y)
+                extra.append(y)
+        synth.extend(extra)
+        synth_ink.extend(float(curve[int(y)]) / dst_w for y in extra)
 
     all_valleys = np.array(valid + synth, dtype=np.float64)
     all_ink = np.array(valley_ink + synth_ink, dtype=np.float64)

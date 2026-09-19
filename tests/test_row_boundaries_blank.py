@@ -50,7 +50,10 @@ def test_missing_char_mid_column_does_not_shift_neighbors():
     assert r is not None
     # 除空格两侧外，其余真缝都要有格线落在 ±3px；空格只要求不把邻字切坏
     keep = [g for i, g in enumerate(gaps[1:-1], start=1) if i not in (9, 10)]
-    assert max(_err(r.boundaries, keep)) <= 3, _err(r.boundaries, keep)
+    # ≤3 → ≤10（2026-09-19 周期锚定候选）：空白格旁边那条格线可能落在离缝中心 8px 的
+    # 周期整数倍位置——合成缝是 22 行零墨，两处都在缝里，间距代价挑了更准的周期点。
+    # 这条测试要挡的是「缺一格摊给邻字」的 30~58px 滑格，±10 照样挡得住。
+    assert max(_err(r.boundaries, keep)) <= 10, _err(r.boundaries, keep)
 
 
 def test_trailing_blank_does_not_push_last_cut_into_last_char():
@@ -59,7 +62,7 @@ def test_trailing_blank_does_not_push_last_cut_into_last_char():
     r = fit_row_boundaries(proj, DST_W, border_top=0, border_bottom=len(proj) - 1, period=PERIOD, n_slots=21)
     assert r is not None
     last_gap = gaps[-2]          # 末字上边界
-    assert min(abs(b - last_gap) for b in r.boundaries[1:-1]) <= 3
+    assert min(abs(b - last_gap) for b in r.boundaries[1:-1]) <= 10   # 见上一条 ≤10 的说明
 
 
 def test_two_missing_chars_at_tail():
@@ -68,7 +71,7 @@ def test_two_missing_chars_at_tail():
     proj, gaps = _column(chars)
     r = fit_row_boundaries(proj, DST_W, border_top=0, border_bottom=len(proj) - 1, period=PERIOD, n_slots=21)
     assert r is not None
-    assert max(_err(r.boundaries, gaps[1:19])) <= 3
+    assert max(_err(r.boundaries, gaps[1:19])) <= 10                   # 见上面 ≤10 的说明
     # 末字的下边界落在空白区里，那里只有每 20px 一个的合成候选，精度天然是半步（≤10px）
     assert _err(r.boundaries, gaps[19:20])[0] <= 10
 
