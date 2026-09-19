@@ -161,12 +161,12 @@ class ColumnGateStep(Step):
             "border_detect_gate_manifest", page)
         if page_type_gate.page_type_policy == "skip":
             page_reject.append(
-                f"L0：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
+                f"page_type_skip：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
         elif p.count_mode == "detected":
             if not cols:
-                page_reject.append("L1：没有列（Step1 未探到正文列）")
+                page_reject.append("column_count：没有列（Step1 未探到正文列）")
         elif len(cols) != expected:
-            page_reject.append(f"L1：只探出 {len(cols)} 列（版式应为 {expected}）")
+            page_reject.append(f"column_count：只探出 {len(cols)} 列（版式应为 {expected}）")
 
         # **列宽偏离是列级判据，不是页级**（2026-09-03 改）。
         # 它逐列算得出，却曾被放在页级拒因里 → 一列坏就整页 9 列作废。
@@ -215,7 +215,7 @@ class ColumnGateStep(Step):
             need = max(1, len(cols) // 2) if p.count_mode == "detected" else max(2, expected // 2)
             if len(projs) < need:
                 page_reject.append(
-                    f"L1：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
+                    f"period_fallback：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
             else:
                 try:
                     period = round(float(estimate_shared_period(
@@ -235,11 +235,11 @@ class ColumnGateStep(Step):
                         period = float(ctx.book.period_prior)
                         period_from_prior = True
                         page_flags.append(
-                            f"L1f：页级周期估不出来（{e}），已用书级先验 "
+                            f"period_fallback：页级周期估不出来（{e}），已用书级先验 "
                             f"{period:g}px 兜底——多半是空栏页（栏内无字，无纵向节律）")
                     else:
                         page_reject.append(
-                            f"L1：页级周期估不出来（{e}）"
+                            f"period_fallback：页级周期估不出来（{e}）"
                             f"；本册未配 period_prior，空栏页无法兜底")
                 ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
@@ -344,7 +344,7 @@ class ColumnGateStep(Step):
             if c.col in non_body:
                 kind, why = non_body[c.col]
                 label = {"margin": "版心（书口）", "edge": "版框外页边"}.get(kind, kind)
-                reasons.append(f"L0c：Step1 判定本列位是{label}，非正文"
+                reasons.append(f"non_body_column：Step1 判定本列位是{label}，非正文"
                                + (f"——{why}" if why else ""))
             if not page_ok:
                 reasons.append("页级未过 L1")
@@ -365,21 +365,21 @@ class ColumnGateStep(Step):
             jz_frac = jz_fracs.get(c.col, 0.0)
             is_jiazhu_col = jz_frac >= p.jiazhu_frac_min
             if is_jiazhu_col:
-                flags.append(f"L1c/L2 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
+                flags.append(f"column_width/side_ink 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
                              "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")
             if c.col in wide_cols and not is_jiazhu_col:
                 band_w = c.band[1] - c.band[0]
-                reasons.append(f"L1c：本列文字带宽 {band_w}px 偏离本页中位数 "
+                reasons.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
                                f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行/夹注双栏）")
             if c.side_floor > p.side_floor_max and not is_jiazhu_col:
-                reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
+                reasons.append(f"side_ink：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
             if c.stamp_noise > p.stamp_noise_max:
                 # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，
                 # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
-                flags.append(f"L2b：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
+                flags.append(f"stamp_noise：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
                              "（疑似背景印章污染，flag 不算错）")
             if p.tier == "gold":
-                reasons.append("L3：金标准入尚未接入（P2）")
+                reasons.append("human_verdict：金标准入尚未接入（P2）")
             recs.append(GateColumn(
                 col=c.col, admitted=not reasons, reject=reasons, flags=flags, tier=p.tier,
                 content_x=(float(c.band[0]), float(c.band[1])),
@@ -420,21 +420,21 @@ COLUMN_GATE_SPEC = GateSpec(
     levels=(
         GateLevel(id="L0c", unit="column",
                   desc="Step1 判定本列位不是正文（筒子页版心 / 版框外页边）——"
-                       "版式如此，不是几何坏了"),
+                       "版式如此，不是几何坏了", name="non_body_column"),
         GateLevel(id="L1", unit="page",
-                  desc="探出的列数是否等于版式列数——整页性的问题才放这一层"),
+                  desc="探出的列数是否等于版式列数——整页性的问题才放这一层", name="column_count"),
         GateLevel(id="L1f", unit="page",
                   desc="页级周期估不出来时是否用书级 period_prior 兜底——flag，"
-                       "不拦（空栏页栏内无字、推不出纵向节律，不是故障）"),
+                       "不拦（空栏页栏内无字、推不出纵向节律，不是故障）", name="period_fallback"),
         GateLevel(id="L1c", unit="column",
-                  desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗"),
+                  desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗", name="column_width"),
         GateLevel(id="L2", unit="column",
-                  desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端"),
+                  desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端", name="side_ink"),
         GateLevel(id="L2b", unit="column",
                   desc="整列中等面积孤立墨点密度是否超界——flag 不是 block，"
-                       "专挡背景印章噪点，只覆盖四种已知污染机制里的一种"),
+                       "专挡背景印章噪点，只覆盖四种已知污染机制里的一种", name="stamp_noise"),
         GateLevel(id="L3", unit="column",
-                  desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
+                  desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
 )
 attach_gate("column_warp", COLUMN_GATE_SPEC)

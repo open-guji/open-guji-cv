@@ -61,7 +61,7 @@ class BorderDetectGateStep(Step):
             # 缺失（`raw_page` 会抛 FileNotFoundError），这条分支要的是宽容
             # 报错，不该在这里引入新的失败点。
             return {"border_detect_gate_manifest": BorderDetectGateManifest(
-                page=page, admitted=False, reject=["L1：上游 borders 产物缺失"],
+                page=page, admitted=False, reject=["missing_input：上游 borders 产物缺失"],
                 n_cols=0, expected_cols=expected)}
         page_type, policy = classify_page_type(ctx.raw_page(page))
         b: Borders = ctx.product("borders", page)
@@ -69,22 +69,22 @@ class BorderDetectGateStep(Step):
 
         reject: list[str] = []
         if policy == "skip":
-            reject.append(f"L0：页型判定为「{page_type}」，无正文栏格，不套列窗口")
+            reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
         if n_cols != expected:
-            reject.append(f"L1：探出 {n_cols} 列（版式应为 {expected}）")
+            reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
         flags: list[str] = []
         if policy == "custom":
-            flags.append(f"L0c：页型判定为「{page_type}」，列数预期与正文不同，未核验")
+            flags.append(f"page_type_custom：页型判定为「{page_type}」，列数预期与正文不同，未核验")
         if policy is None:
-            flags.append("L0c：页型判不准（uncertain），按 body/standard 兜底处理")
+            flags.append("page_type_custom：页型判不准（uncertain），按 body/standard 兜底处理")
         if b.bend_w80_max is not None and b.bend_w80_max >= p.bend_w80_max_gate:
-            flags.append(f"L2：单条界行 w80 达 {b.bend_w80_max:.1f}px "
+            flags.append(f"vline_wander：单条界行 w80 达 {b.bend_w80_max:.1f}px "
                         f"（>= {p.bend_w80_max_gate}），这条线可能跑飞了")
         if b.top_outer_offset is None:
-            flags.append("L3：上外框没探到（可能没印上，也可能该有却漏了，未区分）")
+            flags.append("outer_frame_missing：上外框没探到（可能没印上，也可能该有却漏了，未区分）")
         if b.bottom_outer_offset is None:
-            flags.append("L3：下外框没探到（可能没印上，也可能该有却漏了，未区分）")
+            flags.append("outer_frame_missing：下外框没探到（可能没印上，也可能该有却漏了，未区分）")
 
         return {"border_detect_gate_manifest": BorderDetectGateManifest(
             page=page, admitted=not reject, reject=reject, flags=flags,
@@ -102,18 +102,18 @@ attach_gate("border_detect", GateSpec(
     levels=(
         GateLevel(id="L0", unit="page",
                   desc="页型是否判定为 skip 类（封面/书签/牌记）——block 级，"
-                       "这些页没有正文栏格，套列窗口是无中生有"),
+                       "这些页没有正文栏格，套列窗口是无中生有", name="page_type_skip"),
         GateLevel(id="L0c", unit="page",
                   desc="页型是否为 custom（如上諭，列数与正文不同）或判不准——"
                        "flag，不拦（custom 还没有专门的窄列处理逻辑，"
-                       "uncertain 按 body/standard 兜底）"),
+                       "uncertain 按 body/standard 兜底）", name="page_type_custom"),
         GateLevel(id="L1", unit="page",
                   desc="探出的列数是否等于版式列数——block 级判据，"
-                       "列窗口错了 Step2 整页都没法射影"),
+                       "列窗口错了 Step2 整页都没法射影", name="column_count"),
         GateLevel(id="L2", unit="page",
-                  desc="是否有单条界行 w80 跑飞——flag，不拦（未验证阈值超了必错）"),
+                  desc="是否有单条界行 w80 跑飞——flag，不拦（未验证阈值超了必错）", name="vline_wander"),
         GateLevel(id="L3", unit="page",
                   desc="上/下外框有没有探到——flag，不拦（没印上是正常情况，"
-                       "现在分不清「没印上」与「该有却漏探」）"),
+                       "现在分不清「没印上」与「该有却漏探」）", name="outer_frame_missing"),
     ),
 ))

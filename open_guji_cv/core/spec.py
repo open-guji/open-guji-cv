@@ -42,9 +42,26 @@ class ProductKindSpec:
 class GateLevel:
     """闸的一层判据，只做文档/查询展示用——执行体仍在闸自己的 `run_page` 里，
     这里不驱动执行，纯重组阶段不把判据拆成逐层可插拔的函数（那是改算法，不是这一轮的事）。"""
-    id: str                          # "L1" / "L1c" / "L2" / "L3" ……
+    id: str
+    """层号，如 `L1` / `L1c` / `L2b`。**只表示「第几道关卡」，不是可读的名字**：
+    L0 版式层面本来就不该走这条链 · L1 结构性硬指标（多为 block）·
+    L2 几何质量（多为 flag）· L3 人裁准入 · L4 更细粒度的内容质量；
+    后缀字母是同一层里的不同判据（`L1c` = L1 的列级版本，`L2b` = L2 的第二条）。
+
+    **新判据请同时给 `name`**，产物消息里印的是 name 而不是这个号——
+    用户 2026-09-18：「所有 gate、裁决的名字，还是用英文单词 2-3 个比较直观」。
+    层号保留是因为它表达「拦截的严重程度顺序」，那是 name 表达不了的。"""
     unit: Unit                       # 这一层判到哪个粒度
     desc: str = ""                   # 一句话判据，别写具体阈值数字（那些在 Params 里，写两处会漂）
+    name: str = ""
+    """机器可读的短名，2~3 个英文单词、`snake_case`，如 `column_count`、
+    `frame_residue`。产物里的 reject/flag 消息以 `<name>：…` 开头，
+    前端与下游按它分类，不必查层号表。空 = 尚未命名的老判据（沿用层号）。"""
+
+    @property
+    def tag(self) -> str:
+        """产物消息该用的前缀：有 name 用 name，没有就退回层号。"""
+        return self.name or self.id
 
 
 @dataclass(frozen=True)

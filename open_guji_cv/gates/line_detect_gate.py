@@ -42,16 +42,16 @@ class LineDetectGateStep(Step):
         flags: list[str] = []
         page_type, policy = "body", "standard"
         if li.n_body == 0:
-            reject.append("L1：没有探到正文列（空白页或只有书口小字）")
+            reject.append("no_body_column：没有探到正文列（空白页或只有书口小字）")
             page_type, policy = "blank", "skip"
         if max_cols and li.n_body > max_cols:
-            flags.append(f"L1b：探出 {li.n_body} 列 > 版式上限 {max_cols}（双行小注子列被当成列？）")
+            flags.append(f"column_overflow：探出 {li.n_body} 列 > 版式上限 {max_cols}（双行小注子列被当成列？）")
         n_wide = sum(1 for ln in li.lines if ln.kind == "wide")
         if n_wide:
-            flags.append(f"L2：{n_wide} 条宽列（并列/粘连），未进正文")
+            flags.append(f"merged_column：{n_wide} 条宽列（并列/粘连），未进正文")
         n_fn = sum(1 for ln in li.lines if ln.kind == "footnote")
         if n_fn:
-            flags.append(f"L3：{n_fn} 条脚注列，未进正文")
+            flags.append(f"footnote_column：{n_fn} 条脚注列，未进正文")
         return {"border_detect_gate_manifest": BorderDetectGateManifest(
             page=page, admitted=not reject, reject=reject, flags=flags,
             n_cols=li.n_body, expected_cols=int(max_cols or li.n_body),
@@ -61,9 +61,9 @@ class LineDetectGateStep(Step):
 attach_gate("line_detect", GateSpec(
     id="line_detect_gate", unit="page", on_fail="block",
     levels=(
-        GateLevel(id="L1", unit="page", desc="有没有探到正文列——block，空页不套列窗口"),
-        GateLevel(id="L1b", unit="page", desc="正文列数是否超过版式上限——flag"),
-        GateLevel(id="L2", unit="page", desc="有没有并列/粘连的宽列——flag"),
-        GateLevel(id="L3", unit="page", desc="有没有脚注列——flag，只提醒"),
+        GateLevel(id="L1", unit="page", desc="有没有探到正文列——block，空页不套列窗口", name="no_body_column"),
+        GateLevel(id="L1b", unit="page", desc="正文列数是否超过版式上限——flag", name="column_overflow"),
+        GateLevel(id="L2", unit="page", desc="有没有并列/粘连的宽列——flag", name="merged_column"),
+        GateLevel(id="L3", unit="page", desc="有没有脚注列——flag，只提醒", name="footnote_column"),
     ),
 ))

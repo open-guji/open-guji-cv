@@ -48,7 +48,7 @@ def test_skip_page_produces_no_columns(tmp_path):
     """闸1判 skip（如封面）时，Step2 不切列，产出空 PageWindows。"""
     gray = np.full((1400, 900), 255, dtype=np.uint8)
     gate = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["L0：页型判定为「cover」，无正文栏格，不套列窗口"],
+        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
         n_cols=0, expected_cols=9, page_type="cover", page_type_policy="skip")
     ctx = _ctx(tmp_path, gate, gray)
     step = STEPS["column_warp"]
@@ -74,19 +74,19 @@ def test_standard_page_still_splits_columns(tmp_path):
 def test_skip_page_then_column_gate_rejects(tmp_path):
     """端到端：Step2 产出空列表后，闸2（column_gate）直接读闸1 page_type
     拒收，拒因说清楚是「页型判定」而不是「探出列数不对」——2026-09-12
-    改动前闸2会自己重新猜一次 L1（"只探出 0 列"），这条断言钉死新行为：
+    改动前闸2会自己重新猜一次「只探出 0 列」，这条断言钉死新行为：
     闸2优先读闸1的判定，不再让人看着列数字猜真实原因。
 
     2026-09-15 补齐：此前这条一直红着——2026-09-12 那轮「闸2/闸3 都直接读闸1」
     只在闸3 落了地，闸2 `column_gate.py` 里没有读 `border_detect_gate_manifest`
-    的代码，实跑仍返回 "L1：只探出 0 列（版式应为 9）"，测试先于实现存在。现在
-    闸2 照闸3 的写法查 `ctx.product`，L0 写页型、不再报列数（`column_gate` 版本
+    的代码，实跑仍返回 "column_count：只探出 0 列（版式应为 9）"，测试先于实现存在。现在
+    闸2 照闸3 的写法查 `ctx.product`，拒因写页型（`page_type_skip`）、不再报列数（`column_gate` 版本
     1.5 → 1.6）。
     （2026-09-13 另有一处 fixture 订正：页型从 blank 换成 cover——blank 已改归
     body 子类，blank+skip 这个组合现在造不出来了。）"""
     gray = np.full((1400, 900), 255, dtype=np.uint8)
     gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["L0：页型判定为「cover」，无正文栏格，不套列窗口"],
+        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
         n_cols=0, expected_cols=9, page_type="cover", page_type_policy="skip")
     ctx = _ctx(tmp_path, gate1, gray)
     warp_step = STEPS["column_warp"]
@@ -97,7 +97,7 @@ def test_skip_page_then_column_gate_rejects(tmp_path):
     gate_out = gate_step.run_page(ctx, PAGE)
     gm = gate_out["gate_manifest"]
     assert gm.admitted is False
-    assert any("L0" in r and "cover" in r for r in gm.reject)
+    assert any(r.startswith("page_type_skip") and "cover" in r for r in gm.reject)
     assert not any("L1" in r for r in gm.reject), (
         "闸1已经说清楚是页型判定，闸2不该再重复猜一次列数原因")
     assert gm.columns == []

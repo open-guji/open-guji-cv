@@ -413,6 +413,25 @@ question = "<step>.<对象>.<问什么>"     # border_detect.page.has_head_raise
 `tests/test_questions.py` 逐条把登记表的 question 造成事件喂给路由表，断言
 落点一致：两张表分头维护就会漂，而漂了不报错，只是裁决静默落错分片。
 
+### 4.2d 闸的判据也用词命名（2026-09-18）
+
+同一件事在闸这边也发生过：判据靠**层号**（`L0` / `L1c` / `L2b`）标识，
+产物里的拒因/flag 就写成 `"L2b：整列噪点密度 0.0075 > 0.007"`。层号既不说
+判的是什么，又**在同一道闸里复用**——`row_segment_gate` 的 `L1` 同时指
+「DP 无解」「格数偏离」「上游产物缺失」三件事，看消息前缀分不出来。
+
+现在 `GateLevel` 多一个 `name`（2~3 个英文单词、`snake_case`，如
+`column_count`、`stamp_noise`、`sliver_cell`），产物消息以它开头。
+命名原则：**说「判的是什么」，不是「怎么处置」**——处置由 `block`/`flag`
+表达，名字里不带 reject/warn 这类词。23 层已全部命名。
+
+层号 `id` 保留不动（文档/查询用，`GateLevel` 本来就注明它不驱动执行），
+`lv.tag` 属性负责「有 name 用 name，没有退回层号」。
+
+**老产物仍带层号前缀**——不重跑闸就不会变，所以前端按前缀分桶的两处
+（`ProgressGatePanel`）两个前缀都认。这是迁移期的兼容，等全部册子重跑过
+可以删。
+
 ### 4.3 审查页双传输
 
 - `review/shell.py::render(..., transport="server" | "artifact")`：卡片构建器只写一次。
