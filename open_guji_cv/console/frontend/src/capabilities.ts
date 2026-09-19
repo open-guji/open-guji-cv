@@ -51,7 +51,13 @@ export function capsOf(book: Book | null | undefined): Caps {
     }
   }
   const modern = book.edition === 'modern'
-  const framed = (book.frame ?? 'ruled') === 'ruled'
+  // 「有没有版框」判据（2026-09-18 修）。原先写 `=== 'ruled'`，而实测**没有
+  // 任何一本册 yaml 用 'ruled'**——真实取值只有 `none`（7 本，现代排印）与
+  // `single`（1 本，北行日錄刻本「四周单边」）。于是唯一有框的那本反被判成
+  // 无框，Step1 的四个边框裁决台在它上面一个都不显示。
+  // 改成「不是 none 就有框」：框的形制（single/double/left-right…）是版式细节，
+  // 与「有没有框」是两回事，这里只问后者。
+  const framed = (book.frame ?? 'ruled') !== 'none'
   return {
     hasFrame: framed,
     // 格位切分与版框是两件事，但现在的两条链恰好一一对应：刻本 = 有框 + 格位，

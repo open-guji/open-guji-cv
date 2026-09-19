@@ -9,6 +9,9 @@ import type { AlignRefSummary, OcrCandidatesSummary } from '../api/products'
 import { fetchGlyphMatchSummary } from '../api/glyphMatch'
 import type { GlyphMatchSummary } from '../api/glyphMatch'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { StepLayout } from '../components/common/StepLayout'
+import { ProductViewer } from '../components/ProductViewer'
+import { usePages } from '../hooks/usePages'
 import { ProgressGatePanel } from '../components/common/ProgressGatePanel'
 import { fetchStatus } from '../api/status'
 import type { StatusResponse } from '../types/status'
@@ -130,6 +133,7 @@ function Step5Overview({ book }: { book: string }) {
 // ④产物、⑤标注同 5-c/5-d 的结论：本次不接，留给以后需要时再补。
 function GlyphMatchOverview({ book }: { book: string }) {
   const [pageSel, setPageSel] = useState(() => loadSavedPageRange(GLYPH_MATCH_STEP_ID, book))
+  const pageNums = usePages(book, pageSel)
   const [summary, setSummary] = useState<GlyphMatchSummary | null>(null)
   const [err, setErr] = useState('')
 
@@ -156,12 +160,18 @@ function GlyphMatchOverview({ book }: { book: string }) {
   ] : undefined
 
   return (
-    <div>
-      <PageRangeSelector book={book} stepId={GLYPH_MATCH_STEP_ID} value={pageSel} onChange={setPageSel} />
-      {err && <div className="card"><p className="muted">{err}</p></div>}
-      {!err && <ProgressGatePanel book={book} title="Step5-a 字形库匹配 —— 匹配档位分布" customMetrics={metrics} />}
-      <GlyphMatchPanel book={book} />
-    </div>
+    <StepLayout
+      book={book} stepId={GLYPH_MATCH_STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      overview={err
+        ? <div className="card"><p className="muted">{err}</p></div>
+        : <ProgressGatePanel book={book} title="Step5-a 字形库匹配 —— 匹配档位分布" customMetrics={metrics} />}
+      // GlyphMatchPanel 是「输页/列/格查一个」的只读查询，不是出卡让人裁，
+      // 所以归板块④（只读视图·按坐标粒度），与 Step7 的 CellLookupPanel 同类。
+      product={<>
+        <GlyphMatchPanel book={book} />
+        <ProductViewer book={book} step={STEP5_BACKEND_IDS['glyph-match']} pages={pageNums} />
+      </>}
+    />
   )
 }
 
@@ -177,6 +187,7 @@ function GlyphMatchOverview({ book }: { book: string }) {
 // 属于「缺口小顺手做」以外的范围，留给以后）；⑤标注 无。
 function OcrCandidatesPanel({ book }: { book: string }) {
   const [pageSel, setPageSel] = useState(() => loadSavedPageRange(OCR_CANDIDATES_STEP_ID, book))
+  const pageNums = usePages(book, pageSel)
   const [summary, setSummary] = useState<OcrCandidatesSummary | null>(null)
   const [err, setErr] = useState('')
 
@@ -203,17 +214,19 @@ function OcrCandidatesPanel({ book }: { book: string }) {
   ] : undefined
 
   return (
-    <div>
-      <PageRangeSelector book={book} stepId={OCR_CANDIDATES_STEP_ID} value={pageSel} onChange={setPageSel} />
-      {err && <div className="card"><p className="muted">{err}</p></div>}
-      {!err && (
-        <ProgressGatePanel
-          book={book}
-          title="Step5-c OCR 候选 —— 逐字全自动产出，无需单点查询（07号任务卡结论核实仍成立）"
-          customMetrics={metrics}
-        />
-      )}
-    </div>
+    <StepLayout
+      book={book} stepId={OCR_CANDIDATES_STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      overview={err
+        ? <div className="card"><p className="muted">{err}</p></div>
+        : <ProgressGatePanel
+            book={book}
+            title="Step5-c OCR 候选 —— 逐字全自动产出，无需单点查询（07号任务卡结论核实仍成立）"
+            customMetrics={metrics}
+          />}
+      // 板块④（2026-09-18 补）：本组件注释原本写着「复用现成的 ProductViewer
+      // 展示 ocr_candidates 逐页 JSON 即可，本次先不接」——现在接上。
+      product={<ProductViewer book={book} step={STEP5_BACKEND_IDS['ocr']} pages={pageNums} />}
+    />
   )
 }
 

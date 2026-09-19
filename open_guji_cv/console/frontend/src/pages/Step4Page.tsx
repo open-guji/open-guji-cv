@@ -7,6 +7,15 @@ import type { CellShrinkRandRow } from '../api/cellShrinkRand'
 import { postEvents } from '../api/events'
 import { fetchReviewVerdicts } from '../api/review'
 import { consumedMsg } from '../domain'
+import { StepLayout } from '../components/common/StepLayout'
+import { loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { ProductViewer } from '../components/ProductViewer'
+import { StepStatusSummary } from '../components/common/StepStatusSummary'
+import { fetchStatus } from '../api/status'
+import type { StatusResponse } from '../types/status'
+import { usePages } from '../hooks/usePages'
+import { backendIdFor, findStep } from '../steps'
+import { useBookCaps } from '../hooks/useBookCaps'
 import '../components/review/review.css'
 
 // Step4 随机层裁决台（overview 2026-09-11 下发：01-补随机层金标.md）。
@@ -49,6 +58,8 @@ function slotOf(id: string): number {
   return parseInt(raw, 10)
 }
 
+const STEP_ID = 'step4'
+
 export function Step4Page() {
   const { book = '' } = useParams()
   const [n, setN] = useState(400)
@@ -57,6 +68,18 @@ export function Step4Page() {
   const [msg, setMsg] = useState('')
   const [todoOnly, setTodoOnly] = useState(false)
   const [cur, setCur] = useState(0)
+  // 板块①的页范围**不进裁决台**：Step4 的卡是全书等概率随机抽的
+  // （fetchCellShrinkRandSample(n, seed)），不按页取。接上去会让人以为
+  // 抽样受它控制。这里只给板块②④用。
+  const [pageSel, setPageSel] = useState(() => loadSavedPageRange(STEP_ID, book))
+  const pages = usePages(book, pageSel)
+  const [status, setStatus] = useState<StatusResponse | undefined>()
+  const { meta: bookMeta } = useBookCaps(book)
+  const step4Id = backendIdFor(findStep('step4'), bookMeta?.edition) ?? 'cell_shrink'
+  useEffect(() => {
+    if (!book) return
+    fetchStatus(book, 'keben_body_v2', 'all').then(setStatus).catch(() => {})
+  }, [book])
   const [, forceRender] = useState(0)
   const bump = () => forceRender((x) => x + 1)
 
@@ -158,6 +181,10 @@ export function Step4Page() {
   }, [visible, cur, todoOnly])
 
   return (
+    <StepLayout
+      book={book} stepId={STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      overview={<div className="card"><h2>总览</h2><StepStatusSummary book={book} status={status?.steps?.[step4Id]} /></div>}
+      reviews={[{ id: 'rand', label: '随机层裁决', node: (
     <div className="card">
       <h2>Step4 随机层裁决 <span className="muted">给字框收缩的缺陷率立一把真人核校过的尺子</span></h2>
       <div className="rv-toolbar">
@@ -216,5 +243,8 @@ export function Step4Page() {
         })}
       </div>
     </div>
+      ) }]}
+      product={<ProductViewer book={book} step={step4Id} pages={pages} />}
+    />
   )
 }
