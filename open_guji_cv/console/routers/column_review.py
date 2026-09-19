@@ -43,6 +43,11 @@ def _case_rec(book: str, pg: int, w) -> dict | None:
         "band": list(w.band),
         "trim_top": w.trim_top.model_dump(),
         "trim_bottom": w.trim_bottom.model_dump(),
+        # 削完之后端部还剩不剩框墨（闸2 `frame_residue` 判据的量）。
+        # 裁决台只显示「算法判了哪一档」时会误导人——bxgb:16:17 下端判 c
+        # 「没带进版框」，而下版框明明在列图里（行墨占比 1.000）。
+        # 把验后的量一起摆出来，人一眼能看出判据和图对不上。
+        "frame_residue": [int(w.frame_residue_top), int(w.frame_residue_bottom)],
         "size": list(w.warped_size),
         "raised": bool(w.raised),
         "img": f"/api/cache/{book}/column_raw/{column_key(pg, w.col)}.png",
