@@ -456,16 +456,29 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     prof = column_row_profile(warped_gray, band, ink_threshold)
 
     def one(p: np.ndarray, m: np.ndarray | None) -> tuple[int, str]:
-        blank = 0
-        while blank < len(p) and p[blank] <= ink_eps:
-            blank += 1
-        if blank > inset_look or blank >= len(p):
-            return 0, "c"                     # 边缘一大片空白，里面是正文
-        run = blank
-        while run < len(p) and p[run] > ink_eps:
-            run += 1
-        thick = run - blank
-        if thick <= border_max_rows:           # 一条薄横线
+        # 从边缘往里找「第一段够格的墨」。噪点段要**跳过去接着找**，不能
+        # 见到一段弱墨就收工（2026-09-18 修）——原先判成噪点直接 `return c`，
+        # 于是扫描停在噪点上，再也看不到它后面的真框：
+        # bxgb p16c17 下端实测，外缘 7 行白 → 7 行弱墨（峰值 0.062）→ 22 行白
+        # → **真框（峰值 1.000）**，判了 c「这一端没带进版框」，框墨整条留在
+        # 列图里。全书 53 个 c 档端口里 46 个是这么漏的（峰值 0.93~1.00）。
+        #
+        # 连带影响：`column_gate` 量墨跨度推 `n_raised_hint` 时把这条框墨算成
+        # 字，跨度多出 0.5~0.7 格 → 误判「这列多一个字」→ DP 多切一格。
+        start = 0
+        blank = run = 0
+        while True:
+            blank = start
+            while blank < len(p) and p[blank] <= ink_eps:
+                blank += 1
+            if blank > inset_look or blank >= len(p):
+                return 0, "c"                 # 边缘一大片空白，里面是正文
+            run = blank
+            while run < len(p) and p[run] > ink_eps:
+                run += 1
+            thick = run - blank
+            if thick > border_max_rows:
+                break                          # 厚墨段：交给下面的 e/b/c 判据
             if blank == 0:
                 return run, "a"                 # 贴着边缘，削掉几行无害
             # 内缩档：要求这条线本身有像样的墨，否则那是噪点不是版框
@@ -473,7 +486,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             #   人裁的结论是"没残墨"，早先按 d 档削了 33 行是假阳性）
             if float(p[blank:run].max()) >= inset_min_peak:
                 return run, "d"
-            return 0, "c"
+            start = run                        # 是噪点——跳过它继续往里找
         # e 档：run 很长只是因为天头底噪 > ink_eps。头部若是「薄高墨段 → 持续低平底」，
         # 那就是框接天头，不是框粘着字（理由与实测见函数 docstring 及 FLOOR_T 注）。
         flush = blank <= flush_max
