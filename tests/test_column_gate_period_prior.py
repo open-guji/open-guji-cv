@@ -11,68 +11,41 @@ vol01 p62/p158/p206 三页就是这么一直挂在异常里的。
 1. 估不出来 + 配了先验 → 用先验兜底、页级过闸、写 flag 不写 reject；
 2. **能估出来的页一律用当场估的值**——兜底不能改变任何正常页的产物。
 
-不依赖真实书页：合成一张「有界行、栏内无字」的图走真链路。
+不依赖真实书页、也不依赖册配置：合成一张「有界行、栏内无字」的图 +
+自备册走真链路。
 """
 
 from __future__ import annotations
 
-import dataclasses
-
 import numpy as np
 
 import open_guji_cv.steps  # noqa: F401  —— 注册产物种类
-from open_guji_cv.core.book import load_book
+from helpers import body_page, make_book, make_borders, make_ctx, make_gate1, ruled_page
 from open_guji_cv.core.step import RunContext, STEPS
-from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.products.kinds.border_detect_gate import BorderDetectGateManifest
-from open_guji_cv.products.kinds.borders import Borders, HLineRec, VLineRec
-from open_guji_cv.products.store import ProductStore
 
 PAGE = 1
 W, H, NCOLS = 900, 1400, 9
-
-
-def _borders() -> Borders:
-    top = HLineRec(y_at_right=40.0, slope=0.0, kind="straight")
-    bottom = HLineRec(y_at_right=float(H - 40), slope=0.0, kind="straight")
-    xs = np.linspace(60, W - 60, NCOLS + 1)
-    return Borders(width=W, height=H, expected_cols=NCOLS, top=top, bottom=bottom,
-                   verticals=[VLineRec(x_at_top=float(x), slope=0.0) for x in xs])
-
-
-def _empty_ruled_page() -> np.ndarray:
-    """空栏页：版框 + 九条界行都印着，栏内一个字都没有。"""
-    g = np.full((H, W), 255, np.uint8)
-    g[40:46, 60:W - 60] = 20                      # 上版框
-    g[H - 46:H - 40, 60:W - 60] = 20              # 下版框
-    for x in np.linspace(60, W - 60, NCOLS + 1):  # 界行
-        g[40:H - 40, int(x) - 2:int(x) + 2] = 20
-    return g
-
-
-def _body_page() -> np.ndarray:
-    """正常正文页：同样的栏格，但每栏按固定行距填满字块。"""
-    g = _empty_ruled_page()
-    xs = np.linspace(60, W - 60, NCOLS + 1)
-    for i in range(NCOLS):
-        x0, x1 = int(xs[i]) + 6, int(xs[i + 1]) - 6
-        for y in range(60, H - 90, 60):           # 行距 60px = 真周期
-            g[y:y + 46, x0:x1] = 20
-    return g
+PERIOD = 60          # 合成正文页的真行距
 
 
 def _ctx(tmp_path, gray: np.ndarray, period_prior: float | None) -> RunContext:
-    store = ProductStore(tmp_path / "products")
-    book = load_book("vol01")
-    book = dataclasses.replace(book, period_prior=period_prior)
-    ctx = RunContext(book, store, ImageCache(tmp_path / "cache"), log=lambda s: None)
-    ctx._raw[PAGE] = gray
-    store.write(book.id, "border_detect", f"p{PAGE:04d}", {"borders": _borders()})
-    store.write(book.id, "border_detect_gate", f"p{PAGE:04d}",
-                {"border_detect_gate_manifest": BorderDetectGateManifest(
-                    page=PAGE, admitted=True, n_cols=NCOLS, expected_cols=NCOLS,
-                    page_type="blank", page_type_policy="standard")})
+    """册配置测试自备：`period_prior` 正是被测的那一项，直接给，不去改某本真书的。"""
+    book = make_book(expected_cols=NCOLS, period_prior=period_prior)
+    ctx = make_ctx(tmp_path, book, raw={PAGE: gray})
+    ctx.store.write(book.id, "border_detect", f"p{PAGE:04d}",
+                    {"borders": make_borders(W, H, NCOLS)})
+    ctx.store.write(book.id, "border_detect_gate", f"p{PAGE:04d}",
+                    {"border_detect_gate_manifest": make_gate1(
+                        PAGE, n_cols=NCOLS, expected_cols=NCOLS, page_type="blank")})
     return ctx
+
+
+def _empty_ruled_page() -> np.ndarray:
+    return ruled_page(W, H, NCOLS)
+
+
+def _body_page() -> np.ndarray:
+    return body_page(W, H, NCOLS, period=PERIOD)
 
 
 def _run(ctx) -> tuple:
