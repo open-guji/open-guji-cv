@@ -79,6 +79,13 @@ class Borders(BaseModel):
     head_raise: list[HeadRaiseRec] = Field(default_factory=list)
     top_outer_offset: float | None = None
     bottom_outer_offset: float | None = None
+    # "double" / "single"（單邊框）/ "none"；旧产物缺省 None。见 BorderDetectionResult。
+    top_frame_kind: str | None = None
+    bottom_frame_kind: str | None = None
+    top_bar_extent: float | None = None
+    bottom_bar_extent: float | None = None
+    bottom_pushed: float = 0.0
+    vlines_snapped: int = 0
     v_outer_side: str | None = None
     v_outer_offset: float | None = None
     vline_segments: int = 1
@@ -97,6 +104,10 @@ class Borders(BaseModel):
             verticals_straight=[VLineRec.of(v) for v in (r.verticals_straight or [])],
             head_raise=[HeadRaiseRec.of(h) for h in (r.head_raise or [])],
             top_outer_offset=_f(r.top_outer_offset), bottom_outer_offset=_f(r.bottom_outer_offset),
+            top_frame_kind=r.top_frame_kind, bottom_frame_kind=r.bottom_frame_kind,
+            top_bar_extent=_f(r.top_bar_extent), bottom_bar_extent=_f(r.bottom_bar_extent),
+            bottom_pushed=float(getattr(r, "bottom_pushed", 0.0) or 0.0),
+            vlines_snapped=int(getattr(r, "vlines_snapped", 0) or 0),
             v_outer_side=r.v_outer_side, v_outer_offset=_f(r.v_outer_offset),
             vline_segments=int(r.vline_segments),
             bend_w80_med=_f(r.bend_w80_med), bend_w80_max=_f(r.bend_w80_max),
@@ -110,6 +121,9 @@ class Borders(BaseModel):
             verticals=[v.to_vline() for v in self.verticals],
             head_raise=[h.to_hr() for h in self.head_raise],
             top_outer_offset=self.top_outer_offset, bottom_outer_offset=self.bottom_outer_offset,
+            top_frame_kind=self.top_frame_kind, bottom_frame_kind=self.bottom_frame_kind,
+            top_bar_extent=self.top_bar_extent, bottom_bar_extent=self.bottom_bar_extent,
+            bottom_pushed=self.bottom_pushed, vlines_snapped=self.vlines_snapped,
             v_outer_side=self.v_outer_side, v_outer_offset=self.v_outer_offset,
             vline_segments=self.vline_segments,
             vline_filled=list(self.vline_filled),

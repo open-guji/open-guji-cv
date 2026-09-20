@@ -114,3 +114,140 @@ def test_outer_run_thickness_counts_rows_not_endpoint_gap():
     prof3 = np.zeros(40)
     prof3[20:23] = OUTER_INK_MIN + 0.2       # 3 行 => 厚 3px，仍应被挡
     assert _outer_run(prof3, offs) is None
+
+
+def test_outer_borders_single_bar_and_weak_vertical_prior():
+    """單邊框判 single、不报外框；竖直外框弱峰不当先验（2026-09-20 vol02 p160 / p10）。
+
+    合成一页：上版框是从内框线起 12 行的粗条（單邊框）；下版框是 3 行内框 + 30px 外
+    一条 5 行的外框（雙邊框）；竖直只有 3px 细内框、没有外框。期望：top 判 single 且
+    不报 outer；bottom 判 double 且报 outer；竖直先验为 None（不能凭噪点造先验）。
+    """
+    from open_guji_cv.utils.border_geometry import (HLine, SINGLE_BAR_MIN,
+                                                   detect_outer_borders)
+    Wd, Hd = 600, 800
+    mask = np.zeros((Hd, Wd), np.uint8)
+    mask[89:101, :] = 255                        # 上：單邊框粗条 12 行（从内框线往外=往上）
+    mask[700:703, :] = 255                       # 下：内框 3 行
+    mask[733:738, :] = 255                       # 下：外框 5 行，离内框 30px
+    mask[:, 60:63] = 255                         # 竖直内框（右侧）
+    mask[:, 537:540] = 255                       # 竖直内框（左侧）
+    verts = [VLine(x_at_top=float((Wd - 1) - 60), slope=0.0),
+             VLine(x_at_top=float((Wd - 1) - 538), slope=0.0)]
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=700.0, slope=0.0, kind="bottom")
+    out = detect_outer_borders(mask, top, bot, verts, Wd, Hd)
+    assert out["top_frame_kind"] == "single", out
+    assert out["top_outer_offset"] is None and out["top_bar_extent"] >= SINGLE_BAR_MIN
+    assert out["v_outer_offset"] is None, out          # 没有竖直外框 → 没有先验
+    assert out["bottom_frame_kind"] == "double" and out["bottom_outer_offset"] is not None, out
+
+
+def _hl(y, kind):
+    from open_guji_cv.utils.border_geometry import HLine
+    return HLine(y_at_right=float(y), slope=0.0, kind=kind)
+
+
+def _vl(x_raw, w):
+    return VLine(x_at_top=float((w - 1) - x_raw), slope=0.0)
+
+
+def test_push_bottom_to_bar_moves_line_from_text_baseline_to_bar():
+    """线塌在最后一行字底边、真框条在 22px 之下 → 推到条上沿 −4（2026-09-20 vol02 p35/p106）。"""
+    from open_guji_cv.utils.border_geometry import push_bottom_to_bar, BPUSH_MARGIN
+    Wd, Hd = 900, 800
+    binm = np.zeros((Hd, Wd), np.uint8)
+    for cx in range(120, 800, 90):                    # 一行字：底边 698
+        binm[640:698, cx - 25:cx + 25] = 1
+    binm[722:731, 40:860] = 1                         # 真框条
+    verts = [_vl(40, Wd), _vl(860, Wd)]
+    bot = _hl(700, "bottom")
+    new, shift = push_bottom_to_bar(binm, bot, verts, Wd, Hd)
+    assert shift == 22 - BPUSH_MARGIN, shift
+    assert abs(new.y_at(0) - (722 - BPUSH_MARGIN)) < 1e-6
+
+
+def test_push_bottom_to_bar_leaves_double_frame_and_barless_pages_alone():
+    """雙邊框：内框细线在 +5（够格的条）→ 目标 <8 不动；没有条 → 不动；条在线上方 → 不动。"""
+    from open_guji_cv.utils.border_geometry import push_bottom_to_bar
+    Wd, Hd = 900, 800
+    verts = [_vl(40, Wd), _vl(860, Wd)]
+    binm = np.zeros((Hd, Wd), np.uint8)
+    binm[705:708, 40:860] = 1                         # 内框 +5
+    binm[725:730, 40:860] = 1                         # 外框 +25
+    _, shift = push_bottom_to_bar(binm, _hl(700, "bottom"), verts, Wd, Hd)
+    assert shift == 0.0
+    binm = np.zeros((Hd, Wd), np.uint8)
+    for cx in range(120, 800, 90):
+        binm[640:698, cx - 25:cx + 25] = 1            # 只有字，没有条
+    _, shift = push_bottom_to_bar(binm, _hl(700, "bottom"), verts, Wd, Hd)
+    assert shift == 0.0
+    binm = np.zeros((Hd, Wd), np.uint8)
+    binm[680:695, 40:860] = 1                         # 粗条在线之上（下沿路线）
+    _, shift = push_bottom_to_bar(binm, _hl(700, "bottom"), verts, Wd, Hd)
+    assert shift == 0.0
+
+
+def _leaning_page(lean_px: float, rule_frac: float):
+    """四列文字页：界行只印在顶部 rule_frac 的高度；下面文字列逐渐向右偏 lean_px。"""
+    Wd, Hd = 900, 1500
+    binm = np.zeros((Hd, Wd), np.uint8)
+    yt, yb = 100, 1400
+    rules = [60, 240, 420, 600, 780]                    # 5 条线（含两侧框线），列距 180
+    for x in rules:
+        binm[yt:yt + int((yb - yt) * rule_frac), x - 1:x + 2] = 1
+    binm[yt - 3:yt, 40:820] = 1; binm[yb:yb + 3, 40:820] = 1
+    for y in range(yt + 20, yb - 20, 60):
+        off = lean_px * (y - yt) / (yb - yt)
+        for a, b in zip(rules[:-1], rules[1:]):
+            cx = (a + b) / 2 + off
+            binm[y:y + 40, int(cx - 45):int(cx + 45)] = 1
+    verts = [_vl(x, Wd) for x in rules]
+    return binm, _hl(yt, "top"), _hl(yb, "bottom"), verts, Wd, Hd
+
+
+def test_snap_verticals_follows_text_gaps_where_rules_are_missing():
+    """界行只印了顶部 15%、文字列往下渐偏 60px（线压进字里）：按文字缝重定位（2026-09-20 p177）。"""
+    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    binm, top, bot, verts, Wd, Hd = _leaning_page(60.0, 0.15)     # 页底线要压进字里 ~15px 才算「有病」
+    out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd)
+    assert n == 3, n                                   # 三条内部线都动了，框线不动
+    for vi in (1, 2, 3):
+        raw_top = (Wd - 1) - out[vi].x_at(150.0)
+        raw_bot = (Wd - 1) - out[vi].x_at(1350.0)
+        assert abs(raw_top - [60, 240, 420, 600, 780][vi]) <= 4, (vi, raw_top)
+        assert abs(raw_bot - ([60, 240, 420, 600, 780][vi] + 60 * (1350 - 100) / 1300)) <= 8, (vi, raw_bot)
+    assert out[0] is verts[0] and out[4] is verts[4]
+
+
+def test_snap_verticals_keeps_fully_ruled_page():
+    """整页都有界行且线在界行上 → 一条不动。"""
+    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 1.0)
+    out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd)
+    assert n == 0 and all(a is b for a, b in zip(out, verts))
+
+
+def test_snap_keeps_lines_that_sit_inside_the_gap_even_off_center():
+    """整页没印界行、文字不偏、线整体偏离缝中心 15px（仍在缝里、离字 ≥8px）→ 一条不动。
+    缝中心不是界行位置（两侧文字不对称时差 ±18px），线在缝里就是对的。"""
+    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.0)      # 整页一条界行都没印
+    shifted = [verts[0]] + [VLine(x_at_top=v.x_at_top - 15.0, slope=0.0) for v in verts[1:-1]] + [verts[-1]]
+    out, n = snap_verticals_to_evidence(binm, top, bot, shifted, Wd, Hd)
+    assert n == 0, n
+
+
+def test_single_bar_tolerates_a_few_white_rows_before_the_bar():
+    """下版框被推到条上沿 −4 之后，粗条从 +4 起：仍判 single，不报「外框没探到」。"""
+    from open_guji_cv.utils.border_geometry import detect_outer_borders, HLine
+    Wd, Hd = 600, 800
+    mask = np.zeros((Hd, Wd), np.uint8)
+    mask[704:716, :] = 255                       # 下：粗条 12 行，线在 700（条从 +4 起）
+    mask[:, 60:63] = 255; mask[:, 537:540] = 255
+    verts = [VLine(x_at_top=float((Wd - 1) - 60), slope=0.0),
+             VLine(x_at_top=float((Wd - 1) - 538), slope=0.0)]
+    out = detect_outer_borders(mask, HLine(y_at_right=100.0, slope=0.0, kind="top"),
+                               HLine(y_at_right=700.0, slope=0.0, kind="bottom"), verts, Wd, Hd)
+    assert out["bottom_frame_kind"] == "single", out
+    assert out["bottom_bar_extent"] == 16.0
