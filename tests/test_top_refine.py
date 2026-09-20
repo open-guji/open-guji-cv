@@ -210,13 +210,19 @@ def test_snap_verticals_follows_text_gaps_where_rules_are_missing():
     """界行只印了顶部 15%、文字列往下渐偏 60px（线压进字里）：按文字缝重定位（2026-09-20 p177）。"""
     from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
     binm, top, bot, verts, Wd, Hd = _leaning_page(60.0, 0.15)     # 页底线要压进字里 ~15px 才算「有病」
-    out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd)
+    out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd, straight=verts)
     assert n == 3, n                                   # 三条内部线都动了，框线不动
     for vi in (1, 2, 3):
+        rule = [60, 240, 420, 600, 780][vi]
         raw_top = (Wd - 1) - out[vi].x_at(150.0)
-        raw_bot = (Wd - 1) - out[vi].x_at(1350.0)
-        assert abs(raw_top - [60, 240, 420, 600, 780][vi]) <= 4, (vi, raw_top)
-        assert abs(raw_bot - ([60, 240, 420, 600, 780][vi] + 60 * (1350 - 100) / 1300)) <= 8, (vi, raw_bot)
+        assert abs(raw_top - rule) <= 4, (vi, raw_top)
+        # 底带（中心 y≈1318）：线要离开字、进到缝里（缝 = 两侧文字块之间，离字边 ≥8px）。
+        # 不要求落到缝中心——无界行横带只保证「不压字」，中段锚在直线拟合上。
+        y = 1318.0
+        off = 60 * (y - 100) / 1300
+        gap_lo, gap_hi = (rule - 90 + 45) + off + 8, (rule + 90 - 45) + off - 8
+        raw_bot = (Wd - 1) - out[vi].x_at(y)
+        assert gap_lo <= raw_bot <= gap_hi, (vi, raw_bot, gap_lo, gap_hi)
     assert out[0] is verts[0] and out[4] is verts[4]
 
 
@@ -251,3 +257,22 @@ def test_single_bar_tolerates_a_few_white_rows_before_the_bar():
                                HLine(y_at_right=700.0, slope=0.0, kind="bottom"), verts, Wd, Hd)
     assert out["bottom_frame_kind"] == "single", out
     assert out["bottom_bar_extent"] == 16.0
+
+
+def test_snap_reverts_unruled_polyline_bends_to_the_straight_fit():
+    """界行只印顶部、文字不偏：折线在下段被（模拟）勾到字上偏 30px，直线拟合是对的 →
+    无界行横带锚回直线（2026-09-20 vol02 p160 c4~c7）。"""
+    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence, _from_knots
+    binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.15)
+    yt, yb = 100.0, 1400.0
+    ky = [yt, yt + (yb - yt) / 3, yt + 2 * (yb - yt) / 3, yb]
+    bent = [verts[0]]
+    for v in verts[1:-1]:
+        x = v.x_at_top
+        bent.append(_from_knots([x, x, x - 30.0, x - 30.0], ky))   # 下两个折点偏 30px（仍在缝里）
+    bent.append(verts[-1])
+    out, n = snap_verticals_to_evidence(binm, top, bot, bent, Wd, Hd, straight=verts)
+    assert n == 3, n
+    for vi in (1, 2, 3):
+        for y in (300.0, 900.0, 1350.0):
+            assert abs(out[vi].x_at(y) - verts[vi].x_at(y)) <= 4, (vi, y, out[vi].x_at(y), verts[vi].x_at(y))

@@ -89,7 +89,10 @@ def test_missing_outer_border_flags_not_blocks():
             m = _run_gate(book, pg)
             if m is None:
                 continue
-            if m.top_outer_offset is None or m.bottom_outer_offset is None:
+            # 單邊框（frame_kind == "single"）本来就没有第二条，outer 为 None 是对的、不 flag
+            miss_top = m.top_outer_offset is None and getattr(m, "top_frame_kind", None) != "single"
+            miss_bot = m.bottom_outer_offset is None and getattr(m, "bottom_frame_kind", None) != "single"
+            if miss_top or miss_bot:
                 found = True
                 assert m.flags, f"{book}/{pg} 外框缺失但没写 flags"
                 if m.n_cols == m.expected_cols:

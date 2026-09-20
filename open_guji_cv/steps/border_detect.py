@@ -75,10 +75,14 @@ class BorderDetectStep(Step):
         # 列类型：`borders.verticals` 已是右上原点空间、x 升序（右→左），与
         # `line_index` 同一坐标空间，不需要翻转。y 取版框上下沿（列位是整列的，
         # 不逐列量墨——那是 Step2/3 的事）。
-        xs = [float(v.x_at_top) for v in borders.verticals]
-        filled = list(res.vline_filled) or [False] * len(xs)
         top_y = float(res.top.y_at(0.0)) if res.top is not None else 0.0
         bot_y = float(res.bottom.y_at(0.0)) if res.bottom is not None else float(H - 1)
+        # x 在版框**中高**处取，不取 `x_at_top`（y=0 处）：界行有斜率时 y=0 离版框
+        # 顶还有三百多行，整排列框会偏几十 px（vol02 p149 偏 40px，叠图上绿框离开
+        # 界行、像是界行错了）。列宽/列类型也该按版框里的 x 算。
+        y_mid = (top_y + bot_y) / 2.0
+        xs = [float(v.x_at(y_mid)) for v in res.verticals]      # VLine（记录 VLineRec 没有 x_at）
+        filled = list(res.vline_filled) or [False] * len(xs)
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
