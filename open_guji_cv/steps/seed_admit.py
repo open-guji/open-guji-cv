@@ -114,9 +114,12 @@ class SeedAdmitParams(BaseModel):
                                corpus_fingerprint([self.exclusions or str(_ex_default())]))
         # 人裁表直接读 glyph.db，这一步自己带库指纹——上游 glyph_match 的指纹只保证
         # 它自己重跑，不会让本步过期（人裁进库时 match 产物可能没变）。
+        # 只看 provenance='human' 那部分（2026-09-20）：机器 align 进库、字头改判与本步
+        # 的人裁通道无关，用整库指纹会让本步跟着白跑。
         if self.use_human_verdicts and not self.human_fingerprint:
-            from .glyph_match import db_fingerprint
-            object.__setattr__(self, "human_fingerprint", db_fingerprint(self.db_path))
+            from .glyph_match import human_verdicts_fingerprint
+            object.__setattr__(self, "human_fingerprint",
+                               human_verdicts_fingerprint(self.db_path))
         # 版本注词表也是派生物（scripts/build_note_lexicon.py），同理
         if self.use_note_lexicon and not self.note_fingerprint:
             from ..clustering.note_lexicon import DEFAULT_LEXICON

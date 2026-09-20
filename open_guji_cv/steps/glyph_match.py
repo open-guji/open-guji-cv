@@ -41,9 +41,16 @@ conflict 的不升档。`n_confirmed` 只数人裁（`glyphs.n_confirmed`，排�
 产物就永远显示 fresh、拿着过期判决往下走。所以 `db_fingerprint` 进了
 `GlyphMatchParams`（参数参与指纹），换库或库变大之后这一步会自动标 stale。
 
-指纹取 `(mtime_ns, size, exemplars 行数)`：前两个便宜，行数防「同尺寸不同内容」
-（compact/vacuum 之后 size 可能巧合相同）。**不哈希整库**——77 MB 每次读一遍
-太贵，而这三个量联合变化的概率低到可以忽略。
+指纹取**库内容**（2026-09-20 起；此前是 `(mtime_ns, size, exemplars 行数)`）：
+exemplars / glyphs / admissions / derived 四表各自的 `(条数, 最大 rowid, 最新时间戳)`
+拼起来哈希，四条聚合查询合计 <10 ms，**不哈希整库**。换掉 mtime 的原因：mtime 会被
+与判决无关的写动到——备份复制、VACUUM、边跑边审时消费者落一条人裁，都让全书
+Step5+ 过期；而内容指纹只在**匹配器会读到的东西**变了才变。`instances` 表不进指纹
+（扫它的 patch_png 要 140 ms 且会随库线性涨），所以**改 instances/derived 内容的
+写路径必须触碰 `exemplars.added_at`**（`GlyphDB.refresh_instance_patch` 就是这么做的，
+`_exemplar_matrix` 的常驻缓存也靠这一戳）——只改派生表不碰戳，指纹与缓存都看不见。
+`seed_admit` 的人裁通道只读 `provenance='human'` 的 admissions，用更窄的
+`human_verdicts_fingerprint`，机器 align 进库不惊动它。
 """
 
 from __future__ import annotations
@@ -71,21 +78,54 @@ def _default_db() -> str:
 DEFAULT_DB = "output/glyph.db"
 
 
-def db_fingerprint(path: str | Path | None = None) -> str:
-    """库的轻量指纹：(mtime_ns, size, exemplars 行数) 的哈希。见模块头。"""
+def _stat_stamp(p: Path) -> str:
+    st = p.stat()
+    return f"stat:{st.st_mtime_ns}:{st.st_size}"
+
+
+def _db_stamp(path: str | Path | None, sql: str) -> str:
+    """跑一条聚合 SQL 取库内容戳；库不存在 → "nodb"，读不了（锁/损坏）→ 退回 stat 戳。"""
     p = Path(path or _default_db())
     if not p.exists():
         return "nodb"
-    st = p.stat()
-    n = ""
     try:
         import sqlite3
         with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as c:
-            n = str(c.execute("SELECT count(*) FROM exemplars").fetchone()[0])
+            row = c.execute(sql).fetchone()
+        raw = "|".join("" if v is None else str(v) for v in row)
     except Exception:
-        n = "?"
-    raw = f"{st.st_mtime_ns}:{st.st_size}:{n}"
+        raw = _stat_stamp(p)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+_CONTENT_SQL = """SELECT
+  (SELECT count(*) || '/' || max(rowid) || '/' || max(added_at)    FROM exemplars),
+  (SELECT count(*) || '/' || max(rowid) || '/' || max(updated_at)  FROM glyphs),
+  (SELECT count(*) || '/' || max(rowid) || '/' || max(admitted_at) FROM admissions),
+  (SELECT count(*) || '/' || max(algo_version)                     FROM derived)"""
+
+_HUMAN_SQL = """SELECT count(*), max(rowid), max(admitted_at)
+  FROM admissions WHERE provenance = 'human'"""
+
+
+def db_fingerprint(path: str | Path | None = None) -> str:
+    """库的内容指纹（见模块头「库是外部状态」）。
+
+    只看匹配器会读到的四张表的 (条数, 最大 rowid, 最新时间戳)：加条目、撤条目、
+    撤后同秒重进（rowid 单调递增，count/时间戳都不变时它变）、改字头、重算派生
+    （`refresh_instance_patch` 会碰 `exemplars.added_at`）都会变；复制文件、VACUUM、
+    只读打开、mtime 被 touch 都不变。
+    """
+    return _db_stamp(path, _CONTENT_SQL)
+
+
+def human_verdicts_fingerprint(path: str | Path | None = None) -> str:
+    """只看 `provenance='human'` 的准入台账——`seed_admit` 人裁通道的输入。
+
+    机器 align 进库、字头改判都不动它；人裁进库、撤裁（删行或改成
+    `human_stale_*`）、撤后重进才动。与 `db_fingerprint` 同一套实现。
+    """
+    return _db_stamp(path, _HUMAN_SQL)
 
 
 class GlyphMatchParams(BaseModel):
@@ -185,8 +225,10 @@ class GlyphMatchStep(Step):
         # 库路径 P0 自检：库路径解析错了、读到空库/别的文件时直接报错，
         # 不许静默出全 diff（见 glyph_db.assert_db_not_silently_empty 模块头）。
         assert_db_not_silently_empty(p.db_path)
+        # 按参数里声明的那份库指纹取匹配器（而不是每页现算）：产物指纹、匹配器缓存键、
+        # 产物里记的 db_fingerprint 三处必须是同一个值，否则边跑边审时三者会各说各话
         matcher, _chars = cached_matcher_from_db(
-            p.db_path, db_fingerprint(p.db_path), edition=p.edition, knn_k=p.knn_k,
+            p.db_path, p.db_fingerprint, edition=p.edition, knn_k=p.knn_k,
             norm_stroke=p.norm_stroke)
         return matcher
 
@@ -264,7 +306,7 @@ class GlyphMatchStep(Step):
                     cand_variants=cand_variants))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         return {"glyph_match": PageMatch(
-            page=page, db_fingerprint=db_fingerprint(p.db_path), columns=out)}
+            page=page, db_fingerprint=p.db_fingerprint, columns=out)}
 
 
 def glyph_match_summary(book_id: str, pages: list[int] | None = None,

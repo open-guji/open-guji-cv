@@ -9,8 +9,8 @@
 `GlyphMatcher` 查的是 `output/glyph.db`，那是**外部可变状态**：库长大了、
 某个条目改判了，同一张图块的判决就会变，而 Step 的代码、参数、上游产物
 一个都没动。指纹里不带它，产物就永远显示 fresh、拿着过期判决往下走。
-所以 `GlyphMatchStep` 把库的 `(mtime, size, 条目数)` 摘进参数，见那一步的
-`db_fingerprint()`。
+所以 `GlyphMatchStep` 把库的**内容指纹**（四表的条数/rowid/时间戳；2026-09-20 前是
+`(mtime, size, 条目数)`）摘进参数，见那一步的 `db_fingerprint()`。
 """
 
 from __future__ import annotations
