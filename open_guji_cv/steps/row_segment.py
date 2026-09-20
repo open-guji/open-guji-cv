@@ -15,7 +15,8 @@ from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, Pag
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..utils.cut_select import ckpt_fingerprint, get_judge
-from ..utils.row_boundaries import effective_body_slots, segment_column
+from ..utils.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
+                                    segment_column)
 from ._warpmap import ColumnMapper
 
 
@@ -68,6 +69,11 @@ class RowSegmentStep(Step):
         # 一个字时（bxgb p33c19 实测 22 字 vs 常量 21），没有可靠的几何信号能
         # 自动探测（格高/period 比值测过，两个方向都不可靠，见
         # feedback_cell_height_not_merge_signal），只能人核对后写回。
+        #
+        # 同一条裁决还带 `uniform`（2026-09-20）：字数对了不等于**字距**均匀。
+        # p33c19 就是字数 22 给对了、DP 仍把首字「尉」劈成两格——等距先验比
+        # 墨量判据贵五倍（账见 row_boundaries.NONUNIFORM_LAM）。标了非均匀的列
+        # 把 lam 降下来，其余列一字不动。
         book_slots = _resolved_slots(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
@@ -84,7 +90,7 @@ class RowSegmentStep(Step):
             # `_apply_resolved_cut` 里"人裁收敛成功就不再是升级"同一条纪律。
             slot_override = book_slots.get((page, gc.col))
             if slot_override is not None:
-                n_body_col = slot_override
+                n_body_col = slot_override.n_slots
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
@@ -104,7 +110,9 @@ class RowSegmentStep(Step):
                 top_slack=gc.top_slack, content_x=gc.content_x,
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
                 raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
-                resolved_cuts=col_resolved or None, cut_judge=judge)
+                resolved_cuts=col_resolved or None, cut_judge=judge,
+                **({} if slot_override is None or slot_override.uniform
+                   else {"lam": NONUNIFORM_LAM}))
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue

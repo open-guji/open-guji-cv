@@ -23,3 +23,5 @@
 .sc-row button { font-size: .78rem; padding: .18rem .5rem; min-height: 28px; }
 .sc-ok { color: var(--ok); font-size: .78rem; display: block; margin-top: .3rem; }
 .sc-pending { color: var(--ochre); font-size: .72rem; display: block; margin-top: .3rem; }
+
+.sc-uni { display: block; margin-top: .25rem; font-size: .8rem; }

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
 
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
@@ -47,8 +49,20 @@ def _resolve(expected: dict) -> ResolvedCut | None:
 SLOT_COUNT_SHARD = "char-segmentation/column-slots"
 
 
-def resolved_slots(book: str) -> dict[tuple[int, int], int]:
-    """已裁决的逐列字数覆盖：`(page, col) → n_slots`。
+class ResolvedColumn(NamedTuple):
+    """人裁给的列级版式覆盖。
+
+    `uniform=False` 表示这一列**字距不均匀**（刻工前疏后密之类），DP 的等距
+    先验要放宽——见 `row_boundaries.NONUNIFORM_LAM` 的标定记录。缺省 True：
+    2026-09-20 之前写的裁决没有这个键，等距是版式常识，不该因为加了新键就
+    把历史裁决的含义改掉。
+    """
+    n_slots: int
+    uniform: bool = True
+
+
+def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
+    """已裁决的逐列版式覆盖：`(page, col) → ResolvedColumn(n_slots, uniform)`。
 
     数据源、生效时机跟 `resolved_cuts` 完全同一套路（见该函数 docstring）——
     `row_segment` 在该页重跑时按这张表覆盖 `effective_body_slots` 算出的
@@ -72,7 +86,8 @@ def resolved_slots(book: str) -> dict[tuple[int, int], int]:
             continue
         n = it.expected.get("n_slots")
         if isinstance(n, int) and n > 0:
-            out[(page, col)] = n
+            uni = it.expected.get("uniform")
+            out[(page, col)] = ResolvedColumn(n, True if uni is None else bool(uni))
     return out
 
 

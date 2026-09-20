@@ -32,6 +32,8 @@ export function SlotCountPanel({ book, pages: pagesProp }: { book: string; pages
   const [cards, setCards] = useState<SlotCountCard[]>([])
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [done, setDone] = useState<Record<string, number>>({})
+  // 这一列字距是否均匀（缺省 true）。标 false 的列 Step3 会放宽等距先验。
+  const [uniform, setUniform] = useState<Record<string, boolean>>({})
   const [msg, setMsg] = useState('')
 
   const batch = () => batchInput.trim() || `${book}-slotcount-review`
@@ -46,7 +48,7 @@ export function SlotCountPanel({ book, pages: pagesProp }: { book: string; pages
       setMsg('失败：' + (e as Error).message)
       return
     }
-    let verdicts: Record<string, { n_slots: number }> = {}
+    let verdicts: Record<string, { n_slots: number; uniform?: boolean }> = {}
     try {
       verdicts = (await fetchSlotCountVerdicts(b)).verdicts || {}
     } catch {
@@ -54,24 +56,31 @@ export function SlotCountPanel({ book, pages: pagesProp }: { book: string; pages
     }
     const dn: Record<string, number> = {}
     const dr: Record<string, string> = {}
+    const du: Record<string, boolean> = {}
     for (const c of d.cards) {
       const v = verdicts[c.id]
       if (v) {
         dn[c.id] = v.n_slots
         dr[c.id] = String(v.n_slots)
+        // 缺省均匀：老裁决没这个键，不能因为加了新键就改掉它们的含义
+        du[c.id] = v.uniform !== false
       }
     }
     setDone(dn)
     setDraft(dr)
+    setUniform(du)
     setCards(d.cards)
     setMsg(`${d.n} 张卡 → 批次 ${b}`)
   }
 
   async function submit(c: SlotCountCard, n: number) {
+    // `uniform` 缺省 true（等距是版式常识）。标 false 的列，Step3 会把等距
+    // 先验降下来——见 row_boundaries.NONUNIFORM_LAM。
+    const uni = uniform[c.id] !== false
     try {
       await postEvents({
         batch: batch(), step: STEP, unit: 'column', kind: 'n_body_slots',
-        events: [{ id: c.id, n_slots: n, t: Date.now() }],
+        events: [{ id: c.id, n_slots: n, uniform: uni, t: Date.now() }],
       })
       setDone((p) => ({ ...p, [c.id]: n }))
       setMsg(`已裁 ${Object.keys(done).length + 1} / ${cards.length} → 批次 ${batch()}`)
@@ -137,6 +146,12 @@ export function SlotCountPanel({ book, pages: pagesProp }: { book: string; pages
                   />
                   <button onClick={() => onConfirm(c)}>{isDone ? '改' : '确认'}</button>
                 </div>
+                <label className="sc-uni muted" title="刻工前疏后密之类：字数对了但字距不等。勾上后 Step3 放宽等距先验，不再为了拉齐格高把大字劈成两格">
+                  <input type="checkbox"
+                         checked={uniform[c.id] === false}
+                         onChange={(e) => setUniform((p) => ({ ...p, [c.id]: !e.target.checked }))} />
+                  {' '}字距不均匀
+                </label>
                 {isDone && !changed && <b className="sc-ok">✓ 已存 {done[c.id]} 字</b>}
                 {changed && <span className="sc-pending">未提交改动</span>}
               </div>

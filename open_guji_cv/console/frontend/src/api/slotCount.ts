@@ -19,6 +19,8 @@ export function fetchSlotCountCards(book: string, pages: string) {
 
 export interface SlotCountVerdictRow {
   n_slots: number
+  /** 这一列字距是否均匀。缺省 true——2026-09-20 之前的裁决没有这个键。 */
+  uniform?: boolean
 }
 
 export function fetchSlotCountVerdicts(batch: string) {
