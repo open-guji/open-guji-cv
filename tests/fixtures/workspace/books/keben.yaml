@@ -1,0 +1,25 @@
+# 测试专用册配置——**不是任何一本真书的配置**，别照抄去跑生产。
+#
+# 版式取自 data/book1（四庫全書簡明目錄，黑白扫描、已剪切半页、八列
+# 二十一字、双层版框有界行），三张原图已复制进 tests/fixtures/workspace/raw/keben/。
+# 复制而不是直接指 data/ ——测试数据要跟生产数据脱钩，data/ 换一批图
+# 不该让测试红（这正是这轮清理要根治的病）。
+#
+# ⚠️ 这份 yaml 与三张原图是**冻结的**：改它等于改所有用 `keben_book`
+# fixture 的测试的输入。要新形态请新开一册，别动这册。
+id: keben
+title: "测试册：刻本半页（八列二十一字）"
+raw_dir: raw/keben          # 相对工作区根
+raw_pattern: "{page}.png"
+edition: keben
+expected_cols: 8
+chars_per_line: 21
+pages: [1, 2, 3]
+dev_set: [1, 2]
+sets:
+  smoke: [1]
+# 下面两个先验按 fixture 三页实测（scripts 里的量法，见 core/book.py 字段注释）。
+# 它们只影响兜底路径，正常页估得出来就不会用到。
+bottom_gap: 188.0
+period_prior: 56.0
+notes: "测试 fixture，长期不动。改动见 tests/fixtures/README.md。"
