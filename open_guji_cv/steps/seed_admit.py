@@ -130,7 +130,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.6", unit="cell",   # 1.6：context 通道加整理本互证
         consumes=("glyph_match", "context_decision", "align_ref"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
@@ -444,9 +444,16 @@ class SeedAdmitStep(Step):
                 # `CONFUSABLE_SAMPLE_CAP`），达到上限后这组字不再新增 exemplar，字形匹配层
                 # 不会继续被这条通道的判决污染，旧顾虑不再成立。
                 d = dmap.get(r.id)
-                if not ok and not form_open and p.use_context and d and d.source == "context" \
-                        and d.char and d.margin >= p.context_margin:
-                    ok, channel, char, prov = True, "context", d.char, "context"
+                # 2026-09-20 加互证：上下文定的字与整理本对齐字语义不同就不放行
+                # （`seeding.context_conflicts_ref`，bxgb 7 条 context 误放行全是这一型）。
+                # 用 `vm_here`（账本确认过的 T2 对已并进去），别用裸 vmap。
+                from ..clustering.seeding import context_conflicts_ref
+                if (not ok and not form_open and p.use_context and d and d.source == "context"
+                        and d.char and d.margin >= p.context_margin):
+                    if context_conflicts_ref(d.char, align_char, vm_here):
+                        doubts.append("context_vs_ref")
+                    else:
+                        ok, channel, char, prov = True, "context", d.char, "context"
 
                 # 整理本 × 形状/上下文 一致 → 放行（用户 2026-09-06「很多都是整理本存在时
                 # 非常明显的选择，能不能放松要求」）。走到这里还没放行的位，若整理本字与库

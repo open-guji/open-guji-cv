@@ -36,3 +36,28 @@ export function fetchStep9Reflow(book: string, pages: string, baselineKg: number
   const qs = `pages=${encodeURIComponent(pages)}&baseline_kg=${baselineKg}`
   return api<Step9ReflowResponse>(`/api/step9/reflow/${encodeURIComponent(book)}?${qs}`)
 }
+
+// 9.0 进度复查（看板，不是闸——有待办也允许跑 9.1/9.2）。口径见 report/progress.py。
+export interface Step9ProgressRow {
+  page: number
+  stale: number
+  stale_steps: string[]
+  review: number
+  cut: number
+  defect: number
+  excluded: number
+  cols_bad: number
+}
+
+export interface Step9ProgressResponse {
+  book: string
+  pages: Step9ProgressRow[]
+  totals: Record<string, number>
+  n_pages: number
+  n_clean: number
+}
+
+export function fetchStep9Progress(book: string, pages: string) {
+  const qs = `pages=${encodeURIComponent(pages)}`
+  return api<Step9ProgressResponse>(`/api/step9/progress/${encodeURIComponent(book)}?${qs}`)
+}

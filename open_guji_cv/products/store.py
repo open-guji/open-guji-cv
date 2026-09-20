@@ -67,8 +67,36 @@ class ProductStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
         tmp.write_bytes(data)
+        # 覆盖前把上一代留在 `_prev/`（只留一代）。格级复用（core/reuse.py）要拿
+        # 「下游产物当时看到的那份上游」跟新上游逐格比几何——上游一旦被覆盖就没
+        # 得比了。是不是"那份"由 manifest 里记的上游 sha 说了算，这里只负责留住。
+        if p.exists():
+            prev = self.prev_path(book, step_id, key)
+            prev.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(p, prev)
         tmp.replace(p)
         return p, sha256_bytes(data)
+
+    # ── 上一代产物（格级复用用）───────────────────────────────────────
+    def prev_path(self, book: str, step_id: str, key: str) -> Path:
+        return self.step_dir(book, step_id) / "_prev" / f"{key}.json"
+
+    def prev_sha(self, book: str, step_id: str, key: str) -> str | None:
+        p = self.prev_path(book, step_id, key)
+        return sha256_file(p) if p.exists() else None
+
+    def read_prev(self, book: str, step_id: str, key: str, kind_id: str) -> BaseModel | None:
+        from ..core.step import kind_of
+        p = self.prev_path(book, step_id, key)
+        if not p.exists():
+            return None
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        if kind_id not in d:
+            return None
+        schema = kind_of(kind_id).schema
+        assert schema is not None
+        return schema.model_validate(d[kind_id])
 
     def read_raw(self, book: str, step_id: str, key: str) -> dict[str, Any] | None:
         p = self.path(book, step_id, key)

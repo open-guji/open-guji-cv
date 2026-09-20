@@ -459,9 +459,10 @@ def test_glyphdb_admit_skips_seg_defect_events(monkeypatch, tmp_path):
 
 
 # ── 落库六条纪律：crop_exclude（③ 排除名单）─────────────────────────
-def test_crop_exclude_appends_seg_defect_and_not_a_char():
-    """2026-09-05 补的缺口：标了缺陷／判非字都要写进排除名单，不能只落金标——
-    否则「标了缺陷」与「以后别再用这块图」之间就是断的。"""
+def test_crop_exclude_appends_not_a_char_but_not_seg_defect():
+    """2026-09-05 补的缺口：判非字要写进排除名单，不能只落金标。
+    2026-09-20 用户定：seg_defect（切坏/带残留）是真字，**不进名单**，进不进库交给
+    Step7 准入闸（见 consumers.crop_exclude 注释与 tests/test_crop_exclude.py）。"""
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "crop_exclusions.jsonl"
@@ -470,10 +471,10 @@ def test_crop_exclude_appends_seg_defect_and_not_a_char():
         e1 = make_event("r1", 1, "confirm", t1, {"v": "seg_defect", "quality": "contaminated"})
         e2 = make_event("r1", 2, "not_a_char", t2, {})
         res = crop_exclude([(e1, None), (e2, None)], list_path=str(path))
-        assert res.added == 2 and not res.errors
+        assert res.added == 1 and res.skipped == 1 and not res.errors
         rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
         reasons = {r["instance_id"]: r["reason"] for r in rows}
-        assert reasons == {"vol01:5:2:9": "seg_defect", "vol01:5:2:10": "not_a_char"}
+        assert reasons == {"vol01:5:2:10": "not_a_char"}
         assert all(r["origin"] == "human" for r in rows)   # 人眼实锤这一档
 
 
@@ -484,10 +485,10 @@ def test_crop_exclude_dedup_skips_known_id():
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "crop_exclusions.jsonl"
         t = _cell_target("vol01:5:2:9", "vol01", 5, 2, 9)
-        e1 = make_event("r1", 1, "confirm", t, {"v": "seg_defect", "quality": "contaminated"})
+        e1 = make_event("r1", 1, "not_a_char", t, {})
         crop_exclude([(e1, None)], list_path=str(path))
         load_exclusions.cache_clear()
-        e2 = make_event("r2", 1, "confirm", t, {"v": "seg_defect", "quality": "truncated"})
+        e2 = make_event("r2", 1, "not_a_char", t, {})
         res = crop_exclude([(e2, None)], list_path=str(path))
         assert res.added == 0 and res.skipped == 1
         assert len(path.read_text(encoding="utf-8").splitlines()) == 1

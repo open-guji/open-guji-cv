@@ -157,10 +157,12 @@ RULE_W = 4           # 两侧界行的宽度
 
 
 def _synth_column_image(jiazhu_slots=(), blank_slots=(), n_slots=N_SLOTS,
-                         top_border_y=0, draw_rules=True):
+                         top_border_y=0, draw_rules=True, solo_slots=()):
     """造一张 Step 2 那样的矫正后列图（白底、界行贴在两侧、格里画墨块）。
 
     `top_border_y`：上版框横线画在这一行（抬头列把它往下挪，让首格落到线上方）。
+    `solo_slots`：單行小注格——一个小字挤在右半（跨度 ≈0.32 列距、墨全在右半），
+    左半整片空白；按 `jiazhu_split.SOLO_*` 三条判据都要过。
     """
     h = GRID_Y0 + n_slots * SLOT_H + 20
     img = np.full((h, COL_W), 255, dtype=np.uint8)
@@ -178,6 +180,8 @@ def _synth_column_image(jiazhu_slots=(), blank_slots=(), n_slots=N_SLOTS,
         if slot in jiazhu_slots:        # 双列小字：缝在列心，两侧各一个小字
             img[y0:y1, 15:85] = 0
             img[y0:y1, 100:COL_W - 15] = 0
+        elif slot in solo_slots:        # 單行小注：只有右半那个小字
+            img[y0:y1, 110:COL_W - 15] = 0
         else:                            # 正文字：居中，跨度只占 0.6 列距
             img[y0:y1, 37:148] = 0
     return img
@@ -281,6 +285,58 @@ def test_segment_column_detect_jiazhu_off_keeps_whole_cells():
                                detect_jiazhu=False)
     assert all(c.sub is None for c in r.cells)
     assert len(r.cells) == N_SLOTS
+
+
+# ── 單行小注（bxgb 版式）：自成 kind=jiazhu_solo，不借 jiazhu_a 的壳 ──────────
+
+def test_segment_column_solo_note_is_its_own_kind_with_no_sub():
+    """單行小注一格只发一个 Cell：kind=jiazhu_solo、sub=None、占 [小注左缘, x_hi]。
+    2026-09-20 前发的是只有 a 半的 jiazhu_a，下游按 (slot, sub) 对不上（见 CELL_KINDS）。"""
+    img = _synth_column_image(solo_slots=(5, 6))
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
+    assert r is not None
+    by_slot: dict[int, list] = {}
+    for c in r.cells:
+        by_slot.setdefault(c.slot, []).append(c)
+    for s in (5, 6):
+        assert len(by_slot[s]) == 1, "單行小注一格只有一个 Cell，没有 b 半"
+        c = by_slot[s][0]
+        assert c.kind == "jiazhu_solo"
+        assert c.sub is None
+        assert c.x1 == r.content_x[1]                # 右边界到内容窗口右缘
+        assert abs(c.x0 - 110) <= 2                  # 左边界落在小注左缘（画在 x=110）
+        assert c.gap_center is not None and abs(c.gap_center - c.x0) <= 0.5
+    assert all(k == "char" for s, k in _kinds(r).items() if s not in (5, 6))
+    assert len(r.cells) == N_SLOTS                   # 格数不变：一格一个 Cell
+
+
+def test_segment_column_solo_note_reads_in_place_not_as_a_run():
+    """單行小注按 slot 就地读；雙行段仍是先 a 全部再 b 全部。两者不互相并段。"""
+    img = _synth_column_image(jiazhu_slots=(8, 9, 10), solo_slots=(13,))
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
+    seq = [(c.slot, c.sub, c.kind) for c in sorted(r.cells, key=lambda c: c.order)]
+    assert [s for s, _, _ in seq[:7]] == list(range(1, 8))
+    assert [(s, sub) for s, sub, _ in seq[7:13]] == [(8, "a"), (9, "a"), (10, "a"),
+                                                     (8, "b"), (9, "b"), (10, "b")]
+    assert seq[13][:2] == (11, None)
+    assert seq[15] == (13, None, "jiazhu_solo")      # 就在 12 之后、14 之前
+    assert sorted(c.order for c in r.cells) == list(range(1, len(r.cells) + 1))
+
+
+def test_reading_order_keeps_solo_note_out_of_adjacent_jiazhu_run():
+    """`reading_order` 的规则本身：`sub=None` 的格不进段。用相邻构造来验这条规则，
+    **不代表版式上会出现**——用户 2026-09-20 定：不会有两段独立的注紧挨着，雙行段
+    下一格的右半小字一律是段尾（`adopt_run_tails` 收成 `jiazhu_a`，不会是 solo）。"""
+    Cell = fit_mod.Cell
+    cells = [Cell(slot=1, y0=0, y1=1, x0=0, x1=1, kind="char"),
+             Cell(slot=2, y0=0, y1=1, x0=0, x1=1, kind="jiazhu_a"),
+             Cell(slot=2, y0=0, y1=1, x0=0, x1=1, kind="jiazhu_b"),
+             Cell(slot=3, y0=0, y1=1, x0=0, x1=1, kind="jiazhu_a"),
+             Cell(slot=3, y0=0, y1=1, x0=0, x1=1, kind="jiazhu_b"),
+             Cell(slot=4, y0=0, y1=1, x0=0, x1=1, kind="jiazhu_solo"),
+             Cell(slot=5, y0=0, y1=1, x0=0, x1=1, kind="char")]
+    seq = [(c.slot, c.sub) for c in fit_mod.reading_order(cells)]
+    assert seq == [(1, None), (2, "a"), (3, "a"), (2, "b"), (3, "b"), (4, None), (5, None)]
 
 
 def test_segment_column_marks_cells_above_the_top_border_as_raised():

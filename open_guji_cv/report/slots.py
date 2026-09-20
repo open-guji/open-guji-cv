@@ -22,8 +22,17 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 | | Step3 `cells.kind` | Step7 有 `AdmitRec`？ | 含义 | 在流里 |
 |---|---|---|---|---|
 | 版式留白 | `blank` | **没有** | 行首挪抬那几格、列末空格 | `kind="blank"`，`char=None` |
-| 排除名单 | `char` | 有，`doubts` 含 `excluded` | 切坏的图块/墨污，**根本不是字** | `excluded=True` |
+| 排除名单·非字 | `char` | 有，`doubts` 含 `excluded`，`evidence.excluded` 理由 `not_a_char` | 墨污/切坏图块，**根本不是字** | `excluded=True`，跳过不占位 |
+| 排除名单·切坏/残 | `char` | 有，理由 `seg_defect` / `damaged` | **字确实在这儿**，只是图块不能进库 | `defect=True`，占位，出阙文（damaged 由 Step7 给 `□`） |
 | 阙文 | `char` | 有，`admit=False and char is None` | 确实是字但认不出 | `unreadable=True` |
+
+排除名单按理由分两路是 2026-09-20 bxgb 对勘查出来的：155 条名单里 131 条是 seg_defect
+（人裁 truncated/contaminated），此前一律当非字跳过，「舉手一揖」的 手、「十一月」的 月
+都从文本里消失，对勘报成 129 条「整理本有刻本无」、80 条正落在这些格上。
+
+另有**單行小注** `kind="jiazhu_solo"`（Step3 1.11 起，`row_boundaries.CELL_KINDS`）：
+小字只占右半、左半空着，`sub=None`，与 Step7 的记录按 `(slot, "")` 直接对上；
+9.1 出不带 `|` 的 `<注>`。
 
 2026-09-11 用户核实 vol02 p1-20：最初版本把 excluded 也标成阙文 `[[]]`，
 20 处里 19 处其实是 excluded。混成一件事会让「这一格本不该存在」和「这格是字
@@ -33,9 +42,11 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 
 「Step7 有这个 (slot,sub) 但 Step3 cells 查不到」已知**两种**成因，别当成一种：
 
-1. **单行小字注**（`_lookup_cell` 认回来，**不记 stale**）：`【正己】`这类只占半列、
-   左半没字的人名注，Step3 按几何记 `sub='a'`、Step7 按「一个字」记 `sub=None`。
-   2026-09-19 实测 bxgb：78 条假 stale 全是这一型，100% 无例外；vol02 零例。
+1. **單行小注的旧记法**（`_lookup_cell` 认回来，**不记 stale**）：`【正己】`这类只占
+   半列、左半没字的人名注，Step3 ≤1.10 借 `jiazhu_a` 的壳记 `sub='a'`，而 Step7
+   按「一个字」记 `sub=None`。2026-09-19 实测 bxgb：78 条假 stale 全是这一型，
+   100% 无例外；vol02 零例。**Step3 1.11 起它自成 `jiazhu_solo`、`sub=None`，
+   直接对上**——这条兜底只为 1.11 前写出的产物留着，bxgb 从 Step3 重跑过之后可删。
 2. **产物过期**：Step3 局部重切后下游没跟上（`guji status` 会把这页标成"过期"）。
    2026-09-11 实测 vol01 p89col7 是这样一个真实个例（全书 810 个夹注字位里只有它）。
 
@@ -90,7 +101,7 @@ class SlotRec:
     col: int
     slot: int
     sub: str | None
-    kind: str                    # char | blank | jiazhu_a | jiazhu_b
+    kind: str                    # char | blank | jiazhu_a | jiazhu_b | jiazhu_solo
     char: str | None             # 字形层；None = 阙文或 blank
     reading: str | None          # 文意读法；None = 与 char 相同
     admit: bool
@@ -98,6 +109,8 @@ class SlotRec:
     excluded: bool
     unreadable: bool
     human: bool                  # 人裁过（channel == "human"）
+    defect: bool = False         # 在排除名单上但**是字**（seg_defect/damaged）：占位，文本出阙文；见 _to_slot
+    guess: str | None = None     # damaged 格人给的「最像哪个字」（Step7 evidence.guess），9.1 出 □{guess=X}
     doubts: list[str] = field(default_factory=list)
 
     @property
@@ -144,18 +157,18 @@ def page_slots(store: ProductStore, book: str, page: int,
 
 
 def _lookup_cell(by_key: dict[tuple[int, str], CellRec], rec: AdmitRec) -> CellRec | None:
-    """`(slot, sub)` 找 Step3 的格；找不到时认一次**单行小字注**再放弃。
+    """`(slot, sub)` 找 Step3 的格；找不到时认一次**旧记法的單行小注**再放弃。
 
-    单行小字注（`【正己】`这类人名夹注，只占半列、左半边没字）两边记法不一致：
-    Step3 按几何记成 `sub='a'`（实测 bxgb 全书 80 个此类格，相对列宽 x∈[0.5,1.0]，
-    跟真夹注的 a 半完全同位），Step7 按「这就是一个字」记成 `sub=None`。
-    `(slot,'')` 于是查空，2026-09-19 前会报 78 条假 stale。
+    **过渡兜底，只对 Step3 ≤1.10 写出的产物有用。** 那时單行小注（`【正己】`这类
+    人名注，只占半列、左半没字）借 `jiazhu_a` 的壳记 `sub='a'`，而 Step7 按「这就是
+    一个字」记 `sub=None`，`(slot,'')` 查空，2026-09-19 实测 bxgb 报 78 条假 stale。
+    1.11 起 Step3 直接发 `kind="jiazhu_solo"`、`sub=None`，第一行 `by_key.get` 就
+    命中，走不到下面。bxgb 从 Step3 重跑过、旧产物洗掉之后，这段可以删。
 
-    Step3 的 `sub` 是**纯几何**的左右半判定，信息本来就全（用户 2026-09-19 指出），
-    所以这里直接认回来：`sub=None` 查不到就回查 `(slot,'a')`，且**仅当该 slot 没有
-    `b` 半**——有 b 半说明是真双行夹注，Step7 少了半边那是另一回事，不能混进来当
-    正常情况吃掉。认回来之后 `_to_slot` 会拿 `cell.kind`（`jiazhu_a`）定 kind，
-    9.1 就能照常出 `<…>` 记号，而不是把小字注平铺进正文。
+    回查规则：`sub=None` 查不到就回查 `(slot,'a')`，且**仅当该 slot 没有 `b` 半**
+    ——有 b 半说明是真双行夹注，Step7 少了半边那是另一回事，不能混进来当正常情况
+    吃掉。认回来之后 `_to_slot` 拿 `cell.kind`（`jiazhu_a`）定 kind，9.1 照旧路径出
+    `<…>`（不带 `|`，因为没有 b）。
     """
     cell = by_key.get((rec.slot, rec.sub or ""))
     if cell is not None or rec.sub:
@@ -166,7 +179,19 @@ def _lookup_cell(by_key: dict[tuple[int, str], CellRec], rec: AdmitRec) -> CellR
 
 
 def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None) -> SlotRec:
-    excluded = "excluded" in (rec.doubts or [])
+    on_list = "excluded" in (rec.doubts or [])
+    # 排除名单要按**理由**分两路（2026-09-20 bxgb 对勘查出来的）：
+    #   not_a_char（非字：墨污/切坏图块）→ 这一格本不存在，跳过不占位；
+    #   seg_defect / damaged（切坏、带残留、原刻残）→ **字确实在这儿**，只是图块
+    #   不能进库；字位必须占住，文本层出阙文（damaged 的 □ 由 Step7 给）。
+    # 此前一律按「非字」跳过——bxgb 155 条名单里 131 条是 seg_defect（人裁
+    # truncated/contaminated：「舉手一揖」的 手、「十一月」的 月、「縉雲」的 縉），
+    # 全被 9.1 吃掉，对勘报成 129 条「整理本有刻本无」，80 条正落在这些格上。
+    # 与 Step7 给 damaged 占位的理由同一条（cv-segmentation §九 逐列对账）。
+    # 老产物没有 evidence（Step7 早期）→ 按原来的口径当非字。
+    reason = str((rec.evidence or {}).get("excluded", "")).split(":")[-1]
+    defect = on_list and reason in ("seg_defect", "damaged")
+    excluded = on_list and not defect
     # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
     # 比少一格的后果大。
@@ -174,7 +199,8 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,
         char=rec.char, reading=rec.reading, admit=bool(rec.admit),
-        channel=rec.channel, excluded=excluded,
+        channel=rec.channel, excluded=excluded, defect=defect,
+        guess=((rec.evidence or {}).get("guess") or None),
         unreadable=(not rec.admit and rec.char is None and not excluded),
         human=(rec.channel == "human"),
         doubts=[d.split("(")[0] for d in (rec.doubts or [])],

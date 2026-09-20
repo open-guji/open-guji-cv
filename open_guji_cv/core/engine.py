@@ -126,6 +126,34 @@ class RunReport:
         }
 
 
+def _self_payload(step: Step, book: BookSpec, ph: str) -> dict:
+    """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
+    `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
+    键集与 2026-09-20 之前的 `fingerprint` payload 逐位相同，现有产物指纹不变。"""
+    payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
+               "code": code_hash(step)}
+    # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
+    # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
+    # 保证现有产物的指纹逐位不变、不触发全量重跑。
+    if step.spec.book_deps:
+        payload["book"] = {k: _jsonable(getattr(book, k, None))
+                           for k in sorted(step.spec.book_deps)}
+    # `binarized_input` 换掉的是 `ctx.raw_page` 本身，**凡是读原图的步都受影响**
+    # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
+    # `book_deps` 覆盖全，所以在这里统一进指纹。
+    # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
+    if getattr(book, "binarized_input", False):
+        payload["bin_input"] = True
+    return payload
+
+
+def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
+    """本步自身的指纹（不含上游）。引擎写进 `ManifestEntry.self_hash`，
+    `RunContext`（含并行 worker 里没有 Engine 的那份）也能独立算出同一个值。"""
+    payload = _self_payload(step, book, params_hash(params))
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
+
+
 class Engine:
     def __init__(self, book: BookSpec, pipeline: Pipeline,
                  store: ProductStore | None = None, cache: ImageCache | None = None,
@@ -210,22 +238,12 @@ class Engine:
         ph = params_hash(p)
         if ups is None:
             return None, None, ph
-        payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
-                   "code": code_hash(step), "upstream": ups}
-        # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
-        # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
-        # 保证现有产物的指纹逐位不变、不触发全量重跑。
-        if step.spec.book_deps:
-            payload["book"] = {k: _jsonable(getattr(self.book, k, None))
-                               for k in sorted(step.spec.book_deps)}
-        # `binarized_input` 换掉的是 `ctx.raw_page` 本身，**凡是读原图的步都受影响**
-        # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
-        # `book_deps` 覆盖全，所以在这里统一进指纹。
-        # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
-        if getattr(self.book, "binarized_input", False):
-            payload["bin_input"] = True
+        payload = {**_self_payload(step, self.book, ph), "upstream": ups}
         fp = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return fp, ups, ph
+
+    def self_hash(self, step: Step) -> str:
+        return self_hash(step, self.book, self.ctx.params_for(step))
 
     # ── 状态 ─────────────────────────────────────────────────────────
     def page_status(self, step: Step, page: int) -> tuple[str, ManifestEntry | None]:
@@ -354,7 +372,8 @@ class Engine:
                 elapsed = time.time() - t0
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
-                                           code_rev=self._rev, elapsed=round(elapsed, 3)))
+                                           code_rev=self._rev, elapsed=round(elapsed, 3),
+                                           self_hash=self.self_hash(step)))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
@@ -448,7 +467,8 @@ class Engine:
                     _, sha = self.store.write(self.book.id, sid, key, products)
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                                params_hash=ph, upstream=ups or {},
-                                               code_rev=self._rev, elapsed=round(elapsed, 3)))
+                                               code_rev=self._rev, elapsed=round(elapsed, 3),
+                                               self_hash=self.self_hash(step)))
                     self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
                     report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
                 except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批

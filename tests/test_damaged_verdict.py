@@ -42,9 +42,11 @@ def test_routes_to_gold_and_exclusions_not_to_glyphdb():
     dests = RouteTable.load(None).destinations(_ev({"v": "damaged", "guess": "塊"}))
     names = {d.consumer for d in dests}
     assert "gold_add" in names and "crop_exclude" in names
-    # glyphdb_admit 在路由里（confirm 那条规则给三个消费者），但它自己按
+    # glyphdb_admit 在路由里（confirm 那条规则给几个消费者），但它自己按
     # payload.v 过滤——下面那条测试钉的就是「真的没进库」。
-    assert names == {"glyphdb_admit", "gold_add", "crop_exclude"}
+    # product_invalidate 2026-09-20 加：人裁落定 → 这一页 seed_admit 失效，
+    # 否则裁完再载入卡还在（裁决进了库、产物不知道，待审列表读的是产物）。
+    assert names == {"glyphdb_admit", "gold_add", "crop_exclude", "product_invalidate"}
 
 
 def test_glyphdb_admit_skips_damaged():

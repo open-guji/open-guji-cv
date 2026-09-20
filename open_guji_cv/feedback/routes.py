@@ -117,7 +117,16 @@ DEFAULT_ROUTES: list[dict] = [
             # 没人把它写进 crop_exclusions.jsonl，于是「标了缺陷」和「以后别再用
             # 这块图」之间是断的——下一轮重跑照样出卡，也没有闸拦着它进库。
             # crop_exclude 只认 seg_defect / not_a_char，定字的 confirm 一律跳过。
-            {"consumer": "crop_exclude"}]},
+            {"consumer": "crop_exclude"},
+            # 第四个去处（2026-09-20 补）：人裁落定 → 这一页 seed_admit 显式失效。
+            # 此前 confirm 只进库不失效产物，控制台待审列表读的是 seed_admit 产物，
+            # 于是「裁完再载入卡还在」（用户 2026-09-20 报）——裁决在库里、产物不知道。
+            # 只标不跑，下次 `step seed_admit` 才重算（0.1 s/页）；历史事件首次接上会把
+            # 裁过的页一起标失效，seed_admit 便宜，不追溯处理。
+            {"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # 判非字同理：名单变了 seed_admit 该重算。
+    {"match": {"kind": "not_a_char"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
 ]
 
 

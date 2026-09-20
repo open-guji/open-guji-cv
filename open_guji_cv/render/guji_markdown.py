@@ -13,7 +13,9 @@
 join（Step3 `cells` × Step7 `seed_admit`、`sort_by_reading` 读序、blank/excluded/
 阙文三分）**已挪去 `report/slots.py`**，9.3 比对与本模块共用同一份——两边各写
 一套的后果见那个模块头。本模块现在只负责**字位流 → guji-markdown 记号**这一层
-映射（抬头 `^`、挪抬 `.`、夹注 `<a|b>`、阙文 `[[]]`）。
+映射（抬头 `^`、挪抬 `.`、雙行夹注 `<a|b>`、單行小注 `<注>`、阙文 `[[]]`）。
+單行小注在 guji-markdown 里就是不带 `|` 的 `<小注>`（那边的 AST 只记"这是夹注"，
+单行/双行是样式层的事，见 guji-markdown README「表现与语义分离」）。
 
 ## 为什么不是 core.step.Step
 
@@ -83,6 +85,20 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
             # a、b 都空（整段夹注全被排除）——整段不输出，连 <> 都不留
             continue
 
+        if rec.kind == "jiazhu_solo":
+            # 單行小注（2026-09-20 起 Step3 自成一类，sub=None）：连续几格并成
+            # 一条 `<…>`（「梁監門<叔玠>」），没有 `|`——它本来就只有一行。
+            # excluded / 阙文的处理与正文一致。整段全被排除则连 <> 都不留。
+            chars: list[str] = []
+            while i < len(slots) and slots[i].kind == "jiazhu_solo":
+                r = slots[i]
+                if not r.excluded:
+                    chars.append(_char_text(r))
+                i += 1
+            if chars:
+                out.append("<" + "".join(chars) + ">")
+            continue
+
         if rec.kind == "blank":
             # 行首连续 blank 已经量进 prefix 的挪抬 `.` 里；这里遇到的
             # ——不管行首那几个还是行中偶尔出现的——一律只是"跳过不占位"，
@@ -108,7 +124,14 @@ def _char_text(rec: SlotRec) -> str:
     阙文（`unreadable`）出 `[[]]`；否则文意优先（`reading or char`）。"""
     if rec.unreadable:
         return "[[]]"
-    return rec.reading or rec.char or "[[]]"
+    text = rec.reading or rec.char or "[[]]"
+    # 原刻残（damaged）：Step7 给 □ 占位，人裁时填的「最像哪个字」挂在 guess 上，
+    # 用 guji-markdown 的后缀属性 `{k=v}` 括注（用户 2026-09-20：「识别成缺字方框，
+    # 但标出像某字」）。属性语法在 guji-markdown 分支 claude/attrs-and-jz-break-0911，
+    # 尚未合并 main——与模块头第 4 条同一个注意事项。
+    if text == "□" and rec.guess:
+        return f"□{{guess={rec.guess}}}"
+    return text
 
 
 def render_page(store: ProductStore, book: str, page: int, stale: list[str]) -> str:

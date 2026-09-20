@@ -90,12 +90,21 @@ class RareCandidatesStep(Step):
         queue: list[tuple[int, CharRec]] = []
         col_recs: dict[int, list[RareRec]] = {}
         imgs: list = []
+        # 格级复用（core/reuse.py）：几何没动的格搬旧记录，不进批处理队列。
+        from ..core.reuse import cell_reuse, log_reuse
+        reuse = cell_reuse(ctx, self, page, "rare_candidates")
+        n_reused = n_total = 0
         for cc in chars.columns:
             if not cc.ok:
                 continue
             col_recs[cc.col] = []
             for r in cc.chars:
                 if r.cell_type != "char" or not r.patch_key:
+                    continue
+                n_total += 1
+                if r.id in reuse:
+                    col_recs[cc.col].append(reuse[r.id])
+                    n_reused += 1
                     continue
                 try:
                     img = ctx.image("char_patch", r.patch_key)
@@ -138,6 +147,7 @@ class RareCandidatesStep(Step):
             ctx.log(f"⚠️ Step5-b p{page}：embedding 一条候选都没出（来源 {dict(srcs)}）"
                     f"——候选已退化为分类头独撑，classes 外的字会整个查不到，请查 emb 索引")
 
+        log_reuse(ctx, self, page, n_reused, n_total)
         return {"rare_candidates": PageRare(
             page=page, model_fingerprint=full_fingerprint(),
             sources=dict(srcs), columns=out)}

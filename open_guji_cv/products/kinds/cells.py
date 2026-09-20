@@ -22,8 +22,8 @@ class CellRec(BaseModel):
     y1: float
     x0: float
     x1: float
-    kind: str                      # char | blank | jiazhu_a | jiazhu_b | punct（现代链）
-    sub: str | None = None         # a / b / None
+    kind: str                      # char | blank | jiazhu_a | jiazhu_b | jiazhu_solo | punct（现代链）
+    sub: str | None = None         # a / b / None（jiazhu_solo 也是 None：單行小注不配对，见 row_boundaries.CELL_KINDS）
     order: int
     gap_center: float | None = None
     ink_ratio: float = 0.0

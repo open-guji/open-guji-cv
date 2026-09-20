@@ -91,3 +91,10 @@ exclude = ["venv*", "output*", "data*", ".claude*"]
 [tool.setuptools.package-data]
 open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/*",
                 "clustering/review/static/*"]
+
+# ── 测试 ────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+markers = [
+    "manual: 依赖真实工作区产物的人工验收测试（如控制台重构快照），默认排除，需要跑时显式加 -m manual",
+]
+addopts = "-m 'not manual'"

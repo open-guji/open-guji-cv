@@ -10,6 +10,15 @@
 拿回来重判。删掉就再也不知道当初排除了谁、为什么排除，也没法对着新图
 验证「这一条现在干净了没有」。名单是可逆的，删除不是。
 
+## 名单只收「不是字」与「原刻残」（2026-09-20 用户定）
+
+切坏 / 带残留（`seg_defect`：truncated / contaminated）**不再进名单**。这类格是真字，图块
+能不能进库交给 Step7 准入闸判：bxgb 实测名单里 131 条 seg_defect 全是真字，复核放出 127 条
+后准入闸自动放行 95 条且与整理本全一致、挡下 32 条送人审——闸分得开，名单只是把真字从
+文本里藏掉（9.1 曾把它们当非字跳过，对勘报成 129 条「整理本有刻本无」）。
+`feedback/consumers.crop_exclude` 已改；存量用 `scripts/apply_exclusion_recheck.py` 复核后撤，
+撤下的条目在 `crop_exclusions_retired.jsonl`。
+
 ## 谁来查这份名单
 
 - 数据集构建（`build_match_pairs_dataset.py` 等）：建集时跳过；
