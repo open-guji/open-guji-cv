@@ -841,6 +841,8 @@ def _cli_json(argv: list[str]) -> dict:
     ap = argparse.ArgumentParser()
     register_subcommands(ap.add_subparsers(dest="command"))
     args = ap.parse_args(argv)
+    if hasattr(args, "workspace") and not args.workspace:
+        args.workspace = os.environ["GUJI_WORKSPACE"]     # 2026-09-20 起带 book 的命令必填 -w
     buf = _io.StringIO()
     with contextlib.redirect_stdout(buf):
         COMMANDS_V2[argv[0]](args)
@@ -914,5 +916,7 @@ def _cli_run(argv: list[str]) -> None:
     ap = argparse.ArgumentParser()
     register_subcommands(ap.add_subparsers(dest="command"))
     args = ap.parse_args(argv)
+    if hasattr(args, "workspace") and not args.workspace:
+        args.workspace = os.environ["GUJI_WORKSPACE"]     # 同上
     with contextlib.redirect_stdout(_io.StringIO()):
         COMMANDS_V2[argv[0]](args)

@@ -66,9 +66,9 @@
 
 ```bash
 # C 层：从工作区真源重建
-GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db rebuild
+python -m open_guji_cv glyph-db rebuild   # 带 book 的命令用 -w <workspace>（2026-09-20 起必填，见下）
 # B 层：从引擎仓字体档重新渲染（四核约 15 分钟）
-GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db import-font
+python -m open_guji_cv glyph-db import-font
 ```
 
 ### 3.1 一本书的字形什么时候「入库」
@@ -171,3 +171,22 @@ Step2 一行没改，19/20 列过闸。因为 `page_column_windows` 把列定义
 
 北行日錄刻本全书 54 页：54/54 页恰好标出 1 个版心，过闸中位 18/20，
 页级 period 中位 71.0（版式真值 70.6）。
+
+## CLI 的工作区参数（2026-09-20 起）
+
+凡带 `book` 位置参数的命令（pipeline / step / status / preclean / binarize / split / …）
+**必填 `-w/--workspace <仓根>`**，不再读 `GUJI_WORKSPACE` 环境变量兜底：
+
+```
+python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages all -w D:/workspace/beixing-guben-workspace
+```
+
+不给报参数错；给了先校验 `<仓根>/books/<book>.yaml` 存在，再把解析结果写进 `GUJI_WORKSPACE`
+供下游用。环境变量若已设且指向别处，以 `-w` 为准并提示。为什么：环境变量漏设时册定义找
+不到（好歹会炸），设错时产物**静默写到别的工作区**——2026-09-19 一天里两次栽在这上面
+（一次后台起跑时变量没带上，一次指着上一本书）。控制台的跑批工单本来就记着工作区，
+`JobSpec.argv()` 会把它作为 `--workspace` 传给子进程。
+
+不带 book 的命令（console / cache / runs / gold …）和 `scripts/` 下的离线台子仍走
+`GUJI_WORKSPACE`。
+
