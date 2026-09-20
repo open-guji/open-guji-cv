@@ -112,6 +112,7 @@ class ColumnGateParams(BaseModel):
     bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
     chars_per_line: int | None = None   # None = Book.chars_per_line；算 n_raised_hint 的基准
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
+    top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
     #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
@@ -322,7 +323,12 @@ class ColumnGateStep(Step):
                 if c.raised or c.border_top_in_column > 1.0:
                     continue                      # 真抬头列的 top_slack 走原路
                 head = prof[:probe]
-                if head.size and float(head.max()) > 0.08:
+                # 顶格的判据要「像个字」：>8% 的行数 ≥ top_flush_min_frac×period。原来只看
+                # 「有没有一行 >8%」，版框条下沿的毛边（9 行、宽 19~36%）也算顶格
+                # （2026-09-20 vol01/141 c1/c3：Step2 把上界提到框内缘后毛边露出来，
+                # c1/c3 各拿到 58px slack，Step3 在首格切出一个假 char）。真顶格字
+                # 117 行（c7「諭旨」），0.25×period ≈ 28 行分得开。
+                if head.size and int((head > 0.08).sum()) >= max(12, int(period * p.top_flush_min_frac)):
                     top_ink_slack[c.col] = round(float(period) * 0.5, 2)
 
         # 夹注列比例：**只对「本来要被 L1c/L2 拒掉」的列算**（每列要逐格跑

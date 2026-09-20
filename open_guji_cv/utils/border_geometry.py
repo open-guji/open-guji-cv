@@ -990,10 +990,19 @@ def _fit_knots(ys: np.ndarray, xs: np.ndarray, ws: np.ndarray, ky: list[float],
 
 
 def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
-                               verticals: list[VLine], width: int, height: int
+                               verticals: list[VLine], width: int, height: int,
+                               straight: list[VLine] | None = None
                                ) -> tuple[list[VLine], int]:
-    """内部界行逐条按横带证据（界行 / 文字缝中心）重拟合三段折线。返回 (新线表, 换了几条)。
-    见 SNAP_* 常量注释。输入输出都是新坐标系的 VLine；证据在原图坐标里量。"""
+    """内部界行逐条按横带证据重拟合三段折线。返回 (新线表, 换了几条)。见 SNAP_* 常量注释。
+    输入输出都是新坐标系的 VLine；证据在原图坐标里量。
+
+    每个横带的证据，按优先级：
+      1. 可见界行（长竖段）→ 界行位置；
+      2. 线压在字上 → 文字缝中心（按邻线中点选缝）；
+      3. 否则 → **直线拟合的位置**（`straight`，折线拟合之前那条）。折线拟合在界行淡到
+         看不见的横带里会把折点贴到字的竖笔上（vol02 p160 页底 c4~c7 偏 21~37px，而直线
+         外推离文字列中心算出的界行 ≤5px）——折点只许在有界行支撑的横带偏离直线。
+         没给 `straight` 就退回当前线位。"""
     n = len(verticals)
     if n < 4:
         return verticals, 0
@@ -1024,14 +1033,19 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
                 if abs(d) >= SNAP_MIN_DEVIATION:
                     sick = True
                 continue
-            if colp[max(0, xl_raw - 12):xl_raw + 13].mean() >= SNAP_TEXT_DENSE:
+            on_text = colp[max(0, xl_raw - 12):xl_raw + 13].mean() >= SNAP_TEXT_DENSE
+            if on_text:
                 sick = True                       # 压在字上（见 SNAP_TEXT_DENSE）
-            xp_raw = (width - 1) - (verticals[vi - 1].x_at(float(yc)) + verticals[vi + 1].x_at(float(yc))) / 2.0
-            gt = _gap_target(colp, xl_raw, pitch, width, xp_raw)
-            if gt is not None:
-                g, _inside = gt
-                # 缝证据一律用缝中心（见 SNAP_GAP_CLEAR 注释）；健康的线下面直接跳过，不会用到
-                ys.append(yc); xs.append((width - 1) - g); ws.append(1.0)
+                xp_raw = (width - 1) - (verticals[vi - 1].x_at(float(yc)) + verticals[vi + 1].x_at(float(yc))) / 2.0
+                gt = _gap_target(colp, xl_raw, pitch, width, xp_raw)
+                if gt is not None:
+                    ys.append(yc); xs.append((width - 1) - gt[0]); ws.append(1.0)
+                    continue
+            # 无界行、没压字：折线不许在这里偏离直线（见 docstring 第 3 条）
+            sx = float(straight[vi].x_at(float(yc))) if straight and vi < len(straight) else xl_new
+            if abs(sx - xl_new) >= SNAP_MIN_DEVIATION:
+                sick = True
+            ys.append(yc); xs.append(sx); ws.append(1.0)
         if not sick or len(ys) < SNAP_MIN_TARGETS:
             continue
         xc = v.x_at(height / 2.0)
@@ -1057,9 +1071,9 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
     changed = 0
     for vi, cand in cands.items():
         ok = True
-        xc = verticals[vi].x_at(height / 2.0)
-        yt, yb = float(top.y_at(xc)), float(bottom.y_at(xc))
-        for y in (yt, yt + (yb - yt) / 3.0, yt + 2.0 * (yb - yt) / 3.0, yb):
+        # 在横带中心量（有证据的地方）。折点 y 在版框顶/底，最后一带之外是外推，
+        # 边框相邻列的合理纠正会在那里被读成 1.4×列距。
+        for y in (float(yc) for (_, _, yc, _) in bands):
             for ni in (vi - 1, vi + 1):
                 nb = cands.get(ni, verticals[ni])
                 gap = abs(cand.x_at(y) - nb.x_at(y))
@@ -1412,7 +1426,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                                                             verticals, w, h,
                                                             fit=vline_polyline)
     # 界行淡到看不见的横带按文字缝重定位（见 SNAP_*）。换了线的页统一成三段格式。
-    verticals, vlines_snapped = snap_verticals_to_evidence(binm_new, top, bottom, verticals, w, h)
+    verticals, vlines_snapped = snap_verticals_to_evidence(binm_new, top, bottom, verticals, w, h,
+                                                           straight=verticals_straight)
     if vlines_snapped and vseg == 1:
         conv = []
         for v in verticals:
