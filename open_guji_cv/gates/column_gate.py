@@ -374,10 +374,26 @@ class ColumnGateStep(Step):
                              "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")
             if c.col in wide_cols and not is_jiazhu_col:
                 band_w = c.band[1] - c.band[0]
-                reasons.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
-                               f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行/夹注双栏）")
+                # flag 级，不进 reject（2026-09-19 从 block 降下来，与 side_ink 同一轮）。
+                # 判词是「多半圈进了界行/夹注双栏」——**「多半」不足以 block**。
+                # vol02 实测被它拦下的 4 列（p3c1 +31%、p160c4 +16%、p177c2 +39%、
+                # p178c4 +25%）逐列看图：全是干净的单列正文，宽只是因为它们是
+                # 边列、窗口带进了版框内侧的余白。强行送进 Step3 四列全部有解、
+                # 切出满格 21 slot。
+                flags.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
+                             f"{med_w:.0f}px {wide_cols[c.col]:+.0%}"
+                             "（可能圈进了界行/夹注双栏，flag 不算错）")
             if c.side_floor > p.side_floor_max and not is_jiazhu_col:
-                reasons.append(f"side_ink：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
+                # flag 级，不进 reject（2026-09-19 从 block 降下来）。判据本身没错——
+                # vol02 58 条 column-warp 金标上 >0.045 命中 1/3 mixed、0/55 clean 误伤——
+                # 错的是**后果**：block 把整列丢掉，而这一层量的「两侧还有墨」多半是
+                # 界行没剥干净或纸面污渍，**不影响 Step3 切字缝**。vol02 实测被它拦下的
+                # 21 列（p3/160/177/178/188）**强行送进 Step3 全部 21/21 有解**，每列
+                # 切出满格 21 slot、12~21 个字格——等于白丢了约 400 个字。
+                # 与 `stamp_noise` / `frame_residue` 同一纪律：没验证过「超标必错」的
+                # 判据只标记、不硬拦（那两条的注释里写着同样的理由）。
+                flags.append(f"side_ink：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}"
+                             "（界行没剥干净或纸面污渍，flag 不算错）")
             if c.stamp_noise > p.stamp_noise_max:
                 # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，
                 # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
@@ -454,9 +470,13 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="页级周期估不出来时是否用书级 period_prior 兜底——flag，"
                        "不拦（空栏页栏内无字、推不出纵向节律，不是故障）", name="period_fallback"),
         GateLevel(id="L1c", unit="column",
-                  desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗", name="column_width"),
+                  desc="本列宽是否偏离本页中位数过多——flag 不是 block（2026-09-19 降级）："
+                       "边列的窗口本来就带进版框内侧余白，vol02 被它拦下的 4 列"
+                       "逐列看图全是干净单列，强行送进 Step3 全部有解", name="column_width"),
         GateLevel(id="L2", unit="column",
-                  desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端", name="side_ink"),
+                  desc="两侧外沿最低墨占比是否超界——flag 不是 block（2026-09-19 降级）："
+                       "量的是界行残墨/纸面污渍，不影响 Step3 切字缝，"
+                       "vol02 被它拦下的 21 列强行送进 Step3 全部有解", name="side_ink"),
         GateLevel(id="L2b", unit="column",
                   desc="整列中等面积孤立墨点密度是否超界——flag 不是 block，"
                        "专挡背景印章噪点，只覆盖四种已知污染机制里的一种", name="stamp_noise"),
