@@ -30,7 +30,17 @@ _spec = importlib.util.spec_from_file_location(
 mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mod)
 
-GOLD = REPO.parent / "open-guji-dataset" / "char-segmentation" / "column-warp" / "samples"
+# 2026-09-20：原先这里有个 `GOLD = ../open-guji-dataset/...`，下面五条用例
+# 拿它量「clean 与 mixed 两组的 side_floor / stamp_noise 分得开分不开」。
+# 那是**对金标数据的测量**，不是代码行为：
+#
+# - 金标一扩，分布就变（模块头记的「114 列复核后 clean 上到 0.0417、mixed
+#   低到 0.0038，完全重叠」正是这么来的），于是其中一条只能长期挂 xfail；
+# - 数据集不在就整条 skip，云端五条一条没跑过。
+#
+# 结论本身（两条负结果 + 印章类分得开）留在模块头与
+# `doc/segmentation_v2_pipeline.md`，要复量就跑评测 `guji eval run`。
+# 这里改为用**合成列图**钉判据的**机制**——机制是代码的，分布是数据的。
 
 
 def test_gold_admits_rejects_mixed_and_idk_and_unlabelled():
@@ -92,156 +102,127 @@ def test_side_floor_is_measured_on_the_raw_column_not_the_cleaned_one():
     assert raw > mod.SIDE_FLOOR_MAX >= cleaned, f"原图 {raw:.4f} / 清理后 {cleaned:.4f}"
 
 
-def _clean_vs_mixed_side_floor() -> tuple[list[float], list[float]]:
-    import cv2
-    from open_guji_cv.utils.column_projection import denoise_column
-    lo, hi = [], []
-    for f in sorted(GOLD.glob("*.json")):
-        d = json.loads(f.read_text(encoding="utf-8"))
-        wf = (REPO / "output" / d["book"] / "step2_columns" / d["page"] / "windows.json")
-        if not wf.exists() or d.get("verdict") not in ("clean", "mixed"):
-            continue
-        win = next((c for c in json.loads(wf.read_text(encoding="utf-8"))["columns"]
-                    if c["col"] == d["col"]), None)
-        if win is None:
-            continue
-        img = cv2.imread(str(wf.parent / win["file"]), cv2.IMREAD_GRAYSCALE)
-        (lo if d["verdict"] == "clean" else hi).append(
-            mod.side_floor(denoise_column(img)))
-    return lo, hi
+# ── 判据的机制（合成列图，不碰金标）────────────────────────────────
+
+def _clean_column_img(h: int = 400, w: int = 120) -> np.ndarray:
+    """一列规规矩矩的正文：居中的字身，两侧留白。"""
+    col = np.full((h, w), 255, np.uint8)
+    for y in range(20, h - 20, 40):
+        col[y:y + 25, 45:80] = 0
+    return col
 
 
-def _clean_vs_mixed_stamp_noise() -> tuple[list[float], dict[str, float]]:
-    """跟 `_clean_vs_mixed_side_floor` 结构一样，但 mixed 组按样本拆开返回——
-    `stamp_noise` 只对「整列噪点」这一种机制有效，不能像 `side_floor` 那样
-    把 4 条 mixed 混在一起比较上下限（那样看只会显得"也重叠"，掩盖了它对
-    印章类单独有效这个事实）。
+def test_stamp_noise_separates_scattered_blobs_from_plain_text():
+    """`stamp_noise_density`（L2b，2026-09-11 新增）认的是**整列散布的中等
+    面积孤立墨点**（背景印章那种），正文字身不该触发它。
+
+    这条钉的是判据的机制。它在真金标上「能干净拦下印章类、对夹注列与局部
+    弯界行没有筛选力」是**数据上的结论**，记在模块头与
+    `column_projection.stamp_noise_density` 的文档字符串里，别指望调阈值能
+    让它覆盖更多——那两种污染在「中等面积孤立墨点」这个维度上就是长得像
+    正常笔画。
     """
-    import cv2
-    lo = {}
-    hi = {}
-    for f in sorted(GOLD.glob("*.json")):
-        d = json.loads(f.read_text(encoding="utf-8"))
-        wf = (REPO / "output" / d["book"] / "step2_columns" / d["page"] / "windows.json")
-        if not wf.exists() or d.get("verdict") not in ("clean", "mixed"):
-            continue
-        win = next((c for c in json.loads(wf.read_text(encoding="utf-8"))["columns"]
-                    if c["col"] == d["col"]), None)
-        if win is None:
-            continue
-        img = cv2.imread(str(wf.parent / win["file"]), cv2.IMREAD_GRAYSCALE)
-        v = mod.stamp_noise_density(img)
-        key = f"{d['book']}/{d['page']}c{d['col']}"
-        (lo if d["verdict"] == "clean" else hi)[key] = v
-    return list(lo.values()), hi
+    rng = np.random.default_rng(7)
+    clean = _clean_column_img()
+    stamped = _clean_column_img()
+    # 墨块边长取 7（面积 49）：判据只数 `lo_area=3 ≤ 面积 ≤ hi_area=60` 的
+    # 连通体——比这大的是字身笔画本体，比这小的是扫描灰尘，都不算。
+    for _ in range(60):
+        y, x = int(rng.integers(5, 385)), int(rng.integers(5, 105))
+        stamped[y:y + 7, x:x + 7] = 0
+
+    assert mod.stamp_noise_density(stamped) > mod.stamp_noise_density(clean), (
+        f"印章列 {mod.stamp_noise_density(stamped):.4f} 不高于干净列 "
+        f"{mod.stamp_noise_density(clean):.4f}")
 
 
-@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
-def test_stamp_noise_catches_the_stamp_contaminated_column_only():
-    """`stamp_noise_density`（L2b，2026-09-11 新增）能干净拦下印章类污染
-    （`vol02/3` c9），但对另外 3 条 mixed（夹注列、局部弯界行）没有筛选力——
-    这是设计范围内的事，见 `column_projection.stamp_noise_density` 文档字符串。
-    这条测试钉死「至少印章类分得开」，别在改动里意外把这条也弄丢了。
+def test_side_floor_cannot_see_contamination_away_from_the_edges():
+    """记录 `side_floor` 结构性看不见的那一类污染，别再拿它当全能判据。
+
+    它只量两侧外 25% —— 污染要是不贴边（弯界行只在列中段探入、背景印章
+    整列散布噪点）就测不到。这不是参数没调好，是这条尺子的设计范围本来
+    就只覆盖「贴边」这一种形态。**扩大金标不会把它挽救回来**，需要的是另
+    一条独立于「两侧墨量」的判据（整列噪点密度 / 连通域特征）。
+
+    合成：同样一列，污染分别摆在**边上**和**中段**，前者报得出、后者报不出。
     """
-    clean, mixed = _clean_vs_mixed_stamp_noise()
-    if not clean or not mixed:
-        pytest.skip("金标里没有可比的 clean/mixed 列图")
-    stamp_key = next((k for k in mixed if "vol02/3c9" in k), None)
-    if stamp_key is None:
-        pytest.skip("金标里没有 vol02/3 c9 这条印章样本")
-    assert max(clean) < mixed[stamp_key], (
-        f"clean 上限 {max(clean):.4f} 应该低于印章列 {mixed[stamp_key]:.4f}")
+    rng = np.random.default_rng(3)
+    at_edge = _clean_column_img()
+    for x in range(0, 30):                    # 贴边：整片外侧糊着淡墨，无零区
+        at_edge[rng.choice(400, 24, replace=False), x] = 0
+    in_middle = _clean_column_img()
+    for x in range(40, 70):                   # 同样的量，摆到列中段
+        in_middle[rng.choice(400, 24, replace=False), x] = 0
+
+    assert mod.side_floor(at_edge) > mod.SIDE_FLOOR_MAX, "贴边污染该报得出"
+    assert mod.side_floor(in_middle) <= mod.SIDE_FLOOR_MAX, (
+        "如果这条开始失败，说明 side_floor 意外能看见中段污染了——"
+        "先去查它的窗口口径是不是被改宽了，而不是庆祝判据修好了")
 
 
-@pytest.mark.skipif(
-    not (Path(__file__).resolve().parent.parent / "output" / "vol02"
-         / "step2_columns" / "3" / "windows.json").exists(),
-    reason="需要先跑 scripts/regen_step2_columns.py vol02 3 --clean 生成产物")
-def test_stamp_noise_flags_columns_without_blocking_them(tmp_path):
-    """端到端钉死 flag 语义：`vol02/3` 整页 9 列全部命中 L2b（背景印章），
-    但 `admitted` 不该因此变 `False`——只由页级 / L2 两条 block 判据决定。
-    这条测试直接跑 `main()`，不是重新拼一遍判定逻辑，避免测试和实现各自
-    维护一份"如果 stamp 超标该怎样"的认知、改了一边忘了另一边。
+def _fake_step2_columns(root: Path, page: int, cols: list[np.ndarray]) -> Path:
+    """造一份 Step2 列图产物（`<page>/windows.json` + 列图），供 `main()` 吃。"""
+    import cv2
+
+    d = root / str(page)
+    d.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for i, img in enumerate(cols, start=1):
+        name = f"c{i:02d}.png"
+        cv2.imwrite(str(d / name), img)
+        h, w = img.shape
+        entries.append({"col": i, "file": name,
+                        "warped_size": {"width": w, "height": h},
+                        "border_top_in_column": 0.0,
+                        "border_bottom_in_column": float(h),
+                        "raised": False, "head_raise_inner_y": None})
+    (d / "windows.json").write_text(json.dumps({"columns": entries}),
+                                    encoding="utf-8")
+    return d
+
+
+def test_stamp_noise_flags_columns_without_blocking_them(tmp_path, monkeypatch):
+    """端到端钉死 flag 语义：命中 L2b（背景印章）的列 **flag 但不拦**——
+    `admitted` 只由页级 / L2 两条 block 判据决定。
+
+    直接跑 `main()`，不重新拼一遍判定逻辑，免得测试与实现各自维护一份
+    「如果 stamp 超标该怎样」的认知、改了一边忘了另一边。
+
+    2026-09-20 改：原先吃的是仓里 `output/vol02/step2_columns/3/` 那份跑批
+    产物，产物不在就 skip。现在整页列图由测试自己合成——九列，每列都撒上
+    印章噪点，但两侧留白干净（不触发 L2）。
     """
     import sys
+
+    rng = np.random.default_rng(11)
+    cols = []
+    for _ in range(mod.EXPECTED_COLS):
+        img = _clean_column_img()
+        for _ in range(60):
+            y, x = int(rng.integers(5, 385)), int(rng.integers(35, 85))
+            img[y:y + 7, x:x + 7] = 0
+        cols.append(img)
+    src = _fake_step2_columns(tmp_path / "step2_columns", 3, cols).parent
+    # 脚本把 `--src` 记成相对仓根的路径（`src.relative_to(ROOT)`），
+    # 所以这里把它认的仓根也挪到 tmp 下。
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+
     argv = sys.argv
-    sys.argv = ["export_step3_input.py", "--book", "vol02",
-                "--src", str(REPO / "output" / "vol02" / "step2_columns"),
+    sys.argv = ["export_step3_input.py", "--book", "tbook", "--src", str(src),
                 "-o", str(tmp_path / "step3_input"), "--tier", "gate"]
     try:
         mod.main()
     finally:
         sys.argv = argv
 
-    manifest = json.loads((tmp_path / "step3_input" / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (tmp_path / "step3_input" / "manifest.json").read_text(encoding="utf-8"))
     page3 = next(p for p in manifest["pages"] if p["page"] == "3")
     flagged = [c for c in page3["columns"] if c["flags"]]
-    assert len(flagged) == 9, f"vol02/3 全页 9 列都该被 L2b 标记，实际 {len(flagged)}"
+    assert len(flagged) == mod.EXPECTED_COLS, \
+        f"全页 {mod.EXPECTED_COLS} 列都该被 L2b 标记，实际 {len(flagged)}"
     assert all("L2b" in f for c in flagged for f in c["flags"])
-    # c2/c7/c8/c9 同时踩了 L2（side_floor，block 级）——那是 L2 自己的活，
-    # L2b 不该替它背锅，也不该反过来被 L2 挡住就不算数。只要求：命中 L2b
-    # 但没命中任何 block 级判据的列，一定还是 admitted=True。
     flagged_only = [c for c in flagged if not c["reject"]]
-    assert flagged_only, "这页应该至少有几列只踩 L2b、没踩 L2，用来验证 flag 不拦截"
+    assert flagged_only, "该有几列只踩 L2b、没踩 block 级判据，用来验证 flag 不拦截"
     assert all(c["admitted"] for c in flagged_only), (
         "L2b 命中不该单独拦截——只踩 L2b 的列应该仍然 admitted=True、正常推给 Step3")
-
-
-@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
-def test_stamp_noise_cannot_see_jiazhu_or_local_bent_rule():
-    """记录 `stamp_noise_density` 结构性看不见的两种污染，别拿它当万能判据。
-
-    夹注列（`vol01/146` c8）和局部弯界行探入（`vol02/188` c3/c4）在这个量上
-    跟 clean 分布完全重叠——不是参数问题，这两种污染在"中等面积孤立墨点"
-    这个维度上就是长得像正常字身笔画。要拦它们得要另外的判据（字符宽度
-    双峰 / 界行走向拟合），`stamp_noise_density` 的设计范围只到印章类为止。
-    """
-    clean, mixed = _clean_vs_mixed_stamp_noise()
-    if not clean or not mixed:
-        pytest.skip("金标里没有可比的 clean/mixed 列图")
-    others = {k: v for k, v in mixed.items() if "vol02/3c9" not in k}
-    if not others:
-        pytest.skip("金标里没有非印章类的 mixed 列图")
-    assert min(others.values()) <= max(clean), (
-        "如果这条也开始失败，说明 stamp_noise 意外能分开夹注/局部弯界行了——"
-        "去看金标是不是漂了，而不是庆祝判据修好了")
-
-
-@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
-@pytest.mark.xfail(strict=True, reason=(
-    "负结果（2026-09-02 扩金标后坐实）：「两侧最低墨」这一条单一指标已经不能"
-    "分开 clean/mixed —— 114 列金标复核：clean 上到 0.0417、mixed 低到 0.0038，"
-    "完全重叠，扫遍所有门槛最优也只能误杀 3 / 放过 1。原因是这条判据"
-    "结构上只看两侧外 25% 的墨——vol01/151 c4 那种「弯界行只在列中段探入」和"
-    "vol02/3 c9 那种「背景印章导致整列散布噪点、不集中在边缘」，这两种污染"
-    "side_floor 天生看不见。见 test_side_floor_cannot_see_whole_column_contamination。"
-    "如果这条哪天意外 PASS 了，不代表判据修好了，先去查是不是金标又漂了"
-    "（比如某次上游改动让样本对应的列图变了但没重标）。"))
-def test_gate_threshold_still_separates_the_human_verdicts():
-    """`SIDE_FLOOR_MAX` 曾经能把金标的 clean 和 mixed 分在两边（clean 上限
-    0.0109 vs mixed 下限 0.0136，n=2），现在不能了——标成 `xfail` 而不是删掉，
-    是为了留一个「这条判据啥时候好使、啥时候不好使」的活证据。
-    """
-    lo, hi = _clean_vs_mixed_side_floor()
-    if not lo or not hi:
-        pytest.skip("金标里没有可比的 clean/mixed 列图")
-    assert max(lo) <= mod.SIDE_FLOOR_MAX < min(hi), (
-        f"clean 上限 {max(lo):.4f} / mixed 下限 {min(hi):.4f} / "
-        f"门槛 {mod.SIDE_FLOOR_MAX}")
-
-
-@pytest.mark.skipif(not GOLD.exists(), reason="需要 open-guji-dataset")
-def test_side_floor_cannot_see_whole_column_contamination():
-    """记录 `side_floor` 结构性看不见的两种污染，别再拿它当全能判据。
-
-    `side_floor` 只量两侧外 25% —— 污染要是不贴边（弯界行只在列中段探入、
-    背景印章整列散布噪点）就测不到。这不是参数没调好，是这条尺子的设计
-    范围本来就只覆盖「贴边」这一种形态。**扩大金标不会把这条测挽救回来**，
-    需要的是另一条独立于「两侧墨量」的判据（比如整列噪点密度/连通域特征）。
-    """
-    lo, hi = _clean_vs_mixed_side_floor()
-    if not lo or not hi:
-        pytest.skip("金标里没有可比的 clean/mixed 列图")
-    assert min(hi) <= max(lo), (
-        "如果这条也开始失败，说明 side_floor 又能分开了——"
-        "去看金标是不是漂了，而不是庆祝判据修好了")

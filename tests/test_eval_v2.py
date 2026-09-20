@@ -18,8 +18,6 @@ from open_guji_cv.eval.registry import EVALS, EvalSpec, find_eval, runnable
 from open_guji_cv.eval.report import EvalReport, Metric, parse_metrics
 from open_guji_cv.eval.runner import _gate_verdict
 
-DATASET = Path(__file__).resolve().parent.parent.parent / "open-guji-dataset"
-needs_dataset = pytest.mark.skipif(not DATASET.exists(), reason="需要 open-guji-dataset")
 
 
 # ── 注册表 ───────────────────────────────────────────────────────────
@@ -214,20 +212,104 @@ def test_metric_fmt_carries_denominator():
     assert "（n=316）" in Metric("检出", 50, denominator=316, unit="%").fmt()
 
 
-# ── 真跑 ─────────────────────────────────────────────────────────────
-@needs_dataset
-def test_run_normalize_for_real():
-    """最快的评测器：纯函数 golden，不需要产物。"""
-    from open_guji_cv.eval import run_eval
-    r = run_eval("normalize", timeout=300)
-    assert r.status in ("ok", "regressed"), r.error
-    assert r.metrics and r.gate in ("通过", "失败")
-    assert r.n_gold == 32                       # char-normalization 32 条
-    assert r.stale_gold == 0
+# ── 真跑（自造评测器 + 自造分片）──────────────────────────────────────
+#
+# 2026-09-20 改：原先两条是拿真数据集跑真评测器（`run_eval("normalize")`，
+# 断言 `n_gold == 32`）。两个毛病：数据集不在就整条 skip（云端从没跑过）；
+# 金标一扩 32 就不对了，而那跟 runner 的代码行为毫无关系。
+#
+# 现在把评测器本身也造出来：一个印几行指标的临时脚本 + 一个两条目的临时分片。
+# 测的是 runner 这一段链路（拼命令行 → 跑子进程 → 解析指标 → 补金标状态 →
+# 回归门判定），跟分片里装的是什么数据无关。
 
 
-@needs_dataset
-def test_skipped_eval_reports_reason():
+def _fake_repo(tmp_path, monkeypatch, body: str) -> Path:
+    """造一个只有 `scripts/eval_fake.py` 的假仓根，并让 runner 用它。"""
+    from open_guji_cv.eval import runner
+
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts" / "eval_fake.py").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(runner, "repo_root", lambda: repo)
+    return repo
+
+
+def _fake_shard(tmp_path, shard: str = "fake-shard") -> Path:
+    """造一个 items 载体的分片，两条目。"""
+    root = tmp_path / "ds"
+    d = root / shard
+    d.mkdir(parents=True)
+    (d / "items.jsonl").write_text(
+        '{"id":"a","anchor":{"book":"b","page":1},"expected":{"v":1}}\n'
+        '{"id":"c","anchor":{"book":"b","page":2},"expected":{"v":2}}\n',
+        encoding="utf-8")
+    return root
+
+
+def _register(monkeypatch, spec: EvalSpec):
+    monkeypatch.setitem(EVALS, spec.id, spec)
+
+
+def test_runner_parses_metrics_and_gate_from_a_real_subprocess(tmp_path, monkeypatch):
+    """端到端：拼命令行 → 跑子进程 → 解析指标 → 补金标状态 → 判回归门。"""
     from open_guji_cv.eval import run_eval
-    r = run_eval("char_ocr", timeout=60)
-    assert r.status == "skipped" and "引擎" in r.error
+
+    _fake_repo(tmp_path, monkeypatch, "print('字保全: 59/65')\n"
+                                      "print('回归门：通过')\n")
+    ds = _fake_shard(tmp_path)
+    _register(monkeypatch, EvalSpec(id="fake", script="eval_fake.py",
+                                    shard="fake-shard", out_flag=""))
+
+    r = run_eval("fake", dataset_root=ds, timeout=60)
+    assert r.status == "ok", r.error
+    assert r.gate == "通过"
+    assert r.metrics and r.metrics[0].name == "字保全"
+    assert (r.metrics[0].numerator, r.metrics[0].denominator) == (59, 65)
+    # 金标状态由 GoldStore 补，不指望脚本自己报
+    assert r.n_gold == 2 and r.stale_gold == 0
+
+
+def test_failed_gate_is_not_reported_as_a_crash(tmp_path, monkeypatch):
+    """**回归门失败 ≠ 跑挂**：门拦住了东西和门本身坏掉是两回事，
+    混报会让人分不清该看算法还是该修评测。"""
+    from open_guji_cv.eval import run_eval
+
+    _fake_repo(tmp_path, monkeypatch,
+               "import sys\n"
+               "print('字保全: 50.0%')\n"
+               "print('回归门：失败')\n"
+               "sys.exit(1)\n")
+    ds = _fake_shard(tmp_path)
+    _register(monkeypatch, EvalSpec(id="fake", script="eval_fake.py",
+                                    shard="fake-shard", out_flag=""))
+
+    r = run_eval("fake", dataset_root=ds, timeout=60)
+    assert r.gate == "失败"
+    assert r.status == "regressed", f"门失败被报成了 {r.status}"
+
+
+def test_missing_shard_is_skipped_with_the_path_in_the_reason(tmp_path, monkeypatch):
+    """金标路径不在 → skipped 且说清是哪条路径，不是含糊的「跑挂了」。"""
+    from open_guji_cv.eval import run_eval
+
+    _fake_repo(tmp_path, monkeypatch, "print('x')\n")
+    _register(monkeypatch, EvalSpec(id="fake", script="eval_fake.py",
+                                    shard="no-such-shard", out_flag=""))
+
+    r = run_eval("fake", dataset_root=tmp_path / "ds", timeout=60)
+    assert r.status == "skipped"
+    assert "no-such-shard" in (r.error or ""), r.error
+
+
+def test_unsatisfiable_needs_reports_the_reason(tmp_path, monkeypatch):
+    """声明了跑不起来的前提（引擎 / 模型）就直接 skipped 并说明，不去起子进程。"""
+    from open_guji_cv.eval import run_eval
+
+    _fake_repo(tmp_path, monkeypatch, "raise SystemExit('不该跑到这里')\n")
+    ds = _fake_shard(tmp_path)
+    _register(monkeypatch, EvalSpec(id="fake", script="eval_fake.py",
+                                    shard="fake-shard", out_flag="",
+                                    needs=("engine",)))
+
+    r = run_eval("fake", dataset_root=ds, timeout=60, allow=())
+    assert r.status == "skipped" and r.error
