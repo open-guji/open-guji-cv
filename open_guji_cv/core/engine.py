@@ -33,13 +33,26 @@ _code_hash_cache: dict[str, str] = {}
 
 
 def _module_source_hash(mod_name: str) -> str:
+    """模块源码的哈希，**行尾归一**（CRLF→LF）后再算（2026-09-20）。
+
+    此前直接哈希文件字节。这个仓 `.gitattributes` 是 `text=auto`、本机 `autocrlf=input`，
+    磁盘上 LF/CRLF 混着（历史文件有 CRLF，Python `write_text` 在 Windows 上也会把 LF
+    写成 CRLF），而 git 看两种行尾是同一份内容。实锤：bxgb 全书跑完，另一个会话用
+    编辑器把 `row_boundaries.py` 从 CRLF 存回 LF——内容一字未改，`git status` 干净——
+    `column_gate` / `row_segment` 的 code_hash 却变了，Step2 闸以下 11 步 54 页全线过期。
+    行尾不是代码，指纹不该认它。
+    """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
     mod = importlib.import_module(mod_name)
     src = inspect.getsourcefile(mod)
-    h = hashlib.sha256(Path(src).read_bytes()).hexdigest() if src else "nosrc"
+    h = hashlib.sha256(_normalize_eol(Path(src).read_bytes())).hexdigest() if src else "nosrc"
     _code_hash_cache[mod_name] = h
     return h
+
+
+def _normalize_eol(raw: bytes) -> bytes:
+    return raw.replace(b"\r\n", b"\n")
 
 
 def code_hash(step: Step) -> str:
