@@ -18,6 +18,7 @@ interface Props {
   onFocus: () => void
   onSet: (shape: string, reading?: string, done?: string) => void
   onSetNoGlyphLib: (checked: boolean) => void
+  onSetGuess: (guess: string) => void
   onToggleCtxImg: () => void
   onFetchRare: (force?: boolean) => void
   contextImgSrc: string
@@ -25,13 +26,14 @@ interface Props {
 
 export function ReviewCardView({
   idx, c, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
-  onFocus, onSet, onSetNoGlyphLib, onToggleCtxImg, onFetchRare, contextImgSrc,
+  onFocus, onSet, onSetNoGlyphLib, onSetGuess, onToggleCtxImg, onFetchRare, contextImgSrc,
 }: Props) {
   const v = verdict || { shape: '', reading: '', done: '' }
   // shape/reading 的唯一改动入口都在本组件内（候选点击、输入框、标记按钮），
   // 所以本地 state 与 verdict 不会失步；不用受控于 prop。
   const [shapeInput, setShapeInput] = useState(v.shape || '')
   const [readingInput, setReadingInput] = useState(v.reading || '')
+  const [guessInput, setGuessInput] = useState(v.guess || '')
 
   const ocr = (c.ocr || []).slice(0, 2)
   const doubts = (c.doubts || []).map((d, i) => <div key={i} className="rvdoubt">⚠ {d}</div>)
@@ -151,6 +153,18 @@ export function ReviewCardView({
         <button className={`rvmark${v.done === 'skip' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'skip' ? '' : 'skip') }}
                 title="真拿不准，留给以后（S）">跳过</button>
+        <button className={`rvmark${v.done === 'damaged' ? ' on' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'damaged' ? '' : 'damaged') }}
+                title="原图就破损，字形认不出（D）。文本出 □，可在右边填最像的那个字">原图破损</button>
+        {v.done === 'damaged' && (
+          <span className="rvguess">
+            {' '}□（？<input className="rvguessin" placeholder="最像" value={guessInput}
+                           maxLength={4}
+                           onClick={(e) => e.stopPropagation()}
+                           onChange={(e) => { setGuessInput(e.target.value); onSetGuess(e.target.value) }}
+                           title="最像的那个字，可空。只作文本括注，不进字形库" />）
+          </span>
+        )}
       </div>
       {aroundCtx && (
         <div className="rvctx">

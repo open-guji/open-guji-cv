@@ -169,6 +169,18 @@ QUESTIONS: tuple[Question, ...] = (
         kind="confirm",
         note="走 `payload.v == 'seg_defect'` 进来，取键见 `_expected_of`。",
     ),
+    Question(
+        id="seed_admit.cell.damaged", unit="cell",
+        shard="char-segmentation/instances",
+        title="原图破损、字形不可辨（最像哪个字）",
+        answers=("damaged",),
+        kind="confirm",
+        note="走 `payload.v == 'damaged'` 进来，payload 另带 `guess`（最像的那个字，"
+             "可空）。与 `seg_quality` 的四档是**两件事**：那四档归因于切分/取块，"
+             "这一档归因于**原刻就残**，切分再准也救不回来，所以 quality 独立成第五档、"
+             "不混进 contaminated。不进字形库（形都不全，当刻例会把破损形钉死成那个字）；"
+             "文本层出 `□`，`guess` 只作括注 `□（？塊）`。",
+    ),
 )
 
 BY_ID: dict[str, Question] = {q.id: q for q in QUESTIONS}

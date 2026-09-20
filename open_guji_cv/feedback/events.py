@@ -44,6 +44,10 @@ Kind = Literal[
     "confirm",        # 确认字（payload: char, admit）
     "relabel",        # 【无出口】改判字
     "skip",           # 【无 kind 出口，但语义在用】存疑跳过——实走 confirm + payload.v
+    "damaged",        # 【无 kind 出口，但语义在用】原图破损、字形不可辨——实走 confirm
+                      #   + payload.v；payload 另带 guess（最像的那个字，可空）。
+                      #   与 skip 的区别：skip 是「我还没想好」（待办），damaged 是
+                      #   「看过了，图就这样，认不出」（已了结，文本出 □）。
     "mark",           # 【无出口】实例级标记
     "flag",           # 【无出口】簇级标记
     "split", "merge", # 【无出口】簇操作

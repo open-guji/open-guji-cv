@@ -172,9 +172,18 @@ class SeedAdmitStep(Step):
         # 全都是间接证据，人看着图下的判断不是——它该一票定案。
         human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
 
+        _ex_cache: dict = {}
+
+        def _ex_records() -> dict:
+            # 名单一页要查几十次，load_exclusions 每次重读整个文件——缓存在本次
+            # run_page 内（名单是外部状态，不跨页缓存）。
+            if not _ex_cache:
+                from ..clustering.exclusions import load_exclusions
+                _ex_cache.update(load_exclusions(_ex_path) or {"": {}})
+            return _ex_cache
+
         def excluded_note(iid: str) -> str:
-            from ..clustering.exclusions import load_exclusions
-            rec = load_exclusions(_ex_path).get(iid, {})
+            rec = _ex_records().get(iid, {})
             return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
@@ -231,11 +240,27 @@ class SeedAdmitStep(Step):
                 # 就没什么可判的。
                 if r.id in excluded:
                     n_excluded += 1
+                    # 原图破损档（2026-09-19）：字位**占住**，文本层出 `□`，
+                    # 人给的 `guess`（最像哪个字）挂在 evidence 上供渲染括注。
+                    # 与其余排除原因（切坏/非字）不同——那些是「这块图不可用」，
+                    # 这一档是「原刻就残，字确实在这儿但认不出」，字位不能消失，
+                    # 否则整列字数对不上（cv-segmentation §九 的逐列对账）。
+                    exrec = _ex_records().get(r.id, {})
+                    damaged = exrec.get("reason") == "damaged"
+                    guess = ""
+                    for tag in exrec.get("evidence") or []:
+                        if isinstance(tag, str) and tag.startswith("guess="):
+                            guess = tag[6:]
+                    evd = {"excluded": excluded_note(r.id)}
+                    if damaged:
+                        evd["damaged"] = True
+                        if guess:
+                            evd["guess"] = guess
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=False,
-                        channel=None, char=None, provenance="",
+                        channel=None, char=("□" if damaged else None), provenance="",
                         doubts=["excluded"],
-                        evidence={"excluded": excluded_note(r.id)}))
+                        evidence=evd))
                     continue
                 # 人裁过的位：一票定案，后面所有自动通道都不再看（2026-09-06）。
                 # 人是**看着图**判的，库匹配/上下文/整理本对齐全是间接证据；实测

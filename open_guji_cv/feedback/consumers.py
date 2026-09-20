@@ -70,6 +70,22 @@ def _expected_of(e: Event) -> dict:
         return out
     if e.kind == "not_a_char":
         return {"quality": "not_text"}
+    if e.kind == "confirm" and p.get("v") == "damaged":
+        # 原图破损、字形不可辨（2026-09-19 用户定）。`quality="damaged"` 是
+        # **第五档**，与既有四分类（clean / truncated / contaminated / not_text）
+        # 并列：那四档说的是「切分/取块把图弄坏了」，这一档说的是**原刻就残**，
+        # 切分再准也救不回来——归因不同，不能混进 contaminated。
+        #
+        # `guess` 是人看图后「最像的那个字」，可空。它**不是** `shape`：
+        # shape 进字形库，guess 只进金标与文本层的括注 `□（？塊）`。
+        # 形都不全，拿它当刻例会把破损形钉死成那个字（glyphdb_admit 本来就
+        # 只认 v=="confirm"，这里再记一笔口径）。
+        out: dict = {"quality": "damaged"}
+        if p.get("guess"):
+            out["guess"] = p["guess"]
+        if p.get("note"):
+            out["note"] = p["note"]
+        return out
     if e.kind == "confirm" and p.get("v") == "seg_defect":
         # 切分缺陷：quality 沿用 char-segmentation/instances 的四分类
         # （clean / truncated / contaminated / not_text），不另造词。
@@ -164,7 +180,9 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
         # `confirm` 事件同时路由给 glyphdb_admit 与这里：定字那部分归前者，
         # 切分缺陷那部分归这里。不分流的话，每条定字都会往 instances 金标里
         # 塞一条没有 quality 的空条目。
-        if e.kind == "confirm" and e.payload.get("v") != "seg_defect":
+        if e.kind == "confirm" and e.payload.get("v") not in ("seg_defect", "damaged"):
+            # `damaged`（原图破损）与 `seg_defect` 一样要落进 instances 金标：
+            # 两者答的都是「这块图能不能用」，只是归因不同（原刻残 vs 切分坏）。
             res.skipped += 1
             continue
         if not d.shard:
@@ -253,7 +271,8 @@ def glyphdb_admit(events, db_path: str | None = None,
     要是被释读污染，将来一个真刻成这形状、该读别的字的实例会错误继承这次的
     释读，字形匹配整条链就失真（charset_and_lm.md §四的实锤）。
 
-    `not_a_char` / `skip` 事件不进库（前者是判非字，后者是存疑跳过）。
+    `not_a_char` / `skip` / `damaged` 事件不进库（判非字 / 存疑跳过 / 原图破损
+    认不出）。三者都靠 `payload.v != "confirm"` 被下面那句过滤挡在外面。
     图块从 v2 的 `char_patch` 缓存取——那正是被裁决的那张图。
 
     ## `no_glyph_lib`：选字正常裁决，但这张图不建库（2026-09-09）
@@ -405,6 +424,12 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
         p = e.payload or {}
         if e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char"):
             hits.append((e, "not_text", "not_a_char"))
+        elif e.kind == "confirm" and p.get("v") == "damaged":
+            # 原图破损、字形不可辨（2026-09-19 用户定）。这块图**永远**不该进字形库，
+            # 也不该再出审查卡——人已经看过并了结了，与 `skip`（待办）相反。
+            # `guess`（最像的那个字）只进金标与文本层的括注，不进库：形都不全，
+            # 拿它当范本会把破损形钉成那个字的刻例。
+            hits.append((e, "damaged", "damaged"))
         elif (e.kind == "confirm" and p.get("v") == "seg_defect"
               and p.get("quality") not in (None, "clean")):
             # quality=="clean" 是「这块图没毛病」——随机层裁决台（Step4）把 clean
@@ -428,11 +453,21 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
         p = e.payload or {}
         if p.get("shape"):
             ev.append(f"shape={p['shape']}")
+        note = f"审查卡片人裁：{quality}"
+        if reason == "damaged":
+            # `guess` 进名单（不只进金标）：seed_admit 读的是名单，文本层要据此
+            # 渲成 `□（？塊）`。存成 `guess=塊` 这种形状而不是塞进 shape——
+            # 名单的 evidence 是给人看的账，shape 那个键别的地方当「进库字形」用。
+            if p.get("guess"):
+                ev.append(f"guess={p['guess']}")
+                note = f"审查卡片人裁：原图破损，最像「{p['guess']}」"
+            else:
+                note = "审查卡片人裁：原图破损，认不出"
         rows.append({
             "date": (e.ts or "")[:10],
             "evidence": ev,
             "instance_id": iid,
-            "note": f"审查卡片人裁：{quality}",
+            "note": note,
             "origin": "human",
             "reason": reason,
             "round": "r2",
