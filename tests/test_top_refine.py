@@ -70,3 +70,29 @@ def test_raised_or_framed_columns_untouched():
     w2 = _win(130.0)
     w2.border_top_y = 140.0                 # border_top_in_column > 0：框在列图里，另一套逻辑
     assert refine_top_by_frame(g, w2) == 0.0
+
+
+def test_does_not_move_when_frame_already_at_top():
+    """`top_y` 正正切在真框上时不许动——2026-09-19 vol02 实测的回归。
+
+    页面上有两条满宽墨：上面一条是**外框/上欄線**，下面一条是**真版框**，Step1 已经
+    把 top_y 切在真框上。旧实现的探针窗口在 top_y 处截止，真框被腰斩、凑不满 MIN_RUN，
+    于是抓住上面那条外框、把 top_y 提到它下沿——真框反被圈进列图（vol02 被上移的列里
+    47% 是这种）。修法是探针越过 top_y 往下多看几行。
+    """
+    g = np.full((H, W), 255, np.uint8)
+    g[100:112, :] = 0                       # 外框/上欄線
+    g[196:202, :] = 0                       # 真版框（top_y 正压在它上面）
+    g[210:340, RAW_L + 20:RAW_R - 20] = 0   # 正文
+    win = _win(197.0)                       # Step1 切在真框上
+    d = refine_top_by_frame(g, win)
+    assert d == 0.0, f"不该动，却上移了 {d}px（又去抓上面那条外框了）"
+    assert win.top_y == 197.0
+
+
+def test_still_moves_when_only_the_upper_frame_exists():
+    """反证：top_y 处没有框、上面有框时照样要提（别把上一条测试修成「永不动」）。"""
+    win = _win(130.0)
+    d = refine_top_by_frame(_page(), win)
+    assert d > 0
+    assert abs(win.top_y - 112) <= 2, win.top_y
