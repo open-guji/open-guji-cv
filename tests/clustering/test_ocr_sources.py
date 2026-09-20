@@ -1,4 +1,13 @@
-"""RapidOcrSource / VlmSeedSource 单测。"""
+"""RapidOcrSource / VlmSeedSource 单测。
+
+2026-09-20：渲染用的 CJK 字体改用**仓内自带**的那份（`fonts/`，入 git）。
+原先写死 `/usr/share/fonts/truetype/fonts-japanese-gothic.ttf`——那是某台
+Linux 机器上恰好装了的系统字体，别处一律 `skip("无 CJK 字体")`。
+仓里本来就有字体，没有理由去依赖系统装了什么。
+
+要真引擎的那几条仍然按可选件跳过（`rapidocr_onnxruntime` 是 pyproject 里的
+`onnx` extra，不是数据依赖）。
+"""
 
 import json
 
@@ -9,7 +18,14 @@ from open_guji_cv.clustering.candidates import (RapidOcrSource, VlmSeedSource,
                                                 fuse_candidates)
 from open_guji_cv.clustering.variants import VariantMap
 
-CJK_FONT = "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"
+def _cjk_font() -> str:
+    """仓内字体档的第一个。用生产代码的定位器，不写死系统路径。"""
+    from open_guji_cv.clustering.font_candidates import _font_files
+
+    files = _font_files()
+    assert files, ("fonts/ 下一个字体都没有。字体档随引擎仓走"
+                   "（见 fonts/README.md），缺了是仓库不完整。")
+    return files[0]
 
 
 def test_rec_topk_filters_ascii_and_blank():
@@ -27,13 +43,10 @@ def test_rapidocr_recognizes_rendered_char(tmp_path):
     """端到端：渲染汉字 → RapidOCR 识别正确。"""
     pytest.importorskip("rapidocr_onnxruntime")
     from PIL import Image, ImageDraw, ImageFont
-    import os
-    if not os.path.exists(CJK_FONT):
-        pytest.skip("无 CJK 字体")
 
     img = Image.new("L", (96, 96), 255)
     ImageDraw.Draw(img).text((10, 4), "文", fill=0,
-                             font=ImageFont.truetype(CJK_FONT, 72))
+                             font=ImageFont.truetype(_cjk_font(), 72))
     src = RapidOcrSource()
     props = src.propose([np.asarray(img)], [])
     assert props, "应给出候选"
@@ -120,12 +133,10 @@ def test_rapidocr_ctc_topk_multiple_candidates():
     """真 top-k：形近字场景应给出多个候选（正确答案进候选列表）。"""
     pytest.importorskip("rapidocr_onnxruntime")
     from PIL import Image, ImageDraw, ImageFont
-    import os
-    if not os.path.exists(CJK_FONT):
-        pytest.skip("无 CJK 字体")
+
     img = Image.new("L", (96, 96), 255)
     ImageDraw.Draw(img).text((10, 4), "文", fill=0,
-                             font=ImageFont.truetype(CJK_FONT, 72))
+                             font=ImageFont.truetype(_cjk_font(), 72))
     src = RapidOcrSource(topk=5)
     src._ensure()
     out = src.rec_topk(np.asarray(img))
