@@ -325,9 +325,11 @@ def test_real_migrated_shards_are_items():
     #                裁决、instances +84 seg_defect（truncated 67 / contaminated 17），
     #                作首尾横笔/相位漂移那一轮算法迭代的回归集。同批 touching-cuts
     #                +234 不在这张表里。核实：`gold import --dry-run` 报 added 31/84。
+    #   instances 1108 → 1154（2026-09-20）：bxgb 第二/三批审阅回流 +46 seg_defect
+    #                （首字被 Step1 上边框裁掉的那批，p48/p54 为主）。
     expect = {"border-detection/column-split": 60,
               "char-segmentation/column-warp": 146,
-              "char-segmentation/instances": 1108,
+              "char-segmentation/instances": 1154,
               "page-type": 394,
               "column-layout": 36}
     for sh, n in expect.items():
