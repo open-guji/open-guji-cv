@@ -347,6 +347,7 @@ def main() -> int:
         pages = sorted(set(pages) | set(body_pages(book)))
 
     errs, errs_base = [], []
+    err_ids: list[str] = []
     poly_new, poly_base = [], []
     from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation
     gold_poly = [i for i in GoldStore().list(SHARD) if i.anchor.book == book and i.status == "active"
@@ -444,7 +445,7 @@ def main() -> int:
                     e_new = min(abs(b - g) for b in new_b[1:-1]); e_base = min(abs(b - g) for b in base_b[1:-1])
                 else:
                     e_new, e_base = abs(new_b[bi] - g), abs(base_b[bi] - g)
-                errs.append(e_new); errs_base.append(e_base)
+                errs.append(e_new); errs_base.append(e_base); err_ids.append(it.id)
                 if a.diag_new and e_new > 20:
                     lo_i, hi_i = max(0, bi - 3), min(len(new_b), bi + 4)
                     print(f"   ✗ {it.id} {ex['verdict']} gold {int(g)} 现役 {int(base_b[bi])}(err {e_base:.0f}) 变体 err {e_new:.0f}")
@@ -483,7 +484,8 @@ def main() -> int:
         for d in diag_rows:
             print("  ", d)
     if a.json:
-        Path(a.json).write_text(json.dumps(dict(errs=errs, errs_base=errs_base, rulers=rulers, rulers_base=rulers_base),
+        Path(a.json).write_text(json.dumps(dict(errs=errs, errs_base=errs_base, rulers=rulers, rulers_base=rulers_base,
+                                                ids=err_ids),
                                            ensure_ascii=False), encoding="utf-8")
     if restore:
         restore()
