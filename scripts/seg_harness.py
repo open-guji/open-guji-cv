@@ -231,8 +231,18 @@ def _patch_seamcost(band=20, weight=1.0):
     return restore
 
 
+def _patch_no_period_anchor():
+    """关掉周期锚定候选（2026-09-19 上线，bxgb/vol01 上验过）——用来在别的册上分诊它的影响。"""
+    old = RB.PERIOD_CAND_GUARD
+    RB.PERIOD_CAND_GUARD = 0.0
+    def restore():
+        RB.PERIOD_CAND_GUARD = old
+    return restore
+
+
 VARIANTS: dict[str, dict] = {
     "baseline": {},
+    "no_period_anchor": {"patch": lambda RB_: _patch_no_period_anchor()},
     "seamcost": {"patch": lambda RB_: _patch_seamcost()},
     "seamcost30": {"patch": lambda RB_: _patch_seamcost(band=30)},
     "snap6": {"fit": {"snap_raw": 6}},
@@ -258,7 +268,8 @@ VARIANTS: dict[str, dict] = {
 }
 
 
-def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict):
+def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict,
+               resolved_cuts: dict | None = None, judge=None):
     """与 RowSegmentStep.run_page 同一套入参。
 
     2026-09-09 台子与现役对比查出「与现役产物不一致 10」列后发现：这里漏了
@@ -275,7 +286,14 @@ def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict)
         border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
         top_slack=gc.top_slack, content_x=gc.content_x,
         ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-        raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, **fit_kw)
+        raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu,
+        seam_band=p.seam_band,
+        # `cut_judge` / `resolved_cuts` 不能漏（2026-09-19）。现役 `run_page` 传的是
+        # U-Net 裁判（2026-09-14 起现役）＋ 人裁已定的切点；台子这里此前两个都不传，
+        # 于是**格线逐条相同（不一致 0）、缝的形状却不同**——折线金标比的是「U-Net 缝
+        # vs 旧规则缝」，不是算法好坏。vol02 实测被这条压到 ≤6px 85.3% → 37.5%，
+        # 看着像大回归，其实是台子自己的口径错（直线口径 94.8% 完全正常，就是证据）。
+        resolved_cuts=resolved_cuts or None, cut_judge=judge, **fit_kw)
 
 
 def classify(prof: np.ndarray, y: int, period: float) -> str:
@@ -346,8 +364,13 @@ def main() -> int:
             return 1
     if a.from_raw:
         ensure_products(bk, pages, store=st, cache=ic)
+    # 与 RowSegmentStep.run_page 同一套：U-Net 裁判 + 人裁已定的切点。
+    from open_guji_cv.feedback.lookup import resolved_cuts as _resolved_cuts
+    from open_guji_cv.utils.cut_select import get_judge
+    book_resolved = _resolved_cuts(book)
+    judge = get_judge() if p.cut_judge == "unet" else None
     rulers = Counter(); rulers_base = Counter()
-    mismatch = 0; n_cols = 0; n_fail = 0
+    mismatch = 0; n_cols = 0; n_fail = 0; skipped_no_y = 0
     mismatch_cols: list[str] = []
     diag_rows = []
     for pg in pages:
@@ -367,7 +390,10 @@ def main() -> int:
             img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path else None
             if img is None:
                 continue
-            r = run_column(book, bk, gate, wins, gc, img, p, fit_kw)
+            col_resolved = {slot: kind for (pg_, col_, slot), kind in book_resolved.items()
+                            if pg_ == pg and col_ == gc.col}
+            r = run_column(book, bk, gate, wins, gc, img, p, fit_kw,
+                           resolved_cuts=col_resolved, judge=judge)
             n_cols += 1
             if r is None:
                 n_fail += 1
@@ -391,6 +417,9 @@ def main() -> int:
                 old_cells = prod[gc.col].cells
                 for it in by_col_poly[(pg, gc.col)]:
                     ex = it.expected
+                    if "y" not in ex:          # 同上：A/B 盲裁条目没有坐标
+                        skipped_no_y += 1
+                        continue
                     gseam = polyline_to_seam(ex["polyline"], x0p, x1p)
                     def eff(cells_, bounds_):
                         up = next((c for c in cells_ if c.kind == "char" and c.slot == ex.get("slot_above")), None)
@@ -403,6 +432,12 @@ def main() -> int:
             for it in by_col.get((pg, gc.col), []):
                 ex = it.expected; bi = ex["bi"]
                 if not (0 < bi < len(new_b) - 1):
+                    continue
+                # A/B 盲裁条目（切分裁决台的「哪个候选更好」）只记 verdict + cand，**没有绝对坐标**。
+                # 位置口径量不了它们，跳过并单独计数——别让它们静默消失（vol02 421 条里有 59 条如此，
+                # 2026-09-19 之前这里直接 KeyError 崩掉，vol02 的金标从来没被这个台子量过）。
+                if "y" not in ex:
+                    skipped_no_y += 1
                     continue
                 g = float(ex["y"])
                 if a.match == "nearest":
@@ -431,6 +466,8 @@ def main() -> int:
                 f"max {e.max():.0f} | ≤3px {100*(e<=3).mean():.1f}% ≤10px {100*(e<=10).mean():.1f}%")
 
     print(f"变体 {a.variant}  列 {n_cols}（无解 {n_fail}，与现役产物不一致 {mismatch}）")
+    if skipped_no_y:
+        print(f"  ⚠ 跳过无坐标金标 {skipped_no_y} 条（A/B 盲裁条目只有 verdict/cand，位置口径量不了）")
     if a.list_mismatch and mismatch_cols:
         print("  不一致列:", mismatch_cols)
     print("  金标误差 现役:", stat(errs_base))
