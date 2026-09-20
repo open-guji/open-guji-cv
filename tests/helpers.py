@@ -253,3 +253,45 @@ def run_keben_from_raw(tmp_path, monkeypatch=None, *, book, gray, page: int = 1,
     ctx = make_ctx(tmp_path, book, raw={page: gray}, monkeypatch=monkeypatch)
     steps = KEBEN_STEPS_FROM_RAW[:KEBEN_STEPS_FROM_RAW.index(through) + 1]
     return ctx, run_steps(ctx, page, steps)
+
+
+# ── Step5 系产物（库匹配 / OCR / 上下文裁决 / 整理本对齐）──────────────
+#
+# 这几步之后的链路（seed_admit、context_decide 的下游）只读产物、不碰图像，
+# 所以直接造产物就能跑真步骤——比「跑一遍完整管线再看碰上什么」既快又可控：
+# 想测哪一条通道，就把那条通道的证据摆成什么样。
+
+def page_match(page: int = 1, book: str = "tbook", *, recs: list[dict],
+               col: int = 1, db_fingerprint: str = "testdb"):
+    """`glyph_match` 产物。`recs` 每项给 slot / verdict / char / cov 等。"""
+    from open_guji_cv.products.kinds.recog import ColumnMatch, MatchRec, PageMatch
+
+    chars = []
+    for r in dict_list(recs):
+        slot = r.pop("slot")
+        chars.append(MatchRec(id=f"{book}:{page}:{col}:{slot}", slot=slot, **r))
+    return PageMatch(page=page, db_fingerprint=db_fingerprint,
+                     columns=[ColumnMatch(col=col, ok=True, chars=chars)])
+
+
+def page_decision(page: int = 1, book: str = "tbook", *, recs: list[dict],
+                  col: int = 1, strategy: str = "test"):
+    """`context_decision` 产物。"""
+    from open_guji_cv.products.kinds.recog import ColumnDecision, DecisionRec, PageDecision
+
+    chars = []
+    for r in dict_list(recs):
+        slot = r.pop("slot")
+        chars.append(DecisionRec(id=f"{book}:{page}:{col}:{slot}", slot=slot, **r))
+    return PageDecision(page=page, strategy=strategy,
+                        columns=[ColumnDecision(col=col, ok=True, chars=chars)])
+
+
+def dict_list(recs: list[dict]) -> list[dict]:
+    """浅拷贝一遍——构造器会 `pop`，不该改调用方手里的字面量。"""
+    return [dict(r) for r in recs]
+
+
+def write_product(ctx, step_id: str, page: int, **kinds):
+    """把产物摆进库（`{种类名: 产物}`）。种类名要与该步 `produces` 里的一致。"""
+    ctx.store.write(ctx.book.id, step_id, f"p{page:04d}", kinds)
