@@ -406,6 +406,11 @@ SINGLE_BAR_MIN = 8
 #: 粗条可以从内框线外 0~这么多行处开始（`push_bottom_to_bar` 把线放在条上沿 −BPUSH_MARGIN，
 #: 条从 +4 起；不容忍这几行白，推过线的页会被判成 none、再被 OUTER_GAP_MIN=12 挡住报「没探到」）。
 SINGLE_BAR_LEAD = 8
+SINGLE_BAR_GAP = 3
+#: 判了 single 之后再往外看：粗条外 `SINGLE_BAR_GAP` 行起、到 `OUTER_GAP_MAX` 为止，
+#: 若还有 ≥ `OUTER_INK_MIN` 的墨，说明这条「粗条」是内框、外面那条才是外框——
+#: **是 double，不是 single**。vol02 判 single 的 30 页里 4 页属此（p12/16/110/185，
+#: 粗条 14~23 行，外框在它外面 10~30px），不查就当成「本来就没有外框」漏报。
 OUTER_RUN_MIN = 4         # 墨条厚度：竖直外框实测 17~28px，上下 0~20px。
 OUTER_RUN_MAX = 40        # 实测 30/40/60 三档结果完全一样，不是敏感参数。
 OUTER_PRIOR_TOL = 10.0    # 偏离页级间距先验多少 px 算一个"半衰"
@@ -588,9 +593,17 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 elif o >= SINGLE_BAR_LEAD:
                     break
             if start0 is not None and run0 >= SINGLE_BAR_MIN:
-                out[f"{kind}_frame_kind"] = "single"
-                out[f"{kind}_bar_extent"] = float(start0 + run0)
-                continue
+                # 粗条之外还有墨 → 那才是外框，这条粗条只是内框（见 SINGLE_BAR_GAP）
+                second = 0.0
+                for o in range(start0 + run0 + SINGLE_BAR_GAP, OUTER_GAP_MAX + 1):
+                    yy = (base + o * sign).astype(int)
+                    ok = (yy >= 0) & (yy < height)
+                    v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
+                    second = max(second, float(v))
+                if second < OUTER_INK_MIN:
+                    out[f"{kind}_frame_kind"] = "single"
+                    out[f"{kind}_bar_extent"] = float(start0 + run0)
+                    continue
             out[f"{kind}_frame_kind"] = "none"
             lo, hi = OUTER_GAP_MIN, OUTER_GAP_MAX
             if prior is not None:      # 钉在页级间距先验上，见函数 docstring
