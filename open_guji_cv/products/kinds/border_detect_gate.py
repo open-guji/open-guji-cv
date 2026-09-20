@@ -42,6 +42,9 @@ class BorderDetectGateManifest(BaseModel):
     bend_w80_max: float | None = None
     top_outer_offset: float | None = None
     bottom_outer_offset: float | None = None
+    top_frame_kind: str | None = None
+    """"double" / "single"（單邊框）/ "none"，透传自 borders；旧产物 None。"""
+    bottom_frame_kind: str | None = None
     n_head_raise: int = 0
     page_type: str = "body"
     """`clustering.page_type.PAGE_TYPES` 之一；判不准兜底 "body"。"""

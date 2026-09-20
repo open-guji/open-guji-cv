@@ -50,6 +50,10 @@ def main() -> int:
     ap.add_argument("--pages", default="",
                     help="只平移这些页（如 1-30）。**只该填这一轮真重跑过的页**——"
                          "别的页上的漂移是别的轮次留下的，成因不同，不能套这个纯平移假设。")
+    ap.add_argument("--windows-bak", default="",
+                    help="重跑前 column_warp 产物的备份目录（如 products/vol02/column_warp.bak-20260920）。"
+                         "给了就按**列窗 top_y 的变化**算位移（bottom_y 变了只改 col_h、不动 y），"
+                         "不给才退回按 col_h 差算——那只在「只有 top 动」时才对。")
     a = ap.parse_args()
     ws = Path(a.workspace)
     shard = Path(a.shard)
@@ -64,6 +68,26 @@ def main() -> int:
                 want_pages.add(int(part))
 
     lines = [json.loads(ln) for ln in shard.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # 列窗 top_y：旧（备份）与新（当前产物）。有备份时位移 = top_new − top_old。
+    top_delta: dict[tuple[int, int], float] = {}
+    if a.windows_bak:
+        bak = Path(a.windows_bak)
+        cur = ws / "products" / a.book / "column_warp"
+        for f in sorted(cur.glob("p0*.json")):
+            g = bak / f.name
+            if not g.exists():
+                continue
+            try:
+                c = {x["col"]: x for x in json.loads(f.read_text(encoding="utf-8"))["column_windows"]["columns"]}
+                o = {x["col"]: x for x in json.loads(g.read_text(encoding="utf-8"))["column_windows"]["columns"]}
+            except (KeyError, json.JSONDecodeError):
+                continue
+            pg = int(f.stem[1:])
+            for col, v in c.items():
+                if col in o:
+                    top_delta[(pg, col)] = float(v["top_y"]) - float(o[col]["top_y"])
+        print(f"列窗备份：{len(top_delta)} 列有新旧 top_y 对照，"
+              f"top 动过的 {sum(1 for d in top_delta.values() if abs(d) > 0.5)} 列")
     heights: dict[tuple[int, int], int | None] = {}
     todo, skip_no_img, skip_no_geom, too_big = [], 0, 0, []
     for o in lines:
@@ -85,9 +109,21 @@ def main() -> int:
         if h is None:
             skip_no_img += 1
             continue
-        d = h - int(ex["col_h"])
-        if d == 0:
-            continue
+        dh = h - int(ex["col_h"])
+        if a.windows_bak:
+            if key not in top_delta:
+                skip_no_img += 1
+                continue
+            # 列图第 r 行 = 页 y − top_y，同一页 y 在新列图里的行号 r_new = r_old − (top_new − top_old)。
+            # 首版写成 +，vol01 751 条按反号搬了一遍（2026-09-20 实测「更脏 197」暴露），
+            # vol02 那天 top 没动（d=0）没露馅。
+            d = -int(round(top_delta[key]))
+            if dh == 0 and d == 0:
+                continue
+        else:
+            d = dh
+            if d == 0:
+                continue
         if abs(d) > a.max_shift:
             too_big.append((o["id"], d))
             continue
@@ -123,8 +159,10 @@ def main() -> int:
         else:
             same += 1
     print(f"验：平移后更干净 {better} / 更脏 {worse} / 不变 {same}")
-    for r in worse_rows[:15]:
-        print("   更脏:", r)
+    print("  更脏里带折线的:", sum(1 for r in worse_rows if r[5]), "/", len(worse_rows))
+    for r in worse_rows:
+        if not r[5]:
+            print("   更脏(无折线):", r)
 
     if not a.apply:
         print("\n（只看模式。确认无误后加 --apply 写回）")
@@ -143,15 +181,17 @@ def main() -> int:
         if d is None:
             continue
         ex = o["expected"]
-        ex["y"] = float(ex["y"]) + d
-        if "y_old" in ex and ex["y_old"] is not None:
-            ex["y_old"] = float(ex["y_old"]) + d
-        if "polyline" in ex and ex["polyline"]:
-            ex["polyline"] = [[x, y + d] for x, y in ex["polyline"]]
+        if d:
+            ex["y"] = float(ex["y"]) + d
+            if "y_old" in ex and ex["y_old"] is not None:
+                ex["y_old"] = float(ex["y_old"]) + d
+            if "polyline" in ex and ex["polyline"]:
+                ex["polyline"] = [[x, y + d] for x, y in ex["polyline"]]
         ex["col_h"] = hh[id(o)]
         o.setdefault("history", []).append(
             {"change": "reshift", "ts": now,
-             "why": f"Step2 列窗上界变动，坐标整体平移 {d:+d}px（reshift_cutline_gold.py）"})
+             "why": (f"Step2 列窗上界变动，坐标整体平移 {d:+d}px" if d else
+                     "列窗只有下界变了，y 不动、只更新 col_h") + "（reshift_cutline_gold.py）"})
         n += 1
     shard.write_text("\n".join(json.dumps(o, ensure_ascii=False) for o in lines) + "\n",
                      encoding="utf-8")
