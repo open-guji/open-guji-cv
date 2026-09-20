@@ -1003,6 +1003,63 @@ COMMANDS_V2 = {
 }
 
 
+WORKSPACE_HELP = ("工作区仓根（含 books/<book>.yaml、products/、cache/、output/）。**必填**——"
+                  "凡带 book 的命令都不再读 GUJI_WORKSPACE 环境变量兜底：那个变量漏设/设错都不报错，"
+                  "产物会静默写到别的工作区（2026-09-19 一天里两次栽在这上面）。")
+
+
+def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
+    return any(a.dest == "book" for a in sp._actions)
+
+
+def resolve_workspace(args, parser: argparse.ArgumentParser) -> Path | None:
+    """带 book 的命令：`--workspace` 必填、必须存在、必须有这册书的定义；解析结果写进
+    `GUJI_WORKSPACE` 供下游（`core.workspace.workspace_root` 及其之下一切）使用。
+
+    环境变量若已设且指向别处，以 `--workspace` 为准并提示——环境变量常是上一本书留下的。
+    """
+    if not hasattr(args, "book"):
+        return None
+    ws = getattr(args, "workspace", None)
+    if not ws:
+        parser.error("缺 -w/--workspace：跑真书必须显式给工作区，例如 "
+                     f"`-w D:/workspace/<book>-workspace`（books/{args.book}.yaml 所在的仓根）。"
+                     "不再读 GUJI_WORKSPACE 兜底。")
+    root = Path(ws).expanduser().resolve()
+    spec = root / "books" / f"{args.book}.yaml"
+    if not spec.exists():
+        parser.error(f"--workspace {root} 下没有 books/{args.book}.yaml——路径给错了，或这不是「{args.book}」的工作区")
+    import os
+    env = os.environ.get("GUJI_WORKSPACE")
+    if env and Path(env).expanduser().resolve() != root:
+        print(f"  ⚠️  GUJI_WORKSPACE={env} 与 --workspace 不同，以 --workspace 为准", file=sys.stderr)
+    os.environ["GUJI_WORKSPACE"] = str(root)
+    print(f"  工作区 {root}  册 {args.book}", file=sys.stderr)
+    return root
+
+
+def _with_workspace(handler, sp: argparse.ArgumentParser):
+    def run(args):
+        resolve_workspace(args, sp)
+        return handler(args)
+    run._workspace_wrapped = True     # type: ignore[attr-defined]
+    return run
+
+
+def install_workspace_option(sub: argparse._SubParsersAction) -> None:
+    """给每个带 book 的子命令加 `-w/--workspace`（必填，见 WORKSPACE_HELP），并把它的
+    处理函数包一层做校验。`register_subcommands` 末尾调用；两个入口（`guji` 与
+    `python -m open_guji_cv`）都经这里，幂等。"""
+    for name, sp in sub.choices.items():
+        handler = COMMANDS_V2.get(name)
+        if handler is None or not _needs_workspace(sp):
+            continue
+        # 参数每次都要加（每次调用建的是新的 parser 对象）；处理函数只包一层
+        sp.add_argument("-w", "--workspace", default=None, help=WORKSPACE_HELP)
+        if not getattr(handler, "_workspace_wrapped", False):
+            COMMANDS_V2[name] = _with_workspace(handler, sp)
+
+
 # ── parsers ──────────────────────────────────────────────────────────
 def _add_pages(p: argparse.ArgumentParser) -> None:
     import os
@@ -1278,6 +1335,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("id", nargs="?", default=None)
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("-f", "--follow", action="store_true", help="log：跟着刷")
+
+    install_workspace_option(sub)
 
 
 def main(argv: list[str] | None = None) -> None:

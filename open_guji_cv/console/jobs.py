@@ -57,6 +57,10 @@ class JobSpec:
     def argv(self) -> list[str]:
         cmd = [sys.executable, "-m", "open_guji_cv", "pipeline", self.pipeline, self.book,
                "--pages", self.pages]
+        if self.workspace:
+            # CLI 自 2026-09-20 起带 book 的命令必填 --workspace（不再读环境变量兜底）；
+            # 工单里的工作区就是那个值，环境变量那条线（_run）留着给还没改的旧脚本
+            cmd += ["--workspace", self.workspace]
         if self.from_step:
             cmd += ["--from", self.from_step]
         if self.to_step:
