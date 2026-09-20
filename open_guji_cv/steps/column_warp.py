@@ -18,7 +18,7 @@ from ..products.kinds.columns import BorderTrim, ColumnTriage, ColumnWindowRec, 
 from ..utils.column_triage import triage_column
 from ..utils.column_projection import (ColumnWindow, clean_column, column_profile,
                                        denoise_column, page_column_windows,
-                                       stamp_noise_density, warp_column)
+                                       refine_top_by_frame, stamp_noise_density, warp_column)
 
 
 class ColumnWarpParams(BaseModel):
@@ -94,7 +94,7 @@ def frame_residue(cleaned: np.ndarray, band: tuple[int, int],
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.4", unit="column",
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.5", unit="column",
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
@@ -109,6 +109,10 @@ class ColumnWarpStep(Step):
         borders: Borders = ctx.product("borders", page)
         wins = page_column_windows(borders.to_result(), body_pad=p.body_pad,
                                    bottom_pad=p.bottom_pad, head_pad=p.head_pad)
+        # 上界之上还看得见版框、框与上界之间夹着字墨的列：把上界提到框下沿
+        # （Step1 的整页直线落到真框之下时首字顶部整块不在列图里，见函数注释）
+        for win in wins:
+            refine_top_by_frame(gray, win)
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow

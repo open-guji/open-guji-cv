@@ -670,6 +670,67 @@ def page_column_windows(result: BorderDetectionResult,
     return out
 
 
+#: `refine_top_by_frame`（2026-09-20）：列窗上界之上再看这么多行找版框。
+TOP_REFINE_PROBE = 90
+#: 认框用满宽段——行墨占比 ≥ 此值且连续 ≥ TOP_REFINE_MIN_RUN 行。与 Step2 `frame_residue` /
+#: Step4 `FRAME_BAND_COV` 同一把尺（bxgb 1065 个削干净端口零误报；二/三 的横笔 ≤0.7 够不着）。
+TOP_REFINE_COV = 0.85
+TOP_REFINE_MIN_RUN = 3
+#: 框下沿离 top_y 至少这么多行才动（≤2 行是正常的贴框，别为几像素折腾）。
+TOP_REFINE_MIN_GAP = 3
+
+
+def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
+                        probe: int = TOP_REFINE_PROBE, cov: float = TOP_REFINE_COV,
+                        min_run: int = TOP_REFINE_MIN_RUN,
+                        min_gap: int = TOP_REFINE_MIN_GAP) -> float:
+    """列窗上界之上若还看得见**版框**（离上界 ≥ min_gap 行），把上界提到框的下沿。
+    返回上移的行数（0 = 没动）。
+
+    Step1 的上版框是整页一条直线；线拟合被首行字的顶边带偏时（bxgb p48/p54：整页首字
+    顶边齐平，投影上是一条比厚框更「尖」的峰），这条线落在**首行字的顶边**而不是框上，
+    离真框 12~22px。后果分两种，都是首字丢顶：
+    - 首字比上界高（二十/三 这类），顶部整块不在列图里；
+    - 首字顶边恰在上界，`column_border_trim` 见「贴着列图顶端的一条薄横」就按 a 档当框线
+      削掉 6~16 行——二 变一、三 变二、六 丢点、冢 丢宀（用户审阅标的首字 seg_defect 16 条，
+      13 条在这两页）。
+    第一版只在「框与上界之间夹着字墨」时才动，漏掉第二种。列图本来就该从框的内缘起，
+    框在上界之上多远都是错，所以只要看见框、离上界 ≥ min_gap 行就提；多出来的几行白
+    由 Step3 的候选/`trim` 的 c 档照常处理。全书实测只有 p48/p54 两页触发。
+
+    判据用满宽段（`TOP_REFINE_COV`），不用「像不像线」：二/三 的顶横再宽也到不了 0.85；
+    上界之上是页边，除了框没有别的满宽墨。只对普通列（`border_top_in_column == 0`、非抬头）
+    做，且只往上提、不往下推。下版框不需要镜像（探针全书 0 列，`BOTTOM_PAD` 早多开 40 行）。
+    """
+    if win.raised or win.border_top_in_column > 0.5 or win.top_y < probe:
+        return 0.0
+    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y)
+    if strip.ndim == 3:
+        strip = strip[:, :, 0]
+    if strip.shape[1] < 20:
+        return 0.0
+    rows = (strip[:, 6:-6] < 128).mean(axis=1)
+    full = rows >= cov
+    runs: list[tuple[int, int]] = []
+    a = None
+    for i, v in enumerate(list(full) + [False]):
+        if v and a is None:
+            a = i
+        if not v and a is not None:
+            if i - a >= min_run:
+                runs.append((a, i - 1))
+            a = None
+    if not runs:
+        return 0.0
+    fb = runs[-1][1]
+    delta = float(len(rows) - 1 - fb)
+    if delta < min_gap:
+        return 0.0
+    win.top_y -= delta
+    win.border_top_y = win.top_y
+    return delta
+
+
 def warp_page_columns(gray: np.ndarray, result: BorderDetectionResult,
                        denoise: bool = False, **window_kwargs
                        ) -> list[tuple[ColumnWindow, np.ndarray]]:
