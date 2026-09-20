@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { fetchStep9Reflow, fetchStep9Render } from '../api/step9'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { ProgressBoard } from '../components/step9/ProgressBoard'
 import type { Step9ReflowResponse, Step9RenderResponse } from '../api/step9'
 
 const BASELINE_KEY_PREFIX = 'guji-step9-baseline:'
@@ -44,7 +45,7 @@ function StaleWarning({ items }: { items: string[] }) {
   )
 }
 
-// Step9 结果整理：9.1 坐标转字符位 ＋ 9.2 可阅读排版（2026-09-12）。
+// Step9 结果整理：9.0 待办看板 ＋ 9.1 坐标转字符位 ＋ 9.2 可阅读排版（2026-09-12 / 09-20）。
 // 体检表、与整理本比对还没做，见 overview 仓 Step9-结果整理/README.md §二。
 //
 // **不进管线**：这不是"选一页看它的产物"（那是 ProductViewer 的活，Step9
@@ -52,6 +53,9 @@ function StaleWarning({ items }: { items: string[] }) {
 // 明确要求"允许审阅一半时直接输出看看效果"，所以每次点"生成"都是当场
 // join Step3+Step7 产物现算，不落盘、不进队列，也没有进度条（页数大就会等
 // 得久，别选整册）。
+//
+// 9.0 看板是独立卡片：打开即读、页范围一改就跟着读、有刷新按钮（用户 2026-09-20）；
+// 它是看板不是闸，有待办也照样能跑 9.1/9.2。
 //
 // 两个视图（tab）各自独立触发，不强制"先跑9.1才能跑9.2"——9.2 内部会
 // 自己重新调用 render_page，两条链路互不依赖对方是否已经点过"生成"。
@@ -107,13 +111,15 @@ export function Step9Page() {
       <div className="card">
         <h2>Step9 结果整理 <span className="muted">现场渲染，不进管线</span></h2>
         <p className="muted">
-          9.1 把 Step3（版面结构）＋ Step7（定字结果）拼成 guji-markdown 文本；
+          9.0 看板列出页范围内还挂着的待办；9.1 把 Step3（版面结构）＋ Step7（定字结果）拼成 guji-markdown 文本；
           9.2 在此基础上取消版式记号、按规则分段，拼成可阅读的横排文本。
           审阅还没全部完成时也能用——挑几页现看效果，不影响整册流程。
         </p>
       </div>
 
       <PageRangeSelector book={book} stepId="step9" value={pageSel} onChange={setPageSel} />
+
+      <ProgressBoard book={book} pages={pageSel} />
 
       <div className="tabs">
         <button className={view === 'render' ? 'active' : ''} onClick={() => setView('render')}>

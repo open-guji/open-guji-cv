@@ -24,6 +24,10 @@ class ManifestEntry:
     elapsed: float = 0.0
     status: str = "ok"
     error: str | None = None
+    self_hash: str | None = None
+    """本步自身的指纹（版本 + 参数 + 代码 + 册配置，**不含上游**；2026-09-20，
+    `engine.self_hash`）。格级复用（`core/reuse.py`）拿它判「这一步自己没变、只是
+    上游变了」——只有这种情况才允许把旧记录搬过来。老条目没有这个字段 → 不复用。"""
     invalidated: str | None = None
     """显式失效理由（2026-09-13）。指纹只认「代码 / 参数 / 上游产物」三样，人裁
     不在里面——一条切线裁决落定后该页 Step3 该重跑，却没有任何指纹会变。这里给

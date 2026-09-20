@@ -149,3 +149,37 @@ table.jobs tr.sel { background: var(--indigo-soft); }
   line-height: 1.45;
   color: #a8342a;
 }
+
+/* ── Step9 · 9.0 待办看板（components/step9/ProgressBoard.tsx）── */
+.pb-head { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .7rem; }
+.pb-head h2 { margin: 0; }
+.pb-spacer { flex: 1; }
+.pb-at { font-variant-numeric: tabular-nums; }
+.pb .ghost { border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: var(--r);
+  padding: .25rem .7rem; font-size: .82rem; cursor: pointer; }
+.pb .ghost:disabled { color: var(--mute); cursor: default; }
+.pb-err { color: var(--zhu); font-size: .85rem; margin: 0 0 .6rem; }
+.pb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; margin-bottom: .7rem; }
+.pb-tile { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r); padding: .55rem .7rem .5rem; }
+.pb-tile-dim { opacity: .7; }
+.pb-tile-label { font-size: .74rem; color: var(--mute); letter-spacing: .01em; }
+.pb-tile-value { font-size: 1.45rem; font-weight: 600; line-height: 1.25; margin-top: .1rem; }
+.pb-ochre { color: var(--ochre); }
+.pb-zero { color: var(--faint); font-weight: 400; }
+.pb-note { font-size: .85rem; margin: 0 0 .6rem; padding: .4rem .6rem; border-radius: var(--r); }
+.pb-note code { font-family: var(--mono); font-size: .8rem; }
+.pb-note-ochre { background: var(--ochre-soft); color: var(--ochre); }
+.pb-note-ok { background: var(--ok-soft); color: var(--ok); }
+.pb-scroll { max-height: 22rem; overflow: auto; border: 1px solid var(--rule); border-radius: var(--r); }
+.pb-table { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.pb-table th, .pb-table td { padding: .28rem .55rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.pb-table th { position: sticky; top: 0; background: var(--paper-2); color: var(--mute); font-weight: 500; font-size: .76rem; }
+.pb-table tbody tr:last-child td { border-bottom: none; }
+.pb-table tbody tr:hover td { background: var(--paper); }
+.pb-table .pb-left { text-align: left; width: 100%; }
+.pb-table .pb-dim { color: var(--mute); }
+.pb-page { font-family: var(--mono); color: var(--ink-2); }
+.pb-n { font-weight: 600; }
+.pb-chip { display: inline-block; background: var(--ochre-soft); color: var(--ochre); border-radius: 999px;
+  padding: .05rem .55rem; font-size: .76rem; font-family: var(--mono); }
+.pb-foot { margin: .6rem 0 0; }

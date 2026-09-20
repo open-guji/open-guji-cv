@@ -90,6 +90,10 @@ class OcrCandidatesStep(Step):
                          for cc in chars.columns])}
 
         from ..clustering.candidates import traditional_candidates
+        # 格级复用（core/reuse.py）：本步没变、只是上游重写了时，几何没动的格搬旧记录。
+        from ..core.reuse import cell_reuse, log_reuse
+        reuse = cell_reuse(ctx, self, page, "ocr_candidates")
+        n_reused = n_total = 0
         out: list[ColumnOcr] = []
         for cc in chars.columns:
             if not cc.ok:
@@ -98,6 +102,11 @@ class OcrCandidatesStep(Step):
             recs: list[OcrRec] = []
             for r in cc.chars:
                 if r.cell_type != "char" or not r.patch_key:
+                    continue
+                n_total += 1
+                if r.id in reuse:
+                    recs.append(reuse[r.id])
+                    n_reused += 1
                     continue
                 try:
                     img = ctx.image("char_patch", r.patch_key)
@@ -116,6 +125,7 @@ class OcrCandidatesStep(Step):
                 recs.append(OcrRec(id=r.id, slot=r.slot, sub=r.sub, engine=engine,
                                    topk=[(c, round(float(v), 4)) for c, v in topk]))
             out.append(ColumnOcr(col=cc.col, ok=True, chars=recs))
+        log_reuse(ctx, self, page, n_reused, n_total)
         return {"ocr_candidates": PageOcr(page=page, engine=p.engine, columns=out)}
 
 

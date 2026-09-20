@@ -402,7 +402,8 @@ def glyphdb_recrop(events, **kw) -> ConsumeResult:
 
 def crop_exclude(events, list_path: str = "", dry_run: bool = False,
                  **kw) -> ConsumeResult:
-    """`seg_defect` / `not_a_char` 事件 → 追加进 `config/crop_exclusions.jsonl`。
+    """`not_a_char` / `damaged` 事件 → 追加进 `config/crop_exclusions.jsonl`。
+    `seg_defect` 自 2026-09-20 起**不进名单**（见下面那段注释：切坏与否交给 Step7 准入闸）。
 
     2026-09-05 补的缺口：此前人在卡片上点「有噪声」「字形不完整」「非字」，
     事件只落进 `char-segmentation/instances` 金标，**没有任何东西把它写进排除
@@ -430,13 +431,18 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
             # `guess`（最像的那个字）只进金标与文本层的括注，不进库：形都不全，
             # 拿它当范本会把破损形钉成那个字的刻例。
             hits.append((e, "damaged", "damaged"))
-        elif (e.kind == "confirm" and p.get("v") == "seg_defect"
-              and p.get("quality") not in (None, "clean")):
-            # quality=="clean" 是「这块图没毛病」——随机层裁决台（Step4）把 clean
-            # 也算作一档正常裁决（不像旧的定向富集页只出可疑样本），不能落进
-            # 排除名单（2026-09-11/12 两次实测都复现：cell_shrink 随机层批次
-            # 把 clean 也写进了 crop_exclusions.jsonl，是这里没挡的缺口）。
-            hits.append((e, p["quality"], "seg_defect"))
+        elif e.kind == "confirm" and p.get("v") == "seg_defect":
+            # **seg_defect 不再进排除名单**（2026-09-20 用户定）。切坏/带残留的图块
+            # 该不该进库，交给 Step7 准入闸判，名单只收「不是字」与「原刻残」。
+            # 依据：bxgb 名单 131 条 seg_defect 全是真字（「舉手一揖」的 手），被 9.1
+            # 当非字吃掉；复核后放出 127 条，准入闸自动放行 95 条**与整理本全一致**、
+            # 挡下 32 条送人审——闸本来就分得开，名单在这里只是把真字藏起来。
+            # 事件仍照常落 `char-segmentation/instances` 金标（quality 四分类给切分
+            # 评测用），只是不再写这份名单。旧名单里的存量用
+            # `scripts/apply_exclusion_recheck.py` 复核后撤。
+            # （此前这里还挡 quality=="clean"——Step4 随机层把 clean 也当一档裁决，
+            # 2026-09-11/12 曾把 clean 写进名单；现在整档不写，那条护栏一并失效。）
+            continue
     res.skipped = len(events) - len(hits)
     if not hits:
         return res

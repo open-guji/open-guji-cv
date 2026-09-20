@@ -94,6 +94,11 @@ class RunContext:
         #: 不传就按册的 edition 选默认管线（`core.pipeline.default_pipeline_id`）——
         #: 控制台 / CLI 那些不经 Engine 直接建 RunContext 的调用点不用改。
         self._pipeline = pipeline
+        #: 格级复用开关（`core/reuse.py`）。环境变量 `GUJI_NO_REUSE=1` 关掉——用环境
+        #: 变量而不是 Step 参数，是因为参数进指纹，加一个参数会让全书产物过期；
+        #: 也不走 Engine 的形参，并行 worker 自己建 ctx、拿不到 Engine。
+        import os as _os
+        self.reuse_enabled = _os.environ.get("GUJI_NO_REUSE") != "1"
 
     @property
     def pipeline(self):

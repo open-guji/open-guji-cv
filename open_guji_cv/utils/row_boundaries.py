@@ -340,8 +340,20 @@ INK_LAM = 0.8
 #: 就整体放宽，等于拿一列的收益赌其余列的先验，所以仍限定在勾选列。
 NONUNIFORM_LAM = 0.08
 
-CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")
-"""**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
+CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b", "jiazhu_solo")
+"""`jiazhu_solo`（2026-09-20 加）＝**單行小注**：小字只占列宽右半、左半空着
+（bxgb 给人名作注的版式，`jiazhu_split.solo_notes`）。它**不是** `jiazhu_a`
+——此前借 `jiazhu_a` 的壳存（当成"只有 a 半的段"），三处下游都因此对不上：
+`Cell.sub` 给 `"a"`，而 Step4 起的记录（`CharRec`→`AdmitRec`）一律 `sub=None`
+（`cell_shrink` 把半宽格合成满宽格再交 extractor 重判，extractor 没有單行判据），
+于是 9.1 的 join 78 格查空报"产物过期"、字流证人对齐的 OCR 锚按 `(slot, sub)`
+配不上（bxgb 全书 78 个單行格没有一条 witness 标签）。單行注本来就是一个字、
+照 slot 顺序**就地读**，`sub=None` 才是对的记法。
+所以它自成一类：`sub` 为 None（不进 a/b 配对与段读序），`x0/x1` 记右半那截，
+`gap_center` 记小注左缘。**只有 a 半的雙行段尾（`adopt_run_tails` 的
+`tail_a`）仍是 `jiazhu_a`**——那是段的一部分，读序要跟段走，与單行注是两回事。
+
+**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
 它们都是字，按坐标来区分位置」）。「抬头」不是一种跟"字/空白/夹注"并列的
 内容类型——它是同一个字的**位置**信息（顶边有没有伸到版框线以上），跟
 "这一格里是什么"是两个维度，硬塞进同一个 `kind` 枚举会让分类互相打架
@@ -370,7 +382,8 @@ class Cell:
       `slot` 相同、`kind` 分别是 `jiazhu_a`/`jiazhu_b`。
     - `x0/x1`：正常格是整个内容窗口（界行已剥掉）；夹注半格是各自那半边——
       `jiazhu_a` = 缝右（`[gap_center, x_hi]`），`jiazhu_b` = 缝左。
-      **a 是右子列、先读**（双行小注先右行后左行）。
+      **a 是右子列、先读**（双行小注先右行后左行）。單行小注 `jiazhu_solo`
+      也只占右半（`[小注左缘, x_hi]`），但**独立成格、不配对**，`sub` 为 None。
     - `order`：本列的阅读序，从 1 开始。正文格按 slot 升序；连续夹注段整体
       插在段位上，段内先 a 全部、再 b 全部（见 `reading_order`）。
     - `gap_center`：夹注格的缝中心 x（a/b 两半共用同一个值），非夹注为 None。
@@ -405,7 +418,8 @@ class Cell:
 
     @property
     def sub(self) -> str | None:
-        """夹注半格的 `"a"`/`"b"`，非夹注为 None（对齐生产 CharInstance.sub）。"""
+        """夹注半格的 `"a"`/`"b"`，非夹注为 None（对齐生产 CharInstance.sub）。
+        `jiazhu_solo` 也是 None——它不参与 a/b 配对，读序按 slot 就地排。"""
         if self.kind == "jiazhu_a":
             return "a"
         if self.kind == "jiazhu_b":
@@ -1327,9 +1341,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
-    `kind` 判定的优先级：空白 > 夹注 > 正文字。空白格不参与夹注判据（生产
-    同口径：只在 char 格上量缝），夹注段的段端收编也只收非空白格。`raised`
-    在这条优先级之外单独算，任何 `kind` 的格都可能是 `raised=True`。
+    `kind` 判定的优先级：空白 > 雙行夹注段（含段尾）> 單行小注 > 正文字。
+    空白格不参与夹注判据（生产同口径：只在 char 格上量缝），夹注段的段端收编
+    也只收非空白格；單行小注只在不属于雙行段的格上找。`raised` 在这条优先级
+    之外单独算，任何 `kind` 的格都可能是 `raised=True`。
     """
     if col_gray.ndim == 3:
         col_gray = col_gray[:, :, 0]
@@ -1367,6 +1382,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
+    solo: dict[int, float] = {}
     suspect: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
@@ -1381,11 +1397,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
-        # 只在非空白、且不属于双行段的格上找；找到的一律只发 a 半。
+        # 只在非空白、且不属于双行段的格上找。**不并进 `runs`/`tail_a`**——
+        # 2026-09-20 前是并进去当"只有 a 半的段"发 `jiazhu_a`，下游三处因此
+        # 对不上（见 `CELL_KINDS` 的说明），现在自成 `jiazhu_solo` 一类。
+        # 顺序上 `adopt_run_tails` 在前：雙行段下一格若是右半小字，一律是段的
+        # 奇数字末行（7a+6b 必然一体）——用户 2026-09-20 定：不会有两段"独立"
+        # 的注紧挨着，所以这里不存在"單行注被当段尾收走"的歧义。
         solo = jiazhu_split.solo_notes(
             {p: patches[p] for p in nonblank}, runs, ruler, ink_threshold)
-        runs.update(solo)
-        tail_a |= set(solo)
 
     cells: list[Cell] = []
     for k in range(n_slots):
@@ -1393,6 +1412,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         slot = _pos_to_slot(pos, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
         raised = y0 < border_top - raise_tol   # 纯几何量，跟 kind 判定分开算
+        if pos in solo:
+            # 單行小注：一格只发一个 Cell，占 [小注左缘, x_hi]，sub 为 None。
+            # `solo_notes` 的 SOLO_MIN_INK(600) 远高于 HALF_MIN_INK，这道闸
+            # 理论上不触发；真触发就退回正文格，别像段尾那样整格不发。
+            cx_local = solo[pos]
+            cxi = int(round(cx_local))
+            half = patches[pos][:, cxi:]
+            if int((half < ink_threshold).sum()) >= jiazhu_split.HALF_MIN_INK:
+                cells.append(Cell(slot=slot, y0=y0, y1=y1,
+                                  x0=float(x_lo + cxi), x1=float(x_hi),
+                                  kind="jiazhu_solo", gap_center=float(x_lo) + cx_local,
+                                  raised=raised,
+                                  ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
+                continue
         if pos in runs:
             cx_local = runs[pos]
             cx = float(x_lo) + cx_local

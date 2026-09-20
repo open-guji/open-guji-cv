@@ -645,9 +645,13 @@ def test_route_inventory():
     slot_count_review / border_review），新增裁决台就要再抄一遍。
     去重按 `(question, key)` 而非 key——切线与定字的 key 形状完全相同
     （`bxgb:39:19:12`），只按 key 去重会把没裁过的字位误当已裁。84 → 85。
+
+    2026-09-20 Step9-9.0 进度复查（用户：「在第九步做一个总进度复查——检查页范围内
+    还有哪些待办」）：新增 `GET /api/step9/progress/{book}`，每页报过期/待审/切线/
+    阙文/非字/坏列。**是看板不是闸**，有待办也照样能跑 9.1/9.2。85 → 86。
     """
     got = sorted(_endpoints())
-    assert len(got) == 85, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 86, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -786,7 +790,8 @@ EXPECTED_ROUTES = [
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
     "GET /api/verdicts",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
-    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/reflow/{book}",
+    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/progress/{book}",
+    "GET /api/step9/reflow/{book}",
     "GET /api/step9/render/{book}", "GET /api/steps", "GET /api/throughput",
     "GET /api/variants/book", "GET /api/variants/groups",
     "GET /v1/", "GET /{full_path:path}",

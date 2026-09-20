@@ -257,6 +257,10 @@ class GlyphMatchStep(Step):
             # 播种与匹配必须用同一把尺子，否则库被一把尺子筛、又被另一把尺子查。
             return _normalize_patch(img, stroke_width=p.norm_stroke, isotropic=punct)
         chars: PageChars = ctx.product("char_index", page)
+        # 格级复用（core/reuse.py）：本步没变、只是上游重写了时，几何没动的格搬旧记录。
+        from ..core.reuse import cell_reuse, log_reuse
+        reuse = cell_reuse(ctx, self, page, "glyph_match")
+        n_reused = n_total = 0
         out: list[ColumnMatch] = []
         for cc in chars.columns:
             if not cc.ok:
@@ -265,6 +269,11 @@ class GlyphMatchStep(Step):
             recs: list[MatchRec] = []
             for r in cc.chars:
                 if r.cell_type != "char" or not r.patch_key:
+                    continue
+                n_total += 1
+                if r.id in reuse:
+                    recs.append(reuse[r.id])
+                    n_reused += 1
                     continue
                 try:
                     img = ctx.image("char_patch", r.patch_key)
@@ -305,6 +314,7 @@ class GlyphMatchStep(Step):
                     guard=m.guard, n_verified=int(m.n_verified), via=via,
                     cand_variants=cand_variants))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
+        log_reuse(ctx, self, page, n_reused, n_total)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
 

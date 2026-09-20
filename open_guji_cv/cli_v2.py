@@ -941,6 +941,18 @@ def cmd_collate(args) -> None:
     print(f"  未锚定页：{un}" + (f" · 数据版本不同步 {len(doc['stale'])} 处" if doc["stale"] else ""))
 
 
+def cmd_progress(args) -> None:
+    """Step9-9.0 进度复查：页范围内每页还挂着哪些待办（看板，不是闸）。口径见 `report/progress.py`。"""
+    from .core.book import load_book
+    from .report.progress import format_table, page_progress
+    bk = load_book(args.book)
+    doc = page_progress(args.book, bk.resolve_pages(args.pages))
+    if args.json:
+        _out(doc)
+        return
+    print(format_table(doc))
+
+
 def cmd_runs(args) -> None:
     """控制台的任务队列：list | show | cancel | log。
 
@@ -999,6 +1011,7 @@ COMMANDS_V2 = {
     "rare": cmd_rare,
     "variants": cmd_variants,
     "collate": cmd_collate,
+    "progress": cmd_progress,
     "runs": cmd_runs,
 }
 
@@ -1329,6 +1342,11 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--console", default="http://127.0.0.1:8640",
                    help="HTML 里深链指向的控制台地址；空串则不出链接")
     p.add_argument("--no-html", action="store_true", help="只出 JSON")
+
+    p = sub.add_parser("progress", help="[v2] Step9-9.0 进度复查：页范围内每页还挂着哪些待办（看板，不拦 9.1/9.2）")
+    p.add_argument("book")
+    p.add_argument("--pages", default="all", help="页表达式；默认全书")
+    p.add_argument("--json", action="store_true", help="出 JSON（与控制台 /api/step9/progress 同形）")
 
     p = sub.add_parser("runs", help="[v2] 控制台任务：list | show | cancel | log")
     p.add_argument("action", choices=["list", "show", "cancel", "log"])

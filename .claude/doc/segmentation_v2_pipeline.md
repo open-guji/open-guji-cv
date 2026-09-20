@@ -1436,7 +1436,7 @@ Step3 之外**——`p56c1/c2`、`p8c13` 被 L1c/L2 拒掉、Step3 根本没跑�
 **输出（已定版）**（`open_guji_cv/utils/row_boundaries.py`）：
 
 ```python
-CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")   # 不含 "raised"，见下
+CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b", "jiazhu_solo")   # 不含 "raised"，见下；jiazhu_solo 2026-09-20 加
 
 @dataclass
 class Cell:
@@ -1532,7 +1532,12 @@ y 向下），沿用 Step 2 的约定——列图矫正之后已经不是页面�
 跨度**比正文还窄**、方向相反，`SPAN_T` 调不出来；孤立成格，`MIN_RUN` 也
 拦住。所以它走 `jiazhu_split.solo_notes()`，与 `gap_center`/`link_runs`
 **并列、不复用**，三条判据缺一不可（跨度 <0.62 ∧ 右半墨占比 >0.93 ∧
-总墨 ≥600px），产出**只发 a 半**（左半无墨，不发 b 格）。
+总墨 ≥600px），产出**自成一类 `kind="jiazhu_solo"`、`sub=None`**，占
+`[小注左缘, x_hi]`（2026-09-20 起；此前借 `jiazhu_a` 的壳"只发 a 半"，
+`sub='a'` 与 Step4 起一律 `sub=None` 的记录对不上——9.1 join 78 格假 stale、
+字流证人对齐的 OCR 锚配不上。單行注读序按 slot **就地**，与段无关。雙行段的
+奇数字段尾 `tail_a` 仍是只有 a 半的 `jiazhu_a`，那是段的一部分；雙行段下一格
+的右半小字一律是段尾——用户定：不会有两段"独立"的注紧挨着，7a+6b 必然一体）。
 标定与三条负结果见 `jiazhu_split.py` 的 `SOLO_*` 常量注释与
 `.claude/doc/jiazhu_defects_for_segmentation.md` 型 3。
 
@@ -1543,7 +1548,7 @@ y 向下），沿用 Step 2 的约定——列图矫正之后已经不是页面�
 `Cell.raised` 是**几何标记**（这一格的顶边伸到 `border_top` 以上了），
 **不是 `kind`**（2026-09-01 改，用户定：「不需要区分抬头和普通字，它们
 都是字，按坐标来区分位置」——`kind` 现在只有 `char`/`blank`/`jiazhu_a`/
-`jiazhu_b` 四种，抬头字的 `kind` 仍是 `"char"`，只是 `raised=True`）。这条
+`jiazhu_b`/`jiazhu_solo` 五种，抬头字的 `kind` 仍是 `"char"`，只是 `raised=True`）。这条
 改动是从「Step3 格类型试点金标」（39 格试标）里踩出来的：单格裁紧图上
 根本看不出"顶边有没有伸到版框线以上"这种相对位置信息，人标的时候只能
 按字面意思判断"这是不是字"，两格真抬头字（vol01/33 col2 的"天""而"）都
