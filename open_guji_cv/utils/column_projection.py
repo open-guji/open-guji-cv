@@ -678,6 +678,12 @@ TOP_REFINE_COV = 0.85
 TOP_REFINE_MIN_RUN = 3
 #: 框下沿离 top_y 至少这么多行才动（≤2 行是正常的贴框，别为几像素折腾）。
 TOP_REFINE_MIN_GAP = 3
+#: 探针要越过 top_y 往下再看这么多行（2026-09-19）。**不看下面就会认错框**：
+#: Step1 把 top_y 正正切在真框上时，真框被探针窗口的下边界腰斩、凑不满 MIN_RUN，
+#: 于是函数转而抓住更上面那条**外框/上欄線**，把 top_y 提到它下沿——真框反被圈进列图。
+#: vol02 实测被上移的列里 47% 属于这种（Step1 本来就是对的）。越过下界多看几行，
+#: 真框就能完整成段、被认出来，`_frame_covers_top` 据此否决这次上移。
+TOP_REFINE_BELOW = 6
 
 
 def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
@@ -704,13 +710,19 @@ def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
     """
     if win.raised or win.border_top_in_column > 0.5 or win.top_y < probe:
         return 0.0
-    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y)
+    # 往下多看 TOP_REFINE_BELOW 行：真框正压在 top_y 上时，只看上方会把它腰斩，
+    # 反而去抓更上面的外框（见 TOP_REFINE_BELOW 的注释）。
+    below = int(TOP_REFINE_BELOW)
+    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y + below)
     if strip.ndim == 3:
         strip = strip[:, :, 0]
     if strip.shape[1] < 20:
         return 0.0
     rows = (strip[:, 6:-6] < 128).mean(axis=1)
     full = rows >= cov
+    # `top_y` 已经落在框上（或框刚好在它下面一点）——Step1 是对的，别动。
+    if bool(full[max(0, probe - min_run):].any()):
+        return 0.0
     runs: list[tuple[int, int]] = []
     a = None
     for i, v in enumerate(list(full) + [False]):
@@ -722,8 +734,12 @@ def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
             a = None
     if not runs:
         return 0.0
+    # 只认 top_y 之上的段（下面那几行是为了看清真框才多取的，不能当搬迁目标）。
+    runs = [r for r in runs if r[1] < probe]
+    if not runs:
+        return 0.0
     fb = runs[-1][1]
-    delta = float(len(rows) - 1 - fb)
+    delta = float(probe - 1 - fb)
     if delta < min_gap:
         return 0.0
     win.top_y -= delta
