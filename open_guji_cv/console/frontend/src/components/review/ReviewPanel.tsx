@@ -18,6 +18,9 @@ export interface Verdict {
   ts?: number
   dwell?: number
   noGlyphLib?: boolean
+  // done === 'damaged' 时：人看图后「最像的那个字」，可空。
+  // **不是 shape**——shape 会进字形库，guess 只进金标与文本层的括注 □（？塊）。
+  guess?: string
 }
 
 const PREFETCH_CHUNK = 24
@@ -185,6 +188,15 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     bump()
   }
 
+  function setGuess(i: number, guess: string) {
+    const c = cards[i]
+    if (!c) return
+    const v = verdicts.current[c.id] || { shape: '', reading: '', done: '' }
+    verdicts.current[c.id] = { ...v, guess }
+    touched.current.add(c.id)
+    bump()
+  }
+
   function setNoGlyphLib(i: number, checked: boolean) {
     const c = cards[i]
     if (!c) return
@@ -229,6 +241,12 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 错的是**每次都把没改的也写进去**。`touched` 由裁决动作登记，见 `mark()`。
       if (!touched.current.has(id)) continue
       if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue }
+      if (v.done === 'damaged') {
+        // 原图破损：字形不可辨，文本层出 □。`guess` 是括注用的「最像哪个字」，
+        // 可空；不进字形库（后端 glyphdb_admit 只认 v==='confirm'）。
+        rows.push({ id, v: 'damaged', guess: v.guess || '', client_ts: v.ts, dwell_ms: v.dwell })
+        continue
+      }
       if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue }
       if (v.done === 'truncated' || v.done === 'contaminated') {
         rows.push({ id, v: 'seg_defect', quality: v.done, shape: v.shape || '', reading: readingOf(v), client_ts: v.ts, dwell_ms: v.dwell })
@@ -298,6 +316,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       else if (ev.key === 's' || ev.key === 'S') { setVerdict(cur, '', '', 'skip'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', '', 'truncated'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'c' || ev.key === 'C') { setVerdict(cur, '', '', 'contaminated'); focus(cur + 1); ev.preventDefault() }
+      // D = 原图破损。**不自动跳下一张**：人多半要接着在「最像」框里填一个字。
+      else if (ev.key === 'd' || ev.key === 'D') { setVerdict(cur, '', '', 'damaged'); ev.preventDefault() }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -336,7 +356,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       )}
       <div className="rv-help">
         键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>C</b> 有噪声 ·
-        <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡。
+        <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损 · <b>←/→</b> 翻卡。
         字一律按图上刻的录。只有 <b>己 / 已 / 巳</b> 例外——它们史上本就混用，
         选中后会多出一个"文意"框，字形填图上的、文意填该读的；其余字不必区分。
       </div>
@@ -354,6 +374,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               onFocus={() => focus(i)}
               onSet={(shape: string, reading?: string, done?: string) => setVerdict(i, shape, reading, done)}
               onSetNoGlyphLib={(checked: boolean) => setNoGlyphLib(i, checked)}
+              onSetGuess={(g: string) => setGuess(i, g)}
               onToggleCtxImg={() => toggleCtxImg(i)}
               onFetchRare={(force?: boolean) => fetchRareFor(i, force)}
               contextImgSrc={contextImgUrl(book, c.page, c.col, c.slot)}

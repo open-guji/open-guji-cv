@@ -68,6 +68,11 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
             out[e.target.key] = {"shape": "", "reading": "", "done": "non"}
         elif v == "skip":
             out[e.target.key] = {"shape": "", "reading": "", "done": "skip"}
+        elif v == "damaged":
+            # 原图破损（2026-09-19）：`guess` 要一并读回，否则刷新后括注里的
+            # 「最像哪个字」凭空消失，人以为没填过、又填一遍。
+            out[e.target.key] = {"shape": "", "reading": "", "done": "damaged",
+                                 "guess": p.get("guess") or ""}
         elif v == "seg_defect":
             out[e.target.key] = {"shape": p.get("shape") or "",
                                  "reading": p.get("reading") or "",

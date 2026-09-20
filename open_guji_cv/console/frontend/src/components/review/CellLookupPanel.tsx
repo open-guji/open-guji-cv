@@ -75,6 +75,7 @@ export function CellLookupPanel({ book }: { book: string }) {
           onFocus={() => {}}
           onSet={() => {}}
           onSetNoGlyphLib={() => {}}
+          onSetGuess={() => {}}
           onToggleCtxImg={() => setCtxOpen((m) => ({ ...m, [i]: !m[i] }))}
           onFetchRare={() => {}}
           contextImgSrc={contextImgUrl(book, c.page, c.col, c.slot)}
