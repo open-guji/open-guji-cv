@@ -697,6 +697,40 @@ def mask_frame_bars_outside(strip: np.ndarray,
     return out
 
 
+def _seam_span(seam) -> tuple[float, float] | None:
+    """折线的 y 极值；不是折线（None / 空）返回 None。"""
+    if not seam:
+        return None
+    ys = [float(v) for v in seam if v is not None]
+    return (min(ys), max(ys)) if ys else None
+
+
+def _cell_top(cell: dict) -> float:
+    """取块窗口的上边界：**有折线就把折线的最高点也裁进来**，否则用矩形 `y_top`。
+
+    2026-09-20 实测（bxgb p31c9 / p45c2 末格「十」）：Step3 选中折线后写进
+    `seam_top`/`seam_bottom`，而矩形 `y_top`/`y_bottom` 仍是 DP 那条直线——两者
+    可以差几十像素（1434 vs 1462）。取块窗口此前只读矩形边界，于是从直线起裁，
+    「十」的横笔整条落在窗口**之外**，图块只剩一竖（人裁标成「字形不完整」）。
+    `mask_outside` 救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
+    没裁进来的墨**。
+
+    窗口取两者并集（折线最高点与矩形上界取小）。折线外的墨随后照旧由
+    `mask_outside` 抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
+    与「格界严格信任 Step3」那条纪律不冲突。
+    """
+    top = float(cell["y_top"])
+    span = _seam_span(cell.get("seam_top"))
+    return min(top, span[0]) if span else top
+
+
+def _cell_bottom(cell: dict) -> float:
+    """取块窗口的下边界，与 `_cell_top` 对称：有折线取折线最低点与矩形下界的大者。"""
+    bot = float(cell["y_bottom"])
+    span = _seam_span(cell.get("seam_bottom"))
+    return max(bot, span[1]) if span else bot
+
+
 def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float) -> np.ndarray:
     """抹掉图块上下 pad 带里**不伸进格内**的连通体——那是邻字伸过来的笔尖（2026-09-19）。
 
@@ -2326,9 +2360,11 @@ class CharExtractor:
             left_delta = sx0 - sx0_widened
             sx0 = sx0_widened
             pad_y = cell_h_ref * self.padding_ratio
-            sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
+            # 条带也要按折线取（2026-09-20）：折线可能比矩形 y_top 高、比 y_bottom 低，
+            # 条带按矩形截断的话，`_cell_top` 把窗口开上去也没用——那几行根本不在条带里。
+            sy0 = int(round(max(0.0, min(_cell_top(c) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
-                               max(float(c["y_bottom"]) for c in cells) + pad_y)))
+                               max(_cell_bottom(c) for c in cells) + pad_y)))
             if frame_bottom_hint is not None:
                 # 条带一直开到下版框（2026-09-08 用户实审 vol01/60 7:21「畜」、
                 # vol02/71 7:21「殆」）：末字与下框贴近/粘连时 DP 的末格下界落在字
@@ -2416,8 +2452,8 @@ class CharExtractor:
 
             col_entries: list[tuple[int, float | None, CharInstance]] = []
             local = [(int(c["index"]),
-                      float(c["y_top"]) - sy0,
-                      float(c["y_bottom"]) - sy0) for c in cells]
+                      _cell_top(c) - sy0,
+                      _cell_bottom(c) - sy0) for c in cells]
             if self.frame_guard:
                 # 版框线换算到**条带坐标**：grid 的 frame_top/frame_bottom 是列图
                 # 坐标，条带从列图的 sy0 行起裁，所以减去 sy0。

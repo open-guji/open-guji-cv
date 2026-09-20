@@ -96,3 +96,21 @@ def test_still_moves_when_only_the_upper_frame_exists():
     d = refine_top_by_frame(_page(), win)
     assert d > 0
     assert abs(win.top_y - 112) <= 2, win.top_y
+
+
+def test_outer_run_thickness_counts_rows_not_endpoint_gap():
+    """外框墨条厚度按**行数**算，不是端点之差——2026-09-19 vol02 实测的 off-by-one。
+
+    vol02 的上下外框只有 3~5px 厚（竖直外框 19~24px，`OUTER_RUN_MIN=4` 是按它标的）。
+    原来 `thick = offs[b]-offs[a]` 少算 1px，占 4 行的条算成 3、被 RUN_MIN 挡掉，
+    整册漏报几十页。
+    """
+    from open_guji_cv.utils.border_geometry import _outer_run, OUTER_INK_MIN
+    prof = np.zeros(40)
+    prof[20:24] = OUTER_INK_MIN + 0.2        # 占 20,21,22,23 共 4 行 => 厚 4px
+    offs = -np.arange(0, 40, 1.0)
+    r = _outer_run(prof, offs)
+    assert r is not None, "4 行厚的墨条应该认出来（端点之差只有 3，按行数是 4）"
+    prof3 = np.zeros(40)
+    prof3[20:23] = OUTER_INK_MIN + 0.2       # 3 行 => 厚 3px，仍应被挡
+    assert _outer_run(prof3, offs) is None

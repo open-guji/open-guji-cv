@@ -31,10 +31,17 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 
 ## Step3 与 Step7 对不上的格（`stale`）不静默兜底
 
-「Step7 有这个 (slot,sub) 但 Step3 cells 查不到」目前唯一已知成因是 Step3 局部
-重切后下游没跟上（`guji status` 会把这页标成"过期"）。2026-09-11 实测 vol01 p89
-col7 就是这样一个真实个例（全书 810 个夹注字位里只有它不匹配）。**不是 join
-逻辑错，但也不该被悄悄吃掉**——追加进 `stale` 由调用方统一报告。
+「Step7 有这个 (slot,sub) 但 Step3 cells 查不到」已知**两种**成因，别当成一种：
+
+1. **单行小字注**（`_lookup_cell` 认回来，**不记 stale**）：`【正己】`这类只占半列、
+   左半没字的人名注，Step3 按几何记 `sub='a'`、Step7 按「一个字」记 `sub=None`。
+   2026-09-19 实测 bxgb：78 条假 stale 全是这一型，100% 无例外；vol02 零例。
+2. **产物过期**：Step3 局部重切后下游没跟上（`guji status` 会把这页标成"过期"）。
+   2026-09-11 实测 vol01 p89col7 是这样一个真实个例（全书 810 个夹注字位里只有它）。
+
+只有第 2 种才追加进 `stale` 由调用方报告——**不是 join 逻辑错，但也不该被悄悄
+吃掉**。两种混报的代价是实打实的：报"产物过期"会让人去重跑 Step7，跑完一条
+不少，白费一轮。
 """
 from __future__ import annotations
 
@@ -104,8 +111,9 @@ def page_slots(store: ProductStore, book: str, page: int,
                stale: list[str] | None = None) -> list[SlotRec]:
     """一页的字位流，**按阅读顺序**（列升序，列内 `sort_by_reading`）。
 
-    `stale`：Step7 有记录但 Step3 cells 查不到的条目，格式 `p{page}col{col}:slot{n}{a|b}`，
-    追加进这个列表，不在这一层报告（见模块头）。
+    `stale`：Step7 有记录但 Step3 cells 真查不到的条目，格式
+    `p{page}col{col}:slot{n}{a|b}`，追加进这个列表，不在这一层报告（见模块头）。
+    **单行小字注那一型不算 stale**，由 `_lookup_cell` 认回来，见那个函数。
     """
     if stale is None:
         stale = []
@@ -128,17 +136,40 @@ def page_slots(store: ProductStore, book: str, page: int,
             continue
         by_key = cells_by_col.get(col_admit.col, {})
         for rec in sort_by_reading(col_admit.chars):
-            cell = by_key.get((rec.slot, rec.sub or ""))
+            cell = _lookup_cell(by_key, rec)
             if cell is None:
                 stale.append(f"p{page}col{col_admit.col}:slot{rec.slot}{rec.sub or ''}")
             out.append(_to_slot(book, page, col_admit.col, rec, cell))
     return out
 
 
+def _lookup_cell(by_key: dict[tuple[int, str], CellRec], rec: AdmitRec) -> CellRec | None:
+    """`(slot, sub)` 找 Step3 的格；找不到时认一次**单行小字注**再放弃。
+
+    单行小字注（`【正己】`这类人名夹注，只占半列、左半边没字）两边记法不一致：
+    Step3 按几何记成 `sub='a'`（实测 bxgb 全书 80 个此类格，相对列宽 x∈[0.5,1.0]，
+    跟真夹注的 a 半完全同位），Step7 按「这就是一个字」记成 `sub=None`。
+    `(slot,'')` 于是查空，2026-09-19 前会报 78 条假 stale。
+
+    Step3 的 `sub` 是**纯几何**的左右半判定，信息本来就全（用户 2026-09-19 指出），
+    所以这里直接认回来：`sub=None` 查不到就回查 `(slot,'a')`，且**仅当该 slot 没有
+    `b` 半**——有 b 半说明是真双行夹注，Step7 少了半边那是另一回事，不能混进来当
+    正常情况吃掉。认回来之后 `_to_slot` 会拿 `cell.kind`（`jiazhu_a`）定 kind，
+    9.1 就能照常出 `<…>` 记号，而不是把小字注平铺进正文。
+    """
+    cell = by_key.get((rec.slot, rec.sub or ""))
+    if cell is not None or rec.sub:
+        return cell
+    if (rec.slot, "b") in by_key:
+        return None                      # 真双行夹注缺了半边，是真不匹配
+    return by_key.get((rec.slot, "a"))
+
+
 def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None) -> SlotRec:
     excluded = "excluded" in (rec.doubts or [])
-    # cell 查不到时按正文字处理（已记 stale），不猜它是夹注或 blank——
-    # 猜错会让读序和夹注配对一起错，比少一格的后果大。
+    # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
+    # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
+    # 比少一格的后果大。
     kind = cell.kind if cell is not None else "char"
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,

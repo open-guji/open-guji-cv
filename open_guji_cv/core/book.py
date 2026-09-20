@@ -229,6 +229,15 @@ class BookSpec:
     #: 写进 yaml。跟 `bottom_gap` 一样不在流水线里现算——`border_detect` 是逐页 step，
     #: 现算等于每页重跑全书。⚠️ 换书必须重标，别抄。
     frame_height: float | None = None
+    #: 上/下外框相对「竖直外框内外间距」的偏移（yaml 的 `outer_shift: {top: , bottom: }`）。
+    #: 版框四边不等距，先验是从竖直外框量的，套到上下要先减掉这个差，否则搜索窗口偏外。
+    #: **这个差是按书变的**：vol01 量出 top -4.2 / bottom -6.3，vol02 实测 **top -12.0 /
+    #: bottom -19.8**（n=136/110，std 7.9/6.5）——差了 8~13px，正好把 3~5px 厚的薄外框
+    #: 挤出窗口，整册漏报几十页。不给就退回 `border_geometry.OUTER_PRIOR_SHIFT` 的缺省值。
+    #:
+    #: **怎么标定**：`utils/border_geometry.measure_book_outer_shift(整册)` 跑一次写进
+    #: yaml。⚠️ 换书必须重标，别抄。
+    outer_shift: dict = field(default_factory=dict)
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -469,6 +478,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         jiazhu=dict(d.get("jiazhu") or {}),
         bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
+        outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),

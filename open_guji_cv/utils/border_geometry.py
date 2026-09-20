@@ -440,7 +440,11 @@ def _outer_run(prof: np.ndarray, offs: np.ndarray,
     runs.append((a, b))
     best = None
     for a, b in runs:
-        thick = abs(float(offs[b] - offs[a]))
+        # 厚度按**行数**算，不是端点之差：offs 步长 1px，占了 a..b 共 b-a+1 行的墨条
+        # 厚 b-a+1 px。原来写 offs[b]-offs[a] 少算 1px，4px 的条算成 3 被 RUN_MIN 挡掉
+        # ——vol02 上下外框实测只有 3~5px 厚（竖直外框 19~24px，RUN_MIN=4 是按它标的），
+        # 正好卡在这个 off-by-one 上，整册 top 漏报 11 页、bottom 更多。
+        thick = abs(float(offs[b] - offs[a])) + 1.0
         if not (OUTER_RUN_MIN <= thick <= OUTER_RUN_MAX):
             continue
         score = float(prof[a:b + 1].mean()) * (thick + 1.0)
@@ -481,7 +485,8 @@ def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
 
 
 def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
-                          verticals: list[VLine], width: int, height: int) -> dict:
+                          verticals: list[VLine], width: int, height: int,
+                          outer_shift: dict | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
@@ -533,7 +538,11 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             base = np.array([line.y_at((width - 1) - x) for x in xs])
             lo, hi = OUTER_GAP_MIN, OUTER_GAP_MAX
             if prior is not None:      # 钉在页级间距先验上，见函数 docstring
-                c = prior + OUTER_PRIOR_SHIFT[kind]     # 四边不等距，先按边校正
+                # 四边不等距，先按边校正。`outer_shift` 是**书级**标定值
+                # （`BookSpec.outer_shift`），不给才退回缺省——这个差按书变，
+                # vol01 -4.2/-6.3 对 vol02 -12.0/-19.8，抄错就整册漏报。
+                shift = (outer_shift or {}).get(kind, OUTER_PRIOR_SHIFT[kind])
+                c = prior + shift
                 lo = max(lo, c - OUTER_PRIOR_WIN)
                 hi = min(hi, c + OUTER_PRIOR_WIN)
             if hi - lo < 5:
@@ -895,6 +904,55 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     return out, 3, w80_med, w80_max
 
 
+def measure_book_outer_shift(results, masks, ink: float = OUTER_INK_MIN) -> dict:
+    """量一册的 `outer_shift`：上/下外框中心相对「竖直外框内外间距」的差。
+
+    版框四边不等距，`detect_outer_borders` 的搜索窗口是拿竖直外框的间距当先验、
+    再按边校正过去的。**这个校正量按书变**：vol01 量出 top -4.2 / bottom -6.3，
+    vol02 实测 **top -12.0 / bottom -19.8**（n=136/110，std 7.9/6.5）。差 8~13px
+    看着不多，但这批书的上下外框只有 3~5px 厚（竖直外框 19~24px），窗口偏一点
+    就把它挤到边上、凑不满 `OUTER_RUN_MIN`，整册漏报几十页。
+
+    `results`/`masks`：整册的 `BorderDetectionResult` 与对应二值 mask（同序）。
+    返回 `{"top": float, "bottom": float}`，量不到的边不进字典。
+    ⚠️ 只在标定时跑一次写进 yaml，别放进逐页流水线——那等于每页重跑全书。
+    """
+    acc: dict[str, list[float]] = {"top": [], "bottom": []}
+    for res, binm in zip(results, masks):
+        if res is None or binm is None or res.v_outer_offset is None:
+            continue
+        h, w = binm.shape[:2]
+        vx = sorted((w - 1) - v.x_at(h / 2.0) for v in res.verticals)
+        if len(vx) < 2:
+            continue
+        xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
+        if len(xs) < 10:
+            continue
+        prior = abs(res.v_outer_offset)
+        for kind, line, sign in (("top", res.top, -1.0), ("bottom", res.bottom, 1.0)):
+            base = np.array([line.y_at((w - 1) - x) for x in xs])
+            lo, hi = 10, 70
+            prof = []
+            for o in range(lo, hi + 1):
+                yy = (base + o * sign).astype(int)
+                ok = (yy >= 0) & (yy < h)
+                prof.append(float(binm[yy[ok], xs[ok]].mean()) if ok.any() else 0.0)
+            prof = np.array(prof)
+            idx = np.where(prof >= ink)[0]
+            if idx.size == 0:
+                continue
+            runs, a, b = [], idx[0], idx[0]
+            for q in idx[1:]:
+                if q == b + 1:
+                    b = q
+                else:
+                    runs.append((a, b)); a = b = q
+            runs.append((a, b))
+            best = max(runs, key=lambda t: prof[t[0]:t[1] + 1].mean() * (t[1] - t[0] + 1))
+            acc[kind].append(lo + (best[0] + best[1]) / 2.0 - prior)
+    return {k: float(np.median(v)) for k, v in acc.items() if v}
+
+
 def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
     """整册「页高 − 下版框 y」的中位数，给下版框跨页先验救援当基准。
 
@@ -930,7 +988,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     column_grid: bool = False,
                     col_pitch: float | None = None,
                     frame_height: float | None = None,
-                    vline_polyline: bool = True) -> BorderDetectionResult:
+                    vline_polyline: bool = True,
+                    outer_shift: dict | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1011,7 +1070,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                                                             verticals, w, h,
                                                             fit=vline_polyline)
     head_raise = detect_head_raise(mask, top, verticals, w)
-    outer = detect_outer_borders(mask, top, bottom, verticals, w, h)
+    outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
+                                 outer_shift=outer_shift)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,
