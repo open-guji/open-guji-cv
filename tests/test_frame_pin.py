@@ -70,169 +70,54 @@ def test_thresholds_are_sane():
     assert 0 < FRAME_BAND_MAX_CUT < 0.5
 
 
-@pytest.mark.parametrize("page,col,slot", [
-    (26, 3, 2), (33, 3, 2), (11, 1, 2), (20, 3, 2), (22, 9, 2),
-])
-def test_real_pages_no_longer_clip_slot2(page, col, slot):
-    """真数据：这些格位曾被人裁标 truncated，修复后紧框外不该再有成段字墨。"""
+def test_real_page_tight_boxes_do_not_clip_char_tops(tmp_path, monkeypatch, ws,
+                                                    fixture_page):
+    """真页端到端：紧框上方不该再有成段字墨（钉桩不许吞字）。
+
+    2026-09-20 改：原先这条按 `(page, col, slot)` 点名 vol01 的五个格位——
+    那五个是人裁标过 truncated 的实例，靶子精准，但**产物在工作区**，云端
+    一条都跑不了，本机重跑一次参数不同也可能整条 skip（原实现里四个
+    `pytest.skip` 分支就是为此而设）。
+
+    现在改成拿 `tests/fixtures/` 里那张冻结真页从 Step1 跑到 Step4，对**每一个**
+    切出来的字格查同一条不变量。样本换了（不再是那五个原始靶位），但判据一字
+    没动，而且覆盖面反而大得多：一页八列、一百二十多个字格，每次都真的执行。
+
+    原始五个靶位的结论（修复后 R4 从 0.51% 降到 0.05%）留在模块头，
+    要复现就跑评测：`guji eval run`（R4 那把尺子在 `eval/rulers.py`）。
+    """
     import cv2
 
-    from open_guji_cv.core.step import page_key
-    from open_guji_cv.products import kinds as _kinds  # noqa: F401
-    from open_guji_cv.products.cache import ImageCache
-    from open_guji_cv.products.store import ProductStore
+    import open_guji_cv.steps  # noqa: F401  —— 注册产物种类与步骤
+    from helpers import run_keben_from_raw
+    from open_guji_cv.core.book import load_book
 
-    st = ProductStore()
-    cells = st.read("vol01", "row_segment", page_key(page), "cells")
-    ci = st.read("vol01", "cell_shrink", page_key(page), "char_index")
-    if cells is None or ci is None:
-        pytest.skip("没有产物")
-    cc = [x for x in cells.columns if x.col == col]
-    cic = [x for x in ci.columns if x.col == col]
-    if not cc or not cic:
-        pytest.skip("没有该列")
-    cell = [x for x in cc[0].cells if x.slot == slot]
-    ch = [x for x in cic[0].chars if getattr(x, "slot", None) == slot]
-    if not cell or not ch:
-        pytest.skip("没有该格")
-    p = ImageCache().get("vol01", "column_image", f"p{page:04d}c{col:02d}")
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
-    if img is None:
-        pytest.skip("没有列图")
-    above = (img < 128)[int(cell[0].y0):int(ch[0].bbox_col[1])]
-    if above.size == 0:
-        return
-    rows = above.mean(axis=1) > 0.05
-    run = best = 0
-    for v in rows:
-        run = run + 1 if v else 0
-        best = max(best, run)
-    assert best < 6, f"p{page}c{col}s{slot} 紧框上方仍有 {best} 行成段字墨（又切字顶了）"
+    ctx, out = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
+                                  gray=fixture_page)
+    cells = {c.col: c for c in out["cells"].columns}
+    chars = {c.col: c for c in out["char_index"].columns}
+    assert cells and chars, "冻结样页跑完 Step4 却没有产物——链路断了"
 
-
-def _col(bars: list[tuple[int, int]], strokes: list[tuple[int, int, int, int]],
-         w: int = 200, h: int = 260):
-    """列图：bars 是横贯整幅宽的版框线行段 (起, 止)；strokes 是只在
-    文字带内的字笔画 (起, 止, x0, x1)。"""
-    img = np.full((h, w), 255, np.uint8)
-    for a, b in bars:
-        img[a:b, :] = 0
-    for a, b, xa, xb in strokes:
-        img[a:b, xa:xb] = 0
-    return img
-
-
-def test_thick_frame_bar_alone_is_not_char_ink():
-    """5~8px 厚的版框线本身满足「连续多行、行墨够」，但它带外还在走——
-    不算字墨。算了字墨桩就永远钉不下去，末格整条框线进裁片（用户实审 30 例）。"""
-    img = _col([(30, 38)], [])
-    assert not _has_char_ink(img, 20, 180, 10, 50)
-
-
-def test_char_stroke_beside_the_bar_still_counts():
-    """框线之上还有一段真字墨（带内 0.3 宽、10 行、带外无墨）→ 仍是字墨，不钉。"""
-    img = _col([(40, 47)], [(20, 30, 60, 110)])
-    assert _has_char_ink(img, 20, 180, 10, 50)
-
-
-def test_wide_stroke_without_outside_ink_is_char():
-    """「二」的底横、「一」：带内行墨 ≥0.5，但到界行就停、带外无墨 → 是字。"""
-    img = _col([], [(20, 28, 25, 175)])
-    assert _has_char_ink(img, 20, 180, 10, 50)
-
-
-def test_no_probe_falls_back_to_dense_rule():
-    """探测窗取不到（条带贴满图宽）时只认第一档：满宽的密行是框线，三成宽的不是。"""
-    img = np.full((260, 180), 255, np.uint8)
-    img[30:38, :] = 0
-    assert not _has_char_ink(img, 0, 180, 10, 50)
-    img2 = np.full((260, 180), 255, np.uint8)
-    img2[20:40, :54] = 0
-    assert _has_char_ink(img2, 0, 180, 10, 50)
-
-
-def test_column_image_thin_margin_uses_dense_rule():
-    """v2 列图：内容窗口外只剩 5px 边距、框线到窗口就停（带外墨 0）。探不到
-    就只认密行——满宽 0.9 的框线行不算字墨，桩要钉得下去（vol01 p11 c3 实况）。"""
-    img = np.full((260, 190), 255, np.uint8)
-    img[30:38, 5:185] = 0
-    assert not _has_char_ink(img, 5, 185, 10, 50)
-    img[15:25, 60:110] = 0          # 框线上方再来一段真字墨 → 仍算字
-    assert _has_char_ink(img, 5, 185, 10, 50)
-
-
-# ── 2026-09-08：列图上「字的顶横被当成上框线」──────────────────────
-# measure_row_frames 是整页尺子（字最长横段 ≤0.1 页宽）；喂它一字宽的列图，
-# 「可/不/南/要/因」的顶横行墨 0.55~0.62 就成了顶端搜索窗里的第一条「框线」。
-# 两册前 50 页普查：真框线与顶边之间连续空白 ≤28 行，被误认的顶横上方空白
-# 119~156 行（整整一个空格）；「南」的顶横上方还连着自己的竖笔。
-
-
-def _col_top(bars: list[tuple[int, int]], strokes: list[tuple[int, int, int, int]],
-             w: int = 180, h: int = 2400):
-    """列图（与真列图同高，框线搜索窗按图高比例算）。"""
-    img = np.full((h, w), 255, np.uint8)
-    for a, b in bars:
-        img[a:b, :] = 0
-    for y0, y1, x0, x1 in strokes:
-        img[y0:y1, x0:x1] = 0
-    return img
-
-
-def test_top_stroke_after_a_blank_slot_is_not_a_frame():
-    """第 1 格空白、第 2 格「可」的顶横（宽 0.6 列宽）不是框线：不钉桩。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([], [(140, 146, 36, 144), (150, 230, 60, 120)])
-    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
-    assert top == 0, f"顶横被当成框线钉在 {top}"
-    top_old, _ = frame_band_inner(img)            # 不传 blank_max = 老口径
-    assert top_old == 146, "对照：老口径确实会把顶横当框线"
-
-
-def test_real_frame_at_the_very_top_is_still_pinned():
-    """真框线：贴着列图顶边（前面至多二三十行空白），照钉。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([(20, 30)], [(60, 150, 60, 120)])
-    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
-    assert top == 30
-
-
-def test_stroke_with_ink_attached_above_is_not_a_frame():
-    """「南」：顶横上方连着十字竖笔——框线之上不会挂着墨，不钉。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([], [(8, 40, 86, 94), (34, 42, 36, 144), (46, 130, 50, 130)])
-    top, _ = frame_band_inner(img, blank_max=0.35 * 112)
-    assert top == 0, f"南的顶横被当成框线钉在 {top}"
-
-
-def test_frame_touched_from_below_is_still_pinned():
-    """框线被下面的字顶住（p48「御」）不算「上方连墨」，照钉。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([(3, 15)], [(15, 120, 70, 110)])
-    top, _ = frame_band_inner(img, blank_max=0.35 * 116)
-    assert top == 15
-
-
-def test_hinted_pin_finds_the_frame_next_to_the_hint_not_the_stroke():
-    """v2 给了 border_bottom 提示：从提示向外找最近的框线行；「至」的底横离提示 44px、
-    真下框离提示 4px，认下框。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([(2385, 2392)], [(2333, 2345, 36, 144), (2250, 2330, 60, 120)])
-    top, bot = frame_band_inner(img, blank_max=0.35 * 116, top_hint=0.0, bottom_hint=2389.0)
-    assert bot == 2385, f"下框内缘 {bot}"
-    assert top == 0
-
-
-def test_hinted_pin_gives_up_when_no_bar_near_hint():
-    """提示附近没有框线行（vol01/151 型偏差超过容差、或框根本不在图里）：检不出，不钉。"""
-    from open_guji_cv.clustering.extractor import frame_band_inner
-    img = _col_top([], [(2250, 2330, 60, 120)])
-    top, bot = frame_band_inner(img, blank_max=0.35 * 116, top_hint=0.0, bottom_hint=2389.0)
-    assert (top, bot) == (0, img.shape[0])
-
-
-def test_faint_frame_rows_are_frame_when_trusted():
-    """trust_frame：带内 0.35 墨、长横段的行是淡框线，不是字墨（vol02/81「因」）。"""
-    img = _page([(20, 26, 0.36)])          # 一段 0.36 墨率的连续横条
-    assert _has_char_ink(img, 0, 180, 10, 50)                    # 老口径：无探测窗只认密行 → 当字墨
-    assert not _has_char_ink(img, 0, 180, 10, 50, trust_frame=True)
+    checked = 0
+    for col, cic in chars.items():
+        img = cv2.imread(str(ctx.cache.get(ctx.book.id, "column_image",
+                                           f"p0001c{col:02d}")),
+                         cv2.IMREAD_GRAYSCALE)
+        assert img is not None, f"c{col} 列图没落缓存"
+        by_slot = {x.slot: x for x in cells[col].cells}
+        for ch in cic.chars:
+            cell = by_slot.get(getattr(ch, "slot", None))
+            if cell is None:
+                continue
+            above = (img < 128)[int(cell.y0):int(ch.bbox_col[1])]
+            if above.size == 0:
+                continue
+            checked += 1
+            rows = above.mean(axis=1) > 0.05
+            run = best = 0
+            for v in rows:
+                run = run + 1 if v else 0
+                best = max(best, run)
+            assert best < 6, \
+                f"c{col}s{ch.slot} 紧框上方仍有 {best} 行成段字墨（又切字顶了）"
+    assert checked > 50, f"只查到 {checked} 个字格，样本太少，这条用例形同虚设"
