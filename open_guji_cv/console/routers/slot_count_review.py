@@ -42,9 +42,13 @@ def api_slot_count_verdicts(batch: str) -> dict:
             key = (e.target.key if e.target else None) or ""
             if not key:
                 continue
-            n = (e.payload or {}).get("n_slots")
+            pay = e.payload or {}
+            n = pay.get("n_slots")
             if n is not None:
-                out[key] = {"n_slots": n}
+                # `uniform` 缺省 True：2026-09-20 之前的裁决没有这个键，等距是
+                # 版式常识，不能因为加了新键就把历史裁决的含义改掉。
+                uni = pay.get("uniform")
+                out[key] = {"n_slots": n, "uniform": True if uni is None else bool(uni)}
     except FileNotFoundError:
         pass
     return {"verdicts": out}
