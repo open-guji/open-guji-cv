@@ -34,7 +34,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_guji_cv.clustering.canonical import encode_png, to_canonical  # noqa: E402
-from open_guji_cv.clustering.glyph_db import GlyphDB  # noqa: E402
+from open_guji_cv.clustering.glyph_db import _now, GlyphDB  # noqa: E402
 from open_guji_cv.clustering.normalize import normalize_patch  # noqa: E402
 from open_guji_cv.core.workspace import glyph_db_path  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
@@ -89,8 +89,14 @@ def main() -> int:
         if a.dry_run:
             n_fixed += 1
             continue
-        cur.execute("UPDATE instances SET patch_png=? WHERE instance_id=?", (new_png, iid))
+        # 与 GlyphDB.refresh_instance_patch 同一纪律：改了图块/派生就要碰时间戳——
+        # 库指纹（db_fingerprint）与特征矩阵常驻缓存都只看 exemplars.added_at，
+        # 只换 derived 它们看不见（2026-09-19 第一版没碰，靠的是当时指纹还含 mtime）
+        now = _now()
+        cur.execute("UPDATE instances SET patch_png=?, updated_at=? WHERE instance_id=?",
+                    (new_png, now, iid))
         db._write_derived(cur, iid, normalize_patch(canon))
+        cur.execute("UPDATE exemplars SET added_at=? WHERE instance_id=?", (now, iid))
         n_fixed += 1
     if not a.dry_run:
         db.conn.commit()
