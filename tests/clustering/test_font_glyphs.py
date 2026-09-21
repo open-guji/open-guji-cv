@@ -1,10 +1,15 @@
 """font_glyphs.py 单测：字表解析、渲染几何、来源隔离与检索过滤。
 
-渲染相关用例需要字体文件，环境变量 GUJI_FONT_DIR 未指向可用字体时跳过。
+渲染相关用例用**引擎仓自带的字体档**（`fonts/`，随仓库走、入 git，见
+fonts/README.md）。
+
+2026-09-20 改：原先靠环境变量 `GUJI_FONT_DIR` 指一个字体目录，没设就跳过
+——于是这五条只在作者那台机器上跑过，别处一律 skip，而仓里明明就有字体。
+定位字体改走生产代码那个 `_font_files()`：守卫与被测代码认同一套路径，
+不会再出现「守卫说有、代码说没有」这类分叉。
 """
 
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -17,14 +22,14 @@ from open_guji_cv.clustering.glyph_db import GlyphDB, export_store
 
 
 def _font_paths() -> list[Path]:
-    root = os.environ.get("GUJI_FONT_DIR")
-    if not root:
-        return []
-    return sorted(Path(root).rglob("*.ttf"))[:1]
+    """仓内字体档的前一个。用生产代码的定位器，不自己 glob 相对路径。"""
+    from open_guji_cv.clustering.font_candidates import _font_files
+
+    return [Path(f) for f in _font_files()[:1]]
 
 
-needs_font = pytest.mark.skipif(not _font_paths(),
-                                reason="需要 GUJI_FONT_DIR 指向字体目录")
+assert _font_paths(), ("fonts/ 下一个字体都没有。字体档随引擎仓走"
+                       "（见 fonts/README.md），缺了是仓库不完整，不是环境问题。")
 
 
 # ── 字表解析 ──────────────────────────────────────────────
@@ -63,7 +68,6 @@ def test_load_manifest_expands_vars(tmp_path, monkeypatch):
 
 # ── 渲染几何 ──────────────────────────────────────────────
 
-@needs_font
 def test_render_is_canonical_and_centered():
     from open_guji_cv.clustering.font_glyphs import FontRenderer
     r = FontRenderer(_font_paths())
@@ -78,7 +82,6 @@ def test_render_is_canonical_and_centered():
     assert max(ys.max() - ys.min(), xs.max() - xs.min()) <= 196
 
 
-@needs_font
 def test_render_missing_char_returns_none():
     from open_guji_cv.clustering.font_glyphs import FontRenderer
     r = FontRenderer(_font_paths())
@@ -87,7 +90,6 @@ def test_render_missing_char_returns_none():
 
 # ── 入库：来源隔离与检索过滤 ────────────────────────────────
 
-@needs_font
 def test_import_font_isolates_source_and_filters(tmp_path):
     db = GlyphDB(tmp_path / "t.sqlite")
     chars = ["一", "二", "三", "口", "日"]
@@ -116,7 +118,6 @@ def test_import_font_isolates_source_and_filters(tmp_path):
     db.close()
 
 
-@needs_font
 def test_query_exclude_survives_dedup(tmp_path):
     """exclude 必须在「每字只留最高分」之前生效，否则整字被抹掉。"""
     db = GlyphDB(tmp_path / "t.sqlite")
@@ -132,7 +133,6 @@ def test_query_exclude_survives_dedup(tmp_path):
     db.close()
 
 
-@needs_font
 def test_font_source_not_exported(tmp_path):
     """字体来源整条链都不进导出目录（可确定性重生成）。"""
     db = GlyphDB(tmp_path / "t.sqlite")

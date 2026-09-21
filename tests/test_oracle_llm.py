@@ -1,11 +1,21 @@
 """`oracle_llm` 策略：答案表驱动的大模型裁决。
 
 这一层刻意**不在线调 API**，理由写在 `OracleLLM` 的 docstring 里（数字要
-可复现、评测不能泄漏、没验收集不许进生产）。所以这里的用例分两类：
+可复现、评测不能泄漏、没验收集不许进生产）。这里只测**契约**：
+只在候选内选、表里没有就弃权、弃权时可退回 n-gram。
 
-- **契约**：只在候选内选、表里没有就弃权、弃权时可退回 n-gram；
-- **复现**：拿 `confusable-context` 冻结的逐题答案跑一遍，五个臂的数字必须
-  和 `charset_and_lm.md §四` 记的一致。这条是防「策略实现悄悄改了口径」。
+2026-09-20：六条「复现」用例已删。它们拿 `confusable-context` 冻结的逐题
+答案跑五个臂，断言准确率还是 `charset_and_lm.md §四` 记的那几个数
+（76.0% / 64.3% / 66.2% / 95.5% / 98.7%）。那是**评测**，不是代码行为：
+
+- 数据集路径写死成 `D:/workspace/open-guji-dataset/...`，除了作者那台机器
+  以外哪儿都跑不了（这个绝对路径本身就是这套依赖失控的标志）；
+- 算准确率那段逻辑**在测试里**，不在生产代码里——测试自己实现一遍被测
+  的东西，实现变了它也跟着变，护不住任何东西。
+
+复现照旧跑评测：`python scripts/eval_oracle_llm.py --answers <答案表>`。
+结论与口径（尤其「字形层 64.3% 低于多数类基线 76.0%」这条——形近位上形状
+判据比瞎猜还差，是「护栏该往宽开」的全部依据）留在 charset_and_lm.md §四。
 """
 
 from __future__ import annotations
@@ -17,9 +27,6 @@ import pytest
 
 from open_guji_cv.clustering.context_step import STRATEGIES, build_strategy
 
-DS = Path(r"D:/workspace/open-guji-dataset/confusable-context")
-needs_dataset = pytest.mark.skipif(
-    not (DS / "answer_key.json").exists(), reason="没有 confusable-context 数据集")
 
 
 def test_registered():
@@ -47,46 +54,24 @@ def test_hits_answer_within_candidates():
     assert r.decision.used_context is True
 
 
-@needs_dataset
-@pytest.mark.parametrize("arm,expect", [
-    ("多数类基线", 0.760),
-    ("字形层 top-1", 0.643),
-    ("OCR", 0.662),
-    ("ngram-heldout", 0.955),
-    ("大模型（盲测）", 0.987),
-])
-def test_reproduces_frozen_baseline(arm, expect):
-    """五个臂的冻结答案跑出来必须还是文档里那几个数（±0.5%）。
+def test_falls_back_to_the_base_strategy_when_it_abstains():
+    """弃权时可退回 n-gram：`fallback` 要写明是哪一条路——
+    「拿不准就保持基线」，而不是静默给一个空结果。"""
+    d = build_strategy("oracle_llm", answers={"x": "入"})
+    r = d.decide({"入": 0.5, "人": 0.4}, item_id="y")
+    assert r.surface is None
+    assert r.decision.fallback == "no_oracle_answer"
 
-    尤其是**字形层 64.3% 低于多数类基线 76.0%** 这一条——形近位上形状判据
-    比瞎猜还差，是「护栏该往宽开」的全部依据。哪天这个数悄悄变了，
-    说明口径被动过，那 charset_and_lm.md §四 的结论就要重新算。
+
+def test_out_of_candidate_answer_never_leaks_into_the_ranking():
+    """候选外的答案不但不能被选中，也不能混进 `ranked`——下游（seed_admit
+    的 context 通道）是照 `ranked` 取用的，混进去等于绕过了铁律 1。
+
+    ⚠️ 这里**不**断言「两种弃权理由分得开」：候选外与表里没有，现在共用
+    同一个 `fallback="no_oracle_answer"`。诊断时分不开是个已知的小缺口，
+    但那是实现现状，测试该钉现状、不该写一条描述想象中行为的断言。
     """
-    base = json.loads((DS / "baseline_r1.json").read_text(encoding="utf-8"))
-    key = json.loads((DS / "answer_key.json").read_text(encoding="utf-8"))
-    gold = {r["id"]: r["gold"] for r in key}
-    opts = {r["id"]: r["options"] for r in key}
-    d = build_strategy("oracle_llm", answers=base[arm])
-    ok = sum(1 for cid, g in gold.items()
-             if d.decide({o: 1.0 / len(opts[cid]) for o in opts[cid]},
-                         item_id=cid).surface == g)
-    acc = ok / len(gold)
-    assert abs(acc - expect) < 0.005, f"{arm} 复现 {acc:.3f}，文档记 {expect}"
-
-
-@needs_dataset
-def test_llm_beats_ngram_on_hard_tier():
-    """真难档才是这一层的价值所在：大模型 93.8% vs n-gram 87.5%。"""
-    base = json.loads((DS / "baseline_r1.json").read_text(encoding="utf-8"))
-    key = json.loads((DS / "answer_key.json").read_text(encoding="utf-8"))
-    hard = [r for r in key if r["tier"].startswith("hard")]
-    assert hard, "难档样本没了，这条用例就失去意义"
-
-    def acc(arm):
-        d = build_strategy("oracle_llm", answers=base[arm])
-        ok = sum(1 for r in hard
-                 if d.decide({o: 1.0 / len(r["options"]) for o in r["options"]},
-                             item_id=r["id"]).surface == r["gold"])
-        return ok / len(hard)
-
-    assert acc("大模型（盲测）") >= acc("ngram-heldout")
+    d = build_strategy("oracle_llm", answers={"x": "書"})
+    r = d.decide({"入": 0.5, "人": 0.4}, item_id="x")
+    assert r.surface is None
+    assert "書" not in dict(r.decision.ranked), r.decision.ranked

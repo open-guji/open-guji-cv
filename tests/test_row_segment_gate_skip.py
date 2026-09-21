@@ -12,39 +12,31 @@
 
 from __future__ import annotations
 
-import pytest
-
 import open_guji_cv.steps  # noqa: F401  —— 注册产物种类
-from open_guji_cv.core.book import load_book
+from helpers import make_book, make_ctx, make_gate1, skip_gate1
 from open_guji_cv.core.step import RunContext, STEPS
-from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.kinds.border_detect_gate import BorderDetectGateManifest
 from open_guji_cv.products.kinds.cells import ColumnCells, PageCells
-from open_guji_cv.products.store import ProductStore
 
 PAGE = 1
+NCOLS = 9
 
 
 def _ctx(tmp_path, gate_manifest: BorderDetectGateManifest, cells: PageCells | None) -> RunContext:
-    store = ProductStore(tmp_path / "products")
-    cache = ImageCache(tmp_path / "cache")
-    book = load_book("vol01")
-    ctx = RunContext(book, store, cache, log=lambda s: None)
-    store.write(book.id, "border_detect_gate", f"p{PAGE:04d}",
-               {"border_detect_gate_manifest": gate_manifest})
+    """册配置测试自备：这几条只用到「版式九列」，不该去 load 某本真书。"""
+    ctx = make_ctx(tmp_path, make_book(expected_cols=NCOLS))
+    ctx.store.write(ctx.book.id, "border_detect_gate", f"p{PAGE:04d}",
+                    {"border_detect_gate_manifest": gate_manifest})
     if cells is not None:
-        store.write(book.id, "row_segment", f"p{PAGE:04d}", {"cells": cells})
+        ctx.store.write(ctx.book.id, "row_segment", f"p{PAGE:04d}", {"cells": cells})
     return ctx
 
 
 def test_skip_page_gets_clear_page_type_reject_not_dp_symptoms(tmp_path):
     """skip 页即使凑巧有 cells 记录（不该发生，但防御式验证），页型判据优先于
     列级判据——不该显示 DP 无解/格数偏离这些下游症状。"""
-    gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
-        n_cols=0, expected_cols=9, page_type="cover", page_type_policy="skip")
     cells = PageCells(page=PAGE, period=None, ref_w=None, columns=[])
-    ctx = _ctx(tmp_path, gate1, cells)
+    ctx = _ctx(tmp_path, skip_gate1(PAGE, expected_cols=NCOLS), cells)
     step = STEPS["row_segment_gate"]
     out = step.run_page(ctx, PAGE)["row_segment_gate_manifest"]
     assert out.admitted is False
@@ -59,9 +51,7 @@ def test_standard_page_all_columns_rejected_gets_page_level_summary(tmp_path):
     2026-09-13：这里的拒因**故意不是**「弹性 DP 无解」——那一种现在走 L0u
     「版式未支持」（见 test_all_dp_unsolved_is_unsupported_layout_not_anomaly）。
     本例要守的是「其余原因整页全拒」仍有页级摘要这条老修复。"""
-    gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=True, n_cols=9, expected_cols=9,
-        page_type="body", page_type_policy="standard")
+    gate1 = make_gate1(PAGE, n_cols=NCOLS, expected_cols=NCOLS)
     cells = PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=1, ok=False, error="页级 period 缺失", n_body_slots=21),
         ColumnCells(col=2, ok=False, error="页级 period 缺失", n_body_slots=21),
@@ -77,9 +67,7 @@ def test_standard_page_all_columns_rejected_gets_page_level_summary(tmp_path):
 
 def test_standard_page_some_columns_admitted_has_no_page_reject(tmp_path):
     """至少一列过闸时页级 admitted=True、reject 应为空——不误伤正常情况。"""
-    gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=True, n_cols=9, expected_cols=9,
-        page_type="body", page_type_policy="standard")
+    gate1 = make_gate1(PAGE, n_cols=NCOLS, expected_cols=NCOLS)
     cells = PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=1, ok=True, n_body_slots=21, boundaries=[0.0] * 22),
     ])
@@ -96,9 +84,7 @@ def test_standard_page_some_columns_admitted_has_no_page_reject(tmp_path):
 # 更要紧，因为误判的后果是把真故障静默归进"非异常"桶里没人查。
 
 def _body_gate1() -> BorderDetectGateManifest:
-    return BorderDetectGateManifest(
-        page=PAGE, admitted=True, n_cols=9, expected_cols=9,
-        page_type="body", page_type_policy="standard")
+    return make_gate1(PAGE, n_cols=NCOLS, expected_cols=NCOLS)
 
 
 def _run(tmp_path, cells: PageCells):
@@ -144,9 +130,7 @@ def test_mixed_reject_reasons_stay_anomalous(tmp_path):
 
 def test_skip_page_takes_precedence_over_unsupported(tmp_path):
     """闸1 已判 skip 的页：L0 优先，不重复判 L0u——页型只有闸1一个权威来源。"""
-    gate1 = BorderDetectGateManifest(
-        page=PAGE, admitted=False, reject=["page_type_skip：页型判定为「cover」，无正文栏格，不套列窗口"],
-        n_cols=9, expected_cols=9, page_type="cover", page_type_policy="skip")
+    gate1 = skip_gate1(PAGE, n_cols=NCOLS, expected_cols=NCOLS)
     ctx = _ctx(tmp_path, gate1, PageCells(page=PAGE, period=40.0, ref_w=180.0, columns=[
         ColumnCells(col=i, ok=False, error="弹性 DP 无解", n_body_slots=21)
         for i in range(1, 10)]))

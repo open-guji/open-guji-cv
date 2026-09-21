@@ -1,18 +1,26 @@
-"""CNN 候选源 + RRF 融合 + 「一」兜底规则的回归。
+r"""CNN 候选源 + RRF 融合 + 「一」兜底规则的回归。
 
 数字来源（2026-09-05，unseen 1,327 条，异体算对）：HOG 75.5/94.7，CNN 72.4/97.6，
 **RRF 86.7/98.3**（top1/top10）。rare-char 21 条 CNN 单独 top-10 100%。
+
+2026-09-20：`test_cnn_rare_char_top10` 已删。它量的是 rare-char 集上的 top-10
+召回，要仓外的 `../open-guji-dataset/rare-char/items.jsonl` ＋ **本地跑批才有的
+字块缓存**，云端两样都没有。同一个量由评测负责，而且比它完整（分层报）：
+
+    python scripts/eval_rare_char.py --k 10
+
+顺带删掉了 `tests/rare_char_set.py`——那个辅助模块唯一的职责就是把冻结集里
+失效的绝对路径（`D:\workspace\...\char_patch\*.png`）按 patch_key 重新对上
+当下的缓存根，是这套依赖的产物，没有消费者之后不该留着。
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-import rare_char_set  # 同目录辅助：按 patch_key 解析字块图，见其 docstring
 
 from open_guji_cv.clustering.candidates import BAR_ASPECT, _bar_rule
 from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT, CnnCandidates, rrf
-from open_guji_cv.core.workspace import corpus_path
 
 # 守卫要跟 `CnnCandidates.available` 同一条件——**光看 checkpoint 在不在不够**。
 # torch 是可选依赖（没装时 available=False、topk 返回空，调用方退回 HOG，这是
@@ -140,27 +148,6 @@ def test_emb_topk_batch_matches_sequential():
         assert [ch for ch, _ in s] == [ch for ch, _ in b]
         for (_, ps), (_, pb) in zip(s, b):
             assert abs(ps - pb) < _BATCH_SCORE_TOL
-
-
-@needs_cnn
-@pytest.mark.skipif(not rare_char_set.available(), reason=rare_char_set.SKIP_REASON)
-def test_cnn_rare_char_top10():
-    """rare-char 21 条，CNN 单独 top-10 不该掉到 85% 以下（实测 100%）。"""
-    from open_guji_cv.clustering.font_candidates import book_charset
-    from open_guji_cv.clustering.normalize import normalize_patch
-    from open_guji_cv.variants import are_variants
-
-    loaded = rare_char_set.load_items()
-    cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
-                      [it["expected"]["char"] for it, _ in loaded])
-    c = CnnCandidates()
-    hit = n = 0
-    for it, img in loaded:
-        n += 1
-        g = it["expected"]["char"]
-        top = [ch for ch, _ in c.topk(normalize_patch(img), cs, k=10)]
-        hit += any(ch == g or are_variants(ch, g) for ch in top)
-    assert n and hit / n >= 0.85, f"CNN rare-char top-10 = {hit}/{n}"
 
 
 def test_rrf_weights_tilt_toward_heavier_source():

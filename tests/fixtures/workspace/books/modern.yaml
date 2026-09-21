@@ -1,0 +1,14 @@
+# 测试专用册配置：现代印刷竖排（无版框，Step1 走 line_detect，列/行数由探测给）。
+# 同样没有配原图，只供「册属性怎么解析」这类测试用。
+id: modern
+title: "测试册：现代印刷竖排"
+raw_dir: raw/modern
+raw_pattern: "{page}.png"
+edition: modern
+frame: none
+expected_cols: null        # 显式 null = 由探测给，不是"没写、用刻本默认 9"
+chars_per_line: null
+pages: [1]
+dev_set: [1]
+pitch_prior: 40.0
+notes: "测试 fixture，长期不动。"

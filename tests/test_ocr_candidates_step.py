@@ -1,27 +1,49 @@
 # -*- coding: utf-8 -*-
-"""Step5-b OCR 候选包壳（阶段 B1）。"""
+"""Step5-b OCR 候选包壳（阶段 B1）。
+
+2026-09-20 重写：原先三条都读工作区里 vol01/24 的产物，且**还要本机装着
+OCR 引擎**，两个条件缺一就 skip——云端两样都没有，三条一条没跑过。
+
+现在分两半：
+- 包壳自己的行为（候选降序、概率区间、简→繁扩展真的接上、没引擎时整页
+  空候选而不是炸）用一个**桩引擎**测，不需要真装 rapidocr；
+- 「库 same × OCR top1 的一致率」那条是**跨信号的质量测量**，不是代码行为，
+  已迁出测试——它要真引擎 + 真书两页产物，且断言的是数据分布。同一个量
+  由评测负责（`guji eval run`，口径见 doc/charset_and_lm.md §一）。
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-
+import numpy as np
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
-from open_guji_cv.core.spec import page_key
+from helpers import make_book, run_keben_from_raw
 from open_guji_cv.core.step import KINDS, STEPS
-from open_guji_cv.products.store import ProductStore
+from open_guji_cv.steps.ocr_candidates import OcrCandidatesParams
 
-REPO = Path(__file__).resolve().parent.parent
+PAGE = 1
 
 
-def _ws_raw():
-    """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
-    没设则退回仓根——引擎自带的小样本仍在仓内。"""
-    from open_guji_cv.core.workspace import raw_root
-    return raw_root()
-RAW = _ws_raw() / "data_full" / "zongmu"
-needs_raw = pytest.mark.skipif(not RAW.exists(), reason="需要 data_full/zongmu 原图")
+class _StubOcr:
+    """固定返回一串简体候选的桩引擎——包壳要测的是它拿到 raw 之后做了什么。"""
+
+    def __init__(self, raw: list[tuple[str, float]]):
+        self.raw = raw
+
+    def rec_topk(self, img):
+        return list(self.raw)
+
+
+def _run(tmp_path, monkeypatch, fixture_page, raw, **params):
+    from open_guji_cv.core.book import load_book
+
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
+                                gray=fixture_page, through="cell_shrink")
+    step = STEPS["ocr_candidates"]
+    monkeypatch.setattr(type(step), "_source", lambda self, p: _StubOcr(raw))
+    ctx.params["ocr_candidates"] = OcrCandidatesParams(**params)
+    return step.run_page(ctx, PAGE)["ocr_candidates"]
 
 
 def test_registered_and_declares_engine_need():
@@ -30,69 +52,61 @@ def test_registered_and_declares_engine_need():
         "要声明 needs=engine，控制台才知道没引擎时该置灰而不是让人点了才失败"
 
 
-@needs_raw
-def test_candidates_are_ranked_and_probabilistic():
-    store = ProductStore()
-    d = store.read("vol01", "ocr_candidates", page_key(24), "ocr_candidates")
-    if d is None:
-        pytest.skip("vol01/24 还没跑过 ocr_candidates")
-    if d.engine.startswith("unavailable"):
-        pytest.skip(f"本机没有 OCR 引擎：{d.engine}")
+def test_candidates_are_ranked_and_probabilistic(tmp_path, monkeypatch, ws,
+                                                 fixture_page):
+    """候选按概率降序、概率落在 [0,1]——下游按名次取用，乱序会静默取错字。"""
+    d = _run(tmp_path, monkeypatch, fixture_page,
+             [("书", 0.7), ("则", 0.2), ("谓", 0.05)])
     recs = [r for cc in d.columns for r in cc.chars if r.topk]
     assert recs, "一个候选都没有"
-    for r in recs[:30]:
+    for r in recs:
         probs = [p for _c, p in r.topk]
         assert probs == sorted(probs, reverse=True), f"{r.id} 候选没按概率降序"
         assert all(0.0 <= p <= 1.0 for p in probs), f"{r.id} 概率越界：{probs}"
 
 
-@needs_raw
-def test_s2t_expansion_reaches_traditional_forms():
+def test_s2t_expansion_reaches_traditional_forms(tmp_path, monkeypatch, ws,
+                                                 fixture_page):
     """简→繁扩展要真的把繁体带进候选。
 
     PP-OCR 是简体模型，本书 11.03% 的字次不在它字表里，缺的还是
     說/則/謂/論 这类各上千次的繁体常用字（charset_and_lm.md §一）。
+
+    桩引擎只吐简体，所以**候选里出现繁体，只可能是扩展做出来的**——
+    这比在真数据上看「候选不全是简体」严实得多。
     """
-    store = ProductStore()
-    d = store.read("vol01", "ocr_candidates", page_key(24), "ocr_candidates")
-    if d is None or d.engine.startswith("unavailable"):
-        pytest.skip("没有产物或没有引擎")
-    simplified_only = set("书则谓论诸称编")
-    all_chars = {c for cc in d.columns for r in cc.chars for c, _p in r.topk}
-    # 这一页是繁体刻本，候选里不该只剩简体形
-    assert all_chars, "候选为空"
-    assert not all_chars <= simplified_only
+    simplified = [("书", 0.7), ("则", 0.2), ("谓", 0.05)]
+    d = _run(tmp_path, monkeypatch, fixture_page, simplified, s2t=True)
+    got = {c for cc in d.columns for r in cc.chars for c, _p in r.topk}
+    assert got, "候选为空"
+    assert got - {c for c, _ in simplified}, f"一个繁体都没扩出来：{sorted(got)}"
+    assert {"書", "則", "謂"} & got, f"常用繁体没进候选：{sorted(got)}"
 
 
-@needs_raw
-def test_two_signals_mostly_agree_and_library_wins_when_they_do_not():
-    """库 same × OCR top1 的一致率要够高——这是 Step6 融合的前提。
+def test_s2t_off_keeps_the_engine_output_verbatim(tmp_path, monkeypatch, ws,
+                                                  fixture_page):
+    """关掉扩展就原样透传——两条路都要守，否则开关形同虚设。"""
+    simplified = [("书", 0.7), ("则", 0.2)]
+    d = _run(tmp_path, monkeypatch, fixture_page, simplified, s2t=False)
+    got = {c for cc in d.columns for r in cc.chars for c, _p in r.topk}
+    assert got == {"书", "则"}, got
 
-    实测 vol01 p24+p137 350 字位：一致 67.1%、打架 11.7%，而打架样例里
-    库 cov 全是 1.0、OCR prob 低到 0.03~0.67（閱/聞、釐/麓、緗/相、雖/維）。
-    印证 glyph_db_first_design.md §7.3 的「库按 cov 分档采信，0.99 是拐点；
-    OCR 置信度不参与任何自动判断」。
-    """
-    store = ProductStore()
-    agree = disagree = 0
-    for pg in (24, 137):
-        m = store.read("vol01", "glyph_match", page_key(pg), "glyph_match")
-        o = store.read("vol01", "ocr_candidates", page_key(pg), "ocr_candidates")
-        if m is None or o is None or o.engine.startswith("unavailable"):
-            continue
-        omap = {r.id: r for cc in o.columns for r in cc.chars}
-        for cc in m.columns:
-            for r in cc.chars:
-                if r.verdict != "same" or not r.char:
-                    continue
-                ocr = omap.get(r.id)
-                if not ocr or not ocr.topk:
-                    continue
-                if r.char == ocr.topk[0][0]:
-                    agree += 1
-                else:
-                    disagree += 1
-    if agree + disagree == 0:
-        pytest.skip("两步产物不齐")
-    rate = agree / (agree + disagree)
-    assert rate > 0.5, f"两路一致率只有 {rate:.1%}，其中一路可能坏了"
+
+def test_missing_engine_yields_empty_candidates_not_a_crash(tmp_path, monkeypatch,
+                                                            ws, fixture_page):
+    """引擎不在时整页空候选、engine 标 `unavailable:…`，不炸整条管线
+    ——这是模块头写明的降级契约（没装引擎的机器照样要能跑完链路）。"""
+    from open_guji_cv.core.book import load_book
+
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
+                                gray=fixture_page)
+    step = STEPS["ocr_candidates"]
+
+    def _boom(self, p):
+        raise RuntimeError("没有引擎")
+
+    monkeypatch.setattr(type(step), "_source", _boom)
+    d = step.run_page(ctx, PAGE)["ocr_candidates"]
+    assert d.engine.startswith("unavailable:"), d.engine
+    assert d.columns and all(not cc.ok for cc in d.columns)
+    assert all(cc.error for cc in d.columns), "降级了却没说为什么"
