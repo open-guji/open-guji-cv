@@ -60,6 +60,7 @@
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_first_design.md](doc/glyph_db_first_design.md) | **字形库优先的增量识别**：不再先聚簇再定字，新图块先与已验证字形库匹配。`match.py` / `recognize_flow.py` / `seeding.py` / `seed_queue.py` 都指回它 |
 | [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + 测试集 + 回归护栏 + 已知失败形态 |
+| [rare_char_matching_survey.md](doc/rare_char_matching_survey.md) | **生僻字匹配现状盘点（2026-09-21）**：5a 判 diff 之后走的那条路（Step5-b 三源 RRF + 按册字表）逐层拆解、「更大的字形库」资产表、实测账与 11 条负结果、8 个结构缺口（无级联 / 下游不消费 / 真刻例不进模板 / IDS 只有护栏没检索 / genmin 三套字体零引用）+ 建议路线 |
 | [glyph_match_research.md](doc/glyph_match_research.md) | 匹配算法调研：我们这层在文献谱系里的位置（IDM 零阶形变模型）+ 四条改进路线 |
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图 + **字体字形匹配力实测（§6，负结果）** |
 | [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
