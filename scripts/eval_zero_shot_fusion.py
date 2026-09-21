@@ -23,7 +23,12 @@ BENCH = Path("cache/glyph_bench")
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="cache/glyph_cnn/best.pt")
+    # 缺省跟现役 checkpoint 走（cnn_candidates.DEFAULT_CKPT），别再写死路径：
+    # 2026-09-21 实锤——原缺省 `cache/glyph_cnn/best.pt` 是 09-05 的旧模型，本机一直
+    # 留着这个文件，于是不带 --model 跑出来的「r5 基线」其实量的是它，不是 r5，
+    # 而 eval_oov / eval_struct_rerank 缺省都是 DEFAULT_CKPT，三个脚本不同口径。
+    from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT
+    ap.add_argument("--model", default=str(DEFAULT_CKPT))
     ap.add_argument("--split", default="unseen")
     ap.add_argument("--n", type=int, default=0, help="0=全部")
     ap.add_argument("--k", type=int, default=50)
@@ -80,32 +85,13 @@ def main() -> int:
 
     ck = torch.load(a.model, map_location="cpu", weights_only=False)
     classes = ck["classes"]
-    import importlib.util, sys
-    spec = importlib.util.spec_from_file_location("tg", "scripts/train_glyph_cnn.py")
-    # 复用训练脚本里的 Net 定义：把 main 里的类抠出来太绕，这里直接重建同结构
-    import torch.nn as nn, torch.nn.functional as F
-
-    class Block(nn.Module):
-        def __init__(self, i, o, s):
-            super().__init__()
-            self.c1 = nn.Conv2d(i, o, 3, s, 1, bias=False); self.b1 = nn.BatchNorm2d(o)
-            self.c2 = nn.Conv2d(o, o, 3, 1, 1, bias=False); self.b2 = nn.BatchNorm2d(o)
-            self.sc = nn.Sequential(nn.Conv2d(i, o, 1, s, bias=False), nn.BatchNorm2d(o)) if (s != 1 or i != o) else nn.Identity()
-        def forward(self, x):
-            y = F.relu(self.b1(self.c1(x))); y = self.b2(self.c2(y)); return F.relu(y + self.sc(x))
-
-    class Net(nn.Module):
-        def __init__(self, n_cls, n_comp, d=256):
-            super().__init__()
-            self.stem = nn.Sequential(nn.Conv2d(1, 32, 3, 1, 1, bias=False), nn.BatchNorm2d(32), nn.ReLU())
-            self.l1 = Block(32, 64, 2); self.l2 = Block(64, 128, 2); self.l3 = Block(128, 256, 2); self.l4 = Block(256, 256, 2)
-            self.emb = nn.Linear(256 * 16, d); self.cls = nn.Linear(d, n_cls); self.comp = nn.Linear(d, n_comp)
-        def forward(self, x):
-            x = self.l4(self.l3(self.l2(self.l1(self.stem(x)))))
-            e = F.normalize(self.emb(x.flatten(1)), dim=1) * 16.0
-            return e, self.cls(e), self.comp(e)
-
-    net = Net(len(classes), len(ck["comps"]))
+    import torch.nn.functional as F
+    # 网络结构以 cnn_candidates._build_net 为准（2026-09-21 起有可选的结构头/槽位头）：
+    # 这里原来自己抄了一份 Net，r6 checkpoint 多了 struct/slot 两个键就 load 不进来。
+    from open_guji_cv.clustering.cnn_candidates import _build_net
+    net = _build_net(len(classes), len(ck["comps"]),
+                     n_struct=len(ck.get("struct_classes") or ()),
+                     n_slot=len(ck.get("slot_labels") or ()))
     net.load_state_dict(ck["state"]); net.eval()
     cs_idx = {c: i for i, c in enumerate(classes)}
     allowed = torch.tensor([cs_idx[c] for c in cs if c in cs_idx])
