@@ -8,12 +8,12 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from .. import deps
 from ..errors import maps_http
-from ...clustering.rare_panel import rare_batch, rare_for, rare_patch
+from ...clustering.rare_panel import ids_fallback, rare_batch, rare_for, rare_patch
 from ...errors import ImageMissing
 
 router = APIRouter()
@@ -93,3 +93,20 @@ def api_rare_batch(req: RareBatchIn) -> dict:
     从 ~10s 降到 ~2s。
     """
     return rare_batch(req.book, req.slots, req.k, deps.image_cache())
+
+
+@router.get("/api/rare/search/{book}")
+@maps_http
+def api_rare_ids_search(book: str, top: str = "", slot: list[str] = Query(default=[]),
+                        comp: list[str] = Query(default=[]), page: int = 0, col: int = 0,
+                        cell: int = 0, sub: str = "", k: int = 10) -> dict:
+    """**IDS 兜底**（2026-09-21，M0）：候选全错时按结构 + 认出的部件查字。
+
+    `?top=⿰&slot=L=言&comp=俞`，给了 `page/col/cell` 就拿那个字块的 emb 在
+    取回的字集里排序。引擎 `rare_panel.ids_fallback`；只出候选。
+    """
+    slots = dict(x.split("=", 1) for x in (slot or []) if "=" in x)
+    img = rare_patch(book, page, col, cell, sub, deps.image_cache()) if page else None
+    return {"book": book, "query": {"top": top, "slots": slots, "components": comp or []},
+            "with_image": img is not None,
+            "candidates": ids_fallback(top or None, slots, comp or [], img, k, book)}

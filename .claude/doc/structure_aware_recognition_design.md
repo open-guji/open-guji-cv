@@ -424,3 +424,19 @@ M0 全在云端、不用 GPU、不用等本机数据（#3 的评测除外），�
 - `scripts/eval_struct_rerank.py`：与 `eval_oov.py` 同口径，在 oov_bench 上报
   基线 vs 重排（扫 weight × top_m），按来源分层。**本机没 checkpoint 没跑**——
   这条要在本机跑：top-1、top-10 都不掉才在册配置里开。
+
+### 2026-09-21 · M0 第三块：IDS 倒排兜底接进面板 / CLI，候选带结构解释
+
+- `rare_panel.ids_fallback(top, slots, components, img, k, book)`：**候选全错时**按
+  结构 + 认出的部件在倒排里取字集（`top` 硬过滤、每中一条 +1、先取前 400），有字块图
+  且 CNN 可用时用 `CnnCandidates.embed()` 现渲染这个池子的字体模板、按余弦在**档内**排
+  （命中数是整数档，余弦只在档内排——池子由结构定、顺序由形状定）；没图按命中数 +
+  语料频次排。字表不限基集，白名单照用。实测「⿰ 左=言 含俞」→ 諭 2 分居首，4.3 s
+  （首次含建索引，之后毫秒）。这就是 survey G4 / 设计稿 §11 #7 的 L2，M0 版。
+- 入口：CLI `rare <book> --top ⿰ --slot-comp L=言 --comp 俞 [page col slot]`；
+  路由 `GET /api/rare/search/{book}?top=⿰&slot=L=言&comp=俞[&page&col&cell]`。
+  **前端没动**（dist 不在仓，要本机 build）——面板上加一个「按结构查」输入框是
+  下一块。
+- 每个候选字典多了 `struct: {top, slots}`（`struct_hint`），审字卡片解释行的数据源；
+  现在只有候选侧的结构，查询侧（字块预测的结构）要等 Step A。
+- 测试 `tests/test_rare_ids_fallback.py` 4 条（无图路）。
