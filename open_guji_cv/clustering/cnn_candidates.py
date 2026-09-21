@@ -140,6 +140,7 @@ class CnnCandidates:
         self._net = None
         self._classes: list[str] = []
         self._cidx: dict[str, int] = {}
+        self._comps: list[str] = []
         self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
         """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
@@ -164,6 +165,7 @@ class CnnCandidates:
         ck = torch.load(self.ckpt, map_location="cpu", weights_only=False)
         self._classes = list(ck["classes"])
         self._cidx = {c: i for i, c in enumerate(self._classes)}
+        self._comps = list(ck.get("comps") or [])
         net = _build_net(len(self._classes), len(ck["comps"]))
         net.load_state_dict(ck["state"])
         net.eval()
@@ -187,6 +189,29 @@ class CnnCandidates:
             pr = torch.softmax(sub, 0)
             top = pr.topk(min(k, len(idx)))
         return [(self._classes[idx[int(i)]], float(p)) for p, i in zip(top.values, top.indices)]
+
+    @property
+    def comps(self) -> list[str]:
+        """部件袋头的词表（训练时 `ids_guard.components` 出现 ≥3 字的部件）。未加载时空。"""
+        return list(self._comps) if self._ensure() else []
+
+    def comp_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化 64² 图 → {部件: 存在概率}（部件袋头 sigmoid）。
+
+        2026-09-21 加，M0 零训练结构重排用（`ids_struct.struct_rerank`）。这个头
+        训练时就在（`train_glyph_cnn.py` 的 `comp` 多标签 BCE），推理一直没读过它。
+        口径：词表是 **一级部件**（`ids_guard.components`），不是 `ids_struct` 的停集
+        词表——拿它打分时 `components_of` 必须传 `ids_guard.components`。
+        """
+        if not self._ensure() or not norm_patches or not self._comps:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            _, _, cp = self._net(x)                      # (N, n_comp) logits
+            pr = torch.sigmoid(cp).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._comps, row)} for row in pr]
 
     def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
                    ) -> list[list[tuple[str, float]]]:

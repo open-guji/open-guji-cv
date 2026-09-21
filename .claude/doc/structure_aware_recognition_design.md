@@ -410,3 +410,17 @@ M0 全在云端、不用 GPU、不用等本机数据（#3 的评测除外），�
 
 下一块（仍是云端）：给 `CnnCandidates` 加 `comp_probs_batch()`、在 `rare_panel` 加
 可开关的 Top-30 一致性重排 + 评测脚本；靶子到位后量。
+
+### 2026-09-21 · M0 第二块：部件概率输出 + 可开关的 Top-30 一致性重排 + 验收脚本
+
+- `CnnCandidates.comp_probs_batch()`：读现役 checkpoint 里一直没用过的**部件袋头**
+  （训练时就有的 `comp` 多标签 BCE），sigmoid 后按 `ck["comps"]` 给 {部件: 概率}。
+  词表是一级部件（`ids_guard.components`），不是停集词表——两套口径别混。
+- `ids_struct.struct_rerank()`：融合表前 30 名按一致性分排第二份名次表，与原表 RRF
+  （原表权 1、一致性表权 `STRUCT_RERANK_WEIGHT`=1.0 **未标定**）；None 的不进
+  一致性表但留在结果里；30 名之外不动。
+- `rare_for_batch(..., struct_rerank=False)` 与 `RareCandidatesParams.struct_rerank`
+  透传，**缺省关**。
+- `scripts/eval_struct_rerank.py`：与 `eval_oov.py` 同口径，在 oov_bench 上报
+  基线 vs 重排（扫 weight × top_m），按来源分层。**本机没 checkpoint 没跑**——
+  这条要在本机跑：top-1、top-10 都不掉才在册配置里开。

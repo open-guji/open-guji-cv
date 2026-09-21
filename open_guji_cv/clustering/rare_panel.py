@@ -246,8 +246,12 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 
 
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
-                   book: str | None = None) -> list[list[dict]]:
+                   book: str | None = None, struct_rerank: bool = False) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
+
+    `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
+    （`ids_struct.struct_rerank`）。**效果未量**，量法见 `scripts/eval_struct_rerank.py`；
+    量出 oov_bench / 北行 top-1、top-10 不掉之前不要在生产配置里打开。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
 
@@ -335,9 +339,25 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
 
-    return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
-            for a, b, cnn_topk, emb_topk, dbk
-            in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    if not (struct_rerank and cnn.available):
+        return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
+                for a, b, cnn_topk, emb_topk, dbk
+                in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+
+    # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
+    from .ids_guard import components as first_level_components
+    from .ids_struct import STRUCT_RERANK_TOP_M, struct_rerank as _rerank
+    m = max(k, STRUCT_RERANK_TOP_M)
+    fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk)
+             for a, b, cnn_topk, emb_topk, dbk
+             in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    probs = cnn.comp_probs_batch(norms)
+    out = []
+    for hits, pr in zip(fused, probs):
+        by_char = {h["char"]: h for h in hits}
+        order = _rerank([h["char"] for h in hits], pr, first_level_components, k=k)
+        out.append([by_char[ch] for ch in order])
+    return out
 
 
 def char_hint(ch: str) -> dict:
