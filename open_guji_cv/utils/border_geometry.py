@@ -156,6 +156,10 @@ class BorderDetectionResult:
     bottom_frame_kind: str | None = None
     top_bar_extent: float | None = None
     bottom_bar_extent: float | None = None
+    # 这条外框是不是按书级先验兜底估出来的（见 OUTER_INK_FALLBACK）。估的值位置可信度
+    # 低于观测值，下游要区别对待。
+    top_outer_estimated: bool = False
+    bottom_outer_estimated: bool = False
     # `push_bottom_to_bar` 把下版框往下推了多少 px（0 = 没动）；`snap_verticals_to_evidence`
     # 换了几条界行。都是诊断量，闸1 转成 flag 给人看。
     bottom_pushed: float = 0.0
@@ -524,7 +528,8 @@ def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
 
 def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           verticals: list[VLine], width: int, height: int,
-                          outer_shift: dict | None = None) -> dict:
+                          outer_shift: dict | None = None,
+                          book_gap: dict | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
@@ -552,6 +557,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     out: dict = dict(top_outer_offset=None, bottom_outer_offset=None,
                      top_frame_kind=None, bottom_frame_kind=None,
                      top_bar_extent=None, bottom_bar_extent=None,
+                     top_outer_estimated=False, bottom_outer_estimated=False,
                      v_outer_side=None, v_outer_offset=None)
     vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
     xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
@@ -629,6 +635,31 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 continue          # 条外面还是墨 => 这根本不是最外层，见常量注释
             out[f"{kind}_outer_offset"] = r[0]
             out[f"{kind}_frame_kind"] = "double"
+    # 书级先验兜底：该有外框却没探到的边，在册基准邻域找弱一档的墨（见 OUTER_INK_FALLBACK）
+    if book_gap:
+        for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
+            if out[f"{kind}_outer_offset"] is not None or out[f"{kind}_frame_kind"] == "single":
+                continue
+            g = book_gap.get(kind)
+            if g is None:
+                continue
+            base = np.array([line.y_at((width - 1) - x) for x in xs])
+            lo = max(OUTER_GAP_MIN, g - OUTER_PRIOR_FALLBACK_WIN)
+            hi = min(OUTER_GAP_MAX, g + OUTER_PRIOR_FALLBACK_WIN)
+            best = None
+            for o in np.arange(lo, hi + 1, 1.0):
+                yy = (base + o * sign).astype(int)
+                ok = (yy >= 0) & (yy < height)
+                v = float(binm[yy[ok], xs[ok]].mean()) if ok.any() else 0.0
+                if v >= OUTER_INK_FALLBACK and (best is None or v > best[1]):
+                    best = (float(o), v)
+            if best is None:
+                continue
+            if _paper_beyond(binm, base, xs, best[0] * sign, sign, height) > OUTER_PAPER_MAX:
+                continue
+            out[f"{kind}_outer_offset"] = best[0] * sign
+            out[f"{kind}_frame_kind"] = "double"
+            out[f"{kind}_outer_estimated"] = True
     return out
 
 
@@ -1269,6 +1300,45 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     return out, 3, w80_med, w80_max
 
 
+#: 书级外框间距先验（`BookSpec.outer_gap`，2026-09-20）。整册「外框外延 − 内框线」
+#: 极稳：vol02 上 38.6±8.3 / 下 27.2±5.3，vol01 上 36.7±6.7 / 下 27.4±4.7（std 都在
+#: 一条框的厚度量级）。所以某一页因为磨损/扫描糊了探不到时，**不该报 None**——
+#: 按整册基准兜底给一个，比没有强（用户 2026-09-20 定）。
+#:
+#: 兜底只在先验邻域 ±`OUTER_PRIOR_FALLBACK_WIN` 内找**弱一档**的墨（≥`OUTER_INK_FALLBACK`）：
+#: 全书实测漏探页在册中位附近仍有 0.30~0.93 的峰，只是够不着 `OUTER_INK_MIN=0.25`
+#: 的连续段判据（磨断了）。找不到就仍报 None，并在结果里标 `*_outer_estimated=True`。
+#:
+#: ⚠️ **估出来的只是「位置提示」，不是「探到了」**（用户 2026-09-20 定）。两册看图查实：
+#: 一部分（vol02 p39/p136）确实压在磨掉大半的残框墨上；另一部分（vol01 p33/p98）落在
+#: 几乎没墨的纸上。试过「落点最长连续横段/版框宽」想把两者分开——**分不开**：
+#: 0.05~0.29 连续分布，真残框 p39 的 0.13 比凭空的 p98 的 0.21 还低（同
+#: `_rescue_bottom` 那段记的教训：磨损到这个程度单一几何量没有分辨力）。
+#: 所以闸1 **不**把 estimated 当作「探到外框」——`outer_frame_missing` 照旧 flag；
+#: 下游要用这个位置（比如裁图留边）可以取，要严格统计就按 `*_outer_estimated` 滤掉。
+OUTER_INK_FALLBACK = 0.18
+OUTER_PRIOR_FALLBACK_WIN = 12.0
+
+
+def measure_book_outer_gap(results) -> dict:
+    """量一册的 `outer_gap`：上/下「外框外延 − 内框线」的中位数。
+
+    `results`：整册的 `BorderDetectionResult`（只统计探到外框的页）。
+    返回 `{"top": float, "bottom": float}`，样本不足 8 页的边不进字典——
+    样本太少的中位数当先验会把整册带偏。
+    ⚠️ 只在标定时跑一次写进 yaml，别放进逐页流水线。
+    """
+    acc: dict[str, list[float]] = {"top": [], "bottom": []}
+    for res in results:
+        if res is None:
+            continue
+        for kind in ("top", "bottom"):
+            o = getattr(res, f"{kind}_outer_offset", None)
+            if o is not None:
+                acc[kind].append(abs(float(o)))
+    return {k: float(np.median(v)) for k, v in acc.items() if len(v) >= 8}
+
+
 def measure_book_outer_shift(results, masks, ink: float = OUTER_INK_MIN) -> dict:
     """量一册的 `outer_shift`：上/下外框中心相对「竖直外框内外间距」的差。
 
@@ -1354,7 +1424,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     col_pitch: float | None = None,
                     frame_height: float | None = None,
                     vline_polyline: bool = True,
-                    outer_shift: dict | None = None) -> BorderDetectionResult:
+                    outer_shift: dict | None = None,
+                    book_outer_gap: dict | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1453,7 +1524,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         verticals, vseg = conv, 3
     head_raise = detect_head_raise(mask, top, verticals, w)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
-                                 outer_shift=outer_shift)
+                                 outer_shift=outer_shift, book_gap=book_outer_gap)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,
