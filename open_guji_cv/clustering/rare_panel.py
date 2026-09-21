@@ -195,15 +195,104 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
         hits = [(ch, by_char_hog[ch].font, by_char_hog[ch].score)
                 if ch in by_char_hog else (ch, "cnn", 0.0) for ch in order]
 
+    return _decorate(hits)
+
+
+def struct_hint(ch: str) -> dict:
+    """候选的结构解释：{"top": "⿰", "slots": {"L": "言", "R": "俞"}}（`ids_struct` 口径）。
+    独体字 top="独体"、slots 空。给审字卡片的解释行用（设计稿 §4.2 Step A 产出 ②）。"""
+    from .ids_struct import SINGLE, structure_of
+    st = structure_of(ch)
+    if st.top == SINGLE:
+        return {"top": SINGLE, "slots": {}}
+    return {"top": st.top, "slots": {k: "".join(v) for k, v in st.top_slots().items()}}
+
+
+def _decorate(hits: list[tuple[str, str, float]]) -> list[dict]:
+    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 频次 / 码点 / 释义 / 正字 / 深链。"""
     freq = _corpus_freq(DEFAULT_CORPUS)
     return [{
         "char": ch, "score": round(score, 4), "font": font,
         "ids": ids_of(ch),
+        "struct": struct_hint(ch),
         "freq": freq.get(ch, 0),
         "cp": f"U+{ord(ch):04X}" if len(ch) == 1 else "",
         "zi": f"https://zi.tools/zi/{ch}",
         **char_hint(ch),
     } for ch, font, score in hits]
+
+
+def ids_fallback(top: str | None = None, slots: dict[str, str] | None = None,
+                 components: list[str] | None = None, img=None, k: int = 10,
+                 book: str | None = None, corpus: str | None = None,
+                 pool: int = 400) -> list[dict]:
+    """**候选全错时的兜底**：按结构 + 已认出的部件在 IDS 倒排里取字集，再用 emb 排序。
+
+    `top`（⿰ / ⿱ …）是硬过滤；`slots={"L": "言"}` 与 `components=["俞"]` 每中一条 +1；
+    先按命中数取前 `pool` 个，再（有字块图且 CNN 可用时）按 emb 余弦在这个池子里
+    排序——**池子由结构定、顺序由形状定**，两者各管一半。没有图就按命中数 + 语料
+    频次排。字表不限基集：兜底本来就是为了够到基集外的字，白名单（简体否决）照用。
+
+    只出候选。它是 `rare_char_matching_survey.md` G4 说的 L2，M0 版（2026-09-21）。
+    """
+    from .ids_struct import shared_index
+    idx = shared_index()
+    # 先取**全部**命中再排、再截池：只按命中数截会让平局按码点排，欠定查询
+    # （只给「含鹿」）时 麓 这种基本区常用字被扩A 的一堆字挤出池子（2026-09-21 测试撞上）。
+    hits = idx.search(top=top or None, slots=slots or None,
+                      components=components or (), limit=1_000_000)
+    if not hits:
+        return []
+    freq0 = _corpus_freq(corpus or DEFAULT_CORPUS)
+
+    def _block(ch: str) -> int:      # 基本区 < 扩A < 兼容区 < 扩B+：没有频次时的「常用度」代理
+        o = ord(ch[0])
+        return 0 if 0x4E00 <= o <= 0x9FFF else 1 if 0x3400 <= o <= 0x4DBF \
+            else 2 if 0xF900 <= o <= 0xFAFF else 3
+    hits = sorted(hits, key=lambda t: (-t[1], -freq0.get(t[0], 0), _block(t[0]), t[0]))[:pool]
+    allow = "none"
+    keep: frozenset = frozenset()
+    try:
+        from .charset_spec import filter_candidates, spec_for_book
+        allow = spec_for_book(book).get("allow", "none") if book else "no-simplified"
+        keep = _corpus_keep(corpus)
+    except Exception:
+        pass
+    chars = [ch for ch, _ in hits]
+    score = {ch: float(n) for ch, n in hits}
+    if allow != "none":
+        chars = [c for c, _ in filter_candidates([(c, score[c]) for c in chars], allow, keep)]
+
+    from .cnn_candidates import shared
+    cnn = shared()
+    if img is not None and cnn.available and chars:
+        from .synth import render_char
+        from .font_candidates import _font_files
+        fonts = _font_files()
+        tmpl, names = [], []
+        for ch in chars:
+            ims = []
+            for fp in fonts:
+                try:
+                    im = render_char(ch, fp, size=64)
+                except Exception:
+                    continue
+                if im is not None and im.any():
+                    ims.append(im.astype("uint8"))
+            if ims:
+                tmpl.append(ims); names.append(ch)
+        if names:
+            flat = [im for ims in tmpl for im in ims]
+            E = cnn.embed(flat)
+            q = cnn.embed([normalize_patch(img)])[0]
+            out, i = [], 0
+            for ch, ims in zip(names, tmpl):
+                v = E[i:i + len(ims)].mean(0); i += len(ims)
+                v = v / (float((v ** 2).sum()) ** 0.5 + 1e-9)
+                out.append((ch, "ids+emb", float(v @ q) + score[ch]))   # 命中数是整数档，余弦只在档内排
+            out.sort(key=lambda t: -t[2])
+            return _decorate(out[:k])
+    return _decorate([(c, "ids", score[c]) for c in chars[:k]])   # chars 已按 命中→频次→区块 排好
 
 
 def rare_for(img, k: int, corpus: str | None = None,
@@ -246,8 +335,12 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 
 
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
-                   book: str | None = None) -> list[list[dict]]:
+                   book: str | None = None, struct_rerank: bool = False) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
+
+    `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
+    （`ids_struct.struct_rerank`）。**效果未量**，量法见 `scripts/eval_struct_rerank.py`；
+    量出 oov_bench / 北行 top-1、top-10 不掉之前不要在生产配置里打开。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
 
@@ -335,9 +428,30 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
 
-    return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
-            for a, b, cnn_topk, emb_topk, dbk
-            in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    if not (struct_rerank and cnn.available):
+        return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
+                for a, b, cnn_topk, emb_topk, dbk
+                in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+
+    # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
+    from .ids_guard import components as first_level_components
+    from .ids_struct import STRUCT_RERANK_TOP_M, struct_rerank as _rerank
+    m = max(k, STRUCT_RERANK_TOP_M)
+    fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk)
+             for a, b, cnn_topk, emb_topk, dbk
+             in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    # Step A 的槽位头（部件@槽）比部件袋头（只管有没有、不管在哪）更细，有就用它
+    if cnn.has_struct_heads:
+        from .ids_struct import slot_keys_of
+        probs, comps_of = cnn.slot_probs_batch(norms), slot_keys_of
+    else:
+        probs, comps_of = cnn.comp_probs_batch(norms), first_level_components
+    out = []
+    for hits, pr in zip(fused, probs):
+        by_char = {h["char"]: h for h in hits}
+        order = _rerank([h["char"] for h in hits], pr, comps_of, k=k)
+        out.append([by_char[ch] for ch in order])
+    return out
 
 
 def char_hint(ch: str) -> dict:

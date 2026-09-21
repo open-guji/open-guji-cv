@@ -91,8 +91,12 @@ def fingerprint(path: str | Path = DEFAULT_CKPT) -> str:
     return hashlib.sha1(f"{p}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
 
 
-def _build_net(n_cls: int, n_comp: int, d: int = 256):
-    """与 train_glyph_cnn.Net 同构；结构改了这里要同步（用 checkpoint 里的维度校验）。"""
+def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot: int = 0):
+    """与 train_glyph_cnn.Net 同构；结构改了这里要同步（用 checkpoint 里的维度校验）。
+
+    `n_struct` / `n_slot` > 0 时多两个头（Step A，2026-09-21）：结构头（顶层算符 18 类）
+    与槽位部件头（`部件@槽` 多标签）。r4/r5 checkpoint 没有这两个键，传 0 即原网络，
+    `forward` 的三元组返回值不变——老调用方一个都不用改；新头走 `heads()`。"""
     import torch.nn as nn
     import torch.nn.functional as F
 
@@ -122,11 +126,23 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256):
             self.emb = nn.Linear(256 * 16, d)
             self.cls = nn.Linear(d, n_cls)
             self.comp = nn.Linear(d, n_comp)
+            self.struct = nn.Linear(d, n_struct) if n_struct > 0 else None
+            self.slot = nn.Linear(d, n_slot) if n_slot > 0 else None
 
         def forward(self, x):
             x = self.l4(self.l3(self.l2(self.l1(self.stem(x)))))
             e = F.normalize(self.emb(x.flatten(1)), dim=1) * 16.0
             return e, self.cls(e), self.comp(e)
+
+        def heads(self, x):
+            """全部头：dict(emb, cls, comp, struct?, slot?)。"""
+            e, lg, cp = self.forward(x)
+            out = {"emb": e, "cls": lg, "comp": cp}
+            if self.struct is not None:
+                out["struct"] = self.struct(e)
+            if self.slot is not None:
+                out["slot"] = self.slot(e)
+            return out
 
     return Net()
 
@@ -140,6 +156,9 @@ class CnnCandidates:
         self._net = None
         self._classes: list[str] = []
         self._cidx: dict[str, int] = {}
+        self._comps: list[str] = []
+        self._struct_classes: list[str] = []
+        self._slot_labels: list[str] = []
         self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
         """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
@@ -164,7 +183,11 @@ class CnnCandidates:
         ck = torch.load(self.ckpt, map_location="cpu", weights_only=False)
         self._classes = list(ck["classes"])
         self._cidx = {c: i for i, c in enumerate(self._classes)}
-        net = _build_net(len(self._classes), len(ck["comps"]))
+        self._comps = list(ck.get("comps") or [])
+        self._struct_classes = list(ck.get("struct_classes") or [])
+        self._slot_labels = list(ck.get("slot_labels") or [])
+        net = _build_net(len(self._classes), len(ck["comps"]),
+                         n_struct=len(self._struct_classes), n_slot=len(self._slot_labels))
         net.load_state_dict(ck["state"])
         net.eval()
         dev = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -187,6 +210,58 @@ class CnnCandidates:
             pr = torch.softmax(sub, 0)
             top = pr.topk(min(k, len(idx)))
         return [(self._classes[idx[int(i)]], float(p)) for p, i in zip(top.values, top.indices)]
+
+    @property
+    def comps(self) -> list[str]:
+        """部件袋头的词表（训练时 `ids_guard.components` 出现 ≥3 字的部件）。未加载时空。"""
+        return list(self._comps) if self._ensure() else []
+
+    @property
+    def has_struct_heads(self) -> bool:
+        """checkpoint 带不带 Step A 的结构头 / 槽位头（r4/r5 不带）。"""
+        return self._ensure() and bool(self._struct_classes) and bool(self._slot_labels)
+
+    @property
+    def slot_labels(self) -> list[str]:
+        return list(self._slot_labels) if self._ensure() else []
+
+    def struct_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化图 → {顶层算符: 概率}（结构头 softmax）。没有结构头 → 全空字典。"""
+        if not self.has_struct_heads or not norm_patches:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+            pr = torch.softmax(self._net.heads(x)["struct"], 1).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._struct_classes, row)} for row in pr]
+
+    def slot_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化图 → {部件@槽: 概率}（槽位头 sigmoid）。键与 `ids_struct.slot_keys_of` 同口径。"""
+        if not self.has_struct_heads or not norm_patches:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+            pr = torch.sigmoid(self._net.heads(x)["slot"]).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._slot_labels, row)} for row in pr]
+
+    def comp_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化 64² 图 → {部件: 存在概率}（部件袋头 sigmoid）。
+
+        2026-09-21 加，M0 零训练结构重排用（`ids_struct.struct_rerank`）。这个头
+        训练时就在（`train_glyph_cnn.py` 的 `comp` 多标签 BCE），推理一直没读过它。
+        口径：词表是 **一级部件**（`ids_guard.components`），不是 `ids_struct` 的停集
+        词表——拿它打分时 `components_of` 必须传 `ids_guard.components`。
+        """
+        if not self._ensure() or not norm_patches or not self._comps:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            _, _, cp = self._net(x)                      # (N, n_comp) logits
+            pr = torch.sigmoid(cp).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._comps, row)} for row in pr]
 
     def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
                    ) -> list[list[tuple[str, float]]]:
@@ -249,7 +324,7 @@ class CnnCandidates:
 
         import hashlib
         import torch
-        from .font_candidates import _font_files
+        from .font_candidates import _font_files, font_set_fingerprint
         from .synth import render_char
 
         cs = tuple(charset)
@@ -264,8 +339,10 @@ class CnnCandidates:
                 extra = load_many(specs, cs)
         except Exception:
             extra = {}
-        key = hashlib.sha1((fingerprint(self.ckpt) + "".join(cs)
-                            + "|".join(sorted(extra)) ).encode("utf-8")).hexdigest()[:16]
+        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
+        # 见 `font_candidates.font_set_fingerprint` 模块头。
+        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
+                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
         f = self.ckpt.parent / f"emb_{key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=False)
@@ -320,6 +397,19 @@ class CnnCandidates:
         os.replace(tmp, f)
         self._emb_cache = (charset, mat, names)
         return mat, names
+
+    def embed(self, norm_patches: list[np.ndarray]) -> np.ndarray:
+        """归一化 64² 图 → 单位化 embedding (N, 256)。不可用时 (0, 256)。
+        给 IDS 兜底检索用（`rare_panel.ids_fallback`）：字集是查询临时定的，不走
+        `_emb_index` 的按字表落盘缓存。"""
+        if not self._ensure() or not norm_patches:
+            return np.zeros((0, 256), np.float32)
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            e, _, _ = self._net(x)
+            return (e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy()
 
     def emb_topk(self, norm_patch: np.ndarray, charset, k: int = 10) -> list[tuple[str, float]]:
         """归一化 64² 二值图 → 与字体模板 embedding 的余弦 top-k。"""
@@ -426,9 +516,11 @@ def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
 
 def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
                       specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
-    """生僻字候选栈的完整指纹：checkpoint + 外部模板集。进 Step 参数才能让
-    `rare_candidates` 产物在换模型/换模板时正确过期（见 `steps/rare_candidates.py`）。"""
-    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}"
+    """生僻字候选栈的完整指纹：checkpoint + 外部模板集 + **模板字体集**（2026-09-21 补，
+    此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
+    换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。"""
+    from .font_candidates import font_set_fingerprint
+    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}:{font_set_fingerprint()}"
 
 
 def _spec_ready(spec: str) -> bool:

@@ -46,7 +46,7 @@ from pathlib import Path
 import numpy as np
 
 # 传承字形优先——刻本用的是旧字形
-FONT_ORDER = ("iming", "jigmo", "kangxi")
+FONT_ORDER = ("iming", "jigmo", "kangxi", "genmin")
 """模板字体，按优先级。
 
 - `iming` I.Ming 一点明朝体：传承字形（旧字形），用字习惯与刻本最吻合
@@ -57,7 +57,17 @@ FONT_ORDER = ("iming", "jigmo", "kangxi")
   **覆盖率 100% vs 76%**。**注意它不能单用**：只留它、去掉 iming/jigmo 会掉到 94.5%，
   多套字体「同字多写法取平均」的作用它一套顶不了。
   ⚠️ 商业字体（字语 TypeLand），字形轮廓受版权保护，与公版古籍扫描图性质不同；
-  进可分发产物前须确认授权。"""
+  进可分发产物前须确认授权。
+- `genmin` **源流／源雲／源樣明體 2.100**（2026-09-21 加；SIL OFL 1.1，`fonts/genmin/LICENSE.txt`）：
+  ButTaiwan 基于思源宋体做的三套传承字形明朝体，基本区 + 扩A 全覆盖（cmap 35,349 字）、
+  扩B 只 2,135。三套档在仓里躺了很久却没进 `FONT_ORDER`、全仓零引用
+  （`rare_char_matching_survey.md` G7）。
+  ⚠️ **接进来时没量过**（当时的机器没有 torch）——先跑
+  `scripts/eval_zero_shot_fusion.py --split unseen --emb` 与 `scripts/eval_oov.py`
+  对照 r5 基线（unseen 严格 96.9 / oov 314 条 73.2），掉了就把这一项拿掉。已知先例：
+  多套字体「同字多写法取平均」有用（只留康熙体 96.4 → 94.5），但三套同源字体会不会
+  把均值拉向思源宋体的骨架，没人量过。字体集已进指纹（`font_set_fingerprint`），
+  加减字体会让 emb 索引与 `rare_candidates` 产物自动过期，不会静默沿用旧模板。"""
 NORM = 64
 
 
@@ -101,13 +111,31 @@ def _font_files(root: str = "fonts") -> list[str]:
 INDEX_DIR = Path("cache/font_index")
 
 
+def font_set_fingerprint(root: str = "fonts") -> str:
+    """模板字体集的指纹：每个字体档 `名字:大小:mtime` 拼起来哈希；一个都没有 → "nofonts"。
+
+    2026-09-21 加。此前只有 HOG 索引键（`_index_key`）带字体档，embedding 索引键
+    （`cnn_candidates._emb_index`）与 `rare_candidates` 产物指纹（`full_fingerprint`）
+    **都不带**——于是 `FONT_ORDER` 加一套字体、或换掉 `fonts/` 里的档，emb 索引照旧
+    命中旧缓存、产物照旧显示新鲜，模板其实一张没变。与「阈值不进指纹」
+    （`steps/rare_candidates.py` 2026-09-17）同一类静默失效，现在三处共用这一把尺子。
+    """
+    import hashlib
+    files = _font_files(root)
+    if not files:
+        return "nofonts"
+    h = hashlib.sha1()
+    for f in files:
+        st = Path(f).stat()
+        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}|".encode())
+    return h.hexdigest()[:12]
+
+
 def _index_key(charset: tuple[str, ...], root: str, backend: str) -> str:
     import hashlib
     h = hashlib.sha1()
     h.update(backend.encode())
-    for f in _font_files(root):
-        st = Path(f).stat()
-        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}".encode())
+    h.update(font_set_fingerprint(root).encode())
     h.update("".join(charset).encode("utf-8"))
     return h.hexdigest()[:16]
 

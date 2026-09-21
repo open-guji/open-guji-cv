@@ -107,3 +107,32 @@ def test_hog_not_called_when_cnn_available():
     finally:
         rare_panel.candidates = orig
     assert not calls, "CNN 可用时不该再调 font_candidates.candidates（HOG）"
+
+
+def test_params_hash_tracks_model_and_font_set(monkeypatch, tmp_path):
+    """候选栈的外部状态（checkpoint / 外部模板集 / 模板字体集）必须进 `params_hash`，
+    产物才会在它们变化时过期（`core/engine._self_payload` 只看参数哈希、代码哈希、
+    `book_deps`，不读产物体里的 `PageRare.model_fingerprint`）。
+
+    2026-09-21 之前 `RareCandidatesParams` 只有 `k`：原地换 `best.pt`、往 `fonts/`
+    加一套字体，产物照报「新鲜」。这条钉住两件事：指纹自动填进参数；**字体集**
+    变了指纹就变（此前 emb 索引键与产物指纹都不带字体档）。
+    """
+    from open_guji_cv.clustering import font_candidates as fc
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.steps.rare_candidates import RareCandidatesParams
+
+    a = RareCandidatesParams()
+    assert a.model_fingerprint, "model_post_init 没把 full_fingerprint 填进参数"
+    assert a.model_fingerprint.count(":") == 2, "指纹应为 checkpoint:模板集:字体集 三段"
+
+    # 字体集多一个档 → 只有字体段变，其余两段不动
+    extra = tmp_path / "Extra.ttf"
+    extra.write_bytes(b"\0" * 16)
+    real = fc._font_files
+    monkeypatch.setattr(fc, "_font_files", lambda root="fonts": real(root) + [str(extra)])
+    b = RareCandidatesParams()
+    assert params_hash(a) != params_hash(b)
+    assert a.model_fingerprint.rsplit(":", 1)[0] == b.model_fingerprint.rsplit(":", 1)[0]
+    assert a.model_fingerprint.rsplit(":", 1)[1] != b.model_fingerprint.rsplit(":", 1)[1]
+
