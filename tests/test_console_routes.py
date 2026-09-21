@@ -854,8 +854,16 @@ def _cli_json(argv: list[str]) -> dict:
     return json.loads(buf.getvalue())
 
 
+@pytest.mark.manual
 def test_cli_matches_routes():
-    """C5 的验收：11 对「命令行 vs 路由」逐条同输出。"""
+    """C5 的验收：11 对「命令行 vs 路由」逐条同输出。
+
+    2026-09-20 改标 `manual`（默认不跑，要跑加 `-m manual`）：它比的是
+    「同一批**真产物**经两个出口出来一不一样」，所以必须有真书工作区。
+    原先是 `skip`——看着在测试清单里，实际云端一次都没跑过，而 skip 与
+    「跑过且通过」在报告里长得一样。标成 manual 是把这件事摆到台面上：
+    这是人工验收工具，不是自动化测试。准备环境见模块 docstring。
+    """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
     if not (products_root() / BOOK / "seed_admit").exists():
@@ -882,8 +890,12 @@ def test_cli_matches_routes():
     print(f"\n{len(CLI_PAIRS)}/{len(CLI_PAIRS)} 对「命令行 vs 路由」同输出")
 
 
+@pytest.mark.manual
 def test_cli_image_exits(tmp_path):
-    """图像类三条（product raw / overlay / patch、cache get / column）与路由出**同样的字节**。"""
+    """图像类三条（product raw / overlay / patch、cache get / column）与路由出**同样的字节**。
+
+    同上，2026-09-20 改标 `manual`：要真书工作区的原图与缓存。
+    """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE")
     EP = _endpoints()

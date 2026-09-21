@@ -67,6 +67,11 @@ console = [
 ]
 dev = [
     "pytest>=7.0",
+    # `clustering/font_glyphs.py` 与 `scripts/build_charset.py` 读字体 cmap 要它。
+    # 生产代码里是**惰性 import**（不导字体字形就用不到），但测试要覆盖那条路，
+    # 所以进 dev。2026-09-20 之前它一处都没声明，tests/clustering/test_font_glyphs.py
+    # 因此在没装它的机器上整片报 ModuleNotFoundError。
+    "fontTools>=4.0",
     "build>=1.0",
     "twine>=4.0",
     "ruff>=0.4",

@@ -16,6 +16,15 @@ BASELINE 是切分前（2,331 行单文件 index.html，commit e33a6457）实测
      python -m open_guji_cv pipeline keben_body_v2 vol01 --pages 24,42`
     （子会话须知 §五：`pytest` 必须带 `-s`，不带会崩）
 没有这些前提就跳过，不误报失败。
+
+2026-09-20：整个模块改标 `manual`（默认不跑，要跑加 `-m manual`）。它要
+浏览器 + 真书工作区 + 跑过的产物，三样都不可能在仓里备齐，本来就不属于
+「只依赖本仓库」的自动化测试。原先是一串 `skipif`，跑全仓时报一行
+「collection skipped」——看着像有这么个测试在守着，其实从没执行过。
+标成 manual 是把它的身份写明：人工验收工具。
+
+另：`importorskip` 也换成了 `find_spec` 判据。前者在 **import 期**就抛
+Skipped，模块连 `pytestmark` 都来不及暴露，于是 `-m 'not manual'` 筛不掉它。
 """
 from __future__ import annotations
 
@@ -33,11 +42,24 @@ from open_guji_cv.core.workspace import products_root  # noqa: E402
 
 PROBE_PRODUCT = products_root() / "vol01" / "border_detect" / "p0024.json"
 
-playwright_sync = pytest.importorskip("playwright.sync_api", reason="需要 `uv pip install playwright`")
-pytest.importorskip("uvicorn", reason="需要 `uv pip install uvicorn`")
-pytest.importorskip("fastapi", reason="需要 `uv pip install fastapi`")
+
+
+def _have(mod: str) -> bool:
+    """这个包在不在。`find_spec` 对 `a.b` 会先 import `a`，包本身缺席时抛
+    ModuleNotFoundError 而不是返回 None——所以要兜住。"""
+    import importlib.util
+    try:
+        return importlib.util.find_spec(mod) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+_MISSING = [m for m in ("playwright.sync_api", "uvicorn", "fastapi") if not _have(m)]
 
 pytestmark = [
+    pytest.mark.manual,
+    pytest.mark.skipif(bool(_MISSING),
+                       reason=f"缺依赖：{_MISSING}（uv pip install playwright fastapi uvicorn）"),
     pytest.mark.skipif(not CHROMIUM.exists(), reason=f"没有预装的 Chromium：{CHROMIUM}"),
     pytest.mark.skipif(not os.environ.get("GUJI_WORKSPACE"), reason="需要设 GUJI_WORKSPACE（子会话须知 §一）"),
     pytest.mark.skipif(

@@ -21,21 +21,21 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import rare_char_set  # noqa: E402 —— 同目录辅助：按 patch_key 解析字块图，见其 docstring
 
 from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
                                                      candidates_batch, _font_files)
-from open_guji_cv.core.workspace import corpus_path
 
 # 用生产代码那个 `_font_files()` 判，不要自己 glob 相对路径（2026-09-17）：
 # 它按引擎仓定位、认 .otf（康熙体是 otf），而 `glob("fonts/*/*.ttf")` 靠 cwd、
 # 还漏 otf——守卫与被测代码认两套路径，迟早给出不一致的结论。
-FONTS_OK = bool(_font_files())
-needs_fonts = pytest.mark.skipif(
-    not FONTS_OK, reason="没有字体文件（fonts/ 下的 ttf/otf，随引擎仓走）")
+#
+# `fonts/` 是**引擎自带**的字体档（随仓库走、入 git），不是某本书的数据，
+# 所以这里依赖它不违反「测试只依赖本仓库」——它不会跟着跑批变。
+_FONTS = _font_files()
+assert _FONTS, ("fonts/ 下一个字体都没有。字体档随引擎仓走（见 fonts/README.md），"
+                "缺了是仓库不完整，不是环境问题——所以这里直接红，不 skip。")
 
 
-@needs_fonts
 def test_fonts_are_found_in_priority_order():
     """I.Ming（传承字形）排在 Jigmo 前面——刻本用的是旧字形。"""
     files = _font_files()
@@ -43,7 +43,6 @@ def test_fonts_are_found_in_priority_order():
     assert "iming" in files[0].lower().replace("\\", "/")
 
 
-@needs_fonts
 @pytest.mark.parametrize("ch", ["袤", "㕔", "䙝", "効", "槧"])
 def test_renders_rare_chars(ch):
     """生僻字必须渲染得出来——这是它相对字形库的全部优势所在。
@@ -63,7 +62,6 @@ def test_renders_rare_chars(ch):
     assert ok, f"{ch} 一套字体都渲染不出来"
 
 
-@needs_fonts
 def test_candidates_are_deduped_and_ranked():
     """同字被多套字体命中只留最高分——候选是给人看的，不该重复。"""
     from open_guji_cv.clustering.synth import render_char
@@ -76,7 +74,6 @@ def test_candidates_are_deduped_and_ranked():
     assert all(hits[i].score >= hits[i + 1].score for i in range(len(hits) - 1))
 
 
-@needs_fonts
 def test_candidates_batch_matches_sequential():
     """`candidates_batch` 必须与逐个调用 `candidates` 位级相同（2026-09-10，
     生僻字候选提速：一页多字改成一次矩阵-矩阵乘法，不能悄悄改变排名）。"""
@@ -88,8 +85,12 @@ def test_candidates_batch_matches_sequential():
     seq = [candidates(p, cs, k=5) for p in patches]
     batch = candidates_batch(patches, cs, k=5)
     for s, b in zip(seq, batch):
-        assert [(h.char, round(h.score, 6), h.font) for h in s] == \
-               [(h.char, round(h.score, 6), h.font) for h in b]
+        assert [(h.char, h.font) for h in s] == [(h.char, h.font) for h in b]
+        # 分数不能要求逐位相同：同一个点积，矩阵-矩阵乘法与逐个向量乘法走的是
+        # 不同的 BLAS 路径，累加次序不同就会差一个 ulp（实测 0.509911 vs
+        # 0.509912）。要钉的是**排名不变**，不是浮点位相同——`round(x, 6)`
+        # 那种写法只是把容差藏进了四舍五入里，边界上照样翻车。
+        assert [h.score for h in s] == pytest.approx([h.score for h in b], abs=1e-5)
 
 
 def test_book_charset_excludes_non_han(tmp_path):
@@ -99,89 +100,19 @@ def test_book_charset_excludes_non_han(tmp_path):
     assert "臣" in cs and "按" in cs
     assert "A" not in cs and "1" not in cs and "，" not in cs
 
-
-@needs_fonts
-def test_recall_on_rare_char_set():
-    """在真集上跑：真难题那档 top-10 召回不该掉到 60% 以下。
-
-    这条是 C 刀的验收线。跑得慢（要建 4600 字 × 4 字体的索引），
-    但它是唯一能证明「字体模板对生僻字有用」的用例。
-    """
-    if not rare_char_set.available():
-        pytest.skip(rare_char_set.SKIP_REASON)
-
-    from open_guji_cv.clustering.normalize import normalize_patch
-
-    loaded = rare_char_set.load_items()
-    hard = [(it, img) for it, img in loaded if not it["expected"]["in_candidates"]]
-    assert hard, "集里没有「三路都没答案」的样本，这条用例失去意义"
-    cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
-                      [it["expected"]["char"] for it, _ in loaded])
-    hit = 0
-    for it, img in hard:
-        got = [h.char for h in candidates(normalize_patch(img), cs, k=10)]
-        hit += it["expected"]["char"] in got
-    rate = hit / len(hard)
-    assert rate >= 0.60, f"真难题 top-10 召回掉到 {rate:.1%}（2026-09-04 实测 78.6%）"
-
-
-def test_two_tier_charset_beats_single_table():
-    """两档字表：小表 top3 占前三、大表补后——top1 与 top10 都要拿到。
-
-    2026-09-04 用户反馈「点生僻字查询准确率不高」，量出来是字表扩张的代价：
-    并上异体展开后字表 4636 → 20059，多出的一万五千个罕用形在 HOG 上与正确
-    答案难分伯仲，**top-1 从 43% 掉到 29%**。
-
-    | 字表 | top1 | top3 | top10 |
-    |---|---|---|---|
-    | 小表（整理本 4636 字）| 43% | 71% | 71% |
-    | 大表（+异体 20059 字）| 29% | 67% | **76%** |
-    | **小表 top3 + 大表** | **43%** | **71%** | **76%** |
-
-    小表名次准但召不全（㕔/䙝 整理本频次 0，压根不在表里）；大表召得全但名次
-    被冲垮。位次合并两头都拿到。
-
-    三条无效的路（别再走）：本书频次加权把 top3 从 67% 打到 33%——要找的字
-    本来就罕见，频次先验反着起作用；异体身份加权 67% → 62%；相似度闸控扩表
-    从不触发，因为小表 top1 分数恒 >0.84，**错的时候也高**。
-    """
-    if not FONTS_OK:
-        pytest.skip("没有字体文件（fonts/ 下的 ttf/otf，随引擎仓走）")
-    if not rare_char_set.available():
-        pytest.skip(rare_char_set.SKIP_REASON)
-
-    from open_guji_cv.clustering.normalize import normalize_patch
-    from open_guji_cv.variants import variants_of
-
-    small = tuple(book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt"))))
-    # 这条靠字表规模统计 top1/top10 召回率，不是单纯验证代码逻辑——没设
-    # GUJI_WORKSPACE 时仓内只有语料小样本（~1100 字种），docstring 里的
-    # 4636 字种、43%/71% 这些数字全部基于完整语料，小样本测出来的召回率
-    # 统计失真（不是代码错），该跳过而不是硬跑给假阳性失败。
-    if len(small) < 4000:
-        pytest.skip(f"字表只有 {len(small)} 字种（需要完整整理本 ~4636 字种），"
-                    "没设 GUJI_WORKSPACE 时仓内只有语料小样本")
-    big = set(small)
-    for ch in small:
-        big.update(v[0] if isinstance(v, (tuple, list)) else v
-                   for v in (variants_of(ch) or ()))
-    big = tuple(sorted(big))
-
-    t1 = t10 = n = 0
-    for it, img in rare_char_set.load_items():
-        norm = normalize_patch(img)
-        a = candidates(norm, small, k=10)
-        b = candidates(norm, big, k=10)
-        out, seen = [], set()
-        for h in list(a[:3]) + list(b) + list(a[3:]):
-            if h.char not in seen:
-                seen.add(h.char)
-                out.append(h.char)
-        out = out[:10]
-        ref = it["expected"]["char"]
-        n += 1
-        t1 += out[:1] == [ref]
-        t10 += ref in out
-    assert n
-    assert t1 / n >= 0.38, f"top-1 掉到 {t1/n:.0%}（2026-09-04 实测 43%）"
-    assert t10 / n >= 0.70, f"top-10 掉到 {t10/n:.0%}（2026-09-04 实测 76%）"
+# ── 召回率那两条已迁出测试（2026-09-20）─────────────────────────────────
+#
+# `test_recall_on_rare_char_set` 与 `test_two_tier_charset_beats_single_table`
+# 量的是**字体模板在 rare-char 集上的 top-1 / top-10 召回率**。那是评测，不是
+# 测试：它依赖仓外的 `../open-guji-dataset/rare-char/items.jsonl` ＋ 本地跑批
+# 才有的 `cache/<book>/char_patch/` 字块图，还依赖完整整理本语料（仓内只有
+# 6000 字小样本，字表 ~1100 字种，docstring 里 4636 字种那组数字全部失真）。
+# 三样东西缺一就 `skip`，于是云端三条常年一条都没跑。
+#
+# 同一个量本来就有评测在做，而且比这两条完整（分层报、可出报告）：
+#
+#     python scripts/eval_rare_char.py --k 10        # 或 guji eval run --only rare_char
+#
+# 结论数字与「别再走的三条路」留在 `doc/glyph_db_expansion_research.md` §6，
+# 不靠测试的 docstring 当档案。这里只留**代码行为**的用例：候选去重排序、
+# batch 与逐个调用排名一致、字表构造只收汉字。

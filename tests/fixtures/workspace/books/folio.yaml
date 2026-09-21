@@ -1,0 +1,15 @@
+# 测试专用册配置：筒子页刻本（一页 = 一整版 = 两个半叶，中间夹版心）。
+# **没有配原图**——用到它的测试都只要册属性（leaf_layout / expected_cols
+# 的口径），不跑图像链。要跑图像链请用 keben。
+id: folio
+title: "测试册：筒子页刻本"
+raw_dir: raw/folio
+raw_pattern: "{page}.png"
+edition: keben
+leaf_layout: folio
+expected_cols: 19          # 9 + 版心 + 9，版心占第 10 列
+chars_per_line: 21
+pages: [1, 2]
+dev_set: [1]
+top_band_frac: 0.30        # 筒子页天头宽，0.15 的默认窗口罩不住真版框
+notes: "测试 fixture，长期不动。"
