@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/beixing-guben-workspace"))
+WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一"))
 
 
 def main() -> int:

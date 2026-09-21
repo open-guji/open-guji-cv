@@ -6,11 +6,15 @@ import type { Step9ProgressResponse, Step9ProgressRow } from '../../api/step9'
 // 看板不是闸：有待办也照样能跑 9.1/9.2。口径见 report/progress.py。
 //
 // 设计（dataviz skill「Figures - when the form is a number」）：
-// - 六个 stat tile 在上：label + 值（proportional figures、semibold），零用 faint；
+// - stat tile 在上：label + 值（proportional figures、semibold），零用 faint；
 // - 表只列有待办的页，数字列 tabular-nums 右对齐，零画成「·」不占视线；
-// - 「过期的步」不再逐个列 13 个名字：压成「从 border_detect 起 13 步」一枚 chip——
-//   这一列想说的是"从哪一步开始要重跑"，不是名单。
+// - 「过期的步」不逐个列名字：压成「从 border_detect 起 13 步」一枚 chip，且与全书共同情形
+//   相同的行不再重复（上面的提示行已经说了）。
 // - 状态色只给「过期」这一档（ochre），且必带文字，不靠颜色单独传达。
+//
+// 「待审」拆成两列（用户 2026-09-20 同意，总览/13 §一·3）：**Step7 待人裁**（未放行 ∧ 未裁过，
+// 与裁决台出卡数逐 id 相等）与 **已裁未放行**（人裁过、机器没采信）。合成一个数报给人，
+// 裁决台只给前者的卡，人以为剩下的无处可做。
 
 const STEP_ORDER = ['border_detect', 'border_detect_gate', 'column_warp', 'column_gate', 'row_segment',
   'row_segment_gate', 'cell_shrink', 'glyph_match', 'ocr_candidates', 'rare_candidates',
@@ -29,8 +33,9 @@ function Num({ v }: { v: number }) {
   return v ? <span className="pb-n">{v}</span> : <span className="pb-zero">·</span>
 }
 
+// 「有待办」不看非字与已裁未放行：前者是已了结的账，后者是人做完了等机器的账。
 function hasTodo(r: Step9ProgressRow) {
-  return !!(r.stale || r.review || r.cut || r.defect || r.cols_bad)
+  return !!(r.stale || r.review_new || r.cut || r.defect || r.cols_bad)
 }
 
 export function ProgressBoard({ book, pages }: { book: string; pages: string }) {
@@ -64,7 +69,7 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
   const t = data?.totals
   const rows = data ? data.pages.filter(hasTodo) : []
   const stalePages = data ? data.pages.filter((r) => r.stale > 0).length : 0
-  // 全书共同的"从哪一步起过期"：取各页最靠上那一步里最常见的
+  // 全书共同的"从哪一步起过期"与共同的过期步数：取各页里最常见的
   let staleFrom: string | null = null
   let commonStale = 0
   if (data && stalePages) {
@@ -93,10 +98,11 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
       {t && (
         <div className="pb-tiles">
           <Tile label="过期页" value={stalePages} tone={stalePages ? 'ochre' : undefined} />
-          <Tile label="待审字位" value={t.review} />
+          <Tile label="Step7 待人裁" value={t.review_new} hint="= 定字裁决台出卡数" />
           <Tile label="切线待裁" value={t.cut} />
           <Tile label="阙文占位" value={t.defect} />
           <Tile label="坏列" value={t.cols_bad} />
+          <Tile label="已裁未放行" value={t.review_decided} dim hint="人裁过、机器没采信" />
           <Tile label="非字（已了结）" value={t.excluded} dim />
         </div>
       )}
@@ -112,7 +118,7 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
         <div className="pb-scroll">
           <table className="pb-table">
             <thead>
-              <tr><th>页</th><th>过期</th><th>待审</th><th>切线</th><th>阙文</th><th>坏列</th><th className="pb-dim">非字</th><th className="pb-left">从哪一步起</th></tr>
+              <tr><th>页</th><th>过期</th><th>待人裁</th><th>切线</th><th>阙文</th><th>坏列</th><th className="pb-dim">已裁未放行</th><th className="pb-dim">非字</th><th className="pb-left">从哪一步起</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => {
@@ -123,8 +129,9 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
                 return (
                   <tr key={r.page}>
                     <td className="pb-page">{r.page}</td>
-                    <td><Num v={r.stale} /></td><td><Num v={r.review} /></td><td><Num v={r.cut} /></td>
+                    <td><Num v={r.stale} /></td><td><Num v={r.review_new} /></td><td><Num v={r.cut} /></td>
                     <td><Num v={r.defect} /></td><td><Num v={r.cols_bad} /></td>
+                    <td className="pb-dim"><Num v={r.review_decided} /></td>
                     <td className="pb-dim"><Num v={r.excluded} /></td>
                     <td className="pb-left">{chip ? <span className="pb-chip">{chip.text}</span> : ''}</td>
                   </tr>
@@ -134,14 +141,14 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
           </table>
         </div>
       )}
-      <p className="muted pb-foot">看板不是闸：有待办也照样能跑 9.1 / 9.2。</p>
+      <p className="muted pb-foot">看板不是闸：有待办也照样能跑 9.1 / 9.2。「待人裁」与定字裁决台的卡逐 id 相等。</p>
     </div>
   )
 }
 
-function Tile({ label, value, tone, dim }: { label: string; value: number; tone?: 'ochre'; dim?: boolean }) {
+function Tile({ label, value, tone, dim, hint }: { label: string; value: number; tone?: 'ochre'; dim?: boolean; hint?: string }) {
   return (
-    <div className={'pb-tile' + (dim ? ' pb-tile-dim' : '')}>
+    <div className={'pb-tile' + (dim ? ' pb-tile-dim' : '')} title={hint}>
       <div className="pb-tile-label">{label}</div>
       <div className={'pb-tile-value' + (value ? (tone ? ` pb-${tone}` : '') : ' pb-zero')}>{value}</div>
     </div>

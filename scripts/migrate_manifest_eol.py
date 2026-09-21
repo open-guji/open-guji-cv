@@ -5,7 +5,7 @@
 与 manifest 最新条目相等（= 除了行尾什么都没变）才追加一条改成新指纹的副本；
 对不上的（真过期的）一律不动，让它继续报过期。
 
-    python scripts/migrate_manifest_eol.py bxgb -w D:/workspace/beixing-guben-workspace [--apply]
+    python scripts/migrate_manifest_eol.py bxgb -w D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一 [--apply]
 """
 from __future__ import annotations
 

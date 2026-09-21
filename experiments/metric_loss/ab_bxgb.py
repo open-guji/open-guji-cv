@@ -12,7 +12,7 @@ checkpoint 只影响 `rare_candidates` 的**候选排序**，不影响切分/取
 + 阶梯 unicode-ext-b + corpus/variants 叠加 + no-simplified），
 `rare_panel` 那套 `cls_gate_weight` 软门控与 RRF 也照用。
 
-    PYTHONIOENCODING=utf-8 GUJI_WORKSPACE=D:/workspace/beixing-guben-workspace \
+    PYTHONIOENCODING=utf-8 GUJI_WORKSPACE=D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一 \
       .venv/Scripts/python.exe experiments/metric_loss/ab_bxgb.py
 """
 from __future__ import annotations
@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/beixing-guben-workspace"))
+WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一"))
 CKPTS = {"r4": "models/glyph_cnn_r4/best.pt", "r5": "models/glyph_cnn_r5/best.pt"}
 
 

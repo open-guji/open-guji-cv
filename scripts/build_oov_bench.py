@@ -131,7 +131,7 @@ def from_user_verdicts(ws: Path, book: str, S: set[str], excl: set[str]) -> list
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspaces", nargs="*", default=[
-        r"D:\workspace\beixing-guben-workspace",
+        r"D:\workspace\guji-workspace\988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一",
         r"D:\workspace\siku-zongmu-workspace",
     ])
     a = ap.parse_args()
