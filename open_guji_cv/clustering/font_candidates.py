@@ -47,6 +47,12 @@ import numpy as np
 
 # 传承字形优先——刻本用的是旧字形
 FONT_ORDER = ("iming", "jigmo", "kangxi", "genmin")
+# genmin 2026-09-21 本机实测**留下**（闸：unseen 严格 / oov 都不掉；r5，同机同代码同日复跑）：
+#   三套字体          unseen 严格 emb 96.9 / hog 77.5   oov emb top-1 73.2 / top-10 90.4
+#   + genmin 三套     unseen 严格 emb 97.0 / hog 79.3   oov emb top-1 74.5 / top-10 91.7
+# 全部持平或涨；HOG 那路涨最多（模板多了三种写法）。数字与过程在
+# structure_aware_recognition_design.md §13。曾一度误判要拿掉——那是被
+# eval_zero_shot_fusion.py 的旧缺省 checkpoint 骗了（同一节有记）。
 """模板字体，按优先级。
 
 - `iming` I.Ming 一点明朝体：传承字形（旧字形），用字习惯与刻本最吻合

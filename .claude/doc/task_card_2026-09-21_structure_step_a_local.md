@@ -93,3 +93,26 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python scripts/export_train_bundle.py --out
 - 不把任何重排 / 结构信号接进放行（`seed_admit`）：只出候选（设计稿 §4.3）。
 - 不用整理本正字的 IDS 当异体字标签（标签一律 shape）。
 - 不在评测集上调 K / 权重再报同一集的数（先建集再动手）。
+
+---
+
+## 本机回执（2026-09-21 晚）
+
+六步已走完，正本在 `structure_aware_recognition_design.md` §13「本机实测①②③」，
+汇总在 overview `5b-生僻字候选/08-结构感知-StepA-本机实测结果.md`。
+
+| 步 | 结果 |
+|---|---|
+| 1 | 38/38 绿 |
+| 2① | 零训练重排 **不开**：top-1 涨 17 但 top-5 掉 8、m=30 时 top-10 塌 |
+| 2② | genmin **留下**：unseen 严格 96.9→97.0、oov 73.2/90.4→74.5/91.7 |
+| 3 | r6 训完，`cache/glyph_cnn_r6/best.pt`（本机，不进 models/） |
+| 4 | **不过线不换**：unseen 严格 96.5（−0.4）、oov 70.4/89.2（−2.8/−1.2）、结构头 90.8% < 95、槽位 top-3 72.8 |
+| 5 | 数据包在 `guji-workspace/_shared/train_bundle.zip`（30.9 MB，普通 git 文件） |
+| 6 | 用户已同意：**照出 300 条结构金标审查页**（M2），r6 没过线但金标对 Step A′ 一样要用 |
+
+给云端的两条：
+- **下一步建议 Step A′**：冻结 r5 主干只训结构头/槽位头（线性探针或小 MLP），embedding 不动，
+  oov / unseen 天然不掉；若冻结主干下结构头仍到不了 95，才谈改主干。设计稿 §13 ②有分析。
+- 评测台修了两处（`eval_zero_shot_fusion.py`：走 `_build_net`；`--model` 缺省改 `DEFAULT_CKPT`），
+  已随本回执一起提交。`eval_struct_heads.py` 验收表里「独体」只 8 条，要么补样本要么删行。
