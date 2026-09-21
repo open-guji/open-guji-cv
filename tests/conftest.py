@@ -162,3 +162,54 @@ def repo_root() -> Path:
     """引擎仓真根——只给「扫自己的源码」这类测试用（守卫测试、打包检查），
     **不要**拿它去读 `output/` / `products/` / `data/` 这些会变的目录。"""
     return Path(__file__).resolve().parent.parent
+
+
+#: 仓内那些**跑批会动**的目录。测试往里写东西 = 污染工作副本，读它 = 依赖活数据。
+#: `corpus/` 之所以在列，是因为 `context_decide` 会在 `corpus/external/` 下落一份
+#: 22 MB 的 LM 缓存——2026-09-20 实测，一条全链用例因此从 5 秒变成跑不完，
+#: 而且 `git status` 看不见（那个缓存在 .gitignore 里）。
+VOLATILE_REPO_DIRS = ("output", "products", "cache", "corpus", "runs", "reports",
+                      "review", "precleaned", "glyph_store")
+
+_REPO = Path(__file__).resolve().parent.parent
+
+
+def _volatile_snapshot() -> dict[str, tuple[int, float]]:
+    """仓内易变目录的 {路径: (大小, mtime)}。只扫这几个目录，几毫秒。"""
+    snap: dict[str, tuple[int, float]] = {}
+    for name in VOLATILE_REPO_DIRS:
+        d = _REPO / name
+        if not d.is_dir():
+            continue
+        for p in d.rglob("*"):
+            if p.is_file():
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                snap[str(p)] = (st.st_size, st.st_mtime)
+    return snap
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _no_writes_into_the_repo():
+    """跑完之后仓内那几个易变目录必须**逐字节没动过**。
+
+    `_isolated_env` 已经把 `core.workspace` 的默认根挪到 tmp，但那拦不住**绕过
+    workspace 的路径**——`ContextDecideParams.general_corpus_dir` 缺省是
+    `"corpus/external"`，按 cwd 解析，于是一条全链用例在仓里写下 22 MB 缓存，
+    `.gitignore` 还把它藏了起来。静态扫源码看不出这种（路径来自生产默认值，
+    不在测试代码里），所以这里在运行期兜一道。
+
+    ⚠️ 只报**新增/改动**，不报删除：有的用例会清自己造的临时文件。
+    """
+    before = _volatile_snapshot()
+    yield
+    after = _volatile_snapshot()
+    added = sorted(set(after) - set(before))
+    changed = sorted(k for k in set(after) & set(before) if after[k] != before[k])
+    bad = [f"新增 {p}" for p in added[:10]] + [f"改动 {p}" for p in changed[:10]]
+    assert not bad, (
+        "测试往仓内易变目录写了东西——那既污染工作副本，也说明它在依赖活数据：\n"
+        + "\n".join(bad)
+        + f"\n（共新增 {len(added)} / 改动 {len(changed)}）")

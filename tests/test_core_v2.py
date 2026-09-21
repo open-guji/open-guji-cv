@@ -329,12 +329,28 @@ def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws):
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.pipeline import load_pipeline
 
+    from open_guji_cv.steps.align_ref import AlignRefParams
+    from open_guji_cv.steps.context_decide import ContextDecideParams
+
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(tmp_path / "products"))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
     pl = load_pipeline("keben_body_v2")
     book = load_book("keben")
     store, cache = ProductStore(tmp_path / "products"), ImageCache(tmp_path / "cache")
     eng = Engine(book, pl, store=store, cache=cache, log=lambda s: None)
+
+    # ⚠️ 语料两处都必须显式指到 fixture 里那份，否则这一跑会去读**仓里的生产语料**：
+    #   - `AlignRefParams.corpus` 缺省 = `corpus/zongmu_wenyuange_wikisource.txt`；
+    #   - `ContextDecideParams.general_corpus_dir` 缺省 = `"corpus/external"`，
+    #     **相对 cwd** 解析（不走 core.workspace），里面是两份 15 MB 泛古籍语料。
+    # 后者尤其要命：它会在 `corpus/external/` 下**写一份 22 MB 的 LM 缓存**
+    # （`.general_lm_cache.json`）——测试往仓库里写东西，且下一次跑要花几分钟
+    # 去加载它。2026-09-20 实测：这条用例因此从 5 秒变成跑不完。
+    corpus = ws / "corpus" / "reference.txt"
+    eng.ctx.params["align_ref"] = AlignRefParams(corpus=str(corpus))
+    eng.ctx.params["context_decide"] = ContextDecideParams(
+        corpus=str(corpus), general_corpus_dir=str(tmp_path / "no_general_corpus"))
+
     rep = eng.run(pages=[1])
     assert not rep.to_dict()["failed"], rep.to_dict()["failed"]
 
