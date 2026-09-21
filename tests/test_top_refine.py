@@ -307,3 +307,25 @@ def test_thick_bar_with_nothing_beyond_stays_single():
     out = detect_outer_borders(mask, HLine(y_at_right=100.0, slope=0.0, kind="top"),
                                HLine(y_at_right=700.0, slope=0.0, kind="bottom"), verts, Wd, Hd)
     assert out["bottom_frame_kind"] == "single" and out["bottom_outer_offset"] is None
+
+
+def test_book_gap_fallback_is_marked_estimated_and_not_counted_as_detected():
+    """外框磨到够不着 OUTER_INK_MIN 时，按书级 outer_gap 兜底给位置，但标 estimated；
+    闸1 仍报 outer_frame_missing（2026-09-20 用户定：只当位置提示）。"""
+    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    Wd, Hd = 600, 800
+    mask = np.zeros((Hd, Wd), np.uint8)
+    mask[:, 60:63] = 255; mask[:, 537:540] = 255
+    # 下外框只剩断续残迹：离内框 27px，墨占比约 0.2（够不着 OUTER_INK_MIN=0.25）
+    for x in range(70, 530, 5):
+        mask[727:730, x:x + 1] = 255
+    verts = [VLine(x_at_top=float((Wd - 1) - 60), slope=0.0),
+             VLine(x_at_top=float((Wd - 1) - 538), slope=0.0)]
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=700.0, slope=0.0, kind="bottom")
+    plain = detect_outer_borders(mask, top, bot, verts, Wd, Hd)
+    assert plain["bottom_outer_offset"] is None          # 不给先验就报 None
+    withp = detect_outer_borders(mask, top, bot, verts, Wd, Hd, book_gap={"bottom": 27.0})
+    assert withp["bottom_outer_offset"] is not None
+    assert withp["bottom_outer_estimated"] is True
+    assert abs(abs(withp["bottom_outer_offset"]) - 27.0) <= 12.0

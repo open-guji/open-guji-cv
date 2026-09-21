@@ -238,6 +238,12 @@ class BookSpec:
     #: **怎么标定**：`utils/border_geometry.measure_book_outer_shift(整册)` 跑一次写进
     #: yaml。⚠️ 换书必须重标，别抄。
     outer_shift: dict = field(default_factory=dict)
+    #: 上/下外框离内框线多远的**书级中位**（yaml 的 `outer_gap: {top: , bottom: }`）。
+    #: 给了才启用「探不到就按册基准兜底」（见 `border_geometry.OUTER_INK_FALLBACK`）：
+    #: 整册这个量极稳（vol02 上 38.6±8.3 / 下 27.2±5.3），某页磨损糊了探不到时按基准
+    #: 邻域找弱一档的墨，比报 None 强。估出来的会标 `*_outer_estimated=True`。
+    #: **怎么标定**：`utils/border_geometry.measure_book_outer_gap(整册结果)`。换书重标。
+    outer_gap: dict = field(default_factory=dict)
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -479,6 +485,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
         outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
+        outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
