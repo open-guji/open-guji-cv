@@ -1,7 +1,7 @@
 # 外部整理本語料
 
 > **2026-09-11 起本目錄只存小樣本（各 6000 字），不存全量**——完整語料只在
-> `siku-zongmu-workspace` 工作區（`export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace`）。
+> `guji-workspace` 的書目錄（`export GUJI_WORKSPACE=/path/to/guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本`）。
 > 代碼一律走 `core.workspace.corpus_path()` 解析（沒設環境變量退回本目錄樣本，
 > 設了就讀工作區真語料），不要再寫死 `"corpus/xxx.txt"` 這種相對路徑字符串——
 > 那種寫法靠進程 cwd 解析，曾導致仓内样本与工作区真语料悄悄分叉 4680 行却

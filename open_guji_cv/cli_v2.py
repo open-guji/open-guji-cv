@@ -100,7 +100,7 @@ def cmd_console(args) -> None:
     if using_sample_db() or using_sample_corpus():
         print("\n  ⚠️  没设 GUJI_WORKSPACE（或工作区数据不全）——库/语料会落到仓内小样本，\n"
               "     整理本锚不上、库匹配全是 unsure。真跑书请先：\n"
-              "     export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace\n")
+              "     export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>\n")
     serve(port=args.port, open_browser=not args.no_browser)
 
 

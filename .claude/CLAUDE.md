@@ -93,8 +93,38 @@ python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 �
 
 ### 本机环境（2026-09-03）
 - 仓里的 `venv/` 指向已卸载的 Store Python 3.13，**是死的**。用 `.venv/`（uv 建，Python 3.12）：
-  `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`
+  `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented fontTools scipy`
 - pytest 在本机会吞掉终端输出，要结果就加 `--junitxml=…` 再解析。
+
+### 测试（2026-09-20 用户定的口径）
+
+> **测试只依赖本仓库，且只依赖 `tests/` 下冻结的数据。**
+
+在这之前，37 个测试文件、94 条用例挂在三种**活数据**上——隔壁测试集仓
+`open-guji-dataset`、某本书的工作区（`GUJI_WORKSPACE` 下的原图/产物/缓存/
+字形库）、以及引擎仓里跟着跑批变的 `output/` `corpus/` `data/`。后果是
+**数据一变就红、数据不在就整条 skip**（云端 94 条静默跳过，绿得毫无意义）。
+
+现在的规矩：
+
+- **单元测试自己造数据**。产物都是 pydantic 模型，直接构造就行，
+  不要去扫 `products/` 看碰巧有什么（`tests/helpers.py` 备好了构造器）。
+- **要真图像的少数集成测试用 `tests/fixtures/` 里冻结的样本**（三张从
+  `data/book1` 复制来的真扫描页，共 ~400 KB），**长期不动**。
+- **对真书数据的质量断言不是测试，是评测**，归 `guji eval run` / `scripts/eval_*.py`。
+- 确实要真工作区的人工验收工具标 `@pytest.mark.manual`（默认不跑，`-m manual` 才跑）。
+
+跑法与踩过的坑见 **`tests/conftest.py` 模块头**，冻结数据的内容与改动规矩见
+**`tests/fixtures/README.md`**；`tests/test_suite_hygiene.py` 是这条口径的守卫，
+会扫测试源码把重新长出来的仓外依赖拦回去。
+
+```bash
+.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider      # 全量（-s 必须带）
+.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider -m manual   # 人工验收那几条
+```
+
+装了 `torch` 才跑的有 7 条（生僻字 CNN 候选、U-Net 切点裁判），
+装了 `rapidocr-onnxruntime` 才跑的有 3 条——那是**可选件**缺席，不是数据依赖。
 
 ### 新命令速查（详见 [console_manual.md](doc/console_manual.md)）
 ```bash

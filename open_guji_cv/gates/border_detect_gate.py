@@ -89,10 +89,20 @@ class BorderDetectGateStep(Step):
             flags.append(f"bottom_pushed：下版框原落在最后一行字底边，已推到框条上 {b.bottom_pushed:.0f}px")
         if getattr(b, "vlines_snapped", 0):
             flags.append(f"vline_snapped：{b.vlines_snapped} 条界行在无界行横带按文字缝重定位")
-        for side, off, fk in (("上", b.top_outer_offset, getattr(b, "top_frame_kind", None)),
-                              ("下", b.bottom_outer_offset, getattr(b, "bottom_frame_kind", None))):
-            if off is None and fk != "single":
+        # `estimated`（按书级 `outer_gap` 兜底估的）**不算探到**：它只是位置提示，
+        # 真残框与凭空落点分不开（见 border_geometry.OUTER_INK_FALLBACK 的注释）。
+        for side, off, fk, est in (
+                ("上", b.top_outer_offset, getattr(b, "top_frame_kind", None),
+                 getattr(b, "top_outer_estimated", False)),
+                ("下", b.bottom_outer_offset, getattr(b, "bottom_frame_kind", None),
+                 getattr(b, "bottom_outer_estimated", False))):
+            if fk == "single":
+                continue
+            if off is None:
                 flags.append(f"outer_frame_missing：{side}外框没探到（不是單邊框；磨没、裁掉或漏探）")
+            elif est:
+                flags.append(f"outer_frame_missing：{side}外框没探到，已按书级 outer_gap "
+                             f"估到 {abs(off):.0f}px（只作位置提示，不算探到）")
 
         return {"border_detect_gate_manifest": BorderDetectGateManifest(
             page=page, admitted=not reject, reject=reject, flags=flags,

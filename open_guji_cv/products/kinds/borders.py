@@ -84,6 +84,8 @@ class Borders(BaseModel):
     bottom_frame_kind: str | None = None
     top_bar_extent: float | None = None
     bottom_bar_extent: float | None = None
+    top_outer_estimated: bool = False
+    bottom_outer_estimated: bool = False
     bottom_pushed: float = 0.0
     vlines_snapped: int = 0
     v_outer_side: str | None = None
@@ -106,6 +108,8 @@ class Borders(BaseModel):
             top_outer_offset=_f(r.top_outer_offset), bottom_outer_offset=_f(r.bottom_outer_offset),
             top_frame_kind=r.top_frame_kind, bottom_frame_kind=r.bottom_frame_kind,
             top_bar_extent=_f(r.top_bar_extent), bottom_bar_extent=_f(r.bottom_bar_extent),
+            top_outer_estimated=bool(getattr(r, "top_outer_estimated", False)),
+            bottom_outer_estimated=bool(getattr(r, "bottom_outer_estimated", False)),
             bottom_pushed=float(getattr(r, "bottom_pushed", 0.0) or 0.0),
             vlines_snapped=int(getattr(r, "vlines_snapped", 0) or 0),
             v_outer_side=r.v_outer_side, v_outer_offset=_f(r.v_outer_offset),
@@ -123,6 +127,8 @@ class Borders(BaseModel):
             top_outer_offset=self.top_outer_offset, bottom_outer_offset=self.bottom_outer_offset,
             top_frame_kind=self.top_frame_kind, bottom_frame_kind=self.bottom_frame_kind,
             top_bar_extent=self.top_bar_extent, bottom_bar_extent=self.bottom_bar_extent,
+            top_outer_estimated=self.top_outer_estimated,
+            bottom_outer_estimated=self.bottom_outer_estimated,
             bottom_pushed=self.bottom_pushed, vlines_snapped=self.vlines_snapped,
             v_outer_side=self.v_outer_side, v_outer_offset=self.v_outer_offset,
             vline_segments=self.vline_segments,
