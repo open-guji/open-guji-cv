@@ -28,6 +28,22 @@ export function fetchRareOne(book: string, page: number, col: number, slot: numb
   return api<{ candidates: RareCandidate[] }>(`/api/rare/${encodeURIComponent(book)}/${page}/${col}/${slot}${suffix}`)
 }
 
+/** IDS 兜底：按结构 + 认出的部件查字（/api/rare/search）。给了字位坐标就用那格的 emb 在池内排。 */
+export function fetchRareSearch(book: string, q: {
+  top?: string; slots?: Record<string, string>; comps?: string[];
+  page?: number; col?: number; cell?: number; sub?: string; k?: number
+}) {
+  const sp = new URLSearchParams()
+  if (q.top) sp.set('top', q.top)
+  for (const [slot, comp] of Object.entries(q.slots || {})) if (comp) sp.append('slot', `${slot}=${comp}`)
+  for (const c of q.comps || []) if (c) sp.append('comp', c)
+  if (q.page) { sp.set('page', String(q.page)); sp.set('col', String(q.col || 0)); sp.set('cell', String(q.cell || 0)) }
+  if (q.sub) sp.set('sub', q.sub)
+  sp.set('k', String(q.k ?? 10))
+  return api<{ candidates: RareCandidate[]; with_image: boolean }>(
+    `/api/rare/search/${encodeURIComponent(book)}?${sp.toString()}`)
+}
+
 export function fetchAroundBatch(
   book: string, before: number, after: number, items: Array<{ page: number; col: number; slot: number }>,
 ) {

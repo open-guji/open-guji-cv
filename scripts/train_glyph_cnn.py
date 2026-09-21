@@ -111,6 +111,11 @@ def main() -> int:
     ap.add_argument("--real-frac", type=float, default=1.0,
                     help="只用这一比例的真刻例训练（按类分层抽样）——学习曲线实验用，"
                          "测试集不受影响")
+    ap.add_argument("--struct-heads", action="store_true",
+                    help="Step A（structure_aware_recognition_design.md §4.2）：加结构头（顶层算符 18 类）"
+                         "与槽位部件头（部件@槽 多标签，ids_struct 停集词表）。不开 = 与 r5 配方逐位相同")
+    ap.add_argument("--w-struct", type=float, default=0.5, help="结构头 CE 的权重")
+    ap.add_argument("--w-slot", type=float, default=0.5, help="槽位部件头 BCE 的权重")
     a = ap.parse_args()
 
     import torch
@@ -145,6 +150,27 @@ def main() -> int:
             if k in kidx:
                 v[kidx[k]] = 1.0
         return v
+
+    # Step A 标签：结构头（顶层算符）+ 槽位部件头（部件@槽）。标签全部由 IDS 派生，零标注。
+    # ⚠️ 类表里的字是 **shape**（刻本字形），不是整理本正字——异体字的 IDS 必须是刻本那个形
+    #    的（㕔 ⿰厂丁，不是 廳），否则是在教网络说谎（设计稿 §3 第 5 条）。
+    struct_classes: list[str] = []
+    slot_labels: list[str] = []
+    if a.struct_heads:
+        from open_guji_cv.clustering.ids_struct import (STRUCT_CLASSES, build_slot_labels,
+                                                        slot_keys_of, struct_index,
+                                                        vocab_fingerprint)
+        struct_classes = list(STRUCT_CLASSES)
+        slot_labels = build_slot_labels(classes, min_count=3)
+        sidx = {k: i for i, k in enumerate(slot_labels)}
+        print(f"结构头 {len(struct_classes)} 类；槽位标签 {len(slot_labels)} 个（词表指纹 {vocab_fingerprint()}）")
+
+        def slot_vec(ch: str) -> np.ndarray:
+            v = np.zeros(len(slot_labels), np.float32)
+            for k in slot_keys_of(ch):
+                if k in sidx:
+                    v[sidx[k]] = 1.0
+            return v
 
     # 真刻例
     def load_real(split):
@@ -222,7 +248,8 @@ def main() -> int:
             return F.relu(y + self.sc(x))
 
     class Net(nn.Module):
-        def __init__(self, n_cls, n_comp, d=256):
+        """与 `cnn_candidates._build_net` 同构（含可选的 struct/slot 头）；改一处另一处要同步。"""
+        def __init__(self, n_cls, n_comp, d=256, n_struct=0, n_slot=0):
             super().__init__()
             self.stem = nn.Sequential(nn.Conv2d(1, 32, 3, 1, 1, bias=False), nn.BatchNorm2d(32), nn.ReLU())
             self.l1 = Block(32, 64, 2)      # 32
@@ -232,15 +259,26 @@ def main() -> int:
             self.emb = nn.Linear(256 * 4 * 4, d)
             self.cls = nn.Linear(d, n_cls)
             self.comp = nn.Linear(d, n_comp)
+            self.struct = nn.Linear(d, n_struct) if n_struct > 0 else None
+            self.slot = nn.Linear(d, n_slot) if n_slot > 0 else None
 
         def forward(self, x):
             x = self.l4(self.l3(self.l2(self.l1(self.stem(x)))))
             e = F.normalize(self.emb(x.flatten(1)), dim=1) * 16.0   # cos-like logits
             return e, self.cls(e), self.comp(e)
 
-    net = Net(len(classes), len(comps)).to(dev)
+        def heads(self, x):
+            e, lg, cp = self.forward(x)
+            return (e, lg, cp,
+                    self.struct(e) if self.struct is not None else None,
+                    self.slot(e) if self.slot is not None else None)
+
+    net = Net(len(classes), len(comps), n_struct=len(struct_classes), n_slot=len(slot_labels)).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     comp_tr = torch.tensor(np.stack([comp_vec(c) for c in classes]), device=dev)
+    if a.struct_heads:
+        struct_tr = torch.tensor([struct_index(c) for c in classes], device=dev)
+        slot_tr = torch.tensor(np.stack([slot_vec(c) for c in classes]), device=dev)
 
     def batch_iter():
         """每 epoch：全部真刻例 + 每类 font-per-class 张字体渲染，混洗。"""
@@ -265,16 +303,24 @@ def main() -> int:
     def evaluate(X, Y, name):
         net.eval()
         r1 = r5 = r10 = 0
+        s_ok = s_n = 0          # 结构头准确率（Step A 验收指标之一）
+        sl_ok = sl_n = 0        # 槽位头：金标槽位标签落在预测 top-3 的比例
         for i in range(0, len(X), 512):
             xb = torch.tensor(X[i:i + 512][:, None].astype(np.float32), device=dev)
-            _, lg, _ = net(xb)
+            _, lg, _, st, sl = net.heads(xb)
             top = lg.topk(10, dim=1).indices.cpu().numpy()
             yb = Y[i:i + 512]
             r1 += (top[:, 0] == yb).sum()
             r5 += (top[:, :5] == yb[:, None]).any(1).sum()
             r10 += (top == yb[:, None]).any(1).sum()
+            if st is not None:
+                s_ok += int((st.argmax(1) == struct_tr[torch.tensor(yb, device=dev)]).sum()); s_n += len(yb)
+                gold = slot_tr[torch.tensor(yb, device=dev)]                      # (B, n_slot)
+                top3 = torch.zeros_like(gold).scatter_(1, sl.topk(3, dim=1).indices, 1.0)
+                sl_ok += int(((gold * top3).sum(1) > 0).sum()); sl_n += len(yb)
         n = len(X)
-        print(f"  {name:10s} top1 {r1/n:5.1%}  top5 {r5/n:5.1%}  top10 {r10/n:5.1%}")
+        extra = f"  struct {s_ok/s_n:5.1%}  slot@3 {sl_ok/sl_n:5.1%}" if s_n else ""
+        print(f"  {name:10s} top1 {r1/n:5.1%}  top5 {r5/n:5.1%}  top10 {r10/n:5.1%}{extra}")
         net.train()
         return r1 / n, r10 / n
 
@@ -288,9 +334,12 @@ def main() -> int:
         t0 = time.time()
         tot = n = 0
         for X, Y in batch_iter():
-            _, lg, cp = net(X)
+            _, lg, cp, st, sl = net.heads(X)
             loss = F.cross_entropy(lg, Y, label_smoothing=0.1) \
                 + 0.5 * F.binary_cross_entropy_with_logits(cp, comp_tr[Y])
+            if st is not None:
+                loss = loss + a.w_struct * F.cross_entropy(st, struct_tr[Y]) \
+                    + a.w_slot * F.binary_cross_entropy_with_logits(sl, slot_tr[Y])
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -302,7 +351,13 @@ def main() -> int:
         _, u10 = evaluate(Xun, Yun, "unseen")
         if u10 > best:
             best = u10
-            torch.save({"state": net.state_dict(), "classes": classes, "comps": comps}, out / "best.pt")
+            ck = {"state": net.state_dict(), "classes": classes, "comps": comps}
+            if a.struct_heads:
+                # 推理侧（cnn_candidates._ensure）按这两个键决定要不要建额外的头；
+                # 词表指纹进 checkpoint，换了 components_v1.tsv 能对得上账
+                ck.update({"struct_classes": struct_classes, "slot_labels": slot_labels,
+                           "vocab_fingerprint": vocab_fingerprint()})
+            torch.save(ck, out / "best.pt")
     print("best unseen top10", f"{best:.1%}", "→", out / "best.pt")
     return 0
 

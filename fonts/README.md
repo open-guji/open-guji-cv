@@ -21,6 +21,12 @@ python -m open_guji_cv glyph-db import-font --edition font:iming
 |---|---|---|---|---|
 | `jigmo/` | Jigmo 字雲（3 档） | 20230816 | **CC0 1.0**（公有领域奉献） | https://kamichikoichi.github.io/jigmo/ |
 | `iming/` | 一点明朝体 I.Ming | 8.10 | **IPA Font License v1.0** | https://github.com/ichitenfont/I.Ming |
+| `genmin/` | 源流／源雲／源樣明體 TC（GenRyuMin2 / GenWanMin2 / GenYoMin2） | 2.100 | **SIL OFL 1.1**（`genmin/LICENSE.txt`） | https://github.com/ButTaiwan/genryu-font 、genwan-font 、genyo-font |
+| `kangxi/` | TypeLand 康熙字典体 | — | **商业字体**，进可分发产物前须确认授权 | 字语 TypeLand |
+
+`genmin/` 与 `kangxi/` 只做 5-b 生僻字候选的 embedding / HOG 模板（`font_candidates.FONT_ORDER`），
+**不在** `config/fonts/manifest.json` 里、不导入字形库当字体域。genmin 三套 2026-09-21 才接进
+`FONT_ORDER`（此前在仓里零引用），接进时没量过效果，见该常量的文档串。
 
 IPA License 允许再分发，条件是随附授权全文（见 `iming/LICENSE.md`）且不改名
 分发衍生字体——本仓库原样收录，未做任何修改。
