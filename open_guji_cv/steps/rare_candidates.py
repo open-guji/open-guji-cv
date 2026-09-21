@@ -53,6 +53,9 @@ from ..products.kinds.recog import ColumnRare, PageRare, RareCand, RareRec
 
 class RareCandidatesParams(BaseModel):
     k: int = 10
+    struct_rerank: bool = False
+    """融合后按部件袋头一致性重排前 30 名（`ids_struct.struct_rerank`）。缺省关：
+    效果要先用 `scripts/eval_struct_rerank.py` 量（2026-09-21，M0 #3）。"""
     model_fingerprint: str = ""
     """候选栈的外部状态指纹（checkpoint + 外部模板集 + 模板字体集），**由
     `model_post_init` 自动填**，yaml 里不用写。它参与 `params_hash`，从而进产物
@@ -145,7 +148,8 @@ class RareCandidatesStep(Step):
         if imgs and not Path(corpus).exists():
             ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
             imgs = []
-        hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id) if imgs else []
+        hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id,
+                                   struct_rerank=p.struct_rerank) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,

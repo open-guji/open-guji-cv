@@ -224,3 +224,18 @@ def test_cls_gate_weight():
     assert cls_gate_weight([], S) == CNN_WEIGHT
     # 空 classes（没 checkpoint）：分类头本来也没输出，给 lo 不影响结果
     assert cls_gate_weight(["一"], set()) == 0.0
+
+
+def test_comp_probs_batch_contract():
+    """部件袋头的概率输出：键是 checkpoint 里的 `comps`，值在 [0,1]，一图一字典。
+    没 checkpoint 就跳过（needs=model）。"""
+    from open_guji_cv.clustering.cnn_candidates import shared
+    cnn = shared()
+    if not cnn.available:
+        pytest.skip("没有 CNN checkpoint")
+    q = np.zeros((64, 64), np.uint8); q[16:48, 16:48] = 1
+    out = cnn.comp_probs_batch([q, q])
+    assert len(out) == 2 and set(out[0]) == set(cnn.comps) and cnn.comps
+    assert all(0.0 <= v <= 1.0 for v in out[0].values())
+    assert cnn.comp_probs_batch([]) == []
+

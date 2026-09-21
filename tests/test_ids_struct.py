@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from open_guji_cv.clustering.ids_struct import (IDC, SINGLE, IdsIndex, Node,
-                                                component_consistency,
+                                                component_consistency, struct_rerank,
                                                 load_table, parse_ids,
                                                 pick_primary, shared_index,
                                                 structure_of, tokenize)
@@ -97,3 +97,20 @@ def test_whole_table_parses_or_is_atomic():
     bad = [ch for ch, e in tab.items()
            if not _is_atomic(e.primary, ch) and parse_ids(e.primary) is None]
     assert len(bad) == 0, f"{len(bad)} 行主拆法解析失败，如 {bad[:10]}"
+
+
+def test_struct_rerank_lifts_consistent_candidate_within_top_m():
+    """融合表 [論, 諭, 人]，部件概率说右边是 俞 不是 侖 → 諭 该升到第一；
+    人 没有部件（None）不进一致性表，但仍留在结果里；top_m 之外的字不动。"""
+    order = ["論", "諭", "人", "麗"]
+    probs = {"言": 0.9, "俞": 0.9, "侖": 0.05}
+    out = struct_rerank(order, probs, k=4, weight=4.0, top_m=3)
+    assert out[0] == "諭"
+    assert set(out[:3]) == {"論", "諭", "人"}      # 前 top_m 名只重排不丢
+    assert out[3] == "麗"                          # top_m 之外原样接回
+
+
+def test_struct_rerank_is_identity_without_probs():
+    assert struct_rerank(["論", "諭"], {}, k=2) == ["論", "諭"]
+    # 一个候选都没有部件意见 → 原样
+    assert struct_rerank(["人", "入"], {"言": 0.9}, k=2) == ["人", "入"]

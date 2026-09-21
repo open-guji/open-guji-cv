@@ -428,6 +428,37 @@ def component_consistency(cands: Iterable[str], comp_probs: dict[str, float],
     return out
 
 
+#: 一致性名次表在 RRF 里的权重。**未标定**——等 `scripts/eval_struct_rerank.py`
+#: 在 oov_bench / 北行 383 上扫过再定；扫之前它只在 `struct_rerank=True` 时生效。
+STRUCT_RERANK_WEIGHT = 1.0
+STRUCT_RERANK_TOP_M = 30      # 只在融合结果前 M 名里重排（GL-HPN：K ≥ 30 不丢召回）
+
+
+def struct_rerank(order: list[str], comp_probs: dict[str, float],
+                  components_of: Callable[[str], Iterable[str]] | None = None,
+                  k: int = 10, weight: float = STRUCT_RERANK_WEIGHT,
+                  top_m: int = STRUCT_RERANK_TOP_M) -> list[str]:
+    """把融合名次表的前 `top_m` 名按部件一致性重排，返回前 `k`。
+
+    做法：一致性分（`component_consistency`）降序排成第二份名次表（None 的不进），
+    与原名次表做 RRF（原表权 1、一致性表权 `weight`）。只重排、不拦截、不改
+    top_m 之外的字——它是**候选排序**信号，不是放行判据（设计稿 §4.3）。
+    `comp_probs` 为空时原样返回，等于关掉。
+    """
+    head = list(order[:top_m])
+    if not head or not comp_probs:
+        return list(order[:k])
+    from .cnn_candidates import rrf
+    cons = component_consistency(head, comp_probs, components_of)
+    ranked = sorted((ch for ch in head if cons[ch] is not None),
+                    key=lambda ch: -cons[ch])
+    if not ranked:
+        return list(order[:k])
+    fused = rrf(head, ranked, k=len(head), weights=(1.0, weight))
+    # rrf 只返回有分的字；head 里每个字在原表都有分，长度不会缩。top_m 之外原样接回。
+    return (fused + list(order[top_m:]))[:k]
+
+
 def _main(argv: list[str]) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="建停集部件词表 / 查结构")
