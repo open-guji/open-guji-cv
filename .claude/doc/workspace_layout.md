@@ -186,7 +186,8 @@ Step2 一行没改，19/20 列过闸。因为 `page_column_windows` 把列定义
 **必填 `-w/--workspace <仓根>`**，不再读 `GUJI_WORKSPACE` 环境变量兜底：
 
 ```
-python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages all -w D:/workspace/beixing-guben-workspace
+python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages all -w "D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一"
+# 2026-09-20 晚迁入 guji-workspace；路径别手抄：-w "$(python scripts/ws.py path 988g7gsqhd)"
 ```
 
 不给报参数错；给了先校验 `<仓根>/books/<book>.yaml` 存在，再把解析结果写进 `GUJI_WORKSPACE`

@@ -115,3 +115,34 @@ def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
         if r is not None:
             out[(page, col, slot)] = r
     return out
+
+
+def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
+    """人在定字台上定过的字 → `{裸 id: (字形 shape, 读法 reading|None)}`，同一位**后到覆盖**。
+
+    2026-09-20 补的缺口：Step7 此前只从字形库拿人裁（`seed_admit._human_shapes`，
+    `provenance='human'`），而人勾了「字形不入库」的裁决根本不进库——bxgb 11 个「已裁未放行」
+    里 5 个（一/吏/邢/太/伋）就是这样：人明明定了字，Step7 一直当没裁过，文本层照旧出阙文，
+    定字台又因 `skip_decided` 不再出卡，成了两边都不管的死角。
+
+    「不入库」说的是**这块图不当范本**（切坏/残/不典型），不是"这个字没定"。文本采信要走
+    事件日志，进库才看字形库——两件事两条路。只认 `kind=confirm ∧ payload.v=confirm` 且带
+    `shape` 的事件；`not_a_char` / `damaged` / `seg_defect` 各有各的去处（排除名单、打回台账）。
+
+    与 `_human_shapes` 同一条警告：切分改了，旧裁决就钉在了错的格上——这里同样不查几何。
+    """
+    from .events import EventLog
+    out: dict[str, tuple[str, str | None]] = {}
+    pre = f"{book}:"
+    try:
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.batch, e.seq))
+    except FileNotFoundError:
+        return out
+    for e in evs:
+        if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        p = e.payload or {}
+        if p.get("v") != "confirm" or not p.get("shape"):
+            continue
+        out[e.target.key] = (str(p["shape"]), (str(p["reading"]) if p.get("reading") else None))
+    return out

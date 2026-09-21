@@ -130,7 +130,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.6", unit="cell",   # 1.6：context 通道加整理本互证
+        id="seed_admit", title="C1 进库准入", version="1.7", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
         consumes=("glyph_match", "context_decision", "align_ref"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
@@ -171,6 +171,10 @@ class SeedAdmitStep(Step):
         # 會，判据 A 的「对你的裁决」因此掉到 210/211。库匹配、上下文、整理本对齐
         # 全都是间接证据，人看着图下的判断不是——它该一票定案。
         human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
+        # 事件侧的人裁定字（2026-09-20）：勾了「字形不入库」的裁决不进字形库，上面那份就
+        # 没有它——但字是定了的，文本采信不能丢。见 `feedback/lookup.human_chars`。
+        from ..feedback.lookup import human_chars
+        human_texts = human_chars(ctx.book.id) if p.use_human_verdicts else {}
 
         _ex_cache: dict = {}
 
@@ -268,13 +272,18 @@ class SeedAdmitStep(Step):
                 # `context` 通道就把它放行成了 會——人裁被机器覆盖，判据 A 的
                 # 「对你的裁决」掉到 210/211。放在排除名单之后、其余通道之前。
                 hs = human_shapes.get(r.id)
-                if hs:
+                ht = human_texts.get(r.id)
+                if hs or ht:
                     n_auto += 1
+                    # 字形优先取库里那份（进库时经过清洗）；库里没有（人勾了不入库）就取事件里的。
+                    # `reading` 只有事件里才有（己/已/巳 那类"刻 X 读 Y"），且与字形不同才记。
+                    char = hs or ht[0]
+                    reading = (ht[1] if ht and ht[1] and ht[1] != char else None)
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=True,
-                        channel="human", char=hs, reading=None,
+                        channel="human", char=char, reading=reading,
                         provenance="human", doubts=[],
-                        evidence={"human": True}))
+                        evidence={"human": True, **({} if hs else {"no_glyph_lib": True})}))
                     continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）

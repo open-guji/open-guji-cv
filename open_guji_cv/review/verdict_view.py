@@ -45,6 +45,13 @@ def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
             continue
         if e.target.unit != "cell":
             continue
+        # 「切坏 / 带残留」不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是"这块图先别用"，
+        # 没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格回到待审队列，
+        # `skip_decided` 却把它们永远藏起来——bxgb 42 个「已裁未放行」里 31 个从没定过字，
+        # 定字台上也看不见，人以为剩下的无处可做。seg_defect 的去处是 Step3 的打回台账，
+        # 不是这里。
+        if e.kind == "confirm" and (e.payload or {}).get("v") == "seg_defect":
+            continue
         k = e.target.key
         if k.startswith(pre):
             out.add(k)

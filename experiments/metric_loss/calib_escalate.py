@@ -15,7 +15,7 @@
 册配置注释里本来写着「⚠️ 在**这套基集**上标的，换 base 要重标」，
 这次补一条：**换 checkpoint 也要重标**。
 
-    PYTHONIOENCODING=utf-8 GUJI_WORKSPACE=D:/workspace/beixing-guben-workspace \
+    PYTHONIOENCODING=utf-8 GUJI_WORKSPACE=D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一 \
       .venv/Scripts/python.exe experiments/metric_loss/calib_escalate.py
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/beixing-guben-workspace"))
+WS = Path(os.environ.get("GUJI_WORKSPACE", "D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一"))
 GRID = [0.0, 0.80, 0.85, 0.90, 0.93, 0.95, 0.97, 0.98, 0.99, 1.01]
 
 

@@ -42,7 +42,8 @@ export interface Step9ProgressRow {
   page: number
   stale: number
   stale_steps: string[]
-  review: number
+  review_new: number       // Step7 待人裁：未放行 ∧ 未裁过 —— 与裁决台出卡数逐 id 相等
+  review_decided: number   // 已裁未放行：人裁过了、机器没采信，不是待办
   cut: number
   defect: number
   excluded: number

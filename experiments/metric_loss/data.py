@@ -50,7 +50,7 @@ ZITOOLS_DIRS = [Path("D:/data/glyph-sources/zitools/p1"),
 WORKSPACES = {
     "siku": Path("D:/workspace/siku-zongmu-workspace/output/glyph.db"),
     "bxrl": Path("D:/workspace/beixingrilu-workspace/output/glyph.db"),
-    "bxgb": Path("D:/workspace/beixing-guben-workspace/output/glyph.db"),
+    "bxgb": Path("D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一/output/glyph.db"),
 }
 REAL_STATUS = ("align", "context", "human", "match")
 CACHE = Path("experiments/metric_loss/out/cache")

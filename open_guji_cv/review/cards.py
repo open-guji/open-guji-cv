@@ -124,6 +124,12 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 else:
                     if r.id in decided:
                         continue
+                    # 排除名单上的格（非字 / 人复核后仍切坏 / 原刻残）不出定字卡：它们不是
+                    # "这是什么字"的问题——非字无字可定，切坏的是 Step3 的打回待办（总览/13）。
+                    # 2026-09-20 前靠 `decided` 顺带藏住（seg_defect 事件曾算"裁过"），
+                    # seg_defect 不再算裁过之后要显式挡，否则 bxgb 4 个「仍切坏」又冒出来。
+                    if "excluded" in (r.doubts or []):
+                        continue
                     if only == "review" and r.admit:
                         continue
                     if only == "auto" and not r.admit:
