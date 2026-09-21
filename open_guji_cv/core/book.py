@@ -10,7 +10,7 @@ import yaml
 
 #: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
 #: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
-#: `siku-zongmu-workspace/books/`。这里只留一个空目录兜底与一条报错提示：
+#: `guji-workspace/<id>-<书名>/books/`。这里只留一个空目录兜底与一条报错提示：
 #: 万一有人往这儿放 yaml，`load_book` 会明确告诉他放错地方了，而不是静默生效
 #: ——那正是「books.yaml 有两份」那条坑的根源（工作区改了没反应，因为读的是这份）。
 BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
@@ -427,7 +427,7 @@ def _workspace_books_dir() -> Path | None:
 
     2026-09-14 起优先于引擎仓；**2026-09-15 起是唯一来源**（用户裁定）。
     册配置是「这本书的数据」，按数据边界（overview `数据边界-三仓各管什么.md`）
-    该落工作区。十册四庫的 yaml 已迁进 `siku-zongmu-workspace/books/`。
+    该落工作区。十册四庫的 yaml 在 `guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本/books/`。
     """
     from .workspace import workspace_root
     ws = workspace_root()
@@ -464,7 +464,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         d = yaml.safe_load(f) or {}
     raw_dir = Path(d["raw_dir"])
     if not raw_dir.is_absolute():
-        # 相对路径优先按工作区解释（原图已随书迁到 siku-zongmu-workspace），
+        # 相对路径优先按工作区解释（原图已随书迁到 guji-workspace 的书目录），
         # 没设 GUJI_WORKSPACE 时退回仓根——引擎自带的小样本仍在仓内。
         from .workspace import raw_root
         raw_dir = raw_root() / raw_dir

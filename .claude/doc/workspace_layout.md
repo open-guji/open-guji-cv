@@ -4,6 +4,14 @@
 > `open_guji_cv/core/workspace.py` 顶部的 docstring 与其中的 `*_REL` 常量——
 > 改布局要**先改那边、再改这里**，两边不一致时以代码为准。
 >
+> **2026-09-20 迁仓**：各书工作区已并入 **`guji-workspace`** 一个仓（`open-guji/guji-workspace`），
+> 一部书一个目录，目录名 = `<book-index id>-<书名>`，如
+> `96mid1ogzk-欽定四庫全書總目武英殿刻本`。`GUJI_WORKSPACE` / `-w` 指到**书目录**那一层，
+> 书目录内部结构不变。`products/`、`cache/`、`output/glyph.db` 仍不进 git（见书目录的
+> `.gitignore`），换机器要重跑或另行拷贝。控制台 URL 的短 id 由书目录下的
+> `workspace.yaml` 的 `id:` 决定——本仓目录名不以 `-workspace` 结尾，不写这个文件
+> URL 上就是一整串中文。
+>
 > 四个工作区（`siku-zongmu` / `beixingrilu` / `yiwenzhi` / `beixing-guben`）已按此对齐；
 > 各自当下状态与迁移记账在 overview 仓
 > `项目进展/图片初步数字化/进度/总览/08-工作区目录约定.md`。
@@ -122,7 +130,7 @@ python -m open_guji_cv glyph-db import-font
 mkdir <book>-workspace && cd <book>-workspace
 mkdir -p books corpus source data_full output products cache \
          review/batches feedback/{events,consumed,verdicts} config reports scripts
-# README.md / .gitignore 照抄 siku-zongmu-workspace 那份，删掉它专有的行
+# README.md / .gitignore 照抄 guji-workspace 里已有的书那份，删掉它专有的行
 git init
 ```
 
