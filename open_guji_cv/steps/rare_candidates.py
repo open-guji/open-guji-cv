@@ -12,7 +12,7 @@ Step，生僻字这路补齐后四路才在同一层，Step6 融合与 Step7 通
 CNN checkpoint、康熙白名单、字统网模板都是**外部可变状态**——换模型或
 换模板，同一张字块图给出的候选会变，而 Step 的代码、参数、上游产物一个
 都没动。跟 `glyph_match` 的 `db_fingerprint` 同一个道理：把
-`cnn_candidates.full_fingerprint()`（checkpoint mtime + 模板集 stamp）摘进
+`cnn_candidates.full_fingerprint()`（checkpoint mtime + 模板集 stamp + 字体集 stamp）摘进
 `RareCandidatesParams`，产物就会在换模型/换模板时自动 stale。
 
 ## checkpoint 缺席时不炸
@@ -53,6 +53,24 @@ from ..products.kinds.recog import ColumnRare, PageRare, RareCand, RareRec
 
 class RareCandidatesParams(BaseModel):
     k: int = 10
+    model_fingerprint: str = ""
+    """候选栈的外部状态指纹（checkpoint + 外部模板集 + 模板字体集），**由
+    `model_post_init` 自动填**，yaml 里不用写。它参与 `params_hash`，从而进产物
+    指纹——换模型文件、换模板、往 `fonts/` 加减字体档，产物才会过期。
+
+    2026-09-21 查出：模块头一直说「把 `full_fingerprint()` 摘进 RareCandidatesParams」，
+    可参数类里从来只有 `k`——指纹只写进了产物体的 `PageRare.model_fingerprint`，而
+    新鲜度判断（`core/engine._self_payload`）只看参数哈希 + 代码哈希 + `book_deps`，
+    不读产物体。后果：**只要代码不动**（原地换 `best.pt`、`fonts/` 里加一套字体），
+    `rare_candidates` 照报「新鲜」，跑出来的候选其实是旧模板的。r4 → r5 那次没露馅，
+    是因为改了 `cnn_candidates.py` 里的默认路径、`code_deps` 的代码哈希顺带变了。
+    照 `GlyphMatchParams.db_fingerprint` 的同一套写法补上。
+    """
+
+    def model_post_init(self, _ctx) -> None:
+        if not self.model_fingerprint:
+            from ..clustering.cnn_candidates import full_fingerprint
+            object.__setattr__(self, "model_fingerprint", full_fingerprint())
 
 
 @register_step
