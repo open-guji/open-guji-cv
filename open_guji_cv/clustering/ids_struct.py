@@ -428,6 +428,46 @@ def component_consistency(cands: Iterable[str], comp_probs: dict[str, float],
     return out
 
 
+# ── Step A 的标签空间（结构头 + 槽位部件头）──────────────────────────
+
+#: 结构头的类：17 个算符 + 独体，顺序固定（进 checkpoint 的 `struct_classes`）。
+STRUCT_CLASSES: tuple[str, ...] = tuple(sorted(IDC_ARITY)) + (SINGLE,)
+SINGLE_SLOT = "S"
+
+
+def struct_index(ch: str, k: int = DEFAULT_K) -> int:
+    """结构头的目标类下标。"""
+    return STRUCT_CLASSES.index(structure_of(ch, k).top)
+
+
+def slot_keys_of(ch: str, k: int = DEFAULT_K) -> tuple[str, ...]:
+    """槽位部件头的目标：`部件@顶层槽`（言@L、俞@R）；独体字是 `字@S`。去重保序。
+
+    与 `component_consistency` / `struct_rerank` 的 `components_of` 参数配套：
+    槽位头的概率字典键就是这些串。
+    """
+    st = structure_of(ch, k)
+    if st.top == SINGLE:
+        return (f"{ch}@{SINGLE_SLOT}",)
+    out: list[str] = []
+    for slot, comps in st.top_slots().items():
+        for c in comps:
+            key = f"{c}@{slot}"
+            if key not in out:
+                out.append(key)
+    return tuple(out)
+
+
+def build_slot_labels(classes: Iterable[str], min_count: int = 3,
+                      k: int = DEFAULT_K) -> list[str]:
+    """训练类表 → 槽位标签词表：只留在 ≥min_count 个类里出现的 `部件@槽`（与现役
+    部件袋头「≥3 字」同一条纪律，罕见标签学不动只添噪）。排序稳定。"""
+    cnt: Counter = Counter()
+    for ch in classes:
+        cnt.update(set(slot_keys_of(ch, k)))
+    return sorted(key for key, n in cnt.items() if n >= min_count)
+
+
 #: 一致性名次表在 RRF 里的权重。**未标定**——等 `scripts/eval_struct_rerank.py`
 #: 在 oov_bench / 北行 383 上扫过再定；扫之前它只在 `struct_rerank=True` 时生效。
 STRUCT_RERANK_WEIGHT = 1.0

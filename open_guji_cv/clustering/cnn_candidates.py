@@ -91,8 +91,12 @@ def fingerprint(path: str | Path = DEFAULT_CKPT) -> str:
     return hashlib.sha1(f"{p}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
 
 
-def _build_net(n_cls: int, n_comp: int, d: int = 256):
-    """与 train_glyph_cnn.Net 同构；结构改了这里要同步（用 checkpoint 里的维度校验）。"""
+def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot: int = 0):
+    """与 train_glyph_cnn.Net 同构；结构改了这里要同步（用 checkpoint 里的维度校验）。
+
+    `n_struct` / `n_slot` > 0 时多两个头（Step A，2026-09-21）：结构头（顶层算符 18 类）
+    与槽位部件头（`部件@槽` 多标签）。r4/r5 checkpoint 没有这两个键，传 0 即原网络，
+    `forward` 的三元组返回值不变——老调用方一个都不用改；新头走 `heads()`。"""
     import torch.nn as nn
     import torch.nn.functional as F
 
@@ -122,11 +126,23 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256):
             self.emb = nn.Linear(256 * 16, d)
             self.cls = nn.Linear(d, n_cls)
             self.comp = nn.Linear(d, n_comp)
+            self.struct = nn.Linear(d, n_struct) if n_struct > 0 else None
+            self.slot = nn.Linear(d, n_slot) if n_slot > 0 else None
 
         def forward(self, x):
             x = self.l4(self.l3(self.l2(self.l1(self.stem(x)))))
             e = F.normalize(self.emb(x.flatten(1)), dim=1) * 16.0
             return e, self.cls(e), self.comp(e)
+
+        def heads(self, x):
+            """全部头：dict(emb, cls, comp, struct?, slot?)。"""
+            e, lg, cp = self.forward(x)
+            out = {"emb": e, "cls": lg, "comp": cp}
+            if self.struct is not None:
+                out["struct"] = self.struct(e)
+            if self.slot is not None:
+                out["slot"] = self.slot(e)
+            return out
 
     return Net()
 
@@ -141,6 +157,8 @@ class CnnCandidates:
         self._classes: list[str] = []
         self._cidx: dict[str, int] = {}
         self._comps: list[str] = []
+        self._struct_classes: list[str] = []
+        self._slot_labels: list[str] = []
         self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
         """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
@@ -166,7 +184,10 @@ class CnnCandidates:
         self._classes = list(ck["classes"])
         self._cidx = {c: i for i, c in enumerate(self._classes)}
         self._comps = list(ck.get("comps") or [])
-        net = _build_net(len(self._classes), len(ck["comps"]))
+        self._struct_classes = list(ck.get("struct_classes") or [])
+        self._slot_labels = list(ck.get("slot_labels") or [])
+        net = _build_net(len(self._classes), len(ck["comps"]),
+                         n_struct=len(self._struct_classes), n_slot=len(self._slot_labels))
         net.load_state_dict(ck["state"])
         net.eval()
         dev = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -194,6 +215,35 @@ class CnnCandidates:
     def comps(self) -> list[str]:
         """部件袋头的词表（训练时 `ids_guard.components` 出现 ≥3 字的部件）。未加载时空。"""
         return list(self._comps) if self._ensure() else []
+
+    @property
+    def has_struct_heads(self) -> bool:
+        """checkpoint 带不带 Step A 的结构头 / 槽位头（r4/r5 不带）。"""
+        return self._ensure() and bool(self._struct_classes) and bool(self._slot_labels)
+
+    @property
+    def slot_labels(self) -> list[str]:
+        return list(self._slot_labels) if self._ensure() else []
+
+    def struct_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化图 → {顶层算符: 概率}（结构头 softmax）。没有结构头 → 全空字典。"""
+        if not self.has_struct_heads or not norm_patches:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+            pr = torch.softmax(self._net.heads(x)["struct"], 1).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._struct_classes, row)} for row in pr]
+
+    def slot_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
+        """归一化图 → {部件@槽: 概率}（槽位头 sigmoid）。键与 `ids_struct.slot_keys_of` 同口径。"""
+        if not self.has_struct_heads or not norm_patches:
+            return [{} for _ in norm_patches]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+            pr = torch.sigmoid(self._net.heads(x)["slot"]).cpu().numpy()
+        return [{c: float(p) for c, p in zip(self._slot_labels, row)} for row in pr]
 
     def comp_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
         """归一化 64² 图 → {部件: 存在概率}（部件袋头 sigmoid）。

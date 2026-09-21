@@ -76,6 +76,8 @@ export interface RareCandidate {
   freq?: number
   gloss?: string
   zi: string
+  /** 结构解释（ids_struct 口径）：{top: '⿰', slots: {L: '言', R: '俞'}}；独体 top='独体' */
+  struct?: { top: string; slots: Record<string, string> }
 }
 
 export interface AroundSlot {

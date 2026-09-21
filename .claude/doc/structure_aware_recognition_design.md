@@ -440,3 +440,20 @@ M0 全在云端、不用 GPU、不用等本机数据（#3 的评测除外），�
 - 每个候选字典多了 `struct: {top, slots}`（`struct_hint`），审字卡片解释行的数据源；
   现在只有候选侧的结构，查询侧（字块预测的结构）要等 Step A。
 - 测试 `tests/test_rare_ids_fallback.py` 4 条（无图路）。
+
+### 2026-09-21 · M1 云端侧：Step A 的训练/推理代码（未训练）
+
+- `scripts/train_glyph_cnn.py --struct-heads`：结构头（`STRUCT_CLASSES` 18 类，CE）+ 槽位部件头
+  （`build_slot_labels(classes, ≥3)` 的 `部件@槽`，BCE），权重 `--w-struct/--w-slot` 各 0.5；
+  不开开关与 r5 配方逐位相同。日志每轮多 `struct` / `slot@3` 两列；checkpoint 多
+  `struct_classes` / `slot_labels` / `vocab_fingerprint` 三个键。
+- `cnn_candidates._build_net(n_struct, n_slot)`：按 checkpoint 有没有那两个键建头，`forward`
+  三元组不变（老调用方零改动），新头走 `heads()`；`struct_probs_batch` / `slot_probs_batch`。
+- `rare_for_batch(struct_rerank=True)` 有槽位头就用槽位头（键 `部件@槽`，`slot_keys_of`），
+  没有退回部件袋头。
+- `scripts/eval_struct_heads.py`：结构头准确率（合体 / 独体分列）、槽位 top-3、三路重排对比。
+- `scripts/export_train_bundle.py`：把 `cache/glyph_bench` + `cache/oov_bench` 打包给云端。
+- 前端：`RarePanel` 加「按结构查（兜底）」一行（结构下拉 + 两槽 + 任意部件），候选行显示
+  `⿰ L:言 R:俞`；`static/dist` 已重建。
+- **本机任务卡**：`task_card_2026-09-21_structure_step_a_local.md`（云端推不进 overview 仓，
+  跨组织；人搬）。
