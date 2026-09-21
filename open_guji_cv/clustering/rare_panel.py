@@ -440,11 +440,16 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk)
              for a, b, cnn_topk, emb_topk, dbk
              in zip(a_list, b_list, cnn_list, emb_list, db_list)]
-    probs = cnn.comp_probs_batch(norms)
+    # Step A 的槽位头（部件@槽）比部件袋头（只管有没有、不管在哪）更细，有就用它
+    if cnn.has_struct_heads:
+        from .ids_struct import slot_keys_of
+        probs, comps_of = cnn.slot_probs_batch(norms), slot_keys_of
+    else:
+        probs, comps_of = cnn.comp_probs_batch(norms), first_level_components
     out = []
     for hits, pr in zip(fused, probs):
         by_char = {h["char"]: h for h in hits}
-        order = _rerank([h["char"] for h in hits], pr, first_level_components, k=k)
+        order = _rerank([h["char"] for h in hits], pr, comps_of, k=k)
         out.append([by_char[ch] for ch in order])
     return out
 

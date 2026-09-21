@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fetchRareOne } from '../../api/review'
+import { fetchRareOne, fetchRareSearch } from '../../api/review'
 import type { RareCandidate } from '../../types/review'
 import '../review/review.css' // 复用候选行样式 .rvrareout/.rvrrow/.rvstd/.rvgloss/.rvzi/.rvpick
 import './rare.css'
@@ -18,6 +18,39 @@ export function RarePanel({ book }: { book: string }) {
   const [sub, setSub] = useState('')
   const [candidates, setCandidates] = useState<RareCandidate[] | null>(null)
   const [msg, setMsg] = useState('')
+  // IDS 兜底（M0 第三块，2026-09-21）：候选全错时按「结构 + 认出的部件」查字
+  const [top, setTop] = useState('')
+  const [slotA, setSlotA] = useState('')     // 第一槽（⿰ 的左 / ⿱ 的上 / 包围的外）
+  const [slotB, setSlotB] = useState('')     // 第二槽
+  const [comps, setComps] = useState('')     // 任意位置含的部件，空格分隔
+
+  const SLOT_NAMES: Record<string, [string, string]> = {
+    '⿰': ['L', 'R'], '⿱': ['T', 'B'], '⿲': ['L', 'R'], '⿳': ['T', 'B'], '⿻': ['A', 'B'],
+    '⿴': ['O', 'I'], '⿵': ['O', 'I'], '⿶': ['O', 'I'], '⿷': ['O', 'I'],
+    '⿸': ['O', 'I'], '⿹': ['O', 'I'], '⿺': ['O', 'I'],
+  }
+
+  async function searchByIds() {
+    const names = SLOT_NAMES[top] || ['L', 'R']
+    const slots: Record<string, string> = {}
+    if (slotA.trim()) slots[names[0]] = slotA.trim()
+    if (slotB.trim()) slots[names[1]] = slotB.trim()
+    const cs = comps.split(/[\s,，]+/).filter(Boolean)
+    if (!top && !Object.keys(slots).length && !cs.length) { setMsg('结构 / 槽位部件 / 任意部件至少给一个'); return }
+    const p = Number.parseInt(page, 10), c = Number.parseInt(col, 10), s = Number.parseInt(slot, 10)
+    setMsg('按结构查询中…')
+    try {
+      const d = await fetchRareSearch(book, {
+        top, slots, comps: cs,
+        page: p && c && s ? p : undefined, col: c || undefined, cell: s || undefined, sub: sub || undefined,
+      })
+      setCandidates(d.candidates || [])
+      setMsg(d.candidates?.length ? (d.with_image ? '池子由结构定、顺序由字块 emb 定' : '没填字位坐标：按命中数 + 频次排') : '倒排里没有这样的字')
+    } catch (e) {
+      setMsg((e as Error).message)
+      setCandidates(null)
+    }
+  }
 
   async function query() {
     const p = Number.parseInt(page, 10)
@@ -46,6 +79,18 @@ export function RarePanel({ book }: { book: string }) {
         <button onClick={query}>查候选</button>
         <span className="muted">{msg}</span>
       </div>
+      <div className="rare-row">
+        <label className="muted">结构
+          <select value={top} onChange={(e) => setTop(e.target.value)}>
+            <option value="">任意</option>
+            {['⿰', '⿱', '⿲', '⿳', '⿴', '⿵', '⿶', '⿷', '⿸', '⿹', '⿺', '⿻'].map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </label>
+        <label className="muted">{(SLOT_NAMES[top] || ['L', 'R'])[0]} 槽 <input value={slotA} onChange={(e) => setSlotA(e.target.value)} size={3} /></label>
+        <label className="muted">{(SLOT_NAMES[top] || ['L', 'R'])[1]} 槽 <input value={slotB} onChange={(e) => setSlotB(e.target.value)} size={3} /></label>
+        <label className="muted">含部件 <input value={comps} onChange={(e) => setComps(e.target.value)} size={8} placeholder="俞 侖" /></label>
+        <button onClick={searchByIds}>按结构查（兜底）</button>
+      </div>
       <p className="muted rare-help">
         候选来自字体模板（4 套字体渲染 + 康熙字典白名单 + 字统网印/楷）与拆字 CNN
         融合（三源 RRF）。这一路只出候选、永不放行——库/OCR/上下文三路都给不出
@@ -61,6 +106,11 @@ export function RarePanel({ book }: { book: string }) {
               {x.std
                 ? <b className="rvstd" title={`整理本里用的是这个字（${x.std_freq} 次）`}>→ {x.std}</b>
                 : (x.freq ? <span className="rvin" title={`整理本里用过 ${x.freq} 次`}>【整】</span> : null)}
+              {x.struct && x.struct.top !== '独体' && (
+                <span className="muted" title="IDS 结构：顶层算符 + 各槽位部件">
+                  {x.struct.top} {Object.entries(x.struct.slots).map(([k, v]) => `${k}:${v}`).join(' ')}
+                </span>
+              )}
               <span className="rvgloss" title={x.gloss || ''}>{x.gloss || ''}</span>
               <a className="rvzi" href={x.zi} target="_blank" rel="noopener noreferrer">字统网</a>
             </div>

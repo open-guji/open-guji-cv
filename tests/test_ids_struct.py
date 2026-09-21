@@ -11,7 +11,9 @@ from __future__ import annotations
 import pytest
 
 from open_guji_cv.clustering.ids_struct import (IDC, SINGLE, IdsIndex, Node,
-                                                component_consistency, struct_rerank,
+                                                STRUCT_CLASSES, build_slot_labels,
+                                                component_consistency, slot_keys_of,
+                                                struct_index, struct_rerank,
                                                 load_table, parse_ids,
                                                 pick_primary, shared_index,
                                                 structure_of, tokenize)
@@ -114,3 +116,16 @@ def test_struct_rerank_is_identity_without_probs():
     assert struct_rerank(["論", "諭"], {}, k=2) == ["論", "諭"]
     # 一个候选都没有部件意见 → 原样
     assert struct_rerank(["人", "入"], {"言": 0.9}, k=2) == ["人", "入"]
+
+
+def test_step_a_label_space():
+    """结构头 18 类、槽位标签 `部件@槽`；独体字是 `字@S`；词表按 ≥min_count 过滤。"""
+    assert len(STRUCT_CLASSES) == 18 and STRUCT_CLASSES[-1] == SINGLE
+    assert STRUCT_CLASSES[struct_index("諭")] == "⿰" and STRUCT_CLASSES[struct_index("人")] == SINGLE
+    assert slot_keys_of("諭") == ("言@L", "俞@R") and slot_keys_of("人") == ("人@S",)
+    labels = build_slot_labels(["諭", "論", "記", "計", "人"], min_count=2)
+    assert "言@L" in labels and "俞@R" not in labels and "人@S" not in labels
+    # 槽位概率能直接喂给 struct_rerank
+    out = struct_rerank(["論", "諭"], {"言@L": 0.9, "俞@R": 0.9, "侖@R": 0.1},
+                        components_of=slot_keys_of, k=2, weight=4.0)
+    assert out[0] == "諭"
