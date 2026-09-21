@@ -249,7 +249,7 @@ class CnnCandidates:
 
         import hashlib
         import torch
-        from .font_candidates import _font_files
+        from .font_candidates import _font_files, font_set_fingerprint
         from .synth import render_char
 
         cs = tuple(charset)
@@ -264,8 +264,10 @@ class CnnCandidates:
                 extra = load_many(specs, cs)
         except Exception:
             extra = {}
-        key = hashlib.sha1((fingerprint(self.ckpt) + "".join(cs)
-                            + "|".join(sorted(extra)) ).encode("utf-8")).hexdigest()[:16]
+        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
+        # 见 `font_candidates.font_set_fingerprint` 模块头。
+        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
+                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
         f = self.ckpt.parent / f"emb_{key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=False)
@@ -426,9 +428,11 @@ def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
 
 def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
                       specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
-    """生僻字候选栈的完整指纹：checkpoint + 外部模板集。进 Step 参数才能让
-    `rare_candidates` 产物在换模型/换模板时正确过期（见 `steps/rare_candidates.py`）。"""
-    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}"
+    """生僻字候选栈的完整指纹：checkpoint + 外部模板集 + **模板字体集**（2026-09-21 补，
+    此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
+    换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。"""
+    from .font_candidates import font_set_fingerprint
+    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}:{font_set_fingerprint()}"
 
 
 def _spec_ready(spec: str) -> bool:
