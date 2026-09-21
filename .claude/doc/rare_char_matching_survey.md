@@ -174,7 +174,7 @@ Top-30 精排，标价半天）、以及「候选里一个都不对时人怎么�
 **最真实的靶子是北行 383 条用户裁决，但它没有登记成金标分片**。step5_step6_benchmark
 §3.2「缺口 3：生僻字没有任何测试集」这条**只补了一半**。
 
-**G7 · `fonts/genmin/` 三套字体全仓零引用。**
+**G7 · `fonts/genmin/` 三套字体全仓零引用。**（**2026-09-21 已接进 `FONT_ORDER`**，补了 OFL 授权文件；顺带查出字体集与模型指纹都没进产物新鲜度判断，一并修了——见 `steps/rare_candidates.py` `RareCandidatesParams.model_fingerprint`。效果仍未量，见 R6。）
 `GenRyuMin2TC / GenWanMin2TC / GenYoMin2TC`（源流/源云/源样明朝，传承字形）躺在
 `fonts/genmin/` 里，**`FONT_ORDER` 没有它、全仓 grep 一处引用都没有、文档也没提**。
 而这条线上已有的实测恰恰说「多套字体『同字多写法取平均』的作用一套顶不了」
@@ -199,7 +199,7 @@ Top-30 精排，标价半天）、以及「候选里一个都不对时人怎么�
 | R3 | **下游消费 5-b**：Step6 把 5-b 候选并入候选池（只补池、不投票）| 半天 | 人审率；候选可达率 | **5-b 与 5-a 同源（都看图），不得互证放行**；harmful_flip ≤1.2% |
 | R4 | **L2 便宜版：Top-30 部件一致性重排**（IDS 倒排 + 部件头一致性打分）| 半天–2 天 | 真难题档 top-1 / top-10 | 不改任何自动放行决定；K≥30 才不丢召回 |
 | R5 | **把北行 383 条 + `oov_bench` 登记成 `rare-char` 分片**（分层：类外 / 三路无候选 / 有码无候选），`calib_escalate` 提成正式 `eval` 子命令 | 1–2 天 | 换册换模型一键重标 | 金标分层报（human / align 不混）|
-| R6 | **试 `fonts/genmin/` 三套进模板**（G7）：`FONT_ORDER` 加一项、重建 emb 索引 | 1 小时 + 一次评测 | `oov_bench` / 北行 top-1 | `unseen` 不掉；先补 LICENSE |
+| R6 | **量 `fonts/genmin/` 三套进模板的效果**（G7，接线已做、效果未量）：重建 emb 索引后跑 `eval_zero_shot_fusion --split unseen --emb` 与 `eval_oov`，掉了就从 `FONT_ORDER` 拿掉 | 一次评测 | `oov_bench` / 北行 top-1 | `unseen` 不掉；先补 LICENSE |
 | R7 | **无码字通道**：IDS 描述 + 图像落账，不造 PUA | 观察 | 无码率 | 只记录，不进字表 |
 
 顺序建议 **R1 → R5 → R6 → R2 → R3 → R4**（R6 最便宜，顺手做）：先让数能量出来（R1/R5），再动模板（R2），
