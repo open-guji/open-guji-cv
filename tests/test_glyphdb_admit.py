@@ -2,93 +2,83 @@
 """审查闭环最后一环：confirm 事件 → GlyphDB 进库。
 
 守两条：字形/释读分开写；v2 的 id 必须与 v1 分居命名空间。
+
+2026-09-20 重写：原先五条都 `shutil.copy` **本机那份真字形库**，再在
+vol01 dev_set 的产物里捞一个「还没进过库」的字位来写——库是活的，捞得到
+捞不到全看这次人裁进了多少，捞不到就 skip；库不在（云端）则五条全 skip。
+`_free_key()` 那个函数本身就是这套依赖的症状：它存在的唯一理由是「真库会
+随人裁不断长大，写死某个 id 迟早撞上已进库的」。
+
+现在库从**空的**建起（`GlyphDB` 打开即建表），字块由 fixture 那张冻结真页
+现跑 Step1→Step4 产出。要对照 v1 旧记录就自己往库里插一条 v1 的——比在真库
+里翻一条出来可控得多，也不会因为别人清了库就整条失效。
 """
 
 from __future__ import annotations
 
-import shutil
 import sqlite3
-from pathlib import Path
 
 import pytest
 
 import open_guji_cv.steps  # noqa: F401
+from helpers import run_keben_from_raw
 from open_guji_cv.feedback.consumers import glyphdb_admit
 from open_guji_cv.feedback.events import EventTarget, make_event
 
-REPO = Path(__file__).resolve().parent.parent
+BOOK, PAGE = "keben", 1
 
 
-def _ws_db():
-    """字形库：优先 GUJI_WORKSPACE / GUJI_GLYPH_DB。"""
-    from open_guji_cv.core.workspace import glyph_db_path
-    return glyph_db_path()
-DB = _ws_db()
-needs_db = pytest.mark.skipif(not DB.exists(), reason="需要 output/glyph.db")
-
-
-def _free_key(db):
-    """在 dev_set 里找一个字块存在、但 v2: 命名空间下还没进过库的字位。"""
-    import open_guji_cv.steps  # noqa: F401
+@pytest.fixture
+def lib(tmp_path, monkeypatch, ws, fixture_page):
+    """一个空字形库 + 一页真字块。返回 `(库路径, [(页, 列, 格), …])`。"""
+    from open_guji_cv.clustering.glyph_db import GlyphDB
     from open_guji_cv.core.book import load_book
-    from open_guji_cv.core.spec import page_key
-    from open_guji_cv.products.cache import ImageCache
-    from open_guji_cv.products.store import ProductStore
-    c = sqlite3.connect(db)
-    used = {r[0] for r in c.execute(
-        "select instance_id from admissions where instance_id like 'v2:%'")}
-    c.close()
-    store, cache = ProductStore(), ImageCache()
-    for pg in load_book("vol01").dev_set:
-        a = store.read("vol01", "cell_shrink", page_key(pg), "char_index")
-        if a is None:
+
+    ctx, out = run_keben_from_raw(tmp_path, monkeypatch, book=load_book(BOOK),
+                                  gray=fixture_page)
+    cells = []
+    for cc in out["char_index"].columns:
+        if not cc.ok:
             continue
-        for cc in a.columns:
-            if not cc.ok:
-                continue
-            for ch in cc.chars:
-                if ch.cell_type != "char" or not ch.patch_key or ch.sub:
-                    continue
-                if f"v2:vol01:{pg}:{cc.col}:{ch.slot}" in used:
-                    continue
-                if cache.get("vol01", "char_patch", ch.patch_key) is None:
-                    continue
-                return pg, cc.col, ch.slot
-    return None
+        for ch in cc.chars:
+            if ch.cell_type == "char" and ch.patch_key and not ch.sub:
+                if ctx.cache.get(BOOK, "char_patch", ch.patch_key) is not None:
+                    cells.append((PAGE, cc.col, ch.slot))
+    assert len(cells) > 10, f"冻结样页只切出 {len(cells)} 个可用字块"
+
+    db = tmp_path / "g.db"
+    GlyphDB(db).close()          # 打开即建表，instances 仍是 0 行
+    return db, cells
 
 
-def _ev(key, payload, page, col, slot):
+def _ev(key, payload, page, col, slot, book: str = BOOK):
     return (make_event("t", 1, "confirm",
                        EventTarget(step="seed_admit", unit="cell", key=key,
-                                   book="vol01", page=page, col=col, slot=slot),
+                                   book=book, page=page, col=col, slot=slot),
                        payload), None)
 
 
-@needs_db
-def test_shape_and_reading_land_in_different_columns(tmp_path):
+def _confirm(db, cell, payload, **kw):
+    pg, col, slot = cell
+    return glyphdb_admit([_ev(f"{BOOK}:{pg}:{col}:{slot}", payload, pg, col, slot)],
+                         db_path=str(db), **kw)
+
+
+def test_shape_and_reading_land_in_different_columns(lib):
     """已/巳 这类：字形进字形索引，释读进 admissions.char。
 
     字形层的 near_form 护栏本来就是防「形状判据自己会认错」，字形库若被
     释读污染，将来一个真刻成这形状、该读别的字的实例会错误继承这次的释读。
     """
-    db = tmp_path / "g.db"
-    shutil.copy(DB, db)
-    # 挑一个**库里还没有**的字位——真库会随人裁不断长大，写死某个 id 迟早
-    # 撞上已进库的（实测 vol01:24:6:13 被人裁定成「次」之后，admit_instance
-    # 的幂等闸拒绝覆盖，测试跟着红）。
-    key = _free_key(db)
-    if key is None:
-        pytest.skip("dev_set 的字块都进过库了，没有干净的 id 可测")
-    pg, col, slot = key
-    r = glyphdb_admit([_ev(f"vol01:{pg}:{col}:{slot}",
-                           {"v": "confirm", "shape": "巳", "reading": "已",
-                            "conversion": 1}, pg, col, slot)], db_path=str(db))
-    if r.added == 0 and any("缓存里没有字块" in e for e in r.errors):
-        pytest.skip("字块缓存里没有这一格")
+    db, cells = lib
+    pg, col, slot = cells[0]
+    r = _confirm(db, cells[0], {"v": "confirm", "shape": "巳", "reading": "已",
+                                "conversion": 1})
     assert r.added == 1, r.errors
-    iid = f"v2:vol01:{pg}:{col}:{slot}"
+
+    iid = f"v2:{BOOK}:{pg}:{col}:{slot}"
     c = sqlite3.connect(db)
-    label, semantic = c.execute(
+    label, _semantic = c.execute(
         "select label, semantic from instances where instance_id=?", (iid,)).fetchone()
     char, prov = c.execute(
         "select char, provenance from admissions where instance_id=?", (iid,)).fetchone()
@@ -98,62 +88,55 @@ def test_shape_and_reading_land_in_different_columns(tmp_path):
     assert prov == "human"
 
 
-@needs_db
-def test_v2_ids_do_not_overwrite_v1_records(tmp_path):
+def test_v2_ids_do_not_overwrite_v1_records(lib):
     """v2 的 id 必须加前缀——v1 的 idx 与 v2 的 slot 差一格，撞车会改写旧记录。
 
     实测 vol01/24 c1：库里 `vol01:24:1:2` 是「每」，v2 的 `1:2` 是「書」，
     170 个同 id 命中里 0 个一致。
-    """
-    db = tmp_path / "g.db"
-    shutil.copy(DB, db)
-    c = sqlite3.connect(db)
-    row = c.execute(
-        "select char from admissions where instance_id='vol01:24:6:2'").fetchone()
-    c.close()
-    if row is None:
-        pytest.skip("库里没有这条 v1 记录可对照")
-    before = row[0]
 
-    glyphdb_admit([_ev("vol01:24:6:2",
-                       {"v": "confirm", "shape": "次", "reading": "次"},
-                       24, 6, 2)], db_path=str(db))
+    这里先自己往库里插一条 v1 形态的记录（不带前缀）当对照——原先是去真库里
+    翻一条，翻不到就 skip。
+    """
+    db, cells = lib
+    pg, col, slot = cells[0]
+    v1_id = f"{BOOK}:{pg}:{col}:{slot}"          # v1 命名空间：没有 v2: 前缀
     c = sqlite3.connect(db)
-    after = c.execute(
-        "select char from admissions where instance_id='vol01:24:6:2'").fetchone()[0]
-    v2 = c.execute(
-        "select char from admissions where instance_id='v2:vol01:24:6:2'").fetchone()
+    c.execute("insert into admissions (instance_id, char, provenance, admitted_at) "
+              "values (?,?,?,datetime('now'))", (v1_id, "每", "human"))
+    c.commit()
     c.close()
-    assert after == before, f"v1 记录被改写了：{before} → {after}"
+
+    _confirm(db, cells[0], {"v": "confirm", "shape": "次", "reading": "次"})
+
+    c = sqlite3.connect(db)
+    after = c.execute("select char from admissions where instance_id=?",
+                      (v1_id,)).fetchone()[0]
+    v2 = c.execute("select char from admissions where instance_id=?",
+                   (f"v2:{v1_id}",)).fetchone()
+    c.close()
+    assert after == "每", f"v1 记录被改写了：每 → {after}"
     assert v2 is not None and v2[0] == "次", "v2 记录没落到 v2: 命名空间"
 
 
-@needs_db
-def test_not_a_char_and_skip_do_not_enter_the_library(tmp_path):
-    db = tmp_path / "g.db"
-    shutil.copy(DB, db)
+def test_not_a_char_and_skip_do_not_enter_the_library(lib):
+    db, cells = lib
+    (p1, c1, s1), (p2, c2, s2) = cells[0], cells[1]
     r = glyphdb_admit([
-        _ev("vol01:24:7:2", {"v": "not_a_char"}, 24, 7, 2),
-        _ev("vol01:24:7:3", {"v": "skip"}, 24, 7, 3),
+        _ev(f"{BOOK}:{p1}:{c1}:{s1}", {"v": "not_a_char"}, p1, c1, s1),
+        _ev(f"{BOOK}:{p2}:{c2}:{s2}", {"v": "skip"}, p2, c2, s2),
     ], db_path=str(db))
     assert r.added == 0 and r.skipped == 2
 
 
-@needs_db
-def test_no_glyph_lib_skips_admit_but_is_not_an_error(tmp_path):
+def test_no_glyph_lib_skips_admit_but_is_not_an_error(lib):
     """勾了「字形不入库」：正常裁决（不算 skipped/errors），但不落 GlyphDB。"""
-    db = tmp_path / "g.db"
-    shutil.copy(DB, db)
-    key = _free_key(db)
-    if key is None:
-        pytest.skip("dev_set 的字块都进过库了，没有干净的 id 可测")
-    pg, col, slot = key
+    db, cells = lib
     c = sqlite3.connect(db)
     before = c.execute("select count(*) from admissions").fetchone()[0]
     c.close()
-    r = glyphdb_admit([_ev(f"vol01:{pg}:{col}:{slot}",
-                          {"v": "confirm", "shape": "次", "reading": "次",
-                           "no_glyph_lib": True}, pg, col, slot)], db_path=str(db))
+
+    r = _confirm(db, cells[0], {"v": "confirm", "shape": "次", "reading": "次",
+                                "no_glyph_lib": True})
     c = sqlite3.connect(db)
     after = c.execute("select count(*) from admissions").fetchone()[0]
     c.close()
@@ -162,17 +145,27 @@ def test_no_glyph_lib_skips_admit_but_is_not_an_error(tmp_path):
     assert r.added == 0 and r.skipped == 0 and not r.errors
 
 
-def test_dry_run_writes_nothing(tmp_path):
-    if not DB.exists():
-        pytest.skip("需要库")
-    db = tmp_path / "g.db"
-    shutil.copy(DB, db)
+def test_dry_run_writes_nothing(lib):
+    db, cells = lib
     c = sqlite3.connect(db)
     before = c.execute("select count(*) from admissions").fetchone()[0]
     c.close()
-    r = glyphdb_admit([_ev("vol01:24:6:2", {"v": "confirm", "shape": "次"}, 24, 6, 2)],
-                      db_path=str(db), dry_run=True)
+    r = _confirm(db, cells[0], {"v": "confirm", "shape": "次"}, dry_run=True)
     c = sqlite3.connect(db)
     after = c.execute("select count(*) from admissions").fetchone()[0]
     c.close()
     assert r.added == 1 and before == after
+
+
+def test_missing_patch_is_an_error_not_a_silent_skip(lib):
+    """字块缓存里没有这一格时要报错，不能静默当成「进库成功」。
+
+    静默的后果是审查闭环少收了一条却没人知道——人裁过的位在库里找不到，
+    下一轮又被当成没裁过再出一次卡。
+    """
+    db, _cells = lib
+    r = glyphdb_admit([_ev(f"{BOOK}:{PAGE}:99:99",
+                           {"v": "confirm", "shape": "次", "reading": "次"},
+                           PAGE, 99, 99)], db_path=str(db))
+    assert r.added == 0
+    assert r.errors, "字块找不到却既没进库也没报错"

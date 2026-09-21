@@ -25,15 +25,6 @@ from open_guji_cv.steps.glyph_match import GlyphMatchParams, db_fingerprint
 REPO = Path(__file__).resolve().parent.parent
 
 
-def _ws_raw():
-    """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
-    没设则退回仓根——引擎自带的小样本仍在仓内。"""
-    from open_guji_cv.core.workspace import raw_root
-    return raw_root()
-RAW = _ws_raw() / "data_full" / "zongmu"
-needs_raw = pytest.mark.skipif(not RAW.exists(), reason="需要 data_full/zongmu 原图")
-
-
 def test_step_and_kinds_are_registered():
     assert "glyph_match" in STEPS
     assert "glyph_match" in KINDS and "ocr_candidates" in KINDS
@@ -57,45 +48,68 @@ def test_missing_db_does_not_crash_fingerprint():
     assert db_fingerprint("no/such/glyph.db") == "nodb"
 
 
-@needs_raw
-def test_stale_propagates_when_library_fingerprint_changes():
+def test_stale_propagates_when_library_fingerprint_changes(tmp_path, monkeypatch, ws,
+                                                          fixture_page):
     """换一个库指纹，产物指纹必须跟着变——这是 stale 传播的唯一依据。
 
     ⚠️ **不能断言「当前是 fresh」**：库是活的，人裁一进库指纹就变、这一步
     立刻转 stale（2026-09-04 实测：用户 82 条定字进库后 p24 就是 stale——
     那正是这个机制在正常工作）。所以直接比两个指纹，不看当前状态。
+
+    2026-09-20：不再去工作区找「vol01/24 跑过没有」，改成拿冻结样页把上游
+    产物现跑出来——指纹算的是上游产物 + 参数，跟那份产物具体是哪本书的无关。
     """
-    store = ProductStore()
-    if store.read_raw("vol01", "glyph_match", page_key(24)) is None:
-        pytest.skip("vol01/24 还没跑过 glyph_match")
-    bk, pl = load_book("vol01"), load_pipeline("keben_body_v2")
-    eng = Engine(bk, pl, store, ImageCache())
+    import open_guji_cv.steps  # noqa: F401
+    from helpers import run_keben_from_raw
+
+    bk = load_book("keben")
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
+    eng = Engine(bk, load_pipeline("keben_body_v2"), ctx.store, ctx.cache)
     step = STEPS["glyph_match"]
 
     eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="aaaa")
-    fp_a, _, _ = eng.fingerprint(step, 24)
+    fp_a, _, _ = eng.fingerprint(step, 1)
     eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="bbbb")
-    fp_b, _, _ = eng.fingerprint(step, 24)
+    fp_b, _, _ = eng.fingerprint(step, 1)
     assert fp_a and fp_b and fp_a != fp_b, "库指纹变了，Step 指纹却没变"
 
-    # 且指纹对不上时状态必须是 stale（而不是 fresh/missing）
-    st = eng.status(pages=[24])["steps"]["glyph_match"]["pages"][24]["status"]
-    assert st in ("stale", "fresh"), f"意外状态 {st}"
 
+def test_products_carry_per_instance_evidence(tmp_path, monkeypatch, ws, fixture_page):
+    """逐实例证据（设计 §3 纪律 1）：same 档必须留下命中的库条目与 cov，
+    产物还要记下判决是对**哪个库**做的。
 
-@needs_raw
-def test_products_carry_per_instance_evidence():
-    """逐实例证据（设计 §3 纪律 1）：same 档必须留下命中的库条目与 cov。"""
-    store = ProductStore()
-    d = store.read("vol01", "glyph_match", page_key(24), "glyph_match")
-    if d is None:
-        pytest.skip("还没跑过")
+    2026-09-20：原先读工作区里 vol01/24 跑出来的产物，没跑过就 skip——于是
+    这条常年不执行，而它守的是这一步的核心纪律。现在拿冻结样页跑真的
+    Step1→Step4 出字块，再把**匹配器**换成一个固定返回 same 的桩：这条要钉的
+    是「记录里有没有留证据」，跟库里恰好有没有这个字无关，用真库反而把两件
+    事绑在一起（库一变测试就红，红了还说不清是谁的问题）。
+    """
+    from dataclasses import dataclass
+
+    import open_guji_cv.steps  # noqa: F401
+    from helpers import run_keben_from_raw
+    from open_guji_cv.clustering.match import MatchResult
+
+    @dataclass
+    class _StubMatcher:
+        def match(self, img, exclude_id=None):
+            return MatchResult(verdict="same", char="甲", matched_id="v2:lib:1:1:1",
+                               cov=0.997, wmax=3.0, candidates=[("甲", 0.997)],
+                               n_verified=1)
+
+    bk = load_book("keben")
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
+    step = STEPS["glyph_match"]
+    monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
+    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp")
+
+    d = step.run_page(ctx, 1)["glyph_match"]
     same = [r for cc in d.columns for r in cc.chars if r.verdict == "same"]
-    assert same, "一个 same 都没有，库或图块有问题"
-    for r in same[:20]:
+    assert same, "一个 same 都没有——字块没切出来还是记录没落？"
+    for r in same:
         assert r.char and r.matched_id, f"{r.id} same 档却没留证据"
         assert r.cov >= 0.99, f"{r.id} same 档 cov 只有 {r.cov}"
-    assert d.db_fingerprint, "产物没记下判决是对哪个库做的"
+    assert d.db_fingerprint == "testfp", "产物没记下判决是对哪个库做的"
 
 
 def test_diff_verdict_still_reports_best_candidate():

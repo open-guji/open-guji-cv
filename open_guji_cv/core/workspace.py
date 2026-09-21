@@ -5,7 +5,7 @@
 
 `open-guji-cv` 是识别引擎，不该自带某一本书的原图与字形库。
 《四庫全書總目》那套数据（原图 134 MB、字形库 88 MB、产物 86 MB）已迁到
-`siku-zongmu-workspace` 私有仓；引擎这边只留一个小样本库供测试。
+`guji-workspace` 私有仓（一部书一个目录，`<book-index id>-<书名>`）；引擎这边只留一个小样本库供测试。
 
 于是路径要能指向别处。解析顺序（先到先得）：
 
@@ -37,7 +37,7 @@
 
 ```bash
 # 跑真书：指向工作区仓
-export GUJI_WORKSPACE=/d/workspace/siku-zongmu-workspace
+export GUJI_WORKSPACE=/d/workspace/guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本
 guji pipeline keben_body_v2 vol01 --pages dev_set
 
 # 跑测试：什么都不设，用仓内样本库
@@ -278,7 +278,7 @@ def assert_workspace_declared() -> None:
     raise RuntimeError(
         "没设 GUJI_WORKSPACE（也没设 GUJI_GLYPH_DB）——这一跑会落到仓内那份"
         f"小样本库（{glyph_db_path()}，几百条，不是你在用的工作区库）。\n"
-        "真跑书：export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace\n"
+        "真跑书：export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>\n"
         "确实想用仓内示例库（本地试跑/开发）：加 --allow-sample-db"
         "（或设 GUJI_ALLOW_SAMPLE_DB=1）显式声明。"
     )

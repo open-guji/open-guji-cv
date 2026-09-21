@@ -40,10 +40,10 @@ router = APIRouter()
 def _ws_id(d: Path) -> str:
     """工作区的 id——**URL 上露出来的就是这个**（`/<ws>/<book>/step/...`）。
 
-    默认取目录名去掉 `-workspace` 后缀（`siku-zongmu-workspace` → `siku-zongmu`）：
-    短、稳定、一眼看得出是哪本书。工作区里放一个 `workspace.yaml` 写
-    `id: 自定义` 可以覆盖——目录名将来改了、或者两台机器上叫法不同时，
-    URL 不必跟着变。
+    默认取目录名去掉 `-workspace` 后缀（`xx-workspace` → `xx`）：短、稳定。
+    **`guji-workspace` 那套目录名是 `<book-index id>-<书名>`**，不以 `-workspace`
+    结尾，退回来就是一整串中文——那种工作区**必须**放 `workspace.yaml` 写
+    `id: 自定义` 覆盖（四庫總目写的是 `siku-zongmu`，与旧仓时期的 URL 一致）。
     """
     import yaml
     f = d / "workspace.yaml"

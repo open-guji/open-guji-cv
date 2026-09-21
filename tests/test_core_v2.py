@@ -313,68 +313,82 @@ def test_engine_rejects_image_kind_returned_as_numeric(world):
         STEPS.pop("t_bad", None)
 
 
-# ── 真实链路（有原图才跑）────────────────────────────────────────────
-RAW_24 = _ws_raw() / "data_full" / "zongmu" / "vol01" / "24.png"
+# ── 真实链路（`tests/fixtures` 那张冻结真页，从 Step1 跑到 C1）────────────
+#
+# 2026-09-20 改：原先钉 `vol01/24` + 工作区字形库，两个前提各挂一道 skipif，
+# 云端两样都没有、本机也要先 `glyph-db rebuild`——于是这条**唯一的全链验收**
+# 常年不执行。现在用 fixture 册 `keben`（八列二十一字）与它配的冻结真页：
+# 整条 `keben_body_v2`（Step1→C1 十二步）在这页上跑得通，5 秒出头。
+#
+# 断言只钉**结构性**的东西（版式列数、格数、bbox 在页内、二次跑全跳过、
+# 字块删了能现算回来），不钉识别准确率——那是评测的事，钉在这里会变成
+# 「算法不许改进」。
 
 
-def _glyph_db_built() -> bool:
-    """字形库重建过没有。
-
-    2026-09-09（库路径 P0 收尾）：`glyph_match` 新增 `assert_db_not_silently_empty`
-    自检——库空而真源非空就报错，因为那必定是路径解析错或忘了 rebuild。
-    这条真实链路测试会走到 `glyph_match`，所以**它要求库已经重建过**。
-
-    ⚠️ 这不是把失败藏起来：库没建时跳过并在 reason 里写清怎么建，
-    是**声明前提**；库建好了它照常跑，自检也照常拦得住真的路径错。
-    在此之前这条测试是**绿在错误行为上**的——空库让 `glyph_match` 跑出全 `diff`
-    却不报错，测试只断言「没有 error」所以一直过。
-    """
-    import sqlite3
-    from open_guji_cv.core.workspace import glyph_db_path
-    db = glyph_db_path()
-    if not db.exists():
-        return False
-    try:
-        with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as c:
-            return c.execute("SELECT COUNT(*) FROM instances").fetchone()[0] > 0
-    except sqlite3.Error:
-        return False
-
-
-@pytest.mark.skipif(not RAW_24.exists(), reason="需要 data_full/zongmu/vol01/24.png")
-@pytest.mark.skipif(not _glyph_db_built(),
-                    reason="字形库未重建，先跑 `python -m open_guji_cv glyph-db rebuild "
-                           "--store $GUJI_WORKSPACE/output/glyph_store`")
-def test_keben_body_v2_on_vol01_page24(tmp_path):
+def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws):
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.pipeline import load_pipeline
+
+    from open_guji_cv.steps.align_ref import AlignRefParams
+    from open_guji_cv.steps.context_decide import ContextDecideParams
+
+    monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(tmp_path / "products"))
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
     pl = load_pipeline("keben_body_v2")
-    book = load_book("vol01")
+    book = load_book("keben")
     store, cache = ProductStore(tmp_path / "products"), ImageCache(tmp_path / "cache")
     eng = Engine(book, pl, store=store, cache=cache, log=lambda s: None)
-    rep = eng.run(pages=[24])
+
+    # ⚠️ 语料两处都必须显式指到 fixture 里那份，否则这一跑会去读**仓里的生产语料**：
+    #   - `AlignRefParams.corpus` 缺省 = `corpus/zongmu_wenyuange_wikisource.txt`；
+    #   - `ContextDecideParams.general_corpus_dir` 缺省 = `"corpus/external"`，
+    #     **相对 cwd** 解析（不走 core.workspace），里面是两份 15 MB 泛古籍语料。
+    # 后者尤其要命：它会在 `corpus/external/` 下**写一份 22 MB 的 LM 缓存**
+    # （`.general_lm_cache.json`）——测试往仓库里写东西，且下一次跑要花几分钟
+    # 去加载它。2026-09-20 实测：这条用例因此从 5 秒变成跑不完。
+    corpus = ws / "corpus" / "reference.txt"
+    eng.ctx.params["align_ref"] = AlignRefParams(corpus=str(corpus))
+    eng.ctx.params["context_decide"] = ContextDecideParams(
+        corpus=str(corpus), general_corpus_dir=str(tmp_path / "no_general_corpus"))
+
+    rep = eng.run(pages=[1])
     assert not rep.to_dict()["failed"], rep.to_dict()["failed"]
 
-    borders = store.read("vol01", "border_detect", "p0024", "borders")
+    borders = store.read(book.id, "border_detect", "p0001", "borders")
     assert len(borders.verticals) == book.expected_cols + 1
-    gate = store.read("vol01", "column_gate", "p0024", "gate_manifest")
+    gate = store.read(book.id, "column_gate", "p0001", "gate_manifest")
     assert gate.admitted and gate.period and gate.ref_w
-    cells = store.read("vol01", "row_segment", "p0024", "cells")
-    assert sum(1 for c in cells.columns if c.ok) == 9
-    assert all(len(c.cells) == book.chars_per_line for c in cells.columns if c.ok)
-    chars = store.read("vol01", "cell_shrink", "p0024", "char_index")
+    cells = store.read(book.id, "row_segment", "p0001", "cells")
+    assert sum(1 for c in cells.columns if c.ok) == book.expected_cols
+    # 钉 `n_body_slots` 而不是 `len(cells)`：格表里除了版式的二十一个正文格，
+    # 还可能有抬头格（slot ≤ 0）这类额外条目，长度本来就允许多出来。
+    assert all(c.n_body_slots == book.chars_per_line for c in cells.columns if c.ok), \
+        [(c.col, c.n_body_slots, len(c.cells)) for c in cells.columns if c.ok]
+    chars = store.read(book.id, "cell_shrink", "p0001", "char_index")
     n = sum(c.n_instances for c in chars.columns)
-    assert n > 150
+    assert n > 100, f"整页只切出 {n} 个字实例"
     W, H = borders.width, borders.height
     for col in chars.columns:
         for ch in col.chars:
             x0, y0, x1, y1 = ch.bbox_page
             assert 0 <= x0 < x1 <= W and 0 <= y0 < y1 <= H
-            assert ch.patch_key is None or cache.path("vol01", "char_patch", ch.patch_key).exists()
-    # 第二遍全跳过；删掉缓存后 Step4 的字块能现算回来
-    rep = eng.run(pages=[24])
-    assert all(o.status == "skipped" for o in rep.outcomes)
+            assert ch.patch_key is None or cache.path(book.id, "char_patch",
+                                                      ch.patch_key).exists()
+    # 第二遍：切分链（Step1→Step4）必须全跳过——它的输入只有原图与参数，
+    # 没有任何活的外部状态，重跑就是白跑。
+    #
+    # ⚠️ **不能断言「十二步全跳过」**：Step5 起吃的是活的外部状态（字形库、
+    # 整理本语料）。这一跑里 `seed_admit` 会建起字形库，于是下一次
+    # `glyph_match` 的库指纹变了、立刻转 stale——那正是 stale 传播在正常
+    # 工作（同 `test_glyph_match_step` 那条的 docstring）。原先这里写的是
+    # `all(skipped)`，只在"库恰好一次都没变"时成立。
+    rep = eng.run(pages=[1])
+    seg = {"border_detect", "border_detect_gate", "column_warp", "column_gate",
+           "row_segment", "row_segment_gate", "cell_shrink"}
+    again = {o.step: o.status for o in rep.outcomes}
+    assert all(again[s] == "skipped" for s in seg), \
+        {s: again[s] for s in seg if again[s] != "skipped"}
     key = next(ch.patch_key for col in chars.columns for ch in col.chars if ch.patch_key)
-    cache.path("vol01", "char_patch", key).unlink()
+    cache.path(book.id, "char_patch", key).unlink()
     ctx = RunContext(book, store, cache, log=lambda s: None)
     assert ctx.image("char_patch", key).size > 0

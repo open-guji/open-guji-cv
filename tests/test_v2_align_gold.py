@@ -1,180 +1,133 @@
 # -*- coding: utf-8 -*-
-"""v2 × 整理本自动金标 + C1 的 near_form 防线。"""
+"""v2 × 整理本自动金标 + C1 的 near_form 防线。
+
+2026-09-20 重写。原先四条都要「工作区里跑过的 vol01 dev_set 产物 ＋ 8.2 MB
+真语料」，两样缺一就整条 skip——模块头当年为此写了三十行「怎么摆环境才跑得
+起来」（只能设 `GUJI_WORKSPACE`、不能额外设 `GUJI_PRODUCTS_DIR`，否则
+products 与 cache 分家…）。那段说明本身就是这套测试设计不对的证据：一条
+单元测试不该要求读者先把三个环境变量摆对。
+
+拆成两半：
+
+- **代码行为**（字形/文意分开记、形近家族不许只凭形状进库）留在这里，输入
+  由测试自己给——要测「整理本把 㫖 正字化成 旨」，就写一份这么写的小语料，
+  比在真书里等着碰上一个可靠得多。
+- **准确率**（dev_set 锚定率 ≥75%、自动进库对金标零错、转换率 <10%）迁出。
+  那是对某一次跑批的质量测量，属评测：`guji eval run`，口径见
+  `doc/glyph_db_first_design.md` §7.3 与 `eval/` 下的判据 A。
+  把它留在测试里的代价，这轮看得很清楚：数据一变就红，红了还说不清是
+  算法退步还是这次跑批的数据不同；而云端根本跑不了，等于没有。
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 import open_guji_cv.steps  # noqa: F401
-from open_guji_cv.core.book import load_book
-from open_guji_cv.core.spec import page_key
-from open_guji_cv.core.workspace import raw_root
-from open_guji_cv.gold.v2_align import DEFAULT_CORPUS as GOLD_CORPUS
+from helpers import make_book, make_ctx, page_decision, page_match, write_product
+from open_guji_cv.core.step import STEPS
 from open_guji_cv.gold.v2_align import align_book
-from open_guji_cv.products.store import ProductStore
+from open_guji_cv.steps.align_ref import AlignRefParams
 
-REPO = Path(__file__).resolve().parent.parent
-
-
-def _ws_raw():
-    """原图根：优先 GUJI_WORKSPACE（数据已迁 siku-zongmu-workspace），
-    没设则退回仓根——引擎自带的小样本仍在仓内。"""
-    return raw_root()
-RAW = _ws_raw() / "data_full" / "zongmu"
-# ⚠️ 跳过判据要查的是 `align_book` **真正会读**的那份语料，不是随便一份整理本。
-# 2026-09-13 订正：这里原本查 `zongmu_wuyingdian_reference.txt`（武英殿本，仍在
-# 现役，但那是字表/字形/训练那批脚本用的），而 `gold.v2_align.DEFAULT_CORPUS`
-# 走的是 `zongmu_wenyuange_wikisource.txt`（文渊阁本）——查 A 跑 B，A 在 B 不在
-# 时就会跑进来然后锚不上。
-#
-# 更要命的是**同名语料有两份**：仓内 `corpus/` 那份只有 17KB（样本，够跑单元
-# 测试），工作区那份 8.2MB（真语料），差 470 倍。`core.workspace` 专门有个
-# `using_sample_corpus()` 就是为这个坑设的。于是：
-#   什么都不设            → 样本语料 + 仓内产物 → 8-gram 锚定失败，本条 skip
-#   export GUJI_WORKSPACE → 真语料 + 工作区产物 + 工作区 cache → 锚上 12/12
-# 要真跑它就**只设 GUJI_WORKSPACE**，让 corpus / products / cache 三者配套指向
-# 工作区。⚠️ 别再额外设 `GUJI_PRODUCTS_DIR` 去钉产物：vol01 的 23472 个字块缓存
-# 只在工作区，把 products 单独指回仓内会让 products 与 cache 分家，
-# test_rulers / test_v1_bridge / test_font_candidates 那批读图块的会整片报
-# 「分母为 0」「0/179 个 char 实例落了图块」——那是环境拆错了，不是算法坏了。
-# 两种环境都不会报假绿：锚不上就 skip，不会假装通过。
-CORPUS = Path(GOLD_CORPUS)
-needs = pytest.mark.skipif(not (RAW.exists() and CORPUS.exists()),
-                           reason="需要原图与整理本（GOLD_CORPUS 指的那份）")
+BOOK, PAGE, COL = "tbook", 1, 1
 
 
-@needs
-def test_most_pages_anchor():
-    """dev_set 大多数页要能靠整理本锚上——锚不上就没有金标可言。"""
-    st = ProductStore()
-    golds = align_book("vol01", load_book("vol01").dev_set, st)
-    ok = [g for g in golds if g.anchored]
-    if not any(g.n_chars for g in golds):
-        pytest.skip("还没跑过 context_decide")
-    assert len(ok) >= len(golds) * 0.75, \
-        f"只锚上 {len(ok)}/{len(golds)} 页"
+def _gold(tmp_path, monkeypatch, *, shapes: str, corpus_text: str):
+    """摆好「刻本这一列定成了 shapes + 整理本这么写」→ 派生 GoldChar。
+
+    `shapes` 是 v2 定的字形（走 `context_decision`），`corpus_text` 是整理本。
+    两者故意可以不同——「字形与文意分开记」测的正是这个差。
+    """
+    corpus = tmp_path / "ref.txt"
+    corpus.write_text(corpus_text, encoding="utf-8")
+    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    ctx.params["align_ref"] = AlignRefParams(corpus=str(corpus))
+
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
+        PAGE, BOOK, col=COL, recs=[
+            dict(slot=i + 1, verdict="same", char=ch, cov=0.999, matched_id=f"g{i}")
+            for i, ch in enumerate(shapes)]))
+    write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
+        PAGE, BOOK, col=COL, recs=[
+            dict(slot=i + 1, char=ch, margin=1.0, source="db_same")
+            for i, ch in enumerate(shapes)]))
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    ctx.store.write(BOOK, "align_ref", f"p{PAGE:04d}", {"align_ref": ar})
+    return ctx, align_book(BOOK, [PAGE], ctx.store, corpus_path=corpus)[0]
 
 
-@needs
-def test_shape_and_reading_are_recorded_separately():
+def test_page_anchors_when_the_reference_contains_the_column(tmp_path, monkeypatch,
+                                                             ws):
+    """整理本里有这一列的文字 → 锚得上、逐字出金标。"""
+    text = "文華殿大學士臣紀昀等奉敕撰欽定四庫全書總目"
+    _, g = _gold(tmp_path, monkeypatch, shapes=text[:12], corpus_text=text * 30)
+    assert g.anchored, g.note
+    assert g.n_chars == 12
+    assert "".join(c.shape for c in g.chars) == text[:12]
+
+
+def test_unanchorable_page_is_reported_not_silently_empty(tmp_path, monkeypatch, ws):
+    """锚不上要如实报，不能给一页「空金标」——空金标会被下游当成「全对」。"""
+    _, g = _gold(tmp_path, monkeypatch, shapes="文華殿大學士臣紀昀等奉敕",
+                 corpus_text="甲乙丙丁" * 500)
+    assert not g.anchored
+    assert g.note, "锚不上却不说为什么"
+    assert g.n_chars == 0
+
+
+def test_shape_and_reading_are_recorded_separately(tmp_path, monkeypatch, ws):
     """字形与文意分开记（用户 2026-09-04 定：先读字形、录入按文意）。
 
     整理本是正字化文本，刻本上的 㫖/彚/卽/祗 会被它写成 旨/彙/即/祇。
     这个差别必须留痕，不能只存一个。
+
+    合成：刻本这一列定成「諭㫖各註某家藏本……」，整理本把 㫖 正字化成 旨。
+    （列要够长：8-gram 锚定对「定字太少」的页直接判锚不住。）
     """
-    st = ProductStore()
-    golds = align_book("vol01", load_book("vol01").dev_set, st)
-    chars = [c for g in golds if g.anchored for c in g.chars]
-    if not chars:
-        pytest.skip("没有金标")
-    conv = [c for c in chars if c.conversion]
+    shapes = "諭㫖各註某家藏本臣等謹按卷一經部"
+    reading = "諭旨各註某家藏本臣等謹按卷一經部"
+    _, g = _gold(tmp_path, monkeypatch, shapes=shapes, corpus_text=reading * 40)
+    assert g.anchored, g.note
+
+    conv = [c for c in g.chars if c.conversion]
     assert conv, "一条转换都没有——shape/reading 恐怕填成同一个值了"
+    assert [(c.shape, c.reading) for c in conv] == [("㫖", "旨")], \
+        [(c.shape, c.reading) for c in conv]
     for c in conv:
         assert c.shape != c.reading
-    # 转换是少数派：多数字位两者相同
-    assert len(conv) < len(chars) * 0.1, \
-        f"转换 {len(conv)}/{len(chars)} 太多，八成是对齐错位"
+    assert g.n_conversion == len(conv)
+    # 其余字位两者必须相同——转换是少数派，不是"到处都在转"
+    same = [c for c in g.chars if not c.conversion]
+    assert same and all(c.shape == c.reading for c in same)
 
 
-@needs
-def test_no_wrong_admission_against_the_gold():
-    """自动进库的字必须与金标**字形**一致——零容忍。
-
-    进库进的是字形（GlyphDB 存的是刻本上实际刻的形），所以比 shape 不比
-    reading。实测修 near_form 之前唯一的错是 vol01:151:8:4 把「論」认成
-    「諭」（库候选 0.9923 vs 0.9898 只差 0.0025）。
-    """
-    st = ProductStore()
-    bk = load_book("vol01")
-    gold = {c.id: c for g in align_book("vol01", bk.dev_set, st) if g.anchored
-            for c in g.chars}
-    if not gold:
-        pytest.skip("没有金标")
-    bad: list = []
-    soft: list = []          # replace 段的不符：金标自身可能错，分开看
-    for pg in bk.dev_set:
-        a = st.read("vol01", "seed_admit", page_key(pg), "seed_admit")
-        if a is None:
-            continue
-        for cc in a.columns:
-            for r in cc.chars:
-                if not r.admit or not r.char:
-                    continue
-                g = gold.get(r.id)
-                if not g or r.char == g.shape:
-                    continue
-                # 人裁通道（seed_admit v1.4）：人看着图判的字形是最强证据，
-                # 金标的 shape 只是**当次转写**，两者不同时该以人裁为准，不算错。
-                # 实例 vol01:151:9:20——人裁字形「巳」、释读「已」（己已巳 三字
-                # 字形与文意分岔，设计如此），而 context 通道当次转写成了「已」。
-                if r.channel == "human":
-                    continue
-                # `source == "fallback"`：Step6 **弃权**的位，`shape` 是
-                # `slots_from_decision` 逐级兜底（库 kNN top1 → OCR top1）填的
-                # **对齐载体**，不是"管线认为这一位是什么字"。该函数 docstring
-                # 自己写着「兜底字只是对齐载体…所以兜底字错了也不会污染
-                # `align_char`」——既然声明了它可能是错的，就不能拿它当零容忍
-                # 金标。实例 vol01:26:5:-1：Step6 char=None（margin 0.0126，
-                # source=prior，排序 正 0.395 / 玉 0.383 / 世 0.222），兜底取了
-                # 库 top1「正」写进 shape；而该列读作「世祖章皇帝曾降…」，
-                # slot=-1 正是避讳抬头位，文意与格式都锁死了是「世」。
-                # dev_set 1930 个金标位里 84 位是 fallback，都属此类。
-                if g.source == "fallback":
-                    continue
-                # 异体字对上 Step6 的 LM 微弱打分差：`shape` 取的是 Step6 定字，
-                # 而 Step6 在异体字上靠上下文模型打分，两个形分数常常只差几个点
-                # ——这个量级分不出「刻本上刻的是哪个形」，但 `align_char`（8-gram
-                # 锚定后与整理本原文逐字比对）分得出。实例 vol01:141:7:2 与
-                # vol01:11:4:21：Step6 排序「旨 0.52 / 㫖 0.46」取了旨，而整理本
-                # 原文两处都作㫖——「諭㫖各註某家藏本」「撮取著書大㫖」，且都是
-                # op=equal 严丝合缝对齐；文渊阁本全书用㫖 1292 次、用旨 684 次。
-                # C1 走的正是 `_pick_char` 里「库 unsure 时整理本字是更好的字形
-                # 估计」那条路（见 seed_admit.py 该函数 docstring），采信 align_char
-                # 比采信 LM 打分更可信。这类位以 align_char 为准，不算管线的错。
-                if g.reading and r.char == g.reading:
-                    continue
-                # `replace` 段的金标 shape 是**整理本给的**，不是图上认的
-                # ——短 replace 段（op_run ≤ 2）正是对齐闸自己警告的高风险
-                # 位置，那里金标可能就是错的。实测 vol01:21:3:21：图上清清
-                # 楚楚是「身」，库 cov 1.000 也是「身」，而整理本对齐把它
-                # 放成了「易」。这种位置不该算管线的错。
-                #
-                # 所以只对 `equal` 段零容忍（那里金标恒等于当次转写，是自证，
-                # 本来就该 100%），replace 段单独收集、只在数量异常时才报。
-                if g.align_op == "equal":
-                    bad.append((r.id, r.char, g.shape, r.channel))
-                else:
-                    soft.append((r.id, r.char, g.shape, g.op_run, r.channel))
-    assert not bad, f"equal 段自动进库与金标字形不符（零容忍）：{bad[:5]}"
-    # replace 段：金标自身可能有误，只在成规模时报——单条多半是金标的问题
-    assert len(soft) <= 3, f"replace 段不符 {len(soft)} 条，超出金标噪声量级：{soft[:5]}"
-
-
-@needs
-def test_near_form_families_never_auto_admit_on_shape_alone():
+def test_near_form_families_never_auto_admit_on_shape_alone(tmp_path, monkeypatch):
     """形近家族不许只凭形状证据自动进库。
 
     这是 C1 包壳曾经的漏洞：judge_doubts 在 v1 里靠整理本产出 near_form，
-    这里没有整理本，若不自己判，admission_decision 的形近防线整条失效。
+    没有整理本时若不自己判，`admission_decision` 的形近防线整条失效。
+
+    合成：两个字位，形状证据一模一样（cov 0.995、无竞争），区别只在
+    候选是不是形近家族的字。**两侧都验**——家族字不许自动进，非家族字
+    必须照常进；只验一侧的话把防线整条删掉也照样绿。
     """
     from open_guji_cv.clustering.seeding import NEAR_FORM_CHARS
-    st = ProductStore()
-    bk = load_book("vol01")
-    for pg in bk.dev_set:
-        a = st.read("vol01", "seed_admit", page_key(pg), "seed_admit")
-        m = st.read("vol01", "glyph_match", page_key(pg), "glyph_match")
-        if a is None or m is None:
-            continue
-        mm = {r.id: r for cc in m.columns for r in cc.chars}
-        for cc in a.columns:
-            for r in cc.chars:
-                if not r.admit or r.channel not in ("match_solo", "match_solo_ocr"):
-                    continue
-                mr = mm.get(r.id)
-                if mr is None:
-                    continue
-                cands = {c for c, _v in mr.candidates[:3]} | ({r.char} if r.char else set())
-                assert not (cands & NEAR_FORM_CHARS), \
-                    f"{r.id} 候选里有形近家族字 {cands & NEAR_FORM_CHARS} 却走了 {r.channel}"
+
+    family = next(iter(sorted(NEAR_FORM_CHARS)))
+    plain = "鼇"
+    assert plain not in NEAR_FORM_CHARS
+
+    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
+        PAGE, BOOK, col=COL, recs=[
+            dict(slot=1, verdict="unsure", cov=0.995, wmax=0.0,
+                 candidates=[(family, 0.995)]),
+            dict(slot=2, verdict="unsure", cov=0.995, wmax=0.0,
+                 candidates=[(plain, 0.995)]),
+        ]))
+    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    by_slot = {r.slot: r for cc in sa.columns for r in cc.chars}
+
+    assert by_slot[2].admit and by_slot[2].channel in ("match_solo", "match_solo_ocr"), \
+        f"非形近家族字该照常自动进库：{by_slot[2].channel} / {by_slot[2].doubts}"
+    assert not by_slot[1].admit or by_slot[1].channel not in ("match_solo",
+                                                              "match_solo_ocr"), \
+        f"形近家族字「{family}」只凭形状就走了 {by_slot[1].channel}"

@@ -27,7 +27,6 @@ from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.review.batches import Batch, BatchStore, render_registry_markdown
 
 REPO = Path(__file__).resolve().parent.parent
-REAL_VERDICTS = REPO.parent / "open-guji-dataset" / "border-detection" / "column-split" / "verdicts_r1.jsonl"
 
 
 # ── 卡片 id ──────────────────────────────────────────────────────────
@@ -271,21 +270,33 @@ def test_gold_upsert_records_history(tmp_path):
     assert store.summary("border-detection/column-split")["n"] == 1
 
 
-@pytest.mark.skipif(not REAL_VERDICTS.exists(), reason="需要 open-guji-dataset")
-def test_real_border_verdicts_roundtrip(tmp_path):
-    """真实的第一轮 60 页裁决：README 记的是 ok 56 / extra 2 / miss 2。"""
+def test_verdicts_jsonl_roundtrip_preserves_the_whole_distribution(tmp_path):
+    """一批裁决 JSONL → 收割 → 路由 → 金标分片，条数与 verdict 分布原样保留。
+
+    2026-09-20 改：原先读的是测试集仓里第一轮那份 `verdicts_r1.jsonl`
+    （60 页），断言 `ok 56 / extra 2 / miss 2`——那是**那批人裁的结果**，
+    不是这段代码的行为；数据集不在就 skip，云端从没跑过。现在这批裁决由
+    测试自己造，分布是已知的，条数与分布一条不许丢。
+    """
     log = EventLog(tmp_path / "feedback")
     store = GoldStore(tmp_path / "dataset")
-    evs = harvest_text(REAL_VERDICTS.read_text(encoding="utf-8"), "border-cols-r1",
-                       "border_detect", "page")
-    assert len(evs) == 60
+
+    want = {"ok": 56, "extra": 2, "miss": 2}
+    rows, n = [], 0
+    for verdict, cnt in want.items():
+        for _ in range(cnt):
+            n += 1
+            rows.append(f'{{"id": "vol01:{n}", "verdict": "{verdict}", "t": 1}}')
+    evs = harvest_text("\n".join(rows), "border-cols-r1", "border_detect", "page")
+    assert len(evs) == sum(want.values()) == 60, "收割丢了事件"
+
     log.append(evs)
     route_and_consume(log, "border-cols-r1", RouteTable.load(None), store)
     items = store.list("border-detection/column-split")
     dist: dict[str, int] = {}
     for i in items:
         dist[i.expected["verdict"]] = dist.get(i.expected["verdict"], 0) + 1
-    assert dist == {"ok": 56, "extra": 2, "miss": 2}
+    assert dist == want, f"路由后分布变了：{dist}"
 
 
 # ── 批次登记 ─────────────────────────────────────────────────────────

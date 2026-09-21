@@ -64,16 +64,26 @@ def test_window_never_reaches_neighbour_char():
 
 
 @pytest.mark.parametrize("goal_key", ["R1", "R2", "R3", "R4"])
-def test_measure_shape_on_real_data(goal_key):
-    """真数据上跑通，且分母非空、比值合理。"""
+def test_measure_shape_on_a_frozen_real_page(goal_key, tmp_path, monkeypatch, ws,
+                                             fixture_page):
+    """真页上跑通，且分母非空、比值合理。
+
+    2026-09-20 改：原先读 `load_book("vol01").dev_set` 的工作区产物，工作区
+    不在就 skip——于是**这个模块最要紧的那条护栏**（R4 窗口越界会飙到十几个
+    百分点）在云端从来没执行过，而它守的正是这个模块唯一的历史故障。
+
+    现在拿 `tests/fixtures/` 里那张冻结真页从 Step1 跑到 Step4 再量。样本固定，
+    所以「分母非空」这类形状断言每次都真的执行；具体数值仍然不写死——那是
+    算法的输出，钉住它就变成了「算法不许改进」。
+    """
     from open_guji_cv.core.book import load_book
     from open_guji_cv.eval.rulers import measure
-    try:
-        bk = load_book("vol01")
-        pgs = bk.resolve_pages("dev_set")[:2]
-    except Exception:
-        pytest.skip("没有 vol01 数据")
-    rs = {r["key"]: r for r in measure("vol01", pgs)["rulers"]}
+
+    import open_guji_cv.steps  # noqa: F401  —— 注册产物种类与步骤
+    from helpers import run_keben_from_raw
+
+    run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"), gray=fixture_page)
+    rs = {r["key"]: r for r in measure("keben", [1])["rulers"]}
     r = rs[goal_key]
     assert r["den"] > 0, f"{goal_key} 分母为 0，说明产物没读到"
     assert 0 <= r["num"] <= r["den"]
