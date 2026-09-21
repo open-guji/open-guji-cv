@@ -881,8 +881,16 @@ def cmd_rare(args) -> None:
     （CNN checkpoint 走 CPU 前向）。⚠️ 首次要建字体索引，方案 §十一·4 实测
     112 秒，之后 0.1 秒——别当它挂了。
     """
-    from .clustering.rare_panel import rare_batch, rare_for, rare_patch
+    from .clustering.rare_panel import ids_fallback, rare_batch, rare_for, rare_patch
 
+    if args.top or args.slot_comp or args.comp:
+        # IDS 兜底：`rare vol01 --top ⿰ --slot-comp L=言 --comp 俞 [page col slot]`
+        slots = dict(x.split("=", 1) for x in args.slot_comp)
+        img = rare_patch(args.book, args.page, args.col, args.slot, args.sub) if args.page else None
+        _out({"query": {"top": args.top, "slots": slots, "components": args.comp},
+              "with_image": img is not None,
+              "candidates": ids_fallback(args.top, slots, args.comp, img, args.k, args.book)})
+        return
     if args.slots:
         _out(rare_batch(args.book, [x.strip() for x in args.slots.split(",") if x.strip()], args.k))
         return
@@ -1329,6 +1337,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--sub", default="")
     p.add_argument("-k", type=int, default=10, help="出几个候选")
     p.add_argument("--slots", default="", help='批量："24:1:10,24:2:3a"')
+    p.add_argument("--top", default="", help="IDS 兜底：顶层结构，如 ⿰ ⿱ ⿸")
+    p.add_argument("--slot-comp", action="append", default=[], metavar="槽=部件",
+                   help="IDS 兜底：某槽位的部件，如 L=言（可重复）")
+    p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])

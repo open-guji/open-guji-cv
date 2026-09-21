@@ -348,6 +348,19 @@ class CnnCandidates:
         self._emb_cache = (charset, mat, names)
         return mat, names
 
+    def embed(self, norm_patches: list[np.ndarray]) -> np.ndarray:
+        """归一化 64² 图 → 单位化 embedding (N, 256)。不可用时 (0, 256)。
+        给 IDS 兜底检索用（`rare_panel.ids_fallback`）：字集是查询临时定的，不走
+        `_emb_index` 的按字表落盘缓存。"""
+        if not self._ensure() or not norm_patches:
+            return np.zeros((0, 256), np.float32)
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            e, _, _ = self._net(x)
+            return (e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy()
+
     def emb_topk(self, norm_patch: np.ndarray, charset, k: int = 10) -> list[tuple[str, float]]:
         """归一化 64² 二值图 → 与字体模板 embedding 的余弦 top-k。"""
         if not self._ensure():
