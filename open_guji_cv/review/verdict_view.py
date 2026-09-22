@@ -45,12 +45,16 @@ def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
             continue
         if e.target.unit != "cell":
             continue
-        # 「切坏 / 带残留」不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是"这块图先别用"，
-        # 没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格回到待审队列，
-        # `skip_decided` 却把它们永远藏起来——bxgb 42 个「已裁未放行」里 31 个从没定过字，
-        # 定字台上也看不见，人以为剩下的无处可做。seg_defect 的去处是 Step3 的打回台账，
-        # 不是这里。
-        if e.kind == "confirm" and (e.payload or {}).get("v") == "seg_defect":
+        # 「切坏 / 带残留」**不带字**时不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是
+        # "这块图先别用"，没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格
+        # 回到待审队列，`skip_decided` 却把它们永远藏起来——bxgb 42 个「已裁未放行」里
+        # 31 个从没定过字，定字台上也看不见，人以为剩下的无处可做。这类的去处是 Step3
+        # 的打回台账，不是这里。
+        #
+        # **带字就算裁过**（同日用户加的两可档）：人一边说这块图切坏了、一边指出是哪个字，
+        # 定字这件事已经做完，不该再出卡；缺陷另走 gold_add 与打回通道。
+        p = e.payload or {}
+        if e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape"):
             continue
         k = e.target.key
         if k.startswith(pre):

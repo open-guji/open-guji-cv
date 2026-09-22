@@ -207,6 +207,16 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        needs=("products",),
        note="金标路径写死在脚本里（page-type/expected.json）；--book/--products 可选，"
            "不走注册表的位置参数机制；只读现成 cells 产物，不重跑管线"),
+    # 结构感知识别（2026-09-21 合并进来的那条线；补进注册表，`test_registry_covers_every_eval_script`
+    # 钉的就是「scripts/eval_*.py 一个都不许漏登记」）
+    _e("struct_rerank", "rare-char", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="结构重排（M0）", needs=("model", "engine"),
+       note="oov_bench 上量部件袋头一致性重排的开/关；主指标 top-10 与 top-1 **不掉**才算过，"
+           "掉一个都不接。扫 权重 × top_m 两个旋钮，按 src 分层读"),
+    _e("struct_heads", "rare-char", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="结构头 + 槽位部件头（Step A）", needs=("model", "engine"),
+       note="要 --ckpt 指到带结构头的 checkpoint；量结构头准确率（独体字单列）、槽位头 top-3、"
+           "三种重排的 top-1/top-10。通过线见脚本头"),
 ]}
 
 

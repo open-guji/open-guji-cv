@@ -649,9 +649,12 @@ def test_route_inventory():
     2026-09-20 Step9-9.0 进度复查（用户：「在第九步做一个总进度复查——检查页范围内
     还有哪些待办」）：新增 `GET /api/step9/progress/{book}`，每页报过期/待审/切线/
     阙文/非字/坏列。**是看板不是闸**，有待办也照样能跑 9.1/9.2。85 → 86。
+
+    2026-09-21 结构感知识别（另一条线合并进来）：生僻字面板加「按结构查」，
+    新增 `GET /api/rare/search/{book}`（IDS 结构码 / 部件倒排查候选）。86 → 87。
     """
     got = sorted(_endpoints())
-    assert len(got) == 86, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 87, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -783,6 +786,7 @@ EXPECTED_ROUTES = [
     "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",
     "GET /api/preclean/{book}/{page}/after.png",
     "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
+    "GET /api/rare/search/{book}",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
     "GET /api/review/around/{book}/{page}/{col}/{slot}",
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",
