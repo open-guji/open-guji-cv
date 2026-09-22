@@ -329,3 +329,27 @@ def test_book_gap_fallback_is_marked_estimated_and_not_counted_as_detected():
     assert withp["bottom_outer_offset"] is not None
     assert withp["bottom_outer_estimated"] is True
     assert abs(abs(withp["bottom_outer_offset"]) - 27.0) <= 12.0
+
+
+def test_fallback_window_reaches_frames_closer_than_the_book_median():
+    """外框比册基准近得多时兜底也要够得着（2026-09-22 两册 58 条实测）。
+
+    磨损页的内外间距散得厉害：册基准 27，这一页的外框在 11px 处。旧写法
+    `基准±12` 把下界收到 15，根本扫不到。外框只可能在内框之外，
+    `OUTER_GAP_MIN` 已是物理下界，下界不该再跟着基准收。
+    """
+    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    Wd, Hd = 600, 800
+    mask = np.zeros((Hd, Wd), np.uint8)
+    mask[:, 60:63] = 255; mask[:, 537:540] = 255
+    # 下外框离内框只有 11px，且磨得淡（约 0.2，够不着 OUTER_INK_MIN=0.25）
+    for x in range(70, 530, 4):
+        mask[711:714, x:x + 1] = 255
+    verts = [VLine(x_at_top=float((Wd - 1) - 60), slope=0.0),
+             VLine(x_at_top=float((Wd - 1) - 538), slope=0.0)]
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=700.0, slope=0.0, kind="bottom")
+    out = detect_outer_borders(mask, top, bot, verts, Wd, Hd, book_gap={"bottom": 27.0})
+    assert out["bottom_outer_offset"] is not None, "册基准 27、实际 11 —— 兜底要够得着"
+    assert out["bottom_outer_estimated"] is True
+    assert abs(abs(out["bottom_outer_offset"]) - 11) <= 6, out["bottom_outer_offset"]
