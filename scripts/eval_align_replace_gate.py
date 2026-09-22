@@ -257,14 +257,17 @@ def report(rows: list[dict]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("-w", "--workspace", required=True)
+    ap.add_argument("-w", "--workspace", default=None, help="工作区仓根；--report-only 时可不给")
     ap.add_argument("--books", default="vol01,vol02")
     ap.add_argument("--pages", default=None, help="页号表达式；默认全书")
     ap.add_argument("--out", default=str(REPO / "cache/align_gate"))
     ap.add_argument("--report-only", action="store_true", help="只读 --out 里已 dump 的行重报")
     a = ap.parse_args()
-    ws = Path(a.workspace).resolve()
-    os.environ["GUJI_WORKSPACE"] = str(ws)
+    if not a.workspace and not a.report_only:
+        print("要 -w/--workspace（跑评测要读工作区产物）；只重报已 dump 的行用 --report-only"); return 2
+    ws = Path(a.workspace).resolve() if a.workspace else None
+    if ws:
+        os.environ["GUJI_WORKSPACE"] = str(ws)
     out_dir = Path(a.out)
     rows: list[dict] = []
     if a.report_only:
@@ -273,6 +276,7 @@ def main() -> int:
             if f.exists():
                 rows += [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
     else:
+        assert ws is not None
         from open_guji_cv.clustering.cnn_candidates import shared
         from open_guji_cv.core.book import load_book
         cnn = shared()
