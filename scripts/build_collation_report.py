@@ -191,8 +191,47 @@ WITNESS_PROBE_MIN = 12
 WITNESS_PROBE_MIN_PROBE = 6
 #: 卷末题的字数范围。「北行日錄下完」6 字；短于 5 字（两三字的卷次、页码）
 #: 不足以断定，长于 12 字多半是正文末列没写满，不是题。
-WITNESS_COL_MIN = 5
+WITNESS_COL_MIN = 4
 WITNESS_COL_MAX = 12
+
+
+def _mostly_absent(probe: str, cn: str, k: int = 4, hit_max: float = 0.25) -> bool:
+    """这段文字**整体**不在证人里吗——按 k-gram 命中率判，不是整串精确匹配。
+
+    整串匹配对「一个字对不上」毫无容错：p24 第 1 列是正文，只因整理本作「廪」
+    而刻本刻「廩」（异体表没收），整串落空、正文列被误摘。
+    题名的特征是**整条都不在证人里**（命中率≈0），正文则哪怕个别字认错，
+    其余 k-gram 仍大面积命中。0.25 这个线拉得很松：宁可漏摘题名，不可误摘正文。
+
+    ⚠️ 判据不是「这些 k-gram 在证人里出现过吗」，而是「它们**连在一处**出现吗」。
+    按语恰恰会**大段引用**上卷原文（bxgb p56 那段引了「行三十里飯黃碧二十八里」），
+    按「出现过」算命中率接近 1，会被当成正文放过去。但那些引文散落在证人的
+    不同位置，**没有一个连续区间能同时装下它们**——正文则一定有。
+    """
+    if len(probe) <= 8:
+        # 短串 k-gram 太少，统计不出「大面积命中」：卷末题「北行日錄下完」只有
+        # 3 个 4-gram，而「北行日錄」在证人里是书名、必然命中。短串回到整串
+        # 精确匹配——它们本来就短，一个字对不上的风险低。
+        return probe not in cn
+    grams = [probe[i:i + k] for i in range(len(probe) - k + 1)]
+    if not grams:
+        return probe not in cn
+    # 以首个命中的 k-gram 为锚，看在它附近 ±len(probe) 的窗口里能命中多少——
+    # 正文连成一片（命中率高），按语的引文散在各处（窗口里捞不回来）。
+    best = 0.0
+    for g0 in grams[:6]:
+        at = cn.find(g0)
+        while at >= 0:
+            lo, hi = max(0, at - len(probe)), at + 2 * len(probe)
+            win = cn[lo:hi]
+            hit = sum(1 for g in grams if g in win) / len(grams)
+            best = max(best, hit)
+            if best > hit_max:
+                return False
+            at = cn.find(g0, at + 1)
+            if at > lo + 4 * len(probe):
+                break
+    return best <= hit_max
 
 
 def witness_absent_runs(slots: list[dict], corpus: str,
@@ -265,18 +304,30 @@ def witness_absent_runs(slots: list[dict], corpus: str,
     # 「整列原样连续命中」这个条件正文本来就满足不了。字位数从 18,237 掉到
     # 12,138、「刻本多」暴涨到 930，一眼可见。卷末题的特征是**位置在末列**
     # 且**自成一体**，不是「长得不像正文」。
+    # 首列/次列的**卷端题**同理：bxgb p3 第 2 列「宋樓鑰𢰅」是刻本的撰人题，
+    # 整理本（文集本）作「四明樓鑰大防」并接生平「時待次溫州教授隨侍充公守括蒼…」。
+    # 两边体例不同，逐字比会把 4 个格配成 宋→州、樓→教、鑰→授、𢰅→隨 四条假「改」
+    # 外加一条 16 字 missing——**一处体例差异报成五条**。
+    #
+    # 只查**页首两列**与**末列**：卷端题/卷末题就在这几个位置，正文列一律不碰。
     body_cols = sorted({s["col"] for s in slots if not s["sub"]})
-    if body_cols:
-        last = body_cols[-1]
-        cs = [s for s in slots if s["col"] == last and not s["sub"]]
+    cand = set(body_cols[:2] + body_cols[-1:]) if body_cols else set()
+    for col in sorted(cand):
+        cs = [s for s in slots if s["col"] == col and not s["sub"]]
         taken = {i for a in out for i in a["ids"]}
         if (WITNESS_COL_MIN <= len(cs) <= WITNESS_COL_MAX
                 and not any(x["id"] in taken for x in cs)):
             t = "".join(x["char"] for x in cs)
             probe = vm.normalize_text(t).replace("□", "")
-            if probe and probe not in cn:
-                out.append({"ids": [x["id"] for x in cs], "text": t, "kind": "卷末题",
-                            "col": last, "n": len(cs)})
+            # ⚠️ 不能只查整串在不在——**一个字对不上就全串落空**。p24 第 1 列
+            # 「此也有滑臺本鄭之廩延」是**正文**，整理本作「廪」而刻本刻「廩」
+            # （异体表没收这一对），整串就查不到，正文列于是被误摘。
+            # 改查**滑动窗口**：题名与正文的区别是「整条都不在证人里」，
+            # 而正文哪怕有个别字对不上，其余 4-gram 仍大面积命中。
+            if probe and _mostly_absent(probe, cn):
+                kind = "卷末题" if col == body_cols[-1] else "卷端题"
+                out.append({"ids": [x["id"] for x in cs], "text": t, "kind": kind,
+                            "col": col, "n": len(cs)})
     return out
 
 
@@ -519,6 +570,26 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   </div>
 </div>"""
 
+    def gap_html(e: dict) -> str:
+        """增删（脱衍）**只出文字，不出图**（用户 2026-09-22）。
+
+        增删要看的是「整理本在这里多了/少了什么」——那是**文本层**的事，
+        字块图帮不上忙：`missing` 那一侧刻本压根没有格子，图只能显示邻近几个
+        无关的字。以**我们的文本为基准**报，方向写清楚。
+        """
+        n = e.get("n", 1)
+        if e["kind"] == "missing":
+            verb, seg = "整理本多出", e["ref"]
+        else:
+            verb, seg = "整理本无（刻本多出）", e["hyp"]
+        big = "seg" if len(seg or "") > 2 else ""
+        return f"""<div class="ent gap" data-kind="{e['kind']}" data-page="{e['page']}">
+  <div class="head"><span class="gapverb">{verb}</span><span class="gl big {big}">{_e(seg) or '—'}</span>
+    <span class="cnt-inline">{n} 字</span><span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])}</div>
+  <div class="ctx"><span class="k">我方</span><span class="gl">{_e(e['hyp_ctx'])}</span></div>
+  <div class="ctx"><span class="k">整理本</span><span class="gl">{_e(e['ref_ctx'])}</span></div>
+</div>"""
+
     # 分层：把「我们录错了」从「两个本子本来就不同」里分出来（见 report/collation_grade.py）。
     # 平表按 kind 排，答的是「字面一不一样」；按 grade 排，答的是「这条要不要人去看」——
     # 后者才是看报告的人真正要问的。存疑那层排最前，成果那几层折叠起来。
@@ -533,7 +604,8 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
         if not es:
             return ""
         note = GRADE_NOTE.get(g, "")
-        inner = "".join(entry_html(e) for e in es)
+        render = gap_html if g == "gap" else entry_html
+        inner = "".join(render(e) for e in es)
         return (f'<details id="g-{g}"{" open" if open_ else ""}><summary>'
                 f'<span class="gname">{_e(GRADE_LABEL[g])}</span>'
                 f'<span class="cnt">{len(es)}</span>'
@@ -789,7 +861,9 @@ def main() -> int:
     n_strip = 0
     truncated = False
     for e in entries:
-        if e["kind"] == "variant":
+        # 异体按对汇总（另有例图），增删只出文字（见 gap_html）——两者都不占截条。
+        if e["kind"] in ("variant", "missing", "extra"):
+            e.pop("_col_slots", None); e.pop("_k", None)
             continue
         if n_strip >= a.limit_strips:
             truncated = True
