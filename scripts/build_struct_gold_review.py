@@ -48,7 +48,11 @@ KEY = "struct-gold-v1"
 CARDS = REPO / "artifacts" / "struct_gold_cards.jsonl"
 SEED = 20260922
 SLOT_ZH = {"L": "左", "R": "右", "T": "上", "B": "下", "M": "中", "O": "外", "I": "内", "A": "甲", "X": "体"}
-OPS = ["⿰", "⿱", "⿲", "⿳", "⿴", "⿵", "⿶", "⿷", "⿸", "⿹", "⿺", "⿻", "独体"]
+# 结构符很多手机字体没有（渲成方框），所以每个都配中文名，按钮与拆法行都印名字
+OPS = [["⿰", "左右"], ["⿱", "上下"], ["⿲", "左中右"], ["⿳", "上中下"], ["⿴", "全包围"], ["⿵", "上三包"],
+       ["⿶", "下三包"], ["⿷", "左三包"], ["⿸", "左上包"], ["⿹", "右上包"], ["⿺", "左下包"], ["⿻", "重叠"],
+       ["独体", "独体"]]
+OP_ZH = dict(OPS)
 
 
 def thumb(img01: np.ndarray, size: int = 128) -> str:
@@ -70,9 +74,9 @@ def sample_cards() -> list[dict]:
         e = tab.get(ch)
         ids = e.primary if e else ""
         if st.top == SINGLE:
-            return {"top": "独体", "slots": [], "ids": ids}
+            return {"top": "独体", "top_zh": "独体", "slots": [], "ids": ids}
         slots = [[SLOT_ZH.get(k, k), "".join(v)] for k, v in st.top_slots().items()]
-        return {"top": st.top, "slots": slots, "ids": ids}
+        return {"top": st.top, "top_zh": OP_ZH.get(st.top, st.top), "slots": slots, "ids": ids}
 
     oov = [json.loads(l) for l in (REPO / "cache/oov_bench/items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     gb = [json.loads(l) for l in (REPO / "cache/glyph_bench/items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -117,6 +121,8 @@ def main() -> None:
 
     if CARDS.exists():
         cards = [json.loads(l) for l in CARDS.read_text(encoding="utf-8").splitlines() if l.strip()]
+        for c in cards:                       # 展示字段可以补，id 与抽样不动
+            c.setdefault("top_zh", OP_ZH.get(c["top"], c["top"]))
         print(f"卡片冻结在 {CARDS}：{len(cards)} 张（id 不变）")
     else:
         cards = sample_cards()
@@ -160,9 +166,10 @@ def main() -> None:
 .verdicts button.slot[aria-pressed="true"]{background:var(--ochre)}
 .verdicts button.idk[aria-pressed="true"]{background:var(--faint)}
 .verdicts button.st[aria-pressed="true"]{background:var(--zhu)}
-.ops{display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-top:8px;}
+.ops{display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-top:8px;}
 .ops .cap{grid-column:1 / -1; font-size:12px; color:var(--muted); margin-top:4px;}
-.ops button{min-height:40px; font-size:18px; font-family:var(--serif);}
+.ops button{min-height:40px; font-size:16px; font-family:var(--serif); line-height:1.1;}
+.ops button small{display:block; font-size:11px; font-family:var(--sans); font-weight:400;}
 """
     page_js = """
 const BODY = `
@@ -203,12 +210,12 @@ function card(r){
   const v = verdictOf(r.id);
   const b = (k, cls, t) => `<button class="${cls}" data-v="${k}" aria-pressed="${v===k}">${t}</button>`;
   const slots = r.slots.map(([n, c]) => `${n}:${esc(c)}`).join('　');
-  const ops = OPS.filter(o => o !== r.top).map(o => b('struct:' + o, 'st', o)).join('');
+  const ops = OPS.filter(([o]) => o !== r.top).map(([o, zh]) => b('struct:' + o, 'st', `${o} <small>${zh}</small>`)).join('');
   return `<article class="card" data-id="${r.id}"${v ? ` data-v="${v}"` : ''}>
     <div class="glyph"><img data-src="g:${r.id}" alt="">
       <div class="lab"><div class="ch">${esc(r.char)}</div>
         <div class="ids">${esc(r.ids || '（表里没有拆法）')}</div>
-        <div class="st"><b>${esc(r.top)}</b>${slots}</div>
+        <div class="st"><b>${esc(r.top)}</b>${esc(r.top_zh || '')}　${slots}</div>
         <div class="meta">${esc(r.stratum)} · ${esc(r.src)} · ${esc(r.id)}</div></div></div>
     <div class="verdicts">${b('ok','ok','拆法对')}${b('slot','slot','结构对、部件写法不同')}${b('idk','idk','拿不准')}</div>
     <div class="verdicts ops"><span class="cap">结构其实是：</span>${ops}</div>
