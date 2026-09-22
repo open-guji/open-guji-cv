@@ -335,7 +335,8 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 
 
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
-                   book: str | None = None, struct_rerank: bool = False) -> list[list[dict]]:
+                   book: str | None = None, struct_rerank: bool = False,
+                   struct_probe: str | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
@@ -428,6 +429,9 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
 
+    if struct_probe:
+        # Step A′ 外挂结构头（2026-09-22）：主干不动，只给重排换一副更细的眼睛
+        cnn.attach_probe(struct_probe)
     if not (struct_rerank and cnn.available):
         return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
                 for a, b, cnn_topk, emb_topk, dbk

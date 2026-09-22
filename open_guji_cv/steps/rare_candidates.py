@@ -73,7 +73,13 @@ class RareCandidatesParams(BaseModel):
     def model_post_init(self, _ctx) -> None:
         if not self.model_fingerprint:
             from ..clustering.cnn_candidates import full_fingerprint
-            object.__setattr__(self, "model_fingerprint", full_fingerprint())
+            fp = full_fingerprint()
+            if self.struct_probe:
+                import hashlib
+                from pathlib import Path
+                pp = Path(self.struct_probe)
+                fp += ":probe=" + (hashlib.sha1(pp.read_bytes()).hexdigest()[:12] if pp.exists() else "missing")
+            object.__setattr__(self, "model_fingerprint", fp)
 
 
 @register_step
@@ -149,7 +155,8 @@ class RareCandidatesStep(Step):
             ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
             imgs = []
         hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id,
-                                   struct_rerank=p.struct_rerank) if imgs else []
+                                   struct_rerank=p.struct_rerank,
+                                   struct_probe=p.struct_probe or None) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,

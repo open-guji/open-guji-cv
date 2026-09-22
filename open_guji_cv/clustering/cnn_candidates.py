@@ -150,10 +150,17 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot:
 class CnnCandidates:
     """懒加载；没有 checkpoint 或没装 torch 时 `available` 为 False，调用方跳过。"""
 
-    def __init__(self, ckpt: str | Path = DEFAULT_CKPT, device: str | None = None):
+    def __init__(self, ckpt: str | Path = DEFAULT_CKPT, device: str | None = None,
+                 probe: str | Path | None = None):
         self.ckpt = Path(ckpt)
         self.device = device
         self._net = None
+        self._probe = None
+        self._probe_path = Path(probe) if probe else None
+        """外挂结构头（Step A′，2026-09-22）：`scripts/probe_struct_heads.py` 在冻结主干的
+        embedding 上训出的 `probe_<arch>.pt`。挂上后 `has_struct_heads` 为真、
+        `struct_probs_batch` / `slot_probs_batch` 走它——主干与 checkpoint 一根毛不动，
+        unseen / oov 定义上不变。checkpoint 自带结构头（r6 那种）时以 checkpoint 为准。"""
         self._classes: list[str] = []
         self._cidx: dict[str, int] = {}
         self._comps: list[str] = []
@@ -216,34 +223,94 @@ class CnnCandidates:
         """部件袋头的词表（训练时 `ids_guard.components` 出现 ≥3 字的部件）。未加载时空。"""
         return list(self._comps) if self._ensure() else []
 
+    # ── 外挂结构头（Step A′）──
+    def attach_probe(self, path: str | Path | None) -> bool:
+        """挂 / 换外挂头；传 None 摘掉。文件不存在或主干指纹对不上 → 不挂、返回 False。"""
+        self._probe = None
+        self._probe_path = Path(path) if path else None
+        return self._ensure_probe()
+
+    def _ensure_probe(self) -> bool:
+        if self._probe is not None:
+            return True
+        if not self._probe_path or not self._probe_path.exists() or not self._ensure():
+            return False
+        import torch
+        import torch.nn as nn
+        pk = torch.load(self._probe_path, map_location="cpu", weights_only=False)
+        if pk.get("backbone") and pk["backbone"] != fingerprint(self.ckpt):
+            _warn_emb_down(f"外挂结构头 {self._probe_path.name} 是给主干 {pk['backbone']} 训的，"
+                           f"现役主干是 {fingerprint(self.ckpt)}，不挂")
+            return False
+        d = 256
+        n_s, n_l = len(pk["struct_classes"]), len(pk["slot_labels"])
+        if pk.get("arch") == "mlp":
+            h = int(pk.get("hidden", 512))
+            head = nn.ModuleDict({"trunk": nn.Sequential(nn.Linear(d, h), nn.ReLU(), nn.Dropout(0.2)),
+                                  "struct": nn.Linear(h, n_s), "slot": nn.Linear(h, n_l)})
+        else:
+            head = nn.ModuleDict({"struct": nn.Linear(d, n_s), "slot": nn.Linear(d, n_l)})
+        head.load_state_dict(pk["state"]); head.eval()
+        self._probe = (head, float(pk.get("scale", 16.0)), list(pk["struct_classes"]), list(pk["slot_labels"]))
+        return True
+
+    def _probe_logits(self, norm_patches: list[np.ndarray]):
+        import torch
+        head, scale, _, _ = self._probe
+        e = torch.tensor(self.embed(norm_patches) * scale)
+        with torch.no_grad():
+            h = head["trunk"](e) if "trunk" in head else e
+            return head["struct"](h), head["slot"](h)
+
     @property
     def has_struct_heads(self) -> bool:
-        """checkpoint 带不带 Step A 的结构头 / 槽位头（r4/r5 不带）。"""
-        return self._ensure() and bool(self._struct_classes) and bool(self._slot_labels)
+        """有没有结构头 / 槽位头：checkpoint 自带（r6 那种）或外挂探针（Step A′）。r4/r5 裸跑没有。"""
+        if self._ensure() and bool(self._struct_classes) and bool(self._slot_labels):
+            return True
+        return self._ensure_probe()
 
     @property
     def slot_labels(self) -> list[str]:
-        return list(self._slot_labels) if self._ensure() else []
+        if self._ensure() and self._slot_labels:
+            return list(self._slot_labels)
+        return list(self._probe[3]) if self._ensure_probe() else []
+
+    @property
+    def struct_source(self) -> str:
+        """'ckpt' / 'probe:<文件名>' / ''——报数与产物指纹用。"""
+        if self._ensure() and self._struct_classes:
+            return "ckpt"
+        return f"probe:{self._probe_path.name}" if self._ensure_probe() else ""
 
     def struct_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
         """归一化图 → {顶层算符: 概率}（结构头 softmax）。没有结构头 → 全空字典。"""
         if not self.has_struct_heads or not norm_patches:
             return [{} for _ in norm_patches]
         import torch
-        with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
-            pr = torch.softmax(self._net.heads(x)["struct"], 1).cpu().numpy()
-        return [{c: float(p) for c, p in zip(self._struct_classes, row)} for row in pr]
+        if self._struct_classes:
+            with torch.no_grad():
+                x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+                pr = torch.softmax(self._net.heads(x)["struct"], 1).cpu().numpy()
+            names = self._struct_classes
+        else:
+            st, _ = self._probe_logits(norm_patches)
+            pr = torch.softmax(st, 1).numpy(); names = self._probe[2]
+        return [{c: float(p) for c, p in zip(names, row)} for row in pr]
 
     def slot_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
         """归一化图 → {部件@槽: 概率}（槽位头 sigmoid）。键与 `ids_struct.slot_keys_of` 同口径。"""
         if not self.has_struct_heads or not norm_patches:
             return [{} for _ in norm_patches]
         import torch
-        with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
-            pr = torch.sigmoid(self._net.heads(x)["slot"]).cpu().numpy()
-        return [{c: float(p) for c, p in zip(self._slot_labels, row)} for row in pr]
+        if self._slot_labels:
+            with torch.no_grad():
+                x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32), device=self._dev)
+                pr = torch.sigmoid(self._net.heads(x)["slot"]).cpu().numpy()
+            names = self._slot_labels
+        else:
+            _, sl = self._probe_logits(norm_patches)
+            pr = torch.sigmoid(sl).numpy(); names = self._probe[3]
+        return [{c: float(p) for c, p in zip(names, row)} for row in pr]
 
     def comp_probs_batch(self, norm_patches: list[np.ndarray]) -> list[dict[str, float]]:
         """归一化 64² 图 → {部件: 存在概率}（部件袋头 sigmoid）。
