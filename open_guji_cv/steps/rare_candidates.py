@@ -56,6 +56,17 @@ class RareCandidatesParams(BaseModel):
     struct_rerank: bool = False
     """融合后按部件袋头一致性重排前 30 名（`ids_struct.struct_rerank`）。缺省关：
     效果要先用 `scripts/eval_struct_rerank.py` 量（2026-09-21，M0 #3）。"""
+    struct_probe: str = ""
+    """结构头探针 checkpoint 路径（`scripts/probe_struct_heads.py` 训出来的那份）。
+    空 = 不用探针。给了就把它的内容哈希并进 `model_fingerprint`（见下），换探针产物才过期。
+
+    ⚠️ **补声明**（2026-09-21）：这个字段被 `model_post_init` 与 `run_page` 用了三处，
+    但类里一直没有它——`RareCandidatesParams()` 直接抛
+    `AttributeError: 'RareCandidatesParams' object has no attribute 'struct_probe'`，
+    Step5-b 对谁都起不来（不止某本书）。pydantic 的 `model_post_init` 在校验之后跑，
+    所以这个错只在**构造实例**时炸，import 阶段完全看不出来——`python -c "import …"`
+    过得去，跑批才死。缺省 `""` 而不是 `None`：与 `struct_rerank` 同风格，且
+    `p.struct_probe or None` 那处本就按假值处理。"""
     model_fingerprint: str = ""
     """候选栈的外部状态指纹（checkpoint + 外部模板集 + 模板字体集），**由
     `model_post_init` 自动填**，yaml 里不用写。它参与 `params_hash`，从而进产物
