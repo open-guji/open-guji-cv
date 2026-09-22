@@ -96,3 +96,20 @@ VLM 进放行；生成/超分复原后再识别；整库抓字统网（先写信
 
 每条任务做完在设计稿 §13 追加「实测④⑤…」小节：命令、数字表、判读、闸过没过；
 本卡末尾追加一行回执表。本机的结果照旧同步到 overview `5b-生僻字候选/`。
+
+## 云端回执（2026-09-22）
+
+| # | 结果 | 正本 |
+|---|---|---|
+| T1 | **探针到不了 95**：线性 64.4 / MLP 87.9；零训练「最近模板类的结构」86.3、top-10 投票 89.9、合成 90.5——与 r6 联训 90.8 同一道 ~90 天花板；槽位头三版都 72–73。**T9 的触发条件成立**，但先等 T3 金标分清标签错 vs 模型错（⿱/⿸、⿹/⿱、⿳/⿱ 是口径分歧） | 设计稿 §13 ④；`scripts/probe_struct_heads.py`、`CnnCandidates.attach_probe`、`--probe` |
+| T2 | 探针槽位头重排 m=10 w=2：top-1 8.9 → 28.0，top-5 84.7 → 78.7，top-10 不变——仍卖 top-5，**缺省不开** | 设计稿 §13 ⑥ |
+| T4 | 7 万字表目录 114,222 形 / 39,958 字；oov emb top-1 74.5 → 77.7、top-5 +1.3、top-10 不变；**unseen top-10 100.0 → 99.8（3 条）**，闸不过，`GW_ENABLED` 缺省关，代码/目录/评测开关都在 | 设计稿 §13 ⑤⑥；`unencoded_char_sources_survey.md` §5′ |
+| T5① | `eval_struct_heads` 独体行 n<20 标「不算数」 | — |
+| T5② | 无模板零样本切分 v1 冻结（200 字种 / 259 条） | `config/eval/notemplate_split_v1.txt` |
+| T5③ | 固定退化协议出表：r5 对粗细/断墨/贴边免疫，σ2.5 模糊与 ≥20% 遮挡才塌，塌时 top-10 先撑住 | 设计稿 §13 ⑤；`scripts/eval_degradation.py`（已登记进 eval） |
+| T6 | 形近对表 v1 19,729 对（IDS 关系 + 余弦 ≥.945 / 纯视觉 ≥.955），候选带 `near`，面板显示 | `config/ids/confusable_pairs_v1.tsv`、`clustering/confusables.py` |
+| T3 / T7 | 未动 | — |
+
+给本机的：`RareCandidatesParams.struct_probe` 我漏写了声明（本机已补 + 加了构造性测试，谢）；
+T4 要在本机跑一次 `build_glyphwiki_catalog.py`（需 dump + `npm i @kurgm/kage-engine`）才有目录，
+开关仍缺省关。下一步建议顺序：T3 金标页 → 结构族口径定 → 决定 T9；T12 未收字子集 → 定 T4 开不开。
