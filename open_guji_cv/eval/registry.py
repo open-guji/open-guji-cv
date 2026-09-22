@@ -141,6 +141,14 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="类外泛化·emb", needs=("products", "heavy"),
        note="集在 cache/oov_bench（本地派生物，由 build_oov_bench.py 建，"
             "不在数据集仓）；314 条 / 138 字种"),
+    # 固定退化协议（2026-09-21 补登记）：同一批真刻例加一组**写死**的扰动
+    # （blur/erode/dilate/断墨/贴边/遮挡/钤印），分因素报各路稳定性。跟 `oov`
+    # 同源同形：数据在 cache/ 的本地派生物、没有位置参数、报告走 `--json`。
+    # `--set` 不进 extra——缺省 oov 就是这条要量的那一档，unseen 那档手跑。
+    _e("degradation", "glyph-bench", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="固定退化·稳定性", needs=("products", "heavy"),
+       note="集在 cache/oov_bench（--set oov，缺省）或 glyph-bench unseen 档；"
+            "模板均值优先复用 cache/struct_probe/emb_*.npz，没有就现渲染"),
     # 粘连格线理想切点（用户在控制台「切线」页拖出来的），现役 Step2 列图坐标。
     _e("touching_cuts", "char-segmentation/touching-cuts", arg_kind="none", out_flag="--json", pythonpath=True,
        title="粘连切点误差", needs=("products",),
