@@ -65,3 +65,20 @@ def test_summarize_partitions_everything_exactly_once():
 
 def test_settled_and_todo_do_not_overlap():
     assert not (set(SETTLED) & set(TODO))
+
+
+def test_taboo_recognised_by_target_char():
+    """避諱按**目标字**认：改法不固定，穷举字对永远漏。
+
+    bxgb 实测同一个「虜」在不同处被刻成 金/國/今/乃/人/敵/改/因/彼/其…
+    10 种以上。「整理本写虜、刻本写别的」这个模式本身就是避諱的定义。
+    """
+    for hyp in "金國今乃人敵改因彼其":
+        e = _e(hyp, "虜")
+        assert grade(e, grade_pairs([e])) == "taboo", f"{hyp}→虜"
+
+
+def test_taboo_target_only_matches_witness_side():
+    """只在整理本侧匹配——刻本刻了「虜」而整理本作别的字，那不是避諱。"""
+    e = _e("虜", "甲")
+    assert grade(e, grade_pairs([e])) != "taboo"
