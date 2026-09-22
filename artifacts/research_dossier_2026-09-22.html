@@ -1,0 +1,635 @@
+<title>生僻字识别研究台账</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --paper:#EBE8DF; --surface:#F8F6F1; --sunk:#E4E0D4; --tint:#DDD8C9;
+  --ink:#1C1B16; --muted:#67624F; --faint:#938D7B;
+  --rule:#D5D0C1; --rule-hard:#B9B2A0;
+  --indigo:#2C4C76; --indigo-soft:#DDE5F0;
+  --zhu:#A8342A; --zhu-soft:#F3E1DD;
+  --ok:#39684A; --ok-soft:#DEEAE1;
+  --ochre:#7F5E14; --ochre-soft:#EFE7D0;
+  --on-solid:#FBFAF6;
+  --shadow:0 1px 0 rgba(28,27,22,.045), 0 2px 12px rgba(28,27,22,.055);
+  --sans:"Archivo","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --serif:"Noto Serif SC","Songti SC",SimSun,Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#15150F; --surface:#1F1F19; --sunk:#292822; --tint:#33322A;
+    --ink:#EAE6DA; --muted:#9C9685; --faint:#7B7565;
+    --rule:#33322A; --rule-hard:#4C4A3F;
+    --indigo:#93B6E0; --indigo-soft:#1F2C3A;
+    --zhu:#E38D81; --zhu-soft:#38231F;
+    --ok:#86BC95; --ok-soft:#1C2A21;
+    --ochre:#CDA854; --ochre-soft:#2E2617;
+    --on-solid:#13130E;
+    --shadow:0 1px 0 rgba(0,0,0,.35), 0 2px 12px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#15150F; --surface:#1F1F19; --sunk:#292822; --tint:#33322A;
+  --ink:#EAE6DA; --muted:#9C9685; --faint:#7B7565;
+  --rule:#33322A; --rule-hard:#4C4A3F;
+  --indigo:#93B6E0; --indigo-soft:#1F2C3A;
+  --zhu:#E38D81; --zhu-soft:#38231F;
+  --ok:#86BC95; --ok-soft:#1C2A21;
+  --ochre:#CDA854; --ochre-soft:#2E2617;
+  --on-solid:#13130E;
+  --shadow:0 1px 0 rgba(0,0,0,.35), 0 2px 12px rgba(0,0,0,.3);
+}
+body{margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:15.5px; line-height:1.62;
+  -webkit-text-size-adjust:100%;}
+.wrap{max-width:53rem; margin:0 auto; padding-inline:18px; padding-block:0 72px;}
+
+/* ── 顶栏 ── */
+.nav{position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb,var(--paper) 90%,transparent);
+  backdrop-filter:blur(10px) saturate(1.3);
+  border-bottom:1px solid var(--rule);}
+.nav-in{max-width:53rem; margin:0 auto; padding:7px 18px;
+  display:flex; align-items:center; gap:14px; overflow-x:auto; scrollbar-width:none;}
+.nav-in::-webkit-scrollbar{display:none}
+.nav a{color:var(--muted); text-decoration:none; font-size:13px; font-weight:500;
+  white-space:nowrap; padding:4px 0; border-bottom:2px solid transparent;}
+.nav a:hover{color:var(--ink)}
+.nav a[aria-current="true"]{color:var(--ink); border-bottom-color:var(--indigo);}
+.nav .mark{font-family:var(--serif); font-weight:700; font-size:14px;
+  color:var(--ink); white-space:nowrap; padding-right:4px;
+  border-right:1px solid var(--rule-hard); margin-right:2px;}
+
+/* ── 开篇 ── */
+.lede{padding-block:38px 8px;}
+.eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--faint);}
+h1{font-family:var(--serif); font-weight:700; font-size:clamp(28px,5.4vw,40px);
+  line-height:1.2; margin:10px 0 0; text-wrap:balance; letter-spacing:.01em;}
+.sub{margin:14px 0 0; font-size:17px; color:var(--muted); max-width:38em;}
+.sub b{color:var(--ink); font-weight:600;}
+
+.tally{display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+  gap:1px; background:var(--rule); border:1px solid var(--rule);
+  margin-top:26px; border-radius:2px; overflow:hidden;}
+.tally div{background:var(--surface); padding:12px 13px;}
+.tally .n{font-family:var(--mono); font-size:22px; font-weight:500;
+  font-variant-numeric:tabular-nums; line-height:1.1;}
+.tally .k{font-size:11.5px; color:var(--muted); margin-top:3px;}
+.tally .n.ok{color:var(--ok)} .tally .n.zhu{color:var(--zhu)}
+
+/* ── 章节 ── */
+section{padding-block:44px 0; scroll-margin-top:76px;}
+h2{font-family:var(--serif); font-weight:700; font-size:24px; margin:0;
+  display:flex; align-items:baseline; gap:11px; text-wrap:balance;}
+h2 .num{font-family:var(--serif); font-size:15px; font-weight:600; color:var(--indigo);
+  letter-spacing:.04em;}
+.intro{margin:12px 0 0; color:var(--muted); max-width:42em;}
+h3{font-family:var(--serif); font-weight:600; font-size:17px; margin:30px 0 0;}
+p{margin:12px 0 0; max-width:42em;}
+a{color:var(--indigo);}
+code{font-family:var(--mono); font-size:.86em; background:var(--sunk);
+  padding:1px 5px; border-radius:2px; word-break:break-word;}
+.hr{height:1px; background:var(--rule); margin-top:44px;}
+
+/* ── 管线 ── */
+.rail{margin-top:24px; display:grid; gap:9px;}
+.step{display:grid; grid-template-columns:auto 1fr; gap:13px; align-items:start;
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:3px; padding:11px 13px; box-shadow:var(--shadow);}
+.step .tag{font-family:var(--mono); font-size:11px; color:var(--on-solid);
+  background:var(--rule-hard); border-radius:2px; padding:3px 6px; white-space:nowrap;
+  margin-top:2px;}
+.step.touched{border-left:3px solid var(--indigo);}
+.step.touched .tag{background:var(--indigo);}
+.step .name{font-family:var(--serif); font-weight:600; font-size:15.5px;}
+.step .name span{font-family:var(--mono); font-weight:400; font-size:11.5px;
+  color:var(--faint); margin-left:7px;}
+.step .what{font-size:13.5px; color:var(--muted); margin-top:2px;}
+.step .delta{font-size:12.5px; color:var(--indigo); margin-top:5px;
+  padding-left:9px; border-left:2px solid var(--indigo-soft);}
+.four{margin:9px 0 0 0; display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:7px;}
+.four div{background:var(--sunk); border-radius:2px; padding:8px 10px; font-size:13px;}
+.four b{font-family:var(--mono); font-size:11.5px; color:var(--indigo); display:block;
+  letter-spacing:.03em;}
+.four em{font-style:normal; color:var(--muted);}
+.creed{margin-top:22px; background:var(--indigo-soft); border-radius:3px;
+  padding:13px 15px; font-size:14px;}
+.creed b{font-family:var(--serif);}
+
+/* ── 表 ── */
+.scroll{overflow-x:auto; margin-top:18px; border:1px solid var(--rule);
+  border-radius:3px; background:var(--surface);}
+table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:min(100%,430px);}
+th,td{text-align:left; padding:8px 12px; border-bottom:1px solid var(--rule);
+  vertical-align:top;}
+thead th{background:var(--sunk); font-weight:600; font-size:11.5px;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--muted); white-space:nowrap;}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right;
+  white-space:nowrap;}
+td.key{font-family:var(--mono); font-size:12px; color:var(--muted); white-space:nowrap;}
+tr.win td{background:var(--ok-soft);}
+tr.win td.num{font-weight:500;}
+
+/* ── 状态片 ── */
+.chip{display:inline-block; font-size:11.5px; font-weight:600; letter-spacing:.02em;
+  padding:2px 8px; border-radius:999px; white-space:nowrap;}
+.chip.ok{background:var(--ok-soft); color:var(--ok);}
+.chip.hold{background:var(--ochre-soft); color:var(--ochre);}
+.chip.neg{background:var(--zhu-soft); color:var(--zhu);}
+.chip.idle{background:var(--sunk); color:var(--faint);}
+
+/* ── 实验卡 ── */
+.exp{margin-top:20px; background:var(--surface); border:1px solid var(--rule);
+  border-radius:3px; box-shadow:var(--shadow); overflow:hidden;}
+.exp > header{display:flex; flex-wrap:wrap; align-items:baseline; gap:9px;
+  padding:13px 15px 11px; border-bottom:1px solid var(--rule);}
+.exp .id{font-family:var(--mono); font-size:12px; color:var(--indigo); letter-spacing:.04em;}
+.exp h4{font-family:var(--serif); font-weight:600; font-size:16.5px; margin:0; flex:1 1 13em;}
+.exp .where{font-family:var(--mono); font-size:11px; color:var(--faint);}
+.exp .body{padding:0 15px 15px;}
+.exp .body .scroll{margin-top:13px;}
+.exp .body p{font-size:14px;}
+.read{margin-top:13px; font-size:14px; padding-left:11px;
+  border-left:2px solid var(--rule-hard); color:var(--ink);}
+.read b{font-weight:600;}
+
+/* ── 负结果 ── */
+.neg{margin-top:20px; display:grid; gap:1px; background:var(--rule);
+  border:1px solid var(--rule); border-radius:3px; overflow:hidden;}
+.neg > div{background:var(--surface); padding:13px 15px;}
+.neg h4{margin:0; font-family:var(--serif); font-weight:600; font-size:15px;
+  color:var(--zhu);}
+.neg p{margin-top:5px; font-size:13.5px; color:var(--muted); max-width:none;}
+.neg p b{color:var(--ink); font-weight:500;}
+
+/* ── 下一步 ── */
+.next{margin-top:20px; display:grid; gap:10px;}
+.next article{background:var(--surface); border:1px solid var(--rule);
+  border-left:3px solid var(--ochre); border-radius:3px; padding:12px 14px;}
+.next article.go{border-left-color:var(--ok);}
+.next h4{margin:0; font-family:var(--serif); font-weight:600; font-size:15.5px;}
+.next p{margin-top:4px; font-size:13.5px; color:var(--muted); max-width:none;}
+.foot{margin-top:46px; padding-top:18px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--faint);}
+.foot code{background:none; padding:0; color:var(--muted);}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+@media (max-width:520px){
+  .step{grid-template-columns:1fr; gap:7px;}
+  .step .tag{justify-self:start;}
+}
+</style>
+
+<nav class="nav"><div class="nav-in">
+  <span class="mark">研究台账</span>
+  <a href="#pipeline">管线</a>
+  <a href="#survey">调研</a>
+  <a href="#ideas">想法</a>
+  <a href="#exp">实验</a>
+  <a href="#neg">负结果</a>
+  <a href="#next">下一步</a>
+</div></nav>
+
+<div class="wrap">
+
+<header class="lede">
+  <div class="eyebrow">open-guji-cv · 2026-09-21 → 09-22 · 36 次提交</div>
+  <h1>生僻字识别研究台账</h1>
+  <p class="sub">两轮调研、十六条想法、八次实验的完整交代。<b>四项落地、六条负结果</b>，
+     以及为什么「结构头到不了 95」现在是一句有人裁背书的话。</p>
+  <div class="tally">
+    <div><div class="n">388</div><div class="k">篇论文入清单</div></div>
+    <div><div class="n">16</div><div class="k">条新想法</div></div>
+    <div><div class="n">8</div><div class="k">次实验</div></div>
+    <div><div class="n ok">4</div><div class="k">项落地</div></div>
+    <div><div class="n zhu">6</div><div class="k">条负结果</div></div>
+    <div><div class="n">56</div><div class="k">条新人裁</div></div>
+  </div>
+</header>
+
+<div class="hr"></div>
+
+<section id="pipeline">
+  <h2><span class="num">一</span>现在的管线长什么样</h2>
+  <p class="intro">刻本正文链 <code>keben_body_v2</code>，十步。这一轮<b>一步都没重排</b>，
+     只在 Step5 的两路证据上动了东西——标蓝的三步是本轮改过的。</p>
+
+  <div class="rail">
+    <div class="step"><span class="tag">Step 1</span><div>
+      <div class="name">边框探测 <span>border_detect</span></div>
+      <div class="what">原图 → 内外版框 + 界行（弯页走三段折线）+ 抬头框。列探测正确率 56/60 = 93.3%。</div>
+    </div></div>
+    <div class="step"><span class="tag">Step 2</span><div>
+      <div class="name">单列射影 <span>column_warp</span></div>
+      <div class="what">逐列射影变换 + 去噪 + 界行清除 + 上下版框清除，出列图。</div>
+    </div></div>
+    <div class="step"><span class="tag">Step 3</span><div>
+      <div class="name">单列文字切分 <span>row_segment</span></div>
+      <div class="what">带类型的字格：字 / 空白 / 抬头 / 夹注 a / 夹注 b，附列内读序。</div>
+    </div></div>
+    <div class="step"><span class="tag">Step 4</span><div>
+      <div class="name">字框收缩 <span>cell_shrink</span></div>
+      <div class="what">紧框 + flags，字块进缓存。这四步产出的字块是下面所有识别的输入。</div>
+    </div></div>
+
+    <div class="step touched"><span class="tag">Step 5</span><div>
+      <div class="name">四路证据并行</div>
+      <div class="what">四路互不依赖，各自出证据，谁也不放行。</div>
+      <div class="four">
+        <div><b>5-a glyph_match</b>库匹配三档 <em>same / unsure / diff</em></div>
+        <div><b>5-b rare_candidates</b>生僻字候选，三源 RRF <em>字体 kNN / CNN 分类头 / embedding</em></div>
+        <div><b>5-c ocr_candidates</b>OCR top-k + 简繁扩展</div>
+        <div><b>5-d align_ref</b>整理本对齐，8-gram 锚 + difflib</div>
+      </div>
+      <div class="delta">本轮：5-b 多了两个<b>缺省关</b>的挂钩——结构探针外挂头、GlyphWiki 变体形第二模板索引；
+        5-d 的 replace 段多了一道<b>缺省开</b>的库证据闸。</div>
+    </div></div>
+
+    <div class="step"><span class="tag">Step 6</span><div>
+      <div class="name">上下文裁决 <span>context_decide</span></div>
+      <div class="what">四路证据融合 + 语言模型 → 门槛化定字，够不着就弃权。</div>
+    </div></div>
+    <div class="step"><span class="tag">C1</span><div>
+      <div class="name">进库准入 <span>seed_admit</span></div>
+      <div class="what">十条通道：自动进字形库，或落回人审队列。</div>
+    </div></div>
+  </div>
+
+  <div class="creed"><b>贯穿始终的一条纪律：</b>结构信号、重排、未收字模板，
+    <b>一律只出候选，不进放行</b>。异体登记用刻本字形的 IDS，不用正字。这一轮新加的三个开关，
+    两个缺省关着，唯一缺省开的那个（5-d 库证据闸）是<b>把采信收紧</b>，不是放宽。</div>
+</section>
+
+<div class="hr"></div>
+
+<section id="survey">
+  <h2><span class="num">二</span>这轮做了两份调研</h2>
+  <p class="intro">一份是「别人怎么做生僻字识别」，一份是「Unicode 没收的字，字形和身份从哪来」。
+     前者产出十六条想法，后者产出一条可落地的数据管道。</p>
+
+  <h3>甲 · 汉字生僻字扩展与 IDS／笔画结构识别文献综述</h3>
+  <p>三步走，用户定的：先尽量广地搜罗，再分类写摘要，最后才想新点子。
+     arXiv 37 组布尔查询收到 <b>369 条</b>去重结果，定点按 id 补抓 <b>75 篇</b>（其中 19 篇查询没命中），
+     再约 40 次网页检索补非 arXiv 的会议期刊。逐篇摘要约 120 篇，分七组：
+     结构化零样本主线／笔画层／历史文献与基准／字形生成／通用引擎与 VLM／文本侧／综述。
+     分类用两轴：文本侧表示 R0–R6 × 建模范式 P1–P8。</p>
+  <p>最有用的一张对照是<b>评测协议</b>——文献里的「零样本」有两种，字零样本（部件都见过）
+     和部首零样本（部件也没见过），后者所有方法都差得多。摆平口径之后横向比：
+     允许字体模板时，CCR-CLIP 的 93.8–95.7 与我们 unseen 档的 96.9 是同一档；
+     <b>真正要攻的是难题档那个 78.6</b>。</p>
+  <p>文献还替我们七条既有负结果背了书：像素级切部件、IDS 当放行判据、笔画序列当主表示、
+     大字表直接并进候选池，都有独立工作得出同向结论。</p>
+
+  <h3>乙 · Unicode 未收字：字统网怎么做、我们能拿到什么</h3>
+  <p>先逆向字统网 <code>zi.tools</code>。结论一句话：<b>未收字 =「一串 IDS 当身份」+「来源辞书自己说的同某字」+「KAGE 动态组字当字形」</b>。
+     接口 <code>/api/zi/&lt;字或IDS串&gt;</code> 按 IDS 串也能返回一页，说明 IDS 串就是它的字 ID；
+     「同 X」抄自《汉字海》《漢語大字典》教育部異體字字典原文；
+     而<b>它的 IDS 是站长自己拆的、没有开源</b>（开源的那份只有已收字，我们早就在用）。
+     站点没有任何许可声明。</p>
+  <p>所以去找公开替代，逐个实测：</p>
+  <div class="scroll"><table>
+    <thead><tr><th>来源</th><th>规模（实测）</th><th>许可</th><th class="num">能用吗</th></tr></thead>
+    <tbody>
+      <tr class="win"><td><b>GlyphWiki dump</b></td><td>215 万字形；IDS 命名 77,444、中华字海 63,167、大漢和 51,127；
+        关联到整理本字种的未收／异体字形 <b>33,804</b> 条，覆盖 4,637 字种的 <b>89.2%</b></td><td>自由</td><td class="num">已接入</td></tr>
+      <tr><td>kage-engine 离线渲染</td><td>9 字 14 ms，已跑通</td><td>MIT</td><td class="num">已接入</td></tr>
+      <tr><td>全字庫 CNS11643</td><td>104,680 码位全有映射，其中 <b>20,659 在 PUA</b>（即未收）；部件表 97,086</td><td>政府開放／OFL</td><td class="num">备用</td></tr>
+      <tr><td>教育部異體字字典</td><td>106,303 字</td><td>无开放数据</td><td class="num">拿不到</td></tr>
+      <tr><td>CHISE IDS-CBETA</td><td>13,364 行，11,063 带 IDS</td><td>自由</td><td class="num">备用</td></tr>
+      <tr><td>字统网 IDS</td><td>—</td><td>未开源、无声明</td><td class="num">先写信</td></tr>
+    </tbody>
+  </table></div>
+  <p>路线定为三层：<b>层 1</b> 拿 GlyphWiki 目录 + 渲染当「第六套字体」进模板库（零训练，就是下面实验⑤）；
+     <b>层 2</b> 按字向字统网补 IDS（先联系站长）；<b>层 3</b> 刻本 IDS 登记回流。</p>
+</section>
+
+<div class="hr"></div>
+
+<section id="ideas">
+  <h2><span class="num">三</span>十六条想法，动了五条</h2>
+  <p class="intro">N1–N16 按「零训练云端能做 / 一次训练要 GPU / 长线研究」分三档。
+     每条都配了文献依据、数据前提、验收靶子。下表是它们现在的状态。</p>
+  <div class="scroll"><table>
+    <thead><tr><th class="num">编号</th><th>想法</th><th>训练</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr class="win"><td class="key">N2</td><td>IDS 派生形近对表：靶子生成器 + 硬负例 + 界面提示</td><td>无</td><td><span class="chip ok">已落地</span> 19,729 对</td></tr>
+      <tr class="win"><td class="key">N5</td><td>固定退化鲁棒性评测协议</td><td>无</td><td><span class="chip ok">已落地</span> 实验⑥</td></tr>
+      <tr class="win"><td class="key">N16</td><td>补两项评测口径：无模板零样本、部首零样本单列</td><td>无</td><td><span class="chip ok">已落地</span></td></tr>
+      <tr><td class="key">N4</td><td>结构感知的对齐与纠错代价（5-d replace 段）</td><td>无</td><td><span class="chip neg">原方案否决</span> 换了个闸落地，实验⑧</td></tr>
+      <tr><td class="key">N12</td><td>未编码字通道：IDS 组字 → 即时渲染 → 当场检索</td><td>无</td><td><span class="chip hold">做了一半</span> 目录与渲染通了，通道未做</td></tr>
+      <tr><td class="key">N1</td><td>四角号码／仓颉当第二把查字钥匙 + 免费辅助头</td><td>头要 GPU</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N6</td><td>5-b 开放集拒识 → 自动触发 IDS 兜底</td><td>无</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N3</td><td>真刻例部件重组合成（KAGE 框投影到真刻例裁部件块）</td><td>一次</td><td><span class="chip idle">未动</span> 排在本机</td></tr>
+      <tr><td class="key">N10</td><td>多原型字典 + 按册轻适配</td><td>小</td><td><span class="chip idle">未动</span> 下一步首选</td></tr>
+      <tr><td class="key">N7</td><td>管线自产无标注字块做自监督预训练</td><td>数小时</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N11</td><td>独体字笔画头</td><td>一次</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N9</td><td>带 IDS 结构嵌入的上下文模型</td><td>小</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N14</td><td>「这是个新字」假设与台账</td><td>无</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N15</td><td>部件级原型库 + 每个槽位像什么的证据图</td><td>无</td><td><span class="chip idle">依赖 N3</span></td></tr>
+      <tr><td class="key">N8</td><td>VLM 只做审查队列的第二意见</td><td>无</td><td><span class="chip idle">未动</span></td></tr>
+      <tr><td class="key">N13</td><td>字体→刻本风格的生成式字典</td><td>重</td><td><span class="chip idle">仅当 N3 不足</span></td></tr>
+    </tbody>
+  </table></div>
+  <p>另有一张<b>反面清单</b>，文献与本项目负结果共同否决、明确不做：
+     生成式序列解码当主识别、像素级切部件、IDS 当放行判据、笔画序列当主表示、
+     大字表直接并进候选池、VLM 进放行、生成／超分复原后再识别。</p>
+</section>
+
+<div class="hr"></div>
+
+<section id="exp">
+  <h2><span class="num">四</span>八次实验</h2>
+  <p class="intro">前三次在本机 GPU（RTX 3080），后五次在云端 CPU。每次都有一条闸，
+     过不了就不换现役——这一轮八次里只有四次过了闸。</p>
+
+  <article class="exp">
+    <header><span class="id">实验 ①</span><h4>零训练重排：拿 r5 的部件袋头给候选换序</h4>
+      <span class="where">本机 GPU · oov 314 条</span><span class="chip hold">不开</span></header>
+    <div class="body">
+      <p>候选出来之后，用「候选字的部件与图像预测的部件一致不一致」给前 m 名重新排序。不用训练。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>配置</th><th class="num">top-1</th><th class="num">top-5</th><th class="num">top-10</th></tr></thead>
+        <tbody>
+          <tr><td>基线</td><td class="num">8.9</td><td class="num">84.7</td><td class="num">91.7</td></tr>
+          <tr><td>部件袋头 m=10 w=2</td><td class="num">25.8</td><td class="num">76.8</td><td class="num">91.7</td></tr>
+          <tr><td>m=30 w=2</td><td class="num">20.7</td><td class="num">65.6</td><td class="num">82.2</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>top-1 涨了近三倍好看，但代价是 top-5 掉 7.9 点。
+        而 top-10 恒等于基线——<b>只重排前 10 名，10 名之外根本不动，这是结构使然不是 bug</b>。
+        5-b 的 KPI 是 top-10（它只出候选、人在候选里点），所以这个开关<b>永远不可能提高 KPI</b>，
+        它只买 top-1、卖 top-5。缺省不开。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ②</span><h4>联训：给主干挂结构头和槽位头一起训（r6）</h4>
+      <span class="where">本机 GPU · 24 分钟</span><span class="chip neg">不换现役</span></header>
+    <div class="body">
+      <p>训练内自报很漂亮：分类 97.9、结构头 99.1、槽位 top-3 98.0。验收是另一回事。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>指标</th><th class="num">闸</th><th class="num">r5 现役</th><th class="num">r6</th><th>判</th></tr></thead>
+        <tbody>
+          <tr><td>unseen 严格 emb top-1</td><td class="num">≥96.9</td><td class="num">96.9</td><td class="num">96.5</td><td>掉 0.4 ✗</td></tr>
+          <tr><td>oov top-1 / top-10</td><td class="num">≥73.2/90.4</td><td class="num">73.2/90.4</td><td class="num">70.4/89.2</td><td>掉 2.8 ✗</td></tr>
+          <tr><td>结构头（合体，类外）</td><td class="num">≥95%</td><td class="num">—</td><td class="num">90.8%</td><td>✗</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>三条线全没过。两个新头各权 0.5 挂在同一个 256 维 embedding 上，
+        把空间往「结构可分」拉，<b>类外泛化就拿来换了类内精度</b>——这与上一代 r4→r5 的教训同构。
+        而结构头训练内 99.1、真类外 90.8，说明头在类表内学的相当一部分是<b>跟着字类走的捷径</b>，
+        不是从笔画看出结构。<br>
+        这次还挖出评测台两个坑：某脚本自抄了一份网络结构导致新模型载不进；
+        另一个脚本的缺省 checkpoint 指向半个月前的旧模型——<b>不带参数跑出来的「r5 基线」量的根本不是 r5</b>。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ③</span><h4>把闲置的三套源流明朝体加进模板库</h4>
+      <span class="where">本机 GPU</span><span class="chip ok">留下</span></header>
+    <div class="body">
+      <p>仓里躺着三套传承字形的明朝体，全仓零引用。加进去只是改一行常量再重建索引。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>模板集</th><th class="num">unseen emb</th><th class="num">HOG</th><th class="num">oov top-1 / top-10</th></tr></thead>
+        <tbody>
+          <tr><td>五个字体档</td><td class="num">96.9</td><td class="num">77.5</td><td class="num">73.2 / 90.4</td></tr>
+          <tr class="win"><td>加三套后（八档）</td><td class="num">97.0</td><td class="num">79.3</td><td class="num">74.5 / 91.7</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>全部持平或涨，留下。HOG 那一路涨最多（+1.8）——多了三种写法的模板，
+        最粗的那路受益最大；emb 只涨 0.1，说明 r5 对模板写法已经不太敏感。
+        原本担心「三套同源字体会把均值拉向同一副骨架」，没有兑现。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ④</span><h4>冻结主干只训头：结构信息到底在不在 embedding 里</h4>
+      <span class="where">云端 CPU · 84,965 条训练样本</span><span class="chip neg">到不了 95</span></header>
+    <div class="body">
+      <p>实验②失败后的正确做法：主干一根毛不动，只在它输出的 256 维向量上训头。
+        这样 oov / unseen 天然不掉，头的准确率单独算。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>做法</th><th class="num">oov 合体结构头</th><th class="num">槽位 top-3</th><th class="num">训练内</th></tr></thead>
+        <tbody>
+          <tr><td>线性探针</td><td class="num">64.4</td><td class="num">73.4</td><td class="num">—</td></tr>
+          <tr><td>MLP 探针（512 隐层）</td><td class="num">87.9</td><td class="num">72.4</td><td class="num">99.7</td></tr>
+          <tr><td>联训主干（实验②）</td><td class="num">90.8</td><td class="num">72.8</td><td class="num">99.1</td></tr>
+          <tr><td>零训练：结构 = 最近字体模板类的结构</td><td class="num">86.3</td><td class="num">—</td><td class="num">—</td></tr>
+          <tr><td>同上，top-10 加权投票</td><td class="num">89.9</td><td class="num">—</td><td class="num">—</td></tr>
+          <tr class="win"><td>MLP 探针 ⊕ 检索投票（λ=0.3）</td><td class="num">90.5</td><td class="num">—</td><td class="num">—</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>三件事。<b>一，结构不是线性可读的</b>——线性头 64.4，MLP 一加就 87.9，
+        信息在、但是非线性的。<b>二，类外有一道 ~90 的天花板</b>，四条路殊途同归（87.9 / 89.9 / 90.5 / 90.8），
+        差别在噪声范围内；冻结主干到不了 95，说明要过 95 得改主干。
+        <b>三，零训练那条 86.3 值得记住</b>——不要任何头，直接拿最近模板类的 IDS 就有 86%，比线性探针还准。<br>
+        槽位头三个版本都是 72–73，与训法无关：它在类表内 97、类外 72，掉的是类外——
+        槽位标签在类表内几乎等于类身份，出了类表就只剩部件本身的视觉证据。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ⑤</span><h4>把 GlyphWiki 的变体形当第六套字体</h4>
+      <span class="where">云端 CPU · 114,222 形 / 39,958 字</span><span class="chip hold">缺省关</span></header>
+    <div class="body">
+      <p>先做对照：拿 2,000 个已收字的标准形渲染去检索自身类，top-1 90.0%——
+        <b>KAGE 明朝体的风格 r5 认得</b>，所以后面的差距是形不是风格。再看变体形检索关联正字只有 42.3%，
+        说明它们确实是长得不一样的形，不是标准形的复制品。那就有救类外字的可能。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>模板</th><th class="num">oov top-1</th><th class="num">top-10</th><th class="num">user 源 top-1</th></tr></thead>
+        <tbody>
+          <tr><td>字体均值（现状）</td><td class="num">75.8</td><td class="num">95.9</td><td class="num">65.1</td></tr>
+          <tr><td>只用变体形</td><td class="num">64.3</td><td class="num">68.8</td><td class="num">61.5</td></tr>
+          <tr class="win"><td>max(字体均值, 变体形)</td><td class="num">81.5</td><td class="num">95.9</td><td class="num">73.4</td></tr>
+          <tr><td>mean(把变体混进均值)</td><td class="num">66.2</td><td class="num">94.6</td><td class="num">58.7</td></tr>
+        </tbody>
+      </table></div>
+      <p>预实验在 4,792 字的小字表上 top-1 涨 5.7、带坏 0 条，救回的字都是「刻本写的正是那个变体，字体里没有」。
+        但换到生产用的 7 万字表，涨幅缩成 3.2，而且 unseen 的 top-10 从 100.0 掉到 99.8（3 条）。</p>
+      <p class="read"><b>判读：</b>闸是「两边都不掉」，差 0.2 没过，<b>缺省关</b>，代码与目录都留着。
+        两条口径教训写死了：<b>必须 max 池化、单独一档</b>，混进均值反而掉 9.6（变体离标准形太远，会把均值拉偏）；
+        以及<b>大字表越大越吵</b>——变体形在大字表里也会给别的字投票，5.7 缩成 3.2 就是这么来的。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ⑥</span><h4>固定退化协议：到底什么样的坏图才打垮它</h4>
+      <span class="where">云端 CPU · oov 314 条</span><span class="chip ok">已成为常规评测</span></header>
+    <div class="body">
+      <p>同一批真刻例加一组写死的扰动，分因素报各路稳定性。以后每个模型改动都在这张表上比。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>扰动</th><th class="num">emb@1</th><th class="num">emb@10</th><th class="num">结构（最近类）</th></tr></thead>
+        <tbody>
+          <tr class="win"><td>干净</td><td class="num">75.8</td><td class="num">95.9</td><td class="num">98.4</td></tr>
+          <tr><td>笔画侵蚀 / 膨胀</td><td class="num">77.4 / 74.5</td><td class="num">95.9</td><td class="num">98.4 / 97.7</td></tr>
+          <tr><td>横抹白 / 竖抹白 / 贴边 3px</td><td class="num">75.5 / 75.8 / 75.8</td><td class="num">95.9</td><td class="num">97.7 / 98.4 / 97.7</td></tr>
+          <tr><td>模糊 σ0.8 / σ1.5</td><td class="num">74.8 / 72.6</td><td class="num">95.9 / 94.9</td><td class="num">98.4 / 97.7</td></tr>
+          <tr><td>钤印状圆遮挡</td><td class="num">60.2</td><td class="num">94.3</td><td class="num">92.5</td></tr>
+          <tr><td>遮挡 20%</td><td class="num">38.2</td><td class="num">83.1</td><td class="num">83.3</td></tr>
+          <tr><td>模糊 σ2.5</td><td class="num">21.3</td><td class="num">52.5</td><td class="num">66.7</td></tr>
+          <tr><td>遮挡 30%</td><td class="num">15.3</td><td class="num">50.3</td><td class="num">61.8</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>对<b>笔画粗细、断墨、贴边几乎免疫</b>——训练时的增广就是这些。
+        真正打垮它的只有两样：软到看不清笔画（σ2.5）和遮掉两成以上。
+        而且塌的时候<b>top-1 先崩、top-10 还撑着</b>（38.2 对 83.1）——这正是「只出候选、
+        top-10 才是 KPI」这条纪律的实测依据。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ⑦</span><h4>结构金标：让人裁 300 张，结果是我出题出歪了</h4>
+      <span class="where">云端 + 人裁 56 条</span><span class="chip ok">天花板坐实</span></header>
+    <div class="body">
+      <p>本来的设计：抽 300 张真刻例卡片，每张显示字块和 IDS 表给的拆法，请人裁「按图上刻的写法这个拆法对不对」，
+        用它把「标签错」从「模型错」里分出来。裁到 46 张时用户问：<b>为什么要我一个个裁？这些字的 IDS 不是已经都有了吗。</b></p>
+      <p>这是对的。<b>只有模型说法 ≠ 表的说法的那些卡，人的裁决才会改变任何结论</b>；
+        模型和表一致的卡，人再看一遍只是在给 IDS 表盖章。于是改成先拿 IDS 表当第一裁判：</p>
+      <div class="scroll"><table>
+        <thead><tr><th>模型预测 vs 表的全部拆法</th><th class="num">oov 200</th><th class="num">unseen 70</th><th class="num">独体 30</th><th class="num">合计</th></tr></thead>
+        <tbody>
+          <tr><td>同主拆法（不用人看）</td><td class="num">179</td><td class="num">68</td><td class="num">30</td><td class="num">277</td></tr>
+          <tr><td>同备选拆法（口径分歧，不用人看）</td><td class="num">2</td><td class="num">1</td><td class="num">0</td><td class="num">3</td></tr>
+          <tr class="win"><td>与表全部拆法都不同 ← 只有这些要人裁</td><td class="num">19</td><td class="num">1</td><td class="num">0</td><td class="num">20</td></tr>
+        </tbody>
+      </table></div>
+      <p>20 张收敛成 15 个字种、一字一张，页面从 259 KB 缩到 30 KB。裁完的结果：<b>模型错 13、模型对 2</b>。
+        那 2 个里，「默」尤其有意思——表写 ⿰黑犬，刻本刻的是「黙」形 ⿱，<b>这才是标签错的真样子：
+        不是表拆错，是刻本用了另一个形</b>。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>真金标下的结构准确率</th><th class="num">对 / n</th><th class="num">准确率</th></tr></thead>
+        <tbody>
+          <tr><td>oov 合体（类外真刻例）</td><td class="num">181 / 200</td><td class="num">90.5%</td></tr>
+          <tr><td>unseen 合体</td><td class="num">68 / 70</td><td class="num">97.1%</td></tr>
+          <tr><td>独体</td><td class="num">30 / 30</td><td class="num">100%</td></tr>
+          <tr class="win"><td>按层权折回总体</td><td class="num">—</td><td class="num">95.9%</td></tr>
+        </tbody>
+      </table></div>
+      <p class="read"><b>判读：</b>「结构头 ≥ 95」这道闸<b>总体上过了、oov 这档没过</b>。
+        更要紧的是：15 个分歧字种里表只错 2 个，<b>标签噪声这个借口排除了</b>——
+        实验④看到的那道 ~90 天花板是真的模型天花板。改主干的触发条件就此坐实。<br>
+        <b>过程教训：</b>出人裁页之前先把「人的答案会改变什么」算清楚。有现成表的东西先拿表当第一裁判，
+        只把机器和表打架的残差交给人。</p>
+    </div>
+  </article>
+
+  <article class="exp">
+    <header><span class="id">实验 ⑧</span><h4>整理本对齐的采信闸：该信整理本，还是该信刻本</h4>
+      <span class="where">云端 CPU · 270 页 / 513 条人裁</span><span class="chip ok">换闸落地</span></header>
+    <div class="body">
+      <p>5-d 把刻本字位对到整理本上，逐字给出「整理本在这一位是什么字」。
+        <code>equal</code> 段全收；<code>replace</code> 段（两边不一样）现在只靠一道<b>长度闸</b>——
+        段长 ≤3 且左右被 equal 夹住。文献综述的 N4 建议把它换成<b>图像代价闸</b>：
+        字块与整理本那个字的模板像不像。</p>
+      <p>为此把两册书的 270 页从头跑到 5-a，枚举出全部 1,910 个等长 replace 位，
+        拿工作区里 513 条用户裁决当真值。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>闸</th><th class="num">采信率</th><th class="num">人裁错采</th><th class="num">漏采</th></tr></thead>
+        <tbody>
+          <tr><td>长度闸（现役）</td><td class="num">97.5%</td><td class="num">19 / 491 = 3.9%</td><td class="num">22 / 494</td></tr>
+          <tr><td>余弦 ≥ 0.5…0.8，各档</td><td class="num">96–100%</td><td class="num">19，一个都分不开</td><td class="num">22</td></tr>
+          <tr><td>gold 在模板表里的名次 ≤1/3/10/30</td><td class="num">59–97%</td><td class="num">最好也只到 4</td><td class="num">227 / 22</td></tr>
+          <tr class="win"><td>长度闸 ∧（异体 ∨ 库 cov &lt; 0.996）</td><td class="num">94.7%</td><td class="num">5 / 476 = 1.1%</td><td class="num">23 / 494</td></tr>
+        </tbody>
+      </table></div>
+      <p><b>图像代价闸整条路是负结果。</b>余弦对均值模板普遍 ≥0.94，错采位的「像整理本字」
+        甚至常常高于「像载体字」，形近字对在全局相似度下分不开——这是本项目 g3g4 那条老负结果的再现。</p>
+      <p>真正能分开的是<b>库证据</b>。19 个错采里 14 个是同一形态：
+        字形库以 cov ≥0.999 认下这一格是 X，而整理本给的既不是 X、也不是 X 的异体。
+        入／人、日／曰、祟／崇、塵／麈、諭／論、艮／良、矩／炬、壁／璧……
+        <b>人裁全部站在刻本这边</b>。这是整理本与刻本的真实差异（版本差或整理本错），
+        不是对齐错位，不该拿整理本盖掉刻本。</p>
+      <p class="read"><b>判读与落地：</b>异体那一档必须放行——巳／已、郎／郞、宮／宫、寬／寛 的库 cov 同样 ≥0.999，
+        但整理本给的是正字，采信没错（人裁 66/66 全对）。于是闸定为
+        <b>库高信度认下 ∧ 与整理本字非异体 → 不采信</b>。错采从 3.9% 降到 1.1%，采信率让出 2.8 点。
+        生产步在两册重跑，拦下 54 位，与评测逐位一致。<br>
+        剩下拦不住的 5 个是乱区里两头都错位的段，载体错、整理本也错、人裁是第三个字，库 cov 只有 0.93–0.95，
+        任何闸都拦不住，留给 Step6 上下文。</p>
+    </div>
+  </article>
+</section>
+
+<div class="hr"></div>
+
+<section id="neg">
+  <h2><span class="num">五</span>负结果台账</h2>
+  <p class="intro">这一轮最值钱的东西。每条都有实测案底，写进了代码模块头或设计稿，
+     为的是后来人（包括我自己）别再走一遍。</p>
+  <div class="neg">
+    <div><h4>图像相似度分不开「整理本错」和「刻本错」</h4>
+      <p>余弦、模板名次、与 top-1 的差，各档都试过，<b>19 个错采一个都分不开</b>。
+        形近字对在任何全局相似度下分布重合——这条早在字形聚类那一轮就有案底，这次在对齐上又撞了一次。</p></div>
+    <div><h4>结构头卡在 ~90 是模型天花板，不是标签噪声</h4>
+      <p>曾以为 IDS 表的口径分歧（⿱/⿸、⿹/⿱、⿳/⿱）是主因。56 条人裁给出答案：
+        <b>15 个分歧字种里表只错 2 个</b>。四条不同路线都停在 87.9–90.8，差别在噪声内。</p></div>
+    <div><h4>只重排前 m 名，永远提不动 top-10</h4>
+      <p>m=10 时 top-10 与基线恒等（结构使然），m=30 时 top-10 反而掉。
+        而 5-b 的 KPI 恰恰是 top-10。<b>这个开关只买 top-1、卖 top-5</b>，两代头（部件袋、槽位）形状完全一样。</p></div>
+    <div><h4>多头联训拿类外泛化换类内精度</h4>
+      <p>两个新头挂在同一个 256 维 embedding 上，把空间往「结构可分」拉，oov 掉 2.8、unseen 掉 0.4。
+        <b>与上一代 r4→r5 的教训同构</b>，是同一个机制第二次发作。</p></div>
+    <div><h4>变体形模板必须 max 池化、单独一档</h4>
+      <p>混进均值反而掉 9.6——变体离标准形太远，会把均值拉偏。
+        另外<b>大字表越大越吵</b>：同样的方法，4,792 字表上 +5.7，70,304 字表上只剩 +3.2。</p></div>
+    <div><h4>现有人裁流里造不出「未收字子集」</h4>
+      <p>两本书 7,769 条人裁事件全查过，<b>shape 字段全是单个 CJK 码位，一个未收字都没有</b>；
+        字形库 2,664 个字种的 IDS 字段全空。能用的替代靶子是四库那 158 条异体分歧（巳/已 80、㫖/旨 27……）。</p></div>
+    <div><h4>附：两个工程教训（不是负结果，是流程）</h4>
+      <p><b>评测脚本的缺省 checkpoint 要核</b>——一个指向半个月前旧模型的缺省值，让一次判断错了两小时。
+        <b>出人裁页之前先算「人的答案会改变什么」</b>——300 张缩成 10 张就是这条的代价。</p></div>
+  </div>
+</section>
+
+<div class="hr"></div>
+
+<section id="next">
+  <h2><span class="num">六</span>下一步</h2>
+  <div class="next">
+    <article class="go"><h4>本机 · 多原型字典（N10 / T11）</h4>
+      <p>每个字的模板 = 字体均值 ⊕ 真刻例按聚类的 k≤3 个原型。没有触发条件、随时能做，
+        而且是直接抬识别 top-1 的路，比继续磨结构头有用。</p></article>
+    <article><h4>改主干（T9）先押后</h4>
+      <p>触发条件已坐实，但结构头的<b>唯一下游消费者是重排</b>，而重排卖 top-5 的形状两代都没变。
+        就算结构头到 95，眼下也没人吃这个红利。等有了真正的消费者再谈。</p></article>
+    <article><h4>未收字模板的验收靶子换一个</h4>
+      <p>「未收字子集」造不出来，GlyphWiki 那 0.2 点的闸就一直卡着。
+        改用四库 158 条异体分歧当靶，或者给变体形模板设「必须赢字体均值一个余量」并在 seen_test 上标定。</p></article>
+    <article><h4>任务卡要搬家</h4>
+      <p>规划与回执现在只在引擎仓的 <code>.claude/doc/task_card_2026-09-22_next_plan.md</code>，
+        overview 仓这个会话够不着，要人工搬到 <code>5b-生僻字候选/</code> 下。</p></article>
+  </div>
+
+  <div class="foot">
+    正本在仓里：设计稿 <code>structure_aware_recognition_design.md</code> §13 记八次实测的命令与数字表；
+    文献综述 <code>ccr_rare_char_literature_review.md</code> 与论文清单 <code>lit/ccr_rare_char_papers.tsv</code>（390 行）；
+    未收字调研 <code>unencoded_char_sources_survey.md</code>；规划与回执 <code>task_card_2026-09-22_next_plan.md</code>。
+    人裁结果 <code>artifacts/struct_gold_verdicts.jsonl</code>（56 条）。本页只是它们的导览。
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) map[el.id] = a;
+  });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      links.forEach(function(a){ a.removeAttribute('aria-current'); });
+      if (map[e.target.id]) map[e.target.id].setAttribute('aria-current','true');
+    });
+  }, {rootMargin: '-72px 0px -62% 0px'});
+  Object.keys(map).forEach(function(id){ io.observe(document.getElementById(id)); });
+})();
+</script>
