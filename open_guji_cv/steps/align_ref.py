@@ -105,27 +105,23 @@ def book_corpus(book: str) -> str:
 
 
 def _with_book_corpus(p, ctx):
-    """参数没显式指定整理本时，换成**这册书自己的**（`references[0].file`）。
+    """**已搬到 `core.step`**（2026-09-21），这里只转发，保持旧调用点可用。
+
+    搬家的理由：原先它只在 `run_page` 里调，而 `Engine.fingerprint()` 拿到的是
+    **没换过语料**的参数——两边算出不同的 `corpus_fingerprint`，于是 `align_ref` /
+    `context_decide` 永远判过期、跑多少次都洗不掉。现在换语料发生在
+    `RunContext.params_for()`，指纹与 run_page 必然拿到同一份。
 
     `AlignRefParams.corpus` 的缺省值是 `DEFAULT_CORPUS`（四庫總目那份语料），
     而参数是在**不知道是哪本书**的时候构造的（`StepSpec.params()` 不带 ctx），
     于是换一本书就拿总目语料去锚它——北行日錄实测 `book_corpus()` 指向
     `beixingrilu_jiaoduiben.txt`，而缺省指向工作区里根本不存在的
-    `zongmu_wenyuange_wikisource.txt`。`book_corpus()` 2026-09-15 就写好了，
-    但只有控制台的生僻字面板在用，两个 Step 都没接上。
+    `zongmu_wenyuange_wikisource.txt`。
 
     **只在「用的还是缺省值」时替换**：显式传了 `--params` 的照用不误。
-    指纹跟着 `corpus`/`corpus_fingerprint` 走，所以换语料产物会自动 stale。
     """
-    if p.corpus != DEFAULT_CORPUS:
-        return p
-    want = book_corpus(ctx.book.id)
-    if want == p.corpus:
-        return p
-    # ⚠️ 必须**重新构造**，不能 `model_copy`：指纹是在 `model_post_init` 里填的，
-    # 而 `model_copy` 不触发它——那样换了语料指纹却还是旧的（或空的），
-    # 产物不会 stale，等于换语料不生效。
-    return type(p)(**{**p.model_dump(), "corpus": want, "corpus_fingerprint": ""})
+    from ..core.step import _with_book_corpus as _impl
+    return _impl(p, ctx)
 
 
 def slots_from_decision(dec, match=None, ocr=None
