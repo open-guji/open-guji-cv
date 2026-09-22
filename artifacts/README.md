@@ -18,6 +18,12 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
+## 研究台账（本轮调研与实测的导览页，2026-09-22）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **生僻字识别研究台账**（管线现状 / 两份调研 / 十六条想法 / 八次实验 / 六条负结果 / 下一步）| https://claude.ai/artifact/3YN5FD5LJvW8hHRHpiopfU | [research_dossier_2026-09-22.html](research_dossier_2026-09-22.html) | 纯静态页，**不是生成的**：内容的正本是设计稿 `structure_aware_recognition_design.md` §13、两份调研与任务卡；数字变了手改这份快照再**重发布到同一 URL** |
+
 ## 结构金标（Step5 结构感知，M2 / 任务卡 2026-09-22 T3）
 
 | 页面 | URL | 快照/真源 | 再生 |
