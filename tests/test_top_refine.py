@@ -9,8 +9,9 @@ bxgb p48/p54：Step1 的上版框直线落在首行字的顶边而不是框上�
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from open_guji_cv.utils.border_geometry import VLine
+from open_guji_cv.utils.border_geometry import HLine, VLine, detect_outer_borders
 from open_guji_cv.utils.column_projection import ColumnWindow, refine_top_by_frame
 
 W, H = 300, 400
@@ -353,3 +354,86 @@ def test_fallback_window_reaches_frames_closer_than_the_book_median():
     assert out["bottom_outer_offset"] is not None, "册基准 27、实际 11 —— 兜底要够得着"
     assert out["bottom_outer_estimated"] is True
     assert abs(abs(out["bottom_outer_offset"]) - 11) <= 6, out["bottom_outer_offset"]
+
+
+# ---------------------------------------------------- 书级版式声明 frame_layers
+
+def _糊死页(H=400, W=1000):
+    """内框线 + 紧贴着的一坨污，糊成一根 26px 粗条——老逻辑会判成 single。
+
+    四庫總目实测：判 single 的「粗条」中位 26px，而真内框线只有 0~8px。
+    那不是單邊框，是内外框之间的空隙被污连成了片。
+    """
+    mask = np.zeros((H, W), np.uint8)
+    mask[100:103, 100:900] = 255            # 上内框线
+    mask[300:303, 100:900] = 255            # 下内框线
+    mask[303:329, 100:900] = 255            # 紧贴着往外的一坨污（26px），外面是白纸
+    for x in (150, 850):                    # 竖界行
+        mask[100:330, x:x + 3] = 255
+    return mask
+
+
+def _verts(H=400):
+    return [VLine(x_at_top=float(x), slope=0.0) for x in (850, 150)]
+
+
+def test_declared_two_layers_rejects_single():
+    """声明 2 层的边不许判 single——版式是全书一致的，这页只是没看清。"""
+    mask = _糊死页()
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=302.0, slope=0.0, kind="bottom")
+
+    old = detect_outer_borders(mask, top, bot, _verts(), 1000, 400)
+    assert old["bottom_frame_kind"] == "single", "前提：老逻辑确实把这坨污判成單邊框"
+
+    new = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                               book_gap={"bottom": 27.0},
+                               frame_layers={"top": 2, "bottom": 2})
+    assert new["bottom_frame_kind"] == "double", "声明 2 层就不该判 single"
+    assert new["bottom_outer_offset"] is not None
+
+
+def test_declared_two_layers_falls_back_when_no_ink():
+    """一点墨都没有也要落位：外框存在，只是这页印不清。"""
+    mask = np.zeros((400, 1000), np.uint8)
+    mask[100:103, 100:900] = 255
+    mask[300:303, 100:900] = 255            # 只有内框线，外面全白
+    for x in (150, 850):
+        mask[100:330, x:x + 3] = 255
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=302.0, slope=0.0, kind="bottom")
+
+    old = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                               book_gap={"bottom": 27.0})
+    assert old["bottom_outer_offset"] is None, "前提：老逻辑无墨就报 None"
+
+    new = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                               book_gap={"bottom": 27.0},
+                               frame_layers={"bottom": 2})
+    assert new["bottom_outer_estimated"] is True
+    # 册基准 27 + 外让 10，且不得超出纸面
+    assert new["bottom_outer_offset"] == pytest.approx(37.0, abs=0.5)
+
+
+def test_estimate_never_cuts_inward():
+    """估位只会离字更远：偏移量始终 >= 册基准，不可能往内收。"""
+    mask = _糊死页()
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=302.0, slope=0.0, kind="bottom")
+    out = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                               book_gap={"bottom": 27.0},
+                               frame_layers={"bottom": 2})
+    # 外框永远在内框**之外**（offset 朝外为正向），不可能往内收去切字
+    assert abs(out["bottom_outer_offset"]) > 0
+
+
+def test_undeclared_keeps_old_behaviour():
+    """不声明层数时行为逐位不变——老书的产物不能因为加了字段就变。"""
+    mask = _糊死页()
+    top = HLine(y_at_right=100.0, slope=0.0, kind="top")
+    bot = HLine(y_at_right=302.0, slope=0.0, kind="bottom")
+    a = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                             book_gap={"bottom": 27.0})
+    b = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
+                             book_gap={"bottom": 27.0}, frame_layers={})
+    assert a == b

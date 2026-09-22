@@ -47,7 +47,8 @@ class BorderDetectStep(Step):
         # 那种静默错误比一次重跑贵得多（见「指纹不认册配置」那条教训）。
         book_deps=("leaf_layout", "expected_cols", "bottom_gap",
                    "top_band_frac", "bottom_band_frac", "column_grid", "col_pitch",
-                   "frame_height", "vline_polyline", "outer_shift", "outer_gap"),
+                   "frame_height", "vline_polyline", "outer_shift", "outer_gap",
+                   "frame_layers"),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
         # `scripts/parallel_border_detect.py` 已验证页级并行与串行 sha256 逐位一致
         # （2026-09-17，见 .claude/doc/segmentation_v2_pipeline.md「Step 1 性能」）。
@@ -70,6 +71,7 @@ class BorderDetectStep(Step):
                              frame_height=ctx.book.frame_height,
                              outer_shift=ctx.book.outer_shift,
                              book_outer_gap=ctx.book.outer_gap,
+                             frame_layers=ctx.book.frame_layers,
                              vline_polyline=ctx.book.vline_polyline)
         borders = Borders.from_result(res, cols)
 

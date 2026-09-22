@@ -529,7 +529,8 @@ def _paper_beyond(binm: np.ndarray, base: np.ndarray, xs: np.ndarray,
 def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                           verticals: list[VLine], width: int, height: int,
                           outer_shift: dict | None = None,
-                          book_gap: dict | None = None) -> dict:
+                          book_gap: dict | None = None,
+                          frame_layers: dict | None = None) -> dict:
     """上下版框的外框偏移 + 纸边侧竖直外框偏移。
 
     坐标口径是**外延**（朝外那一侧的半高边缘），跟 `detect_head_raise()` 的
@@ -584,6 +585,9 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     if len(xs) > 10:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
             base = np.array([line.y_at((width - 1) - x) for x in xs])
+            # 书级声明了这条边有 2 层，就不许判 single——版式是全书一致的，
+            # 这一页看着像一根粗条，是内外框之间被污糊连成了片（见 BookSpec.frame_layers）。
+            declared = (frame_layers or {}).get(kind)
             # 先判單邊框：从内框线起往外连续的粗墨。是粗条就不找第二条了。
             run0, start0 = 0, None
             for o in range(0, OUTER_GAP_MAX + 1):
@@ -606,7 +610,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                     ok = (yy >= 0) & (yy < height)
                     v = binm[yy[ok], xs[ok]].mean() if ok.any() else 0.0
                     second = max(second, float(v))
-                if second < OUTER_INK_MIN:
+                if second < OUTER_INK_MIN and declared != 2:
                     out[f"{kind}_frame_kind"] = "single"
                     out[f"{kind}_bar_extent"] = float(start0 + run0)
                     continue
@@ -638,7 +642,12 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
     # 书级先验兜底：该有外框却没探到的边，在册基准邻域找弱一档的墨（见 OUTER_INK_FALLBACK）
     if book_gap:
         for kind, line, sign in (("top", top, -1.0), ("bottom", bottom, 1.0)):
-            if out[f"{kind}_outer_offset"] is not None or out[f"{kind}_frame_kind"] == "single":
+            declared = (frame_layers or {}).get(kind)
+            if out[f"{kind}_outer_offset"] is not None:
+                continue
+            # 没声明层数时保持老行为：判了 single 就不再兜底。
+            # 声明 2 层的边不会走到这里判 single（上面拦了），继续兜底。
+            if declared != 2 and out[f"{kind}_frame_kind"] == "single":
                 continue
             g = book_gap.get(kind)
             if g is None:
@@ -653,11 +662,26 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                 v = float(binm[yy[ok], xs[ok]].mean()) if ok.any() else 0.0
                 if v >= OUTER_INK_FALLBACK and (best is None or v > best[1]):
                     best = (float(o), v)
+            if best is not None and _paper_beyond(
+                    binm, base, xs, best[0] * sign, sign, height) > OUTER_PAPER_MAX:
+                best = None        # 条外面还是墨 => 不是最外层，当没找着
             if best is None:
+                if declared != 2:
+                    continue
+                # 声明了 2 层却一点墨都没看见：外框仍然**存在**，只是这一页
+                # 印不清/糊了/磨没了。按册基准硬落位——位置未必准，但往外让过
+                # （OUTER_ESTIMATE_SLACK）保证不会切到字。
+                off = g + OUTER_ESTIMATE_SLACK
+            else:
+                off = best[0]      # 见到墨了就是实测位置，不外让
+            off = min(float(off), float(OUTER_GAP_MAX))
+            # 让出纸面就退回纸边内侧，别把框画到图像外头
+            room = (float(base.min()) if sign < 0
+                    else float(height - 1 - base.max()))
+            off = min(off, max(0.0, room - 1.0))
+            if off <= 0:
                 continue
-            if _paper_beyond(binm, base, xs, best[0] * sign, sign, height) > OUTER_PAPER_MAX:
-                continue
-            out[f"{kind}_outer_offset"] = best[0] * sign
+            out[f"{kind}_outer_offset"] = off * sign
             out[f"{kind}_frame_kind"] = "double"
             out[f"{kind}_outer_estimated"] = True
     return out
@@ -1317,6 +1341,20 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
 #: 所以闸1 **不**把 estimated 当作「探到外框」——`outer_frame_missing` 照旧 flag；
 #: 下游要用这个位置（比如裁图留边）可以取，要严格统计就按 `*_outer_estimated` 滤掉。
 OUTER_INK_FALLBACK = 0.18
+#: 按册基准估外框位置时，再往**外**让这么多像素（2026-09-22）。
+#: 估位取册中位，真外框可能比它更外：实测 `真间距 - 册中位` 的 p95 是
+#: 上 8.3/6.5、下 5.3/6.0，max 到 24.6/32.9（vol02/vol01）。让 p95 这一档
+#: 就能盖住 95% 的页。
+#:
+#: **让多了几乎没有代价**：外框在内框**之外**，文字在**之内**——往外让只会
+#: 离字更远，不可能切字。唯一的边界是让出纸面，而内框线到图像边缘还有
+#: 262~324px（两册 n=120 实测 min=262），让 10px 用掉不到 4%。
+#: 所以取两册四条边 p95 的上界 8.3 向上取整 = 9，再留 1px 余量。
+#:
+#: ⚠️ **只加在「一点墨都没见到、纯按册基准猜」的位置上**。弱档兜底找到了墨
+#: 的（`OUTER_INK_FALLBACK`）是实测，外让会把探到的 11px 推成 22px——
+#: 见 `test_fallback_window_reaches_frames_closer_than_the_book_median`。
+OUTER_ESTIMATE_SLACK = 10.0
 #: 兜底窗口：`[OUTER_GAP_MIN, 册基准 + OUTER_PRIOR_FALLBACK_WIN]`。
 #: **下界不跟着册基准收**（2026-09-22）：两册 192 条报 None 的边逐条量剖面，58 条是
 #: 「离内框有一段白、然后一个独立的墨峰、峰后回落」——**真外框**，只是这一页的内外间距
@@ -1433,7 +1471,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     frame_height: float | None = None,
                     vline_polyline: bool = True,
                     outer_shift: dict | None = None,
-                    book_outer_gap: dict | None = None) -> BorderDetectionResult:
+                    book_outer_gap: dict | None = None,
+                    frame_layers: dict | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1532,7 +1571,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         verticals, vseg = conv, 3
     head_raise = detect_head_raise(mask, top, verticals, w)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
-                                 outer_shift=outer_shift, book_gap=book_outer_gap)
+                                 outer_shift=outer_shift, book_gap=book_outer_gap,
+                                 frame_layers=frame_layers)
     return BorderDetectionResult(width=w, height=h, top=top, bottom=bottom,
                                   verticals=verticals, head_raise=head_raise,
                                   vline_segments=vseg, bend_w80_med=w80_med,
