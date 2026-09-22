@@ -38,6 +38,7 @@ def main() -> int:
     ap.add_argument("--with-hog", action="store_true")
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--json", default=None, help="结果写到这个文件（对比历次用）")
+    ap.add_argument("--no-gw", action="store_true", help="关掉 GlyphWiki 变体形模板档（cnn_candidates.GW_ENABLED），做对照")
     a = ap.parse_args()
 
     import cv2
@@ -57,7 +58,12 @@ def main() -> int:
     cs = base_charset(a.charset)
     print(f"集 {len(G)} 条 / {len(set(G))} 字种；字表 {a.charset} {len(cs)} 字")
 
+    if a.no_gw:
+        import open_guji_cv.clustering.cnn_candidates as _cc
+        _cc.GW_ENABLED = False
     cnn = CnnCandidates(a.ckpt or str(DEFAULT_CKPT))
+    from open_guji_cv.clustering.cnn_candidates import GW_CATALOG, GW_ENABLED
+    print(f"GlyphWiki 变体形模板档：{'开' if (GW_ENABLED and GW_CATALOG.exists()) else '关/缺席'}（{GW_CATALOG}）", flush=True)
     cnn._ensure()
     t0 = time.time()
     cls = [[c for c, _ in r] for r in cnn.topk_batch(imgs, cs, k=a.k)]
