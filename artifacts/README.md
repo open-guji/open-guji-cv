@@ -22,7 +22,7 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **结构金标裁决台**（300 条真刻例 × IDS 拆法，裁「按图上写法拆法对不对」）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/build_struct_gold_review.py`（读冻结卡片；`--seed-verdicts` 续裁）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
+| **结构金标裁决台**（原 300 条；2026-09-22 起只出**残差 10 张**——模型与 IDS 表全部拆法都不同、字种未裁的，一字种一张）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
 
 ## 边框判读（Step1）
 

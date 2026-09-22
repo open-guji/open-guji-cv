@@ -1,0 +1,3981 @@
+{
+ "lam": 0.3,
+ "probe": "probe_mlp.pt",
+ "emb": "emb_6bf3e6f780bd.npz",
+ "classes": {
+  "同主拆法": 277,
+  "与表全部拆法都不同": 20,
+  "同备选拆法": 3
+ },
+ "rows": [
+  {
+   "id": "oov:bxgb:10:4:9",
+   "char": "迓",
+   "stratum": "oov",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿺",
+   "conf": 0.838,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:17:5:8",
+   "char": "擄",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:32:6:12",
+   "char": "基",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:43:9:13",
+   "char": "愠",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:vol02:167:5:21",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.977,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:22:18:3",
+   "char": "堤",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.946,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:62:6:8",
+   "char": "䟦",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:30:1:8",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.759,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:167:7:7",
+   "char": "𫎇",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:13:9:4",
+   "char": "耽",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:31:6:3",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "slot"
+  },
+  {
+   "id": "oov:vol02:168:4:16",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.95,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:5:19:20",
+   "char": "憩",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.854,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:5:11:3",
+   "char": "㫄",
+   "stratum": "oov",
+   "table": "⿹",
+   "table_alts": [
+    "⿵",
+    "⿹"
+   ],
+   "pred": "⿱",
+   "conf": 0.763,
+   "cls": "与表全部拆法都不同",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:165:6:17",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.976,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:4:16:10",
+   "char": "崷",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:86:9:17",
+   "char": "矩",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.979,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:18:9:18",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:136:7:5",
+   "char": "旌",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.87,
+   "cls": "同主拆法",
+   "verdict": "struct:⿰"
+  },
+  {
+   "id": "oov:v2:bxgb:13:18:17",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:138:5:4",
+   "char": "焯",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:5:8:2",
+   "char": "憩",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿰",
+   "conf": 0.782,
+   "cls": "与表全部拆法都不同",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:16:9:13",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.756,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:7:8:9",
+   "char": "艤",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿸",
+   "conf": 0.487,
+   "cls": "与表全部拆法都不同",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:19:17:15",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.969,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:78:6:10",
+   "char": "棠",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol01:47:7:15",
+   "char": "内",
+   "stratum": "oov",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.784,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:20:16:18",
+   "char": "箏",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:146:4:15",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.759,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:46:3:17",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:20:7:7",
+   "char": "噪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.911,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:29:1:19",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.757,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:142:6:6",
+   "char": "急",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.926,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:bxgb:3:11:14",
+   "char": "餞",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.971,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:19:13:9",
+   "char": "旣",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.942,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:9:6:5",
+   "char": "閘",
+   "stratum": "oov",
+   "table": "⿵",
+   "table_alts": [
+    "⿵"
+   ],
+   "pred": "⿵",
+   "conf": 0.948,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:36:2:12",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.901,
+   "cls": "同主拆法",
+   "verdict": "slot"
+  },
+  {
+   "id": "oov:vol02:168:3:21",
+   "char": "𥁞",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.947,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:32:3:4",
+   "char": "怨",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.856,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:14:7:14",
+   "char": "牌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:bxgb:20:3:7",
+   "char": "褥",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "oov:v2:vol02:112:1:5",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.918,
+   "cls": "同主拆法",
+   "verdict": "slot"
+  },
+  {
+   "id": "oov:vol02:18:6:8",
+   "char": "皙",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.922,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:137:9:10",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:76:2:6",
+   "char": "游",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.868,
+   "cls": "同主拆法",
+   "verdict": "struct:⿲"
+  },
+  {
+   "id": "oov:bxgb:6:1:15",
+   "char": "釀",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": "ok"
+  },
+  {
+   "id": "gb:vol01:21:7:20",
+   "char": "托",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:16:15",
+   "char": "塔",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:54:9:6",
+   "char": "蒂",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.91,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:146:6:6",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:v2:vol01:21:3:20",
+   "char": "巳",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.757,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:17:4",
+   "char": "瓶",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.969,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:156:9:19",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.745,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:56:7:13",
+   "char": "讜",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.948,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:11:20",
+   "char": "㫄",
+   "stratum": "oov",
+   "table": "⿹",
+   "table_alts": [
+    "⿵",
+    "⿹"
+   ],
+   "pred": "⿱",
+   "conf": 0.331,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:21:4:1",
+   "char": "服",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:12:8",
+   "char": "壕",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.968,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:6:13:13",
+   "char": "憩",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.671,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:51:4:11",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:4:11:13",
+   "char": "㫄",
+   "stratum": "oov",
+   "table": "⿹",
+   "table_alts": [
+    "⿵",
+    "⿹"
+   ],
+   "pred": "⿸",
+   "conf": 0.663,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:142:3:9",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.753,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:8:14",
+   "char": "繂",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:22:15:5",
+   "char": "琵",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿰",
+   "conf": 0.538,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:24:8:21",
+   "char": "内",
+   "stratum": "oov",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.758,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:18:20",
+   "char": "酋",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.892,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:150:2:10",
+   "char": "諫",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:31:6:3",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:153:2:3",
+   "char": "逃",
+   "stratum": "unseen",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿺",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol01:69:8:8",
+   "char": "𲄳",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿺"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:12:19:3",
+   "char": "戸",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿸",
+   "conf": 0.731,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:40:7:2",
+   "char": "欺",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol01:71:7:15",
+   "char": "宮",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.951,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:46:7:21",
+   "char": "𢑱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.915,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:66:7:8",
+   "char": "䟦",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:3:11:14",
+   "char": "餞",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.971,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:31:8:15",
+   "char": "醖",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:14:2",
+   "char": "餅",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:77:5:5",
+   "char": "田",
+   "stratum": "unseen",
+   "table": "⿴",
+   "table_alts": [
+    "⿴"
+   ],
+   "pred": "⿴",
+   "conf": 0.79,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:36:9:8",
+   "char": "黎",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.929,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:11:16:6",
+   "char": "閘",
+   "stratum": "oov",
+   "table": "⿵",
+   "table_alts": [
+    "⿵"
+   ],
+   "pred": "⿵",
+   "conf": 0.946,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:15:10",
+   "char": "僃",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:15:1:10",
+   "char": "鐶",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.941,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:5:9:7",
+   "char": "輩",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:20:12:12",
+   "char": "𤓎",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.941,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:26:9:19",
+   "char": "陋",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:52:8:14",
+   "char": "裹",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿴"
+   ],
+   "pred": "⿴",
+   "conf": 0.786,
+   "cls": "同备选拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:168:5:16",
+   "char": "𡚁",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:2:7",
+   "char": "泫",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:43:9:13",
+   "char": "愠",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:146:8:13b",
+   "char": "亨",
+   "stratum": "unseen",
+   "table": "⿳",
+   "table_alts": [
+    "⿳"
+   ],
+   "pred": "⿳",
+   "conf": 0.848,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:6:2:2",
+   "char": "店",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.916,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:19:4",
+   "char": "糧",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.971,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:6:1:9",
+   "char": "醪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:29:5:15",
+   "char": "又",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.756,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:150:6:13",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.763,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:46:7:21",
+   "char": "𢑱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.915,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:29:8:7",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.755,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:151:3:16",
+   "char": "隙",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:4:3:17",
+   "char": "罋",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:24:6:21",
+   "char": "㸃",
+   "stratum": "oov",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿰",
+   "conf": 0.691,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:18:6:6",
+   "char": "皙",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.926,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:42:1:15",
+   "char": "𫝑",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:112:1:5",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.918,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:33:1:8",
+   "char": "禎",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:55:7:11",
+   "char": "猪",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.949,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:36:9:4",
+   "char": "又",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.756,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:16:3:12",
+   "char": "𠀉",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿷"
+   ],
+   "pred": "⿱",
+   "conf": 0.779,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:3:9",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.62,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:6:10",
+   "char": "座",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿱",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 0.459,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:20:12:14",
+   "char": "醎",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:153:8:5",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿻",
+   "conf": 0.874,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:80:4:16",
+   "char": "看",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.794,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:137:5:12",
+   "char": "强",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:11:13",
+   "char": "㫄",
+   "stratum": "oov",
+   "table": "⿹",
+   "table_alts": [
+    "⿵",
+    "⿹"
+   ],
+   "pred": "⿸",
+   "conf": 0.663,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:22:12:21",
+   "char": "堤",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.972,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:80:3:12",
+   "char": "積",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:3:4:5",
+   "char": "覿",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.995,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:3:20",
+   "char": "跪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.968,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:165:9:3",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:14:6:11",
+   "char": "皁",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿻"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:5:6:6",
+   "char": "鑱",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:150:4:12",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.759,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:80:7:1",
+   "char": "旬",
+   "stratum": "unseen",
+   "table": "⿹",
+   "table_alts": [
+    "⿹"
+   ],
+   "pred": "⿹",
+   "conf": 0.847,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:51:7:6",
+   "char": "羲",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.849,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:138:3:15",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.868,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:6:1:9",
+   "char": "醪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:24:7:16",
+   "char": "内",
+   "stratum": "oov",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.758,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:39:3:18",
+   "char": "斟",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.977,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:16:17:17",
+   "char": "𠀉",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿷"
+   ],
+   "pred": "⿷",
+   "conf": 0.493,
+   "cls": "同备选拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:14:6:11",
+   "char": "皁",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿻"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:21:1:7",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:13:18:17",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:28:8:15",
+   "char": "遍",
+   "stratum": "unseen",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿺",
+   "conf": 0.848,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:14:6:7",
+   "char": "塢",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.968,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:56:1:9",
+   "char": "母",
+   "stratum": "unseen",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.827,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:9:1",
+   "char": "櫓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.889,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:156:9:14",
+   "char": "孚",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.976,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:165:6:17",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:66:2:19",
+   "char": "䟦",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:13:1:9",
+   "char": "戸",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿸",
+   "conf": 0.749,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:16:15:17",
+   "char": "逖",
+   "stratum": "oov",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿰",
+   "conf": 0.718,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:15:17:19",
+   "char": "圮",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.963,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:142:4:17",
+   "char": "寺",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.952,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:165:9:3",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.976,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:10:19:16",
+   "char": "狼",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.961,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:19:3:9",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.62,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:13:19",
+   "char": "肚",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:37:5:20",
+   "char": "氷",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.793,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:167:8:7",
+   "char": "𫎇",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.947,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:12:17",
+   "char": "瀨",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:v2:vol01:70:7:11",
+   "char": "才",
+   "stratum": "unseen",
+   "table": "⿹",
+   "table_alts": [
+    "⿹",
+    "⿻"
+   ],
+   "pred": "⿹",
+   "conf": 0.77,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:45:3:7",
+   "char": "革",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.969,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:80:4:3",
+   "char": "皮",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.87,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:3:13:11",
+   "char": "别",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.949,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:5:15:10",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.908,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:14:18",
+   "char": "餅",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.961,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:86:1:14",
+   "char": "躬",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.924,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:67:7:3",
+   "char": "叅",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.97,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:9:7:15",
+   "char": "窠",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿻"
+   ],
+   "pred": "⿱",
+   "conf": 0.945,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:146:6:12",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.759,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:59:4:6",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.747,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:6:11",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.842,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:138:3:15",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.916,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:18:19",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.492,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:140:7:19",
+   "char": "洲",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿲"
+   ],
+   "pred": "⿰",
+   "conf": 0.949,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:16:7:6",
+   "char": "淮",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:31:8:15",
+   "char": "醖",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:12:7:14",
+   "char": "踴",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:7:4",
+   "char": "扣",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.971,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:71:7:15",
+   "char": "宮",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.951,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:13:12:15",
+   "char": "撻",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.972,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:10:4:9",
+   "char": "迓",
+   "stratum": "oov",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿺",
+   "conf": 0.838,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:17:6:11",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.842,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:12:9",
+   "char": "塹",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.919,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:9:19",
+   "char": "朶",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿻"
+   ],
+   "pred": "⿱",
+   "conf": 0.956,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:73:7:14",
+   "char": "汰",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.9,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:145:9:6",
+   "char": "熈",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿰",
+   "conf": 0.821,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:2:16",
+   "char": "店",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.833,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:16:19",
+   "char": "宐",
+   "stratum": "oov",
+   "table": "⿳",
+   "table_alts": [
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:11:4:15",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.913,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:3:13:11",
+   "char": "别",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.949,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:8:16",
+   "char": "屹",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.971,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:64:1:9",
+   "char": "虹",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:165:3:7",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.977,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:36:2:12",
+   "char": "歴",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.924,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:82:7:5",
+   "char": "扇",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.801,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:83:4:15",
+   "char": "繕",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.952,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:9:8",
+   "char": "楪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:10:16:14",
+   "char": "㒊",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:1:17",
+   "char": "义",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.698,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:19:13:9",
+   "char": "旣",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.942,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:20:18:1",
+   "char": "椀",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:13:12:15",
+   "char": "撻",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.972,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:41:3:9",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:138:7:16",
+   "char": "餖",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:42:4:18",
+   "char": "别",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:3:16:9",
+   "char": "𤂸",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.943,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:5:15:16",
+   "char": "宮",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:11:2:19",
+   "char": "𨕖",
+   "stratum": "oov",
+   "table": "⿺",
+   "table_alts": [
+    "⿺"
+   ],
+   "pred": "⿺",
+   "conf": 0.946,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:168:4:16",
+   "char": "𣏌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.948,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:142:1:4",
+   "char": "䘮",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:18:15:10",
+   "char": "僃",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:15:7:11",
+   "char": "鬚",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.912,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:3:14",
+   "char": "跪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.957,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:11:5",
+   "char": "蠟",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:9:18",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:18:6:6",
+   "char": "皙",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.925,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:44:2:8",
+   "char": "疇",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.966,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:67:7:3",
+   "char": "叅",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.97,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:155:1:4",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.761,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:v2:vol01:141:1:17",
+   "char": "俞",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.898,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:41:5:19",
+   "char": "讜",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.947,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:7:6",
+   "char": "塔",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.888,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:135:2:12",
+   "char": "槪",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:21:11:7",
+   "char": "墟",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:44:8:13",
+   "char": "昔",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:57:7:20",
+   "char": "𫊫",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:12:15",
+   "char": "豉",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:151:9:13",
+   "char": "赫",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.817,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:3:2:19",
+   "char": "𢰅",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:19:2:7",
+   "char": "泫",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:14:14:6",
+   "char": "𮮄",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿱",
+   "conf": 0.812,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:154:8:6",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:8:13",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:65:2:14",
+   "char": "染",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:16:10",
+   "char": "崷",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:10:8:13",
+   "char": "座",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿱",
+    "⿸"
+   ],
+   "pred": "⿱",
+   "conf": 0.644,
+   "cls": "同备选拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:68:2:3",
+   "char": "棱",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:1:3",
+   "char": "頹",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:15:8:9",
+   "char": "芒",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.84,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:7:18:19",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.492,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:13:16:1",
+   "char": "琉",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:19:7:8",
+   "char": "簍",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:13:13:7",
+   "char": "褥",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:18:9:19",
+   "char": "朶",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿻"
+   ],
+   "pred": "⿱",
+   "conf": 0.956,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:62:6:8",
+   "char": "䟦",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:13:8",
+   "char": "店",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.88,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:18:18:20",
+   "char": "酋",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.892,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:73:4:8",
+   "char": "度",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.926,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:78:7:6",
+   "char": "肅",
+   "stratum": "unseen",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.771,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:140:4:11",
+   "char": "絃",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.949,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:vol02:110:9:13",
+   "char": "㝠",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.926,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:24:8:15",
+   "char": "内",
+   "stratum": "oov",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.78,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:3:17",
+   "char": "罋",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:69:8:8",
+   "char": "𲄳",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿺"
+   ],
+   "pred": "⿰",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:10:1:2",
+   "char": "根",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:14:7:11",
+   "char": "牌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:141:1:16",
+   "char": "俞",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.897,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:57:7:20",
+   "char": "𫊫",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:13:11:18",
+   "char": "訴",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.946,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:66:4:3",
+   "char": "廂",
+   "stratum": "unseen",
+   "table": "⿸",
+   "table_alts": [
+    "⿱",
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.88,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:12:14",
+   "char": "醎",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:141:4:11",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.745,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:5:15:10",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.908,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:69:5:5",
+   "char": "漏",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 0.948,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:5:9:14",
+   "char": "淋",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:12:12:5",
+   "char": "犒",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:20:1:3",
+   "char": "繙",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:22:15:6",
+   "char": "琶",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.887,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:17:15:21",
+   "char": "凋",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:73:1:9",
+   "char": "𬋕",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿰",
+   "conf": 0.762,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:46:8:18",
+   "char": "夙",
+   "stratum": "unseen",
+   "table": "⿵",
+   "table_alts": [
+    "⿵"
+   ],
+   "pred": "⿵",
+   "conf": 0.813,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:33:8:12",
+   "char": "急",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.976,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:86:1:12",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.76,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:15:14:10",
+   "char": "𠊓",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:9:2:11",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.745,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:4:12:16",
+   "char": "湍",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:33:8:17",
+   "char": "又",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.756,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:31:1:13",
+   "char": "脞",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.899,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:16:6:9",
+   "char": "鶩",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:16:18",
+   "char": "箏",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:155:2:18",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.762,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:66:2:19",
+   "char": "䟦",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿸"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:82:3:2",
+   "char": "芸",
+   "stratum": "unseen",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.973,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol02:18:6:8",
+   "char": "皙",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.922,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:14:7:21",
+   "char": "牌",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.974,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:18:16:5",
+   "char": "快",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:145:9:5",
+   "char": "一",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.746,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:17:15",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.969,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:15:16:13",
+   "char": "戸",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿸",
+   "conf": 0.766,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:12:1:9",
+   "char": "誚",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:6:15:2",
+   "char": "店",
+   "stratum": "oov",
+   "table": "⿸",
+   "table_alts": [
+    "⿸"
+   ],
+   "pred": "⿸",
+   "conf": 0.913,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:3:3",
+   "char": "榻",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:19:2:12",
+   "char": "畱",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱",
+    "⿳"
+   ],
+   "pred": "⿱",
+   "conf": 0.905,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:75:4:6",
+   "char": "佛",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:5:8:3",
+   "char": "宮",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.975,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:151:6:14",
+   "char": "又",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.76,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:29:6:17",
+   "char": "狂",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.948,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:18:1",
+   "char": "椀",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:13:1:14",
+   "char": "袋",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.906,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:20:9:4",
+   "char": "柈",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:vol01:33:9:5",
+   "char": "内",
+   "stratum": "oov",
+   "table": "⿻",
+   "table_alts": [
+    "⿻"
+   ],
+   "pred": "⿻",
+   "conf": 0.786,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:4:16",
+   "char": "押",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 1.0,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:66:8:17",
+   "char": "默",
+   "stratum": "unseen",
+   "table": "⿰",
+   "table_alts": [
+    "⿰",
+    "⿺"
+   ],
+   "pred": "⿱",
+   "conf": 0.818,
+   "cls": "与表全部拆法都不同",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:12:4:2",
+   "char": "鋈",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.932,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:20:12:12",
+   "char": "𤓎",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.941,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:9:15:11",
+   "char": "餅",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.972,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:bxgb:7:6:3",
+   "char": "憩",
+   "stratum": "oov",
+   "table": "⿱",
+   "table_alts": [
+    "⿱"
+   ],
+   "pred": "⿱",
+   "conf": 0.681,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "gb:vol01:44:5:5",
+   "char": "人",
+   "stratum": "single",
+   "table": "独体",
+   "table_alts": [
+    "独体"
+   ],
+   "pred": "独体",
+   "conf": 0.756,
+   "cls": "同主拆法",
+   "verdict": null
+  },
+  {
+   "id": "oov:v2:bxgb:17:9:1",
+   "char": "塚",
+   "stratum": "oov",
+   "table": "⿰",
+   "table_alts": [
+    "⿰"
+   ],
+   "pred": "⿰",
+   "conf": 0.944,
+   "cls": "同主拆法",
+   "verdict": null
+  }
+ ],
+ "residual_ids": [
+  "oov:bxgb:22:15:5",
+  "oov:v2:bxgb:12:19:3",
+  "oov:v2:vol01:24:6:21",
+  "oov:bxgb:20:6:10",
+  "oov:bxgb:16:15:17",
+  "oov:v2:vol02:145:9:6",
+  "oov:bxgb:19:16:19",
+  "oov:v2:bxgb:14:14:6",
+  "oov:v2:vol01:73:1:9",
+  "gb:vol01:66:8:17"
+ ],
+ "residual_also": {
+  "oov:bxgb:22:15:5": [],
+  "oov:v2:bxgb:12:19:3": [
+   "oov:v2:bxgb:13:1:9",
+   "oov:v2:bxgb:15:16:13"
+  ],
+  "oov:v2:vol01:24:6:21": [],
+  "oov:bxgb:20:6:10": [],
+  "oov:bxgb:16:15:17": [],
+  "oov:v2:vol02:145:9:6": [],
+  "oov:bxgb:19:16:19": [],
+  "oov:v2:bxgb:14:14:6": [],
+  "oov:v2:vol01:73:1:9": [],
+  "gb:vol01:66:8:17": []
+ }
+}

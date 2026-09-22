@@ -115,6 +115,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(REPO / "artifacts/struct_gold_review.html"))
     ap.add_argument("--seed-verdicts", default=None, help="上一轮收回的 verdicts.jsonl，续裁")
+    ap.add_argument("--residual", default=None,
+                    help="scripts/struct_gold_residual.py 的输出：只出「模型与表全部拆法都不同、字种没裁过」的卡，每字种一张")
     a = ap.parse_args()
     from _review_shell import render  # noqa: E402
     from open_guji_cv.clustering.normalize import normalize_patch
@@ -128,6 +130,12 @@ def main() -> None:
         cards = sample_cards()
         CARDS.write_text("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in cards), encoding="utf-8")
         print(f"抽样 {len(cards)} 张 → {CARDS}")
+    residual_also: dict[str, list[str]] = {}
+    if a.residual:
+        res = json.loads(Path(a.residual).read_text(encoding="utf-8"))
+        keep = set(res["residual_ids"]); residual_also = res.get("residual_also", {})
+        cards = [c for c in cards if c["id"] in keep]
+        print(f"残差模式：{len(cards)} 张（模型与表全部拆法都不同、字种未裁）")
     imgs, rows = {}, []
     for c in cards:
         im = cv2.imread(c["png"], cv2.IMREAD_GRAYSCALE)
@@ -135,7 +143,10 @@ def main() -> None:
             continue
         g = normalize_patch(im).astype(np.uint8) if c["norm"] else (im > 127).astype(np.uint8)
         imgs["g:" + c["id"]] = thumb(g)
-        rows.append({k: v for k, v in c.items() if k not in ("png", "norm")})
+        r = {k: v for k, v in c.items() if k not in ("png", "norm")}
+        if c["id"] in residual_also:
+            r["also"] = residual_also[c["id"]]          # 同字种的其他卡，裁决随这张
+        rows.append(r)
     print(Counter(r["stratum"] for r in rows), Counter(r["top"] for r in rows).most_common(6))
 
     verdicts = {}
@@ -181,7 +192,7 @@ const BODY = `
 <div class="wrap">
   <details class="intro" id="intro" open>
     <summary>怎么裁</summary>
-    <p>上面是刻本字块，下面是 IDS 表给这个字的拆法（顶层结构 + 各槽位部件）。
+    __RESIDUAL_NOTE__<p>上面是刻本字块，下面是 IDS 表给这个字的拆法（顶层结构 + 各槽位部件）。
        问的是：<b>按图上刻的写法，这个拆法对不对？</b></p>
     <p>「拆法对」= 结构与槽位都符合；结构不对就在下面一排里点它<b>实际的</b>结构；
        「部件写法不同」= 结构对，但某个槽里刻的不是表里那个部件（异体 / 刻工写法）；
@@ -238,7 +249,11 @@ function payload(){
   return D.rows.filter(r => verdictOf(r.id))
     .map(r => JSON.stringify({id: r.id, char: r.char, stratum: r.stratum, top: r.top, verdict: verdictOf(r.id)})).join('\\n');
 }
-""".replace("__TITLE__", TITLE).replace("__OPS__", json.dumps(OPS, ensure_ascii=False))
+""".replace("__TITLE__", TITLE).replace("__OPS__", json.dumps(OPS, ensure_ascii=False)).replace(
+        "__RESIDUAL_NOTE__",
+        ("<p><b>只剩这几张。</b>300 张里模型和 IDS 表说法一致的（含表的备选拆法）不用人看，"
+         "已裁过的字种也不再出；这里每张都是<b>模型和表的每一种拆法都不一样</b>的字，一个字种一张，"
+         "同字的其他图跟着算。卡上仍不印模型说法，照图裁。</p>") if a.residual else "")
     html = render(TITLE, KEY, verdicts=verdicts, css=css, page_js=page_js, payload={"rows": rows, "imgs": imgs})
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
