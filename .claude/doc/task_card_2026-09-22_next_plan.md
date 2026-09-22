@@ -108,9 +108,9 @@ VLM 进放行；生成/超分复原后再识别；整库抓字统网（先写信
 | T5② | 无模板零样本切分 v1 冻结（200 字种 / 259 条） | `config/eval/notemplate_split_v1.txt` |
 | T5③ | 固定退化协议出表：r5 对粗细/断墨/贴边免疫，σ2.5 模糊与 ≥20% 遮挡才塌，塌时 top-10 先撑住 | 设计稿 §13 ⑤；`scripts/eval_degradation.py`（已登记进 eval） |
 | T6 | 形近对表 v1 19,729 对（IDS 关系 + 余弦 ≥.945 / 纯视觉 ≥.955），候选带 `near`，面板显示 | `config/ids/confusable_pairs_v1.tsv`、`clustering/confusables.py` |
-| T3 | **出题出歪、已改**：用户裁 46 张后反馈「IDS 不是都有了吗」。改成先拿 IDS 表（主拆法 + 备选）当第一裁判：300 张里模型 = 表 280、打架 20（15 字种），已裁定的 5 字种全是模型错；页面缩成 10 字种 10 张（同 URL）。**T9 触发条件坐实**（~90 是模型天花板不是标签噪声） | 设计稿 §13 ⑦；`scripts/struct_gold_residual.py`、`artifacts/struct_gold_verdicts.jsonl` |
+| T3 | **裁完（56 条人裁）**：出题出歪一次（让人对 300 张盖章）、改成先拿 IDS 表（主拆法 + 备选）当第一裁判，只把模型与表打架的 15 字种交给人。裁定：模型错 13 / 模型对 2（宐 ⿳/⿱ 口径、默 刻的是 黙 形）。真金标下结构头 oov 合体 **90.5%**、unseen 97.1%、独体 100%，按层权折回总体 **95.9%**——闸在总体上过、在 oov 档没过；标签噪声排除，**T9 开不开由 oov 档要不要攻决定** | 设计稿 §13 ⑦；`scripts/struct_gold_residual.py`、`artifacts/struct_gold_verdicts.jsonl` |
 | T7 | 未动 | — |
 
 给本机的：`RareCandidatesParams.struct_probe` 我漏写了声明（本机已补 + 加了构造性测试，谢）；
 T4 要在本机跑一次 `build_glyphwiki_catalog.py`（需 dump + `npm i @kurgm/kage-engine`）才有目录，
-开关仍缺省关。下一步建议顺序：T3 残差 10 张裁完（可不裁，5/5 已定）→ **T9 可以开了**；T12 未收字子集 → 定 T4 开不开。
+开关仍缺省关。下一步建议顺序：T3 已裁完 → T9 由 oov 档定（总体 95.9 已过闸、oov 90.5 没过）；T12 未收字子集 → 定 T4 开不开。

@@ -832,7 +832,7 @@
    "pred": "⿰",
    "conf": 0.538,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "oov:v2:vol01:24:8:21",
@@ -924,7 +924,7 @@
    "pred": "⿸",
    "conf": 0.731,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "gb:vol01:40:7:2",
@@ -1316,7 +1316,7 @@
    "pred": "⿰",
    "conf": 0.691,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "struct:⿱"
   },
   {
    "id": "oov:v2:vol02:18:6:6",
@@ -1436,7 +1436,7 @@
    "pred": "⿰",
    "conf": 0.459,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "oov:v2:bxgb:20:12:14",
@@ -1857,7 +1857,7 @@
    "pred": "⿰",
    "conf": 0.718,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "oov:bxgb:15:17:19",
@@ -2335,7 +2335,7 @@
    "pred": "⿰",
    "conf": 0.821,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "oov:bxgb:7:2:16",
@@ -2361,7 +2361,7 @@
    "pred": "⿱",
    "conf": 1.0,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "struct:⿱"
   },
   {
    "id": "oov:v2:bxgb:11:4:15",
@@ -2921,7 +2921,7 @@
    "pred": "⿱",
    "conf": 0.812,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "gb:vol01:154:8:6",
@@ -3437,7 +3437,7 @@
    "pred": "⿰",
    "conf": 0.762,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "ok"
   },
   {
    "id": "gb:vol01:46:8:18",
@@ -3870,7 +3870,7 @@
    "pred": "⿱",
    "conf": 0.818,
    "cls": "与表全部拆法都不同",
-   "verdict": null
+   "verdict": "struct:⿱"
   },
   {
    "id": "oov:v2:bxgb:12:4:2",
@@ -3951,31 +3951,6 @@
    "verdict": null
   }
  ],
- "residual_ids": [
-  "oov:bxgb:22:15:5",
-  "oov:v2:bxgb:12:19:3",
-  "oov:v2:vol01:24:6:21",
-  "oov:bxgb:20:6:10",
-  "oov:bxgb:16:15:17",
-  "oov:v2:vol02:145:9:6",
-  "oov:bxgb:19:16:19",
-  "oov:v2:bxgb:14:14:6",
-  "oov:v2:vol01:73:1:9",
-  "gb:vol01:66:8:17"
- ],
- "residual_also": {
-  "oov:bxgb:22:15:5": [],
-  "oov:v2:bxgb:12:19:3": [
-   "oov:v2:bxgb:13:1:9",
-   "oov:v2:bxgb:15:16:13"
-  ],
-  "oov:v2:vol01:24:6:21": [],
-  "oov:bxgb:20:6:10": [],
-  "oov:bxgb:16:15:17": [],
-  "oov:v2:vol02:145:9:6": [],
-  "oov:bxgb:19:16:19": [],
-  "oov:v2:bxgb:14:14:6": [],
-  "oov:v2:vol01:73:1:9": [],
-  "gb:vol01:66:8:17": []
- }
+ "residual_ids": [],
+ "residual_also": {}
 }
