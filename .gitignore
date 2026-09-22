@@ -136,3 +136,6 @@ models/*/emb_*.npz
 /logs/
 # 顺手兜底：仓根的散落日志（万一又忘了写 logs/ 前缀）
 /*.log
+
+# GlyphWiki 变体形模板的 embedding 缓存（cnn_candidates._gw_index，按 checkpoint+目录指纹重建，百 MB 级）
+models/**/gw_*.npz
