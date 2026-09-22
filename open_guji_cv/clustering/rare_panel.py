@@ -209,12 +209,17 @@ def struct_hint(ch: str) -> dict:
 
 
 def _decorate(hits: list[tuple[str, str, float]]) -> list[dict]:
-    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 频次 / 码点 / 释义 / 正字 / 深链。"""
+    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 形近字 / 频次 / 码点 / 释义 / 正字 / 深链。
+
+    `near`（2026-09-22，T6）：`config/ids/confusable_pairs_v1.tsv` 里该字的形近字前 3 个，
+    带差在哪个槽（`⿰:R:俞/侖`）——告诉人该盯哪里看，不投票、不放行。"""
+    from .confusables import near_forms
     freq = _corpus_freq(DEFAULT_CORPUS)
     return [{
         "char": ch, "score": round(score, 4), "font": font,
         "ids": ids_of(ch),
         "struct": struct_hint(ch),
+        "near": near_forms(ch, k=3),
         "freq": freq.get(ch, 0),
         "cp": f"U+{ord(ch):04X}" if len(ch) == 1 else "",
         "zi": f"https://zi.tools/zi/{ch}",
@@ -335,7 +340,8 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 
 
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
-                   book: str | None = None, struct_rerank: bool = False) -> list[list[dict]]:
+                   book: str | None = None, struct_rerank: bool = False,
+                   struct_probe: str | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
@@ -373,6 +379,9 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         a_list = b_list = [[] for _ in norms]
         cnn_list = cnn.topk_batch(norms, cs_base, k=max(k, 10))
         emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10))
+        # GlyphWiki 变体形模板赢过字体均值的字位（`cnn_candidates.GW_CATALOG`，T4）：
+        # 记下是哪张形赢的，最后挂到候选的 `gw` 字段——告诉人「匹配到的是中华字海的这个异体」。
+        gw_prov = [dict(d) for d in cnn.last_gw_prov] or [{} for _ in norms]
 
         # ── 阶梯：基集 top-1 分数低的字位，**追加**升级档候选（不是替换）──
         #
@@ -388,6 +397,8 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
             if idx:
                 sub = cnn.emb_topk_batch([norms[i] for i in idx], cs_esc,
                                          k=max(k, 10))
+                for i, d in zip(idx, cnn.last_gw_prov):
+                    gw_prov[i].update(d)
                 for i, extra in zip(idx, sub):
                     # ⚠️ **按分数归并，不能简单拼接**（2026-09-17 实测）。
                     # 先写的是 `emb_list[i] + extra`，结果阈值扫描从 0.80 到 1.0
@@ -406,6 +417,7 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         a_list = candidates_batch(norms, cs_small, k=max(k, 10))
         b_list = candidates_batch(norms, cs_big, k=max(k, 10))
         cnn_list = emb_list = [[] for _ in norms]
+        gw_prov = [{} for _ in norms]
 
     eds = book_font_editions(book) if book else []
     ns = _book_norm_stroke(book) if book else None
@@ -428,10 +440,21 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list, emb_list = f(cnn_list), f(emb_list)
         a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
 
+    if struct_probe:
+        # Step A′ 外挂结构头（2026-09-22）：主干不动，只给重排换一副更细的眼睛
+        cnn.attach_probe(struct_probe)
+    def _gw(hits: list[dict], prov: dict) -> list[dict]:
+        for h in hits:
+            p = prov.get(h["char"])
+            if p:
+                h["gw"] = {"name": p[0], "source": p[1], "cos": round(p[2], 4),
+                           "url": f"https://glyphwiki.org/wiki/{p[0]}"}
+        return hits
+
     if not (struct_rerank and cnn.available):
-        return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
-                for a, b, cnn_topk, emb_topk, dbk
-                in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+        return [_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk), pv)
+                for a, b, cnn_topk, emb_topk, dbk, pv
+                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov)]
 
     # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
     from .ids_guard import components as first_level_components
@@ -447,10 +470,10 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     else:
         probs, comps_of = cnn.comp_probs_batch(norms), first_level_components
     out = []
-    for hits, pr in zip(fused, probs):
+    for hits, pr, pv in zip(fused, probs, gw_prov):
         by_char = {h["char"]: h for h in hits}
         order = _rerank([h["char"] for h in hits], pr, comps_of, k=k)
-        out.append([by_char[ch] for ch in order])
+        out.append(_gw([by_char[ch] for ch in order], pv))
     return out
 
 
