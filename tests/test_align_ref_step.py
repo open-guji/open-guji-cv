@@ -138,3 +138,38 @@ def test_gold_derivation_matches_between_cached_and_live_recompute(tmp_path,
 
     assert cached[0].anchored and live[0].anchored
     assert [asdict(c) for c in cached[0].chars] == [asdict(c) for c in live[0].chars]
+
+
+def test_lib_gate_drops_confident_non_variant_replace_but_keeps_variants(tmp_path, monkeypatch, ws):
+    """库证据闸（align_ref 模块头 2026-09-22）：
+
+    - 库 cov 0.9995 认下「入」、整理本给「人」（不是异体）→ 这一位不采信；
+    - 同样 cov，库认「巳」、整理本「已」（variants.json 登记的异体）→ 照采（人裁 66/66 全对）；
+    - 库 cov 0.95（不够信）认「入」、整理本「人」→ 照采（长度闸说了算）。
+    """
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    # 刻本列：第 2 位库认「入」，第 15 位库认「巳」；整理本对应位是「人」「已」。
+    # 两处替换之间要留 ≥8 个相同字，8-gram 才锚得住。
+    col = "文入華殿大學士臣紀昀等奉敕撰巳欽定四庫全書總目卷一"
+    ref = ("文人華殿大學士臣紀昀等奉敕撰已欽定四庫全書總目卷一經部易類一") * 30
+    corpus = tmp_path / "ref.txt"; corpus.write_text(ref, encoding="utf-8")
+
+    def run(cov3: float, gate: bool = True):
+        ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+        ctx.params["align_ref"] = P(corpus=str(corpus), lib_gate=gate)
+        recs = [dict(slot=i + 1, verdict="same", char=ch, cov=(cov3 if i == 1 else 0.9995),
+                     matched_id=f"g{i}") for i, ch in enumerate(col)]
+        write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+        ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+        assert ar.anchored, ar.note
+        return ar, {c.slot: (c.align_char, c.align_op) for c in ar.chars if c.col == COL}
+
+    ar, got = run(0.9995)
+    assert 2 not in got, f"库高信度认「入」、整理本「人」非异体，该拦下，实得 {got.get(2)}"
+    assert got.get(15) == ("已", "replace"), f"巳/已 是异体，该照采，实得 {got.get(15)}"
+    assert ar.n_lib_dropped == 1
+    _, got = run(0.95)
+    assert got.get(2) == ("人", "replace"), "库不够信时长度闸说了算"
+    ar, got = run(0.9995, gate=False)
+    assert got.get(2) == ("人", "replace") and ar.n_lib_dropped == 0
+

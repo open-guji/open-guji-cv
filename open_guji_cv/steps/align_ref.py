@@ -61,6 +61,32 @@ top1（`slots_from_decision`，见下方旧版说明）。这让 Step5-d 名义�
 复用 `clustering/align_label.label_page`：定字串 → 8-gram 锚到整理本 →
 `difflib` 对齐 → **采信闸**（`equal` 段全收；等长 `replace` 段要求段长 ≤3
 且左右各有 ≥2 字的 `equal` 段贴身夹住，一侧 ≥2、另一侧 ≥1 即可）。
+
+## 2026-09-22 replace 段加「库证据闸」（任务卡 T7；图像代价闸是负结果）
+
+T7 原想把长度闸换成「图像代价闸」（字块 embedding 与整理本字模板的余弦 ⊕ IDS 距离）。
+在四库两册 270 页、1,910 个等长 replace 位、513 条用户 confirm 上量（`scripts/eval_align_replace_gate.py`，
+载体串只用 `glyph_match`、云端没装 OCR）：
+
+| 闸 | 采信率 | 人裁错采 | 漏采 |
+|---|---|---|---|
+| 长度闸（现役） | 97.5% | 19/491 = 3.9% | 22/494 |
+| 余弦 / 模板名次 / cos_top1 差，各档 | 96–100% | **19，一个都分不开** | 22 |
+| 长度闸 ∧（异体 ∨ 库 cov < 0.996）——本闸 | 94.7% | **5/476 = 1.1%** | 23/494 |
+
+余弦对均值模板普遍 ≥0.94、错采位的 cos_gold 反而常高于 cos_hyp，形近字对在全局相似度下
+分不开（老负结果 g3g4 §核心）。真能分开的是**库证据**：19 个错采里 14 个是
+「库以 cov ≥0.999 认下了这一格是 X，整理本给的既不是 X 也不是 X 的异体」——入/人、筍/笱、
+艮/良、矩/炬、壁/璧、諭/論、日/曰、祟/崇、睽/暌、塵/麈……人裁全站在刻本这边。这是整理本
+与刻本的**真实差异**（版本差 / 整理本错），不是对齐错位，不该拿整理本盖掉刻本。
+剩 5 个是乱区里 len=2 段两头都对错位（思愚/汝、夏蔓/枝），载体错、gold 也错、人裁是第三个字，
+库 cov 只有 0.93–0.95，任何闸都拦不住，只能靠 Step6 上下文。
+
+于是 replace 位再过一道：`glyph_match` 对这一格的 cov ≥ `lib_cov_min`（0.996，与库 same 档
+门槛同口径；0.995~0.999 之间数字一样）且库认的字与 gold 不是异体（`variants.are_variants`），
+就不采信这一位。「异体」这一档必须放行：巳/已、郎/郞、宮/宫、寬/寛 这类库 cov 也 ≥0.999，
+但整理本给的是正字，采信没错（人裁 66/66 全对）。
+不限段长（只要夹住）在 8 个 4 字段上 8/8 对、0 错采，但样本太薄，长度闸照旧。
 """
 
 from __future__ import annotations
@@ -239,6 +265,10 @@ class AlignRefParams(BaseModel):
     corpus: str = DEFAULT_CORPUS
     corpus_fingerprint: str = ""
     """整理本指纹，留空自动填——理由同 `context_decide` 的语料指纹。"""
+    lib_gate: bool = True
+    """replace 位的库证据闸（模块头 2026-09-22）：库高信度认下的字与整理本字不是异体 → 不采信。"""
+    lib_cov_min: float = 0.996
+    """库证据闸的 cov 门槛，与 `glyph_match` same 档同口径。"""
 
     def model_post_init(self, _ctx) -> None:
         if not self.corpus_fingerprint:
@@ -331,13 +361,46 @@ class AlignRefStep(Step):
                 n_grams=diag.n_grams, n_votes=diag.n_votes,
                 vote_frac=diag.vote_frac, dominance=diag.dominance)}
 
+        n_dropped = 0
+        if p.lib_gate and match is not None:
+            labs, n_dropped = lib_gate(labs, match, p.lib_cov_min)
         chars = [AlignRec(id=lab.instance_id, col=_col_of(lab.instance_id),
                           slot=_slot_of(lab.instance_id), sub=_sub_of(lab.instance_id),
                           align_char=lab.char, align_op=lab.op, ref_run=lab.op_run)
                  for lab in labs]
         return {"align_ref": PageAlignRef(
             page=page, anchored=True, corpus_fingerprint=p.corpus_fingerprint,
-            chars=chars)}
+            chars=chars, n_lib_dropped=n_dropped)}
+
+
+def lib_char_of(m) -> str | None:
+    """库对这一格认的字：same 档取 `char`，否则取候选首位。"""
+    if m is None:
+        return None
+    if m.char:
+        return m.char
+    return m.candidates[0][0] if m.candidates else None
+
+
+def lib_gate(labs: list, match: PageMatch, cov_min: float) -> tuple[list, int]:
+    """replace 位的库证据闸（模块头 2026-09-22）。
+
+    库以 cov ≥ `cov_min` 认下这一格是 X、而整理本给的 gold 既不是 X 也不是 X 的异体
+    → 整理本与刻本在这一位真的不同，不采信。equal 位不动（gold == 载体，闸无从谈起）。
+    """
+    from ..variants import are_variants
+    mrec = {r.id: r for cc in match.columns for r in cc.chars}
+    out, dropped = [], 0
+    for lab in labs:
+        if lab.op == "replace":
+            m = mrec.get(lab.instance_id)
+            x = lib_char_of(m)
+            if m is not None and x and m.cov >= cov_min and x != lab.char \
+                    and not are_variants(x, lab.char):
+                dropped += 1
+                continue
+        out.append(lab)
+    return out, dropped
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
