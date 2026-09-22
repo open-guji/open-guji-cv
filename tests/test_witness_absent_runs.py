@@ -85,3 +85,41 @@ def test_variant_normalized_before_probing():
     slots = _slots([(9, i + 1, "", ch) for i, ch in enumerate("北行日錄上")])
     # 证人用「録」，原串比对会误判成「证人里没有」
     assert witness_absent_runs(slots, "攻媿先生文集卷第一百十九北行日録上時待次") == []
+
+
+def test_colophon_at_front_is_picked_up():
+    """卷端题（撰人题）同卷末题：bxgb p3 第 2 列「宋樓鑰𢰅」。
+
+    整理本（文集本）作「四明樓鑰大防」并接生平，逐字比会把 4 个格配成
+    宋→州、樓→教、鑰→授、𢰅→隨 四条假「改」外加一条 16 字 missing——
+    **一处体例差异报成五条**。
+    """
+    slots = _slots([(1, i + 1, "", ch) for i, ch in enumerate("北行日錄上")]
+                   + [(2, i + 1, "", ch) for i, ch in enumerate("宋樓鑰𢰅")]
+                   + [(3, i + 1, "", ch) for i, ch in enumerate("乾道五年己丑十月九日辛卯邸報仲舅侍郎")])
+    out = witness_absent_runs(slots, "四明樓鑰大防北行日録上時待次溫州教授隨侍充公守括蒼"
+                                     "乾道五年己丑十月九日辛卯邸報仲舅侍郎充賀正")
+    assert [o["kind"] for o in out] == ["卷端题"] and out[0]["col"] == 2
+
+
+def test_one_unmatched_char_does_not_drop_a_body_column():
+    """整串精确匹配没有容错——p24 第 1 列正文只因整理本作「廪」而刻本刻「廩」
+    （异体表没收这一对）就被误摘。判据必须容得下个别字对不上。"""
+    body = "此也有滑臺本鄭之廩延"
+    slots = _slots([(1, i + 1, "", ch) for i, ch in enumerate(body)]
+                   + [(2, i + 1, "", ch) for i, ch in enumerate("十四日乙未晴五更車行二十五里至濬州")])
+    witness = "酈生所謂守白馬之津皆此也有滑臺本鄭之廪延十四日乙未晴五更車行二十五里至濬州城外"
+    assert not any(o["col"] == 1 for o in witness_absent_runs(slots, witness)), "正文列被误摘"
+
+
+def test_note_quoting_the_witness_is_still_absent():
+    """按语会**大段引用**原文——按「k-gram 出现过吗」算命中率接近 1，会被放过去。
+    判据得看它们**连不连在一处**：引文散落各处，没有一个连续区间装得下整段。"""
+    note = ("案上卷乾道五年十月二十一日行三十里飯黃碧二十八里宿和尚店去李溪猶二里"
+            "此云過永康數里飯至李溪晚過黃壁")
+    slots = _slots([(1, i + 1, "a", ch) for i, ch in enumerate(note)])
+    witness = ("小憩而行三十里飯黃碧村醪醇釅不殊家釀二十八里宿和尚店去李溪猶二里會倅廳一兵"
+               + "中间隔着很长很长的正文" * 40
+               + "五日丙辰晴過永康數里飯至李溪遇承局持家書來接晚過黃壁六日丁巳雨")
+    out = witness_absent_runs(slots, witness)
+    assert len(out) == 1 and out[0]["kind"] == "夾注"
