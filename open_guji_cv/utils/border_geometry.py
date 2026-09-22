@@ -644,7 +644,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
             if g is None:
                 continue
             base = np.array([line.y_at((width - 1) - x) for x in xs])
-            lo = max(OUTER_GAP_MIN, g - OUTER_PRIOR_FALLBACK_WIN)
+            lo = float(OUTER_GAP_MIN)          # 下界不收，见 OUTER_PRIOR_FALLBACK_WIN
             hi = min(OUTER_GAP_MAX, g + OUTER_PRIOR_FALLBACK_WIN)
             best = None
             for o in np.arange(lo, hi + 1, 1.0):
@@ -1317,6 +1317,14 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
 #: 所以闸1 **不**把 estimated 当作「探到外框」——`outer_frame_missing` 照旧 flag；
 #: 下游要用这个位置（比如裁图留边）可以取，要严格统计就按 `*_outer_estimated` 滤掉。
 OUTER_INK_FALLBACK = 0.18
+#: 兜底窗口：`[OUTER_GAP_MIN, 册基准 + OUTER_PRIOR_FALLBACK_WIN]`。
+#: **下界不跟着册基准收**（2026-09-22）：两册 192 条报 None 的边逐条量剖面，58 条是
+#: 「离内框有一段白、然后一个独立的墨峰、峰后回落」——**真外框**，只是这一页的内外间距
+#: 比册基准近得多（峰位 8~23px，而册基准 27~39）。按 `基准±12` 开窗根本够不着。
+#: 磨损页的内外间距本来就散（这批书 std 4.7~8.3，个别页更远），下界收紧没有道理：
+#: 外框只可能在内框**之外**，`OUTER_GAP_MIN=12` 已经是物理下界。
+#: 上界仍跟着基准收——再往外就是书口/版心的宽黑带（p133 峰 1.00@58、p47 0.34@56，
+#: 逐条看图确认不是框线）。
 OUTER_PRIOR_FALLBACK_WIN = 12.0
 
 
