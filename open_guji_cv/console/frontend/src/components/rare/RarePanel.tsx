@@ -111,6 +111,11 @@ export function RarePanel({ book }: { book: string }) {
                   {x.struct.top} {Object.entries(x.struct.slots).map(([k, v]) => `${k}:${v}`).join(' ')}
                 </span>
               )}
+              {x.near && x.near.length > 0 && (
+                <span className="muted" title="形近字（IDS 只差一槽 / 字体模板余弦很近）：差在哪个槽就盯哪里看，不投票">
+                  {'≈ '}{x.near.map((n) => n.detail ? `${n.char}(${n.detail.split(':').slice(1).join(' ')})` : n.char).join(' ')}
+                </span>
+              )}
               <span className="rvgloss" title={x.gloss || ''}>{x.gloss || ''}</span>
               <a className="rvzi" href={x.zi} target="_blank" rel="noopener noreferrer">字统网</a>
             </div>
