@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 # ──────────────────────────────────────────────
@@ -389,7 +390,7 @@ class TableDetector:
         Returns:
             TableResult 或 None（非表格页）
         """
-        img = cv2.imread(image_path)
+        img = cv_imread(image_path)
         if img is None:
             raise FileNotFoundError(f"无法读取图像: {image_path}")
 
@@ -467,7 +468,7 @@ class TableDetector:
         if result is None:
             return None
 
-        img = cv2.imread(image_path)
+        img = cv_imread(image_path)
         grid = result.grid
 
         # 画网格线
@@ -486,5 +487,5 @@ class TableDetector:
                         (x1 + 2, y1 + 14),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 180, 0), 1)
 
-        cv2.imwrite(output_path, img)
+        cv_imwrite(output_path, img)
         return result

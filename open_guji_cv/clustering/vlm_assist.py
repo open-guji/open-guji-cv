@@ -20,7 +20,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..utils.image_io import imread
+from ..utils.image_io import imread, imwrite as cv_imwrite
 from .extractor import load_index
 from .variants import VariantMap
 
@@ -77,7 +77,7 @@ def make_sheets(book_out_dir: str | Path, out_dir: str | Path,
                        x0 + 30 + j * TILE:x0 + 30 + (j + 1) * TILE] = \
                     cv2.cvtColor(load_patch(iid), cv2.COLOR_GRAY2BGR)
             bmap[str(k + 1)] = {"cluster": c["cluster_id"], "size": c["size"]}
-        cv2.imwrite(str(out / f"batch_{bi:02d}.png"), canvas)
+        cv_imwrite(str(out / f"batch_{bi:02d}.png"), canvas)
         mapping[f"batch_{bi:02d}"] = bmap
     with open(out / "mapping.json", "w", encoding="utf-8") as f:
         json.dump(mapping, f, ensure_ascii=False)

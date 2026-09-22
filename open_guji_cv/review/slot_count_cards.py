@@ -41,6 +41,7 @@ import numpy as np
 from ..core.spec import column_key, page_key
 from ..products.cache import ImageCache
 from ..products.store import ProductStore
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 CARD_KIND = "slot-count"
 
@@ -100,7 +101,7 @@ def render_slot_count_img(book: str, page: int, col: int, *, image_cache: ImageC
     p = image_cache.get(book, "column_raw", column_key(page, col))
     if p is None:
         raise FileNotFoundError(f"没有这一列的矫正图：{book}/{page}/{col}")
-    g = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    g = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if g is None:
         raise FileNotFoundError(f"列图读不出来：{book}/{page}/{col}")
     im = cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)

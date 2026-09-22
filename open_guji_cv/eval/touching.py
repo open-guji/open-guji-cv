@@ -10,6 +10,7 @@ R2s 的判据与 `eval/rulers.py` 完全一致（格线处墨占比 > INK_ON_LIN
 from __future__ import annotations
 
 import random
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 SHARD = "char-segmentation/touching-cuts"
 
@@ -72,7 +73,7 @@ def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> f
     p = ImageCache().get(book, "column_image", column_key(page, col))
     if p is None:
         return None
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
     y0, y1 = max(0, int(cell.y0)), min(img.shape[0], int(cell.y1))
@@ -305,7 +306,7 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         k = (pg, col)
         if k not in h_cache:
             p = ic.get(book, "column_image", f"p{pg:04d}c{col:02d}")
-            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
+            img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
             h_cache[k] = None if img is None else int(img.shape[0])
         return h_cache[k]
 
@@ -406,7 +407,7 @@ def escalated_boundaries(book: str, pages: list[int], store=None,
         k_ = (pg_, col_)
         if k_ not in h_cache:
             p_ = ic.get(book, "column_image", column_key(pg_, col_))
-            img = cv2.imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
+            img = cv_imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
             h_cache[k_] = None if img is None else int(img.shape[0])
         return h_cache[k_]
 

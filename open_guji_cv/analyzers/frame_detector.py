@@ -10,6 +10,7 @@
 import cv2
 import numpy as np
 from dataclasses import dataclass
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 @dataclass
@@ -410,8 +411,8 @@ class FrameDetector:
                     (10, 90), font, 0.7, (0, 255, 0), 2)
 
         out_path = str(Path(debug_dir) / "frame_detect.png")
-        cv2.imwrite(out_path, vis)
+        cv_imwrite(out_path, vis)
 
         # 输出直线提取图
         lines = cls.extract_lines(img)
-        cv2.imwrite(str(Path(debug_dir) / "lines_only.png"), lines)
+        cv_imwrite(str(Path(debug_dir) / "lines_only.png"), lines)

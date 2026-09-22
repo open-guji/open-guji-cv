@@ -20,6 +20,7 @@ from ...core.step import KINDS, RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...gates.query import GATES, gate_summary
 from ...render.overlay import encode_png, overlay, preclean_overlay, preclean_report
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 router = APIRouter()
 
@@ -62,7 +63,7 @@ def api_raw(book: str, page: int, scale: float = 0.35) -> Response:
     p = b.raw_path(page)
     if not p.exists():
         raise ImageMissing("原图缺失")
-    img = cv2.imread(str(p))
+    img = cv_imread(str(p))
     return _png(img, scale)
 
 
@@ -121,7 +122,7 @@ def _char_patch_binarized(book: str, key: str) -> Response | None:
         break
     if not box:
         return None
-    g = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    g = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if g is None:
         return None
     # ⚠️ `bbox_page` 是**右上原点规范空间**（x 向左递增，见 `core/anchor.py` 与
@@ -178,7 +179,7 @@ def api_preclean_before(book: str, page: int, scale: float = 0.35) -> Response:
     p = b.raw_path(page)
     if not p.exists():
         raise ImageMissing("原图缺失")
-    return _png(cv2.imread(str(p)), scale)
+    return _png(cv_imread(str(p)), scale)
 
 
 
@@ -191,7 +192,7 @@ def api_preclean_after(book: str, page: int, scale: float = 0.35) -> Response:
     p = precleaned_path(book, page)
     if not p.exists():
         raise ImageMissing(f"还没生成，先跑 python -m open_guji_cv.cli_v2 preclean {book}")
-    return _png(cv2.imread(str(p)), scale)
+    return _png(cv_imread(str(p)), scale)
 
 
 
@@ -248,7 +249,7 @@ def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) ->
     path = deps.image_cache().get(book, "column_image", column_key(page, col))
     if path is None:
         raise ImageMissing("没有列图")
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("列图读不出来")
     h = img.shape[0]

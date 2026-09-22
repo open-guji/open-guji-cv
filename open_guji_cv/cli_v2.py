@@ -134,7 +134,7 @@ def cmd_cache(args) -> None:
         path = cache.get(args.book, "column_image", column_key(args.page, args.col))
         if path is None:
             print("没有列图"); sys.exit(1)
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             print("列图读不出来"); sys.exit(1)
         h = img.shape[0]
@@ -271,7 +271,7 @@ def cmd_gold(args) -> None:
             if not p:
                 return None
             f = root / p.replace("open-guji-cv ", "")
-            return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
+            return cv_imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
 
         rep = check_shard(args.shard, items, image_of)
         print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1))
@@ -602,10 +602,10 @@ def cmd_import_pdf(args) -> None:
                 import cv2
                 raw = doc.extract_image(xref)["image"]
                 tmp.write_bytes(raw)
-                img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
                 if img is None:                      # 码流坏了，试抢救
                     tmp.write_bytes(_salvage_jpx(raw))
-                    img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                    img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
                     if img is not None:
                         n_salvaged += 1
                         problems.append(f"页 {page_no}：内嵌码流残缺，已截断末 tile 抢救"
@@ -644,7 +644,7 @@ def cmd_import_pdf(args) -> None:
     for f in out.glob("*.png"):
         try:
             import cv2
-            im = cv2.imread(str(f), cv2.IMREAD_UNCHANGED)
+            im = cv_imread(str(f), cv2.IMREAD_UNCHANGED)
             if im is not None:
                 sizes[(im.shape[1], im.shape[0])] = sizes.get((im.shape[1], im.shape[0]), 0) + 1
         except Exception:
@@ -775,7 +775,7 @@ def cmd_product(args) -> None:
         f = load_book(args.book).raw_path(args.page)
         if not f.exists():
             print("原图缺失"); sys.exit(1)
-        _write(args.out, encode_png(cv2.imread(str(f)), args.scale))
+        _write(args.out, encode_png(cv_imread(str(f)), args.scale))
     elif args.action == "overlay":
         _write(args.out, encode_png(overlay(args.book, args.step, args.page, st), args.scale))
     elif args.action == "patch":

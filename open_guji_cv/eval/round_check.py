@@ -34,6 +34,7 @@ from collections import Counter
 from pathlib import Path
 
 from ..gold.store import default_dataset_root
+from ..utils.image_io import imread as cv_imread
 
 DATASET = default_dataset_root()     # 评测读测试集仓是正当的；别再用 cwd 相对路径
 
@@ -437,7 +438,7 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
     cnn = shared()
     hit = n = 0
     for it in items:
-        img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
         order = [h["char"] for h in rare_for(img, k)]
