@@ -40,10 +40,15 @@ from collections import Counter
 #: 重复几次以上算「系统性」。见模块头「为什么是 3」。
 REPEAT_MIN = 3
 
-#: 清刻本避諱改字：刻本用 key、整理本回改成 value。知不足齋本（乾隆—道光间）
-#: 回避「虜」「褎」一族，以形近或同音字代之。这是版本学事实，不是统计推断——
-#: 所以单独列表，不参与重复度判定（出现 1 次也算版本差异）。
-#: 出处：本册实测字对 + 清代避諱通例；新增前先在 collation json 里核实际字对。
+#: 整理本作这些字时，刻本多半是**避諱改字**——改法不固定，同一个「虜」在
+#: 不同处被改成 金/國/今/乃/人/敵/改/因/彼/其…（bxgb 实测 10 种以上）。
+#: 按**目标字**认，比穷举字对靠谱：穷举永远漏，而「整理本写虜、刻本写别的」
+#: 这个模式本身就是避諱的定义。
+#: ⚠️ 只在**整理本侧**匹配：刻本侧写什么都算，因为改法就是不固定的。
+TABOO_TARGETS = frozenset("虜酋褎亮")
+
+#: 固定字对（`TABOO_TARGETS` 之外的避諱，如避孔子諱）。清刻本避諱是版本学事实、
+#: 不是统计推断，所以单独列表，不参与重复度判定（出现 1 次也算版本差异）。
 TABOO = {
     ("金", "虜"), ("國", "虜"), ("擄", "虜"), ("今", "虜"), ("乃", "虜"),
     ("金", "褎"), ("新", "褎"),
@@ -126,7 +131,7 @@ def grade(e: dict, pairs: Counter, misanchored: frozenset[int] = frozenset()) ->
     if k == "variant":
         return "variant"
     pair = (e["hyp"], e["ref"])
-    if pair in TABOO:
+    if pair in TABOO or e["ref"] in TABOO_TARGETS:
         return "taboo"
     if pairs.get(pair, 0) >= REPEAT_MIN:
         return "systematic"
