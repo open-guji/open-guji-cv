@@ -81,7 +81,9 @@ def main() -> int:
         res["struct_acc_compound"] = 100.0 * ok / max(n, 1)
         res["struct_acc_single"] = 100.0 * ok_single / max(n_single, 1)
         res["slot_top3"] = 100.0 * hit / max(tot, 1)
-        print(f"结构头：合体字 {res['struct_acc_compound']:.1f}% (n={n})  独体 {res['struct_acc_single']:.1f}% (n={n_single})")
+        # 独体一行 n<20 不算数（oov_bench 只有 8 条，任务卡 2026-09-22 T5①）：照报数字但标出来
+        print(f"结构头：合体字 {res['struct_acc_compound']:.1f}% (n={n})  独体 {res['struct_acc_single']:.1f}% (n={n_single})"
+              + ("  ← 独体 n<20 不算数" if n_single < 20 else ""))
         print(f"槽位头 top-3：{res['slot_top3']:.1f}% (标签 {tot})   {time.time()-t0:.0f}s")
 
     cs = base_charset(a.charset)
