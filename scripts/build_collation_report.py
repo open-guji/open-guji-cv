@@ -502,7 +502,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="对勘报告")
     ap.add_argument("--book", default="vol01")
     ap.add_argument("--pages", default="", help="页表达式；空 = 全部有产物的正文页")
-    ap.add_argument("--corpus", default=DEFAULT_CORPUS)
+    ap.add_argument("--corpus", default="",
+                    help="整理本语料路径；空 = 按 books/<book>.yaml 的 references[0] 取本册自己那份")
     ap.add_argument("--out", default=None, help="HTML 输出（默认 output/collation_<book>.html）")
     ap.add_argument("--strip", type=int, default=5, help="截条上下各几格")
     ap.add_argument("--thumb-h", type=int, default=40, help="每格缩放到多高（px）")
@@ -517,7 +518,17 @@ def main() -> int:
     # 只留汉字再锚定/对齐：整理本里夹着抬头码（⏎b1 / c3 / a1）、全角空格、行末连字符「-」，
     # 8-gram 投票按原文位置数偏移，页内一有这些标记，页首就会锚晚几字，
     # 开头那几格全成「刻本多」（dev_set p26「乾隆四十一年七」×7 就是这么来的）
-    raw = (REPO / a.corpus).read_text(encoding="utf-8")
+    # 语料按册取（`steps/align_ref.book_corpus`，读 books/<id>.yaml 的 references[0]），
+    # 不再缺省指向刻本链那份总目语料。缺省值写死 + `REPO / a.corpus` 锚 cv 仓，是两个
+    # 叠一起的老毛病：北行日錄的语料在**工作区** corpus/ 下，两条路都够不着，于是
+    # `--book bxgb` 直接 FileNotFoundError；真凑巧撞上同名文件则更糟——拿别册的
+    # 整理本对勘，差异表会整片虚高而不报错（与 Step5-b、context_decide 的同型坑一样）。
+    # 显式给 --corpus 的照用，相对路径仍按 cv 仓解析（老用法不破）。
+    from open_guji_cv.steps.align_ref import book_corpus
+    corpus_file = Path(a.corpus) if a.corpus else Path(book_corpus(a.book))
+    if not corpus_file.is_absolute():
+        corpus_file = REPO / corpus_file
+    raw = corpus_file.read_text(encoding="utf-8")
     corpus = "".join(c for c in raw if is_han(c))
     index = build_ngram_index(corpus)
     truth = load_verdicts(a.book)
@@ -567,7 +578,7 @@ def main() -> int:
         e["strip"] = strip_b64(cache, a.book, e["page"], e.pop("_col_slots"), e.pop("_k"), a.strip, a.thumb_h)
         n_strip += 1
 
-    meta = {"built_at": time.strftime("%Y-%m-%d %H:%M"), "corpus": a.corpus,
+    meta = {"built_at": time.strftime("%Y-%m-%d %H:%M"), "corpus": str(corpus_file),
             "strips": n_strip, "truncated": truncated}
     out = Path(a.out) if a.out else REPO / "output" / f"collation_{a.book}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
