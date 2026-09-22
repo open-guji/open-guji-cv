@@ -46,6 +46,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageAlignRef, PageDecision, PageMatch,
                                     PageOcr)
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 class SeedAdmitParams(BaseModel):
@@ -666,7 +667,7 @@ def _cnn_top(book: str, page: int, col: int, slot: int, sub: str | None) -> str 
         path = ImageCache().get(book, "char_patch", key)
         if path is None:
             return None
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             return None
         cc = shared()
@@ -689,7 +690,7 @@ def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,
         path = ImageCache().get(book, "char_patch", key)
         if path is None:
             return None
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             return None
         return image_ranks_for(normalize_patch(img), forms)

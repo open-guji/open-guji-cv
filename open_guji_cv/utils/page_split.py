@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
+from ..utils.image_io import imread as cv_imread
 
 MANIFEST_NAME = "_split_manifest.json"
 
@@ -274,7 +275,7 @@ def split_book(book, *, pages: list[int] | None = None, force: bool = False,
             log(f"[split] 扫描页 {scan}: 已有逻辑页 {2 * scan - 1}/{2 * scan}，跳过")
             continue
         src = src_dir / pattern.format(page=scan)
-        gray = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
+        gray = cv_imread(str(src), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             log(f"[split] 扫描页 {scan}: 读不到 {src}，跳过")
             continue
@@ -283,7 +284,7 @@ def split_book(book, *, pages: list[int] | None = None, force: bool = False,
                                     sep_min_frac=float(cfg.get("sep_min_frac", 0.3)),
                                     wide_frac=float(cfg.get("wide_frac", 0.1)))
         for rec, img, o in zip(recs, imgs, outs):
-            cv2.imwrite(str(o), img)
+            cv_imwrite(str(o), img)
             manifest["pages"][str(rec.logical)] = asdict(rec)
             done.append(rec)
         sep_txt = "无分界线" if recs[0].sep_y is None else f"分界线 y={recs[0].sep_y:.0f}"

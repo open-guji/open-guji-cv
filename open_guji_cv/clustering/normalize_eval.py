@@ -29,6 +29,7 @@ import cv2
 import numpy as np
 
 from .normalize import skeletonize
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 _KERNEL_CROSS = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
 
@@ -89,7 +90,7 @@ def check_sample(sample_dir: Path, produced: np.ndarray,
                  produced_skeleton: np.ndarray | None = None) -> SampleResult:
     """把当前归一化的输出与冻结的 golden 比。produced 为 uint8 {0,1}。"""
     spec = json.loads((sample_dir / "expected.json").read_text(encoding="utf-8"))
-    golden = to_binary(cv2.imread(str(sample_dir / spec["golden"]),
+    golden = to_binary(cv_imread(str(sample_dir / spec["golden"]),
                                   cv2.IMREAD_GRAYSCALE))
     tol = spec.get("tolerance", {})
     max_pdr = tol.get("pixel_diff_ratio", 0.01)
@@ -101,7 +102,7 @@ def check_sample(sample_dir: Path, produced: np.ndarray,
     if produced_skeleton is None:
         delta = skeleton_endpoint_delta(golden, produced)
     else:
-        gs = to_binary(cv2.imread(str(sample_dir / spec["golden_skeleton"]),
+        gs = to_binary(cv_imread(str(sample_dir / spec["golden_skeleton"]),
                                   cv2.IMREAD_GRAYSCALE))
         ge, gj = skeleton_nodes(gs)
         pe, pj = skeleton_nodes(produced_skeleton)

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 @dataclass
@@ -80,7 +81,7 @@ def score_fonts(db, book_id: str, labels: list[dict], cache_root: Path, editions
     missing = 0
     for d in labels:
         p = patch_path(cache_root, book_id, d)
-        g = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+        g = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
         if g is None:
             missing += 1
             continue

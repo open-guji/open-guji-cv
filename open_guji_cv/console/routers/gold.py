@@ -14,6 +14,7 @@ import cv2
 from fastapi import APIRouter
 
 from .. import deps
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 router = APIRouter()
 
@@ -67,7 +68,7 @@ def api_gold_drift(shard: str, apply: bool = False) -> dict:
         if not p:
             return None
         f = root / str(p).replace("open-guji-cv ", "")
-        return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
+        return cv_imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
 
     rep = check_shard(shard, deps.gold_store().list(shard), image_of)
     out = rep.to_dict()

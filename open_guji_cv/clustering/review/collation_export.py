@@ -37,6 +37,7 @@ import numpy as np
 from .persist_js import PERSIST_JS
 from ..seed_queue import SEED_EVENT_PREFIX, SeedItem
 from ..variants import VariantMap
+from ...utils.image_io import imread as cv_imread
 
 _DECIDED = {"auto_admitted", "confirmed", "confirmed_label_only"}
 
@@ -91,7 +92,7 @@ def _col_strip(items: list[SeedItem], root: Path, target_idx: int,
     """
     tiles: list[np.ndarray] = []
     for it in items:
-        g = cv2.imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
+        g = cv_imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
         if g is None:
             g = np.full((width, width), 220, np.uint8)
         h = max(1, int(round(g.shape[0] * width / g.shape[1])))
