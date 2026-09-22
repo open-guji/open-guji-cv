@@ -151,6 +151,15 @@ def dump_book(ws: Path, book: str, pages: list[int] | None, cnn, out_dir: Path) 
             return round(float(v @ mat[j]), 4) if (v is not None and j is not None) else None
         r["cos_gold"] = cos(r["gold"]); r["cos_hyp"] = cos(r["hyp"])
         r["cos_shape"] = cos(r["shape"]) if r["shape"] else None
+        # gold 在整个模板字表里按余弦排第几（1 = 最像）、与最像模板的差——绝对余弦对均值模板
+        # 普遍 0.8+ 没有分辨力（vol01 实测全部 ≥0.8），要看相对量
+        if v is not None and r["cos_gold"] is not None:
+            sims = mat @ v
+            r["gold_rank"] = int((sims > r["cos_gold"]).sum()) + 1
+            r["cos_top1"] = round(float(sims.max()), 4)
+            r["top1"] = names[int(sims.argmax())]
+        else:
+            r["gold_rank"] = None; r["cos_top1"] = None; r["top1"] = None
         sg, sh = structure_of(r["gold"]), structure_of(r["hyp"])
         kg, kh = set(slot_keys_of(r["gold"])), set(slot_keys_of(r["hyp"]))
         r["same_top"] = sg.top == sh.top
@@ -198,6 +207,22 @@ def report(rows: list[dict]) -> None:
         line(f"G4 长度闸 ∨ (夹住 ∧ cos_gold ≥ {t})", lambda r, t=t: r["len_gate"] or (flank(r) and cg(r, t)))
     for t in (0.0, 0.05, 0.1):
         line(f"G5 长度闸 ∧ (cos_gold − cos_hyp ≥ {t} 或 异体)", lambda r, t=t: r["len_gate"] and (margin(r, t) or r["variant"]))
+    rk = lambda r, k: r.get("gold_rank") is not None and r["gold_rank"] <= k
+    for k in (1, 3, 10, 30):
+        line(f"G6 长度闸 ∧ (gold 模板名次 ≤ {k} 或 异体)", lambda r, k=k: r["len_gate"] and (rk(r, k) or r["variant"]))
+    for k in (3, 10, 30):
+        line(f"G7 夹住 ∧ (gold 模板名次 ≤ {k} 或 异体)（不限段长）", lambda r, k=k: flank(r) and (rk(r, k) or r["variant"]))
+    # 库证据闸：载体字被库高信度认下（cov 高）而 gold 又不是它的异体——整理本和刻本在这一位
+    # 真的不同（版本差异 / 整理本错），不该拿 gold 盖掉刻本。vol01 人裁 8 个错采全是这种。
+    lib = lambda r, c: r["m_cov"] >= c
+    for c in (0.99, 0.995, 0.999):
+        line(f"G9 长度闸 ∧ (异体 ∨ 库 cov < {c})", lambda r, c=c: r["len_gate"] and (r["variant"] or not lib(r, c)))
+    for c in (0.99, 0.999):
+        line(f"G9′ 长度闸 ∧ (异体 ∨ 库 cov < {c} ∨ ¬形近对)", lambda r, c=c: r["len_gate"] and (r["variant"] or not lib(r, c) or not r["confusable"]))
+    for c in (0.99, 0.999):
+        line(f"G9″ 夹住 ∧ (异体 ∨ 库 cov < {c})（不限段长）", lambda r, c=c: flank(r) and (r["variant"] or not lib(r, c)))
+    for t in (0.02, 0.05, 0.1):
+        line(f"G8 长度闸 ∧ (cos_top1 − cos_gold ≤ {t} 或 异体)", lambda r, t=t: r["len_gate"] and ((r.get("cos_top1") is not None and r["cos_top1"] - r["cos_gold"] <= t) or r["variant"]))
     print("── 分层：段长 × 人裁 gold 对不对 ──")
     by = defaultdict(lambda: [0, 0])
     for r in H:
@@ -205,6 +230,21 @@ def report(rows: list[dict]) -> None:
         by[b][0] += 1; by[b][1] += r["gold_ok"]
     for b in ("1", "2-3", "4-6", "7+"):
         n, k = by[b]; print(f"  len {b:<4s} n={n:4d} gold 对 {k:4d} = {100 * k / max(1, n):5.1f}%")
+    print("── 分层：异体关系 × 库 cov × 人裁 gold 对不对 ──")
+    by = defaultdict(lambda: [0, 0])
+    for r in H:
+        b = ("异体" if r["variant"] else "非异体") + ("·cov≥.99" if r["m_cov"] >= 0.99 else "·cov<.99")
+        by[b][0] += 1; by[b][1] += r["gold_ok"]
+    for b, (n, k) in sorted(by.items()):
+        print(f"  {b:<14s} n={n:4d} gold 对 {k:4d} = {100 * k / max(1, n):5.1f}%")
+    print("── 分层：gold 模板名次 × 人裁 gold 对不对 ──")
+    by = defaultdict(lambda: [0, 0])
+    for r in H:
+        g = r.get("gold_rank")
+        b = "无" if g is None else "1" if g == 1 else "2-3" if g <= 3 else "4-10" if g <= 10 else "11-30" if g <= 30 else "31+"
+        by[b][0] += 1; by[b][1] += r["gold_ok"]
+    for b in ("无", "1", "2-3", "4-10", "11-30", "31+"):
+        n, k = by[b]; print(f"  rank {b:<5s} n={n:4d} gold 对 {k:4d} = {100 * k / max(1, n):5.1f}%")
     print("── 分层：cos_gold 档 × 人裁 gold 对不对 ──")
     by = defaultdict(lambda: [0, 0])
     for r in H:
