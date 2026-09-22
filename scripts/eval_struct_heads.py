@@ -36,6 +36,7 @@ def main() -> int:
     ap.add_argument("--charset", default="unicode-cjk-ab")
     ap.add_argument("--weight", type=float, default=1.0)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--probe", default=None, help="外挂结构头 probe_<arch>.pt（Step A′，scripts/probe_struct_heads.py）")
     a = ap.parse_args()
 
     import cv2
@@ -52,10 +53,11 @@ def main() -> int:
         im = cv2.imread(str(BENCH / it["png"]), cv2.IMREAD_GRAYSCALE)
         if im is not None:
             imgs.append((im > 127).astype(np.uint8)); gold.append(it["char"])
-    cnn = CnnCandidates(a.ckpt)
+    cnn = CnnCandidates(a.ckpt, probe=a.probe)
     if not cnn.available:
         print("没有 checkpoint / torch", file=sys.stderr); return 2
-    res: dict = {"n": len(gold), "ckpt": a.ckpt, "has_struct_heads": cnn.has_struct_heads}
+    res: dict = {"n": len(gold), "ckpt": a.ckpt, "has_struct_heads": cnn.has_struct_heads,
+                 "struct_source": cnn.struct_source}
     print(f"集 {len(gold)} 条；checkpoint 结构头: {cnn.has_struct_heads}", flush=True)
 
     if cnn.has_struct_heads:
