@@ -149,6 +149,13 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="固定退化·稳定性", needs=("products", "heavy"),
        note="集在 cache/oov_bench（--set oov，缺省）或 glyph-bench unseen 档；"
             "模板均值优先复用 cache/struct_probe/emb_*.npz，没有就现渲染"),
+    # Step5-d replace 段采信闸（2026-09-22 T7）：靶子不是数据集分片，是工作区 feedback 里
+    # 用户 confirm 的 shape + 该工作区跑到 5-a 的产物。注册表这条只**重报**已 dump 的行
+    # （cache/align_gate/<book>.jsonl）；dump 要手跑 `-w <工作区> --books vol01,vol02`。
+    _e("align_replace_gate", "workspace/feedback", arg_kind="none", out_flag="", pythonpath=True,
+       title="5-d replace 采信闸", needs=("products", "heavy", "corpus"),
+       extra=("--report-only",),
+       note="靶子=工作区人裁（四库两册 513 条）；先手跑一次带 -w 的 dump，这里只重报"),
     # 粘连格线理想切点（用户在控制台「切线」页拖出来的），现役 Step2 列图坐标。
     _e("touching_cuts", "char-segmentation/touching-cuts", arg_kind="none", out_flag="--json", pythonpath=True,
        title="粘连切点误差", needs=("products",),
