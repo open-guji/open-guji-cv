@@ -170,10 +170,18 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     }
   }
 
+  function prevDone(id: string): string {
+    return verdicts.current[id]?.done || ''
+  }
+
   function setVerdict(i: number, shape: string, reading?: string, doneIn?: string) {
     const c = cards[i]
     if (!c) return
-    let mark = doneIn === undefined ? (shape ? '1' : '') : doneIn
+    // 从候选/输入框改字时（doneIn 省略）：切分缺陷两档要**保住**，别被改字顶掉——
+    // 「这块图切坏了」与「这是哪个字」是两件事，可以同时成立（用户 2026-09-20）。
+    const keepDefect = (doneIn === undefined
+                        && (prevDone(c.id) === 'truncated' || prevDone(c.id) === 'contaminated'))
+    let mark = doneIn === undefined ? (keepDefect ? prevDone(c.id) : (shape ? '1' : '')) : doneIn
     const rd = reading || ''
     if (needsReading(shape) && !rd) mark = 'need_reading'
     const prev = verdicts.current[c.id]

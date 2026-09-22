@@ -141,12 +141,15 @@ export function ReviewCardView({
         )}
       </div>
       <div className="rvseg">
+        {/* 切分缺陷两档**保留已填的字**（用户 2026-09-20：「有噪声和字形不完整的，应该
+            同时允许我选到底是哪个字——既不影响下一步整理，也反馈给了上游」）。
+            别的档（非字/跳过/破损）本来就没有字可留，照旧清空。 */}
         <button className={`rvmark${v.done === 'truncated' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'truncated' ? '' : 'truncated') }}
-                title="本字的笔画被切掉了一部分（T）">字形不完整</button>
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.reading, v.done === 'truncated' ? (v.shape ? '1' : '') : 'truncated') }}
+                title="本字的笔画被切掉了一部分（T）。可同时在上面选/填这是哪个字——字照样进文本，缺陷照样反馈给 Step3">字形不完整</button>
         <button className={`rvmark${v.done === 'contaminated' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'contaminated' ? '' : 'contaminated') }}
-                title="混进了邻字残墨 / 界行 / 版框（C）">有噪声</button>
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.reading, v.done === 'contaminated' ? (v.shape ? '1' : '') : 'contaminated') }}
+                title="混进了邻字残墨 / 界行 / 版框（C）。可同时选/填这是哪个字">有噪声</button>
         <button className={`rvmark${v.done === 'non' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'non' ? '' : 'non') }}
                 title="这一格根本不是字（N）">非字</button>
