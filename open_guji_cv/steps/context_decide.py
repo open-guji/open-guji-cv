@@ -126,8 +126,23 @@ class ContextDecideParams(BaseModel):
     llm_log_dir: str = DEFAULT_LLM_LOG_DIR
 
     def _corpus_paths(self) -> list[str]:
+        """本册整理本 + 泛古籍语料。**相对路径锚在仓根，不靠进程 cwd**（2026-09-21 修）。
+
+        `general_corpus_dir` 缺省是相对路径 `corpus/external`，原先直接
+        `Path(...)` 解析——于是同一份参数在不同 cwd 下得出不同的语料清单、
+        不同的 `corpus_fingerprint`：在 cv 仓根下跑扫得到两份泛语料，在工作区下跑
+        一份都扫不到。跑管线（cwd=工作区）与查 `status`（cwd=cv 仓）因此永远对不上，
+        `context_decide` **跑完立刻又判过期，循环无解**（bxgb 实测）。
+
+        这两份泛语料是**引擎自带、跨书共用**的（不是某本书的资料），所以锚仓根是对的；
+        与 `core.workspace.corpus_path` 第 80 行那条警告同源——那次修了 `DEFAULT_CORPUS`，
+        漏了这里。绝对路径原样用。
+        """
         out = [self.corpus]
         d = Path(self.general_corpus_dir)
+        if not d.is_absolute():
+            from ..core.workspace import REPO_ROOT
+            d = REPO_ROOT / d
         if d.is_dir():
             out += [str(p) for p in sorted(d.glob("*.txt"))]
         return out
