@@ -64,7 +64,8 @@ from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.report.collation_grade import GRADE_LABEL, summarize  # noqa: E402
+from open_guji_cv.report.collation_grade import (GRADE_LABEL, misanchored_pages,  # noqa: E402
+                                                  summarize)
 from open_guji_cv.utils.image_io import imread  # noqa: E402
 
 #: 每一层在报告里写明判据——分层是给人看的排序，人得能不同意它。
@@ -74,6 +75,8 @@ GRADE_NOTE = {
     "taboo": "清刻本避諱改字，整理本回改原字；录刻本形是对的",
     "systematic": "同一字对全书反复出现（≥3 次），是版本用字差异而非识别错",
     "variant": "异体关系图已收，同字异形",
+    "human": "人已看过这张图并定了字——这是人判定的版本差异，不是待办",
+    "misanchor": "整页与整理本对不上号（锚到了错的位置），不是逐字认错；转写本身多半是对的",
 }
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
@@ -412,7 +415,10 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
     # 分层：把「我们录错了」从「两个本子本来就不同」里分出来（见 report/collation_grade.py）。
     # 平表按 kind 排，答的是「字面一不一样」；按 grade 排，答的是「这条要不要人去看」——
     # 后者才是看报告的人真正要问的。存疑那层排最前，成果那几层折叠起来。
-    gsum = summarize(entries)
+    # 锚定**失败**的页已经单独报了（`unanch`），不再重复计进「整段错位」——
+    # 那些页压根没出差异条目，混进来只会让同一页在两处各报一次。
+    mis = misanchored_pages(page_stats) - set(unanchored)
+    gsum = summarize(entries, mis)
     counts, by = gsum["counts"], gsum["by_grade"]
 
     def grade_section(g: str, *, open_: bool) -> str:
@@ -428,7 +434,8 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
                 f'<div class="ents">{inner}</div></details>')
 
     sections = [grade_section("suspect", open_=True)]
-    sections += [grade_section(g, open_=False) for g in ("gap", "taboo", "systematic", "variant")]
+    sections += [grade_section(g, open_=False)
+                 for g in ("misanchor", "gap", "human", "taboo", "systematic", "variant")]
 
     unanch = (f"<p class='warn'>锚定失败 {len(unanchored)} 页：{', '.join('p%d' % p for p in unanchored)}"
               f"——转写与整理本对不上号（整理本缺这段，或这页转写噪声太大），不在下表内。</p>" if unanchored else "")
@@ -508,14 +515,17 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   <div class="eyebrow">open-guji-cv · 对勘 · {_e(meta['built_at'])} · 转写 = 人裁 &gt; 自动放行 &gt; 上下文 &gt; 库 &gt; OCR</div>
   <h1>{_e(book)} 对勘</h1>
   <p class="lede">全书 <b>{n_slots:,}</b> 字位，与整理本一致 <b>{n_equal:,}</b>（{n_equal / max(1, n_slots) * 100:.1f}%）。
-    其余 <b>{len(entries)}</b> 处差异里，<b>{gsum['n_settled']}</b> 处是两个本子的真实不同（避諱改字、正俗、异体，<b>转写忠于刻本，不用改</b>），
-    真正<b>存疑待覈的 {gsum['n_todo']} 处</b>。</p>
+    其余 <b>{len(entries)}</b> 处差异里，<b>{gsum['n_settled']}</b> 处是两个本子的真实不同（避諱改字、正俗、异体、人裁定字，<b>转写忠于刻本，不用改</b>）；
+    <b>{counts.get('gap', 0)}</b> 处增删、<b>{counts.get('misanchor', 0)}</b> 处整段错位（对齐问题，非逐字认错）；
+    真正<b>存疑待覈的只有 {gsum['n_todo']} 处</b>。</p>
   <div class="summary">
     <div class="stat todo"><b>{counts.get('suspect', 0)}</b><span>存疑·待覈</span></div>
-    <div class="stat"><b>{counts.get('gap', 0)}</b><span>增删（脱衍）</span></div>
+    <div class="stat ok"><b>{counts.get('human', 0)}</b><span>人裁定字</span></div>
     <div class="stat ok"><b>{counts.get('taboo', 0)}</b><span>避諱改字</span></div>
     <div class="stat ok"><b>{counts.get('systematic', 0)}</b><span>正俗·异体（系统性）</span></div>
     <div class="stat ok"><b>{counts.get('variant', 0)}</b><span>异体（{len(variant_pairs)} 对）</span></div>
+    <div class="stat"><b>{counts.get('gap', 0)}</b><span>增删（脱衍）</span></div>
+    <div class="stat"><b>{counts.get('misanchor', 0)}</b><span>整段错位{(" · p" + "、p".join(str(p) for p in sorted(mis))) if mis else ""}</span></div>
   </div>
   <p class="muted" style="font-size:.82rem">分层判据：避諱字表 + 同一字对全书重复 ≥3 次 + 异体关系图（见 <code>report/collation_grade.py</code>）。
     <b>分层是排序不是闸</b>——落进「存疑」不等于错，落进「版本差异」也不等于一定对。
@@ -523,7 +533,7 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
     转写来源：人裁 {n_src.get('human', 0)} · 自动 {n_src.get('auto', 0)} · 机器猜 {n_src.get('ctx', 0) + n_src.get('lib', 0) + n_src.get('ocr', 0) + n_src.get('none', 0)}</p>
   {unanch}{trunc}
 </header>
-<nav><a href="#g-suspect">存疑 {counts.get('suspect', 0)}</a>{"".join(f'<a href="#g-{g}">{_e(GRADE_LABEL[g])} {counts.get(g, 0)}</a>' for g in ("gap", "taboo", "systematic", "variant") if counts.get(g))}<a href="#pages">按页</a><a href="#variants">异体字</a></nav>
+<nav><a href="#g-suspect">存疑 {counts.get('suspect', 0)}</a>{"".join(f'<a href="#g-{g}">{_e(GRADE_LABEL[g])} {counts.get(g, 0)}</a>' for g in ("misanchor", "gap", "human", "taboo", "systematic", "variant") if counts.get(g))}<a href="#pages">按页</a><a href="#variants">异体字</a></nav>
 
 <section id="pages"><h2>按页</h2>
 <div class="tw"><table><thead><tr><th>页</th><th>字位</th><th>一致</th>{"".join(f"<th>{_e(KIND_LABEL[k].split('（')[0])}</th>" for k in KINDS)}<th>排除</th></tr></thead>

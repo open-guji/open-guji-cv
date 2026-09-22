@@ -54,11 +54,17 @@ GRADE_LABEL = {
     "systematic": "正俗·异体（系统性）",
     "variant": "异体（关系图已收）",
     "gap": "增删（脱衍）",
+    "human": "人裁定字（与整理本不同）",
+    "misanchor": "整段错位（锚定失败）",
     "suspect": "存疑·待覈",
 }
 
 #: 哪些层是「成果」（转写忠于刻本，不用改），哪些是「待办」。
-SETTLED = ("taboo", "systematic", "variant")
+#: `human` 进成果：人看过图、定了字，这条差异就是**人判定的版本差异**，
+#: 不该再挂在待办里让人重看一遍（bxgb 实测：130 条「存疑」里 109 条是人裁过的，
+#: 全是 鳥/烏、扣/叩、溪/谿、棊/棋 这类一眼可判的正俗字，只因全书恰好出现一两次
+#: 没够上重复度阈值）。`misanchor` 单列：那不是字错，是整页对不上。
+SETTLED = ("taboo", "systematic", "variant", "human")
 TODO = ("suspect",)
 
 
@@ -68,8 +74,46 @@ def grade_pairs(entries: list[dict]) -> Counter:
                    if e["kind"] == "substitution")
 
 
-def grade(e: dict, pairs: Counter) -> str:
-    """给一条差异定层。`pairs` 来自 `grade_pairs`（全书统计，不能只看本页）。"""
+#: 一页不一致率超过这个数，就当整段错位，不当成逐字认错。
+#: bxgb 实测：全书中位数 2.5%，最高的正常页 5.1%（p3，卷端题那列），
+#: 而 p56 是 33.9%——卷末按语列锚错，整段跟错了位置。两者差一个数量级，
+#: 20% 落在中间的空档里，不是精调出来的。
+MISANCHOR_RATE = 0.20
+
+
+def misanchored_pages(page_stats: dict, rate: float = MISANCHOR_RATE) -> frozenset[int]:
+    """按不一致率挑出「整段错位」的页。
+
+    锚定**失败**的页（`anchored=False`）根本不出差异条目，这里管的是另一种：
+    锚上了、但锚到了错的位置，于是整页逐字比对全错。这种页的差异报成几十条
+    「改」，看的人会以为识别烂掉了，其实转写一个字都没错——
+    bxgb p56 实证：`飯黃碧二十八里` 被配到 `飯摩訶樣又行數里`。
+    """
+    out = set()
+    for p, s in (page_stats or {}).items():
+        n = (s.get("n_slots") or 0) - (s.get("excluded") or 0)
+        if n > 0 and 1 - (s.get("equal") or 0) / n >= rate:
+            out.add(int(p))
+    return frozenset(out)
+
+
+def _is_human(e: dict) -> bool:
+    """这个字是人定的吗。
+
+    `human` = 本次转写直接取人裁 shape；`auto:human` = Step7 因为有人裁记录才放行。
+    对分层是同一件事：**人看过这张图并定了这个字**。
+    """
+    return str(e.get("source", "")).endswith("human")
+
+
+def grade(e: dict, pairs: Counter, misanchored: frozenset[int] = frozenset()) -> str:
+    """给一条差异定层。
+
+    `pairs` 来自 `grade_pairs`（**全书**统计，不能只看本页）；
+    `misanchored` 是锚定失败/整段错位的页号——那些页上的差异不是字错，是对不上号。
+    """
+    if e.get("page") in misanchored:
+        return "misanchor"
     k = e["kind"]
     if k in ("missing", "extra"):
         return "gap"
@@ -82,15 +126,20 @@ def grade(e: dict, pairs: Counter) -> str:
         return "taboo"
     if pairs.get(pair, 0) >= REPEAT_MIN:
         return "systematic"
+    # 人裁过的排在统计判据**之后**：先认避諱与系统性（那是版本学事实，
+    # 比「谁定的字」更强的判据），剩下的才按「有没有人看过」分。
+    if _is_human(e):
+        return "human"
     return "suspect"
 
 
-def summarize(entries: list[dict]) -> dict:
+def summarize(entries: list[dict], misanchored: frozenset[int] | set[int] = frozenset()) -> dict:
     """→ {grade: [entries]} + 计数。给报告顶部那段结论用。"""
     pairs = grade_pairs(entries)
+    mis = frozenset(misanchored)
     by: dict[str, list] = {g: [] for g in GRADE_LABEL}
     for e in entries:
-        g = grade(e, pairs)
+        g = grade(e, pairs, mis)
         e["grade"] = g
         by[g].append(e)
     return {
