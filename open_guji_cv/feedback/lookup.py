@@ -142,7 +142,11 @@ def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
         p = e.payload or {}
-        if p.get("v") != "confirm" or not p.get("shape"):
+        # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是
+        # **这块图**的毛病，人同时看得出是哪个字时，那个字不该被丢——文本照样出字，
+        # 缺陷照样反馈给 Step3（`gold_add` 那边本来就留着 shape，见 consumers.py）。
+        # 没填字的 seg_defect 仍然只是缺陷，不在这里出现。
+        if p.get("v") not in ("confirm", "seg_defect") or not p.get("shape"):
             continue
         out[e.target.key] = (str(p["shape"]), (str(p["reading"]) if p.get("reading") else None))
     return out
