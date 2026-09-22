@@ -64,6 +64,17 @@ from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
+from open_guji_cv.report.collation_grade import GRADE_LABEL, summarize  # noqa: E402
+from open_guji_cv.utils.image_io import imread  # noqa: E402
+
+#: 每一层在报告里写明判据——分层是给人看的排序，人得能不同意它。
+GRADE_NOTE = {
+    "suspect": "只出现一两次、无已知关系——最该先看这批",
+    "gap": "刻本多出或整理本多出，多半是漏切/两字并一格，或整理本据他本补字",
+    "taboo": "清刻本避諱改字，整理本回改原字；录刻本形是对的",
+    "systematic": "同一字对全书反复出现（≥3 次），是版本用字差异而非识别错",
+    "variant": "异体关系图已收，同字异形",
+}
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
 # 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
@@ -269,7 +280,11 @@ def _load_cell(cache: ImageCache, book: str, page: int, col: int, slot: int, sub
     p = cache.get(book, "char_patch", cell_key(page, col, slot) + sub)
     if p is None:
         return None
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    # ⚠️ 必须走 utils.image_io.imread（np.fromfile + imdecode），不能用 cv2.imread：
+    # OpenCV 在 Windows 下按 ANSI 编码传路径，工作区目录名一带中文就恒返回 None
+    # （2026-09-22 实测：`988g7gsqhd-北行日錄…` 下 545 条截条图**全部为空**，
+    # 报告里每条差异旁边都是「无图」，而生成过程一句错都不报）。
+    img = imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
     w = max(1, int(round(img.shape[1] * h / img.shape[0])))
@@ -278,28 +293,45 @@ def _load_cell(cache: ImageCache, book: str, page: int, col: int, slot: int, sub
 
 def strip_b64(cache: ImageCache, book: str, page: int, col_slots: list[dict], k: int,
               radius: int, h: int) -> str | None:
-    """同列第 k 格上下各 radius 格的竖条，目标格红框。→ PNG base64。"""
+    """目标格前后各 radius 格，**横排**成一条，目标格红框。→ WebP base64。
+
+    ## 为什么横排、为什么只截 ±2
+
+    旧版是竖排 ±5 格：11 个字块each 40px 叠起来近 500px 高，一条差异占掉整屏，
+    545 条就是 545 屏，「看得很累」（用户 2026-09-22）。古籍是竖排，所以竖着截
+    看似天经地义——但**报告不是书**：报告要的是「一眼看清这个字长什么样、左右
+    邻字是什么」，上下文有文字那两行管够，图只需要认字。
+
+    横排后一条高 ~48px、宽 ~5 格，正好嵌在文字行旁边，一屏能排十几条；同一个
+    `radius` 下，竖排占的是**高度**（稀缺，决定翻多少屏），横排占的是**宽度**
+    （富余，1100px 版心放得下 5 格还有余）。
+
+    ±2 而不是 ±5：定字要的是紧邻上下文，隔 5 个字的邻居对认字没有帮助，只是
+    把图撑大。真要看长上下文，条目下面的两行文字转写给的是 ±5 字，比图好读。
+
+    竖排的字块横过来拼，读序仍是原来的阅读序（从右到左是刻本行序，这里按
+    从左到右排，与下面的文字转写同向——两者对照时不用在脑子里翻转）。
+    """
     lo, hi = max(0, k - radius), min(len(col_slots), k + radius + 1)
     cells = []
     for i in range(lo, hi):
         s = col_slots[i]
         img = _load_cell(cache, book, page, s["col"], s["slot"], s["sub"], h)
         if img is None:
-            img = np.full((h, h, ), 235, np.uint8)
+            img = np.full((h, h), 235, np.uint8)
         cells.append((i == k, img))
     if not cells:
         return None
-    w = max(c.shape[1] for _, c in cells) + 6
-    gap = 3
-    total_h = sum(c.shape[0] for _, c in cells) + gap * (len(cells) - 1) + 6
-    canvas = np.full((total_h, w, 3), 255, np.uint8)
-    y = 3
+    gap, pad = 4, 3
+    total_w = sum(c.shape[1] for _, c in cells) + gap * (len(cells) - 1) + pad * 2
+    canvas = np.full((h + pad * 2, total_w, 3), 255, np.uint8)
+    x = pad
     for is_t, c in cells:
-        x = (w - c.shape[1]) // 2
+        y = pad + (h - c.shape[0]) // 2
         canvas[y:y + c.shape[0], x:x + c.shape[1]] = cv2.cvtColor(c, cv2.COLOR_GRAY2BGR)
         if is_t:
             cv2.rectangle(canvas, (x - 2, y - 2), (x + c.shape[1] + 1, y + c.shape[0] + 1), (30, 38, 179), 2)
-        y += c.shape[0] + gap
+        x += c.shape[1] + gap
     return _b64(canvas)
 
 
@@ -321,9 +353,13 @@ def _e(s) -> str:
 
 
 def _src_badge(src: str) -> str:
-    cls = "human" if src == "human" else ("auto" if src.startswith("auto") else "guess")
-    label = {"human": "人裁", "ctx": "上下文猜", "lib": "库猜", "ocr": "OCR猜", "none": "无候选",
-             "excluded": "排除"}.get(src, src.replace("auto:", "自动·"))
+    # `auto:human` 是 seed_admit 的 human **通道**（这格因为有人裁记录才放行），
+    # 与顶层 `human`（本次转写直接取人裁 shape）是两回事，但对读报告的人是同一件事：
+    # 这个字人看过。都标「人裁」，别端出「自动·human」这种内部通道名。
+    human_like = src in ("human", "auto:human")
+    cls = "human" if human_like else ("auto" if src.startswith("auto") else "guess")
+    label = {"human": "人裁", "auto:human": "人裁", "ctx": "上下文猜", "lib": "库猜",
+             "ocr": "OCR猜", "none": "无候选", "excluded": "排除"}.get(src, src.replace("auto:", "自动·"))
     return f'<span class="src {cls}">{_e(label)}</span>'
 
 
@@ -366,22 +402,33 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
         return f"""<div class="ent" data-kind="{e['kind']}" data-page="{e['page']}">
   {img}
   <div class="body">
-    <div class="head"><span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])} {doubts}</div>
-    <div class="pair"><span class="k">刻本</span><span class="gl big">{_e(e['hyp']) or '—'}</span>
-      <span class="k">整理本</span><span class="gl big">{_e(e['ref']) or '—'}</span></div>
+    <div class="head"><span class="pair"><span class="gl big">{_e(e['hyp']) or '—'}</span><span class="arr">→</span><span class="gl big">{_e(e['ref']) or '—'}</span></span>
+      <span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])} {doubts}</div>
     <div class="ctx"><span class="k">转写</span><span class="gl">{_e(e['hyp_ctx'])}</span></div>
     <div class="ctx"><span class="k">整理本</span><span class="gl">{_e(e['ref_ctx'])}</span></div>
   </div>
 </div>"""
 
-    sections = []
-    for k in ("substitution", "missing", "extra", "unreadable"):
-        es = [e for e in entries if e["kind"] == k]
+    # 分层：把「我们录错了」从「两个本子本来就不同」里分出来（见 report/collation_grade.py）。
+    # 平表按 kind 排，答的是「字面一不一样」；按 grade 排，答的是「这条要不要人去看」——
+    # 后者才是看报告的人真正要问的。存疑那层排最前，成果那几层折叠起来。
+    gsum = summarize(entries)
+    counts, by = gsum["counts"], gsum["by_grade"]
+
+    def grade_section(g: str, *, open_: bool) -> str:
+        es = by.get(g) or []
         if not es:
-            continue
-        cnt = f"{len(es)} 处 · {sum(e.get('n', 1) for e in es)} 字" if k == "missing" else str(len(es))
-        sections.append(f'<section id="k-{k}"><h2>{_e(KIND_LABEL[k])} <span class="cnt">{cnt}</span></h2><div class="ents">'
-                        + "".join(entry_html(e) for e in es) + "</div></section>")
+            return ""
+        note = GRADE_NOTE.get(g, "")
+        inner = "".join(entry_html(e) for e in es)
+        return (f'<details id="g-{g}"{" open" if open_ else ""}><summary>'
+                f'<span class="gname">{_e(GRADE_LABEL[g])}</span>'
+                f'<span class="cnt">{len(es)}</span>'
+                f'<span class="gnote">{_e(note)}</span></summary>'
+                f'<div class="ents">{inner}</div></details>')
+
+    sections = [grade_section("suspect", open_=True)]
+    sections += [grade_section(g, open_=False) for g in ("gap", "taboo", "systematic", "variant")]
 
     unanch = (f"<p class='warn'>锚定失败 {len(unanchored)} 页：{', '.join('p%d' % p for p in unanchored)}"
               f"——转写与整理本对不上号（整理本缺这段，或这页转写噪声太大），不在下表内。</p>" if unanchored else "")
@@ -409,6 +456,17 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   .stat {{ border-top:2px solid var(--ink); padding:.4rem 0; }}
   .stat b {{ display:block; font-family:var(--serif); font-size:1.5rem; line-height:1.2; }}
   .stat span {{ font-size:.8rem; color:var(--mute); }}
+  .stat.todo {{ border-top-color:var(--zhu); }}  .stat.todo b {{ color:var(--zhu); }}
+  .stat.ok {{ border-top-color:var(--ok); }}
+  .lede {{ font-size:1.05rem; line-height:1.85; margin:.2rem 0 1.1rem; max-width:62ch; }}
+  .lede b {{ font-family:var(--serif); }}
+  details {{ border-top:1px solid var(--rule); margin:0; }}
+  details[open] {{ padding-bottom:1.2rem; }}
+  summary {{ cursor:pointer; padding:.85rem 0; display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap; font-family:var(--serif); }}
+  summary::marker {{ color:var(--mute); }}
+  .gname {{ font-size:1.15rem; font-weight:700; }}
+  #g-suspect .gname {{ color:var(--zhu); }}
+  .gnote {{ font-family:var(--sans); font-size:.82rem; color:var(--mute); font-weight:400; }}
   .tw {{ overflow-x:auto; margin:0 0 1rem; border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); }}
   table {{ border-collapse:collapse; width:100%; font-size:.86rem; }}
   th,td {{ text-align:left; vertical-align:middle; padding:.32rem .6rem; border-bottom:1px solid var(--rule); }}
@@ -418,13 +476,20 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   .gl.big {{ font-size:1.7rem; line-height:1.1; }}
   .th {{ height:44px; border:1px solid var(--rule); background:#fff; margin-right:.25rem; vertical-align:middle; }}
   .muted {{ color:var(--mute); }} .warn {{ color:var(--zhu); }}
-  .ents {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(30rem,1fr)); gap:0 2.5rem; }}
-  .ent {{ display:grid; grid-template-columns:auto 1fr; gap:.9rem; padding:.7rem 0; border-bottom:1px solid var(--rule); min-width:0; }}
-  .ent .strip {{ background:#fff; border:1px solid var(--rule); display:block; }}
-  .ent .strip.nop {{ width:52px; min-height:8rem; color:var(--mute); font-size:.7rem; display:flex; align-items:center; justify-content:center; }}
-  .ent .head {{ font-size:.8rem; color:var(--mute); display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }}
-  .ent .pair {{ display:flex; align-items:baseline; gap:.5rem 1rem; margin:.25rem 0; flex-wrap:wrap; }}
-  .ent .pair .big {{ word-break:break-all; }}
+  /* 截条横排后条目改成上下堆叠：图一条（~48px 高）压在文字上面，整条不到 8rem。
+     旧版竖条 ~500px 高、图文左右并排，一条就是一屏（用户 2026-09-22「看的很累」）。
+     两列布局在 1100px 版心下每列 ~30rem，一屏能排 6–8 条。 */
+  .ents {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(26rem,1fr)); gap:0 2.5rem; }}
+  .ent {{ padding:.6rem 0; border-bottom:1px solid var(--rule); min-width:0; }}
+  .ent .strip {{ background:#fff; border:1px solid var(--rule); display:block; max-width:100%; margin:0 0 .35rem; }}
+  .ent .strip.nop {{ height:2.6rem; color:var(--mute); font-size:.7rem; display:flex; align-items:center; padding:0 .5rem; }}
+  /* 「刻本 X → 整理本 Y」并进 id 那一行：旧版它独占一行、两个大字中间还夹着两个
+     标签，一条条目因此多占一行半。图上已有红框指明是哪一格，两行文字上下文也带
+     【】标记，这里只要把两个字并排摆出来就够，不必再写「刻本」「整理本」四个字。 */
+  .ent .head {{ font-size:.8rem; color:var(--mute); display:flex; gap:.45rem; flex-wrap:wrap; align-items:baseline; }}
+  .ent .pair {{ display:inline-flex; align-items:baseline; gap:.3rem; margin-right:.25rem; }}
+  .ent .pair .big {{ word-break:break-all; font-size:1.35rem; }}
+  .ent .arr {{ color:var(--mute); font-size:.85rem; }}
   .ent .k {{ font-size:.72rem; color:var(--mute); letter-spacing:.06em; margin-right:.3rem; }}
   .ent .ctx {{ font-size:.95rem; }}
   .src {{ font-family:var(--mono); font-size:.68rem; padding:.05em .45em; border-radius:2px; border:1px solid var(--rule); }}
@@ -442,16 +507,23 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
 <header>
   <div class="eyebrow">open-guji-cv · 对勘 · {_e(meta['built_at'])} · 转写 = 人裁 &gt; 自动放行 &gt; 上下文 &gt; 库 &gt; OCR</div>
   <h1>{_e(book)} 对勘</h1>
+  <p class="lede">全书 <b>{n_slots:,}</b> 字位，与整理本一致 <b>{n_equal:,}</b>（{n_equal / max(1, n_slots) * 100:.1f}%）。
+    其余 <b>{len(entries)}</b> 处差异里，<b>{gsum['n_settled']}</b> 处是两个本子的真实不同（避諱改字、正俗、异体，<b>转写忠于刻本，不用改</b>），
+    真正<b>存疑待覈的 {gsum['n_todo']} 处</b>。</p>
   <div class="summary">
-    <div class="stat"><b>{len(pages)}</b><span>页（锚定 {len(pages) - len(unanchored)}）</span></div>
-    <div class="stat"><b>{n_slots:,}</b><span>字位（排除名单 {n_excl}）</span></div>
-    <div class="stat"><b>{n_equal:,}</b><span>与整理本一致</span></div>
-    <div class="stat"><b>{kc.get('variant', 0)}</b><span>异体（{len(variant_pairs)} 对）</span></div>
-    <div class="stat"><b>{kc.get('substitution', 0) + kc.get('missing', 0) + kc.get('extra', 0) + kc.get('unreadable', 0)}</b><span>增删改（人裁 {n_src.get('human', 0)} · 自动 {n_src.get('auto', 0)} · 机器猜 {n_src.get('ctx', 0) + n_src.get('lib', 0) + n_src.get('ocr', 0) + n_src.get('none', 0)}）</span></div>
+    <div class="stat todo"><b>{counts.get('suspect', 0)}</b><span>存疑·待覈</span></div>
+    <div class="stat"><b>{counts.get('gap', 0)}</b><span>增删（脱衍）</span></div>
+    <div class="stat ok"><b>{counts.get('taboo', 0)}</b><span>避諱改字</span></div>
+    <div class="stat ok"><b>{counts.get('systematic', 0)}</b><span>正俗·异体（系统性）</span></div>
+    <div class="stat ok"><b>{counts.get('variant', 0)}</b><span>异体（{len(variant_pairs)} 对）</span></div>
   </div>
+  <p class="muted" style="font-size:.82rem">分层判据：避諱字表 + 同一字对全书重复 ≥3 次 + 异体关系图（见 <code>report/collation_grade.py</code>）。
+    <b>分层是排序不是闸</b>——落进「存疑」不等于错，落进「版本差异」也不等于一定对。
+    {len(pages)} 页（锚定 {len(pages) - len(unanchored)}）· 排除名单 {n_excl} 格不进比对 ·
+    转写来源：人裁 {n_src.get('human', 0)} · 自动 {n_src.get('auto', 0)} · 机器猜 {n_src.get('ctx', 0) + n_src.get('lib', 0) + n_src.get('ocr', 0) + n_src.get('none', 0)}</p>
   {unanch}{trunc}
 </header>
-<nav><a href="#pages">按页</a><a href="#variants">异体字</a>{"".join(f'<a href="#k-{k}">{_e(KIND_LABEL[k])} {kc.get(k, 0)}</a>' for k in ("substitution", "missing", "extra", "unreadable") if kc.get(k))}</nav>
+<nav><a href="#g-suspect">存疑 {counts.get('suspect', 0)}</a>{"".join(f'<a href="#g-{g}">{_e(GRADE_LABEL[g])} {counts.get(g, 0)}</a>' for g in ("gap", "taboo", "systematic", "variant") if counts.get(g))}<a href="#pages">按页</a><a href="#variants">异体字</a></nav>
 
 <section id="pages"><h2>按页</h2>
 <div class="tw"><table><thead><tr><th>页</th><th>字位</th><th>一致</th>{"".join(f"<th>{_e(KIND_LABEL[k].split('（')[0])}</th>" for k in KINDS)}<th>排除</th></tr></thead>
@@ -488,7 +560,13 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
       e.hidden=!ok; if(ok)n++;
     }}
     fc.textContent='显示 '+n+' / '+ents.length;
-    document.querySelectorAll('section[id^=k-]').forEach(s=>{{ s.hidden=![...s.querySelectorAll('.ent')].some(e=>!e.hidden); }});
+    // 分层用 <details id="g-…">，不再是 section[id^=k-]；整层空了就藏掉，
+    // 并把层标题上的计数改成「当前显示数」，否则筛完标题还写着全量数，对不上。
+    document.querySelectorAll('details[id^=g-]').forEach(s=>{{
+      const vis=[...s.querySelectorAll('.ent')].filter(e=>!e.hidden).length;
+      s.hidden=!vis;
+      const c=s.querySelector('summary .cnt'); if(c) c.textContent=vis;
+    }});
   }}
   fk.forEach(c=>c.onchange=apply); fp.oninput=apply; fh.onchange=apply; apply();
 }})();
@@ -505,8 +583,8 @@ def main() -> int:
     ap.add_argument("--corpus", default="",
                     help="整理本语料路径；空 = 按 books/<book>.yaml 的 references[0] 取本册自己那份")
     ap.add_argument("--out", default=None, help="HTML 输出（默认 output/collation_<book>.html）")
-    ap.add_argument("--strip", type=int, default=5, help="截条上下各几格")
-    ap.add_argument("--thumb-h", type=int, default=40, help="每格缩放到多高（px）")
+    ap.add_argument("--strip", type=int, default=2, help="截条目标格前后各几格（横排，见 strip_b64）")
+    ap.add_argument("--thumb-h", type=int, default=44, help="每格缩放到多高（px）")
     ap.add_argument("--limit-strips", type=int, default=1500, help="最多出多少条截条图（控体积）")
     ap.add_argument("--variant-examples", type=int, default=3)
     a = ap.parse_args()
