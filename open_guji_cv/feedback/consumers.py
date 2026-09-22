@@ -512,18 +512,30 @@ def product_invalidate(events, product_store=None, dry_run: bool = False, **kw) 
     for e, d in events:
         step = (d.extra or {}).get("step")
         t = e.target
-        if not step or t.book is None or t.page is None:
+        book, page = t.book, t.page
+        if (book is None or page is None) and t.unit == "cell":
+            # 从 key 反解（2026-09-21）：写入方**多半不填** `book`/`page`——bxgb 实测
+            # 1,558 条 cell 事件里 822 条（53%）两个字段都是 None，而 `key` 一直是
+            # 完整的 `<book>:<页>:<列>:<格>`。`decided_cells` 早就为同一件事按 key
+            # 前缀兜底了，这里没兜，于是过半的人裁**不触发产物失效**：裁决进了库，
+            # seed_admit 不知道，待审列表照旧端出那张卡（09-20 报的「裁完再载入还在」
+            # 就是这条路由缺席，补上路由之后又被这半数空字段挡掉一半）。
+            parts = (t.key or "").split(":")
+            if len(parts) >= 3 and parts[1].isdigit():
+                book = book or parts[0]
+                page = page if page is not None else int(parts[1])
+        if not step or book is None or page is None:
             res.skipped += 1
-            res.errors.append(f"{e.id}: 路由没给 extra.step 或事件没 book/page")
+            res.errors.append(f"{e.id}: 路由没给 extra.step，或事件没 book/page 且 key {t.key!r} 反解不出")
             continue
-        key = (t.book, step, page_key(t.page))
+        key = (book, step, page_key(page))
         if key in done:
             continue
         done.add(key)
         if dry_run:
             res.added += 1
             continue
-        if st.manifest(t.book, step).invalidate(key[2], f"人裁 {e.kind} {e.id}"):
+        if st.manifest(book, step).invalidate(key[2], f"人裁 {e.kind} {e.id}"):
             res.added += 1
         else:
             res.skipped += 1
