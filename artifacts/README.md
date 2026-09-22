@@ -18,6 +18,12 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
+## 结构金标（Step5 结构感知，M2 / 任务卡 2026-09-22 T3）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **结构金标裁决台**（300 条真刻例 × IDS 拆法，裁「按图上写法拆法对不对」）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/build_struct_gold_review.py`（读冻结卡片；`--seed-verdicts` 续裁）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
+
 ## 边框判读（Step1）
 
 | 页面 | URL | 快照/真源 | 再生 |
