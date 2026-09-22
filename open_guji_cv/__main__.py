@@ -48,6 +48,7 @@ elif hasattr(sys.stdout, "reconfigure"):
 
 from .pipeline import GujiPipeline, IMAGE_EXTENSIONS
 from .profile import BookProfile
+from .utils.image_io import imread as cv_imread
 
 
 # ─── 工具函数 ──────────────────────────────────────────────
@@ -118,7 +119,7 @@ def cmd_cut(args):
     image_files = []
     for f in sorted(path.iterdir()):
         if f.suffix.lower() in IMAGE_EXTENSIONS:
-            img = cv2.imread(str(f))
+            img = cv_imread(str(f))
             if img is not None:
                 images.append(img)
                 image_files.append(f)
@@ -158,14 +159,14 @@ def cmd_cut(args):
             mid_x = w // 2
             left = img[:, :mid_x]
             right = img[:, mid_x:]
-            cv2.imwrite(str(output_dir / f"{stem}_left.png"), left)
-            cv2.imwrite(str(output_dir / f"{stem}_right.png"), right)
+            cv_imwrite(str(output_dir / f"{stem}_left.png"), left)
+            cv_imwrite(str(output_dir / f"{stem}_right.png"), right)
         elif cut_type == "horizontal_cut":
             mid_y = h // 2
             top = img[:mid_y, :]
             bottom = img[mid_y:, :]
-            cv2.imwrite(str(output_dir / f"{stem}_top.png"), top)
-            cv2.imwrite(str(output_dir / f"{stem}_bottom.png"), bottom)
+            cv_imwrite(str(output_dir / f"{stem}_top.png"), top)
+            cv_imwrite(str(output_dir / f"{stem}_bottom.png"), bottom)
 
     print(f"切分完成: {len(image_files)} 张 -> {output_dir}")
 
@@ -416,7 +417,7 @@ def cmd_recognize(args):
     import cv2 as _cv2
     with open(out_dir / "matches.jsonl", "w", encoding="utf-8") as f:
         for n, rec in enumerate(recs, 1):
-            gray = _cv2.imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
+            gray = cv_imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
             if gray is None:
                 continue
             r = matcher.match(normalize_patch(gray))

@@ -25,6 +25,7 @@ from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
 from ...utils.preclean import effective_raw_path
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 router = APIRouter()
 
@@ -287,7 +288,7 @@ def api_review_context_img(book: str, page: int, col: int, slot: int, around: in
         path = ctx.materialize("column_image", column_key(page, col))
     except Exception as e:   # noqa: BLE001
         raise ImageMissing(f"列图算不出来: {e}") from e
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("列图读不出来")
     h = img.shape[0]
@@ -347,7 +348,7 @@ def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
     p = effective_raw_path(b, page)
     if not p.exists():
         raise ImageMissing("原图缺失")
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("原图读不出来")
     h, w = img.shape

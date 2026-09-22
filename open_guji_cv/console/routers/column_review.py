@@ -27,6 +27,7 @@ from ...core.book import load_book
 from ...core.spec import column_key, page_key
 from ...utils.column_triage import BLOCKING, REVIEW, triage_column
 from .. import deps
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 router = APIRouter()
 
@@ -219,7 +220,7 @@ def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
     p = deps.image_cache().get(book, "column_raw", column_key(page, col))
     if p is None:
         raise HTTPException(404, "没有这一列的矫正图（先跑 Step2）")
-    g = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    g = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if g is None:
         raise HTTPException(404, "列图读不出来")
     shown = binarize_page(g) if src == "bin" else g
@@ -280,7 +281,7 @@ def api_column_profile(book: str, page: int, col: int) -> dict:
     p = ctx_cache.get(book, "column_raw", column_key(page, col))
     if p is None:
         raise HTTPException(404, "没有这一列的矫正图（先跑 Step2）")
-    g = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    g = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if g is None:
         raise HTTPException(404, "列图读不出来")
     dn = denoise_column(g)

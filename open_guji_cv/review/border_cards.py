@@ -53,6 +53,7 @@ from ..utils.column_projection import (
     strip_column_rules,
 )
 from ..utils.preclean import effective_raw_path
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 HEAD_UP, HEAD_DN = 250, 45
 STRIP_W, STRIP_PAD = 480, 42
@@ -73,7 +74,7 @@ def _read_gray(book: str, page: int):
     p = effective_raw_path(b, page)
     if not p.exists():
         raise ImageMissing(f"原图缺失: {p}")
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing(f"原图读不出来: {p}")
     return img
@@ -417,7 +418,7 @@ def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: s
         path = ctx.materialize("column_image", column_key(page, col))
     except Exception as e:   # noqa: BLE001
         raise ImageMissing(f"列图算不出来: {e}") from e
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("列图读不出来")
     denoised = denoise_column(img)

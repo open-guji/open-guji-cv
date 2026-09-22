@@ -15,6 +15,7 @@ from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
 from .events import Event, EventLog
 from .routes import Destination, RouteTable
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 @dataclass
@@ -344,7 +345,7 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.errors.append(f"{e.target.key}: 缓存里没有字块 {ckey}")
             res.skipped += 1
             continue
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             res.errors.append(f"{e.target.key}: 图块读不出来")
             res.skipped += 1
