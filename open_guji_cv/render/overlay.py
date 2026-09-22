@@ -29,6 +29,7 @@ from ..errors import EncodeFailed, ImageMissing, NotFound, ProductMissing, Unsup
 from ..gates.query import GATE_TIER_COLOR, gate_column_tier
 from ..products.store import ProductStore
 from ..utils.preclean import band_boundary, band_ink_ratio, effective_raw_path, precleaned_path
+from ..utils.image_io import imread as cv_imread
 
 
 def encode_png(img: np.ndarray, scale: float | None = None) -> bytes:
@@ -67,7 +68,7 @@ def overlay(book: str, step: str, page: int,
     """
     b = load_book(book)
     st = store or ProductStore()
-    img = cv2.imread(str(effective_raw_path(b, page)))
+    img = cv_imread(str(effective_raw_path(b, page)))
     if img is None:
         raise ImageMissing("原图缺失")
     H, W = img.shape[:2]
@@ -167,10 +168,10 @@ def preclean_overlay(book: str, page: int) -> np.ndarray:
     rules = (b.preclean or {}).get(page)
     if not rules:
         raise NotFound(f"{book} p{page} 没有登记 preclean 规则")
-    img = cv2.imread(str(b.raw_path(page)))
+    img = cv_imread(str(b.raw_path(page)))
     if img is None:
         raise ImageMissing("原图缺失")
-    gray = cv2.imread(str(b.raw_path(page)), cv2.IMREAD_GRAYSCALE)
+    gray = cv_imread(str(b.raw_path(page)), cv2.IMREAD_GRAYSCALE)
     for r in rules:
         if r.get("kind", "inverted_band") != "inverted_band":
             continue
@@ -205,7 +206,7 @@ def preclean_report(book: str, page: int) -> dict:
     rules = (b.preclean or {}).get(page)
     if not rules:
         raise NotFound(f"{book} p{page} 没有登记 preclean 规则")
-    gray = cv2.imread(str(b.raw_path(page)), cv2.IMREAD_GRAYSCALE)
+    gray = cv_imread(str(b.raw_path(page)), cv2.IMREAD_GRAYSCALE)
     if gray is None:
         raise ImageMissing("原图缺失")
 

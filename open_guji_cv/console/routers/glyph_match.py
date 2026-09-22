@@ -18,6 +18,7 @@ from .. import deps
 from ..errors import maps_http
 from ...core.book import load_book
 from ...errors import ImageMissing
+from ...utils.image_io import imread as cv_imread
 
 router = APIRouter()
 
@@ -74,7 +75,7 @@ def api_glyph_match_query(book: str, page: int, col: int, slot: int,
     if path is None:
         raise ImageMissing(f"没有字块 p{page:04d}c{col:02d}s{slot}{sub or ''}")
     import cv2
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
 
     p = _params_for_book(book, k)
     matcher, _chars = cached_matcher_from_db(

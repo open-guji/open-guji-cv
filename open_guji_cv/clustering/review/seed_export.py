@@ -33,6 +33,7 @@ from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
                           parse_seed_events)
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 # 已裁决 = 不再需要出现在待审批次里的状态（auto_admitted 也算：免审进库；
 # confirmed_label_only = 定了字但字形不入库，同样已裁决）
@@ -190,7 +191,7 @@ def _recrop_region(book_dir: Path, rec) -> dict | None:
     img = book_dir / f"{rec.page}.png"
     if not img.exists():
         return None
-    im = cv2.imread(str(img), cv2.IMREAD_GRAYSCALE)
+    im = cv_imread(str(img), cv2.IMREAD_GRAYSCALE)
     if im is None:
         return None
     h, w = im.shape[:2]

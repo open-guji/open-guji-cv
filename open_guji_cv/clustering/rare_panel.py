@@ -30,6 +30,7 @@ from .ids_guard import ids_of
 from .normalize import normalize_patch
 from ..products.cache import ImageCache
 from ..steps.align_ref import DEFAULT_CORPUS
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
@@ -39,7 +40,7 @@ def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
     path = (cache or ImageCache()).get(book, "char_patch", ck)
     if path is None:
         return None
-    return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    return cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
 
 
 def _book_norm_stroke(book: str | None) -> int | None:

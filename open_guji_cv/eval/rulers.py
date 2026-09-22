@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 # R2：格线处墨占比超过这个值就算「穿字」（口径同 step3_error_survey）
 INK_ON_LINE = 0.02
@@ -95,7 +96,7 @@ def _col_profile(store, book: str, pg: int, col: int) -> np.ndarray | None:
     path = ImageCache().get(book, "column_image", f"p{pg:04d}c{col:02d}")
     if path is None:
         return None
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
     return (img < int(INK_TH * 255)).mean(axis=1).astype(np.float64)
@@ -108,7 +109,7 @@ def _col_ink(book: str, pg: int, col: int) -> np.ndarray | None:
     path = ImageCache().get(book, "column_image", f"p{pg:04d}c{col:02d}")
     if path is None:
         return None
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     return None if img is None else (img < int(INK_TH * 255))
 
 
