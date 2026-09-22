@@ -22,7 +22,7 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **结构金标裁决台**（原 300 条；2026-09-22 起只出**残差 10 张**——模型与 IDS 表全部拆法都不同、字种未裁的，一字种一张）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
+| **结构金标裁决台**（原 300 条；改成只出模型与 IDS 表全部拆法都不同的残差，**已裁完**，56 条人裁冻结在 [struct_gold_verdicts.jsonl](struct_gold_verdicts.jsonl)，`struct_gold_residual.py` 报残差 0）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
 
 ## 边框判读（Step1）
 
