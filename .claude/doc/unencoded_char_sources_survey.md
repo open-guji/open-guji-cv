@@ -282,3 +282,21 @@ Fonts_Sung/Kai.zip；授权二选一：政府資料開放授權條款第 1 版 �
 - 渲染原型：`scripts/kage_render_glyphwiki.py`（需 `npm install @kurgm/kage-engine`）。
 - 相关文档：`ccr_rare_char_literature_review.md` §6 N12/N14/N3（未收字通道、新字假设、KAGE 框投影）、
   `glyph_db_expansion_research.md`（GlyphWiki 许可与 dump 说明）、`structure_aware_recognition_design.md` §3.5。
+
+---
+
+## 5′ 落地记录
+
+### 2026-09-22 · 层 1 第一块已落：GlyphWiki 变体形当第六套模板档
+
+- **预实验**（设计稿 §13 ⑤）：oov_bench 上 max(字体均值, 变体形) top-1 75.8 → **81.5**（user 源
+  65.1 → 73.4），top-10 不变、带坏 0；混进均值反而掉到 66.2。对照：KAGE 渲染的标准形自身类
+  top-1 90.0%，风格不是问题；目录 33,342 形对关联字只 42% top-1，说明它们是真变体。
+- **代码**：`scripts/build_glyphwiki_catalog.py`（dump + kage → `cache/glyphwiki/catalog_64.npz`，
+  不进 git）；`cnn_candidates.GW_CATALOG` / `_gw_index()` / `emb_topk_batch` 取 max、
+  `last_gw_prov` 记来源；`full_fingerprint` 带目录指纹（产物会正确过期）；`rare_for_batch`
+  给候选挂 `gw` 字段（名 / 来源 / 余弦 / GlyphWiki 链接），面板显示「变体形·zihai」；
+  `tests/test_gw_templates.py`。总开关 `GW_ENABLED`，目录缺席整条路静默不参与。
+- **还没做**：IDS 命名的 58,091 条进 `IdsIndex`（键空间扩到未收字）、`diff` 档门控（N6）、
+  「未收字子集」评测（T12 人裁）。本机要用：`npm i @kurgm/kage-engine`、下 dump、跑一次
+  构建脚本（7 万字表约 12 万形，渲染分钟级，embedding GPU 秒级 / CPU 十几分钟）。

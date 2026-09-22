@@ -41,6 +41,7 @@ def main() -> int:
     ap.add_argument("--weights", default="0.5,1,2,4")
     ap.add_argument("--top-m", default="10,30")
     ap.add_argument("--json", default=None)
+    ap.add_argument("--probe", default=None, help="外挂结构头 probe_<arch>.pt（Step A′，scripts/probe_struct_heads.py）")
     a = ap.parse_args()
 
     import cv2
@@ -60,7 +61,7 @@ def main() -> int:
         imgs.append((im > 127).astype(np.uint8)); gold.append(it["char"])
         src.append(it.get("src") or it.get("source") or "?")
     cs = base_charset(a.charset)
-    cnn = CnnCandidates(a.ckpt or DEFAULT_CKPT)
+    cnn = CnnCandidates(a.ckpt or DEFAULT_CKPT, probe=a.probe)
     if not cnn.available:
         print("没有 checkpoint / torch，量不了", file=sys.stderr)
         return 2
@@ -90,11 +91,18 @@ def main() -> int:
     res = {"n": len(gold), "charset": a.charset, "ckpt": str(a.ckpt or DEFAULT_CKPT), "rows": {}}
     print("\n配置            top-1  top-5  top-10   按来源 top1/top10")
     res["rows"]["baseline"] = report("baseline", base)
-    for tm in (int(x) for x in a.top_m.split(",")):
-        for w in (float(x) for x in a.weights.split(",")):
-            rk = [struct_rerank(b, p, first_level, k=10, weight=w, top_m=tm)
-                  for b, p in zip(base, probs)]
-            res["rows"][f"m{tm}_w{w:g}"] = report(f"m={tm} w={w:g}", rk)
+    # 两副眼睛：部件袋头（r5 自带，M0）与槽位头（checkpoint 自带或外挂探针 --probe，Step A/A′）
+    modes = [("comp", probs, first_level)]
+    if cnn.has_struct_heads:
+        from open_guji_cv.clustering.ids_struct import slot_keys_of
+        modes.append(("slot", cnn.slot_probs_batch(imgs), slot_keys_of))
+        print(f"槽位头来源：{cnn.struct_source}", flush=True)
+    for mode, pr, comps_of in modes:
+        for tm in (int(x) for x in a.top_m.split(",")):
+            for w in (float(x) for x in a.weights.split(",")):
+                rk = [struct_rerank(b, p, comps_of, k=10, weight=w, top_m=tm)
+                      for b, p in zip(base, pr)]
+                res["rows"][f"{mode}_m{tm}_w{w:g}"] = report(f"{mode} m={tm} w={w:g}", rk)
     if a.json:
         Path(a.json).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
         print("→", a.json)
