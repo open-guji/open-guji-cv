@@ -109,7 +109,8 @@ VLM 进放行；生成/超分复原后再识别；整库抓字统网（先写信
 | T5③ | 固定退化协议出表：r5 对粗细/断墨/贴边免疫，σ2.5 模糊与 ≥20% 遮挡才塌，塌时 top-10 先撑住 | 设计稿 §13 ⑤；`scripts/eval_degradation.py`（已登记进 eval） |
 | T6 | 形近对表 v1 19,729 对（IDS 关系 + 余弦 ≥.945 / 纯视觉 ≥.955），候选带 `near`，面板显示 | `config/ids/confusable_pairs_v1.tsv`、`clustering/confusables.py` |
 | T3 | **裁完（56 条人裁）**：出题出歪一次（让人对 300 张盖章）、改成先拿 IDS 表（主拆法 + 备选）当第一裁判，只把模型与表打架的 15 字种交给人。裁定：模型错 13 / 模型对 2（宐 ⿳/⿱ 口径、默 刻的是 黙 形）。真金标下结构头 oov 合体 **90.5%**、unseen 97.1%、独体 100%，按层权折回总体 **95.9%**——闸在总体上过、在 oov 档没过；标签噪声排除，**T9 开不开由 oov 档要不要攻决定** | 设计稿 §13 ⑦；`scripts/struct_gold_residual.py`、`artifacts/struct_gold_verdicts.jsonl` |
-| T7 | 未动 | — |
+| T7 | 进行中（云端，靶子换成四库两册：北行的 products/glyph.db 不进 git、云端拿不到；四库 glyph_store 16,557 条 + 扫描图 + 6,211 条用户 confirm 都在 git 里，云端重建库、重跑 Step1→5-a→5-d） | `scripts/eval_align_replace_gate.py`；`align_label.align_ops` |
+| T12 | **云端预筛：负结果——现有人裁流里没有未收字**。北行 `feedback/events` 1,558 条 seed_admit 事件（confirm 1,362 / seg_defect 159 / not_a_char 35）shape 全是单个 CJK 码位，shape≠reading 仅 1 条（澀/㒊）、`no_glyph_lib` 7 条；四库 6,211 条 confirm 同样全是单码位，shape≠reading 158 条（巳/已 80、㫖/旨 27、巳/己 9、鈎/鉤 5、注/註 5、卽/即 4、歴/歷 3、𬋕/醮 2…，其余是 OCR 拉丁字母误读）；`glyph_store/glyphs.jsonl` 2,664 字种 `ids` 字段全空。**「未收字子集」在当前数据里造不出来**，T4 的验收只能等真遇到未收字再说；现成能立刻用的是四库这 158 条**异体分歧子集**（刻本字形 vs 整理本读法），可以当 T4「变体形模板」的靶子——GlyphWiki 里 㫖/卽/歴/𬋕 这类都有形 | 本卡 §T12 |
 
 给本机的：`RareCandidatesParams.struct_probe` 我漏写了声明（本机已补 + 加了构造性测试，谢）；
 T4 要在本机跑一次 `build_glyphwiki_catalog.py`（需 dump + `npm i @kurgm/kage-engine`）才有目录，
