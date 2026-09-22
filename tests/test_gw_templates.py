@@ -35,6 +35,7 @@ def test_gw_max_fusion_and_provenance(tmp_path, monkeypatch):
     base = cnn.emb_topk_batch([img], charset, k=3)[0]
     assert base[0][0] == "諭" and cnn.last_gw_prov == [{}]
 
+    monkeypatch.setattr(cc, "GW_ENABLED", True)          # 缺省关（见 cnn_candidates.GW_ENABLED），这里显式开
     monkeypatch.setattr(cc, "GW_CATALOG", _catalog(tmp_path, img, related="論"))
     monkeypatch.setattr(cnn, "ckpt", tmp_path / "ckpt" / "best.pt")     # 落盘缓存写到临时目录
     (tmp_path / "ckpt").mkdir()

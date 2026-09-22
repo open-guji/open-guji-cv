@@ -97,8 +97,12 @@ kage 渲染成 64² 图，每形挂一个关联字。**每字取 max、单独一
 （oov_bench 实测：max 池化 top-1 75.8 → 81.5，混进均值 → 66.2；设计稿 §13 ⑤）。
 文件缺席时整条路静默不参与（`gw_catalog_fingerprint()` 为空、`full_fingerprint` 不变）。"""
 
-GW_ENABLED = True
-"""评测对照用的总开关（`eval_oov.py --no-gw` 之类置 False）；生产不改。"""
+GW_ENABLED = False
+"""总开关。**2026-09-22 缺省关**：7 万字表实测 oov_bench emb top-1 74.5 → 77.7、top-5 89.8 → 91.1、
+top-10 91.7 不变；但 unseen 严格 top-10 100.0 → 99.8（掉 3 条，top-1 98.0 不变）——任务卡的闸是
+「unseen 严格 / oov 都不掉」，差这 0.2 不开。开关留着：有了「未收字子集」（T12）再定，
+或者给 gw 模板加一个赢过字体均值的余量再量（不要在 unseen 上调这个余量）。
+评测：`eval_oov.py --no-gw` 对照；设计稿 §13 ⑥。"""
 
 
 def gw_catalog_fingerprint(path: str | Path = GW_CATALOG) -> str:
