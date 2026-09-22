@@ -241,6 +241,7 @@ class PageAlignRef(BaseModel):
     vote_frac: float = 0.0                   #   已经放弃（候选太少/没有产物/语料读不到），
     dominance: float | None = None           #   不是投票判据本身没过线
     chars: list[AlignRec] = Field(default_factory=list)
+    n_lib_dropped: int = 0                   # 被「库证据闸」拦下的 replace 位数（align_ref 模块头 2026-09-22）
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(

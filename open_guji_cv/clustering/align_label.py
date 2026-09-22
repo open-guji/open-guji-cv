@@ -197,11 +197,44 @@ def label_page(page: str, slots: list[tuple], book: str,
     连累整页对齐。`sub` 非空时 `instance_id` 带后缀（`book:page:col:slot` + `a`/`b`），
     与 `cell_shrink` / `seed_admit` 的字位 id 一致。
     """
+    aligned = align_ops(slots, corpus, corpus_index, window_pad)
+    if aligned is None:
+        return [], False
+    norm, window, ops = aligned
+
+    out: list[AlignedLabel] = []
+    for n, (tag, i1, i2, j1, j2) in enumerate(ops):
+        if tag == "equal":
+            pass
+        elif tag == "replace" and (i2 - i1) == (j2 - j1):
+            if not replace_len_gate(ops, n):
+                continue
+        else:
+            # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
+            continue
+        for k in range(i2 - i1):
+            col, idx, sub, hyp = norm[i1 + k]
+            gold = window[j1 + k]
+            out.append(AlignedLabel(f"{book}:{page}:{col}:{idx}{sub}", page,
+                                    gold, hyp, tag, i2 - i1))
+    return out, True
+
+
+def align_ops(slots: list[tuple], corpus: str, corpus_index: dict[str, list[int]],
+              window_pad: int = WINDOW_PAD):
+    """锚定 + difflib，**不过闸**：返回 `(norm, window, ops)`，锚不上返回 None。
+
+    2026-09-22 从 `label_page` 拆出来，给 `scripts/eval_align_replace_gate.py`
+    量「replace 段采信闸」用——评测要看到闸**拦掉的**那些位（长段、没被 equal
+    夹住的），走 `label_page` 看不到；而枚举逻辑必须与生产同一份，否则量出来
+    的采信率对不上产物。`norm` 是规范化的 `(col, slot, sub, hyp)`，`window`
+    是去掉换行的语料窗口，`ops` 是 `SequenceMatcher.get_opcodes()`。
+    """
     norm = [(t[0], t[1], (t[2] or "") if len(t) > 3 else "", t[-1]) for t in slots]
     text = "".join(ch for _, _, _, ch in norm)
     offset = anchor_page(text, corpus_index)
     if offset is None:
-        return [], False
+        return None
 
     lo = max(0, offset)
     hi = min(len(corpus), offset + len(text) + window_pad)
@@ -215,47 +248,42 @@ def label_page(page: str, slots: list[tuple], book: str,
     # gold 字符本身（取的就是清洗后字符串里的字，天然是汉字）。
     window = corpus[lo:hi].replace("\n", "")
     sm = difflib.SequenceMatcher(None, text, window, autojunk=False)
+    return norm, window, sm.get_opcodes()
 
-    out: list[AlignedLabel] = []
-    ops = sm.get_opcodes()
-    for n, (tag, i1, i2, j1, j2) in enumerate(ops):
-        if tag == "equal":
-            pass
-        elif tag == "replace" and (i2 - i1) == (j2 - j1):
-            # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
-            # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
-            # 位置本身就不可信——实测漏进来的错标（卷→曰、己→已）全是
-            # 这种。要求段长 ≤3，且左右被 equal 夹住。
-            #
-            # ⚠️ 夹住的门槛：**一侧 ≥2 字，另一侧 ≥1 字**（2026-09-06 放宽，
-            # 原来两侧都要 ≥2）。原规则丢掉了一整类真实模式：连续几个单字
-            # replace 被 1 字 equal 隔开，而整段外面被大片 equal 锚得很牢。
-            # 实例 vol02:32:7:6「目→曰 | 口 | 誤→訣 | 今詳考之實不盡然…」
-            # ——后面 34 字全对，位置毫无疑问，却因为紧邻的 equal 只有「口」
-            # 一个字被丢；vol02:31:1:7 的人名「伏曼容」同理。
-            #
-            # 放宽的代价实测为零：两册上有人裁真值的 replace 金标，
-            # 严格闸 176/214 = 82.2%，放宽后 198/241 = **82.2%**，
-            # 准确率一模一样而覆盖多 337 条（现有 1523 条的 22%）。
-            # 那 18% 的「不一致」也不是错标，是「忠于刻本字形」方针下的正常
-            # 分歧：刻本刻 櫽/祗/囘/𨽾，整理本印 檃/祇/回/隷。
-            if (i2 - i1) > 3:
-                continue
-            prev_run = (ops[n - 1][2] - ops[n - 1][1]
-                        if n > 0 and ops[n - 1][0] == "equal" else 0)
-            next_run = (ops[n + 1][2] - ops[n + 1][1]
-                        if n + 1 < len(ops) and ops[n + 1][0] == "equal" else 0)
-            if not (max(prev_run, next_run) >= 2 and min(prev_run, next_run) >= 1):
-                continue
-        else:
-            # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
-            continue
-        for k in range(i2 - i1):
-            col, idx, sub, hyp = norm[i1 + k]
-            gold = window[j1 + k]
-            out.append(AlignedLabel(f"{book}:{page}:{col}:{idx}{sub}", page,
-                                    gold, hyp, tag, i2 - i1))
-    return out, True
+
+def flank_runs(ops: list[tuple], n: int) -> tuple[int, int]:
+    """第 n 段左右贴身的 `equal` 段长度（不是 equal 就是 0）。"""
+    prev_run = (ops[n - 1][2] - ops[n - 1][1]
+                if n > 0 and ops[n - 1][0] == "equal" else 0)
+    next_run = (ops[n + 1][2] - ops[n + 1][1]
+                if n + 1 < len(ops) and ops[n + 1][0] == "equal" else 0)
+    return prev_run, next_run
+
+
+def replace_len_gate(ops: list[tuple], n: int) -> bool:
+    """等长 `replace` 段的**长度闸**（生产现役）：段长 ≤3 且被 equal 夹住。"""
+    tag, i1, i2, j1, j2 = ops[n]
+    # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
+    # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
+    # 位置本身就不可信——实测漏进来的错标（卷→曰、己→已）全是
+    # 这种。要求段长 ≤3，且左右被 equal 夹住。
+    #
+    # ⚠️ 夹住的门槛：**一侧 ≥2 字，另一侧 ≥1 字**（2026-09-06 放宽，
+    # 原来两侧都要 ≥2）。原规则丢掉了一整类真实模式：连续几个单字
+    # replace 被 1 字 equal 隔开，而整段外面被大片 equal 锚得很牢。
+    # 实例 vol02:32:7:6「目→曰 | 口 | 誤→訣 | 今詳考之實不盡然…」
+    # ——后面 34 字全对，位置毫无疑问，却因为紧邻的 equal 只有「口」
+    # 一个字被丢；vol02:31:1:7 的人名「伏曼容」同理。
+    #
+    # 放宽的代价实测为零：两册上有人裁真值的 replace 金标，
+    # 严格闸 176/214 = 82.2%，放宽后 198/241 = **82.2%**，
+    # 准确率一模一样而覆盖多 337 条（现有 1523 条的 22%）。
+    # 那 18% 的「不一致」也不是错标，是「忠于刻本字形」方针下的正常
+    # 分歧：刻本刻 櫽/祗/囘/𨽾，整理本印 檃/祇/回/隷。
+    if (i2 - i1) > 3:
+        return False
+    prev_run, next_run = flank_runs(ops, n)
+    return max(prev_run, next_run) >= 2 and min(prev_run, next_run) >= 1
 
 
 def page_reference(page: str, slots: list[tuple[int, int, str]],
