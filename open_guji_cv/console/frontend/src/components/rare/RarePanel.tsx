@@ -111,6 +111,12 @@ export function RarePanel({ book }: { book: string }) {
                   {x.struct.top} {Object.entries(x.struct.slots).map(([k, v]) => `${k}:${v}`).join(' ')}
                 </span>
               )}
+              {x.gw && (
+                <a className="rvzi" href={x.gw.url} target="_blank" rel="noopener noreferrer"
+                   title={`匹配到的是 GlyphWiki 上的变体形 ${x.gw.name}（来源 ${x.gw.source}，余弦 ${x.gw.cos}），不是标准字形`}>
+                  变体形·{x.gw.source}
+                </a>
+              )}
               {x.near && x.near.length > 0 && (
                 <span className="muted" title="形近字（IDS 只差一槽 / 字体模板余弦很近）：差在哪个槽就盯哪里看，不投票">
                   {'≈ '}{x.near.map((n) => n.detail ? `${n.char}(${n.detail.split(':').slice(1).join(' ')})` : n.char).join(' ')}

@@ -80,6 +80,35 @@ r5 的组内定形 top1−top2 差比 r4 小 3.8 倍（0.048 vs 0.184），沿�
 **换 checkpoint 会让下游产物过期**（路径 + mtime 进 `fingerprint()`），相关页要重跑。
 旧 checkpoint 保留在 `models/glyph_cnn_r4/` 可随时切回；
 切回时 `HOG_WEIGHT`/`EMB_WEIGHT`/`FORM_EMB_GAP` 都要一起还原。"""
+def _resolve_gw_catalog() -> Path:
+    """GlyphWiki 变体形目录（`scripts/build_glyphwiki_catalog.py` 的产物，不进 git）：
+    先认 cwd，再认引擎仓——与 `_resolve_default_ckpt` 同一条口径。找不到 → 引擎仓路径（不存在）。"""
+    here = Path(__file__).resolve().parents[2]
+    for base in (Path.cwd(), here):
+        cand = base / "cache/glyphwiki/catalog_64.npz"
+        if cand.exists():
+            return cand
+    return here / "cache/glyphwiki/catalog_64.npz"
+
+
+GW_CATALOG = _resolve_gw_catalog()
+"""第六套模板档：GlyphWiki 的未收/异体字形（中华字海、教育部字典、大漢和、IDS 命名……），
+kage 渲染成 64² 图，每形挂一个关联字。**每字取 max、单独一档、不混进字体均值**
+（oov_bench 实测：max 池化 top-1 75.8 → 81.5，混进均值 → 66.2；设计稿 §13 ⑤）。
+文件缺席时整条路静默不参与（`gw_catalog_fingerprint()` 为空、`full_fingerprint` 不变）。"""
+
+GW_ENABLED = True
+"""评测对照用的总开关（`eval_oov.py --no-gw` 之类置 False）；生产不改。"""
+
+
+def gw_catalog_fingerprint(path: str | Path = GW_CATALOG) -> str:
+    p = Path(path)
+    if not p.exists():
+        return ""
+    st = p.stat()
+    return hashlib.sha1(f"{p.name}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
+
+
 RRF_K = 60
 
 
@@ -157,6 +186,11 @@ class CnnCandidates:
         self._net = None
         self._probe = None
         self._probe_path = Path(probe) if probe else None
+        self._gw: tuple | None = None          # (G 单位向量, related 字数组, names, sources)，整目录，按 checkpoint+目录指纹落盘
+        self._gw_cs: tuple | None = None       # (charset 身份, G_sub, rel_row_idx, names_sub, src_sub)
+        self.last_gw_prov: list[dict] = []
+        """最近一次 `emb_topk_batch` 里 GlyphWiki 模板赢过字体均值的字位：每个查询一个
+        `{字: (gw 名, 来源, 余弦)}`，与输入一一对应。`rare_for_batch` 紧跟着读它给候选加 `gw` 字段。"""
         """外挂结构头（Step A′，2026-09-22）：`scripts/probe_struct_heads.py` 在冻结主干的
         embedding 上训出的 `probe_<arch>.pt`。挂上后 `has_struct_heads` 为真、
         `struct_probs_batch` / `slot_probs_batch` 走它——主干与 checkpoint 一根毛不动，
@@ -526,11 +560,67 @@ class CnnCandidates:
             Q = e / (e.norm(dim=1, keepdim=True) + 1e-9)
             Q = Q.cpu().numpy()
         sims = mat @ Q.T                                   # (rows, N)
+        self.last_gw_prov = [{} for _ in norm_patches]
+        gw = self._gw_index(charset, names) if GW_ENABLED else None
+        if gw is not None:
+            G, rows_idx, gnames, gsrc = gw
+            sg = G @ Q.T                                   # (n_gw, N)
+            for j in range(sims.shape[1]):
+                best = np.full(sims.shape[0], -2.0, np.float32)
+                np.maximum.at(best, rows_idx, sg[:, j])
+                win = best > sims[:, j]
+                if win.any():
+                    # 记来源：该字位上赢了字体均值的那张 gw 模板
+                    for r in np.where(win)[0]:
+                        cand = np.where(rows_idx == r)[0]
+                        b = cand[int(np.argmax(sg[cand, j]))]
+                        self.last_gw_prov[j][names[int(r)]] = (str(gnames[b]), str(gsrc[b]), float(sg[b, j]))
+                    sims[:, j] = np.maximum(sims[:, j], best)
         out = []
         for j in range(sims.shape[1]):
             order = np.argsort(-sims[:, j])[:k]
             out.append([(names[int(i)], float(sims[i, j])) for i in order])
         return out
+
+    def _gw_index(self, charset, names: list[str]):
+        """GlyphWiki 变体形模板（`GW_CATALOG`）→ 限定到当前字表：
+        `(G, rows_idx, gnames, gsrc)`，`rows_idx[i]` 是第 i 张模板的关联字在字体索引 `names` 里的行号。
+        整目录的 embedding 按 checkpoint + 目录指纹落盘一次（`<ckpt 目录>/gw_<key>.npz`），
+        关联字不在字体索引里的模板不参与（v1：只给已有字体行的字加模板）。目录缺席 → None。"""
+        if self._gw_cs is not None and self._gw_cs[0] is charset:
+            return self._gw_cs[1]
+        if not GW_CATALOG.exists():
+            return None
+        import torch
+        if self._gw is None:
+            key = hashlib.sha1((fingerprint(self.ckpt) + gw_catalog_fingerprint()).encode()).hexdigest()[:16]
+            f = self.ckpt.parent / f"gw_{key}.npz"
+            z = np.load(GW_CATALOG, allow_pickle=False)
+            gnames, grel, gsrc = z["names"], z["related"], z["source"]
+            if f.exists():
+                G = np.load(f, allow_pickle=False)["emb"]
+            else:
+                imgs = z["imgs"]
+                vecs = []
+                with torch.no_grad():
+                    for i in range(0, len(imgs), 256):
+                        x = torch.tensor(imgs[i:i + 256][:, None].astype(np.float32), device=self._dev)
+                        e, _, _ = self._net(x)
+                        vecs.append((e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy())
+                G = np.concatenate(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+                f.parent.mkdir(parents=True, exist_ok=True)
+                tmp = f.with_name(f.name + ".tmp.npz")
+                np.savez(tmp, emb=G); os.replace(tmp, f)
+            self._gw = (G, grel, gnames, gsrc)
+        G, grel, gnames, gsrc = self._gw
+        pos = {c: i for i, c in enumerate(names)}
+        keep = np.array([i for i, c in enumerate(grel) if c in pos], dtype=np.int64)
+        if len(keep) == 0:
+            res = None
+        else:
+            res = (G[keep], np.array([pos[grel[i]] for i in keep], dtype=np.int64), gnames[keep], gsrc[keep])
+        self._gw_cs = (charset, res)
+        return res
 
 
 EMB_EXTRA_SPECS: tuple[str, ...] = ()
@@ -587,7 +677,9 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
     换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。"""
     from .font_candidates import font_set_fingerprint
-    return f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}:{font_set_fingerprint()}"
+    fp = f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}:{font_set_fingerprint()}"
+    gw = gw_catalog_fingerprint()
+    return f"{fp}:gw={gw}" if gw else fp
 
 
 def _spec_ready(spec: str) -> bool:
