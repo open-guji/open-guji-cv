@@ -244,6 +244,20 @@ class BookSpec:
     #: 邻域找弱一档的墨，比报 None 强。估出来的会标 `*_outer_estimated=True`。
     #: **怎么标定**：`utils/border_geometry.measure_book_outer_gap(整册结果)`。换书重标。
     outer_gap: dict = field(default_factory=dict)
+    #: 版框**本来**有几层（yaml 的 `frame_layers: {top: 2, bottom: 2}`）。
+    #: 一本书的版式是一致的：雙邊框的书每一页上下都是内+外两条，个别页印不清、
+    #: 被污糊住、或磨没了，**不代表这一页的版式变了**——只代表这一页没看清。
+    #:
+    #: 不声明（空 dict）时按老行为：逐页猜 `frame_kind`，探不到就 `none`。
+    #: 声明 `2` 的边改成「外框一定存在，只是位置要猜」：
+    #:   - 不再判 `single`（四庫總目实测：判 single 的粗条中位 26px，而真内框线
+    #:     只有 0~8px——那是内外框之间的空隙被污糊连成了一片，不是單邊框）；
+    #:   - 探不到就按 `outer_gap` 册基准落位，标 `*_outer_estimated=True`。
+    #: 声明 `1` 的边则相反：只有一条，不找第二条。
+    #:
+    #: **怎么定**：看整册 `frame_kind` 分布——上边框 90% 判 double 说明版式就是 2 层。
+    #: ⚠️ 只管上下；左右 Step1 只探内框，外框不关心（2026-09-22 用户确认）。
+    frame_layers: dict = field(default_factory=dict)
     #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
     #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
     #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
@@ -326,7 +340,7 @@ class BookSpec:
             "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
-            "font": dict(self.font),
+            "font": dict(self.font), "frame_layers": dict(self.frame_layers),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
         }
@@ -486,6 +500,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
         outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
         outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
+        frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
