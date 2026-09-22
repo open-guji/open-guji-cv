@@ -209,12 +209,17 @@ def struct_hint(ch: str) -> dict:
 
 
 def _decorate(hits: list[tuple[str, str, float]]) -> list[dict]:
-    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 频次 / 码点 / 释义 / 正字 / 深链。"""
+    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 形近字 / 频次 / 码点 / 释义 / 正字 / 深链。
+
+    `near`（2026-09-22，T6）：`config/ids/confusable_pairs_v1.tsv` 里该字的形近字前 3 个，
+    带差在哪个槽（`⿰:R:俞/侖`）——告诉人该盯哪里看，不投票、不放行。"""
+    from .confusables import near_forms
     freq = _corpus_freq(DEFAULT_CORPUS)
     return [{
         "char": ch, "score": round(score, 4), "font": font,
         "ids": ids_of(ch),
         "struct": struct_hint(ch),
+        "near": near_forms(ch, k=3),
         "freq": freq.get(ch, 0),
         "cp": f"U+{ord(ch):04X}" if len(ch) == 1 else "",
         "zi": f"https://zi.tools/zi/{ch}",
