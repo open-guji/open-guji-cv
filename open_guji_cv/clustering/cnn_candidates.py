@@ -681,9 +681,13 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
     换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。"""
     from .font_candidates import font_set_fingerprint
-    fp = f"{fingerprint(ckpt)}:{template_set_fingerprint(specs)}:{font_set_fingerprint()}"
+    # GlyphWiki 变体形目录（第六档模板）并进「模板集」那一段，指纹保持三段（测试钉着这个形状）；
+    # 目录缺席时该段与从前逐位相同。
+    tmpl = template_set_fingerprint(specs)
     gw = gw_catalog_fingerprint()
-    return f"{fp}:gw={gw}" if gw else fp
+    if gw:
+        tmpl = hashlib.sha1(f"{tmpl}|gw={gw}".encode()).hexdigest()[:16]
+    return f"{fingerprint(ckpt)}:{tmpl}:{font_set_fingerprint()}"
 
 
 def _spec_ready(spec: str) -> bool:
