@@ -183,3 +183,48 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .pb-chip { display: inline-block; background: var(--ochre-soft); color: var(--ochre); border-radius: 999px;
   padding: .05rem .55rem; font-size: .76rem; font-family: var(--mono); }
 .pb-foot { margin: .6rem 0 0; }
+
+/* ── Step8 · 对勘与复核（components/step8/CollateDesk.tsx）── */
+.s8-head { display: flex; align-items: baseline; gap: .7rem; margin-bottom: .8rem; }
+.s8-head h2 { margin: 0; }
+.s8-head .muted { flex: 1; font-size: .8rem; }
+.s8-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+.s8-stat { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r); padding: .55rem .7rem .5rem; }
+.s8-stat b { display: block; font-size: 1.45rem; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.s8-stat span { font-size: .74rem; color: var(--mute); }
+.s8-stat i { display: block; font-style: normal; font-size: .7rem; color: var(--faint); }
+/* ③ 零星分歧是唯一要判「谁错了」的一层——只给它状态色，且必带文字 */
+.s8-stat.todo { border-color: var(--zhu); }
+.s8-stat.todo b { color: var(--zhu); }
+.s8-absent { border: 1px solid var(--rule); border-radius: var(--r); padding: .6rem .75rem; margin-bottom: .9rem; }
+.s8-absent b { margin-right: .5rem; }
+.s8-absent .muted { font-size: .8rem; }
+.s8-absent ul { margin: .45rem 0 0; padding-left: 1.2rem; font-size: .88rem; line-height: 1.9; }
+.s8-filter { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.s8-filter button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .25rem .7rem; font-size: .82rem; cursor: pointer; }
+.s8-filter button.on { border-color: var(--ink); font-weight: 600; }
+.s8-filter .muted { margin-left: auto; font-size: .82rem; }
+.s8-msg { font-size: .85rem; color: var(--mute); margin: 0 0 .7rem; }
+.s8-card { border: 1px solid var(--rule); border-radius: var(--r); padding: .9rem 1rem; }
+/* 图横排：竖排占的是高度（稀缺，决定翻多少屏），横排占宽度（版心富余） */
+.s8-imgs { display: flex; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.s8-imgs img { height: 88px; background: #fff; border: 1px solid var(--rule); border-radius: 2px; }
+.s8-pair { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
+.s8-pair .big { font-size: 1.9rem; }
+.s8-pair .arr { color: var(--mute); }
+.s8-n { font-size: .82rem; color: var(--mute); }
+.s8-ctx { font-size: .92rem; line-height: 1.85; }
+.s8-ctx .k { font-size: .72rem; color: var(--mute); margin-right: .4rem; }
+.s8-ctx + .s8-ctx { border-top: 1px dashed var(--rule); margin-top: .3rem; padding-top: .3rem; }
+.s8-acts { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; }
+.s8-acts button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .3rem .9rem; font-size: .88rem; cursor: pointer; }
+.s8-acts button:first-child { border-color: var(--ink); }
+.s8-acts label { font-size: .8rem; color: var(--mute); margin-left: auto; }
+.s8-nav { display: flex; gap: .4rem; margin-top: .6rem; }
+.s8-nav button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .2rem .8rem; cursor: pointer; }
+.s8-nav button:disabled { color: var(--faint); cursor: default; }
+.s8-ledger { margin-top: 1.5rem; border-top: 1px solid var(--rule); padding-top: .6rem; }
+.s8-ledger summary { cursor: pointer; color: var(--mute); font-size: .88rem; }

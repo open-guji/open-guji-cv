@@ -1,11 +1,24 @@
+import { useParams } from 'react-router-dom'
+import { CollateDesk } from '../components/step8/CollateDesk'
 import { HarvestPanel } from '../components/feedback/HarvestPanel'
 
-// D5：Step8 落库反馈。收割消费 + 审查批次台账 + 金标分片表（v1 review tab 里
-// 除定字裁决/体检之外的第三块），方案 §三：文档写得很明确，无歧义。
+// Step8 对勘与复核（2026-09-22 扩：原本只有 HarvestPanel）。
+//
+// 用户判断：「step8 其实没有什么内容，这些入库的决定应该是 step7 顺便就做了的」
+// ——属实。三个落库出口的执行体全在 Step7 的裁决提交里顺手做掉了。真正缺位置的
+// 是**全局复核**：Step7 只知道「机器确不确定」，不知道「机器对不对」，后者只有
+// 与独立证人逐字对勘能答。
+//
+// 落库台账（HarvestPanel）降为次要，排在复核之后：它是 Step7 的账，不是一步。
 export function Step8Page() {
+  const { book = '' } = useParams()
   return (
     <div>
-      <HarvestPanel />
+      <CollateDesk book={book} />
+      <details className="s8-ledger">
+        <summary>落库台账（Step7 裁决的三个出口）</summary>
+        <HarvestPanel />
+      </details>
     </div>
   )
 }

@@ -96,11 +96,27 @@ def _ledger():
     return BookLedger.load_or_empty("wuyingdian_zongmu")
 
 
+@lru_cache(maxsize=1)
+def _variant_graph():
+    """关系图加载一次。⚠️ 原先 `_edge_sources` 每次调用都 `VariantGraph.load()`
+    ——读一个几 MB 的 json 再建图。对勘按字对查几百次，实测 `pair_index` 要 31 s，
+    控制台一开 Step8 页面接口就挂住。"""
+    from ..variants import VariantGraph
+    return VariantGraph.load()
+
+
+@lru_cache(maxsize=1)
+def _variant_map():
+    """同上，`VariantMap` 也别逐次 load。"""
+    from ..clustering.variants import VariantMap
+    return VariantMap.load()
+
+
+@lru_cache(maxsize=None)
 def _edge_sources(a: str, b: str) -> tuple[str, ...]:
     """关系图里 a—b 这条边的来源标签（查不到返回空）。两个方向都试。"""
     try:
-        from ..variants import VariantGraph
-        g = VariantGraph.load()
+        g = _variant_graph()
         for x, y in ((b, a), (a, b)):
             tags = dict(g.variants_of(x)).get(y)
             if tags:
@@ -162,8 +178,7 @@ def _same_char(a: str | None, b: str | None) -> bool:
     # 对勘报告因此把 `輨`（识别错，整理本作 `轄`）记进「异体·成果」档，
     # 报告说它没问题。上面那段注释本就写明 T2 要账本才算——兜底把自己的防线拆了。
     try:
-        from ..clustering.variants import VariantMap
-        vm = VariantMap.load()
+        vm = _variant_map()
         return vm.semantic(a) == vm.semantic(b)
     except Exception:
         return False
