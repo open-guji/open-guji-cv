@@ -42,6 +42,7 @@ from ..clustering.align_label import is_han
 from ..clustering.variants import VariantMap
 from ..eval.round_check import _same_char
 from ..products.store import ProductStore
+from .absent import absent_runs
 from .slots import SlotRec, page_slots
 from .witness import Witness, col_verdict
 
@@ -102,6 +103,9 @@ class PageResult:
     note: str = ""
     diffs: list[Diff] = field(default_factory=list)
     cols: list[ColDiff] = field(default_factory=list)
+    absent_runs: list[dict] = field(default_factory=list)
+    """证人里没有的段（按语/卷端题/卷末题），**不进 diffs**——见 report/absent.py。
+    报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
 
 
 def classify(char: str, reading: str | None, ref: str) -> str:
@@ -199,6 +203,19 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
     if not text_slots:
         res.note = "没有可比对的字位"
         return res
+
+    # 证人里根本没有的段（校勘按语、卷端题、卷末题）**先摘出去再对齐**：
+    # 留着它们不但自己全报成差异，还会把整页的锚点带偏（见 report/absent.py）。
+    vm0 = _vm()
+    res.absent_runs = absent_runs(
+        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _slot_char(s)}
+         for s in text_slots], w.text_norm, vm0.normalize_text)
+    if res.absent_runs:
+        skip = {i for a in res.absent_runs for i in a["ids"]}
+        text_slots = [s for s in text_slots if s.id not in skip]
+        if not text_slots:
+            res.note = "整页都是证人无此段的内容"
+            return res
 
     text = "".join(_slot_char(s) for s in text_slots)
     offset = anchor_page(text, w.index)
