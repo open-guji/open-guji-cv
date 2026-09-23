@@ -62,7 +62,10 @@ Kind = Literal[
     "char_convention",# 本书通例（payload: pair, kind∈人名/物品/通假/避諱/正俗, note）
                       #   → books/<id>.yaml 的 char_conventions。**本书专属**：
                       #   完/元 在别的书里就是两个字，进全局表会污染。
-    "variant_deny",   # 推翻一条「通用异体」边（payload: pair）→ variants.deny.tsv。
+    "mark_jiajie",    # 标为通假（payload: pair）→ jiajie.tsv。异体与通假是**两类**：
+                      #   异体是同一个字的不同写法（衞/衛），通假是借字（早/蚤、甫/父）。
+                      #   自动判据分不开，新字对先落异体层，人点「这是通假」才搬。
+    "variant_deny",   # 推翻一条「异体」边（payload: pair）→ variants.deny.tsv。
                       #   **跨书**负样本：关系图会错（治/冶、輨/轄 实证）。
 ]
 

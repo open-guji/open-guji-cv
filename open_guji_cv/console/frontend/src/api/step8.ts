@@ -3,7 +3,7 @@ import { api } from './client'
 // Step8 对勘与复核。设计见 overview 仓 Step8-落库反馈/04、05 两篇。
 // 两个接口都**读已有产物、不现跑**：对勘一次 ~100s，不能每次开页面都跑。
 
-export type Step8Tier = 'taboo' | 'common' | 'book' | 'dispute'
+export type Step8Tier = 'taboo' | 'variant' | 'jiajie' | 'book' | 'dispute'
 
 export interface Step8Sample {
   id: string; page: number; col: number; slot: number; sub: string | null
@@ -11,7 +11,7 @@ export interface Step8Sample {
 }
 
 export interface Step8Pair {
-  pair: [string, string]      // [刻本形, 证人形]
+  pair: [string, string]      // [刻本形, 校对本形]
   tier: Step8Tier
   n: number                   // 全书出现几处
   ids: string[]
@@ -49,4 +49,25 @@ export function fetchStep8Pairs(book: string, tier = '', undecided = true, limit
   const qs = `tier=${encodeURIComponent(tier)}&undecided=${undecided}&limit=${limit}`
   return api<{ pairs: Step8Pair[]; total: number; has_report: boolean; truncated: boolean }>(
     `/api/step8/pairs/${encodeURIComponent(book)}?${qs}`)
+}
+
+// 一次复核裁决。**按字对提交**：`ids` 是这次要裁的字位
+// （「N 处一起裁」勾上 = 全部，不勾 = 只当前这一处）。
+export interface Step8Decide {
+  book: string; pair: [string, string]; ids: string[]
+  who?: string        // ours | theirs | neither（③ 第一级）
+  rel?: string        // jiajie | diff（③ 第二级）
+  kind?: string       // ② 的性质：人名/物品/通假/异体/避諱/正俗；① 的 不是异体
+  fix?: string        // who=neither 时人输入的正确字
+  note?: string
+}
+
+export function postStep8Decide(d: Step8Decide) {
+  return api<{ ok: boolean; error?: string; appended?: number; kinds?: string[]
+    consumed?: { consumer: string; added: number; skipped: number; errors: string[] }[]
+    consume_error?: string }>('/api/step8/decide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(d),
+    })
 }

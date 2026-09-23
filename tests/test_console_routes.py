@@ -652,9 +652,14 @@ def test_route_inventory():
 
     2026-09-21 结构感知识别（另一条线合并进来）：生僻字面板加「按结构查」，
     新增 `GET /api/rare/search/{book}`（IDS 结构码 / 部件倒排查候选）。86 → 87。
+
+    2026-09-22 Step8 扩为「对勘与复核」（用户：「step8 其实没有什么内容……
+    把这些分析都放到 step8 上边」）：新增 `GET /api/step8/overview/{book}`（对勘结论
+    ＋ 差异分层计数）、`GET /api/step8/pairs/{book}`（**按字对聚合**的复核队列）、
+    `POST /api/step8/decide`（复核裁决，按字对提交）。87 → 90。
     """
     got = sorted(_endpoints())
-    assert len(got) == 87, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 90, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -757,6 +762,10 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
+    # Step8 对勘与复核（2026-09-22）
+    "GET /api/step8/overview/{book}",
+    "GET /api/step8/pairs/{book}",
+    "POST /api/step8/decide",
     "GET /", "GET /api/align-ref/summary", "GET /api/align-ref/{book}/summary",
     "GET /api/workspace",
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
