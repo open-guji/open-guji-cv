@@ -56,6 +56,14 @@ Kind = Literal[
     "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
     "head_raise",     # 列级抬头精标（payload: raised / n_raised / head_cut / note）
     "n_body_slots",   # 逐列字数人裁：chars_per_line 常量在个别列不成立时的覆盖（payload: n_slots）
+    # ── Step8 复核裁决（2026-09-22）。问的不是「这是什么字」而是「我们和证人谁对」。
+    "collate_ok",     # 维持我方转写：看过图了，我们和证人就是不一样。只记账，
+                      #   作用是**下轮不再出这张卡**（否则每次重跑重看同样 71 条）。
+    "char_convention",# 本书通例（payload: pair, kind∈人名/物品/通假/避諱/正俗, note）
+                      #   → books/<id>.yaml 的 char_conventions。**本书专属**：
+                      #   完/元 在别的书里就是两个字，进全局表会污染。
+    "variant_deny",   # 推翻一条「通用异体」边（payload: pair）→ variants.deny.tsv。
+                      #   **跨书**负样本：关系图会错（治/冶、輨/轄 实证）。
 ]
 
 Actor = Literal["user", "model", "align"]

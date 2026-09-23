@@ -551,6 +551,12 @@ CONSUMERS = {
     "product_invalidate": product_invalidate,
 }
 
+# Step8 复核裁决的三个出口（见 feedback/collate_consumers.py 模块头）。
+# 单独一个模块、在这里并进来：它们回答的是「我们和证人谁对」，
+# 与上面那批「这是什么字」不是一类，但走同一套路由与记账。
+from .collate_consumers import COLLATE_CONSUMERS  # noqa: E402
+CONSUMERS.update(COLLATE_CONSUMERS)
+
 
 def route_and_consume(log: EventLog, batch: str | None = None,
                       table: RouteTable | None = None,

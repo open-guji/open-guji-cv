@@ -127,6 +127,13 @@ DEFAULT_ROUTES: list[dict] = [
     # 判非字同理：名单变了 seed_admit 该重算。
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # ── Step8 复核裁决（2026-09-22）─────────────────────────────
+    # 三条都**不入字形库、不失效产物**：那一格的字没有变，Step7 早已入过库。
+    # 只有「证人对（我们认错了）」要改字，而它走上面 `confirm` 那条现成通道，
+    # 不在这里——改字、入库、失效产物三件事那边都有，不必重造。
+    {"match": {"kind": "collate_ok"}, "to": [{"consumer": "collate_ok"}]},
+    {"match": {"kind": "char_convention"}, "to": [{"consumer": "char_convention"}]},
+    {"match": {"kind": "variant_deny"}, "to": [{"consumer": "variant_deny"}]},
 ]
 
 
