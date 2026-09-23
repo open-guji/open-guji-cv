@@ -25,10 +25,17 @@ const WHO = [
   { key: 'theirs', label: '校对本对', hint: '我们认错了，改字并入库' },
   { key: 'neither', label: '都不对', hint: '两边都错，输入正确的字' },
 ] as const
+// 「不同字」排在前面且是默认值：③ 里绝大多数就是这个（實測 64 对里只有零星
+// 几对是通假）。默认选中最常见的那档，人只在**例外**时才动手——这是把 64 次
+// 判断压成「翻页 + 偶尔改一下」的关键。
 const REL = [
-  { key: 'jiajie', label: '通假字', hint: '本字不在、借另一个字代替 → 移入通假字' },
   { key: 'diff', label: '不同字', hint: '就是两个字，一方认错了' },
+  { key: 'jiajie', label: '通假字', hint: '本字不在、借另一个字代替 → 移入通假字' },
 ] as const
+
+//: ③ 的默认裁决：我方对 · 不同字。**默认展开且选中**，回车/→ 直接确认。
+const DEFAULT_WHO = 'ours'
+const DEFAULT_REL = 'diff' 
 
 // ② 本书特有：选一个性质即批量确认。**异体也是一项**——通用异体表有缺漏，
 // 有些字对表里没收但确实是异体（用户 2026-09-22）。
@@ -68,7 +75,8 @@ export function CollateDesk({ book }: { book: string }) {
   // 等剩下的 N-1 处（用户 2026-09-22：「不勾应该裁两次」）。
   const [applyAll, setApplyAll] = useState(true)
   const [at, setAt] = useState(0)          // 不勾一起裁时，裁到该字对的第几处
-  const [who, setWho] = useState('')       // ③ 第一级
+  const [who, setWho] = useState(DEFAULT_WHO)   // ③ 第一级，默认「我方对」
+  const [rel, setRel] = useState(DEFAULT_REL)   // ③ 第二级，默认「不同字」
   const [fix, setFix] = useState('')       // 「都不对」时人输入的字
 
   const load = useCallback(async () => {
@@ -76,7 +84,8 @@ export function CollateDesk({ book }: { book: string }) {
     setBusy(true); setMsg('')
     try {
       const [o, p] = await Promise.all([fetchStep8Overview(book), fetchStep8Pairs(book, tier)])
-      setOv(o); setPairs(p.pairs || []); setCur(0); setAt(0); setWho(''); setFix('')
+      setOv(o); setPairs(p.pairs || []); setCur(0); setAt(0)
+      setWho(DEFAULT_WHO); setRel(DEFAULT_REL); setFix('')
       if (!o.has_report) setMsg(o.hint || '还没有对勘产物')
     } catch (e) { setMsg(String(e)) } finally { setBusy(false) }
   }, [book, tier])
@@ -85,19 +94,32 @@ export function CollateDesk({ book }: { book: string }) {
 
   const c = pairs[cur]
   const nextCard = () => {
-    setWho(''); setFix(''); setAt(0)
+    setWho(DEFAULT_WHO); setRel(DEFAULT_REL); setFix(''); setAt(0)
     setCur((i) => Math.min(i + 1, pairs.length - 1))
   }
   // 不勾一起裁：走完这一对的 N 处才翻下一张卡
   const advance = () => {
     if (!c) return
     if (applyAll || at + 1 >= c.n) { nextCard(); return }
-    setAt((i) => i + 1); setWho(''); setFix('')
+    setAt((i) => i + 1); setWho(DEFAULT_WHO); setRel(DEFAULT_REL); setFix('')
+  }
+
+  // 「下一个」= **确认当前选择**（用户 2026-09-23）。③ 默认「我方对·不同字」，
+  // 于是一路回车/→ 就能把那批「我们没错、就是两个字」的快速走完，
+  // 只在例外时才动手改选项——这是把 64 次判断压成「翻页 ＋ 偶尔改一下」的关键。
+  //
+  // 「都不对」还没填字时不提交（否则会写一条空 shape 的 confirm），只翻页。
+  const confirmNext = async () => {
+    if (!c) return
+    if (c.tier === 'dispute' && who === 'neither' && !fix) { nextCard(); return }
+    await submit()
   }
 
   // `ids`：勾了一起裁就全部，否则只当前这一处（用户 2026-09-22：「不勾应该裁两次」）。
   const submit = async (opt: { rel?: string; kind?: string } = {}) => {
     if (!c || busy) return
+    // ③ 不传 rel 时用当前选中的（默认「不同字」）——回车/→ 走的就是这条。
+    if (c.tier === 'dispute' && opt.rel === undefined && who !== 'neither') opt.rel = rel
     const ids = applyAll ? c.ids : [c.ids[at]]
     setBusy(true)
     try {
@@ -112,6 +134,23 @@ export function CollateDesk({ book }: { book: string }) {
       advance()
     } catch (e) { setMsg(String(e)) } finally { setBusy(false) }
   }
+
+  // 键盘走查（用户 2026-09-23：「回车或向右键，等于确认」）。
+  // 在输入框里打字时不接管——「都不对」填字那里的回车由 input 自己处理。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); void confirmNext() }
+      else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setWho(DEFAULT_WHO); setRel(DEFAULT_REL); setFix(''); setAt(0)
+        setCur((i) => Math.max(0, i - 1))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   return (
     <div className="s8">
@@ -182,7 +221,9 @@ export function CollateDesk({ book }: { book: string }) {
               {who === 'neither' && (
                 <div className="s8-acts">
                   <input className="s8-fix" value={fix} maxLength={4} placeholder="正确的字"
-                    onChange={(e) => setFix(e.target.value)} />
+                    autoFocus
+                    onChange={(e) => setFix(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && fix) void submit() }} />
                   <button disabled={!fix} onClick={() => void submit()}>提交</button>
                 </div>
               )}
@@ -191,8 +232,10 @@ export function CollateDesk({ book }: { book: string }) {
                   <span className="k">这一对是</span>
                   {REL.map((r) => (
                     <button key={r.key} title={r.hint}
-                      onClick={() => void submit({ rel: r.key })}>{r.label}</button>
+                      className={rel === r.key ? 'on' : ''}
+                      onClick={() => setRel(r.key)}>{r.label}</button>
                   ))}
+                  <span className="s8-hint">↵ 或 → 确认并下一对</span>
                 </div>
               )}
             </>
@@ -224,9 +267,10 @@ export function CollateDesk({ book }: { book: string }) {
           )}
 
           <div className="s8-nav">
-            <button onClick={() => { setWho(''); setFix(''); setAt(0); setCur((i) => Math.max(0, i - 1)) }}
+            <button title="上一对（不提交）"
+              onClick={() => { setWho(DEFAULT_WHO); setRel(DEFAULT_REL); setFix(''); setAt(0); setCur((i) => Math.max(0, i - 1)) }}
               disabled={cur === 0}>←</button>
-            <button onClick={nextCard} disabled={cur >= pairs.length - 1}>→</button>
+            <button title="确认当前选择并下一对" onClick={() => void confirmNext()}>→</button>
           </div>
         </div>
       )}

@@ -232,3 +232,4 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .s8-fix { width: 5rem; font-size: 1.3rem; text-align: center; padding: .2rem .4rem;
   border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); color: var(--ink); }
 .s8-acts .k { font-size: .76rem; color: var(--mute); margin-right: .2rem; }
+.s8-hint { font-size: .74rem; color: var(--faint); margin-left: .5rem; }
