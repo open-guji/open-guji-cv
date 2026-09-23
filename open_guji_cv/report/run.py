@@ -57,6 +57,9 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                 "n_equal": res.n_equal,
                 "counts": dict(Counter(d.kind for d in res.diffs)),
                 "cols": dict(Counter(c.kind for c in res.cols)),
+                # 证人无此段（按语/卷端题/卷末题）：不进 diffs，但报告要说明，
+                # 否则读者会奇怪这页字数怎么对不上（见 report/absent.py）。
+                "absent_runs": res.absent_runs,
             }
             all_diffs.extend(res.diffs)
             all_cols.extend(asdict(c) for c in res.cols)
@@ -74,7 +77,11 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                        "n_chars": len(w.text)} for w in witnesses],
         "unanchored": unanchored,
         "stale": sorted(set(stale)),
-        "summary": summarize(all_diffs, all_cols, pages_out, witnesses),
+        "summary": {**summarize(all_diffs, all_cols, pages_out, witnesses),
+                    "absent_runs": [dict(a, page=rec["page"], witness=lb)
+                                    for rec in pages_out
+                                    for lb, st in rec["witnesses"].items()
+                                    for a in st.get("absent_runs") or []]},
         "page_stats": pages_out,
         "diffs": [asdict(d) for d in all_diffs],
         "cols": [c for c in all_cols if c["kind"] != "col.ok"],

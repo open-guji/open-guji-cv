@@ -67,6 +67,10 @@ class Witness:
     调用方不该拿它判列。"""
     line_is_column: bool = False       # 这份证人的「行」是否对应我们的「列」
     index: dict = field(default_factory=dict, repr=False)   # 8-gram 索引，建一次复用
+    text_norm: str = field(default="", repr=False)
+    """`text` 的异体归一版，建一次复用（`report/absent.py` 要按归一层查段）。
+    证人作「北行日録」而刻本刻「北行日錄」，不归一会把卷端题误判成「证人里没有」。
+    18k 字逐页重算等于白跑 54 遍。"""
 
     @property
     def rank(self) -> int:
@@ -106,9 +110,11 @@ def load_witness(name: str, label: str = "", quality: str = "mid",
             han.append(ch)
 
     text = "".join(han)
+    from ..clustering.variants import VariantMap
     return Witness(name=name, label=label or name, quality=quality, text=text,
                    line_starts=frozenset(starts), line_is_column=line_is_column,
-                   index=build_ngram_index(text) if build_index else {})
+                   index=build_ngram_index(text) if build_index else {},
+                   text_norm=VariantMap.load().normalize_text(text))
 
 
 def load_witnesses(specs: list[dict] | None, build_index: bool = True) -> list[Witness]:
