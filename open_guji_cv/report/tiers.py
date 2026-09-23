@@ -39,6 +39,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from functools import lru_cache
 
 #: ② 的门槛：同一字对在本书出现几次以上，才算「本书通例」而非偶发分歧。
 #: 与 `collation_grade.REPEAT_MIN` 同源同值——2 次可能是同一块坏版连错两页。
@@ -55,9 +56,15 @@ TIER_LABEL = {
 CONVENTION_KINDS = ("人名", "物品", "通假", "避諱", "正俗")
 
 
+@lru_cache(maxsize=None)
 def _same_char(a: str, b: str) -> bool:
     """通用异体关系图认不认这一对。走 `eval.round_check._same_char`——
-    那里已经按**来源数**判（单一 twedu 来源不算数），别在这里另起一套。"""
+    那里已经按**来源数**判（单一 twedu 来源不算数），别在这里另起一套。
+
+    ⚠️ **必须缓存**：那边每次调用都重新 `VariantGraph.load()` + `VariantMap.load()`，
+    单次几百毫秒。bxgb 451 条差异实测 `pair_index` 要 **39.6 s**，控制台一开页面
+    就是接口挂住——加 `lru_cache` 后降到毫秒级。字对是有限的，缓存不会涨。
+    """
     try:
         from ..eval.round_check import _same_char as sc
         return bool(sc(a, b))
