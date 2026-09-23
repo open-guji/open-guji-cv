@@ -228,3 +228,7 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .s8-nav button:disabled { color: var(--faint); cursor: default; }
 .s8-ledger { margin-top: 1.5rem; border-top: 1px solid var(--rule); padding-top: .6rem; }
 .s8-ledger summary { cursor: pointer; color: var(--mute); font-size: .88rem; }
+.s8-acts button.on { border-color: var(--ink); font-weight: 600; background: var(--panel); }
+.s8-fix { width: 5rem; font-size: 1.3rem; text-align: center; padding: .2rem .4rem;
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); color: var(--ink); }
+.s8-acts .k { font-size: .76rem; color: var(--mute); margin-right: .2rem; }

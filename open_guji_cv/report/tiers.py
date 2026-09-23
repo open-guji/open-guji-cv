@@ -11,7 +11,8 @@
 | 层 | 判据 | bxgb 实测 | 人要做什么 |
 |---|---|---|---|
 | `taboo` 避諱改字 | 避諱字表 / 目标字 | 40 条 / 17 对 | 什么都不用做 |
-| ① `common` 通用异体 | 通用异体关系图有边 | 185 条 / 74 对 | **选做**复核，可推翻 |
+| `variant` 异体字 | 关系图有边 | 185 条 / 74 对 | **选做**复核，可推翻、可标为通假 |
+| `jiajie` 通假字 | 人标过（`jiajie.tsv`） | 0（新表） | 已归档 |
 | ② `book` 本书特有 | 表外 ＋ 本书反复（≥`BOOK_MIN`） | 69 条 / 11 对 | 批量确认一次 |
 | ③ `dispute` 零星分歧 | 表外 ＋ 零星 | 72 条 / 64 对 | 逐对判谁错 |
 
@@ -32,7 +33,7 @@
 
 ## ② 为什么落书配置而不是全局表
 
-`完→元` 是这部书证人的编辑方针（女真姓氏「完顏」整理本作「元顏」），
+`完→元` 是这部书校对本的编辑方针（女真姓氏「完顏」整理本作「元顏」），
 **放进全局异体表会污染别的书**——别的书里「完」和「元」就是两个字。
 """
 
@@ -47,10 +48,21 @@ BOOK_MIN = 3
 
 TIER_LABEL = {
     "taboo": "避諱改字",
-    "common": "通用异体",
+    "variant": "异体字",
+    "jiajie": "通假字",
     "book": "本书特有转换",
     "dispute": "零星分歧",
 }
+
+#: 异体 与 通假 是**两类**（用户 2026-09-22 定）：
+#: - **异体**：同一个字的不同写法（衞/衛、戸/户、卻/却）——字形之别；
+#: - **通假**：本字不在，借另一个字代替（早/蚤、甫/父）——用字之别。
+#: 版本学上是两回事，各自审阅。
+#:
+#: 自动判据只认得「关系图有边」，分不开这两类——**所以新字对一律先进「异体字」**，
+#: 人在裁决台点「这是通假」才移过去（落 JIAJIE_REL）。宁可让人搬，
+#: 不可替人猜：猜错了会把「借字」说成「同一个字」，那是版本学上的错话。
+JIAJIE_REL = "config/dicts/jiajie.tsv"
 
 #: ② 确认时人选的性质。用户 2026-09-22 定（「名物」拆成「人名」「物品」）。
 CONVENTION_KINDS = ("人名", "物品", "通假", "避諱", "正俗")
@@ -72,8 +84,23 @@ def _same_char(a: str, b: str) -> bool:
         return False
 
 
+def load_pairs(rel: str) -> set:
+    """读一张「字对表」（TSV：刻本形<TAB>校对本形<TAB>来源）→ `{(a, b)}`。"""
+    from ..core.workspace import REPO_ROOT
+    p = REPO_ROOT / rel
+    out = set()
+    if p.exists():
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                parts = ln.split("	")
+                if len(parts) >= 2:
+                    out.add((parts[0], parts[1]))
+    return out
+
+
 def tier_of(hyp: str, ref: str, n: int, *, conventions: set | None = None,
-            denied: set | None = None) -> str:
+            denied: set | None = None, jiajie: set | None = None) -> str:
     """一对字属于哪一层。`n` 是它在**全书**出现的次数。
 
     顺序有讲究：先看人已经裁过的（`conventions` / `denied`），再看关系图，
@@ -86,18 +113,22 @@ def tier_of(hyp: str, ref: str, n: int, *, conventions: set | None = None,
     from .collation_grade import TABOO, TABOO_TARGETS
     if pair in TABOO or ref in TABOO_TARGETS:
         return "taboo"
+    # 人标过「通假」的移到通假层——③/② 里选了通假的字对由此搬家（用户 2026-09-22）
+    if jiajie and pair in jiajie:
+        return "jiajie"
     if conventions and pair in conventions:
         return "book"
     if denied and pair in denied:
-        # 人推翻过的关系图边：不再算通用异体，退回逐对判
+        # 人推翻过的关系图边：不再算异体，退回逐对判
         return "dispute"
     if _same_char(hyp, ref):
-        return "common"
+        return "variant"
     return "book" if n >= BOOK_MIN else "dispute"
 
 
 def pair_index(diffs: list[dict], *, conventions: set | None = None,
-               denied: set | None = None, kinds: tuple = ("sub.", "variant.")) -> list[dict]:
+               denied: set | None = None, jiajie: set | None = None,
+               kinds: tuple = ("sub.", "variant.")) -> list[dict]:
     """差异清单 → **按字对聚合**的条目，每条带层、次数、全部实例 id。
 
     只收替换类（`sub.*` / `variant.*`）——增删（`missing`/`extra`）没有「对应的
@@ -115,10 +146,11 @@ def pair_index(diffs: list[dict], *, conventions: set | None = None,
             continue
         buckets[(a, b)].append(d)
 
-    order = {"dispute": 0, "book": 1, "common": 2, "taboo": 3}
+    order = {"dispute": 0, "book": 1, "variant": 2, "jiajie": 3, "taboo": 4}
     out = []
     for (a, b), rows in buckets.items():
-        t = tier_of(a, b, len(rows), conventions=conventions, denied=denied)
+        t = tier_of(a, b, len(rows), conventions=conventions, denied=denied,
+                    jiajie=jiajie)
         out.append({
             "pair": [a, b],
             "tier": t,

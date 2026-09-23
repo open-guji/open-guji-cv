@@ -32,7 +32,7 @@ def test_book_convention_beats_graph_and_count():
 
 def test_denied_edge_falls_back_to_dispute():
     """人推翻的关系图边退回逐对判——治/冶 那类错边靠这条翻身。"""
-    assert tier_of("厯", "歷", 9) == "common"
+    assert tier_of("厯", "歷", 9) == "variant"
     assert tier_of("厯", "歷", 9, denied={("厯", "歷")}) == "dispute"
 
 
