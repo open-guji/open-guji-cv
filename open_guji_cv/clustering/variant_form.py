@@ -169,15 +169,20 @@ def decide_form(semantic_char: str, forms: list[str],
                        for k in ("hog", "cls", "emb")}
         if orders:
             fused = rrf(*orders, k=len(forms), weights=tuple(weights))
-            top = fused[0]
-            agree = all(o[0] == top for o in orders)
-            emb = image_ranks.get("emb") or []
-            gap = (float(emb[0][1]) - float(emb[1][1])) if len(emb) > 1 else 0.0
-            ev["fused"] = fused
-            ev["agree"] = agree
-            ev["emb_gap"] = round(gap, 4)
-            if agree and gap >= FORM_EMB_GAP and human.get(top, 0) > 0:
-                return FormDecision("fixed_form", top, forms, ev)
+            if not fused:
+                ev["fused"] = []
+                ev["agree"] = False
+                ev["emb_gap"] = 0.0
+            else:
+                top = fused[0]
+                agree = all(o[0] == top for o in orders)
+                emb = image_ranks.get("emb") or []
+                gap = (float(emb[0][1]) - float(emb[1][1])) if len(emb) > 1 else 0.0
+                ev["fused"] = fused
+                ev["agree"] = agree
+                ev["emb_gap"] = round(gap, 4)
+                if agree and gap >= FORM_EMB_GAP and human.get(top, 0) > 0:
+                    return FormDecision("fixed_form", top, forms, ev)
 
     return FormDecision("open", None, forms, ev)
 
