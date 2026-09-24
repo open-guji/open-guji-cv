@@ -240,9 +240,60 @@ def variant_deny(events, deny_path: str = "", dry_run: bool = False,
                                "# 由 feedback/collate_consumers.variant_deny 写。\n"))
 
 
+def collate_verdict(events, dry_run: bool = False, **kw) -> ConsumeResult:
+    """`collate_verdict` → 只记账（2026-09-24 两层分类）。
+
+    状态本身就在事件日志里（`collate_state.human_verdicts` 读回），没有别的文件要写；
+    改字、标通假这些副作用由同一次提交里另写的 `confirm` / `mark_jiajie` /
+    `unmark_jiajie` 各走各的消费者。
+    """
+    res = collate_ok(events, dry_run=dry_run)
+    res.consumer = "collate_verdict"
+    return res
+
+
+def unmark_jiajie(events, path: str = "", dry_run: bool = False, **kw) -> ConsumeResult:
+    """`unmark_jiajie` → 从 `jiajie.tsv` 删掉**本书标的**那行。
+
+    字对被人从「通假字」挪走、本书里再没有一处归通假时发。`jiajie.tsv` 是跨书表，
+    所以只删来源是本书复核批次（`human:evt_<book>-collate_…`）的行——别的书标的
+    不归这本书撤。
+    """
+    from ..report.tiers import JIAJIE_REL
+    res = ConsumeResult("unmark_jiajie", n_events=len(events))
+    p = Path(path or str(_repo_path(JIAJIE_REL)))
+    drop: set[tuple[str, str, str]] = set()
+    for e, _d in events:
+        pl = e.payload or {}
+        pair, book = pl.get("pair"), pl.get("book") or e.target.book
+        if not (pair and len(pair) == 2 and book):
+            res.errors.append(f"{e.id}: 缺 pair/book")
+            res.skipped += 1
+            continue
+        drop.add((pair[0], pair[1], f"human:evt_{book}-collate_"))
+    if not drop or not p.exists():
+        res.skipped += len(drop)
+        return res
+    keep, n = [], 0
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        parts = ln.split("\t")
+        if (not ln.startswith("#") and len(parts) >= 3
+                and any(parts[0] == a and parts[1] == b and parts[2].startswith(src)
+                        for a, b, src in drop)):
+            n += 1
+            continue
+        keep.append(ln)
+    res.added = n
+    if n and not dry_run:
+        p.write_text("\n".join(keep) + "\n", encoding="utf-8", newline="\n")
+    return res
+
+
 COLLATE_CONSUMERS = {
     "collate_ok": collate_ok,
     "char_convention": char_convention,
     "variant_deny": variant_deny,
     "mark_jiajie": mark_jiajie,
+    "collate_verdict": collate_verdict,
+    "unmark_jiajie": unmark_jiajie,
 }

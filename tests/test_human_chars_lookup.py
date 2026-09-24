@@ -33,3 +33,16 @@ def test_last_verdict_wins_and_other_kinds_ignored(tmp_path):
                 _ev("vol02:1:1:1", {"v": "confirm", "shape": "他"}, 5)])
     got = human_chars("vol01", log)
     assert got == {"vol01:4:1:3": ("太", None)}, "后到覆盖；seg_defect / not_a_char / 别的书不算"
+
+
+def test_later_step8_fix_beats_earlier_step7_by_time(tmp_path):
+    """按时间后到覆盖，不按批次名：`bxgb-list-…` 排在 `bxgb-collate` 后面，
+    按批次名排会把 Step8 复核改好的字盖回 Step7 的旧字（2026-09-24）。"""
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    log = EventLog(tmp_path)
+    t = EventTarget(step="x", unit="cell", key="bxgb:3:1:1", book="bxgb")
+    log.append([make_event("bxgb-list-lu-decide", 1, "confirm", t,
+                           {"v": "confirm", "shape": "甲"}, ts="2026-09-20T00:00:00Z"),
+                make_event("bxgb-collate", 1, "confirm", t,
+                           {"v": "confirm", "shape": "乙"}, ts="2026-09-24T00:00:00Z")])
+    assert human_chars("bxgb", log)["bxgb:3:1:1"][0] == "乙"

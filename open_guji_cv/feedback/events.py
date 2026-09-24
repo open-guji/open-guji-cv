@@ -67,6 +67,11 @@ Kind = Literal[
                       #   自动判据分不开，新字对先落异体层，人点「这是通假」才搬。
     "variant_deny",   # 推翻一条「异体」边（payload: pair）→ variants.deny.tsv。
                       #   **跨书**负样本：关系图会错（治/冶、輨/轄 实证）。
+    # ── Step8 两层分类（2026-09-24）。见 feedback/collate_state.py。
+    "collate_verdict",# 把一个字位挪进某一类（payload: pair, who∈ours/theirs/neither/空,
+                      #   cat∈variant/jiajie/taboo/other, fix, final, ctx 快照）。**逐字位**、
+                      #   后到覆盖，who 空 = 退回待审。改字那部分另写一条带 via 的 confirm。
+    "unmark_jiajie",  # 撤一条通假字对（payload: pair, book）→ 从 jiajie.tsv 删掉本书标的那行。
 ]
 
 Actor = Literal["user", "model", "align"]

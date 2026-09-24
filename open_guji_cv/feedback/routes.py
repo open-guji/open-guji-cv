@@ -135,6 +135,8 @@ DEFAULT_ROUTES: list[dict] = [
     {"match": {"kind": "char_convention"}, "to": [{"consumer": "char_convention"}]},
     {"match": {"kind": "variant_deny"}, "to": [{"consumer": "variant_deny"}]},
     {"match": {"kind": "mark_jiajie"}, "to": [{"consumer": "mark_jiajie"}]},
+    {"match": {"kind": "collate_verdict"}, "to": [{"consumer": "collate_verdict"}]},
+    {"match": {"kind": "unmark_jiajie"}, "to": [{"consumer": "unmark_jiajie"}]},
 ]
 
 
