@@ -174,3 +174,17 @@ def test_legacy_event_on_a_cell_without_that_pair_is_ignored():
     assert human_verdicts(evs, "bxgb", lambda k: None) == {}
     other = _diff(1, "丁", "戊")
     assert human_verdicts(evs[:1], "bxgb", lambda k: other) == {}, "报告里这一格是别的字对"
+
+
+def test_ours_after_rerun_with_new_ref_goes_pending():
+    """我方对 甲→乙，重跑后校对本对齐变了成 甲→丙：是新差异，要进待审，不能归回 甲→乙。"""
+    evs = [_ev(1, "collate_verdict", {"pair": ["甲", "乙"], "who": "ours", "cat": "other"})]
+    items = build_items([_diff(1, "甲", "丙")], human_verdicts(evs, "bxgb"), _tier())
+    assert [(tuple(it["pair"]), it["who"]) for it in items] == [(("甲", "丙"), "pending")]
+
+
+def test_theirs_after_rerun_with_new_ref_goes_pending():
+    """校对本对 甲→乙（改成乙），重跑后成了 乙→丙：同样是新差异。"""
+    evs = [_ev(1, "collate_verdict", {"pair": ["甲", "乙"], "who": "theirs"})]
+    items = build_items([_diff(1, "乙", "丙")], human_verdicts(evs, "bxgb"), _tier())
+    assert [(tuple(it["pair"]), it["who"]) for it in items] == [(("乙", "丙"), "pending")]

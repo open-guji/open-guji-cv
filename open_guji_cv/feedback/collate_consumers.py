@@ -162,7 +162,8 @@ def _rewrite_conventions(path: Path, rows: list[dict]) -> None:
                     encoding="utf-8", newline="")
 
 
-def mark_jiajie(events, path: str = "", dry_run: bool = False, **kw) -> ConsumeResult:
+def mark_jiajie(events, path: str = "", dry_run: bool = False, log=None,
+                **kw) -> ConsumeResult:
     """`mark_jiajie` → 写 `config/dicts/jiajie.tsv`（**跨书**通假字对表）。
 
     异体与通假是**两类**（用户 2026-09-22）：异体是同一个字的不同写法（衞/衛），
@@ -179,11 +180,14 @@ def mark_jiajie(events, path: str = "", dry_run: bool = False, **kw) -> ConsumeR
                          dry_run,
                          head=("# 通假字对：本字不在、借另一个字代替（早/蚤、甫/父）。\n"
                                "# 与异体（同一个字的不同写法）分属两类，各自审阅。\n"
-                               "# 格式：刻本形\t校对本形\t来源。只追加不删除。\n"
-                               "# 由 feedback/collate_consumers.mark_jiajie 写。\n"))
+                               "# 格式：刻本形\t校对本形\t来源。\n"
+                               "# 由 feedback/collate_consumers.mark_jiajie 追加、\n"
+                               "# unmark_jiajie 撤本书标的行（字对在该书复核台上被挪出通假）。\n"),
+                         keep=lambda e, pair: _latest_jiajie_op(e, pair, log) != "unmark_jiajie")
 
 
-def _append_pairs(events, name: str, path_s: str, dry_run: bool, head: str) -> ConsumeResult:
+def _append_pairs(events, name: str, path_s: str, dry_run: bool, head: str,
+                  keep=lambda e, pair: True) -> ConsumeResult:
     """把事件里的 `payload.pair` 追加进一张 TSV，已有的跳过。
 
     `variant_deny` 与 `mark_jiajie` 共用：两者都是「人给某个字对贴了个跨书标签」，
@@ -207,7 +211,7 @@ def _append_pairs(events, name: str, path_s: str, dry_run: bool, head: str) -> C
             res.skipped += 1
             continue
         key = (pair[0], pair[1])
-        if key in known:
+        if key in known or not keep(e, pair):
             res.skipped += 1
             continue
         known.add(key)
@@ -252,7 +256,42 @@ def collate_verdict(events, dry_run: bool = False, **kw) -> ConsumeResult:
     return res
 
 
-def unmark_jiajie(events, path: str = "", dry_run: bool = False, **kw) -> ConsumeResult:
+def jiajie_rows(path: str = "") -> list[tuple[str, str, str]]:
+    """`jiajie.tsv` → `[(刻本形, 校对本形, 来源)]`，来源缺省为空串。"""
+    from ..report.tiers import JIAJIE_REL
+    p = Path(path or str(_repo_path(JIAJIE_REL)))
+    out = []
+    if p.exists():
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            parts = ln.strip().split("\t")
+            if ln.strip() and not ln.startswith("#") and len(parts) >= 2:
+                out.append((parts[0], parts[1], parts[2] if len(parts) > 2 else ""))
+    return out
+
+
+def _latest_jiajie_op(e, pair, log=None) -> str | None:
+    """事件所在批次里，这个字对**最后一次**是标（mark_jiajie）还是撤（unmark_jiajie）。
+
+    `route_and_consume` 按消费者分组跑（mark 整组先于 unmark）。平时每次提交当场消费，
+    顺序无所谓；可一旦某次消费出错、事件积压，下次一起跑时「标 → 撤 → 再标」会被执行成
+    「标、标（跳过）、撤」，表里就没了这一对（PR #13 评审）。所以两个消费者都不只信
+    手上这条事件，而是按日志里最后一次的意图办。
+    """
+    from .events import EventLog
+    try:
+        evs = (log or EventLog()).read(e.batch)
+    except Exception:                               # noqa: BLE001
+        return None
+    last = None
+    for x in evs:
+        if x.kind in ("mark_jiajie", "unmark_jiajie") and \
+                tuple((x.payload or {}).get("pair") or ()) == tuple(pair):
+            last = x.kind
+    return last
+
+
+def unmark_jiajie(events, path: str = "", dry_run: bool = False, log=None,
+                  **kw) -> ConsumeResult:
     """`unmark_jiajie` → 从 `jiajie.tsv` 删掉**本书标的**那行。
 
     字对被人从「通假字」挪走、本书里再没有一处归通假时发。`jiajie.tsv` 是跨书表，
@@ -269,6 +308,9 @@ def unmark_jiajie(events, path: str = "", dry_run: bool = False, **kw) -> Consum
         if not (pair and len(pair) == 2 and book):
             res.errors.append(f"{e.id}: 缺 pair/book")
             res.skipped += 1
+            continue
+        if _latest_jiajie_op(e, pair, log) == "mark_jiajie":
+            res.skipped += 1                    # 撤了之后又标回去了：以最后一次为准
             continue
         drop.add((pair[0], pair[1], f"human:evt_{book}-collate_"))
     if not drop or not p.exists():
