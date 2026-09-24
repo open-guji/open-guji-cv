@@ -123,3 +123,39 @@ def test_collate_verdict_only_books_it():
     from open_guji_cv.feedback.collate_consumers import collate_verdict
     res = collate_verdict(_pairs(_ev("collate_verdict", {"pair": ["甲", "乙"], "who": "ours"})))
     assert res.consumer == "collate_verdict" and res.added == 1
+
+
+def _log_with(tmp_path, *kinds_pairs):
+    from open_guji_cv.feedback.events import EventLog
+    log = EventLog(tmp_path / "fb")
+    log.append([make_event("bxgb-collate", i + 1, k,
+                           EventTarget(step="step8_collate", unit="cell", key="bxgb:3:2:10",
+                                       book="bxgb"),
+                           {"pair": list(p), "book": "bxgb"}, source_format="server")
+                for i, (k, p) in enumerate(kinds_pairs)])
+    return log
+
+
+def test_backlog_mark_unmark_mark_ends_marked(tmp_path):
+    """积压的「标 → 撤 → 再标」一起消费：按日志里最后一次（标）办，表里要有这一对。"""
+    from open_guji_cv.feedback.collate_consumers import mark_jiajie, unmark_jiajie
+    P = ("甫", "父")
+    log = _log_with(tmp_path, ("mark_jiajie", P), ("unmark_jiajie", P), ("mark_jiajie", P))
+    p = tmp_path / "jiajie.tsv"
+    evs = log.read("bxgb-collate")
+    mark_jiajie(_pairs(*[e for e in evs if e.kind == "mark_jiajie"]), path=str(p), log=log)
+    unmark_jiajie(_pairs(*[e for e in evs if e.kind == "unmark_jiajie"]), path=str(p), log=log)
+    assert "甫\t父" in p.read_text(encoding="utf-8")
+
+
+def test_backlog_mark_unmark_ends_unmarked(tmp_path):
+    """最后一次是撤：mark 那条就别加（加了也会被撤，但别让中间态落盘）。"""
+    from open_guji_cv.feedback.collate_consumers import mark_jiajie, unmark_jiajie
+    P = ("甫", "父")
+    log = _log_with(tmp_path, ("mark_jiajie", P), ("unmark_jiajie", P))
+    p = tmp_path / "jiajie.tsv"
+    evs = log.read("bxgb-collate")
+    res = mark_jiajie(_pairs(*[e for e in evs if e.kind == "mark_jiajie"]), path=str(p), log=log)
+    assert res.added == 0
+    unmark_jiajie(_pairs(*[e for e in evs if e.kind == "unmark_jiajie"]), path=str(p), log=log)
+    assert not p.exists() or "甫\t父" not in p.read_text(encoding="utf-8")

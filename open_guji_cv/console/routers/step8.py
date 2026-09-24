@@ -19,6 +19,7 @@ JSON；要重跑走 `guji collate`（或前端的「重新对勘」按钮，走 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -61,6 +62,13 @@ def _jiajie() -> set:
     """`jiajie.tsv` → `{(刻本形, 校对本形)}`。人标过「这是通假」的字对。"""
     from ...report.tiers import JIAJIE_REL, load_pairs
     return load_pairs(JIAJIE_REL)
+
+
+def _jiajie_of_book(book: str) -> set:
+    """`jiajie.tsv` 里**本书复核批次**标的那些字对。`unmark_jiajie` 只撤得动这些：
+    别的书标的行按它判「要不要撤」，每挪一次都会白写一条撤不掉的 unmark。"""
+    from ...feedback.collate_consumers import jiajie_rows
+    return {(a, b) for a, b, src in jiajie_rows() if src.startswith(f"human:evt_{book}-collate_")}
 
 
 def _denied() -> set:
@@ -159,8 +167,9 @@ def api_step8_queue(book: str, bucket: str = "pending", cat: str = "",
     items = _items(book, doc) if doc else []
     sel = [it for it in items
            if it["who"] == bucket and (bucket != "ours" or not cat or it["cat"] == cat)]
-    n_groups = len(group_items(sel))
-    groups = group_items(sel)[:limit]
+    all_groups = group_items(sel)
+    n_groups = len(all_groups)
+    groups = all_groups[:limit]
     seg = _seg_flags(book)
     for g in groups:
         for smp in g["samples"]:
@@ -252,6 +261,14 @@ class DecideIn(BaseModel):
     note: str = ""
 
 
+_VS = re.compile("[\ufe00-\ufe0f\U000e0100-\U000e01ef]")
+
+
+def _nchars(t: str) -> int:
+    """字数，不算异体选择符：`葛󠄀`（葛 + VS17）是一个字、两个码位。"""
+    return len(_VS.sub("", t))
+
+
 def _check(d: DecideIn) -> str:
     from ...feedback.collate_state import CATS, WHO
     if not d.ids or len(d.pair) != 2 or not all(d.pair) or d.pair[0] == d.pair[1]:
@@ -260,7 +277,7 @@ def _check(d: DecideIn) -> str:
         return f"who 只能是 {'/'.join(WHO)} 或空"
     if d.who == "ours" and (d.cat or "other") not in CATS:
         return f"cat 只能是 {'/'.join(CATS)}"
-    if d.who == "neither" and len(d.fix.strip()) != 1:
+    if d.who == "neither" and _nchars(d.fix.strip()) != 1:
         return "「都不对」要输入**一个**正确的字"
     return ""
 
@@ -272,8 +289,12 @@ def _check(d: DecideIn) -> str:
 #:   → 一条 `confirm`，走 Step7 的改字／入库／失效产物；没变就不写，不白白入库；
 #: - 字对在本书**有无一处归通假**变了 → `mark_jiajie` / `unmark_jiajie`（跨书表）。
 def _events_for(d: DecideIn, base_seq: int, batch: str, current: dict[str, dict],
-                jiajie: set):
-    """一条裁决 → 要写的事件列表。`current`：这个字对**现在**的逐字位状态行。"""
+                jiajie: set, jiajie_mine: set | None = None):
+    """一条裁决 → 要写的事件列表。`current`：这个字对**现在**的逐字位状态行。
+
+    `jiajie`：整张通假表（有了就不必再标）；`jiajie_mine`：其中本书标的（只有这些撤得动）。
+    """
+    jiajie_mine = jiajie if jiajie_mine is None else jiajie_mine
     from ...feedback.collate_state import VIA, final_char
     from ...feedback.events import EventTarget, make_event
     from ...feedback.harvest import parse_card_id
@@ -310,7 +331,7 @@ def _events_for(d: DecideIn, base_seq: int, batch: str, current: dict[str, dict]
         for k, it in current.items() if k not in moved)
     if jj_after and tuple(pair) not in jiajie:
         add("mark_jiajie", d.ids[0], {"pair": pair, "via": VIA, "note": d.note})
-    elif not jj_after and tuple(pair) in jiajie:
+    elif not jj_after and tuple(pair) in jiajie_mine:
         add("unmark_jiajie", d.ids[0], {"pair": pair, "book": d.book, "via": VIA})
     return out
 
@@ -339,7 +360,8 @@ def api_step8_decide(d: DecideIn) -> dict:
                                       f"（{bad[0]}…），请刷新"}
     batch = f"{d.book}-collate"
     log = deps.event_log()
-    evs = _events_for(d, log.latest_seq(batch), batch, current, _jiajie())
+    evs = _events_for(d, log.latest_seq(batch), batch, current, _jiajie(),
+                      _jiajie_of_book(d.book))
     n = log.append(evs)
     confirms = [e for e in evs if e.kind == "confirm"]
     out = {"ok": True, "appended": n, "batch": batch,

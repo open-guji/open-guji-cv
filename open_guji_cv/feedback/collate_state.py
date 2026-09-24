@@ -206,9 +206,11 @@ def build_items(diffs: list[dict], verdicts: dict[str, Verdict],
                 if rows[vid]["page"] is None:
                     # 连旧报告都查不到：至少从字位 id（书:页:列:格）拿回坐标，图还能出
                     rows[vid].update(_coords(vid))
-        elif r["pair"] != v.pair and r["pair"][0] == v.final:
+        elif r["pair"] == (v.final, v.pair[1]) and v.final != v.pair[0]:
             # 「都不对」改成 丙 之后重跑：这一格变成 丙→乙 的差异，仍是那条裁决的结果，
-            # 按裁决时的字对归位，别当成新差异再问一遍
+            # 按裁决时的字对归位，别当成新差异再问一遍。**只认这一种形态**（我方变成 final、
+            # 校对本没变）：宽成「我方 == final」的话，我方对 甲→乙 重跑后成了 甲→丙
+            # （校对本对齐变了）也会被归回 甲→乙，那条新差异就永远进不了待审（PR #13 评审）
             r["pair"] = v.pair
 
     n_of: dict[tuple, int] = {}
