@@ -135,7 +135,10 @@ def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
     try:
-        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.batch, e.seq))
+        # 按**时间**后到覆盖，不按批次名：Step8 复核（`<book>-collate`）改的字要压过更早的
+        # Step7 定字，而批次名排序下 `bxgb-list-…-decide` 排在 `bxgb-collate` 后面，
+        # 会把复核改好的字盖回去（2026-09-24）。同一秒内再按批次/seq 定序。
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
         return out
     for e in evs:

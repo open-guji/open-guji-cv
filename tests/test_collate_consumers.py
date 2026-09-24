@@ -103,3 +103,23 @@ def test_char_convention_reports_bad_payload(tmp_path, payload):
     p = _book_yaml(tmp_path, "id: bxgb\n")
     res = char_convention(_pairs(_ev("char_convention", payload)), book_path=str(p))
     assert res.added == 0 and res.skipped == 1 and res.errors
+
+
+def test_unmark_jiajie_only_drops_this_books_rows(tmp_path):
+    """撤通假只删**本书复核批次**标的那行；别的书标的、别的字对都不动。"""
+    from open_guji_cv.feedback.collate_consumers import unmark_jiajie
+    p = tmp_path / "jiajie.tsv"
+    p.write_text("# 头\n甫\t父\thuman:evt_bxgb-collate_000001\n"
+                 "甫\t父\thuman:evt_other-collate_000009\n"
+                 "早\t蚤\thuman:evt_bxgb-collate_000002\n", encoding="utf-8")
+    res = unmark_jiajie(_pairs(_ev("unmark_jiajie", {"pair": ["甫", "父"], "book": "bxgb"})),
+                        path=str(p))
+    assert res.added == 1 and not res.errors
+    assert p.read_text(encoding="utf-8") == ("# 头\n甫\t父\thuman:evt_other-collate_000009\n"
+                                             "早\t蚤\thuman:evt_bxgb-collate_000002\n")
+
+
+def test_collate_verdict_only_books_it():
+    from open_guji_cv.feedback.collate_consumers import collate_verdict
+    res = collate_verdict(_pairs(_ev("collate_verdict", {"pair": ["甲", "乙"], "who": "ours"})))
+    assert res.consumer == "collate_verdict" and res.added == 1

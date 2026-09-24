@@ -220,9 +220,8 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .s8-acts { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; }
 .s8-acts button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
   border-radius: var(--r); padding: .3rem .9rem; font-size: .88rem; cursor: pointer; }
-.s8-acts button:first-child { border-color: var(--ink); }
 .s8-acts label { font-size: .8rem; color: var(--mute); margin-left: auto; }
-.s8-nav { display: flex; gap: .4rem; margin-top: .6rem; }
+.s8-nav { display: flex; gap: .4rem; margin-top: .6rem; align-items: center; }
 .s8-nav button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
   border-radius: var(--r); padding: .2rem .8rem; cursor: pointer; }
 .s8-nav button:disabled { color: var(--faint); cursor: default; }
@@ -232,4 +231,29 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .s8-fix { width: 5rem; font-size: 1.3rem; text-align: center; padding: .2rem .4rem;
   border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); color: var(--ink); }
 .s8-acts .k { font-size: .76rem; color: var(--mute); margin-right: .2rem; }
-.s8-hint { font-size: .74rem; color: var(--faint); margin-left: .5rem; }
+.s8-hint { font-size: .78rem; color: var(--mute); margin: .45rem 0 0; }
+/* Step8 两层页签（2026-09-24）：第一层 待审/我方对/校对本对/都不对，第二层挂在我方对下 */
+.s8-filter button b { font-variant-numeric: tabular-nums; margin-left: .15rem; }
+.s8-filter button i { font-style: normal; font-size: .7rem; color: var(--faint); margin-left: .35rem; }
+.s8-filter.s8-sub { margin-top: -.4rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
+.s8-filter.s8-sub button { font-size: .78rem; }
+.s8-badge { font-size: .72rem; padding: .05rem .45rem; border-radius: var(--r); background: var(--faint-soft); color: var(--mute); }
+.s8-badge.auto { background: var(--ochre-soft); color: var(--ochre); }
+.s8-badge.human { background: var(--ok-soft); color: var(--ok); }
+.s8-final { font-size: .82rem; color: var(--indigo); }
+.s8-undo { margin-left: .6rem; border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .05rem .5rem; font-size: .78rem; cursor: pointer; }
+details.s8-absent summary { cursor: pointer; }
+details.s8-absent summary .muted { margin-left: .3rem; }
+/* 切分反馈（2026-09-24）：挨着「都不对」，与分类独立 */
+.s8-acts .s8-seg { display: flex; gap: .7rem; margin-left: 1.2rem; font-size: .78rem; color: var(--mute); }
+.s8-acts .s8-seg label { margin-left: 0; display: flex; align-items: center; gap: .2rem; cursor: pointer; white-space: nowrap; }
+.s8-acts .s8-seg label.on { color: var(--zhu); }
+.s8-acts .s8-seg input { margin: 0; }
+.s8-nav .s8-ok { margin-left: .9rem; border-color: var(--ink); font-weight: 600; }
+.s8-navhint { margin-left: auto; text-align: right; font-size: .7rem; line-height: 1.45; color: var(--faint); }
+.s8-nav .s8-back { margin-left: .6rem; }
+/* 逐处坐标（2026-09-24）：全书 N 处每处的 页·列·字 */
+.s8-locs { display: flex; flex-wrap: wrap; gap: .15rem .9rem; font-size: .8rem; color: var(--mute); margin: -.2rem 0 .5rem; }
+.s8-locs .cur { color: var(--ink); font-weight: 600; }
+.s8-loc { font-size: .72rem; color: var(--faint); }
