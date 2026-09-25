@@ -52,3 +52,26 @@ def test_decisions(tmp_path):
     dec = [json.loads(l) for l in open(p.parent / "glyph_selfcheck" / "decisions.jsonl")]
     assert [d["key"] for d in dec] == ["k1", "k2", "k3"]
     assert dec[1]["old_char"] == "干" and dec[2]["old_char"] == "王"
+
+
+def test_fidelity(tmp_path):
+    p = tmp_path / "output" / "glyph.db"
+    p.parent.mkdir()
+    g = GlyphDB(p)
+    g.admit_instance("bk:1:1:1", "王", _png(0), provenance="align")
+    g.admit_instance("bk:1:1:2", "王", _png(1), provenance="align")
+    g.close()
+    r = glyph_audit([
+        _ev(1, {"v": "fidelity", "key": "f1", "instance_id": "bk:1:1:1",
+                "targets": ["bk:1:1:1", "bk:1:1:2"], "fidelity": "exact"}),
+        _ev(2, {"v": "fidelity", "key": "f2", "instance_id": "bk:1:1:2", "fidelity": "nearest"}),
+        _ev(3, {"v": "fidelity", "key": "f3", "instance_id": "bk:1:1:2", "fidelity": "nearest",
+                "ids": "⿱一土"}),
+    ], db_path=str(p))
+    assert r.added == 2 and r.skipped == 1, r.errors      # nearest 不给 IDS 拒收
+    c = sqlite3.connect(p)
+    got = dict(c.execute("select instance_id, fidelity || '|' || coalesce(ids,'') from instances"))
+    c.close()
+    assert got == {"bk:1:1:1": "exact|", "bk:1:1:2": "nearest|⿱一土"}
+    from open_guji_cv.clustering.glyph_ledger import library_summary
+    assert library_summary(p)["fidelity"] == {"exact": 1, "nearest": 1}

@@ -10,6 +10,9 @@
 | `near_form` | 两个都没错，只是形近 / 异体——记账，并记进 `near_forms.jsonl`（形近字对的本书人裁证据） |
 | `evict` | 撤库：`payload.target` 那个实例（本例或本书里的对手）删出库，下次跑到那一格重新出卡 |
 | `relabel` | 本例其实是 `payload.char`：撤掉旧的、以人裁身份按新字重进库（同 id、同图块） |
+| `fidelity` | 标一致程度（字形库 04）：`payload.fidelity` ∈ exact / nearest / unencoded / 空（撤销），`nearest`/`unencoded` 必带 `payload.ids`（刻例的实际结构）；`payload.targets` 可一次标多例 |
+
+`relabel` 也可以顺带 `fidelity`/`ids`（「改成 X，但只是最近似」）。
 
 所有裁决都写 `<库目录>/glyph_selfcheck/decisions.jsonl`（后到覆盖）。撤库与改字
 改的是 glyph.db，裁完要 `glyph-db export` 把真源带进 git（总账页会亮 store 漂移）。
@@ -48,6 +51,16 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                    "peer_char": p.get("peer_char")}
             if v in ("ok", "near_form"):
                 pass
+            elif v == "fidelity":
+                fid = p.get("fidelity") or None
+                err = _check_fidelity(fid, p.get("ids"))
+                if err:
+                    res.errors.append(f"{e.id}: {err}")
+                    res.skipped += 1
+                    continue
+                targets = p.get("targets") or [iid]
+                n = _set_fidelity(db, targets, fid, p.get("ids"), e.id)
+                rec.update(fidelity=fid, ids=p.get("ids"), targets=targets, n=n)
             elif v == "evict":
                 target = p.get("target") or iid
                 if not db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
@@ -78,6 +91,13 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                                             "old_char": rec["old_char"]},
                                   page=page, col=col, idx=idx,
                                   bbox=json.loads(bbox) if bbox else None)
+                if p.get("fidelity"):
+                    err = _check_fidelity(p["fidelity"], p.get("ids"))
+                    if err:
+                        res.errors.append(f"{e.id}: 字已改，一致程度没标：{err}")
+                    else:
+                        _set_fidelity(db, [iid], p["fidelity"], p.get("ids"), e.id)
+                        rec.update(fidelity=p["fidelity"], ids=p.get("ids"))
             else:
                 res.errors.append(f"{e.id}: 不认识的裁决 {v!r}")
                 res.skipped += 1
@@ -94,6 +114,34 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
     finally:
         db.close()
     return res
+
+
+FIDELITY_SET = ("exact", "nearest", "unencoded")
+
+
+def _check_fidelity(fid: str | None, ids: str | None) -> str | None:
+    if fid is None:
+        return None                       # 撤销
+    if fid not in FIDELITY_SET:
+        return f"一致程度只认 {FIDELITY_SET}，拿到 {fid!r}"
+    if fid in ("nearest", "unencoded") and not (ids or "").strip():
+        return f"{fid} 要给 IDS（刻例实际怎么写）"
+    return None
+
+
+def _set_fidelity(db, targets: list[str], fid: str | None, ids: str | None, event_id: str) -> int:
+    by = json.dumps({"event": event_id, "at": time.strftime("%Y-%m-%d")}, ensure_ascii=False)
+    n = 0
+    for t in targets:
+        if fid in ("nearest", "unencoded"):
+            cur = db.conn.execute("UPDATE instances SET fidelity=?, fidelity_by=?, ids=? "
+                                  "WHERE instance_id=?", (fid, by, ids.strip(), t))
+        else:
+            cur = db.conn.execute("UPDATE instances SET fidelity=?, fidelity_by=? "
+                                  "WHERE instance_id=?", (fid, by if fid else None, t))
+        n += cur.rowcount
+    db.conn.commit()
+    return n
 
 
 GLYPH_AUDIT_CONSUMERS = {"glyph_audit": glyph_audit}

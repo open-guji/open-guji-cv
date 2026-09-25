@@ -153,13 +153,16 @@ def api_glyphlib_audit(all: bool = False) -> dict:
 class AuditDecideIn(BaseModel):
     key: str
     instance_id: str
-    v: str                      # ok | near_form | evict | relabel
+    v: str                      # ok | near_form | evict | relabel | fidelity
     target: str | None = None   # evict 撤哪个（本例或本书里的对手）
     char: str | None = None     # relabel 改成什么字
     char_self: str | None = None
     peer: str | None = None
     peer_char: str | None = None
     flags: list[str] = []
+    fidelity: str | None = None  # exact | nearest | unencoded（字形库 04）
+    ids: str | None = None       # nearest / unencoded 时刻例的实际结构
+    targets: list[str] = []      # fidelity 一次标多例
 
 
 @router.post("/api/glyphlib/audit/decide")
@@ -173,7 +176,7 @@ def api_glyphlib_audit_decide(d: AuditDecideIn) -> dict:
     from ...feedback.routes import RouteTable
     from .. import deps
 
-    if d.v not in ("ok", "near_form", "evict", "relabel"):
+    if d.v not in ("ok", "near_form", "evict", "relabel", "fidelity"):
         return {"ok": False, "error": f"不认识的裁决 {d.v}"}
     batch = "glyphlib-audit"
     log = deps.event_log()
