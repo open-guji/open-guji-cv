@@ -448,6 +448,33 @@ def repair_glyph_heads(db_path: str | Path, dry_run: bool = True) -> dict:
     return {"dry_run": dry_run, "n": len(fixes), "fixes": fixes, "ids_filled": n_ids}
 
 
+def label_mismatches(db_path: str | Path, apply: bool = False) -> dict:
+    """刻例挂在字头 X 下、实例自己的 label 却是 Y（库内两处真相）。
+
+    匹配器按字头出字（`load_matcher_from_db` 读 glyphs.char），人裁计数、单字页按
+    instances.label——两处不一致时各说各话。四庫 2026-09-26 实测 97 例：内/內 57、
+    别/別 22、眞/真 8、戸/戶 4、注/註 3…，是 09-16 一轮把字头改成刻本字形（09-16
+    那批定字事件的意图，事件本身乱码没消费成）时实例没跟着改。看图核过：字头那边
+    是刻本字形。`apply` 时把 label / unicode_cp 对齐到字头；semantic（读法）不动。
+    """
+    c = sqlite3.connect(str(db_path))
+    try:
+        rows = c.execute(
+            "SELECT e.instance_id, g.char, i.label FROM exemplars e JOIN glyphs g USING(glyph_id) "
+            "JOIN instances i ON i.instance_id=e.instance_id "
+            "WHERE g.edition_tag NOT LIKE 'font:%' AND g.char != i.label").fetchall()
+        if apply:
+            for iid, gc, _lab in rows:
+                c.execute("UPDATE instances SET label=?, unicode_cp=? WHERE instance_id=?",
+                          (gc, ord(gc) if len(gc) == 1 else None, iid))
+            c.commit()
+    finally:
+        c.close()
+    pairs = Counter((gc, lab) for _i, gc, lab in rows)
+    return {"n": len(rows), "applied": apply,
+            "pairs": {f"{gc}←{lab}": n for (gc, lab), n in pairs.most_common()}}
+
+
 def semantic_disagreements(db_path: str | Path) -> list[dict]:
     """字头 semantic 是汉字、却与刻例多数读法不同的（如 曰 字头记成 日）。"""
     c = connect_ro(db_path)
