@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchLibSummary, PROV_LABEL, PROV_ORDER, type LibSummary } from '../../api/glyphlib'
+import { fetchLibSummary, FID_LABEL, PROV_LABEL, PROV_ORDER, type LibSummary } from '../../api/glyphlib'
 
 // 总账：本书套（全部非字体来源并一套、按格去重）＋ 各来源 ＋ 字体覆盖 ＋ 真源健康 ＋ 兄弟工作区。
 export function LibSummaryPanel({ onFilter }: { onFilter: (f: string) => void }) {
@@ -41,6 +41,17 @@ export function LibSummaryPanel({ onFilter }: { onFilter: (f: string) => void })
         </div>
         <p className="muted gl-note">人裁是新 Step7「库里有完全同形且已定字的实例」这条铁证的来源；
           上下文（Step6 n-gram）通道会背整理本，是体检优先对象。</p>
+      </div>
+
+      <div className="card">
+        <h3 className="gl-h3">一致程度</h3>
+        <div className="counts">
+          {['exact', 'variant_encoded', 'nearest', 'unencoded', 'unrated'].filter((k) => s.fidelity?.[k]).map((k) => (
+            <span key={k}>{FID_LABEL[k]} {s.fidelity[k].toLocaleString()}</span>
+          ))}
+        </div>
+        <p className="muted gl-note">刻例与所定码位的字形一致到什么程度。「有码异体」= 刻的形与读法不同（卽 读 即），自动算；
+          其余要人在单字页或体检卡上标。「最近似码位」「无码」附 IDS 记刻例实际结构。</p>
       </div>
 
       <div className="card">

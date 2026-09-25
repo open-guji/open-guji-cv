@@ -84,6 +84,13 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
                 const c = [...(prompt('本例其实是哪个字？') ?? '').trim()][0]
                 if (c) decide(f, { v: 'relabel', char: c })
               }}>改成…</button>
+              <span className="gl-sep" />
+              <button disabled={!!busy} onClick={() => decide(f, { v: 'fidelity', fidelity: 'exact' })}
+                title="字没标错，且刻的就是这个码位的通行字形">完全一致</button>
+              <button disabled={!!busy} onClick={() => {
+                const ids = (prompt('Unicode 里没有同形字，存的是最近似码位。刻例实际结构的 IDS：') ?? '').trim()
+                if (ids) decide(f, { v: 'fidelity', fidelity: 'nearest', ids })
+              }}>最近似码位…</button>
             </div>
           )}
         </div>
@@ -95,6 +102,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
 }
 
 function label(d: Omit<AuditDecision, 'key' | 'instance_id'>) {
+  if (d.v === 'fidelity') return d.fidelity === 'exact' ? '完全一致' : `最近似 ${d.ids}`
   return d.v === 'ok' ? '没问题' : d.v === 'near_form' ? '形近·异体' : d.v === 'evict' ? '已撤' : `改成 ${d.char}`
 }
 

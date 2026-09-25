@@ -140,6 +140,36 @@ def head_anomalies(c: sqlite3.Connection) -> list[dict]:
     return out
 
 
+FIDELITY = ("exact", "variant_encoded", "nearest", "unencoded")
+
+
+def _has_col(c: sqlite3.Connection, table: str, col: str) -> bool:
+    return any(r[1] == col for r in c.execute(f"PRAGMA table_info({table})"))
+
+
+def fidelity_of(label: str | None, semantic: str | None, stored: str | None) -> str | None:
+    """实例的一致程度：人标的优先；没标但字形≠读法的，就是「有码异体」。"""
+    if stored:
+        return stored
+    if label and semantic and label != semantic:
+        return "variant_encoded"
+    return None
+
+
+def fidelity_counts(c: sqlite3.Connection) -> dict:
+    """本书套刻例的一致程度分布（按实例）。"""
+    fe = _font_editions(c)
+    col = "i.fidelity" if _has_col(c, "instances", "fidelity") else "NULL"
+    out: Counter = Counter()
+    for ed, lab, sem, fid in c.execute(
+            f"SELECT g.edition_tag, i.label, i.semantic, {col} FROM exemplars e "
+            "JOIN glyphs g ON g.glyph_id=e.glyph_id JOIN instances i ON i.instance_id=e.instance_id"):
+        if ed in fe:
+            continue
+        out[fidelity_of(lab, sem, fid) or "unrated"] += 1
+    return dict(out)
+
+
 def library_summary(db_path: str | Path, store_dir: str | Path | None = None) -> dict:
     """一本书字形库的总账（控制台字形库页 / `glyph-db stats` 共用）。"""
     c = connect_ro(db_path)
@@ -200,6 +230,7 @@ def library_summary(db_path: str | Path, store_dir: str | Path | None = None) ->
                 "chars_split_across_editions": split,
             },
             "fonts": font_chars,
+            "fidelity": fidelity_counts(c),
             "store": store_drift(c, store_dir),
             "head_anomalies": len(head_anomalies(c)),
         }
@@ -222,8 +253,13 @@ def char_table(db_path: str | Path) -> list[dict]:
             if ed not in fe:
                 heads[ch][ed] = (sem, cp)
         per = defaultdict(lambda: {"cells": set(), "prov": Counter(), "semantic": Counter()})
+        fcol = "fidelity" if _has_col(c, "instances", "fidelity") else "NULL"
+        fid_of = {iid: f for iid, f in c.execute(
+            f"SELECT instance_id, {fcol} FROM instances WHERE {fcol} IS NOT NULL")}
         for ch, iid, ed, p, sem in _book_rows(c):
             d = per[ch]
+            if fid_of.get(iid):
+                d.setdefault("fid", Counter())[fid_of[iid]] += 1
             d["cells"].add(cell_key(iid, v1))
             d["prov"][_prov_class(p)] += 1
             if sem:
@@ -239,6 +275,7 @@ def char_table(db_path: str | Path) -> list[dict]:
                 "semantic": sem,
                 "editions": sorted(heads.get(ch, {})),
                 "in_font": ch in in_font if fe else None,
+                "fidelity": dict(d.get("fid") or {}),
             })
         out.sort(key=lambda r: (-r["n"], r["char"]))
         return out
@@ -254,9 +291,10 @@ def char_detail(db_path: str | Path, char: str) -> dict:
         fe = _font_editions(c)
         ex = []
         seen: set[str] = set()
-        for iid, ed, p, sem, page, col, idx, ev, at in c.execute(
+        fcol = "i.fidelity, i.ids" if _has_col(c, "instances", "fidelity") else "NULL, i.ids"
+        for iid, ed, p, sem, page, col, idx, ev, at, lab, fid, ids in c.execute(
                 "SELECT e.instance_id, g.edition_tag, a.provenance, i.semantic, "
-                "  i.page, i.col, i.idx, a.evidence, a.admitted_at "
+                "  i.page, i.col, i.idx, a.evidence, a.admitted_at, i.label, " + fcol + " "
                 "FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id "
                 "JOIN instances i ON i.instance_id=e.instance_id "
                 "LEFT JOIN admissions a ON a.instance_id=e.instance_id "
@@ -272,6 +310,7 @@ def char_detail(db_path: str | Path, char: str) -> dict:
                        "provenance": _prov_class(p), "provenance_raw": p,
                        "semantic": sem, "page": page, "col": col, "idx": idx,
                        "duplicate": k in seen, "admitted_at": at,
+                       "fidelity": fidelity_of(lab, sem, fid), "ids": ids,
                        "event": evd.get("event") if isinstance(evd, dict) else None})
             seen.add(k)
         fonts = []
@@ -286,7 +325,9 @@ def char_detail(db_path: str | Path, char: str) -> dict:
                  for r in c.execute(
                      "SELECT edition_tag, semantic, unicode_cp, status, n_confirmed "
                      "FROM glyphs WHERE char=? AND edition_tag NOT LIKE 'font:%'", (char,))]
+        from .ids_guard import ids_of
         return {"char": char, "cp": ord(char) if len(char) == 1 else None,
+                "ids": ids_of(char) or None,
                 "heads": heads, "exemplars": ex, "fonts": fonts}
     finally:
         c.close()
@@ -305,6 +346,9 @@ def repair_glyph_heads(db_path: str | Path, dry_run: bool = True) -> dict:
 
     `semantic` 是汉字但与实例不一致的（如 曰→日）不在这里自动改——那是读法
     判断，交给体检出卡由人裁。
+
+    另把字头行空着的 `ids` 用 `config/ids/ids_lv1.txt` 回填——那是**所定码位的
+    通行结构**，体检与「最近似码位」卡对照用；刻例自己的实际结构记在实例的 `ids`。
     """
     c = sqlite3.connect(str(db_path))
     fixes = []
@@ -324,11 +368,21 @@ def repair_glyph_heads(db_path: str | Path, dry_run: bool = True) -> dict:
                 c.execute("UPDATE glyphs SET %s WHERE glyph_id=?"
                           % ",".join(f"{k}=?" for k in upd),
                           (*upd.values(), a["glyph_id"]))
+        from .ids_guard import ids_of
+        n_ids = 0
+        for gid, ch in c.execute(
+                "SELECT glyph_id, char FROM glyphs WHERE (ids IS NULL OR ids='') "
+                "AND edition_tag NOT LIKE 'font:%'").fetchall():
+            seq = ids_of(ch)
+            if seq:
+                n_ids += 1
+                if not dry_run:
+                    c.execute("UPDATE glyphs SET ids=? WHERE glyph_id=?", (seq, gid))
         if not dry_run:
             c.commit()
     finally:
         c.close()
-    return {"dry_run": dry_run, "n": len(fixes), "fixes": fixes}
+    return {"dry_run": dry_run, "n": len(fixes), "fixes": fixes, "ids_filled": n_ids}
 
 
 def semantic_disagreements(db_path: str | Path) -> list[dict]:

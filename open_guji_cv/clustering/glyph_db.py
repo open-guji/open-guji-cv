@@ -198,6 +198,15 @@ class GlyphDB:
         if "kind" not in have:
             self.conn.execute("ALTER TABLE sources ADD COLUMN kind TEXT "
                               "NOT NULL DEFAULT 'woodblock'")
+        # 字形可信度（2026-09-25，字形库 04）：这个刻例与所定码位的通行字形
+        # 一致到什么程度——exact 完全一致 / nearest Unicode 里没有同形字、存的是
+        # 最近似码位（ids 写实际结构）/ unencoded 部件都对不上。NULL = 未评。
+        # 「刻的是另一个有码位的异体」不存：label ≠ semantic 即是，现算。
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(instances)")}
+        if "fidelity" not in have:
+            self.conn.execute("ALTER TABLE instances ADD COLUMN fidelity TEXT")
+        if "fidelity_by" not in have:
+            self.conn.execute("ALTER TABLE instances ADD COLUMN fidelity_by TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -895,6 +904,11 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
         for r in rows:
             d = dict(r)
             png = d.pop("patch_png")
+            # 可信度两列是 2026-09-25 加的：未评（NULL）就不写，免得每次导出给
+            # 全部旧行都添一对 null 键、store 平白整片改动
+            for k in ("fidelity", "fidelity_by"):
+                if d.get(k) is None:
+                    d.pop(k, None)
             name = f"{_safe(d['instance_id'])}.png"
             (out / "patches" / name).write_bytes(png)
             written.add(name)

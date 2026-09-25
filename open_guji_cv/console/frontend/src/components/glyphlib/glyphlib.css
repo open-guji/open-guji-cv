@@ -42,3 +42,13 @@
 .gl-img-self { outline: 2px solid var(--indigo); }
 .gl-audit-fig figcaption { font-size: .7rem; color: var(--mute); max-width: 6rem; text-align: center; }
 .gl-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+
+/* 一致程度（字形库 04） */
+.gl-fid-bar { margin-bottom: .7rem; align-items: center; }
+.gl-tile.gl-sel .gl-img { outline: 2px solid var(--indigo); }
+.gl-fid { font-family: inherit; margin-right: .15rem; padding: 0 .15rem; border-radius: 2px; font-weight: 500; }
+.gl-fid-exact { background: var(--ok-soft); color: var(--ok); }
+.gl-fid-variant_encoded { background: var(--faint-soft); color: var(--ink-2); }
+.gl-fid-nearest { background: var(--ochre-soft); color: var(--ochre); }
+.gl-fid-unencoded { background: var(--zhu-soft); color: var(--zhu); }
+.gl-sep { width: 1px; background: var(--rule); margin: 0 .3rem; }

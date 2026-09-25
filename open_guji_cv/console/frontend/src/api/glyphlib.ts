@@ -18,6 +18,7 @@ export interface LibSummary {
     singleton_chars: number; chars_split_across_editions: number
   }
   fonts: Record<string, { chars: number; book_chars_not_in_font: number }>
+  fidelity: Record<string, number>
   store: { db_exemplars: number; store_exemplars: number | null; ok: boolean; message: string | null }
   head_anomalies: number
   others: { ws: string; name: string; chars?: number; common?: number; error?: string }[]
@@ -25,17 +26,17 @@ export interface LibSummary {
 
 export interface LibChar {
   char: string; cp: number | null; n: number; prov: Prov; semantic: string
-  editions: string[]; in_font: boolean | null; also_in: string[]
+  editions: string[]; in_font: boolean | null; also_in: string[]; fidelity: Record<string, number>
 }
 
 export interface LibExemplar {
   instance_id: string; cell: string; edition: string; provenance: string; provenance_raw: string | null
   semantic: string | null; page: string; col: number; idx: number; duplicate: boolean
-  admitted_at: string | null; event: string | null
+  admitted_at: string | null; event: string | null; fidelity: string | null; ids: string | null
 }
 
 export interface LibCharDetail {
-  char: string; cp: number | null
+  char: string; cp: number | null; ids: string | null
   heads: { edition: string; semantic: string | null; unicode_cp: number | null; status: string; n_confirmed: number }[]
   exemplars: LibExemplar[]
   fonts: { edition: string; instance_id: string }[]
@@ -55,6 +56,10 @@ export function libPatchUrl(instanceId: string, ws?: string) {
 /** 来路的中文名与顺序：人裁在前（新 Step7 的铁证来源），机器通道在后。 */
 export const PROV_LABEL: Record<string, string> = {
   human: '人裁', align: '整理本对齐', match: '库匹配', context: '上下文', render: '字体', unknown: '未知',
+}
+/** 一致程度（字形库 04）。variant_encoded 不存，由 字形≠读法 现算。 */
+export const FID_LABEL: Record<string, string> = {
+  exact: '完全一致', variant_encoded: '有码异体', nearest: '最近似码位', unencoded: '无码', unrated: '未评',
 }
 export const PROV_ORDER = ['human', 'align', 'match', 'context', 'unknown']
 
@@ -79,7 +84,8 @@ export interface AuditResult {
 export const fetchLibAudit = (all = false) => api<AuditResult>(`/api/glyphlib/audit${all ? '?all=1' : ''}`)
 
 export interface AuditDecision {
-  key: string; instance_id: string; v: 'ok' | 'near_form' | 'evict' | 'relabel'
+  key: string; instance_id: string; v: 'ok' | 'near_form' | 'evict' | 'relabel' | 'fidelity'
+  fidelity?: string | null; ids?: string; targets?: string[]
   target?: string; char?: string; char_self?: string; peer?: string | null; peer_char?: string | null; flags?: string[]
 }
 export const postLibAudit = (d: AuditDecision) =>
