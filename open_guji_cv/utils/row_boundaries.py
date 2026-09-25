@@ -323,6 +323,17 @@ PERIOD_CAND_LOWINK_SEP = 0.0
 #: 墨量项被压得太轻就不再拦「切在字上」了。0.8 与 0.5 之间没有再细扫。
 INK_LAM = 0.8
 
+#: 末格「墨跨够不够半个字」的判定里，`_ink_end` 之后再沿**笔画级**墨往下延伸（行墨 ≥ 这么多倍的
+#: `blank_thresh`）（2026-09-25）。`blank_thresh` 是 0.08×列宽（vol02 ≈14.6px），「十」「千」下半
+#: 只剩一根竖（行墨 10–12px）整截看不见——vol02 p148c6「莊公二十」的正确切法（2144/2254）两个切点
+#: 都在候选里，却因末格「十」墨跨只算到 53px < 0.5 格被判不可行，DP 改走切进「二」横画间隙的路。
+#:
+#: **只用于下界判定，代价仍按旧墨跨算**。三版全书 A/B（逐列看图，overview 进度 Step3/13 §四）：
+#: 代价也改用延伸值 → 修 2 坏 ≥3（可/義/本 的上沿被划给上一字）；仅在旧墨跨 <0.5 格时改用 → 修 2
+#: 坏 1（p56c4「戶」首横被划给「門」——「一截宽横 + 细竖」与「十」形态一样，这个量分不开）；
+#: 只判下界 → 修 1（p148c6）坏 0。0 = 关。
+TAIL_STROKE_FRAC = 0.3
+
 #: 人裁标了「这一列非均匀」时用的间距先验强度（2026-09-20，用户定）。
 #:
 #: 默认 `lam=0.3` 的二次方惩罚假设「一列里各字等距」，绝大多数列成立。但刻工
@@ -638,6 +649,25 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         i = _ink_end_i(round(ya), round(yb))
         return ya if i is None else float(i)
 
+    stroke_thresh = blank_thresh * TAIL_STROKE_FRAC
+
+    @functools.lru_cache(maxsize=None)
+    def _stroke_end_i(a: int, b: int) -> int | None:
+        i = _ink_end_i(a, b)
+        if i is None or stroke_thresh <= 0:
+            return i
+        hi = min(n_cmax, b + 1)
+        while i + 1 < hi and cmax_list[i + 1] >= stroke_thresh:
+            i += 1
+        return i
+
+    def _stroke_end(ya: float, yb: float) -> float:
+        """`_ink_end` 之后沿**笔画级**的墨（≥ stroke_thresh）连续往下延伸到的位置。"""
+        if not cmax_list:
+            return yb
+        i = _stroke_end_i(round(ya), round(yb))
+        return ya if i is None else float(i)
+
     @functools.lru_cache(maxsize=None)
     def _near_blank_i(a: int, b: int) -> bool:
         lo, hi = max(0, a), min(n_cmax, b)
@@ -689,6 +719,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             base = blank_cost_full if gap >= blank_full_ratio * period else blank_cost
             return base + blank_lam_frac * lam * ((gap - period) / period) ** 2
         g = gap
+        g_lo = gap
         lo_eff = lo_ratio * period
         if last and tail_trim:
             # 末格只算到最后一行有墨处；**墨的跨度本身仍要够半个字**——不能用下界去
@@ -696,8 +727,15 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             # 用整格下界 0.7 卡（vol01/140 c1：末字墨跨 75px = 0.67·period 是真字）。
             # 字的墨跨通常是 0.75–0.85 格，残渣 0.1–0.3 格，取 0.5 分界。
             g = _ink_end(y_prev, y) - y_prev
+            g_lo = g
+            # 判「够不够半个字」时墨跨沿笔画级的墨往下延伸（TAIL_STROKE_FRAC）：「十」「千」下半只剩
+            # 一根竖，行墨低于 blank_thresh，旧量法看不见，末格被判不可行。代价仍按 g 算，见常量注释。
+            # 末格上沿自己切在墨上（切进下一个字的上半）时不延伸：那是「上一格吞了本字上半、
+            # 本格只剩细笔尾巴」的形状（vol01 p95c5「庭」），延伸会给它开绿灯
+            if 0 <= round(y_prev) < n_cmax and cmax_list[round(y_prev)] < stroke_thresh:
+                g_lo = _stroke_end(y_prev, y) - y_prev
             lo_eff = 0.5 * period
-        if not (lo_eff <= g <= hi_ratio * period):
+        if not (lo_eff <= max(g, g_lo) and g <= hi_ratio * period):
             return None
         dev = (g - period) / period
         if not interior:
