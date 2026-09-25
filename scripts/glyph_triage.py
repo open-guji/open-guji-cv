@@ -4,11 +4,16 @@
 
 不带 --all 只过体检（glyph-db selfcheck）标出、还没裁的卡；带 --all 过全库刻例
 （噪声块常是单例、体检标不出来——北行 bxgb:6:11:4 那块污渍就是这样找到的）。
+OCR 默认用 **Step5-c 同款引擎 PP-OCRv5 server**（~/paddle-venv 常驻 worker，15,907 字；
+2026-09-05 横评比 RapidOCR v4 mobile 高 10 个点）；`--rapid` 退回 v4 mobile（6,278 字，快但弱，
+繁体、生僻字大量不可达）。`--only <jsonl>` 只跑其中列出的 instance_id（大书先用 --rapid
+全量筛，再对非 agree 的用 v5 复跑）。
+
 分四类：agree（OCR 或 CNN ≥0.5 认定库里的字）/ mislabel（两路一致认成另一个字）/
 noise（两路都 <0.3，多半是污渍、残块、切坏）/ unclear。**只是分诊，不改库**；
 非 agree 的用 scripts/glyph_triage_sheet.py 出联系表看图再裁（OCR/CNN 对生僻字、
 异体、繁简码位都偏，mislabel 里一大半是 内/內、别/別、巳/已 这类码位习惯）。
-依赖：rapidocr-onnxruntime（pyproject 的 cpu extra）——装它会顺带装有 GUI 的
+依赖（仅 --rapid）：rapidocr-onnxruntime（pyproject 的 cpu extra）——装它会顺带装有 GUI 的
 opencv-python，与 headless 版冲突、cv2 直接起不来，装完要卸掉 opencv-python
 再强装回 opencv-python-headless。
 """
@@ -45,8 +50,13 @@ if "--all" in sys.argv:
                                             "provenance": prov or "", "flags": [], "rival_char": None,
                                             "rival": 0, "xrival_char": None, "font_own": None, "score": 0})
     rows = allrows
+if "--only" in sys.argv:
+    want = {json.loads(l)["instance_id"] for l in open(sys.argv[sys.argv.index("--only") + 1], encoding="utf-8")}
+    rows = [r for r in rows if r["instance_id"] in want]
 
-ocr = RapidOcrSource(topk=5); ocr._ensure()
+from open_guji_cv.clustering.candidates import PaddleOcrSource
+ocr = PaddleOcrSource(topk=5) if "--rapid" not in sys.argv else RapidOcrSource(topk=5)
+ocr._ensure()
 cnn = cnn_shared()
 cnn._ensure()
 classes = list(cnn._classes) if cnn.available else []
@@ -119,7 +129,7 @@ for r in rows:
                                           "rival_char", "rival", "xrival_char", "font_own", "score")},
                 "ocr": o[:3], "cnn": k[:3], "witness": w, "wop": wop, "alt": alt, "cat": cat, "ink": round(ink, 4), "n_cc": n_cc})
 
-with open([a for a in sys.argv[1:] if not a.startswith('--')][0], "w", encoding="utf-8") as f:
+with open(sys.argv[1], "w", encoding="utf-8") as f:
     for x in out:
         f.write(json.dumps(x, ensure_ascii=False) + "\n")
 from collections import Counter
