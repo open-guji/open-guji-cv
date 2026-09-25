@@ -122,7 +122,16 @@ def guided_seam_from_owner(owner: np.ndarray, y_line_local: int, band: int = GUI
 
 
 def ckpt_fingerprint(path: str | Path | None = None) -> str:
-    """权重文件的轻量指纹 (mtime_ns, size)；文件不存在返回空串（= 裁判不可用，按旧规则）。"""
+    """权重文件的轻量指纹 (mtime_ns, size)；文件不存在返回空串（= 裁判不可用，按旧规则）。
+
+    **没装 torch 也返回空串**（2026-09-25）：此前只看权重文件，没 torch 的机器上
+    `get_judge()` 静默返回 None、Step3 按旧规则切，指纹却与装了 torch 时一模一样，
+    产物照报新鲜。vol02 实测一轮这样跑出来：U-Net 改选 213 → 0、升级人审 96 → 0、
+    人裁收敛 186 → 105，`status` 全绿。现在「裁判不可用」进指纹，装/卸 torch 都会让
+    Step3 过期。"""
+    import importlib.util
+    if importlib.util.find_spec("torch") is None:
+        return ""
     p = Path(path) if path else DEFAULT_CKPT
     try:
         st = os.stat(p)
