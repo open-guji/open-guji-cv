@@ -102,3 +102,26 @@ def test_v1_twin_same_cell(tmp_path):
     assert [(d["v1"], d["v2"]) for d in got] == [("vo:3:4:9", "v2:vo:3:4:10")]
     sh = L.evict_shadow_duplicates(p, dry_run=False)
     assert sh["ids"] == ["vo:3:4:9"] and len(sh["v1_conflicts"]) == 1
+
+
+def test_set_book_edition_merges_and_routes_new_admits(tmp_path, db):
+    """一本书一个 edition：同字两行合一、刻例挂过去；声明之后新进的刻例也归它；导出/重建保留声明。"""
+    g = GlyphDB(db)
+    r = g.set_book_edition("my-book", title="某書")
+    assert r["glyph_rows_merged"] == 1                         # 乙 在 bk 与 v2 各一行
+    g.admit_instance("v2:bk:9:9:9", "丁", _png(6), provenance="human")
+    eds = {e for (e,) in g.conn.execute("SELECT DISTINCT edition_tag FROM glyphs")}
+    n_yi = g.conn.execute("SELECT COUNT(*) FROM exemplars e JOIN glyphs x USING(glyph_id) "
+                          "WHERE x.char='乙'").fetchone()[0]
+    g.close()
+    assert eds == {"my-book", "font:x"} and n_yi == 2
+    s = L.library_summary(db)
+    assert s["book"]["chars_split_across_editions"] == 0
+    from open_guji_cv.clustering.glyph_db import export_store, rebuild_from_store
+    g = GlyphDB(db)
+    export_store(g, tmp_path / "store")
+    g.close()
+    rebuild_from_store(tmp_path / "store", tmp_path / "re.db")
+    g2 = GlyphDB(tmp_path / "re.db")
+    assert g2.book_edition() == "my-book"
+    g2.close()

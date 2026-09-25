@@ -55,21 +55,26 @@ export function LibSummaryPanel({ onFilter }: { onFilter: (f: string) => void })
       </div>
 
       <div className="card">
-        <h3 className="gl-h3">来源（库里的 edition）</h3>
+        <h3 className="gl-h3">版本与实例来源</h3>
+        <p>本书 edition：{s.book_edition
+          ? <><b className="mono">{s.book_edition}</b> <span className="muted">{s.sources.find((x) => x.kind !== 'font')?.title ?? ''}</span></>
+          : <span className="pb-chip">未声明（按实例前缀分成 {s.editions.filter((e) => e.kind !== 'font').length} 个 edition）</span>}</p>
         <table className="pb-table">
-          <thead><tr><th className="pb-left">edition</th><th>类型</th><th>字头行</th><th>stable</th><th>刻例</th></tr></thead>
+          <thead><tr><th className="pb-left">实例前缀</th><th className="pb-left">是什么</th><th>刻例</th><th className="pb-left">来路</th></tr></thead>
           <tbody>
-            {s.editions.map((e) => (
-              <tr key={e.edition}>
-                <td className="pb-left mono">{e.edition}</td>
-                <td>{e.kind === 'font' ? '字体' : '刻例'}</td>
-                <td>{e.chars.toLocaleString()}</td><td>{e.stable.toLocaleString()}</td><td>{e.exemplars.toLocaleString()}</td>
+            {s.sources.filter((x) => x.kind !== 'font').map((x) => (
+              <tr key={x.source_id}>
+                <td className="pb-left mono">{x.source_id}</td>
+                <td className="pb-left">{SRC_NOTE(x.source_id, x.pipeline_version)}</td>
+                <td>{(x.exemplars ?? 0).toLocaleString()}</td>
+                <td className="pb-left muted">{Object.entries(x.provenance ?? {}).map(([k, v]) => `${PROV_LABEL[k] ?? k} ${v}`).join(' · ')}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="muted gl-note">人裁一律落 <span className="mono">v2</span>（实例 id 命名空间，不是另一套书），
-          上面的总数已把本书各刻例来源并成一套；{b.chars_split_across_editions} 个字在两个来源里各有字头行。</p>
+        <p className="muted gl-note">实例前缀只是<b>字位坐标的命名空间</b>，不是版本：旧管线（v1）按格序从 0 数，新管线（v2）按字位从 1 数，
+          同名 id 不是同一格，所以人裁一律加 <span className="mono">v2:</span> 前缀存。它们都属于同一本书、同一个 edition。
+          {s.fonts && Object.keys(s.fonts).length > 0 && <> 字体域另计：{Object.keys(s.fonts).join('、')}。</>}</p>
       </div>
 
       <div className="card">
@@ -92,6 +97,12 @@ export function LibSummaryPanel({ onFilter }: { onFilter: (f: string) => void })
       </div>
     </div>
   )
+}
+
+function SRC_NOTE(src: string, pv: string | null) {
+  if (src === 'v2') return '新管线（v2）字位 · 控制台人裁进库的都在这里'
+  if (pv === 'v1') return '旧管线（v1）字位 · 早期整理本对齐 / 库匹配 / 上下文准入'
+  return '本书字位 · 播种 / 自动放行'
 }
 
 function Tile({ label, value, hint, ochre, onClick }: {

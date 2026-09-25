@@ -10,7 +10,9 @@ export interface LibEdition { edition: string; kind: 'font' | 'woodblock'; chars
 
 export interface LibSummary {
   db: string
-  sources: { source_id: string; edition_tag: string; kind: string; title: string | null; pipeline_version: string | null }[]
+  book_edition: string | null
+  sources: { source_id: string; edition_tag: string; kind: string; title: string | null; pipeline_version: string | null
+    exemplars?: number; provenance?: Prov }[]
   editions: LibEdition[]
   book: {
     chars: number; exemplars: number; cells: number; shadow_duplicates: number
