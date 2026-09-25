@@ -10,7 +10,7 @@
 | `near_form` | 两个都没错，只是形近 / 异体——记账，并记进 `near_forms.jsonl`（形近字对的本书人裁证据） |
 | `evict` | 撤库：`payload.target` 那个实例（本例或本书里的对手）删出库，下次跑到那一格重新出卡 |
 | `relabel` | 本例其实是 `payload.char`：撤掉旧的、以人裁身份按新字重进库（同 id、同图块） |
-| `fidelity` | 标一致程度（字形库 04）：`payload.fidelity` ∈ exact / nearest / unencoded / 空（撤销），`nearest`/`unencoded` 必带 `payload.ids`（刻例的实际结构）；`payload.targets` 可一次标多例 |
+| `fidelity` | 标一致程度（字形库 04）：`payload.fidelity` ∈ exact / nearest / unencoded / 空（撤销），`nearest`/`unencoded` 必带 `payload.ids`（刻例的实际结构），且这条 IDS 在 Unicode 里反查不到同结构字（`ids_lookup`），查到了要人确认后带 `force`；`payload.targets` 可一次标多例 |
 
 `relabel` 也可以顺带 `fidelity`/`ids`（「改成 X，但只是最近似」）。
 
@@ -53,7 +53,7 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                 pass
             elif v == "fidelity":
                 fid = p.get("fidelity") or None
-                err = _check_fidelity(fid, p.get("ids"))
+                err = _check_fidelity(fid, p.get("ids"), p.get("force"))
                 if err:
                     res.errors.append(f"{e.id}: {err}")
                     res.skipped += 1
@@ -92,7 +92,7 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                                   page=page, col=col, idx=idx,
                                   bbox=json.loads(bbox) if bbox else None)
                 if p.get("fidelity"):
-                    err = _check_fidelity(p["fidelity"], p.get("ids"))
+                    err = _check_fidelity(p["fidelity"], p.get("ids"), p.get("force"))
                     if err:
                         res.errors.append(f"{e.id}: 字已改，一致程度没标：{err}")
                     else:
@@ -119,13 +119,21 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
 FIDELITY_SET = ("exact", "nearest", "unencoded")
 
 
-def _check_fidelity(fid: str | None, ids: str | None) -> str | None:
+def _check_fidelity(fid: str | None, ids: str | None, force: bool = False) -> str | None:
     if fid is None:
         return None                       # 撤销
     if fid not in FIDELITY_SET:
         return f"一致程度只认 {FIDELITY_SET}，拿到 {fid!r}"
-    if fid in ("nearest", "unencoded") and not (ids or "").strip():
-        return f"{fid} 要给 IDS（刻例实际怎么写）"
+    if fid in ("nearest", "unencoded"):
+        if not (ids or "").strip():
+            return f"{fid} 要给 IDS（刻例实际怎么写）"
+        # 「Unicode 里没有」之前先反查：同结构的字已有编码就该改字，不是标最近似
+        # （人看过候选、确认都不是时带 force）
+        if not force:
+            from ..clustering.ids_lookup import encoded_match
+            got = encoded_match(ids)
+            if got:
+                return f"IDS {ids.strip()} 在 Unicode 里已有同结构的字：{'、'.join(got[:5])}——该改字；确认都不是再带 force"
     return None
 
 

@@ -6,7 +6,7 @@ import { fetchLibChars, type LibChar } from '../../api/glyphlib'
 
 const FILTERS: [string, string][] = [
   ['all', '全部'], ['single', '单例字'], ['nohuman', '无人裁'], ['humanonly', '只有人裁'],
-  ['context', '含上下文放行'], ['nofont', '不在字体里'], ['unique', '本书独有'],
+  ['context', '含上下文放行'], ['nofont', '不在字体里'], ['fontfar', '与各字体都不像'], ['unique', '本书独有'],
 ]
 
 function pass(r: LibChar, f: string): boolean {
@@ -16,6 +16,7 @@ function pass(r: LibChar, f: string): boolean {
     case 'humanonly': return !!r.prov.human && Object.keys(r.prov).length === 1
     case 'context': return !!r.prov.context
     case 'nofont': return r.in_font === false
+    case 'fontfar': return r.font_sim != null && r.font_sim < 0.8
     case 'unique': return r.also_in.length === 0
     default:
       if (f.startsWith('shared:')) return r.also_in.includes(f.slice(7))
@@ -29,7 +30,7 @@ export function LibCharTable({ filter, setFilter, onPick }: {
   const [rows, setRows] = useState<LibChar[] | null>(null)
   const [err, setErr] = useState('')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<'n' | 'n-asc' | 'cp'>('n')
+  const [sort, setSort] = useState<'n' | 'n-asc' | 'cp' | 'font'>('n')
   const [limit, setLimit] = useState(600)
   useEffect(() => { fetchLibChars().then((d) => setRows(d.chars)).catch((e) => setErr((e as Error).message)) }, [])
 
@@ -40,6 +41,7 @@ export function LibCharTable({ filter, setFilter, onPick }: {
     const out = rows.filter((r) => pass(r, filter) && (qs.size === 0 || qs.has(r.char)))
     if (sort === 'n-asc') out.sort((a, b) => a.n - b.n || a.char.localeCompare(b.char))
     else if (sort === 'cp') out.sort((a, b) => (a.cp ?? 0) - (b.cp ?? 0))
+    else if (sort === 'font') out.sort((a, b) => (a.font_sim ?? 2) - (b.font_sim ?? 2))
     return out
   }, [rows, filter, q, sort])
 
@@ -57,6 +59,7 @@ export function LibCharTable({ filter, setFilter, onPick }: {
         <label className="muted">排序
           <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
             <option value="n">刻例多→少</option><option value="n-asc">刻例少→多</option><option value="cp">码位</option>
+            <option value="font">与字体最不像的在前</option>
           </select>
         </label>
         <label className="muted">查字 <input type="text" value={q} placeholder="粘一段字" onChange={(e) => setQ(e.target.value)} /></label>
@@ -72,7 +75,8 @@ export function LibCharTable({ filter, setFilter, onPick }: {
         ))}
       </div>
       {shown.length > limit && <button onClick={() => setLimit(limit + 1200)}>再显示 1200 个</button>}
-      <p className="muted gl-note">格右下是刻例数（按格去重）。左边竖条 = 有人裁；虚线框 = 字体里没有这个字。</p>
+      <p className="muted gl-note">格右下是刻例数（按格去重）。左边竖条 = 有人裁；虚线框 = 字体里没有这个字。
+        「与各字体都不像」= 刻例与六套字体里最像那套的相似度中位 &lt;0.80（要先跑体检）——最近似码位 / 刻本异写的首选排查对象。</p>
     </div>
   )
 }
@@ -80,5 +84,6 @@ export function LibCharTable({ filter, setFilter, onPick }: {
 function title(r: LibChar) {
   const p = Object.entries(r.prov).map(([k, v]) => `${k} ${v}`).join(' · ')
   return `${r.char} U+${(r.cp ?? 0).toString(16).toUpperCase()}　${r.n} 例　${p}` +
+    (r.font_sim != null ? `　与字体最优相似 ${r.font_sim.toFixed(2)}` : '') +
     (r.semantic !== r.char ? `　读作 ${r.semantic}` : '') + (r.also_in.length ? `　也见于 ${r.also_in.join('、')}` : '')
 }

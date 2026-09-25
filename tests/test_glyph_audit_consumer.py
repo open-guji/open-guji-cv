@@ -66,9 +66,12 @@ def test_fidelity(tmp_path):
                 "targets": ["bk:1:1:1", "bk:1:1:2"], "fidelity": "exact"}),
         _ev(2, {"v": "fidelity", "key": "f2", "instance_id": "bk:1:1:2", "fidelity": "nearest"}),
         _ev(3, {"v": "fidelity", "key": "f3", "instance_id": "bk:1:1:2", "fidelity": "nearest",
-                "ids": "⿱一土"}),
+                "ids": "⿱一土"}),                          # ⿱一土 = 王，Unicode 已有 → 拒收
+        _ev(4, {"v": "fidelity", "key": "f4", "instance_id": "bk:1:1:2", "fidelity": "nearest",
+                "ids": "⿱一土", "force": True}),         # 人看过候选，确认都不是
     ], db_path=str(p))
-    assert r.added == 2 and r.skipped == 1, r.errors      # nearest 不给 IDS 拒收
+    assert r.added == 2 and r.skipped == 2, r.errors      # 不给 IDS、IDS 已有编码 → 各拒一条
+    assert "已有同结构" in r.errors[1]
     c = sqlite3.connect(p)
     got = dict(c.execute("select instance_id, fidelity || '|' || coalesce(ids,'') from instances"))
     c.close()

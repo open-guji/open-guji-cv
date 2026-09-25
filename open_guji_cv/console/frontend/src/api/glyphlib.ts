@@ -27,6 +27,7 @@ export interface LibSummary {
 export interface LibChar {
   char: string; cp: number | null; n: number; prov: Prov; semantic: string
   editions: string[]; in_font: boolean | null; also_in: string[]; fidelity: Record<string, number>
+  font_sim?: number | null
 }
 
 export interface LibExemplar {
@@ -63,7 +64,14 @@ export const FID_LABEL: Record<string, string> = {
 }
 export const PROV_ORDER = ['human', 'align', 'match', 'context', 'unknown']
 
-export const libFontUrl = (c: string) => withWorkspace(`/api/glyphlib/font/${encodeURIComponent(c)}.png`)
+/** 字体渲染图。给 font 就用那套字体现场渲染（FONT_SETS），不给就取库里字体域那张。 */
+export const libFontUrl = (c: string, font?: string) =>
+  withWorkspace(`/api/glyphlib/font/${encodeURIComponent(c)}.png${font ? `?font=${font}` : ''}`)
+
+/** 自检拿来比「本字」的几套字体（glyph_selfcheck.FONT_SETS），显示名。 */
+export const FONT_NAME: Record<string, string> = {
+  iming: 'I.Ming', jigmo: 'Jigmo', genryu: '源流明體', genwan: '源雲明體', genyo: '源樣明體', kangxi: '康熙字典體',
+}
 
 // ── 体检（字形库 03）──
 export interface AuditFinding {
@@ -71,13 +79,15 @@ export interface AuditFinding {
   n_same_self: number; best_same: number; best_same_self: number; same_peer: string | null; same_peer_ws: string
   rival: number; rival_char: string | null; rival_peer: string | null; rival_prov: string | null
   xrival: number; xrival_char: string | null; xrival_peer: string | null; xrival_ws: string
-  font_own: number | null; font_best: number; font_char: string | null
+  font_own: number | null; font_own_by?: Record<string, number>; font_best: number; font_char: string | null
   human_conflict: boolean
   decision?: { v: string; char?: string; target?: string } | null
 }
 export interface AuditResult {
   meta: { n_checked?: number; n_flagged?: number; flag_counts?: Record<string, number>; created_at?: string
-    others?: string[]; params?: Record<string, number>; seconds?: number }
+    others?: string[]; params?: Record<string, unknown>; seconds?: number
+    fonts?: Record<string, { n: number; median: number; p10: number; best_for: number }>
+    no_font?: number; chars_font_far?: string[] }
   flag_labels: Record<string, string>; out: string
   n_total: number; n_decided: number; findings: AuditFinding[]
 }
@@ -85,10 +95,15 @@ export const fetchLibAudit = (all = false) => api<AuditResult>(`/api/glyphlib/au
 
 export interface AuditDecision {
   key: string; instance_id: string; v: 'ok' | 'near_form' | 'evict' | 'relabel' | 'fidelity'
-  fidelity?: string | null; ids?: string; targets?: string[]
+  fidelity?: string | null; ids?: string; targets?: string[]; force?: boolean
   target?: string; char?: string; char_self?: string; peer?: string | null; peer_char?: string | null; flags?: string[]
 }
 export const postLibAudit = (d: AuditDecision) =>
   api<{ ok: boolean; error?: string; consume_error?: string }>('/api/glyphlib/audit/decide', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d),
   })
+
+// ── IDS 反查（标「最近似码位 / 无码」前先查 Unicode 里有没有同结构的字）──
+export interface IdsHit { char: string; cp: number; block: string; ids: string; match: 'exact' | 'expanded' | 'near'; diff: number; in_book: boolean }
+export const fetchIdsLookup = (q: string) =>
+  api<{ query: string; expanded: string; hits: IdsHit[]; error?: string }>(`/api/glyphlib/ids-lookup?q=${encodeURIComponent(q)}`)

@@ -75,4 +75,7 @@ def serve(port: int = 8640, open_browser: bool = True) -> None:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     threading.Thread(target=warm_font_index, name="font-index-warm",
                      daemon=True).start()
+    # IDS 反查索引（10 万字，约 4 秒）：预热，免得字形库页第一次反查卡住
+    from ..clustering.ids_lookup import warm as warm_ids
+    threading.Thread(target=warm_ids, name="ids-lookup-warm", daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
