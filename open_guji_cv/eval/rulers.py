@@ -252,6 +252,10 @@ def measure(book: str, pages: list[int], store=None) -> dict:
             # 整个邻字，报出一堆 ~110px 的假被切（110px 正好一个字高）。
             slot_cell = {c.slot: c for c in cc.cells}
             for ch in (cic.chars if cic else []):
+                # 只量字：Step4 判成空的格（版框/界行残渣、frame_bar）没有「本字」可切（2026-09-25，
+                # vol02 R4 的 p76c9/p183c4 两条就是空格里的框线被当成「紧框被切」）
+                if getattr(ch, "cell_type", "char") != "char":
+                    continue
                 cell = slot_cell.get(getattr(ch, "slot", None))
                 if cell is None:
                     continue

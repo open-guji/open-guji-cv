@@ -49,6 +49,23 @@ def _upright(ctx: RunContext, patch):
     return np.rot90(patch, 1).copy()      # 入口转了 -1（顺时针），这里转回来
 
 
+#: 抬头位（slot < 1）里「矮而满宽」的紧框是版框线，不是字（2026-09-25）。
+#: 雙邊版框的外框线落在列窗里，Step3 给它开了一个抬头格，Step4 就把那条线当字框收了进来，
+#: 一路送进识别。vol02 全书 29 个抬头位字框里 12 个是这种线（高 12–35px、宽 0.6 列以上），
+#: 真抬头字（御/聖/易/厚…）高全在 97px 以上。门槛取 0.4 格高：抬头位出现「一」这类扁字
+#: 在这套书里不存在（抬头是给御/聖/皇/天这些字的）。
+FRAME_BAR_MAX_H = 0.4
+FRAME_BAR_MIN_W = 0.6
+
+
+def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
+    if cell_type != "char" or slot is None or slot >= 1 or not cc.period or not cc.content_x:
+        return False
+    h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
+    col_w = cc.content_x[1] - cc.content_x[0]
+    return h < FRAME_BAR_MAX_H * cc.period and w >= FRAME_BAR_MIN_W * col_w
+
+
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
@@ -216,15 +233,19 @@ class CellShrinkStep(Step):
                 has_patch = patch is not None and getattr(patch, "size", 0) > 0
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
+                cell_type = inst.cell_type
+                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                if frame_bar:
+                    cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
-                if not inst.sub and has_patch and inst.cell_type == "char":
+                if not inst.sub and has_patch and cell_type == "char":
                     cand_variants = self._cand_variants(
                         ctx, page, cc, img, inst, slot, seams.get(pos),
                         multi_above.get(pos), multi_below.get(pos))
-                if patch is not None and getattr(patch, "size", 0) > 0 and inst.cell_type == "char":
+                if has_patch and cell_type == "char":
                     ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
-                flags = list(inst.flags)
+                flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
                 s3_kind = step3_kind.get(pos, "char")
                 # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
                 # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——
@@ -238,12 +259,13 @@ class CellShrinkStep(Step):
                 # `lost_patch`，下游/人审能靠这个 flag 筛出「Step4 认为
                 # 这里没有可交付的图块，但 Step3 认为这里应该有字」的
                 # 格位，而不是永远无声无息。
-                if patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags:
+                if (patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags
+                        and not frame_bar):
                     flags.append("lost_patch")
                 recs.append(CharRec(
                     id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
                     slot=slot, pos=pos, idx=int(inst.idx), sub=inst.sub,
-                    cell_type=inst.cell_type, step3_kind=s3_kind,
+                    cell_type=cell_type, step3_kind=s3_kind,
                     bbox_col=bbox,
                     bbox_page=(None if mapper is None else
                                tuple(round(v, 2) for v in mapper.bbox_tr(*bbox))),
