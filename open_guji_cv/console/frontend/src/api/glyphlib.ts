@@ -27,6 +27,7 @@ export interface LibSummary {
 export interface LibChar {
   char: string; cp: number | null; n: number; prov: Prov; semantic: string
   editions: string[]; in_font: boolean | null; also_in: string[]; fidelity: Record<string, number>
+  font_sim?: number | null
 }
 
 export interface LibExemplar {
@@ -63,7 +64,14 @@ export const FID_LABEL: Record<string, string> = {
 }
 export const PROV_ORDER = ['human', 'align', 'match', 'context', 'unknown']
 
-export const libFontUrl = (c: string) => withWorkspace(`/api/glyphlib/font/${encodeURIComponent(c)}.png`)
+/** 字体渲染图。给 font 就用那套字体现场渲染（FONT_SETS），不给就取库里字体域那张。 */
+export const libFontUrl = (c: string, font?: string) =>
+  withWorkspace(`/api/glyphlib/font/${encodeURIComponent(c)}.png${font ? `?font=${font}` : ''}`)
+
+/** 自检拿来比「本字」的几套字体（glyph_selfcheck.FONT_SETS），显示名。 */
+export const FONT_NAME: Record<string, string> = {
+  iming: 'I.Ming', jigmo: 'Jigmo', genryu: '源流明體', genwan: '源雲明體', genyo: '源樣明體', kangxi: '康熙字典體',
+}
 
 // ── 体检（字形库 03）──
 export interface AuditFinding {
@@ -71,13 +79,15 @@ export interface AuditFinding {
   n_same_self: number; best_same: number; best_same_self: number; same_peer: string | null; same_peer_ws: string
   rival: number; rival_char: string | null; rival_peer: string | null; rival_prov: string | null
   xrival: number; xrival_char: string | null; xrival_peer: string | null; xrival_ws: string
-  font_own: number | null; font_best: number; font_char: string | null
+  font_own: number | null; font_own_by?: Record<string, number>; font_best: number; font_char: string | null
   human_conflict: boolean
   decision?: { v: string; char?: string; target?: string } | null
 }
 export interface AuditResult {
   meta: { n_checked?: number; n_flagged?: number; flag_counts?: Record<string, number>; created_at?: string
-    others?: string[]; params?: Record<string, number>; seconds?: number }
+    others?: string[]; params?: Record<string, unknown>; seconds?: number
+    fonts?: Record<string, { n: number; median: number; p10: number; best_for: number }>
+    no_font?: number; chars_font_far?: string[] }
   flag_labels: Record<string, string>; out: string
   n_total: number; n_decided: number; findings: AuditFinding[]
 }

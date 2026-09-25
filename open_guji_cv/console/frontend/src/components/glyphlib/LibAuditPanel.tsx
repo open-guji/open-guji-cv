@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { IdsPicker } from './IdsPicker'
-import { fetchLibAudit, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
+import { fetchLibAudit, FONT_NAME, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
   type AuditDecision, type AuditFinding, type AuditResult } from '../../api/glyphlib'
 
 // 体检：`glyph-db selfcheck` 标出的可疑刻例，一张卡一个。本例与它的同字最近、
@@ -50,6 +50,23 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
           </select>
         </label>
       </div>
+      {r.meta.fonts && (
+        <details className="card gl-fonts">
+          <summary>本书刻例与各字体的相似度（本字，弹性覆盖率）</summary>
+          <table className="pb-table">
+            <thead><tr><th className="pb-left">字体</th><th>中位</th><th>P10</th><th>最像它的刻例</th></tr></thead>
+            <tbody>
+              {Object.entries(r.meta.fonts).sort((a, b) => b[1].median - a[1].median).map(([k, v]) => (
+                <tr key={k}><td className="pb-left">{FONT_NAME[k] ?? k}</td><td>{v.median.toFixed(3)}</td>
+                  <td>{v.p10.toFixed(3)}</td><td>{v.best_for.toLocaleString()}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted gl-note">与各字体都不像（按字中位 &lt;0.80）的字 {(r.meta.chars_font_far ?? []).length} 个：
+            {(r.meta.chars_font_far ?? []).slice(0, 60).map((c) => (
+              <a key={c} href="#" onClick={(e) => { e.preventDefault(); onPick(c) }}> {c}</a>))}</p>
+        </details>
+      )}
       {shown.map((f) => (
         <div key={f.key} className={`card gl-audit${done[f.key] ? ' gl-done' : ''}`}>
           <div className="gl-audit-head">
@@ -67,7 +84,13 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
               cap={`同字${f.same_peer_ws ? '·他书' : ''} ${f.best_same.toFixed(2)}`} />}
             {f.rival_peer && <Fig src={libPatchUrl(f.rival_peer)} cap={`本书「${f.rival_char}」${f.rival.toFixed(2)}`} />}
             {f.xrival_peer && <Fig src={libPatchUrl(f.xrival_peer, f.xrival_ws)} cap={`${f.xrival_ws}「${f.xrival_char}」${f.xrival.toFixed(2)}`} />}
-            <Fig src={libFontUrl(f.char)} cap={`字体本字 ${f.font_own == null ? '—' : f.font_own.toFixed(2)}`} />
+            {(() => {
+              const by = f.font_own_by ?? {}
+              const best = Object.keys(by).sort((a, b) => by[b] - by[a])[0]
+              const tip = Object.entries(by).map(([k, v]) => `${FONT_NAME[k] ?? k} ${v.toFixed(2)}`).join('\n')
+              return <span title={tip}><Fig src={libFontUrl(f.char, best)}
+                cap={`${best ? FONT_NAME[best] ?? best : '字体'}本字 ${f.font_own == null ? '—' : f.font_own.toFixed(2)}`} /></span>
+            })()}
             {f.font_char && <Fig src={libFontUrl(f.font_char)} cap={`字体「${f.font_char}」${f.font_best.toFixed(2)}`} />}
           </div>
           {!done[f.key] && (

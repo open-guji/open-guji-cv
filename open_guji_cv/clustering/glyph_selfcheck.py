@@ -56,6 +56,60 @@ FLAG_LABELS = {
 }
 
 
+#: 拿来比「本字」的几套字体（2026-09-25，多字体）。Unicode 不给标准字形，码表是各来源的
+#: 代表字形；能合法拿来逐像素比的全量字形只有字体。**只和一套不像多半是刻本异写，
+#: 和每一套都不像才值得怀疑**——`font_rival` 因此看最优那套。字体档在引擎仓 `fonts/`：
+#: iming 传承字形、jigmo 全 Unicode（CC0）、源流/源雲/源樣明體 TC（OFL）、康熙字典体（商业，
+#: 只在本机比对，不进任何产物）。
+FONT_SETS = {
+    "iming": ("iming/I.Ming-8.10.ttf",),
+    "jigmo": ("jigmo/Jigmo.ttf", "jigmo/Jigmo2.ttf", "jigmo/Jigmo3.ttf"),
+    "genryu": ("genmin/GenRyuMin2TC-R.otf",),
+    "genwan": ("genmin/GenWanMin2TC-R.otf",),
+    "genyo": ("genmin/GenYoMin2TC-R.otf",),
+    "kangxi": ("kangxi/TypeLand-KhangXiDict.otf",),
+}
+FONT_FAR = 0.80            # 本字在所有字体里的最优 cov 都低于此 = 「与哪套字体都不像」
+
+
+def _font_root() -> Path:
+    import os
+    env = os.environ.get("GUJI_FONT_DIR")
+    return Path(env) if env else Path(__file__).resolve().parents[2] / "fonts"
+
+
+_RENDERERS: dict = {}
+
+
+def font_renderer(font: str):
+    """一套字体的渲染器（缓存；读 cmap 要一两秒）。字体档不在返回 False。"""
+    r = _RENDERERS.get(font)
+    if r is None:
+        from .font_glyphs import FontRenderer
+        paths = [_font_root() / x for x in FONT_SETS[font]]
+        paths = [x for x in paths if x.exists()]
+        r = FontRenderer(paths) if paths else False
+        _RENDERERS[font] = r
+    return r
+
+
+def font_norm(font: str, ch: str):
+    """某套字体里一个字的归一图（渲染→canonical→归一，同 font_glyphs 导入口径）；缺字 None。"""
+    key = (font, ch)
+    if key in _RENDERERS:
+        return _RENDERERS[key]
+    from .normalize import normalize_patch
+    r = font_renderer(font)
+    out = None
+    if r and len(ch) == 1:
+        canon = r.render(ch)
+        if canon is not None:
+            n = normalize_patch(canon, strip_lines=False)
+            out = n if n.any() else None
+    _RENDERERS[key] = out
+    return out
+
+
 @dataclass
 class Entry:
     instance_id: str
@@ -85,7 +139,8 @@ class Finding:
     xrival_char: str | None = None
     xrival_peer: str | None = None
     xrival_ws: str = ""
-    font_own: float | None = None         # 与本字字体渲染的 cov（字体没这个字 = None）
+    font_own: float | None = None         # 与本字各字体渲染的**最优** cov（都没这个字 = None）
+    font_own_by: dict = field(default_factory=dict)   # {字体: cov}，见 FONT_SETS
     font_best: float = 0.0
     font_char: str | None = None
     font_peer: str | None = None
@@ -256,12 +311,16 @@ def run_selfcheck(db_path: str | Path,
                     f.rival, f.rival_char, f.rival_peer, f.rival_prov = v, o.char, o.instance_id, o.provenance
             elif v > f.xrival:
                 f.xrival, f.xrival_char, f.xrival_peer, f.xrival_ws = v, o.char, o.instance_id, o.origin
+        # 本字 × 每套字体（字不在某套里就跳过那套）
+        for fname in FONT_SETS:
+            fn = font_norm(fname, e.char)
+            if fn is None and e.semantic != e.char:
+                fn = font_norm(fname, e.semantic)
+            if fn is not None:
+                f.font_own_by[fname] = round(float(verify_pair_elastic(e.norm, fn).f1), 4)
+        if f.font_own_by:
+            f.font_own = max(f.font_own_by.values())
         if font:
-            own = fidx.get(e.char)
-            if own is None:
-                own = fidx.get(e.semantic)
-            if own is not None:
-                f.font_own = float(verify_pair_elastic(e.norm, fnorms[own]).f1)
             fs = FF @ F[i] if FF.shape[1] == F.shape[1] else None
             if fs is not None:
                 for k in np.argsort(-fs)[:KNN_FONT]:
@@ -275,6 +334,22 @@ def run_selfcheck(db_path: str | Path,
         findings.append(f)
         if progress and (n + 1) % 500 == 0:
             print(f"  {n + 1}/{len(todo)}  {time.time() - t0:.0f}s", flush=True)
+
+    # 本书每个字与字体的距离：刻例对本字最优字体 cov 的中位数。整字都低 = 本书这个字的
+    # 写法与哪套字体都不同——「最近似码位 / 刻本异写」的首选排查对象（按字，不按例出卡）
+    per_char: dict[str, list[float]] = {}
+    per_font: dict[str, list[float]] = {}
+    for f in findings:
+        if f.font_own is not None:
+            per_char.setdefault(f.char, []).append(f.font_own)
+        for k, v in f.font_own_by.items():
+            per_font.setdefault(k, []).append(v)
+    char_font = {ch: round(float(np.median(v)), 4) for ch, v in per_char.items()}
+    best_font_count: dict[str, int] = {}
+    for f in findings:
+        if f.font_own_by:
+            k = max(f.font_own_by, key=f.font_own_by.get)
+            best_font_count[k] = best_font_count.get(k, 0) + 1
 
     flagged = [f for f in findings if f.flags]
     flagged.sort(key=lambda f: -f.score)
@@ -291,10 +366,18 @@ def run_selfcheck(db_path: str | Path,
         "flag_counts": counts,
         "human_conflict": sum(f.human_conflict for f in flagged),
         "singletons_no_peer": sum(1 for f in findings if f.n_same_self == 0),
+        "fonts": {k: {"n": len(v), "median": round(float(np.median(v)), 4),
+                      "p10": round(float(np.percentile(v, 10)), 4),
+                      "best_for": best_font_count.get(k, 0)} for k, v in per_font.items()},
+        "no_font": sum(1 for f in findings if f.font_own is None),
+        "char_font": char_font,
+        "chars_font_far": sorted((ch for ch, v in char_font.items() if v < FONT_FAR),
+                                 key=lambda c: char_font[c]),
         "params": {"TH_OUTLIER": TH_OUTLIER, "TH_RIVAL": TH_RIVAL,
                    "TH_RIVAL_SINGLE": TH_RIVAL_SINGLE, "FONT_TH": FONT_TH,
                    "FONT_MARGIN": FONT_MARGIN, "KNN_GLOBAL": KNN_GLOBAL,
-                   "KNN_SAME": KNN_SAME, "KNN_FONT": KNN_FONT},
+                   "KNN_SAME": KNN_SAME, "KNN_FONT": KNN_FONT, "FONT_FAR": FONT_FAR,
+                   "FONT_SETS": list(FONT_SETS)},
         "seconds": round(time.time() - t0, 1),
         "findings": flagged,
         "all": findings,

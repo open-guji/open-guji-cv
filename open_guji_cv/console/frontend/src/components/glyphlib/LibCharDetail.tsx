@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchLibChar, FID_LABEL, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL, PROV_ORDER,
+import { fetchLibChar, FID_LABEL, FONT_NAME, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL, PROV_ORDER,
   type LibCharDetail as Detail, type LibExemplar } from '../../api/glyphlib'
 import { IdsPicker, type IdsPick } from './IdsPicker'
 
@@ -84,9 +84,16 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
           ))}
           <div className="card">
             <h3 className="gl-h3">对照</h3>
-            <div className="gl-row"><span className="gl-row-label mono">{d.fonts[0]?.edition ?? '字体'}</span>
-              <img className="gl-img" src={libFontUrl(d.char)} alt="字体"
-                onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} /></div>
+            <div className="gl-row"><span className="gl-row-label">字体</span>
+              <div className="gl-tiles">
+                {Object.entries(FONT_NAME).map(([k, name]) => (
+                  <figure key={k} className="gl-tile">
+                    <img className="gl-img" src={libFontUrl(d.char, k)} alt={name} loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
+                    <figcaption>{name}</figcaption>
+                  </figure>
+                ))}
+              </div></div>
             {d.others.map((o) => (
               <div key={o.ws} className="gl-row"><span className="gl-row-label">{o.ws}<br /><span className="muted">{o.n} 例</span></span>
                 <Tiles xs={o.exemplars} ws={o.ws} /></div>
