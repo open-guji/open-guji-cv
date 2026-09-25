@@ -1310,6 +1310,52 @@ def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
     return [cands[match_idx]], 0
 
 
+FRAME_V_RUN = 1.2      # 框线竖边：连续墨 ≥ 这么多个 period（字的笔画不会跨出一格）
+FRAME_V_EDGE = 0.35    # 框线竖边只认列宽两侧这么多比例以内——居中的长竖是字：bxgb「十」「上」「于」
+                       # 的竖与下一个字的起笔连成一线就超过 1.2 格，不设这条会把它们整格判空（A/B 实测 41 格）
+FRAME_THIN_H = 0.2     # 去掉框线后剩下的墨，高度都 < 这么多 period（只剩细横）……
+FRAME_THIN_W = 0.5     # ……且每一块宽度 < 这么多格宽（「一」是一整块宽横，≥0.55，留着）
+
+
+def _frame_mask(col_ink: np.ndarray, period: float) -> np.ndarray:
+    """列图里「跨格的长竖」：竖向闭合补小断口后，连续墨 ≥ FRAME_V_RUN·period 的像素。"""
+    import cv2
+    k = max(3, int(FRAME_V_RUN * period))
+    # 闭合只补 ≤5px 的断口：放到 9 会把「日」「言」「二」的边竖与上下字的笔画连成跨格长竖（bxgb A/B 误判 3 格）
+    closed = cv2.morphologyEx(col_ink, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5)))
+    m = cv2.morphologyEx(closed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, k))) & col_ink
+    w = m.shape[1]
+    xs = np.arange(w)
+    m[:, (xs > FRAME_V_EDGE * w) & (xs < (1 - FRAME_V_EDGE) * w)] = 0
+    return m
+
+
+def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
+    """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
+    后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
+    import cv2
+    h, w = ink.shape[:2]
+    if h < 10 or w < 10 or not frame.any():
+        return False
+    rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
+    if float(rest.mean()) < min_ink_ratio:
+        return True
+    # 贴着长竖（框角：框的上/下边接在竖边上）的那几块也算框：「┬」「┌」去掉竖以后剩一截横
+    zone = cv2.dilate(frame, np.ones((13, 13), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(rest.astype(np.uint8), connectivity=8)
+    for i in range(1, n):
+        if st[i, cv2.CC_STAT_AREA] < 20:
+            continue
+        thin = st[i, cv2.CC_STAT_HEIGHT] < FRAME_THIN_H * period
+        near = zone[lab == i].any()
+        if thin and (st[i, cv2.CC_STAT_WIDTH] < FRAME_THIN_W * w or near):
+            continue
+        if near and st[i, cv2.CC_STAT_WIDTH] <= 0.1 * w:    # 框线竖边毛糙、没被开运算收进来的边角
+            continue
+        return False
+    return True
+
+
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
@@ -1436,6 +1482,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         patches[pos] = patch
         inks[pos] = _ink_ratio(patch, ink_threshold)
     nonblank = {p for p in patches if inks[p] >= min_ink_ratio}
+    # 只有框线的格算空白（2026-09-26）：版面装饰框/版框的边落进格里（vol02 p188 c7 首两格是
+    # 「御製」框的左上角「┌」），墨量够不上空白，被当成字、甚至当成單行小注。
+    col_ink = (col_gray[:, x_lo:x_hi] < ink_threshold).astype(np.uint8)
+    frame = _frame_mask(col_ink, period)
+    if frame.any():
+        for k in range(n_slots):
+            pos = k + 1
+            if pos not in nonblank:
+                continue
+            y0i = max(0, min(h, int(round(bounds[k]))))
+            y1i = max(0, min(h, int(round(bounds[k + 1]))))
+            if _frame_only(col_ink[y0i:y1i], frame[y0i:y1i], period, min_ink_ratio):
+                nonblank.discard(pos)
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
