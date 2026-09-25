@@ -82,7 +82,9 @@ for pg in range(0, len(rows), per):
         tiles = [patch(r["instance_id"]), patch(rival.get(r["key"])), font(r["char"]), font(o1), font(k1)]
         for i, t in enumerate(tiles):
             img.paste(Image.fromarray(tile(t)), (x0 + i * (T + 2), y0))
-        d.text((x0, y0 + T + 1), f"#{pg + n} 定{r['char']} 本{r.get('witness') or '-'} 对{r.get('rival_char') or '-'} "
+        # 标签字体小，曰/日、己/已 这类在 15px 下分不清（2026-09-26 实际看错过）——附码位
+        cp = lambda ch: f"{ch}{ord(ch[0]):X}" if ch else "-"
+        d.text((x0, y0 + T + 1), f"#{pg + n} 定{cp(r['char'])} 本{cp(r.get('witness'))} 对{r.get('rival_char') or '-'} "
                f"OCR{o1}{(r['ocr'][0][1] if r['ocr'] else 0):.2f} CNN{k1}{(r['cnn'][0][1] if r['cnn'] else 0):.2f}",
                fill=0, font=F)
         d.text((x0, y0 + T + 18), f"{r['instance_id']} {r['provenance'][:5]} {','.join(f[:5] for f in r['flags'])}",
