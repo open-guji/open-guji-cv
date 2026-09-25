@@ -319,14 +319,22 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         if h is None:
             skipped["no_column_image"] = skipped.get("no_column_image", 0) + 1
             continue
+        # 记了页面坐标 / 几何签名的条目（2026-09-25，eval/colgeom.py）：页面坐标能换算，不用重裁；
+        # 签名不符又没页面坐标的一定漂了（col_h 相同也漂过）；两样都没记的老条目走下面的 col_h 口径
+        from .colgeom import current_geom, gold_rows_now
+        mode, _, _ = gold_rows_now(ex, current_geom(st, book, pg, col))
         gold_h = ex.get("col_h")
+        if mode == "drift":
+            gold_h = gold_h or -1
+        elif mode in ("page", "sig_ok") and only_ids is None and not include_relabeled:
+            continue
         if not gold_h:
             # 没记 col_h 的是 2026-09-13 起「选切分方案」卡的裁决（只有 cand 没有 y），
             # 本来就是对当前候选裁的，不算过期
             skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
             continue
-        drifted = abs(int(gold_h) - h) > tol
-        if drifted:
+        drifted = mode == "drift" or abs(int(gold_h) - h) > tol
+        if drifted and mode != "drift":
             # col_h 变了只是粗筛；原格线还在原处的不算漂移（见 ANCHOR_TOL 注释：vol01 706 条里 666 条是这种），
             # 否则会让人把没坏的金标重标一遍。
             if pg not in cells_cache:

@@ -4,7 +4,12 @@
     python scripts/eval_touching_cuts.py [--book vol01] [--json out.json]
 
 只算 verdict ∈ {moved, ok} 的条目；overlap 单独计数（切在哪都伤字，算法只能折中）；
-idk（uncertain）不进指标。坐标系 = 现役 Step2 列图，col_h 对不上的条目报"漂移"并跳过。
+idk（uncertain）不进指标。坐标系 = 现役 Step2 列图。
+
+金标坐标怎么换到现役列图（2026-09-25，`eval/colgeom.py`）：记了页面坐标的按当前列窗几何换算
+（不会漂）；只记了几何签名的，签名不同报"漂移"跳过；两样都没记的老条目只能信原坐标，
+col_h 对不上再按原格线锚点复核——**col_h 相同不代表坐标系没变**（vol02 实测一批漂了 20–50px
+而 col_h 逐像素相等），所以老条目单独计数，数字要打折看。
 """
 from __future__ import annotations
 
@@ -36,11 +41,30 @@ def main() -> int:
     items = [i for i in gs.list(SHARD) if i.status == "active"
              and (not a.book or i.anchor.book == a.book)]
     rows, overlap, drift, missing = [], 0, 0, 0
+    from collections import Counter
+    from open_guji_cv.eval.colgeom import current_geom, gold_rows_now
+    geoms: dict = {}
+    modes: Counter = Counter()
+
+    def now_of(it):
+        k = (it.anchor.book, it.anchor.page, it.anchor.col)
+        if k not in geoms:
+            geoms[k] = current_geom(st, *k)
+        return gold_rows_now(it.expected, geoms[k])
     seam_ok = 0
     tagged: dict[str, list] = {}
     poly_rows: list[dict] = []          # 折线金标 vs 现役缝
     for it in items:
-        ex = it.expected
+        mode, y_now, pl_now = now_of(it)
+        ex = dict(it.expected)
+        if mode == "drift":
+            modes[mode] += 1
+            drift += 1
+            continue
+        if y_now is not None:
+            ex["y"] = y_now
+        if pl_now is not None:
+            ex["polyline"] = pl_now
         v = ex.get("verdict")
         if ex.get("polyline") and len(ex["polyline"]) >= 2 and not ex.get("tags"):
             book, pg, col = it.anchor.book, it.anchor.page, it.anchor.col
@@ -78,7 +102,8 @@ def main() -> int:
             missing += 1
             continue
         prof = _col_profile(st, book, pg, col)
-        if prof is not None and ex.get("col_h") and abs(len(prof) - int(ex["col_h"])) > 2:
+        modes[mode] += 1
+        if mode == "legacy" and prof is not None and ex.get("col_h") and abs(len(prof) - int(ex["col_h"])) > 2:
             # col_h 对不上只是「可能漂移」；再按原格线锚点复核（eval.touching.gold_anchor_ok）。
             # 2026-09-16：vol01 重跑后 706 条 col_h 不一致，其中 666 条格线坐标其实没动（列只是底部变长），
             # 老判据把它们全跳过，评测样本从 ~900 掉到 239。
@@ -103,6 +128,8 @@ def main() -> int:
     e = np.array([r["err"] for r in rows])
     print(f"touching-cuts n={len(e)}（moved {sum(r['verdict']=='moved' for r in rows)} / ok {sum(r['verdict']=='ok' for r in rows)}；"
           f"overlap 另计 {overlap}，缝正确 {seam_ok}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}）")
+    print(f"  坐标口径：页面坐标换算 {modes['page']} / 签名一致 {modes['sig_ok']} / 签名不符跳过 {modes['drift']} / "
+          f"老条目（未记几何，可能已漂而查不出）{modes['legacy']}")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
     print(f"  ≤3px {100*(e<=3).mean():.1f}%   ≤5px {100*(e<=5).mean():.1f}%   ≤10px {100*(e<=10).mean():.1f}%")
     worst = sorted(rows, key=lambda r: -r["err"])[:8]

@@ -29,8 +29,6 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from open_guji_cv.products.kinds.borders import VLineRec  # noqa: E402
-from open_guji_cv.utils.column_projection import _strip_bounds, column_warp_matrix  # noqa: E402
 
 SHARD = Path(r"D:\workspace\open-guji-dataset\char-segmentation\touching-cuts\items.jsonl")
 GEOM_KEYS = ("left_line", "right_line", "top_y", "bottom_y")
@@ -48,35 +46,8 @@ def load_windows(d: Path) -> dict[int, tuple[int, dict[int, dict]]]:
     return out
 
 
-class Geom:
-    """一列的射影几何：分带矩阵 + 行号偏移。"""
-
-    def __init__(self, rec: dict, page_w: int):
-        self.left = VLineRec(**rec["left_line"]).to_vline()
-        self.right = VLineRec(**rec["right_line"]).to_vline()
-        self.top, self.bottom = float(rec["top_y"]), float(rec["bottom_y"])
-        poly = self.left.segments == 3 or self.right.segments == 3
-        self.strips = _strip_bounds(self.left, self.right, self.top, self.bottom) if poly else [(self.top, self.bottom)]
-        mats = [column_warp_matrix(page_w, self.left, self.right, a, b) for a, b in self.strips]
-        self.out_w = max(m[1] for m in mats)
-        self.mats = [column_warp_matrix(page_w, self.left, self.right, a, b, out_w=self.out_w) for a, b in self.strips]
-        self.offs = [0]
-        for m in self.mats:
-            self.offs.append(self.offs[-1] + m[2])
-        self.height = self.offs[-1]
-        self.invs = [np.linalg.inv(m[0]) for m in self.mats]
-
-    def row_to_page(self, r: float, u: float | None = None) -> tuple[float, float]:
-        u = self.out_w / 2.0 if u is None else u
-        i = max(0, min(len(self.strips) - 1, next((k for k in range(len(self.strips)) if r < self.offs[k + 1]), len(self.strips) - 1)))
-        v = r - self.offs[i]
-        p = self.invs[i] @ np.array([u, v, 1.0])
-        return float(p[0] / p[2]), float(p[1] / p[2])
-
-    def page_to_row(self, x: float, y: float) -> tuple[float, float]:
-        i = max(0, min(len(self.strips) - 1, next((k for k, (a, b) in enumerate(self.strips) if y < b), len(self.strips) - 1)))
-        p = self.mats[i][0] @ np.array([x, y, 1.0])
-        return float(p[1] / p[2]) + self.offs[i], float(p[0] / p[2])
+# 几何类搬进了库（2026-09-25，评测与控制台也要用）：open_guji_cv/eval/colgeom.py
+from open_guji_cv.eval.colgeom import ColumnGeom as Geom, stamp  # noqa: E402
 
 
 def main() -> int:
@@ -145,6 +116,8 @@ def main() -> int:
             new_ex["polyline"] = pl
         img = cv2.imread(str(imgd / f"p{pg:04d}c{col:02d}.png"), cv2.IMREAD_GRAYSCALE)
         new_ex["col_h"] = int(img.shape[0]) if img is not None else int(gn.height)
+        # 顺手记页面坐标与几何签名，下次几何再变评测能自己换算，不必再跑这个脚本
+        new_ex.update(stamp({"y": new_ex["y"], "polyline": new_ex.get("polyline")}, gn))
         todo.append((o, new_ex, img))
 
     print(f"{a.book}: 列窗变了要重映射 {len(todo)} 条；列窗没变 {unchanged}；缺列窗/几何 {skipped}；"

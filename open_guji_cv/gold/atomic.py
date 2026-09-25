@@ -12,7 +12,10 @@ from __future__ import annotations
 # 切线事件写进 touching-cuts 的全部键
 CUTLINE_KEYS: tuple[str, ...] = ("y", "y_old", "verdict", "bi", "slot_above", "slot_below", "col_h",
                                  "char_above", "char_below", "shape_above", "shape_below",
-                                 "tags", "note", "polyline", "cand")
+                                 "tags", "note", "polyline", "cand",
+                                 # 页面坐标与列窗几何签名（2026-09-25，eval/colgeom.py）：与 y/polyline
+                                 # 同属一次判定，必须整组替换，否则新 y 配旧 page_y 会被评测当真
+                                 "geom_sig", "page_x", "page_y", "page_polyline")
 
 ATOMIC_KEY_GROUPS: dict[str, tuple[str, ...]] = {
     "char-segmentation/touching-cuts": CUTLINE_KEYS,

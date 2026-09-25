@@ -142,6 +142,12 @@ def api_events(req: EventsIn) -> dict:
         # 指标就是这个耗时，没有它 D 刀无法证伪。
         from ...feedback.harvest import parse_card_id
         ids = parse_card_id(row["id"])
+        if req.kind == "cutline" and ids.get("page") is not None and ids.get("col") is not None:
+            # 切线坐标在列图里，列窗几何一变就漂（col_h 还可能不变）；写入时顺手记下页面坐标
+            # 与几何签名，评测据此换算到当前列图（eval/colgeom.py）。取不到几何就不记，不挡写入。
+            from ...eval.colgeom import current_geom, stamp
+            geom = current_geom(deps.product_store(), ids.get("book") or "", ids["page"], ids["col"])
+            payload = {**payload, **stamp(payload, geom)}
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
                                           anchor=_product_anchor(req.step, ids), **ids),
