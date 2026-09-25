@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel
 
 from ..errors import maps_http
 
@@ -127,3 +128,90 @@ def api_glyphlib_patch(instance_id: str) -> Response:
         raise HTTPException(404, f"库里没有这个实例：{instance_id}")
     return Response(bytes(row[0]), media_type="image/png",
                     headers={"Cache-Control": "max-age=300"})
+
+
+# ── 体检（字形库 03）────────────────────────────────────
+
+
+@router.get("/api/glyphlib/audit")
+@maps_http
+def api_glyphlib_audit(all: bool = False) -> dict:
+    """体检结果（`glyph-db selfcheck` 落的 findings.jsonl）＋ 裁决账。
+    默认只回未裁的卡；`all=1` 连已裁的一起回（带 `decision`）。"""
+    from ...clustering.glyph_selfcheck import FLAG_LABELS, decisions, load_findings, out_dir
+    _paths()
+    meta, rows = load_findings()
+    dec = decisions()
+    for r in rows:
+        r["decision"] = dec.get(r["key"])
+    todo = [r for r in rows if r["decision"] is None]
+    return {"meta": meta, "flag_labels": FLAG_LABELS, "out": str(out_dir()),
+            "n_total": len(rows), "n_decided": len(rows) - len(todo),
+            "findings": rows if all else todo}
+
+
+class AuditDecideIn(BaseModel):
+    key: str
+    instance_id: str
+    v: str                      # ok | near_form | evict | relabel
+    target: str | None = None   # evict 撤哪个（本例或本书里的对手）
+    char: str | None = None     # relabel 改成什么字
+    char_self: str | None = None
+    peer: str | None = None
+    peer_char: str | None = None
+    flags: list[str] = []
+
+
+@router.post("/api/glyphlib/audit/decide")
+@maps_http
+def api_glyphlib_audit_decide(d: AuditDecideIn) -> dict:
+    """写一条 `glyph_audit` 事件并立即消费（撤库 / 改字 / 白名单）。
+
+    批次固定 `glyphlib-audit`：与定字（`*-decide`）、复核（`*-collate`）分开记账。"""
+    from ...feedback.consumers import route_and_consume
+    from ...feedback.events import EventTarget, make_event
+    from ...feedback.routes import RouteTable
+    from .. import deps
+
+    if d.v not in ("ok", "near_form", "evict", "relabel"):
+        return {"ok": False, "error": f"不认识的裁决 {d.v}"}
+    batch = "glyphlib-audit"
+    log = deps.event_log()
+    ev = make_event(batch, log.latest_seq(batch) + 1, "glyph_audit",
+                    EventTarget(step="glyph_audit", unit="cell", key=d.instance_id),
+                    d.model_dump())
+    log.append([ev])
+    out = {"ok": True, "event": ev.id}
+    try:
+        table = RouteTable.load(log.root / "routes.yaml")
+        res = route_and_consume(log, batch, table, deps.verdict_store())
+        got = [x for x in res["results"] if x["consumer"] == "glyph_audit"]
+        out["consumed"] = got
+        if got and got[0]["errors"]:
+            out["ok"] = False
+            out["error"] = "；".join(got[0]["errors"][:2])
+    except Exception as exc:                       # noqa: BLE001
+        out["consume_error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+@router.get("/api/glyphlib/font/{char}.png")
+@maps_http
+def api_glyphlib_font(char: str) -> Response:
+    """一个字的字体渲染图。字体字形与书无关，本库没导字体域就去兄弟工作区的库里找
+    （四庫的库没导，北行的库导了 I.Ming）。"""
+    import sqlite3
+    db, _ = _paths()
+    for p in [db] + [o["db"] for o in _siblings()]:
+        c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            row = c.execute(
+                "SELECT i.patch_png FROM glyphs g JOIN exemplars e ON e.glyph_id=g.glyph_id "
+                "JOIN instances i ON i.instance_id=e.instance_id "
+                "WHERE g.edition_tag LIKE 'font:%' AND g.char=? LIMIT 1", (char,)).fetchone()
+        finally:
+            c.close()
+        if row:
+            return Response(bytes(row[0]), media_type="image/png",
+                            headers={"Cache-Control": "max-age=3600"})
+    raise HTTPException(404, f"没有找到「{char}」的字体渲染")

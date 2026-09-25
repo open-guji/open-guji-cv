@@ -29,3 +29,16 @@
 .gl-img { width: 3.4rem; height: 3.4rem; object-fit: contain; background: #fff; border: 1px solid var(--rule); border-radius: 2px; }
 .gl-row { display: flex; gap: .6rem; align-items: flex-start; margin-bottom: .5rem; }
 .gl-row-label { width: 7rem; flex-shrink: 0; font-size: .8rem; }
+
+/* 体检卡 */
+.gl-audit { padding: .6rem .8rem; }
+.gl-audit.gl-done { opacity: .55; }
+.gl-audit-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; margin-bottom: .45rem; }
+.gl-big-sm { font-size: 1.6rem; text-decoration: none; color: var(--ink); font-family: "Noto Serif TC", "Noto Serif CJK TC", "Source Han Serif TC", serif; }
+.gl-tag { font-size: .7rem; border: 1px solid var(--rule); border-radius: 3px; padding: 0 .35rem; color: var(--ochre); border-color: var(--ochre); }
+.gl-tag-hot { color: var(--zhu); border-color: var(--zhu); }
+.gl-done-mark { color: var(--ok); margin-left: auto; }
+.gl-img-lg { width: 5.2rem; height: 5.2rem; }
+.gl-img-self { outline: 2px solid var(--indigo); }
+.gl-audit-fig figcaption { font-size: .7rem; color: var(--mute); max-width: 6rem; text-align: center; }
+.gl-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }

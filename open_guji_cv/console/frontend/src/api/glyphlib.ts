@@ -57,3 +57,32 @@ export const PROV_LABEL: Record<string, string> = {
   human: '人裁', align: '整理本对齐', match: '库匹配', context: '上下文', render: '字体', unknown: '未知',
 }
 export const PROV_ORDER = ['human', 'align', 'match', 'context', 'unknown']
+
+export const libFontUrl = (c: string) => withWorkspace(`/api/glyphlib/font/${encodeURIComponent(c)}.png`)
+
+// ── 体检（字形库 03）──
+export interface AuditFinding {
+  instance_id: string; char: string; provenance: string; flags: string[]; score: number; key: string
+  n_same_self: number; best_same: number; best_same_self: number; same_peer: string | null; same_peer_ws: string
+  rival: number; rival_char: string | null; rival_peer: string | null; rival_prov: string | null
+  xrival: number; xrival_char: string | null; xrival_peer: string | null; xrival_ws: string
+  font_own: number | null; font_best: number; font_char: string | null
+  human_conflict: boolean
+  decision?: { v: string; char?: string; target?: string } | null
+}
+export interface AuditResult {
+  meta: { n_checked?: number; n_flagged?: number; flag_counts?: Record<string, number>; created_at?: string
+    others?: string[]; params?: Record<string, number>; seconds?: number }
+  flag_labels: Record<string, string>; out: string
+  n_total: number; n_decided: number; findings: AuditFinding[]
+}
+export const fetchLibAudit = (all = false) => api<AuditResult>(`/api/glyphlib/audit${all ? '?all=1' : ''}`)
+
+export interface AuditDecision {
+  key: string; instance_id: string; v: 'ok' | 'near_form' | 'evict' | 'relabel'
+  target?: string; char?: string; char_self?: string; peer?: string | null; peer_char?: string | null; flags?: string[]
+}
+export const postLibAudit = (d: AuditDecision) =>
+  api<{ ok: boolean; error?: string; consume_error?: string }>('/api/glyphlib/audit/decide', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d),
+  })
