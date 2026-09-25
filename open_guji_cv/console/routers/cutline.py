@@ -77,6 +77,11 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                     relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
         cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None, only_ids=only_ids)
         if only_ids is not None:
+            # 清单里不在金标里的 id（机器新筛的可疑切点）直接从现役产物出卡（2026-09-26）
+            have = {c["id"] for c in cases}
+            extra, ex_sk = T.boundary_cases(book, sorted(only_ids - have), st)
+            cases += extra
+            drift_skipped = {**drift_skipped, **{f"list_{k}": v for k, v in ex_sk.items()}}
             for c in cases:
                 c["from_list"] = True
         pg = sorted({c["page"] for c in cases})
