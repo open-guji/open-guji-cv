@@ -1501,6 +1501,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if len(cands) < n_before:
                 chosen_by = "human"
             escalate, escalate_reason = False, None
+            if cut_judge is not None and len(cands) == 1 and period > 0 and resolved is None:
+                # 单候选：裁判无可改选，只剩探针；两侧格高都正常就不探（见 cut_select.PROBE_DEV）。
+                # 有人裁的不跳：人裁可能指向扩池才生成的候选（unet_seam / period_*），要走完下面的扩池才收敛得上
+                from .cut_select import PROBE_DEV
+                if max(abs((up_c.y1 - up_c.y0) / period - 1),
+                       abs((dn_c.y1 - dn_c.y0) / period - 1)) <= PROBE_DEV:
+                    return cands, chosen, chosen_by, escalate, escalate_reason
             if cut_judge is not None and cands:
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)

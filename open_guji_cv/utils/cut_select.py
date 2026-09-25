@@ -54,6 +54,18 @@ PENDING_BLOB = 60
 放行 963 条里估计漏 9 条（占放行 1.0%、全书 4633 个切点的 0.2%）。人工从 1045 降到 82 条，省 92%。
 ≥100 的另由 `ESCALATE_BLOB` 升级出卡（L2′），两者衔接。"""
 
+PROBE_DEV = 0.10
+"""单候选切点要不要过 U-Net 探针（2026-09-25，用户：「U-Net 应该只对少数情况使用」）。
+
+候选池只剩一条（绝大多数是「窄走廊零墨、贴着直线」那条缝收缩后的独苗）时，裁判无可改选，
+U-Net 只剩 L2′ 探针一个用处：分歧 ≥ `ESCALATE_BLOB` 就升级出卡。vol02 全书实测这类切点
+3486 条（占全部粘连切点 72%）、只升级 18 条，却占 Step3 的大头时间——CPU 上一次前向
+≈0.18 s，一轮 188 页 Step3 从 ≈2 s/页 拖到 6–15 s/页（批量与多线程在这台 2 核机器上都不省）。
+
+18 条升级里 13 条的上/下格高偏离 period >10%（p107c8「書」下半被切这种真错都在里面），
+其余 5 条（p3 噪点页 2 条、p52c1/p132c6/p185c7 目视切对）偏离 ≤10%。所以单候选切点
+**只在两侧格高有一个偏离 period 超过这个比例时才探**：探针调用 3486 → 580（−83%），
+升级 18 → 13，丢的 5 条都不是真错。多候选切点（真要裁判改选）照旧全过 U-Net。"""
 ESCALATE_BLOB = 100
 """L2′ 分歧探针（2026-09-15，overview 10 卡「梯次裁决」）：最终选中的切法与 U-Net 归属的**分歧最大连通块**
 ≥ 这么多像素，就把这个切点标成 `escalate=True`——不改选法，只是「本层拿不准，给下游再审」：
@@ -211,7 +223,24 @@ class UNetJudge:
         self.fingerprint = ckpt_fingerprint(self.ckpt)
 
     def owner(self, win_gray: np.ndarray, ink_threshold: int = INK_TH, cc_max: int | None = CC_MAX):
-        """双格窗口灰度 → (墨掩膜 W, owner 1/2/0, 置信 |pA−pB|)。"""
+        """双格窗口灰度 → (墨掩膜 W, owner 1/2/0, 置信 |pA−pB|)。
+
+        同一窗口按内容记忆（2026-09-25）：升级切点上 `assess` → 扩池 `guided_seam` → 扩池后
+        再 `assess` 是**同一个窗口连跑三次前向**，CPU 上一次 ≈0.2 s。只留最近几个窗口。"""
+        import hashlib
+        key = (win_gray.shape, ink_threshold, cc_max,
+               hashlib.blake2b(np.ascontiguousarray(win_gray).tobytes(), digest_size=16).digest())
+        cache = self.__dict__.setdefault("_owner_cache", {})
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        out = self._owner(win_gray, ink_threshold, cc_max)
+        if len(cache) >= 8:
+            cache.pop(next(iter(cache)))
+        cache[key] = out
+        return out
+
+    def _owner(self, win_gray: np.ndarray, ink_threshold: int, cc_max: int | None):
         import cv2
         import torch
         W = (win_gray < ink_threshold).astype(np.uint8)
