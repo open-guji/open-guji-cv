@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { IdsPicker } from './IdsPicker'
 import { fetchLibAudit, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
   type AuditDecision, type AuditFinding, type AuditResult } from '../../api/glyphlib'
 
@@ -11,6 +12,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
   const [flag, setFlag] = useState('')
   const [done, setDone] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState('')
+  const [picking, setPicking] = useState('')
   useEffect(() => { fetchLibAudit().then(setR).catch((e) => setErr((e as Error).message)) }, [])
 
   const shown = useMemo(() => (r?.findings ?? []).filter((f) => !flag || f.flags.includes(flag)
@@ -87,11 +89,14 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
               <span className="gl-sep" />
               <button disabled={!!busy} onClick={() => decide(f, { v: 'fidelity', fidelity: 'exact' })}
                 title="字没标错，且刻的就是这个码位的通行字形">完全一致</button>
-              <button disabled={!!busy} onClick={() => {
-                const ids = (prompt('Unicode 里没有同形字，存的是最近似码位。刻例实际结构的 IDS：') ?? '').trim()
-                if (ids) decide(f, { v: 'fidelity', fidelity: 'nearest', ids })
-              }}>最近似码位…</button>
+              <button disabled={!!busy} onClick={() => setPicking(f.key)}
+                title="写实际结构，先在 Unicode 里反查">最近似码位 / 无码…</button>
             </div>
+          )}
+          {!done[f.key] && picking === f.key && (
+            <IdsPicker initial="" current={f.char} onCancel={() => setPicking('')}
+              onPick={(p) => { setPicking(''); if (p.kind === 'relabel') decide(f, { v: 'relabel', char: p.char })
+                else decide(f, { v: 'fidelity', fidelity: p.fidelity, ids: p.ids, force: p.force }) }} />
           )}
         </div>
       ))}
@@ -102,7 +107,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
 }
 
 function label(d: Omit<AuditDecision, 'key' | 'instance_id'>) {
-  if (d.v === 'fidelity') return d.fidelity === 'exact' ? '完全一致' : `最近似 ${d.ids}`
+  if (d.v === 'fidelity') return d.fidelity === 'exact' ? '完全一致' : `${d.fidelity === 'nearest' ? '最近似' : '无码'} ${d.ids}`
   return d.v === 'ok' ? '没问题' : d.v === 'near_form' ? '形近·异体' : d.v === 'evict' ? '已撤' : `改成 ${d.char}`
 }
 

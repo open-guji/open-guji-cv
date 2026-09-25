@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchLibChar, FID_LABEL, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL, PROV_ORDER,
   type LibCharDetail as Detail, type LibExemplar } from '../../api/glyphlib'
+import { IdsPicker, type IdsPick } from './IdsPicker'
 
 // 单字页：本书全部刻例（按来路分组）＋ 字体 ＋ 兄弟工作区同字。
 // 点刻例可多选，给选中的（没选就给全部未评的）标一致程度（字形库 04）。
@@ -10,6 +11,7 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
   const [q, setQ] = useState(char)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [tick, setTick] = useState(0)
+  const [picking, setPicking] = useState(false)
   // 换字时页面用 key={char} 重挂本组件，状态自然清空，这里只管取数
   useEffect(() => {
     if (char) fetchLibChar(char).then(setD).catch((e) => setErr((e as Error).message))
@@ -19,19 +21,29 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
   const groups = d ? PROV_ORDER.map((k) => [k, d.exemplars.filter((x) => x.provenance === k)] as const).filter(([, xs]) => xs.length) : []
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
-  async function mark(fid: string | null) {
+  const targetsNow = () => d ? (sel.size ? [...sel] : d.exemplars.filter((x) => !x.fidelity).map((x) => x.instance_id)) : []
+
+  async function mark(fid: string | null, ids?: string, force?: boolean) {
     if (!d) return
-    const targets = sel.size ? [...sel] : d.exemplars.filter((x) => !x.fidelity).map((x) => x.instance_id)
+    const targets = targetsNow()
     if (!targets.length) { alert('没有选中的、也没有未评的刻例'); return }
-    let ids: string | undefined
-    if (fid === 'nearest' || fid === 'unencoded') {
-      ids = (prompt(`刻例实际结构的 IDS（本字通行：${d.ids ?? '—'}）`, d.ids ?? '') ?? '').trim()
-      if (!ids) return
-    }
     const r = await postLibAudit({ key: `fid:${d.char}:${Date.now()}`, instance_id: targets[0], v: 'fidelity',
-      fidelity: fid, ids, targets })
+      fidelity: fid, ids, targets, force })
     if (!r.ok) { alert(r.error || r.consume_error || '失败'); return }
-    setSel(new Set()); setTick((t) => t + 1)
+    setSel(new Set()); setPicking(false); setTick((t) => t + 1)
+  }
+
+  // 反查面板的结果：改字（逐例 relabel）或标最近似 / 无码
+  async function onIdsPick(p: IdsPick) {
+    if (!d) return
+    if (p.kind === 'fidelity') { await mark(p.fidelity, p.ids, p.force); return }
+    const targets = targetsNow()
+    if (!targets.length || !confirm(`把 ${targets.length} 例从「${d.char}」改成「${p.char}」？`)) return
+    for (const t of targets) {
+      const r = await postLibAudit({ key: `relabel:${t}:${Date.now()}`, instance_id: t, v: 'relabel', char: p.char })
+      if (!r.ok) { alert(r.error || r.consume_error || '失败'); break }
+    }
+    setSel(new Set()); setPicking(false); setTick((t) => t + 1)
   }
 
   return (
@@ -57,12 +69,12 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
             <div className="gl-actions gl-fid-bar">
               <span className="muted">一致程度 → {sel.size ? `选中 ${sel.size} 例` : '全部未评'}：</span>
               <button onClick={() => mark('exact')}>完全一致</button>
-              <button onClick={() => mark('nearest')}>最近似码位…</button>
-              <button onClick={() => mark('unencoded')}>无码…</button>
+              <button onClick={() => setPicking(true)} title="写实际结构，先在 Unicode 里反查">最近似码位 / 无码…</button>
               <button onClick={() => mark(null)} disabled={!sel.size} title="撤销选中刻例的标注">撤销</button>
               {sel.size > 0 && <button onClick={() => setSel(new Set())}>清选</button>}
             </div>
           )}
+          {picking && <IdsPicker initial={d.ids ?? ''} current={d.char} onPick={onIdsPick} onCancel={() => setPicking(false)} />}
           {d.exemplars.length === 0 && <p className="muted">本书库里没有这个字。</p>}
           {groups.map(([k, xs]) => (
             <div key={k} className="card">

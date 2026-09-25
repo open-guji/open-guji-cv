@@ -52,3 +52,12 @@
 .gl-fid-nearest { background: var(--ochre-soft); color: var(--ochre); }
 .gl-fid-unencoded { background: var(--zhu-soft); color: var(--zhu); }
 .gl-sep { width: 1px; background: var(--rule); margin: 0 .3rem; }
+
+/* IDS 反查面板 */
+.gl-ids { border-color: var(--indigo); }
+.gl-idc button { padding: .05rem .3rem; margin-right: .1rem; }
+.gl-ids-hits { display: flex; flex-wrap: wrap; gap: .5rem; margin: .4rem 0; }
+.gl-ids-hit { width: 8.5rem; }
+.gl-ids-hit figcaption { font-size: .72rem; text-align: center; }
+.gl-ids-hit figcaption b { font-size: 1.1rem; }
+.gl-m-exact .gl-img, .gl-m-expanded .gl-img { outline: 2px solid var(--ochre); }
