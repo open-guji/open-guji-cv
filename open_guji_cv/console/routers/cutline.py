@@ -115,6 +115,20 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
+    elif skip_done and only_ids is not None and batch:
+        # 清单模式（2026-09-26）：本批次里**对着当前列窗几何**裁过的算已裁（事件带的 geom_sig
+        # 等于当前签名，见 eval/colgeom.py）。原来清单模式一律不滤——那时只能靠 col_h 变化出池，
+        # 而清单里的条目 col_h 本来就没变，裁完刷新又全回来，「只看未裁」形同虚设。
+        from ...eval.colgeom import current_geom
+        from ...feedback.harvest import parse_card_id
+        for e in deps.event_log().read(batch):
+            sig = e.payload.get("geom_sig") if e.kind == "cutline" else None
+            if not sig or e.target.key not in only_ids:
+                continue
+            ids = parse_card_id(e.target.key)
+            g = current_geom(st, ids.get("book") or book, ids.get("page"), ids.get("col"))
+            if g is not None and g.sig == sig:
+                done.add(e.target.key)
     elif skip_done and esc_mode and batch:
         # 升级模式：**不按 gold_ids 滤**（152 条升级切点里只有 7 条在金标里，滤了就几乎全没了），
         # 只按本批次已裁的事件滤——人裁完一条它就从「未裁」里消失。

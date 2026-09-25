@@ -127,6 +127,9 @@ def default_feedback_root() -> Path:
     return feedback_root()
 
 
+_CONSUMED_CACHE: dict[tuple[str, int, int], frozenset[str]] = {}
+
+
 class EventLog:
     """只追加的事件日志。一批一个文件，便于按批收割与回看。"""
 
@@ -269,17 +272,28 @@ class EventLog:
             return []
         return sorted(p.stem for p in d.glob("*.jsonl"))
 
-    def consumed_ids(self, consumer: str) -> set[str]:
+    def consumed_ids(self, consumer: str) -> frozenset[str]:
+        """记账过的事件 id。按文件 (mtime, size) 缓存（2026-09-26）：gold_add 的记账
+        1 MB+、6 万行，控制台每存一条裁决都要读好几份，占保存耗时的三分之一。
+        `mark_consumed` 追加写会改 mtime/size，缓存自然失效。"""
         path = self.consumed_dir / f"{consumer}.jsonl"
         if not path.exists():
-            return set()
+            return frozenset()
+        st = path.stat()
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        hit = _CONSUMED_CACHE.get(key)
+        if hit is not None:
+            return hit
         ids = set()
         with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     ids.add(json.loads(line)["event"])
-        return ids
+        for k in [k for k in _CONSUMED_CACHE if k[0] == key[0]]:
+            del _CONSUMED_CACHE[k]
+        _CONSUMED_CACHE[key] = frozenset(ids)
+        return _CONSUMED_CACHE[key]
 
     def mark_consumed(self, consumer: str, events: Iterable[Event], note: str = "") -> int:
         events = list(events)

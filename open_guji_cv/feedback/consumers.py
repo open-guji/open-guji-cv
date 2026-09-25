@@ -600,16 +600,29 @@ CONSUMERS.update(GLYPH_AUDIT_CONSUMERS)
 def route_and_consume(log: EventLog, batch: str | None = None,
                       table: RouteTable | None = None,
                       store: GoldStore | None = None,
-                      dry_run: bool = False, **consumer_kw) -> dict:
+                      dry_run: bool = False, event_ids: set[str] | None = None,
+                      **consumer_kw) -> dict:
     """把未消费的事件按路由表分发给各消费者；成功的记账。
 
     `consumer_kw` 透传给消费者（如 `glyphdb_admit` 的 `db_path`）——测试要
-    指向库副本，别动真库。"""
+    指向库副本，别动真库。
+
+    `event_ids`：只看这几条事件（控制台「写完直接消费」只该消费刚写进来的那几条）。
+    2026-09-26 实测：不限定时，每存一条切线都把整批 419 条 × 12 个消费者重新过一遍
+    路由表（11.5 万次规则匹配）、再各读一遍 MB 级的记账文件，一次保存 1–2 秒。
+    路由结果按事件缓存，每条只算一次（原来每个消费者各算一遍）。"""
     table = table or RouteTable.load(log.root / "routes.yaml")
     results: list[ConsumeResult] = []
+    evs_all = log.read(batch) if batch else sorted(log.iter_all(), key=lambda e: e.order)
+    if event_ids is not None:
+        evs_all = [e for e in evs_all if e.id in event_ids]
+    dests = {e.id: table.destinations(e) for e in evs_all}
     for consumer, fn in CONSUMERS.items():
-        pending = log.pending(consumer, batch)
-        pairs = [(e, d) for e in pending for d in table.destinations(e) if d.consumer == consumer]
+        mine = [e for e in evs_all if any(d.consumer == consumer for d in dests[e.id])]
+        if not mine:
+            continue
+        done = log.consumed_ids(consumer)
+        pairs = [(e, d) for e in mine if e.id not in done for d in dests[e.id] if d.consumer == consumer]
         if not pairs:
             continue
         res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
@@ -628,7 +641,6 @@ def route_and_consume(log: EventLog, batch: str | None = None,
             for e, _ in pairs:
                 seen.setdefault(e.id, e)
             log.mark_consumed(consumer, seen.values(), note=batch or "")
-    evs = log.read(batch) if batch else list(log.iter_all())
     return {"batch": batch, "dry_run": dry_run,
             "results": [r.to_dict() for r in results],
-            "unrouted": [e.id for e in table.unrouted(evs)]}
+            "unrouted": [e.id for e in evs_all if not dests[e.id]]}
