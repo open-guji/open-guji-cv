@@ -117,6 +117,43 @@ def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     return out
 
 
+def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
+    """人**拖过**的切线：`(page, col, slot_above) → 当前列图里的 y`（2026-09-26）。
+
+    `resolved_cuts` 只认「选某条候选」「现役就对」两类——人把线拖到别处（`moved`、没选候选）
+    的裁决只进金标，Step3 重跑照旧切在原处，人白拖（vol02 179:1:18「百」首横、140:9:8「舊」
+    下半，用户：「这两个会影响识字」）。这里把它们变成**钉住的格线**：`segment_column` 用人给的
+    位置替换 DP 那一条（`pinned_cuts`），缝照常在新位置附近找。
+
+    只收带页面坐标的裁决（`page_x/page_y`，09-26 起写入时自动记，见 eval/colgeom.py），
+    按**当前**列窗几何换算成行号——老裁决的 `y` 是对哪版列图拖的已无从知道（vol02 一批
+    漂了 20–50px 而 col_h 不变），套上去可能把线钉到字身上，不收。
+    """
+    from ..eval.colgeom import current_geom
+    from ..products.store import ProductStore
+    from .consumers import verdict_store
+    st = store or ProductStore()
+    out: dict[tuple[int, int, int], float] = {}
+    try:
+        items = verdict_store().list(TOUCHING_CUTS_SHARD, legacy=False)
+    except Exception:
+        return out
+    for it in items:
+        ex = it.expected
+        if it.status != "active" or str(it.anchor.book) != book or ex.get("verdict") != "moved":
+            continue
+        if ex.get("cand") or ex.get("page_y") is None:
+            continue
+        a = it.anchor
+        if a.page is None or a.col is None or a.slot is None:
+            continue
+        g = current_geom(st, book, a.page, a.col)
+        if g is None:
+            continue
+        out[(a.page, a.col, a.slot)] = g.page_to_row(float(ex["page_x"]), float(ex["page_y"]))[0]
+    return out
+
+
 def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
     """人在定字台上定过的字 → `{裸 id: (字形 shape, 读法 reading|None)}`，同一位**后到覆盖**。
 

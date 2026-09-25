@@ -77,6 +77,9 @@ class RowSegmentStep(Step):
         book_slots = _resolved_slots(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
+        # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
+        from ..feedback.lookup import resolved_pins as _resolved_pins
+        book_pins = _resolved_pins(ctx.book.id, ctx.store)
         out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
@@ -111,6 +114,8 @@ class RowSegmentStep(Step):
                 ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
                 raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
                 resolved_cuts=col_resolved or None, cut_judge=judge,
+                pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
+                             if pg_ == page and c_ == gc.col} or None,
                 **({} if slot_override is None or slot_override.uniform
                    else {"lam": NONUNIFORM_LAM}))
             if r is None:
