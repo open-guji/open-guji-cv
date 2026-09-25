@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..clustering.rare_panel import warm_font_index
 from .static_path import STATIC
-from .routers import (border_review, column_review, cutline, evals, feedback, glyph_match,
+from .routers import (border_review, column_review, cutline, evals, feedback, glyph_match, glyphlib,
                       gold, jiazhu, products, rare, registry, review, runs, slot_count_review,
                       spa_fallback, step8, step9, variants, workspace)
 
@@ -27,7 +27,7 @@ from .routers import (border_review, column_review, cutline, evals, feedback, gl
 #: 后面所有 router 的 /api/* 路由（见该文件顶部说明）。
 ROUTERS = (registry, workspace, runs, products, feedback, gold, evals,
            review, cutline, border_review, column_review, slot_count_review, jiazhu,
-           rare, glyph_match, variants, step8, step9, spa_fallback)
+           rare, glyph_match, glyphlib, variants, step8, step9, spa_fallback)
 
 app = FastAPI(title="open-guji-cv 控制台", version="0.1")
 # 允许离线页面回传裁决（2026-09-06）：`scripts/build_char_review.py` 出的按字复核页是

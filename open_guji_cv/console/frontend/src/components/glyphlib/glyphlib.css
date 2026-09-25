@@ -1,0 +1,31 @@
+/* 字形库总览（components/glyphlib/*）。来路配色：人裁用印泥青（铁证），机器通道中性，上下文用赭（体检优先）。 */
+.gl-h3 { margin: 0 0 .5rem; font-size: .95rem; display: flex; align-items: center; gap: .4rem; }
+.gl-note { margin: .5rem 0 0; }
+.gl-click { cursor: pointer; }
+.gl-click:hover { border-color: var(--indigo); }
+.gl-bar { display: flex; height: .7rem; border-radius: 999px; overflow: hidden; gap: 2px; margin-bottom: .5rem; }
+.gl-bar-seg { display: block; min-width: 3px; }
+.gl-dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; margin-right: .3rem; vertical-align: -.05rem; }
+.gl-p-human { background: var(--indigo); }
+.gl-p-align { background: var(--faint); }
+.gl-p-match { background: var(--ink-2); }
+.gl-p-context { background: var(--ochre); }
+.gl-p-unknown { background: var(--rule); }
+.gl-list { margin: 0; padding-left: 1.1rem; line-height: 1.9; }
+
+.gl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.2rem, 1fr)); gap: .3rem; margin-bottom: .7rem; }
+.gl-cell { position: relative; height: 3.2rem; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--paper); }
+.gl-cell.gl-has-human { box-shadow: inset 3px 0 0 var(--indigo); }
+.gl-cell.gl-nofont { border-style: dashed; border-color: var(--ochre); }
+.gl-ch { font-size: 1.45rem; color: var(--ink); font-family: "Noto Serif TC", "Noto Serif CJK TC", "Source Han Serif TC", serif; }
+.gl-n { position: absolute; right: .2rem; bottom: .05rem; font-size: .62rem; color: var(--mute); font-family: var(--mono); }
+
+.gl-head { display: flex; align-items: baseline; gap: .8rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.gl-big { font-size: 2.6rem; line-height: 1; font-family: "Noto Serif TC", "Noto Serif CJK TC", "Source Han Serif TC", serif; }
+.gl-tiles { display: flex; flex-wrap: wrap; gap: .35rem; }
+.gl-tile { margin: 0; display: flex; flex-direction: column; align-items: center; }
+.gl-tile figcaption { font-size: .6rem; color: var(--faint); }
+.gl-tile.gl-dup .gl-img { outline: 2px dashed var(--ochre); }
+.gl-img { width: 3.4rem; height: 3.4rem; object-fit: contain; background: #fff; border: 1px solid var(--rule); border-radius: 2px; }
+.gl-row { display: flex; gap: .6rem; align-items: flex-start; margin-bottom: .5rem; }
+.gl-row-label { width: 7rem; flex-shrink: 0; font-size: .8rem; }
