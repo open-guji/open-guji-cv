@@ -33,8 +33,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-DB = ROOT / "output" / "glyph.db"
-STORE = ROOT / "output" / "glyph_store"
+# 库与真源跟工作区走（2026-09-25 修）：原先写死引擎仓 output/，迁仓后在任何
+# 工作区都报「没有 glyph.db」。git 操作在 store 所在目录做（工作区仓）。
+from open_guji_cv.core.workspace import glyph_db_path, glyph_store_path  # noqa: E402
+
+DB = glyph_db_path()
+STORE = glyph_store_path()
 MIN_DELTA = 200          # 新增实例数达到这个量就值得快照
 MAX_AGE_DAYS = 14        # 或者距上次快照过了这么久
 
@@ -44,7 +48,10 @@ def _count(db: Path) -> int:
         return 0
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
-        return c.execute("SELECT COUNT(*) FROM instances").fetchone()[0]
+        # 字体来源不导出，也就不该算进「库长大了多少」
+        return c.execute(
+            "SELECT COUNT(*) FROM instances i LEFT JOIN sources s USING(source_id) "
+            "WHERE COALESCE(s.kind, 'woodblock') != 'font'").fetchone()[0]
     finally:
         c.close()
 
@@ -55,7 +62,7 @@ def _stored() -> tuple[int, float]:
     if meta.exists():
         d = json.loads(meta.read_text(encoding="utf-8"))
         r = subprocess.run(["git", "log", "-1", "--format=%ct", "--",
-                            str(meta)], cwd=ROOT, capture_output=True, text=True)
+                            str(meta)], cwd=STORE.parent, capture_output=True, text=True)
         ts = float(r.stdout.strip()) if r.stdout.strip() else 0.0
         return d.get("instances", 0), ts
     n = sum(1 for f in (STORE / "instances").glob("*.jsonl")
@@ -96,16 +103,18 @@ def main() -> int:
           f"{s['bytes'] / 1024 / 1024:.1f} MB")
 
     if a.commit:
-        subprocess.run(["git", "add", "output/glyph_store"], cwd=ROOT, check=True)
-        r = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
+        subprocess.run(["git", "add", str(STORE)], cwd=STORE.parent, check=True)
+        r = subprocess.run(["git", "diff", "--cached", "--quiet", "--", str(STORE)],
+                           cwd=STORE.parent)
         if r.returncode == 0:
             print("store 内容没变，不提交")
             return 0
         msg = (f"字形库快照：{s['instances']} 实例（+{delta}）\n\n"
                f"output/glyph.db 不进 Git（二进制，历史 63 版 3.19 GiB）；\n"
                f"真源是本 store，sqlite 用 glyph-db rebuild 重建。\n\n"
-               f"Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>")
-        subprocess.run(["git", "commit", "-q", "-m", msg], cwd=ROOT, check=True)
+               f"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
+        subprocess.run(["git", "commit", "-q", "-m", msg, "--", str(STORE)],
+                       cwd=STORE.parent, check=True)
         print("已提交（未推送）")
     return 0
 

@@ -548,6 +548,14 @@ class GlyphDB:
                       n_confirmed = n_confirmed + 1,
                       status = CASE WHEN n_confirmed + 1 >= {K_MIN}
                                THEN 'stable' ELSE status END,
+                      -- 字头 semantic/unicode_cp 首次插入即冻结；早期事件把拼音
+                      -- 首字母写进过 semantic（麗→l），这里遇到非汉字旧值就让新值
+                      -- 顶上，码位缺了就补（glyph_ledger.repair_glyph_heads 修存量）
+                      semantic = CASE WHEN semantic IS NULL
+                                        OR length(semantic) != 1
+                                        OR unicode(semantic) < {0x2E80}
+                                      THEN excluded.semantic ELSE semantic END,
+                      unicode_cp = COALESCE(unicode_cp, excluded.unicode_cp),
                       updated_at=excluded.updated_at""",
                 (edition, shape, sem, cp, None, _now()))
             gid = cur.execute(
