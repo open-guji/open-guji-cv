@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchLibChar, libPatchUrl, PROV_LABEL, PROV_ORDER, type LibCharDetail as Detail, type LibExemplar } from '../../api/glyphlib'
+import { fetchLibChar, libFontUrl, libPatchUrl, PROV_LABEL, PROV_ORDER, type LibCharDetail as Detail, type LibExemplar } from '../../api/glyphlib'
 
 // 单字页：本书全部刻例（按来路分组）＋ 字体 ＋ 兄弟工作区同字。
 // 03 卡（库自检）的人审就落在这一页的形并排上。
@@ -39,13 +39,12 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
               <Tiles xs={xs} />
             </div>
           ))}
-          {(d.fonts.length > 0 || d.others.length > 0) && (
+          {(
             <div className="card">
               <h3 className="gl-h3">对照</h3>
-              {d.fonts.map((f) => (
-                <div key={f.edition} className="gl-row"><span className="gl-row-label mono">{f.edition}</span>
-                  <img className="gl-img" src={libPatchUrl(f.instance_id)} alt={f.edition} /></div>
-              ))}
+              <div className="gl-row"><span className="gl-row-label mono">{d.fonts[0]?.edition ?? '字体'}</span>
+                <img className="gl-img" src={libFontUrl(d.char)} alt="字体"
+                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} /></div>
               {d.others.map((o) => (
                 <div key={o.ws} className="gl-row"><span className="gl-row-label">{o.ws}<br /><span className="muted">{o.n} 例</span></span>
                   <Tiles xs={o.exemplars} ws={o.ws} /></div>

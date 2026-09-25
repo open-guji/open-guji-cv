@@ -572,6 +572,10 @@ CONSUMERS = {
 from .collate_consumers import COLLATE_CONSUMERS  # noqa: E402
 CONSUMERS.update(COLLATE_CONSUMERS)
 
+# 字形库体检裁决（2026-09-25，字形库 03）：问的是「库里这个刻例定的字对不对」。
+from .glyph_audit import GLYPH_AUDIT_CONSUMERS  # noqa: E402
+CONSUMERS.update(GLYPH_AUDIT_CONSUMERS)
+
 
 def route_and_consume(log: EventLog, batch: str | None = None,
                       table: RouteTable | None = None,
