@@ -78,8 +78,13 @@ def api_glyphlib_chars() -> dict:
     过滤与排序在前端做——两本书都只有几千行。另附兄弟工作区的字集，
     供「只看本书独有 / 与某书共有」过滤。"""
     from ...clustering.glyph_ledger import char_table
+    from ...clustering.glyph_selfcheck import load_findings
     db, _ = _paths()
     rows = char_table(db)
+    # 体检算过的「本字与各字体的最优相似度」（按字取刻例中位）；没跑过体检就没有
+    char_font = (load_findings()[0] or {}).get("char_font", {})
+    for r in rows:
+        r["font_sim"] = char_font.get(r["char"])
     shared: dict[str, list[str]] = {}
     for o in _siblings():
         try:
@@ -210,10 +215,24 @@ def api_glyphlib_audit_decide(d: AuditDecideIn) -> dict:
 
 @router.get("/api/glyphlib/font/{char}.png")
 @maps_http
-def api_glyphlib_font(char: str) -> Response:
-    """一个字的字体渲染图。字体字形与书无关，本库没导字体域就去兄弟工作区的库里找
-    （四庫的库没导，北行的库导了 I.Ming）。"""
+def api_glyphlib_font(char: str, font: str = "") -> Response:
+    """一个字的字体渲染图。
+
+    给了 `font`（`glyph_selfcheck.FONT_SETS` 里的名字：iming / jigmo / genryu / genwan /
+    genyo / kangxi）就现场用引擎仓 `fonts/` 的字体档渲染；不给就取库里字体域的那张——
+    本库没导就去兄弟工作区的库里找（四庫的库没导，北行的库导了 I.Ming）。"""
     import sqlite3
+    if font:
+        import cv2
+        from ...clustering.glyph_selfcheck import FONT_SETS, font_renderer
+        if font not in FONT_SETS:
+            raise HTTPException(404, f"没有这套字体：{font}")
+        r = font_renderer(font)
+        img = r.render(char) if r and len(char) == 1 else None
+        if img is None:
+            raise HTTPException(404, f"{font} 里没有「{char}」")
+        return Response(cv2.imencode(".png", img)[1].tobytes(), media_type="image/png",
+                        headers={"Cache-Control": "max-age=86400"})
     db, _ = _paths()
     for p in [db] + [o["db"] for o in _siblings()]:
         c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
