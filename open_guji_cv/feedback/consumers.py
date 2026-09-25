@@ -257,14 +257,15 @@ def _unmojibake(s: str | None) -> str | None:
     消费不了、一直挂着；万一被消费，三个拉丁字母会被当字形进库。还原不了的原样返回。"""
     if not s or all(ord(ch) >= 0x2E80 for ch in s):
         return s
-    for enc in ("cp1252", "latin-1"):
-        try:
-            fixed = s.encode(enc).decode("utf-8")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            continue
-        if fixed and all(ord(ch) >= 0x2E80 for ch in fixed):
-            return fixed
-    return s
+    # 逐字回成字节：cp1252 有定义的按 cp1252，没定义的（0x81 0x8D 0x8F 0x90 0x9D 被当成
+    # 同值控制符留下）按 latin-1——「é\x9dž」这种混合形态整串 encode 哪个都不成
+    try:
+        raw = b"".join(ch.encode("cp1252") if ch.encode("cp1252", "ignore") else ch.encode("latin-1")
+                       for ch in s)
+        fixed = raw.decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
+    return fixed if fixed and all(ord(ch) >= 0x2E80 for ch in fixed) else s
 
 
 def glyphdb_admit(events, db_path: str | None = None,
