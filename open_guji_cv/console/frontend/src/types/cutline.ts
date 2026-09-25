@@ -30,6 +30,10 @@ export interface CutlineCase {
   /** drift 档（坐标过期重标）：kind === 'drift'；redo = 本批次已对当前坐标系裁过（只看未裁取消时才出） */
   kind?: string
   redo?: boolean
+  /** 当前列窗几何签名（eval/colgeom.py）；读回的裁决签名相同才算对当前列图裁过 */
+  geom_sig?: string | null
+  /** 清单模式（list:）出的卡：col_h 没变也可能漂了，不带签名的老裁决一律不认 */
+  from_list?: boolean
   drift_from_col_h?: number | null
   id: string
   page: number
@@ -83,6 +87,8 @@ export interface CutlineVerdict {
   cand?: string
   /** 裁决时的列图高，drift 档据此判断是否对当前坐标系裁的 */
   col_h?: number
+  /** 裁决时的列窗几何签名（2026-09-26 起写入时自动记），比 col_h 准 */
+  geom_sig?: string | null
 }
 
 export interface CutlineVerdictsResponse {

@@ -322,7 +322,8 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         # 记了页面坐标 / 几何签名的条目（2026-09-25，eval/colgeom.py）：页面坐标能换算，不用重裁；
         # 签名不符又没页面坐标的一定漂了（col_h 相同也漂过）；两样都没记的老条目走下面的 col_h 口径
         from .colgeom import current_geom, gold_rows_now
-        mode, _, _ = gold_rows_now(ex, current_geom(st, book, pg, col))
+        g_now = current_geom(st, book, pg, col)
+        mode, _, _ = gold_rows_now(ex, g_now)
         gold_h = ex.get("col_h")
         if mode == "drift":
             gold_h = gold_h or -1
@@ -381,6 +382,7 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
             col_h=h, col_w=col_w,
             seam=list(seam) if seam else None,
             kind="drift",
+            geom_sig=g_now.sig if g_now is not None else None,
             drift_from_col_h=int(gold_h) if drifted else None,
             redo=redo,
             gold_verdict=ex.get("verdict"),
