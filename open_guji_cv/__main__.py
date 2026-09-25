@@ -685,6 +685,12 @@ def cmd_glyph_db(args):
             summary = db.import_book(_book_out_dir(args),
                                      edition_tag=args.edition,
                                      source_meta=meta)
+        elif args.action == "set-edition":
+            # 一本书一个 edition：把库里全部刻本字形并到 --edition（字形库 06）
+            if not args.edition:
+                print("set-edition 需要 --edition"); sys.exit(1)
+            summary = db.set_book_edition(args.edition, title=args.title,
+                                          dry_run=not args.apply)
         elif args.action == "selfcheck":
             # 字形库自检（字形库 03）：本书内 / 对兄弟工作区的库 / 对字体
             from .clustering import glyph_selfcheck as G
@@ -1061,11 +1067,12 @@ def main():
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["import", "stats", "export", "rebuild",
-                            "import-font", "drop-edition", "repair", "selfcheck"])
+                            "import-font", "drop-edition", "repair", "selfcheck",
+                            "set-edition"])
     p.add_argument("--no-others", action="store_true",
                    help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
     p.add_argument("--apply", action="store_true",
-                   help="repair 用：真写库（不加只报告）")
+                   help="repair / set-edition 用：真写库（不加只报告）")
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default=None,
                    help="字形库目录（真源）。不传按 core.workspace 解析"

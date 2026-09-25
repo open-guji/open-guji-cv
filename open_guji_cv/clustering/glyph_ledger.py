@@ -259,8 +259,26 @@ def library_summary(db_path: str | Path, store_dir: str | Path | None = None) ->
                 font_chars[ed] = {"chars": len(have),
                                   "book_chars_not_in_font": sum(
                                       1 for ch in per_char if ch not in have)}
+        # 每个实例来源（= 实例 id 前缀）的刻例数与来路：v2 / vol01 / bxgb 是坐标命名空间
+        # （v2 slot 从 1、v1 idx 从 0），不是版本；版本看 book_edition
+        by_src: dict[str, Counter] = defaultdict(Counter)
+        for iid, p in c.execute(
+                "SELECT e.instance_id, a.provenance FROM exemplars e "
+                "JOIN glyphs g ON g.glyph_id=e.glyph_id "
+                "LEFT JOIN admissions a ON a.instance_id=e.instance_id "
+                "WHERE g.edition_tag NOT LIKE 'font:%'"):
+            by_src[iid.split(":", 1)[0]][_prov_class(p)] += 1
+        for src in sources:
+            cnt = by_src.get(src["source_id"], Counter())
+            src["exemplars"] = sum(cnt.values())
+            src["provenance"] = dict(cnt.most_common())
+        book_edition = None
+        if _has_col(c, "meta", "key"):
+            r = c.execute("SELECT value FROM meta WHERE key='book_edition'").fetchone()
+            book_edition = r[0] if r else None
         return {
             "db": str(db_path),
+            "book_edition": book_edition,
             "sources": sources,
             "editions": editions,
             "book": {

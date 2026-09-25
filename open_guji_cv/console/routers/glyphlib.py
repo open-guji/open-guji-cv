@@ -117,9 +117,31 @@ def api_glyphlib_char(char: str, others: int = 12) -> dict:
     return d
 
 
+def _crop_to_ink(png: bytes, pad: float = 0.12) -> bytes:
+    """显示用：裁到墨迹外接正方形再留一圈白边。库里的 canonical 字只占画布四成上下
+    （北行 0.3），缩略图里字就小得看不清（用户 2026-09-25）。只改显示，不动库。"""
+    import cv2
+    import numpy as np
+    img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return png
+    ys, xs = np.where(img < 128)
+    if len(ys) == 0:
+        return png
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    side = int(max(y1 - y0, x1 - x0) * (1 + 2 * pad)) + 2
+    cy, cx = (y0 + y1) // 2, (x0 + x1) // 2
+    canvas = np.full((side, side), 255, np.uint8)
+    sy0, sx0 = cy - side // 2, cx - side // 2
+    ay0, ax0 = max(sy0, 0), max(sx0, 0)
+    ay1, ax1 = min(sy0 + side, img.shape[0]), min(sx0 + side, img.shape[1])
+    canvas[ay0 - sy0:ay1 - sy0, ax0 - sx0:ax1 - sx0] = img[ay0:ay1, ax0:ax1]
+    return cv2.imencode(".png", canvas)[1].tobytes()
+
+
 @router.get("/api/glyphlib/patch/{instance_id}.png")
 @maps_http
-def api_glyphlib_patch(instance_id: str) -> Response:
+def api_glyphlib_patch(instance_id: str, crop: bool = True) -> Response:
     """刻例图块（库里存的 canonical 原图，不是归一化图——人看的是原形）。"""
     import sqlite3
     db, _ = _paths()
@@ -131,7 +153,8 @@ def api_glyphlib_patch(instance_id: str) -> Response:
         c.close()
     if row is None:
         raise HTTPException(404, f"库里没有这个实例：{instance_id}")
-    return Response(bytes(row[0]), media_type="image/png",
+    png = bytes(row[0])
+    return Response(_crop_to_ink(png) if crop else png, media_type="image/png",
                     headers={"Cache-Control": "max-age=300"})
 
 
@@ -215,7 +238,7 @@ def api_glyphlib_audit_decide(d: AuditDecideIn) -> dict:
 
 @router.get("/api/glyphlib/font/{char}.png")
 @maps_http
-def api_glyphlib_font(char: str, font: str = "") -> Response:
+def api_glyphlib_font(char: str, font: str = "", crop: bool = True) -> Response:
     """一个字的字体渲染图。
 
     给了 `font`（`glyph_selfcheck.FONT_SETS` 里的名字：iming / jigmo / genryu / genwan /
@@ -231,7 +254,8 @@ def api_glyphlib_font(char: str, font: str = "") -> Response:
         img = r.render(char) if r and len(char) == 1 else None
         if img is None:
             raise HTTPException(404, f"{font} 里没有「{char}」")
-        return Response(cv2.imencode(".png", img)[1].tobytes(), media_type="image/png",
+        png = cv2.imencode(".png", img)[1].tobytes()
+        return Response(_crop_to_ink(png) if crop else png, media_type="image/png",
                         headers={"Cache-Control": "max-age=86400"})
     db, _ = _paths()
     for p in [db] + [o["db"] for o in _siblings()]:
@@ -244,7 +268,8 @@ def api_glyphlib_font(char: str, font: str = "") -> Response:
         finally:
             c.close()
         if row:
-            return Response(bytes(row[0]), media_type="image/png",
+            png = bytes(row[0])
+            return Response(_crop_to_ink(png) if crop else png, media_type="image/png",
                             headers={"Cache-Control": "max-age=3600"})
     raise HTTPException(404, f"没有找到「{char}」的字体渲染")
 
