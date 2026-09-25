@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchLibAudit, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
+import { IdsPicker } from './IdsPicker'
+import { fetchLibAudit, FONT_NAME, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
   type AuditDecision, type AuditFinding, type AuditResult } from '../../api/glyphlib'
 
 // 体检：`glyph-db selfcheck` 标出的可疑刻例，一张卡一个。本例与它的同字最近、
@@ -11,6 +12,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
   const [flag, setFlag] = useState('')
   const [done, setDone] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState('')
+  const [picking, setPicking] = useState('')
   useEffect(() => { fetchLibAudit().then(setR).catch((e) => setErr((e as Error).message)) }, [])
 
   const shown = useMemo(() => (r?.findings ?? []).filter((f) => !flag || f.flags.includes(flag)
@@ -48,6 +50,23 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
           </select>
         </label>
       </div>
+      {r.meta.fonts && (
+        <details className="card gl-fonts">
+          <summary>本书刻例与各字体的相似度（本字，弹性覆盖率）</summary>
+          <table className="pb-table">
+            <thead><tr><th className="pb-left">字体</th><th>中位</th><th>P10</th><th>最像它的刻例</th></tr></thead>
+            <tbody>
+              {Object.entries(r.meta.fonts).sort((a, b) => b[1].median - a[1].median).map(([k, v]) => (
+                <tr key={k}><td className="pb-left">{FONT_NAME[k] ?? k}</td><td>{v.median.toFixed(3)}</td>
+                  <td>{v.p10.toFixed(3)}</td><td>{v.best_for.toLocaleString()}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted gl-note">与各字体都不像（按字中位 &lt;0.80）的字 {(r.meta.chars_font_far ?? []).length} 个：
+            {(r.meta.chars_font_far ?? []).slice(0, 60).map((c) => (
+              <a key={c} href="#" onClick={(e) => { e.preventDefault(); onPick(c) }}> {c}</a>))}</p>
+        </details>
+      )}
       {shown.map((f) => (
         <div key={f.key} className={`card gl-audit${done[f.key] ? ' gl-done' : ''}`}>
           <div className="gl-audit-head">
@@ -65,7 +84,13 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
               cap={`同字${f.same_peer_ws ? '·他书' : ''} ${f.best_same.toFixed(2)}`} />}
             {f.rival_peer && <Fig src={libPatchUrl(f.rival_peer)} cap={`本书「${f.rival_char}」${f.rival.toFixed(2)}`} />}
             {f.xrival_peer && <Fig src={libPatchUrl(f.xrival_peer, f.xrival_ws)} cap={`${f.xrival_ws}「${f.xrival_char}」${f.xrival.toFixed(2)}`} />}
-            <Fig src={libFontUrl(f.char)} cap={`字体本字 ${f.font_own == null ? '—' : f.font_own.toFixed(2)}`} />
+            {(() => {
+              const by = f.font_own_by ?? {}
+              const best = Object.keys(by).sort((a, b) => by[b] - by[a])[0]
+              const tip = Object.entries(by).map(([k, v]) => `${FONT_NAME[k] ?? k} ${v.toFixed(2)}`).join('\n')
+              return <span title={tip}><Fig src={libFontUrl(f.char, best)}
+                cap={`${best ? FONT_NAME[best] ?? best : '字体'}本字 ${f.font_own == null ? '—' : f.font_own.toFixed(2)}`} /></span>
+            })()}
             {f.font_char && <Fig src={libFontUrl(f.font_char)} cap={`字体「${f.font_char}」${f.font_best.toFixed(2)}`} />}
           </div>
           {!done[f.key] && (
@@ -87,11 +112,14 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
               <span className="gl-sep" />
               <button disabled={!!busy} onClick={() => decide(f, { v: 'fidelity', fidelity: 'exact' })}
                 title="字没标错，且刻的就是这个码位的通行字形">完全一致</button>
-              <button disabled={!!busy} onClick={() => {
-                const ids = (prompt('Unicode 里没有同形字，存的是最近似码位。刻例实际结构的 IDS：') ?? '').trim()
-                if (ids) decide(f, { v: 'fidelity', fidelity: 'nearest', ids })
-              }}>最近似码位…</button>
+              <button disabled={!!busy} onClick={() => setPicking(f.key)}
+                title="写实际结构，先在 Unicode 里反查">最近似码位 / 无码…</button>
             </div>
+          )}
+          {!done[f.key] && picking === f.key && (
+            <IdsPicker initial="" current={f.char} onCancel={() => setPicking('')}
+              onPick={(p) => { setPicking(''); if (p.kind === 'relabel') decide(f, { v: 'relabel', char: p.char })
+                else decide(f, { v: 'fidelity', fidelity: p.fidelity, ids: p.ids, force: p.force }) }} />
           )}
         </div>
       ))}
@@ -102,7 +130,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
 }
 
 function label(d: Omit<AuditDecision, 'key' | 'instance_id'>) {
-  if (d.v === 'fidelity') return d.fidelity === 'exact' ? '完全一致' : `最近似 ${d.ids}`
+  if (d.v === 'fidelity') return d.fidelity === 'exact' ? '完全一致' : `${d.fidelity === 'nearest' ? '最近似' : '无码'} ${d.ids}`
   return d.v === 'ok' ? '没问题' : d.v === 'near_form' ? '形近·异体' : d.v === 'evict' ? '已撤' : `改成 ${d.char}`
 }
 

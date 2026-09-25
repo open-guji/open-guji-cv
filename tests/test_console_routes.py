@@ -669,9 +669,10 @@ def test_route_inventory():
     工作区同字）、`GET /api/glyphlib/patch/{instance_id}.png`（刻例图块）、
     `GET /api/glyphlib/audit`（体检结果）、`POST /api/glyphlib/audit/decide`（体检裁决）、
     `GET /api/glyphlib/font/{char}.png`（字体渲染，库里没导字体域就去兄弟库找）。91 → 98。
+    同日 `GET /api/glyphlib/ids-lookup`（IDS 反查：标「最近似码位」前先查 Unicode 里有没有同结构字）。98 → 99。
     """
     got = sorted(_endpoints())
-    assert len(got) == 98, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 99, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -798,7 +799,7 @@ EXPECTED_ROUTES = [
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/glyph-match/exemplar/{instance_id}.png",
-    "GET /api/glyphlib/audit", "GET /api/glyphlib/char/{char}", "GET /api/glyphlib/font/{char}.png", "GET /api/glyphlib/chars",
+    "GET /api/glyphlib/audit", "GET /api/glyphlib/char/{char}", "GET /api/glyphlib/ids-lookup", "GET /api/glyphlib/font/{char}.png", "GET /api/glyphlib/chars",
     "GET /api/glyphlib/patch/{instance_id}.png", "GET /api/glyphlib/summary",
     "POST /api/glyphlib/audit/decide",
     "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",
