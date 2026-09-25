@@ -107,7 +107,9 @@ def cutline_verdicts(batch: str, log: EventLog | None = None) -> dict:
         # 坐标系已过期，不能拿来当「已裁」，更不能把旧折线画到新图上——2026-09-14 实锤）。
         # cand：「选切分方案」裁决选中的候选，刷新后恢复选中态。
         out[e.target.key] = {"y": p.get("y"), "verdict": p.get("verdict"), "polyline": p.get("polyline"),
-                             "col_h": p.get("col_h"), "cand": p.get("cand")}
+                             "col_h": p.get("col_h"), "cand": p.get("cand"),
+                             # 几何签名（2026-09-26，eval/colgeom.py）：比 col_h 准——列窗边线变了列高可以不变
+                             "geom_sig": p.get("geom_sig")}
     return {"batch": batch, "n": len(out), "verdicts": out}
 
 

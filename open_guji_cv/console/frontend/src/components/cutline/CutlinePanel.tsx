@@ -84,7 +84,7 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
       setMsg('失败：' + (e as Error).message)
       return
     }
-    type DoneRec = { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string; col_h?: number }
+    type DoneRec = { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string; col_h?: number; geom_sig?: string | null }
     let done: Record<string, DoneRec> = {}
     try {
       done = (await fetchCutlineVerdicts(b)).verdicts || {}
@@ -100,9 +100,13 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
       // drift 档：批次里可能躺着这些 id 的**历史**裁决（批次框留空落到 vol02-cutline 这种老批次，
       // 当初的金标就是那里裁的）。坐标系已过期的不算已裁，更不能把旧折线画到新图上
       // （用户 2026-09-14：「只看未裁没卡片，不选有奇怪的连续折线点」）。只认对当前列高裁过的。
+      // 2026-09-26：先认几何签名——列窗边线变了列高可以不变（vol02:181:7:13 等：旧裁决 col_h 与当前逐像素相等，
+      // 却是对另一版列图裁的，读回来的线整体偏了几十像素）。裁决带签名就按签名判；没带的老裁决在 drift 档一律不认。
       if (dv && c.kind === 'drift') {
-        const sameFrame = dv.col_h != null && Math.abs(dv.col_h - c.col_h) <= 2
-        if (!c.redo && !sameFrame) dv = undefined
+        const sameFrame = dv.geom_sig != null
+          ? dv.geom_sig === c.geom_sig
+          : !c.from_list && (!!c.redo || (dv.col_h != null && Math.abs(dv.col_h - c.col_h) <= 2))
+        if (!sameFrame) dv = undefined
       }
       if (dv) {
         st.done = dv.verdict

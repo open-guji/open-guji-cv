@@ -76,6 +76,9 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                 if e.kind == "cutline" and e.payload.get("col_h"):
                     relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
         cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None, only_ids=only_ids)
+        if only_ids is not None:
+            for c in cases:
+                c["from_list"] = True
         pg = sorted({c["page"] for c in cases})
     elif pages in ("escalated", "esc"):
         # 升级切点模式（2026-09-15，10 卡 L5）：直接读 Step3 产物里 `escalate=True` 的切点——
