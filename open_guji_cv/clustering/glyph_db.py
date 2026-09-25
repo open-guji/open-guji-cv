@@ -617,10 +617,15 @@ class GlyphDB:
             "FROM glyphs WHERE edition_tag NOT LIKE 'font:%' AND edition_tag NOT LIKE 'modern:%' "
             "AND edition_tag != ?", (edition,)).fetchall()
         merged = moved = 0
+        seen: set[str] = set()        # 试算时记「已挪过去的字」，第二行同字才算合并
         for gid, ed, ch, sem, cp, ids, n in rows:
             tgt = cur.execute("SELECT glyph_id, n_confirmed FROM glyphs "
                               "WHERE edition_tag=? AND char=?", (edition, ch)).fetchone()
+            if tgt is None and dry_run and ch in seen:
+                merged += 1
+                continue
             if tgt is None:
+                seen.add(ch)
                 if not dry_run:
                     cur.execute("UPDATE glyphs SET edition_tag=?, updated_at=? WHERE glyph_id=?",
                                 (edition, _now(), gid))
