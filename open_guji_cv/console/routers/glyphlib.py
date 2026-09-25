@@ -139,13 +139,22 @@ def api_glyphlib_audit(all: bool = False) -> dict:
     """体检结果（`glyph-db selfcheck` 落的 findings.jsonl）＋ 裁决账。
     默认只回未裁的卡；`all=1` 连已裁的一起回（带 `decision`）。"""
     from ...clustering.glyph_selfcheck import FLAG_LABELS, decisions, load_findings, out_dir
-    _paths()
+    import sqlite3
+    db, _ = _paths()
     meta, rows = load_findings()
     dec = decisions()
+    # 体检之后撤掉的实例（别处撤库、同格副本清理）不再出卡
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        alive = {r[0] for r in c.execute("SELECT instance_id FROM exemplars")}
+    finally:
+        c.close()
+    n_gone = sum(1 for r in rows if r["instance_id"] not in alive)
+    rows = [r for r in rows if r["instance_id"] in alive]
     for r in rows:
         r["decision"] = dec.get(r["key"])
     todo = [r for r in rows if r["decision"] is None]
-    return {"meta": meta, "flag_labels": FLAG_LABELS, "out": str(out_dir()),
+    return {"meta": meta, "flag_labels": FLAG_LABELS, "out": str(out_dir()), "n_gone": n_gone,
             "n_total": len(rows), "n_decided": len(rows) - len(todo),
             "findings": rows if all else todo}
 
