@@ -159,9 +159,11 @@ class GlyphMatchParams(BaseModel):
     """两边都骨架化再统一细化到 N px 再比（2026-09-15，现代印刷链）。1-bit 扫描的粗笔画
     （北行日錄归一后 5.5px）让软覆盖饱和：同书留一法错误命中 cov 最高 0.9996、same 闸漏
     2 个假 same；细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链保持 None。"""
-    exclude_self: bool = False
-    """匹配时把字位自己摘出库（`GlyphMatcher.match(exclude_id=)`）。播种过的书（modern:<book>
-    的实例就是这本书的字位）不摘就是自证 cov 1.0。刻本链默认不摘，行为不变。"""
+    exclude_self: bool = True
+    """匹配时把字位自己摘出库（`GlyphMatcher.match(exclude_id=)`，按同一物理格摘，含 v2:/播种/v1
+    各种 id 与重切漂移的邻格号）。不摘就是自证 cov 1.0。2026-09-26 起刻本链也默认摘
+    （用户：「该改就改」）——此前刻本链一个格进库后，5-a 就是自己配自己，新 Step7 的
+    「库里同形已定实例」铁证全被自证喂饱。"""
     consensus_cov: float = 0.99          # 共识升档三条件，见模块头；min_confirmed = 0 关掉
     consensus_margin: float = 0.03
     consensus_min_confirmed: int = 3

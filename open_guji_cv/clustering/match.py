@@ -64,6 +64,20 @@ class MatchResult:
                 "guard": self.guard, "n_verified": self.n_verified}
 
 
+def _cell_parts(iid: str):
+    """实例 / 字位 id → (册, 页, 列, 格号)；带 v2: 前缀、a/b 子格都认。认不出返回 None。"""
+    p = iid.split(":")
+    if p and p[0] == "v2":
+        p = p[1:]
+    if len(p) != 4:
+        return None
+    b, pg, col, sl = p
+    sl = sl.rstrip("ab")
+    if not (pg.isdigit() and col.isdigit() and sl.isdigit()):
+        return None
+    return b, int(pg), int(col), int(sl)
+
+
 class GlyphMatcher:
     """内存字形索引：kNN(特征) 粗排 → verify_pair_elastic 精验 → 三档判决。
 
@@ -119,6 +133,26 @@ class GlyphMatcher:
         self._F = None
         self._char_set.add(char)
 
+    def _same_cell_rows(self, cell_id: str) -> set[int]:
+        """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08）。
+
+        同一格在库里不止一种 id：人裁 ``v2:<格>``、播种/机器准入 ``<格>``、四庫 v1 旧管线
+        ``<册>:页:列:idx``（idx 从 0，= 格号−1），重切后还可能漂到邻格号。只摘一个 id
+        等于没摘——铁证审计实测：只摘 ``v2:`` 那份，北行 3,731 例播种副本照样自己配自己。
+        所以按「同册同页同列、格号相差 ≤2」一并摘掉（跨所有前缀）。代价是同列相邻两格
+        若恰是同一个字，那份真证据也摘了——宁可少一条证据，不要自证。
+        """
+        q = _cell_parts(cell_id)
+        if q is None:
+            return {j for j, iid in enumerate(self._ids) if iid == cell_id}
+        keys = getattr(self, "_cell_keys", None)
+        if keys is None or len(keys) != len(self._ids):
+            keys = [_cell_parts(i) for i in self._ids]
+            self._cell_keys = keys
+        b, pg, col, sl = q
+        return {j for j, k in enumerate(keys)
+                if k is not None and k[:3] == (b, pg, col) and abs(k[3] - sl) <= 2}
+
     def extract(self, patches: np.ndarray) -> np.ndarray:
         """暴露特征提取，供调用方批量预计算后喂给 add()。"""
         return self._feature.extract(patches)
@@ -136,6 +170,8 @@ class GlyphMatcher:
         变成了「上次进库时定的字」，独立性归零；``match_solo``（无整理本、
         库 cov≥0.99 单独放行）更是会被自证直接喂饱。
         实测 vol01 队列：1333 行的 matched_id 指向自己，1136 条 cov=1.0。
+
+        2026-09-26 起按**同一物理格**摘（见 `_same_cell_rows`），不再只摘字面相同的那一个 id。
         """
         if not self._ids:
             return MatchResult("diff", None, None, 0.0, 0.0)
@@ -148,15 +184,16 @@ class GlyphMatcher:
             F = np.asarray(self._feats)
             self._F = F
         sims = F @ np.asarray(feat, dtype=np.float32)
+        excl: set[int] = set()
         if exclude_id is not None:
             # 摘自身：把相似度压到最低，排序自然把它甩到末尾。
-            sims = sims.copy()
-            for j, iid in enumerate(self._ids):
-                if iid == exclude_id:
-                    sims[j] = -np.inf
+            excl = self._same_cell_rows(exclude_id)
+            if excl:
+                sims = sims.copy()
+                sims[list(excl)] = -np.inf
         top = np.argsort(-sims)[: self.k]
-        if exclude_id is not None:
-            top = [j for j in top if self._ids[int(j)] != exclude_id]
+        if excl:
+            top = [j for j in top if int(j) not in excl]
             if not top:
                 return MatchResult("diff", None, None, 0.0, 0.0)
 
