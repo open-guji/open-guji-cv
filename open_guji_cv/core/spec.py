@@ -113,6 +113,22 @@ class StepSpec:
     2026-09-15 `leaf_layout` 踩到（改成 `folio` 后 Step1 该把版心标 `margin`，
     却整页跳过）。凡是 `run_page` 里读了 `ctx.book.X` 且 X 会改变产物的，
     都要在这里声明 X。"""
+    soft_params: tuple[str, ...] = field(default=())
+    """**软参数**：参数模型里这些字段**不进指纹**（`params_hash` / `self_hash` 都剔掉），
+    只把当时的值记进 manifest 条目的 `soft`，`status` 另报「漂移」、不报过期。
+
+    2026-09-25 加，给 `glyph_match` 的 `db_fingerprint` 用（用户定）：字形库是外部
+    可变状态，人裁每进一批字形库指纹就变，按硬参数算就是全书 Step5-a 过期、且格级
+    复用第一道闸（`self_hash`）也跟着失效——一页半分钟，一册一个多小时，而新进的
+    几个字形绝大多数格的判决根本不动。改成软参数之后：
+
+    - 库变了**不自动**重跑；`guji status` 在「漂移」一列告诉你有多少页是对旧库判的；
+    - 要吃新库的红利、或确知某些字形有问题，用 `guji recheck` 点名格
+      （按字 / 按判档 / 命中的库条目已撤）→ 只重算点名的格，其余格照旧复用；
+    - `--force` 仍是整页全算的最后手段（配 `GUJI_NO_REUSE=1`）。
+
+    只适合「值变了、但绝大多数产物仍然成立」的外部状态。代码、阈值、checkpoint
+    这类一变就整体失效的东西**不许**放这里（cv-pipeline-ops §2.2）。"""
     needs: tuple[str, ...] = field(default=())
     """跑得起来的**外部**前提，控制台据此把跑不了的步骤置灰而不是让人点了才失败。
     口径与 `eval/registry.py` 的 `needs` 一致：

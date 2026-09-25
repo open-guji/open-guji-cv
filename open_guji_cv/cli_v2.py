@@ -82,8 +82,77 @@ def cmd_status(args) -> None:
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
     for sid, d in st["steps"].items():
         c = d["counts"]
+        drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
         print(f"  {sid:16s} 新鲜 {c['fresh']:3d}  过期 {c['stale']:3d}  缺失 {c['missing']:3d}  "
-              f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}")
+              f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}{drift}")
+    if any(d.get("drift") for d in st["steps"].values()):
+        print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
+              "要重算点名格用 `guji recheck`）")
+
+
+def cmd_recheck(args) -> None:
+    """Step5-a 点名重算：按字 / 判档 / 命中条目已撤，把格写进 manifest 的格级失效。
+    只标不跑——跑还是 `guji pipeline <p> <book> --from glyph_match`，只重算点名格。"""
+    from .core.spec import page_key
+    from .steps.glyph_match import live_exemplars, recheck_reasons
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    step = eng.pipeline.producer_of("glyph_match")
+    sid = step.spec.id
+    p = eng.ctx.params_for(step)
+    chars = set((args.chars or "").replace(",", "").replace("，", "").replace(" ", ""))
+    verdicts = {v for v in (args.verdicts or "").split(",") if v}
+    if not (chars or verdicts or args.dead or args.all):
+        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all")
+    live = None
+    if args.dead:
+        edition = p.edition
+        if edition is None and getattr(eng.book, "edition", "keben") == "modern":
+            edition = f"modern:{eng.book.id}"
+        live = live_exemplars(p.db_path, edition)
+    manifest = eng.store.manifest(eng.book.id, sid)
+    pages = eng.book.resolve_pages(args.pages)
+    reason = "recheck " + " ".join(x for x in (
+        f"chars={''.join(sorted(chars))}" if chars else "",
+        f"verdicts={','.join(sorted(verdicts))}" if verdicts else "",
+        "dead" if args.dead else "", "all" if args.all else "") if x)
+    n_pages = n_cells = n_total = 0
+    by_why: dict[str, int] = {}
+    for pg in pages:
+        key = page_key(pg)
+        if manifest.get(key) is None:
+            continue
+        if args.all:
+            n_pages += 1
+            if not args.dry_run:
+                manifest.invalidate(key, reason)
+            continue
+        pm = eng.store.read(eng.book.id, sid, key, "glyph_match")
+        if pm is None:
+            continue
+        ids: list[str] = []
+        for col in pm.columns:
+            for r in col.chars if col.ok else []:
+                n_total += 1
+                why = recheck_reasons(r, chars, verdicts, live)
+                for w in why:
+                    by_why[w] = by_why.get(w, 0) + 1
+                if why:
+                    ids.append(r.id)
+        if ids:
+            n_pages += 1
+            n_cells += len(ids)
+            if not args.dry_run:
+                manifest.invalidate(key, reason, cells=ids)
+    head = "[dry-run] " if args.dry_run else ""
+    if args.all:
+        print(f"{head}{sid}：{n_pages} 页整页失效")
+    else:
+        pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
+        print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
+              + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
+    if n_pages and not args.dry_run:
+        print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
+              f"--pages {args.pages} -w <workspace>")
 
 
 def cmd_console(args) -> None:
@@ -1008,6 +1077,7 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "recheck": cmd_recheck,
     "console": cmd_console,
     "cache": cmd_cache,
     "batch": cmd_batch,
@@ -1223,6 +1293,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("recheck",
+                       help="[v2] Step5-a 点名重算：库变了不自动重跑，要吃新库就在这里点名格")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--chars", default=None, help="记录里出现这些字的格（判定字/候选），如 𠊓,虜")
+    p.add_argument("--verdicts", default=None, help="这些判档的格，如 unsure,diff")
+    p.add_argument("--dead", action="store_true",
+                   help="same 档命中的库条目已撤或字头已改（撤库后建议跑一次）")
+    p.add_argument("--all", action="store_true", help="整页失效（不复用任何格）")
+    p.add_argument("--dry-run", action="store_true", help="只数不写")
 
     p = sub.add_parser("console", help="[v2] 启动控制台（FastAPI）")
     p.add_argument("--port", type=int, default=DEFAULT_CONSOLE_PORT)

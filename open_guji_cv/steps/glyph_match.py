@@ -51,6 +51,21 @@ Step5+ 过期；而内容指纹只在**匹配器会读到的东西**变了才变
 `_exemplar_matrix` 的常驻缓存也靠这一戳）——只改派生表不碰戳，指纹与缓存都看不见。
 `seed_admit` 的人裁通道只读 `provenance='human'` 的 admissions，用更窄的
 `human_verdicts_fingerprint`，机器 align 进库不惊动它。
+
+## 库指纹：记录，不判过期（2026-09-25 起，用户定）
+
+上面那套「库一变就全书过期」执行了一周，代价压过了收益：人裁每进一批，指纹就变，
+Step5-a 全书过期、格级复用的第一道闸（`self_hash`）也一并失效——一页半分钟、
+vol02 一轮一个半小时，而新进的几个字形绝大多数格的判决一动不动。现在
+`db_fingerprint` 是 `StepSpec.soft_params`：
+
+- 仍然**记**：参数里有、产物 `PageMatch.db_fingerprint` 里有、manifest 条目 `soft` 里有；
+- **不判过期**：不进 `params_hash` / `self_hash`，库变了 `status` 只在「漂移」一列报页数；
+  上游（几何）变了照旧重跑，几何没动的格照旧复用——复用的记录是对旧库判的，这是接受的代价；
+- **要吃新库**就点名：`guji recheck <book> --chars 𠊓,虜`（记录里出现这些字的格）、
+  `--verdicts unsure,diff`（非 same 的格统统再查一遍，≈半价）、`--dead`（命中的库条目
+  已撤或已改字头——这类格的 same 已经没有依据，建议每次撤库后跑）、`--all`（整页）。
+  它只写 manifest 的格级失效，下一次 `guji pipeline --from glyph_match` 只重算这些格。
 """
 
 from __future__ import annotations
@@ -214,6 +229,9 @@ class GlyphMatchStep(Step):
         # `norm_stroke` 来自册配置且直接改归一结果——不进指纹的话改了 yaml
         # 产物还报「新鲜」（与 leaf_layout 当初同一个坑）
         book_deps=("norm_stroke",),
+        # 库指纹是**软参数**（2026-09-25，用户定）：库变了只报「漂移」不报过期，
+        # 要重算点名格走 `guji recheck`。见模块头「库指纹：记录，不判过期」。
+        soft_params=("db_fingerprint",),
     )
 
     def _matcher(self, p: GlyphMatchParams):
@@ -353,3 +371,55 @@ def glyph_match_summary(book_id: str, pages: list[int] | None = None,
         "n_pages": n_pages, "n_missing": n_missing,
         "verdict_counts": verdict_counts, "guard_counts": guard_counts,
     }
+
+
+# ── 点名重算（`guji recheck`，见模块头「库指纹：记录，不判过期」）──────────────
+
+def live_exemplars(db_path: str, edition: str | None = None) -> dict[str, set[str]]:
+    """库里现役条目：{instance_id: {字头…}}，口径与 `seeding.load_matcher_from_db` 相同
+    （exemplars ⋈ glyphs，按 edition 过滤）。`--dead` 拿它判「命中的条目还在不在、字头改没改」。"""
+    import sqlite3
+    sql = ("SELECT e.instance_id, g.char FROM exemplars e "
+           "JOIN glyphs g ON g.glyph_id = e.glyph_id")
+    args: tuple = ()
+    if edition:
+        sql += " WHERE g.edition_tag = ?"
+        args = (edition,)
+    out: dict[str, set[str]] = {}
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+        for iid, ch in c.execute(sql, args):
+            out.setdefault(str(iid), set()).add(str(ch))
+    return out
+
+
+def _rec_chars(r: MatchRec) -> set[str]:
+    """一条记录里出现过的所有字：判定字、候选、候选试切的判定字与候选。"""
+    out = {c for c, _ in r.candidates}
+    if r.char:
+        out.add(r.char)
+    for cv in r.cand_variants:
+        if cv.char:
+            out.add(cv.char)
+        out.update(c for c, _ in cv.candidates)
+    return out
+
+
+def recheck_reasons(r: MatchRec, chars: set[str] | frozenset = frozenset(),
+                    verdicts: set[str] | frozenset = frozenset(),
+                    live: dict[str, set[str]] | None = None) -> list[str]:
+    """这一格为什么该重算（空表 = 不用）。三条相互独立，任一命中即点名：
+
+    - `char`：记录里出现了点名的字（判定字 / 候选 / 候选试切）——那个字的库条目
+      变了（新进、撤掉、改判），这些格的判决最可能跟着变；
+    - `verdict`：判档在点名之列（如 unsure/diff：库长大后最可能升档的就是它们）；
+    - `dead`：same 档命中的库条目已不在库里，或字头已不是记录里的字——
+      判决的依据没了，必须重算（`live` 为 None 不查这一条）。
+    """
+    why: list[str] = []
+    if chars and _rec_chars(r) & set(chars):
+        why.append("char")
+    if verdicts and r.verdict in verdicts:
+        why.append("verdict")
+    if live is not None and r.matched_id and r.char not in live.get(r.matched_id, ()):
+        why.append("dead")
+    return why
