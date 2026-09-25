@@ -685,8 +685,35 @@ def cmd_glyph_db(args):
             summary = db.import_book(_book_out_dir(args),
                                      edition_tag=args.edition,
                                      source_meta=meta)
+        elif args.action == "selfcheck":
+            # 字形库自检（字形库 03）：本书内 / 对兄弟工作区的库 / 对字体
+            from .clustering import glyph_selfcheck as G
+            db.close()
+            db = None
+            others = [] if args.no_others else G.sibling_libraries()
+            font_db = G.pick_font_db(db_path, *[p for _, p in others])
+            res = G.run_selfcheck(db_path, others, font_db, progress=True)
+            out = G.save(res)
+            summary = {k: v for k, v in res.items() if k not in ("findings", "all")}
+            summary["out"] = str(out)
+        elif args.action == "repair":
+            # 字头脏数据 + 同一格的机器副本；默认只报，--apply 才写
+            from .clustering.glyph_ledger import (evict_shadow_duplicates,
+                                                  repair_glyph_heads,
+                                                  semantic_disagreements)
+            db.close()
+            db = None
+            summary = {
+                "heads": repair_glyph_heads(db_path, dry_run=not args.apply),
+                "shadow": evict_shadow_duplicates(db_path, dry_run=not args.apply),
+                "semantic_disagreements（只报不改，交人裁）":
+                    semantic_disagreements(db_path),
+            }
         else:
-            summary = db.stats()
+            # 本书套总账（并套口径，见 glyph_ledger 模块头）＋ 原来的表行数
+            from .clustering.glyph_ledger import library_summary
+            summary = library_summary(db_path, store_dir)
+            summary["tables"] = db.stats()
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
         if db is not None:
@@ -1031,7 +1058,11 @@ def main():
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["import", "stats", "export", "rebuild",
-                            "import-font", "drop-edition"])
+                            "import-font", "drop-edition", "repair", "selfcheck"])
+    p.add_argument("--no-others", action="store_true",
+                   help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
+    p.add_argument("--apply", action="store_true",
+                   help="repair 用：真写库（不加只报告）")
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default=None,
                    help="字形库目录（真源）。不传按 core.workspace 解析"

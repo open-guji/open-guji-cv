@@ -137,6 +137,8 @@ DEFAULT_ROUTES: list[dict] = [
     {"match": {"kind": "mark_jiajie"}, "to": [{"consumer": "mark_jiajie"}]},
     {"match": {"kind": "collate_verdict"}, "to": [{"consumer": "collate_verdict"}]},
     {"match": {"kind": "unmark_jiajie"}, "to": [{"consumer": "unmark_jiajie"}]},
+    # 字形库体检裁决（2026-09-25）：撤库 / 改字 / 白名单，只动本工作区的 glyph.db
+    {"match": {"kind": "glyph_audit"}, "to": [{"consumer": "glyph_audit"}]},
 ]
 
 

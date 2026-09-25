@@ -380,6 +380,21 @@ def glyphdb_admit(events, db_path: str | None = None,
             from ..clustering.audit import evict_instance
             evict_instance(db, db_id)
             res.updated += 1
+        # 同一格的机器副本（2026-09-25）：播种按 `<book>:p:c:s` 进库，人裁按
+        # `v2:<book>:p:c:s` 进库，两者都是 v2 slot 坐标、是同一格。人裁到了就撤
+        # 机器那份——不撤的话，人改判后机器那份带着旧字继续当刻例（北行实测已有
+        # 17 格两份并存，碰巧都同字）。v1 来源（四庫 vol01 的 idx 坐标）同名不同格，不动。
+        twin = db_id[3:]
+        twin_src = twin.split(":", 1)[0]
+        if db.conn.execute(
+                "SELECT 1 FROM admissions a JOIN instances i USING(instance_id) "
+                "  LEFT JOIN sources s ON s.source_id = i.source_id "
+                " WHERE a.instance_id = ? AND a.provenance NOT LIKE 'human%' "
+                "   AND COALESCE(s.pipeline_version, '') != 'v1'",
+                (twin,)).fetchone() and twin_src != "v2":
+            from ..clustering.audit import evict_instance
+            evict_instance(db, twin)
+            res.updated += 1
         ok = db.admit_instance(
             db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
             provenance="human", shape=shape,
@@ -390,6 +405,26 @@ def glyphdb_admit(events, db_path: str | None = None,
             idx=int(e.target.slot or 0))
         if ok:
             res.added += 1
+            # v1 来源（四庫 vol01）的同一格在 idx = slot − 1 上，形状对得上才认（2026-09-25：
+            # 四庫 177 格两份并存，其中 37 格 v1 标的字是错的）。机器那份撤掉，人裁的不动。
+            from ..clustering.glyph_ledger import V1_TWIN_COV, v1_twin_id
+            t = v1_twin_id(db_id)
+            if t and t.split(":", 1)[0] != "v2":
+                row = db.conn.execute(
+                    "SELECT a.provenance FROM admissions a JOIN instances i USING(instance_id) "
+                    "  JOIN sources s ON s.source_id = i.source_id "
+                    " WHERE a.instance_id = ? AND s.pipeline_version = 'v1'", (t,)).fetchone()
+                if row and not str(row[0]).startswith("human"):
+                    from ..clustering.glyph_db import _unpng
+                    from ..clustering.verify import verify_pair_elastic
+                    n = dict(db.conn.execute(
+                        "SELECT instance_id, data FROM derived WHERE kind='norm' "
+                        "AND instance_id IN (?,?)", (db_id, t)))
+                    if len(n) == 2 and verify_pair_elastic(
+                            _unpng(n[db_id]), _unpng(n[t])).f1 >= V1_TWIN_COV:
+                        from ..clustering.audit import evict_instance
+                        evict_instance(db, t)
+                        res.updated += 1
         else:
             res.skipped += 1        # admit_instance 的幂等闸：已进过库
     return res
@@ -556,6 +591,10 @@ CONSUMERS = {
 # 与上面那批「这是什么字」不是一类，但走同一套路由与记账。
 from .collate_consumers import COLLATE_CONSUMERS  # noqa: E402
 CONSUMERS.update(COLLATE_CONSUMERS)
+
+# 字形库体检裁决（2026-09-25，字形库 03）：问的是「库里这个刻例定的字对不对」。
+from .glyph_audit import GLYPH_AUDIT_CONSUMERS  # noqa: E402
+CONSUMERS.update(GLYPH_AUDIT_CONSUMERS)
 
 
 def route_and_consume(log: EventLog, batch: str | None = None,
