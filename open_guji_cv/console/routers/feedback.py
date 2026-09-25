@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
+from ...feedback.anchor import enrich_events as _anchor_events
 from ...feedback.consumers import route_and_consume
 from ...feedback.events import EventTarget, make_event
 from ...feedback.harvest import harvest_text
@@ -152,6 +153,7 @@ def api_events(req: EventsIn) -> dict:
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
                                           anchor=_product_anchor(req.step, ids), **ids),
                               payload, source_format="server"))
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(req.batch)
     if b is None:
@@ -164,27 +166,26 @@ def api_events(req: EventsIn) -> dict:
                   notes="控制台直连裁决自动登记")
     if b.status == "draft":
         b.status = "open"
-    deps.batch_store().refresh_counts(b, deps.event_log())
-    deps.batch_store().save(b)
-    out = {"appended": n, "batch": req.batch, "total": len(deps.event_log().read(req.batch))}
+    out = {"appended": n, "batch": req.batch}
     if req.consume and n:
         # 写完直接消费（见 EventsIn.consume）。**失败不抛**：事件已经落盘，
         # 消费只是把它送进字形库/金标，出了岔子在「收割与消费」那块补跑即可——
         # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。
         try:
             table = RouteTable.load(deps.event_log().root / "routes.yaml")
-            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store())
+            # 只消费刚写进来的这几条（见 route_and_consume 的 event_ids）
+            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store(),
+                                    event_ids={e.id for e in evs})
             out["consumed"] = [
                 {"consumer": x["consumer"], "added": x["added"],
                  "skipped": x["skipped"], "errors": x["errors"][:3]}
                 for x in res["results"] if x["events"]]
             out["unrouted"] = res["unrouted"]
-            b2 = deps.batch_store().get(req.batch)
-            if b2:
-                deps.batch_store().refresh_counts(b2, deps.event_log())
-                deps.batch_store().save(b2)
         except Exception as exc:                       # noqa: BLE001
             out["consume_error"] = f"{type(exc).__name__}: {exc}"
+    # 批次计数只在最后刷一次（原来消费前后各刷一次，一次 0.3 s）；refresh_counts 自己会 save
+    deps.batch_store().refresh_counts(b, deps.event_log())
+    out["total"] = b.n_events
     return out
 
 
@@ -225,6 +226,7 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
         evs = [make_event(batch_id, base + i, e.kind, e.target, e.payload,
                           e.actor, e.source_format, e.ts)
                for i, e in enumerate(fresh, 1)]
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(batch_id)
     if b:
