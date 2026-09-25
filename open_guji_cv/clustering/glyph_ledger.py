@@ -103,6 +103,51 @@ def shadow_duplicates(c: sqlite3.Connection) -> list[tuple[str, str]]:
     return out
 
 
+#: v1 与 v2 同一格的形状闸：同页同列、v1 idx = v2 slot − 1、且归一图弹性覆盖率到这档
+#: 才认作同一格。四庫实测同形的 177 对几乎都是 0.999–1.0；不同形的（重切后错位）远低于此。
+V1_TWIN_COV = 0.98
+
+
+def v1_twin_id(v2_id: str) -> str | None:
+    """`v2:<book>:p:c:s` → v1 口径下同一格的候选 id `<book>:p:c:(s-1)`。
+
+    v1 的 idx 从 0 数、v2 的 slot 从 1 数（`glyphdb_admit` 文档串：同名 id 170 例
+    0 个一致——因为整体差一格）。带 a/b 子格后缀的 v1 没有对应，返回 None。"""
+    parts = v2_id.split(":")
+    if len(parts) != 5 or parts[0] != "v2" or not parts[4].isdigit():
+        return None
+    return f"{parts[1]}:{parts[2]}:{parts[3]}:{int(parts[4]) - 1}"
+
+
+def v1_shadow_duplicates(c: sqlite3.Connection, th: float = V1_TWIN_COV) -> list[dict]:
+    """v1 来源里与人裁 v2 刻例是同一格的那份：[{v1, v2, v1_char, v2_char, cov}]。
+
+    四庫 vol01 的机器准入（v1 管线）与后来的人裁（v2）各存一份，同形同字的是重复，
+    同形异字的是 **v1 标错**（淮/准、廣/蹟、機/棧、易/身…，以及 v1 把字形记成
+    读法：即/卽、歷/厯）——人裁那份才是对的。只认形状对得上的，重切后错位的不动。"""
+    from .glyph_db import _unpng
+    from .verify import verify_pair_elastic
+    v1 = _v1_sources(c)
+    if not v1:
+        return []
+    ex = {r[0] for r in c.execute("SELECT instance_id FROM exemplars")}
+    lab = dict(c.execute("SELECT instance_id, label FROM instances"))
+    out = []
+    for iid in sorted(ex):
+        t = v1_twin_id(iid)
+        if not t or t not in ex or t.split(":", 1)[0] not in v1:
+            continue
+        rows = dict(c.execute("SELECT instance_id, data FROM derived WHERE kind='norm' "
+                              "AND instance_id IN (?,?)", (iid, t)))
+        if len(rows) < 2:
+            continue
+        cov = float(verify_pair_elastic(_unpng(rows[iid]), _unpng(rows[t])).f1)
+        if cov >= th:
+            out.append({"v1": t, "v2": iid, "v1_char": lab.get(t), "v2_char": lab.get(iid),
+                        "cov": round(cov, 4)})
+    return out
+
+
 def store_drift(c: sqlite3.Connection, store_dir: str | Path | None) -> dict:
     """db 与真源 store 的刻例数差。db 不进 git，差额就是只在本机的数据。"""
     fe = _font_editions(c)
@@ -414,9 +459,12 @@ def evict_shadow_duplicates(db_path: str | Path, dry_run: bool = True) -> dict:
     c = connect_ro(db_path)
     try:
         pairs = shadow_duplicates(c)
+        v1pairs = v1_shadow_duplicates(c)
         prov = {iid: p for iid, p in c.execute("SELECT instance_id, provenance FROM admissions")}
     finally:
         c.close()
+    pairs = pairs + [(d["v1"], d["v2"]) for d in v1pairs]
+    # 机器那份才撤；两份都是人裁（v1 时代也有人裁）而字不同的，是人与人的分歧，留给体检
     todo = [(m, h) for m, h in pairs if not _prov_class(prov.get(m)).startswith("human")]
     if not dry_run and todo:
         db = GlyphDB(str(db_path))
@@ -426,5 +474,10 @@ def evict_shadow_duplicates(db_path: str | Path, dry_run: bool = True) -> dict:
             db.conn.commit()
         finally:
             db.close()
+    kept = [d for d in v1pairs if _prov_class(prov.get(d["v1"])).startswith("human")
+            and d["v1_char"] != d["v2_char"]]
     return {"dry_run": dry_run, "pairs": len(pairs), "evicted": len(todo),
+            "v1_pairs": len(v1pairs),
+            "v1_conflicts": [d for d in v1pairs if d["v1_char"] != d["v2_char"]],
+            "human_vs_human_kept": kept,
             "ids": [m for m, _ in todo]}

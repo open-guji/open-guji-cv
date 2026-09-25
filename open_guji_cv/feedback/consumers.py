@@ -405,6 +405,26 @@ def glyphdb_admit(events, db_path: str | None = None,
             idx=int(e.target.slot or 0))
         if ok:
             res.added += 1
+            # v1 来源（四庫 vol01）的同一格在 idx = slot − 1 上，形状对得上才认（2026-09-25：
+            # 四庫 177 格两份并存，其中 37 格 v1 标的字是错的）。机器那份撤掉，人裁的不动。
+            from ..clustering.glyph_ledger import V1_TWIN_COV, v1_twin_id
+            t = v1_twin_id(db_id)
+            if t and t.split(":", 1)[0] != "v2":
+                row = db.conn.execute(
+                    "SELECT a.provenance FROM admissions a JOIN instances i USING(instance_id) "
+                    "  JOIN sources s ON s.source_id = i.source_id "
+                    " WHERE a.instance_id = ? AND s.pipeline_version = 'v1'", (t,)).fetchone()
+                if row and not str(row[0]).startswith("human"):
+                    from ..clustering.glyph_db import _unpng
+                    from ..clustering.verify import verify_pair_elastic
+                    n = dict(db.conn.execute(
+                        "SELECT instance_id, data FROM derived WHERE kind='norm' "
+                        "AND instance_id IN (?,?)", (db_id, t)))
+                    if len(n) == 2 and verify_pair_elastic(
+                            _unpng(n[db_id]), _unpng(n[t])).f1 >= V1_TWIN_COV:
+                        from ..clustering.audit import evict_instance
+                        evict_instance(db, t)
+                        res.updated += 1
         else:
             res.skipped += 1        # admit_instance 的幂等闸：已进过库
     return res

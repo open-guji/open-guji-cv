@@ -80,3 +80,25 @@ def test_admit_heals_frozen_head(db):
     assert c.execute("select semantic, unicode_cp from glyphs where char='甲' "
                      "and edition_tag='bk'").fetchone() == ("甲", ord("甲"))
     c.close()
+
+
+def test_v1_twin_same_cell(tmp_path):
+    """v1 idx = v2 slot − 1 且形状对得上 = 同一格：机器那份撤，人裁那份留。"""
+    p = tmp_path / "g.db"
+    g = GlyphDB(p)
+    g.admit_instance("vo:3:4:9", "即", _png(0), provenance="align")        # v1 机器，记成读法
+    g.admit_instance("vo:3:4:5", "甲", _png(1), provenance="align")        # 不对应的格
+    g.admit_instance("v2:vo:3:4:10", "卽", _png(0), provenance="human")   # 同一格的人裁
+    ring = np.full((64, 64), 255, np.uint8)
+    cv2.circle(ring, (32, 32), 20, 0, 3)
+    g.admit_instance("v2:vo:3:4:6", "乙", cv2.imencode(".png", ring)[1].tobytes(),
+                     provenance="human")                                  # idx 对上但形不同
+    g.conn.execute("UPDATE sources SET pipeline_version='v1' WHERE source_id='vo'")
+    g.conn.commit()
+    g.close()
+    c = sqlite3.connect(p)
+    got = L.v1_shadow_duplicates(c)
+    c.close()
+    assert [(d["v1"], d["v2"]) for d in got] == [("vo:3:4:9", "v2:vo:3:4:10")]
+    sh = L.evict_shadow_duplicates(p, dry_run=False)
+    assert sh["ids"] == ["vo:3:4:9"] and len(sh["v1_conflicts"]) == 1
