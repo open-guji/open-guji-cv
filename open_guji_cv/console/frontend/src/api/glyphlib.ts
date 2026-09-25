@@ -85,10 +85,15 @@ export const fetchLibAudit = (all = false) => api<AuditResult>(`/api/glyphlib/au
 
 export interface AuditDecision {
   key: string; instance_id: string; v: 'ok' | 'near_form' | 'evict' | 'relabel' | 'fidelity'
-  fidelity?: string | null; ids?: string; targets?: string[]
+  fidelity?: string | null; ids?: string; targets?: string[]; force?: boolean
   target?: string; char?: string; char_self?: string; peer?: string | null; peer_char?: string | null; flags?: string[]
 }
 export const postLibAudit = (d: AuditDecision) =>
   api<{ ok: boolean; error?: string; consume_error?: string }>('/api/glyphlib/audit/decide', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d),
   })
+
+// ── IDS 反查（标「最近似码位 / 无码」前先查 Unicode 里有没有同结构的字）──
+export interface IdsHit { char: string; cp: number; block: string; ids: string; match: 'exact' | 'expanded' | 'near'; diff: number; in_book: boolean }
+export const fetchIdsLookup = (q: string) =>
+  api<{ query: string; expanded: string; hits: IdsHit[]; error?: string }>(`/api/glyphlib/ids-lookup?q=${encodeURIComponent(q)}`)

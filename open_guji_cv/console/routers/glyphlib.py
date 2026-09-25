@@ -172,6 +172,7 @@ class AuditDecideIn(BaseModel):
     fidelity: str | None = None  # exact | nearest | unencoded（字形库 04）
     ids: str | None = None       # nearest / unencoded 时刻例的实际结构
     targets: list[str] = []      # fidelity 一次标多例
+    force: bool = False          # nearest/unencoded 的 IDS 在 Unicode 里已有同结构字时，人确认仍要这样标
 
 
 @router.post("/api/glyphlib/audit/decide")
@@ -227,3 +228,27 @@ def api_glyphlib_font(char: str) -> Response:
             return Response(bytes(row[0]), media_type="image/png",
                             headers={"Cache-Control": "max-age=3600"})
     raise HTTPException(404, f"没有找到「{char}」的字体渲染")
+
+
+@router.get("/api/glyphlib/ids-lookup")
+@maps_http
+def api_glyphlib_ids_lookup(q: str, near: int = 12) -> dict:
+    """IDS 反查（`clustering/ids_lookup.py`）：这条结构 Unicode 里有没有字。
+    标「最近似码位 / 无码」之前先查——很多「没有」的字其实在扩展区有编码。
+    每个命中另标本书库里有没有这个字（`in_book`）。"""
+    import sqlite3
+    from ...clustering.ids_lookup import lookup
+    r = lookup(q, near=near)
+    try:
+        db, _ = _paths()
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            have = {row[0] for row in c.execute(
+                "SELECT DISTINCT char FROM glyphs WHERE edition_tag NOT LIKE 'font:%'")}
+        finally:
+            c.close()
+    except HTTPException:
+        have = set()
+    for h in r["hits"]:
+        h["in_book"] = h["char"] in have
+    return r
