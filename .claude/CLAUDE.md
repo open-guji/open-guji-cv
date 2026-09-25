@@ -94,6 +94,12 @@ python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 �
 - `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` — 跳过模型源连接检查，加快启动速度
 - `PYTHONIOENCODING=utf-8` — Windows 控制台中文输出必须设置
 
+### 云服务器上的内存额度（2026-09-26）
+- 云服务器只有 7.5G，跑批曾多次把整机拖进 OOM。所有跑批共用 `guji-batch.slice`（上限 3.5G），超了只杀跑批本身。
+- `python -m open_guji_cv` / `guji` 的跑批子命令会**自动**进这个 slice（见 `utils/batch_slice.py`）；`console`/`ui`/`review`/`status`/`cache` 不进。
+- **自己写的临时脚本**（scratchpad 里的 `ab_book.py` 之类）不会自动进，要包一层：`guji-batch .venv/bin/python xxx.py ...`。
+- cv 控制台由 systemd 托管（`systemctl --user status guji-cv-console`），挂了自动拉起；重启用 `runs/restart_console.sh`，**不要再用 nohup 起第二个**。
+
 ### 本机环境（2026-09-03）
 - 仓里的 `venv/` 指向已卸载的 Store Python 3.13，**是死的**。用 `.venv/`（uv 建，Python 3.12）：
   `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented fontTools scipy`
