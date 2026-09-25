@@ -250,6 +250,23 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
 
 
 # ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
+def _unmojibake(s: str | None) -> str | None:
+    """UTF-8 被当 cp1252 / latin-1 解过一遍的乱码还原（「å†…」→「内」）。
+
+    2026-09-16 那批 `vol01-p1-30-confirm-20260916` 的 56 条事件字形全是这种乱码，
+    消费不了、一直挂着；万一被消费，三个拉丁字母会被当字形进库。还原不了的原样返回。"""
+    if not s or all(ord(ch) >= 0x2E80 for ch in s):
+        return s
+    for enc in ("cp1252", "latin-1"):
+        try:
+            fixed = s.encode(enc).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if fixed and all(ord(ch) >= 0x2E80 for ch in fixed):
+            return fixed
+    return s
+
+
 def glyphdb_admit(events, db_path: str | None = None,
                   dry_run: bool = False, binarize: bool = True, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
@@ -312,8 +329,8 @@ def glyphdb_admit(events, db_path: str | None = None,
     db = GlyphDB(str(glyph_db_path(db_path)))
     cache = ImageCache()
     for e, _dest in admits:
-        shape = e.payload.get("shape") or e.payload.get("char")
-        reading = e.payload.get("reading") or shape
+        shape = _unmojibake(e.payload.get("shape") or e.payload.get("char"))
+        reading = _unmojibake(e.payload.get("reading")) or shape
         # 只有 己/已/巳 分字形与文意（用户 2026-09-04 定；审查页与组视图同规则）。
         # 其它字的 reading 一律跟随 shape——旧组视图曾对所有组填整理本字当文意
         # （「卽 读 即」×45），那批事件已清账，这里再守一道免得任何来源重犯。
@@ -323,6 +340,11 @@ def glyphdb_admit(events, db_path: str | None = None,
             reading = shape                 # 拼音首字母那类（输入法没转）
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
+            res.skipped += 1
+            continue
+        if len(shape) != 1 or ord(shape) < 0x2E80:
+            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引
+            res.errors.append(f"{e.target.key}: 字形 {shape!r} 不是单个汉字，跳过")
             res.skipped += 1
             continue
         if e.payload.get("no_glyph_lib"):
@@ -341,11 +363,21 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.skipped += 1
             continue
         path = cache.get(book, "char_patch", ckey)
+        db_id0 = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
+        lib_png = None
         if path is None:
-            res.errors.append(f"{e.target.key}: 缓存里没有字块 {ckey}")
-            res.skipped += 1
-            continue
-        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+            # 字块缓存会被清（LRU）。这一格**已在库里**（改判）时，图块就用库里那张——
+            # 字形库 08（2026-09-26）实测：缓存没了改判就一直消费失败，库里留着旧字。
+            row = db.conn.execute("SELECT patch_png FROM instances WHERE instance_id=?",
+                                   (db_id0,)).fetchone()
+            if row is None:
+                res.errors.append(f"{e.target.key}: 缓存里没有字块 {ckey}")
+                res.skipped += 1
+                continue
+            lib_png = bytes(row[0])
+        import numpy as np
+        img = (cv2.imdecode(np.frombuffer(lib_png, np.uint8), cv2.IMREAD_GRAYSCALE)
+               if lib_png is not None else cv_imread(str(path), cv2.IMREAD_GRAYSCALE))
         if img is None:
             res.errors.append(f"{e.target.key}: 图块读不出来")
             res.skipped += 1
@@ -355,7 +387,7 @@ def glyphdb_admit(events, db_path: str | None = None,
         # （`_unpng` 固定阈 128 / `normalize_patch` Sauvola，两处可能不一致）。
         # 与播种（`seed_witness`）和整页副本（`utils/binarized`）**共用同一个
         # 二值化**，保证库里那张 = 人裁看到那张 = 播种进去那张。
-        if binarize:
+        if binarize and lib_png is None:          # 库里那张已是二值 canonical
             # ⚠️ `edge_margin=0`（2026-09-19）。`binarize_page` 是给**整页**用的，2026-09-17 起
             # 最外 20px 强制判纸（挡扫描纸缘的浅灰渐变）；字块只有 64×88 上下，套上去等于
             # 把四边各 20px 的笔画全抹掉，只剩中间一小块。后果：09-18/19 入库的 405 条人裁

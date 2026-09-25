@@ -705,6 +705,7 @@ def cmd_glyph_db(args):
         elif args.action == "repair":
             # 字头脏数据 + 同一格的机器副本；默认只报，--apply 才写
             from .clustering.glyph_ledger import (evict_shadow_duplicates,
+                                                  label_mismatches,
                                                   repair_glyph_heads,
                                                   semantic_disagreements)
             db.close()
@@ -712,6 +713,7 @@ def cmd_glyph_db(args):
             summary = {
                 "heads": repair_glyph_heads(db_path, dry_run=not args.apply),
                 "shadow": evict_shadow_duplicates(db_path, dry_run=not args.apply),
+                "labels": label_mismatches(db_path, apply=args.apply),
                 "semantic_disagreements（只报不改，交人裁）":
                     semantic_disagreements(db_path),
             }

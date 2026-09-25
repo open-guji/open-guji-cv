@@ -216,3 +216,32 @@ def test_v1_namespace_twin_is_not_evicted(lib):
     assert c.execute("select count(*) from exemplars where instance_id=?",
                      (v1,)).fetchone()[0] == 1, "v1 同名 id 是另一格，不该撤"
     c.close()
+
+
+def test_mojibake_shape_is_repaired_or_rejected(lib):
+    """UTF-8 被当 cp1252 解过的乱码（「å†…」＝内）还原后进库；还原不了的不进库。"""
+    db, cells = lib
+    r = _confirm(db, cells[3], {"v": "confirm", "shape": "å†…"})
+    assert r.added == 1, r.errors
+    pg, col, slot = cells[3]
+    c = sqlite3.connect(db)
+    assert c.execute("select label from instances where instance_id=?",
+                     (f"v2:{BOOK}:{pg}:{col}:{slot}",)).fetchone()[0] == "内"
+    c.close()
+    r = _confirm(db, cells[4], {"v": "confirm", "shape": "abc"})
+    assert r.added == 0 and "不是单个汉字" in r.errors[0]
+
+
+def test_relabel_without_cache_uses_library_patch(lib, monkeypatch):
+    """字块缓存被清之后改判：图块用库里那张，改判照样落库。"""
+    db, cells = lib
+    assert _confirm(db, cells[5], {"v": "confirm", "shape": "甲"}).added == 1
+    from open_guji_cv.products.cache import ImageCache
+    monkeypatch.setattr(ImageCache, "get", lambda self, *a, **k: None)
+    r = _confirm(db, cells[5], {"v": "confirm", "shape": "乙"})
+    assert r.added == 1, r.errors
+    pg, col, slot = cells[5]
+    c = sqlite3.connect(db)
+    assert c.execute("select label from instances where instance_id=?",
+                     (f"v2:{BOOK}:{pg}:{col}:{slot}",)).fetchone()[0] == "乙"
+    c.close()
