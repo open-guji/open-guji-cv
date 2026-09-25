@@ -169,3 +169,50 @@ def test_missing_patch_is_an_error_not_a_silent_skip(lib):
                            PAGE, 99, 99)], db_path=str(db))
     assert r.added == 0
     assert r.errors, "字块找不到却既没进库也没报错"
+
+
+def _seed_machine_copy(db, iid, char, source_pv=None):
+    """往库里插一条机器准入的刻例（模拟播种），可指定来源的 pipeline_version。"""
+    import cv2
+    import numpy as np
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    g = GlyphDB(db)
+    img = np.full((64, 64), 255, np.uint8)
+    cv2.rectangle(img, (20, 10), (44, 54), 0, 4)
+    g.admit_instance(iid, char, cv2.imencode(".png", img)[1].tobytes(),
+                     provenance="align", evidence={"test": True})
+    if source_pv:
+        g.conn.execute("UPDATE sources SET pipeline_version=? WHERE source_id=?",
+                       (source_pv, iid.split(":")[0]))
+        g.conn.commit()
+    g.close()
+
+
+def test_human_verdict_evicts_machine_copy_of_same_cell(lib):
+    """播种 `<book>:p:c:s` 与人裁 `v2:<book>:p:c:s` 是同一格：人裁到了撤机器那份，
+    否则人改判后机器那份带着旧字继续当刻例（2026-09-25 北行实测 17 格两份并存）。"""
+    db, cells = lib
+    pg, col, slot = cells[1]
+    machine = f"{BOOK}:{pg}:{col}:{slot}"
+    _seed_machine_copy(db, machine, "甲")
+    r = _confirm(db, cells[1], {"v": "confirm", "shape": "乙"})
+    assert r.added == 1, r.errors
+    c = sqlite3.connect(db)
+    assert c.execute("select count(*) from exemplars where instance_id=?",
+                     (machine,)).fetchone()[0] == 0, "机器副本该被撤掉"
+    assert c.execute("select count(*) from glyphs where char='甲'").fetchone()[0] == 0
+    c.close()
+
+
+def test_v1_namespace_twin_is_not_evicted(lib):
+    """v1 来源（idx 坐标）同名 id 指的是另一格，人裁不能顺手撤它。"""
+    db, cells = lib
+    pg, col, slot = cells[2]
+    v1 = f"{BOOK}:{pg}:{col}:{slot}"
+    _seed_machine_copy(db, v1, "甲", source_pv="v1")
+    r = _confirm(db, cells[2], {"v": "confirm", "shape": "乙"})
+    assert r.added == 1, r.errors
+    c = sqlite3.connect(db)
+    assert c.execute("select count(*) from exemplars where instance_id=?",
+                     (v1,)).fetchone()[0] == 1, "v1 同名 id 是另一格，不该撤"
+    c.close()

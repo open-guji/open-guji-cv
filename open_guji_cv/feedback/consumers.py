@@ -380,6 +380,21 @@ def glyphdb_admit(events, db_path: str | None = None,
             from ..clustering.audit import evict_instance
             evict_instance(db, db_id)
             res.updated += 1
+        # 同一格的机器副本（2026-09-25）：播种按 `<book>:p:c:s` 进库，人裁按
+        # `v2:<book>:p:c:s` 进库，两者都是 v2 slot 坐标、是同一格。人裁到了就撤
+        # 机器那份——不撤的话，人改判后机器那份带着旧字继续当刻例（北行实测已有
+        # 17 格两份并存，碰巧都同字）。v1 来源（四庫 vol01 的 idx 坐标）同名不同格，不动。
+        twin = db_id[3:]
+        twin_src = twin.split(":", 1)[0]
+        if db.conn.execute(
+                "SELECT 1 FROM admissions a JOIN instances i USING(instance_id) "
+                "  LEFT JOIN sources s ON s.source_id = i.source_id "
+                " WHERE a.instance_id = ? AND a.provenance NOT LIKE 'human%' "
+                "   AND COALESCE(s.pipeline_version, '') != 'v1'",
+                (twin,)).fetchone() and twin_src != "v2":
+            from ..clustering.audit import evict_instance
+            evict_instance(db, twin)
+            res.updated += 1
         ok = db.admit_instance(
             db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
             provenance="human", shape=shape,
