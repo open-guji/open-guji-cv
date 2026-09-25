@@ -72,6 +72,9 @@ Kind = Literal[
                       #   cat∈variant/jiajie/taboo/other, fix, final, ctx 快照）。**逐字位**、
                       #   后到覆盖，who 空 = 退回待审。改字那部分另写一条带 via 的 confirm。
     "unmark_jiajie",  # 撤一条通假字对（payload: pair, book）→ 从 jiajie.tsv 删掉本书标的那行。
+    # ── 字形库体检（2026-09-25，字形库 03）。见 feedback/glyph_audit.py。
+    "glyph_audit",    # 库里一个刻例定的字对不对（payload: v∈ok/near_form/evict/relabel,
+                      #   instance_id, key, target, char, peer, peer_char, flags）
 ]
 
 Actor = Literal["user", "model", "align"]
