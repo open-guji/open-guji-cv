@@ -786,6 +786,9 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
 # ─── 主入口 ───────────────────────────────────────────────
 
 def main():
+    from .utils.batch_slice import enter_batch_slice
+    enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
+
     parser = argparse.ArgumentParser(
         prog="guji-cv",
         description="古籍图像 OCR 分析框架",
