@@ -21,6 +21,10 @@ Step1 版框动 1px 就让 54 页 Step4–8 全过期——绝大多数格的图
 3. **逐格几何没变**：`bbox_page`（原图规范空间，与 Step2 列窗怎么漂无关）四角各 ≤ `tol` px，
    且 cell_type / step3_kind / flags / patch_key 相同。`bbox_page` 为 None（没有映射）→ 这格不复用。
 
+**格级失效**（2026-09-25）：manifest 条目带 `invalidated` + `recheck`（格 id 表）时，
+闸 1 不因 `invalidated` 拒绝，只把 `recheck` 里的格剔出复用表——这是 `guji recheck`
+「只重算点名的格」的落点。整页失效（`recheck` 为 None）照旧一格不复用。
+
 复用的记录**逐字节等于旧记录**，产物里看不出它是搬来的（用户 2026-09-20 待定项之一，
 先按"不带标记"做，要审计看引擎日志的「复用 n/m 格」）。
 """
@@ -57,9 +61,11 @@ def cell_reuse(ctx, step, page: int, own_kind: str, upstream_kind: str = "char_i
     from .engine import self_hash
     book, sid, key = ctx.book.id, step.spec.id, page_key(page)
     entry = ctx.store.manifest(book, sid).get(key)
-    if (entry is None or entry.status != "ok" or entry.invalidated or not entry.self_hash
+    if (entry is None or entry.status != "ok" or not entry.self_hash
+            or (entry.invalidated and entry.recheck is None)
             or entry.self_hash != self_hash(step, ctx.book, ctx.params_for(step))):
         return {}
+    recheck = set(entry.recheck or []) if entry.invalidated else set()
     # 盘上这份旧产物得是 manifest 说的那份（别人手改过就不认）
     if entry.sha256 and ctx.store.sha(book, sid, key) != entry.sha256:
         return {}
@@ -85,7 +91,7 @@ def cell_reuse(ctx, step, page: int, own_kind: str, upstream_kind: str = "char_i
             continue
         for r in cc.chars:
             g0, g1 = old_geom.get(r.id), _geom(r)
-            if g0 and g1 and r.id in own_recs and _same(g0, g1, tol):
+            if g0 and g1 and r.id in own_recs and r.id not in recheck and _same(g0, g1, tol):
                 out[r.id] = own_recs[r.id]
     return out
 

@@ -75,9 +75,21 @@ def _jsonable(v):
     return str(v)
 
 
-def params_hash(params: BaseModel) -> str:
-    return hashlib.sha256(json.dumps(params.model_dump(mode="json"), sort_keys=True,
+def params_hash(params: BaseModel, soft: tuple[str, ...] = ()) -> str:
+    """参数指纹。`soft` 里的字段剔掉不算（`StepSpec.soft_params`）；没有软参数的步
+    与 2026-09-25 之前逐位相同。"""
+    d = params.model_dump(mode="json")
+    for k in soft:
+        d.pop(k, None)
+    return hashlib.sha256(json.dumps(d, sort_keys=True,
                                      ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def soft_values(step: Step, params: BaseModel) -> dict[str, str] | None:
+    """这次跑的软参数取值（记进 manifest，`status` 比漂移用）；无软参数 → None。"""
+    if not step.spec.soft_params:
+        return None
+    return {k: str(getattr(params, k, "")) for k in step.spec.soft_params}
 
 
 def git_rev(repo: Path | None = None) -> str | None:
@@ -150,7 +162,7 @@ def _self_payload(step: Step, book: BookSpec, ph: str) -> dict:
 def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
     """本步自身的指纹（不含上游）。引擎写进 `ManifestEntry.self_hash`，
     `RunContext`（含并行 worker 里没有 Engine 的那份）也能独立算出同一个值。"""
-    payload = _self_payload(step, book, params_hash(params))
+    payload = _self_payload(step, book, params_hash(params, step.spec.soft_params))
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
 
 
@@ -235,7 +247,7 @@ class Engine:
     def fingerprint(self, step: Step, page: int) -> tuple[str | None, dict[str, str] | None, str]:
         ups = self.upstream_shas(step, page)
         p = self.ctx.params_for(step)
-        ph = params_hash(p)
+        ph = params_hash(p, step.spec.soft_params)
         if ups is None:
             return None, None, ph
         payload = {**_self_payload(step, self.book, ph), "upstream": ups}
@@ -265,6 +277,10 @@ class Engine:
         per_page: dict[int, dict] = {}
         counts = {FRESH: 0, STALE: 0, MISSING: 0, FAILED: 0, BLOCKED: 0}
         page_state: dict[int, str] = {}
+        # 软参数漂移（`StepSpec.soft_params`）：只报数、不改状态。老条目没记 `soft`
+        # （软化之前跑的）也算漂移——不知道当时对的是哪个库。
+        soft_now = soft_values(step, self.ctx.params_for(step))
+        n_drift = 0
         for pg in pages:
             st, entry = self.page_status(step, pg)
             upstream_stale = st == FRESH and not upstream_fresh.get(pg, True)
@@ -272,11 +288,14 @@ class Engine:
                 st = STALE
             page_state[pg] = st
             counts[st] += 1
-            per_page[pg] = {"status": st, "upstream_stale": upstream_stale,
+            drift = bool(soft_now and entry and entry.status == "ok"
+                         and (entry.soft or {}) != soft_now)
+            n_drift += drift
+            per_page[pg] = {"status": st, "upstream_stale": upstream_stale, "drift": drift,
                             "ts": entry.ts if entry else None,
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
-        return {"counts": counts, "pages": per_page}, page_state
+        return {"counts": counts, "pages": per_page, "drift": n_drift}, page_state
 
     def status(self, pages: list[int] | None = None, steps: list[str] | None = None) -> dict:
         """每步每页的状态。**过期沿 DAG 向下传**：某页的任一直接上游不是 fresh，本步该页
@@ -373,7 +392,8 @@ class Engine:
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, elapsed=round(elapsed, 3),
-                                           self_hash=self.self_hash(step)))
+                                           self_hash=self.self_hash(step),
+                                           soft=soft_values(step, self.ctx.params_for(step))))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
@@ -468,7 +488,8 @@ class Engine:
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                                params_hash=ph, upstream=ups or {},
                                                code_rev=self._rev, elapsed=round(elapsed, 3),
-                                               self_hash=self.self_hash(step)))
+                                               self_hash=self.self_hash(step),
+                                               soft=soft_values(step, self.ctx.params_for(step))))
                     self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
                     report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
                 except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批

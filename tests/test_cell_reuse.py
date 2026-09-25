@@ -136,3 +136,51 @@ def test_cell_without_page_bbox_is_never_reused(tmp_path):
                    bbox_col=(0, 0, 10, 10), bbox_page=None, patch_key="k")]
     ctx = _setup(tmp_path, old, old)
     assert cell_reuse(ctx, STEP, 1, "glyph_match") == {}
+
+
+# ── 格级失效（`guji recheck`，2026-09-25）────────────────────────────────
+
+def test_cell_level_invalidation_reuses_all_but_named_cells(tmp_path):
+    old = [_char(1, (10, 10, 60, 70)), _char(2, (10, 80, 60, 140)), _char(3, (10, 150, 60, 210))]
+    ctx = _setup(tmp_path, old, old)
+    man = ctx.store.manifest("tb", "glyph_match")
+    assert man.invalidate("p0001", "recheck chars=甲", cells=["tb:1:1:2"])
+    assert set(cell_reuse(ctx, STEP, 1, "glyph_match")) == {"tb:1:1:1", "tb:1:1:3"}
+
+
+def test_whole_page_invalidation_reuses_nothing(tmp_path):
+    old = [_char(1, (10, 10, 60, 70))]
+    ctx = _setup(tmp_path, old, old)
+    ctx.store.manifest("tb", "glyph_match").invalidate("p0001", "人裁")
+    assert cell_reuse(ctx, STEP, 1, "glyph_match") == {}
+
+
+def test_invalidate_merges_cells_and_whole_page_wins(tmp_path):
+    store = ProductStore(tmp_path)
+    man = store.manifest("tb", "glyph_match")
+    man.put(ManifestEntry(key="p0001", fingerprint="f"))
+    man.invalidate("p0001", "a", cells=["x"])
+    man.invalidate("p0001", "b", cells=["y"])
+    assert man.get("p0001").recheck == ["x", "y"]
+    man.invalidate("p0001", "c")                 # 整页压过格级
+    assert man.get("p0001").recheck is None and man.get("p0001").invalidated
+    man.invalidate("p0001", "d", cells=["z"])    # 整页之后再来格级，不降级
+    assert man.get("p0001").recheck is None
+    # 落盘再读回来一致
+    from open_guji_cv.products.manifest import Manifest
+    assert Manifest(man.path).get("p0001").recheck is None
+
+
+def test_recheck_reasons():
+    from open_guji_cv.products.kinds.recog import CandidateMatch
+    from open_guji_cv.steps.glyph_match import recheck_reasons
+    r = MatchRec(id="a", slot=1, verdict="unsure", char=None, candidates=[("虜", 0.95), ("虚", 0.9)])
+    assert recheck_reasons(r, chars={"虜"}) == ["char"]
+    assert recheck_reasons(r, chars={"甲"}) == []
+    assert recheck_reasons(r, verdicts={"unsure", "diff"}) == ["verdict"]
+    s = MatchRec(id="b", slot=2, verdict="same", char="甲", matched_id="i1",
+                 cand_variants=[CandidateMatch(side="a", cand_idx=0, verdict="same", char="乙")])
+    assert recheck_reasons(s, chars={"乙"}) == ["char"]            # 候选试切里的字也算
+    assert recheck_reasons(s, live={"i1": {"甲"}}) == []
+    assert recheck_reasons(s, live={"i1": {"由"}}) == ["dead"]      # 字头改了
+    assert recheck_reasons(s, live={}) == ["dead"]                  # 条目撤了

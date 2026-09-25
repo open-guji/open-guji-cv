@@ -37,41 +37,60 @@ def test_db_fingerprint_lands_in_params_automatically():
     assert p.db_fingerprint == db_fingerprint(p.db_path)
 
 
-def test_params_hash_changes_when_the_library_changes():
-    """库指纹一变，参数哈希必须跟着变——这是 stale 传播的唯一依据。"""
+def test_library_fingerprint_is_soft_in_params_hash():
+    """库指纹是软参数（2026-09-25）：按 Step 的 `soft_params` 算的参数哈希不随库变，
+    不剔的全量哈希照旧会变（剔的是这一个字段，不是别的）。"""
+    soft = STEPS["glyph_match"].spec.soft_params
+    assert soft == ("db_fingerprint",)
     a = GlyphMatchParams(db_fingerprint="aaaa")
     b = GlyphMatchParams(db_fingerprint="bbbb")
+    assert params_hash(a, soft) == params_hash(b, soft)
     assert params_hash(a) != params_hash(b)
+    c = GlyphMatchParams(db_fingerprint="aaaa", knn_k=7)
+    assert params_hash(a, soft) != params_hash(c, soft)
 
 
 def test_missing_db_does_not_crash_fingerprint():
     assert db_fingerprint("no/such/glyph.db") == "nodb"
 
 
-def test_stale_propagates_when_library_fingerprint_changes(tmp_path, monkeypatch, ws,
-                                                          fixture_page):
-    """换一个库指纹，产物指纹必须跟着变——这是 stale 传播的唯一依据。
+def test_library_change_does_not_stale_but_is_reported_as_drift(tmp_path, monkeypatch, ws,
+                                                                fixture_page):
+    """库指纹变了：Step 指纹**不变**（不判过期），`status` 在 `drift` 里报出来
+    （2026-09-25 用户定：库进几个新字形不该让全书 Step5-a 重跑）。
 
-    ⚠️ **不能断言「当前是 fresh」**：库是活的，人裁一进库指纹就变、这一步
-    立刻转 stale（2026-09-04 实测：用户 82 条定字进库后 p24 就是 stale——
-    那正是这个机制在正常工作）。所以直接比两个指纹，不看当前状态。
-
-    2026-09-20：不再去工作区找「vol01/24 跑过没有」，改成拿冻结样页把上游
-    产物现跑出来——指纹算的是上游产物 + 参数，跟那份产物具体是哪本书的无关。
+    拿冻结样页把上游产物现跑出来，再用固定库指纹跑一遍 glyph_match 落 manifest。
     """
     import open_guji_cv.steps  # noqa: F401
+    from dataclasses import dataclass
     from helpers import run_keben_from_raw
+    from open_guji_cv.clustering.match import MatchResult
+
+    @dataclass
+    class _StubMatcher:
+        def match(self, img, exclude_id=None):
+            return MatchResult(verdict="diff", char=None, matched_id=None, cov=0.5,
+                               wmax=30.0, candidates=[], n_verified=0)
 
     bk = load_book("keben")
     ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
     eng = Engine(bk, load_pipeline("keben_body_v2"), ctx.store, ctx.cache)
     step = STEPS["glyph_match"]
+    monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
 
     eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="aaaa")
     fp_a, _, _ = eng.fingerprint(step, 1)
+    eng.run(steps=["glyph_match"], pages=[1])
+    assert eng.store.manifest(bk.id, "glyph_match").get("p0001").soft == {"db_fingerprint": "aaaa"}
+    row = eng.status(pages=[1], steps=["glyph_match"])["steps"]["glyph_match"]
+    assert row["drift"] == 0
+    before = row["pages"][1]["status"]     # 样页的上游闸不一定全新鲜，只比前后
+
     eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="bbbb")
     fp_b, _, _ = eng.fingerprint(step, 1)
-    assert fp_a and fp_b and fp_a != fp_b, "库指纹变了，Step 指纹却没变"
+    assert fp_a and fp_a == fp_b, "库指纹变了，Step 指纹不该跟着变（软参数）"
+    row = eng.status(pages=[1], steps=["glyph_match"])["steps"]["glyph_match"]
+    assert row["pages"][1]["status"] == before and row["drift"] == 1
 
 
 def test_products_carry_per_instance_evidence(tmp_path, monkeypatch, ws, fixture_page):
