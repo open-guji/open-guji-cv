@@ -12,7 +12,8 @@
 - ``pipeline``   机器准入的刻例（align / match / context）：这一格现在的 seed_admit 已不放行，或放行成别的字
 - ``drift``      （--drift）库里的图与这一格现在的字块图不像了——重切之后 id 指到了别的字
 
-v1 来源（四庫 vol01 旧管线，idx 从 0）按 slot = idx+1 对到现在的格；只作参考，不保证同格。
+v1 来源（四庫 vol01 旧管线，idx 从 0）默认按 slot = idx+1 猜现在的格（`v1_guess=true`，只作参考）；
+给了 `--v1-map <glyph_v1_map.py 输出>` 就改用按形状确认过的现格。
 只报不改；每条带足证据，改库走控制台字形库页或 glyph_audit 事件。
 """
 from __future__ import annotations
@@ -30,7 +31,12 @@ from open_guji_cv.core.workspace import (exclusions_path, feedback_root,  # noqa
                                          glyph_db_path, products_root)
 
 
+V1_MAP: dict[str, str] = {}      # v1 id → 按形状确认过的现格（glyph_v1_map.py 的 exact/match）
+
+
 def cell_of(iid: str, v1: set[str]) -> str | None:
+    if iid in V1_MAP:
+        return V1_MAP[iid]
     p = iid.split(":")
     if p[0] == "v2" and len(p) == 5:
         return ":".join(p[1:])
@@ -83,6 +89,11 @@ def pipeline_decisions(book_dirs: list[Path]) -> dict[str, dict]:
 def main() -> int:
     out_path = Path(sys.argv[1])
     drift = "--drift" in sys.argv
+    if "--v1-map" in sys.argv:
+        for ln in open(sys.argv[sys.argv.index("--v1-map") + 1], encoding="utf-8"):
+            d = json.loads(ln)
+            if d["status"] in ("exact", "match") and d["cell"]:
+                V1_MAP[d["v1"]] = d["cell"]
     db = glyph_db_path()
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     v1 = {r[0] for r in c.execute("SELECT source_id FROM sources WHERE pipeline_version='v1'")}
@@ -110,7 +121,7 @@ def main() -> int:
             continue
         human = (prov or "").startswith("human")
         base = {"instance_id": iid, "cell": cell, "char": ch, "provenance": prov, "admitted_at": at,
-                "v1_guess": iid.split(":")[0] in v1}
+                "v1_guess": iid.split(":")[0] in v1 and iid not in V1_MAP}
         x = excl.get(cell)
         if x and x.get("origin") == "human" and x.get("reason") in ("not_a_char", "damaged"):
             findings.append({**base, "check": "excluded", "why": x.get("reason"),

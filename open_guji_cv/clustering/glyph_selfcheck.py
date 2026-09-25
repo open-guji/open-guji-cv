@@ -264,6 +264,16 @@ def run_selfcheck(db_path: str | Path,
     c.close()
     cells = [cell_key(e.instance_id, v1) if not e.origin else f"{e.origin}|{e.instance_id}"
              for e in pool]
+    # 同一物理格按「同册同页同列、格号差 ≤2」认（与 GlyphMatcher._same_cell_rows 同口径）：
+    # v1 idx、v2 slot、重切漂移都在这个范围里，别拿自己的另一份当同字参照 / 对手
+    from .match import _cell_parts
+    parts = [_cell_parts(e.instance_id) if not e.origin else None for e in pool]
+
+    def same_cell(i: int, j: int) -> bool:
+        if cells[i] == cells[j]:
+            return True
+        a, b = parts[i], parts[j]
+        return a is not None and b is not None and a[:3] == b[:3] and abs(a[3] - b[3]) <= 2
 
     by_sem: dict[tuple[str, str], list[int]] = {}
     for i, e in enumerate(pool):
@@ -290,8 +300,8 @@ def run_selfcheck(db_path: str | Path,
         sims = F @ F[i]
         order = np.argsort(-sims)
         neigh = [int(j) for j in order[: KNN_GLOBAL + 4]
-                 if int(j) != i and cells[int(j)] != cells[i]][:KNN_GLOBAL]
-        same_self = [j for j in by_sem.get(("", e.semantic), []) if cells[j] != cells[i]]
+                 if int(j) != i and not same_cell(i, int(j))][:KNN_GLOBAL]
+        same_self = [j for j in by_sem.get(("", e.semantic), []) if not same_cell(i, j)]
         for grp in [same_self] + [by_sem.get((ws, e.semantic), []) for ws, _ in others]:
             for j in sorted(grp, key=lambda j: -float(sims[j]))[:KNN_SAME]:
                 if j not in neigh and j != i:
