@@ -82,7 +82,9 @@ class OcrCandidatesStep(Step):
         chars: PageChars = ctx.product("char_index", page)
         try:
             src = self._source(p)
-            engine = "rapidocr"
+            # 逐格记**实际**引擎（2026-09-26 修）：原先写死 "rapidocr"，默认早已是 paddle
+            # （PP-OCRv5），产物里每格都标成 rapidocr，查「这批候选是哪个模型出的」会被误导
+            engine = "paddle-ppocrv5" if p.engine == "paddle" else "rapidocr"
         except Exception as e:            # 引擎不在就整页空候选，不炸（见模块头）
             return {"ocr_candidates": PageOcr(
                 page=page, engine=f"unavailable:{type(e).__name__}",
