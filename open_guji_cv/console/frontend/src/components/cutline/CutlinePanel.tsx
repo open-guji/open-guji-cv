@@ -296,6 +296,10 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
     st.armed = undefined      // 落定后清掉「待确认」高亮，免得重开时还亮着
     if (onlyTodo) st.hidden = true
     bump()
+    // 先挪焦点、后等写入（2026-09-26）：POST 连带「写完直接消费」（金标 upsert + 产物失效 + 批次计数）
+    // 要 1–2 秒，原来等它返回才 focus，人按完回车要干等。`st.done` 已先置上，重复按不会双写；
+    // 写入失败再把焦点拉回这一张。
+    focus(i + 1)
     try {
       await postEvents({ batch: batch(), step: 'row_segment', unit: 'boundary', kind: 'cutline', events: [row] })
       const n = Object.values(cardState.current).filter((s) => s.done).length
@@ -305,9 +309,8 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
       st.done = undefined
       st.hidden = false
       bump()
-      return
+      focus(i)
     }
-    focus(i + 1)
   }
 
   // 键盘快捷键：只在本面板挂载时生效（v1 靠 #view-cutline.active 判断，
