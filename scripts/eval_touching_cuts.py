@@ -41,6 +41,7 @@ def main() -> int:
     items = [i for i in gs.list(SHARD) if i.status == "active"
              and (not a.book or i.anchor.book == a.book)]
     rows, overlap, drift, missing = [], 0, 0, 0
+    col_end: list[str] = []
     from collections import Counter
     from open_guji_cv.eval.colgeom import current_geom, gold_rows_now
     geoms: dict = {}
@@ -120,6 +121,11 @@ def main() -> int:
             missing += 1
             continue
         cur = float(min(inner, key=lambda b: abs(b - float(ex["y"]))))
+        if abs(cc.boundaries[-1] - float(ex["y"])) < abs(cur - float(ex["y"])):
+            # 金标落在列尾（末字的底，下面已没有字）：比的是列的终点而不是字间切线，另计。
+            # vol02:100:4:20「淳／乙」——「乙」在下一列，人把线拖到了「淳」底（2026-09-26）
+            col_end.append(it.id)
+            continue
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
                          cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v))
     if not rows:
@@ -127,7 +133,8 @@ def main() -> int:
         return 0
     e = np.array([r["err"] for r in rows])
     print(f"touching-cuts n={len(e)}（moved {sum(r['verdict']=='moved' for r in rows)} / ok {sum(r['verdict']=='ok' for r in rows)}；"
-          f"overlap 另计 {overlap}，缝正确 {seam_ok}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}）")
+          f"overlap 另计 {overlap}，缝正确 {seam_ok}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}，"
+          f"列尾另计 {len(col_end)}{' ' + str(col_end[:5]) if col_end else ''}）")
     print(f"  坐标口径：页面坐标换算 {modes['page']} / 签名一致 {modes['sig_ok']} / 签名不符跳过 {modes['drift']} / "
           f"老条目（未记几何，可能已漂而查不出）{modes['legacy']}")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
