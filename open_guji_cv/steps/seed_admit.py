@@ -172,6 +172,10 @@ class SeedAdmitStep(Step):
         # 會，判据 A 的「对你的裁决」因此掉到 210/211。库匹配、上下文、整理本对齐
         # 全都是间接证据，人看着图下的判断不是——它该一票定案。
         human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
+        if human_shapes:
+            # 按入库时的编号记的人裁，先过绑定表找回现在对应的格（总览/15；重切后挂错格的根治）
+            from ..feedback.bindings import rebind_library_shapes
+            human_shapes = rebind_library_shapes(ctx.book.id, human_shapes)
         # 事件侧的人裁定字（2026-09-20）：勾了「字形不入库」的裁决不进字形库，上面那份就
         # 没有它——但字是定了的，文本采信不能丢。见 `feedback/lookup.human_chars`。
         from ..feedback.lookup import human_chars
@@ -279,7 +283,7 @@ class SeedAdmitStep(Step):
                     # 字形优先取库里那份（进库时经过清洗）；库里没有（人勾了不入库）就取事件里的。
                     # `reading` 只有事件里才有（己/已/巳 那类"刻 X 读 Y"），且与字形不同才记。
                     char = hs or ht[0]
-                    reading = (ht[1] if ht and ht[1] and ht[1] != char else None)
+                    reading = None      # 读法取消（2026-09-26），人裁只认字形
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=True,
                         channel="human", char=char, reading=reading,
@@ -384,9 +388,11 @@ class SeedAdmitStep(Step):
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
                 if channel == "split_ref":
-                    _top = r.candidates[0][0] if r.candidates else None
-                    char = _top if _top in always else align_char
-                    reading = align_char if align_char != char else None
+                    # 己/已/巳：刻本三字刻法常不分，库 top1 定不了是哪个字。读法取消后（2026-09-26）
+                    # 字形直接取整理本字——此前字形取库 top1、文意取整理本，文本出文意；
+                    # 去掉文意后若仍取库 top1，「己丑」会变回「已丑」（bxgb 影子核对裁过 3 处）。
+                    char = align_char
+                    reading = None
                 # variant_form 分支要用**改名前**的 channel 判——见下面「⚠️ dual 档判 variant_form
                 # 判早了」。这里先存一份，改名（下一段）之后再用它，别被 "dual" 字符串盖掉。
                 is_corpus_channel = channel in _CORPUS_CHANNELS
@@ -489,7 +495,7 @@ class SeedAdmitStep(Step):
                     n_review += 1
                 recs.append(AdmitRec(
                     id=r.id, slot=r.slot, sub=r.sub, admit=ok, channel=channel,
-                    char=char, reading=reading, provenance=prov,
+                    char=char, reading=None, provenance=prov,   # 读法取消（2026-09-26），只记字形
                     doubts=[] if ok else (_doubts(r, d) + doubts),
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,

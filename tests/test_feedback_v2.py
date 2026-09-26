@@ -376,8 +376,8 @@ def test_glyphdb_admit_reading_forced_to_shape_outside_exception(monkeypatch, tm
 
 
 def test_glyphdb_admit_ji_yi_si_exception_keeps_shape_on_label(monkeypatch, tmp_path):
-    """己/已/巳允许字形与文意分岔，但 instances.label 仍照录刻本形（唯一例外
-    也不例外的那一半）。"""
+    """己/已/巳 事件里带的旧 `reading` 不再生效：instances.label 与 admissions.char 都记字形
+    （读法取消，用户 2026-09-26）。"""
     _put_char_patch(monkeypatch, tmp_path, "vol01", 9, 2, 5)
     t = _cell_target("vol01:9:2:5", "vol01", 9, 2, 5)
     e = make_event("r1", 1, "confirm", t, {"shape": "巳", "reading": "已", "conversion": 1})
@@ -389,7 +389,7 @@ def test_glyphdb_admit_ji_yi_si_exception_keeps_shape_on_label(monkeypatch, tmp_
                             ("v2:vol01:9:2:5",)).fetchone()[0]
     char = db.conn.execute("SELECT char FROM admissions WHERE instance_id=?",
                            ("v2:vol01:9:2:5",)).fetchone()[0]
-    assert label == "巳" and char == "已"
+    assert label == "巳" and char == "巳"
 
 
 def test_glyphdb_admit_relabel_goes_through_evict_and_readmit(monkeypatch, tmp_path):

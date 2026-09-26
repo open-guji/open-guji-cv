@@ -331,14 +331,9 @@ def glyphdb_admit(events, db_path: str | None = None,
     cache = ImageCache()
     for e, _dest in admits:
         shape = _unmojibake(e.payload.get("shape") or e.payload.get("char"))
-        reading = _unmojibake(e.payload.get("reading")) or shape
-        # 只有 己/已/巳 分字形与文意（用户 2026-09-04 定；审查页与组视图同规则）。
-        # 其它字的 reading 一律跟随 shape——旧组视图曾对所有组填整理本字当文意
-        # （「卽 读 即」×45），那批事件已清账，这里再守一道免得任何来源重犯。
-        if shape and shape not in ("己", "已", "巳"):
-            reading = shape
-        if reading and (len(reading) != 1 or ord(reading) < 0x2E80):
-            reading = shape                 # 拼音首字母那类（输入法没转）
+        # 读法取消（用户 2026-09-26：「所有地方都用字形，包括字形库」）：`admissions.char`
+        # 一律记字形。此前 己/已/巳 分字形与文意、其余跟随字形；事件里旧的 `reading` 不再读。
+        reading = shape
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
