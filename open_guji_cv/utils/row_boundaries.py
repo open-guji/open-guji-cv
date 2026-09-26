@@ -1466,22 +1466,28 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
     # 已不是同一条格线（格数/相位变了），不套。
     #
-    # 先按**位置**认：离钉子 ≤ PIN_NEAR 格的那条格线就是它（2026-09-26：上游几何一变，格号会整体
-    # 错一位——vol02 p187c9 双线框剥干净后列首少了一个假格，人按旧格号钉的线全落到隔壁格号上；
-    # 钉子记的是页面坐标，位置才是人裁的本意）。位置上找不到，才按格号认，并放宽到 PIN_FAR 格
-    # （p100c4「淳乙」：DP 把两字并成一格，人钉的线离 DP 那条 1.1 格）。两种都要夹在相邻格线之间。
-    inner_idx = list(range(1, n_slots))
-    for slot_above, y_pin in (pinned_cuts or {}).items():
+    # 先按**格号**认（离 DP 那条 ≤ PIN_FAR 格；p100c4「淳乙」DP 把两字并成一格，人钉的线离 DP 1.1 格），
+    # 格号那条夹不进相邻格线之间时再按**位置**认（离它 ≤ PIN_NEAR 格的那条）：上游几何一变格号会整体
+    # 错一位（vol02 p187c9 双线框剥干净后列首少了一个假格），钉子记的是页面坐标，位置才是人裁本意。
+    # 不能反过来先按位置：两根钉子挨着时，前一根会就近抢走后一根的格线（p28c8 实测丢了一根）。
+    # 按 y 从上往下钉，一条格线只钉一次。
+    used: set[int] = set()
+    for slot_above, y_pin in sorted((pinned_cuts or {}).items(), key=lambda kv: kv[1]):
         y_pin = float(y_pin)
-        near = min(inner_idx, key=lambda i: abs(bounds[i] - y_pin)) if inner_idx else None
-        if near is not None and abs(bounds[near] - y_pin) <= PIN_NEAR * period:
-            p_ = near
-        else:
-            p_ = _slot_to_pos_local(slot_above, n_raised)
-            if not (1 <= p_ < n_slots) or abs(y_pin - bounds[p_]) > PIN_FAR * period:
+        cands: list[int] = []
+        p_slot = _slot_to_pos_local(slot_above, n_raised)
+        if 1 <= p_slot < n_slots and abs(y_pin - bounds[p_slot]) <= PIN_FAR * period:
+            cands.append(p_slot)
+        near = min(range(1, n_slots), key=lambda i: abs(bounds[i] - y_pin)) if n_slots > 1 else None
+        if near is not None and abs(bounds[near] - y_pin) <= PIN_NEAR * period and near not in cands:
+            cands.append(near)
+        for p_ in cands:
+            if p_ in used:
                 continue
-        if bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN:
-            bounds[p_] = y_pin
+            if bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN:
+                bounds[p_] = y_pin
+                used.add(p_)
+                break
 
     # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
     # （对外编号，抬头/正文交界处跳过 0）只在生成 Cell 的最后一步换算。
