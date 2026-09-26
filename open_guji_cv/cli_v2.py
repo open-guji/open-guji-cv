@@ -943,6 +943,21 @@ def cmd_check(args) -> None:
         from .eval import throughput as tp
         pages = None if args.all_pages else args.pages
         _out(tp.full_report(args.book, pages, st))
+    elif args.action == "ledger":
+        # 字形库 × 工作区记录对账（H 人裁单写者任务书件 3）：只读，不改库。
+        # `book` 过滤到这一本（一个工作区常挂好几本书，如四庫 vol01–vol10 共用一个 glyph.db）。
+        from .clustering.glyph_ledger import crosscheck
+        from .core.workspace import glyph_db_path
+        res = crosscheck(glyph_db_path(), book=args.book, drift=args.drift)
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as f:
+                for x in res["findings"]:
+                    f.write(json.dumps(x, ensure_ascii=False) + "\n")
+        _out({"book": args.book, "n_lib": res["n_lib"], "counts": res["counts"],
+             "n_findings": len(res["findings"]), "drift_missing": res["drift_missing"],
+             "out": args.out or None})
 
 
 def cmd_cards(args) -> None:
@@ -1552,14 +1567,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--scale", type=float, default=0.35, help="raw / overlay 的缩放")
     p.add_argument("--out", default="", help="图像输出路径（raw / overlay / patch 必给）")
 
-    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput")
-    p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput"])
+    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput | ledger")
+    p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput", "ledger"])
     p.add_argument("book", nargs="?", default="vol01")
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--snapshot", action="store_true", help="rate：记一行台账（默认只读）")
     p.add_argument("--note", default="", help="rate --snapshot 的说明")
     p.add_argument("--all-pages", action="store_true",
                    help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
+    p.add_argument("--drift", action="store_true",
+                   help="ledger：另外核对库里的图与现在的字块图还像不像（较慢，逐条读图比对）")
+    p.add_argument("--out", default="",
+                   help="ledger：发现明细另存 jsonl（不给就只在 --json/文字里出汇总数与 counts）")
 
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
