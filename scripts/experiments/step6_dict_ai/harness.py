@@ -6,16 +6,57 @@ import dictlib, prompts
 DAYS = json.load(open(H + '/data/days.json')); CELLS = json.load(open(H + '/data/cells_human1135.json'))
 TR = json.load(open(H + '/data/truth.json')); KEYS, TXT = TR['keys'], TR['text']
 MARK = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚'
-CACHE = H + '/cache'; os.makedirs(CACHE, exist_ok=True)
+CACHE = H + '/cache'; CV_ROOT = os.path.abspath(os.path.join(H, '../../..')); os.makedirs(CACHE, exist_ok=True)
 
 # 美元/百万 token（输入, 输出）；只用于预算闸，账单以控制台为准
 PRICE = {'claude-haiku-4-5': (1.0, 5.0), 'claude-sonnet-5': (2.0, 10.0), 'claude-opus-5': (5.0, 25.0)}
 SPENT = {'usd': 0.0}
 
 def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None):
+    if model.startswith('cc:'):
+        return call_cc(model[3:], messages)
     if model.startswith('claude-'):
         return call_claude(model, messages, thinking, max_tokens, effort)
+    if model.startswith('qwen'):
+        return call_glm(model, messages, thinking, temperature, max_tokens, seed_tag,
+                        url='https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', key=_key('DASHSCOPE_API_KEY'))
     return call_glm(model, messages, thinking, temperature, max_tokens, seed_tag)
+
+def _key(name):
+    """环境变量优先，其次 overview/.secret/api-keys.cfg（与 clustering/llm_context.py 同一查找顺序）"""
+    if os.environ.get(name): return os.environ[name]
+    p = os.environ.get('GUJI_API_KEYS_CFG') or os.path.join(CV_ROOT, '..', 'overview', '.secret', 'api-keys.cfg')
+    for line in open(p, encoding='utf-8'):
+        if line.strip().startswith(name + '='): return line.split('=', 1)[1].strip()
+    sys.exit(f'找不到 {name}')
+
+def call_cc(model, messages):
+    """走本机 Claude Code CLI（订阅额度，不用 API key）：`claude -p`，换掉系统提示、关掉工具与设置。
+    model = haiku / sonnet / opus。没有温度参数，思考用 CLI 默认。"""
+    import subprocess
+    sysmsg, user = messages[0]['content'], messages[1]['content']
+    h = hashlib.sha256(json.dumps(['cc', model, sysmsg, user], ensure_ascii=False).encode()).hexdigest()[:24]
+    fp = f'{CACHE}/{h}.json'
+    if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
+    t = time.time()
+    for att in range(3):
+        p = subprocess.run(['claude', '-p', '--model', model, '--system-prompt', sysmsg, '--tools', '',
+                            '--setting-sources', '', '--output-format', 'json', '--no-session-persistence'],
+                           input=user, capture_output=True, text=True, timeout=900, cwd='/tmp')
+        try:
+            d = json.loads(p.stdout)
+            if d.get('is_error'): raise RuntimeError(d.get('result'))
+            break
+        except Exception as e:
+            err = f'{e} {p.stderr[:200]}'
+            open(H + '/errors.log', 'a').write(f'{time.strftime("%T")} cc:{model} {err}\n'); time.sleep(10 * 2 ** att)
+    else:
+        return {'text': '', 'error': err}
+    u = d.get('usage', {})
+    out = {'text': d.get('result', ''), 'usage': {'prompt_tokens': u.get('input_tokens', 0) + u.get('cache_read_input_tokens', 0) + u.get('cache_creation_input_tokens', 0),
+           'completion_tokens': u.get('output_tokens', 0)}, 'usd_equiv': d.get('total_cost_usd'), 'models': list(d.get('modelUsage', {})),
+           'latency': round(time.time() - t, 1), 'model': 'cc:' + model, 'ts': time.strftime('%FT%T')}
+    json.dump(out, open(fp, 'w'), ensure_ascii=False); return out
 
 def call_claude(model, messages, thinking, max_tokens, effort):
     import anthropic
@@ -49,17 +90,19 @@ def call_claude(model, messages, thinking, max_tokens, effort):
     out = {'text': text, 'usage': usage, 'usd': round(usd, 5), 'stop': msg.stop_reason, 'latency': round(time.time() - t, 1), 'model': model, 'ts': time.strftime('%FT%T')}
     json.dump(out, open(fp, 'w'), ensure_ascii=False); return out
 
-def call_glm(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag=''):
-    body = {'model': model, 'messages': messages, 'temperature': temperature, 'max_tokens': max_tokens,
-            'thinking': {'type': 'enabled' if thinking else 'disabled'}}
+def call_glm(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='',
+             url='https://open.bigmodel.cn/api/paas/v4/chat/completions', key=None):
+    body = {'model': model, 'messages': messages, 'temperature': temperature, 'max_tokens': max_tokens}
+    if model.startswith('glm'): body['thinking'] = {'type': 'enabled' if thinking else 'disabled'}
+    elif thinking: body['enable_thinking'] = True
     h = hashlib.sha256((json.dumps(body, ensure_ascii=False, sort_keys=True) + seed_tag).encode()).hexdigest()[:24]
     fp = f'{CACHE}/{h}.json'
     if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
     for att in range(4):
         try:
             t = time.time()
-            req = urllib.request.Request('https://open.bigmodel.cn/api/paas/v4/chat/completions',
-                                         data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+            hd = {'Content-Type': 'application/json'} | ({'Authorization': 'Bearer ' + key} if key else {})
+            req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=hd)
             req.data = json.dumps(body | {'stream': True, 'stream_options': {'include_usage': True}}).encode()
             txt, usage = [], None
             with urllib.request.urlopen(req, timeout=900) as resp:
