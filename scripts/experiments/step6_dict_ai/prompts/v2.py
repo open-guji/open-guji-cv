@@ -8,7 +8,7 @@ SYSTEM = v1.SYSTEM.replace('判斷要求：', '''候選已按詞典預先分成�
 
 判斷要求：''').replace('1. 排除（drop）：', '''0. 硬規則：若某關聯組裡有一個字在此處讀得通，則同組其他字**不得以「文意不通」為由排除**——刻本可能就刻作它的異體。整理本與刻本候選不同時，**不得僅據整理本排除刻本候選**；整理本改字是常態。
 1. 排除（drop）：''')
-def build(DAYS, d, ask, allpend, keys, txt, dictlib, MARK, with_ref=True, min_ctx=300):
+def build(DAYS, d, ask, allpend, keys, txt, dictlib, MARK, with_ref=True, min_ctx=300, strict=False):
     msgs, marks = v1.build(DAYS, d, ask, allpend, keys, txt, dictlib, MARK, with_ref=with_ref, min_ctx=min_ctx)
     u = msgs[1]['content']
     head, rest = u.split('【待判字位與候選】', 1)
@@ -16,7 +16,7 @@ def build(DAYS, d, ask, allpend, keys, txt, dictlib, MARK, with_ref=True, min_ct
     lines = []
     for m, c in marks.items():
         src = {x['c']: x['src'] for x in c['cands']}
-        gs = dictlib.group_cands([x['c'] for x in c['cands']])
+        gs = dictlib.group_cands([x['c'] for x in c['cands']], strict=strict)
         lines.append(f'{m}：')
         for gi, (mem, why) in enumerate(gs):
             s = '，'.join(f"{ch}（{'、'.join(src[ch]) or '其他'}）" for ch in mem)

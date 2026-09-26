@@ -46,9 +46,22 @@ if __name__ == '__main__':
 def _bridge_nb(c):
     return {x for x, tags in V.variants_of(c) if any(t in V.BRIDGE_SOURCES or t in ('cjkvi-simplified', 'unihan:kSimplifiedVariant', 'unihan:kTraditionalVariant', 'dypytz') for t in tags)}
 
-def group_cands(chars):
+WEAK = {'hydzd-borrowed', 'unihan:kSpoofingVariant', 'yitizi', 'unihan:kSpecializedSemanticVariant'}
+def strict_variant(a, b):
+    """严格异体：≥2 个独立来源（不含通假/形近/yitizi/部分义项），或本项目刻本实证。且—旦（仅 twedu）不算。"""
+    if a == b: return True
+    for x, tags in V.variants_of(a):
+        if x == b:
+            good = set(tags) - WEAK
+            return 'local:keben' in good or len(good) >= 2
+    return False
+
+def _strict_nb(c):
+    return {x for x, tags in V.variants_of(c) if 'local:keben' in tags or len(set(tags) - WEAK) >= 2}
+
+def group_cands(chars, strict=False):
     """确定性分组：直接异体边，或经同一第三字（两跳）相连 → 同组。返回 [(members, 说明)]"""
-    chars = list(dict.fromkeys(chars)); nb = {c: _bridge_nb(c) for c in chars}
+    chars = list(dict.fromkeys(chars)); nb = {c: (_strict_nb(c) if strict else _bridge_nb(c)) for c in chars}
     par = {c: c for c in chars}; why = {}
     def f(x):
         while par[x] != x: x = par[x]
