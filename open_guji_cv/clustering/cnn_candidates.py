@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
@@ -113,7 +114,144 @@ def gw_catalog_fingerprint(path: str | Path = GW_CATALOG) -> str:
     return hashlib.sha1(f"{p.name}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
 
 
+REAL_PROTO_ENABLED = False
+"""真刻例多原型档总开关（R2 / T11，2026-09-26）。缺省关：跨书统一真刻例库还不存在
+（`rare_char_matching_survey.md` G3），启用前先看 `REAL_PROTO_SPECS` 指了哪几本书、
+闸过没过（任务书「过了闸也只出候选、不进放行；开关缺省值由协调者看了数再定」）。
+
+补的是 `_emb_index` 模板只有字体渲染均值这个结构缺口：每字模板改成
+「字体均值 ⊕ 该字真刻例聚类的 k≤3 个原型」，与 `GW_ENABLED` 那档同一套接线
+（max 融合、指纹带 stamp、开关缺省关），模板源换成本仓能读到的 `glyph_store`
+目录而不是 GlyphWiki 渲染图。"""
+
+REAL_PROTO_SPECS: tuple[str, ...] = ()
+"""真刻例来源，`store:<glyph_store 目录>` 列表，缺省空。每个目录须是某本书
+`output/glyph_store`（`instances/*.jsonl` + `patches/<instance_id 把 : 换成 _>.png`
+那个布局，见 `glyph_db.py` 的 `instances` 表：patch 是原始裁块，不是归一化图）。"""
+
+REAL_PROTO_K = 3
+"""每字最多聚几个原型（任务书「k≤3」）。"""
+
+REAL_PROTO_LABEL_STATUSES: frozenset = frozenset({"human"})
+"""只认这些 `label_status` 的实例——`align`/`match`/`context` 都是算法标的，
+只有 `human` 是人工确认过的真刻例（`feedback/bindings.py:132` 同一口径）。"""
 RRF_K = 60
+
+
+def _iter_real_exemplars(store_dir: Path, label_statuses: frozenset = REAL_PROTO_LABEL_STATUSES):
+    """`glyph_store` 目录 -> 逐条 yield (char, instance_id, patch 文件路径)。
+
+    扫 `instances/*.jsonl`，只收 `label_status` 在白名单里、`label` 是单字的行；
+    图从 `patches/` 按 instance_id（把 `:` 换成 `_`）找，缺文件的跳过。
+    """
+    import json
+
+    inst_dir = store_dir / "instances"
+    if not inst_dir.exists():
+        return
+    for jf in sorted(inst_dir.glob("*.jsonl")):
+        with open(jf, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                d = json.loads(line)
+                if d.get("label_status") not in label_statuses:
+                    continue
+                ch = d.get("label")
+                if not ch or len(ch) != 1:
+                    continue
+                iid = d.get("instance_id")
+                if not iid:
+                    continue
+                p = store_dir / "patches" / (iid.replace(":", "_") + ".png")
+                if p.exists():
+                    yield ch, iid, p
+
+
+def load_real_exemplars(specs: tuple = REAL_PROTO_SPECS, charset=None):
+    """spec 列表 -> {字: [(instance_id, 64² 二值归一图), ...]}。
+
+    全部走 `normalize_patch`——与真刻例同一条归一化路径，跟 `extra_glyphs.load_extra_glyphs`
+    同一条纪律（`instances` 表存的是原始裁块，不是已归一化图）。**不落盘缓存**：真刻例池
+    比 GlyphWiki 小两个量级，CPU 全量前向本身就是秒级，落盘缓存反而引入「书变了但 key
+    没变」的新鲜度坑。
+    """
+    import cv2
+
+    from .normalize import normalize_patch
+
+    cs = set(charset) if charset is not None else None
+    out: dict = defaultdict(list)
+    for spec in specs or ():
+        if not spec.startswith("store:"):
+            continue
+        d = Path(spec.split(":", 1)[1])
+        if not d.exists():
+            continue
+        for ch, iid, p in _iter_real_exemplars(d):
+            if cs is not None and ch not in cs:
+                continue
+            try:
+                buf = np.fromfile(str(p), dtype=np.uint8)
+                img = cv2.imdecode(buf, cv2.IMREAD_GRAYSCALE) if buf.size else None
+            except OSError:
+                img = None
+            if img is None or img.size == 0:
+                continue
+            try:
+                norm = normalize_patch(img)
+            except Exception:  # noqa: BLE001
+                continue
+            if not norm.any():
+                continue
+            out[ch].append((iid, norm.astype(np.uint8)))
+    return dict(out)
+
+
+def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS) -> str:
+    """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的 `名字:大小:mtime` 拼起来。
+    目录缺席的 spec 不参与，一个都不参与（或总开关关着）时返回空串。
+    """
+    if not REAL_PROTO_ENABLED:
+        return ""
+    parts = []
+    for spec in specs or ():
+        if not spec.startswith("store:"):
+            continue
+        d = Path(spec.split(":", 1)[1]) / "instances"
+        if not d.exists():
+            continue
+        for jf in sorted(d.glob("*.jsonl")):
+            st = jf.stat()
+            parts.append(f"{spec}/{jf.name}:{st.st_size}:{int(st.st_mtime)}")
+    if not parts:
+        return ""
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
+
+
+def _farthest_point_protos(vecs: np.ndarray, ids: list, k: int):
+    """余弦空间最远点采样：从一个字的全部真刻例 embedding 里挑 <=k 个彼此最不像的做原型。
+
+    不用 KMeans——n 通常个位数到几十，重点是覆盖类内形态分布的极端（磨损、断笔、
+    异写），不是求形心；第一个点取离全体均值最远的（离群锚点），后续每次挑「离已选
+    原型集合最近距离」最大的那个（增量 k-center，贪心 2-近似）。n<=k 时全部保留。
+    """
+    n = vecs.shape[0]
+    if n <= k:
+        return [vecs[i] for i in range(n)], list(ids)
+    mean = vecs.mean(0)
+    mean = mean / (np.linalg.norm(mean) + 1e-9)
+    d0 = 1.0 - vecs @ mean
+    chosen = [int(np.argmax(d0))]
+    min_d = 1.0 - vecs @ vecs[chosen[0]]
+    while len(chosen) < k:
+        nxt = int(np.argmax(min_d))
+        if nxt in chosen:
+            break
+        chosen.append(nxt)
+        min_d = np.minimum(min_d, 1.0 - vecs @ vecs[nxt])
+    return [vecs[i] for i in chosen], [ids[i] for i in chosen]
 
 
 def fingerprint(path: str | Path = DEFAULT_CKPT) -> str:
@@ -208,6 +346,12 @@ class CnnCandidates:
         """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
         解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。"""
+        self._real_cs: tuple[tuple, tuple | None] | None = None
+        """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
+        GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
+        self.last_real_prov: list[dict] = []
+        """最近一次 `emb_topk_batch` 里真刻例原型赢过字体均值的字位：每个查询一个
+        `{字: (instance_id, 余弦)}`，与 `last_gw_prov` 同一套用法（R2/T11，2026-09-26）。"""
 
     @property
     def available(self) -> bool:
@@ -535,9 +679,13 @@ class CnnCandidates:
         order = np.argsort(-sims)[:k]
         return [(names[int(i)], float(sims[int(i)])) for i in order]
 
-    def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
+    def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10,
+                       real_exclude_ids: frozenset = frozenset()
                        ) -> list[list[tuple[str, float]]]:
         """`emb_topk()` 的批量版：网络前向与模板矩阵检索都改一次一批。
+
+        `real_exclude_ids`：真刻例多原型档（R2/T11）评测时的留一法摘除集合，
+        产线（非评测）传空集。见 `_real_index` 文档。
 
         ## 2026-09-10 生僻字候选提速第二轮：批处理网络前向 + 矩阵-矩阵乘法
 
@@ -579,6 +727,21 @@ class CnnCandidates:
                         cand = np.where(rows_idx == r)[0]
                         b = cand[int(np.argmax(sg[cand, j]))]
                         self.last_gw_prov[j][names[int(r)]] = (str(gnames[b]), str(gsrc[b]), float(sg[b, j]))
+                    sims[:, j] = np.maximum(sims[:, j], best)
+        self.last_real_prov = [{} for _ in norm_patches]
+        real = self._real_index(charset, names, real_exclude_ids) if REAL_PROTO_ENABLED else None
+        if real is not None:
+            R, r_rows_idx, r_iids = real
+            sr = R @ Q.T                                   # (n_real, N)
+            for j in range(sims.shape[1]):
+                best = np.full(sims.shape[0], -2.0, np.float32)
+                np.maximum.at(best, r_rows_idx, sr[:, j])
+                win = best > sims[:, j]
+                if win.any():
+                    for r in np.where(win)[0]:
+                        cand = np.where(r_rows_idx == r)[0]
+                        b = cand[int(np.argmax(sr[cand, j]))]
+                        self.last_real_prov[j][names[int(r)]] = (str(r_iids[b]), float(sr[b, j]))
                     sims[:, j] = np.maximum(sims[:, j], best)
         out = []
         for j in range(sims.shape[1]):
@@ -624,6 +787,69 @@ class CnnCandidates:
         else:
             res = (G[keep], np.array([pos[grel[i]] for i in keep], dtype=np.int64), gnames[keep], gsrc[keep])
         self._gw_cs = (charset, res)
+        return res
+
+    def _real_index(self, charset, names: list[str], exclude_ids: frozenset = frozenset()):
+        """真刻例多原型档（R2 / T11）限定到当前字表：`(R, rows_idx, iids)`，
+        `rows_idx[i]` 是第 i 个原型的字在字体索引 `names` 里的行号，与 `_gw_index`
+        同一套接线（`emb_topk_batch` 里按 `rows_idx` 做 max 融合）。
+
+        `exclude_ids`：评测时的留一法摘除集合（物理格粒度）——按
+        `match._cell_parts` 同册同页同列、格号相差 <=2 一并摘，不只摘字面同一个
+        id（教训见 `GlyphMatcher._same_cell_rows`：只摘一个 id 摘不干净，v1/v2/
+        机器准入同一格有好几种 id）。产线（非评测）传空集。
+
+        **不落盘**：真刻例池比 GlyphWiki 小两个量级（千级 vs 万级），CPU 全量
+        前向本身秒级，落盘缓存反而引入「换书但 key 没变」的新鲜度坑（同
+        `load_real_exemplars` 的理由）。按 `(charset, exclude_ids)` 记一次内存缓存。
+        """
+        key = (charset, exclude_ids)
+        if self._real_cs is not None and self._real_cs[0] == key:
+            return self._real_cs[1]
+        if not REAL_PROTO_SPECS or not self._ensure():
+            self._real_cs = (key, None)
+            return None
+        pool = load_real_exemplars(REAL_PROTO_SPECS, charset)
+        if not pool:
+            self._real_cs = (key, None)
+            return None
+        from .match import _cell_parts
+
+        def _excluded(iid: str) -> bool:
+            if not exclude_ids:
+                return False
+            if iid in exclude_ids:
+                return True
+            q = _cell_parts(iid)
+            if q is None:
+                return False
+            for e in exclude_ids:
+                ek = _cell_parts(e)
+                if ek is not None and ek[:3] == q[:3] and abs(ek[3] - q[3]) <= 2:
+                    return True
+            return False
+
+        import torch
+        pos = {c: i for i, c in enumerate(names)}
+        vecs, rows_idx, iids = [], [], []
+        with torch.no_grad():
+            for ch, items in pool.items():
+                if ch not in pos:
+                    continue
+                items = [(iid, img) for iid, img in items if not _excluded(iid)]
+                if not items:
+                    continue
+                x = torch.tensor(np.stack([im for _, im in items])[:, None].astype(np.float32),
+                                 device=self._dev)
+                e, _, _ = self._net(x)
+                e = (e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy()
+                protos, proto_ids = _farthest_point_protos(e, [iid for iid, _ in items], REAL_PROTO_K)
+                for v, iid in zip(protos, proto_ids):
+                    vecs.append(v); rows_idx.append(pos[ch]); iids.append(iid)
+        res = None
+        if vecs:
+            res = (np.stack(vecs).astype(np.float32), np.array(rows_idx, dtype=np.int64), iids)
+        self._real_cs = (key, res)
         return res
 
 
@@ -687,6 +913,9 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     gw = gw_catalog_fingerprint()
     if gw:
         tmpl = hashlib.sha1(f"{tmpl}|gw={gw}".encode()).hexdigest()[:16]
+    real = real_proto_fingerprint()
+    if real:
+        tmpl = hashlib.sha1(f"{tmpl}|real={real}".encode()).hexdigest()[:16]
     return f"{fingerprint(ckpt)}:{tmpl}:{font_set_fingerprint()}"
 
 

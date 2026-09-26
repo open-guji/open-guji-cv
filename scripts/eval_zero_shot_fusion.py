@@ -51,6 +51,11 @@ def main() -> int:
                     help="只评异体子集：char 在 config/charset/variants.tsv 里映射到别字的实例")
     ap.add_argument("--wear", type=float, default=0.0,
                     help="评测时给查询图加磨损：0=不加；0.5=腐蚀+抹白一次；1=两次")
+    ap.add_argument("--real-proto", action="store_true",
+                    help="开真刻例多原型档（R2/T11，cnn_candidates.REAL_PROTO_ENABLED，缺省关）；"
+                         "只对 --emb-mode mean 且不带 --emb-extra 时生效（生产的接线）")
+    ap.add_argument("--real-proto-store", action="append", default=[],
+                    help="真刻例来源 store:<glyph_store 目录>，可重复；配合 --real-proto 用")
     a = ap.parse_args()
 
     import torch
@@ -98,6 +103,8 @@ def main() -> int:
 
     emb_mat = None
     emb_chars: list[str] = []
+    real_mat = None
+    real_rows_idx = None
     if a.emb:
         # 复用 CnnCandidates 的落盘模板向量（按 checkpoint 指纹 + 字表），
         # 免得每个配置重算 4,636 × 4 张渲染——扫权重时这是 90% 的耗时。
@@ -108,6 +115,21 @@ def main() -> int:
         if a.emb_mode == "mean" and not a.emb_extra:
             emb_mat, emb_chars = cc_._emb_index(cs)
             emb_owner = None
+            real_mat = real_rows_idx = None
+            if a.real_proto:
+                import open_guji_cv.clustering.cnn_candidates as _cc
+                _cc.REAL_PROTO_ENABLED = True
+                _cc.REAL_PROTO_SPECS = tuple(a.real_proto_store)
+                # 留一法：这批评测字自己的物理格不许进它自己的真刻例模板
+                # （同 5-a 的教训「自证不是证据」），见 `cnn_candidates._real_index`。
+                real_loo = frozenset(it["id"] for it in items if it.get("id"))
+                real = cc_._real_index(cs, emb_chars, real_loo)
+                if real is not None:
+                    real_mat, real_rows_idx, real_iids = real
+                    print(f"真刻例多原型档：{len(real_mat)} 个原型 / "
+                          f"{len(set(real_rows_idx.tolist()))} 字（留一法摘除 {len(real_loo)} 个物理格）")
+                else:
+                    print("真刻例多原型档：开了但没取到任何原型（检查 --real-proto-store）")
         elif a.emb_extra:
             # 外部真刻本模板：每字 = mean(字体渲染向量 ∪ 外部图向量)（--emb-extra-only 时只用外部图）
             from open_guji_cv.clustering.extra_glyphs import load_many
@@ -198,7 +220,10 @@ def main() -> int:
     n = 0
     with torch.no_grad():
         for it in items:
-            img = cv2.imread(it["png"], cv2.IMREAD_GRAYSCALE)
+            # `items.jsonl` 是在 Windows 上建的（`build_glyph_bench.py`），`png` 路径带
+            # `\`——云端跑在 Linux 上，`cv2.imread` 不认反斜杠分隔符，逐条文件读失败但
+            # 不报错、只留 opencv 的 WARN 日志，图直接被判 None 跳过，n 悄悄归零。
+            img = cv2.imread(str(it["png"]).replace("\\", "/"), cv2.IMREAD_GRAYSCALE)
             if img is None:
                 continue
             q = wear(normalize_patch(img)); g = it["char"]; n += 1
@@ -217,6 +242,11 @@ def main() -> int:
             if emb_mat is not None:
                 qe = e_all.mean(0); qe = (qe / (qe.norm() + 1e-9)).numpy()
                 sims = emb_mat @ qe
+                if real_mat is not None:
+                    sr = real_mat @ qe
+                    best = np.full(sims.shape[0], -2.0, np.float32)
+                    np.maximum.at(best, real_rows_idx, sr)
+                    sims = np.maximum(sims, best)
                 if a.emb_mode == "max":
                     best: dict[str, float] = {}
                     for i in np.argsort(-sims):
