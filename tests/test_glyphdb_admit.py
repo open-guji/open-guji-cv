@@ -84,7 +84,8 @@ def test_shape_and_reading_land_in_different_columns(lib):
         "select char, provenance from admissions where instance_id=?", (iid,)).fetchone()
     c.close()
     assert label == "巳", f"字形索引该存刻本的形，实际 {label}"
-    assert char == "已", f"admissions.char 该存释读，实际 {char}"
+    # 读法取消（用户 2026-09-26）：admissions.char 也记字形，事件里旧的 reading 不再读
+    assert char == "巳", f"admissions.char 该存字形，实际 {char}"
     assert prov == "human"
 
 
