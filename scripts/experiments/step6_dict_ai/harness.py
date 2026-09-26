@@ -198,6 +198,7 @@ def run(a):
             rows += res; usage.append(u); errs.append(e)
     print(f'  本次新花费约 ${SPENT["usd"]:.3f}（预算 ${a.budget}）')
     tag = a.tag or f'{a.prompt}_{"answers" if a.answers else a.model}{"_" + a.effort if a.effort else ""}{"_think" if a.thinking else ""}{"_noref" if a.no_ref else ""}_b{a.batch}'
+    tag = tag.replace(':', '-')
     os.makedirs(H + '/runs', exist_ok=True)
     json.dump({'args': vars(a), 'rows': rows}, open(f'{H}/runs/{tag}.json', 'w'), ensure_ascii=False)
     summarize(rows, usage, errs, tag)
