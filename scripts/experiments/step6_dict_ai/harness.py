@@ -8,7 +8,48 @@ TR = json.load(open(H + '/data/truth.json')); KEYS, TXT = TR['keys'], TR['text']
 MARK = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚'
 CACHE = H + '/cache'; os.makedirs(CACHE, exist_ok=True)
 
-def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag=''):
+# 美元/百万 token（输入, 输出）；只用于预算闸，账单以控制台为准
+PRICE = {'claude-haiku-4-5': (1.0, 5.0), 'claude-sonnet-5': (2.0, 10.0), 'claude-opus-5': (5.0, 25.0)}
+SPENT = {'usd': 0.0}
+
+def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None):
+    if model.startswith('claude-'):
+        return call_claude(model, messages, thinking, max_tokens, effort)
+    return call_glm(model, messages, thinking, temperature, max_tokens, seed_tag)
+
+def call_claude(model, messages, thinking, max_tokens, effort):
+    import anthropic
+    sysmsg = messages[0]['content']; user = messages[1]['content']
+    kw = {'model': model, 'max_tokens': max_tokens,
+          'system': [{'type': 'text', 'text': sysmsg, 'cache_control': {'type': 'ephemeral'}}],
+          'messages': [{'role': 'user', 'content': user}]}
+    if model.startswith('claude-haiku'):
+        if thinking: kw['thinking'] = {'type': 'enabled', 'budget_tokens': 4000}; kw['max_tokens'] = max(max_tokens, 12000)
+    else:
+        kw['thinking'] = {'type': 'adaptive'} if thinking else {'type': 'disabled'}
+        if effort: kw['output_config'] = {'effort': effort}
+    h = hashlib.sha256(json.dumps(kw, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:24]
+    fp = f'{CACHE}/{h}.json'
+    if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
+    client = anthropic.Anthropic(max_retries=4)
+    t = time.time()
+    try:
+        with client.messages.stream(**kw) as st:
+            msg = st.get_final_message()
+    except anthropic.APIStatusError as e:
+        open(H + '/errors.log', 'a').write(f'{time.strftime("%T")} {model} {e.status_code} {str(e)[:200]}\n'); return {'text': '', 'error': str(e)}
+    except anthropic.APIConnectionError as e:
+        open(H + '/errors.log', 'a').write(f'{time.strftime("%T")} {model} conn {e}\n'); return {'text': '', 'error': str(e)}
+    text = ''.join(b.text for b in msg.content if b.type == 'text')
+    u = msg.usage
+    usage = {'prompt_tokens': u.input_tokens + (u.cache_read_input_tokens or 0) + (u.cache_creation_input_tokens or 0),
+             'completion_tokens': u.output_tokens, 'cache_read': u.cache_read_input_tokens or 0}
+    pi, po = PRICE.get(model, (5.0, 25.0))
+    usd = (u.input_tokens + 1.25 * (u.cache_creation_input_tokens or 0) + 0.1 * (u.cache_read_input_tokens or 0)) * pi / 1e6 + u.output_tokens * po / 1e6
+    out = {'text': text, 'usage': usage, 'usd': round(usd, 5), 'stop': msg.stop_reason, 'latency': round(time.time() - t, 1), 'model': model, 'ts': time.strftime('%FT%T')}
+    json.dump(out, open(fp, 'w'), ensure_ascii=False); return out
+
+def call_glm(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag=''):
     body = {'model': model, 'messages': messages, 'temperature': temperature, 'max_tokens': max_tokens,
             'thinking': {'type': 'enabled' if thinking else 'disabled'}}
     h = hashlib.sha256((json.dumps(body, ensure_ascii=False, sort_keys=True) + seed_tag).encode()).hexdigest()[:24]
@@ -70,10 +111,34 @@ def run(a):
         pend = sorted([c for c in CELLS.values() if c['day'] == d], key=lambda c: c['pos'])
         for i in range(0, len(pend), a.batch):
             jobs.append((d, pend[i:i + a.batch], pend))
+    if a.max_cells:
+        kept, n = [], 0
+        for j in jobs:
+            if n >= a.max_cells: break
+            kept.append(j); n += len(j[1])
+        jobs = kept
+    if a.export:   # 给只能在自家客户端跑的模型（如 muse）：导出提示词，跑完用 --answers 导回
+        with open(a.export, 'w') as f:
+            for d, ask, allpend in jobs:
+                msgs, marks = P.build(DAYS, d, ask, allpend, KEYS, TXT, dictlib, MARK, with_ref=not a.no_ref)
+                jid = f"{a.prompt}:{d}:{ask[0]['key']}"
+                f.write(json.dumps({'job_id': jid, 'system': msgs[0]['content'], 'user': msgs[1]['content']}, ensure_ascii=False) + '\n')
+        print('导出', len(jobs), '个提示词 →', a.export, '；回填格式：每行 {"job_id":..., "text": 模型原样输出}'); return
+    if a.model.startswith('claude-') and not a.answers and not os.environ.get('ANTHROPIC_API_KEY'):
+        sys.exit('没有 ANTHROPIC_API_KEY：在云端环境设置里加这个环境变量，新开会话生效')
+    ANS = {}
+    if a.answers:
+        for line in open(a.answers): r = json.loads(line); ANS[r['job_id']] = r
     def one(job):
         d, ask, allpend = job
         msgs, marks = P.build(DAYS, d, ask, allpend, KEYS, TXT, dictlib, MARK, with_ref=not a.no_ref)
-        out = call(a.model, msgs, thinking=a.thinking, temperature=a.temp)
+        if a.answers:
+            out = ANS.get(f"{a.prompt}:{d}:{ask[0]['key']}", {'text': '', 'error': 'no answer'})
+        elif SPENT['usd'] >= a.budget:
+            out = {'text': '', 'error': 'budget'}
+        else:
+            out = call(a.model, msgs, thinking=a.thinking, temperature=a.temp, effort=a.effort)
+            SPENT['usd'] += out.get('usd', 0) if not out.get('cached') else 0
         js = parse(out.get('text', ''))
         res = []
         for mk, cell in marks.items():
@@ -88,7 +153,8 @@ def run(a):
     with cf.ThreadPoolExecutor(a.workers) as ex:
         for res, u, e in ex.map(one, jobs):
             rows += res; usage.append(u); errs.append(e)
-    tag = a.tag or f'{a.prompt}_{a.model}{"_think" if a.thinking else ""}{"_noref" if a.no_ref else ""}_b{a.batch}'
+    print(f'  本次新花费约 ${SPENT["usd"]:.3f}（预算 ${a.budget}）')
+    tag = a.tag or f'{a.prompt}_{"answers" if a.answers else a.model}{"_" + a.effort if a.effort else ""}{"_think" if a.thinking else ""}{"_noref" if a.no_ref else ""}_b{a.batch}'
     os.makedirs(H + '/runs', exist_ok=True)
     json.dump({'args': vars(a), 'rows': rows}, open(f'{H}/runs/{tag}.json', 'w'), ensure_ascii=False)
     summarize(rows, usage, errs, tag)
@@ -114,5 +180,8 @@ if __name__ == '__main__':
     ap.add_argument('--days', default='all'); ap.add_argument('--batch', type=int, default=20)
     ap.add_argument('--thinking', action='store_true'); ap.add_argument('--no-ref', action='store_true')
     ap.add_argument('--temp', type=float, default=0.0); ap.add_argument('--workers', type=int, default=4)
-    ap.add_argument('--tag')
+    ap.add_argument('--tag'); ap.add_argument('--effort')
+    ap.add_argument('--budget', type=float, default=2.0, help='本次新调用美元上限，超了剩下的不再调用')
+    ap.add_argument('--max-cells', type=int, default=0, help='最多问多少格（按批截断）')
+    ap.add_argument('--export', help='只导出提示词 JSONL，不调用'); ap.add_argument('--answers', help='从 JSONL 导回答案打分')
     run(ap.parse_args())
