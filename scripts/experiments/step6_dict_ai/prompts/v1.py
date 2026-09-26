@@ -21,12 +21,24 @@ SYSTEM = """你是宋代文献与古籍版本的校勘专家。任务：为清�
 輸出 JSON（不要多餘文字）：
 {"items":[{"pos":"①","drop":["字",...],"drop_why":{"字":"理由"},"groups":[{"members":["字",...],"word":"此處的詞義","p":0.97,"why":"理由"}],"confidence":"高","need_human":""}]}"""
 
+FILL = {'mode': 'box'}   # box：其他待判位显示 ▢；guess：显示〔图像首选?〕（E4）
+_GUESS = None
+def _guess(k):
+    """其他待判位的图像首选：库首选与 OCR 首选一致取之，否则取库首选，再否则 OCR 首选"""
+    global _GUESS
+    if _GUESS is None:
+        C = json.load(open(H + '/data/cells_human1135.json')); _GUESS = {}
+        for kk, c in C.items():
+            lib = [x['c'] for x in c['cands'] if '库首选' in x['src']]; ocr = [x['c'] for x in c['cands'] if 'OCR第1' in x['src']]
+            _GUESS[kk] = (lib or ocr or ['▢'])[0]
+    return _GUESS.get(k, '▢')
+
 def ctx_text(keys, txt, i0, i1, marks_at):
     out = []
     for i in range(i0, i1):
         k = keys[i]
         if k in marks_at: out.append(marks_at[k])
-        elif k in PENDING: out.append('▢')
+        elif k in PENDING: out.append('▢' if FILL['mode'] == 'box' else f'〔{_guess(k)}?〕')
         else: out.append(txt[i])
     return ''.join(out)
 
@@ -42,7 +54,7 @@ def build(DAYS, d, ask, allpend, keys, txt, dictlib, MARK, with_ref=True, min_ct
         if DAYS[b]['i1'] - DAYS[a]['i0'] < min_ctx and b < len(DAYS) - 1: b += 1
     parts = []
     if a < d: parts.append('【前文】' + ctx_text(keys, txt, DAYS[a]['i0'], i0, {}))
-    parts.append('【本日（待判字位以圈號標出，▢ 為其他未定字）】' + ctx_text(keys, txt, i0, i1, marks_at))
+    parts.append(('【本日（待判字位以圈號標出，▢ 為其他未定字）】' if FILL['mode'] == 'box' else '【本日（待判字位以圈號標出；〔X?〕為其他未定字，X 是圖像識別的首選，未必對）】') + ctx_text(keys, txt, i0, i1, marks_at))
     if b > d: parts.append('【後文】' + ctx_text(keys, txt, i1, DAYS[b]['i1'], {}))
     lines = ['\n'.join(parts), '', '【待判字位與候選】']
     allchars = []
