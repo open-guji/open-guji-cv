@@ -14,7 +14,7 @@
 本模块现在只做**金标派生**：优先读 `align_ref` 的产物（指纹对得上才用，
 见 `_aligned_chars`），把 `shape`（v2 定的刻本形，仍从 `context_decision`/
 `glyph_match`/`ocr_candidates` 现算——这部分本来就不是"对齐"）与
-`align_ref` 给的 `reading`/`align_op`/`op_run` 拼成 `GoldChar`。
+`align_ref` 给的整理本字 `ref`/`align_op`/`op_run` 拼成 `GoldChar`。
 
 调用方传了非默认 `corpus_path`（`build_rare_char_set.py`/
 `survey_review_queue.py` 的 `--corpus`）、或还没跑过 `align_ref` 时，
@@ -38,17 +38,13 @@
    就是挖漏了，后面的数字一概作废。这个模块只产金标，挖洞是评测脚本的事，
    纪律记在这里免得忘。
 
-## 字形 / 释读分开记（用户 2026-09-04 定）
+## 每条金标两个字
 
-「碰到已/巳、人/入 这类，先读字形，但是文本录入要按文意录（最好能记录
-这个转换）」。所以每条金标带两个字段：
+- `shape`：刻本上实际刻的形（v2 定字给的）；
+- `ref`：整理本在这一位印的字。
 
-- `shape`：刻本上实际刻的形（v2 定字给的，字形层照录）；
-- `reading`：文意上该读什么（整理本给的）。
-
-两者不同就是一次**转换**，`conversion=True`。这跟 `GlyphDB.admit_instance`
-的 `shape` / `char` 分岔是同一件事（charset_and_lm.md §四）：字形库存前者，
-文本录入用后者，两条线不许互相污染。
+两者不同记 `conversion=True`（刻本形与整理本形不同）。2026-09-26 前这个字段叫 `reading`，
+当作「文意读法」、文本录入用它——用户定取消读法、所有地方只用字形，于是改名，只作对照。
 """
 
 from __future__ import annotations
@@ -73,10 +69,10 @@ class GoldChar:
     col: int
     slot: int
     shape: str                    # 刻本字形（v2 定的）
-    reading: str                  # 文意读法（整理本给的）
+    ref: str                      # 整理本在这一位印的字（此前字段名叫 reading，2026-09-26 改名：没有「读法」这回事）
     align_op: str                 # equal | replace —— 分层读，别混着算
     op_run: int = 1               # 所在对齐段长度，越长越可疑
-    conversion: bool = False      # shape != reading，一次字形→文意的转换
+    conversion: bool = False      # shape != ref（刻本形与整理本形不同）
     source: str = ""              # v2 定字来源：db_same | context | prior
     sub: str | None = None        # 夹注半格的 a/b，正文格 None（2026-09-06）
 
@@ -154,14 +150,14 @@ def align_page(book: str, page: int, store, corpus: str, corpus_index: dict,
         al = aligns.get((col, slot, sub))
         if al is None:
             continue          # 没过闸（insert/delete/长 replace/没被 equal 夹住）
-        reading, op, op_run = al
-        # hyp = 转写（v2 定的字形）；reading = 金标（整理本给的文意读法）
-        conv = hyp != reading
+        ref, op, op_run = al
+        # hyp = 转写（v2 定的字形）；ref = 金标（整理本在这一位印的字）
+        conv = hyp != ref
         n_conv += conv
         iid = f"{book}:{page}:{col}:{slot}{sub}"
         out.append(GoldChar(
             id=iid, page=page, col=col, slot=slot, sub=sub or None,
-            shape=hyp, reading=reading, align_op=op, op_run=op_run,
+            shape=hyp, ref=ref, align_op=op, op_run=op_run,
             conversion=conv, source=meta.get((col, slot, sub), "")))
     return PageGold(book=book, page=page, anchored=True,
                     n_chars=len(out), n_conversion=n_conv, chars=out)
@@ -175,7 +171,7 @@ def align_book(book: str, pages: list[int], store,
 
     - 缺省值曾是 `DEFAULT_CORPUS`（四庫總目那份语料），换一本书就拿总目去锚它。
       本函数有六个调用方（review 卡片、jiazhu 卡片、eval 三处），全都用的缺省值,
-      所以北行日錄的审查卡片整片 `reading: null`——不报错，只是没有整理本对应字。
+      所以北行日錄的审查卡片整片没有整理本对应字——不报错。
     - 语料要**只留汉字**再建索引：锚定载体是刻本字位（无标点），语料带着句读就
       永远凑不出一个能命中的 8-gram。四庫總目那份标点密度 0.000 所以一直没暴露，
       北行日錄校對本是 0.215，7/7 页全部锚定失败。

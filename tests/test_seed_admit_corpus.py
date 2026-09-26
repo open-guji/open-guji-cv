@@ -57,35 +57,31 @@ def test_dual_unsure_does_not_take_db_guess_as_shape(vmap):
         doubts=[], vmap=vmap, match_char=None,
         match_candidates=[("數", 0.957), ("敷", 0.955)],
         match_guard=None, match_wmax=17.1)
-    char, reading = _pick_char(ok=ok, channel=channel, align_char="敷",
-                               match_char=None, verdict="unsure",
-                               candidates=[("數", 0.957), ("敷", 0.955)])
+    char = _pick_char(ok=ok, channel=channel, align_char="敷",
+                      match_char=None, verdict="unsure",
+                      candidates=[("數", 0.957), ("敷", 0.955)])
     assert char == "敷", f"库 unsure 却拿它的猜测当字形：{char}"
-    assert reading is None, "字形与文意相同时不该记转换"
 
 
-def test_variant_keeps_carved_shape_and_records_reading():
-    """库判 same 的异体位：字形照录刻本的形，整理本字只进 reading。
+def test_variant_keeps_carved_shape():
+    """库判 same 的异体位：字照录刻本的形，整理本字不覆盖（2026-09-26 起没有读法，只有这一个字）。
 
-    刻本刻「㫖」而整理本作「旨」——字形库存前者，文本录入用后者。
-    用整理本改 char 会污染字形库（charset_and_lm.md §四）。
+    刻本刻「㫖」而整理本作「旨」——用整理本改 char 会污染字形库（charset_and_lm.md §四）。
     """
     from open_guji_cv.steps.seed_admit import _pick_char
-    char, reading = _pick_char(ok=True, channel="match_replace", align_char="旨",
-                               match_char="㫖", verdict="same",
-                               candidates=[("㫖", 0.99)])
+    char = _pick_char(ok=True, channel="match_replace", align_char="旨",
+                      match_char="㫖", verdict="same",
+                      candidates=[("㫖", 0.99)])
     assert char == "㫖", "字形被整理本覆盖了"
-    assert reading == "旨", "没记下字形→文意的转换"
 
 
 def test_match_solo_still_uses_db_top1():
     """没有整理本时仍取库 top1——别把上面两条修过头。"""
     from open_guji_cv.steps.seed_admit import _pick_char
-    char, reading = _pick_char(ok=True, channel="match_solo", align_char=None,
-                               match_char=None, verdict="unsure",
-                               candidates=[("書", 0.995)])
+    char = _pick_char(ok=True, channel="match_solo", align_char=None,
+                      match_char=None, verdict="unsure",
+                      candidates=[("書", 0.995)])
     assert char == "書"
-    assert reading is None
 
 
 def test_align_label_ids_need_real_book_name():

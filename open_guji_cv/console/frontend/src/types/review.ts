@@ -39,6 +39,8 @@ export interface ReviewCard {
   ref?: ReviewCardRef
   db?: ReviewCardDb
   ctx?: ReviewCardCtx
+  /** 己/已/巳：按上下文定的建议字与依据（utils/ji_yi_si.py） */
+  jys?: { char: string | null; why: string } | null
   ocr?: Array<[string, number]>
   doubts?: string[]
   form?: ReviewCardForm
@@ -53,7 +55,6 @@ export interface ReviewCardsResponse {
 
 export interface ReviewVerdict {
   shape: string
-  reading: string
   done: string
   ts?: number
   dwell?: number

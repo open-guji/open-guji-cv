@@ -62,20 +62,16 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 g = gold.get(r.id)
                 if g is None:
                     continue
-                # ⚠️ 自动放行位比**文意** `reading`，不是字形 `char`（2026-09-16 修，
-                # 同 round_check 判据 A）：两者不同正是一次有意的「字形→文意」转换
-                # （己/已/巳 那条通道：字形取库 top1、文意取整理本）。拿 char 去比
-                # 金标的 reading，等于把设计成要分岔的两层当成一层比，管线没错也报错。
-                pred = (r.reading or r.char) if r.admit else (dd[r.id].char if r.id in dd else None)
+                # 2026-09-26 起只有字形（读法取消），自动放行位直接比 `char`。
+                pred = r.char if r.admit else (dd[r.id].char if r.id in dd else None)
                 if pred is None:
                     continue
                 k = r.channel if r.admit else "人审"
                 slot = by_ch.setdefault(k, [0, 0])
-                # ⚠️ 比 `reading` 不比 `shape`（2026-09-06 修，variant_strategy.md）。
-                # `v2_align` 里 shape = lab.hyp = **当次转写自己**，reading = lab.char
-                # 才是整理本给的金标。比 shape 的后果：equal 段恒真（自证，该模块头
+                # ⚠️ 比 `ref` 不比 `shape`（2026-09-06 修，variant_strategy.md）。
+                # `v2_align` 里 shape = lab.hyp = **当次转写自己**，ref = 整理本在这一位印的字
+                # 才是金标。比 shape 的后果：equal 段恒真（自证，该模块头
                 # 「纪律 1」写过），replace 段比的是「这次跟上次一不一样」，与对错无关。
-                # 实测 vol02 p1–10：比 shape 报 5 错，比 reading 只有 1 条真错。
                 #
                 # 第二项是「忠于刻本字形」方针（用户 2026-09-05 定）的要求：金标记过
                 # 转换（conversion）的位上，输出**刻本形**同样算对——葢/蓋、卽/即 这类
@@ -87,8 +83,8 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 # 「忠于刻本字形」），判据不该记成错。所以：pred 与金标同组、且 pred 就是
                 # 账本给这组定的 preferred → 算对。
                 # 只认 preferred，不认「同组任一形」——否则组内选错形也会被放过。
-                ok = ((pred == g.reading) or (g.conversion and pred == g.shape)
-                      or ledger.preferred_form(g.reading) == pred)
+                ok = ((pred == g.ref) or (g.conversion and pred == g.shape)
+                      or ledger.preferred_form(g.ref) == pred)
                 slot[0] += ok
                 slot[1] += 1
                 # 分层：equal 段是自证层，replace 段才是真正的错误样本，别合成一个数看
@@ -96,7 +92,7 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 lay[0] += ok
                 lay[1] += 1
                 if not ok:
-                    errors.append({"id": r.id, "pred": pred, "gold": g.reading,
+                    errors.append({"id": r.id, "pred": pred, "gold": g.ref,
                                    "shape": g.shape, "align_op": g.align_op,
                                    "channel": k, "cov": (r.evidence or {}).get("cov")})
     acc = [{"channel": k, "ok": v[0], "n": v[1], "acc": round(v[0] / v[1], 4)}

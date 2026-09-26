@@ -3,7 +3,7 @@ import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import { withWorkspace } from '../../api/client'
 import { fetchJiazhuSegments } from '../../api/jiazhu'
 import { postEvents } from '../../api/events'
-import { needsReading, consumedMsg } from '../../domain'
+import { consumedMsg } from '../../domain'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { JiazhuSegment } from '../../types/jiazhu'
 import './jiazhu.css'
@@ -107,9 +107,7 @@ export function JiazhuPanel({ book, pages: pagesProp }: { book: string; pages?: 
         const v = edit[c.id]
         if (v === undefined || !v) continue
         rows.push({
-          id: c.id, v: 'confirm', shape: v,
-          reading: needsReading(v) ? (c.ref || v) : v,
-          conversion: 0, client_ts: Date.now() / 1000,
+          id: c.id, v: 'confirm', shape: v, client_ts: Date.now() / 1000,
         })
       }
     }
@@ -119,7 +117,7 @@ export function JiazhuPanel({ book, pages: pagesProp }: { book: string; pages?: 
       if (!why) continue
       defects.push({
         id: s.cells[0].id, v: 'seg_defect', quality: why.quality, defect: why.key,
-        shape: s.cells[0].char || '', reading: s.cells[0].char || '',
+        shape: s.cells[0].char || '',
         note: `jiazhu_split ${s.id} ${s.n}格 ${why.note}`,
         client_ts: Date.now() / 1000,
       })

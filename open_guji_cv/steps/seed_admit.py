@@ -281,17 +281,13 @@ class SeedAdmitStep(Step):
                 ht = human_texts.get(r.id)
                 if hs or ht:
                     n_auto += 1
-                    # 字形优先取库里那份（进库时经过清洗）；库里没有（人勾了不入库）就取事件里的。
-                    # `reading` 只有事件里才有（己/已/巳 那类"刻 X 读 Y"），且与字形不同才记。
-                    char = hs or ht[0]
-                    reading = None      # 读法取消（2026-09-26），人裁只认字形
-                    # 己/已/巳：人当时若按「看着像 X、文意是 Y」裁（事件带 reading），Y 才是人定的字
-                    # ——本族字形不分，只按文意（用户 2026-09-26，见 utils/ji_yi_si.py）。
-                    if char in _JYS and ht and ht[1] in _JYS:
-                        char = ht[1]
+                    # 字优先取库里那份（进库时经过清洗）；库里没有（人勾了不入库）就取事件里的。
+                    # 己/已/巳 例外：事件侧已按人当时的文意判断归好（`lookup.human_chars`），
+                    # 库里存的可能是「看着像的那个」——本族字形不分，取事件的（utils/ji_yi_si.py）。
+                    char = ht if (ht and hs in _JYS and ht in _JYS) else (hs or ht)
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=True,
-                        channel="human", char=char, reading=reading,
+                        channel="human", char=char,
                         provenance="human", doubts=[],
                         evidence={"human": True, **({} if hs else {"no_glyph_lib": True})}))
                     continue
@@ -380,24 +376,20 @@ class SeedAdmitStep(Step):
                         or (r.candidates and r.candidates[0][0] in always)
                         or (r.char in always)):
                     if p.relax_split_ref and align_char in always:
-                        # 用户 2026-09-06 改口：「己已巳 没必要每次都单独选文意，根据上下文
-                        # 或整理本直接选；字形选哪个都行，不太重要」。文意 = 整理本字，
-                        # 字形 = 库 top1（若也是这三字之一，否则跟整理本）。字形/文意
-                        # 的取值在 _pick_char 之后统一写（见下）。整理本没给字的仍人审。
+                        # 己已巳：字形只定「是这一族」，哪个字按上下文（用户 2026-09-06 / 09-26）。
+                        # 这里先放行、字取整理本；页末 `_resolve_ji_yi_si` 按上下文改定。
                         ok, channel = True, "split_ref"
                     elif ok:
                         ok, channel = False, None
 
-                char, reading = _pick_char(
+                char = _pick_char(
                     ok=ok, channel=channel, align_char=align_char,
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
                 if channel == "split_ref":
-                    # 己/已/巳：刻本三字刻法常不分，库 top1 定不了是哪个字。读法取消后（2026-09-26）
-                    # 字形直接取整理本字——此前字形取库 top1、文意取整理本，文本出文意；
-                    # 去掉文意后若仍取库 top1，「己丑」会变回「已丑」（bxgb 影子核对裁过 3 处）。
+                    # 己/已/巳：刻本三字刻法常不分，库 top1 定不了是哪个字，先取整理本字；
+                    # 页末 `_resolve_ji_yi_si` 再按上下文定（干支/时辰/搭配压过整理本）。
                     char = align_char
-                    reading = None
                 # variant_form 分支要用**改名前**的 channel 判——见下面「⚠️ dual 档判 variant_form
                 # 判早了」。这里先存一份，改名（下一段）之后再用它，别被 "dual" 字符串盖掉。
                 is_corpus_channel = channel in _CORPUS_CHANNELS
@@ -435,20 +427,16 @@ class SeedAdmitStep(Step):
                         _top = r.candidates[0][0] if r.candidates else None
                         if fd.state == "open" and p.relax_ref_agree and _top in forms:
                             # 用户 2026-09-06「整理本和字形分析一致时直接放行」：组里哪个形
-                            # 没定，但库 top1 就是组内的一个形——拿它当形（最好的猜测），文意
-                            # 取整理本。证据里 state=guess，判据 E 的分母（_multi_form）会把
+                            # 没定，但库 top1 就是组内的一个形——拿它当形（最好的猜测）。证据里 state=guess，判据 E 的分母（_multi_form）会把
                             # 它算进抽审；错了走 audit_glyph_consistency 那套人裁子库复查。
                             char = _top
-                            reading = align_char if align_char != char else None
                             form_ev = {**form_ev, "state": "guess"}
                         elif fd.state == "open":
                             ok, channel, prov, form_open = False, None, "", True
                             doubts = doubts + ["form_open"]
                             char = None
-                            reading = align_char
                         else:
                             char = fd.char
-                            reading = align_char if align_char != char else None
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
@@ -479,7 +467,7 @@ class SeedAdmitStep(Step):
                 # 整理本 × 形状/上下文 一致 → 放行（用户 2026-09-06「很多都是整理本存在时
                 # 非常明显的选择，能不能放松要求」）。走到这里还没放行的位，若整理本字与库
                 # top1 语义同字（刻本形归一后是同一个字），或与 Step6 上下文定字相同，就放行：
-                # 形取库 top1（它是刻本形），文意取整理本。两册人审位实测（关掉人裁通道的
+                # 形取库 top1（它是刻本形）。两册人审位实测（关掉人裁通道的
                 # 产物）整理本≡库top1 10/10、==上下文 4/4；全部人裁真值上反例 0（relax_study）。
                 # 己已巳 不走这里（上面 split_ref 单独处理）。
                 if (not ok and p.relax_ref_agree and align_char and align_char not in always):
@@ -489,18 +477,16 @@ class SeedAdmitStep(Step):
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         ok, channel, prov = True, "ref_lib", "match"
                         char = _top
-                        reading = align_char if align_char != _top else None
                     elif _d and _d.char and _d.char == align_char:
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
-                        reading = None
                 if ok:
                     n_auto += 1
                 else:
                     n_review += 1
                 recs.append(AdmitRec(
                     id=r.id, slot=r.slot, sub=r.sub, admit=ok, channel=channel,
-                    char=char, reading=None, provenance=prov,   # 读法取消（2026-09-26），只记字形
+                    char=char, provenance=prov,
                     doubts=[] if ok else (_doubts(r, d) + doubts),
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,
@@ -522,7 +508,8 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
     - **干支 / 时辰**（几乎不会错）：直接定字并放行——哪怕原先落了人审；
     - 其余（「己」的搭配、整理本给「己」、默认「已」）：**原已放行的改成规则的字**——原先的字
       不过是库或整理本对字形的猜测，而本族字形本就不分（四庫整理本自己也把「而已」印成「而巳」）；
-      原在人审 → 仍人审，证据里写建议字。
+      原在人审、但字形证据确认是这一族（库 top1 属本族且 cov ≥ 0.95，或 OCR 首选属本族）→
+      按规则的字放行；字形证据不足 → 仍人审，证据里写建议字。
     人裁位不动（人定的就是文意）。→ (新增放行数, 新增人审数)。
     实测（人裁为真值，bxgb + 四庫 vol01/02）：干支/时辰 全对；搭配与默认 约 96%。
     """
@@ -547,15 +534,18 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
                 d_review -= 1
             r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
-        elif r.admit and ch != r.char:
+        elif r.admit:
             r.char = ch
+        else:
+            ev = r.evidence or {}
+            ocr1 = (ev.get("ocr") or [[None]])[0][0] if ev.get("ocr") else None
+            if (ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS:
+                r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
+                d_auto += 1
+                d_review -= 1
     return d_auto, d_review
 
 
-# 整理本参与的通道：`reading` 记整理本字（字形仍照录图上的形）。
-# ⚠️ match_ref 也在内（2026-09-05 补）：它放行的依据就是「库 top1 语义 == 整理本字」，
-# 漏掉它的后果是 vol01:18:8:6 刻「㫖」、整理本「旨」被存成 reading=None——
-# 体检判据 A 把这种异体位当成错例（99.99%），其实是转换没记下来。
 @lru_cache(maxsize=4)
 def _human_shapes(db_path: str) -> dict[str, str]:
     """字形库里人裁过的位 → 人裁的**字形**。`{裸 id: shape}`（去掉 v2: 前缀）。
@@ -609,43 +599,32 @@ def _human_shapes(db_path: str) -> dict[str, str]:
 
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
-                    # note_lexicon（2026-09-06）：版本注闭集给的读法同样是**文本证据**，
-                    # 与整理本那几路一个性质——`reading` 该填、字形该照录图上的形、
-                    # 「义定形未定」的组内定形该走。漏进这个元组会有两个后果：
-                    # reading 不填（账本统计不到转换），以及 variant_form 整段跳过
-                    # （刻本形被整理本形盖掉，正是判据 E 82/91 那次的机制）。
+                    # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
+                    # 库没下 same 断言时拿整理本字当字形估计，且要走「义定形未定」的组内定形；
+                    # 漏进这个元组，variant_form 整段跳过（刻本形被整理本形盖掉，判据 E 82/91 那次）。
                     "note_lexicon")
 
 
 def _pick_char(ok: bool, channel: str | None, align_char: str | None,
                match_char: str | None, verdict: str,
-               candidates: list) -> tuple[str | None, str | None]:
-    """决定这一位的 **(字形, 文意)**。
+               candidates: list) -> str | None:
+    """决定这一位的**字**（刻本字形；2026-09-26 起没有「读法」）。
 
-    - `char`（字形）：same 档用库继承的字；否则取**库候选 top1**——那正是
-      match_solo / match_solo_ocr 采信的东西，不取就会「自动进库却没有字」。
-    - `reading`（文意）：整理本参与的通道填整理本字；与 char 相同时返回 None。
+    same 档用库继承的字；整理本参与的通道、库又没下 same 断言时取整理本字；
+    否则取**库候选 top1**——那正是 match_solo / match_solo_ocr 采信的东西。
 
-    ## ⚠️ 整理本字不能覆盖 `char`
+    ## ⚠️ 库判 same 时整理本字不能覆盖
 
-    第一版让整理本字直接覆盖 `char`，结果 7 条异体字位被写成了整理本的形：
-    刻本刻「㫖」存成「旨」、「彚」存成「彙」、「卽」存成「即」。`AdmitRec.char`
-    喂的是字形库，**字形库存的是刻本上实际刻的形**——用整理本改它，将来一个真
-    刻成这形状的实例会继承错误的字形（charset_and_lm.md §四的实锤）。所以整理本
-    字只进 `reading`，`char` 永远照录图上的形。
+    第一版让整理本字直接覆盖，7 条异体字位被写成了整理本的形：刻本刻「㫖」存成「旨」、
+    「彚」存成「彙」、「卽」存成「即」。字形库存的是刻本上实际刻的形（charset_and_lm.md §四）。
 
     ## ⚠️ `channel is None` 也是一条通道
 
     `dual` 档（align × OCR 双信号一致且零疑问）在 `admission_decision` 里是
-    `return True, None`——**没有通道名**。漏掉它，`reading` 就不会填；更早的一版
-    连 `char` 都会掉进库 top1 兜底，实测判错 9 条金标（vol01:42:3:20 align 与
-    OCR 都读「敷」，库 top1 却是「數」，0.957 vs 0.955 的 HOG 饱和差距）。
-    所以按「这条通道用没用整理本」判，而不是列通道名。
+    `return True, None`——**没有通道名**。所以按「这条通道用没用整理本」判，而不是列通道名。
     """
     char = match_char if verdict == "same" else None
-    reading = None
     if ok and align_char and channel in _CORPUS_CHANNELS:
-        reading = align_char
         # ⚠️ 库 unsure 时，**别拿库 top1 当字形**。
         #
         # unsure 的字面意思就是「库不知道这是什么」：实测 8 条 dual 位
@@ -656,12 +635,12 @@ def _pick_char(ok: bool, channel: str | None, align_char: str | None,
         #
         # 库判 same 才有资格定字形（那是它下了断言）；unsure 时两路零同源证据
         # 一致，整理本字是更好的字形估计。异体位（㫖/旨、彚/彙）不受影响：
-        # 库对它们判 same，char 仍照录刻本的形，只有 reading 取整理本。
+        # 库对它们判 same，char 仍照录刻本的形。
         if char is None:
             char = align_char
     if char is None and candidates:
         char = candidates[0][0]
-    return char, (reading if reading and reading != char else None)
+    return char
 
 
 def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:

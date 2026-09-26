@@ -3,7 +3,7 @@ import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import { fetchVariantGroups } from '../../api/variants'
 import { submitRun, fetchRun } from '../../api/runs'
 import { postEvents } from '../../api/events'
-import { needsReading, consumedMsg } from '../../domain'
+import { consumedMsg } from '../../domain'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { GroupTile, VariantGroupView } from '../../types/variants'
 import './variants.css'
@@ -67,8 +67,7 @@ export function GroupsPanel({ book }: { book: string }) {
 
     const story = (g: VariantGroupView) =>
       g.n_pending > 0 || g.n_stale > 0 || g.n_audit > 0 ||
-      new Set(g.tiles.filter((t) => t.char).map((t) => t.char)).size >= 2 ||
-      g.tiles.some((t) => t.reading && t.char && t.reading !== t.char)
+      new Set(g.tiles.filter((t) => t.char).map((t) => t.char)).size >= 2
     const mainIdx = d.map((g, k) => [g, k] as const).filter(([g]) => story(g)).map(([, k]) => k)
     if (mainIdx.length) show(mainIdx[0], d)
     else if (d.length) show(0, d)
@@ -168,21 +167,17 @@ export function GroupsPanel({ book }: { book: string }) {
         const dshape = s.col
         rows.push({
           id: t.id, v: 'seg_defect', quality: s.mark,
-          shape: dshape, reading: needsReading(dshape) ? (g.reading_default || dshape) : dshape,
+          shape: dshape,
           client_ts: now,
         })
         continue
       }
       if (s.other) {
         if (!s.otherChar) { skipped++; continue }
-        rows.push({ id: t.id, v: 'confirm', shape: s.otherChar, reading: s.otherChar, conversion: 0, client_ts: now, group: 'out:' + g.canonical })
+        rows.push({ id: t.id, v: 'confirm', shape: s.otherChar, client_ts: now, group: 'out:' + g.canonical })
         continue
       }
-      const shape = s.col
-      const reading = needsReading(shape)
-        ? (t.reading && t.reading !== t.char ? t.reading : (g.reading_default || shape))
-        : shape
-      rows.push({ id: t.id, v: 'confirm', shape, reading: reading || shape, conversion: (reading && reading !== shape) ? 1 : 0, client_ts: now, group: g.canonical })
+      rows.push({ id: t.id, v: 'confirm', shape: s.col, client_ts: now, group: g.canonical })
     }
     if (!rows.length) { setMsg(skipped ? `组外那 ${skipped} 格还没填字` : '没有要提交的格'); return }
     const batch = `${book}-variants-${g.canonical}`
@@ -219,8 +214,7 @@ export function GroupsPanel({ book }: { book: string }) {
 
   const story = (gr: VariantGroupView) =>
     gr.n_pending > 0 || gr.n_stale > 0 || gr.n_audit > 0 ||
-    new Set(gr.tiles.filter((t) => t.char).map((t) => t.char)).size >= 2 ||
-    gr.tiles.some((t) => t.reading && t.char && t.reading !== t.char)
+    new Set(gr.tiles.filter((t) => t.char).map((t) => t.char)).size >= 2
   const mainList = data ? data.map((gr, k) => [gr, k] as const).filter(([gr]) => story(gr)) : []
   const restList = data ? data.map((gr, k) => [gr, k] as const).filter(([gr]) => !story(gr)) : []
 
@@ -265,7 +259,7 @@ export function GroupsPanel({ book }: { book: string }) {
         <>
           <p className="muted var-help">
             红虚框 = 义定形未定（待审）。<b>单击 = 选中</b>（蓝框），选中后才好按键；
-            <b>双击 / 空格 / ←→</b> = 挪列改形。提交时每格记 shape（所在列）+ reading（整理本字），两者不同即一次转换。
+            <b>双击 / 空格 / ←→</b> = 挪列改形。提交时每格记所在列的字形。
             选中后可按：<b>O</b> 组外（两个形都不是——扔进下面那栏再填字） ·
             <b>N</b> 非字 · <b>T</b> 字形不完整 · <b>C</b> 有噪声——后三个是"这块图不能用，不是认错字"，
             提交后写进金标与排除名单，这一格<b>以后不进库也不再出卡</b>。
@@ -280,7 +274,7 @@ export function GroupsPanel({ book }: { book: string }) {
                 <div className="vcol" key={c}>
                   <div className="vhead">
                     <span className="vgl">{c}</span>
-                    <span className="muted">刻 {carved}{b.human ? `·人${b.human}` : ''} · 整理本 {f.ref || 0}{c === g.reading_default ? ' · 文意' : ''}{c === g.preferred ? ' · 本书惯用' : ''}</span>
+                    <span className="muted">刻 {carved}{b.human ? `·人${b.human}` : ''} · 整理本 {f.ref || 0}{c === g.preferred ? ' · 本书惯用' : ''}</span>
                   </div>
                   <div className="vtiles">
                     {(byCol[c] || []).map((t) => {

@@ -90,14 +90,12 @@ def _expected_of(e: Event) -> dict:
     if e.kind == "confirm" and p.get("v") == "seg_defect":
         # 切分缺陷：quality 沿用 char-segmentation/instances 的四分类
         # （clean / truncated / contaminated / not_text），不另造词。
-        # 字形/文意若已填也一并留着——人看图时顺手认出的字不该丢。
+        # 字形若已填也一并留着——人看图时顺手认出的字不该丢。
         out = {"quality": p.get("quality") or "contaminated"}
         if p.get("defect"):
             out["defect"] = p["defect"]
         if p.get("shape"):
             out["shape"] = p["shape"]
-        if p.get("reading"):
-            out["reading"] = p["reading"]
         # `note` 要留住（2026-09-06）：四分类只说「这块图脏」，说不出**怎么脏**。
         # 夹注段卡标的缺陷（少格 / 多格 / ab 分错边）全靠它区分——丢了这一行，
         # 金标里就只剩一个 contaminated，将来没法按缺陷类型归因，也没法回查是哪一段。
@@ -116,7 +114,7 @@ def _expected_of(e: Event) -> dict:
         # cand：verdict == "cand" 时**算法候选里被人选中的那一种**（straight / seam_narrow /
         # seam_wide）。这是攒给下游打分函数的样本——哪条缝被人看上了，比 y 更能说明问题
         # （2026-09-10）。
-        # char_above/below：**整理本读法**（v2_align 的 `reading`）。
+        # char_above/below：**整理本在这一位印的字**（v2_align 的 `ref`）。
         # shape_above/below：v2 定字认的刻本形（`shape`）。两者不同即一次转换。
         # ⚠️ 2026-09-13 之前 `char_*` 存进来的其实是 `shape`（卡片取错了字段，
         # 标签却写着「整理本期望」）——那之前的历史事件里 `char_*` 要按 shape
@@ -275,20 +273,11 @@ def glyphdb_admit(events, db_path: str | None = None,
     这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
     此前只能手动跑 `seed-ingest`，人裁结果与控制台脱节。
 
-    ## 字形 / 释读分开写（用户 2026-09-04 定）
+    ## 只有字形（2026-09-26）
 
-    「碰到已/巳、人/入 这类，先读字形，但是文本录入要按文意录（最好能记录
-    这个转换）」。事件 payload 因此带两个值：
-
-    - `shape`：图上刻的形 → `admit_instance(shape=...)`，进 `glyphs` /
-      `exemplars` / `GlyphMatcher` 的**字形索引**；
-    - `reading`：文意读法 → `admit_instance(char=...)`，进 `admissions.char`
-      与 `instances.semantic`。
-
-    两者不同就是一次转换（`conversion=1`）。**字形永远照录**，连已/巳 也不
-    例外——字形层的 near_form 护栏本来就是防「形状判据自己会认错」，字形库
-    要是被释读污染，将来一个真刻成这形状、该读别的字的实例会错误继承这次的
-    释读，字形匹配整条链就失真（charset_and_lm.md §四的实锤）。
+    事件的 `shape` 进字形索引（`glyphs` / `exemplars` / `GlyphMatcher`），也进 `admissions.char`
+    与 `instances.semantic`。2026-09-04 起曾分「字形 / 释读」两值写，用户 2026-09-26 定取消读法、
+    所有地方只用字形；老事件里的 `reading` 不再读。
 
     `not_a_char` / `skip` / `damaged` 事件不进库（判非字 / 存疑跳过 / 原图破损
     认不出）。三者都靠 `payload.v != "confirm"` 被下面那句过滤挡在外面。
@@ -331,9 +320,6 @@ def glyphdb_admit(events, db_path: str | None = None,
     cache = ImageCache()
     for e, _dest in admits:
         shape = _unmojibake(e.payload.get("shape") or e.payload.get("char"))
-        # 读法取消（用户 2026-09-26：「所有地方都用字形，包括字形库」）：`admissions.char`
-        # 一律记字形。此前 己/已/巳 分字形与文意、其余跟随字形；事件里旧的 `reading` 不再读。
-        reading = shape
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
@@ -397,14 +383,14 @@ def glyphdb_admit(events, db_path: str | None = None,
         # 人裁改判要压过旧的人裁（2026-09-07）。admit_instance 的幂等闸只认主键：
         # 第一次裁 巳、后来改判 已，第二个事件被闸掉，库里永远是 巳——seed_admit 的
         # 人裁通道读库就跟着错，判据 E 报「存 巳 人裁 已」（29:4:19、80:5:7；更早
-        # 蠹、32:7:10 也是它）。所以：库里已有**人裁**记录且字形或释读不同 → 撤旧再进。
+        # 蠹、32:7:10 也是它）。所以：库里已有**人裁**记录且字不同 → 撤旧再进。
         # 机器进的（provenance 非 human）本来就该被人裁覆盖，同样撤。
         prev = db.conn.execute(
             "SELECT a.provenance, a.char, g.char FROM admissions a "
             "  LEFT JOIN exemplars e ON e.instance_id = a.instance_id "
             "  LEFT JOIN glyphs g ON g.glyph_id = e.glyph_id "
             " WHERE a.instance_id = ?", (db_id,)).fetchone()
-        if prev is not None and (prev[2] != shape or prev[1] != reading):
+        if prev is not None and (prev[2] != shape or prev[1] != shape):
             from ..clustering.audit import evict_instance
             evict_instance(db, db_id)
             res.updated += 1
@@ -424,11 +410,11 @@ def glyphdb_admit(events, db_path: str | None = None,
             evict_instance(db, twin)
             res.updated += 1
         ok = db.admit_instance(
-            db_id, reading, cv2.imencode(".png", img)[1].tobytes(),
+            db_id, shape, cv2.imencode(".png", img)[1].tobytes(),
             provenance="human", shape=shape,
             evidence={"event": e.id, "batch": e.batch,
                       "conversion": bool(e.payload.get("conversion")),
-                      "shape": shape, "reading": reading},
+                      "shape": shape},
             page=str(e.target.page or ""), col=int(e.target.col or 0),
             idx=int(e.target.slot or 0))
         if ok:

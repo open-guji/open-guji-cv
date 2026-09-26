@@ -188,7 +188,7 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
       id: c.id, y, y_old: c.y,
       verdict: verdict === 'idk' ? 'idk' : (drawn ? 'moved' : (k === c.chosen ? 'ok' : 'moved')),
       bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below, col_h: c.col_h,
-      // char_* = 整理本读法（reading）；shape_* = v2 定字认的刻本形。
+      // char_* = 整理本在这一位印的字（v2_align 的 ref）；shape_* = v2 定字认的刻本形。
       // 2026-09-13 之前 char_* 存的其实是 shape，两层混记；此后分开存，
       // 历史事件里的 char_* 要按 shape 理解（见 eval/touching.attach_expected）。
       char_above: c.char_above || '', char_below: c.char_below || '',
