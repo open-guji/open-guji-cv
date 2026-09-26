@@ -5,7 +5,7 @@
 
 登录用机器人密码（Special:BotPasswords），读 `~/.wikisource-bot`（两行 `WS_USER=` / `WS_PASS=`，
 权限 600，不进任何仓）。页名映射复用 `export_wikisource.BOOKS`。已存在的页直接覆盖（历史里留旧版）。
-页眉页脚留空；`--level` 是 ProofreadPage 校对等级（1 未校对 / 3 已校对 / 4 已核对）。
+页眉页脚留空；`--level` 是 ProofreadPage 校对等级（1 未校对 / 3 已校对 / 4 已核对），默认 3（用户 2026-09-26 定：一律标已校对）。
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("book", choices=sorted(BOOKS))
     ap.add_argument("--pages", required=True, help="扫描页号，如 3,4 或 3-56")
-    ap.add_argument("--level", type=int, default=1, choices=(1, 2, 3, 4))
+    ap.add_argument("--level", type=int, default=3, choices=(1, 2, 3, 4))  # 用户 2026-09-26 定：维基文库一律标已校对
     ap.add_argument("--dir", default=None, help="pNNN.wiki 所在目录；缺省工作区 reports/<book>/wikisource")
     ap.add_argument("--workspace", "-w", default=None)
     ap.add_argument("--sleep", type=float, default=5.0)
