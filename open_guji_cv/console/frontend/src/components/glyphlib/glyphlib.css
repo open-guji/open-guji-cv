@@ -61,3 +61,4 @@
 .gl-ids-hit figcaption { font-size: .72rem; text-align: center; }
 .gl-ids-hit figcaption b { font-size: 1.1rem; }
 .gl-m-exact .gl-img, .gl-m-expanded .gl-img { outline: 2px solid var(--ochre); }
+.gl-batchbar { align-items: center; }
