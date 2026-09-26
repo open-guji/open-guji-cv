@@ -45,10 +45,10 @@ def main() -> int:
         a, _, b = sys.argv[sys.argv.index("--pages") + 1].partition("-")
         lo, hi = int(a), int(b or a)
     c = sqlite3.connect(f"file:{glyph_db_path()}?mode=ro", uri=True)
-    v1 = {r[0] for r in c.execute("SELECT source_id FROM sources WHERE pipeline_version='v1'")}
-    rows = [r for r in c.execute(
+    rows = c.execute(
         "SELECT i.instance_id, i.label, d.data FROM instances i JOIN derived d "
-        "ON d.instance_id=i.instance_id AND d.kind='norm'") if r[0].split(":")[0] in v1]
+        "ON d.instance_id=i.instance_id AND d.kind='norm' "
+        "JOIN sources s ON s.source_id=i.source_id WHERE s.pipeline_version='v1'").fetchall()
     import open_guji_cv.steps  # noqa: F401  注册各步，materialize 才找得到生产者
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.spec import page_key
@@ -84,7 +84,7 @@ def main() -> int:
 
     with open(out, "w", encoding="utf-8") as fh:
         for iid, label, norm in rows:
-            b, pg, col, idx = iid.split(":")
+            b, pg, col, idx = iid.removeprefix("v1:").split(":")   # 重键后留下的 v1 带 v1: 前缀
             if not (lo <= int(pg) <= hi) or not idx.isdigit():
                 continue
             mine = _unpng(norm)
