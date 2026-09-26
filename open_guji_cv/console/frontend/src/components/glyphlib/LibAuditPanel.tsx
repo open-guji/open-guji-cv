@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+
+// 一批只渲染这么多卡（每卡六张图）：四庫 435 张一次铺开，浏览器卡死（用户 2026-09-26）
+const BATCH = 30
 import { IdsPicker } from './IdsPicker'
 import { fetchLibAudit, FONT_NAME, libFontUrl, libPatchUrl, postLibAudit, PROV_LABEL,
   type AuditDecision, type AuditFinding, type AuditResult } from '../../api/glyphlib'
@@ -13,10 +16,29 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
   const [done, setDone] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState('')
   const [picking, setPicking] = useState('')
+  const [skipped, setSkipped] = useState<Set<string>>(new Set())   // 翻过去没裁的，本轮不再出
+  const [view, setView] = useState<string[] | null>(null)          // 当前这一批的卡（key）
   useEffect(() => { fetchLibAudit().then(setR).catch((e) => setErr((e as Error).message)) }, [])
 
   const shown = useMemo(() => (r?.findings ?? []).filter((f) => !flag || f.flags.includes(flag)
     || (flag === 'human_conflict' && f.human_conflict) || (flag === 'context' && f.provenance === 'context')), [r, flag])
+
+  // 下一批：跳过当前批里没裁的，从剩下（未裁、未跳过）的里再取 BATCH 张
+  const takeBatch = (skip: Set<string>) =>
+    shown.filter((f) => !done[f.key] && !skip.has(f.key)).slice(0, BATCH).map((f) => f.key)
+  const batchKeys = view ?? takeBatch(skipped)
+  const byKey = new Map(shown.map((f) => [f.key, f]))
+  const batch = batchKeys.map((k) => byKey.get(k)).filter((f): f is AuditFinding => !!f)
+  const left = shown.filter((f) => !done[f.key] && !skipped.has(f.key) && !batchKeys.includes(f.key)).length
+  const nBatchDone = batch.filter((f) => done[f.key]).length
+  function nextBatch() {
+    const skip = new Set(skipped)
+    batch.forEach((f) => { if (!done[f.key]) skip.add(f.key) })
+    setSkipped(skip)
+    setView(takeBatch(skip))
+    window.scrollTo({ top: 0 })
+  }
+  function restart() { setSkipped(new Set()); setView(null) }
 
   async function decide(f: AuditFinding, d: Omit<AuditDecision, 'key' | 'instance_id'>) {
     setBusy(f.key)
@@ -42,7 +64,7 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
         <span className="muted">体检于 {r.meta.created_at}，查 {r.meta.n_checked?.toLocaleString()} 例，标 {r.meta.n_flagged} 例；
           已裁 {r.n_decided + Object.keys(done).length}，参照：{(r.meta.others ?? []).join('、') || '仅本书'}</span>
         <label className="muted">只看
-          <select value={flag} onChange={(e) => setFlag(e.target.value)}>
+          <select value={flag} onChange={(e) => { setFlag(e.target.value); restart() }}>
             <option value="">全部 {r.findings.length}</option>
             {Object.entries(r.flag_labels).map(([k, t]) => <option key={k} value={k}>{t} {fc[k] ?? 0}</option>)}
             <option value="human_conflict">人裁 × 人裁冲突</option>
@@ -67,7 +89,12 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
               <a key={c} href="#" onClick={(e) => { e.preventDefault(); onPick(c) }}> {c}</a>))}</p>
         </details>
       )}
-      {shown.map((f) => (
+      <div className="pv-toolbar gl-batchbar">
+        <span>本批 {batch.length} 张，已裁 {nBatchDone}；后面还有 {left} 张{skipped.size ? `，跳过 ${skipped.size} 张` : ''}</span>
+        <button className={nBatchDone === batch.length && left ? 'primary' : ''} disabled={!left} onClick={nextBatch}>下一批 {BATCH}</button>
+        {skipped.size > 0 && <button onClick={restart}>回头看跳过的</button>}
+      </div>
+      {batch.map((f) => (
         <div key={f.key} className={`card gl-audit${done[f.key] ? ' gl-done' : ''}`}>
           <div className="gl-audit-head">
             <a href="#" className="gl-big-sm" onClick={(e) => { e.preventDefault(); onPick(f.char) }}>{f.char}</a>
@@ -123,7 +150,13 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
           )}
         </div>
       ))}
-      {shown.length === 0 && <p className="muted">这一类没有待裁的卡。</p>}
+      {batch.length === 0 && <p className="muted">这一类没有待裁的卡。</p>}
+      {batch.length > 0 && (
+        <div className="pv-toolbar gl-batchbar">
+          <span className="muted">本批已裁 {nBatchDone} / {batch.length}</span>
+          <button className={nBatchDone === batch.length && left ? 'primary' : ''} disabled={!left} onClick={nextBatch}>下一批 {BATCH}（跳过本批没裁的）</button>
+        </div>
+      )}
       <p className="muted gl-note">撤库、改字改的是 glyph.db；裁完在工作区跑 <span className="mono">glyph-db export</span> 把真源带进 git（总账页会提示漂移）。</p>
     </div>
   )
