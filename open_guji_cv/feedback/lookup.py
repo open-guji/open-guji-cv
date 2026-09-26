@@ -146,7 +146,7 @@ def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
 
 
 def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
-    """人**拖过**的切线：`(page, col, slot_above) → 当前列图里的 y`（2026-09-26）。
+    """人**拖过或认可过**的切线：`(page, col, slot_above) → 当前列图里的 y`（2026-09-26）。
 
     `resolved_cuts` 只认「选某条候选」「现役就对」两类——人把线拖到别处（`moved`、没选候选）
     的裁决只进金标，Step3 重跑照旧切在原处，人白拖（vol02 179:1:18「百」首横、140:9:8「舊」
@@ -168,7 +168,10 @@ def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
         return out
     for it in items:
         ex = it.expected
-        if it.status != "active" or str(it.anchor.book) != book or ex.get("verdict") != "moved":
+        # `ok` 也收（2026-09-26）：人对着**钉住后的线**又按了回车，后到的 `ok` 覆盖了先前的 `moved`，
+        # 若只认 `moved`，钉子就此丢了、重跑又退回 DP 那条（vol02 179:1:19 等 6 条实测退回 25–41px）。
+        # `ok` 的 y 就是人当时看到并认可的位置，钉上去与现状一致时什么都不变。
+        if it.status != "active" or str(it.anchor.book) != book or ex.get("verdict") not in ("moved", "ok"):
             continue
         if ex.get("cand") or ex.get("page_y") is None:
             continue
