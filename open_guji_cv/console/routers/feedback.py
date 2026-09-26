@@ -129,9 +129,22 @@ def _product_anchor(step: str, ids: dict) -> dict | None:
         return None
 
 
+_EVENTS_LOCK = __import__("threading").Lock()
+
+
 @router.post("/api/events")
 def api_events(req: EventsIn) -> dict:
-    """审查页直连写入。seq 从当前最大值续，保证同批不撞号。"""
+    """审查页直连写入。seq 从当前最大值续，保证同批不撞号。
+
+    **整段串行**（2026-09-26）：FastAPI 把同步路由放进线程池并发跑，而这里「取最大 seq → 追加」
+    与消费里金标的「整读 → 合并 → 整写」都是读改写。切线台改成回车先跳下一张、不等写入返回后，
+    人连按回车就有几个 POST 同时在跑——实测 vol02 两分钟里丢了 9 条金标（事件与记账都在，
+    裁决表里没有：两次 upsert 读到同一版文件，后写的覆盖了先写的）。"""
+    with _EVENTS_LOCK:
+        return _api_events(req)
+
+
+def _api_events(req: EventsIn) -> dict:
     base = deps.event_log().latest_seq(req.batch)
     evs = []
     for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
