@@ -86,6 +86,10 @@ class OcrRec(BaseModel):
     topk: list[tuple[str, float]] = Field(default_factory=list)
     #                                        # (字, prob)，已含简→繁扩展
     engine: str = ""
+    error: str | None = None
+    """这一格识别本身失败的原因（2026-09-26 加，`steps/ocr_candidates.py` 写）。
+    `topk` 为空且这个字段也是 None：正常跑完但引擎没吐出候选；这个字段非空：
+    `rec_topk` 对这一格抛了异常，`ocr_candidates.py` 拿它算整页失败率的分子。"""
 
 
 class ColumnOcr(BaseModel):
