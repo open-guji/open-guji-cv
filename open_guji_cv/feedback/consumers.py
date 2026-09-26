@@ -421,9 +421,11 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.added += 1
             # v1 来源（四庫 vol01）的同一格在 idx = slot − 1 上，形状对得上才认（2026-09-25：
             # 四庫 177 格两份并存，其中 37 格 v1 标的字是错的）。机器那份撤掉，人裁的不动。
-            from ..clustering.glyph_ledger import V1_TWIN_COV, v1_twin_id
-            t = v1_twin_id(db_id)
-            if t and t.split(":", 1)[0] != "v2":
+            # v1 重键后没对上现格的留在 `v1:<book>:p:c:idx`，重键前是裸的 `<book>:p:c:idx`；按来源认
+            from ..clustering.glyph_ledger import V1_TWIN_COV, v1_twin_ids
+            for t in v1_twin_ids(db_id):
+                if t.split(":", 1)[0] == "v2":
+                    continue
                 row = db.conn.execute(
                     "SELECT a.provenance FROM admissions a JOIN instances i USING(instance_id) "
                     "  JOIN sources s ON s.source_id = i.source_id "
