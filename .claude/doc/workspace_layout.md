@@ -108,6 +108,14 @@ python -m open_guji_cv glyph-db import-font
 而它不进 Git。这是一个**已知缺口**：db 可以重跑播种重建（上一次 25 分钟起步），
 但**人裁回流的改判不在重建路径里**，丢了就是丢了。处置见 overview 那篇 §四.2。
 
+> **2026-09-26 实测更正**（本机盘点 `D:\workspace\beixingrilu-workspace`）：北行日錄**现代排印本**的 db 里
+> `human` = 0、`events` = 0，24,884 条全是 align 播种（20,683）＋字体渲染（4,201），**可以重建**；该书两轮人裁在
+> `config/confusable_human.json`（本仓）与 overview `报告/北行日錄校對本订正清单.md`。store 已导出（align 20,683 条），
+> 工作区仍不在任何仓（无 book-index ID）。
+>
+> ⚠️ **只读导出的坑**：`GlyphDB()` 打开老库会跑 `_migrate()` 加列，**会写库**。要不动原库地导出，先拷一份字节副本，
+> `GUJI_GLYPH_DB` 指副本再跑 `snapshot_glyph_store.py`。
+
 新书不要走这条路：**播种进库之后就 `glyph-db export` 出 store**，
 让真源是文本 + PNG，db 退回成可重建的索引。
 
