@@ -32,7 +32,7 @@ _cutline_expected_cache: dict = {}
 @router.get("/api/cutline/cases")
 def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
                       seed: int = 0, batch: str | None = None, skip_done: bool = True,
-                      kind: str = "r2s", scope: str = "all") -> dict:
+                      kind: str = "r2s", scope: str = "all", include_skipped: bool = False) -> dict:
     """切线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。
 
     `kind`：`r2s` 真粘连（切点有墨、附近无墨谷，投影法无解）；`split_char`
@@ -141,6 +141,14 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         # 升级模式：**不按 gold_ids 滤**（152 条升级切点里只有 7 条在金标里，滤了就几乎全没了），
         # 只按本批次已裁的事件滤——人裁完一条它就从「未裁」里消失。
         done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
+    if include_skipped and batch and done:
+        # 「含已跳过」（2026-09-26 用户）：只看未裁时把本批里**最后一次判「拿不准」**的也放出来，
+        # 回头补裁。已裁的其它判定照旧滤掉。
+        last: dict[str, str] = {}
+        for e in deps.event_log().read(batch):
+            if e.kind == "cutline":
+                last[e.target.key] = e.payload.get("verdict") or ""
+        done -= {k for k, v in last.items() if v == "idk"}
     cases = [c for c in cases if c["id"] not in done]
     picked = T.pick_cases(cases, limit, seed=seed)
     # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）。
