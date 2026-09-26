@@ -116,10 +116,13 @@ def test_login_open_step_page_logout(console_port):
         assert "/auth/login" not in page.url, "已登录不该再被赶去登录页"
         assert page.locator("nav.sidebar-steps a", has_text="Step0").count() > 0, "没看到 Step 导航——页面像是没渲染起来"
 
-        # 四 · 退出：点侧栏「退出」，应该清会话回到首页，且再刷新会被重新赶去登录。
+        # 四 · 退出：点侧栏「退出」，应该清会话回到首页——落地后 `useIdentity`
+        # 自己就会发现没有会话、接着跳去登录页，是**同一串**导航，不用另外
+        # `reload()` 去触发（试过 `reload()`：它和这条自动跳转经常撞在一起，
+        # `reload()` 半路把正在跳转的 frame 干掉，报 `ERR_ABORTED`/frame
+        # detached——两条都是导航，等**最终**落地的那一个就够了）。
         page.click("button.sidebar-user-logout")
-        page.wait_for_url(f"{base}/", timeout=5000)
-        page.reload(wait_until="networkidle")
-        assert "/auth/dev-login" in page.url, f"退出后刷新该被重新赶去登录页，实际是 {page.url}"
+        page.wait_for_load_state("networkidle", timeout=5000)
+        assert "/auth/dev-login" in page.url, f"退出后该被赶去登录页，实际停在 {page.url}"
 
         browser.close()

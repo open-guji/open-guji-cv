@@ -7,6 +7,7 @@ import { LibSummaryPanel } from '../components/glyphlib/LibSummaryPanel'
 import { LibCharTable } from '../components/glyphlib/LibCharTable'
 import { LibCharDetail } from '../components/glyphlib/LibCharDetail'
 import { LibAuditPanel } from '../components/glyphlib/LibAuditPanel'
+import { useIdentity } from '../hooks/useIdentity'
 import '../components/glyphlib/glyphlib.css'
 
 // 字形库：本工作区（= 一本书）的字形库总览。用户 2026-09-11 §4 立栏目时只放了组视图，
@@ -24,6 +25,8 @@ export function GlyphLibraryPage() {
     for (const [k, v] of Object.entries(kv)) { if (v) n.set(k, v); else n.delete(k) }
     setSp(n)
   }
+  const identityState = useIdentity()
+  const isAdmin = identityState.status === 'ok' && identityState.identity.tier === 'admin'
 
   return (
     <div>
@@ -38,7 +41,7 @@ export function GlyphLibraryPage() {
       {tab === 'summary' && <LibSummaryPanel onFilter={(f) => set({ tab: 'chars', f })} />}
       {tab === 'chars' && <LibCharTable filter={filter} setFilter={(f) => set({ f })} onPick={(c) => set({ tab: 'char', c })} />}
       {tab === 'char' && <LibCharDetail key={char} char={char} onPick={(c) => set({ c })} />}
-      {tab === 'audit' && <LibAuditPanel onPick={(c) => set({ tab: 'char', c })} />}
+      {tab === 'audit' && <LibAuditPanel isAdmin={isAdmin} onPick={(c) => set({ tab: 'char', c })} />}
       {tab === 'groups' && <GroupsTab />}
     </div>
   )

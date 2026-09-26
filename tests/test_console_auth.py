@@ -163,6 +163,71 @@ def test_no_auth_allowed_on_loopback_host(monkeypatch):
     assert auth_config.get().dev_idp is True
 
 
+# ── 向后兼容：OAuth 没配时别把服务器上正在用的人挡在外面 ─────────────
+#
+# 协调者 09-26 20:10 验收意见：网站两个端点 10 月上旬才有 PR，服务器的
+# systemd 单元现在起控制台不带任何鉴权参数——这次改动一合 main、控制台一
+# 重启，缺省就会变成一个当下用不了的登录页。
+def test_falls_back_to_no_auth_on_loopback_without_oauth_config(monkeypatch, capsys):
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="")   # 模拟「没配置 OAuth」
+    calls = {}
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: calls.update(kw))
+    args = argparse.Namespace(port=8640, no_browser=True, host="127.0.0.1", no_auth=False,
+                              root_path="", dev_idp=False)
+    cli_v2.cmd_console(args)
+    assert calls == {"port": 8640, "open_browser": False, "host": "127.0.0.1", "root_path": ""}
+    assert auth_config.get().no_auth is True
+    assert "未配置 OAuth" in capsys.readouterr().out
+
+
+def test_refuses_start_on_public_host_without_oauth_config(monkeypatch, capsys):
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="")
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: pytest.fail("不该走到 serve()"))
+    args = argparse.Namespace(port=8640, no_browser=True, host="0.0.0.0", no_auth=False,
+                              root_path="", dev_idp=False)
+    with pytest.raises(SystemExit) as exc:
+        cli_v2.cmd_console(args)
+    assert exc.value.code != 0
+    assert "OAuth" in capsys.readouterr().err
+
+
+def test_dev_idp_without_oauth_config_does_not_force_no_auth(monkeypatch):
+    """`--dev-idp` 本身就是「登录流程走得通」的另一种方式——不该被向后兼容
+    那条顺带打开 `--no-auth`（两回事：`--dev-idp` 仍然要求真的走一遍回调）。"""
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="")
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: None)
+    args = argparse.Namespace(port=8640, no_browser=True, host="127.0.0.1", no_auth=False,
+                              root_path="", dev_idp=True)
+    cli_v2.cmd_console(args)
+    assert auth_config.get().no_auth is False
+    assert auth_config.get().dev_idp is True
+
+
+def test_oauth_configured_enforces_auth_even_on_loopback(monkeypatch):
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="a-real-secret")
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: None)
+    args = argparse.Namespace(port=8640, no_browser=True, host="127.0.0.1", no_auth=False,
+                              root_path="", dev_idp=False)
+    cli_v2.cmd_console(args)
+    assert auth_config.get().no_auth is False
+
+
 # ── OAuth 授权码 + PKCE：真流程（假 token_url），不打真网站 ──────────
 def test_login_redirects_to_authorize_with_pkce(client):
     r = client.get("/auth/login")
