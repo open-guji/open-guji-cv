@@ -240,17 +240,39 @@ def _hog(stack: np.ndarray) -> np.ndarray:
     return F / np.maximum(n, 1e-6)
 
 
+#: 体检里「异字」要排除的 Unihan 异体边（2026-09-26，任务书 H §四·4）。`VariantMap.semantic`
+#: 只收整理本用形方向的归并，強/强、內/内 这类码位异体不在里面，于是互判「形似他字」。
+#: 只在体检这一处认，不动 VariantMap（它的表进 Step7 指纹）。kSpoofingVariant 是形近字，不算。
+UNIHAN_SAME = frozenset({"unihan:kSemanticVariant", "unihan:kZVariant"})
+#: 再加简繁两属性：內/内、別/别 在 Unihan 里只有这两条边（码位习惯见字形库 11，待用户定）。
+UNIHAN_SAME_WIDE = UNIHAN_SAME | {"unihan:kSimplifiedVariant", "unihan:kTraditionalVariant"}
+
+
+def _unihan_same(sources: frozenset[str] = UNIHAN_SAME):
+    """(a, b) → 是否 Unihan 异体（`sources` 里任一属性）。关系层表缺席时恒 False。"""
+    try:
+        from ..variants import VariantGraph
+        g = VariantGraph.load()
+    except Exception:
+        return lambda a, b: False
+    return lambda a, b: a != b and any(s in sources for s in g.sources_of(a, b))
+
+
 def run_selfcheck(db_path: str | Path,
                   others: list[tuple[str, str | Path]] = (),
                   font_db: str | Path | None = None,
                   only: set[str] | None = None,
-                  progress: bool = False) -> dict:
-    """体检一本书的库。`others` = [(工作区 id, 库路径)]；`only` 只查这些实例（小集迭代用）。"""
+                  progress: bool = False,
+                  unihan_variants: bool | frozenset[str] = True) -> dict:
+    """体检一本书的库。`others` = [(工作区 id, 库路径)]；`only` 只查这些实例（小集迭代用）。
+    `unihan_variants`：Unihan 异体的两字按同字算（不互判 rival）；True = `UNIHAN_SAME`，也可传属性集合。"""
     from .variants import VariantMap
     from .verify import verify_pair_elastic
 
     t0 = time.time()
     vmap = VariantMap.load()
+    uv = (_unihan_same(UNIHAN_SAME if unihan_variants is True else unihan_variants)
+          if unihan_variants else (lambda a, b: False))
     mine = load_entries(db_path, "", vmap)
     pool = list(mine)
     for ws, p in others:
@@ -312,7 +334,7 @@ def run_selfcheck(db_path: str | Path,
         for j in neigh:
             o = pool[j]
             v = cov(i, j)
-            if o.semantic == e.semantic:
+            if o.semantic == e.semantic or uv(o.char, e.char):
                 if not o.origin and v > f.best_same_self:
                     f.best_same_self = v
                 if v > f.best_same:
@@ -336,7 +358,7 @@ def run_selfcheck(db_path: str | Path,
             if fs is not None:
                 for k in np.argsort(-fs)[:KNN_FONT]:
                     ch = fchars[int(k)]
-                    if ch == e.char or vmap.semantic(ch) == e.semantic:
+                    if ch == e.char or vmap.semantic(ch) == e.semantic or uv(ch, e.char):
                         continue
                     v = float(verify_pair_elastic(e.norm, fnorms[int(k)]).f1)
                     if v > f.font_best:
