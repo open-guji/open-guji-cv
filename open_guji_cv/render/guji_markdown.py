@@ -14,8 +14,8 @@ join（Step3 `cells` × Step7 `seed_admit`、`sort_by_reading` 读序、blank/ex
 阙文三分）**已挪去 `report/slots.py`**，9.3 比对与本模块共用同一份——两边各写
 一套的后果见那个模块头。本模块现在只负责**字位流 → guji-markdown 记号**这一层
 映射（抬头 `^`、挪抬 `.`、雙行夹注 `<a|b>`、單行小注 `<注>`、阙文 `[[]]`）。
-單行小注在 guji-markdown 里就是不带 `|` 的 `<小注>`（那边的 AST 只记"这是夹注"，
-单行/双行是样式层的事，见 guji-markdown README「表现与语义分离」）。
+單行小注写成指令式 `:jz[小注]{type=单行}`（2026-09-24 起；此前写不带 `|` 的
+`<小注>`，与只剩一半的雙行夹注分不开，维基文库导出要区分二者）。
 
 ## 为什么不是 core.step.Step
 
@@ -96,7 +96,10 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
                     chars.append(_char_text(r))
                 i += 1
             if chars:
-                out.append("<" + "".join(chars) + ">")
+                # 用指令式写 type=单行（guji-markdown spec/directives.md：jz 的 type
+                # 取 双行|单行|尾注，缺省双行）。`<…>` 简写带不了属性，而下游
+                # 要靠它分开「人名小字」和「注文」（维基文库前者出 {{small}}、后者 {{*}}）。
+                out.append(":jz[" + "".join(chars) + "]{type=单行}")
             continue
 
         if rec.kind == "blank":
@@ -121,10 +124,14 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
 
 def _char_text(rec: SlotRec) -> str:
     """一个字位的输出文本，只在**不是** excluded 时调用。
-    阙文（`unreadable`）出 `[[]]`；否则文意优先（`reading or char`）。"""
+    阙文（`unreadable`）出 `[[]]`；否则出**字形**（`char`）。
+
+    2026-09-26 起只出字形，不再「文意优先」（用户：「读法彻底取消，所有地方都用字形，
+    包括字形库、输出文本」）。此前出 `reading or char`，bxgb 有 27 处把刻本的 𠀉/宐/呂
+    输出成整理本的 丘/宜/吕，与人裁定的字形相反。老产物里的 `reading` 字段忽略。"""
     if rec.unreadable:
         return "[[]]"
-    text = rec.reading or rec.char or "[[]]"
+    text = rec.char or "[[]]"
     # 原刻残（damaged）：Step7 给 □ 占位，人裁时填的「最像哪个字」挂在 guess 上，
     # 用 guji-markdown 的后缀属性 `{k=v}` 括注（用户 2026-09-20：「识别成缺字方框，
     # 但标出像某字」）。属性语法在 guji-markdown 分支 claude/attrs-and-jz-break-0911，
@@ -134,9 +141,13 @@ def _char_text(rec: SlotRec) -> str:
     return text
 
 
-def render_page(store: ProductStore, book: str, page: int, stale: list[str]) -> str:
+def render_page(store: ProductStore, book: str, page: int, stale: list[str],
+                keep_empty_cols: bool = False) -> str:
     """`stale`：本页发现的「Step7 有记录但 Step3 cells 查不到」条目，
     格式 `p{page}col{col}:slot{n}{a|b}`，追加进这个列表，不在这一层报告。
+
+    `keep_empty_cols`：没有字的列（版心、空列）也占一行、出空行，使「第 k 行 = 第 k 列」。
+    维基文库导出要它（用户 2026-09-24：版心那一行应当空出来）；缺省关，9.2 等不受影响。
     """
     slots = page_slots(store, book, page, stale)
 
@@ -152,7 +163,11 @@ def render_page(store: ProductStore, book: str, page: int, stale: list[str]) -> 
         by_col.setdefault(s.col, []).append(s)
 
     lines: list[str] = []
-    for col in sorted(by_col):
+    cols = sorted(set(by_col) | ({c.col for c in cells.columns} if keep_empty_cols else set()))
+    for col in cols:
+        if col not in by_col:
+            lines.append("")
+            continue
         lines.append(render_column(by_col[col], n_raised_by_col.get(col, 0),
                                    lead_blank_by_col.get(col, 0)))
     return "\n".join(lines)
