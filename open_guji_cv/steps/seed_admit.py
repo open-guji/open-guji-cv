@@ -47,6 +47,7 @@ from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageAlignRef, PageDecision, PageMatch,
                                     PageOcr)
 from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.ji_yi_si import FAMILY as _JYS
 
 
 class SeedAdmitParams(BaseModel):
@@ -284,6 +285,10 @@ class SeedAdmitStep(Step):
                     # `reading` 只有事件里才有（己/已/巳 那类"刻 X 读 Y"），且与字形不同才记。
                     char = hs or ht[0]
                     reading = None      # 读法取消（2026-09-26），人裁只认字形
+                    # 己/已/巳：人当时若按「看着像 X、文意是 Y」裁（事件带 reading），Y 才是人定的字
+                    # ——本族字形不分，只按文意（用户 2026-09-26，见 utils/ji_yi_si.py）。
+                    if char in _JYS and ht and ht[1] in _JYS:
+                        char = ht[1]
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=True,
                         channel="human", char=char, reading=reading,
@@ -503,8 +508,48 @@ class SeedAdmitStep(Step):
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
+        d_auto, d_review = _resolve_ji_yi_si(out, amap)
+        n_auto += d_auto
+        n_review += d_review
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
+    """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
+
+    按本页读序取前后字：
+    - **干支 / 时辰**（几乎不会错）：直接定字并放行——哪怕原先落了人审；
+    - 其余（「己」的搭配、整理本给「己」、默认「已」）：**原已放行的改成规则的字**——原先的字
+      不过是库或整理本对字形的猜测，而本族字形本就不分（四庫整理本自己也把「而已」印成「而巳」）；
+      原在人审 → 仍人审，证据里写建议字。
+    人裁位不动（人定的就是文意）。→ (新增放行数, 新增人审数)。
+    实测（人裁为真值，bxgb + 四庫 vol01/02）：干支/时辰 全对；搭配与默认 约 96%。
+    """
+    from ..utils.jiazhu_order import sort_by_reading
+    from ..utils.ji_yi_si import resolve
+    seq = [r for c in sorted(cols, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+           if not (r.doubts and "excluded" in r.doubts)]
+    d_auto = d_review = 0
+    for i, r in enumerate(seq):
+        if r.channel == "human" or r.char not in _JYS:
+            continue
+        prev = seq[i - 1].char if i else None
+        nxt = seq[i + 1].char if i + 1 < len(seq) else None
+        nxt2 = seq[i + 2].char if i + 2 < len(seq) else None
+        ref = (amap.get(r.id) or (None, None))[0]
+        ch, why = resolve(prev, nxt, ref, next2=nxt2)
+        r.evidence = {**(r.evidence or {}), "ji_yi_si": {"char": ch, "why": why}}
+        sure = why.startswith("干支") or why == "时辰"
+        if sure:
+            if not r.admit:
+                d_auto += 1
+                d_review -= 1
+            r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
+            r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
+        elif r.admit and ch != r.char:
+            r.char = ch
+    return d_auto, d_review
 
 
 # 整理本参与的通道：`reading` 记整理本字（字形仍照录图上的形）。
