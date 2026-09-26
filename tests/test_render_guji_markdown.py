@@ -96,14 +96,14 @@ def test_jiazhu_pairs():
 
 
 def test_solo_note():
-    """單行小注在 guji-markdown 里就是不带 `|` 的 `<注>`——AST 只记「这是夹注」，
-    单行/双行是样式层的事（见 guji-markdown README「表现与语义分离」）。"""
+    """單行小注写指令式 `:jz[注]{type=单行}`（spec/directives.md 的 jz type）——
+    不带 `|` 的 `<注>` 与只剩一半的雙行夹注分不开，维基文库导出要区分二者。"""
     cells = {(1, ""): _cell(1)}
     recs = [_rec(1, "按")]
     for slot, ch in ((2, "瀛"), (3, "楫")):
         cells[(slot, "")] = _cell(slot, "jiazhu_solo")
         recs.append(_rec(slot, ch))
-    assert _render(cells, recs) == "按<瀛楫>"
+    assert _render(cells, recs) == "按:jz[瀛楫]{type=单行}"
 
 
 def test_unreadable_is_a_gap():
