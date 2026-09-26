@@ -79,6 +79,17 @@ class RareCandidatesParams(BaseModel):
     `rare_candidates` 照报「新鲜」，跑出来的候选其实是旧模板的。r4 → r5 那次没露馅，
     是因为改了 `cnn_candidates.py` 里的默认路径、`code_deps` 的代码哈希顺带变了。
     照 `GlyphMatchParams.db_fingerprint` 的同一套写法补上。
+
+    ⚠️ **这里填的仍是模块级默认**（真刻例档按 `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`
+    算，缺省关）——`model_post_init` 没有 `ctx.book`，算不出按书配置的那份。按书的
+    真刻例开关/来源（`font.real_proto`，见 `run_page` 与 `cnn_candidates.book_real_proto`）
+    走 `StepSpec.book_deps=("font",)`：整本 `font` 字典的文本内容进 `_self_payload`，
+    yaml 里改 `enabled`/`stores` 会让产物正确过期。**没盖住的一格**：`stores` 指的
+    `glyph_store` 目录本身内容变了（H 道新裁了几条真刻例）而 yaml 文本没动，
+    `book_deps` 与这个字段都不会觉察——与「产物体的 `model_fingerprint` 不参与新鲜度
+    判断」是同一类缺口，跟随本卡的转正一起留给下一件（真刻例库随内容变化的过期判定）。
+    `PageRare.model_fingerprint`（产物体，见 `run_page`）**会**按书算、按当前
+    `glyph_store` 文件的 mtime/size 算，只是这份不参与 `params_hash`。
     """
 
     def model_post_init(self, _ctx) -> None:
@@ -115,8 +126,15 @@ class RareCandidatesStep(Step):
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        from ..clustering.cnn_candidates import full_fingerprint
+        from ..clustering.cnn_candidates import book_real_proto, full_fingerprint
         from ..clustering.rare_panel import rare_for_batch
+
+        # 真刻例多原型档来源改按书配置（5-b 开关转正，2026-09-26）：`ctx.book.font.real_proto`
+        # 决定开不开、读哪个 `glyph_store`，实例级传给 `CnnCandidates`，不再改
+        # `cnn_candidates` 模块全局（那两个全局仍留给评测脚本用，见 `book_real_proto` 文档）。
+        # 关着时 `real_proto_fingerprint` 短路回空串，`full_fingerprint(real_proto=…)`
+        # 与不传参（模块级默认，同样是关）逐字节相同——不让现有产物过期。
+        real_proto = book_real_proto(ctx.book.font)
 
         p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
         chars: PageChars = ctx.product("char_index", page)
@@ -167,7 +185,8 @@ class RareCandidatesStep(Step):
             imgs = []
         hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id,
                                    struct_rerank=p.struct_rerank,
-                                   struct_probe=p.struct_probe or None) if imgs else []
+                                   struct_probe=p.struct_probe or None,
+                                   real_proto=real_proto) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,
@@ -189,5 +208,5 @@ class RareCandidatesStep(Step):
 
         log_reuse(ctx, self, page, n_reused, n_total)
         return {"rare_candidates": PageRare(
-            page=page, model_fingerprint=full_fingerprint(),
+            page=page, model_fingerprint=full_fingerprint(real_proto=real_proto),
             sources=dict(srcs), columns=out)}

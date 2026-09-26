@@ -136,3 +136,57 @@ def test_params_hash_tracks_model_and_font_set(monkeypatch, tmp_path):
     assert a.model_fingerprint.rsplit(":", 1)[0] == b.model_fingerprint.rsplit(":", 1)[0]
     assert a.model_fingerprint.rsplit(":", 1)[1] != b.model_fingerprint.rsplit(":", 1)[1]
 
+
+def test_book_real_proto_disabled_matches_module_default():
+    """真刻例多原型档「开关转正」（5-b，2026-09-26）：书配置里开关关着（或压根没写
+    这段——旧 yaml、十册四庫大多数还没加）时，`full_fingerprint(real_proto=…)`
+    必须与不传参数的模块级默认（同样是关）逐字节相同——不让现有 `rare_candidates`
+    产物因为加了这块新配置而过期，是任务书「5-b 开关转正」的完成判据之一。"""
+    from open_guji_cv.clustering.cnn_candidates import book_real_proto, full_fingerprint
+
+    baseline = full_fingerprint()
+
+    # 旧 yaml：font 里压根没有 real_proto 段
+    assert full_fingerprint(real_proto=book_real_proto({})) == baseline
+    assert full_fingerprint(real_proto=book_real_proto(None)) == baseline
+
+    # 显式写了 enabled: false（两书 yaml 现在这么写）
+    off = book_real_proto({"real_proto": {"enabled": False, "stores": ["output/glyph_store"]}})
+    assert off[0] is False
+    assert full_fingerprint(real_proto=off) == baseline
+
+
+def test_book_real_proto_resolves_relative_stores(monkeypatch, tmp_path):
+    """`stores` 相对路径按 `workspace_root()` 解释（书目录），不是仓根或 cwd；
+    没给 `stores` 时缺省 `output/glyph_store`。"""
+    from open_guji_cv.clustering import cnn_candidates as cc
+    from open_guji_cv.core import workspace as ws
+
+    monkeypatch.setattr(ws, "workspace_root", lambda: tmp_path)
+
+    enabled, specs = cc.book_real_proto({"real_proto": {"enabled": True}})
+    assert enabled is True
+    assert specs == (f"store:{tmp_path / 'output' / 'glyph_store'}",)
+
+    enabled2, specs2 = cc.book_real_proto(
+        {"real_proto": {"enabled": True, "stores": ["output/glyph_store", "/abs/other_store"]}})
+    assert specs2 == (f"store:{tmp_path / 'output' / 'glyph_store'}", "store:/abs/other_store")
+
+
+def test_rare_for_batch_real_proto_off_matches_no_param(monkeypatch):
+    """`rare_for_batch`/`emb_topk_batch` 加了 `real_proto` 形参不该改变缺省行为：
+    显式传 `(False, …)` 与完全不传该参数（旧调用方式）结果必须逐字节相同。"""
+    from open_guji_cv.clustering.cnn_candidates import shared
+
+    cnn = shared()
+    if not cnn.available:
+        pytest.skip("没有 CNN checkpoint，跳过（needs=model）")
+
+    charset = tuple("一二三十土王")
+    q = np.zeros((64, 64), np.uint8)
+    q[20:44, 8:56] = 1
+
+    a = cnn.emb_topk_batch([q], charset, k=3)
+    b = cnn.emb_topk_batch([q], charset, k=3, real_proto=(False, ("store:/nonexistent",)))
+    assert a == b
+
