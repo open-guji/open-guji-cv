@@ -52,13 +52,22 @@ def main() -> int:
     ns = _book_norm_stroke(a.book)
     imgs, G, ids = [], [], []
     for key in sorted(gold):
-        p, c, s = key.split(":")[1:]
-        im = rare_patch(a.book, int(p), int(c), int(s))
+        p, c, tail = key.split(":")[1:]
+        # `tail` 可能带雙行小注的子格字母（`9a`/`9b`，同 `rare_panel.rare_batch`
+        # 的切法）——原来直接 `int(s)` 遇到这类字位就整批崩溃，之前一直没跑通
+        # 大概率没露馅是因为这条脚本此前从没在有 `products/char_patch` 缓存的
+        # 环境里跑过（见模块头「本轮云端没有缓存，没跑成」）。
+        sub = tail[-1] if tail[-1:] in ("a", "b") else ""
+        slot = int(tail[:-1] if sub else tail)
+        im = rare_patch(a.book, int(p), int(c), slot, sub)
         if im is None:
             continue
         imgs.append(normalize_patch(im, stroke_width=ns))
         G.append(gold[key])
-        ids.append(f"{p}:{c}:{s}")
+        # ⚠️ 留一法摘除按 `match._cell_parts` 认的 `册:页:列:格` 四段——漏了册前缀
+        # `_cell_parts` 会认不出（返回 None），留一法整个失效但不报错，评测结果
+        # 会偷偷把评测字自己算成命中自己（同 5-a「自证不是证据」的坑）。
+        ids.append(f"{a.book}:{p}:{c}:{tail}")
     print(f"字位 {len(imgs)}（类外 {sum(1 for g in G if g not in classes)}）")
     exclude_ids = frozenset(ids)
 

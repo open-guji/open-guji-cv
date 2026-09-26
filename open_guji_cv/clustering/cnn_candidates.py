@@ -138,6 +138,34 @@ REAL_PROTO_LABEL_STATUSES: frozenset = frozenset({"human"})
 RRF_K = 60
 
 
+def book_real_proto(font: dict | None) -> tuple[bool, tuple[str, ...]]:
+    """册配置 `font.real_proto` → `(enabled, specs)`（5-b 开关转正，2026-09-26）。
+
+    yaml 形状：`font: {real_proto: {enabled: bool, stores: [<相对书目录的 glyph_store
+    路径>, ...]}}`；`stores` 缺省 `["output/glyph_store"]`（这册书自己的库）。相对路径
+    按当前 `workspace_root()` 解释（没设 `GUJI_WORKSPACE` 就按引擎仓——与
+    `core.workspace.glyph_store_path` 同一条口径），拼成 `_iter_real_exemplars` 认的
+    `store:<目录>` 形式。缺省 `enabled=False`——不给这段配置的书（包括现役十册四庫、
+    没重跑过的旧产物）行为与这块新配置加入前逐位相同。
+
+    `rare_candidates.py::RareCandidatesStep.run_page` 用它把 `CnnCandidates` 的真刻例
+    来源从模块全局（`REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`，仍留给评测脚本用）
+    改成**按书**、实例级传参，两本书可以各开各的、各指各的库，不再互相牵连。
+    """
+    cfg = (font or {}).get("real_proto") or {}
+    enabled = bool(cfg.get("enabled", False))
+    stores = cfg.get("stores") or ["output/glyph_store"]
+    from ..core.workspace import workspace_root
+    base = workspace_root() or Path(__file__).resolve().parents[2]
+    specs = []
+    for s in stores:
+        p = Path(s)
+        if not p.is_absolute():
+            p = base / p
+        specs.append(f"store:{p}")
+    return enabled, tuple(specs)
+
+
 def _iter_real_exemplars(store_dir: Path, label_statuses: frozenset = REAL_PROTO_LABEL_STATUSES):
     """`glyph_store` 目录 -> 逐条 yield (char, instance_id, patch 文件路径)。
 
@@ -209,11 +237,15 @@ def load_real_exemplars(specs: tuple = REAL_PROTO_SPECS, charset=None):
     return dict(out)
 
 
-def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS) -> str:
+def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None = None) -> str:
     """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的 `名字:大小:mtime` 拼起来。
     目录缺席的 spec 不参与，一个都不参与（或总开关关着）时返回空串。
+
+    `enabled=None`（缺省）时看模块级 `REAL_PROTO_ENABLED`——评测脚本走这条，与此前
+    逐位相同。按书配置调用时传显式的书级开关（见 `book_real_proto`），不再看模块全局。
     """
-    if not REAL_PROTO_ENABLED:
+    en = REAL_PROTO_ENABLED if enabled is None else enabled
+    if not en:
         return ""
     parts = []
     for spec in specs or ():
@@ -680,12 +712,18 @@ class CnnCandidates:
         return [(names[int(i)], float(sims[int(i)])) for i in order]
 
     def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10,
-                       real_exclude_ids: frozenset = frozenset()
+                       real_exclude_ids: frozenset = frozenset(),
+                       real_proto: tuple[bool, tuple[str, ...]] | None = None
                        ) -> list[list[tuple[str, float]]]:
         """`emb_topk()` 的批量版：网络前向与模板矩阵检索都改一次一批。
 
         `real_exclude_ids`：真刻例多原型档（R2/T11）评测时的留一法摘除集合，
         产线（非评测）传空集。见 `_real_index` 文档。
+
+        `real_proto`（5-b 开关转正，2026-09-26）：`(enabled, specs)`，按书配置调用时传
+        `cnn_candidates.book_real_proto(ctx.book.font)` 的结果，覆盖模块级
+        `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`。`None`（缺省）时走模块级——评测脚本
+        （`eval_oov.py` 等直接改 `_cc.REAL_PROTO_ENABLED`）与此前调用方式逐位相同。
 
         ## 2026-09-10 生僻字候选提速第二轮：批处理网络前向 + 矩阵-矩阵乘法
 
@@ -729,7 +767,11 @@ class CnnCandidates:
                         self.last_gw_prov[j][names[int(r)]] = (str(gnames[b]), str(gsrc[b]), float(sg[b, j]))
                     sims[:, j] = np.maximum(sims[:, j], best)
         self.last_real_prov = [{} for _ in norm_patches]
-        real = self._real_index(charset, names, real_exclude_ids) if REAL_PROTO_ENABLED else None
+        if real_proto is not None:
+            r_enabled, r_specs = real_proto
+        else:
+            r_enabled, r_specs = REAL_PROTO_ENABLED, REAL_PROTO_SPECS
+        real = self._real_index(charset, names, real_exclude_ids, specs=r_specs) if r_enabled else None
         if real is not None:
             R, r_rows_idx, r_iids = real
             sr = R @ Q.T                                   # (n_real, N)
@@ -789,7 +831,8 @@ class CnnCandidates:
         self._gw_cs = (charset, res)
         return res
 
-    def _real_index(self, charset, names: list[str], exclude_ids: frozenset = frozenset()):
+    def _real_index(self, charset, names: list[str], exclude_ids: frozenset = frozenset(),
+                    specs: tuple | None = None):
         """真刻例多原型档（R2 / T11）限定到当前字表：`(R, rows_idx, iids)`，
         `rows_idx[i]` 是第 i 个原型的字在字体索引 `names` 里的行号，与 `_gw_index`
         同一套接线（`emb_topk_batch` 里按 `rows_idx` 做 max 融合）。
@@ -799,17 +842,22 @@ class CnnCandidates:
         id（教训见 `GlyphMatcher._same_cell_rows`：只摘一个 id 摘不干净，v1/v2/
         机器准入同一格有好几种 id）。产线（非评测）传空集。
 
+        `specs`：按书配置调用时传显式 store 列表（见 `book_real_proto`），覆盖模块级
+        `REAL_PROTO_SPECS`；`None`（缺省）时走模块级——评测脚本与此前调用方式逐位
+        相同。**进缓存 key**：换书换 specs 不会命中上一本书留下的内存缓存。
+
         **不落盘**：真刻例池比 GlyphWiki 小两个量级（千级 vs 万级），CPU 全量
         前向本身秒级，落盘缓存反而引入「换书但 key 没变」的新鲜度坑（同
-        `load_real_exemplars` 的理由）。按 `(charset, exclude_ids)` 记一次内存缓存。
+        `load_real_exemplars` 的理由）。按 `(charset, exclude_ids, specs)` 记一次内存缓存。
         """
-        key = (charset, exclude_ids)
+        sp = REAL_PROTO_SPECS if specs is None else specs
+        key = (charset, exclude_ids, sp)
         if self._real_cs is not None and self._real_cs[0] == key:
             return self._real_cs[1]
-        if not REAL_PROTO_SPECS or not self._ensure():
+        if not sp or not self._ensure():
             self._real_cs = (key, None)
             return None
-        pool = load_real_exemplars(REAL_PROTO_SPECS, charset)
+        pool = load_real_exemplars(sp, charset)
         if not pool:
             self._real_cs = (key, None)
             return None
@@ -902,10 +950,17 @@ def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
 
 
 def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
-                      specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
+                      specs: tuple[str, ...] = EMB_EXTRA_SPECS,
+                      real_proto: tuple[bool, tuple[str, ...]] | None = None) -> str:
     """生僻字候选栈的完整指纹：checkpoint + 外部模板集 + **模板字体集**（2026-09-21 补，
     此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
-    换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。"""
+    换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。
+
+    `real_proto`（5-b 开关转正，2026-09-26）：`(enabled, specs)`，按书配置调用时传
+    `book_real_proto(ctx.book.font)` 的结果；`None`（缺省）时走模块级
+    `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`——不传参的旧调用方式与此前逐位相同，
+    关着时（不管是模块级还是书级）这段一律不进指纹（`real_proto_fingerprint`
+    短路返回空串）。"""
     from .font_candidates import font_set_fingerprint
     # GlyphWiki 变体形目录（第六档模板）并进「模板集」那一段，指纹保持三段（测试钉着这个形状）；
     # 目录缺席时该段与从前逐位相同。
@@ -913,7 +968,11 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     gw = gw_catalog_fingerprint()
     if gw:
         tmpl = hashlib.sha1(f"{tmpl}|gw={gw}".encode()).hexdigest()[:16]
-    real = real_proto_fingerprint()
+    if real_proto is not None:
+        en, sp = real_proto
+        real = real_proto_fingerprint(sp, enabled=en)
+    else:
+        real = real_proto_fingerprint()
     if real:
         tmpl = hashlib.sha1(f"{tmpl}|real={real}".encode()).hexdigest()[:16]
     return f"{fingerprint(ckpt)}:{tmpl}:{font_set_fingerprint()}"
