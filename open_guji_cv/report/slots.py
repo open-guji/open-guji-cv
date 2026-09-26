@@ -2,16 +2,14 @@
 """字位流：一页的定字结果按阅读顺序摊平成一串 `SlotRec`。
 
 **9.1 排版与 9.3 比对共用这一份**——此前两边各有一套 join：
-`render/guji_markdown.py::render_page`（出 `reading or char`）与
+`render/guji_markdown.py::render_page`（出 `char`）与
 `scripts/build_collation_report.py::page_slots`（出 `char`，未放行位退到
 ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文本」里是两串不同的字，
 比对报告说的每一条差异都未必指向最终文本里那个字。归一到这里。
 
 ## 取字规则（设计档 04 §三·1，两处分歧在此裁定）
 
-- `char` ＝ **字形层，照录图上的形**，比对以它为准；
-- `reading` ＝ 文意读法（整理本参与的通道才填），只参与分类
-  （`char != ref` 且 `reading == ref` ⇒ 管线已知的转换，不是新发现的差异）；
+- `char` ＝ **字形，照录图上的形**，排版与比对都以它为准（2026-09-26 起没有「读法」）；
 - **未放行且 `char is None` 的位输出 `None`，不退到库/OCR 猜测**。原型那样做的
   结果是 vol01 251 条「改」里 221 条是未审位的库 top1 猜测——噪声盖过信号，
   而这些位本来就该由「未审阅数」这个指标去报，不该混进差异清单。
@@ -103,7 +101,6 @@ class SlotRec:
     sub: str | None
     kind: str                    # char | blank | jiazhu_a | jiazhu_b | jiazhu_solo
     char: str | None             # 字形层；None = 阙文或 blank
-    reading: str | None          # 文意读法；None = 与 char 相同
     admit: bool
     channel: str | None
     excluded: bool
@@ -198,7 +195,7 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     kind = cell.kind if cell is not None else "char"
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,
-        char=rec.char, reading=rec.reading, admit=bool(rec.admit),
+        char=rec.char, admit=bool(rec.admit),
         channel=rec.channel, excluded=excluded, defect=defect,
         guess=((rec.evidence or {}).get("guess") or None),
         unreadable=(not rec.admit and rec.char is None and not excluded),

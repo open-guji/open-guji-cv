@@ -22,7 +22,7 @@ from pathlib import Path
 
 KIND_LABEL = {
     "same": "一致",
-    "conv.known": "已记账的转换（reading 命中）",
+    "conv.known": "已记账的转换（旧报告；2026-09-26 取消读法后不再产生）",
     "variant.to_orthodox": "异体 → 整理本正字",
     "variant.to_simp": "异体/繁体 → 简体",
     "variant.other": "同组异形（方向不明）",
@@ -163,13 +163,11 @@ def _entry(d: dict, book: str, console: str) -> str:
     badge = "<span class='src human'>人裁</span>" if d.get("human") else \
             (f"<span class='src auto'>{_e(d.get('channel') or '')}</span>" if d.get("admit")
              else "<span class='src guess'>未放行</span>")
-    rd = (f"<span class='k'>reading</span><span class='gl'>{_e(d['reading'])}</span>"
-          if d.get("reading") else "")
     return f"""<div class="ent">
   <div class="head"><span class="mono">{_e(d['id'])}</span> {badge}
     <span class="wit">{_e(d['witness'])}</span> {a0}</div>
   <div class="pair"><span class="k">刻本</span><span class="gl big">{_e(d['char']) or '—'}</span>
-    <span class="k">整理本</span><span class="gl big">{_e(d['ref']) or '—'}</span>{rd}</div>
+    <span class="k">整理本</span><span class="gl big">{_e(d['ref']) or '—'}</span></div>
   <div class="ctx"><span class="k">我们</span><span class="gl">{_e(d['hyp_ctx'])}</span></div>
   <div class="ctx"><span class="k">整理本</span><span class="gl">{_e(d['ref_ctx'])}</span></div>
 </div>"""

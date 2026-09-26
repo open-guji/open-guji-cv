@@ -73,7 +73,7 @@ def test_unanchorable_page_is_reported_not_silently_empty(tmp_path, monkeypatch,
     assert g.n_chars == 0
 
 
-def test_shape_and_reading_are_recorded_separately(tmp_path, monkeypatch, ws):
+def test_shape_and_ref_are_recorded_separately(tmp_path, monkeypatch, ws):
     """字形与文意分开记（用户 2026-09-04 定：先读字形、录入按文意）。
 
     整理本是正字化文本，刻本上的 㫖/彚/卽/祗 会被它写成 旨/彙/即/祇。
@@ -88,15 +88,15 @@ def test_shape_and_reading_are_recorded_separately(tmp_path, monkeypatch, ws):
     assert g.anchored, g.note
 
     conv = [c for c in g.chars if c.conversion]
-    assert conv, "一条转换都没有——shape/reading 恐怕填成同一个值了"
-    assert [(c.shape, c.reading) for c in conv] == [("㫖", "旨")], \
-        [(c.shape, c.reading) for c in conv]
+    assert conv, "一条转换都没有——shape/ref 恐怕填成同一个值了"
+    assert [(c.shape, c.ref) for c in conv] == [("㫖", "旨")], \
+        [(c.shape, c.ref) for c in conv]
     for c in conv:
-        assert c.shape != c.reading
+        assert c.shape != c.ref
     assert g.n_conversion == len(conv)
     # 其余字位两者必须相同——转换是少数派，不是"到处都在转"
     same = [c for c in g.chars if not c.conversion]
-    assert same and all(c.shape == c.reading for c in same)
+    assert same and all(c.shape == c.ref for c in same)
 
 
 def test_near_form_families_never_auto_admit_on_shape_alone(tmp_path, monkeypatch):

@@ -99,7 +99,8 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
                 # 用指令式写 type=单行（guji-markdown spec/directives.md：jz 的 type
                 # 取 双行|单行|尾注，缺省双行）。`<…>` 简写带不了属性，而下游
                 # 要靠它分开「人名小字」和「注文」（维基文库前者出 {{small}}、后者 {{*}}）。
-                out.append(":jz[" + "".join(chars) + "]{type=单行}")
+                # 指令 label 里不能有裸 `[`/`]`（会提前闭合）：阙文 `[[]]` 在这里改写 □。
+                out.append(":jz[" + "".join("□" if c == "[[]]" else c for c in chars) + "]{type=单行}")
             continue
 
         if rec.kind == "blank":

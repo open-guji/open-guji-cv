@@ -75,7 +75,7 @@ def jiazhu_segments(book: str = "vol02", pages: str = "jz",
                     cellsjs.append({
                         "id": r.id, "slot": r.slot, "sub": r.sub,
                         "char": r.char, "admit": r.admit, "channel": r.channel,
-                        "ref": g.reading if g else None,
+                        "ref": g.ref if g else None,
                         "patch": (f"/api/cache/{book}/char_patch/"
                                   f"{cell_key(pg, cc.col, r.slot)}{r.sub or ''}.png"),
                         "done": done.get(r.id),

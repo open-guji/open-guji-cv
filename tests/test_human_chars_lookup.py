@@ -21,7 +21,7 @@ def _ev(key: str, payload: dict, seq: int, batch: str = "b"):
 def test_no_glyph_lib_confirm_still_counts(tmp_path):
     log = EventLog(tmp_path)
     log.append([_ev("vol01:4:1:3", {"v": "confirm", "shape": "太", "reading": "太", "no_glyph_lib": True}, 1)])
-    assert human_chars("vol01", log) == {"vol01:4:1:3": ("太", "太")}
+    assert human_chars("vol01", log) == {"vol01:4:1:3": "太"}
 
 
 def test_last_verdict_wins_and_other_kinds_ignored(tmp_path):
@@ -32,7 +32,7 @@ def test_last_verdict_wins_and_other_kinds_ignored(tmp_path):
                 _ev("vol01:4:1:5", {"v": "not_a_char"}, 4),
                 _ev("vol02:1:1:1", {"v": "confirm", "shape": "他"}, 5)])
     got = human_chars("vol01", log)
-    assert got == {"vol01:4:1:3": ("太", None)}, "后到覆盖；seg_defect / not_a_char / 别的书不算"
+    assert got == {"vol01:4:1:3": "太"}, "后到覆盖；seg_defect / not_a_char / 别的书不算"
 
 
 def test_later_step8_fix_beats_earlier_step7_by_time(tmp_path):
@@ -58,7 +58,7 @@ def test_stale_mark_voids_earlier_verdicts_only(tmp_path):
     new = _ev("vol01:4:1:3", {"v": "confirm", "shape": "文"}, 2)
     new.ts = "2026-09-26T01:00:00Z"
     log.append([new])
-    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925"}) == {"vol01:4:1:3": ("文", None)}
+    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925"}) == {"vol01:4:1:3": "文"}
 
 
 def test_stale_mark_minute_precision_same_day(tmp_path):
@@ -66,4 +66,4 @@ def test_stale_mark_minute_precision_same_day(tmp_path):
     a = _ev("vol01:4:1:3", {"v": "confirm", "shape": "目"}, 1); a.ts = "2026-09-25T06:00:00Z"
     b = _ev("vol01:4:1:3", {"v": "confirm", "shape": "文"}, 2); b.ts = "2026-09-25T08:00:00Z"
     log.append([a, b])
-    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925T0700"}) == {"vol01:4:1:3": ("文", None)}
+    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925T0700"}) == {"vol01:4:1:3": "文"}

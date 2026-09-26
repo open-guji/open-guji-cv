@@ -9,8 +9,6 @@
 .rvcard[data-done="1"] { border-left-color: var(--ok); }
 .rvcard[data-done="skip"] { border-left-color: var(--ochre); }
 .rvcard[data-done="non"] { border-left-color: var(--zhu); }
-.rvcard[data-done="need_reading"] { border-left-color: var(--ochre); box-shadow: inset 0 0 0 1px var(--ochre); }
-.rvcard[data-done="need_reading"] .rvread input { border-color: var(--ochre); background: var(--ochre-soft); }
 .rvcard[data-done="truncated"] { border-left-color: var(--zhu); border-left-style: dashed; }
 .rvcard[data-done="contaminated"] { border-left-color: var(--ochre); border-left-style: dashed; }
 .rvcard[data-done="upstream_miscut"] { border-left-color: var(--indigo); border-left-style: double; border-left-width: 6px; }

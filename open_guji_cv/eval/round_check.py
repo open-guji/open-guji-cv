@@ -226,8 +226,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                 g = gold.get(r.id) if r.channel != "human" else None
                 if g:
                     ng += 1
-                    # ⚠️ 金标是 `reading`（整理本），`shape` 是**当次转写自己**
-                    # （v2_align:158 `shape, reading = lab.hyp, lab.char`）。
+                    # ⚠️ 金标是 `ref`（整理本在这一位印的字），`shape` 是**当次转写自己**。
                     # 无条件收 `r.char == g.shape` 等于「跟上次一样就算对」，
                     # replace 段上会把真错也放过去。只在**记过转换**时才收刻本形
                     # ——那是「忠于刻本字形」方针要的（葢/蓋、卽/即 按刻本形放行）。
@@ -240,19 +239,12 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 实测 vol02:18:9:5 与 35:7:13——图上刻 曾、用户裁 曾，整理本印 會，
                     # 判据 A 于是把**用户自己的裁决**记成了两条错，灯从绿变黄。
                     # 判据 A 量的是「自动放行准不准」，人裁不是自动放行，本就不该进这个分母。
-                    # ⚠️ 比**文意**要拿 `reading`，不是 `char`（2026-09-16 修）。
-                    # `char` 是字形层（照录图上的形），`reading` 是文意层；两者不同
-                    # 正是一次有意的「字形→文意」转换（AdmitRec.reading 的 docstring）。
-                    # 己/已/巳 那条通道（用户 2026-09-06 定）就是这么走的：字形取库
-                    # top1、文意取整理本。拿 char 去比 g.reading，等于把**设计成
-                    # 要分岔的两层**当成一层比——北行日錄 20 页实测，4 条「错」全是
-                    # 这一类：seed_admit 存的是 char=已 / reading=己，Step6 也判的是
-                    # 己（margin 0.78~0.90），管线一点没错，判据自己算错了。
-                    pred = r.reading or r.char
-                    hit = (pred == g.reading
+                    # 2026-09-26 起只有字形（读法取消）：直接比 `char`。
+                    pred = r.char
+                    hit = (pred == g.ref
                            or (g.conversion and r.char == g.shape)
-                           or _ledger().preferred_form(g.reading) == pred
-                           or _same_char(pred, g.reading))
+                           or _ledger().preferred_form(g.ref) == pred
+                           or _same_char(pred, g.ref))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
                     if getattr(g, "source", "") != "fallback":
@@ -263,8 +255,8 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                         okr += hit
                     if not hit:
                         errors.append({"id": r.id, "pred": pred,
-                                       "char": r.char, "reading": r.reading,
-                                       "gold": g.reading, "shape": g.shape,
+                                       "char": r.char,
+                                       "gold": g.ref, "shape": g.shape,
                                        "channel": r.channel,
                                        "source": getattr(g, "source", ""),
                                        "op": g.align_op})
@@ -600,8 +592,8 @@ def _multi_form(char: str | None) -> bool:
 
 def form_fidelity(book: str, pages: list[int], store=None) -> dict:
     """判据 E（variant_strategy.md §4.5）：**字形保真率**——自动放行里，字形与人裁
-    完全一致的比例。分母只取「异体位」：自动放行且 (reading ≠ char，或走了
-    variant_form 定形)。这里**不许**用 `_same_char` 放水：整理本印 髮、刻本刻 髪，
+    完全一致的比例。分母只取「异体位」：自动放行且（走了 variant_form 定形，
+    或字所在账本组还有别的形被本书刻过）。这里**不许**用 `_same_char` 放水：整理本印 髮、刻本刻 髪，
     存成 髮 在判据 A 里算对（异体算同字），在这里就是错——保真量的正是这一层。
 
     分两层报：`form_auto`（variant_form 定的形）与其余（库 same 继承的形）。
@@ -628,11 +620,10 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                     n_open += f.get("state") == "open"
                     continue
                 # 分母还要算上**没记转换的异体位**（2026-09-06 补）：context / dual 通道
-                # 把整理本形直接写成 char（已、隸、變、即、歷），reading 与 char 相同，
-                # 这里看不见，E 报 50/50 时用户抽审 274 条里其实错了 25 条。
+                # 把整理本形直接写成 char（已、隸、變、即、歷），E 报 50/50 时用户抽审
+                # 274 条里其实错了 25 条。
                 # 凡 char 所在的账本组还有别的形被本书刻过（db/human>0），就是可能写错形的位。
-                is_var = bool(r.reading and r.reading != r.char) \
-                    or f.get("state") in ("fixed_lib", "fixed_form") \
+                is_var = f.get("state") in ("fixed_lib", "fixed_form") \
                     or _multi_form(r.char)
                 if not is_var or not r.char:
                     continue
@@ -648,7 +639,7 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                     hit_auto += ok
                 if not ok:
                     errors.append({"id": r.id, "pred": r.char, "human": t,
-                                   "reading": r.reading, "state": f.get("state")})
+                                   "state": f.get("state")})
     low = _wilson_low(hit, n)
     if errors:
         # 错例是硬信号：一条都不能有（见 FIDELITY_GREEN 的说明）

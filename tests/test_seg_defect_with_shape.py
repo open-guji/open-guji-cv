@@ -30,7 +30,7 @@ def test_seg_defect_with_shape_counts_as_decided_and_gives_text(tmp_path):
     log.append([_ev("vol01:5:2:9", {"v": "seg_defect", "quality": "contaminated",
                                     "shape": "手", "reading": "手"}, 1),
                 _ev("vol01:5:2:10", {"v": "seg_defect", "quality": "truncated"}, 2)])
-    assert human_chars("vol01", log) == {"vol01:5:2:9": ("手", "手")}, "带字的要出字"
+    assert human_chars("vol01", log) == {"vol01:5:2:9": "手"}, "带字的要出字"
     assert decided_cells("vol01", log) == {"vol01:5:2:9"}, "带字的算裁过、不再出卡；不带字的照旧待办"
 
 

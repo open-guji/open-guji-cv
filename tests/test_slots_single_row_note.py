@@ -31,7 +31,7 @@ def _cell(slot: int, sub: str | None, kind: str) -> CellRec:
 def _admit(slot: int, sub: str | None, char: str | None, admit: bool = True,
            doubts: list[str] | None = None) -> AdmitRec:
     return AdmitRec(id="", slot=slot, sub=sub, admit=admit, char=char,
-                    reading=None, doubts=doubts or [])
+                    doubts=doubts or [])
 
 
 # ── 1. 新记法 ──────────────────────────────────────────────────
@@ -81,26 +81,26 @@ def test_slot_absent_entirely_is_stale():
 
 def _slot(slot: int, kind: str, char: str | None, *, excluded=False, unreadable=False) -> SlotRec:
     return SlotRec(id="", page=8, col=1, slot=slot, sub=None, kind=kind, char=char,
-                   reading=None, admit=char is not None, channel=None,
+                   admit=char is not None, channel=None,
                    excluded=excluded, unreadable=unreadable, human=False)
 
 
 def test_render_groups_consecutive_solo_notes_without_bar():
     slots = [_slot(16, "char", "生"), _slot(17, "jiazhu_solo", "憲"),
              _slot(18, "jiazhu_solo", "平"), _slot(19, "char", "閭")]
-    assert render_column(slots, n_raised=0, n_lead_blank=0) == "生<憲平>閭"
+    assert render_column(slots, n_raised=0, n_lead_blank=0) == "生:jz[憲平]{type=单行}閭"
 
 
 def test_render_solo_note_separated_by_body_char_stays_two_notes():
     slots = [_slot(5, "jiazhu_solo", "德"), _slot(6, "jiazhu_solo", "潤"),
              _slot(7, "char", "葉"), _slot(8, "jiazhu_solo", "翥")]
-    assert render_column(slots, n_raised=0, n_lead_blank=0) == "<德潤>葉<翥>"
+    assert render_column(slots, n_raised=0, n_lead_blank=0) == ":jz[德潤]{type=单行}葉:jz[翥]{type=单行}"
 
 
 def test_render_solo_note_excluded_and_unreadable():
     slots = [_slot(1, "jiazhu_solo", "憲"),
              _slot(2, "jiazhu_solo", None, excluded=True),
              _slot(3, "jiazhu_solo", None, unreadable=True)]
-    assert render_column(slots, n_raised=0, n_lead_blank=0) == "<憲[[]]>"
+    assert render_column(slots, n_raised=0, n_lead_blank=0) == ":jz[憲□]{type=单行}"
     only_excluded = [_slot(1, "jiazhu_solo", None, excluded=True)]
     assert render_column(only_excluded, n_raised=0, n_lead_blank=0) == ""

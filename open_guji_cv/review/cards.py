@@ -91,7 +91,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     else:
         pgs = bk.resolve_pages(pages)
     # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
-    # 拿 v2_align 的页对齐（`reading` = 整理本在这一位印的字），锚不上的页没有。
+    # 拿 v2_align 的页对齐（`ref` = 整理本在这一位印的字），锚不上的页没有。
     # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
     try:
         golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
@@ -145,15 +145,16 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 gc = golds.get(r.id)
                 ref = None
-                if gc and gc.reading:
-                    pf = ledger.preferred_form(gc.reading)
-                    ref = {"char": gc.reading, "op": gc.align_op, "run": gc.op_run,
-                           "form": pf if pf and pf != gc.reading else None}
+                if gc and gc.ref:
+                    pf = ledger.preferred_form(gc.ref)
+                    ref = {"char": gc.ref, "op": gc.align_op, "run": gc.op_run,
+                           "form": pf if pf and pf != gc.ref else None}
                 out.append({
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
                     "admit": r.admit, "channel": r.channel, "char": r.char,
-                    "reading": r.reading,
+                    # 己/已/巳：按上下文定的建议字（utils/ji_yi_si.py），卡片可直接点
+                    "jys": (r.evidence or {}).get("ji_yi_si"),
                     # 整理本在这一位印的字（页对齐给的）；form = 本书惯刻的形（账本 preferred，≠整理本字时才有）
                     "ref": ref,
                     # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形

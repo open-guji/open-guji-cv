@@ -25,7 +25,9 @@ export interface VariantGroup {
 
 export interface VariantUnknownPair {
   shape: string
-  reading: string
+  /** 整理本形。账本文件里旧键名叫 reading */
+  ref?: string
+  reading?: string
   n: number
   human?: number
 }
@@ -48,7 +50,6 @@ export interface GroupTile {
   page: number
   patch: string
   char?: string
-  reading?: string
   pending: boolean
   stale?: boolean
   audit?: boolean
@@ -61,7 +62,6 @@ export interface VariantGroupView {
   canonical: string
   members: string[]
   preferred?: string
-  reading_default?: string
   forms: Record<string, VariantForm>
   tiles: GroupTile[]
   n_tiles: number

@@ -75,7 +75,6 @@ class Diff:
     channel: str | None = None
     admit: bool = False
     human: bool = False
-    reading: str | None = None
     n: int = 1         # missing 串长
     hyp_ctx: str = ""
     ref_ctx: str = ""
@@ -108,11 +107,10 @@ class PageResult:
     报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
 
 
-def classify(char: str, reading: str | None, ref: str) -> str:
+def classify(char: str, ref: str) -> str:
     """一个字位的差异性质。判定顺序固定、互斥，先命中者生效（04 卡 §二·3）。
 
     - `same`：字形一致；
-    - `conv.known`：管线已记账的转换（`reading == ref`）——不是新发现的差异；
     - `variant.to_orthodox` / `variant.to_simp` / `variant.other`：同一个字的
       不同形，按**方向**分；
     - `sub.confusable`：T3 形近（己已巳、日曰、人入）——最可能是认错；
@@ -126,8 +124,6 @@ def classify(char: str, reading: str | None, ref: str) -> str:
         return "same"
     if char == PLACEHOLDER:
         return "unreadable"
-    if reading is not None and reading == ref:
-        return "conv.known"
     if _same_char(char, ref):
         return _variant_direction(char, ref)
     # ⚠️ 简体判定要在 `_same_char` **之后、认错之前**单独来一遍。
@@ -248,7 +244,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
         res.diffs.append(Diff(
             id=s.id, page=page, col=s.col, slot=s.slot, sub=s.sub, kind=kind,
             char=ch, ref=ref, witness=w.label, channel=s.channel, admit=s.admit,
-            human=s.human, reading=s.reading, n=n,
+            human=s.human, n=n,
             hyp_ctx=ctx_hyp(i), ref_ctx=ctx_ref(j, n=n)))
 
     # 字位 → 它在证人汉字流里的绝对 offset，供列结构比对用
@@ -260,7 +256,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             for k in range(i2 - i1):
                 s, ref = text_slots[i1 + k], window[j1 + k]
                 pos_of[s.id] = lo + j1 + k
-                kind = classify(_slot_char(s), s.reading, ref)
+                kind = classify(_slot_char(s), ref)
                 if kind == "same":
                     res.n_equal += 1
                     continue
@@ -280,7 +276,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             pos_of[s.id] = lo + jb + k
             if not is_han(ref):
                 continue
-            kind = classify(_slot_char(s), s.reading, ref)
+            kind = classify(_slot_char(s), ref)
             if kind == "same":
                 res.n_equal += 1
                 continue

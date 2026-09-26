@@ -99,7 +99,7 @@ export function VariantBookPanel() {
         <div className="muted var-unknown">
           关系图里没有这条边、或两头落在不同组的转换对（新异体 / OCR 错 / 整理本错 三选一，待审）：
           {data.unknown_pairs.map((u, i) => (
-            <span key={i}>　{u.shape}→{u.reading}{sub(u.n, u.human)}</span>
+            <span key={i}>　{u.shape}→{u.ref ?? u.reading}{sub(u.n, u.human)}</span>
           ))}
         </div>
       )}

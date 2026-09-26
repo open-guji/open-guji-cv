@@ -110,7 +110,7 @@ def cell_anchor(key: str, store=None, cache=None, with_ctx: bool = True) -> dict
             from ..report.slots import page_slots
             seq = [s for s in page_slots(store, book, page) if s.is_text]
             i = next(k for k, s in enumerate(seq) if s.id == key)
-            t = lambda xs: "".join((s.reading or s.char or "□") for s in xs)  # noqa: E731
+            t = lambda xs: "".join((s.char or "□") for s in xs)  # noqa: E731
             a["ctx"] = [t(seq[max(0, i - 2):i]), t(seq[i + 1:i + 3])]
         except Exception:
             pass

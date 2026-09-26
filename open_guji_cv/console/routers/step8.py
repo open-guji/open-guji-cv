@@ -321,7 +321,7 @@ def _events_for(d: DecideIn, base_seq: int, batch: str, current: dict[str, dict]
         add("collate_verdict", key, {"pair": pair, "who": who, "cat": cat, "fix": fix,
                                      "final": new_final, "ctx": ctx, "note": d.note})
         if new_final != cur.get("final", pair[0]):
-            add("confirm", key, {"v": "confirm", "shape": new_final, "reading": new_final,
+            add("confirm", key, {"v": "confirm", "shape": new_final,
                                  "conversion": 0, "no_glyph_lib": False, "via": VIA,
                                  "pair": pair, "note": d.note or f"Step8 复核：{who or '退回待审'}"})
 

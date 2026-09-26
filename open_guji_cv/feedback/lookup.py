@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from ..utils.ji_yi_si import FAMILY as _JYS
 from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
 
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
@@ -223,8 +224,11 @@ def stale_human_marks(book: str) -> dict[str, str]:
 
 
 def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
-                bind: bool | None = None) -> dict[str, tuple[str, str | None]]:
-    """人在定字台上定过的字 → `{裸 id: (字形 shape, 读法 reading|None)}`，同一位**后到覆盖**。
+                bind: bool | None = None) -> dict[str, str]:
+    """人在定字台上定过的字 → `{裸 id: 字}`，同一位**后到覆盖**。
+
+    只有字形（2026-09-26 取消读法）。唯一的例外是**老事件**里的 己/已/巳：当时允许「看着像 X、
+    读作 Y」两栏分填，Y 才是人按上下文定的字——本族字形本就不分（`utils/ji_yi_si.py`），取 Y。
 
     2026-09-20 补的缺口：Step7 此前只从字形库拿人裁（`seed_admit._human_shapes`，
     `provenance='human'`），而人勾了「字形不入库」的裁决根本不进库——bxgb 11 个「已裁未放行」
@@ -285,5 +289,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             key = usable(bound.get(e.id)) if e.id in bound else key
             if key is None:
                 continue                  # 挂错格 / 切开合并 / 格没了：不采信，回待审
-        out[key] = (str(p["shape"]), (str(p["reading"]) if p.get("reading") else None))
+        ch = str(p["shape"])
+        rd = p.get("reading")
+        if ch in _JYS and rd in _JYS:
+            ch = rd
+        out[key] = ch
     return out

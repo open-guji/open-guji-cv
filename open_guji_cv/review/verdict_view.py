@@ -76,21 +76,19 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
         p = e.payload
         v = p.get("v") or e.kind
         if v == "not_a_char":
-            out[e.target.key] = {"shape": "", "reading": "", "done": "non"}
+            out[e.target.key] = {"shape": "", "done": "non"}
         elif v == "skip":
-            out[e.target.key] = {"shape": "", "reading": "", "done": "skip"}
+            out[e.target.key] = {"shape": "", "done": "skip"}
         elif v == "damaged":
             # 原图破损（2026-09-19）：`guess` 要一并读回，否则刷新后括注里的
             # 「最像哪个字」凭空消失，人以为没填过、又填一遍。
-            out[e.target.key] = {"shape": "", "reading": "", "done": "damaged",
+            out[e.target.key] = {"shape": "", "done": "damaged",
                                  "guess": p.get("guess") or ""}
         elif v == "seg_defect":
             out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "reading": p.get("reading") or "",
                                  "done": p.get("quality") or "contaminated"}
         elif v == "confirm":
             out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "reading": p.get("reading") or p.get("shape") or "",
                                  "done": "1",
                                  "noGlyphLib": bool(p.get("no_glyph_lib"))}
     return {"batch": batch, "n": len(out), "verdicts": out}
@@ -126,7 +124,7 @@ def verdicts_by_question(batch: str, question: str | None = None,
 
     ## 为什么返回原始 payload 而不是统一形状
 
-    四个前端消费的形状本就不同（定字台要 `{shape, reading, done}`，
+    四个前端消费的形状本就不同（定字台要 `{shape, done}`，
     列清理台要 `{side_verdict, top_class, bot_class}`）。硬统一成一种形状
     要改写全部前端——那是阶段三裁决台改造的事。这里统一的是**接口与去重
     规则**，形状仍由各 question 自己决定：给回原始 payload，前端取自己要的键。

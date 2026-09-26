@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchAroundBatch, fetchRareBatch, fetchRareOne, fetchReviewCards, fetchReviewVerdicts, contextImgUrl } from '../../api/review'
 import { postEvents } from '../../api/events'
-import { needsReading, readingOf, consumedMsg } from '../../domain'
+import { consumedMsg } from '../../domain'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import './review.css'
 
 // 迁移自 v1 static/js/panels/review.js（549 行，方案 §四标注"改造复用（分文件）"）。
-// 一条口径（用户 2026-09-04 定）：先读字形，文本录入按文意，记录转换。
+// 一条口径（用户 2026-09-26 定）：每一格只裁一个字，就是字形；没有「读法」。
 // 候选生成/键位表抽成纯函数（candidates.ts），交互与状态留在本组件。
 
 export interface Verdict {
   shape: string
-  reading: string
   done: string
   ts?: number
   dwell?: number
@@ -105,10 +104,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const st = (c: ReviewCard) => verdicts.current[c.id]?.done
     // 「已裁」= 本轮在这一屏里刚裁的。已裁过的卡默认压根不载入（后端 skip_decided），
     // 所以这个数从 0 涨到 n 就是本屏的进度条；`nDecided` 是全书累计，另计。
-    const nDone = list.filter((c) => st(c) && st(c) !== 'need_reading').length
-    const nNeed = list.filter((c) => st(c) === 'need_reading').length
+    const nDone = list.filter((c) => st(c)).length
     setMsg(`${n} 张 · 已裁 ${nDone}`
-      + (nNeed ? ` · 待填文意 ${nNeed}` : '')
       + (nDec ? ` · 全书已裁 ${nDec}${inclDecided ? '（含在本屏）' : '，已跳过'}` : ''))
     bump()
   }
@@ -174,23 +171,20 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     return verdicts.current[id]?.done || ''
   }
 
-  function setVerdict(i: number, shape: string, reading?: string, doneIn?: string) {
+  function setVerdict(i: number, shape: string, doneIn?: string) {
     const c = cards[i]
     if (!c) return
     // 从候选/输入框改字时（doneIn 省略）：切分缺陷两档要**保住**，别被改字顶掉——
     // 「这块图切坏了」与「这是哪个字」是两件事，可以同时成立（用户 2026-09-20）。
     const keepDefect = (doneIn === undefined
                         && (prevDone(c.id) === 'truncated' || prevDone(c.id) === 'contaminated'))
-    let mark = doneIn === undefined ? (keepDefect ? prevDone(c.id) : (shape ? '1' : '')) : doneIn
-    const rd = reading || ''
-    if (needsReading(shape) && !rd) mark = 'need_reading'
+    const mark = doneIn === undefined ? (keepDefect ? prevDone(c.id) : (shape ? '1' : '')) : doneIn
     const prev = verdicts.current[c.id]
     const now = Date.now()
     const dwell = prev?.dwell !== undefined ? prev.dwell : (seen.current[c.id] ? now - seen.current[c.id] : undefined)
     const prevNoGlyphLib = verdicts.current[c.id]?.noGlyphLib
     verdicts.current[c.id] = {
-      shape, reading: needsReading(shape) ? rd : (rd || shape),
-      done: mark, ts: now, dwell, noGlyphLib: prevNoGlyphLib,
+      shape, done: mark, ts: now, dwell, noGlyphLib: prevNoGlyphLib,
     }
     touched.current.add(c.id)
     bump()
@@ -199,7 +193,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   function setGuess(i: number, guess: string) {
     const c = cards[i]
     if (!c) return
-    const v = verdicts.current[c.id] || { shape: '', reading: '', done: '' }
+    const v = verdicts.current[c.id] || { shape: '', done: '' }
     verdicts.current[c.id] = { ...v, guess }
     touched.current.add(c.id)
     bump()
@@ -208,7 +202,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   function setNoGlyphLib(i: number, checked: boolean) {
     const c = cards[i]
     if (!c) return
-    const v = verdicts.current[c.id] || { shape: '', reading: '', done: '' }
+    const v = verdicts.current[c.id] || { shape: '', done: '' }
     verdicts.current[c.id] = { ...v, noGlyphLib: checked }
     touched.current.add(c.id)
     bump()
@@ -237,9 +231,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   async function submit() {
     const b = batch()
     const rows: Array<Record<string, unknown>> = []
-    let pending = 0
     for (const [id, v] of Object.entries(verdicts.current)) {
-      if (v.done === 'need_reading') { pending++; continue }
       if (!v.done) continue
       // 只发**本轮真正动过的**（用户 2026-09-16「反复 confirm 要合并，只记后面的」）。
       // `verdicts.current` 里混着 `load()` 从服务端读回的历史裁决（`{...done, ...current}`），
@@ -257,21 +249,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       }
       if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue }
       if (v.done === 'truncated' || v.done === 'contaminated') {
-        rows.push({ id, v: 'seg_defect', quality: v.done, shape: v.shape || '', reading: readingOf(v), client_ts: v.ts, dwell_ms: v.dwell })
+        rows.push({ id, v: 'seg_defect', quality: v.done, shape: v.shape || '', client_ts: v.ts, dwell_ms: v.dwell })
         continue
       }
       rows.push({
-        id, v: 'confirm', shape: v.shape, reading: readingOf(v),
-        conversion: readingOf(v) !== v.shape ? 1 : 0,
+        id, v: 'confirm', shape: v.shape,
         no_glyph_lib: !!v.noGlyphLib,
         client_ts: v.ts, dwell_ms: v.dwell,
       })
-    }
-    if (pending) {
-      setMsg(`有 ${pending} 张选了 己/已/巳 但没填文意（黄框那些），填完再提交`)
-      const first = cards.findIndex((c) => verdicts.current[c.id]?.done === 'need_reading')
-      if (first >= 0) focus(first)
-      return
     }
     if (!rows.length) { setMsg('还没有裁决'); return }
     setMsg('提交中…')
@@ -320,12 +305,12 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
         const pick = keyList(c, rare.current[c.id]).find((e) => e.keys.includes(+ev.key))
         if (pick && pick.ch) { setVerdict(cur, pick.ch); focus(cur + 1); ev.preventDefault() }
-      } else if (ev.key === 'n' || ev.key === 'N') { setVerdict(cur, '', '', 'non'); focus(cur + 1); ev.preventDefault() }
-      else if (ev.key === 's' || ev.key === 'S') { setVerdict(cur, '', '', 'skip'); focus(cur + 1); ev.preventDefault() }
-      else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', '', 'truncated'); focus(cur + 1); ev.preventDefault() }
-      else if (ev.key === 'c' || ev.key === 'C') { setVerdict(cur, '', '', 'contaminated'); focus(cur + 1); ev.preventDefault() }
+      } else if (ev.key === 'n' || ev.key === 'N') { setVerdict(cur, '', 'non'); focus(cur + 1); ev.preventDefault() }
+      else if (ev.key === 's' || ev.key === 'S') { setVerdict(cur, '', 'skip'); focus(cur + 1); ev.preventDefault() }
+      else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', 'truncated'); focus(cur + 1); ev.preventDefault() }
+      else if (ev.key === 'c' || ev.key === 'C') { setVerdict(cur, '', 'contaminated'); focus(cur + 1); ev.preventDefault() }
       // D = 原图破损。**不自动跳下一张**：人多半要接着在「最像」框里填一个字。
-      else if (ev.key === 'd' || ev.key === 'D') { setVerdict(cur, '', '', 'damaged'); ev.preventDefault() }
+      else if (ev.key === 'd' || ev.key === 'D') { setVerdict(cur, '', 'damaged'); ev.preventDefault() }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -380,7 +365,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               aroundCtx={around.current[`${c.page}:${c.col}:${c.slot}`]}
               rareOut={rareOut.current[i]}
               onFocus={() => focus(i)}
-              onSet={(shape: string, reading?: string, done?: string) => setVerdict(i, shape, reading, done)}
+              onSet={(shape: string, done?: string) => setVerdict(i, shape, done)}
               onSetNoGlyphLib={(checked: boolean) => setNoGlyphLib(i, checked)}
               onSetGuess={(g: string) => setGuess(i, g)}
               onToggleCtxImg={() => toggleCtxImg(i)}
