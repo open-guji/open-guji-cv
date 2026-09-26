@@ -174,7 +174,8 @@ def cmd_console(args) -> None:
               "拒绝启动——对外开放校对平台不能关掉登录。", file=sys.stderr)
         sys.exit(1)
     root_path = getattr(args, "root_path", "") or ""
-    auth_config.set_config(no_auth=no_auth, root_path=root_path)
+    dev_idp = bool(getattr(args, "dev_idp", False))
+    auth_config.set_config(no_auth=no_auth, root_path=root_path, dev_idp=dev_idp)
 
     # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
     # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
@@ -190,6 +191,8 @@ def cmd_console(args) -> None:
     if no_auth:
         print("  ⚠️  --no-auth：鉴权已关闭，任何能连上本机端口的人都能起跑批、写裁决——"
               "只许本机开发用。\n")
+    if dev_idp:
+        print("  ⚠️  --dev-idp：登录走本机假登录页，不是网站真授权——只许本机开发用。\n")
     serve(port=args.port, open_browser=not args.no_browser, host=host, root_path=root_path)
 
 
@@ -1366,6 +1369,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "绑别的地址会拒绝启动")
     p.add_argument("--root-path", default="",
                    help="挂在反向代理前缀下时用，如 /collate（网站把 /collate/* 转发到这里）")
+    p.add_argument("--dev-idp", action="store_true",
+                   help="登录走本机假登录页，不打网站真的 /oauth/authorize|token（网站两个端点"
+                        "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
+                        "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column")
     p.add_argument("action", choices=["usage", "prune", "get", "column"])

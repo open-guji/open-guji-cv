@@ -1,6 +1,7 @@
-// 身份委托给网站——这里只是薄薄一层：问后端「我是谁」（后端再转发 Cookie
-// 去问网站 `/api/auth/me`），以及拿跳转用的地址（登录/登出入口）。
-// 不在前端存密码、不做任何本地登录表单。
+// 身份委托给网站——OAuth 授权码 + PKCE，平台自己不存密码、不建账号表。
+// 登录/登出都是**平台自己的**相对路径（`/auth/login`、`/auth/logout`，
+// `console/routers/auth.py`），不是网站的地址——09-26 第二次改向后平台暂时
+// 直连服务器 IP，不挂网站域名下，跳转/回调全在同一个源上完成。
 
 import { ROOT_PATH } from './client'
 
@@ -8,12 +9,6 @@ export interface Identity {
   email: string
   role: string          // 网站原始角色：reviewer / editor / admin
   tier: 'reviewer' | 'admin'
-}
-
-export interface AuthConfig {
-  login_url: string
-  logout_url: string
-  root_path: string
 }
 
 /** 未登录时抛这个（区别于其它接口错误），调用方据此跳转登录，不是弹错误提示。 */
@@ -26,8 +21,16 @@ export async function getMe(): Promise<Identity> {
   return r.json() as Promise<Identity>
 }
 
-export async function getAuthConfig(): Promise<AuthConfig> {
-  const r = await fetch(`${ROOT_PATH}/api/auth/config`, { credentials: 'same-origin' })
-  if (!r.ok) throw new Error(`拿不到鉴权配置：${r.status}`)
-  return r.json() as Promise<AuthConfig>
+/** 跳去登录（整页导航，不是 fetch）。`next` 缺省当前页——登录完回得来。
+ * `prompt === 'none'` 用于角色刷新到期后的静默重试（会话仍在但过了刷新间隔，
+ * 后端 401；如果网站那边登录态还在，这一趟用户无感，登不动再退回交互式登录）。 */
+export function goToLogin(opts?: { next?: string; prompt?: 'none' }): void {
+  const next = opts?.next ?? window.location.pathname + window.location.search
+  const params = new URLSearchParams({ next })
+  if (opts?.prompt) params.set('prompt', opts.prompt)
+  window.location.href = `${ROOT_PATH}/auth/login?${params.toString()}`
+}
+
+export function goToLogout(): void {
+  window.location.href = `${ROOT_PATH}/auth/logout`
 }
