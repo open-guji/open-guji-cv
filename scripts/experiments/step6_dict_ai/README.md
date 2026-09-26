@@ -13,7 +13,13 @@
 
 不读人裁事件；上下文里所有难例格挖成 ▢ 或标为待判位。工作区路径取 `GUJI_WORKSPACE`，缺省为与 cv 仓并列的 `guji-workspace/988g7gsqhd-…`。
 
+## 模型与用量
+
+- `--model claude-haiku-4-5 | claude-sonnet-5`（需环境变量 `ANTHROPIC_API_KEY`）或智谱 `glm-*`。
+- `--budget`（美元，默认 2）：本次新调用花费到了就停，缓存命中不计；`--max-cells N` 只问前 N 格（按批截断）。**先小样本，别直接 `--days all`。**
+- 只能在自家客户端跑的模型（muse 等）：`--export prompts.jsonl` 只导出提示词；跑完把每行 `{"job_id", "text"}` 存成 JSONL，`--answers answers.jsonl` 导回打分。
+
 ```bash
 python3 prep.py
-python3 harness.py --prompt v2 --model glm-5 --days all --workers 2
+python3 harness.py --prompt v2 --model claude-haiku-4-5 --days 62 --max-cells 20 --budget 0.5
 ```
