@@ -9,7 +9,7 @@ import { fetchLibAudit, FONT_NAME, libFontUrl, libPatchUrl, postLibAudit, PROV_L
 // 体检：`glyph-db selfcheck` 标出的可疑刻例，一张卡一个。本例与它的同字最近、
 // 本书里最像的别的字、他书里最像的别的字、字体（本字 / 最像的别的字）并排。
 // 裁决走 glyph_audit 事件（feedback/glyph_audit.py）：没问题 / 形近·异体 / 撤库 / 改字。
-export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
+export function LibAuditPanel({ onPick, isAdmin }: { onPick: (c: string) => void; isAdmin: boolean }) {
   const [r, setR] = useState<AuditResult | null>(null)
   const [err, setErr] = useState('')
   const [flag, setFlag] = useState('')
@@ -120,7 +120,10 @@ export function LibAuditPanel({ onPick }: { onPick: (c: string) => void }) {
             })()}
             {f.font_char && <Fig src={libFontUrl(f.font_char)} cap={`字体「${f.font_char}」${f.font_best.toFixed(2)}`} />}
           </div>
-          {!done[f.key] && (
+          {!done[f.key] && !isAdmin && (
+            <p className="muted">体检裁决（撤库/改字）需要管理员权限，只有管理员能操作。</p>
+          )}
+          {!done[f.key] && isAdmin && (
             <div className="gl-actions">
               <button disabled={!!busy} onClick={() => decide(f, { v: 'ok' })}>没问题</button>
               <button disabled={!!busy} onClick={() => decide(f, { v: 'near_form' })}

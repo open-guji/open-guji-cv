@@ -168,14 +168,33 @@ def cmd_console(args) -> None:
     from .core.workspace import describe, using_sample_corpus, using_sample_db
 
     host = getattr(args, "host", None) or "127.0.0.1"
+    loopback = host in ("127.0.0.1", "localhost")
     no_auth = bool(getattr(args, "no_auth", False))
-    if no_auth and host not in ("127.0.0.1", "localhost"):
+    if no_auth and not loopback:
         print(f"✗ --no-auth 只能在本机（127.0.0.1/localhost）用，绑 {host} 时必须过身份接口鉴权，"
               "拒绝启动——对外开放校对平台不能关掉登录。", file=sys.stderr)
         sys.exit(1)
     root_path = getattr(args, "root_path", "") or ""
     dev_idp = bool(getattr(args, "dev_idp", False))
     auth_config.set_config(no_auth=no_auth, root_path=root_path, dev_idp=dev_idp)
+
+    # 向后兼容（协调者 09-26 20:10 验收意见）：OAuth 还没配（网站两个端点
+    # 10 月上旬才有 PR），服务器的 systemd 单元现在起控制台**没带任何鉴权参数**。
+    # 不补这条的话，这次改动一合 main、服务器一重启，控制台就变成一个当下
+    # 用不了的登录页，把正在用的人全挡在外面。
+    oauth_configured = bool(auth_config.get().client_secret)
+    if not no_auth and not dev_idp and not oauth_configured:
+        if loopback:
+            no_auth = True
+            auth_config.set_config(no_auth=True)
+            print("  ⚠️⚠️  未配置 OAuth（GUJI_OAUTH_CLIENT_SECRET 为空）且未加 --dev-idp/--no-auth，"
+                  "绑的是本机地址——按本机免鉴权运行。生产部署前必须配置 OAuth 或显式加"
+                  " --no-auth/--dev-idp。\n")
+        else:
+            print(f"✗ 绑 {host} 但没配置 OAuth（GUJI_OAUTH_CLIENT_SECRET 为空）也没加 --dev-idp——"
+                  "登录流程打不通，拒绝启动。要么配好 OAuth，要么本机开发用 --dev-idp。",
+                  file=sys.stderr)
+            sys.exit(1)
 
     # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
     # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
