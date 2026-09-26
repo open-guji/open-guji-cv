@@ -27,6 +27,9 @@ from open_guji_cv.eval.runner import _gate_verdict
 NOT_REGISTRY_SHAPED = {
     "oracle_llm",  # --answers 是 required 的外部答案表路径（run_llm_context_eval.py
                    # 的产物，同一次可传多份对比 provider），不是数据集分片
+    "beixing_real_proto",  # 靶子是某本书私有工作区的 GUJI_WORKSPACE + 该书专属
+                           # --real-proto-store 路径（R2/T11 额外靶，任务书「有就报」），
+                           # 不是数据集仓里的分片，每次要手指哪本书
 }
 
 

@@ -149,6 +149,13 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="固定退化·稳定性", needs=("products", "heavy"),
        note="集在 cache/oov_bench（--set oov，缺省）或 glyph-bench unseen 档；"
             "模板均值优先复用 cache/struct_probe/emb_*.npz，没有就现渲染"),
+    # 真刻例多原型档（R2/T11，2026-09-26）验收协议之一：seen_test 每类只留 1 条
+    # 真刻例当模板、其余当查询，对照纯字体模板——与 oov/zero_shot_fusion 同源
+    # 同形（数据在 cache/glyph_bench，没有位置参数）。
+    _e("seen_test_single_proto", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
+       title="真刻例单原型·seen_test", needs=("products", "heavy"),
+       note="`cnn_candidates.REAL_PROTO_ENABLED`（k<=3 多原型）的独立验证协议，"
+            "不经过 glyph_store，直接从 glyph_bench 按类拆模板/查询"),
     # Step5-d replace 段采信闸（2026-09-22 T7）：靶子不是数据集分片，是工作区 feedback 里
     # 用户 confirm 的 shape + 该工作区跑到 5-a 的产物。注册表这条只**重报**已 dump 的行
     # （cache/align_gate/<book>.jsonl）；dump 要手跑 `-w <工作区> --books vol01,vol02`。

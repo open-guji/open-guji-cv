@@ -39,6 +39,10 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--json", default=None, help="结果写到这个文件（对比历次用）")
     ap.add_argument("--no-gw", action="store_true", help="关掉 GlyphWiki 变体形模板档（cnn_candidates.GW_ENABLED），做对照")
+    ap.add_argument("--real-proto", action="store_true",
+                    help="开真刻例多原型档（R2/T11，cnn_candidates.REAL_PROTO_ENABLED，缺省关）")
+    ap.add_argument("--real-proto-store", action="append", default=[],
+                    help="真刻例来源 store:<glyph_store 目录>，可重复；配合 --real-proto 用")
     a = ap.parse_args()
 
     import cv2
@@ -61,13 +65,24 @@ def main() -> int:
     if a.no_gw:
         import open_guji_cv.clustering.cnn_candidates as _cc
         _cc.GW_ENABLED = False
+    real_exclude_ids: frozenset = frozenset()
+    if a.real_proto:
+        import open_guji_cv.clustering.cnn_candidates as _cc
+        _cc.REAL_PROTO_ENABLED = True
+        _cc.REAL_PROTO_SPECS = tuple(a.real_proto_store)
+        # 留一法：这批评测字自己的物理格不许进它自己的真刻例模板（同 5-a 的教训
+        # 「自证不是证据」）——按 `id` 摘，`_real_index` 里再按物理格（同册同页
+        # 同列、格号相差 <=2）扩摘一圈，见 `cnn_candidates._real_index` 文档。
+        real_exclude_ids = frozenset(it["id"] for it in items if it.get("id"))
     cnn = CnnCandidates(a.ckpt or str(DEFAULT_CKPT))
-    from open_guji_cv.clustering.cnn_candidates import GW_CATALOG, GW_ENABLED
+    from open_guji_cv.clustering.cnn_candidates import GW_CATALOG, GW_ENABLED, REAL_PROTO_SPECS
     print(f"GlyphWiki 变体形模板档：{'开' if (GW_ENABLED and GW_CATALOG.exists()) else '关/缺席'}（{GW_CATALOG}）", flush=True)
+    print(f"真刻例多原型档：{'开 ' + str(REAL_PROTO_SPECS) if a.real_proto else '关'}"
+          f"（留一法摘除 {len(real_exclude_ids)} 个物理格）", flush=True)
     cnn._ensure()
     t0 = time.time()
     cls = [[c for c, _ in r] for r in cnn.topk_batch(imgs, cs, k=a.k)]
-    emb = [[c for c, _ in r] for r in cnn.emb_topk_batch(imgs, cs, k=a.k)]
+    emb = [[c for c, _ in r] for r in cnn.emb_topk_batch(imgs, cs, k=a.k, real_exclude_ids=real_exclude_ids)]
     dt = time.time() - t0
     rows = {"cls": cls, "emb": emb,
             "rrf": [rrf(c, e, k=a.k, weights=(CNN_WEIGHT, EMB_WEIGHT))
@@ -100,7 +115,9 @@ def main() -> int:
     if a.json:
         Path(a.json).write_text(json.dumps(
             {"charset": a.charset, "ckpt": a.ckpt or str(DEFAULT_CKPT),
-             "n": n, "n_chars": len(set(G)), "result": res},
+             "n": n, "n_chars": len(set(G)), "result": res,
+             "real_proto": a.real_proto, "real_proto_store": a.real_proto_store,
+             "real_proto_loo": len(real_exclude_ids)},
             ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n→ {a.json}")
     return 0
