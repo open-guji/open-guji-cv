@@ -13,6 +13,8 @@ PRICE = {'claude-haiku-4-5': (1.0, 5.0), 'claude-sonnet-5': (2.0, 10.0), 'claude
 SPENT = {'usd': 0.0}
 
 def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None):
+    if model.startswith('muse'):
+        return call_muse(model, messages, effort)
     if model.startswith('cc:'):
         return call_cc(model[3:], messages)
     if model.startswith('claude-'):
@@ -29,6 +31,35 @@ def _key(name):
     for line in open(p, encoding='utf-8'):
         if line.strip().startswith(name + '='): return line.split('=', 1)[1].strip()
     sys.exit(f'找不到 {name}')
+
+def call_muse(model, messages, effort):
+    """Meta Muse Code 无交互模式 `muse exec`（账号登录，凭证存文件：TBH_CREDENTIAL_BACKEND=file）。
+    model = 'muse' 用默认模型，'muse:<id>' 指定。它没有替换系统提示的参数，系统提示拼在提示词文件开头；
+    --max-model-steps 2 不给它走工具的余地，工作目录是空沙箱。"""
+    import subprocess, tempfile
+    mid = model.split(':', 1)[1] if ':' in model else None
+    prompt = '【任務說明】\n' + messages[0]['content'] + '\n\n【本次材料】\n' + messages[1]['content'] + '\n\n只輸出 JSON，不要調用任何工具。'
+    h = hashlib.sha256(json.dumps(['muse', mid, effort, 'schema-v1', prompt], ensure_ascii=False).encode()).hexdigest()[:24]
+    fp = f'{CACHE}/{h}.json'
+    if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
+    sb = '/tmp/muse_sandbox'; os.makedirs(sb, exist_ok=True)
+    with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, dir='/tmp') as f: f.write(prompt); pf = f.name
+    cmd = [os.path.expanduser('~/.local/bin/muse'), 'exec', '--prompt-file', pf, '--max-model-steps', '2', '--workspace', sb,
+           '--output-schema', H + '/answer_schema.json']
+    if mid: cmd += ['--model', mid]
+    if effort: cmd += ['--reasoning-effort', effort]
+    t = time.time(); err = ''
+    for att in range(3):
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, cwd=sb,
+                           env=os.environ | {'TBH_CREDENTIAL_BACKEND': 'file'})
+        if p.returncode == 0 and p.stdout.strip(): break
+        err = (p.stderr or p.stdout)[-300:]
+        open(H + '/errors.log', 'a').write(f'{time.strftime("%T")} {model} rc={p.returncode} {err}\n'); time.sleep(10 * 2 ** att)
+    else:
+        return {'text': '', 'error': err}
+    os.unlink(pf)
+    out = {'text': p.stdout, 'usage': None, 'latency': round(time.time() - t, 1), 'model': model, 'ts': time.strftime('%FT%T')}
+    json.dump(out, open(fp, 'w'), ensure_ascii=False); return out
 
 def call_cc(model, messages):
     """走本机 Claude Code CLI（订阅额度，不用 API key）：`claude -p`，换掉系统提示、关掉工具与设置。
@@ -215,7 +246,7 @@ def summarize(rows, usage, errs, tag):
     for band in [(0.99, 1.01), (0.95, 0.99), (0.8, 0.95), (0, 0.8)]:
         B = [s for s in tin if band[0] <= s['top_p'] < band[1]]
         if B: print(f'  top_p∈[{band[0]},{band[1]}): {len(B)} 格, 首组含真值 {f("top_has_truth", B)/len(B):.1%}')
-    tok = [u for u in usage if u]
+    tok = [u for u in usage if u and u.get('prompt_tokens') is not None]
     print(f'  tokens in {sum(u["prompt_tokens"] for u in tok)} out {sum(u["completion_tokens"] for u in tok)}；调用错误 {sum(1 for e in errs if e)}')
 
 if __name__ == '__main__':
