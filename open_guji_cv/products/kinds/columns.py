@@ -16,7 +16,7 @@ from .borders import VLineRec
 
 class BorderTrim(BaseModel):
     px: int
-    case: str          # a / b / c / d / e（见 column_projection.column_border_trim）
+    case: str          # a / b / c / d / e；带数字后缀（a2/d2/e3…）＝双线版框连第二、三道一起剥（见 column_projection.column_border_trim）
 
 
 class ColumnTriage(BaseModel):
