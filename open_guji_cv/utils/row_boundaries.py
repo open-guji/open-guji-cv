@@ -1216,7 +1216,6 @@ RESOLVED_SEAM_TOL = 4.0
 PIN_MARGIN = 8.0
 """人钉的格线离上下相邻格线至少这么多像素，否则不钉（见 segment_column 的 pinned_cuts）。"""
 
-
 SPLIT_SHORT, SPLIT_TALL, SPLIT_MASS_MIN = 0.79, 1.05, 0.10
 """L0′「切进字里」嫌疑（2026-09-15，10 卡）：直线格线不穿墨、看着干净，但相邻两格一个 ≤0.79·中位格高、
 一个 ≥1.05·中位格高，且**矮格的绝对墨量**（墨像素 ÷ 中位格高×格宽）≥0.10——矮格里装的不是「一」「二」那种扁字
@@ -1367,6 +1366,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     resolved_cuts: "dict[int, str | ResolvedCut] | None" = None,
                     cut_judge=None,
                     pinned_cuts: "dict[int, float] | None" = None,
+                    forced_solo: "set[int] | None" = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1427,6 +1427,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `cut_judge`：候选池裁判（`utils/cut_select.get_judge()` 的 U-Net），None = 只用现役规则。
       候选池经现役规则、收缩、**人裁回流**之后仍 ≥2 条（人没裁过）时，用它给每条候选打一致率、
       改选高出门槛的最优者。人裁在前：`seam_ok` 收敛的是人当时看到的现役折线。见 `utils/cut_select.py` 模块头。
+    - `forced_solo`：人裁指认为單行小注的格（对外 `slot` 编号，来自
+      `feedback/lookup.resolved_solo_notes`）。只管判据落空的那一型（左半有碎墨把
+      跨度撑满），已被雙行段收走的格不动；缝取右半墨迹左缘。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
@@ -1468,7 +1471,6 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         if (bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN
                 and abs(y_pin - bounds[p_]) <= period):
             bounds[p_] = y_pin
-
 
     # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
     # （对外编号，抬头/正文交界处跳过 0）只在生成 Cell 的最后一步换算。
@@ -1521,6 +1523,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 的注紧挨着，所以这里不存在"單行注被当段尾收走"的歧义。
         solo = jiazhu_split.solo_notes(
             {p: patches[p] for p in nonblank}, runs, ruler, ink_threshold)
+        for pos in sorted(nonblank):
+            if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
+                    and pos not in runs and pos not in solo:
+                solo[pos] = jiazhu_split.right_half_left_edge(patches[pos], ink_threshold)
 
     cells: list[Cell] = []
     for k in range(n_slots):

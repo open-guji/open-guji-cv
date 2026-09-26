@@ -91,6 +91,34 @@ def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
     return out
 
 
+SOLO_NOTE_SHARD = "char-segmentation/solo-notes"
+
+
+def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
+    """人裁「这一格是單行小注」：`(page, col) → {slot, …}`。
+
+    `jiazhu_split.solo_notes` 纯几何量到头的那一型——干扰墨恰好落在左半，与「左半
+    空着」这个核心信号正面冲突（bxgb `p3c4s5`「覿」，见 overview Step3-12 预案）。
+    判据不会为它举手，只能人指出来。卡片 id `book:page:col:slot`，`expected.kind`
+    只认 `jiazhu_solo`；生效时机同 `resolved_cuts`（裁决不进指纹，该页重跑才生效）。
+    """
+    from .consumers import verdict_store
+    out: dict[tuple[int, int], set[int]] = {}
+    try:
+        items = verdict_store().list(SOLO_NOTE_SHARD, legacy=False)
+    except Exception:
+        return out
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book:
+            continue
+        a = it.anchor
+        if a.page is None or a.col is None or a.slot is None:
+            continue
+        if it.expected.get("kind") == "jiazhu_solo":
+            out.setdefault((a.page, a.col), set()).add(a.slot)
+    return out
+
+
 def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     """已裁决、可收敛的切点：`(page, col, slot_above) → ResolvedCut`。判据见 `_resolve`。
 
@@ -154,7 +182,45 @@ def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
     return out
 
 
-def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
+def stale_human_marks(book: str) -> dict[str, str]:
+    """字形库里已撤下的人裁：`{裸 id: 撤下时刻 YYYYMMDD 或 YYYYMMDDTHHMM（UTC）}`（`admissions.provenance='human_stale_<日期>'`）。
+
+    撤法见 `scripts/check_stale_human.py`（重字签名）与 2026-09-25 的漂移检查
+    （`scripts/experiments/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
+    库读不到就当没有——事件侧的人裁照旧生效，不因为这张表缺席就全部作废。
+    """
+    import sqlite3
+
+    from ..core.workspace import glyph_db_path
+    out: dict[str, str] = {}
+    try:
+        con = sqlite3.connect(str(glyph_db_path()))
+        rows = con.execute("SELECT instance_id, provenance FROM admissions "
+                           "WHERE provenance LIKE 'human_stale_%'").fetchall()
+    except Exception:
+        return out
+    for iid, prov in rows:
+        key = iid[3:] if iid.startswith("v2:") else iid
+        if key.startswith(book + ":"):
+            out[key] = prov.rsplit("_", 1)[-1]
+    # 没进字形库的人裁（勾了不入库、或 v1 编号）改不了 provenance，另记一张作废表：
+    # `<feedback>/lists/stale_verdicts.tsv`，每行 `字位id<TAB>撤下时刻<TAB>原因`（2026-09-25 加）。
+    from ..core.workspace import feedback_root
+    try:
+        path = feedback_root() / "lists" / "stale_verdicts.tsv"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            key, cut = line.split("\t")[:2]
+            if key.startswith(book + ":"):
+                out[key] = max(out.get(key, ""), cut.strip())
+    except (FileNotFoundError, OSError, ValueError):
+        pass
+    return out
+
+
+def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
+                bind: bool | None = None) -> dict[str, tuple[str, str | None]]:
     """人在定字台上定过的字 → `{裸 id: (字形 shape, 读法 reading|None)}`，同一位**后到覆盖**。
 
     2026-09-20 补的缺口：Step7 此前只从字形库拿人裁（`seed_admit._human_shapes`，
@@ -167,7 +233,25 @@ def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
     `shape` 的事件；`not_a_char` / `damaged` / `seg_defect` 各有各的去处（排除名单、打回台账）。
 
     与 `_human_shapes` 同一条警告：切分改了，旧裁决就钉在了错的格上——这里同样不查几何。
+    **但要认字形库里的撤下标记**（2026-09-25 补）：某一位在库里被撤成 `human_stale_<日期>`，
+    那天及以前的事件就作废（否则撤了库里那份，事件这条路又把旧裁决原样送回来）；
+    撤下之后再裁的事件照常生效。`stale` 缺省从字形库读（`stale_human_marks`），测试可直接传。
+
+    **重绑定**（2026-09-25，总览/15）：`bind` 为真时每条裁决先过绑定表（`feedback/bindings.py`）——
+    按锚在现行切分里找回它现在对应的格：原格仍是那个字照用，整列顺移了改绑到新编号，
+    切开/合并/找不到的不采信（回待审）。缺省 `bind=None` = 读工作区事件日志时开、传入测试日志时关。
     """
+    if stale is None:
+        stale = stale_human_marks(book)
+    if bind is None:
+        bind = log is None
+    bound: dict[str, dict] = {}
+    if bind:
+        try:
+            from .bindings import book_bindings
+            bound = book_bindings(book, log)
+        except Exception:
+            bound = {}            # 绑定表算不出来就退回按编号（与 09-25 之前一致），不因此丢掉全部人裁
     from .events import EventLog
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
@@ -188,5 +272,15 @@ def human_chars(book: str, log=None) -> dict[str, tuple[str, str | None]]:
         # 没填字的 seg_defect 仍然只是缺陷，不在这里出现。
         if p.get("v") not in ("confirm", "seg_defect") or not p.get("shape"):
             continue
-        out[e.target.key] = (str(p["shape"]), (str(p["reading"]) if p.get("reading") else None))
+        cut = stale.get(e.target.key)
+        # 撤下标记可以只到日（human_stale_20260917）或到分钟（human_stale_20260925T0712，同一天撤了又重裁时要用）
+        if cut and e.ts.replace("-", "").replace(":", "")[:len(cut)] <= cut:
+            continue
+        key = e.target.key
+        if bind:
+            from .bindings import usable
+            key = usable(bound.get(e.id)) if e.id in bound else key
+            if key is None:
+                continue                  # 挂错格 / 切开合并 / 格没了：不采信，回待审
+        out[key] = (str(p["shape"]), (str(p["reading"]) if p.get("reading") else None))
     return out

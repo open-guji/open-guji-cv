@@ -15,6 +15,7 @@
 | `defect` | 排除名单上但是字的格（seg_defect/damaged，文本出阙文） | `report/slots` |
 | `excluded` | 排除名单上的非字格 | 同上 |
 | `cols_bad` | Step3 没解出来 / 没过闸的列（版心除外） | `cells` 产物 |
+| `rebind` | **人裁待重核**：重切后切开/合并/找不到、或补不出锚的人裁位（不再采信，等人重看） | `feedback/bindings.py`（总览/15） |
 
 `review_new` **必须与定字裁决台的出卡数逐 id 相等**——两边都从「未放行 ∧ 未裁过」算。
 2026-09-20 之前只有一个 `review`（= 未放行），把已裁未放行的 42 格和真待裁的 31 格加成
@@ -31,7 +32,7 @@ from ..core.spec import page_key
 from ..products.store import ProductStore
 from .slots import ADMIT_STEP, CELLS_KIND, cells_step, page_slots
 
-COLS = ("stale", "review_new", "review_decided", "cut", "defect", "excluded", "cols_bad")
+COLS = ("stale", "review_new", "review_decided", "cut", "defect", "excluded", "cols_bad", "rebind")
 TODO = tuple(k for k in COLS if k not in ("excluded", "review_decided"))
 """「无待办」看这几列：非字是已了结的账，已裁未放行是人做完了等机器的账，都不是要人做的事。"""
 
@@ -55,6 +56,7 @@ def page_progress(book: str, pages: list[int], store: ProductStore | None = None
     for (pg, _col, _slot) in cut:
         cut_by_page[pg] = cut_by_page.get(pg, 0) + 1
     decided = decided_cells(book)
+    rebind_by_page = _rebind_pending(book, pages, st)
 
     step3 = cells_step(book)
     rows = []
@@ -62,7 +64,7 @@ def page_progress(book: str, pages: list[int], store: ProductStore | None = None
     for pg in pages:
         row = {"page": pg, "stale": len(stale_steps[pg]), "stale_steps": stale_steps[pg],
                "review_new": 0, "review_decided": 0, "cut": cut_by_page.get(pg, 0),
-               "defect": 0, "excluded": 0, "cols_bad": 0}
+               "defect": 0, "excluded": 0, "cols_bad": 0, "rebind": rebind_by_page.get(pg, 0)}
         cells = st.read(book, step3, page_key(pg), CELLS_KIND)
         if cells is not None:
             # 版心（筒子页第 10 列）被闸按 `non_body_column` 拒掉是版式如此，不是待办。
@@ -92,17 +94,44 @@ def page_progress(book: str, pages: list[int], store: ProductStore | None = None
             "n_pages": len(pages), "n_clean": sum(1 for r in rows if not any(r[k] for k in TODO))}
 
 
+def _rebind_pending(book: str, pages: list[int], store) -> dict[int, int]:
+    """每页「人裁待重核」位数：取每个字位最后一条裁决的绑定状态，不采信的计入。
+    绑定表按页缓存、Step3 或裁决变了才重算（`feedback/bindings.py`）；算不出来就当 0，不拖垮看板。"""
+    try:
+        from ..feedback.bindings import book_bindings, usable
+        rows = book_bindings(book, store=store, pages=pages)
+    except Exception:
+        return {}
+    latest: dict[str, dict] = {}
+    for r in sorted(rows.values(), key=lambda r: r["ts"]):
+        latest[r["key"]] = r
+    try:
+        from ..feedback.lookup import stale_human_marks
+        stale = stale_human_marks(book)
+    except Exception:
+        stale = {}
+    out: dict[int, int] = {}
+    for r in latest.values():
+        cut = stale.get(r["key"])
+        if cut and r["ts"].replace("-", "").replace(":", "")[:len(cut)] <= cut:
+            continue          # 已手工撤销（作废表 / 库内 human_stale）：不算待办，这一格已回到自动流程
+        if usable(r) is None:
+            pg = int(r["key"].split(":")[1])
+            out[pg] = out.get(pg, 0) + 1
+    return out
+
+
 def format_table(doc: dict) -> str:
-    head = f"{'页':>4} {'过期':>4} {'待裁':>4} {'已裁':>4} {'切线':>4} {'阙文':>4} {'非字':>4} {'坏列':>4}  说明"
+    head = f"{'页':>4} {'过期':>4} {'待裁':>4} {'已裁':>4} {'切线':>4} {'阙文':>4} {'非字':>4} {'坏列':>4} {'重核':>4}  说明"
     lines = [head]
     for r in doc["pages"]:
         if not any(r[k] for k in TODO):
             continue
         note = " ".join(r["stale_steps"][:3]) + ("…" if len(r["stale_steps"]) > 3 else "")
         lines.append(f"{r['page']:>4} {r['stale']:>4} {r['review_new']:>4} {r['review_decided']:>4} "
-                     f"{r['cut']:>4} {r['defect']:>4} {r['excluded']:>4} {r['cols_bad']:>4}  {note}")
+                     f"{r['cut']:>4} {r['defect']:>4} {r['excluded']:>4} {r['cols_bad']:>4} {r['rebind']:>4}  {note}")
     t = doc["totals"]
     lines.append(f"合计 {doc['n_pages']} 页，{doc['n_clean']} 页无待办；过期 {t['stale']} · "
                  f"Step7 待人裁 {t['review_new']} · 已裁未放行 {t['review_decided']} · 切线 {t['cut']} · "
-                 f"阙文 {t['defect']} · 非字 {t['excluded']} · 坏列 {t['cols_bad']}")
+                 f"阙文 {t['defect']} · 非字 {t['excluded']} · 坏列 {t['cols_bad']} · 人裁待重核 {t['rebind']}")
     return "\n".join(lines)

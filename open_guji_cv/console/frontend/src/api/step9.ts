@@ -48,6 +48,7 @@ export interface Step9ProgressRow {
   defect: number
   excluded: number
   cols_bad: number
+  rebind: number           // 人裁待重核：重切后切开/合并/找不到的人裁位，已不采信（总览/15）
 }
 
 export interface Step9ProgressResponse {

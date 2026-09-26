@@ -35,7 +35,7 @@ function Num({ v }: { v: number }) {
 
 // 「有待办」不看非字与已裁未放行：前者是已了结的账，后者是人做完了等机器的账。
 function hasTodo(r: Step9ProgressRow) {
-  return !!(r.stale || r.review_new || r.cut || r.defect || r.cols_bad)
+  return !!(r.stale || r.review_new || r.cut || r.defect || r.cols_bad || r.rebind)
 }
 
 export function ProgressBoard({ book, pages }: { book: string; pages: string }) {
@@ -102,6 +102,7 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
           <Tile label="切线待裁" value={t.cut} />
           <Tile label="阙文占位" value={t.defect} />
           <Tile label="坏列" value={t.cols_bad} />
+          <Tile label="人裁待重核" value={t.rebind ?? 0} hint="重切后对不上原格的人裁，已不采信" />
           <Tile label="已裁未放行" value={t.review_decided} dim hint="人裁过、机器没采信" />
           <Tile label="非字（已了结）" value={t.excluded} dim />
         </div>
@@ -118,7 +119,7 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
         <div className="pb-scroll">
           <table className="pb-table">
             <thead>
-              <tr><th>页</th><th>过期</th><th>待人裁</th><th>切线</th><th>阙文</th><th>坏列</th><th className="pb-dim">已裁未放行</th><th className="pb-dim">非字</th><th className="pb-left">从哪一步起</th></tr>
+              <tr><th>页</th><th>过期</th><th>待人裁</th><th>切线</th><th>阙文</th><th>坏列</th><th>人裁待重核</th><th className="pb-dim">已裁未放行</th><th className="pb-dim">非字</th><th className="pb-left">从哪一步起</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => {
@@ -130,7 +131,7 @@ export function ProgressBoard({ book, pages }: { book: string; pages: string }) 
                   <tr key={r.page}>
                     <td className="pb-page">{r.page}</td>
                     <td><Num v={r.stale} /></td><td><Num v={r.review_new} /></td><td><Num v={r.cut} /></td>
-                    <td><Num v={r.defect} /></td><td><Num v={r.cols_bad} /></td>
+                    <td><Num v={r.defect} /></td><td><Num v={r.cols_bad} /></td><td><Num v={r.rebind ?? 0} /></td>
                     <td className="pb-dim"><Num v={r.review_decided} /></td>
                     <td className="pb-dim"><Num v={r.excluded} /></td>
                     <td className="pb-left">{chip ? <span className="pb-chip">{chip.text}</span> : ''}</td>
