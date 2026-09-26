@@ -40,8 +40,11 @@ def cell_of(iid: str, v1: set[str]) -> str | None:
     p = iid.split(":")
     if p[0] == "v2" and len(p) == 5:
         return ":".join(p[1:])
+    if p[0] == "v1" and len(p) == 5:            # 重键后留在 idx 坐标的 v1（glyph_v1_rekey.py）
+        p = p[1:]
+        return f"{p[0]}:{p[1]}:{p[2]}:{int(p[3]) + 1}" if p[3].isdigit() else None
     if len(p) == 4:
-        if p[0] in v1 and p[3].isdigit():
+        if iid in v1 and p[3].isdigit():
             return f"{p[0]}:{p[1]}:{p[2]}:{int(p[3]) + 1}"
         return iid
     return None
@@ -96,7 +99,8 @@ def main() -> int:
                 V1_MAP[d["v1"]] = d["cell"]
     db = glyph_db_path()
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    v1 = {r[0] for r in c.execute("SELECT source_id FROM sources WHERE pipeline_version='v1'")}
+    from open_guji_cv.clustering.glyph_ledger import _v1_sources
+    v1 = _v1_sources(c)             # v1（idx 坐标）刻例的实例 id；前缀分不出重键过的
     lib = c.execute(
         "SELECT e.instance_id, g.char, i.semantic, a.provenance, a.admitted_at "
         "FROM exemplars e JOIN glyphs g USING(glyph_id) JOIN instances i ON i.instance_id=e.instance_id "
@@ -121,7 +125,7 @@ def main() -> int:
             continue
         human = (prov or "").startswith("human")
         base = {"instance_id": iid, "cell": cell, "char": ch, "provenance": prov, "admitted_at": at,
-                "v1_guess": iid.split(":")[0] in v1 and iid not in V1_MAP}
+                "v1_guess": iid in v1 and iid not in V1_MAP}
         x = excl.get(cell)
         if x and x.get("origin") == "human" and x.get("reason") in ("not_a_char", "damaged"):
             findings.append({**base, "check": "excluded", "why": x.get("reason"),
@@ -158,7 +162,7 @@ def main() -> int:
         n_missing = 0
         for iid, ch, sem, prov, at in lib:
             cell = cell_of(iid, v1)
-            if not cell or iid.split(":")[0] in v1:
+            if not cell or iid in v1:
                 continue
             b, pg, col, slot = cell.split(":")
             sub = slot[-1] if slot[-1:] in ("a", "b") else ""

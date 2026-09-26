@@ -32,6 +32,8 @@ sem = lambda c: vm.semantic(c) if c else c
 cc = opencc.OpenCC("s2t")
 db = glyph_db_path()
 c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+from open_guji_cv.clustering.glyph_ledger import _v1_sources  # noqa: E402
+V1_IDS = _v1_sources(c)            # 仍是 idx 坐标的 v1 刻例（重键过的已是格号，不再 +1）
 meta, rows = load_findings()
 dec = decisions()
 alive = {r[0] for r in c.execute("SELECT instance_id FROM exemplars")}
@@ -66,13 +68,16 @@ _al = {}
 
 
 def witness(iid):
-    """整理本对齐字（align_ref）。v1 id 的 idx 从 0 → slot = idx+1。"""
+    """整理本对齐字（align_ref）。v1（idx 坐标）刻例的 idx 从 0 → slot = idx+1。"""
     parts = iid.split(":")
-    if parts[0] == "v2":
+    if parts[0] == "v1":                       # 重键后留在 idx 坐标的 v1：v1:<book>:p:c:idx
+        book, pg, col, slot = parts[1], parts[2], parts[3], parts[4]
+        slot = str(int(slot) + 1) if slot.isdigit() else slot
+    elif parts[0] == "v2":
         book, pg, col, slot = parts[1], parts[2], parts[3], parts[4]
     else:
         book, pg, col, slot = parts[0], parts[1], parts[2], parts[3]
-        if book.startswith("vol") and slot.isdigit():
+        if iid in V1_IDS and slot.isdigit():
             slot = str(int(slot) + 1)
     key = (book, int(pg))
     if key not in _al:
