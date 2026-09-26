@@ -10,7 +10,14 @@ from __future__ import annotations
 
 import pytest
 
+from open_guji_cv.console.auth import Identity
+
 # 直接调端点函数，不起 TestClient——那需要 httpx，不值得为一个测试加依赖。
+
+#: 直调绕过 FastAPI 的 Depends 解析，`identity` 落到的是 `Depends(...)` 这个
+#: sentinel 本身而不是真值——2026-09-26 鉴权改造后 `api_events` 自己要用
+#: `identity.email`，直调时必须像 `req` 一样显式给一个。
+_FAKE_IDENTITY = Identity(email="autoconsume-test@example.com", role="reviewer", tier="reviewer")
 
 
 @pytest.fixture()
@@ -36,7 +43,7 @@ def client(tmp_path, monkeypatch):
 def _post(client, events, **kw):
     body = {"batch": "t-batch", "step": "seed_admit", "unit": "cell",
             "kind": "confirm", "events": events, **kw}
-    return client.api_events(client.EventsIn(**body))
+    return client.api_events(client.EventsIn(**body), identity=_FAKE_IDENTITY)
 
 
 def test_consume_runs_by_default(client):

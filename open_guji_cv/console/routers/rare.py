@@ -8,15 +8,16 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...clustering.rare_panel import ids_fallback, rare_batch, rare_for, rare_patch
 from ...errors import ImageMissing
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 

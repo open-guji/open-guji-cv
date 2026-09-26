@@ -8,9 +8,10 @@ books / pipelines / steps / kinds / index
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
+from ..auth import require_reviewer
 from ..static_path import STATIC
 from ...core.book import list_books, load_book
 from ...core.pipeline import list_pipelines, load_pipeline
@@ -18,30 +19,33 @@ from ...core.step import KINDS, STEPS
 from ... import steps as _steps  # noqa: F401  —— 注册全部 Step 与产物种类
 
 router = APIRouter()
+#: 「/」「/v1/」是 SPA 外壳，**不挂鉴权**——未登录时前端要能加载出这层壳，
+#: 才能拿到 JS 去判断「没登录，跳网站登录页」；反过来给壳本身鉴权会死循环。
+_auth = Depends(require_reviewer)
 
 
 
 # ── 注册表 ───────────────────────────────────────────────────────────
-@router.get("/api/books")
+@router.get("/api/books", dependencies=[_auth])
 def api_books() -> list[dict]:
     return [load_book(b).to_dict() for b in list_books()]
 
 
 
-@router.get("/api/pipelines")
+@router.get("/api/pipelines", dependencies=[_auth])
 def api_pipelines() -> list[dict]:
     return [load_pipeline(p).to_dict() for p in list_pipelines()]
 
 
 
-@router.get("/api/steps")
+@router.get("/api/steps", dependencies=[_auth])
 def api_steps() -> list[dict]:
     import open_guji_cv.steps  # noqa: F401
     return [s.describe() for s in STEPS.values()]
 
 
 
-@router.get("/api/kinds")
+@router.get("/api/kinds", dependencies=[_auth])
 def api_kinds() -> list[dict]:
     import open_guji_cv.steps  # noqa: F401
     return [{"id": k.id, "title": k.title, "storage": k.storage, "unit": k.unit,

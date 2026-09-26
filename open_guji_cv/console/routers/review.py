@@ -9,11 +9,14 @@
 from __future__ import annotations
 
 import cv2
-from fastapi import APIRouter, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.anchor import x_tr_to_tl
 from ...core.book import load_book
@@ -27,7 +30,7 @@ from ...steps._warpmap import ColumnMapper
 from ...utils.preclean import effective_raw_path
 from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -410,3 +413,58 @@ def _step3_seam_lines(store, book: str, page: int, col: int, slot: int
             pts.append((int(round(x_tr_to_tl(px_tr, page_w))), int(round(py))))
         lines.append(pts)
     return lines
+
+
+
+# ── 复核队列：同一个格被不同人裁法不一致（2026-09-26，任务书 §做什么·4）───
+#
+# **只读、只标记与查询**——不改 `feedback/consumers.py` 的写入流程（那是 H 道
+# 「人裁单写者」在做跨进程锁的地方，见任务书「不要碰」）。事件日志本来就是
+# 追加写：两个校对者对同一个格提交不同裁决，两条事件**都已经**在日志里，
+# 不会互相覆盖——会被覆盖的只是下游裁决表里那一条（后到覆盖，见
+# `feedback/consumers.py` 头注），这里不动那条路径，只是多扫一遍事件日志，
+# 把"两个人对同一个格给出不同答案"这件事挑出来给复核台看。
+
+_IGNORE_PAYLOAD_KEYS = {"t", "client_ts", "dwell_ms"}
+
+
+def _event_signature(payload: dict) -> str:
+    """裁决的「内容」签名，去掉跟裁得对不对无关的计时字段。"""
+    filtered = {k: v for k, v in payload.items() if k not in _IGNORE_PAYLOAD_KEYS}
+    return json.dumps(filtered, sort_keys=True, ensure_ascii=False, default=str)
+
+
+@router.get("/api/review/conflicts")
+def api_review_conflicts(batch: str | None = None, book: str | None = None) -> list[dict]:
+    """同一个格（`step`+`unit`+`kind`+`key`）被不同校对者（`event.reviewer`）
+    裁出不同结果——两条都在事件日志里，这里只挑出「不一致」的那些分组供复核。
+
+    `reviewer` 是可选字段（老事件没有，见 `feedback/events.py`），没带这个字段
+    的事件（老数据、非控制台直连写入的收割数据）不参与比对。同一人对同一个格
+    改判多次，只看他**最后一条**（按 `(batch, seq)` 排序）。
+    """
+    evs = deps.event_log().read(batch) if batch else list(deps.event_log().iter_all())
+    if book:
+        evs = [e for e in evs if e.target.book == book]
+    groups: dict[tuple, list] = {}
+    for e in evs:
+        if not e.reviewer:
+            continue
+        groups.setdefault((e.target.step, e.target.unit, e.kind, e.target.key), []).append(e)
+    out = []
+    for (step, unit, kind, key), group in groups.items():
+        last_by_reviewer = {}
+        for e in sorted(group, key=lambda x: x.order):
+            last_by_reviewer[e.reviewer] = e
+        if len(last_by_reviewer) < 2:
+            continue
+        sigs = {r: _event_signature(e.payload) for r, e in last_by_reviewer.items()}
+        if len(set(sigs.values())) < 2:
+            continue
+        first = next(iter(last_by_reviewer.values()))
+        out.append({
+            "step": step, "unit": unit, "kind": kind, "key": key, "book": first.target.book,
+            "reviewers": [{"reviewer": r, "event_id": e.id, "ts": e.ts, "payload": e.payload}
+                         for r, e in sorted(last_by_reviewer.items())],
+        })
+    return out

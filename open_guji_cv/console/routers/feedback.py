@@ -8,11 +8,12 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import Identity, require_admin, require_reviewer
 from ...feedback.anchor import enrich_events as _anchor_events
 from ...feedback.consumers import route_and_consume
 from ...feedback.events import EventTarget, make_event
@@ -20,7 +21,7 @@ from ...feedback.harvest import harvest_text
 from ...feedback.routes import RouteTable
 from ...review.batches import Batch, render_registry_markdown
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -72,7 +73,7 @@ def api_batches() -> list[dict]:
 
 
 
-@router.post("/api/batches")
+@router.post("/api/batches", dependencies=[Depends(require_admin)])
 def api_batch_create(req: BatchCreate) -> dict:
     if deps.batch_store().get(req.id):
         raise HTTPException(409, f"批次 {req.id} 已存在")
@@ -133,7 +134,7 @@ _EVENTS_LOCK = __import__("threading").Lock()
 
 
 @router.post("/api/events")
-def api_events(req: EventsIn) -> dict:
+def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) -> dict:
     """审查页直连写入。seq 从当前最大值续，保证同批不撞号。
 
     **整段串行**（2026-09-26）：FastAPI 把同步路由放进线程池并发跑，而这里「取最大 seq → 追加」
@@ -141,10 +142,10 @@ def api_events(req: EventsIn) -> dict:
     人连按回车就有几个 POST 同时在跑——实测 vol02 两分钟里丢了 9 条金标（事件与记账都在，
     裁决表里没有：两次 upsert 读到同一版文件，后写的覆盖了先写的）。"""
     with _EVENTS_LOCK:
-        return _api_events(req)
+        return _api_events(req, identity.email)
 
 
-def _api_events(req: EventsIn) -> dict:
+def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
     base = deps.event_log().latest_seq(req.batch)
     evs = []
     for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
@@ -165,7 +166,7 @@ def _api_events(req: EventsIn) -> dict:
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
                                           anchor=_product_anchor(req.step, ids), **ids),
-                              payload, source_format="server"))
+                              payload, source_format="server", reviewer=reviewer))
     _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(req.batch)
@@ -219,7 +220,7 @@ class HarvestIn(BaseModel):
 
 
 
-@router.post("/api/batches/{batch_id}/harvest")
+@router.post("/api/batches/{batch_id}/harvest", dependencies=[Depends(require_admin)])
 def api_harvest(batch_id: str, req: HarvestIn) -> dict:
     """喂 Artifact 读回的 HTML（或旧格式文本）→ 解析 → 事件入库。
 
@@ -251,7 +252,7 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
 
 
 
-@router.post("/api/batches/{batch_id}/route")
+@router.post("/api/batches/{batch_id}/route", dependencies=[Depends(require_admin)])
 def api_route(batch_id: str, dry_run: bool = False) -> dict:
     table = RouteTable.load(deps.event_log().root / "routes.yaml")
     out = route_and_consume(deps.event_log(), batch_id, table, deps.verdict_store(),

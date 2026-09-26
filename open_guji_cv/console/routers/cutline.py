@@ -8,14 +8,15 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...review.verdict_view import cutline_verdicts
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 

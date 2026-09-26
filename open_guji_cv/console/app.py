@@ -18,14 +18,14 @@ from fastapi.staticfiles import StaticFiles
 
 from ..clustering.rare_panel import warm_font_index
 from .static_path import STATIC
-from .routers import (border_review, column_review, cutline, evals, feedback, glyph_match, glyphlib,
-                      gold, jiazhu, products, rare, registry, review, runs, slot_count_review,
-                      spa_fallback, step8, step9, variants, workspace)
+from .routers import (auth, border_review, column_review, cutline, evals, feedback, glyph_match,
+                      glyphlib, gold, jiazhu, products, rare, registry, review, runs,
+                      slot_count_review, spa_fallback, step8, step9, variants, workspace)
 
 #: include 的顺序 = OpenAPI 文档里的顺序，与 `routers/__init__.py` 那张表一致。
 #: `spa_fallback` 必须排最后——它注册 `/{full_path:path}`，放前面会抢走
 #: 后面所有 router 的 /api/* 路由（见该文件顶部说明）。
-ROUTERS = (registry, workspace, runs, products, feedback, gold, evals,
+ROUTERS = (auth, registry, workspace, runs, products, feedback, gold, evals,
            review, cutline, border_review, column_review, slot_count_review, jiazhu,
            rare, glyph_match, glyphlib, variants, step8, step9, spa_fallback)
 
@@ -67,15 +67,19 @@ for _r in ROUTERS:
     app.include_router(_r.router)
 
 
-def serve(port: int = 8640, open_browser: bool = True) -> None:
+def serve(port: int = 8640, open_browser: bool = True, host: str = "127.0.0.1",
+         root_path: str = "") -> None:
+    """`host` 缺省仍是回环地址——对外开放校对平台时才显式传别的地址
+    （`guji console --host`）；`root_path` 挂在反向代理前缀下时用
+    （如 `/collate`，见 `console/auth/config.py`）。"""
     import uvicorn
-    url = f"http://127.0.0.1:{port}/"
+    url = f"http://{host}:{port}{root_path}/"
     print(f"控制台: {url}")
-    if open_browser:
+    if open_browser and host in ("127.0.0.1", "localhost"):
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     threading.Thread(target=warm_font_index, name="font-index-warm",
                      daemon=True).start()
     # IDS 反查索引（10 万字，约 4 秒）：预热，免得字形库页第一次反查卡住
     from ..clustering.ids_lookup import warm as warm_ids
     threading.Thread(target=warm_ids, name="ids-lookup-warm", daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning", root_path=root_path)

@@ -102,6 +102,12 @@ class Event(BaseModel):
     target: EventTarget
     payload: dict = Field(default_factory=dict)
     source_format: str | None = None   # 从旧格式收割来的，记原格式名：verdicts / seed / seg / marks
+    #: 校对者 email（控制台接入网站账号后填，2026-09-26）。**只加字段，不改写入
+    #: 流程**：老事件没有这个键，pydantic 缺省 `None`，照读不受影响；`actor` 的
+    #: 语义不变（它答的是「谁的动作触发了这条」——user/model/align，`reviewer`
+    #: 答的是「网站账号里具体哪个人」，两者独立，`actor="model"` 也可以有 `reviewer`
+    #: ——比如模型判定是复核台上某个校对者确认落库的）。
+    reviewer: str | None = None
 
     @property
     def order(self) -> tuple[str, int]:
@@ -113,9 +119,11 @@ def _now() -> str:
 
 
 def make_event(batch: str, seq: int, kind: Kind, target: EventTarget, payload: dict | None = None,
-               actor: Actor = "user", source_format: str | None = None, ts: str | None = None) -> Event:
+               actor: Actor = "user", source_format: str | None = None, ts: str | None = None,
+               reviewer: str | None = None) -> Event:
     return Event(id=f"evt_{batch}_{seq:06d}", ts=ts or _now(), batch=batch, seq=seq, actor=actor,
-                 kind=kind, target=target, payload=payload or {}, source_format=source_format)
+                 kind=kind, target=target, payload=payload or {}, source_format=source_format,
+                 reviewer=reviewer)
 
 
 def default_feedback_root() -> Path:

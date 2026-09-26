@@ -109,6 +109,13 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .sidebar-cross { display: flex; flex-direction: column; }
 .sidebar-libs { display: flex; flex-direction: column; }
 .sidebar-hint { padding: .3rem .5rem; }
+.sidebar-user { display: flex; align-items: center; gap: .35rem; font-size: .75rem;
+  margin: -.4rem 0 .6rem; word-break: break-all; }
+.sidebar-user-role { flex-shrink: 0; padding: .05rem .35rem; border-radius: var(--r);
+  background: var(--indigo-soft); color: var(--indigo); font-size: .7rem; }
+.sidebar-user-logout { flex-shrink: 0; border: none; background: none; color: var(--mute);
+  font-size: .75rem; cursor: pointer; padding: 0; text-decoration: underline; }
+.app-shell-gate { align-items: center; justify-content: center; }
 /* Step5 二级子菜单：永久展开，不用点进 Step5 才看到（用户 2026-09-11 反馈） */
 .sidebar-step5-subs { display: flex; flex-direction: column; padding-left: 1rem; }
 .sidebar-step5-subs a { font-size: .78rem; color: var(--mute); }

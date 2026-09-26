@@ -11,12 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import cv2
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import deps
+from ..auth import require_admin
 from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 

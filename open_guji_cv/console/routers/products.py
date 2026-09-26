@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...core.step import KINDS, RunContext
@@ -22,7 +23,7 @@ from ...gates.query import GATES, gate_summary
 from ...render.overlay import encode_png, overlay, preclean_overlay, preclean_report
 from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 

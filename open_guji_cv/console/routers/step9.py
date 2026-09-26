@@ -13,15 +13,16 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...render.guji_markdown import render_page
 from ...render.reading_layout import DEFAULT_BASELINE_KG, reflow_page_structured
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 @router.get("/api/step9/render/{book}")

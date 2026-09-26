@@ -8,14 +8,15 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...errors import NotFound
 from ...review.group_view import group_view
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
