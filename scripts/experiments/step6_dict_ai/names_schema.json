@@ -1,0 +1,3 @@
+{"type": "object", "additionalProperties": false, "required": ["names"],
+ "properties": {"names": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["n", "t", "note"],
+   "properties": {"n": {"type": "string"}, "t": {"type": "string", "enum": ["人名", "地名", "官名機構", "書名", "其他"]}, "note": {"type": "string"}}}}}}

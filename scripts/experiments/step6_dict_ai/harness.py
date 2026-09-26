@@ -12,9 +12,9 @@ CACHE = H + '/cache'; CV_ROOT = os.path.abspath(os.path.join(H, '../../..')); os
 PRICE = {'claude-haiku-4-5': (1.0, 5.0), 'claude-sonnet-5': (2.0, 10.0), 'claude-opus-5': (5.0, 25.0)}
 SPENT = {'usd': 0.0}
 
-def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None):
+def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None, schema=None):
     if model.startswith('muse'):
-        return call_muse(model, messages, effort)
+        return call_muse(model, messages, effort, schema or H + '/answer_schema.json')
     if model.startswith('cc:'):
         return call_cc(model[3:], messages)
     if model.startswith('claude-'):
@@ -32,20 +32,20 @@ def _key(name):
         if line.strip().startswith(name + '='): return line.split('=', 1)[1].strip()
     sys.exit(f'找不到 {name}')
 
-def call_muse(model, messages, effort):
+def call_muse(model, messages, effort, schema):
     """Meta Muse Code 无交互模式 `muse exec`（账号登录，凭证存文件：TBH_CREDENTIAL_BACKEND=file）。
     model = 'muse' 用默认模型，'muse:<id>' 指定。它没有替换系统提示的参数，系统提示拼在提示词文件开头；
     --max-model-steps 2 不给它走工具的余地，工作目录是空沙箱。"""
     import subprocess, tempfile
     mid = model.split(':', 1)[1] if ':' in model else None
     prompt = '【任務說明】\n' + messages[0]['content'] + '\n\n【本次材料】\n' + messages[1]['content'] + '\n\n只輸出 JSON，不要調用任何工具。'
-    h = hashlib.sha256(json.dumps(['muse', mid, effort, 'schema-v1', prompt], ensure_ascii=False).encode()).hexdigest()[:24]
+    h = hashlib.sha256(json.dumps(['muse', mid, effort, 'schema-v1' if schema.endswith('answer_schema.json') else schema, prompt], ensure_ascii=False).encode()).hexdigest()[:24]
     fp = f'{CACHE}/{h}.json'
     if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
     sb = '/tmp/muse_sandbox'; os.makedirs(sb, exist_ok=True)
     with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, dir='/tmp') as f: f.write(prompt); pf = f.name
     cmd = [os.path.expanduser('~/.local/bin/muse'), 'exec', '--prompt-file', pf, '--max-model-steps', '2', '--workspace', sb,
-           '--output-schema', H + '/answer_schema.json']
+           '--output-schema', schema]
     if mid: cmd += ['--model', mid]
     if effort: cmd += ['--reasoning-effort', effort]
     t = time.time(); err = ''
