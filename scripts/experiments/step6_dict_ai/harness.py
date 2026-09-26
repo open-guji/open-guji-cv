@@ -11,10 +11,11 @@ CACHE = H + '/cache'; CV_ROOT = os.path.abspath(os.path.join(H, '../../..')); os
 # 美元/百万 token（输入, 输出）；只用于预算闸，账单以控制台为准
 PRICE = {'claude-haiku-4-5': (1.0, 5.0), 'claude-sonnet-5': (2.0, 10.0), 'claude-opus-5': (5.0, 25.0)}
 SPENT = {'usd': 0.0}
+REP = {'n': 0}   # 重复轮次：>0 时进缓存键，用来量同一配置两次运行的波动
 
 def call(model, messages, thinking=False, temperature=0.0, max_tokens=8000, seed_tag='', effort=None, schema=None):
     if model.startswith('muse'):
-        return call_muse(model, messages, effort, schema or H + '/answer_schema.json')
+        return call_muse(model, messages, effort, schema or H + '/answer_schema.json', REP['n'])
     if model.startswith('cc:'):
         return call_cc(model[3:], messages)
     if model.startswith('claude-'):
@@ -32,14 +33,14 @@ def _key(name):
         if line.strip().startswith(name + '='): return line.split('=', 1)[1].strip()
     sys.exit(f'找不到 {name}')
 
-def call_muse(model, messages, effort, schema):
+def call_muse(model, messages, effort, schema, rep=0):
     """Meta Muse Code 无交互模式 `muse exec`（账号登录，凭证存文件：TBH_CREDENTIAL_BACKEND=file）。
     model = 'muse' 用默认模型，'muse:<id>' 指定。它没有替换系统提示的参数，系统提示拼在提示词文件开头；
     --max-model-steps 2 不给它走工具的余地，工作目录是空沙箱。"""
     import subprocess, tempfile
     mid = model.split(':', 1)[1] if ':' in model else None
     prompt = '【任務說明】\n' + messages[0]['content'] + '\n\n【本次材料】\n' + messages[1]['content'] + '\n\n只輸出 JSON，不要調用任何工具。'
-    h = hashlib.sha256(json.dumps(['muse', mid, effort, 'schema-v1' if schema.endswith('answer_schema.json') else schema, prompt], ensure_ascii=False).encode()).hexdigest()[:24]
+    h = hashlib.sha256(json.dumps(['muse', mid, effort, 'schema-v1' if schema.endswith('answer_schema.json') else schema, prompt] + ([rep] if rep else []), ensure_ascii=False).encode()).hexdigest()[:24]
     fp = f'{CACHE}/{h}.json'
     if os.path.exists(fp): return json.load(open(fp)) | {'cached': True}
     sb = '/tmp/muse_sandbox'; os.makedirs(sb, exist_ok=True)
@@ -199,6 +200,7 @@ def score(cell, ans):
     return r
 
 def run(a):
+    REP['n'] = a.rep
     if a.days in ('dev', 'test', 'smoke'):
         days = json.load(open(H + '/data/splits.json'))[a.days]
     else:
@@ -282,7 +284,7 @@ if __name__ == '__main__':
     ap.add_argument('--days', default='all'); ap.add_argument('--batch', type=int, default=20)
     ap.add_argument('--thinking', action='store_true'); ap.add_argument('--no-ref', action='store_true')
     ap.add_argument('--temp', type=float, default=0.0); ap.add_argument('--workers', type=int, default=4)
-    ap.add_argument('--tag'); ap.add_argument('--effort')
+    ap.add_argument('--tag'); ap.add_argument('--effort'); ap.add_argument('--rep', type=int, default=0)
     ap.add_argument('--budget', type=float, default=2.0, help='本次新调用美元上限，超了剩下的不再调用')
     ap.add_argument('--max-cells', type=int, default=0, help='最多问多少格（按批截断）')
     ap.add_argument('--export', help='只导出提示词 JSONL，不调用'); ap.add_argument('--answers', help='从 JSONL 导回答案打分')
