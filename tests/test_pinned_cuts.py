@@ -29,7 +29,14 @@ def test_pin_moves_only_that_boundary():
     assert [b for i, b in enumerate(pinned) if i != 3] == [b for i, b in enumerate(base) if i != 3]
 
 
-def test_pin_outside_neighbours_is_ignored():
+def test_pin_matches_by_position_when_slot_numbers_shifted():
+    """格号错了一位（上游几何变了），钉子按位置认最近那条格线。"""
     base = _bounds()
-    assert _bounds(pinned_cuts={3: base[4] + 1}) == base      # 越过下一条格线
-    assert _bounds(pinned_cuts={0: 5.0, 99: 5.0}) == base      # slot 不存在
+    pinned = _bounds(pinned_cuts={3: base[4] - 3})            # 格号说 3，位置贴着第 4 条
+    assert pinned[4] == base[4] - 3 and pinned[3] == base[3]
+
+
+def test_pin_far_from_everything_is_ignored():
+    base = _bounds()
+    assert _bounds(pinned_cuts={99: 5.0}) == base              # 格号不存在、位置也不挨着
+    assert _bounds(pinned_cuts={3: base[3] + 2 * SLOT_H}) == base   # 离得太远（>1.5 格）
