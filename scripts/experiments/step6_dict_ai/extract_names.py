@@ -16,7 +16,7 @@ MODEL = sys.argv[1] if len(sys.argv) > 1 else 'muse'
 CH = 1500
 chunks = [ref[i:i + CH + 20] for i in range(0, len(ref), CH)]   # 20 字重叠，防专名被切断
 def one(ch):
-    out = harness.call(MODEL, [{'role': 'system', 'content': SYS}, {'role': 'user', 'content': ch}])
+    out = harness.call(MODEL, [{'role': 'system', 'content': SYS}, {'role': 'user', 'content': ch}], schema=H + '/names_schema.json')
     js = harness.parse(out.get('text', '')) if out.get('text') else None
     if js is None and out.get('text'):
         try:
