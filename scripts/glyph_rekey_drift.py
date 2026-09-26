@@ -74,8 +74,12 @@ def main() -> int:
         norm, reading, prov, ev, label = row
         mine = _unpng(norm)
         if cdir is None:
-            p0 = cache.get(b, "char_patch", f"p{int(pg):04d}c{int(col):02d}s1")
-            cdir = Path(p0).parent if p0 else None
+            # 按本列前几格探缓存目录：格号 1 可能是抬头/空格没出字块（四庫 5:7、vol03 17:3 实测）
+            for s_ in range(1, 31):
+                p0 = cache.get(b, "char_patch", f"p{int(pg):04d}c{int(col):02d}s{s_}")
+                if p0:
+                    cdir = Path(p0).parent
+                    break
         if cdir is None:
             stuck.append((iid, "no cache dir"))
             continue
