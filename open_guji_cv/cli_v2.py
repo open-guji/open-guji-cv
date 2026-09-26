@@ -59,8 +59,15 @@ def cmd_pipeline(args) -> None:
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
-    rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
-                  jobs=getattr(args, "jobs", 1))
+    # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
+    from .core.runlock import book_run_lock, RunLockHeld
+    try:
+        with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
+            rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
+                          jobs=getattr(args, "jobs", 1))
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
     n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
@@ -1030,6 +1037,26 @@ def cmd_progress(args) -> None:
     print(format_table(doc))
 
 
+def cmd_snapshot(args) -> None:
+    """把一本书若干步的产物冻结成快照，供下游用 GUJI_PRODUCTS_DIR 读（并行分工 §三·2）。"""
+    from .core.runlock import make_snapshot, snapshots_root, RunLockHeld
+    if args.action == "list":
+        root = snapshots_root() / args.book
+        for d in sorted(root.iterdir()) if root.is_dir() else []:
+            meta = d / "SNAPSHOT.json"
+            info = json.loads(meta.read_text(encoding="utf-8")) if meta.is_file() else {}
+            print(f"{d}  steps={','.join(info.get('steps', []))}  rev={info.get('code_rev')}  {info.get('created', '')}")
+        return
+    steps = [s for s in (args.steps or "").split(",") if s] or None
+    try:
+        out = make_snapshot(args.book, steps, args.name)
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
+    print(f"快照：{out}")
+    print(f"下游这样读：GUJI_PRODUCTS_DIR='{out}'")
+
+
 def cmd_runs(args) -> None:
     """控制台的任务队列：list | show | cancel | log。
 
@@ -1091,6 +1118,7 @@ COMMANDS_V2 = {
     "collate": cmd_collate,
     "progress": cmd_progress,
     "runs": cmd_runs,
+    "snapshot": cmd_snapshot,
 }
 
 
@@ -1160,6 +1188,8 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
+    p.add_argument("--wait", action="store_true",
+                   help="这本书正有别的跑批在写时排队等它跑完（默认直接报持有者并退出，退出码 3）")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
                    help="页级并行进程数（默认=本机 CPU 数）。只对声明过 "
                         "`StepSpec.parallel_safe=True` 的 Step 生效，其余 Step 仍串行，"
@@ -1287,6 +1317,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "⚠️ 页框 pt 数不一定等于内嵌图像素数，那样会静默降分辨率")
     p.add_argument("--pages", default=None, help="只抽这些页，如 1-5,9")
     p.add_argument("--force", action="store_true")
+
+    p = sub.add_parser("snapshot", help="[v2] 冻结一本书若干步的产物，供下游用 GUJI_PRODUCTS_DIR 读")
+    p.add_argument("action", choices=["make", "list"])
+    p.add_argument("book")
+    p.add_argument("--steps", default=None, help="逗号分隔的步骤 id，默认该书已有的全部步")
+    p.add_argument("--name", default=None, help="快照名，默认 <日期-时刻>-<commit>")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
