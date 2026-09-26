@@ -1,6 +1,6 @@
 """Step6 新设计评测框架：按天批量问 → 结构化结论 → 与终稿真值打分。
 用法: python3 harness.py --prompt v1 --model glm-5 --days 3,5,20 [--thinking] [--no-ref] [--tag x]"""
-import json, os, sys, re, time, hashlib, argparse, urllib.request, concurrent.futures as cf
+import json, os, sys, re, time, hashlib, unicodedata, argparse, urllib.request, concurrent.futures as cf
 H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, H)
 import dictlib, prompts
 DAYS = json.load(open(H + '/data/days.json')); CELLS = json.load(open(H + '/data/cells_human1135.json'))
@@ -160,11 +160,21 @@ def parse(text):
     if m: t = m.group(1)
     i, j = t.find('{'), t.rfind('}')
     try: return json.loads(t[i:j + 1])
+    except Exception: pass
+    try:                                  # 模型常漏括号/引号：容错修复，修不出 items 仍算失败
+        import json_repair
+        r = json_repair.loads(t[i:j + 1])
+        return r if isinstance(r, dict) and r.get('items') else None
     except Exception: return None
 
 def score(cell, ans):
-    """ans: {'drop':[..],'groups':[{'members':[..],'p':x}],'confidence':..}"""
-    cands = [c['c'] for c in cell['cands']]; tr = cell['truth']
+    """ans: {'drop':[..],'groups':[{'members':[..],'p':x}],'confidence':..}
+    一律 NFC 比较：候选里有 CJK 兼容汉字（開 U+F9xx 等），模型回答时会规范化成统一码位。"""
+    N = lambda x: unicodedata.normalize('NFC', x) if isinstance(x, str) else x
+    cands = [N(c['c']) for c in cell['cands']]; tr = N(cell['truth'])
+    if ans:
+        ans = dict(ans, drop=[N(x) for x in ans.get('drop') or [] if isinstance(x, str)],
+                   groups=[dict(g, members=[N(m) for m in g.get('members') or [] if isinstance(m, str)]) for g in ans.get('groups') or [] if isinstance(g, dict)])
     if not ans: return {'ok_parse': 0}
     drop = set(ans.get('drop', [])) & set(cands)
     groups = sorted(ans.get('groups', []), key=lambda g: -float(g.get('p', 0) or 0))
