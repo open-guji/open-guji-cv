@@ -626,37 +626,45 @@ def route_and_consume(log: EventLog, batch: str | None = None,
     `event_ids`：只看这几条事件（控制台「写完直接消费」只该消费刚写进来的那几条）。
     2026-09-26 实测：不限定时，每存一条切线都把整批 419 条 × 12 个消费者重新过一遍
     路由表（11.5 万次规则匹配）、再各读一遍 MB 级的记账文件，一次保存 1–2 秒。
-    路由结果按事件缓存，每条只算一次（原来每个消费者各算一遍）。"""
-    table = table or RouteTable.load(log.root / "routes.yaml")
-    results: list[ConsumeResult] = []
-    evs_all = log.read(batch) if batch else sorted(log.iter_all(), key=lambda e: e.order)
-    if event_ids is not None:
-        evs_all = [e for e in evs_all if e.id in event_ids]
-    dests = {e.id: table.destinations(e) for e in evs_all}
-    for consumer, fn in CONSUMERS.items():
-        mine = [e for e in evs_all if any(d.consumer == consumer for d in dests[e.id])]
-        if not mine:
-            continue
-        done = log.consumed_ids(consumer)
-        pairs = [(e, d) for e in mine if e.id not in done for d in dests[e.id] if d.consumer == consumer]
-        if not pairs:
-            continue
-        res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
-               else fn(pairs, dry_run=dry_run, **consumer_kw))
-        results.append(res)
-        if not dry_run and not res.errors:
-            # ⚠️ 一个事件命中同一消费者的多条路由（如 cutline+border 同时进
-            # touching-cuts 与 side-rule，两条去向都是 gold_add）时，`pairs`
-            # 里同一个事件会出现两次——`consumed/<consumer>.jsonl` 因此被
-            # 写两行。`consumed_ids()` 用 set 收，不影响幂等判定，但账本本身
-            # 失真（2026-09-10 金标对账道实测：`consumed/gold_add.jsonl` 里
-            # `evt_vol02-cutline_000032`/`000042` 各记了两次，是「事件数 507
-            # vs gold_add 记账 509」这 2 条差值的全部来源）。按事件 id 去重
-            # 再记账，金标本身（各分片各写一条）不受影响。
-            seen: dict[str, Event] = {}
-            for e, _ in pairs:
-                seen.setdefault(e.id, e)
-            log.mark_consumed(consumer, seen.values(), note=batch or "")
-    return {"batch": batch, "dry_run": dry_run,
-            "results": [r.to_dict() for r in results],
-            "unrouted": [e.id for e in evs_all if not dests[e.id]]}
+    路由结果按事件缓存，每条只算一次（原来每个消费者各算一遍）。
+
+    **整段持人裁写锁**（2026-09-26，H 人裁单写者任务书件 1）：`crop_exclude`／
+    `glyph_audit` 都是「读已有名单/账本 → 追加新行」，与 `mark_consumed` 一样是
+    读改写，并发跑会互相踩；`dry_run` 只读不写，锁开销可忽略，一起包上更简单
+    （锁可重入，且各消费者本来就该在同一快照上跑，不然「读到的 pending 集合」
+    与「记账」之间还是可能被插一脚）。"""
+    from .lock import feedback_write_lock
+    with feedback_write_lock(log.root):
+        table = table or RouteTable.load(log.root / "routes.yaml")
+        results: list[ConsumeResult] = []
+        evs_all = log.read(batch) if batch else sorted(log.iter_all(), key=lambda e: e.order)
+        if event_ids is not None:
+            evs_all = [e for e in evs_all if e.id in event_ids]
+        dests = {e.id: table.destinations(e) for e in evs_all}
+        for consumer, fn in CONSUMERS.items():
+            mine = [e for e in evs_all if any(d.consumer == consumer for d in dests[e.id])]
+            if not mine:
+                continue
+            done = log.consumed_ids(consumer)
+            pairs = [(e, d) for e in mine if e.id not in done for d in dests[e.id] if d.consumer == consumer]
+            if not pairs:
+                continue
+            res = (fn(pairs, store=store, dry_run=dry_run) if consumer == "gold_add"
+                   else fn(pairs, dry_run=dry_run, **consumer_kw))
+            results.append(res)
+            if not dry_run and not res.errors:
+                # ⚠️ 一个事件命中同一消费者的多条路由（如 cutline+border 同时进
+                # touching-cuts 与 side-rule，两条去向都是 gold_add）时，`pairs`
+                # 里同一个事件会出现两次——`consumed/<consumer>.jsonl` 因此被
+                # 写两行。`consumed_ids()` 用 set 收，不影响幂等判定，但账本本身
+                # 失真（2026-09-10 金标对账道实测：`consumed/gold_add.jsonl` 里
+                # `evt_vol02-cutline_000032`/`000042` 各记了两次，是「事件数 507
+                # vs gold_add 记账 509」这 2 条差值的全部来源）。按事件 id 去重
+                # 再记账，金标本身（各分片各写一条）不受影响。
+                seen: dict[str, Event] = {}
+                for e, _ in pairs:
+                    seen.setdefault(e.id, e)
+                log.mark_consumed(consumer, seen.values(), note=batch or "")
+        return {"batch": batch, "dry_run": dry_run,
+                "results": [r.to_dict() for r in results],
+                "unrouted": [e.id for e in evs_all if not dests[e.id]]}
