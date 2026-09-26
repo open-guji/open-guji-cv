@@ -401,7 +401,12 @@ class PaddleOcrSource:
     仍然**只供候选、不投票**（OCR 永不与库配对放行，97.1% 那条老账）。
     """
 
-    DEFAULT_PYTHON = r"D:/古籍整理/.venv/Scripts/python.exe"
+    # Windows 机用用户另一个项目的 paddle 环境；Linux 机（2026-09-24 起）是 ~/paddle-venv
+    # （paddlepaddle 3.2 + paddleocr 3.4，opencv 须有 contrib 的发行名，headless 的库）。
+    # 此前 Linux 上缺省仍指 D: 盘，引擎起不来，按「不炸」整页空候选——p3–12 因此没了
+    # OCR 旁证，上下文只凭先验出字（器→春、徑→㹵），见 overview Step9-13。
+    DEFAULT_PYTHON = (r"D:/古籍整理/.venv/Scripts/python.exe" if os.name == "nt"
+                      else os.path.expanduser("~/paddle-venv/bin/python"))
 
     def __init__(self, model_name: str = "PP-OCRv5_server_rec",
                  s2t: bool = True, topk: int = 5, device: str = "cpu",
@@ -419,7 +424,8 @@ class PaddleOcrSource:
         import subprocess
         from pathlib import Path
         worker = Path(__file__).resolve().parents[1] / "ocr" / "paddle_worker.py"
-        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        # 连通性检查每次起 worker 要等几十秒，模型已在本地缓存，跳过
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK="True")
         self._proc = subprocess.Popen(
             [self.python, str(worker), self.model_name, self.device],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
