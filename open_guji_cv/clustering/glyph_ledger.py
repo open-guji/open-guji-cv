@@ -58,15 +58,24 @@ def _font_editions(c: sqlite3.Connection) -> set[str]:
 
 
 def _v1_sources(c: sqlite3.Connection) -> set[str]:
+    """v1（idx 坐标）刻例的**实例 id** 集合。
+
+    按实例所属来源判，不按 id 前缀判：四庫 v1 刻例按形状重键到现格号之后
+    （`scripts/glyph_v1_rekey.py`），`vol01:页:列:格` 这个前缀下既有已重键的（格号坐标，
+    来源 `vol01`）也有没对上、仍是 idx 坐标的（挪到来源 `vol01v1`，id 不动）——
+    前缀已分不出来。"""
     return {r[0] for r in c.execute(
-        "SELECT source_id FROM sources WHERE pipeline_version='v1'")}
+        "SELECT i.instance_id FROM instances i JOIN sources s ON s.source_id = i.source_id "
+        "WHERE s.pipeline_version='v1'")}
 
 
-def cell_key(instance_id: str, v1_sources: set[str] = frozenset()) -> str:
-    """实例 id → 格键。`v2:<x>` 与 `<x>` 是同一格，除非 `<x>` 属于 v1 来源。"""
+def cell_key(instance_id: str, v1_ids: set[str] = frozenset()) -> str:
+    """实例 id → 格键。`v2:<x>` 与 `<x>` 是同一格，除非 `<x>` 是 v1（idx 坐标）刻例。"""
     if instance_id.startswith("v2:"):
         return instance_id[3:]
-    if instance_id.split(":", 1)[0] in v1_sources:
+    if instance_id.startswith("v1:"):
+        return instance_id
+    if instance_id in v1_ids:
         return "v1:" + instance_id
     return instance_id
 
@@ -96,7 +105,7 @@ def shadow_duplicates(c: sqlite3.Connection) -> list[tuple[str, str]]:
     for (iid,) in c.execute(
             "SELECT instance_id FROM exemplars WHERE instance_id LIKE 'v2:%'"):
         twin = iid[3:]
-        if twin.split(":", 1)[0] in v1:
+        if twin in v1:
             continue
         if c.execute("SELECT 1 FROM exemplars WHERE instance_id=?", (twin,)).fetchone():
             out.append((twin, iid))
@@ -112,11 +121,20 @@ def v1_twin_id(v2_id: str) -> str | None:
     """`v2:<book>:p:c:s` → v1 口径下同一格的候选 id `<book>:p:c:(s-1)`。
 
     v1 的 idx 从 0 数、v2 的 slot 从 1 数（`glyphdb_admit` 文档串：同名 id 170 例
-    0 个一致——因为整体差一格）。带 a/b 子格后缀的 v1 没有对应，返回 None。"""
+    0 个一致——因为整体差一格）。带 a/b 子格后缀的 v1 没有对应，返回 None。
+    v1 重键之后没对上现格的那部分改名成 `v1:<book>:p:c:idx`，见 `v1_twin_ids`。"""
     parts = v2_id.split(":")
     if len(parts) != 5 or parts[0] != "v2" or not parts[4].isdigit():
         return None
     return f"{parts[1]}:{parts[2]}:{parts[3]}:{int(parts[4]) - 1}"
+
+
+def v1_twin_ids(v2_id: str) -> list[str]:
+    """同 `v1_twin_id`，但两种写法都给：重键后留在 idx 坐标的 v1 刻例带 `v1:` 前缀
+    （`scripts/glyph_v1_rekey.py`），重键前是裸的 `<book>:p:c:idx`。调用方再按来源
+    （`pipeline_version='v1'`）认——裸写法重键后已是格号坐标，不再是 v1。"""
+    t = v1_twin_id(v2_id)
+    return [] if t is None else ["v1:" + t, t]
 
 
 def v1_shadow_duplicates(c: sqlite3.Connection, th: float = V1_TWIN_COV) -> list[dict]:
@@ -134,8 +152,8 @@ def v1_shadow_duplicates(c: sqlite3.Connection, th: float = V1_TWIN_COV) -> list
     lab = dict(c.execute("SELECT instance_id, label FROM instances"))
     out = []
     for iid in sorted(ex):
-        t = v1_twin_id(iid)
-        if not t or t not in ex or t.split(":", 1)[0] not in v1:
+        t = next((x for x in v1_twin_ids(iid) if x in ex and x in v1), None)
+        if not t:
             continue
         rows = dict(c.execute("SELECT instance_id, data FROM derived WHERE kind='norm' "
                               "AND instance_id IN (?,?)", (iid, t)))
@@ -259,15 +277,17 @@ def library_summary(db_path: str | Path, store_dir: str | Path | None = None) ->
                 font_chars[ed] = {"chars": len(have),
                                   "book_chars_not_in_font": sum(
                                       1 for ch in per_char if ch not in have)}
-        # 每个实例来源（= 实例 id 前缀）的刻例数与来路：v2 / vol01 / bxgb 是坐标命名空间
-        # （v2 slot 从 1、v1 idx 从 0），不是版本；版本看 book_edition
+        # 每个实例来源的刻例数与来路：v2 / vol01 / bxgb 是坐标命名空间
+        # （v2 slot 从 1、v1 idx 从 0），不是版本；版本看 book_edition。
+        # 按 instances.source_id 数：v1 重键后 `vol01:` 前缀下分属两个来源
         by_src: dict[str, Counter] = defaultdict(Counter)
-        for iid, p in c.execute(
-                "SELECT e.instance_id, a.provenance FROM exemplars e "
+        for src_id, p in c.execute(
+                "SELECT i.source_id, a.provenance FROM exemplars e "
                 "JOIN glyphs g ON g.glyph_id=e.glyph_id "
+                "JOIN instances i ON i.instance_id=e.instance_id "
                 "LEFT JOIN admissions a ON a.instance_id=e.instance_id "
                 "WHERE g.edition_tag NOT LIKE 'font:%'"):
-            by_src[iid.split(":", 1)[0]][_prov_class(p)] += 1
+            by_src[src_id][_prov_class(p)] += 1
         for src in sources:
             cnt = by_src.get(src["source_id"], Counter())
             src["exemplars"] = sum(cnt.values())

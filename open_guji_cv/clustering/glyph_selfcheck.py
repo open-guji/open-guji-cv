@@ -260,7 +260,8 @@ def run_selfcheck(db_path: str | Path,
 
     # 本书 v1/v2 同格去重：同一格的另一份不能当自己的同字参照
     c = connect_ro(db_path)
-    v1 = {r[0] for r in c.execute("SELECT source_id FROM sources WHERE pipeline_version='v1'")}
+    from .glyph_ledger import _v1_sources
+    v1 = _v1_sources(c)             # v1（idx 坐标）刻例的实例 id
     c.close()
     cells = [cell_key(e.instance_id, v1) if not e.origin else f"{e.origin}|{e.instance_id}"
              for e in pool]
