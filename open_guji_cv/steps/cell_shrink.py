@@ -58,12 +58,23 @@ FRAME_BAR_MAX_H = 0.4
 FRAME_BAR_MIN_W = 0.6
 
 
+FRAME_BAR_TOP = 0.15
+"""首格（slot 1）也收框线（2026-09-26，用户定）：上边框线落在列首第一格里（vol02 p58c4、p113c9），
+同样是矮而满宽，但首格可能真有扁字，所以多一条——紧框贴着格顶（≤ 这么多格高）。「一」作首字时
+居中，不贴顶。四册全书按这三条筛只中 vol02 这 2 格，全是框线。"""
+
+
 def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
-    if cell_type != "char" or slot is None or slot >= 1 or not cc.period or not cc.content_x:
+    if cell_type != "char" or slot is None or slot > 1 or not cc.period or not cc.content_x:
         return False
     h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
     col_w = cc.content_x[1] - cc.content_x[0]
-    return h < FRAME_BAR_MAX_H * cc.period and w >= FRAME_BAR_MIN_W * col_w
+    if not (h < FRAME_BAR_MAX_H * cc.period and w >= FRAME_BAR_MIN_W * col_w):
+        return False
+    if slot < 1:
+        return True
+    cell = next((c for c in cc.cells if c.slot == 1 and not c.sub), None)
+    return cell is not None and bbox[1] - cell.y0 <= FRAME_BAR_TOP * cc.period
 
 
 @register_step
