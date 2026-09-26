@@ -164,7 +164,6 @@ def _sheet(sample, a, patch_of) -> None:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
-    from open_guji_cv.clustering.glyph_db import _unpng
     font = ImageFont.truetype(str(REPO / "fonts/iming/I.Ming-8.10.ttf"), 18)
     c = sqlite3.connect(f"file:{a.db}?mode=ro", uri=True)
     W, H = 150, 150
@@ -183,7 +182,7 @@ def _sheet(sample, a, patch_of) -> None:
         if mid:
             r = c.execute("SELECT patch_png, label FROM instances WHERE instance_id=?", (mid,)).fetchone()
             if r:
-                lib, lab = _unpng(r[0]), r[1]
+                lib, lab = cv2.imdecode(np.frombuffer(r[0], np.uint8), cv2.IMREAD_GRAYSCALE), r[1]
         tile = Image.new("L", (W * 2 + 360, H + 10), 255)
         for i, im in enumerate((cell, lib)):
             if im is None:

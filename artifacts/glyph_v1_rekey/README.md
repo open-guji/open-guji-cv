@@ -9,8 +9,13 @@
 服务器执行（几分钟）：
 
 ```bash
+# 前提：vol01 Step1–4 已在同一 commit 上重跑新鲜（对照表的格号出自新鲜切分）
 systemctl --user stop guji-glyph-store-sync.timer
 cp output/glyph.db output/glyph.db.bak-$(date +%Y%m%d)            # 在书目录下
+# 先把漂到邻格的人裁挪回来（否则 v1 与它们「同格异字」、重键跳过；沙箱实测 5 例）
+GUJI_WORKSPACE=<书目录> PYTHONPATH=. .venv/bin/python scripts/glyph_crosscheck.py /tmp/cc.jsonl --drift \
+    --v1-map artifacts/glyph_v1_rekey/siku_vol01_v1_map.jsonl
+GUJI_WORKSPACE=<书目录> PYTHONPATH=. .venv/bin/python scripts/glyph_rekey_drift.py /tmp/cc.jsonl --apply
 GUJI_GLYPH_DB=<书目录>/output/glyph.db PYTHONPATH=. .venv/bin/python scripts/glyph_v1_rekey.py \
     artifacts/glyph_v1_rekey/siku_vol01_v1_map.jsonl --dry-run      # 先看数，与沙箱报告对得上再跑
 GUJI_GLYPH_DB=... PYTHONPATH=. .venv/bin/python scripts/glyph_v1_rekey.py artifacts/glyph_v1_rekey/siku_vol01_v1_map.jsonl \
