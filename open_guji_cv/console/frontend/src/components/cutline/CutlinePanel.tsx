@@ -59,6 +59,10 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
   const [limit, setLimit] = useState(30)          // 一屏能裁完的量；大批量再手改（2026-09-15 用户定）
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
+  // 「含已跳过」（2026-09-26 用户）：只看未裁时把判过「拿不准」（S）的卡也放出来，回头补裁
+  const [withSkipped, setWithSkipped] = useState(false)
+  const hideDone = (done: string | undefined, todo: boolean, skipped: boolean) =>
+    todo && !!done && !(skipped && done === 'idk')
   const [cases, setCases] = useState<CutlineCase[]>([])
   const [msg, setMsg] = useState('')
   const [cur, setCur] = useState(0)
@@ -74,12 +78,13 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
     return batchInput.trim() || `${book}-cutline${suffix}`
   }
 
-  async function load() {
+  async function load(skippedOverride?: boolean) {
+    const skipped = skippedOverride ?? withSkipped
     const b = batch()
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind, scope)
+      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind, scope, skipped)
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
@@ -116,7 +121,7 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
           const k = (c.candidates || []).findIndex((x) => x.kind === dv.cand)
           if (k >= 0) st.pick = k
         }
-        st.hidden = onlyTodo
+        st.hidden = hideDone(dv.verdict, onlyTodo, skipped)
       }
       next[c.id] = st
     }
@@ -298,7 +303,7 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
     }
     st.done = verdict
     st.armed = undefined      // 落定后清掉「待确认」高亮，免得重开时还亮着
-    if (onlyTodo) st.hidden = true
+    if (hideDone(verdict, onlyTodo, withSkipped)) st.hidden = true
     bump()
     // 先挪焦点、后等写入（2026-09-26）：POST 连带「写完直接消费」（金标 upsert + 产物失效 + 批次计数）
     // 要 1–2 秒，原来等它返回才 focus，人按完回车要干等。`st.done` 已先置上，重复按不会双写；
@@ -390,10 +395,15 @@ export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?:
           // 原来只在「载入」时生效，改成即时——取消勾选立刻把已裁的卡放回来。
           const v = e.target.checked
           setOnlyTodo(v)
-          for (const st of Object.values(cardState.current)) st.hidden = v && !!st.done
+          for (const st of Object.values(cardState.current)) st.hidden = hideDone(st.done, v, withSkipped)
           bump()
         }} /> 只看未裁</label>
-        <button onClick={load}>载入</button>
+        <label className="muted" title="勾上：「只看未裁」时把判过「拿不准」（S）的卡也列出来，回头补裁（会重新载入）"><input type="checkbox" checked={withSkipped} onChange={(e) => {
+          const v = e.target.checked
+          setWithSkipped(v)
+          load(v)
+        }} /> 含已跳过</label>
+        <button onClick={() => load()}>载入</button>
         <span className="muted">{msg}</span>
       </div>
       {cases.length > 0 && (
