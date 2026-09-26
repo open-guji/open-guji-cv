@@ -1214,6 +1214,8 @@ touching-cuts 评测口径 ≤3 / ≤5 / ≤10 px，取最严一档。"""
 RESOLVED_SEAM_TOL = 4.0
 
 PIN_MARGIN = 8.0
+PIN_NEAR = 0.4     # 钉子按位置认格线：离它 ≤ 这么多格
+PIN_FAR = 1.5      # 位置认不上时按格号认：离 DP 那条 ≤ 这么多格
 """人钉的格线离上下相邻格线至少这么多像素，否则不钉（见 segment_column 的 pinned_cuts）。"""
 
 SPLIT_SHORT, SPLIT_TALL, SPLIT_MASS_MIN = 0.79, 1.05, 0.10
@@ -1463,13 +1465,22 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 人拖过的切线钉住（2026-09-26，feedback/lookup.resolved_pins）：slot_above 下沿那条格线换成人给的 y。
     # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
     # 已不是同一条格线（格数/相位变了），不套。
+    #
+    # 先按**位置**认：离钉子 ≤ PIN_NEAR 格的那条格线就是它（2026-09-26：上游几何一变，格号会整体
+    # 错一位——vol02 p187c9 双线框剥干净后列首少了一个假格，人按旧格号钉的线全落到隔壁格号上；
+    # 钉子记的是页面坐标，位置才是人裁的本意）。位置上找不到，才按格号认，并放宽到 PIN_FAR 格
+    # （p100c4「淳乙」：DP 把两字并成一格，人钉的线离 DP 那条 1.1 格）。两种都要夹在相邻格线之间。
+    inner_idx = list(range(1, n_slots))
     for slot_above, y_pin in (pinned_cuts or {}).items():
-        p_ = _slot_to_pos_local(slot_above, n_raised)
-        if not (1 <= p_ < n_slots):
-            continue
         y_pin = float(y_pin)
-        if (bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN
-                and abs(y_pin - bounds[p_]) <= period):
+        near = min(inner_idx, key=lambda i: abs(bounds[i] - y_pin)) if inner_idx else None
+        if near is not None and abs(bounds[near] - y_pin) <= PIN_NEAR * period:
+            p_ = near
+        else:
+            p_ = _slot_to_pos_local(slot_above, n_raised)
+            if not (1 <= p_ < n_slots) or abs(y_pin - bounds[p_]) > PIN_FAR * period:
+                continue
+        if bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN:
             bounds[p_] = y_pin
 
     # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
