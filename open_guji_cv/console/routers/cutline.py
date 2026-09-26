@@ -150,10 +150,21 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                  "conv_above", "conv_below")
     key = (book, tuple(sorted({c["page"] for c in picked})))
     if drift:
-        # 期望字沿用金标里的（06 卡人裁洗过），不再重新对齐整理本
+        # 期望字沿用金标里的（06 卡人裁洗过）；金标里没有的（清单模式从产物现出的卡、或老金标
+        # 没记字）才对齐整理本补上——2026-09-26 用户：清单卡上「上格/下格」全是空的，线切在字中间时
+        # 不知道该往上挪还是往下挪。补的走同一份按页缓存。
         for c in picked:
             for k in _EXP_KEYS:
                 c.setdefault(k, "")
+        need = [c for c in picked if not c.get("char_above") and not c.get("char_below")]
+        if need:
+            nkey = (book, tuple(sorted({c["page"] for c in need})))
+            if nkey not in _cutline_expected_cache:
+                tmp = [dict(c) for c in need]
+                T.attach_expected(tmp, book, st)
+                _cutline_expected_cache[nkey] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in tmp}
+            for c in need:
+                c.update(_cutline_expected_cache[nkey].get(c["id"], {}))
     elif key not in _cutline_expected_cache:
         T.attach_expected(picked, book, st)
         _cutline_expected_cache[key] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in picked}
