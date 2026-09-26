@@ -373,6 +373,25 @@ FLOOR_RUN_FLUSH = 2
 #: 不判 e、退回原有 b/c——宁可留框渣，绝不切「一/二/三」。
 MARGIN_T = 0.7
 MARGIN_MIN_PX = 6
+#: 双线版框（2026-09-26）：册配置 `frame_layers` 声明某端有两层时，剥掉第一道线之后**继续往里
+#: 找第二道**。vol02 实测只剥一道：列尾 499/1674 列留着紧贴末字的那道细虚线（内框），列首 352 列
+#: 留着第二道——Step4 再把它收进字的图块（列尾约四成的图块底下挂一截虚线），或当成一个「字」。
+#: 第二道的判据：离第一道 ≤ `outer_gap`（册配置）× LAYER2_GAP_K + LAYER2_GAP_ADD 行，
+#: 本身薄（≤ LAYER2_MAX_ROWS 行），且**横向跨度**（这几行里最左墨到最右墨）≥ LAYER2_EXTENT
+#: × 文字带宽——虚线断断续续、墨占比不高，但从头贯到尾；「一」「二」「三」「王」的横
+#: 只占文字带六七成，够不上。拿不准就不剥（与 b 档同一纪律）。
+LAYER2_GAP_K = 1.5
+LAYER2_GAP_ADD = 12
+LAYER2_MAX_ROWS = 30     # 外框粗线实测 18~24 行（与 border_max_rows 同一把尺）
+LAYER2_EXTENT = 0.85
+LAYER2_MARGIN_RISE = 0.3   # 边距证据：这几行的边距墨比全列边距中位高出这么多（界行本底不算）
+#: 下端还有一刀：**Step1 的下版框就是内框线**（vol02 实测残线正落在 `border_bottom_in_column` ±8 行），
+#: 而字不会越过内框。剥完外面几道之后，若内框线还在（紧贴末字、与字粘连，按行分不出段的那种，
+#: vol02 约 200 列），就在 Step1 给的位置 ±INNER_SEARCH 行里找覆盖最高的一行（≥ INNER_COV），
+#: 连同它上沿 ≥ INNER_EDGE 的几行一起、往下全抹。只在册配置声明下端有两层时做。
+INNER_SEARCH = 10
+INNER_COV = 0.35
+INNER_EDGE = 0.15
 
 
 def _thin_bar_then_floor(p: np.ndarray, blank: int, bar_coverage: float,
@@ -408,7 +427,9 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
                         bar_coverage: float = 0.65, inset_min_peak: float = 0.15,
                         margin_profile: np.ndarray | None = None,
                         floor_t: float = FLOOR_T, floor_run: int = FLOOR_RUN,
-                        flush_max: int = FLUSH_MAX, margin_t: float = MARGIN_T
+                        flush_max: int = FLUSH_MAX, margin_t: float = MARGIN_T,
+                        layers: tuple[int, int] = (1, 1),
+                        layer_gap: tuple[float | None, float | None] = (None, None),
                         ) -> tuple[tuple[int, str], tuple[int, str]]:
     """上下版框残墨该削掉几行 —— 返回 `((top_px, top_case), (bottom_px, bottom_case))`。
 
@@ -454,6 +475,56 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     才分得开，因为字的顶边必然是细的。
     """
     prof = column_row_profile(warped_gray, band, ink_threshold)
+    lo_, hi_ = band if band is not None else (0, warped_gray.shape[1])
+    bink = warped_gray[:, lo_:hi_] < ink_threshold
+    bw = max(1, hi_ - lo_)
+
+    def second_layer(p: np.ndarray, ink2: np.ndarray, cut: int, gap: float | None,
+                     m: np.ndarray | None = None) -> int | None:
+        """`cut` 之后找第二道框线（见 LAYER2_* 注）；找到返回它的下沿，否则 None。"""
+        if gap is None:
+            return None
+        j = cut
+        limit = cut + int(gap * LAYER2_GAP_K + LAYER2_GAP_ADD)
+        while True:
+            while j < len(p) and j < limit and p[j] <= ink_eps:
+                j += 1
+            if j >= len(p) or j >= limit:
+                return None
+            k = j
+            while k < len(p) and p[k] > ink_eps:
+                k += 1
+            if float(p[j:k].max()) >= inset_min_peak:
+                break
+            j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
+        if k - j > LAYER2_MAX_ROWS:
+            return None
+        cols = np.where(ink2[j:k].any(axis=0))[0]
+        if len(cols) and (cols[-1] - cols[0] + 1) >= LAYER2_EXTENT * bw:
+            return k
+        # 跨度不够（磨损的框线只剩几截，vol02 实测列首第二道常只有 0.5~0.8 宽）时看**边距证据**：
+        # 框线横贯整列、在文字带外的边距里也是墨；字止于文字带（口径同 e 档的 MARGIN_T）
+        # 边距里常年有界行（每一行都是墨），所以比的是**高出这一列边距的常态**多少，不是绝对值
+        if m is not None and float(m[j:k].max()) >= margin_t and \
+                float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:
+            return k
+        return None
+
+    def two(p: np.ndarray, m: np.ndarray | None, ink2: np.ndarray, n_layers: int,
+            gap: float | None) -> tuple[int, str]:
+        px, case = one(p, m)
+        if n_layers >= 2 and case in ("a", "d", "e") and px:
+            # 至多再剥两道：vol02 有的列尾除了内外两道框，最外还压着一截页边/上一道框的残墨
+            # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）
+            got = 0
+            for _ in range(2):
+                k = second_layer(p, ink2, px, gap, m)
+                if k is None:
+                    break
+                px, got = k, got + 1
+            if got:
+                return px, case + str(got + 1)
+        return px, case
 
     def one(p: np.ndarray, m: np.ndarray | None) -> tuple[int, str]:
         # 从边缘往里找「第一段够格的墨」。噪点段要**跳过去接着找**，不能
@@ -507,7 +578,8 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
         return 0, "c"                           # 是字不是版框，什么都不削
 
     mrev = None if margin_profile is None else margin_profile[::-1]
-    return one(prof, margin_profile), one(prof[::-1], mrev)
+    return (two(prof, margin_profile, bink, layers[0], layer_gap[0]),
+            two(prof[::-1], mrev, bink[::-1], layers[1], layer_gap[1]))
 
 
 def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
@@ -553,9 +625,24 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
     if lo + (denoised.shape[1] - hi) >= MARGIN_MIN_PX:
         binm = denoised < ink_threshold
         margin_profile = np.concatenate([binm[:, :lo], binm[:, hi:]], axis=1).mean(axis=1)
+    inner_bottom = kwargs.pop("inner_bottom", None)
     (top_px, top_case), (bot_px, bot_case) = column_border_trim(
         no_rules, band, ink_threshold=ink_threshold, margin_profile=margin_profile,
         **kwargs)
+    layers = kwargs.get("layers", (1, 1))
+    if inner_bottom is not None and layers[1] >= 2:
+        prof = column_row_profile(no_rules, band, ink_threshold)
+        h = len(prof)
+        y0 = max(0, int(round(inner_bottom)) - INNER_SEARCH)
+        y1 = min(h, int(round(inner_bottom)) + INNER_SEARCH + 1)
+        if y1 > y0:
+            r = y0 + int(np.argmax(prof[y0:y1]))
+            if prof[r] >= INNER_COV:
+                t = r
+                while t - 1 >= y0 - 4 and prof[t - 1] >= INNER_EDGE:
+                    t -= 1
+                if h - t > bot_px:
+                    bot_px, bot_case = h - t, bot_case + "i"
     out = no_rules.copy()
     if top_px:
         out[:top_px] = 255

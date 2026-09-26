@@ -144,8 +144,9 @@ def main() -> int:
         worst = sorted(poly_rows, key=lambda r: -r["max_dev"])[:5]
         print("  折线最差:", [(r["id"], round(r["max_dev"])) for r in worst])
     if a.json:
-        Path(a.json).write_text(json.dumps({"rows": rows, "overlap": overlap, "drift": drift,
-                                            "missing": missing}, ensure_ascii=False, indent=1), encoding="utf-8")
+        Path(a.json).write_text(json.dumps({"rows": rows, "poly": poly_rows, "overlap": overlap, "drift": drift,
+                                            "missing": missing, "modes": dict(modes)},
+                                           ensure_ascii=False, indent=1), encoding="utf-8")
     return 0
 
 

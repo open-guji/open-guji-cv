@@ -100,6 +100,8 @@ class ColumnWarpStep(Step):
         params=ColumnWarpParams,
         code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry",
                    "open_guji_cv.utils.column_triage"),
+        # 双线版框剥第二道读册配置（2026-09-26）——改 yaml 要让列图过期
+        book_deps=("frame_layers", "outer_gap"),
     )
 
     # ── 共用的一列计算 ─────────────────────────────────────────────────
@@ -111,8 +113,12 @@ class ColumnWarpStep(Step):
                                    bottom_pad=p.bottom_pad, head_pad=p.head_pad)
         # 上界之上还看得见版框、框与上界之间夹着字墨的列：把上界提到框下沿
         # （Step1 的整页直线落到真框之下时首字顶部整块不在列图里，见函数注释）
-        for win in wins:
-            refine_top_by_frame(gray, win)
+        # 双线版框的册不做：内框是细虚线、满宽段判据认不出，refine 会越过它去抓上面那道粗外框，
+        # 把内框整条圈进列图（vol02 1682 列里 491 列被这样上提 15~25px，列首残线的大头）。
+        # refine 是给单线框、Step1 线落在首字顶边的册（bxgb p48/p54）准备的。
+        if int((ctx.book.frame_layers or {}).get("top", 1)) < 2:
+            for win in wins:
+                refine_top_by_frame(gray, win)
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow
@@ -120,7 +126,13 @@ class ColumnWarpStep(Step):
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
         warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y)
         raw = denoise_column(warped, ink_threshold=p.ink_threshold, min_blob_area=p.min_blob_area)
-        cleaned, diag = clean_column(raw, ink_threshold=p.ink_threshold)
+        # 双线版框剥第二道（column_projection.LAYER2_* 注）：层数与层距来自册配置
+        fl, og = ctx.book.frame_layers or {}, ctx.book.outer_gap or {}
+        cleaned, diag = clean_column(
+            raw, ink_threshold=p.ink_threshold,
+            layers=(int(fl.get("top", 1)), int(fl.get("bottom", 1))),
+            layer_gap=(og.get("top"), og.get("bottom")),
+            inner_bottom=win.border_bottom_in_column)
         return raw, cleaned, diag, warped
 
     # ── Step 接口 ─────────────────────────────────────────────────────
