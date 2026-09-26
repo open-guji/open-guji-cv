@@ -185,6 +185,17 @@ def score(cell, ans):
          'top_has_truth': tr in top.get('members', []), 'top_p': float(top.get('p', 0) or 0),
          'top_single': len(top.get('members', [])) == 1, 'conf': ans.get('confidence'),
          'out_of_cands': [m for m in kept if m not in cands]}
+    # 图像共识 = 库首选 与 OCR 首选 同字
+    lib = [N(c['c']) for c in cell['cands'] if '库首选' in c['src']]; ocr = [N(c['c']) for c in cell['cands'] if 'OCR第1' in c['src']]
+    img = lib[0] if lib and ocr and lib[0] == ocr[0] else None
+    topm = set(top.get('members', [])); tc = topm & set(cands)
+    sg = {m: i for i, (mem, _) in enumerate(dictlib.group_cands(cands, strict=True)) for m in mem}
+    r.update(img=img, img_ok=img == tr if img else None,
+             merged=len({sg.get(m) for m in tc}) > 1,                     # 首组混了不同的（严格）组 = 没判出来
+             veto=bool(img) and img not in topm,                          # AI 首组不含图像共识
+             # 严格放行口径：图像共识 ∈ 首组、高把握、p≥0.95、首组里没有别的候选
+             rel=bool(img) and img in topm and ans.get('confidence') == '高' and r['top_p'] >= 0.95 and tc == {img})
+    r['rel_err'] = r['rel'] and img != tr
     return r
 
 def run(a):
@@ -259,6 +270,9 @@ def summarize(rows, usage, errs, tag):
     for band in [(0.99, 1.01), (0.95, 0.99), (0.8, 0.95), (0, 0.8)]:
         B = [s for s in tin if band[0] <= s['top_p'] < band[1]]
         if B: print(f'  top_p∈[{band[0]},{band[1]}): {len(B)} 格, 首组含真值 {f("top_has_truth", B)/len(B):.1%}')
+    rel = [s for s in ok if s.get('rel')]
+    print(f'  严格放行 {len(rel)} 格（{len(rel)/max(len(ok),1):.1%}）错 {sum(1 for s in rel if s["rel_err"])}；首组并组 {sum(1 for s in ok if s.get("merged"))}；'
+          f'否决图像共识 {sum(1 for s in ok if s.get("veto"))}（其中图像对 {sum(1 for s in ok if s.get("veto") and s.get("img_ok"))}）')
     tok = [u for u in usage if u and u.get('prompt_tokens') is not None]
     print(f'  tokens in {sum(u["prompt_tokens"] for u in tok)} out {sum(u["completion_tokens"] for u in tok)}；调用错误 {sum(1 for e in errs if e)}')
 
