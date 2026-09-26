@@ -68,6 +68,36 @@ def test_no_update_when_local_matches_remote(no_sleep):
     assert all(c[0] in ("fetch", "rev-parse") for c in git.calls)
 
 
+def test_fetch_uses_explicit_refspec_not_bare_branch_name(no_sleep):
+    """回归 2026-09-26 实测的坑：只传裸分支名，`git fetch` 更不更新
+    `refs/remotes/<remote>/<branch>` 要看这个 checkout 配的 fetch refspec
+    （这个仓的沙箱 clone 只配了 `+refs/heads/main:...`，production 传裸分支名
+    fetch 完 `git rev-parse origin/production` 照样 unknown revision）——
+    必须显式给目标端，不能依赖调用方的 remote 配置。"""
+    git = FakeGit(local_rev="abc123", remote_rev="abc123")   # 无更新，fetch 之后立刻退出
+    dc.deploy_check(Path("/fake/repo"), git_runner=git, sleeper=no_sleep)
+    fetch_call = next(c for c in git.calls if c[0] == "fetch")
+    assert fetch_call == ["fetch", "origin", "+production:refs/remotes/origin/production"]
+
+
+def test_resolve_failed_when_rev_parse_errors(no_sleep):
+    """`git rev-parse <解析不出的东西>` 会把参数原样回显到 stdout、真正的错误在
+    stderr、退出码非零——不查 returncode 就会把这行回显误当成"新提交"（2026-09-26
+    实测踩到的真 bug，见 `deploy_check.py` 里这段注释）。"""
+
+    class BrokenGit(FakeGit):
+        def __call__(self, repo, args):
+            if args[0] == "rev-parse" and args[1] == "origin/production":
+                self.calls.append(args)
+                return _cp(stdout="origin/production\n", returncode=128,
+                          stderr="fatal: ambiguous argument 'origin/production': unknown revision")
+            return super().__call__(repo, args)
+
+    git = BrokenGit(local_rev="abc123", remote_rev="def456")
+    result = dc.deploy_check(Path("/fake/repo"), git_runner=git, sleeper=no_sleep)
+    assert result.status == dc.RESOLVE_FAILED
+
+
 def test_fetch_failed_short_circuits(no_sleep):
     git = FakeGit(local_rev="abc123", remote_rev="def456", fetch_ok=False)
     result = dc.deploy_check(Path("/fake/repo"), git_runner=git, sleeper=no_sleep)

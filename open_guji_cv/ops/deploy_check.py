@@ -28,6 +28,7 @@ from typing import Callable
 
 NO_UPDATE = "no_update"
 FETCH_FAILED = "fetch_failed"
+RESOLVE_FAILED = "resolve_failed"
 LOCKED = "locked"
 OUTSIDE_WINDOW = "outside_window"
 WOULD_DEPLOY = "would_deploy"
@@ -125,14 +126,27 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
     window = window or DeployWindow()
     now = now or datetime.now(timezone.utc)
 
-    fetch = git_runner(repo, ["fetch", remote, branch])
+    # 显式给目标 refspec（`+<branch>:refs/remotes/<remote>/<branch>`），不能只传
+    # 裸分支名——`git fetch <remote> <branch>` 认不认 `refs/remotes/<remote>/<branch>`
+    # 取决于这个 checkout 配置的 fetch refspec，只有它匹配 `<branch>` 时才会更新那个
+    # 远程跟踪引用，否则只落 `FETCH_HEAD`（2026-09-26 实测：这个仓的 clone 只配了
+    # `+refs/heads/main:refs/remotes/origin/main`，`git fetch origin production`
+    # 跑完 `git rev-parse origin/production` 照样 unknown revision——服务器上按什么
+    # 方式 clone 不该影响这条逻辑对不对，显式给目标端才是可靠的）。
+    fetch = git_runner(repo, ["fetch", remote, f"+{branch}:refs/remotes/{remote}/{branch}"])
     if fetch.returncode != 0:
         return DeployResult(FETCH_FAILED, {"stderr": fetch.stderr.strip()})
 
     local = git_runner(repo, ["rev-parse", branch])
     remote_rev = git_runner(repo, ["rev-parse", f"{remote}/{branch}"])
+    # `git rev-parse <解析不出的东西>` 会把参数原样回显到 stdout、错误信息才在
+    # stderr、退出码非零（2026-09-26 实测踩到：不查 returncode 时把这行回显字符串
+    # 误当成"新提交"，报了个假的 `would_deploy`）——两边都要查 returncode。
+    if local.returncode != 0 or remote_rev.returncode != 0:
+        return DeployResult(RESOLVE_FAILED, {
+            "local_stderr": local.stderr.strip(), "remote_stderr": remote_rev.stderr.strip()})
     local_rev, remote_head = local.stdout.strip(), remote_rev.stdout.strip()
-    if not remote_head or local_rev == remote_head:
+    if local_rev == remote_head:
         return DeployResult(NO_UPDATE, {"rev": local_rev})
 
     # 锁在「有没有更新」之后查——没更新时压根不用管有没有人在跑批。

@@ -1143,7 +1143,7 @@ def cmd_deploy(args) -> None:
     if args.overview and not args.dry_run and result.status != dc.NO_UPDATE:
         path = dc.write_deploy_record(Path(args.overview).resolve(), result, stale_summary=stale)
         print(f"部署记录：{path}", file=sys.stderr)
-    if result.status in (dc.FETCH_FAILED, dc.MERGE_FAILED, dc.ROLLED_BACK):
+    if result.status in (dc.FETCH_FAILED, dc.RESOLVE_FAILED, dc.MERGE_FAILED, dc.ROLLED_BACK):
         sys.exit(1)
 
 
