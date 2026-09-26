@@ -138,6 +138,12 @@ def default_feedback_root() -> Path:
 _CONSUMED_CACHE: dict[tuple[str, int, int], frozenset[str]] = {}
 
 
+def _same_content(a: Event, b: Event) -> bool:
+    """两条事件除 `ts`/`id`/`seq` 外是否一样——用来分辨「真重复」与「seq 碰撞」。"""
+    return (a.kind == b.kind and a.actor == b.actor and a.target == b.target
+            and a.payload == b.payload and a.reviewer == b.reviewer)
+
+
 class EventLog:
     """只追加的事件日志。一批一个文件，便于按批收割与回看。"""
 
@@ -174,7 +180,15 @@ class EventLog:
 
     # ── 读写 ─────────────────────────────────────────────────────────
     def append(self, events: Iterable[Event]) -> int:
-        """追加；同 (batch, seq) 已存在的**跳过**（重复收割同一页面不会灌重）。"""
+        """追加；同 (batch, seq) 已存在**且内容相同**的跳过（重复收割同一页面不会灌重）。
+
+        **调用方多半在锁外算好 `seq`**（`base = latest_seq(batch)` 再 `make_event(batch, base+i, …)`），
+        两个进程各自读到同一个 `base` 时会算出同一批 `seq`。这本身不算错——真正需要保证的是
+        「最终落盘不丢」。所以这里不是简单按 `(batch, seq)` 去重丢弃：**内容不同**的碰撞
+        （不同事件被分到了同一个 seq）顺延到当前 batch 的下一个空 seq 重新入号，而不是
+        整条丢弃——这正是 cv `9f1ea8c`（两个 POST 撞 seq、后写覆盖先写、丢了 9 条金标）的根因。
+        内容相同的碰撞（同一事件被重复提交，如重复收割）才按原语义跳过。
+        """
         events = list(events)
         if not events:
             return 0
@@ -182,18 +196,26 @@ class EventLog:
         by_batch: dict[str, list[Event]] = {}
         for e in events:
             by_batch.setdefault(e.batch, []).append(e)
-        for batch, evs in by_batch.items():
-            path = self.batch_path(batch)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            seen = {(e.batch, e.seq) for e in self.read(batch)}
-            with open(path, "a", encoding="utf-8") as f:
-                for e in sorted(evs, key=lambda x: x.seq):
-                    if (e.batch, e.seq) in seen:
-                        continue
-                    f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
-                                       sort_keys=True) + "\n")
-                    seen.add((e.batch, e.seq))
-                    n += 1
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            for batch, evs in by_batch.items():
+                path = self.batch_path(batch)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                existing = {(e.batch, e.seq): e for e in self.read(batch)}
+                next_seq = max((s for (_, s) in existing), default=0) + 1
+                with open(path, "a", encoding="utf-8") as f:
+                    for e in sorted(evs, key=lambda x: x.seq):
+                        prior = existing.get((e.batch, e.seq))
+                        if prior is not None:
+                            if _same_content(prior, e):
+                                continue
+                            e = make_event(e.batch, next_seq, e.kind, e.target, e.payload,
+                                          e.actor, e.source_format, e.ts, e.reviewer)
+                        f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
+                                           sort_keys=True) + "\n")
+                        existing[(e.batch, e.seq)] = e
+                        next_seq = max(next_seq, e.seq + 1)
+                        n += 1
         return n
 
     def compact(self, batch: str, dry_run: bool = False) -> dict:
@@ -213,26 +235,28 @@ class EventLog:
         分组键是 `(kind, target.unit, target.key)`：`cutline` 与字位裁决的 key
         形状相同（`bxgb:39:19:12`）而 unit 不同，混在一起会互相顶掉。
         """
-        evs = self.read(batch)
-        if not evs:
-            return {"batch": batch, "before": 0, "after": 0, "removed": 0, "dry_run": dry_run}
-        keep: dict[tuple, Event] = {}
-        for e in evs:                       # read() 已按 (batch, seq) 升序 → 后到覆盖
-            keep[(e.kind, e.target.unit, e.target.key)] = e
-        kept_ids = {e.id for e in keep.values()}
-        out = [e for e in evs if e.id in kept_ids]
-        res = {"batch": batch, "before": len(evs), "after": len(out),
-               "removed": len(evs) - len(out), "dry_run": dry_run}
-        if dry_run or not res["removed"]:
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            evs = self.read(batch)
+            if not evs:
+                return {"batch": batch, "before": 0, "after": 0, "removed": 0, "dry_run": dry_run}
+            keep: dict[tuple, Event] = {}
+            for e in evs:                       # read() 已按 (batch, seq) 升序 → 后到覆盖
+                keep[(e.kind, e.target.unit, e.target.key)] = e
+            kept_ids = {e.id for e in keep.values()}
+            out = [e for e in evs if e.id in kept_ids]
+            res = {"batch": batch, "before": len(evs), "after": len(out),
+                   "removed": len(evs) - len(out), "dry_run": dry_run}
+            if dry_run or not res["removed"]:
+                return res
+            path = self.batch_path(batch)
+            tmp = path.with_suffix(".jsonl.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                for e in out:                   # 原顺序、原 id、原 seq
+                    f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
+                                       sort_keys=True) + "\n")
+            os.replace(tmp, path)               # 原子替换：中途挂掉不会留半个日志
             return res
-        path = self.batch_path(batch)
-        tmp = path.with_suffix(".jsonl.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            for e in out:                   # 原顺序、原 id、原 seq
-                f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
-                                   sort_keys=True) + "\n")
-        os.replace(tmp, path)               # 原子替换：中途挂掉不会留半个日志
-        return res
 
     def read(self, batch: str) -> list[Event]:
         path = self.batch_path(batch)
@@ -307,13 +331,15 @@ class EventLog:
         events = list(events)
         if not events:
             return 0
-        path = self.consumed_dir / f"{consumer}.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        ts = _now()
-        with open(path, "a", encoding="utf-8") as f:
-            for e in events:
-                f.write(json.dumps({"event": e.id, "ts": ts, "note": note},
-                                   ensure_ascii=False) + "\n")
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            path = self.consumed_dir / f"{consumer}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            ts = _now()
+            with open(path, "a", encoding="utf-8") as f:
+                for e in events:
+                    f.write(json.dumps({"event": e.id, "ts": ts, "note": note},
+                                       ensure_ascii=False) + "\n")
         return len(events)
 
     def pending(self, consumer: str, batch: str | None = None) -> list[Event]:
