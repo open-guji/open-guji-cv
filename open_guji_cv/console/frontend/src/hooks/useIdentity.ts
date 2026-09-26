@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAuthConfig, getMe, UnauthenticatedError } from '../api/auth'
+import { getMe, goToLogin, UnauthenticatedError } from '../api/auth'
 import type { Identity } from '../api/auth'
 
 export type IdentityState =
@@ -8,10 +8,10 @@ export type IdentityState =
   | { status: 'unauthenticated' }
   | { status: 'error'; message: string }
 
-/** 我是谁。未登录时**跳到网站登录入口**（地址来自 `/api/auth/config`，可配）——
- * 控制台自己不画登录页，登录整套都在网站那边（09-26 改向：不自建账号）。
- *
- * 跳转带 `next`，登录完网站把人送回来（网站那边要认这个参数——写进对接清单）。
+/** 我是谁。未登录（或会话过了角色刷新间隔）时**跳到平台自己的 `/auth/login`**
+ * （OAuth 授权码流程的起点，`console/routers/auth.py`）——控制台自己不画登录
+ * 表单，那套在网站那边（09-26 第二次改向：平台直连服务器 IP，不能转发网站
+ * cookie，改标准 OAuth2）。
  */
 export function useIdentity(): IdentityState {
   const [state, setState] = useState<IdentityState>({ status: 'loading' })
@@ -24,13 +24,7 @@ export function useIdentity(): IdentityState {
       if (!alive) return
       if (err instanceof UnauthenticatedError) {
         setState({ status: 'unauthenticated' })
-        getAuthConfig().then((cfg) => {
-          const next = encodeURIComponent(window.location.href)
-          const sep = cfg.login_url.includes('?') ? '&' : '?'
-          window.location.href = `${cfg.login_url}${sep}next=${next}`
-        }).catch(() => {
-          // 连配置都拿不到——没法跳，至少别让页面停在「加载中」死等
-        })
+        goToLogin()
       } else {
         setState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
       }

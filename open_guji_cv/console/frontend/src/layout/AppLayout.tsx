@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { STEPS, STEP5_SUBS, findStep } from '../steps'
 import { listBooks } from '../api/registry'
-import { getAuthConfig } from '../api/auth'
+import { goToLogout } from '../api/auth'
 import { getWorkspace } from '../api/workspace'
 import type { WorkspaceState } from '../api/workspace'
 import type { Book } from '../types/registry'
@@ -76,10 +76,7 @@ export function AppLayout() {
         <div className="sidebar-user muted">
           {identity.email}
           <span className="sidebar-user-role">{identity.tier === 'admin' ? '管理员' : '校对者'}</span>
-          <button type="button" className="sidebar-user-logout" onClick={() => {
-            getAuthConfig().then((cfg) => { window.location.href = cfg.logout_url })
-              .catch(() => { window.location.reload() })
-          }}>退出</button>
+          <button type="button" className="sidebar-user-logout" onClick={goToLogout}>退出</button>
         </div>
         {isAdmin && ws && ws.available.length > 0 && (
           <label className="sidebar-book-select muted">工作区

@@ -687,14 +687,22 @@ def test_route_inventory():
     `GET /api/glyphlib/font/{char}.png`（字体渲染，库里没导字体域就去兄弟库找）。91 → 98。
     同日 `GET /api/glyphlib/ids-lookup`（IDS 反查：标「最近似码位」前先查 Unicode 里有没有同结构字）。98 → 99。
 
-    2026-09-26 控制台接入网站账号体系（C 道任务书，鉴权改造）：新增
-    `console/routers/auth.py`——`GET /api/auth/me`（前端探测「我是谁」，未登录 401）、
-    `GET /api/auth/config`（前端跳转登录/登出用的地址）；`review.py` 新增
-    `GET /api/review/conflicts`（复核队列：同一格被不同校对者裁出不同结果，只读扫描
-    事件日志，不改 `feedback/consumers.py` 的写入流程）。99 → 102。
+    2026-09-26 控制台接入网站账号体系，第一版（cookie 转发，C 道任务书）：新增
+    `console/routers/auth.py`——`GET /api/auth/me`、`GET /api/auth/config`；
+    `review.py` 新增 `GET /api/review/conflicts`（复核队列：同一格被不同校对者
+    裁出不同结果，只读扫描事件日志，不改 `feedback/consumers.py` 的写入流程）。
+    99 → 102。
+
+    2026-09-26 当天第二次改向（用户：平台直连服务器 IP，不挂网站域名下，不能
+    转发 Cookie，改标准 OAuth2 授权码 + PKCE）：`GET /api/auth/config` 撤掉
+    （登录/登出改成平台自己的相对路径，不用再问后端要地址）；新增 OAuth 客户端
+    五条——`GET /auth/login`（302 去 authorize）、`GET /auth/callback`（换
+    `id_token`、发会话）、`GET /auth/logout`、`--dev-idp` 本机假登录页
+    `GET /auth/dev-login` + `GET /auth/dev-login-submit`；另加 `GET /healthz`
+    （免鉴权部署健康检查）。102 → 107（-1 +6）。
     """
     got = sorted(_endpoints())
-    assert len(got) == 102, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 107, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -798,7 +806,9 @@ def test_route_snapshot():
 
 EXPECTED_ROUTES = [
     # 控制台接入网站账号体系（2026-09-26）
-    "GET /api/auth/me", "GET /api/auth/config", "GET /api/review/conflicts",
+    "GET /api/auth/me", "GET /api/review/conflicts", "GET /healthz",
+    "GET /auth/login", "GET /auth/callback", "GET /auth/logout",
+    "GET /auth/dev-login", "GET /auth/dev-login-submit",
     # Step8 对勘与复核（2026-09-22）
     "GET /api/step8/overview/{book}",
     "GET /api/step8/queue/{book}",
