@@ -92,10 +92,14 @@ def test_s2t_off_keeps_the_engine_output_verbatim(tmp_path, monkeypatch, ws,
     assert got == {"书", "则"}, got
 
 
-def test_missing_engine_yields_empty_candidates_not_a_crash(tmp_path, monkeypatch,
-                                                            ws, fixture_page):
-    """引擎不在时整页空候选、engine 标 `unavailable:…`，不炸整条管线
-    ——这是模块头写明的降级契约（没装引擎的机器照样要能跑完链路）。"""
+def test_missing_engine_raises_so_the_page_is_marked_failed(tmp_path, monkeypatch,
+                                                             ws, fixture_page):
+    """引擎不在时**整页判失败**，不许再悄悄落一份空产物报「新鲜」
+    （2026-09-26 改：Linux 上 PaddleOCR 起不来时曾经这样静默出过一整轮空产物，
+    看板还报新鲜，下游没有 OCR 旁证凭先验出字出错，见模块头）。
+
+    `run_page` 直接把异常甩给调用方——`Engine._run_one_step` 本来就会接住并记
+    `status="failed"`、不落产物，这里不用自己模拟"整页 ok=False"的降级产物。"""
     from open_guji_cv.core.book import load_book
 
     ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
@@ -106,7 +110,61 @@ def test_missing_engine_yields_empty_candidates_not_a_crash(tmp_path, monkeypatc
         raise RuntimeError("没有引擎")
 
     monkeypatch.setattr(type(step), "_source", _boom)
+    with pytest.raises(RuntimeError, match="没有引擎"):
+        step.run_page(ctx, PAGE)
+
+
+def test_per_cell_failure_is_recorded_with_a_reason(tmp_path, monkeypatch, ws,
+                                                     fixture_page):
+    """逐格识别失败要留原因（`OcrRec.error`），不是悄悄记一条没有 topk 的空记录
+    ——个别格崩不拖累整页（失败占比没过阈值），但要留痕能查。"""
+    from open_guji_cv.core.book import load_book
+
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
+                                gray=fixture_page, through="cell_shrink")
+    step = STEPS["ocr_candidates"]
+
+    class _FlakyOcr:
+        def rec_topk(self, img):
+            raise ValueError("坏图块")
+
+    monkeypatch.setattr(type(step), "_source", lambda self, p: _FlakyOcr())
+    # 阈值设成 1.0：即使这一页全部格都失败（比率 1.0，不大于 1.0），page 级判失败
+    # 也不会触发——这条测试只看"逐格失败有没有留原因"，不测阈值本身。
+    ctx.params["ocr_candidates"] = OcrCandidatesParams(fail_threshold=1.0)
     d = step.run_page(ctx, PAGE)["ocr_candidates"]
-    assert d.engine.startswith("unavailable:"), d.engine
-    assert d.columns and all(not cc.ok for cc in d.columns)
-    assert all(cc.error for cc in d.columns), "降级了却没说为什么"
+    recs = [r for cc in d.columns for r in cc.chars]
+    assert recs, "一个字位记录都没有"
+    assert all(not r.topk for r in recs), "桩引擎全抛异常，不该有候选"
+    assert all(r.error for r in recs), "逐格失败没留原因"
+
+
+def test_high_cell_failure_rate_fails_the_whole_page(tmp_path, monkeypatch, ws,
+                                                      fixture_page):
+    """一页里失败格占比超过阈值（默认 5%）时整页判失败——成片崩大概率是引擎
+    本身出问题，不该被当正常产物放行；`fail_threshold` 可调，测试把阈值压到
+    0 好让本来就有格的样本页必超阈值，不依赖样本页恰好有多少个字位。"""
+    from open_guji_cv.core.book import load_book
+
+    ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"),
+                                gray=fixture_page, through="cell_shrink")
+    step = STEPS["ocr_candidates"]
+
+    class _FlakyOcr:
+        def rec_topk(self, img):
+            raise ValueError("坏图块")
+
+    monkeypatch.setattr(type(step), "_source", lambda self, p: _FlakyOcr())
+    ctx.params["ocr_candidates"] = OcrCandidatesParams(fail_threshold=0.0)
+    with pytest.raises(RuntimeError, match="失败率过高"):
+        step.run_page(ctx, PAGE)
+
+
+def test_normal_page_unaffected_by_the_failure_threshold(tmp_path, monkeypatch, ws,
+                                                          fixture_page):
+    """正常页（没有格失败）不受这次改动影响：照常出候选，不抛异常。"""
+    d = _run(tmp_path, monkeypatch, fixture_page,
+             [("书", 0.7), ("则", 0.2), ("谓", 0.05)])
+    recs = [r for cc in d.columns for r in cc.chars]
+    assert recs and all(not r.error for r in recs)
+    assert any(r.topk for r in recs)
