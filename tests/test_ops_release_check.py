@@ -162,6 +162,16 @@ def test_run_test_suite_parses_failed_and_skipped(tmp_path):
     assert result["returncode"] != 0
 
 
+def test_release_check_first_release_does_not_gate_on_test_result(fake_repo):
+    """没有 `cv-*` tag、没有 `ops/baseline_tests.json`——首次发布，`regressed` 必须是
+    `False`，否则第一版永远发不出去（见 `release_check` 里 `first_release` 那段）。"""
+    res = rc.release_check(fake_repo, "HEAD", run_tests=False)
+    assert res.old_tag is None
+    assert res.test_diff["regressed"] is False
+    assert res.test_diff["first_release"] is True
+    assert "首次发布" in res.draft
+
+
 def test_render_release_draft_contains_key_sections():
     draft = rc.render_release_draft(
         version="cv-2026.09.26", old_tag="cv-2026.09.20", new_rev="abc1234",

@@ -22,7 +22,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 TAG_PREFIX = "cv-"
-BASELINE_REL = "ops/baseline_tests.json"
+#: 相对仓根，**不是**相对 `open_guji_cv/ops/`——这是发布之间要 diff 的数据，
+#: 跟同名的 python 包目录分开放，省得两个「ops」目录混着看。
+BASELINE_REL = "open_guji_cv/ops/baseline_tests.json"
 
 
 # ── git 原语 ─────────────────────────────────────────────────────────
@@ -192,8 +194,11 @@ def render_release_draft(*, version: str, old_tag: str | None, new_rev: str,
         lines += [f"- `{sid}`：{', '.join(files)}" for sid, files in sorted(impact.items())]
     else:
         lines.append("- 无（本轮改动不影响任何 Step 的指纹）")
-    lines += ["", "### 全量测试（唯一硬门槛：不许比上一版多失败/多跳过）", "",
-             f"- 新增失败：{', '.join(test_diff['new_failed']) or '无'}",
+    lines += ["", "### 全量测试（唯一硬门槛：不许比上一版多失败/多跳过）", ""]
+    if test_diff.get("first_release"):
+        lines.append("- 首次发布，没有基线——以下是当前失败/跳过，不作硬门槛，"
+                     "`--write-baseline` 之后定为下一版基线")
+    lines += [f"- 新增失败：{', '.join(test_diff['new_failed']) or '无'}",
              f"- 新增跳过：{', '.join(test_diff['new_skipped']) or '无'}",
              f"- 本轮修复：{', '.join(test_diff['resolved_failed']) or '无'}"]
     lines += ["", "### 回滚目标", "", f"- `{rollback_target or old_tag or '（无）'}`", ""]
@@ -229,6 +234,12 @@ def release_check(repo: Path, candidate: str = "HEAD", *, against: str | None = 
     current = run_test_suite(repo) if run_tests else {"failed": [], "skipped": [], "returncode": 0,
                                                        "stdout_tail": "（--no-tests，未跑）"}
     test_diff = diff_test_sets(baseline, current)
+    if baseline is None:
+        # 首次发布：没有基线可比，"regressed" 只是把当前失败/跳过全记成了"新增"，
+        # 不能当硬门槛——那样第一版永远发不出去。`--write-baseline` 才是用来把
+        # 这次的结果定成下一版基线的地方。
+        test_diff["regressed"] = False
+        test_diff["first_release"] = True
     ver = version or next_version(repo)
     draft = render_release_draft(version=ver, old_tag=old_tag, new_rev=resolve_rev(repo, candidate) or candidate,
                                  titles=titles, impact=impact, test_diff=test_diff, rollback_target=old_tag)

@@ -1,0 +1,37 @@
+{
+  "failed": [
+    "tests.clustering.test_charset_spec::test_filter_candidates_shapes_and_keep",
+    "tests.clustering.test_charset_spec::test_is_simplified",
+    "tests.clustering.test_font_glyphs::test_font_source_not_exported",
+    "tests.clustering.test_font_glyphs::test_import_font_isolates_source_and_filters",
+    "tests.clustering.test_font_glyphs::test_query_exclude_survives_dedup",
+    "tests.clustering.test_font_glyphs::test_render_is_canonical_and_centered",
+    "tests.clustering.test_font_glyphs::test_render_missing_char_returns_none",
+    "tests.clustering.test_ocr_sources::test_all_ocr_sources_have_s2t_attribute",
+    "tests.clustering.test_recognize_flow::test_s2t_expansion_promotes_traditional_form",
+    "tests.test_cut_select::test_ckpt_fingerprint_empty_for_missing_file",
+    "tests.test_ocr_candidates_step::test_s2t_expansion_reaches_traditional_forms"
+  ],
+  "skipped": [
+    "::tests.test_cnn_probe_hook",
+    "::tests.test_gw_templates",
+    "::tests.test_real_proto_templates",
+    "tests.clustering.test_ocr_sources::test_rapidocr_ctc_topk_multiple_candidates",
+    "tests.clustering.test_ocr_sources::test_rapidocr_recognizes_rendered_char",
+    "tests.clustering.test_ocr_sources::test_rapidocr_s2t_expansion",
+    "tests.clustering.test_ocr_sources::test_rec_topk_filters_ascii_and_blank",
+    "tests.clustering.test_ocr_sources::test_residual_simplified_ignores_self_valid_forms",
+    "tests.clustering.test_ocr_sources::test_traditional_candidates_grading",
+    "tests.clustering.test_ocr_sources::test_traditional_variants",
+    "tests.clustering.test_ocr_sources::test_traditional_variants_keeps_self_valid_forms",
+    "tests.test_cnn_candidates::test_cnn_topk_contract",
+    "tests.test_cnn_candidates::test_comp_probs_batch_contract",
+    "tests.test_cnn_candidates::test_emb_topk_batch_matches_sequential",
+    "tests.test_cnn_candidates::test_emb_topk_contract_and_cache",
+    "tests.test_cnn_candidates::test_topk_batch_matches_sequential",
+    "tests.test_cut_select::test_real_judge_prefers_seam_that_respects_two_blobs",
+    "tests.test_rare_candidates_step::test_emb_index_memoized_per_charset_not_recomputed_per_call",
+    "tests.test_rare_candidates_step::test_hog_not_called_when_cnn_available"
+  ],
+  "version": "cv-2026.09.26-2"
+}
