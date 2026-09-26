@@ -178,6 +178,12 @@ SANCTIONED = {
         "（后端任务书 §三·2 点名要消掉的）。改之前这条在云端必然抛 "
         "OperationalError: no such table: admissions —— 它当场造一个 0 字节空库再去查表；"
         "改之后正常记一行台账。这是修好了，不是改坏了。",
+    "GET /api/events":
+        "`Event` 新增可选字段 `reviewer`（校对者 email，2026-09-26 鉴权改造「裁决记人」），"
+        "老事件没有这个键时 pydantic 缺省 `None`——`model_dump()` 里每条事件多一个键，"
+        "值全是 null 或本次直调传的 `_FAKE_IDENTITY.email`，不是哪条事件的其余字段变了。",
+    "GET /api/batches/{batch_id}":
+        "同上——`events` 里内嵌的也是 `Event.model_dump()`，一并多出 `reviewer` 键。",
 }
 
 #: 生僻字候选的两条路由：内容取决于 CNN 候选源在不在（torch 是可选依赖）。
@@ -237,6 +243,12 @@ COL, SLOT = 1, 10          # p0024c01s10 是真有字块图的位；slot=1 那�
 JZ_BOOK, JZ_PAGES = "vol02", "jz"   # 夹注段只在 vol02 有
 EVAL_ID = "char_drop"      # 真存在的评测器（"column-split" 不是 id，只会得到「没有这个评测器」）
 BATCH = "snap-batch"       # 沙箱里现建的批次，不碰真台账
+
+from open_guji_cv.console.auth import Identity as _Identity  # noqa: E402
+
+#: `POST /api/events` 直调时要给的身份——路由体自己要用 `identity.email`
+#: （见下方调用处的注释），不只是门禁用的 `Depends`。
+_FAKE_IDENTITY = _Identity(email="snapshot-test@example.com", role="reviewer", tier="reviewer")
 
 # 时间/耗时类字段：同一份产物两次读出来也可能不同，或与本次重构无关
 VOLATILE = {"ts", "elapsed", "harvested_at", "created_at", "updated_at",
@@ -442,10 +454,14 @@ def _collect() -> dict:
     call("POST /api/batches",
          _model(mk)(id=BATCH, title="快照批次", step="seed_admit", book=BOOK))
     ev = EP["POST /api/events"]
+    # `identity` 是 2026-09-26 鉴权改造加的（任务书「裁决记人」）：路由体自己要用
+    # 校对者 email，不只是挂在 router 上的门禁，所以直调时得像 `req` 一样显式给一个——
+    # 直调本来就绕过 FastAPI 的 Depends 解析，`Depends(...)` sentinel 落不到真值。
     call("POST /api/events", _model(ev)(
         batch=BATCH, step="seed_admit", unit="cell", kind="verdict", consume=False,
         events=[{"id": f"{BOOK}:{PAGE}:{COL}:{SLOT}", "v": "confirm",
-                 "shape": "一", "reading": "一", "t": 1}]))
+                 "shape": "一", "reading": "一", "t": 1}]),
+        identity=_FAKE_IDENTITY)
     call("GET /api/events", batch=BATCH)
     call("GET /api/batches/{batch_id}", BATCH)
     hv = EP["POST /api/batches/{batch_id}/harvest"]
@@ -670,9 +686,15 @@ def test_route_inventory():
     `GET /api/glyphlib/audit`（体检结果）、`POST /api/glyphlib/audit/decide`（体检裁决）、
     `GET /api/glyphlib/font/{char}.png`（字体渲染，库里没导字体域就去兄弟库找）。91 → 98。
     同日 `GET /api/glyphlib/ids-lookup`（IDS 反查：标「最近似码位」前先查 Unicode 里有没有同结构字）。98 → 99。
+
+    2026-09-26 控制台接入网站账号体系（C 道任务书，鉴权改造）：新增
+    `console/routers/auth.py`——`GET /api/auth/me`（前端探测「我是谁」，未登录 401）、
+    `GET /api/auth/config`（前端跳转登录/登出用的地址）；`review.py` 新增
+    `GET /api/review/conflicts`（复核队列：同一格被不同校对者裁出不同结果，只读扫描
+    事件日志，不改 `feedback/consumers.py` 的写入流程）。99 → 102。
     """
     got = sorted(_endpoints())
-    assert len(got) == 99, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 102, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -775,6 +797,8 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
+    # 控制台接入网站账号体系（2026-09-26）
+    "GET /api/auth/me", "GET /api/auth/config", "GET /api/review/conflicts",
     # Step8 对勘与复核（2026-09-22）
     "GET /api/step8/overview/{book}",
     "GET /api/step8/queue/{book}",

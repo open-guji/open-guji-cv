@@ -8,12 +8,13 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import deps
+from ..auth import require_reviewer
 from ...review.jiazhu_cards import jiazhu_segments
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 

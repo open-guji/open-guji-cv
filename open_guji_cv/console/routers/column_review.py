@@ -21,15 +21,16 @@ import random
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ...core.book import load_book
 from ...core.spec import column_key, page_key
 from ...utils.column_triage import BLOCKING, REVIEW, triage_column
 from .. import deps
+from ..auth import require_reviewer
 from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _case_rec(book: str, pg: int, w) -> dict | None:

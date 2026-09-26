@@ -22,16 +22,17 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ... import feedback as _fb  # noqa: F401  确保事件/路由模块已加载
 from ...core.workspace import reports_root
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...feedback.anchor import enrich_events as _anchor_events
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _latest(book: str) -> Path | None:

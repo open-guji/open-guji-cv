@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { STEPS, STEP5_SUBS, findStep } from '../steps'
 import { listBooks } from '../api/registry'
+import { getAuthConfig } from '../api/auth'
 import { getWorkspace } from '../api/workspace'
 import type { WorkspaceState } from '../api/workspace'
 import type { Book } from '../types/registry'
 import { useBookCaps } from '../hooks/useBookCaps'
+import { useIdentity } from '../hooks/useIdentity'
 
 // 顶层布局：左侧导航。用户 2026-09-11 测试反馈 §1/§4 重排过一次：
 // 换书下拉框置顶 → 分割线 → 总览 → Step0-9（Step5 四小步永久展开为二级
@@ -25,11 +27,16 @@ export function AppLayout() {
   // 切工作区现在只是一次 navigate，没有异步、也不会失败，忙碌/报错状态一并去掉
   // 侧边栏也按能力裁：点进去只会看到「这本书没开这一路」的子项就别列出来
   const { caps } = useBookCaps(book ?? '')
+  const identityState = useIdentity()
+  const isAdmin = identityState.status === 'ok' && identityState.identity.tier === 'admin'
 
   useEffect(() => {
+    // 未登录时这两条本来就是 401——不发，省一次注定失败的请求，也不在控制台
+    // 打开的瞬间闪一下"看不到数据"的空态。
+    if (identityState.status !== 'ok') return
     listBooks().then(setBooks).catch(() => {})
-    getWorkspace().then(setWs).catch(() => setWs(null))
-  }, [])
+    if (isAdmin) getWorkspace().then(setWs).catch(() => setWs(null))
+  }, [identityState.status, isAdmin])
 
   // 标签页标题：工作区 + Step 名。SPA 切路由不刷新 HTML，静态 <title> 只在
   // 整页刷新时生效一次，得在路由变化时手动写 document.title（用户 2026-09-17）。
@@ -48,11 +55,33 @@ export function AppLayout() {
     navigate(`/${encodeURIComponent(id)}/`)
   }
 
+  // 未登录：`useIdentity` 已经在跳转去网站登录页了，这里只画一个占位，
+  // 不渲染任何真实数据、也不让下面那些 effect 白打一次注定 401 的请求。
+  if (identityState.status === 'loading' || identityState.status === 'unauthenticated') {
+    return <div className="app-shell app-shell-gate"><p className="muted">加载中…</p></div>
+  }
+  if (identityState.status === 'error') {
+    return (
+      <div className="app-shell app-shell-gate">
+        <p className="muted">身份接口出错了：{identityState.message}</p>
+      </div>
+    )
+  }
+  const identity = identityState.identity
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <h1><NavLink to={wsId ? at('/') : '/'}>open-guji-cv 控制台</NavLink></h1>
-        {ws && ws.available.length > 0 && (
+        <div className="sidebar-user muted">
+          {identity.email}
+          <span className="sidebar-user-role">{identity.tier === 'admin' ? '管理员' : '校对者'}</span>
+          <button type="button" className="sidebar-user-logout" onClick={() => {
+            getAuthConfig().then((cfg) => { window.location.href = cfg.logout_url })
+              .catch(() => { window.location.reload() })
+          }}>退出</button>
+        </div>
+        {isAdmin && ws && ws.available.length > 0 && (
           <label className="sidebar-book-select muted">工作区
             <select
               value={wsId}
@@ -103,7 +132,7 @@ export function AppLayout() {
             </nav>
             <hr className="sidebar-rule" />
             <nav className="sidebar-cross">
-              <NavLink to={at(`/${book}/runs/`)}>运行</NavLink>
+              {isAdmin && <NavLink to={at(`/${book}/runs/`)}>运行</NavLink>}
               <NavLink to={at(`/${book}/evals/`)}>统计数据</NavLink>
             </nav>
           </>

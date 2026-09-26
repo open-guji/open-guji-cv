@@ -10,15 +10,16 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import require_admin, require_reviewer
 from ..errors import maps_http
 from ...eval import rate_history
 from ...eval.quality import quality
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -34,7 +35,7 @@ def api_evals() -> list[dict]:
 
 
 
-@router.post("/api/evals/{eval_id}/run")
+@router.post("/api/evals/{eval_id}/run", dependencies=[Depends(require_admin)])
 def api_eval_run(eval_id: str, timeout: int = 900) -> dict:
     from ...eval import run_eval
     return run_eval(eval_id, timeout=timeout).to_dict()
@@ -219,7 +220,7 @@ class RateSnapIn(BaseModel):
 
 
 
-@router.post("/api/review/rate-history")
+@router.post("/api/review/rate-history", dependencies=[Depends(require_admin)])
 @maps_http
 def api_rate_snapshot(req: RateSnapIn) -> dict:
     """记一行台账（体检页的「记一笔」按钮）。重跑完顺手点，别再事后翻聊天记录。"""

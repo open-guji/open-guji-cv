@@ -30,11 +30,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from ..auth import require_reviewer
 from ...core.workspace import describe, workspace_root
 
-router = APIRouter()
+#: 只读、只列清单——真正的越权闸在 `WorkspaceMiddleware`（白名单，见模块头注）。
+#: **不是** admin 专属：选工作区/选书是校对者进控制台的第一步（`WorkspacePickerPage`
+#: 挂在根路径，谁登录进来都要经过它），2026-09-26 鉴权改造第一版把它划成
+#: admin-only 之后前端实测发现校对者连书都选不到，改回 reviewer。
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _ws_id(d: Path) -> str:

@@ -164,7 +164,17 @@ def cmd_recheck(args) -> None:
 
 def cmd_console(args) -> None:
     from .console.app import serve
+    from .console.auth import config as auth_config
     from .core.workspace import describe, using_sample_corpus, using_sample_db
+
+    host = getattr(args, "host", None) or "127.0.0.1"
+    no_auth = bool(getattr(args, "no_auth", False))
+    if no_auth and host not in ("127.0.0.1", "localhost"):
+        print(f"✗ --no-auth 只能在本机（127.0.0.1/localhost）用，绑 {host} 时必须过身份接口鉴权，"
+              "拒绝启动——对外开放校对平台不能关掉登录。", file=sys.stderr)
+        sys.exit(1)
+    root_path = getattr(args, "root_path", "") or ""
+    auth_config.set_config(no_auth=no_auth, root_path=root_path)
 
     # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
     # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
@@ -177,7 +187,10 @@ def cmd_console(args) -> None:
         print("\n  ⚠️  没设 GUJI_WORKSPACE（或工作区数据不全）——库/语料会落到仓内小样本，\n"
               "     整理本锚不上、库匹配全是 unsure。真跑书请先：\n"
               "     export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>\n")
-    serve(port=args.port, open_browser=not args.no_browser)
+    if no_auth:
+        print("  ⚠️  --no-auth：鉴权已关闭，任何能连上本机端口的人都能起跑批、写裁决——"
+              "只许本机开发用。\n")
+    serve(port=args.port, open_browser=not args.no_browser, host=host, root_path=root_path)
 
 
 def cmd_cache(args) -> None:
@@ -1345,6 +1358,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("console", help="[v2] 启动控制台（FastAPI）")
     p.add_argument("--port", type=int, default=DEFAULT_CONSOLE_PORT)
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--host", default="127.0.0.1",
+                   help="监听地址，默认 127.0.0.1（对外开放校对平台生产环境仍应绑回环地址，"
+                        "由反向代理转发，见 overview 总览/16）")
+    p.add_argument("--no-auth", action="store_true",
+                   help="关掉鉴权（本机开发用）。只在 --host 是 127.0.0.1/localhost 时允许，"
+                        "绑别的地址会拒绝启动")
+    p.add_argument("--root-path", default="",
+                   help="挂在反向代理前缀下时用，如 /collate（网站把 /collate/* 转发到这里）")
 
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column")
     p.add_argument("action", choices=["usage", "prune", "get", "column"])

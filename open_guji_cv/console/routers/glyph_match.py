@@ -12,15 +12,16 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...errors import ImageMissing
 from ...utils.image_io import imread as cv_imread
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _params_for_book(book: str, k: int):
