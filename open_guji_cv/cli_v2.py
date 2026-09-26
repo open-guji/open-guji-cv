@@ -1256,9 +1256,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None, help="只做这些页（默认全书）")
     p.add_argument("--force", action="store_true", help="已有也重做")
-    p.add_argument("--window", type=int, default=31,
-                   help="Sauvola 窗口（默认 31，与 normalize_patch 同一组常数）")
-    p.add_argument("--k", type=float, default=0.2, help="Sauvola k（默认 0.2）")
+    from .clustering.normalize import SAUVOLA_K, SAUVOLA_WINDOW
+    p.add_argument("--window", type=int, default=SAUVOLA_WINDOW,
+                   help=f"Sauvola 窗口（默认 {SAUVOLA_WINDOW}，与 normalize_patch 同一组常数）")
+    p.add_argument("--k", type=float, default=SAUVOLA_K,
+                   help=f"Sauvola k（默认 {SAUVOLA_K}，与 normalize_patch 同一把尺子；"
+                        "旧版这里写死 0.2，是常数改成 0.10 时漏改的）")
 
     p = sub.add_parser("preclean",
                        help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
