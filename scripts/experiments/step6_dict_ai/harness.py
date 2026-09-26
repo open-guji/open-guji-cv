@@ -188,7 +188,10 @@ def score(cell, ans):
     return r
 
 def run(a):
-    days = [int(x) for x in a.days.split(',')] if a.days != 'all' else sorted({c['day'] for c in CELLS.values()})
+    if a.days in ('dev', 'test', 'smoke'):
+        days = json.load(open(H + '/data/splits.json'))[a.days]
+    else:
+        days = [int(x) for x in a.days.split(',')] if a.days != 'all' else sorted({c['day'] for c in CELLS.values()})
     P = getattr(prompts, a.prompt)
     jobs = []
     for d in days:
