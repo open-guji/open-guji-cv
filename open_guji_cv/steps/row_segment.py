@@ -75,6 +75,9 @@ class RowSegmentStep(Step):
         # 墨量判据贵五倍（账见 row_boundaries.NONUNIFORM_LAM）。标了非均匀的列
         # 把 lam 降下来，其余列一字不动。
         book_slots = _resolved_slots(ctx.book.id)
+        # 第三个兄弟：人指认的單行小注格（判据落空的那一型，见 lookup.resolved_solo_notes）
+        from ..feedback.lookup import resolved_solo_notes as _resolved_solo
+        book_solo = _resolved_solo(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
         # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
@@ -116,6 +119,7 @@ class RowSegmentStep(Step):
                 resolved_cuts=col_resolved or None, cut_judge=judge,
                 pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                              if pg_ == page and c_ == gc.col} or None,
+                forced_solo=book_solo.get((page, gc.col)),
                 **({} if slot_override is None or slot_override.uniform
                    else {"lam": NONUNIFORM_LAM}))
             if r is None:

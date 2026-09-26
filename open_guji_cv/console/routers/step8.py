@@ -29,6 +29,7 @@ from ... import feedback as _fb  # noqa: F401  确保事件/路由模块已加�
 from ...core.workspace import reports_root
 from .. import deps
 from ..errors import maps_http
+from ...feedback.anchor import enrich_events as _anchor_events
 
 router = APIRouter()
 
@@ -239,6 +240,7 @@ def api_step8_seg(d: SegIn) -> dict:
                                   **parse_card_id(it.id)),
                       seg_payload(it.flags), source_format="server")
            for i, it in enumerate(todo)]
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     log.append(evs)
     out = {"ok": True, "appended": len(evs)}
     try:
@@ -362,6 +364,7 @@ def api_step8_decide(d: DecideIn) -> dict:
     log = deps.event_log()
     evs = _events_for(d, log.latest_seq(batch), batch, current, _jiajie(),
                       _jiajie_of_book(d.book))
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = log.append(evs)
     confirms = [e for e in evs if e.kind == "confirm"]
     out = {"ok": True, "appended": n, "batch": batch,

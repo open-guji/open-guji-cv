@@ -262,6 +262,16 @@ def solo_notes(patches: dict[int, np.ndarray], runs: dict[int, float],
     return out
 
 
+def right_half_left_edge(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> float:
+    """人裁指认的單行小注格的缝：右半里墨够厚的最左一列（口径同 `solo_notes`
+    取 `x0`）。只在右半找——左半的碎墨正是判据落空的原因，不能让它把缝拉过去。
+    右半找不到够厚的列就退回正中。"""
+    binary = _binary(patch, ink_threshold)
+    w = binary.shape[1]
+    solid = np.flatnonzero(binary[:, w // 2:].sum(axis=0) >= SOLO_COL_INK_MIN)
+    return float(w // 2 + (int(solid[0]) if solid.size else 0))
+
+
 def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
               ) -> dict[int, float]:
     """列上下文：连续、缝对齐的夹注格 → `{格号: 缝中心}`。

@@ -46,3 +46,24 @@ def test_later_step8_fix_beats_earlier_step7_by_time(tmp_path):
                 make_event("bxgb-collate", 1, "confirm", t,
                            {"v": "confirm", "shape": "乙"}, ts="2026-09-24T00:00:00Z")])
     assert human_chars("bxgb", log)["bxgb:3:1:1"][0] == "乙"
+
+
+def test_stale_mark_voids_earlier_verdicts_only(tmp_path):
+    """库里撤下（human_stale_<日期>）的位：那天及以前的事件作废，之后再裁的照常生效（2026-09-25）。"""
+    log = EventLog(tmp_path)
+    old = _ev("vol01:4:1:3", {"v": "confirm", "shape": "目"}, 1)
+    old.ts = "2026-09-10T05:00:00Z"
+    log.append([old])
+    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925"}) == {}
+    new = _ev("vol01:4:1:3", {"v": "confirm", "shape": "文"}, 2)
+    new.ts = "2026-09-26T01:00:00Z"
+    log.append([new])
+    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925"}) == {"vol01:4:1:3": ("文", None)}
+
+
+def test_stale_mark_minute_precision_same_day(tmp_path):
+    log = EventLog(tmp_path)
+    a = _ev("vol01:4:1:3", {"v": "confirm", "shape": "目"}, 1); a.ts = "2026-09-25T06:00:00Z"
+    b = _ev("vol01:4:1:3", {"v": "confirm", "shape": "文"}, 2); b.ts = "2026-09-25T08:00:00Z"
+    log.append([a, b])
+    assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925T0700"}) == {"vol01:4:1:3": ("文", None)}
