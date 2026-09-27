@@ -92,7 +92,8 @@ def test_only_human_label_status(tmp_path, monkeypatch):
 
 
 def test_leave_one_out_by_physical_cell(tmp_path, monkeypatch):
-    """留一法：评测字自己的物理格（同册同页同列、格号相差 <=2）摘掉后退回字体基线。"""
+    """留一法：v1 重键后 vol01:/v2:（精确格号坐标）要求同格号 =0 才摘；
+    v1: 前缀（idx 换算、未经形状确认）仍按 ±2 兜底（字形库 12 §六，2026-09-27 收紧）。"""
     from open_guji_cv.clustering import cnn_candidates as cc
     from open_guji_cv.clustering.font_candidates import _font_files
     from open_guji_cv.clustering.normalize import normalize_patch
@@ -112,10 +113,25 @@ def test_leave_one_out_by_physical_cell(tmp_path, monkeypatch):
     base = cnn.emb_topk_batch([query], charset, k=3)[0]
     monkeypatch.setattr(cc, "REAL_PROTO_ENABLED", True)
 
-    # 摘一个相邻格号（漂移邻格，非精确同一 id）也要摘中
+    # 字面同一格（精确坐标，diff=0）：摘中
     cnn._real_cs = None
-    out = cnn.emb_topk_batch([query], charset, k=3, real_exclude_ids=frozenset({"vol01:5:2:11"}))[0]
+    out = cnn.emb_topk_batch([query], charset, k=3, real_exclude_ids=frozenset({"vol01:5:2:10"}))[0]
     assert out == base and cnn.last_real_prov == [{}]
+
+    # 相邻格号（重键后两边都是精确坐标，不再是同一物理格）：不摘，真证据留着
+    cnn._real_cs = None
+    out_adj = cnn.emb_topk_batch([query], charset, k=3, real_exclude_ids=frozenset({"vol01:5:2:11"}))[0]
+    assert out_adj[0][0] == "諭" and out_adj[0][1] > 0.999
+
+    # exclude 侧是 v1:（idx 换算、未经形状确认）时仍保留 ±2：idx=7 → 格号 8，与池子的格号 10 差 2，摘中
+    cnn._real_cs = None
+    out_v1_in = cnn.emb_topk_batch([query], charset, k=3, real_exclude_ids=frozenset({"v1:vol01:5:2:7"}))[0]
+    assert out_v1_in == base and cnn.last_real_prov == [{}]
+
+    # 同样是 v1:，差到 3 就超出 ±2 容差：不摘
+    cnn._real_cs = None
+    out_v1_out = cnn.emb_topk_batch([query], charset, k=3, real_exclude_ids=frozenset({"v1:vol01:5:2:6"}))[0]
+    assert out_v1_out[0][0] == "諭" and out_v1_out[0][1] > 0.999
 
     # 不相关的格（列不同）不摘
     cnn._real_cs = None

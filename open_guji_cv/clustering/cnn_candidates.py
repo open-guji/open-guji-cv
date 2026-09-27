@@ -975,7 +975,15 @@ class CnnCandidates:
                 return False
             for e in exclude_ids:
                 ek = _cell_parts(e)
-                if ek is not None and ek[:3] == q[:3] and abs(ek[3] - q[3]) <= 2:
+                if ek is None or ek[:3] != q[:3]:
+                    continue
+                diff = abs(ek[3] - q[3])
+                # 两边都是重键后的精确格号坐标（非 v1:）才要求 =0；
+                # 有一边是未确认的 v1: idx 换算格号，保留 ±2（字形库 12 §六）
+                if ek[4] and q[4]:
+                    if diff == 0:
+                        return True
+                elif diff <= 2:
                     return True
             return False
 

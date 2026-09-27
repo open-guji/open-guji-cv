@@ -141,17 +141,28 @@ class MatchResult:
 
 
 def _cell_parts(iid: str):
-    """实例 / 字位 id → (册, 页, 列, 格号)；带 v2: 前缀、a/b 子格都认。认不出返回 None。"""
+    """实例 / 字位 id → (册, 页, 列, 格号, 格号是否精确)。
+
+    `v2:`（人裁）与裸 `<册>:页:列:格号`（现管线播种/机器准入）都是重键后的
+    **格号坐标**，精确（`exact=True`）。`v1:` 前缀（四庫旧管线约 250 例没对上
+    现格的旧刻例）是 **idx 坐标**，按 idx+1 换算成格号，但没经形状确认，
+    `exact=False`（2026-09-27，字形库 12 §六）。a/b 子格都认。认不出返回 None。
+    """
     p = iid.split(":")
+    exact = True
     if p and p[0] == "v2":
         p = p[1:]
+    elif p and p[0] == "v1":
+        p = p[1:]
+        exact = False
     if len(p) != 4:
         return None
     b, pg, col, sl = p
     sl = sl.rstrip("ab")
     if not (pg.isdigit() and col.isdigit() and sl.isdigit()):
         return None
-    return b, int(pg), int(col), int(sl)
+    slot = int(sl) if exact else int(sl) + 1
+    return b, int(pg), int(col), slot, exact
 
 
 class GlyphMatcher:
@@ -215,13 +226,16 @@ class GlyphMatcher:
         self._char_set.add(char)
 
     def _same_cell_rows(self, cell_id: str) -> set[int]:
-        """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08）。
+        """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08；
+        2026-09-27 v1 重键后收紧，字形库 12 §六）。
 
         同一格在库里不止一种 id：人裁 ``v2:<格>``、播种/机器准入 ``<格>``、四庫 v1 旧管线
-        ``<册>:页:列:idx``（idx 从 0，= 格号−1），重切后还可能漂到邻格号。只摘一个 id
-        等于没摘——铁证审计实测：只摘 ``v2:`` 那份，北行 3,731 例播种副本照样自己配自己。
-        所以按「同册同页同列、格号相差 ≤2」一并摘掉（跨所有前缀）。代价是同列相邻两格
-        若恰是同一个字，那份真证据也摘了——宁可少一条证据，不要自证。
+        ``<册>:页:列:idx``（``v1:`` 前缀，idx 从 0，按 idx+1 换算格号）。v1 重键之后
+        ``v2:``／裸格号前缀都已经是**精确的格号坐标**——两边都精确时格号差要求 ``=0``，
+        不然「同列相邻两格恰是同一字」这条真证据会被平白摘掉（08 卡记的代价，v1 重键前
+        格号坐标不可信、只能靠 ±2 兜底防自证；重键后前缀是 ``v1:`` 的约 250 例仍是
+        idx 换算来的、没经形状确认，**这些仍按 ±2 兜底**）。所以：只要 ``cell_id`` 与某一行
+        两边都是精确坐标，格号差必须 ``=0``；只要有一边是未确认的 ``v1:``，保留 ±2 容差。
         """
         q = _cell_parts(cell_id)
         if q is None:
@@ -230,9 +244,18 @@ class GlyphMatcher:
         if keys is None or len(keys) != len(self._ids):
             keys = [_cell_parts(i) for i in self._ids]
             self._cell_keys = keys
-        b, pg, col, sl = q
-        return {j for j, k in enumerate(keys)
-                if k is not None and k[:3] == (b, pg, col) and abs(k[3] - sl) <= 2}
+        b, pg, col, sl, q_exact = q
+        rows = set()
+        for j, k in enumerate(keys):
+            if k is None or k[:3] != (b, pg, col):
+                continue
+            diff = abs(k[3] - sl)
+            if q_exact and k[4]:
+                if diff == 0:
+                    rows.add(j)
+            elif diff <= 2:
+                rows.add(j)
+        return rows
 
     def extract(self, patches: np.ndarray) -> np.ndarray:
         """暴露特征提取，供调用方批量预计算后喂给 add()。"""
