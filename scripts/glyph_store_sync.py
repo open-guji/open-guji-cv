@@ -20,16 +20,13 @@
 store 的写者是本脚本自己（`export_store`）；`feedback/`／排除名单是控制台
 （人在点裁决）随时在写的，本脚本只是**照抄现状去提交**，不生成不修改内容。
 
-⚠️ **写锁现状（还没有跨进程锁）**：H 道「人裁单写者」（overview
-任务书-H-人裁单写者.md）计划给 `feedback/` 的所有写入口配一把跨进程锁，本脚本
-届时应该在同一把锁下做 add/commit——现在那把锁还没合入 main，`acquire_feedback_lock`
-先是个 no-op 占位（见下）。这段时间的真实防线只有：控制台每个请求的写入本身是
-原子的（一次性 `open(...).write()`／sqlite 事务），本脚本只读文件末尾状态去
-`git add`，撞上「正在写一半」的窗口极窄，但**理论上不是零**——H 的锁合入后，
-把 `acquire_feedback_lock` 换成 `from open_guji_cv.feedback.lock import
-book_feedback_lock` 且对每本书分别 `with book_feedback_lock(ws.name):`
-包住这本书的 add（不是整个 main() 一把大锁，几十本书不该因为其中一本在写就
-全部等）。
+**写锁**（2026-09-26，H 道「人裁单写者」合入后）：每本书各自的 `feedback/` 目录
+一把 `open_guji_cv.feedback.lock.book_feedback_lock`——控制台裁决 `POST /api/events`
+等写入口现在都走同一把锁，本脚本读 `feedback/` 去 `git add` 之前也要**先拿到那本书的锁**，
+不然仍可能读到「正在写一半」的状态。按书各拿一把、不是整个 `main()` 一把大锁：
+几十本书不该因为其中一本在写就全部等。`acquire_feedback_lock` 一次性拿齐本轮涉及
+的每本书的锁（`ExitStack`），持锁期间做 `git add`/`diff`/`commit`——add 那一刻的内容
+即是拿到锁那一刻的快照，之后再有新裁决进来是下一轮的事，不属于这次提交漏读。
 
 用 flock 防重入；日志写 stdout（systemd 接到 runs/glyph_store_sync.log）。
 """
@@ -139,20 +136,19 @@ def feedback_rel_paths(ws: Path) -> list[str]:
     return rels
 
 
-def acquire_feedback_lock(root: Path):
-    """H 道「人裁单写者」（overview 任务书-H-人裁单写者.md）的跨进程锁还没合入
-    main 前的占位——**no-op**，见本文件模块头「写锁现状」那段。
+def acquire_feedback_lock(books: list[Path]):
+    """按书各拿一把 `feedback/` 写锁（`ExitStack`：一次性全拿齐，持锁期间做 add/commit）。
 
-    H 的锁一合入，这里改成：
+    只给**有 `feedback/` 目录**的书拿锁——纯字形库导出、没有人裁状态的书不需要。
+    """
+    from contextlib import ExitStack
 
-        from open_guji_cv.feedback.lock import book_feedback_lock
-        return book_feedback_lock(ws.name)   # 对每本书分别拿锁，不是整仓一把
-
-    调用点也要跟着从「main() 里一次性包住所有书的 add」改成「每本书的 add 各自
-    在自己的 `with book_feedback_lock(ws.name):` 里」——现在先用一把粗粒度的
-    占位锁（仍是 no-op）不拆细，等真锁到位再一起改，避免改两遍。"""
-    from contextlib import nullcontext
-    return nullcontext()
+    from open_guji_cv.feedback.lock import book_feedback_lock
+    stack = ExitStack()
+    for ws in books:
+        if (ws / "feedback").is_dir():
+            stack.enter_context(book_feedback_lock(ws / "feedback"))
+    return stack
 
 
 def main() -> int:
@@ -183,7 +179,7 @@ def main() -> int:
     paths = glyph_paths + feedback_paths
     if not paths:
         return 0
-    with acquire_feedback_lock(root):
+    with acquire_feedback_lock(books):
         git(root, "add", "--", *paths)
         if git(root, "diff", "--cached", "--quiet", "--", *paths, check=False).returncode == 0:
             log("导出/事件都与已提交的一致，不提交")
