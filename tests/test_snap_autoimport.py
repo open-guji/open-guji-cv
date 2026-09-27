@@ -622,3 +622,18 @@ def test_glyph_fingerprint_follows_borrowed_db(world, tmp_path, monkeypatch):
     monkeypatch.setenv("GUJI_GLYPH_DB", str(db))
     monkeypatch.setattr("open_guji_cv.steps.glyph_match.db_fingerprint", lambda p: f"fp:{Path(p).name}")
     assert sp._glyph_fp(world["cloud"] / WS_DIR) == "fp:borrowed.db"
+
+
+def test_pack_cli_reads_products_of_given_workspace(world, tmp_path, monkeypatch, capsys):
+    """`guji snap pack <book> -w <ws>` 读的是 <ws>/products（没设 GUJI_WORKSPACE 时也是）。"""
+    import sys
+    from open_guji_cv import cli_v2
+    ws = world["cloud"] / WS_DIR
+    write_products(ws / "products", "fromws")
+    monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setattr(sys, "argv", ["guji", "snap", "pack", BOOK, "-w", str(ws), "--cv-commit", world["A"],
+                                      "--no-push", "--stamp", "20260927T0444"])
+    cli_v2.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out["files"] == 8 and out["branch"].endswith("T0444")
