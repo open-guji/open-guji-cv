@@ -483,3 +483,188 @@ def test_attachment_destinations_restricted(world, tmp_path):
                       stamp=f"20260927T1{len(dest):03d}")
     m = make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=f)], push=False)
     assert m["attachments"][0]["dest"] == ".gitignore"
+
+
+def test_manual_import_is_remembered_by_watch(world):
+    """手动 import 之后定时器同一提交不再重导（09-27 服务器装机回执 #90）。"""
+    m = make_pack(world)
+    r = imp.import_pack(m["branch"], ws_repo=world["server"], ws_roots=[world["server"]], cv_repo=world["cv"],
+                        freshness_fn=fake_fresh())
+    assert r.status == imp.IMPORTED
+    assert sw.remember(world["state"], r)
+    assert json.loads(world["state"].read_text())[m["branch"]]["status"] == imp.IMPORTED
+    out = run_watch(world)
+    assert out["status"] == "idle"
+    log = (world["server"] / WS_DIR / "products" / BOOK / mf.IMPORTS_NAME).read_text().splitlines()
+    assert len(log) == 1                                # 只导了一次
+
+
+def test_manual_import_cli_writes_state(world, monkeypatch, capsys):
+    import sys
+    from open_guji_cv import cli_v2
+    m = make_pack(world)
+    monkeypatch.setattr(imp, "default_freshness", fake_fresh())
+    monkeypatch.setattr(sys, "argv", ["guji", "snap", "import", m["branch"], "--ws-repo", str(world["server"]),
+                                      "--cv-repo", str(world["cv"]), "--state", str(world["state"])])
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main()
+    assert e.value.code == 0
+    assert json.loads(world["state"].read_text())[m["branch"]]["status"] == imp.IMPORTED
+    assert run_watch(world)["status"] == "idle"
+
+
+def test_gitignore_attachment_merges_lines(world, tmp_path):
+    """.gitignore 附件按行合并：只追加本地没有的行、不删本地的（服务器本地是 `*`）。"""
+    local = world["server"] / WS_DIR / ".gitignore"
+    local.write_text("*\nproducts/\n", encoding="utf-8")
+    gi = tmp_path / "gi"
+    gi.write_text("# 注释\nproducts/\nscans/\n", encoding="utf-8")
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
+    out = run_watch(world)
+    assert out["results"][0]["attachments_placed"] == ["ws:.gitignore"]
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "scans/"]
+    # 再来一包同样的 .gitignore：没有新行，不动
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)], stamp="20260927T2100")
+    out = run_watch(world)
+    assert out["results"][0]["status"] == imp.IMPORTED and out["results"][0]["attachments_placed"] == []
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "scans/"]
+
+
+def test_gitignore_merge_undone_on_downgrade(world, tmp_path):
+    local = world["server"] / WS_DIR / ".gitignore"
+    local.write_text("*\n", encoding="utf-8")
+    gi = tmp_path / "gi"
+    gi.write_text("scans/\n", encoding="utf-8")
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
+    out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
+    assert out["results"][0]["status"] == imp.DOWNGRADE
+    assert local.read_text(encoding="utf-8") == "*\n"
+
+
+# ── 09-27 服务器 vol03/vol04 T2132 事后补的三处 ──────────────────────
+def _add_raw_upstream(prod: Path, sha_of) -> None:
+    for s in STEPS:
+        mfp = prod / BOOK / s / "_manifest.jsonl"
+        rows = [json.loads(l) for l in mfp.read_text().splitlines() if l.strip()]
+        for r in rows:
+            r["upstream"] = {"raw_page": sha_of(int(r["key"][1:]))}
+        mfp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def test_raw_mismatch_waits_then_imports(world, tmp_path):
+    prod = tmp_path / "rawprod"
+    write_products(prod, "new")
+    _add_raw_upstream(prod, lambda p: f"{p:064d}")
+    spec = sp.PackSpec(book=BOOK, products_root=prod, ws_dir=world["cloud"] / WS_DIR, cv_commit=world["A"],
+                       stamp="20260927T2132", glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "t")
+    sp.commit_and_push(world["cloud"], tmp_path / "t", m)
+    server_raw = {"state": "old"}
+
+    def raw_check(ws_dir, book, want):
+        assert want == {p: f"{p:064d}" for p in (1, 2, 3)}
+        return {} if server_raw["state"] == "new" else {1: "服务器原图与包算的时候不是同一张"}
+
+    out = run_watch(world, raw_check=raw_check)
+    r = out["results"][0]
+    assert r["status"] == imp.RAW_MISMATCH and r["raw_pages"] == {"1": "服务器原图与包算的时候不是同一张"}
+    assert read_page(world)["v"] == "old"
+    assert "等 guji-workspace pull" in Path(out["record"]).read_text(encoding="utf-8")
+    out = run_watch(world, raw_check=raw_check)          # 还没 pull：再试、不重复写记录
+    assert out["results"][0]["status"] == imp.RAW_MISMATCH and out["record"] is None
+    server_raw["state"] = "new"                          # 服务器 pull 了
+    out = run_watch(world, raw_check=raw_check)
+    assert out["results"][0]["status"] == imp.IMPORTED and read_page(world)["v"] == "new"
+
+
+def test_default_raw_check_real_book(tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "books").mkdir(parents=True)
+    (ws / "raw").mkdir()
+    (ws / "books" / "b1.yaml").write_text('id: b1\ntitle: t\nraw_dir: raw\nraw_pattern: "{page}.png"\n',
+                                          encoding="utf-8")
+    (ws / "raw" / "1.png").write_bytes(b"page-one")
+    (ws / "raw" / "2.png").write_bytes(b"page-two-server")
+    import hashlib
+    h = lambda b: hashlib.sha256(b).hexdigest()   # noqa: E731
+    bad = imp.default_raw_check(ws, "b1", {1: h(b"page-one"), 2: h(b"page-two-cloud"), 3: h(b"x")})
+    assert bad == {2: "服务器原图与包算的时候不是同一张", 3: "服务器没有这页原图"}
+    assert imp.default_raw_check(ws, "b1", {1: h(b"page-one")}) == {}
+    assert "skipped" in imp.default_raw_check(ws, "nobook", {1: "0" * 64})
+
+
+def test_downgrade_record_has_three_columns_and_rollback_ok(world):
+    make_pack(world)
+    out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
+    r = out["results"][0]
+    assert r["status"] == imp.DOWNGRADE and r["rollback_ok"] is True
+    assert r["freshness_after_rollback"] == r["freshness_before"]
+    txt = Path(out["record"]).read_text(encoding="utf-8")
+    assert "| 步 | 导入前 | 换上后 | 换回后 |" in txt and "换回后与导入前一致：是" in txt
+    assert "| border_detect | 新鲜3 | 过期3 | 新鲜3 |" in txt
+
+
+def test_pack_brings_gates_along(world, tmp_path):
+    prod = tmp_path / "gp"
+    write_products(prod, "new", steps=["border_detect", "border_detect_gate", "column_warp", "column_gate"])
+    spec = sp.PackSpec(book=BOOK, products_root=prod, ws_dir=world["cloud"] / WS_DIR, cv_commit=world["A"],
+                       steps=["border_detect", "column_warp"], stamp="20260927T0003",
+                       glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "gt")
+    assert m["steps"] == ["border_detect", "border_detect_gate", "column_warp", "column_gate"]
+    assert m["gates_added"] == ["border_detect_gate", "column_gate"]
+
+
+def test_glyph_fingerprint_follows_borrowed_db(world, tmp_path, monkeypatch):
+    import sqlite3
+    db = tmp_path / "borrowed.db"
+    sqlite3.connect(db).close()
+    monkeypatch.setenv("GUJI_GLYPH_DB", str(db))
+    monkeypatch.setattr("open_guji_cv.steps.glyph_match.db_fingerprint", lambda p: f"fp:{Path(p).name}")
+    assert sp._glyph_fp(world["cloud"] / WS_DIR) == "fp:borrowed.db"
+
+
+def test_pack_cli_reads_products_of_given_workspace(world, tmp_path, monkeypatch, capsys):
+    """`guji snap pack <book> -w <ws>` 读的是 <ws>/products（没设 GUJI_WORKSPACE 时也是）。"""
+    import sys
+    from open_guji_cv import cli_v2
+    ws = world["cloud"] / WS_DIR
+    write_products(ws / "products", "fromws")
+    monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setattr(sys, "argv", ["guji", "snap", "pack", BOOK, "-w", str(ws), "--cv-commit", world["A"],
+                                      "--no-push", "--stamp", "20260927T0444"])
+    cli_v2.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out["files"] == 8 and out["branch"].endswith("T0444")
+
+
+def test_attach_only_pack_and_import(world, tmp_path):
+    """纯附件包（Z17 回馈）：本地没有 products 也能打；导入只落位附件、不碰 products。"""
+    idx = tmp_path / "emb_k.npz"
+    idx.write_bytes(b"index-bytes" * 100)
+    spec = sp.PackSpec(book="rare-index", products_root=tmp_path / "nothing-here", ws_dir=world["cloud"] / WS_DIR,
+                       mode="attach-only", cv_commit=world["A"], stamp="20260927T2330",
+                       attachments=[sp.Attachment(root="cv", dest="models/glyph_cnn_r5/emb_k.npz", src=idx)],
+                       glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "t")
+    assert m["steps"] == [] and m["files"] == {} and m["page_scope"] == "none"
+    assert m["branch"] == "snap/abcdefgh12/rare-index/20260927T2330"
+    sp.commit_and_push(world["cloud"], tmp_path / "t", m)
+    before = read_page(world)
+    out = run_watch(world)
+    r = out["results"][0]
+    assert r["status"] == imp.IMPORTED and r["attachments_placed"] == ["cv:models/glyph_cnn_r5/emb_k.npz"]
+    assert (world["cv"] / "models/glyph_cnn_r5/emb_k.npz").read_bytes() == idx.read_bytes()
+    assert read_page(world) == before
+    assert not (world["server"] / WS_DIR / "products" / "rare-index").exists()
+    assert run_watch(world)["status"] == "idle"
+    with pytest.raises(mf.ManifestError):
+        sp.build_tree(sp.PackSpec(book="x", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
+                                  mode="attach-only", cv_commit=world["A"]), tmp_path / "t2")
+
+
+def test_product_pack_without_products_dir_hints_attach_only(world, tmp_path):
+    with pytest.raises(FileNotFoundError, match="attach-only"):
+        sp.build_tree(sp.PackSpec(book="nobook", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
+                                  cv_commit=world["A"]), tmp_path / "t3")

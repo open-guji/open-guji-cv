@@ -1338,12 +1338,20 @@ def cmd_snap(args) -> None:
         if not args.target:
             print("pack 要给书 id", file=sys.stderr)
             sys.exit(2)
+        import os
         from .core.workspace import products_root, workspace_root
         ws_dir = Path(args.workspace).expanduser().resolve() if args.workspace else workspace_root()
         if ws_dir is None:
             print("✗ 不知道是哪个工作区：设 GUJI_WORKSPACE 或给 --workspace", file=sys.stderr)
             sys.exit(2)
-        prod = Path(args.from_products).expanduser().resolve() if args.from_products else products_root()
+        # 产物根：--from-products > GUJI_PRODUCTS_DIR（沙箱）> 这个工作区的 products/。
+        # 原来直接用 products_root()，给了 -w 但没设 GUJI_WORKSPACE 时会去读仓内 products/（09-27 实测）
+        if args.from_products:
+            prod = Path(args.from_products).expanduser().resolve()
+        elif os.environ.get("GUJI_PRODUCTS_DIR"):
+            prod = products_root()
+        else:
+            prod = ws_dir / "products"
         pages = args.pages
         if pages and pages != "all" and not pages[:1].isdigit():
             from .core.book import load_book
@@ -1407,6 +1415,8 @@ def cmd_snap(args) -> None:
         r = imp.import_pack(args.target, ws_repo=ws_repo, ws_roots=ws_roots, cv_repo=cv_repo,
                             dry_run=args.dry_run, force=args.force)
         print(json.dumps(r.to_dict(), ensure_ascii=False, indent=2, default=str))
+        if not args.dry_run:
+            sw.remember(state, r)   # 定时器据此不再重导同一提交
         if args.overview and not args.dry_run:
             path = sw.write_import_record(Path(args.overview).expanduser().resolve(), [r],
                                           push=not args.no_push)
@@ -1750,7 +1760,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="pack：从这个 products 根读（如旧快照目录），默认当前 products 根")
     p.add_argument("--pages", default=None, help="pack：页集（1-5,9 / all / 命名页集），默认 all")
     p.add_argument("--steps", default=None, help="pack：逗号分隔的步，默认这本书现有的全部步")
-    p.add_argument("--mode", default="replace-steps", choices=["replace-steps", "display-only"])
+    p.add_argument("--mode", default="replace-steps", choices=["replace-steps", "display-only", "attach-only"],
+                   help="attach-only：纯附件包（如 rare 预建索引），本地不需要 products，target 当标签用")
     p.add_argument("--supersedes", default=None, help="pack：作废哪些旧包（逗号分隔的分支名）")
     p.add_argument("--cv-commit", default=None, help="pack：产物是哪个 cv 提交算的，默认 cv 仓 HEAD")
     p.add_argument("--compatible-with", default=None, help="pack：另声明与这些 cv 提交兼容（逗号分隔）")
