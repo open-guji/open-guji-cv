@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import HUMAN_FILES, QTW_BOOKS, QTW_TRUTH, cell_index  # noqa: E402
+from qb_common import HUMAN_FILES, QTW_BOOKS, QTW_TRUTH, cell_index  # noqa: E402
 
 
 def rows():

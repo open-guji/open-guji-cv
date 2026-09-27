@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import QTW_BOOKS, TRIO, align_chars  # noqa: E402
+from qb_common import QTW_BOOKS, TRIO, align_chars  # noqa: E402
 
 
 def vec(img):

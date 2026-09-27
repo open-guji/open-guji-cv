@@ -8,8 +8,9 @@ events：
   `payload.v` = confirm（带 shape）或 damaged（看不清，guess 空）；
 - 簇裁决展开成逐格，`payload.cluster` 带簇 id、`payload.src` 带「文件:行」；
 - `reviewer` = 用户（校对者），`actor=user`，`ts` = 页面点击时间；
-- 进库口径按用户 09-27 22:20Z（覆盖 22:15Z 的「每字 1～3 例」）：**确认格全部进库**，
-  只有 a3_screen 抽查闸标出的疑错格 `no_glyph_lib=true`（照常算人裁、记事件，但不进库）；
+- 进库口径按用户 09-27 22:20Z（覆盖 22:15Z 的「每字 1～3 例」）：进库名单是 a3b_select 的
+  `lib_keys.json`（抽查闸＋对齐交叉核＋每字上限），名单外的确认格 `no_glyph_lib=true`，
+  `payload.lib_skip` 写原因（照常算人裁、记事件，但不进库）；
 - 写入口是 `EventLog.append`：乱码/非单字闸 + `feedback_write_lock`（人裁单写者锁）。
 
 lib：
@@ -27,7 +28,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import QTW_EDITION, QTW_WS, SIKU_STORE  # noqa: E402
+from qb_common import QTW_EDITION, QTW_WS, SIKU_STORE  # noqa: E402
 
 REVIEWER = "sheldonli.dev@gmail.com"      # 校对者 = 用户（控制台账号口径：email）
 FILES = {"batch1": "batch1-partial.jsonl", "batch2": "batch2-v2-partial.jsonl",
@@ -39,7 +40,7 @@ def batch_name(tag: str) -> str:
     return f"qtw-human-{tag}-20260927"
 
 
-def build_events(final, reps: set[str]):
+def build_events(final, reps: set[str], skip: dict[str, str]):
     from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
     log = EventLog(QTW_WS / "feedback")
     by = collections.defaultdict(list)
@@ -57,6 +58,8 @@ def build_events(final, reps: set[str]):
             if r["act"] == "confirm":
                 p.update(shape=r["char"], no_glyph_lib=r["key"] not in reps,
                          lib_rep=r["key"] in reps, per_cell=bool(r.get("per_cell")))
+                if r["key"] not in reps:
+                    p["lib_skip"] = skip.get(r["key"], "每字进库上限")
             else:
                 p.update(guess=None, note="看不清（审查页 blur / char:null）")
             ts = (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["t"] / 1000))
@@ -71,9 +74,11 @@ def build_events(final, reps: set[str]):
 
 def cmd_events(d: Path, dry: bool):
     final = [json.loads(l) for l in open(d / "final.jsonl", encoding="utf-8")]
-    flagged = {x["key"] for x in json.load(open(d / "screen.json", encoding="utf-8"))["flagged"]}
-    reps = {r["key"] for r in final if r["import"] and r["act"] == "confirm"} - flagged
-    log, evs = build_events(final, reps)
+    L = json.load(open(d / "lib_keys.json", encoding="utf-8"))
+    reps = {k for ks in L["lib"].values() for k in ks}
+    skip = {k: "；".join(v["why"]) for k, v in L["not_in_lib"].items()}
+    flagged = skip
+    log, evs = build_events(final, reps, skip)
     stat = {"events": len(evs), "by_batch": dict(collections.Counter(e.batch for e in evs)),
             "by_v": dict(collections.Counter(e.payload["v"] for e in evs)),
             "lib_rep": sum(bool(e.payload.get("lib_rep")) for e in evs), "reps_expected": len(reps)}
