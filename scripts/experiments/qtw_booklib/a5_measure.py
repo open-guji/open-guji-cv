@@ -49,9 +49,11 @@ def main():
                          any(rel(c, r["truth"]) for c in cands)))
         per[name] = rows
         print(name, "done", flush=True)
-    inlib = lambda t: t in chars or any(rel(t, c) for c in chars)  # noqa: E731
+    inlib = lambda t: t in chars  # noqa: E731
+    near = lambda t: t not in chars and any(rel(t, c) for c in chars)  # noqa: E731
     for scope, keep in (("all", lambda t: True), ("真值在自有库", inlib),
-                        ("真值不在自有库", lambda t: not inlib(t))):
+                        ("真值只是库里某字的异体", near),
+                        ("真值不在自有库", lambda t: not inlib(t) and not near(t))):
         res[scope] = {}
         for name, rows in per.items():
             sel = [x for x in rows if keep(x[1])]
