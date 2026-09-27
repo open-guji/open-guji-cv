@@ -1,0 +1,16 @@
+/* 按字种批审（任务书-C-待审卡按字种批审，2026-09-27）。沿用 review.css 的
+   变量与 .rv-toolbar，只加这一屏自己的网格/提示样式。 */
+
+.grp-nav { display: flex; align-items: center; gap: .7rem; margin: .4rem 0; }
+.grp-head { display: flex; align-items: baseline; gap: .8rem; margin-bottom: .3rem; }
+.grp-char { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.8rem; line-height: 1; }
+.grp-warn { font-size: .78rem; color: var(--ochre); margin-bottom: .5rem; }
+.grp-toolbar { display: flex; gap: .5rem; margin-bottom: .6rem; }
+
+.grp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: .5rem; }
+.grp-tile { position: relative; border: 2px solid var(--ok); border-radius: 4px; padding: .2rem;
+            background: var(--paper-2); cursor: pointer; user-select: none; }
+.grp-tile img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; }
+.grp-tile.off { border-color: var(--zhu); opacity: .45; }
+.grp-mark { position: absolute; top: 0; right: .15rem; font-size: .75rem; color: var(--ok); }
+.grp-tile.off .grp-mark { color: var(--zhu); }
