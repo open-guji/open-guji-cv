@@ -266,6 +266,29 @@ class BookSpec:
     vline_polyline: bool = True
     #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
     font: dict = field(default_factory=dict)
+    #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。
+    #: `{另一码位: 本书指定码位}`——如 `{别: 別}` 表示这本书里「别」这个码位一律
+    #: 按「別」统一（库、人裁、用字账都算作「別」，评测认它们是同一字、不算错）。
+    #:
+    #: **只管「两形人几乎分不出、一本书该统一用一个码位」这一类**（别/別、内/內）；
+    #: 「刻的形状真能分开」那一类（强/強、却/卻、回/囘、并/幷）逐例照录，不进这张表，
+    #: 进 `config/confusable_human.json` 的形近对表。两类的区分见字形库 11 §〇。
+    #:
+    #: 空 = 不启用，行为与加这个字段之前完全一样。**选哪个码位是统计出来的**：
+    #: 该书库＋人裁里两码位各多少，取与整理本一致的那个（见 `scripts/glyph_codepoint_census.py`
+    #: 与 `scripts/glyph_codepoint_unify.py`），不是猜的。
+    codepoints: dict[str, str] = field(default_factory=dict)
+
+    def canonical_char(self, ch: str) -> str:
+        """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
+        目标码位；否则原样返回（含 `ch` 本来就是目标码位、或这对字根本没配置两种情况）。
+        没配置 `codepoints` 时对任何字都是恒等函数，行为与加这个字段之前一样。"""
+        return self.codepoints.get(ch, ch)
+
+    def codepoint_equal(self, a: str, b: str) -> bool:
+        """`a`、`b` 按本书书级码位配置算不算「同一个字」——给 D 的评测、R 的候选用：
+        两形按 `codepoints` 统一到同一目标码位后相等，就不算异字（不算错、不算两个候选）。"""
+        return self.canonical_char(a) == self.canonical_char(b)
 
     # ── 页 ───────────────────────────────────────────────────────────
     def raw_path(self, page: int) -> Path:
@@ -341,6 +364,7 @@ class BookSpec:
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
             "font": dict(self.font), "frame_layers": dict(self.frame_layers),
+            "codepoints": dict(self.codepoints),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
         }
@@ -524,6 +548,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                       else float(d["frame_height"])),
         vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
+        codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
     )
 
 
@@ -558,4 +583,32 @@ def set_ocr_candidates(book_id: str, enabled: bool, books_dir: Path | None = Non
         if not text.endswith("\n"):
             text += "\n"
         text += line + "\n"
+    path.write_text(text, encoding="utf-8")
+
+
+#: 顶层 `codepoints:` 块——键行以两个空格缩进（yaml 里手写的都是这个缩进）。
+_CODEPOINTS_BLOCK_RE = re.compile(r"^codepoints:\n(?:[ \t]+\S.*\n?)*", re.MULTILINE)
+
+
+def set_codepoints(book_id: str, mapping: dict[str, str], books_dir: Path | None = None) -> None:
+    """定向文本编辑 book yaml 的顶层 `codepoints:` 字段（书级码位配置，字形库 11 §〇）。
+
+    与 `set_ocr_candidates` 同一个理由：这份 yaml 满是手写中文注释，`yaml.safe_dump`
+    整体重写会把注释冲掉，所以只在原文里改/插这一块，不碰其余内容。
+
+    `mapping` 空字典时删掉整块（等于不配置，回到加这个字段之前的行为）；
+    非空时整块替换/追加成 `codepoints:\\n  <另一码位>: <本书指定码位>\\n  ...`。
+    """
+    path = _book_yaml_path(book_id, books_dir)
+    if not path.exists():
+        raise FileNotFoundError(f"没有这册书的定义: {path}")
+    text = path.read_text(encoding="utf-8")
+    block = ("codepoints:\n" + "".join(f"  {k}: {v}\n" for k, v in mapping.items())
+             if mapping else "")
+    if _CODEPOINTS_BLOCK_RE.search(text):
+        text = _CODEPOINTS_BLOCK_RE.sub(block, text, count=1)
+    elif block:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += block
     path.write_text(text, encoding="utf-8")
