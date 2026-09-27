@@ -87,6 +87,16 @@ def _compact_manifest(path: Path) -> dict[str, dict]:
     return out
 
 
+def _gates_of(steps: list[str]) -> dict[str, str]:
+    """{步: 它出口挂的闸}。读不到注册表（极简环境）就当没有闸。"""
+    try:
+        from .. import steps as _register  # noqa: F401 —— import 即注册全部 Step 与闸
+        from ..core.step import STEPS
+    except Exception:  # noqa: BLE001
+        return {}
+    return {s: STEPS[s].spec.gate.id for s in steps if s in STEPS and STEPS[s].spec.gate}
+
+
 def _page_of(name: str) -> int | None:
     m = _PAGE_FILE.match(name)
     return int(m.group(1)) if m else None
@@ -139,7 +149,14 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
     if not src.is_dir():
         raise FileNotFoundError(f"没有产物目录 {src}")
     avail = sorted(p.name for p in src.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
-    steps = spec.steps or avail
+    steps = list(spec.steps or avail)
+    gates_added = []
+    for sid, gid in _gates_of(steps).items():
+        # 点名的步挂着闸、产物里又有闸的目录，就一起带上（2026-09-27 服务器实测：Z16 的 vol03/vol04 包
+        # 只带 border_detect/column_warp/row_segment/cell_shrink 四步，导入后闸是旧的，下游整条判过期/阻塞）
+        if gid not in steps and gid in avail:
+            steps.insert(steps.index(sid) + 1, gid)
+            gates_added.append(gid)
     missing = [s for s in steps if s not in avail]
     if missing:
         raise FileNotFoundError(f"{src} 下没有这些步：{', '.join(missing)}（有：{', '.join(avail)}）")
@@ -234,6 +251,7 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
         "workspace": {"key": wsk, "dir": Path(spec.ws_dir).name, "create": bool(spec.create_workspace)},
         "book": spec.book,
         "steps": steps,
+        "gates_added": gates_added,
         "pages": sorted(pages_seen),
         "page_scope": "full" if spec.pages is None else "subset",
         "mode": spec.mode,
