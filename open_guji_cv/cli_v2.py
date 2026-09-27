@@ -1085,7 +1085,9 @@ def cmd_collate(args) -> None:
               + " · ".join(f"{k} {v}" for k, v in sorted(c.items(), key=lambda kv: -kv[1]))
               + (f" · 列 {s['cols']}" if s["cols"] else ""))
     un = {k: len(v) for k, v in doc["unanchored"].items()}
-    print(f"  未锚定页：{un}" + (f" · 数据版本不同步 {len(doc['stale'])} 处" if doc["stale"] else ""))
+    print(f"  未锚定页：{un}" + (f" · 数据版本不同步 {len(doc['stale'])} 处" if doc["stale"] else "")
+          + (f" · 崩溃页 {len(doc['page_errors'])} 处：{[e['page'] for e in doc['page_errors']]}"
+             if doc.get("page_errors") else ""))
 
 
 def cmd_progress(args) -> None:
