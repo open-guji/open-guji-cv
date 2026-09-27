@@ -78,3 +78,23 @@
 /* 不复用 .rvin：那个类名在本文件里被复用成候选行「【整】」标记的 span 样式
    （见上面那条注释），input 用它会被后到的 color/font-size 串掉。 */
 .rvguessin { width: 3em; text-align: center; font-size: .9rem; }
+
+/* Step6-AI 证据（任务书-C-人审卡按AI预选，2026-09-27）：候选按 AI 排序，
+   同组「同字异形」并排，首组加边框强调，排除项默认折叠。 */
+.rvai { margin: .35rem 0; padding: .3rem .45rem; border: 1px solid var(--rule); border-radius: 3px;
+        background: var(--paper); font-size: .74rem; }
+.rvai-badges { display: flex; gap: .4rem; flex-wrap: wrap; align-items: baseline; margin-bottom: .2rem; }
+.rvbadge { font-size: .68rem; padding: .05rem .4rem; border-radius: 3px; }
+.rvbadge-warn { background: var(--ochre-soft); color: var(--ochre); }
+.rvai-groups { display: flex; flex-direction: column; gap: .2rem; }
+.rvai-group { display: flex; align-items: baseline; gap: .25rem; flex-wrap: wrap; }
+.rvai-group.rvai-top { border-left: 3px solid var(--indigo); padding-left: .3rem; }
+.rvai-group button { font-size: 1rem; padding: 0 .4rem;
+  font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.rvai-group button.pick { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.rvai-why { display: inline; font-size: .68rem; color: var(--mute); }
+.rvai-why summary { cursor: pointer; display: inline; }
+.rvai-why div { margin-top: .1rem; }
+.rvai-drop { margin-top: .3rem; font-size: .7rem; color: var(--mute); }
+.rvai-drop summary { cursor: pointer; }
+.rvai-dropitem { padding: .05rem 0 .05rem .6rem; }

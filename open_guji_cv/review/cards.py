@@ -42,6 +42,33 @@ def parse_cells_spec(pages: str, book: str) -> set[str]:
     return ids
 
 
+def _ai_view(dr) -> tuple[list[dict] | None, dict | None]:
+    """`DecisionRec.groups`/`ai` → 卡片要的精简视图（人审卡按 AI 首组预选，
+    2026-09-27，任务书-C-人审卡按AI预选）。
+
+    没有就是 `None`——字段缺失时卡片照旧，不显示 AI 部分（四庫等未接
+    Step6-AI 的书）。纯函数，不碰 `load_book`/`align_book`，方便单独测。
+    """
+    if dr is None:
+        return None, None
+    groups = [{"id": g.id, "members": list(g.members), "why": g.why}
+              for g in dr.groups] or None
+    ai = None
+    if dr.ai is not None:
+        a = dr.ai
+        ai = {
+            "runs": a.runs,
+            "drop": list(a.drop),
+            "drop_why": [{"c": x.c, "why": x.why} for x in a.drop_why],
+            "rank": [{"group": r.group, "p": r.p, "why": r.why} for r in a.rank],
+            "confidence": a.confidence,
+            "need_human": a.need_human,
+            "conflict_with_img": a.conflict_with_img,
+            "runs_top": list(a.runs_top),
+        }
+    return groups, ai
+
+
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True) -> dict:
@@ -142,6 +169,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                                         "slot": r.slot, "pending": _pend})
                     continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
+                groups, ai = _ai_view(dr)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 gc = golds.get(r.id)
                 ref = None
@@ -167,6 +195,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ctx": {"char": dr.char, "margin": dr.margin,
                             "source": dr.source,
                             "llm_suggestion": dr.llm_suggestion} if dr else None,
+                    # Step6-AI 三层证据（groups=词典分组，ai=AI 排序/排除/把握度）；
+                    # 没接这段的书两者都是 None，卡片不显示 AI 部分。
+                    "groups": groups,
+                    "ai": ai,
                 })
                 if len(out) >= limit:
                     return {"book": book, "cards": out, "truncated": True,
