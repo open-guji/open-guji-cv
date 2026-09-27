@@ -293,3 +293,20 @@ def test_default_install_runner_uses_current_interpreter(monkeypatch):
     monkeypatch.setattr(dc.subprocess, "run", fake_run)
     dc.default_install_runner(Path("/fake/repo"))
     assert seen["cmd"][0] == sys.executable
+
+
+def test_health_check_waits_for_slow_start(tmp_path, no_sleep):
+    import json
+    import subprocess as sp
+    state = tmp_path / "deploy_state.json"
+    state.write_text(json.dumps({"deployed": "old"}))
+    hits = {"n": 0}
+
+    def slow(url):
+        hits["n"] += 1
+        return 200 if hits["n"] > 8 else 0      # 前几次还没起来
+    res = dc.deploy_check(Path("/fake/repo"), git_runner=_fake_git_ahead([]), sleeper=no_sleep,
+                          install_runner=lambda r: sp.CompletedProcess([], 0, "", ""),
+                          systemctl_runner=lambda a: sp.CompletedProcess(a, 0, "", ""),
+                          http_get=slow, state_path=state)
+    assert res.status == dc.DEPLOYED
