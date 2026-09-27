@@ -709,9 +709,11 @@ def test_route_inventory():
     `GET /api/rare/status`（字体候选索引现在能不能用，供控制台提示「字体
     候选暂不可用」——`warm_font_index()` 缺盘且此刻有活跑批时会推迟冷建）。
     107 → 108。
+    2026-09-27 字形库抽检（overview#110，C 道）：新增 `GET /api/glyphlib/spotcheck`
+    （按来路随机抽刻例，只读；裁决仍走 `POST /api/glyphlib/audit/decide`）。108 → 109。
     """
     got = sorted(_endpoints())
-    assert len(got) == 108, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 109, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -843,7 +845,7 @@ EXPECTED_ROUTES = [
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/glyph-match/exemplar/{instance_id}.png",
     "GET /api/glyphlib/audit", "GET /api/glyphlib/char/{char}", "GET /api/glyphlib/ids-lookup", "GET /api/glyphlib/font/{char}.png", "GET /api/glyphlib/chars",
-    "GET /api/glyphlib/patch/{instance_id}.png", "GET /api/glyphlib/summary",
+    "GET /api/glyphlib/patch/{instance_id}.png", "GET /api/glyphlib/spotcheck", "GET /api/glyphlib/summary",
     "POST /api/glyphlib/audit/decide",
     "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",
     "GET /api/gold", "GET /api/jiazhu/segments",

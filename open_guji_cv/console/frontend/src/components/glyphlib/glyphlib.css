@@ -62,3 +62,14 @@
 .gl-ids-hit figcaption b { font-size: 1.1rem; }
 .gl-m-exact .gl-img, .gl-m-expanded .gl-img { outline: 2px solid var(--ochre); }
 .gl-batchbar { align-items: center; }
+/* 抽检（overview#110，2026-09-27） */
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; }
+.spot-card { border: 1px solid var(--rule); border-left-width: 4px; padding: .35rem; background: var(--paper-2); font-size: .75rem; }
+.spot-card.ok { border-left-color: var(--ok); }
+.spot-card.bad { border-left-color: var(--zhu); }
+.spot-card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; }
+.spot-char { font-size: 1.4rem; text-align: center; font-family: "Noto Serif TC", serif; }
+.spot-id { word-break: break-all; }
+.spot-btns { display: flex; flex-wrap: wrap; gap: .2rem; margin-top: .2rem; }
+.spot-btns button { font-size: .72rem; padding: .05rem .35rem; }
+.spot-done { margin-top: .2rem; font-weight: 600; }
