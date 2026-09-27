@@ -1251,12 +1251,20 @@ def cmd_snap(args) -> None:
         if not args.target:
             print("pack 要给书 id", file=sys.stderr)
             sys.exit(2)
+        import os
         from .core.workspace import products_root, workspace_root
         ws_dir = Path(args.workspace).expanduser().resolve() if args.workspace else workspace_root()
         if ws_dir is None:
             print("✗ 不知道是哪个工作区：设 GUJI_WORKSPACE 或给 --workspace", file=sys.stderr)
             sys.exit(2)
-        prod = Path(args.from_products).expanduser().resolve() if args.from_products else products_root()
+        # 产物根：--from-products > GUJI_PRODUCTS_DIR（沙箱）> 这个工作区的 products/。
+        # 原来直接用 products_root()，给了 -w 但没设 GUJI_WORKSPACE 时会去读仓内 products/（09-27 实测）
+        if args.from_products:
+            prod = Path(args.from_products).expanduser().resolve()
+        elif os.environ.get("GUJI_PRODUCTS_DIR"):
+            prod = products_root()
+        else:
+            prod = ws_dir / "products"
         pages = args.pages
         if pages and pages != "all" and not pages[:1].isdigit():
             from .core.book import load_book
