@@ -75,6 +75,10 @@ Kind = Literal[
     # ── 字形库体检（2026-09-25，字形库 03）。见 feedback/glyph_audit.py。
     "glyph_audit",    # 库里一个刻例定的字对不对（payload: v∈ok/near_form/evict/relabel,
                       #   instance_id, key, target, char, peer, peer_char, flags）
+    # ── 打回结案（2026-09-27，总览/13 并入总览/15，见 feedback/returns.py）。
+    "return_resolve", # 本步待办卡上人点了「已修」/「不是问题」（payload: resolution∈
+                      #   fixed/wontfix, note）。与触发打回的原事件（seg_defect/cutline/
+                      #   n_body_slots）按 target.key 同键、取最新一条，见 bindings.py。
 ]
 
 Actor = Literal["user", "model", "align"]

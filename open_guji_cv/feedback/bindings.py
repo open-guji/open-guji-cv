@@ -29,6 +29,20 @@
 
 每页一份 `feedback/bindings/<book>/pNNNN.json`，记算它时的 Step3 产物 sha 与本页裁决事件的签名；
 二者任一变了（重切了 / 有新裁决）就在下一次读的时候重算。所以**不用记得去跑**，谁读谁触发。
+
+## `status` 与 `return_status`：两列，答的是两件不同的事（2026-09-27）
+
+总览/13（打回台账）并入本篇（总览/15）之后，绑定行上会同时出现两组状态字段，
+**别混进同一列**——对照见 overview `进度/总览/17-13并入15-字段对照.md`：
+
+| 字段 | 答的问题 | 取值 | 谁定 |
+|---|---|---|---|
+| `status`（上面那张表） | 这条裁决现在还对不对得上格（认不认锚） | valid/rebound/review/void/unanchored | 重切前后的几何/图块比对，见本文件 |
+| `return_to`／`return_reason`／`return_status` | 这一格的上游处理有没有问题、该退给谁、退回工单办完了没 | to_step 字符串／reason 枚举／open-fixed-wontfix | `feedback/returns.py`，从 `confirm(seg_defect)`／`cutline`／`n_body_slots` 等事件现算 |
+
+一条裁决完全可能同时是 `status=valid`（这一格锚定还对得上）**且** `return_status=open`
+（但人另外标过这一格切分有问题，该退回 Step3 重切）——两件事互不遮挡。三个 `return_*`
+字段都可空：空 = 这一格没有被打回过。
 """
 from __future__ import annotations
 
@@ -45,7 +59,7 @@ IOU_GONE = 0.15       # 低于这个算「那一格没了」
 SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：未动的 1,122 条 ≥0.9，漂移的 30 条 <0.9
 USE_STATUSES = ("valid", "rebound")
 _MEMO: dict = {}
-_VERSION = 3          # 判定规则/行格式改了就加 1，缓存自动作废
+_VERSION = 4          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段）
 
 
 def _ts(iso: str) -> float:
@@ -170,8 +184,32 @@ def _verdict_events(book: str, log) -> dict[int, list]:
     return out
 
 
-def compute_page(book: str, page: int, events: list, store=None, cache=None, glyph_db=None) -> list[dict]:
-    """一页裁决的绑定（不读不写缓存）。"""
+def _return_trigger_events(book: str, log) -> dict[int, list]:
+    """本书 `cutline`／`n_body_slots`／`return_resolve` 事件，按页分组、按时间排序——
+    `_verdict_events` 只收 `confirm`+`unit=cell`，收不到这几种列级/结案事件（见
+    `feedback/returns.py`、`compute_page` 的 `return_events` 参数）。"""
+    out: dict[int, list] = {}
+    for e in sorted(log.iter_all(), key=lambda e: (e.ts, e.batch, e.seq)):
+        if e.kind not in ("cutline", "n_body_slots", "return_resolve"):
+            continue
+        if e.target.book != book or e.target.page is None:
+            continue
+        out.setdefault(e.target.page, []).append(e)
+    return out
+
+
+def compute_page(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
+                 return_events: list | None = None) -> list[dict]:
+    """一页裁决的绑定（不读不写缓存）。
+
+    `return_events`：这一页的 `cutline`／`n_body_slots`／`return_resolve` 事件（列级/结案，
+    `_verdict_events` 收不到——它只收 `confirm`+`unit=cell`）。给了就顺带把打回字段
+    （`return_to`／`return_reason`／`return_status`，见 `feedback/returns.py`）折进已有的行——
+    **只折进已经因为 confirm 事件存在的行**，不为「只有列级触发、没有单独定字事件」的格
+    另造新行：那类格会让 `book_bindings()` 的按事件 id 建表、`rebind_library_shapes()`
+    的按 key 取最新两处逻辑多一种它们没设计过的行形状，宁可这轮先不接，留到下一轮
+    专门给它们设计不冲突的落点（见 overview 总览/17 对照页 §三）。
+    """
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
     store = store or ProductStore()
@@ -232,32 +270,68 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         else:
             row["status"] = "review"
         rows.append(row)
+
+    # ── 打回：折进已有行（2026-09-27，总览/13 并入总览/15）───────────────────
+    from .returns import affected_slots, classify_return, resolve_status
+    by_key: dict[str, list] = {}          # 格键 → 这一格全部「打回相关」事件（触发 + 结案）
+    for ev in events:
+        if classify_return(ev) is not None or ev.kind == "return_resolve":
+            by_key.setdefault(ev.target.key, []).append(ev)
+    for ev in (return_events or []):
+        if ev.kind == "return_resolve":
+            by_key.setdefault(ev.target.key, []).append(ev)
+            continue
+        if classify_return(ev) is None:
+            continue
+        for (c, s, sub) in affected_slots(ev, cur_idx):
+            by_key.setdefault(f"{book}:{page}:{c}:{s}{sub}", []).append(ev)
+    if by_key:
+        rows_by_key: dict[str, dict] = {}
+        for r in rows:                     # 同一 key 可能有多条历史行，后到覆盖取最新
+            rows_by_key[r["key"]] = r
+        for key, hist in by_key.items():
+            row = rows_by_key.get(key)
+            if row is None:
+                continue                   # 只有列级触发、这一格没有单独的 confirm 行：本轮不接，见函数头注释
+            hist_sorted = sorted(hist, key=lambda e: (e.ts, e.batch, e.seq))
+            trigger = next((e for e in reversed(hist_sorted) if classify_return(e) is not None), None)
+            if trigger is None:
+                continue
+            to_step, reason = classify_return(trigger)
+            row["return_to"] = to_step
+            row["return_reason"] = reason
+            row["return_status"] = resolve_status(hist_sorted)
     return rows
 
 
-def _sig(events) -> str:
-    return f"{len(events)}:{events[-1].id if events else ''}"
+def _sig(events, return_events: list | None = None) -> str:
+    base = f"{len(events)}:{events[-1].id if events else ''}"
+    if not return_events:
+        return base
+    return f"{base}|{len(return_events)}:{return_events[-1].id}"
 
 
 def page_bindings(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
-                  refresh: bool = False) -> list[dict]:
-    """读缓存；Step3 产物或本页裁决变了就重算并写回。"""
+                  refresh: bool = False, return_events: list | None = None) -> list[dict]:
+    """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。"""
     from ..core.spec import page_key
     from ..products.store import ProductStore
     from ..report.slots import cells_step
     store = store or ProductStore()
     cells_sha = store.sha(book, cells_step(book), page_key(page))
     f = _bindings_dir(book) / f"p{page:04d}.json"
+    sig = _sig(events, return_events)
     if not refresh and f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            if d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == _sig(events):
+            if d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == sig:
                 return d["rows"]
         except Exception:
             pass
-    rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db)
+    rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db,
+                       return_events=return_events)
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": _sig(events),
+    f.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
                              "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                              "rows": rows}, ensure_ascii=False), encoding="utf-8")
     return rows
@@ -273,13 +347,17 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     from ..products.store import ProductStore
     from .events import EventLog
     store = store or ProductStore()
-    by_page = _verdict_events(book, log or EventLog())
+    log = log or EventLog()
+    by_page = _verdict_events(book, log)
+    by_page_returns = _return_trigger_events(book, log)
     # 同一次跑批里 Step7 每页都要读一遍全书绑定：事件与 Step3 产物都没变时直接用上一份（2 分钟内）
     from ..core.spec import page_key
     from ..report.slots import cells_step
     step = cells_step(book)
+    all_pages = sorted(set(by_page) | set(by_page_returns))
     sig = (book, str(store.root),
-           tuple((pg, _sig(evs), store.sha(book, step, page_key(pg))) for pg, evs in sorted(by_page.items())),
+           tuple((pg, _sig(by_page.get(pg, []), by_page_returns.get(pg)),
+                 store.sha(book, step, page_key(pg))) for pg in all_pages),
            tuple(pages) if pages is not None else None)
     hit = _MEMO.get(sig)
     if hit and not refresh and time.time() - hit[0] < 120:
@@ -290,10 +368,12 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     except Exception:
         gdb = None
     out: dict[str, dict] = {}
-    for page, evs in by_page.items():
+    for page in all_pages:
         if pages is not None and page not in pages:
             continue
-        for r in page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh):
+        evs = by_page.get(page, [])
+        for r in page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh,
+                               return_events=by_page_returns.get(page)):
             out[r["event"]] = r
     _MEMO.clear()
     _MEMO[sig] = (time.time(), out)

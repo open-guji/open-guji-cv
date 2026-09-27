@@ -56,6 +56,24 @@ def test_concurrent_event_append_no_loss_no_collision(tmp_path, n_workers, n_eac
     assert keys == expect_keys, f"缺失的 key：{sorted(expect_keys - keys)[:5]}"
 
 
+def test_repeat_harvest_same_content_does_not_duplicate(tmp_path):
+    """同一批**重复收割**（内容完全相同）只落一份，别被撞号顺延误判成两份新事件。
+
+    （CV 总管 reply `20260927-0050`：顺延修复不能反过来把真重复变成重复条目。）
+    """
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    log = EventLog(tmp_path / "feedback")
+    build = lambda: [make_event("dup", i + 1, "verdict",  # noqa: E731
+                                EventTarget(step="test", unit="cell", key=f"k{i}"),
+                                {"v": "ok"}, actor="user")
+                     for i in range(50)]
+    first = log.append(build())
+    assert first == 50
+    second = log.append(build())          # 同一批内容再收割一次（重复收割场景）
+    assert second == 0, "内容相同的重复收割不该再写一条"
+    assert len(log.read("dup")) == 50
+
+
 @pytest.mark.parametrize("n_workers,n_each", [(8, 200)])
 def test_concurrent_gold_upsert_no_loss(tmp_path, n_workers, n_each):
     root = tmp_path / "dataset"
