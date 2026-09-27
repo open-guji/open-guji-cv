@@ -147,11 +147,17 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
     """把包内容写到 `tree_dir`（应不存在或为空），返回 manifest（也已写进 tree_dir）。"""
     if spec.mode not in MODES:
         raise ManifestError(f"mode 只能是 {'/'.join(MODES)}")
+    attach_only = spec.mode == "attach-only"
     src = Path(spec.products_root) / spec.book
-    if not src.is_dir():
-        raise FileNotFoundError(f"没有产物目录 {src}")
-    avail = sorted(p.name for p in src.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
-    steps = list(spec.steps or avail)
+    if attach_only:
+        if spec.steps:
+            raise ManifestError("attach-only 包不带步（--steps 去掉）")
+        avail = []
+    elif not src.is_dir():
+        raise FileNotFoundError(f"没有产物目录 {src}（只带附件请用 --mode attach-only）")
+    else:
+        avail = sorted(p.name for p in src.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
+    steps = [] if attach_only else list(spec.steps or avail)
     gates_added = []
     for sid, gid in _gates_of(steps).items():
         # 点名的步挂着闸、产物里又有闸的目录，就一起带上（2026-09-27 服务器实测：Z16 的 vol03/vol04 包
@@ -255,7 +261,7 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
         "steps": steps,
         "gates_added": gates_added,
         "pages": sorted(pages_seen),
-        "page_scope": "full" if spec.pages is None else "subset",
+        "page_scope": "none" if attach_only else ("full" if spec.pages is None else "subset"),
         "mode": spec.mode,
         "allow_downgrade": bool(spec.allow_downgrade),
         "supersedes": list(spec.supersedes),

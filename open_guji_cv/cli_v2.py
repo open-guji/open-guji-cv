@@ -1649,7 +1649,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="pack：从这个 products 根读（如旧快照目录），默认当前 products 根")
     p.add_argument("--pages", default=None, help="pack：页集（1-5,9 / all / 命名页集），默认 all")
     p.add_argument("--steps", default=None, help="pack：逗号分隔的步，默认这本书现有的全部步")
-    p.add_argument("--mode", default="replace-steps", choices=["replace-steps", "display-only"])
+    p.add_argument("--mode", default="replace-steps", choices=["replace-steps", "display-only", "attach-only"],
+                   help="attach-only：纯附件包（如 rare 预建索引），本地不需要 products，target 当标签用")
     p.add_argument("--supersedes", default=None, help="pack：作废哪些旧包（逗号分隔的分支名）")
     p.add_argument("--cv-commit", default=None, help="pack：产物是哪个 cv 提交算的，默认 cv 仓 HEAD")
     p.add_argument("--compatible-with", default=None, help="pack：另声明与这些 cv 提交兼容（逗号分隔）")

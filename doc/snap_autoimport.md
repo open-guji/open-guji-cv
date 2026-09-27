@@ -32,6 +32,10 @@ guji snap import snap/… --ws-repo … [--dry-run] [--force]   # 手动导一�
   要么一起带上，要么接受服务器按夜间队列去算。
 - 重打的包用 `--supersedes <旧分支>` 作废旧包，别去改旧分支。
 - 防降级闸**留着**：无人值守宁可不换，也不把新鲜的换成过期的。真要换用 `guji snap import … --force`（先问 CV 总管）。
+- **纯附件包**（只发 rare 预建索引之类、本地没有 products）：`guji snap pack rare-index -w <ws> --mode attach-only
+  --attach …=cv:models/glyph_cnn_r5/emb_<key>.npz`。导入只校验 sha、落位附件（被换掉的留 `runs/snap_backup/`），不碰 products。
+  ⚠️ 2026-09-27 实测：emb 索引 key 里带字体档 mtime（`font_set_fingerprint`），跨机器 key 对不上，云端预建的索引在服务器
+  命中不了——等 R 道把 key 改成按内容算再发（见 overview#51）。
 - 附带 R 道预建的 rare 模板索引：`--attach models/glyph_cnn_r5/emb_<key>.npz=cv:models/glyph_cnn_r5/emb_<key>.npz`
   （float32，几十 MB 会自动切块）。
 

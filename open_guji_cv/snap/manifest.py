@@ -12,7 +12,9 @@ from pathlib import Path
 FORMAT = "guji-snap/1"
 BRANCH_PREFIX = "snap/"
 MANIFEST = "manifest.json"
-MODES = ("replace-steps", "display-only")
+#: attach-only：纯附件包（2026-09-27，整理 Z17 回馈）——不带任何产物、只带附件（如 rare 预建索引
+#: `models/glyph_cnn_r5/emb_*.npz`），本地没有 products 也能打；导入只校验、落位附件，不碰 products。
+MODES = ("replace-steps", "display-only", "attach-only")
 #: GitHub 单文件 50 MB 起警告、100 MB 硬拒；留余量切 45 MB 一块。
 CHUNK_BYTES = 45 * 1024 * 1024
 
@@ -78,6 +80,13 @@ def validate(m: dict) -> dict:
             raise ManifestError(f"manifest 缺字段 {k}")
     if m["mode"] not in MODES:
         raise ManifestError(f"mode 只能是 {'/'.join(MODES)}，不是 {m['mode']!r}")
+    if m["mode"] == "attach-only":
+        if m["steps"] or m["files"]:
+            raise ManifestError("attach-only 包不能带步与产物")
+        if not m.get("attachments"):
+            raise ManifestError("attach-only 包至少要有一个附件")
+    elif not m["steps"]:
+        raise ManifestError("产物包至少要有一步（只带附件请用 attach-only）")
     if not _SAFE.match(m["book"]):
         raise ManifestError(f"书 id 不合法：{m['book']!r}")
     for s in m["steps"]:
