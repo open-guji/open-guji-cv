@@ -1176,6 +1176,105 @@ def cmd_deploy(args) -> None:
         sys.exit(1)
 
 
+def cmd_snap(args) -> None:
+    """`guji snap pack|import|watch|list`：快照自动导入（K 道，2026-09-27）。
+    见 `open_guji_cv/snap/__init__.py` 模块头与 overview 任务书-K-快照自动导入。"""
+    from .snap import gitio
+    from .snap import importer as imp
+    from .snap import watch as sw
+    state = Path(args.state).expanduser() if args.state else sw.DEFAULT_STATE
+    ws_repo = Path(args.ws_repo).expanduser().resolve() if args.ws_repo else None
+    cv_repo = Path(args.cv_repo).expanduser().resolve() if args.cv_repo else Path(__file__).resolve().parent.parent
+    ws_roots = [Path(r).expanduser().resolve() for r in (args.ws_root or [])]
+    if args.action == "pack":
+        from .snap import pack as sp
+        if not args.target:
+            print("pack 要给书 id", file=sys.stderr)
+            sys.exit(2)
+        from .core.workspace import products_root, workspace_root
+        ws_dir = Path(args.workspace).expanduser().resolve() if args.workspace else workspace_root()
+        if ws_dir is None:
+            print("✗ 不知道是哪个工作区：设 GUJI_WORKSPACE 或给 --workspace", file=sys.stderr)
+            sys.exit(2)
+        prod = Path(args.from_products).expanduser().resolve() if args.from_products else products_root()
+        pages = args.pages
+        if pages and pages != "all" and not pages[:1].isdigit():
+            from .core.book import load_book
+            pages = ",".join(str(p) for p in load_book(args.target, ws_dir / "books").resolve_pages(pages))
+        overrides: dict[str, dict] = {}
+        for kv in args.param or []:
+            key, _, val = kv.partition("=")
+            step, _, field = key.partition(".")
+            try:
+                val = json.loads(val)
+            except ValueError:
+                pass
+            overrides.setdefault(step, {})[field] = val
+        atts = []
+        for a in args.attach or []:
+            src, _, dst = a.partition("=")
+            root, _, dest = dst.partition(":")
+            atts.append(sp.Attachment(root=root, dest=dest, src=Path(src).expanduser().resolve()))
+        for a in args.attach_url or []:
+            dst, _, rest = a.partition("=")
+            root, _, dest = dst.partition(":")
+            url, _, sha = rest.rpartition("#")
+            atts.append(sp.Attachment(root=root, dest=dest, url=url, sha256=sha))
+        spec = sp.PackSpec(book=args.target, products_root=prod, ws_dir=ws_dir,
+                           steps=[s for s in (args.steps or "").split(",") if s] or None,
+                           pages=sp.parse_pages(pages), mode=args.mode,
+                           supersedes=[s for s in (args.supersedes or "").split(",") if s],
+                           cv_commit=args.cv_commit,
+                           compatible_with=[s for s in (args.compatible_with or "").split(",") if s],
+                           param_overrides=overrides, attachments=atts, note=args.note or "",
+                           stamp=args.stamp, create_workspace=args.create_workspace,
+                           allow_downgrade=args.allow_downgrade)
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="guji-snap-") as td:
+            tree = Path(td) / "tree"
+            m = sp.build_tree(spec, tree, cv_repo=cv_repo)
+            repo = ws_repo or ws_dir
+            top = gitio.default_git(repo, ["rev-parse", "--show-toplevel"])
+            if top.returncode != 0:
+                print(f"✗ {repo} 不在 git 仓里；给 --ws-repo", file=sys.stderr)
+                sys.exit(2)
+            commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
+        print(json.dumps({"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
+                          "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
+                          "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
+                          "pushed": not args.no_push}, ensure_ascii=False, indent=2))
+        return
+    if ws_repo is None:
+        print("✗ 要给 --ws-repo（服务器上 guji-workspace 的 clone）", file=sys.stderr)
+        sys.exit(2)
+    if not ws_roots:
+        ws_roots = [ws_repo]
+    if args.action == "list":
+        for row in sw.list_packs(ws_repo, state):
+            print(f"{row['status']:<13} {row['branch']}  {row['commit'][:10]}  {row['at'] or ''}")
+        return
+    if args.action == "import":
+        if not args.target:
+            print("import 要给分支名（snap/…）", file=sys.stderr)
+            sys.exit(2)
+        r = imp.import_pack(args.target, ws_repo=ws_repo, ws_roots=ws_roots, cv_repo=cv_repo,
+                            dry_run=args.dry_run, force=args.force)
+        print(json.dumps(r.to_dict(), ensure_ascii=False, indent=2, default=str))
+        if args.overview and not args.dry_run:
+            path = sw.write_import_record(Path(args.overview).expanduser().resolve(), [r],
+                                          push=not args.no_push)
+            print(f"导入记录：{path}", file=sys.stderr)
+        sys.exit(0 if r.status in (imp.IMPORTED, imp.WOULD_IMPORT) else 1)
+    if args.action == "watch":
+        out = sw.watch(ws_repo=ws_repo, ws_roots=ws_roots, cv_repo=cv_repo, state_path=state,
+                       overview=Path(args.overview).expanduser().resolve() if args.overview else None,
+                       dry_run=args.dry_run, push=not args.no_push)
+        print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
+        if out.get("status") in ("ls_remote_failed", "fetch_failed"):
+            sys.exit(1)
+        return
+
+
 def cmd_runs(args) -> None:
     """控制台的任务队列：list | show | cancel | log。
 
@@ -1240,6 +1339,7 @@ COMMANDS_V2 = {
     "snapshot": cmd_snapshot,
     "release": cmd_release,
     "deploy": cmd_deploy,
+    "snap": cmd_snap,
 }
 
 
@@ -1469,6 +1569,37 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--workspace", default=None, help="部署成功后 guji status 各书要用的工作区")
     p.add_argument("--overview", default=None, help="overview 仓路径，成功/失败都写一张部署记录并推")
     p.add_argument("--dry-run", action="store_true", help="只打印会做什么，不改任何东西")
+
+    p = sub.add_parser("snap", help="[v2] 快照自动导入：pack（云端打包推分支）/ import / watch（服务器定时器）/ list")
+    p.add_argument("action", choices=["pack", "import", "watch", "list"])
+    # dest 不叫 book：不走「带 book 的命令必填 -w」那层包装（import 的位置参数是分支名）
+    p.add_argument("target", nargs="?", default=None, help="pack：书 id；import：分支名 snap/…")
+    p.add_argument("-w", "--workspace", default=None, help="pack：书的工作区目录，默认 GUJI_WORKSPACE")
+    p.add_argument("--from-products", default=None,
+                   help="pack：从这个 products 根读（如旧快照目录），默认当前 products 根")
+    p.add_argument("--pages", default=None, help="pack：页集（1-5,9 / all / 命名页集），默认 all")
+    p.add_argument("--steps", default=None, help="pack：逗号分隔的步，默认这本书现有的全部步")
+    p.add_argument("--mode", default="replace-steps", choices=["replace-steps", "display-only"])
+    p.add_argument("--supersedes", default=None, help="pack：作废哪些旧包（逗号分隔的分支名）")
+    p.add_argument("--cv-commit", default=None, help="pack：产物是哪个 cv 提交算的，默认 cv 仓 HEAD")
+    p.add_argument("--compatible-with", default=None, help="pack：另声明与这些 cv 提交兼容（逗号分隔）")
+    p.add_argument("--param", action="append", help="pack：记一条参数覆盖 step.key=value，可重复")
+    p.add_argument("--attach", action="append", help="pack：附件 SRC=cv:相对路径 或 SRC=ws:相对路径")
+    p.add_argument("--attach-url", action="append", help="pack：外链附件 cv:相对路径=URL#sha256")
+    p.add_argument("--note", default=None)
+    p.add_argument("--stamp", default=None, help="pack：分支时戳，默认当前 UTC yyyymmddThhmm")
+    p.add_argument("--create-workspace", action="store_true",
+                   help="pack：允许服务器上还没有这个工作区时新建（新书第一包）")
+    p.add_argument("--allow-downgrade", action="store_true",
+                   help="pack：导入后新鲜度变差也照换（缺省会整包换回、报 downgrade）")
+    p.add_argument("--ws-repo", default=None, help="guji-workspace 的 git clone（pack 默认工作区所在仓）")
+    p.add_argument("--ws-root", action="append", help="import/watch：到哪找书的工作区目录，可重复；默认 --ws-repo")
+    p.add_argument("--cv-repo", default=None, help="import/watch：判 cv 兼容用的 cv 仓，默认本模块所在的仓")
+    p.add_argument("--overview", default=None, help="import/watch：写导入记录并推的 overview 仓")
+    p.add_argument("--state", default=None, help="watch/list：状态文件，默认 ~/.local/state/guji_snap/state.json")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--force", action="store_true", help="import：被作废的包、会降级的包也照导")
+    p.add_argument("--no-push", action="store_true", help="pack：只建本地分支；import/watch：记录只提交不推")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
