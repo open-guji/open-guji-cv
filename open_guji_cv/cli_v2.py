@@ -1040,10 +1040,15 @@ def cmd_variants(args) -> None:
 
 
 def cmd_collate(args) -> None:
-    """Step9-9.3 对勘：字位流 × 整理本 → JSON 正本（＋可选 HTML）。
+    """Step9-9.3 对勘：字位流 × 整理本 → JSON 正本（＋可选 HTML ＋可选截图）。
 
     证人默认读书配置的 `references:`，没配就退回单证人（光盘版）。
     **不进管线**：跨页跨册汇总，不属于任何一页，同 Step8（见 `report/__init__.py`）。
+
+    `--strips`：生成截条图（`report/strips.py`），写在 `<out 同目录>/strips/<证人>/`。
+    离线交付包配 `--console ""`：深链自动退到包内的静态截图，不依赖正在跑的控制台
+    （见 `report/html.py` 模块头「分层 + 截条图」）——**把 JSON/HTML 与 `strips/`
+    目录一起打包**才是完整的离线交付物，单拷 HTML 不带 `strips/` 目录，图会显示不出来。
     """
     from .core.book import load_book
     from .report.html import write_html
@@ -1063,6 +1068,14 @@ def cmd_collate(args) -> None:
     doc = collate_book(args.book, pages, witnesses, progress=progress)
     out = write_report(doc, args.out)
     print(f"JSON → {out}")
+    if args.strips:
+        from .report.strips import write_diff_strips, write_variant_thumbs
+        n_strip = write_diff_strips(doc, out.parent, radius=args.strip_radius,
+                                    h=args.strip_h, limit=args.limit_strips)
+        n_thumb = write_variant_thumbs(doc, out.parent)
+        print(f"截图 → {out.parent / 'strips'}"
+              f"（差异 {sum(n_strip.values())} 条，异体例图 {sum(n_thumb.values())} 张）")
+        write_report(doc, out)   # 截图路径写回了 doc["diffs"][*]["strip"]，JSON 正本要跟着更新
     if not args.no_html:
         h = write_html(doc, out.with_suffix(".html"), args.console)
         print(f"HTML → {h}  ({h.stat().st_size / 1e6:.1f} MB)")
@@ -1619,8 +1632,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--out", default=None,
                    help="JSON 落点（默认 <workspace>/reports/<book>/collation_<时间>.json）")
     p.add_argument("--console", default="http://127.0.0.1:8640",
-                   help="HTML 里深链指向的控制台地址；空串则不出链接")
+                   help="HTML 里深链指向的控制台地址；空串则不出链接（离线交付包配 --strips 用）")
     p.add_argument("--no-html", action="store_true", help="只出 JSON")
+    p.add_argument("--strips", action="store_true",
+                   help="生成截条图（report/strips.py），写在 <out 同目录>/strips/；"
+                        "离线交付包配 --console \"\" 让深链落到包内截图，不依赖控制台")
+    p.add_argument("--strip-radius", type=int, default=2, help="截条图目标格前后各几格（横排）")
+    p.add_argument("--strip-h", type=int, default=44, help="截条图每格缩放到多高（px）")
+    p.add_argument("--limit-strips", type=int, default=1500, help="--strips 最多出多少条截图（控体积）")
 
     p = sub.add_parser("progress", help="[v2] Step9-9.0 进度复查：页范围内每页还挂着哪些待办（看板，不拦 9.1/9.2）")
     p.add_argument("book")
