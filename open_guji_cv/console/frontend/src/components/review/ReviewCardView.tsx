@@ -70,6 +70,30 @@ export function ReviewCardView({
             ? <><b>{c.ref.char}</b><span className="rvp">{c.ref.op}{c.ref.form ? ` · 惯刻 ${c.ref.form}` : ''}</span></>
             : <span className="muted">—</span>}</div>
           <div><span className="k">库</span> {c.db ? `${c.db.verdict} ${c.db.cov}` : '—'}</div>
+          {c.first && (
+            <div className="rvfirst">
+              <span className="k" title="借来的字形库上按字取 r5 embedding 均值原型检索（书 yaml params.review.first_pick）">CNN</span>{' '}
+              {c.first.cnn_candidates.slice(0, 3).map(([ch, s], i) => (
+                <span key={i}>
+                  <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(ch) }}
+                          title={`采信这个字（CNN 原型余弦 ${s}）`}>{ch}</button>
+                  <span className="rvp">{Number(s).toFixed(2)}</span>
+                </span>
+              ))}
+              {c.first.proto_src && (
+                <span className="muted" title="CNN 首位的原型来源：本书自有库（own）优先，缺字才回退借来的库（borrow，冷启动）">
+                  {c.first.proto_src === 'own' ? '本书库' : '借库'}
+                </span>
+              )}
+              {c.first.agree === true && <span className="rvbadge rvbadge-ok" title="像素比对首位与 CNN 原型首位是同一个字">像素与CNN一致</span>}
+              {c.first.agree === false && (
+                <span className="rvbadge rvbadge-warn" title="像素比对首位与 CNN 原型首位不同——这类卡排在前面">
+                  ⚠ 像素与CNN不一致：{c.first.pixel} / {c.first.cnn}
+                </span>
+              )}
+              {c.first.agree === null && <span className="muted" title="有一路没给出候选">单路</span>}
+            </div>
+          )}
           <div><span className="k">上下文</span> {c.ctx?.char
             ? <><button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.char!) }}
                         title={`采信上下文定的字（margin ${c.ctx.margin}）`}>{c.ctx.char}</button>

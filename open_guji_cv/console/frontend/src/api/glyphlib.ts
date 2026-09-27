@@ -109,3 +109,17 @@ export const postLibAudit = (d: AuditDecision) =>
 export interface IdsHit { char: string; cp: number; block: string; ids: string; match: 'exact' | 'expanded' | 'near'; diff: number; in_book: boolean }
 export const fetchIdsLookup = (q: string) =>
   api<{ query: string; expanded: string; hits: IdsHit[]; error?: string }>(`/api/glyphlib/ids-lookup?q=${encodeURIComponent(q)}`)
+
+// ── 抽检（2026-09-27，overview#110：按来路随机抽刻例判对错）──
+export interface SpotItem {
+  instance_id: string; char: string; provenance: string; batch: string; key: string
+  evidence: { channel?: string; verdict?: string; cov?: number; page?: number; book?: string }
+  decision: { v: string; char?: string | null; ts?: string } | null
+}
+export interface SpotResult {
+  provenance: string; batch: string; seed: number; n_pool: number
+  batches: Record<string, number>; items: SpotItem[]; tally: Record<string, number>
+}
+export const fetchLibSpot = (provenance: string, batch: string, n: number, seed: number) =>
+  api<SpotResult>(`/api/glyphlib/spotcheck?provenance=${encodeURIComponent(provenance)}`
+    + `&batch=${encodeURIComponent(batch)}&n=${n}&seed=${seed}`)

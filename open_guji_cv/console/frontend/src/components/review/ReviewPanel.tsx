@@ -3,7 +3,7 @@ import { fetchAroundBatch, fetchRareBatch, fetchRareOne, fetchReviewCards, fetch
 import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
-import { aiAccepted, aiDefaultShape } from './ai'
+import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import './review.css'
@@ -84,7 +84,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // 发现不对时点别的候选/输入框覆盖即可，跟人工选完再改主意的路径一样。
     for (const c of d.cards) {
       if (verdicts.current[c.id]) continue
-      const def = aiDefaultShape(c)
+      // 借库书（`c.first`）没有 Step6-AI 默认时用 CNN／融合首选（defaultShape，2026-09-27）
+      const def = defaultShape(c)
       if (!def) continue
       verdicts.current[c.id] = { shape: def, done: '1', ts: Date.now() }
       touched.current.add(c.id)

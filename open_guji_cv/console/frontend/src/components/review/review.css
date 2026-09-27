@@ -98,3 +98,6 @@
 .rvai-drop { margin-top: .3rem; font-size: .7rem; color: var(--mute); }
 .rvai-drop summary { cursor: pointer; }
 .rvai-dropitem { padding: .05rem 0 .05rem .6rem; }
+/* 借库书 CNN 原型首选（任务书-C-借库书人审首选改CNN原型，2026-09-27） */
+.rvfirst { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.rvbadge-ok { background: var(--paper); color: var(--ok); border: 1px solid var(--ok); }
