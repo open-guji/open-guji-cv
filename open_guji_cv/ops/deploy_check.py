@@ -248,12 +248,19 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
 
 # ── 部署成功之后：各书过期步 → 夜间重算队列清单（只写清单，不自动起跑批）───
 def collect_stale_summary(workspace: Path, *, pages: str = "all") -> dict[str, list[str]]:
-    """每本书哪些步有非新鲜产物（stale/missing）。一本书算失败不拖累别的书。"""
+    """每本书哪些步有非新鲜产物（stale/missing）。一本书算失败不拖累别的书。
+
+    **display-only 快照导进来的步一律不进队列**（2026-09-27，K 快照自动导入）：那些步
+    是云端算好只给人看的（如全唐文关 context 的 Step1–7），指纹含云端的库/参数，在服务器上
+    必然判过期——重算就把人要看的那份冲掉了。标记在 `products/<book>/.snap_marks.json`，
+    由 `guji snap import` 写、下一个 replace-steps 包导入同一步时清。"""
     import os
 
     from ..core.book import list_books, load_book
     from ..core.engine import Engine, MISSING, STALE
     from ..core.pipeline import default_pipeline_id, load_pipeline
+    from ..core.workspace import products_root
+    from ..snap.manifest import display_only_steps
     os.environ["GUJI_WORKSPACE"] = str(workspace)
     out: dict[str, list[str]] = {}
     for bid in list_books(workspace / "books"):
@@ -262,8 +269,9 @@ def collect_stale_summary(workspace: Path, *, pages: str = "all") -> dict[str, l
             pl = load_pipeline(default_pipeline_id(book))
             eng = Engine(book, pl, log=lambda s: None)
             st = eng.status(pages=book.resolve_pages(pages))
+            skip = display_only_steps(products_root(), bid)
             stale = [sid for sid, d in st["steps"].items()
-                    if d["counts"].get(STALE, 0) or d["counts"].get(MISSING, 0)]
+                    if sid not in skip and (d["counts"].get(STALE, 0) or d["counts"].get(MISSING, 0))]
             if stale:
                 out[bid] = stale
         except Exception as e:  # noqa: BLE001 —— 一本书读不出不拖累别的书

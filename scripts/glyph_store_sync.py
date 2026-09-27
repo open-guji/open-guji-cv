@@ -165,6 +165,9 @@ def main() -> int:
         log("上一轮还在跑，跳过")
         return 0
     books = sorted(d for d in root.iterdir() if (d / "output" / "glyph.db").exists())
+    # 人裁状态按「有没有 feedback/排除名单」挑书，不按有没有自己的库（2026-09-27，K 快照自动导入）：
+    # 借别家库的书（全唐文借四庫库）没有 output/glyph.db，原先整本被跳过，控制台上的裁决回不到 git。
+    fb_books = sorted(d for d in root.iterdir() if d.is_dir() and feedback_rel_paths(d))
     changed = []
     for ws in books:
         try:
@@ -175,11 +178,11 @@ def main() -> int:
     glyph_paths = [str((ws / "output" / "glyph_store").relative_to(root)) for ws in changed]
     # feedback/ 与排除名单**每本书都查**，不限于这次导出了字形库的那些——它们的
     # 写主体是控制台裁决，跟字形库 store 是否需要重新导出没有关系（09-26 加）。
-    feedback_paths = [str((ws / rel).relative_to(root)) for ws in books for rel in feedback_rel_paths(ws)]
+    feedback_paths = [str((ws / rel).relative_to(root)) for ws in fb_books for rel in feedback_rel_paths(ws)]
     paths = glyph_paths + feedback_paths
     if not paths:
         return 0
-    with acquire_feedback_lock(books):
+    with acquire_feedback_lock(fb_books):
         git(root, "add", "--", *paths)
         if git(root, "diff", "--cached", "--quiet", "--", *paths, check=False).returncode == 0:
             log("导出/事件都与已提交的一致，不提交")
@@ -189,7 +192,7 @@ def main() -> int:
         if glyph_names:
             msg_parts.append(f"字形库 store：{glyph_names}")
         if feedback_paths:
-            msg_parts.append(f"人裁事件/裁决/绑定表/排除名单：{len(books)} 本书检查、"
+            msg_parts.append(f"人裁事件/裁决/绑定表/排除名单：{len(fb_books)} 本书检查、"
                              f"{sum(1 for p in feedback_paths if p)} 个路径纳入")
         msg = ("定时同步：" + "；".join(msg_parts) + "\n\n"
               "scripts/glyph_store_sync.py（systemd guji-glyph-store-sync.timer，每 30 分钟）。\n"
