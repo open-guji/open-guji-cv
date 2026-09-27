@@ -146,7 +146,8 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
                  http_get: Callable[[str], int] = default_http_get,
                  sleeper: Callable[[float], None] = time.sleep,
                  health_paths: tuple[str, ...] = ("/", "/healthz"),
-                 state_path: Path | None = None) -> DeployResult:
+                 state_path: Path | None = None,
+                 health_timeout: float = 90.0) -> DeployResult:
     """`state_path`（2026-09-27）：记「真正部署成功的提交」与「部署失败过的提交」。
     判有没有更新以它为准、不看本地分支——否则 git 已前进而装依赖／重启失败时，本地分支
     已等于远端，下一轮会判 `no_update`，控制台永远停在旧代码（服务器实测踩到）。
@@ -226,10 +227,20 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
     if getattr(inst, "returncode", 0) not in (0, None):
         return _rollback("install: " + (getattr(inst, "stderr", "") or "")[-500:].strip())
     systemctl_runner(["restart", service])
-    sleeper(2.0)
-    ok = all(http_get(base_url.rstrip("/") + p) == 200 for p in health_paths)
+    # 控制台冷启动要十几秒（导入 torch 等）；只等 2 秒就判失败会误回滚
+    # （2026-09-27 服务器首次自动部署实测）。每 3 秒试一次，最多 health_timeout 秒。
+    ok = False
+    waited = 0.0
+    while True:
+        sleeper(3.0)
+        waited += 3.0
+        if all(http_get(base_url.rstrip("/") + p) == 200 for p in health_paths):
+            ok = True
+            break
+        if waited >= health_timeout:
+            break
     if not ok:
-        return _rollback("health check")
+        return _rollback(f"health check (waited {waited:.0f}s)")
 
     _save_state(state_path, {"deployed": remote_head})
     return DeployResult(DEPLOYED, {"from_rev": prev_rev, "to_rev": remote_head})
