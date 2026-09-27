@@ -246,7 +246,9 @@ class ColumnGateStep(Step):
                     else:
                         page_reject.append(
                             f"period_fallback：页级周期估不出来（{e}）"
-                            f"；本册未配 period_prior，空栏页无法兜底")
+                            f"；本册未配 period_prior，空栏页无法兜底。"
+                            f"先标一下：`guji calibrate {ctx.book.id} --pages all --with-bottom-gap`，"
+                            f"把测出来的 period_prior 写进 books/{ctx.book.id}.yaml")
                 ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
 

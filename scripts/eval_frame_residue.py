@@ -98,7 +98,10 @@ def main() -> int:
 
     store = ProductStore()
     bspec = load_book(a.book)
-    max_page = 300
+    # `--pages all` 曾经硬编码 max_page=300——全唐文冊页数超过 300，`--pages all`
+    # 会悄悄漏掉 300 页之后的部分（任务卡 #54 第15条）。改成按书实际页数（`all_pages()`
+    # 为空时退回 300，兜底旧行为，免得一本连 raw_dir 都没配全的书直接报错退出）。
+    max_page = max(bspec.all_pages(), default=300)
     pages = _expand_pages(a.pages, max_page)
 
     tab: dict[str, Counter] = {"top": Counter(), "bottom": Counter()}

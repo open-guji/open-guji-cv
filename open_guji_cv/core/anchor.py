@@ -45,3 +45,30 @@ def to_cv(bbox: BBox, width: int, space: str = RAW_TR) -> tuple[int, int, int, i
     else:
         raise ValueError(f"to_cv 不接受空间 {space!r}")
     return int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1))
+
+
+def crop_patch(img, bbox: BBox, space: str = RAW_TR):
+    """按任一页面空间的 bbox（默认 `char_index.bbox_page` 用的 `raw_page_px@top-right`）
+    从一张左上原点的图（`cv2`/`numpy` 读出来的原图、二值副本都是这个原点）裁出对应的
+    图块。任务卡 #54 第12条：`bbox_page` 原点在页面**右上角**、x 从右往左量，直接拿它
+    当左上原点 bbox 去裁**会静默裁到另一个字**（`console/routers/products.py` 那次
+    实审就是这么栽的：p3c11s11「鳳」按 x=1467 裁，真身在 x=1243，两者正好差
+    `(W-1) - 1557`——y 完全没错，看着像"没对齐"，其实是坐标系搞错了）。
+
+    这个函数把 `to_cv()`（坐标换算）与切片一起包掉，调用方不用记那条镜像公式：
+
+    ```python
+    g = cv_imread(str(page_png), cv2.IMREAD_GRAYSCALE)
+    patch = crop_patch(g, ch.bbox_page)   # ch: products.kinds.chars.CharRec
+    ```
+
+    `img.shape[1]` 当宽度；越界会先夹到图内，框退化（x1<=x0 或 y1<=y0）时返回
+    `None`（不抛，调用方按"这一格没裁出来"处理，同 `console/routers/products.py`
+    原有的失败语义）。"""
+    h, w = img.shape[0], img.shape[1]
+    x0, y0, x1, y1 = to_cv(bbox, w, space)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return img[y0:y1, x0:x1]

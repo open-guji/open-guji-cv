@@ -649,8 +649,15 @@ def cmd_glyph_db(args):
     `core.workspace.glyph_store_path()`：不传按工作区解析，传相对路径按工作区
     解释，传绝对路径当覆盖。）
     """
+    import os
     from .clustering.glyph_db import GlyphDB
-    from .core.workspace import glyph_db_path, glyph_store_path
+    from .core.workspace import assert_workspace_declared, glyph_db_path, glyph_store_path
+
+    if getattr(args, "workspace", None):
+        os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+    if getattr(args, "allow_sample_db", False):
+        os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
+    assert_workspace_declared()
 
     db_path = glyph_db_path()
     store_dir = glyph_store_path(args.store)
@@ -1071,6 +1078,13 @@ def main():
                    choices=["import", "stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
                             "set-edition"])
+    p.add_argument("-w", "--workspace", default=None,
+                   help="工作区仓根（含 books/、output/glyph.db）。同 v2 命令那个 -w：给了就覆盖"
+                        "本次调用的 GUJI_WORKSPACE，不给就退回读环境变量。任务卡 #54 第13条：这个"
+                        "命令以前只认 GUJI_WORKSPACE、没设也不报错，会静默去改 cv 仓自己的 output/。")
+    p.add_argument("--allow-sample-db", action="store_true",
+                   help="没有工作区时，显式声明就用仓内小样本库（本地试跑/装台子/跑单测才该用；"
+                        "同控制台『允许用本地示例库』勾选框）。不加就直接报错退出。")
     p.add_argument("--no-others", action="store_true",
                    help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
     p.add_argument("--apply", action="store_true",
