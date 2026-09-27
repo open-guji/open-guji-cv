@@ -35,6 +35,37 @@ def _first_command(argv: list[str]) -> str | None:
     return None
 
 
+def batch_active(proc_dir: Path | str = "/proc") -> bool:
+    """`guji-batch.slice` 里现在有没有活跑批（任务书-K-控制台常驻内存，2026-09-28）。
+
+    字体/嵌入索引冷建要吃几百 MB 到 GB 内存，跟 3.5G 额度的批处理槽抢内存会把
+    两边一起拖进 OOM——子会话须知记过的同一条教训。直接查 cgroup v2（systemd
+    默认走统一层级）：随便哪个进程的 `/proc/<pid>/cgroup` 路径里带
+    `/guji-batch.slice/` 就算有跑批在跑——不 shell 出去问 `systemctl`，输出格式
+    换了就会静默失真。没有 `/proc`（非 posix，如 Windows）一律当没有跑批，
+    与本模块其余函数的降级方向一致（不装切片的机器不拦任何东西）。
+
+    `proc_dir` 只给测试用，替换成一份假的 `/proc` 目录；生产代码不传。
+    """
+    if os.name != "posix":
+        return False
+    needle = f"/{SLICE}/"
+    try:
+        proc = Path(proc_dir)
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                text = (entry / "cgroup").read_text()
+            except OSError:
+                continue
+            if needle in text:
+                return True
+    except OSError:
+        pass
+    return False
+
+
 def enter_batch_slice(argv: list[str]) -> None:
     if os.name != "posix" or os.environ.get("GUJI_NO_BATCH_SLICE") or os.environ.get("GUJI_IN_BATCH_SLICE"):
         return
