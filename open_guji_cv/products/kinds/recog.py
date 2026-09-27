@@ -144,6 +144,47 @@ class PageRare(BaseModel):
         return next((c for c in self.columns if c.col == col), None)
 
 
+class GroupRec(BaseModel):
+    """词典严格异体分组（方案§三 `groups`）：组内是同一个字的不同写法。"""
+    id: str
+    members: list[str] = Field(default_factory=list)
+    why: str = ""                            # 异体关系依据（词典来源）
+
+
+class AiDropReason(BaseModel):
+    """AI 排除某候选的理由（`AiEvidence.drop` 的展开，卡片「排除项」展开显示）。"""
+    c: str
+    why: str = ""
+
+
+class AiRankItem(BaseModel):
+    """AI 对某个词典分组的排序打分（`AiEvidence.rank` 的一项）。"""
+    group: str                               # 对应 GroupRec.id
+    p: float = 0.0
+    why: str = ""
+
+
+class AiEvidence(BaseModel):
+    """Step6 AI 判断层证据（方案-词典加AI接入管线 §三；只对「问过 AI」的
+    格有——图像两路不一致或缺一路的格，北行约 11%）。
+
+    字段缺失（`DecisionRec.ai is None`）时卡片按老逐像素行为走，不显示
+    AI 部分——四庫等书至今没有接这段。
+    """
+    runs: int = 0                            # 跑了几次；排除取并集、放行要各次一致
+    drop: list[str] = Field(default_factory=list)          # 各次都排除的候选（并集）
+    drop_why: list[AiDropReason] = Field(default_factory=list)   # 排除理由（卡片展开用）
+    rank: list[AiRankItem] = Field(default_factory=list)   # 按 p 降序的分组排序
+    confidence: str = ""                     # 高 | 中 | 低
+    need_human: str = ""
+    conflict_with_img: bool = False          # AI 首组不含图像共识 → 卡片标「疑似刻本讹字/整理本改字」
+    #: 各次运行首组的代表字，长度 == runs；只在 runs>=2 且互不一致时才有分辨意义
+    #: （**2026-09-27 C 道暂拟**：方案 §三 原定稿没有这个字段，卡片要标「两次
+    #: 运行首组不一致」需要它，已 cross 给 D-Step6/H 确认字段名与是否并入导出脚本）
+    runs_top: list[str] = Field(default_factory=list)
+    fingerprint: dict[str, str] = Field(default_factory=dict)
+
+
 class DecisionRec(BaseModel):
     """一个字位的最终定字 + 证据（Step6）。"""
     id: str
@@ -159,6 +200,10 @@ class DecisionRec(BaseModel):
     模块头【2026-09-10】）。只调 `ranked` 顺序，不参与 `char`/`source`——
     是否采信仍由人审决定，这个字段只是给审阅界面一个「模型觉得是这个」
     的提示。None＝没问过，或问了但答案不在候选内／解析失败。"""
+    groups: list[GroupRec] = Field(default_factory=list)
+    ai: AiEvidence | None = None
+    """Step6-AI 三层证据里的判断层（方案 §三）。只加可选字段，不改既有字段
+    （2026-09-26 并行分工 §65 定的口径），四庫等未接这段的书留空。"""
 
 
 class ColumnDecision(BaseModel):
