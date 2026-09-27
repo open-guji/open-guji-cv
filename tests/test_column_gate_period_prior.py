@@ -75,6 +75,9 @@ def test_without_prior_the_page_is_still_rejected(tmp_path):
     assert gm.admitted is False
     assert any("周期估不出来" in r for r in gm.reject)
     assert any("period_prior" in r for r in gm.reject), "要提示怎么修，不能只报错"
+    # 任务卡 #54 第8条：不能只说「没配」，要直接给出该跑哪条命令
+    assert any("guji calibrate" in r and "--with-bottom-gap" in r for r in gm.reject), \
+        "报错要点名 `guji calibrate <册> --pages all --with-bottom-gap`，别让人翻代码找"
 
 
 def test_prior_never_overrides_a_page_that_can_estimate(tmp_path):
