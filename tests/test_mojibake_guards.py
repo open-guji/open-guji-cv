@@ -22,7 +22,7 @@ from open_guji_cv.errors import BadRequest
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 from open_guji_cv.feedback.lookup import human_chars
 from open_guji_cv.feedback.mojibake import (classify_shape_field, is_legal_shape,
-                                            is_ids_string, is_pua_with_selector, unmojibake)
+                                            is_ids_string, is_variation_sequence, unmojibake)
 
 MOJIBAKE_NEI = "å†…"       # 「内」被 cp1252 误解码
 MOJIBAKE_CHOU = "é·¹"      # 「鷹」被 cp1252 误解码
@@ -70,8 +70,19 @@ def test_ids_string_is_legal_multi_codepoint():
 
 def test_pua_with_selector_is_legal():
     pua = chr(0xE000) + chr(0xFE00)
-    assert is_pua_with_selector(pua)
+    assert is_variation_sequence(pua)
     assert is_legal_shape(pua)
+
+
+def test_encoded_cjk_with_variation_selector_is_legal():
+    """基字不限 PUA——已编码的普通汉字 + 变体选择符也是合法的单字位（IVS）。
+    这是 `console/routers/step8.py`"都不对，填 X+VS17"的真实场景，第一版
+    只认 PUA 基字，把「葛」+ VS17 误判成不合法，`test_step8_routes.py::
+    test_decide_accepts_variation_selector_fix` 实测踩过。"""
+    ge_vs17 = "葛" + "\U000E0100"
+    assert is_variation_sequence(ge_vs17)
+    assert is_legal_shape(ge_vs17)
+    assert classify_shape_field(ge_vs17) == "legal"
 
 
 def test_already_cjk_multi_char_not_treated_as_mojibake():

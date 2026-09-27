@@ -19,8 +19,11 @@
   - **IDS 拆分串**（`⿰亻斯` 这类）：未收字用 IDS 表达身份是既定做法
     （见 `unencoded_char_sources_survey.md`），全串是表意文字描述字符
     （U+2FF0–U+2FFF）与 CJK 类字符的组合。
-  - **PUA 带变体选择符**：全字库／字统网未收字的另一种形态，PUA 码位
-    （私用区）后跟一个表意文字变体选择符。
+  - **表意文字变体序列（IVS）**：已编码 CJK 字 或 PUA 码位 + 一个变体选择符，
+    `console/routers/step8.py` 的"都不对，填 X+VS17"、全字库／字统网未收字
+    都是这种形态——**基字不限 PUA**，普通已编码汉字一样可以带变体选择符
+    （`test_step8_routes.py::test_decide_accepts_variation_selector_fix`
+    实测踩过：第一版只认 PUA 基字，把"葛+VS17"误判成不合法）。
   - **`human_stale_*` 撤下标记**：不是字形值，是 provenance 标记字符串，
     出现在这三个字段里本身就不合法（不豁免），列在这里只是文档说明不误判。
 - `classify_shape_field`：普查用，`legal` / `recoverable`（乱码可还原）/
@@ -28,7 +31,7 @@
 
 ## 谁在用
 
-- **写入口**（`events.EventLog.append`）：不合格直接拒（`ValueError`），
+- **写入口**（`events.EventLog.append`）：不合格直接拒（`BadRequest`），
   不让新的乱码再落盘。
 - **读取处**（`lookup.human_chars` / `steps.seed_admit._human_shapes`）：
   遇到不合格的跳过并记 warning，不让老数据/未来的意外数据把下游冲垮，
@@ -64,12 +67,18 @@ def is_ids_string(s: str) -> bool:
     return has_idc and all(ord(ch) >= _CJK_ISH or _in_ranges(ord(ch), (_IDC_RANGE,)) for ch in s)
 
 
-def is_pua_with_selector(s: str) -> bool:
-    """PUA 字符 + 变体选择符（表意文字变体序列），长度恰好 2。"""
+def is_variation_sequence(s: str) -> bool:
+    """基字 + 变体选择符（表意文字变体序列 IVS），长度恰好 2。
+
+    基字可以是**已编码的 CJK 统一表意文字**（标准 Unicode IVS 机制，
+    `console/routers/step8.py` 的"都不对填 X+VS17"就是这种——「一个字，两个
+    码位」），也可以是 **PUA 私用区字符**（全字库/字统网未收字常见形态，见
+    `unencoded_char_sources_survey.md`）。两者都合法，不能只认 PUA 那一种。"""
     if len(s) != 2:
         return False
     a, b = ord(s[0]), ord(s[1])
-    return _in_ranges(a, _PUA_RANGES) and _in_ranges(b, _VS_RANGES)
+    base_ok = _in_ranges(a, _PUA_RANGES) or a >= _CJK_ISH
+    return base_ok and _in_ranges(b, _VS_RANGES)
 
 
 def is_legal_shape(s: str | None) -> bool:
@@ -78,7 +87,7 @@ def is_legal_shape(s: str | None) -> bool:
         return True
     if len(s) == 1:
         return True
-    return is_ids_string(s) or is_pua_with_selector(s)
+    return is_ids_string(s) or is_variation_sequence(s)
 
 
 def unmojibake(s: str | None) -> str | None:
