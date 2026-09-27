@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from .. import deps
 from ..auth import Identity, require_admin, require_reviewer
+from ..errors import maps_http
 from ...feedback.anchor import enrich_events as _anchor_events
 from ...feedback.consumers import route_and_consume
 from ...feedback.events import EventTarget, make_event
@@ -134,6 +135,7 @@ _EVENTS_LOCK = __import__("threading").Lock()
 
 
 @router.post("/api/events")
+@maps_http
 def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) -> dict:
     """审查页直连写入。seq 从当前最大值续，保证同批不撞号。
 

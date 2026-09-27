@@ -7,10 +7,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from ..utils.ji_yi_si import FAMILY as _JYS
 from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
+from .mojibake import is_legal_shape
+
+# 不叫 `log`：`human_chars(book, log=None, …)` 的形参 `log` 是 EventLog 实例，
+# 同名会在函数体内把这个 logger 遮住（`log.warning(...)` 变成调 EventLog 不存在的方法）。
+_logger = logging.getLogger(__name__)
 
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
 CUT_KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")   # 后三种 = L3 扩池（2026-09-15）
@@ -282,6 +288,17 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         cut = stale.get(e.target.key)
         # 撤下标记可以只到日（human_stale_20260917）或到分钟（human_stale_20260925T0712，同一天撤了又重裁时要用）
         if cut and e.ts.replace("-", "").replace(":", "")[:len(cut)] <= cut:
+            continue
+        # 字形字段合法性校验（2026-09-27，H 道乱码普查）：老事件里可能混进乱码
+        # （UTF-8 被按 cp1252 误解码再存盘，「内」存成「å†…」，P cross 1717）——
+        # 不是单字、也不是合法多码位（IDS/PUA+选择符）就跳过，只记 warning，不
+        # 让它原样当"人裁字形"混进文本层，冲乱下游 `report/collate.py` 的逐位
+        # 对齐（那正是 vol01 7 页崩溃的根因）。跳过不等于丢数据：机械可还原的
+        # 那批走的是追加更正事件（`scripts/mojibake_census.py`），这里只挡
+        # 未来/未覆盖到的意外坏数据。
+        if not is_legal_shape(p["shape"]):
+            _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
+                            book, e.target.key, p["shape"])
             continue
         key = e.target.key
         if bind:

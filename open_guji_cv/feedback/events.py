@@ -192,10 +192,25 @@ class EventLog:
         （不同事件被分到了同一个 seq）顺延到当前 batch 的下一个空 seq 重新入号，而不是
         整条丢弃——这正是 cv `9f1ea8c`（两个 POST 撞 seq、后写覆盖先写、丢了 9 条金标）的根因。
         内容相同的碰撞（同一事件被重复提交，如重复收割）才按原语义跳过。
-        """
+
+        **字形字段拒写**（2026-09-27，H 道乱码普查）：`payload.shape`／`reading`／`char`
+        不是单字、也不是合法的多码位形态（IDS 拆分串、PUA＋变体选择符）就整批拒绝，
+        `BadRequest`（领域层异常，`console/errors.py` 会映射成 HTTP 400，CLI/脚本直接
+        `except BadRequest` 打人话）列出具体是哪条哪个字段——这是唯一的写入口
+        （`POST /api/events`、`harvest.py` 收割旧格式都经这里），挡在这里能防住
+        2026-09-16 那批 UTF-8 被按 cp1252 误解码再存盘的乱码（`"内"` → `"å†…"`）重演。
+        这一层只挡**新写入**，老数据的清理走单独的机械还原＋追加更正事件
+        （`feedback/mojibake.py`）。"""
         events = list(events)
         if not events:
             return 0
+        from ..errors import BadRequest
+        from .mojibake import is_legal_shape
+        bad = [(e.id, f, e.payload.get(f)) for e in events for f in ("shape", "reading", "char")
+               if e.payload.get(f) is not None and not is_legal_shape(e.payload.get(f))]
+        if bad:
+            detail = "; ".join(f"{eid}: {f}={v!r}" for eid, f, v in bad)
+            raise BadRequest(f"字形字段不合法（不是单字，也不是合法多码位），拒绝写入：{detail}")
         n = 0
         by_batch: dict[str, list[Event]] = {}
         for e in events:
