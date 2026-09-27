@@ -78,8 +78,22 @@ def test_link_runs_needs_min_run_and_alignment():
     assert jz.link_runs(lone) == {}                       # 孤格不算夹注
     pair = [(3, (92.0, 4000.0)), (4, (94.0, 4000.0))]
     assert set(jz.link_runs(pair)) == {3, 4}
-    off = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0))]
-    assert jz.link_runs(off) == {}                        # 缝对不齐
+    off = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN_PAIR + 5, 4000.0))]
+    assert jz.link_runs(off) == {}                        # 缝对不齐（超过头两格的更松容差）
+
+
+def test_link_runs_pair_formation_uses_looser_align():
+    """刚结成头两格时容差是 `ALIGN_PAIR`，不是 `ALIGN`——「內府藏本」一类只有
+    2~3 行的短版本小注，缝位漂移比长段夹注大，2026-09-27 vol02/vol03 实测最大
+    15.5px（见模块头 `ALIGN_PAIR` 的注记）。"""
+    within_pair = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0))]
+    assert abs(within_pair[1][1][0] - within_pair[0][1][0]) > jz.ALIGN
+    assert set(jz.link_runs(within_pair)) == {3, 4}        # 超过 ALIGN、没超过 ALIGN_PAIR：仍算一段
+
+    # 但长到第三格之后，续接用回严格的 ALIGN——不放宽长段夹注已验证过的行为。
+    third_too_far = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0)),
+                      (5, (92.0 + jz.ALIGN + 5 + jz.ALIGN + 5, 4000.0))]
+    assert set(jz.link_runs(third_too_far)) == {3, 4}      # 第三格没入段，只有头两格
 
 
 def test_link_runs_bridges_single_unmeasured_cell():
