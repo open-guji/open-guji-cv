@@ -20,6 +20,21 @@ guji snap list   --ws-repo ~/guji-workspace          # 各包状态
 guji snap import snap/… --ws-repo … [--dry-run] [--force]   # 手动导一个
 ```
 
+## 打包惯例（CV 总管 09-27 定）
+
+- **Step1–4 一包、Step5–7 另一包**，别混打。Step5–7 的指纹含字形库，云端重建的库与服务器现役库指纹不同，导到
+  服务器上必然判过期；防降级闸一看「新鲜页数变少」就**整包**换回——混在一个包里，本来能变新鲜的 Step1–4 也跟着导不进去。
+  ```bash
+  guji snap pack vol03 -w … --steps border_detect,border_detect_gate,column_warp,column_gate,row_segment,row_segment_gate,cell_shrink
+  guji snap pack vol03 -w … --steps glyph_match,rare_candidates,align_ref,context_decide,seed_admit   # 只在服务器没有更好的那份时才会导进去
+  ```
+- 只给人看、不许服务器重算的（全唐文这类借库/关 context 的试跑）用 `--mode display-only`；包里没带的步不受标记保护，
+  要么一起带上，要么接受服务器按夜间队列去算。
+- 重打的包用 `--supersedes <旧分支>` 作废旧包，别去改旧分支。
+- 防降级闸**留着**：无人值守宁可不换，也不把新鲜的换成过期的。真要换用 `guji snap import … --force`（先问 CV 总管）。
+- 附带 R 道预建的 rare 模板索引：`--attach models/glyph_cnn_r5/emb_<key>.npz=cv:models/glyph_cnn_r5/emb_<key>.npz`
+  （float32，几十 MB 会自动切块）。
+
 ## 包格式 v1
 
 - **一包一条孤儿分支，不设 index 分支**：`ls-remote 'refs/heads/snap/*'` 就是索引；index 分支是多写者
