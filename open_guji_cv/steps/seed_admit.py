@@ -90,6 +90,19 @@ class SeedAdmitParams(BaseModel):
     对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
     11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
     是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
+    context_blank_gate: bool = True
+    """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
+    是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
+    到底有没有墨）。字块（`char_index` 的 `ink_ratio`）低于 `context_min_ink`
+    时不走 context 通道，落人审（`context_blank_cell`）。只挡 context 这一条
+    通道——`match_solo`/`iron` 等字形通道本身就要求库里能验出「像」，空白格
+    verify 不出 same，链路里已经挡住了，不需要重复设闸。"""
+    context_min_ink: float = 0.02
+    """`context_blank_gate` 的墨量闸。bxgb + vol03 两书全书 `char_index.ink_ratio`
+    分布实测（`scripts/measure_context_ink_gate.py`）：绝大多数字块 ink_ratio
+    在 0.05 以上一段连续分布，`context` 通道命中里另有一小簇 <0.02 且与主分布
+    有明显空隙——`vol03:9:9:21` 落在这一簇（ink_ratio≈0.005）。取 0.02 就压在
+    这道空隙里，两本书的正常字（哪怕「一」这种笔画少的）都在闸外。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -145,8 +158,8 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.7", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
-        consumes=("glyph_match", "context_decision", "align_ref"),
+        id="seed_admit", title="C1 进库准入", version="1.8", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸
+        consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
         params=SeedAdmitParams,
@@ -215,9 +228,11 @@ class SeedAdmitStep(Step):
         match: PageMatch = ctx.product("glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
+        chars = _opt(ctx, "char_index", page)
 
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
+        imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
         amap = _align(ctx, page)
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
@@ -482,8 +497,12 @@ class SeedAdmitStep(Step):
                 from ..clustering.seeding import context_conflicts_ref
                 if (not ok and not form_open and p.use_context and d and d.source == "context"
                         and d.char and d.margin >= p.context_margin):
+                    _ir = imap.get(r.id)
                     if context_conflicts_ref(d.char, align_char, vm_here):
                         doubts.append("context_vs_ref")
+                    elif p.context_blank_gate and _ir is not None \
+                            and _ir.ink_ratio < p.context_min_ink:
+                        doubts.append("context_blank_cell")
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
