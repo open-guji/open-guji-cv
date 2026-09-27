@@ -134,7 +134,7 @@ def guided_seam_from_owner(owner: np.ndarray, y_line_local: int, band: int = GUI
 
 
 def ckpt_fingerprint(path: str | Path | None = None) -> str:
-    """权重文件的轻量指纹 (mtime_ns, size)；文件不存在返回空串（= 裁判不可用，按旧规则）。
+    """权重文件的内容指纹（sha256 前 12 位）；文件不存在返回空串（= 裁判不可用，按旧规则）。
 
     **没装 torch 也返回空串**（2026-09-25）：此前只看权重文件，没 torch 的机器上
     `get_judge()` 静默返回 None、Step3 按旧规则切，指纹却与装了 torch 时一模一样，
@@ -149,7 +149,19 @@ def ckpt_fingerprint(path: str | Path | None = None) -> str:
         st = os.stat(p)
     except OSError:
         return ""
-    return hashlib.sha1(f"{st.st_mtime_ns}:{st.st_size}".encode()).hexdigest()[:12]
+    # 按**内容**算（2026-09-27）：此前是 sha1(mtime_ns:size)，而 mtime 是各机器 checkout
+    # 的时间——云端算好的 Step3 产物运到服务器，权重一字不差却永远判过期（O1 运维道查实）。
+    # 同一进程里按 (路径, mtime, size) 缓存，避免每次实例化参数都重读 11MB。
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _CKPT_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _CKPT_FP_CACHE[key] = fp
+    return fp
+
+
+_CKPT_FP_CACHE: dict[tuple[str, int, int], str] = {}
 
 
 def owner_from_seam(win_ink: np.ndarray, seam_local: np.ndarray) -> np.ndarray:
