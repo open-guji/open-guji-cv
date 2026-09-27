@@ -1,0 +1,13 @@
+{"type": "object", "additionalProperties": false, "required": ["items"],
+ "properties": {"items": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+   "required": ["pos", "drop", "drop_why", "groups", "confidence", "need_human"],
+   "properties": {
+     "pos": {"type": "string"},
+     "drop": {"type": "array", "items": {"type": "string"}},
+     "drop_why": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["c", "why"],
+                  "properties": {"c": {"type": "string"}, "why": {"type": "string"}}}},
+     "groups": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["members", "word", "p", "why"],
+                "properties": {"members": {"type": "array", "items": {"type": "string"}}, "word": {"type": "string"},
+                               "p": {"type": "number"}, "why": {"type": "string"}}}},
+     "confidence": {"type": "string", "enum": ["高", "中", "低"]},
+     "need_human": {"type": "string"}}}}}}
