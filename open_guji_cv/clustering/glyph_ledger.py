@@ -622,8 +622,8 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
     `products/`——所以是**只读体检**，不改任何东西。`book` 给了就只留该书前缀的发现
     （一个工作区常常挂着好几本书，如四庫 vol01–vol10 共用一个 `glyph.db`）。
 
-    返回 `{"n_lib": 库里非字体来源的刻例数, "findings": [...], "counts": Counter,
-    "drift_missing": --drift 时缓存里找不到字块图的条数（None 表示没跑 --drift）}`。
+    返回 `{"n_lib": 库里非字体来源的刻例数（给了 book 就只数这本书的）, "findings": [...],
+    "counts": Counter, "drift_missing": --drift 时缓存里找不到字块图的条数（None 表示没跑 --drift）}`。
     """
     from ..core.workspace import exclusions_path, feedback_root, products_root
 
@@ -649,12 +649,14 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
         pipe = _pipeline_decisions([d for d in pr.iterdir() if d.is_dir()]) if pr.exists() else {}
 
         findings = []
+        n_lib = 0
         for iid, ch, sem, prov, at in lib:
             cell = _cell_of(iid, v1, v1_map)
             if not cell:
                 continue
             if book and not cell.startswith(f"{book}:"):
                 continue
+            n_lib += 1
             human = (prov or "").startswith("human")
             base = {"instance_id": iid, "cell": cell, "char": ch, "provenance": prov, "admitted_at": at,
                     "v1_guess": iid in v1 and iid not in v1_map}
@@ -723,6 +725,6 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
     finally:
         c.close()
 
-    return {"n_lib": len(lib), "findings": findings,
+    return {"n_lib": n_lib, "findings": findings,
             "counts": dict(Counter(x["check"] for x in findings)),
             "drift_missing": drift_missing}

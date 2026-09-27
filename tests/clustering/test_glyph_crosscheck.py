@@ -80,4 +80,6 @@ def test_crosscheck_flags_excluded_verdict_and_pipeline(workspace, db):
 
 def test_crosscheck_filters_by_book(workspace, db):
     res_other = L.crosscheck(db, book="other-book")
-    assert res_other["n_lib"] == 5 and res_other["findings"] == []
+    assert res_other["n_lib"] == 0 and res_other["findings"] == []      # 这本工作区没有 other-book 的格
+    res_all = L.crosscheck(db, book=None)
+    assert res_all["n_lib"] == 5                                       # 不给 book 就是整库
