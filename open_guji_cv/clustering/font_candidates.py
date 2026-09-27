@@ -152,7 +152,40 @@ def _index_key(charset: tuple[str, ...], root: str, backend: str) -> str:
     return h.hexdigest()[:16]
 
 
-@lru_cache(maxsize=4)
+def index_ready(charset: tuple[str, ...], root: str = "fonts", backend: str = "hog") -> bool:
+    """`_index(charset, ...)` 这个字表**自己的**索引文件是不是已经落盘（不建，
+    只查）。⚠️ 不认「借父表矩阵」那条路——`charset` 是另一个更大字表的子集时，
+    它可能永远没有属于自己的 `.npz`（`warm()` 的 K19 去重就是这么设计的），
+    这里仍然如实报 False。要问「这组字表整批还要不要建」，用 `all_ready()`。
+    """
+    return (_index_dir() / f"{_index_key(charset, root, backend)}.npz").exists()
+
+
+def all_ready(charsets: list[tuple[str, ...]], root: str = "fonts", backend: str = "hog") -> bool:
+    """`warm(charsets, ...)` 会不会整批直接命中磁盘缓存、一个字都不用现建
+    （K19，2026-09-28）。
+
+    跟 `warm()` 走同一套「被更大字表整体包含的字表不用单独建」去重逻辑——
+    直接用 `index_ready()` 挨个查会把「small ⊆ big，small 从来没有自己的
+    `.npz`」误判成「一直没建过」，导致控制台每次启动都以为要冷建。
+    """
+    uniq = sorted({tuple(cs) for cs in charsets}, key=len, reverse=True)
+    kept: list[frozenset[str]] = []
+    for cs in uniq:
+        cs_set = frozenset(cs)
+        if any(cs_set <= parent for parent in kept):
+            continue
+        if not index_ready(cs, root, backend):
+            return False
+        kept.append(cs_set)
+    return True
+
+
+#: `warm()` 修过 K19 之后只会真的建「极大」的那几张表（被别的字表包含的字表
+#: 改用 `universe=` 借矩阵，见 `warm()` 模块头），常驻的表数量本来就少；
+#: `image_ranks_for()` 那类 2~4 字的临时小表会话里也会经过这里，留 2 个名额
+#: 够同时放住 1 张大表 + 1 张正在用的临时小表，不必留 4（K19，2026-09-28）。
+@lru_cache(maxsize=2)
 def _index(charset: tuple[str, ...], root: str = "fonts",
            backend: str = "hog") -> tuple[np.ndarray, list[tuple[str, str]]]:
     """字表 × 字体 → (特征矩阵, [(字, 字体名)])。
@@ -205,9 +238,29 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
 
 def warm(charsets: list[tuple[str, ...]], root: str = "fonts",
          backend: str = "hog") -> None:
-    """服务启动时预热——首次建大表要几分钟，别让第一个点按钮的人等。"""
-    for cs in charsets:
-        _index(tuple(cs), root, backend)
+    """服务启动时预热——首次建大表要几分钟，别让第一个点按钮的人等。
+
+    ## K19（任务书-K-控制台常驻内存，2026-09-28）：字表之间的包含关系不能各建一份
+
+    传进来的字表常有包含关系——`rare_panel._rare_charsets()` 的 small⊆big 就是
+    典型例子。改之前这里对每个字表各调一次 `_index()`：内容高度重叠（small 的
+    每个字、每套字体的渲染图，big 里原样都有）却各自整套重新渲染+提特征、各占
+    一份 `lru_cache` 名额——**控制台冷启动实测两份矩阵各 ~495MB 同时常驻**
+    （K19 done 单 §三），不是两份不同的数据，是同一批渲染做了两遍。
+
+    现在按字表大小降序处理，**跳过已经是某个更大字表子集的字表**——它的查询
+    改由调用方传 `candidates(..., universe=<那个更大的字表>)` 借用父表的矩阵
+    （见该函数与 `_topk_from_sims` 的 `universe`/`allowed` 形参），不再单独建、
+    单独常驻。`rare_panel.py` 里 small/big 两处调用已经这样改。
+    """
+    uniq = sorted({tuple(cs) for cs in charsets}, key=len, reverse=True)
+    kept: list[frozenset[str]] = []
+    for cs in uniq:
+        cs_set = frozenset(cs)
+        if any(cs_set <= parent for parent in kept):
+            continue
+        _index(cs, root, backend)
+        kept.append(cs_set)
 
 
 _NORM_CACHE: dict[int, np.ndarray] = {}
@@ -227,8 +280,8 @@ def _row_norms(mat: np.ndarray) -> np.ndarray:
 
 
 def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],
-               k: int = 10, root: str = "fonts",
-               backend: str = "hog") -> list[FontHit]:
+               k: int = 10, root: str = "fonts", backend: str = "hog",
+               universe: tuple[str, ...] | None = None) -> list[FontHit]:
     """字块 → 字体模板 top-k 候选（按余弦相似度）。
 
     `patch` 是**已归一化**的 64² 二值图（`normalize_patch` 的输出），与建索引
@@ -236,10 +289,16 @@ def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],
 
     同一个字被多套字体命中时只留分最高的那次——候选列表要给人看，
     不该出现「䙝(jigmo3) 䙝(jigmo2)」这种重复。
+
+    `universe`（K19，2026-09-28）：可选，给一个更大的父字表——`charset` 必须是
+    它的子集。给了就直接用 `universe` 的索引矩阵查询、答案只在 `charset` 里选，
+    不为 `charset` 单独建一份索引（不重复渲染，也不多占一份常驻内存）。
+    `rare_panel._rare_charsets()` 的 small⊆big 就是这种关系。不传行为不变。
     """
     from .features import get_feature
 
-    mat, keys = _index(tuple(charset), root, backend)
+    mat, keys = _index(tuple(universe) if universe is not None else tuple(charset),
+                       root, backend)
     if mat.shape[0] == 0:
         return []
     q = get_feature(backend).extract(patch[None, ...].astype(np.uint8))[0]
@@ -249,16 +308,36 @@ def candidates(patch: np.ndarray, charset: list[str] | tuple[str, ...],
     # 每张卡要等 0.35s）。按矩阵对象 id 缓存一份，索引本身有 lru_cache 保证不变。
     norms = _row_norms(mat)
     sims = (mat @ q) / (norms * qn)
-    return _topk_from_sims(sims, keys, k)
+    allowed = frozenset(charset) if universe is not None else None
+    return _topk_from_sims(sims, keys, k, allowed)
 
 
-def _topk_from_sims(sims: np.ndarray, keys: list[tuple[str, str]], k: int) -> list[FontHit]:
+def _topk_from_sims(sims: np.ndarray, keys: list[tuple[str, str]], k: int,
+                    allowed: frozenset | None = None) -> list[FontHit]:
     """一行相似度 → 去重（同字取最高分字体）后的 top-k `FontHit`，`candidates()`
-    与 `candidates_batch()` 共用（批处理版只是把这段循环搬到每行上跑）。"""
+    与 `candidates_batch()` 共用（批处理版只是把这段循环搬到每行上跑）。
+
+    `allowed`（K19，2026-09-28）：只在这个字集合里挑答案（`candidates()` 的
+    `universe` 用法）。**必须先按 `allowed` 筛出行、再在筛出的子集里找 top 池**——
+    先按全表截出 top 池再筛会漏答案：`allowed` 可能比截断池还小，池子里可能
+    一行 `allowed` 里的字都没有。
+    """
+    if allowed is not None:
+        idxs = np.fromiter((i for i, (ch, _f) in enumerate(keys) if ch in allowed),
+                           dtype=np.int64)
+        if idxs.size == 0:
+            return []
+        sub = sims[idxs]
+        pool = min(sub.size, max(64, k * 8))
+        local = np.argpartition(-sub, pool - 1)[:pool]
+        cand = idxs[local]
+        cand = cand[np.argsort(-sims[cand])]
+    else:
+        pool = min(len(sims), max(64, k * 8))
+        cand = np.argpartition(-sims, pool - 1)[:pool]
+        cand = cand[np.argsort(-sims[cand])]
     best: dict[str, FontHit] = {}
-    pool = min(len(sims), max(64, k * 8))
-    cand = np.argpartition(-sims, pool - 1)[:pool]
-    for i in cand[np.argsort(-sims[cand])]:
+    for i in cand:
         ch, fname = keys[int(i)]
         s = float(sims[int(i)])
         if ch not in best or s > best[ch].score:
@@ -269,8 +348,8 @@ def _topk_from_sims(sims: np.ndarray, keys: list[tuple[str, str]], k: int) -> li
 
 
 def candidates_batch(patches: list[np.ndarray], charset: list[str] | tuple[str, ...],
-                     k: int = 10, root: str = "fonts",
-                     backend: str = "hog") -> list[list[FontHit]]:
+                     k: int = 10, root: str = "fonts", backend: str = "hog",
+                     universe: tuple[str, ...] | None = None) -> list[list[FontHit]]:
     """`candidates()` 的批量版：一页多个字块一次性对模板矩阵做矩阵-矩阵乘法。
 
     ## 为什么要批：矩阵-向量乘法 vs 矩阵-矩阵乘法
@@ -284,10 +363,14 @@ def candidates_batch(patches: list[np.ndarray], charset: list[str] | tuple[str, 
 
     结果与逐次调用 `candidates()` 完全一致（同一份归一化、同一份索引、
     同一套去重/截断逻辑），只是把「一次一个」的 IO 模式换成「一次一批」。
+
+    `universe`：同 `candidates()`（K19，2026-09-28）——借父表矩阵、答案限制在
+    `charset` 里，不单独建索引。
     """
     from .features import get_feature
 
-    mat, keys = _index(tuple(charset), root, backend)
+    mat, keys = _index(tuple(universe) if universe is not None else tuple(charset),
+                       root, backend)
     if mat.shape[0] == 0 or not patches:
         return [[] for _ in patches]
     feat = get_feature(backend)
@@ -297,7 +380,8 @@ def candidates_batch(patches: list[np.ndarray], charset: list[str] | tuple[str, 
     norms = _row_norms(mat)
     # (rows, D) @ (D, N) → (rows, N)；除以外积 (rows, N) 的行列模长
     sims = (mat @ Q.T) / (norms[:, None] * qn[None, :])
-    return [_topk_from_sims(sims[:, j], keys, k) for j in range(sims.shape[1])]
+    allowed = frozenset(charset) if universe is not None else None
+    return [_topk_from_sims(sims[:, j], keys, k, allowed) for j in range(sims.shape[1])]
 
 
 def book_charset(corpus_path: str, extra: list[str] | None = None) -> list[str]:

@@ -704,9 +704,14 @@ def test_route_inventory():
     `id_token`、发会话）、`GET /auth/logout`、`--dev-idp` 本机假登录页
     `GET /auth/dev-login` + `GET /auth/dev-login-submit`；另加 `GET /healthz`
     （免鉴权部署健康检查）。102 → 107（-1 +6）。
+
+    2026-09-28（任务书-K-控制台常驻内存与字体索引预建，K19）：新增
+    `GET /api/rare/status`（字体候选索引现在能不能用，供控制台提示「字体
+    候选暂不可用」——`warm_font_index()` 缺盘且此刻有活跑批时会推迟冷建）。
+    107 → 108。
     """
     got = sorted(_endpoints())
-    assert len(got) == 107, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 108, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -850,7 +855,7 @@ EXPECTED_ROUTES = [
     "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",
     "GET /api/preclean/{book}/{page}/after.png",
     "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
-    "GET /api/rare/search/{book}",
+    "GET /api/rare/search/{book}", "GET /api/rare/status",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
     "GET /api/review/around/{book}/{page}/{col}/{slot}",
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",

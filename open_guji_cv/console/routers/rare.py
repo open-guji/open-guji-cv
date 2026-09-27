@@ -14,11 +14,22 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...clustering.rare_panel import ids_fallback, rare_batch, rare_for, rare_patch
+from ...clustering.rare_panel import (font_index_status, ids_fallback, rare_batch,
+                                      rare_for, rare_patch)
 from ...errors import ImageMissing
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
+
+@router.get("/api/rare/status")
+def api_rare_status() -> dict:
+    """字体候选索引现在能不能用（任务书-K-控制台常驻内存，2026-09-28）。
+
+    `deferred=True`：磁盘上还缺字体索引，且此刻有活跑批，冷建被推迟了——
+    这段时间字体候选（HOG 那一路）不可用，前端可以照这个字段提示
+    「字体候选暂不可用」。库/CNN 两路候选不受影响，正常返回。
+    """
+    return font_index_status()
 
 
 @router.get("/api/rare/{book}/{page}/{col}/{slot}")
