@@ -85,6 +85,11 @@ class SeedAdmitParams(BaseModel):
     """自动填：`config/iron_extra_confusable.json`（铁证闸的追加形近/形不可分表）
     变了本步要重跑。开不开铁证闸看册配置 `iron_gate:`（`StepSpec.book_deps`
     已经把这个字段收进指纹了，这里只管配置文件内容本身）。"""
+    iron_ref_guard: bool = True
+    """铁证放行前与整理本互证（2026-09-27 整理 Z7 实测）：铁证定的字与 `align_ref`
+    对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
+    11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
+    是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -510,7 +515,10 @@ class SeedAdmitStep(Step):
                 if not ok and iron_ctx is not None:
                     iron_char = _iron_decide(ctx.book.id, page, cc.col, r, iron_ctx,
                                              iron_scale, iron_ns)
-                    if iron_char is not None:
+                    if iron_char is not None and p.iron_ref_guard \
+                            and context_conflicts_ref(iron_char, align_char, vm_here):
+                        doubts.append("iron_vs_ref")
+                    elif iron_char is not None:
                         ok, channel, char, prov = True, "iron", iron_char, "iron"
                         doubts = []
                 if ok:
