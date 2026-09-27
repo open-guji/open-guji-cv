@@ -123,6 +123,49 @@ export interface ReviewCardsGroupedResponse {
   groups: ReviewCardGroup[]
 }
 
+/**
+ * 按形聚类分组（`group=shape`，任务书-C-批审按形聚类分组 2026-09-27）：
+ * 先按形近对表把互相混淆的字种池化（`pool`，如 "今+令"），池内再用 CNN
+ * embedding 按形状聚类拆开——同一个池可能拆成好几组，每组是一个真实形状。
+ */
+export interface ReviewMajority {
+  char: string
+  n: number
+}
+
+export interface ReviewShapeGroup {
+  /** 池标签（形近对合并后的字种，如 "今+令"；没有形近搭档就是单字本身）。 */
+  pool: string
+  /** 建议字：整理本对齐字的多数票；两路证据都没有时为 `null`（未识别组）。 */
+  char: string | null
+  /** 另外几个候选字（含建议字本身），供一键改成别的字，封顶 3 个。 */
+  candidates: string[]
+  ai_majority: ReviewMajority | null
+  ref_majority: ReviewMajority | null
+  /** 组内多数票（取 `ref_majority` 优先）占 n 的比例。 */
+  purity: number
+  /** 这组是不是真走了 embedding 聚类拆出来的（`false` = 池没有形近搭档、
+   * CNN 不可用、池太大或聚不出来，退化成等同 `group=char` 的一组）。 */
+  clustered: boolean
+  n: number
+  pages: ReviewCardGroupPage[]
+  tiles: ReviewCard[]
+  truncated: boolean
+}
+
+export interface ReviewCardsShapeResponse {
+  book: string
+  mode: 'shape'
+  /** CNN embedding 是否可用——`false` 时全部组退化成 `group=char` 等效分组，
+   * `hint` 给出补救命令，不阻塞控制台。 */
+  cluster_ready: boolean
+  hint: string | null
+  n_total: number
+  n_decided?: number
+  blocked?: unknown[]
+  groups: ReviewShapeGroup[]
+}
+
 export interface ReviewVerdict {
   shape: string
   done: string

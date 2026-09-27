@@ -375,12 +375,96 @@ def _farthest_point_protos(vecs: np.ndarray, ids: list, k: int):
     return [vecs[i] for i in chosen], [ids[i] for i in chosen]
 
 
+_CKPT_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def fingerprint(path: str | Path = DEFAULT_CKPT) -> str:
+    """checkpoint 指纹：**按内容**（sha256 前 12 位），不按 `(路径, mtime)`
+    （2026-09-27，任务书-R-rare冷启动内存与索引预建）——同 `real_proto_fingerprint`/
+    `gw_catalog_fingerprint`/`utils.cut_select.ckpt_fingerprint` 那几次同一个坑：
+    云端建好的 `emb_*.npz`/`gw_*.npz` 运到服务器，`best.pt` 内容一字不差，mtime
+    却对不上（换机器 checkout 的时间），旧写法（sha1(路径:大小:mtime)）会让这份
+    预建索引在服务器上**永远不命中**，白白预建。
+
+    按 `(路径, mtime_ns, 大小)` 缓存 sha256 结果，避免同进程内每次实例化
+    `CnnCandidates`/每次查指纹都重读 19MB 的权重文件。"""
     p = Path(path)
     if not p.exists():
         return "nockpt"
     st = p.stat()
-    return hashlib.sha1(f"{p}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _CKPT_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _CKPT_FP_CACHE[key] = fp
+    return fp
+
+
+def build_emb_matrix(net, dev, cs: tuple[str, ...], extra: dict, render_char,
+                     log=None, log_every: int = 1000) -> tuple[np.ndarray, list[str]]:
+    """`_emb_index` 冷启动那段重活的独立函数体：字表 → (字体渲染 ∪ 真刻本图) →
+    网络前向 → 单位化 embedding，逐字均值。抽成模块函数（2026-09-27，任务书-
+    R-rare冷启动内存与索引预建）有两个原因：
+
+    1. **进度日志**：建 2.7–7 万字的索引单核 5–25 分钟、此前零输出，跑批看着
+       像卡死（`总调度/服务器工单/1715`「5 分钟里没写出 emb_*.npz」就是这么
+       被判定成问题的）。现在每 `log_every` 字打一行，`ctx.log`/`print` 都能接。
+    2. **给 `guji cache build-rare-index` 复用**：预建命令与产线用同一份逻辑，
+       不会走出两条实现、结果不一致。
+
+    这一步的内存实测**没有能收敛到 ≤1.2G 目标的进程内改法**（`gc.collect`+
+    `malloc_trim`、关 mkldnn、固定 batch 形状都试过、都不改变增长曲线，见
+    `_emb_index` 模块头）——真正的解法是别在服务器上跑这段，靠预建+分发。
+    """
+    import torch
+    from .font_candidates import _font_files
+
+    fonts = _font_files()
+    vecs, names = [], []
+    n_render_fail = 0
+    with torch.no_grad():
+        for i, ch in enumerate(cs):
+            ims = []
+            for fp in fonts:
+                try:
+                    im = render_char(ch, fp, size=64)
+                except Exception:
+                    continue
+                if im is not None and im.any():
+                    ims.append(im.astype(np.uint8))
+            ims += extra.get(ch, [])
+            if not ims:
+                n_render_fail += 1
+                continue
+            x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=dev)
+            e, _, _ = net(x)
+            v = e.mean(0)
+            vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
+            names.append(ch)
+            if log is not None and (i + 1) % log_every == 0:
+                log(f"guji cache build-rare-index：{i + 1}/{len(cs)} 字"
+                   f"（{n_render_fail} 字全部字体渲染失败）")
+    mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+    if log is not None:
+        log(f"guji cache build-rare-index：完成，{len(names)}/{len(cs)} 字建出模板"
+           f"（{n_render_fail} 字全部字体渲染失败）")
+    return mat, names
+
+
+def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
+    """embedding 索引原子落盘，**存 float32**（2026-09-27 CV 总管定：R 道试过
+    float16 落盘，200 条压测查询 top-1 变 1%、top-10 集合变 8.5%；体积省一半
+    约 35MB 不值得换候选不逐位一致，改回 float32，与改前产物逐位相同）。
+
+    先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下只建了
+    一半的索引冒充完整缓存。⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补**
+    .npz 后缀，所以临时文件必须自己以 .npz 结尾，否则 savez 写的是
+    `x.tmp.npz`、replace 找的是 `x.tmp`。"""
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f.name + ".tmp.npz")
+    np.savez(tmp, mat=mat.astype(np.float32), chars=np.array(names))
+    os.replace(tmp, f)
 
 
 def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot: int = 0):
@@ -674,6 +758,29 @@ class CnnCandidates:
     # 模板向量按「checkpoint 指纹 + 字表」落盘（cache/glyph_cnn/emb_<key>.npz），
     # 4,636 字 × 4 字体首建约 1 分钟，之后毫秒级。
 
+    def emb_index_key(self, charset) -> tuple[str, Path, dict]:
+        """`_emb_index` 用来定位磁盘缓存的 `(key, npz路径, extra字典)`，抽出来给
+        `guji cache build-rare-index` 复用——预建命令与产线必须算出**同一个 key**，
+        不然预建的文件产线永远碰不到（2026-09-27，任务书-R-rare冷启动内存与索引预建）。
+        """
+        import hashlib
+        from .font_candidates import font_set_fingerprint
+
+        cs = tuple(charset)
+        extra: dict = {}
+        try:
+            from .extra_glyphs import load_many
+            specs = [sp for sp in EMB_EXTRA_SPECS if _spec_ready(sp)]
+            if specs:
+                extra = load_many(specs, cs)
+        except Exception:
+            extra = {}
+        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
+        # 见 `font_candidates.font_set_fingerprint` 模块头。
+        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
+                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
+        return key, self.ckpt.parent / f"emb_{key}.npz", extra
+
     def _emb_index(self, charset) -> tuple[np.ndarray, list[str]]:
         """归一化 64² 图 → 字表 embedding 索引 `(mat, names)`，按 charset 记忆化。
 
@@ -692,32 +799,35 @@ class CnnCandidates:
         进程内是同一个 tuple 对象，`is` 比较比整表 `==` 更快也更严格）在实例
         上记一次，同一整理本/字表跑一遍只算一次 key、只探一次磁盘缓存，
         换字表（不同书）会自然重算。
+
+        ## 2026-09-27：冷启动峰值 2.4G＋（任务书-R-rare冷启动内存与索引预建）
+
+        全新容器（磁盘缓存不在）第一次对 2.7–7 万字建这份索引，服务器上实测
+        单进程 RSS 峰值 2.41 GiB、5 分钟还在涨（`总调度/服务器工单/1715`）。
+        量清楚的结论（`profile_coldstart.py`，unicode-cjk-a 27,584 字 / unicode-ext-b
+        42,720 字分别单独量过，见任务书 done 单）：这不是某个无界缓存一次性占住
+        不放（`gc.collect()`+`malloc_trim(0)` 每 200 字打一次几乎不改变曲线，
+        `torch.backends.mkldnn.enabled=False`、固定 batch 形状也都不改变曲线），
+        而是**逐字前向 + 字体渲染在几万次迭代上的真实、缓慢的线性堆积**
+        （量出来约 5~9 KB/字的稳态斜率，前 2000 字有一次性的更陡爬升，随后转平）；
+        没有发现能把它降到目标 ≤1.2G 的进程内改法。
+
+        能落地的两件事：①**把这份索引挪到云端一次性预建**（`guji cache
+        build-rare-index`），随快照/Release 分发给服务器，服务器直接命中磁盘
+        缓存、连这个函数的建索引分支都不必进——这是唯一真正让服务器峰值归零
+        的办法；②本函数仍然做的三件小事——建索引期间**每 1000 字打一行进度**
+        （此前 5~25 分钟零输出，看着像卡死）、落盘仍存 float32（试过 float16，
+        候选会变，已弃）、`fingerprint()` 改内容指纹（见该函数文档）使预建的
+        文件在服务器上真的能命中。**这三件不改变冷启动峰值**，需要真降内存
+        只能走①。
         """
         if self._emb_cache is not None and self._emb_cache[0] is charset:
             return self._emb_cache[1], self._emb_cache[2]
 
-        import hashlib
-        import torch
-        from .font_candidates import _font_files, font_set_fingerprint
         from .synth import render_char
 
         cs = tuple(charset)
-        # 外部真刻本模板（康熙字头 / 字统网）：每字的模板 = mean(字体渲染 ∪ 真刻本图)。
-        # 2026-09-07 上线，实测 unseen emb top-1 95.9 → 97.4（严格 94.5 → 95.6），
-        # 异体子集 83.2 → 91.6。源目录缺失时静默退回纯字体（实验数据不在仓里）。
-        extra: dict = {}
-        try:
-            from .extra_glyphs import load_many
-            specs = [sp for sp in EMB_EXTRA_SPECS if _spec_ready(sp)]
-            if specs:
-                extra = load_many(specs, cs)
-        except Exception:
-            extra = {}
-        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
-        # 见 `font_candidates.font_set_fingerprint` 模块头。
-        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
-                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
-        f = self.ckpt.parent / f"emb_{key}.npz"
+        key, f, extra = self.emb_index_key(cs)
         if f.exists():
             z = np.load(f, allow_pickle=False)
             mat, names = z["mat"], z["chars"].tolist()
@@ -728,29 +838,13 @@ class CnnCandidates:
                 except OSError:
                     pass
             else:
+                # 落盘是 float32（见 `_save_emb_index`）；astype 对老缓存或手工
+                # 放进来的文件兜底，保证查询路一律 float32。
+                mat = mat.astype(np.float32)
                 self._emb_cache = (charset, mat, names)
                 return mat, names
-        fonts = _font_files()
-        vecs, names = [], []
-        with torch.no_grad():
-            for ch in cs:
-                ims = []
-                for fp in fonts:
-                    try:
-                        im = render_char(ch, fp, size=64)
-                    except Exception:
-                        continue
-                    if im is not None and im.any():
-                        ims.append(im.astype(np.uint8))
-                ims += extra.get(ch, [])
-                if not ims:
-                    continue
-                x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=self._dev)
-                e, _, _ = self._net(x)
-                v = e.mean(0)
-                vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
-                names.append(ch)
-        mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+        mat, names = build_emb_matrix(self._net, self._dev, cs, extra, render_char,
+                                      log=lambda s: print(s, flush=True))
         # **空索引绝不落盘**（2026-09-17）。此前无条件 savez：建索引失败（模板目录
         # 缺失、渲染全挂、中途被打断）会把 (0, 256) 存进缓存，之后 `f.exists()`
         # 永远命中，`emb_topk`/`emb_topk_batch` 于是**静默返回空**——不报错、
@@ -761,14 +855,7 @@ class CnnCandidates:
             raise RuntimeError(
                 f"embedding 索引建成 0 行（字表 {len(cs)} 字）——字体模板或渲染全部失败，"
                 f"不落盘。检查 fonts/ 目录与 EMB_EXTRA_SPECS。")
-        f.parent.mkdir(parents=True, exist_ok=True)
-        # 先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下
-        # 只建了一半的索引冒充完整缓存。
-        # ⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补** .npz 后缀，所以临时文件
-        # 必须自己以 .npz 结尾，否则 savez 写的是 `x.tmp.npz`、replace 找的是 `x.tmp`。
-        tmp = f.with_name(f.name + ".tmp.npz")
-        np.savez(tmp, mat=mat, chars=np.array(names))
-        os.replace(tmp, f)
+        _save_emb_index(f, mat, names)
         self._emb_cache = (charset, mat, names)
         return mat, names
 

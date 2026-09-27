@@ -10,10 +10,16 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 ## 取字规则（设计档 04 §三·1，两处分歧在此裁定）
 
 - `char` ＝ **字形，照录图上的形**，排版与比对都以它为准（2026-09-26 起没有「读法」）；
-- **未放行且 `char is None` 的位输出 `None`，不退到库/OCR 猜测**。原型那样做的
-  结果是 vol01 251 条「改」里 221 条是未审位的库 top1 猜测——噪声盖过信号，
-  而这些位本来就该由「未审阅数」这个指标去报，不该混进差异清单。
-  调用方要显示时自行渲染成 `□`（比对）或 `[[]]`（9.1 的阙文记号）。
+- **未放行（`admit=False`）且不在排除名单上的位，`char` 一律 `None`，不退到库/
+  OCR 猜测**。原型那样做的结果是 vol01 251 条「改」里 221 条是未审位的库 top1
+  猜测——噪声盖过信号，而这些位本来就该由「未审阅数」这个指标去报，不该混进
+  差异清单。调用方要显示时自行渲染成 `□`（比对）或 `[[]]`（9.1 的阙文记号）。
+  **2026-09-27 前这条口径没有真的执行**：`seed_admit._pick_char()` 给人审卡
+  用的 AI 猜测即便 `admit=False` 也写进 `AdmitRec.char`，本函数一度原样
+  `char=rec.char` 搬了过去，让「机器自己也不确定」的位在 9.3 对勘里被当成了
+  认错字（R 道 `R-形近溯源` 单查出 vol03 5 格皆属此类）。`_to_slot` 现在把
+  这类猜测挪进 `guess` 字段，只给对勘锚定撑密度（`report/collate.py::
+  _anchor_char`），不再冒充定论的 `char`。
 
 ## 三种「没有字」的格必须分开（真实数据教训，别合并）
 
@@ -193,12 +199,30 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
     # 比少一格的后果大。
     kind = cell.kind if cell is not None else "char"
+    admit = bool(rec.admit)
+    char = rec.char
+    guess = (rec.evidence or {}).get("guess") or None
+    # 未放行、不在排除名单上的格：`rec.char` 是 `seed_admit._pick_char()` 给
+    # 人审卡用的「AI 猜测」，`admit=False` 时也照写（人审 UI 要看它）。本层此前
+    # 原样把它当成「这格定下来的字」搬进 `char`，9.3 对勘就把「机器自己也不
+    # 确定」的位算成了认错字——本模块头早就定了「不退到库/OCR 猜测」的口径，
+    # 这里之前没真的执行（2026-09-27 R 道溯源单查出：vol03 5 格全部 `admit=
+    # False`，被对勘误记成 sub.confusable）。猜测挪进 `guess`：9.1 渲染看不到
+    # 它（`unreadable=True` 时直接出 `[[]]`，走不到 `guess` 判断那一步，见
+    # `render/guji_markdown.py::_char_text`），9.3 对勘的 8-gram 锚定还用得上
+    # （`report/collate.py::_anchor_char`，保持锚定串密度不变，不降低锚定率）。
+    # 排除名单（defect/excluded）不走这条——那两类的 `char` 已经是 Step7 自己
+    # 给的占位（damaged 的 `□`、seg_defect 的 `None`），不是 `_pick_char` 的
+    # 候选猜测，动它会破坏既有的阙文渲染（见 tests/test_slots_excluded_reason.py）。
+    if not admit and not on_list:
+        guess = guess or char
+        char = None
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,
-        char=rec.char, admit=bool(rec.admit),
+        char=char, admit=admit,
         channel=rec.channel, excluded=excluded, defect=defect,
-        guess=((rec.evidence or {}).get("guess") or None),
-        unreadable=(not rec.admit and rec.char is None and not excluded),
+        guess=guess,
+        unreadable=(not admit and char is None and not excluded),
         human=(rec.channel == "human"),
         doubts=[d.split("(")[0] for d in (rec.doubts or [])],
     )
