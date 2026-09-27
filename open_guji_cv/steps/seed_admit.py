@@ -101,8 +101,32 @@ class SeedAdmitParams(BaseModel):
     文意取整理本。两册人审位实测 整理本≡库top1 10/10、==上下文 4/4，全部 1,1xx 条
     人裁真值上反例 0。同时让「义定形未定」的位在库 top1 属组内形时直接取它当形
     （evidence.form.state=guess，判据 E 会把它算进抽审分母）。"""
+    ref_lib_variant_guard: bool = True
+    """`ref_lib` 通道变体放行加闸（2026-09-27，R 形近溯源实测 `bxgb:52:11:15` 冶→治
+    揪出，做法参照 `iron_ref_guard`，参数缺省开）：`relax_ref_agree` 里「库候选与整理本字
+    语义相同（`vmap.semantic` 归一）」这条，此前只要语义相同就放行，完全不看两者字面是否
+    一致、也不看 Step6 margin——`variants.auto.tsv` 的 `graph` 来源多数是词典单向登记
+    （twedu 那条 冶→治 就是：`directed['冶']={'治':['twedu']}`，没有反向 `directed['治']`），
+    不代表刻本场景下两字真同义（`open_guji_cv/variants.py` 模块头「来源分级只是先验」）。
+    加闸后：库候选与整理本字**字面相同**（`_top == align_char`）不受影响，照放；**字面不同**
+    （变体放行）只有满足以下任一条件才放行，否则记 doubt `ref_lib_variant`、退回人审（不改
+    `char`，不采信这条判决）——
+    - **可信边**：变体关系在关系层双向确认（`open_guji_cv.variants.regulars_of` 两个方向都
+      收，即两个来源都认对方是自己的正字，不是单向词典登记）；或本书用字账人裁过这一对
+      （`BookLedger.pair_confirmed`，双向都查）；或本书 `codepoints` 配置把两个码位统一成
+      同一个（`BookSpec.codepoint_equal`，书级实证，比字典更硬）；
+    - **Step6 margin 过线**：复用 `context_margin`（0.70，同一把已经在生产用的尺子，不另开
+      一个阈值）——`context_decision` 给这一位的 margin ≥ 它，即便变体边本身单薄也放行。
+    三书（bxgb dev_set+p52、vol03 107 页快照、vol01 206 页快照）实测 `ref_lib` 通道共 5 格
+    变体放行、0 格字面相同：`躭→耽`（vol01，双向可信）、`彝→彞`×3（vol03，双向可信）margin
+    0.12~0.24 全部远低于 0.70；`冶→治`（bxgb，唯一不可信）margin 0.024。加闸后前四格不变，
+    冶→治 落人审——详见 done 单。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
+    variant_graph_fingerprint: str = ""
+    """自动填：关系层 `config/variants/variants.json` 变了本步要重跑——`ref_lib_variant_guard`
+    的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
+    只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
 
     def model_post_init(self, _ctx) -> None:
@@ -119,6 +143,10 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.variants import DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH
             paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
             object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
+        if not self.variant_graph_fingerprint:
+            from ..variants import DEFAULT_VARIANTS_JSON
+            object.__setattr__(self, "variant_graph_fingerprint",
+                               corpus_fingerprint([str(DEFAULT_VARIANTS_JSON)]))
         if self.use_exclusions and not self.exclusions_fingerprint:
             from ..clustering.exclusions import default_path as _ex_default
             object.__setattr__(self, "exclusions_fingerprint",
@@ -157,10 +185,12 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
                    "open_guji_cv.utils.jiazhu_order",
-                   "open_guji_cv.clustering.iron_evidence"),
+                   "open_guji_cv.clustering.iron_evidence",
+                   "open_guji_cv.variants"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
-        book_deps=("iron_gate",),
+        # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
+        book_deps=("iron_gate", "codepoints"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -498,8 +528,20 @@ class SeedAdmitStep(Step):
                     _d = dmap.get(r.id)
                     if _top and _top not in always \
                             and vmap.semantic(_top) == vmap.semantic(align_char):
-                        ok, channel, prov = True, "ref_lib", "match"
-                        char = _top
+                        # 字面相同不受加闸影响，照放（任务书「字面相同的放行照旧」）。
+                        # 字面不同——变体放行——才要过闸：可信边，或 Step6 margin 过线
+                        # （复用 context_margin，同一把生产已在用的尺子），否则记
+                        # doubt、退回人审，不采信这条判决（ref_lib_variant_guard）。
+                        if _top == align_char:
+                            ok, channel, prov = True, "ref_lib", "match"
+                            char = _top
+                        elif (not p.ref_lib_variant_guard
+                              or (_d is not None and _d.margin >= p.context_margin)
+                              or _trusted_variant_edge(_top, align_char, ledger, ctx.book)):
+                            ok, channel, prov = True, "ref_lib", "match"
+                            char = _top
+                        else:
+                            doubts.append("ref_lib_variant")
                     elif _d and _d.char and _d.char == align_char:
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
@@ -875,3 +917,32 @@ def _doubts(match_rec, dec_rec) -> list[str]:
     if dec_rec is not None and dec_rec.source == "prior":
         out.append(f"上下文 margin 不足({dec_rec.margin:.2f})")
     return out
+
+
+def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
+    """`ref_lib` 变体放行（库候选与整理本字字面不同、语义同）时，这条变体边可不可信。
+
+    `vmap.semantic(top) == vmap.semantic(align_char)` 只说明两者在 `variants.auto.tsv`/
+    `variants.tsv` 里被登记成了同一语义正字，**不等于这条边本身够硬**——`graph` 来源的
+    条目多数是关系层某个词典单向登记（见 `SeedAdmitParams.ref_lib_variant_guard` 的
+    docstring，`冶→治` 就是 twedu 单向边），拿它当「两字同义」的唯一依据会把形近而
+    异义的字放过闸。可信边三选一：
+
+    - **双向**：关系层（`open_guji_cv.variants`）两个方向都把对方登记成正字——
+      `directed[top][align_char]` 与 `directed[align_char][top]` 都有条目，不是单向
+      「异体→正字」的登记，是两个来源互认；
+    - **人裁**：本书用字账记过这一对的人工确认（`BookLedger.pair_confirmed`，刻本形/
+      整理本形谁在前不确定，两个方向都查）；
+    - **书级 codepoints**：本书 `codepoints:` 配置把两个码位统一成了同一个
+      （`BookSpec.codepoint_equal`，书级实证，比字典更硬）。
+    """
+    from ..variants import regulars_of
+    a_to_b = any(r == align_char for r, _tags in regulars_of(top))
+    b_to_a = any(r == top for r, _tags in regulars_of(align_char))
+    if a_to_b and b_to_a:
+        return True
+    if ledger.pair_confirmed(top, align_char) or ledger.pair_confirmed(align_char, top):
+        return True
+    if book.codepoint_equal(top, align_char):
+        return True
+    return False
