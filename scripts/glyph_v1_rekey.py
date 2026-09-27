@@ -2,7 +2,7 @@
 """四庫 v1 旧刻例 → 现格号：按 `glyph_v1_map.py` 的形状对照表，一次性改 instance_id（字形库 12 / 任务书 H §二）。
 
     GUJI_GLYPH_DB=<glyph.db> PYTHONPATH=. python scripts/glyph_v1_rekey.py <v1_map.jsonl> \
-        [--dry-run] [--table <对照表.tsv>] [--report <报告.json>]
+        [--dry-run] [--table <对照表.tsv>] [--report <报告.json>] [--book <书 id>]
 
 ## 改什么
 
@@ -22,7 +22,12 @@ v1 刻例的 id 是 `<册>:页:列:idx`（idx 从 0，还数进了页边格）�
 
 ## 冲突
 
-- 目标格已有人裁 `v2:<格>`：同字 → v1 这份是重复，撤；**异字 → 不改、不撤**，列进 `conflict_human` 等人定；
+- 目标格已有人裁 `v2:<格>`：同字 → v1 这份是重复，撤；**异字 → 不改、不撤**，列进 `conflict_human` 等人定——
+  **除非** `--book` 给了书 id 且两边按该书 `codepoints` 配置算「同一个字」（`BookSpec.codepoint_equal`，
+  即/卽、歷/厯 这类「同字异码位」：字形库 11 §〇 定的「两形人几乎分不出、一本书该统一用一个码位」那一类）：
+  这种不算冲突，照常重键（进 `rename`，不进 `conflict_human`），并把 v1 这份的 `label`/`semantic`/
+  `unicode_cp`/`admissions.char` 一并改成书级码位（`book.canonical_char`），单独计进 `codepoint_landed`。
+  不给 `--book`（缺省）时行为与加这条规则之前完全一样——`codepoint_equal` 永远为 False 就是普通 conflict_human。
 - 两例 v1 对到同一格：留 cov 高的，其余不改（`collide`）；
 - 目标 id 被一个非 v1 实例占着（现库里没有这种情况）：不改（`blocked`）。
 所有 v1 实例先挪到临时 id 再落到终点，链式平移（5→6、6→7…）不会撞主键。
@@ -78,16 +83,19 @@ def _bare(iid: str) -> str:
     return iid[3:] if iid.startswith("v1:") else iid
 
 
-def plan(c: sqlite3.Connection, rows: list[dict]) -> dict:
+def plan(c: sqlite3.Connection, rows: list[dict], book=None) -> dict:
     """只读推演。rename: [(旧 id, 新 id, cov)]（新 id 可能与旧 id 相同 = 原地认定）；
-    keep: [(旧 id, 留下后的 id, 原因)]；dup: [(旧 id, 人裁 id)] 要撤的重复。"""
+    keep: [(旧 id, 留下后的 id, 原因)]；dup: [(旧 id, 人裁 id)] 要撤的重复；
+    codepoint_landed: [{...}] 是 rename 的子集——异字但按 `book.codepoint_equal` 算同一个字，
+    额外记下书级码位好在 `main()` 里落地改 label。`book` 缺省（None）时这条规则不生效，
+    异字一律进 conflict_human，与加这条规则之前完全一样。"""
     src_of = dict(c.execute("SELECT instance_id, source_id FROM instances"))
     label = dict(c.execute("SELECT instance_id, label FROM instances"))
     v1_ids = {r[0] for r in c.execute(
         "SELECT i.instance_id FROM instances i JOIN sources s ON s.source_id=i.source_id "
         "WHERE s.pipeline_version='v1'")}
     by_key = {r["v1"]: r for r in rows}
-    out = {k: [] for k in ("rename", "keep", "dup", "conflict_human", "collide", "blocked")}
+    out = {k: [] for k in ("rename", "keep", "dup", "conflict_human", "collide", "blocked", "codepoint_landed")}
     best: dict[str, tuple[str, dict]] = {}
     for iid in sorted(v1_ids):
         r = by_key.get(iid) or by_key.get(_bare(iid))
@@ -108,11 +116,17 @@ def plan(c: sqlite3.Connection, rows: list[dict]) -> dict:
     for cell, (iid, r) in sorted(best.items()):
         twin = "v2:" + cell
         if twin in src_of:
-            if label.get(twin) == label.get(iid):
+            v1_char, v2_char = label.get(iid), label.get(twin)
+            if v1_char == v2_char:
                 out["dup"].append((iid, twin))
+            elif book is not None and book.codepoint_equal(v1_char, v2_char):
+                out["rename"].append((iid, cell, r["cov"]))
+                out["codepoint_landed"].append({"v1": iid, "v1_char": v1_char, "cell": cell, "v2": twin,
+                                                "v2_char": v2_char, "book_char": book.canonical_char(v1_char),
+                                                "cov": r["cov"]})
             else:
-                out["conflict_human"].append({"v1": iid, "v1_char": label.get(iid), "cell": cell,
-                                              "v2": twin, "v2_char": label.get(twin), "cov": r["cov"]})
+                out["conflict_human"].append({"v1": iid, "v1_char": v1_char, "cell": cell,
+                                              "v2": twin, "v2_char": v2_char, "cov": r["cov"]})
             continue
         if cell in src_of and cell not in v1_ids:
             out["blocked"].append({"v1": iid, "cell": cell, "occupant_source": src_of[cell],
@@ -134,12 +148,19 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--table", type=Path, help="对照表 tsv：旧 id / 新 id / 处置 / 字 / cov")
     ap.add_argument("--report", type=Path)
+    ap.add_argument("--book", help="书 id：给了就按该书 `codepoints` 配置把同字异码位的冲突（即/卽、歷/厯 这类）"
+                                   "当非冲突处理，照常重键并把 label 落到书级码位；不给行为不变")
     a = ap.parse_args()
     from open_guji_cv.core.workspace import glyph_db_path
     db = str(glyph_db_path())
+    book = None
+    if a.book:
+        from open_guji_cv.core.book import load_book
+        book = load_book(a.book)
     rows = [json.loads(l) for l in open(a.v1_map, encoding="utf-8") if l.strip()]
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True) if a.dry_run else sqlite3.connect(db)
-    p = plan(c, rows)
+    p = plan(c, rows, book=book)
+    land_map = {item["v1"]: item["book_char"] for item in p["codepoint_landed"]}
     label = dict(c.execute("SELECT instance_id, label FROM instances"))
     keep_final = {iid: ("v1:" + iid if not iid.startswith("v1:") else iid) for iid, _ in p["keep"]}
     moved = [(o, n, cv) for o, n, cv in p["rename"] if o != n]
@@ -151,6 +172,7 @@ def main() -> int:
         "keep_prefixed_now": sum(1 for o, n in keep_final.items() if o != n),
         "keep_by_reason": {}, "conflict_human": len(p["conflict_human"]),
         "collide": len(p["collide"]), "blocked": len(p["blocked"]),
+        "codepoint_landed": len(p["codepoint_landed"]),
     }
     for _iid, why in p["keep"]:
         summary["keep_by_reason"][why] = summary["keep_by_reason"].get(why, 0) + 1
@@ -179,6 +201,11 @@ def main() -> int:
                 c.execute("UPDATE admissions SET evidence=? WHERE instance_id=?",
                           (json.dumps(evd, ensure_ascii=False), new))
             c.execute("UPDATE exemplars SET added_at=? WHERE instance_id=?", (now, new))
+            canon = land_map.get(old)
+            if canon is not None:
+                c.execute("UPDATE instances SET label=?, semantic=?, unicode_cp=? WHERE instance_id=?",
+                          (canon, canon, ord(canon), new))
+                c.execute("UPDATE admissions SET char=? WHERE instance_id=?", (canon, new))
         # 来源：留下的 v1 归 `v1`（idx 坐标），`vol01` 改为格号坐标
         src = c.execute("SELECT * FROM sources WHERE source_id=?", (BOOK_SRC,)).fetchone()
         cols = [d[1] for d in c.execute("PRAGMA table_info(sources)")]
@@ -201,7 +228,10 @@ def main() -> int:
         with open(a.table, "w", encoding="utf-8") as fh:
             fh.write("old_id\tnew_id\taction\tchar\tcov\n")
             for old, new, cov in p["rename"]:
-                fh.write(f"{old}\t{new}\t{'rekey' if old != new else 'rekey_in_place'}\t{label.get(old)}\t{cov}\n")
+                action = "rekey" if old != new else "rekey_in_place"
+                if old in land_map:
+                    action += f"_codepoint:{label.get(old)}->{land_map[old]}"
+                fh.write(f"{old}\t{new}\t{action}\t{label.get(old)}\t{cov}\n")
             for old, twin in p["dup"]:
                 fh.write(f"{old}\t\tevict_dup_of:{twin}\t{label.get(old)}\t\n")
             why = dict(p["keep"])
@@ -209,6 +239,7 @@ def main() -> int:
                 fh.write(f"{old}\t{new}\tkeep_v1:{why[old]}\t{label.get(old)}\t\n")
     if a.report:
         a.report.write_text(json.dumps({"summary": summary, "conflict_human": p["conflict_human"],
+                                        "codepoint_landed": p["codepoint_landed"],
                                         "collide": p["collide"], "blocked": p["blocked"], "dup": p["dup"],
                                         "keep": p["keep"]}, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0
