@@ -1,7 +1,7 @@
 import { api, withWorkspace } from './client'
 import type {
   AroundContext, RareCandidate, ReviewCardsGroupedResponse, ReviewCardsResponse,
-  ReviewVerdictsResponse,
+  ReviewCardsShapeResponse, ReviewVerdictsResponse,
 } from '../types/review'
 
 // `skipDecided`：跳过全书所有批次已裁过的字位（默认开），于是 `limit` 数的是净新卡。
@@ -20,6 +20,16 @@ export function fetchReviewCardsGrouped(book: string, pages: string, only: strin
     + `&only=${only}&gate_cut=${gateCut}&skip_decided=${skipDecided}`
     + `&group=char&sample_limit=${sampleLimit}`
   return api<ReviewCardsGroupedResponse>(`/api/review/cards?${qs}`)
+}
+
+// 按形聚类分组（`group=shape`）：先按形近对表把互相混淆的字种池化，池内再用
+// CNN embedding 按形状聚类拆开，同样不受 `limit` 截断（理由同 `group=char`）。
+export function fetchReviewCardsByShape(book: string, pages: string, only: string, gateCut: boolean,
+                                        skipDecided = true, sampleLimit = 60) {
+  const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
+    + `&only=${only}&gate_cut=${gateCut}&skip_decided=${skipDecided}`
+    + `&group=shape&sample_limit=${sampleLimit}`
+  return api<ReviewCardsShapeResponse>(`/api/review/cards?${qs}`)
 }
 
 export function fetchReviewVerdicts(batch: string) {
