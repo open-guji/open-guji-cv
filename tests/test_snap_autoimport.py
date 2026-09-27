@@ -613,3 +613,12 @@ def test_pack_brings_gates_along(world, tmp_path):
     m = sp.build_tree(spec, tmp_path / "gt")
     assert m["steps"] == ["border_detect", "border_detect_gate", "column_warp", "column_gate"]
     assert m["gates_added"] == ["border_detect_gate", "column_gate"]
+
+
+def test_glyph_fingerprint_follows_borrowed_db(world, tmp_path, monkeypatch):
+    import sqlite3
+    db = tmp_path / "borrowed.db"
+    sqlite3.connect(db).close()
+    monkeypatch.setenv("GUJI_GLYPH_DB", str(db))
+    monkeypatch.setattr("open_guji_cv.steps.glyph_match.db_fingerprint", lambda p: f"fp:{Path(p).name}")
+    assert sp._glyph_fp(world["cloud"] / WS_DIR) == "fp:borrowed.db"
