@@ -1,5 +1,22 @@
 # -*- coding: utf-8 -*-
-"""对勘报告：已整理页面的转写 × 整理本，逐字比对，出可分享的单文件 HTML。
+"""⚠️ **已退役（2026-09-27）**——用 `guji collate <book> --strips` 代替。
+
+这是**单证人**的原型，只吃刻本链默认整理本一份证人。它的两件独有功能——分层
+（`report/collation_grade.py` 的避諱/系统性/异体/人裁/整段错位/存疑）与截条图
+（`strip_b64`）——已经**接进多证人的 `guji collate`**（`report/run.py` + `html.py` +
+新增的 `report/strips.py`），两条线不再各有一半功能。新工具支持任意本书配置的
+`references:` 多证人列表，出的 HTML 同样带分层分区（存疑默认展开）与横排截条图
+（现在落盘成 webp 文件、不再内嵌 base64），另加了「离线交付包」开关（`--console ""`
+时深链退到包内的静态截图，不依赖正在跑的控制台）。
+
+本文件留着**只为存档**（旧产物的复现方法、`witness_absent_runs` 等判据的原始出处，
+`report/absent.py` 头部仍指着这里的教训）。**不要在这上面加新东西**——
+`report/collation_grade.py`、`report/strips.py`、`report/html.py` 才是维护中的代码，
+改判据/加功能都改那三个文件。
+
+---
+
+原说明（保留存档）：对勘报告：已整理页面的转写 × 整理本，逐字比对，出可分享的单文件 HTML。
 
     python scripts/build_collation_report.py --book vol01 [--pages 4-60,63-88]
         [--out output/collation_vol01.html] [--strip 5] [--thumb-h 40] [--limit-strips 1500]
@@ -799,6 +816,9 @@ def main() -> int:
     ap.add_argument("--limit-strips", type=int, default=1500, help="最多出多少条截条图（控体积）")
     ap.add_argument("--variant-examples", type=int, default=3)
     a = ap.parse_args()
+
+    print("⚠️  已退役：请用 `guji collate <book> --strips` 代替——分层与截条图都已接过去，"
+          "还支持多证人。见本文件模块头。", file=sys.stderr, flush=True)
 
     t0 = time.time()
     st = ProductStore()

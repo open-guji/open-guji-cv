@@ -10,8 +10,8 @@
 """
 from __future__ import annotations
 
-from open_guji_cv.report.collation_grade import (REPEAT_MIN, SETTLED, TODO, grade,
-                                                 grade_pairs, summarize)
+from open_guji_cv.report.collation_grade import (REPEAT_MIN, SETTLED, TODO, adapt_diff,
+                                                 grade, grade_pairs, summarize)
 
 
 def _e(hyp, ref, kind="substitution", page=1):
@@ -82,3 +82,50 @@ def test_taboo_target_only_matches_witness_side():
     """只在整理本侧匹配——刻本刻了「虜」而整理本作别的字，那不是避諱。"""
     e = _e("虜", "甲")
     assert grade(e, grade_pairs([e])) != "taboo"
+
+
+# ── adapt_diff：多证人 guji collate 的 Diff 形状 → 这里认的形状 ──────────
+#
+# `report/run.py::collate_book` 现在把这套判据接到 `report/collate.py::Diff`
+# 上（原来只接单证人的旧脚本，见模块头「两个工具字段名不同」）。这几条钉住
+# 字段翻译本身不能错——翻错了分层就是错的，但不会报错，只会悄悄分错层。
+
+def _diff(kind, char, ref, *, human=False, page=1):
+    """`asdict(Diff(...))` 的最小子集：`adapt_diff` 只读这几个键。"""
+    return {"kind": kind, "char": char, "ref": ref, "human": human, "page": page}
+
+
+def test_adapt_diff_maps_char_to_hyp():
+    """`Diff.char` 是我们的字形，`grade()`/`grade_pairs()` 认的键叫 `hyp`。"""
+    assert adapt_diff(_diff("sub.other", "甲", "乙"))["hyp"] == "甲"
+
+
+def test_adapt_diff_collapses_substitution_kinds():
+    """`sub.confusable`／`sub.other` 都是「不同字」，分层不分这两种。"""
+    for k in ("sub.confusable", "sub.other"):
+        assert adapt_diff(_diff(k, "甲", "乙"))["kind"] == "substitution"
+
+
+def test_adapt_diff_collapses_variant_directions():
+    """`variant.to_orthodox`／`variant.to_simp`／`variant.other` 三种方向都归 `variant`
+    ——分层只问「是不是异体」，方向是另一层信息（html.py 单独显示）。"""
+    for k in ("variant.to_orthodox", "variant.to_simp", "variant.other"):
+        assert adapt_diff(_diff(k, "厯", "歷"))["kind"] == "variant"
+
+
+def test_adapt_diff_passes_through_gap_and_unreadable():
+    for k in ("missing", "extra", "unreadable"):
+        assert adapt_diff(_diff(k, "甲", "乙"))["kind"] == k
+
+
+def test_adapt_diff_source_reflects_human_flag():
+    """`source` 只分「人裁」与「其余」——`grade()`/`_is_human()` 只关心是不是以
+    `human` 结尾，不关心 `channel` 具体值，别在 adapter 里编 `auto:<channel>`。"""
+    assert adapt_diff(_diff("sub.other", "甲", "乙", human=True))["source"] == "human"
+    assert adapt_diff(_diff("sub.other", "甲", "乙", human=False))["source"] == ""
+
+
+def test_adapt_diff_output_gradeable_end_to_end():
+    """翻译完的形状能直接喂给 `grade()`，且结果跟直接用旧形状构造的一样。"""
+    entries = [adapt_diff(_diff("sub.other", "金", "虜"))]
+    assert grade(entries[0], grade_pairs(entries)) == "taboo"
