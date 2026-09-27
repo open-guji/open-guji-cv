@@ -157,6 +157,18 @@ def test_one_way_edge_alone_is_not_trusted():
     assert _trusted_variant_edge("冶", "治", ledger, book) is False
 
 
+def test_hand_curated_table_pair_is_trusted():
+    """`config/dicts/variants.tsv`（人工表）登记过的对，即便关系层查不到双向也可信。
+
+    真实例：`為→爲` 关系层双向、但 `逰→遊`/`无→無`/`迴→回` 等 10/17 条查不到双向
+    （单向 `directed`），全部是人工确认——只认双向会把这些手工条目也拦掉，比不加闸
+    还倒退。"""
+    ledger = BookLedger({"groups": {}})
+    book = make_book(BOOK)
+    for top, ref in [("逰", "遊"), ("无", "無"), ("迴", "回")]:
+        assert _trusted_variant_edge(top, ref, ledger, book) is True, f"{top}->{ref}"
+
+
 # ── 3. 字面相同不受影响 ──────────────────────────────────────────
 
 def test_literal_same_is_unaffected_by_guard(tmp_path, monkeypatch):
