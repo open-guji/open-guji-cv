@@ -21,13 +21,14 @@ SYSTEM = """你是宋代文献与古籍版本的校勘专家。任务：为清�
 輸出 JSON（不要多餘文字）：
 {"items":[{"pos":"①","drop":["字",...],"drop_why":{"字":"理由"},"groups":[{"members":["字",...],"word":"此處的詞義","p":0.97,"why":"理由"}],"confidence":"高","need_human":""}]}"""
 
+_CELLS_FILE = 'cells_human1135.json'
 FILL = {'mode': 'box'}   # box：其他待判位显示 ▢；guess：显示〔图像首选?〕（E4）
 _GUESS = None
 def _guess(k):
     """其他待判位的图像首选：库首选与 OCR 首选一致取之，否则取库首选，再否则 OCR 首选"""
     global _GUESS
     if _GUESS is None:
-        C = json.load(open(H + '/data/cells_human1135.json')); _GUESS = {}
+        C = json.load(open(H + '/data/' + _CELLS_FILE)); _GUESS = {}
         for kk, c in C.items():
             lib = [x['c'] for x in c['cands'] if '库首选' in x['src']]; ocr = [x['c'] for x in c['cands'] if 'OCR第1' in x['src']]
             _GUESS[kk] = (lib or ocr or ['▢'])[0]

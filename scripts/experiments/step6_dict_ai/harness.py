@@ -4,6 +4,19 @@ import json, os, sys, re, time, hashlib, unicodedata, argparse, urllib.request, 
 H = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, H)
 import dictlib, prompts
 DAYS = json.load(open(H + '/data/days.json')); CELLS = json.load(open(H + '/data/cells_human1135.json'))
+
+def use_cells(name):
+    """切换评测集。human=1,135 人裁难例（默认）；fullbook-hard=全书无图像共识的格（库首选≠OCR首选或缺一路），
+    含非人裁格。待判集合（上下文挖空）随之切换。"""
+    global CELLS
+    if name == 'human': return
+    F = json.load(open(H + '/data/cells_fullbook.json'))
+    def img(c):
+        lib = [x['c'] for x in c['cands'] if '库首选' in x['src']]; ocr = [x['c'] for x in c['cands'] if 'OCR第1' in x['src']]
+        return lib[0] if lib and ocr and lib[0] == ocr[0] else None
+    CELLS = {k: c for k, c in F.items() if c.get('day') is not None and not img(c)}
+    from prompts import v1, v3
+    v1.PENDING = set(CELLS); v1._GUESS = None; v1._CELLS_FILE = 'cells_fullbook.json'; v3._CELLS = list(CELLS.values())
 TR = json.load(open(H + '/data/truth.json')); KEYS, TXT = TR['keys'], TR['text']
 MARK = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚'
 CACHE = H + '/cache'; CV_ROOT = os.path.abspath(os.path.join(H, '../../..')); os.makedirs(CACHE, exist_ok=True)
@@ -201,8 +214,12 @@ def score(cell, ans):
 
 def run(a):
     REP['n'] = a.rep
+    use_cells(a.cells)
     if a.days in ('dev', 'test', 'smoke'):
         days = json.load(open(H + '/data/splits.json'))[a.days]
+    elif a.days == 'nontest':                  # 全书实验：除 test 集的天以外全部
+        test = set(json.load(open(H + '/data/splits.json'))['test'])
+        days = sorted({c['day'] for c in CELLS.values()} - test)
     else:
         days = [int(x) for x in a.days.split(',')] if a.days != 'all' else sorted({c['day'] for c in CELLS.values()})
     P = getattr(prompts, a.prompt)
@@ -285,6 +302,7 @@ if __name__ == '__main__':
     ap.add_argument('--thinking', action='store_true'); ap.add_argument('--no-ref', action='store_true')
     ap.add_argument('--temp', type=float, default=0.0); ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--tag'); ap.add_argument('--effort'); ap.add_argument('--rep', type=int, default=0)
+    ap.add_argument('--cells', default='human', choices=['human', 'fullbook-hard'])
     ap.add_argument('--budget', type=float, default=2.0, help='本次新调用美元上限，超了剩下的不再调用')
     ap.add_argument('--max-cells', type=int, default=0, help='最多问多少格（按批截断）')
     ap.add_argument('--export', help='只导出提示词 JSONL，不调用'); ap.add_argument('--answers', help='从 JSONL 导回答案打分')
