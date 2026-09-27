@@ -24,7 +24,7 @@ from __future__ import annotations
 import pytest
 
 import open_guji_cv.steps  # noqa: F401  —— 注册产物种类
-from helpers import body_page, make_book, make_borders, make_ctx
+from helpers import body_page, make_book, make_borders, make_ctx, sparse_column_body_page
 from open_guji_cv.core.step import STEPS
 
 PAGE = 1
@@ -111,6 +111,56 @@ def test_missing_borders_product_is_a_tolerant_reject(tmp_path):
     m = STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
     assert not m.admitted
     assert any(r.startswith("missing_input") for r in m.reject), m.reject
+
+
+def test_label_page_with_full_columns_is_overridden_to_body(tmp_path):
+    """卷末尾叶只剩一列有字、其余栏空白——像素统计判「label」（书签），
+    但界行版框齐全（探到 9 条 == 版式 9 列）。这份结构证据应该压过像素
+    统计，改判正文放行，不整页跳过（全唐文 v003/p83 等五页实测的根因，
+    见任务卡 open-guji-core/overview#56）。"""
+    gray, borders = sparse_column_body_page(n_cols=NCOLS)
+    from open_guji_cv.clustering.page_type import classify_page_type
+    assert classify_page_type(gray) == ("label", "skip"), "fixture 本身没触发 label 分类，先修 fixture"
+
+    m = _run_gate(tmp_path, borders, gray=gray)
+    assert m.n_cols == NCOLS == m.expected_cols
+    assert m.admitted, m.reject
+    assert m.reject == []
+    assert m.page_type == "body"
+    assert m.page_type_policy == "standard"
+    assert any(f.startswith("page_type_label_override") for f in m.flags), m.flags
+
+
+def test_label_override_can_be_switched_off(tmp_path):
+    """开关关掉时恢复旧行为——仍判 label、整页跳过。"""
+    from open_guji_cv.core.step import RunContext
+    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
+    from open_guji_cv.products.cache import ImageCache
+    from open_guji_cv.products.store import ProductStore
+
+    gray, borders = sparse_column_body_page(n_cols=NCOLS)
+    book = make_book(expected_cols=NCOLS)
+    ctx = RunContext(book, ProductStore(tmp_path / "products"), ImageCache(tmp_path / "cache"),
+                     params={"border_detect_gate": BorderDetectGateParams(
+                         label_override_on_full_columns=False)},
+                     log=lambda s: None)
+    ctx._raw[PAGE] = gray
+    ctx.store.write(ctx.book.id, "border_detect", f"p{PAGE:04d}", {"borders": borders})
+    m = STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
+    assert not m.admitted
+    assert m.page_type == "label"
+    assert any(r.startswith("page_type_skip") for r in m.reject), m.reject
+
+
+def test_label_page_with_wrong_column_count_still_blocked(tmp_path):
+    """像素统计判「label」、且列数也真不对——两条证据都指向异常，仍该拦，
+    不能因为开了覆盖开关就一律放行。"""
+    gray, borders = sparse_column_body_page(n_cols=NCOLS)
+    m = _run_gate(tmp_path, borders, expected_cols=NCOLS + 1, gray=gray)
+    assert not m.admitted
+    assert m.page_type == "label"
+    assert any(r.startswith("page_type_skip") for r in m.reject), m.reject
+    assert any(r.startswith("column_count") for r in m.reject), m.reject
 
 
 def test_bend_w80_uses_same_constant_as_detection():

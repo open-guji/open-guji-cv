@@ -42,6 +42,19 @@ from ..utils.border_geometry import BEND_W80_MAX
 class BorderDetectGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
     bend_w80_max_gate: float = BEND_W80_MAX   # 复用探测阶段判"单条线跑飞"的同一个量
+    label_override_on_full_columns: bool = True
+    """竖线条数与版式列数吻合时，不因页型判成「label」而整页跳过（缺省开）。
+
+    根因（全唐文 v003/p83、v100/p41、v006/p84、v018/p96、v020/p91 五页
+    实测）：`classify_page_type` 判 `label`（书签/标题条）看的是**像素统计**
+    （墨窄而高，见 `clustering/page_type.py`），跟 Step1 探到几条界行是
+    两条完全独立的证据链——版心几列印字很少（卷末尾叶常见）时，正文页
+    在像素上也会长得很像一条竖长的书签，但 `borders.verticals` 已经把
+    9 条界行（含两条外边框）全部探对了，这是「这页确实有完整栏格」的
+    结构性证据，比像素统计更硬。一律 `n_cols == expected` 才覆盖（不放宽
+    容差——五个实例全部精确相等，没有证据支持「差一条也算接近」）。
+    只覆盖 `label` 这一种 skip 类型：`cover`/`colophon` 目前没有类似的
+    误判证据，覆盖面收紧到已验证的那一种。"""
 
 
 @register_step
@@ -67,13 +80,19 @@ class BorderDetectGateStep(Step):
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
 
+        flags: list[str] = []
+        if (p.label_override_on_full_columns and page_type == "label"
+                and n_cols == expected):
+            flags.append(f"page_type_label_override：像素统计判「label」，"
+                        f"但探到 {n_cols}/{expected} 列（界行齐全），按正文放行")
+            page_type, policy = "body", "standard"
+
         reject: list[str] = []
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
         if n_cols != expected:
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
-        flags: list[str] = []
         if policy == "custom":
             flags.append(f"page_type_custom：页型判定为「{page_type}」，列数预期与正文不同，未核验")
         if policy is None:
@@ -127,6 +146,11 @@ attach_gate("border_detect", GateSpec(
                   desc="页型是否为 custom（如上諭，列数与正文不同）或判不准——"
                        "flag，不拦（custom 还没有专门的窄列处理逻辑，"
                        "uncertain 按 body/standard 兜底）", name="page_type_custom"),
+        GateLevel(id="L0d", unit="page",
+                  desc="页型判「label」但探到的列数与版式列数吻合——flag，"
+                       "改判正文放行不拦（像素统计与界行探测冲突时，"
+                       "以界行为准；开关 `label_override_on_full_columns`，"
+                       "缺省开）", name="page_type_label_override"),
         GateLevel(id="L1", unit="page",
                   desc="探出的列数是否等于版式列数——block 级判据，"
                        "列窗口错了 Step2 整页都没法射影", name="column_count"),
