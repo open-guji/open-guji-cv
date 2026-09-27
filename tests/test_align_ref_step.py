@@ -361,3 +361,108 @@ def test_witness_fingerprint_filled_from_book_references_when_not_legacy(tmp_pat
     p3 = ctx.params_for(step)
     assert p3.witness_fingerprint != fp_before, "换了证人文件内容，指纹该变"
 
+
+# ---------------------------------------------------------------------------
+# uncontested_relax（任务卡 D-align_ref锚定召回-全唐文，2026-09-27）：
+# v006 全书实测发现「最高票簇 1-4 票」失败页里绝大多数没有竞争簇（
+# `avg_hits_per_hit_gram`≈1、`n_clusters`==1），是刻本侧连续 8 字全对太难，
+# 不是套语碰撞——见 `AlignRefParams.uncontested_relax` 模块头。这里用可控的
+# 合成语料复现三种情形：唯一无竞争低票页（该收）、有竞争簇的低票页（不该
+# 收）、命中率不够的低票页（不该收）。
+# ---------------------------------------------------------------------------
+
+# 目标串本身不含重复子串，嵌进「甲乙丙丁…」这类互不相干的填充文字里，
+# 保证除嵌入处外语料里不会有第二处巧合命中。
+_UR_TARGET = "文華殿大學士臣紀昀等奉敕撰經進四庫全書總目提要恭呈御覽伏候聖裁謹奏"
+_UR_FILLER_A = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥零壹貳參肆伍陸柒捌玖拾"
+_UR_FILLER_B = "東西南北中上下前後左右春夏秋冬金木水火土日月星辰風雲雷電山川湖海"
+
+
+def _ur_corpus_text(*, duplicate: bool = False) -> str:
+    if duplicate:
+        # 语料里把目标串重复一遍——真「套语碰撞」的最小复现：两处命中票数
+        # 相当，谁都不占绝对优势。
+        return _UR_FILLER_A * 3 + _UR_TARGET + _UR_FILLER_B * 3 + _UR_TARGET + _UR_FILLER_A * 3
+    return _UR_FILLER_A * 3 + _UR_TARGET + _UR_FILLER_B * 3
+
+
+def _ur_hyp(error_positions: tuple[int, ...] = (5, 15, 25)) -> str:
+    """把 `_UR_TARGET` 在给定位置换成形近字混淆的近似——用来控制「留下几个
+    干净的 8-gram」。默认三个位置量出来正好留 4 个干净窗口（< 绝对下限 5），
+    且只在真实位置命中、没有竞争簇（见模块头「uncontested_relax」一节的
+    prototype 实测）。"""
+    chars = list(_UR_TARGET)
+    for pos in error_positions:
+        chars[pos] = "錯"
+    return "".join(chars)
+
+
+def test_uncontested_relax_off_by_default():
+    assert AlignRefParams().uncontested_relax is False
+
+
+def test_uncontested_relax_recovers_uncontested_low_vote_page(tmp_path, monkeypatch, ws):
+    """核心场景：3 处形近字错误，只留 4 个干净的 8-gram（< 绝对下限 5），
+    但语料里只有这一处命中、没有竞争簇——`uncontested_relax` 应该收下，
+    且锚定后的字符仍是**语料字**（等长 replace 位一样吃 `replace_len_gate`，
+    不是把兜底当成放宽单字采信）。"""
+    hyp = _ur_hyp()
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars=hyp,
+                              corpus_text=_ur_corpus_text())
+
+    legacy = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not legacy.anchored, f"这个场景本该锚不上（legacy）：{legacy.note}"
+    assert legacy.anchor_via == "ngram"
+
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    relaxed = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert relaxed.anchored, f"低票兜底该收但没收：{relaxed.note}"
+    assert relaxed.anchor_via == "uncontested"
+    text = "".join(c.align_char for c in sorted(relaxed.chars, key=lambda c: c.slot))
+    # 三处形近字错位没有匹配上下文，difflib 会把它们判成 delete（不是等长
+    # replace），`_labels_from_ops` 照 `align_label` 原有规则把 delete 段整段
+    # 丢弃——这是复用既有过闸逻辑的正常结果，不是这条新判据的行为。真正要
+    # 守住的是：锚上的字全部是**语料字**、顺序不乱、错位那三个字不会污染
+    # 输出（不会出现「錯」，也不会把语料窗口以外的字带进来）。
+    assert "錯" not in text
+    assert text == "".join(ch for i, ch in enumerate(_UR_TARGET) if i not in (5, 15, 25))
+
+
+def test_uncontested_relax_does_not_override_contested_cluster(tmp_path, monkeypatch, ws):
+    """语料里把目标串重复一遍（真套语碰撞）：两处命中票数相当，
+    `uncontested_relax` 必须原样报「锚不上」，不能瞎猜一个。"""
+    hyp = _ur_hyp()
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars=hyp,
+                              corpus_text=_ur_corpus_text(duplicate=True))
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored, "有竞争簇时不该被兜底收进去"
+    assert ar.anchor_via == "ngram"
+
+
+def test_uncontested_relax_still_rejects_low_equal_frac(tmp_path, monkeypatch, ws):
+    """就算没有竞争簇，候选窗口命中率太低（这里只留头 8 字对、其余全错）
+    也不该收——兜底判据是「双重门槛」，不是只看有没有竞争簇。"""
+    hyp = list(_UR_TARGET)
+    for i in range(9, len(hyp)):
+        hyp[i] = "錯"
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars="".join(hyp),
+                              corpus_text=_ur_corpus_text())
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored, "命中率太低时不该被兜底收进去"
+
+
+def test_uncontested_relax_needs_at_least_min_votes(tmp_path, monkeypatch, ws):
+    """`uncontested_min_votes` 挡住「一票都没有」的页——这类页该继续报
+    「候选太少」/「一个 n-gram 都没命中」，不该被这条参数掩盖。"""
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, corpus_text="甲乙丙丁" * 500)
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored
+    assert ar.anchor_via == "ngram"
+
