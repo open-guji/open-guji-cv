@@ -35,7 +35,7 @@ match_ref 1,748，`steps/seed_admit.py`）。拿同一份整理本再比一遍�
 from __future__ import annotations
 
 import difflib
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from ..clustering.align_eval import WINDOW_PAD, anchor_page
 from ..clustering.align_label import is_han
@@ -109,6 +109,9 @@ class PageResult:
     absent_runs: list[dict] = field(default_factory=list)
     """证人里没有的段（按语/卷端题/卷末题），**不进 diffs**——见 report/absent.py。
     报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
+    warnings: list[str] = field(default_factory=list)
+    """字位数据本身不对劲（`char`/`guess` 长度不是 1），已被 `_sanitize_slots`
+    按阙文/去猜测挡下——不是这一页的对勘结论，是数据质量提醒，见该函数说明。"""
 
 
 def classify(char: str, ref: str) -> str:
@@ -207,14 +210,44 @@ def _anchor_char(s: SlotRec) -> str:
     return s.char or s.guess or PLACEHOLDER
 
 
+def _sanitize_slots(slots: list[SlotRec]) -> tuple[list[SlotRec], list[str]]:
+    """挡坏数据：`char`/`guess` 长度不是 1（`None` 正常，不含占位符 `□`——它
+    本来就是长度 1）的格按阙文 / 去猜测处理，**只挡、不修**。
+
+    2026-09-27 实锤：vol01 一批人裁事件（`feedback/events/
+    vol01-p1-30-confirm-20260916.jsonl`）UTF-8 误当 cp1252 解码再存盘，
+    一个字位存成了 3 个 code point 的假"字"（`'å†…'`，还原是「内」）。9.3
+    对勘假设「一个字位＝一个字符」逐位建串，这种假字混进 `text`/`anchor_text`
+    会让长度对不上、下游 `SequenceMatcher` opcode 下标全部偏移、越界崩溃
+    （vol01 p24/26/33/42/47/137/141 实测，7 页同一批坏数据，全书跑批中止）。
+    根因在上游数据（人裁事件／字形库），交那边去修（cross 单已发）；这里只
+    保证一页坏数据崩不了这页、更崩不了整册。"""
+    warnings: list[str] = []
+    out: list[SlotRec] = []
+    for s in slots:
+        bad_char = s.char is not None and len(s.char) != 1
+        bad_guess = s.guess is not None and len(s.guess) != 1
+        if not bad_char and not bad_guess:
+            out.append(s)
+            continue
+        warnings.append(f"{s.id}: char={s.char!r} guess={s.guess!r} 长度异常，"
+                        + ("已按阙文处理" if bad_char else "已丢弃猜测"))
+        out.append(replace(s, char=(None if bad_char else s.char),
+                           guess=(None if bad_guess else s.guess),
+                           unreadable=(True if bad_char else s.unreadable)))
+    return out, warnings
+
+
 def diff_page(slots: list[SlotRec], w: Witness, page: int,
               pad: int = WINDOW_PAD) -> PageResult:
     """一页 × 一个证人 → 差异清单 ＋ 列结构裁定。"""
+    slots, slot_warnings = _sanitize_slots(slots)
     text_slots = [s for s in slots if s.is_text]
     res = PageResult(page=page, anchored=False, n_slots=len(slots),
                      n_text=len(text_slots),
                      n_excluded=sum(1 for s in slots if s.excluded),
-                     n_unreadable=sum(1 for s in slots if s.unreadable))
+                     n_unreadable=sum(1 for s in slots if s.unreadable),
+                     warnings=slot_warnings)
     if not text_slots:
         res.note = "没有可比对的字位"
         return res
