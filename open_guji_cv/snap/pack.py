@@ -130,7 +130,9 @@ def _pipeline_params(book: str, ws_dir: Path, steps: list[str]) -> tuple[dict, s
 
 
 def _glyph_fp(ws_dir: Path) -> str | None:
-    db = ws_dir / "output" / "glyph.db"
+    """算产物时用的那个库的指纹：设了 `GUJI_GLYPH_DB`（借库，如全唐文借四庫库）就认它，否则本书库。"""
+    env = os.environ.get("GUJI_GLYPH_DB")
+    db = Path(env) if env else ws_dir / "output" / "glyph.db"
     if not db.is_file():
         return None
     try:
