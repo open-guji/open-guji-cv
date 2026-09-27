@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import cell_index, ctx_for  # noqa: E402
+from qb_common import cell_index, ctx_for  # noqa: E402
 
 
 def main():
