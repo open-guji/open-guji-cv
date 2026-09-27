@@ -303,6 +303,19 @@ def page_chars(page: int = 1, book: str = "tbook", *, recs: list[dict], col: int
     return PageChars(page=page, columns=[ColumnChars(col=col, ok=True, chars=chars)])
 
 
+def page_align_ref(page: int = 1, book: str = "tbook", *, recs: list[dict], col: int = 1,
+                   anchored: bool = True):
+    """`align_ref`（Step5-d）产物。`recs` 每项给 slot / align_char / align_op。"""
+    from open_guji_cv.products.kinds.recog import AlignRec, PageAlignRef
+
+    chars = []
+    for r in dict_list(recs):
+        slot = r.pop("slot")
+        r.setdefault("align_op", "equal")
+        chars.append(AlignRec(id=f"{book}:{page}:{col}:{slot}", col=col, slot=slot, **r))
+    return PageAlignRef(page=page, anchored=anchored, chars=chars)
+
+
 def dict_list(recs: list[dict]) -> list[dict]:
     """浅拷贝一遍——构造器会 `pop`，不该改调用方手里的字面量。"""
     return [dict(r) for r in recs]

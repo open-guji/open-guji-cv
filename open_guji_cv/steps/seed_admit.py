@@ -108,6 +108,16 @@ class SeedAdmitParams(BaseModel):
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
     实测 41 条人裁：文意对 39、字形对 40。关掉不等于「永远人审」——下面的 context
     通道（2026-09-11 起对己已巳不再排除）仍可能在没有整理本时单独放行。"""
+    ji_yi_si_review: bool = False
+    """己/已/巳 一族转人审的三方一致闸（2026-09-27 D 铁证复核）：vol03/vol04 各自
+    独立全量穷举，这一族全部自动放行、零送审，vol03 47 格错 55.3%、vol04 34 处——
+    见 `_resolve_ji_yi_si` 文档字符串。这条开关是任务书给的「二选一」里更保守的
+    那种：非「干支/时辰」（几乎不错，不受此闸影响）的其余路径，要求**上下文判定
+    （Step6）＝整理本对齐字＝库候选 top1** 三者一致才放行，不然送人审
+    （`doubts` 记 `ji_yi_si_review`）。另一种做法「这一族一律送审」更简单更保守，
+    数字见任务书对应 done 单，没实现为第二个开关值——需要时改这一个布尔量的调用点
+    即可，不必新增字段。缺省关：用户 09-06/09-11 定的规矩是「整理本给了就放行」，
+    这一族默认继续全放行，开不开等用户看完两种做法的数字再定。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -158,7 +168,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.8", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸
+        id="seed_admit", title="C1 进库准入", version="1.9", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
@@ -233,6 +243,7 @@ class SeedAdmitStep(Step):
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
+        mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         amap = _align(ctx, page)
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
@@ -554,24 +565,54 @@ class SeedAdmitStep(Step):
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
-        d_auto, d_review = _resolve_ji_yi_si(out, amap)
+        d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
         n_review += d_review
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
 
 
-def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
+def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
+                      review_gate: bool = False) -> tuple[int, int]:
     """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
 
     按本页读序取前后字：
     - **干支 / 时辰**（几乎不会错）：直接定字并放行——哪怕原先落了人审；
-    - 其余（「己」的搭配、整理本给「己」、默认「已」）：**原已放行的改成规则的字**——原先的字
+    - 其余（「己」的搭配、整理本、默认「已」）：**原已放行的改成规则的字**——原先的字
       不过是库或整理本对字形的猜测，而本族字形本就不分（四庫整理本自己也把「而已」印成「而巳」）；
       原在人审、但字形证据确认是这一族（库 top1 属本族且 cov ≥ 0.95，或 OCR 首选属本族）→
       按规则的字放行；字形证据不足 → 仍人审，证据里写建议字。
     人裁位不动（人定的就是文意）。→ (新增放行数, 新增人审数)。
-    实测（人裁为真值，bxgb + 四庫 vol01/02）：干支/时辰 全对；搭配与默认 约 96%。
+
+    **2026-09-27 D 铁证复核改了两处**（vol03/vol04 独立复现同一系统性判偏，见
+    `scripts/audit_ji_yi_si_0927.py`）：
+
+    1. **`resolve()` 传 `use_ref="all"`**（原来 `ji_only`，只在整理本给「己」时信它）。
+       docstring 原写的「实测干支/时辰全对、搭配与默认约 96%」是在 bxgb + 四庫 vol01/02
+       上量的；vol03/vol04 独立穷举发现 pred 系统性偏「已」（vol03 47 格里 55.3% 错、
+       vol04 34 处），根因是「默认→已」这条兜底规则抢在整理本前面——vol03/vol04 的
+       gold 分布是 已:巳 ≈ 19:28（vol03）/ 42:38（vol04），「其余→已」这个默认假设
+       在这两本书上是错的多数派，不是少数例外。把默认前多问一次整理本
+       （`use_ref="all"`：干支/时辰仍最先命中，不受影响），vol04 47 格一致率
+       53.0%→86.7%、vol03 47 格 42.6%→80.9%。**这一步没有改变"哪条规则优先"
+       的顺序，只是把整理本从"只信它说己"扩成"它说什么就参考什么"——跟用户
+       09-06/09-11「整理本给了就放行」的规矩方向一致，不是相反。**
+    2. **残留错例（vol04 11/83、vol03 9/47）是另一个独立的坑，这次没修**：清一色是
+       「己的常见搭配」（`_JI_NEXT` 含"意"）与「干支后为地支」规则里 `未` 的例外分支
+       在这两本书上误触发，把已经正确的整理本字覆盖成错的「己」——这两条规则是在
+       bxgb/vol01/vol02 上标定的，vol03/vol04 明显不适配（vol03 全书 47 格 gold 里
+       "己" 出现 0 次，vol04 只 3 次），但样本太小（各不到 10 例）不够重新拟阈值，
+       **负结果**：试过把"意"从 `_JI_NEXT` 删掉，vol04 这 11 例全对，但没有 bxgb/
+       vol01/02 数据验证会不会反过来伤到那三本书的搭配判例，没做——把这条判断
+       完全交给下面的 `review_gate`。
+
+    `review_gate`（`SeedAdmitParams.ji_yi_si_review`）：非「干支/时辰」的其余路径
+    （搭配/整理本/默认）开了之后要求**上下文判定（Step6 `context_decision`）＝
+    整理本对齐字＝库候选 top1** 三者一致才放行，不一致就送人审（`doubts` 记
+    `ji_yi_si_review`）——刚好接住上面第 2 点没修的残留误判：那些误判本质就是
+    "规则给的字"与"整理本"不一致（规则自己覆盖了整理本），三方一致闸会把它们
+    挡下来，不需要先分清是哪条规则错的。缺省关（用户 09-06/09-11 定的规矩是
+    "整理本给了就放行"，这一族默认仍全放行）。
     """
     from ..utils.jiazhu_order import sort_by_reading
     from ..utils.ji_yi_si import resolve
@@ -585,7 +626,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
         nxt = seq[i + 1].char if i + 1 < len(seq) else None
         nxt2 = seq[i + 2].char if i + 2 < len(seq) else None
         ref = (amap.get(r.id) or (None, None))[0]
-        ch, why = resolve(prev, nxt, ref, next2=nxt2)
+        ch, why = resolve(prev, nxt, ref, use_ref="all", next2=nxt2)
         r.evidence = {**(r.evidence or {}), "ji_yi_si": {"char": ch, "why": why}}
         sure = why.startswith("干支") or why == "时辰"
         if sure:
@@ -594,12 +635,25 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
                 d_review -= 1
             r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
-        elif r.admit:
-            r.char = ch
+            continue
+        m = mmap.get(r.id)
+        top1 = (m.candidates[0][0] if m and m.candidates else (m.char if m else None))
+        d = dmap.get(r.id)
+        ctx_char = d.char if d and d.source == "context" else None
+        agree = review_gate and ref and ctx_char == ref and top1 == ref
+        blocked = review_gate and not agree
+        if r.admit:
+            if blocked:
+                r.char, r.admit, r.channel, r.provenance = None, False, None, ""
+                r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_review"]))
+                d_auto -= 1
+                d_review += 1
+            else:
+                r.char = ch
         else:
             ev = r.evidence or {}
             ocr1 = (ev.get("ocr") or [[None]])[0][0] if ev.get("ocr") else None
-            if (ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS:
+            if ((ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS) and not blocked:
                 r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
                 d_auto += 1
                 d_review -= 1
