@@ -9,18 +9,14 @@
         --pages 3-56 --out <ws>/reports/bxgb/shadow/iron_shadow.json \
         --sample-out <ws>/reports/bxgb/shadow/audit_sample.json --sample-n 300 --seed 20260927
 
-判别器触发条件、护栏见总览/14 §八「下一步」，**2026-09-27 bxgb 全书实测后收紧过一版**：
-① 归一化按书级统一尺度（不按本字紧框拉伸）、去墨点连通块；
-② 两个候选都要有 ≥2 个人裁实例，否则弃权；
-③ 入/八 这类「形不可分」登记表，直接弃权交文意；
-④ **触发条件收紧为「两个人裁字都 ≥0.99」**（`iron()` 自己的「两个人裁字都像」判据）——
-   最初按 §八 字面「次优异字 cov ≥ 0.90」广撒网，bxgb 全书实测 35/322 对人裁核对错
-   （10.9%），逐条看图全是语义无关的字（晴/躋、衞/帝、國/回……）：本书字格只有
-   ~70px 高，elastic verify 在这个分辨率上会给结构无关、只是左右密度相近的合体字
-   虚高的 cov，判别器从没在这种「语义无关」的对子上验证过，等于抛硬币。收紧后
-   见下方「结果」一节。距离差 ≥2 才下结论，否则弃权。
-
 只出报表 + 抽样名单，不改任何产物、不写库、不写 admissions、不碰 seed_admit.py。
+
+**判据实现在** `open_guji_cv.clustering.iron_evidence`（2026-09-27 转正时从这个文件搬
+过去、生产 `steps/seed_admit.py` 的 `iron` 通道与这里共用同一份代码，护栏与判别器
+触发条件的实测教训都写在那个模块的头注释里）。本文件只剩：批处理壳（估书级尺度、
+逐页跑、写报表）、按字种去重抽样、以及本道自己评测用的 `CODEPOINT_CONVENTION_PAIRS`
+——码位习惯口径，只用于「跟人裁真值比对」这一步怎么分类，不是放行判据的一部分，
+所以留在这里而不进共享模块。
 """
 from __future__ import annotations
 
@@ -35,163 +31,17 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # 找 scripts/audit_iron_evidence.py
 
-from audit_iron_evidence import human_matcher, iron  # noqa: E402
-
-CANVAS = 96
-MIN_INK_AREA = 10
-DISC_MARGIN = 2.0
-DISC_MIN_INSTANCES = 2
-# 总览/14 §八实测：这类刻本近同形字对，判别器也分不开，交文意判断（不是判别器的锅）。
-FORM_INSEPARABLE = {frozenset(("入", "八"))}
-
-# 共享形近表（clustering/confusable.py）没收、但 verify 的 elastic cov 对它们的
-# 小笔画差异不敏感的对子——本道 shadow 闸自己用的复核名单，**不改共享表**：
-# 玉/王、石/右、早/皁、州/川 出自总览/14 §七 16 条冲突抽查；自/目、且/旦 是
-# 2026-09-27 bxgb 全书实测新踩到的同型坑（见本文件 iron_with_disc 文档）。
-EXTRA_CONFUSABLE_PAIRS: list[tuple[str, str]] = [
-    ("玉", "王"), ("石", "右"), ("上", "土"), ("早", "皁"), ("州", "川"),
-    ("自", "目"), ("且", "旦"),
-    # 2026-09-27 随机抽检 01 实测踩到的一条：「入/八」本已在 FORM_INSEPARABLE
-    # （判别器分不开、交文意），但没进这张表就从来不会走到 _discriminate 里去查
-    # FORM_INSEPARABLE——bxgb:26:3:4 放「八」其实像「入/人」，没被拦下就是这个原因，
-    # 补进来才会真的强制弃权。
-    ("入", "八"),
-    # 2026-09-27 用户码位裁定（字形库/11 §〇）：这四对**按刻形区分，认错就是错**，
-    # 不进 CODEPOINT_CONVENTION_PAIRS——强/強、卻/却 用户原话；回/囘、幷/并 用户看抽检
-    # 02 样张后判「错」，说明这两对在这本书上也能按形区分，一并收进来做复核。
-    ("强", "強"), ("卻", "却"), ("回", "囘"), ("幷", "并"),
-]
-EXTRA_CONFUSABLE_PARTNERS: dict[str, frozenset[str]] = {}
-for _a, _b in EXTRA_CONFUSABLE_PAIRS:
-    EXTRA_CONFUSABLE_PARTNERS.setdefault(_a, set()).add(_b)
-    EXTRA_CONFUSABLE_PARTNERS.setdefault(_b, set()).add(_a)
-EXTRA_CONFUSABLE_PARTNERS = {k: frozenset(v) for k, v in EXTRA_CONFUSABLE_PARTNERS.items()}
+from open_guji_cv.clustering.iron_evidence import (  # noqa: E402
+    CANVAS, extra_confusable_partners, human_matcher, iron, iron_with_disc,
+)
 
 # 码位规矩（字形库/11，用户 2026-09-27 定表）：这两对是「书级统一指定一个码位」的
-# 记录习惯岔子（库/人裁各按各的敲法），评测里当同字、不算错。
+# 记录习惯岔子（库/人裁各按各的敲法），评测里当同字、不算错——只影响本文件跟人裁真值
+# 比对时怎么分类，不是放行判据，所以留在这里而不是共享模块。
 # ⚠️ 幷/并、回/囘 **不在这张表**——用户看抽检 02 样张后判「错」，说明这两对在本书上
-# 也能按刻形区分，已改收进 EXTRA_CONFUSABLE_PAIRS 走复核（同 强/強、卻/却）。
+# 也能按刻形区分，已改收进共享模块的 EXTRA_CONFUSABLE_PAIRS 走复核（同 强/強、卻/却）。
 CODEPOINT_CONVENTION_PAIRS = {frozenset(p) for p in (("别", "別"), ("内", "內"))}
-
-
-def _clean_ink(gray: np.ndarray) -> np.ndarray:
-    _, b = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    n, lab, stats, _ = cv2.connectedComponentsWithStats(b, 8)
-    keep = np.zeros_like(b)
-    for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] >= MIN_INK_AREA:
-            keep[lab == i] = 255
-    return keep
-
-
-def _place_center(img: np.ndarray, canvas: int = CANVAS) -> np.ndarray:
-    h, w = img.shape
-    if h > canvas:
-        y0 = (h - canvas) // 2
-        img = img[y0:y0 + canvas]
-        h = canvas
-    if w > canvas:
-        x0 = (w - canvas) // 2
-        img = img[:, x0:x0 + canvas]
-        w = canvas
-    out = np.zeros((canvas, canvas), np.uint8)
-    y0, x0 = (canvas - h) // 2, (canvas - w) // 2
-    out[y0:y0 + h, x0:x0 + w] = img
-    return out
-
-
-def normalize_book_scale(gray: np.ndarray, scale: float) -> np.ndarray:
-    """按**书级统一尺度**缩放（不按本字墨迹紧框拉伸——避免窄字放大/宽字压扁），去墨点，居中。"""
-    b = _clean_ink(gray)
-    h, w = gray.shape
-    rw, rh = max(1, round(w * scale)), max(1, round(h * scale))
-    r = (cv2.resize(b, (rw, rh), interpolation=cv2.INTER_AREA) > 127).astype(np.uint8) * 255
-    return _place_center(r)
-
-
-def _dt(b: np.ndarray) -> np.ndarray:
-    return cv2.distanceTransform((1 - (b > 0).astype(np.uint8)), cv2.DIST_L2, 3)
-
-
-def chamfer(a: np.ndarray, b: np.ndarray) -> float:
-    """刚性对齐（平移 ±5、缩放 3 档）后的对称倒角距离（97 分位，取较差一侧）。"""
-    if not a.any() or not b.any():
-        return 1e9
-    da, best, best_bb = _dt(a), 1e9, None
-    for sc in (0.94, 1.0, 1.06):
-        bs = cv2.resize(b, None, fx=sc, fy=sc, interpolation=cv2.INTER_NEAREST)
-        c = _place_center(bs)
-        for dy in range(-5, 6):
-            for dx in range(-5, 6):
-                bb = np.roll(np.roll(c, dy, 0), dx, 1)
-                if not bb.any():
-                    continue
-                s = float(np.percentile(da[bb > 0], 97))
-                if s < best:
-                    best, best_bb = s, bb
-    if best_bb is None:
-        return 1e9
-    return max(best, float(np.percentile(_dt(best_bb)[a > 0], 97)))
-
-
-def iron_with_disc(cands, human_chars_set, partners_map, raw_patch, ex_raws_fn, scale):
-    """→ (放行字 | None, top cov, 次优异字 cov, 理由, 判别器距离对 | None)。
-
-    先走纯铁证闸（`iron()`）；**只在 `iron()` 判定「两个人裁字都像」（top/second 都
-    ≥ IRON_COV）时**才交判别器对 top/second 两个候选各自的人裁实例做成对判别。
-
-    2026-09-27 实测教训（bxgb 全书）：最初按总览/14 §八字面「次优异字 cov ≥ 0.90」
-    广撒网触发判别器，35/322 对人裁核对错（10.9%），逐条看图全是**语义无关的字**
-    （晴/躋、衞/帝、國/回……）——本书字格只有 ~70px 高，elastic verify 在这个分辨率上
-    对**结构无关但左右密度相近**的合体字会给出虚高的 cov 近打平分，判别器只在「候选
-    确实形近」的窄集合上验证过（总览/14 §八用的是 87 条冲突里的王/玉、石/右…），
-    对这种大集合里混进来的语义不相关对子等于抛硬币。收紧到只在**两个人裁字都
-    ≥0.99**（iron() 自己的「两个人裁字都像」判据）时才用，见 shadow 报告。
-    """
-    ic, top, second, why = iron(cands, human_chars_set, partners_map)
-    if ic is not None:
-        # 复核：iron 直接判成的字如果在「本道追加形近表」里有对手，交判别器确认一次——
-        # 现有共享形近表（clustering/confusable.py）不收玉/王、上/土、自/目、且/旦
-        # 这类对子（2026-09-27 bxgb 实测踩到，总览/14 §七已点过王/玉这个坑），cov 对
-        # 这类小笔画差异不敏感，光凭 ≥0.99 会静默放错。
-        # ⚠️ 2026-09-27 第一版要求对手字先出现在 GlyphMatcher 的 top-k（k=10）候选里
-        # 才触发，实测 bxgb:25:9:17（土/上）因为「土」没挤进前十而漏判——**对手不必
-        # 在候选集里**，直接查表触发即可，`_discriminate` 会自己对对手的库实例算 cov。
-        partner = next(iter(EXTRA_CONFUSABLE_PARTNERS.get(ic, frozenset())), None)
-        if partner is None:
-            return ic, top, second, "铁证", None
-        return _discriminate(ic, partner, raw_patch, ex_raws_fn, scale, top, second,
-                              base_why="铁证", confirm=True)
-    if why != "两个人裁字都像" or not cands:
-        return None, top, second, why, None
-    top_c, top_v = cands[0]
-    second_c = next((c for c, v in cands[1:] if c != top_c and abs(v - second) < 1e-9), None)
-    if second_c is None:
-        return None, top, second, why, None
-    return _discriminate(top_c, second_c, raw_patch, ex_raws_fn, scale, top, second,
-                          base_why=why, confirm=False)
-
-
-def _discriminate(cand_a, cand_b, raw_patch, ex_raws_fn, scale, top, second, base_why, confirm):
-    """判别 cand_a／cand_b 哪个更像 raw_patch。`confirm=True`：cand_a 是 iron() 已经给出的
-    字，只是要用追加形近表复核一次——查不了（实例不够）时**弃权**而不是照旧放行，
-    宁可多送审也不让已知的小笔画混淆对蒙混过关。"""
-    if frozenset((cand_a, cand_b)) in FORM_INSEPARABLE:
-        return None, top, second, "形不可分", None
-    ex_a, ex_b = ex_raws_fn(cand_a), ex_raws_fn(cand_b)
-    if len(ex_a) < DISC_MIN_INSTANCES or len(ex_b) < DISC_MIN_INSTANCES:
-        reason = "候选实例不足(复核)" if confirm else "候选实例不足(判别器)"
-        return None, top, second, reason, None
-    a0 = normalize_book_scale(raw_patch, scale)
-    da = min(chamfer(a0, normalize_book_scale(b, scale)) for b in ex_a[:6])
-    db = min(chamfer(a0, normalize_book_scale(b, scale)) for b in ex_b[:6])
-    if abs(da - db) < DISC_MARGIN:
-        return None, top, second, f"判别器距离差不够({da:.1f}v{db:.1f})", None
-    winner = cand_a if da < db else cand_b
-    tag = "铁证(判别器复核)" if confirm else "铁证(判别器)"
-    return winner, top, second, tag, (round(da, 2), round(db, 2))
 
 
 def main() -> None:
@@ -231,6 +81,7 @@ def main() -> None:
     human_chars_set = set(matcher._chars)
     vm = VariantMap.load()
     st, cache = ProductStore(), ImageCache()
+    extra_partners = extra_confusable_partners()
 
     truth = human_chars(book)
     print(f"人裁真值 {len(truth)} 格；库人裁实例 {n_lib}", file=sys.stderr)
@@ -371,7 +222,7 @@ def main() -> None:
             exclude = set()
             if a.exclude_chars_file:
                 exclude = set(json.loads(Path(a.exclude_chars_file).read_text(encoding="utf-8")))
-            watch_chars = set(EXTRA_CONFUSABLE_PARTNERS) | {c for p in CODEPOINT_CONVENTION_PAIRS for c in p}
+            watch_chars = set(extra_partners) | {c for p in CODEPOINT_CONVENTION_PAIRS for c in p}
             by_char: dict[str, dict] = {}
             for row in pool:
                 ch = row["char"]

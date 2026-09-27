@@ -90,6 +90,14 @@ class BookSpec:
     #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
     #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
     ocr_candidates: bool = False
+    #: Step7 铁证放行通道（yaml 的 `iron_gate:`）。**默认关闭**——D 道影子验收
+    #: 2026-09-25～27 全书实测（bxgb、vol03，`open_guji_cv.clustering.iron_evidence`）
+    #: 对人裁核对累计 348 格 0 错，2026-09-27 用户批准转正、按书开（先只给测过的
+    #: 两本书开），见 overview 项目进展/图片初步数字化/进度/Step7-放行判定/
+    #: 任务书-D-铁证放行影子验收.md。**只放行文本，不进字形库**（不写 admissions）——
+    #: 这是用户批复时特意加的口子，避免「自己放行的字变成下次放行的证据」自我强化；
+    #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
+    iron_gate: bool = False
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
     #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。
@@ -330,6 +338,7 @@ class BookSpec:
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
+            "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
@@ -505,6 +514,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
+        iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
         frame=str(d.get("frame", "ruled")),
