@@ -17,6 +17,7 @@
 """
 
 from ..products import kinds  # noqa: F401  —— 先注册产物种类
+from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条），排最前
 from . import (border_detect, column_warp, row_segment,  # noqa: F401
                cell_shrink, glyph_match, ocr_candidates, rare_candidates,
                context_decide, align_ref, seed_admit)
