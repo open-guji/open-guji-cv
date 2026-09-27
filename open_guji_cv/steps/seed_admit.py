@@ -81,6 +81,15 @@ class SeedAdmitParams(BaseModel):
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
+    iron_config_fingerprint: str = ""
+    """自动填：`config/iron_extra_confusable.json`（铁证闸的追加形近/形不可分表）
+    变了本步要重跑。开不开铁证闸看册配置 `iron_gate:`（`StepSpec.book_deps`
+    已经把这个字段收进指纹了，这里只管配置文件内容本身）。"""
+    iron_ref_guard: bool = True
+    """铁证放行前与整理本互证（2026-09-27 整理 Z7 实测）：铁证定的字与 `align_ref`
+    对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
+    11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
+    是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -127,6 +136,10 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+        if not self.iron_config_fingerprint:
+            from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
+            object.__setattr__(self, "iron_config_fingerprint",
+                               corpus_fingerprint([str(_IRON_CONFIG)]))
 
 
 @register_step
@@ -143,7 +156,11 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
-                   "open_guji_cv.utils.jiazhu_order"),
+                   "open_guji_cv.utils.jiazhu_order",
+                   "open_guji_cv.clustering.iron_evidence"),
+        # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
+        # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
+        book_deps=("iron_gate",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -205,6 +222,12 @@ class SeedAdmitStep(Step):
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
+        # 铁证放行通道（用户 2026-09-27 批：只放行文本，不进字形库）。册配置
+        # `iron_gate:` 关时这两个都是 None，下面 `_iron_decide` 直接跳过——
+        # 零额外开销，不影响没开这个开关的书。
+        iron_ns = getattr(ctx.book, "norm_stroke", None)
+        iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
+        iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -480,6 +503,24 @@ class SeedAdmitStep(Step):
                     elif _d and _d.char and _d.char == align_char:
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
+
+                # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
+                # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
+                # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
+                # 上面所有通道都没定下来的格再补一次机会，不覆盖任何已经放行的判决（哪怕
+                # 铁证跟它不一致）。开关前后产物 diff 因此只应该多出 `channel="iron"` 的新
+                # 增格，一个已有的格都不会变——这是这次转正验证的判据，也是「先不进库」
+                # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
+                # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
+                if not ok and iron_ctx is not None:
+                    iron_char = _iron_decide(ctx.book.id, page, cc.col, r, iron_ctx,
+                                             iron_scale, iron_ns)
+                    if iron_char is not None and p.iron_ref_guard \
+                            and context_conflicts_ref(iron_char, align_char, vm_here):
+                        doubts.append("iron_vs_ref")
+                    elif iron_char is not None:
+                        ok, channel, char, prov = True, "iron", iron_char, "iron"
+                        doubts = []
                 if ok:
                     n_auto += 1
                 else:
@@ -596,6 +637,95 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     finally:
         conn.close()
     return {iid[3:]: ch for iid, ch in rows if ch}
+
+
+@lru_cache(maxsize=4)
+def _iron_context(db_path: str, norm_stroke: int | None):
+    """铁证闸的匹配上下文：只吃人裁实例的内存匹配器 + 人裁字集合 + 形近表 + 按字分组的
+    人裁实例 id（供判别器成对复核取原始字块）。跨页/跨 run 缓存（同 `_human_shapes`），
+    只在 db_path/norm_stroke 换了才重建——一本书一次，不是一页一次。"""
+    from ..clustering.confusable import partners as _confusable_partners
+    from ..clustering.glyph_db import GlyphDB
+    from ..clustering.iron_evidence import human_matcher
+    matcher, _n = human_matcher(db_path, norm_stroke)
+    human_chars_set = set(matcher._chars)
+    partners_map = _confusable_partners()
+    db = GlyphDB(db_path)
+    human_ids: dict[str, list[str]] = {}
+    for ch, iid in db.conn.execute(
+            """SELECT g.char, e.instance_id FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
+               JOIN instances i ON i.instance_id=e.instance_id WHERE i.label_status='human'"""):
+        human_ids.setdefault(ch, []).append(iid.replace("v2:", ""))
+    return matcher, human_chars_set, partners_map, human_ids
+
+
+def _iron_page_scale(book: str, page: int, match: PageMatch) -> float:
+    """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
+    原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
+    的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
+    几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
+    import cv2
+
+    from ..clustering.iron_evidence import book_scale_from_patches
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    patches = []
+    for cc in match.columns:
+        if not cc.ok:
+            continue
+        for r in cc.chars:
+            path = cache.get(book, "char_patch", f"p{page:04d}c{cc.col:02d}s{r.slot}{r.sub or ''}")
+            if path is None:
+                continue
+            img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                patches.append(img)
+    return book_scale_from_patches(patches)
+
+
+def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
+                 norm_stroke: int | None) -> str | None:
+    """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
+    （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
+    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
+    import cv2
+
+    from ..clustering.iron_evidence import iron_with_disc
+    from ..clustering.normalize import normalize_patch
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    matcher, human_chars_set, partners_map, human_ids = iron_ctx
+    key = f"p{page:04d}c{col:02d}s{r.slot}{r.sub or ''}"
+    path = cache.get(book, "char_patch", key)
+    if path is None:
+        return None
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    res = matcher.match(normalize_patch(img, stroke_width=norm_stroke), exclude_id=f"v2:{r.id}")
+    cands = [(c, float(v)) for c, v in res.candidates]
+    if res.verdict == "same" and res.char and all(c != res.char for c, _ in cands):
+        cands.insert(0, (res.char, float(res.cov)))
+    cands.sort(key=lambda t: -t[1])
+
+    raw_cache: dict[str, object] = {}
+
+    def raw_of(cid: str):
+        if cid not in raw_cache:
+            bk_, p_, c_, s_ = cid.split(":")
+            sub = s_[-1] if s_[-1] in "ab" else ""
+            s_ = s_.rstrip("ab")
+            pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
+            raw_cache[cid] = None if pth is None else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE)
+        return raw_cache[cid]
+
+    def ex_raws(ch: str):
+        ids = [i for i in human_ids.get(ch, []) if i != r.id]
+        return [x for i in ids[:8] if (x := raw_of(i)) is not None]
+
+    winner, _top, _second, _why, _disc = iron_with_disc(
+        cands, human_chars_set, partners_map, img, ex_raws, scale)
+    return winner
 
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
+import { disagreeingRuns, dropReason, groupById } from './ai'
 import type { KeyItem } from './candidates'
 import type { Verdict } from './ReviewPanel'
 
@@ -98,6 +99,63 @@ export function ReviewCardView({
           {doubts}
         </div>
       </div>
+      {c.ai && (() => {
+        const disagree = disagreeingRuns(c.ai)
+        const drop = c.ai.drop || []
+        return (
+          <div className="rvai" onClick={(e) => e.stopPropagation()}>
+            <div className="rvai-badges">
+              {c.ai.conflict_with_img && (
+                <span className="rvbadge rvbadge-warn"
+                      title="AI 首组不包含图像共识（库首选=OCR首选的那个字）">
+                  ⚠ 疑似刻本讹字／整理本改字
+                </span>
+              )}
+              {disagree && (
+                <span className="rvbadge rvbadge-warn" title="两次运行给出的首组不一致">
+                  ⚠ AI 拿不准：{disagree.join(' / ')}
+                </span>
+              )}
+              {c.ai.confidence && <span className="rvp">AI 把握 {c.ai.confidence}</span>}
+              {c.ai.need_human && <span className="muted">{c.ai.need_human}</span>}
+            </div>
+            <div className="rvai-groups">
+              {(c.ai.rank || []).map((r, i) => {
+                const g = groupById(c.groups, r.group)
+                if (!g) return null
+                return (
+                  <div key={r.group} className={`rvai-group${i === 0 ? ' rvai-top' : ''}`}>
+                    <span className="rvp">p={r.p.toFixed(2)}</span>
+                    {g.members.map((m) => (
+                      <button key={m} className={`rvpick${v.shape === m ? ' pick' : ''}`}
+                              onClick={(e) => { e.stopPropagation(); onFocus(); pick(m) }}
+                              title={g.why || undefined}>{m}</button>
+                    ))}
+                    {g.members.length > 1 && <span className="muted">同字异形</span>}
+                    {(g.why || r.why) && (
+                      <details className="rvai-why">
+                        <summary>理由</summary>
+                        {g.why && <div><span className="k">词典</span> {g.why}</div>}
+                        {r.why && <div><span className="k">AI</span> {r.why}</div>}
+                      </details>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {drop.length > 0 && (
+              <details className="rvai-drop">
+                <summary>排除 {drop.length} 项</summary>
+                {drop.map((ch) => (
+                  <div key={ch} className="rvai-dropitem">
+                    <b>{ch}</b> <span className="muted">{dropReason(c.ai, ch)}</span>
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        )
+      })()}
       {ctxImgOpen && <div className="rvctximg"><img src={contextImgSrc} alt="上下文原图" /></div>}
       {fm && (
         <div className="rvform">
