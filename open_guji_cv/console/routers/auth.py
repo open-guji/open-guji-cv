@@ -16,7 +16,7 @@ from __future__ import annotations
 import secrets
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from ..auth import Identity, config as auth_config, get_identity, oauth, session
@@ -148,12 +148,16 @@ _DEV_LOGIN_FORM = """<!doctype html><html><body>
 @router.get("/auth/dev-login")
 def auth_dev_login(state: str, redirect_uri: str) -> HTMLResponse:
     cfg = auth_config.get()
+    if not cfg.dev_idp:
+        raise HTTPException(status_code=404)
     action = _app_path(cfg, "/auth/dev-login-submit")
     return HTMLResponse(_DEV_LOGIN_FORM.format(action=action, state=state, redirect_uri=redirect_uri))
 
 
 @router.get("/auth/dev-login-submit")
 def auth_dev_login_submit(state: str, redirect_uri: str, email: str, role: str) -> RedirectResponse:
+    if not auth_config.get().dev_idp:
+        raise HTTPException(status_code=404)
     code = oauth.dev_issue_code(email=email.strip(), role=role.strip())
     return RedirectResponse(f"{redirect_uri}?code={quote(code)}&state={quote(state)}",
                             status_code=302)
