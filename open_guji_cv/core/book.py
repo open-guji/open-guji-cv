@@ -292,6 +292,20 @@ class BookSpec:
     #: `DecisionRec.groups/ai` 上，**只进产物、不改放行**（`seed_admit` 不读 `ai`）。
     #: 空 = 不启用，参数指纹与产物逐字节同加这个字段之前（见 `ContextDecideParams`）。
     step6_ai: str = ""
+    #: 书级 Step 参数覆盖（yaml 的 `params:` 段，2026-09-27，D-书级admit覆盖）。
+    #: 形状与 `Pipeline.params` 完全一样——`{step_id: {字段: 值}}`，**取名也一样叫
+    #: `params:` 而不是 `admit:`**：任务书要解决的不只是 `seed_admit` 一个步骤
+    #: （`context_verdicts` 是，未来别的步骤书级微调大概率也是），叫 `admit:`
+    #: 会把「书级参数覆盖」这个通用机制窄化成「只服务放行」，下次要给别的步骤
+    #: 加书级参数又要新开一个顶层字段。跟管线 yaml 用同一个名字、同一种形状，
+    #: 也省得两处各记一套写法。
+    #:
+    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） <
+    #: **这里** < 调用方覆盖（CLI `--params` / 控制台表单）——合并逻辑在
+    #: `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前叠一层。
+    #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
+    #: 已有 Step 的参数取值）。
+    params: dict[str, dict] = field(default_factory=dict)
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -475,6 +489,21 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
     return out
 
 
+def _load_book_params(raw) -> dict[str, dict]:
+    """yaml 的顶层 `params:` 段 → `{step_id: {字段: 值}}`。跟
+    `core/pipeline.py::load_pipeline` 里对管线 yaml `params:` 的校验同一个理由：
+    形状错了要在读配置时就报，不要拖到某个 Step 用 `**kv` 构参数时才报出一个
+    不好懂的 `TypeError`。不在这里校验 `step_id` 是不是已注册的 Step——那要
+    `import open_guji_cv.steps` 触发注册，`core/book.py` 不该为此绑定 steps 包，
+    合并时（`core/engine.py`）交给 `STEPS[sid].spec.params(**kv)` 自然报错。
+    """
+    if not raw:
+        return {}
+    if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
+        raise ValueError("书 yaml 的 params: 必须是 {step_id: {字段: 值}}")
+    return {str(k): dict(v) for k, v in raw.items()}
+
+
 def _workspace_books_dir() -> Path | None:
     """工作区里的 `books/`（有 `GUJI_WORKSPACE` 才有）。
 
@@ -566,6 +595,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         font=dict(d.get("font") or {}),
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
         step6_ai=str(d.get("step6_ai") or ""),
+        params=_load_book_params(d.get("params")),
     )
 
 

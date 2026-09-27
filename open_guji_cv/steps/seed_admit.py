@@ -58,6 +58,19 @@ class SeedAdmitParams(BaseModel):
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
+    context_verdicts: str = ""
+    """context 通道按**库判 verdict** 加的闸（2026-09-27，D-书级admit覆盖）。
+    逗号分隔的允许集合，如 `"same,unsure"`——只在 `r.verdict` 落在这个集合里时
+    才允许 context 放行；不在集合里记一条 doubt `context_verdict`、落人审。
+    空串 = 不限制（旧行为，所有 verdict 都能走 context）。
+
+    起因：全唐文放行抽检（overview `新书整理/书/全唐文/放行抽检-v0.md`）—— 独立
+    两次抽样都测到 `channel=context ∧ verdict=diff` 错率约 50%（n=40），而
+    `verdict=same/unsure` 错率低得多（`unsure` 9.1%~5.0%，`same` 未见错）。按
+    「锚定页/未锚定页」拆开复核过，错率不随锚定与否变化，说明问题出在
+    `verdict=diff` 这个组合本身——库已经明确判"不是这个字"，`context_margin`
+    顶格覆盖这条视觉证据不可靠，不是分辨率不够的问题，是这条通道天生守不住。
+    """
     always_review: str = "己已巳"
     """这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
     「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
@@ -255,6 +268,8 @@ class SeedAdmitStep(Step):
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         amap = _align(ctx, page)
         always = set(p.always_review or "")
+        context_verdicts = frozenset(
+            s.strip() for s in (p.context_verdicts or "").split(",") if s.strip())
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
         # 铁证放行通道（用户 2026-09-27 批：只放行文本，不进字形库）。册配置
@@ -517,7 +532,9 @@ class SeedAdmitStep(Step):
                 from ..clustering.seeding import context_conflicts_ref
                 if (not ok and not form_open and p.use_context and d and d.source == "context"
                         and d.char and d.margin >= p.context_margin):
-                    if context_conflicts_ref(d.char, align_char, vm_here):
+                    if context_verdicts and r.verdict not in context_verdicts:
+                        doubts.append("context_verdict")
+                    elif context_conflicts_ref(d.char, align_char, vm_here):
                         doubts.append("context_vs_ref")
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
