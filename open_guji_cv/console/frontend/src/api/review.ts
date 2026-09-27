@@ -1,6 +1,7 @@
 import { api, withWorkspace } from './client'
 import type {
-  AroundContext, RareCandidate, ReviewCardsResponse, ReviewVerdictsResponse,
+  AroundContext, RareCandidate, ReviewCardsGroupedResponse, ReviewCardsResponse,
+  ReviewVerdictsResponse,
 } from '../types/review'
 
 // `skipDecided`：跳过全书所有批次已裁过的字位（默认开），于是 `limit` 数的是净新卡。
@@ -9,6 +10,16 @@ export function fetchReviewCards(book: string, pages: string, only: string, gate
   const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
     + `&only=${only}&gate_cut=${gateCut}&limit=${limit}&skip_decided=${skipDecided}`
   return api<ReviewCardsResponse>(`/api/review/cards?${qs}`)
+}
+
+// 按字种批审（`group=char`）：不传 `limit`——这一模式后端本就不按 limit 截断，
+// 要的是全量待审格才能如实报每组 n 与页码分布；`sampleLimit` 只管每组样例数。
+export function fetchReviewCardsGrouped(book: string, pages: string, only: string, gateCut: boolean,
+                                        skipDecided = true, sampleLimit = 60) {
+  const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
+    + `&only=${only}&gate_cut=${gateCut}&skip_decided=${skipDecided}`
+    + `&group=char&sample_limit=${sampleLimit}`
+  return api<ReviewCardsGroupedResponse>(`/api/review/cards?${qs}`)
 }
 
 export function fetchReviewVerdicts(batch: string) {
