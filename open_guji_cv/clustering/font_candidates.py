@@ -123,24 +123,49 @@ def _index_dir() -> Path:
     return cache_root() / "font_index"
 
 
+_FONT_FILE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _font_file_fingerprint(p: Path) -> str:
+    """单个字体文件的**内容**指纹（sha256 前 12 位），按 `(路径, mtime_ns, 大小)`
+    缓存避免重复读盘——与 `cnn_candidates._CKPT_FP_CACHE`/`_real_proto_file_fingerprint`/
+    `_gw_catalog_content_fingerprint` 同一个写法。"""
+    st = p.stat()
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _FONT_FILE_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _FONT_FILE_FP_CACHE[key] = fp
+    return fp
+
+
 def font_set_fingerprint(root: str = "fonts") -> str:
-    """模板字体集的指纹：每个字体档 `名字:大小:mtime` 拼起来哈希；一个都没有 → "nofonts"。
+    """模板字体集的指纹：每个字体档按**内容**（sha256）拼起来哈希；一个都没有 → "nofonts"。
 
     2026-09-21 加。此前只有 HOG 索引键（`_index_key`）带字体档，embedding 索引键
     （`cnn_candidates._emb_index`）与 `rare_candidates` 产物指纹（`full_fingerprint`）
     **都不带**——于是 `FONT_ORDER` 加一套字体、或换掉 `fonts/` 里的档，emb 索引照旧
     命中旧缓存、产物照旧显示新鲜，模板其实一张没变。与「阈值不进指纹」
     （`steps/rare_candidates.py` 2026-09-17）同一类静默失效，现在三处共用这一把尺子。
-    """
+
+    **2026-09-28 改按内容算，`root` 固定按仓根解析**（CV 总管 09-27 23:45Z 追加，
+    K 快照自动导入 #51 查出）——原先按 `名字:大小:mtime` 拼，字体文件逐字节相同、
+    只是不同机器 checkout 的 mtime 不同，key 就跟着变（vol03 base 一处
+    `f1f5c8e8…`、一处 `05a81919…`）：云端预建的 embedding/HOG 索引到服务器上
+    全部 miss，服务器只能现建（K18 实测冷建近 1 小时，差点 OOM）——与
+    `cnn_candidates.fingerprint`/`real_proto_fingerprint`/`gw_catalog_fingerprint`
+    同一个坑、同一个改法。`root` 不再走 `_font_files` 那套「先认 cwd 再认仓根」的
+    兼容写法（那是给**找文件**用的，两边最终扫到的物理文件不变）——指纹要的是
+    「同一份字体在哪台机器都算出同一个 key」，不该让计算路径跟着 cwd 漂，这里
+    显式解析成绝对路径后再传给 `_font_files`。"""
     import hashlib
-    files = _font_files(root)
+    base = root if Path(root).is_absolute() else str(_REPO_ROOT / root)
+    files = _font_files(base)
     if not files:
         return "nofonts"
-    h = hashlib.sha1()
-    for f in files:
-        st = Path(f).stat()
-        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}|".encode())
-    return h.hexdigest()[:12]
+    parts = [f"{Path(f).name}:{_font_file_fingerprint(Path(f))}" for f in files]
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
 
 
 def _index_key(charset: tuple[str, ...], root: str, backend: str) -> str:
