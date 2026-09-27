@@ -637,3 +637,34 @@ def test_pack_cli_reads_products_of_given_workspace(world, tmp_path, monkeypatch
     cli_v2.main()
     out = json.loads(capsys.readouterr().out)
     assert out["files"] == 8 and out["branch"].endswith("T0444")
+
+
+def test_attach_only_pack_and_import(world, tmp_path):
+    """纯附件包（Z17 回馈）：本地没有 products 也能打；导入只落位附件、不碰 products。"""
+    idx = tmp_path / "emb_k.npz"
+    idx.write_bytes(b"index-bytes" * 100)
+    spec = sp.PackSpec(book="rare-index", products_root=tmp_path / "nothing-here", ws_dir=world["cloud"] / WS_DIR,
+                       mode="attach-only", cv_commit=world["A"], stamp="20260927T2330",
+                       attachments=[sp.Attachment(root="cv", dest="models/glyph_cnn_r5/emb_k.npz", src=idx)],
+                       glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "t")
+    assert m["steps"] == [] and m["files"] == {} and m["page_scope"] == "none"
+    assert m["branch"] == "snap/abcdefgh12/rare-index/20260927T2330"
+    sp.commit_and_push(world["cloud"], tmp_path / "t", m)
+    before = read_page(world)
+    out = run_watch(world)
+    r = out["results"][0]
+    assert r["status"] == imp.IMPORTED and r["attachments_placed"] == ["cv:models/glyph_cnn_r5/emb_k.npz"]
+    assert (world["cv"] / "models/glyph_cnn_r5/emb_k.npz").read_bytes() == idx.read_bytes()
+    assert read_page(world) == before
+    assert not (world["server"] / WS_DIR / "products" / "rare-index").exists()
+    assert run_watch(world)["status"] == "idle"
+    with pytest.raises(mf.ManifestError):
+        sp.build_tree(sp.PackSpec(book="x", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
+                                  mode="attach-only", cv_commit=world["A"]), tmp_path / "t2")
+
+
+def test_product_pack_without_products_dir_hints_attach_only(world, tmp_path):
+    with pytest.raises(FileNotFoundError, match="attach-only"):
+        sp.build_tree(sp.PackSpec(book="nobook", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
+                                  cv_commit=world["A"]), tmp_path / "t3")

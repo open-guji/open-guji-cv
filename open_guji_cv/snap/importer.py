@@ -396,6 +396,51 @@ def _swap_back(m: dict, book_dir: Path, backup_dir: Path, backed: list[str], pla
             target.unlink(missing_ok=True)
 
 
+def _import_attach_only(branch: str, m: dict, base: dict, ref: str, *, ws_repo: Path,
+                        ws_roots: list[Path], cv_repo: Path, remote: str, dry_run: bool,
+                        git: gitio.GitRunner, url_fetch) -> ImportResult:
+    """纯附件包：校验 sha → 查 cv 兼容 → 落位附件（被换掉的留备份在 cv 仓 `runs/snap_backup/`）。
+    不碰任何 products，不拿书级跑批锁、不量新鲜度。只有 ws 附件时才要找得到工作区。"""
+    need_ws = any(a["root"] == "ws" for a in m["attachments"])
+    ws_dir = find_workspace(ws_roots, m["workspace"]["key"], m["workspace"].get("dir")) if need_ws else None
+    if need_ws and ws_dir is None:
+        return ImportResult(NO_WORKSPACE, branch, {**base, "workspace": m["workspace"],
+                                                   "searched": [str(r) for r in ws_roots]})
+    staging = Path(tempfile.mkdtemp(prefix=STAGING_PREFIX))
+    try:
+        try:
+            tar = gitio.archive_tar(ws_repo, ref, git)
+        except gitio.GitError as e:
+            return ImportResult(FETCH_FAILED, branch, {**base, "error": str(e)})
+        problems = extract_and_verify(tar, m, staging, url_fetch)
+        if problems:
+            return ImportResult(SHA_MISMATCH, branch, {**base, "problems": problems[:20],
+                                                       "n_problems": len(problems)})
+        ok, cvd = check_cv(cv_repo, m, git, remote)
+        base["cv_check"] = cvd
+        if not ok:
+            return ImportResult(INCOMPATIBLE, branch, base)
+        if dry_run:
+            return ImportResult(WOULD_IMPORT, branch, {
+                **base, "attachments": len(m["attachments"]),
+                "plan": [f"落位 {a['root']}:{a['dest']}" for a in m["attachments"]]})
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        backup_dir = Path(cv_repo) / "runs" / "snap_backup" / f"{stamp}__{m['id'].replace('/', '_')}"
+        placed = _place_attachments(m, staging, ws_dir or Path(cv_repo), cv_repo, backup_dir)
+        log = Path(cv_repo) / "runs" / "snap_attach_imports.jsonl"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": stamp, "pack": m["id"], "branch": branch, "commit": base["commit"],
+                                 "placed": placed}, ensure_ascii=False) + "\n")
+        return ImportResult(IMPORTED, branch, {
+            **base, "attachments_placed": placed,
+            "backup": str(backup_dir) if backup_dir.exists() else None})
+    except Exception as e:  # noqa: BLE001
+        return ImportResult(FAILED, branch, {**base, "error": f"{type(e).__name__}: {e}"})
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Path,
                 remote: str = "origin", dry_run: bool = False, force: bool = False,
                 superseded_by: str | None = None, fetch: bool = True,
@@ -421,6 +466,10 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
             "pack_cv": m["cv"]["commit"]}
     if superseded_by and not force:
         return ImportResult(SUPERSEDED, branch, {**base, "superseded_by": superseded_by})
+    if m["mode"] == "attach-only":
+        return _import_attach_only(branch, m, base, ref, ws_repo=ws_repo, ws_roots=ws_roots,
+                                   cv_repo=cv_repo, remote=remote, dry_run=dry_run, git=git,
+                                   url_fetch=url_fetch)
     ws_dir = find_workspace(ws_roots, m["workspace"]["key"], m["workspace"].get("dir"))
     if ws_dir is None and m["workspace"].get("create") and ws_roots:
         # 新书第一包：在第一个 ws 根下按包里的目录名新建（名字已由 safe_relpath 校验）
