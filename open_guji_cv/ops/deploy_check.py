@@ -18,7 +18,9 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -34,6 +36,7 @@ OUTSIDE_WINDOW = "outside_window"
 WOULD_DEPLOY = "would_deploy"
 MERGE_FAILED = "merge_failed"
 ROLLED_BACK = "rolled_back"
+KNOWN_BAD = "known_bad"
 DEPLOYED = "deployed"
 
 
@@ -47,7 +50,9 @@ def default_systemctl_runner(args: list[str]) -> subprocess.CompletedProcess:
 
 
 def default_install_runner(repo: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["python", "-m", "pip", "install", "-e", "."], cwd=repo,
+    # 用跑本脚本的解释器（2026-09-27 服务器实测：systemd 用户服务的 PATH 里没有 `python`，
+    # 写死 "python" 直接 FileNotFoundError）。
+    return subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], cwd=repo,
                           capture_output=True, text=True)
 
 
@@ -113,6 +118,24 @@ class DeployResult:
         return {"status": self.status, **self.detail}
 
 
+def _load_state(path: Path | None) -> dict:
+    if path is None or not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_state(path: Path | None, state: dict) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+
+
 def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "production",
                  service: str = "guji-cv-console", base_url: str = "http://127.0.0.1:8640",
                  products_root: Path | None = None, dry_run: bool = False,
@@ -122,7 +145,12 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
                  install_runner: Callable[[Path], subprocess.CompletedProcess] = default_install_runner,
                  http_get: Callable[[str], int] = default_http_get,
                  sleeper: Callable[[float], None] = time.sleep,
-                 health_paths: tuple[str, ...] = ("/", "/healthz")) -> DeployResult:
+                 health_paths: tuple[str, ...] = ("/", "/healthz"),
+                 state_path: Path | None = None) -> DeployResult:
+    """`state_path`（2026-09-27）：记「真正部署成功的提交」与「部署失败过的提交」。
+    判有没有更新以它为准、不看本地分支——否则 git 已前进而装依赖／重启失败时，本地分支
+    已等于远端，下一轮会判 `no_update`，控制台永远停在旧代码（服务器实测踩到）。
+    不给则退回旧行为（看本地分支）。"""
     window = window or DeployWindow()
     now = now or datetime.now(timezone.utc)
 
@@ -146,8 +174,13 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
         return DeployResult(RESOLVE_FAILED, {
             "local_stderr": local.stderr.strip(), "remote_stderr": remote_rev.stderr.strip()})
     local_rev, remote_head = local.stdout.strip(), remote_rev.stdout.strip()
-    if local_rev == remote_head:
-        return DeployResult(NO_UPDATE, {"rev": local_rev})
+    state = _load_state(state_path)
+    deployed_rev = state.get("deployed") or local_rev
+    if deployed_rev == remote_head:
+        return DeployResult(NO_UPDATE, {"rev": deployed_rev})
+    if state.get("failed") == remote_head:
+        return DeployResult(KNOWN_BAD, {"rev": remote_head, "deployed": deployed_rev,
+                                        "reason": state.get("failed_reason", "")})
 
     # 锁在「有没有更新」之后查——没更新时压根不用管有没有人在跑批。
     locks = find_run_locks(products_root) if products_root else []
@@ -166,22 +199,39 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
                     "pip install -e .", f"systemctl --user restart {service}",
                     "健康检查 " + "、".join(base_url.rstrip('/') + p for p in health_paths)]})
 
-    prev_rev = local_rev
+    prev_rev = deployed_rev
     git_runner(repo, ["checkout", branch])
     merged = git_runner(repo, ["merge", "--ff-only", f"{remote}/{branch}"])
     if merged.returncode != 0:
         return DeployResult(MERGE_FAILED, {"stderr": merged.stderr.strip(), "target_rev": remote_head})
 
-    install_runner(repo)
+    def _rollback(reason: str) -> DeployResult:
+        # 本地分支退回上一个部署成功的提交，再装一次、重启；失败提交记进状态，
+        # 下一轮不再反复撞同一个坏提交（production 前进到新提交会自动再试）。
+        git_runner(repo, ["checkout", "-B", branch, prev_rev])
+        try:
+            install_runner(repo)
+        except Exception:  # noqa: BLE001 —— 回滚路上尽力而为
+            pass
+        systemctl_runner(["restart", service])
+        _save_state(state_path, {"deployed": prev_rev, "failed": remote_head,
+                                 "failed_reason": reason})
+        return DeployResult(ROLLED_BACK, {"failed_rev": remote_head, "rolled_back_to": prev_rev,
+                                          "reason": reason, "health_paths": list(health_paths)})
+
+    try:
+        inst = install_runner(repo)
+    except Exception as e:  # noqa: BLE001
+        return _rollback(f"install: {type(e).__name__}: {e}")
+    if getattr(inst, "returncode", 0) not in (0, None):
+        return _rollback("install: " + (getattr(inst, "stderr", "") or "")[-500:].strip())
     systemctl_runner(["restart", service])
     sleeper(2.0)
     ok = all(http_get(base_url.rstrip("/") + p) == 200 for p in health_paths)
     if not ok:
-        git_runner(repo, ["checkout", prev_rev])
-        systemctl_runner(["restart", service])
-        return DeployResult(ROLLED_BACK, {"failed_rev": remote_head, "rolled_back_to": prev_rev,
-                                          "health_paths": list(health_paths)})
+        return _rollback("health check")
 
+    _save_state(state_path, {"deployed": remote_head})
     return DeployResult(DEPLOYED, {"from_rev": prev_rev, "to_rev": remote_head})
 
 

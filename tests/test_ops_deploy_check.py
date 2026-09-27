@@ -182,7 +182,7 @@ def test_health_check_failure_rolls_back(no_sleep):
     assert result.detail["rolled_back_to"] == "abc123"
     # 回滚：checkout 回旧提交、再重启一次——总共两次 restart（部署时一次、回滚后一次）
     assert len(restarts) == 2
-    checkout_targets = [c[1] for c in git.calls if c[0] == "checkout"]
+    checkout_targets = [c[-1] for c in git.calls if c[0] == "checkout"]
     assert "abc123" in checkout_targets
 
 
@@ -232,3 +232,64 @@ def test_write_deploy_record_writes_markdown_without_pushing(tmp_path):
     assert "deployed" in text
     assert "vol02" in text
     assert "glyph_match" in text
+
+
+# ── 2026-09-27：装依赖失败要回滚；成功／失败都记状态，git 前进后失败不能卡成 no_update ──
+def _fake_git_ahead(calls):
+    import subprocess as sp
+
+    def git(repo, args):
+        calls.append(args)
+        if args[:1] == ["rev-parse"]:
+            rev = "new" if args[1].startswith("origin/") else "new"   # 本地分支已被前一轮推进
+            return sp.CompletedProcess(args, 0, rev + "\n", "")
+        return sp.CompletedProcess(args, 0, "", "")
+    return git
+
+
+def test_state_file_retries_when_branch_advanced_but_not_deployed(tmp_path, no_sleep):
+    import json
+    import subprocess as sp
+    state = tmp_path / "deploy_state.json"
+    state.write_text(json.dumps({"deployed": "old"}))
+    calls = []
+    res = dc.deploy_check(Path("/fake/repo"), git_runner=_fake_git_ahead(calls), sleeper=no_sleep,
+                          install_runner=lambda r: sp.CompletedProcess([], 0, "", ""),
+                          systemctl_runner=lambda a: sp.CompletedProcess(a, 0, "", ""),
+                          http_get=lambda u: 200, state_path=state)
+    assert res.status == dc.DEPLOYED
+    assert json.loads(state.read_text())["deployed"] == "new"
+
+
+def test_install_failure_rolls_back_and_marks_known_bad(tmp_path, no_sleep):
+    import json
+    import subprocess as sp
+    state = tmp_path / "deploy_state.json"
+    state.write_text(json.dumps({"deployed": "old"}))
+    calls = []
+
+    def boom(repo):
+        raise FileNotFoundError("python")
+    res = dc.deploy_check(Path("/fake/repo"), git_runner=_fake_git_ahead(calls), sleeper=no_sleep,
+                          install_runner=boom,
+                          systemctl_runner=lambda a: sp.CompletedProcess(a, 0, "", ""),
+                          http_get=lambda u: 200, state_path=state)
+    assert res.status == dc.ROLLED_BACK
+    assert ["checkout", "-B", "production", "old"] in calls
+    st = json.loads(state.read_text())
+    assert st["deployed"] == "old" and st["failed"] == "new"
+    again = dc.deploy_check(Path("/fake/repo"), git_runner=_fake_git_ahead([]), sleeper=no_sleep,
+                            state_path=state)
+    assert again.status == dc.KNOWN_BAD
+
+
+def test_default_install_runner_uses_current_interpreter(monkeypatch):
+    import sys
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        return None
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    dc.default_install_runner(Path("/fake/repo"))
+    assert seen["cmd"][0] == sys.executable

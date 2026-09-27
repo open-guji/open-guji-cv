@@ -1146,7 +1146,8 @@ def cmd_deploy(args) -> None:
     repo = Path(args.repo).resolve() if args.repo else Path(__file__).resolve().parent.parent
     products_root = Path(args.products).resolve() if args.products else None
     result = dc.deploy_check(repo, branch=args.branch, service=args.service, base_url=args.base_url,
-                             products_root=products_root, dry_run=args.dry_run)
+                             products_root=products_root, dry_run=args.dry_run,
+                             state_path=repo / "runs" / "deploy_state.json")
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     stale = None
     if result.status == dc.DEPLOYED and args.workspace:
