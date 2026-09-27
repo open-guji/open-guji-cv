@@ -122,10 +122,12 @@ class GoldStore:
 
         out = list(merged.values())
         if not dry_run:
-            for it in out:
-                if it.status != "uncertain":
-                    it.touch("migrated", f"从 {carrier} 迁入")
-            self._write_all(shard, out)
+            from ..feedback.lock import feedback_write_lock
+            with feedback_write_lock(self.root):
+                for it in out:
+                    if it.status != "uncertain":
+                        it.touch("migrated", f"从 {carrier} 迁入")
+                self._write_all(shard, out)
         return {"shard": shard, "carrier": carrier, "n_source": len(items), "n": len(out),
                 "conflicts": conflicts, "dry_run": dry_run, "sample_id": out[0].id}
 
@@ -143,52 +145,62 @@ class GoldStore:
         return len(items)
 
     def upsert(self, shard: str, items: Iterable[GoldItem], why: str = "") -> tuple[int, int]:
-        """按 id 合并：新条目追加，已存在的更新 expected 并记 history。返回 (新增, 更新)。"""
-        existing = {i.id: i for i in self.list(shard)}
-        added = updated = 0
-        for it in items:
-            old = existing.get(it.id)
-            if old is None:
-                it.touch("created", why)
-                existing[it.id] = it
-                added += 1
-            elif old.expected != it.expected or old.status != it.status:
-                it.history = list(old.history)
-                it.touch(f"expected {old.expected} → {it.expected}", why)
-                it.source_events = sorted(set(old.source_events) | set(it.source_events))
-                existing[it.id] = it
-                updated += 1
-            else:
-                merged = sorted(set(old.source_events) | set(it.source_events))
-                if merged != old.source_events:
-                    old.source_events = merged
-                    existing[it.id] = old
-        self._write_all(shard, existing.values())
-        return added, updated
+        """按 id 合并：新条目追加，已存在的更新 expected 并记 history。返回 (新增, 更新)。
+
+        **整读→改→整写**，`self.list` 到 `self._write_all` 之间必须持锁——两个并发
+        upsert 各自读到同一版文件、后写覆盖先写，正是并行分工.md §一·1 那类真丢过的坑。
+        """
+        from ..feedback.lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            existing = {i.id: i for i in self.list(shard)}
+            added = updated = 0
+            for it in items:
+                old = existing.get(it.id)
+                if old is None:
+                    it.touch("created", why)
+                    existing[it.id] = it
+                    added += 1
+                elif old.expected != it.expected or old.status != it.status:
+                    it.history = list(old.history)
+                    it.touch(f"expected {old.expected} → {it.expected}", why)
+                    it.source_events = sorted(set(old.source_events) | set(it.source_events))
+                    existing[it.id] = it
+                    updated += 1
+                else:
+                    merged = sorted(set(old.source_events) | set(it.source_events))
+                    if merged != old.source_events:
+                        old.source_events = merged
+                        existing[it.id] = old
+            self._write_all(shard, existing.values())
+            return added, updated
 
     def retire(self, shard: str, item_ids: Iterable[str], why: str = "") -> int:
-        items = self.list(shard)
-        ids = set(item_ids)
-        n = 0
-        for it in items:
-            if it.id in ids and it.status != "retired":
-                it.status = "retired"
-                it.touch("retired", why)
-                n += 1
-        self._write_all(shard, items)
-        return n
+        from ..feedback.lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            items = self.list(shard)
+            ids = set(item_ids)
+            n = 0
+            for it in items:
+                if it.id in ids and it.status != "retired":
+                    it.status = "retired"
+                    it.touch("retired", why)
+                    n += 1
+            self._write_all(shard, items)
+            return n
 
     def mark_stale(self, shard: str, item_ids: Iterable[str], why: str = "") -> int:
-        items = self.list(shard)
-        ids = set(item_ids)
-        n = 0
-        for it in items:
-            if it.id in ids and it.status == "active":
-                it.status = "stale"
-                it.touch("stale", why)
-                n += 1
-        self._write_all(shard, items)
-        return n
+        from ..feedback.lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            items = self.list(shard)
+            ids = set(item_ids)
+            n = 0
+            for it in items:
+                if it.id in ids and it.status == "active":
+                    it.status = "stale"
+                    it.touch("stale", why)
+                    n += 1
+            self._write_all(shard, items)
+            return n
 
     # ── 统计 ─────────────────────────────────────────────────────────
     def summary(self, shard: str) -> dict:
