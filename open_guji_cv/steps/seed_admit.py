@@ -97,12 +97,17 @@ class SeedAdmitParams(BaseModel):
     时不走 context 通道，落人审（`context_blank_cell`）。只挡 context 这一条
     通道——`match_solo`/`iron` 等字形通道本身就要求库里能验出「像」，空白格
     verify 不出 same，链路里已经挡住了，不需要重复设闸。"""
-    context_min_ink: float = 0.02
+    context_min_ink: float = 0.05
     """`context_blank_gate` 的墨量闸。bxgb + vol03 两书全书 `char_index.ink_ratio`
-    分布实测（`scripts/measure_context_ink_gate.py`）：绝大多数字块 ink_ratio
-    在 0.05 以上一段连续分布，`context` 通道命中里另有一小簇 <0.02 且与主分布
-    有明显空隙——`vol03:9:9:21` 落在这一簇（ink_ratio≈0.005）。取 0.02 就压在
-    这道空隙里，两本书的正常字（哪怕「一」这种笔画少的）都在闸外。"""
+    分布实测（`scripts/measure_context_ink_gate.py`）＋逐格看图定的界：vol03 全
+    书 `channel=context` 的 262 格里最低 4 格（0.0415~0.0493，含 `vol03:9:9:21`
+    ink=0.0493、`vol03:67:9:21` ink=0.0415）图上看**都是空白**（碎墨点/划痕，
+    非字）；再往上第一个「像样」的格是 `vol03:33:2:1`（一，ink=0.0677）——
+    「一」只有一横，天然低墨，图上确认是真字；中间 0.0604（莫）图上零散不
+    确定，落在闸的"不拦"一侧（新闸第一版，拿不准就不拦，比错拦一个真字更
+    安全）。取 **0.05**：压在「确认空白」（≤0.0493）与「确认真字」（0.0677）
+    之间。bxgb 全书 `channel=context` 134 格最低也有 0.1093（臣），阈值对它
+    是纯保险栓、不会误伤。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。

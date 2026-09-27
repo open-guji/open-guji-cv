@@ -82,6 +82,7 @@ def test_missing_char_index_does_not_block(tmp_path, monkeypatch):
 
 
 def test_default_min_ink_leaves_room_for_real_low_ink_chars():
-    """闸值本身的量出来的口径：见 `SeedAdmitParams.context_min_ink` 文档字符串——
-    两本书全书 `ink_ratio` 分布实测，取的是主分布与近空白孤簇之间的空隙。"""
-    assert 0.0 < SeedAdmitParams().context_min_ink < 0.05
+    """闸值本身量出来的口径：见 `SeedAdmitParams.context_min_ink` 文档字符串——
+    vol03 全书 `channel=context` 逐格看图定的界，压在「确认空白」（0.0493）与
+    「确认真字，一横的「一」」（0.0677）之间。"""
+    assert 0.0493 < SeedAdmitParams().context_min_ink < 0.0677
