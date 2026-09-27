@@ -37,6 +37,7 @@ dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 7
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
 from pydantic import BaseModel
@@ -48,6 +49,8 @@ from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageOcr)
 from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 from ..utils.ji_yi_si import FAMILY as _JYS
+
+_log = logging.getLogger(__name__)
 
 
 class SeedAdmitParams(BaseModel):
@@ -620,6 +623,8 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     """
     import sqlite3
     from pathlib import Path
+
+    from ..feedback.mojibake import is_legal_shape
     if not Path(db_path).exists():
         return {}
     try:
@@ -636,7 +641,19 @@ def _human_shapes(db_path: str) -> dict[str, str]:
         return {}
     finally:
         conn.close()
-    return {iid[3:]: ch for iid, ch in rows if ch}
+    # 字形字段合法性校验（2026-09-27，H 道乱码普查）：`glyphdb_admit` 写入口自
+    # `b162e64` 起已经挡乱码（单字校验），但这道闸是那次改动之后才加的——库里
+    # 可能留着更早年代写进去的坏数据（这里同样只挡、不吞：跳过并记 warning，
+    # 不让老坏数据悄悄消失）。见 `feedback/mojibake.py`。
+    out: dict[str, str] = {}
+    for iid, ch in rows:
+        if not ch:
+            continue
+        if not is_legal_shape(ch):
+            _log.warning("_human_shapes: %s 字形字段不合法，跳过：%r", iid, ch)
+            continue
+        out[iid[3:]] = ch
+    return out
 
 
 @lru_cache(maxsize=4)
