@@ -34,6 +34,12 @@ NOT_REGISTRY_SHAPED = {
                       # （--book 必填，没有默认值），不读数据集仓分片；104 卡校准表
                       # 写死在脚本里，见 scripts/eval_frame_residue.py 模块头
     "gate2_columns",  # 同上，靶子是 --book 指定书的 gate_manifest 产物，不是数据集分片
+    "t4_gates",  # T4 变体形闸检查：靶子是 GUJI_WORKSPACE 那本书重建出来的
+                # cache/glyph_bench + cache/oov_bench（真刻例，非数据集仓分片），
+                # 与 beixing_real_proto 同一类「有就报」附加靶
+    "t4_variant",  # T4 158/110 条异体分歧冻结子集：--subset 必填指向
+                   # overview 仓那份 jsonl，且要该书已跑到 cell_shrink 的
+                   # char_patch 缓存，不是数据集仓分片
 }
 
 

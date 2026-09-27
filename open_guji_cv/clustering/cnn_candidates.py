@@ -99,19 +99,64 @@ kage 渲染成 64² 图，每形挂一个关联字。**每字取 max、单独一
 文件缺席时整条路静默不参与（`gw_catalog_fingerprint()` 为空、`full_fingerprint` 不变）。"""
 
 GW_ENABLED = False
-"""总开关。**2026-09-22 缺省关**：7 万字表实测 oov_bench emb top-1 74.5 → 77.7、top-5 89.8 → 91.1、
-top-10 91.7 不变；但 unseen 严格 top-10 100.0 → 99.8（掉 3 条，top-1 98.0 不变）——任务卡的闸是
-「unseen 严格 / oov 都不掉」，差这 0.2 不开。开关留着：有了「未收字子集」（T12）再定，
-或者给 gw 模板加一个赢过字体均值的余量再量（不要在 unseen 上调这个余量）。
-评测：`eval_oov.py --no-gw` 对照；设计稿 §13 ⑥。"""
+"""模块级总开关，**缺省关**——评测脚本（`eval_oov.py --no-gw`）与不带 `ctx.book` 的老调用方走它。
+**2026-09-22** 7 万字表实测 oov_bench emb top-1 74.5 → 77.7、top-5 89.8 → 91.1、top-10 91.7
+不变；但 unseen 严格 top-10 100.0 → 99.8（掉 3 条，top-1 98.0 不变）——当时任务卡的闸是
+「unseen 严格 / oov 都不掉」，差这 0.2 没开。
+
+**2026-09-27（T4 变体形转正）**：按书开的口子已接（`font.gw_variant.enabled`，见
+`book_gw_variant()`），产线走 `emb_topk_batch(gw_enabled=…)`/`full_fingerprint(gw_enabled=…)`
+显式传参，不再依赖这个模块全局；此处仍留 `False` 当"没配置 `gw_variant` 的书"的兜底，
+与加这个开关之前逐位相同。评测：`eval_oov.py --no-gw` 对照；`scripts/eval_t4_variant.py`
+对照 158 条异体分歧子集；设计稿 §13 ⑥。"""
 
 
-def gw_catalog_fingerprint(path: str | Path = GW_CATALOG) -> str:
+_GW_CATALOG_FILE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _gw_catalog_content_fingerprint(p: Path) -> str:
+    """单个目录文件的**内容**指纹（sha256 前 12 位），按 `(路径, mtime_ns, 大小)` 缓存——
+    与 `_real_proto_file_fingerprint`/`utils.cut_select.ckpt_fingerprint` 同一个写法。"""
+    st = p.stat()
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _GW_CATALOG_FILE_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _GW_CATALOG_FILE_FP_CACHE[key] = fp
+    return fp
+
+
+def gw_catalog_fingerprint(path: str | Path = GW_CATALOG, enabled: bool | None = None) -> str:
+    """GlyphWiki 目录指纹：**按内容**（sha256），不按 `(大小, mtime)`（T4 变体形转正，
+    2026-09-27）——同 `real_proto_fingerprint` 那次改的理由：云端算好的目录运到别的机器，
+    文件内容一字不差，mtime 却对不上，会被判过期。
+
+    `enabled=None`（缺省）时看模块级 `GW_ENABLED`；按书配置调用时传显式的书级开关
+    （见 `book_gw_variant`）。**关着（不管模块级还是书级）一律返回空串**——这不是新行为，
+    是补一个此前就该有的短路：`full_fingerprint()` 曾经不管 `GW_ENABLED` 一律把这段
+    fingerprint 并进去（`_gw_index` 用不用是另一回事），关着的书只要本机 `cache/glyphwiki/`
+    目录内容一变，`rare_candidates` 就被判过期——跟 `params_hash`/`self_hash` 不对齐
+    同一类坑（见 `core/step.py::_with_book_real_proto` 那次）。"""
+    en = GW_ENABLED if enabled is None else enabled
+    if not en:
+        return ""
     p = Path(path)
     if not p.exists():
         return ""
-    st = p.stat()
-    return hashlib.sha1(f"{p.name}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
+    return _gw_catalog_content_fingerprint(p)
+
+
+def book_gw_variant(font: dict | None) -> bool:
+    """册配置 `font.gw_variant` → `enabled`（T4 变体形模板转正，2026-09-27）。
+
+    yaml 形状：`font: {gw_variant: {enabled: bool}}`。缺省 `enabled=False`——不给这段
+    配置的书（包括现役十册四庫、没重跑过的旧产物）行为与这块新配置加入前逐位相同。
+    与 `book_real_proto` 同一条口径，只是这里没有 `stores`：GlyphWiki 目录是引擎仓级的
+    单一资源（`cache/glyphwiki/catalog_64.npz`，`scripts/build_glyphwiki_catalog.py` 生成，
+    不进 git），不像真刻例那样按书各指各的库。"""
+    cfg = (font or {}).get("gw_variant") or {}
+    return bool(cfg.get("enabled", False))
 
 
 REAL_PROTO_ENABLED = False
@@ -732,7 +777,8 @@ class CnnCandidates:
 
     def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10,
                        real_exclude_ids: frozenset = frozenset(),
-                       real_proto: tuple[bool, tuple[str, ...]] | None = None
+                       real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                       gw_enabled: bool | None = None,
                        ) -> list[list[tuple[str, float]]]:
         """`emb_topk()` 的批量版：网络前向与模板矩阵检索都改一次一批。
 
@@ -743,6 +789,10 @@ class CnnCandidates:
         `cnn_candidates.book_real_proto(ctx.book.font)` 的结果，覆盖模块级
         `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`。`None`（缺省）时走模块级——评测脚本
         （`eval_oov.py` 等直接改 `_cc.REAL_PROTO_ENABLED`）与此前调用方式逐位相同。
+
+        `gw_enabled`（T4 变体形转正，2026-09-27）：按书配置调用时传
+        `cnn_candidates.book_gw_variant(ctx.book.font)`，覆盖模块级 `GW_ENABLED`。
+        `None`（缺省）时走模块级——与加这个形参之前逐位相同。
 
         ## 2026-09-10 生僻字候选提速第二轮：批处理网络前向 + 矩阵-矩阵乘法
 
@@ -770,7 +820,8 @@ class CnnCandidates:
             Q = Q.cpu().numpy()
         sims = mat @ Q.T                                   # (rows, N)
         self.last_gw_prov = [{} for _ in norm_patches]
-        gw = self._gw_index(charset, names) if GW_ENABLED else None
+        gw_on = GW_ENABLED if gw_enabled is None else gw_enabled
+        gw = self._gw_index(charset, names) if gw_on else None
         if gw is not None:
             G, rows_idx, gnames, gsrc = gw
             sg = G @ Q.T                                   # (n_gw, N)
@@ -821,7 +872,10 @@ class CnnCandidates:
             return None
         import torch
         if self._gw is None:
-            key = hashlib.sha1((fingerprint(self.ckpt) + gw_catalog_fingerprint()).encode()).hexdigest()[:16]
+            # `_gw_index` 只在调用方已经判定 gw 打开时才跑（见 `emb_topk_batch`），
+            # 这里显式传 `enabled=True`——不看模块级 `GW_ENABLED`，否则「书级开、模块级关」
+            # 这个此前不存在的组合会把落盘缓存 key 算成空指纹（内容变了也不换文件名）。
+            key = hashlib.sha1((fingerprint(self.ckpt) + gw_catalog_fingerprint(enabled=True)).encode()).hexdigest()[:16]
             f = self.ckpt.parent / f"gw_{key}.npz"
             z = np.load(GW_CATALOG, allow_pickle=False)
             gnames, grel, gsrc = z["names"], z["related"], z["source"]
@@ -970,7 +1024,8 @@ def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
 
 def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
                       specs: tuple[str, ...] = EMB_EXTRA_SPECS,
-                      real_proto: tuple[bool, tuple[str, ...]] | None = None) -> str:
+                      real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                      gw_enabled: bool | None = None) -> str:
     """生僻字候选栈的完整指纹：checkpoint + 外部模板集 + **模板字体集**（2026-09-21 补，
     此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
     换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。
@@ -979,12 +1034,22 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     `book_real_proto(ctx.book.font)` 的结果；`None`（缺省）时走模块级
     `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`——不传参的旧调用方式与此前逐位相同，
     关着时（不管是模块级还是书级）这段一律不进指纹（`real_proto_fingerprint`
-    短路返回空串）。"""
+    短路返回空串）。
+
+    `gw_enabled`（T4 变体形转正，2026-09-27）：按书配置调用时传
+    `book_gw_variant(ctx.book.font)`；`None`（缺省）时走模块级 `GW_ENABLED`。
+
+    ⚠️ **这里补了一个此前就该有的短路**：改之前 `gw_catalog_fingerprint()` 不看
+    `GW_ENABLED`/`gw_enabled`，只要 `cache/glyphwiki/catalog_64.npz` 存在就把它的
+    stamp 并进来——`_gw_index` 用不用是另一回事，关着的书只要这份目录内容一变
+    （比如别的道重新生成了目录），`rare_candidates` 也会被判过期，`params_hash`
+    与实际用没用 gw 对不上，跟 `real_proto` 那次的坑同源。现在关着（不管模块级
+    还是书级）一律不进指纹，与加这个形参之前、目录缺席时逐位相同。"""
     from .font_candidates import font_set_fingerprint
     # GlyphWiki 变体形目录（第六档模板）并进「模板集」那一段，指纹保持三段（测试钉着这个形状）；
-    # 目录缺席时该段与从前逐位相同。
+    # 目录缺席或关着时该段与从前逐位相同。
     tmpl = template_set_fingerprint(specs)
-    gw = gw_catalog_fingerprint()
+    gw = gw_catalog_fingerprint(enabled=gw_enabled)
     if gw:
         tmpl = hashlib.sha1(f"{tmpl}|gw={gw}".encode()).hexdigest()[:16]
     if real_proto is not None:

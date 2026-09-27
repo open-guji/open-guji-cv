@@ -343,7 +343,8 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                    book: str | None = None, struct_rerank: bool = False,
                    struct_probe: str | None = None,
-                   real_proto: tuple[bool, tuple[str, ...]] | None = None) -> list[list[dict]]:
+                   real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                   gw_enabled: bool | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
@@ -355,6 +356,10 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     `cnn_candidates.book_real_proto(ctx.book.font)`；别的调用方（面板单查
     `rare_for`、CLI `rare_batch`）不传，退回模块级 `REAL_PROTO_ENABLED`（缺省关），
     行为与加这个形参之前逐位相同。
+
+    `gw_enabled`（T4 变体形转正，2026-09-27）：透传给 `emb_topk_batch`。
+    `RareCandidatesStep` 传 `cnn_candidates.book_gw_variant(ctx.book.font)`；
+    别的调用方不传，退回模块级 `GW_ENABLED`（缺省关），行为与加这个形参之前逐位相同。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
 
@@ -386,7 +391,8 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cs_base, cs_esc, spec = book_charsets(book, corpus)
         a_list = b_list = [[] for _ in norms]
         cnn_list = cnn.topk_batch(norms, cs_base, k=max(k, 10))
-        emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10), real_proto=real_proto)
+        emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10), real_proto=real_proto,
+                                      gw_enabled=gw_enabled)
         # GlyphWiki 变体形模板赢过字体均值的字位（`cnn_candidates.GW_CATALOG`，T4）：
         # 记下是哪张形赢的，最后挂到候选的 `gw` 字段——告诉人「匹配到的是中华字海的这个异体」。
         gw_prov = [dict(d) for d in cnn.last_gw_prov] or [{} for _ in norms]
@@ -404,7 +410,8 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                    if (not e) or e[0][1] < th]
             if idx:
                 sub = cnn.emb_topk_batch([norms[i] for i in idx], cs_esc,
-                                         k=max(k, 10), real_proto=real_proto)
+                                         k=max(k, 10), real_proto=real_proto,
+                                         gw_enabled=gw_enabled)
                 for i, d in zip(idx, cnn.last_gw_prov):
                     gw_prov[i].update(d)
                 for i, extra in zip(idx, sub):
