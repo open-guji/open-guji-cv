@@ -441,6 +441,18 @@ LAYER2_FADE = 3
 #: 但接下来往下一段仍停在地板以上、很快又爬回去（vol02 t008_p33c2「褚」实测：局部峰
 #: 0.38、半峰门槛 0.19，之后 9 行停在 0.16~0.19 从未跌破 0.15，再往下墨又回升到 0.3+）。
 #: 真线贴字的淡边本就是「几行 0.03~0.1」，这几行必落在地板以下。
+#: **只对 a 档（`one()` 判的边缘贴墨迅速归零那档）生效**（2026-09-27 段三）：S 段二把这条
+#: lookahead 无条件加给所有会走 second_layer 的链（a/d/e），全书回归把 5 个 d 档列的第二道
+#: 框线判成「没找到真地板」而漏剥（留下下边框）、2 个 d 档列因为地板确认后 lookahead 窗口
+#: 里刚好又扫到别的浅谷而多削——用户实审 11 列里 7 列判坏，全部落在 d 档链。a 档链只有
+#: 「褚」与 `p21c6`（同链，未见回归）。所以只在 `case=="a"` 时启用，d/e 档一律用老逻辑
+#: （半峰即触发，不等地板确认）。
+LAYER2_HALF_LOOKAHEAD = 6
+#: 半峰触发（`p[i] < LAYER2_HALF*pk` 但本身没跌破地板）之后，往下再看这么多行，
+#: 必须真的见到跌破 LAYER2_FLOOR 的一行才认——字身部首间的波谷也会先跌到半峰以下，
+#: 但接下来往下一段仍停在地板以上、很快又爬回去（vol02 t008_p33c2「褚」实测：局部峰
+#: 0.38、半峰门槛 0.19，之后 9 行停在 0.16~0.19 从未跌破 0.15，再往下墨又回升到 0.3+）。
+#: 真线贴字的淡边本就是「几行 0.03~0.1」，这几行必落在地板以下。
 LAYER2_HALF_LOOKAHEAD = 6
 #: 线要**尖**：峰值一半以上的行不超过 LAYER2_CORE_MAX 行（内框虚线实测 3~10 行）；只有峰值
 #: ≥ LAYER2_BOLD 的粗外框（18~24 行、满宽实墨）才放宽到 LAYER2_MAX_ROWS。字的底部是
@@ -558,8 +570,12 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     bink = warped_gray[:, lo_:hi_] < ink_threshold
     bw = max(1, hi_ - lo_)
 
-    def line_end(p: np.ndarray, j: int) -> int | None:
-        """从线段起点 `j` 往里找线的下沿（LAYER2_FLOOR / LAYER2_HALF 注）；厚过 LAYER2_MAX_ROWS 返回 None。"""
+    def line_end(p: np.ndarray, j: int, strict: bool = False) -> int | None:
+        """从线段起点 `j` 往里找线的下沿（LAYER2_FLOOR / LAYER2_HALF 注）；厚过 LAYER2_MAX_ROWS 返回 None。
+
+        `strict`：只在 `case=="a"` 链上传 True（见 LAYER2_HALF_LOOKAHEAD 注）——半峰触发
+        （`below_half` 但没跌破地板）之后要求 `LAYER2_HALF_LOOKAHEAD` 行内确有一行跌破地板
+        才认，地板本身触发不受影响。`strict=False`（d/e 档）时完全是老逻辑：半峰即触发。"""
         n = len(p)
         pk = 0.0
         i = j
@@ -567,7 +583,14 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if i - j > LAYER2_MAX_ROWS:
                 return None
             pk = max(pk, float(p[i]))
-            if pk >= inset_min_peak and (p[i] < LAYER2_FLOOR or p[i] < LAYER2_HALF * pk):
+            below_floor = p[i] < LAYER2_FLOOR
+            below_half = p[i] < LAYER2_HALF * pk
+            if pk >= inset_min_peak and (below_floor or below_half):
+                if strict and not below_floor:
+                    look = p[i:min(n, i + LAYER2_FADE + LAYER2_HALF_LOOKAHEAD)]
+                    if not look.size or float(look.min()) >= LAYER2_FLOOR:
+                        i += 1
+                        continue         # 半峰触发但后头没有真贴地板的淡墨——字身波谷，接着扫
                 # 线的淡边（**严格**一路往下走的至多 LAYER2_FADE 行）一起剥掉，别留一两行渣；持平或回升就是字了
                 e = i
                 while e < min(n, i + LAYER2_FADE) and p[e] > ink_eps and (e == i or p[e] < p[e - 1]):
@@ -578,12 +601,13 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
 
     def second_layer(p: np.ndarray, ink2: np.ndarray, cut: int, gap: float | None,
                      m: np.ndarray | None = None, hint: float | None = None,
-                     glued: bool = False) -> int | None:
+                     glued: bool = False, strict: bool = False) -> int | None:
         """`cut` 之后找第二道框线（见 LAYER2_* 注）；找到返回它的下沿，否则 None。
 
         `hint`：Step1 内框线离这一端的行数（位置证据，见 LAYER2_EXTENT_HINT 注）。
         `glued`：认不认与字粘着的线（只给下端：列首第二道之后紧跟首字的顶横，
-        分不清是线还是字——vol02 p101c6、p35c4 试过，削掉的是首字的顶，列首照旧要求线后归零）。"""
+        分不清是线还是字——vol02 p101c6、p35c4 试过，削掉的是首字的顶，列首照旧要求线后归零）。
+        `strict`：只在 `case=="a"` 链上传 True，传给 `line_end`（见其注）。"""
         if gap is None:
             return None
         j = cut
@@ -604,7 +628,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
                 break
             j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
         if glued:
-            k = line_end(p, j)
+            k = line_end(p, j, strict=strict)
         else:                                    # 老口径：线之后必须归零，下沿就是归零处
             k = j
             while k < len(p) and p[k] > ink_eps:
@@ -648,7 +672,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）
             got = 0
             for _ in range(2):
-                k = second_layer(p, ink2, px, gap, m, hint, glued)
+                k = second_layer(p, ink2, px, gap, m, hint, glued, strict=(case == "a"))
                 if k is None:
                     break
                 px, got = k, got + 1
