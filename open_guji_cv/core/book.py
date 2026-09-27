@@ -286,6 +286,12 @@ class BookSpec:
     #: 该书库＋人裁里两码位各多少，取与整理本一致的那个（见 `scripts/glyph_codepoint_census.py`
     #: 与 `scripts/glyph_codepoint_unify.py`），不是猜的。
     codepoints: dict[str, str] = field(default_factory=dict)
+    #: Step6 词典+AI 证据文件（yaml 的 `step6_ai:`，2026-09-27 加，D-Step6）。
+    #: 异步外包段产出的逐格 JSONL（`{key, groups, ai}`，schema = `DecisionRec.groups` /
+    #: `AiEvidence`），相对路径锚工作区根。`context_decide` 读它挂到对应字位的
+    #: `DecisionRec.groups/ai` 上，**只进产物、不改放行**（`seed_admit` 不读 `ai`）。
+    #: 空 = 不启用，参数指纹与产物逐字节同加这个字段之前（见 `ContextDecideParams`）。
+    step6_ai: str = ""
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -559,6 +565,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
+        step6_ai=str(d.get("step6_ai") or ""),
     )
 
 
