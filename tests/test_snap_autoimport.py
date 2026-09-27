@@ -483,3 +483,59 @@ def test_attachment_destinations_restricted(world, tmp_path):
                       stamp=f"20260927T1{len(dest):03d}")
     m = make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=f)], push=False)
     assert m["attachments"][0]["dest"] == ".gitignore"
+
+
+def test_manual_import_is_remembered_by_watch(world):
+    """手动 import 之后定时器同一提交不再重导（09-27 服务器装机回执 #90）。"""
+    m = make_pack(world)
+    r = imp.import_pack(m["branch"], ws_repo=world["server"], ws_roots=[world["server"]], cv_repo=world["cv"],
+                        freshness_fn=fake_fresh())
+    assert r.status == imp.IMPORTED
+    assert sw.remember(world["state"], r)
+    assert json.loads(world["state"].read_text())[m["branch"]]["status"] == imp.IMPORTED
+    out = run_watch(world)
+    assert out["status"] == "idle"
+    log = (world["server"] / WS_DIR / "products" / BOOK / mf.IMPORTS_NAME).read_text().splitlines()
+    assert len(log) == 1                                # 只导了一次
+
+
+def test_manual_import_cli_writes_state(world, monkeypatch, capsys):
+    import sys
+    from open_guji_cv import cli_v2
+    m = make_pack(world)
+    monkeypatch.setattr(imp, "default_freshness", fake_fresh())
+    monkeypatch.setattr(sys, "argv", ["guji", "snap", "import", m["branch"], "--ws-repo", str(world["server"]),
+                                      "--cv-repo", str(world["cv"]), "--state", str(world["state"])])
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main()
+    assert e.value.code == 0
+    assert json.loads(world["state"].read_text())[m["branch"]]["status"] == imp.IMPORTED
+    assert run_watch(world)["status"] == "idle"
+
+
+def test_gitignore_attachment_merges_lines(world, tmp_path):
+    """.gitignore 附件按行合并：只追加本地没有的行、不删本地的（服务器本地是 `*`）。"""
+    local = world["server"] / WS_DIR / ".gitignore"
+    local.write_text("*\nproducts/\n", encoding="utf-8")
+    gi = tmp_path / "gi"
+    gi.write_text("# 注释\nproducts/\ndata_full/\n", encoding="utf-8")
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
+    out = run_watch(world)
+    assert out["results"][0]["attachments_placed"] == ["ws:.gitignore"]
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "data_full/"]
+    # 再来一包同样的 .gitignore：没有新行，不动
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)], stamp="20260927T2100")
+    out = run_watch(world)
+    assert out["results"][0]["status"] == imp.IMPORTED and out["results"][0]["attachments_placed"] == []
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "data_full/"]
+
+
+def test_gitignore_merge_undone_on_downgrade(world, tmp_path):
+    local = world["server"] / WS_DIR / ".gitignore"
+    local.write_text("*\n", encoding="utf-8")
+    gi = tmp_path / "gi"
+    gi.write_text("data_full/\n", encoding="utf-8")
+    make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
+    out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
+    assert out["results"][0]["status"] == imp.DOWNGRADE
+    assert local.read_text(encoding="utf-8") == "*\n"
