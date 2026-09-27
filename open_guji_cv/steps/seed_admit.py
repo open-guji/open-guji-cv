@@ -112,9 +112,11 @@ class SeedAdmitParams(BaseModel):
     （变体放行）只有满足以下任一条件才放行，否则记 doubt `ref_lib_variant`、退回人审（不改
     `char`，不采信这条判决）——
     - **可信边**：变体关系在关系层双向确认（`open_guji_cv.variants.regulars_of` 两个方向都
-      收，即两个来源都认对方是自己的正字，不是单向词典登记）；或本书用字账人裁过这一对
-      （`BookLedger.pair_confirmed`，双向都查）；或本书 `codepoints` 配置把两个码位统一成
-      同一个（`BookSpec.codepoint_equal`，书级实证，比字典更硬）；
+      收，即两个来源都认对方是自己的正字，不是单向词典登记）；或人工审查确认表
+      `config/dicts/variants.tsv` 登记过这一对（该表本就是人工确认，不要求关系层双向）；
+      或本书用字账人裁过这一对（`BookLedger.pair_confirmed`，双向都查）；或本书
+      `codepoints` 配置把两个码位统一成同一个（`BookSpec.codepoint_equal`，书级实证，
+      比字典更硬）——见 `_trusted_variant_edge` 的完整判据；
     - **Step6 margin 过线**：复用 `context_margin`（0.70，同一把已经在生产用的尺子，不另开
       一个阈值）——`context_decision` 给这一位的 margin ≥ 它，即便变体边本身单薄也放行。
     三书（bxgb dev_set+p52、vol03 107 页快照、vol01 206 页快照）实测 `ref_lib` 通道共 5 格
@@ -926,11 +928,15 @@ def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
     `variants.tsv` 里被登记成了同一语义正字，**不等于这条边本身够硬**——`graph` 来源的
     条目多数是关系层某个词典单向登记（见 `SeedAdmitParams.ref_lib_variant_guard` 的
     docstring，`冶→治` 就是 twedu 单向边），拿它当「两字同义」的唯一依据会把形近而
-    异义的字放过闸。可信边三选一：
+    异义的字放过闸。可信边四选一：
 
     - **双向**：关系层（`open_guji_cv.variants`）两个方向都把对方登记成正字——
       `directed[top][align_char]` 与 `directed[align_char][top]` 都有条目，不是单向
       「异体→正字」的登记，是两个来源互认；
+    - **人工审查确认表**：`config/dicts/variants.tsv`（手工表，文件头「种子条目：随人工
+      审查确认逐步扩充」）登记过这一对，双向都查——**这条不能略**：该表 17 条里有 10 条
+      在关系层查不到双向（为→爲、逰→遊、无→無、迴→回、囬→回、彚→彙、厯→歷、㫖→旨、
+      𨽾→隸、櫽→檃），全部人工确认过，若只认双向会被本闸误拦，比不加闸还倒退；
     - **人裁**：本书用字账记过这一对的人工确认（`BookLedger.pair_confirmed`，刻本形/
       整理本形谁在前不确定，两个方向都查）；
     - **书级 codepoints**：本书 `codepoints:` 配置把两个码位统一成了同一个
@@ -941,8 +947,31 @@ def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
     b_to_a = any(r == top for r, _tags in regulars_of(align_char))
     if a_to_b and b_to_a:
         return True
+    if (top, align_char) in _hand_variant_pairs() or (align_char, top) in _hand_variant_pairs():
+        return True
     if ledger.pair_confirmed(top, align_char) or ledger.pair_confirmed(align_char, top):
         return True
     if book.codepoint_equal(top, align_char):
         return True
     return False
+
+
+@lru_cache(maxsize=1)
+def _hand_variant_pairs() -> frozenset[tuple[str, str]]:
+    """`config/dicts/variants.tsv`（人工表）的全部条目，`{(异体, 正字)}`。
+
+    人工确认过的边不要求关系层双向——它本身就是比关系层更硬的证据（人工审查过，
+    不是词典单向登记）。缺省表很小（17 条），一次读全，跨 run_page 调用缓存
+    （同 `_human_shapes`/`_iron_context` 的做法，进程内不重读文件）。
+    """
+    from ..clustering.variants import DEFAULT_VARIANTS_PATH
+    pairs: set[tuple[str, str]] = set()
+    if DEFAULT_VARIANTS_PATH.exists():
+        for line in DEFAULT_VARIANTS_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0] and parts[1]:
+                pairs.add((parts[0], parts[1]))
+    return frozenset(pairs)
