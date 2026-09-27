@@ -72,11 +72,16 @@ def test_params_for_matches_module_default_when_disabled_or_missing():
         assert p.model_fingerprint == baseline, f"font={font!r} 时指纹不该偏离模块级默认"
 
 
-def test_gw_and_real_proto_combine_independently():
+def test_gw_and_real_proto_combine_independently(monkeypatch):
     """两个书级开关各自生效、互不打架——都开的书指纹既反映 real_proto 也反映 gw_variant，
     只开一个的书只反映那一个（回归 `_with_book_gw` 模块头「基准要带上 real_proto」
     那条：顺序若错，只开 real_proto 没开 gw_variant 的书会被误判成"已经算过"而
     跳过 gw 这一层，或反过来 gw 那一层把 real_proto 那一层的效果冲掉）。"""
+    # GlyphWiki 目录不进仓（`cache/glyphwiki/`），缺席时 gw 开关按设计不影响指纹。
+    # 这里把目录指纹钉成常量，测的是「开关叠加的接线」，不依赖本机有没有这份文件。
+    import open_guji_cv.clustering.cnn_candidates as cc
+    monkeypatch.setattr(cc, "gw_catalog_fingerprint",
+                        lambda path=None, enabled=None: "gwstub" if (cc.GW_ENABLED if enabled is None else enabled) else "")
     font_both = {"real_proto": {"enabled": True}, "gw_variant": {"enabled": True}}
     font_real_only = {"real_proto": {"enabled": True}}
     font_gw_only = {"gw_variant": {"enabled": True}}
