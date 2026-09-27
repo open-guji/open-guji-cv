@@ -294,7 +294,8 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
             continue
         for cc in cells.columns:
             for cp in (getattr(cc, "cut_candidates", None) or []):
-                where[(pg, cc.col, cp.slot_above)] = (cp.k, cp.slot_below)
+                where[(pg, cc.col, cp.slot_above)] = (getattr(cp, "k", "?"),
+                                                     getattr(cp, "slot_below", cp.slot_above + 1))
                 # 2026-09-15：多候选**不再一律挡**。60 条分层抽样实测（10 卡第十一节）：
                 # 所选切法与 U-Net 分歧块 <20px 的 779 条里 0/20 切坏，20–60 的 5%，60–100 的 **35%**。
                 # 所以只挡 `dis_unet >= PENDING_BLOB`（60）的，人工省 92%、放行里漏 1.0%。
@@ -343,7 +344,7 @@ def _warm_column_images(book: str, pgs: list[int], st: ProductStore) -> set[tupl
         if cells is None:
             continue
         for cc in cells.columns:
-            if not cc.ok:
+            if not getattr(cc, "ok", True):
                 continue
             key = column_key(pg, cc.col)
             if cache.get(book, "column_image", key) is not None:
