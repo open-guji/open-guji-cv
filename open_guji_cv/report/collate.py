@@ -186,10 +186,25 @@ def _is_confusable(char: str, ref: str) -> bool:
 
 
 def _slot_char(s: SlotRec) -> str:
-    """比对串里这一位出的字。**不退到库/OCR 猜测**（04 卡 §三·1）——
-    原型那样做的结果是 vol01 251 条「改」里 221 条是未审位的库 top1 猜测，
-    噪声盖过信号；未审位由体检表的「未审阅数」去报。"""
+    """比对串里这一位出的字，**用来分类/出差异**。不退到库/OCR 猜测（04 卡
+    §三·1）——原型那样做的结果是 vol01 251 条「改」里 221 条是未审位的库 top1
+    猜测，噪声盖过信号；未审位由体检表的「未审阅数」去报。
+
+    2026-09-27 起 `report/slots.py::_to_slot` 已经把未放行、非排除名单位的
+    `char` 清成 `None`（猜测挪进 `guess`），这里因此天然只会拿到已放行的字或
+    `PLACEHOLDER`——本函数本身不用再判 `admit`。"""
     return s.char or PLACEHOLDER
+
+
+def _anchor_char(s: SlotRec) -> str:
+    """锚定 / 对齐用的字：**容忍未放行猜测**，跟 2026-09-27 前 `_slot_char` 的
+    效果完全一致（`s.char or s.guess or PLACEHOLDER`，对已放行位与排除名单位
+    两者值相同，只在「未放行且非排除名单」这一类上从 `guess` 里找回原先在
+    `char` 里的那份猜测）——8-gram 锚定要靠字串够密，一整串全是占位符锚不上
+    （任务书「P-对勘未放行格口径」§2 明说的顾虑）。**只用于找 offset 与
+    difflib 对齐**，不进最终差异输出——那边一律走 `_slot_char`，出差异时不
+    退到猜测。"""
+    return s.char or s.guess or PLACEHOLDER
 
 
 def diff_page(slots: list[SlotRec], w: Witness, page: int,
@@ -206,9 +221,11 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
 
     # 证人里根本没有的段（校勘按语、卷端题、卷末题）**先摘出去再对齐**：
     # 留着它们不但自己全报成差异，还会把整页的锚点带偏（见 report/absent.py）。
+    # 摘段与锚定都用 `_anchor_char`（容忍未放行猜测）——串密度决定摘段准确率
+    # 与 8-gram 锚定成败，跟「未放行位不该被当成认错字」是两件事，别混着改。
     vm0 = _vm()
     res.absent_runs = absent_runs(
-        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _slot_char(s)}
+        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _anchor_char(s)}
          for s in text_slots], w.text_norm, vm0.normalize_text)
     if res.absent_runs:
         skip = {i for a in res.absent_runs for i in a["ids"]}
@@ -217,13 +234,17 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             res.note = "整页都是证人无此段的内容"
             return res
 
-    text = "".join(_slot_char(s) for s in text_slots)
-    offset = anchor_page(text, w.index)
+    anchor_text = "".join(_anchor_char(s) for s in text_slots)
+    offset = anchor_page(anchor_text, w.index)
     if offset is None:
         res.note = "8-gram 锚定失败"
         return res
     res.anchored = True
 
+    # 找 offset 之后的对齐/上下文一律用 `_slot_char`（未放行位退占位符，不退猜测）
+    # ——`anchor_text` 只借来撑锚定密度，长度跟 `text` 一样（同一份 `text_slots`
+    # 逐位对应），offset 换算不受影响。
+    text = "".join(_slot_char(s) for s in text_slots)
     corpus = w.text
     lo, hi = max(0, offset - pad), min(len(corpus), offset + len(text) + pad)
     window = corpus[lo:hi]
