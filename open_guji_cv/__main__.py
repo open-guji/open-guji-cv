@@ -685,6 +685,11 @@ def cmd_glyph_db(args):
                 summary = rebuild_from_store(store_dir, db_path)
             db = None
             assert_db_not_silently_empty(db_path, store_dir)
+            # 补放两次导出之间审进库、真源还没跟上的人裁（值守 #115，2026-09-27）；--no-replay 跳过
+            if not getattr(args, "no_replay", False):
+                from .core.workspace import feedback_root
+                from .feedback.replay import replay_after_rebuild
+                summary = {**summary, "replay": replay_after_rebuild(db_path, store_dir, feedback_root())}
         elif args.action == "drop-edition":
             if not args.edition:
                 print("drop-edition 需要 --edition"); sys.exit(1)
@@ -1104,6 +1109,8 @@ def main():
                    help="rebuild 用，可重复：再借一个别的工作区的字形库真源进本库"
                         "（按原 edition 装，只为匹配；export 时跳过，不进本书真源）。"
                         "只用于新书冷启动；不给时读 workspace.yaml 的 glyph_lib.borrow")
+    p.add_argument("--no-replay", action="store_true",
+                   help="rebuild 用：不补放人裁事件（缺省会把真源水位线之后的人裁 confirm 重新进库）")
     p.add_argument("--no-borrow", action="store_true",
                    help="rebuild 用：不借任何库（无视 workspace.yaml 的 glyph_lib.borrow），只用本书自有库")
     p.add_argument("--edition", default=None,
