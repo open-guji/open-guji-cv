@@ -1,0 +1,6 @@
+{"type": "object", "additionalProperties": false, "required": ["a", "b", "same_char", "tongjia", "canonical", "basis"],
+ "properties": {"a": {"type": "string"}, "b": {"type": "string"},
+   "same_char": {"type": "string", "enum": ["是", "否", "拿不准"]},
+   "tongjia": {"type": "boolean"},
+   "canonical": {"type": "string", "enum": ["a", "b", "null"]},
+   "basis": {"type": "string"}}}
