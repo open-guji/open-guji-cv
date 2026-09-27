@@ -170,13 +170,15 @@ def cmd_console(args) -> None:
 
     host = getattr(args, "host", None) or "127.0.0.1"
     loopback = host in ("127.0.0.1", "localhost")
-    no_auth = bool(getattr(args, "no_auth", False))
+    # 环境变量 GUJI_CONSOLE_NO_AUTH / GUJI_CONSOLE_DEV_IDP 与命令行参数等价（原来命令行
+    # 那一步会把环境变量的值覆盖成 False，环境变量形同虚设）。
+    no_auth = bool(getattr(args, "no_auth", False)) or auth_config.get().no_auth
     if no_auth and not loopback:
         print(f"✗ --no-auth 只能在本机（127.0.0.1/localhost）用，绑 {host} 时必须过身份接口鉴权，"
               "拒绝启动——对外开放校对平台不能关掉登录。", file=sys.stderr)
         sys.exit(1)
     root_path = getattr(args, "root_path", "") or ""
-    dev_idp = bool(getattr(args, "dev_idp", False))
+    dev_idp = bool(getattr(args, "dev_idp", False)) or auth_config.get().dev_idp
     auth_config.set_config(no_auth=no_auth, root_path=root_path, dev_idp=dev_idp)
 
     # 向后兼容（协调者 09-26 20:10 验收意见）：OAuth 还没配（网站两个端点
@@ -184,7 +186,17 @@ def cmd_console(args) -> None:
     # 不补这条的话，这次改动一合 main、服务器一重启，控制台就变成一个当下
     # 用不了的登录页，把正在用的人全挡在外面。
     oauth_configured = bool(auth_config.get().client_secret)
+    # 设了 GUJI_OAUTH_REDIRECT_URI 说明这是对外部署（前面有反代）：反代过来的请求
+    # 来源都是 127.0.0.1，「本机就自动免鉴权」会把 admin 开给公网（服务器值守
+    # 09-27 #109 实测）。这时密钥为空不许悄悄退回免鉴权，要免鉴权必须显式声明。
+    public_deploy = bool(auth_config.get().redirect_uri)
     if not no_auth and not dev_idp and not oauth_configured:
+        if loopback and public_deploy:
+            print("✗ 设了 GUJI_OAUTH_REDIRECT_URI（对外部署）但 GUJI_OAUTH_CLIENT_SECRET 为空——"
+                  "反代后的请求都来自本机，自动免鉴权会把 admin 开给外网，拒绝启动。"
+                  "要么填好 OAuth 密钥；要么前面另有一层鉴权时显式设 GUJI_CONSOLE_NO_AUTH=1。",
+                  file=sys.stderr)
+            sys.exit(1)
         if loopback:
             no_auth = True
             auth_config.set_config(no_auth=True)
