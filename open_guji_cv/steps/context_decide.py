@@ -92,14 +92,26 @@ def _log_llm_call(log_dir: str, book: str, row: dict) -> None:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+_CORPUS_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def corpus_fingerprint(paths: list[str]) -> str:
-    """语料的轻量指纹：每份 (name, mtime_ns, size) 的哈希。见模块头。"""
+    """语料指纹：每份 (name, 内容 sha256) 的哈希。见模块头。
+
+    2026-09-27 起按内容算（此前是 mtime_ns:size）：mtime 随各机器 checkout 而变，
+    云端算好的 Step6 产物运到服务器会无故判过期。同一进程内按 (路径, mtime, size) 缓存。"""
+    from ..products.store import sha256_file
     parts = []
     for s in paths:
         p = Path(s)
         if p.exists():
             st = p.stat()
-            parts.append(f"{p.name}:{st.st_mtime_ns}:{st.st_size}")
+            key = (str(p), st.st_mtime_ns, st.st_size)
+            h = _CORPUS_FP_CACHE.get(key)
+            if h is None:
+                h = sha256_file(p)[:16]
+                _CORPUS_FP_CACHE[key] = h
+            parts.append(f"{p.name}:{h}")
         else:
             parts.append(f"{p.name}:missing")
     if not parts:
