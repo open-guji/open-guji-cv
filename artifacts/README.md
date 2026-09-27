@@ -30,6 +30,12 @@
 |---|---|---|---|
 | **结构金标裁决台**（原 300 条；改成只出模型与 IDS 表全部拆法都不同的残差，**已裁完**，56 条人裁冻结在 [struct_gold_verdicts.jsonl](struct_gold_verdicts.jsonl)，`struct_gold_residual.py` 报残差 0）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
 
+## 字形库·muse 新增异体审查（H 道，2026-09-27）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **muse 新增异体审查台**（bxgb 全书 muse 二分口径判「是」的 158 对里，71 对新增＋16 对弱边复核，配真实刻例图/字体渲染，分三节 ≤40 卡）| https://claude.ai/artifact/QgMY2HwMiaV8qCWtifwNq6 | [muse_variant_review.html](muse_variant_review.html)；卡片 id 冻结在 [muse_variant_cards.jsonl](muse_variant_cards.jsonl) | `GUJI_WORKSPACE=<bxgb 工作区> GUJI_GLYPH_DB=<沙箱库路径> python scripts/build_muse_variant_review.py`（候选源 `scripts/experiments/muse_variant_pilot/variant_same_bin_muse.jsonl`，`config/variants/variants.json` 只读）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。任务书：overview `进度/字形库/任务书-H-muse新增异体71对审查页.md`。**发布覆盖同一 URL** |
+
 ## 边框判读（Step1）
 
 | 页面 | URL | 快照/真源 | 再生 |
