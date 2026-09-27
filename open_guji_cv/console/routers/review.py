@@ -45,7 +45,8 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 @router.get("/api/review/cards")
 def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
                      only: str = "review", gate_cut: bool = True,
-                     skip_decided: bool = True) -> dict:
+                     skip_decided: bool = True, group: str = "",
+                     sample_limit: int = 60) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -56,7 +57,16 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
 
     `skip_decided`：跳过全书所有批次已裁过的字位（用户 2026-09-16，默认开）——
     `limit` 于是数的是**净新卡**，载入 N 张就是 N 张真待裁的。
+
+    `group="char"`：按字种批审（任务书-C-待审卡按字种批审，2026-09-27）——
+    不再一格一张，改按「AI 首选字」把待审格摊成组，供前端「一个字种一屏，
+    多格一起确认」用。这一模式下 `limit` 不生效（要的是**全量**待审格才能
+    如实报每组 n 与页码分布），组内样例数由 `sample_limit` 单独控制。
     """
+    if group == "char":
+        return cards_by_char(book, pages, only, deps.product_store(),
+                             gate_cut=gate_cut, skip_decided=skip_decided,
+                             sample_limit=sample_limit)
     return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut,
                  skip_decided=skip_decided)
 
@@ -79,6 +89,120 @@ def api_verdicts(batch: str, question: str | None = None) -> dict:
     """
     return verdicts_by_question(batch, question, deps.event_log())
 
+
+
+# ── 按字种批审（2026-09-27，任务书-C-待审卡按字种批审）───────────────
+#
+# 背景：`/api/review/cards` 一格一张，逐格裁很慢；Step8 对勘队列能按字
+# 「N 处一起裁」，但只管对勘发现的疑点，管不到 `admit=False` 的待审格。
+# 全唐文人审率偏高（v006 26.72%），要先积累本书字形——最高效的办法是
+# 「一个字种一屏，多格一起确认」。这一段只**读**卡片、**分组**、**排序**，
+# 不碰写入：提交仍旧走既有的 `POST /api/events`（前端逐格拼 confirm 事件），
+# 不新造协议，也不改 `seed_admit`（任务书边界）。
+
+
+def _top_pick(card: dict) -> str | None:
+    """待审格的「AI 首选字」——分组的键。
+
+    没接 Step6-AI 的书（`ai`/`groups` 恒为 `None`，四庫等）退到既有的定字
+    兜底链，与 `_column_slots` 同一顺序（上下文 → 库候选 → OCR）：卡片本来
+    就是照这个优先级给"这格大概是什么字"的，分组用同一把尺子，不另起一套。
+    Step6-AI 首组有多个候选字（AI 也没拿定主意）时取候选里排第一的那个
+    当组名——不影响谁进哪组要紧的是"型内一致"，组名只是标签，人翻开一屏
+    一眼就看得出图对不对。
+    """
+    ai = card.get("ai")
+    groups = card.get("groups")
+    if ai and groups:
+        rank = ai.get("rank") or []
+        if rank:
+            gid = rank[0].get("group")
+            g = next((x for x in groups if x.get("id") == gid), None)
+            if g and g.get("members"):
+                return g["members"][0]
+    ctx = card.get("ctx")
+    if ctx and ctx.get("char"):
+        return ctx["char"]
+    db = card.get("db")
+    if db and db.get("candidates"):
+        return db["candidates"][0][0]
+    ocr = card.get("ocr")
+    if ocr:
+        return ocr[0][0]
+    return None
+
+
+def _group_key(card: dict) -> tuple[str, str | None]:
+    """分组键：`(首选字, mismatch_ref_char)`。
+
+    首选字与整理本对齐字（`ref.char`）不同的格**单独成组**，不与「首选字
+    ==对齐字，或本页压根没有对齐字」的格混在一起（任务书§做什么·1）——
+    这批格恰恰是最该被人逐条盯着看的，混进大部队里"缺省全选"风险最高。
+    取不到首选字（三路证据都没有）的格归进 `__unresolved__` 组，不丢弃——
+    分组要对得上待审总数（验收标准），有格必须有组能装。
+    """
+    top = _top_pick(card)
+    if top is None:
+        return ("__unresolved__", None)
+    ref = card.get("ref") or {}
+    ref_char = ref.get("char")
+    if ref_char and ref_char != top:
+        return (top, ref_char)
+    return (top, None)
+
+
+def _tile_rank_score(card: dict) -> float:
+    """组内排序键，越小排越靠前（"最不像的排最前"，任务书§做什么·1）。
+
+    用 Step5 `glyph_match` 已经算好的 `db.cov`（与库内最近候选的覆盖度）
+    当"像不像"的现成信号——没有库命中（`db` 缺失，即 `verdict=diff` 且
+    连候选都没有）的格视为最可疑，排最前；有命中的按 `cov` 升序，覆盖度
+    越低越可疑。这不是「组内两两图块比对」（那是另开一条图像特征管线的
+    活，本轮任务书边界只许动 `console/routers/review.py`），是复用已有
+    证据当代理——如果不够准，留给下一轮换成真正的图块聚类。
+    """
+    db = card.get("db")
+    if not db:
+        return -1.0
+    return float(db.get("cov") or 0.0)
+
+
+def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
+    """把一批待审卡片摊成按字种分的组：每组 `n`/页码分布/排好序的样例。"""
+    buckets: dict[tuple, list[dict]] = {}
+    for c in cs:
+        buckets.setdefault(_group_key(c), []).append(c)
+    out = []
+    for (top, ref_char), tiles in buckets.items():
+        tiles = sorted(tiles, key=_tile_rank_score)
+        pages: dict[int, int] = {}
+        for t in tiles:
+            pages[t["page"]] = pages.get(t["page"], 0) + 1
+        out.append({
+            "char": None if top == "__unresolved__" else top,
+            "ref_char": ref_char,
+            "n": len(tiles),
+            "pages": [{"page": p, "n": n} for p, n in sorted(pages.items())],
+            "tiles": tiles[:sample_limit],
+            "truncated": len(tiles) > sample_limit,
+        })
+    # 待审格多的字种排前面（用户「高频字优先，自举最快」）；同 n 时按字/对齐字
+    # 稳定排序，避免每次请求顺序乱跳（前端翻页体验）。
+    out.sort(key=lambda g: (-g["n"], g["char"] or "", g["ref_char"] or ""))
+    return out
+
+
+def cards_by_char(book: str, pages: str, only: str, store,
+                  gate_cut: bool, skip_decided: bool, sample_limit: int) -> dict:
+    """按字种批审的装配：调既有 `cards()` 拿**全量**待审格（不受 `limit`
+    截断——分组要的是真实的 n 与页码分布），再摊成组。
+    """
+    d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
+             skip_decided=skip_decided)
+    groups = _build_char_groups(d["cards"], sample_limit)
+    return {"book": book, "mode": "char", "n_total": len(d["cards"]),
+            "n_decided": d.get("n_decided", 0), "blocked": d.get("blocked", []),
+            "groups": groups}
 
 
 def _page_maps(st, book: str, page: int, cache: dict):
