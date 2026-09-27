@@ -137,10 +137,13 @@ def render(doc: dict, console: str = "") -> str:
         if not vp:
             continue
         ex_by_pair = all_examples.get(w["label"], {})
-        rows = "".join(
-            f"<tr><td class='gl'>{_e(a)}</td><td class='gl'>{_e(b)}</td><td class='num'>{n}</td>"
-            f"<td>{''.join(f'<img class=\"th\" src=\"{_e(p)}\">' for p in ex_by_pair.get(f'{a}\t{b}', []))}</td></tr>"
-            for a, b, n in vp[:40])
+        # 不在 f-string 表达式里写反斜杠：服务器是 Python 3.11，那种写法 3.12 才支持（值守 09-27 报）
+        rows = ""
+        for a, b, n in vp[:40]:
+            imgs = "".join('<img class="th" src="' + _e(p) + '">'
+                           for p in ex_by_pair.get(a + "\t" + b, []))
+            rows += (f"<tr><td class='gl'>{_e(a)}</td><td class='gl'>{_e(b)}</td>"
+                     f"<td class='num'>{n}</td><td>{imgs}</td></tr>")
         vsec += (f"<section><h2>异体对 · {_e(w['label'])}</h2>"
                  f"<table class='t'><tr><th>刻本</th><th>整理本</th><th>次数</th><th>例</th></tr>{rows}</table></section>")
 
