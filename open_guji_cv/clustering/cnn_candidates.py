@@ -237,13 +237,33 @@ def load_real_exemplars(specs: tuple = REAL_PROTO_SPECS, charset=None):
     return dict(out)
 
 
+_REAL_PROTO_FILE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _real_proto_file_fingerprint(jf: Path) -> str:
+    """单个 `instances/*.jsonl` 的**内容**指纹（sha256 前 12 位），按 `(路径, mtime_ns,
+    大小)` 缓存避免重复读盘——跟 `utils.cut_select.ckpt_fingerprint` 同一个写法。"""
+    st = jf.stat()
+    key = (str(jf), st.st_mtime_ns, st.st_size)
+    fp = _REAL_PROTO_FILE_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(jf)[:12]
+        _REAL_PROTO_FILE_FP_CACHE[key] = fp
+    return fp
+
+
 def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None = None) -> str:
-    """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的 `名字:大小:mtime` 拼起来。
+    """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的**内容** sha256 拼起来。
     目录缺席的 spec 不参与，一个都不参与（或总开关关着）时返回空串。
 
     `enabled=None`（缺省）时看模块级 `REAL_PROTO_ENABLED`——评测脚本走这条，与此前
     逐位相同。按书配置调用时传显式的书级开关（见 `book_real_proto`），不再看模块全局。
-    """
+
+    **按内容算，不按 `(大小, mtime)`**（2026-09-27，CV 总管 review 指出）：mtime 是各
+    机器 checkout 的时间，云端算好的产物运到服务器、文件内容一字不差，mtime 却对不上，
+    `rare_candidates` 会被判过期——跟 09-27 `ckpt_fingerprint`／`corpus_fingerprint`
+    那次（cv `078a13d`）同一个坑，见 `utils.cut_select.ckpt_fingerprint` 模块注释。"""
     en = REAL_PROTO_ENABLED if enabled is None else enabled
     if not en:
         return ""
@@ -255,8 +275,7 @@ def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None
         if not d.exists():
             continue
         for jf in sorted(d.glob("*.jsonl")):
-            st = jf.stat()
-            parts.append(f"{spec}/{jf.name}:{st.st_size}:{int(st.st_mtime)}")
+            parts.append(f"{spec}/{jf.name}:{_real_proto_file_fingerprint(jf)}")
     if not parts:
         return ""
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
