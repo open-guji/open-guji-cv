@@ -51,6 +51,22 @@ SPAN_T = 0.75              # 两子列合起来占**列距**的比例下限。�
 GAP_MIN = 3                # 子列间缝宽下限（px）。部首缝只有 2~3px
 MASS_W = 0.6               # 单个子列宽度上限（× 墨迹跨度）
 ALIGN = 8                  # 相邻格缝中心相差不超过此才算同一条夹注（px）
+ALIGN_PAIR = 16            # 结成头两格（还没有第三格可比）时的更松容差。
+                           # **2026-09-27 vol02/vol03 实测新增**：全书"提要末尾
+                           # 版本双行小注"（「內府藏本」「山東巡撫採進本」……只
+                           # 2~3 行、每行仅 1~2 字）比长段夹注的缝位漂移大得多——
+                           # 7 处真实命中（vol03 p6c6/p8c2/p42c3/p69c5/p86c7、
+                           # vol02 p176c6/p178c7，均已看图核实、单侧连通体强度
+                           # 2000+ 远高于 `CC_MIN`）里最大相邻漂移 15.5px，超过
+                           # 原 `ALIGN`=8 达 1.9 倍，导致这两格从未被 `link_runs`
+                           # 收编、退化成正文字送去识别（认出的是"部""精"这类
+                           # 乱码，不是版本小注）。**全书扫描过 vol02+vol03 全部
+                           # 页面**，除这 7 处外只找到 2 处漂移更大的候选，两处
+                           # 单侧连通体强度均 <500（`CC_MIN`），已被强度闸挡下、
+                           # 与 `ALIGN` 取值无关——**扩大到 16 没有引入任何新的
+                           # 假阳性**。只放宽"刚起头结成两格"这一步（下方
+                           # `link_runs` 用 `len(run) < 2` 判断），run 长到 3 格
+                           # 及以上仍用原 `ALIGN`=8，不动长段夹注已验证过的行为。
 MIN_RUN = 2                # 至少连续这么多格才判夹注
 CC_MIN = 500               # 段中位「两侧较小 maxCC」低于此 → 噪点段否决
                            # （真小字 ≥1242px，纸面碎点 ≤327px，实测）
@@ -310,8 +326,9 @@ def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
     run: list[int] = []
     prev_i = None
     for i in sorted(cmap):
+        align = ALIGN if len(run) >= 2 else ALIGN_PAIR
         ok = (prev_i is not None and i == prev_i + 1
-              and abs(cmap[i] - cmap[prev_i]) <= ALIGN)
+              and abs(cmap[i] - cmap[prev_i]) <= align)
         if ok:
             run.append(i)
         else:
