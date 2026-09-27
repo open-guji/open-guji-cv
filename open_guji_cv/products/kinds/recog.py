@@ -284,6 +284,8 @@ class PageAlignRef(BaseModel):
     dominance: float | None = None           #   不是投票判据本身没过线
     chars: list[AlignRec] = Field(default_factory=list)
     n_lib_dropped: int = 0                   # 被「库证据闸」拦下的 replace 位数（align_ref 模块头 2026-09-22）
+    witness_strategy: str = "legacy"         # 多证人合并策略（align_ref 模块头 2026-09-27，任务书 D-多证人对齐策略）
+    n_witnesses: int = 1                     # 这一页参与合并的证人数（legacy 恒 1）
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
