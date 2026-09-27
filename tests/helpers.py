@@ -287,6 +287,35 @@ def page_decision(page: int = 1, book: str = "tbook", *, recs: list[dict],
                         columns=[ColumnDecision(col=col, ok=True, chars=chars)])
 
 
+def page_chars(page: int = 1, book: str = "tbook", *, recs: list[dict], col: int = 1):
+    """`char_index`（Step4 `cell_shrink`）产物。`recs` 每项给 slot / ink_ratio 等
+    （`pos`/`idx` 默认跟 slot 走，够测 seed_admit 读它就行，不需要真几何）。"""
+    from open_guji_cv.products.kinds.chars import CharRec, ColumnChars, PageChars
+
+    chars = []
+    for r in dict_list(recs):
+        slot = r.pop("slot")
+        r.setdefault("pos", slot)
+        r.setdefault("idx", slot - 1)
+        r.setdefault("cell_type", "char")
+        r.setdefault("bbox_col", (0.0, 0.0, 0.0, 0.0))
+        chars.append(CharRec(id=f"{book}:{page}:{col}:{slot}", slot=slot, **r))
+    return PageChars(page=page, columns=[ColumnChars(col=col, ok=True, chars=chars)])
+
+
+def page_align_ref(page: int = 1, book: str = "tbook", *, recs: list[dict], col: int = 1,
+                   anchored: bool = True):
+    """`align_ref`（Step5-d）产物。`recs` 每项给 slot / align_char / align_op。"""
+    from open_guji_cv.products.kinds.recog import AlignRec, PageAlignRef
+
+    chars = []
+    for r in dict_list(recs):
+        slot = r.pop("slot")
+        r.setdefault("align_op", "equal")
+        chars.append(AlignRec(id=f"{book}:{page}:{col}:{slot}", col=col, slot=slot, **r))
+    return PageAlignRef(page=page, anchored=anchored, chars=chars)
+
+
 def dict_list(recs: list[dict]) -> list[dict]:
     """浅拷贝一遍——构造器会 `pop`，不该改调用方手里的字面量。"""
     return [dict(r) for r in recs]
