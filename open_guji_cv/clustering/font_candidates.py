@@ -114,7 +114,13 @@ def _font_files(root: str = "fonts") -> list[str]:
     return []
 
 
-INDEX_DIR = Path("cache/font_index")
+def _index_dir() -> Path:
+    """HOG 索引落盘目录：按工作区/`GUJI_CACHE_DIR` 解析（任务卡 #54 第3条），
+    不是裸相对路径 `cache/font_index`——那条路径按 cwd 解析，全量单测跑在
+    引擎仓根下会真的写出 `<仓根>/cache/font_index/`，触发 conftest 的
+    仓内易变目录防污染断言。"""
+    from ..core.workspace import cache_root
+    return cache_root() / "font_index"
 
 
 def font_set_fingerprint(root: str = "fonts") -> str:
@@ -166,7 +172,8 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
     from .synth import render_char
 
     key = _index_key(charset, root, backend)
-    f = INDEX_DIR / f"{key}.npz"
+    index_dir = _index_dir()
+    f = index_dir / f"{key}.npz"
     if f.exists():
         z = np.load(f, allow_pickle=False)
         keys = [(c, fn) for c, fn in zip(z["chars"].tolist(), z["fonts"].tolist())]
@@ -189,7 +196,7 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
     if not mats:
         return np.zeros((0, 1), dtype=np.float32), []
     mat = feat.extract(np.stack(mats)).astype(np.float32)
-    INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    index_dir.mkdir(parents=True, exist_ok=True)
     np.savez(f, mat=mat,
              chars=np.array([c for c, _ in keys]),
              fonts=np.array([fn for _, fn in keys]))
