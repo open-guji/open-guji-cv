@@ -518,23 +518,23 @@ def test_gitignore_attachment_merges_lines(world, tmp_path):
     local = world["server"] / WS_DIR / ".gitignore"
     local.write_text("*\nproducts/\n", encoding="utf-8")
     gi = tmp_path / "gi"
-    gi.write_text("# 注释\nproducts/\ndata_full/\n", encoding="utf-8")
+    gi.write_text("# 注释\nproducts/\nscans/\n", encoding="utf-8")
     make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
     out = run_watch(world)
     assert out["results"][0]["attachments_placed"] == ["ws:.gitignore"]
-    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "data_full/"]
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "scans/"]
     # 再来一包同样的 .gitignore：没有新行，不动
     make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)], stamp="20260927T2100")
     out = run_watch(world)
     assert out["results"][0]["status"] == imp.IMPORTED and out["results"][0]["attachments_placed"] == []
-    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "data_full/"]
+    assert local.read_text(encoding="utf-8").splitlines() == ["*", "products/", "# 注释", "scans/"]
 
 
 def test_gitignore_merge_undone_on_downgrade(world, tmp_path):
     local = world["server"] / WS_DIR / ".gitignore"
     local.write_text("*\n", encoding="utf-8")
     gi = tmp_path / "gi"
-    gi.write_text("data_full/\n", encoding="utf-8")
+    gi.write_text("scans/\n", encoding="utf-8")
     make_pack(world, attachments=[sp.Attachment(root="ws", dest=".gitignore", src=gi)])
     out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
     assert out["results"][0]["status"] == imp.DOWNGRADE
