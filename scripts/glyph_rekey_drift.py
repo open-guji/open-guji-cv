@@ -61,7 +61,7 @@ def main() -> int:
     db = GlyphDB(str(glyph_db_path()))
     have = {r[0] for r in db.conn.execute("SELECT instance_id FROM instances")}
     cdir = None
-    moved, stuck = [], []
+    moved, stuck, noop = [], [], []
     for r in rows:
         iid = r["instance_id"]
         b, pg, col, slot = r["cell"].split(":")
@@ -70,6 +70,14 @@ def main() -> int:
                               "JOIN instances i ON i.instance_id=d.instance_id "
                               "WHERE d.instance_id=? AND d.kind='norm'", (iid,)).fetchone()
         if not row:
+            # 库里没有这实例，或者 derived/admissions 缺行（instance_id 打错、已被别的批次撤过）——
+            # 2026-09-27 修：这条以前直接 continue，既不进 moved 也不进 stuck，跑完一句话都不
+            # 留（任务书 H·v1重键与撤例按B后重定 §5：vol02 187:9:4 的静默跳过就是这支，虽然
+            # 沙箱用新鲜产物复现不出同样的空 join——库/derived/admissions 三张表当场都有这行，
+            # 说明服务器那次的真正病根多半是它当时的 char_patch 缓存太旧，不是这一支本身；
+            # 但这一支确实是代码里唯一会吞掉整行不报的地方，先堵上）。
+            exists = db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?", (iid,)).fetchone()
+            noop.append((iid, "库里没有这实例" if not exists else "有实例但没有 derived(norm)/admissions 行"))
             continue
         norm, reading, prov, ev, label = row
         mine = _unpng(norm)
@@ -108,7 +116,8 @@ def main() -> int:
         cov, new_cell, canon = cands[0]
         new_id = ("v2:" if iid.startswith("v2:") else "") + new_cell
         if new_id == iid:
-            continue                     # 还在原格（图已刷新），不用挪
+            noop.append((iid, f"已经在算出来的现格 {new_cell}，不用挪"))
+            continue
         if new_id in have and new_id != iid:
             other = db.conn.execute("SELECT label FROM instances WHERE instance_id=?", (new_id,)).fetchone()
             if other and other[0] == label:
@@ -139,7 +148,9 @@ def main() -> int:
         print("move", *m)
     for s in stuck:
         print("stuck", *s)
-    print(f"{'已挪' if apply else '可挪'} {len(moved)}，挪不动 {len(stuck)}")
+    for n in noop:
+        print("noop", *n)
+    print(f"{'已挪' if apply else '可挪'} {len(moved)}，挪不动 {len(stuck)}，不用挪/查不到 {len(noop)}")
     return 0
 
 
