@@ -121,7 +121,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from ..clustering.align_eval import WINDOW_PAD
+from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
@@ -315,6 +315,49 @@ class AlignRefParams(BaseModel):
     `core/step.py::_with_witness_fingerprint`（同 `corpus_fingerprint` 的道理：
     `model_post_init` 造实例时不知道是哪本书，只能留空，`params_for` 里补）。"""
 
+    uncontested_relax: bool = False
+    """低票兜底（2026-09-27，任务卡 D-align_ref锚定召回-全唐文）：`label_page`
+    走正常 n-gram 投票锚不上时，只在**没有任何竞争簇**（真实 runner_up == 0，
+    不是 `anchor_page_diag` 早退时的占位 0——它在 `n_votes < MIN_VOTES` 就直接
+    返回，从没算过真正的次高票簇）的前提下，改用候选窗口的 difflib 命中率
+    兜底：命中率达标就仍然收下这个锚点，字符级仍过 `align_label.label_page`
+    同一套 `replace_len_gate`（段长 ≤3 且被 equal 夹住），不会因为兜底而放松
+    单字采信。
+
+    ## 根因：v006 实测证明这类失败多是「连续 8 字全对太难」，不是「套语碰撞」
+
+    整理 Z15（cross `整理Z15-align_ref套语文体`）报告全唐文 v006 16-18 页正文
+    锚不住，**猜测**是诏令/制书体裁骈俪套语多、同一 8-gram 在语料里多处命中、
+    票被摊薄（"套语碰撞"）。本卡在 v006 全书 86 页上实测（`glyph-db rebuild
+    --store <四庫真库>` 借四庫库、Kanripo 语料，见
+    `scripts/experiments/align_anchor_recall/diagnose_v006.py`）：14 个
+    「最高票簇 1-4 票，低于绝对下限 5」失败页里，**12 个 `avg_hits_per_hit_gram`
+    ≈1、`n_clusters`==1**（唯一命中的极少数 8-gram 各自在语料里只出现一次，
+    彼此又聚成同一个偏移簇，没有第二个候选位置）——这与"套语碰撞"的特征
+    （同一 8-gram 到处出现、多个候选簇势均力敌）正相反：**多数 8-gram 根本
+    没命中任何位置**（如 p16 171 个 gram 只有 2 个命中、p30 169 个只有 1 个），
+    是刻本侧字串本身噪声大（借四庫库对全唐文这类新书字形覆盖不足，逐字位
+    top1 常错），连续 8 字全部对上本来就难，不是内容被别处摊薄。10 个候选页
+    (p3/4/6/11/16/30/36/38/54/64) 目视核对候选窗口与整理本，字面逐句连贯、
+    差异全是形近字混淆（今/令、泰/秦、玉/王、流/涼……），确认是正确锚点；
+    另外 2 个「1-4 票」页（p2/61）与 1 个「占比/优势不达标」页（p67）**真的有
+    竞争簇**（`runner_up` 分别 1/1/8），本判据的 `runner_up == 0` 闸天然把它们
+    挡在外面，不会误收。v006 实测：67/86 → 77/86（新增 10 页），旧锚定页
+    （offset 已确定的那部分）逐页不变——见 done 单核验数字。
+
+    只对 `witness_strategy == "legacy"` 生效；多证人路径另有自己的失败报告，
+    不叠加这条（保持两条路径互不纠缠，同 `witness_strategy` 模块头的原则）。
+    默认关，不改变现有行为。
+    """
+    uncontested_min_votes: int = 1
+    """低票兜底生效的最低票数——低于它（即真的一票命中都没有）不兜底，
+    防止把候选太少/语料未命中的页也拉进来（那类页应该继续报「候选太少」/
+    「一个 n-gram 都没命中」，不该被这条参数掩盖）。"""
+    uncontested_min_equal_frac: float = 0.5
+    """低票兜底的候选窗口 difflib 命中率门槛。v006 实测：10 个确认应收的
+    低票页命中率落在 0.58~0.82；门槛设在明显低于这个区间的 0.5，留安全边界。
+    未观测到假阳性样本落进 [0.5, 0.58) 这一段，样本量不大，口径偏保守。"""
+
     def model_post_init(self, _ctx) -> None:
         if not self.corpus_fingerprint:
             from .context_decide import corpus_fingerprint
@@ -402,6 +445,12 @@ class AlignRefStep(Step):
         # 整理本通道一条都不触发（本轮实际踩到，靠比对键样例才发现）。
         labs, ok = label_page(str(page), slots, ctx.book.id, text,
                               _corpus_index(p.corpus))
+        anchor_via = "ngram"
+        if not ok and p.uncontested_relax:
+            alt = _uncontested_fallback(ctx.book.id, page, slots, text,
+                                        _corpus_index(p.corpus), p)
+            if alt:
+                labs, ok, anchor_via = alt, True, "uncontested"
         if not ok:
             # label_page 内部已经跑过一次 anchor_page，这里为了拿判据明细
             # 重算一次 anchor_page_diag——多一次 8-gram 投票，索引已缓存，
@@ -425,7 +474,73 @@ class AlignRefStep(Step):
                  for lab in labs]
         return {"align_ref": PageAlignRef(
             page=page, anchored=True, corpus_fingerprint=p.corpus_fingerprint,
-            chars=chars, n_lib_dropped=n_dropped)}
+            chars=chars, n_lib_dropped=n_dropped, anchor_via=anchor_via)}
+
+
+def _raw_vote_clusters(text: str, index: dict[str, list[int]],
+                       gram: int = GRAM) -> tuple[int | None, int, int]:
+    """`align_eval.anchor_page_diag` 同一套投票核心，但不套 `MIN_VOTES` 提前
+    返回——`AlignRefParams.uncontested_relax` 要看真实的次高票簇，
+    `anchor_page_diag` 在 `n_votes < MIN_VOTES` 时直接返回 `runner_up=0`，
+    那是占位值不是真算出来的（见该函数），不能拿来判「有没有竞争簇」。
+
+    刻意不改 `anchor_page_diag` 本身——它是 `anchor_page`/`align_label`／
+    `gold` 等一大票调用方共用的锚定核心，这里只加一个新的独立函数，
+    `uncontested_relax` 缺省关时这个函数从不会被调用，零行为变化。
+
+    返回 `(peak_offset, peak_votes, runner_up_votes)`；没有任何命中时
+    `(None, 0, 0)`。
+    """
+    from collections import Counter
+
+    from ..clustering.align_eval import POOL_RADIUS, index_lookup
+    if len(text) < gram:
+        return None, 0, 0
+    votes: Counter[int] = Counter()
+    n_grams = len(text) - gram + 1
+    for i in range(n_grams):
+        for pos in index_lookup(index, text[i:i + gram]):
+            votes[pos - i] += 1
+    if not votes:
+        return None, 0, 0
+    peak = votes.most_common(1)[0][0]
+    near = [o for o in votes if abs(o - peak) <= POOL_RADIUS]
+    peak_votes = sum(votes[o] for o in near)
+    rest = {o: v for o, v in votes.items() if abs(o - peak) > POOL_RADIUS}
+    runner_up = 0
+    if rest:
+        peak2 = max(rest, key=rest.get)
+        runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
+    return min(near), peak_votes, runner_up
+
+
+def _uncontested_fallback(book: str, page: int, slots: list[tuple], corpus: str,
+                          index: dict[str, list[int]], p: "AlignRefParams",
+                          ) -> list | None:
+    """`AlignRefParams.uncontested_relax` 的兜底路径（模块头「低票兜底」一节）。
+
+    只在**没有竞争簇**（`runner_up == 0`）且票数达到 `uncontested_min_votes`
+    时才去算 difflib 命中率；命中率达标才收，否则 `None`（调用方退回原有的
+    失败报告，不吞掉任何诊断信息）。返回的标签仍过
+    `align_label.label_page` 同一套 `replace_len_gate`（`_labels_from_ops`
+    直接复用，规则一字不改）。
+    """
+    import difflib
+
+    norm = _norm_slots(slots)
+    query = "".join(t[-1] for t in norm)
+    offset, peak_votes, runner_up = _raw_vote_clusters(query, index)
+    if offset is None or runner_up != 0 or peak_votes < p.uncontested_min_votes:
+        return None
+    lo = max(0, offset)
+    hi = min(len(corpus), offset + len(query) + WINDOW_PAD)
+    window = corpus[lo:hi].replace("\n", "")  # 同 `align_label.align_ops`：清洗语料换行
+    sm = difflib.SequenceMatcher(None, query, window, autojunk=False)
+    equal = sum(b.size for b in sm.get_matching_blocks())
+    if not query or equal / len(query) < p.uncontested_min_equal_frac:
+        return None
+    labs = _labels_from_ops(book, page, norm, sm.get_opcodes(), window)
+    return labs or None
 
 
 def _refs_key(refs: list[dict]) -> tuple:
