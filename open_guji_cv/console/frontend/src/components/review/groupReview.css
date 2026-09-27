@@ -14,3 +14,6 @@
 .grp-tile.off { border-color: var(--zhu); opacity: .45; }
 .grp-mark { position: absolute; top: 0; right: .15rem; font-size: .75rem; color: var(--ok); }
 .grp-tile.off .grp-mark { color: var(--zhu); }
+/* 像素与 CNN 两路首位不一致的样例（借库书，2026-09-27）：排组内最前，虚线框提示逐张看 */
+.grp-tile.disagree { border-style: dashed; }
+.grp-disagree { position: absolute; top: 0; left: .2rem; font-size: .75rem; color: var(--ochre); font-weight: 600; }

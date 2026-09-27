@@ -84,6 +84,22 @@ export interface ReviewCard {
    * 两者都缺失 = 这一格没接 Step6-AI（四庫等书恒缺）。 */
   groups?: AiGroup[] | null
   ai?: AiEvidence | null
+  /** 借库书的「AI 首选」（书 yaml `params.review.first_pick` 开了才有；四庫、北行恒缺）。
+   * 任务书-C-借库书人审首选改CNN原型（2026-09-27），装配见 `review/borrow_first.py`。 */
+  first?: FirstPick | null
+}
+
+export interface FirstPick {
+  /** 默认首选字（`cnn` = CNN 原型检索首位；`rrf` = 像素与 CNN 名次融合首位）。 */
+  char: string | null
+  mode: 'cnn' | 'rrf'
+  /** 像素比对（5-a，字形库）首位。 */
+  pixel: string | null
+  /** CNN 原型检索首位。 */
+  cnn: string | null
+  /** 两路首位是否一致；任一路缺席为 `null`。 */
+  agree: boolean | null
+  cnn_candidates: Array<[string, number]>
 }
 
 export interface ReviewCardsResponse {

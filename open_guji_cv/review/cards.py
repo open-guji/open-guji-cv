@@ -18,6 +18,7 @@ from ..core.spec import cell_key, page_key
 from ..gold.v2_align import align_book
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
+from .borrow_first import annotate, first_pick_mode, sort_disagree_first
 from .verdict_view import decided_cells
 
 
@@ -201,10 +202,28 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ai": ai,
                 })
                 if len(out) >= limit:
-                    return {"book": book, "cards": out, "truncated": True,
-                            "blocked": out_blocked, "n_decided": len(decided)}
-    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked,
-            "n_decided": len(decided)}
+                    return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
+                                                  "blocked": out_blocked,
+                                                  "n_decided": len(decided)})
+    return _finish(book, bk, st, {"book": book, "cards": out, "truncated": False,
+                                  "blocked": out_blocked, "n_decided": len(decided)})
+
+
+def _finish(book: str, bk, st: ProductStore, res: dict) -> dict:
+    """借库书的「AI 首选」改 CNN 原型（2026-09-27，任务书-C-借库书人审首选改CNN原型）。
+
+    书 yaml `params.review.first_pick` 没开（四庫、北行等全部现有书）时**原样返回**，
+    返回值与加这一步之前逐字节相同。开了：每张卡挂 `first`（默认首选、像素/CNN
+    各自首位、两路是否一致），**两路不一致的排前面**（本次载入的这一批内稳定排序；
+    `limit` 截断在排序之前——要全量排序就把 limit 放大，或用 `group=char`）。
+    装配见 `review/borrow_first.py`。
+    """
+    mode = first_pick_mode(bk)
+    if mode is None:
+        return res
+    res["first_pick"] = annotate(book, res["cards"], st, mode, bk=bk)
+    res["cards"] = sort_disagree_first(res["cards"])
+    return res
 
 
 def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[dict]:

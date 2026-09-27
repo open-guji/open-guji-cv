@@ -134,6 +134,12 @@ def _top_pick(card: dict) -> str | None:
             g = next((x for x in groups if x.get("id") == gid), None)
             if g and g.get("members"):
                 return g["members"][0]
+    # 借库书的 CNN 原型首选（`review/borrow_first.py`，书 yaml `params.review.first_pick`
+    # 开了才有 `first`；四庫、北行恒无此键，走下面原来的链，分组逐字节不变）。
+    # 排在上下文之前：借库书的上下文字也是从像素候选里挑的，像素排名本身就歪。
+    first = card.get("first")
+    if first and first.get("char"):
+        return first["char"]
     ctx = card.get("ctx")
     if ctx and ctx.get("char"):
         return ctx["char"]
@@ -181,6 +187,12 @@ def _tile_rank_score(card: dict) -> float:
     return float(db.get("cov") or 0.0)
 
 
+def _agree_rank(card: dict) -> int:
+    """两路一致的卡排后（1），不一致／一路缺席／没有 `first` 的排前（0）。"""
+    f = card.get("first")
+    return 1 if (f is not None and f.get("agree") is True) else 0
+
+
 def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
     """把一批待审卡片摊成按字种分的组：每组 `n`/页码分布/排好序的样例。"""
     buckets: dict[tuple, list[dict]] = {}
@@ -188,7 +200,9 @@ def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
         buckets.setdefault(_group_key(c), []).append(c)
     out = []
     for (top, ref_char), tiles in buckets.items():
-        tiles = sorted(tiles, key=_tile_rank_score)
+        # 借库书：像素与 CNN 两路首位不一致的排组内最前（任务书-C-借库书人审首选改CNN原型 §3）；
+        # 没有 `first` 的卡第一键恒为 0，排序与改前相同。
+        tiles = sorted(tiles, key=lambda t: (_agree_rank(t), _tile_rank_score(t)))
         pages: dict[int, int] = {}
         for t in tiles:
             pages[t["page"]] = pages.get(t["page"], 0) + 1

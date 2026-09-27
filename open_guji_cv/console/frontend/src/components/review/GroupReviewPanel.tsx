@@ -160,11 +160,13 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
             {g.tiles.map((t) => {
               const off = droppedHere.has(t.id)
               return (
-                <div key={t.id} className={`grp-tile${off ? ' off' : ''}`}
-                     title={`${t.id}${t.ref?.char ? ` · 整理本 ${t.ref.char}` : ''}`}
+                <div key={t.id} className={`grp-tile${off ? ' off' : ''}${t.first?.agree === false ? ' disagree' : ''}`}
+                     title={`${t.id}${t.ref?.char ? ` · 整理本 ${t.ref.char}` : ''}`
+                       + (t.first?.agree === false ? ` · 像素 ${t.first.pixel} / CNN ${t.first.cnn} 不一致` : '')}
                      onClick={() => toggle(t.id)}>
                   <img src={t.patch} alt={t.id} />
                   <span className="grp-mark">{off ? '✕' : '✓'}</span>
+                  {t.first?.agree === false && <span className="grp-disagree">≠</span>}
                 </div>
               )
             })}
