@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import cv2
 import json
+from collections import Counter
+
+import numpy as np
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -18,9 +21,11 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
+from ...clustering import cnn_candidates
+from ...clustering.confusables import load_pairs
 from ...core.anchor import x_tr_to_tl
 from ...core.book import load_book
-from ...core.spec import column_key, page_key
+from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.cards import cards
@@ -62,7 +67,16 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     不再一格一张，改按「AI 首选字」把待审格摊成组，供前端「一个字种一屏，
     多格一起确认」用。这一模式下 `limit` 不生效（要的是**全量**待审格才能
     如实报每组 n 与页码分布），组内样例数由 `sample_limit` 单独控制。
+
+    `group="shape"`：按形聚类分组（任务书-C-批审按形聚类分组，2026-09-27）——
+    `group="char"` 的进阶版：AI 首选字系统性认错方向的形近对（今/令、玉/王、
+    大/天……）会把两种真实形状混进同一个字种组，这里先按形近对表把互相混淆
+    的字种池化，池内再用 CNN embedding 按形状聚类拆开。同样不受 `limit` 截断。
     """
+    if group == "shape":
+        return cards_by_shape(book, pages, only, deps.product_store(),
+                              gate_cut=gate_cut, skip_decided=skip_decided,
+                              sample_limit=sample_limit)
     if group == "char":
         return cards_by_char(book, pages, only, deps.product_store(),
                              gate_cut=gate_cut, skip_decided=skip_decided,
@@ -203,6 +217,367 @@ def cards_by_char(book: str, pages: str, only: str, store,
     return {"book": book, "mode": "char", "n_total": len(d["cards"]),
             "n_decided": d.get("n_decided", 0), "blocked": d.get("blocked", []),
             "groups": groups}
+
+
+
+# ── 按形聚类分组（2026-09-27，任务书-C-批审按形聚类分组）───────────────
+#
+# 背景（Z15 ask 2135）：`group=char` 按「AI 首选字」分组时，形近对（今/令、
+# 玉/王、大/天……）若 AI 首选系统性认错方向，两种真实形状会混进同一个字种
+# 组，人一屏扫过去分不清该点掉哪些。这里先按形近对表（`clustering/confusables.py`）
+# 把互相混淆的字种池化，池内再用 CNN embedding 按形状聚类拆开——同一个「今」
+# 首选字池，聚类之后往往能分出「真今」「真令」两簇。
+#
+# ⚠️ 只读 `clustering/cnn_candidates.py`：不改它的索引格式，也不碰
+# `_emb_index`（那是按字表建的字体模板索引，2.7–7 万字冷启动要 5–25 分钟，
+# 见 R 冷启动内存那道）——这里只用它的 `embed()`，只对**已有的字块图**过一次
+# 网络求 256 维向量，不牵扯字表模板，不会触发那个冷启动。CNN checkpoint 本身
+# 不可用（缺 torch/权重）、单池格数太多、或图块算不出来时整池退化成「未聚类」
+# 的一簇（`clustered=False`），不报错、不卡控制台（任务书§做什么·3）。
+
+MAX_SHAPE_K = 4
+"""一个池最多拆几簇。封顶防止极端链式合并把一个池拆得过碎。"""
+
+MAX_SHAPE_EMBED = 1200
+"""单池格数超过这个数就不聚类，整池当一簇（控制台响应时间闸）。按 CPU 上单张
+64² 图过一次小网络前向的量级估的、未在生产大池上实测校准，见 done 单。"""
+
+MAX_POOL_LABELS = 6
+"""一个池最多含几个不同「首选字」，超了就地解散回各自单字池（见 `_pool_key_map`
+「负结果」一节）——不是「拆得碎不碎」的取舍，是防真的语义错误：链式合并会
+把毫不相干的字全部拖进同一个池。"""
+
+
+def _pool_key_map(tops: set[str], pairs: dict | None = None
+                 ) -> tuple[dict[str, str], dict[str, set[str]]]:
+    """把一批「AI 首选字」按形近对表合并成池：并查集，`pairs` 里成对的字
+    （不论隔几跳）先落进同一个池，池太大再就地解散。→ `(首选字 -> 池代表字,
+    池代表字 -> 池内含的首选字集合)`。`pairs=None` 时读生产表
+    （`confusables.load_pairs()`）。
+
+    ## 负结果（2026-09-27，vol03 5 页真实数据实测）：不能直接用并查集的传递闭包
+
+    最初实现是纯并查集、不设上限，理由是「形近对表理论上能链式合并出一长串
+    字，但实测几乎都是两两成对」——**这个假设是错的**。真拿 vol03 p3/6/8/9/20
+    过一遍控制台真请求，"之" 池被传递闭包拖进 **137 个不相干的字**（一+丈+下+
+    不+中+……+馬），聚出来的"簇"纯度只有 4.3%~45.8%，比不聚类还误导人。
+
+    根子在表本身：`confusable_pairs_v1.tsv` 19,732 条边、4,477 个字，平均出度
+    ~8.8——不是「今/令 这种孤立的两两对」，是一张连通度很高的图，个别生僻变体
+    字（如 𣕕）度数到 339（多半是同一堆近似字形的生僻扩展字互相全连）。今/令
+    （cos=.9606）、玉/王（.9598）、大/天（.9609）三个真目标恰好都在表的判定
+    阈值（.945/.955）附近，**没有一个更高的余弦阈值能只留住它们仨又不放行
+    高连通度的生僻字网络**——两者的余弦区间是重叠的，卡阈值治不了根。
+
+    真正起作用的是**事后限流**：允许并查集正常传递合并（今/令/大/天这类真实
+    两三字小簇需要它），但一个池的标签数超过 `MAX_POOL_LABELS` 就判定为「链
+    式合并失控」，就地解散回各自的单字池——退到 `group=char` 的粒度，不比它
+    更差（与 `_cluster_pool_by_shape` 的退化哲学一致）。
+    """
+    if pairs is None:
+        pairs = load_pairs()
+    parent = {t: t for t in tops}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for a in tops:
+        for row in pairs.get(a, []):
+            b = row[0]
+            if b in parent:
+                union(a, b)
+    pool_of = {t: find(t) for t in tops}
+    members: dict[str, set[str]] = {}
+    for t, pool in pool_of.items():
+        members.setdefault(pool, set()).add(t)
+
+    oversized = [pool for pool, labs in members.items() if len(labs) > MAX_POOL_LABELS]
+    for pool in oversized:
+        for t in members.pop(pool):
+            pool_of[t] = t
+            members[t] = {t}
+    return pool_of, members
+
+
+def _majority(items: list) -> tuple:
+    """众数与票数；`None` 不计票。空/全 None → `(None, 0)`。"""
+    c = Counter(x for x in items if x is not None)
+    if not c:
+        return None, 0
+    ch, n = c.most_common(1)[0]
+    return ch, n
+
+
+def _init_shape_centroids(tiles: list[dict], emb: np.ndarray, labels: set[str], k: int
+                          ) -> tuple[np.ndarray, list[str]] | None:
+    """给至多 `k` 个标签各选一个种子向量：优先选「AI 首选字＝整理本对齐字＝该
+    标签」的格（最可信的锚点），选不到就退回随便一个首选字＝该标签的格。
+
+    → `(种子矩阵, 种子对应的标签，按同一顺序)`——调用方要用这份对应关系把
+    「算不出图但知道首选字」的格塞回它自己首选字所在的那一簇，而不是乱塞。
+    种子不够 2 个（能提供种子的标签只有 0/1 个）时返回 `None`，调用方退化。
+    """
+    idx_by_id = {t["id"]: i for i, t in enumerate(tiles)}
+    seeds, used = [], []
+    for lab in sorted(labels):
+        if len(seeds) >= k:
+            break
+        exemplar = next((t for t in tiles if _top_pick(t) == lab
+                         and (t.get("ref") or {}).get("char") == lab), None)
+        if exemplar is None:
+            exemplar = next((t for t in tiles if _top_pick(t) == lab), None)
+        if exemplar is not None:
+            seeds.append(emb[idx_by_id[exemplar["id"]]])
+            used.append(lab)
+    if len(seeds) < 2:
+        return None
+    return np.stack(seeds), used
+
+
+def _spherical_kmeans(emb: np.ndarray, centroids: np.ndarray, iters: int = 10) -> np.ndarray:
+    """单位向量上的 k-means（用余弦相似度，即质心归一化后的内积）。质心分不到
+    格时保留上一轮的值，不让它被拉成 NaN。确定性：种子固定、`argmax` 平手取
+    第一个下标，同一批输入每次跑结果一样，方便测试。
+    """
+    c = centroids / np.maximum(np.linalg.norm(centroids, axis=1, keepdims=True), 1e-9)
+    assign = None
+    for _ in range(iters):
+        sims = emb @ c.T
+        new_assign = np.argmax(sims, axis=1)
+        if assign is not None and np.array_equal(new_assign, assign):
+            break
+        assign = new_assign
+        for j in range(c.shape[0]):
+            members = emb[assign == j]
+            if len(members) == 0:
+                continue
+            v = members.mean(axis=0)
+            n = np.linalg.norm(v)
+            if n > 1e-9:
+                c[j] = v / n
+    return assign
+
+
+def _label_split(tiles: list[dict]) -> list[dict]:
+    """兜底切法：单纯按「AI 首选字」拆——等同 `group=char` 那一刀，不牵扯
+    embedding。聚类的任何一步失败都退到这里，而不是把整池糊成一组：形近对
+    合并已经让 `group=char` 看不出来的问题露出来了（今/令混在一起），退化
+    到「跟 `group=char` 一样烂」都比「比 `group=char` 更烂（多字合一组）」强。
+    """
+    buckets: dict[str, list[dict]] = {}
+    for t in tiles:
+        buckets.setdefault(_top_pick(t), []).append(t)
+    return [{"tiles": buckets[lab], "clustered": False} for lab in sorted(buckets)]
+
+
+def _cluster_pool_by_shape(tiles: list[dict], labels: set[str], *, get_patch, embed,
+                           max_k: int = MAX_SHAPE_K, max_embed: int = MAX_SHAPE_EMBED
+                           ) -> list[dict]:
+    """一个池内按形状聚出至多 `max_k` 簇。
+
+    `get_patch(tile) -> 归一化图 | None`、`embed(patches) -> (N,256) 单位向量`
+    都是外部传入的可调用——生产由 `cards_by_shape` 拼真的（读字块图 + CNN
+    checkpoint），单测传假的，聚类算法本身与 IO/模型解耦，纯函数可测。
+
+    退化条件（→ `_label_split`，按首选字拆，`clustered=False`）：`embed` 为
+    `None`（CNN 不可用）、池格数超过 `max_embed`、能算出图的格数不够 2 个标签
+    的种子、或质心种不出来。**任何一种都不报错，也不会比 `group=char` 更差**
+    ——之前一版实现在这几种情况下把整池糊成一组（今+令混在一起），比
+    `group=char` 分开两组还倒退，这里改成退到「按首选字拆」而不是「整池一组」。
+    没有形近对合并（`labels` 只有 1 个）时本来就不用拆，直接一组。
+    """
+    if len(labels) < 2:
+        return [{"tiles": list(tiles), "clustered": False}]
+    if embed is None or len(tiles) > max_embed:
+        return _label_split(tiles)
+
+    k = min(len(labels), max_k)
+    ok_tiles, patches = [], []
+    for t in tiles:
+        img = get_patch(t)
+        if img is None:
+            continue
+        ok_tiles.append(t)
+        patches.append(img)
+    if len(ok_tiles) < 2:
+        return _label_split(tiles)
+
+    emb = embed(patches)
+    if emb is None or getattr(emb, "shape", (0,))[0] != len(ok_tiles):
+        return _label_split(tiles)
+
+    seeded = _init_shape_centroids(ok_tiles, emb, labels, k)
+    if seeded is None:
+        return _label_split(tiles)
+    centroids, used_labels = seeded
+    assign = _spherical_kmeans(emb, centroids)
+
+    n_clusters = centroids.shape[0]
+    buckets: list[list[dict]] = [[] for _ in range(n_clusters)]
+    sims: list[list[float]] = [[] for _ in range(n_clusters)]
+    c_unit = centroids / np.maximum(np.linalg.norm(centroids, axis=1, keepdims=True), 1e-9)
+    for i, t in enumerate(ok_tiles):
+        j = int(assign[i])
+        buckets[j].append(t)
+        sims[j].append(float(emb[i] @ c_unit[j]))
+
+    ok_ids = {t["id"] for t in ok_tiles}
+    missing = [t for t in tiles if t["id"] not in ok_ids]
+    if missing:
+        # 图算不出的格不丢（验收标准「组内格数之和＝待审总数」）：优先塞进它
+        # 自己首选字对应的那一簇（种上了种子的话），不瞎塞——不然「令」的一个
+        # 缺图格可能被扔进「今」簇，污染那一簇的多数票统计。种不上（这个标签
+        # 压根没能当种子）才退回塞最大簇。
+        label_to_cluster = {lab: j for j, lab in enumerate(used_labels)}
+        for t in missing:
+            j = label_to_cluster.get(_top_pick(t))
+            if j is None:
+                j = max(range(n_clusters), key=lambda x: len(buckets[x]))
+            buckets[j].append(t)
+
+    out = []
+    for j in range(n_clusters):
+        order = sorted(range(len(sims[j])), key=lambda i: sims[j][i])
+        ranked = [buckets[j][i] for i in order]
+        tail = buckets[j][len(order):]     # missing 塞进来的、没有相似度分数
+        out.append({"tiles": ranked + tail, "clustered": True})
+    return [cl for cl in out if cl["tiles"]]
+
+
+def _shape_candidates(pool_tiles: list[dict], suggest_char: str | None, cap: int = 3
+                      ) -> list[str]:
+    """一个池「另外几个候选」：池内所有格的首选字＋整理本对齐字按票数排序，
+    建议字（如果有）排第一，去重封顶 `cap` 个——前端据此给「一键改成别的字」
+    的下拉。"""
+    votes: Counter = Counter()
+    for t in pool_tiles:
+        for ch in (_top_pick(t), (t.get("ref") or {}).get("char")):
+            if ch:
+                votes[ch] += 1
+    ordered = [ch for ch, _ in votes.most_common()]
+    out: list[str] = []
+    if suggest_char is not None:
+        out.append(suggest_char)
+    for ch in ordered:
+        if ch not in out:
+            out.append(ch)
+    return out[:cap]
+
+
+def _build_shape_groups(cs: list[dict], sample_limit: int, *, get_patch, embed) -> list[dict]:
+    """把一批待审卡片先按形近对表池化、池内再按形状聚类拆成组——
+    `cards_by_shape` 的核心装配，`get_patch`/`embed` 见 `_cluster_pool_by_shape`。
+    """
+    unresolved = [c for c in cs if _top_pick(c) is None]
+    resolved = [c for c in cs if _top_pick(c) is not None]
+    tops = {_top_pick(c) for c in resolved}
+    pool_of, members = _pool_key_map(tops)
+    pools: dict[str, list[dict]] = {}
+    for c in resolved:
+        pools.setdefault(pool_of[_top_pick(c)], []).append(c)
+
+    out = []
+    for pool_rep, tiles in pools.items():
+        labels = members[pool_rep]
+        pool_label = "+".join(sorted(labels))
+        clusters = _cluster_pool_by_shape(tiles, labels, get_patch=get_patch, embed=embed)
+        for cl in clusters:
+            tiles_c = cl["tiles"]
+            ai_char, ai_n = _majority([_top_pick(t) for t in tiles_c])
+            ref_char, ref_n = _majority([(t.get("ref") or {}).get("char") for t in tiles_c])
+            if ref_char is not None:
+                char, n_maj = ref_char, ref_n
+            else:
+                char, n_maj = ai_char, ai_n
+            n = len(tiles_c)
+            pages: dict[int, int] = {}
+            for t in tiles_c:
+                pages[t["page"]] = pages.get(t["page"], 0) + 1
+            out.append({
+                "pool": pool_label,
+                "char": char,
+                "candidates": _shape_candidates(tiles, char),
+                "ai_majority": {"char": ai_char, "n": ai_n} if ai_char is not None else None,
+                "ref_majority": {"char": ref_char, "n": ref_n} if ref_char is not None else None,
+                "purity": round(n_maj / n, 4) if n else 0.0,
+                "clustered": cl["clustered"],
+                "n": n,
+                "pages": [{"page": p, "n": v} for p, v in sorted(pages.items())],
+                "tiles": tiles_c[:sample_limit],
+                "truncated": len(tiles_c) > sample_limit,
+            })
+    if unresolved:
+        pages = {}
+        for t in unresolved:
+            pages[t["page"]] = pages.get(t["page"], 0) + 1
+        out.append({
+            "pool": "__unresolved__", "char": None, "candidates": [],
+            "ai_majority": None, "ref_majority": None, "purity": 0.0,
+            "clustered": False, "n": len(unresolved),
+            "pages": [{"page": p, "n": v} for p, v in sorted(pages.items())],
+            "tiles": unresolved[:sample_limit], "truncated": len(unresolved) > sample_limit,
+        })
+    # 大池优先（用户「高频字优先」，同 `_build_char_groups`）；同 n 时按池/字稳定排序。
+    out.sort(key=lambda g: (-g["n"], g["pool"], g["char"] or ""))
+    return out
+
+
+def _card_norm_patch(book: str, ctx: RunContext, card: dict):
+    """卡片 → 归一化 64² 图（`embed()` 要的输入），算不出来时 `None`。
+
+    `key` 与 `review/cards.py` 拼 `patch` URL 用的是同一个 `cell_key(...)+sub`
+    （同一份坐标 → 同一张缓存图，不能各拼各的）；`ctx.materialize` 没有缓存时
+    会从原图现算（子会话须知 §〇·1：云端能看字块图）。
+    """
+    from ...clustering.normalize import normalize_patch
+
+    key = cell_key(card["page"], card["col"], card["slot"]) + (card.get("sub") or "")
+    try:
+        path = ctx.materialize("char_patch", key)
+    except Exception:   # noqa: BLE001 — 算不出来当缺图，不炸整个批审请求
+        return None
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    return normalize_patch(img)
+
+
+def cards_by_shape(book: str, pages: str, only: str, store,
+                   gate_cut: bool, skip_decided: bool, sample_limit: int) -> dict:
+    """按形聚类分组的装配：调既有 `cards()` 拿全量待审格，池化＋聚类后摊成组。
+
+    `get_patch`/`embed` 在这里拼真的（`RunContext.materialize` 读字块图、CNN
+    单例 `embed()` 求向量），聚类算法本身（`_build_shape_groups` 及其调用链）
+    不碰 IO/模型，全靠参数传入，纯函数可单独测。
+    """
+    d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
+             skip_decided=skip_decided)
+    cnn = cnn_candidates.shared()
+    embed = None
+    ctx = None
+    if cnn.available:
+        ctx = RunContext(load_book(book), store, deps.image_cache(), log=lambda s: None)
+        embed = cnn.embed
+
+    def get_patch(card: dict):
+        return _card_norm_patch(book, ctx, card) if ctx is not None else None
+
+    groups = _build_shape_groups(d["cards"], sample_limit, get_patch=get_patch, embed=embed)
+    hint = (None if cnn.available else
+           "CNN checkpoint 不可用（缺 torch 或 models/glyph_cnn_r5/best.pt），"
+           "形近对没法按形状拆开——已按字种分组（等同 group=char），先把这个跑起来："
+           "uv pip install torch --index-url https://download.pytorch.org/whl/cpu")
+    return {"book": book, "mode": "shape", "cluster_ready": cnn.available, "hint": hint,
+            "n_total": len(d["cards"]), "n_decided": d.get("n_decided", 0),
+            "blocked": d.get("blocked", []), "groups": groups}
 
 
 def _page_maps(st, book: str, page: int, cache: dict):
