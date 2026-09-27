@@ -93,6 +93,36 @@ export interface ReviewCardsResponse {
   n_decided?: number
 }
 
+/**
+ * 按字种批审（`group=char`，任务书-C-待审卡按字种批审 2026-09-27）：
+ * 一个字种一组，`tiles` 是排好序（最不像排最前）的样例，`n` 是这组真实的
+ * 待审格总数（可能大于 `tiles.length`，`truncated` 标出来）。
+ */
+export interface ReviewCardGroupPage {
+  page: number
+  n: number
+}
+
+export interface ReviewCardGroup {
+  /** AI 首选字；三路证据都没有时为 `null`，前端标"未识别"。 */
+  char: string | null
+  /** 非空 = 这组的首选字与整理本对齐字不同，单独成组，**不与同字种的组混**。 */
+  ref_char: string | null
+  n: number
+  pages: ReviewCardGroupPage[]
+  tiles: ReviewCard[]
+  truncated: boolean
+}
+
+export interface ReviewCardsGroupedResponse {
+  book: string
+  mode: 'char'
+  n_total: number
+  n_decided?: number
+  blocked?: unknown[]
+  groups: ReviewCardGroup[]
+}
+
 export interface ReviewVerdict {
   shape: string
   done: string
