@@ -80,6 +80,11 @@ export function ReviewCardView({
                   <span className="rvp">{Number(s).toFixed(2)}</span>
                 </span>
               ))}
+              {c.first.proto_src && (
+                <span className="muted" title="CNN 首位的原型来源：本书自有库（own）优先，缺字才回退借来的库（borrow，冷启动）">
+                  {c.first.proto_src === 'own' ? '本书库' : '借库'}
+                </span>
+              )}
               {c.first.agree === true && <span className="rvbadge rvbadge-ok" title="像素比对首位与 CNN 原型首位是同一个字">像素与CNN一致</span>}
               {c.first.agree === false && (
                 <span className="rvbadge rvbadge-warn" title="像素比对首位与 CNN 原型首位不同——这类卡排在前面">
