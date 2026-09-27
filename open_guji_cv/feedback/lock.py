@@ -88,3 +88,14 @@ def feedback_write_lock(root: Path | str):
             held[key] = 0
     finally:
         fh.close()   # 关闭即放锁
+
+
+def book_feedback_lock(feedback_dir: Path | str):
+    """给**一本书**的 `feedback/` 目录拿写锁——按书各一把，不是整个工作区一把。
+
+    `scripts/glyph_store_sync.py` 这类跨多本书跑一轮的调用点用这个名字更好读；
+    等价于 `feedback_write_lock(feedback_dir)`，传书自己的 `feedback/` 目录
+    （不是书名字符串——多本书共享同一 `GUJI_WORKSPACE` 时无法从名字反解路径，
+    调用方本来就手上有路径，直接给路径更不容易接错书）。
+    """
+    return feedback_write_lock(feedback_dir)
