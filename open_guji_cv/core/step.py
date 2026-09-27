@@ -212,6 +212,24 @@ def _with_book_gw(p: BaseModel, ctx: "RunContext") -> BaseModel:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
+def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`ContextDecideParams.ai_evidence` 缺省时按书级配置 `step6_ai:` 填（2026-09-27，
+    D-Step6 导回管线）。同 `_with_book_corpus` 一个道理：要在 `params_for` 里填，
+    指纹（`params_hash`）与 `run_page` 才拿到同一份；必须**重新构造**以触发
+    `model_post_init` 算内容指纹。相对路径锚工作区根（没有工作区则锚 cwd）。
+    书没配 `step6_ai`、或调用方显式传了 `ai_evidence` 的，原样返回。"""
+    if not hasattr(p, "ai_evidence") or p.ai_evidence:
+        return p
+    rel = getattr(ctx.book, "step6_ai", "") or ""
+    if not rel:
+        return p
+    from .workspace import workspace_root
+    path = Path(rel)
+    if not path.is_absolute():
+        path = (workspace_root() or Path.cwd()) / path
+    return type(p)(**{**p.model_dump(), "ai_evidence": str(path), "ai_evidence_fingerprint": ""})
+
+
 # ── 运行上下文 ───────────────────────────────────────────────────────
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
@@ -282,6 +300,7 @@ class RunContext:
         p = _with_book_real_proto(p, self)
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
+        p = _with_book_step6_ai(p, self)
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
