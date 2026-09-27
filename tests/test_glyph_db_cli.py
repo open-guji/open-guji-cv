@@ -37,6 +37,8 @@ def capture_store(monkeypatch, tmp_path):
 
     monkeypatch.setattr(glyph_db_mod, "rebuild_from_store", _fake_rebuild)
     monkeypatch.setattr(glyph_db_mod, "assert_db_not_silently_empty", _fake_assert)
+    from open_guji_cv.feedback import replay as replay_mod
+    monkeypatch.setattr(replay_mod, "replay_after_rebuild", lambda *a, **k: {"stub": True})
     monkeypatch.setenv("GUJI_GLYPH_DB", str(tmp_path / "glyph.db"))
     return seen
 
@@ -96,6 +98,8 @@ def capture_extras(monkeypatch, tmp_path):
 
     monkeypatch.setattr(glyph_db_mod, "rebuild_from_store", _fake_rebuild)
     monkeypatch.setattr(glyph_db_mod, "assert_db_not_silently_empty", lambda *a, **k: None)
+    from open_guji_cv.feedback import replay as replay_mod
+    monkeypatch.setattr(replay_mod, "replay_after_rebuild", lambda *a, **k: {"stub": True})
     monkeypatch.setenv("GUJI_GLYPH_DB", str(tmp_path / "glyph.db"))
     return seen
 
