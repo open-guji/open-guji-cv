@@ -53,12 +53,27 @@ FORM_INSEPARABLE = {frozenset(("入", "八"))}
 EXTRA_CONFUSABLE_PAIRS: list[tuple[str, str]] = [
     ("玉", "王"), ("石", "右"), ("上", "土"), ("早", "皁"), ("州", "川"),
     ("自", "目"), ("且", "旦"),
+    # 2026-09-27 随机抽检 01 实测踩到的两条：
+    # 「入/八」本已在 FORM_INSEPARABLE（判别器分不开、交文意），但没进这张表就从来
+    # 不会走到 _discriminate 里去查 FORM_INSEPARABLE——bxgb:26:3:4 放「八」其实像「入/人」，
+    # 没被拦下就是这个原因，补进来才会真的强制弃权。
+    ("入", "八"),
 ]
 EXTRA_CONFUSABLE_PARTNERS: dict[str, frozenset[str]] = {}
 for _a, _b in EXTRA_CONFUSABLE_PAIRS:
     EXTRA_CONFUSABLE_PARTNERS.setdefault(_a, set()).add(_b)
     EXTRA_CONFUSABLE_PARTNERS.setdefault(_b, set()).add(_a)
 EXTRA_CONFUSABLE_PARTNERS = {k: frozenset(v) for k, v in EXTRA_CONFUSABLE_PARTNERS.items()}
+
+# 码位规矩（字形库/11 草案，H 道起草、用户未定表）：这几对是「同一刻本字形分落两个
+# 码位」的记录习惯岔子（库/人裁各按各的敲法），不是形状误判——总管 2026-09-27 裁定
+# 单列一档「码位不一致」，不算进错误率，等用户定表后按定的口径重算。
+CODEPOINT_CONVENTION_PAIRS = {frozenset(p) for p in (
+    ("别", "別"), ("内", "內"), ("幷", "并"),
+    # bxgb:11:11:17（随机抽检 01 实测）：放行「回」，图是「囘」——同一刻本字形分落
+    # 两个码位，归总管 2026-09-27 裁定的「码位不一致」档，等用户定码位表。
+    ("回", "囘"),
+)}
 
 
 def _clean_ink(gray: np.ndarray) -> np.ndarray:
@@ -137,12 +152,14 @@ def iron_with_disc(cands, human_chars_set, partners_map, raw_patch, ex_raws_fn, 
     """
     ic, top, second, why = iron(cands, human_chars_set, partners_map)
     if ic is not None:
-        # 复核：iron 直接判成的字如果在「本道追加形近表」里有对手、且对手也在候选集里，
-        # 交判别器确认一次——现有共享形近表（clustering/confusable.py）不收玉/王、
-        # 上/土、自/目、且/旦 这类对子（2026-09-27 bxgb 实测踩到，总览/14 §七已点过
-        # 王/玉 这个坑），cov 对这类小笔画差异不敏感，光凭 ≥0.99 会静默放错。
-        partner = next((p for p in EXTRA_CONFUSABLE_PARTNERS.get(ic, frozenset())
-                         if any(c == p for c, _ in cands)), None)
+        # 复核：iron 直接判成的字如果在「本道追加形近表」里有对手，交判别器确认一次——
+        # 现有共享形近表（clustering/confusable.py）不收玉/王、上/土、自/目、且/旦
+        # 这类对子（2026-09-27 bxgb 实测踩到，总览/14 §七已点过王/玉这个坑），cov 对
+        # 这类小笔画差异不敏感，光凭 ≥0.99 会静默放错。
+        # ⚠️ 2026-09-27 第一版要求对手字先出现在 GlyphMatcher 的 top-k（k=10）候选里
+        # 才触发，实测 bxgb:25:9:17（土/上）因为「土」没挤进前十而漏判——**对手不必
+        # 在候选集里**，直接查表触发即可，`_discriminate` 会自己对对手的库实例算 cov。
+        partner = next(iter(EXTRA_CONFUSABLE_PARTNERS.get(ic, frozenset())), None)
         if partner is None:
             return ic, top, second, "铁证", None
         return _discriminate(ic, partner, raw_patch, ex_raws_fn, scale, top, second,
@@ -186,6 +203,11 @@ def main() -> None:
     ap.add_argument("--sample-n", type=int, default=300)
     ap.add_argument("--seed", type=int, default=20260927)
     ap.add_argument("--no-disc", action="store_true", help="只跑纯铁证闸，不接判别器（对照用）")
+    ap.add_argument("--dedup-char", action="store_true",
+                     help="按字种去重抽样（总管 2026-09-27 定）：同一字种只出 1 张，"
+                          "优先「没裁过的字种」与「本道追加形近/码位表里有对手的字种」")
+    ap.add_argument("--exclude-chars-file",
+                     help="JSON 字符数组：已经裁过、判对的字种，去重时跳过（不再出卡）")
     a = ap.parse_args()
 
     from open_guji_cv.clustering.glyph_db import GlyphDB
@@ -310,6 +332,9 @@ def main() -> None:
                 elif vm.semantic(winner) == vm.semantic(gt):
                     stat["核对人裁·同字异形"] += 1
                     rows.append(row)
+                elif frozenset((winner, gt)) in CODEPOINT_CONVENTION_PAIRS:
+                    stat["核对人裁·码位不一致"] += 1
+                    rows.append(row)
                 else:
                     stat["核对人裁·错"] += 1
                     rows.append(row)
@@ -336,10 +361,33 @@ def main() -> None:
         random.seed(a.seed)
         pool = fire_no_truth[:]
         random.shuffle(pool)
-        sample = pool[:a.sample_n]
+        if a.dedup_char:
+            # 总管 2026-09-27 定：随机抽检 01 里高频简单字（十/之/一/五…）反复出、把人
+            # 累坏了才停在 71/300。改按字种去重：同一字种只留 1 张；已裁过判对的字种
+            # 整个跳过；优先出「没裁过的字种」与「本道形近/码位表里有对手的字种」。
+            exclude = set()
+            if a.exclude_chars_file:
+                exclude = set(json.loads(Path(a.exclude_chars_file).read_text(encoding="utf-8")))
+            watch_chars = set(EXTRA_CONFUSABLE_PARTNERS) | {c for p in CODEPOINT_CONVENTION_PAIRS for c in p}
+            by_char: dict[str, dict] = {}
+            for row in pool:
+                ch = row["char"]
+                if ch in exclude or ch in by_char:
+                    continue
+                by_char[ch] = row
+            ranked = sorted(by_char.values(), key=lambda r: 0 if r["char"] in watch_chars else 1)
+            sample = ranked[:a.sample_n]
+            n_pool_cells = sum(1 for r in pool if r["char"] not in exclude)
+            print(f"去重：池 {len(pool)} 格 → {len(by_char)} 个未裁字种（已排除 {len(exclude)} 个"
+                  f"已判对字种）；本页 {len(sample)} 张，其中 {sum(1 for r in sample if r['char'] in watch_chars)} "
+                  f"张是形近/码位表里的字种", file=sys.stderr)
+        else:
+            sample = pool[:a.sample_n]
+            n_pool_cells = len(pool)
         Path(a.sample_out).write_text(json.dumps({
-            "book": book, "seed": a.seed, "pool_size": len(fire_no_truth), "n": len(sample),
-            "sample": sample,
+            "book": book, "seed": a.seed, "pool_size": len(fire_no_truth),
+            "pool_cells_excluding_confirmed": n_pool_cells, "dedup_char": a.dedup_char,
+            "n": len(sample), "sample": sample,
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"随机抽检名单：池 {len(fire_no_truth)} 格，抽 {len(sample)}（种子 {a.seed}）", file=sys.stderr)
 
