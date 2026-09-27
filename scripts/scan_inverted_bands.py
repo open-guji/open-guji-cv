@@ -221,10 +221,10 @@ def main():
             n += 1
             print(f"p{int(p.stem):<4} " +
                   "  ".join(f"y{a}-{b}({tag})" for a, b, tag in kept))
-    print(f"\n{len(pages)} 页里 {n} 页有候选"
-          f"{'（粗筛全量，未滤）' if args.raw else
-             '（已滤：贴版框模式，上下取大者 + 带内纸列纯黑）' if args.edge else
-             '（已滤：上下夹正文 或 界行穿过，+ 带内纸列纯黑；贴版框的带看 --edge）'}")
+    mode = ('（粗筛全量，未滤）' if args.raw else
+            '（已滤：贴版框模式，上下取大者 + 带内纸列纯黑）' if args.edge else
+            '（已滤：上下夹正文 或 界行穿过，+ 带内纸列纯黑；贴版框的带看 --edge）')
+    print(f"\n{len(pages)} 页里 {n} 页有候选{mode}")
     print("下一步：人工看图确认，再把位置写进 books/<book>.yaml 的 preclean 段")
 
 
