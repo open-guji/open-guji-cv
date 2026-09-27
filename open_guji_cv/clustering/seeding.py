@@ -506,14 +506,24 @@ def admission_decision(ocr: dict | None, align_char: str | None,
 # ── 语言模型 ─────────────────────────────────────────────────────────
 
 def _load_general_lm(paths: list[Path]) -> CharNgramLM:
-    """通用语料 LM：训练一次（~30s/10M 字）后缓存在首个语料同目录。
+    """通用语料 LM：训练一次（~30s/10M 字）后缓存。
 
     缓存键 = 各源文件 (name, size, mtime) + 剪枝阈；源变了自动重训。
+
+    ⚠️ **缓存文件落 `cache_root()`，不落 `paths[0].parent`**（任务卡 #54 第3条，
+    2026-09-27 改）：`general_corpus_dir` 的语料本身是引擎自带资源，可以摆在
+    仓里或工作区，但**派生缓存**不该跟着摆在语料旁边——那条路径不受
+    `GUJI_CACHE_DIR`/`GUJI_WORKSPACE` 管，语料一旦解析到仓内 `corpus/external/`，
+    全量单测就会在仓里写下一份 22 MB 的 `.general_lm_cache.json`，触发
+    conftest 的仓内易变目录防污染断言。
     """
+    from ..core.workspace import cache_root
     key = json.dumps([[p.name, p.stat().st_size, int(p.stat().st_mtime)]
                       for p in paths] + [GENERAL_LM_PRUNE])
-    cache = paths[0].parent / ".general_lm_cache.json"
-    meta = paths[0].parent / ".general_lm_cache.meta"
+    lm_dir = cache_root() / "general_lm"
+    lm_dir.mkdir(parents=True, exist_ok=True)
+    cache = lm_dir / ".general_lm_cache.json"
+    meta = lm_dir / ".general_lm_cache.meta"
     if cache.exists() and meta.exists() \
             and meta.read_text(encoding="utf-8") == key:
         return CharNgramLM.load(cache)
