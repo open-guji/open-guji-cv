@@ -6,6 +6,7 @@
     guji console [--port 8640] [--no-browser]
     guji cache usage|prune [--limit-gb N]
     guji cache build-rare-index --book <book>              # 云端预建 Step5-b embedding 索引，供服务器分发命中
+    guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
 本模块顶层不 import 任何重依赖，保证 CLI 冷启动快。
@@ -267,6 +268,8 @@ def cmd_cache(args) -> None:
         _write(args.out, encode_png(img[y0:y1]))
     elif args.action == "build-rare-index":
         _cmd_cache_build_rare_index(args)
+    elif args.action == "build-font-index":
+        _cmd_cache_build_font_index(args)
 
 
 def _cmd_cache_build_rare_index(args) -> None:
@@ -322,6 +325,45 @@ def _cmd_cache_build_rare_index(args) -> None:
     print("换机器 mtime 不同也照样命中。验证命中：服务器上 `git status`/校验 sha256 后跑一页，")
     print("看 `guji pipeline … --to rare_candidates --pages <该页>` 的日志里没有")
     print("「guji cache build-rare-index：…」这行进度（=直接读了缓存，没有现建）。")
+
+
+def _cmd_cache_build_font_index(args) -> None:
+    """`guji cache build-font-index [--book <book>]`：云端预建控制台 K19 的
+    HOG 字体模板索引（2026-09-28，任务书-K-控制台常驻内存与字体索引预建）。
+
+    控制台启动会起一个后台线程 `warm_font_index()`（`clustering/rare_panel.py`）
+    现建这份索引——首次建大表要几分钟、峰值内存到 GB 量级（K19 done 单 §三：
+    一份矩阵单独就有 495MB）。跟 `build-rare-index` 同一个解法：云端把
+    `cache/font_index/<key>.npz` 建好，随快照/发布分发到服务器，控制台第一次
+    调 `font_candidates._index()` 就直接命中磁盘缓存，连建索引的分支都不进。
+
+    只建 `warm_font_index()` 实际会用到的两张表：`rare_panel._rare_charsets()`
+    的 small 与 big——与 `warm()` 用的是**同一个函数**，算出来的
+    `_index_key()` 必然一致。`--book` 给了就按那本书的整理本语料算字表
+    （`rare_for` 单查时用的字表），不给就用 `DEFAULT_CORPUS`（控制台启动
+    `warm_font_index()` 走的正是这条，不传 book）——预建哪张表要跟被预热的
+    那张对上。
+
+    `warm()` 内部已经把「被别的字表整体包含的字表」去重（K19：small⊆big 只建
+    big 一份，small 查询借 big 的矩阵，见 `font_candidates.warm()` 模块头），
+    这里直接调它，不用自己再判断包含关系。
+    """
+    from .clustering.font_candidates import all_ready, warm
+    from .clustering.rare_panel import _rare_charsets
+    from .steps.align_ref import book_corpus
+
+    corpus = book_corpus(args.book) if args.book else None
+    cs_small, cs_big = _rare_charsets(corpus)
+    print(f"book={args.book or '(默认语料)'} corpus={corpus or '(DEFAULT_CORPUS)'} "
+         f"small={len(cs_small)} 字 big={len(cs_big)} 字")
+    if all_ready([cs_small, cs_big]):
+        print("已有缓存，跳过重建；如需强制重建先删掉 cache/font_index/ 里对应文件")
+        return
+    warm([cs_small, cs_big])
+    print("")
+    print("分发：把 <cache_root>/font_index/*.npz 随 cv 仓快照或 Release 一起带走，")
+    print("服务器上放到同一个相对路径（`core.workspace.cache_root()` 算出来的那层）即可；")
+    print("`font_set_fingerprint()` 按字体文件内容+大小+mtime 算，字表/字体没变就命中。")
 
 
 def cmd_batch(args) -> None:
@@ -1806,8 +1848,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | build-rare-index")
-    p.add_argument("action", choices=["usage", "prune", "get", "column", "build-rare-index"])
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | "
+                                     "build-rare-index | build-font-index")
+    p.add_argument("action", choices=["usage", "prune", "get", "column",
+                                      "build-rare-index", "build-font-index"])
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
