@@ -2,8 +2,8 @@
 
 1. `cnn_candidates.fingerprint()` 改内容指纹——同内容换 mtime 命中同一份缓存，
    换机器（云端建、服务器用）才不会白建一次。
-2. `build_emb_matrix()` 的进度回调、`_emb_index()` 落盘改 float16 后查询路
-   立刻转回 float32（与从未碰过磁盘的现算结果只差浮点尾数，不改变字符排序）。
+2. `build_emb_matrix()` 的进度回调、`_emb_index()` 落盘 float32，读回与现算
+   逐位相同（float16 试过，候选会变，已弃）。
 3. `guji cache build-rare-index` 与产线用**同一个** `book_charsets()`/
    `emb_index_key()`，预建的文件产线必然能命中。
 
