@@ -82,11 +82,14 @@ class Ruler:
     def value(self) -> float | None:
         return None if not self.den else round(100.0 * self.num / self.den, 2)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, full: bool = False) -> dict:
+        """`full=False`（默认）只带前 20 条 `detail`，够看个样子；做全量错例
+        统计要 `full=True` 拿完整明细——以前只能 monkeypatch 这个方法（任务卡
+        #54 第6条），CLI `check rulers` 对应 `--full` 开关。"""
         return {"key": self.key, "title": self.title, "num": self.num,
                 "den": self.den, "value": self.value, "unit": self.unit,
                 "goal": self.goal, "note": self.note,
-                "detail": self.detail[:20]}
+                "detail": self.detail if full else self.detail[:20]}
 
 
 def _col_profile(store, book: str, pg: int, col: int) -> np.ndarray | None:
@@ -127,8 +130,9 @@ def _runs_over(mask: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(s, e))
 
 
-def measure(book: str, pages: list[int], store=None) -> dict:
-    """跑四把尺子。只读产物，不改任何东西。"""
+def measure(book: str, pages: list[int], store=None, full: bool = False) -> dict:
+    """跑四把尺子。只读产物，不改任何东西。`full=True` 时 `detail` 不截断
+    （做全量错例统计要用；CLI 对应 `check rulers --full`）。"""
     from ..products import kinds as _kinds   # noqa: F401  先注册产物种类
     from ..core.step import page_key
     from ..products.store import ProductStore
@@ -158,6 +162,8 @@ def measure(book: str, pages: list[int], store=None) -> dict:
     r2c = Ruler("R2c", "缝后仍穿墨的格线（占直线穿墨格线）", goal="↓",
                 note="分母 = 直线穿墨的内部格线；有缝按缝上的墨算，无缝即直线穿墨")
 
+    n_solved_cols = 0    # R2 系尺子的潜在分母来源：过闸且 DP 有解的列
+    n_cache_miss = 0     # 其中列图缓存缺失（拿不到 _col_profile）的列数
     for pg in pages:
         gate = store.read(book, "column_gate", page_key(pg), "gate_manifest")
         cells = store.read(book, "cell_shrink", page_key(pg), "cells")
@@ -178,8 +184,10 @@ def measure(book: str, pages: list[int], store=None) -> dict:
         for cc in (cells.columns if cells else []):
             if not cc.ok:
                 continue
+            n_solved_cols += 1
             prof = _col_profile(store, book, pg, cc.col)
             if prof is None:
+                n_cache_miss += 1
                 continue
             h = len(prof)
             ink_img = None
@@ -267,8 +275,22 @@ def measure(book: str, pages: list[int], store=None) -> dict:
                                       "slot": getattr(ch, "slot", None),
                                       "px": int(n)})
 
+    # 任务卡 #54 第4条：快照只带 `products/`，不带 `cache/`——R2 系尺子（R2/R2s/
+    # R2x/R2c/R3/R4）全靠 `_col_profile()` 读列图缓存，缺了就整批 `continue`，
+    # 分母 0、`value` 全部悄悄变 `None`（下游看板常把 None 显示成 0），且不报错。
+    # R1 不受影响（只读数值产物），所以这道闸看的是"过闸有解的列，缓存全都读不到"
+    # 这一种结构性缺失，不会误伤"个别列缓存被 LRU 淘汰"那种正常情况（那种是少数，
+    # 不会 100% 命中缺失）。
+    if n_solved_cols > 0 and n_cache_miss == n_solved_cols:
+        raise RuntimeError(
+            f"check rulers（{book}）：{n_solved_cols} 个过闸有解的列一张列图缓存都读不到，"
+            f"R2/R2s/R2x/R2c/R3/R4 会全部得 None（不是真的 0）。这份快照大概只带了 "
+            f"products/、没带 cache/——先补算列图缓存（重跑该书 Step1-4，"
+            f"或从原图现跑 column_warp/cell_shrink 重建 cache/column_image），"
+            f"再来算这几把尺子。")
+
     return {"book": book, "n_pages": len(pages),
-            "rulers": [x.to_dict() for x in (r1, r2, r2s, r2x, r2c, r3, r4)]}
+            "rulers": [x.to_dict(full=full) for x in (r1, r2, r2s, r2x, r2c, r3, r4)]}
 
 
 def _clipped_ink(prof: np.ndarray, bbox, cell, h: int) -> int:

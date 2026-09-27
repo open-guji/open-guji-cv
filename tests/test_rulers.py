@@ -90,3 +90,44 @@ def test_measure_shape_on_a_frozen_real_page(goal_key, tmp_path, monkeypatch, ws
     # R4 若窗口越界会飙到十几个百分点；正常应远低于此
     if goal_key == "R4":
         assert r["value"] < 5.0, f"R4={r['value']}% 太高，多半是窗口又越界了"
+
+
+# ── 任务卡 #54 第4条：快照只带 products/、没带 cache/ 时要报错，不许悄悄给 0/None ──
+def test_measure_errors_when_column_image_cache_entirely_missing(tmp_path, monkeypatch,
+                                                                  fixture_page, ws):
+    """拿快照复算：`products/` 有、`cache/` 没有——R2 系尺子以前会因为
+    `_col_profile()` 全部返回 None 而悄悄把分母算成 0（下游看板常把
+    `value=None` 显示成 0），且不报错。这种"过闸有解的列一张列图缓存都
+    读不到"的结构性缺失现在要报错，不许假装量出来了。"""
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.eval.rulers import measure
+
+    import open_guji_cv.steps  # noqa: F401
+    from helpers import run_keben_from_raw
+
+    run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"), gray=fixture_page)
+    import shutil
+    shutil.rmtree(tmp_path / "cache" / "keben" / "column_image")   # 模拟"只有快照的 products/"
+
+    with pytest.raises(RuntimeError, match="cache"):
+        measure("keben", [1])
+
+
+def test_measure_tolerates_sporadic_single_column_cache_miss(tmp_path, monkeypatch,
+                                                              fixture_page, ws):
+    """个别列的缓存被 LRU 淘汰是正常运行中会发生的事——不该被 K4 那道闸误伤。
+    只删一列的缓存（不是全删），应当正常出结果，不报错。"""
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.eval.rulers import measure
+
+    import open_guji_cv.steps  # noqa: F401
+    from helpers import run_keben_from_raw
+
+    run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"), gray=fixture_page)
+    img_dir = tmp_path / "cache" / "keben" / "column_image"
+    files = sorted(img_dir.iterdir())
+    assert len(files) > 1, "这张 fixture 页只有一列，测不出「个别列缺失」——挑张多列的页"
+    files[0].unlink()   # 只删一列
+
+    out = measure("keben", [1])   # 不该抛
+    assert out["rulers"]
