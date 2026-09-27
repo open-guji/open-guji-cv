@@ -50,16 +50,22 @@ def iron(cands: list[tuple[str, float]], human_chars: set[str],
          partners: dict[str, frozenset[str]]) -> tuple[str | None, float, float, str]:
     """→ (铁证字 | None, top cov, 次优异字 cov, 不成铁证的原因)。
 
-    用户口径（cov ≥ 0.99；或 ≥ 0.95 且次优 < 0.80）之外加两条护栏——p20 试跑实测需要：
+    用户口径（cov ≥ 0.99；或 ≥ 0.95 且次优 < 0.80）之外加三条护栏——p20 试跑实测需要：
     - **两个人裁字都 ≥ 0.99** 不算铁证（且 0.9961 / 旦 0.9935：两份人裁证据互相打架）；
     - **形近对家不在人裁库里**不算铁证：cov 对一点一横不敏感，人裁库只有「太」没有「大」时，
       刻本的「大」对「太」能到 0.994（match.py 护栏 1 注释里记过同一个盲区）。
+    - **≥0.95 但 <0.99 的低档必须有 ≥2 个候选才算「次优够低」**（2026-09-27 vol03 影子验收
+      实测踩到）：`second` 拿不到候选就默认 0.0，只有 1 个候选时「次优 < 0.80」永远成立，
+      于是「库里压根没有真字的刻例、随手一个 0.9576 的错字候选」也会当铁证放出去——
+      vol03:94:1:4 刻的是「生」，库里「生」零人裁实例，唯一候选「注」cov 只有 0.9576
+      却因为没有第二候选而蒙混过关。「没有对手」不是「像」的证据，是「库不够」的证据，
+      两者不能用同一个默认值 0.0 混着判。
     """
     if not cands:
         return None, 0.0, 0.0, "无候选"
     top_c, top_v = cands[0]
     second = max((v for c, v in cands[1:] if c != top_c), default=0.0)
-    if not (top_v >= IRON_COV or (top_v >= IRON_COV_LOW and second < IRON_SECOND_MAX)):
+    if not (top_v >= IRON_COV or (top_v >= IRON_COV_LOW and len(cands) >= 2 and second < IRON_SECOND_MAX)):
         return None, top_v, second, "分数不够"
     if second >= IRON_COV:
         return None, top_v, second, "两个人裁字都像"
