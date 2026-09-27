@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """对勘差异的**定性分层**：把「我们错了」从「两个本子本来就不同」里分出来。
 
+这层判据原来只接在**单证人**的旧脚本 `build_collation_report.py` 上；新的**多证人**
+`guji collate`（`report/run.py` + `report/html.py`）2026-09-27 起接上了同一套判据——
+`adapt_diff()` 把 `report/collate.py::Diff` 的字段（`char`/`ref`/`human`/`channel`）
+翻成这里认的形状（`hyp`/`ref`/`source`），`grade()`/`summarize()` 本身一行没改。
+两个工具字段名不同，别改这个模块去凑新工具，改 `adapt_diff` 就够了——它是唯一知道
+两种形状怎么对应的地方。
+
 `build_collation_report.py` 出的是一张 545 行的平表，三分类（variant / substitution /
 extra）答的是「字面一不一样」，答不了看报告的人真正要问的那一句：
 
@@ -158,3 +165,26 @@ def summarize(entries: list[dict], misanchored: frozenset[int] | set[int] = froz
         "n_todo": sum(len(by[g]) for g in TODO),
         "pairs": pairs,
     }
+
+
+#: `report/collate.py::Diff.kind` → 这里认的粗分类。`variant.*` 三种方向不分，
+#: 分层只问「是不是异体」，方向（正字/简体）是另一层信息，`html.py` 单独显示；
+#: `sub.confusable`/`sub.other` 同理合并——分层要问的是「要不要看」，
+#: 「像不像形近字」是另一件事，不影响落哪一层。`same`/`col.*` 不是差异，不会走到这里。
+DIFF_KIND_MAP = {
+    "sub.confusable": "substitution", "sub.other": "substitution",
+    "variant.to_orthodox": "variant", "variant.to_simp": "variant", "variant.other": "variant",
+    "missing": "missing", "extra": "extra", "unreadable": "unreadable",
+}
+
+
+def adapt_diff(d: dict) -> dict:
+    """`Diff`（`asdict()` 之后的字典）→ `grade()`/`grade_pairs()` 认的形状。
+
+    只做字段改名，不改判据一行——沿用 Z11 交付预演 `grade_adapter.py` 验过的映射
+    （见模块头）。`source` 只分「人裁」与「其余」：`grade()`/`_is_human()` 只关心
+    `source` 是不是以 `human` 结尾，`channel` 的具体值（match_solo/context/…）
+    分层用不上，别在这里编一个 `auto:<channel>` 字符串出来又没人读。
+    """
+    return {**d, "hyp": d.get("char"), "kind": DIFF_KIND_MAP[d["kind"]],
+            "source": "human" if d.get("human") else ""}

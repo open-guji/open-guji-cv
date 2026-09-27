@@ -78,6 +78,10 @@ class Diff:
     n: int = 1         # missing 串长
     hyp_ctx: str = ""
     ref_ctx: str = ""
+    grade: str = ""    # collation_grade.grade() 的结果，run.collate_book 填；空 = 尚未分层
+    strip: str | None = None
+    """截条图相对路径（`<out>_strips/<witness>/<id>.webp`），`report/strips.py` 填。
+    None = 还没生成/这条不出图（增删/异体汇总另有例图，见 strips 模块头）。"""
 
 
 @dataclass
