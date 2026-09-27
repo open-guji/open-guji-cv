@@ -87,6 +87,16 @@ def _compact_manifest(path: Path) -> dict[str, dict]:
     return out
 
 
+def _gates_of(steps: list[str]) -> dict[str, str]:
+    """{步: 它出口挂的闸}。读不到注册表（极简环境）就当没有闸。"""
+    try:
+        from .. import steps as _register  # noqa: F401 —— import 即注册全部 Step 与闸
+        from ..core.step import STEPS
+    except Exception:  # noqa: BLE001
+        return {}
+    return {s: STEPS[s].spec.gate.id for s in steps if s in STEPS and STEPS[s].spec.gate}
+
+
 def _page_of(name: str) -> int | None:
     m = _PAGE_FILE.match(name)
     return int(m.group(1)) if m else None
@@ -120,7 +130,9 @@ def _pipeline_params(book: str, ws_dir: Path, steps: list[str]) -> tuple[dict, s
 
 
 def _glyph_fp(ws_dir: Path) -> str | None:
-    db = ws_dir / "output" / "glyph.db"
+    """算产物时用的那个库的指纹：设了 `GUJI_GLYPH_DB`（借库，如全唐文借四庫库）就认它，否则本书库。"""
+    env = os.environ.get("GUJI_GLYPH_DB")
+    db = Path(env) if env else ws_dir / "output" / "glyph.db"
     if not db.is_file():
         return None
     try:
@@ -135,11 +147,24 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
     """把包内容写到 `tree_dir`（应不存在或为空），返回 manifest（也已写进 tree_dir）。"""
     if spec.mode not in MODES:
         raise ManifestError(f"mode 只能是 {'/'.join(MODES)}")
+    attach_only = spec.mode == "attach-only"
     src = Path(spec.products_root) / spec.book
-    if not src.is_dir():
-        raise FileNotFoundError(f"没有产物目录 {src}")
-    avail = sorted(p.name for p in src.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
-    steps = spec.steps or avail
+    if attach_only:
+        if spec.steps:
+            raise ManifestError("attach-only 包不带步（--steps 去掉）")
+        avail = []
+    elif not src.is_dir():
+        raise FileNotFoundError(f"没有产物目录 {src}（只带附件请用 --mode attach-only）")
+    else:
+        avail = sorted(p.name for p in src.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
+    steps = [] if attach_only else list(spec.steps or avail)
+    gates_added = []
+    for sid, gid in _gates_of(steps).items():
+        # 点名的步挂着闸、产物里又有闸的目录，就一起带上（2026-09-27 服务器实测：Z16 的 vol03/vol04 包
+        # 只带 border_detect/column_warp/row_segment/cell_shrink 四步，导入后闸是旧的，下游整条判过期/阻塞）
+        if gid not in steps and gid in avail:
+            steps.insert(steps.index(sid) + 1, gid)
+            gates_added.append(gid)
     missing = [s for s in steps if s not in avail]
     if missing:
         raise FileNotFoundError(f"{src} 下没有这些步：{', '.join(missing)}（有：{', '.join(avail)}）")
@@ -234,8 +259,9 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
         "workspace": {"key": wsk, "dir": Path(spec.ws_dir).name, "create": bool(spec.create_workspace)},
         "book": spec.book,
         "steps": steps,
+        "gates_added": gates_added,
         "pages": sorted(pages_seen),
-        "page_scope": "full" if spec.pages is None else "subset",
+        "page_scope": "none" if attach_only else ("full" if spec.pages is None else "subset"),
         "mode": spec.mode,
         "allow_downgrade": bool(spec.allow_downgrade),
         "supersedes": list(spec.supersedes),

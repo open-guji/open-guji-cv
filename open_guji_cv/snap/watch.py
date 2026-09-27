@@ -42,11 +42,33 @@ def _save(path: Path, state: dict) -> None:
     tmp.replace(path)
 
 
+def _state_row(commit: str, r: ImportResult) -> dict:
+    return {"commit": commit, "status": r.status,
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "pack": r.detail.get("pack")}
+
+
+def remember(state_path: Path, r: ImportResult) -> bool:
+    """手动 `guji snap import` 的结果也记进 watch 的状态文件（2026-09-27 服务器实测：不记的话
+    定时器下一轮把手动导过的包又导一遍）。拿与 watch 同一把锁（阻塞等），watch 正在跑就等它跑完。
+    没有提交号的结果（拉包失败）不记。返回是否记了。"""
+    commit = r.detail.get("commit")
+    if not commit:
+        return False
+    state_path = Path(state_path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(state_path.with_name(state_path.name + ".lock"), "w") as lockf:
+        fcntl.flock(lockf, fcntl.LOCK_EX)
+        state = _load(state_path)
+        state[r.branch] = _state_row(commit, r)
+        _save(state_path, state)
+    return True
+
+
 def watch(*, ws_repo: Path, ws_roots: list[Path], cv_repo: Path, state_path: Path = DEFAULT_STATE,
           overview: Path | None = None, remote: str = "origin", dry_run: bool = False, push: bool = True,
           git: gitio.GitRunner = gitio.default_git,
           freshness_fn: Callable = default_freshness, importer: Callable = import_pack,
-          url_fetch: Callable | None = None) -> dict:
+          url_fetch: Callable | None = None, raw_check: Callable | None = None) -> dict:
     state_path = Path(state_path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     lockf = open(state_path.with_name(state_path.name + ".lock"), "w")
@@ -57,13 +79,14 @@ def watch(*, ws_repo: Path, ws_roots: list[Path], cv_repo: Path, state_path: Pat
             return {"status": "busy", "note": "上一轮还在跑"}
         return _watch_locked(ws_repo=ws_repo, ws_roots=ws_roots, cv_repo=cv_repo, state_path=state_path,
                              overview=overview, remote=remote, dry_run=dry_run, push=push, git=git,
-                             freshness_fn=freshness_fn, importer=importer, url_fetch=url_fetch)
+                             freshness_fn=freshness_fn, importer=importer, url_fetch=url_fetch,
+                             raw_check=raw_check)
     finally:
         lockf.close()
 
 
 def _watch_locked(*, ws_repo, ws_roots, cv_repo, state_path, overview, remote, dry_run, push, git,
-                  freshness_fn, importer, url_fetch) -> dict:
+                  freshness_fn, importer, url_fetch, raw_check=None) -> dict:
     try:
         listing = gitio.ls_remote_snaps(ws_repo, remote, git)
     except gitio.GitError as e:
@@ -90,6 +113,8 @@ def _watch_locked(*, ws_repo, ws_roots, cv_repo, state_path, overview, remote, d
             superseded.setdefault(old, b)
     todo.sort(key=lambda b: (manifests.get(b, {}).get("created", ""), b))
     kw = {"url_fetch": url_fetch} if url_fetch else {}
+    if raw_check:
+        kw["raw_check"] = raw_check
     changed: list[ImportResult] = []
     results = []
     for b in todo:
@@ -104,9 +129,7 @@ def _watch_locked(*, ws_repo, ws_roots, cv_repo, state_path, overview, remote, d
         if prev.get("commit") != listing[b] or prev.get("status") != r.status:
             changed.append(r)
         if not dry_run:
-            state[b] = {"commit": listing[b], "status": r.status,
-                        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "pack": r.detail.get("pack")}
+            state[b] = _state_row(listing[b], r)
     if not dry_run:
         _save(state_path, state)
     record = None
@@ -127,19 +150,23 @@ def _counts(d: dict | None) -> str:
     return " ".join(f"{zh}{d.get(k, 0)}" for k, zh in _COLS if d.get(k))
 
 
-def format_freshness(before: dict | None, after: dict | None) -> list[str]:
-    """`guji status` 的尾巴：每步导入前后的 新鲜/过期/缺失/失败/阻塞。"""
-    before, after = before or {}, after or {}
+def format_freshness(before: dict | None, after: dict | None, restored: dict | None = None) -> list[str]:
+    """`guji status` 的尾巴：每步导入前后的 新鲜/过期/缺失/失败/阻塞。给了 `restored`（被防降级
+    闸换回的包）就是三栏：导入前 / 换上后（据此判的降级） / 换回后（应与导入前相同）。"""
+    cols = [("导入前", before or {})]
+    cols += [("换上后", after or {}), ("换回后", restored or {})] if restored is not None else [("导入后", after or {})]
     lines = []
-    for label, d in (("导入前", before), ("导入后", after)):
+    for label, d in cols:
         if "error" in d:
             lines.append(f"- {label}新鲜度量不出：`{d['error']}`")
-    steps = [s for s in list(before) + [s for s in after if s not in before] if s != "error"]
+    steps: list[str] = []
+    for _, d in cols:
+        steps += [s for s in d if s != "error" and s not in steps]
     if not steps:
         return lines
-    lines += ["", "| 步 | 导入前 | 导入后 |", "|---|---|---|"]
+    lines += ["", "| 步 | " + " | ".join(c for c, _ in cols) + " |", "|---|" + "---|" * len(cols)]
     for s in steps:
-        lines.append(f"| {s} | {_counts(before.get(s))} | {_counts(after.get(s))} |")
+        lines.append(f"| {s} | " + " | ".join(_counts(d.get(s)) for _, d in cols) + " |")
     return lines
 
 
@@ -162,6 +189,8 @@ def render_record(results: list[ImportResult], ts: str) -> str:
         for k, zh in (("superseded_by", "被作废，取代它的是"), ("holder", "跑批锁持有者"),
                       ("downgraded", "会让这些步变旧，已整包换回（要换就 import --force）"),
                       ("workspace_created", "新建了工作区目录"),
+                      ("raw_pages", "服务器原图与包不一致，等 guji-workspace pull（下轮再试）"),
+                      ("raw_check_skipped", "原图核对跳过"),
                       ("error", "错误"), ("backup", "旧产物备份到"), ("attachments_placed", "附件落位"),
                       ("pruned_backups", "清掉的旧备份")):
             if d.get(k):
@@ -169,9 +198,12 @@ def render_record(results: list[ImportResult], ts: str) -> str:
         if d.get("problems"):
             lines.append(f"- 校验问题 {d.get('n_problems')} 条（前 20）：")
             lines += [f"  - {p}" for p in d["problems"]]
-        if "freshness_before" in d or "freshness_after" in d or "freshness_after_rolled_back" in d:
-            lines += format_freshness(d.get("freshness_before"),
-                                      d.get("freshness_after") or d.get("freshness_after_rolled_back"))
+        if "freshness_after_rollback" in d:
+            lines.append(f"- 换回后与导入前一致：{'是' if d.get('rollback_ok') else '**否，要人看**'}")
+            lines += format_freshness(d.get("freshness_before"), d.get("freshness_swapped_in"),
+                                      d.get("freshness_after_rollback"))
+        elif "freshness_before" in d or "freshness_after" in d:
+            lines += format_freshness(d.get("freshness_before"), d.get("freshness_after"))
         if r.status == IMPORTED and d.get("mode") == "display-only":
             lines.append("")
             lines.append("> display-only：这些步只看不算，部署器的过期步队列会跳过它们，"
