@@ -572,6 +572,43 @@ def cmd_calibrate(args) -> None:
         print("已写 " + str(args.json))
 
 
+def cmd_survey(args) -> None:
+    """Step0 页面预检：原图尺寸 → 按册中位数标异常页（任务卡 #54 第22条）。
+
+    与跑管线是两条独立的路：这条命令**只读原图尺寸**，不需要先有任何产物，
+    开新书第一件事就能跑；管线里的 `page_survey` Step 与 `border_detect_gate`
+    的闸走的是同一份判据函数（`steps.page_survey.survey_book`），CLI 这里
+    只是给人一份不用先跑管线就能看的清单。
+    """
+    from .core.book import load_book
+    from .steps.page_survey import PageSurveyParams, survey_book
+
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else None
+    ratio_high = args.ratio_high or PageSurveyParams().ratio_high
+    ratio_low = args.ratio_low or PageSurveyParams().ratio_low
+    rows = survey_book(book, pages, ratio_high, ratio_low)
+    whitelist = (book.params.get("page_survey", {}) or {}).get("whitelist", {}) or {}
+    whitelist = {int(k): v for k, v in whitelist.items()}
+    odd = [r for r in rows if r.odd or r.p1_suspect]
+    for r in odd:
+        reason = (whitelist.get(r.page) or "").strip()
+        tag = f"（白名单：{reason}）" if reason else ""
+        if r.p1_suspect and not r.odd:
+            print(f"p{r.page}：页1，未按尺寸判异常，人核对是否书脊/封面{tag}")
+        else:
+            print(f"p{r.page}：{r.kind}，{r.width}×{r.height}（册中位 "
+                 f"{r.median_width:.0f}×{r.median_height:.0f}，宽{r.ratio_w:.2f}×/"
+                 f"高{r.ratio_h:.2f}×）{tag}")
+    print(f"共 {len(rows)} 页，{len(odd)} 页异常/待核（阈值 {ratio_low}~{ratio_high}）")
+    if args.json:
+        payload = {"book": book.id, "ratio_high": ratio_high, "ratio_low": ratio_low,
+                   "n_pages": len(rows), "odd": [r.model_dump() for r in odd]}
+        Path(args.json).write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                                   encoding="utf-8")
+        print("已写 " + str(args.json))
+
+
 def cmd_calibrate_font(args) -> None:
     """字体判定（三模式方案 §五.1）：拿 witness-align / 人裁的标签当查询，逐套字体量
     recall@1/@5 与可分性 margin（utils/font_calibrate.py）。字体字形先用
@@ -929,18 +966,32 @@ def cmd_product(args) -> None:
     from .render.overlay import encode_png, overlay
     import cv2
 
+    from .core.step import resolve_step_id
     st = ProductStore()
+    if args.action in ("show", "manifest"):
+        # `step` 位置参数常被当成产物种类(kind_id)传——多数步骤 step_id==kind_id
+        # 恰好凑巧对，`context_decide`(step_id) 产 `context_decision`(kind_id)
+        # 这种不同名的一查就悄悄 0 条（任务卡 #54 第21条）。这里按名字自动纠正，
+        # 两边都不认得才报错，不再放过去变成一份「查到了空」的假阴性。
+        try:
+            step_id = resolve_step_id(args.step)
+        except KeyError as e:
+            print(str(e)); sys.exit(1)
+        if step_id != args.step:
+            print(f"『{args.step}』是产物种类(kind_id)，不是步骤名(step_id)——"
+                 f"改查 {step_id!r}", file=sys.stderr)
     if args.action == "show":
-        d = st.read_raw(args.book, args.step, args.key)
+        d = st.read_raw(args.book, step_id, args.key)
         if d is None:
-            print(f"没有这份产物: {args.book}/{args.step}/{args.key}"); sys.exit(1)
-        entry = st.manifest(args.book, args.step).get(args.key)
-        _out({"book": args.book, "step": args.step, "key": args.key,
+            print(f"没有这份产物: {args.book}/{step_id}/{args.key}"); sys.exit(1)
+        entry = st.manifest(args.book, step_id).get(args.key)
+        _out({"book": args.book, "step": step_id, "key": args.key,
               "manifest": (entry.__dict__ if entry else None), "products": d})
     elif args.action == "manifest":
-        _out({k: v.__dict__ for k, v in st.manifest(args.book, args.step).all().items()})
+        _out({k: v.__dict__ for k, v in st.manifest(args.book, step_id).all().items()})
     elif args.action == "raw":
         from .core.book import load_book
+        from .utils.image_io import imread as cv_imread
         f = load_book(args.book).raw_path(args.page)
         if not f.exists():
             print("原图缺失"); sys.exit(1)
@@ -948,10 +999,19 @@ def cmd_product(args) -> None:
     elif args.action == "overlay":
         _write(args.out, encode_png(overlay(args.book, args.step, args.page, st), args.scale))
     elif args.action == "patch":
+        from .core.book import load_book
+        from .core.step import RunContext
         key = cell_key(args.page, args.col, args.slot) + (args.sub or "")
-        f = ImageCache().get(args.book, "char_patch", key)
+        cache = ImageCache()
+        f = cache.get(args.book, "char_patch", key)
         if f is None:
-            print(f"没有字块 {key}"); sys.exit(1)
+            # 缓存没有就现场重建（同控制台 /api/cache 那条路，见 console/routers/products.py::api_cache）：
+            # 拿快照到云端时 products/ 有、cache/ 没有，字块图应当能从原图 + cell_shrink 重建，不该直接报错退出。
+            try:
+                ctx = RunContext(load_book(args.book), st, cache, log=lambda s: None)
+                f = ctx.materialize("char_patch", key)
+            except Exception as e:  # noqa: BLE001
+                print(f"没有字块 {key}，现场重建也失败: {e}"); sys.exit(1)
         _write(args.out, Path(f).read_bytes())
 
 
@@ -967,15 +1027,28 @@ def cmd_check(args) -> None:
     st = ProductStore()
     if args.action == "quality":
         from .eval.quality import quality
-        _out(quality(args.book, args.pages, st))
+        # 不给 --pages 时以前悄悄按 dev_set 算：书级 dev_set 为空会退化成全书（凑巧对），
+        # 非空就悄悄只算子集、且不报警（任务卡 #54 第1条）。改成不给就是 all，
+        # 并且不论给不给都把「用的是哪个页集、实算了几页」打到 stderr——JSON 走 stdout，
+        # 接 jq 的管道不受影响。
+        pages_sel = args.pages if args.pages is not None else "all"
+        pgs = load_book(args.book).resolve_pages(pages_sel)
+        print(f"check quality: 页集={pages_sel!r}，共 {len(pgs)} 页", file=sys.stderr)
+        _out(quality(args.book, pages_sel, st))
     elif args.action == "rulers":
         from .eval.rulers import measure
-        _out(measure(args.book, load_book(args.book).resolve_pages(args.pages), st))
+        pages_sel = args.pages if args.pages is not None else "all"
+        pgs = load_book(args.book).resolve_pages(pages_sel)
+        print(f"check rulers: 页集={pages_sel!r}，共 {len(pgs)} 页", file=sys.stderr)
+        _out(measure(args.book, pgs, st, full=args.full))
     elif args.action == "round":
         from .eval import round_check as rc
+        # round/rate/throughput/ledger 不在任务卡#54第1条范围内，不给 --pages 时
+        # 按老规矩仍然是 dev_set，不跟着 quality/rulers 一起改，避免动了别人没求的地方。
+        pages_sel = args.pages if args.pages is not None else "dev_set"
         out = {"next": rc.next_batch(args.book)}
-        if args.pages:
-            out.update(rc.check(args.book, load_book(args.book).resolve_pages(args.pages)))
+        if pages_sel:
+            out.update(rc.check(args.book, load_book(args.book).resolve_pages(pages_sel)))
         _out(out)
     elif args.action == "rate":
         from .eval import rate_history
@@ -999,7 +1072,9 @@ def cmd_check(args) -> None:
             _out({"rows": rows})
     elif args.action == "throughput":
         from .eval import throughput as tp
-        pages = None if args.all_pages else args.pages
+        # 同 round：不在 #54 第1条范围内，不给 --pages 时维持老默认 dev_set（原样传字符串给
+        # per_page/channel_breakdown 的 `resolve_pages(pages) if pages else _all_pages(...)`）。
+        pages = None if args.all_pages else (args.pages if args.pages is not None else "dev_set")
         _out(tp.full_report(args.book, pages, st))
     elif args.action == "ledger":
         # 字形库 × 工作区记录对账（H 人裁单写者任务书件 3）：只读，不改库。
@@ -1376,6 +1451,7 @@ COMMANDS_V2 = {
     "witness-align": cmd_witness_align,
     "witness-align-stream": cmd_witness_align_stream,
     "calibrate": cmd_calibrate,
+    "survey": cmd_survey,
     "calibrate-font": cmd_calibrate_font,
     "seed-witness": cmd_seed_witness,
     "eval": cmd_eval,
@@ -1412,15 +1488,28 @@ def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
     return any(a.dest == "book" for a in sp._actions)
 
 
-def resolve_workspace(args, parser: argparse.ArgumentParser) -> Path | None:
+#: `status`／`collate` 只读、不写产物——认 `GUJI_WORKSPACE` 兜底顶多让人看错报告，
+#: 不会像 `pipeline`/`step` 那样把真产物静默写进错的工作区，所以任务卡 #54 第10条
+#: 单给这两条开例外，其余命令仍照 2026-09-19 定的规矩必须显式 `-w`。
+ENV_FALLBACK_COMMANDS = {"status", "collate"}
+
+
+def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") -> Path | None:
     """带 book 的命令：`--workspace` 必填、必须存在、必须有这册书的定义；解析结果写进
     `GUJI_WORKSPACE` 供下游（`core.workspace.workspace_root` 及其之下一切）使用。
 
     环境变量若已设且指向别处，以 `--workspace` 为准并提示——环境变量常是上一本书留下的。
+    `command` 在 `ENV_FALLBACK_COMMANDS` 里时，缺 `-w` 改成读 `GUJI_WORKSPACE`，不报错
+    （仍然打印在用哪个工作区，不悄悄用）。
     """
     if not hasattr(args, "book"):
         return None
+    import os
     ws = getattr(args, "workspace", None)
+    if not ws and command in ENV_FALLBACK_COMMANDS:
+        ws = os.environ.get("GUJI_WORKSPACE")
+        if ws:
+            print(f"  未给 -w，退回 GUJI_WORKSPACE={ws}", file=sys.stderr)
     if not ws:
         parser.error("缺 -w/--workspace：跑真书必须显式给工作区，例如 "
                      f"`-w D:/workspace/<book>-workspace`（books/{args.book}.yaml 所在的仓根）。"
@@ -1429,7 +1518,6 @@ def resolve_workspace(args, parser: argparse.ArgumentParser) -> Path | None:
     spec = root / "books" / f"{args.book}.yaml"
     if not spec.exists():
         parser.error(f"--workspace {root} 下没有 books/{args.book}.yaml——路径给错了，或这不是「{args.book}」的工作区")
-    import os
     env = os.environ.get("GUJI_WORKSPACE")
     if env and Path(env).expanduser().resolve() != root:
         print(f"  ⚠️  GUJI_WORKSPACE={env} 与 --workspace 不同，以 --workspace 为准", file=sys.stderr)
@@ -1438,9 +1526,9 @@ def resolve_workspace(args, parser: argparse.ArgumentParser) -> Path | None:
     return root
 
 
-def _with_workspace(handler, sp: argparse.ArgumentParser):
+def _with_workspace(handler, sp: argparse.ArgumentParser, name: str = ""):
     def run(args):
-        resolve_workspace(args, sp)
+        resolve_workspace(args, sp, command=name)
         return handler(args)
     run._workspace_wrapped = True     # type: ignore[attr-defined]
     return run
@@ -1455,9 +1543,12 @@ def install_workspace_option(sub: argparse._SubParsersAction) -> None:
         if handler is None or not _needs_workspace(sp):
             continue
         # 参数每次都要加（每次调用建的是新的 parser 对象）；处理函数只包一层
-        sp.add_argument("-w", "--workspace", default=None, help=WORKSPACE_HELP)
+        help_ = WORKSPACE_HELP
+        if name in ENV_FALLBACK_COMMANDS:
+            help_ += "（这条命令例外：不给也认 GUJI_WORKSPACE，只读不写产物，risk 小）"
+        sp.add_argument("-w", "--workspace", default=None, help=help_)
         if not getattr(handler, "_workspace_wrapped", False):
-            COMMANDS_V2[name] = _with_workspace(handler, sp)
+            COMMANDS_V2[name] = _with_workspace(handler, sp, name=name)
 
 
 # ── parsers ──────────────────────────────────────────────────────────
@@ -1545,6 +1636,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pages", default=None, help="页号表达式；默认 yaml 的 pages")
     p.add_argument("--with-bottom-gap", action="store_true",
                    help="连 bottom_gap 一起量（要读整册原图，慢）")
+    p.add_argument("--json", default=None)
+
+    p = sub.add_parser("survey",
+                       help="[v2] Step0 页面预检：原图尺寸 → 按册中位数标异常页（任务卡 #54 第22条）")
+    p.add_argument("book")
+    p.add_argument("--pages", default=None, help="页号表达式；默认全书（book.pages 或 all_pages）")
+    p.add_argument("--ratio-high", type=float, default=None, help="默认 1.3（>= 这个倍数算偏大）")
+    p.add_argument("--ratio-low", type=float, default=None, help="默认 0.7（<= 这个倍数算偏小）")
     p.add_argument("--json", default=None)
 
     p = sub.add_parser("calibrate-font",
@@ -1775,11 +1874,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput | ledger")
     p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput", "ledger"])
     p.add_argument("book", nargs="?", default="vol01")
-    p.add_argument("--pages", default="dev_set")
+    p.add_argument("--pages", default=None,
+                   help="不给：quality/rulers 默认 all，round/rate/throughput/ledger 仍默认 "
+                        "dev_set（历史行为不变）。也可显式给 dev_set | all | 3-6,9 | 命名集")
     p.add_argument("--snapshot", action="store_true", help="rate：记一行台账（默认只读）")
     p.add_argument("--note", default="", help="rate --snapshot 的说明")
     p.add_argument("--all-pages", action="store_true",
                    help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
+    p.add_argument("--full", action="store_true",
+                   help="rulers：detail 不截断（默认只带前 20 条，做全量错例统计要这个）")
     p.add_argument("--drift", action="store_true",
                    help="ledger：另外核对库里的图与现在的字块图还像不像（较慢，逐条读图比对）")
     p.add_argument("--out", default="",
