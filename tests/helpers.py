@@ -146,6 +146,20 @@ def blank_page(w: int = 900, h: int = 1400) -> np.ndarray:
     return np.full((h, w), 255, np.uint8)
 
 
+def sparse_column_body_page(w: int = 900, h: int = 1400, n_cols: int = 9,
+                            margin: int = 60, frame: int = 40,
+                            text_col: int = 5) -> tuple[np.ndarray, "object"]:
+    """卷末尾叶常见形态：界行版框齐全（`n_cols` 条界行都探得到），但只有
+    一列有字、其余栏内空白——像素统计上墨窄而高，`classify_page_type`
+    会把它判成 `label`（书签），可 `Borders.verticals` 明明是满栏格。
+
+    用来测「界行证据 vs 像素统计证据冲突时以谁为准」（`border_detect_gate`
+    的 `label_override_on_full_columns`）。返回 `(灰度图, Borders)`，与
+    `synth_page` 一样图产一致。"""
+    return synth_page(w=w, h=h, n_cols=n_cols, period=30, margin=margin,
+                      frame=frame, col_n_chars={text_col: 40}, n_chars=0, gap=6)
+
+
 # ── 合成产物 ─────────────────────────────────────────────────────────────
 
 def make_borders(w: int = 900, h: int = 1400, n_cols: int = 9,
