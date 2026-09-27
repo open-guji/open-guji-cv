@@ -30,6 +30,10 @@ NOT_REGISTRY_SHAPED = {
     "beixing_real_proto",  # 靶子是某本书私有工作区的 GUJI_WORKSPACE + 该书专属
                            # --real-proto-store 路径（R2/T11 额外靶，任务书「有就报」），
                            # 不是数据集仓里的分片，每次要手指哪本书
+    "frame_residue",  # 靶子是当前 GUJI_PRODUCTS_DIR 里某本书的 column_windows 产物
+                      # （--book 必填，没有默认值），不读数据集仓分片；104 卡校准表
+                      # 写死在脚本里，见 scripts/eval_frame_residue.py 模块头
+    "gate2_columns",  # 同上，靶子是 --book 指定书的 gate_manifest 产物，不是数据集分片
 }
 
 
