@@ -5,6 +5,7 @@
     guji status <book> [--pipeline P] [--pages …] [--json]
     guji console [--port 8640] [--no-browser]
     guji cache usage|prune [--limit-gb N]
+    guji cache build-rare-index --book <book>              # 云端预建 Step5-b embedding 索引，供服务器分发命中
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
 本模块顶层不 import 任何重依赖，保证 CLI 冷启动快。
@@ -252,6 +253,63 @@ def cmd_cache(args) -> None:
         y0 = max(0, min(h - 1, args.y0)); y1 = max(y0 + 1, min(h, args.y1 or h))
         from .render.overlay import encode_png
         _write(args.out, encode_png(img[y0:y1]))
+    elif args.action == "build-rare-index":
+        _cmd_cache_build_rare_index(args)
+
+
+def _cmd_cache_build_rare_index(args) -> None:
+    """`guji cache build-rare-index <book>`：云端预建 Step5-b 的 embedding 模板索引
+    （2026-09-27，任务书-R-rare冷启动内存与索引预建）。
+
+    这是解服务器工单 1715「vol02 冷启动 5 分钟、RSS 2.41G 还在涨」的正解：
+    冷启动开销**量清楚了没找到能在原地压到 ≤1.2G 的办法**（见
+    `clustering.cnn_candidates._emb_index` 模块头的实测记录），真正能让服务器
+    峰值归零的办法是**根本不在服务器上建**——这里在云端把 `emb_<key>.npz` 建
+    好，跟快照/checkpoint 一起分发，服务器 `git pull` 之后 `_emb_index` 第一次
+    调用就直接命中磁盘缓存，连建索引的分支都不会进。
+
+    只建 `rare_for_batch` 实际会用到的两张表：`book_charsets()` 的基集
+    （`cs_base`）与升级档（`cs_esc`，配了 `escalate` 才有）——与产线用的是
+    **同一个函数**，算出来的 key 必然一致，不会出现「预建的文件产线用不上」。
+    """
+    import time
+
+    from .clustering import cnn_candidates as cc
+    from .clustering.rare_panel import book_charsets
+    from .steps.align_ref import book_corpus
+
+    book = args.book
+    if not book:
+        print("必须给 --book"); sys.exit(1)
+    corpus = book_corpus(book)
+    cs_base, cs_esc, spec = book_charsets(book, corpus)
+    print(f"book={book} corpus={corpus} base={spec['base']}（{len(cs_base)} 字）"
+         f" escalate={spec['escalate']}（{len(cs_esc)} 字）")
+
+    inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
+    if not inst.available:
+        print(f"checkpoint 不可用（{inst.ckpt}）或没装 torch，建不了。"); sys.exit(1)
+    inst._ensure()
+
+    for name, cs in (("base", cs_base), ("escalate", cs_esc)):
+        if not cs:
+            print(f"{name}：空表，跳过")
+            continue
+        key, f, _extra = inst.emb_index_key(cs)
+        if f.exists():
+            print(f"{name}：已有缓存 {f}（key={key}），跳过重建；如需强制重建先删掉这个文件")
+            continue
+        t0 = time.time()
+        mat, names = inst._emb_index(cs)
+        dt = time.time() - t0
+        print(f"{name}：{f} 建好，{len(names)}/{len(cs)} 字，{dt:.1f}s")
+
+    print("")
+    print("分发：把 models/<ckpt名>/emb_*.npz 这几个文件随 cv 仓快照或 Release 一起带走，")
+    print("服务器上放到同一个相对路径（checkpoint 旁边）即可；`fingerprint()` 按内容算，")
+    print("换机器 mtime 不同也照样命中。验证命中：服务器上 `git status`/校验 sha256 后跑一页，")
+    print("看 `guji pipeline … --to rare_candidates --pages <该页>` 的日志里没有")
+    print("「guji cache build-rare-index：…」这行进度（=直接读了缓存，没有现建）。")
 
 
 def cmd_batch(args) -> None:
@@ -1504,8 +1562,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column")
-    p.add_argument("action", choices=["usage", "prune", "get", "column"])
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | build-rare-index")
+    p.add_argument("action", choices=["usage", "prune", "get", "column", "build-rare-index"])
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
