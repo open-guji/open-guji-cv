@@ -93,6 +93,11 @@ class RareCandidatesParams(BaseModel):
     目录内容变了（H 道新裁了真刻例）而 yaml 文本没动，`_with_book_real_proto` 每次
     都会用当前磁盘状态重算，指纹跟着变；`book_deps=("font",)` 仍留着，管的是
     `font` 字典别的字段将来变化时的兜底，两者不冲突。
+
+    2026-09-27（T4 变体形）：`core.step._with_book_gw()` 跟在 `_with_book_real_proto`
+    后面同一套写法再叠一层——`ctx.book.font.gw_variant.enabled` 决定 GlyphWiki 第六档
+    模板开不开。`gw_catalog_fingerprint()` 同一天改成**内容指纹**（sha256，不再是
+    `(大小,mtime)`），道理与 `real_proto_fingerprint` 那次一样。
     """
 
     def model_post_init(self, _ctx) -> None:
@@ -129,7 +134,7 @@ class RareCandidatesStep(Step):
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        from ..clustering.cnn_candidates import book_real_proto
+        from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch
 
         # 真刻例多原型档来源改按书配置（5-b 开关转正，2026-09-26）：`ctx.book.font.real_proto`
@@ -138,6 +143,9 @@ class RareCandidatesStep(Step):
         # 关着时 `real_proto_fingerprint` 短路回空串，`full_fingerprint(real_proto=…)`
         # 与不传参（模块级默认，同样是关）逐字节相同——不让现有产物过期。
         real_proto = book_real_proto(ctx.book.font)
+        # GlyphWiki 变体形模板同一条口径（T4 变体形转正，2026-09-27）：`ctx.book.font.gw_variant`
+        # 决定开不开，不再改 `cnn_candidates.GW_ENABLED` 模块全局。
+        gw_enabled = book_gw_variant(ctx.book.font)
 
         p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
         chars: PageChars = ctx.product("char_index", page)
@@ -189,7 +197,8 @@ class RareCandidatesStep(Step):
         hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id,
                                    struct_rerank=p.struct_rerank,
                                    struct_probe=p.struct_probe or None,
-                                   real_proto=real_proto) if imgs else []
+                                   real_proto=real_proto,
+                                   gw_enabled=gw_enabled) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,

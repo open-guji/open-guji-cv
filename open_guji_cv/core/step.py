@@ -172,6 +172,46 @@ def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     fp = corpus_fingerprint([str(corpus_path(n)) for n in names])
     return type(p)(**{**p.model_dump(), "witness_fingerprint": fp})
 
+
+def _with_book_gw(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`RareCandidatesParams.model_fingerprint` 再叠一层书级开关：`font.gw_variant.enabled`
+    （T4 变体形模板，2026-09-27）。跟在 `_with_book_real_proto` 之后跑，`params_for` 里
+    两个开关依次生效——与它同一个坑、同一个补法（`model_post_init` 造实例时没有
+    `ctx.book`，只能填模块级默认 `GW_ENABLED` 缺省关那份）。
+
+    这里的「构造时默认值」基准**必须带上 `_with_book_real_proto` 已经生效的
+    `real_proto`**，不能直接对 `full_fingerprint()`（两个开关都不传，即两个都按
+    模块级）比——那样若某本书只开了 `real_proto` 没开 `gw_variant`，
+    `p.model_fingerprint` 在这一步一进来就已经不等于「两者皆模块级」那份，会被
+    误判成「显式传值/已经算过」而跳过，`gw_variant` 那半开关就失效了。
+    做法：重算一次同一份 `real_proto`（纯读 yaml，无 IO 开销），拿它当基准的固定项，
+    只比较 gw 那一维「是否还是构造时的模块级默认」。
+
+    ⚠️ 同样必须**重新构造**，不能 `model_copy`（理由同 `_with_book_real_proto`）。
+    """
+    from ..steps.rare_candidates import RareCandidatesParams
+    if not isinstance(p, RareCandidatesParams):
+        return p
+
+    from ..clustering.cnn_candidates import book_gw_variant, book_real_proto, full_fingerprint
+    font = getattr(ctx.book, "font", None)
+    real_proto = book_real_proto(font)
+
+    def _fp(gw_enabled) -> str:
+        fp = full_fingerprint(real_proto=real_proto, gw_enabled=gw_enabled)
+        if p.struct_probe:
+            import hashlib
+            pp = Path(p.struct_probe)
+            fp += ":probe=" + (hashlib.sha1(pp.read_bytes()).hexdigest()[:12] if pp.exists() else "missing")
+        return fp
+
+    if p.model_fingerprint != _fp(None):
+        return p  # 显式传值，或已经按某本书算过（幂等，见下）
+    fp = _fp(book_gw_variant(font))
+    if fp == p.model_fingerprint:
+        return p
+    return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
+
 # ── 运行上下文 ───────────────────────────────────────────────────────
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
@@ -231,6 +271,9 @@ class RunContext:
         2026-09-27 又补 `_with_witness_fingerprint()`：`AlignRefParams.witness_fingerprint`
         同一个坑，`witness_strategy != "legacy"` 时按 `references` 全部文件算（任务书
         D-多证人对齐策略）。
+        `_with_book_gw()`（同日，T4 变体形）跟在它后面再叠一层——两个书级开关各自
+        对 `RareCandidatesParams.model_fingerprint` 生效，顺序不能换（见 `_with_book_gw`
+        文档「基准要带上 real_proto」那段）。
         """
         p = self.params.get(step.spec.id)
         if p is None:
@@ -238,6 +281,7 @@ class RunContext:
         p = _with_book_corpus(p, self)
         p = _with_book_real_proto(p, self)
         p = _with_witness_fingerprint(p, self)
+        p = _with_book_gw(p, self)
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
