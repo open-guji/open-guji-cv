@@ -86,7 +86,7 @@ def test_pick_first_cnn_falls_back_to_pixel():
 def test_first_view_agree_flags():
     v = bf.first_view([("以", .9)], [("以", .8), ("取", .1)], "rrf")
     assert v == {"char": "以", "mode": "rrf", "pixel": "以", "cnn": "以", "agree": True,
-                 "cnn_candidates": [["以", 0.8], ["取", 0.1]]}
+                 "cnn_candidates": [["以", 0.8], ["取", 0.1]], "proto_src": None}
     assert bf.first_view([("取", .9)], [("以", .8)], "cnn")["agree"] is False
     assert bf.first_view([], [("以", .8)], "cnn")["agree"] is None
     assert bf.first_view([("以", .9)], [], "cnn")["agree"] is None
@@ -211,3 +211,60 @@ def test_char_groups_disagree_tiles_first():
 def test_char_groups_without_first_unchanged_order():
     cs = [_card("a", cov=.3), _card("b", cov=.1), _card("c", cov=.2)]
     assert [t["id"] for t in _build_char_groups(cs, 60)[0]["tiles"]] == ["b", "c", "a"]
+
+
+# ── 原型来源可切换（用户 09-27 22:20Z：借库只作冷启动）──────────────────
+
+def _ix(chars, vecs):
+    return list(chars), np.array(vecs, np.float32)
+
+
+def test_sources_default_borrow_only():
+    assert bf.proto_sources(_bk({"review": {"first_pick": "cnn"}})) == (None, True)
+
+
+def test_sources_own_relative_to_workspace(monkeypatch, tmp_path):
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    own, fb = bf.proto_sources(_bk({"review": {"own_db": "output/own.db", "borrow_fallback": False}}))
+    assert own == str(tmp_path / "output/own.db") and fb is False
+
+
+def test_sources_bad_config_raises():
+    with pytest.raises(ValueError):
+        bf.proto_sources(_bk({"review": {"borrow_fallback": False}}))     # 一个原型都没有
+    with pytest.raises(ValueError):
+        bf.proto_sources(_bk({"review": {"own_db": "x", "borrow_fallback": "no"}}))
+
+
+def test_merge_own_first_then_fallback():
+    own = _ix(["以", "令"], [[1, 0], [0, 1]])
+    bor = _ix(["以", "取", "今"], [[0, 1], [1, 1], [1, -1]])
+    chars, mat, src = bf.merge_protos(own, bor, True)
+    assert chars == ["以", "令", "取", "今"]
+    assert src == ["own", "own", "borrow", "borrow"]
+    assert np.allclose(mat[0], [1, 0])          # 「以」用本书刻例，不是借库那条
+
+
+def test_merge_no_fallback_drops_missing():
+    chars, _, src = bf.merge_protos(_ix(["以"], [[1, 0]]), _ix(["取"], [[0, 1]]), False)
+    assert chars == ["以"] and src == ["own"]
+
+
+def test_merge_no_own_is_borrow():
+    chars, _, src = bf.merge_protos(None, _ix(["取"], [[0, 1]]), True)
+    assert chars == ["取"] and src == ["borrow"]
+    chars, mat, _ = bf.merge_protos(None, None, True)
+    assert chars == [] and mat.shape[0] == 0
+
+
+def test_load_index_missing_own_file_falls_back(monkeypatch, tmp_path):
+    """本书库文件还不存在（H 没建）：当空库，全走借库，不报错。"""
+    monkeypatch.setattr(bf.ProtoIndex, "get",
+                        classmethod(lambda cls, db, cnn: _ix(["取"], [[0, 1]])))
+    chars, _, src = bf.load_index("borrow.db", object(), str(tmp_path / "nope.db"), True)
+    assert chars == ["取"] and src == {"取": "borrow"}
+
+
+def test_first_view_proto_src():
+    assert bf.first_view([], [("以", .9)], "cnn", "own")["proto_src"] == "own"
+    assert bf.first_view([("以", .9)], [], "cnn", "own")["proto_src"] is None

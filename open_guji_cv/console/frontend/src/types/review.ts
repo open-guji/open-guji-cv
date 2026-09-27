@@ -100,6 +100,8 @@ export interface FirstPick {
   /** 两路首位是否一致；任一路缺席为 `null`。 */
   agree: boolean | null
   cnn_candidates: Array<[string, number]>
+  /** CNN 首位的原型来自本书自有库（own）还是借来的库（borrow，冷启动）。 */
+  proto_src?: 'own' | 'borrow' | null
 }
 
 export interface ReviewCardsResponse {

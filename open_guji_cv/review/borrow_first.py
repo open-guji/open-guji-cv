@@ -17,6 +17,18 @@
       review:
         first_pick: rrf      # 或 cnn；不写 / off = 关，卡片与改前逐字节一样
 
+**原型来源可切换**（用户 09-27 22:20Z 定：借库只作冷启动，新书最终只用自己的字形）：
+
+    params:
+      review:
+        first_pick: rrf
+        own_db: output/glyph_own.db   # 本书自有库（H 道在建）；相对路径锚工作区根
+        borrow_fallback: true         # 本书库缺的字回退借库原型；false = 只用本书库
+
+某字在本书库里有刻例 → 该字原型只用本书刻例；没有 → 回退借来的库（`review_db_path`，
+与像素那一路同一个库）；`borrow_fallback: false` 时缺的字干脆不进字集。没配 `own_db`
+= 全用借库（冷启动）。卡片 `first.proto_src` 记 CNN 首位的原型来自哪边（own/borrow）。
+
 `params:` 是 `{step_id: {…}}` 的书级覆盖（`core/book.py::BookSpec.params`）；
 `review` 不是 Step id，引擎只按 `step.spec.id` 取，**不进任何 Step 的参数与指纹**，
 开关只影响审卡装配，产物一个字节都不动。
@@ -71,6 +83,46 @@ def review_db_path(book_spec) -> str:
     return str(glyph_db_path())
 
 
+def proto_sources(book_spec) -> tuple[str | None, bool]:
+    """→ (本书自有库路径或 None, 缺字是否回退借库)。`own_db` 相对路径按工作区根解释。"""
+    cfg = ((getattr(book_spec, "params", None) or {}).get("review") or {})
+    own = cfg.get("own_db") or None
+    if own:
+        p = Path(own).expanduser()
+        if not p.is_absolute():
+            from ..core.workspace import REPO_ROOT, workspace_root
+            p = (workspace_root() or REPO_ROOT) / p
+        own = str(p)
+    fb = cfg.get("borrow_fallback", True)
+    if not isinstance(fb, bool):
+        raise ValueError(f"书 yaml params.review.borrow_fallback 要 true/false，得到 {fb!r}")
+    if own is None and not fb:
+        raise ValueError("params.review：没配 own_db 又关了 borrow_fallback，原型一个字都没有")
+    return own, fb
+
+
+def merge_protos(own: tuple[list[str], np.ndarray] | None,
+                 borrow: tuple[list[str], np.ndarray] | None,
+                 fallback: bool = True) -> tuple[list[str], np.ndarray, list[str]]:
+    """按字合并两套原型：本书库有的字用本书的，缺的字（`fallback` 时）用借库的。
+    → (字表, 原型矩阵, 每字来源 'own'/'borrow')。纯函数。"""
+    chars: list[str] = []
+    rows: list[np.ndarray] = []
+    src: list[str] = []
+    have = set()
+    if own is not None:
+        for ch, v in zip(own[0], own[1]):
+            chars.append(ch); rows.append(v); src.append("own"); have.add(ch)
+    if fallback and borrow is not None:
+        for ch, v in zip(borrow[0], borrow[1]):
+            if ch not in have:
+                chars.append(ch); rows.append(v); src.append("borrow")
+    d = (own[1].shape[1] if own is not None and own[1].ndim == 2 else
+         borrow[1].shape[1] if borrow is not None and borrow[1].ndim == 2 else 256)
+    mat = np.stack(rows).astype(np.float32) if rows else np.zeros((0, d), np.float32)
+    return chars, mat, src
+
+
 # ── 纯函数：融合、标注（不碰 IO / 模型，单测直接喂数）────────────────────
 
 
@@ -107,7 +159,7 @@ def pick_first(pixel: list, cnn: list, mode: str) -> str | None:
     raise ValueError(f"未知 first_pick 模式 {mode!r}")
 
 
-def first_view(pixel: list, cnn: list, mode: str) -> dict:
+def first_view(pixel: list, cnn: list, mode: str, proto_src: str | None = None) -> dict:
     """卡片上的 `first` 字段：默认首选、两路各自首位、是否一致。
 
     `agree`：像素首位 == CNN 首位。任一路没出候选时是 `None`（无从谈一致），
@@ -122,6 +174,8 @@ def first_view(pixel: list, cnn: list, mode: str) -> dict:
         "cnn": c1,
         "agree": (p1 == c1) if (p1 is not None and c1 is not None) else None,
         "cnn_candidates": [[ch, round(float(s), 4)] for ch, s in (cnn or [])[:CNN_TOPK]],
+        # CNN 首位的原型来自本书自有库（own）还是借来的库（borrow）；没 CNN 候选为 None
+        "proto_src": proto_src if cnn else None,
     }
 
 
@@ -227,16 +281,32 @@ class ProtoIndex:
 # ── 装配：给卡片挂 `first` ───────────────────────────────────────────
 
 
-def cnn_ranks_for_patches(norm_patches: list, db_path: str, cnn=None, k: int = CNN_TOPK
-                          ) -> list[list[tuple[str, float]]]:
+def load_index(borrow_db: str | None, cnn, own_db: str | None = None, fallback: bool = True
+               ) -> tuple[list[str], np.ndarray, dict[str, str]]:
+    """两个库 → 合并后的原型索引 + {字: 来源}。本书库文件不存在（H 还没建）时当空库，
+    有回退就全走借库，不报错。"""
+    own = ProtoIndex.get(own_db, cnn) if own_db and Path(own_db).exists() else None
+    borrow = ProtoIndex.get(borrow_db, cnn) if (fallback and borrow_db) else None
+    chars, mat, src = merge_protos(own, borrow, fallback)
+    return chars, mat, dict(zip(chars, src))
+
+
+def cnn_ranks_for_patches(norm_patches: list, db_path: str | None, cnn=None, k: int = CNN_TOPK,
+                          own_db: str | None = None, fallback: bool = True,
+                          index: tuple | None = None) -> list[list[tuple[str, float]]]:
     """归一化 64² 图（可含 `None`＝缺图）→ 每条 CNN 原型 top-k。缺图的给 `[]`。
-    评测脚本与卡片装配共用这一条，量的就是线上跑的那份代码。"""
+    评测脚本与卡片装配共用这一条，量的就是线上跑的那份代码。
+    `db_path` = 借来的库；`own_db` = 本书自有库（见模块头）。`index` 可直接传
+    `(字表, 原型矩阵)`（评测里模拟本书库用），此时不读库。"""
     from ..clustering import cnn_candidates as cc
     cnn = cnn or cc.shared()
     out: list[list] = [[] for _ in norm_patches]
     if not cnn.available:
         return out
-    chars, protos = ProtoIndex.get(db_path, cnn)
+    if index is not None:
+        chars, protos = index[0], index[1]
+    else:
+        chars, protos, _ = load_index(db_path, cnn, own_db, fallback)
     idx = [i for i, p in enumerate(norm_patches) if p is not None]
     for s in range(0, len(idx), 256):
         part = idx[s:s + 256]
@@ -269,17 +339,26 @@ def annotate(book: str, cards: list[dict], store, mode: str, bk=None) -> dict:
     from ..products.cache import ImageCache
     bk = bk or load_book(book)
     cnn = cc.shared()
+    own_db, fallback = proto_sources(bk)
     ranks: list[list] = [[] for _ in cards]
+    src_of: dict[str, str] = {}
     if cnn.available and cards:
         ctx = RunContext(bk, store, ImageCache(), log=lambda *_: None)
-        ranks = cnn_ranks_for_patches([_card_patch(ctx, c) for c in cards],
-                                      review_db_path(bk), cnn)
+        chars, protos, src_of = load_index(review_db_path(bk), cnn, own_db, fallback)
+        ranks = cnn_ranks_for_patches([_card_patch(ctx, c) for c in cards], None, cnn,
+                                      index=(chars, protos))
     n_agree = n_both = 0
+    n_own = 0
     for c, cr in zip(cards, ranks):
         pixel = [tuple(x) for x in ((c.get("db") or {}).get("candidates") or [])]
-        c["first"] = first_view(pixel, cr, mode)
+        c["first"] = first_view(pixel, cr, mode, src_of.get(cr[0][0]) if cr else None)
+        n_own += c["first"]["proto_src"] == "own"
         if c["first"]["agree"] is not None:
             n_both += 1
             n_agree += bool(c["first"]["agree"])
     return {"mode": mode, "cnn_ready": bool(cnn.available), "n": len(cards),
-            "n_both": n_both, "n_agree": n_agree}
+            "n_both": n_both, "n_agree": n_agree,
+            "own_db": own_db, "borrow_fallback": fallback,
+            "n_own_chars": sum(v == "own" for v in src_of.values()),
+            "n_borrow_chars": sum(v == "borrow" for v in src_of.values()),
+            "n_first_from_own": n_own}
