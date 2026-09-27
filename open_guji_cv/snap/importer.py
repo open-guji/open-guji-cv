@@ -286,6 +286,23 @@ def _place_attachments(m: dict, staging: Path, ws_dir: Path, cv_repo: Path, back
         src = staging / "_attach" / a["root"] / a["dest"]
         if dest.is_file() and sha256_file(dest) == a["sha256"]:
             continue
+        if Path(a["dest"]).name == ".gitignore" and dest.is_file():
+            # .gitignore 按行合并：只追加本地没有的行，不删本地的行（2026-09-27 服务器实测：整文件覆盖把
+            # 本地的 `*` 换掉，qtw-draft/data_full 的 520 张原图一下子全变 untracked）
+            have = dest.read_text(encoding="utf-8").splitlines()
+            seen = {ln.strip() for ln in have}
+            add = [ln for ln in src.read_text(encoding="utf-8").splitlines()
+                   if ln.strip() and ln.strip() not in seen]
+            if not add:
+                continue
+            bk = backup_dir / "_attach" / a["root"] / a["dest"]
+            bk.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(dest, bk)
+            tmp = dest.with_name(dest.name + ".snap-tmp")
+            tmp.write_text("\n".join(have + add) + "\n", encoding="utf-8")
+            os.replace(tmp, dest)
+            placed.append(f"{a['root']}:{a['dest']}")
+            continue
         if dest.exists():
             bk = backup_dir / "_attach" / a["root"] / a["dest"]
             bk.parent.mkdir(parents=True, exist_ok=True)

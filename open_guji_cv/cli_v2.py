@@ -1320,6 +1320,8 @@ def cmd_snap(args) -> None:
         r = imp.import_pack(args.target, ws_repo=ws_repo, ws_roots=ws_roots, cv_repo=cv_repo,
                             dry_run=args.dry_run, force=args.force)
         print(json.dumps(r.to_dict(), ensure_ascii=False, indent=2, default=str))
+        if not args.dry_run:
+            sw.remember(state, r)   # 定时器据此不再重导同一提交
         if args.overview and not args.dry_run:
             path = sw.write_import_record(Path(args.overview).expanduser().resolve(), [r],
                                           push=not args.no_push)

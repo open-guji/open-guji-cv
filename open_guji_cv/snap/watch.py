@@ -42,6 +42,28 @@ def _save(path: Path, state: dict) -> None:
     tmp.replace(path)
 
 
+def _state_row(commit: str, r: ImportResult) -> dict:
+    return {"commit": commit, "status": r.status,
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "pack": r.detail.get("pack")}
+
+
+def remember(state_path: Path, r: ImportResult) -> bool:
+    """手动 `guji snap import` 的结果也记进 watch 的状态文件（2026-09-27 服务器实测：不记的话
+    定时器下一轮把手动导过的包又导一遍）。拿与 watch 同一把锁（阻塞等），watch 正在跑就等它跑完。
+    没有提交号的结果（拉包失败）不记。返回是否记了。"""
+    commit = r.detail.get("commit")
+    if not commit:
+        return False
+    state_path = Path(state_path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(state_path.with_name(state_path.name + ".lock"), "w") as lockf:
+        fcntl.flock(lockf, fcntl.LOCK_EX)
+        state = _load(state_path)
+        state[r.branch] = _state_row(commit, r)
+        _save(state_path, state)
+    return True
+
+
 def watch(*, ws_repo: Path, ws_roots: list[Path], cv_repo: Path, state_path: Path = DEFAULT_STATE,
           overview: Path | None = None, remote: str = "origin", dry_run: bool = False, push: bool = True,
           git: gitio.GitRunner = gitio.default_git,
@@ -104,9 +126,7 @@ def _watch_locked(*, ws_repo, ws_roots, cv_repo, state_path, overview, remote, d
         if prev.get("commit") != listing[b] or prev.get("status") != r.status:
             changed.append(r)
         if not dry_run:
-            state[b] = {"commit": listing[b], "status": r.status,
-                        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "pack": r.detail.get("pack")}
+            state[b] = _state_row(listing[b], r)
     if not dry_run:
         _save(state_path, state)
     record = None
