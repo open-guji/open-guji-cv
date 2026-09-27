@@ -27,11 +27,36 @@ from __future__ import annotations
 
 import hashlib
 import os
+
+# CPU 推理反活锁（2026-09-27，任务书-R-rare挂死）：容器环境下 torch/OpenBLAS 默认按
+# `os.cpu_count()` 开 intra-op 线程池，`rare_for_batch` 对整页字块逐批调用小张量/小矩阵
+# 运算，触发线程池忙醒忙睡的 futex 活锁（`strace` 实测：两个线程池地址间来回
+# `FUTEX_WAKE_PRIVATE`，CPU 300%+ 但零进度，几分钟不会自己恢复）。
+#
+# 只设环境变量不够——OpenBLAS/MKL 的线程池只在各自库**第一次**跑并行运算时才读一次
+# 这些变量，读过之后再改 `os.environ` 不生效（实测：同进程内先跑一次矩阵乘法、再设
+# `OPENBLAS_NUM_THREADS`，前后耗时几乎相同）。所以必须在**本模块 import 时**、也就是
+# 在任何 `import numpy`/`import torch`/`import cv2` 真正触发线程池之前设好——`cnn_candidates`
+# 是 Step5-b 候选栈里最先被 import 的一个（`rare_candidates.run_page` 先 import 它，
+# 再 import 会牵出 `font_candidates` 的 `rare_panel`），这里设最早。
+# 用 `setdefault` 不覆盖调用方已经显式设置的值。
+for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+             "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+del _var
+
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+
+try:  # pragma: no cover - cv2 总已安装，防御性写法与其余延迟 import 一致
+    import cv2 as _cv2
+    _cv2.setNumThreads(1)
+except Exception:
+    pass
+
 
 def _resolve_default_ckpt() -> Path:
     """checkpoint 不可重建（重训要 GPU + 数小时），2026-09-09 起进 Git，
@@ -465,6 +490,10 @@ class CnnCandidates:
         if not self.available:
             return False
         import torch
+        # 与模块头的环境变量同一件事的第二道保险：`torch.set_num_threads` 是运行期
+        # API，随时调用都生效（不像 env var 只在线程池第一次建立时读一次），
+        # 覆盖"本模块 import 前已有别的代码把 torch 线程池跑起来了"这一种情况。
+        torch.set_num_threads(1)
         ck = torch.load(self.ckpt, map_location="cpu", weights_only=False)
         self._classes = list(ck["classes"])
         self._cidx = {c: i for i, c in enumerate(self._classes)}
