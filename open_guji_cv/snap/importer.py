@@ -50,10 +50,11 @@ LOCKED = "locked"
 INCOMPATIBLE = "incompatible"
 FAILED = "failed"
 DOWNGRADE = "downgrade"
+RAW_MISMATCH = "raw_mismatch"
 
 #: 这些状态下一轮还会再试（锁放了、服务器部署跟上了、工作区挂上了……）；
 #: 其余是终态，同一提交不再重试（分支提交变了才会再看）。
-RETRYABLE = frozenset({FETCH_FAILED, NO_WORKSPACE, LOCKED, INCOMPATIBLE, FAILED})
+RETRYABLE = frozenset({FETCH_FAILED, NO_WORKSPACE, LOCKED, INCOMPATIBLE, FAILED, RAW_MISMATCH})
 
 
 @dataclass
@@ -87,6 +88,53 @@ def default_freshness(ws_dir: Path, book: str, pages: list[int] | None) -> dict:
         eng = Engine(bk, load_pipeline(default_pipeline_id(bk)), log=lambda s: None)
         st = eng.status(pages=pages if pages else bk.resolve_pages("all"))
         return {sid: dict(d["counts"]) for sid, d in st["steps"].items()}
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def packed_raw_shas(staging: Path, m: dict) -> dict[int, str]:
+    """包里各页算的时候用的原图 sha（各步 `_manifest.jsonl` 条目的 `upstream.raw_page`）。"""
+    out: dict[int, str] = {}
+    for s in m["steps"]:
+        mf = staging / "products" / m["book"] / s / "_manifest.jsonl"
+        if not mf.is_file():
+            continue
+        for line in mf.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            e = json.loads(line)
+            sha = (e.get("upstream") or {}).get("raw_page")
+            k = e.get("key", "")
+            if sha and k.startswith("p") and k[1:].isdigit():
+                out[int(k[1:])] = sha
+    return out
+
+
+def default_raw_check(ws_dir: Path, book: str, want: dict[int, str]) -> dict:
+    """服务器上这些页的原图与包算的时候是不是同一张。返回 {页: 原因}；读不到书定义返回
+    `{"skipped": 原因}`（不挡导入，记录里写出来）。"""
+    keys = ("GUJI_WORKSPACE",)
+    saved = {k: os.environ.get(k) for k in keys}
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)
+    try:
+        from ..core.book import load_book
+        from ..utils.preclean import effective_raw_path
+        try:
+            bk = load_book(book, Path(ws_dir) / "books")
+        except Exception as e:  # noqa: BLE001
+            return {"skipped": f"{type(e).__name__}: {e}"}
+        bad: dict = {}
+        for pg, sha in sorted(want.items()):
+            p = effective_raw_path(bk, pg)
+            if not p.exists():
+                bad[pg] = "服务器没有这页原图"
+            elif sha256_file(p) != sha:
+                bad[pg] = "服务器原图与包算的时候不是同一张"
+        return bad
     finally:
         for k, v in saved.items():
             if v is None:
@@ -353,7 +401,8 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
                 superseded_by: str | None = None, fetch: bool = True,
                 git: gitio.GitRunner = gitio.default_git,
                 freshness_fn: Callable[[Path, str, list[int] | None], dict] = default_freshness,
-                url_fetch: Callable[[str, Path], None] = default_url_fetch) -> ImportResult:
+                url_fetch: Callable[[str, Path], None] = default_url_fetch,
+                raw_check: Callable[[Path, str, dict], dict] = default_raw_check) -> ImportResult:
     ref = gitio.remote_ref(branch, remote)
     if fetch:
         try:
@@ -404,6 +453,19 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
         if problems:
             return ImportResult(SHA_MISMATCH, branch, {**base, "problems": problems[:20],
                                                        "n_problems": len(problems)})
+        if m["mode"] != "display-only" and not force:
+            # 包是拿哪张原图算的，服务器上就得是哪张——否则换上去立刻判过期（2026-09-27 服务器实测：
+            # Z16 在 ws main 上拆了 vol03 p105/vol04 p216 并据此打包，服务器 guji-workspace 还没 pull，
+            # 先被防降级闸挡下、12 分钟后 pull 了才导进去）。原图不对就等（可重试），不算失败。
+            want = packed_raw_shas(staging, m)
+            if want:
+                rc = raw_check(ws_dir, m["book"], want)
+                if rc.get("skipped"):
+                    base["raw_check_skipped"] = rc["skipped"]
+                elif rc:
+                    return ImportResult(RAW_MISMATCH, branch, {
+                        **base, "raw_pages": {str(k): v for k, v in rc.items()},
+                        "hint": "等服务器 guji-workspace pull 到打包时的原图（下一轮自动再试）"})
         holder = probe_lock(products_root, m["book"])
         if holder is not None:
             return ImportResult(LOCKED, branch, {**base, "holder": holder})
@@ -446,9 +508,13 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
                 if worse:
                     _swap_back(m, book_dir, backup_dir, backed, placed, ws_dir, cv_repo)
                     shutil.rmtree(backup_dir, ignore_errors=True)
+                    # 换回后再量一次：记录里三栏并排（导入前 / 换上后 / 换回后），换回对不对一眼看得出
+                    # （09-27 服务器那张记录只有「导入后」一栏、量的是换回之前，被读成「没还原」）
+                    restored = _safe_freshness(freshness_fn, ws_dir, m["book"], pages)
                     return ImportResult(DOWNGRADE, branch, {
                         **base, "downgraded": worse, "freshness_before": before,
-                        "freshness_after_rolled_back": after})
+                        "freshness_swapped_in": after, "freshness_after_rollback": restored,
+                        "rollback_ok": restored == before})
                 append_import_log(products_root, m["book"], {
                     "pack": m["id"], "branch": branch, "commit": commit, "mode": m["mode"],
                     "steps": m["steps"], "page_scope": m.get("page_scope"),

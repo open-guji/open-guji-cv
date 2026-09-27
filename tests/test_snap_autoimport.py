@@ -539,3 +539,77 @@ def test_gitignore_merge_undone_on_downgrade(world, tmp_path):
     out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
     assert out["results"][0]["status"] == imp.DOWNGRADE
     assert local.read_text(encoding="utf-8") == "*\n"
+
+
+# ── 09-27 服务器 vol03/vol04 T2132 事后补的三处 ──────────────────────
+def _add_raw_upstream(prod: Path, sha_of) -> None:
+    for s in STEPS:
+        mfp = prod / BOOK / s / "_manifest.jsonl"
+        rows = [json.loads(l) for l in mfp.read_text().splitlines() if l.strip()]
+        for r in rows:
+            r["upstream"] = {"raw_page": sha_of(int(r["key"][1:]))}
+        mfp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def test_raw_mismatch_waits_then_imports(world, tmp_path):
+    prod = tmp_path / "rawprod"
+    write_products(prod, "new")
+    _add_raw_upstream(prod, lambda p: f"{p:064d}")
+    spec = sp.PackSpec(book=BOOK, products_root=prod, ws_dir=world["cloud"] / WS_DIR, cv_commit=world["A"],
+                       stamp="20260927T2132", glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "t")
+    sp.commit_and_push(world["cloud"], tmp_path / "t", m)
+    server_raw = {"state": "old"}
+
+    def raw_check(ws_dir, book, want):
+        assert want == {p: f"{p:064d}" for p in (1, 2, 3)}
+        return {} if server_raw["state"] == "new" else {1: "服务器原图与包算的时候不是同一张"}
+
+    out = run_watch(world, raw_check=raw_check)
+    r = out["results"][0]
+    assert r["status"] == imp.RAW_MISMATCH and r["raw_pages"] == {"1": "服务器原图与包算的时候不是同一张"}
+    assert read_page(world)["v"] == "old"
+    assert "等 guji-workspace pull" in Path(out["record"]).read_text(encoding="utf-8")
+    out = run_watch(world, raw_check=raw_check)          # 还没 pull：再试、不重复写记录
+    assert out["results"][0]["status"] == imp.RAW_MISMATCH and out["record"] is None
+    server_raw["state"] = "new"                          # 服务器 pull 了
+    out = run_watch(world, raw_check=raw_check)
+    assert out["results"][0]["status"] == imp.IMPORTED and read_page(world)["v"] == "new"
+
+
+def test_default_raw_check_real_book(tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "books").mkdir(parents=True)
+    (ws / "raw").mkdir()
+    (ws / "books" / "b1.yaml").write_text('id: b1\ntitle: t\nraw_dir: raw\nraw_pattern: "{page}.png"\n',
+                                          encoding="utf-8")
+    (ws / "raw" / "1.png").write_bytes(b"page-one")
+    (ws / "raw" / "2.png").write_bytes(b"page-two-server")
+    import hashlib
+    h = lambda b: hashlib.sha256(b).hexdigest()   # noqa: E731
+    bad = imp.default_raw_check(ws, "b1", {1: h(b"page-one"), 2: h(b"page-two-cloud"), 3: h(b"x")})
+    assert bad == {2: "服务器原图与包算的时候不是同一张", 3: "服务器没有这页原图"}
+    assert imp.default_raw_check(ws, "b1", {1: h(b"page-one")}) == {}
+    assert "skipped" in imp.default_raw_check(ws, "nobook", {1: "0" * 64})
+
+
+def test_downgrade_record_has_three_columns_and_rollback_ok(world):
+    make_pack(world)
+    out = run_watch(world, freshness_fn=_fresh_by_tag("old"))
+    r = out["results"][0]
+    assert r["status"] == imp.DOWNGRADE and r["rollback_ok"] is True
+    assert r["freshness_after_rollback"] == r["freshness_before"]
+    txt = Path(out["record"]).read_text(encoding="utf-8")
+    assert "| 步 | 导入前 | 换上后 | 换回后 |" in txt and "换回后与导入前一致：是" in txt
+    assert "| border_detect | 新鲜3 | 过期3 | 新鲜3 |" in txt
+
+
+def test_pack_brings_gates_along(world, tmp_path):
+    prod = tmp_path / "gp"
+    write_products(prod, "new", steps=["border_detect", "border_detect_gate", "column_warp", "column_gate"])
+    spec = sp.PackSpec(book=BOOK, products_root=prod, ws_dir=world["cloud"] / WS_DIR, cv_commit=world["A"],
+                       steps=["border_detect", "column_warp"], stamp="20260927T0003",
+                       glyph_fingerprint="x", session="s")
+    m = sp.build_tree(spec, tmp_path / "gt")
+    assert m["steps"] == ["border_detect", "border_detect_gate", "column_warp", "column_gate"]
+    assert m["gates_added"] == ["border_detect_gate", "column_gate"]
