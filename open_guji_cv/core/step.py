@@ -78,6 +78,44 @@ def attach_gate(step_id: str, gate: GateSpec) -> None:
 
 
 
+def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseModel:
+    """书 yaml 顶层 `params:` 段（`BookSpec.params`，2026-09-27，D-书级admit覆盖）
+    覆盖**这一步**的参数——形状与管线 yaml 的 `params:` 一样 `{step_id: {字段: 值}}`，
+    取的是 `ctx.book.params.get(step.spec.id)`。设计初衷：全唐文一直靠命令行
+    `--params '{"seed_admit": {"use_context": false}}'` 临时挡住 `context` 通道
+    的错放行，漏带一次这个参数这一整轮就白挡——书级 yaml 能把这个决定钉死，
+    不必每次跑批都记得带命令行参数。
+
+    只把**仍是 Step 构造默认值**的字段替换成书里配的值，跟 `_with_book_corpus`
+    走同一个限制：显式传了 CLI `--params` 的字段已经不等于默认值，这里不碰；
+    管线 yaml 若也配了同一个字段，效果上跟 CLI 一样「已经不是默认值」，也会被
+    这里放过、书 yaml 那份对该字段不生效——**这一点与任务书写的「管线 yaml <
+    书 yaml」字面顺序不完全一致**，是与另外四个 `_with_book_*` 函数共享的同一个
+    近似（它们全都只能补「仍是默认值」的字段，分不清「从没设过」与「设成了
+    跟默认值一样的值」，也分不清是管线 yaml 设的还是 CLI 设的）。目前没有任何
+    管线 yaml 给 `seed_admit` 配过参数，这条边界情形不会真的发生；真出现那天，
+    应该跟这几个既有函数一起换一套更精确的机制，不在这一个函数里单独精确到位。
+
+    `ctx.book.params` 没有这个 Step 的条目、或条目是空字典时原样返回，逐字节
+    行为不变——书 yaml 没写 `params:` 这一段的册，加这个函数前后产物指纹相同。
+    **必须重新构造**，不能 `model_copy`：跟 `_with_book_corpus` 一样，某些参数类
+    在 `model_post_init` 里按字段算派生指纹，只有重新构造才会触发。
+
+    放在 `params_for` 参数链的最前面（先于 `_with_book_corpus` 等四个函数）：
+    书 yaml 里显式配的字段是用户的明确决定，应该压过那几个函数算的「按本书
+    convenience 默认值」，不能反过来被它们先占了「仍是默认值」这个判据的位置。
+    """
+    book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
+    if not book_kv:
+        return p
+    default = step.spec.params()
+    overrides = {k: v for k, v in book_kv.items()
+                 if getattr(p, k, object()) == getattr(default, k, object())}
+    if not overrides:
+        return p
+    return type(p)(**{**p.model_dump(), **overrides})
+
+
 def _with_book_corpus(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """参数里的整理本语料没显式指定时，换成**这册书自己的**（`references[0].file`）。
 
@@ -292,10 +330,16 @@ class RunContext:
         `_with_book_gw()`（同日，T4 变体形）跟在它后面再叠一层——两个书级开关各自
         对 `RareCandidatesParams.model_fingerprint` 生效，顺序不能换（见 `_with_book_gw`
         文档「基准要带上 real_proto」那段）。
+
+        2026-09-27 再补 `_with_book_params()`（D-书级admit覆盖）：书 yaml 顶层
+        `params:` 段按字段通用覆盖任意 Step 的参数（`BookSpec.params`），放在**最前面**
+        ——它是用户在书 yaml 里的明确配置，不该被下面几个"按本书 convenience
+        默认值"的函数抢先占了"仍是默认值"这个判据的位置（见该函数文档）。
         """
         p = self.params.get(step.spec.id)
         if p is None:
             p = step.spec.params()
+        p = _with_book_params(p, step, self)
         p = _with_book_corpus(p, self)
         p = _with_book_real_proto(p, self)
         p = _with_witness_fingerprint(p, self)
