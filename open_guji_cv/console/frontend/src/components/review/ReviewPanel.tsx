@@ -3,6 +3,7 @@ import { fetchAroundBatch, fetchRareBatch, fetchRareOne, fetchReviewCards, fetch
 import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
+import { aiAccepted, aiDefaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import './review.css'
@@ -76,6 +77,18 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 批次还不存在就是没裁过
     }
     verdicts.current = { ...done, ...verdicts.current }
+    // Step6-AI 默认预选（任务书-C-人审卡按AI预选，2026-09-27）：只对**这一格
+    // 还没有任何裁决**（服务端没裁过、本地也没动过）且 AI 首组只有一个字的
+    // 卡片生效——首组多个字时不替人选（`aiDefaultShape` 返回 null），组内
+    // 字形仍由人看图点。视为「已裁」（标 touched）会跟着提交按钮走，人看图
+    // 发现不对时点别的候选/输入框覆盖即可，跟人工选完再改主意的路径一样。
+    for (const c of d.cards) {
+      if (verdicts.current[c.id]) continue
+      const def = aiDefaultShape(c)
+      if (!def) continue
+      verdicts.current[c.id] = { shape: def, done: '1', ts: Date.now() }
+      touched.current.add(c.id)
+    }
     // 注意**不清** `touched`：静默刷新（切线联动 reloadSignal）会走到这里，
     // 而此时人可能已裁了几张还没提交，清掉就等于把这几张的裁决静默丢了。
     // 已提交的在 `submit` 里逐条移除，留在这里的都是真·未落盘。
@@ -230,6 +243,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
 
   async function submit() {
     const b = batch()
+    const byId: Record<string, ReviewCard> = {}
+    for (const c of cards) byId[c.id] = c
     const rows: Array<Record<string, unknown>> = []
     for (const [id, v] of Object.entries(verdicts.current)) {
       if (!v.done) continue
@@ -252,10 +267,17 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         rows.push({ id, v: 'seg_defect', quality: v.done, shape: v.shape || '', client_ts: v.ts, dwell_ms: v.dwell })
         continue
       }
+      // 「是否采纳 AI 预选」（任务书-C-人审卡按AI预选 §6）：`null` = 这一格
+      // 没问过 AI（`card.ai` 缺失），不是「没采纳」——四庫等书这里恒是 null。
+      // **2026-09-27 C 道暂拟字段名 `ai_accepted`，待与 H 道约定**（cross 单
+      // 见 inbox/C-人审卡AI预选/），只加可选字段，不改 `confirm` 既有字段。
+      const card = byId[id]
+      const ac = card ? aiAccepted(card, v.shape) : null
       rows.push({
         id, v: 'confirm', shape: v.shape,
         no_glyph_lib: !!v.noGlyphLib,
         client_ts: v.ts, dwell_ms: v.dwell,
+        ...(ac !== null ? { ai_accepted: ac } : {}),
       })
     }
     if (!rows.length) { setMsg('还没有裁决'); return }

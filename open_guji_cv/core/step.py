@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -158,7 +159,7 @@ class RunContext:
         self.cache = cache
         self.params: dict[str, BaseModel] = params or {}
         self.log = log or (lambda s: print(s, flush=True))
-        self._raw: dict[int, np.ndarray] = {}
+        self._raw: "OrderedDict[int, np.ndarray]" = OrderedDict()
         #: 查「谁产出这种产物」按这条管线来（2026-09-14，三模式方案「地基 2」）。
         #: 不传就按册的 edition 选默认管线（`core.pipeline.default_pipeline_id`）——
         #: 控制台 / CLI 那些不经 Engine 直接建 RunContext 的调用点不用改。
@@ -208,6 +209,12 @@ class RunContext:
         p = _with_book_real_proto(p, self)
         return p
 
+    #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
+    #: 一个 Step 对全书每一页依次调用一次，同一个 `RunContext`／`self._raw`
+    #: 贯穿整本书——**不是**只处理当前页那一刻才存在。留 2 页给相邻页偶尔
+    #: 互相借用的场景（目前没有这种调用，纯防御）。
+    _RAW_MAX = 2
+
     # 原图（灰度 uint8）。同一页只读一次。
     def raw_page(self, page: int) -> np.ndarray:
         """读序空间的「原图」。
@@ -221,24 +228,43 @@ class RunContext:
         面向人的三处（控制台叠图、金标锚点、Step9 导出）要转回去，走
         `core/anchor.py` 的 `to_original()`；那部分尚未实现，所以横排书现在
         跑得了算法、叠图看着是横躺的。
+
+        ⚠️ **`_raw` 必须有界**（2026-09-27，R-rare-mem 急件）：这里此前是无界
+        `dict`，注释写着「同一页只读一次」，实现却是「每一页都留一份，一本书
+        跑到底」——引擎按 step-major 顺序跑（一个 Step 对全书每页各调一次），
+        188 页 × 每页原图 ~7MB，实测一遍 `border_detect`（`raw_page` 的调用方
+        之一）跑下来 `_raw` 自己就攒到 1.4GB，且这份状态跨步骤持续存在
+        （border_detect 那一遍攒的页，column_warp/rare_candidates 那几遍也不
+        会释放，同一个 `RunContext` 全程共用）。四庫 vol03 服务器上
+        `rare_candidates` 单进程涨破 3G 被杀，这是主要分量之一：轮到
+        `rare_candidates` 跑时，`_raw` 早已被它前面那几个读原图的 Step
+        （border_detect / column_warp / line_detect）攒满了整本书。改成 LRU
+        （`_RAW_MAX` 页），没有任何调用点会跨页借用原图（`grep -rn "raw_page("`
+        实测全部传的是 `run_page` 自己收到的那个 `page` 参数），所以留 2 页
+        纯防御、行为不变；实测同样跑一遍 `border_detect` 全书，RSS 从
+        72MB→1410MB（改前）变成 72MB→146MB 就不再涨（改后）。
         """
-        if page not in self._raw:
-            path = self._page_path(page)
-            img = imread(str(path), 0) if path.exists() else None
-            if img is None:
-                raise FileNotFoundError(f"原图缺失: {path}")
-            if img.ndim == 3:
-                import cv2
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
-                img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
-            if getattr(self.book, "binarized_input", False):
-                # 整页二值副本（`book.binarized_input`）。放在旋转**之后**：
-                # Sauvola 的窗口是各向同性的，先转后转结果一样，但纸缘护栏
-                # 按的是「转完之后」的四条边，与下游几何看到的边一致。
-                from ..utils.binarized import binarize_page
-                img = binarize_page(img)
-            self._raw[page] = img
+        if page in self._raw:
+            self._raw.move_to_end(page)
+            return self._raw[page]
+        path = self._page_path(page)
+        img = imread(str(path), 0) if path.exists() else None
+        if img is None:
+            raise FileNotFoundError(f"原图缺失: {path}")
+        if img.ndim == 3:
+            import cv2
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
+            img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
+        if getattr(self.book, "binarized_input", False):
+            # 整页二值副本（`book.binarized_input`）。放在旋转**之后**：
+            # Sauvola 的窗口是各向同性的，先转后转结果一样，但纸缘护栏
+            # 按的是「转完之后」的四条边，与下游几何看到的边一致。
+            from ..utils.binarized import binarize_page
+            img = binarize_page(img)
+        self._raw[page] = img
+        while len(self._raw) > self._RAW_MAX:
+            self._raw.popitem(last=False)
         return self._raw[page]
 
     def _page_path(self, page: int) -> "Path":
