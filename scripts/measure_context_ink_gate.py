@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import open_guji_cv.steps  # noqa: E402,F401
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 
 
