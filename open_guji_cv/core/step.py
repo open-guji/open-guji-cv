@@ -146,6 +146,32 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
+
+def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`AlignRefParams.witness_fingerprint` 按**这册书的 `references` 文件**算
+    （2026-09-27，任务书-D-多证人对齐策略）。只对 `witness_strategy != "legacy"`
+    生效——legacy 策略只用单一 `corpus`，继续吃 `_with_book_corpus` 那份指纹，
+    不需要这里再算一遍。
+
+    同 `_with_book_corpus`／`_with_book_real_proto` 一个坑：`model_post_init`
+    造实例时没有 `ctx.book`，只能留空；这里在 `params_for` 里补，让
+    `Engine.fingerprint()` 与 `run_page` 拿到同一份。只在字段仍是空串（未算过）
+    时才填，显式传值的不动。
+    """
+    if not hasattr(p, "witness_strategy") or not hasattr(p, "witness_fingerprint"):
+        return p
+    if getattr(p, "witness_strategy") == "legacy" or getattr(p, "witness_fingerprint"):
+        return p
+    from ..core.workspace import corpus_path
+    from ..steps.align_ref import book_corpus
+    from ..steps.context_decide import corpus_fingerprint
+    refs = getattr(ctx.book, "references", None) or []
+    names = [r.get("file", "") for r in refs if r.get("file")]
+    if not names:
+        names = [Path(book_corpus(ctx.book.id)).name]
+    fp = corpus_fingerprint([str(corpus_path(n)) for n in names])
+    return type(p)(**{**p.model_dump(), "witness_fingerprint": fp})
+
 # ── 运行上下文 ───────────────────────────────────────────────────────
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
@@ -201,12 +227,17 @@ class RunContext:
 
         2026-09-27 补 `_with_book_real_proto()`：`RareCandidatesParams.model_fingerprint`
         同一个坑（见该函数文档）——`rare_candidates` 的开关/来源转正二。
+
+        2026-09-27 又补 `_with_witness_fingerprint()`：`AlignRefParams.witness_fingerprint`
+        同一个坑，`witness_strategy != "legacy"` 时按 `references` 全部文件算（任务书
+        D-多证人对齐策略）。
         """
         p = self.params.get(step.spec.id)
         if p is None:
             p = step.spec.params()
         p = _with_book_corpus(p, self)
         p = _with_book_real_proto(p, self)
+        p = _with_witness_fingerprint(p, self)
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
