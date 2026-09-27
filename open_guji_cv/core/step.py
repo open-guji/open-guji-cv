@@ -101,6 +101,51 @@ def _with_book_corpus(p: BaseModel, ctx: "RunContext") -> BaseModel:
         return p
     return type(p)(**{**p.model_dump(), "corpus": want, "corpus_fingerprint": ""})
 
+
+def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`RareCandidatesParams.model_fingerprint` 换成**按这册书**算的那份（5-b 转正二，
+    2026-09-27）。只对 `RareCandidatesParams` 生效，别的参数类原样返回，跟
+    `_with_book_corpus` 同一个坑、同一个补法。
+
+    `model_post_init` 造实例时没有 `ctx.book`，只能填模块级默认（`REAL_PROTO_ENABLED`
+    缺省关那份）；此前只靠 `StepSpec.book_deps=("font",)` 兜底整本 `font` 字典的文本
+    （yaml 改了会让 self_hash 变，但 `params_hash` 里那格仍是常量，与产物体
+    `PageRare.model_fingerprint` 实际用的值对不上）。这里在 `params_for` 里用
+    `book_real_proto(ctx.book.font)` 重算，让 `params_hash` 与 `run_page` 算的
+    是同一份——顺带补上 `book_deps` 没兜住的那格：`real_proto_fingerprint` 本来就是
+    内容指纹（`instances/*.jsonl` 的名字:大小:mtime），`glyph_store` 长内容而 yaml
+    文本不动时，这里重算也会跟着变，不必再等 `book_deps`。
+
+    ⚠️ 必须**重新构造**，不能 `model_copy`：同 `_with_book_corpus` 的道理——
+    `model_post_init` 只在字段为空串时才填，`model_copy` 不会重新触发这段判断。
+
+    只在「当前值仍是构造时的模块级默认」时才换——跟 `_with_book_corpus` 用
+    `p.corpus != DEFAULT_CORPUS` 判断「已经不是缺省值」是同一个道理，这里换成比
+    对不带 `ctx.book` 时 `model_post_init` 会填的那份，显式传了 `model_fingerprint`
+    的（`GlyphMatchParams.db_fingerprint` 那条注释说的「按某个历史指纹重放」）
+    才不会被这里覆盖。`ctx.book` 没有 `font` 属性（旧结构 / 测试用的壳对象）按
+    `None` 处理，等价于关。
+    """
+    from ..steps.rare_candidates import RareCandidatesParams
+    if not isinstance(p, RareCandidatesParams):
+        return p
+
+    def _fp(real_proto) -> str:
+        fp = full_fingerprint(real_proto=real_proto)
+        if p.struct_probe:
+            import hashlib
+            pp = Path(p.struct_probe)
+            fp += ":probe=" + (hashlib.sha1(pp.read_bytes()).hexdigest()[:12] if pp.exists() else "missing")
+        return fp
+
+    from ..clustering.cnn_candidates import book_real_proto, full_fingerprint
+    if p.model_fingerprint != _fp(None):
+        return p  # 显式传值，或已经按某本书算过（幂等，见下）
+    fp = _fp(book_real_proto(getattr(ctx.book, "font", None)))
+    if fp == p.model_fingerprint:
+        return p
+    return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
+
 # ── 运行上下文 ───────────────────────────────────────────────────────
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
@@ -153,11 +198,16 @@ class RunContext:
 
         凡是 `references` 指向非缺省语料的书都中招；四庫總目因缺省值恰好就是它的语料，
         反而不显——**这类"只在别的书上犯"的错，不跨书验就看不见**。
+
+        2026-09-27 补 `_with_book_real_proto()`：`RareCandidatesParams.model_fingerprint`
+        同一个坑（见该函数文档）——`rare_candidates` 的开关/来源转正二。
         """
         p = self.params.get(step.spec.id)
         if p is None:
             p = step.spec.params()
-        return _with_book_corpus(p, self)
+        p = _with_book_corpus(p, self)
+        p = _with_book_real_proto(p, self)
+        return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
     #: 一个 Step 对全书每一页依次调用一次，同一个 `RunContext`／`self._raw`
