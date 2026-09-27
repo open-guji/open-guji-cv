@@ -91,13 +91,11 @@ def test_build_emb_matrix_skips_unrenderable_char_without_crashing():
     assert names == []
 
 
-# ── 3. _emb_index 落盘 float16，查询路转回 float32 ────────────────
+# ── 3. _emb_index 落盘 float32（09-27 CV 总管定，不用 float16）────────
 @needs_cnn
 def test_emb_index_disk_roundtrip_is_float32_and_close(tmp_path, monkeypatch):
-    """建一次（现算，float32 常驻+落盘 float16）→ 新实例重新读盘（命中 float16
-    缓存）→ 两次矩阵在 float16 精度范围内一致，且**都是 float32**（查询路精度
-    与从未落过盘的旧路径一致，不会把 float16 的舍入误差带进矩阵乘法之外的地方）。
-    """
+    """建一次（现算）→ 新实例重新读盘（命中缓存）→ 两次矩阵**逐位相同**、都是
+    float32（落盘不降精度，候选与从未落过盘的现算结果完全一致）。"""
     ckpt_copy = tmp_path / "best.pt"
     ckpt_copy.write_bytes(DEFAULT_CKPT.read_bytes())
 
@@ -109,17 +107,15 @@ def test_emb_index_disk_roundtrip_is_float32_and_close(tmp_path, monkeypatch):
 
     key, f, _extra = inst1.emb_index_key(cs)
     assert f.exists()
-    # 落盘确实是 float16（体积减半）
     with np.load(f) as z:
-        assert z["mat"].dtype == np.float16
+        assert z["mat"].dtype == np.float32
 
     inst2 = CnnCandidates(ckpt=ckpt_copy)
     inst2._ensure()
     mat2, names2 = inst2._emb_index(cs)
     assert names2 == names1
     assert mat2.dtype == np.float32
-    # float16 尾数 10 位，单位向量分量的舍入误差量级 ~1e-3，给足余量
-    assert np.abs(mat1 - mat2).max() < 5e-3
+    assert np.array_equal(mat1, mat2)
 
 
 @needs_cnn

@@ -453,11 +453,9 @@ def build_emb_matrix(net, dev, cs: tuple[str, ...], extra: dict, render_char,
 
 
 def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
-    """embedding 索引原子落盘：float16（2026-09-27 起，任务书-R-rare冷启动内存
-    与索引预建）——查询路读回后立刻转 float32（见 `_emb_index`），产物精度与
-    一直用 float32 的旧路径**几乎**相同（float16 尾数 10 位，单位向量分量的
-    舍入误差约 1e-3 量级；同页 top-10 候选逐字对比见任务书 done 单，浮点误差
-    导致名次交换的条目已逐条列出）。`.npz` 体积减半，随快照/Release 分发更省。
+    """embedding 索引原子落盘，**存 float32**（2026-09-27 CV 总管定：R 道试过
+    float16 落盘，200 条压测查询 top-1 变 1%、top-10 集合变 8.5%；体积省一半
+    约 35MB 不值得换候选不逐位一致，改回 float32，与改前产物逐位相同）。
 
     先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下只建了
     一半的索引冒充完整缓存。⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补**
@@ -465,7 +463,7 @@ def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
     `x.tmp.npz`、replace 找的是 `x.tmp`。"""
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_name(f.name + ".tmp.npz")
-    np.savez(tmp, mat=mat.astype(np.float16), chars=np.array(names))
+    np.savez(tmp, mat=mat.astype(np.float32), chars=np.array(names))
     os.replace(tmp, f)
 
 
@@ -840,9 +838,8 @@ class CnnCandidates:
                 except OSError:
                     pass
             else:
-                # 落盘是 float16（2026-09-27 起，见上）；查询路全程按 float32
-                # 算，与从未碰过磁盘的现算结果精度一致——这里立刻转回来，不让
-                # float16 的舍入误差渗进 `mat @ q` 之外的地方。
+                # 落盘是 float32（见 `_save_emb_index`）；astype 对老缓存或手工
+                # 放进来的文件兜底，保证查询路一律 float32。
                 mat = mat.astype(np.float32)
                 self._emb_cache = (charset, mat, names)
                 return mat, names
