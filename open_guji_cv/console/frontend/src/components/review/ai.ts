@@ -49,3 +49,15 @@ export function disagreeingRuns(ai: AiEvidence | null | undefined): string[] | n
 export function dropReason(ai: AiEvidence | null | undefined, ch: string): string {
   return (ai?.drop_why || []).find((d) => d.c === ch)?.why || ''
 }
+
+/**
+ * 借库书的默认首选（`c.first`，书 yaml `params.review.first_pick` 开了才有）。
+ * 只在 Step6-AI 没给默认（`aiDefaultShape` 为 null）时才用——两者都有时 Step6-AI 优先，
+ * 与后端 `_top_pick` 同一顺序。任务书-C-借库书人审首选改CNN原型（2026-09-27）。
+ */
+export function defaultShape(c: ReviewCard): string | null {
+  const ai = aiDefaultShape(c)
+  if (ai) return ai
+  if (c.ai && topGroup(c)) return null   // Step6-AI 问过、首组多字或拿不准：照旧不替人选
+  return c.first?.char || null
+}
