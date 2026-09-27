@@ -113,6 +113,34 @@ def _measured_ref_w(store, book_id: str, pages: list[int],
     return round(statistics.median(vals), 2), len(vals)
 
 
+def _period_coverage(store, book_id: str, pages: list[int],
+                     body: set[int] | None) -> int:
+    """`period_prior` 实测用了几页——跟 `row_boundaries.measure_book_period()`
+    数的是同一批页（同样排掉 `period_from_prior` 兜底页），只读不算，纯计数。
+
+    任务卡 #54 第14条：`measure_book_period` 本身有 `len(vals)<5` 的下限，
+    但那道下限只挡「一页都没有」，挡不住「全书 300 页只测了前 6 页、column_gate
+    还没跑完」——6 页也能过 5 页那道下限，测出来的数字却离全书真值差着一截
+    （全唐文实测：先测出 159，跑完整册后是 204，差 28%）。这里单独数一遍
+    「全书应该有多少正文页 vs 实际读到了多少」，供 `format_table` 判「这批样本
+    够不够覆盖全书」，跟 `_stale_pages`（判「有没有跑完」）是两件不同的事——
+    产物可以逐条都新鲜、但只新鲜了一小部分页。
+    """
+    from ..core.spec import page_key
+    from ..products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
+    from ..products.kinds import border_detect_gate as _bg  # noqa: F401
+
+    n = 0
+    for pg in pages:
+        if body is not None and pg not in body:
+            continue
+        g = store.read(book_id, "column_gate", page_key(pg), "gate_manifest")
+        if g is None or not g.period or getattr(g, "period_from_prior", False):
+            continue
+        n += 1
+    return n
+
+
 def _stale_pages(book, store, pages: list[int]) -> tuple[int, int] | None:
     """闸2 产物里有多少页已过期，返回 `(过期数, 查到数)`；查不了返回 None。
 
@@ -159,20 +187,24 @@ def calibrate(book, store, pages: list[int] | None = None,
     pgs = list(pages) if pages is not None else (list(book.pages) or book.all_pages())
     body = _body_pages(store, book.id, pgs)
     st = _stale_pages(book, store, pgs)
+    period_n = _period_coverage(store, book.id, pgs, body)
+    period_expect = len(body) if body is not None else len(pgs)
     diag = {
         "pages": len(pgs),
         "body_pages": (len(body) if body is not None else None),
         "body_source": ("闸1 page_type" if body is not None else "无页型产物，用 measure_* 的粗筛兜底"),
         "stale": (st[0] if st else None),
         "checked": (st[1] if st else None),
+        "period_n": period_n,
+        "period_expect": period_expect,
     }
 
     rows: list[Row] = []
 
     # period_prior —— 读闸2 产物，measure_book_period 自己排掉兜底页
     per = measure_book_period(store, book.id, pages=pgs, body_pages=body)
-    rows.append(Row("period_prior", book.period_prior, per,
-                    "正文页 period 中位；已排除 period_from_prior 的页（防循环论证）"))
+    per_note = f"正文页 period 中位（{period_n}/{period_expect} 页有数）；已排除 period_from_prior 的页（防循环论证）"
+    rows.append(Row("period_prior", book.period_prior, per, per_note))
 
     # pitch_prior —— 只作量级参照（ref_w 是列内容宽，不含界行；与列距差一个界行宽）
     rw, n_rw = _measured_ref_w(store, book.id, pgs, body)
@@ -239,6 +271,20 @@ def format_table(rows: list[Row], diag: dict, book_id: str) -> str:
         out.append(f"🔴 闸2 产物 {stale}/{checked} 页**已过期**——下面的「实测」是拿"
                    f"旧产物算的，不能用来复核当前 yaml。")
         out.append("   先重跑（guji pipeline <链> <册> --to-step column_gate）再标定。")
+        out.append("")
+
+    # 任务卡 #54 第14条：产物齐全、都新鲜，但只齐全了一小部分页（column_gate
+    # 还没跑完全书）——`_stale_pages` 那道闸测不出这个，得单独看覆盖率。
+    # 全唐文实测过：只跑出一小截时 period_prior 测成 159，跑完整册后是 204，
+    # 差 28%，早跑那次的数字**当时看起来完全正常**（有测出数、不过期），
+    # 唯一的破绽就是覆盖率低。
+    period_n, period_expect = diag.get("period_n"), diag.get("period_expect")
+    if period_n is not None and period_expect and period_n < 0.8 * period_expect:
+        out.append(f"🔴 period_prior 只拿到 {period_n}/{period_expect} 页（{period_n / period_expect:.0%}）"
+                   f"——覆盖不到八成，**此值不可信**：column_gate 大概还没跑完全书，"
+                   f"早跑的一截页不能代表全书分布（实例：全唐文只跑了一部分时测出 159，"
+                   f"跑完整册后是 204，差 28%）。")
+        out.append("   先把 column_gate 跑到全书新鲜再标定。")
         out.append("")
 
     drifted = [r for r in rows if r.verdict == "漂了"]
