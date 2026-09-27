@@ -45,7 +45,13 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     """整册比对 → 可直接落盘的报告 dict。
 
     `progress`：`f(done, total, page)`，控制台/CLI 用来报进度；跑整册几十秒。
-    """
+
+    **单页崩溃不拖垮整册**（2026-09-27 补，vol01 7 页人裁事件乱码实锤：
+    `collate_page` 对某一页抛异常时，之前整个 `collate_book` 直接崩溃、
+    崩溃页起的所有后续页全部拿不到结果）。`collate_page` 抛异常时记进
+    `page_errors`（页号 + 异常类型 + 首行信息），跳过这一页，继续跑剩下的页；
+    坏数据本身不在这里修——那是上游数据的事（人裁事件/字形库），这里只保证
+    「一页坏能不能让全书都拿不到对勘结果」这件事不再发生。"""
     store = store or ProductStore()
     t0 = time.time()
     stale: list[str] = []
@@ -53,9 +59,18 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     all_diffs: list[Diff] = []
     all_cols: list[dict] = []
     unanchored: dict[str, list[int]] = {w.label: [] for w in witnesses}
+    page_errors: list[dict] = []
 
     for n, page in enumerate(pages, 1):
-        per = collate_page(store, book, page, witnesses, stale)
+        try:
+            per = collate_page(store, book, page, witnesses, stale)
+        except Exception as e:
+            msg = str(e).splitlines()[0] if str(e) else ""
+            page_errors.append({"page": page, "error_type": type(e).__name__,
+                                "message": msg})
+            if progress:
+                progress(n, len(pages), page)
+            continue
         rec: dict = {"page": page, "witnesses": {}}
         for label, res in per.items():
             if not res.anchored:
@@ -70,6 +85,9 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                 # 证人无此段（按语/卷端题/卷末题）：不进 diffs，但报告要说明，
                 # 否则读者会奇怪这页字数怎么对不上（见 report/absent.py）。
                 "absent_runs": res.absent_runs,
+                # 字位数据本身长度异常（乱码等），已被 diff_page 挡下——见
+                # collate.py::_sanitize_slots。
+                "warnings": res.warnings,
             }
             all_diffs.extend(res.diffs)
             all_cols.extend(asdict(c) for c in res.cols)
@@ -89,7 +107,9 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                        "n_chars": len(w.text)} for w in witnesses],
         "unanchored": unanchored,
         "stale": sorted(set(stale)),
+        "page_errors": page_errors,
         "summary": {**summarize(all_diffs, all_cols, pages_out, witnesses, grades),
+                    "n_page_errors": len(page_errors),
                     "absent_runs": [dict(a, page=rec["page"], witness=lb)
                                     for rec in pages_out
                                     for lb, st in rec["witnesses"].items()
