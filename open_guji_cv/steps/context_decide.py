@@ -67,13 +67,13 @@ import json
 import time
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
-from ..products.kinds.recog import (ColumnDecision, DecisionRec,
-                                    PageDecision, PageMatch, PageOcr)
+from ..products.kinds.recog import (AiEvidence, ColumnDecision, DecisionRec,
+                                    GroupRec, PageDecision, PageMatch, PageOcr)
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 align_ref.py 模块头
@@ -90,6 +90,43 @@ def _log_llm_call(log_dir: str, book: str, row: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def ai_evidence_fingerprint(path: str) -> str:
+    """词典+AI 证据文件的内容指纹（sha256 前 16 位）；文件不在记 `missing`——
+    配了路径却没文件是配置错，`load_ai_evidence` 会报错，这里只管让指纹可算。"""
+    from ..products.store import sha256_file
+    p = Path(path)
+    return sha256_file(p)[:16] if p.exists() else "missing"
+
+
+_AI_CACHE: dict[str, dict[str, tuple[list[GroupRec], AiEvidence | None]]] = {}
+
+
+def load_ai_evidence(path: str, fingerprint: str) -> dict[str, tuple[list[GroupRec], AiEvidence | None]]:
+    """读逐格 JSONL → {字位 id: (groups, ai)}，按内容指纹缓存（一次 run 几十页共用）。
+    每行按 `GroupRec` / `AiEvidence` 校验；行里别的键（如核对用的 `img`）忽略。
+    配了路径却读不到直接报错，不静默退化成「没有 AI」（子会话须知铁律）。"""
+    hit = _AI_CACHE.get(fingerprint)
+    if hit is not None:
+        return hit
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"context_decide.ai_evidence 指向的文件不存在: {p}")
+    out: dict[str, tuple[list[GroupRec], AiEvidence | None]] = {}
+    with open(p, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            if "key" not in d:
+                raise ValueError(f"{p}:{n} 缺 key")
+            groups = [GroupRec.model_validate(g) for g in d.get("groups") or []]
+            ai = AiEvidence.model_validate(d["ai"]) if d.get("ai") else None
+            out[str(d["key"])] = (groups, ai)
+    _AI_CACHE[fingerprint] = out
+    return out
 
 
 _CORPUS_FP_CACHE: dict[tuple[str, int, int], str] = {}
@@ -137,6 +174,25 @@ class ContextDecideParams(BaseModel):
     llm_context_chars: int = 10       # 上/下文各取多少字，同评测集口径
     llm_log_dir: str = DEFAULT_LLM_LOG_DIR
 
+    # ── 词典+AI 证据（异步外包段导回，2026-09-27 D-Step6）──────────────────
+    # 方案：overview 进度/Step6-上下文裁决/方案-词典加AI接入管线.md §三、§七。
+    # 逐格 JSONL（`{key, groups, ai}`），run_page 把 groups/ai 挂到对应 DecisionRec 上。
+    # **只进产物、不改放行**：char/margin/source/ranked 一概不动，seed_admit 不读 ai。
+    # 路径缺省由书级配置 `step6_ai:` 填（`core.step._with_book_step6_ai`）。
+    ai_evidence: str = ""
+    ai_evidence_fingerprint: str = ""
+    """证据文件内容哈希，留空自动填——换了文件，产物要判过期。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_ai(self, handler):
+        """两个 ai_* 字段为空时不进 dump：没接 AI 的书 `params_hash` 与加字段前逐位
+        相同，四庫等已跑的 context_decide 产物不会因为这次改代码全体判过期。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.ai_evidence:
+            d.pop("ai_evidence", None)
+            d.pop("ai_evidence_fingerprint", None)
+        return d
+
     def _corpus_paths(self) -> list[str]:
         """本册整理本 + 泛古籍语料。**相对路径锚在仓根，不靠进程 cwd**（2026-09-21 修）。
 
@@ -163,6 +219,9 @@ class ContextDecideParams(BaseModel):
         if not self.corpus_fingerprint:
             object.__setattr__(self, "corpus_fingerprint",
                                corpus_fingerprint(self._corpus_paths()))
+        if self.ai_evidence and not self.ai_evidence_fingerprint:
+            object.__setattr__(self, "ai_evidence_fingerprint",
+                               ai_evidence_fingerprint(self.ai_evidence))
 
 @register_step
 class ContextDecideStep(Step):
@@ -293,6 +352,8 @@ class ContextDecideStep(Step):
         except Exception:
             ocr = None                     # 没装引擎时只用库候选，不炸
         decider = self._decider(p)
+        ai_map = (load_ai_evidence(p.ai_evidence, p.ai_evidence_fingerprint)
+                  if p.ai_evidence else {})
 
         omap = ({r.id: r for cc in ocr.columns for r in cc.chars}
                 if ocr is not None else {})
@@ -357,6 +418,12 @@ class ContextDecideStep(Step):
                     llm_suggestion=llm_suggestion if llm_suggestion in priors else None))
                 if ok and res.surface:
                     decided.append((r.slot, res.surface))
+            if ai_map:
+                # 词典+AI 证据只挂上去，不动 char/margin/source/ranked（只进产物、不改放行）
+                for rec in recs:
+                    ev = ai_map.get(rec.id)
+                    if ev is not None:
+                        rec.groups, rec.ai = list(ev[0]), ev[1]
             out.append(ColumnDecision(col=cc.col, ok=True, chars=recs))
         return {"context_decision": PageDecision(
             page=page, strategy=p.strategy,
