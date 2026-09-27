@@ -42,13 +42,20 @@ from ..utils.border_geometry import BEND_W80_MAX
 class BorderDetectGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
     bend_w80_max_gate: float = BEND_W80_MAX   # 复用探测阶段判"单条线跑飞"的同一个量
+    page_survey_block: bool = False
+    """任务卡 #54 第22条：`page_survey`（Step0）判定尺寸异常且不在白名单的页要不要拦。
+    缺省 False——先观察、只记 flag，不拦；书级 `params: {border_detect_gate:
+    {page_survey_block: true}}` 才打开真拦截。开关放这道闸，不放 `page_survey`
+    自己的 params：产不产异常数据是 Step0 的事，拦不拦是 Step1 出口闸的事，
+    两件事分开才能做到"缺省只记待办不拦"。"""
 
 
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.0", unit="page",
-        consumes=("borders",), produces=("border_detect_gate_manifest",),
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.1", unit="page",
+        consumes=("borders",), optional_consumes=("page_survey",),
+        produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type"),
     )
@@ -74,6 +81,21 @@ class BorderDetectGateStep(Step):
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
         flags: list[str] = []
+        # 任务卡 #54 第22条：Step0 页面预检判定尺寸异常——白名单页/关着开关时
+        # 只 flag；开了 `page_survey_block` 且不在白名单才真拦（待拆/待核）。
+        survey = ctx.product("page_survey", page) if ctx.has_product("page_survey", page) else None
+        if survey is not None and (survey.odd or survey.p1_suspect):
+            why = (f"page_size_odd：{survey.kind}，本页 {survey.width}×{survey.height}，"
+                  f"册中位 {survey.median_width:.0f}×{survey.median_height:.0f}"
+                  f"（宽{survey.ratio_w:.2f}×/高{survey.ratio_h:.2f}×）"
+                  if survey.odd else
+                  "page1_suspect：页1 常是书脊/封面，异常与否未判，供人核对")
+            if survey.whitelisted:
+                flags.append(f"{why}；已列入白名单：{survey.whitelist_reason}")
+            elif survey.odd and p.page_survey_block:
+                reject.append(f"{why}；待拆/待核——书 yaml 白名单或先拆页再重跑")
+            else:
+                flags.append(why)
         if policy == "custom":
             flags.append(f"page_type_custom：页型判定为「{page_type}」，列数预期与正文不同，未核验")
         if policy is None:
@@ -138,5 +160,9 @@ attach_gate("border_detect", GateSpec(
         GateLevel(id="L3", unit="page",
                   desc="上/下外框有没有探到——flag，不拦。單邊框（frame_kind=single）"
                        "不算没探到；剩下的 none 仍分不清「磨没/裁掉」与「漏探」", name="outer_frame_missing"),
+        GateLevel(id="L4", unit="page",
+                  desc="Step0 页面预检（page_survey）判尺寸异常——缺省 flag 不拦，"
+                       "书级 params.border_detect_gate.page_survey_block=true 才升 block；"
+                       "命中白名单永远只 flag。页1 另标，不管尺寸判据", name="page_size_odd"),
     ),
 ))

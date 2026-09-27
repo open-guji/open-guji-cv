@@ -63,6 +63,27 @@ def producer_of(kind_id: str) -> "Step":
     raise KeyError(f"没有 Step 产出 {kind_id!r}")
 
 
+def resolve_step_id(name: str) -> str:
+    """人查产物时常把 kind_id 和 step_id 搞混——多数步骤两者同名，
+    `context_decide`（step_id）产 `context_decision`（kind_id）这种**不同名**的
+    是例外，按名字直查目录（`ProductStore.step_dir` 用 step_id）会悄悄查到
+    空目录、0 条，不报错（任务卡 #54 第21条）。
+
+    `name` 既可能是 step_id 也可能是 kind_id：是 step_id 原样返回；
+    是 kind_id 就解到产出它的 step_id；两者都不是就报错，报错里列出
+    已注册的 kind_id 供对照（截了前 30 个，免得刷屏）。
+    """
+    if name in STEPS:
+        return name
+    if name in KINDS:
+        return producer_of(name).spec.id
+    valid = sorted(KINDS.keys())
+    raise KeyError(
+        f"{name!r} 既不是已知的 step_id，也不是已知的产物种类(kind_id)。"
+        f"已注册的产物种类（前 30 个）: {valid[:30]}"
+    )
+
+
 def attach_gate(step_id: str, gate: GateSpec) -> None:
     """把一道闸挂到某个已注册 Step 的 spec 上——只覆盖这一个实例的 `spec`
     （`dataclasses.replace` 出一份新的、其余字段原样复制），不改该 Step 自己的
