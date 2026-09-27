@@ -23,6 +23,7 @@
       review:
         first_pick: rrf
         own_db: output/glyph_own.db   # 本书自有库（H 道在建）；相对路径锚工作区根
+        borrow_db: /path/to/siku/glyph.db  # 借来的库（缺省 = glyph_match 用的那个库）
         borrow_fallback: true         # 本书库缺的字回退借库原型；false = 只用本书库
 
 某字在本书库里有刻例 → 该字原型只用本书刻例；没有 → 回退借来的库（`review_db_path`，
@@ -72,11 +73,32 @@ def first_pick_mode(book_spec) -> str | None:
     return v
 
 
+def _ws_path(v: str) -> str:
+    """书 yaml 里的库路径：相对路径按工作区根解释（没有工作区按仓根），同 `core.workspace._resolve`。"""
+    p = Path(v).expanduser()
+    if not p.is_absolute():
+        from ..core.workspace import REPO_ROOT, workspace_root
+        p = (workspace_root() or REPO_ROOT) / p
+    return str(p)
+
+
 def review_db_path(book_spec) -> str:
-    """审卡用的字形库：书级 `params.glyph_match.db_path` 显式配了就用它，否则同
-    `glyph_match` 的缺省解析（`GUJI_GLYPH_DB` → 工作区 `output/glyph.db`）。
-    与像素那一路读**同一个**库，两路比的才是同一个字集。"""
-    gm = ((getattr(book_spec, "params", None) or {}).get("glyph_match") or {})
+    """借来的库（CNN 原型的回退来源）。优先级：
+
+    1. `params.review.borrow_db`——**借库单独指**（2026-09-28）：服务器上 qtw-draft 的
+       `output/glyph.db` 已换成全唐文自有库，四庫库得另给路径。放在 `review` 下而不是
+       改 `glyph_match.db_path`，是因为后者进 Step5 参数指纹，一改全书 glyph_match 过期；
+       `review` 不是 Step id，不进任何指纹。
+    2. `params.glyph_match.db_path`（像素那一路显式配的库）；
+    3. 同 `glyph_match` 的缺省解析（`GUJI_GLYPH_DB` → 工作区 `output/glyph.db`）。
+
+    相对路径按工作区根解释。
+    """
+    params = getattr(book_spec, "params", None) or {}
+    rv = params.get("review") or {}
+    if rv.get("borrow_db"):
+        return _ws_path(str(rv["borrow_db"]))
+    gm = params.get("glyph_match") or {}
     if gm.get("db_path"):
         return str(gm["db_path"])
     from ..core.workspace import glyph_db_path
@@ -88,11 +110,7 @@ def proto_sources(book_spec) -> tuple[str | None, bool]:
     cfg = ((getattr(book_spec, "params", None) or {}).get("review") or {})
     own = cfg.get("own_db") or None
     if own:
-        p = Path(own).expanduser()
-        if not p.is_absolute():
-            from ..core.workspace import REPO_ROOT, workspace_root
-            p = (workspace_root() or REPO_ROOT) / p
-        own = str(p)
+        own = _ws_path(str(own))
     fb = cfg.get("borrow_fallback", True)
     if not isinstance(fb, bool):
         raise ValueError(f"书 yaml params.review.borrow_fallback 要 true/false，得到 {fb!r}")
@@ -358,7 +376,8 @@ def annotate(book: str, cards: list[dict], store, mode: str, bk=None) -> dict:
             n_agree += bool(c["first"]["agree"])
     return {"mode": mode, "cnn_ready": bool(cnn.available), "n": len(cards),
             "n_both": n_both, "n_agree": n_agree,
-            "own_db": own_db, "borrow_fallback": fallback,
+            "own_db": own_db, "borrow_db": review_db_path(bk) if fallback else None,
+            "borrow_fallback": fallback,
             "n_own_chars": sum(v == "own" for v in src_of.values()),
             "n_borrow_chars": sum(v == "borrow" for v in src_of.values()),
             "n_first_from_own": n_own}
