@@ -1,0 +1,18 @@
+/* 板块骨架（StepLayout）。只管容器与 tab 条，各板块自己的样式不在这里。 */
+
+/* 裁决台外壳：里面的面板自己也是 .card，双层 padding 会太厚，这里收掉外层的 */
+.slreview { padding: .5rem .6rem; }
+.slreview > .card { margin-bottom: 0; }
+
+.sltabs { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.sltabs button {
+  padding: .25rem .7rem; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--paper); color: inherit; cursor: pointer; font-size: .9em;
+}
+.sltabs button:hover { background: var(--paper-2); }
+.sltabs button.on { background: var(--indigo-soft); border-color: var(--indigo); font-weight: 600; }
+
+.slbadge {
+  margin-left: .35rem; padding: 0 .3rem; border-radius: 3px;
+  background: var(--zhu-soft); color: var(--zhu); font-size: .85em;
+}

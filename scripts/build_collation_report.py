@@ -64,6 +64,20 @@ from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 from open_guji_cv.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
+from open_guji_cv.report.collation_grade import (GRADE_LABEL, misanchored_pages,  # noqa: E402
+                                                  summarize)
+from open_guji_cv.utils.image_io import imread  # noqa: E402
+
+#: 每一层在报告里写明判据——分层是给人看的排序，人得能不同意它。
+GRADE_NOTE = {
+    "suspect": "只出现一两次、无已知关系——最该先看这批",
+    "gap": "刻本多出或整理本多出，多半是漏切/两字并一格，或整理本据他本补字",
+    "taboo": "清刻本避諱改字，整理本回改原字；录刻本形是对的",
+    "systematic": "同一字对全书反复出现（≥3 次），是版本用字差异而非识别错",
+    "variant": "异体关系图已收，同字异形",
+    "human": "人已看过这张图并定了字——这是人判定的版本差异，不是待办",
+    "misanchor": "整页与整理本对不上号（锚到了错的位置），不是逐字认错；转写本身多半是对的",
+}
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 steps/align_ref.py
 # 模块头「2026-09-11」一节，硬编码相对路径曾导致读到仓内过期样本。
@@ -170,13 +184,171 @@ def _vm() -> VariantMap:
     return _VM
 
 
+#: 夾注段短于这个字数就不查「证人里有没有」——「並六十陌」这类三五字的注
+#: 落进整理本正文里纯属碰巧的概率不低，查了反而添乱。按语总是成段的。
+WITNESS_PROBE_MIN = 12
+#: 探针归一后至少这么长才判「证人里没有」——太短的串碰巧命中/落空都不说明问题。
+WITNESS_PROBE_MIN_PROBE = 6
+#: 卷末题的字数范围。「北行日錄下完」6 字；短于 5 字（两三字的卷次、页码）
+#: 不足以断定，长于 12 字多半是正文末列没写满，不是题。
+WITNESS_COL_MIN = 4
+WITNESS_COL_MAX = 12
+
+
+def _mostly_absent(probe: str, cn: str, k: int = 4, hit_max: float = 0.25) -> bool:
+    """这段文字**整体**不在证人里吗——按 k-gram 命中率判，不是整串精确匹配。
+
+    整串匹配对「一个字对不上」毫无容错：p24 第 1 列是正文，只因整理本作「廪」
+    而刻本刻「廩」（异体表没收），整串落空、正文列被误摘。
+    题名的特征是**整条都不在证人里**（命中率≈0），正文则哪怕个别字认错，
+    其余 k-gram 仍大面积命中。0.25 这个线拉得很松：宁可漏摘题名，不可误摘正文。
+
+    ⚠️ 判据不是「这些 k-gram 在证人里出现过吗」，而是「它们**连在一处**出现吗」。
+    按语恰恰会**大段引用**上卷原文（bxgb p56 那段引了「行三十里飯黃碧二十八里」），
+    按「出现过」算命中率接近 1，会被当成正文放过去。但那些引文散落在证人的
+    不同位置，**没有一个连续区间能同时装下它们**——正文则一定有。
+    """
+    if len(probe) <= 8:
+        # 短串 k-gram 太少，统计不出「大面积命中」：卷末题「北行日錄下完」只有
+        # 3 个 4-gram，而「北行日錄」在证人里是书名、必然命中。短串回到整串
+        # 精确匹配——它们本来就短，一个字对不上的风险低。
+        return probe not in cn
+    grams = [probe[i:i + k] for i in range(len(probe) - k + 1)]
+    if not grams:
+        return probe not in cn
+    # 以首个命中的 k-gram 为锚，看在它附近 ±len(probe) 的窗口里能命中多少——
+    # 正文连成一片（命中率高），按语的引文散在各处（窗口里捞不回来）。
+    best = 0.0
+    for g0 in grams[:6]:
+        at = cn.find(g0)
+        while at >= 0:
+            lo, hi = max(0, at - len(probe)), at + 2 * len(probe)
+            win = cn[lo:hi]
+            hit = sum(1 for g in grams if g in win) / len(grams)
+            best = max(best, hit)
+            if best > hit_max:
+                return False
+            at = cn.find(g0, at + 1)
+            if at > lo + 4 * len(probe):
+                break
+    return best <= hit_max
+
+
+def witness_absent_runs(slots: list[dict], corpus: str,
+                        corpus_norm: str | None = None) -> list[dict]:
+    """找出**整理本里根本没有**的夾注段（校勘按语那种）。
+
+    ## 为什么要单独挑出来
+
+    bxgb p56 的卷末有一段 68 字的校勘按语：「案上卷…行三十里飯黃碧二十八里…
+    此云過永康數里飯至李溪晚過黃壁…壁與黃碧係□處而壁碧互異姑各仍原文」——
+    **校勘者在比对上卷与本卷的异文**。整理本把这段按语删掉了（末尾直接接
+    「喜可知也 / 攻媿先生文集卷第一百二十」）。
+
+    于是 8-gram 锚定拿整页 170 字去投票，前 5 字「接晚過黃壁」命中了整理本
+    第 18251 字，整页按那个偏移对齐——而后面 160 字在整理本里压根不存在，
+    逐字比对自然全错，报成 61 条「改/增删」。
+
+    **这不是锚定算法的 bug，也不是识别错**：图、转写都对，是「拿有按语的页
+    去跟删了按语的整理本逐字比」这件事本身不成立。把它当差异报出来，
+    等于让人去复核一段根本不该比的文字。
+
+    ## 判据：直接查证人里有没有，不猜「案」字
+
+    起初想按起头字认（「案」「按」起头的是按语），但全书四段夾注的起头字是
+    張 / 或 / 並 / 案，只有一段是按语——**样本太少，认字头就是过拟合**。
+    改成直接拿这段文字去整理本里查：在就比，不在就不比。这是**可直接核实的
+    事实**，不是推断，且换一本书照样成立。
+
+    实测 bxgb 四段夾注：p8「張說張掄…」、p33「或云劉李河」、p46「並六十陌」
+    三段整理本都有（照常比对），只有 p56 那段没有。
+    """
+    vm = _vm()
+    cn = corpus_norm if corpus_norm is not None else vm.normalize_text(corpus)
+    out: list[dict] = []
+
+    def _absent(t: str) -> bool:
+        """这段文字在整理本里找不到吗。
+
+        按**异体归一后**比：整理本作「北行日録」而刻本刻「北行日錄」，
+        原串比对会把卷端题误判成「证人里没有」。归一层正是为这种字形差异准备的。
+        整段可能含 □（排除名单）或个别识别错，所以只拿段首一小截当探针。
+        """
+        probe = vm.normalize_text(t[:10]).replace("□", "")
+        return len(probe) >= WITNESS_PROBE_MIN_PROBE and probe not in cn
+
+    # 1) 夾注段（连续带 sub 的格）——校勘按语多半在这里
+    runs: list[list[dict]] = []
+    cur: list[dict] = []
+    for s in slots:
+        if s["sub"]:
+            cur.append(s)
+        else:
+            if cur:
+                runs.append(cur)
+            cur = []
+    if cur:
+        runs.append(cur)
+    for r in runs:
+        t = "".join(x["char"] for x in r)
+        if len(t) >= WITNESS_PROBE_MIN and _absent(t):
+            out.append({"ids": [x["id"] for x in r], "text": t, "kind": "夾注",
+                        "col": r[0]["col"], "n": len(r)})
+
+    # 2) 末列的卷末题。bxgb p56 第 13 列「北行日錄下完」是刻本的卷末题，
+    # 整理本是文集本、作「攻媿先生文集卷第一百二十」，两边体例不同。
+    #
+    # ⚠️ **只查本页最后一列，且必须整列都不在证人里**（2026-09-22 踩过）：
+    # 起初对**每一列**都做这个判断，结果把 302 段、6,167 字的**正文**摘掉了
+    # ——正文列在整理本里是连续文本，但整理本有分页、有异体、有个别识别错，
+    # 「整列原样连续命中」这个条件正文本来就满足不了。字位数从 18,237 掉到
+    # 12,138、「刻本多」暴涨到 930，一眼可见。卷末题的特征是**位置在末列**
+    # 且**自成一体**，不是「长得不像正文」。
+    # 首列/次列的**卷端题**同理：bxgb p3 第 2 列「宋樓鑰𢰅」是刻本的撰人题，
+    # 整理本（文集本）作「四明樓鑰大防」并接生平「時待次溫州教授隨侍充公守括蒼…」。
+    # 两边体例不同，逐字比会把 4 个格配成 宋→州、樓→教、鑰→授、𢰅→隨 四条假「改」
+    # 外加一条 16 字 missing——**一处体例差异报成五条**。
+    #
+    # 只查**页首两列**与**末列**：卷端题/卷末题就在这几个位置，正文列一律不碰。
+    body_cols = sorted({s["col"] for s in slots if not s["sub"]})
+    cand = set(body_cols[:2] + body_cols[-1:]) if body_cols else set()
+    for col in sorted(cand):
+        cs = [s for s in slots if s["col"] == col and not s["sub"]]
+        taken = {i for a in out for i in a["ids"]}
+        if (WITNESS_COL_MIN <= len(cs) <= WITNESS_COL_MAX
+                and not any(x["id"] in taken for x in cs)):
+            t = "".join(x["char"] for x in cs)
+            probe = vm.normalize_text(t).replace("□", "")
+            # ⚠️ 不能只查整串在不在——**一个字对不上就全串落空**。p24 第 1 列
+            # 「此也有滑臺本鄭之廩延」是**正文**，整理本作「廪」而刻本刻「廩」
+            # （异体表没收这一对），整串就查不到，正文列于是被误摘。
+            # 改查**滑动窗口**：题名与正文的区别是「整条都不在证人里」，
+            # 而正文哪怕有个别字对不上，其余 4-gram 仍大面积命中。
+            if probe and _mostly_absent(probe, cn):
+                kind = "卷末题" if col == body_cols[-1] else "卷端题"
+                out.append({"ids": [x["id"] for x in cs], "text": t, "kind": kind,
+                            "col": col, "n": len(cs)})
+    return out
+
+
 def diff_page(slots: list[dict], corpus: str, index: dict, pad: int = WINDOW_PAD,
-              vm: VariantMap | None = None) -> tuple[list[dict], dict]:
-    """→ (差异条目, 统计)。锚不上时返回 ([], {"anchored": False})。"""
+              vm: VariantMap | None = None, corpus_norm: str | None = None) -> tuple[list[dict], dict]:
+    """→ (差异条目, 统计)。锚不上时返回 ([], {"anchored": False})。
+
+    整理本里没有的夾注段（校勘按语，见 `witness_absent_runs`）**先摘出去再对齐**：
+    留着它们不但自己全报成差异，还会把整页的锚点带偏。
+    """
+    absent = witness_absent_runs(slots, corpus, corpus_norm)
+    skip = {i for a in absent for i in a["ids"]}
+    if skip:
+        slots = [s for s in slots if s["id"] not in skip]
     text = "".join(s["char"] for s in slots)
     offset = anchor_page(text, index)
     stat = {"anchored": offset is not None, "n_slots": len(slots), "equal": 0,
-            "excluded": sum(1 for s in slots if s["excluded"])}
+            "excluded": sum(1 for s in slots if s["excluded"]),
+            # 摘出去的按语段：不进差异表，但要在报告里说明「这里有一段、整理本没有」，
+            # 否则读者会奇怪这页字数怎么对不上。
+            "absent_runs": absent}
     if offset is None:
         return [], stat
     # 窗口头尾各留 pad：投票偏移会被页内多出/漏掉的格带偏几字（页首两格空着的纪年行、
@@ -269,7 +441,11 @@ def _load_cell(cache: ImageCache, book: str, page: int, col: int, slot: int, sub
     p = cache.get(book, "char_patch", cell_key(page, col, slot) + sub)
     if p is None:
         return None
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    # ⚠️ 必须走 utils.image_io.imread（np.fromfile + imdecode），不能用 cv2.imread：
+    # OpenCV 在 Windows 下按 ANSI 编码传路径，工作区目录名一带中文就恒返回 None
+    # （2026-09-22 实测：`988g7gsqhd-北行日錄…` 下 545 条截条图**全部为空**，
+    # 报告里每条差异旁边都是「无图」，而生成过程一句错都不报）。
+    img = imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
     w = max(1, int(round(img.shape[1] * h / img.shape[0])))
@@ -278,28 +454,45 @@ def _load_cell(cache: ImageCache, book: str, page: int, col: int, slot: int, sub
 
 def strip_b64(cache: ImageCache, book: str, page: int, col_slots: list[dict], k: int,
               radius: int, h: int) -> str | None:
-    """同列第 k 格上下各 radius 格的竖条，目标格红框。→ PNG base64。"""
+    """目标格前后各 radius 格，**横排**成一条，目标格红框。→ WebP base64。
+
+    ## 为什么横排、为什么只截 ±2
+
+    旧版是竖排 ±5 格：11 个字块each 40px 叠起来近 500px 高，一条差异占掉整屏，
+    545 条就是 545 屏，「看得很累」（用户 2026-09-22）。古籍是竖排，所以竖着截
+    看似天经地义——但**报告不是书**：报告要的是「一眼看清这个字长什么样、左右
+    邻字是什么」，上下文有文字那两行管够，图只需要认字。
+
+    横排后一条高 ~48px、宽 ~5 格，正好嵌在文字行旁边，一屏能排十几条；同一个
+    `radius` 下，竖排占的是**高度**（稀缺，决定翻多少屏），横排占的是**宽度**
+    （富余，1100px 版心放得下 5 格还有余）。
+
+    ±2 而不是 ±5：定字要的是紧邻上下文，隔 5 个字的邻居对认字没有帮助，只是
+    把图撑大。真要看长上下文，条目下面的两行文字转写给的是 ±5 字，比图好读。
+
+    竖排的字块横过来拼，读序仍是原来的阅读序（从右到左是刻本行序，这里按
+    从左到右排，与下面的文字转写同向——两者对照时不用在脑子里翻转）。
+    """
     lo, hi = max(0, k - radius), min(len(col_slots), k + radius + 1)
     cells = []
     for i in range(lo, hi):
         s = col_slots[i]
         img = _load_cell(cache, book, page, s["col"], s["slot"], s["sub"], h)
         if img is None:
-            img = np.full((h, h, ), 235, np.uint8)
+            img = np.full((h, h), 235, np.uint8)
         cells.append((i == k, img))
     if not cells:
         return None
-    w = max(c.shape[1] for _, c in cells) + 6
-    gap = 3
-    total_h = sum(c.shape[0] for _, c in cells) + gap * (len(cells) - 1) + 6
-    canvas = np.full((total_h, w, 3), 255, np.uint8)
-    y = 3
+    gap, pad = 4, 3
+    total_w = sum(c.shape[1] for _, c in cells) + gap * (len(cells) - 1) + pad * 2
+    canvas = np.full((h + pad * 2, total_w, 3), 255, np.uint8)
+    x = pad
     for is_t, c in cells:
-        x = (w - c.shape[1]) // 2
+        y = pad + (h - c.shape[0]) // 2
         canvas[y:y + c.shape[0], x:x + c.shape[1]] = cv2.cvtColor(c, cv2.COLOR_GRAY2BGR)
         if is_t:
             cv2.rectangle(canvas, (x - 2, y - 2), (x + c.shape[1] + 1, y + c.shape[0] + 1), (30, 38, 179), 2)
-        y += c.shape[0] + gap
+        x += c.shape[1] + gap
     return _b64(canvas)
 
 
@@ -321,9 +514,13 @@ def _e(s) -> str:
 
 
 def _src_badge(src: str) -> str:
-    cls = "human" if src == "human" else ("auto" if src.startswith("auto") else "guess")
-    label = {"human": "人裁", "ctx": "上下文猜", "lib": "库猜", "ocr": "OCR猜", "none": "无候选",
-             "excluded": "排除"}.get(src, src.replace("auto:", "自动·"))
+    # `auto:human` 是 seed_admit 的 human **通道**（这格因为有人裁记录才放行），
+    # 与顶层 `human`（本次转写直接取人裁 shape）是两回事，但对读报告的人是同一件事：
+    # 这个字人看过。都标「人裁」，别端出「自动·human」这种内部通道名。
+    human_like = src in ("human", "auto:human")
+    cls = "human" if human_like else ("auto" if src.startswith("auto") else "guess")
+    label = {"human": "人裁", "auto:human": "人裁", "ctx": "上下文猜", "lib": "库猜",
+             "ocr": "OCR猜", "none": "无候选", "excluded": "排除"}.get(src, src.replace("auto:", "自动·"))
     return f'<span class="src {cls}">{_e(label)}</span>'
 
 
@@ -366,25 +563,80 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
         return f"""<div class="ent" data-kind="{e['kind']}" data-page="{e['page']}">
   {img}
   <div class="body">
-    <div class="head"><span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])} {doubts}</div>
-    <div class="pair"><span class="k">刻本</span><span class="gl big">{_e(e['hyp']) or '—'}</span>
-      <span class="k">整理本</span><span class="gl big">{_e(e['ref']) or '—'}</span></div>
+    <div class="head"><span class="pair"><span class="gl big">{_e(e['hyp']) or '—'}</span><span class="arr">→</span><span class="gl big">{_e(e['ref']) or '—'}</span></span>
+      <span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])} {doubts}</div>
     <div class="ctx"><span class="k">转写</span><span class="gl">{_e(e['hyp_ctx'])}</span></div>
     <div class="ctx"><span class="k">整理本</span><span class="gl">{_e(e['ref_ctx'])}</span></div>
   </div>
 </div>"""
 
-    sections = []
-    for k in ("substitution", "missing", "extra", "unreadable"):
-        es = [e for e in entries if e["kind"] == k]
+    def gap_html(e: dict) -> str:
+        """增删（脱衍）**只出文字，不出图**（用户 2026-09-22）。
+
+        增删要看的是「整理本在这里多了/少了什么」——那是**文本层**的事，
+        字块图帮不上忙：`missing` 那一侧刻本压根没有格子，图只能显示邻近几个
+        无关的字。以**我们的文本为基准**报，方向写清楚。
+        """
+        n = e.get("n", 1)
+        if e["kind"] == "missing":
+            verb, seg = "整理本多出", e["ref"]
+        else:
+            verb, seg = "整理本无（刻本多出）", e["hyp"]
+        big = "seg" if len(seg or "") > 2 else ""
+        return f"""<div class="ent gap" data-kind="{e['kind']}" data-page="{e['page']}">
+  <div class="head"><span class="gapverb">{verb}</span><span class="gl big {big}">{_e(seg) or '—'}</span>
+    <span class="cnt-inline">{n} 字</span><span class="mono">{_e(e['id'])}</span> {_src_badge(e['source'])}</div>
+  <div class="ctx"><span class="k">我方</span><span class="gl">{_e(e['hyp_ctx'])}</span></div>
+  <div class="ctx"><span class="k">整理本</span><span class="gl">{_e(e['ref_ctx'])}</span></div>
+</div>"""
+
+    # 分层：把「我们录错了」从「两个本子本来就不同」里分出来（见 report/collation_grade.py）。
+    # 平表按 kind 排，答的是「字面一不一样」；按 grade 排，答的是「这条要不要人去看」——
+    # 后者才是看报告的人真正要问的。存疑那层排最前，成果那几层折叠起来。
+    # 锚定**失败**的页已经单独报了（`unanch`），不再重复计进「整段错位」——
+    # 那些页压根没出差异条目，混进来只会让同一页在两处各报一次。
+    mis = misanchored_pages(page_stats) - set(unanchored)
+    gsum = summarize(entries, mis)
+    counts, by = gsum["counts"], gsum["by_grade"]
+
+    def grade_section(g: str, *, open_: bool) -> str:
+        es = by.get(g) or []
         if not es:
-            continue
-        cnt = f"{len(es)} 处 · {sum(e.get('n', 1) for e in es)} 字" if k == "missing" else str(len(es))
-        sections.append(f'<section id="k-{k}"><h2>{_e(KIND_LABEL[k])} <span class="cnt">{cnt}</span></h2><div class="ents">'
-                        + "".join(entry_html(e) for e in es) + "</div></section>")
+            return ""
+        note = GRADE_NOTE.get(g, "")
+        render = gap_html if g == "gap" else entry_html
+        inner = "".join(render(e) for e in es)
+        return (f'<details id="g-{g}"{" open" if open_ else ""}><summary>'
+                f'<span class="gname">{_e(GRADE_LABEL[g])}</span>'
+                f'<span class="cnt">{len(es)}</span>'
+                f'<span class="gnote">{_e(note)}</span></summary>'
+                f'<div class="ents">{inner}</div></details>')
+
+    sections = [grade_section("suspect", open_=True)]
+    sections += [grade_section(g, open_=False)
+                 for g in ("misanchor", "gap", "human", "taboo", "systematic", "variant")]
 
     unanch = (f"<p class='warn'>锚定失败 {len(unanchored)} 页：{', '.join('p%d' % p for p in unanchored)}"
               f"——转写与整理本对不上号（整理本缺这段，或这页转写噪声太大），不在下表内。</p>" if unanchored else "")
+    # 整理本没有的夾注段（校勘按语）：单独说明，不进差异表。
+    # 这是**结论**不是警告——「这里有一段按语、整理本删了」本身就是对勘的一项发现。
+    absent_rows = [(p, a) for p, s in sorted(page_stats.items())
+                   for a in (s.get("absent_runs") or [])]
+    absent_html = ""
+    if absent_rows:
+        items = "".join(
+            f"<li><b>p{p} 第 {a['col']} 列</b>，{a['n']} 字{a.get('kind', '夾注')}："
+            f"<span class='gl'>{_e(a['text'][:80])}{'…' if len(a['text']) > 80 else ''}</span></li>"
+            for p, a in absent_rows)
+        absent_html = (
+            f"<section id='absent'><h2>整理本无此段 <span class='cnt'>{len(absent_rows)}</span></h2>"
+            f"<p class='muted'>这几段文字<b>在整理本里查不到</b>：刻本所附的<b>校勘按语</b>、"
+            f"<b>卷末题</b>之类——整理本另有体例（bxgb 的证人是文集本，卷末作"
+            f"「攻媿先生文集卷第一百二十」而非刻本的「北行日錄下完」），不收这些。"
+            f"它们<b>不进下面的差异表</b>：拿它们逐字比对只会报出一片"
+            f"「改/增删」，而图与转写都没错，是「有按语的页 × 删了按语的整理本」这件事本身不成立。"
+            f"判据是<b>直接拿这段文字去整理本里查有没有</b>，不靠认「案」「按」字头。</p>"
+            f"<ul class='absent'>{items}</ul></section>")
     trunc = (f"<p class='warn'>截条图只出了前 {meta['strips']} 条（--limit-strips），其余只有文字上下文。</p>"
              if meta.get("truncated") else "")
 
@@ -409,6 +661,19 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   .stat {{ border-top:2px solid var(--ink); padding:.4rem 0; }}
   .stat b {{ display:block; font-family:var(--serif); font-size:1.5rem; line-height:1.2; }}
   .stat span {{ font-size:.8rem; color:var(--mute); }}
+  .stat.todo {{ border-top-color:var(--zhu); }}  .stat.todo b {{ color:var(--zhu); }}
+  .stat.ok {{ border-top-color:var(--ok); }}
+  ul.absent {{ margin:.4rem 0 0; padding-left:1.2rem; }}
+  ul.absent li {{ margin:.35rem 0; line-height:1.9; }}
+  .lede {{ font-size:1.05rem; line-height:1.85; margin:.2rem 0 1.1rem; max-width:62ch; }}
+  .lede b {{ font-family:var(--serif); }}
+  details {{ border-top:1px solid var(--rule); margin:0; }}
+  details[open] {{ padding-bottom:1.2rem; }}
+  summary {{ cursor:pointer; padding:.85rem 0; display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap; font-family:var(--serif); }}
+  summary::marker {{ color:var(--mute); }}
+  .gname {{ font-size:1.15rem; font-weight:700; }}
+  #g-suspect .gname {{ color:var(--zhu); }}
+  .gnote {{ font-family:var(--sans); font-size:.82rem; color:var(--mute); font-weight:400; }}
   .tw {{ overflow-x:auto; margin:0 0 1rem; border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); }}
   table {{ border-collapse:collapse; width:100%; font-size:.86rem; }}
   th,td {{ text-align:left; vertical-align:middle; padding:.32rem .6rem; border-bottom:1px solid var(--rule); }}
@@ -418,13 +683,20 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   .gl.big {{ font-size:1.7rem; line-height:1.1; }}
   .th {{ height:44px; border:1px solid var(--rule); background:#fff; margin-right:.25rem; vertical-align:middle; }}
   .muted {{ color:var(--mute); }} .warn {{ color:var(--zhu); }}
-  .ents {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(30rem,1fr)); gap:0 2.5rem; }}
-  .ent {{ display:grid; grid-template-columns:auto 1fr; gap:.9rem; padding:.7rem 0; border-bottom:1px solid var(--rule); min-width:0; }}
-  .ent .strip {{ background:#fff; border:1px solid var(--rule); display:block; }}
-  .ent .strip.nop {{ width:52px; min-height:8rem; color:var(--mute); font-size:.7rem; display:flex; align-items:center; justify-content:center; }}
-  .ent .head {{ font-size:.8rem; color:var(--mute); display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }}
-  .ent .pair {{ display:flex; align-items:baseline; gap:.5rem 1rem; margin:.25rem 0; flex-wrap:wrap; }}
-  .ent .pair .big {{ word-break:break-all; }}
+  /* 截条横排后条目改成上下堆叠：图一条（~48px 高）压在文字上面，整条不到 8rem。
+     旧版竖条 ~500px 高、图文左右并排，一条就是一屏（用户 2026-09-22「看的很累」）。
+     两列布局在 1100px 版心下每列 ~30rem，一屏能排 6–8 条。 */
+  .ents {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(26rem,1fr)); gap:0 2.5rem; }}
+  .ent {{ padding:.6rem 0; border-bottom:1px solid var(--rule); min-width:0; }}
+  .ent .strip {{ background:#fff; border:1px solid var(--rule); display:block; max-width:100%; margin:0 0 .35rem; }}
+  .ent .strip.nop {{ height:2.6rem; color:var(--mute); font-size:.7rem; display:flex; align-items:center; padding:0 .5rem; }}
+  /* 「刻本 X → 整理本 Y」并进 id 那一行：旧版它独占一行、两个大字中间还夹着两个
+     标签，一条条目因此多占一行半。图上已有红框指明是哪一格，两行文字上下文也带
+     【】标记，这里只要把两个字并排摆出来就够，不必再写「刻本」「整理本」四个字。 */
+  .ent .head {{ font-size:.8rem; color:var(--mute); display:flex; gap:.45rem; flex-wrap:wrap; align-items:baseline; }}
+  .ent .pair {{ display:inline-flex; align-items:baseline; gap:.3rem; margin-right:.25rem; }}
+  .ent .pair .big {{ word-break:break-all; font-size:1.35rem; }}
+  .ent .arr {{ color:var(--mute); font-size:.85rem; }}
   .ent .k {{ font-size:.72rem; color:var(--mute); letter-spacing:.06em; margin-right:.3rem; }}
   .ent .ctx {{ font-size:.95rem; }}
   .src {{ font-family:var(--mono); font-size:.68rem; padding:.05em .45em; border-radius:2px; border:1px solid var(--rule); }}
@@ -442,16 +714,26 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
 <header>
   <div class="eyebrow">open-guji-cv · 对勘 · {_e(meta['built_at'])} · 转写 = 人裁 &gt; 自动放行 &gt; 上下文 &gt; 库 &gt; OCR</div>
   <h1>{_e(book)} 对勘</h1>
+  <p class="lede">全书 <b>{n_slots:,}</b> 字位，与整理本一致 <b>{n_equal:,}</b>（{n_equal / max(1, n_slots) * 100:.1f}%）。
+    其余 <b>{len(entries)}</b> 处差异里，<b>{gsum['n_settled']}</b> 处是两个本子的真实不同（避諱改字、正俗、异体、人裁定字，<b>转写忠于刻本，不用改</b>）；
+    <b>{counts.get('gap', 0)}</b> 处增删、<b>{counts.get('misanchor', 0)}</b> 处整段错位（对齐问题，非逐字认错）；
+    真正<b>存疑待覈的只有 {gsum['n_todo']} 处</b>。</p>
   <div class="summary">
-    <div class="stat"><b>{len(pages)}</b><span>页（锚定 {len(pages) - len(unanchored)}）</span></div>
-    <div class="stat"><b>{n_slots:,}</b><span>字位（排除名单 {n_excl}）</span></div>
-    <div class="stat"><b>{n_equal:,}</b><span>与整理本一致</span></div>
-    <div class="stat"><b>{kc.get('variant', 0)}</b><span>异体（{len(variant_pairs)} 对）</span></div>
-    <div class="stat"><b>{kc.get('substitution', 0) + kc.get('missing', 0) + kc.get('extra', 0) + kc.get('unreadable', 0)}</b><span>增删改（人裁 {n_src.get('human', 0)} · 自动 {n_src.get('auto', 0)} · 机器猜 {n_src.get('ctx', 0) + n_src.get('lib', 0) + n_src.get('ocr', 0) + n_src.get('none', 0)}）</span></div>
+    <div class="stat todo"><b>{counts.get('suspect', 0)}</b><span>存疑·待覈</span></div>
+    <div class="stat ok"><b>{counts.get('human', 0)}</b><span>人裁定字</span></div>
+    <div class="stat ok"><b>{counts.get('taboo', 0)}</b><span>避諱改字</span></div>
+    <div class="stat ok"><b>{counts.get('systematic', 0)}</b><span>正俗·异体（系统性）</span></div>
+    <div class="stat ok"><b>{counts.get('variant', 0)}</b><span>异体（{len(variant_pairs)} 对）</span></div>
+    <div class="stat"><b>{counts.get('gap', 0)}</b><span>增删（脱衍）</span></div>
+    <div class="stat"><b>{counts.get('misanchor', 0)}</b><span>整段错位{(" · p" + "、p".join(str(p) for p in sorted(mis))) if mis else ""}</span></div>
   </div>
+  <p class="muted" style="font-size:.82rem">分层判据：避諱字表 + 同一字对全书重复 ≥3 次 + 异体关系图（见 <code>report/collation_grade.py</code>）。
+    <b>分层是排序不是闸</b>——落进「存疑」不等于错，落进「版本差异」也不等于一定对。
+    {len(pages)} 页（锚定 {len(pages) - len(unanchored)}）· 排除名单 {n_excl} 格不进比对 ·
+    转写来源：人裁 {n_src.get('human', 0)} · 自动 {n_src.get('auto', 0)} · 机器猜 {n_src.get('ctx', 0) + n_src.get('lib', 0) + n_src.get('ocr', 0) + n_src.get('none', 0)}</p>
   {unanch}{trunc}
 </header>
-<nav><a href="#pages">按页</a><a href="#variants">异体字</a>{"".join(f'<a href="#k-{k}">{_e(KIND_LABEL[k])} {kc.get(k, 0)}</a>' for k in ("substitution", "missing", "extra", "unreadable") if kc.get(k))}</nav>
+<nav><a href="#g-suspect">存疑 {counts.get('suspect', 0)}</a>{"".join(f'<a href="#g-{g}">{_e(GRADE_LABEL[g])} {counts.get(g, 0)}</a>' for g in ("misanchor", "gap", "human", "taboo", "systematic", "variant") if counts.get(g))}{'<a href="#absent">整理本无此段 %d</a>' % len(absent_rows) if absent_rows else ''}<a href="#pages">按页</a><a href="#variants">异体字</a></nav>
 
 <section id="pages"><h2>按页</h2>
 <div class="tw"><table><thead><tr><th>页</th><th>字位</th><th>一致</th>{"".join(f"<th>{_e(KIND_LABEL[k].split('（')[0])}</th>" for k in KINDS)}<th>排除</th></tr></thead>
@@ -471,6 +753,7 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
   <label><input type="checkbox" id="fh"> 只看非人裁</label>
   <span class="muted" id="fc"></span>
 </div>
+{absent_html}
 {"".join(sections)}
 
 <div class="foot">整理本 {_e(meta['corpus'])} · 锚定 8-gram + WINDOW_PAD {WINDOW_PAD} · 异体判定 = variants.json 有边 或 VariantMap 语义相同 · 生成 scripts/build_collation_report.py · {_e(meta['built_at'])}</div>
@@ -488,7 +771,13 @@ def render(book: str, pages: list[int], page_stats: dict, entries: list[dict],
       e.hidden=!ok; if(ok)n++;
     }}
     fc.textContent='显示 '+n+' / '+ents.length;
-    document.querySelectorAll('section[id^=k-]').forEach(s=>{{ s.hidden=![...s.querySelectorAll('.ent')].some(e=>!e.hidden); }});
+    // 分层用 <details id="g-…">，不再是 section[id^=k-]；整层空了就藏掉，
+    // 并把层标题上的计数改成「当前显示数」，否则筛完标题还写着全量数，对不上。
+    document.querySelectorAll('details[id^=g-]').forEach(s=>{{
+      const vis=[...s.querySelectorAll('.ent')].filter(e=>!e.hidden).length;
+      s.hidden=!vis;
+      const c=s.querySelector('summary .cnt'); if(c) c.textContent=vis;
+    }});
   }}
   fk.forEach(c=>c.onchange=apply); fp.oninput=apply; fh.onchange=apply; apply();
 }})();
@@ -502,10 +791,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="对勘报告")
     ap.add_argument("--book", default="vol01")
     ap.add_argument("--pages", default="", help="页表达式；空 = 全部有产物的正文页")
-    ap.add_argument("--corpus", default=DEFAULT_CORPUS)
+    ap.add_argument("--corpus", default="",
+                    help="整理本语料路径；空 = 按 books/<book>.yaml 的 references[0] 取本册自己那份")
     ap.add_argument("--out", default=None, help="HTML 输出（默认 output/collation_<book>.html）")
-    ap.add_argument("--strip", type=int, default=5, help="截条上下各几格")
-    ap.add_argument("--thumb-h", type=int, default=40, help="每格缩放到多高（px）")
+    ap.add_argument("--strip", type=int, default=2, help="截条目标格前后各几格（横排，见 strip_b64）")
+    ap.add_argument("--thumb-h", type=int, default=44, help="每格缩放到多高（px）")
     ap.add_argument("--limit-strips", type=int, default=1500, help="最多出多少条截条图（控体积）")
     ap.add_argument("--variant-examples", type=int, default=3)
     a = ap.parse_args()
@@ -517,9 +807,22 @@ def main() -> int:
     # 只留汉字再锚定/对齐：整理本里夹着抬头码（⏎b1 / c3 / a1）、全角空格、行末连字符「-」，
     # 8-gram 投票按原文位置数偏移，页内一有这些标记，页首就会锚晚几字，
     # 开头那几格全成「刻本多」（dev_set p26「乾隆四十一年七」×7 就是这么来的）
-    raw = (REPO / a.corpus).read_text(encoding="utf-8")
+    # 语料按册取（`steps/align_ref.book_corpus`，读 books/<id>.yaml 的 references[0]），
+    # 不再缺省指向刻本链那份总目语料。缺省值写死 + `REPO / a.corpus` 锚 cv 仓，是两个
+    # 叠一起的老毛病：北行日錄的语料在**工作区** corpus/ 下，两条路都够不着，于是
+    # `--book bxgb` 直接 FileNotFoundError；真凑巧撞上同名文件则更糟——拿别册的
+    # 整理本对勘，差异表会整片虚高而不报错（与 Step5-b、context_decide 的同型坑一样）。
+    # 显式给 --corpus 的照用，相对路径仍按 cv 仓解析（老用法不破）。
+    from open_guji_cv.steps.align_ref import book_corpus
+    corpus_file = Path(a.corpus) if a.corpus else Path(book_corpus(a.book))
+    if not corpus_file.is_absolute():
+        corpus_file = REPO / corpus_file
+    raw = corpus_file.read_text(encoding="utf-8")
     corpus = "".join(c for c in raw if is_han(c))
     index = build_ngram_index(corpus)
+    # 归一一次给所有页复用：`witness_absent_runs` 要按异体归一层比（整理本作
+    # 「北行日録」而刻本刻「北行日錄」），逐页重算 18k 字白费 54 遍。
+    corpus_norm = VariantMap.load().normalize_text(corpus)
     truth = load_verdicts(a.book)
     cache = ImageCache()
 
@@ -530,7 +833,7 @@ def main() -> int:
     variant_examples: dict[tuple, list] = defaultdict(list)
     for p in pages:
         slots = page_slots(a.book, p, st, truth)
-        ents, stat = diff_page(slots, corpus, index)
+        ents, stat = diff_page(slots, corpus, index, corpus_norm=corpus_norm)
         page_stats[p] = stat
         if not stat["anchored"]:
             unanchored.append(p)
@@ -558,7 +861,9 @@ def main() -> int:
     n_strip = 0
     truncated = False
     for e in entries:
-        if e["kind"] == "variant":
+        # 异体按对汇总（另有例图），增删只出文字（见 gap_html）——两者都不占截条。
+        if e["kind"] in ("variant", "missing", "extra"):
+            e.pop("_col_slots", None); e.pop("_k", None)
             continue
         if n_strip >= a.limit_strips:
             truncated = True
@@ -567,7 +872,7 @@ def main() -> int:
         e["strip"] = strip_b64(cache, a.book, e["page"], e.pop("_col_slots"), e.pop("_k"), a.strip, a.thumb_h)
         n_strip += 1
 
-    meta = {"built_at": time.strftime("%Y-%m-%d %H:%M"), "corpus": a.corpus,
+    meta = {"built_at": time.strftime("%Y-%m-%d %H:%M"), "corpus": str(corpus_file),
             "strips": n_strip, "truncated": truncated}
     out = Path(a.out) if a.out else REPO / "output" / f"collation_{a.book}.html"
     out.parent.mkdir(parents=True, exist_ok=True)

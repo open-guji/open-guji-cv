@@ -13,15 +13,16 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...render.guji_markdown import render_page
 from ...render.reading_layout import DEFAULT_BASELINE_KG, reflow_page_structured
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 @router.get("/api/step9/render/{book}")
@@ -80,3 +81,13 @@ def api_step9_reflow(book: str, pages: str, baseline_kg: int = DEFAULT_BASELINE_
         })
 
     return {"pages": pages_out, "stale": stale}
+
+
+@router.get("/api/step9/progress/{book}")
+@maps_http
+def api_step9_progress(book: str, pages: str = "all") -> dict:
+    """9.0：页范围内每页还挂着哪些待办（过期/待审/切线/阙文/非字/坏列）。
+    是看板不是闸——有待办也照样允许 9.1/9.2（用户 2026-09-20）。口径见 `report/progress.py`。"""
+    from ...report.progress import page_progress
+    bk = load_book(book)
+    return page_progress(book, bk.resolve_pages(pages), deps.product_store())

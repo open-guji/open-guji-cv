@@ -23,7 +23,12 @@ BENCH = Path("cache/glyph_bench")
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="cache/glyph_cnn/best.pt")
+    # 缺省跟现役 checkpoint 走（cnn_candidates.DEFAULT_CKPT），别再写死路径：
+    # 2026-09-21 实锤——原缺省 `cache/glyph_cnn/best.pt` 是 09-05 的旧模型，本机一直
+    # 留着这个文件，于是不带 --model 跑出来的「r5 基线」其实量的是它，不是 r5，
+    # 而 eval_oov / eval_struct_rerank 缺省都是 DEFAULT_CKPT，三个脚本不同口径。
+    from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT
+    ap.add_argument("--model", default=str(DEFAULT_CKPT))
     ap.add_argument("--split", default="unseen")
     ap.add_argument("--n", type=int, default=0, help="0=全部")
     ap.add_argument("--k", type=int, default=50)
@@ -46,6 +51,11 @@ def main() -> int:
                     help="只评异体子集：char 在 config/charset/variants.tsv 里映射到别字的实例")
     ap.add_argument("--wear", type=float, default=0.0,
                     help="评测时给查询图加磨损：0=不加；0.5=腐蚀+抹白一次；1=两次")
+    ap.add_argument("--real-proto", action="store_true",
+                    help="开真刻例多原型档（R2/T11，cnn_candidates.REAL_PROTO_ENABLED，缺省关）；"
+                         "只对 --emb-mode mean 且不带 --emb-extra 时生效（生产的接线）")
+    ap.add_argument("--real-proto-store", action="append", default=[],
+                    help="真刻例来源 store:<glyph_store 目录>，可重复；配合 --real-proto 用")
     a = ap.parse_args()
 
     import torch
@@ -80,38 +90,21 @@ def main() -> int:
 
     ck = torch.load(a.model, map_location="cpu", weights_only=False)
     classes = ck["classes"]
-    import importlib.util, sys
-    spec = importlib.util.spec_from_file_location("tg", "scripts/train_glyph_cnn.py")
-    # 复用训练脚本里的 Net 定义：把 main 里的类抠出来太绕，这里直接重建同结构
-    import torch.nn as nn, torch.nn.functional as F
-
-    class Block(nn.Module):
-        def __init__(self, i, o, s):
-            super().__init__()
-            self.c1 = nn.Conv2d(i, o, 3, s, 1, bias=False); self.b1 = nn.BatchNorm2d(o)
-            self.c2 = nn.Conv2d(o, o, 3, 1, 1, bias=False); self.b2 = nn.BatchNorm2d(o)
-            self.sc = nn.Sequential(nn.Conv2d(i, o, 1, s, bias=False), nn.BatchNorm2d(o)) if (s != 1 or i != o) else nn.Identity()
-        def forward(self, x):
-            y = F.relu(self.b1(self.c1(x))); y = self.b2(self.c2(y)); return F.relu(y + self.sc(x))
-
-    class Net(nn.Module):
-        def __init__(self, n_cls, n_comp, d=256):
-            super().__init__()
-            self.stem = nn.Sequential(nn.Conv2d(1, 32, 3, 1, 1, bias=False), nn.BatchNorm2d(32), nn.ReLU())
-            self.l1 = Block(32, 64, 2); self.l2 = Block(64, 128, 2); self.l3 = Block(128, 256, 2); self.l4 = Block(256, 256, 2)
-            self.emb = nn.Linear(256 * 16, d); self.cls = nn.Linear(d, n_cls); self.comp = nn.Linear(d, n_comp)
-        def forward(self, x):
-            x = self.l4(self.l3(self.l2(self.l1(self.stem(x)))))
-            e = F.normalize(self.emb(x.flatten(1)), dim=1) * 16.0
-            return e, self.cls(e), self.comp(e)
-
-    net = Net(len(classes), len(ck["comps"]))
+    import torch.nn.functional as F
+    # 网络结构以 cnn_candidates._build_net 为准（2026-09-21 起有可选的结构头/槽位头）：
+    # 这里原来自己抄了一份 Net，r6 checkpoint 多了 struct/slot 两个键就 load 不进来。
+    from open_guji_cv.clustering.cnn_candidates import _build_net
+    net = _build_net(len(classes), len(ck["comps"]),
+                     n_struct=len(ck.get("struct_classes") or ()),
+                     n_slot=len(ck.get("slot_labels") or ()))
     net.load_state_dict(ck["state"]); net.eval()
     cs_idx = {c: i for i, c in enumerate(classes)}
     allowed = torch.tensor([cs_idx[c] for c in cs if c in cs_idx])
 
     emb_mat = None
     emb_chars: list[str] = []
+    real_mat = None
+    real_rows_idx = None
     if a.emb:
         # 复用 CnnCandidates 的落盘模板向量（按 checkpoint 指纹 + 字表），
         # 免得每个配置重算 4,636 × 4 张渲染——扫权重时这是 90% 的耗时。
@@ -122,6 +115,21 @@ def main() -> int:
         if a.emb_mode == "mean" and not a.emb_extra:
             emb_mat, emb_chars = cc_._emb_index(cs)
             emb_owner = None
+            real_mat = real_rows_idx = None
+            if a.real_proto:
+                import open_guji_cv.clustering.cnn_candidates as _cc
+                _cc.REAL_PROTO_ENABLED = True
+                _cc.REAL_PROTO_SPECS = tuple(a.real_proto_store)
+                # 留一法：这批评测字自己的物理格不许进它自己的真刻例模板
+                # （同 5-a 的教训「自证不是证据」），见 `cnn_candidates._real_index`。
+                real_loo = frozenset(it["id"] for it in items if it.get("id"))
+                real = cc_._real_index(cs, emb_chars, real_loo)
+                if real is not None:
+                    real_mat, real_rows_idx, real_iids = real
+                    print(f"真刻例多原型档：{len(real_mat)} 个原型 / "
+                          f"{len(set(real_rows_idx.tolist()))} 字（留一法摘除 {len(real_loo)} 个物理格）")
+                else:
+                    print("真刻例多原型档：开了但没取到任何原型（检查 --real-proto-store）")
         elif a.emb_extra:
             # 外部真刻本模板：每字 = mean(字体渲染向量 ∪ 外部图向量)（--emb-extra-only 时只用外部图）
             from open_guji_cv.clustering.extra_glyphs import load_many
@@ -212,7 +220,10 @@ def main() -> int:
     n = 0
     with torch.no_grad():
         for it in items:
-            img = cv2.imread(it["png"], cv2.IMREAD_GRAYSCALE)
+            # `items.jsonl` 是在 Windows 上建的（`build_glyph_bench.py`），`png` 路径带
+            # `\`——云端跑在 Linux 上，`cv2.imread` 不认反斜杠分隔符，逐条文件读失败但
+            # 不报错、只留 opencv 的 WARN 日志，图直接被判 None 跳过，n 悄悄归零。
+            img = cv2.imread(str(it["png"]).replace("\\", "/"), cv2.IMREAD_GRAYSCALE)
             if img is None:
                 continue
             q = wear(normalize_patch(img)); g = it["char"]; n += 1
@@ -231,6 +242,11 @@ def main() -> int:
             if emb_mat is not None:
                 qe = e_all.mean(0); qe = (qe / (qe.norm() + 1e-9)).numpy()
                 sims = emb_mat @ qe
+                if real_mat is not None:
+                    sr = real_mat @ qe
+                    best = np.full(sims.shape[0], -2.0, np.float32)
+                    np.maximum.at(best, real_rows_idx, sr)
+                    sims = np.maximum(sims, best)
                 if a.emb_mode == "max":
                     best: dict[str, float] = {}
                     for i in np.argsort(-sims):

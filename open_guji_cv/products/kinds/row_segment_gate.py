@@ -34,6 +34,16 @@ class RowSegmentGateColumn(BaseModel):
     """本列 R2s（真粘连）格线数。"""
     n_r2x: int = 0
     """本列 R2x（错切）格线数。"""
+    sliver_slots: list[int] = Field(default_factory=list)
+    """L4（2026-09-18）：本列里**高度远小于一格**的碎格的 slot 号。
+
+    DP 在凑格数时会造出十几像素的碎格（`row_boundaries.BLANK_MIN_RATIO` 注释
+    记过这个病：碎格让后面每一格往上挤，累积成相位错位，而**列格数是对的，
+    字数对账查不出来**）。这是**格子级**判据，闸3 此前只有页级/列级两层。
+
+    实测 bxgb 全书 20446 格只命中 16 个、集中在 8 列（全在 p53），出卡量可控。
+    判据是几何上确定可见的那一类（档 A）——不碰已证否的格高比值与切点局部墨量，
+    那两条对「腰斩」两个方向都不可靠，见《计划书》§3.1 的三条负结果。"""
 
 
 class RowSegmentGateManifest(BaseModel):

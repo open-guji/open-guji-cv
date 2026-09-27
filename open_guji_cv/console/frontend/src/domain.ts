@@ -1,16 +1,7 @@
 // 跨页面借用的领域小工具，对应 v1 static/js/shared/domain.js（原样复用，见方案 §四）。
 
-// 曾经只有 己/已/巳 才分"字形"与"文意"两个输入框（用户 2026-09-04 定，理由见 v1
-// domain.js 注释）。用户 2026-09-11 改口：这三个字的判定与人工确认都只看文意，字形
-// 库也不再为它们分岔存储样本（见 open_guji_cv/clustering/glyph_db.py 的
-// CONFUSABLE_SAMPLE_CAP）——两个框收窄成一个，`needsReading` 永远返回 false。
-// 留着这个函数（而不是删掉三处调用点）是为了给以后别的易混字组复用同一个开关；
-// 真要加新组时改这里就够，不用再碰 ReviewCardView/ReviewPanel/GroupsPanel/JiazhuPanel。
-export const needsReading = (_ch: string) => false
-
-const HAN_RE = /[㐀-鿿\u{20000}-\u{3134f}]/u
-export const readingOf = (v: { reading?: string; shape?: string }) =>
-  v.reading && HAN_RE.test(v.reading) ? v.reading : v.shape || ''
+// 2026-09-26 起没有「读法」：每一格只裁一个字（字形）。己/已/巳 三字刻法不分，裁的就是
+// 按上下文定下的那个字（后端 utils/ji_yi_si.py 会给建议，卡片上一键可点）。
 
 export interface ConsumeResult {
   consume_error?: string

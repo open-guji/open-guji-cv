@@ -4,6 +4,14 @@
 > `open_guji_cv/core/workspace.py` 顶部的 docstring 与其中的 `*_REL` 常量——
 > 改布局要**先改那边、再改这里**，两边不一致时以代码为准。
 >
+> **2026-09-20 迁仓**：各书工作区已并入 **`guji-workspace`** 一个仓（`open-guji/guji-workspace`），
+> 一部书一个目录，目录名 = `<book-index id>-<书名>`，如
+> `96mid1ogzk-欽定四庫全書總目武英殿刻本`。`GUJI_WORKSPACE` / `-w` 指到**书目录**那一层，
+> 书目录内部结构不变。`products/`、`cache/`、`output/glyph.db` 仍不进 git（见书目录的
+> `.gitignore`），换机器要重跑或另行拷贝。控制台 URL 的短 id 由书目录下的
+> `workspace.yaml` 的 `id:` 决定——本仓目录名不以 `-workspace` 结尾，不写这个文件
+> URL 上就是一整串中文。
+>
 > 四个工作区（`siku-zongmu` / `beixingrilu` / `yiwenzhi` / `beixing-guben`）已按此对齐；
 > 各自当下状态与迁移记账在 overview 仓
 > `项目进展/图片初步数字化/进度/总览/08-工作区目录约定.md`。
@@ -66,9 +74,9 @@
 
 ```bash
 # C 层：从工作区真源重建
-GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db rebuild
+python -m open_guji_cv glyph-db rebuild   # 带 book 的命令用 -w <workspace>（2026-09-20 起必填，见下）
 # B 层：从引擎仓字体档重新渲染（四核约 15 分钟）
-GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db import-font
+python -m open_guji_cv glyph-db import-font
 ```
 
 ### 3.1 一本书的字形什么时候「入库」
@@ -100,6 +108,14 @@ GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db import-font
 而它不进 Git。这是一个**已知缺口**：db 可以重跑播种重建（上一次 25 分钟起步），
 但**人裁回流的改判不在重建路径里**，丢了就是丢了。处置见 overview 那篇 §四.2。
 
+> **2026-09-26 实测更正**（本机盘点 `D:\workspace\beixingrilu-workspace`）：北行日錄**现代排印本**的 db 里
+> `human` = 0、`events` = 0，24,884 条全是 align 播种（20,683）＋字体渲染（4,201），**可以重建**；该书两轮人裁在
+> `config/confusable_human.json`（本仓）与 overview `报告/北行日錄校對本订正清单.md`。store 已导出（align 20,683 条），
+> 工作区仍不在任何仓（无 book-index ID）。
+>
+> ⚠️ **只读导出的坑**：`GlyphDB()` 打开老库会跑 `_migrate()` 加列，**会写库**。要不动原库地导出，先拷一份字节副本，
+> `GUJI_GLYPH_DB` 指副本再跑 `snapshot_glyph_store.py`。
+
 新书不要走这条路：**播种进库之后就 `glyph-db export` 出 store**，
 让真源是文本 + PNG，db 退回成可重建的索引。
 
@@ -122,7 +138,7 @@ GUJI_WORKSPACE=<workspace> python -m open_guji_cv glyph-db import-font
 mkdir <book>-workspace && cd <book>-workspace
 mkdir -p books corpus source data_full output products cache \
          review/batches feedback/{events,consumed,verdicts} config reports scripts
-# README.md / .gitignore 照抄 siku-zongmu-workspace 那份，删掉它专有的行
+# README.md / .gitignore 照抄 guji-workspace 里已有的书那份，删掉它专有的行
 git init
 ```
 
@@ -171,3 +187,23 @@ Step2 一行没改，19/20 列过闸。因为 `page_column_windows` 把列定义
 
 北行日錄刻本全书 54 页：54/54 页恰好标出 1 个版心，过闸中位 18/20，
 页级 period 中位 71.0（版式真值 70.6）。
+
+## CLI 的工作区参数（2026-09-20 起）
+
+凡带 `book` 位置参数的命令（pipeline / step / status / preclean / binarize / split / …）
+**必填 `-w/--workspace <仓根>`**，不再读 `GUJI_WORKSPACE` 环境变量兜底：
+
+```
+python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages all -w "D:/workspace/guji-workspace/988g7gsqhd-北行日錄清乾隆道光間長塘鮑氏刊知不足齋叢書之一"
+# 2026-09-20 晚迁入 guji-workspace；路径别手抄：-w "$(python scripts/ws.py path 988g7gsqhd)"
+```
+
+不给报参数错；给了先校验 `<仓根>/books/<book>.yaml` 存在，再把解析结果写进 `GUJI_WORKSPACE`
+供下游用。环境变量若已设且指向别处，以 `-w` 为准并提示。为什么：环境变量漏设时册定义找
+不到（好歹会炸），设错时产物**静默写到别的工作区**——2026-09-19 一天里两次栽在这上面
+（一次后台起跑时变量没带上，一次指着上一本书）。控制台的跑批工单本来就记着工作区，
+`JobSpec.argv()` 会把它作为 `--workspace` 传给子进程。
+
+不带 book 的命令（console / cache / runs / gold …）和 `scripts/` 下的离线台子仍走
+`GUJI_WORKSPACE`。
+

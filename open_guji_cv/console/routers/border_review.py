@@ -12,17 +12,18 @@
 from __future__ import annotations
 
 import cv2
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 import numpy as np
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...core.step import RunContext
 from ...review import border_cards as bc
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 _CARD_BUILDERS = {
     "cols": bc.cols_cards,

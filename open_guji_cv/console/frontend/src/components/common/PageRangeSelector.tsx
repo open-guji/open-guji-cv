@@ -33,6 +33,16 @@ export interface PageRangeTypeFilter<T extends string = string> {
   onChange: (v: T) => void
 }
 
+//: 后端 `resolve_pages` / 各 cases 接口支持的取值。此前前端只在 title 里提了
+//: 三种，`body` / `list:` / `drift` 这些**后端早就支持、前端从没暴露**，
+//: 等于藏起来的功能（《计划书-控制台四板块统一》§1.2）。
+export const PAGE_RANGE_PRESETS: { value: string; label: string; hint: string }[] = [
+  { value: 'all', label: 'all — 全书', hint: '整册所有页' },
+  { value: 'dev_set', label: 'dev_set — 分层小页集', hint: '册 yaml 里固定的那批，历史数字都挂在它上面' },
+  { value: 'body', label: 'body — 正文页', hint: 'page-type 判为正文的页（跳过封面/职名/目录）' },
+  { value: 'drift', label: 'drift — 产物过期的', hint: '上游重跑后金标坐标系可能已失准的那批' },
+]
+
 export interface PageRangeSelectorProps {
   book: string
   stepId: string
@@ -48,12 +58,24 @@ export function PageRangeSelector({ book, stepId, value, onChange, typeFilter }:
     saveSavedPageRange(stepId, book, v)
   }
 
+  // 预设值用下拉快选，手输框仍在——`list:<名字>` / `3-6,9` / `cells:<坐标>`
+  // 这类要打字，不能只给下拉。
+  const preset = PAGE_RANGE_PRESETS.find((p) => p.value === value)?.value ?? ''
+
   return (
     <div className="card">
       <label className="muted">
         页范围 <input value={value} onChange={(e) => handleChange(e.target.value)} size={12}
-                     title="dev_set / body / all，或 3-6,9 这样的页号表达式；控制本页下面的板块" />
+                     title="dev_set / body / all / drift，或 3-6,9 页号表达式、list:<名字>、cells:<坐标表>；控制本页下面所有板块" />
       </label>
+      <select className="muted" value={preset} style={{ marginLeft: '.4rem' }}
+              onChange={(e) => e.target.value && handleChange(e.target.value)}
+              title="常用取值；list: 与页号表达式请直接在左边输入框打字">
+        <option value="">快选…</option>
+        {PAGE_RANGE_PRESETS.map((p) => (
+          <option key={p.value} value={p.value} title={p.hint}>{p.label}</option>
+        ))}
+      </select>
       {typeFilter && (
         <label className="muted" style={{ marginLeft: '.8rem' }}>
           页面类型{' '}

@@ -76,6 +76,30 @@ def attach_gate(step_id: str, gate: GateSpec) -> None:
     step.spec = dataclasses.replace(step.spec, gate=gate)
 
 
+
+def _with_book_corpus(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """参数里的整理本语料没显式指定时，换成**这册书自己的**（`references[0].file`）。
+
+    只对带 `corpus` 字段的参数类生效（`align_ref` / `context_decide`），别的步原样返回。
+    显式传了 `--params corpus=…` 的照用不误——只在「用的还是缺省值」时替换。
+
+    ⚠️ 必须**重新构造**，不能 `model_copy`：`corpus_fingerprint` 是在 `model_post_init`
+    里填的，而 `model_copy` 不触发它——那样换了语料指纹却还是旧的，产物不会 stale，
+    等于换语料不生效。
+
+    2026-09-21 从 `steps/align_ref.py` 搬到这里：原先它只在 `run_page` 里调，
+    `Engine.fingerprint()` 拿到的是没换过的参数，两边算出不同的指纹（见 `params_for`）。
+    """
+    if not hasattr(p, "corpus"):
+        return p
+    from ..steps.align_ref import DEFAULT_CORPUS, book_corpus
+    if p.corpus != DEFAULT_CORPUS:
+        return p
+    want = book_corpus(ctx.book.id)
+    if want == p.corpus:
+        return p
+    return type(p)(**{**p.model_dump(), "corpus": want, "corpus_fingerprint": ""})
+
 # ── 运行上下文 ───────────────────────────────────────────────────────
 class RunContext:
     """一次运行里 Step 看到的全部环境。Step 通过它读上游产物、拿原图、走图像缓存。"""
@@ -94,6 +118,11 @@ class RunContext:
         #: 不传就按册的 edition 选默认管线（`core.pipeline.default_pipeline_id`）——
         #: 控制台 / CLI 那些不经 Engine 直接建 RunContext 的调用点不用改。
         self._pipeline = pipeline
+        #: 格级复用开关（`core/reuse.py`）。环境变量 `GUJI_NO_REUSE=1` 关掉——用环境
+        #: 变量而不是 Step 参数，是因为参数进指纹，加一个参数会让全书产物过期；
+        #: 也不走 Engine 的形参，并行 worker 自己建 ctx、拿不到 Engine。
+        import os as _os
+        self.reuse_enabled = _os.environ.get("GUJI_NO_REUSE") != "1"
 
     @property
     def pipeline(self):
@@ -109,8 +138,25 @@ class RunContext:
 
     # 参数
     def params_for(self, step: "Step") -> BaseModel:
+        """这一步这次跑用的参数。**指纹与 run_page 必须拿到同一份**，所以「按册换语料」
+        这类改写要在这里做，不能留在 `run_page` 里。
+
+        2026-09-21 修：`align_ref` / `context_decide` 的 `corpus` 缺省是四庫總目那份，
+        `run_page` 里用 `_with_book_corpus()` 换成本册自己的整理本并重算 `corpus_fingerprint`，
+        而 `Engine.fingerprint()` 走的是**没换过的**那份——两边算的不是同一个东西，于是
+        这两步**永远判过期，跑多少次都洗不掉**（bxgb 实测：引擎按不存在的
+        `zongmu_wenyuange_wikisource.txt` 算出 `a8c79b1a`，run_page 按
+        `beixingrilu_jiaoduiben.txt` 算出 `a7729ad3`，产物里记的又是上一轮的
+        `4bf07e96`，三个互不相同）。产物内容一直是对的（run_page 用的语料没错），
+        坏的只是新鲜度判断——它长期显示过期，让人分不清真该重跑还是假警报。
+
+        凡是 `references` 指向非缺省语料的书都中招；四庫總目因缺省值恰好就是它的语料，
+        反而不显——**这类"只在别的书上犯"的错，不跨书验就看不见**。
+        """
         p = self.params.get(step.spec.id)
-        return p if p is not None else step.spec.params()
+        if p is None:
+            p = step.spec.params()
+        return _with_book_corpus(p, self)
 
     # 原图（灰度 uint8）。同一页只读一次。
     def raw_page(self, page: int) -> np.ndarray:
@@ -136,6 +182,12 @@ class RunContext:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             if getattr(self.book, "writing_mode", "vertical-rl") == "horizontal-tb":
                 img = np.rot90(img, -1).copy()   # -1 = 顺时针；copy 保证内存连续
+            if getattr(self.book, "binarized_input", False):
+                # 整页二值副本（`book.binarized_input`）。放在旋转**之后**：
+                # Sauvola 的窗口是各向同性的，先转后转结果一样，但纸缘护栏
+                # 按的是「转完之后」的四条边，与下游几何看到的边一致。
+                from ..utils.binarized import binarize_page
+                img = binarize_page(img)
             self._raw[page] = img
         return self._raw[page]
 

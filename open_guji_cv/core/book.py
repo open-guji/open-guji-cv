@@ -10,7 +10,7 @@ import yaml
 
 #: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
 #: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
-#: `siku-zongmu-workspace/books/`。这里只留一个空目录兜底与一条报错提示：
+#: `guji-workspace/<id>-<书名>/books/`。这里只留一个空目录兜底与一条报错提示：
 #: 万一有人往这儿放 yaml，`load_book` 会明确告诉他放错地方了，而不是静默生效
 #: ——那正是「books.yaml 有两份」那条坑的根源（工作区改了没反应，因为读的是这份）。
 BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
@@ -90,6 +90,14 @@ class BookSpec:
     #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
     #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
     ocr_candidates: bool = False
+    #: Step7 铁证放行通道（yaml 的 `iron_gate:`）。**默认关闭**——D 道影子验收
+    #: 2026-09-25～27 全书实测（bxgb、vol03，`open_guji_cv.clustering.iron_evidence`）
+    #: 对人裁核对累计 348 格 0 错，2026-09-27 用户批准转正、按书开（先只给测过的
+    #: 两本书开），见 overview 项目进展/图片初步数字化/进度/Step7-放行判定/
+    #: 任务书-D-铁证放行影子验收.md。**只放行文本，不进字形库**（不写 admissions）——
+    #: 这是用户批复时特意加的口子，避免「自己放行的字变成下次放行的证据」自我强化；
+    #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
+    iron_gate: bool = False
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
     #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。
@@ -142,18 +150,153 @@ class BookSpec:
     #: `leaf_layout`：`single`（一页 = 一个半叶，默认）| `folio`（**筒子页**：一页 =
     #: 一整版 = 两个半叶，中间夹版心/书口）。
     #:
-    #: 筒子页**不必先分页**（beixing-guben 实测：Step1 21 条竖线全探到、Step2 一行
-    #: 没改、19/20 列过闸）——`page_column_windows` 把列定义成相邻两条 `verticals`
-    #: 之间，版心两侧的书口栏线在它眼里就是普通界行；上下版框虽名义上左右半叶各一条，
-    #: 实测两半几乎共线（版心处 y 差 0.1~8.9px，远小于 `column_bounds` 已在处理的
-    #: 14.5px 锚点漂移），一条 `HLine` 够用。
+    #: 筒子页**不必先分页**（beixing-guben 实测：Step2 一行没改就跑通）——
+    #: `page_column_windows` 把列定义成相邻两条 `verticals` 之间，版心两侧的书口栏线
+    #: 在它眼里就是普通界行；上下版框虽名义上左右半叶各一条，实测两半几乎共线
+    #: （版心处 y 差 0.1~8.9px，远小于 `column_bounds` 已在处理的 14.5px 锚点漂移），
+    #: 一条 `HLine` 够用。
     #:
-    #: 代价是**版心占掉一个列位**：`expected_cols` 要按整版填（10 + 版心 + 10 = 20），
-    #: 且下游必须把版心那一列排除在正文之外——这就是 `border_detect` 产
-    #: `line_index` 把它标成 `margin` 的原因。
+    #: 代价是**版心占掉一个列位**：`expected_cols` 要按整版填（北行日錄刻本：
+    #: 9 + 版心 + 9 = **19**，版心是第 10 列；版心宽 117px vs 正文 119px，只窄 2px，
+    #: **不能**靠宽度认它，只能靠位置），且下游必须把版心那一列排除在正文之外——
+    #: 这就是 `border_detect` 产 `line_index` 把它标成 `margin` 的原因。
+    #: ⚠️ 这个数曾被写成 20（多算了页边那条假线），Step1 因此每页被迫多收一条线。
     leaf_layout: str = "single"
+    #: `norm_stroke`（yaml 同名）：字形归一时**两边都骨架化再统一细化到 N px**
+    #: （`normalize.stroke_normalize`）。None = 不做（缺省，四庫總目那批就是）。
+    #:
+    #: **这是册级属性，不是链级**——它取决于「这本书的笔宽 vs 字体模板的笔宽」
+    #: 差多少，所以放在册配置里，不写进 `keben_body_v2.yaml`（那会把四庫總目
+    #: 一起改掉）。北行日錄刻本实测（都归一到 64×64 之后）：
+    #: 书块笔宽 p50 **4.65px**、I.Ming 模板 **3.82px**，差近 1px，`cov` 会把
+    #: 「粗细差」当成「形状差」——不归一时 字→宇、旦→且、宣→宜/直 每个实例都反，
+    #: 字/旦/宣 一个都进不了库（seed_witness 2026-09-15 实锤）。
+    #:
+    #: ⚠️ **播种与 Step5-a 必须用同一个值**，否则库被一把尺子筛、又被另一把尺子查，
+    #: 等于白播。`seed-witness --norm-stroke` 与 `glyph_match` 都读这个字段。
+    #:
+    #: ⚠️ 它**不是免费的**：`stroke_normalize` 的 docstring 记着 2026-08-24 撤掉它的
+    #: 理由——膨胀到 3px 会把 已/巳、日/曰 这类开口糊死。所以只在「书与模板笔宽
+    #: 确实差得多」的册上开，别当默认值抄。
+    norm_stroke: int | None = None
+    #: `frame_bar_strategy`（yaml 同名）：Step4 认「版框横条」用哪套判据。
+    #: 取值见 `clustering/frame_bar_strategy.py`：
+    #:
+    #: - `side_gap`（缺省，历史行为）：靠「横条填满文字带两侧空档」。
+    #:   前提是**字的横笔不满宽**，对「巨/雲/二/亘」这类上下横横贯全字宽的字
+    #:   不成立——bxgb p4 实测「巨」上横行墨 0.60 > 阈值 0.55，整条上横被抹掉，
+    #:   人裁时表现成「最上一横不见了」。
+    #: - `border_line`：用 Step1 拟合的**整页版框直线**定位，只抹贴线且够厚的段。
+    #:   bxgb 全书 400 列图实测：厚≥6 且在端区 61 段（真框，抹）、厚<6 在端区
+    #:   57 段（字横，放过——正是老判据误抹的那批）、厚≥6 在中部 0 段（无误伤）。
+    #: - `off`：不抹（没有版框的现代排印本）。
+    #:
+    #: ⚠️ **版框被抬头突破、或版框模糊的册不能用 `border_line`**：四庫總目正是
+    #: 这两条都占（抬头字越过版框线，位置判据会把抬头笔画当框），所以缺省保持
+    #: `side_gap`，只在确认过版框清晰且不被突破的册上开。
+    frame_bar_strategy: str = "side_gap"
+    #: `binarized_input`（yaml 同名）：Step1 起的**几何链路读整页二值副本**，
+    #: 而不是灰度原图（`utils/binarized.binarize_page`，Sauvola 31/k=0.10）。
+    #:
+    #: ⚠️ 2026-09-17 补：最初猜的理由——「界行是浅灰细线，固定阈 `<128` 砍掉
+    #: 一半，局部阈能留住，这是北行日錄刻本要上 `column_grid` 的根子」——
+    #: **实测不成立**。同一把窗形判据（线位是否有高出两翼的窄峰；墨占比判据
+    #: 是反的，见 `feedback_vline_verify_by_overlay`）逐页量：灰度 58.6%、
+    #: 二值 58.6%，**逐位相同**。二值没有把界行信号找回来，全书仍约 43% 的
+    #: 线是 `column_grid` 插值撑出来的，跟灰度时期一样。
+    #:
+    #: 真正验证成立、值得留着的理由只有一条：**线距均匀度**。bxgb 全书 54 页
+    #: 实测，二值比灰度更匀的 10 页、更差 4 页、持平 13——这和「界行找回来」
+    #: 是两件事，具体机理未查（大概是 Sauvola 局部阈让个别列竖线定位抖动更小）。
+    #:
+    #: ⚠️ 缺省 `False`，**只在逐册验过之后开**：`ink_threshold`、`side_floor`
+    #: 0.045、`GRID_MIN_SCORE` 20 那一堆几何常数是在灰度上一起标定的
+    #: （见 `utils/binarized` 模块 docstring 的警告）。bxgb 上实测这些阈值几乎
+    #: 都不用动（`side_floor` 比值 1.000、`FRAME_ROW_T=0.5` 仍分得开框与正文），
+    #: 但这是**这一册**的结论，不能推广到四庫那种版框模糊的册。
+    binarized_input: bool = False
+    #: `column_grid`（yaml 同名）：Step1 竖线走**网格模式**——版框定死、列距均匀、
+    #: 逐槽验线、探不到的槽位按几何插值（`peak_line_search.find_vertical_lines_grid`）。
+    #: 给**界行没印全**的书用：北行日錄刻本 972 个槽位里 120 个（12.3%）没有线，
+    #: 自由模式在这些槽只能拿字身假峰凑数。前提是 `expected_cols` 是真值。
+    #: 默认 False = 自由模式，四庫總目那批不受影响。
+    column_grid: bool = False
+    #: `col_pitch`（yaml 同名）：**列距**（相邻界行间距，含界行本身）像素先验，
+    #: 网格模式用它过滤版框对。量法：版框宽 / 列数，逐页取中位。北行日錄刻本 119。
+    #: ⚠️ 与 `pitch_prior` 不是一回事——那个是沿列方向的**字距**，给现代链 Step3 用。
+    col_pitch: float | None = None
+    #: `frame_height`（yaml 同名）：**框高**（下版框 y − 上版框 y）像素中位，册级统计。
+    #: 网格模式用它把 `GRID_MIN_SCORE` 换算到本书的尺度——半高宽匹配分 =
+    #: 沿线投影行数 / 半高宽，**跟框高成正比**，在 2801×2343 / 框高 1482 上标的
+    #: 那个 20.0 换一本分辨率差一倍的书直接失效。
+    #:
+    #: ⚠️ **不给不报错，只静默退化**：偏小 → 真界行被拒、整页插值；偏大 → 字身假峰
+    #: 混进来。跟 `top_band_frac` 同型的坑。给了才换算，不给就用北行日錄那组绝对值。
+    #:
+    #: **怎么标定**：`peak_line_search.measure_book_frame_height(整册 mask)` 跑一次
+    #: 写进 yaml。跟 `bottom_gap` 一样不在流水线里现算——`border_detect` 是逐页 step，
+    #: 现算等于每页重跑全书。⚠️ 换书必须重标，别抄。
+    frame_height: float | None = None
+    #: 上/下外框相对「竖直外框内外间距」的偏移（yaml 的 `outer_shift: {top: , bottom: }`）。
+    #: 版框四边不等距，先验是从竖直外框量的，套到上下要先减掉这个差，否则搜索窗口偏外。
+    #: **这个差是按书变的**：vol01 量出 top -4.2 / bottom -6.3，vol02 实测 **top -12.0 /
+    #: bottom -19.8**（n=136/110，std 7.9/6.5）——差了 8~13px，正好把 3~5px 厚的薄外框
+    #: 挤出窗口，整册漏报几十页。不给就退回 `border_geometry.OUTER_PRIOR_SHIFT` 的缺省值。
+    #:
+    #: **怎么标定**：`utils/border_geometry.measure_book_outer_shift(整册)` 跑一次写进
+    #: yaml。⚠️ 换书必须重标，别抄。
+    outer_shift: dict = field(default_factory=dict)
+    #: 上/下外框离内框线多远的**书级中位**（yaml 的 `outer_gap: {top: , bottom: }`）。
+    #: 给了才启用「探不到就按册基准兜底」（见 `border_geometry.OUTER_INK_FALLBACK`）：
+    #: 整册这个量极稳（vol02 上 38.6±8.3 / 下 27.2±5.3），某页磨损糊了探不到时按基准
+    #: 邻域找弱一档的墨，比报 None 强。估出来的会标 `*_outer_estimated=True`。
+    #: **怎么标定**：`utils/border_geometry.measure_book_outer_gap(整册结果)`。换书重标。
+    outer_gap: dict = field(default_factory=dict)
+    #: 版框**本来**有几层（yaml 的 `frame_layers: {top: 2, bottom: 2}`）。
+    #: 一本书的版式是一致的：雙邊框的书每一页上下都是内+外两条，个别页印不清、
+    #: 被污糊住、或磨没了，**不代表这一页的版式变了**——只代表这一页没看清。
+    #:
+    #: 不声明（空 dict）时按老行为：逐页猜 `frame_kind`，探不到就 `none`。
+    #: 声明 `2` 的边改成「外框一定存在，只是位置要猜」：
+    #:   - 不再判 `single`（四庫總目实测：判 single 的粗条中位 26px，而真内框线
+    #:     只有 0~8px——那是内外框之间的空隙被污糊连成了一片，不是單邊框）；
+    #:   - 探不到就按 `outer_gap` 册基准落位，标 `*_outer_estimated=True`。
+    #: 声明 `1` 的边则相反：只有一条，不找第二条。
+    #:
+    #: **怎么定**：看整册 `frame_kind` 分布——上边框 90% 判 double 说明版式就是 2 层。
+    #: ⚠️ 只管上下；左右 Step1 只探内框，外框不关心（2026-09-22 用户确认）。
+    frame_layers: dict = field(default_factory=dict)
+    #: `vline_polyline`（yaml 同名，默认 True）：Step1 界行要不要按弯度做三段折线拟合。
+    #: **界行淡而断的书要关**：折线的判弯量 w80 在那种书上量的是"线有多断"，平直页
+    #: 也被判成弯页，折点在淡线上找不到墨就整页齐刷刷平移几十 px（北行日錄刻本
+    #: p40/p41 实测 33~39px，闸2 只剩 1/19 列）。关了只量 w80 不拟合，整页直线。
+    #: 四庫總目那批界行实黑、w80 3~6，默认 True 行为不变。
+    vline_polyline: bool = True
     #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
     font: dict = field(default_factory=dict)
+    #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。
+    #: `{另一码位: 本书指定码位}`——如 `{别: 別}` 表示这本书里「别」这个码位一律
+    #: 按「別」统一（库、人裁、用字账都算作「別」，评测认它们是同一字、不算错）。
+    #:
+    #: **只管「两形人几乎分不出、一本书该统一用一个码位」这一类**（别/別、内/內）；
+    #: 「刻的形状真能分开」那一类（强/強、却/卻、回/囘、并/幷）逐例照录，不进这张表，
+    #: 进 `config/confusable_human.json` 的形近对表。两类的区分见字形库 11 §〇。
+    #:
+    #: 空 = 不启用，行为与加这个字段之前完全一样。**选哪个码位是统计出来的**：
+    #: 该书库＋人裁里两码位各多少，取与整理本一致的那个（见 `scripts/glyph_codepoint_census.py`
+    #: 与 `scripts/glyph_codepoint_unify.py`），不是猜的。
+    codepoints: dict[str, str] = field(default_factory=dict)
+
+    def canonical_char(self, ch: str) -> str:
+        """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
+        目标码位；否则原样返回（含 `ch` 本来就是目标码位、或这对字根本没配置两种情况）。
+        没配置 `codepoints` 时对任何字都是恒等函数，行为与加这个字段之前一样。"""
+        return self.codepoints.get(ch, ch)
+
+    def codepoint_equal(self, a: str, b: str) -> bool:
+        """`a`、`b` 按本书书级码位配置算不算「同一个字」——给 D 的评测、R 的候选用：
+        两形按 `codepoints` 统一到同一目标码位后相等，就不算异字（不算错、不算两个候选）。"""
+        return self.canonical_char(a) == self.canonical_char(b)
 
     # ── 页 ───────────────────────────────────────────────────────────
     def raw_path(self, page: int) -> Path:
@@ -218,13 +361,19 @@ class BookSpec:
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
+            "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
-            "font": dict(self.font),
+            "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "norm_stroke": self.norm_stroke,
+            "frame_height": self.frame_height,
+            "vline_polyline": self.vline_polyline,
+            "font": dict(self.font), "frame_layers": dict(self.frame_layers),
+            "codepoints": dict(self.codepoints),
             "pipeline": self.default_pipeline_id(),
             "in_workspace": self.in_workspace(),
         }
@@ -325,7 +474,7 @@ def _workspace_books_dir() -> Path | None:
 
     2026-09-14 起优先于引擎仓；**2026-09-15 起是唯一来源**（用户裁定）。
     册配置是「这本书的数据」，按数据边界（overview `数据边界-三仓各管什么.md`）
-    该落工作区。十册四庫的 yaml 已迁进 `siku-zongmu-workspace/books/`。
+    该落工作区。十册四庫的 yaml 在 `guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本/books/`。
     """
     from .workspace import workspace_root
     ws = workspace_root()
@@ -362,7 +511,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         d = yaml.safe_load(f) or {}
     raw_dir = Path(d["raw_dir"])
     if not raw_dir.is_absolute():
-        # 相对路径优先按工作区解释（原图已随书迁到 siku-zongmu-workspace），
+        # 相对路径优先按工作区解释（原图已随书迁到 guji-workspace 的书目录），
         # 没设 GUJI_WORKSPACE 时退回仓根——引擎自带的小样本仍在仓内。
         from .workspace import raw_root
         raw_dir = raw_root() / raw_dir
@@ -382,10 +531,14 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         jiazhu=dict(d.get("jiazhu") or {}),
         bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
+        outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
+        outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
+        frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
+        iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
         frame=str(d.get("frame", "ruled")),
@@ -396,7 +549,16 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         top_band_frac=(None if d.get("top_band_frac") is None else float(d["top_band_frac"])),
         bottom_band_frac=(None if d.get("bottom_band_frac") is None
                           else float(d["bottom_band_frac"])),
+        column_grid=bool(d.get("column_grid", False)),
+        norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
+        frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
+        binarized_input=bool(d.get("binarized_input", False)),
+        col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
+        frame_height=(None if d.get("frame_height") is None
+                      else float(d["frame_height"])),
+        vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
+        codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
     )
 
 
@@ -431,4 +593,32 @@ def set_ocr_candidates(book_id: str, enabled: bool, books_dir: Path | None = Non
         if not text.endswith("\n"):
             text += "\n"
         text += line + "\n"
+    path.write_text(text, encoding="utf-8")
+
+
+#: 顶层 `codepoints:` 块——键行以两个空格缩进（yaml 里手写的都是这个缩进）。
+_CODEPOINTS_BLOCK_RE = re.compile(r"^codepoints:\n(?:[ \t]+\S.*\n?)*", re.MULTILINE)
+
+
+def set_codepoints(book_id: str, mapping: dict[str, str], books_dir: Path | None = None) -> None:
+    """定向文本编辑 book yaml 的顶层 `codepoints:` 字段（书级码位配置，字形库 11 §〇）。
+
+    与 `set_ocr_candidates` 同一个理由：这份 yaml 满是手写中文注释，`yaml.safe_dump`
+    整体重写会把注释冲掉，所以只在原文里改/插这一块，不碰其余内容。
+
+    `mapping` 空字典时删掉整块（等于不配置，回到加这个字段之前的行为）；
+    非空时整块替换/追加成 `codepoints:\\n  <另一码位>: <本书指定码位>\\n  ...`。
+    """
+    path = _book_yaml_path(book_id, books_dir)
+    if not path.exists():
+        raise FileNotFoundError(f"没有这册书的定义: {path}")
+    text = path.read_text(encoding="utf-8")
+    block = ("codepoints:\n" + "".join(f"  {k}: {v}\n" for k, v in mapping.items())
+             if mapping else "")
+    if _CODEPOINTS_BLOCK_RE.search(text):
+        text = _CODEPOINTS_BLOCK_RE.sub(block, text, count=1)
+    elif block:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += block
     path.write_text(text, encoding="utf-8")

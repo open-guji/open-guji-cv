@@ -33,13 +33,30 @@ python -m open_guji_cv pipeline keben_body_v2 vol01 --pages 24,42   # 两页产�
 - 重落基线：`GUJI_ROUTE_SNAP_WRITE=1`。
 - ⚠️ `pytest` 必须带 `-s`（子会话须知 §五：不带会 `ValueError: I/O operation on closed file`）。
 
-## 三处「天然不可比」怎么处理（方案 §九）
+## 四处「天然不可比」怎么处理（方案 §九）
 
 1. **`/api/runs` 系列**带 job id 与时间戳 → `mode="shape"`，**比结构不比值**
    （每个标量换成它的类型名，键与嵌套形状照比）。
 2. **二进制响应**（`/api/cache`、`/api/overlay`、`/api/raw`、`/api/cutline/img`）
    → 比 `sha256` 与字节数，不比字节本身。
 3. **产物清单里的 `ts`/`elapsed`** 等时间字段 → 换成 `<volatile>`。
+4. **举例数据**（`SAMPLE_KEYS`，如尺子的 `detail`）→ `_sample_shape`，只留元素
+   结构，不比挑中了哪几条、也不比挑了几条。
+
+## 「举例」与「输出」的界线（2026-09-16）
+
+第 4 条是这次加的，起因：重跑一次 vol01 的 Step1–3，`/api/rulers` 当场变红，
+差异全在 `rulers[].detail`——举例的格线从 p141c1 换成 p24c9。**可测的行为一点没变，
+变的是被测数据**，这种红是噪声，会训练人「跑红了先重落基线」，那这个测试就废了。
+
+判据是**这个值是不是路由的输出本身**：
+
+- **是输出** → 逐值严比。`/api/cutline/cases` 的 `cases`、`/api/review/cards` 的
+  `cards` 都是「这个 URL 就是为了给你这批东西」，值变了就是行为变了，该红。
+  它们同样绑产物，但那是这个测试的**前提**（见下：产物得先跑出来），不是缺陷。
+- **是举例** → 进 `SAMPLE_KEYS`。尺子的 `detail` 是「满足条件的有 45 条，挑几条
+  给人看看长什么样」，挑中谁不是行为。聚合量 `num`/`den`/`value` 照旧严比——
+  真出了切分回归，是那三个数变，不是举例变。
 
 ## 写路由怎么做到可重复
 
@@ -142,12 +159,35 @@ WRITE = os.environ.get("GUJI_ROUTE_SNAP_WRITE") == "1"
 #: 重构轮的规矩是「行为一模一样」，所以这张表**只能由任务书点名**才加得进来，
 #: 且必须写清为什么。目前只有一条：
 SANCTIONED = {
+    "GET /api/books":
+        "BookSpec 新增 `frame_height`（框高像素中位，册级统计），`to_dict()` 跟着多一个键。"
+        "网格模式的 GRID_MIN_SCORE 原本是在北行日錄刻本（框高 1482）上标的绝对像素，"
+        "换一本分辨率差一倍的书直接失效且**不报错**，只静默退化成整页插值；"
+        "`peak_line_search.grid_thresholds()` 用这个先验把阈值换算过去。"
+        "所有册 yaml 都还没写这个字段，值一律是 null——是多一个键，不是哪本书的值变了。",
+    "GET /api/evals":
+        "评测注册表新增 `oov`（类外泛化·emb），36 → 37 条，其余条目一字未动。"
+        "此前所有零样本评测集（glyph-bench 的 unseen/seen/mid、rare-char 21 条）"
+        "**100% 落在 CNN 的 4,654 类内**，量不出类外泛化——而扩字表的收益全由 "
+        "embedding 兑现，分类头对类外字 top-10 恒为 0。"
+        "集由 scripts/build_oov_bench.py 建（314 条 / 138 字种，全是真刻例），"
+        "基线在 cache/oov_bench/baseline.json。",
     "POST /api/review/rate-history":
         "C2 把 measure() 从 scripts/track_review_rate.py 搬进 eval/rate_history.py 时，"
         "顺带把硬编码的 REPO/output/glyph.db 换成 core.workspace.glyph_db_path()"
         "（后端任务书 §三·2 点名要消掉的）。改之前这条在云端必然抛 "
         "OperationalError: no such table: admissions —— 它当场造一个 0 字节空库再去查表；"
         "改之后正常记一行台账。这是修好了，不是改坏了。",
+    "GET /api/events":
+        "`Event` 新增可选字段 `reviewer`（校对者 email，2026-09-26 鉴权改造「裁决记人」），"
+        "老事件没有这个键时 pydantic 缺省 `None`——`model_dump()` 里每条事件多一个键，"
+        "值全是 null 或本次直调传的 `_FAKE_IDENTITY.email`，不是哪条事件的其余字段变了。",
+    "GET /api/batches/{batch_id}":
+        "同上——`events` 里内嵌的也是 `Event.model_dump()`，一并多出 `reviewer` 键。",
+    "GET /api/books":
+        "BookSpec 新增 `codepoints`（书级码位配置，字形库 11 §〇，H·码位裁定落地任务书），"
+        "`to_dict()` 跟着多一个键。所有册 yaml 都还没写这个字段，值一律是 `{}`——"
+        "是多一个键，不是哪本书的值变了。",
 }
 
 #: 生僻字候选的两条路由：内容取决于 CNN 候选源在不在（torch 是可选依赖）。
@@ -208,9 +248,31 @@ JZ_BOOK, JZ_PAGES = "vol02", "jz"   # 夹注段只在 vol02 有
 EVAL_ID = "char_drop"      # 真存在的评测器（"column-split" 不是 id，只会得到「没有这个评测器」）
 BATCH = "snap-batch"       # 沙箱里现建的批次，不碰真台账
 
+from open_guji_cv.console.auth import Identity as _Identity  # noqa: E402
+
+#: `POST /api/events` 直调时要给的身份——路由体自己要用 `identity.email`
+#: （见下方调用处的注释），不只是门禁用的 `Depends`。
+_FAKE_IDENTITY = _Identity(email="snapshot-test@example.com", role="reviewer", tier="reviewer")
+
 # 时间/耗时类字段：同一份产物两次读出来也可能不同，或与本次重构无关
 VOLATILE = {"ts", "elapsed", "harvested_at", "created_at", "updated_at",
-            "started_at", "finished_at", "queued_at", "submitted_at", "t"}
+            "started_at", "finished_at", "queued_at", "submitted_at", "t",
+            # 2026-09-16：产物指纹里的 `code_rev` 是**当前 HEAD 的短 sha**，
+            # `fingerprint` 由它派生 —— 任何人往仓里提一笔（哪怕改的是别的模块、
+            # 哪怕只是文档），下次跑这个测试的 3 条路由必红。那是「代码变过」，
+            # 不是「路由行为变了」。产物是否**新鲜**由 `/api/status` 的 counts 管，
+            # 那个照旧严比；这里只是不拿 sha 当行为。
+            "code_rev", "fingerprint"}
+
+#: **举例数据**：值随产物变、但不是被测行为的键。这些键的值一律只比**结构**
+#: （`_shape`：标量换类型名、列表只留首元素＋省略号），不比具体是哪一页哪一列。
+#:
+#: 2026-09-16 加：`/api/rulers` 的 `detail` 是「哪些格线穿字」的**样例清单**——
+#: 重跑一次 vol01 的 Step1–3，举例就从 p141c1 换成 p24c9，测试当场变红，可测的
+#: 行为却一点没变。尺子本身的 `num`/`den`/`value` 照旧逐值严比（那才是回归要看的），
+#: 只有举例是谁不比。判据：**这个键的值是「从满足条件的东西里挑几个给人看」吗**——
+#: 是就进这里；是聚合量（计数、比率、分母）就不进。
+SAMPLE_KEYS = {"detail"}
 
 
 # ── 归一化 ───────────────────────────────────────────────────────────
@@ -245,7 +307,19 @@ def _norm(v):
         # 键一律转成字符串：`/api/status` 的 `steps.<step>.pages` 是 **int 键**，
         # 存进基线 JSON 再读回来就成了 str，不转的话每次都报「差异」。
         # 走 HTTP 时 fastapi 也是这么序列化的，转了才是它真正发出去的形状。
-        return {str(k): ("<volatile>" if k in VOLATILE else _norm(x)) for k, x in v.items()}
+        out = {}
+        for k, x in v.items():
+            ks = str(k)
+            if k in VOLATILE:
+                out[ks] = "<volatile>"
+            elif k in SAMPLE_KEYS:
+                # 举例清单：只留**元素结构**，既不比挑中了哪几条、也不比挑了几条
+                # （`_shape` 自身会把「1 条」和「多条」编码成不同结构，而举例条数
+                # 同样随产物变——R2 的 detail 在同一份产物上就是 7 条、重跑后 5 条）
+                out[ks] = _sample_shape(_norm(x))
+            else:
+                out[ks] = _norm(x)
+        return out
     if isinstance(v, (list, tuple)):
         return [_norm(x) for x in v]
     if isinstance(v, float):
@@ -290,6 +364,23 @@ def _frame_kind(frame: bytes | None) -> str:
     return "<other>"
 
 
+def _sample_shape(v):
+    """举例清单的归一：空与非空要分开（「有没有举例」是行为），但**非空之间
+    不比条数、不比挑中谁**——只留合并后的元素结构。给 SAMPLE_KEYS 用。"""
+    if not isinstance(v, (list, tuple)):
+        return _shape(v)
+    if not v:
+        return []
+    merged: dict = {}
+    for item in v:
+        s = _shape(item)
+        if isinstance(s, dict):
+            merged.update(s)
+        else:                       # 标量举例（如 id 清单）：留一个类型名就够
+            return [s, "…"]
+    return [merged, "…"]
+
+
 def _shape(v):
     """比结构不比值：每个标量换成类型名。给 /api/runs 系列用。"""
     if isinstance(v, dict):
@@ -331,8 +422,12 @@ def _collect() -> dict:
     html = EP["GET /"]()
     snap["GET /"] = {"len": len(html), "sha256": _sha(html.encode())}
 
-    # 二 · 状态（1）
-    call("GET /api/status", book=BOOK, pages=PAGES)
+    # 二 · 状态（1）——`mode="shape"`：这条报的是**产物新鲜度**，而新鲜度按定义
+    # 就是「产物指纹 vs 当前代码指纹」。仓里提一笔代码、或谁重跑了一页，counts 的
+    # fresh/stale 就变（2026-09-16 实测：并行会话提了一个提交，fresh 9→1、stale 3→11）。
+    # 那是环境状态，不是这条路由的行为。行为＝「有没有按 step×page 报出 counts 与
+    # 每页 status」，比结构就够；真要守新鲜度，那是 `guji status` 与跑批的事。
+    call("GET /api/status", book=BOOK, pages=PAGES, mode="shape")
 
     # 三 · 管线执行（6）——全部比结构不比值（带 job id 与时间戳）
     run_ep = EP["POST /api/runs"]
@@ -363,10 +458,14 @@ def _collect() -> dict:
     call("POST /api/batches",
          _model(mk)(id=BATCH, title="快照批次", step="seed_admit", book=BOOK))
     ev = EP["POST /api/events"]
+    # `identity` 是 2026-09-26 鉴权改造加的（任务书「裁决记人」）：路由体自己要用
+    # 校对者 email，不只是挂在 router 上的门禁，所以直调时得像 `req` 一样显式给一个——
+    # 直调本来就绕过 FastAPI 的 Depends 解析，`Depends(...)` sentinel 落不到真值。
     call("POST /api/events", _model(ev)(
         batch=BATCH, step="seed_admit", unit="cell", kind="verdict", consume=False,
         events=[{"id": f"{BOOK}:{PAGE}:{COL}:{SLOT}", "v": "confirm",
-                 "shape": "一", "reading": "一", "t": 1}]))
+                 "shape": "一", "reading": "一", "t": 1}]),
+        identity=_FAKE_IDENTITY)
     call("GET /api/events", batch=BATCH)
     call("GET /api/batches/{batch_id}", BATCH)
     hv = EP["POST /api/batches/{batch_id}/harvest"]
@@ -534,14 +633,86 @@ def test_route_inventory():
     2 条——`GET /api/workspace`（当前工作区、各个根、可切换清单）与
     `POST /api/workspace`（改 `GUJI_WORKSPACE` + 重建进程内 Store，不重启进程；
     有任务在跑时回 409），75 → 77。
+
+    2026-09-17 Step2 列清理人裁（用户「上下、左右都做审阅台，人审结果进测试集」）：
+    新增 `column_review.py` 3 条——`GET /api/column-review/cases`（按分诊类别分层
+    抽样出待裁列）、`GET /api/column-review/verdicts`（读回本批已裁）、
+    `GET /api/column-review/profile/{book}/{page}/{col}`（两条投影曲线，拖线时看），
+    76 → 79。
+
+    2026-09-17 同一批：再加 `GET /api/column-review/img/{book}/{page}/{col}.png`
+    （列图**二值化 + 把算法的线画上去**：红=文字带左右边界、绿=上端削到的行、
+    蓝=下端削到的行）。用户实测反馈「你需要划线不然我不知道在哪」——看不到线
+    就没法判「削到哪了对不对」；二值化是为了与字形库/定字审阅同一把尺子。
+    79 → 80。
+
+    2026-09-18 Step3 逐列字数人裁（用户「现在就设计人工标注这个环节」——
+    格高/period 比值判不出「一格塞两字」，两个方向都测过假阳性/假阴性，
+    见 `cv-segmentation` skill §三）：新增 `slot_count_review.py` 3 条——
+    `GET /api/slot-count-review/cards`（逐列出卡，附现有格数）、
+    `GET /api/slot-count-review/verdicts`（读回本批已裁）、
+    `GET /api/slot-count-review/img/{book}/{page}/{col}.png`（整列图 + 现有
+    格线，人逐格数字数用）。80 → 83。
+
+    2026-09-18 Step2 裁决台加「跳到指定页/列」（用户「既要可以按分诊抽样出卡，
+    也要可以直接输入 33/16 跳到指定列」）：新增
+    `GET /api/column-review/case`（单列直达；列号留空出整页所有列，按列号排序
+    ——查「同一页逐列切线齐不齐」时抽样卡永远凑不齐一页）。83 → 84。
+
+    2026-09-18 阶段二 2.4「读回接口收敛」：新增 `GET /api/verdicts`
+    （通用读回，可按 `question` 过滤，返回原始 payload）。此前「读回本批已裁」
+    有四份实现、四种返回形状（review / cutline / column_review /
+    slot_count_review / border_review），新增裁决台就要再抄一遍。
+    去重按 `(question, key)` 而非 key——切线与定字的 key 形状完全相同
+    （`bxgb:39:19:12`），只按 key 去重会把没裁过的字位误当已裁。84 → 85。
+
+    2026-09-20 Step9-9.0 进度复查（用户：「在第九步做一个总进度复查——检查页范围内
+    还有哪些待办」）：新增 `GET /api/step9/progress/{book}`，每页报过期/待审/切线/
+    阙文/非字/坏列。**是看板不是闸**，有待办也照样能跑 9.1/9.2。85 → 86。
+
+    2026-09-21 结构感知识别（另一条线合并进来）：生僻字面板加「按结构查」，
+    新增 `GET /api/rare/search/{book}`（IDS 结构码 / 部件倒排查候选）。86 → 87。
+
+    2026-09-22 Step8 扩为「对勘与复核」（用户：「step8 其实没有什么内容……
+    把这些分析都放到 step8 上边」）：新增 `GET /api/step8/overview/{book}`（对勘结论
+    ＋ 差异分层计数）、`GET /api/step8/pairs/{book}`（**按字对聚合**的复核队列）、
+    `POST /api/step8/decide`（复核裁决，按字对提交）。87 → 90。
+
+    2026-09-24 Step8 两层分类（待审/我方对/校对本对/都不对 × 异体/通假/避讳/其他）：
+    `GET /api/step8/pairs/{book}` 换成 `GET /api/step8/queue/{book}`（某一类的卡片 ＋
+    全部类的计数）；新增 `POST /api/step8/seg`（图右边「字形不完整 / 有噪声」复选框，
+    与分类独立，走 seg_defect 通道留作切分反馈）。90 → 91。
+
+    2026-09-25 字形库页（overview `进度/字形库/` 02、03 卡）：此前 `/:ws/glyphlib/` 只有
+    异体组视图、打开是空的。新增 `GET /api/glyphlib/summary`（本书套总账）、
+    `GET /api/glyphlib/chars`（字表）、`GET /api/glyphlib/char/{char}`（单字页，含兄弟
+    工作区同字）、`GET /api/glyphlib/patch/{instance_id}.png`（刻例图块）、
+    `GET /api/glyphlib/audit`（体检结果）、`POST /api/glyphlib/audit/decide`（体检裁决）、
+    `GET /api/glyphlib/font/{char}.png`（字体渲染，库里没导字体域就去兄弟库找）。91 → 98。
+    同日 `GET /api/glyphlib/ids-lookup`（IDS 反查：标「最近似码位」前先查 Unicode 里有没有同结构字）。98 → 99。
+
+    2026-09-26 控制台接入网站账号体系，第一版（cookie 转发，C 道任务书）：新增
+    `console/routers/auth.py`——`GET /api/auth/me`、`GET /api/auth/config`；
+    `review.py` 新增 `GET /api/review/conflicts`（复核队列：同一格被不同校对者
+    裁出不同结果，只读扫描事件日志，不改 `feedback/consumers.py` 的写入流程）。
+    99 → 102。
+
+    2026-09-26 当天第二次改向（用户：平台直连服务器 IP，不挂网站域名下，不能
+    转发 Cookie，改标准 OAuth2 授权码 + PKCE）：`GET /api/auth/config` 撤掉
+    （登录/登出改成平台自己的相对路径，不用再问后端要地址）；新增 OAuth 客户端
+    五条——`GET /auth/login`（302 去 authorize）、`GET /auth/callback`（换
+    `id_token`、发会话）、`GET /auth/logout`、`--dev-idp` 本机假登录页
+    `GET /auth/dev-login` + `GET /auth/dev-login-submit`；另加 `GET /healthz`
+    （免鉴权部署健康检查）。102 → 107（-1 +6）。
     """
     got = sorted(_endpoints())
-    assert len(got) == 76, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 107, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
 
 
+@pytest.mark.manual
 def test_route_snapshot():
     """52 条路由各调一次，与基线逐条比对。
 
@@ -638,11 +809,27 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
+    # 控制台接入网站账号体系（2026-09-26）
+    "GET /api/auth/me", "GET /api/review/conflicts", "GET /healthz",
+    "GET /auth/login", "GET /auth/callback", "GET /auth/logout",
+    "GET /auth/dev-login", "GET /auth/dev-login-submit",
+    # Step8 对勘与复核（2026-09-22）
+    "GET /api/step8/overview/{book}",
+    "GET /api/step8/queue/{book}",
+    "POST /api/step8/decide",
+    "POST /api/step8/seg",
     "GET /", "GET /api/align-ref/summary", "GET /api/align-ref/{book}/summary",
     "GET /api/workspace",
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
+    # Step2 列清理人裁（2026-09-17）
+    "GET /api/column-review/case",
+    "GET /api/column-review/cases", "GET /api/column-review/verdicts",
+    "GET /api/column-review/profile/{book}/{page}/{col}",
+    "GET /api/column-review/img/{book}/{page}/{col}.png",
+    "GET /api/slot-count-review/cards", "GET /api/slot-count-review/verdicts",
+    "GET /api/slot-count-review/img/{book}/{page}/{col}.png",
     "GET /api/cache/{book}/{kind}/{key}.png",
     "GET /api/cell-shrink-rand/context/{book}/{page}/{col}/{slot}.png",
     "GET /api/cell-shrink-rand/sample",
@@ -650,6 +837,9 @@ EXPECTED_ROUTES = [
     "GET /api/cutline/img/{book}/{page}/{col}.png", "GET /api/cutline/verdicts",
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/glyph-match/exemplar/{instance_id}.png",
+    "GET /api/glyphlib/audit", "GET /api/glyphlib/char/{char}", "GET /api/glyphlib/ids-lookup", "GET /api/glyphlib/font/{char}.png", "GET /api/glyphlib/chars",
+    "GET /api/glyphlib/patch/{instance_id}.png", "GET /api/glyphlib/summary",
+    "POST /api/glyphlib/audit/decide",
     "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",
     "GET /api/gold", "GET /api/jiazhu/segments",
     "GET /api/kinds", "GET /api/llm_online_stats", "GET /api/llm_online_calls/{book}",
@@ -660,13 +850,16 @@ EXPECTED_ROUTES = [
     "GET /api/preclean/{book}/{page}/overlay.png", "GET /api/preclean/{book}/{page}/before.png",
     "GET /api/preclean/{book}/{page}/after.png",
     "GET /api/products/{book}/{step}/{key}", "GET /api/quality",
+    "GET /api/rare/search/{book}",
     "GET /api/rare/{book}/{page}/{col}/{slot}", "GET /api/raw/{book}/{page}.png",
     "GET /api/review/around/{book}/{page}/{col}/{slot}",
     "GET /api/review/cards", "GET /api/review/column/{book}/{page}/{col}",
     "GET /api/review/context-img/{book}/{page}/{col}/{slot}.png",
     "GET /api/review/rate-history", "GET /api/review/verdicts", "GET /api/round",
+    "GET /api/verdicts",
     "GET /api/rulers", "GET /api/runs", "GET /api/runs/{job_id}", "GET /api/runs/{job_id}/log",
-    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/reflow/{book}",
+    "GET /api/runs/{job_id}/log.txt", "GET /api/status", "GET /api/step9/progress/{book}",
+    "GET /api/step9/reflow/{book}",
     "GET /api/step9/render/{book}", "GET /api/steps", "GET /api/throughput",
     "GET /api/variants/book", "GET /api/variants/groups",
     "GET /v1/", "GET /{full_path:path}",
@@ -721,14 +914,24 @@ def _cli_json(argv: list[str]) -> dict:
     ap = argparse.ArgumentParser()
     register_subcommands(ap.add_subparsers(dest="command"))
     args = ap.parse_args(argv)
+    if hasattr(args, "workspace") and not args.workspace:
+        args.workspace = os.environ["GUJI_WORKSPACE"]     # 2026-09-20 起带 book 的命令必填 -w
     buf = _io.StringIO()
     with contextlib.redirect_stdout(buf):
         COMMANDS_V2[argv[0]](args)
     return json.loads(buf.getvalue())
 
 
+@pytest.mark.manual
 def test_cli_matches_routes():
-    """C5 的验收：11 对「命令行 vs 路由」逐条同输出。"""
+    """C5 的验收：11 对「命令行 vs 路由」逐条同输出。
+
+    2026-09-20 改标 `manual`（默认不跑，要跑加 `-m manual`）：它比的是
+    「同一批**真产物**经两个出口出来一不一样」，所以必须有真书工作区。
+    原先是 `skip`——看着在测试清单里，实际云端一次都没跑过，而 skip 与
+    「跑过且通过」在报告里长得一样。标成 manual 是把这件事摆到台面上：
+    这是人工验收工具，不是自动化测试。准备环境见模块 docstring。
+    """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE 指向真书工作区（见模块 docstring）")
     if not (products_root() / BOOK / "seed_admit").exists():
@@ -755,8 +958,12 @@ def test_cli_matches_routes():
     print(f"\n{len(CLI_PAIRS)}/{len(CLI_PAIRS)} 对「命令行 vs 路由」同输出")
 
 
+@pytest.mark.manual
 def test_cli_image_exits(tmp_path):
-    """图像类三条（product raw / overlay / patch、cache get / column）与路由出**同样的字节**。"""
+    """图像类三条（product raw / overlay / patch、cache get / column）与路由出**同样的字节**。
+
+    同上，2026-09-20 改标 `manual`：要真书工作区的原图与缓存。
+    """
     if not os.environ.get("GUJI_WORKSPACE"):
         pytest.skip("要 GUJI_WORKSPACE")
     EP = _endpoints()
@@ -794,5 +1001,7 @@ def _cli_run(argv: list[str]) -> None:
     ap = argparse.ArgumentParser()
     register_subcommands(ap.add_subparsers(dest="command"))
     args = ap.parse_args(argv)
+    if hasattr(args, "workspace") and not args.workspace:
+        args.workspace = os.environ["GUJI_WORKSPACE"]     # 同上
     with contextlib.redirect_stdout(_io.StringIO()):
         COMMANDS_V2[argv[0]](args)

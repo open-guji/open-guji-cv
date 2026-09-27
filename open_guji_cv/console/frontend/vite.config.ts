@@ -6,9 +6,15 @@ import { defineConfig } from 'vite'
 // `npm run build` 产物落 ../static/dist/，FastAPI 继续用一条命令托管，
 // 产物入仓（用户 2026-09-11 定：工作台与 open-guji-cv 运行环境分离，
 // 不能假设都装了 node/npm）。
+// 挂在反向代理前缀下（如 `/collate`，网站把 `/collate/*` 转给 CV 服务器，
+// overview 任务书「监听与本机开发」一节）：build 时传 `VITE_ROOT_PATH=/collate`，
+// 资源 base 与 `client.ts` 的 `ROOT_PATH`（API/图片 URL 前缀、Router `basename`）
+// 一起跟着换。缺省空串——本机单独跑控制台照旧挂在根路径。
+const ROOT_PATH = (process.env.VITE_ROOT_PATH ?? '').replace(/\/$/, '')
+
 export default defineConfig({
   plugins: [react()],
-  base: '/static/dist/',
+  base: `${ROOT_PATH}/static/dist/`,
   build: {
     outDir: '../static/dist',
     emptyOutDir: true,

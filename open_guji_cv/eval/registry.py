@@ -133,6 +133,36 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("zero_shot_fusion", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
        title="零样本·HOG/CNN/融合", needs=("products", "heavy"),
        note="需要 cache/glyph_cnn/best.pt；全 unseen 1,327 条约 3 分钟"),
+    # 类外评测：金标字落在 CNN classes **之外**的真刻例（2026-09-17 建）。
+    # 上面那几个零样本集 100% 落在 classes 内，量不出类外泛化——而扩字表的收益
+    # 全由 embedding 兑现，分类头对类外字 top-10 恒为 0。集与基线见
+    # scripts/build_oov_bench.py、cache/oov_bench/baseline.json。
+    _e("oov", "glyph-bench", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="类外泛化·emb", needs=("products", "heavy"),
+       note="集在 cache/oov_bench（本地派生物，由 build_oov_bench.py 建，"
+            "不在数据集仓）；314 条 / 138 字种"),
+    # 固定退化协议（2026-09-21 补登记）：同一批真刻例加一组**写死**的扰动
+    # （blur/erode/dilate/断墨/贴边/遮挡/钤印），分因素报各路稳定性。跟 `oov`
+    # 同源同形：数据在 cache/ 的本地派生物、没有位置参数、报告走 `--json`。
+    # `--set` 不进 extra——缺省 oov 就是这条要量的那一档，unseen 那档手跑。
+    _e("degradation", "glyph-bench", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="固定退化·稳定性", needs=("products", "heavy"),
+       note="集在 cache/oov_bench（--set oov，缺省）或 glyph-bench unseen 档；"
+            "模板均值优先复用 cache/struct_probe/emb_*.npz，没有就现渲染"),
+    # 真刻例多原型档（R2/T11，2026-09-26）验收协议之一：seen_test 每类只留 1 条
+    # 真刻例当模板、其余当查询，对照纯字体模板——与 oov/zero_shot_fusion 同源
+    # 同形（数据在 cache/glyph_bench，没有位置参数）。
+    _e("seen_test_single_proto", "glyph-bench", arg_kind="none", out_flag="", pythonpath=True,
+       title="真刻例单原型·seen_test", needs=("products", "heavy"),
+       note="`cnn_candidates.REAL_PROTO_ENABLED`（k<=3 多原型）的独立验证协议，"
+            "不经过 glyph_store，直接从 glyph_bench 按类拆模板/查询"),
+    # Step5-d replace 段采信闸（2026-09-22 T7）：靶子不是数据集分片，是工作区 feedback 里
+    # 用户 confirm 的 shape + 该工作区跑到 5-a 的产物。注册表这条只**重报**已 dump 的行
+    # （cache/align_gate/<book>.jsonl）；dump 要手跑 `-w <工作区> --books vol01,vol02`。
+    _e("align_replace_gate", "workspace/feedback", arg_kind="none", out_flag="", pythonpath=True,
+       title="5-d replace 采信闸", needs=("products", "heavy", "corpus"),
+       extra=("--report-only",),
+       note="靶子=工作区人裁（四库两册 513 条）；先手跑一次带 -w 的 dump，这里只重报"),
     # 粘连格线理想切点（用户在控制台「切线」页拖出来的），现役 Step2 列图坐标。
     _e("touching_cuts", "char-segmentation/touching-cuts", arg_kind="none", out_flag="--json", pythonpath=True,
        title="粘连切点误差", needs=("products",),
@@ -199,6 +229,16 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        needs=("products",),
        note="金标路径写死在脚本里（page-type/expected.json）；--book/--products 可选，"
            "不走注册表的位置参数机制；只读现成 cells 产物，不重跑管线"),
+    # 结构感知识别（2026-09-21 合并进来的那条线；补进注册表，`test_registry_covers_every_eval_script`
+    # 钉的就是「scripts/eval_*.py 一个都不许漏登记」）
+    _e("struct_rerank", "rare-char", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="结构重排（M0）", needs=("model", "engine"),
+       note="oov_bench 上量部件袋头一致性重排的开/关；主指标 top-10 与 top-1 **不掉**才算过，"
+           "掉一个都不接。扫 权重 × top_m 两个旋钮，按 src 分层读"),
+    _e("struct_heads", "rare-char", arg_kind="none", out_flag="--json", pythonpath=True,
+       title="结构头 + 槽位部件头（Step A）", needs=("model", "engine"),
+       note="要 --ckpt 指到带结构头的 checkpoint；量结构头准确率（独体字单列）、槽位头 top-3、"
+           "三种重排的 top-1/top-10。通过线见脚本头"),
 ]}
 
 

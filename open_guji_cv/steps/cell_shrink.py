@@ -49,14 +49,45 @@ def _upright(ctx: RunContext, patch):
     return np.rot90(patch, 1).copy()      # 入口转了 -1（顺时针），这里转回来
 
 
+#: 抬头位（slot < 1）里「矮而满宽」的紧框是版框线，不是字（2026-09-25）。
+#: 雙邊版框的外框线落在列窗里，Step3 给它开了一个抬头格，Step4 就把那条线当字框收了进来，
+#: 一路送进识别。vol02 全书 29 个抬头位字框里 12 个是这种线（高 12–35px、宽 0.6 列以上），
+#: 真抬头字（御/聖/易/厚…）高全在 97px 以上。门槛取 0.4 格高：抬头位出现「一」这类扁字
+#: 在这套书里不存在（抬头是给御/聖/皇/天这些字的）。
+FRAME_BAR_MAX_H = 0.4
+FRAME_BAR_MIN_W = 0.6
+
+
+FRAME_BAR_TOP = 0.15
+"""首格（slot 1）也收框线（2026-09-26，用户定）：上边框线落在列首第一格里（vol02 p58c4、p113c9），
+同样是矮而满宽，但首格可能真有扁字，所以多一条——紧框贴着格顶（≤ 这么多格高）。「一」作首字时
+居中，不贴顶。四册全书按这三条筛只中 vol02 这 2 格，全是框线。"""
+
+
+def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
+    if cell_type != "char" or slot is None or slot > 1 or not cc.period or not cc.content_x:
+        return False
+    h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
+    col_w = cc.content_x[1] - cc.content_x[0]
+    if not (h < FRAME_BAR_MAX_H * cc.period and w >= FRAME_BAR_MIN_W * col_w):
+        return False
+    if slot < 1:
+        return True
+    cell = next((c for c in cc.cells if c.slot == 1 and not c.sub), None)
+    return cell is not None and bbox[1] - cell.y0 <= FRAME_BAR_TOP * cc.period
+
+
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.3", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.5", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
+        # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
+        # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
+        book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.utils.seam"),
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -99,7 +130,12 @@ class CellShrinkStep(Step):
                      "cell_h": cc.period, "head_raise_rows": 0,
                      # Step 2 量好的版框 y（列图坐标）：extractor 只在它附近认框线行，
                      # 并把条带开到下框（见 extractor.frame_band_inner 的 hint 说明）
-                     "frame_top": cc.border_top, "frame_bottom": cc.border_bottom},
+                     "frame_top": cc.border_top, "frame_bottom": cc.border_bottom,
+                     # 册级判据（见 BookSpec.frame_bar_strategy）。`border_line`
+                     # 用下面这两条线定位版框，它们是**列图坐标**：border_top=0 表示
+                     # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
+                     # 落在 y≈0 与 y≈border_bottom 附近。
+                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap")},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
@@ -208,23 +244,44 @@ class CellShrinkStep(Step):
                 has_patch = patch is not None and getattr(patch, "size", 0) > 0
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
+                cell_type = inst.cell_type
+                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                if frame_bar:
+                    cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
-                if not inst.sub and has_patch and inst.cell_type == "char":
+                if not inst.sub and has_patch and cell_type == "char":
                     cand_variants = self._cand_variants(
                         ctx, page, cc, img, inst, slot, seams.get(pos),
                         multi_above.get(pos), multi_below.get(pos))
-                if patch is not None and getattr(patch, "size", 0) > 0 and inst.cell_type == "char":
+                if has_patch and cell_type == "char":
                     ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
+                flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
+                s3_kind = step3_kind.get(pos, "char")
+                # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
+                # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——
+                # 无论是列端渣格闸误杀（tail_junk）、`patch.size == 0`
+                # 的极端情况，还是以后任何新引入的路径——下游（Step5-c
+                # OCR、glyph_match、人裁审查页）一律按 pos 遍历 char_index，
+                # patch_key=None 会被默默跳过，字就凭空消失在产物里、
+                # 不报错也不留痕（旧行为——本卡起点的那 63 个丢字就是
+                # 这样被发现的）。这里补一个确定性 flag：只要满足
+                # 「Step3 说有字」+「Step4 没给出可用图块」，就打
+                # `lost_patch`，下游/人审能靠这个 flag 筛出「Step4 认为
+                # 这里没有可交付的图块，但 Step3 认为这里应该有字」的
+                # 格位，而不是永远无声无息。
+                if (patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags
+                        and not frame_bar):
+                    flags.append("lost_patch")
                 recs.append(CharRec(
                     id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
                     slot=slot, pos=pos, idx=int(inst.idx), sub=inst.sub,
-                    cell_type=inst.cell_type, step3_kind=step3_kind.get(pos, "char"),
+                    cell_type=cell_type, step3_kind=s3_kind,
                     bbox_col=bbox,
                     bbox_page=(None if mapper is None else
                                tuple(round(v, 2) for v in mapper.bbox_tr(*bbox))),
                     ink_ratio=float(inst.ink_ratio), height=float(bbox[3] - bbox[1]), width=float(bbox[2] - bbox[0]),
-                    flags=list(inst.flags), patch_key=patch_key,
+                    flags=flags, patch_key=patch_key,
                     cand_variants=cand_variants,
                 ))
             out.append(ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs))

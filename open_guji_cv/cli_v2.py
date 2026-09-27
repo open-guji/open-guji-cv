@@ -59,7 +59,15 @@ def cmd_pipeline(args) -> None:
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
-    rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error)
+    # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
+    from .core.runlock import book_run_lock, RunLockHeld
+    try:
+        with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
+            rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
+                          jobs=getattr(args, "jobs", 1))
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
     n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
@@ -81,13 +89,112 @@ def cmd_status(args) -> None:
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
     for sid, d in st["steps"].items():
         c = d["counts"]
+        drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
         print(f"  {sid:16s} 新鲜 {c['fresh']:3d}  过期 {c['stale']:3d}  缺失 {c['missing']:3d}  "
-              f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}")
+              f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}{drift}")
+    if any(d.get("drift") for d in st["steps"].values()):
+        print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
+              "要重算点名格用 `guji recheck`）")
+
+
+def cmd_recheck(args) -> None:
+    """Step5-a 点名重算：按字 / 判档 / 命中条目已撤，把格写进 manifest 的格级失效。
+    只标不跑——跑还是 `guji pipeline <p> <book> --from glyph_match`，只重算点名格。"""
+    from .core.spec import page_key
+    from .steps.glyph_match import live_exemplars, recheck_reasons
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    step = eng.pipeline.producer_of("glyph_match")
+    sid = step.spec.id
+    p = eng.ctx.params_for(step)
+    chars = set((args.chars or "").replace(",", "").replace("，", "").replace(" ", ""))
+    verdicts = {v for v in (args.verdicts or "").split(",") if v}
+    if not (chars or verdicts or args.dead or args.all):
+        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all")
+    live = None
+    if args.dead:
+        edition = p.edition
+        if edition is None and getattr(eng.book, "edition", "keben") == "modern":
+            edition = f"modern:{eng.book.id}"
+        live = live_exemplars(p.db_path, edition)
+    manifest = eng.store.manifest(eng.book.id, sid)
+    pages = eng.book.resolve_pages(args.pages)
+    reason = "recheck " + " ".join(x for x in (
+        f"chars={''.join(sorted(chars))}" if chars else "",
+        f"verdicts={','.join(sorted(verdicts))}" if verdicts else "",
+        "dead" if args.dead else "", "all" if args.all else "") if x)
+    n_pages = n_cells = n_total = 0
+    by_why: dict[str, int] = {}
+    for pg in pages:
+        key = page_key(pg)
+        if manifest.get(key) is None:
+            continue
+        if args.all:
+            n_pages += 1
+            if not args.dry_run:
+                manifest.invalidate(key, reason)
+            continue
+        pm = eng.store.read(eng.book.id, sid, key, "glyph_match")
+        if pm is None:
+            continue
+        ids: list[str] = []
+        for col in pm.columns:
+            for r in col.chars if col.ok else []:
+                n_total += 1
+                why = recheck_reasons(r, chars, verdicts, live)
+                for w in why:
+                    by_why[w] = by_why.get(w, 0) + 1
+                if why:
+                    ids.append(r.id)
+        if ids:
+            n_pages += 1
+            n_cells += len(ids)
+            if not args.dry_run:
+                manifest.invalidate(key, reason, cells=ids)
+    head = "[dry-run] " if args.dry_run else ""
+    if args.all:
+        print(f"{head}{sid}：{n_pages} 页整页失效")
+    else:
+        pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
+        print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
+              + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
+    if n_pages and not args.dry_run:
+        print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
+              f"--pages {args.pages} -w <workspace>")
 
 
 def cmd_console(args) -> None:
     from .console.app import serve
+    from .console.auth import config as auth_config
     from .core.workspace import describe, using_sample_corpus, using_sample_db
+
+    host = getattr(args, "host", None) or "127.0.0.1"
+    loopback = host in ("127.0.0.1", "localhost")
+    no_auth = bool(getattr(args, "no_auth", False))
+    if no_auth and not loopback:
+        print(f"✗ --no-auth 只能在本机（127.0.0.1/localhost）用，绑 {host} 时必须过身份接口鉴权，"
+              "拒绝启动——对外开放校对平台不能关掉登录。", file=sys.stderr)
+        sys.exit(1)
+    root_path = getattr(args, "root_path", "") or ""
+    dev_idp = bool(getattr(args, "dev_idp", False))
+    auth_config.set_config(no_auth=no_auth, root_path=root_path, dev_idp=dev_idp)
+
+    # 向后兼容（协调者 09-26 20:10 验收意见）：OAuth 还没配（网站两个端点
+    # 10 月上旬才有 PR），服务器的 systemd 单元现在起控制台**没带任何鉴权参数**。
+    # 不补这条的话，这次改动一合 main、服务器一重启，控制台就变成一个当下
+    # 用不了的登录页，把正在用的人全挡在外面。
+    oauth_configured = bool(auth_config.get().client_secret)
+    if not no_auth and not dev_idp and not oauth_configured:
+        if loopback:
+            no_auth = True
+            auth_config.set_config(no_auth=True)
+            print("  ⚠️⚠️  未配置 OAuth（GUJI_OAUTH_CLIENT_SECRET 为空）且未加 --dev-idp/--no-auth，"
+                  "绑的是本机地址——按本机免鉴权运行。生产部署前必须配置 OAuth 或显式加"
+                  " --no-auth/--dev-idp。\n")
+        else:
+            print(f"✗ 绑 {host} 但没配置 OAuth（GUJI_OAUTH_CLIENT_SECRET 为空）也没加 --dev-idp——"
+                  "登录流程打不通，拒绝启动。要么配好 OAuth，要么本机开发用 --dev-idp。",
+                  file=sys.stderr)
+            sys.exit(1)
 
     # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
     # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
@@ -99,8 +206,13 @@ def cmd_console(args) -> None:
     if using_sample_db() or using_sample_corpus():
         print("\n  ⚠️  没设 GUJI_WORKSPACE（或工作区数据不全）——库/语料会落到仓内小样本，\n"
               "     整理本锚不上、库匹配全是 unsure。真跑书请先：\n"
-              "     export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace\n")
-    serve(port=args.port, open_browser=not args.no_browser)
+              "     export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>\n")
+    if no_auth:
+        print("  ⚠️  --no-auth：鉴权已关闭，任何能连上本机端口的人都能起跑批、写裁决——"
+              "只许本机开发用。\n")
+    if dev_idp:
+        print("  ⚠️  --dev-idp：登录走本机假登录页，不是网站真授权——只许本机开发用。\n")
+    serve(port=args.port, open_browser=not args.no_browser, host=host, root_path=root_path)
 
 
 def cmd_cache(args) -> None:
@@ -133,7 +245,7 @@ def cmd_cache(args) -> None:
         path = cache.get(args.book, "column_image", column_key(args.page, args.col))
         if path is None:
             print("没有列图"); sys.exit(1)
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             print("列图读不出来"); sys.exit(1)
         h = img.shape[0]
@@ -270,7 +382,7 @@ def cmd_gold(args) -> None:
             if not p:
                 return None
             f = root / p.replace("open-guji-cv ", "")
-            return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
+            return cv_imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
 
         rep = check_shard(args.shard, items, image_of)
         print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1))
@@ -346,6 +458,62 @@ def cmd_witness_align(args) -> None:
     print(json.dumps(stats, ensure_ascii=False))
 
 
+def cmd_witness_align_stream(args) -> None:
+    """字流证人对齐：换行与刻本不同的证人（`line_is_column: false`）→ 逐字位标签
+    （utils/witness_align_stream.py）。同书异版用这条，列级那条对不上。
+
+    OCR 只当锚，标签一律取证人字；只收长度 ≥ `--min-block` 的 `equal` 块。
+    """
+    from .core.book import load_book
+    from .core.workspace import corpus_path, products_root
+    from .utils.witness_align_stream import align_stream, write_labels
+
+    book = load_book(args.book)
+    ref = (book.references or [{}])[0]
+    witness = Path(args.witness) if args.witness else corpus_path(ref["file"])
+    res = align_stream(book, witness=witness, products_root=products_root(),
+                       min_block=args.min_block)
+    out = products_root() / book.id / "witness_align" / "labels.jsonl"
+    write_labels(res, out)
+    blocks = sorted(res.blocks, reverse=True)
+    stats = {
+        "n_cells": res.n_cells, "n_witness": res.n_witness, "n_ocr": res.n_ocr,
+        "n_equal": res.n_equal, "n_labeled": res.n_labeled,
+        "coverage": round(res.n_labeled / max(1, res.n_cells), 4),
+        "ocr_agree_at_labels": res.ocr_agree,
+        "n_blocks": len(blocks), "longest_blocks": blocks[:10],
+        "min_block": args.min_block,
+    }
+    print(json.dumps(stats, ensure_ascii=False, indent=1))
+    print(f"→ {out}")
+
+
+def cmd_calibrate(args) -> None:
+    """册级先验复核：把 `measure_*` 跑一遍，和 `books/<id>.yaml` 里的现值对照。
+
+    **只印表，不改 yaml**（理由见 `utils/calibrate.py` 模块头：自动回写会让一次
+    坏标定悄悄固化，还容易冲掉人写的 note）。
+    """
+    from .core.book import load_book
+    from .products.store import ProductStore
+    from .utils.calibrate import calibrate, format_table
+
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else None
+    rows, diag = calibrate(book, ProductStore(), pages=pages,
+                           with_bottom_gap=args.with_bottom_gap)
+    print(format_table(rows, diag, book.id))
+    if args.json:
+        payload = {"book": book.id, "diag": diag,
+                   "rows": [{"field": r.field, "current": r.current, "measured": r.measured,
+                             "verdict": r.verdict, "drift_pct": r.drift_pct, "note": r.note}
+                            for r in rows]}
+        Path(args.json).write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                                   encoding="utf-8")
+        print("")
+        print("已写 " + str(args.json))
+
+
 def cmd_calibrate_font(args) -> None:
     """字体判定（三模式方案 §五.1）：拿 witness-align / 人裁的标签当查询，逐套字体量
     recall@1/@5 与可分性 margin（utils/font_calibrate.py）。字体字形先用
@@ -398,6 +566,11 @@ def cmd_seed_witness(args) -> None:
     from .utils.seed_witness import seed_from_witness
 
     book = load_book(args.book)
+    # 不显式传就用册配置的（与 Step5-a 读同一个字段）——两边必须同一把尺子，
+    # 否则库被一把尺子筛、又被另一把尺子查，等于白播。
+    if args.norm_stroke is None and getattr(book, "norm_stroke", None):
+        args.norm_stroke = int(book.norm_stroke)
+        print(f"[seed] --norm-stroke 取册配置 {args.norm_stroke}")
     labels_path = Path(args.labels) if args.labels else products_root() / book.id / "witness_align" / "labels.jsonl"
     db = GlyphDB(glyph_db_path())
     try:
@@ -405,7 +578,8 @@ def cmd_seed_witness(args) -> None:
                                   font_editions=args.fonts.split(","), edition_tag=args.edition,
                                   limit=args.limit, products_root=products_root(),
                                   norm_stroke=args.norm_stroke, jobs=args.jobs,
-                                  only_chars=args.only_chars)
+                                  only_chars=args.only_chars, source_kind=args.source_kind,
+                                  binarize=not args.keep_gray)
     finally:
         db.close()
     out = products_root() / book.id / "witness_align" / "seed_stats.json"
@@ -539,10 +713,10 @@ def cmd_import_pdf(args) -> None:
                 import cv2
                 raw = doc.extract_image(xref)["image"]
                 tmp.write_bytes(raw)
-                img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
                 if img is None:                      # 码流坏了，试抢救
                     tmp.write_bytes(_salvage_jpx(raw))
-                    img = cv2.imread(str(tmp), cv2.IMREAD_UNCHANGED)
+                    img = cv_imread(str(tmp), cv2.IMREAD_UNCHANGED)
                     if img is not None:
                         n_salvaged += 1
                         problems.append(f"页 {page_no}：内嵌码流残缺，已截断末 tile 抢救"
@@ -581,7 +755,7 @@ def cmd_import_pdf(args) -> None:
     for f in out.glob("*.png"):
         try:
             import cv2
-            im = cv2.imread(str(f), cv2.IMREAD_UNCHANGED)
+            im = cv_imread(str(f), cv2.IMREAD_UNCHANGED)
             if im is not None:
                 sizes[(im.shape[1], im.shape[0])] = sizes.get((im.shape[1], im.shape[0]), 0) + 1
         except Exception:
@@ -595,6 +769,25 @@ def cmd_import_pdf(args) -> None:
         print("  ⚠️ 尺寸不一致：" + "；".join(f"{w}×{h} × {c} 页" for (w, h), c in top[:4]))
     for p in problems:
         print("  ⚠️ " + p)
+
+
+def cmd_binarize(args) -> None:
+    """整页二值副本：灰度扫描 → `binarized/<book>/<page>.png`（白底黑字）。
+
+    进字形库的图一定是二值的（用户 2026-09-16），审阅时看二值的也更准。
+    这条把二值化统一到**页级**做一次落盘，而不是每个消费点各二值各的。
+    默认 Sauvola 31/0.2 —— 固定阈 128 会砍掉一半界行，见 `utils/binarized.py`。
+    """
+    from .core.book import load_book
+    from .utils.binarized import binarized_root, build_binarized
+
+    book = load_book(args.book)
+    pages = book.resolve_pages(args.pages) if args.pages else book.all_pages()
+    written = build_binarized(book, pages, force=args.force,
+                              window=args.window, k=args.k)
+    print(json.dumps({"book": book.id, "pages": len(pages), "written": len(written),
+                      "dir": str(binarized_root() / book.id),
+                      "window": args.window, "k": args.k}, ensure_ascii=False))
 
 
 def cmd_preclean(args) -> None:
@@ -693,7 +886,7 @@ def cmd_product(args) -> None:
         f = load_book(args.book).raw_path(args.page)
         if not f.exists():
             print("原图缺失"); sys.exit(1)
-        _write(args.out, encode_png(cv2.imread(str(f)), args.scale))
+        _write(args.out, encode_png(cv_imread(str(f)), args.scale))
     elif args.action == "overlay":
         _write(args.out, encode_png(overlay(args.book, args.step, args.page, st), args.scale))
     elif args.action == "patch":
@@ -750,6 +943,21 @@ def cmd_check(args) -> None:
         from .eval import throughput as tp
         pages = None if args.all_pages else args.pages
         _out(tp.full_report(args.book, pages, st))
+    elif args.action == "ledger":
+        # 字形库 × 工作区记录对账（H 人裁单写者任务书件 3）：只读，不改库。
+        # `book` 过滤到这一本（一个工作区常挂好几本书，如四庫 vol01–vol10 共用一个 glyph.db）。
+        from .clustering.glyph_ledger import crosscheck
+        from .core.workspace import glyph_db_path
+        res = crosscheck(glyph_db_path(), book=args.book, drift=args.drift)
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as f:
+                for x in res["findings"]:
+                    f.write(json.dumps(x, ensure_ascii=False) + "\n")
+        _out({"book": args.book, "n_lib": res["n_lib"], "counts": res["counts"],
+             "n_findings": len(res["findings"]), "drift_missing": res["drift_missing"],
+             "out": args.out or None})
 
 
 def cmd_cards(args) -> None:
@@ -799,8 +1007,16 @@ def cmd_rare(args) -> None:
     （CNN checkpoint 走 CPU 前向）。⚠️ 首次要建字体索引，方案 §十一·4 实测
     112 秒，之后 0.1 秒——别当它挂了。
     """
-    from .clustering.rare_panel import rare_batch, rare_for, rare_patch
+    from .clustering.rare_panel import ids_fallback, rare_batch, rare_for, rare_patch
 
+    if args.top or args.slot_comp or args.comp:
+        # IDS 兜底：`rare vol01 --top ⿰ --slot-comp L=言 --comp 俞 [page col slot]`
+        slots = dict(x.split("=", 1) for x in args.slot_comp)
+        img = rare_patch(args.book, args.page, args.col, args.slot, args.sub) if args.page else None
+        _out({"query": {"top": args.top, "slots": slots, "components": args.comp},
+              "with_image": img is not None,
+              "candidates": ids_fallback(args.top, slots, args.comp, img, args.k, args.book)})
+        return
     if args.slots:
         _out(rare_batch(args.book, [x.strip() for x in args.slots.split(",") if x.strip()], args.k))
         return
@@ -859,6 +1075,94 @@ def cmd_collate(args) -> None:
     print(f"  未锚定页：{un}" + (f" · 数据版本不同步 {len(doc['stale'])} 处" if doc["stale"] else ""))
 
 
+def cmd_progress(args) -> None:
+    """Step9-9.0 进度复查：页范围内每页还挂着哪些待办（看板，不是闸）。口径见 `report/progress.py`。"""
+    from .core.book import load_book
+    from .report.progress import format_table, page_progress
+    bk = load_book(args.book)
+    doc = page_progress(args.book, bk.resolve_pages(args.pages))
+    if args.json:
+        _out(doc)
+        return
+    print(format_table(doc))
+
+
+def cmd_snapshot(args) -> None:
+    """把一本书若干步的产物冻结成快照，供下游用 GUJI_PRODUCTS_DIR 读（并行分工 §三·2）。"""
+    from .core.runlock import make_snapshot, snapshots_root, RunLockHeld
+    if args.action == "list":
+        root = snapshots_root() / args.book
+        for d in sorted(root.iterdir()) if root.is_dir() else []:
+            meta = d / "SNAPSHOT.json"
+            info = json.loads(meta.read_text(encoding="utf-8")) if meta.is_file() else {}
+            print(f"{d}  steps={','.join(info.get('steps', []))}  rev={info.get('code_rev')}  {info.get('created', '')}")
+        return
+    steps = [s for s in (args.steps or "").split(",") if s] or None
+    try:
+        out = make_snapshot(args.book, steps, args.name)
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
+    print(f"快照：{out}")
+    print(f"下游这样读：GUJI_PRODUCTS_DIR='{out}'")
+
+
+def cmd_release(args) -> None:
+    """`guji release check`：候选提交跟上一个 `cv-*` tag 比（K 道，2026-09-26）。
+    见 `open_guji_cv/ops/release_check.py` 模块头。"""
+    from .ops import release_check as rc
+    if args.action != "check":
+        print(f"未知 action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+    repo = Path(args.repo).resolve() if args.repo else Path(__file__).resolve().parent.parent
+    res = rc.release_check(repo, args.candidate, against=args.against, version=args.version,
+                           run_tests=not args.no_tests)
+    if args.json:
+        print(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(res.draft)
+    if args.write_baseline:
+        import json as _json
+        baseline_path = repo / rc.BASELINE_REL
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(_json.dumps({"failed": res.test_result["failed"],
+                                              "skipped": res.test_result["skipped"],
+                                              "version": res.version},
+                                             ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"已写基线：{baseline_path}", file=sys.stderr)
+    if res.test_diff["regressed"]:
+        print("✗ 全量测试比上一版多了失败/跳过——这是发布前唯一的硬门槛，见上面「全量测试」一节",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_deploy(args) -> None:
+    """`guji deploy check`：服务器定时器跑，拉模式部署 `production` 分支（K 道，2026-09-26）。
+    见 `open_guji_cv/ops/deploy_check.py` 模块头。"""
+    from .ops import deploy_check as dc
+    if args.action != "check":
+        print(f"未知 action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+    repo = Path(args.repo).resolve() if args.repo else Path(__file__).resolve().parent.parent
+    products_root = Path(args.products).resolve() if args.products else None
+    result = dc.deploy_check(repo, branch=args.branch, service=args.service, base_url=args.base_url,
+                             products_root=products_root, dry_run=args.dry_run,
+                             state_path=repo / "runs" / "deploy_state.json")
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    stale = None
+    if result.status == dc.DEPLOYED and args.workspace:
+        stale = dc.collect_stale_summary(Path(args.workspace).resolve())
+        if stale:
+            print("过期步（排进夜间重算队列，只写清单不自动起跑批）：", file=sys.stderr)
+            for book, steps in sorted(stale.items()):
+                print(f"  {book}: {', '.join(steps)}", file=sys.stderr)
+    if args.overview and not args.dry_run and result.status != dc.NO_UPDATE:
+        path = dc.write_deploy_record(Path(args.overview).resolve(), result, stale_summary=stale)
+        print(f"部署记录：{path}", file=sys.stderr)
+    if result.status in (dc.FETCH_FAILED, dc.RESOLVE_FAILED, dc.MERGE_FAILED, dc.ROLLED_BACK):
+        sys.exit(1)
+
+
 def cmd_runs(args) -> None:
     """控制台的任务队列：list | show | cancel | log。
 
@@ -894,15 +1198,19 @@ def cmd_runs(args) -> None:
 
 COMMANDS_V2 = {
     "preclean": cmd_preclean,
+    "binarize": cmd_binarize,
     "split": cmd_split,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
+    "witness-align-stream": cmd_witness_align_stream,
+    "calibrate": cmd_calibrate,
     "calibrate-font": cmd_calibrate_font,
     "seed-witness": cmd_seed_witness,
     "eval": cmd_eval,
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "recheck": cmd_recheck,
     "console": cmd_console,
     "cache": cmd_cache,
     "batch": cmd_batch,
@@ -914,18 +1222,88 @@ COMMANDS_V2 = {
     "rare": cmd_rare,
     "variants": cmd_variants,
     "collate": cmd_collate,
+    "progress": cmd_progress,
     "runs": cmd_runs,
+    "snapshot": cmd_snapshot,
+    "release": cmd_release,
+    "deploy": cmd_deploy,
 }
+
+
+WORKSPACE_HELP = ("工作区仓根（含 books/<book>.yaml、products/、cache/、output/）。**必填**——"
+                  "凡带 book 的命令都不再读 GUJI_WORKSPACE 环境变量兜底：那个变量漏设/设错都不报错，"
+                  "产物会静默写到别的工作区（2026-09-19 一天里两次栽在这上面）。")
+
+
+def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
+    return any(a.dest == "book" for a in sp._actions)
+
+
+def resolve_workspace(args, parser: argparse.ArgumentParser) -> Path | None:
+    """带 book 的命令：`--workspace` 必填、必须存在、必须有这册书的定义；解析结果写进
+    `GUJI_WORKSPACE` 供下游（`core.workspace.workspace_root` 及其之下一切）使用。
+
+    环境变量若已设且指向别处，以 `--workspace` 为准并提示——环境变量常是上一本书留下的。
+    """
+    if not hasattr(args, "book"):
+        return None
+    ws = getattr(args, "workspace", None)
+    if not ws:
+        parser.error("缺 -w/--workspace：跑真书必须显式给工作区，例如 "
+                     f"`-w D:/workspace/<book>-workspace`（books/{args.book}.yaml 所在的仓根）。"
+                     "不再读 GUJI_WORKSPACE 兜底。")
+    root = Path(ws).expanduser().resolve()
+    spec = root / "books" / f"{args.book}.yaml"
+    if not spec.exists():
+        parser.error(f"--workspace {root} 下没有 books/{args.book}.yaml——路径给错了，或这不是「{args.book}」的工作区")
+    import os
+    env = os.environ.get("GUJI_WORKSPACE")
+    if env and Path(env).expanduser().resolve() != root:
+        print(f"  ⚠️  GUJI_WORKSPACE={env} 与 --workspace 不同，以 --workspace 为准", file=sys.stderr)
+    os.environ["GUJI_WORKSPACE"] = str(root)
+    print(f"  工作区 {root}  册 {args.book}", file=sys.stderr)
+    return root
+
+
+def _with_workspace(handler, sp: argparse.ArgumentParser):
+    def run(args):
+        resolve_workspace(args, sp)
+        return handler(args)
+    run._workspace_wrapped = True     # type: ignore[attr-defined]
+    return run
+
+
+def install_workspace_option(sub: argparse._SubParsersAction) -> None:
+    """给每个带 book 的子命令加 `-w/--workspace`（必填，见 WORKSPACE_HELP），并把它的
+    处理函数包一层做校验。`register_subcommands` 末尾调用；两个入口（`guji` 与
+    `python -m open_guji_cv`）都经这里，幂等。"""
+    for name, sp in sub.choices.items():
+        handler = COMMANDS_V2.get(name)
+        if handler is None or not _needs_workspace(sp):
+            continue
+        # 参数每次都要加（每次调用建的是新的 parser 对象）；处理函数只包一层
+        sp.add_argument("-w", "--workspace", default=None, help=WORKSPACE_HELP)
+        if not getattr(handler, "_workspace_wrapped", False):
+            COMMANDS_V2[name] = _with_workspace(handler, sp)
 
 
 # ── parsers ──────────────────────────────────────────────────────────
 def _add_pages(p: argparse.ArgumentParser) -> None:
+    import os
     p.add_argument("--pages", default="dev_set",
                    help="dev_set（默认）| all | 3-6,9 之类的页号表达式")
     p.add_argument("--force", action="store_true", help="无视指纹，强制重跑")
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
+    p.add_argument("--wait", action="store_true",
+                   help="这本书正有别的跑批在写时排队等它跑完（默认直接报持有者并退出，退出码 3）")
+    p.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                   help="页级并行进程数（默认=本机 CPU 数）。只对声明过 "
+                        "`StepSpec.parallel_safe=True` 的 Step 生效，其余 Step 仍串行，"
+                        "混跑一条 pipeline 时不用分开调。别超过 CPU 数——超订只会更慢，"
+                        "有一次性初始化（模型/字形库）的 Step 并行时这部分开销按进程数摊，"
+                        "不是按页摊，进程数越多单个 worker 越快建好摊得越薄，但仍不该超核数")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"
@@ -945,6 +1323,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     _add_pages(p)
+
+    p = sub.add_parser("binarize",
+                       help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
+    p.add_argument("book", help="books/<id>.yaml 里的书 id")
+    p.add_argument("--pages", default=None, help="只做这些页（默认全书）")
+    p.add_argument("--force", action="store_true", help="已有也重做")
+    from .clustering.normalize import SAUVOLA_K, SAUVOLA_WINDOW
+    p.add_argument("--window", type=int, default=SAUVOLA_WINDOW,
+                   help=f"Sauvola 窗口（默认 {SAUVOLA_WINDOW}，与 normalize_patch 同一组常数）")
+    p.add_argument("--k", type=float, default=SAUVOLA_K,
+                   help=f"Sauvola k（默认 {SAUVOLA_K}，与 normalize_patch 同一把尺子；"
+                        "旧版这里写死 0.2，是常数改成 0.10 时漏改的）")
 
     p = sub.add_parser("preclean",
                        help="[v2] Step0：生成预清理后的页图（只处理 yaml 里登记的页）")
@@ -968,6 +1358,21 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--first-page", type=int, default=None, help="扫描页 1 对应的影印页码")
     p.add_argument("--witness", default=None, help="整理本文件；默认 references[0].file")
+
+    p = sub.add_parser("witness-align-stream",
+                       help="[v2] 字流证人对齐：换行与刻本不同的证人（同书异版）→ 逐字位标签")
+    p.add_argument("book")
+    p.add_argument("--witness", default=None, help="证人文件；默认 references[0].file")
+    p.add_argument("--min-block", type=int, default=8,
+                   help="只收长度 ≥ 这个的 equal 块（默认 8，与 align_label 的 8-gram 同量级）")
+
+    p = sub.add_parser("calibrate",
+                       help="[v2] 册级先验复核：measure_* 实测 vs books/<id>.yaml 现值的对照表（不改 yaml）")
+    p.add_argument("book")
+    p.add_argument("--pages", default=None, help="页号表达式；默认 yaml 的 pages")
+    p.add_argument("--with-bottom-gap", action="store_true",
+                   help="连 bottom_gap 一起量（要读整册原图，慢）")
+    p.add_argument("--json", default=None)
 
     p = sub.add_parser("calibrate-font",
                        help="[v2] 字体判定：标签字位在各套字体来源里的 recall@1/@5 与可分性 margin")
@@ -1004,6 +1409,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--only-chars", default=None,
                    help="只播这些字头（连写，如 「」《》）。进库幂等，可反复补播——"
                         "修好某一类字的形状证人后补这一类，不必全量重播")
+    p.add_argument("--keep-gray", action="store_true",
+                   help="进库存灰度裁片（旧行为）。缺省存**二值**——用户 2026-09-16："
+                        "最后进字形库的一定是二值的，灰度值会干扰")
+    p.add_argument("--source-kind", default="print", choices=["print", "woodblock"],
+                   help="这本书的来源类型（默认 print，现代排印本）。**刻本必须传 woodblock**："
+                        "候选检索默认只查 kinds=('woodblock',)，记成 print 会让播进去的字形"
+                        "在检索里静默查不到")
 
     p = sub.add_parser("import-pdf", help="[v2] PDF 逐页抽成灰度 PNG（<out>/<页号>.png）")
     p.add_argument("pdf")
@@ -1017,15 +1429,67 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pages", default=None, help="只抽这些页，如 1-5,9")
     p.add_argument("--force", action="store_true")
 
+    p = sub.add_parser("snapshot", help="[v2] 冻结一本书若干步的产物，供下游用 GUJI_PRODUCTS_DIR 读")
+    p.add_argument("action", choices=["make", "list"])
+    p.add_argument("book")
+    p.add_argument("--steps", default=None, help="逗号分隔的步骤 id，默认该书已有的全部步")
+    p.add_argument("--name", default=None, help="快照名，默认 <日期-时刻>-<commit>")
+
+    p = sub.add_parser("release", help="[v2] 发版前检查：release check <commit>（K 道，2026-09-26）")
+    p.add_argument("action", choices=["check"])
+    p.add_argument("candidate", nargs="?", default="HEAD", help="候选提交，默认当前 HEAD")
+    p.add_argument("--against", default=None, help="对比的旧提交/tag，默认上一个 cv-* tag")
+    p.add_argument("--version", default=None, help="版本号，默认 cv-YYYY.MM.DD（当天已有就加 -2/-3）")
+    p.add_argument("--repo", default=None, help="cv 仓根，默认本模块所在的仓")
+    p.add_argument("--no-tests", action="store_true", help="跳过全量测试（只看指纹影响清单，调试用）")
+    p.add_argument("--write-baseline", action="store_true",
+                   help="把这次的失败/跳过写成新基线（ops/baseline_tests.json），发布通过后再加")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("deploy", help="[v2] 服务器部署检查：deploy check（K 道，2026-09-26）")
+    p.add_argument("action", choices=["check"])
+    p.add_argument("--repo", default=None, help="cv 仓（服务器上跟 production 分支的那个 checkout），默认本模块所在的仓")
+    p.add_argument("--branch", default="production")
+    p.add_argument("--service", default="guji-cv-console", help="systemd --user 服务名")
+    p.add_argument("--base-url", default="http://127.0.0.1:8640", help="健康检查打的地址")
+    p.add_argument("--products", default=None, help="products 根目录，探测跑批锁用；不给就不查锁")
+    p.add_argument("--workspace", default=None, help="部署成功后 guji status 各书要用的工作区")
+    p.add_argument("--overview", default=None, help="overview 仓路径，成功/失败都写一张部署记录并推")
+    p.add_argument("--dry-run", action="store_true", help="只打印会做什么，不改任何东西")
+
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("recheck",
+                       help="[v2] Step5-a 点名重算：库变了不自动重跑，要吃新库就在这里点名格")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--chars", default=None, help="记录里出现这些字的格（判定字/候选），如 𠊓,虜")
+    p.add_argument("--verdicts", default=None, help="这些判档的格，如 unsure,diff")
+    p.add_argument("--dead", action="store_true",
+                   help="same 档命中的库条目已撤或字头已改（撤库后建议跑一次）")
+    p.add_argument("--all", action="store_true", help="整页失效（不复用任何格）")
+    p.add_argument("--dry-run", action="store_true", help="只数不写")
+
     p = sub.add_parser("console", help="[v2] 启动控制台（FastAPI）")
     p.add_argument("--port", type=int, default=DEFAULT_CONSOLE_PORT)
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--host", default="127.0.0.1",
+                   help="监听地址，默认 127.0.0.1（对外开放校对平台生产环境仍应绑回环地址，"
+                        "由反向代理转发，见 overview 总览/16）")
+    p.add_argument("--no-auth", action="store_true",
+                   help="关掉鉴权（本机开发用）。只在 --host 是 127.0.0.1/localhost 时允许，"
+                        "绑别的地址会拒绝启动")
+    p.add_argument("--root-path", default="",
+                   help="挂在反向代理前缀下时用，如 /collate（网站把 /collate/* 转发到这里）")
+    p.add_argument("--dev-idp", action="store_true",
+                   help="登录走本机假登录页，不打网站真的 /oauth/authorize|token（网站两个端点"
+                        "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
+                        "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column")
     p.add_argument("action", choices=["usage", "prune", "get", "column"])
@@ -1104,14 +1568,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--scale", type=float, default=0.35, help="raw / overlay 的缩放")
     p.add_argument("--out", default="", help="图像输出路径（raw / overlay / patch 必给）")
 
-    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput")
-    p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput"])
+    p = sub.add_parser("check", help="[v2] 判据与体检：quality | rulers | round | rate | throughput | ledger")
+    p.add_argument("action", choices=["quality", "rulers", "round", "rate", "throughput", "ledger"])
     p.add_argument("book", nargs="?", default="vol01")
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--snapshot", action="store_true", help="rate：记一行台账（默认只读）")
     p.add_argument("--note", default="", help="rate --snapshot 的说明")
     p.add_argument("--all-pages", action="store_true",
                    help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
+    p.add_argument("--drift", action="store_true",
+                   help="ledger：另外核对库里的图与现在的字块图还像不像（较慢，逐条读图比对）")
+    p.add_argument("--out", default="",
+                   help="ledger：发现明细另存 jsonl（不给就只在 --json/文字里出汇总数与 counts）")
 
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
@@ -1136,6 +1604,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--sub", default="")
     p.add_argument("-k", type=int, default=10, help="出几个候选")
     p.add_argument("--slots", default="", help='批量："24:1:10,24:2:3a"')
+    p.add_argument("--top", default="", help="IDS 兜底：顶层结构，如 ⿰ ⿱ ⿸")
+    p.add_argument("--slot-comp", action="append", default=[], metavar="槽=部件",
+                   help="IDS 兜底：某槽位的部件，如 L=言（可重复）")
+    p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])
@@ -1150,14 +1622,24 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="HTML 里深链指向的控制台地址；空串则不出链接")
     p.add_argument("--no-html", action="store_true", help="只出 JSON")
 
+    p = sub.add_parser("progress", help="[v2] Step9-9.0 进度复查：页范围内每页还挂着哪些待办（看板，不拦 9.1/9.2）")
+    p.add_argument("book")
+    p.add_argument("--pages", default="all", help="页表达式；默认全书")
+    p.add_argument("--json", action="store_true", help="出 JSON（与控制台 /api/step9/progress 同形）")
+
     p = sub.add_parser("runs", help="[v2] 控制台任务：list | show | cancel | log")
     p.add_argument("action", choices=["list", "show", "cancel", "log"])
     p.add_argument("id", nargs="?", default=None)
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("-f", "--follow", action="store_true", help="log：跟着刷")
 
+    install_workspace_option(sub)
+
 
 def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        from .utils.batch_slice import enter_batch_slice
+        enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)

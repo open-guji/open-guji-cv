@@ -8,18 +8,20 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import Identity, require_admin, require_reviewer
+from ...feedback.anchor import enrich_events as _anchor_events
 from ...feedback.consumers import route_and_consume
 from ...feedback.events import EventTarget, make_event
 from ...feedback.harvest import harvest_text
 from ...feedback.routes import RouteTable
 from ...review.batches import Batch, render_registry_markdown
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -71,7 +73,7 @@ def api_batches() -> list[dict]:
 
 
 
-@router.post("/api/batches")
+@router.post("/api/batches", dependencies=[Depends(require_admin)])
 def api_batch_create(req: BatchCreate) -> dict:
     if deps.batch_store().get(req.id):
         raise HTTPException(409, f"批次 {req.id} 已存在")
@@ -95,9 +97,55 @@ def api_batch_get(batch_id: str) -> dict:
 
 
 
+def _product_anchor(step: str, ids: dict) -> dict | None:
+    """裁决是**对哪一版产物**做的——写进 `target.anchor.product_key`。
+
+    ## 为什么要有
+
+    `Anchor` 设计时就写着「product_key 允许失效，bbox + content_sha 不失效」，
+    可实测这三个字段**填充率全是 0%**（2984 条裁决表条目里一条都没有），
+    「产物重生后仍可定位」这个核心能力从来没兑现过。
+
+    后果是真实的：2026-09-18 改了 Step3 的 `ink_lam` 重跑全书，切线坐标基准
+    随之变化，而金标里没有任何东西能判断「这条裁决是对哪一版产物裁的」——
+    只能靠人记得。切线台自己发明了一个补丁（把 `col_h` 塞进 payload，233/233
+    条都有，前端 drift 档据此判断裁决是否过期），但那是**私有解法**，
+    别的台没有。这里把它提升成通用字段，由写入路径统一填，不靠各台自觉。
+
+    取不到指纹就返回 None（页号解析不出、产物还没跑、step 不产页级产物），
+    **不抛异常**——anchor 是锦上添花，不该让裁决写不进去。
+    """
+    pg = ids.get("page")
+    if not step or pg is None:
+        return None
+    try:
+        from ...core.spec import page_key
+        man = deps.product_store().manifest(ids.get("book") or "", step)
+        rec = man.get(page_key(int(pg))) if man else None
+        fp = getattr(rec, "fingerprint", None)
+        if not fp:
+            return None
+        return {"product_key": {"step": step, "key": page_key(int(pg)), "fingerprint": fp}}
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
+_EVENTS_LOCK = __import__("threading").Lock()
+
+
 @router.post("/api/events")
-def api_events(req: EventsIn) -> dict:
-    """审查页直连写入。seq 从当前最大值续，保证同批不撞号。"""
+def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) -> dict:
+    """审查页直连写入。seq 从当前最大值续，保证同批不撞号。
+
+    **整段串行**（2026-09-26）：FastAPI 把同步路由放进线程池并发跑，而这里「取最大 seq → 追加」
+    与消费里金标的「整读 → 合并 → 整写」都是读改写。切线台改成回车先跳下一张、不等写入返回后，
+    人连按回车就有几个 POST 同时在跑——实测 vol02 两分钟里丢了 9 条金标（事件与记账都在，
+    裁决表里没有：两次 upsert 读到同一版文件，后写的覆盖了先写的）。"""
+    with _EVENTS_LOCK:
+        return _api_events(req, identity.email)
+
+
+def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
     base = deps.event_log().latest_seq(req.batch)
     evs = []
     for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
@@ -108,10 +156,18 @@ def api_events(req: EventsIn) -> dict:
         # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
         # 指标就是这个耗时，没有它 D 刀无法证伪。
         from ...feedback.harvest import parse_card_id
+        ids = parse_card_id(row["id"])
+        if req.kind == "cutline" and ids.get("page") is not None and ids.get("col") is not None:
+            # 切线坐标在列图里，列窗几何一变就漂（col_h 还可能不变）；写入时顺手记下页面坐标
+            # 与几何签名，评测据此换算到当前列图（eval/colgeom.py）。取不到几何就不记，不挡写入。
+            from ...eval.colgeom import current_geom, stamp
+            geom = current_geom(deps.product_store(), ids.get("book") or "", ids["page"], ids["col"])
+            payload = {**payload, **stamp(payload, geom)}
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
                               EventTarget(step=req.step, unit=req.unit, key=row["id"],
-                                          **parse_card_id(row["id"])),
-                              payload, source_format="server"))
+                                          anchor=_product_anchor(req.step, ids), **ids),
+                              payload, source_format="server", reviewer=reviewer))
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(req.batch)
     if b is None:
@@ -124,27 +180,26 @@ def api_events(req: EventsIn) -> dict:
                   notes="控制台直连裁决自动登记")
     if b.status == "draft":
         b.status = "open"
-    deps.batch_store().refresh_counts(b, deps.event_log())
-    deps.batch_store().save(b)
-    out = {"appended": n, "batch": req.batch, "total": len(deps.event_log().read(req.batch))}
+    out = {"appended": n, "batch": req.batch}
     if req.consume and n:
         # 写完直接消费（见 EventsIn.consume）。**失败不抛**：事件已经落盘，
         # 消费只是把它送进字形库/金标，出了岔子在「收割与消费」那块补跑即可——
         # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。
         try:
             table = RouteTable.load(deps.event_log().root / "routes.yaml")
-            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store())
+            # 只消费刚写进来的这几条（见 route_and_consume 的 event_ids）
+            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store(),
+                                    event_ids={e.id for e in evs})
             out["consumed"] = [
                 {"consumer": x["consumer"], "added": x["added"],
                  "skipped": x["skipped"], "errors": x["errors"][:3]}
                 for x in res["results"] if x["events"]]
             out["unrouted"] = res["unrouted"]
-            b2 = deps.batch_store().get(req.batch)
-            if b2:
-                deps.batch_store().refresh_counts(b2, deps.event_log())
-                deps.batch_store().save(b2)
         except Exception as exc:                       # noqa: BLE001
             out["consume_error"] = f"{type(exc).__name__}: {exc}"
+    # 批次计数只在最后刷一次（原来消费前后各刷一次，一次 0.3 s）；refresh_counts 自己会 save
+    deps.batch_store().refresh_counts(b, deps.event_log())
+    out["total"] = b.n_events
     return out
 
 
@@ -165,7 +220,7 @@ class HarvestIn(BaseModel):
 
 
 
-@router.post("/api/batches/{batch_id}/harvest")
+@router.post("/api/batches/{batch_id}/harvest", dependencies=[Depends(require_admin)])
 def api_harvest(batch_id: str, req: HarvestIn) -> dict:
     """喂 Artifact 读回的 HTML（或旧格式文本）→ 解析 → 事件入库。
 
@@ -185,6 +240,7 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
         evs = [make_event(batch_id, base + i, e.kind, e.target, e.payload,
                           e.actor, e.source_format, e.ts)
                for i, e in enumerate(fresh, 1)]
+    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
     n = deps.event_log().append(evs)
     b = deps.batch_store().get(batch_id)
     if b:
@@ -196,7 +252,7 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
 
 
 
-@router.post("/api/batches/{batch_id}/route")
+@router.post("/api/batches/{batch_id}/route", dependencies=[Depends(require_admin)])
 def api_route(batch_id: str, dry_run: bool = False) -> dict:
     table = RouteTable.load(deps.event_log().root / "routes.yaml")
     out = route_and_consume(deps.event_log(), batch_id, table, deps.verdict_store(),

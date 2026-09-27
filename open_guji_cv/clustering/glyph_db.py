@@ -132,6 +132,12 @@ CREATE TABLE IF NOT EXISTS pairs (
     created_at TEXT NOT NULL,
     PRIMARY KEY (inst_a, inst_b, relation)
 );
+CREATE TABLE IF NOT EXISTS meta (
+    -- 库级设置（2026-09-25）。book_edition：这个库是一本书的库，刻本字形一律归这个
+    -- edition（`set_book_edition` 写入）。没有这一行 = 旧行为（edition = 实例 id 前缀）。
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE TABLE IF NOT EXISTS admissions (
     -- 逐实例准入审计（种子协议 §3.5）：provenance + 完整判定证据。
     -- 主键即幂等闸：同一实例只准入一次，重复事件/重跑不重复进库。
@@ -198,6 +204,15 @@ class GlyphDB:
         if "kind" not in have:
             self.conn.execute("ALTER TABLE sources ADD COLUMN kind TEXT "
                               "NOT NULL DEFAULT 'woodblock'")
+        # 字形可信度（2026-09-25，字形库 04）：这个刻例与所定码位的通行字形
+        # 一致到什么程度——exact 完全一致 / nearest Unicode 里没有同形字、存的是
+        # 最近似码位（ids 写实际结构）/ unencoded 部件都对不上。NULL = 未评。
+        # 「刻的是另一个有码位的异体」不存：label ≠ semantic 即是，现算。
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(instances)")}
+        if "fidelity" not in have:
+            self.conn.execute("ALTER TABLE instances ADD COLUMN fidelity TEXT")
+        if "fidelity_by" not in have:
+            self.conn.execute("ALTER TABLE instances ADD COLUMN fidelity_by TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -505,6 +520,12 @@ class GlyphDB:
             return False
         source_id = instance_id.split(":")[0]
         edition = edition_tag or source_id
+        # 一本书一个 edition（2026-09-25，用户：「v2 应该是整个四库目录，是整一个新的
+        # edition」）。实例 id 前缀（vol01 / v2 / bxgb）是**命名空间**不是版本：库声明了
+        # 本书 edition（meta.book_edition）时，新进的刻本字形一律归它。字体（font:*）与
+        # 现代链播种域（modern:*，匹配器按它过滤）不动。
+        if not edition.startswith(("font:", "modern:")):
+            edition = self.book_edition() or edition
         cur.execute(
             "INSERT OR IGNORE INTO sources (source_id, edition_tag, created_at)"
             " VALUES (?,?,?)", (source_id, edition, _now()))
@@ -548,6 +569,14 @@ class GlyphDB:
                       n_confirmed = n_confirmed + 1,
                       status = CASE WHEN n_confirmed + 1 >= {K_MIN}
                                THEN 'stable' ELSE status END,
+                      -- 字头 semantic/unicode_cp 首次插入即冻结；早期事件把拼音
+                      -- 首字母写进过 semantic（麗→l），这里遇到非汉字旧值就让新值
+                      -- 顶上，码位缺了就补（glyph_ledger.repair_glyph_heads 修存量）
+                      semantic = CASE WHEN semantic IS NULL
+                                        OR length(semantic) != 1
+                                        OR unicode(semantic) < {0x2E80}
+                                      THEN excluded.semantic ELSE semantic END,
+                      unicode_cp = COALESCE(unicode_cp, excluded.unicode_cp),
                       updated_at=excluded.updated_at""",
                 (edition, shape, sem, cp, None, _now()))
             gid = cur.execute(
@@ -561,6 +590,75 @@ class GlyphDB:
                      if evidence is not None else None, _now()))
         self.conn.commit()
         return True
+
+    def book_edition(self) -> str | None:
+        """这个库声明过的「本书 edition」（`set_book_edition` 写进 meta）；没声明返回 None。
+
+        要显式声明、不按「来源恰好只有一个 edition」自动推：同一个库里放几本书的
+        情形（样本库、测试夹具）照样存在，自动推会把别的书并进来。"""
+        r = self.conn.execute("SELECT value FROM meta WHERE key='book_edition'").fetchone()
+        return r[0] if r and r[0] else None
+
+    def set_book_edition(self, edition: str, title: str | None = None,
+                         dry_run: bool = False) -> dict:
+        """把库里全部刻本字形并到一个 edition（一本书一套）。
+
+        `glyphs` 以 (edition_tag, char) 为键，同字在两个 edition 各一行的要合并：
+        刻例挂到目标行、确认数相加、够 K_MIN 升 stable；字头 semantic/ids/码位取目标行
+        已有的、没有就取被并的。`sources.edition_tag` 一并改掉，以后新进的刻例
+        （`admit_instance`）自动归这个 edition。实例 id 与 `instances.source_id` 不动——
+        v1/v2 前缀是坐标命名空间（idx 从 0 / slot 从 1），不是版本。
+        """
+        if edition.startswith(("font:", "modern:")):
+            raise ValueError("书的 edition 不能以 font: / modern: 开头")
+        cur = self.conn.cursor()
+        rows = cur.execute(
+            "SELECT glyph_id, edition_tag, char, semantic, unicode_cp, ids, n_confirmed "
+            "FROM glyphs WHERE edition_tag NOT LIKE 'font:%' AND edition_tag NOT LIKE 'modern:%' "
+            "AND edition_tag != ?", (edition,)).fetchall()
+        merged = moved = 0
+        seen: set[str] = set()        # 试算时记「已挪过去的字」，第二行同字才算合并
+        for gid, ed, ch, sem, cp, ids, n in rows:
+            tgt = cur.execute("SELECT glyph_id, n_confirmed FROM glyphs "
+                              "WHERE edition_tag=? AND char=?", (edition, ch)).fetchone()
+            if tgt is None and dry_run and ch in seen:
+                merged += 1
+                continue
+            if tgt is None:
+                seen.add(ch)
+                if not dry_run:
+                    cur.execute("UPDATE glyphs SET edition_tag=?, updated_at=? WHERE glyph_id=?",
+                                (edition, _now(), gid))
+                moved += 1
+                continue
+            merged += 1
+            if dry_run:
+                continue
+            tid, tn = tgt
+            total = int(tn or 0) + int(n or 0)
+            cur.execute(f"""UPDATE glyphs SET n_confirmed=?,
+                             status=CASE WHEN ? >= {K_MIN} THEN 'stable' ELSE status END,
+                             semantic=COALESCE(semantic, ?), unicode_cp=COALESCE(unicode_cp, ?),
+                             ids=COALESCE(NULLIF(ids,''), ?), updated_at=?
+                           WHERE glyph_id=?""", (total, total, sem, cp, ids, _now(), tid))
+            cur.execute("UPDATE OR IGNORE exemplars SET glyph_id=? WHERE glyph_id=?", (tid, gid))
+            cur.execute("DELETE FROM exemplars WHERE glyph_id=?", (gid,))
+            cur.execute("DELETE FROM glyphs WHERE glyph_id=?", (gid,))
+        n_src = cur.execute(
+            "SELECT COUNT(*) FROM sources WHERE COALESCE(kind,'woodblock') != 'font' "
+            "AND edition_tag NOT LIKE 'font:%'").fetchone()[0]
+        if not dry_run:
+            # 刻本来源一律改过来——含 bxgb 那条历史上记成 modern:bxgb、而字形早已是 bxgb 的
+            cur.execute("UPDATE sources SET edition_tag=? WHERE COALESCE(kind,'woodblock') != 'font' "
+                        "AND edition_tag NOT LIKE 'font:%'", (edition,))
+            if title:
+                cur.execute("UPDATE sources SET title=? WHERE COALESCE(kind,'woodblock') != 'font'",
+                            (title,))
+            cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('book_edition', ?)",
+                        (edition,))
+            self.conn.commit()
+        return {"edition": edition, "dry_run": dry_run, "glyph_rows_moved": moved,
+                "glyph_rows_merged": merged, "sources": n_src}
 
     def refresh_instance_patch(self, instance_id: str, patch_png: bytes,
                                bbox: list | None = None) -> bool:
@@ -721,6 +819,11 @@ class GlyphDB:
         用於剪掉不再需要的字體庫或導入到一半的殘局。只認 kind='font' 之外
         的來源時要當心：刻本來源的真源在 glyph_store/，這裡刪的只是索引，
         `rebuild` 會把它們拉回來——真要棄掉刻本來源得動導出目錄。
+
+        **`admissions` 準入台賬一併刪掉**（2026-09-16 補）：`admit_instance` 靠
+        台賬判重，台賬留著而實例沒了，重播時整批被當成 duplicate 跳過——庫看著
+        「播過了」其實是空的，而且不報錯。北行日錄踩過：1001 個字位重播只進了
+        114 個字頭，其餘 887 全被跳過，查了半天才發現是台賬沒清。
         """
         cur = self.conn.cursor()
         iids = [r[0] for r in cur.execute(
@@ -740,6 +843,9 @@ class GlyphDB:
             cur.execute(f"DELETE FROM derived WHERE instance_id IN ({ph})",
                         chunk)
             cur.execute(f"DELETE FROM instances WHERE instance_id IN ({ph})",
+                        chunk)
+            # 台賬跟著實例一起走，否則重播全被判重跳過（見 docstring）
+            cur.execute(f"DELETE FROM admissions WHERE instance_id IN ({ph})",
                         chunk)
         cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
         self.conn.commit()
@@ -843,6 +949,8 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
              "FROM exemplars e JOIN glyphs g ON g.glyph_id = e.glyph_id"
              + not_font("g.edition_tag")
              + " ORDER BY g.edition_tag, g.char, e.instance_id", fe)])
+    counts["meta"] = dump(out / "meta.jsonl",
+                          cur.execute("SELECT * FROM meta ORDER BY key"))
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
@@ -879,6 +987,11 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
         for r in rows:
             d = dict(r)
             png = d.pop("patch_png")
+            # 可信度两列是 2026-09-25 加的：未评（NULL）就不写，免得每次导出给
+            # 全部旧行都添一对 null 键、store 平白整片改动
+            for k in ("fidelity", "fidelity_by"):
+                if d.get(k) is None:
+                    d.pop(k, None)
             name = f"{_safe(d['instance_id'])}.png"
             (out / "patches" / name).write_bytes(png)
             written.add(name)
@@ -972,6 +1085,9 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         cols = ",".join(r.keys())
         cur.execute(f"INSERT OR REPLACE INTO admissions ({cols}) "
                     f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+    for r in read(store / "meta.jsonl"):
+        cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                    (r["key"], r["value"]))
     for r in read(store / "pairs.jsonl"):
         cols = ",".join(r)
         cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "

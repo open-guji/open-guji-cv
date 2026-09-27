@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { fetchStep9Reflow, fetchStep9Render } from '../api/step9'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
+import { ProgressBoard } from '../components/step9/ProgressBoard'
 import type { Step9ReflowResponse, Step9RenderResponse } from '../api/step9'
 
 const BASELINE_KEY_PREFIX = 'guji-step9-baseline:'
@@ -25,7 +26,26 @@ function saveBaseline(book: string, v: number): void {
 
 type View = 'render' | 'reflow'
 
-// Step9 结果整理：9.1 坐标转字符位 ＋ 9.2 可阅读排版（2026-09-12）。
+// Step3/Step7 对不上的格。文案别再写死成"产物过期"——**单行小字注**那一型
+// （Step3 按几何记 sub='a'、Step7 按「一个字」记 sub=None）本来占了实测里的
+// 绝大多数，2026-09-19 已在 `report/slots.py::_lookup_cell` 认回来、不再进这个
+// 列表；剩下能走到这儿的才是真过期。但"多半是…"这种口气当初就是只见过一个
+// 个例时写的，害人白重跑一轮 Step7，所以这里只陈述现象＋给一条可验证的下一步，
+// 不替人断因。
+function StaleWarning({ items }: { items: string[] }) {
+  if (items.length === 0) return null
+  return (
+    <p className="reflow-stale">
+      ⚠ {items.length} 处 Step7 记录在 Step3 里查不到对应格子，已按正文字兜底出字
+      （字不会丢，但这些格的夹注/留白身份是猜的）。
+      先跑 <code>guji status</code> 看这几页是不是标了"过期"：是就重跑 Step3→Step7，
+      不是则属新成因，别急着重跑，先看一眼这几格的实际版面。
+      {' '}{items.join(', ')}
+    </p>
+  )
+}
+
+// Step9 结果整理：9.0 待办看板 ＋ 9.1 坐标转字符位 ＋ 9.2 可阅读排版（2026-09-12 / 09-20）。
 // 体检表、与整理本比对还没做，见 overview 仓 Step9-结果整理/README.md §二。
 //
 // **不进管线**：这不是"选一页看它的产物"（那是 ProductViewer 的活，Step9
@@ -33,6 +53,9 @@ type View = 'render' | 'reflow'
 // 明确要求"允许审阅一半时直接输出看看效果"，所以每次点"生成"都是当场
 // join Step3+Step7 产物现算，不落盘、不进队列，也没有进度条（页数大就会等
 // 得久，别选整册）。
+//
+// 9.0 看板是独立卡片：打开即读、页范围一改就跟着读、有刷新按钮（用户 2026-09-20）；
+// 它是看板不是闸，有待办也照样能跑 9.1/9.2。
 //
 // 两个视图（tab）各自独立触发，不强制"先跑9.1才能跑9.2"——9.2 内部会
 // 自己重新调用 render_page，两条链路互不依赖对方是否已经点过"生成"。
@@ -88,13 +111,15 @@ export function Step9Page() {
       <div className="card">
         <h2>Step9 结果整理 <span className="muted">现场渲染，不进管线</span></h2>
         <p className="muted">
-          9.1 把 Step3（版面结构）＋ Step7（定字结果）拼成 guji-markdown 文本；
+          9.0 看板列出页范围内还挂着的待办；9.1 把 Step3（版面结构）＋ Step7（定字结果）拼成 guji-markdown 文本；
           9.2 在此基础上取消版式记号、按规则分段，拼成可阅读的横排文本。
           审阅还没全部完成时也能用——挑几页现看效果，不影响整册流程。
         </p>
       </div>
 
       <PageRangeSelector book={book} stepId="step9" value={pageSel} onChange={setPageSel} />
+
+      <ProgressBoard book={book} pages={pageSel} />
 
       <div className="tabs">
         <button className={view === 'render' ? 'active' : ''} onClick={() => setView('render')}>
@@ -131,13 +156,7 @@ export function Step9Page() {
           <h3 style={{ margin: '0 0 .6rem', fontSize: '.95rem' }}>
             结果 <span className="muted">{renderResult.pages.length} 页</span>
           </h3>
-          {renderResult.stale.length > 0 && (
-            <p className="reflow-stale">
-              ⚠ {renderResult.stale.length} 处 Step7 记录在 Step3 里查不到对应格子
-              （多半是这一页 Step3 局部重切后 Step7 没跟着重跑，产物过期）：
-              {' '}{renderResult.stale.join(', ')}
-            </p>
-          )}
+          <StaleWarning items={renderResult.stale} />
           <pre className="json">{renderResult.text}</pre>
         </div>
       )}
@@ -150,13 +169,7 @@ export function Step9Page() {
               {totalNotes > 0 && <> · {totalNotes} 处标记供复核</>}
             </span>
           </h3>
-          {reflowResult.stale.length > 0 && (
-            <p className="reflow-stale">
-              ⚠ {reflowResult.stale.length} 处 Step7 记录在 Step3 里查不到对应格子
-              （多半是这一页 Step3 局部重切后 Step7 没跟着重跑，产物过期）：
-              {' '}{reflowResult.stale.join(', ')}
-            </p>
-          )}
+          <StaleWarning items={reflowResult.stale} />
           {reflowResult.pages.map((pg) => (
             <div key={pg.page}>
               <div className="reflow-page-mark">第 {pg.page} 页</div>

@@ -57,6 +57,7 @@ from .seed_queue import (DOUBT_DB_INCONSISTENT, DOUBT_DEGRADED_CROP,
                          STATUS_RECROPPED, STATUS_REJECTED, STATUS_SKIPPED,
                          SeedItem)
 from .variants import VariantMap
+from ..utils.image_io import imread as cv_imread
 
 # weak_single 的 OCR prob 阈。**待 char-ocr 集标定**（设计 §3.5 条目 2），
 # 当前 0.85 只是保守起点：book9 金标上 top1 88.75%，低置信段错误集中。
@@ -840,7 +841,7 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                     qf.write(item.to_json() + "\n")
                     summary["n_excluded"] = summary.get("n_excluded", 0) + 1
                     continue
-                gray = cv2.imread(str(root / rec.patch_path),
+                gray = cv_imread(str(root / rec.patch_path),
                                   cv2.IMREAD_GRAYSCALE)
                 if gray is None:
                     summary["n_missing_patch"] += 1
@@ -1092,7 +1093,7 @@ def apply_recrop(book_out_dir: Path, rec, bbox: list[float]) -> bytes | None:
     page_img = book_out_dir / f"{rec.page}.png"
     if not page_img.exists():
         return None
-    im = cv2.imread(str(page_img), cv2.IMREAD_GRAYSCALE)
+    im = cv_imread(str(page_img), cv2.IMREAD_GRAYSCALE)
     if im is None:
         return None
     h, w = im.shape[:2]
@@ -1239,7 +1240,7 @@ def ingest_decisions(book_out_dir: str | Path, db: GlyphDB,
                 it.provenance = None
                 n["label_only"] += 1
                 continue
-            gray = cv2.imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
+            gray = cv_imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
             if gray is None:
                 n["missing_patch"] += 1
                 continue
@@ -1331,7 +1332,7 @@ def scrub_nonchar(book_out_dir: str | Path) -> dict:
     for it in items.values():
         if it.status not in (STATUS_PENDING, STATUS_SKIPPED):
             continue
-        gray = cv2.imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
+        gray = cv_imread(str(root / it.patch_path), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             n["missing_patch"] += 1
             continue
@@ -1417,7 +1418,7 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
         if not proposed or rec is None:
             n["kept"] += 1
             continue
-        gray = cv2.imread(str(root / rec.patch_path), cv2.IMREAD_GRAYSCALE)
+        gray = cv_imread(str(root / rec.patch_path), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             n["missing_patch"] += 1
             continue
@@ -1445,3 +1446,20 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
             f.write(items[iid].to_json() + "\n")
     _refresh_progress_pending(seed_dir, items)
     return dict(n)
+
+
+def context_conflicts_ref(ctx_char, align_char, vmap) -> bool:
+    """`context` 通道放行前的互证（2026-09-20 bxgb 对勘查出来的）：Step6 上下文定的字
+    与整理本对齐字**语义不同**就不放行、落人审。
+
+    bxgb 141 条 context 放行里 18 条与整理本不同：7 条是真错（p37c6s17 库与 OCR 都说
+    匹 0.99，语言模型偏爱「二十四」把第二候选抬上去、margin 0.77 过了门槛就放行；
+    多/皆、見/只、車/五、日/子、日/曰、二/三 同型），8 条是清刻本改字（刻本对、整理本
+    不同，册级异文表补上后先被吸收），3 条是异体没连上。20 条真错的正解 20/20 都在
+    `align_ref` 里，而它本来就是 seed_admit 已消费的上游。
+
+    没有对齐字（页没锚上、这格在 insert 段）→ 不拦，照旧走 margin 门槛。
+    """
+    if not align_char or not ctx_char:
+        return False
+    return vmap.semantic(ctx_char) != vmap.semantic(align_char)

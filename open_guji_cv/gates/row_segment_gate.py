@@ -74,12 +74,19 @@ class RowSegmentGateParams(BaseModel):
     expected_slots: int | None = None   # None = Book.chars_per_line
     slot_tol: int = 1                   # n_body_slots 与版式格数的容许偏差
                                          # （effective_body_slots 正当下调 1 格）
+    #: L4 碎格判据（2026-09-18）：格高低于 `sliver_ratio × period` 就算碎格。
+    #: 0.35 的依据——bxgb 全书 20446 格的格高分布里，正常格最低也在 0.7·period
+    #: 上下（DP 的 `lo_ratio` 硬约束卡着），而实测命中的 16 个碎格是 11~25px
+    #: 对 period≈72，比值 0.15~0.35，中间空着一大段。取 0.35 落在空档上沿，
+    #: 两边都有余量。**只 flag 不 block**：碎格列的字多数仍切得对（p53 逐列
+    #: 看图确认「焚香致敬」四字各一格），拦下来会连累整列作废。
+    sliver_ratio: float = 0.35
 
 
 @register_step
 class RowSegmentGateStep(Step):
     spec = StepSpec(
-        id="row_segment_gate", title="Step3→4 交接闸", version="1.2", unit="column",
+        id="row_segment_gate", title="Step3→4 交接闸", version="1.3", unit="column",
         consumes=("cells", "border_detect_gate_manifest"), produces=("row_segment_gate_manifest",),
         params=RowSegmentGateParams,
         code_deps=("open_guji_cv.eval.rulers", "open_guji_cv.clustering.page_type"),
@@ -94,12 +101,12 @@ class RowSegmentGateStep(Step):
         page_type_gate: BorderDetectGateManifest = ctx.product(
             "border_detect_gate_manifest", page)
         skip_reject = (
-            [f"L0：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列"]
+            [f"page_type_skip：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列"]
             if page_type_gate.page_type_policy == "skip" else [])
         if not ctx.has_product("cells", page):
             return {"row_segment_gate_manifest": RowSegmentGateManifest(
                 page=page, admitted=False,
-                reject=skip_reject or ["L1：上游 cells 产物缺失"])}
+                reject=skip_reject or ["missing_input：上游 cells 产物缺失"])}
         cells: PageCells = ctx.product("cells", page)
 
         recs: list[RowSegmentGateColumn] = []
@@ -107,10 +114,10 @@ class RowSegmentGateStep(Step):
             reject: list[str] = []
             flags: list[str] = []
             if not cc.ok:
-                reject.append(f"L1：DP 无解（{cc.error or '未知原因'}）")
+                reject.append(f"dp_no_solution：DP 无解（{cc.error or '未知原因'}）")
             elif expected is not None and abs(cc.n_body_slots - expected) > p.slot_tol:
                 reject.append(
-                    f"L1：格数 {cc.n_body_slots} 偏离版式格数 {expected} "
+                    f"slot_count：格数 {cc.n_body_slots} 偏离版式格数 {expected} "
                     f"超过容许的 {p.slot_tol} 格（非 effective_body_slots 的正当下调）")
 
             n_r2 = n_r2s = n_r2x = 0
@@ -130,14 +137,30 @@ class RowSegmentGateStep(Step):
                         elif cls == "r2s":
                             n_r2s += 1
                 if n_r2:
-                    flags.append(f"L2：{n_r2} 条格线可改善（R2），未修")
+                    flags.append(f"cut_improvable：{n_r2} 条格线可改善（R2），未修")
                 if n_r2s:
-                    flags.append(f"L2：{n_r2s} 条格线真粘连（R2s），图像极限，flag 不算错")
+                    flags.append(f"cut_touching：{n_r2s} 条格线真粘连（R2s），图像极限，flag 不算错")
+
+            # L4 碎格（2026-09-18，格子级——闸3 此前只有页级/列级两层）。
+            # DP 凑格数时会造出十几像素的格，它让后面每格往上挤、累积成相位
+            # 错位，而**列格数是对的，逐列字数对账查不出来**
+            # （`row_boundaries.BLANK_MIN_RATIO` 注释记过这个病）。
+            sliver: list[int] = []
+            if not reject and cc.ok and (cc.period or 0) > 0:
+                lim = p.sliver_ratio * cc.period
+                for k, cell in enumerate(cc.cells):
+                    if (cell.y1 - cell.y0) < lim:
+                        sliver.append(cell.slot)
+            if sliver:
+                flags.append(
+                    f"sliver_cell：{len(sliver)} 个碎格（高 < {p.sliver_ratio:g}×格高），"
+                    f"slot {sliver}——DP 凑格数造的，会让整列相位往上挤")
 
             recs.append(RowSegmentGateColumn(
                 col=cc.col, admitted=not reject, reject=reject, flags=flags,
                 n_body_slots=cc.n_body_slots if cc.ok else None,
                 n_r2=n_r2, n_r2s=n_r2s, n_r2x=n_r2x,
+                sliver_slots=sliver,
             ))
 
         page_admitted = any(c.admitted for c in recs) if recs else False
@@ -158,13 +181,13 @@ class RowSegmentGateStep(Step):
         if skip_reject:
             page_reject = skip_reject
         elif not recs:
-            page_reject = ["L1：本页无 cells 记录"]
+            page_reject = ["missing_input：本页无 cells 记录"]
         elif is_unsupported:
             # L0u 与闸1 的 L0 分开：L0 是「闸1 已判非正文、根本没切」，
             # L0u 是「切了，但这页的版式现有先验支持不了」。控制台按前缀
             # 分桶，两者都不进「整页被拦（异常）」。
             page_reject = [
-                f"L0u：版式未支持——{n_unsupported} 列全部「{UNSUPPORTED_LAYOUT_ERROR}」，"
+                f"layout_unsupported：版式未支持——{n_unsupported} 列全部「{UNSUPPORTED_LAYOUT_ERROR}」，"
                 f"每列字数非 {expected} 且逐列不同（职名/目录类），"
                 f"非故障，待 keben_roster.yaml 支持"]
         elif not page_admitted:
@@ -173,7 +196,7 @@ class RowSegmentGateStep(Step):
             # 后面什么都没有，看不出这页为什么整页没有一列过闸。这道闸是
             # 列级闸（`unit="column"`），列级原因已经在各自 `columns[].reject`
             # 里，这里只给一句页级摘要，不重复照抄。
-            page_reject = [f"L1：本页 {len(recs)} 列全部未过（各列拒因见列级 reject）"]
+            page_reject = [f"all_columns_failed：本页 {len(recs)} 列全部未过（各列拒因见列级 reject）"]
         else:
             page_reject = []
         return {"row_segment_gate_manifest": RowSegmentGateManifest(
@@ -189,16 +212,21 @@ attach_gate("row_segment", GateSpec(
     levels=(
         GateLevel(id="L0", unit="page",
                   desc="闸1是否判定这页页型为 skip 类——是则页级直接拒收，"
-                       "不看列级 DP 结果"),
+                       "不看列级 DP 结果", name="page_type_skip"),
         GateLevel(id="L0u", unit="page",
                   desc="是否「版式未支持」（整页各列都因弹性 DP 无解而被拒）——"
-                       "职名/目录类，非故障，与真异常分开记"),
-        GateLevel(id="L1", unit="column", desc="DP 是否有解"),
+                       "职名/目录类，非故障，与真异常分开记", name="layout_unsupported"),
+        GateLevel(id="L1", unit="column", desc="DP 是否有解", name="dp_no_solution"),
         GateLevel(id="L1", unit="column",
-                  desc="格数是否偏离版式格数超过容许范围（非 effective_body_slots 的正当下调）"),
+                  desc="格数是否偏离版式格数超过容许范围（非 effective_body_slots 的正当下调）",
+                  name="slot_count"),
         GateLevel(id="L2", unit="column",
-                  desc="R2 可改善格线数——flag，不拦（该修但不算作废这一列）"),
+                  desc="R2 可改善格线数——flag，不拦（该修但不算作废这一列）",
+                  name="cut_improvable"),
         GateLevel(id="L2", unit="column",
-                  desc="R2s 真粘连格线数——flag，不拦（图像极限，不算错）"),
+                  desc="R2s 真粘连格线数——flag，不拦（图像极限，不算错）",
+                  name="cut_touching"),
+        GateLevel(id="L4", unit="cell",
+                  desc="碎格：格高远小于一格——flag，不拦（列里多数字仍切得对）", name="sliver_cell"),
     ),
 ))

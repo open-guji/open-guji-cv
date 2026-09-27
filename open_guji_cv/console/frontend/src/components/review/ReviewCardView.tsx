@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { needsReading } from '../../domain'
+import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
+import { disagreeingRuns, dropReason, groupById } from './ai'
 import type { KeyItem } from './candidates'
 import type { Verdict } from './ReviewPanel'
 
@@ -15,8 +16,9 @@ interface Props {
   aroundCtx?: AroundContext
   rareOut?: RareCandidate[] | 'loading' | 'error'
   onFocus: () => void
-  onSet: (shape: string, reading?: string, done?: string) => void
+  onSet: (shape: string, done?: string) => void
   onSetNoGlyphLib: (checked: boolean) => void
+  onSetGuess: (guess: string) => void
   onToggleCtxImg: () => void
   onFetchRare: (force?: boolean) => void
   contextImgSrc: string
@@ -24,32 +26,26 @@ interface Props {
 
 export function ReviewCardView({
   idx, c, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
-  onFocus, onSet, onSetNoGlyphLib, onToggleCtxImg, onFetchRare, contextImgSrc,
+  onFocus, onSet, onSetNoGlyphLib, onSetGuess, onToggleCtxImg, onFetchRare, contextImgSrc,
 }: Props) {
-  const v = verdict || { shape: '', reading: '', done: '' }
-  // shape/reading 的唯一改动入口都在本组件内（候选点击、输入框、标记按钮），
+  const v = verdict || { shape: '', done: '' }
+  // 字的唯一改动入口都在本组件内（候选点击、输入框、标记按钮），
   // 所以本地 state 与 verdict 不会失步；不用受控于 prop。
   const [shapeInput, setShapeInput] = useState(v.shape || '')
-  const [readingInput, setReadingInput] = useState(v.reading || '')
+  const [guessInput, setGuessInput] = useState(v.guess || '')
 
   const ocr = (c.ocr || []).slice(0, 2)
   const doubts = (c.doubts || []).map((d, i) => <div key={i} className="rvdoubt">⚠ {d}</div>)
   const fm = c.form && c.form.state === 'open' ? c.form : null
-  const showReading = needsReading(v.shape) || (!!v.reading && v.reading !== v.shape)
 
-  function pick(ch: string, reading?: string) {
+  function pick(ch: string) {
     setShapeInput(ch)
-    setReadingInput(reading ?? (needsReading(ch) ? '' : ch))
-    onSet(ch, reading ?? (needsReading(ch) ? readingInput : ch))
+    onSet(ch)
   }
 
   function onShapeInput(val: string) {
     setShapeInput(val)
-    onSet(val, readingInput, undefined)
-  }
-  function onReadingInput(val: string) {
-    setReadingInput(val)
-    onSet(shapeInput, val, undefined)
+    onSet(val, undefined)
   }
 
   return (
@@ -63,11 +59,12 @@ export function ReviewCardView({
         </label>
       </div>
       <div className="rvbody">
-        <div className="rvimgcol">
-          <img src={c.patch} alt={c.id} loading="lazy" />
-          <button className="rvctxbtn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
-                  title="切分/缩框前的列图原样，上下各带 2 格">看原图</button>
-        </div>
+        <BinaryToggleImage
+          src={c.patch} alt={c.id}
+          extra={
+            <button className="bti-btn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
+                    title="切分/缩框前的列图原样，上下各带 2 格">看原图</button>
+          } />
         <div className="rvev">
           <div><span className="k">整理本</span> {c.ref?.char
             ? <><b>{c.ref.char}</b><span className="rvp">{c.ref.op}{c.ref.form ? ` · 惯刻 ${c.ref.form}` : ''}</span></>
@@ -84,6 +81,12 @@ export function ReviewCardView({
                 🤖{c.ctx.llm_suggestion}
               </button>
             )}</div>
+          {c.jys?.char && (
+            <div><span className="k" title="己/已/巳 三字刻法不分，按上下文定：干支、时辰、「自己」一类搭配，其余为「已」">上下文定字</span>{' '}
+              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.jys!.char!) }}
+                      title={`依据：${c.jys.why}`}>{c.jys.char}</button>
+              <span className="rvp">{c.jys.why}</span></div>
+          )}
           <div><span className="k" title="Paddle OCR，准确率一般，只作参考">OCR</span> {ocr.length
             ? ocr.map(([ch, p], i) => (
                 <span key={i}>
@@ -96,6 +99,63 @@ export function ReviewCardView({
           {doubts}
         </div>
       </div>
+      {c.ai && (() => {
+        const disagree = disagreeingRuns(c.ai)
+        const drop = c.ai.drop || []
+        return (
+          <div className="rvai" onClick={(e) => e.stopPropagation()}>
+            <div className="rvai-badges">
+              {c.ai.conflict_with_img && (
+                <span className="rvbadge rvbadge-warn"
+                      title="AI 首组不包含图像共识（库首选=OCR首选的那个字）">
+                  ⚠ 疑似刻本讹字／整理本改字
+                </span>
+              )}
+              {disagree && (
+                <span className="rvbadge rvbadge-warn" title="两次运行给出的首组不一致">
+                  ⚠ AI 拿不准：{disagree.join(' / ')}
+                </span>
+              )}
+              {c.ai.confidence && <span className="rvp">AI 把握 {c.ai.confidence}</span>}
+              {c.ai.need_human && <span className="muted">{c.ai.need_human}</span>}
+            </div>
+            <div className="rvai-groups">
+              {(c.ai.rank || []).map((r, i) => {
+                const g = groupById(c.groups, r.group)
+                if (!g) return null
+                return (
+                  <div key={r.group} className={`rvai-group${i === 0 ? ' rvai-top' : ''}`}>
+                    <span className="rvp">p={r.p.toFixed(2)}</span>
+                    {g.members.map((m) => (
+                      <button key={m} className={`rvpick${v.shape === m ? ' pick' : ''}`}
+                              onClick={(e) => { e.stopPropagation(); onFocus(); pick(m) }}
+                              title={g.why || undefined}>{m}</button>
+                    ))}
+                    {g.members.length > 1 && <span className="muted">同字异形</span>}
+                    {(g.why || r.why) && (
+                      <details className="rvai-why">
+                        <summary>理由</summary>
+                        {g.why && <div><span className="k">词典</span> {g.why}</div>}
+                        {r.why && <div><span className="k">AI</span> {r.why}</div>}
+                      </details>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {drop.length > 0 && (
+              <details className="rvai-drop">
+                <summary>排除 {drop.length} 项</summary>
+                {drop.map((ch) => (
+                  <div key={ch} className="rvai-dropitem">
+                    <b>{ch}</b> <span className="muted">{dropReason(c.ai, ch)}</span>
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        )
+      })()}
       {ctxImgOpen && <div className="rvctximg"><img src={contextImgSrc} alt="上下文原图" /></div>}
       {fm && (
         <div className="rvform">
@@ -105,7 +165,7 @@ export function ReviewCardView({
             const lib = (fm.lib || []).find((x) => x[0] === f)
             return (
               <button key={f} className={`rvformpick${v.shape === f ? ' pick' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); onFocus(); pick(f, fm.semantic) }}
+                      onClick={(e) => { e.stopPropagation(); onFocus(); pick(f) }}
                       title={`${hn ? `本书人裁确认过 ${hn} 次` : '本书还没人确认过这个形（首例）'}${lib ? ` · 库 cov ${lib[1]}` : ''}`}>
                 {f}<sub>{hn ? `人${hn}` : '新'}</sub>
               </button>
@@ -127,28 +187,35 @@ export function ReviewCardView({
         <input className="rvin" placeholder="字" value={shapeInput}
                onClick={(e) => e.stopPropagation()}
                onChange={(e) => onShapeInput(e.target.value)} />
-        {showReading && (
-          <span className="rvread">
-            {' '}→ <input className="rvin" placeholder="文意" value={readingInput}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => onReadingInput(e.target.value)}
-                          title="己/已/巳 才需要：图上刻的是左边那个，这里填文意该读的" />
-          </span>
-        )}
       </div>
       <div className="rvseg">
+        {/* 切分缺陷两档**保留已填的字**（用户 2026-09-20：「有噪声和字形不完整的，应该
+            同时允许我选到底是哪个字——既不影响下一步整理，也反馈给了上游」）。
+            别的档（非字/跳过/破损）本来就没有字可留，照旧清空。 */}
         <button className={`rvmark${v.done === 'truncated' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'truncated' ? '' : 'truncated') }}
-                title="本字的笔画被切掉了一部分（T）">字形不完整</button>
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'truncated' ? (v.shape ? '1' : '') : 'truncated') }}
+                title="本字的笔画被切掉了一部分（T）。可同时在上面选/填这是哪个字——字照样进文本，缺陷照样反馈给 Step3">字形不完整</button>
         <button className={`rvmark${v.done === 'contaminated' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'contaminated' ? '' : 'contaminated') }}
-                title="混进了邻字残墨 / 界行 / 版框（C）">有噪声</button>
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'contaminated' ? (v.shape ? '1' : '') : 'contaminated') }}
+                title="混进了邻字残墨 / 界行 / 版框（C）。可同时选/填这是哪个字">有噪声</button>
         <button className={`rvmark${v.done === 'non' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'non' ? '' : 'non') }}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', v.done === 'non' ? '' : 'non') }}
                 title="这一格根本不是字（N）">非字</button>
         <button className={`rvmark${v.done === 'skip' ? ' on' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', '', v.done === 'skip' ? '' : 'skip') }}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', v.done === 'skip' ? '' : 'skip') }}
                 title="真拿不准，留给以后（S）">跳过</button>
+        <button className={`rvmark${v.done === 'damaged' ? ' on' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet('', v.done === 'damaged' ? '' : 'damaged') }}
+                title="原图就破损，字形认不出（D）。文本出 □，可在右边填最像的那个字">原图破损</button>
+        {v.done === 'damaged' && (
+          <span className="rvguess">
+            {' '}□（？<input className="rvguessin" placeholder="最像" value={guessInput}
+                           maxLength={4}
+                           onClick={(e) => e.stopPropagation()}
+                           onChange={(e) => { setGuessInput(e.target.value); onSetGuess(e.target.value) }}
+                           title="最像的那个字，可空。只作文本括注，不进字形库" />）
+          </span>
+        )}
       </div>
       {aroundCtx && (
         <div className="rvctx">

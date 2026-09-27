@@ -126,15 +126,15 @@ class BookLedger:
         """这个形被人确认过几次（``book.human``）。首例判定用它。"""
         return self.book_count(form, "human")
 
-    def pair(self, shape: str, reading: str) -> dict | None:
-        """(刻本形 → 整理本形) 这对转换的记录（没有 → None）。"""
+    def pair(self, shape: str, ref: str) -> dict | None:
+        """(刻本形 → 整理本形) 这一对的记录（没有 → None）。"""
         g = self.group_of(shape)
         if not g:
             return None
-        return g.get("pairs", {}).get(f"{shape}→{reading}")
+        return g.get("pairs", {}).get(f"{shape}→{ref}")
 
-    def pair_confirmed(self, shape: str, reading: str) -> bool:
-        p = self.pair(shape, reading)
+    def pair_confirmed(self, shape: str, ref: str) -> bool:
+        p = self.pair(shape, ref)
         return bool(p and p.get("human", 0) > 0)
 
 

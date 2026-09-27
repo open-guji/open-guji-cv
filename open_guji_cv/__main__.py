@@ -48,6 +48,7 @@ elif hasattr(sys.stdout, "reconfigure"):
 
 from .pipeline import GujiPipeline, IMAGE_EXTENSIONS
 from .profile import BookProfile
+from .utils.image_io import imread as cv_imread
 
 
 # ─── 工具函数 ──────────────────────────────────────────────
@@ -118,7 +119,7 @@ def cmd_cut(args):
     image_files = []
     for f in sorted(path.iterdir()):
         if f.suffix.lower() in IMAGE_EXTENSIONS:
-            img = cv2.imread(str(f))
+            img = cv_imread(str(f))
             if img is not None:
                 images.append(img)
                 image_files.append(f)
@@ -158,14 +159,14 @@ def cmd_cut(args):
             mid_x = w // 2
             left = img[:, :mid_x]
             right = img[:, mid_x:]
-            cv2.imwrite(str(output_dir / f"{stem}_left.png"), left)
-            cv2.imwrite(str(output_dir / f"{stem}_right.png"), right)
+            cv_imwrite(str(output_dir / f"{stem}_left.png"), left)
+            cv_imwrite(str(output_dir / f"{stem}_right.png"), right)
         elif cut_type == "horizontal_cut":
             mid_y = h // 2
             top = img[:mid_y, :]
             bottom = img[mid_y:, :]
-            cv2.imwrite(str(output_dir / f"{stem}_top.png"), top)
-            cv2.imwrite(str(output_dir / f"{stem}_bottom.png"), bottom)
+            cv_imwrite(str(output_dir / f"{stem}_top.png"), top)
+            cv_imwrite(str(output_dir / f"{stem}_bottom.png"), bottom)
 
     print(f"切分完成: {len(image_files)} 张 -> {output_dir}")
 
@@ -416,7 +417,7 @@ def cmd_recognize(args):
     import cv2 as _cv2
     with open(out_dir / "matches.jsonl", "w", encoding="utf-8") as f:
         for n, rec in enumerate(recs, 1):
-            gray = _cv2.imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
+            gray = cv_imread(str(root / rec.patch_path), _cv2.IMREAD_GRAYSCALE)
             if gray is None:
                 continue
             r = matcher.match(normalize_patch(gray))
@@ -684,8 +685,43 @@ def cmd_glyph_db(args):
             summary = db.import_book(_book_out_dir(args),
                                      edition_tag=args.edition,
                                      source_meta=meta)
+        elif args.action == "set-edition":
+            # 一本书一个 edition：把库里全部刻本字形并到 --edition（字形库 06）
+            if not args.edition:
+                print("set-edition 需要 --edition"); sys.exit(1)
+            summary = db.set_book_edition(args.edition, title=args.title,
+                                          dry_run=not args.apply)
+        elif args.action == "selfcheck":
+            # 字形库自检（字形库 03）：本书内 / 对兄弟工作区的库 / 对字体
+            from .clustering import glyph_selfcheck as G
+            db.close()
+            db = None
+            others = [] if args.no_others else G.sibling_libraries()
+            font_db = G.pick_font_db(db_path, *[p for _, p in others])
+            res = G.run_selfcheck(db_path, others, font_db, progress=True)
+            out = G.save(res)
+            summary = {k: v for k, v in res.items() if k not in ("findings", "all")}
+            summary["out"] = str(out)
+        elif args.action == "repair":
+            # 字头脏数据 + 同一格的机器副本；默认只报，--apply 才写
+            from .clustering.glyph_ledger import (evict_shadow_duplicates,
+                                                  label_mismatches,
+                                                  repair_glyph_heads,
+                                                  semantic_disagreements)
+            db.close()
+            db = None
+            summary = {
+                "heads": repair_glyph_heads(db_path, dry_run=not args.apply),
+                "shadow": evict_shadow_duplicates(db_path, dry_run=not args.apply),
+                "labels": label_mismatches(db_path, apply=args.apply),
+                "semantic_disagreements（只报不改，交人裁）":
+                    semantic_disagreements(db_path),
+            }
         else:
-            summary = db.stats()
+            # 本书套总账（并套口径，见 glyph_ledger 模块头）＋ 原来的表行数
+            from .clustering.glyph_ledger import library_summary
+            summary = library_summary(db_path, store_dir)
+            summary["tables"] = db.stats()
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
         if db is not None:
@@ -758,6 +794,9 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
 # ─── 主入口 ───────────────────────────────────────────────
 
 def main():
+    from .utils.batch_slice import enter_batch_slice
+    enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
+
     parser = argparse.ArgumentParser(
         prog="guji-cv",
         description="古籍图像 OCR 分析框架",
@@ -1030,7 +1069,12 @@ def main():
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["import", "stats", "export", "rebuild",
-                            "import-font", "drop-edition"])
+                            "import-font", "drop-edition", "repair", "selfcheck",
+                            "set-edition"])
+    p.add_argument("--no-others", action="store_true",
+                   help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
+    p.add_argument("--apply", action="store_true",
+                   help="repair / set-edition 用：真写库（不加只报告）")
     p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default=None,
                    help="字形库目录（真源）。不传按 core.workspace 解析"

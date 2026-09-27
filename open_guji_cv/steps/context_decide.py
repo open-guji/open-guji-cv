@@ -92,14 +92,26 @@ def _log_llm_call(log_dir: str, book: str, row: dict) -> None:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+_CORPUS_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def corpus_fingerprint(paths: list[str]) -> str:
-    """语料的轻量指纹：每份 (name, mtime_ns, size) 的哈希。见模块头。"""
+    """语料指纹：每份 (name, 内容 sha256) 的哈希。见模块头。
+
+    2026-09-27 起按内容算（此前是 mtime_ns:size）：mtime 随各机器 checkout 而变，
+    云端算好的 Step6 产物运到服务器会无故判过期。同一进程内按 (路径, mtime, size) 缓存。"""
+    from ..products.store import sha256_file
     parts = []
     for s in paths:
         p = Path(s)
         if p.exists():
             st = p.stat()
-            parts.append(f"{p.name}:{st.st_mtime_ns}:{st.st_size}")
+            key = (str(p), st.st_mtime_ns, st.st_size)
+            h = _CORPUS_FP_CACHE.get(key)
+            if h is None:
+                h = sha256_file(p)[:16]
+                _CORPUS_FP_CACHE[key] = h
+            parts.append(f"{p.name}:{h}")
         else:
             parts.append(f"{p.name}:missing")
     if not parts:
@@ -126,8 +138,23 @@ class ContextDecideParams(BaseModel):
     llm_log_dir: str = DEFAULT_LLM_LOG_DIR
 
     def _corpus_paths(self) -> list[str]:
+        """本册整理本 + 泛古籍语料。**相对路径锚在仓根，不靠进程 cwd**（2026-09-21 修）。
+
+        `general_corpus_dir` 缺省是相对路径 `corpus/external`，原先直接
+        `Path(...)` 解析——于是同一份参数在不同 cwd 下得出不同的语料清单、
+        不同的 `corpus_fingerprint`：在 cv 仓根下跑扫得到两份泛语料，在工作区下跑
+        一份都扫不到。跑管线（cwd=工作区）与查 `status`（cwd=cv 仓）因此永远对不上，
+        `context_decide` **跑完立刻又判过期，循环无解**（bxgb 实测）。
+
+        这两份泛语料是**引擎自带、跨书共用**的（不是某本书的资料），所以锚仓根是对的；
+        与 `core.workspace.corpus_path` 第 80 行那条警告同源——那次修了 `DEFAULT_CORPUS`，
+        漏了这里。绝对路径原样用。
+        """
         out = [self.corpus]
         d = Path(self.general_corpus_dir)
+        if not d.is_absolute():
+            from ..core.workspace import REPO_ROOT
+            d = REPO_ROOT / d
         if d.is_dir():
             out += [str(p) for p in sorted(d.glob("*.txt"))]
         return out
@@ -254,7 +281,12 @@ class ContextDecideStep(Step):
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.recognize_flow import fuse_priors
+        from .align_ref import _with_book_corpus
         p: ContextDecideParams = ctx.params_for(self)  # type: ignore[assignment]
+        # 没显式指定就用这册书自己的整理本——理由与踩过的坑见 `_with_book_corpus`。
+        # 本步尤其要紧：语料错了 n-gram 会退化成「只有两份泛古籍语料」，
+        # 「人」比「入」常见，于是每个「入」都判成「人」（见 `book_corpus` docstring）。
+        p = _with_book_corpus(p, ctx)
         match: PageMatch = ctx.product("glyph_match", page)
         try:
             ocr: PageOcr | None = ctx.product("ocr_candidates", page)

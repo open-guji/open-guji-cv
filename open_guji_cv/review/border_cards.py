@@ -53,6 +53,7 @@ from ..utils.column_projection import (
     strip_column_rules,
 )
 from ..utils.preclean import effective_raw_path
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 HEAD_UP, HEAD_DN = 250, 45
 STRIP_W, STRIP_PAD = 480, 42
@@ -73,7 +74,7 @@ def _read_gray(book: str, page: int):
     p = effective_raw_path(b, page)
     if not p.exists():
         raise ImageMissing(f"原图缺失: {p}")
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing(f"原图读不出来: {p}")
     return img
@@ -106,7 +107,7 @@ def head_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:
         res = _borders(store, book, pg)
         if res is None:
             continue
-        out.append(dict(id=f"head:{book}:{pg}", kind="head", book=book, page=pg,
+        out.append(dict(id=f"{book}:{pg}", kind="head", book=book, page=pg,
                         img=f"/api/border-review/img/{book}/{pg}.jpg?kind=head"))
     return out
 
@@ -227,7 +228,7 @@ def headcol_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict
             #   它就等于把探测器的漏检一起藏了，而这张卡的用处恰恰是量漏检。
             hr_cols = {b.col for b in res.head_raise}
             out.append(dict(
-                id=f"headcol:{book}:{pg}:{win.col}", kind="headcol",
+                id=f"{book}:{pg}:{win.col}", kind="headcol",
                 book=book, page=pg, col=win.col,
                 det_raised=bool(win.raised),
                 det_n_raised=None if cc is None else int(cc.n_raised),
@@ -417,7 +418,7 @@ def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: s
         path = ctx.materialize("column_image", column_key(page, col))
     except Exception as e:   # noqa: BLE001
         raise ImageMissing(f"列图算不出来: {e}") from e
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("列图读不出来")
     denoised = denoise_column(img)
@@ -458,7 +459,7 @@ def page_bottom_cards(store: ProductStore, book: str, pages: list[int]) -> list[
         # 已经栽过一次（当时是"标注后 30 分钟有人改了代码"）。
         # 所以这里**同时发绝对坐标**，前端回写事件时存绝对值，金标自带参照系。
         out.append(dict(
-            id=f"pageline:{book}:{pg}", kind="pageline", book=book, page=pg,
+            id=f"{book}:{pg}", kind="pageline", book=book, page=pg,
             page_w=w, page_h=h, crop_top=round(crop_top, 1),
             y_left=round(y_left - crop_top, 2), y_right=round(y_right - crop_top, 2),
             y_left_abs=round(y_left, 2), y_right_abs=round(y_right, 2),

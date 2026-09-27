@@ -4,13 +4,19 @@
 （弹性 DP：位置代价看墨量、步长容许伸缩），但这里是从 `char-segmentation/
 row-boundaries` 数据集上的单页（vol02/135）逐轮试出来的独立实现，重点解决的
 是"整列往错误的相邻字缝滑一格"这一类失败——过程详见
-`.claude/doc/row_boundaries_design.md`。**尚未接入生产管线**，只在这一页上
-验证过，先作为可复用工具落地。
+`.claude/doc/row_boundaries_design.md`。
+
+**已是生产实现**（`steps/row_segment.py` 直接调 `segment_column`）；下面
+"已知局限"里"只在 vol02/135 一页验证过"那几条是**当初的**情况，现已跨册
+跑过（四庫 vol01-03 + 北行日錄刻本/现代排印本），参数几经标定。要看当下
+实测状态用 `guji status`，别信这段文字的年份。
 
 ## 核心设计
 
 1. **候选只从波谷来**：局部最小值 + 凸出度过滤，不直接对每个像素算代价——
    笔画间的小凹陷会制造大量噪声候选，之前踩过（见设计文档"波谷候选"节）。
+   后来补了三类定向候选：极低墨行（浅而干净的缝）、空白区合成点（撑可行性）、
+   **周期锚定点**（v±period，2026-09-19：粘连缝没有波谷时 DP 会整段错相位）。
 2. **空白区间单独探测**、其中补一批等间隔的"合成候选"（墨量给个统一的低值），
    保证没有真实波谷的空白段也有地方可选，不会因为没候选就整列判"无解"。
 3. **周期(gap)不是常数，也不是本列自己算的**——单列自己拟合的周期可能有
@@ -61,6 +67,19 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import jiazhu_split
+
+#: 空白格的**下界**（× period）。空白格代表「这里本该有个字、但它是空的」，
+#: 所以它的高度应当接近一格；此前只给了上界 1.25·period，没有下界，于是 DP 可以
+#: 造出 8~20px 的「碎空白格」来凑够 `n_slots`——代价只有 `blank_cost`=0.05 加
+#: 十分之一的间距惩罚（`blank_lam_frac`），比把两个字并成一格更划算。
+#:
+#: 后果是**相位错位**：北行日錄 p8c1 slot2 被塞成 13.5px 的空白格，后面每一格
+#: 往上挤，累积到 slot12~14 变成 90/98.5/96px 的超大格，一格装两个字（人裁标
+#: 「季+鷹」「鷹+陳」各半）。这类列格数是对的（21），所以字数对账查不出来。
+#:
+#: 0.6 的依据：全书 1842 个 blank 格的高/period 分布 p5=0.82、p50=1.07、p99=1.20，
+#: 而 <0.5 的只有 43 个（正是凑数的那批）——0.6 落在两堆中间的空档里，两边都有余量。
+BLANK_MIN_RATIO = 0.6
 
 
 # ── 波谷 / 空白区间探测 ──────────────────────────────────────────
@@ -178,6 +197,17 @@ def estimate_period(curve: np.ndarray, lag_lo: int = 70, lag_hi: int = 160) -> i
 
     `lag_lo/lag_hi`：只在合理的单字高度量级里找峰，避开"半个字"和"两个字"
     这类谐波峰——范围本身不依赖任何一列的版框位置。
+
+    ⚠️ **窗口必须含真周期、且把 2x 谐波关在外面**，两个条件缺一不可。
+    缺省的 70–160 是给《四庫全書總目》标的（真值 113~115，稳稳落在窗口中间）。
+    **真值顶在 `lag_lo` 上就会出事**：北行日錄刻本真值 70.6，窗口勉强表示得了它，
+    却对 2x 谐波 141 敞开——自相关在 70 和 141 两处都有峰，逐列各自锁哪个看运气，
+    全书 30.4% 的列锁到谐波。而 `estimate_shared_period` 取逐列中位数，两堆各半时
+    中位落进中间的空档，给出一个**物理上不存在**的 106.5，DP 拿它当先验必然无解。
+    所以窗口要由册的 `period_prior` 派生（见 `estimate_shared_period`），别写死。
+
+    ⚠️ 另一条死路：**别换成另一组固定窄窗**。试过 [55,100]，北行日錄是好了，
+    四庫總目当场全毁（115 被上界截成 99，抽 12 页里 10 页中位都变）。
     """
     seg = curve - curve.mean()
     n = len(seg)
@@ -189,15 +219,34 @@ def estimate_period(curve: np.ndarray, lag_lo: int = 70, lag_hi: int = 160) -> i
     return best_lag
 
 
+#: `period_prior` 派生自相关窗口的系数。真周期的逐页波动远小于 ±30%
+#: （四庫總目 vol01 正文 108 页 115.0±1.67px），取这么宽是留足标定误差的余量；
+#: 上界 1.4 < 2.0 保证 2x 谐波一定被关在窗外，这是这组数唯一的硬约束。
+PERIOD_WINDOW_LO, PERIOD_WINDOW_HI = 0.7, 1.4
+
+
 def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[float, float]],
-                            dst_ws: list[int], blank_thresh_frac: float = 0.08) -> float:
+                            dst_ws: list[int], blank_thresh_frac: float = 0.08,
+                            period_prior: float | None = None) -> float:
     """页面级共享周期：每列自己 trim+估计一次，取中位数。
 
     单列自己的估计可能有系统性偏差（本列字距天生不齐时尤其明显），中位数
     对个别列的偏差不敏感，比直接用某一列自己的估计更适合当所有列共享的
     先验（vol02/135 九列实测：中位数 108.4px，个别列自己的估计低至 104px、
     高至 115px）。
+
+    `period_prior`（册的 `BookSpec.period_prior`）：给了就用它派生自相关窗口
+    `[0.7×prior, 1.4×prior]`，把 2x 谐波关在窗外；不给就沿用 `estimate_period`
+    的缺省 70–160，**行为逐位不变**。为什么必须跟着书走、以及固定窄窗为什么
+    是死路，见 `estimate_period` 的 docstring。
+
+    实测（北行日錄刻本 prior=70.6 → 窗口 [49, 98]）：884 列锁 2x 谐波 30.4% → 0%，
+    页级中位偏离真值 >10px 的页 3 → 0；四庫總目三册 501 页页级 period 逐页不变。
     """
+    kw = {}
+    if period_prior:
+        kw = {"lag_lo": max(2, int(period_prior * PERIOD_WINDOW_LO)),
+              "lag_hi": max(4, int(period_prior * PERIOD_WINDOW_HI))}
     periods = []
     for row_proj, (x1, x2), dst_w in zip(row_projs, borders, dst_ws):
         curve = smooth_curve(np.asarray(row_proj, dtype=np.float64))
@@ -205,7 +254,7 @@ def estimate_shared_period(row_projs: list[np.ndarray], borders: list[tuple[floa
         cs, ce = trim_content_span(curve, x1, x2, thresh)
         if ce - cs < 20:
             continue
-        periods.append(float(estimate_period(curve[cs:ce])))
+        periods.append(float(estimate_period(curve[cs:ce], **kw)))
     if not periods:
         raise ValueError("no column produced a usable period estimate")
     return float(np.median(periods))
@@ -244,8 +293,78 @@ def _runs_of(mask: np.ndarray) -> list[tuple[int, int]]:
 LOW_INK_FRAC = 0.12
 LOW_INK_SEP = 12          # 与已有候选的最小间距（px），免得同一条缝挤进两个点
 
-CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b")
-"""**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
+#: 周期锚定候选（2026-09-19）：每个候选 v 在 v±period 处、±这么多像素内没有候选就补一个
+#: （取那一小段里曲线最低的行）。0 = 关。为什么要有它见 `fit_row_boundaries` 里的注释。
+PERIOD_CAND_GUARD = 6.0
+#: 只在首/末锚点窗口之外补（True）——首锚点窗口有自己的一套（顶格/抬头补窗顶候选）。
+PERIOD_CAND_INTERIOR_ONLY = True
+#: 落点是低墨行、且 ±这么多像素内已有一个**同样干净**的候选时不补（那条缝早有代表点，
+#: 再补只是把同一条缝挤成两个点，DP 在零墨段里按间距挑，本来切在缝中心的格线会挪几
+#: 像素）。附近的候选不干净（切在墨上的波谷）就照补——干净的锚定点正是要替掉它。
+#: 0 = 关。
+PERIOD_CAND_LOWINK_SEP = 0.0
+
+#: 切点墨量项的权重（`ink_lam`）。DP 每一步都加一份「切在这里要穿多少墨」，
+#: 原先权重恒为 1，与间距项 `lam·dev²` **量级差两个数量级**——北行日錄全书实测
+#: λ·dev² 中位 0.0005、p95 0.0120，而一条**真字缝**的墨量是 0.02~0.06。于是
+#: 「一条真字缝」抵得上四十到一百多个格子的间距偏差，间距先验形同虚设。
+#:
+#: 后果是 DP **专挑绝对干净的位置切，哪怕那是字肚子里**：刻本里「三」「二」
+#: 「一」这类横画分离的字，字内空隙比真字缝还干净（字缝下方常挂着下一个字的
+#: 起笔）。bxgb p33c16「三節」实测：切在「三」第二、三横之间墨量 0.0000、
+#: 切在「三」「節」之间墨量 0.0364，于是「三」被腰斩、上两横独占一格、第三横
+#: 跟「節」挤一格。**格高统计查不出来**（64/95 px 对 period=70.5，两格都在
+#: 正常波动内），只有对着图叠线才看得见。
+#:
+#: 0.8 是全书 970 列 A/B 扫出来的：修好 10 列切字（含上述 p33c16），另 35 列是
+#: 空白格区内部的等价平移（新旧切点墨量皆 0，不碰字），**0 列变差**，还顺带
+#: 把 2 列无解救回。**别再往下调**：0.5 时修好的涨到 36 列，但 p33c18/p48c02
+#: 两列整列下移、切线从零墨位置挪到墨量 6~20 的字身上沿（逐列叠图确认），
+#: 墨量项被压得太轻就不再拦「切在字上」了。0.8 与 0.5 之间没有再细扫。
+INK_LAM = 0.8
+
+#: 末格「墨跨够不够半个字」的判定里，`_ink_end` 之后再沿**笔画级**墨往下延伸（行墨 ≥ 这么多倍的
+#: `blank_thresh`）（2026-09-25）。`blank_thresh` 是 0.08×列宽（vol02 ≈14.6px），「十」「千」下半
+#: 只剩一根竖（行墨 10–12px）整截看不见——vol02 p148c6「莊公二十」的正确切法（2144/2254）两个切点
+#: 都在候选里，却因末格「十」墨跨只算到 53px < 0.5 格被判不可行，DP 改走切进「二」横画间隙的路。
+#:
+#: **只用于下界判定，代价仍按旧墨跨算**。三版全书 A/B（逐列看图，overview 进度 Step3/13 §四）：
+#: 代价也改用延伸值 → 修 2 坏 ≥3（可/義/本 的上沿被划给上一字）；仅在旧墨跨 <0.5 格时改用 → 修 2
+#: 坏 1（p56c4「戶」首横被划给「門」——「一截宽横 + 细竖」与「十」形态一样，这个量分不开）；
+#: 只判下界 → 修 1（p148c6）坏 0。0 = 关。
+TAIL_STROKE_FRAC = 0.3
+
+#: 人裁标了「这一列非均匀」时用的间距先验强度（2026-09-20，用户定）。
+#:
+#: 默认 `lam=0.3` 的二次方惩罚假设「一列里各字等距」，绝大多数列成立。但刻工
+#: 遇到长衔名/长句时会**前疏后密**：bxgb p33c19 前 2 字占 155px（平均 77.5）、
+#: 后 20 字占 1326px（平均 66.3），DP 为了把首格拉回 67px 把「尉」（实测墨跨
+#: 24..119，95px）从中间劈成 57+62 两格，整列随之错位一格，末尾「白琮」反而
+#: 各占 88/90px。
+#:
+#: 代价账（p_shared=67.3）：正解给「尉」95px 要吃 λ·dev² = 0.3×0.41² = 0.0507，
+#: 劈成两格只要 0.0070+0.0019 = 0.0089，而劈开处的墨只有 0.098——**间距先验比
+#: 墨量判据贵五倍**，DP 必然选劈。降到 0.08 后正解代价 0.0135，劈开不再划算。
+#:
+#: 只对人裁标过 `uniform=false` 的列生效。全书 967 列实测把它全局铺开也只动
+#: 2 列（都变好、0 变差），但那是**这本书**的结论：等距是版式常识，没有证据
+#: 就整体放宽，等于拿一列的收益赌其余列的先验，所以仍限定在勾选列。
+NONUNIFORM_LAM = 0.08
+
+CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b", "jiazhu_solo")
+"""`jiazhu_solo`（2026-09-20 加）＝**單行小注**：小字只占列宽右半、左半空着
+（bxgb 给人名作注的版式，`jiazhu_split.solo_notes`）。它**不是** `jiazhu_a`
+——此前借 `jiazhu_a` 的壳存（当成"只有 a 半的段"），三处下游都因此对不上：
+`Cell.sub` 给 `"a"`，而 Step4 起的记录（`CharRec`→`AdmitRec`）一律 `sub=None`
+（`cell_shrink` 把半宽格合成满宽格再交 extractor 重判，extractor 没有單行判据），
+于是 9.1 的 join 78 格查空报"产物过期"、字流证人对齐的 OCR 锚按 `(slot, sub)`
+配不上（bxgb 全书 78 个單行格没有一条 witness 标签）。單行注本来就是一个字、
+照 slot 顺序**就地读**，`sub=None` 才是对的记法。
+所以它自成一类：`sub` 为 None（不进 a/b 配对与段读序），`x0/x1` 记右半那截，
+`gap_center` 记小注左缘。**只有 a 半的雙行段尾（`adopt_run_tails` 的
+`tail_a`）仍是 `jiazhu_a`**——那是段的一部分，读序要跟段走，与單行注是两回事。
+
+**不含 `"raised"`**（2026-09-01 改，用户定：「不需要区分抬头和普通字。
 它们都是字，按坐标来区分位置」）。「抬头」不是一种跟"字/空白/夹注"并列的
 内容类型——它是同一个字的**位置**信息（顶边有没有伸到版框线以上），跟
 "这一格里是什么"是两个维度，硬塞进同一个 `kind` 枚举会让分类互相打架
@@ -274,7 +393,8 @@ class Cell:
       `slot` 相同、`kind` 分别是 `jiazhu_a`/`jiazhu_b`。
     - `x0/x1`：正常格是整个内容窗口（界行已剥掉）；夹注半格是各自那半边——
       `jiazhu_a` = 缝右（`[gap_center, x_hi]`），`jiazhu_b` = 缝左。
-      **a 是右子列、先读**（双行小注先右行后左行）。
+      **a 是右子列、先读**（双行小注先右行后左行）。單行小注 `jiazhu_solo`
+      也只占右半（`[小注左缘, x_hi]`），但**独立成格、不配对**，`sub` 为 None。
     - `order`：本列的阅读序，从 1 开始。正文格按 slot 升序；连续夹注段整体
       插在段位上，段内先 a 全部、再 b 全部（见 `reading_order`）。
     - `gap_center`：夹注格的缝中心 x（a/b 两半共用同一个值），非夹注为 None。
@@ -309,7 +429,8 @@ class Cell:
 
     @property
     def sub(self) -> str | None:
-        """夹注半格的 `"a"`/`"b"`，非夹注为 None（对齐生产 CharInstance.sub）。"""
+        """夹注半格的 `"a"`/`"b"`，非夹注为 None（对齐生产 CharInstance.sub）。
+        `jiazhu_solo` 也是 None——它不参与 a/b 配对，读序按 slot 就地排。"""
         if self.kind == "jiazhu_a":
             return "a"
         if self.kind == "jiazhu_b":
@@ -369,12 +490,14 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          blank_full_ratio: float = 0.8,
                          blank_cost_full: float = 0.01,
                          blank_lam_frac: float = 0.1,
+                         blank_min_ratio: float = BLANK_MIN_RATIO,
                          drop_lam: float = 0.3,
                          lam4: float = 0.0,
                          mass_lam: float = 1.0,
                          mass_h: float = 0.79,
                          mass_min: float = 0.100,
-                         cell_w: float = 0.0) -> list[float] | None:
+                         cell_w: float = 0.0,
+                         ink_lam: float = INK_LAM) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -526,6 +649,25 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         i = _ink_end_i(round(ya), round(yb))
         return ya if i is None else float(i)
 
+    stroke_thresh = blank_thresh * TAIL_STROKE_FRAC
+
+    @functools.lru_cache(maxsize=None)
+    def _stroke_end_i(a: int, b: int) -> int | None:
+        i = _ink_end_i(a, b)
+        if i is None or stroke_thresh <= 0:
+            return i
+        hi = min(n_cmax, b + 1)
+        while i + 1 < hi and cmax_list[i + 1] >= stroke_thresh:
+            i += 1
+        return i
+
+    def _stroke_end(ya: float, yb: float) -> float:
+        """`_ink_end` 之后沿**笔画级**的墨（≥ stroke_thresh）连续往下延伸到的位置。"""
+        if not cmax_list:
+            return yb
+        i = _stroke_end_i(round(ya), round(yb))
+        return ya if i is None else float(i)
+
     @functools.lru_cache(maxsize=None)
     def _near_blank_i(a: int, b: int) -> bool:
         lo, hi = max(0, a), min(n_cmax, b)
@@ -568,9 +710,16 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             # （vol01/141 c3：单个 160px 空白格让整列格位比人裁时少 1，裁决键全错位）。
             if gap > 1.25 * period:
                 return None
+            # 下界（2026-09-17）：空白格是「一个空着的字位」，不该只有十几像素。
+            # 没有下界时 DP 会造碎空白格凑格数，害得后面整列相位错位——理由与
+            # 实测分布见 BLANK_MIN_RATIO。首尾锚点那两段不走这里（它们由
+            # y1_max/y2_max 管），所以这条只约束**列内**的空白格。
+            if gap < blank_min_ratio * period:
+                return None
             base = blank_cost_full if gap >= blank_full_ratio * period else blank_cost
             return base + blank_lam_frac * lam * ((gap - period) / period) ** 2
         g = gap
+        g_lo = gap
         lo_eff = lo_ratio * period
         if last and tail_trim:
             # 末格只算到最后一行有墨处；**墨的跨度本身仍要够半个字**——不能用下界去
@@ -578,8 +727,15 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             # 用整格下界 0.7 卡（vol01/140 c1：末字墨跨 75px = 0.67·period 是真字）。
             # 字的墨跨通常是 0.75–0.85 格，残渣 0.1–0.3 格，取 0.5 分界。
             g = _ink_end(y_prev, y) - y_prev
+            g_lo = g
+            # 判「够不够半个字」时墨跨沿笔画级的墨往下延伸（TAIL_STROKE_FRAC）：「十」「千」下半只剩
+            # 一根竖，行墨低于 blank_thresh，旧量法看不见，末格被判不可行。代价仍按 g 算，见常量注释。
+            # 末格上沿自己切在墨上（切进下一个字的上半）时不延伸：那是「上一格吞了本字上半、
+            # 本格只剩细笔尾巴」的形状（vol01 p95c5「庭」），延伸会给它开绿灯
+            if 0 <= round(y_prev) < n_cmax and cmax_list[round(y_prev)] < stroke_thresh:
+                g_lo = _stroke_end(y_prev, y) - y_prev
             lo_eff = 0.5 * period
-        if not (lo_eff <= g <= hi_ratio * period):
+        if not (lo_eff <= max(g, g_lo) and g <= hi_ratio * period):
             return None
         dev = (g - period) / period
         if not interior:
@@ -619,7 +775,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     # 再按 k 向量化填表。**数值逐位相同**：total 的加法顺序保持 ((prev + c) + ink) + eps，
     # argmin 取首个最小值 = 原来「严格小于才更新」的取法（最小的 mp 胜出）。
     mid_y = [y for y, _ in mid]
-    mid_ink = np.array([ink for _, ink in mid], dtype=np.float64)
+    mid_ink = ink_lam * np.array([ink for _, ink in mid], dtype=np.float64)
     C = np.full((m_count, m_count), np.inf)
     for m in range(m_count):
         y = mid_y[m]
@@ -636,7 +792,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             y, ink = mid[m]
             c = step_cost(v0, y, interior=False)
             if c is not None:
-                dp_cost[0, m] = c + ink + eps + drop_cost_0
+                dp_cost[0, m] = c + ink_lam * ink + eps + drop_cost_0
         for k in range(1, n_interior):
             tot = dp_cost[k - 1][:, None] + C
             tot = tot + mid_ink[None, :]
@@ -681,11 +837,13 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         blank_full_ratio: float = 0.8,
                         blank_cost_full: float = 0.01,
                         blank_lam_frac: float = 0.1,
+                        blank_min_ratio: float = BLANK_MIN_RATIO,
                         drop_lam: float = 0.3,
                         lam4: float = 0.0,
                         mass_lam: float = 1.0,
                         mass_h: float = 0.79,
-                        mass_min: float = 0.100) -> RowBoundaryResult | None:
+                        mass_min: float = 0.100,
+                        ink_lam: float = INK_LAM) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -763,6 +921,72 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                 synth_ink.append(float(curve[int(y)]) / dst_w if 0 <= int(y) < len(curve) else 0.03)
             y += synth_step
 
+    # **周期锚定候选**（2026-09-19，bxgb 切线金标 234 条）。候选只来自波谷 + 低墨行 +
+    # 空白区合成点，可两字**粘连**时那一条真缝既不是局部极小（凸出度够不着 0.10·W，
+    # 旁边几像素就有更低的点）、也不是孤立的低墨行——它就不在候选集里。DP 面对
+    # 「缺一个候选」的段只能错相位，而且一错就是一整段：bxgb p15c16 实测，868 之后
+    # 候选 883/913/955，真缝 937 缺席；955→1004 只有 49px < 0.7·71 不可行，DP 从 955
+    # 起一路偏 20~34px 切了 7 格，每条都切在墨 0.12~0.19 上（真缝墨 0~0.03）。代价
+    # 函数没错——真缝路径总代价 0.28 对现役 1.14——是**选不了一个不在候选集里的点**，
+    # 与上面低墨候选那条同一根因。
+    # 给每个候选 v 在 v±period 处补一个候选（±PERIOD_CAND_GUARD 内没有候选才补，取那
+    # 一小段里曲线最低的一行，墨量用真值）：只是把「按周期该有一条缝」的位置放进候选
+    # 集，选不选仍由墨量 + 间距代价定。实测（scripts/seg_harness.py，内存里新旧对比）：
+    #   bxgb 切线金标（最近格线口径）≤10px 80.4% → 92.8%，p90 21 → 7.8px，mean 6.1 → 3.4；
+    #   R2x 42 → 21、R2 28 → 24（切在墨上的格线少了一半），折线金标 10 条好转 / 1 条变差
+    #   （那 1 条是 p33c18，台子没套人裁的 n_slots=22，不作数）；
+    #   「切在墨上且离最近零墨缝 ≥10px」探针全书 439 → 410 条，p15c16 从 8 条降到 0；
+    #   vol01 522 条金标 ≤10px 97.1% → 97.7%，折线金标逐条无变差，R2 49 → 44。
+    # **vol02 的「净负」是金标口径的假象**（2026-09-19 查实，别再照着它调参）。
+    # 台子上 vol02 切线金标 ≤10px 94.8%（关）对 90.9%（开），看着是锚定弄坏了 9 条。
+    # 逐条到图上看现役切点的墨：**9 条里 8 条切在零墨上、一个字都没伤**——它们落在
+    # 首部 blank 格带来的宽零墨缝里（这 9 列全部首部有 blank 格），gold 只是标了同一条
+    # 缝里的另一个位置，两个都干净。剩下 1 条（106:2:11）是真粘连：±25px 内行墨从没
+    # 低于 0.11，gold 0.134 对现役 0.140，差 0.006，谈不上谁对。
+    # 真正量「伤没伤字」的尺子上锚定是**更好**的：R2 46→43、R2x 69→59、clean 82.02%→82.23%。
+    # 三条判别方向都试过且证伪（宽零墨缝守卫只救回 2/10；相邻格距偏离周期 BAD 中位 0.22
+    # 对其它 0.09、但其它里 19.4% 也超；首部 blank 格 9 条里中 7 条、但全书 80% 的列都有）
+    # ——本来就没有真缺陷可分，所以分不开。
+    # 候选多了一到两成，DP 代价矩阵是 m² 的，单列耗时相应上去一点，可接受。
+    # 两条边界，都是为了**只在需要的地方补**、不改动已经切对的列：
+    # - 只补列**内部**（首/末锚点窗口之外）。首锚点窗口有自己的一套（顶格/抬头补窗顶
+    #   候选、top_slack），往那里撒点会改抬头列的首格；
+    # - 落点是低墨行（< LOW_INK_FRAC·W）、且 ±PERIOD_CAND_LOWINK_SEP 内已有一个同样干净的
+    #   候选时不补——那条缝早已由波谷/低墨行代表，再补只是把同一条缝挤成两个点，DP 在
+    #   零墨段里按间距挑一个，本来切在缝中心的格线会挪几像素（单测里 8px）。附近候选
+    #   不干净时照补：bxgb 实测把这条守卫写成「附近有任何候选就不补」会把收益吐回去
+    #   一小半（≤10px 92.8% → 91.5%，R2 24 → 30），因为要替掉的正是那些切在墨上的波谷。
+    if PERIOD_CAND_GUARD > 0 and period > 0:
+        if PERIOD_CAND_INTERIOR_ONLY:
+            lo_in, hi_in = border_top + y1_max_frac * period, border_bottom - y2_max_frac * period
+        else:
+            lo_in, hi_in = border_top - 1, border_bottom + 1
+        low_ink = LOW_INK_FRAC * dst_w
+        base = sorted(set(valid + synth))
+        have = list(base)
+        extra: list[float] = []
+        for v in base:
+            for cand in (v - period, v + period):
+                if not (lo_in <= cand <= hi_in):
+                    continue
+                if any(abs(cand - u) < PERIOD_CAND_GUARD for u in have):
+                    continue
+                a = max(0, int(round(cand - PERIOD_CAND_GUARD)))
+                b = min(len(curve) - 1, int(round(cand + PERIOD_CAND_GUARD)))
+                if b <= a:
+                    continue
+                y = float(a + int(np.argmin(curve[a:b + 1])))
+                if any(abs(y - u) < PERIOD_CAND_GUARD for u in have):
+                    continue
+                if (PERIOD_CAND_LOWINK_SEP > 0 and curve[int(y)] < low_ink
+                        and any(abs(y - u) < PERIOD_CAND_LOWINK_SEP and curve[int(u)] < low_ink
+                                for u in have)):
+                    continue          # 这条干净缝已有干净的代表点，不挤第二个
+                have.append(y)
+                extra.append(y)
+        synth.extend(extra)
+        synth_ink.extend(float(curve[int(y)]) / dst_w for y in extra)
+
     all_valleys = np.array(valid + synth, dtype=np.float64)
     all_ink = np.array(valley_ink + synth_ink, dtype=np.float64)
     order = np.argsort(all_valleys)
@@ -777,9 +1001,26 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
         curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
         blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
-        blank_lam_frac=blank_lam_frac, drop_lam=drop_lam, lam4=lam4,
+        blank_lam_frac=blank_lam_frac, blank_min_ratio=blank_min_ratio,
+        drop_lam=drop_lam, lam4=lam4,
         mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
+        ink_lam=ink_lam,
     )
+    if boundaries is None and blank_min_ratio > 0.0:
+        # 空白格下界是**偏好**不是硬约束：它挡的是「造碎空白格凑格数」，可有些列
+        # （版式本身就有半格留白、或列尾残段）加了下界就整列无解——无解比相位错位
+        # 更糟（这一列一个字都切不出来）。北行日錄全书 952 列实测：不回退时 7 列
+        # 由有解变无解，回退后 0 列。所以先按下界解，解不出来再放开重来。
+        boundaries = _bounded_elastic_dp(
+            border_top, border_bottom, all_valleys, all_ink, period, eps,
+            lo_ratio, hi_ratio, y1_max_frac, y2_max_frac, lam, n_slots, top_slack,
+            curve=curve, blank_thresh=thresh, blank_cost=blank_cost, tail_trim=tail_trim,
+            blank_full_ratio=blank_full_ratio, blank_cost_full=blank_cost_full,
+            blank_lam_frac=blank_lam_frac, blank_min_ratio=0.0,
+            drop_lam=drop_lam, lam4=lam4,
+            mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
+            ink_lam=ink_lam,
+        )
     if boundaries is None:
         return None
     boundaries = _snap_to_raw_minimum(boundaries, np.asarray(row_proj, dtype=np.float64),
@@ -972,6 +1213,11 @@ touching-cuts 评测口径 ≤3 / ≤5 / ≤10 px，取最严一档。"""
 
 RESOLVED_SEAM_TOL = 4.0
 
+PIN_MARGIN = 8.0
+PIN_NEAR = 0.4     # 钉子按位置认格线：离它 ≤ 这么多格
+PIN_FAR = 1.5      # 位置认不上时按格号认：离 DP 那条 ≤ 这么多格
+"""人钉的格线离上下相邻格线至少这么多像素，否则不钉（见 segment_column 的 pinned_cuts）。"""
+
 SPLIT_SHORT, SPLIT_TALL, SPLIT_MASS_MIN = 0.79, 1.05, 0.10
 """L0′「切进字里」嫌疑（2026-09-15，10 卡）：直线格线不穿墨、看着干净，但相邻两格一个 ≤0.79·中位格高、
 一个 ≥1.05·中位格高，且**矮格的绝对墨量**（墨像素 ÷ 中位格高×格宽）≥0.10——矮格里装的不是「一」「二」那种扁字
@@ -1065,6 +1311,52 @@ def _apply_resolved_cut(cands: list[SeamCandidate], chosen: int,
     return [cands[match_idx]], 0
 
 
+FRAME_V_RUN = 1.2      # 框线竖边：连续墨 ≥ 这么多个 period（字的笔画不会跨出一格）
+FRAME_V_EDGE = 0.35    # 框线竖边只认列宽两侧这么多比例以内——居中的长竖是字：bxgb「十」「上」「于」
+                       # 的竖与下一个字的起笔连成一线就超过 1.2 格，不设这条会把它们整格判空（A/B 实测 41 格）
+FRAME_THIN_H = 0.2     # 去掉框线后剩下的墨，高度都 < 这么多 period（只剩细横）……
+FRAME_THIN_W = 0.5     # ……且每一块宽度 < 这么多格宽（「一」是一整块宽横，≥0.55，留着）
+
+
+def _frame_mask(col_ink: np.ndarray, period: float) -> np.ndarray:
+    """列图里「跨格的长竖」：竖向闭合补小断口后，连续墨 ≥ FRAME_V_RUN·period 的像素。"""
+    import cv2
+    k = max(3, int(FRAME_V_RUN * period))
+    # 闭合只补 ≤5px 的断口：放到 9 会把「日」「言」「二」的边竖与上下字的笔画连成跨格长竖（bxgb A/B 误判 3 格）
+    closed = cv2.morphologyEx(col_ink, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (1, 5)))
+    m = cv2.morphologyEx(closed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, k))) & col_ink
+    w = m.shape[1]
+    xs = np.arange(w)
+    m[:, (xs > FRAME_V_EDGE * w) & (xs < (1 - FRAME_V_EDGE) * w)] = 0
+    return m
+
+
+def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
+    """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
+    后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
+    import cv2
+    h, w = ink.shape[:2]
+    if h < 10 or w < 10 or not frame.any():
+        return False
+    rest = ink & (1 - cv2.dilate(frame, np.ones((5, 5), np.uint8)))
+    if float(rest.mean()) < min_ink_ratio:
+        return True
+    # 贴着长竖（框角：框的上/下边接在竖边上）的那几块也算框：「┬」「┌」去掉竖以后剩一截横
+    zone = cv2.dilate(frame, np.ones((13, 13), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(rest.astype(np.uint8), connectivity=8)
+    for i in range(1, n):
+        if st[i, cv2.CC_STAT_AREA] < 20:
+            continue
+        thin = st[i, cv2.CC_STAT_HEIGHT] < FRAME_THIN_H * period
+        near = zone[lab == i].any()
+        if thin and (st[i, cv2.CC_STAT_WIDTH] < FRAME_THIN_W * w or near):
+            continue
+        if near and st[i, cv2.CC_STAT_WIDTH] <= 0.1 * w:    # 框线竖边毛糙、没被开运算收进来的边角
+            continue
+        return False
+    return True
+
+
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
@@ -1075,6 +1367,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     seam_band: int = 20,
                     resolved_cuts: "dict[int, str | ResolvedCut] | None" = None,
                     cut_judge=None,
+                    pinned_cuts: "dict[int, float] | None" = None,
+                    forced_solo: "set[int] | None" = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1135,12 +1429,18 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `cut_judge`：候选池裁判（`utils/cut_select.get_judge()` 的 U-Net），None = 只用现役规则。
       候选池经现役规则、收缩、**人裁回流**之后仍 ≥2 条（人没裁过）时，用它给每条候选打一致率、
       改选高出门槛的最优者。人裁在前：`seam_ok` 收敛的是人当时看到的现役折线。见 `utils/cut_select.py` 模块头。
+    - `forced_solo`：人裁指认为單行小注的格（对外 `slot` 编号，来自
+      `feedback/lookup.resolved_solo_notes`）。只管判据落空的那一型（左半有碎墨把
+      跨度撑满），已被雙行段收走的格不动；缝取右半墨迹左缘。
+    - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
+      把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
-    `kind` 判定的优先级：空白 > 夹注 > 正文字。空白格不参与夹注判据（生产
-    同口径：只在 char 格上量缝），夹注段的段端收编也只收非空白格。`raised`
-    在这条优先级之外单独算，任何 `kind` 的格都可能是 `raised=True`。
+    `kind` 判定的优先级：空白 > 雙行夹注段（含段尾）> 單行小注 > 正文字。
+    空白格不参与夹注判据（生产同口径：只在 char 格上量缝），夹注段的段端收编
+    也只收非空白格；單行小注只在不属于雙行段的格上找。`raised` 在这条优先级
+    之外单独算，任何 `kind` 的格都可能是 `raised=True`。
     """
     if col_gray.ndim == 3:
         col_gray = col_gray[:, :, 0]
@@ -1162,6 +1462,32 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         return None
     result.content_x = (float(x_lo), float(x_hi))
     bounds = result.boundaries
+    # 人拖过的切线钉住（2026-09-26，feedback/lookup.resolved_pins）：slot_above 下沿那条格线换成人给的 y。
+    # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
+    # 已不是同一条格线（格数/相位变了），不套。
+    #
+    # 先按**格号**认（离 DP 那条 ≤ PIN_FAR 格；p100c4「淳乙」DP 把两字并成一格，人钉的线离 DP 1.1 格），
+    # 格号那条夹不进相邻格线之间时再按**位置**认（离它 ≤ PIN_NEAR 格的那条）：上游几何一变格号会整体
+    # 错一位（vol02 p187c9 双线框剥干净后列首少了一个假格），钉子记的是页面坐标，位置才是人裁本意。
+    # 不能反过来先按位置：两根钉子挨着时，前一根会就近抢走后一根的格线（p28c8 实测丢了一根）。
+    # 按 y 从上往下钉，一条格线只钉一次。
+    used: set[int] = set()
+    for slot_above, y_pin in sorted((pinned_cuts or {}).items(), key=lambda kv: kv[1]):
+        y_pin = float(y_pin)
+        cands: list[int] = []
+        p_slot = _slot_to_pos_local(slot_above, n_raised)
+        if 1 <= p_slot < n_slots and abs(y_pin - bounds[p_slot]) <= PIN_FAR * period:
+            cands.append(p_slot)
+        near = min(range(1, n_slots), key=lambda i: abs(bounds[i] - y_pin)) if n_slots > 1 else None
+        if near is not None and abs(bounds[near] - y_pin) <= PIN_NEAR * period and near not in cands:
+            cands.append(near)
+        for p_ in cands:
+            if p_ in used:
+                continue
+            if bounds[p_ - 1] + PIN_MARGIN < y_pin < bounds[p_ + 1] - PIN_MARGIN:
+                bounds[p_] = y_pin
+                used.add(p_)
+                break
 
     # 下面全程用 pos（1..n_slots，物理上连续）做字典键和相邻性判断；slot
     # （对外编号，抬头/正文交界处跳过 0）只在生成 Cell 的最后一步换算。
@@ -1175,9 +1501,23 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         patches[pos] = patch
         inks[pos] = _ink_ratio(patch, ink_threshold)
     nonblank = {p for p in patches if inks[p] >= min_ink_ratio}
+    # 只有框线的格算空白（2026-09-26）：版面装饰框/版框的边落进格里（vol02 p188 c7 首两格是
+    # 「御製」框的左上角「┌」），墨量够不上空白，被当成字、甚至当成單行小注。
+    col_ink = (col_gray[:, x_lo:x_hi] < ink_threshold).astype(np.uint8)
+    frame = _frame_mask(col_ink, period)
+    if frame.any():
+        for k in range(n_slots):
+            pos = k + 1
+            if pos not in nonblank:
+                continue
+            y0i = max(0, min(h, int(round(bounds[k]))))
+            y1i = max(0, min(h, int(round(bounds[k + 1]))))
+            if _frame_only(col_ink[y0i:y1i], frame[y0i:y1i], period, min_ink_ratio):
+                nonblank.discard(pos)
 
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
+    solo: dict[int, float] = {}
     suspect: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
@@ -1190,6 +1530,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         runs, tail_a = jiazhu_split.adopt_run_tails(
             runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
+        # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
+        # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
+        # 只在非空白、且不属于双行段的格上找。**不并进 `runs`/`tail_a`**——
+        # 2026-09-20 前是并进去当"只有 a 半的段"发 `jiazhu_a`，下游三处因此
+        # 对不上（见 `CELL_KINDS` 的说明），现在自成 `jiazhu_solo` 一类。
+        # 顺序上 `adopt_run_tails` 在前：雙行段下一格若是右半小字，一律是段的
+        # 奇数字末行（7a+6b 必然一体）——用户 2026-09-20 定：不会有两段"独立"
+        # 的注紧挨着，所以这里不存在"單行注被当段尾收走"的歧义。
+        solo = jiazhu_split.solo_notes(
+            {p: patches[p] for p in nonblank}, runs, ruler, ink_threshold)
+        for pos in sorted(nonblank):
+            if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
+                    and pos not in runs and pos not in solo:
+                solo[pos] = jiazhu_split.right_half_left_edge(patches[pos], ink_threshold)
 
     cells: list[Cell] = []
     for k in range(n_slots):
@@ -1197,6 +1551,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         slot = _pos_to_slot(pos, n_raised)
         y0, y1 = float(bounds[k]), float(bounds[k + 1])
         raised = y0 < border_top - raise_tol   # 纯几何量，跟 kind 判定分开算
+        if pos in solo:
+            # 單行小注：一格只发一个 Cell，占 [小注左缘, x_hi]，sub 为 None。
+            # `solo_notes` 的 SOLO_MIN_INK(600) 远高于 HALF_MIN_INK，这道闸
+            # 理论上不触发；真触发就退回正文格，别像段尾那样整格不发。
+            cx_local = solo[pos]
+            cxi = int(round(cx_local))
+            half = patches[pos][:, cxi:]
+            if int((half < ink_threshold).sum()) >= jiazhu_split.HALF_MIN_INK:
+                cells.append(Cell(slot=slot, y0=y0, y1=y1,
+                                  x0=float(x_lo + cxi), x1=float(x_hi),
+                                  kind="jiazhu_solo", gap_center=float(x_lo) + cx_local,
+                                  raised=raised,
+                                  ink_ratio=round(_ink_ratio(half, ink_threshold), 4)))
+                continue
         if pos in runs:
             cx_local = runs[pos]
             cx = float(x_lo) + cx_local
@@ -1272,6 +1640,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if len(cands) < n_before:
                 chosen_by = "human"
             escalate, escalate_reason = False, None
+            if cut_judge is not None and len(cands) == 1 and period > 0 and resolved is None:
+                # 单候选：裁判无可改选，只剩探针；两侧格高都正常就不探（见 cut_select.PROBE_DEV）。
+                # 有人裁的不跳：人裁可能指向扩池才生成的候选（unet_seam / period_*），要走完下面的扩池才收敛得上
+                from .cut_select import PROBE_DEV
+                if max(abs((up_c.y1 - up_c.y0) / period - 1),
+                       abs((dn_c.y1 - dn_c.y0) / period - 1)) <= PROBE_DEV:
+                    return cands, chosen, chosen_by, escalate, escalate_reason
             if cut_judge is not None and cands:
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)

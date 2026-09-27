@@ -35,7 +35,6 @@ def _prep_one(args):
     key, path, isotropic, norm_stroke = args
     import cv2
     import numpy as np
-    from ..clustering.canonical import to_canonical
     from ..clustering.normalize import normalize_patch
     p = Path(path)
     if not p.exists():
@@ -44,16 +43,50 @@ def _prep_one(args):
     g = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
     if g is None:
         return key, None
-    return key, (png, g, normalize_patch(to_canonical(g), stroke_width=norm_stroke,
+    # ⚠️ **不要先过 `to_canonical`**（2026-09-16 修）。Step5-a（`glyph_match`）是拿
+    # 字块**直接** `normalize_patch` 的；播种这边多垫一层 canonical，两边就成了两把尺子。
+    # 而且这层不只是「多余」，是**有害**：canonical 把 70×77 的字块摆进 256×256 画布
+    # 且「只缩不放」，墨只占画布 1%（实测 卯 ink 0.0096）；normalize_patch 接着把这个
+    # 小图再放大 2.7 倍填满 64×64，纸纹跟着放大成整片黑。实测 十 变成一个方块 → 字体
+    # top-1 给 由，之 给 國。300 个随机字位的字体一致率：
+    #   canonical→norm  22.3%     直接 norm  **74.0%**
+    return key, (png, g, normalize_patch(g, stroke_width=norm_stroke,
                                          isotropic=isotropic))
+
+
+def _binarized_png(gray: "np.ndarray") -> bytes:
+    """字块灰度 → **二值** PNG bytes（白底黑字），进库存这张。
+
+    用户 2026-09-16 定的口径：**最后进字形库的一定是二值的，灰度值会干扰**。
+    此前存的是缓存里的灰度裁片（189~198 个灰阶），等于把「用哪把尺子二值化」
+    推迟到每次读取——`glyph_db._unpng` 用固定阈 128、`normalize_patch` 用
+    Sauvola，同一个字块在检索与匹配两处拿到的二值图可以不一样。
+
+    与整页副本 `utils/binarized.binarize_page` **共用同一个二值化**（Sauvola
+    31/0.2），所以「库里那张」与「人裁看的那张」是同一把尺子出来的。
+    """
+    import cv2
+    from .binarized import binarize_page
+    ok, buf = cv2.imencode(".png", binarize_page(gray))
+    if not ok:
+        raise RuntimeError("PNG 编码失败")
+    return buf.tobytes()
+
+
+def _cell_key(d: dict) -> str:
+    """标签行 → `char_patch` 的键。**夹注半格要带 `sub`**（`p0004c03s10a`）——
+    a/b 两半 slot 相同，不带后缀两半会撞成同一个键、图块互相覆盖。
+    命名与 `steps/cell_shrink.py` 落盘时的 `cell_key(...) + (inst.sub or "")` 同一口径。
+    """
+    from ..core.spec import cell_key
+    return cell_key(d["page"], d["col"], d["slot"]) + (d.get("sub") or "")
 
 
 def _prep_patches(rows, cache_root: Path, book_id: str, norm_stroke, jobs: int = 1) -> dict:
     """批量把字块读进来并归一。`jobs>1` 走进程池（纯 CPU、无状态，这段占检索三分之一）。"""
-    from ..core.spec import cell_key
     tasks = []
     for d in rows:
-        key = cell_key(d["page"], d["col"], d["slot"])
+        key = _cell_key(d)
         tasks.append((key, str(cache_root / book_id / "char_patch" / (key + ".png")),
                       d.get("cell_kind") == "punct", norm_stroke))
     out: dict = {}
@@ -75,13 +108,13 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
                       edition_tag: str | None = None, kinds=("char", "punct"), limit: int | None = None,
                       products_root: Path | None = None, skip_flags=SKIP_FLAGS,
                       norm_stroke: int | None = None, jobs: int = 1,
-                      only_chars: str | None = None, log=print) -> dict:
+                      only_chars: str | None = None, source_kind: str = "print",
+                      binarize: bool = True, log=print) -> dict:
     """两阶段：先对全部字位做字体检索（只读，检索缓存稳定），再逐条进库（只写）。
 
     第一版是边检索边进库——每 `admit_instance` 一条就让 `GlyphDB.query` 的特征缓存失效
     （缓存键含 exemplar 条数），下一次检索重建整张表，25 分钟只进了 4,101 条；
     拆成两阶段后检索 ~15ms/次、进库 ~10ms/条。"""
-    from ..clustering.canonical import to_canonical
     from ..clustering.normalize import normalize_patch
     from ..core.spec import cell_key
 
@@ -93,7 +126,8 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # 判据（，0.65 / 、1.04 / 。1.00 / ：0.48，方差 ±0.02），默认那 ±20% 各向异性拉伸
     # 会把判据抹平——实测 `，`/`、` 的间隔从 +0.336 掉到 +0.044。
     def norm_of(d, img):
-        return normalize_patch(to_canonical(img), stroke_width=norm_stroke,
+        # 与 `_prep_one` 同：**不垫 `to_canonical`**，与 Step5-a 同一把尺子（理由见那里）
+        return normalize_patch(img, stroke_width=norm_stroke,
                                isotropic=(d.get("cell_kind") == "punct"))
     # 形状证人这一路必须与 Step5-a 用同一把尺子（笔宽归一 `norm_stroke`）。2026-09-15 北行日錄
     # 实锤：不归一时书块 4.6px vs 字体 2.7px，cov 0.6～0.8 量的是粗细，字→宇、旦→且、宣→宜/直
@@ -139,7 +173,9 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
         if not ln.strip():
             continue
         d = json.loads(ln)
-        if d.get("kind") not in kinds or d.get("cell_kind") not in ("char", "punct"):
+        # `jiazhu` 是夹注半格（2026-09-17 起字流对齐也收它们）。它们跟正文格
+        # 一样是**一个字**，同样要过字体那一路互证，没有理由挡在播种之外。
+        if d.get("kind") not in kinds or d.get("cell_kind") not in ("char", "punct", "jiazhu"):
             continue
         fl = cell_flags.get((d["page"], d["col"], d["slot"]), ())
         hit = [f for f in fl if f in bad_flags]
@@ -171,7 +207,7 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # （检索本身不并行：matcher 带着 2000 个模板的特征矩阵，进程间传它比算还贵。）
     prepped = _prep_patches(rows, cache_root, book.id, norm_stroke, jobs=jobs)
     for i, d in enumerate(rows):
-        key = cell_key(d["page"], d["col"], d["slot"])
+        key = _cell_key(d)
         got = prepped.get(key)
         if got is None:
             n_missing += 1
@@ -199,7 +235,12 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     # ── 阶段二：进库（只写）──
     n_admit = n_dup = 0
     for j, (d, png, g, agreed, tops) in enumerate(plan):
-        iid = f"{book.id}:{d['page']}:{d['col']}:{d['slot']}"
+        # 夹注半格带 a/b 后缀，与全仓一致（cell_shrink / glyph_match / rare / gold
+        # 都是 `{book}:{page}:{col}:{slot}{sub}`）。不带的话两半是同一个 iid，
+        # 进库时后一半会被当成重复丢掉。
+        iid = f"{book.id}:{d['page']}:{d['col']}:{d['slot']}{d.get('sub') or ''}"
+        if binarize:
+            png = _binarized_png(g)
         ok = db.admit_instance(
             iid, d["char"], png, provenance="align", edition_tag=edition,
             evidence={"witness_page": d.get("witness_page"), "line_idx": d.get("line_idx"),
@@ -213,7 +254,11 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
         if (j + 1) % 2000 == 0:
             db.conn.commit()
             log(f"  [seed/进库] {j + 1}/{len(plan)}：新进 {n_admit} 已有 {n_dup}")
-    db.conn.execute("UPDATE sources SET kind='print' WHERE source_id=?", (book.id,))
+    # ⚠️ `source_kind` 不是装饰性的：`candidates.GlyphKnnProposer` 默认只查
+    # `kinds=("woodblock",)`，刻本的书如果被记成 'print'，播进去的字形在候选
+    # 检索里**静默查不到**（不报错，只是永远没有候选）。本函数原为现代排印本
+    # 写死 'print'，刻本调用方必须显式传 'woodblock'。
+    db.conn.execute("UPDATE sources SET kind=? WHERE source_id=?", (source_kind, book.id))
     db.conn.commit()
     n_glyphs = db.conn.execute("SELECT COUNT(*) FROM glyphs WHERE edition_tag=?", (edition,)).fetchone()[0]
     stats = {"edition": edition, "labels_seen": n_seen, "admitted": n_admit,

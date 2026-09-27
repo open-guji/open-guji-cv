@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { BinaryToggleImage } from '../common/BinaryToggleImage'
+import { withWorkspace } from '../../api/client'
 import { fetchJiazhuSegments } from '../../api/jiazhu'
 import { postEvents } from '../../api/events'
-import { needsReading, consumedMsg } from '../../domain'
+import { consumedMsg } from '../../domain'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { JiazhuSegment } from '../../types/jiazhu'
 import './jiazhu.css'
@@ -21,8 +23,14 @@ const DEFECT_OPTIONS = [
 
 interface DefectChoice { key: string; quality: string; note: string }
 
-export function JiazhuPanel({ book }: { book: string }) {
-  const [pages, setPages] = usePersistedPages('jiazhu', book, 'jz')
+export function JiazhuPanel({ book, pages: pagesProp }: { book: string; pages?: string }) {
+  // `pages` 由页面（StepLayout 的板块①）传下来时以它为准；不传则退回
+  // 面板自己记的那份。此前只有后者，于是 Step3 的切线台与 Step7 的阻塞
+  // 切线台圈的是不同批页，看起来「两个台不重合」——而机制上
+  // blocking ⊆ all 恒成立（计划书 §1.2 实测）。
+  const [ownPages, setOwnPages] = usePersistedPages('jiazhu', book, 'jz')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [only, setOnly] = useState<'all' | 'review' | 'auto'>('all')
   const [batchInput, setBatchInput] = useState('')
   const [segs, setSegs] = useState<JiazhuSegment[]>([])
@@ -99,9 +107,7 @@ export function JiazhuPanel({ book }: { book: string }) {
         const v = edit[c.id]
         if (v === undefined || !v) continue
         rows.push({
-          id: c.id, v: 'confirm', shape: v,
-          reading: needsReading(v) ? (c.ref || v) : v,
-          conversion: 0, client_ts: Date.now() / 1000,
+          id: c.id, v: 'confirm', shape: v, client_ts: Date.now() / 1000,
         })
       }
     }
@@ -111,7 +117,7 @@ export function JiazhuPanel({ book }: { book: string }) {
       if (!why) continue
       defects.push({
         id: s.cells[0].id, v: 'seg_defect', quality: why.quality, defect: why.key,
-        shape: s.cells[0].char || '', reading: s.cells[0].char || '',
+        shape: s.cells[0].char || '',
         note: `jiazhu_split ${s.id} ${s.n}格 ${why.note}`,
         client_ts: Date.now() / 1000,
       })
@@ -183,7 +189,7 @@ export function JiazhuPanel({ book }: { book: string }) {
                   : <span className="badge b-pending">与整理本有出入</span>}
               </div>
               <div className="jzbody">
-                <img className="jzstrip" src={s.img} alt="列条" loading="lazy" />
+                <img className="jzstrip" src={withWorkspace(s.img)} alt="列条" loading="lazy" />
                 <div className="jztext">
                   <div className="jzline">
                     <span className="jzlab">转写</span>
@@ -195,7 +201,7 @@ export function JiazhuPanel({ book }: { book: string }) {
                       return (
                         <span key={c.id} className={`jzcell ${cls}`} title={`${c.id} · ${c.channel || '待审'}`}
                               onClick={() => editCell(i, j)}>
-                          <img src={c.patch} alt="" loading="lazy" /><b>{shown}</b>{ref}
+                          <BinaryToggleImage src={c.patch} showToggle={false} /><b>{shown}</b>{ref}
                         </span>
                       )
                     })}

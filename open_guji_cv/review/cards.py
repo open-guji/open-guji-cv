@@ -18,11 +18,60 @@ from ..core.spec import cell_key, page_key
 from ..gold.v2_align import align_book
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
+from .verdict_view import decided_cells
+
+
+def parse_cells_spec(pages: str, book: str) -> set[str]:
+    """`cells:4:1:21,6:8:1` → `{"bxgb:4:1:21", "bxgb:6:8:1"}`（2026-09-17）。
+
+    用户「输入 4:1:21 就显示那张卡」：人裁时报出一个字位要立刻调卡对着看，
+    不必先猜它在哪一页。书号可省（省了补 `book`），逗号/空格/中文逗号都当分隔符。
+
+    返回值进 `cards()` 的 `only_ids`，与点名清单 `list:` 同一条通路，因此同样
+    **不受 only / 顺序闸 / 已裁去重约束**——点名要看的就得出得来，否则「它已自动
+    进库」或「旁边切线没裁」会把它静默吞掉，人对着空面板分不清是没问题还是被吞了。
+    """
+    raw = pages[len("cells:"):].replace("，", ",").replace(" ", ",")
+    ids = {tok if tok.count(":") >= 3 else f"{book}:{tok}"
+           for tok in (t.strip() for t in raw.split(",")) if tok}
+    if not ids:
+        raise ValueError(f"cells: 里没有可用的坐标：{pages!r}")
+    bad = sorted(i for i in ids if i.count(":") < 3 or not i.split(":")[1].isdigit())
+    if bad:
+        raise ValueError(f"坐标要写成 页:列:格（可带书号），这些不对：{bad}")
+    return ids
+
+
+def _ai_view(dr) -> tuple[list[dict] | None, dict | None]:
+    """`DecisionRec.groups`/`ai` → 卡片要的精简视图（人审卡按 AI 首组预选，
+    2026-09-27，任务书-C-人审卡按AI预选）。
+
+    没有就是 `None`——字段缺失时卡片照旧，不显示 AI 部分（四庫等未接
+    Step6-AI 的书）。纯函数，不碰 `load_book`/`align_book`，方便单独测。
+    """
+    if dr is None:
+        return None, None
+    groups = [{"id": g.id, "members": list(g.members), "why": g.why}
+              for g in dr.groups] or None
+    ai = None
+    if dr.ai is not None:
+        a = dr.ai
+        ai = {
+            "runs": a.runs,
+            "drop": list(a.drop),
+            "drop_why": [{"c": x.c, "why": x.why} for x in a.drop_why],
+            "rank": [{"group": r.group, "p": r.p, "why": r.why} for r in a.rank],
+            "confidence": a.confidence,
+            "need_human": a.need_human,
+            "conflict_with_img": a.conflict_with_img,
+            "runs_top": list(a.runs_top),
+        }
+    return groups, ai
 
 
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
-          gate_cut: bool = True) -> dict:
+          gate_cut: bool = True, skip_decided: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -33,12 +82,43 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     `gate_cut`：顺序闸（用户 2026-09-10）——切分线还没 review 的格位先不出字卡。
     被挡下的进返回值的 `blocked`，面板据此显示「还有 N 位等着先看切线」。
     默认开；传 False 可整批看全部（判据 E 抽审、跑评测要用）。
+
+    `skip_decided`（用户 2026-09-16 定）：跳过**全书所有批次**已经裁过的字位，
+    于是 `limit` 数的是**净新卡**——载入 30 张就是 30 张真待裁的。以前这里不看
+    事件日志，每次都从第一页重数，把上轮裁过的又端出来（实测重复率见
+    `verdict_view.decided_cells` 的注释）。传 False 回到旧行为（复核自己裁过的、
+    或想改主意时用）。`n_decided` 一并返回，面板显示「全书已裁 N」。
+
+    ⚠️ 点名清单模式（`pages=list:…`）**不受本开关约束**——点名要看的就得出得来，
+    与 `only` / 顺序闸同一条纪律：别让人对着空面板猜是没问题还是被吞了。
     """
     st = store or ProductStore()
     bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
+    # 点名清单模式（2026-09-16）：`pages` 填 `list:<名字>`，读 workspace
+    # `feedback/lists/<名字>.txt`（一行一个字位 id，`#` 开头是注释），**只出这几张卡**。
+    # 与切线面板的 `list:` 同一套约定（`console/routers/cutline.py`），同一个目录。
+    # 用途：机器筛出可疑的几十个字（如「这轮重跑后与整理本不一致的」），让人只审这些，
+    # 不必按页翻。页范围由清单自己决定——出现在清单里的页才读产物。
+    only_ids: set[str] | None = None
+    if pages.startswith("cells:"):
+        only_ids = parse_cells_spec(pages, book)
+        pgs = sorted({int(i.split(":")[1]) for i in only_ids})
+    elif pages.startswith("list:"):
+        from ..core.workspace import feedback_root
+        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+        if not lp.exists():
+            raise FileNotFoundError(f"清单不存在：{lp}")
+        # 行尾注释也要剥掉：这些清单是机器生成给人看的，每行都带
+        # `vol02:11:9:8    # 意 -> 憲` 这样的说明，不剥的话整行当 id，一张卡也出不来。
+        only_ids = {ln.split("#", 1)[0].strip() for ln in lp.read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.lstrip().startswith("#")}
+        only_ids.discard("")
+        # id 形如 `vol02:11:9:8`（书:页:列:格，末尾可带 sub 字母）→ 取页号
+        pgs = sorted({int(i.split(":")[1]) for i in only_ids if i.count(":") >= 3})
+    else:
+        pgs = bk.resolve_pages(pages)
     # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
-    # 拿 v2_align 的页对齐（`reading` = 整理本在这一位印的字），锚不上的页没有。
+    # 拿 v2_align 的页对齐（`ref` = 整理本在这一位印的字），锚不上的页没有。
     # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
     try:
         golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
@@ -48,6 +128,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     out: list[dict] = []
     out_blocked: list[dict] = []
     blocked = cut_pending(book, pgs, st) if gate_cut else {}
+    # 全书已裁字位（跨批次）。点名清单模式不去重——见 docstring。
+    decided = decided_cells(book) if (skip_decided and only_ids is None) else set()
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -60,30 +142,47 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
             if not cc.ok:
                 continue
             for r in cc.chars:
-                if only == "review" and r.admit:
-                    continue
-                if only == "auto" and not r.admit:
-                    continue
+                # 点名清单：只认 id，**不受 only / 顺序闸约束**——点名要看的就得出得来，
+                # 否则「这个字自动进库了」或「旁边切线没裁」会把它静默吞掉，人对着空面板
+                # 不知道是没问题还是没出卡。
+                if only_ids is not None:
+                    if r.id not in only_ids:
+                        continue
+                else:
+                    if r.id in decided:
+                        continue
+                    # 排除名单上的格（非字 / 人复核后仍切坏 / 原刻残）不出定字卡：它们不是
+                    # "这是什么字"的问题——非字无字可定，切坏的是 Step3 的打回待办（总览/13）。
+                    # 2026-09-20 前靠 `decided` 顺带藏住（seg_defect 事件曾算"裁过"），
+                    # seg_defect 不再算裁过之后要显式挡，否则 bxgb 4 个「仍切坏」又冒出来。
+                    if "excluded" in (r.doubts or []):
+                        continue
+                    if only == "review" and r.admit:
+                        continue
+                    if only == "auto" and not r.admit:
+                        continue
                 # 顺序闸（用户 2026-09-10 定）：这一位旁边有一条**还没 review 的切线**时，
                 # 先别出字卡——先把切分线看过，再来看这个字。粒度是格位，不整页挡。
                 _pend = blocked.get((pg, cc.col, r.slot))
-                if _pend is not None:
+                if _pend is not None and only_ids is None:
                     out_blocked.append({"id": r.id, "page": pg, "col": cc.col,
                                         "slot": r.slot, "pending": _pend})
                     continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
+                groups, ai = _ai_view(dr)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 gc = golds.get(r.id)
                 ref = None
-                if gc and gc.reading:
-                    pf = ledger.preferred_form(gc.reading)
-                    ref = {"char": gc.reading, "op": gc.align_op, "run": gc.op_run,
-                           "form": pf if pf and pf != gc.reading else None}
+                if gc and gc.ref:
+                    pf = ledger.preferred_form(gc.ref)
+                    ref = {"char": gc.ref, "op": gc.align_op, "run": gc.op_run,
+                           "form": pf if pf and pf != gc.ref else None}
                 out.append({
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
                     "admit": r.admit, "channel": r.channel, "char": r.char,
-                    "reading": r.reading,
+                    # 己/已/巳：按上下文定的建议字（utils/ji_yi_si.py），卡片可直接点
+                    "jys": (r.evidence or {}).get("ji_yi_si"),
                     # 整理本在这一位印的字（页对齐给的）；form = 本书惯刻的形（账本 preferred，≠整理本字时才有）
                     "ref": ref,
                     # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
@@ -96,11 +195,16 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ctx": {"char": dr.char, "margin": dr.margin,
                             "source": dr.source,
                             "llm_suggestion": dr.llm_suggestion} if dr else None,
+                    # Step6-AI 三层证据（groups=词典分组，ai=AI 排序/排除/把握度）；
+                    # 没接这段的书两者都是 None，卡片不显示 AI 部分。
+                    "groups": groups,
+                    "ai": ai,
                 })
                 if len(out) >= limit:
                     return {"book": book, "cards": out, "truncated": True,
-                            "blocked": out_blocked}
-    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked}
+                            "blocked": out_blocked, "n_decided": len(decided)}
+    return {"book": book, "cards": out, "truncated": False, "blocked": out_blocked,
+            "n_decided": len(decided)}
 
 
 def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[dict]:

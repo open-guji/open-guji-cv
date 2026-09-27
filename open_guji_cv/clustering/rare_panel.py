@@ -30,6 +30,7 @@ from .ids_guard import ids_of
 from .normalize import normalize_patch
 from ..products.cache import ImageCache
 from ..steps.align_ref import DEFAULT_CORPUS
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 
 def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
@@ -39,7 +40,7 @@ def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
     path = (cache or ImageCache()).get(book, "char_patch", ck)
     if path is None:
         return None
-    return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    return cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
 
 
 def _book_norm_stroke(book: str | None) -> int | None:
@@ -155,8 +156,12 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
         by_char = {c: ("cnn", p) for c, p in cnn_topk}
         by_char.update({c: ("emb", p) for c, p in emb_topk})
         by_char.update({c: ("font", p) for c, p in (db_topk or [])})
+        # 分类头同样走门控（理由见下面 CNN 两路分支的注释）。库字体域**不门控**：
+        # 它是这册书实际印刷字形的证人，字表由 `font.editions` 定，不受 classes 限制。
+        from .cnn_candidates import cls_gate_weight, shared_classes
+        w_cls = cls_gate_weight(emb_order, shared_classes())
         orders = [o for o in (db_order, cnn_order, emb_order) if o]
-        weights = tuple(w for o, w in ((db_order, CNN_WEIGHT), (cnn_order, CNN_WEIGHT),
+        weights = tuple(w for o, w in ((db_order, CNN_WEIGHT), (cnn_order, w_cls),
                                        (emb_order, EMB_WEIGHT)) if o)
         order = rrf(*orders, k=k, weights=weights)
         hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
@@ -169,7 +174,13 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
         by_char = {c: ("cnn", p) for c, p in cnn_topk}
         by_char.update({c: ("emb", p) for c, p in emb_topk})
         if cnn_order and emb_order:
-            order = rrf(cnn_order, emb_order, k=k, weights=(CNN_WEIGHT, EMB_WEIGHT))
+            # 分类头按「这个字位像不像类外字」动态调权（`cls_gate_weight` 的
+            # docstring 有判据与实测表）。类外字它的输出全是错的，恒权会把
+            # embedding 的正确答案压下去——314 条类外真刻例实测，
+            # emb 单源 top-1 67.8%，两路恒权 RRF 只剩 26.4%。
+            from .cnn_candidates import cls_gate_weight, shared_classes
+            w_cls = cls_gate_weight(emb_order, shared_classes())
+            order = rrf(cnn_order, emb_order, k=k, weights=(w_cls, EMB_WEIGHT))
         else:
             order = (cnn_order or emb_order)[:k]
         hits = [(ch, *by_char.get(ch, ("cnn", 0.0))) for ch in order]
@@ -185,10 +196,31 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
         hits = [(ch, by_char_hog[ch].font, by_char_hog[ch].score)
                 if ch in by_char_hog else (ch, "cnn", 0.0) for ch in order]
 
+    return _decorate(hits)
+
+
+def struct_hint(ch: str) -> dict:
+    """候选的结构解释：{"top": "⿰", "slots": {"L": "言", "R": "俞"}}（`ids_struct` 口径）。
+    独体字 top="独体"、slots 空。给审字卡片的解释行用（设计稿 §4.2 Step A 产出 ②）。"""
+    from .ids_struct import SINGLE, structure_of
+    st = structure_of(ch)
+    if st.top == SINGLE:
+        return {"top": SINGLE, "slots": {}}
+    return {"top": st.top, "slots": {k: "".join(v) for k, v in st.top_slots().items()}}
+
+
+def _decorate(hits: list[tuple[str, str, float]]) -> list[dict]:
+    """(字, 来源, 分) → 面板要的字典：IDS / 结构 / 形近字 / 频次 / 码点 / 释义 / 正字 / 深链。
+
+    `near`（2026-09-22，T6）：`config/ids/confusable_pairs_v1.tsv` 里该字的形近字前 3 个，
+    带差在哪个槽（`⿰:R:俞/侖`）——告诉人该盯哪里看，不投票、不放行。"""
+    from .confusables import near_forms
     freq = _corpus_freq(DEFAULT_CORPUS)
     return [{
         "char": ch, "score": round(score, 4), "font": font,
         "ids": ids_of(ch),
+        "struct": struct_hint(ch),
+        "near": near_forms(ch, k=3),
         "freq": freq.get(ch, 0),
         "cp": f"U+{ord(ch):04X}" if len(ch) == 1 else "",
         "zi": f"https://zi.tools/zi/{ch}",
@@ -196,8 +228,91 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
     } for ch, font, score in hits]
 
 
+def ids_fallback(top: str | None = None, slots: dict[str, str] | None = None,
+                 components: list[str] | None = None, img=None, k: int = 10,
+                 book: str | None = None, corpus: str | None = None,
+                 pool: int = 400) -> list[dict]:
+    """**候选全错时的兜底**：按结构 + 已认出的部件在 IDS 倒排里取字集，再用 emb 排序。
+
+    `top`（⿰ / ⿱ …）是硬过滤；`slots={"L": "言"}` 与 `components=["俞"]` 每中一条 +1；
+    先按命中数取前 `pool` 个，再（有字块图且 CNN 可用时）按 emb 余弦在这个池子里
+    排序——**池子由结构定、顺序由形状定**，两者各管一半。没有图就按命中数 + 语料
+    频次排。字表不限基集：兜底本来就是为了够到基集外的字，白名单（简体否决）照用。
+
+    只出候选。它是 `rare_char_matching_survey.md` G4 说的 L2，M0 版（2026-09-21）。
+    """
+    from .ids_struct import shared_index
+    idx = shared_index()
+    # 先取**全部**命中再排、再截池：只按命中数截会让平局按码点排，欠定查询
+    # （只给「含鹿」）时 麓 这种基本区常用字被扩A 的一堆字挤出池子（2026-09-21 测试撞上）。
+    hits = idx.search(top=top or None, slots=slots or None,
+                      components=components or (), limit=1_000_000)
+    if not hits:
+        return []
+    freq0 = _corpus_freq(corpus or DEFAULT_CORPUS)
+
+    def _block(ch: str) -> int:      # 基本区 < 扩A < 兼容区 < 扩B+：没有频次时的「常用度」代理
+        o = ord(ch[0])
+        return 0 if 0x4E00 <= o <= 0x9FFF else 1 if 0x3400 <= o <= 0x4DBF \
+            else 2 if 0xF900 <= o <= 0xFAFF else 3
+    hits = sorted(hits, key=lambda t: (-t[1], -freq0.get(t[0], 0), _block(t[0]), t[0]))[:pool]
+    allow = "none"
+    keep: frozenset = frozenset()
+    try:
+        from .charset_spec import filter_candidates, spec_for_book
+        allow = spec_for_book(book).get("allow", "none") if book else "no-simplified"
+        keep = _corpus_keep(corpus)
+    except Exception:
+        pass
+    chars = [ch for ch, _ in hits]
+    score = {ch: float(n) for ch, n in hits}
+    if allow != "none":
+        chars = [c for c, _ in filter_candidates([(c, score[c]) for c in chars], allow, keep)]
+
+    from .cnn_candidates import shared
+    cnn = shared()
+    if img is not None and cnn.available and chars:
+        from .synth import render_char
+        from .font_candidates import _font_files
+        fonts = _font_files()
+        tmpl, names = [], []
+        for ch in chars:
+            ims = []
+            for fp in fonts:
+                try:
+                    im = render_char(ch, fp, size=64)
+                except Exception:
+                    continue
+                if im is not None and im.any():
+                    ims.append(im.astype("uint8"))
+            if ims:
+                tmpl.append(ims); names.append(ch)
+        if names:
+            flat = [im for ims in tmpl for im in ims]
+            E = cnn.embed(flat)
+            q = cnn.embed([normalize_patch(img)])[0]
+            out, i = [], 0
+            for ch, ims in zip(names, tmpl):
+                v = E[i:i + len(ims)].mean(0); i += len(ims)
+                v = v / (float((v ** 2).sum()) ** 0.5 + 1e-9)
+                out.append((ch, "ids+emb", float(v @ q) + score[ch]))   # 命中数是整数档，余弦只在档内排
+            out.sort(key=lambda t: -t[2])
+            return _decorate(out[:k])
+    return _decorate([(c, "ids", score[c]) for c in chars[:k]])   # chars 已按 命中→频次→区块 排好
+
+
 def rare_for(img, k: int, corpus: str | None = None,
              book: str | None = None) -> list[dict]:
+    """单查：直接走批量版，保证审阅页与 Step5-b **同一条口径**。
+
+    2026-09-17 起不再单独实现——阶梯与白名单两套逻辑要是各写一遍，
+    迟早分叉（面板给一个答案、产物给另一个）。批量版对 1 张图没有额外开销。
+    """
+    return rare_for_batch([img], k, corpus, book)[0] if img is not None else []
+
+
+def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
+                            book: str | None = None) -> list[dict]:
     """一张字块图 → top-k 候选（含释义等修饰）。单查用这个；一页多个字块
     用 `rare_for_batch`——五路检索改成矩阵-矩阵乘法/网络批前向，快数倍
     （2026-09-10，见 `font_candidates.candidates_batch` 与
@@ -226,8 +341,20 @@ def rare_for(img, k: int, corpus: str | None = None,
 
 
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
-                   book: str | None = None) -> list[list[dict]]:
+                   book: str | None = None, struct_rerank: bool = False,
+                   struct_probe: str | None = None,
+                   real_proto: tuple[bool, tuple[str, ...]] | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
+
+    `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
+    （`ids_struct.struct_rerank`）。**效果未量**，量法见 `scripts/eval_struct_rerank.py`；
+    量出 oov_bench / 北行 top-1、top-10 不掉之前不要在生产配置里打开。
+
+    `real_proto`（5-b 开关转正，2026-09-26）：`(enabled, specs)`，透传给
+    `CnnCandidates.emb_topk_batch`。`RareCandidatesStep` 传
+    `cnn_candidates.book_real_proto(ctx.book.font)`；别的调用方（面板单查
+    `rare_for`、CLI `rare_batch`）不传，退回模块级 `REAL_PROTO_ENABLED`（缺省关），
+    行为与加这个形参之前逐位相同。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
 
@@ -254,16 +381,51 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
 
     from .cnn_candidates import shared
     cnn = shared()
+    spec: dict = {}
     if cnn.available:
-        cs_big = _rare_charsets(corpus)[1]
+        cs_base, cs_esc, spec = book_charsets(book, corpus)
         a_list = b_list = [[] for _ in norms]
-        cnn_list = cnn.topk_batch(norms, cs_big, k=max(k, 10))
-        emb_list = cnn.emb_topk_batch(norms, cs_big, k=max(k, 10))
+        cnn_list = cnn.topk_batch(norms, cs_base, k=max(k, 10))
+        emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10), real_proto=real_proto)
+        # GlyphWiki 变体形模板赢过字体均值的字位（`cnn_candidates.GW_CATALOG`，T4）：
+        # 记下是哪张形赢的，最后挂到候选的 `gw` 字段——告诉人「匹配到的是中华字海的这个异体」。
+        gw_prov = [dict(d) for d in cnn.last_gw_prov] or [{} for _ in norms]
+
+        # ── 阶梯：基集 top-1 分数低的字位，**追加**升级档候选（不是替换）──
+        #
+        # 为什么是追加：扩B 里全是常用字的罕见异写，形状极近**且得分更高**
+        # （斲 0.816 → 𣂪 0.831、言 0.818 → 𧥜 0.832），直接并进大表会抢答，
+        # 北行实测 top-1 掉 2.1 点。追加则基集首选留在原位，抢答不发生、
+        # 救回照样发生。阈值 0.80 实测甜点：升级率 15.7%，top-1 +0.2、top-10 +1.3。
+        # 完整阈值扫描与「为什么不能靠分数分开命中/未命中」见 charset_spec 模块头。
+        if cs_esc:
+            th = spec.get("escalate_threshold", 0.80)
+            idx = [i for i, e in enumerate(emb_list)
+                   if (not e) or e[0][1] < th]
+            if idx:
+                sub = cnn.emb_topk_batch([norms[i] for i in idx], cs_esc,
+                                         k=max(k, 10), real_proto=real_proto)
+                for i, d in zip(idx, cnn.last_gw_prov):
+                    gw_prov[i].update(d)
+                for i, extra in zip(idx, sub):
+                    # ⚠️ **按分数归并，不能简单拼接**（2026-09-17 实测）。
+                    # 先写的是 `emb_list[i] + extra`，结果阈值扫描从 0.80 到 1.0
+                    # 一个点都不涨——RRF 只看**名次**，拼在后面的升级档一律从第
+                    # 11 位起，权重 4/(60+10) 打到底，金标明明在升级档的第 2~3 名
+                    # （𠊓 𨕖 𠀉 实测都在）也挤不进最终 top-10。
+                    # 归并后升级档凭自己的余弦分与基集同台排名，才真的能救回来。
+                    merged = list(emb_list[i]) + list(extra)
+                    seen: dict[str, float] = {}
+                    for ch, sc in merged:
+                        if sc > seen.get(ch, -1.0):
+                            seen[ch] = sc
+                    emb_list[i] = sorted(seen.items(), key=lambda t: -t[1])[:max(k, 10)]
     else:
         cs_small, cs_big = _rare_charsets(corpus)
         a_list = candidates_batch(norms, cs_small, k=max(k, 10))
         b_list = candidates_batch(norms, cs_big, k=max(k, 10))
         cnn_list = emb_list = [[] for _ in norms]
+        gw_prov = [{} for _ in norms]
 
     eds = book_font_editions(book) if book else []
     ns = _book_norm_stroke(book) if book else None
@@ -271,9 +433,56 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     # 缓存只保留最近一个 key，两套字体轮流查会互相把对方挤掉 → 每个字位重建两次
     # 索引，163 个字位跑了一个多小时也没完，2026-09-15 实测）。
     db_list = _db_topk_batch(norms, eds, max(k, 10), ns) if eds else [[]] * len(norms)
-    return [_fuse(a, b, cnn_topk, emb_topk, k, dbk)
-            for a, b, cnn_topk, emb_topk, dbk
-            in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+
+    # ── 白名单否决：在 `_fuse` **之前**滤各路输入 ──
+    #
+    # 必须在融合前滤：`_fuse` 里 RRF 会先截到 k 条，之后再滤就等于白白浪费名额
+    # （滤掉 3 个简体，列表就只剩 7 条，而不是让后面的正字递补上来）。
+    # `keep` = 本册语料用过的字，无条件放行（判据再准也可能有例外，
+    # 而语料是这本书自己的证据）。
+    allow = (spec or {}).get("allow", "none")
+    if allow != "none":
+        from .charset_spec import filter_candidates
+        keep = _corpus_keep(corpus)
+        f = lambda rows: [filter_candidates(r, allow, keep) for r in rows]  # noqa: E731
+        cnn_list, emb_list = f(cnn_list), f(emb_list)
+        a_list, b_list, db_list = f(a_list), f(b_list), f(db_list)
+
+    if struct_probe:
+        # Step A′ 外挂结构头（2026-09-22）：主干不动，只给重排换一副更细的眼睛
+        cnn.attach_probe(struct_probe)
+    def _gw(hits: list[dict], prov: dict) -> list[dict]:
+        for h in hits:
+            p = prov.get(h["char"])
+            if p:
+                h["gw"] = {"name": p[0], "source": p[1], "cos": round(p[2], 4),
+                           "url": f"https://glyphwiki.org/wiki/{p[0]}"}
+        return hits
+
+    if not (struct_rerank and cnn.available):
+        return [_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk), pv)
+                for a, b, cnn_topk, emb_topk, dbk, pv
+                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov)]
+
+    # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
+    from .ids_guard import components as first_level_components
+    from .ids_struct import STRUCT_RERANK_TOP_M, struct_rerank as _rerank
+    m = max(k, STRUCT_RERANK_TOP_M)
+    fused = [_fuse(a, b, cnn_topk, emb_topk, m, dbk)
+             for a, b, cnn_topk, emb_topk, dbk
+             in zip(a_list, b_list, cnn_list, emb_list, db_list)]
+    # Step A 的槽位头（部件@槽）比部件袋头（只管有没有、不管在哪）更细，有就用它
+    if cnn.has_struct_heads:
+        from .ids_struct import slot_keys_of
+        probs, comps_of = cnn.slot_probs_batch(norms), slot_keys_of
+    else:
+        probs, comps_of = cnn.comp_probs_batch(norms), first_level_components
+    out = []
+    for hits, pr, pv in zip(fused, probs, gw_prov):
+        by_char = {h["char"]: h for h in hits}
+        order = _rerank([h["char"] for h in hits], pr, comps_of, k=k)
+        out.append(_gw([by_char[ch] for ch in order], pv))
+    return out
 
 
 def char_hint(ch: str) -> dict:
@@ -361,6 +570,35 @@ def _rare_charsets(corpus: str | None = None) -> tuple[tuple[str, ...], tuple[st
     except Exception:
         pass
     return small, tuple(sorted(big))
+
+
+@lru_cache(maxsize=4)
+def book_charsets(book: str | None, corpus: str | None
+                  ) -> tuple[tuple[str, ...], tuple[str, ...], dict]:
+    """这册书的 `(基集字表, 升级档字表, 规格)`——**候选字表的唯一入口**（2026-09-17）。
+
+    与旧的 `_rare_charsets`（只吃整理本用字）的区别见
+    `charset_spec` 模块头：整理本从「唯一来源」降级成「叠加项」，
+    基集改由册配置 `font.charset.base` 决定，缺省按 `edition` 取。
+
+    返回的两个元组**身份稳定**（`lru_cache` + `charset_spec` 内部也各自
+    记忆化），下游 `_emb_index` / `font_candidates._index` 的索引缓存才命中——
+    每次现拼新元组会让 7 万字的索引反复重建（实测一次 5 分钟）。
+    """
+    from .charset_spec import build_charsets, spec_for_book
+    spec = spec_for_book(book)
+    base, esc = build_charsets(
+        spec["base"], spec["escalate"], corpus,
+        spec["corpus"], spec["variants"], tuple(spec["extra"]))
+    return base, esc, spec
+
+
+@lru_cache(maxsize=4)
+def _corpus_keep(corpus: str | None) -> frozenset:
+    """本册语料真实用过的字——白名单的无条件放行集（见 `filter_candidates`）。"""
+    if not corpus or not Path(corpus).exists():
+        return frozenset()
+    return frozenset(book_charset(corpus))
 
 
 def warm_font_index() -> None:

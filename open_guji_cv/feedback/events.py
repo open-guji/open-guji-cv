@@ -21,22 +21,64 @@ from pydantic import BaseModel, Field
 
 # 人裁动作。前四种是 P1 就要用的；其余对齐既有 labels.jsonl / seed 事件的动词，
 # 收割旧格式时映射到这里，不新造词。
+#: ⚠️ **枚举里有 9 个值没有任何前端出口**（2026-09-18 实测：扫全部事件日志 +
+#: 前端源码 + 路由表）。别照着它推断「系统支持哪些裁决」——真正的分类真源是
+#: `feedback/questions.py` 的问题登记表，`kind` 只是传输层的粗分类。
+#:
+#: 其中两个容易看走眼：`not_a_char` 与 `skip` **确实在用**，但身份是
+#: `payload.v` 的取值（前端整批发 `kind="confirm"`，靠 `v` 二次分流），
+#: 不是 kind。后端两条路都认（`consumers.py` 里
+#: `e.kind == "not_a_char" or (e.kind == "confirm" and p.get("v") == "not_a_char")`），
+#: 走的一直是后一条。
+#:
+#: **不删这些值**：`Kind` 是 `Literal`，删了之后任何遗留事件（含别人机器上的、
+#: 未推送的日志）在 `gold rebuild` 重放时会直接校验失败——而重放是金标的重建
+#: 路径，炸在这里等于金标重建不了。标注比删除安全，"误导"这个实际问题靠注释解决。
 Kind = Literal[
     "verdict",        # 一档裁决（ok / miss / extra / idk 之类，取值在 payload.verdict）
     "band",           # 拖出的边界（文字带左右、切分点…）
     "border_class",   # 类别裁决（clean / glued / none / idk）
-    "recrop",         # 拖框重切（payload: old_bbox / new_bbox）
-    "not_a_char",     # 判非字
+    "recrop",         # 【无出口】拖框重切。消费器 `glyphdb_recrop` 自己就报
+                      #   "尚未接入（P1 之后）"，路由表那条规则是死的
+    "not_a_char",     # 【无 kind 出口，但语义在用】判非字——实走 confirm + payload.v
     "confirm",        # 确认字（payload: char, admit）
-    "relabel",        # 改判字
-    "skip",           # 存疑跳过
-    "mark",           # 实例级标记
-    "flag",           # 簇级标记
-    "split", "merge", # 簇操作
-    "note",           # 纯文字批注
+    "relabel",        # 【无出口】改判字
+    "skip",           # 【无 kind 出口，但语义在用】存疑跳过——实走 confirm + payload.v
+    "damaged",        # 【无 kind 出口，但语义在用】原图破损、字形不可辨——实走 confirm
+                      #   + payload.v；payload 另带 guess（最像的那个字，可空）。
+                      #   与 skip 的区别：skip 是「我还没想好」（待办），damaged 是
+                      #   「看过了，图就这样，认不出」（已了结，文本出 □）。
+    "mark",           # 【无出口】实例级标记
+    "flag",           # 【无出口】簇级标记
+    "split", "merge", # 【无出口】簇操作
+    "note",           # 【无出口】纯文字批注
     "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
     "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
     "head_raise",     # 列级抬头精标（payload: raised / n_raised / head_cut / note）
+    "n_body_slots",   # 逐列字数人裁：chars_per_line 常量在个别列不成立时的覆盖（payload: n_slots）
+    # ── Step8 复核裁决（2026-09-22）。问的不是「这是什么字」而是「我们和证人谁对」。
+    "collate_ok",     # 维持我方转写：看过图了，我们和证人就是不一样。只记账，
+                      #   作用是**下轮不再出这张卡**（否则每次重跑重看同样 71 条）。
+    "char_convention",# 本书通例（payload: pair, kind∈人名/物品/通假/避諱/正俗, note）
+                      #   → books/<id>.yaml 的 char_conventions。**本书专属**：
+                      #   完/元 在别的书里就是两个字，进全局表会污染。
+    "mark_jiajie",    # 标为通假（payload: pair）→ jiajie.tsv。异体与通假是**两类**：
+                      #   异体是同一个字的不同写法（衞/衛），通假是借字（早/蚤、甫/父）。
+                      #   自动判据分不开，新字对先落异体层，人点「这是通假」才搬。
+    "variant_deny",   # 推翻一条「异体」边（payload: pair）→ variants.deny.tsv。
+                      #   **跨书**负样本：关系图会错（治/冶、輨/轄 实证）。
+    # ── Step8 两层分类（2026-09-24）。见 feedback/collate_state.py。
+    "collate_verdict",# 把一个字位挪进某一类（payload: pair, who∈ours/theirs/neither/空,
+                      #   cat∈variant/jiajie/taboo/other, fix, final, ctx 快照）。**逐字位**、
+                      #   后到覆盖，who 空 = 退回待审。改字那部分另写一条带 via 的 confirm。
+    "unmark_jiajie",  # 撤一条通假字对（payload: pair, book）→ 从 jiajie.tsv 删掉本书标的那行。
+    # ── 字形库体检（2026-09-25，字形库 03）。见 feedback/glyph_audit.py。
+    "glyph_audit",    # 库里一个刻例定的字对不对（payload: v∈ok/near_form/evict/relabel,
+                      #   instance_id, key, target, char, peer, peer_char, flags）
+    # ── 打回结案（2026-09-27，总览/13 并入总览/15，见 feedback/returns.py）。
+    "return_resolve", # 本步待办卡上人点了「已修」/「不是问题」（payload: resolution∈
+                      #   fixed/wontfix, note）。与触发打回的原事件（seg_defect/cutline/
+                      #   n_body_slots）按 target.key 同键、取最新一条，见 bindings.py。
 ]
 
 Actor = Literal["user", "model", "align"]
@@ -64,6 +106,12 @@ class Event(BaseModel):
     target: EventTarget
     payload: dict = Field(default_factory=dict)
     source_format: str | None = None   # 从旧格式收割来的，记原格式名：verdicts / seed / seg / marks
+    #: 校对者 email（控制台接入网站账号后填，2026-09-26）。**只加字段，不改写入
+    #: 流程**：老事件没有这个键，pydantic 缺省 `None`，照读不受影响；`actor` 的
+    #: 语义不变（它答的是「谁的动作触发了这条」——user/model/align，`reviewer`
+    #: 答的是「网站账号里具体哪个人」，两者独立，`actor="model"` 也可以有 `reviewer`
+    #: ——比如模型判定是复核台上某个校对者确认落库的）。
+    reviewer: str | None = None
 
     @property
     def order(self) -> tuple[str, int]:
@@ -75,9 +123,11 @@ def _now() -> str:
 
 
 def make_event(batch: str, seq: int, kind: Kind, target: EventTarget, payload: dict | None = None,
-               actor: Actor = "user", source_format: str | None = None, ts: str | None = None) -> Event:
+               actor: Actor = "user", source_format: str | None = None, ts: str | None = None,
+               reviewer: str | None = None) -> Event:
     return Event(id=f"evt_{batch}_{seq:06d}", ts=ts or _now(), batch=batch, seq=seq, actor=actor,
-                 kind=kind, target=target, payload=payload or {}, source_format=source_format)
+                 kind=kind, target=target, payload=payload or {}, source_format=source_format,
+                 reviewer=reviewer)
 
 
 def default_feedback_root() -> Path:
@@ -87,6 +137,15 @@ def default_feedback_root() -> Path:
     人裁事件是这本书审查过程的账，运行时不该写测试集仓）。"""
     from ..core.workspace import feedback_root
     return feedback_root()
+
+
+_CONSUMED_CACHE: dict[tuple[str, int, int], frozenset[str]] = {}
+
+
+def _same_content(a: Event, b: Event) -> bool:
+    """两条事件除 `ts`/`id`/`seq` 外是否一样——用来分辨「真重复」与「seq 碰撞」。"""
+    return (a.kind == b.kind and a.actor == b.actor and a.target == b.target
+            and a.payload == b.payload and a.reviewer == b.reviewer)
 
 
 class EventLog:
@@ -104,12 +163,36 @@ class EventLog:
     def consumed_dir(self) -> Path:
         return self.root / "consumed"
 
+    #: 批次名里不能进文件名的字符 → 统一换成 `-`。
+    #:
+    #: 2026-09-16 吃过一次亏：定字面板的批次名默认是 `<book>-<pages>-decide`，
+    #: 用户把页码框填成 `list:regress_vol02_p1_30`（点名清单模式），批次名就带了冒号。
+    #: **Windows 上冒号是 NTFS 数据流分隔符**——`open("…/list:x.jsonl","a")` 不报错，
+    #: 而是往名为 `list` 的 0 字节文件里写一条隐藏流 `x.jsonl`。于是：裁了 30 条、
+    #: 面板显示正常、`ls` 看不到任何 jsonl、下次读回来是空的。静默丢数据，最坏的一种。
+    #: （那批数据事后用 `Get-Content -Stream` 捞回来了，见 vol02-regress-p1-30-decide.jsonl）
+    _BAD_IN_NAME = ':*?"<>|/\\\x00'
+
+    @classmethod
+    def safe_batch_name(cls, batch: str) -> str:
+        """批次名 → 可安全当文件名的形式。只改文件名，事件里的 `batch` 字段保持原样。"""
+        out = "".join("-" if c in cls._BAD_IN_NAME else c for c in batch)
+        return out.strip(". ") or "batch"
+
     def batch_path(self, batch: str) -> Path:
-        return self.events_dir / f"{batch}.jsonl"
+        return self.events_dir / f"{self.safe_batch_name(batch)}.jsonl"
 
     # ── 读写 ─────────────────────────────────────────────────────────
     def append(self, events: Iterable[Event]) -> int:
-        """追加；同 (batch, seq) 已存在的**跳过**（重复收割同一页面不会灌重）。"""
+        """追加；同 (batch, seq) 已存在**且内容相同**的跳过（重复收割同一页面不会灌重）。
+
+        **调用方多半在锁外算好 `seq`**（`base = latest_seq(batch)` 再 `make_event(batch, base+i, …)`），
+        两个进程各自读到同一个 `base` 时会算出同一批 `seq`。这本身不算错——真正需要保证的是
+        「最终落盘不丢」。所以这里不是简单按 `(batch, seq)` 去重丢弃：**内容不同**的碰撞
+        （不同事件被分到了同一个 seq）顺延到当前 batch 的下一个空 seq 重新入号，而不是
+        整条丢弃——这正是 cv `9f1ea8c`（两个 POST 撞 seq、后写覆盖先写、丢了 9 条金标）的根因。
+        内容相同的碰撞（同一事件被重复提交，如重复收割）才按原语义跳过。
+        """
         events = list(events)
         if not events:
             return 0
@@ -117,19 +200,67 @@ class EventLog:
         by_batch: dict[str, list[Event]] = {}
         for e in events:
             by_batch.setdefault(e.batch, []).append(e)
-        for batch, evs in by_batch.items():
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            for batch, evs in by_batch.items():
+                path = self.batch_path(batch)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                existing = {(e.batch, e.seq): e for e in self.read(batch)}
+                next_seq = max((s for (_, s) in existing), default=0) + 1
+                with open(path, "a", encoding="utf-8") as f:
+                    for e in sorted(evs, key=lambda x: x.seq):
+                        prior = existing.get((e.batch, e.seq))
+                        if prior is not None:
+                            if _same_content(prior, e):
+                                continue
+                            e = make_event(e.batch, next_seq, e.kind, e.target, e.payload,
+                                          e.actor, e.source_format, e.ts, e.reviewer)
+                        f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
+                                           sort_keys=True) + "\n")
+                        existing[(e.batch, e.seq)] = e
+                        next_seq = max(next_seq, e.seq + 1)
+                        n += 1
+        return n
+
+    def compact(self, batch: str, dry_run: bool = False) -> dict:
+        """同一 target.key 的重复裁决只留**最后一条**（用户 2026-09-16）。
+
+        重放语义（后到覆盖）一直是对的，日志膨胀才是问题：定字面板以前每点一次
+        「提交裁决」，就把 `verdicts.current` 里**全部**裁决重写一遍——包括刚从
+        服务端读回、本轮根本没动过的那些。实测 bxgb：1620 条 confirm 只覆盖 312
+        个字位，`bxgb:3:1:19` 累计写了 13 次。前端已改成只发本轮动过的，这个方法
+        是把**已经攒下的**重复压掉。
+
+        ⚠️ **保留被留下那条的原 `id` 与 `seq`，绝不重编号**。幂等记账
+        （`consumed/<consumer>.jsonl`）认的就是 `evt_<batch>_<seq>` 这个 id，
+        重编会让已消费的事件对不上账，被当成新事件**再消费一遍**——压实本是
+        为了消重，结果在下游制造重复，那就反了。
+
+        分组键是 `(kind, target.unit, target.key)`：`cutline` 与字位裁决的 key
+        形状相同（`bxgb:39:19:12`）而 unit 不同，混在一起会互相顶掉。
+        """
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            evs = self.read(batch)
+            if not evs:
+                return {"batch": batch, "before": 0, "after": 0, "removed": 0, "dry_run": dry_run}
+            keep: dict[tuple, Event] = {}
+            for e in evs:                       # read() 已按 (batch, seq) 升序 → 后到覆盖
+                keep[(e.kind, e.target.unit, e.target.key)] = e
+            kept_ids = {e.id for e in keep.values()}
+            out = [e for e in evs if e.id in kept_ids]
+            res = {"batch": batch, "before": len(evs), "after": len(out),
+                   "removed": len(evs) - len(out), "dry_run": dry_run}
+            if dry_run or not res["removed"]:
+                return res
             path = self.batch_path(batch)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            seen = {(e.batch, e.seq) for e in self.read(batch)}
-            with open(path, "a", encoding="utf-8") as f:
-                for e in sorted(evs, key=lambda x: x.seq):
-                    if (e.batch, e.seq) in seen:
-                        continue
+            tmp = path.with_suffix(".jsonl.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                for e in out:                   # 原顺序、原 id、原 seq
                     f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False,
                                        sort_keys=True) + "\n")
-                    seen.add((e.batch, e.seq))
-                    n += 1
-        return n
+            os.replace(tmp, path)               # 原子替换：中途挂掉不会留半个日志
+            return res
 
     def read(self, batch: str) -> list[Event]:
         path = self.batch_path(batch)
@@ -164,29 +295,55 @@ class EventLog:
         return out
 
     # ── 幂等消费 ─────────────────────────────────────────────────────
-    def consumed_ids(self, consumer: str) -> set[str]:
+    def consumers(self) -> list[str]:
+        """记账目录里实际存在的消费者名。
+
+        2026-09-18 加：`refresh_counts` 原先写死 `{"gold_add", "glyphdb"}` 两个名字，
+        而真实记账文件叫 **`glyphdb_admit`**——`consumed_ids("glyphdb")` 恒返回空集，
+        定字裁决的消费数一直算作 0；另外还漏了 `crop_exclude` / `product_invalidate`。
+        写死名字就会随消费者改名而静默失准，改成按目录实际内容取。
+        """
+        d = self.consumed_dir
+        if not d.exists():
+            return []
+        return sorted(p.stem for p in d.glob("*.jsonl"))
+
+    def consumed_ids(self, consumer: str) -> frozenset[str]:
+        """记账过的事件 id。按文件 (mtime, size) 缓存（2026-09-26）：gold_add 的记账
+        1 MB+、6 万行，控制台每存一条裁决都要读好几份，占保存耗时的三分之一。
+        `mark_consumed` 追加写会改 mtime/size，缓存自然失效。"""
         path = self.consumed_dir / f"{consumer}.jsonl"
         if not path.exists():
-            return set()
+            return frozenset()
+        st = path.stat()
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        hit = _CONSUMED_CACHE.get(key)
+        if hit is not None:
+            return hit
         ids = set()
         with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     ids.add(json.loads(line)["event"])
-        return ids
+        for k in [k for k in _CONSUMED_CACHE if k[0] == key[0]]:
+            del _CONSUMED_CACHE[k]
+        _CONSUMED_CACHE[key] = frozenset(ids)
+        return _CONSUMED_CACHE[key]
 
     def mark_consumed(self, consumer: str, events: Iterable[Event], note: str = "") -> int:
         events = list(events)
         if not events:
             return 0
-        path = self.consumed_dir / f"{consumer}.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        ts = _now()
-        with open(path, "a", encoding="utf-8") as f:
-            for e in events:
-                f.write(json.dumps({"event": e.id, "ts": ts, "note": note},
-                                   ensure_ascii=False) + "\n")
+        from .lock import feedback_write_lock
+        with feedback_write_lock(self.root):
+            path = self.consumed_dir / f"{consumer}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            ts = _now()
+            with open(path, "a", encoding="utf-8") as f:
+                for e in events:
+                    f.write(json.dumps({"event": e.id, "ts": ts, "note": note},
+                                       ensure_ascii=False) + "\n")
         return len(events)
 
     def pending(self, consumer: str, batch: str | None = None) -> list[Event]:

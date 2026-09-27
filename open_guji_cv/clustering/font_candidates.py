@@ -46,7 +46,13 @@ from pathlib import Path
 import numpy as np
 
 # 传承字形优先——刻本用的是旧字形
-FONT_ORDER = ("iming", "jigmo", "kangxi")
+FONT_ORDER = ("iming", "jigmo", "kangxi", "genmin")
+# genmin 2026-09-21 本机实测**留下**（闸：unseen 严格 / oov 都不掉；r5，同机同代码同日复跑）：
+#   三套字体          unseen 严格 emb 96.9 / hog 77.5   oov emb top-1 73.2 / top-10 90.4
+#   + genmin 三套     unseen 严格 emb 97.0 / hog 79.3   oov emb top-1 74.5 / top-10 91.7
+# 全部持平或涨；HOG 那路涨最多（模板多了三种写法）。数字与过程在
+# structure_aware_recognition_design.md §13。曾一度误判要拿掉——那是被
+# eval_zero_shot_fusion.py 的旧缺省 checkpoint 骗了（同一节有记）。
 """模板字体，按优先级。
 
 - `iming` I.Ming 一点明朝体：传承字形（旧字形），用字习惯与刻本最吻合
@@ -57,7 +63,17 @@ FONT_ORDER = ("iming", "jigmo", "kangxi")
   **覆盖率 100% vs 76%**。**注意它不能单用**：只留它、去掉 iming/jigmo 会掉到 94.5%，
   多套字体「同字多写法取平均」的作用它一套顶不了。
   ⚠️ 商业字体（字语 TypeLand），字形轮廓受版权保护，与公版古籍扫描图性质不同；
-  进可分发产物前须确认授权。"""
+  进可分发产物前须确认授权。
+- `genmin` **源流／源雲／源樣明體 2.100**（2026-09-21 加；SIL OFL 1.1，`fonts/genmin/LICENSE.txt`）：
+  ButTaiwan 基于思源宋体做的三套传承字形明朝体，基本区 + 扩A 全覆盖（cmap 35,349 字）、
+  扩B 只 2,135。三套档在仓里躺了很久却没进 `FONT_ORDER`、全仓零引用
+  （`rare_char_matching_survey.md` G7）。
+  ⚠️ **接进来时没量过**（当时的机器没有 torch）——先跑
+  `scripts/eval_zero_shot_fusion.py --split unseen --emb` 与 `scripts/eval_oov.py`
+  对照 r5 基线（unseen 严格 96.9 / oov 314 条 73.2），掉了就把这一项拿掉。已知先例：
+  多套字体「同字多写法取平均」有用（只留康熙体 96.4 → 94.5），但三套同源字体会不会
+  把均值拉向思源宋体的骨架，没人量过。字体集已进指纹（`font_set_fingerprint`），
+  加减字体会让 emb 索引与 `rare_candidates` 产物自动过期，不会静默沿用旧模板。"""
 NORM = 64
 
 
@@ -71,24 +87,61 @@ class FontHit:
         return (self.char, self.score)
 
 
+#: 引擎仓根（`…/open-guji-cv`）——字体随仓走，不随调用方的 cwd 走。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _font_files(root: str = "fonts") -> list[str]:
-    out: list[str] = []
-    for name in FONT_ORDER:
-        for ext in ("*.ttf", "*.otf"):     # 康熙体是 otf，只 glob ttf 会静默漏掉
-            out.extend(sorted(glob.glob(str(Path(root) / name / ext))))
-    return out
+    """字体文件清单。
+
+    **按引擎仓定位，不按调用方的 cwd**（2026-09-17）。`root` 缺省是相对路径
+    `fonts`，原先直接 glob 它——运行时 cwd 常常是**工作区**（北行日錄、四庫
+    各自一个目录），那里没有 `fonts/`，于是返回空列表：HOG 候选悄悄变空，
+    embedding 模板也建不出来（它同样调这个函数取字体）。
+    与 `cnn_candidates._resolve_default_ckpt` 2026-09-15 那次是同一类病：
+    **仓内资源用相对路径找，换个 cwd 就静默失效**。
+
+    显式传绝对路径的照用；传相对路径时先认 cwd（本机旧习惯），再认引擎仓。
+    """
+    cands = [Path(root)] if Path(root).is_absolute() else [Path(root), _REPO_ROOT / root]
+    for base in cands:
+        out: list[str] = []
+        for name in FONT_ORDER:
+            for ext in ("*.ttf", "*.otf"):   # 康熙体是 otf，只 glob ttf 会静默漏掉
+                out.extend(sorted(glob.glob(str(base / name / ext))))
+        if out:
+            return out
+    return []
 
 
 INDEX_DIR = Path("cache/font_index")
+
+
+def font_set_fingerprint(root: str = "fonts") -> str:
+    """模板字体集的指纹：每个字体档 `名字:大小:mtime` 拼起来哈希；一个都没有 → "nofonts"。
+
+    2026-09-21 加。此前只有 HOG 索引键（`_index_key`）带字体档，embedding 索引键
+    （`cnn_candidates._emb_index`）与 `rare_candidates` 产物指纹（`full_fingerprint`）
+    **都不带**——于是 `FONT_ORDER` 加一套字体、或换掉 `fonts/` 里的档，emb 索引照旧
+    命中旧缓存、产物照旧显示新鲜，模板其实一张没变。与「阈值不进指纹」
+    （`steps/rare_candidates.py` 2026-09-17）同一类静默失效，现在三处共用这一把尺子。
+    """
+    import hashlib
+    files = _font_files(root)
+    if not files:
+        return "nofonts"
+    h = hashlib.sha1()
+    for f in files:
+        st = Path(f).stat()
+        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}|".encode())
+    return h.hexdigest()[:12]
 
 
 def _index_key(charset: tuple[str, ...], root: str, backend: str) -> str:
     import hashlib
     h = hashlib.sha1()
     h.update(backend.encode())
-    for f in _font_files(root):
-        st = Path(f).stat()
-        h.update(f"{Path(f).name}:{st.st_size}:{int(st.st_mtime)}".encode())
+    h.update(font_set_fingerprint(root).encode())
     h.update("".join(charset).encode("utf-8"))
     return h.hexdigest()[:16]
 

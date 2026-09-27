@@ -547,8 +547,23 @@ def mask_frame_bars_outside(strip: np.ndarray,
                             lpad: int, rpad: int,
                             cell_h: float,
                             right_ext: int = 0,
-                            left_ext: int = 0) -> np.ndarray:
+                            left_ext: int = 0,
+                            strategy: str = "side_gap",
+                            top_line: float | None = None,
+                            bottom_line: float | None = None) -> np.ndarray:
     """抹掉条带首/末端区里的版框横线**行**（用户审阅反馈的主病灶）。
+
+    `strategy`（2026-09-17 加，册级可选，见 `frame_bar_strategy` 模块）：
+
+    - `side_gap`（缺省，本函数原有行为）：靠「横条填满文字带两侧空档」。
+      前提是**字的横笔不满宽**——对「巨/雲/二/亘」这类上下横横贯全字宽的字
+      不成立（bxgb p4 实测「巨」上横行墨 0.60 > 阈值 0.55，整条被抹掉）。
+    - `border_line`：用 Step1 的**整页版框直线**（`top_line`/`bottom_line`，
+      本条带坐标系）定位，只抹贴线且**够厚**的段。bxgb 全书 400 列图实测：
+      厚≥6 且在端区 61 段（真框，照抹）、厚<6 在端区 57 段（字横，放过
+      ——这 57 段正是老判据误抹的）、厚≥6 在中部 0 段（无误伤）。
+      ⚠️ **版框被抬头突破的册不能用**（如四库总目）：抬头字越过版框线，
+      位置判据会把它的笔画当框。
 
     三道判据缺一不可：
     - 按**行**不按连通体：横条经 8 连通与条带边缘细碎渣会链成几百像素
@@ -563,9 +578,35 @@ def mask_frame_bars_outside(strip: np.ndarray,
     绝不顺着连通关系动格心的字身。"""
     if not local:
         return strip
+    if strategy == "off":
+        return strip
     top = int(min(l for _, l, _ in local))
     bot = int(max(b for _, _, b in local))
     H, W = strip.shape
+    if strategy == "border_line":
+        from .frame_bar_strategy import frame_rows_border_line
+        binary_bl = (strip < BINARY_THRESHOLD_PATCH)
+        We_bl = max(0, W - right_ext)
+        Ws_bl = min(left_ext, We_bl)
+        if We_bl - Ws_bl < 4:
+            return strip
+        rowink_bl = binary_bl[:, Ws_bl:We_bl].mean(axis=1)
+        rows = frame_rows_border_line(rowink_bl, FRAME_BAR_ROW_T,
+                                      top_line, bottom_line)
+        if not rows.any():
+            return strip
+        out_bl = strip.copy()
+        # 与 side_gap 同样只抹「纯横条」的 x：带内有墨、但上下没有笔画穿行
+        # 的列才抹，穿行笔画（捺/竖）保留——理由见下方「穿行保护」注释。
+        for a, b in _runs(np.flatnonzero(rows)):
+            band = binary_bl[a:b + 1]
+            above = binary_bl[max(0, a - 5):a]
+            below = binary_bl[b + 1:min(H, b + 6)]
+            thru = (above.any(axis=0) & below.any(axis=0))
+            xs = np.flatnonzero(band.any(axis=0) & ~thru)
+            for x in xs:
+                out_bl[a:b + 1, x] = 255
+        return out_bl
     # 左右缘救援外扩带（left_ext/right_ext）不算「墙内空档」：那里按
     # 设计装着被救回的穿边笔尖 + 磨损界行点渣。r11 实测 vol01/34
     # 「類」——底横的笔尖伸进右外扩带，被当成「横条填满右侧空档」的
@@ -653,6 +694,70 @@ def mask_frame_bars_outside(strip: np.ndarray,
         protect = span_ink >= (yb - ya) + 6
         seg = out[ya:yb]
         seg[:, ~protect] = 255
+    return out
+
+
+def _seam_span(seam) -> tuple[float, float] | None:
+    """折线的 y 极值；不是折线（None / 空）返回 None。"""
+    if not seam:
+        return None
+    ys = [float(v) for v in seam if v is not None]
+    return (min(ys), max(ys)) if ys else None
+
+
+def _cell_top(cell: dict) -> float:
+    """取块窗口的上边界：**有折线就把折线的最高点也裁进来**，否则用矩形 `y_top`。
+
+    2026-09-20 实测（bxgb p31c9 / p45c2 末格「十」）：Step3 选中折线后写进
+    `seam_top`/`seam_bottom`，而矩形 `y_top`/`y_bottom` 仍是 DP 那条直线——两者
+    可以差几十像素（1434 vs 1462）。取块窗口此前只读矩形边界，于是从直线起裁，
+    「十」的横笔整条落在窗口**之外**，图块只剩一竖（人裁标成「字形不完整」）。
+    `mask_outside` 救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
+    没裁进来的墨**。
+
+    窗口取两者并集（折线最高点与矩形上界取小）。折线外的墨随后照旧由
+    `mask_outside` 抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
+    与「格界严格信任 Step3」那条纪律不冲突。
+    """
+    top = float(cell["y_top"])
+    span = _seam_span(cell.get("seam_top"))
+    return min(top, span[0]) if span else top
+
+
+def _cell_bottom(cell: dict) -> float:
+    """取块窗口的下边界，与 `_cell_top` 对称：有折线取折线最低点与矩形下界的大者。"""
+    bot = float(cell["y_bottom"])
+    span = _seam_span(cell.get("seam_bottom"))
+    return max(bot, span[1]) if span else bot
+
+
+def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float) -> np.ndarray:
+    """抹掉图块上下 pad 带里**不伸进格内**的连通体——那是邻字伸过来的笔尖（2026-09-19）。
+
+    图块按格界外扩 8% 裁（pad 是给略微越界的本字笔画留的），可紧裁又是「图块内所有墨的
+    外接框」，于是邻字压在格界外几像素的笔尖也被框进来：bxgb 4 页 1422 格里 161 格
+    （11.3%）的紧框因此多出中位 6px 的邻字墨（水/高/山/五/里/王/張/柏/漢/不/道/云/二/十/間
+    …逐格看过，抹掉的全是邻字的笔尖）。用户审阅标的「contaminated」大半是它。
+
+    判据只用格界（严格信任 Step3，与折线 `mask_outside` 同一纪律）：连通体整体落在
+    `[0, cell_top)` 或 `[cell_bot, H)` 里的抹掉；跨过格界、哪怕只沾进一像素的都留——
+    本字越界的笔画正是 pad 要保住的。列端格的框残渣同样在 pad 带里，顺带抹掉，
+    后面的端格剥离少一道活。
+    """
+    t0, t1 = int(round(cell_top)), int(round(cell_bot))
+    if t0 <= 0 and t1 >= patch.shape[0]:
+        return patch
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if n <= 1:
+        return patch
+    out = patch
+    for k in range(1, n):
+        y, h = int(st[k, 1]), int(st[k, 3])
+        if y + h <= t0 or y >= t1:
+            if out is patch:
+                out = patch.copy()
+            out[lab == k] = 255
     return out
 
 
@@ -842,6 +947,9 @@ STUB_SIDE_PROBE = 42       # 列框外侧的探测宽度（px）
 STUB_SIDE_INK = 0.35       # 列外墨率（取两侧较大者）超此 → 框线在继续
 STUB_MAX_H = 12            # 断段的高度上限（px）——版框线本来就薄
 STUB_MIN_AREA = 40         # 小于此的碎点交给别的闸，这里不管
+STUB_MIN_PROBE = 12        # 列外探测窗至少这么宽才判（2026-09-19）：v2 的「整页」就是一张
+                           #   列图，两侧只剩 4~7px padding，那几列里任何一点墨都能把
+                           #   「列外墨率」推过 0.35，字的宽底横被当成框线断段剥掉
 
 
 def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
@@ -858,6 +966,10 @@ def strip_frame_stub(patch: np.ndarray, page: np.ndarray,
         return patch
     main = int(np.argmax(st[1:, 4])) + 1
     H, W = page.shape[:2]
+    lw = max(0, x0) - max(0, x0 - STUB_SIDE_PROBE)
+    rw = min(W, x1 + STUB_SIDE_PROBE) - min(W - 1, x1)
+    if max(lw, rw) < STUB_MIN_PROBE:
+        return patch                      # 列外没有足够宽的地方可取证，不判
     hits = []
     for k in range(1, n):
         if k == main:
@@ -1080,6 +1192,9 @@ CARVE_ZONE = 0.5           # 路径活动带（× 图块高，自底向上）
 CARVE_NEAR_GAP = 1         # bbox 垂直间隙 < 此值的连通体并入字身受保护
 CARVE_DEBRIS_H = 10        # 可切连通体的高度上限（px）——版框线本来就薄
 CARVE_DEBRIS_AREA = 200    # 可切连通体的墨量上限（px）
+CARVE_DEBRIS_MIN_W = 0.30  # ……且宽度 ≥ 此比例 × 图块宽才算框渣候选（2026-09-19）：
+                           #   框渣是横向的断段，字底的点/钩尖（黃 的八、行 的钩）
+                           #   又薄又小又贴端，三条旧判据全中招，只有「窄」能分开
 CARVE_MARGIN = 2           # 路径与字身下沿的余量（px）
 CARVE_KEEP_AREA = 60       # 字身外实体墨块并入保护的面积下限（px）
 CARVE_KEEP_D = 15          # ……且离被切端至少这么远（框渣都贴着端行）
@@ -1107,7 +1222,8 @@ def _char_body(binary: np.ndarray) -> np.ndarray | None:
     cand = [k for k in range(1, n)
             if k != main
             and int(st[k, 3]) <= CARVE_DEBRIS_H
-            and int(st[k, 4]) <= CARVE_DEBRIS_AREA]
+            and int(st[k, 4]) <= CARVE_DEBRIS_AREA
+            and int(st[k, 2]) >= CARVE_DEBRIS_MIN_W * binary.shape[1]]
     out = np.zeros(binary.shape, dtype=bool)
     for k in range(1, n):
         if k not in cand:
@@ -1168,15 +1284,27 @@ def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     return out if bottom else out[::-1]
 
 
-# ── 列端渣格闸（2026-08-24 自评回流）─────────────────────
+# ── 列端渣格闸（2026-08-24 自评回流；2026-09-16 补 frame_guard 分支）───
 # 240 格分层自评里 39 个失败有 30 个是同一形态：列首/列尾多出一格，
 # 落在版框横条区，掩蔽剥掉条身后剩下贴满两墙的矮横渣/碎点，被当字
 # 输出（几乎全在 idx 末端，tail 层 48 格里 18 个）。判据在**格框图块**
 # （裁紧前、清理后）上算。危险邻例是列尾的扁字（实测「二」：两笔各高
 # ~18px 但只占 0.78 墙距、两笔纵向跨度≈整格），故「字证据」看两条：
 # 非满宽连通体的纵向总跨度，或单个够高的连通体。
+#
+# 「满宽且矮＝条渣」这条判据的物理前提是**版框存在**：框线两端钉死在
+# 墙上，穿墙是条渣的物理特征。北行日錄（modern_body，`frame: none`）
+# 没有版框，不可能有框线残渣；而它这本书的「一」字本身就是一条满宽
+# 的细横笔（实测 area 499~798、恰好卡在 TAIL_JUNK_ONE_INK=1000 逃生口
+# 门槛之下——那道门槛是按刻本「一」字标定的，刻本笔画粗，这本现代
+# 排印本的宋体「一」笔画细，同一套阈值把真字当条渣（2026-09-16 塌缩
+# 诊断：p4/c9/pos2、p8/c12/pos1 等 34 例逐一核实，图块里就是印着「一」
+# 的单条横笔＋右端小衬线，不是任何形式的框线）。故 `frame_guard=False`
+# 时跳过这条判据——没有物理框就不可能有框渣，满宽矮体只能是真字
+# （「一」）或极稀薄的噪点，后者仍受 TAIL_JUNK_MIN_INK/h<4 兜底过滤。
 TAIL_JUNK_W2W = 0.92       # 连通体宽 ≥ 此比例 × 墙距 → 满宽条渣（字笔画到
                            #   文字带就停，条痕物理上穿墙，裁到图块边）
+                           #   ——只在 frame_guard=True（有物理版框）时生效
 TAIL_JUNK_W2W_H = 0.35     # 满宽体高 ≥ 此比例 × 格高 → 不是条渣是「字粘条」
                            #   （字与条连成一个连通体时整体满宽；实测纯条渣
                            #   高 ≤0.26 格，字粘条 ≥0.6 格）
@@ -1185,16 +1313,50 @@ TAIL_JUNK_CC_H = 0.30      # 单连通体高 ≥ 此比例 × 格高 → 直接�
 TAIL_JUNK_SPAN = 0.35      # 字证据连通体纵向总跨度 ≥ 此比例 × 格高 → 字
 TAIL_JUNK_ONE_INK = 1000   # 孤「一」逃生口：单连通体墨量下限（实测条渣
 TAIL_JUNK_ONE_W = 0.45     #   非满宽块 ≤725）、宽度下限（× 墙距）
-TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）
+TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）——仅 frame_guard=True
+                           #   时使用；frame_guard=False 时不需要这道逃生口
+                           #   （满宽矮体本身已经不被当条渣，不必再单独救）
+# 逃生口的墨量门槛改成**相对量**（2026-09-19）：1000 是按四库刻本的粗笔画标的
+# （W≈180、格高≈115，1000/(180×115)≈4.8%），北行日錄刻本笔画细、格小
+# （W≈109、格高≈71），「一」的墨量只有 268~400 = 3.5%~5%，全书列端的「一」
+# 每一个都被判成条渣丢掉（尾 11、首 15，静默丢字）。取 min(1000, 3%×W×格高)，
+# 两册都落得进。四库的条渣（非满宽块 ≤725）会不会趁机混进来靠**位置**挡：
+# 框渣贴着图块端行，「一」离两端各有一段空白——TAIL_JUNK_ONE_EDGE。
+TAIL_JUNK_ONE_FRAC = 0.03
+TAIL_JUNK_ONE_H_REL = 0.10 # 相对路的高度下限（× 格高）：北行「一」连通体高 7~14px
+TAIL_JUNK_ONE_EDGE = 8     # 连通体上下沿离图块两端至少这么远（px）
 
 
-def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
-    """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。"""
+def is_end_cell_junk(patch: np.ndarray, cell_h: float,
+                      frame_guard: bool = True) -> bool:
+    """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。
+
+    `frame_guard`：本书有没有物理版框（同 `CharExtractor.frame_guard`）。
+
+    True（刻本默认）沿用原判据：「满宽且矮＝条渣」是主判据，只信个头
+    够高的连通体或跨度撑得起整格的多笔组合是字，另开「孤一逃生口」
+    把墨够厚的「一」字单独捞回来（阈值按刻本「一」字的笔画粗细标定）。
+
+    False（现代排印本，如 `modern_body.yaml` 的北行日錄）时，「满宽
+    矮体＝条渣」这条判据本身不成立——没有物理版框就不可能有框线
+    残渣，能通过 TAIL_JUNK_MIN_INK/h<4 两道噪点闸的连通体，物理上
+    只能是文字墨迹（含这本书偏细的「一」，area 499~798，远低于刻本
+    「一」标定的 1000 逃生口门槛，也接不住 TAIL_JUNK_CC_H/SPAN 的
+    高度判据——2026-09-16 塌缩诊断：34 例逐一核实图块内容全是真字，
+    无一例外）。因此 frame_guard=False 时不做任何高度/跨度判据，
+    只要有一个连通体通过了两道噪点闸就直接判定不是渣。
+    """
     binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
     if not binary.any():
         return True
     W = patch.shape[1]
     n, _lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    if not frame_guard:
+        for k in range(1, n):
+            h, area = int(st[k, 3]), int(st[k, 4])
+            if area >= TAIL_JUNK_MIN_INK and h >= 4:
+                return False               # 无版框书：过了噪点闸就是字，不设高度门槛
+        return True
     top, bot = None, None
     for k in range(1, n):
         x, y, w, h, area = (int(st[k, 0]), int(st[k, 1]), int(st[k, 2]),
@@ -1208,6 +1370,11 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float) -> bool:
         if (area >= TAIL_JUNK_ONE_INK and w >= TAIL_JUNK_ONE_W * W
                 and h >= TAIL_JUNK_ONE_H * cell_h):
             return False                  # 孤「一」：矮但宽厚墨足
+        if (area >= TAIL_JUNK_ONE_FRAC * W * cell_h and w >= TAIL_JUNK_ONE_W * W
+                and h >= TAIL_JUNK_ONE_H_REL * cell_h
+                and y >= TAIL_JUNK_ONE_EDGE
+                and y + h <= patch.shape[0] - TAIL_JUNK_ONE_EDGE):
+            return False                  # 孤「一」（相对量）：宽、不贴端、墨量够本册的一横
         top = y if top is None else min(top, y)
         bot = y + h if bot is None else max(bot, y + h)
     if top is not None and (bot - top) >= TAIL_JUNK_SPAN * cell_h:
@@ -1940,6 +2107,23 @@ def _has_char_ink(page: np.ndarray, x0: int, x1: int,
     return best >= PIN_INK_RUN
 
 
+#: `border_line` 策略下认版框带的尺（2026-09-19）：**满宽连续段**——行墨占比 ≥ FRAME_BAND_COV
+#: 且连续 ≥ FRAME_BAND_MIN_RUN 行。与 Step2 `steps/column_warp.frame_residue` 同一把尺，
+#: 那边在 bxgb 2052 个端口上标定过：削干净的 d/e 档 1065 个端口零误报——字的横笔到
+#: 文字带边就停，够不着 0.85；框线横贯整列宽。
+#:
+#: 为什么 `border_line` 不能沿用 `_nearest_bar`：它在 hint ±FRAME_HINT_TOL(40) 行内找**任何**
+#: 「像框的行」（行墨 ≥ FRAME_ROW_T 或最长游程够长），末字的宽底横（三/上/五/正/王/黃，
+#: 离下框 20~40px、厚 2~8px）就被当成框，条带在底横**上方**截断，整条底横不进图块。
+#: bxgb 实测：尾格 793 个里 179 个（22.6%）紧框比格内墨沿高 3~25px，把各道剥离函数
+#: （strip_frame_debris / strip_frame_stub / carve_end_edge / speckle / mask_frame_bars）
+#: 逐个换成恒等都**不改变这个数**——截断发生在条带裁切这一步。换成满宽段判据后
+#: 尾格截底 179 → 0，首/尾丢字 25 → 0，全书 1731 个端格 210 个好转、0 个变差
+#: （含 frame_residue 标出的 10 列：残框仍在带里，照旧被这把尺认出来）。
+FRAME_BAND_COV = 0.85
+FRAME_BAND_MIN_RUN = 3
+
+
 def _nearest_bar(is_bar, hint: int, h: int) -> int | None:
     """从 hint 向两侧交替找最近的框线行，最远 FRAME_HINT_TOL 行；找不到 None。"""
     for k in range(FRAME_HINT_TOL + 1):
@@ -1952,8 +2136,14 @@ def _nearest_bar(is_bar, hint: int, h: int) -> int | None:
 def frame_band_inner(page: np.ndarray,
                      blank_max: float | None = None,
                      top_hint: float | None = None,
-                     bottom_hint: float | None = None) -> tuple[int, int]:
+                     bottom_hint: float | None = None,
+                     strategy: str = "side_gap",
+                     band: tuple[int, int] | None = None) -> tuple[int, int]:
     """整页上下版框带的**内缘**行号 (top_inner, bot_inner)。检不出给页界。
+
+    `strategy`（2026-09-19）：`border_line` 时改用「满宽连续段」认框（见 FRAME_BAND_COV
+    上方注释），`band` 给文字带 (x0, x1)，行墨占比在带内量；其余策略走原有的
+    `_nearest_bar`/`measure_row_frames` 路。
 
     top_hint / bottom_hint：调用方已经知道的版框 y（v2 的 Step 2 按整页几何测出的
     `border_top` / `border_bottom`，列图坐标）。给了就**从提示向外找最近的框线行，
@@ -1969,6 +2159,23 @@ def frame_band_inner(page: np.ndarray,
     if page.ndim == 3:
         page = cv2.cvtColor(page, cv2.COLOR_BGR2GRAY)
     h, w = page.shape[:2]
+    if strategy == "border_line":
+        x0, x1 = (0, w) if band is None else (max(0, int(band[0])), min(w, int(band[1])))
+        if x1 - x0 < 4:
+            x0, x1 = 0, w
+        full = (page[:, x0:x1] < BINARY_THRESHOLD_PATCH).mean(axis=1) >= FRAME_BAND_COV
+        th = None if (top_hint is None or float(top_hint) <= 0.5) else float(top_hint)
+        bh = None if bottom_hint is None else float(bottom_hint)
+        top, bot = 0, h
+        for a, b in _runs(np.flatnonzero(full)):
+            if b - a + 1 < FRAME_BAND_MIN_RUN:
+                continue
+            c = (a + b) / 2.0
+            if bh is not None and abs(c - bh) <= FRAME_HINT_TOL:
+                bot = min(bot, a)
+            if th is not None and abs(c - th) <= FRAME_HINT_TOL:
+                top = max(top, b + 1)
+        return top, bot
     ft, fb = measure_row_frames(page)
     binary = page < BINARY_THRESHOLD
     rowink = binary.sum(axis=1) / max(1, w)
@@ -1985,7 +2192,16 @@ def frame_band_inner(page: np.ndarray,
         return run / max(1, w) >= FRAME_RUN_T
 
     if top_hint is not None:
-        ft = _nearest_bar(is_bar, int(round(top_hint)), h)
+        if float(top_hint) <= 0.5:
+            # `border_top=0` = **列裁切已把上框排除**，列图顶端就是框内缘
+            # （column_gate：「版框内顶端起写的顶格列 border_top_in_column=0」）。
+            # 带里没有框线，只有字——此时拿 hint 去 `_nearest_bar` 搜，
+            # FRAME_HINT_TOL=40 行的窗口会把**行首字的满宽上横**搜出来当框线
+            # （bxgb p4 实测内缘定在 y=6/14/22，正是「雲/巨」的上横），
+            # 桩钉上去整条上横就没了。没有框可找，就别找。
+            ft = None
+        else:
+            ft = _nearest_bar(is_bar, int(round(top_hint)), h)
     if bottom_hint is not None:
         fb = _nearest_bar(is_bar, int(round(bottom_hint)), h)
     if ft is not None and blank_max is not None and ft > 0:
@@ -2088,11 +2304,18 @@ class CharExtractor:
         # frame_bottom（列图坐标）；有它就不在一字宽的列图上重猜框线位置。
         frame_top_hint = gmeta.get("frame_top")
         frame_bottom_hint = gmeta.get("frame_bottom")
+        # v2 一次只喂一列：文字带就是那一列的 left_x/right_x，border_line 策略在带内量行墨
+        fbi_strategy = str(gmeta.get("frame_bar_strategy") or "side_gap")
+        fbi_band = None
+        _cols = grid.get("columns") or []
+        if fbi_strategy == "border_line" and len(_cols) == 1:
+            fbi_band = (int(round(float(_cols[0]["left_x"]))), int(round(float(_cols[0]["right_x"]))))
         frame_in_top, frame_in_bot = frame_band_inner(
             page_img,
             blank_max=(FRAME_PIN_BLANK_MAX * cell_h_grid if cell_h_grid > 0 else None),
             top_hint=None if frame_top_hint is None else float(frame_top_hint),
-            bottom_hint=None if frame_bottom_hint is None else float(frame_bottom_hint))
+            bottom_hint=None if frame_bottom_hint is None else float(frame_bottom_hint),
+            strategy=fbi_strategy, band=fbi_band)
         n_head_rows = int((grid.get("grid") or {}).get("head_raise_rows") or 0)
         # 夹注跨度的尺子：列距（书级刚性常量）。老产物没有就退回图块宽度
         jz_ref_w = float((grid.get("grid") or {}).get("period") or 0.0) or None
@@ -2137,9 +2360,11 @@ class CharExtractor:
             left_delta = sx0 - sx0_widened
             sx0 = sx0_widened
             pad_y = cell_h_ref * self.padding_ratio
-            sy0 = int(round(max(0.0, min(float(c["y_top"]) for c in cells) - pad_y)))
+            # 条带也要按折线取（2026-09-20）：折线可能比矩形 y_top 高、比 y_bottom 低，
+            # 条带按矩形截断的话，`_cell_top` 把窗口开上去也没用——那几行根本不在条带里。
+            sy0 = int(round(max(0.0, min(_cell_top(c) for c in cells) - pad_y)))
             sy1 = int(round(min(float(img_h),
-                               max(float(c["y_bottom"]) for c in cells) + pad_y)))
+                               max(_cell_bottom(c) for c in cells) + pad_y)))
             if frame_bottom_hint is not None:
                 # 条带一直开到下版框（2026-09-08 用户实审 vol01/60 7:21「畜」、
                 # vol02/71 7:21「殆」）：末字与下框贴近/粘连时 DP 的末格下界落在字
@@ -2160,13 +2385,31 @@ class CharExtractor:
             # 注释），所以补一条直接看墨的闸：桩要跨过的那段里若已经有**成段
             # 字墨**（连续 ≥MIN_INK_RUN 行、行墨率 ≥INK_ROW_T），就不钉——
             # 框渣是薄的、断续的，字的横画是成段的。
+            # ⚠️ `trust_frame` 要的是「这段带子里**真的躺着版框线**」，不是
+            # 「调用方传了 hint」。`frame_top=0` 表示**列裁切已把上框排除**、
+            # 列图顶端就是框内缘（column_gate：「版框内顶端起写的顶格列
+            # border_top_in_column=0」），带里没有框线，只有字。bxgb 全书
+            # 1026 列里 98.3% 的 border_top 都是 0，于是每一列都 trust_frame=True，
+            # 「巨/雲/二」这类**满宽上横**被当成框线行、字墨闸判「无字墨」、
+            # 桩照钉，整条上横被切掉（p4 c14s1「巨」实测：同一段 [597,610)
+            # trust_frame=True 判无字墨、False 判有字墨，差别就在这里）。
+            # 下框不受影响：`border_bottom` 是真实位置（中位 1525），框确实在带里。
+            trust_top = frame_top_hint is not None and float(frame_top_hint) > 0.5
             if frame_in_top - sy0 <= cut_lim and not _has_char_ink(
                     page_img, sx0, sx1, sy0, frame_in_top,
-                    trust_frame=frame_top_hint is not None):
+                    trust_frame=trust_top):
                 sy0 = max(sy0, frame_in_top)
-            if sy1 - frame_in_bot <= cut_lim and not _has_char_ink(
-                    page_img, sx0, sx1, frame_in_bot, sy1,
-                    trust_frame=frame_bottom_hint is not None):
+            # 比例闸**不能单独否决**（2026-09-17）：它只问「吃掉几分之几格高」，
+            # 不问「吃掉的是不是字」；而字墨闸问的正是后者。列末格的条带底常被
+            # `min(img_h, y_bottom+pad)` 截到**列图底**（`y_bottom` 是页坐标、
+            # 远超列图高），于是「条带底 − 下框内缘」= 框带 + 页边空白 ≈ 50px，
+            # 超过 cut_lim（0.35×72 ≈ 25），比例闸把桩拦下、粗下框整条留在图块里
+            # （bxgb 实测 p40c11「物」、p40c19「繡」、p6c14「宿」三例，框高 86~89px
+            # 对正常 ~70px）。而这三例的字墨闸都判「无字墨」——要吃的全是框带与
+            # 空白，本该钉。所以：**字墨闸说没字，就放行，不受比例闸约束**；
+            # 比例闸只在字墨闸拿不准（有字墨）时兜底，维持「绝不吞字」的红线。
+            if not _has_char_ink(page_img, sx0, sx1, frame_in_bot, sy1,
+                                 trust_frame=frame_bottom_hint is not None):
                 sy1 = min(sy1, frame_in_bot)
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
@@ -2209,13 +2452,23 @@ class CharExtractor:
 
             col_entries: list[tuple[int, float | None, CharInstance]] = []
             local = [(int(c["index"]),
-                      float(c["y_top"]) - sy0,
-                      float(c["y_bottom"]) - sy0) for c in cells]
+                      _cell_top(c) - sy0,
+                      _cell_bottom(c) - sy0) for c in cells]
             if self.frame_guard:
+                # 版框线换算到**条带坐标**：grid 的 frame_top/frame_bottom 是列图
+                # 坐标，条带从列图的 sy0 行起裁，所以减去 sy0。
+                bar_strategy = str(gmeta.get("frame_bar_strategy") or "side_gap")
+                tl = bl = None
+                if bar_strategy == "border_line":
+                    if frame_top_hint is not None:
+                        tl = float(frame_top_hint) - sy0
+                    if frame_bottom_hint is not None:
+                        bl = float(frame_bottom_hint) - sy0
                 strip = mask_frame_bars_outside(
                     strip, local, int(round(left_x)) - sx0,
                     int(round(right_x)) - sx0, cell_h_ref,
-                    right_ext=right_delta, left_ext=left_delta)
+                    right_ext=right_delta, left_ext=left_delta,
+                    strategy=bar_strategy, top_line=tl, bottom_line=bl)
             # 格与格之间的上下边界**严格信任 Step3**（矩形 y_top/y_bottom，
             # 或 Step3 选中了折线时的 seam_top/seam_bottom），不再自己按
             # 连通体猜"这块墨该归哪格"（2026-09-12 用户定：`_assign_column`
@@ -2257,6 +2510,8 @@ class CharExtractor:
                     # 曾经把整格抹白——2026-09-12 实测复现）。
                     patch = mask_outside(patch, seam_top, seam_bottom,
                                         y0=sy0 + y0, x0=sx0 - int(round(left_x)))
+                # pad 带里邻字伸过来的笔尖：不跨格界的连通体一律抹掉（见函数注释）
+                patch = drop_pad_only_components(patch, ltop - y0, lbot - y0)
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
@@ -2374,7 +2629,7 @@ class CharExtractor:
                         break
                     if "tail_junk" in inst.flags:
                         continue
-                    if not is_end_cell_junk(*info):
+                    if not is_end_cell_junk(*info, frame_guard=self.frame_guard):
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")

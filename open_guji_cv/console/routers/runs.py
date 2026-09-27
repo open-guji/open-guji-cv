@@ -10,18 +10,19 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import require_admin
 from ..jobs import JobSpec
 from ..sse import sse
 from ...core.book import load_book, set_ocr_candidates
 from ...core.engine import Engine
 from ...core.pipeline import load_pipeline
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 

@@ -1,19 +1,36 @@
-"""CNN 候选源 + RRF 融合 + 「一」兜底规则的回归。
+r"""CNN 候选源 + RRF 融合 + 「一」兜底规则的回归。
 
 数字来源（2026-09-05，unseen 1,327 条，异体算对）：HOG 75.5/94.7，CNN 72.4/97.6，
 **RRF 86.7/98.3**（top1/top10）。rare-char 21 条 CNN 单独 top-10 100%。
+
+2026-09-20：`test_cnn_rare_char_top10` 已删。它量的是 rare-char 集上的 top-10
+召回，要仓外的 `../open-guji-dataset/rare-char/items.jsonl` ＋ **本地跑批才有的
+字块缓存**，云端两样都没有。同一个量由评测负责，而且比它完整（分层报）：
+
+    python scripts/eval_rare_char.py --k 10
+
+顺带删掉了 `tests/rare_char_set.py`——那个辅助模块唯一的职责就是把冻结集里
+失效的绝对路径（`D:\workspace\...\char_patch\*.png`）按 patch_key 重新对上
+当下的缓存根，是这套依赖的产物，没有消费者之后不该留着。
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from open_guji_cv.clustering.candidates import BAR_ASPECT, _bar_rule
 from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT, CnnCandidates, rrf
-from open_guji_cv.core.workspace import corpus_path
+
+# 守卫要跟 `CnnCandidates.available` 同一条件——**光看 checkpoint 在不在不够**。
+# torch 是可选依赖（没装时 available=False、topk 返回空，调用方退回 HOG，这是
+# 设计的静默降级，见 test_cnn_unavailable_is_silent）。只守 ckpt 的话，venv 里
+# 没 torch 时这些用例照跑不误，拿到的全是空列表：`len([]) <= 3`、两个空列表相等
+# 之类的弱断言会**假通过**，只有 `0 < len(out)`、`hit/n >= 0.85` 这种才红——
+# 同一批用例一半绿一半红，病因还看不出来。统一守 available。
+CNN_OK = CnnCandidates().available
+needs_cnn = pytest.mark.skipif(
+    not CNN_OK, reason=f"没有 checkpoint（{DEFAULT_CKPT}）或没装 torch")
 
 
 # ── RRF ──────────────────────────────────────────────────────────
@@ -70,7 +87,7 @@ def test_cnn_unavailable_is_silent(tmp_path):
     assert c.topk(np.zeros((64, 64), np.uint8), ["甲"], k=3) == []
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_cnn_topk_contract():
     """有模型时：只返回字表内的字、概率降序、条数 ≤ k。"""
     c = CnnCandidates()
@@ -83,7 +100,20 @@ def test_cnn_topk_contract():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+#: 批处理 vs 逐次的分数容差。**只放宽分数，字与名次照旧严格比**。
+#:
+#: 1e-4 在 r4 上够（实测最大 6.4e-05），换 r5 后超了（3.3e-04）：
+#: 权重变了，GPU 上批处理的累加顺序差异被放大一个量级。同一份图跑三次
+#: 分差完全相同——是确定性的求和顺序偏差，不是随机噪声。
+#: 按设备拆：cuda 3.3e-04、cpu 2.4e-07，确认来源是 GPU 批处理。
+#:
+#: 与 `tests/test_console_routes.py` 的 `_SCORE_TOL = 5e-4` 同一类问题、同一个值。
+#: ⚠️ 别用「round 到更少位数再比」那招——噪声骑在进位边界上照样不等
+#: （那边 2026-09-15 栽过），要吃掉噪声只能比差值。
+_BATCH_SCORE_TOL = 5e-4
+
+
+@needs_cnn
 def test_topk_batch_matches_sequential():
     """`topk_batch` 必须与逐次调用 `topk` 位级相同（2026-09-10 生僻字候选
     提速：整页字块一次前向，不能悄悄改变候选或排名）。"""
@@ -95,15 +125,15 @@ def test_topk_batch_matches_sequential():
     qs[2][30:50, 20:60] = 1
     seq = [c.topk(q, cs, k=4) for q in qs]
     batch = c.topk_batch(qs, cs, k=4)
-    # 批处理与逐次调用的矩阵运算求和顺序不同，允许浮点噪声（1e-4 量级），
+    # 批处理与逐次调用的矩阵运算求和顺序不同，允许浮点噪声，
     # 但字符与排名必须完全一致。
     for s, b in zip(seq, batch):
         assert [ch for ch, _ in s] == [ch for ch, _ in b]
         for (_, ps), (_, pb) in zip(s, b):
-            assert abs(ps - pb) < 1e-4
+            assert abs(ps - pb) < _BATCH_SCORE_TOL
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_emb_topk_batch_matches_sequential():
     """同上，`emb_topk_batch` 对 `emb_topk`。"""
     c = CnnCandidates()
@@ -117,37 +147,7 @@ def test_emb_topk_batch_matches_sequential():
     for s, b in zip(seq, batch):
         assert [ch for ch, _ in s] == [ch for ch, _ in b]
         for (_, ps), (_, pb) in zip(s, b):
-            assert abs(ps - pb) < 1e-4
-
-
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists()
-                    or not Path("../open-guji-dataset/rare-char/items.jsonl").exists(),
-                    reason="没有 checkpoint 或 rare-char 集")
-def test_cnn_rare_char_top10():
-    """rare-char 21 条，CNN 单独 top-10 不该掉到 85% 以下（实测 100%）。"""
-    import json
-
-    import cv2
-
-    from open_guji_cv.clustering.font_candidates import book_charset
-    from open_guji_cv.clustering.normalize import normalize_patch
-    from open_guji_cv.variants import are_variants
-
-    items = [json.loads(l) for l in
-             Path("../open-guji-dataset/rare-char/items.jsonl").read_text(encoding="utf-8").splitlines()]
-    cs = book_charset(str(corpus_path("zongmu_wuyingdian_reference.txt")),
-                      [i["expected"]["char"] for i in items])
-    c = CnnCandidates()
-    hit = n = 0
-    for it in items:
-        img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            continue
-        n += 1
-        g = it["expected"]["char"]
-        top = [ch for ch, _ in c.topk(normalize_patch(img), cs, k=10)]
-        hit += any(ch == g or are_variants(ch, g) for ch in top)
-    assert n and hit / n >= 0.85, f"CNN rare-char top-10 = {hit}/{n}"
+            assert abs(ps - pb) < _BATCH_SCORE_TOL
 
 
 def test_rrf_weights_tilt_toward_heavier_source():
@@ -175,7 +175,7 @@ def test_rrf_weights_tilt_toward_heavier_source():
     assert EMB_WEIGHT >= CNN_WEIGHT >= HOG_WEIGHT >= 0
 
 
-@pytest.mark.skipif(not Path(DEFAULT_CKPT).exists(), reason="没有训练好的 checkpoint")
+@needs_cnn
 def test_emb_topk_contract_and_cache():
     """embedding 检索：只返回字表内的字、相似度降序；模板向量落盘复用。"""
     c = CnnCandidates()
@@ -188,3 +188,41 @@ def test_emb_topk_contract_and_cache():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
     # 第二次走缓存，结果一致
     assert [ch for ch, _ in c.emb_topk(q, cs, k=4)] == [ch for ch, _ in out]
+
+
+def test_cls_gate_weight():
+    """分类头门控：emb 前 3 名落在 classes 内的比例决定 cls 权重。
+
+    类外字位上分类头的输出全是错的（`cache/oov_bench` 314 条实测 top-10 = 0%），
+    恒权会把 embedding 的正确答案压下去——同集 emb 单源 top-1 67.8%，
+    两路恒权 RRF 只剩 26.4%。
+    """
+    from open_guji_cv.clustering.cnn_candidates import CNN_WEIGHT, cls_gate_weight
+
+    S = {"一", "二", "三"}
+    # 前三名全在类内 → 满权重
+    assert cls_gate_weight(["一", "二", "三", "x"], S) == CNN_WEIGHT
+    # 全在类外 → 归零，分类头不参与
+    assert cls_gate_weight(["𠀀", "𠀁", "𠀂"], S) == 0.0
+    # 各半 → 按比例插值
+    w = cls_gate_weight(["一", "𠀀", "二"], S)
+    assert 0.0 < w < CNN_WEIGHT
+    # 空 order（emb 没给候选）不该把分类头也关掉
+    assert cls_gate_weight([], S) == CNN_WEIGHT
+    # 空 classes（没 checkpoint）：分类头本来也没输出，给 lo 不影响结果
+    assert cls_gate_weight(["一"], set()) == 0.0
+
+
+def test_comp_probs_batch_contract():
+    """部件袋头的概率输出：键是 checkpoint 里的 `comps`，值在 [0,1]，一图一字典。
+    没 checkpoint 就跳过（needs=model）。"""
+    from open_guji_cv.clustering.cnn_candidates import shared
+    cnn = shared()
+    if not cnn.available:
+        pytest.skip("没有 CNN checkpoint")
+    q = np.zeros((64, 64), np.uint8); q[16:48, 16:48] = 1
+    out = cnn.comp_probs_batch([q, q])
+    assert len(out) == 2 and set(out[0]) == set(cnn.comps) and cnn.comps
+    assert all(0.0 <= v <= 1.0 for v in out[0].values())
+    assert cnn.comp_probs_batch([]) == []
+

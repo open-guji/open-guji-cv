@@ -46,6 +46,8 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageAlignRef, PageDecision, PageMatch,
                                     PageOcr)
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.ji_yi_si import FAMILY as _JYS
 
 
 class SeedAdmitParams(BaseModel):
@@ -79,6 +81,15 @@ class SeedAdmitParams(BaseModel):
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
+    iron_config_fingerprint: str = ""
+    """自动填：`config/iron_extra_confusable.json`（铁证闸的追加形近/形不可分表）
+    变了本步要重跑。开不开铁证闸看册配置 `iron_gate:`（`StepSpec.book_deps`
+    已经把这个字段收进指纹了，这里只管配置文件内容本身）。"""
+    iron_ref_guard: bool = True
+    """铁证放行前与整理本互证（2026-09-27 整理 Z7 实测）：铁证定的字与 `align_ref`
+    对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
+    11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
+    是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -114,20 +125,27 @@ class SeedAdmitParams(BaseModel):
                                corpus_fingerprint([self.exclusions or str(_ex_default())]))
         # 人裁表直接读 glyph.db，这一步自己带库指纹——上游 glyph_match 的指纹只保证
         # 它自己重跑，不会让本步过期（人裁进库时 match 产物可能没变）。
+        # 只看 provenance='human' 那部分（2026-09-20）：机器 align 进库、字头改判与本步
+        # 的人裁通道无关，用整库指纹会让本步跟着白跑。
         if self.use_human_verdicts and not self.human_fingerprint:
-            from .glyph_match import db_fingerprint
-            object.__setattr__(self, "human_fingerprint", db_fingerprint(self.db_path))
+            from .glyph_match import human_verdicts_fingerprint
+            object.__setattr__(self, "human_fingerprint",
+                               human_verdicts_fingerprint(self.db_path))
         # 版本注词表也是派生物（scripts/build_note_lexicon.py），同理
         if self.use_note_lexicon and not self.note_fingerprint:
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+        if not self.iron_config_fingerprint:
+            from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
+            object.__setattr__(self, "iron_config_fingerprint",
+                               corpus_fingerprint([str(_IRON_CONFIG)]))
 
 
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.5", unit="cell",
+        id="seed_admit", title="C1 进库准入", version="1.7", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
         consumes=("glyph_match", "context_decision", "align_ref"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
@@ -138,7 +156,11 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
-                   "open_guji_cv.utils.jiazhu_order"),
+                   "open_guji_cv.utils.jiazhu_order",
+                   "open_guji_cv.clustering.iron_evidence"),
+        # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
+        # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
+        book_deps=("iron_gate",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -168,10 +190,27 @@ class SeedAdmitStep(Step):
         # 會，判据 A 的「对你的裁决」因此掉到 210/211。库匹配、上下文、整理本对齐
         # 全都是间接证据，人看着图下的判断不是——它该一票定案。
         human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
+        if human_shapes:
+            # 按入库时的编号记的人裁，先过绑定表找回现在对应的格（总览/15；重切后挂错格的根治）
+            from ..feedback.bindings import rebind_library_shapes
+            human_shapes = rebind_library_shapes(ctx.book.id, human_shapes)
+        # 事件侧的人裁定字（2026-09-20）：勾了「字形不入库」的裁决不进字形库，上面那份就
+        # 没有它——但字是定了的，文本采信不能丢。见 `feedback/lookup.human_chars`。
+        from ..feedback.lookup import human_chars
+        human_texts = human_chars(ctx.book.id) if p.use_human_verdicts else {}
+
+        _ex_cache: dict = {}
+
+        def _ex_records() -> dict:
+            # 名单一页要查几十次，load_exclusions 每次重读整个文件——缓存在本次
+            # run_page 内（名单是外部状态，不跨页缓存）。
+            if not _ex_cache:
+                from ..clustering.exclusions import load_exclusions
+                _ex_cache.update(load_exclusions(_ex_path) or {"": {}})
+            return _ex_cache
 
         def excluded_note(iid: str) -> str:
-            from ..clustering.exclusions import load_exclusions
-            rec = load_exclusions(_ex_path).get(iid, {})
+            rec = _ex_records().get(iid, {})
             return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
@@ -183,6 +222,12 @@ class SeedAdmitStep(Step):
         always = set(p.always_review or "")
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
+        # 铁证放行通道（用户 2026-09-27 批：只放行文本，不进字形库）。册配置
+        # `iron_gate:` 关时这两个都是 None，下面 `_iron_decide` 直接跳过——
+        # 零额外开销，不影响没开这个开关的书。
+        iron_ns = getattr(ctx.book, "norm_stroke", None)
+        iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
+        iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -228,11 +273,27 @@ class SeedAdmitStep(Step):
                 # 就没什么可判的。
                 if r.id in excluded:
                     n_excluded += 1
+                    # 原图破损档（2026-09-19）：字位**占住**，文本层出 `□`，
+                    # 人给的 `guess`（最像哪个字）挂在 evidence 上供渲染括注。
+                    # 与其余排除原因（切坏/非字）不同——那些是「这块图不可用」，
+                    # 这一档是「原刻就残，字确实在这儿但认不出」，字位不能消失，
+                    # 否则整列字数对不上（cv-segmentation §九 的逐列对账）。
+                    exrec = _ex_records().get(r.id, {})
+                    damaged = exrec.get("reason") == "damaged"
+                    guess = ""
+                    for tag in exrec.get("evidence") or []:
+                        if isinstance(tag, str) and tag.startswith("guess="):
+                            guess = tag[6:]
+                    evd = {"excluded": excluded_note(r.id)}
+                    if damaged:
+                        evd["damaged"] = True
+                        if guess:
+                            evd["guess"] = guess
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=False,
-                        channel=None, char=None, provenance="",
+                        channel=None, char=("□" if damaged else None), provenance="",
                         doubts=["excluded"],
-                        evidence={"excluded": excluded_note(r.id)}))
+                        evidence=evd))
                     continue
                 # 人裁过的位：一票定案，后面所有自动通道都不再看（2026-09-06）。
                 # 人是**看着图**判的，库匹配/上下文/整理本对齐全是间接证据；实测
@@ -240,13 +301,18 @@ class SeedAdmitStep(Step):
                 # `context` 通道就把它放行成了 會——人裁被机器覆盖，判据 A 的
                 # 「对你的裁决」掉到 210/211。放在排除名单之后、其余通道之前。
                 hs = human_shapes.get(r.id)
-                if hs:
+                ht = human_texts.get(r.id)
+                if hs or ht:
                     n_auto += 1
+                    # 字优先取库里那份（进库时经过清洗）；库里没有（人勾了不入库）就取事件里的。
+                    # 己/已/巳 例外：事件侧已按人当时的文意判断归好（`lookup.human_chars`），
+                    # 库里存的可能是「看着像的那个」——本族字形不分，取事件的（utils/ji_yi_si.py）。
+                    char = ht if (ht and hs in _JYS and ht in _JYS) else (hs or ht)
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=True,
-                        channel="human", char=hs, reading=None,
+                        channel="human", char=char,
                         provenance="human", doubts=[],
-                        evidence={"human": True}))
+                        evidence={"human": True, **({} if hs else {"no_glyph_lib": True})}))
                     continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
@@ -333,22 +399,20 @@ class SeedAdmitStep(Step):
                         or (r.candidates and r.candidates[0][0] in always)
                         or (r.char in always)):
                     if p.relax_split_ref and align_char in always:
-                        # 用户 2026-09-06 改口：「己已巳 没必要每次都单独选文意，根据上下文
-                        # 或整理本直接选；字形选哪个都行，不太重要」。文意 = 整理本字，
-                        # 字形 = 库 top1（若也是这三字之一，否则跟整理本）。字形/文意
-                        # 的取值在 _pick_char 之后统一写（见下）。整理本没给字的仍人审。
+                        # 己已巳：字形只定「是这一族」，哪个字按上下文（用户 2026-09-06 / 09-26）。
+                        # 这里先放行、字取整理本；页末 `_resolve_ji_yi_si` 按上下文改定。
                         ok, channel = True, "split_ref"
                     elif ok:
                         ok, channel = False, None
 
-                char, reading = _pick_char(
+                char = _pick_char(
                     ok=ok, channel=channel, align_char=align_char,
                     match_char=r.char, verdict=r.verdict,
                     candidates=list(r.candidates))
                 if channel == "split_ref":
-                    _top = r.candidates[0][0] if r.candidates else None
-                    char = _top if _top in always else align_char
-                    reading = align_char if align_char != char else None
+                    # 己/已/巳：刻本三字刻法常不分，库 top1 定不了是哪个字，先取整理本字；
+                    # 页末 `_resolve_ji_yi_si` 再按上下文定（干支/时辰/搭配压过整理本）。
+                    char = align_char
                 # variant_form 分支要用**改名前**的 channel 判——见下面「⚠️ dual 档判 variant_form
                 # 判早了」。这里先存一份，改名（下一段）之后再用它，别被 "dual" 字符串盖掉。
                 is_corpus_channel = channel in _CORPUS_CHANNELS
@@ -386,20 +450,16 @@ class SeedAdmitStep(Step):
                         _top = r.candidates[0][0] if r.candidates else None
                         if fd.state == "open" and p.relax_ref_agree and _top in forms:
                             # 用户 2026-09-06「整理本和字形分析一致时直接放行」：组里哪个形
-                            # 没定，但库 top1 就是组内的一个形——拿它当形（最好的猜测），文意
-                            # 取整理本。证据里 state=guess，判据 E 的分母（_multi_form）会把
+                            # 没定，但库 top1 就是组内的一个形——拿它当形（最好的猜测）。证据里 state=guess，判据 E 的分母（_multi_form）会把
                             # 它算进抽审；错了走 audit_glyph_consistency 那套人裁子库复查。
                             char = _top
-                            reading = align_char if align_char != char else None
                             form_ev = {**form_ev, "state": "guess"}
                         elif fd.state == "open":
                             ok, channel, prov, form_open = False, None, "", True
                             doubts = doubts + ["form_open"]
                             char = None
-                            reading = align_char
                         else:
                             char = fd.char
-                            reading = align_char if align_char != char else None
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
@@ -416,14 +476,21 @@ class SeedAdmitStep(Step):
                 # `CONFUSABLE_SAMPLE_CAP`），达到上限后这组字不再新增 exemplar，字形匹配层
                 # 不会继续被这条通道的判决污染，旧顾虑不再成立。
                 d = dmap.get(r.id)
-                if not ok and not form_open and p.use_context and d and d.source == "context" \
-                        and d.char and d.margin >= p.context_margin:
-                    ok, channel, char, prov = True, "context", d.char, "context"
+                # 2026-09-20 加互证：上下文定的字与整理本对齐字语义不同就不放行
+                # （`seeding.context_conflicts_ref`，bxgb 7 条 context 误放行全是这一型）。
+                # 用 `vm_here`（账本确认过的 T2 对已并进去），别用裸 vmap。
+                from ..clustering.seeding import context_conflicts_ref
+                if (not ok and not form_open and p.use_context and d and d.source == "context"
+                        and d.char and d.margin >= p.context_margin):
+                    if context_conflicts_ref(d.char, align_char, vm_here):
+                        doubts.append("context_vs_ref")
+                    else:
+                        ok, channel, char, prov = True, "context", d.char, "context"
 
                 # 整理本 × 形状/上下文 一致 → 放行（用户 2026-09-06「很多都是整理本存在时
                 # 非常明显的选择，能不能放松要求」）。走到这里还没放行的位，若整理本字与库
                 # top1 语义同字（刻本形归一后是同一个字），或与 Step6 上下文定字相同，就放行：
-                # 形取库 top1（它是刻本形），文意取整理本。两册人审位实测（关掉人裁通道的
+                # 形取库 top1（它是刻本形）。两册人审位实测（关掉人裁通道的
                 # 产物）整理本≡库top1 10/10、==上下文 4/4；全部人裁真值上反例 0（relax_study）。
                 # 己已巳 不走这里（上面 split_ref 单独处理）。
                 if (not ok and p.relax_ref_agree and align_char and align_char not in always):
@@ -433,18 +500,34 @@ class SeedAdmitStep(Step):
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         ok, channel, prov = True, "ref_lib", "match"
                         char = _top
-                        reading = align_char if align_char != _top else None
                     elif _d and _d.char and _d.char == align_char:
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
-                        reading = None
+
+                # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
+                # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
+                # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
+                # 上面所有通道都没定下来的格再补一次机会，不覆盖任何已经放行的判决（哪怕
+                # 铁证跟它不一致）。开关前后产物 diff 因此只应该多出 `channel="iron"` 的新
+                # 增格，一个已有的格都不会变——这是这次转正验证的判据，也是「先不进库」
+                # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
+                # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
+                if not ok and iron_ctx is not None:
+                    iron_char = _iron_decide(ctx.book.id, page, cc.col, r, iron_ctx,
+                                             iron_scale, iron_ns)
+                    if iron_char is not None and p.iron_ref_guard \
+                            and context_conflicts_ref(iron_char, align_char, vm_here):
+                        doubts.append("iron_vs_ref")
+                    elif iron_char is not None:
+                        ok, channel, char, prov = True, "iron", iron_char, "iron"
+                        doubts = []
                 if ok:
                     n_auto += 1
                 else:
                     n_review += 1
                 recs.append(AdmitRec(
                     id=r.id, slot=r.slot, sub=r.sub, admit=ok, channel=channel,
-                    char=char, reading=reading, provenance=prov,
+                    char=char, provenance=prov,
                     doubts=[] if ok else (_doubts(r, d) + doubts),
                     evidence={"verdict": r.verdict, "cov": r.cov, "wmax": r.wmax,
                               "guard": r.guard,
@@ -452,14 +535,58 @@ class SeedAdmitStep(Step):
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
+        d_auto, d_review = _resolve_ji_yi_si(out, amap)
+        n_auto += d_auto
+        n_review += d_review
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
 
 
-# 整理本参与的通道：`reading` 记整理本字（字形仍照录图上的形）。
-# ⚠️ match_ref 也在内（2026-09-05 补）：它放行的依据就是「库 top1 语义 == 整理本字」，
-# 漏掉它的后果是 vol01:18:8:6 刻「㫖」、整理本「旨」被存成 reading=None——
-# 体检判据 A 把这种异体位当成错例（99.99%），其实是转换没记下来。
+def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
+    """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
+
+    按本页读序取前后字：
+    - **干支 / 时辰**（几乎不会错）：直接定字并放行——哪怕原先落了人审；
+    - 其余（「己」的搭配、整理本给「己」、默认「已」）：**原已放行的改成规则的字**——原先的字
+      不过是库或整理本对字形的猜测，而本族字形本就不分（四庫整理本自己也把「而已」印成「而巳」）；
+      原在人审、但字形证据确认是这一族（库 top1 属本族且 cov ≥ 0.95，或 OCR 首选属本族）→
+      按规则的字放行；字形证据不足 → 仍人审，证据里写建议字。
+    人裁位不动（人定的就是文意）。→ (新增放行数, 新增人审数)。
+    实测（人裁为真值，bxgb + 四庫 vol01/02）：干支/时辰 全对；搭配与默认 约 96%。
+    """
+    from ..utils.jiazhu_order import sort_by_reading
+    from ..utils.ji_yi_si import resolve
+    seq = [r for c in sorted(cols, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+           if not (r.doubts and "excluded" in r.doubts)]
+    d_auto = d_review = 0
+    for i, r in enumerate(seq):
+        if r.channel == "human" or r.char not in _JYS:
+            continue
+        prev = seq[i - 1].char if i else None
+        nxt = seq[i + 1].char if i + 1 < len(seq) else None
+        nxt2 = seq[i + 2].char if i + 2 < len(seq) else None
+        ref = (amap.get(r.id) or (None, None))[0]
+        ch, why = resolve(prev, nxt, ref, next2=nxt2)
+        r.evidence = {**(r.evidence or {}), "ji_yi_si": {"char": ch, "why": why}}
+        sure = why.startswith("干支") or why == "时辰"
+        if sure:
+            if not r.admit:
+                d_auto += 1
+                d_review -= 1
+            r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
+            r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
+        elif r.admit:
+            r.char = ch
+        else:
+            ev = r.evidence or {}
+            ocr1 = (ev.get("ocr") or [[None]])[0][0] if ev.get("ocr") else None
+            if (ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS:
+                r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
+                d_auto += 1
+                d_review -= 1
+    return d_auto, d_review
+
+
 @lru_cache(maxsize=4)
 def _human_shapes(db_path: str) -> dict[str, str]:
     """字形库里人裁过的位 → 人裁的**字形**。`{裸 id: shape}`（去掉 v2: 前缀）。
@@ -467,6 +594,20 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     取 `provenance='human'` 的 admissions，字形从 glyphs 经 exemplars 取——
     `admissions.char` 存的是**释读**，己/已/巳 那三个字它与字形会分岔，
     拿它当字形会把「刻 巳 读 已」写成「刻 已」（09-06 那批 62 条脏数据就是这么来的）。
+
+    ## ⚠️ 人裁会**过期**：切分改了，这一格就不是当初看的那一格
+
+    「人裁一票定案」的前提是那一格没变。2026-09-08~11 那几批裁完之后 Step2/Step3 改过多轮
+    （去框、候选池、U-Net 裁判），格重新分了、slot 号整体偏移，旧裁决就钉在了错误的格上：
+    p75 列1 实测人裁 slot4=用 / 9=自 / 12=已，而重切后这三格的图是 互 / 左 / 言（逐格看图核对过，
+    与整理本一致）。一旦钉住，`human` 压过库匹配与上下文，**整段跟着错**，且没有任何报错。
+
+    vol02 全书查出 61 条这种「与列内上一位重字」的人裁位，撤掉其中与整理本不一致的 56 条后，
+    全书一致率 97.43% → 97.61%、`sub.other` 335 → 288。撤法是把 `provenance` 改成
+    `human_stale_<日期>`（不删账，本函数只认 `'human'`）。
+
+    **这是个反复会犯的坑**：只要切分再改一次，现有人裁就可能再过期一批。检测签名见
+    `scripts/check_stale_human.py`（人裁位与上一位重字 → 疑似错位），跑批后应该定期跑一次。
 
     ## ⚠️ 只认 `v2:` 前缀，v1 的记录一条都不能要
 
@@ -498,44 +639,122 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     return {iid[3:]: ch for iid, ch in rows if ch}
 
 
+@lru_cache(maxsize=4)
+def _iron_context(db_path: str, norm_stroke: int | None):
+    """铁证闸的匹配上下文：只吃人裁实例的内存匹配器 + 人裁字集合 + 形近表 + 按字分组的
+    人裁实例 id（供判别器成对复核取原始字块）。跨页/跨 run 缓存（同 `_human_shapes`），
+    只在 db_path/norm_stroke 换了才重建——一本书一次，不是一页一次。"""
+    from ..clustering.confusable import partners as _confusable_partners
+    from ..clustering.glyph_db import GlyphDB
+    from ..clustering.iron_evidence import human_matcher
+    matcher, _n = human_matcher(db_path, norm_stroke)
+    human_chars_set = set(matcher._chars)
+    partners_map = _confusable_partners()
+    db = GlyphDB(db_path)
+    human_ids: dict[str, list[str]] = {}
+    for ch, iid in db.conn.execute(
+            """SELECT g.char, e.instance_id FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
+               JOIN instances i ON i.instance_id=e.instance_id WHERE i.label_status='human'"""):
+        human_ids.setdefault(ch, []).append(iid.replace("v2:", ""))
+    return matcher, human_chars_set, partners_map, human_ids
+
+
+def _iron_page_scale(book: str, page: int, match: PageMatch) -> float:
+    """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
+    原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
+    的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
+    几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
+    import cv2
+
+    from ..clustering.iron_evidence import book_scale_from_patches
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    patches = []
+    for cc in match.columns:
+        if not cc.ok:
+            continue
+        for r in cc.chars:
+            path = cache.get(book, "char_patch", f"p{page:04d}c{cc.col:02d}s{r.slot}{r.sub or ''}")
+            if path is None:
+                continue
+            img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                patches.append(img)
+    return book_scale_from_patches(patches)
+
+
+def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
+                 norm_stroke: int | None) -> str | None:
+    """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
+    （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
+    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
+    import cv2
+
+    from ..clustering.iron_evidence import iron_with_disc
+    from ..clustering.normalize import normalize_patch
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    matcher, human_chars_set, partners_map, human_ids = iron_ctx
+    key = f"p{page:04d}c{col:02d}s{r.slot}{r.sub or ''}"
+    path = cache.get(book, "char_patch", key)
+    if path is None:
+        return None
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    res = matcher.match(normalize_patch(img, stroke_width=norm_stroke), exclude_id=f"v2:{r.id}")
+    cands = [(c, float(v)) for c, v in res.candidates]
+    if res.verdict == "same" and res.char and all(c != res.char for c, _ in cands):
+        cands.insert(0, (res.char, float(res.cov)))
+    cands.sort(key=lambda t: -t[1])
+
+    raw_cache: dict[str, object] = {}
+
+    def raw_of(cid: str):
+        if cid not in raw_cache:
+            bk_, p_, c_, s_ = cid.split(":")
+            sub = s_[-1] if s_[-1] in "ab" else ""
+            s_ = s_.rstrip("ab")
+            pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
+            raw_cache[cid] = None if pth is None else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE)
+        return raw_cache[cid]
+
+    def ex_raws(ch: str):
+        ids = [i for i in human_ids.get(ch, []) if i != r.id]
+        return [x for i in ids[:8] if (x := raw_of(i)) is not None]
+
+    winner, _top, _second, _why, _disc = iron_with_disc(
+        cands, human_chars_set, partners_map, img, ex_raws, scale)
+    return winner
+
+
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
-                    # note_lexicon（2026-09-06）：版本注闭集给的读法同样是**文本证据**，
-                    # 与整理本那几路一个性质——`reading` 该填、字形该照录图上的形、
-                    # 「义定形未定」的组内定形该走。漏进这个元组会有两个后果：
-                    # reading 不填（账本统计不到转换），以及 variant_form 整段跳过
-                    # （刻本形被整理本形盖掉，正是判据 E 82/91 那次的机制）。
+                    # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
+                    # 库没下 same 断言时拿整理本字当字形估计，且要走「义定形未定」的组内定形；
+                    # 漏进这个元组，variant_form 整段跳过（刻本形被整理本形盖掉，判据 E 82/91 那次）。
                     "note_lexicon")
 
 
 def _pick_char(ok: bool, channel: str | None, align_char: str | None,
                match_char: str | None, verdict: str,
-               candidates: list) -> tuple[str | None, str | None]:
-    """决定这一位的 **(字形, 文意)**。
+               candidates: list) -> str | None:
+    """决定这一位的**字**（刻本字形；2026-09-26 起没有「读法」）。
 
-    - `char`（字形）：same 档用库继承的字；否则取**库候选 top1**——那正是
-      match_solo / match_solo_ocr 采信的东西，不取就会「自动进库却没有字」。
-    - `reading`（文意）：整理本参与的通道填整理本字；与 char 相同时返回 None。
+    same 档用库继承的字；整理本参与的通道、库又没下 same 断言时取整理本字；
+    否则取**库候选 top1**——那正是 match_solo / match_solo_ocr 采信的东西。
 
-    ## ⚠️ 整理本字不能覆盖 `char`
+    ## ⚠️ 库判 same 时整理本字不能覆盖
 
-    第一版让整理本字直接覆盖 `char`，结果 7 条异体字位被写成了整理本的形：
-    刻本刻「㫖」存成「旨」、「彚」存成「彙」、「卽」存成「即」。`AdmitRec.char`
-    喂的是字形库，**字形库存的是刻本上实际刻的形**——用整理本改它，将来一个真
-    刻成这形状的实例会继承错误的字形（charset_and_lm.md §四的实锤）。所以整理本
-    字只进 `reading`，`char` 永远照录图上的形。
+    第一版让整理本字直接覆盖，7 条异体字位被写成了整理本的形：刻本刻「㫖」存成「旨」、
+    「彚」存成「彙」、「卽」存成「即」。字形库存的是刻本上实际刻的形（charset_and_lm.md §四）。
 
     ## ⚠️ `channel is None` 也是一条通道
 
     `dual` 档（align × OCR 双信号一致且零疑问）在 `admission_decision` 里是
-    `return True, None`——**没有通道名**。漏掉它，`reading` 就不会填；更早的一版
-    连 `char` 都会掉进库 top1 兜底，实测判错 9 条金标（vol01:42:3:20 align 与
-    OCR 都读「敷」，库 top1 却是「數」，0.957 vs 0.955 的 HOG 饱和差距）。
-    所以按「这条通道用没用整理本」判，而不是列通道名。
+    `return True, None`——**没有通道名**。所以按「这条通道用没用整理本」判，而不是列通道名。
     """
     char = match_char if verdict == "same" else None
-    reading = None
     if ok and align_char and channel in _CORPUS_CHANNELS:
-        reading = align_char
         # ⚠️ 库 unsure 时，**别拿库 top1 当字形**。
         #
         # unsure 的字面意思就是「库不知道这是什么」：实测 8 条 dual 位
@@ -546,12 +765,12 @@ def _pick_char(ok: bool, channel: str | None, align_char: str | None,
         #
         # 库判 same 才有资格定字形（那是它下了断言）；unsure 时两路零同源证据
         # 一致，整理本字是更好的字形估计。异体位（㫖/旨、彚/彙）不受影响：
-        # 库对它们判 same，char 仍照录刻本的形，只有 reading 取整理本。
+        # 库对它们判 same，char 仍照录刻本的形。
         if char is None:
             char = align_char
     if char is None and candidates:
         char = candidates[0][0]
-    return char, (reading if reading and reading != char else None)
+    return char
 
 
 def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:
@@ -608,7 +827,7 @@ def _cnn_top(book: str, page: int, col: int, slot: int, sub: str | None) -> str 
         path = ImageCache().get(book, "char_patch", key)
         if path is None:
             return None
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             return None
         cc = shared()
@@ -631,7 +850,7 @@ def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,
         path = ImageCache().get(book, "char_patch", key)
         if path is None:
             return None
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
             return None
         return image_ranks_for(normalize_patch(img), forms)

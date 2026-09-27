@@ -148,6 +148,130 @@ def gap_center(patch: np.ndarray, ref_w: float | None = None,
     return float(x0 + (ga + gb) / 2), strength
 
 
+# ── 單行小注（小字只占半列、另半列空着） ────────────────────────
+# **这是 zongmu 两册没有的版式**（vol02 全书 317 个 a 半格，43 个是段尾单半、
+# 其余全是成对双行，**没有一个是孤立的半宽小注**），所以原判据完全没覆盖它：
+# `gap_center` 要求「两子列合起来占满列距」，而單行小注只有一个子列有字，
+# 跨度只有 0.49，**比正文字（0.70）还窄**，判据方向正好相反，怎么调
+# `SPAN_T` 都测不到。bxgb（樓鑰《北行日録》知不足齋刻本）大量用这种版式给
+# 人名作注（校對本里用【】标出：「梁監門【叔玠】」「沈尉【德潤】」）。
+#
+# 判据三条（bxgb 全书 18,220 个正文格实测标定）：
+#   跨度  span/ref_w < SOLO_SPAN_MAX —— 正文字 p05 0.554、中位 0.703；
+#         命中的 74 格 0.39~0.56。**这条单独用不行**，窄正文字（下/十/上）
+#         也只有 0.62~0.69，所以必须配下一条；
+#   偏置  右半墨占比 > SOLO_RIGHT_FRAC —— 正文字 p99 0.782、最近的落选
+#         0.903；命中的 74 格 0.960~1.000。中间空着 0.06 的档；
+#   墨量  >= SOLO_MIN_INK —— 低于此的 12 格实测全是纸缘残墨与污点
+#         （p10c17 那一列的边缘残渣，肉眼看不是字），真小注最低 690。
+# 三条都过才判，实测 74 格全部落在 42 列里，`p6c13` 的「瀛」「楫」正是其中两格。
+#
+# ⚠️ **只认右半（a 子列）**：74 格无一例外全在右半，左半一个都没有——這是
+# 版式决定的（小注接在正文字之后、顶右侧起写）。不要"顺手"把左半也加上，
+# 那等于放开一倍的假阳性面，而实测根本没有左半的样本支撑。
+SOLO_SPAN_MAX = 0.62       # 跨度/列距上限
+SOLO_RIGHT_FRAC = 0.93     # 墨落在右半的比例下限
+SOLO_MIN_INK = 600         # 总墨下限（px），滤掉纸缘残墨/污点
+# ⚠️ **已知漏检一例，三条路都试过，别再走**（2026-09-17，bxgb p3c4s5「覿」）：
+# 那一格右半是真小注「覿」（右半最大连通体 934px），左半散布着**一整片碎墨渍**
+# （7 个碎块、总面积 194、最大 62px，肉眼可见是印污不是字）。碎渍把跨度撑到
+# 1.000、右半墨占比压到 0.887，两条判据同时落空。试过的三条补救都不划算：
+#   1. 量跨度前剔掉小连通体（<80~250px）：「覿」能捞回，但同一门槛下
+#      「上/十/下/寸」这类窄正文字也跟着通过——1 个真阳性换 4~5 个假阳性；
+#   2. 改量「右半自身的跨度」：真小注 rspan p05=0.391、最小 0.270，与那批窄
+#      正文字（0.336~0.378）**分布重叠**，卡它必然误伤真小注；
+#   3. 改量「右半字高/格高」：真小注 0.867(中位)~1.000，窄正文字 0.881~0.906，
+#      同样重叠，分不开。
+# 根子在于干扰恰好落在左半，与「左半空着」这个核心信号正面冲突——纯几何量
+# 到头了（与正文粘连切分、夹注型1 同构：图像信号到头，要识别引导）。
+# **宁可漏这一格，不可放开假阳性面**；留给人审兜底。
+SOLO_COL_INK_MIN = 2       # 量跨度时，每列墨量低于此的**不算有墨**。
+                           # 跨度取「最外侧有墨的列」，拿绝对最外点的话
+                           # **一个孤立像素就能毁掉判据**：p8c2s5「袤」在 x=0
+                           # 处有 1px 纸缘残渣，跨度从 ~0.5 被撑到 1.009，
+                           # 右半墨占比 0.995 完全正确却因此落选。
+                           # 全书实测：门槛 1（即不过滤）76 格、2 和 3 都是
+                           # 79 格（多捞回「袤」「茂」「子」，均已看图确认是
+                           # 真小注），2 与 3 结果相同说明不是卡在临界值上。
+
+COLUMN_FRAC_T = 0.25       # 整列判据：非空白格里有这个比例以上量得出缝，就认这是
+                           # 一条**夹注列**（交接闸据此豁免 L1c/L2，见
+                           # `gates/column_gate.jiazhu_column_frac`）。
+                           # bxgb 全书 931 列实测：普通列中位 0.000、p95 0.000、
+                           # p99 0.048；三条真夹注列 0.44 / 0.76 / 1.00。
+                           # 两个分布之间有 0.05~0.44 的空档，阈值取在空档中段。
+
+
+def column_frac(patches: dict[int, np.ndarray], ref_w: float | None = None,
+                ink_threshold: int = INK_THRESHOLD) -> float:
+    """整列判据：这一列有多大比例的非空白格**看起来是双列小字**。
+
+    `patches` 是本列逐格的内容窗口图块（同 `gap_center` 的输入口径）。返回
+    「量得出缝的格数 / 非空白格数」，全空列返回 0。
+
+    **这是给交接闸用的列级量，不是切分判据**——切分仍由 `link_runs` 按
+    连段/对齐/连通体决定，这里只回答"这一列整体上像不像夹注列"。
+    单格判据会被个别左右结构字骗到（模块头有记载），但骗不出整列的高比例：
+    普通正文列偶有 1~2 格命中（p99 0.048），大段夹注列则是半列以上。
+    """
+    nonblank = [p for p in patches.values()
+                if _binary(p, ink_threshold).mean() >= 0.01]
+    if not nonblank:
+        return 0.0
+    hit = sum(1 for p in nonblank if gap_center(p, ref_w, ink_threshold) is not None)
+    return hit / len(nonblank)
+
+
+def solo_notes(patches: dict[int, np.ndarray], runs: dict[int, float],
+               ref_w: float | None = None,
+               ink_threshold: int = INK_THRESHOLD) -> dict[int, float]:
+    """單行小注：小字只占右半列、左半空着的格 → `{格号: 缝中心}`。
+
+    `patches` 同 `gap_center` 的口径（内容窗口内、未裁紧、同一 x 原点），
+    `runs` 是 `link_runs`/`adopt_run_tails` 已经认下的雙行夹注格——**这些格
+    不再参与**（双行段里的半格本来就偏在一侧，重判会把 b 半抢走）。
+
+    返回的缝中心取墨迹左缘（小注的左边界），调用方据此切出 a 半格；左半无墨，
+    不发 b 格。判据与标定见模块头 `SOLO_*` 那一段。
+
+    **与 `link_runs` 的关键差别：不要求连段。** 單行小注大量是孤立一格
+    （bxgb 实测 74 格里 34 格是孤立的，「瀛」「楫」都是），MIN_RUN 那条
+    保护在这里不成立——它防的是"左右结构字被缝骗过"，而这里的判据是
+    "墨整块偏在右半且明显窄"，正文字不会长成这样（最近的落选差 0.06）。
+    """
+    out: dict[int, float] = {}
+    for pos, patch in patches.items():
+        if pos in runs:
+            continue
+        binary = _binary(patch, ink_threshold)
+        total = int(binary.sum())
+        if total < SOLO_MIN_INK:
+            continue
+        w = binary.shape[1]
+        xp = binary.sum(axis=0)
+        # 跨度按「墨量够厚的列」量，不取绝对最外点——见 SOLO_COL_INK_MIN。
+        solid = np.flatnonzero(xp >= SOLO_COL_INK_MIN)
+        if solid.size < 5:
+            continue
+        x0, x1 = int(solid[0]), int(solid[-1])
+        if (x1 - x0 + 1) / float(ref_w or w) >= SOLO_SPAN_MAX:
+            continue
+        if int(binary[:, w // 2:].sum()) / total <= SOLO_RIGHT_FRAC:
+            continue
+        out[pos] = float(x0)
+    return out
+
+
+def right_half_left_edge(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> float:
+    """人裁指认的單行小注格的缝：右半里墨够厚的最左一列（口径同 `solo_notes`
+    取 `x0`）。只在右半找——左半的碎墨正是判据落空的原因，不能让它把缝拉过去。
+    右半找不到够厚的列就退回正中。"""
+    binary = _binary(patch, ink_threshold)
+    w = binary.shape[1]
+    solid = np.flatnonzero(binary[:, w // 2:].sum(axis=0) >= SOLO_COL_INK_MIN)
+    return float(w // 2 + (int(solid[0]) if solid.size else 0))
+
+
 def link_runs(entries: list[tuple[int, tuple[float, float] | None]]
               ) -> dict[int, float]:
     """列上下文：连续、缝对齐的夹注格 → `{格号: 缝中心}`。

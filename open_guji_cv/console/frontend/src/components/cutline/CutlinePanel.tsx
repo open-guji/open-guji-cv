@@ -3,8 +3,13 @@ import { fetchCutlineCases, fetchCutlineVerdicts } from '../../api/cutline'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
 import type { CutlineCase } from '../../types/cutline'
-import { CutlineCard, type CardState } from './CutlineCard'
+import { CL_MINE, CL_STYLE, CutlineCard, type CardState } from './CutlineCard'
 import './cutline.css'
+
+/** 字母 → 切法类型（`CL_STYLE` 的反表）。按一下 = 选中该类型并落定。 */
+const CAND_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(CL_STYLE).map(([kind, s]) => [s.key, kind]),
+)
 
 // 迁移自 v1 static/js/panels/cutline.js（398 行，方案 §四标注「改造复用（分文件）」）。
 // 用户 2026-09-05：「先让我添加一些金标，确定理想位置，再想算法。」
@@ -39,12 +44,25 @@ function defaultPick(c: CutlineCase): number {
   return best >= 0 ? best : (c.chosen ?? 0)
 }
 
-export function CutlinePanel({ book }: { book: string }) {
-  const [pages, setPages] = usePersistedPages('cutline', book, 'body')
+export function CutlinePanel({ book, pages: pagesProp }: { book: string; pages?: string }) {
+  // `pages` 由页面（StepLayout 的板块①）传下来时以它为准；不传则退回
+  // 面板自己记的那份。此前只有后者，于是 Step3 的切线台与 Step7 的阻塞
+  // 切线台圈的是不同批页，看起来「两个台不重合」（计划书 §1.2 实测）。
+  const [ownPages, setOwnPages] = usePersistedPages('cutline', book, 'body')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [kind, setKind] = useState<'r2s' | 'split_char' | 'all'>('r2s')
+  // 第一级筛选：按**处置状态**（计划书 §1.4b）。后端 `scope` 早就支持，
+  // 前端一直没暴露——而这正是 Step3 拖切线台与 Step7 切分裁决台的唯一区别
+  // （后者写死 scope='blocking'）。暴露之后两个台就是同一个台的两个预设。
+  const [scope, setScope] = useState<'all' | 'blocking'>('all')
   const [limit, setLimit] = useState(30)          // 一屏能裁完的量；大批量再手改（2026-09-15 用户定）
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
+  // 「含已跳过」（2026-09-26 用户）：只看未裁时把判过「拿不准」（S）的卡也放出来，回头补裁
+  const [withSkipped, setWithSkipped] = useState(false)
+  const hideDone = (done: string | undefined, todo: boolean, skipped: boolean) =>
+    todo && !!done && !(skipped && done === 'idk')
   const [cases, setCases] = useState<CutlineCase[]>([])
   const [msg, setMsg] = useState('')
   const [cur, setCur] = useState(0)
@@ -60,17 +78,18 @@ export function CutlinePanel({ book }: { book: string }) {
     return batchInput.trim() || `${book}-cutline${suffix}`
   }
 
-  async function load() {
+  async function load(skippedOverride?: boolean) {
+    const skipped = skippedOverride ?? withSkipped
     const b = batch()
     setMsg('载入中…（首次要做整理本对齐，约一分钟）')
     let d
     try {
-      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind)
+      d = await fetchCutlineCases(book, pages || 'body', limit || 30, b, onlyTodo, kind, scope, skipped)
     } catch (e) {
       setMsg('失败：' + (e as Error).message)
       return
     }
-    type DoneRec = { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string; col_h?: number }
+    type DoneRec = { verdict: string; y?: number; polyline?: Array<[number, number]>; cand?: string; col_h?: number; geom_sig?: string | null }
     let done: Record<string, DoneRec> = {}
     try {
       done = (await fetchCutlineVerdicts(b)).verdicts || {}
@@ -86,9 +105,13 @@ export function CutlinePanel({ book }: { book: string }) {
       // drift 档：批次里可能躺着这些 id 的**历史**裁决（批次框留空落到 vol02-cutline 这种老批次，
       // 当初的金标就是那里裁的）。坐标系已过期的不算已裁，更不能把旧折线画到新图上
       // （用户 2026-09-14：「只看未裁没卡片，不选有奇怪的连续折线点」）。只认对当前列高裁过的。
+      // 2026-09-26：先认几何签名——列窗边线变了列高可以不变（vol02:181:7:13 等：旧裁决 col_h 与当前逐像素相等，
+      // 却是对另一版列图裁的，读回来的线整体偏了几十像素）。裁决带签名就按签名判；没带的老裁决在 drift 档一律不认。
       if (dv && c.kind === 'drift') {
-        const sameFrame = dv.col_h != null && Math.abs(dv.col_h - c.col_h) <= 2
-        if (!c.redo && !sameFrame) dv = undefined
+        const sameFrame = dv.geom_sig != null
+          ? dv.geom_sig === c.geom_sig
+          : !c.from_list && (!!c.redo || (dv.col_h != null && Math.abs(dv.col_h - c.col_h) <= 2))
+        if (!sameFrame) dv = undefined
       }
       if (dv) {
         st.done = dv.verdict
@@ -98,7 +121,7 @@ export function CutlinePanel({ book }: { book: string }) {
           const k = (c.candidates || []).findIndex((x) => x.kind === dv.cand)
           if (k >= 0) st.pick = k
         }
-        st.hidden = onlyTodo
+        st.hidden = hideDone(dv.verdict, onlyTodo, skipped)
       }
       next[c.id] = st
     }
@@ -146,9 +169,25 @@ export function CutlinePanel({ book }: { book: string }) {
     cardState.current[c.id].pick = k
     cardState.current[c.id].pickTouched = true
     bump()
-    const cd = c.candidates[k]
-    setMsg(k === 0 ? '选的是「直线」——回车 = 现切点正确'
-      : `选了「${CL_KIND[cd?.kind ?? ''] || ''}」，回车 / C 落定为「切法正确」`)
+  }
+
+  /** 鼠标点判定项：**先选中高亮**，让人看到图上那条线，回车才落定
+   *  （用户 2026-09-17：键盘一步到位，鼠标两步）。 */
+  function arm(i: number, k: number, verdict: string) {
+    const c = cases[i]
+    if (!c) return
+    const st = cardState.current[c.id]
+    if (st.done) { setMsg(`${c.id} 已落定（${st.done}），要改先按 U 重做`); return }
+    if (k >= 0) { st.pick = k; st.pickTouched = true }
+    // 再点一次同一项 = 确认（等价于回车），省得鼠标党还要去够键盘
+    if (st.armed === verdict) { decide(i, verdict); return }
+    st.armed = verdict
+    bump()
+    focus(i)
+    const name = k >= 0
+      ? (CL_STYLE[c.candidates?.[k]?.kind ?? '']?.label || CL_KIND[c.candidates?.[k]?.kind ?? ''] || '这条')
+      : ({ seam_ok: '现役折线缝', idk: '跳过·拿不准' }[verdict] || verdict)
+    setMsg(`已选中「${name}」——看一眼图上的线，回车确认（或再点一次）`)
   }
 
   function toggleMode(i: number) {
@@ -203,6 +242,7 @@ export function CutlinePanel({ book }: { book: string }) {
     if (!c) return
     const st = cardState.current[c.id]
     st.done = undefined
+    st.armed = undefined
     st.hidden = false
     bump()
     focus(i)
@@ -262,8 +302,13 @@ export function CutlinePanel({ book }: { book: string }) {
       client_ts: now, dwell_ms: seenAt.current[c.id] ? now - seenAt.current[c.id] : undefined,
     }
     st.done = verdict
-    if (onlyTodo) st.hidden = true
+    st.armed = undefined      // 落定后清掉「待确认」高亮，免得重开时还亮着
+    if (hideDone(verdict, onlyTodo, withSkipped)) st.hidden = true
     bump()
+    // 先挪焦点、后等写入（2026-09-26）：POST 连带「写完直接消费」（金标 upsert + 产物失效 + 批次计数）
+    // 要 1–2 秒，原来等它返回才 focus，人按完回车要干等。`st.done` 已先置上，重复按不会双写；
+    // 写入失败再把焦点拉回这一张。
+    focus(i + 1)
     try {
       await postEvents({ batch: batch(), step: 'row_segment', unit: 'boundary', kind: 'cutline', events: [row] })
       const n = Object.values(cardState.current).filter((s) => s.done).length
@@ -273,9 +318,8 @@ export function CutlinePanel({ book }: { book: string }) {
       st.done = undefined
       st.hidden = false
       bump()
-      return
+      focus(i)
     }
-    focus(i + 1)
   }
 
   // 键盘快捷键：只在本面板挂载时生效（v1 靠 #view-cutline.active 判断，
@@ -291,12 +335,24 @@ export function CutlinePanel({ book }: { book: string }) {
       const st = cardState.current[c.id]
       if (ev.key === 'ArrowUp') { setY(cur, st.y - step); ev.preventDefault() }
       else if (ev.key === 'ArrowDown') { setY(cur, st.y + step); ev.preventDefault() }
-      else if (ev.key === 'Enter') { decide(cur, 'moved'); ev.preventDefault() }
-      else if (ev.key === 'o' || ev.key === 'O') { decide(cur, 'ok'); ev.preventDefault() }
+      // 回车：有鼠标点中待确认的就落定它；否则落定「自选」（拖/画出来的线）
+      else if (ev.key === 'Enter') { decide(cur, st.armed || 'moved'); ev.preventDefault() }
       else if (ev.key === 'g' || ev.key === 'G') { decide(cur, 'seam_ok'); ev.preventDefault() }
-      else if (ev.key === 'c' || ev.key === 'C') { decide(cur, 'cand'); ev.preventDefault() }
-      else if (ev.key === 'v' || ev.key === 'V') { decide(cur, 'overlap'); ev.preventDefault() }
       else if (ev.key === 's' || ev.key === 'S') { decide(cur, 'idk'); ev.preventDefault() }
+      else if (CAND_KEY[ev.key.toUpperCase()]) {
+        // 切法类型的固定字母（2026-09-17 用户定）：一类一个键，按下 = 选中并落定。
+        // 此前是「先选候选、再按 C 确认」两步，而 O/↵/G/C 四个动作语义交叉（折线正确时
+        // 四个都说得通，人不知道点哪个）。类型本身就是判定项，一步到位。
+        const want = CAND_KEY[ev.key.toUpperCase()]
+        const k = (c.candidates || []).findIndex((x) => x.kind === want)
+        if (k >= 0) {
+          pick(cur, k)
+          decide(cur, want === 'straight' ? 'ok' : 'cand')
+        } else {
+          setMsg(`这条格线没有「${CL_STYLE[want]?.label || want}」候选`)
+        }
+        ev.preventDefault()
+      }
       else if (ev.key === 'ArrowRight' || ev.key === 'j') { focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'ArrowLeft' || ev.key === 'k') { focus(cur - 1); ev.preventDefault() }
       else if (['1', '2', '3', '4'].includes(ev.key)) {
@@ -316,9 +372,17 @@ export function CutlinePanel({ book }: { book: string }) {
       <h2>拖切线 <span className="muted">粘连格线（R2s）：把横线拖到你认为该切的位置，攒成 touching-cuts 金标</span></h2>
       <div className="cl-toolbar">
         <label className="muted">页 <input value={pages} onChange={(e) => setPages(e.target.value)} size={10} title="body = 正文页；或 3-6,9" /></label>
+        <label className="muted">范围
+          <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}
+                  title="全部 = 判据筛出的所有可疑切点；只看闸拦下的 = 顺序闸正挡着字卡的那批（与 Step7「切分裁决」同一批）">
+            <option value="all">全部</option>
+            <option value="blocking">只看闸拦下的</option>
+          </select>
+        </label>
         <label className="muted">类型
           <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}
-                  title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙">
+                  disabled={scope === 'blocking'}
+                  title="r2s = 真粘连（切点有墨、无墨谷）；切进字里 = 一矮一高且切点落在字内部空隙。选「只看闸拦下的」时本项不生效——挡卡的判据本就是两者都查">
             <option value="r2s">粘连 R2s</option>
             <option value="split_char">切进字里</option>
             <option value="all">两者</option>
@@ -331,10 +395,15 @@ export function CutlinePanel({ book }: { book: string }) {
           // 原来只在「载入」时生效，改成即时——取消勾选立刻把已裁的卡放回来。
           const v = e.target.checked
           setOnlyTodo(v)
-          for (const st of Object.values(cardState.current)) st.hidden = v && !!st.done
+          for (const st of Object.values(cardState.current)) st.hidden = hideDone(st.done, v, withSkipped)
           bump()
         }} /> 只看未裁</label>
-        <button onClick={load}>载入</button>
+        <label className="muted" title="勾上：「只看未裁」时把判过「拿不准」（S）的卡也列出来，回头补裁（会重新载入）"><input type="checkbox" checked={withSkipped} onChange={(e) => {
+          const v = e.target.checked
+          setWithSkipped(v)
+          load(v)
+        }} /> 含已跳过</label>
+        <button onClick={() => load()}>载入</button>
         <span className="muted">{msg}</span>
       </div>
       {cases.length > 0 && (
@@ -342,15 +411,25 @@ export function CutlinePanel({ book }: { book: string }) {
           <summary>怎么裁 · 快捷键速查</summary>
           <div className="cl-help-grid">
             <div><b>判定（点一个即落定）</b>
-              O 现切点正确 · ↵ 把线拖到位后落定（没动过 = 现切点正确）· G 绿色折线缝已正确 ·
-              C 选中的算法切法正确（算法给出多种切法时才出现这一行；点过切法后直接回车也算）· V 上下字重叠、切在哪都伤字，线放折中处 · S 拿不准</div>
+              判定项 = **切法类型**，一类一个固定字母与颜色。
+              <b>键盘</b>按字母 = 直接落定：A 格线（直线）· D 折线·窄 · F 折线·宽 · W U-Net ·
+              R/T 按格高 · G 现役折线缝 · S 跳过。
+              <b>鼠标</b>点一下只**选中**（虚框高亮，图上那条线变粗），看清楚再按 ↵（或再点一次）确认。
+              自己拖格线或画折线（P）之后会多出一条朱红的「自选」，同样按 ↵ 确认。</div>
             <div><b>干扰（可多选，落定前点，评测里分开算）</b>
               1 污点 · 2 界行/版框 · 3 邻字残墨 · 4 其他</div>
             <div><b>工具</b>
               在图上点击或拖动定位 · ↑/↓ 1px（Shift 5px）· ←/→ 翻卡 ·
               P 折线模式：点空白处加点、点中已有点可拖动、右键删点、Backspace 撤最后一点、X 清空、↵ 落定 · U 重做已落定的卡</div>
             <div><b>图例</b>
-              蓝虚线 = 现役直线切点 · 绿虚线 = 现役折线缝 · 蓝点虚线 = 窄走廊候选 · 黄点虚线 = 宽走廊候选。每次落定立刻写入事件，刷新不丢。</div>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.straight.color }}>格线</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.seam_narrow.color }}>折线·窄</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.seam_wide.color }}>折线·宽</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.unet_seam.color }}>U-Net</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.period_up.color }}>按格高↑</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_STYLE.period_dn.color }}>按格高↓</span>
+              <span className="cllg" style={{ ['--cc' as string]: CL_MINE }}>自选（你拖/画的）</span>
+              　颜色与右侧判定按钮一一对应；选中的那条会加粗变实线。每次落定立刻写入事件，刷新不丢。</div>
           </div>
         </details>
       )}
@@ -368,7 +447,7 @@ export function CutlinePanel({ book }: { book: string }) {
               onMovePoint={(k, x, y) => movePoint(i, k, x, y)}
               onRemovePoint={(k) => removePoint(i, k)}
               onDecide={(v) => decide(i, v)}
-              onPick={(k) => pick(i, k)}
+              onArm={(k, v) => arm(i, k, v)}
               onToggleMode={() => toggleMode(i)}
               onClearPoly={() => clearPoly(i)}
               onReopen={() => reopen(i)}

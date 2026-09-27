@@ -9,8 +9,8 @@
 `GlyphMatcher` 查的是 `output/glyph.db`，那是**外部可变状态**：库长大了、
 某个条目改判了，同一张图块的判决就会变，而 Step 的代码、参数、上游产物
 一个都没动。指纹里不带它，产物就永远显示 fresh、拿着过期判决往下走。
-所以 `GlyphMatchStep` 把库的 `(mtime, size, 条目数)` 摘进参数，见那一步的
-`db_fingerprint()`。
+所以 `GlyphMatchStep` 把库的**内容指纹**（四表的条数/rowid/时间戳；2026-09-20 前是
+`(mtime, size, 条目数)`）摘进参数，见那一步的 `db_fingerprint()`。
 """
 
 from __future__ import annotations
@@ -56,6 +56,7 @@ class MatchRec(BaseModel):
     #                                        # unsure 档：字 → cov 先验，降序
     guard: str | None = None                 # never_match | conflict
     n_verified: int = 0
+    via: str | None = None                   # same 档的来源：None = 匹配器直接判；"consensus:<n>" = 共识升档（见 steps/glyph_match.consensus_same）
     cand_variants: list[CandidateMatch] = Field(default_factory=list)
     """`char_index` 里同字位 `CharRec.cand_variants` 每个候选试切字块各自的
     库匹配结果；空列表 = 该字位两侧都是单一候选，见 `CharRec.cand_variants`
@@ -85,6 +86,10 @@ class OcrRec(BaseModel):
     topk: list[tuple[str, float]] = Field(default_factory=list)
     #                                        # (字, prob)，已含简→繁扩展
     engine: str = ""
+    error: str | None = None
+    """这一格识别本身失败的原因（2026-09-26 加，`steps/ocr_candidates.py` 写）。
+    `topk` 为空且这个字段也是 None：正常跑完但引擎没吐出候选；这个字段非空：
+    `rec_topk` 对这一格抛了异常，`ocr_candidates.py` 拿它算整页失败率的分子。"""
 
 
 class ColumnOcr(BaseModel):
@@ -128,10 +133,56 @@ class ColumnRare(BaseModel):
 class PageRare(BaseModel):
     page: int
     model_fingerprint: str = ""      # checkpoint + 模板集指纹，见 steps.rare_candidates
+    #: 这一页各候选源各出了多少条（`{"emb": 3400, "cnn": 12, ...}`）。
+    #: 2026-09-17 加：此前产物里看不出哪一路干了活，北行日錄整条 embedding 路
+    #: 静默死掉、候选全由分类头独撑，是靠逐条数 `font` 字段才反推出来的。
+    #: 正常刻本页应当以 `emb` 为主；`emb` 为 0 就是那一路又死了，立刻查。
+    sources: dict[str, int] = Field(default_factory=dict)
     columns: list[ColumnRare] = Field(default_factory=list)
 
     def column(self, col: int) -> ColumnRare | None:
         return next((c for c in self.columns if c.col == col), None)
+
+
+class GroupRec(BaseModel):
+    """词典严格异体分组（方案§三 `groups`）：组内是同一个字的不同写法。"""
+    id: str
+    members: list[str] = Field(default_factory=list)
+    why: str = ""                            # 异体关系依据（词典来源）
+
+
+class AiDropReason(BaseModel):
+    """AI 排除某候选的理由（`AiEvidence.drop` 的展开，卡片「排除项」展开显示）。"""
+    c: str
+    why: str = ""
+
+
+class AiRankItem(BaseModel):
+    """AI 对某个词典分组的排序打分（`AiEvidence.rank` 的一项）。"""
+    group: str                               # 对应 GroupRec.id
+    p: float = 0.0
+    why: str = ""
+
+
+class AiEvidence(BaseModel):
+    """Step6 AI 判断层证据（方案-词典加AI接入管线 §三；只对「问过 AI」的
+    格有——图像两路不一致或缺一路的格，北行约 11%）。
+
+    字段缺失（`DecisionRec.ai is None`）时卡片按老逐像素行为走，不显示
+    AI 部分——四庫等书至今没有接这段。
+    """
+    runs: int = 0                            # 跑了几次；排除取并集、放行要各次一致
+    drop: list[str] = Field(default_factory=list)          # 各次都排除的候选（并集）
+    drop_why: list[AiDropReason] = Field(default_factory=list)   # 排除理由（卡片展开用）
+    rank: list[AiRankItem] = Field(default_factory=list)   # 按 p 降序的分组排序
+    confidence: str = ""                     # 高 | 中 | 低
+    need_human: str = ""
+    conflict_with_img: bool = False          # AI 首组不含图像共识 → 卡片标「疑似刻本讹字/整理本改字」
+    #: 各次运行首组的代表字，长度 == runs；只在 runs>=2 且互不一致时才有分辨意义
+    #: （**2026-09-27 C 道暂拟**：方案 §三 原定稿没有这个字段，卡片要标「两次
+    #: 运行首组不一致」需要它，已 cross 给 D-Step6/H 确认字段名与是否并入导出脚本）
+    runs_top: list[str] = Field(default_factory=list)
+    fingerprint: dict[str, str] = Field(default_factory=dict)
 
 
 class DecisionRec(BaseModel):
@@ -149,6 +200,10 @@ class DecisionRec(BaseModel):
     模块头【2026-09-10】）。只调 `ranked` 顺序，不参与 `char`/`source`——
     是否采信仍由人审决定，这个字段只是给审阅界面一个「模型觉得是这个」
     的提示。None＝没问过，或问了但答案不在候选内／解析失败。"""
+    groups: list[GroupRec] = Field(default_factory=list)
+    ai: AiEvidence | None = None
+    """Step6-AI 三层证据里的判断层（方案 §三）。只加可选字段，不改既有字段
+    （2026-09-26 并行分工 §65 定的口径），四庫等未接这段的书留空。"""
 
 
 class ColumnDecision(BaseModel):
@@ -175,15 +230,8 @@ class AdmitRec(BaseModel):
     sub: str | None = None
     admit: bool = False
     channel: str | None = None          # match_solo | match_solo_ocr | context | ...
-    char: str | None = None             # 拟进库的字（字形层，照录图上的形）
-    reading: str | None = None
-    """文意读法（语义层）。与 `char` 不同就是一次**字形→文意的转换**。
-
-    刻本刻「㫖」而整理本作「旨」、刻「彚」而整理本作「彙」——字形库存前者，
-    文本录入用后者，两条线不许互相污染（charset_and_lm.md §四）。整理本参与
-    的通道（dual / match_replace / match_ref_weak / match_margin）会填这一栏，
-    `char` 仍照录图上的形。None = 与 `char` 相同。
-    """
+    char: str | None = None             # 这一格的字：刻本字形（照录图上的形）。全流程只有这一个字
+    # 2026-09-26 起没有「读法」（reading）字段：用户定「所有地方都用字形」。老产物里的 reading 键读入时忽略。
     provenance: str = ""                # match | align | context —— 设计 §3.2 分级
     doubts: list[str] = Field(default_factory=list)
     evidence: dict = Field(default_factory=dict)
@@ -235,6 +283,7 @@ class PageAlignRef(BaseModel):
     vote_frac: float = 0.0                   #   已经放弃（候选太少/没有产物/语料读不到），
     dominance: float | None = None           #   不是投票判据本身没过线
     chars: list[AlignRec] = Field(default_factory=list)
+    n_lib_dropped: int = 0                   # 被「库证据闸」拦下的 replace 位数（align_ref 模块头 2026-09-22）
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(

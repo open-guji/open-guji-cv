@@ -65,19 +65,16 @@ def group_view(book: str, pages: str = "dev_set", edition: str = "",
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub,
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
                     # 产物落后时用人裁的字形当 char，格子才落在对的那一列
-                    "char": r.char or human, "reading": r.reading, "channel": r.channel,
+                    "char": r.char or human, "channel": r.channel,
                     "state": f.get("state") or ("lib_same" if r.admit else None),
                     # 裁过但产物没跟上 → 标 stale，前端提示「重跑管线后生效」
                     "stale": bool(human and not r.admit and f.get("state") == "open"),
-                    # 判据 E 的分母：自动放行的**异体位**（reading≠char，或走了 variant_form
-                    # 定形）。`audit` 标出「还没人核过的异体位」——那才是抽审该点的格；
+                    # 判据 E 的分母：自动放行且走了 variant_form 定形的**异体位**。`audit` 标出「还没人核过的异体位」——那才是抽审该点的格；
                     # 「有/洧」「正/政」这种账本噪声组即便 100 格也一条都不贡献。
                     "variant": bool(r.admit and r.char
-                                    and ((r.reading and r.reading != r.char)
-                                         or f.get("state") in ("fixed_lib", "fixed_form"))),
+                                    and f.get("state") in ("fixed_lib", "fixed_form")),
                     "audit": bool(r.admit and r.char and r.id not in truth
-                                  and ((r.reading and r.reading != r.char)
-                                       or f.get("state") in ("fixed_lib", "fixed_form"))),
+                                  and f.get("state") in ("fixed_lib", "fixed_form")),
                     "pending": pending, "human": human,
                     "lib": f.get("lib"), "human_n": f.get("human"),
                 })
@@ -92,11 +89,9 @@ def group_view(book: str, pages: str = "dev_set", edition: str = "",
         # 待审在前，其次「待抽审的异体位」——判据 E 只认这些格，人该先点它们
         ts.sort(key=lambda t: (not t["pending"], not t.get("audit"),
                                t["page"], t["col"], t["slot"]))
-        refd = [m for m, fm in g["forms"].items() if fm["ref"] > 0 and m not in g.get("ref_minor", [])]
         out.append({
             "canonical": canon, "members": g["members"], "forms": g["forms"],
             "ref_policy": g["ref_policy"], "preferred": g.get("preferred"),
-            "reading_default": refd[0] if len(refd) == 1 else canon,
             "n_tiles": len(ts), "n_pending": n_pending, "n_stale": n_stale,
             "n_audit": n_audit,
             "tiles": ts[:limit_tiles], "truncated": len(ts) > limit_tiles,

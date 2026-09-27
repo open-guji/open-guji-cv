@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { fetchHeadColCards, fetchHeadColVerdicts } from '../../api/headRaise'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
@@ -19,8 +20,14 @@ import './borderReview.css'
 
 const STEP = 'row_segment'
 
-export function HeadRaisePanel({ book }: { book: string }) {
-  const [pages, setPages] = usePersistedPages('headcol', book, 'dev_set')
+export function HeadRaisePanel({ book, pages: pagesProp }: { book: string; pages?: string }) {
+  // `pages` 由页面（StepLayout 的板块①）传下来时以它为准；不传则退回
+  // 面板自己记的那份。此前只有后者，于是 Step3 的切线台与 Step7 的阻塞
+  // 切线台圈的是不同批页，看起来「两个台不重合」——而机制上
+  // blocking ⊆ all 恒成立（计划书 §1.2 实测）。
+  const [ownPages, setOwnPages] = usePersistedPages('headcol', book, 'dev_set')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [onlySuspect, setOnlySuspect] = useState(false)
@@ -152,7 +159,7 @@ export function HeadRaisePanel({ book }: { book: string }) {
                   「容器还没高度」会整排不触发（实测 9 张卡只显示第 1 张）。
                   一页 9 张列带图，直接加载代价可以接受。 */}
               <div className="hr-img-wrap">
-                <img src={`${c.img}&overlay=${overlay ? 1 : 0}`} alt="" />
+                <img src={withWorkspace(`${c.img}&overlay=${overlay ? 1 : 0}`)} alt="" />
               </div>
               <div className="hr-row">
                 <span className="hr-lab">抬头</span>

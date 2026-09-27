@@ -63,3 +63,24 @@ def test_long_replace_run_is_dropped():
     got = _labeled(hyp, ref)
     for slot in (3, 4, 5, 6, 7):
         assert slot not in got, f"5 字的 replace 段不该收，slot {slot} 却进来了"
+
+
+def test_align_ops_enumerates_ungated_and_len_gate_matches_label_page():
+    """`align_ops` 拆出来之后（2026-09-22，给 T7 评测用）：它枚举**全部**等长 replace 位，
+    `replace_len_gate` 逐段判过不过，两者拼起来必须与 `label_page` 收的完全一样。
+    长段（4 字）在 `align_ops` 里看得见、在 `label_page` 里看不见。"""
+    from open_guji_cv.clustering.align_label import align_ops, flank_runs, replace_len_gate
+    hyp = "便講習故甲乙丙丁一口誤" + TAIL      # 前段 4 字等长 replace + 后段 1 字 replace
+    ref = "便講習故曰口訣今一口訣" + TAIL
+    idx = build_ngram_index(ref)
+    norm, window, ops = align_ops(_slots(hyp), ref, idx)
+    rep = [(n, op) for n, op in enumerate(ops) if op[0] == "replace" and op[2] - op[1] == op[4] - op[3]]
+    assert any(op[2] - op[1] >= 4 for _, op in rep), "4 字长段该被枚举出来"
+    ungated = {norm[op[1] + k][1] for _, op in rep for k in range(op[2] - op[1])}
+    gated = {norm[op[1] + k][1] for n, op in rep if replace_len_gate(ops, n) for k in range(op[2] - op[1])}
+    labeled = {s for s, (g, h) in _labeled(hyp, ref).items() if g != h}
+    assert gated == labeled
+    assert ungated > gated                      # 长段只在 ungated 里
+    for n, op in rep:
+        p, q = flank_runs(ops, n)
+        assert p >= 0 and q >= 0

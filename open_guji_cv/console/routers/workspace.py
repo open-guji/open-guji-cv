@@ -30,20 +30,25 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from ..auth import require_reviewer
 from ...core.workspace import describe, workspace_root
 
-router = APIRouter()
+#: 只读、只列清单——真正的越权闸在 `WorkspaceMiddleware`（白名单，见模块头注）。
+#: **不是** admin 专属：选工作区/选书是校对者进控制台的第一步（`WorkspacePickerPage`
+#: 挂在根路径，谁登录进来都要经过它），2026-09-26 鉴权改造第一版把它划成
+#: admin-only 之后前端实测发现校对者连书都选不到，改回 reviewer。
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _ws_id(d: Path) -> str:
     """工作区的 id——**URL 上露出来的就是这个**（`/<ws>/<book>/step/...`）。
 
-    默认取目录名去掉 `-workspace` 后缀（`siku-zongmu-workspace` → `siku-zongmu`）：
-    短、稳定、一眼看得出是哪本书。工作区里放一个 `workspace.yaml` 写
-    `id: 自定义` 可以覆盖——目录名将来改了、或者两台机器上叫法不同时，
-    URL 不必跟着变。
+    默认取目录名去掉 `-workspace` 后缀（`xx-workspace` → `xx`）：短、稳定。
+    **`guji-workspace` 那套目录名是 `<book-index id>-<书名>`**，不以 `-workspace`
+    结尾，退回来就是一整串中文——那种工作区**必须**放 `workspace.yaml` 写
+    `id: 自定义` 覆盖（四庫總目写的是 `siku-zongmu`，与旧仓时期的 URL 一致）。
     """
     import yaml
     f = d / "workspace.yaml"

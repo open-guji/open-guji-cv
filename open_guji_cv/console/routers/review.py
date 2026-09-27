@@ -9,11 +9,14 @@
 from __future__ import annotations
 
 import cv2
-from fastapi import APIRouter, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.anchor import x_tr_to_tl
 from ...core.book import load_book
@@ -22,11 +25,12 @@ from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.cards import cards
 from ...review.cell_shrink_rand import rand_sample
-from ...review.verdict_view import review_verdicts
+from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
 from ...utils.preclean import effective_raw_path
+from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -40,7 +44,8 @@ router = APIRouter()
 
 @router.get("/api/review/cards")
 def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
-                     only: str = "review", gate_cut: bool = True) -> dict:
+                     only: str = "review", gate_cut: bool = True,
+                     skip_decided: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -48,8 +53,12 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     `gate_cut`：顺序闸——格位旁边那条切分线有**多种切法**且还没 review 时，
     这个字位先不出卡（用户 2026-09-10：先 review 切分线，再 review 字符）。
     被挡下的在返回值的 `blocked` 里，面板显示剩余条数。
+
+    `skip_decided`：跳过全书所有批次已裁过的字位（用户 2026-09-16，默认开）——
+    `limit` 于是数的是**净新卡**，载入 N 张就是 N 张真待裁的。
     """
-    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut)
+    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut,
+                 skip_decided=skip_decided)
 
 
 
@@ -57,6 +66,18 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
 def api_review_verdicts(batch: str) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。装配在 `review/verdict_view.py`。"""
     return review_verdicts(batch, deps.event_log())
+
+
+@router.get("/api/verdicts")
+def api_verdicts(batch: str, question: str | None = None) -> dict:
+    """**通用读回**：本批（可按 question 过滤）已裁条目的原始 payload。
+
+    收敛此前的四份实现（本文件 + cutline / column_review / slot_count_review /
+    border_review 各一份，返回形状四种）。新增裁决台直接用这条，不必再抄。
+    去重按 `(question, key)` 而非 key——切线与定字的 key 形状完全一样，
+    只按 key 去重会把没裁过的字位误当已裁。详见 `verdicts_by_question`。
+    """
+    return verdicts_by_question(batch, question, deps.event_log())
 
 
 
@@ -270,7 +291,7 @@ def api_review_context_img(book: str, page: int, col: int, slot: int, around: in
         path = ctx.materialize("column_image", column_key(page, col))
     except Exception as e:   # noqa: BLE001
         raise ImageMissing(f"列图算不出来: {e}") from e
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("列图读不出来")
     h = img.shape[0]
@@ -330,7 +351,7 @@ def api_cell_shrink_rand_context(book: str, page: int, col: int, slot: int,
     p = effective_raw_path(b, page)
     if not p.exists():
         raise ImageMissing("原图缺失")
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ImageMissing("原图读不出来")
     h, w = img.shape
@@ -392,3 +413,58 @@ def _step3_seam_lines(store, book: str, page: int, col: int, slot: int
             pts.append((int(round(x_tr_to_tl(px_tr, page_w))), int(round(py))))
         lines.append(pts)
     return lines
+
+
+
+# ── 复核队列：同一个格被不同人裁法不一致（2026-09-26，任务书 §做什么·4）───
+#
+# **只读、只标记与查询**——不改 `feedback/consumers.py` 的写入流程（那是 H 道
+# 「人裁单写者」在做跨进程锁的地方，见任务书「不要碰」）。事件日志本来就是
+# 追加写：两个校对者对同一个格提交不同裁决，两条事件**都已经**在日志里，
+# 不会互相覆盖——会被覆盖的只是下游裁决表里那一条（后到覆盖，见
+# `feedback/consumers.py` 头注），这里不动那条路径，只是多扫一遍事件日志，
+# 把"两个人对同一个格给出不同答案"这件事挑出来给复核台看。
+
+_IGNORE_PAYLOAD_KEYS = {"t", "client_ts", "dwell_ms"}
+
+
+def _event_signature(payload: dict) -> str:
+    """裁决的「内容」签名，去掉跟裁得对不对无关的计时字段。"""
+    filtered = {k: v for k, v in payload.items() if k not in _IGNORE_PAYLOAD_KEYS}
+    return json.dumps(filtered, sort_keys=True, ensure_ascii=False, default=str)
+
+
+@router.get("/api/review/conflicts")
+def api_review_conflicts(batch: str | None = None, book: str | None = None) -> list[dict]:
+    """同一个格（`step`+`unit`+`kind`+`key`）被不同校对者（`event.reviewer`）
+    裁出不同结果——两条都在事件日志里，这里只挑出「不一致」的那些分组供复核。
+
+    `reviewer` 是可选字段（老事件没有，见 `feedback/events.py`），没带这个字段
+    的事件（老数据、非控制台直连写入的收割数据）不参与比对。同一人对同一个格
+    改判多次，只看他**最后一条**（按 `(batch, seq)` 排序）。
+    """
+    evs = deps.event_log().read(batch) if batch else list(deps.event_log().iter_all())
+    if book:
+        evs = [e for e in evs if e.target.book == book]
+    groups: dict[tuple, list] = {}
+    for e in evs:
+        if not e.reviewer:
+            continue
+        groups.setdefault((e.target.step, e.target.unit, e.kind, e.target.key), []).append(e)
+    out = []
+    for (step, unit, kind, key), group in groups.items():
+        last_by_reviewer = {}
+        for e in sorted(group, key=lambda x: x.order):
+            last_by_reviewer[e.reviewer] = e
+        if len(last_by_reviewer) < 2:
+            continue
+        sigs = {r: _event_signature(e.payload) for r, e in last_by_reviewer.items()}
+        if len(set(sigs.values())) < 2:
+            continue
+        first = next(iter(last_by_reviewer.values()))
+        out.append({
+            "step": step, "unit": unit, "kind": kind, "key": key, "book": first.target.book,
+            "reviewers": [{"reviewer": r, "event_id": e.id, "ts": e.ts, "payload": e.payload}
+                         for r, e in sorted(last_by_reviewer.items())],
+        })
+    return out

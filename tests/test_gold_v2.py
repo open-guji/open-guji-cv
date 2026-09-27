@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
 """P2 金标层：四种旧载体适配器、分片枚举、迁移、冲突处理。
 
-真实数据集在隔壁仓，缺了就跳过；合成用例覆盖每种载体的形态分支，
-尤其是**报告式** expected.json（阈值 + 嵌套条目）——第一版就是在这里把阈值名
-当成了条目 id。
+合成用例覆盖每种载体的形态分支，尤其是**报告式** expected.json（阈值 + 嵌套
+条目）——第一版就是在这里把阈值名当成了条目 id。
+
+2026-09-20：三条「真实数据集」用例已删。它们断言的是隔壁 `open-guji-dataset`
+里各分片的**条目数**（`column-warp: 146`、`instances: 1154`…）与分片总数
+`>= 30`。那不是这个仓的代码行为，是那个仓的数据现状：
+
+- 每导一批人裁就要回来改数字。改到最后，那条用例的注释长到 **40 行**，
+  全是「这次从 114 变 115 是因为…、从 1108 变 1154 是因为…」——一份写错
+  地方的变更日志。
+- 数据集不在（云端、别人的机器）就整条 skip，等于没有。
+
+数据集自身的完整性该由数据集那边守（它有自己的 CI 与 `guji gold` 命令）；
+这里留下的是**载体适配与迁移的代码行为**，全部自备数据。迁移无损那条
+改成在自造的旧载体上跑同一个校验器（`scripts/verify_gold_migration.py`），
+测的还是同一段逻辑，只是不再需要真数据集。
 """
 
 from __future__ import annotations
@@ -18,8 +31,6 @@ from open_guji_cv.gold.adapters.base import Adapter
 from open_guji_cv.gold.store import GoldStore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DATASET = REPO_ROOT.parent / "open-guji-dataset"
-needs_dataset = pytest.mark.skipif(not DATASET.exists(), reason="需要 open-guji-dataset")
 
 
 def _write(p: Path, obj) -> None:
@@ -262,110 +273,64 @@ def test_drift_keep_recheck_nofp_missing(tmp_path):
     assert store.get("s", "same").status == "active"
 
 
-# ── 真实数据集 ───────────────────────────────────────────────────────
-@needs_dataset
-def test_real_dataset_all_shards_readable():
-    store = GoldStore(DATASET)
-    shards = store.shards()
-    assert len(shards) >= 30
-    empty = []
-    for sh in shards:
-        items = store.list(sh)
-        if not items:
-            empty.append(sh)
-        else:
-            assert all(i.id for i in items), f"{sh} 有空 id"
-    # truncation 是全自动统计型分片，本就没有条目级金标
-    assert empty == ["char-segmentation/truncation"], empty
+# ── 迁移无损（自造旧载体）────────────────────────────────────────────
 
-
-@needs_dataset
-def test_real_migrated_shards_are_items():
-    """已迁分片的条数与各自 README / metadata 记载对得上。"""
-    store = GoldStore(DATASET)
-    # ⚠️ 这些数字随上游扩金标、人裁回流而变，**不是常量**。改动时要说清
-    # 增量从哪来：
-    #   column-warp 114 → 115：main 那边新增 vol01_42_c9（Step1 最外线次候选轮）
-    #   instances   559 → 571：控制台定字裁决回流的 12 条切分缺陷
-    #                （9 truncated + 3 contaminated，2026-09-04 用户实裁）
-    #   instances   600 → 614：p44-56 裁决回流 14 条（其中 14 条 seg_defect
-    #                集中在列尾 slot 19~21——那批页字距极挤，字与字物理相连，
-    #                属图像极限而非算法缺陷，见 review_loop_sop.md 判据 C2）
-    #   instances   582 → 600：p15-29 新页裁决回流 18 条（用户 2026-09-04 审
-    #                完 12 页新正文页，其中 9 条 seg_defect 集中在 slot 2
-    #                ——那批正是暴露「版框钉桩切字顶」的证据）
-    #   instances   571 → 582：第二轮裁决再回流 11 条
-    #                （10 truncated + 1 contaminated，页 11/151/137/60/70）
-    #                核实办法：带 source_events 的条目共 23 条，其中
-    #                只挂 1 个事件的 11 条就是本轮新增——不是迁移漏条。
-    #   instances   614 → 1024：不是一次性跳变，是 open-guji-dataset 里 16 条
-    #                已提交历史（commit db01e024 起到 bf168364）逐批累积——
-    #                vol01/vol02 大批正文人审事件回流、rand_human 分片新增
-    #                （Step4 随机层真人核校）、多轮标注账复核（愈合/保留改判）。
-    #                核实办法：`git log --oneline -- char-segmentation/instances/items.jsonl`
-    #                能看到全部落地的提交，且该文件在 dataset 仓 `git status`
-    #                里干净（无未提交改动）——是已经定档的金标，不是迁移漏条。
-    #   column-split 60 → 130：**不是本轮改坏，是 dataset 仓有 70 条未提交的
-    #                新增**（`git status` 在 open-guji-dataset 里能看到
-    #                `border-detection/column-split/items.jsonl` 有本地改动未
-    #                commit）。新增的 70 条 id 前缀全是 `head:`（如
-    #                `head:vol01:26`），是 2026-09-12～13 新上线的「抬头列级
-    #                标注台」（commit 3ecd2e07b8 附近，overview 任务卡
-    #                「Step1 抬头检测」）产出的人裁金标（label_origin=human，
-    #                source_events 指向 `evt_vol0{1,2}-head-review_*`），verdict
-    #                取值是 yes/no（8 yes / 62 no），与原来 60 条 `cols:` 前缀
-    #                的 ok/extra/miss verdict 体系是两套并存的判据，不冲突。
-    #                原 60 条 `cols:` 条目内容与分布完全未变（仍是
-    #                ok 56 / extra 2 / miss 2，见下方断言）。数字对不上先查
-    #                是「金标长大了」还是「迁移漏了」，别直接改数——这次两条
-    #                都是长大：一条是已提交的真实历史演进，一条是同仓另一
-    #                功能刚产出、还没来得及 commit 的真实新金标。
-    expect = {"border-detection/column-split": 130,
-              "char-segmentation/column-warp": 115,
-              "char-segmentation/instances": 1024,
-              "page-type": 394,
-              "column-layout": 36}
-    for sh, n in expect.items():
-        if not store.items_path(sh).exists():
-            pytest.skip(f"{sh} 还没迁")
-        assert store.carrier(sh) == "items"
-        assert len(store.list(sh)) == n
-    # 第一轮界行裁决（id 前缀 cols:，60 条）：ok 56 / extra 2 / miss 2。
-    # 2026-09-13 起同一分片里并存第二套判据——抬头列级标注台产出的
-    # id 前缀 head:（70 条，verdict 取 yes/no）——按前缀分开统计，
-    # 不然两套 verdict 词表混在一个 dist 里对不上任何一边的账。
-    dist: dict[str, int] = {}
-    head_dist: dict[str, int] = {}
-    for i in store.list("border-detection/column-split"):
-        v = i.expected.get("verdict")
-        if i.id.startswith("head:"):
-            head_dist[v] = head_dist.get(v, 0) + 1
-        else:
-            dist[v] = dist.get(v, 0) + 1
-    assert dist == {"ok": 56, "extra": 2, "miss": 2}
-    assert head_dist == {"yes": 8, "no": 62}
-
-
-@needs_dataset
-def test_real_migration_is_lossless():
+def test_migration_is_lossless_against_the_verifier(tmp_path):
     """**迁移无损**：items.jsonl 还原回旧格式后，与旧文件逐条相同。
 
-    这是迁移的核心保证——载体变了、内容不许变。校验器与
-    `scripts/verify_gold_migration.py` 同源。
+    这是迁移的核心保证——载体变了、内容不许变。校验器就是
+    `scripts/verify_gold_migration.py`（生产用的那个），这里拿它跑自造的分片。
+
+    2026-09-20 改：原先是拿它去扫真数据集里所有已迁分片，数据集不在就 skip。
+    校验器的逻辑跟分片是哪个仓的无关，自造一份反而能把**四种旧载体各造一遍**，
+    覆盖面比「真数据集里碰巧有哪几种」稳。
     """
     import importlib.util
+
     spec = importlib.util.spec_from_file_location(
         "verify_gold_migration", REPO_ROOT / "scripts" / "verify_gold_migration.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
-    store = GoldStore(DATASET)
-    migrated = [s for s in store.shards() if store.items_path(s).exists()]
-    if not migrated:
-        pytest.skip("还没有迁过的分片")
-    bad = []
-    for sh in migrated:
+    root = tmp_path / "ds"
+    # flat_expected：扁平数组
+    _write(root / "flat" / "expected.json", [
+        {"book": "vol01", "page": 1, "col": 2, "idx": 3, "quality": "clean"},
+        {"book": "vol01", "page": 4, "col": 5, "idx": 6, "quality": "truncated"},
+    ])
+    # samples_dir：逐样本一个目录
+    _write(root / "samples" / "samples" / "001" / "expected.json",
+           {"layout": "cut_half", "lines_per_page": 9})
+    # verdicts：人裁轮次
+    (root / "verdicts").mkdir(parents=True)
+    (root / "verdicts" / "verdicts_r1.jsonl").write_text(
+        '{"id":"vol01:1:1:1","verdict":"ok","t":1}\n', encoding="utf-8")
+
+    store = GoldStore(root)
+    for sh in ("flat", "samples", "verdicts"):
+        store.migrate(sh)
+        assert store.carrier(sh) == "items"
         ok, msgs = mod.compare(sh, store)
-        if not ok:
-            bad.append((sh, msgs))
-    assert not bad, "\n".join(m for _, ms in bad for m in ms)
+        assert ok, f"{sh} 迁移有损：" + "\n".join(msgs)
+
+
+def test_store_enumerates_and_reads_every_shard(tmp_path):
+    """分片枚举 + 逐分片读得出条目，且条目都有 id。
+
+    2026-09-20 改：原先是对真数据集断言「分片 ≥30 条、只有 truncation 一个
+    分片是空的」——那是数据集现状，扩一个分片就得回来改数字。这里改成自造
+    多分片，钉的是 `shards()` / `list()` 的行为本身。
+    """
+    root = tmp_path / "ds"
+    _write(root / "a" / "expected.json",
+           [{"book": "vol01", "page": 1, "col": 1, "idx": 1, "quality": "clean"}])
+    _write(root / "nested" / "b" / "expected.json",
+           [{"book": "vol02", "page": 2, "col": 2, "idx": 2, "quality": "clean"}])
+    (root / "empty").mkdir(parents=True)
+    (root / "empty" / "items.jsonl").write_text("", encoding="utf-8")
+
+    store = GoldStore(root)
+    shards = set(store.shards())
+    assert {"a", "nested/b", "empty"} <= shards, shards
+    assert all(i.id for sh in shards for i in store.list(sh)), "有条目没有 id"
+    assert store.list("empty") == [], "空分片该读成空表，不是报错"

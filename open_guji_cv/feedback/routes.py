@@ -19,7 +19,38 @@ from .events import Event
 
 # 内置默认表 —— 与设计 §3.6 的 routes.yaml 一致
 DEFAULT_ROUTES: list[dict] = [
-    {"match": {"kind": "verdict", "target.step": "border_detect"},
+    # 闸1 的三类页级裁决（2026-09-18 拆开）。此前一条 `verdict + border_detect`
+    # 通吃，**三个问题落进同一个分片**：cols 问「界行在不在缝上」(ok/miss/extra)、
+    # head 问「这页有没有抬头」(yes/no)、outer 问「外沿线准不准」(ok/in/out/none)。
+    # 实测污染：siku column-split 分片 205 条里有 **70 条是 head 的 yes/no**
+    # ——档位完全不同，拿这个分片评测会把 70 条答非所问的条目算进去。
+    # 靠 `payload.question` 分流；前端三种卡各自声明自己问的是什么。
+    # `question` 是《计划书-控制台四板块统一》§2.2 的一等字段，阶段二会正式化，
+    # 这里先以 payload 落地（止血优先，不提前引入机制）。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.has_head_raise"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/head-raise-presence"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.outer_edge"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/outer-edge"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": "border_detect.page.vline_on_seam"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/column-split"}]},
+    # ── 历史事件（2026-09-18 之前，没有 `question`）按卡片 id 前缀分流 ──
+    # `gold rebuild` 会重放整个事件日志，这三条保证重放结果与新裁的一致；
+    # 存量 70 条 head 裁决正是靠它们从 column-split 迁出的。
+    # `payload.question: None` = 「没带 question」，与上面三条互斥，
+    # 不写的话带 question 的事件会同时命中专用规则和兜底，落进两个分片。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None, "target.key": "prefix:head:"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/head-raise-presence"}]},
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None, "target.key": "prefix:outer:"},
+     "to": [{"consumer": "gold_add", "shard": "border-detection/outer-edge"}]},
+    # 其余（`cols:` 前缀与更早的无前缀 id）仍落 column-split——那是它本来的归属。
+    {"match": {"kind": "verdict", "target.step": "border_detect",
+               "payload.question": None,
+               "target.key": "not-prefix:head:|outer:"},
      "to": [{"consumer": "gold_add", "shard": "border-detection/column-split"}]},
     {"match": {"kind": "band", "target.step": "column_warp"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
@@ -27,6 +58,13 @@ DEFAULT_ROUTES: list[dict] = [
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
     {"match": {"kind": "verdict", "target.step": "row_segment"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/row-boundaries"}]},
+    # ⚠️ 下面两条**当前没有事件会命中**（2026-09-18 实测：事件日志与前端源码都没有
+    # 以它们为 kind 的出口）。留着不删的理由各不相同：
+    # - `recrop`：消费器 `glyphdb_recrop` 自己就报「尚未接入（P1 之后）」，
+    #   整条链路是半成品。删了规则等于把这件未办的事抹掉痕迹。
+    # - `not_a_char`：语义**在用**，但走的是 `confirm` + `payload.v == "not_a_char"`
+    #   那条（见下面 confirm 规则里的 crop_exclude）。这条 kind 级规则是早期
+    #   设计的残留，`consumers.crop_exclude` 至今两条都认。
     {"match": {"kind": "recrop"},
      "to": [{"consumer": "glyphdb_recrop"},
             {"consumer": "gold_add", "shard": "char-segmentation/instances",
@@ -59,6 +97,13 @@ DEFAULT_ROUTES: list[dict] = [
     # （页 vs 列），塞一个分片里 eval 口径会打架。
     {"match": {"kind": "head_raise"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/head-raise-columns"}]},
+    # 逐列字数人裁（2026-09-18，`review/slot_count_cards.py`）：`chars_per_line`
+    # 页级常量在个别列不成立（比如实际比常量多一个字）时的兜底。同 cutline 一条
+    # 双消费者：落金标 + 该页 Step3 显式失效，下次重跑 `feedback/lookup.resolved_slots()`
+    # 读回来覆盖 `effective_body_slots` 算出的格数。
+    {"match": {"kind": "n_body_slots"},
+     "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-slots"},
+            {"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     {"match": {"kind": "confirm"},
      "to": [{"consumer": "glyphdb_admit"},
             # 切分缺陷（payload.v == "seg_defect"）也走 confirm 这条线进来，
@@ -72,7 +117,28 @@ DEFAULT_ROUTES: list[dict] = [
             # 没人把它写进 crop_exclusions.jsonl，于是「标了缺陷」和「以后别再用
             # 这块图」之间是断的——下一轮重跑照样出卡，也没有闸拦着它进库。
             # crop_exclude 只认 seg_defect / not_a_char，定字的 confirm 一律跳过。
-            {"consumer": "crop_exclude"}]},
+            {"consumer": "crop_exclude"},
+            # 第四个去处（2026-09-20 补）：人裁落定 → 这一页 seed_admit 显式失效。
+            # 此前 confirm 只进库不失效产物，控制台待审列表读的是 seed_admit 产物，
+            # 于是「裁完再载入卡还在」（用户 2026-09-20 报）——裁决在库里、产物不知道。
+            # 只标不跑，下次 `step seed_admit` 才重算（0.1 s/页）；历史事件首次接上会把
+            # 裁过的页一起标失效，seed_admit 便宜，不追溯处理。
+            {"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # 判非字同理：名单变了 seed_admit 该重算。
+    {"match": {"kind": "not_a_char"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # ── Step8 复核裁决（2026-09-22）─────────────────────────────
+    # 三条都**不入字形库、不失效产物**：那一格的字没有变，Step7 早已入过库。
+    # 只有「证人对（我们认错了）」要改字，而它走上面 `confirm` 那条现成通道，
+    # 不在这里——改字、入库、失效产物三件事那边都有，不必重造。
+    {"match": {"kind": "collate_ok"}, "to": [{"consumer": "collate_ok"}]},
+    {"match": {"kind": "char_convention"}, "to": [{"consumer": "char_convention"}]},
+    {"match": {"kind": "variant_deny"}, "to": [{"consumer": "variant_deny"}]},
+    {"match": {"kind": "mark_jiajie"}, "to": [{"consumer": "mark_jiajie"}]},
+    {"match": {"kind": "collate_verdict"}, "to": [{"consumer": "collate_verdict"}]},
+    {"match": {"kind": "unmark_jiajie"}, "to": [{"consumer": "unmark_jiajie"}]},
+    # 字形库体检裁决（2026-09-25）：撤库 / 改字 / 白名单，只动本工作区的 glyph.db
+    {"match": {"kind": "glyph_audit"}, "to": [{"consumer": "glyph_audit"}]},
 ]
 
 
@@ -94,6 +160,26 @@ class Route:
             # 实际值是列表（如 payload.tags）时，规则写一个标量表示"包含"
             if isinstance(got, list) and not isinstance(want, list):
                 if want not in got:
+                    return False
+                continue
+            # `"prefix:xxx"` 写法（2026-09-18）：值以 xxx 开头就算命中。
+            # 只为**历史事件**而加——2026-09-18 之前的 cols/head/outer 裁决没有
+            # `payload.question`，唯一能分辨它们的就是卡片 id 前缀（`head:` /
+            # `outer:`）。给历史事件日志补字段等于改真源，风险远大于在路由层按
+            # 既成事实的前缀分流，所以走这条。新事件一律靠 `question`，
+            # 阶段二统一卡片 id（去前缀）之后，这些 prefix 规则连同前缀一起退役。
+            if isinstance(want, str) and want.startswith("prefix:"):
+                if not (isinstance(got, str) and got.startswith(want[7:])):
+                    return False
+                continue
+            # `"not-prefix:a|b"` —— 都不以这些前缀开头才算命中。兜底规则要用它把
+            # 已有专用去向的前缀排掉：`match` 是「所有条件与」，表达不了「非」，
+            # 而 `destinations` 把**每条**命中规则的去向累加，不是首条命中即止
+            # ——少了这个，一条历史 head 裁决会同时落进 head-raise-presence 和
+            # column-split 两个分片（实测确认过，不是假想）。
+            if isinstance(want, str) and want.startswith("not-prefix:"):
+                pres = [x for x in want[11:].split("|") if x]
+                if isinstance(got, str) and any(got.startswith(x) for x in pres):
                     return False
                 continue
             if got != want:

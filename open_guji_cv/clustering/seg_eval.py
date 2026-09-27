@@ -31,6 +31,7 @@ import numpy as np
 
 from .extractor import (MIN_COMP_AREA_RATIO, PADDING_RATIO, _assign_column,
                         _column_binary)
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 Cells = list[tuple[int, float, float]]
 Masks = dict[int, np.ndarray]
@@ -165,8 +166,8 @@ def load_case(sample_dir: Path) -> dict:
     """读一个样本目录：strip.png + case.json（金标为逐格连通体白名单）。"""
     sample_dir = Path(sample_dir)
     meta = json.loads((sample_dir / "case.json").read_text(encoding="utf-8"))
-    strip = cv2.imread(str(sample_dir / "strip.png"), cv2.IMREAD_GRAYSCALE)
-    gold_img = cv2.imread(str(sample_dir / "gold.png"), cv2.IMREAD_GRAYSCALE)
+    strip = cv_imread(str(sample_dir / "strip.png"), cv2.IMREAD_GRAYSCALE)
+    gold_img = cv_imread(str(sample_dir / "gold.png"), cv2.IMREAD_GRAYSCALE)
     cells = [(int(c["index"]), float(c["y_top"]), float(c["y_bottom"]))
              for c in meta["cells"]]
     # gold.png 用像素值编码归属：0=非本字墨/背景，i+1=第 i 格

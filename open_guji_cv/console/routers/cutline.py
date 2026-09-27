@@ -8,14 +8,15 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from .. import deps
+from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...review.verdict_view import cutline_verdicts
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 
@@ -32,7 +33,7 @@ _cutline_expected_cache: dict = {}
 @router.get("/api/cutline/cases")
 def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
                       seed: int = 0, batch: str | None = None, skip_done: bool = True,
-                      kind: str = "r2s", scope: str = "all") -> dict:
+                      kind: str = "r2s", scope: str = "all", include_skipped: bool = False) -> dict:
     """切线用例。pages='body' = page-type 金标判为正文的页（职名/目录页稍后）。
 
     `kind`：`r2s` 真粘连（切点有墨、附近无墨谷，投影法无解）；`split_char`
@@ -76,13 +77,29 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                 if e.kind == "cutline" and e.payload.get("col_h"):
                     relabeled.setdefault(e.target.key, set()).add(int(e.payload["col_h"]))
         cases, drift_skipped = T.drifted_boundaries(book, st, include_relabeled=relabeled or None, only_ids=only_ids)
+        if only_ids is not None:
+            # 清单里不在金标里的 id（机器新筛的可疑切点）直接从现役产物出卡（2026-09-26）
+            have = {c["id"] for c in cases}
+            extra, ex_sk = T.boundary_cases(book, sorted(only_ids - have), st)
+            cases += extra
+            drift_skipped = {**drift_skipped, **{f"list_{k}": v for k, v in ex_sk.items()}}
+            for c in cases:
+                c["from_list"] = True
         pg = sorted({c["page"] for c in cases})
     elif pages in ("escalated", "esc"):
         # 升级切点模式（2026-09-15，10 卡 L5）：直接读 Step3 产物里 `escalate=True` 的切点——
         # L2′/L0′ 说「本层拿不准」的那些，池里已由 L3 补过 unet_seam / period_* 候选。
         # 与 `list:` 模式的区别：那个只能出**已在裁决表里**的金标 id（152 条升级点里只有 7 条），
         # 这个直接从产物出，新切点也能出卡。
-        pg = [p for p in T.body_pages(book)]
+        # 口径是「21 格标准版式」（正文 + 目录 + 牌记/诏令），不是纯正文——2026-09-16：
+        # vol01 近一半页是目录/职名，只取 body 会把 201 条升级切点挡掉 166 条。
+        # 职名页仍排除在外（大小字混排，列切本身是坏的，见 STD_GRID_TYPES 注释）。
+        pg = [p for p in T.std_grid_pages(book)]
+    elif pages == "body":
+        # 文档一直写着「pages='body' = page-type 金标判为正文的页」，但分支漏了，
+        # 落到 `resolve_pages("body")` → `int("body")` 500（2026-09-17 北行日錄实测）。
+        # 口径同 `escalated`：`std_grid_pages`（21 格标准版式），不是纯 `body_pages`。
+        pg = [p for p in T.std_grid_pages(book)]
     else:
         pg = bk.resolve_pages(pages)
     if drift:
@@ -107,10 +124,32 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         done |= T.gold_ids()
         if batch:
             done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
+    elif skip_done and only_ids is not None and batch:
+        # 清单模式（2026-09-26）：本批次里**对着当前列窗几何**裁过的算已裁（事件带的 geom_sig
+        # 等于当前签名，见 eval/colgeom.py）。原来清单模式一律不滤——那时只能靠 col_h 变化出池，
+        # 而清单里的条目 col_h 本来就没变，裁完刷新又全回来，「只看未裁」形同虚设。
+        from ...eval.colgeom import current_geom
+        from ...feedback.harvest import parse_card_id
+        for e in deps.event_log().read(batch):
+            sig = e.payload.get("geom_sig") if e.kind == "cutline" else None
+            if not sig or e.target.key not in only_ids:
+                continue
+            ids = parse_card_id(e.target.key)
+            g = current_geom(st, ids.get("book") or book, ids.get("page"), ids.get("col"))
+            if g is not None and g.sig == sig:
+                done.add(e.target.key)
     elif skip_done and esc_mode and batch:
         # 升级模式：**不按 gold_ids 滤**（152 条升级切点里只有 7 条在金标里，滤了就几乎全没了），
         # 只按本批次已裁的事件滤——人裁完一条它就从「未裁」里消失。
         done |= {e.target.key for e in deps.event_log().read(batch) if e.kind == "cutline"}
+    if include_skipped and batch and done:
+        # 「含已跳过」（2026-09-26 用户）：只看未裁时把本批里**最后一次判「拿不准」**的也放出来，
+        # 回头补裁。已裁的其它判定照旧滤掉。
+        last: dict[str, str] = {}
+        for e in deps.event_log().read(batch):
+            if e.kind == "cutline":
+                last[e.target.key] = e.payload.get("verdict") or ""
+        done -= {k for k, v in last.items() if v == "idk"}
     cases = [c for c in cases if c["id"] not in done]
     picked = T.pick_cases(cases, limit, seed=seed)
     # 期望字：整理本对齐金标（按页缓存，对齐 60 页约 1 分钟）。
@@ -120,10 +159,21 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
                  "conv_above", "conv_below")
     key = (book, tuple(sorted({c["page"] for c in picked})))
     if drift:
-        # 期望字沿用金标里的（06 卡人裁洗过），不再重新对齐整理本
+        # 期望字沿用金标里的（06 卡人裁洗过）；金标里没有的（清单模式从产物现出的卡、或老金标
+        # 没记字）才对齐整理本补上——2026-09-26 用户：清单卡上「上格/下格」全是空的，线切在字中间时
+        # 不知道该往上挪还是往下挪。补的走同一份按页缓存。
         for c in picked:
             for k in _EXP_KEYS:
                 c.setdefault(k, "")
+        need = [c for c in picked if not c.get("char_above") and not c.get("char_below")]
+        if need:
+            nkey = (book, tuple(sorted({c["page"] for c in need})))
+            if nkey not in _cutline_expected_cache:
+                tmp = [dict(c) for c in need]
+                T.attach_expected(tmp, book, st)
+                _cutline_expected_cache[nkey] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in tmp}
+            for c in need:
+                c.update(_cutline_expected_cache[nkey].get(c["id"], {}))
     elif key not in _cutline_expected_cache:
         T.attach_expected(picked, book, st)
         _cutline_expected_cache[key] = {c["id"]: {k: c.get(k, "") for k in _EXP_KEYS} for c in picked}
@@ -146,7 +196,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     if using_sample_corpus():
         warn = (f"读到的是仓内小样本语料（{corpus_path('zongmu_wenyuange_wikisource.txt')}），"
                 "整理本锚不上，「整理本期望」不可信。"
-                "起控制台前 export GUJI_WORKSPACE=/path/to/siku-zongmu-workspace")
+                "起控制台前 export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>")
     n_expect = sum(1 for c in picked if c.get("char_above") and c.get("char_below"))
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
             "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked,

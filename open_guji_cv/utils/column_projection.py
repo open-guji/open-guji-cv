@@ -225,10 +225,25 @@ def column_profile(warped_gray: np.ndarray, ink_threshold: int = 128) -> np.ndar
     return (warped_gray < ink_threshold).astype(np.float64).mean(axis=0)
 
 
+#: 行墨 ≥ 此值的行当横贯版框行，不进列投影（见 column_text_band）；剩下的行少于 ROWS_KEEP_MIN 就不剔
+FRAME_ROW_COV = 0.6
+ROWS_KEEP_MIN = 0.5
+
+
+#: 贴边档找「内侧孤立竖线」（`bar_after`）用的峰值门槛，比内缩档 `bar_min_peak`
+#: 低——贴边档已经先证明了边缘真有一条外框线衰减到谷底，这个前提把「误认成字身」
+#: 的风险摘掉了大半，可以比内缩档更敢信一条更淡的窄条。vol02 p81c9/p79c1/p159c1/
+#: p181c1/p182c9/p57c4 六个页边列实测：内侧那条真线峰值只有 0.118~0.232，远够不上
+#: 0.40（当时是按 p73c1 峰 1.00 的样本标定的，没覆盖这么淡的）；全书按 0.10 扫，
+#: 命中的都还是页边列（col 1/9），没有一条落在正文腹地列（2026-09-27）。
+BAR_AFTER_MIN_PEAK = 0.10
+
+
 def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
                       edge_ink_eps: float = 0.01, plateau_tol: float = 0.005,
                       max_rule_frac: float = 0.15, bar_min_peak: float = 0.40,
-                      bar_max_width: int = 22, inset_look_frac: float = 0.28
+                      bar_max_width: int = 22, inset_look_frac: float = 0.28,
+                      bar_after_min_peak: float = BAR_AFTER_MIN_PEAK,
                       ) -> tuple[int, int]:
     """找矫正图里**文字带的左右边界** `(x_left, x_right)`（半开区间，右端不含）。
 
@@ -266,19 +281,47 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
     56/64、**切字 0px**。按"宁可留残墨也不切字"取 0.005。
     """
     prof = column_profile(warped_gray, ink_threshold)
+    ink = warped_gray < ink_threshold
+    rows = ink.mean(axis=1) < FRAME_ROW_COV
+    # 判「孤立窄条」用的投影剔掉横贯的版框行（2026-09-26）：条里压着一截上/下版框时整条投影被垫高
+    # 0.02~0.1，界行两侧不再归零，孤立判不出来（vol02 p81c9、p181c1 列端那一条里的竖线）。
+    # 只给窄条判据用；贴边档找谷底仍用原投影（换投影会让两百来列的带宽抖 1px，没有收益）
+    prof_bar = (ink[rows] if rows.sum() >= ROWS_KEEP_MIN * len(rows) else ink).astype(np.float64).mean(axis=0)
     n = len(prof)
     limit = max(1, min(int(round(max_rule_frac * n)), n // 2))
+    wide_n = max(1, min(int(round(inset_look_frac * n)), n // 2))
+
+    def bar_after(order: np.ndarray, start: int) -> int | None:
+        """`start` 之后（先要有空白）紧接着的一段墨若是孤立窄条，返回它的内侧末端。"""
+        wide = prof_bar[order[:wide_n]]
+        k = start
+        if k >= len(wide) or wide[k] > edge_ink_eps:
+            return None
+        while k < len(wide) and wide[k] <= edge_ink_eps:
+            k += 1
+        a = k
+        while k < len(wide) and wide[k] > edge_ink_eps:
+            k += 1
+        if a >= len(wide) or k >= len(wide):
+            return None
+        if k - a <= bar_max_width and float(wide[a:k].max()) >= bar_after_min_peak:
+            return k
+        return None
 
     def scan(order: np.ndarray) -> int:
         window = prof[order[:limit]]
         if window[0] > edge_ink_eps:                 # 贴边档
             floor = float(window.min())
-            return int(np.argmax(window <= floor + plateau_tol))
+            b = int(np.argmax(window <= floor + plateau_tol))
+            # 贴边的界行之内还有一条孤立窄竖线（页边列的双线：外框贴边、内框探进来，
+            # vol02 p73c1 实测 x=189~195、峰 1.00、两侧 0.00）：一并算在带外
+            inner = bar_after(order, b)
+            return b if inner is None else inner
         # 内缩档：在自己的宽窗口里找**峰值最高的那一段**墨，看它是不是孤立窄条。
         # 不能取"第一段"——去噪之后仍有零星 1~2% 的麻点，一段麻点就把前导空白
         # 截断了（vol01/47 c4 实测踩过：真正的界行条在 x=22~30、峰 0.98，却被
         # x=9 处一个 0.013 的麻点挡住，判成"没有条"）。
-        wide = prof[order[:max(1, min(int(round(inset_look_frac * n)), n // 2))]]
+        wide = prof_bar[order[:wide_n]]
         best = None
         k = 0
         while k < len(wide):
@@ -348,13 +391,137 @@ def column_row_profile(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     return (warped_gray[:, lo:hi] < ink_threshold).astype(np.float64).mean(axis=1)
 
 
+#: e 档（薄框接低平底）的三个尺子，bxgb 54 页 1026 列 column_raw 上标定（2026-09-17）：
+#: - `FLOOR_T` 低平底上限。b 档误判的根源是框后面那段 0.03~0.14 的底噪（界行残迹、
+#:   纸纹）超过 `ink_eps`=0.02，把框和整个字身连成一段（71~372 行）；0.25 把它
+#:   收进「底」里，而字身行墨中位 0.598，不会被当成底。
+#: - `FLOOR_RUN` 低平底至少持续几行。版框与首字之间是天头（`top_slack` ≈ 35px），
+#:   字的横笔下方几行内必接其余笔画：上端 b 档 109 列里 floor ≥6 的占 94%、a 档
+#:   （已正确切掉的 900 列）99%——同一把尺子在 a 档上给出的切点与现行削行 |d|≤2。
+#: - `FLUSH_MAX` 「贴边」的定义。非抬头列的矫正图第 0 行**就是 Step1 拟合的版框线**
+#:   （`page_column_windows`：top_y = btop，BODY_PAD=0），贴边的高墨薄段只能是框，
+#:   首字离它还有整个天头——所以上端贴边时不需要边距证据。
+FLOOR_T = 0.25
+FLOOR_RUN = 6
+FLUSH_MAX = 3
+#: 贴边端的低平底只需这么几行。贴边时框的身份由位置定死（第 0 行就是 Step1 的版框
+#: 线），低平底只是用来找**框的下沿**，不必再当「天头」证据；首字离框近（天头 < 6 行）
+#: 的列用 6 行会漏：bxgb 1026 个贴边上端里 6 列（p4c3「聞」等）漏抹，改 2 行后 0 列，
+#: vol01 1669 个贴边上端零变化。非贴边（下端/抬头列）仍用 FLOOR_RUN + 边距证据。
+FLOOR_RUN_FLUSH = 2
+#: 非贴边（下端的框被 BOTTOM_PAD 内缩 ~40 行；抬头列的框被 HEAD_PAD 内缩）时要
+#: **边距证据**：版框横贯整列宽，文字带外的边距里也是墨；字的横笔止于文字带，
+#: 边距里只有界行底噪。实测框行边距墨中位 1.000（p5 0.75），首字行 0.333（p95 0.667）；
+#: 阈值 0.7：框行 96.5% 过、首字行 4.9% 过。边距合计不足 `MARGIN_MIN_PX` 时没有证据，
+#: 不判 e、退回原有 b/c——宁可留框渣，绝不切「一/二/三」。
+MARGIN_T = 0.7
+MARGIN_MIN_PX = 6
+#: 双线版框（2026-09-26）：册配置 `frame_layers` 声明某端有两层时，剥掉第一道线之后**继续往里
+#: 找第二道**。vol02 实测只剥一道：列尾 499/1674 列留着紧贴末字的那道细虚线（内框），列首 352 列
+#: 留着第二道——Step4 再把它收进字的图块（列尾约四成的图块底下挂一截虚线），或当成一个「字」。
+#: 第二道的判据：离第一道 ≤ `outer_gap`（册配置）× LAYER2_GAP_K + LAYER2_GAP_ADD 行，
+#: 本身薄（≤ LAYER2_MAX_ROWS 行），且**横向跨度**（这几行里最左墨到最右墨）≥ LAYER2_EXTENT
+#: × 文字带宽——虚线断断续续、墨占比不高，但从头贯到尾；「一」「二」「三」「王」的横
+#: 只占文字带六七成，够不上。拿不准就不剥（与 b 档同一纪律）。
+LAYER2_GAP_K = 1.5
+LAYER2_GAP_ADD = 12
+LAYER2_MAX_ROWS = 30     # 外框粗线实测 18~24 行（与 border_max_rows 同一把尺）
+LAYER2_EXTENT = 0.85
+LAYER2_MARGIN_RISE = 0.3   # 边距证据：这几行的边距墨比全列边距中位高出这么多（界行本底不算）
+#: 第二道的**下沿**不按「墨归零」找（2026-09-26）：内框紧贴末字时，线与字之间常只隔几行
+#: 0.03~0.1 的淡墨（字的收笔、麻点），按 > ink_eps 连成一段就把字身也算进来，厚度超 30 行判不是线
+#: ——vol02 残线 126 列里约九成是这样漏的。改为从这段的起点往里走，过了峰值之后行墨跌破
+#: LAYER2_FLOOR 或跌到峰值 × LAYER2_HALF 以下，再带上一路下降的至多 LAYER2_FADE 行淡边，就是线的
+#: 下沿；再往里是字，不动（先试过「谷底」判据：字底 0.15~0.25 的收笔尾巴会被当成线的一部分削掉十来行）。
+LAYER2_FLOOR = 0.15
+LAYER2_HALF = 0.5
+LAYER2_FADE = 3
+#: 半峰触发（`p[i] < LAYER2_HALF*pk` 但本身没跌破地板）之后，往下再看这么多行，
+#: 必须真的见到跌破 LAYER2_FLOOR 的一行才认——字身部首间的波谷也会先跌到半峰以下，
+#: 但接下来往下一段仍停在地板以上、很快又爬回去（vol02 t008_p33c2「褚」实测：局部峰
+#: 0.38、半峰门槛 0.19，之后 9 行停在 0.16~0.19 从未跌破 0.15，再往下墨又回升到 0.3+）。
+#: 真线贴字的淡边本就是「几行 0.03~0.1」，这几行必落在地板以下。
+LAYER2_HALF_LOOKAHEAD = 6
+#: 线要**尖**：峰值一半以上的行不超过 LAYER2_CORE_MAX 行（内框虚线实测 3~10 行）；只有峰值
+#: ≥ LAYER2_BOLD 的粗外框（18~24 行、满宽实墨）才放宽到 LAYER2_MAX_ROWS。字的底部是
+#: 0.2~0.45 的宽鼓包、几十行高——不加这条，剥第三道时会把末字下半当成线（vol02 p187c6 实测）。
+LAYER2_CORE_MAX = 12
+LAYER2_BOLD = 0.8
+#: 线要**陡起**：峰值一半之前紧挨着的、行墨 > LAYER2_RAMP_INK 的连续行不超过 LAYER2_RAMP 行。
+#: 线是白纸上直接冒出来的（实测 0~3 行），字底是十来行 0.1~0.2 的淡墨慢慢爬上来（p102c1、p31c7）。
+#: 粗外框（峰 ≥ LAYER2_BOLD）不管：略斜的粗线投影也是缓起的（p22c9 十行爬到 0.99）
+LAYER2_RAMP = 5
+LAYER2_RAMP_INK = 0.05
+#: 与上一刀之间至少要有这么多行白（≤ ink_eps）：两道框之间隔着纸，一段不断的淡墨后面冒出的「线」是字底
+#: （p18c8 实测：第二道之后 17 行 0.05~0.1 的淡墨，接着一段 0.4 的横墨被当成第三道）。两道框可以挨得
+#: 很近（p17c4 只隔 2 行、p17c1 隔 1 行），所以只要 1 行；粗线（峰 ≥ LAYER2_BOLD，p178c9 两道粗线只隔一行 0.1）
+#: 或上一刀切在粗线身里（切口处行墨 ≥ LAYER2_BOLD，p23c8）不要求
+LAYER2_BLANK_MIN = 1
+#: **Step1 位置证据**（只用于下端）：Step1 的下版框线多半落在内框上（`border_bottom_in_column`）。
+#: 候选线离它 ≤ INNER_SEARCH 行时，跨度只要 ≥ LAYER2_EXTENT_HINT 就认——磨损的内框虚线常只剩
+#: 三成到七成宽（vol02 列尾残线 126 列里 87 列靠这一条才认出来）。末格的「一」离版框约半格，落不进
+#: 这个窗口；贴着内框的字底另有上面的尖/陡起/隔白三条挡着。Step1 线落在外框上的列（约一成）
+#: 这条证据用不上，内框靠跨度或边距证据认。
+LAYER2_EXTENT_HINT = 0.35
+#: 下端还有一刀：**Step1 的下版框就是内框线**（vol02 实测残线正落在 `border_bottom_in_column` ±8 行），
+#: 而字不会越过内框。剥完外面几道之后，若内框线还在（紧贴末字、与字粘连，按行分不出段的那种，
+#: vol02 约 200 列），就在 Step1 给的位置 ±INNER_SEARCH 行里找覆盖最高的一行（≥ INNER_COV），
+#: 连同它上沿 ≥ INNER_EDGE 的几行一起、往下全抹。只在册配置声明下端有两层时做。
+INNER_SEARCH = 10
+INNER_COV = 0.35
+INNER_EDGE = 0.15
+
+
+def _thin_bar_then_floor(p: np.ndarray, blank: int, bar_coverage: float,
+                         floor_t: float, floor_run: int, cap: int = 40
+                         ) -> tuple[int, int] | None:
+    """从 `blank` 起在 `cap` 行内找「高墨薄段（≥bar_coverage）→ 低平底（≤floor_t，
+    连续 ≥floor_run 行）」；找到返回 `(bar_start, bar_end)`，`bar_end` 是第一行低平底
+    的下标（切到这里正好把框的下沿含进去）。框的下沿常有一两行 0.3~0.5 的过渡，
+    过渡行既不算框也不算底，跳过继续看。"""
+    n = len(p)
+    seen = False
+    start: int | None = None
+    for j in range(blank, min(n, blank + cap)):
+        v = float(p[j])
+        if v >= bar_coverage:
+            if start is None:
+                start = j
+            seen = True
+        elif seen and v < floor_t:
+            k = j
+            while k < n and k < j + floor_run and p[k] <= floor_t:
+                k += 1
+            if k - j >= floor_run and start is not None:
+                return start, j
+            return None
+    return None
+
+
 def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
                         ink_threshold: int = 128, ink_eps: float = 0.02,
                         border_max_rows: int = 30, inset_look: int = 70,
                         glue_px: int = 3, bar_probe: int = 8,
-                        bar_coverage: float = 0.65, inset_min_peak: float = 0.15
+                        bar_coverage: float = 0.65, inset_min_peak: float = 0.15,
+                        margin_profile: np.ndarray | None = None,
+                        floor_t: float = FLOOR_T, floor_run: int = FLOOR_RUN,
+                        flush_max: int = FLUSH_MAX, margin_t: float = MARGIN_T,
+                        layers: tuple[int, int] = (1, 1),
+                        layer_gap: tuple[float | None, float | None] = (None, None),
+                        layer_hint: tuple[float | None, float | None] = (None, None),
                         ) -> tuple[tuple[int, str], tuple[int, str]]:
     """上下版框残墨该削掉几行 —— 返回 `((top_px, top_case), (bottom_px, bottom_case))`。
+
+    **e 档（2026-09-17 加，bxgb 列端残框 89 列的病根）**：边缘一段薄高墨、之后是一段
+    **持续的低平底**、再往里才是首字——这是「版框 → 天头 → 首字」的形态，框应当整段
+    削掉。此前它落进 b 档只削 `glue_px`=3 行，框剩 3~7 行留在列图里，Step4 再把它
+    带进首字的图块（人裁看到的「含有边框噪点」）。原因是天头那段有 0.03~0.14 的
+    界行/纸纹底噪，超过 `ink_eps`，于是 `run` 一路走到字身、`thick` 71~372 行，被
+    当成「框粘着字」。判 e 要两条：`_thin_bar_then_floor` 找到形态，且 **贴边**
+    （`blank <= flush_max`，见 FLUSH_MAX 注）或 **边距里也是墨**（`margin_profile`，
+    见 MARGIN_T 注）二者之一。只在 `thick > border_max_rows` 这一支里判——a/d 档
+    的行为一位不动。`margin_profile` 由 `clean_column` 在 **抹界行之前** 的图上算，
+    别的调用方不传就只认贴边这一条。
 
     上下界用的是 `column_bounds` 的口径（页面右端 x=0 锚点），落点未必正好压在
     版框上，所以矫正图的头尾常常带进一截版框线。判据在水平投影上分四档：
@@ -387,18 +554,132 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     才分得开，因为字的顶边必然是细的。
     """
     prof = column_row_profile(warped_gray, band, ink_threshold)
+    lo_, hi_ = band if band is not None else (0, warped_gray.shape[1])
+    bink = warped_gray[:, lo_:hi_] < ink_threshold
+    bw = max(1, hi_ - lo_)
 
-    def one(p: np.ndarray) -> tuple[int, str]:
-        blank = 0
-        while blank < len(p) and p[blank] <= ink_eps:
-            blank += 1
-        if blank > inset_look or blank >= len(p):
-            return 0, "c"                     # 边缘一大片空白，里面是正文
-        run = blank
-        while run < len(p) and p[run] > ink_eps:
-            run += 1
-        thick = run - blank
-        if thick <= border_max_rows:           # 一条薄横线
+    def line_end(p: np.ndarray, j: int) -> int | None:
+        """从线段起点 `j` 往里找线的下沿（LAYER2_FLOOR / LAYER2_HALF 注）；厚过 LAYER2_MAX_ROWS 返回 None。"""
+        n = len(p)
+        pk = 0.0
+        i = j
+        while i < n:
+            if i - j > LAYER2_MAX_ROWS:
+                return None
+            pk = max(pk, float(p[i]))
+            if pk >= inset_min_peak and (p[i] < LAYER2_FLOOR or p[i] < LAYER2_HALF * pk):
+                # 线的淡边（**严格**一路往下走的至多 LAYER2_FADE 行）一起剥掉，别留一两行渣；持平或回升就是字了
+                e = i
+                while e < min(n, i + LAYER2_FADE) and p[e] > ink_eps and (e == i or p[e] < p[e - 1]):
+                    e += 1
+                return e
+            i += 1
+        return i
+
+    def second_layer(p: np.ndarray, ink2: np.ndarray, cut: int, gap: float | None,
+                     m: np.ndarray | None = None, hint: float | None = None,
+                     glued: bool = False) -> int | None:
+        """`cut` 之后找第二道框线（见 LAYER2_* 注）；找到返回它的下沿，否则 None。
+
+        `hint`：Step1 内框线离这一端的行数（位置证据，见 LAYER2_EXTENT_HINT 注）。
+        `glued`：认不认与字粘着的线（只给下端：列首第二道之后紧跟首字的顶横，
+        分不清是线还是字——vol02 p101c6、p35c4 试过，削掉的是首字的顶，列首照旧要求线后归零）。"""
+        if gap is None:
+            return None
+        j = cut
+        limit = cut + int(gap * LAYER2_GAP_K + LAYER2_GAP_ADD)
+        # 上一刀留下的淡尾（行墨仍在**严格**往下掉，p11c1：e 档切在 0.64→0.21→0.16 的半截上）算上一道的，跳过
+        while 0 < j < len(p) and p[j] > ink_eps and p[j] < p[j - 1]:
+            j += 1
+        tail = j
+        while True:
+            while j < len(p) and j < limit and p[j] <= ink_eps:
+                j += 1
+            if j >= len(p) or j >= limit:
+                return None
+            k = j
+            while k < len(p) and p[k] > ink_eps:
+                k += 1
+            if float(p[j:k].max()) >= inset_min_peak:
+                break
+            j = k                                # 噪点段（vol02 p123c9：两道框之间 3 行麻点）：跳过接着找
+        if glued:
+            k = line_end(p, j)
+        else:                                    # 老口径：线之后必须归零，下沿就是归零处
+            k = j
+            while k < len(p) and p[k] > ink_eps:
+                k += 1
+            k = None if k - j > LAYER2_MAX_ROWS else k
+        if k is None:
+            return None
+        pk = float(p[j:k].max())
+        if int((p[tail:j] <= ink_eps).sum()) < LAYER2_BLANK_MIN and pk < LAYER2_BOLD \
+                and not (cut < len(p) and p[cut] >= LAYER2_BOLD):
+            return None                          # 两道框之间必隔着白纸；紧接上一道的淡墨是字的底
+        core = int((p[j:k] >= 0.5 * pk).sum())
+        if core > LAYER2_CORE_MAX and pk < LAYER2_BOLD:
+            return None
+        c0 = j + int(np.argmax(p[j:k] >= 0.5 * pk))
+        r = c0
+        while r - 1 >= j and p[r - 1] > LAYER2_RAMP_INK:
+            r -= 1
+        if c0 - r > LAYER2_RAMP and pk < LAYER2_BOLD:
+            return None                          # 缓起：字的底边，不是线
+        cols = np.where(ink2[j:k].any(axis=0))[0]
+        extent = (cols[-1] - cols[0] + 1) / bw if len(cols) else 0.0
+        if extent >= LAYER2_EXTENT:
+            return k
+        if hint is not None and j - INNER_SEARCH <= hint <= k + INNER_SEARCH \
+                and extent >= LAYER2_EXTENT_HINT:
+            return k
+        # 跨度不够（磨损的框线只剩几截，vol02 实测列首第二道常只有 0.5~0.8 宽）时看**边距证据**：
+        # 框线横贯整列、在文字带外的边距里也是墨；字止于文字带（口径同 e 档的 MARGIN_T）
+        # 边距里常年有界行（每一行都是墨），所以比的是**高出这一列边距的常态**多少，不是绝对值
+        if m is not None and float(m[j:k].max()) >= margin_t and \
+                float(m[j:k].max()) - float(np.median(m)) >= LAYER2_MARGIN_RISE:
+            return k
+        return None
+
+    def two(p: np.ndarray, m: np.ndarray | None, ink2: np.ndarray, n_layers: int,
+            gap: float | None, hint: float | None = None, glued: bool = False) -> tuple[int, str]:
+        px, case = one(p, m)
+        if n_layers >= 2 and case in ("a", "d", "e") and px:
+            # 至多再剥两道：vol02 有的列尾除了内外两道框，最外还压着一截页边/上一道框的残墨
+            # （第一刀削掉的是那截，外框粗线与内框虚线都还在，p17c4 实测）
+            got = 0
+            for _ in range(2):
+                k = second_layer(p, ink2, px, gap, m, hint, glued)
+                if k is None:
+                    break
+                px, got = k, got + 1
+            if got:
+                return px, case + str(got + 1)
+        return px, case
+
+    def one(p: np.ndarray, m: np.ndarray | None) -> tuple[int, str]:
+        # 从边缘往里找「第一段够格的墨」。噪点段要**跳过去接着找**，不能
+        # 见到一段弱墨就收工（2026-09-18 修）——原先判成噪点直接 `return c`，
+        # 于是扫描停在噪点上，再也看不到它后面的真框：
+        # bxgb p16c17 下端实测，外缘 7 行白 → 7 行弱墨（峰值 0.062）→ 22 行白
+        # → **真框（峰值 1.000）**，判了 c「这一端没带进版框」，框墨整条留在
+        # 列图里。全书 53 个 c 档端口里 46 个是这么漏的（峰值 0.93~1.00）。
+        #
+        # 连带影响：`column_gate` 量墨跨度推 `n_raised_hint` 时把这条框墨算成
+        # 字，跨度多出 0.5~0.7 格 → 误判「这列多一个字」→ DP 多切一格。
+        start = 0
+        blank = run = 0
+        while True:
+            blank = start
+            while blank < len(p) and p[blank] <= ink_eps:
+                blank += 1
+            if blank > inset_look or blank >= len(p):
+                return 0, "c"                 # 边缘一大片空白，里面是正文
+            run = blank
+            while run < len(p) and p[run] > ink_eps:
+                run += 1
+            thick = run - blank
+            if thick > border_max_rows:
+                break                          # 厚墨段：交给下面的 e/b/c 判据
             if blank == 0:
                 return run, "a"                 # 贴着边缘，削掉几行无害
             # 内缩档：要求这条线本身有像样的墨，否则那是噪点不是版框
@@ -406,7 +687,18 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             #   人裁的结论是"没残墨"，早先按 d 档削了 33 行是假阳性）
             if float(p[blank:run].max()) >= inset_min_peak:
                 return run, "d"
-            return 0, "c"
+            start = run                        # 是噪点——跳过它继续往里找
+        # e 档：run 很长只是因为天头底噪 > ink_eps。头部若是「薄高墨段 → 持续低平底」，
+        # 那就是框接天头，不是框粘着字（理由与实测见函数 docstring 及 FLOOR_T 注）。
+        flush = blank <= flush_max
+        e = _thin_bar_then_floor(p, blank, bar_coverage, floor_t,
+                                 min(floor_run, FLOOR_RUN_FLUSH) if flush else floor_run)
+        if e is not None:
+            bar_start, bar_end = e
+            margin_ok = (m is not None and bar_end > bar_start
+                         and float(np.median(m[bar_start:bar_end])) >= margin_t)
+            if flush or margin_ok:
+                return bar_end, "e"
         # 厚墨段：是版框粘着字，还是**压根就是字**？看起始陡度——版框线一上来
         # 就满宽（头 3~4 行冲到 0.74~0.93），字的顶/底边必然是细的、缓起。
         # 这一条以前只在内缩档用，贴边档一律判 b（粘连），结果把"末字顶到
@@ -415,7 +707,9 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             return blank + glue_px, "b"        # 版框粘着字，只削一点
         return 0, "c"                           # 是字不是版框，什么都不削
 
-    return one(prof), one(prof[::-1])
+    mrev = None if margin_profile is None else margin_profile[::-1]
+    return (two(prof, margin_profile, bink, layers[0], layer_gap[0], layer_hint[0]),
+            two(prof[::-1], mrev, bink[::-1], layers[1], layer_gap[1], layer_hint[1], glued=True))
 
 
 def strip_column_borders(warped_gray: np.ndarray, band: tuple[int, int] | None = None,
@@ -454,8 +748,32 @@ def clean_column(warped_gray: np.ndarray, ink_threshold: int = 128,
     denoised = denoise_column(warped_gray, ink_threshold=ink_threshold)
     band = column_text_band(denoised, ink_threshold=ink_threshold)
     no_rules = strip_column_rules(denoised, ink_threshold=ink_threshold)
+    # e 档的边距证据必须在**抹界行之前**的图上算——抹白之后带外全是白，
+    # 版框横贯整列这一特征就看不见了（见 column_border_trim 的 MARGIN_T 注）。
+    margin_profile = None
+    lo, hi = band
+    if lo + (denoised.shape[1] - hi) >= MARGIN_MIN_PX:
+        binm = denoised < ink_threshold
+        margin_profile = np.concatenate([binm[:, :lo], binm[:, hi:]], axis=1).mean(axis=1)
+    inner_bottom = kwargs.pop("inner_bottom", None)
+    hint = (None, None if inner_bottom is None else denoised.shape[0] - inner_bottom)
     (top_px, top_case), (bot_px, bot_case) = column_border_trim(
-        no_rules, band, ink_threshold=ink_threshold, **kwargs)
+        no_rules, band, ink_threshold=ink_threshold, margin_profile=margin_profile,
+        layer_hint=hint, **kwargs)
+    layers = kwargs.get("layers", (1, 1))
+    if inner_bottom is not None and layers[1] >= 2:
+        prof = column_row_profile(no_rules, band, ink_threshold)
+        h = len(prof)
+        y0 = max(0, int(round(inner_bottom)) - INNER_SEARCH)
+        y1 = min(h, int(round(inner_bottom)) + INNER_SEARCH + 1)
+        if y1 > y0:
+            r = y0 + int(np.argmax(prof[y0:y1]))
+            if prof[r] >= INNER_COV:
+                t = r
+                while t - 1 >= y0 - 4 and prof[t - 1] >= INNER_EDGE:
+                    t -= 1
+                if h - t > bot_px:
+                    bot_px, bot_case = h - t, bot_case + "i"
     out = no_rules.copy()
     if top_px:
         out[:top_px] = 255
@@ -568,6 +886,83 @@ def page_column_windows(result: BorderDetectionResult,
             raised=raised_top is not None,
             head_raise_inner_y=None if raised_top is None else float(raised_top)))
     return out
+
+
+#: `refine_top_by_frame`（2026-09-20）：列窗上界之上再看这么多行找版框。
+TOP_REFINE_PROBE = 90
+#: 认框用满宽段——行墨占比 ≥ 此值且连续 ≥ TOP_REFINE_MIN_RUN 行。与 Step2 `frame_residue` /
+#: Step4 `FRAME_BAND_COV` 同一把尺（bxgb 1065 个削干净端口零误报；二/三 的横笔 ≤0.7 够不着）。
+TOP_REFINE_COV = 0.85
+TOP_REFINE_MIN_RUN = 3
+#: 框下沿离 top_y 至少这么多行才动（≤2 行是正常的贴框，别为几像素折腾）。
+TOP_REFINE_MIN_GAP = 3
+#: 探针要越过 top_y 往下再看这么多行（2026-09-19）。**不看下面就会认错框**：
+#: Step1 把 top_y 正正切在真框上时，真框被探针窗口的下边界腰斩、凑不满 MIN_RUN，
+#: 于是函数转而抓住更上面那条**外框/上欄線**，把 top_y 提到它下沿——真框反被圈进列图。
+#: vol02 实测被上移的列里 47% 属于这种（Step1 本来就是对的）。越过下界多看几行，
+#: 真框就能完整成段、被认出来，`_frame_covers_top` 据此否决这次上移。
+TOP_REFINE_BELOW = 6
+
+
+def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
+                        probe: int = TOP_REFINE_PROBE, cov: float = TOP_REFINE_COV,
+                        min_run: int = TOP_REFINE_MIN_RUN,
+                        min_gap: int = TOP_REFINE_MIN_GAP) -> float:
+    """列窗上界之上若还看得见**版框**（离上界 ≥ min_gap 行），把上界提到框的下沿。
+    返回上移的行数（0 = 没动）。
+
+    Step1 的上版框是整页一条直线；线拟合被首行字的顶边带偏时（bxgb p48/p54：整页首字
+    顶边齐平，投影上是一条比厚框更「尖」的峰），这条线落在**首行字的顶边**而不是框上，
+    离真框 12~22px。后果分两种，都是首字丢顶：
+    - 首字比上界高（二十/三 这类），顶部整块不在列图里；
+    - 首字顶边恰在上界，`column_border_trim` 见「贴着列图顶端的一条薄横」就按 a 档当框线
+      削掉 6~16 行——二 变一、三 变二、六 丢点、冢 丢宀（用户审阅标的首字 seg_defect 16 条，
+      13 条在这两页）。
+    第一版只在「框与上界之间夹着字墨」时才动，漏掉第二种。列图本来就该从框的内缘起，
+    框在上界之上多远都是错，所以只要看见框、离上界 ≥ min_gap 行就提；多出来的几行白
+    由 Step3 的候选/`trim` 的 c 档照常处理。全书实测只有 p48/p54 两页触发。
+
+    判据用满宽段（`TOP_REFINE_COV`），不用「像不像线」：二/三 的顶横再宽也到不了 0.85；
+    上界之上是页边，除了框没有别的满宽墨。只对普通列（`border_top_in_column == 0`、非抬头）
+    做，且只往上提、不往下推。下版框不需要镜像（探针全书 0 列，`BOTTOM_PAD` 早多开 40 行）。
+    """
+    if win.raised or win.border_top_in_column > 0.5 or win.top_y < probe:
+        return 0.0
+    # 往下多看 TOP_REFINE_BELOW 行：真框正压在 top_y 上时，只看上方会把它腰斩，
+    # 反而去抓更上面的外框（见 TOP_REFINE_BELOW 的注释）。
+    below = int(TOP_REFINE_BELOW)
+    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y + below)
+    if strip.ndim == 3:
+        strip = strip[:, :, 0]
+    if strip.shape[1] < 20:
+        return 0.0
+    rows = (strip[:, 6:-6] < 128).mean(axis=1)
+    full = rows >= cov
+    # `top_y` 已经落在框上（或框刚好在它下面一点）——Step1 是对的，别动。
+    if bool(full[max(0, probe - min_run):].any()):
+        return 0.0
+    runs: list[tuple[int, int]] = []
+    a = None
+    for i, v in enumerate(list(full) + [False]):
+        if v and a is None:
+            a = i
+        if not v and a is not None:
+            if i - a >= min_run:
+                runs.append((a, i - 1))
+            a = None
+    if not runs:
+        return 0.0
+    # 只认 top_y 之上的段（下面那几行是为了看清真框才多取的，不能当搬迁目标）。
+    runs = [r for r in runs if r[1] < probe]
+    if not runs:
+        return 0.0
+    fb = runs[-1][1]
+    delta = float(probe - 1 - fb)
+    if delta < min_gap:
+        return 0.0
+    win.top_y -= delta
+    win.border_top_y = win.top_y
+    return delta
 
 
 def warp_page_columns(gray: np.ndarray, result: BorderDetectionResult,

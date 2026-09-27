@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { withWorkspace } from '../../api/client'
 import { fetchBorderReviewCards, fetchBorderReviewVerdicts } from '../../api/borderReview'
 import { postEvents } from '../../api/events'
 import { usePersistedPages } from '../../hooks/usePersistedPages'
@@ -17,11 +18,16 @@ const STEP_OF: Record<BorderReviewKind, string> = {
   cols: 'border_detect', head: 'border_detect', outer: 'border_detect', colborder: 'column_warp',
 }
 
-export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderReviewKind }) {
+export function BorderReviewPanel({ book, kind, pages: pagesProp }:
+                                  { book: string; kind: BorderReviewKind; pages?: string }) {
   const spec = BORDER_REVIEW_SPECS[kind]
   // id 带 kind：这一个组件被 cols/head/outer/colborder 四个 tab 复用，
   // 页范围各自记各自的，不共享（用户 2026-09-12 定）。
-  const [pages, setPages] = usePersistedPages(`border-review-${kind}`, book, 'dev_set')
+  // 2026-09-18：页面（StepLayout 板块①）传了 `pages` 就以它为准——页范围
+  // 唯一源（计划书 §1.2）；不传仍退回各 tab 自己那份，非 Step 页面照用。
+  const [ownPages, setOwnPages] = usePersistedPages(`border-review-${kind}`, book, 'dev_set')
+  const pages = pagesProp ?? ownPages
+  const setPages = pagesProp === undefined ? setOwnPages : () => {}
   const [batchInput, setBatchInput] = useState('')
   const [onlyTodo, setOnlyTodo] = useState(true)
   const [cards, setCards] = useState<BorderReviewCard[]>([])
@@ -61,7 +67,10 @@ export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderRe
     try {
       await postEvents({
         batch: batch(), step: STEP_OF[kind], unit: kind === 'colborder' ? 'column' : 'page',
-        kind: spec.eventKind, events: [{ id: card.id, [payloadKey]: v, t: Date.now() }],
+        // `question` 随裁决一起发（2026-09-18）：cols/head/outer 三类的 kind 与 step
+        // 完全相同，路由只能靠它分辨该落哪个金标分片，见 feedback/routes.py 的说明。
+        kind: spec.eventKind,
+        events: [{ id: card.id, [payloadKey]: v, question: spec.question, t: Date.now() }],
       })
       const n = Object.keys(verdicts.current).length
       setMsg(`已裁 ${n} / ${cards.length} → 批次 ${batch()}`)
@@ -95,7 +104,7 @@ export function BorderReviewPanel({ book, kind }: { book: string; kind: BorderRe
                 {kind === 'outer' && <em>{c.side === 'top' ? '上框' : '下框'}</em>}
                 {kind === 'colborder' && <em>第 {c.col} 列 · {c.end === 'top' ? '上端' : '下端（已翻转）'}</em>}
               </h3>
-              <img src={c.img} alt="" loading="lazy" className={kind === 'colborder' ? 'br-img-pixelated' : ''} />
+              <img src={withWorkspace(c.img)} alt="" loading="lazy" className={kind === 'colborder' ? 'br-img-pixelated' : ''} />
               <div className="br-verdicts">
                 {spec.options.map((opt) => (
                   <button

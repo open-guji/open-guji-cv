@@ -226,10 +226,36 @@ def test_escalate_flag_set_when_chosen_disagrees_with_unet_by_a_big_blob():
     assert cp2.escalate is False and cp2.escalate_reason is None
 
 
-def test_single_candidate_cut_is_also_probed_and_can_escalate():
-    """单候选（例：文言 vol02:163:1:6，池里只有直线）也要过探针：U-Net 说差一大块就升级，选法仍是直线。"""
+def _single_straight_cut(j):
+    """monkeypatch 缝搜索不产出折线 → 池里只剩直线，跑一列取那个切点。"""
     from open_guji_cv.utils import row_boundaries as RBm
+    import open_guji_cv.utils.seam as seam_mod
+    img = _touching_column()
+    orig = seam_mod.find_seam
+    try:
+        seam_mod.find_seam = lambda ink, y, band=20, **kw: __import__("numpy").full(ink.shape[1], y, dtype=int)
+        r = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=j)
+    finally:
+        seam_mod.find_seam = orig
+    return _cut(r)
+
+
+def test_single_candidate_with_normal_cells_skips_the_probe(monkeypatch):
+    """单候选且两侧格高都在 period ±PROBE_DEV 内：裁判无可改选，探针也省掉（CPU 上一次前向 ≈0.2 s，
+    这类切点占 72%）。不打分、不升级。"""
+    j = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"straight": 999})
+    cp = _single_straight_cut(j)
+    assert len(cp.candidates) == 1 and cp.candidates[0].agree is None
+    assert cp.candidates[0].dis_unet is None and cp.escalate is False
+
+
+def test_single_candidate_cut_is_also_probed_and_can_escalate(monkeypatch):
+    """单候选（例：文言 vol02:163:1:6，池里只有直线）也要过探针：U-Net 说差一大块就升级，选法仍是直线。
+    2026-09-25 起只在两侧格高偏离 period 超过 PROBE_DEV 时才探；这里把门槛关掉测探针本身。"""
+    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.utils import cut_select as CSm
     from open_guji_cv.utils.cut_select import ESCALATE_BLOB
+    monkeypatch.setattr(CSm, "PROBE_DEV", -1.0)
     # 用人裁把池收成单候选之外的办法：monkeypatch 让缝搜索不产出折线 → 只剩直线
     img = _touching_column()
     j = _FakeJudge({"straight": 0.80, "seam": 0.99}, dis={"straight": ESCALATE_BLOB + 1})

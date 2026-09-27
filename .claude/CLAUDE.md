@@ -60,6 +60,11 @@
 | [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
 | [glyph_db_first_design.md](doc/glyph_db_first_design.md) | **字形库优先的增量识别**：不再先聚簇再定字，新图块先与已验证字形库匹配。`match.py` / `recognize_flow.py` / `seeding.py` / `seed_queue.py` 都指回它 |
 | [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + 测试集 + 回归护栏 + 已知失败形态 |
+| [rare_char_matching_survey.md](doc/rare_char_matching_survey.md) | **生僻字匹配现状盘点（2026-09-21）**：5a 判 diff 之后走的那条路（Step5-b 三源 RRF + 按册字表）逐层拆解、「更大的字形库」资产表、实测账与 11 条负结果、8 个结构缺口（无级联 / 下游不消费 / 真刻例不进模板 / IDS 只有护栏没检索 / genmin 三套字体零引用）+ 建议路线 |
+| [structure_aware_recognition_design.md](doc/structure_aware_recognition_design.md) | **结构感知识别方案草案（2026-09-21）**：用户「识别要和 IDS 拆分结合、输出结构 + 每槽位像什么」的想法在文献里对应 RZCR/ACCID 显式检测支 vs CCR-CLIP/GRSTR 隐式对齐支的地图（20 篇 + 4 个历史文献数据集）、对「不依赖字体/噪点」能兑现多少的评估、IDS 表实测（停集 K=20 → 1,710 部件）、三步方案（结构头+槽位部件头 → IDS 树编码器 → 槽位级检索）与验收，全部只出候选不放行；**第二部分 §8–12 实施方案**（范围收窄到楷／行、IDS 数据源盘点、数据流、**云端 CPU vs 本机 GPU 分工表**、里程碑 M0–M4）；**§13 落地记录**：M0 三块 + M1 云端侧已做（`ids_struct.py`、`components_v1.tsv`、重排开关、IDS 兜底、训练脚本 `--struct-heads`），本机待办见 [task_card_2026-09-21_structure_step_a_local.md](doc/task_card_2026-09-21_structure_step_a_local.md) |
+| [ccr_rare_char_literature_review.md](doc/ccr_rare_char_literature_review.md) | **汉字识别生僻字扩展与 IDS／笔画结构识别文献综述（2026-09-21）**：按用户「先广搜、再分类写摘要、最后想新点子」三步组织——arXiv 37 组查询 369 条 + 定点 75 篇 + 约 40 次网页检索（清单 `doc/lit/ccr_rare_char_papers.tsv`）；评测协议对照表（字零样本／部首零样本／加模板／开放集／类外）；两轴分类（文本侧表示 R0–R6 × 建模范式 P1–P8）；约 120 篇逐篇摘要分七组（结构化零样本主线／笔画层／历史文献与基准／字形生成／通用引擎与 VLM／文本侧／综述）；横向数字对照（允许字体模板时 CCR-CLIP 93.8–95.7 与我们 unseen 96.9 同档；真难题档 78.6 才是要攻的数）；文献对本项目 7 条负结果的印证；**§6 十六条新想法 N1–N16** 按零训练云端／一次训练 GPU／长线分级，前六项零训练（IDS 派生形近对表、四角号码查字与辅助头、5-b 拒识→自动兜底、固定退化协议、结构感知对齐代价、两项评测口径），中段是真刻例部件重组合成（KAGE 框投影取部件块）、多原型+按册适配、独体字笔画头；反面清单 7 条 |
+| [unencoded_char_sources_survey.md](doc/unencoded_char_sources_survey.md) | **Unicode 未收字：字统网怎么做、数据从哪来、我们能拿到什么（2026-09-21）**：逆向 `zi.tools /api/zi/<字或IDS串>`——未收字以 IDS 串当身份、「同 X」抄自《汉字海》/《漢語大字典》/教育部異體字字典原文、字形是 KAGE 动态组字、IDS 是站长白易自拆且**未开源**（`yi-bai/ids` 只有已收字），站点无许可；公开替代全部实测：**GlyphWiki dump**（自由许可，215 万条：IDS 命名 77,444 / 中华字海 63,167 / 大漢和 51,127 …，关联到整理本字种的未收/异体字形 33,804 条、覆盖 4,637 字种的 89.2%）、kage-engine 离线渲染已跑通（`scripts/kage_render_glyphwiki.py`，9 字 14 ms）、全字庫开放数据（104,680 码位中 20,659 在 PUA、部件表 97,086）、教育部異體字字典（106,303 字无开放数据）、CHISE CBETA/大漢和/CDP 未收字 IDS、IRG ORT（unify-to 判定）；三层做法：层 1 GlyphWiki 目录 + 渲染进模板库当第六套字体（零训练）、层 2 字统网按字补 IDS（先联系站长）、层 3 刻本 IDS 登记回流 |
+| [task_card_2026-09-22_next_plan.md](doc/task_card_2026-09-22_next_plan.md) | **下一步规划任务卡（2026-09-22）**：综合本机三实测（r6 不过线、重排只买 top-1 卖 top-5、genmin 留下）+ 文献综述 + 未收字调研；T1 冻结 r5 线性探针训结构头/槽位头（云端 CPU）、T2 重排重测加 diff 门控、T3 结构金标 300 条审查页、T4 GlyphWiki 未收字当第六套字体、T5 三个评测口径、T6 形近对表 + 四角查字、T7 对齐代价闸；本机 T9 改主干仅当 T1 < 95%、T10 部件块库、T11 真刻例多原型；闸表与不做清单。云端新能力：`guji-workspace` 可挂、bundle 已解到 `cache/`、CPU torch 跑 r5 9.4 ms/字 |
 | [glyph_match_research.md](doc/glyph_match_research.md) | 匹配算法调研：我们这层在文献谱系里的位置（IDM 零阶形变模型）+ 四条改进路线 |
 | [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图 + **字体字形匹配力实测（§6，负结果）** |
 | [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
@@ -89,10 +94,46 @@ python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 �
 - `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` — 跳过模型源连接检查，加快启动速度
 - `PYTHONIOENCODING=utf-8` — Windows 控制台中文输出必须设置
 
+### 云服务器上的内存额度（2026-09-26）
+- 云服务器只有 7.5G，跑批曾多次把整机拖进 OOM。所有跑批共用 `guji-batch.slice`（上限 3.5G），超了只杀跑批本身。
+- `python -m open_guji_cv` / `guji` 的跑批子命令会**自动**进这个 slice（见 `utils/batch_slice.py`）；`console`/`ui`/`review`/`status`/`cache` 不进。
+- **自己写的临时脚本**（scratchpad 里的 `ab_book.py` 之类）不会自动进，要包一层：`guji-batch .venv/bin/python xxx.py ...`。
+- cv 控制台由 systemd 托管（`systemctl --user status guji-cv-console`），挂了自动拉起；重启用 `runs/restart_console.sh`，**不要再用 nohup 起第二个**。
+
 ### 本机环境（2026-09-03）
 - 仓里的 `venv/` 指向已卸载的 Store Python 3.13，**是死的**。用 `.venv/`（uv 建，Python 3.12）：
-  `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented`
+  `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented fontTools scipy`
 - pytest 在本机会吞掉终端输出，要结果就加 `--junitxml=…` 再解析。
+
+### 测试（2026-09-20 用户定的口径）
+
+> **测试只依赖本仓库，且只依赖 `tests/` 下冻结的数据。**
+
+在这之前，37 个测试文件、94 条用例挂在三种**活数据**上——隔壁测试集仓
+`open-guji-dataset`、某本书的工作区（`GUJI_WORKSPACE` 下的原图/产物/缓存/
+字形库）、以及引擎仓里跟着跑批变的 `output/` `corpus/` `data/`。后果是
+**数据一变就红、数据不在就整条 skip**（云端 94 条静默跳过，绿得毫无意义）。
+
+现在的规矩：
+
+- **单元测试自己造数据**。产物都是 pydantic 模型，直接构造就行，
+  不要去扫 `products/` 看碰巧有什么（`tests/helpers.py` 备好了构造器）。
+- **要真图像的少数集成测试用 `tests/fixtures/` 里冻结的样本**（三张从
+  `data/book1` 复制来的真扫描页，共 ~400 KB），**长期不动**。
+- **对真书数据的质量断言不是测试，是评测**，归 `guji eval run` / `scripts/eval_*.py`。
+- 确实要真工作区的人工验收工具标 `@pytest.mark.manual`（默认不跑，`-m manual` 才跑）。
+
+跑法与踩过的坑见 **`tests/conftest.py` 模块头**，冻结数据的内容与改动规矩见
+**`tests/fixtures/README.md`**；`tests/test_suite_hygiene.py` 是这条口径的守卫，
+会扫测试源码把重新长出来的仓外依赖拦回去。
+
+```bash
+.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider      # 全量（-s 必须带）
+.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider -m manual   # 人工验收那几条
+```
+
+装了 `torch` 才跑的有 7 条（生僻字 CNN 候选、U-Net 切点裁判），
+装了 `rapidocr-onnxruntime` 才跑的有 3 条——那是**可选件**缺席，不是数据依赖。
 
 ### 新命令速查（详见 [console_manual.md](doc/console_manual.md)）
 ```bash

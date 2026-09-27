@@ -1,4 +1,6 @@
 import { useRef } from 'react'
+import { withWorkspace } from '../../api/client'
+import { CL_COLORS } from './CutlineCard'
 import type { CandidateMatch, CutlineCase } from '../../types/cutline'
 
 // Step7「切分裁决」板块专用卡片（overview 2026-09-11 下发）。
@@ -63,7 +65,7 @@ function matchLabel(m: CandidateMatch | null | undefined, expect?: string) {
   )
 }
 
-// 一个格位的期望字。`ch` = 整理本读法（reading），`shape` = v2 定字认的刻本形。
+// 一个格位的期望字。`ch` = 整理本在这一位印的字，`shape` = v2 定字认的刻本形。
 // 两者不同就是一次转换，摆成「读法(形)」并标出来——此前卡片只显示 shape 却写着
 // 「整理本期望」，v2 定错字时人就照着一个错的"期望"去裁切线（2026-09-13 实锤：
 // vol02:33:2:9 语料是「何妥」，卡片显示「何安」）。
@@ -145,13 +147,20 @@ export function BlockingCutlineCard({
         <div className="climg" ref={boxRef} style={{ height: h * scale, width: w * scale, cursor: drawing ? 'crosshair' : 'default' }}
              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={endDrag} onMouseLeave={endDrag}
              onContextMenu={(ev) => ev.preventDefault()}>
-          <img src={c.img} height={h * scale} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * scale }} />
+          {/* 同 ReviewCardView：图片出口的工作区只能放查询串 */}
+          <img src={withWorkspace(c.img)} height={h * scale} alt={c.id} loading="lazy" style={{ width: 'auto', height: h * scale }} />
           <svg className="clsvg" style={{ height: h * scale }}>
             {cands.map((cd, k) => {
               if (!cd.y || !cd.y.length) return null
               const cls = cd.kind === 'seam_wide' ? 'wide' : 'narrow'
               return (
+                // ⚠️ `stroke` 必须走**行内属性**：`.clcand` 只定了 fill/宽度/虚线，
+                // 颜色一直是逐条给的（见 CutlineCard 的 CL_COLORS 注释）。
+                // 这里原来只给 `wide`/`narrow` 两个 class，而 cutline.css 里根本
+                // 没有这两条规则 —— 于是 stroke 解析成 none，线在 DOM 里、
+                // 几何也对，就是一个像素都不画（用户 2026-09-16 实测「看不到线」）。
                 <polyline key={k} className={`clcand ${cls}${k === pick && !drawn ? ' clcand-pick' : ''}`}
+                          stroke={CL_COLORS[k % CL_COLORS.length]}
                           points={cd.y.map((yy, j) => `${(c.x0 + j) * scale},${(yy - c.crop_y0) * scale}`).join(' ')} />
               )
             })}

@@ -42,6 +42,7 @@ from ..clustering.align_label import is_han
 from ..clustering.variants import VariantMap
 from ..eval.round_check import _same_char
 from ..products.store import ProductStore
+from .absent import absent_runs
 from .slots import SlotRec, page_slots
 from .witness import Witness, col_verdict
 
@@ -74,7 +75,6 @@ class Diff:
     channel: str | None = None
     admit: bool = False
     human: bool = False
-    reading: str | None = None
     n: int = 1         # missing 串长
     hyp_ctx: str = ""
     ref_ctx: str = ""
@@ -102,13 +102,15 @@ class PageResult:
     note: str = ""
     diffs: list[Diff] = field(default_factory=list)
     cols: list[ColDiff] = field(default_factory=list)
+    absent_runs: list[dict] = field(default_factory=list)
+    """证人里没有的段（按语/卷端题/卷末题），**不进 diffs**——见 report/absent.py。
+    报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
 
 
-def classify(char: str, reading: str | None, ref: str) -> str:
+def classify(char: str, ref: str) -> str:
     """一个字位的差异性质。判定顺序固定、互斥，先命中者生效（04 卡 §二·3）。
 
     - `same`：字形一致；
-    - `conv.known`：管线已记账的转换（`reading == ref`）——不是新发现的差异；
     - `variant.to_orthodox` / `variant.to_simp` / `variant.other`：同一个字的
       不同形，按**方向**分；
     - `sub.confusable`：T3 形近（己已巳、日曰、人入）——最可能是认错；
@@ -122,8 +124,6 @@ def classify(char: str, reading: str | None, ref: str) -> str:
         return "same"
     if char == PLACEHOLDER:
         return "unreadable"
-    if reading is not None and reading == ref:
-        return "conv.known"
     if _same_char(char, ref):
         return _variant_direction(char, ref)
     # ⚠️ 简体判定要在 `_same_char` **之后、认错之前**单独来一遍。
@@ -200,6 +200,19 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
         res.note = "没有可比对的字位"
         return res
 
+    # 证人里根本没有的段（校勘按语、卷端题、卷末题）**先摘出去再对齐**：
+    # 留着它们不但自己全报成差异，还会把整页的锚点带偏（见 report/absent.py）。
+    vm0 = _vm()
+    res.absent_runs = absent_runs(
+        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _slot_char(s)}
+         for s in text_slots], w.text_norm, vm0.normalize_text)
+    if res.absent_runs:
+        skip = {i for a in res.absent_runs for i in a["ids"]}
+        text_slots = [s for s in text_slots if s.id not in skip]
+        if not text_slots:
+            res.note = "整页都是证人无此段的内容"
+            return res
+
     text = "".join(_slot_char(s) for s in text_slots)
     offset = anchor_page(text, w.index)
     if offset is None:
@@ -231,7 +244,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
         res.diffs.append(Diff(
             id=s.id, page=page, col=s.col, slot=s.slot, sub=s.sub, kind=kind,
             char=ch, ref=ref, witness=w.label, channel=s.channel, admit=s.admit,
-            human=s.human, reading=s.reading, n=n,
+            human=s.human, n=n,
             hyp_ctx=ctx_hyp(i), ref_ctx=ctx_ref(j, n=n)))
 
     # 字位 → 它在证人汉字流里的绝对 offset，供列结构比对用
@@ -243,7 +256,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             for k in range(i2 - i1):
                 s, ref = text_slots[i1 + k], window[j1 + k]
                 pos_of[s.id] = lo + j1 + k
-                kind = classify(_slot_char(s), s.reading, ref)
+                kind = classify(_slot_char(s), ref)
                 if kind == "same":
                     res.n_equal += 1
                     continue
@@ -263,7 +276,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             pos_of[s.id] = lo + jb + k
             if not is_han(ref):
                 continue
-            kind = classify(_slot_char(s), s.reading, ref)
+            kind = classify(_slot_char(s), ref)
             if kind == "same":
                 res.n_equal += 1
                 continue

@@ -10,12 +10,13 @@ R2s 的判据与 `eval/rulers.py` 完全一致（格线处墨占比 > INK_ON_LIN
 from __future__ import annotations
 
 import random
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 SHARD = "char-segmentation/touching-cuts"
 
 
-def body_pages(book: str) -> list[int]:
-    """page-type 标注里判为正文的页（职名页 / 目录页不用 21 格先验，先不出卡片）。
+def _pages_of_type(book: str, types: frozenset[str]) -> list[int]:
+    """page-type 裁决表里属于 `types` 的页。
 
     读 **workspace 裁决表**的 `page-type` 分片（`guji gold export page-type` 从测试集仓
     复制过来，是「这本书的事实」），不读 open-guji-dataset——出卡是运行时（2026-09-13）。"""
@@ -26,7 +27,36 @@ def body_pages(book: str) -> list[int]:
         return []
     return sorted(int(i.anchor.page) for i in items
                   if str(i.anchor.book) == book and i.anchor.page is not None
-                  and (i.expected or {}).get("page_type") == "body")
+                  and (i.expected or {}).get("page_type") in types)
+
+
+def body_pages(book: str) -> list[int]:
+    """严格的正文页。标定（`utils/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
+    return _pages_of_type(book, frozenset({"body"}))
+
+
+#: 切线出卡的页型口径。**只有正文**——2026-09-16 放开目录页又收回，两次都有实测依据：
+#:
+#: - `toc` 目录：格数统计看着像正文（99/108 列通过、21 格为主），但那是**假象**。目录页大量是
+#:   「易類一」这种三五个字的短条目，整列剩下大半是空白；弹性 DP 仍按 21 格去填，于是把空白
+#:   均分成一堆 20–60px 的空格（正文格心距 115.8±2.1，目录 116.6±**17.1**，最小 20px）。
+#:   用户裁完的反馈：「格线定位到了字的中间，都不知道该往上标还是往下标」——出卡没有审阅价值，
+#:   人也给不出可信的金标。要修的是「短条目列不该硬凑 21 格」，属 Step3 的活，不是人裁能解决的。
+#: - `roster` 职名：「大字官职 + 小字『臣某某』」混排，周期估计锁到小字的 80px（正文 115），
+#:   44 页里 37 页有列切失败、20 多页整页 9 列全废。0 格的列也产生不了切点卡。
+#:
+#: 两类的共同点：**病在 Step3 的格线定位，不在切点选择**。拿坏格线出切点卡，是让人在错的
+#: 前提上标注，标了也进不了金标（原则③：不能判断的交下游，不是硬让人判）。
+STD_GRID_TYPES = frozenset({"body"})
+
+
+def std_grid_pages(book: str) -> list[int]:
+    """切线出卡的页口径，见 `STD_GRID_TYPES`。
+
+    现在等价于 `body_pages()`；留着这个名字是因为口径**会**再动（目录页的短条目切分修好后
+    就该放回来），到时改 `STD_GRID_TYPES` 一处即可，不必再去动路由。
+    """
+    return _pages_of_type(book, STD_GRID_TYPES)
 
 
 def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> float | None:
@@ -43,7 +73,7 @@ def _cell_ink_mass(store, book: str, page: int, col: int, cell, med: float) -> f
     p = ImageCache().get(book, "column_image", column_key(page, col))
     if p is None:
         return None
-    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
     y0, y1 = max(0, int(cell.y0)), min(img.shape[0], int(cell.y1))
@@ -188,6 +218,45 @@ def r2s_boundaries(book: str, pages: list[int], store=None) -> list[dict]:
     return out
 
 
+#: 金标「坐标系是否还有效」的判据：金标记的**原格线** `y_old` 与当前**同一格线**的位移 ≤ 这个数就算没变。
+#:
+#: 2026-09-16 实测（实验十六/十七）：vol01 按新 Step1 重跑后 706 条金标 `col_h` 对不上，按旧判据全算「漂移」；
+#: 可 `y_new − y_old` 中位 0.0、p90 2.0——列只是**底部变长了 10px**，格线一根没动。等比缩放反而把误差加上去
+#: （y=1500 × 1.004 = 平移 6px）。按这个判据复核：666 条可直接用、40 条真漂移（个别列重新分格了）。
+#: `col_h` 只能当「可能变了」的粗筛，不能当「确实变了」的结论。
+ANCHOR_TOL = 3.0
+
+
+def gold_anchor_shift(cc, ex: dict) -> float | None:
+    """金标原格线 `y_old` 到当前同一格线的位移（当前 − 旧）。找不到那条格线返回 None。
+
+    先按 (slot_above, slot_below) 对回当前 cells 找格线（slot 比序号稳，重新分格后序号会整体错位）；
+    对不上再退到「离 y_old 最近的内部格线」——序号错位而坐标没变的情况靠这一步救回来。
+    """
+    yo = ex.get("y_old", ex.get("y"))
+    if yo is None or cc is None or not getattr(cc, "boundaries", None):
+        return None
+    yo = float(yo)
+    sa, sb = ex.get("slot_above"), ex.get("slot_below")
+    cells = getattr(cc, "cells", None) or []
+    if sa is not None and sb is not None and len(cells) == len(cc.boundaries) - 1:
+        bi = next((i for i in range(1, len(cells))
+                   if cells[i - 1].slot == sa and cells[i].slot == sb), None)
+        if bi is not None:
+            return float(cc.boundaries[bi]) - yo
+    inner = list(cc.boundaries[1:-1])
+    if not inner:
+        return None
+    near = min(inner, key=lambda b: abs(float(b) - yo))
+    return float(near) - yo
+
+
+def gold_anchor_ok(cc, ex: dict, tol: float = ANCHOR_TOL) -> bool:
+    """金标坐标系对当前产物仍然有效（原格线位移 ≤ tol）。"""
+    d = gold_anchor_shift(cc, ex)
+    return d is not None and abs(d) <= tol
+
+
 def drifted_boundaries(book: str, store=None, tol: int = 2,
                        include_relabeled: dict[str, set[int]] | None = None,
                        only_ids: set[str] | None = None) -> tuple[list[dict], dict]:
@@ -237,7 +306,7 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         k = (pg, col)
         if k not in h_cache:
             p = ic.get(book, "column_image", f"p{pg:04d}c{col:02d}")
-            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
+            img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
             h_cache[k] = None if img is None else int(img.shape[0])
         return h_cache[k]
 
@@ -250,13 +319,32 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
         if h is None:
             skipped["no_column_image"] = skipped.get("no_column_image", 0) + 1
             continue
+        # 记了页面坐标 / 几何签名的条目（2026-09-25，eval/colgeom.py）：页面坐标能换算，不用重裁；
+        # 签名不符又没页面坐标的一定漂了（col_h 相同也漂过）；两样都没记的老条目走下面的 col_h 口径
+        from .colgeom import current_geom, gold_rows_now
+        g_now = current_geom(st, book, pg, col)
+        mode, _, _ = gold_rows_now(ex, g_now)
         gold_h = ex.get("col_h")
+        if mode == "drift":
+            gold_h = gold_h or -1
+        elif mode in ("page", "sig_ok") and only_ids is None and not include_relabeled:
+            continue
         if not gold_h:
             # 没记 col_h 的是 2026-09-13 起「选切分方案」卡的裁决（只有 cand 没有 y），
             # 本来就是对当前候选裁的，不算过期
             skipped["no_col_h(cand-verdict)"] = skipped.get("no_col_h(cand-verdict)", 0) + 1
             continue
-        drifted = abs(int(gold_h) - h) > tol
+        drifted = mode == "drift" or abs(int(gold_h) - h) > tol
+        if drifted and mode != "drift":
+            # col_h 变了只是粗筛；原格线还在原处的不算漂移（见 ANCHOR_TOL 注释：vol01 706 条里 666 条是这种），
+            # 否则会让人把没坏的金标重标一遍。
+            if pg not in cells_cache:
+                cells_cache[pg] = st.read(book, "row_segment", page_key(pg), "cells")
+            _cells = cells_cache[pg]
+            _cc = _cells.column(col) if _cells is not None else None
+            if _cc is not None and _cc.ok and gold_anchor_ok(_cc, ex):
+                drifted = False
+                skipped["anchor_ok(col_h_changed_only)"] = skipped.get("anchor_ok(col_h_changed_only)", 0) + 1
         redo = (not drifted and bool(include_relabeled)
                 and any(abs(int(v) - h) <= tol for v in include_relabeled.get(it.id, ())))
         if only_ids is not None and not drifted:
@@ -294,6 +382,7 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
             col_h=h, col_w=col_w,
             seam=list(seam) if seam else None,
             kind="drift",
+            geom_sig=g_now.sig if g_now is not None else None,
             drift_from_col_h=int(gold_h) if drifted else None,
             redo=redo,
             gold_verdict=ex.get("verdict"),
@@ -328,7 +417,7 @@ def escalated_boundaries(book: str, pages: list[int], store=None,
         k_ = (pg_, col_)
         if k_ not in h_cache:
             p_ = ic.get(book, "column_image", column_key(pg_, col_))
-            img = cv2.imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
+            img = cv_imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
             h_cache[k_] = None if img is None else int(img.shape[0])
         return h_cache[k_]
 
@@ -384,6 +473,68 @@ def escalated_boundaries(book: str, pages: list[int], store=None,
     return out, skipped
 
 
+def boundary_cases(book: str, ids, store=None) -> tuple[list[dict], dict]:
+    """按 id（`<book>:<页>:<列>:<上格 slot>`）直接从现役 Step3 产物出切线卡，**不要求已在金标里**。
+
+    2026-09-26 加：控制台清单模式（`list:<名字>`）原来只能出裁决表里已有的金标 id（走
+    `drifted_boundaries`）；机器新筛出来的可疑切点（如「矮格贴线」的细字腰斩，见 overview
+    Step3-逐字切分/13 §十）不在金标里，出不了卡。卡片字段与 `escalated_boundaries` 同形。
+    上下两格不限 char（首字顶横被切进上面空白格的也要能出）。
+    """
+    from ..core.step import page_key
+    from ..core.spec import column_key
+    from ..products import kinds as _k  # noqa: F401
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+    from .colgeom import current_geom
+    from .rulers import _col_profile
+    import cv2
+    st = store or ProductStore()
+    ic = ImageCache()
+    out: list[dict] = []
+    skipped: dict[str, int] = {}
+    cells_cache: dict[int, object] = {}
+    for cid in ids:
+        parts = str(cid).split(":")
+        if len(parts) != 4 or parts[0] != book:
+            skipped["bad_id"] = skipped.get("bad_id", 0) + 1
+            continue
+        pg, col, sa = int(parts[1]), int(parts[2]), int(parts[3])
+        if pg not in cells_cache:
+            cells_cache[pg] = st.read(book, "row_segment", page_key(pg), "cells")
+        cells = cells_cache[pg]
+        cc = cells.column(col) if cells is not None else None
+        if cc is None or not cc.ok:
+            skipped["column_not_ok"] = skipped.get("column_not_ok", 0) + 1
+            continue
+        cmap = {c.slot: c for c in cc.cells if c.sub is None}
+        up, dn = cmap.get(sa), cmap.get(sa + 1)
+        if up is None or dn is None:
+            skipped["slots_not_found"] = skipped.get("slots_not_found", 0) + 1
+            continue
+        p_ = ic.get(book, "column_image", column_key(pg, col))
+        img = cv_imread(str(p_), cv2.IMREAD_GRAYSCALE) if p_ else None
+        if img is None:
+            skipped["no_column_image"] = skipped.get("no_column_image", 0) + 1
+            continue
+        prof = _col_profile(st, book, pg, col)
+        bi = next((i for i in range(1, len(cc.cells)) if cc.cells[i - 1].slot == sa and cc.cells[i].slot == sa + 1), None)
+        y = int(round(up.y1))
+        g = current_geom(st, book, pg, col)
+        out.append(dict(
+            id=cid, book=book, page=pg, col=col, bi=bi, y=y,
+            ink=round(float(prof[y]), 3) if prof is not None and 0 <= y < len(prof) else None,
+            best=None, slot_above=up.slot, slot_below=dn.slot,
+            y0=int(round(up.y0)), y1=int(round(dn.y1)),
+            x0=int(round(min(up.x0, dn.x0))), x1=int(round(max(up.x1, dn.x1))),
+            col_h=int(img.shape[0]), col_w=int(max(c.x1 for c in cc.cells) + min(c.x0 for c in cc.cells)),
+            seam=list(up.seam_bottom) if getattr(up, "seam_bottom", None) else None,
+            kind="drift", geom_sig=g.sig if g is not None else None, drift_from_col_h=None, redo=False,
+            gold_verdict=None, char_above="", char_below="",
+        ))
+    return out, skipped
+
+
 def polyline_to_seam(points: list, x0: int, x1: int) -> list[int]:
     """人标的折线（列图坐标 [[x, y], …]，按 x 递增）→ 每个 x∈[x0, x1) 一个 y（线性插值；
     两端之外取端点的 y，即水平延伸）。与 `Cell.seam_*` 同口径，可直接比。"""
@@ -418,15 +569,15 @@ def seam_deviation(a: list, b: list) -> tuple[float, float]:
 def attach_expected(cases: list[dict], book: str, store=None) -> None:
     """把整理本对齐金标的期望字挂到 char_above / char_below（没有就留空）。
 
-    取 `reading`（整理本给的文意读法），**不是** `shape`（v2 定字认的刻本形）
+    取 `ref`（整理本在这一位印的字），**不是** `shape`（v2 定字认的刻本形）
     ——卡片上那栏写着「整理本期望」，就得真是整理本说的字。2026-09-13 实锤：
     vol02:33:2:9 语料原文是「大象引何**妥**說」，卡片却显示「何**安**」，因为
-    这里一直取的是 `shape`：那条金标 `shape='安' reading='妥' conversion=True
+    这里一直取的是 `shape`：那条金标 `shape='安' ref='妥' conversion=True
     source='fallback'`——v2 定字自己就没把握（fallback 兜底），定出来的形还被
     当成「整理本期望」摆给人看，等于拿一个更不可信的来源冒充金标。
 
     两层都留着（`shape_above`/`shape_below`），差异由前端显式呈现为一次转换
-    （见 `v2_align` 模块头「字形 / 释读分开记」）；`conversion` 位也一并带出，
+    （见 `v2_align` 模块头）；`conversion` 位也一并带出，
     省得前端拿两个字符串比对再猜。
     """
     from ..gold.v2_align import align_book
@@ -440,8 +591,8 @@ def attach_expected(cases: list[dict], book: str, store=None) -> None:
     for c in cases:
         gu = gold.get(f"{book}:{c['page']}:{c['col']}:{c['slot_above']}")
         gd = gold.get(f"{book}:{c['page']}:{c['col']}:{c['slot_below']}")
-        c["char_above"] = gu.reading if gu else ""
-        c["char_below"] = gd.reading if gd else ""
+        c["char_above"] = gu.ref if gu else ""
+        c["char_below"] = gd.ref if gd else ""
         c["shape_above"] = gu.shape if gu else ""
         c["shape_below"] = gd.shape if gd else ""
         c["conv_above"] = bool(gu.conversion) if gu else False

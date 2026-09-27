@@ -9,8 +9,6 @@
 .rvcard[data-done="1"] { border-left-color: var(--ok); }
 .rvcard[data-done="skip"] { border-left-color: var(--ochre); }
 .rvcard[data-done="non"] { border-left-color: var(--zhu); }
-.rvcard[data-done="need_reading"] { border-left-color: var(--ochre); box-shadow: inset 0 0 0 1px var(--ochre); }
-.rvcard[data-done="need_reading"] .rvread input { border-color: var(--ochre); background: var(--ochre-soft); }
 .rvcard[data-done="truncated"] { border-left-color: var(--zhu); border-left-style: dashed; }
 .rvcard[data-done="contaminated"] { border-left-color: var(--ochre); border-left-style: dashed; }
 .rvcard[data-done="upstream_miscut"] { border-left-color: var(--indigo); border-left-style: double; border-left-width: 6px; }
@@ -27,6 +25,7 @@
 .rvbody img { width: 76px; height: 76px; object-fit: contain; background: #fff; border: 1px solid var(--rule); }
 .rvimgcol { display: flex; flex-direction: column; align-items: center; gap: .2rem; }
 .rvctxbtn { font-size: .65rem; padding: .05rem .35rem; color: var(--mute); }
+.rvimgbtns { display: flex; gap: .25rem; }
 .rvctximg { margin: .3rem 0; padding: .3rem; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
 .rvctximg img { max-width: 100%; display: block; margin: 0 auto; }
 .rvev { flex: 1; min-width: 0; line-height: 1.5; }
@@ -72,3 +71,30 @@
 .rvseg button kbd { font-family: var(--mono); font-size: .68rem; color: var(--mute);
   border: 1px solid var(--rule); border-radius: 2px; padding: 0 .25rem; margin-right: .2rem; }
 .rvseg button.on kbd { color: #fff; border-color: rgba(255,255,255,.6); }
+
+/* 原图破损的「最像哪个字」括注（2026-09-19）。与 .rvread（己/已/巳 的文意框）
+   同一形状：都是「主裁决之外的补充信息」，跟着主裁决出现/消失。 */
+.rvguess { margin-left: 6px; font-size: 13px; color: #555; }
+/* 不复用 .rvin：那个类名在本文件里被复用成候选行「【整】」标记的 span 样式
+   （见上面那条注释），input 用它会被后到的 color/font-size 串掉。 */
+.rvguessin { width: 3em; text-align: center; font-size: .9rem; }
+
+/* Step6-AI 证据（任务书-C-人审卡按AI预选，2026-09-27）：候选按 AI 排序，
+   同组「同字异形」并排，首组加边框强调，排除项默认折叠。 */
+.rvai { margin: .35rem 0; padding: .3rem .45rem; border: 1px solid var(--rule); border-radius: 3px;
+        background: var(--paper); font-size: .74rem; }
+.rvai-badges { display: flex; gap: .4rem; flex-wrap: wrap; align-items: baseline; margin-bottom: .2rem; }
+.rvbadge { font-size: .68rem; padding: .05rem .4rem; border-radius: 3px; }
+.rvbadge-warn { background: var(--ochre-soft); color: var(--ochre); }
+.rvai-groups { display: flex; flex-direction: column; gap: .2rem; }
+.rvai-group { display: flex; align-items: baseline; gap: .25rem; flex-wrap: wrap; }
+.rvai-group.rvai-top { border-left: 3px solid var(--indigo); padding-left: .3rem; }
+.rvai-group button { font-size: 1rem; padding: 0 .4rem;
+  font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.rvai-group button.pick { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.rvai-why { display: inline; font-size: .68rem; color: var(--mute); }
+.rvai-why summary { cursor: pointer; display: inline; }
+.rvai-why div { margin-top: .1rem; }
+.rvai-drop { margin-top: .3rem; font-size: .7rem; color: var(--mute); }
+.rvai-drop summary { cursor: pointer; }
+.rvai-dropitem { padding: .05rem 0 .05rem .6rem; }

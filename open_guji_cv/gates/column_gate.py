@@ -56,7 +56,36 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
+from ..utils import jiazhu_split
 from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
+
+
+def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
+                        border_top: float, border_bottom: float,
+                        period: float | None, ref_w: float | None,
+                        ink_threshold: int = 128) -> float:
+    """这一列有多大比例的非空白格像双列小字（`jiazhu_split.column_frac` 的列图版）。
+
+    闸跑在 Step3 之前，拿不到 Step3 的格边界，所以这里按 `period` 均匀分格来
+    量——**判据只需要"整列比例"这个粗量，不需要精确的格边界**（实测按均匀
+    格分与按 Step3 真边界分，三条夹注列的比例分别是 0.44/0.76/1.00 与
+    0.44/0.76/1.00，逐列相同）。`period` 缺失时返回 0（不豁免）。
+    """
+    if not period or period <= 0:
+        return 0.0
+    x_lo, x_hi = int(band[0]), int(band[1])
+    y0, y1 = max(0.0, border_top), min(float(cleaned.shape[0]), border_bottom)
+    if x_hi - x_lo < 8 or y1 - y0 < period:
+        return 0.0
+    n = max(1, int(round((y1 - y0) / period)))
+    patches = {}
+    for k in range(n):
+        a = int(round(y0 + k * (y1 - y0) / n))
+        b = int(round(y0 + (k + 1) * (y1 - y0) / n))
+        if b - a >= 8:
+            patches[k] = cleaned[a:b, x_lo:x_hi]
+    return jiazhu_split.column_frac(patches, ref_w, ink_threshold)
+
 
 CONTRACT = [
     "页级共享量 period / ref_w 用该页的正文列算（剔掉 L1c 宽度异常与 L0c 非正文列），"
@@ -74,6 +103,7 @@ class ColumnGateParams(BaseModel):
     width_tol: float = 0.15
     side_floor_max: float = 0.045
     stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
+    jiazhu_frac_min: float = jiazhu_split.COLUMN_FRAC_T  # 夹注列豁免门槛，见 L1c/L2 的豁免说明
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
     # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
@@ -82,19 +112,28 @@ class ColumnGateParams(BaseModel):
     bottom_slack: float = 16.0     # 下界在版框线之外再放多少，见 border_bottom 注释
     chars_per_line: int | None = None   # None = Book.chars_per_line；算 n_raised_hint 的基准
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
+    top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
+    #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
+    #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
+    #: 而 b 档（框字粘连）最小 6，两侧都有余量。标定见
+    #: `steps/column_warp.FRAME_RESIDUE_*`（含被证伪的「端部峰值」候选）。
+    frame_residue_min_run: int = 3
 
 
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.7", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.10", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
+        # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
+        # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
+        book_deps=("period_prior", "expected_cols", "chars_per_line"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -103,7 +142,16 @@ class ColumnGateStep(Step):
         expected_slots = p.chars_per_line or ctx.book.chars_per_line
         wins: PageWindows = ctx.product("column_windows", page)
         cols = wins.columns
-        widths = [float(c.warped_size[0]) for c in cols]
+        # **量文字带宽（`band`），不量整列图宽（`warped_size[0]`）**（2026-09-18 修）。
+        # 后者含两侧 padding，一列紧贴一条界行时 padding 被撑大、总宽虚高，闸却拿这个
+        # 虚高值去判「是不是把界行圈进来了」——band 早就把界行排除在文字带外，闸没用它，
+        # 等于拿「排除界行之前」的量去证明「排除界行没排干净」，判据和它自己的说法矛盾。
+        # 实锤 bxgb p33c19：warped_size 145px（含左侧界行）判 +20% 拒收，band 127px
+        # 只比中位数高 14%——这一列 21 格里被拦到一格都没切出来，是这本书唯一一处
+        # Step3 完全空转的列。全书改用 band 后重算：只此一处从「拒」变「收」，
+        # 没有新增误报——顺带真拦住了一处此前漏判的（p56c2：band 130px vs 中位 111px，
+        # 图上核实是夹注双栏内容被误切成单列，band 判据在这正确起作用）。
+        widths = [float(c.band[1] - c.band[0]) for c in cols]
         med_w = statistics.median(widths) if widths else None
         page_reject: list[str] = []
 
@@ -119,12 +167,12 @@ class ColumnGateStep(Step):
             "border_detect_gate_manifest", page)
         if page_type_gate.page_type_policy == "skip":
             page_reject.append(
-                f"L0：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
+                f"page_type_skip：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
         elif p.count_mode == "detected":
             if not cols:
-                page_reject.append("L1：没有列（Step1 未探到正文列）")
+                page_reject.append("column_count：没有列（Step1 未探到正文列）")
         elif len(cols) != expected:
-            page_reject.append(f"L1：只探出 {len(cols)} 列（版式应为 {expected}）")
+            page_reject.append(f"column_count：只探出 {len(cols)} 列（版式应为 {expected}）")
 
         # **列宽偏离是列级判据，不是页级**（2026-09-03 改）。
         # 它逐列算得出，却曾被放在页级拒因里 → 一列坏就整页 9 列作废。
@@ -173,10 +221,11 @@ class ColumnGateStep(Step):
             need = max(1, len(cols) // 2) if p.count_mode == "detected" else max(2, expected // 2)
             if len(projs) < need:
                 page_reject.append(
-                    f"L1：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
+                    f"period_fallback：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
             else:
                 try:
-                    period = round(float(estimate_shared_period(projs, borders, dst_ws)), 2)
+                    period = round(float(estimate_shared_period(
+                        projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
                 except ValueError as e:
                     # 空栏页兜底（2026-09-13）：栏内没有字就推不出纵向节律，
                     # 这不是故障——界行齐全、九列切得出来，该正常产出一个
@@ -192,11 +241,11 @@ class ColumnGateStep(Step):
                         period = float(ctx.book.period_prior)
                         period_from_prior = True
                         page_flags.append(
-                            f"L1f：页级周期估不出来（{e}），已用书级先验 "
+                            f"period_fallback：页级周期估不出来（{e}），已用书级先验 "
                             f"{period:g}px 兜底——多半是空栏页（栏内无字，无纵向节律）")
                     else:
                         page_reject.append(
-                            f"L1：页级周期估不出来（{e}）"
+                            f"period_fallback：页级周期估不出来（{e}）"
                             f"；本册未配 period_prior，空栏页无法兜底")
                 ref_w = float(statistics.median(band_ws)) if band_ws else None
         page_ok = not page_reject
@@ -274,8 +323,30 @@ class ColumnGateStep(Step):
                 if c.raised or c.border_top_in_column > 1.0:
                     continue                      # 真抬头列的 top_slack 走原路
                 head = prof[:probe]
-                if head.size and float(head.max()) > 0.08:
+                # 顶格的判据要「像个字」：>8% 的行数 ≥ top_flush_min_frac×period。原来只看
+                # 「有没有一行 >8%」，版框条下沿的毛边（9 行、宽 19~36%）也算顶格
+                # （2026-09-20 vol01/141 c1/c3：Step2 把上界提到框内缘后毛边露出来，
+                # c1/c3 各拿到 58px slack，Step3 在首格切出一个假 char）。真顶格字
+                # 117 行（c7「諭旨」），0.25×period ≈ 28 行分得开。
+                if head.size and int((head > 0.08).sum()) >= max(12, int(period * p.top_flush_min_frac)):
                     top_ink_slack[c.col] = round(float(period) * 0.5, 2)
+
+        # 夹注列比例：**只对「本来要被 L1c/L2 拒掉」的列算**（每列要逐格跑
+        # 一遍缝判据，不便全列算；正常列算了也用不上——豁免只在有拒因时才有
+        # 意义）。非正文列（版心/页边）不算：L0c 不在豁免范围内。
+        jz_fracs: dict[int, float] = {}
+        for c in cols:
+            if c.col in non_body:
+                continue
+            if c.col not in wide_cols and c.side_floor <= p.side_floor_max:
+                continue
+            try:
+                cleaned = ctx.image("column_image", column_key(page, c.col))
+            except Exception:
+                continue
+            jz_fracs[c.col] = round(jiazhu_column_frac(
+                cleaned, c.band, c.border_top_in_column, c.border_bottom_in_column,
+                period, ref_w, p.ink_threshold), 3)
 
         recs: list[GateColumn] = []
         for c in cols:
@@ -284,22 +355,78 @@ class ColumnGateStep(Step):
             if c.col in non_body:
                 kind, why = non_body[c.col]
                 label = {"margin": "版心（书口）", "edge": "版框外页边"}.get(kind, kind)
-                reasons.append(f"L0c：Step1 判定本列位是{label}，非正文"
+                reasons.append(f"non_body_column：Step1 判定本列位是{label}，非正文"
                                + (f"——{why}" if why else ""))
             if not page_ok:
                 reasons.append("页级未过 L1")
-            if c.col in wide_cols:
-                reasons.append(f"L1c：本列宽 {c.warped_size[0]}px 偏离本页中位数 "
-                               f"{med_w:.0f}px {wide_cols[c.col]:+.0%}（多半圈进了界行）")
-            if c.side_floor > p.side_floor_max:
-                reasons.append(f"L2：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}")
+            # **夹注列豁免**（2026-09-17）：L1c 与 L2 都建立在「正文列 = 一列
+            # 居中的大字」这个前提上——L1c 认为超宽是圈进了界行，L2 认为两侧
+            # 外沿有墨是列窗没对齐。**大段双行小注把这两个前提同时打破**：
+            # 两个小字并排合起来本来就顶满列宽（两侧外沿当然有墨），排得密的
+            # 列文字带也确实比正文列宽。
+            # 实锤：bxgb p56c1/c2、p8c13 三列被这两条拒掉，Step3 根本没跑；
+            # 绕过闸直接切，夹注 a/b 全部切对（p56c2 读序出来正是
+            # 「二里此云過永康數里飯至李」），是闸在丢好数据，不是切分不行。
+            # 判据用 `jiazhu_column_frac`——全书 931 列实测普通列 p99 0.048、
+            # 这三列 0.44/0.76/1.00，两个分布中间空一大档（标定见
+            # `jiazhu_split.COLUMN_FRAC_T`）。
+            # ⚠️ 只豁免这两条**几何前提被版式打破**的闸；L0c（版心/页边，版式
+            # 事实）与 L2b（噪点 flag）不在豁免范围内——版心就算印得像夹注也
+            # 不是正文。
+            jz_frac = jz_fracs.get(c.col, 0.0)
+            is_jiazhu_col = jz_frac >= p.jiazhu_frac_min
+            if is_jiazhu_col:
+                flags.append(f"column_width/side_ink 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
+                             "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")
+            if c.col in wide_cols and not is_jiazhu_col:
+                band_w = c.band[1] - c.band[0]
+                # flag 级，不进 reject（2026-09-19 从 block 降下来，与 side_ink 同一轮）。
+                # 判词是「多半圈进了界行/夹注双栏」——**「多半」不足以 block**。
+                # vol02 实测被它拦下的 4 列（p3c1 +31%、p160c4 +16%、p177c2 +39%、
+                # p178c4 +25%）逐列看图：全是干净的单列正文，宽只是因为它们是
+                # 边列、窗口带进了版框内侧的余白。强行送进 Step3 四列全部有解、
+                # 切出满格 21 slot。
+                flags.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
+                             f"{med_w:.0f}px {wide_cols[c.col]:+.0%}"
+                             "（可能圈进了界行/夹注双栏，flag 不算错）")
+            if c.side_floor > p.side_floor_max and not is_jiazhu_col:
+                # flag 级，不进 reject（2026-09-19 从 block 降下来）。判据本身没错——
+                # vol02 58 条 column-warp 金标上 >0.045 命中 1/3 mixed、0/55 clean 误伤——
+                # 错的是**后果**：block 把整列丢掉，而这一层量的「两侧还有墨」多半是
+                # 界行没剥干净或纸面污渍，**不影响 Step3 切字缝**。vol02 实测被它拦下的
+                # 21 列（p3/160/177/178/188）**强行送进 Step3 全部 21/21 有解**，每列
+                # 切出满格 21 slot、12~21 个字格——等于白丢了约 400 个字。
+                # 与 `stamp_noise` / `frame_residue` 同一纪律：没验证过「超标必错」的
+                # 判据只标记、不硬拦（那两条的注释里写着同样的理由）。
+                flags.append(f"side_ink：两侧最低墨占比 {c.side_floor:.4f} > {p.side_floor_max}"
+                             "（界行没剥干净或纸面污渍，flag 不算错）")
             if c.stamp_noise > p.stamp_noise_max:
                 # flag 级，不进 reject：只在 115 列金标上验证过背景印章这一种机制，
                 # 未见过的书页上有没有误伤先例不确定，先标记攒人审证据，不硬拦。
-                flags.append(f"L2b：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
+                flags.append(f"stamp_noise：整列噪点密度 {c.stamp_noise:.4f} > {p.stamp_noise_max}"
                              "（疑似背景印章污染，flag 不算错）")
+            # 端部残留版框墨：`column_border_trim` 判「怎么削」，这一条验「削干净没有」。
+            # flag 不 block，三条理由：(1) b 档那 9 个端口是**已知的图像极限**
+            # （框与字粘连成一个连通体，按红线不能剥，见 frame-strip README），
+            # 拦下来等于永久卡死；(2) 框墨留在列图里不影响切分本身——Step3 切的是
+            # 字缝，框墨在格子边缘，真正受影响的是 Step4 字块质量，那步有
+            # `strip_frame_debris`；(3) 闸的既有纪律就是「图像极限只标记不拦」。
+            #
+            # **非正文列不标**（2026-09-19，实跑定的）：版心（书口）那一列本来
+            # 就横贯着版框线，判据当然命中，可「版心里有框墨」不是缺陷、也没人
+            # 要去修它。bxgb 全书 53 个命中里 43 个是 c10 版心，占 81%——照单
+            # 全收等于让裁决台 5 条里有 4 条是废话，真正要看的 10 条正文列反而
+            # 被淹掉。这一列已经由 `non_body_column` 拒收，不必再叠一个 flag。
+            residue = [] if c.col in non_body else [
+                (end, run) for end, run in
+                (("上", c.frame_residue_top), ("下", c.frame_residue_bottom))
+                if run >= p.frame_residue_min_run]
+            if residue:
+                flags.append("frame_residue：" + "、".join(
+                    f"{end}端残留满宽段 {run} 行" for end, run in residue)
+                    + f"（≥{p.frame_residue_min_run} 行判为版框没削干净，flag 不算错）")
             if p.tier == "gold":
-                reasons.append("L3：金标准入尚未接入（P2）")
+                reasons.append("human_verdict：金标准入尚未接入（P2）")
             recs.append(GateColumn(
                 col=c.col, admitted=not reasons, reject=reasons, flags=flags, tier=p.tier,
                 content_x=(float(c.band[0]), float(c.band[1])),
@@ -325,6 +452,8 @@ class ColumnGateStep(Step):
                 raised=c.raised, head_raise_inner_y=c.head_raise_inner_y,
                 warped_size=c.warped_size, side_floor=c.side_floor,
                 stamp_noise=c.stamp_noise,
+                frame_residue_top=c.frame_residue_top,
+                frame_residue_bottom=c.frame_residue_bottom,
                 band_width=float(c.band[1] - c.band[0]),
             ))
         return {"gate_manifest": GateManifest(
@@ -340,21 +469,29 @@ COLUMN_GATE_SPEC = GateSpec(
     levels=(
         GateLevel(id="L0c", unit="column",
                   desc="Step1 判定本列位不是正文（筒子页版心 / 版框外页边）——"
-                       "版式如此，不是几何坏了"),
+                       "版式如此，不是几何坏了", name="non_body_column"),
         GateLevel(id="L1", unit="page",
-                  desc="探出的列数是否等于版式列数——整页性的问题才放这一层"),
+                  desc="探出的列数是否等于版式列数——整页性的问题才放这一层", name="column_count"),
         GateLevel(id="L1f", unit="page",
                   desc="页级周期估不出来时是否用书级 period_prior 兜底——flag，"
-                       "不拦（空栏页栏内无字、推不出纵向节律，不是故障）"),
+                       "不拦（空栏页栏内无字、推不出纵向节律，不是故障）", name="period_fallback"),
         GateLevel(id="L1c", unit="column",
-                  desc="本列宽是否偏离本页中位数过多——多半是把界行圈进了列窗"),
+                  desc="本列宽是否偏离本页中位数过多——flag 不是 block（2026-09-19 降级）："
+                       "边列的窗口本来就带进版框内侧余白，vol02 被它拦下的 4 列"
+                       "逐列看图全是干净单列，强行送进 Step3 全部有解", name="column_width"),
         GateLevel(id="L2", unit="column",
-                  desc="两侧外沿最低墨占比是否超界——已知几乎没有独立筛选力，只挡极端"),
+                  desc="两侧外沿最低墨占比是否超界——flag 不是 block（2026-09-19 降级）："
+                       "量的是界行残墨/纸面污渍，不影响 Step3 切字缝，"
+                       "vol02 被它拦下的 21 列强行送进 Step3 全部有解", name="side_ink"),
         GateLevel(id="L2b", unit="column",
                   desc="整列中等面积孤立墨点密度是否超界——flag 不是 block，"
-                       "专挡背景印章噪点，只覆盖四种已知污染机制里的一种"),
+                       "专挡背景印章噪点，只覆盖四种已知污染机制里的一种", name="stamp_noise"),
+        GateLevel(id="L4e", unit="column",
+                  desc="清理后上/下端还剩不剩版框墨（满宽连续段）——flag 不是 block，"
+                       "b 档框字粘连是已知图像极限，拦下来等于永久卡死",
+                  name="frame_residue"),
         GateLevel(id="L3", unit="column",
-                  desc="人裁金标准入（P2 未接，tier=gate 时不生效）"),
+                  desc="人裁金标准入（P2 未接，tier=gate 时不生效）", name="human_verdict"),
     ),
 )
 attach_gate("column_warp", COLUMN_GATE_SPEC)

@@ -34,6 +34,7 @@ from collections import Counter
 from pathlib import Path
 
 from ..gold.store import default_dataset_root
+from ..utils.image_io import imread as cv_imread
 
 DATASET = default_dataset_root()     # 评测读测试集仓是正当的；别再用 cwd 相对路径
 
@@ -95,6 +96,36 @@ def _ledger():
     return BookLedger.load_or_empty("wuyingdian_zongmu")
 
 
+@lru_cache(maxsize=1)
+def _variant_graph():
+    """关系图加载一次。⚠️ 原先 `_edge_sources` 每次调用都 `VariantGraph.load()`
+    ——读一个几 MB 的 json 再建图。对勘按字对查几百次，实测 `pair_index` 要 31 s，
+    控制台一开 Step8 页面接口就挂住。"""
+    from ..variants import VariantGraph
+    return VariantGraph.load()
+
+
+@lru_cache(maxsize=1)
+def _variant_map():
+    """同上，`VariantMap` 也别逐次 load。"""
+    from ..clustering.variants import VariantMap
+    return VariantMap.load()
+
+
+@lru_cache(maxsize=None)
+def _edge_sources(a: str, b: str) -> tuple[str, ...]:
+    """关系图里 a—b 这条边的来源标签（查不到返回空）。两个方向都试。"""
+    try:
+        g = _variant_graph()
+        for x, y in ((b, a), (a, b)):
+            tags = dict(g.variants_of(x)).get(y)
+            if tags:
+                return tuple(tags)
+    except Exception:
+        pass
+    return ()
+
+
 def _same_char(a: str | None, b: str | None) -> bool:
     """互为异体就当同一个字——刻本刻「卽」而整理本作「即」，字形层照录是对的。"""
     if not a or not b:
@@ -107,18 +138,47 @@ def _same_char(a: str | None, b: str | None) -> bool:
         from ..variants import edge_tier
         t = edge_tier(a, b)
         if t == "T1":
-            return True
+            # ⚠️ T1 也要看来源数（2026-09-22）。`build_semantic_variants.from_graph`
+            # 只要求「≥1 个硬来源 + T1」，而 twedu 在硬来源里——于是**单凭 twedu
+            # 一条就能判 T1**。实测 auto.tsv 的 9,031 条 graph 派生里，
+            # 唯一来源是 twedu 的有 1,125 条（12.5%），抽样即见 㐌→色、㐪→亥、
+            # 治→冶 这类根本不是异体的对。bxgb 因此把 `治`（识别错，整理本作
+            # `冶`）记进「异体·成果」档，对勘报告说它没问题。
+            # 单一来源降级走 T2 的来源数判据，其余 T1 照旧直接算同字。
+            srcs = set(_edge_sources(a, b))
+            if len(srcs) > 1 or not srcs:
+                return True
+            return False
         if t == "T2":
             from ..variant_ledger import BookLedger
             led = BookLedger.load_or_empty()
             if led.pair(a, b) or led.pair(b, a):
                 return True
+            # 账本没记过时看**这条边有几个独立来源**。账本只记这本书实际用过的
+            # 转换，一本新书的账本几乎是空的——只认账本会把 㓂/寇、卽/即、啟/啓
+            # 这些公认异体一律判成「不同字」。实测 auto.tsv 里判 T2 的 20 条：
+            # 多来源（≥3）15 条全是真异体，单一来源 twedu 的 3 条（卞/其、皍/即、
+            # 轄/輨）全是错的。来源数把两者分得干净，比账本有无更可靠。
+            #
+            # twedu（教育部異體字字典）收的是「历史上曾被当作某字使用过的字形」，
+            # 口径比「同一个字的不同写法」宽——**适合做候选来源，不适合单独做判定**。
+            return len(set(_edge_sources(a, b))) >= 3
+        if t:
+            # T3（形近·通假·仅简繁）从不算，也不许兜底翻盘。
+            return False
     except Exception:
         pass
-    # variants.json 没收的字形异体（㫖/旨 这类 UCV 认同形）：VariantMap 的语义归并兜底
+    # 兜底**只对关系图里根本没有这条边的字对**生效——㫖/旨 这类 UCV 认同形，
+    # 关系图没收、VariantMap 的语义归并收了。
+    #
+    # ⚠️ 2026-09-22 修：原先 T2 没过账本时**不 return**，径直落到这里，而
+    # `variants.auto.tsv` 正是从同一张关系图派生的，于是「劫→刦 / 刼→刦」
+    # 「轄→輨」这类条目让语义归并相等，T2 那道闸被**自己的派生物架空**。
+    # 实测 bxgb：劫/刼、輨/轄 两对 T2 且账本无记录，却双双判成异体，
+    # 对勘报告因此把 `輨`（识别错，整理本作 `轄`）记进「异体·成果」档，
+    # 报告说它没问题。上面那段注释本就写明 T2 要账本才算——兜底把自己的防线拆了。
     try:
-        from ..clustering.variants import VariantMap
-        vm = VariantMap.load()
+        vm = _variant_map()
         return vm.semantic(a) == vm.semantic(b)
     except Exception:
         return False
@@ -166,8 +226,7 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                 g = gold.get(r.id) if r.channel != "human" else None
                 if g:
                     ng += 1
-                    # ⚠️ 金标是 `reading`（整理本），`shape` 是**当次转写自己**
-                    # （v2_align:158 `shape, reading = lab.hyp, lab.char`）。
+                    # ⚠️ 金标是 `ref`（整理本在这一位印的字），`shape` 是**当次转写自己**。
                     # 无条件收 `r.char == g.shape` 等于「跟上次一样就算对」，
                     # replace 段上会把真错也放过去。只在**记过转换**时才收刻本形
                     # ——那是「忠于刻本字形」方针要的（葢/蓋、卽/即 按刻本形放行）。
@@ -180,10 +239,12 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 实测 vol02:18:9:5 与 35:7:13——图上刻 曾、用户裁 曾，整理本印 會，
                     # 判据 A 于是把**用户自己的裁决**记成了两条错，灯从绿变黄。
                     # 判据 A 量的是「自动放行准不准」，人裁不是自动放行，本就不该进这个分母。
-                    hit = (r.char == g.reading
+                    # 2026-09-26 起只有字形（读法取消）：直接比 `char`。
+                    pred = r.char
+                    hit = (pred == g.ref
                            or (g.conversion and r.char == g.shape)
-                           or _ledger().preferred_form(g.reading) == r.char
-                           or _same_char(r.char, g.reading))
+                           or _ledger().preferred_form(g.ref) == pred
+                           or _same_char(pred, g.ref))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
                     if getattr(g, "source", "") != "fallback":
@@ -193,8 +254,9 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                         nr += 1
                         okr += hit
                     if not hit:
-                        errors.append({"id": r.id, "pred": r.char,
-                                       "gold": g.reading, "shape": g.shape,
+                        errors.append({"id": r.id, "pred": pred,
+                                       "char": r.char,
+                                       "gold": g.ref, "shape": g.shape,
                                        "channel": r.channel,
                                        "source": getattr(g, "source", ""),
                                        "op": g.align_op})
@@ -427,7 +489,7 @@ def rare_char_recall(root: Path | None = None, k: int = 10) -> dict:
     cnn = shared()
     hit = n = 0
     for it in items:
-        img = cv2.imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
+        img = cv_imread(it["input"]["patch"], cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
         order = [h["char"] for h in rare_for(img, k)]
@@ -530,8 +592,8 @@ def _multi_form(char: str | None) -> bool:
 
 def form_fidelity(book: str, pages: list[int], store=None) -> dict:
     """判据 E（variant_strategy.md §4.5）：**字形保真率**——自动放行里，字形与人裁
-    完全一致的比例。分母只取「异体位」：自动放行且 (reading ≠ char，或走了
-    variant_form 定形)。这里**不许**用 `_same_char` 放水：整理本印 髮、刻本刻 髪，
+    完全一致的比例。分母只取「异体位」：自动放行且（走了 variant_form 定形，
+    或字所在账本组还有别的形被本书刻过）。这里**不许**用 `_same_char` 放水：整理本印 髮、刻本刻 髪，
     存成 髮 在判据 A 里算对（异体算同字），在这里就是错——保真量的正是这一层。
 
     分两层报：`form_auto`（variant_form 定的形）与其余（库 same 继承的形）。
@@ -558,11 +620,10 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                     n_open += f.get("state") == "open"
                     continue
                 # 分母还要算上**没记转换的异体位**（2026-09-06 补）：context / dual 通道
-                # 把整理本形直接写成 char（已、隸、變、即、歷），reading 与 char 相同，
-                # 这里看不见，E 报 50/50 时用户抽审 274 条里其实错了 25 条。
+                # 把整理本形直接写成 char（已、隸、變、即、歷），E 报 50/50 时用户抽审
+                # 274 条里其实错了 25 条。
                 # 凡 char 所在的账本组还有别的形被本书刻过（db/human>0），就是可能写错形的位。
-                is_var = bool(r.reading and r.reading != r.char) \
-                    or f.get("state") in ("fixed_lib", "fixed_form") \
+                is_var = f.get("state") in ("fixed_lib", "fixed_form") \
                     or _multi_form(r.char)
                 if not is_var or not r.char:
                     continue
@@ -578,7 +639,7 @@ def form_fidelity(book: str, pages: list[int], store=None) -> dict:
                     hit_auto += ok
                 if not ok:
                     errors.append({"id": r.id, "pred": r.char, "human": t,
-                                   "reading": r.reading, "state": f.get("state")})
+                                   "state": f.get("state")})
     low = _wilson_low(hit, n)
     if errors:
         # 错例是硬信号：一条都不能有（见 FIDELITY_GREEN 的说明）

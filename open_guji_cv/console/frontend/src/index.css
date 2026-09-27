@@ -109,6 +109,13 @@ table.jobs tr.sel { background: var(--indigo-soft); }
 .sidebar-cross { display: flex; flex-direction: column; }
 .sidebar-libs { display: flex; flex-direction: column; }
 .sidebar-hint { padding: .3rem .5rem; }
+.sidebar-user { display: flex; align-items: center; gap: .35rem; font-size: .75rem;
+  margin: -.4rem 0 .6rem; word-break: break-all; }
+.sidebar-user-role { flex-shrink: 0; padding: .05rem .35rem; border-radius: var(--r);
+  background: var(--indigo-soft); color: var(--indigo); font-size: .7rem; }
+.sidebar-user-logout { flex-shrink: 0; border: none; background: none; color: var(--mute);
+  font-size: .75rem; cursor: pointer; padding: 0; text-decoration: underline; }
+.app-shell-gate { align-items: center; justify-content: center; }
 /* Step5 二级子菜单：永久展开，不用点进 Step5 才看到（用户 2026-09-11 反馈） */
 .sidebar-step5-subs { display: flex; flex-direction: column; padding-left: 1rem; }
 .sidebar-step5-subs a { font-size: .78rem; color: var(--mute); }
@@ -149,3 +156,111 @@ table.jobs tr.sel { background: var(--indigo-soft); }
   line-height: 1.45;
   color: #a8342a;
 }
+
+/* ── Step9 · 9.0 待办看板（components/step9/ProgressBoard.tsx）── */
+.pb-head { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .7rem; }
+.pb-head h2 { margin: 0; }
+.pb-spacer { flex: 1; }
+.pb-at { font-variant-numeric: tabular-nums; }
+.pb .ghost { border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: var(--r);
+  padding: .25rem .7rem; font-size: .82rem; cursor: pointer; }
+.pb .ghost:disabled { color: var(--mute); cursor: default; }
+.pb-err { color: var(--zhu); font-size: .85rem; margin: 0 0 .6rem; }
+.pb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; margin-bottom: .7rem; }
+.pb-tile { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r); padding: .55rem .7rem .5rem; }
+.pb-tile-dim { opacity: .7; }
+.pb-tile-label { font-size: .74rem; color: var(--mute); letter-spacing: .01em; }
+.pb-tile-value { font-size: 1.45rem; font-weight: 600; line-height: 1.25; margin-top: .1rem; }
+.pb-ochre { color: var(--ochre); }
+.pb-zero { color: var(--faint); font-weight: 400; }
+.pb-note { font-size: .85rem; margin: 0 0 .6rem; padding: .4rem .6rem; border-radius: var(--r); }
+.pb-note code { font-family: var(--mono); font-size: .8rem; }
+.pb-note-ochre { background: var(--ochre-soft); color: var(--ochre); }
+.pb-note-ok { background: var(--ok-soft); color: var(--ok); }
+.pb-scroll { max-height: 22rem; overflow: auto; border: 1px solid var(--rule); border-radius: var(--r); }
+.pb-table { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.pb-table th, .pb-table td { padding: .28rem .55rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.pb-table th { position: sticky; top: 0; background: var(--paper-2); color: var(--mute); font-weight: 500; font-size: .76rem; }
+.pb-table tbody tr:last-child td { border-bottom: none; }
+.pb-table tbody tr:hover td { background: var(--paper); }
+.pb-table .pb-left { text-align: left; width: 100%; }
+.pb-table .pb-dim { color: var(--mute); }
+.pb-page { font-family: var(--mono); color: var(--ink-2); }
+.pb-n { font-weight: 600; }
+.pb-chip { display: inline-block; background: var(--ochre-soft); color: var(--ochre); border-radius: 999px;
+  padding: .05rem .55rem; font-size: .76rem; font-family: var(--mono); }
+.pb-foot { margin: .6rem 0 0; }
+
+/* ── Step8 · 对勘与复核（components/step8/CollateDesk.tsx）── */
+.s8-head { display: flex; align-items: baseline; gap: .7rem; margin-bottom: .8rem; }
+.s8-head h2 { margin: 0; }
+.s8-head .muted { flex: 1; font-size: .8rem; }
+.s8-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+.s8-stat { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r); padding: .55rem .7rem .5rem; }
+.s8-stat b { display: block; font-size: 1.45rem; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.s8-stat span { font-size: .74rem; color: var(--mute); }
+.s8-stat i { display: block; font-style: normal; font-size: .7rem; color: var(--faint); }
+/* ③ 零星分歧是唯一要判「谁错了」的一层——只给它状态色，且必带文字 */
+.s8-stat.todo { border-color: var(--zhu); }
+.s8-stat.todo b { color: var(--zhu); }
+.s8-absent { border: 1px solid var(--rule); border-radius: var(--r); padding: .6rem .75rem; margin-bottom: .9rem; }
+.s8-absent b { margin-right: .5rem; }
+.s8-absent .muted { font-size: .8rem; }
+.s8-absent ul { margin: .45rem 0 0; padding-left: 1.2rem; font-size: .88rem; line-height: 1.9; }
+.s8-filter { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.s8-filter button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .25rem .7rem; font-size: .82rem; cursor: pointer; }
+.s8-filter button.on { border-color: var(--ink); font-weight: 600; }
+.s8-filter .muted { margin-left: auto; font-size: .82rem; }
+.s8-msg { font-size: .85rem; color: var(--mute); margin: 0 0 .7rem; }
+.s8-card { border: 1px solid var(--rule); border-radius: var(--r); padding: .9rem 1rem; }
+/* 图横排：竖排占的是高度（稀缺，决定翻多少屏），横排占宽度（版心富余） */
+.s8-imgs { display: flex; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.s8-imgs img { height: 88px; background: #fff; border: 1px solid var(--rule); border-radius: 2px; }
+.s8-pair { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
+.s8-pair .big { font-size: 1.9rem; }
+.s8-pair .arr { color: var(--mute); }
+.s8-n { font-size: .82rem; color: var(--mute); }
+.s8-ctx { font-size: .92rem; line-height: 1.85; }
+.s8-ctx .k { font-size: .72rem; color: var(--mute); margin-right: .4rem; }
+.s8-ctx + .s8-ctx { border-top: 1px dashed var(--rule); margin-top: .3rem; padding-top: .3rem; }
+.s8-acts { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; }
+.s8-acts button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .3rem .9rem; font-size: .88rem; cursor: pointer; }
+.s8-acts label { font-size: .8rem; color: var(--mute); margin-left: auto; }
+.s8-nav { display: flex; gap: .4rem; margin-top: .6rem; align-items: center; }
+.s8-nav button { border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .2rem .8rem; cursor: pointer; }
+.s8-nav button:disabled { color: var(--faint); cursor: default; }
+.s8-ledger { margin-top: 1.5rem; border-top: 1px solid var(--rule); padding-top: .6rem; }
+.s8-ledger summary { cursor: pointer; color: var(--mute); font-size: .88rem; }
+.s8-acts button.on { border-color: var(--ink); font-weight: 600; background: var(--panel); }
+.s8-fix { width: 5rem; font-size: 1.3rem; text-align: center; padding: .2rem .4rem;
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); color: var(--ink); }
+.s8-acts .k { font-size: .76rem; color: var(--mute); margin-right: .2rem; }
+.s8-hint { font-size: .78rem; color: var(--mute); margin: .45rem 0 0; }
+/* Step8 两层页签（2026-09-24）：第一层 待审/我方对/校对本对/都不对，第二层挂在我方对下 */
+.s8-filter button b { font-variant-numeric: tabular-nums; margin-left: .15rem; }
+.s8-filter button i { font-style: normal; font-size: .7rem; color: var(--faint); margin-left: .35rem; }
+.s8-filter.s8-sub { margin-top: -.4rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
+.s8-filter.s8-sub button { font-size: .78rem; }
+.s8-badge { font-size: .72rem; padding: .05rem .45rem; border-radius: var(--r); background: var(--faint-soft); color: var(--mute); }
+.s8-badge.auto { background: var(--ochre-soft); color: var(--ochre); }
+.s8-badge.human { background: var(--ok-soft); color: var(--ok); }
+.s8-final { font-size: .82rem; color: var(--indigo); }
+.s8-undo { margin-left: .6rem; border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: var(--r); padding: .05rem .5rem; font-size: .78rem; cursor: pointer; }
+details.s8-absent summary { cursor: pointer; }
+details.s8-absent summary .muted { margin-left: .3rem; }
+/* 切分反馈（2026-09-24）：挨着「都不对」，与分类独立 */
+.s8-acts .s8-seg { display: flex; gap: .7rem; margin-left: 1.2rem; font-size: .78rem; color: var(--mute); }
+.s8-acts .s8-seg label { margin-left: 0; display: flex; align-items: center; gap: .2rem; cursor: pointer; white-space: nowrap; }
+.s8-acts .s8-seg label.on { color: var(--zhu); }
+.s8-acts .s8-seg input { margin: 0; }
+.s8-nav .s8-ok { margin-left: .9rem; border-color: var(--ink); font-weight: 600; }
+.s8-navhint { margin-left: auto; text-align: right; font-size: .7rem; line-height: 1.45; color: var(--faint); }
+.s8-nav .s8-back { margin-left: .6rem; }
+/* 逐处坐标（2026-09-24）：全书 N 处每处的 页·列·字 */
+.s8-locs { display: flex; flex-wrap: wrap; gap: .15rem .9rem; font-size: .8rem; color: var(--mute); margin: -.2rem 0 .5rem; }
+.s8-locs .cur { color: var(--ink); font-weight: 600; }
+.s8-loc { font-size: .72rem; color: var(--faint); }

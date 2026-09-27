@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 from .font_calibrate import FontScore, _pct, patch_path
+from ..utils.image_io import imread as cv_imread
 
 
 def stroke_width_px(norm01: np.ndarray) -> float:
@@ -77,7 +78,7 @@ def score_fonts_direct(book_id: str, labels: list[dict], cache_root: Path, fonts
     hog = HogFeature()
     queries: list[tuple[dict, np.ndarray]] = []
     for d in labels:
-        g = cv2.imread(str(patch_path(cache_root, book_id, d)), cv2.IMREAD_GRAYSCALE)
+        g = cv_imread(str(patch_path(cache_root, book_id, d)), cv2.IMREAD_GRAYSCALE)
         if g is not None:
             queries.append((d, norm(to_canonical(g))))
     book_w = float(np.median([stroke_width_px(n) for _, n in queries]))

@@ -46,6 +46,19 @@ gpu = [
 onnx = [
     "rapidocr-onnxruntime>=1.3",
 ]
+# torch 模型：生僻字 CNN 候选（clustering/cnn_candidates.py：分类头 + embedding 检索）
+# 与切点 U-Net 判官（utils/cut_select.py）。两处都**懒导入 + 缺件降级**，不装也能跑
+# （`CnnCandidates.available` 为 False 时候选退回字体 HOG，UNetJudge 任何异常返回 None），
+# 所以它是 extra 不是核心依赖——与 paddle 同一个理由：装哪个轮子（CPU / CUDA 版本）
+# 得由环境定，写死在 dependencies 里会逼所有人拖一个几百 MB 的包。
+#
+# ⚠️ 不装的代价是**测试会静默少覆盖**：2026-09-15 实测本机 venv 没装 torch，
+# tests/test_cnn_candidates.py 5 条全跳过；更早之前守卫只查 checkpoint 不查 torch，
+# 其中 3 条断言太弱（`len([]) <= 3`）一直在假通过，另 2 条才红出来。
+# 跑测试想覆盖 CNN 那几条就装这个 extra；推理只用 CPU 轮子就够（两处都 CPU/CUDA 自适应）。
+torch = [
+    "torch>=2.0",
+]
 # 开发依赖：pip install open-guji-cv[dev]
 # 本地控制台：pip install open-guji-cv[console]
 console = [
@@ -54,6 +67,11 @@ console = [
 ]
 dev = [
     "pytest>=7.0",
+    # `clustering/font_glyphs.py` 与 `scripts/build_charset.py` 读字体 cmap 要它。
+    # 生产代码里是**惰性 import**（不导字体字形就用不到），但测试要覆盖那条路，
+    # 所以进 dev。2026-09-20 之前它一处都没声明，tests/clustering/test_font_glyphs.py
+    # 因此在没装它的机器上整片报 ModuleNotFoundError。
+    "fontTools>=4.0",
     "build>=1.0",
     "twine>=4.0",
     "ruff>=0.4",
@@ -78,3 +96,10 @@ exclude = ["venv*", "output*", "data*", ".claude*"]
 [tool.setuptools.package-data]
 open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/*",
                 "clustering/review/static/*"]
+
+# ── 测试 ────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+markers = [
+    "manual: 依赖真实工作区产物的人工验收测试（如控制台重构快照），默认排除，需要跑时显式加 -m manual",
+]
+addopts = "-m 'not manual'"

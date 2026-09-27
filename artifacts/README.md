@@ -18,6 +18,18 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | `scripts/export_collation_review.py output/vol01` |
 
+## 研究台账（本轮调研与实测的导览页，2026-09-22）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **生僻字识别研究台账**（管线现状 / 两份调研 / 十六条想法 / 八次实验 / 六条负结果 / 下一步）| https://claude.ai/artifact/3YN5FD5LJvW8hHRHpiopfU | [research_dossier_2026-09-22.html](research_dossier_2026-09-22.html) | 纯静态页，**不是生成的**：内容的正本是设计稿 `structure_aware_recognition_design.md` §13、两份调研与任务卡；数字变了手改这份快照再**重发布到同一 URL** |
+
+## 结构金标（Step5 结构感知，M2 / 任务卡 2026-09-22 T3）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **结构金标裁决台**（原 300 条；改成只出模型与 IDS 表全部拆法都不同的残差，**已裁完**，56 条人裁冻结在 [struct_gold_verdicts.jsonl](struct_gold_verdicts.jsonl)，`struct_gold_residual.py` 报残差 0）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
+
 ## 边框判读（Step1）
 
 | 页面 | URL | 快照/真源 | 再生 |
@@ -405,3 +417,5 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
   （persist_js.py），从 artifact 存档提取事件行即可回收。
 | 北行日錄 库匹配 same 档 vs 校對本 41 例 | https://claude.ai/artifact/2B2id71yUuaneP8hGdUJYR | **HTML 快照不入库**（工作区 `beixingrilu-workspace/review/same_mismatch_review.html`，41 卡 155 张 16 级灰缩略图约 267KB，裁决自存） | 现代链 Step5-a（`norm_stroke=3, exclude_self`，库 `modern:bxrl`）全书 same 档 13,283 里与校對本不一致的 41 个字位。每卡三张图（书上字位 / 库命中样本 / 库里「应为」字样本——后者 41 张只有 1 张有，说明校對本用的那个码在库里几乎没实例、播种时字体 top-1 全给了另一个码）+ SimSun/I.Ming 两个码的标准形 + 校對本三行原文（该字高亮）。四档：同形异码 / 校對本录错 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review.py`（2026-09-15） |
 | 北行日錄 不一致复核 r2（**只取训练段**）| https://claude.ai/artifact/Pn1QogrKMojPhMcgqwAJGJ | [bxrl_same_mismatch_r2.html](bxrl_same_mismatch_r2.html)（32 卡 116 图 212KB，裁决自存，定点已验）| **库修好后**重跑的第二轮。第一轮的 5 例「真形近误判」全部消失——根因是库缺字：播种闸走不归一笔宽的老协议、且字体模板的细横被归一化当版框删了（旦变日、宣变亘），见 `.claude/doc/modern_print_pipeline.md` §五.4。**取样只从逻辑页 ≥21**：用户 2026-09-15 定 1–20 页为测试集、不做任何人工干预（第一轮的「揚楊」证人字位在逻辑页 13，已从 `config/confusable_human.json` 撤出）。32 例的字对里 10 对的证人码在库里 0 个样本（內/卻/呂/墙/強/戶/搖/澀/稅/衞），是「校對本录错」的硬旁证；`换/換` 两例互为对方的命中样本（同一个字形、证人给了两个码）。四档：校對本录错 / 同形异码 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards_r2.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review_r2.py`（2026-09-15）|
+
+- **2026-09-20 排除名单复核（bxgb，154 卡）** https://claude.ai/artifact/Ndgyiai5qfC1YtT9nidvrk — `scripts/build_exclusion_recheck_review.py`，卡 id 在 `beixing-guben-workspace/review/batches/exclusion_recheck_20260920_cards.jsonl`；问「红框里现在是不是完整的字」，ok 的撤名单（收回后写 `apply_exclusion_recheck.py`）。
