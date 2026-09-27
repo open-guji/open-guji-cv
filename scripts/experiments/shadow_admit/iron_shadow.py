@@ -53,11 +53,15 @@ FORM_INSEPARABLE = {frozenset(("入", "八"))}
 EXTRA_CONFUSABLE_PAIRS: list[tuple[str, str]] = [
     ("玉", "王"), ("石", "右"), ("上", "土"), ("早", "皁"), ("州", "川"),
     ("自", "目"), ("且", "旦"),
-    # 2026-09-27 随机抽检 01 实测踩到的两条：
-    # 「入/八」本已在 FORM_INSEPARABLE（判别器分不开、交文意），但没进这张表就从来
-    # 不会走到 _discriminate 里去查 FORM_INSEPARABLE——bxgb:26:3:4 放「八」其实像「入/人」，
-    # 没被拦下就是这个原因，补进来才会真的强制弃权。
+    # 2026-09-27 随机抽检 01 实测踩到的一条：「入/八」本已在 FORM_INSEPARABLE
+    # （判别器分不开、交文意），但没进这张表就从来不会走到 _discriminate 里去查
+    # FORM_INSEPARABLE——bxgb:26:3:4 放「八」其实像「入/人」，没被拦下就是这个原因，
+    # 补进来才会真的强制弃权。
     ("入", "八"),
+    # 2026-09-27 用户码位裁定（字形库/11 §〇）：这四对**按刻形区分，认错就是错**，
+    # 不进 CODEPOINT_CONVENTION_PAIRS——强/強、卻/却 用户原话；回/囘、幷/并 用户看抽检
+    # 02 样张后判「错」，说明这两对在这本书上也能按形区分，一并收进来做复核。
+    ("强", "強"), ("卻", "却"), ("回", "囘"), ("幷", "并"),
 ]
 EXTRA_CONFUSABLE_PARTNERS: dict[str, frozenset[str]] = {}
 for _a, _b in EXTRA_CONFUSABLE_PAIRS:
@@ -65,15 +69,11 @@ for _a, _b in EXTRA_CONFUSABLE_PAIRS:
     EXTRA_CONFUSABLE_PARTNERS.setdefault(_b, set()).add(_a)
 EXTRA_CONFUSABLE_PARTNERS = {k: frozenset(v) for k, v in EXTRA_CONFUSABLE_PARTNERS.items()}
 
-# 码位规矩（字形库/11 草案，H 道起草、用户未定表）：这几对是「同一刻本字形分落两个
-# 码位」的记录习惯岔子（库/人裁各按各的敲法），不是形状误判——总管 2026-09-27 裁定
-# 单列一档「码位不一致」，不算进错误率，等用户定表后按定的口径重算。
-CODEPOINT_CONVENTION_PAIRS = {frozenset(p) for p in (
-    ("别", "別"), ("内", "內"), ("幷", "并"),
-    # bxgb:11:11:17（随机抽检 01 实测）：放行「回」，图是「囘」——同一刻本字形分落
-    # 两个码位，归总管 2026-09-27 裁定的「码位不一致」档，等用户定码位表。
-    ("回", "囘"),
-)}
+# 码位规矩（字形库/11，用户 2026-09-27 定表）：这两对是「书级统一指定一个码位」的
+# 记录习惯岔子（库/人裁各按各的敲法），评测里当同字、不算错。
+# ⚠️ 幷/并、回/囘 **不在这张表**——用户看抽检 02 样张后判「错」，说明这两对在本书上
+# 也能按刻形区分，已改收进 EXTRA_CONFUSABLE_PAIRS 走复核（同 强/強、卻/却）。
+CODEPOINT_CONVENTION_PAIRS = {frozenset(p) for p in (("别", "別"), ("内", "內"))}
 
 
 def _clean_ink(gray: np.ndarray) -> np.ndarray:
@@ -345,6 +345,7 @@ def main() -> None:
 
     n_checked = stat["核对人裁·对"] + stat["核对人裁·同字异形"] + stat["核对人裁·错"]
     err = stat["核对人裁·错"]
+    no_truth_char_counts = dict(Counter(r["char"] for r in fire_no_truth))
     Path(a.out).write_text(json.dumps({
         "book": book, "pages": a.pages, "disc": not a.no_disc,
         "n_human_lib": n_lib, "book_scale": round(scale, 4), "book_side_px": round(book_side, 1),
@@ -352,6 +353,8 @@ def main() -> None:
         "n_checked_vs_human": n_checked, "n_wrong_vs_human": err,
         "err_rate_vs_human": (err / n_checked) if n_checked else None,
         "rows_checked_wrong_or_variant": rows,
+        # 「放行·未经人看」池按字种计数——按字种加权合并多轮抽检估计用，见任务书回报。
+        "no_truth_char_counts": no_truth_char_counts,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"完成。{dict(stat)}", file=sys.stderr)
     print(f"对人裁核对：{n_checked} 格，错 {err}"
