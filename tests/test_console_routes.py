@@ -184,6 +184,10 @@ SANCTIONED = {
         "值全是 null 或本次直调传的 `_FAKE_IDENTITY.email`，不是哪条事件的其余字段变了。",
     "GET /api/batches/{batch_id}":
         "同上——`events` 里内嵌的也是 `Event.model_dump()`，一并多出 `reviewer` 键。",
+    "GET /api/books":
+        "BookSpec 新增 `codepoints`（书级码位配置，字形库 11 §〇，H·码位裁定落地任务书），"
+        "`to_dict()` 跟着多一个键。所有册 yaml 都还没写这个字段，值一律是 `{}`——"
+        "是多一个键，不是哪本书的值变了。",
 }
 
 #: 生僻字候选的两条路由：内容取决于 CNN 候选源在不在（torch 是可选依赖）。
