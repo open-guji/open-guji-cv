@@ -248,6 +248,7 @@ def test_emb_topk_batch_subset_matches_direct_call_without_extra_forward(cnn_tes
     qs[3][15:49, 15:49] = 1
 
     c.emb_topk_batch(qs, cs_base, k=3)   # 建立前向缓存
+    c.emb_topk_batch(qs, cs_esc, k=3)    # 顺带把 cs_esc 的模板矩阵建出来（下面不测这个）
 
     calls = []
     orig_forward = c._net.forward
@@ -258,6 +259,9 @@ def test_emb_topk_batch_subset_matches_direct_call_without_extra_forward(cnn_tes
 
     c._net.forward = counted
 
+    # ⚠️ `charset` 必须是上面刚用过的**同一个 tuple 对象**（`_emb_index` 按
+    # `is charset` 记忆化，见其模块头）——否则这里会先重建 cs_esc 的字体模板
+    # 矩阵（跟本测试要盯的「查询 embedding 前向」无关，会把调用数误判成没省下）。
     idx = [1, 3]
     via_subset = c.emb_topk_batch_subset(qs, idx, cs_esc, k=3)
     assert len(calls) == 0, "子集复用不该再前向"
