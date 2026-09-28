@@ -40,6 +40,11 @@ class ManifestEntry:
     soft: dict[str, str] | None = None
     """跑这一页时软参数的值（`StepSpec.soft_params`，2026-09-25）。不进指纹，
     `status` 拿它与现值比，报「漂移」而不是「过期」。"""
+    book: dict | None = None
+    """跑这一页时 `StepSpec.book_deps` 各字段的取值（2026-09-28，#174）。指纹里早就
+    含这些值，但只存了哈希——`calibrate` 后改了 yaml 的 `period_prior`，`status` 只能
+    报「过期」、说不出为什么。记下原值，`status` 就能报「册配置 period_prior 180→204」。
+    没有 book_deps 的步、以及此前的老条目都是 None。"""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
