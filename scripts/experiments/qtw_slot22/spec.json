@@ -1,0 +1,253 @@
+{
+ "split": [
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "page": 69,
+   "col": 7,
+   "slot": 13,
+   "char": "二",
+   "d_id": "v006:69:7:13"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "page": 83,
+   "col": 6,
+   "slot": 21,
+   "char": "二",
+   "d_id": "v006:83:6:20"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "page": 54,
+   "col": 7,
+   "slot": 10,
+   "char": "二",
+   "d_id": "v007:54:7:10"
+  }
+ ],
+ "gate_keep": [
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "page": 50,
+   "col": 5,
+   "trim": false,
+   "why": "四庫「上諭」真抬头列"
+  }
+ ],
+ "tail": [
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "id": "v006:2:1:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "id": "v006:48:1:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:4:2:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:5:3:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:5:4:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:6:3:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:50:1:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:52:1:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:58:6:22",
+   "frame": true,
+   "why": "D #155 点名的框线「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "id": "v006:47:9:22",
+   "frame": true,
+   "why": "五册跑出来的框线格（5:1 带墨渍、6:1 连外框上沿，定 0.3 格高的依据）"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "id": "v006:73:9:22",
+   "frame": true,
+   "why": "五册跑出来的框线格（5:1 带墨渍、6:1 连外框上沿，定 0.3 格高的依据）"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:5:1:22",
+   "frame": true,
+   "why": "五册跑出来的框线格（5:1 带墨渍、6:1 连外框上沿，定 0.3 格高的依据）"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v008",
+   "id": "v008:6:1:22",
+   "frame": true,
+   "why": "五册跑出来的框线格（5:1 带墨渍、6:1 连外框上沿，定 0.3 格高的依据）"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v006",
+   "id": "v006:26:3:22",
+   "frame": false,
+   "why": "全唐文列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v007",
+   "id": "v007:35:3:22",
+   "frame": false,
+   "why": "全唐文列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v009",
+   "id": "v009:53:4:22",
+   "frame": false,
+   "why": "全唐文列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/qtw-new",
+   "book": "v009",
+   "id": "v009:63:9:22",
+   "frame": false,
+   "why": "全唐文列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:9:3:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:18:3:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:21:8:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:24:7:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:152:6:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol01",
+   "id": "vol01:154:3:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:16:4:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:21:2:21",
+   "frame": false,
+   "why": "四庫列末残字（改前就有的切分问题）"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:25:8:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:39:9:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:58:4:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:109:6:21",
+   "frame": false,
+   "why": "四庫列末真「一」"
+  },
+  {
+   "ws": "<sandbox>/sk-base",
+   "book": "vol02",
+   "id": "vol02:148:3:21",
+   "frame": false,
+   "why": "四庫列末残字（改前就有的切分问题）"
+  }
+ ]
+}
