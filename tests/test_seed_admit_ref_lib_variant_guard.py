@@ -11,6 +11,10 @@
 1. 变体放行（字面不同、边不可信、margin 不过线）被拦——记 doubt、不放行；
 2. 可信边（双向关系 / 人裁 / 书级 codepoints）照放；
 3. 字面相同（库候选 == 整理本字）不受影响。
+
+2026-09-28（overview#201）：冶/治 登记进 `never_group.json`，语义层不再同义，走不到
+`ref_lib` 变体分支了。闸本身的三条行为测试改用同为单向直接边的 `𠮓→變`（D #178 单向桶里的
+新旧字形）钉；`_trusted_variant_edge` 的纯函数测试仍用 冶/治（它不看语义表）。
 """
 from __future__ import annotations
 
@@ -76,8 +80,8 @@ def _rec(sa):
 # ── 1. 变体放行被拦 ──────────────────────────────────────────────
 
 def test_untrusted_variant_is_blocked(tmp_path, monkeypatch):
-    """`冶→治`：graph 来源、单向、无人裁、无 codepoints、margin 0.024——加闸后不放行。"""
-    sa = _run(tmp_path, monkeypatch, lib_char="治", align_char="冶")
+    """`𠮓→變`（原例 冶→治，见模块头）：graph 来源、单向、无人裁、无 codepoints、margin 0.024——加闸后不放行。"""
+    sa = _run(tmp_path, monkeypatch, lib_char="變", align_char="𠮓")
     r = _rec(sa)
     assert r.admit is False, f"未加闸的变体放行没被拦住：channel={r.channel}"
     assert "ref_lib_variant" in r.doubts, r.doubts
@@ -90,10 +94,10 @@ def test_guard_default_on():
 
 def test_guard_disabled_restores_old_behavior(tmp_path, monkeypatch):
     """关掉开关要能回到加闸前的行为（回归安全阀）。"""
-    sa = _run(tmp_path, monkeypatch, lib_char="治", align_char="冶",
+    sa = _run(tmp_path, monkeypatch, lib_char="變", align_char="𠮓",
              params={"ref_lib_variant_guard": False})
     r = _rec(sa)
-    assert r.admit is True and r.channel == "ref_lib" and r.char == "治"
+    assert r.admit is True and r.channel == "ref_lib" and r.char == "變"
 
 
 # ── 2. 可信边照放 ────────────────────────────────────────────────
@@ -120,9 +124,9 @@ def test_margin_over_threshold_is_admitted(tmp_path, monkeypatch):
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[
             dict(slot=SLOT, verdict="unsure", cov=0.9443, wmax=25.81,
-                 candidates=_candidates("治")),
+                 candidates=_candidates("變")),
         ]))
-    _write_align(ctx, align_char="冶")
+    _write_align(ctx, align_char="𠮓")
     # margin 0.80 ≥ 生产 context_margin 0.70，但 source 不是 "context"（不走上面
     # 那条 context 通道)，只用来给 ref_lib 变体闸的 margin 分支背书。
     write_product(ctx, "context_decide", PAGE, context_decision=PageDecision(
@@ -132,7 +136,7 @@ def test_margin_over_threshold_is_admitted(tmp_path, monkeypatch):
         ])]))
     sa = _run_with_params(ctx, SeedAdmitParams())
     r = _rec(sa)
-    assert r.admit is True and r.channel == "ref_lib" and r.char == "治"
+    assert r.admit is True and r.channel == "ref_lib" and r.char == "變"
 
 
 def test_human_ledger_pair_is_trusted(tmp_path, monkeypatch):
