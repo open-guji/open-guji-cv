@@ -256,6 +256,32 @@ def test_load_verdicts_prefers_workspace_events(tmp_path, monkeypatch, capsys):
     capsys.readouterr()
 
 
+def test_load_verdicts_reads_cross_book_batch_files(tmp_path, monkeypatch, capsys):
+    """全唐文人裁在跨册批次文件 `qtw-human-batch*.jsonl` 里（C #166 查出）：
+    文件名不以书 id 开头也要读到，按 target.key 的书前缀过滤，别册的不混进来。"""
+    from open_guji_cv.eval import round_check as rc
+    import json as _json
+
+    ws_events = tmp_path / "ws" / "feedback" / "events"
+    ws_events.mkdir(parents=True)
+    monkeypatch.setattr(rc, "DATASET", tmp_path / "dataset")
+    rows = [
+        {"actor": "user", "kind": "confirm", "target": {"key": "v007:3:1:2"},
+         "payload": {"v": "confirm", "shape": "聞"}, "ts": "2026-09-27T01:00:00"},
+        {"actor": "user", "kind": "confirm", "target": {"key": "v2:v007:3:1:3"},
+         "payload": {"v": "confirm", "shape": "爲"}, "ts": "2026-09-27T01:00:01"},
+        {"actor": "user", "kind": "confirm", "target": {"key": "v0070:3:1:2"},
+         "payload": {"v": "confirm", "shape": "別册"}, "ts": "2026-09-27T01:00:02"},
+        {"actor": "user", "kind": "confirm", "target": {"key": "v008:3:1:2"},
+         "payload": {"v": "confirm", "shape": "他册"}, "ts": "2026-09-27T01:00:03"},
+    ]
+    (ws_events / "qtw-human-batch1.jsonl").write_text(
+        "".join(_json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path / "ws"))
+    assert rc.load_verdicts("v007") == {"v007:3:1:2": "聞", "v2:v007:3:1:3": "爲"}
+    capsys.readouterr()
+
+
 def test_load_verdicts_falls_back_to_dataset_and_warns_when_both_empty(tmp_path, monkeypatch, capsys):
     from open_guji_cv.eval import round_check as rc
 
