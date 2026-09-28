@@ -1128,12 +1128,13 @@ def cmd_check(args) -> None:
         pages_sel = args.pages if args.pages is not None else "all"
         pgs = load_book(args.book).resolve_pages(pages_sel)
         print(f"check rulers: 页集={pages_sel!r}，共 {len(pgs)} 页", file=sys.stderr)
-        res = measure(args.book, pgs, st, full=args.full or bool(args.detail))
-        if args.detail:
+        detail = getattr(args, "detail", None)   # 程序化调用（测试、控制台）造的 Namespace 可能没有这个键
+        res = measure(args.book, pgs, st, full=args.full or bool(detail))
+        if detail:
             # `--detail R2c`：只印这把尺子的逐条页／列明细（#174），一行一条，方便 grep／排错例
-            r = next((x for x in res["rulers"] if x["key"].lower() == args.detail.lower()), None)
+            r = next((x for x in res["rulers"] if x["key"].lower() == detail.lower()), None)
             if r is None:
-                raise SystemExit(f"没有尺子 {args.detail!r}；可选："
+                raise SystemExit(f"没有尺子 {detail!r}；可选："
                                  + " ".join(x["key"] for x in res["rulers"]))
             print(f"{r['key']} {r['title']}：{r['num']}/{r['den']}（{r['value']}{r['unit']}）")
             for pg, e in r["by_page"].items():
