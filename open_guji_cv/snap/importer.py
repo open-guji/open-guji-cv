@@ -242,8 +242,11 @@ def check_cv(cv_repo: Path, m: dict, git: gitio.GitRunner = gitio.default_git,
     tried = {}
     for c in cands:
         r = gitio.is_ancestor(cv_repo, c, "HEAD", git)
+        if r is None and gitio.deepen_head(cv_repo, remote, git):
+            # 浅仓：包的 cv 可能是 HEAD 的老祖先、落在浅边界下面——先把 HEAD 往下加深再判
+            r = gitio.is_ancestor(cv_repo, c, "HEAD", git)
         if r is None:          # 本地没有这个提交：拉一次再判（服务器 clone 可能落后）
-            git(cv_repo, ["fetch", "-q", remote, c])
+            gitio.fetch_commit(cv_repo, c, remote, git)
             r = gitio.is_ancestor(cv_repo, c, "HEAD", git)
         tried[c] = {True: "是 HEAD 的祖先", False: "不是 HEAD 的祖先", None: "服务器找不到这个提交"}[r]
         if r:
