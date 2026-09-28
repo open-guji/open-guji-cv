@@ -38,7 +38,7 @@
 
 | 项 | 结果 |
 |---|---|
-| 全量测试 `pytest tests/ -s -q -p no:cacheprovider` | 见文末 |
+| 全量测试 `pytest tests/ -s -q -p no:cacheprovider` | **2367 passed, 27 skipped, 1 failed**（409 s）。唯一失败的是 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`：`DEFAULT_CKPT` 存在，但算出的指纹为空。**在未改动的 main（7d7b469）上单跑也一样失败**，是云端环境的 checkpoint 问题（没装 torch，或 ckpt 是占位文件），和本单无关，没有处理 |
 | 前端 `tsc -b` + `npm run build` | 通过；dist 已重出（`index-JucMqF6u.js` / `index-BKBKwQNu.css`） |
 | 新用例 `tests/test_replace_align_grid.py` | 10 条全过：划分纯函数、`defect_only_cells`、`cls_sub` 筛选/计数/报错、网格点掉的格归逐张、路由、node 跑 TS 比对网格行和逐张行、jiazhu 行、下游不变 ×2 |
 
