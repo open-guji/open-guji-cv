@@ -162,7 +162,12 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
     # `+refs/heads/main:refs/remotes/origin/main`，`git fetch origin production`
     # 跑完 `git rev-parse origin/production` 照样 unknown revision——服务器上按什么
     # 方式 clone 不该影响这条逻辑对不对，显式给目标端才是可靠的）。
-    fetch = git_runner(repo, ["fetch", remote, f"+{branch}:refs/remotes/{remote}/{branch}"])
+    # 浅克隆（服务器 cv 仓 09-28 起是浅仓）不带 --depth 的 fetch 协商不出共同历史，会去拉
+    # 整仓历史（GitHub 报 ~4.7 GB），卡 6 小时、临时 pack 堆到 13 GB（值守 overview#216）。
+    # 只在本来就是浅仓时加 depth——对完整 clone 带 --depth 会把它悄悄变成浅仓（见 snap/gitio）。
+    shallow = (git_runner(repo, ["rev-parse", "--is-shallow-repository"]).stdout or "").strip() == "true"
+    depth = ["--depth", "200"] if shallow else []
+    fetch = git_runner(repo, ["fetch", *depth, remote, f"+{branch}:refs/remotes/{remote}/{branch}"])
     if fetch.returncode != 0:
         return DeployResult(FETCH_FAILED, {"stderr": fetch.stderr.strip()})
 
