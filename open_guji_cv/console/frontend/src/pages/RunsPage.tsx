@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { listPipelines } from '../api/registry'
 import { submitRun, fetchRuns, cancelRun } from '../api/runs'
-import { fmtDur } from '../api/client'
+import { fmtDur, withWorkspace } from '../api/client'
 import { usePersistedPages } from '../hooks/usePersistedPages'
 import type { Pipeline, StepDescribe } from '../types/registry'
 import type { RunJob, LogEvent } from '../types/runs'
@@ -66,7 +66,7 @@ export function RunsPage() {
     setSelJob(id)
     setLogTitle(id)
     setLogLines([])
-    const es = new EventSource(`/api/runs/${id}/log`)
+    const es = new EventSource(withWorkspace(`/api/runs/${id}/log`))  // EventSource 同样带不了头；也补上 ROOT_PATH
     esRef.current = es
     es.onmessage = (m) => {
       const d: LogEvent = JSON.parse(m.data)

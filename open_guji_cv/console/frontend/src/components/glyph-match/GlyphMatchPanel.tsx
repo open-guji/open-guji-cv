@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fetchGlyphMatch, glyphMatchExemplarUrl } from '../../api/glyphMatch'
 import type { GlyphMatchResult } from '../../api/glyphMatch'
+import { withWorkspace } from '../../api/client'
 import './glyphMatch.css'
 
 // Step5-a 字形库匹配调试视图（overview 2026-09-11 方案：
@@ -36,7 +37,7 @@ export function GlyphMatchPanel({ book }: { book: string }) {
   }
 
   const queryImgSrc = queryKey
-    ? `/api/cache/${encodeURIComponent(book)}/char_patch/p${String(queryKey.page).padStart(4, '0')}c${String(queryKey.col).padStart(2, '0')}s${queryKey.slot}${queryKey.sub || ''}.png`
+    ? withWorkspace(`/api/cache/${encodeURIComponent(book)}/char_patch/p${String(queryKey.page).padStart(4, '0')}c${String(queryKey.col).padStart(2, '0')}s${queryKey.slot}${queryKey.sub || ''}.png`)
     : ''
 
   const verdictLabel = { same: '继承', unsure: '候选', diff: '库里没有' } as const

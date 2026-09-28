@@ -297,7 +297,7 @@ export function ColumnReviewPanel({ book, pages }: { book: string; pages: string
 // （Step2 内部判据仍是固定阈 128，两者在本书上差 15%~38% 墨量——正因为如此，
 // 人看的那张必须标明是哪一张，否则裁决对不上号）。
 function ColumnStrips({ cse, src }: { cse: Case; src: 'bin' | 'raw' }) {
-  const base = `/api/column-review/img/${cse.book}/${cse.page}/${cse.col}.png?src=${src}`
+  const base = `/api/column-review/img/${cse.book}/${cse.page}/${cse.col}.png?src=${src}`  // ws-ok: 下面三个 <img> 各自 withWorkspace(base…)
   const PAD = 130
   // 整列图**纵向压 8 倍、横向一比一**（用户 2026-09-17：「展示左右的切线位置时，
   // 需要把上下压缩到比较小，不然看不清」）。以前靠 maxHeight 让浏览器等比缩，
