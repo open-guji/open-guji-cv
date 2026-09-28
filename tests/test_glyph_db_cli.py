@@ -37,6 +37,8 @@ def capture_store(monkeypatch, tmp_path):
 
     monkeypatch.setattr(glyph_db_mod, "rebuild_from_store", _fake_rebuild)
     monkeypatch.setattr(glyph_db_mod, "assert_db_not_silently_empty", _fake_assert)
+    from open_guji_cv.feedback import replay as replay_mod
+    monkeypatch.setattr(replay_mod, "replay_after_rebuild", lambda *a, **k: {"stub": True})
     monkeypatch.setenv("GUJI_GLYPH_DB", str(tmp_path / "glyph.db"))
     return seen
 
@@ -82,3 +84,58 @@ def test_absolute_store_overrides_workspace(monkeypatch, tmp_path, capture_store
     _run(str(abs_store))
 
     assert capture_store["store_dir"] == abs_store
+
+
+# ── 借库（冷启动，2026-09-27 全唐文）：--extra-store / workspace.yaml glyph_lib.borrow / --no-borrow ──
+
+@pytest.fixture()
+def capture_extras(monkeypatch, tmp_path):
+    seen = {}
+
+    def _fake_rebuild(store_dir, db_path, extra_stores=()):
+        seen["extras"] = [Path(x) for x in extra_stores]
+        return {"instances": 0}
+
+    monkeypatch.setattr(glyph_db_mod, "rebuild_from_store", _fake_rebuild)
+    monkeypatch.setattr(glyph_db_mod, "assert_db_not_silently_empty", lambda *a, **k: None)
+    from open_guji_cv.feedback import replay as replay_mod
+    monkeypatch.setattr(replay_mod, "replay_after_rebuild", lambda *a, **k: {"stub": True})
+    monkeypatch.setenv("GUJI_GLYPH_DB", str(tmp_path / "glyph.db"))
+    return seen
+
+
+def _ws_with_borrow(monkeypatch, tmp_path, borrow):
+    ws = tmp_path / "qtw"
+    ws.mkdir()
+    import yaml
+    (ws / "workspace.yaml").write_text(
+        yaml.safe_dump({"id": "qtw", "glyph_lib": {"borrow": borrow}}, allow_unicode=True),
+        encoding="utf-8")
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    return ws
+
+
+def test_borrow_from_workspace_yaml(monkeypatch, tmp_path, capture_extras):
+    ws = _ws_with_borrow(monkeypatch, tmp_path, ["../siku/output/glyph_store"])
+    main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None))
+    assert capture_extras["extras"] == [ws / "../siku/output/glyph_store"]
+
+
+def test_no_borrow_overrides_workspace_yaml(monkeypatch, tmp_path, capture_extras):
+    _ws_with_borrow(monkeypatch, tmp_path, ["../siku/output/glyph_store"])
+    main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None, no_borrow=True))
+    assert capture_extras["extras"] == []
+
+
+def test_extra_store_cli_wins_and_ignores_glyph_store_env(monkeypatch, tmp_path, capture_extras):
+    ws = _ws_with_borrow(monkeypatch, tmp_path, ["../siku/output/glyph_store"])
+    monkeypatch.setenv("GUJI_GLYPH_STORE", str(tmp_path / "own_store"))
+    main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None,
+                                    extra_store=["/abs/other/glyph_store", "rel/store"]))
+    assert capture_extras["extras"] == [Path("/abs/other/glyph_store"), ws / "rel/store"]
+
+
+def test_empty_borrow_means_own_library_only(monkeypatch, tmp_path, capture_extras):
+    _ws_with_borrow(monkeypatch, tmp_path, [])
+    main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None))
+    assert capture_extras["extras"] == []
