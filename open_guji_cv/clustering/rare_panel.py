@@ -412,9 +412,11 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
             idx = [i for i, e in enumerate(emb_list)
                    if (not e) or e[0][1] < th]
             if idx:
-                sub = cnn.emb_topk_batch([norms[i] for i in idx], cs_esc,
-                                         k=max(k, 10), real_proto=real_proto,
-                                         gw_enabled=gw_enabled)
+                # 复用基集字表那次已经算过的前向 embedding，不对子集重新跑网络
+                # （2026-09-28，K 引擎卡手 #54 cross 单：此前这里重新前向是第三次）。
+                sub = cnn.emb_topk_batch_subset(norms, idx, cs_esc,
+                                                k=max(k, 10), real_proto=real_proto,
+                                                gw_enabled=gw_enabled)
                 for i, d in zip(idx, cnn.last_gw_prov):
                     gw_prov[i].update(d)
                 for i, extra in zip(idx, sub):

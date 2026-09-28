@@ -134,9 +134,14 @@ def test_topk_batch_matches_sequential():
 
 
 @needs_cnn
-def test_emb_topk_batch_matches_sequential():
-    """同上，`emb_topk_batch` 对 `emb_topk`。"""
-    c = CnnCandidates()
+def test_emb_topk_batch_matches_sequential(cnn_test_ckpt):
+    """同上，`emb_topk_batch` 对 `emb_topk`。
+
+    ⚠️ 用 `cnn_test_ckpt`（tmp 拷贝）不用裸 `CnnCandidates()`——`emb_topk`/
+    `emb_topk_batch` 会把模板索引落盘到 `<ckpt 所在目录>/emb_*.npz`，裸用真实
+    `DEFAULT_CKPT` 会把这个测试小字表的索引写进真实 `models/glyph_cnn_r5/`
+    （2026-09-28，任务书-R-rare前向去重与测试隔离；见 `conftest.py::cnn_test_ckpt`）。"""
+    c = CnnCandidates(cnn_test_ckpt)
     cs = ["一", "二", "三", "十", "土", "王"]
     qs = [np.zeros((64, 64), np.uint8) for _ in range(3)]
     qs[0][20:44, 8:56] = 1
@@ -176,9 +181,11 @@ def test_rrf_weights_tilt_toward_heavier_source():
 
 
 @needs_cnn
-def test_emb_topk_contract_and_cache():
-    """embedding 检索：只返回字表内的字、相似度降序；模板向量落盘复用。"""
-    c = CnnCandidates()
+def test_emb_topk_contract_and_cache(cnn_test_ckpt):
+    """embedding 检索：只返回字表内的字、相似度降序；模板向量落盘复用。
+
+    ⚠️ 用 `cnn_test_ckpt`（tmp 拷贝），理由同 `test_emb_topk_batch_matches_sequential`。"""
+    c = CnnCandidates(cnn_test_ckpt)
     cs = ["一", "二", "三", "十", "土", "王"]
     q = np.zeros((64, 64), np.uint8)
     q[20:44, 8:56] = 1
@@ -188,6 +195,149 @@ def test_emb_topk_contract_and_cache():
     assert all(out[i][1] >= out[i + 1][1] for i in range(len(out) - 1))
     # 第二次走缓存，结果一致
     assert [ch for ch, _ in c.emb_topk(q, cs, k=4)] == [ch for ch, _ in out]
+
+
+@needs_cnn
+def test_emb_index_caches_multiple_charsets_without_evicting(cnn_test_ckpt):
+    """`_emb_index` 的内存缓存必须能同时留住两档字表（基集＋升级档），不能只留
+    「最近一档」——`rare_panel.rare_for_batch` 的阶梯**在同一页内**先后查两档
+    字表，两档字表对象在一本书的所有页里都稳定（`book_charsets` 的 lru_cache），
+    单槽缓存会导致每一页都要把上一档挤掉、重新从磁盘读另一档的大矩阵（unicode-
+    cjk-a/unicode-ext-b 级别 28~44MB），来回颠簸（2026-09-28，CV 总管报服务器
+    `rare_candidates` 单进程内存随页数线性上涨，任务书-R 追加件；生产大字表
+    40 页合成基准实测：改前每页都重建、改后 `emb_cache` 恒为 2 档、全部复用，
+    RSS 从持续小幅攀升变成打平）。这里用两个不同的小字表模拟「基集/升级档」
+    交替访问，钉住「都在缓存里，互不驱逐」。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    cs_a = ("一", "二", "三")
+    cs_b = ("十", "土", "王")
+    q = np.zeros((64, 64), np.uint8)
+    q[20:44, 8:56] = 1
+
+    mat_a, _ = c._emb_index(cs_a)
+    mat_b, _ = c._emb_index(cs_b)
+    ids_after_first_round = {id(mat) for (_cs, mat, _names) in c._emb_cache}
+    assert len(c._emb_cache) == 2
+
+    # 交替访问 6 轮（模拟 6 页，每页先查 cs_a 再查 cs_b）：不该有新矩阵被建出来。
+    for _ in range(6):
+        mat_a2, names_a2 = c._emb_index(cs_a)
+        mat_b2, names_b2 = c._emb_index(cs_b)
+        assert mat_a2 is mat_a and mat_b2 is mat_b, "不该重建，该命中同一份对象"
+
+    assert len(c._emb_cache) == 2
+    assert {id(mat) for (_cs, mat, _names) in c._emb_cache} == ids_after_first_round
+
+
+@needs_cnn
+def test_emb_index_cache_evicts_oldest_beyond_max(cnn_test_ckpt):
+    """超过 `_EMB_CACHE_MAX` 档字表时按 LRU 淘汰最久未用的那档，不是无界增长。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    charsets = [tuple(chr(ord("一") + i)) for i in range(c._EMB_CACHE_MAX + 2)]
+    for cs in charsets:
+        c._emb_index(cs)
+    assert len(c._emb_cache) == c._EMB_CACHE_MAX
+    cached = {cs_obj for (cs_obj, _mat, _names) in c._emb_cache}
+    # 最早那几档（超出上限的部分）该被淘汰掉了
+    for cs in charsets[:-c._EMB_CACHE_MAX]:
+        assert cs not in cached
+    # 最近用的几档还在
+    for cs in charsets[-c._EMB_CACHE_MAX:]:
+        assert cs in cached
+
+
+@needs_cnn
+def test_topk_batch_and_emb_topk_batch_share_one_forward(cnn_test_ckpt):
+    """`topk_batch`/`emb_topk_batch` 对同一批图（同一个 list 对象）只该跑一次
+    `self._net(x)`——此前各自独立前向，`rare_panel.rare_for_batch` 对同一批
+    字块图先后调两次，网络前向白白翻倍（2026-09-28，任务书-R-rare前向去重与
+    测试隔离，K 引擎卡手 #54 cross 单：warm-cache 单页实测 `topk_batch` 1.95s +
+    `emb_topk_batch` 1.93s，几乎是同一件事算了两遍）。换一批（新 list 对象）
+    必须重新前向，不能沿用上一批的缓存。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    calls = []
+    orig_forward = c._net.forward
+
+    def counted(x):
+        calls.append(1)
+        return orig_forward(x)
+
+    c._net.forward = counted
+
+    cs = ["一", "二", "三", "十", "土", "王"]
+    qs = [np.zeros((64, 64), np.uint8) for _ in range(3)]
+    qs[0][20:44, 8:56] = 1
+    qs[1][10:30, 10:30] = 1
+    qs[2][30:50, 20:60] = 1
+
+    c.topk_batch(qs, cs, k=4)
+    c.emb_topk_batch(qs, cs, k=4)
+    assert len(calls) == 1, f"同一批该只前向一次，实际 {len(calls)} 次"
+
+    qs2 = [np.zeros((64, 64), np.uint8) for _ in range(2)]
+    c.topk_batch(qs2, cs, k=4)
+    assert len(calls) == 2, "换新批次该重新前向，不能沿用上一批的缓存"
+
+
+@needs_cnn
+def test_emb_topk_batch_subset_matches_direct_call_without_extra_forward(cnn_test_ckpt):
+    """升级档子集复用（`rare_panel.rare_for_batch` 的 escalate）：
+    `emb_topk_batch_subset` 对已经前向过的批次里的子集重查另一档字表，必须与
+    直接对那几张子集图单独调 `emb_topk_batch` 结果逐位相同，且不再触发新的
+    `self._net(x)` 前向（2026-09-28，同上任务书）。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    cs_base = ("一", "二", "三")
+    cs_esc = ("十", "土", "王", "人", "之")
+    qs = [np.zeros((64, 64), np.uint8) for _ in range(4)]
+    qs[0][20:44, 8:56] = 1
+    qs[1][10:30, 10:30] = 1
+    qs[2][30:50, 20:60] = 1
+    qs[3][15:49, 15:49] = 1
+
+    c.emb_topk_batch(qs, cs_base, k=3)   # 建立前向缓存
+    c.emb_topk_batch(qs, cs_esc, k=3)    # 顺带把 cs_esc 的模板矩阵建出来（下面不测这个）
+
+    calls = []
+    orig_forward = c._net.forward
+
+    def counted(x):
+        calls.append(1)
+        return orig_forward(x)
+
+    c._net.forward = counted
+
+    # ⚠️ `charset` 必须是上面刚用过的**同一个 tuple 对象**（`_emb_index` 按
+    # `is charset` 记忆化，见其模块头）——否则这里会先重建 cs_esc 的字体模板
+    # 矩阵（跟本测试要盯的「查询 embedding 前向」无关，会把调用数误判成没省下）。
+    idx = [1, 3]
+    via_subset = c.emb_topk_batch_subset(qs, idx, cs_esc, k=3)
+    assert len(calls) == 0, "子集复用不该再前向"
+
+    c._net.forward = orig_forward
+    direct = c.emb_topk_batch([qs[i] for i in idx], cs_esc, k=3)
+    assert via_subset == direct
+
+
+@needs_cnn
+def test_emb_topk_batch_subset_falls_back_when_cache_misses(cnn_test_ckpt):
+    """防御性兜底：`norm_patches_full` 不是上一次前向缓存的那个 list 对象时
+    （比如没有先调 `topk_batch`/`emb_topk_batch`），照样能算对，只是拿不到
+    复用的省时——正确性不受影响。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    cs_esc = ("十", "土", "王")
+    qs = [np.zeros((64, 64), np.uint8) for _ in range(3)]
+    qs[0][20:44, 8:56] = 1
+    qs[1][10:30, 10:30] = 1
+    qs[2][30:50, 20:60] = 1
+
+    via_subset = c.emb_topk_batch_subset(qs, [0, 2], cs_esc, k=3)
+    direct = c.emb_topk_batch([qs[0], qs[2]], cs_esc, k=3)
+    assert via_subset == direct
 
 
 def test_cls_gate_weight():

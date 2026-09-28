@@ -24,17 +24,21 @@ def test_registered():
     assert set(STEPS["rare_candidates"].spec.consumes) == {"char_index", "char_patch"}
 
 
-def test_emb_index_memoized_per_charset_not_recomputed_per_call():
+def test_emb_index_memoized_per_charset_not_recomputed_per_call(cnn_test_ckpt):
     """性能回归钉子：同一 charset 连续调用，第二次起必须走内存缓存，
     不能每次都触发 `extra_glyphs.load_many` 的目录扫描/npz 解压。
 
     不依赖 checkpoint 是否存在——`_ensure()` 失败时 `emb_topk` 直接返回
     `[]`，不会走到 `_emb_index`，这条测试测的是缓存开关本身，用一个
     真实存在的小 charset 和随机图即可，跑不跑得出候选不是这条测试关心的。
-    """
-    from open_guji_cv.clustering.cnn_candidates import CnnCandidates, shared
 
-    cnn = shared()
+    ⚠️ 用 `cnn_test_ckpt`（tmp 拷贝）不用 `shared()`——后者绑的是真实
+    `DEFAULT_CKPT`，`emb_topk` 会把这个测试小字表的模板索引落盘进真实
+    `models/glyph_cnn_r5/`（2026-09-28，任务书-R-rare前向去重与测试隔离）。
+    """
+    from open_guji_cv.clustering.cnn_candidates import CnnCandidates
+
+    cnn = CnnCandidates(cnn_test_ckpt)
     if not cnn.available:
         pytest.skip("没有 CNN checkpoint，跳过（needs=model）")
 
@@ -58,11 +62,27 @@ def test_emb_index_memoized_per_charset_not_recomputed_per_call():
         "（逐字重新扫描外部模板目录），见 cnn_candidates.py _emb_index 模块头")
 
 
-def test_rare_for_batch_matches_sequential():
+def test_rare_for_batch_matches_sequential(monkeypatch, cnn_test_ckpt):
     """`rare_for_batch`（页级批处理，2026-09-10 第二轮提速）必须与逐张调用
     `rare_for` 给出一致的候选排名——允许批处理矩阵运算的浮点求和顺序噪声
-    （1e-4 量级），但字符与排名不能变。"""
+    （1e-4 量级），但字符与排名不能变。
+
+    ⚠️ 打桩小字表 + `cnn_test_ckpt`（2026-09-28，任务书-R-rare前向去重与测试
+    隔离，K 引擎卡手 #54 done 单 §四）：`book=None` 时 `rare_for_batch` 走产线
+    真实大字表（`unicode-cjk-a` 等 2.7 万字），全新容器第一次建索引单核要
+    15~25 分钟——这正是「全量单测有时 3 分钟有时 80+ 分钟」的根因，这条测试
+    测的是批处理与逐张调用的排名一致，跟字表大小无关；同时 `shared()` 绑的是
+    真实 `DEFAULT_CKPT`，会把索引写进真实 `models/glyph_cnn_r5/`，改用
+    `cnn_test_ckpt`（tmp 拷贝）避免污染。"""
+    from open_guji_cv.clustering import cnn_candidates as cc
+    from open_guji_cv.clustering import rare_panel as rare_panel_mod
     from open_guji_cv.clustering.rare_panel import rare_for, rare_for_batch
+
+    small_cnn = cc.CnnCandidates(cnn_test_ckpt)
+    monkeypatch.setattr(cc, "shared", lambda *a, **k: small_cnn)
+    monkeypatch.setattr(rare_panel_mod, "book_charsets",
+                        lambda book, corpus: (tuple("一二三十土王人之月田"), (),
+                                              {"base": "fake-small", "escalate": "fake-esc"}))
 
     imgs = [np.zeros((64, 64), np.uint8) for _ in range(4)]
     imgs[0][20:44, 8:56] = 1
@@ -79,18 +99,26 @@ def test_rare_for_batch_matches_sequential():
             assert abs(hs["score"] - hb["score"]) < 1e-3
 
 
-def test_hog_not_called_when_cnn_available():
+def test_hog_not_called_when_cnn_available(monkeypatch, cnn_test_ckpt):
     """2026-09-10 第三轮：`HOG_WEIGHT=0.0` 已经让 HOG 对排名零贡献
     （vol01 全量 1934 字实测跑不跑 HOG 结果逐字相同），CNN checkpoint 装了
     就不该再跑 HOG 的 `candidates()`——那是 `rare_for` 全链路里最贵的部分。
     这条测试直接 monkeypatch `font_candidates.candidates`，断言 CNN 可用时
     一次都不会被调用；同时确认 CNN 不可用时 HOG 仍是唯一候选源、会被调用。
+
+    ⚠️ 打桩小字表 + `cnn_test_ckpt`，理由同 `test_rare_for_batch_matches_sequential`
+    ——不打桩的话 `book=None` 一样会走产线真实大字表并写进真实
+    `models/glyph_cnn_r5/`。
     """
     from open_guji_cv.clustering import cnn_candidates, font_candidates, rare_panel
 
-    cnn = cnn_candidates.shared()
+    cnn = cnn_candidates.CnnCandidates(cnn_test_ckpt)
     if not cnn.available:
         pytest.skip("没有 CNN checkpoint，跳过（HOG 本来就该被调用，测的是反面）")
+    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: cnn)
+    monkeypatch.setattr(rare_panel, "book_charsets",
+                        lambda book, corpus: (tuple("一二三十土王人之月田"), (),
+                                              {"base": "fake-small", "escalate": "fake-esc"}))
 
     calls = []
     orig = font_candidates.candidates
@@ -173,12 +201,14 @@ def test_book_real_proto_resolves_relative_stores(monkeypatch, tmp_path):
     assert specs2 == (f"store:{tmp_path / 'output' / 'glyph_store'}", "store:/abs/other_store")
 
 
-def test_rare_for_batch_real_proto_off_matches_no_param(monkeypatch):
+def test_rare_for_batch_real_proto_off_matches_no_param(monkeypatch, cnn_test_ckpt):
     """`rare_for_batch`/`emb_topk_batch` 加了 `real_proto` 形参不该改变缺省行为：
-    显式传 `(False, …)` 与完全不传该参数（旧调用方式）结果必须逐字节相同。"""
-    from open_guji_cv.clustering.cnn_candidates import shared
+    显式传 `(False, …)` 与完全不传该参数（旧调用方式）结果必须逐字节相同。
 
-    cnn = shared()
+    ⚠️ 用 `cnn_test_ckpt`，理由同 `test_emb_index_memoized_per_charset_not_recomputed_per_call`。"""
+    from open_guji_cv.clustering.cnn_candidates import CnnCandidates
+
+    cnn = CnnCandidates(cnn_test_ckpt)
     if not cnn.available:
         pytest.skip("没有 CNN checkpoint，跳过（needs=model）")
 

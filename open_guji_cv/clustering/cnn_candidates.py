@@ -526,6 +526,10 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot:
 class CnnCandidates:
     """懒加载；没有 checkpoint 或没装 torch 时 `available` 为 False，调用方跳过。"""
 
+    _EMB_CACHE_MAX = 4
+    """`_emb_cache` 最多留几档字表的 embedding 矩阵——见该属性在 `__init__` 里的
+    文档。一本书正常只有基集＋升级档两档，4 是留出的余量，不是精确值。"""
+
     def __init__(self, ckpt: str | Path = DEFAULT_CKPT, device: str | None = None,
                  probe: str | Path | None = None):
         self.ckpt = Path(ckpt)
@@ -547,13 +551,50 @@ class CnnCandidates:
         self._comps: list[str] = []
         self._struct_classes: list[str] = []
         self._slot_labels: list[str] = []
-        self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
-        """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
+        self._emb_cache: list[tuple] = []
+        """`_emb_index` 的内存缓存：`[(charset, mat, names), ...]`，最多留
+        `_EMB_CACHE_MAX` 份，LRU（命中的挪到末尾，满了从头淘汰）。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
-        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。"""
+        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。
+
+        **2026-09-28 从单槽改成小容量 LRU**（CV 总管报：服务器 `rare_candidates`
+        单进程内存随页数线性上涨，任务书-R 追加件）：原来单槽缓存只留「最近一档」，
+        而 `rare_panel.rare_for_batch` 的阶梯（基集→升级档）**在同一页内先后查两档
+        字表**——两档字表对象在一本书的所有页里都稳定（`book_charsets` 的
+        `lru_cache`），但单槽缓存放不下两个，于是每一页都要把上一页缓存的那一档
+        挤掉、从磁盘重读另一档（unicode-cjk-a 基集矩阵约 28MB／unicode-ext-b
+        升级档约 44MB），来回颠簸。实测（生产大字表、40 页合成基准）：RSS 从
+        建索引刚完成的 708MB 到第 2 页跳到 738MB 后打平，不是持续攀升，但这种
+        大块反复 alloc/free 的模式会顶住 glibc malloc arena 不易缩回，与服务器
+        「涨到 3.17G 被节流」的现象吻合。留够两档（缺省 4，给以后可能出现的
+        第三档留余量）后，同一本书跑多少页都只在最开始各建一次，不用 `is` 键
+        的普通 dict——**存对象本身、线性扫描 `is` 比对**（与 `_fwd_cache` 同一个
+        写法，理由见其文档：只存 `id()` 整数会被垃圾回收后复用的地址撞车；这里
+        `charset` 由 `book_charsets` 的 lru_cache 一直强引用着，其实不会被回收，
+        但还是照抄这个更安全的写法，不留后患）。"""
         self._real_cs: tuple[tuple, tuple | None] | None = None
         """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
         GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
+        self._fwd_cache: tuple[list, tuple] | None = None
+        """最近一批 `self._net(x)` 的原始前向结果缓存：`(norm_patches 那个 list
+        对象本身, (e, lg, cp))`。`topk_batch`/`emb_topk_batch` 原来对同一批字块图
+        各自独立跑一次前向（网络本身不看 charset，两边算的是同一件事），
+        `rare_panel.rare_for_batch` 对基集字表先后调两次、升级档子集再调第三次——
+        改成只留「最近一批」，同一个 list 对象（调用方按页组批，同一页内对象不变）
+        内的后续调用直接复用，换新批次自动作废（2026-09-28，任务书-R-rare前向
+        去重与测试隔离，K 引擎卡手 #54 cross 单）。单槽缓存，不是无界字典——
+        `shared()` 是进程级单例，页与页之间批次不同，留多份没有意义。
+
+        ⚠️ **必须存对象本身、用 `is` 比对，不能只存 `id(norm_patches)` 这个整数**
+        （与 `_emb_cache` 存 `charset` 本身、`is charset` 比对同一个写法）：
+        `norm_patches` 是调用方每次新建的临时 list，一用完就被垃圾回收，
+        CPython 会把同一块内存地址迅速分配给下一个不相关的新 list——只存
+        整数 id 撞上了这个坑：`rare_panel.rare_for` 连续单张调用时，每次都建一个
+        长度 1 的临时列表，前一个刚被回收、下一个几乎必然撞到同一个 id，于是
+        第二张图直接读到了第一张图的缓存，`rare_for` 与 `rare_for_batch` 排序
+        对不上（2026-09-28 用真实 `rare_for` 循环调用复现、原地修复）。存对象
+        本身相当于多持一份强引用，只要这个缓存还活着，Python 就不会把它的地址
+        腾给别的对象，`is` 比较因此安全。"""
         self.last_real_prov: list[dict] = []
         """最近一次 `emb_topk_batch` 里真刻例原型赢过字体均值的字位：每个查询一个
         `{字: (instance_id, 余弦)}`，与 `last_gw_prov` 同一套用法（R2/T11，2026-09-26）。"""
@@ -721,6 +762,22 @@ class CnnCandidates:
             pr = torch.sigmoid(cp).cpu().numpy()
         return [{c: float(p) for c, p in zip(self._comps, row)} for row in pr]
 
+    def _forward_batch(self, norm_patches: list[np.ndarray]):
+        """跑一次 `self._net(x)`，返回未转 numpy 的 `(e, lg, cp)`。
+
+        同一批（同一个 `norm_patches` list 对象）内的后续调用直接命中 `self._fwd_cache`，
+        不重新前向——`__init__` 里 `_fwd_cache` 的文档有完整背景（**必须用 `is`
+        比对持有的对象本身，不能只存 `id()` 整数**）。"""
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches:
+            return self._fwd_cache[1]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            out = self._net(x)
+        self._fwd_cache = (norm_patches, out)
+        return out
+
     def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
                    ) -> list[list[tuple[str, float]]]:
         """`topk()` 的批量版：一页多个字块一次前向，见 `emb_topk_batch` 模块头
@@ -733,10 +790,8 @@ class CnnCandidates:
         if not idx or not norm_patches:
             return [[] for _ in norm_patches]
         idx_t = torch.tensor(idx, device=self._dev)
+        _, lg, _ = self._forward_batch(norm_patches)
         with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
-                             device=self._dev)
-            _, lg, _ = self._net(x)                     # (N, n_cls)
             sub = lg[:, idx_t]                           # (N, len(idx))
             pr = torch.softmax(sub, 1)
             top = pr.topk(min(k, len(idx)), dim=1)
@@ -821,8 +876,11 @@ class CnnCandidates:
         文件在服务器上真的能命中。**这三件不改变冷启动峰值**，需要真降内存
         只能走①。
         """
-        if self._emb_cache is not None and self._emb_cache[0] is charset:
-            return self._emb_cache[1], self._emb_cache[2]
+        for i, (cs_obj, mat, names) in enumerate(self._emb_cache):
+            if cs_obj is charset:
+                if i != len(self._emb_cache) - 1:            # LRU：命中的挪到末尾
+                    self._emb_cache.append(self._emb_cache.pop(i))
+                return mat, names
 
         from .synth import render_char
 
@@ -841,7 +899,7 @@ class CnnCandidates:
                 # 落盘是 float32（见 `_save_emb_index`）；astype 对老缓存或手工
                 # 放进来的文件兜底，保证查询路一律 float32。
                 mat = mat.astype(np.float32)
-                self._emb_cache = (charset, mat, names)
+                self._emb_cache_put(charset, mat, names)
                 return mat, names
         mat, names = build_emb_matrix(self._net, self._dev, cs, extra, render_char,
                                       log=lambda s: print(s, flush=True))
@@ -856,8 +914,14 @@ class CnnCandidates:
                 f"embedding 索引建成 0 行（字表 {len(cs)} 字）——字体模板或渲染全部失败，"
                 f"不落盘。检查 fonts/ 目录与 EMB_EXTRA_SPECS。")
         _save_emb_index(f, mat, names)
-        self._emb_cache = (charset, mat, names)
+        self._emb_cache_put(charset, mat, names)
         return mat, names
+
+    def _emb_cache_put(self, charset, mat: np.ndarray, names: list[str]) -> None:
+        """写入 `_emb_cache`（LRU，见该属性文档）：满了先从头淘汰最久未用的一档。"""
+        self._emb_cache.append((charset, mat, names))
+        while len(self._emb_cache) > self._EMB_CACHE_MAX:
+            self._emb_cache.pop(0)
 
     def embed(self, norm_patches: list[np.ndarray]) -> np.ndarray:
         """归一化 64² 图 → 单位化 embedding (N, 256)。不可用时 (0, 256)。
@@ -922,20 +986,70 @@ class CnnCandidates:
         if not self._ensure():
             _warn_emb_down("checkpoint 不可用")
             return [[] for _ in norm_patches]
-        import torch
         mat, names = self._emb_index(charset)
         if mat.shape[0] == 0 and norm_patches:
             _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
         if mat.shape[0] == 0 or not norm_patches:
             return [[] for _ in norm_patches]
+        e, _, _ = self._forward_batch(norm_patches)
+        return self._emb_topk_from_query(e, mat, names, charset, k,
+                                         real_exclude_ids, real_proto, gw_enabled)
+
+    def emb_topk_batch_subset(self, norm_patches_full: list[np.ndarray], idx: list[int],
+                              charset, k: int = 10,
+                              real_exclude_ids: frozenset = frozenset(),
+                              real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                              gw_enabled: bool | None = None,
+                              ) -> list[list[tuple[str, float]]]:
+        """升级档子集复用（`rare_panel.rare_for_batch` 的 escalate）：`idx` 是
+        `norm_patches_full`（与之前那次 `topk_batch`/`emb_topk_batch` 传的**同一个**
+        list 对象）里要重算的字位下标，换一档字表（`charset`）重查。
+
+        直接切上一次前向缓存里的 embedding（`self._fwd_cache`），不对这个子集重新跑
+        `self._net(x)`——同一批图先前已经在基集字表那次调用里前向过一遍，子集不该
+        再算第三遍（2026-09-28，任务书-R-rare前向去重与测试隔离，K 引擎卡手 #54
+        cross 单：warm-cache 实测 `topk_batch` 1.95s + `emb_topk_batch` 1.93s，
+        几乎是同一件事算了两遍，加上升级档子集就是第三遍）。
+
+        缓存没命中（`norm_patches_full` 不是上一次前向缓存的那个 list 对象，比如
+        调用方没有先调 `topk_batch`/`emb_topk_batch`）时退回对子集单独前向——
+        正确性不受影响，只是拿不到这次的省时；这是防御性兜底，不是常态路径。
+        """
+        if not self._ensure():
+            _warn_emb_down("checkpoint 不可用")
+            return [[] for _ in idx]
+        if not idx:
+            return []
+        mat, names = self._emb_index(charset)
+        if mat.shape[0] == 0:
+            _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
+            return [[] for _ in idx]
+        import torch
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches_full:
+            e_full, _, _ = self._fwd_cache[1]
+            e_sub = e_full[torch.tensor(list(idx), device=self._dev)]
+        else:
+            sub_patches = [norm_patches_full[i] for i in idx]
+            e_sub, _, _ = self._forward_batch(sub_patches)
+        return self._emb_topk_from_query(e_sub, mat, names, charset, k,
+                                         real_exclude_ids, real_proto, gw_enabled)
+
+    def _emb_topk_from_query(self, e, mat: np.ndarray, names: list[str], charset, k: int,
+                             real_exclude_ids: frozenset,
+                             real_proto: tuple[bool, tuple[str, ...]] | None,
+                             gw_enabled: bool | None,
+                             ) -> list[list[tuple[str, float]]]:
+        """`emb_topk_batch`/`emb_topk_batch_subset` 共用的检索尾段：给定已经算好的
+        查询 embedding `e`（torch tensor，未归一化，(N, 256)）与目标字表的模板矩阵
+        `(mat, names)`，做归一化＋矩阵检索＋gw/real 融合，返回逐图 top-k。网络前向
+        由调用方做完，这里不碰 `self._net`——`emb_topk_batch` 原有的这段逻辑一字未改，
+        只是从「拿到 norm_patches 就现跑前向」改成「拿已经算好的 e」。"""
+        import torch
         with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
-                             device=self._dev)
-            e, _, _ = self._net(x)                        # (N, 256)
             Q = e / (e.norm(dim=1, keepdim=True) + 1e-9)
             Q = Q.cpu().numpy()
         sims = mat @ Q.T                                   # (rows, N)
-        self.last_gw_prov = [{} for _ in norm_patches]
+        self.last_gw_prov = [{} for _ in range(Q.shape[0])]
         gw_on = GW_ENABLED if gw_enabled is None else gw_enabled
         gw = self._gw_index(charset, names) if gw_on else None
         if gw is not None:
@@ -952,7 +1066,7 @@ class CnnCandidates:
                         b = cand[int(np.argmax(sg[cand, j]))]
                         self.last_gw_prov[j][names[int(r)]] = (str(gnames[b]), str(gsrc[b]), float(sg[b, j]))
                     sims[:, j] = np.maximum(sims[:, j], best)
-        self.last_real_prov = [{} for _ in norm_patches]
+        self.last_real_prov = [{} for _ in range(Q.shape[0])]
         if real_proto is not None:
             r_enabled, r_specs = real_proto
         else:

@@ -136,16 +136,23 @@ def test_emb_index_key_stable_for_equal_charset_tuples():
 
 # ── CLI：guji cache build-rare-index 走的是产线同一个 book_charsets ──
 @needs_cnn
-def test_cli_build_rare_index_uses_book_charsets_and_dedupes(monkeypatch, tmp_path):
+def test_cli_build_rare_index_uses_book_charsets_and_dedupes(monkeypatch, cnn_test_ckpt):
     """打桩 `book_charsets` 回一个几个字的小表，只验证 CLI 把它接到
     `emb_index_key`/`_emb_index` 的路径没接错、文件写到了预期位置、
-    第二次调用（缓存已在）不重建。不碰真实 27,584/70,304 字规模。"""
+    第二次调用（缓存已在）不重建。不碰真实 27,584/70,304 字规模。
+
+    ⚠️ 用会话级 `cnn_test_ckpt`（tmp 拷贝）代替本地现拷 `best.pt`——两者效果
+    相同（`emb_index_key` 落盘路径锚在 `ckpt.parent`，这里 `monkeypatch.setattr(cc,
+    "DEFAULT_CKPT", ...)` 让 `_cmd_cache_build_rare_index` 里 `cc.CnnCandidates(
+    ckpt=cc.DEFAULT_CKPT)` 读到的就是 tmp 路径，不会碰真实 `models/glyph_cnn_r5/`），
+    只是不必每条测试各自现拷一遍 19MB 权重文件（2026-09-28，任务书-R-rare前向
+    去重与测试隔离；`tests/conftest.py::_no_new_files_in_models` 现在会在整个
+    会话收尾时校验 `models/` 没有新文件，独立确认这条测试确实没写真实目录）。"""
     from open_guji_cv import cli_v2
     from open_guji_cv.clustering import cnn_candidates as cc
     from open_guji_cv.clustering import rare_panel as rare_panel_mod
 
-    ckpt_copy = tmp_path / "best.pt"
-    ckpt_copy.write_bytes(DEFAULT_CKPT.read_bytes())
+    ckpt_copy = cnn_test_ckpt
     monkeypatch.setattr(cc, "DEFAULT_CKPT", ckpt_copy)
 
     cs_base = tuple("一二三十土王")

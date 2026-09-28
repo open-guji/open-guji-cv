@@ -45,7 +45,7 @@ def _make_store(tmp_path, entries):
     return store
 
 
-def test_real_proto_hit_and_provenance(tmp_path, monkeypatch):
+def test_real_proto_hit_and_provenance(tmp_path, monkeypatch, cnn_test_ckpt):
     from open_guji_cv.clustering import cnn_candidates as cc
     from open_guji_cv.clustering.font_candidates import _font_files
     from open_guji_cv.clustering.normalize import normalize_patch
@@ -55,7 +55,10 @@ def test_real_proto_hit_and_provenance(tmp_path, monkeypatch):
     raw = _raw_patch("諭", _font_files()[0])
     store = _make_store(tmp_path, [("諭", "vol01:1:1:1", "human", raw)])
     charset = ("諭", "論", "俞")
-    cnn = cc.CnnCandidates(cc.DEFAULT_CKPT)
+    # `cnn_test_ckpt` 不用真实 `cc.DEFAULT_CKPT`：下面 `emb_topk_batch` 会把这个
+    # 测试字表的模板索引落盘，用真实 ckpt 会写进真实 `models/glyph_cnn_r5/`
+    # （2026-09-28，任务书-R-rare前向去重与测试隔离）。
+    cnn = cc.CnnCandidates(cnn_test_ckpt)
 
     monkeypatch.setattr(cc, "REAL_PROTO_ENABLED", False)
     query = normalize_patch(raw)
@@ -91,7 +94,7 @@ def test_only_human_label_status(tmp_path, monkeypatch):
     assert pool == {}
 
 
-def test_leave_one_out_by_physical_cell(tmp_path, monkeypatch):
+def test_leave_one_out_by_physical_cell(tmp_path, monkeypatch, cnn_test_ckpt):
     """留一法：v1 重键后 vol01:/v2:（精确格号坐标）要求同格号 =0 才摘；
     v1: 前缀（idx 换算、未经形状确认）仍按 ±2 兜底（字形库 12 §六，2026-09-27 收紧）。"""
     from open_guji_cv.clustering import cnn_candidates as cc
@@ -103,7 +106,7 @@ def test_leave_one_out_by_physical_cell(tmp_path, monkeypatch):
     raw = _raw_patch("諭", _font_files()[0])
     store = _make_store(tmp_path, [("諭", "vol01:5:2:10", "human", raw)])
     charset = ("諭", "論", "俞")
-    cnn = cc.CnnCandidates(cc.DEFAULT_CKPT)
+    cnn = cc.CnnCandidates(cnn_test_ckpt)
     monkeypatch.setattr(cc, "REAL_PROTO_ENABLED", True)
     monkeypatch.setattr(cc, "REAL_PROTO_SPECS", (f"store:{store}",))
 

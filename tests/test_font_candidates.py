@@ -219,6 +219,64 @@ def test_all_ready_false_when_any_independent_charset_missing():
     assert all_ready([a, b])
 
 
+
+# ── font_set_fingerprint 按内容算，不按 mtime（2026-09-28）───────────────
+#
+# CV 总管 09-27 23:45Z 追加到任务书-R-rare前向去重与测试隔离（K 快照自动导入
+# #51 查出）：改前按 `名字:大小:mtime` 拼，字体逐字节相同、只是不同机器
+# checkout 的 mtime 不同，key 就跟着变——云端预建的 embedding/HOG 索引到服务器
+# 上全部 miss，服务器只能现建（K18 实测冷建近 1 小时，差点 OOM）。与
+# `cnn_candidates.fingerprint`/`real_proto_fingerprint`/`gw_catalog_fingerprint`
+# 同一个坑、同一个改法，这里钉住同一条规矩：换 mtime 不变，换内容才变。
+def test_font_set_fingerprint_survives_mtime_change(tmp_path):
+    from open_guji_cv.clustering.font_candidates import (FONT_ORDER,
+                                                         font_set_fingerprint)
+
+    root = tmp_path / "fonts"
+    d = root / FONT_ORDER[0]
+    d.mkdir(parents=True)
+    f = d / "a.ttf"
+    f.write_bytes(b"hello font bytes" * 50)
+
+    fp1 = font_set_fingerprint(str(root))
+    import os
+    import time
+    time.sleep(0.01)
+    os.utime(f, (time.time() + 1000, time.time() + 1000))  # 未来 mtime，模拟换机器 checkout
+    fp2 = font_set_fingerprint(str(root))
+    assert fp1 == fp2
+
+
+def test_font_set_fingerprint_changes_with_content(tmp_path):
+    from open_guji_cv.clustering.font_candidates import (FONT_ORDER,
+                                                         font_set_fingerprint)
+
+    root = tmp_path / "fonts"
+    d = root / FONT_ORDER[0]
+    d.mkdir(parents=True)
+    f = d / "a.ttf"
+    f.write_bytes(b"aaaa")
+    fp1 = font_set_fingerprint(str(root))
+    f.write_bytes(b"bbbb")
+    fp2 = font_set_fingerprint(str(root))
+    assert fp1 != fp2
+
+
+def test_font_set_fingerprint_relative_root_matches_absolute():
+    """`root` 不管传相对路径（缺省 `"fonts"`）还是绝对路径，只要指向同一份
+    仓内字体档，都该按仓根解析出同一个 key——不该跟着 cwd 漂
+    （`_font_files` 本身的 cwd-then-repo-root 兼容逻辑是给「找文件」用的，
+    指纹计算这里显式钉死走仓根）。"""
+    from open_guji_cv.clustering.font_candidates import _REPO_ROOT, font_set_fingerprint
+
+    assert font_set_fingerprint("fonts") == font_set_fingerprint(str(_REPO_ROOT / "fonts"))
+
+
+def test_font_set_fingerprint_no_fonts_is_nofonts(tmp_path):
+    from open_guji_cv.clustering.font_candidates import font_set_fingerprint
+
+    assert font_set_fingerprint(str(tmp_path / "empty")) == "nofonts"
+
 # ── 召回率那两条已迁出测试（2026-09-20）─────────────────────────────────
 #
 # `test_recall_on_rare_char_set` 与 `test_two_tier_charset_beats_single_table`
