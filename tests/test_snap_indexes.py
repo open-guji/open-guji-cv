@@ -220,3 +220,24 @@ def test_reference_existing_remote_index_without_local_file(world):
     with pytest.raises(mf.ManifestError, match="本地也没有"):
         idx.publish(world["cloud"], [idx.IndexFile("rare_emb", "ffffffffffffffff", None,
                                                    "models/r5/emb_ffffffffffffffff.npz")])
+
+
+def test_import_index_cli_by_branch_name(world, capsys):
+    """`guji snap import-index idx/<kind>/<key>`：不经 snap 包直接落位，第二次报已在。"""
+    import argparse
+
+    from open_guji_cv import cli_v2
+    a = _rare(world["tmp"], "abcdefabcdefabcd")
+    idx.publish(world["cloud"], [a], cv_commit=world["A"])
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="cmd")
+    cli_v2.register_subcommands(sub)
+    argv = ["snap", "import-index", f"idx/rare_emb/{a.key}", "--ws-repo", str(world["server"]),
+            "--cv-repo", str(world["cv"])]
+    cli_v2.COMMANDS_V2["snap"](parser.parse_args(argv + ["--dry-run"]))
+    assert json.loads(capsys.readouterr().out)["status"] == idx.WOULD_PLACE
+    cli_v2.COMMANDS_V2["snap"](parser.parse_args(argv))
+    assert json.loads(capsys.readouterr().out)["status"] == idx.PLACED
+    assert (world["cv"] / a.dest).read_bytes() == a.src.read_bytes()
+    cli_v2.COMMANDS_V2["snap"](parser.parse_args(argv))
+    assert json.loads(capsys.readouterr().out)["status"] == idx.PRESENT
