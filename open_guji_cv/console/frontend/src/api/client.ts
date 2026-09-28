@@ -48,6 +48,16 @@ export function withWorkspace(url: string): string {
   return rooted + (rooted.includes('?') ? '&' : '?') + 'ws=' + encodeURIComponent(ws)
 }
 
+/** 带 HTTP 状态码的错误——调用方要区分「服务器在重启（502/503/504）」与真错误时用。
+ * 仍是 `Error`，`.message` 与以前一致，老调用方不受影响。 */
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 export async function api<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
   // 每个请求都带上本标签页的工作区。服务端据此解析 products / cache /
   // 字形库等所有根（console/middleware.py），不持有「当前工作区」。
@@ -62,7 +72,7 @@ export async function api<T = unknown>(path: string, opts?: RequestInit): Promis
     } catch {
       // 不是 JSON，原样用文本
     }
-    throw new Error(t)
+    throw new ApiError(t, r.status)
   }
   return r.json() as Promise<T>
 }

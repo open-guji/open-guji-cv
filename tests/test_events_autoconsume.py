@@ -111,3 +111,18 @@ def test_batch_name_with_colon_does_not_create_ntfs_stream(tmp_path):
     # 事件内容里的 batch 字段保持原样（只有文件名被净化）
     back = el.read(batch)
     assert len(back) == 1 and back[0].batch == batch
+
+
+def test_request_id_dedups_retry(client):
+    """部署重启期间前端重试：同一 request_id 只写一次（含「第一次其实写成功了」）。"""
+    row = [{"id": "vol01:4:1:3", "v": "seg_defect", "quality": "truncated"}]
+    a = _post(client, row, request_id="rid-1")
+    assert a["appended"] == 1 and not a.get("duplicate")
+    b = _post(client, row, request_id="rid-1")
+    assert b["appended"] == 0 and b["duplicate"] is True
+    assert b["total"] == a["total"]
+    from open_guji_cv.console import deps
+    assert len(deps.event_log().read("t-batch")) == 1
+    # 不同 id 照写；不带 id 的老调用不受影响
+    assert _post(client, row, request_id="rid-2")["appended"] == 1
+    assert _post(client, row)["appended"] == 1

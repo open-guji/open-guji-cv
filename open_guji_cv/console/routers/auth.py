@@ -14,6 +14,9 @@
 from __future__ import annotations
 
 import secrets
+import subprocess
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -27,6 +30,40 @@ router = APIRouter()
 @router.get("/healthz")
 def healthz() -> dict:
     return {"ok": True}
+
+
+_VERSION_CACHE: dict | None = None
+_STARTED_AT = datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _git(*args: str) -> str | None:
+    try:
+        r = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True,
+                           text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = r.stdout.strip()
+    return out if r.returncode == 0 and out else None
+
+
+def current_version() -> dict:
+    """当前进程对应的 cv 版本。**每个进程只算一次**：部署是「换代码 → 重启进程」，
+    进程活着期间代码在盘上可能已被换掉，缓存保证它报的始终是自己加载的那一版。
+    `deployed_at` 用进程启动时间（部署必重启，不必去改部署器写文件）。
+    取不到 git（没有 .git／没装 git）→ `commit=None`，前端显示「开发版」。"""
+    global _VERSION_CACHE
+    if _VERSION_CACHE is None:
+        commit = _git("rev-parse", "--short", "HEAD")
+        _VERSION_CACHE = {"commit": commit,
+                          "subject": _git("log", "-1", "--format=%s") if commit else None,
+                          "deployed_at": _STARTED_AT}
+    return _VERSION_CACHE
+
+
+@router.get("/api/version")
+def api_version() -> dict:
+    """免鉴权（同 `/healthz`）：前端登录前后、重启间隙都要能轮询。"""
+    return current_version()
 
 
 @router.get("/api/auth/me")
