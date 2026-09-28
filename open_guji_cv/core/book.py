@@ -195,6 +195,15 @@ class BookSpec:
     #: 这两条都占（抬头字越过版框线，位置判据会把抬头笔画当框），所以缺省保持
     #: `side_gap`，只在确认过版框清晰且不被突破的册上开。
     frame_bar_strategy: str = "side_gap"
+    #: `end_rule_strip`（yaml 同名，缺省关）：Step4 在列首/列尾格裁紧前剥掉贴边的
+    #: **内框细线**（`clustering/end_rule_strip.py`）。全唐文四周雙邊、内框线细而断续，
+    #: 现役 `frame_bar_strategy` 两套判据都是按四庫粗糊版框标定的、抓不到它
+    #: （2026-09-28 S 道，overview#66）。四庫各册不开，行为不变。
+    end_rule_strip: bool = False
+    #: `raised_bar_max_h`（yaml 同名）：抬头位「矮而满宽」的紧框判成版框线的高度上限
+    #: （× 格高，见 `steps/cell_shrink.FRAME_BAR_MAX_H`）。缺省 None=0.4（四庫 vol02 标定）。
+    #: 全唐文雙邊的外粗条+内细线整组落进抬头位，高 110–120px≈0.55 格高，0.4 放它当字，要 0.65。
+    raised_bar_max_h: float | None = None
     #: `binarized_input`（yaml 同名）：Step1 起的**几何链路读整页二值副本**，
     #: 而不是灰度原图（`utils/binarized.binarize_page`，Sauvola 31/k=0.10）。
     #:
@@ -587,6 +596,9 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         column_grid=bool(d.get("column_grid", False)),
         norm_stroke=(None if d.get("norm_stroke") is None else int(d["norm_stroke"])),
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
+        end_rule_strip=bool(d.get("end_rule_strip", False)),
+        raised_bar_max_h=(None if d.get("raised_bar_max_h") is None
+                          else float(d["raised_bar_max_h"])),
         binarized_input=bool(d.get("binarized_input", False)),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
         frame_height=(None if d.get("frame_height") is None

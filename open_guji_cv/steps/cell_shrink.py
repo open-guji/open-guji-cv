@@ -64,12 +64,32 @@ FRAME_BAR_TOP = 0.15
 居中，不贴顶。四册全书按这三条筛只中 vol02 这 2 格，全是框线。"""
 
 
-def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
+def _bar_like(patch) -> bool:
+    """图块的墨是不是几乎全落在「满宽行」里（行墨 ≥ 0.5 图块宽的行占全部墨的 ≥ 85%）。"""
+    if patch is None or getattr(patch, "size", 0) == 0:
+        return False
+    b = np.asarray(patch) < 128
+    tot = int(b.sum())
+    if tot == 0:
+        return False
+    full = b.mean(axis=1) >= 0.5
+    return int(b[full].sum()) >= 0.85 * tot
+
+
+def _is_raised_frame_bar(slot, cell_type: str, bbox, cc, max_h: float | None = None,
+                         patch=None) -> bool:
+    """`max_h`：书级 `raised_bar_max_h`（只放宽抬头位 slot<1，首格那条仍用 0.4——首格可能真有扁字）。"""
     if cell_type != "char" or slot is None or slot > 1 or not cc.period or not cc.content_x:
         return False
     h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
     col_w = cc.content_x[1] - cc.content_x[0]
-    if not (h < FRAME_BAR_MAX_H * cc.period and w >= FRAME_BAR_MIN_W * col_w):
+    lim = max_h if (max_h is not None and slot < 1) else FRAME_BAR_MAX_H
+    if not (h < lim * cc.period and w >= FRAME_BAR_MIN_W * col_w):
+        return False
+    if h >= FRAME_BAR_MAX_H * cc.period and not _bar_like(patch):
+        # 放宽出来的那一截（书级 raised_bar_max_h）只收「整块都是横条」的：
+        # 全唐文抬头位有时框线下面带着下一格字的上半截（Step3 的抬头格压进了字身，
+        # v006 p63/p67/p69 实测），那种不能判空——判空等于把那截字墨藏起来
         return False
     if slot < 1:
         return True
@@ -85,9 +105,10 @@ class CellShrinkStep(Step):
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
-        book_deps=("frame_bar_strategy",),
+        book_deps=("frame_bar_strategy", "end_rule_strip", "raised_bar_max_h"),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam"),
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.clustering.end_rule_strip",
+                   "open_guji_cv.utils.seam"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -135,7 +156,9 @@ class CellShrinkStep(Step):
                      # 用下面这两条线定位版框，它们是**列图坐标**：border_top=0 表示
                      # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
                      # 落在 y≈0 与 y≈border_bottom 附近。
-                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap")},
+                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap"),
+                     # 书级开关（缺省关）：列首/列尾贴边内框细线剥离，见 clustering/end_rule_strip
+                     "end_rule_strip": bool(getattr(ctx.book, "end_rule_strip", False))},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
@@ -245,7 +268,9 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc,
+                                                 getattr(ctx.book, "raised_bar_max_h", None),
+                                                 patch if has_patch else None)
                 if frame_bar:
                     cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
