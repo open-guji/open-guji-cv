@@ -78,3 +78,7 @@ export function fetchAroundBatch(
 export function contextImgUrl(book: string, page: number, col: number, slot: number) {
   return withWorkspace(`/api/review/context-img/${encodeURIComponent(book)}/${page}/${col}/${slot}.png?around=2`)
 }
+
+/** 字体候选索引状态（K19，`GET /api/rare/status`）：`deferred` = 缺盘且有活跑批，冷建推迟，
+ * 这段时间字体候选（HOG 那一路）不可用；库/CNN 两路不受影响。 */
+export const fetchRareStatus = () => api<{ deferred?: boolean; [k: string]: unknown }>('/api/rare/status')

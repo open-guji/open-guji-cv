@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { fetchRareOne, fetchRareSearch } from '../../api/review'
+import { useEffect, useState } from 'react'
+import { fetchRareOne, fetchRareSearch, fetchRareStatus } from '../../api/review'
 import type { RareCandidate } from '../../types/review'
 import '../review/review.css' // 复用候选行样式 .rvrareout/.rvrrow/.rvstd/.rvgloss/.rvzi/.rvpick
 import './rare.css'
@@ -23,6 +23,12 @@ export function RarePanel({ book }: { book: string }) {
   const [slotA, setSlotA] = useState('')     // 第一槽（⿰ 的左 / ⿱ 的上 / 包围的外）
   const [slotB, setSlotB] = useState('')     // 第二槽
   const [comps, setComps] = useState('')     // 任意位置含的部件，空格分隔
+  // K19 cross（2026-09-28）：字体索引冷建被推迟（缺盘且有活跑批）时，字体候选暂不可用。
+  // 进面板查一次就够——推迟是「等下一次请求/重启再给机会」，不在前端轮询。
+  const [fontDeferred, setFontDeferred] = useState(false)
+  useEffect(() => {
+    fetchRareStatus().then((s) => setFontDeferred(!!s.deferred)).catch(() => {})
+  }, [])
 
   const SLOT_NAMES: Record<string, [string, string]> = {
     '⿰': ['L', 'R'], '⿱': ['T', 'B'], '⿲': ['L', 'R'], '⿳': ['T', 'B'], '⿻': ['A', 'B'],
@@ -69,7 +75,12 @@ export function RarePanel({ book }: { book: string }) {
   }
 
   return (
-    <div className="card">
+    <div className="card rare-card">
+      {fontDeferred && (
+        <div className="rare-deferred muted" title="GET /api/rare/status：deferred=true">
+          字体候选暂不可用（有跑批在跑，字体索引推迟建）；库／CNN 候选照常
+        </div>
+      )}
       <h2>生僻字候选 <span className="muted">字体模板 + CNN 融合，输入字位坐标直接查</span></h2>
       <div className="rare-row">
         <label className="muted">页 <input value={page} onChange={(e) => setPage(e.target.value)} size={6} /></label>

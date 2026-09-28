@@ -1,2 +1,5 @@
 .rare-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; margin-bottom: .6rem; }
 .rare-help { font-size: .78rem; margin-bottom: .6rem; }
+/* K19 cross：字体索引推迟建时的角落提示（2026-09-28） */
+.rare-card { position: relative; }
+.rare-deferred { position: absolute; top: .4rem; right: .6rem; font-size: .72rem; color: var(--mute); }
