@@ -87,13 +87,17 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
     else:
         from ..core.workspace import feedback_root
         ws_events = feedback_root() / "events"
-        if ws_events.exists() and any(ws_events.glob(f"{book}-*.jsonl")):
+        if ws_events.exists() and any(ws_events.glob("*.jsonl")):
             d, src = ws_events, f"工作区 {ws_events}"
         else:
             d, src = DATASET / "feedback" / "events", f"open-guji-dataset {DATASET / 'feedback' / 'events'}"
-    files = sorted(d.glob(f"{book}-*.jsonl")) if d.exists() else []
+    # ⚠️ 读目录下**全部** jsonl、再按 target.key 的书前缀过滤（2026-09-28，C #166 查出）：
+    # 全唐文的人裁在跨册批次文件 `qtw-human-batch*.jsonl` 里，按 `{book}-*` 前缀
+    # 一个也匹配不上，v007–v010 读到 0 条、v006 只读到 70/704 条。
+    files = sorted(d.glob("*.jsonl")) if d.exists() else []
+    prefix = f"{book}:"
     if not files:
-        print(f"load_verdicts({book!r})：{src} 下没有 {book}-*.jsonl，人裁事件读到 0 条",
+        print(f"load_verdicts({book!r})：{src} 下没有事件文件，人裁事件读到 0 条",
              file=_sys.stderr)
     evs: list[tuple] = []
     for p in files:
@@ -103,9 +107,12 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
             except json.JSONDecodeError:
                 continue
             pl = e.get("payload") or {}
+            key = ((e.get("target") or {}).get("key") or "")
+            if not (key[3:] if key.startswith("v2:") else key).startswith(prefix):
+                continue
             if e.get("actor") == "user" and e.get("kind") == "confirm"                     and pl.get("v") == "confirm" and pl.get("shape"):
                 evs.append((e.get("ts") or "", e.get("batch") or "",
-                            e.get("seq") or 0, e["target"]["key"], pl["shape"]))
+                            e.get("seq") or 0, key, pl["shape"]))
     out: dict[str, str] = {}
     for _ts, _b, _sq, key, shape in sorted(evs):
         out[key] = shape
