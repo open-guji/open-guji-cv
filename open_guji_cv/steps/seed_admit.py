@@ -186,6 +186,25 @@ class SeedAdmitParams(BaseModel):
     留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
     lib_confident_gap: float = 0.0
     """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
+    off_channels: str = ""
+    """关掉 `admission_decision` 的哪几条通道（逗号分隔，如 `"match_solo"`；2026-09-28，
+    overview#155）。命中的判决作废、记 doubt `channel_off`，后面的兜底通道（context／
+    ref_lib／铁证…）照常有机会——关的是**这条路**，不是这个格。空串 = 全开（旧行为）。
+    书级用：书 yaml `params: {seed_admit: {off_channels: match_solo}}`。"""
+    solo_confusable_guard: bool = False
+    """match_solo 系（`match_solo`/`match_solo_ocr`/`match_solo_cnn`）加形近闸（2026-09-28，
+    overview#155）：库 top1 在任何一张形近表里（`_confusable_char`：NEAR_FORM_CHARS、
+    `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
+    起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
+    这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+    replace_form: str = "align"
+    """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
+    - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
+    - `lib`：整理本字与库 top1 语义同、字面不同时，取**库 top1**（刻本字形；这条通道要求
+      top1 cov ≥ 0.95，形状证据站得住）；
+    - `review`：字面不同就不放行，记 doubt `replace_form`、落人审。
+    起因：全唐文 v006 `match_replace` 放行「嚐」，图上是「嘗」——整理本（维基）用了
+    异体，码位跟着整理本走了。只在 variant_form（本书用字账组内定形）没接手时生效。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""
@@ -320,6 +339,10 @@ class SeedAdmitStep(Step):
         always = set(p.always_review or "")
         context_verdicts = frozenset(
             s.strip() for s in (p.context_verdicts or "").split(",") if s.strip())
+        off_channels = frozenset(
+            s.strip() for s in (p.off_channels or "").split(",") if s.strip())
+        if p.replace_form not in ("align", "lib", "review"):
+            raise ValueError(f"seed_admit.replace_form 只能是 align/lib/review，不是 {p.replace_form!r}")
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
         # 铁证放行通道（用户 2026-09-27 批：只放行文本，不进字形库）。册配置
@@ -463,6 +486,15 @@ class SeedAdmitStep(Step):
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
                     solo_cov=p.solo_cov, cnn_char=cnn_char)
+                # 书级收紧（overview#155）：关通道 / match_solo 形近闸。放在所有兜底通道之前，
+                # 作废的格后面仍可能被别的独立证据接住。
+                if ok and channel in off_channels:
+                    ok, channel = False, None
+                    doubts.append("channel_off")
+                elif (ok and p.solo_confusable_guard and channel in _SOLO_CHANNELS
+                      and r.candidates and _confusable_char(r.candidates[0][0])):
+                    ok, channel = False, None
+                    doubts.append("solo_confusable")
                 # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
                 # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
                 # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
@@ -560,6 +592,18 @@ class SeedAdmitStep(Step):
                             char = None
                         else:
                             char = fd.char
+                # match_replace 的码位（overview#155）：整理本字与库 top1 语义同、字面不同，
+                # 而用字账没接手定形（form_ev 为空）时，按 `replace_form` 取库形或落审。
+                if (ok and channel == "match_replace" and p.replace_form != "align"
+                        and form_ev is None and r.verdict != "same" and r.candidates):
+                    _top = r.candidates[0][0]
+                    if align_char and _top != align_char \
+                            and vm_here.semantic(_top) == vm_here.semantic(align_char):
+                        if p.replace_form == "lib":
+                            char = _top
+                        else:
+                            ok, channel, prov, char = False, None, "", None
+                            doubts = doubts + ["replace_form"]
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
@@ -917,6 +961,9 @@ def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
         cands, human_chars_set, partners_map, img, ex_raws, scale)
     return winner
 
+
+#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_confusable_guard` 用）
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_cnn"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
