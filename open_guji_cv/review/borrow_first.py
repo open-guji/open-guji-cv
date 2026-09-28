@@ -260,39 +260,132 @@ def rank_protos(emb: np.ndarray, chars: list[str], protos: np.ndarray, k: int = 
     return out
 
 
-class ProtoIndex:
-    """借来的库 → 按字均值原型。按 (库内容指纹, checkpoint 指纹) 落盘到
-    `cache_root()/review_protos/`，内存里再留一份——17k 例首建 CPU 约一两分钟，
-    之后秒开。库一变（H 道自举进了新刻例）指纹就变，自动重建。"""
+#: 一批过网络的图数。256 时 v006 冷算峰值 RSS +700~970 MB（卷积激活按批放大），
+#: 服务器 2 核 7.5G、控制台 MemoryHigh 3.5G，几个请求并发就被节流（#166 加急，#167）。
+EMBED_BATCH = 64
 
-    _mem: dict[str, tuple[list[str], np.ndarray]] = {}
+
+def _exemplar_rows(db_path: str) -> list[tuple[str, str]]:
+    """库里全部 (字, 例键)，**不取图**。例键 = `instance_id:derived.rowid`——刻例归一图
+    重算（`INSERT OR REPLACE`）会换 rowid，键跟着变；同一例同一张图键不变。"""
+    c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        return [(ch, f"{iid}:{rid}") for ch, iid, rid in c.execute(
+            """SELECT g.char, e.instance_id, d.rowid FROM exemplars e
+               JOIN glyphs g ON g.glyph_id=e.glyph_id
+               JOIN derived d ON d.instance_id=e.instance_id AND d.kind='norm'""")]
+    finally:
+        c.close()
+
+
+def _norms_by_rowid(db_path: str, rowids: list[int]) -> dict[int, np.ndarray]:
+    from ..clustering.glyph_db import _unpng
+    out: dict[int, np.ndarray] = {}
+    c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        for s in range(0, len(rowids), 500):
+            part = rowids[s:s + 500]
+            q = f"SELECT rowid, data FROM derived WHERE rowid IN ({','.join('?' * len(part))})"
+            for rid, d in c.execute(q, part):
+                out[int(rid)] = _unpng(d).astype(np.uint8)
+    finally:
+        c.close()
+    return out
+
+
+def _npz_load(f: Path) -> dict[str, np.ndarray]:
+    try:
+        z = np.load(f, allow_pickle=False)
+        return dict(zip(json.loads(str(z["keys"])), z["mat"]))
+    except Exception:           # noqa: BLE001 — 没有/坏了当空
+        return {}
+
+
+def _npz_save(f: Path, d: dict[str, np.ndarray], dim: int = 256) -> None:
+    import os
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(f".{os.getpid()}.tmp.npz")
+        keys = list(d)
+        np.savez(tmp, keys=json.dumps(keys, ensure_ascii=False),
+                 mat=(np.stack([d[k] for k in keys]) if keys else np.zeros((0, dim))
+                      ).astype(np.float32))
+        os.replace(tmp, f)
+    except OSError:
+        pass
+
+
+class ProtoIndex:
+    """库 → 按字均值原型。两层落 `cache_root()/review_protos/`：
+
+    1. `protos_<库内容指纹|ckpt>.npz`：整份原型，库没变就直接读（秒开）；
+    2. `inst_<库路径哈希>_<ckpt>.npz`：**逐例** embedding（键见 `_exemplar_rows`）。库一变
+       （H 道每消费一条人裁就往本书库进刻例，指纹就变）不再整库重跑 CNN——只给新进的
+       例过网络，其余读盘，按字取均值即得新原型。#166 加急：服务器上正是「每次请求都
+       整库重建」把 cards 拖过 180 s、RSS 顶到 3.27G。
+
+    内存里只留**每个库路径最新一份**（旧指纹那份丢掉，库一直在变时不会越积越多）。"""
+
+    _mem: dict[str, tuple[str, tuple[list[str], np.ndarray]]] = {}
 
     @classmethod
     def get(cls, db_path: str, cnn) -> tuple[list[str], np.ndarray]:
         from ..clustering import cnn_candidates as cc
-        key = hashlib.sha1(
-            f"{_db_content_key(db_path)}|{cc.fingerprint(cnn.ckpt)}".encode()).hexdigest()[:16]
-        if key in cls._mem:
-            return cls._mem[key]
         from ..core.workspace import cache_root
-        f = Path(cache_root()) / "review_protos" / f"protos_{key}.npz"
+        ck = cc.fingerprint(cnn.ckpt)
+        key = hashlib.sha1(f"{_db_content_key(db_path)}|{ck}".encode()).hexdigest()[:16]
+        hit = cls._mem.get(db_path)
+        if hit and hit[0] == key:
+            return hit[1]
+        root = Path(cache_root()) / "review_protos"
+        f = root / f"protos_{key}.npz"
+        got = None
         if f.exists():
             try:
                 z = np.load(f, allow_pickle=False)
                 got = (json.loads(str(z["chars"])), z["mat"])
-                cls._mem[key] = got
-                return got
             except Exception:       # noqa: BLE001 — 坏缓存当没有，重建
+                got = None
+        if got is None:
+            got = cls._build(db_path, cnn, root, ck)
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+                tmp = f.with_suffix(".tmp.npz")
+                np.savez(tmp, chars=json.dumps(got[0], ensure_ascii=False), mat=got[1])
+                tmp.replace(f)
+            except OSError:
                 pass
-        chars, mat = build_protos(_load_exemplar_norms(db_path), cnn.embed)
-        try:
-            f.parent.mkdir(parents=True, exist_ok=True)
-            tmp = f.with_suffix(".tmp.npz")
-            np.savez(tmp, chars=json.dumps(chars, ensure_ascii=False), mat=mat)
-            tmp.replace(f)
-        except OSError:
-            pass
-        cls._mem[key] = (chars, mat)
+        cls._mem[db_path] = (key, got)
+        return got
+
+    @staticmethod
+    def _build(db_path: str, cnn, root: Path, ck: str) -> tuple[list[str], np.ndarray]:
+        rows = _exemplar_rows(db_path)
+        pf = hashlib.sha1(str(Path(db_path).resolve()).encode()).hexdigest()[:12]
+        inst_f = root / f"inst_{pf}_{ck}.npz"
+        have = _npz_load(inst_f)
+        need = sorted({int(k.rsplit(":", 1)[1]) for _, k in rows if k not in have})
+        if need:
+            rid2key = {int(k.rsplit(":", 1)[1]): k for _, k in rows}
+            for s in range(0, len(need), 2000):
+                imgs = _norms_by_rowid(db_path, need[s:s + 2000])
+                ids = list(imgs)
+                for t in range(0, len(ids), EMBED_BATCH):
+                    part = ids[t:t + EMBED_BATCH]
+                    for rid, e in zip(part, cnn.embed([imgs[r] for r in part])):
+                        have[rid2key[rid]] = np.asarray(e, np.float32)
+        live = {k for _, k in rows}
+        _npz_save(inst_f, {k: v for k, v in have.items() if k in live})
+        by: dict[str, list[np.ndarray]] = {}
+        for ch, k in rows:
+            if k in have:
+                by.setdefault(ch, []).append(have[k])
+        chars = sorted(by)
+        protos = []
+        for ch in chars:
+            m = np.asarray(by[ch], np.float64).mean(0)
+            protos.append((m / (np.linalg.norm(m) + 1e-9)).astype(np.float32))
+        mat = np.stack(protos) if protos else np.zeros((0, 256), np.float32)
         return chars, mat
 
 
@@ -398,8 +491,8 @@ def cnn_ranks_for_patches(norm_patches: list, db_path: str | None, cnn=None, k: 
     else:
         chars, protos, _ = load_index(db_path, cnn, own_db, fallback)
     idx = [i for i, p in enumerate(norm_patches) if p is not None]
-    for s in range(0, len(idx), 256):
-        part = idx[s:s + 256]
+    for s in range(0, len(idx), EMBED_BATCH):
+        part = idx[s:s + EMBED_BATCH]
         emb = cnn.embed([norm_patches[i] for i in part])
         for i, r in zip(part, rank_protos(emb, chars, protos, k)):
             out[i] = r

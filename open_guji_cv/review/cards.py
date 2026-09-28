@@ -571,3 +571,38 @@ def _remember(key: str, res: dict) -> None:
 def clear_cards_cache(book: str | None = None) -> None:
     """清内存那份（测试、以及想强制重算时用）；磁盘份靠键自然失效。"""
     _cards_mem.clear()
+
+
+# ── 预热（#166 加急）：跑批侧把 CNN 原型与每格 embedding 算好落盘，控制台只读盘 ──
+
+def warm_review_cache(book: str, pages: str = "all", store: ProductStore | None = None) -> dict:
+    """借库书（开了 `params.review.first_pick`）审卡要用的两份 CNN 缓存一次算好：
+
+    - 本书库 / 借库的逐例 embedding 与按字原型（`borrow_first.ProtoIndex`）；
+    - `pages` 范围内**全部格**（不只待审——格在待审/自动档之间会随库变动来回走）的
+      查询 embedding（`borrow_first.EmbCache`）。
+
+    之后控制台 cards 冷算只剩非 CNN 部分（v006 实测 ~18 s，峰值 RSS +275~312 MB）。
+    没开 first_pick 的书什么都不做。**跑批活**：服务器上用
+    `guji-batch .venv/bin/python -m open_guji_cv.review.cards <书> [页]`，别在控制台进程里调。
+    幂等：已有的直接读盘，只算缺的。
+    """
+    import time
+    from .borrow_first import first_pick_mode
+    bk = load_book(book)
+    if first_pick_mode(bk) is None:
+        return {"book": book, "skipped": "书 yaml 没开 params.review.first_pick"}
+    t = time.time()
+    d = cards(book, pages, 10**9, "all", store or ProductStore(), gate_cut=False,
+              skip_decided=False)
+    fp = d.get("first_pick") or {}
+    return {"book": book, "pages": pages, "n_cells": len(d["cards"]),
+            "cnn_ready": fp.get("cnn_ready"), "secs": round(time.time() - t, 1)}
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        sys.exit("用法：python -m open_guji_cv.review.cards <书> [页范围，缺省 all]")
+    print(json.dumps(warm_review_cache(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "all"),
+                     ensure_ascii=False))
