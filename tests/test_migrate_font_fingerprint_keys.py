@@ -21,8 +21,17 @@ _spec.loader.exec_module(migrate_mod)
 
 
 @pytest.fixture
-def _ckpt(cnn_test_ckpt) -> Path:
-    return cnn_test_ckpt
+def _ckpt(tmp_path) -> Path:
+    """每条测试**各自**一份 checkpoint 拷贝（不用会话级 `cnn_test_ckpt`）——
+    这几条测试断言的正是「某个 key 的文件存在与否」，跟别的测试共用同一份
+    tmp ckpt 会让『new_path 是不是刚被这条测试建出来的』这件事被同会话里
+    别的测试（用了同一个字表）提前建好而污染，钉不住这个断言。"""
+    from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT
+    if not DEFAULT_CKPT.exists():
+        pytest.skip("没有 checkpoint")
+    p = tmp_path / "best.pt"
+    p.write_bytes(DEFAULT_CKPT.read_bytes())
+    return p
 
 
 def test_migrate_renames_old_key_file_without_touching_content(monkeypatch, _ckpt):
