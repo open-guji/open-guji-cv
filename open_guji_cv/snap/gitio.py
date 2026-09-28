@@ -8,11 +8,16 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from ..ops import git_fetch as _gf
+
 GitRunner = Callable[..., subprocess.CompletedProcess]
 
 
 def default_git(repo: Path, args: list[str], env: dict | None = None,
                 binary: bool = False) -> subprocess.CompletedProcess:
+    if args and args[0] == "fetch":
+        # 所有 fetch 走护栏：超时整组杀、开跑前与跑的过程中查盘（overview #236）
+        return _gf.run_guarded(repo, args, env=env, text=not binary)
     full_env = None
     if env:
         full_env = {**os.environ, **env}
@@ -54,9 +59,35 @@ def fetch_branches(repo: Path, branches: list[str], remote: str = "origin",
     if not branches:
         return
     specs = [f"+refs/heads/{b}:refs/remotes/{remote}/{b}" for b in branches]
-    shallow = git(repo, ["rev-parse", "--is-shallow-repository"]).stdout.strip() == "true"
-    depth = ["--depth", "1"] if shallow else []
-    _ok(git(repo, ["fetch", "-q", *depth, remote, *specs]), "fetch")
+    shallow = _gf.is_shallow(repo, git)
+    _ok(git(repo, _gf.fetch_args(remote, specs, shallow=shallow, depth=1, quiet=True)), "fetch")
+
+
+def fetch_commit(repo: Path, commit: str, remote: str = "origin", git: GitRunner = default_git,
+                 depth: int = _gf.DEFAULT_DEPTH) -> subprocess.CompletedProcess:
+    """按提交号拉一个提交（`check_cv` 用：服务器 cv 落后于包的 cv 时补拉）。
+
+    浅仓带 `--depth`——09-28 服务器 cv 是浅仓，不带 depth 拉一个新提交会连带拉整个仓的
+    历史（overview #236）。深度取 50 而不是 1：拉下来还要判它是不是 HEAD 的祖先，
+    只拉 1 层时新提交的父提交在本地找不到，`merge-base` 走不到 HEAD。"""
+    return git(repo, _gf.fetch_args(remote, [commit], shallow=_gf.is_shallow(repo, git),
+                                    depth=depth, quiet=True))
+
+
+def deepen_head(repo: Path, remote: str = "origin", git: GitRunner = default_git,
+                deepen: int = 200) -> bool:
+    """浅仓里把 HEAD 的历史往下加深 `deepen` 层（`fetch --deepen`，从现有浅边界往下接，
+    不拉全量）。完整仓什么都不做、返回 False。
+
+    为什么要：浅仓里比浅边界更老的提交本地没有，`merge-base --is-ancestor` 也走不过边界，
+    `check_cv` 会把「包的 cv 是 HEAD 的老祖先」误判成找不到／不兼容（09-28 服务器 cv
+    浅边界在 `b961082`，之前打的包都会撞上）。"""
+    if not _gf.is_shallow(repo, git):
+        return False
+    head = rev_parse(repo, "HEAD", git)
+    if head is None:
+        return False
+    return git(repo, ["fetch", "-q", f"--deepen={deepen}", remote, head]).returncode == 0
 
 
 def remote_ref(branch: str, remote: str = "origin") -> str:
