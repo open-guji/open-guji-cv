@@ -124,3 +124,11 @@ def test_text_layer_outputs_default_char_and_skips_blank_fake_cells():
     # 对照：普通的未放行格照旧不出字（口径没被放宽）
     plain = AdmitRec(id="", slot=4, admit=False, char="衡", doubts=["库 unsure"])
     assert _to_slot("vol03", 3, 5, plain, _cell(4)).char is None
+
+
+def test_pua_placeholder_is_not_used_as_default(tmp_path, monkeypatch):
+    """daizhige 逐列本里没码表的 PUA 生僻字记 `〓`：知道这儿有字、不知道是哪个——默认字留空。"""
+    coord = [CoordRec(id=f"{BOOK}:{PAGE}:3:3", col=3, slot=3, ref_char="〓")]
+    got, _ = _run_seed(tmp_path, monkeypatch, coord=coord)
+    assert not got[3].admit and got[3].char is None
+    assert got[3].evidence["occluded"]["via"] == "coord_pua"

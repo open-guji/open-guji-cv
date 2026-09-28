@@ -1074,7 +1074,10 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             dens = hit.get((cc.col, r.slot, r.sub or ""))
             if dens is None:
                 continue
-            if r.id in coord:
+            if r.id in coord and coord[r.id] == "〓":
+                # 逐列本里没有码表的 PUA 生僻字占位：知道这儿有字、不知道是哪个
+                out[r.id] = (dens, None, "coord_pua")
+            elif r.id in coord:
                 ch = coord[r.id]
                 out[r.id] = (dens, ch or None, "coord" if ch else "coord_blank")
             elif r.id in amap:

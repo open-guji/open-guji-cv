@@ -139,7 +139,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
             continue
         # 坐标对位（align_ref `coord`，overview#195）：现役对位没给字的格用它补「整理本」一栏
         _ar = st.read(book, "align_ref", page_key(pg), "align_ref")
-        coord = {c.id: c.ref_char for c in (getattr(_ar, "coord", None) or [])}
+        coord = {c.id: c.ref_char for c in (getattr(_ar, "coord", None) or [])
+                 if c.ref_char != "〓"}          # 逐列本的 PUA 生僻字占位，不当整理本字显示
         mm = {r.id: r for cc in (m.columns if m else []) for r in cc.chars}
         dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         for cc in a.columns:

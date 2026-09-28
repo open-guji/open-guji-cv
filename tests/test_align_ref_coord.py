@@ -181,3 +181,23 @@ def test_auto_mode_needs_line_per_column_corpus(tmp_path, monkeypatch):
                     encoding="utf-8")
     r = AlignRefStep().run_page(_with_params(ctx, str(long), "auto"), PAGE)["align_ref"]
     assert r.coord == []
+
+
+def test_column_shifted_by_one_is_rejected():
+    """vol01 p102 列6（职名页，页锚不上）：几何配上了，但认出来的字整列在下一格——错位，退回。"""
+    (ln,) = C.parse_lines("天文算法纂修官")
+    carriers = "一天文算法纂修"        # 格数、几何都对得上，认出来的字却整列在下一格
+    units = [_cu(s, float(s), ch) for s, ch in enumerate(carriers, start=1)]
+    r = C.coord_column(units, ln)
+    assert not r.ok and "错位" in r.note
+
+
+def test_grid_corpus_uses_start_and_pipe_notes():
+    """P 道逐列本：`#@` 半叶头、全角空格＝格位、`<右|左>`、空列留行。"""
+    raw = "#@ 0001 1-1a h0\n欽定\n\n　　元許<兩江|採進本>\n"
+    lines = C.parse_lines(raw)
+    assert [ln.leaf_start for ln in lines] == [True, False, False]
+    assert lines[1].n == 0
+    tu = lines[2].text_units()
+    assert [p for p, _u in tu] == [2, 3, 4, 5, 6]
+    assert [(u.a, u.b) for _p, u in tu if u.kind == "n"] == [("兩", "採"), ("江", "進"), ("", "本")]
