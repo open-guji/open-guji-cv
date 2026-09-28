@@ -198,6 +198,57 @@ def test_emb_topk_contract_and_cache(cnn_test_ckpt):
 
 
 @needs_cnn
+def test_emb_index_caches_multiple_charsets_without_evicting(cnn_test_ckpt):
+    """`_emb_index` 的内存缓存必须能同时留住两档字表（基集＋升级档），不能只留
+    「最近一档」——`rare_panel.rare_for_batch` 的阶梯**在同一页内**先后查两档
+    字表，两档字表对象在一本书的所有页里都稳定（`book_charsets` 的 lru_cache），
+    单槽缓存会导致每一页都要把上一档挤掉、重新从磁盘读另一档的大矩阵（unicode-
+    cjk-a/unicode-ext-b 级别 28~44MB），来回颠簸（2026-09-28，CV 总管报服务器
+    `rare_candidates` 单进程内存随页数线性上涨，任务书-R 追加件；生产大字表
+    40 页合成基准实测：改前每页都重建、改后 `emb_cache` 恒为 2 档、全部复用，
+    RSS 从持续小幅攀升变成打平）。这里用两个不同的小字表模拟「基集/升级档」
+    交替访问，钉住「都在缓存里，互不驱逐」。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    cs_a = ("一", "二", "三")
+    cs_b = ("十", "土", "王")
+    q = np.zeros((64, 64), np.uint8)
+    q[20:44, 8:56] = 1
+
+    mat_a, _ = c._emb_index(cs_a)
+    mat_b, _ = c._emb_index(cs_b)
+    ids_after_first_round = {id(mat) for (_cs, mat, _names) in c._emb_cache}
+    assert len(c._emb_cache) == 2
+
+    # 交替访问 6 轮（模拟 6 页，每页先查 cs_a 再查 cs_b）：不该有新矩阵被建出来。
+    for _ in range(6):
+        mat_a2, names_a2 = c._emb_index(cs_a)
+        mat_b2, names_b2 = c._emb_index(cs_b)
+        assert mat_a2 is mat_a and mat_b2 is mat_b, "不该重建，该命中同一份对象"
+
+    assert len(c._emb_cache) == 2
+    assert {id(mat) for (_cs, mat, _names) in c._emb_cache} == ids_after_first_round
+
+
+@needs_cnn
+def test_emb_index_cache_evicts_oldest_beyond_max(cnn_test_ckpt):
+    """超过 `_EMB_CACHE_MAX` 档字表时按 LRU 淘汰最久未用的那档，不是无界增长。"""
+    c = CnnCandidates(cnn_test_ckpt)
+    c._ensure()
+    charsets = [tuple(chr(ord("一") + i)) for i in range(c._EMB_CACHE_MAX + 2)]
+    for cs in charsets:
+        c._emb_index(cs)
+    assert len(c._emb_cache) == c._EMB_CACHE_MAX
+    cached = {cs_obj for (cs_obj, _mat, _names) in c._emb_cache}
+    # 最早那几档（超出上限的部分）该被淘汰掉了
+    for cs in charsets[:-c._EMB_CACHE_MAX]:
+        assert cs not in cached
+    # 最近用的几档还在
+    for cs in charsets[-c._EMB_CACHE_MAX:]:
+        assert cs in cached
+
+
+@needs_cnn
 def test_topk_batch_and_emb_topk_batch_share_one_forward(cnn_test_ckpt):
     """`topk_batch`/`emb_topk_batch` 对同一批图（同一个 list 对象）只该跑一次
     `self._net(x)`——此前各自独立前向，`rare_panel.rare_for_batch` 对同一批
