@@ -29,6 +29,30 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 _cutline_expected_cache: dict = {}
 
 
+def _cutline_list_or_cells_ids(pages: str, book: str) -> set[str] | None:
+    """`pages` 的 `list:`/`cells:` 前缀 → 具体 id 清单（点名要看的，进 `only_ids`，
+    走「不受 only／顺序闸／已裁去重约束」的点名通路），不是这两种前缀返回 `None`。
+
+    `cells:` 此前没接：填 `cells:4:1:21` 直接落到下面的 `bk.resolve_pages(pages)`，
+    当页码表达式解析、对 `int("cells:4:1:21")` 抛 `ValueError`（D-Step6 道 09-27
+    报，见 overview inbox `D-Step6/20260927-1731-done-导回管线.md` 负结果 5）。
+    坐标约定同 `console/routers/evals.py::_rulers_pages`、`review/cards.py::parse_cells_spec`。
+    """
+    if pages.startswith("list:"):
+        from ...core.workspace import feedback_root
+        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+        if not lp.exists():
+            raise HTTPException(404, f"清单不存在：{lp}")
+        return {ln.strip() for ln in lp.read_text(encoding="utf-8").splitlines()
+                if ln.strip() and not ln.startswith("#")}
+    if pages.startswith("cells:"):
+        from ...review.cards import parse_cells_spec
+        try:
+            return parse_cells_spec(pages, book)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return None
+
 
 @router.get("/api/cutline/cases")
 def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250,
@@ -52,18 +76,11 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     bk = load_book(book)
     st = deps.product_store()
     drift_skipped: dict = {}
-    drift = pages in ("drift", "stale") or pages.startswith("list:")
-    only_ids: set[str] | None = None
-    if pages.startswith("list:"):
-        # 复核清单模式（2026-09-14）：页码框填 list:<名字>，读 workspace feedback/lists/<名字>.txt
-        # （一行一个金标 id，# 开头是注释），按 id 出卡、不管过没过期。用途：机器筛出「多候选卡上
-        # 按了 ok，可能本想选切法」之类的可疑条目，让人回头只看这几张。
-        from ...core.workspace import feedback_root
-        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
-        if not lp.exists():
-            raise HTTPException(404, f"清单不存在：{lp}")
-        only_ids = {ln.strip() for ln in lp.read_text(encoding="utf-8").splitlines()
-                    if ln.strip() and not ln.startswith("#")}
+    drift = pages in ("drift", "stale") or pages.startswith("list:") or pages.startswith("cells:")
+    # 复核清单模式（2026-09-14 `list:`，2026-09-27 加 `cells:`）：页码框点名具体 id，
+    # 按 id 出卡、不管过没过期。用途：机器筛出「多候选卡上按了 ok，可能本想选切法」之类
+    # 的可疑条目，或人直接点名一个字位（`cells:4:1:21`）要立刻调卡看。
+    only_ids = _cutline_list_or_cells_ids(pages, book)
     if drift:
         # 「坐标过期重标」模式（2026-09-14）：页码框填 drift，出**金标 col_h 与当前列图高不一致**
         # 的那批切点（按 slot 对回当前 cells，id 沿用金标 id）。它们本来就在金标里，所以
