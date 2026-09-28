@@ -1100,7 +1100,21 @@ def cmd_check(args) -> None:
         pages_sel = args.pages if args.pages is not None else "all"
         pgs = load_book(args.book).resolve_pages(pages_sel)
         print(f"check rulers: 页集={pages_sel!r}，共 {len(pgs)} 页", file=sys.stderr)
-        _out(measure(args.book, pgs, st, full=args.full))
+        res = measure(args.book, pgs, st, full=args.full or bool(args.detail))
+        if args.detail:
+            # `--detail R2c`：只印这把尺子的逐条页／列明细（#174），一行一条，方便 grep／排错例
+            r = next((x for x in res["rulers"] if x["key"].lower() == args.detail.lower()), None)
+            if r is None:
+                raise SystemExit(f"没有尺子 {args.detail!r}；可选："
+                                 + " ".join(x["key"] for x in res["rulers"]))
+            print(f"{r['key']} {r['title']}：{r['num']}/{r['den']}（{r['value']}{r['unit']}）")
+            for pg, e in r["by_page"].items():
+                print(f"  p{pg}  {e['n']:3d} 条  列 {','.join(map(str, e['cols']))}")
+            for d in r["detail"]:
+                extra = "  ".join(f"{k}={v}" for k, v in d.items() if k not in ("page", "col"))
+                print(f"p{d.get('page')}\tc{d.get('col')}\t{extra}")
+            return
+        _out(res)
     elif args.action == "round":
         from .eval import round_check as rc
         # round/rate/throughput/ledger 不在任务卡#54第1条范围内，不给 --pages 时
@@ -1967,6 +1981,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
     p.add_argument("--full", action="store_true",
                    help="rulers：detail 不截断（默认只带前 20 条，做全量错例统计要这个）")
+    p.add_argument("--detail", default=None, metavar="RULER",
+                   help="rulers：只印这把尺子（如 R2c）的全量页／列明细，一行一条（JSON 里另有 by_page 汇总）")
     p.add_argument("--drift", action="store_true",
                    help="ledger：另外核对库里的图与现在的字块图还像不像（较慢，逐条读图比对）")
     p.add_argument("--out", default="",

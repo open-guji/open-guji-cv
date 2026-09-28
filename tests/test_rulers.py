@@ -131,3 +131,54 @@ def test_measure_tolerates_sporadic_single_column_cache_miss(tmp_path, monkeypat
 
     out = measure("keben", [1])   # 不该抛
     assert out["rulers"]
+
+
+# ── #174：R2c 等要给页／列明细，不只总数 ──────────────────────────────
+def test_by_page_aggregates_full_detail_even_when_truncated():
+    from open_guji_cv.eval.rulers import Ruler
+    r = Ruler("R2c", "t", num=25, den=30,
+              detail=[{"page": 149, "col": c % 3, "y": c} for c in range(22)]
+              + [{"page": 7, "col": 1, "y": 0}] * 3)
+    d = r.to_dict(full=False)
+    assert len(d["detail"]) == 20                              # detail 仍截断
+    assert d["by_page"] == {"7": {"n": 3, "cols": [1]},        # by_page 按全量汇总、页号排序
+                            "149": {"n": 22, "cols": [0, 1, 2]}}
+
+
+def test_r2c_detail_covers_every_counted_line(tmp_path, monkeypatch, ws, fixture_page):
+    """R2c 以前只给「无缝」那一种记明细，「缝上有墨」只进总数——明细条数 ≠ num。"""
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.eval.rulers import measure
+
+    import open_guji_cv.steps  # noqa: F401
+    from helpers import run_keben_from_raw
+
+    run_keben_from_raw(tmp_path, monkeypatch, book=load_book("keben"), gray=fixture_page)
+    r = {x["key"]: x for x in measure("keben", [1], full=True)["rulers"]}["R2c"]
+    assert len(r["detail"]) == r["num"]
+    assert sum(e["n"] for e in r["by_page"].values()) == r["num"]
+    assert all(d["why"] in ("无缝", "缝上有墨") for d in r["detail"])
+
+
+def test_check_rulers_detail_flag_prints_rows(monkeypatch, capsys):
+    from open_guji_cv import cli_v2
+    from open_guji_cv.eval import rulers
+    fake = {"book": "b", "n_pages": 1, "rulers": [
+        {"key": "R2c", "title": "缝后仍穿墨", "num": 2, "den": 9, "value": 22.2, "unit": "%",
+         "detail": [{"page": 149, "col": 3, "y": 400, "why": "无缝"},
+                    {"page": 149, "col": 7, "y": 88, "why": "缝上有墨", "px": 4}],
+         "by_page": {"149": {"n": 2, "cols": [3, 7]}}}]}
+    seen = {}
+
+    def fake_measure(book, pages, st, full=False):
+        seen["full"] = full
+        return fake
+    monkeypatch.setattr(rulers, "measure", fake_measure)
+    monkeypatch.setattr("open_guji_cv.core.book.load_book",
+                        lambda b: type("B", (), {"resolve_pages": lambda self, s: [149]})())
+    args = type("A", (), {"action": "rulers", "book": "b", "pages": None, "full": False, "detail": "r2c"})()
+    cli_v2.cmd_check(args)
+    out = capsys.readouterr().out
+    assert seen["full"] is True
+    assert "p149    2 条  列 3,7" in out
+    assert "p149\tc7\ty=88  why=缝上有墨  px=4" in out
