@@ -250,6 +250,27 @@ def _read_gray(book, page: int):
     return img
 
 
+def dependent_steps(field: str) -> list[str]:
+    """哪些步（含闸）把这个册配置字段列进了 `book_deps`——改了 yaml 这些步的产物就过期。"""
+    import open_guji_cv.steps  # noqa: F401 —— 触发 Step 与闸注册
+    from ..core.step import STEPS
+    return sorted(sid for sid, st in STEPS.items() if field in (st.spec.book_deps or ()))
+
+
+def rerun_hint(rows: list[Row]) -> list[str]:
+    """标定后要改 yaml 的字段 → 「改了之后哪些步过期、须重跑」（#174）。
+    整理首跑回馈：改完 `period_prior` 没人提醒 column_gate 要重跑，后面拿旧闸2 产物接着干。"""
+    out = []
+    for r in rows:
+        if r.verdict not in ("漂了", "未配"):
+            continue
+        deps = dependent_steps(r.field)
+        if deps:
+            out.append(f"   改了 yaml 的 {r.field} 之后，{'、'.join(deps)} 的产物会**过期、须重跑**"
+                       f"（`guji status <册>` 的过期原因会写「册配置 {r.field} 旧→新」）。")
+    return out
+
+
 def format_table(rows: list[Row], diag: dict, book_id: str) -> str:
     """对照表。**现值在前、实测在后**——这张表是拿来复核 yaml 的，不是拿来抄的。"""
     out = [f"册 {book_id}：{diag['pages']} 页"
@@ -294,6 +315,7 @@ def format_table(rows: list[Row], diag: dict, book_id: str) -> str:
                    + "、".join(r.field for r in drifted))
         out.append("   **不会自动改 yaml**——先看清是先验过期了，还是这次量得不对"
                    "（产物陈旧？页型混了职名/目录页？），再手改。")
+        out.extend(rerun_hint(rows))
     elif compared and stale:
         # 数字碰巧对不上不代表复核过了——产物是旧的，这一致是偶然。
         out.append(f"⚠️ 比对上的 {len(compared)} 个先验数值与 yaml 相符，"

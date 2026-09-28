@@ -94,6 +94,12 @@ def cmd_status(args) -> None:
         drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
         print(f"  {sid:16s} 新鲜 {c['fresh']:3d}  过期 {c['stale']:3d}  缺失 {c['missing']:3d}  "
               f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}{drift}")
+        # 过期原因（#174）：上游过期那条是连带的，只在没有别的原因时才印
+        rs = d.get("stale_reasons") or {}
+        own = {r: n for r, n in rs.items() if r != "上游过期"} or rs
+        for r, n in sorted(own.items(), key=lambda kv: -kv[1]):
+            tail = "，须重跑" if r.startswith("册配置") else ""
+            print(f"      ↳ 过期 {n:3d} 页：{r}{tail}")
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
@@ -529,6 +535,34 @@ def cmd_eval(args) -> None:
     n_reg = sum(1 for r in reports if r.status == "regressed")
     print(f"\n通过 {sum(1 for r in reports if r.status=='ok')} / 回归门失败 {n_reg} / 跑不起来 {n_bad}")
     sys.exit(1 if n_bad and args.strict else 0)
+
+
+def cmd_locate_gutter(args) -> None:
+    """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
+    判据见 `utils/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
+    import cv2
+    from .utils.image_io import imread
+    from .utils.locate_gutter import locate_gutter
+    gray = imread(args.image, cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        raise SystemExit(f"读不了图：{args.image}")
+    band = None
+    if args.band:
+        a, _, b = args.band.partition(",")
+        band = (int(a), int(b))
+    r = locate_gutter(gray, band=band, ink_threshold=args.ink_threshold)
+    if args.json:
+        print(json.dumps({"image": str(args.image), **r.to_dict()}, ensure_ascii=False, indent=2))
+    elif r.x is None:
+        print(f"✗ 没找到版心：{r.note}")
+    else:
+        print(f"版心 x={r.x:.1f}（{r.x_left:.1f}–{r.x_right:.1f}，宽 {r.x_right - r.x_left:.0f}）"
+              f"  置信度 {r.confidence:.2f}  列距 {r.pitch:.0f}  竖线 {r.n_lines} 条"
+              + (f"  ⚠ {r.note}" if r.note else ""))
+        for c in r.candidates:
+            print(f"  候选 {c.x_left:7.1f}–{c.x_right:7.1f}  居中 {c.central:.2f} × 空 {c.blank:.2f} = {c.score:.2f}")
+    if r.x is None:
+        sys.exit(1)
 
 
 def cmd_split(args) -> None:
@@ -1094,7 +1128,22 @@ def cmd_check(args) -> None:
         pages_sel = args.pages if args.pages is not None else "all"
         pgs = load_book(args.book).resolve_pages(pages_sel)
         print(f"check rulers: 页集={pages_sel!r}，共 {len(pgs)} 页", file=sys.stderr)
-        _out(measure(args.book, pgs, st, full=args.full))
+        detail = getattr(args, "detail", None)   # 程序化调用（测试、控制台）造的 Namespace 可能没有这个键
+        res = measure(args.book, pgs, st, full=args.full or bool(detail))
+        if detail:
+            # `--detail R2c`：只印这把尺子的逐条页／列明细（#174），一行一条，方便 grep／排错例
+            r = next((x for x in res["rulers"] if x["key"].lower() == detail.lower()), None)
+            if r is None:
+                raise SystemExit(f"没有尺子 {detail!r}；可选："
+                                 + " ".join(x["key"] for x in res["rulers"]))
+            print(f"{r['key']} {r['title']}：{r['num']}/{r['den']}（{r['value']}{r['unit']}）")
+            for pg, e in r["by_page"].items():
+                print(f"  p{pg}  {e['n']:3d} 条  列 {','.join(map(str, e['cols']))}")
+            for d in r["detail"]:
+                extra = "  ".join(f"{k}={v}" for k, v in d.items() if k not in ("page", "col"))
+                print(f"p{d.get('page')}\tc{d.get('col')}\t{extra}")
+            return
+        _out(res)
     elif args.action == "round":
         from .eval import round_check as rc
         # round/rate/throughput/ledger 不在任务卡#54第1条范围内，不给 --pages 时
@@ -1435,11 +1484,21 @@ def cmd_snap(args) -> None:
             if top.returncode != 0:
                 print(f"✗ {repo} 不在 git 仓里；给 --ws-repo", file=sys.stderr)
                 sys.exit(2)
-            commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
-        print(json.dumps({"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
-                          "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
-                          "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
-                          "pushed": not args.no_push}, ensure_ascii=False, indent=2))
+            # --dry-run：只打印计划，不建提交、不建本地分支、不推（原来 pack 根本不看 --dry-run，
+            # 照样真推——整理 Z21/Z22/Z23 三道都踩过，#174）
+            if args.dry_run:
+                commit = None
+                size = sum(f.stat().st_size for f in tree.rglob("*") if f.is_file())
+            else:
+                commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
+        out = {"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
+               "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
+               "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
+               "pushed": not args.no_push and not args.dry_run}
+        if args.dry_run:
+            out.update(dry_run=True, bytes=size, supersedes=m.get("supersedes", []),
+                       plan=f"演练：会推 {m['branch']}（未建提交、未推）")
+        print(json.dumps(out, ensure_ascii=False, indent=2))
         return
     if ws_repo is None:
         print("✗ 要给 --ws-repo（服务器上 guji-workspace 的 clone）", file=sys.stderr)
@@ -1511,6 +1570,7 @@ COMMANDS_V2 = {
     "preclean": cmd_preclean,
     "binarize": cmd_binarize,
     "split": cmd_split,
+    "locate-gutter": cmd_locate_gutter,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
     "witness-align-stream": cmd_witness_align_stream,
@@ -1681,6 +1741,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pages", default=None, help="只做这些**扫描页**（页号表达式，如 1-5,9）；默认全部")
     p.add_argument("--force", action="store_true", help="已有产物也重做")
 
+    p = sub.add_parser("locate-gutter",
+                       help="[v2] 版心定位（拆页用）：整叶扫描图 → 版心 x 与置信度（原图坐标，左原点）")
+    p.add_argument("image", help="原图路径")
+    p.add_argument("--band", default=None, help="只看这段高度 y0,y1（一张图上下两叶时分开找）")
+    p.add_argument("--ink-threshold", type=int, default=128)
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("witness-align",
                        help="[v2] 列级证人对齐：一行一列的整理本 → 逐字位候选标签（现代链播种/评测用）")
     p.add_argument("book")
@@ -1821,7 +1888,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--cv-repo", default=None, help="import/watch：判 cv 兼容用的 cv 仓，默认本模块所在的仓")
     p.add_argument("--overview", default=None, help="import/watch：写导入记录并推的 overview 仓")
     p.add_argument("--state", default=None, help="watch/list：状态文件，默认 ~/.local/state/guji_snap/state.json")
-    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--dry-run", action="store_true",
+                   help="pack：只打印计划（分支名、页数、文件数），不建提交、不推；import/watch：只校验不替换")
     p.add_argument("--force", action="store_true", help="import：被作废的包、会降级的包也照导")
     p.add_argument("--no-push", action="store_true", help="pack：只建本地分支；import/watch：记录只提交不推")
 
@@ -1950,6 +2018,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="throughput：统计全书已有产物的页，不只 --pages（吞吐量/通道占比默认整册）")
     p.add_argument("--full", action="store_true",
                    help="rulers：detail 不截断（默认只带前 20 条，做全量错例统计要这个）")
+    p.add_argument("--detail", default=None, metavar="RULER",
+                   help="rulers：只印这把尺子（如 R2c）的全量页／列明细，一行一条（JSON 里另有 by_page 汇总）")
     p.add_argument("--drift", action="store_true",
                    help="ledger：另外核对库里的图与现在的字块图还像不像（较慢，逐条读图比对）")
     p.add_argument("--out", default="",

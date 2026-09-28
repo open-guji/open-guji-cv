@@ -75,6 +75,13 @@ def _jsonable(v):
     return str(v)
 
 
+def book_dep_values(step: Step, book: BookSpec) -> dict | None:
+    """本步 `book_deps` 各字段的现值（记进 manifest，`status` 报过期原因用）；无 → None。"""
+    if not step.spec.book_deps:
+        return None
+    return {k: _jsonable(getattr(book, k, None)) for k in sorted(step.spec.book_deps)}
+
+
 def params_hash(params: BaseModel, soft: tuple[str, ...] = ()) -> str:
     """参数指纹。`soft` 里的字段剔掉不算（`StepSpec.soft_params`）；没有软参数的步
     与 2026-09-25 之前逐位相同。"""
@@ -148,8 +155,7 @@ def _self_payload(step: Step, book: BookSpec, ph: str) -> dict:
     # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
     # 保证现有产物的指纹逐位不变、不触发全量重跑。
     if step.spec.book_deps:
-        payload["book"] = {k: _jsonable(getattr(book, k, None))
-                           for k in sorted(step.spec.book_deps)}
+        payload["book"] = book_dep_values(step, book)
     # `binarized_input` 换掉的是 `ctx.raw_page` 本身，**凡是读原图的步都受影响**
     # （Step1 版框、Step2 矫正、Step3 切格、Step4 收框…），没法靠某一步的
     # `book_deps` 覆盖全，所以在这里统一进指纹。
@@ -285,6 +291,30 @@ class Engine:
             return STALE, entry        # 显式失效（人裁落定等），见 ManifestEntry.invalidated
         return (FRESH if entry.fingerprint == fp else STALE), entry
 
+    def stale_reason(self, step: Step, page: int, entry: ManifestEntry | None) -> str | None:
+        """指纹对不上时说清是哪一样变了（#174）。按能分辨的粒度报：显式失效 > 册配置
+        （`book_deps` 值，只有记过 `entry.book` 的条目才分得出）> 参数 > 上游产物 > 代码/版本。
+        册配置那条写成「册配置 period_prior 180→204」，调用方直接拿去印。"""
+        if entry is None:
+            return None
+        if entry.invalidated:
+            return f"显式失效：{entry.invalidated}"
+        fp, ups, ph = self.fingerprint(step, page)
+        if fp is None or entry.fingerprint == fp:
+            return None
+        now = book_dep_values(step, self.book)
+        if now is not None and entry.book is not None and entry.book != now:
+            diff = [f"{k} {entry.book.get(k)}→{now.get(k)}" for k in sorted(now)
+                    if entry.book.get(k) != now.get(k)]
+            return "册配置 " + "，".join(diff)
+        if entry.params_hash != ph:
+            return "参数变了"
+        if (entry.upstream or {}) != (ups or {}):
+            return "上游产物变了"
+        if now is not None and entry.book is None:
+            return "代码或册配置变了（" + "/".join(sorted(now)) + "；旧条目没记册配置原值）"
+        return "代码或版本变了"
+
     def _page_status_row(self, step: Step, pages: list[int],
                           upstream_fresh: dict[int, bool]) -> tuple[dict, dict[int, str]]:
         """算一个 Step（普通 Step 或闸）逐页状态，返回 (给 status() 用的行, {页: 状态} 供下游查过期)。"""
@@ -295,6 +325,7 @@ class Engine:
         # （软化之前跑的）也算漂移——不知道当时对的是哪个库。
         soft_now = soft_values(step, self.ctx.params_for(step))
         n_drift = 0
+        reasons: dict[str, int] = {}
         for pg in pages:
             st, entry = self.page_status(step, pg)
             upstream_stale = st == FRESH and not upstream_fresh.get(pg, True)
@@ -305,11 +336,18 @@ class Engine:
             drift = bool(soft_now and entry and entry.status == "ok"
                          and (entry.soft or {}) != soft_now)
             n_drift += drift
+            reason = None
+            if st == STALE:
+                reason = "上游过期" if upstream_stale else self.stale_reason(step, pg, entry)
+                if reason:
+                    reasons[reason] = reasons.get(reason, 0) + 1
             per_page[pg] = {"status": st, "upstream_stale": upstream_stale, "drift": drift,
+                            "reason": reason,
                             "ts": entry.ts if entry else None,
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
-        return {"counts": counts, "pages": per_page, "drift": n_drift}, page_state
+        return {"counts": counts, "pages": per_page, "drift": n_drift,
+                "stale_reasons": reasons}, page_state
 
     def status(self, pages: list[int] | None = None, steps: list[str] | None = None) -> dict:
         """每步每页的状态。**过期沿 DAG 向下传**：某页的任一直接上游不是 fresh，本步该页
@@ -407,7 +445,8 @@ class Engine:
                                            params_hash=ph, upstream=ups or {},
                                            code_rev=self._rev, elapsed=round(elapsed, 3),
                                            self_hash=self.self_hash(step),
-                                           soft=soft_values(step, self.ctx.params_for(step))))
+                                           soft=soft_values(step, self.ctx.params_for(step)),
+                                           book=book_dep_values(step, self.book)))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
@@ -503,7 +542,8 @@ class Engine:
                                                params_hash=ph, upstream=ups or {},
                                                code_rev=self._rev, elapsed=round(elapsed, 3),
                                                self_hash=self.self_hash(step),
-                                               soft=soft_values(step, self.ctx.params_for(step))))
+                                               soft=soft_values(step, self.ctx.params_for(step)),
+                                               book=book_dep_values(step, self.book)))
                     self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
                     report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
                 except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批

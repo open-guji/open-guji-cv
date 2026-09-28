@@ -668,3 +668,25 @@ def test_product_pack_without_products_dir_hints_attach_only(world, tmp_path):
     with pytest.raises(FileNotFoundError, match="attach-only"):
         sp.build_tree(sp.PackSpec(book="nobook", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
                                   cv_commit=world["A"]), tmp_path / "t3")
+
+
+def test_pack_cli_dry_run_never_pushes(world, monkeypatch, capsys):
+    """`guji snap pack --dry-run` 只打印计划：不调 commit/push、假 origin 上不出分支、本地也不建分支（#174）。"""
+    import sys
+    from open_guji_cv import cli_v2
+    prod = world["tmp"] / "cloudprod-dry"
+    write_products(prod, "dry")
+    called = []
+    monkeypatch.setattr(sp, "commit_and_push", lambda *a, **k: called.append("commit_and_push"))
+    monkeypatch.setattr(gitio, "push_commit", lambda *a, **k: called.append("push_commit"))
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setattr(sys, "argv", ["guji", "snap", "pack", BOOK, "-w", str(world["cloud"] / WS_DIR),
+                                      "--from-products", str(prod), "--cv-commit", world["A"],
+                                      "--stamp", "20260928T0300", "--dry-run"])
+    cli_v2.main()
+    out = json.loads(capsys.readouterr().out)
+    assert called == []
+    assert out["dry_run"] is True and out["pushed"] is False and out["commit"] is None
+    assert out["branch"].startswith("snap/") and out["pages"] == 3 and out["files"] > 0
+    assert git(world["origin"], "branch", "--list", "snap/*") == ""
+    assert git(world["cloud"], "branch", "--list", "snap/*") == ""
