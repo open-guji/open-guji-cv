@@ -3,6 +3,7 @@ import { fetchCutlineCases, fetchCutlineVerdicts } from '../../api/cutline'
 import { postEvents } from '../../api/events'
 import type { CutlineCase } from '../../types/cutline'
 import { BlockingCutlineCard } from './BlockingCutlineCard'
+import { decideFields, defaultPick } from './cutlineVerdict'
 import './cutline.css'
 
 // Step7「切分裁决」板块（overview 2026-09-11 下发）。只出顺序闸正在挡住字卡
@@ -62,9 +63,9 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
       // 用户 2026-09-28（overview#188）：有 U-Net 候选就默认选它，方便一路 Enter 确认；
-      // 没有才退回引擎 `chosen`。提交口径不变（选中项≠chosen 记 moved，cand=unet_seam）。
-      const unet = (c.candidates || []).findIndex((x) => x.kind === 'unet_seam')
-      const st: CardState = { pick: unet >= 0 ? unet : (c.chosen ?? null), done: undefined, drawing: false, poly: [] }
+      // 没有才退回引擎 `chosen`。书级开关 `params.review.cutline_default`，后端算好下发
+      // `default_idx`；落定时 ok/moved 跟这个默认项比，见 `cutlineVerdict.ts`。
+      const st: CardState = { pick: defaultPick(c).idx, done: undefined, drawing: false, poly: [] }
       const dv = done[c.id]
       if (dv) {
         st.done = dv.verdict
@@ -189,7 +190,8 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     }
     const row = {
       id: c.id, y, y_old: c.y,
-      verdict: verdict === 'idk' ? 'idk' : (drawn ? 'moved' : (k === c.chosen ? 'ok' : 'moved')),
+      // verdict 跟卡片默认选中项比（overview#188）；picked_source / default_pick 另记来源。
+      ...decideFields(c, k, drawn, verdict),
       bi: c.bi, slot_above: c.slot_above, slot_below: c.slot_below, col_h: c.col_h,
       // char_* = 整理本在这一位印的字（v2_align 的 ref）；shape_* = v2 定字认的刻本形。
       // 2026-09-13 之前 char_* 存的其实是 shape，两层混记；此后分开存，

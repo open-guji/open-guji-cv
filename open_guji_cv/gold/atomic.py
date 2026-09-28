@@ -15,7 +15,11 @@ CUTLINE_KEYS: tuple[str, ...] = ("y", "y_old", "verdict", "bi", "slot_above", "s
                                  "tags", "note", "polyline", "cand",
                                  # 页面坐标与列窗几何签名（2026-09-25，eval/colgeom.py）：与 y/polyline
                                  # 同属一次判定，必须整组替换，否则新 y 配旧 page_y 会被评测当真
-                                 "geom_sig", "page_x", "page_y", "page_polyline")
+                                 "geom_sig", "page_x", "page_y", "page_polyline",
+                                 # Step7 切分裁决的来源口径（2026-09-28，overview#188）：verdict 跟卡片
+                                 # 默认选中项比，「最后用的线出自谁 / 当时默认选的是谁」另记在这两个键，
+                                 # 下游判「引擎错没错」看 picked_source != "engine"，不看 moved
+                                 "picked_source", "default_pick")
 
 ATOMIC_KEY_GROUPS: dict[str, tuple[str, ...]] = {
     "char-segmentation/touching-cuts": CUTLINE_KEYS,

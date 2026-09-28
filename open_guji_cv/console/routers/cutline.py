@@ -14,6 +14,7 @@ from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
+from ...review.cutline_default import attach_default_pick, cutline_default_mode
 from ...review.verdict_view import cutline_verdicts
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
@@ -198,6 +199,13 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         for c in picked:
             c.update(_cutline_expected_cache[key].get(c["id"], {k: "" for k in _EXP_KEYS}))
     _attach_candidates(st, book, picked)
+    # 卡片默认选中项（overview#188）：书级开关 `params.review.cutline_default`，缺省 unet。
+    # 在后端算好下发，前端只照 `default_idx` 选、按它判 ok/moved，口径只有一处。
+    try:
+        default_mode = cutline_default_mode(bk)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    attach_default_pick(picked, default_mode)
     for c in picked:
         pad = 6
         c["crop_y0"] = max(0, c["y0"] - pad)
@@ -217,6 +225,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     n_expect = sum(1 for c in picked if c.get("char_above") and c.get("char_below"))
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
             "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked,
+            "cutline_default": default_mode,
             "drift_skipped": drift_skipped}
 
 
