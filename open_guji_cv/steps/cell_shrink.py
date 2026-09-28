@@ -77,10 +77,32 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
     return cell is not None and bbox[1] - cell.y0 <= FRAME_BAR_TOP * cc.period
 
 
+TAIL_BAR_MAX_H = 0.2
+TAIL_BAR_MIN_W = 0.8
+TAIL_BAR_NEAR = 0.5
+"""列末格收框线（2026-09-28，overview#202）：全唐文四周雙邊，Step1 的 bottom 落在外粗框上，
+内框细线留在列窗底部；列里字数不满格数时（或交接闸多给了一格），最后一格只装着这条线，
+Step4 把它当字框收进来，一路以「一」放行（v006/v007 9 例，都在 slot 22，格高 23–30px）。
+判据三条都要：紧框矮（< TAIL_BAR_MAX_H 格高）；宽到横贯文字带（≥ TAIL_BAR_MIN_W 带宽——
+「一」的横笔到字身边就停，列图中部最宽横笔 ≤0.73，见 clustering/end_rule_strip）；
+紧框底离列窗下界 ≤ TAIL_BAR_NEAR 格高（「一」作末字时居格中，离下界还有大半格）。
+只看列里最后一格；与字粘在同一格里的框线归 #66 的 `end_rule_strip`，这里不管。"""
+
+
+def _is_tail_frame_bar(pos: int, cell_type: str, bbox, cc) -> bool:
+    if cell_type != "char" or not cc.period or not cc.content_x or cc.border_bottom is None:
+        return False
+    if pos != max((c.pos for c in cc.cells), default=None):
+        return False
+    h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
+    col_w = cc.content_x[1] - cc.content_x[0]
+    return (h < TAIL_BAR_MAX_H * cc.period and w >= TAIL_BAR_MIN_W * col_w
+            and cc.border_bottom - bbox[3] <= TAIL_BAR_NEAR * cc.period)
+
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.5", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.6", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
@@ -245,7 +267,8 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                frame_bar = (_is_raised_frame_bar(slot, cell_type, bbox, cc)
+                             or (not inst.sub and _is_tail_frame_bar(pos, cell_type, bbox, cc)))
                 if frame_bar:
                     cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
