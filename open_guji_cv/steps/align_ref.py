@@ -999,6 +999,8 @@ def _corpus_line_is_column(path: str, cap: int) -> bool:
     lines, _ = ref_lines(path)
     if len(lines) < 100:
         return False
+    if any(ln.leaf_start for ln in lines[:50]):
+        return True                     # 逐列本（`#@` 半叶头）
     ok = sum(1 for ln in lines if ln.n <= cap + 1)
     return ok >= 0.95 * len(lines)
 
@@ -1027,15 +1029,17 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     if off is None:
         res.coord_note = "定不了页在整理本里的位置（8-gram/4-gram 都没命中）"
         return
+    grid = bool(lines) and any(ln.leaf_start for ln in lines[:50])
     l0 = C.line_at(starts, max(0, off))
-    pm = C.map_columns(carriers, lines, l0 - C.COORD_WINDOW_LINES,
-                       l0 + len(carriers) + C.COORD_WINDOW_LINES)
+    win = C.COORD_WINDOW_LINES + (9 if grid else 0)
+    pm = C.map_columns(carriers, lines, l0 - win, l0 + len(carriers) + win, grid=grid)
     if pm.base is None:
         res.coord_note = pm.note
         return
     from ..products.kinds.recog import CoordRec
     legacy = {c.id: c for c in res.chars} if res.anchored else {}
     same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
+    work = []
     for cc in cols:
         li = pm.col_line.get(cc.col)
         if li is None:
@@ -1045,7 +1049,15 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         if not units:
             res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
             continue
-        r = C.coord_column(units, lines[li])
+        work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
+    # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
+    # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
+    bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
+    if grid and bs:
+        b_page = bs[len(bs) // 2]
+        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page))
+                for cc, u, ln, r in work]
+    for cc, _units, _ln, r in work:
         if not r.ok:
             res.coord_fallback[str(cc.col)] = r.note
             continue
