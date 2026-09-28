@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchAroundBatch, fetchRareBatch, fetchRareOne, fetchReviewCards, fetchReviewVerdicts, contextImgUrl } from '../../api/review'
+import { aroundKey, fetchAroundBatch, fetchRareBatch, fetchRareOne, fetchReviewCards, fetchReviewVerdicts, contextImgUrl } from '../../api/review'
 import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
-import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
+import type { AroundContext, RareCandidate, ReviewCard, ReviewClassMeta } from '../../types/review'
 import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
-import { DOUBT_HINTS, doubtName, occludedDefault, occludedGroupRows } from './doubt'
+import { occludedDefault, occludedGroupRows } from './doubt'
+import { CLASS_HELP, DEFAULT_HELP, isJysCard, JYS_NONE_KEYS, jysPickByKey, pickVerdict, verdictRow } from './reviewClass'
 import './review.css'
 
 // 迁移自 v1 static/js/panels/review.js（549 行，方案 §四标注"改造复用（分文件）"）。
 // 一条口径（用户 2026-09-26 定）：每一格只裁一个字，就是字形；没有「读法」。
 // 候选生成/键位表抽成纯函数（candidates.ts），交互与状态留在本组件。
+//
+// 按类别审（overview#247，2026-09-28）：层级 = 范围 → **类别**（主导航，点了就载入，按钮上是
+// 这一类还剩几张）→ 本类细项（条数、含已裁决、先切线后字符、批次，默认收起）。队列模式：
+// 提交后自动载入同一类的下一批。一张卡只归优先级最高的一类（后端 `REVIEW_CLASSES`）；
+// 卡片样式与快捷键跟着类别走（`reviewClass.ts`，己已巳是三选一专用卡）。
 
 export interface Verdict {
   shape: string
@@ -44,11 +50,15 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   const [msg, setMsg] = useState('')
   const [gateNote, setGateNote] = useState<{ n: number } | null>(null)
   const [nDecided, setNDecided] = useState(0)   // 全书累计已裁字位数（后端跨批次去重后给的）
-  // 按原因筛（overview#215）：'' = 全部。请求一律带 `doubt`（空时发 `*`）——后端据此回计数，
-  // 按钮上的数是「这个原因一共还有几张」（不受「条数」截断）。
-  const [doubtSel, setDoubtSel] = useState('')
-  const [doubtCounts, setDoubtCounts] = useState<Record<string, number> | null>(null)
-  const [doubtTotal, setDoubtTotal] = useState(0)
+  // 按类别审（overview#247）：'' = 还没选（首次载入发 `*`，只为拿计数画导航）；'*' = 全部类别混着；
+  // 其余 = 某一类。请求一律带 `cls`——按钮上的数是「这一类一共还剩几张」（不受「条数」截断）。
+  // （原 #215 的 doubt 码筛选后端仍在，面板改用类别：一张卡多个码时按码筛会在几个按钮下各出一次。）
+  const [cls, setCls] = useState('')
+  const [classCounts, setClassCounts] = useState<Record<string, number> | null>(null)
+  const [classTotal, setClassTotal] = useState(0)
+  const [classes, setClasses] = useState<ReviewClassMeta[]>([])
+  // 上下文缺省显示整理本对位原文；勾上才显示刻本那边的读法（#247）
+  const [ctxKeben, setCtxKeben] = useState(false)
   const [groupBusy, setGroupBusy] = useState(false)
   const [, forceRender] = useState(0)
   const bump = () => forceRender((n) => n + 1)
@@ -66,6 +76,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   const around = useRef<Record<string, AroundContext>>({})
   const ctxImgOpen = useRef<Record<number, boolean>>({})
   const rareOut = useRef<Record<number, RareCandidate[] | 'loading' | 'error' | undefined>>({})
+  // 己已巳卡点了「都不是」的格 → 展开成普通卡
+  const jysOpen = useRef<Record<string, boolean>>({})
 
   const batch = () => batchInput.trim() || `${book}-${pages || 'dev_set'}-decide`
 
@@ -73,13 +85,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 只更新数据，不把页面滚去「定字裁决」区域。用户 2026-09-11 实测踩到：
   // 每次在「切分裁决」落定一条，画面会被强行跳到定字裁决第一张卡，打断
   // 正在做的操作。手动点「载入」按钮才应该滚（那是用户主动要看结果）。
-  async function load(scrollOnLoad = true, sel = doubtSel) {
+  async function load(scrollOnLoad = true, sel = cls) {
     setMsg('载入中…')
     const b = batch()
     const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30, !inclDecided,
-                                     sel || '*')
-    setDoubtCounts(d.doubt_counts ?? null)
-    setDoubtTotal(d.doubt_total ?? 0)
+                                     '', sel || '*')
+    setClassCounts(d.class_counts ?? null)
+    setClassTotal(d.class_total ?? 0)
+    if (d.classes) setClasses(d.classes)
     let done: Record<string, Verdict> = {}
     try {
       done = (await fetchReviewVerdicts(b)).verdicts || {}
@@ -112,6 +125,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     rare.current = {}
     rareFly.current = new Set()
     snapshot.current = null
+    // 这两个按卡片**下标**记——换了一批卡，下标对应的格全变了，留着会串到别的卡上
+    rareOut.current = {}
+    ctxImgOpen.current = {}
     setCards(d.cards)
     setCur(0)
     const t0 = Date.now()
@@ -123,9 +139,11 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     filterMsg(d.cards, nDec)
     focus(0, d.cards, scrollOnLoad)
 
-    fetchAroundBatch(book, 10, 10, d.cards.map((c) => ({ page: c.page, col: c.col, slot: c.slot })))
+    // 上下文前后各 20 字（可跨列跨页），一批卡一次请求（#247）
+    fetchAroundBatch(book, 20, 20, d.cards.map((c) => ({ page: c.page, col: c.col, slot: c.slot, sub: c.sub || '' })))
       .then((r) => { around.current = r.around || {}; bump() })
       .catch(() => {})
+    return d
   }
 
   // `nDec` 显式传入，不走 state：`load()` 里 setState 还没生效，闭包读到的是上一轮的值。
@@ -159,6 +177,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     setCur(j)
     if (scroll) document.getElementById(`rvc${j}`)?.scrollIntoView({ block: 'nearest' })
     prefetchRare(j, arr)
+    // 「库里没有」这一类多半是生僻字：当前卡自动查 10 个候选（#247「卡片样式跟着类别变」）
+    if (arr[j]?.cls === 'lib_miss') fetchRareFor(j, false, arr)
   }
 
   async function prefetchRare(i: number, list?: ReviewCard[]) {
@@ -197,24 +217,19 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     }
   }
 
-  function prevDone(id: string): string {
-    return verdicts.current[id]?.done || ''
-  }
-
   function setVerdict(i: number, shape: string, doneIn?: string) {
     const c = cards[i]
     if (!c) return
     // 从候选/输入框改字时（doneIn 省略）：切分缺陷两档要**保住**，别被改字顶掉——
     // 「这块图切坏了」与「这是哪个字」是两件事，可以同时成立（用户 2026-09-20）。
-    const keepDefect = (doneIn === undefined
-                        && (prevDone(c.id) === 'truncated' || prevDone(c.id) === 'contaminated'))
-    const mark = doneIn === undefined ? (keepDefect ? prevDone(c.id) : (shape ? '1' : '')) : doneIn
+    // 己已巳专用卡的三选一也走这条（doneIn 省略），与点普通卡的候选同一口径（`pickVerdict`）。
     const prev = verdicts.current[c.id]
     const now = Date.now()
-    const dwell = prev?.dwell !== undefined ? prev.dwell : (seen.current[c.id] ? now - seen.current[c.id] : undefined)
-    const prevNoGlyphLib = verdicts.current[c.id]?.noGlyphLib
-    verdicts.current[c.id] = {
-      shape, done: mark, ts: now, dwell, noGlyphLib: prevNoGlyphLib,
+    if (doneIn === undefined) {
+      verdicts.current[c.id] = pickVerdict(shape, prev, seen.current[c.id], now)
+    } else {
+      const dwell = prev?.dwell !== undefined ? prev.dwell : (seen.current[c.id] ? now - seen.current[c.id] : undefined)
+      verdicts.current[c.id] = { shape, done: doneIn, ts: now, dwell, noGlyphLib: prev?.noGlyphLib }
     }
     touched.current.add(c.id)
     bump()
@@ -243,8 +258,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     bump()
   }
 
-  async function fetchRareFor(i: number, force?: boolean) {
-    const c = cards[i]
+  async function fetchRareFor(i: number, force?: boolean, list?: ReviewCard[]) {
+    const c = (list ?? cards)[i]
     if (!c) return
     if (!force && rareOut.current[i] !== undefined) return
     rareOut.current[i] = 'loading'
@@ -272,30 +287,13 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 包含，`bxgb:3:1:19` 累计写了 13 次。重放语义（后到覆盖）一直是对的，
       // 错的是**每次都把没改的也写进去**。`touched` 由裁决动作登记，见 `mark()`。
       if (!touched.current.has(id)) continue
-      if (v.done === 'skip') { rows.push({ id, v: 'skip' }); continue }
-      if (v.done === 'damaged') {
-        // 原图破损：字形不可辨，文本层出 □。`guess` 是括注用的「最像哪个字」，
-        // 可空；不进字形库（后端 glyphdb_admit 只认 v==='confirm'）。
-        rows.push({ id, v: 'damaged', guess: v.guess || '', client_ts: v.ts, dwell_ms: v.dwell })
-        continue
-      }
-      if (v.done === 'non') { rows.push({ id, v: 'not_a_char' }); continue }
-      if (v.done === 'truncated' || v.done === 'contaminated') {
-        rows.push({ id, v: 'seg_defect', quality: v.done, shape: v.shape || '', client_ts: v.ts, dwell_ms: v.dwell })
-        continue
-      }
       // 「是否采纳 AI 预选」（任务书-C-人审卡按AI预选 §6）：`null` = 这一格
       // 没问过 AI（`card.ai` 缺失），不是「没采纳」——四庫等书这里恒是 null。
       // **2026-09-27 C 道暂拟字段名 `ai_accepted`，待与 H 道约定**（cross 单
       // 见 inbox/C-人审卡AI预选/），只加可选字段，不改 `confirm` 既有字段。
       const card = byId[id]
-      const ac = card ? aiAccepted(card, v.shape) : null
-      rows.push({
-        id, v: 'confirm', shape: v.shape,
-        no_glyph_lib: !!v.noGlyphLib,
-        client_ts: v.ts, dwell_ms: v.dwell,
-        ...(ac !== null ? { ai_accepted: ac } : {}),
-      })
+      const row = verdictRow(id, v, card ? aiAccepted(card, v.shape) : null)
+      if (row) rows.push(row)
     }
     if (!rows.length) { setMsg('还没有裁决'); return }
     setMsg('提交中…')
@@ -304,40 +302,48 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 已落盘的不再算「动过」——否则下次提交又把它们重写一遍，重复照旧。
       // 只清本次提交的这批：提交是 await 的，其间人可能已经裁了新卡。
       for (const row of rows) touched.current.delete(row.id as string)
-      setMsg(`已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r))
+      const done = `已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
       onSubmitted()
+      // 队列模式（#247）：提交完自动载入同一类的下一批。裁过的后端已跳过（skip_decided），
+      // 这一屏没裁的会再出现；「含已裁决」开着时不自动翻（那是复核模式，翻了就看不到刚裁的）。
+      if (cls && !inclDecided) {
+        const d = await load(true, cls)
+        const left = cls === '*' ? (d.class_total ?? 0) : (d.class_counts?.[cls] ?? 0)
+        setMsg(`${done}；已载入本类下一批 ${d.cards.length} 张，本类还剩 ${left}`)
+      } else {
+        setMsg(done)
+      }
     } catch (e) {
       setMsg('提交失败：' + (e as Error).message)
     }
   }
 
-  function pickDoubt(code: string) {
-    const next = doubtSel === code ? '' : code
-    setDoubtSel(next)
-    load(true, next)
+  function pickClass(key: string) {
+    setCls(key)
+    load(true, key)
   }
 
   // 印章遮挡整组一键确认（overview#215 ②）：与 #166 按簇提交同一机制——展开成 N 条逐格事件，
   // 走既有 `POST /api/events`。先按 `doubt=occluded` 把**这一组全部**拉回来（不受「条数」
   // 截断），每格用人在屏上改过的裁决、没改过就用默认（整理本字／非字），字形一律不入库。
   async function confirmOccludedGroup() {
-    const n = doubtCounts?.occluded || 0
+    const n = classCounts?.occluded || 0
     if (!n || groupBusy) return
     if (!window.confirm(`把 ${n} 格印章遮挡卡按默认（整理本字／整理本空位判非字）整组确认？\n`
       + '字形一律不入库；屏上改过的格按改过的提交。')) return
     setGroupBusy(true)
     setMsg('整组载入中…')
     try {
-      const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, Math.max(n, 1), !inclDecided, 'occluded')
+      const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, Math.max(n, 1), !inclDecided, '', 'occluded')
       const { rows, skipped } = occludedGroupRows(d.cards, verdicts.current, Date.now())
       if (!rows.length) { setMsg(`这组 ${d.cards.length} 格都没有默认字，请逐格填`); return }
       const b = batch()
       const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
       for (const row of rows) touched.current.delete(row.id as string)
-      // 这组裁完了，筛选停在「印章遮挡」只剩空屏——回到全部
-      const next = doubtSel === 'occluded' ? '' : doubtSel
-      setDoubtSel(next)
-      await load(false, next)
+      // 这组裁完了，停在「印章遮挡」只剩空屏——回到全部类别
+      const next = cls === 'occluded' ? '*' : cls
+      setCls(next)
+      await load(false, next || '*')
       setMsg(`印章遮挡整组：已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
         + (skipped.length ? `；${skipped.length} 格没有默认字，留在待审` : ''))
       onSubmitted()
@@ -369,6 +375,15 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages])
 
+  // 范围是层级的第一层：换了范围，各类计数都变——已经载入过的话立刻按新范围重载（#247）。
+  // 没载入过（`classCounts` 为空）不自动拉，与「切页不在首次挂载时自动载入」同一个理由。
+  const onlyLoadedOnce = useRef(false)
+  useEffect(() => {
+    if (!onlyLoadedOnce.current) { onlyLoadedOnce.current = true; return }
+    if (classCounts) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [only])
+
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
       const target = ev.target as HTMLElement
@@ -376,6 +391,13 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return
       const c = cards[cur]
       if (!c) return
+      // 己已巳专用卡：1/2/3 = 己/已/巳，4/0 = 都不是（展开成普通卡）；T/C/D 这张卡上没有，不响应
+      if (isJysCard(c.cls, !!jysOpen.current[c.id])) {
+        const ch = jysPickByKey(ev.key)
+        if (ch) { setVerdict(cur, ch); focus(cur + 1); ev.preventDefault(); return }
+        if (JYS_NONE_KEYS.includes(ev.key)) { jysOpen.current[c.id] = true; bump(); ev.preventDefault(); return }
+        if (/^[5tTcCdD]$/.test(ev.key)) return
+      }
       if (ev.key === 'ArrowRight' || ev.key === 'j') { focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'ArrowLeft' || ev.key === 'k') { focus(cur - 1); ev.preventDefault() }
       else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
@@ -404,37 +426,52 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
             <option value="all">全部</option>
           </select>
         </label>
-        <label className="muted" title="一次载入多少张卡。缺省 30 = 一屏能裁完的量；调大再按「重新载入」。">
-          条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} />
-        </label>
-        <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册页自动命名" /></label>
-        <label className="muted" title="默认只出全书从未裁过的字位（跨批次去重），所以「条数」数的是净新卡。勾上则把已裁过的也一并载入——复核自己裁过的、或想改主意时用。">
-          <input type="checkbox" checked={inclDecided} onChange={(e) => setInclDecided(e.target.checked)} /> 含已裁决
-        </label>
-        <label className="muted" title="顺序闸：字位旁边那条切分线有多种切法且还没 review 时，这个字位先不出卡。取消勾选可整批看全部。">
-          <input type="checkbox" checked={gate} onChange={(e) => setGate(e.target.checked)} /> 先切线后字符
-        </label>
-        <button onClick={() => load()}>载入</button>
-        <button onClick={submit}>提交裁决</button>
+        <button onClick={() => { const k = cls || '*'; setCls(k); load(true, k) }}
+                title="按当前范围、类别重新载入；还没选类别时载入全部类别并给出各类计数">{classCounts ? '重新载入' : '载入'}</button>
+        <button onClick={submit}
+                title={cls && !inclDecided ? '提交这一屏的裁决，然后自动载入本类下一批' : '提交这一屏的裁决'}>提交裁决</button>
         <span className="muted">{msg}</span>
       </div>
-      {doubtCounts && (
-        <div className="rv-doubts" data-testid="rv-doubts">
-          <span className="muted">按原因</span>
-          <button className={doubtSel === '' ? 'on' : ''} onClick={() => pickDoubt('')}
-                  title="不按原因筛，出全部待审卡">全部<span className="n">{doubtTotal}</span></button>
-          {Object.entries(doubtCounts).map(([code, n]) => (
-            <button key={code} data-doubt={code} className={doubtSel === code ? 'on' : ''}
-                    onClick={() => pickDoubt(code)} title={`${code}${DOUBT_HINTS[code] ? '：' + DOUBT_HINTS[code] : ''}`}>
-              {doubtName(code)}<span className="n">{n}</span>
+      {classCounts && (
+        <div className="rv-classes" data-testid="rv-classes">
+          <span className="muted">类别</span>
+          <button className={cls === '*' ? 'on' : ''} onClick={() => pickClass('*')}
+                  title="不分类别，按页序混着出">全部<span className="n">{classTotal}</span></button>
+          {classes.filter((m) => classCounts[m.key]).map((m) => (
+            <button key={m.key} data-cls={m.key} className={cls === m.key ? 'on' : ''}
+                    onClick={() => pickClass(m.key)} title={m.hint}>
+              {m.label}<span className="n">{classCounts[m.key]}</span>
             </button>
           ))}
-          {(doubtCounts.occluded || 0) > 0 && (
-            <button className="rv-occl-all" onClick={confirmOccludedGroup} disabled={groupBusy}
-                    title="印章遮挡卡默认填整理本字（整理本此位空的判非字），字形不入库；一键把这一组全部按默认提交">
-              印章遮挡 · 整组确认 {doubtCounts.occluded} 格
-            </button>
+          {cls && (
+            <span className="rv-left" title="按当前范围与细项，这一类还没裁的张数（含这一屏）">
+              本类还剩 <b>{cls === '*' ? classTotal : (classCounts[cls] || 0)}</b>
+              {cards.length ? `（本屏 ${cards.length}）` : ''}
+            </span>
           )}
+        </div>
+      )}
+      <details className="rv-detail">
+        <summary className="muted">本类细项</summary>
+        <div className="rv-toolbar">
+          <label className="muted" title="一批载入多少张卡。缺省 30 = 一屏能裁完的量；改了点「重新载入」。">
+            条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} />
+          </label>
+          <label className="muted" title="默认只出全书从未裁过的字位（跨批次去重），所以「条数」数的是净新卡。勾上则把已裁过的也一并载入——复核自己裁过的、或想改主意时用（此时提交后不自动翻下一批）。">
+            <input type="checkbox" checked={inclDecided} onChange={(e) => setInclDecided(e.target.checked)} /> 含已裁决
+          </label>
+          <label className="muted" title="顺序闸：字位旁边那条切分线有多种切法且还没 review 时，这个字位先不出卡。取消勾选可整批看全部。">
+            <input type="checkbox" checked={gate} onChange={(e) => setGate(e.target.checked)} /> 先切线后字符
+          </label>
+          <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册页自动命名" /></label>
+        </div>
+      </details>
+      {cls === 'occluded' && (classCounts?.occluded || 0) > 0 && (
+        <div className="rv-classes">
+          <button className="rv-occl-all" onClick={confirmOccludedGroup} disabled={groupBusy}
+                  title="印章遮挡卡默认填整理本字（整理本此位空的判非字），字形不入库；一键把这一组全部按默认提交">
+            印章遮挡 · 整组确认 {classCounts?.occluded} 格
+          </button>
         </div>
       )}
       {gateNote && (
@@ -443,10 +480,10 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         </div>
       )}
       <div className="rv-help">
-        键盘：<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>C</b> 有噪声 ·
-        <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损 · <b>←/→</b> 翻卡。
-        字一律按图上刻的录。只有 <b>己 / 已 / 巳</b> 例外——它们史上本就混用，
-        选中后会多出一个"文意"框，字形填图上的、文意填该读的；其余字不必区分。
+        <span dangerouslySetInnerHTML={{ __html: '键盘：' + (CLASS_HELP[cls] ?? DEFAULT_HELP) }} />{' '}
+        <label className="muted" title="上下文缺省显示整理本对位原文（对不上的格退回刻本定字、字色浅一档）；勾上改看刻本这边的读法（定字 → 库 → OCR）">
+          <input type="checkbox" checked={ctxKeben} onChange={(e) => setCtxKeben(e.target.checked)} /> 上下文用刻本读法
+        </label>
       </div>
       <div className="rvgrid">
         {cards.map((c, i) => {
@@ -457,7 +494,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               verdict={verdicts.current[c.id]}
               keys={keyList(c, rare.current[c.id])}
               ctxImgOpen={!!ctxImgOpen.current[i]}
-              aroundCtx={around.current[`${c.page}:${c.col}:${c.slot}`]}
+              aroundCtx={around.current[aroundKey(c)]}
               rareOut={rareOut.current[i]}
               onFocus={() => focus(i)}
               onSet={(shape: string, done?: string) => setVerdict(i, shape, done)}
@@ -466,6 +503,10 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               onToggleCtxImg={() => toggleCtxImg(i)}
               onFetchRare={(force?: boolean) => fetchRareFor(i, force)}
               contextImgSrc={contextImgUrl(book, c.page, c.col, c.slot)}
+              cls={c.cls}
+              jysOpen={!!jysOpen.current[c.id]}
+              onJysNone={() => { jysOpen.current[c.id] = true; bump() }}
+              ctxKeben={ctxKeben}
             />
           )
         })}
