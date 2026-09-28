@@ -1435,11 +1435,21 @@ def cmd_snap(args) -> None:
             if top.returncode != 0:
                 print(f"✗ {repo} 不在 git 仓里；给 --ws-repo", file=sys.stderr)
                 sys.exit(2)
-            commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
-        print(json.dumps({"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
-                          "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
-                          "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
-                          "pushed": not args.no_push}, ensure_ascii=False, indent=2))
+            # --dry-run：只打印计划，不建提交、不建本地分支、不推（原来 pack 根本不看 --dry-run，
+            # 照样真推——整理 Z21/Z22/Z23 三道都踩过，#174）
+            if args.dry_run:
+                commit = None
+                size = sum(f.stat().st_size for f in tree.rglob("*") if f.is_file())
+            else:
+                commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
+        out = {"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
+               "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
+               "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
+               "pushed": not args.no_push and not args.dry_run}
+        if args.dry_run:
+            out.update(dry_run=True, bytes=size, supersedes=m.get("supersedes", []),
+                       plan=f"演练：会推 {m['branch']}（未建提交、未推）")
+        print(json.dumps(out, ensure_ascii=False, indent=2))
         return
     if ws_repo is None:
         print("✗ 要给 --ws-repo（服务器上 guji-workspace 的 clone）", file=sys.stderr)
@@ -1821,7 +1831,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--cv-repo", default=None, help="import/watch：判 cv 兼容用的 cv 仓，默认本模块所在的仓")
     p.add_argument("--overview", default=None, help="import/watch：写导入记录并推的 overview 仓")
     p.add_argument("--state", default=None, help="watch/list：状态文件，默认 ~/.local/state/guji_snap/state.json")
-    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--dry-run", action="store_true",
+                   help="pack：只打印计划（分支名、页数、文件数），不建提交、不推；import/watch：只校验不替换")
     p.add_argument("--force", action="store_true", help="import：被作废的包、会降级的包也照导")
     p.add_argument("--no-push", action="store_true", help="pack：只建本地分支；import/watch：记录只提交不推")
 
