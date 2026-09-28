@@ -322,3 +322,23 @@ def place(entries: list[dict], *, ws_repo: Path, cv_repo: Path, ws_dir: Path | N
                     tmp.unlink()
         out.append({**row, "status": PLACED})
     return out
+
+
+def import_branch(branch: str, *, host: str, ws_repo: Path | None, cv_repo: Path, ws_dir: Path | None = None,
+                  remote: str = "origin", dry_run: bool = False,
+                  git: gitio.GitRunner = gitio.default_git) -> dict:
+    """不经 snap 包、直接按 idx 分支名落位一张表（`guji snap import-index`，值守手动用）。
+    条目从分支自己的 `index.json` 来，照样校 sha、已在就跳过。"""
+    if not branch.startswith(BRANCH_PREFIX):
+        raise ManifestError(f"不是 idx 分支：{branch}")
+    repo = cv_repo if host == "cv" else ws_repo
+    if repo is None:
+        raise ManifestError("--index-repo ws 要给 --ws-repo")
+    meta = _read_remote_meta(Path(repo), branch, remote, git)
+    e = {k: meta.get(k) for k in ("kind", "key", "root", "dest", "sha256", "size")}
+    e.update(branch=branch, repo=host)
+    check_entry(e)
+    if dry_run:
+        return plan([e], cv_repo, ws_dir)[0]
+    return place([e], ws_repo=Path(ws_repo or repo), cv_repo=cv_repo, ws_dir=ws_dir, remote=remote,
+                 fetch=False, git=git)[0]

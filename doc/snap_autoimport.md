@@ -75,6 +75,8 @@ guji snap pack … --font-index [book|default]
 - **idx 分支挂哪个仓**：缺省 guji-workspace（与包同仓）；`--index-repo cv` 挂 open-guji-cv 的 origin，manifest
   条目写 `repo: cv`，导入端到 `--cv-repo` 的 origin 去拉。本地没建过、但远端已有同 key 的 idx 分支也能打包
   （只引用、不要求本地有文件）——建表的会话和打包的会话可以不是同一个。
+- **值守手动落一张表、不经包**：`guji snap import-index idx/<kind>/<key> --index-repo cv|ws [--cv-repo …]
+  [--ws-repo …] [-w <工作区>（font_hog 才要）] [--dry-run]`——读分支自己的 `index.json`，同样校 sha、已在就跳过。
 
 ## 包格式 v1
 

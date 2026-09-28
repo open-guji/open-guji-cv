@@ -1523,6 +1523,21 @@ def cmd_snap(args) -> None:
                        plan=f"演练：会推 {m['branch']}（未建提交、未推）")
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return
+    if args.action == "import-index":
+        # 值守手动：不经 snap 包，按 idx 分支名直接落一张模板索引（已在就跳过）
+        from .snap import indexes as sidx
+        if not args.target:
+            print("import-index 要给分支名（idx/<kind>/<key>）", file=sys.stderr)
+            sys.exit(2)
+        ws_dir = Path(args.workspace).expanduser().resolve() if args.workspace else None
+        try:
+            row = sidx.import_branch(args.target, host=args.index_repo, ws_repo=ws_repo, cv_repo=cv_repo,
+                                     ws_dir=ws_dir, dry_run=args.dry_run)
+        except Exception as e:  # noqa: BLE001
+            print(f"✗ {type(e).__name__}: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(row, ensure_ascii=False))
+        return
     if ws_repo is None:
         print("✗ 要给 --ws-repo（服务器上 guji-workspace 的 clone）", file=sys.stderr)
         sys.exit(2)
@@ -1929,10 +1944,11 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dry-run", action="store_true", help="只打印会做什么，不改任何东西")
 
     p = sub.add_parser("snap", help="[v2] 快照自动导入：pack（云端打包推分支）/ import / watch（服务器定时器）/ list")
-    p.add_argument("action", choices=["pack", "import", "watch", "list"])
+    p.add_argument("action", choices=["pack", "import", "watch", "list", "import-index"])
     # dest 不叫 book：不走「带 book 的命令必填 -w」那层包装（import 的位置参数是分支名）
-    p.add_argument("target", nargs="?", default=None, help="pack：书 id；import：分支名 snap/…")
-    p.add_argument("-w", "--workspace", default=None, help="pack：书的工作区目录，默认 GUJI_WORKSPACE")
+    p.add_argument("target", nargs="?", default=None,
+                   help="pack：书 id；import：分支名 snap/…；import-index：分支名 idx/<kind>/<key>")
+    p.add_argument("-w", "--workspace", default=None, help="pack：书的工作区目录，默认 GUJI_WORKSPACE；import-index：font_hog 落哪个工作区")
     p.add_argument("--from-products", default=None,
                    help="pack：从这个 products 根读（如旧快照目录），默认当前 products 根")
     p.add_argument("--pages", default=None, help="pack：页集（1-5,9 / all / 命名页集），默认 all")
@@ -1952,7 +1968,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="pack：带上控制台 HOG 字体索引（先 `guji cache build-font-index`）；"
                         "book=按这本书的语料，default=控制台启动预热用的默认语料")
     p.add_argument("--index-repo", default="ws", choices=["ws", "cv"],
-                   help="pack：idx 分支挂在哪个仓的 origin（缺省 ws=guji-workspace；cv=open-guji-cv）")
+                   help="pack / import-index：idx 分支挂在哪个仓的 origin（缺省 ws=guji-workspace；cv=open-guji-cv）")
     p.add_argument("--note", default=None)
     p.add_argument("--stamp", default=None, help="pack：分支时戳，默认当前 UTC yyyymmddThhmm")
     p.add_argument("--create-workspace", action="store_true",
