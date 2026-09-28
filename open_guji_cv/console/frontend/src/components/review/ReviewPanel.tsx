@@ -6,6 +6,7 @@ import type { AroundContext, RareCandidate, ReviewCard } from '../../types/revie
 import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
+import { DOUBT_HINTS, doubtName, occludedDefault, occludedGroupRows } from './doubt'
 import './review.css'
 
 // 迁移自 v1 static/js/panels/review.js（549 行，方案 §四标注"改造复用（分文件）"）。
@@ -43,6 +44,12 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   const [msg, setMsg] = useState('')
   const [gateNote, setGateNote] = useState<{ n: number } | null>(null)
   const [nDecided, setNDecided] = useState(0)   // 全书累计已裁字位数（后端跨批次去重后给的）
+  // 按原因筛（overview#215）：'' = 全部。请求一律带 `doubt`（空时发 `*`）——后端据此回计数，
+  // 按钮上的数是「这个原因一共还有几张」（不受「条数」截断）。
+  const [doubtSel, setDoubtSel] = useState('')
+  const [doubtCounts, setDoubtCounts] = useState<Record<string, number> | null>(null)
+  const [doubtTotal, setDoubtTotal] = useState(0)
+  const [groupBusy, setGroupBusy] = useState(false)
   const [, forceRender] = useState(0)
   const bump = () => forceRender((n) => n + 1)
 
@@ -66,10 +73,13 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 只更新数据，不把页面滚去「定字裁决」区域。用户 2026-09-11 实测踩到：
   // 每次在「切分裁决」落定一条，画面会被强行跳到定字裁决第一张卡，打断
   // 正在做的操作。手动点「载入」按钮才应该滚（那是用户主动要看结果）。
-  async function load(scrollOnLoad = true) {
+  async function load(scrollOnLoad = true, sel = doubtSel) {
     setMsg('载入中…')
     const b = batch()
-    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30, !inclDecided)
+    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30, !inclDecided,
+                                     sel || '*')
+    setDoubtCounts(d.doubt_counts ?? null)
+    setDoubtTotal(d.doubt_total ?? 0)
     let done: Record<string, Verdict> = {}
     try {
       done = (await fetchReviewVerdicts(b)).verdicts || {}
@@ -86,9 +96,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       if (verdicts.current[c.id]) continue
       // 印章遮挡格（overview#195）：默认整理本字、字形不入库；假格（整理本空格位）默认「非字」
       if (c.occluded) {
-        verdicts.current[c.id] = c.occluded.ref_blank || !c.occluded.char
-          ? (c.occluded.ref_blank ? { shape: '', done: 'non', ts: Date.now() } : { shape: '', done: '', ts: Date.now(), noGlyphLib: true })
-          : { shape: c.occluded.char, done: '1', ts: Date.now(), noGlyphLib: true }
+        verdicts.current[c.id] = occludedDefault(c, Date.now()) ?? { shape: '', done: '', ts: Date.now(), noGlyphLib: true }
         if (verdicts.current[c.id].done) touched.current.add(c.id)
         continue
       }
@@ -303,6 +311,43 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     }
   }
 
+  function pickDoubt(code: string) {
+    const next = doubtSel === code ? '' : code
+    setDoubtSel(next)
+    load(true, next)
+  }
+
+  // 印章遮挡整组一键确认（overview#215 ②）：与 #166 按簇提交同一机制——展开成 N 条逐格事件，
+  // 走既有 `POST /api/events`。先按 `doubt=occluded` 把**这一组全部**拉回来（不受「条数」
+  // 截断），每格用人在屏上改过的裁决、没改过就用默认（整理本字／非字），字形一律不入库。
+  async function confirmOccludedGroup() {
+    const n = doubtCounts?.occluded || 0
+    if (!n || groupBusy) return
+    if (!window.confirm(`把 ${n} 格印章遮挡卡按默认（整理本字／整理本空位判非字）整组确认？\n`
+      + '字形一律不入库；屏上改过的格按改过的提交。')) return
+    setGroupBusy(true)
+    setMsg('整组载入中…')
+    try {
+      const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, Math.max(n, 1), !inclDecided, 'occluded')
+      const { rows, skipped } = occludedGroupRows(d.cards, verdicts.current, Date.now())
+      if (!rows.length) { setMsg(`这组 ${d.cards.length} 格都没有默认字，请逐格填`); return }
+      const b = batch()
+      const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
+      for (const row of rows) touched.current.delete(row.id as string)
+      // 这组裁完了，筛选停在「印章遮挡」只剩空屏——回到全部
+      const next = doubtSel === 'occluded' ? '' : doubtSel
+      setDoubtSel(next)
+      await load(false, next)
+      setMsg(`印章遮挡整组：已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
+        + (skipped.length ? `；${skipped.length} 格没有默认字，留在待审` : ''))
+      onSubmitted()
+    } catch (e) {
+      setMsg('整组确认失败：' + (e as Error).message)
+    } finally {
+      setGroupBusy(false)
+    }
+  }
+
   // 外层（Step7「切分裁决」板块）裁完一条切分方案后 bump 这个信号，通知这里
   // 重新载入——刚被那条切线挡住的字卡才会跟着解锁。首次挂载不触发（还没人
   // 点过「载入」，没有 batch/verdicts 状态可续）。
@@ -373,6 +418,25 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         <button onClick={submit}>提交裁决</button>
         <span className="muted">{msg}</span>
       </div>
+      {doubtCounts && (
+        <div className="rv-doubts" data-testid="rv-doubts">
+          <span className="muted">按原因</span>
+          <button className={doubtSel === '' ? 'on' : ''} onClick={() => pickDoubt('')}
+                  title="不按原因筛，出全部待审卡">全部<span className="n">{doubtTotal}</span></button>
+          {Object.entries(doubtCounts).map(([code, n]) => (
+            <button key={code} data-doubt={code} className={doubtSel === code ? 'on' : ''}
+                    onClick={() => pickDoubt(code)} title={`${code}${DOUBT_HINTS[code] ? '：' + DOUBT_HINTS[code] : ''}`}>
+              {doubtName(code)}<span className="n">{n}</span>
+            </button>
+          ))}
+          {(doubtCounts.occluded || 0) > 0 && (
+            <button className="rv-occl-all" onClick={confirmOccludedGroup} disabled={groupBusy}
+                    title="印章遮挡卡默认填整理本字（整理本此位空的判非字），字形不入库；一键把这一组全部按默认提交">
+              印章遮挡 · 整组确认 {doubtCounts.occluded} 格
+            </button>
+          )}
+        </div>
+      )}
       {gateNote && (
         <div className="muted rv-gate-note" style={{ color: 'var(--ochre)' }}>
           ⊘ {gateNote.n} 位被顺序闸挡下——它们的格线有<b>多种切法</b>还没 review。

@@ -112,6 +112,12 @@ export interface ReviewCardsResponse {
   blocked?: unknown[]
   /** 全书所有批次已裁过的字位数（后端跨批次去重）。skip_decided 开时这些卡已被跳过。 */
   n_decided?: number
+  truncated?: boolean
+  /** 请求带了 `doubt`（哪怕是 `*`）才有（overview#215）：码 → 卡数。口径 = 过了 only／
+   * 已裁去重／顺序闸、还没按 doubt 筛的那批，不受 `limit` 截断；`_none` = 一个码都没有。 */
+  doubt_counts?: Record<string, number>
+  /** 参与 doubt 计数的卡数（一张卡多个码只算一次）。 */
+  doubt_total?: number
 }
 
 /**
