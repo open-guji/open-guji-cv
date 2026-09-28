@@ -75,6 +75,11 @@ export function occludedGroupRows(cards: ReviewCard[], verdicts: Record<string, 
                   client_ts: v.ts ?? now, ...via })
       continue
     }
+    if (v.done === 'jiazhu') {   // 小注当正文（overview#265），与 reviewClass.verdictRow 同形
+      rows.push({ id: c.id, v: 'seg_defect', quality: 'truncated', reason: 'jiazhu_as_main',
+                  shape: v.shape || '', client_ts: v.ts ?? now, ...via })
+      continue
+    }
     if (!v.shape) { skipped.push(c.id); continue }
     rows.push({ id: c.id, v: 'confirm', shape: v.shape, no_glyph_lib: true,
                 client_ts: v.ts ?? now, ...via })

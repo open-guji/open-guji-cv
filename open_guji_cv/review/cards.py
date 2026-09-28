@@ -22,7 +22,7 @@ from ..core.spec import cell_key, page_key
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
-from .verdict_view import decided_cells
+from .verdict_view import decided_cells, defect_only_cells
 
 
 def parse_cells_spec(pages: str, book: str) -> set[str]:
@@ -168,6 +168,41 @@ def card_class(doubts, evidence: dict | None = None, char: str | None = None,
     return "other"
 
 
+# ── 对齐改字层的细项（overview#265，2026-09-28）──────────────────────────
+#
+# 用户审四庫 vol03「对齐改字层」：已裁 234 张里确认了字的 197 张有 195 张就等于整理本对位字，
+# 标「字形不完整」的集中在列尾第 20、21 格（列尾双行小注被当成了正文）。所以这一类再分三组：
+# `grid` = 网格一屏几十张、缺省采信整理本、人只点掉异常的；`tail` = 列尾（疑似小注），照旧逐张；
+# `manual` = 其余要逐张看的（带形近疑因、整理本空、或本书惯刻形 ≠ 整理本字——网格只标一个字，
+# 两个形二选一得逐张挑）。只对 `replace_align` 这一类分，其余类别没有细项。
+
+REPLACE_ALIGN_SUBS: tuple[tuple[str, str, str], ...] = (
+    ("grid", "网格（采信整理本）", "一屏几十张、缺省采信整理本字，只点掉异常的"),
+    ("tail", "列尾（疑似小注）", "列尾第 20 格起：多是双行小注被当成了正文，逐张审"),
+    ("manual", "逐张", "带形近疑因、整理本此位空、或本书惯刻形与整理本字不同，逐张审"),
+)
+REPLACE_ALIGN_SUB_KEYS = tuple(k for k, _l, _h in REPLACE_ALIGN_SUBS)
+#: 列尾从第几格算起（slot 从 1 数）。vol03 标「字形不完整」的集中在 20、21 格。
+TAIL_SLOT = 20
+_NEAR_FORM_CODES = frozenset({"near_form", "solo_confusable"})
+
+
+def replace_align_sub(slot: int, doubts, ref: dict | None, defect_before: bool = False) -> str:
+    """「对齐改字层」一张卡归哪个细项（`REPLACE_ALIGN_SUBS`）。纯函数。
+
+    `ref` 是卡片上的「整理本」一栏（`{"char", "form", ...}` 或 None）。列尾优先于其余判据：
+    列尾那组是「疑似小注」，人要带着这个问题去看。`defect_before`：人上次只标了切分缺陷、没给字
+    （`verdict_view.defect_only_cells`）——回到网格又是缺省采信，等于把人点掉的又默认收了，归逐张。
+    """
+    if slot >= TAIL_SLOT:
+        return "tail"
+    if defect_before or set(doubt_codes(doubts)) & _NEAR_FORM_CODES:
+        return "manual"
+    if not ref or not ref.get("char") or ref.get("form"):
+        return "manual"
+    return "grid"
+
+
 def parse_class_filter(cls: str) -> str | None:
     """`cls` 参数 → `None`（不分类，响应与改前一样）/ `"*"`（只计数）/ 某个类别键。"""
     c = (cls or "").strip()
@@ -202,7 +237,8 @@ def _align_ref_maps(st: ProductStore, book: str, pg: int) -> tuple[dict, dict]:
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True,
-          emb_out: dict | None = None, doubt: str = "", cls: str = "") -> dict:
+          emb_out: dict | None = None, doubt: str = "", cls: str = "",
+          cls_sub: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -238,9 +274,21 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     每张卡多一个 `cls` 字段；响应多 `class_counts`（类别 → 张数，口径与 `doubt_counts` 相同：
     过了 only／已裁去重／排除名单／顺序闸，不受 `limit` 截断）、`class_total` 与 `classes`
     （表：键／中文名／说明，按优先级排）。缺省 `""` 时这些都没有。
+
+    `cls_sub`（overview#265）：类别细项，目前只有「对齐改字层」有（`REPLACE_ALIGN_SUBS`：
+    grid 网格 / tail 列尾疑似小注 / manual 逐张）。给了 `cls` 时这一类的卡多一个 `cls_sub`
+    字段，响应多 `class_sub_counts`（`{类别: {细项: 张数}}`，口径同 `class_counts`）与
+    `class_subs`（表）；`cls_sub` 非空且 `cls=replace_align` 时只出这个细项。
     """
     sel = parse_doubt_filter(doubt)
     csel = parse_class_filter(cls)
+    ssel = (cls_sub or "").strip() or None
+    if ssel is not None and ssel not in REPLACE_ALIGN_SUB_KEYS:
+        raise ValueError(f"cls_sub 只认 {'/'.join(REPLACE_ALIGN_SUB_KEYS)}，得到 {cls_sub!r}")
+    if ssel is not None and csel != "replace_align":
+        raise ValueError("cls_sub 只对 cls=replace_align 生效")
+    class_sub_counts: dict[str, dict[str, int]] = {}
+    _defect_only: set[str] | None = None        # 用到「对齐改字层」细项时才读事件
     class_counts: dict[str, int] = {}
     n_cls = 0
     counting = sel is not None
@@ -333,17 +381,6 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                         continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
                 gc = golds.get(r.id)
-                _cls = None
-                if csel is not None:
-                    _lib = (mr.candidates[0][0] if mr and mr.candidates else None)
-                    _cls = card_class(r.doubts, r.evidence, r.char,
-                                      gc[0] if gc else coord.get(r.id), _lib)
-                    n_cls += 1
-                    class_counts[_cls] = class_counts.get(_cls, 0) + 1
-                    if full or (csel != "*" and _cls != csel):
-                        continue
-                groups, ai = _ai_view(dr)
-                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 ref = None
                 if gc:
                     pf = ledger.preferred_form(gc[0])
@@ -353,6 +390,25 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     pf = ledger.preferred_form(coord[r.id])
                     ref = {"char": coord[r.id], "op": "coord", "run": 1,
                            "form": pf if pf and pf != coord[r.id] else None}
+                _cls = _sub = None
+                if csel is not None:
+                    _lib = (mr.candidates[0][0] if mr and mr.candidates else None)
+                    _cls = card_class(r.doubts, r.evidence, r.char,
+                                      gc[0] if gc else coord.get(r.id), _lib)
+                    n_cls += 1
+                    class_counts[_cls] = class_counts.get(_cls, 0) + 1
+                    if _cls == "replace_align":
+                        if _defect_only is None:
+                            _defect_only = defect_only_cells(book)
+                        _sub = replace_align_sub(r.slot, r.doubts, ref, r.id in _defect_only)
+                        _sc = class_sub_counts.setdefault(_cls, {})
+                        _sc[_sub] = _sc.get(_sub, 0) + 1
+                    if full or (csel != "*" and _cls != csel):
+                        continue
+                    if ssel is not None and _sub != ssel:
+                        continue
+                groups, ai = _ai_view(dr)
+                key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 # 印章／污损遮挡（Step7 `occluded_gate`）：默认字 = 整理本字（坐标对位优先），
                 # 字形一律不入库；`char=None` 且 ref_blank = 整理本这一位是空格（假格），默认「非字」。
                 _occ = (r.evidence or {}).get("occluded")
@@ -382,6 +438,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "groups": groups,
                     "ai": ai,
                     **({"cls": _cls} if _cls is not None else {}),
+                    **({"cls_sub": _sub} if _sub is not None else {}),
                 })
                 if len(out) >= limit:
                     if not counting and csel is None:
@@ -398,6 +455,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
         res["class_counts"] = {k: class_counts[k] for k in CLASS_KEYS if class_counts.get(k)}
         res["class_total"] = n_cls
         res["classes"] = [{"key": k, "label": lb, "hint": h} for k, lb, h in REVIEW_CLASSES]
+        res["class_sub_counts"] = {c: {k: sc[k] for k in REPLACE_ALIGN_SUB_KEYS if sc.get(k)}
+                                   for c, sc in class_sub_counts.items()}
+        res["class_subs"] = {"replace_align": [{"key": k, "label": lb, "hint": h}
+                                               for k, lb, h in REPLACE_ALIGN_SUBS]}
     return _finish(book, bk, st, res, emb_out)
 
 

@@ -62,6 +62,26 @@ def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
     return out
 
 
+def defect_only_cells(book: str, log: EventLog | None = None) -> set[str]:
+    """最新一条定字裁决是**不带字的** `seg_defect`（只说了「这块图坏了」）的字位。
+
+    这些格不算裁过（见 `decided_cells`），还会回到待审队列。「对齐改字层」网格缺省采信整理本，
+    它们要是回到网格，人上次点掉的又成了默认采信——所以网格把它们让给逐张（overview#265）。
+    """
+    last: dict[str, bool] = {}
+    pre = f"{book}:"
+    try:
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
+    except FileNotFoundError:
+        return set()
+    for e in evs:
+        if e.kind not in DECIDED_KINDS or e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        p = e.payload or {}
+        last[e.target.key] = e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape")
+    return {k for k, v in last.items() if v}
+
+
 def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
 
@@ -85,8 +105,11 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
             out[e.target.key] = {"shape": "", "done": "damaged",
                                  "guess": p.get("guess") or ""}
         elif v == "seg_defect":
-            out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "done": p.get("quality") or "contaminated"}
+            # 「小注当正文」（overview#265）：事件照旧是 seg_defect，靠 `reason` 读回成前端那一档，
+            # 否则刷新后显示成「字形不完整」，人以为标错了又改一遍。
+            done = ("jiazhu" if p.get("reason") == "jiazhu_as_main"
+                    else p.get("quality") or "contaminated")
+            out[e.target.key] = {"shape": p.get("shape") or "", "done": done}
         elif v == "confirm":
             out[e.target.key] = {"shape": p.get("shape") or "",
                                  "done": "1",
