@@ -92,7 +92,8 @@ def test_fetch_adds_depth_only_on_shallow_repo(no_sleep):
     git = ShallowGit(local_rev="abc123", remote_rev="abc123")
     dc.deploy_check(Path("/fake/repo"), git_runner=git, sleeper=no_sleep)
     fetch_call = next(c for c in git.calls if c[0] == "fetch")
-    assert fetch_call == ["fetch", "--depth", "200", "origin", "+production:refs/remotes/origin/production"]
+    # K #236 统一成 ops/git_fetch.py：浅仓 depth 50，接不上再加深到 500（见 test_git_fetch_guard）
+    assert fetch_call == ["fetch", "--depth", "50", "origin", "+production:refs/remotes/origin/production"]
 
 
 def test_resolve_failed_when_rev_parse_errors(no_sleep):
