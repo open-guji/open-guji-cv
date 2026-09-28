@@ -17,6 +17,17 @@ from open_guji_cv.clustering import font_candidates, rare_panel
 from open_guji_cv.utils import batch_slice
 
 
+class _Cnn:
+    def __init__(self, ok): self.available = ok
+
+
+@pytest.fixture(autouse=True)
+def _no_cnn(monkeypatch):
+    """下面的老用例测的是「CNN 缺席、要用 HOG」这条分支；CNN 可用时预热直接跳过（见末尾用例）。"""
+    from open_guji_cv.clustering import cnn_candidates
+    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Cnn(False))
+
+
 @pytest.fixture(autouse=True)
 def _reset_state():
     rare_panel.FONT_INDEX_STATE["deferred"] = False
@@ -79,3 +90,19 @@ def test_warm_font_index_swallows_exceptions(monkeypatch):
 
     monkeypatch.setattr(font_candidates, "all_ready", _boom)
     rare_panel.warm_font_index()  # 不该抛
+
+
+def test_warm_font_index_skips_when_cnn_available(monkeypatch):
+    """服务器值守 2026-09-28（overview#237）：CNN 可用时 rare 不走 HOG，预热它只会白占
+    几 GB 内存把控制台顶在 cgroup 上限——直接跳过，不读盘也不建。"""
+    from open_guji_cv.clustering import cnn_candidates
+    calls = []
+    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Cnn(True))
+    monkeypatch.setattr(font_candidates, "all_ready", lambda cs, *a, **k: False)
+    monkeypatch.setattr(font_candidates, "warm", lambda charsets, *a, **k: calls.append(charsets))
+    monkeypatch.setattr(batch_slice, "batch_active", lambda *a, **k: False)
+
+    rare_panel.warm_font_index()
+
+    assert calls == []
+    assert rare_panel.FONT_INDEX_STATE == {"deferred": False, "ready": False}

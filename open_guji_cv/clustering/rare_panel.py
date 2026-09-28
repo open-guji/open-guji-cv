@@ -642,6 +642,14 @@ def warm_font_index() -> None:
         from .font_candidates import all_ready, warm
         from ..utils.batch_slice import batch_active
 
+        # 服务器值守 2026-09-28（overview#237）：CNN 可用时 `rare_for_batch` 根本不走
+        # HOG 字体索引（只有 checkpoint 缺席才用它当唯一候选源），预热它纯属白占——
+        # 大表现建峰值 5.58 GB，读盘后也常驻 ~2.5 GB，把控制台顶在 cgroup 上限被节流。
+        from .cnn_candidates import shared
+        if shared().available:
+            FONT_INDEX_STATE["deferred"] = False
+            return
+
         charsets = list(_rare_charsets())
         if not all_ready(charsets) and batch_active():
             FONT_INDEX_STATE["deferred"] = True

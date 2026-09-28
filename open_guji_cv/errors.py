@@ -45,5 +45,12 @@ class Conflict(GujiError):
     """与既有状态冲突（如批次 id 已存在）。"""
 
 
+class IndexNotBuilt(GujiError):
+    """大模板索引（字体 HOG／CNN embedding）磁盘上没有，而本进程禁止现建
+    （`GUJI_FORBID_INLINE_INDEX=1`，控制台用）——现建要几 GB 内存、几十分钟，
+    放进控制台会把整个平台拖死（2026-09-28 服务器实测：HOG 大表峰值 5.58 GB）。
+    该由离线命令预建：`guji cache build-rare-index`／`build-font-index`。"""
+
+
 class EncodeFailed(GujiError):
     """图像编码失败——这是真的坏了，不是「没有」。"""
