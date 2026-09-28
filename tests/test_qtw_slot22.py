@@ -60,9 +60,12 @@ def test_split_column_loses_the_false_hint(case):
 
 
 @pytest.mark.parametrize("case", CASES["gate_keep"], ids=lambda c: c["id"])
-def test_real_extra_char_keeps_its_hint(case):
+def test_real_raised_column_keeps_its_hint(case):
+    """四庫 vol01 p50c5「上諭」真抬头：缺省口径（不剔）下 hint 照旧是 1。
+    开了剔端它会掉成 0——这正是开关缺省关、只给全唐文开的原因（见 column_gate._ink_span）。"""
     band, prof = _band(case)
-    assert _hint(_ink_span(band, prof, case["period"], P), case) == case["hint"]
+    p = P if case["trim"] else P_OFF
+    assert _hint(_ink_span(band, prof, case["period"], p), case) == case["hint"]
 
 
 def _synthetic_band(runs, w=300, h=4600):

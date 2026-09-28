@@ -29,6 +29,14 @@ workspace/                 一个最小的工作区（布局同 core/workspace.p
   corpus/reference.txt     17 KB 小语料，从 corpus/ 复制
 ```
 
+```
+qtw_slot22/                overview#202：全唐文列末框线成格 / 「二」被横切（test_qtw_slot22.py）
+  cols/*.png               4 条真列图（二值），3 条横切例 + 四庫 vol01 p50c5 真抬头列
+  cases.json               每例的几何量与标签：split 3 / gate_keep 1 / tail 30（框线 13、真「一」等 17）
+```
+由 `scripts/experiments/qtw_slot22/build_fixtures.py` 从沙箱工作区抽出，每例目检过；
+抽样清单（沙箱路径）在 `scripts/experiments/qtw_slot22/spec.json`。
+
 为什么复制而不是直接指 `data/` 和 `corpus/`：那两个是生产数据，会换批、会
 重建；测试数据跟着它们变，就又回到「数据一变测试就红」。复制过来一共 1.2 MB，
 换来的是这批测试十年不动。

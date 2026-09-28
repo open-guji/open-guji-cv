@@ -5,7 +5,8 @@
 SPEC.json（人手写，逐例目检过才进）：
   {"split": [{"ws": ".../qtw-new", "book": "v006", "page": 69, "col": 7, "slot": 13, "char": "二",
               "d_id": "v006:69:7:13"}, ...],          # 改后整字那一格（slot 为改后编号）
-   "gate_keep": [{"ws": ..., "book": ..., "page": ..., "col": ..., "why": "..."}],   # 真多一字、hint 必须留着
+   "gate_keep": [{"ws": ..., "book": ..., "page": ..., "col": ..., "trim": false, "why": "..."}],
+                                                     # 真抬头列：在该书口径（trim 开/关）下 hint 必须留着
    "tail": [{"ws": ..., "book": ..., "id": "v006:2:1:22", "frame": true, "why": "..."}]}
 
 产出：
@@ -70,7 +71,8 @@ def main(spec_path: str) -> None:
         ws, book, page, col = s["ws"], s["book"], s["page"], s["col"]
         _, gc = _gate(ws, book, page, col)
         cases["gate_keep"].append(dict(id=f"{book}:{page}:{col}", png=_save_col(ws, book, page, col),
-                                       hint=gc["n_raised_hint"], why=s.get("why", ""),
+                                       hint=gc["n_raised_hint"], trim=bool(s.get("trim", False)),
+                                       why=s.get("why", ""),
                                        **_col_meta(ws, book, page, col)))
     for s in spec.get("tail", []):
         ws, book = s["ws"], s["book"]
