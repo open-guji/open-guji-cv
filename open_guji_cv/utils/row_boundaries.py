@@ -478,6 +478,9 @@ class RowBoundaryResult:
     """内容窗口 `[x_lo, x_hi)`：列图两侧的界行/版框竖线剥掉之后剩下的范围。"""
     cut_candidates: list[CutPointCandidates] = field(default_factory=list)
     """直线格线穿墨的 char–char 相邻处的全部候选切线；下游可据此选切分方案。"""
+    bottom_bar_y: float | None = None
+    """列图里 `border_bottom` 之上认出的下版框线上沿（`find_bottom_frame_bar`）；
+    认出来了 DP 的下界就是它，没认出来为 None（下界照旧用 `border_bottom`）。"""
 
 
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
@@ -1357,6 +1360,74 @@ def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio
     return True
 
 
+# ── 列里还躺着的下版框线（2026-09-28，overview#266）────────────────────────
+# vol03 实测：Step1 的下版框有两类落点不在内框线上——双边框落在**外框**（内框在其上
+# 20~30px，同 vol02 未配 `frame_layers` 之前，cv-segmentation §17），以及 p25/p43/p47/p48
+# 这类落在**框下白纸**上（内框在其上 45~77px）。Step2 按一层框只剥掉 border_bottom 那一道，
+# 真内框就留在列图里、落进 DP 的末格：末格被撑到 130~200px 把框线包进去（人裁
+# 「contaminated」），DP 把多出来的高度摊给末两三格、第 20/21 格切线错相位吃进下一字的首笔；
+# Step4 把条带开到 border_bottom 再在它 ±40 行里找框，找不到这条线，框墨就进了图块。
+# 这里只认**又满又宽、下面干净**的线（宁可漏认，不可把末字的底横当框吃掉）：
+BOTTOM_BAR_SEARCH = 1.0    # 只在 border_bottom 以上这么多 period 内找
+BOTTOM_BAR_ROW_ON = 0.5    # 框线的行：行墨 ≥ 此（占内容窗口宽）
+BOTTOM_BAR_PEAK = 0.85     # 且至少有一行 ≥ 此——「一」「上」的底横 ≤0.8，满宽的只有框
+BOTTOM_BAR_THICK = (3, 30)  # 线厚（行）
+BOTTOM_BAR_CLEAN = 0.1     # 线下（到 border_bottom）行墨都 < 此：线下没有字
+BOTTOM_BAR_PAIR_GAP = 35   # 双边框：再往上 ≤ 这么多行、中间干净的一道也算框（内框）。vol03 实测内外框距 14~30……
+BOTTOM_BAR_PAIR_PEAK = 0.6  # ……内框常印得细、断，峰值门槛放到这里，但须两头顶到墙
+BOTTOM_BAR_PAIR_SPAN = 0.83  # 墨的横向跨度 ≥ 此×内容窗口宽（框线贴墙：p42c4 内框 0.85~0.86；同列末字「一」0.78）
+BOTTOM_BAR_MIN_CELL = 0.3  # 框线上沿离倒数第二条格线至少这么多 period，否则不认（末格会被压扁）
+BOTTOM_BAR_MIN_SHIFT = 20  # 框线上沿比 border_bottom 高出不到这么多行就不挪下界。border_bottom
+                           # 本来就放了 16 行余量（column_gate.bottom_slack），框在余量里是常态
+
+
+def find_bottom_frame_bar(col_gray: np.ndarray, x_lo: int, x_hi: int,
+                          border_bottom: float, period: float,
+                          ink_threshold: int = 128) -> float | None:
+    """`border_bottom` 之上还躺着的下版框线（内框）的上沿 y；没有返回 None。
+
+    自下而上：最下一道「满宽」线（`BOTTOM_BAR_PEAK`）须线下到 `border_bottom` 干净；
+    它上方 `BOTTOM_BAR_PAIR_GAP` 行内若还有一道贴墙的线、中间干净，就是双边框的内框，
+    取内框。判据门槛与失败案例见上方常量。"""
+    ink = col_gray[:, x_lo:x_hi] < ink_threshold
+    if ink.shape[1] < 10:
+        return None
+    r = ink.mean(axis=1)
+    h = len(r)
+    lo = int(max(0, border_bottom - BOTTOM_BAR_SEARCH * period))
+    hi = min(h, int(border_bottom) + 1)
+    # 统一成半开区间 [a, b)（_runs_of 给的是止含）
+    runs = [(a + lo, b + lo + 1) for a, b in _runs_of(r[lo:hi] >= BOTTOM_BAR_ROW_ON)]
+
+    def thick_ok(a: int, b: int) -> bool:
+        return BOTTOM_BAR_THICK[0] <= b - a <= BOTTOM_BAR_THICK[1]
+
+    def clean(a: int, b: int) -> bool:
+        return b <= a or float(r[a:b].max()) < BOTTOM_BAR_CLEAN
+
+    def span(a: int, b: int) -> float:
+        xs = np.flatnonzero(ink[a:b].any(axis=0))
+        return 0.0 if xs.size == 0 else (xs[-1] - xs[0] + 1) / ink.shape[1]
+
+    main = [i for i, (a, b) in enumerate(runs) if thick_ok(a, b) and r[a:b].max() >= BOTTOM_BAR_PEAK]
+    if not main:
+        return None
+    k = main[-1]
+    a, b = runs[k]
+    if not clean(b + 3, hi):                        # 线心之下还有字：不是框（或框下还压着字）
+        return None
+    top = a
+    for j in range(k - 1, -1, -1):
+        pa, pb = runs[j]
+        if top - pb > BOTTOM_BAR_PAIR_GAP:
+            break
+        if not (2 <= pb - pa <= BOTTOM_BAR_THICK[1] and r[pa:pb].max() >= BOTTOM_BAR_PAIR_PEAK
+                and span(pa, pb) >= BOTTOM_BAR_PAIR_SPAN and clean(pb + 3, top - 2)):
+            break
+        top = pa
+    return float(top)
+
+
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
@@ -1369,6 +1440,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_judge=None,
                     pinned_cuts: "dict[int, float] | None" = None,
                     forced_solo: "set[int] | None" = None,
+                    detect_bottom_bar: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1434,6 +1506,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       跨度撑满），已被雙行段收走的格不动；缝取右半墨迹左缘。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
+    - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
+      DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1456,12 +1530,35 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     dst_w = x_hi - x_lo
     row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
 
+    bar_y = (find_bottom_frame_bar(col_gray, x_lo, x_hi, border_bottom, period, ink_threshold)
+             if detect_bottom_bar else None)
+    # 框线已在 border_bottom 上（或贴着它）就不必挪：只有真高出一截才换下界
+    if bar_y is not None and bar_y > border_bottom - BOTTOM_BAR_MIN_SHIFT:
+        bar_y = None
     result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
                                 n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
+    if bar_y is not None:
+        barred = fit_row_boundaries(row_proj, dst_w, border_top, bar_y, period,
+                                    n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
+        # 下界收上来之后，只许列尾那几条格线动。再往上也动了，说明这列的字数装不进框线以内的高度、
+        # DP 是在列中间硬挤出一格（tests/fixtures 真页 c3：框线占着第 21 格，收上来后第 10~12 格
+        # 切进字里）——这种列退回原下界的解，只把末格下沿收到框线上沿。
+        # 抬头列整列错一格（vol03 25:3/43:1：框线假字占了第 21 格、全列上移一格）也在这里退回。
+        if barred is not None and (result is None or len(barred.boundaries) != len(result.boundaries) or all(
+                abs(a - b) <= 2 for a, b in zip(barred.boundaries[:-3], result.boundaries[:-3]))):
+            result = barred
     if result is None:
         return None
     result.content_x = (float(x_lo), float(x_hi))
     bounds = result.boundaries
+    if bar_y is not None and bar_y - bounds[-2] < BOTTOM_BAR_MIN_CELL * period:
+        bar_y = None                                # 框线离倒数第二条格线太近，末格装不下一个字：不认
+    result.bottom_bar_y = bar_y
+    if bar_y is not None:
+        # 末格下沿对齐框线上沿（上下都对齐）：往下补——DP 的尾裁（`_ink_end`）会停在末字细尾
+        # （「甲」的竖、「存」的钩，行墨 0.06~0.1）里的低墨行上，p5c2 / p47c1 实测差 23~31 行；
+        # 往上收——退回原下界解的列，末格本来包着框线
+        bounds[-1] = bar_y
     # 人拖过的切线钉住（2026-09-26，feedback/lookup.resolved_pins）：slot_above 下沿那条格线换成人给的 y。
     # 只在夹在上下两条格线之间（各留 PIN_MARGIN）且离 DP 那条不超过一格时才钉，否则人裁对的
     # 已不是同一条格线（格数/相位变了），不套。
