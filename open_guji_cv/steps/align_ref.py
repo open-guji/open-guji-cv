@@ -311,20 +311,9 @@ def rrf_carrier(pixel: list, cnn: list[str], k: int = 60) -> str | None:
     return min((*rp, *rc), key=lambda ch: (-score(ch), rc.get(ch, big), rp.get(ch, big)))
 
 
-def slots_from_evidence(match, ocr, rare: dict[str, list[str]] | None = None
-                        ) -> list[tuple[int, int, str, str]]:
-    """`glyph_match` + `ocr_candidates`（+ 可选 `rare_candidates`）→ 对齐要的 slots，不碰 Step6。
-
-    每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
-    `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
-    「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
-    但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
-
-    `rare`（`rare_topk_map` 的输出，`AlignRefParams.rare_topk` 开了才给）：库判
-    `same` 以外的位，库那一路的首选换成「库候选 ∪ 5-b 前 k 名」RRF 融合的首位
-    （`rrf_carrier`），OCR 比较照旧。见模块头「2026-09-28 5-b 候选并入锚定载体」。
-    `rare` 为空时与加这个参数之前逐位相同。
-    """
+def carrier_fn(match, ocr, rare: dict[str, list[str]] | None = None):
+    """字位 id → 锚定载体字（`slots_from_evidence` 的逐位取字规则，单独拿出来给
+    坐标对位 `align_ref_coord` 复用；规则见 `slots_from_evidence` 文档字符串）。"""
     mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
     omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
     rare = rare or {}
@@ -343,6 +332,24 @@ def slots_from_evidence(match, ocr, rare: dict[str, list[str]] | None = None
         if o and o.topk and o.topk[0][1] > conf:
             ch = o.topk[0][0]
         return ch
+    return _best
+
+
+def slots_from_evidence(match, ocr, rare: dict[str, list[str]] | None = None
+                        ) -> list[tuple[int, int, str, str]]:
+    """`glyph_match` + `ocr_candidates`（+ 可选 `rare_candidates`）→ 对齐要的 slots，不碰 Step6。
+
+    每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
+    `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
+    「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
+    但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
+
+    `rare`（`rare_topk_map` 的输出，`AlignRefParams.rare_topk` 开了才给）：库判
+    `same` 以外的位，库那一路的首选换成「库候选 ∪ 5-b 前 k 名」RRF 融合的首位
+    （`rrf_carrier`），OCR 比较照旧。见模块头「2026-09-28 5-b 候选并入锚定载体」。
+    `rare` 为空时与加这个参数之前逐位相同。
+    """
+    _best = carrier_fn(match, ocr, rare)
 
     slots: list[tuple[int, int, str, str]] = []
     src = match if match is not None else ocr
@@ -440,6 +447,17 @@ class AlignRefParams(BaseModel):
     也不进参数哈希（见 `_drop_off_rare`），四庫等书产物与加这个字段之前逐字节相同。
     书 yaml `params: {align_ref: {rare_topk: 5}}` 打开。实测见模块头同日一节。"""
 
+    coord: str = "auto"
+    """按坐标对位（2026-09-28，D 道 overview#195；见 `steps/align_ref_coord` 模块头）。
+
+    - ``"auto"``（缺省）：整理本是**逐列分行**的才做——书 yaml `references[0]` 标了
+      `line_is_column: true`，或语料本身 ≥95% 的非空行字位数不超过每列格数
+      （`chars_per_line`，+1 容抬头）。四庫光盘版满足（一行 = 刻本一列），北行日錄
+      校對本、全唐文这类整段录入的整理本不满足，自动不做。
+    - ``"on"`` / ``"off"``：强制。
+
+    结果另记在 `PageAlignRef.coord`，**不改现役 `chars`、不进任何准入通道**。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
@@ -486,8 +504,8 @@ def _corpus_index(path: str):
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
+        id="align_ref", title="Step5-d 整理本对齐", version="2.1", unit="cell",   # 2.1：按坐标对位 coord（overview#195）
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
         params=AlignRefParams,
@@ -498,7 +516,8 @@ class AlignRefStep(Step):
                    # 模块的算法——`report.witness` 装载证人/排序，`clustering.variants`
                    # 提供归一表。改了它们，`align_ref` 的非 legacy 产物也该判过期。
                    "open_guji_cv.report.witness",
-                   "open_guji_cv.clustering.variants"),
+                   "open_guji_cv.clustering.variants",
+                   "open_guji_cv.steps.align_ref_coord"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -508,6 +527,17 @@ class AlignRefStep(Step):
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
+        out = self._run_legacy(ctx, p, page, match, ocr, rare)
+        if _coord_enabled(p, ctx.book) and match is not None:
+            attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
+                         _opt(ctx, "cells", page), p.corpus)
+        return out
+
+    def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
+                    match: PageMatch | None, ocr: PageOcr | None,
+                    rare: dict | None) -> dict[str, BaseModel]:
+        """8-gram 锚定 + difflib 的现役对位（2026-09-28 从 `run_page` 原样拆出，
+        一行没改，坐标对位在 `run_page` 里接在它后面）。"""
         if match is None and ocr is None:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -946,3 +976,116 @@ def align_ref_summary(book_id: str, pages: list[int] | None = None,
         "n_pages": n_pages, "n_anchored": n_anchored, "n_missing": n_missing,
         "n_not_anchored": n_pages - n_anchored - n_missing,
     }
+
+
+# ── 按坐标对位（overview#195，算法见 `steps/align_ref_coord` 模块头）────────
+def _coord_enabled(p: "AlignRefParams", book) -> bool:
+    if p.coord == "off" or p.witness_strategy != "legacy":
+        return False
+    if p.coord == "on":
+        return True
+    refs = getattr(book, "references", None) or []
+    if refs and refs[0].get("line_is_column"):
+        return True
+    return _corpus_line_is_column(p.corpus, int(getattr(book, "chars_per_line", None) or 0))
+
+
+@lru_cache(maxsize=8)
+def _corpus_line_is_column(path: str, cap: int) -> bool:
+    """语料是不是逐列分行的：≥95% 的非空行字位数 ≤ cap+1（+1 容抬头）。"""
+    if cap <= 0:
+        return False
+    from .align_ref_coord import ref_lines
+    lines, _ = ref_lines(path)
+    if len(lines) < 100:
+        return False
+    if any(ln.leaf_start for ln in lines[:50]):
+        return True                     # 逐列本（`#@` 半叶头）
+    ok = sum(1 for ln in lines if ln.n <= cap + 1)
+    return ok >= 0.95 * len(lines)
+
+
+def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
+                 cells, corpus: str) -> None:
+    """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
+    `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。"""
+    from . import align_ref_coord as C
+    if cells is None:
+        res.coord_note = "没有 Step3 字格产物（cells）"
+        return
+    lines, starts = C.ref_lines(corpus)
+    text = _corpus_text(corpus)
+    if not lines or not text:
+        res.coord_note = "整理本读不到"
+        return
+    carrier = carrier_fn(match, ocr, rare)
+    cols = [cc for cc in sorted(match.columns, key=lambda c: c.col) if cc.ok and cc.chars]
+    carriers = [(cc.col, "".join(carrier(r.id) or "" for r in sort_by_reading(cc.chars)))
+                for cc in cols]
+    query = "".join(c for _col, c in carriers)
+    off, votes, _ru = _raw_vote_clusters(query, _corpus_index(corpus))
+    if off is None or votes < 2:
+        off, votes = C.scan_offset(query, text)
+    if off is None:
+        res.coord_note = "定不了页在整理本里的位置（8-gram/4-gram 都没命中）"
+        return
+    grid = bool(lines) and any(ln.leaf_start for ln in lines[:50])
+    l0 = C.line_at(starts, max(0, off))
+    win = C.COORD_WINDOW_LINES + (9 if grid else 0)
+    pm = C.map_columns(carriers, lines, l0 - win, l0 + len(carriers) + win, grid=grid)
+    if pm.base is None:
+        res.coord_note = pm.note
+        return
+    from ..products.kinds.recog import CoordRec
+    legacy = {c.id: c for c in res.chars} if res.anchored else {}
+    same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
+    work = []
+    for cc in cols:
+        li = pm.col_line.get(cc.col)
+        if li is None:
+            res.coord_fallback[str(cc.col)] = "列行对应不成立"
+            continue
+        units = C.column_units(book, page, cc.col, cc, cells.column(cc.col), carrier)
+        if not units:
+            res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
+            continue
+        work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
+    # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
+    # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
+    bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
+    if grid and bs:
+        b_page = bs[len(bs) // 2]
+        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page))
+                for cc, u, ln, r in work]
+    for cc, _units, _ln, r in work:
+        if not r.ok:
+            res.coord_fallback[str(cc.col)] = r.note
+            continue
+        why = _coord_conflict(r.recs, legacy, same)
+        if why:
+            res.coord_fallback[str(cc.col)] = why
+            continue
+        res.coord_cols.append(cc.col)
+        res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
+                         for i, sl, sub, ch, g in r.recs)
+
+
+def _coord_conflict(recs, legacy: dict, same: dict) -> str:
+    """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
+
+    vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
+    **全部是整列错一位**——光盘版这一行的分行比刻本多/少一个字（行首或行尾的字
+    归了邻行），几何上照样配得上（多出来的那格被当成空格位），字却整列错开一格。
+    这些格的现役对位几乎全是 `equal`（认出来的字与整理本逐字相同），所以：
+
+    - 与现役 `equal` 位的字不同 → 退回（现役 `replace` 位本身存疑，不作数）；
+    - 被判成空格位的格，库却以 `same` 认下了一个字 → 退回（锚不上的页没有现役
+      对位可比，靠这条挡同一种错位）。"""
+    for i, _sl, _sub, ch, _g in recs:
+        lg = legacy.get(i)
+        if lg is not None and lg.align_op == "equal" and lg.align_char != ch:
+            return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lg.align_char}）"
+        if ch == "" and i in same:
+            return f"空格位上库认出了字（{i} 库 same {same[i]}）"
+    return ""
+

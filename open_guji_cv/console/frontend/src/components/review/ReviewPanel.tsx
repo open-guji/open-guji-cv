@@ -84,6 +84,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // 发现不对时点别的候选/输入框覆盖即可，跟人工选完再改主意的路径一样。
     for (const c of d.cards) {
       if (verdicts.current[c.id]) continue
+      // 印章遮挡格（overview#195）：默认整理本字、字形不入库；假格（整理本空格位）默认「非字」
+      if (c.occluded) {
+        verdicts.current[c.id] = c.occluded.ref_blank || !c.occluded.char
+          ? (c.occluded.ref_blank ? { shape: '', done: 'non', ts: Date.now() } : { shape: '', done: '', ts: Date.now(), noGlyphLib: true })
+          : { shape: c.occluded.char, done: '1', ts: Date.now(), noGlyphLib: true }
+        if (verdicts.current[c.id].done) touched.current.add(c.id)
+        continue
+      }
       // 借库书（`c.first`）没有 Step6-AI 默认时用 CNN／融合首选（defaultShape，2026-09-27）
       const def = defaultShape(c)
       if (!def) continue
