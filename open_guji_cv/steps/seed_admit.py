@@ -180,7 +180,10 @@ class SeedAdmitParams(BaseModel):
     - 库无护栏（`guard is None`）；本格没有任何流程内疑问（`near_form`／`replace_align`／
       `context_vs_ref`／`form_open`／`iron_vs_ref` …）——**整理本说了不同（replace）一律不放**；
     - 只当兜底：放在铁证之后、`if not ok` 里，只新增放行，不改动任何已放行格。
-    分档数字与为什么缺省关，见 overview `进度/inbox/D-放宽候选/` 的 done 单。"""
+    **缺省关、不推荐开**（四册 vol01–04 实测，open-guji-core/overview#59）：这个池子里有人裁的
+    109 格库 top1 错 94 格——真字多半库里没收，cov 0.95~0.98 只是「库里最像的那个」；最窄的
+    候选档（cov≥0.98、领先≥0.03）四册合计只有 130 格，全审 0 错也压不到 95% 上界 ≤1%。
+    留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
     lib_confident_gap: float = 0.0
     """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
