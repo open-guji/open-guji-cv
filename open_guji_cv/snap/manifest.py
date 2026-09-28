@@ -83,8 +83,8 @@ def validate(m: dict) -> dict:
     if m["mode"] == "attach-only":
         if m["steps"] or m["files"]:
             raise ManifestError("attach-only 包不能带步与产物")
-        if not m.get("attachments"):
-            raise ManifestError("attach-only 包至少要有一个附件")
+        if not m.get("attachments") and not m.get("indexes"):
+            raise ManifestError("attach-only 包至少要有一个附件或模板索引")
     elif not m["steps"]:
         raise ManifestError("产物包至少要有一步（只带附件请用 attach-only）")
     if not _SAFE.match(m["book"]):
@@ -115,6 +115,13 @@ def validate(m: dict) -> dict:
                 raise ManifestError(f"附件分块不在 attach/ 下：{p}")
         if not a.get("parts") and not a.get("url"):
             raise ManifestError(f"附件既没有分块也没有 url：{a.get('dest')}")
+    from .indexes import check_entry
+    seen = set()
+    for e in m.get("indexes", []):
+        check_entry(e)
+        if (e["kind"], e["key"]) in seen:
+            raise ManifestError(f"索引重复：{e['kind']}/{e['key']}")
+        seen.add((e["kind"], e["key"]))
     return m
 
 
