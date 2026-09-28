@@ -1,0 +1,8288 @@
+{
+ "rows": [
+  {
+   "id": "new001",
+   "sec": "new",
+   "a": "上",
+   "b": "𠀉",
+   "lbl_a": "lb:上",
+   "lbl_b": "lb:𠀉",
+   "cells": 15,
+   "tags": [],
+   "basis": "說文：𠀉為上之古文，音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "季𩪠葉先生慿平閤【?】監丞尢監簿袤訪及",
+    "中猶有𣄺縣本芒敬【?】二縣地有芒山與揚",
+    "高帝隱於此漢更敬【?】爲太𠀉腖寔嘗爲長"
+   ],
+   "rel_a": [
+    {
+     "char": "二",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:二"
+    },
+    {
+     "char": "尚",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:尚"
+    },
+    {
+     "char": "𠄞",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠄞"
+    },
+    {
+     "char": "丄",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:丄"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "丘",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:丘"
+    }
+   ],
+   "pics_a": [
+    "c:上:bxgb:10:16:1",
+    "c:上:bxgb:11:16:17",
+    "c:上:bxgb:12:18:9",
+    "c:上:bxgb:13:6:8"
+   ],
+   "pics_b": [
+    "c:𠀉:v2:bxgb:16:17:17",
+    "c:𠀉:v2:bxgb:16:3:12",
+    "c:𠀉:v2:bxgb:21:7:16",
+    "c:𠀉:v2:bxgb:22:19:16"
+   ],
+   "font_a": null,
+   "font_b": null,
+   "n_real_a": 4,
+   "n_real_b": 4,
+   "pageIdx": 1
+  },
+  {
+   "id": "new002",
+   "sec": "new",
+   "a": "果",
+   "b": "𭩱",
+   "lbl_a": "lb:果",
+   "lbl_b": "lb:𭩱",
+   "cells": 6,
+   "tags": [],
+   "basis": "《中華字海》收𭩱為果之異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "二十二里至金𣐩園【?】木甚多馬行十八里",
+    "盡讀枏上井石有張【?】老驢迹四遇一夫自",
+    "之屬其次皆低釘細【?】𠊓設王壺以貯餘酒"
+   ],
+   "rel_a": [
+    {
+     "char": "祼",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:祼"
+    },
+    {
+     "char": "臝",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:臝"
+    },
+    {
+     "char": "菓",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:菓"
+    },
+    {
+     "char": "裏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:裏"
+    },
+    {
+     "char": "裸",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:裸"
+    },
+    {
+     "char": "𣐭",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣐭"
+    },
+    {
+     "char": "𤬁",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𤬁"
+    },
+    {
+     "char": "婐",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:婐"
+    },
+    {
+     "char": "惈",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:惈"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:果:bxgb:19:9:16"
+   ],
+   "pics_b": [
+    "c:𭩱:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new003",
+   "sec": "new",
+   "a": "呼",
+   "b": "𠰜",
+   "lbl_a": "lb:呼",
+   "lbl_b": "lb:𠰜",
+   "cells": 4,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》𠰜為呼異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "頭十五里一行人勸【?】而行且感神賜之如",
+    "三節人東北向再拜【?】噪升廳占位東向南",
+    "貌甚偉衣冠亦𧂨楚【?】問之云姓馬有佼尉"
+   ],
+   "rel_a": [
+    {
+     "char": "唿",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:唿"
+    },
+    {
+     "char": "嘑",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:嘑"
+    },
+    {
+     "char": "歑",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:歑"
+    },
+    {
+     "char": "罅",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:罅"
+    },
+    {
+     "char": "虖",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:虖"
+    },
+    {
+     "char": "詨",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:詨"
+    },
+    {
+     "char": "謼",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:謼"
+    },
+    {
+     "char": "𠰗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠰗"
+    },
+    {
+     "char": "𡀛",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡀛"
+    },
+    {
+     "char": "𢧶",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢧶"
+    },
+    {
+     "char": "𧦝",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧦝"
+    },
+    {
+     "char": "吁",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:吁"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𠱫",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𠱫"
+    }
+   ],
+   "pics_a": [
+    "c:呼:font:iming"
+   ],
+   "pics_b": [
+    "c:𠰜:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new004",
+   "sec": "new",
+   "a": "果",
+   "b": "𣐩",
+   "lbl_a": "lb:果",
+   "lbl_b": "lb:𣐩",
+   "cells": 3,
+   "tags": [],
+   "basis": "據學識𣐩係果異體音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "入又二十二里至金【?】園𭩱木甚多馬行十",
+    "應人各與少香茶紅【?】子或跪或喏跪者胡",
+    "日己酉晴風止賜酒【?】口宣云已休候館將"
+   ],
+   "rel_a": [
+    {
+     "char": "祼",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:祼"
+    },
+    {
+     "char": "臝",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:臝"
+    },
+    {
+     "char": "菓",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:菓"
+    },
+    {
+     "char": "裏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:裏"
+    },
+    {
+     "char": "裸",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:裸"
+    },
+    {
+     "char": "𣐭",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣐭"
+    },
+    {
+     "char": "𤬁",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𤬁"
+    },
+    {
+     "char": "婐",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:婐"
+    },
+    {
+     "char": "惈",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:惈"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:果:bxgb:19:9:16"
+   ],
+   "pics_b": [
+    "c:𣐩:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new005",
+   "sec": "new",
+   "a": "三",
+   "b": "𠀉",
+   "lbl_a": "lb:三",
+   "lbl_b": "lb:𠀉",
+   "cells": 3,
+   "tags": [],
+   "basis": "《康熙字典》一部收𠀉為三之古文豎書，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "縣故城在東又有癸【?】齋桓介所會也承應",
+    "門金改曰玄武新封【?】門舊曰安遠金改曰",
+    "十七日戊戌晴謁閭【?】監丞欲問坑治之詐"
+   ],
+   "rel_a": [
+    {
+     "char": "叁",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:叁"
+    },
+    {
+     "char": "参",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:参"
+    },
+    {
+     "char": "參",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:參"
+    },
+    {
+     "char": "叄",
+     "srcs": [
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:叄"
+    },
+    {
+     "char": "弎",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:弎"
+    },
+    {
+     "char": "蓡",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:蓡"
+    },
+    {
+     "char": "𢦘",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢦘"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "丘",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:丘"
+    }
+   ],
+   "pics_a": [
+    "c:三:bxgb:10:18:7",
+    "c:三:bxgb:10:3:5",
+    "c:三:bxgb:11:14:8",
+    "c:三:bxgb:11:16:9"
+   ],
+   "pics_b": [
+    "c:𠀉:v2:bxgb:16:17:17",
+    "c:𠀉:v2:bxgb:16:3:12",
+    "c:𠀉:v2:bxgb:21:7:16",
+    "c:𠀉:v2:bxgb:22:19:16"
+   ],
+   "font_a": null,
+   "font_b": null,
+   "n_real_a": 4,
+   "n_real_b": 4,
+   "pageIdx": 1
+  },
+  {
+   "id": "new006",
+   "sec": "new",
+   "a": "學",
+   "b": "𫝯",
+   "lbl_a": "lb:學",
+   "lbl_b": "lb:𫝯",
+   "cells": 2,
+   "tags": [],
+   "basis": "《中華字海》收𫝯為學之異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "有小門𠊓曰教女直【?】州樓曰頄天軍驛在",
+    "華子庸不値㹵入郡【?】直舍省景山兄周教"
+   ],
+   "rel_a": [
+    {
+     "char": "教",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:教"
+    },
+    {
+     "char": "斅",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:斅"
+    },
+    {
+     "char": "斈",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:斈"
+    },
+    {
+     "char": "𡕕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡕕"
+    },
+    {
+     "char": "𢻯",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢻯"
+    },
+    {
+     "char": "𣁃",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣁃"
+    },
+    {
+     "char": "学",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:学"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:學:font:iming"
+   ],
+   "pics_b": [
+    "c:𫝯:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new007",
+   "sec": "new",
+   "a": "䇿",
+   "b": "策",
+   "lbl_a": "lb:䇿",
+   "lbl_b": "lb:策",
+   "cells": 1,
+   "tags": [],
+   "basis": "《康熙字典》《漢語大字典》皆收䇿為策之異體字",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "經故生𢕯山水秀發【?】杖縦觀聞有趙侯廟"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "筞",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:筞"
+    },
+    {
+     "char": "筴",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:筴"
+    },
+    {
+     "char": "箣",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:箣"
+    },
+    {
+     "char": "萗",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:萗"
+    },
+    {
+     "char": "赦",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:赦"
+    },
+    {
+     "char": "𠞁",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠞁"
+    },
+    {
+     "char": "𠞦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠞦"
+    },
+    {
+     "char": "𠷽",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠷽"
+    },
+    {
+     "char": "𢄆",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢄆"
+    },
+    {
+     "char": "𥫪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥫪"
+    },
+    {
+     "char": "𥬰",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥬰"
+    },
+    {
+     "char": "𥮫",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥮫"
+    },
+    {
+     "char": "𥮮",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥮮"
+    },
+    {
+     "char": "𥯻",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥯻"
+    },
+    {
+     "char": "𥳯",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥳯"
+    },
+    {
+     "char": "䇲",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:䇲"
+    },
+    {
+     "char": "册",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:册"
+    },
+    {
+     "char": "敕",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:敕"
+    },
+    {
+     "char": "笧",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:笧"
+    }
+   ],
+   "pics_a": [
+    "c:䇿:font:iming"
+   ],
+   "pics_b": [
+    "c:策:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new008",
+   "sec": "new",
+   "a": "懲",
+   "b": "𢤎",
+   "lbl_a": "lb:懲",
+   "lbl_b": "lb:𢤎",
+   "cells": 1,
+   "tags": [],
+   "basis": "《康熙字典》《異體字字典》收𢤎為懲異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "名云有洞名忘歸旣【?】初暘之失道回登焉"
+   ],
+   "rel_a": [
+    {
+     "char": "承",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:承"
+    },
+    {
+     "char": "懲",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:懲"
+    },
+    {
+     "char": "徵",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:徵"
+    },
+    {
+     "char": "惩",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:惩"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:懲:font:iming"
+   ],
+   "pics_b": [
+    "c:𢤎:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new009",
+   "sec": "new",
+   "a": "隱",
+   "b": "𨃗",
+   "lbl_a": "lb:隱",
+   "lbl_b": "lb:𨃗",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》收𨃗為隱異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "葉因風而下石壁隱【?】有車轍世言黃帝申"
+   ],
+   "rel_a": [
+    {
+     "char": "𠂣",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠂣"
+    },
+    {
+     "char": "𠃊",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠃊"
+    },
+    {
+     "char": "𤔌",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤔌"
+    },
+    {
+     "char": "𨼆",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨼆"
+    },
+    {
+     "char": "𨽌",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨽌"
+    },
+    {
+     "char": "乚",
+     "srcs": [
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:乚"
+    },
+    {
+     "char": "隐",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:隐"
+    },
+    {
+     "char": "隠",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:隠"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𨄇",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨄇"
+    },
+    {
+     "char": "𨆐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨆐"
+    }
+   ],
+   "pics_a": [
+    "c:隱:bxgb:15:9:5",
+    "c:隱:bxgb:4:14:10",
+    "c:隱:bxgb:5:3:14"
+   ],
+   "pics_b": [
+    "c:𨃗:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 3,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new010",
+   "sec": "new",
+   "a": "倘",
+   "b": "𠊰",
+   "lbl_a": "lb:倘",
+   "lbl_b": "lb:𠊰",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》收𠊰為倘之異體，音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "望之高列峯外自謂【?】登其上必可俯𠍯鼎"
+   ],
+   "rel_a": [
+    {
+     "char": "傥",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:傥"
+    },
+    {
+     "char": "儻",
+     "srcs": [
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:儻"
+    },
+    {
+     "char": "徜",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:徜"
+    },
+    {
+     "char": "躺",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:躺"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𠈕",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𠈕"
+    }
+   ],
+   "pics_a": [
+    "c:倘:v2:bxgb:4:16:21"
+   ],
+   "pics_b": [
+    "c:𠊰:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new011",
+   "sec": "new",
+   "a": "覺",
+   "b": "𮗖",
+   "lbl_a": "lb:覺",
+   "lbl_b": "lb:𮗖",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》收𮗖為覺之異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "蘿登後山之巔者猶【?】未及強半是知此峯"
+   ],
+   "rel_a": [
+    {
+     "char": "觉",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:觉"
+    },
+    {
+     "char": "較",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:較"
+    },
+    {
+     "char": "𡕚",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡕚"
+    },
+    {
+     "char": "𧠭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧠭"
+    },
+    {
+     "char": "𧠷",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧠷"
+    },
+    {
+     "char": "斍",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSpecializedSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:斍"
+    },
+    {
+     "char": "校",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:校"
+    },
+    {
+     "char": "梏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:梏"
+    },
+    {
+     "char": "覐",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:覐"
+    },
+    {
+     "char": "覚",
+     "srcs": [
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:覚"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:覺:bxgb:4:19:20"
+   ],
+   "pics_b": [
+    "c:𮗖:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new012",
+   "sec": "new",
+   "a": "躋",
+   "b": "𨅤",
+   "lbl_a": "lb:躋",
+   "lbl_b": "lb:𨅤",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》躋條收𨅤為異體，同音子兮切訓登升",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "側也後山有石空洞【?】𣝴而上一竇通明昔"
+   ],
+   "rel_a": [
+    {
+     "char": "隮",
+     "srcs": [
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:隮"
+    },
+    {
+     "char": "齊",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:齊"
+    },
+    {
+     "char": "𢁃",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢁃"
+    },
+    {
+     "char": "𤼥",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤼥"
+    },
+    {
+     "char": "𧾙",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧾙"
+    },
+    {
+     "char": "𨹶",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𨹶"
+    },
+    {
+     "char": "𨹷",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨹷"
+    },
+    {
+     "char": "𨻕",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𨻕"
+    },
+    {
+     "char": "𨼻",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨼻"
+    },
+    {
+     "char": "𬯀",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:𬯀"
+    },
+    {
+     "char": "䠁",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䠁"
+    },
+    {
+     "char": "濟",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:濟"
+    },
+    {
+     "char": "跻",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:跻"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "踑",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:踑"
+    }
+   ],
+   "pics_a": [
+    "c:躋:v2:bxgb:5:2:6"
+   ],
+   "pics_b": [
+    "c:𨅤:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new013",
+   "sec": "new",
+   "a": "攀",
+   "b": "𣝴",
+   "lbl_a": "lb:攀",
+   "lbl_b": "lb:𣝴",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𣝴為攀異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "也後山有石空洞𨅤【?】而上一竇通明昔劉"
+   ],
+   "rel_a": [
+    {
+     "char": "𠔀",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠔀"
+    },
+    {
+     "char": "𠬜",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠬜"
+    },
+    {
+     "char": "𡴂",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡴂"
+    },
+    {
+     "char": "𢲔",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢲔"
+    },
+    {
+     "char": "𢸅",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢸅"
+    },
+    {
+     "char": "𧰨",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧰨"
+    },
+    {
+     "char": "㐴",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:㐴"
+    },
+    {
+     "char": "乑",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:乑"
+    },
+    {
+     "char": "扳",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:扳"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:攀:bxgb:5:2:7"
+   ],
+   "pics_b": [
+    "c:𣝴:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new014",
+   "sec": "new",
+   "a": "竭",
+   "b": "𪀦",
+   "lbl_a": "lb:竭",
+   "lbl_b": "lb:𪀦",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𪀦為竭異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "水僅如𡲙漏終古不【?】下鑿小泓貯之名公"
+   ],
+   "rel_a": [
+    {
+     "char": "渴",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:渴"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𪀸",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𪀸"
+    },
+    {
+     "char": "𪄪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𪄪"
+    },
+    {
+     "char": "𪆵",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𪆵"
+    },
+    {
+     "char": "𪉅",
+     "srcs": [
+      "cjkvi-simplified",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:𪉅"
+    },
+    {
+     "char": "䳵",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:䳵"
+    },
+    {
+     "char": "鵣",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:鵣"
+    },
+    {
+     "char": "鶒",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:鶒"
+    },
+    {
+     "char": "鷘",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:鷘"
+    }
+   ],
+   "pics_a": [
+    "c:竭:font:iming"
+   ],
+   "pics_b": [
+    "c:𪀦:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new015",
+   "sec": "new",
+   "a": "寇",
+   "b": "𠣑",
+   "lbl_a": "lb:寇",
+   "lbl_b": "lb:𠣑",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》以𠣑為寇異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "嘗以金龍鎮之爲𪽘【?】盜去腳力旣侍不得"
+   ],
+   "rel_a": [
+    {
+     "char": "窛",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:窛"
+    },
+    {
+     "char": "𡨥",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:𡨥"
+    },
+    {
+     "char": "𡯷",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡯷"
+    },
+    {
+     "char": "𢽉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢽉"
+    },
+    {
+     "char": "𥦆",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥦆"
+    },
+    {
+     "char": "𥦲",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥦲"
+    },
+    {
+     "char": "㓂",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:㓂"
+    },
+    {
+     "char": "冦",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:冦"
+    },
+    {
+     "char": "宼",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:宼"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:寇:font:iming"
+   ],
+   "pics_b": [
+    "c:𠣑:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new016",
+   "sec": "new",
+   "a": "霰",
+   "b": "𩄿",
+   "lbl_a": "lb:霰",
+   "lbl_b": "lb:𩄿",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》《漢語大字典》收𩄿為霰異體，音義同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "二十二日甲辰夜微【?】早陰晴行二十七里"
+   ],
+   "rel_a": [
+    {
+     "char": "𩃂",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩃂"
+    },
+    {
+     "char": "𩃝",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩃝"
+    },
+    {
+     "char": "𩄧",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩄧"
+    },
+    {
+     "char": "𩅤",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩅤"
+    },
+    {
+     "char": "𩆥",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩆥"
+    },
+    {
+     "char": "𩆵",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩆵"
+    },
+    {
+     "char": "䨘",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:䨘"
+    },
+    {
+     "char": "䨷",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䨷"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:霰:bxgb:6:4:9"
+   ],
+   "pics_b": [
+    "c:𩄿:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new017",
+   "sec": "new",
+   "a": "厚",
+   "b": "𠩭",
+   "lbl_a": "lb:厚",
+   "lbl_b": "lb:𠩭",
+   "cells": 1,
+   "tags": [],
+   "basis": "《中華字海》收𠩭為厚之異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "朱店東陽士人周忠【?】同邸清話久之夜分"
+   ],
+   "rel_a": [
+    {
+     "char": "后",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:后"
+    },
+    {
+     "char": "垕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:垕"
+    },
+    {
+     "char": "後",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:後"
+    },
+    {
+     "char": "𠩞",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠩞"
+    },
+    {
+     "char": "𠩰",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠩰"
+    },
+    {
+     "char": "𠪀",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠪀"
+    },
+    {
+     "char": "𠪋",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠪋"
+    },
+    {
+     "char": "𡎋",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡎋"
+    },
+    {
+     "char": "𡦩",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡦩"
+    },
+    {
+     "char": "𡦬",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡦬"
+    },
+    {
+     "char": "𢈲",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢈲"
+    },
+    {
+     "char": "𣆉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣆉"
+    },
+    {
+     "char": "𣆪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣆪"
+    },
+    {
+     "char": "㫗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:㫗"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "淳",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:淳"
+    }
+   ],
+   "pics_a": [
+    "c:厚:bxgb:7:3:13"
+   ],
+   "pics_b": [
+    "c:𠩭:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new018",
+   "sec": "new",
+   "a": "馳",
+   "b": "𩢸",
+   "lbl_a": "lb:馳",
+   "lbl_b": "lb:𩢸",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》𩢸為馳之異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "下登岸已薄暮矣驅【?】至嘉會門開關己久"
+   ],
+   "rel_a": [
+    {
+     "char": "驰",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:驰"
+    },
+    {
+     "char": "𧂓",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧂓"
+    },
+    {
+     "char": "䮈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䮈"
+    },
+    {
+     "char": "移",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:移"
+    },
+    {
+     "char": "踶",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:踶"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𩧳",
+     "srcs": [
+      "cjkvi-simplified",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:𩧳"
+    }
+   ],
+   "pics_a": [
+    "c:馳:font:iming"
+   ],
+   "pics_b": [
+    "c:𩢸:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new019",
+   "sec": "new",
+   "a": "霖",
+   "b": "𩃕",
+   "lbl_a": "lb:霖",
+   "lbl_b": "lb:𩃕",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》𩃕同霖，久雨音lín",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "不見客次遇蔡架閣【?】去歲書狀官也又遇"
+   ],
+   "rel_a": [
+    {
+     "char": "淋",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:淋"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:霖:v2:bxgb:7:18:10"
+   ],
+   "pics_b": [
+    "c:𩃕:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new020",
+   "sec": "new",
+   "a": "閤",
+   "b": "𨳼",
+   "lbl_a": "lb:閤",
+   "lbl_b": "lb:𨳼",
+   "cells": 1,
+   "tags": [],
+   "basis": "龍龕手鑑門部：𨳼同閤，宋知閤門事通用",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "衣冠𧵎國信竑六知【?】張詮張倫未鈞𠅅𦣽"
+   ],
+   "rel_a": [
+    {
+     "char": "闔",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:闔"
+    },
+    {
+     "char": "阁",
+     "srcs": [
+      "cjkvi-simplified"
+     ],
+     "lbl": "lb:阁"
+    },
+    {
+     "char": "阖",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:阖"
+    },
+    {
+     "char": "𬮤",
+     "srcs": [
+      "cjkvi-simplified",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant"
+     ],
+     "lbl": "lb:𬮤"
+    },
+    {
+     "char": "合",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:合"
+    },
+    {
+     "char": "閣",
+     "srcs": [
+      "dypytz",
+      "hydzd"
+     ],
+     "lbl": "lb:閣"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:閤:v2:bxgb:34:18:15",
+    "c:閤:v2:bxgb:42:17:5",
+    "c:閤:v2:bxgb:8:13:3"
+   ],
+   "pics_b": [
+    "c:𨳼:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 3,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new021",
+   "sec": "new",
+   "a": "謂",
+   "b": "𧫐",
+   "lbl_a": "lb:謂",
+   "lbl_b": "lb:𧫐",
+   "cells": 1,
+   "tags": [],
+   "basis": "《汉语大字典》《异体字字典》收𧫐为謂异体",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "張倫未鈞𠅅𦣽溫康【?】王汴偕來歸寓奏槀"
+   ],
+   "rel_a": [
+    {
+     "char": "谓",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:谓"
+    },
+    {
+     "char": "𧬴",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧬴"
+    },
+    {
+     "char": "歌",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:歌"
+    },
+    {
+     "char": "為",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:為"
+    },
+    {
+     "char": "胃",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:胃"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "諝",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:諝"
+    }
+   ],
+   "pics_a": [
+    "c:謂:bxgb:10:9:6",
+    "c:謂:bxgb:22:15:14",
+    "c:謂:bxgb:4:16:20"
+   ],
+   "pics_b": [
+    "c:𧫐:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 3,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new022",
+   "sec": "new",
+   "a": "盥",
+   "b": "𥂩",
+   "lbl_a": "lb:盥",
+   "lbl_b": "lb:𥂩",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》收𥂩為盥異體，音義全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "十七日己已晴上館【?】櫛仲舅欲同謁王侍"
+   ],
+   "rel_a": [
+    {
+     "char": "𣹉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣹉"
+    },
+    {
+     "char": "𤃗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤃗"
+    },
+    {
+     "char": "𥁉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥁉"
+    },
+    {
+     "char": "卢",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:卢"
+    },
+    {
+     "char": "泴",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:泴"
+    },
+    {
+     "char": "涫",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:涫"
+    },
+    {
+     "char": "灌",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:灌"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "䀇",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䀇"
+    }
+   ],
+   "pics_a": [
+    "c:盥:v2:bxgb:10:6:9"
+   ],
+   "pics_b": [
+    "c:𥂩:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new023",
+   "sec": "new",
+   "a": "覽",
+   "b": "𧢦",
+   "lbl_a": "lb:覽",
+   "lbl_b": "lb:𧢦",
+   "cells": 1,
+   "tags": [],
+   "basis": "教育部異體字字典收𧢦為覽之異體，音義全同可互換。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "舟金山因約同遊窮【?】勝處主僧寶印首座"
+   ],
+   "rel_a": [
+    {
+     "char": "览",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:览"
+    },
+    {
+     "char": "攬",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:攬"
+    },
+    {
+     "char": "覧",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:覧"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𧢫",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧢫"
+    },
+    {
+     "char": "䁛",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:䁛"
+    }
+   ],
+   "pics_a": [
+    "c:覽:bxgb:10:8:5"
+   ],
+   "pics_b": [
+    "c:𧢦:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new024",
+   "sec": "new",
+   "a": "觀",
+   "b": "𫟜",
+   "lbl_a": "lb:觀",
+   "lbl_b": "lb:𫟜",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》𫟜為觀異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "起乘馬陼使副天慶【?】朝拜歸館望拜兩宮"
+   ],
+   "rel_a": [
+    {
+     "char": "观",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:观"
+    },
+    {
+     "char": "驩",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:驩"
+    },
+    {
+     "char": "𥍄",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥍄"
+    },
+    {
+     "char": "𥍅",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥍅"
+    },
+    {
+     "char": "𥍊",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥍊"
+    },
+    {
+     "char": "𥍕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥍕"
+    },
+    {
+     "char": "𥷯",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥷯"
+    },
+    {
+     "char": "𥸑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥸑"
+    },
+    {
+     "char": "𧃼",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𧃼"
+    },
+    {
+     "char": "𧢪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧢪"
+    },
+    {
+     "char": "𩁰",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩁰"
+    },
+    {
+     "char": "覌",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:覌"
+    },
+    {
+     "char": "観",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:観"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:觀:bxgb:15:16:9",
+    "c:觀:bxgb:16:17:3",
+    "c:觀:bxgb:17:4:17",
+    "c:觀:bxgb:30:15:17"
+   ],
+   "pics_b": [
+    "c:𫟜:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 4,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new025",
+   "sec": "new",
+   "a": "探",
+   "b": "𢮕",
+   "lbl_a": "lb:探",
+   "lbl_b": "lb:𢮕",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》皆收𢮕為探異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "盱胎客將李寶渡淮【?】問接伴使副已到泗"
+   ],
+   "rel_a": [
+    {
+     "char": "撏",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:撏"
+    },
+    {
+     "char": "撢",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:撢"
+    },
+    {
+     "char": "貪",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:貪"
+    },
+    {
+     "char": "𢲘",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢲘"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "揲",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:揲"
+    }
+   ],
+   "pics_a": [
+    "c:探:v2:bxgb:12:13:16"
+   ],
+   "pics_b": [
+    "c:𢮕:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new026",
+   "sec": "new",
+   "a": "輕",
+   "b": "𨋔",
+   "lbl_a": "lb:輕",
+   "lbl_b": "lb:𨋔",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》以𨋔為輕異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "行尚書更部郞中上【?】車都尉彭城郡開國"
+   ],
+   "rel_a": [
+    {
+     "char": "轻",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:轻"
+    },
+    {
+     "char": "𨌷",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨌷"
+    },
+    {
+     "char": "𨓷",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨓷"
+    },
+    {
+     "char": "䡖",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:䡖"
+    },
+    {
+     "char": "軽",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:軽"
+    },
+    {
+     "char": "輊",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:輊"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "䡰",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䡰"
+    }
+   ],
+   "pics_a": [
+    "c:輕:bxgb:12:18:10"
+   ],
+   "pics_b": [
+    "c:𨋔:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new027",
+   "sec": "new",
+   "a": "豐",
+   "b": "𧯽",
+   "lbl_a": "lb:豐",
+   "lbl_b": "lb:𧯽",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》𧯽同豐為豐異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "㛒錢聞本朝養兵之【?】歎感不己南京城樓"
+   ],
+   "rel_a": [
+    {
+     "char": "酆",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:酆"
+    },
+    {
+     "char": "麷",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:麷"
+    },
+    {
+     "char": "𣍈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣍈"
+    },
+    {
+     "char": "𤲊",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𤲊"
+    },
+    {
+     "char": "𧯮",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧯮"
+    },
+    {
+     "char": "丰",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:丰"
+    },
+    {
+     "char": "夆",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:夆"
+    },
+    {
+     "char": "豊",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:豊"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "豊",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:豊"
+    }
+   ],
+   "pics_a": [
+    "c:豐:bxgb:15:19:4"
+   ],
+   "pics_b": [
+    "c:𧯽:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new028",
+   "sec": "new",
+   "a": "範",
+   "b": "𥲮",
+   "lbl_a": "lb:範",
+   "lbl_b": "lb:𥲮",
+   "cells": 1,
+   "tags": [],
+   "basis": "據字書及固定詞風範，𥲮為範之異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "小此閒只是舊時風【?】伍改𦇥衣裝耳又行"
+   ],
+   "rel_a": [
+    {
+     "char": "范",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:范"
+    },
+    {
+     "char": "犯",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:犯"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "毒",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:毒"
+    }
+   ],
+   "pics_a": [
+    "c:範:bxgb:17:1:5"
+   ],
+   "pics_b": [
+    "c:𥲮:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new029",
+   "sec": "new",
+   "a": "戎",
+   "b": "𢦶",
+   "lbl_a": "lb:戎",
+   "lbl_b": "lb:𢦶",
+   "cells": 1,
+   "tags": [],
+   "basis": "《汉语大字典》《异体字字典》𢦶为戎异体",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "此者皆𭮵抹舊皆爲【?】曾驅役號閒糧官不"
+   ],
+   "rel_a": [
+    {
+     "char": "扔",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:扔"
+    },
+    {
+     "char": "𠈋",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠈋"
+    },
+    {
+     "char": "𢍻",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢍻"
+    },
+    {
+     "char": "𢦛",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢦛"
+    },
+    {
+     "char": "𢦦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢦦"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "戒",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:戒"
+    }
+   ],
+   "pics_a": [
+    "c:戎:bxgb:18:18:19"
+   ],
+   "pics_b": [
+    "c:𢦶:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new030",
+   "sec": "new",
+   "a": "殿",
+   "b": "𭮺",
+   "lbl_a": "lb:殿",
+   "lbl_b": "lb:𭮺",
+   "cells": 1,
+   "tags": [],
+   "basis": "《中華字海》收𭮺為殿異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "蒲簍數扛等之以旗【?】以二騎或云其中皆"
+   ],
+   "rel_a": [
+    {
+     "char": "𡱒",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𡱒"
+    },
+    {
+     "char": "𣪍",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣪍"
+    },
+    {
+     "char": "𣪫",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣪫"
+    },
+    {
+     "char": "𣪍",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣪍"
+    },
+    {
+     "char": "壂",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:壂"
+    },
+    {
+     "char": "敦",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:敦"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:殿:bxgb:19:7:15"
+   ],
+   "pics_b": [
+    "c:𭮺:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new031",
+   "sec": "new",
+   "a": "穢",
+   "b": "𢕺",
+   "lbl_a": "lb:穢",
+   "lbl_b": "lb:𢕺",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𢕺為穢異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "管慍其主人𩚁𨎖以【?】語詆之又有萬福包"
+   ],
+   "rel_a": [
+    {
+     "char": "薉",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:薉"
+    },
+    {
+     "char": "𢧹",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢧹"
+    },
+    {
+     "char": "𢧼",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢧼"
+    },
+    {
+     "char": "𤻀",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤻀"
+    },
+    {
+     "char": "濊",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:濊"
+    },
+    {
+     "char": "秽",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:秽"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:穢:font:iming"
+   ],
+   "pics_b": [
+    "c:𢕺:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new032",
+   "sec": "new",
+   "a": "羹",
+   "b": "𣚧",
+   "lbl_a": "lb:羹",
+   "lbl_b": "lb:𣚧",
+   "cells": 1,
+   "tags": [],
+   "basis": "《康熙字典》羊部：𣚧為羹異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "松次肉浊餅次腰子【?】次茶食以大柈貯四"
+   ],
+   "rel_a": [
+    {
+     "char": "𢑌",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢑌"
+    },
+    {
+     "char": "𦎟",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦎟"
+    },
+    {
+     "char": "𦢋",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦢋"
+    },
+    {
+     "char": "𦢹",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦢹"
+    },
+    {
+     "char": "𩱁",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩱁"
+    },
+    {
+     "char": "𩱋",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩱋"
+    },
+    {
+     "char": "𩱧",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩱧"
+    },
+    {
+     "char": "羮",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:羮"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:羹:v2:bxgb:20:13:20"
+   ],
+   "pics_b": [
+    "c:𣚧:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new033",
+   "sec": "new",
+   "a": "鹹",
+   "b": "𨠽",
+   "lbl_a": "lb:鹹",
+   "lbl_b": "lb:𨠽",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》以𨠽為鹹異體音義同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "大餅肉山又下穳魚【?】豉等五楪繼即數十"
+   ],
+   "rel_a": [
+    {
+     "char": "鹼",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:鹼"
+    },
+    {
+     "char": "𨣇",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨣇"
+    },
+    {
+     "char": "𨣝",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨣝"
+    },
+    {
+     "char": "𪉳",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𪉳"
+    },
+    {
+     "char": "咸",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:咸"
+    },
+    {
+     "char": "堿",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:堿"
+    },
+    {
+     "char": "醎",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:醎"
+    },
+    {
+     "char": "醶",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:醶"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:鹹:font:iming"
+   ],
+   "pics_b": [
+    "c:𨠽:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new034",
+   "sec": "new",
+   "a": "鼈",
+   "b": "𪔀",
+   "lbl_a": "lb:鼈",
+   "lbl_b": "lb:𪔀",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典·黽部》鼈、𪔀俱為鱉異體音義同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "肉次剗子次羊頭假【?】次雙下灌漿饅頭次"
+   ],
+   "rel_a": [
+    {
+     "char": "龞",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:龞"
+    },
+    {
+     "char": "𱌇",
+     "srcs": [
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant"
+     ],
+     "lbl": "lb:𱌇"
+    },
+    {
+     "char": "鱉",
+     "srcs": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:鱉"
+    },
+    {
+     "char": "鳖",
+     "srcs": [
+      "cjkvi-simplified",
+      "yitizi"
+     ],
+     "lbl": "lb:鳖"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "鱉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:鱉"
+    }
+   ],
+   "pics_a": [
+    "c:鼈:font:iming"
+   ],
+   "pics_b": [
+    "c:𪔀:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new035",
+   "sec": "new",
+   "a": "酈",
+   "b": "𮠑",
+   "lbl_a": "lb:酈",
+   "lbl_b": "lb:𮠑",
+   "cells": 1,
+   "tags": [],
+   "basis": "《说文》郦从邑丽声，酈𮠑为刀邑旁异体同字",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "開羽斬良以報曹公【?】生所謂守白馬之津"
+   ],
+   "rel_a": [
+    {
+     "char": "𨜥",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨜥"
+    },
+    {
+     "char": "𨟫",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨟫"
+    },
+    {
+     "char": "𨼓",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨼓"
+    },
+    {
+     "char": "郦",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:郦"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:酈:font:iming"
+   ],
+   "pics_b": [
+    "c:𮠑:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new036",
+   "sec": "new",
+   "a": "駛",
+   "b": "𩢶",
+   "lbl_a": "lb:駛",
+   "lbl_b": "lb:𩢶",
+   "cells": 1,
+   "tags": [],
+   "basis": "《中華字海》《漢語大字典》：𩢶同駛，史聲，疾也",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "層冰蛾峨中有水甚【?】載冰厮以東聞水盛"
+   ],
+   "rel_a": [
+    {
+     "char": "驶",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:驶"
+    },
+    {
+     "char": "𩢲",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:𩢲"
+    },
+    {
+     "char": "𩣬",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩣬"
+    },
+    {
+     "char": "𩰢",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩰢"
+    },
+    {
+     "char": "使",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:使"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:駛:font:iming"
+   ],
+   "pics_b": [
+    "c:𩢶:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new037",
+   "sec": "new",
+   "a": "螭",
+   "b": "𧐳",
+   "lbl_a": "lb:螭",
+   "lbl_b": "lb:𧐳",
+   "cells": 1,
+   "tags": [],
+   "basis": "《汉语大字典》《异体字字典》收𧐳为螭异体，音义全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "曹公祠也塚間又有【?】首碑聞是晉𥓭六十"
+   ],
+   "rel_a": [
+    {
+     "char": "離",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:離"
+    },
+    {
+     "char": "魑",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:魑"
+    },
+    {
+     "char": "𡖟",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡖟"
+    },
+    {
+     "char": "𧕮",
+     "srcs": [
+      "cjkvi-simplified"
+     ],
+     "lbl": "lb:𧕮"
+    },
+    {
+     "char": "彲",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:彲"
+    },
+    {
+     "char": "离",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:离"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "螰",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:螰"
+    }
+   ],
+   "pics_a": [
+    "c:螭:font:iming"
+   ],
+   "pics_b": [
+    "c:𧐳:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new038",
+   "sec": "new",
+   "a": "楚",
+   "b": "𤴝",
+   "lbl_a": "lb:楚",
+   "lbl_b": "lb:𤴝",
+   "cells": 1,
+   "tags": [],
+   "basis": "字書收𤴝為楚之異體，箠楚為一義",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "等官雖甚高未免箠【?】成甚活路又本州以"
+   ],
+   "rel_a": [
+    {
+     "char": "檚",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:檚"
+    },
+    {
+     "char": "𣕑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣕑"
+    },
+    {
+     "char": "𣗂",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣗂"
+    },
+    {
+     "char": "𤻇",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤻇"
+    },
+    {
+     "char": "䠂",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䠂"
+    },
+    {
+     "char": "椘",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:椘"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "疐",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:疐"
+    }
+   ],
+   "pics_a": [
+    "c:楚:font:iming"
+   ],
+   "pics_b": [
+    "c:𤴝:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new039",
+   "sec": "new",
+   "a": "直",
+   "b": "𮂔",
+   "lbl_a": "lb:直",
+   "lbl_b": "lb:𮂔",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》以𮂔為直異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "三等官漢官棃舟女【?】三者雜居𦕉部文移"
+   ],
+   "rel_a": [
+    {
+     "char": "置",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:置"
+    },
+    {
+     "char": "職",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:職"
+    },
+    {
+     "char": "𡇛",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𡇛"
+    },
+    {
+     "char": "𣓟",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣓟"
+    },
+    {
+     "char": "𣖇",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣖇"
+    },
+    {
+     "char": "𣖴",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣖴"
+    },
+    {
+     "char": "𥄂",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥄂"
+    },
+    {
+     "char": "直",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:直"
+    },
+    {
+     "char": "値",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:値"
+    },
+    {
+     "char": "值",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed",
+      "yitizi"
+     ],
+     "lbl": "lb:值"
+    },
+    {
+     "char": "德",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:德"
+    },
+    {
+     "char": "殖",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:殖"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:直:v2:bxgb:24:6:20",
+    "c:直:v2:bxgb:27:6:4"
+   ],
+   "pics_b": [
+    "c:𮂔:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 2,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new040",
+   "sec": "new",
+   "a": "省",
+   "b": "𦕉",
+   "lbl_a": "lb:省",
+   "lbl_b": "lb:𦕉",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》皆收𦕉為省異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "棃舟女𮂔三者雜居【?】部文移官司牌示各"
+   ],
+   "rel_a": [
+    {
+     "char": "眚",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:眚"
+    },
+    {
+     "char": "胜",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:胜"
+    },
+    {
+     "char": "𡞞",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡞞"
+    },
+    {
+     "char": "𡨽",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𡨽"
+    },
+    {
+     "char": "𡮀",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡮀"
+    },
+    {
+     "char": "𥄾",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥄾"
+    },
+    {
+     "char": "𥅱",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥅱"
+    },
+    {
+     "char": "㗂",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:㗂"
+    },
+    {
+     "char": "䁞",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䁞"
+    },
+    {
+     "char": "䚇",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:䚇"
+    },
+    {
+     "char": "渻",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:渻"
+    },
+    {
+     "char": "獮",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:獮"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:省:font:iming"
+   ],
+   "pics_b": [
+    "c:𦕉:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 1
+  },
+  {
+   "id": "new041",
+   "sec": "new",
+   "a": "驢",
+   "b": "𩥈",
+   "lbl_a": "lb:驢",
+   "lbl_b": "lb:𩥈",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》均收𩥈為驢異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "屬邢州縣有重城換【?】行二十五里至邢州"
+   ],
+   "rel_a": [
+    {
+     "char": "驴",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:驴"
+    },
+    {
+     "char": "𩢉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩢉"
+    },
+    {
+     "char": "𩧥",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩧥"
+    },
+    {
+     "char": "䮫",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䮫"
+    },
+    {
+     "char": "馿",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:馿"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𮹌",
+     "srcs": [
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant"
+     ],
+     "lbl": "lb:𮹌"
+    }
+   ],
+   "pics_a": [
+    "c:驢:bxgb:15:12:17"
+   ],
+   "pics_b": [
+    "c:𩥈:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new042",
+   "sec": "new",
+   "a": "勫",
+   "b": "翻",
+   "lbl_a": "lb:勫",
+   "lbl_b": "lb:翻",
+   "cells": 1,
+   "tags": [],
+   "basis": "《廣韻》《集韻》勫同飜，為翻異體，佛經勫譯即翻譯",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "市肆牌額多寫般作【?】有大塔十三層寺宇"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "飜",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:飜"
+    },
+    {
+     "char": "𢑵",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢑵"
+    },
+    {
+     "char": "𢬵",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢬵"
+    },
+    {
+     "char": "幡",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:幡"
+    },
+    {
+     "char": "憣",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:憣"
+    },
+    {
+     "char": "拚",
+     "srcs": [
+      "hydzd-borrowed",
+      "twedu"
+     ],
+     "lbl": "lb:拚"
+    },
+    {
+     "char": "繙",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:繙"
+    }
+   ],
+   "pics_a": [
+    "c:勫:font:iming"
+   ],
+   "pics_b": [
+    "c:翻:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new043",
+   "sec": "new",
+   "a": "碾",
+   "b": "𥖨",
+   "lbl_a": "lb:碾",
+   "lbl_b": "lb:𥖨",
+   "cells": 1,
+   "tags": [],
+   "basis": "从石展声同源，𥖨为碾之异体",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "東北有邢山出邢沙【?】玉所用也過沙河數"
+   ],
+   "rel_a": [
+    {
+     "char": "輾",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:輾"
+    },
+    {
+     "char": "𥑊",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥑊"
+    },
+    {
+     "char": "𥗇",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥗇"
+    },
+    {
+     "char": "𥗷",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥗷"
+    },
+    {
+     "char": "攆",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:攆"
+    },
+    {
+     "char": "榐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:榐"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:碾:font:iming"
+   ],
+   "pics_b": [
+    "c:𥖨:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new044",
+   "sec": "new",
+   "a": "勒",
+   "b": "𩉜",
+   "lbl_a": "lb:勒",
+   "lbl_b": "lb:𩉜",
+   "cells": 1,
+   "tags": [],
+   "basis": "未见《汉语大字典》等明确𩉜为勒异体",
+   "canonical": "null",
+   "tongjia": false,
+   "ctx": [
+    "耳後趙石勒皆都焉【?】隋龔州張竇曰襄國"
+   ],
+   "rel_a": [
+    {
+     "char": "嘞",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:嘞"
+    },
+    {
+     "char": "肋",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:肋"
+    },
+    {
+     "char": "𩩸",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩩸"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𩉳",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩉳"
+    },
+    {
+     "char": "鞿",
+     "srcs": [
+      "cjkvi-simplified"
+     ],
+     "lbl": "lb:鞿"
+    }
+   ],
+   "pics_a": [
+    "c:勒:font:iming"
+   ],
+   "pics_b": [
+    "c:𩉜:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new045",
+   "sec": "new",
+   "a": "盧",
+   "b": "𭾐",
+   "lbl_a": "lb:盧",
+   "lbl_b": "lb:𭾐",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》𭾐同盧，范陽盧氏郡望可證",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "郡進士李雲𢰅范陽【?】規書一開元甘二年"
+   ],
+   "rel_a": [
+    {
+     "char": "矑",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:矑"
+    },
+    {
+     "char": "籚",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:籚"
+    },
+    {
+     "char": "鑪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:鑪"
+    },
+    {
+     "char": "顱",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:顱"
+    },
+    {
+     "char": "鸕",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:鸕"
+    },
+    {
+     "char": "𥃈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥃈"
+    },
+    {
+     "char": "𧆣",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𧆣"
+    },
+    {
+     "char": "卢",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:卢"
+    },
+    {
+     "char": "壚",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:壚"
+    },
+    {
+     "char": "廬",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:廬"
+    },
+    {
+     "char": "櫨",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:櫨"
+    },
+    {
+     "char": "爐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:爐"
+    },
+    {
+     "char": "獹",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:獹"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:盧:v2:bxgb:33:15:3"
+   ],
+   "pics_b": [
+    "c:𭾐:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new046",
+   "sec": "new",
+   "a": "晉",
+   "b": "𫞄",
+   "lbl_a": "lb:晉",
+   "lbl_b": "lb:𫞄",
+   "cells": 1,
+   "tags": [],
+   "basis": "《康熙字典》《異體字字典》收𫞄為晉異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "今改曰沃州春秋屬【?】戰國屬趙後魏曰般"
+   ],
+   "rel_a": [
+    {
+     "char": "晋",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:晋"
+    },
+    {
+     "char": "箭",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:箭"
+    },
+    {
+     "char": "鐏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:鐏"
+    },
+    {
+     "char": "𡥨",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡥨"
+    },
+    {
+     "char": "𣈆",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣈆"
+    },
+    {
+     "char": "𣋤",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣋤"
+    },
+    {
+     "char": "𣋧",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣋧"
+    },
+    {
+     "char": "𣌇",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣌇"
+    },
+    {
+     "char": "𦗎",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦗎"
+    },
+    {
+     "char": "㬐",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:㬐"
+    },
+    {
+     "char": "㬜",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:㬜"
+    },
+    {
+     "char": "搢",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:搢"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:晉:bxgb:22:8:20"
+   ],
+   "pics_b": [
+    "c:𫞄:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new047",
+   "sec": "new",
+   "a": "韓",
+   "b": "𩋾",
+   "lbl_a": "lb:韓",
+   "lbl_b": "lb:𩋾",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𩋾為韓異體，音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "度使臨城縣有䟡水【?】信斬成安君于此是"
+   ],
+   "rel_a": [
+    {
+     "char": "韩",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:韩"
+    },
+    {
+     "char": "𡋶",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡋶"
+    },
+    {
+     "char": "𩏑",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:𩏑"
+    },
+    {
+     "char": "㙔",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:㙔"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "靴",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:靴"
+    }
+   ],
+   "pics_a": [
+    "c:韓:v2:bxgb:29:7:21"
+   ],
+   "pics_b": [
+    "c:𩋾:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new048",
+   "sec": "new",
+   "a": "陷",
+   "b": "𨹿",
+   "lbl_a": "lb:陷",
+   "lbl_b": "lb:𨹿",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》𨹿為陷異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "渡河未畢數車而冰【?】俗傳河水隨車而折"
+   ],
+   "rel_a": [
+    {
+     "char": "𨺂",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨺂"
+    },
+    {
+     "char": "𨺻",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𨺻"
+    },
+    {
+     "char": "䧟",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䧟"
+    },
+    {
+     "char": "含",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:含"
+    },
+    {
+     "char": "埳",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:埳"
+    },
+    {
+     "char": "臽",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:臽"
+    },
+    {
+     "char": "陥",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:陥"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "隆",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:隆"
+    }
+   ],
+   "pics_a": [
+    "c:陷:font:iming"
+   ],
+   "pics_b": [
+    "c:𨹿:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new049",
+   "sec": "new",
+   "a": "蒙",
+   "b": "𫎇",
+   "lbl_a": "lb:蒙",
+   "lbl_b": "lb:𫎇",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𫎇為蒙異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "後敕某卿會朝歲旦【?】𤜱家𭑿眷惟將命之"
+   ],
+   "rel_a": [
+    {
+     "char": "霥",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:霥"
+    },
+    {
+     "char": "靀",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:靀"
+    },
+    {
+     "char": "𠐁",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠐁"
+    },
+    {
+     "char": "𣉭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣉭"
+    },
+    {
+     "char": "𦿢",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𦿢"
+    },
+    {
+     "char": "𰰡",
+     "srcs": [
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant"
+     ],
+     "lbl": "lb:𰰡"
+    },
+    {
+     "char": "䝉",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:䝉"
+    },
+    {
+     "char": "冡",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:冡"
+    },
+    {
+     "char": "懞",
+     "srcs": [
+      "cjkvi-simplified",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:懞"
+    },
+    {
+     "char": "朦",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:朦"
+    },
+    {
+     "char": "濛",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:濛"
+    },
+    {
+     "char": "矇",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd-borrowed",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:矇"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:蒙:v2:bxgb:46:16:6"
+   ],
+   "pics_b": [
+    "c:𫎇:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new050",
+   "sec": "new",
+   "a": "郡",
+   "b": "𨜐",
+   "lbl_a": "lb:郡",
+   "lbl_b": "lb:𨜐",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《中華字海》收𨜐為郡異體，音義全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "郞中上騎都尉𢊮平【?】𨴂國子食邑盧𦯓㕧"
+   ],
+   "rel_a": [
+    {
+     "char": "𨛦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨛦"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:郡:bxgb:12:18:16",
+    "c:郡:bxgb:14:19:13"
+   ],
+   "pics_b": [
+    "c:𨜐:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 2,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new051",
+   "sec": "new",
+   "a": "撫",
+   "b": "𫞶",
+   "lbl_a": "lb:撫",
+   "lbl_b": "lb:𫞶",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》𫞶為撫之異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "喏傳示訖分位張鉉【?】問琮口宣云遠持使"
+   ],
+   "rel_a": [
+    {
+     "char": "橅",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:橅"
+    },
+    {
+     "char": "𢪑",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢪑"
+    },
+    {
+     "char": "𢸮",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢸮"
+    },
+    {
+     "char": "𢺌",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢺌"
+    },
+    {
+     "char": "𢻬",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢻬"
+    },
+    {
+     "char": "𢻲",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢻲"
+    },
+    {
+     "char": "𨑑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨑑"
+    },
+    {
+     "char": "𨑟",
+     "srcs": [
+      "unihan:kSemanticVariant"
+     ],
+     "lbl": "lb:𨑟"
+    },
+    {
+     "char": "匍",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:匍"
+    },
+    {
+     "char": "幠",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:幠"
+    },
+    {
+     "char": "抚",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:抚"
+    },
+    {
+     "char": "拊",
+     "srcs": [
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:拊"
+    },
+    {
+     "char": "捬",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:捬"
+    },
+    {
+     "char": "摹",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:摹"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:撫:v2:bxgb:34:13:12"
+   ],
+   "pics_b": [
+    "c:𫞶:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new052",
+   "sec": "new",
+   "a": "翔",
+   "b": "𦒢",
+   "lbl_a": "lb:翔",
+   "lbl_b": "lb:𦒢",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》收𦒢為翔異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "門即大安殿門外左【?】龍門之後數德後爲"
+   ],
+   "rel_a": [
+    {
+     "char": "詳",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:詳"
+    },
+    {
+     "char": "養",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:養"
+    },
+    {
+     "char": "鴹",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:鴹"
+    },
+    {
+     "char": "𦍤",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦍤"
+    },
+    {
+     "char": "祥",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:祥"
+    },
+    {
+     "char": "羏",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:羏"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "翱",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:翱"
+    },
+    {
+     "char": "翺",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:翺"
+    }
+   ],
+   "pics_a": [
+    "c:翔:font:iming"
+   ],
+   "pics_b": [
+    "c:𦒢:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new053",
+   "sec": "new",
+   "a": "高",
+   "b": "𡨈",
+   "lbl_a": "lb:高",
+   "lbl_b": "lb:𡨈",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》𡨈為高異體，上下文高麗可證",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "退無有移動者是日【?】麗西夏使人同見高"
+   ],
+   "rel_a": [
+    {
+     "char": "髙",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:髙"
+    },
+    {
+     "char": "𠆪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠆪"
+    },
+    {
+     "char": "𠇃",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𠇃"
+    },
+    {
+     "char": "𦕺",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦕺"
+    },
+    {
+     "char": "𬺦",
+     "srcs": [
+      "unihan:kSemanticVariant"
+     ],
+     "lbl": "lb:𬺦"
+    },
+    {
+     "char": "皋",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:皋"
+    },
+    {
+     "char": "皜",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:皜"
+    },
+    {
+     "char": "膏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:膏"
+    },
+    {
+     "char": "郊",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:郊"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "宣",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:宣"
+    }
+   ],
+   "pics_a": [
+    "c:高:bxgb:16:3:3",
+    "c:高:bxgb:5:3:17",
+    "c:高:bxgb:8:18:10",
+    "c:高:v2:bxgb:35:3:21"
+   ],
+   "pics_b": [
+    "c:𡨈:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 4,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new054",
+   "sec": "new",
+   "a": "扇",
+   "b": "𦒃",
+   "lbl_a": "lb:扇",
+   "lbl_b": "lb:𦒃",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《康熙字典》收𦒃為扇異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "門五間每間朱門四【?】金釘集然入見如儀"
+   ],
+   "rel_a": [
+    {
+     "char": "搧",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:搧"
+    },
+    {
+     "char": "煽",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:煽"
+    },
+    {
+     "char": "騸",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:騸"
+    },
+    {
+     "char": "𢄒",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢄒"
+    },
+    {
+     "char": "𥰢",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥰢"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "䎕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䎕"
+    }
+   ],
+   "pics_a": [
+    "c:扇:font:iming"
+   ],
+   "pics_b": [
+    "c:𦒃:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new055",
+   "sec": "new",
+   "a": "䨱",
+   "b": "覆",
+   "lbl_a": "lb:䨱",
+   "lbl_b": "lb:覆",
+   "cells": 1,
+   "tags": [],
+   "basis": "《集韻》《漢語大字典》：䨱芳六切，同覆，蓋也",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "層中間又爲澀道亦【?】以氈上壽酒時太子"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "复",
+     "srcs": [
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:复"
+    },
+    {
+     "char": "復",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed",
+      "yitizi"
+     ],
+     "lbl": "lb:復"
+    },
+    {
+     "char": "愎",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:愎"
+    },
+    {
+     "char": "複",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:複"
+    }
+   ],
+   "pics_a": [
+    "c:䨱:font:iming"
+   ],
+   "pics_b": [
+    "c:覆:v2:bxgb:41:2:19"
+   ],
+   "font_a": "iming",
+   "font_b": null,
+   "n_real_a": 0,
+   "n_real_b": 1,
+   "pageIdx": 2
+  },
+  {
+   "id": "new056",
+   "sec": "new",
+   "a": "栽",
+   "b": "𦁋",
+   "lbl_a": "lb:栽",
+   "lbl_b": "lb:𦁋",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》𦁋係栽異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "一峯號仁夀山山下【?】松柏井裝椀李各十"
+   ],
+   "rel_a": [
+    {
+     "char": "載",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:載"
+    },
+    {
+     "char": "𣒭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣒭"
+    },
+    {
+     "char": "𣔮",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣔮"
+    },
+    {
+     "char": "𣖋",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𣖋"
+    },
+    {
+     "char": "𥯒",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥯒"
+    },
+    {
+     "char": "𦳦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦳦"
+    },
+    {
+     "char": "㘽",
+     "srcs": [
+      "hydzd",
+      "unihan:kSemanticVariant"
+     ],
+     "lbl": "lb:㘽"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "織",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:織"
+    }
+   ],
+   "pics_a": [
+    "c:栽:font:iming"
+   ],
+   "pics_b": [
+    "c:𦁋:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new057",
+   "sec": "new",
+   "a": "背",
+   "b": "𦙟",
+   "lbl_a": "lb:背",
+   "lbl_b": "lb:𦙟",
+   "cells": 1,
+   "tags": [],
+   "basis": "𦙟係背之異體，見漢語大字典、異體字字典",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "十餘抹大獅𧰼各一【?】負七寶又以綵索繄"
+   ],
+   "rel_a": [
+    {
+     "char": "褙",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:褙"
+    },
+    {
+     "char": "𧶙",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧶙"
+    },
+    {
+     "char": "伾",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:伾"
+    },
+    {
+     "char": "倍",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:倍"
+    },
+    {
+     "char": "偝",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:偝"
+    },
+    {
+     "char": "北",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:北"
+    },
+    {
+     "char": "崩",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:崩"
+    },
+    {
+     "char": "揹",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:揹"
+    },
+    {
+     "char": "絣",
+     "srcs": [
+      "unihan:kSpecializedSemanticVariant"
+     ],
+     "lbl": "lb:絣"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "臍",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:臍"
+    },
+    {
+     "char": "齊",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:齊"
+    }
+   ],
+   "pics_a": [
+    "c:背:font:iming"
+   ],
+   "pics_b": [
+    "c:𦙟:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new058",
+   "sec": "new",
+   "a": "福",
+   "b": "𧹭",
+   "lbl_a": "lb:福",
+   "lbl_b": "lb:𧹭",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《康熙字典》：𧹭為福異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "獅子二以薇其杙𫟉【?】廣祐之前又各爲綵"
+   ],
+   "rel_a": [
+    {
+     "char": "稫",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:稫"
+    },
+    {
+     "char": "茀",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:茀"
+    },
+    {
+     "char": "𤔜",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤔜"
+    },
+    {
+     "char": "福",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:福"
+    },
+    {
+     "char": "副",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:副"
+    },
+    {
+     "char": "富",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:富"
+    },
+    {
+     "char": "幅",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:幅"
+    },
+    {
+     "char": "畗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:畗"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:福:font:iming"
+   ],
+   "pics_b": [
+    "c:𧹭:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new059",
+   "sec": "new",
+   "a": "幞",
+   "b": "𢢜",
+   "lbl_a": "lb:幞",
+   "lbl_b": "lb:𢢜",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《龍龕手鑑》巾部𢢜同幞為幞頭異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "雜色狀如鋪帶翹起【?】頭四角後垂拂四𣏽"
+   ],
+   "rel_a": [
+    {
+     "char": "纀",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:纀"
+    },
+    {
+     "char": "襆",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:襆"
+    },
+    {
+     "char": "襮",
+     "srcs": [
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:襮"
+    },
+    {
+     "char": "𦄾",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦄾"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:幞:v2:bxgb:37:2:5",
+    "c:幞:v2:bxgb:41:14:21",
+    "c:幞:v2:bxgb:42:4:4"
+   ],
+   "pics_b": [
+    "c:𢢜:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 3,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new060",
+   "sec": "new",
+   "a": "易",
+   "b": "𣆄",
+   "lbl_a": "lb:易",
+   "lbl_b": "lb:𣆄",
+   "cells": 1,
+   "tags": [],
+   "basis": "《汉语大字典》《异体字字典》收𣆄为易异体，音义全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "二十五里至沙河縣【?】驢馬又三十五里飯"
+   ],
+   "rel_a": [
+    {
+     "char": "昜",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:昜"
+    },
+    {
+     "char": "蜴",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:蜴"
+    },
+    {
+     "char": "賜",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:賜"
+    },
+    {
+     "char": "𡱿",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡱿"
+    },
+    {
+     "char": "㑥",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:㑥"
+    },
+    {
+     "char": "亦",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:亦"
+    },
+    {
+     "char": "埸",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:埸"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "昜",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:昜"
+    },
+    {
+     "char": "陽",
+     "srcs": [
+      "twedu",
+      "unihan:kSemanticVariant"
+     ],
+     "lbl": "lb:陽"
+    }
+   ],
+   "pics_a": [
+    "c:易:font:iming"
+   ],
+   "pics_b": [
+    "c:𣆄:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new061",
+   "sec": "new",
+   "a": "馬",
+   "b": "𫠉",
+   "lbl_a": "lb:馬",
+   "lbl_b": "lb:𫠉",
+   "cells": 1,
+   "tags": [],
+   "basis": "《中華字海》《漢語大字典》收𫠉為馬異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "有折軸者隨使副乘【?】過漳河登車六十里"
+   ],
+   "rel_a": [
+    {
+     "char": "马",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:马"
+    },
+    {
+     "char": "𢒗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢒗"
+    },
+    {
+     "char": "𢒠",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢒠"
+    },
+    {
+     "char": "𢒧",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢒧"
+    },
+    {
+     "char": "𩡬",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩡬"
+    },
+    {
+     "char": "𩡮",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𩡮"
+    },
+    {
+     "char": "傌",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:傌"
+    },
+    {
+     "char": "碼",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:碼"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:馬:bxgb:13:15:1",
+    "c:馬:bxgb:13:17:8",
+    "c:馬:bxgb:13:19:21",
+    "c:馬:bxgb:13:6:9"
+   ],
+   "pics_b": [
+    "c:𫠉:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 4,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new062",
+   "sec": "new",
+   "a": "瓠",
+   "b": "𤬏",
+   "lbl_a": "lb:瓠",
+   "lbl_b": "lb:𤬏",
+   "cells": 1,
+   "tags": [],
+   "basis": "《汉语大字典》瓠条收𤬏为异体音义同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "煙上爲胡羊中橫一【?】下爲經一卷蓋河朔"
+   ],
+   "rel_a": [
+    {
+     "char": "瓡",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:瓡"
+    },
+    {
+     "char": "葫",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:葫"
+    },
+    {
+     "char": "𤬗",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤬗"
+    },
+    {
+     "char": "壼",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:壼"
+    },
+    {
+     "char": "狐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:狐"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:瓠:font:iming"
+   ],
+   "pics_b": [
+    "c:𤬏:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new063",
+   "sec": "new",
+   "a": "㡬",
+   "b": "幾",
+   "lbl_a": "lb:㡬",
+   "lbl_b": "lb:幾",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》㡬為幾之異體音義全同",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "王南征盡剝去不知【?】喜萬匹後來都是行"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "機",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:機"
+    },
+    {
+     "char": "譏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:譏"
+    },
+    {
+     "char": "豈",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:豈"
+    },
+    {
+     "char": "頎",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:頎"
+    },
+    {
+     "char": "𢆻",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢆻"
+    },
+    {
+     "char": "𢆼",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢆼"
+    },
+    {
+     "char": "𢇒",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢇒"
+    },
+    {
+     "char": "𢇓",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𢇓"
+    },
+    {
+     "char": "𨗂",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨗂"
+    },
+    {
+     "char": "僟",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:僟"
+    },
+    {
+     "char": "冀",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:冀"
+    },
+    {
+     "char": "几",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:几"
+    },
+    {
+     "char": "刉",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:刉"
+    },
+    {
+     "char": "刏",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:刏"
+    }
+   ],
+   "pics_a": [
+    "c:㡬:font:iming"
+   ],
+   "pics_b": [
+    "c:幾:v2:bxgb:18:11:6"
+   ],
+   "font_a": "iming",
+   "font_b": null,
+   "n_real_a": 0,
+   "n_real_b": 1,
+   "pageIdx": 2
+  },
+  {
+   "id": "new064",
+   "sec": "new",
+   "a": "殃",
+   "b": "𣧎",
+   "lbl_a": "lb:殃",
+   "lbl_b": "lb:𣧎",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》殃部：𣧎為殃之異體，音義全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "來都是行歸而今又【?】我等責價買問絹帛"
+   ],
+   "rel_a": [
+    {
+     "char": "𥙏",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥙏"
+    },
+    {
+     "char": "䄃",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:䄃"
+    },
+    {
+     "char": "央",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:央"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:殃:font:iming"
+   ],
+   "pics_b": [
+    "c:𣧎:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new065",
+   "sec": "new",
+   "a": "議",
+   "b": "𧫟",
+   "lbl_a": "lb:議",
+   "lbl_b": "lb:𧫟",
+   "cells": 1,
+   "tags": [],
+   "basis": "《教育部異體字字典》收𧫟為議之異體，音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "作梗太子自去邊頭【?】和半年不決又且歸"
+   ],
+   "rel_a": [
+    {
+     "char": "议",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:议"
+    },
+    {
+     "char": "𧭖",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧭖"
+    },
+    {
+     "char": "俄",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:俄"
+    },
+    {
+     "char": "義",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:義"
+    },
+    {
+     "char": "訛",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:訛"
+    },
+    {
+     "char": "誼",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:誼"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "謑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:謑"
+    }
+   ],
+   "pics_a": [
+    "c:議:font:iming"
+   ],
+   "pics_b": [
+    "c:𧫟:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new066",
+   "sec": "new",
+   "a": "寧",
+   "b": "𫝱",
+   "lbl_a": "lb:寧",
+   "lbl_b": "lb:𫝱",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《異體字字典》以𫝱為寧異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "四更車行六十里飯【?】陵縣永寧驛又六十"
+   ],
+   "rel_a": [
+    {
+     "char": "甯",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:甯"
+    },
+    {
+     "char": "𡧾",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡧾"
+    },
+    {
+     "char": "𡨴",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:𡨴"
+    },
+    {
+     "char": "𡩬",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𡩬"
+    },
+    {
+     "char": "𡪕",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡪕"
+    },
+    {
+     "char": "𡬛",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡬛"
+    },
+    {
+     "char": "寧",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:寧"
+    },
+    {
+     "char": "㝕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:㝕"
+    },
+    {
+     "char": "宁",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:宁"
+    },
+    {
+     "char": "寍",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:寍"
+    },
+    {
+     "char": "寕",
+     "srcs": [
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:寕"
+    },
+    {
+     "char": "寗",
+     "srcs": [
+      "dypytz",
+      "hydzd"
+     ],
+     "lbl": "lb:寗"
+    },
+    {
+     "char": "寜",
+     "srcs": [
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:寜"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:寧:bxgb:16:8:11",
+    "c:寧:v2:bxgb:3:16:14"
+   ],
+   "pics_b": [
+    "c:𫝱:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 2,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new067",
+   "sec": "new",
+   "a": "背",
+   "b": "𦙼",
+   "lbl_a": "lb:背",
+   "lbl_b": "lb:𦙼",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典·肉部》以𦙼為背異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "甚多也是日日有四【?】氣又白虹貫日日在"
+   ],
+   "rel_a": [
+    {
+     "char": "褙",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:褙"
+    },
+    {
+     "char": "𧶙",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧶙"
+    },
+    {
+     "char": "伾",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:伾"
+    },
+    {
+     "char": "倍",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:倍"
+    },
+    {
+     "char": "偝",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:偝"
+    },
+    {
+     "char": "北",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:北"
+    },
+    {
+     "char": "崩",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:崩"
+    },
+    {
+     "char": "揹",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "yitizi"
+     ],
+     "lbl": "lb:揹"
+    },
+    {
+     "char": "絣",
+     "srcs": [
+      "unihan:kSpecializedSemanticVariant"
+     ],
+     "lbl": "lb:絣"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "胔",
+     "srcs": [
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:胔"
+    },
+    {
+     "char": "胾",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:胾"
+    },
+    {
+     "char": "骴",
+     "srcs": [
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:骴"
+    }
+   ],
+   "pics_a": [
+    "c:背:font:iming"
+   ],
+   "pics_b": [
+    "c:𦙼:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new068",
+   "sec": "new",
+   "a": "瘞",
+   "b": "𤸻",
+   "lbl_a": "lb:瘞",
+   "lbl_b": "lb:𤸻",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《康熙字典》𤸻為瘞異體，音義同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "召伯埭使副捐金使【?】之晚過揚州是夜禮"
+   ],
+   "rel_a": [
+    {
+     "char": "𡈾",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡈾"
+    },
+    {
+     "char": "𡎶",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡎶"
+    },
+    {
+     "char": "𢊃",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢊃"
+    },
+    {
+     "char": "𤺦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤺦"
+    },
+    {
+     "char": "𨻊",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨻊"
+    },
+    {
+     "char": "𨻏",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𨻏"
+    },
+    {
+     "char": "圠",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:圠"
+    },
+    {
+     "char": "殪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:殪"
+    },
+    {
+     "char": "瘗",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:瘗"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:瘞:font:iming"
+   ],
+   "pics_b": [
+    "c:𤸻:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new069",
+   "sec": "new",
+   "a": "驚",
+   "b": "𩦉",
+   "lbl_a": "lb:驚",
+   "lbl_b": "lb:𩦉",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》馬部:𩦉係驚左右異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "間隔岸望鄉頭終日【?】臉勞動止行三十餘"
+   ],
+   "rel_a": [
+    {
+     "char": "惊",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:惊"
+    },
+    {
+     "char": "敬",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:敬"
+    },
+    {
+     "char": "警",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:警"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:驚:font:iming"
+   ],
+   "pics_b": [
+    "c:𩦉:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new070",
+   "sec": "new",
+   "a": "解",
+   "b": "𧣈",
+   "lbl_a": "lb:解",
+   "lbl_b": "lb:𧣈",
+   "cells": 1,
+   "tags": [],
+   "basis": "《漢語大字典》《康熙字典》以𧣈為解異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "留來日一飯客次遇【?】節椎延連是日景山"
+   ],
+   "rel_a": [
+    {
+     "char": "觧",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "unihan:kSpecializedSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:觧"
+    },
+    {
+     "char": "豸",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:豸"
+    },
+    {
+     "char": "鳩",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:鳩"
+    },
+    {
+     "char": "𦴘",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦴘"
+    },
+    {
+     "char": "懈",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:懈"
+    },
+    {
+     "char": "蟹",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:蟹"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "斛",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:斛"
+    },
+    {
+     "char": "觸",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:觸"
+    }
+   ],
+   "pics_a": [
+    "c:解:font:iming"
+   ],
+   "pics_b": [
+    "c:𧣈:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "new071",
+   "sec": "new",
+   "a": "昏",
+   "b": "𤯁",
+   "lbl_a": "lb:昏",
+   "lbl_b": "lb:𤯁",
+   "cells": 1,
+   "tags": [],
+   "basis": "《異體字字典》收𤯁為昏異體，音hūn義日冥全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "馬公嶺至天寧寺已【?】黑仲兄器之仁甫不"
+   ],
+   "rel_a": [
+    {
+     "char": "昬",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:昬"
+    },
+    {
+     "char": "泯",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:泯"
+    },
+    {
+     "char": "閽",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:閽"
+    },
+    {
+     "char": "𢾞",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:𢾞"
+    },
+    {
+     "char": "𣄼",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣄼"
+    },
+    {
+     "char": "𣄾",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣄾"
+    },
+    {
+     "char": "𣆾",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣆾"
+    },
+    {
+     "char": "𣉈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣉈"
+    },
+    {
+     "char": "𣋯",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣋯"
+    },
+    {
+     "char": "𦟲",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𦟲"
+    },
+    {
+     "char": "婚",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:婚"
+    },
+    {
+     "char": "惛",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:惛"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𠯑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠯑"
+    }
+   ],
+   "pics_a": [
+    "c:昏:font:iming"
+   ],
+   "pics_b": [
+    "c:𤯁:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0,
+   "pageIdx": 2
+  },
+  {
+   "id": "weak072",
+   "sec": "weak",
+   "a": "枝",
+   "b": "𣏽",
+   "lbl_a": "lb:枝",
+   "lbl_b": "lb:𣏽",
+   "cells": 3,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典以𣏽為枝異體，音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "帚桑時起林中數尺【?】佭叢細苑如帚狀稍",
+    "簪花翦絑爲之惟欒【?】甚異或四或二長二",
+    "𢢜頭四角後垂拂四【?】是日風旣暴狂幾不"
+   ],
+   "rel_a": [
+    {
+     "char": "歧",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:歧"
+    },
+    {
+     "char": "肢",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:肢"
+    },
+    {
+     "char": "胑",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:胑"
+    },
+    {
+     "char": "跂",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:跂"
+    },
+    {
+     "char": "軹",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:軹"
+    },
+    {
+     "char": "㩽",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:㩽"
+    },
+    {
+     "char": "支",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:支"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "枚",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:枚"
+    }
+   ],
+   "pics_a": [
+    "c:枝:font:iming"
+   ],
+   "pics_b": [
+    "c:𣏽:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak073",
+   "sec": "weak",
+   "a": "涿",
+   "b": "𣵠",
+   "lbl_a": "lb:涿",
+   "lbl_b": "lb:𣵠",
+   "cells": 3,
+   "tags": [
+    "hydzd"
+   ],
+   "existing_srcs": [
+    "hydzd"
+   ],
+   "basis": "《汉语大字典》𣵠同涿，读zhuo1即涿州涿郡",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "客于此又六十里至【?】州漢高帝立𣵠郡魏",
+    "里至𣵠州漢高帝立【?】郡魏文帝更名范陽",
+    "晴五更車行八十里【?】州早食又六十里宿"
+   ],
+   "rel_a": [
+    {
+     "char": "湪",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:湪"
+    },
+    {
+     "char": "琢",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:琢"
+    },
+    {
+     "char": "𣄻",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣄻"
+    },
+    {
+     "char": "𣽗",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣽗"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:涿:font:iming"
+   ],
+   "pics_b": [
+    "c:𣵠:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak074",
+   "sec": "weak",
+   "a": "㒒",
+   "b": "僕",
+   "lbl_a": "lb:㒒",
+   "lbl_b": "lb:僕",
+   "cells": 1,
+   "tags": [
+    "hydzd"
+   ],
+   "existing_srcs": [
+    "hydzd"
+   ],
+   "basis": "《漢語大字典》《集韻》㒒同僕，為僕異體",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "石筍森列䀁亭翼然【?】夫曰此初陽各也中"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "卜",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:卜"
+    },
+    {
+     "char": "轐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:轐"
+    },
+    {
+     "char": "𢖃",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢖃"
+    },
+    {
+     "char": "䑑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:䑑"
+    },
+    {
+     "char": "仆",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:仆"
+    }
+   ],
+   "pics_a": [
+    "c:㒒:font:iming"
+   ],
+   "pics_b": [
+    "c:僕:v2:bxgb:4:6:13"
+   ],
+   "font_a": "iming",
+   "font_b": null,
+   "n_real_a": 0,
+   "n_real_b": 1
+  },
+  {
+   "id": "weak075",
+   "sec": "weak",
+   "a": "築",
+   "b": "𥲒",
+   "lbl_a": "lb:築",
+   "lbl_b": "lb:𥲒",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典以𥲒為築異體音義同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "有作屋其上州城新【?】雉堞甚整聞是五月"
+   ],
+   "rel_a": [
+    {
+     "char": "𥭰",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥭰"
+    },
+    {
+     "char": "𥯹",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥯹"
+    },
+    {
+     "char": "𥰺",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥰺"
+    },
+    {
+     "char": "𥲔",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥲔"
+    },
+    {
+     "char": "𥴀",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥴀"
+    },
+    {
+     "char": "𥴁",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥴁"
+    },
+    {
+     "char": "𥵭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥵭"
+    },
+    {
+     "char": "築",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:築"
+    },
+    {
+     "char": "祝",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:祝"
+    },
+    {
+     "char": "筑",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:筑"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:築:bxgb:14:12:14",
+    "c:築:bxgb:14:6:5",
+    "c:築:bxgb:22:14:1"
+   ],
+   "pics_b": [
+    "c:𥲒:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 3,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak076",
+   "sec": "weak",
+   "a": "青",
+   "b": "𤯝",
+   "lbl_a": "lb:青",
+   "lbl_b": "lb:𤯝",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典：𤯝為青之異體，音義全同可互換。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "也北郊方壇在路西【?】城在路東面南中開"
+   ],
+   "rel_a": [
+    {
+     "char": "𡗡",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡗡"
+    },
+    {
+     "char": "𡴏",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡴏"
+    },
+    {
+     "char": "𡴐",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𡴐"
+    },
+    {
+     "char": "𡴑",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡴑"
+    },
+    {
+     "char": "𡷉",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡷉"
+    },
+    {
+     "char": "𤯞",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𤯞"
+    },
+    {
+     "char": "㞭",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:㞭"
+    },
+    {
+     "char": "寈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:寈"
+    },
+    {
+     "char": "清",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:清"
+    },
+    {
+     "char": "靑",
+     "srcs": [
+      "twedu",
+      "yitizi"
+     ],
+     "lbl": "lb:靑"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "眚",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:眚"
+    }
+   ],
+   "pics_a": [
+    "c:青:bxgb:21:9:3"
+   ],
+   "pics_b": [
+    "c:𤯝:font:iming"
+   ],
+   "font_a": null,
+   "font_b": "iming",
+   "n_real_a": 1,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak077",
+   "sec": "weak",
+   "a": "㐲",
+   "b": "伏",
+   "lbl_a": "lb:㐲",
+   "lbl_b": "lb:伏",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典：㐲為伏之異體",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "復車行四十五里過【?】道望扁鵲墓墓前多"
+   ],
+   "rel_a": [],
+   "rel_b": [
+    {
+     "char": "服",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:服"
+    },
+    {
+     "char": "虙",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:虙"
+    },
+    {
+     "char": "負",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:負"
+    },
+    {
+     "char": "𥦸",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥦸"
+    },
+    {
+     "char": "𥧜",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𥧜"
+    }
+   ],
+   "pics_a": [
+    "c:㐲:font:iming"
+   ],
+   "pics_b": [
+    "c:伏:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak078",
+   "sec": "weak",
+   "a": "煕",
+   "b": "熙",
+   "lbl_a": "lb:煕",
+   "lbl_b": "lb:熙",
+   "cells": 1,
+   "tags": [
+    "yitizi"
+   ],
+   "existing_srcs": [
+    "yitizi"
+   ],
+   "basis": "《康熙字典》《異體字字典》收煕為熙之異體",
+   "canonical": "b",
+   "tongjia": false,
+   "ctx": [
+    "木巷立節坊成義坊【?】暉樓市肆牌額多寫"
+   ],
+   "rel_a": [
+    {
+     "char": "熈",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:熈"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "禧",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:禧"
+    },
+    {
+     "char": "𤇴",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𤇴"
+    },
+    {
+     "char": "𤋮",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd"
+     ],
+     "lbl": "lb:𤋮"
+    },
+    {
+     "char": "𤐤",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𤐤"
+    },
+    {
+     "char": "㷂",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:㷂"
+    },
+    {
+     "char": "喜",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:喜"
+    },
+    {
+     "char": "嬉",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:嬉"
+    },
+    {
+     "char": "巸",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:巸"
+    },
+    {
+     "char": "焈",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:焈"
+    },
+    {
+     "char": "熈",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:熈"
+    }
+   ],
+   "pics_a": [
+    "c:煕:font:iming"
+   ],
+   "pics_b": [
+    "c:熙:bxgb:11:11:20"
+   ],
+   "font_a": "iming",
+   "font_b": null,
+   "n_real_a": 0,
+   "n_real_b": 1
+  },
+  {
+   "id": "weak079",
+   "sec": "weak",
+   "a": "置",
+   "b": "𣇣",
+   "lbl_a": "lb:置",
+   "lbl_b": "lb:𣇣",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典收𣇣為置之異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "民間㧲捕耳皇朝初【?】保塞軍後升爲州政"
+   ],
+   "rel_a": [
+    {
+     "char": "𢍧",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢍧"
+    },
+    {
+     "char": "𦋘",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𦋘"
+    },
+    {
+     "char": "𦋲",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦋲"
+    },
+    {
+     "char": "𦋽",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𦋽"
+    },
+    {
+     "char": "𦌃",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦌃"
+    },
+    {
+     "char": "𦌖",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𦌖"
+    },
+    {
+     "char": "𦌤",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦌤"
+    },
+    {
+     "char": "值",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:值"
+    },
+    {
+     "char": "寘",
+     "srcs": [
+      "cjkvi-simplified",
+      "dypytz",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:寘"
+    },
+    {
+     "char": "直",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:直"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:置:font:iming"
+   ],
+   "pics_b": [
+    "c:𣇣:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak080",
+   "sec": "weak",
+   "a": "督",
+   "b": "𣈉",
+   "lbl_a": "lb:督",
+   "lbl_b": "lb:𣈉",
+   "cells": 1,
+   "tags": [
+    "hydzd"
+   ],
+   "existing_srcs": [
+    "hydzd"
+   ],
+   "basis": "《漢語大字典·目部》𣈉為督異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "更名范陽新城縣有【?】兀阪漑田號爲𮌔𦚤"
+   ],
+   "rel_a": [
+    {
+     "char": "篤",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:篤"
+    },
+    {
+     "char": "𥆳",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𥆳"
+    },
+    {
+     "char": "𥆴",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𥆴"
+    },
+    {
+     "char": "毒",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:毒"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:督:font:iming"
+   ],
+   "pics_b": [
+    "c:𣈉:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak081",
+   "sec": "weak",
+   "a": "剪",
+   "b": "翦",
+   "lbl_a": "lb:剪",
+   "lbl_b": "lb:翦",
+   "cells": 1,
+   "tags": [
+    "dypytz",
+    "hydzd",
+    "hydzd-borrowed",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "yitizi"
+   ],
+   "existing_srcs": [
+    "dypytz",
+    "hydzd",
+    "hydzd-borrowed",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "yitizi"
+   ],
+   "basis": "漢語大字典、教育部異體字典皆以翦為剪異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "先起百官出就簪花【?】絑爲之惟欒𣏽甚異"
+   ],
+   "rel_a": [
+    {
+     "char": "踐",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:踐"
+    },
+    {
+     "char": "鬋",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:鬋"
+    },
+    {
+     "char": "齊",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:齊"
+    },
+    {
+     "char": "𠝣",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𠝣"
+    },
+    {
+     "char": "𣦃",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𣦃"
+    },
+    {
+     "char": "𣦟",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𣦟"
+    },
+    {
+     "char": "前",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:前"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "踐",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:踐"
+    },
+    {
+     "char": "鬋",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:鬋"
+    },
+    {
+     "char": "𠞽",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠞽"
+    },
+    {
+     "char": "𠟠",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𠟠"
+    },
+    {
+     "char": "𦑦",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦑦"
+    },
+    {
+     "char": "𦑳",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦑳"
+    },
+    {
+     "char": "𦒕",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦒕"
+    },
+    {
+     "char": "前",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:前"
+    },
+    {
+     "char": "劗",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:劗"
+    },
+    {
+     "char": "箭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:箭"
+    }
+   ],
+   "pics_a": [
+    "c:剪:font:iming"
+   ],
+   "pics_b": [
+    "c:翦:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak082",
+   "sec": "weak",
+   "a": "幣",
+   "b": "幤",
+   "lbl_a": "lb:幣",
+   "lbl_b": "lb:幤",
+   "cells": 1,
+   "tags": [
+    "yitizi"
+   ],
+   "existing_srcs": [
+    "yitizi"
+   ],
+   "basis": "教育部異體字字典收幤為幣異體，音義全同可互換",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "罷偉口宣云遠將慶【?】來會春朝方休徒御"
+   ],
+   "rel_a": [
+    {
+     "char": "弊",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:弊"
+    },
+    {
+     "char": "敝",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:敝"
+    },
+    {
+     "char": "𢄞",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢄞"
+    },
+    {
+     "char": "𧝬",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧝬"
+    },
+    {
+     "char": "𧸁",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𧸁"
+    },
+    {
+     "char": "币",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "twedu",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:币"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "币",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:币"
+    }
+   ],
+   "pics_a": [
+    "c:幣:font:iming"
+   ],
+   "pics_b": [
+    "c:幤:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak083",
+   "sec": "weak",
+   "a": "霧",
+   "b": "霿",
+   "lbl_a": "lb:霧",
+   "lbl_b": "lb:霿",
+   "cells": 1,
+   "tags": [
+    "hydzd",
+    "hydzd-borrowed"
+   ],
+   "existing_srcs": [
+    "hydzd",
+    "hydzd-borrowed"
+   ],
+   "basis": "《說文》霿即今霧，《漢語大字典》注霿同霧",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "曰拱德十四日乙丑【?】子下天明開霽四更"
+   ],
+   "rel_a": [
+    {
+     "char": "𩄯",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩄯"
+    },
+    {
+     "char": "𩅗",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:𩅗"
+    },
+    {
+     "char": "𩅬",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𩅬"
+    },
+    {
+     "char": "雱",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:雱"
+    },
+    {
+     "char": "雺",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu"
+     ],
+     "lbl": "lb:雺"
+    },
+    {
+     "char": "雾",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:雾"
+    },
+    {
+     "char": "霚",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:霚"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "𠊮",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𠊮"
+    },
+    {
+     "char": "𠍢",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𠍢"
+    },
+    {
+     "char": "𢝠",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢝠"
+    },
+    {
+     "char": "𢝽",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢝽"
+    },
+    {
+     "char": "𩆭",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𩆭"
+    },
+    {
+     "char": "愗",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:愗"
+    },
+    {
+     "char": "雺",
+     "srcs": [
+      "hydzd",
+      "hydzd-borrowed",
+      "twedu"
+     ],
+     "lbl": "lb:雺"
+    }
+   ],
+   "pics_a": [
+    "c:霧:font:iming"
+   ],
+   "pics_b": [
+    "c:霿:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak084",
+   "sec": "weak",
+   "a": "喜",
+   "b": "𠶮",
+   "lbl_a": "lb:喜",
+   "lbl_b": "lb:𠶮",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "據教育部異體字字典，𠶮為喜之異體音義全同",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "及淮山一行已不勝【?】𥗫矣又六十里宿泗"
+   ],
+   "rel_a": [
+    {
+     "char": "嬉",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:嬉"
+    },
+    {
+     "char": "憘",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:憘"
+    },
+    {
+     "char": "憙",
+     "srcs": [
+      "hydzd",
+      "twedu",
+      "unihan:kSemanticVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:憙"
+    },
+    {
+     "char": "歖",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:歖"
+    },
+    {
+     "char": "熙",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:熙"
+    },
+    {
+     "char": "饎",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:饎"
+    },
+    {
+     "char": "𡔯",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𡔯"
+    },
+    {
+     "char": "𢐭",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢐭"
+    },
+    {
+     "char": "𢝫",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𢝫"
+    },
+    {
+     "char": "𦬅",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:𦬅"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:喜:font:iming"
+   ],
+   "pics_b": [
+    "c:𠶮:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak085",
+   "sec": "weak",
+   "a": "羅",
+   "b": "𦌴",
+   "lbl_a": "lb:羅",
+   "lbl_b": "lb:𦌴",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部異體字字典收𦌴為羅之異體，音義全同。",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "而人不覺同行楊劉【?】三人蒙被登岸舟已"
+   ],
+   "rel_a": [
+    {
+     "char": "邏",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:邏"
+    },
+    {
+     "char": "𦋝",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𦋝"
+    },
+    {
+     "char": "啰",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:啰"
+    },
+    {
+     "char": "囉",
+     "srcs": [
+      "yitizi"
+     ],
+     "lbl": "lb:囉"
+    },
+    {
+     "char": "罗",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSemanticVariant",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:罗"
+    }
+   ],
+   "rel_b": [],
+   "pics_a": [
+    "c:羅:font:iming"
+   ],
+   "pics_b": [
+    "c:𦌴:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak086",
+   "sec": "weak",
+   "a": "任",
+   "b": "仼",
+   "lbl_a": "lb:任",
+   "lbl_b": "lb:仼",
+   "cells": 1,
+   "tags": [
+    "unihan:kSemanticVariant"
+   ],
+   "existing_srcs": [
+    "unihan:kSemanticVariant"
+   ],
+   "basis": "《汉语大字典》《中华字海》收仼为任异体，壬俗作王",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "罷即行喻郞中訪及【?】當來知諸舅來迓夜"
+   ],
+   "rel_a": [
+    {
+     "char": "妊",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:妊"
+    },
+    {
+     "char": "紝",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:紝"
+    },
+    {
+     "char": "賃",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:賃"
+    },
+    {
+     "char": "𢓩",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𢓩"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "俇",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:俇"
+    },
+    {
+     "char": "彺",
+     "srcs": [
+      "twedu"
+     ],
+     "lbl": "lb:彺"
+    }
+   ],
+   "pics_a": [
+    "c:任:font:iming"
+   ],
+   "pics_b": [
+    "c:仼:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  },
+  {
+   "id": "weak087",
+   "sec": "weak",
+   "a": "鸕",
+   "b": "𪇸",
+   "lbl_a": "lb:鸕",
+   "lbl_b": "lb:𪇸",
+   "cells": 1,
+   "tags": [
+    "twedu"
+   ],
+   "existing_srcs": [
+    "twedu"
+   ],
+   "basis": "教育部《異體字字典》：𪇸為鸕之異體",
+   "canonical": "a",
+   "tongjia": false,
+   "ctx": [
+    "戊申晴東風張㠶過【?】鵡原鈞𡎲下伴伯原"
+   ],
+   "rel_a": [
+    {
+     "char": "鸬",
+     "srcs": [
+      "cjkvi-simplified",
+      "hydzd",
+      "unihan:kSimplifiedVariant",
+      "unihan:kTraditionalVariant",
+      "yitizi"
+     ],
+     "lbl": "lb:鸬"
+    },
+    {
+     "char": "𩁨",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𩁨"
+    },
+    {
+     "char": "𪈒",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:𪈒"
+    },
+    {
+     "char": "盧",
+     "srcs": [
+      "hydzd"
+     ],
+     "lbl": "lb:盧"
+    },
+    {
+     "char": "鷺",
+     "srcs": [
+      "hydzd-borrowed"
+     ],
+     "lbl": "lb:鷺"
+    }
+   ],
+   "rel_b": [
+    {
+     "char": "鷺",
+     "srcs": [
+      "hydzd",
+      "twedu"
+     ],
+     "lbl": "lb:鷺"
+    }
+   ],
+   "pics_a": [
+    "c:鸕:font:iming"
+   ],
+   "pics_b": [
+    "c:𪇸:font:iming"
+   ],
+   "font_a": "iming",
+   "font_b": "iming",
+   "n_real_a": 0,
+   "n_real_b": 0
+  }
+ ],
+ "verdicts": {
+  "new001": {
+   "v": "out",
+   "t": 1790543117203
+  },
+  "new002": {
+   "v": "in",
+   "t": 1790543124259
+  },
+  "new003": {
+   "v": "in",
+   "t": 1790543133992
+  },
+  "new004": {
+   "v": "out",
+   "t": 1790543213373
+  },
+  "new005": {
+   "v": "out",
+   "t": 1790543216286
+  },
+  "new006": {
+   "v": "in",
+   "t": 1790543238395
+  },
+  "new007": {
+   "v": "in",
+   "t": 1790543242023
+  }
+ }
+}
