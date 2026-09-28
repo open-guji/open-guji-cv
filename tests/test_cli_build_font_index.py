@@ -16,7 +16,7 @@ from open_guji_cv.clustering import font_candidates as fc
 from open_guji_cv.clustering import rare_panel as rare_panel_mod
 
 
-def test_cli_build_font_index_uses_rare_charsets_and_dedupes(monkeypatch):
+def test_cli_build_font_index_uses_rare_charsets_and_dedupes(monkeypatch, ws):
     cs_small = tuple("一二三")
     cs_big = tuple("一二三十土王")   # small ⊆ big
 
@@ -43,7 +43,7 @@ def test_cli_build_font_index_uses_rare_charsets_and_dedupes(monkeypatch):
     assert f_big.stat().st_mtime_ns == mtime_before
 
 
-def test_cli_build_font_index_passes_book_corpus_when_book_given(monkeypatch):
+def test_cli_build_font_index_passes_book_corpus_when_book_given(monkeypatch, ws):
     """给了 `--book` 时字表要按那本书的语料算（`book_corpus(book)`），
     不能悄悄退回 DEFAULT_CORPUS——预建的表要跟那本书 `rare_for(book=...)`
     实际查询时用的表对上。"""
@@ -62,3 +62,38 @@ def test_cli_build_font_index_passes_book_corpus_when_book_given(monkeypatch):
 
     cli_v2._cmd_cache_build_font_index(Namespace(book="vol01"))
     assert seen_corpus == ["vol01"]
+
+
+def test_cli_build_font_index_without_workspace_refuses(monkeypatch, capsys):
+    """不给 -w（也没 GUJI_CACHE_DIR）：默认语料与 cache/font_index/ 都会退回仓内样本，
+    建出来的表谁也用不上——直接拒，不悄悄建（overview#246）。"""
+    import pytest
+    called = []
+    monkeypatch.setattr(rare_panel_mod, "_rare_charsets", lambda corpus=None: called.append(1))
+    with pytest.raises(SystemExit):
+        cli_v2._cmd_cache_build_font_index(Namespace(book=""))
+    assert "-w" in capsys.readouterr().err and not called
+
+
+def test_cache_without_book_parses_with_and_without_workspace(tmp_path, monkeypatch):
+    """`guji cache build-font-index -w <ws>`（不带 --book）原先被「带 book 的命令必须有
+    books/<book>.yaml」那层包装拦下（`books/.yaml` 不存在），怎么都跑不起来；
+    `guji cache usage` 不带 -w 也被拦。现在可选的 --book 没给时：有 -w 只查目录、导出
+    GUJI_WORKSPACE；没 -w 就不碰工作区。"""
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="cmd")
+    cli_v2.register_subcommands(sub)
+    seen = []
+    monkeypatch.setattr(cli_v2, "_cmd_cache_build_font_index",
+                        lambda a: seen.append(os.environ.get("GUJI_WORKSPACE")))
+    args = parser.parse_args(["cache", "build-font-index", "-w", str(tmp_path)])
+    cli_v2.COMMANDS_V2["cache"](args)
+    assert seen == [str(tmp_path.resolve())]
+
+    monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
+    args = parser.parse_args(["cache", "build-font-index"])
+    cli_v2.COMMANDS_V2["cache"](args)
+    assert seen[-1] is None

@@ -192,6 +192,7 @@ def render_record(results: list[ImportResult], ts: str) -> str:
                       ("raw_pages", "服务器原图与包不一致，等 guji-workspace pull（下轮再试）"),
                       ("raw_check_skipped", "原图核对跳过"),
                       ("error", "错误"), ("backup", "旧产物备份到"), ("attachments_placed", "附件落位"),
+                      ("indexes_placed", "模板索引落位"), ("indexes_present", "模板索引已在（按 key 去重，没拉）"),
                       ("pruned_backups", "清掉的旧备份")):
             if d.get(k):
                 lines.append(f"- {zh}：{d[k]}")

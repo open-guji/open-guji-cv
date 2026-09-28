@@ -38,7 +38,13 @@ class GitError(RuntimeError):
 
 def ls_remote_snaps(repo: Path, remote: str = "origin", git: GitRunner = default_git) -> dict[str, str]:
     """远端所有 `snap/*` 分支 → 提交 sha。"""
-    out = _ok(git(repo, ["ls-remote", remote, "refs/heads/snap/*"]), "ls-remote")
+    return ls_remote_heads(repo, "snap/*", remote, git)
+
+
+def ls_remote_heads(repo: Path, pattern: str, remote: str = "origin",
+                    git: GitRunner = default_git) -> dict[str, str]:
+    """远端 `refs/heads/<pattern>` 的分支 → 提交 sha（`snap/*` 快照包、`idx/*` 模板索引）。"""
+    out = _ok(git(repo, ["ls-remote", remote, f"refs/heads/{pattern}"]), "ls-remote")
     res = {}
     for line in out.splitlines():
         sha, _, ref = line.partition("\t")
