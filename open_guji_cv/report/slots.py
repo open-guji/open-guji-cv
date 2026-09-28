@@ -195,6 +195,12 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     reason = str((rec.evidence or {}).get("excluded", "")).split(":")[-1]
     defect = on_list and reason in ("seg_defect", "damaged")
     excluded = on_list and not defect
+    # 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：不放行，但用户定「文本产物
+    # 照常输出这个字」——`char` 是整理本的默认字（坐标对位优先），不是机器猜测，照出；
+    # 坐标对位说这一位是空格（印章切出来的假格）的，当非字跳过，不占位。
+    occ = (rec.evidence or {}).get("occluded") or None
+    if occ and occ.get("ref_blank") and not rec.admit:
+        excluded = True
     # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
     # 比少一格的后果大。
@@ -214,7 +220,7 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     # 排除名单（defect/excluded）不走这条——那两类的 `char` 已经是 Step7 自己
     # 给的占位（damaged 的 `□`、seg_defect 的 `None`），不是 `_pick_char` 的
     # 候选猜测，动它会破坏既有的阙文渲染（见 tests/test_slots_excluded_reason.py）。
-    if not admit and not on_list:
+    if not admit and not on_list and not (occ and char):
         guess = guess or char
         char = None
     return SlotRec(
