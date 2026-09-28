@@ -537,6 +537,34 @@ def cmd_eval(args) -> None:
     sys.exit(1 if n_bad and args.strict else 0)
 
 
+def cmd_locate_gutter(args) -> None:
+    """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
+    判据见 `utils/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
+    import cv2
+    from .utils.image_io import imread
+    from .utils.locate_gutter import locate_gutter
+    gray = imread(args.image, cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        raise SystemExit(f"读不了图：{args.image}")
+    band = None
+    if args.band:
+        a, _, b = args.band.partition(",")
+        band = (int(a), int(b))
+    r = locate_gutter(gray, band=band, ink_threshold=args.ink_threshold)
+    if args.json:
+        print(json.dumps({"image": str(args.image), **r.to_dict()}, ensure_ascii=False, indent=2))
+    elif r.x is None:
+        print(f"✗ 没找到版心：{r.note}")
+    else:
+        print(f"版心 x={r.x:.1f}（{r.x_left:.1f}–{r.x_right:.1f}，宽 {r.x_right - r.x_left:.0f}）"
+              f"  置信度 {r.confidence:.2f}  列距 {r.pitch:.0f}  竖线 {r.n_lines} 条"
+              + (f"  ⚠ {r.note}" if r.note else ""))
+        for c in r.candidates:
+            print(f"  候选 {c.x_left:7.1f}–{c.x_right:7.1f}  居中 {c.central:.2f} × 空 {c.blank:.2f} = {c.score:.2f}")
+    if r.x is None:
+        sys.exit(1)
+
+
 def cmd_split(args) -> None:
     """Step0 分页：按 book.yaml 的 page_split 段把扫描页裁成逻辑页，写进 raw_dir。
 
@@ -1541,6 +1569,7 @@ COMMANDS_V2 = {
     "preclean": cmd_preclean,
     "binarize": cmd_binarize,
     "split": cmd_split,
+    "locate-gutter": cmd_locate_gutter,
     "import-pdf": cmd_import_pdf,
     "witness-align": cmd_witness_align,
     "witness-align-stream": cmd_witness_align_stream,
@@ -1710,6 +1739,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--pages", default=None, help="只做这些**扫描页**（页号表达式，如 1-5,9）；默认全部")
     p.add_argument("--force", action="store_true", help="已有产物也重做")
+
+    p = sub.add_parser("locate-gutter",
+                       help="[v2] 版心定位（拆页用）：整叶扫描图 → 版心 x 与置信度（原图坐标，左原点）")
+    p.add_argument("image", help="原图路径")
+    p.add_argument("--band", default=None, help="只看这段高度 y0,y1（一张图上下两叶时分开找）")
+    p.add_argument("--ink-threshold", type=int, default=128)
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("witness-align",
                        help="[v2] 列级证人对齐：一行一列的整理本 → 逐字位候选标签（现代链播种/评测用）")
