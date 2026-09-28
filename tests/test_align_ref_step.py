@@ -59,7 +59,8 @@ def test_registered():
     # 阻塞**，`test_core_v2.test_keben_body_v2_on_vol01_page24` 一直挂在这上面。
     assert set(STEPS["align_ref"].spec.consumes) == {"glyph_match"}
     # 2026-09-28 加 `rare_candidates`（带开关，缺省不进指纹），见 test_rare_downstream.py
-    assert set(STEPS["align_ref"].spec.optional_consumes) == {"ocr_candidates", "rare_candidates"}
+    # 2026-09-28 加 `cells`（Step3 字格几何，按坐标对位 coord 用，overview#195；见 test_align_ref_coord.py）
+    assert set(STEPS["align_ref"].spec.optional_consumes) == {"ocr_candidates", "rare_candidates", "cells"}
 
 
 def test_corpus_fingerprint_lands_in_params_and_moves_the_hash():

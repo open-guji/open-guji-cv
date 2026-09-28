@@ -216,6 +216,10 @@ class SeedAdmitParams(BaseModel):
     """热格连通块至少多少格才算遮挡。"""
     occluded_min_cols: int = 3
     """热格连通块至少横跨几列。"""
+    occluded_min_peak: float = 8.0
+    """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
+    occluded_min_contrast: float = 2.5
+    """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
@@ -1058,7 +1062,8 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
     except Exception:
         return {}
     hit = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
-                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols)
+                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
+                         min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
     if not hit:
         return {}
     ref: PageAlignRef | None = _opt(ctx, "align_ref", page)

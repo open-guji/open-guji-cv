@@ -87,6 +87,9 @@ export interface ReviewCard {
   /** 借库书的「AI 首选」（书 yaml `params.review.first_pick` 开了才有；四庫、北行恒缺）。
    * 任务书-C-借库书人审首选改CNN原型（2026-09-27），装配见 `review/borrow_first.py`。 */
   first?: FirstPick | null
+  /** 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：默认字 = 整理本字（坐标对位优先），
+   * 字形一律不入库；`ref_blank` = 整理本这一位是空格（印章切出来的假格），默认「非字」。 */
+  occluded?: { char: string; via: string | null; ref_blank: boolean } | null
 }
 
 export interface FirstPick {

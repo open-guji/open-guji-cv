@@ -41,6 +41,20 @@
 取 **4 / 12 / 3**：全册只命中 p3，补洞后覆盖印章区 1–14 行的全部字格。
 样本只有一页真印章，阈值是在「全册零误报」这一侧定的；换书（或同书别的印章页）
 若漏报，先看 `evidence.occluded.density`，别急着降门槛（降到 6 格块就有 9 页误报）。
+
+## 十册复核（同日，四庫 vol01–vol10 快照全部 Step3 产物，共 1,892 页）
+
+只用上面三条，十册命中 15 页：各册首叶（p2/p3，藏书印）10 页 + 卷端 4 页
+（vol04 p130、vol09 p70/p164、vol10 p88）逐页看图**都是真印章**（vol09 p68 是一方小印，
+12 格刚好过线）；**vol05 p68 是误报**——那页没有印，是整页印得虚、笔画断成碎块、界行
+断成虚线，中等墨点处处都是。块级统计把它分得很开：
+
+| | 块内最高密度 | 块内中位 / 页内其余中位 |
+|---|---|---|
+| 14 页真印章 | 9.2 ~ 20.2 | 3.1 ~ 11 倍 |
+| vol05 p68（碎笔画） | **6.1** | **1.9 倍** |
+
+于是加两道块级闸：峰值 ≥ 8、对比 ≥ 2.5 倍（两者都要过）。加闸后十册命中 14 页全是真印章。
 """
 
 from __future__ import annotations
@@ -92,8 +106,13 @@ def cell_densities(gray: np.ndarray, cells) -> dict[tuple[int, int, str], float]
 
 
 def occluded_cells(dens: dict[tuple[int, int, str], float], *, min_density: float = 4.0,
-                   min_cells: int = 12, min_cols: int = 3) -> dict[tuple[int, int, str], float]:
-    """热格连通成块 → 遮挡格（含补洞）。返回 {(col, slot, sub): 密度}。"""
+                   min_cells: int = 12, min_cols: int = 3, min_peak: float = 8.0,
+                   min_contrast: float = 2.5) -> dict[tuple[int, int, str], float]:
+    """热格连通成块 → 遮挡格（含补洞）。返回 {(col, slot, sub): 密度}。
+
+    块还要过两道块级闸（见模块头「十册复核」）：块内最高密度 ≥ `min_peak`（印章芯子是
+    实打实的一大片斑点）；块内密度中位 ≥ `min_contrast` × 本页其余格的密度中位（整页
+    印得虚、笔画断成碎块的页，块内外一样脏，比不出来）。"""
     hot = [k for k, v in dens.items() if v >= min_density]
     hot_set = set(hot)
     seen: set = set()
@@ -113,6 +132,14 @@ def occluded_cells(dens: dict[tuple[int, int, str], float], *, min_density: floa
                     stack.append(o)
         if len(comp) >= min_cells and len({c[0] for c in comp}) >= min_cols:
             blocks.append(comp)
+    if blocks:
+        import statistics
+        in_any = {c for comp in blocks for c in comp}
+        rest = [v for k, v in dens.items() if k not in in_any]
+        rest_med = statistics.median(rest) if rest else 0.0
+        blocks = [comp for comp in blocks
+                  if max(dens[c] for c in comp) >= min_peak
+                  and statistics.median(dens[c] for c in comp) >= min_contrast * rest_med]
     out: dict[tuple[int, int, str], float] = {}
     for comp in blocks:
         span: dict[int, tuple[int, int]] = {}
