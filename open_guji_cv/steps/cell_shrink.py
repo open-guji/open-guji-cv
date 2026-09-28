@@ -77,13 +77,14 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
     return cell is not None and bbox[1] - cell.y0 <= FRAME_BAR_TOP * cc.period
 
 
-TAIL_BAR_MAX_H = 0.2
+TAIL_BAR_MAX_H = 0.3
 TAIL_BAR_MIN_W = 0.8
 TAIL_BAR_NEAR = 0.5
 """列末格收框线（2026-09-28，overview#202）：全唐文四周雙邊，Step1 的 bottom 落在外粗框上，
 内框细线留在列窗底部；列里字数不满格数时（或交接闸多给了一格），最后一格只装着这条线，
 Step4 把它当字框收进来，一路以「一」放行（v006/v007 9 例，都在 slot 22，格高 23–30px）。
-判据三条都要：紧框矮（< TAIL_BAR_MAX_H 格高）；宽到横贯文字带（≥ TAIL_BAR_MIN_W 带宽——
+判据三条都要：紧框矮（< TAIL_BAR_MAX_H 格高；线上粘着墨渍或连着外框上沿时到 0.22–0.26，
+五册实测，所以不卡 0.2——高度本来也分不开框线与「一」，真「一」0.17–0.19）；宽到横贯文字带（≥ TAIL_BAR_MIN_W 带宽——
 「一」的横笔到字身边就停，列图中部最宽横笔 ≤0.73，见 clustering/end_rule_strip）；
 紧框底离列窗下界 ≤ TAIL_BAR_NEAR 格高（「一」作末字时居格中，离下界还有大半格）。
 只看列里最后一格；与字粘在同一格里的框线归 #66 的 `end_rule_strip`，这里不管。"""
