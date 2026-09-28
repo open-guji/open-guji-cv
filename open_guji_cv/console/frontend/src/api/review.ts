@@ -7,11 +7,14 @@ import type {
 // `skipDecided`：跳过全书所有批次已裁过的字位（默认开），于是 `limit` 数的是净新卡。
 // `doubt`（overview#215）：按 doubt 码筛（`occluded,channel_off`）；`*` = 不筛但要计数
 // （响应带 `doubt_counts`）；空串 = 不带这个参数，请求与改前一样。
+// `cls`（overview#247）：按类别审，`*` = 不筛只计数（响应带 `class_counts`），类别键 = 只出这一类；
+// 空串 = 不带这个参数。
 export function fetchReviewCards(book: string, pages: string, only: string, gateCut: boolean,
-                                 limit = 400, skipDecided = true, doubt = '') {
+                                 limit = 400, skipDecided = true, doubt = '', cls = '') {
   const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
     + `&only=${only}&gate_cut=${gateCut}&limit=${limit}&skip_decided=${skipDecided}`
     + (doubt ? `&doubt=${encodeURIComponent(doubt)}` : '')
+    + (cls ? `&cls=${encodeURIComponent(cls)}` : '')
   return api<ReviewCardsResponse>(`/api/review/cards?${qs}`)
 }
 
@@ -69,7 +72,9 @@ export function fetchRareSearch(book: string, q: {
 }
 
 export function fetchAroundBatch(
-  book: string, before: number, after: number, items: Array<{ page: number; col: number; slot: number }>,
+  book: string, before: number, after: number,
+  // 带非空 `sub` 的项，返回键是 `p:c:s<sub>`（夹注 a/b 各一份），见 `aroundKey`
+  items: Array<{ page: number; col: number; slot: number; sub?: string }>,
 ) {
   return api<{ around: Record<string, AroundContext> }>('/api/review/around/batch', {
     method: 'POST',
@@ -85,3 +90,8 @@ export function contextImgUrl(book: string, page: number, col: number, slot: num
 /** 字体候选索引状态（K19，`GET /api/rare/status`）：`deferred` = 缺盘且有活跑批，冷建推迟，
  * 这段时间字体候选（HOG 那一路）不可用；库/CNN 两路不受影响。 */
 export const fetchRareStatus = () => api<{ deferred?: boolean; [k: string]: unknown }>('/api/rare/status')
+
+/** `fetchAroundBatch` 返回值的键：与后端 `api_review_around_batch` 同一口径。 */
+export function aroundKey(c: { page: number; col: number; slot: number; sub?: string }) {
+  return `${c.page}:${c.col}:${c.slot}${c.sub || ''}`
+}

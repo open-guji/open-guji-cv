@@ -107,3 +107,33 @@
 /* 借库书 CNN 原型首选（任务书-C-借库书人审首选改CNN原型，2026-09-27） */
 .rvfirst { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
 .rvbadge-ok { background: var(--paper); color: var(--ok); border: 1px solid var(--ok); }
+
+/* 按类别审（overview#247）：类别是主导航，本类细项默认收起 */
+.rv-classes { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; margin-bottom: .5rem; font-size: .8rem; }
+.rv-classes button { font-size: .82rem; padding: .15rem .55rem; }
+.rv-classes button.on { background: var(--indigo-soft); color: var(--indigo); border-color: var(--indigo); font-weight: 600; }
+.rv-classes button .n { margin-left: .3rem; opacity: .75; font-family: var(--mono); font-size: .72rem; }
+.rv-classes .rv-occl-all { border-color: var(--zhu); color: var(--zhu); font-weight: 600; }
+.rv-left { margin-left: .5rem; color: var(--ink-2); }
+.rv-left b { font-family: var(--mono); color: var(--indigo); }
+.rv-detail { margin-bottom: .5rem; font-size: .8rem; }
+.rv-detail summary { cursor: pointer; user-select: none; }
+.rv-detail .rv-toolbar { margin: .4rem 0 0; }
+/* 类别色条：卡片左上角一小段，看一眼知道这张卡为什么在这里 */
+.rvcard[data-cls] { background-image: linear-gradient(var(--cls-c, transparent), var(--cls-c, transparent));
+  background-size: 2.2rem 3px; background-repeat: no-repeat; background-position: top left; }
+.rvcard[data-cls="occluded"] { --cls-c: var(--zhu); }
+.rvcard[data-cls="ji_yi_si"] { --cls-c: var(--indigo); }
+.rvcard[data-cls="form_open"], .rvcard[data-cls="variant"] { --cls-c: var(--ok); }
+.rvcard[data-cls="ref_conflict"], .rvcard[data-cls="near_form"] { --cls-c: var(--ochre); }
+.rvcard[data-cls="lib_miss"] { --cls-c: var(--ink-2); }
+/* 己已巳专用卡：三个大按钮 + 「都不是」，上下文放在图旁边 */
+.rvjys .rvjys-ctx { flex: 1; min-width: 0; }
+.rvjys .rvjys-ctx .rvctx { margin-top: 0; font-size: .86rem; line-height: 1.6; }
+.rvjys-opts { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: .3rem; margin-top: .35rem; }
+.rvjys-pick { display: flex; align-items: baseline; justify-content: center; gap: .2rem; padding: .1rem .3rem;
+  font-size: 1.55rem; line-height: 1.3; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.rvjys-pick kbd, .rvjys-none kbd { font-family: var(--mono); font-size: .62rem; color: var(--mute); }
+.rvjys-pick.pick { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.rvjys-pick.pick kbd { color: #fff; opacity: .85; }
+.rvjys-none { font-size: .74rem; color: var(--mute); border-style: dashed; padding: .1rem .35rem; white-space: nowrap; }

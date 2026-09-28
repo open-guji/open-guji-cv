@@ -30,7 +30,8 @@ from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.borrow_first import first_pick_mode
-from ...review.cards import cached_cards, cards, parse_doubt_filter
+from ...review.cards import (_align_ref_maps, cached_cards, cards, parse_class_filter,
+                              parse_doubt_filter)
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
@@ -54,7 +55,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
                      only: str = "review", gate_cut: bool = True,
                      skip_decided: bool = True, group: str = "",
                      sample_limit: int = 60, cluster: str = "auto",
-                     cluster_thr: float | None = None, doubt: str = "") -> dict:
+                     cluster_thr: float | None = None, doubt: str = "", cls: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -88,6 +89,11 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     「按原因」筛选按钮。三种模式（逐格 / `group=char` / `group=shape`）都认。不传时与改前逐字节
     一致（缓存键也不变）。语法与计数口径见 `review/cards.py::parse_doubt_filter` / `cards()`。
 
+    `cls`（overview#247）：按**类别**审——一张卡只归优先级最高的一类（`review/cards.py::
+    REVIEW_CLASSES`）。`*` = 不筛只计数，类别键 = 只出这一类；给了就在响应里加
+    `class_counts`/`class_total`/`classes`，每张卡带 `cls`。只对逐格模式生效。不传时与改前一致
+    （缓存键也不变）。
+
     **结果缓存**（#166）：整个响应按（书，全部参数，产物 manifest，事件水位，库指纹）
     落 `cache_root()/review_cards/`，见 `review/cards.py::cached_cards`。人裁一写入
     水位就变、自动失效。命中与否看响应头 `X-Cards-Cache: mem|disk|miss`。
@@ -106,6 +112,12 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     if doubt.strip():
         # 只在给了时进键：不传 doubt 的请求键与改前相同，#166 已落盘的缓存照样命中
         req["doubt"] = doubt
+    try:
+        parse_class_filter(cls)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if cls.strip():
+        req["cls"] = cls           # 同上：只在给了时进键
 
     def compute() -> dict:
         if group == "shape":
@@ -116,11 +128,11 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
             return cards_by_char(book, pages, only, st, gate_cut=gate_cut,
                                  skip_decided=skip_decided, sample_limit=sample_limit,
                                  cluster=cluster, cluster_thr=cluster_thr, doubt=doubt)
-        if not doubt.strip():
+        if not doubt.strip() and not cls.strip():
             return cards(book, pages, limit, only, st, gate_cut=gate_cut,
                          skip_decided=skip_decided)
         return cards(book, pages, limit, only, st, gate_cut=gate_cut,
-                     skip_decided=skip_decided, doubt=doubt)
+                     skip_decided=skip_decided, doubt=doubt, cls=cls)
 
     res, how = cached_cards(book, req, compute, st)
     response.headers["X-Cards-Cache"] = how
@@ -764,20 +776,30 @@ def _page_maps(st, book: str, page: int, cache: dict):
         dm = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         om = {r.id: r for cc in (o.columns if o else []) for r in cc.chars}
         am = {r.id: r for cc in (a.columns if a else []) for r in cc.chars}
-        cache[key] = (d, m, o, a, dm, om, am)
+        # 整理本对位（#247）：上下文默认显示整理本原文，对不上的格才退回定字链
+        refm, coord = _align_ref_maps(st, book, page)
+        cache[key] = (d, m, o, a, dm, om, am, refm, coord)
     return cache[key]
 
 
 def _column_slots(st, book: str, page: int, col: int, cache: dict) -> list[dict] | None:
-    """一列的定字串：见 `api_review_column` 说明——逐级兜底、标出待审位。"""
-    d, m, o, a, dm, om, am = _page_maps(st, book, page, cache)
+    """一列的定字串：见 `api_review_column` 说明——逐级兜底、标出待审位。
+
+    每格两套字（#247）：`char`/`source` = 刻本这边的读法（定字 → 库 → OCR，改前就有）；
+    `ref` = 整理本在这一格对位的字（`align_ref` 现役对位，没有再看坐标对位 `coord`），
+    `text` = 显示用的字——**有整理本字就用它**，对不上的格才退回 `char`，`text_src`
+    标出取自哪（`ref`/`coord`/原 `source`）。读序按 `sort_by_reading`（夹注 a/b 各成一行），
+    无夹注的列与原来的 (slot, sub) 排序完全相同。
+    """
+    from ...utils.jiazhu_order import sort_by_reading
+    d, m, o, a, dm, om, am, refm, coord = _page_maps(st, book, page, cache)
     if d is None and m is None:
         return None
     src_col = (m.column(col) if m else None) or (d.column(col) if d else None)
     if src_col is None:
         return None
     out = []
-    for r in sorted(src_col.chars, key=lambda x: (x.slot, x.sub or "")):
+    for r in sort_by_reading(src_col.chars):
         dd, oo, aa = dm.get(r.id), om.get(r.id), am.get(r.id)
         ch, src = None, ""
         if dd is not None and dd.char:
@@ -786,8 +808,11 @@ def _column_slots(st, book: str, page: int, col: int, cache: dict) -> list[dict]
             ch, src = r.candidates[0][0], "db"
         elif oo is not None and oo.topk:
             ch, src = oo.topk[0][0], "ocr"
+        rf = refm.get(r.id)
+        ref, rsrc = (rf[0], "ref") if rf else ((coord[r.id], "coord") if r.id in coord else (None, ""))
         out.append({"slot": r.slot, "sub": r.sub, "id": r.id, "page": page, "col": col,
                     "char": ch, "source": src,
+                    "ref": ref, "text": ref or ch, "text_src": rsrc or src,
                     # 待审 = seed_admit 没放行；前端据此高亮
                     "review": bool(aa is not None and not aa.admit)})
     return out
@@ -801,7 +826,7 @@ def _max_col(st, book: str, page: int, cache: dict) -> int | None:
 
 
 def _around(st, book: str, page: int, col: int, slot: int,
-           before: int, after: int, cache: dict) -> dict:
+           before: int, after: int, cache: dict, sub: str | None = None) -> dict:
     """跨列/跨页拼够前后各 N 个字——单条与批量端点共用这一份装配。
 
     本位所在列本身可能就有一大截「本位前」「本位后」的字（21 格一列，本位
@@ -811,7 +836,12 @@ def _around(st, book: str, page: int, col: int, slot: int,
     cur = _column_slots(st, book, page, col, cache)
     if cur is None:
         return {"text": "", "slots": [], "at": -1}
-    idx = next((k for k, r in enumerate(cur) if r["slot"] == slot), None)
+    # 带 sub（夹注 a/b）就按 (slot, sub) 精确找本位；不带时照旧取这一格的第一条
+    idx = None
+    if sub:
+        idx = next((k for k, r in enumerate(cur) if r["slot"] == slot and (r["sub"] or "") == sub), None)
+    if idx is None:
+        idx = next((k for k, r in enumerate(cur) if r["slot"] == slot), None)
     if idx is None:
         return {"text": "", "slots": [], "at": -1}
 
@@ -853,7 +883,9 @@ def _around(st, book: str, page: int, col: int, slot: int,
 
     slots = before_slots[-before:] + [cur[idx]] + after_slots[:after]
     at = len(before_slots[-before:])
-    return {"text": "".join(x["char"] or "□" for x in slots), "slots": slots, "at": at}
+    # `text` 是刻本读法串（改前的口径，别的调用方在用）；`ref_text` 是整理本优先的串（#247）
+    return {"text": "".join(x["char"] or "□" for x in slots), "slots": slots, "at": at,
+            "ref_text": "".join(x["text"] or "□" for x in slots)}
 
 
 @router.get("/api/review/column/{book}/{page}/{col}")
@@ -901,8 +933,9 @@ class AroundBatchIn(BaseModel):
     book: str
     before: int = 10
     after: int = 10
-    # 每项 {page, col, slot}；不用 "p:c:s" 字符串键——slot 可能带 sub（"3a"),
+    # 每项 {page, col, slot[, sub]}；不用 "p:c:s" 字符串键——slot 可能带 sub（"3a"),
     # 用字符串拼接容易在多处 split 逻辑里出岔子，结构化更省心。
+    # 带了非空 sub 的项，返回键是 "p:c:s<sub>"（夹注 a/b 两格各自一份上下文）；不带照旧 "p:c:s"。
     items: list[dict]
 
 
@@ -919,7 +952,9 @@ def api_review_around_batch(req: AroundBatchIn) -> dict:
     out = {}
     for it in req.items:
         pg, cl, sl = int(it["page"]), int(it["col"]), int(it["slot"])
-        out[f"{pg}:{cl}:{sl}"] = _around(st, req.book, pg, cl, sl, req.before, req.after, cache)
+        sub = str(it.get("sub") or "")
+        out[f"{pg}:{cl}:{sl}{sub}"] = _around(st, req.book, pg, cl, sl, req.before, req.after,
+                                              cache, sub or None)
     return {"around": out}
 
 

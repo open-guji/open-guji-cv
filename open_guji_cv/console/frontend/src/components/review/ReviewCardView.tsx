@@ -4,6 +4,7 @@ import type { AroundContext, RareCandidate, ReviewCard } from '../../types/revie
 import { disagreeingRuns, dropReason, groupById } from './ai'
 import type { KeyItem } from './candidates'
 import type { Verdict } from './ReviewPanel'
+import { ctxChar, isJysCard, JYS_OPTIONS } from './reviewClass'
 
 interface Props {
   idx: number
@@ -22,11 +23,19 @@ interface Props {
   onToggleCtxImg: () => void
   onFetchRare: (force?: boolean) => void
   contextImgSrc: string
+  /** 这张卡的类别（overview#247，按类别审时才有）；决定卡片样式。 */
+  cls?: string
+  /** 己已巳卡：人点了「都不是」→ 展开成普通卡。 */
+  jysOpen?: boolean
+  onJysNone?: () => void
+  /** 上下文显示刻本读法（缺省显示整理本对位原文）。 */
+  ctxKeben?: boolean
 }
 
 export function ReviewCardView({
   idx, c, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
   onFocus, onSet, onSetNoGlyphLib, onSetGuess, onToggleCtxImg, onFetchRare, contextImgSrc,
+  cls, jysOpen = false, onJysNone, ctxKeben = false,
 }: Props) {
   const v = verdict || { shape: '', done: '' }
   // 字的唯一改动入口都在本组件内（候选点击、输入框、标记按钮），
@@ -48,9 +57,63 @@ export function ReviewCardView({
     onSet(val, undefined)
   }
 
+  // 上下文：整理本对位原文优先，刻本读法在开关后面（#247）。己已巳卡把本位遮成「？」——
+  // 三选一要人读文意，别让整理本在这一格印的字替人答了（整理本自己也把「而已」印成「而巳」）。
+  function ctxLine(hideAt: boolean) {
+    if (!aroundCtx) return null
+    return (
+      <div className="rvctx" title={ctxKeben ? '刻本读法（定字 → 库 → OCR）' : '整理本对位原文；灰字 = 这一格对不上整理本，退回刻本定字'}>
+        {aroundCtx.slots.map((s, k) => {
+          if (k === aroundCtx.at) return <mark key={k}>{hideAt ? '？' : ctxChar(s, ctxKeben)}</mark>
+          const ch = ctxChar(s, ctxKeben)
+          // 浅一档：整理本口径下 = 这一格对不上整理本、退回了定字；刻本口径下 = 库/OCR 兜底字（改前的规则）
+          const useKeben = ctxKeben || s.text_src === undefined      // 老后端没给整理本字段
+          const weak = useKeben ? (s.source === 'db' || s.source === 'ocr')
+                                : !(s.text_src === 'ref' || s.text_src === 'coord')
+          const cls2 = s.review ? 'ctx-rev' : (weak ? 'ctx-w' : '')
+          return cls2 ? <span key={k} className={cls2}>{ch}</span> : <span key={k}>{ch}</span>
+        })}
+      </div>
+    )
+  }
+
+  // ── 己已巳专用卡（#247）：只给三个选项 + 「都不是」；不显示整理本、库分、次选、OCR ──
+  if (isJysCard(cls, jysOpen)) {
+    return (
+      <div id={`rvc${idx}`} className={`rvcard rvjys${isCurrent ? ' cur' : ''}`} data-done={v.done || ''} data-cls={cls}
+           onClick={onFocus}>
+        <div className="rvhead">
+          <b className="rvsel">{c.id}</b><span className="muted">己已巳 · 按文意三选一</span>
+        </div>
+        <div className="rvbody">
+          <BinaryToggleImage
+            src={c.patch} alt={c.id}
+            extra={
+              <button className="bti-btn" onClick={(e) => { e.stopPropagation(); onToggleCtxImg() }}
+                      title="切分/缩框前的列图原样，上下各带 2 格">看原图</button>
+            } />
+          <div className="rvjys-ctx">{ctxLine(true) ?? <span className="muted">上下文加载中…</span>}</div>
+        </div>
+        {ctxImgOpen && <div className="rvctximg"><img src={contextImgSrc} alt="上下文原图" /></div>}
+        <div className="rvjys-opts">
+          {JYS_OPTIONS.map((o) => (
+            <button key={o.ch} className={`rvjys-pick${v.shape === o.ch && v.done ? ' pick' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); onFocus(); pick(o.ch) }} title={`${o.ch}：${o.hint}（${o.key}）`}>
+              <kbd>{o.key}</kbd>{o.ch}
+            </button>
+          ))}
+          <button className="rvjys-none" onClick={(e) => { e.stopPropagation(); onFocus(); onJysNone?.() }}
+                  title="图上刻的不是这一族的字（切错了、或是别的字）：展开成普通卡自己挑（4）">
+            <kbd>4</kbd>都不是
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div id={`rvc${idx}`} className={`rvcard${isCurrent ? ' cur' : ''}`} data-done={v.done || ''} data-nolib={v.noGlyphLib ? '1' : ''}
-         onClick={onFocus}>
+         data-cls={cls || undefined} onClick={onFocus}>
       <div className="rvhead">
         <b className="rvsel">{c.id}</b><span className="muted">{c.channel || '待审'}</span>
         {c.occluded && (
@@ -246,16 +309,7 @@ export function ReviewCardView({
           </span>
         )}
       </div>
-      {aroundCtx && (
-        <div className="rvctx">
-          {aroundCtx.slots.map((s, k) => {
-            const ch = s.char || '□'
-            if (k === aroundCtx.at) return <mark key={k}>{ch}</mark>
-            const cls = s.review ? 'ctx-rev' : (s.source === 'db' || s.source === 'ocr' ? 'ctx-w' : '')
-            return cls ? <span key={k} className={cls}>{ch}</span> : <span key={k}>{ch}</span>
-          })}
-        </div>
-      )}
+      {ctxLine(false)}
       <div className="rvrare">
         <button className="rvrarebtn" onClick={(e) => { e.stopPropagation(); onFetchRare(true) }}>查候选</button>
         <span className="muted">字体模板 + CNN 融合，10 个；带释义与整理本对应字</span>
