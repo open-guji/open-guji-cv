@@ -28,15 +28,15 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 @router.get("/api/step9/render/{book}")
 @maps_http
 def api_step9_render(book: str, pages: str) -> dict:
-    """9.1：把 `pages`（`book.resolve_pages` 支持的表达式，如 `"33"`、
-    `"10,33,89"`、`"33-40"`）逐页拼成 guji-markdown 文本。
+    """9.1：把 `pages`（`book.resolve_pages_ext` 支持的表达式，如 `"33"`、
+    `"10,33,89"`、`"33-40"`，也认 `list:`/`cells:` 前缀）逐页拼成 guji-markdown 文本。
 
     某一页缺产物（Step3/Step7 没跑到）会让整批请求失败——**不是**跳过那一页
     继续拼其余页。理由：这本来就是「看几页效果」的交互式调用，页数不多，
     失败了直接告诉用户哪页缺什么、去补哪一步，比悄悄漏一页更清楚。
     """
     bk = load_book(book)
-    page_list = bk.resolve_pages(pages)
+    page_list = bk.resolve_pages_ext(pages)
     store = deps.product_store()
 
     stale: list[str] = []
@@ -63,7 +63,7 @@ def api_step9_reflow(book: str, pages: str, baseline_kg: int = DEFAULT_BASELINE_
     延续的场景以后有需要再补，现在如实说明，不假装做到了。
     """
     bk = load_book(book)
-    page_list = bk.resolve_pages(pages)
+    page_list = bk.resolve_pages_ext(pages)
     store = deps.product_store()
 
     stale: list[str] = []
@@ -90,4 +90,4 @@ def api_step9_progress(book: str, pages: str = "all") -> dict:
     是看板不是闸——有待办也照样允许 9.1/9.2（用户 2026-09-20）。口径见 `report/progress.py`。"""
     from ...report.progress import page_progress
     bk = load_book(book)
-    return page_progress(book, bk.resolve_pages(pages), deps.product_store())
+    return page_progress(book, bk.resolve_pages_ext(pages), deps.product_store())
