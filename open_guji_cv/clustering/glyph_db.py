@@ -147,6 +147,17 @@ CREATE TABLE IF NOT EXISTS admissions (
     evidence TEXT,
     admitted_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS evictions (
+    -- 撤例审计（2026-09-28，overview#234）：`evict_instance` 删四表行时连 admissions 一起删，
+    -- 库里原本不留「这例是被撤的」痕迹，`glyph_store_sync` 分不清「db 撤了」和「db 根本没见过
+    -- 别人进的」（09-28 事故：服务器旧库导出冲掉 main 上 14 例「聞」）。每撤一例记一行，
+    -- 随 store 导出（evictions.jsonl），同步的删除护栏只放行有这里记录的删除。
+    instance_id TEXT NOT NULL,
+    char TEXT,
+    reason TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (instance_id, at)
+);
 """
 
 
@@ -848,6 +859,11 @@ class GlyphDB:
             cur.execute(f"DELETE FROM admissions WHERE instance_id IN ({ph})",
                         chunk)
         cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
+        # 撤例审计（overview#234）：否则下一轮 glyph_store_sync 的删除护栏会拦下这批删除
+        at = _now()
+        cur.executemany("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) "
+                        "VALUES (?,?,?,?)",
+                        [(i, None, f"drop_edition {edition_tag}", at) for i in iids])
         self.conn.commit()
         self._cache_stamp = None          # 特徵緩存必須失效
         return {"edition": edition_tag, "glyphs": n_gly,
@@ -957,6 +973,10 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
              + " ORDER BY g.edition_tag, g.char, e.instance_id", fe)])
     counts["meta"] = dump(out / "meta.jsonl",
                           cur.execute("SELECT * FROM meta ORDER BY key"))
+    # 撤例审计（overview#234）：别的机器（服务器 / 云端）靠它知道「这例是被撤的、不是漏了」
+    counts["evictions"] = dump(
+        out / "evictions.jsonl",
+        cur.execute("SELECT * FROM evictions ORDER BY instance_id, at"))
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
@@ -1152,6 +1172,10 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                 cols = ",".join(r)
                 cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
                             f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+            for r in read(st / "evictions.jsonl"):
+                cur.execute("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) "
+                            "VALUES (?,?,?,?)",
+                            (r["instance_id"], r.get("char"), r.get("reason"), r["at"]))
         else:
             own = db.book_edition()
             if own and own in eds:

@@ -152,10 +152,11 @@ def apply_ocr(findings: dict[str, AuditFinding],
             f.flags.append("ocr")
 
 
-def evict_instance(db, instance_id: str) -> str | None:
+def evict_instance(db, instance_id: str, reason: str | None = None) -> str | None:
     """撤库：删四表行 + 修正字头（n_confirmed 减一，最后一个刻例撤掉就删字头）。
 
-    返回原字（不存在返回 None）。
+    返回原字（不存在返回 None）。库里确有这一例时记一行 `evictions` 撤例审计
+    （2026-09-28，overview#234）：`glyph_store_sync` 的删除护栏只放行有审计的删除。
 
     2026-08-25 修：原来那条清壳 SQL 一次都没生效过。它写的是
 
@@ -173,8 +174,16 @@ def evict_instance(db, instance_id: str) -> str | None:
         """SELECT g.glyph_id, g.char FROM exemplars e
            JOIN glyphs g ON g.glyph_id=e.glyph_id WHERE e.instance_id=?""",
         (instance_id,)).fetchone()
+    existed = db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                              (instance_id,)).fetchone()
     for t in ("admissions", "exemplars", "derived", "instances"):
         db.conn.execute(f"DELETE FROM {t} WHERE instance_id=?", (instance_id,))
+    if existed or row:
+        from datetime import datetime, timezone
+        db.conn.execute(
+            "INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) VALUES (?,?,?,?)",
+            (instance_id, row[1] if row else None, reason,
+             datetime.now(timezone.utc).isoformat(timespec="seconds")))
     if row:
         gid = row[0]
         left = db.conn.execute(
