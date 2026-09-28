@@ -902,7 +902,16 @@ def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
 
     def raw_of(cid: str):
         if cid not in raw_cache:
-            bk_, p_, c_, s_ = cid.split(":")
+            parts = cid.split(":")
+            if parts and parts[0] == "v2":      # 人裁重键后的格号坐标，去前缀即可
+                parts = parts[1:]
+            # `v1:` 是旧管线的 idx 坐标、没经形状确认，不拿来当铁证对照图；
+            # 其它认不出的形状也一律跳过（服务器 #40：v1: 人裁 id 让 vol03 p3/p74 崩）。
+            if len(parts) != 4 or parts[0] == "v1" or not parts[3].rstrip("ab").isdigit() \
+                    or not (parts[1].isdigit() and parts[2].isdigit()):
+                raw_cache[cid] = None
+                return None
+            bk_, p_, c_, s_ = parts
             sub = s_[-1] if s_[-1] in "ab" else ""
             s_ = s_.rstrip("ab")
             pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
