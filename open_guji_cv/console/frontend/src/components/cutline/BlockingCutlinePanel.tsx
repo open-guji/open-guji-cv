@@ -61,7 +61,10 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     const t0 = Date.now()
     for (const c of d.cases) {
       seenAt.current[c.id] = t0
-      const st: CardState = { pick: c.chosen ?? null, done: undefined, drawing: false, poly: [] }
+      // 用户 2026-09-28（overview#188）：有 U-Net 候选就默认选它，方便一路 Enter 确认；
+      // 没有才退回引擎 `chosen`。提交口径不变（选中项≠chosen 记 moved，cand=unet_seam）。
+      const unet = (c.candidates || []).findIndex((x) => x.kind === 'unet_seam')
+      const st: CardState = { pick: unet >= 0 ? unet : (c.chosen ?? null), done: undefined, drawing: false, poly: [] }
       const dv = done[c.id]
       if (dv) {
         st.done = dv.verdict
