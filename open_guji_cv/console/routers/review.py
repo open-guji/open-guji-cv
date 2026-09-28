@@ -30,7 +30,7 @@ from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.borrow_first import first_pick_mode
-from ...review.cards import cached_cards, cards
+from ...review.cards import cached_cards, cards, parse_doubt_filter
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
@@ -54,7 +54,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
                      only: str = "review", gate_cut: bool = True,
                      skip_decided: bool = True, group: str = "",
                      sample_limit: int = 60, cluster: str = "auto",
-                     cluster_thr: float | None = None) -> dict:
+                     cluster_thr: float | None = None, doubt: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -83,6 +83,11 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     （借库书，embedding 在算首选时已经算好，直接复用）；`on`/`off` 强制。关着时
     返回值与改前逐字节一样。`cluster_thr` 覆盖缺省门槛（`review_cluster.CLUSTER_THR`）。
 
+    `doubt`（overview#215）：按 doubt 码筛（`occluded,channel_off`；`*` = 不筛只计数；
+    `_none` = 一个码都没有的卡），给了就在响应里加 `doubt_counts`/`doubt_total`，前端据此画
+    「按原因」筛选按钮。三种模式（逐格 / `group=char` / `group=shape`）都认。不传时与改前逐字节
+    一致（缓存键也不变）。语法与计数口径见 `review/cards.py::parse_doubt_filter` / `cards()`。
+
     **结果缓存**（#166）：整个响应按（书，全部参数，产物 manifest，事件水位，库指纹）
     落 `cache_root()/review_cards/`，见 `review/cards.py::cached_cards`。人裁一写入
     水位就变、自动失效。命中与否看响应头 `X-Cards-Cache: mem|disk|miss`。
@@ -94,18 +99,28 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
            "skip_decided": skip_decided, "group": group, "sample_limit": sample_limit}
     if group in ("char", "shape"):
         req.update(cluster=cluster, cluster_thr=cluster_thr)
+    try:
+        parse_doubt_filter(doubt)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if doubt.strip():
+        # 只在给了时进键：不传 doubt 的请求键与改前相同，#166 已落盘的缓存照样命中
+        req["doubt"] = doubt
 
     def compute() -> dict:
         if group == "shape":
             return cards_by_shape(book, pages, only, st, gate_cut=gate_cut,
                                   skip_decided=skip_decided, sample_limit=sample_limit,
-                                  cluster=cluster, cluster_thr=cluster_thr)
+                                  cluster=cluster, cluster_thr=cluster_thr, doubt=doubt)
         if group == "char":
             return cards_by_char(book, pages, only, st, gate_cut=gate_cut,
                                  skip_decided=skip_decided, sample_limit=sample_limit,
-                                 cluster=cluster, cluster_thr=cluster_thr)
+                                 cluster=cluster, cluster_thr=cluster_thr, doubt=doubt)
+        if not doubt.strip():
+            return cards(book, pages, limit, only, st, gate_cut=gate_cut,
+                         skip_decided=skip_decided)
         return cards(book, pages, limit, only, st, gate_cut=gate_cut,
-                     skip_decided=skip_decided)
+                     skip_decided=skip_decided, doubt=doubt)
 
     res, how = cached_cards(book, req, compute, st)
     response.headers["X-Cards-Cache"] = how
@@ -254,14 +269,15 @@ def _build_char_groups(cs: list[dict], sample_limit: int, clusterer=None) -> lis
 
 def cards_by_char(book: str, pages: str, only: str, store,
                   gate_cut: bool, skip_decided: bool, sample_limit: int,
-                  cluster: str = "off", cluster_thr: float | None = None) -> dict:
+                  cluster: str = "off", cluster_thr: float | None = None,
+                  doubt: str = "") -> dict:
     """按字种批审的装配：调既有 `cards()` 拿**全量**待审格（不受 `limit`
     截断——分组要的是真实的 n 与页码分布），再摊成组。`cluster` 见路由 docstring。
     """
     on = _cluster_on(book, cluster)
     emb: dict = {}
     d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
-             skip_decided=skip_decided, emb_out=emb if on else None)
+             skip_decided=skip_decided, emb_out=emb if on else None, doubt=doubt)
     clusterer = _make_clusterer(book, store, d["cards"], emb, cluster_thr) if on else None
     groups = _build_char_groups(d["cards"], sample_limit, clusterer)
     res = {"book": book, "mode": "char", "n_total": len(d["cards"]),
@@ -269,7 +285,15 @@ def cards_by_char(book: str, pages: str, only: str, store,
            "groups": groups}
     if on:
         res["cluster"] = _cluster_summary(groups, emb, cluster_thr)
+    _copy_doubt_counts(d, res)
     return res
+
+
+def _copy_doubt_counts(d: dict, res: dict) -> None:
+    """`cards(doubt=…)` 给了计数就原样带到分组响应里（overview#215）；没给就什么都不加。"""
+    for k in ("doubt_counts", "doubt_total"):
+        if k in d:
+            res[k] = d[k]
 
 
 
@@ -613,7 +637,8 @@ def _card_norm_patch(book: str, ctx: RunContext, card: dict):
 
 def cards_by_shape(book: str, pages: str, only: str, store,
                    gate_cut: bool, skip_decided: bool, sample_limit: int,
-                   cluster: str = "off", cluster_thr: float | None = None) -> dict:
+                   cluster: str = "off", cluster_thr: float | None = None,
+                   doubt: str = "") -> dict:
     """按形聚类分组的装配：调既有 `cards()` 拿全量待审格，池化＋聚类后摊成组。
 
     `get_patch`/`embed` 在这里拼真的（`RunContext.materialize` 读字块图、CNN
@@ -626,7 +651,7 @@ def cards_by_shape(book: str, pages: str, only: str, store,
     on = _cluster_on(book, cluster)
     emb: dict = {}
     d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
-             skip_decided=skip_decided, emb_out=emb if on else None)
+             skip_decided=skip_decided, emb_out=emb if on else None, doubt=doubt)
     cnn = cnn_candidates.shared()
     embed = None
     ctx = None
@@ -658,6 +683,7 @@ def cards_by_shape(book: str, pages: str, only: str, store,
            "blocked": d.get("blocked", []), "groups": groups}
     if on:
         res["cluster"] = _cluster_summary(groups, emb, cluster_thr)
+    _copy_doubt_counts(d, res)
     return res
 
 

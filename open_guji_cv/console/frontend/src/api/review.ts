@@ -5,10 +5,13 @@ import type {
 } from '../types/review'
 
 // `skipDecided`：跳过全书所有批次已裁过的字位（默认开），于是 `limit` 数的是净新卡。
+// `doubt`（overview#215）：按 doubt 码筛（`occluded,channel_off`）；`*` = 不筛但要计数
+// （响应带 `doubt_counts`）；空串 = 不带这个参数，请求与改前一样。
 export function fetchReviewCards(book: string, pages: string, only: string, gateCut: boolean,
-                                 limit = 400, skipDecided = true) {
+                                 limit = 400, skipDecided = true, doubt = '') {
   const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
     + `&only=${only}&gate_cut=${gateCut}&limit=${limit}&skip_decided=${skipDecided}`
+    + (doubt ? `&doubt=${encodeURIComponent(doubt)}` : '')
   return api<ReviewCardsResponse>(`/api/review/cards?${qs}`)
 }
 

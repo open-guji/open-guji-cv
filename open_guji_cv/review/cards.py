@@ -14,6 +14,7 @@ CLI 只看 `id`/`char`/`doubts` 那几列就行；换成别的形状会动到前
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from ..core.book import load_book
@@ -73,10 +74,43 @@ def _ai_view(dr) -> tuple[list[dict] | None, dict | None]:
     return groups, ai
 
 
+DOUBT_NONE = "_none"
+"""`doubt` 筛选与计数里的伪码：这张卡一个 doubt 码都没有（只有中文说明或全空）。"""
+
+_DOUBT_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def doubt_codes(doubts) -> list[str]:
+    """卡片 `doubts` 里的**码**（`channel_off`、`occluded` 这种小写标识符）。
+
+    `doubts` 里还混着 `_doubts()` 写的中文说明（「库里没有这个字」「库 unsure(cov=0.123)」），
+    那是给人读的一句话、带数值，每张卡都不一样，不能当筛选键——只取码。"""
+    return [d for d in (doubts or []) if isinstance(d, str) and _DOUBT_CODE.match(d)]
+
+
+def parse_doubt_filter(doubt: str) -> frozenset[str] | None:
+    """`doubt` 参数 → 选中的码集合（overview#215）。
+
+    - `""`（缺省）→ `None`：不筛、不计数，响应与加这个参数之前逐字节一样；
+    - `"*"`（或 `all`）→ 空集：**不筛**，但响应带 `doubt_counts`（前端要先拿到计数才画得出按钮）；
+    - `"occluded,channel_off"` → 只出带其中任一码的卡；`_none` = 一个码都没有的卡。
+    逗号 / 空格 / 中文逗号都当分隔符（与 `cells:` 同一口径）。"""
+    raw = (doubt or "").replace("，", ",").replace(" ", ",")
+    toks = [t.strip() for t in raw.split(",") if t.strip()]
+    if not toks:
+        return None
+    if any(t in ("*", "all") for t in toks):
+        return frozenset()
+    bad = [t for t in toks if t != DOUBT_NONE and not _DOUBT_CODE.match(t)]
+    if bad:
+        raise ValueError(f"doubt 只认小写码（如 occluded,channel_off）或 * / {DOUBT_NONE}，这些不对：{bad}")
+    return frozenset(toks)
+
+
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True,
-          emb_out: dict | None = None) -> dict:
+          emb_out: dict | None = None, doubt: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -99,7 +133,19 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
 
     `emb_out`（#166）：给一个 dict，借库书（开了 `first_pick`）算 CNN 首选时顺手把
     `{卡片 id: r5 embedding}` 填进去，批审组内聚簇复用；不改返回值。
+
+    `doubt`（overview#215）：按 doubt 码筛，语法见 `parse_doubt_filter`。给了（哪怕是 `*`）
+    响应就多两项：`doubt_counts`（码 → 卡数）与 `doubt_total`（参与计数的卡数）。计数口径 =
+    **过了 only / 已裁去重 / 排除名单 / 顺序闸、还没按 doubt 筛**的那批卡，且**不受 `limit`
+    截断**（数到页范围末尾）——按钮上的数是「这个原因一共还有几张」，不是「这一屏里有几张」。
+    一张卡带几个码就在几个码下各记一次；一个码都没有的记在 `_none`。
+    缺省 `""` 时一行代码路径都不变，返回值与改前逐字节一致。
     """
+    sel = parse_doubt_filter(doubt)
+    counting = sel is not None
+    doubt_counts: dict[str, int] = {}
+    n_counted = 0
+    full = False                    # 已凑满 limit；还在数的话只数不装
     st = store or ProductStore()
     bk = load_book(book)
     # 点名清单模式（2026-09-16）：`pages` 填 `list:<名字>`，读 workspace
@@ -177,9 +223,17 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 # 先别出字卡——先把切分线看过，再来看这个字。粒度是格位，不整页挡。
                 _pend = blocked.get((pg, cc.col, r.slot))
                 if _pend is not None and only_ids is None:
-                    out_blocked.append({"id": r.id, "page": pg, "col": cc.col,
-                                        "slot": r.slot, "pending": _pend})
+                    if not full:
+                        out_blocked.append({"id": r.id, "page": pg, "col": cc.col,
+                                            "slot": r.slot, "pending": _pend})
                     continue
+                if counting:
+                    _codes = doubt_codes(r.doubts) or [DOUBT_NONE]
+                    n_counted += 1
+                    for _c in dict.fromkeys(_codes):
+                        doubt_counts[_c] = doubt_counts.get(_c, 0) + 1
+                    if full or (sel and not sel.intersection(_codes)):
+                        continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
                 groups, ai = _ai_view(dr)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
@@ -223,11 +277,17 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ai": ai,
                 })
                 if len(out) >= limit:
-                    return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
-                                                  "blocked": out_blocked,
-                                                  "n_decided": len(decided)}, emb_out)
-    return _finish(book, bk, st, {"book": book, "cards": out, "truncated": False,
-                                  "blocked": out_blocked, "n_decided": len(decided)}, emb_out)
+                    if not counting:
+                        return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
+                                                      "blocked": out_blocked,
+                                                      "n_decided": len(decided)}, emb_out)
+                    full = True             # 计数要数到页范围末尾，卡片不再装
+    res = {"book": book, "cards": out, "truncated": full,
+           "blocked": out_blocked, "n_decided": len(decided)}
+    if counting:
+        res["doubt_counts"] = dict(sorted(doubt_counts.items(), key=lambda kv: (-kv[1], kv[0])))
+        res["doubt_total"] = n_counted
+    return _finish(book, bk, st, res, emb_out)
 
 
 def _finish(book: str, bk, st: ProductStore, res: dict, emb_out: dict | None = None) -> dict:
