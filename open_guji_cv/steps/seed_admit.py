@@ -167,6 +167,25 @@ class SeedAdmitParams(BaseModel):
     变体放行、0 格字面相同：`躭→耽`（vol01，双向可信）、`彝→彞`×3（vol03，双向可信）margin
     0.12~0.24 全部远低于 0.70；`冶→治`（bxgb，唯一不可信）margin 0.024。加闸后前四格不变，
     冶→治 落人审——详见 done 单。"""
+    lib_confident_cov: float = 0.0
+    """库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。0 = 关（缺省）。
+
+    对象：上面所有通道都没放行、库判 `unsure`、Step6 退回先验（`source=prior`，
+    即人审卡上的「上下文 margin 不足」）的格。库 top1 的 cov ≥ 本值、且领先第二名
+    ≥ `lib_confident_gap` 时放行 top1。硬约束（任务书 item 2）：
+    - 不碰 己／已／巳 一族（`always_review` 与 `ji_yi_si.FAMILY`）；
+    - 不碰形近对表里的字：top1 在 `confusable.partners()`（手工＋人裁＋字体表）或铁证
+      补充表（`iron_extra_confusable.json`）里有对手就不放——**按字不按对**，不要求
+      对手恰好在候选里；
+    - 库无护栏（`guard is None`）；本格没有任何流程内疑问（`near_form`／`replace_align`／
+      `context_vs_ref`／`form_open`／`iron_vs_ref` …）——**整理本说了不同（replace）一律不放**；
+    - 只当兜底：放在铁证之后、`if not ok` 里，只新增放行，不改动任何已放行格。
+    **缺省关、不推荐开**（四册 vol01–04 实测，open-guji-core/overview#59）：这个池子里有人裁的
+    109 格库 top1 错 94 格——真字多半库里没收，cov 0.95~0.98 只是「库里最像的那个」；最窄的
+    候选档（cov≥0.98、领先≥0.03）四册合计只有 130 格，全审 0 错也压不到 95% 上界 ≤1%。
+    留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
+    lib_confident_gap: float = 0.0
+    """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""
@@ -620,6 +639,21 @@ class SeedAdmitStep(Step):
                     elif iron_char is not None:
                         ok, channel, char, prov = True, "iron", iron_char, "iron"
                         doubts = []
+                # 库高置信兜底（`lib_confident_cov`，缺省关）：只补「库已经很像、只因 Step6
+                # 帮不上（退回先验）」的格。约束见参数文档；`doubts` 非空说明流程里已有别的
+                # 理由拦它（整理本 replace、形近、互证冲突……），一律不碰。
+                if (not ok and p.lib_confident_cov > 0 and not doubts and not form_open
+                        and r.verdict == "unsure" and r.guard is None and r.candidates
+                        and d is not None and d.source == "prior"):
+                    _top, _c1 = r.candidates[0]
+                    _c2 = r.candidates[1][1] if len(r.candidates) > 1 else 0.0
+                    if (_c1 >= p.lib_confident_cov and _c1 - _c2 >= p.lib_confident_gap
+                            and _top not in always and _top not in _JYS
+                            and not (align_char and align_char in _JYS)
+                            and not _confusable_char(_top)
+                            and not (align_char and vm_here.semantic(align_char)
+                                     != vm_here.semantic(_top))):
+                        ok, channel, char, prov = True, "lib_confident", _top, "match"
                 if ok:
                     n_auto += 1
                 else:
@@ -1031,6 +1065,15 @@ def _doubts(match_rec, dec_rec) -> list[str]:
     if dec_rec is not None and dec_rec.source == "prior":
         out.append(f"上下文 margin 不足({dec_rec.margin:.2f})")
     return out
+
+
+def _confusable_char(ch: str) -> bool:
+    """`lib_confident` 用：这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
+    from ..clustering.confusable import partners
+    from ..clustering.iron_evidence import extra_confusable_partners
+    from ..clustering.seeding import NEAR_FORM_CHARS
+    return (ch in NEAR_FORM_CHARS or ch in partners()
+            or ch in extra_confusable_partners())
 
 
 def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
