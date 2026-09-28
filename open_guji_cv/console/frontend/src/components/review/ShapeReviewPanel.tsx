@@ -4,7 +4,8 @@ import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { ReviewShapeGroup } from '../../types/review'
 import './groupReview.css'
-import { withWorkspace } from '../../api/client'
+import { ClusterGrid } from './ClusterGrid'
+import { groupCellIds, groupRows } from './clusterRows'
 
 // 按形聚类批审（任务书-C-批审按形聚类分组，2026-09-27）：`group=char` 的进阶
 // 版——形近对（今/令、玉/王、大/天……）AI 首选系统性认错方向时，同一个字种组
@@ -41,6 +42,7 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
       setClusterReady(d.cluster_ready)
       const base = d.groups.length
         ? `${d.groups.length} 簇 · 待审共 ${d.n_total} 格`
+          + (d.cluster ? ` · 组内再按形聚成 ${d.cluster.n_clusters} 小簇，每簇一张代表图（余弦 ≥ ${d.cluster.thr}）` : '')
         : '没有待审格'
       setMsg(d.cluster_ready ? base : `${base}（${d.hint || 'embedding 未就绪，按字种分组'}）`)
     } catch (e) {
@@ -52,12 +54,8 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
   const droppedHere = dropped[idx] || new Set<string>()
   const pickedChar = (g && picked[idx]) ?? g?.char ?? null
 
-  function toggle(id: string) {
-    setDropped((prev) => {
-      const next = new Set(prev[idx] || [])
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return { ...prev, [idx]: next }
-    })
+  function setHere(next: Set<string>) {
+    setDropped((prev) => ({ ...prev, [idx]: next }))
   }
 
   function selectAll() {
@@ -66,7 +64,7 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
 
   function selectNone() {
     if (!g) return
-    setDropped((prev) => ({ ...prev, [idx]: new Set(g.tiles.map((t) => t.id)) }))
+    setDropped((prev) => ({ ...prev, [idx]: new Set(groupCellIds(g)) }))
   }
 
   function pick(ch: string) {
@@ -79,18 +77,14 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
 
   async function submit() {
     if (!g || !pickedChar) { setMsg('这簇没有可确认的字，去「定字裁决」逐格看'); return }
-    const selected = g.tiles.filter((t) => !droppedHere.has(t.id))
-    if (!selected.length) { setMsg('这簇全点掉了，没有可提交的'); return }
+    const rows = groupRows(g, droppedHere, pickedChar, Date.now())
+    if (!rows.length) { setMsg('这簇全点掉了，没有可提交的'); return }
     setSubmitting(true)
     setMsg('提交中…')
-    const now = Date.now()
-    const rows = selected.map((t) => ({
-      id: t.id, v: 'confirm', shape: pickedChar, no_glyph_lib: false, client_ts: now,
-    }))
     try {
       const r = await postEvents({ batch: batch(), step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
       setMsg(`已写入 ${r.appended ?? rows.length} 条事件（批次 ${batch()}）`
-        + consumedMsg(r) + `；跳过 ${g.tiles.length - selected.length} 格`)
+        + consumedMsg(r) + `；跳过 ${groupCellIds(g).length - rows.length} 格`)
       const thisIdx = idx
       const nextGroups = groups.filter((_, i) => i !== thisIdx)
       setGroups(nextGroups)
@@ -150,7 +144,8 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
             <span className="grp-char">{g.char ?? '（未识别）'}</span>
             <span className="muted">
               池 {g.pool}{g.clustered ? '' : '（未聚类）'} · 待审 {g.n} 格
-              {g.truncated ? `（本屏样例 ${g.tiles.length}）` : ''}
+              {g.clusters ? ` · ${g.n_clusters} 小簇${g.truncated ? `（本屏 ${g.clusters.length}）` : ''}`
+                : g.truncated ? `（本屏样例 ${g.tiles.length}）` : ''}
               {g.n ? ` · 纯度 ${(g.purity * 100).toFixed(1)}%` : ''}
             </span>
             <span className="muted">
@@ -187,23 +182,11 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
             <button onClick={selectAll}>全选</button>
             <button onClick={selectNone}>全不选</button>
             <button onClick={submit} disabled={submitting || !pickedChar}>
-              提交为「{pickedChar ?? '？'}」（{g.tiles.length - droppedHere.size} / {g.tiles.length}）
+              提交为「{pickedChar ?? '？'}」（{groupCellIds(g).length - droppedHere.size} / {groupCellIds(g).length} 格）
             </button>
           </div>
 
-          <div className="grp-grid">
-            {g.tiles.map((t) => {
-              const off = droppedHere.has(t.id)
-              return (
-                <div key={t.id} className={`grp-tile${off ? ' off' : ''}`}
-                     title={`${t.id}${t.ref?.char ? ` · 整理本 ${t.ref.char}` : ''}`}
-                     onClick={() => toggle(t.id)}>
-                  <img src={withWorkspace(t.patch)} alt={t.id} />
-                  <span className="grp-mark">{off ? '✕' : '✓'}</span>
-                </div>
-              )
-            })}
-          </div>
+          <ClusterGrid key={idx} g={g} dropped={droppedHere} onChange={setHere} />
         </>
       )}
     </div>

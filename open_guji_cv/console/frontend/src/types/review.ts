@@ -128,8 +128,29 @@ export interface ReviewCardGroup {
   ref_char: string | null
   n: number
   pages: ReviewCardGroupPage[]
+  /** 聚簇开着时是各簇代表图（与 `clusters` 下标对齐），否则是组内样例。 */
   tiles: ReviewCard[]
   truncated: boolean
+  /** 组内按形聚簇（overview #166）：只在聚簇开着时有。 */
+  clusters?: ReviewTileCluster[]
+  n_clusters?: number
+}
+
+/** 组内一簇（overview #166）：代表图是 `tiles[i]`，`members[0]` 也是它。 */
+export interface ReviewTileCluster {
+  /** 簇 id = 代表图的格 id；提交事件记 `via: cluster:<id>`。 */
+  id: string
+  n: number
+  members: { id: string; patch: string; page: number; sim: number | null }[]
+}
+
+/** 响应顶层的聚簇摘要（只在聚簇开着时有）。 */
+export interface ReviewClusterSummary {
+  thr: number
+  n_groups: number
+  n_clusters: number
+  n_cells: number
+  n_with_emb: number
 }
 
 export interface ReviewCardsGroupedResponse {
@@ -139,6 +160,7 @@ export interface ReviewCardsGroupedResponse {
   n_decided?: number
   blocked?: unknown[]
   groups: ReviewCardGroup[]
+  cluster?: ReviewClusterSummary
 }
 
 /**
@@ -169,6 +191,8 @@ export interface ReviewShapeGroup {
   pages: ReviewCardGroupPage[]
   tiles: ReviewCard[]
   truncated: boolean
+  clusters?: ReviewTileCluster[]
+  n_clusters?: number
 }
 
 export interface ReviewCardsShapeResponse {
@@ -182,6 +206,7 @@ export interface ReviewCardsShapeResponse {
   n_decided?: number
   blocked?: unknown[]
   groups: ReviewShapeGroup[]
+  cluster?: ReviewClusterSummary
 }
 
 export interface ReviewVerdict {
