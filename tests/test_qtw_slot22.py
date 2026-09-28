@@ -27,7 +27,8 @@ from open_guji_cv.utils.row_boundaries import segment_column
 
 FIX = Path(__file__).parent / "fixtures" / "qtw_slot22"
 CASES = json.loads((FIX / "cases.json").read_text(encoding="utf-8"))
-P = ColumnGateParams()
+P = ColumnGateParams(span_trim_ends=True)     # 全唐文书 yaml 的口径
+P_OFF = ColumnGateParams()                    # 缺省（四庫各册）
 
 
 def _img(case) -> np.ndarray:
@@ -89,9 +90,31 @@ def test_ink_span_drops_a_top_rule_too():
     assert _ink_span(band, band.mean(axis=1), 200.0, P) == 4400 - 1 - 150
 
 
-def test_ink_span_all_junk_is_none():
+def test_ink_span_keeps_everything_when_only_junk():
+    # 两端都是线、中间没字：剔到只剩一段就停，不返回空
     band = _synthetic_band([(5, 20, 0, 300), (4460, 4478, 0, 300)])
-    assert _ink_span(band, band.mean(axis=1), 200.0, P) is None
+    assert _ink_span(band, band.mean(axis=1), 200.0, P) is not None
+
+
+def test_ink_span_does_not_nibble_a_fragmented_char():
+    # 细笔画的字在行墨门槛下碎成几段（每段 < 0.1 格、间隔 6 行）：不孤立，一段都不剔
+    band = _synthetic_band([(150, 330, 60, 240), (4300, 4315, 60, 240), (4321, 4336, 60, 240),
+                            (4342, 4357, 60, 240), (4363, 4378, 60, 240)])
+    assert _ink_span(band, band.mean(axis=1), 200.0, P) == 4378 - 1 - 150
+
+
+def test_ink_span_trim_is_capped():
+    # 末端连着三条细线、合起来超过半格：剔到超上限的那一条就停
+    band = _synthetic_band([(150, 330, 60, 240), (4000, 4150, 60, 240), (4200, 4215, 0, 300),
+                            (4250, 4265, 0, 300), (4300, 4315, 0, 300)])
+    assert _ink_span(band, band.mean(axis=1), 200.0, P) == 4215 - 1 - 150   # 第三条（4200）会超，留下
+
+
+def test_ink_span_default_off_is_the_old_raw_span():
+    band = _synthetic_band([(150, 330, 60, 240), (4250, 4400, 50, 250), (4460, 4478, 0, 300)])
+    prof = band.mean(axis=1)
+    ys = np.flatnonzero(prof > P_OFF.span_ink)
+    assert _ink_span(band, prof, 200.0, P_OFF) == float(ys[-1] - ys[0])
 
 
 # ── Step3：不多给那一格时，DP 不再劈字 ─────────────────────────────────

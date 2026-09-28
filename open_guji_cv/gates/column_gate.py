@@ -105,21 +105,29 @@ def _hclose_rows(b: np.ndarray, w: int = 9) -> np.ndarray:
 
 
 def _ink_span(band: np.ndarray, prof: np.ndarray, period: float, p: "ColumnGateParams") -> float | None:
-    """列的墨跨度（首段墨顶 → 末段墨底），两端的非字墨段不算。
+    """列的墨跨度（首段墨顶 → 末段墨底）。`p.span_trim_ends` 开时，两端的非字墨段不算。
 
     **为什么要剔**（2026-09-28，overview#202）：全唐文四周雙邊，Step1 的 bottom 落在
     外粗框上，内框细线（厚 3–8px，列图里连同倾斜 15–20 行）就留在列窗底部。它离末字
-    还有半格，却把墨跨度撑长了 0.4–0.5 格——`span/period - 22 + 0.5` 恰好过 1，
+    还有小半格，却把墨跨度撑长 0.3–0.5 格——`span/period - 22 + 0.5` 恰好过 1，
     `n_raised_hint` 给 1，Step3 只好在 22 个字里切 23 格：要么让框线自成一格
-    （列末 slot 22 出「一」，9 例），要么把字内留白最干净的「二」「三」劈成两格
-    （5 例）。v006 93 个 hint 列里 88 个是这样来的。
+    （列末 slot 22 出「一」），要么把字内留白最干净的「二」「三」劈开，整列 slot 号
+    还错一位。v006 93 个 hint 列里 88 个是这样来的。
+
+    **为什么是开关、缺省关**：`span_margin=0.5` 是在四庫上**连着框线残渣**标定的。
+    四庫 vol01 p50c5「上諭」真抬头列，去掉末端框线后跨度 21.62→21.18，hint 1→0
+    （原来是框线凑巧帮它过了线）；p196c9 的 hint 2 则全靠一粒离末字 950px 的碎屑。
+    两头都有，四庫要改得先重标 margin，不在本卡范围。
 
     剔法：从两端往里，逐段看（行墨 > span_ink 的行、断口 ≤4 行算一段）：
-    - 段高 < span_min_run×period：碎段（线的断头、毛刺）；字最矮的「一」也有 25px；
-    - 段高 ≤ span_rule_h×period 且闭合后某行横贯 ≥ span_rule_cov×带宽：细横线。
-      字的横笔到字身边就停（v006 列图中部最宽横笔 ≤0.73，见 clustering/end_rule_strip），
-      横贯整条文字带的只有框线。
-    遇到第一段「像字」的就停。全剔光返回 None（当没墨）。
+    - 细横线：段高 ≤ span_rule_h×period 且闭合后某行横贯 ≥ span_rule_cov×带宽
+      （字的横笔到字身边就停，v006 列图中部最宽横笔 ≤0.73，见 clustering/end_rule_strip）；
+    - 孤立碎段：段高 < span_min_run×period **且**离里侧下一段 ≥ span_speck_gap×period。
+      不加「孤立」这条会一段段往里啃：细笔画的字在 span_ink 门槛下碎成好几段，
+      四庫 vol02 实测整列被啃掉 2–16 格；
+    - 每端剔掉的墨（最外一段外沿 → 剔掉的最里一段内沿，不含它与字之间的空白）累计不超过
+      span_trim_max×period，再剔就超的那一段起停手——框线加碎屑实测 ≤0.35 格。
+    全剔光返回 None（当没墨）。
     """
     ys = np.flatnonzero(prof > p.span_ink)
     if not ys.size:
@@ -130,21 +138,25 @@ def _ink_span(band: np.ndarray, prof: np.ndarray, period: float, p: "ColumnGateP
             runs[-1][1] = int(y)
         else:
             runs.append([int(y), int(y)])
+    if not p.span_trim_ends:
+        return float(runs[-1][1] - runs[0][0])
 
-    def junk(a: int, e: int) -> bool:
+    def junk(a: int, e: int, gap: float | None) -> bool:
         h = e - a + 1
-        if h < p.span_min_run * period:
+        if (h <= p.span_rule_h * period
+                and float(_hclose_rows(band[a:e + 1]).mean(axis=1).max()) >= p.span_rule_cov):
             return True
-        return (h <= p.span_rule_h * period
-                and float(_hclose_rows(band[a:e + 1]).mean(axis=1).max()) >= p.span_rule_cov)
+        return h < p.span_min_run * period and (gap is None or gap >= p.span_speck_gap * period)
 
-    while runs and junk(*runs[-1]):
-        runs.pop()
-    while runs and junk(*runs[0]):
-        runs.pop(0)
-    if not runs:
-        return None
-    return float(runs[-1][1] - runs[0][0])
+    cap = p.span_trim_max * period
+    lo, hi = 0, len(runs) - 1
+    while hi > lo and junk(*runs[hi], runs[hi][0] - runs[hi - 1][1]) \
+            and runs[-1][1] - runs[hi][0] <= cap:
+        hi -= 1
+    while lo < hi and junk(*runs[lo], runs[lo + 1][0] - runs[lo][1]) \
+            and runs[lo][1] - runs[0][0] <= cap:
+        lo += 1
+    return float(runs[hi][1] - runs[lo][0])
 
 
 class ColumnGateParams(BaseModel):
@@ -164,12 +176,15 @@ class ColumnGateParams(BaseModel):
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
     top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
-    #: 量墨跨度时两端剔掉的「不是字」的墨段（2026-09-28，overview#202，见 `_ink_span`）：
-    #: 段高 < span_min_run×period 的碎段；段高 ≤ span_rule_h×period 且横向闭合后
-    #: 某行横贯 ≥ span_rule_cov×文字带宽的细横线（版框内线）。
-    span_min_run: float = 0.1
-    span_rule_h: float = 0.2
-    span_rule_cov: float = 0.8
+    #: 量墨跨度时剔掉两端「不是字」的墨段（2026-09-28，overview#202，见 `_ink_span`）。
+    #: **缺省关**：margin 是在四庫上连着框线残渣标定的，四庫开了会翻真抬头列。
+    #: 全唐文在书 yaml 的 `params: column_gate: {span_trim_ends: true}` 打开。
+    span_trim_ends: bool = False
+    span_rule_h: float = 0.2       # 细横线：段高 ≤ 此×period ……
+    span_rule_cov: float = 0.8     # ……且闭合后某行横贯 ≥ 此×带宽
+    span_min_run: float = 0.1      # 孤立碎段：段高 < 此×period ……
+    span_speck_gap: float = 0.1    # ……且离里侧下一段 ≥ 此×period
+    span_trim_max: float = 0.5     # 每端剔掉的墨（不含到字的空白）累计最多这么多×period
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
     #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
     #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
