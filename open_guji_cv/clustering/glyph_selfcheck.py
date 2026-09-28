@@ -258,6 +258,22 @@ def _unihan_same(sources: frozenset[str] = UNIHAN_SAME):
     return lambda a, b: a != b and any(s in sources for s in g.sources_of(a, b))
 
 
+def _same_physical_cell(a: tuple | None, b: tuple | None) -> bool:
+    """两个 `match._cell_parts()` 结果是否是同一物理格（2026-09-27 收紧，字形库 12 §六）。
+
+    与 `GlyphMatcher._same_cell_rows` / `CnnCandidates._real_index._excluded` 同口径：
+    两边都是重键后的精确格号坐标（非 `v1:`，`parts[4] is True`）时格号差要求 `=0`；
+    只要有一边是未确认的 `v1:`（idx 坐标换算、没经形状确认）就保留 ±2 容差兜底。
+    `a`/`b` 为 `None`（无法解析，例如跨书 `origin` 条目）时恒不算同格。
+    """
+    if a is None or b is None or a[:3] != b[:3]:
+        return False
+    diff = abs(a[3] - b[3])
+    if a[4] and b[4]:
+        return diff == 0
+    return diff <= 2
+
+
 def run_selfcheck(db_path: str | Path,
                   others: list[tuple[str, str | Path]] = (),
                   font_db: str | Path | None = None,
@@ -287,16 +303,14 @@ def run_selfcheck(db_path: str | Path,
     c.close()
     cells = [cell_key(e.instance_id, v1) if not e.origin else f"{e.origin}|{e.instance_id}"
              for e in pool]
-    # 同一物理格按「同册同页同列、格号差 ≤2」认（与 GlyphMatcher._same_cell_rows 同口径）：
-    # v1 idx、v2 slot、重切漂移都在这个范围里，别拿自己的另一份当同字参照 / 对手
+    # 同一物理格判据与 GlyphMatcher._same_cell_rows 同口径（2026-09-27 收紧，字形库 12 §六）：
+    # 两边都是重键后的精确格号坐标（非 v1:）时格号差要求 =0；只要有一边是未确认的
+    # v1:（idx 坐标、没经形状确认）才保留 ±2 容差兜底。
     from .match import _cell_parts
     parts = [_cell_parts(e.instance_id) if not e.origin else None for e in pool]
 
     def same_cell(i: int, j: int) -> bool:
-        if cells[i] == cells[j]:
-            return True
-        a, b = parts[i], parts[j]
-        return a is not None and b is not None and a[:3] == b[:3] and abs(a[3] - b[3]) <= 2
+        return cells[i] == cells[j] or _same_physical_cell(parts[i], parts[j])
 
     by_sem: dict[tuple[str, str], list[int]] = {}
     for i, e in enumerate(pool):
