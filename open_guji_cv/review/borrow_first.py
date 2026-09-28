@@ -260,40 +260,201 @@ def rank_protos(emb: np.ndarray, chars: list[str], protos: np.ndarray, k: int = 
     return out
 
 
-class ProtoIndex:
-    """借来的库 → 按字均值原型。按 (库内容指纹, checkpoint 指纹) 落盘到
-    `cache_root()/review_protos/`，内存里再留一份——17k 例首建 CPU 约一两分钟，
-    之后秒开。库一变（H 道自举进了新刻例）指纹就变，自动重建。"""
+#: 一批过网络的图数。256 时 v006 冷算峰值 RSS +700~970 MB（卷积激活按批放大），
+#: 服务器 2 核 7.5G、控制台 MemoryHigh 3.5G，几个请求并发就被节流（#166 加急，#167）。
+EMBED_BATCH = 64
 
-    _mem: dict[str, tuple[list[str], np.ndarray]] = {}
+
+def _exemplar_rows(db_path: str) -> list[tuple[str, str]]:
+    """库里全部 (字, 例键)，**不取图**。例键 = `instance_id:derived.rowid`——刻例归一图
+    重算（`INSERT OR REPLACE`）会换 rowid，键跟着变；同一例同一张图键不变。"""
+    c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        return [(ch, f"{iid}:{rid}") for ch, iid, rid in c.execute(
+            """SELECT g.char, e.instance_id, d.rowid FROM exemplars e
+               JOIN glyphs g ON g.glyph_id=e.glyph_id
+               JOIN derived d ON d.instance_id=e.instance_id AND d.kind='norm'""")]
+    finally:
+        c.close()
+
+
+def _norms_by_rowid(db_path: str, rowids: list[int]) -> dict[int, np.ndarray]:
+    from ..clustering.glyph_db import _unpng
+    out: dict[int, np.ndarray] = {}
+    c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        for s in range(0, len(rowids), 500):
+            part = rowids[s:s + 500]
+            q = f"SELECT rowid, data FROM derived WHERE rowid IN ({','.join('?' * len(part))})"
+            for rid, d in c.execute(q, part):
+                out[int(rid)] = _unpng(d).astype(np.uint8)
+    finally:
+        c.close()
+    return out
+
+
+def _npz_load(f: Path) -> dict[str, np.ndarray]:
+    try:
+        z = np.load(f, allow_pickle=False)
+        return dict(zip(json.loads(str(z["keys"])), z["mat"]))
+    except Exception:           # noqa: BLE001 — 没有/坏了当空
+        return {}
+
+
+def _npz_save(f: Path, d: dict[str, np.ndarray], dim: int = 256) -> None:
+    import os
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(f".{os.getpid()}.tmp.npz")
+        keys = list(d)
+        np.savez(tmp, keys=json.dumps(keys, ensure_ascii=False),
+                 mat=(np.stack([d[k] for k in keys]) if keys else np.zeros((0, dim))
+                      ).astype(np.float32))
+        os.replace(tmp, f)
+    except OSError:
+        pass
+
+
+class ProtoIndex:
+    """库 → 按字均值原型。两层落 `cache_root()/review_protos/`：
+
+    1. `protos_<库内容指纹|ckpt>.npz`：整份原型，库没变就直接读（秒开）；
+    2. `inst_<库路径哈希>_<ckpt>.npz`：**逐例** embedding（键见 `_exemplar_rows`）。库一变
+       （H 道每消费一条人裁就往本书库进刻例，指纹就变）不再整库重跑 CNN——只给新进的
+       例过网络，其余读盘，按字取均值即得新原型。#166 加急：服务器上正是「每次请求都
+       整库重建」把 cards 拖过 180 s、RSS 顶到 3.27G。
+
+    内存里只留**每个库路径最新一份**（旧指纹那份丢掉，库一直在变时不会越积越多）。"""
+
+    _mem: dict[str, tuple[str, tuple[list[str], np.ndarray]]] = {}
 
     @classmethod
     def get(cls, db_path: str, cnn) -> tuple[list[str], np.ndarray]:
         from ..clustering import cnn_candidates as cc
-        key = hashlib.sha1(
-            f"{_db_content_key(db_path)}|{cc.fingerprint(cnn.ckpt)}".encode()).hexdigest()[:16]
-        if key in cls._mem:
-            return cls._mem[key]
         from ..core.workspace import cache_root
-        f = Path(cache_root()) / "review_protos" / f"protos_{key}.npz"
+        ck = cc.fingerprint(cnn.ckpt)
+        key = hashlib.sha1(f"{_db_content_key(db_path)}|{ck}".encode()).hexdigest()[:16]
+        hit = cls._mem.get(db_path)
+        if hit and hit[0] == key:
+            return hit[1]
+        root = Path(cache_root()) / "review_protos"
+        f = root / f"protos_{key}.npz"
+        got = None
         if f.exists():
             try:
                 z = np.load(f, allow_pickle=False)
                 got = (json.loads(str(z["chars"])), z["mat"])
-                cls._mem[key] = got
-                return got
             except Exception:       # noqa: BLE001 — 坏缓存当没有，重建
+                got = None
+        if got is None:
+            got = cls._build(db_path, cnn, root, ck)
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+                tmp = f.with_suffix(".tmp.npz")
+                np.savez(tmp, chars=json.dumps(got[0], ensure_ascii=False), mat=got[1])
+                tmp.replace(f)
+            except OSError:
                 pass
-        chars, mat = build_protos(_load_exemplar_norms(db_path), cnn.embed)
+        cls._mem[db_path] = (key, got)
+        return got
+
+    @staticmethod
+    def _build(db_path: str, cnn, root: Path, ck: str) -> tuple[list[str], np.ndarray]:
+        rows = _exemplar_rows(db_path)
+        pf = hashlib.sha1(str(Path(db_path).resolve()).encode()).hexdigest()[:12]
+        inst_f = root / f"inst_{pf}_{ck}.npz"
+        have = _npz_load(inst_f)
+        need = sorted({int(k.rsplit(":", 1)[1]) for _, k in rows if k not in have})
+        if need:
+            rid2key = {int(k.rsplit(":", 1)[1]): k for _, k in rows}
+            for s in range(0, len(need), 2000):
+                imgs = _norms_by_rowid(db_path, need[s:s + 2000])
+                ids = list(imgs)
+                for t in range(0, len(ids), EMBED_BATCH):
+                    part = ids[t:t + EMBED_BATCH]
+                    for rid, e in zip(part, cnn.embed([imgs[r] for r in part])):
+                        have[rid2key[rid]] = np.asarray(e, np.float32)
+        live = {k for _, k in rows}
+        _npz_save(inst_f, {k: v for k, v in have.items() if k in live})
+        by: dict[str, list[np.ndarray]] = {}
+        for ch, k in rows:
+            if k in have:
+                by.setdefault(ch, []).append(have[k])
+        chars = sorted(by)
+        protos = []
+        for ch in chars:
+            m = np.asarray(by[ch], np.float64).mean(0)
+            protos.append((m / (np.linalg.norm(m) + 1e-9)).astype(np.float32))
+        mat = np.stack(protos) if protos else np.zeros((0, 256), np.float32)
+        return chars, mat
+
+
+class EmbCache:
+    """按格的 r5 embedding 落盘缓存（overview #166，2026-09-28）。
+
+    审卡结果缓存（`review/cards.py::cached_cards`）的键里有事件水位，人裁一写入就整份
+    失效；下次载入要给全书待审格重算 embedding——v006 4182 格实测占冷算 63 s 里的
+    约 43 s（读图归一 12.6 s + CNN 前向 30 s），而这些字块图根本没变。这里按格记住：
+
+    键 = 格 id + 该页 `cell_shrink` 产物的 sha256（字块图是它的纯函数；重切 / 重跑
+    Step4 就换键），文件按 checkpoint 指纹分开（换模型整份作废）。落
+    `cache_root()/review_emb/<书>/<ckpt 指纹>.npz`。只是算过的结果记下来，同一张图
+    同一个模型给同一个向量，首选与放行逻辑一个字不动。
+    """
+
+    def __init__(self, book: str, store, ckpt_fp: str):
+        from ..core.workspace import cache_root
+        from ..feedback.events import EventLog
+        self.book, self.store = book, store
+        self.path = (Path(cache_root()) / "review_emb" / EventLog.safe_batch_name(book)
+                     / f"{ckpt_fp}.npz")
+        self._page_sha: dict[int, str | None] = {}
+        self._new: dict[str, np.ndarray] = {}
+        self._have: dict[str, np.ndarray] = {}
+        if self.path.exists():
+            try:
+                z = np.load(self.path, allow_pickle=False)
+                self._have = dict(zip(json.loads(str(z["keys"])), z["mat"]))
+            except Exception:           # noqa: BLE001 — 坏缓存当没有
+                self._have = {}
+
+    def _key(self, card: dict) -> str | None:
+        pg = card["page"]
+        if pg not in self._page_sha:
+            from ..core.spec import page_key
+            try:
+                ent = self.store.manifest(self.book, "cell_shrink").get(page_key(pg))
+                self._page_sha[pg] = getattr(ent, "sha256", None)
+            except Exception:           # noqa: BLE001 — 取不到产物指纹就不缓存这页
+                self._page_sha[pg] = None
+        sha = self._page_sha[pg]
+        return f"{card['id']}|{sha}" if sha else None
+
+    def get(self, card: dict) -> np.ndarray | None:
+        k = self._key(card)
+        return None if k is None else self._have.get(k)
+
+    def put(self, card: dict, vec: np.ndarray) -> None:
+        k = self._key(card)
+        if k is not None:
+            self._new[k] = np.asarray(vec, np.float32)
+
+    def save(self) -> None:
+        """并进已有的再原子写回；写不了（盘满/只读）就算了，下次重算。"""
+        if not self._new:
+            return
+        import os
+        allk = {**self._have, **self._new}
+        keys = list(allk)
         try:
-            f.parent.mkdir(parents=True, exist_ok=True)
-            tmp = f.with_suffix(".tmp.npz")
-            np.savez(tmp, chars=json.dumps(chars, ensure_ascii=False), mat=mat)
-            tmp.replace(f)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(f".{os.getpid()}.tmp.npz")
+            np.savez(tmp, keys=json.dumps(keys, ensure_ascii=False),
+                     mat=np.stack([allk[k] for k in keys]).astype(np.float32))
+            os.replace(tmp, self.path)
+            self._have, self._new = allk, {}
         except OSError:
             pass
-        cls._mem[key] = (chars, mat)
-        return chars, mat
 
 
 # ── 装配：给卡片挂 `first` ───────────────────────────────────────────
@@ -311,11 +472,15 @@ def load_index(borrow_db: str | None, cnn, own_db: str | None = None, fallback: 
 
 def cnn_ranks_for_patches(norm_patches: list, db_path: str | None, cnn=None, k: int = CNN_TOPK,
                           own_db: str | None = None, fallback: bool = True,
-                          index: tuple | None = None) -> list[list[tuple[str, float]]]:
+                          index: tuple | None = None, emb_out: list | None = None
+                          ) -> list[list[tuple[str, float]]]:
     """归一化 64² 图（可含 `None`＝缺图）→ 每条 CNN 原型 top-k。缺图的给 `[]`。
     评测脚本与卡片装配共用这一条，量的就是线上跑的那份代码。
     `db_path` = 借来的库；`own_db` = 本书自有库（见模块头）。`index` 可直接传
-    `(字表, 原型矩阵)`（评测里模拟本书库用），此时不读库。"""
+    `(字表, 原型矩阵)`（评测里模拟本书库用），此时不读库。
+
+    `emb_out`：给一个与 `norm_patches` 等长的列表，顺手把每条的 embedding 填进去
+    （缺图留 `None`）——批审组内聚簇（#166）直接复用，不再过第二遍网络。"""
     from ..clustering import cnn_candidates as cc
     cnn = cnn or cc.shared()
     out: list[list] = [[] for _ in norm_patches]
@@ -326,11 +491,14 @@ def cnn_ranks_for_patches(norm_patches: list, db_path: str | None, cnn=None, k: 
     else:
         chars, protos, _ = load_index(db_path, cnn, own_db, fallback)
     idx = [i for i, p in enumerate(norm_patches) if p is not None]
-    for s in range(0, len(idx), 256):
-        part = idx[s:s + 256]
+    for s in range(0, len(idx), EMBED_BATCH):
+        part = idx[s:s + EMBED_BATCH]
         emb = cnn.embed([norm_patches[i] for i in part])
         for i, r in zip(part, rank_protos(emb, chars, protos, k)):
             out[i] = r
+        if emb_out is not None:
+            for j, i in enumerate(part):
+                emb_out[i] = np.asarray(emb[j], np.float32)
     return out
 
 
@@ -345,11 +513,15 @@ def _card_patch(ctx, card: dict):
     return normalize_patch(img)
 
 
-def annotate(book: str, cards: list[dict], store, mode: str, bk=None) -> dict:
+def annotate(book: str, cards: list[dict], store, mode: str, bk=None,
+             emb_out: dict | None = None) -> dict:
     """给每张卡挂 `first`（见 `first_view`），原地改。返回摘要（一致率等，供面板/日志）。
 
     CNN 不可用（没装 torch / 缺 checkpoint）时 CNN 一路为空：`cnn` 模式退像素首位，
     `rrf` 模式等于像素排名——不报错、不挡审卡，`summary.cnn_ready=False` 讲明白。
+
+    `emb_out`：给一个 dict 就顺手填 `{卡片 id: r5 embedding}`（缺图的卡不填），供批审
+    组内聚簇（#166）复用；不进卡片、不改返回值。
     """
     from ..clustering import cnn_candidates as cc
     from ..core.book import load_book
@@ -363,8 +535,24 @@ def annotate(book: str, cards: list[dict], store, mode: str, bk=None) -> dict:
     if cnn.available and cards:
         ctx = RunContext(bk, store, ImageCache(), log=lambda *_: None)
         chars, protos, src_of = load_index(review_db_path(bk), cnn, own_db, fallback)
-        ranks = cnn_ranks_for_patches([_card_patch(ctx, c) for c in cards], None, cnn,
-                                      index=(chars, protos))
+        ec = EmbCache(book, store, cc.fingerprint(cnn.ckpt))
+        embs: list = [ec.get(c) for c in cards]
+        need = [i for i, e in enumerate(embs) if e is None]
+        if need:
+            fresh: list = [None] * len(need)
+            cnn_ranks_for_patches([_card_patch(ctx, cards[i]) for i in need], None, cnn,
+                                  index=(chars, protos), emb_out=fresh)
+            for i, e in zip(need, fresh):
+                if e is not None:
+                    embs[i] = e
+                    ec.put(cards[i], e)
+            ec.save()
+        ok = [i for i, e in enumerate(embs) if e is not None]
+        if ok:
+            for i, r in zip(ok, rank_protos(np.stack([embs[i] for i in ok]), chars, protos)):
+                ranks[i] = r
+        if emb_out is not None:
+            emb_out.update({c["id"]: e for c, e in zip(cards, embs) if e is not None})
     n_agree = n_both = 0
     n_own = 0
     for c, cr in zip(cards, ranks):

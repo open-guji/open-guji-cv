@@ -13,6 +13,9 @@ CLI 只看 `id`/`char`/`doubts` 那几列就行；换成别的形状会动到前
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from ..core.book import load_book
 from ..core.spec import cell_key, page_key
 from ..gold.v2_align import align_book
@@ -72,7 +75,8 @@ def _ai_view(dr) -> tuple[list[dict] | None, dict | None]:
 
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
-          gate_cut: bool = True, skip_decided: bool = True) -> dict:
+          gate_cut: bool = True, skip_decided: bool = True,
+          emb_out: dict | None = None) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -92,6 +96,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
 
     ⚠️ 点名清单模式（`pages=list:…`）**不受本开关约束**——点名要看的就得出得来，
     与 `only` / 顺序闸同一条纪律：别让人对着空面板猜是没问题还是被吞了。
+
+    `emb_out`（#166）：给一个 dict，借库书（开了 `first_pick`）算 CNN 首选时顺手把
+    `{卡片 id: r5 embedding}` 填进去，批审组内聚簇复用；不改返回值。
     """
     st = store or ProductStore()
     bk = load_book(book)
@@ -204,12 +211,12 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 if len(out) >= limit:
                     return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
                                                   "blocked": out_blocked,
-                                                  "n_decided": len(decided)})
+                                                  "n_decided": len(decided)}, emb_out)
     return _finish(book, bk, st, {"book": book, "cards": out, "truncated": False,
-                                  "blocked": out_blocked, "n_decided": len(decided)})
+                                  "blocked": out_blocked, "n_decided": len(decided)}, emb_out)
 
 
-def _finish(book: str, bk, st: ProductStore, res: dict) -> dict:
+def _finish(book: str, bk, st: ProductStore, res: dict, emb_out: dict | None = None) -> dict:
     """借库书的「AI 首选」改 CNN 原型（2026-09-27，任务书-C-借库书人审首选改CNN原型）。
 
     书 yaml `params.review.first_pick` 没开（四庫、北行等全部现有书）时**原样返回**，
@@ -221,7 +228,8 @@ def _finish(book: str, bk, st: ProductStore, res: dict) -> dict:
     mode = first_pick_mode(bk)
     if mode is None:
         return res
-    res["first_pick"] = annotate(book, res["cards"], st, mode, bk=bk)
+    kw = {"emb_out": emb_out} if emb_out is not None else {}
+    res["first_pick"] = annotate(book, res["cards"], st, mode, bk=bk, **kw)
     res["cards"] = sort_disagree_first(res["cards"])
     return res
 
@@ -400,3 +408,201 @@ def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
         out[(c["page"], c["col"], c["slot_above"])] = why
         out[(c["page"], c["col"], c["slot_below"])] = why
     return out
+
+
+# ── cards 结果缓存（overview #166，2026-09-28）──────────────────────────
+#
+# 服务器值守实测：全唐文 v006 按字种批审，`/api/review/cards` 在那台 2 核机上一次
+# 冷算 23 s，每换一次书、每刷新一次都要重算（2.3 MB JSON，传输只占 10 s 里的一小段）。
+# 这里把**整个响应**按输入指纹落盘，同样的输入第二次直接读回。
+#
+# 键里有什么（任何一项变了都换键 = 自动失效，不需要谁记得去清）：
+# - 请求参数（模式、页范围、only、顺序闸、去重、样例上限、聚簇开关与门槛）与
+#   `ProductStore.root`；
+# - **产物**：这本书每一步 `_manifest.jsonl` 的内容哈希——每次写产物都往 manifest
+#   追加一条（含 sha256 与 `self_hash`），重跑任何一步、显式失效任何一页都会变；
+# - **事件水位**：`feedback/events/*.jsonl` 的 (文件名, 大小, mtime_ns)。人裁一写入
+#   水位就变，已裁格要从待审里消失、切线裁决要放开顺序闸，都靠它——#166「事件一写入
+#   就让相关组失效」；点名清单模式另加清单文件本身；
+# - 书 yaml 解析结果、用字账、借库书首选用到的两个字形库的内容指纹（H 道往本书库进了
+#   新刻例 → CNN 首选会变）、CNN checkpoint 指纹；`CARDS_CACHE_VERSION`（装配代码改了
+#   输出形状时手动加一）。
+#
+# 读回的是同一份 dict 的 JSON 往返，FastAPI 再序列化出来与现算逐字节相同（测试守着）。
+# 命中与否只走响应头（`X-Cards-Cache`，路由层加），**不往响应体里加字段**——四庫、北行
+# 的审卡数据要与改前逐字节一致（#166 验收）。
+
+CARDS_CACHE_VERSION = "1"
+_CARDS_MEM_MAX = 8
+_CARDS_DISK_KEEP = 16
+"""每本书磁盘上留几份（按 mtime 留最新的），其余在写新份时顺手删。"""
+
+_cards_mem: "dict[str, dict]" = {}
+
+
+def _stat_sig(paths) -> list:
+    out = []
+    for p in paths:
+        try:
+            s = p.stat()
+            out.append([p.name, s.st_size, s.st_mtime_ns])
+        except OSError:
+            out.append([p.name, None, None])
+    return out
+
+
+def _events_watermark(pages: str) -> list:
+    from ..core.workspace import feedback_root
+    fr = feedback_root()
+    ev = fr / "events"
+    sig = _stat_sig(sorted(ev.glob("*.jsonl"))) if ev.is_dir() else []
+    if pages.startswith("list:"):
+        sig.append(["list"] + _stat_sig([fr / "lists" / f"{pages[5:].strip()}.txt"])[0])
+    return sig
+
+
+def _products_sig(book: str, st: ProductStore) -> list:
+    import hashlib
+    root = st.root / book
+    out = []
+    if root.is_dir():
+        for d in sorted(p for p in root.iterdir() if p.is_dir()):
+            m = d / "_manifest.jsonl"
+            try:
+                h = hashlib.sha1(m.read_bytes()).hexdigest()
+            except OSError:
+                h = None
+            out.append([d.name, h])
+    return out
+
+
+def _inputs_sig(bk) -> dict:
+    """产物与事件之外、会改变卡片内容的输入。取不到的项记 None（照样进键）。"""
+    import dataclasses
+    from ..variant_ledger import ledger_path
+    sig: dict = {}
+    try:
+        sig["book"] = json.dumps(dataclasses.asdict(bk), ensure_ascii=False, sort_keys=True,
+                                 default=str)
+    except TypeError:
+        sig["book"] = repr(bk)
+    sig["ledger"] = _stat_sig([ledger_path()])
+    from .borrow_first import first_pick_mode, proto_sources, review_db_path
+    if first_pick_mode(bk) is not None:
+        from ..clustering import cnn_candidates as cc
+        from ..steps.glyph_match import db_fingerprint
+        own, fb = proto_sources(bk)
+        dbs = {"own": own, "borrow": review_db_path(bk) if fb else None}
+        for k, p in dbs.items():
+            try:
+                sig[f"db_{k}"] = db_fingerprint(p) if p and Path(p).exists() else None
+            except Exception:           # noqa: BLE001 — 坏库照样进键（记 None），不挡审卡
+                sig[f"db_{k}"] = None
+        sig["ckpt"] = cc.fingerprint(cc.DEFAULT_CKPT)
+    return sig
+
+
+def cards_cache_key(book: str, req: dict, st: ProductStore | None = None, bk=None) -> str:
+    """`req` = 路由收到的全部参数（dict，可 JSON 化）。→ 40 位十六进制键。"""
+    import hashlib
+    st = st or ProductStore()
+    bk = bk or load_book(book)
+    doc = {"v": CARDS_CACHE_VERSION, "book": book, "req": req, "root": str(st.root),
+           "products": _products_sig(book, st),
+           "events": _events_watermark(str(req.get("pages", ""))),
+           "inputs": _inputs_sig(bk)}
+    return hashlib.sha1(json.dumps(doc, ensure_ascii=False, sort_keys=True,
+                                   default=str).encode("utf-8")).hexdigest()
+
+
+def _cards_cache_dir(book: str) -> Path:
+    from ..core.workspace import cache_root
+    from ..feedback.events import EventLog
+    return Path(cache_root()) / "review_cards" / EventLog.safe_batch_name(book)
+
+
+def cached_cards(book: str, req: dict, compute, st: ProductStore | None = None
+                 ) -> tuple[dict, str]:
+    """有就读回，没有就 `compute()` 再落盘。→ `(响应 dict, "mem"|"disk"|"miss")`。
+
+    内存里留最近 `_CARDS_MEM_MAX` 份（进程内热命中不必读盘解析 2 MB JSON），磁盘
+    `cache_root()/review_cards/<书>/<键>.json`，每书留最新 `_CARDS_DISK_KEEP` 份。
+    缓存写失败（盘满、只读）只是没缓存，不挡返回。
+    """
+    import os
+    st = st or ProductStore()
+    key = cards_cache_key(book, req, st)
+    if key in _cards_mem:
+        return _cards_mem[key], "mem"
+    d = _cards_cache_dir(book)
+    f = d / f"{key}.json"
+    if f.exists():
+        try:
+            res = json.loads(f.read_text(encoding="utf-8"))
+            _remember(key, res)
+            return res, "disk"
+        except (OSError, ValueError):
+            pass                        # 坏缓存当没有，重算覆盖
+    res = compute()
+    # 以 JSON 往返后的那份为准返回——保证冷、热两次返回的是同一种对象（tuple 都成 list）
+    text = json.dumps(res, ensure_ascii=False)
+    res = json.loads(text)
+    _remember(key, res)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, f)
+        olds = sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+        for p in olds[_CARDS_DISK_KEEP:]:
+            p.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return res, "miss"
+
+
+def _remember(key: str, res: dict) -> None:
+    _cards_mem.pop(key, None)
+    _cards_mem[key] = res
+    while len(_cards_mem) > _CARDS_MEM_MAX:
+        _cards_mem.pop(next(iter(_cards_mem)))
+
+
+def clear_cards_cache(book: str | None = None) -> None:
+    """清内存那份（测试、以及想强制重算时用）；磁盘份靠键自然失效。"""
+    _cards_mem.clear()
+
+
+# ── 预热（#166 加急）：跑批侧把 CNN 原型与每格 embedding 算好落盘，控制台只读盘 ──
+
+def warm_review_cache(book: str, pages: str = "all", store: ProductStore | None = None) -> dict:
+    """借库书（开了 `params.review.first_pick`）审卡要用的两份 CNN 缓存一次算好：
+
+    - 本书库 / 借库的逐例 embedding 与按字原型（`borrow_first.ProtoIndex`）；
+    - `pages` 范围内**全部格**（不只待审——格在待审/自动档之间会随库变动来回走）的
+      查询 embedding（`borrow_first.EmbCache`）。
+
+    之后控制台 cards 冷算只剩非 CNN 部分（v006 实测 ~18 s，峰值 RSS +275~312 MB）。
+    没开 first_pick 的书什么都不做。**跑批活**：服务器上用
+    `guji-batch .venv/bin/python -m open_guji_cv.review.cards <书> [页]`，别在控制台进程里调。
+    幂等：已有的直接读盘，只算缺的。
+    """
+    import time
+    from .borrow_first import first_pick_mode
+    bk = load_book(book)
+    if first_pick_mode(bk) is None:
+        return {"book": book, "skipped": "书 yaml 没开 params.review.first_pick"}
+    t = time.time()
+    d = cards(book, pages, 10**9, "all", store or ProductStore(), gate_cut=False,
+              skip_decided=False)
+    fp = d.get("first_pick") or {}
+    return {"book": book, "pages": pages, "n_cells": len(d["cards"]),
+            "cnn_ready": fp.get("cnn_ready"), "secs": round(time.time() - t, 1)}
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        sys.exit("用法：python -m open_guji_cv.review.cards <书> [页范围，缺省 all]")
+    print(json.dumps(warm_review_cache(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "all"),
+                     ensure_ascii=False))
