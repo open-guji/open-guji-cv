@@ -38,8 +38,43 @@ guji snap import snap/… --ws-repo … [--dry-run] [--force]   # 手动导一�
   --attach …=cv:models/glyph_cnn_r5/emb_<key>.npz`。导入只校验 sha、落位附件（被换掉的留 `runs/snap_backup/`），不碰 products。
   ⚠️ 2026-09-27 实测：emb 索引 key 里带字体档 mtime（`font_set_fingerprint`），跨机器 key 对不上，云端预建的索引在服务器
   命中不了——等 R 道把 key 改成按内容算再发（见 overview#51）。
-- 附带 R 道预建的 rare 模板索引：`--attach models/glyph_cnn_r5/emb_<key>.npz=cv:models/glyph_cnn_r5/emb_<key>.npz`
-  （float32，几十 MB 会自动切块）。
+- ~~附带 R 道预建的 rare 模板索引：`--attach models/glyph_cnn_r5/emb_<key>.npz=cv:…`~~ ——
+  2026-09-28 起改用下一节的 `--rare-index` / `--font-index`（按 key 去重，大文件不进包）。
+
+## 大模板索引分发（2026-09-28，overview#246，用户定方案 1）
+
+大模板索引（Step5-b CNN embedding 表 `models/<ckpt>/emb_<key>.npz`、控制台 HOG 字体表
+`<ws>/cache/font_index/<key>.npz`）**一律云端预建、随快照分发，服务器控制台只读盘、不现建**
+（控制台一侧 cv e3fcfdf）。代码 `open_guji_cv/snap/indexes.py`（模块头是正本）。
+
+```bash
+# 云端：先建表（单进程单核，base ≈3 万字 / escalate ≈4.3 万字，耗时与峰值见 overview#246 交单）
+guji cache build-rare-index --book bxgb -w <工作区>
+guji cache build-font-index [--book bxgb] -w <工作区>     # 不带 --book = 控制台启动预热用的默认语料
+# 再打包：纯索引包用 attach-only；产物包也能顺手带
+guji snap pack bxgb -w <工作区> --mode attach-only --rare-index            # base+escalate
+guji snap pack v007 -w <工作区> --mode attach-only --rare-index escalate   # 只带一档
+guji snap pack … --font-index [book|default]
+#   书 id 要写在 --rare-index/--font-index 前面（两者值可省，省了会吞掉后面的位置参数）
+```
+
+- **一张表一条孤儿分支 `idx/<kind>/<key>`**（`kind` = `rare_emb` / `font_hog`）：`index.json` + 45 MB 一块的
+  `data.partNNN`。大文件只在这里，**不进任何主干历史，也不进 `snap/…` 包本身**——包的 manifest 只多一栏
+  `indexes: [{kind, key, root, dest, sha256, size, branch, label}]`，写明 key 与落位。
+- **打包按 key 去重**：远端已有 `idx/<kind>/<key>` 就直接引用（sha 取远端那份），不重推；一个包里重复的 key
+  只留一条。全唐文 v007–v009 共用一张 escalate、四庫 vol09/vol10 共用一张 escalate，都只推一次。
+- **导入按 key 去重**：目标文件已在就跳过、连 idx 分支都不拉（导入记录写「模板索引已在」）；不在才浅拉那条
+  分支、拼块、校 sha256、原子落位（「模板索引落位」）。同一 key 不同机器建出来的字节可能不逐位相同
+  （浮点累加顺序），内容等价，所以「已在」只看文件在不在。
+- 索引先于产物落位、不拿书锁（按内容 key 的缓存，放上去不会让任何产物变旧）；拉不到/校验不过记 `fetch_failed`
+  （可重试），产物一点不动。
+- ⚠️ **服务器 cv 要先部署到认 `indexes` 的版本再推这种包**：旧版 `validate` 不认识纯索引的 attach-only 包
+  （「至少要有一个附件」），会记成 `bad_manifest` 终态，同一提交不再重试——真撞上了就重打一个包（新提交）。
+- key 与产线同一个函数算（`emb_index_key` / `font_candidates._index_key`），2026-09-28 起都按内容算，
+  换机器照样命中；打包端表没建会直接报错提示先建，不替人现建。
+- **idx 分支挂哪个仓**：缺省 guji-workspace（与包同仓）；`--index-repo cv` 挂 open-guji-cv 的 origin，manifest
+  条目写 `repo: cv`，导入端到 `--cv-repo` 的 origin 去拉。本地没建过、但远端已有同 key 的 idx 分支也能打包
+  （只引用、不要求本地有文件）——建表的会话和打包的会话可以不是同一个。
 
 ## 包格式 v1
 

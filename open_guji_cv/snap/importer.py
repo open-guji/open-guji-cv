@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import gitio
+from . import indexes as idx
 from .manifest import (BACKUP_DIR, BACKUP_KEEP, MANIFEST, STAGING_PREFIX, ManifestError, append_import_log,
                        read_marks, safe_relpath, sha256_file, validate, write_marks, ws_key)
 
@@ -399,12 +400,31 @@ def _swap_back(m: dict, book_dir: Path, backup_dir: Path, backed: list[str], pla
             target.unlink(missing_ok=True)
 
 
+def _place_indexes(m: dict, *, ws_repo: Path, cv_repo: Path, ws_dir: Path | None, remote: str,
+                   git: gitio.GitRunner) -> tuple[list[dict] | None, str | None]:
+    """模板索引落位（按 key 去重：已在就跳过、不拉）。返回 (逐条结果, 错误)；出错的包记成
+    `FETCH_FAILED`（可重试）——多半是 idx 分支还没推到 / 网络，下一轮再来。"""
+    if not m.get("indexes"):
+        return [], None
+    try:
+        return idx.place(m["indexes"], ws_repo=ws_repo, cv_repo=cv_repo, ws_dir=ws_dir,
+                         remote=remote, git=git), None
+    except Exception as e:  # noqa: BLE001
+        return None, f"模板索引落位失败：{type(e).__name__}: {e}"
+
+
+def _index_summary(rows: list[dict]) -> dict:
+    return {"indexes": rows,
+            "indexes_placed": [f"{r['kind']}/{r['key']}" for r in rows if r["status"] == idx.PLACED],
+            "indexes_present": [f"{r['kind']}/{r['key']}" for r in rows if r["status"] == idx.PRESENT]}
+
+
 def _import_attach_only(branch: str, m: dict, base: dict, ref: str, *, ws_repo: Path,
                         ws_roots: list[Path], cv_repo: Path, remote: str, dry_run: bool,
                         git: gitio.GitRunner, url_fetch) -> ImportResult:
     """纯附件包：校验 sha → 查 cv 兼容 → 落位附件（被换掉的留备份在 cv 仓 `runs/snap_backup/`）。
     不碰任何 products，不拿书级跑批锁、不量新鲜度。只有 ws 附件时才要找得到工作区。"""
-    need_ws = any(a["root"] == "ws" for a in m["attachments"])
+    need_ws = any(a["root"] == "ws" for a in [*m["attachments"], *m.get("indexes", [])])
     ws_dir = find_workspace(ws_roots, m["workspace"]["key"], m["workspace"].get("dir")) if need_ws else None
     if need_ws and ws_dir is None:
         return ImportResult(NO_WORKSPACE, branch, {**base, "workspace": m["workspace"],
@@ -426,7 +446,12 @@ def _import_attach_only(branch: str, m: dict, base: dict, ref: str, *, ws_repo: 
         if dry_run:
             return ImportResult(WOULD_IMPORT, branch, {
                 **base, "attachments": len(m["attachments"]),
+                "indexes": idx.plan(m.get("indexes", []), cv_repo, ws_dir),
                 "plan": [f"落位 {a['root']}:{a['dest']}" for a in m["attachments"]]})
+        rows, err = _place_indexes(m, ws_repo=ws_repo, cv_repo=cv_repo, ws_dir=ws_dir, remote=remote, git=git)
+        if err:
+            return ImportResult(FETCH_FAILED, branch, {**base, "error": err})
+        base.update(_index_summary(rows))
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         backup_dir = Path(cv_repo) / "runs" / "snap_backup" / f"{stamp}__{m['id'].replace('/', '_')}"
         placed = _place_attachments(m, staging, ws_dir or Path(cv_repo), cv_repo, backup_dir)
@@ -530,8 +555,15 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
         if dry_run:
             return ImportResult(WOULD_IMPORT, branch, {
                 **base, "files": len(m["files"]), "attachments": len(m.get("attachments", [])),
+                "indexes": idx.plan(m.get("indexes", []), cv_repo, ws_dir),
                 "plan": [f"备份并替换 products/{m['book']}/{s}" for s in m["steps"]]
                 + (["打 display-only 标记：" + ",".join(m["steps"])] if m["mode"] == "display-only" else [])})
+        # 模板索引先于产物落位、不拿书锁：它们是按内容 key 的缓存，放上去不会让任何产物变旧；
+        # 拉不到就整包下轮再试，产物一点没动
+        rows, err = _place_indexes(m, ws_repo=ws_repo, cv_repo=cv_repo, ws_dir=ws_dir, remote=remote, git=git)
+        if err:
+            return ImportResult(FETCH_FAILED, branch, {**base, "error": err})
+        base.update(_index_summary(rows))
         before = _safe_freshness(freshness_fn, ws_dir, m["book"], pages)
         from ..core.runlock import RunLockHeld, book_run_lock
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
