@@ -499,6 +499,299 @@ def struct_rerank(order: list[str], comp_probs: dict[str, float],
     return (fused + list(order[top_m:]))[:k]
 
 
+# ── 形近对表（overview#128，2026-09-28）──────────────────────────────
+"""
+从 IDS 拆分离线生成「形近对」候选表，供审卡标「存在形近字」与放行影子评测用
+（**不接进放行判定**，见任务卡）。
+
+⚠️ **别跟 `clustering/confusables.py` 混了**：那份（`config/ids/confusable_pairs_v1.tsv`，
+2026-09-22 建，IDS 关系 + **字体模板 embedding 余弦** + 纯视觉近邻三路合成，19,732 条边，
+已接进 `rare_panel` 的 `near` 字段与控制台「按形聚类分组」）已经在生产环境跑着，
+本卡开工时才发现——写域检查时踩到文件名撞车，已确认没有覆盖到那份文件（改动前
+`git checkout` 复核过）。本模块这套是**它的零训练版**：只用 IDS 结构，不需要
+字体渲染或 embedding 模型，数据文件是另一个名字（`ids_confusable_pairs_v1.tsv`），
+**没有接入 `rare_panel`/控制台**，两套并存，谁用哪套、要不要合并交协调者裁定
+（见任务卡评论区的 ask）。三类对，判据都建在上面的结构/槽位之上：
+
+1. **slot**（只差一个槽）：两字顶层结构、二层结构码、槽位路径集合全同，
+   恰好一个槽的叶部件不同（K=20 口径，与 `structure_of` 默认一致）。
+   score = (槽数-1)/槽数——槽数越多，共享的骨架占比越高。
+   ⚠️ **实测发现**：⿰/⿱ 两槽结构占了绝大多数真实 confusable 对，score 恒为
+   0.5——**score 本身在这个档位没有区分力**（申/中、宇/字、冶/治、馭/取、
+   澤/擇、河/何、猶/獨……全部卡在 0.5，overview#128 任务卡评论区实测）。
+   但**共享部件的一级频次**（`first_level_freq`）有区分力：2 槽真错例
+   共享的都是冷僻声旁（治/冶 共享「台」频次 119、澤/擇 共享「睪」频次 61、
+   河/何 共享「可」频次 134，全在全表后 10% 分位），而 氵/亻/木 这类高频
+   形旁共享几乎不提供信息——这是**谐声偏旁混淆**的经典模式（同声旁、
+   换形旁）。`slot1_pairs`/`build_confusable_pairs` 的 `max_shared_freq`
+   参数按这条门槛筛：8,909 字宇宙上取 1000 能把全表从 448,659 压到
+   61,376（**降 86.3%**），`scripts/eval_confusable_recall.py` 校准集
+   18 对真错例的加权召回**一个百分点不掉**（53.3%，与不设门槛的全量相同）——
+   随仓库提交的 `config/ids/ids_confusable_pairs_v1.tsv` **就是这个 1000 门槛档**
+   （`build_confusable_pairs.py` 的默认值）；要全量不过滤，传
+   `--max-shared-freq -1`。
+   另一个筛选杠杆是**字表范围**（见 `scripts/build_confusable_pairs.py`
+   只在「整理本 ∪ 各书库字种」8,909 字上生成，不是全量 10 万字表）。
+2. **sameleaf**（部件相同，位置不同）：K=20 叶部件多重集完全相同、但顶层结构
+   码不同。样本很少（8,909 字全表仅 96 对），score 定死 0.9。
+3. **atom1**（差一个笔画级原子）：把两字都强制展开到**笔画级原子**
+   （`k=ATOM_K`，停集规则失效、除非碰到 `_is_atomic` 或深度上限），
+   多重集恰好相差一个原子（较大的那个 = 较小的 + 1 个原子）。
+   score = n/(n+1)，n=较小侧的原子数。**这是唯一接住「加/减一笔」这类对的
+   类型**——玉/王（+丶）、天/大（+一）都是 slot 接不住、atom1 才接得住的
+   （K=20 口径下玉的主拆法与王完全对不上槽位，见任务卡评论区诊断）。
+
+**已知接不住的**（实测记录，别重踩）：
+- **纯原子字之间**（己/已/巳、人/入）：这几个字本身在 `ids_lv1.txt` 里就是
+  独体（无 IDS 可拆），三类判据全部失效——这是 IDS 方法论本身的天花板，
+  不是参数没调对。己已巳这族项目里已经在用文意判据（`utils/ji_yi_si.py`），
+  不指望这张表。
+- **纯字样/刻工差异**（以→取 135 次实测最大宗错例）：两字部件与结构毫无
+  关联，这类错来自「同一本书里同一个字被借库模板系统性认成另一个字」
+  （刻工写法差异，非几何形近），结构方法救不了，属于借库/自举那条线的问题
+  （overview#86），不是本卡该覆盖的范围。
+- **原子距离恰好为 2**（仕/士：仕 = 士 + 亻，亻 本身是 2 个原子 丿+丨）、
+  **同原子数但多处替换**（平/乎：5 个原子里 2 处不同）：本卡判据严格卡在
+  "恰好 1 个"，这两个不含糊地落在范围外，按 N2 文档定义（差一个笔画级原子）
+  不该扩大。
+
+数据文件：`config/ids/ids_confusable_pairs_v1.tsv`（`build_confusable_pairs.py` 生成，
+指纹用文件内容哈希，跟 `components_v1.tsv` 一个模式）。
+"""
+
+ATOM_K = 1_000_000     # 强制展开到笔画级原子：随便一个远超任何 first_level_freq 的数
+CONFUSABLE_FILE = _CFG / "ids" / "ids_confusable_pairs_v1.tsv"
+
+
+@dataclass(frozen=True)
+class ConfusablePair:
+    a: str
+    b: str
+    kind: str          # "slot" | "sameleaf" | "atom1"
+    score: float
+    detail: str         # 人读的差异说明
+
+
+def leaf_multiset(ch: str, k: int = DEFAULT_K, path: str | None = None) -> Counter:
+    """按槽位取叶部件的多重集（与 `Structure.leaves` 不同——那个去重，这里保留重复，
+    例如同一部件在两个槽位各出现一次时要记两次）。"""
+    return Counter(c for _, c in structure_of(ch, k, path).slots)
+
+
+def atom_multiset(ch: str, path: str | None = None) -> Counter:
+    """笔画级原子多重集（`k=ATOM_K` 的 `leaf_multiset`）。给 atom1 类用。"""
+    return leaf_multiset(ch, ATOM_K, path)
+
+
+def _skeleton(st: Structure) -> tuple:
+    return (st.top, st.code, tuple(p for p, _ in st.slots))
+
+
+def slot1_pairs(chars: Iterable[str], k: int = DEFAULT_K,
+                path: str | None = None,
+                max_shared_freq: int | None = None) -> dict[tuple[str, str], ConfusablePair]:
+    """同结构、恰好一个槽的叶部件不同。用「遮住第 j 槽」当桶键的通配技巧，
+    避免 O(n²) 两两比较——桶内候选数天然只有几个到几十个。
+
+    `max_shared_freq`：**只对 2 槽结构生效**的门槛（⿰/⿱ 那 99.8%）。2 槽时
+    「共享的那个部件」是唯一没变的东西，它作为一级部件出现得越频繁
+    （`first_level_freq`，比如 氵/亻/木 这类高频形旁），这一对能提供的
+    「共享部件长得像」信息量反而越低——真正的形近对多半是**共享冷僻的声旁、
+    只在形旁上不同**（诸声字混淆：治/冶 共享「台」、澤/擇 共享「睪」、
+    河/何 共享「可」——这三对共享部件的一级频次分别只有 119/61/134，全在
+    全表后 10% 分位）。实测（overview#128 任务卡评论区）：8,909 字宇宙上
+    7 个已确认的 2 槽真错例，共享部件频次全部 ≤984，取门槛 1000 能把
+    443,078 条 2 槽候选压到 54,903 条（12.4%），**7 个真例一个不丢**
+    （`scripts/eval_confusable_recall.py` 实测）。
+    `None`＝不过滤（原始全量，`build_confusable_pairs` 缺省用这个）。
+    ≥3 槽的结构（如 令/今）不受此参数影响——那部分只有几百条，且真例的
+    共享部件本身也很常见，用同一把尺子会把它们筛掉。
+    """
+    chars = list(dict.fromkeys(chars))
+    struct = {ch: structure_of(ch, k, path) for ch in chars}
+    freq = first_level_freq(path) if max_shared_freq is not None else None
+    buckets: dict[tuple, list[tuple[str, str]]] = defaultdict(list)
+    for ch, st in struct.items():
+        n = len(st.slots)
+        if n < 2:
+            continue
+        sk = _skeleton(st)
+        leaves_seq = tuple(c for _, c in st.slots)
+        for j in range(n):
+            if n == 2 and freq is not None:
+                shared = leaves_seq[1 - j]
+                if freq.get(shared, 0) > max_shared_freq:
+                    continue
+            masked = sk + leaves_seq[:j] + ("*",) + leaves_seq[j + 1:]
+            buckets[masked].append((ch, leaves_seq[j]))
+
+    out: dict[tuple[str, str], ConfusablePair] = {}
+    for key, items in buckets.items():
+        if len(items) < 2:
+            continue
+        by_leaf: dict[str, list[str]] = defaultdict(list)
+        for ch, leaf in items:
+            by_leaf[leaf].append(ch)
+        leaves = list(by_leaf)
+        if len(leaves) < 2:
+            continue
+        n_slots = len(struct[items[0][0]].slots)
+        score = (n_slots - 1) / n_slots
+        for i in range(len(leaves)):
+            for j in range(i + 1, len(leaves)):
+                for a in by_leaf[leaves[i]]:
+                    for b in by_leaf[leaves[j]]:
+                        if a == b:
+                            continue
+                        pair = (a, b) if a < b else (b, a)
+                        detail = f"槽位差: {leaves[i]}/{leaves[j]}"
+                        prev = out.get(pair)
+                        if prev is None or score > prev.score:
+                            out[pair] = ConfusablePair(pair[0], pair[1], "slot", score, detail)
+    return out
+
+
+def sameleaf_pairs(chars: Iterable[str], k: int = DEFAULT_K,
+                   path: str | None = None) -> dict[tuple[str, str], ConfusablePair]:
+    """叶部件多重集完全相同、顶层结构不同（部件相同、位置或组合方式不同）。"""
+    chars = list(dict.fromkeys(chars))
+    struct = {ch: structure_of(ch, k, path) for ch in chars}
+    groups: dict[tuple, list[str]] = defaultdict(list)
+    for ch, st in struct.items():
+        if len(st.slots) < 2:
+            continue
+        key = tuple(sorted(Counter(c for _, c in st.slots).items()))
+        groups[key].append(ch)
+
+    out: dict[tuple[str, str], ConfusablePair] = {}
+    for key, items in groups.items():
+        if len(items) < 2:
+            continue
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                a, b = items[i], items[j]
+                if struct[a].top == struct[b].top and struct[a].code == struct[b].code:
+                    continue    # 结构也相同：不是这一类要抓的对象
+                pair = (a, b) if a < b else (b, a)
+                detail = f"同部件不同结构: {struct[a].code}/{struct[b].code}"
+                out[pair] = ConfusablePair(pair[0], pair[1], "sameleaf", 0.9, detail)
+    return out
+
+
+def atom1_pairs(chars: Iterable[str],
+                path: str | None = None) -> dict[tuple[str, str], ConfusablePair]:
+    """笔画级原子多重集恰好相差一个原子（较大的 = 较小的 + 1 个原子）。
+
+    做法：每个字生成「去掉其中一个原子实例」的全部归约签名（同值原子只留一份，
+    去重避免重复配对）；归约签名若恰好等于另一个字的**完整**签名，两者即一对，
+    「去掉的那个原子」就是差异。比两两比较快得多——大字表也能几秒内跑完。
+    """
+    chars = list(dict.fromkeys(chars))
+    atoms = {ch: atom_multiset(ch, path) for ch in chars}
+
+    def sig(cnt: Counter) -> tuple:
+        return tuple(sorted(cnt.items()))
+
+    full_map: dict[tuple, list[str]] = defaultdict(list)
+    for ch, cnt in atoms.items():
+        full_map[sig(cnt)].append(ch)
+
+    reduced_map: dict[tuple, list[tuple[str, str]]] = defaultdict(list)
+    for ch, cnt in atoms.items():
+        for atom in set(cnt):
+            rc = Counter(cnt)
+            rc[atom] -= 1
+            if rc[atom] <= 0:
+                del rc[atom]
+            reduced_map[sig(rc)].append((ch, atom))
+
+    out: dict[tuple[str, str], ConfusablePair] = {}
+    for key, reduced_items in reduced_map.items():
+        smaller = full_map.get(key, [])
+        if not smaller:
+            continue
+        n = sum(c for _, c in key)
+        score = n / (n + 1) if n > 0 else 0.5
+        for big_ch, removed_atom in reduced_items:
+            for small_ch in smaller:
+                if big_ch == small_ch:
+                    continue
+                pair = (big_ch, small_ch) if big_ch < small_ch else (small_ch, big_ch)
+                detail = f"多一个原子: {removed_atom}"
+                prev = out.get(pair)
+                if prev is None or score > prev.score:
+                    out[pair] = ConfusablePair(pair[0], pair[1], "atom1", score, detail)
+    return out
+
+
+def build_confusable_pairs(chars: Iterable[str], k: int = DEFAULT_K,
+                           path: str | None = None,
+                           max_shared_freq: int | None = None) -> list[ConfusablePair]:
+    """三类合并；同一对多类命中时只留分最高的一条。按分数降序、字典序返回。
+
+    `max_shared_freq` 透传给 `slot1_pairs`（见其文档串）——2 槽结构的共享
+    部件门槛，不影响 sameleaf/atom1。"""
+    chars = list(dict.fromkeys(chars))
+    merged: dict[tuple[str, str], ConfusablePair] = {}
+    for pair, cp in slot1_pairs(chars, k, path, max_shared_freq).items():
+        merged[pair] = cp
+    for pair, cp in sameleaf_pairs(chars, k, path).items():
+        prev = merged.get(pair)
+        if prev is None or cp.score > prev.score:
+            merged[pair] = cp
+    for pair, cp in atom1_pairs(chars, path).items():
+        prev = merged.get(pair)
+        if prev is None or cp.score > prev.score:
+            merged[pair] = cp
+    return sorted(merged.values(), key=lambda p: (-p.score, p.a, p.b))
+
+
+def write_confusable_pairs(pairs: Iterable[ConfusablePair],
+                           out: Path = CONFUSABLE_FILE) -> Path:
+    lines = ["# ids_confusable_pairs_v1  source=ids_lv1.txt  "
+             "columns: a\\tb\\tkind\\tscore\\tdetail"]
+    for p in pairs:
+        lines.append(f"{p.a}\t{p.b}\t{p.kind}\t{p.score:.4f}\t{p.detail}")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
+@lru_cache(maxsize=1)
+def load_confusable_pairs(path: str | None = None) -> dict[frozenset, ConfusablePair]:
+    """→ {frozenset({a,b}): ConfusablePair}。文件不存在时返回空表（`is_confusable`
+    因此缺省关闭，不报错——与 `load_vocab` 对空文件的处理一致）。"""
+    p = Path(path) if path else CONFUSABLE_FILE
+    out: dict[frozenset, ConfusablePair] = {}
+    if not p.exists():
+        return out
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        if not ln or ln.startswith("#"):
+            continue
+        parts = ln.split("\t")
+        if len(parts) < 5:
+            continue
+        a, b, kind, score, detail = parts[0], parts[1], parts[2], parts[3], parts[4]
+        out[frozenset((a, b))] = ConfusablePair(a, b, kind, float(score), detail)
+    return out
+
+
+def is_confusable(a: str, b: str, path: str | None = None) -> bool:
+    """`a`、`b` 是否在形近对表里。**只供审卡标记与影子评测**，不接进放行判定
+    （见任务卡边界）。"""
+    if a == b:
+        return False
+    return frozenset((a, b)) in load_confusable_pairs(path)
+
+
+def confusable_detail(a: str, b: str, path: str | None = None) -> ConfusablePair | None:
+    """同 `is_confusable`，命中时把 `ConfusablePair`（含 kind/score/detail）一并给出，
+    供审卡界面拼「差在右槽 X/Y」这类提示语。"""
+    if a == b:
+        return None
+    return load_confusable_pairs(path).get(frozenset((a, b)))
+
+
 def _main(argv: list[str]) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="建停集部件词表 / 查结构")

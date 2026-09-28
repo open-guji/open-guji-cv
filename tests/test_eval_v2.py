@@ -40,6 +40,10 @@ NOT_REGISTRY_SHAPED = {
     "t4_variant",  # T4 158/110 条异体分歧冻结子集：--subset 必填指向
                    # overview 仓那份 jsonl，且要该书已跑到 cell_shrink 的
                    # char_patch 缓存，不是数据集仓分片
+    "confusable_recall",  # overview#128 形近对表校准：靶子是写死在脚本里的
+                          # 18 对实测混淆（来源 #86/#120 done 单），且要读
+                          # guji-workspace 里各书的 corpus/glyph_store 重建字表
+                          # 宇宙，不是数据集仓分片，一次性校准工具不是常规回归门
 }
 
 
