@@ -273,6 +273,19 @@ class AlignRec(BaseModel):
     ref_run: int = 1
 
 
+class CoordRec(BaseModel):
+    """按坐标对位的一格（`align: coord`，2026-09-28 overview#195，见 `steps/align_ref_coord`）。
+
+    `ref_char=""` 表示整理本在这一位是**空格**（印章/污点切出来的假格、行首缩进位）。
+    不进任何准入通道——只供印章污损格的默认字、人审卡显示、对照报告用。"""
+    id: str
+    col: int
+    slot: int
+    sub: str | None = None
+    ref_char: str
+    row: float = 0.0                         # 几何行号（1 起，格中心 y / period + 0.5）
+
+
 class PageAlignRef(BaseModel):
     page: int
     anchored: bool = False
@@ -288,6 +301,11 @@ class PageAlignRef(BaseModel):
     n_witnesses: int = 1                     # 这一页参与合并的证人数（legacy 恒 1）
     anchor_via: str = "ngram"                # "ngram"=常规 8-gram 投票过线；"uncontested"=低票兜底
                                               # （align_ref 模块头「低票兜底」一节，任务书 D-align_ref锚定召回-全唐文）
+    # 按坐标对位（`AlignRefParams.coord`，overview#195）。与上面 `chars` 互不影响：
+    coord: list[CoordRec] = Field(default_factory=list)
+    coord_cols: list[int] = Field(default_factory=list)        # 走了坐标对位的列
+    coord_fallback: dict[str, str] = Field(default_factory=dict)   # 退回的列 → 原因（键是列号字符串）
+    coord_note: str = ""                                        # 整页没走坐标对位时的原因
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
