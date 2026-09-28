@@ -94,6 +94,12 @@ def cmd_status(args) -> None:
         drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
         print(f"  {sid:16s} 新鲜 {c['fresh']:3d}  过期 {c['stale']:3d}  缺失 {c['missing']:3d}  "
               f"失败 {c['failed']:3d}  阻塞 {c['blocked']:3d}{drift}")
+        # 过期原因（#174）：上游过期那条是连带的，只在没有别的原因时才印
+        rs = d.get("stale_reasons") or {}
+        own = {r: n for r, n in rs.items() if r != "上游过期"} or rs
+        for r, n in sorted(own.items(), key=lambda kv: -kv[1]):
+            tail = "，须重跑" if r.startswith("册配置") else ""
+            print(f"      ↳ 过期 {n:3d} 页：{r}{tail}")
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
