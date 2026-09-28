@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
+from .review_cluster import CLUSTER_THR, cluster_tiles
 from ...clustering import cnn_candidates
 from ...clustering.confusables import load_pairs
 from ...core.anchor import x_tr_to_tl
@@ -28,7 +29,8 @@ from ...core.book import load_book
 from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
-from ...review.cards import cards
+from ...review.borrow_first import first_pick_mode
+from ...review.cards import cached_cards, cards
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
@@ -48,10 +50,11 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 @router.get("/api/review/cards")
-def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
+def api_review_cards(response: Response, book: str, pages: str = "dev_set", limit: int = 400,
                      only: str = "review", gate_cut: bool = True,
                      skip_decided: bool = True, group: str = "",
-                     sample_limit: int = 60) -> dict:
+                     sample_limit: int = 60, cluster: str = "auto",
+                     cluster_thr: float | None = None) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -72,17 +75,41 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     `group="char"` 的进阶版：AI 首选字系统性认错方向的形近对（今/令、玉/王、
     大/天……）会把两种真实形状混进同一个字种组，这里先按形近对表把互相混淆
     的字种池化，池内再用 CNN embedding 按形状聚类拆开。同样不受 `limit` 截断。
+
+    `cluster`（overview #166，2026-09-28，只对 `group=char/shape` 生效）：组内再按
+    r5 embedding 余弦聚成小簇，**每簇只给一张代表图**（`tiles` 换成各簇代表图，
+    `clusters[i]` 与 `tiles[i]` 对齐，带「×N」与全部成员 id），一屏要加载的图从
+    几十张降到几张。`auto`（缺省）= 书 yaml 设了 `params.review.first_pick` 才开
+    （借库书，embedding 在算首选时已经算好，直接复用）；`on`/`off` 强制。关着时
+    返回值与改前逐字节一样。`cluster_thr` 覆盖缺省门槛（`review_cluster.CLUSTER_THR`）。
+
+    **结果缓存**（#166）：整个响应按（书，全部参数，产物 manifest，事件水位，库指纹）
+    落 `cache_root()/review_cards/`，见 `review/cards.py::cached_cards`。人裁一写入
+    水位就变、自动失效。命中与否看响应头 `X-Cards-Cache: mem|disk|miss`。
     """
-    if group == "shape":
-        return cards_by_shape(book, pages, only, deps.product_store(),
-                              gate_cut=gate_cut, skip_decided=skip_decided,
-                              sample_limit=sample_limit)
-    if group == "char":
-        return cards_by_char(book, pages, only, deps.product_store(),
-                             gate_cut=gate_cut, skip_decided=skip_decided,
-                             sample_limit=sample_limit)
-    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut,
-                 skip_decided=skip_decided)
+    if cluster not in ("auto", "on", "off"):
+        raise HTTPException(400, f"cluster 只认 auto/on/off，得到 {cluster!r}")
+    st = deps.product_store()
+    req = {"pages": pages, "limit": limit, "only": only, "gate_cut": gate_cut,
+           "skip_decided": skip_decided, "group": group, "sample_limit": sample_limit}
+    if group in ("char", "shape"):
+        req.update(cluster=cluster, cluster_thr=cluster_thr)
+
+    def compute() -> dict:
+        if group == "shape":
+            return cards_by_shape(book, pages, only, st, gate_cut=gate_cut,
+                                  skip_decided=skip_decided, sample_limit=sample_limit,
+                                  cluster=cluster, cluster_thr=cluster_thr)
+        if group == "char":
+            return cards_by_char(book, pages, only, st, gate_cut=gate_cut,
+                                 skip_decided=skip_decided, sample_limit=sample_limit,
+                                 cluster=cluster, cluster_thr=cluster_thr)
+        return cards(book, pages, limit, only, st, gate_cut=gate_cut,
+                     skip_decided=skip_decided)
+
+    res, how = cached_cards(book, req, compute, st)
+    response.headers["X-Cards-Cache"] = how
+    return res
 
 
 
@@ -193,8 +220,10 @@ def _agree_rank(card: dict) -> int:
     return 1 if (f is not None and f.get("agree") is True) else 0
 
 
-def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
-    """把一批待审卡片摊成按字种分的组：每组 `n`/页码分布/排好序的样例。"""
+def _build_char_groups(cs: list[dict], sample_limit: int, clusterer=None) -> list[dict]:
+    """把一批待审卡片摊成按字种分的组：每组 `n`/页码分布/排好序的样例。
+
+    `clusterer`（#166）：给了就把组内样例换成「每簇一张代表图」（见 `_make_clusterer`）。"""
     buckets: dict[tuple, list[dict]] = {}
     for c in cs:
         buckets.setdefault(_group_key(c), []).append(c)
@@ -206,14 +235,17 @@ def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
         pages: dict[int, int] = {}
         for t in tiles:
             pages[t["page"]] = pages.get(t["page"], 0) + 1
-        out.append({
+        g = {
             "char": None if top == "__unresolved__" else top,
             "ref_char": ref_char,
             "n": len(tiles),
             "pages": [{"page": p, "n": n} for p, n in sorted(pages.items())],
             "tiles": tiles[:sample_limit],
             "truncated": len(tiles) > sample_limit,
-        })
+        }
+        if clusterer is not None:
+            g.update(clusterer(tiles, sample_limit))
+        out.append(g)
     # 待审格多的字种排前面（用户「高频字优先，自举最快」）；同 n 时按字/对齐字
     # 稳定排序，避免每次请求顺序乱跳（前端翻页体验）。
     out.sort(key=lambda g: (-g["n"], g["char"] or "", g["ref_char"] or ""))
@@ -221,16 +253,23 @@ def _build_char_groups(cs: list[dict], sample_limit: int) -> list[dict]:
 
 
 def cards_by_char(book: str, pages: str, only: str, store,
-                  gate_cut: bool, skip_decided: bool, sample_limit: int) -> dict:
+                  gate_cut: bool, skip_decided: bool, sample_limit: int,
+                  cluster: str = "off", cluster_thr: float | None = None) -> dict:
     """按字种批审的装配：调既有 `cards()` 拿**全量**待审格（不受 `limit`
-    截断——分组要的是真实的 n 与页码分布），再摊成组。
+    截断——分组要的是真实的 n 与页码分布），再摊成组。`cluster` 见路由 docstring。
     """
+    on = _cluster_on(book, cluster)
+    emb: dict = {}
     d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
-             skip_decided=skip_decided)
-    groups = _build_char_groups(d["cards"], sample_limit)
-    return {"book": book, "mode": "char", "n_total": len(d["cards"]),
-            "n_decided": d.get("n_decided", 0), "blocked": d.get("blocked", []),
-            "groups": groups}
+             skip_decided=skip_decided, emb_out=emb if on else None)
+    clusterer = _make_clusterer(book, store, d["cards"], emb, cluster_thr) if on else None
+    groups = _build_char_groups(d["cards"], sample_limit, clusterer)
+    res = {"book": book, "mode": "char", "n_total": len(d["cards"]),
+           "n_decided": d.get("n_decided", 0), "blocked": d.get("blocked", []),
+           "groups": groups}
+    if on:
+        res["cluster"] = _cluster_summary(groups, emb, cluster_thr)
+    return res
 
 
 
@@ -486,9 +525,11 @@ def _shape_candidates(pool_tiles: list[dict], suggest_char: str | None, cap: int
     return out[:cap]
 
 
-def _build_shape_groups(cs: list[dict], sample_limit: int, *, get_patch, embed) -> list[dict]:
+def _build_shape_groups(cs: list[dict], sample_limit: int, *, get_patch, embed,
+                        clusterer=None) -> list[dict]:
     """把一批待审卡片先按形近对表池化、池内再按形状聚类拆成组——
     `cards_by_shape` 的核心装配，`get_patch`/`embed` 见 `_cluster_pool_by_shape`。
+    `clusterer`（#166）同 `_build_char_groups`。
     """
     unresolved = [c for c in cs if _top_pick(c) is None]
     resolved = [c for c in cs if _top_pick(c) is not None]
@@ -515,7 +556,7 @@ def _build_shape_groups(cs: list[dict], sample_limit: int, *, get_patch, embed) 
             pages: dict[int, int] = {}
             for t in tiles_c:
                 pages[t["page"]] = pages.get(t["page"], 0) + 1
-            out.append({
+            g = {
                 "pool": pool_label,
                 "char": char,
                 "candidates": _shape_candidates(tiles, char),
@@ -527,18 +568,24 @@ def _build_shape_groups(cs: list[dict], sample_limit: int, *, get_patch, embed) 
                 "pages": [{"page": p, "n": v} for p, v in sorted(pages.items())],
                 "tiles": tiles_c[:sample_limit],
                 "truncated": len(tiles_c) > sample_limit,
-            })
+            }
+            if clusterer is not None:
+                g.update(clusterer(tiles_c, sample_limit))
+            out.append(g)
     if unresolved:
         pages = {}
         for t in unresolved:
             pages[t["page"]] = pages.get(t["page"], 0) + 1
-        out.append({
+        g = {
             "pool": "__unresolved__", "char": None, "candidates": [],
             "ai_majority": None, "ref_majority": None, "purity": 0.0,
             "clustered": False, "n": len(unresolved),
             "pages": [{"page": p, "n": v} for p, v in sorted(pages.items())],
             "tiles": unresolved[:sample_limit], "truncated": len(unresolved) > sample_limit,
-        })
+        }
+        if clusterer is not None:
+            g.update(clusterer(unresolved, sample_limit))
+        out.append(g)
     # 大池优先（用户「高频字优先」，同 `_build_char_groups`）；同 n 时按池/字稳定排序。
     out.sort(key=lambda g: (-g["n"], g["pool"], g["char"] or ""))
     return out
@@ -565,33 +612,115 @@ def _card_norm_patch(book: str, ctx: RunContext, card: dict):
 
 
 def cards_by_shape(book: str, pages: str, only: str, store,
-                   gate_cut: bool, skip_decided: bool, sample_limit: int) -> dict:
+                   gate_cut: bool, skip_decided: bool, sample_limit: int,
+                   cluster: str = "off", cluster_thr: float | None = None) -> dict:
     """按形聚类分组的装配：调既有 `cards()` 拿全量待审格，池化＋聚类后摊成组。
 
     `get_patch`/`embed` 在这里拼真的（`RunContext.materialize` 读字块图、CNN
     单例 `embed()` 求向量），聚类算法本身（`_build_shape_groups` 及其调用链）
     不碰 IO/模型，全靠参数传入，纯函数可单独测。
+
+    `cluster` 开着时（#166）：池内 k-means 直接复用算首选时已有的 embedding（按卡片 id
+    查表，不再读图过网络），拆好的每组里再按形聚小簇、每簇一张代表图。
     """
+    on = _cluster_on(book, cluster)
+    emb: dict = {}
     d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
-             skip_decided=skip_decided)
+             skip_decided=skip_decided, emb_out=emb if on else None)
     cnn = cnn_candidates.shared()
     embed = None
     ctx = None
-    if cnn.available:
-        ctx = RunContext(load_book(book), store, deps.image_cache(), log=lambda s: None)
-        embed = cnn.embed
+    clusterer = None
+    if on:
+        clusterer = _make_clusterer(book, store, d["cards"], emb, cluster_thr)
+    if on and emb:
+        def get_patch(card: dict):
+            return card["id"] if card["id"] in emb else None
 
-    def get_patch(card: dict):
-        return _card_norm_patch(book, ctx, card) if ctx is not None else None
+        def embed(ids):
+            return np.stack([emb[i] for i in ids])
+    else:
+        if cnn.available:
+            ctx = RunContext(load_book(book), store, deps.image_cache(), log=lambda s: None)
+            embed = cnn.embed
 
-    groups = _build_shape_groups(d["cards"], sample_limit, get_patch=get_patch, embed=embed)
+        def get_patch(card: dict):
+            return _card_norm_patch(book, ctx, card) if ctx is not None else None
+
+    groups = _build_shape_groups(d["cards"], sample_limit, get_patch=get_patch, embed=embed,
+                                 clusterer=clusterer)
     hint = (None if cnn.available else
            "CNN checkpoint 不可用（缺 torch 或 models/glyph_cnn_r5/best.pt），"
            "形近对没法按形状拆开——已按字种分组（等同 group=char），先把这个跑起来："
            "uv pip install torch --index-url https://download.pytorch.org/whl/cpu")
-    return {"book": book, "mode": "shape", "cluster_ready": cnn.available, "hint": hint,
-            "n_total": len(d["cards"]), "n_decided": d.get("n_decided", 0),
-            "blocked": d.get("blocked", []), "groups": groups}
+    res = {"book": book, "mode": "shape", "cluster_ready": cnn.available, "hint": hint,
+           "n_total": len(d["cards"]), "n_decided": d.get("n_decided", 0),
+           "blocked": d.get("blocked", []), "groups": groups}
+    if on:
+        res["cluster"] = _cluster_summary(groups, emb, cluster_thr)
+    return res
+
+
+# ── 组内按形聚簇、每簇一张代表图（overview #166，2026-09-28）─────────────
+#
+# 算法与阈值标定在 `review_cluster.py`。这里只做装配：决定开不开、embedding 从哪来、
+# 把一组的样例换成代表图。
+
+
+def _cluster_on(book: str, cluster: str) -> bool:
+    """`auto` = 书 yaml 设了 `params.review.first_pick` 才开（#166：聚类开关缺省只对
+    借库书打开，四庫、北行等审卡数据与改前逐字节一致）。"""
+    if cluster == "on":
+        return True
+    if cluster == "off":
+        return False
+    return first_pick_mode(load_book(book)) is not None
+
+
+def _cluster_key(card: dict):
+    """并簇必须一致的键：首选字 + 人裁字（卡片带 `human` 时）。键不同的两格永远不同簇
+    ——#166「簇内有任意一格人裁或首选与代表图不一致的，不合进该簇」。"""
+    return (_top_pick(card), card.get("human"))
+
+
+def _make_clusterer(book: str, store, all_cards: list[dict], emb: dict,
+                    thr: float | None):
+    """→ `clusterer(tiles, sample_limit) -> dict`（并进组 dict 的几个键）。
+
+    `emb` 是 `cards(emb_out=…)` 顺手填好的（借库书算首选时已有）；缺的卡（强制 `on`
+    的非借库书、或首选那一路没跑出向量）在这里补算一次，补不出的格各自单成一簇。
+    """
+    missing = [c for c in all_cards if c["id"] not in emb]
+    if missing:
+        cnn = cnn_candidates.shared()
+        if cnn.available:
+            ctx = RunContext(load_book(book), store, deps.image_cache(), log=lambda s: None)
+            pats = [(c["id"], _card_norm_patch(book, ctx, c)) for c in missing]
+            pats = [(i, p) for i, p in pats if p is not None]
+            for s in range(0, len(pats), 256):
+                part = pats[s:s + 256]
+                for (i, _), v in zip(part, cnn.embed([p for _, p in part])):
+                    emb[i] = np.asarray(v, np.float32)
+    t = CLUSTER_THR if thr is None else float(thr)
+
+    def clusterer(tiles: list[dict], sample_limit: int) -> dict:
+        cls = cluster_tiles(tiles, lambda c: emb.get(c["id"]), _cluster_key, t)
+        shown = cls[:sample_limit]
+        return {"tiles": [c["rep"] for c in shown],
+                "clusters": [{"id": c["id"], "n": c["n"], "members": c["members"]}
+                             for c in shown],
+                "n_clusters": len(cls),
+                "truncated": len(cls) > sample_limit}
+    return clusterer
+
+
+def _cluster_summary(groups: list[dict], emb: dict, thr: float | None) -> dict:
+    """响应顶层的聚簇摘要：门槛、屏上要画几张图、覆盖多少格（只在聚簇开着时出现）。"""
+    return {"thr": CLUSTER_THR if thr is None else float(thr),
+            "n_groups": len(groups),
+            "n_clusters": sum(g.get("n_clusters", 0) for g in groups),
+            "n_cells": sum(g["n"] for g in groups),
+            "n_with_emb": len(emb)}
 
 
 def _page_maps(st, book: str, page: int, cache: dict):
