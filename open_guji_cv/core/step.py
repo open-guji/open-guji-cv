@@ -45,6 +45,9 @@ def register_step(cls: type["Step"]) -> type["Step"]:
     for k in (*inst.spec.consumes, *inst.spec.optional_consumes, *inst.spec.produces):
         if k not in KINDS:
             raise ValueError(f"Step {sid} 引用了未注册的产物种类 {k!r}")
+    for k, _f in inst.spec.optional_consumes_when:
+        if k not in inst.spec.optional_consumes:
+            raise ValueError(f"Step {sid}: optional_consumes_when 的 {k!r} 不在 optional_consumes 里")
     STEPS[sid] = inst
     return cls
 

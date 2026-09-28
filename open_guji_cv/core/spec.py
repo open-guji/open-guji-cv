@@ -100,6 +100,20 @@ class StepSpec:
     三步的 `run_page` 其实早就写好了容错（`seed_admit._opt` docstring 直说"可选
     上游：缺了就 None，不炸"；`align_ref` 只在 match 和 ocr 都缺时才报错），那些
     代码根本没机会跑到。声明与实现对不上，这个字段就是用来把实现的意图表达出来的。"""
+    optional_consumes_when: tuple[tuple[str, str], ...] = field(default=())
+    """**带参数开关的可选上游**：`(产物种类, 参数字段名)`，种类必须同时写在
+    `optional_consumes` 里。参数字段为假（0 / False / 空）时这一路**当它不存在**——
+    不进指纹、不参与过期传播；为真时与普通可选上游一样。
+
+    2026-09-28 加（D 道，overview#126）：`rare_candidates`（5-b）接进
+    `align_ref`/`context_decide`/`seed_admit`，书级开关缺省关。四庫等书早就有
+    5-b 产物，若只写进 `optional_consumes`，它的 sha 立刻并进三步的指纹、5-b 一过期
+    三步跟着过期——开关明明关着，全书 Step5-d～7 却要重跑。`ocr_candidates` 没有这个
+    问题，是因为它关着时压根没跑、没有产物；5-b 是常开的。
+
+    拓扑序与 `Pipeline.validate` 照旧按 `optional_consumes` 全量算（开关开的时候上游
+    得排在前面），只有指纹（`Engine.upstream_shas`）与过期传播（`Engine.status`）
+    看开关——见 `live_optional_consumes`。"""
     code_deps: tuple[str, ...] = field(default=())
     """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
     book_deps: tuple[str, ...] = field(default=())
@@ -152,6 +166,14 @@ class StepSpec:
     `store.write(..., page_key(pg), ...)` 这种按页隔离的产物，数据库/字形库连接
     （若有）能在子进程里各自新建而非跨进程共享。标错的代价是静默数据错误，
     不是报错——宁可漏标（退化成串行）也不要错标。"""
+
+
+def live_optional_consumes(spec: StepSpec, params) -> tuple[str, ...]:
+    """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
+    只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
+    gates = dict(spec.optional_consumes_when)
+    return tuple(k for k in spec.optional_consumes
+                 if k not in gates or bool(getattr(params, gates[k], None)))
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────
