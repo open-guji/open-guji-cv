@@ -526,6 +526,10 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot:
 class CnnCandidates:
     """懒加载；没有 checkpoint 或没装 torch 时 `available` 为 False，调用方跳过。"""
 
+    _EMB_CACHE_MAX = 4
+    """`_emb_cache` 最多留几档字表的 embedding 矩阵——见该属性在 `__init__` 里的
+    文档。一本书正常只有基集＋升级档两档，4 是留出的余量，不是精确值。"""
+
     def __init__(self, ckpt: str | Path = DEFAULT_CKPT, device: str | None = None,
                  probe: str | Path | None = None):
         self.ckpt = Path(ckpt)
@@ -547,10 +551,27 @@ class CnnCandidates:
         self._comps: list[str] = []
         self._struct_classes: list[str] = []
         self._slot_labels: list[str] = []
-        self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
-        """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
+        self._emb_cache: list[tuple] = []
+        """`_emb_index` 的内存缓存：`[(charset, mat, names), ...]`，最多留
+        `_EMB_CACHE_MAX` 份，LRU（命中的挪到末尾，满了从头淘汰）。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
-        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。"""
+        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。
+
+        **2026-09-28 从单槽改成小容量 LRU**（CV 总管报：服务器 `rare_candidates`
+        单进程内存随页数线性上涨，任务书-R 追加件）：原来单槽缓存只留「最近一档」，
+        而 `rare_panel.rare_for_batch` 的阶梯（基集→升级档）**在同一页内先后查两档
+        字表**——两档字表对象在一本书的所有页里都稳定（`book_charsets` 的
+        `lru_cache`），但单槽缓存放不下两个，于是每一页都要把上一页缓存的那一档
+        挤掉、从磁盘重读另一档（unicode-cjk-a 基集矩阵约 28MB／unicode-ext-b
+        升级档约 44MB），来回颠簸。实测（生产大字表、40 页合成基准）：RSS 从
+        建索引刚完成的 708MB 到第 2 页跳到 738MB 后打平，不是持续攀升，但这种
+        大块反复 alloc/free 的模式会顶住 glibc malloc arena 不易缩回，与服务器
+        「涨到 3.17G 被节流」的现象吻合。留够两档（缺省 4，给以后可能出现的
+        第三档留余量）后，同一本书跑多少页都只在最开始各建一次，不用 `is` 键
+        的普通 dict——**存对象本身、线性扫描 `is` 比对**（与 `_fwd_cache` 同一个
+        写法，理由见其文档：只存 `id()` 整数会被垃圾回收后复用的地址撞车；这里
+        `charset` 由 `book_charsets` 的 lru_cache 一直强引用着，其实不会被回收，
+        但还是照抄这个更安全的写法，不留后患）。"""
         self._real_cs: tuple[tuple, tuple | None] | None = None
         """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
         GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
@@ -855,8 +876,11 @@ class CnnCandidates:
         文件在服务器上真的能命中。**这三件不改变冷启动峰值**，需要真降内存
         只能走①。
         """
-        if self._emb_cache is not None and self._emb_cache[0] is charset:
-            return self._emb_cache[1], self._emb_cache[2]
+        for i, (cs_obj, mat, names) in enumerate(self._emb_cache):
+            if cs_obj is charset:
+                if i != len(self._emb_cache) - 1:            # LRU：命中的挪到末尾
+                    self._emb_cache.append(self._emb_cache.pop(i))
+                return mat, names
 
         from .synth import render_char
 
@@ -875,7 +899,7 @@ class CnnCandidates:
                 # 落盘是 float32（见 `_save_emb_index`）；astype 对老缓存或手工
                 # 放进来的文件兜底，保证查询路一律 float32。
                 mat = mat.astype(np.float32)
-                self._emb_cache = (charset, mat, names)
+                self._emb_cache_put(charset, mat, names)
                 return mat, names
         mat, names = build_emb_matrix(self._net, self._dev, cs, extra, render_char,
                                       log=lambda s: print(s, flush=True))
@@ -890,8 +914,14 @@ class CnnCandidates:
                 f"embedding 索引建成 0 行（字表 {len(cs)} 字）——字体模板或渲染全部失败，"
                 f"不落盘。检查 fonts/ 目录与 EMB_EXTRA_SPECS。")
         _save_emb_index(f, mat, names)
-        self._emb_cache = (charset, mat, names)
+        self._emb_cache_put(charset, mat, names)
         return mat, names
+
+    def _emb_cache_put(self, charset, mat: np.ndarray, names: list[str]) -> None:
+        """写入 `_emb_cache`（LRU，见该属性文档）：满了先从头淘汰最久未用的一档。"""
+        self._emb_cache.append((charset, mat, names))
+        while len(self._emb_cache) > self._EMB_CACHE_MAX:
+            self._emb_cache.pop(0)
 
     def embed(self, norm_patches: list[np.ndarray]) -> np.ndarray:
         """归一化 64² 图 → 单位化 embedding (N, 256)。不可用时 (0, 256)。
