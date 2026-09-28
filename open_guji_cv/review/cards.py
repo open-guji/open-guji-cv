@@ -144,6 +144,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
         d = st.read(book, "context_decide", page_key(pg), "context_decision")
         if a is None:
             continue
+        # 坐标对位（align_ref `coord`，overview#195）：现役对位没给字的格用它补「整理本」一栏
+        _ar = st.read(book, "align_ref", page_key(pg), "align_ref")
+        coord = {c.id: c.ref_char for c in (getattr(_ar, "coord", None) or [])
+                 if c.ref_char != "〓"}          # 逐列本的 PUA 生僻字占位，不当整理本字显示
         mm = {r.id: r for cc in (m.columns if m else []) for r in cc.chars}
         dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         for cc in a.columns:
@@ -185,6 +189,15 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     pf = ledger.preferred_form(gc.ref)
                     ref = {"char": gc.ref, "op": gc.align_op, "run": gc.op_run,
                            "form": pf if pf and pf != gc.ref else None}
+                elif coord.get(r.id):
+                    pf = ledger.preferred_form(coord[r.id])
+                    ref = {"char": coord[r.id], "op": "coord", "run": 1,
+                           "form": pf if pf and pf != coord[r.id] else None}
+                # 印章／污损遮挡（Step7 `occluded_gate`）：默认字 = 整理本字（坐标对位优先），
+                # 字形一律不入库；`char=None` 且 ref_blank = 整理本这一位是空格（假格），默认「非字」。
+                _occ = (r.evidence or {}).get("occluded")
+                occluded = ({"char": r.char or "", "via": _occ.get("via"),
+                             "ref_blank": bool(_occ.get("ref_blank"))} if _occ else None)
                 out.append({
                     "id": r.id, "page": pg, "col": cc.col, "slot": r.slot, "sub": r.sub or "",
                     "patch": f"/api/cache/{book}/char_patch/{key}.png",
@@ -196,6 +209,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
                     "form": (r.evidence or {}).get("form"),
                     "doubts": r.doubts,
+                    "occluded": occluded,
                     "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
                            "wmax": round(mr.wmax, 1),
                            "candidates": mr.candidates[:5]} if mr else None,
@@ -225,6 +239,8 @@ def _finish(book: str, bk, st: ProductStore, res: dict, emb_out: dict | None = N
     `limit` 截断在排序之前——要全量排序就把 limit 放大，或用 `group=char`）。
     装配见 `review/borrow_first.py`。
     """
+    # 印章遮挡卡排到一组、放最前（overview#195「并排到一组，方便一次过」）；组内保持原序。
+    res["cards"] = sorted(res["cards"], key=lambda c: 0 if c.get("occluded") else 1)
     mode = first_pick_mode(bk)
     if mode is None:
         return res

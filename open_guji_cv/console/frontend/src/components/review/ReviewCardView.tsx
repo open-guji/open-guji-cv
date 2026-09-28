@@ -53,6 +53,9 @@ export function ReviewCardView({
          onClick={onFocus}>
       <div className="rvhead">
         <b className="rvsel">{c.id}</b><span className="muted">{c.channel || '待审'}</span>
+        {c.occluded && (
+          <span className="rvoccl" title="印章／大片污损遮挡：默认用整理本的字，字形不进字形库（overview#195）">印章遮挡</span>
+        )}
         <label className="rvnolib" title="字形有无法修复的噪声（污墨/裂纹等），这次选字正常裁决，但这张图不进字形库">
           <input type="checkbox" checked={!!v.noGlyphLib}
                  onChange={(e) => { e.stopPropagation(); onSetNoGlyphLib(e.target.checked) }} /> 字形不入库

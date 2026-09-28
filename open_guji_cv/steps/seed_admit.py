@@ -236,6 +236,26 @@ class SeedAdmitParams(BaseModel):
     **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
     达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
     不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
+    occluded_gate: bool = True
+    """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
+
+    检测见 `steps/occlusion.py`（整页中等墨点密度 + 成块，vol03 全册标定只命中 p3 印章）。
+    命中的格：**不进任何放行通道**（`admit=False`、`doubts=["occluded"]`）——太脏，字形
+    一律不进字形库（用户原话「这些格太脏，全都不能入库」）；`char` = 默认字：整理本的字，
+    先取 `align_ref` 的坐标对位（`PageAlignRef.coord`），没有才取现役对位字，都没有为 None；
+    坐标对位说这一位是**空格**（印章切出来的假格）的，`char=None` 并记
+    `evidence.occluded.ref_blank=True`（文本层当非字跳过，人审卡默认点「非字」）。
+    人裁位照旧一票定案，不受这道闸影响。只会把格从放行挪到待审，不会反过来。"""
+    occluded_min_density: float = 4.0
+    """热格密度门槛（每万像素中等墨点数），标定见 `steps/occlusion.py` 模块头。"""
+    occluded_min_cells: int = 12
+    """热格连通块至少多少格才算遮挡。"""
+    occluded_min_cols: int = 3
+    """热格连通块至少横跨几列。"""
+    occluded_min_peak: float = 8.0
+    """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
+    occluded_min_contrast: float = 2.5
+    """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
@@ -303,7 +323,10 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.note_lexicon",
                    "open_guji_cv.utils.jiazhu_order",
                    "open_guji_cv.clustering.iron_evidence",
-                   "open_guji_cv.variants"),
+                   "open_guji_cv.variants",
+                   # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
+                   # 间接进了指纹，原图不变，所以不必加进 consumes。
+                   "open_guji_cv.steps.occlusion"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
@@ -388,6 +411,8 @@ class SeedAdmitStep(Step):
         iron_ns = getattr(ctx.book, "norm_stroke", None)
         iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
         iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
+        # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
+        occ = _occluded(ctx, page, match, p, amap) if p.occluded_gate else {}
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -473,6 +498,19 @@ class SeedAdmitStep(Step):
                         channel="human", char=char,
                         provenance="human", doubts=[],
                         evidence={"human": True, **({} if hs else {"no_glyph_lib": True})}))
+                    continue
+                # 印章／污损遮挡：一律不放行、不进库，默认字取整理本（坐标对位优先）。
+                # 放在人裁之后——人已经看着图定过的字照旧一票定案。
+                if r.id in occ:
+                    n_review += 1
+                    dens, dflt, via = occ[r.id]
+                    oev = {"density": round(dens, 2), "via": via}
+                    if via == "coord_blank":
+                        oev["ref_blank"] = True
+                    recs.append(AdmitRec(
+                        id=r.id, slot=r.slot, sub=r.sub, admit=False, channel=None,
+                        char=dflt, provenance="", doubts=["occluded"],
+                        evidence={"verdict": r.verdict, "cov": r.cov, "occluded": oev}))
                     continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
@@ -821,7 +859,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
            if not (r.doubts and "excluded" in r.doubts)]
     d_auto = d_review = 0
     for i, r in enumerate(seq):
-        if r.channel == "human" or r.char not in _JYS:
+        if r.channel == "human" or r.char not in _JYS or "occluded" in (r.doubts or []):
             continue
         prev = seq[i - 1].char if i else None
         nxt = seq[i + 1].char if i + 1 < len(seq) else None
@@ -1086,6 +1124,46 @@ def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:
     if ref is None or not ref.anchored:
         return {}
     return {c.id: (c.align_char, c.align_op) for c in ref.chars}
+
+
+def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams",
+              amap: dict) -> dict[str, tuple[float, str | None, str]]:
+    """本页被印章／大片污损遮住的格 → {字位 id: (密度, 默认字, 默认字来源)}。
+
+    来源：`coord`（坐标对位的整理本字）/ `coord_blank`（坐标对位说是空格位，默认字 None）/
+    `align`（现役对位字）/ `none`。读不到 Step3 字格或原图就当没有遮挡（返回空表）。"""
+    from .occlusion import cell_densities, occluded_cells
+    cells = _opt(ctx, "cells", page)
+    if cells is None:
+        return {}
+    try:
+        gray = ctx.raw_page(page)
+    except Exception:
+        return {}
+    hit = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
+                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
+                         min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+    if not hit:
+        return {}
+    ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+    coord = {c.id: c.ref_char for c in (ref.coord if ref else [])}
+    out: dict[str, tuple[float, str | None, str]] = {}
+    for cc in match.columns:
+        for r in cc.chars:
+            dens = hit.get((cc.col, r.slot, r.sub or ""))
+            if dens is None:
+                continue
+            if r.id in coord and coord[r.id] == "〓":
+                # 逐列本里没有码表的 PUA 生僻字占位：知道这儿有字、不知道是哪个
+                out[r.id] = (dens, None, "coord_pua")
+            elif r.id in coord:
+                ch = coord[r.id]
+                out[r.id] = (dens, ch or None, "coord" if ch else "coord_blank")
+            elif r.id in amap:
+                out[r.id] = (dens, amap[r.id][0], "align")
+            else:
+                out[r.id] = (dens, None, "none")
+    return out
 
 
 def _rare_agree(match_rec, cnn: list[str] | None) -> dict:
