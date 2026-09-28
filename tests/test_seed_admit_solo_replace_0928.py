@@ -76,19 +76,20 @@ def test_solo_confusable_guard(tmp_path, monkeypatch):
     assert r.admit and r.channel == "match_solo"
 
 
-# match_replace：整理本 replace 层给「嚐」，库 top1「嘗」（语义同、字面不同），库 unsure
-REPL = dict(cands=[("嘗", 0.97), ("當", 0.90)], verdict="unsure",
-            align={"align_char": "嚐", "align_op": "replace"})
+# match_replace：整理本 replace 层给「旣」，库 top1「既」（语义同、字面不同），库 unsure。
+# （原例 嚐/嘗：2026-09-28 overview#201 登记进 never_group、语义层不再同义，改用 旣/既）
+REPL = dict(cands=[("既", 0.97), ("當", 0.90)], verdict="unsure",
+            align={"align_char": "旣", "align_op": "replace"})
 
 
 def test_replace_default_takes_align_form(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, **REPL)
-    assert r.admit and r.channel == "match_replace" and r.char == "嚐"
+    assert r.admit and r.channel == "match_replace" and r.char == "旣"
 
 
 def test_replace_form_lib(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, **REPL, params={"replace_form": "lib"})
-    assert r.admit and r.channel == "match_replace" and r.char == "嘗"
+    assert r.admit and r.channel == "match_replace" and r.char == "既"
 
 
 def test_replace_form_review(tmp_path, monkeypatch):
