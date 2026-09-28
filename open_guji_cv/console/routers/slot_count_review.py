@@ -18,16 +18,18 @@ from ...core.spec import page_key
 from ...review.slot_count_cards import render_slot_count_img, slot_count_cards
 from .. import deps
 from ..auth import require_reviewer
+from ..errors import maps_http
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 @router.get("/api/slot-count-review/cards")
+@maps_http
 def api_slot_count_cards(book: str, pages: str = "dev_set") -> dict:
     from ...core.book import load_book
     st = deps.product_store()
     bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
+    pgs = bk.resolve_pages_ext(pages)
     cards = slot_count_cards(st, book, pgs)
     return {"book": book, "pages": pgs, "n": len(cards), "cards": cards}
 

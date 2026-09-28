@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from ..errors import BadRequest
+
 #: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
 #: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
 #: `guji-workspace/<id>-<书名>/books/`。这里只留一个空目录兜底与一条报错提示：
@@ -368,6 +370,47 @@ class BookSpec:
             else:
                 pages.add(int(part))
         return sorted(pages)
+
+    def resolve_pages_ext(self, pages: str | list[int] | None) -> list[int]:
+        """`resolve_pages` 的公共外壳：多认 `list:<清单名>` / `cells:<页:列:格,...>`
+        两种前缀（人裁清单与坐标点名的约定，来自 `review/cards.py::parse_cells_spec`
+        与 `feedback_root()/lists/*.txt`），两者都点的是具体字位/列，不是页码
+        表达式，落到原 `resolve_pages` 会对 `int("list:...")`／`int("cells:...")`
+        抛 `ValueError`（issue #154：C #67 查出的 `core/book.py:369` 这处，在
+        `column_review`/`slot_count_review`/`step9`/`glyph_match`/`products`/
+        `runs` 六个 router 的八处调用里都能复现）。
+
+        除 `list:`/`cells:` 外，其余写法原样交给 `resolve_pages`。**不认识的
+        写法（含两种前缀自己的错，如清单不存在/为空、`cells:` 坐标写错）一律
+        收口成 `BadRequest`**，不让 `ValueError` 冒泡成控制台的裸 500——
+        `BadRequest` 是 `errors.py` 的领域异常，配 `console/errors.py` 的
+        `@maps_http` 用就是 400；没挂 `@maps_http` 的调用方（如 `runs.py`）
+        自己 `except BadRequest` 转 `HTTPException(400, ...)`。
+        """
+        if isinstance(pages, str):
+            if pages.startswith("cells:"):
+                from ..review.cards import parse_cells_spec
+                try:
+                    ids = parse_cells_spec(pages, self.id)
+                except ValueError as e:
+                    raise BadRequest(str(e)) from e
+                return sorted({int(i.split(":")[1]) for i in ids})
+            if pages.startswith("list:"):
+                from .workspace import feedback_root
+                lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+                if not lp.exists():
+                    raise BadRequest(f"清单不存在：{lp}")
+                ids = {ln.split("#", 1)[0].strip()
+                       for ln in lp.read_text(encoding="utf-8").splitlines()
+                       if ln.strip() and not ln.lstrip().startswith("#")}
+                pgs = {int(i.split(":")[1]) for i in ids if i.count(":") >= 3}
+                if not pgs:
+                    raise BadRequest(f"清单是空的或没有可用坐标：{lp}")
+                return sorted(pgs)
+        try:
+            return self.resolve_pages(pages)
+        except ValueError as e:
+            raise BadRequest(f"页号表达式错误：{e}") from e
 
     def to_dict(self) -> dict:
         return {
