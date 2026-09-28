@@ -8,6 +8,7 @@ import type { WorkspaceState } from '../api/workspace'
 import type { Book } from '../types/registry'
 import { useBookCaps } from '../hooks/useBookCaps'
 import { useIdentity } from '../hooks/useIdentity'
+import { VersionInfoLine } from './VersionBanner'
 
 // 顶层布局：左侧导航。用户 2026-09-11 测试反馈 §1/§4 重排过一次：
 // 换书下拉框置顶 → 分割线 → 总览 → Step0-9（Step5 四小步永久展开为二级
@@ -141,6 +142,7 @@ export function AppLayout() {
           <NavLink to={at('/glyphlib/')}>字形库</NavLink>
           <NavLink to={at('/variantlib/')}>异体字库</NavLink>
         </nav>
+        <VersionInfoLine />
       </aside>
       <main className="content">
         <Outlet />

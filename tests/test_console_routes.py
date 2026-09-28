@@ -714,9 +714,10 @@ def test_route_inventory():
     2026-09-28 字形库「待纳入」（overview#176，C 道）：新增 `GET /api/glyphlib/candidates`
     （候选清单一览）、`GET /api/glyphlib/candidates/{list_id}`（一份清单按字分组、配库里
     同字刻例）；只读，裁决走 `POST /api/events`（kind=admit_candidate）。109 → 111。
+    2026-09-28 部署版本条（overview#258，C 道）：新增 `GET /api/version`（免鉴权）。111 → 112。
     """
     got = sorted(_endpoints())
-    assert len(got) == 111, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 112, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -820,7 +821,7 @@ def test_route_snapshot():
 
 EXPECTED_ROUTES = [
     # 控制台接入网站账号体系（2026-09-26）
-    "GET /api/auth/me", "GET /api/review/conflicts", "GET /healthz",
+    "GET /api/auth/me", "GET /api/review/conflicts", "GET /healthz", "GET /api/version",
     "GET /auth/login", "GET /auth/callback", "GET /auth/logout",
     "GET /auth/dev-login", "GET /auth/dev-login-submit",
     # Step8 对勘与复核（2026-09-22）

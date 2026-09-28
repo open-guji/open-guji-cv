@@ -575,3 +575,13 @@ def test_dev_login_routes_404_without_dev_idp(client):
     r = client.get("/auth/dev-login-submit", params={
         "state": "x", "redirect_uri": "y", "email": "a@b.c", "role": "admin"})
     assert r.status_code == 404
+
+
+def test_version_is_public_and_shaped(client):
+    r = client.get("/api/version")
+    assert r.status_code == 200
+    d = r.json()
+    assert set(d) == {"commit", "subject", "deployed_at"}
+    assert d["deployed_at"]
+    if d["commit"] is not None:
+        assert 4 <= len(d["commit"]) <= 40
