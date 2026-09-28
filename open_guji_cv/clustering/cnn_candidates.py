@@ -901,6 +901,8 @@ class CnnCandidates:
                 mat = mat.astype(np.float32)
                 self._emb_cache_put(charset, mat, names)
                 return mat, names
+        from ..utils.inline_index import forbid_inline_build
+        forbid_inline_build("CNN embedding", len(cs), f)
         mat, names = build_emb_matrix(self._net, self._dev, cs, extra, render_char,
                                       log=lambda s: print(s, flush=True))
         # **空索引绝不落盘**（2026-09-17）。此前无条件 savez：建索引失败（模板目录

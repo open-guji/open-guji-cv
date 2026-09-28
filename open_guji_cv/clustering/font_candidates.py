@@ -237,6 +237,9 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
         keys = [(c, fn) for c, fn in zip(z["chars"].tolist(), z["fonts"].tolist())]
         return z["mat"], keys
 
+    from ..utils.inline_index import forbid_inline_build
+    forbid_inline_build("字体 HOG", len(charset), f)
+
     feat = get_feature(backend)
     mats: list[np.ndarray] = []
     keys: list[tuple[str, str]] = []
