@@ -97,6 +97,56 @@ CONTRACT = [
 ]
 
 
+def _hclose_rows(b: np.ndarray, w: int = 9) -> np.ndarray:
+    """逐行横向闭合（接上虚线断口），宽 w。"""
+    import cv2
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (w, 1))
+    return cv2.morphologyEx(b.astype(np.uint8), cv2.MORPH_CLOSE, k) > 0
+
+
+def _ink_span(band: np.ndarray, prof: np.ndarray, period: float, p: "ColumnGateParams") -> float | None:
+    """列的墨跨度（首段墨顶 → 末段墨底），两端的非字墨段不算。
+
+    **为什么要剔**（2026-09-28，overview#202）：全唐文四周雙邊，Step1 的 bottom 落在
+    外粗框上，内框细线（厚 3–8px，列图里连同倾斜 15–20 行）就留在列窗底部。它离末字
+    还有半格，却把墨跨度撑长了 0.4–0.5 格——`span/period - 22 + 0.5` 恰好过 1，
+    `n_raised_hint` 给 1，Step3 只好在 22 个字里切 23 格：要么让框线自成一格
+    （列末 slot 22 出「一」，9 例），要么把字内留白最干净的「二」「三」劈成两格
+    （5 例）。v006 93 个 hint 列里 88 个是这样来的。
+
+    剔法：从两端往里，逐段看（行墨 > span_ink 的行、断口 ≤4 行算一段）：
+    - 段高 < span_min_run×period：碎段（线的断头、毛刺）；字最矮的「一」也有 25px；
+    - 段高 ≤ span_rule_h×period 且闭合后某行横贯 ≥ span_rule_cov×带宽：细横线。
+      字的横笔到字身边就停（v006 列图中部最宽横笔 ≤0.73，见 clustering/end_rule_strip），
+      横贯整条文字带的只有框线。
+    遇到第一段「像字」的就停。全剔光返回 None（当没墨）。
+    """
+    ys = np.flatnonzero(prof > p.span_ink)
+    if not ys.size:
+        return None
+    runs: list[list[int]] = []
+    for y in ys:
+        if runs and y - runs[-1][1] <= 4:
+            runs[-1][1] = int(y)
+        else:
+            runs.append([int(y), int(y)])
+
+    def junk(a: int, e: int) -> bool:
+        h = e - a + 1
+        if h < p.span_min_run * period:
+            return True
+        return (h <= p.span_rule_h * period
+                and float(_hclose_rows(band[a:e + 1]).mean(axis=1).max()) >= p.span_rule_cov)
+
+    while runs and junk(*runs[-1]):
+        runs.pop()
+    while runs and junk(*runs[0]):
+        runs.pop(0)
+    if not runs:
+        return None
+    return float(runs[-1][1] - runs[0][0])
+
+
 class ColumnGateParams(BaseModel):
     expected_cols: int | None = None    # None = Book.expected_cols
     count_mode: str = "exact"           # exact：列数必须等于版式列数 | detected：列数由 Step1 探出，只要求 ≥1（现代链）
@@ -114,6 +164,12 @@ class ColumnGateParams(BaseModel):
     span_ink: float = 0.05         # 量墨跨度时算「有墨」的行墨门槛
     top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
+    #: 量墨跨度时两端剔掉的「不是字」的墨段（2026-09-28，overview#202，见 `_ink_span`）：
+    #: 段高 < span_min_run×period 的碎段；段高 ≤ span_rule_h×period 且横向闭合后
+    #: 某行横贯 ≥ span_rule_cov×文字带宽的细横线（版框内线）。
+    span_min_run: float = 0.1
+    span_rule_h: float = 0.2
+    span_rule_cov: float = 0.8
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
     #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
     #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
@@ -125,7 +181,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.10", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.11", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -315,9 +371,8 @@ class ColumnGateStep(Step):
                         max(1, int(c.border_top_in_column / period)),
                         p.max_raised_hint)
                 else:
-                    ink = np.flatnonzero(prof > p.span_ink)
-                    if ink.size:
-                        span = float(ink[-1] - ink[0])
+                    span = _ink_span(img[:, int(b0):int(b1)] < p.ink_threshold, prof, period, p)
+                    if span is not None:
                         extra = int(span / period - expected_slots + p.span_margin)
                         if extra > 0:
                             n_raised_hint[c.col] = min(extra, p.max_raised_hint)
