@@ -294,3 +294,70 @@ def test_emb_cache_roundtrip_and_rekey_on_product_change(ws, tmp_path, monkeypat
     assert EmbCache("keben", _ManStore("bbb"), "fp").get(card) is None   # Step4 重跑 → 换键
     assert EmbCache("keben", _ManStore("aaa"), "fp2").get(card) is None  # 换模型 → 换文件
     assert EmbCache("keben", _ManStore(None), "fp").get(card) is None    # 没产物指纹不缓存
+
+
+# ── 原型增量重建（#166 加急：库一变不再整库重跑 CNN）───────────────────────
+
+def _mini_db(path, items):
+    import sqlite3
+
+    import cv2
+    c = sqlite3.connect(path)
+    c.executescript("""
+      CREATE TABLE glyphs (glyph_id INTEGER PRIMARY KEY, char TEXT, updated_at TEXT);
+      CREATE TABLE exemplars (glyph_id INTEGER, instance_id TEXT, role TEXT, added_at TEXT,
+                              PRIMARY KEY (glyph_id, instance_id));
+      CREATE TABLE admissions (admitted_at TEXT);
+      CREATE TABLE derived (instance_id TEXT, kind TEXT, algo_version TEXT, data BLOB,
+                            PRIMARY KEY (instance_id, kind, algo_version));""")
+    _mini_add(c, items)
+    return c
+
+
+def _mini_add(c, items):
+    import cv2
+    for ch, iid, v in items:
+        gid = c.execute("SELECT glyph_id FROM glyphs WHERE char=?", (ch,)).fetchone()
+        if gid is None:
+            gid = (c.execute("INSERT INTO glyphs (char, updated_at) VALUES (?, 't')", (ch,)).lastrowid,)
+        img = np.full((64, 64), v, np.uint8)
+        c.execute("INSERT INTO exemplars VALUES (?,?,'x',?)", (gid[0], iid, iid))
+        c.execute("INSERT INTO derived VALUES (?, 'norm', 'v1', ?)",
+                  (iid, cv2.imencode(".png", img)[1].tobytes()))
+    c.commit()
+
+
+class _CountingCnn:
+    from pathlib import Path as _P
+    ckpt = _P("/nonexistent/best.pt")
+
+    def __init__(self):
+        self.n = 0
+
+    def embed(self, imgs):
+        self.n += len(imgs)
+        return np.stack([_u(float(im.mean()) + 1.0, 1.0) for im in imgs])
+
+
+def test_proto_index_incremental_only_embeds_new_exemplars(tmp_path, monkeypatch):
+    from open_guji_cv.review import borrow_first as bf
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(bf.ProtoIndex, "_mem", {})
+    db = str(tmp_path / "g.db")
+    c = _mini_db(db, [("甲", "i1", 10), ("甲", "i2", 20), ("乙", "i3", 200)])
+    cnn = _CountingCnn()
+    chars, mat = bf.ProtoIndex.get(db, cnn)
+    assert chars == ["乙", "甲"] and cnn.n == 3
+    assert np.allclose(np.linalg.norm(mat, axis=1), 1.0)
+    bf.ProtoIndex.get(db, cnn)
+    assert cnn.n == 3                                     # 库没变：内存命中
+    _mini_add(c, [("丙", "i4", 90)])                       # H 道进了一例新刻例
+    chars2, _ = bf.ProtoIndex.get(db, cnn)
+    assert chars2 == ["丙", "乙", "甲"] and cnn.n == 4     # 只给新那一例过网络
+    monkeypatch.setattr(bf.ProtoIndex, "_mem", {})         # 换进程：读盘
+    bf.ProtoIndex.get(db, cnn)
+    assert cnn.n == 4
+    # 与直接整库算的原型一致
+    ref_chars, ref = bf.build_protos(bf._load_exemplar_norms(db), cnn.embed)
+    got_chars, got = bf.ProtoIndex.get(db, cnn)
+    assert ref_chars == got_chars and np.allclose(ref, got, atol=1e-6)
