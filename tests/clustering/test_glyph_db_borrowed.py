@@ -32,9 +32,9 @@ def _store(tmp_path, name, edition, rows):
 
 @pytest.fixture
 def two(tmp_path):
-    siku = _store(tmp_path, "siku", "siku-zongmu",
+    siku = _store(tmp_path, "siku", "book-a",
                   [("v2:vol01:1:1:1", "以"), ("v2:vol01:1:1:2", "取"), ("vol01:2:1:3", "今")])
-    qtw = _store(tmp_path, "qtw", "qtw-jiaqing",
+    qtw = _store(tmp_path, "qtw", "book-b",
                  [("v2:v006:5:1:1", "以"), ("v2:v006:5:1:2", "令")])
     return siku, qtw
 
@@ -44,16 +44,16 @@ def test_borrowed_merge_keeps_editions_apart(two, tmp_path):
     out = rebuild_from_store(qtw, tmp_path / "m.db", extra_stores=[siku])
     assert out["borrowed_instances"] == 3
     db = GlyphDB(tmp_path / "m.db")
-    assert db.book_edition() == "qtw-jiaqing"          # 库的身份仍是本书
+    assert db.book_edition() == "book-b"          # 库的身份仍是本书
     eds = dict(db.conn.execute(
         "SELECT char || '@' || edition_tag, n_confirmed FROM glyphs").fetchall())
-    assert eds == {"以@qtw-jiaqing": 1, "令@qtw-jiaqing": 1,
-                   "以@siku-zongmu": 1, "取@siku-zongmu": 1, "今@siku-zongmu": 1}
+    assert eds == {"以@book-b": 1, "令@book-b": 1,
+                   "以@book-a": 1, "取@book-a": 1, "今@book-a": 1}
     assert db.conn.execute("SELECT count(*) FROM exemplars").fetchone()[0] == 5
     # 新进的刻例归本书 edition，不归借来的
     db.admit_instance("v2:v006:6:1:1", "取", _png(7), provenance="human")
     assert db.conn.execute("SELECT count(*) FROM glyphs WHERE char='取' "
-                           "AND edition_tag='qtw-jiaqing'").fetchone()[0] == 1
+                           "AND edition_tag='book-b'").fetchone()[0] == 1
     db.close()
 
 
@@ -67,7 +67,7 @@ def test_export_from_merged_skips_borrowed(two, tmp_path):
     db.close()
     assert c["instances"] == 3 and c["admissions"] == 3 and c["exemplars"] == 3
     eds = {json.loads(l)["edition_tag"] for l in open(out / "glyphs.jsonl", encoding="utf-8")}
-    assert eds == {"qtw-jiaqing"}
+    assert eds == {"book-b"}
     ids = {json.loads(l)["instance_id"] for f in (out / "instances").glob("*.jsonl")
            for l in open(f, encoding="utf-8")}
     assert ids == {"v2:v006:5:1:1", "v2:v006:5:1:2", "v2:v006:6:1:1"}
