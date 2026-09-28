@@ -48,6 +48,8 @@ class PackSpec:
     compatible_with: list[str] = field(default_factory=list)
     param_overrides: dict[str, dict] = field(default_factory=dict)
     attachments: list[Attachment] = field(default_factory=list)
+    #: 模板索引引用（`indexes.publish()` 的返回）：大文件在 `idx/<kind>/<key>` 分支上，包里只写引用。
+    indexes: list[dict] = field(default_factory=list)
     glyph_fingerprint: str | None = None
     session: str | None = None
     note: str = ""
@@ -278,6 +280,7 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
         "note": spec.note,
         "files": files,
         "attachments": attachments,
+        "indexes": list(spec.indexes),
     }
     validate(manifest)
     (tree_dir / MANIFEST).write_text(dumps(manifest), encoding="utf-8")
@@ -287,8 +290,10 @@ def build_tree(spec: PackSpec, tree_dir: Path, *, cv_repo: Path | None = None,
 def commit_and_push(ws_repo: Path, tree_dir: Path, manifest: dict, *, push: bool = True,
                     remote: str = "origin", git: gitio.GitRunner = gitio.default_git) -> str:
     """做成孤儿提交；`push=False` 时只在本地建 `refs/heads/<branch>`（演练/检查用）。"""
+    idx = manifest.get("indexes") or []
     msg = (f"快照 {manifest['id']}：{manifest['book']} {len(manifest['pages'])} 页 "
-           f"{','.join(manifest['steps'])}（{manifest['mode']}）\n\n"
+           f"{','.join(manifest['steps'])}（{manifest['mode']}）"
+           + (f"；模板索引 {', '.join(e['kind'] + '/' + e['key'] for e in idx)}" if idx else "") + "\n\n"
            f"cv {manifest['cv']['commit']}；guji snap pack 生成，内容见 manifest.json。"
            + (f"\n\n{manifest['note']}" if manifest.get("note") else ""))
     commit = gitio.commit_tree_from_dir(ws_repo, tree_dir, msg, git=git)

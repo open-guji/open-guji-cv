@@ -354,18 +354,30 @@ def _cmd_cache_build_font_index(args) -> None:
     big 一份，small 查询借 big 的矩阵，见 `font_candidates.warm()` 模块头），
     这里直接调它，不用自己再判断包含关系。
     """
-    from .clustering.font_candidates import all_ready, warm
+    import os
+
+    from .clustering.font_candidates import _index_dir, _index_key, all_ready, warm
     from .clustering.rare_panel import _rare_charsets
+    from .core.workspace import workspace_root
     from .steps.align_ref import book_corpus
 
+    # 不给 --book 时字表取 DEFAULT_CORPUS、落盘在 cache_root()——两样都按工作区解析。没有工作区
+    # 就会拿仓内 17 KB 样本语料建一张谁也用不上的表、写进仓内 cache/，所以要么 -w、要么 GUJI_CACHE_DIR。
+    if workspace_root() is None and not os.environ.get("GUJI_CACHE_DIR"):
+        print("✗ 要给 -w <工作区>（控制台起在哪个工作区就给哪个）：默认语料与 cache/font_index/ "
+              "都按工作区解析，不给会拿仓内样本语料建一张用不上的表", file=sys.stderr)
+        sys.exit(2)
     corpus = book_corpus(args.book) if args.book else None
     cs_small, cs_big = _rare_charsets(corpus)
     print(f"book={args.book or '(默认语料)'} corpus={corpus or '(DEFAULT_CORPUS)'} "
          f"small={len(cs_small)} 字 big={len(cs_big)} 字")
+    for name, cs in (("small", cs_small), ("big", cs_big)):
+        print(f"  {name} key={_index_key(cs, 'fonts', 'hog')}")
     if all_ready([cs_small, cs_big]):
-        print("已有缓存，跳过重建；如需强制重建先删掉 cache/font_index/ 里对应文件")
+        print(f"已有缓存，跳过重建；如需强制重建先删掉 {_index_dir()} 里对应文件")
         return
     warm([cs_small, cs_big])
+    print(f"建好，落在 {_index_dir()}")
     print("")
     print("分发：把 <cache_root>/font_index/*.npz 随 cv 仓快照或 Release 一起带走，")
     print("服务器上放到同一个相对路径（`core.workspace.cache_root()` 算出来的那层）即可；")
@@ -1466,6 +1478,7 @@ def cmd_snap(args) -> None:
             root, _, dest = dst.partition(":")
             url, _, sha = rest.rpartition("#")
             atts.append(sp.Attachment(root=root, dest=dest, url=url, sha256=sha))
+        idx_files = _snap_index_files(args, ws_dir, cv_repo, ws_repo)
         spec = sp.PackSpec(book=args.target, products_root=prod, ws_dir=ws_dir,
                            steps=[s for s in (args.steps or "").split(",") if s] or None,
                            pages=sp.parse_pages(pages), mode=args.mode,
@@ -1478,12 +1491,19 @@ def cmd_snap(args) -> None:
         import tempfile
         with tempfile.TemporaryDirectory(prefix="guji-snap-") as td:
             tree = Path(td) / "tree"
-            m = sp.build_tree(spec, tree, cv_repo=cv_repo)
             repo = ws_repo or ws_dir
             top = gitio.default_git(repo, ["rev-parse", "--show-toplevel"])
             if top.returncode != 0:
                 print(f"✗ {repo} 不在 git 仓里；给 --ws-repo", file=sys.stderr)
                 sys.exit(2)
+            if idx_files:
+                # 模板索引先上 idx/<kind>/<key>（远端已有同 key 的直接引用、不重推），包里只写引用
+                from .snap import indexes as sidx
+                host_repo = cv_repo if args.index_repo == "cv" else Path(top.stdout.strip())
+                spec.indexes = sidx.publish(host_repo, idx_files, host=args.index_repo,
+                                            cv_commit=args.cv_commit or sp._cv_head(cv_repo),
+                                            push=not args.no_push, dry_run=args.dry_run)
+            m = sp.build_tree(spec, tree, cv_repo=cv_repo)
             # --dry-run：只打印计划，不建提交、不建本地分支、不推（原来 pack 根本不看 --dry-run，
             # 照样真推——整理 Z21/Z22/Z23 三道都踩过，#174）
             if args.dry_run:
@@ -1493,7 +1513,10 @@ def cmd_snap(args) -> None:
                 commit = sp.commit_and_push(Path(top.stdout.strip()), tree, m, push=not args.no_push)
         out = {"branch": m["branch"], "commit": commit, "book": m["book"], "mode": m["mode"],
                "steps": m["steps"], "pages": len(m["pages"]), "files": len(m["files"]),
-               "attachments": len(m["attachments"]), "cv": m["cv"]["commit"],
+               "attachments": len(m["attachments"]),
+               "indexes": [{k: e.get(k) for k in ("kind", "key", "dest", "branch", "size", "reused", "label")}
+                           for e in m.get("indexes", [])],
+               "cv": m["cv"]["commit"],
                "pushed": not args.no_push and not args.dry_run}
         if args.dry_run:
             out.update(dry_run=True, bytes=size, supersedes=m.get("supersedes", []),
@@ -1531,6 +1554,39 @@ def cmd_snap(args) -> None:
         if out.get("status") in ("ls_remote_failed", "fetch_failed"):
             sys.exit(1)
         return
+
+
+def _snap_index_files(args, ws_dir: Path, cv_repo: Path, ws_repo: Path | None) -> list:
+    """`snap pack --rare-index/--font-index` → 要带的表（`snap.indexes.IndexFile`）。
+    key 要按这本书的字表算，字表叠加了工作区里的整理本语料，所以临时把 GUJI_WORKSPACE 指过来。
+    本地没建、但索引仓远端已有同 key 的 idx 分支也行（只引用），所以先 ls-remote 一次。"""
+    if not (args.rare_index or args.font_index):
+        return []
+    import os
+    from .snap import gitio
+    from .snap import indexes as sidx
+    try:
+        have = set(sidx.remote_index_branches(cv_repo if args.index_repo == "cv" else (ws_repo or ws_dir)))
+    except gitio.GitError as e:
+        print(f"  ⚠️ 查不了远端 idx 分支（{e}），只认本地已建的表", file=sys.stderr)
+        have = set()
+    saved = os.environ.get("GUJI_WORKSPACE")
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)
+    try:
+        out = []
+        if args.rare_index:
+            out += sidx.rare_index_files(args.target, args.rare_index, cv_repo, have)
+        if args.font_index:
+            out += sidx.font_index_files(args.target if args.font_index == "book" else None, have)
+        return out
+    except FileNotFoundError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(2)
+    finally:
+        if saved is None:
+            os.environ.pop("GUJI_WORKSPACE", None)
+        else:
+            os.environ["GUJI_WORKSPACE"] = saved
 
 
 def cmd_runs(args) -> None:
@@ -1630,6 +1686,18 @@ def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") 
         return None
     import os
     ws = getattr(args, "workspace", None)
+    if not args.book:
+        # 可选的 `--book` 没给（`cache usage|prune|build-font-index`、`batch list`）：没有书可校验，
+        # 给了 -w 就只查目录在不在并导出，不给就不碰工作区。原先照「带 book 的命令」一律要
+        # `-w` 且要 `books/.yaml`，`guji cache build-font-index` 不带 --book 怎么都跑不起来（overview#246）。
+        if not ws:
+            return None
+        root = Path(ws).expanduser().resolve()
+        if not root.is_dir():
+            parser.error(f"--workspace {root} 不存在")
+        os.environ["GUJI_WORKSPACE"] = str(root)
+        print(f"  工作区 {root}（未指定册）", file=sys.stderr)
+        return root
     if not ws and command in ENV_FALLBACK_COMMANDS:
         ws = os.environ.get("GUJI_WORKSPACE")
         if ws:
@@ -1877,6 +1945,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--param", action="append", help="pack：记一条参数覆盖 step.key=value，可重复")
     p.add_argument("--attach", action="append", help="pack：附件 SRC=cv:相对路径 或 SRC=ws:相对路径")
     p.add_argument("--attach-url", action="append", help="pack：外链附件 cv:相对路径=URL#sha256")
+    p.add_argument("--rare-index", nargs="?", const="all", default=None, choices=["all", "base", "escalate"],
+                   help="pack：带上这本书的 Step5-b embedding 索引（先 `guji cache build-rare-index`）。"
+                        "大文件进 idx/rare_emb/<key> 分支、按 key 去重，包里只写引用")
+    p.add_argument("--font-index", nargs="?", const="book", default=None, choices=["book", "default"],
+                   help="pack：带上控制台 HOG 字体索引（先 `guji cache build-font-index`）；"
+                        "book=按这本书的语料，default=控制台启动预热用的默认语料")
+    p.add_argument("--index-repo", default="ws", choices=["ws", "cv"],
+                   help="pack：idx 分支挂在哪个仓的 origin（缺省 ws=guji-workspace；cv=open-guji-cv）")
     p.add_argument("--note", default=None)
     p.add_argument("--stamp", default=None, help="pack：分支时戳，默认当前 UTC yyyymmddThhmm")
     p.add_argument("--create-workspace", action="store_true",
