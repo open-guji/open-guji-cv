@@ -21,6 +21,10 @@
   `…part000/001…`，导入时拼回并校验整文件 sha256；再大的放 Release/对象存储，manifest
   写 `url` + sha256（`attachments[].url`），导入时下载校验。
 
+- 大模板索引（rare emb / 字体 HOG，几十 MB 一张、多本书共用）**不进包**：一张表一条
+  `idx/<kind>/<key>` 孤儿分支，manifest `indexes` 只写引用，打包与导入都按 key 去重
+  （2026-09-28，overview#246，见 `indexes` 模块头）。
+
 模块：`manifest`（格式、分支名、标记文件）、`gitio`（可注入的 git 调用）、`pack`、
-`importer`、`watch`。
+`importer`、`watch`、`indexes`。
 """
