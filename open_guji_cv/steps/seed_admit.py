@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -193,6 +193,21 @@ class SeedAdmitParams(BaseModel):
     的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
     只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
+    rare_agree: bool = False
+    """记「像素与 CNN 两路首选是否一致」（2026-09-28，D 道 overview#126），缺省关。
+    开了读 `rare_candidates`（5-b），在每格 `evidence.rare` 记 `{pix, cnn, agree}`：
+    `pix` = 库（`glyph_match`）首位、`cnn` = 5-b 首位、`agree` = 两字相同。
+    **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
+    达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
+    不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_rare(self, handler):
+        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.rare_agree:
+            d.pop("rare_agree", None)
+        return d
 
     def model_post_init(self, _ctx) -> None:
         if not self.db_path:
@@ -240,7 +255,8 @@ class SeedAdmitStep(Step):
     spec = StepSpec(
         id="seed_admit", title="C1 进库准入", version="1.9", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
-        optional_consumes=("ocr_candidates",),
+        optional_consumes=("ocr_candidates", "rare_candidates"),
+        optional_consumes_when=(("rare_candidates", "rare_agree"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -316,6 +332,10 @@ class SeedAdmitStep(Step):
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
+        rtop: dict[str, list[str]] = {}
+        if p.rare_agree:
+            from .align_ref import rare_topk_map
+            rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
         always = set(p.always_review or "")
         context_verdicts = frozenset(
@@ -666,7 +686,9 @@ class SeedAdmitStep(Step):
                               "guard": r.guard,
                               "ocr": (o.topk[:3] if o else []),
                               "ctx_margin": (d.margin if d else None),
-                              **({"form": form_ev} if form_ev else {})}))
+                              **({"form": form_ev} if form_ev else {}),
+                              **({"rare": _rare_agree(r, rtop.get(r.id))}
+                                 if p.rare_agree else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
@@ -985,6 +1007,16 @@ def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:
     if ref is None or not ref.anchored:
         return {}
     return {c.id: (c.align_char, c.align_op) for c in ref.chars}
+
+
+def _rare_agree(match_rec, cnn: list[str] | None) -> dict:
+    """`SeedAdmitParams.rare_agree` 记的那一笔：库首位、5-b 首位、两者是否相同。
+    库判 `same` 时首位取 `char`，否则取候选第一名；任一路没有 → `agree` 为 None。"""
+    pix = (match_rec.char if match_rec.verdict == "same" and match_rec.char
+           else (match_rec.candidates[0][0] if match_rec.candidates else None))
+    c1 = cnn[0] if cnn else None
+    return {"pix": pix, "cnn": c1,
+            "agree": (pix == c1) if (pix is not None and c1 is not None) else None}
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
