@@ -22,7 +22,7 @@ def _catalog(tmp_path, img, related: str, name="zihai-000001", src="zihai"):
     return f
 
 
-def test_gw_max_fusion_and_provenance(tmp_path, monkeypatch):
+def test_gw_max_fusion_and_provenance(tmp_path, monkeypatch, cnn_test_ckpt):
     from open_guji_cv.clustering import cnn_candidates as cc
     from open_guji_cv.clustering.font_candidates import _font_files
     from open_guji_cv.clustering.synth import render_char
@@ -30,7 +30,11 @@ def test_gw_max_fusion_and_provenance(tmp_path, monkeypatch):
         pytest.skip("没有 checkpoint / 字体")
     img = render_char("諭", _font_files()[0], size=64).astype(np.uint8)
     charset = ("諭", "論", "俞")
-    cnn = cc.CnnCandidates(cc.DEFAULT_CKPT)
+    # `cnn_test_ckpt`（tmp 拷贝）不用真实 `cc.DEFAULT_CKPT`——下面第一次
+    # `emb_topk_batch` 调用（44 行前）会把这个测试字表的模板索引落盘，用真实
+    # ckpt 会写进真实 `models/glyph_cnn_r5/`（2026-09-28，任务书-R-rare前向
+    # 去重与测试隔离）。
+    cnn = cc.CnnCandidates(cnn_test_ckpt)
     monkeypatch.setattr(cc, "GW_CATALOG", tmp_path / "nope.npz")
     base = cnn.emb_topk_batch([img], charset, k=3)[0]
     assert base[0][0] == "諭" and cnn.last_gw_prov == [{}]
