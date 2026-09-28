@@ -64,5 +64,10 @@ guji snap import snap/… --ws-repo … [--dry-run] [--force]   # 手动导一�
 ## 踩过的坑
 
 - 对完整 clone `git fetch --depth 1` 会把整个仓变浅仓（写 `.git/shallow`）——只在本来就浅时带 depth。
+- **反过来，浅仓做不带 depth 的 fetch 会拉整个仓的历史**（09-28 服务器 cv 仓，约 4.7 GB、临时 pack 13 GB，
+  部署与 snap-watch 卡了近 7 小时，overview #236）。现在部署与快照的所有 fetch 都走 `ops/git_fetch.py`：
+  浅仓带 `--depth`（部署 50、拉包 1、补拉 cv 提交 50）、开跑前查盘（`GUJI_FETCH_MIN_FREE_GB`，缺省 10）、
+  超时整组杀并删半截 `tmp_pack_*`（`GUJI_FETCH_TIMEOUT`，缺省 600 秒）。`check_cv` 在浅仓里先
+  `fetch --deepen=200` 把 HEAD 往下接再判祖先——否则落在浅边界下的老 cv 提交会被误判成不兼容。
 - `resolve_pages("all")` 按原图目录数页：原图不在时新鲜度量出 0 页。导入记录只量包里的页。
 - 部分页的包不能整目录替换（会删掉别的页），走合并：复制现目录 → 覆盖包内页 → `_manifest.jsonl` 追加。
