@@ -16,7 +16,14 @@ from open_guji_cv.clustering.ids_struct import (IDC, SINGLE, IdsIndex, Node,
                                                 struct_index, struct_rerank,
                                                 load_table, parse_ids,
                                                 pick_primary, shared_index,
-                                                structure_of, tokenize)
+                                                structure_of, tokenize,
+                                                atom_multiset, atom1_pairs,
+                                                build_confusable_pairs,
+                                                confusable_detail, is_confusable,
+                                                first_level_freq,
+                                                leaf_multiset, load_confusable_pairs,
+                                                sameleaf_pairs, slot1_pairs,
+                                                write_confusable_pairs)
 
 
 def test_tokenize_keeps_unencoded_component_as_one_token():
@@ -129,3 +136,112 @@ def test_step_a_label_space():
     out = struct_rerank(["論", "諭"], {"言@L": 0.9, "俞@R": 0.9, "侖@R": 0.1},
                         components_of=slot_keys_of, k=2, weight=4.0)
     assert out[0] == "諭"
+
+
+# ── 形近对表（overview#128）──────────────────────────────────────────
+
+def test_leaf_multiset_keeps_duplicates():
+    """`leaves` 元组去重，`leaf_multiset` 不去重——同一部件在两个槽位各出现
+    一次要记两次，供 atom1/sameleaf 的多重集比较用。"""
+    m = leaf_multiset("金")     # ⿻(全, 丷)，全 本身再拆出一个 王 里的一
+    assert sum(m.values()) == len(structure_of("金", 20).slots)
+
+
+def test_slot1_pairs_catch_one_slot_difference():
+    """令/今：同结构、同槽位路径，只有 B 槽不同——最常见的一档，score 恒为
+    (槽数-1)/槽数（这里 3 槽 = 2/3）。申/中 是 2 槽的典型（score 0.5）。"""
+    pairs = slot1_pairs(["令", "今", "申", "中", "人"])
+    assert ("今", "令") in pairs and pairs[("今", "令")].score == pytest.approx(2 / 3)
+    assert ("中", "申") in pairs and pairs[("中", "申")].score == pytest.approx(0.5)
+    # 独体字（人）没有槽位，不会跟任何人配对
+    assert not any("人" in p for p in pairs)
+
+
+def test_slot1_pairs_max_shared_freq_only_filters_2_slot_structures():
+    """`max_shared_freq` 按共享部件的一级频次筛 2 槽结构：冶/治 共享「台」是
+    冷僻声旁（频次远低于门槛），门槛再低也留着；申/中 共享「丨」频次高得多，
+    门槛卡在两者中间时该被筛掉但冶/治仍在。3 槽的令/今不受这个参数影响。"""
+    freq = first_level_freq()
+    lo = freq.get("台", 0) + 1                 # 刚好挡住比「台」更常见的共享部件
+    pairs_lo = slot1_pairs(["冶", "治", "申", "中", "令", "今"], max_shared_freq=lo)
+    assert ("冶", "治") in pairs_lo
+    assert ("中", "申") not in pairs_lo if freq.get("丨", 0) > lo else True
+    assert ("今", "令") in pairs_lo             # 3 槽不受影响
+    # 不传参数＝不过滤，行为与旧版一致
+    pairs_all = slot1_pairs(["冶", "治", "申", "中"])
+    assert ("冶", "治") in pairs_all and ("中", "申") in pairs_all
+
+
+def test_slot1_pairs_reject_different_skeleton():
+    """结构或槽位路径数不同就不算——王(2槽)与玉(3槽) 不该被 slot1 抓到
+    （它们的真实关系是 atom1，见下）。"""
+    pairs = slot1_pairs(["玉", "王"])
+    assert ("王", "玉") not in pairs and not pairs
+
+
+def test_atom1_pairs_catch_one_stroke_add():
+    """天=大+一、玉=王+丶：K=20 口径下结构对不上，但笔画级原子恰好差一个。"""
+    pairs = atom1_pairs(["天", "大", "玉", "王"])
+    assert ("大", "天") in pairs
+    assert pairs[("大", "天")].detail.endswith("一")
+    assert ("玉", "王") in pairs
+    assert pairs[("玉", "王")].detail.endswith("丶")
+
+
+def test_atom1_pairs_reject_distance_two():
+    """仕=士+亻，亻 本身是 2 个原子（丿+丨）——原子距离是 2，不是「恰好一个」，
+    不该进 atom1（严格按 N2 文档的「差一个笔画级原子」，不放宽）。"""
+    pairs = atom1_pairs(["仕", "士"])
+    assert ("仕", "士") not in pairs and ("士", "仕") not in pairs
+
+
+def test_sameleaf_pairs_need_same_multiset_different_structure():
+    pairs = sameleaf_pairs(["諭", "論", "人"])
+    assert not pairs        # 諭/論 是 slot 类不是 sameleaf 类（结构相同）
+
+
+def test_build_confusable_pairs_dedups_and_prefers_higher_score():
+    """同一对可能被多个类命中（冶/治 是最典型的例子：K=20 下是 slot，
+    在这个小字表里恰好也满足 atom1）——只留分高的一条。"""
+    pairs = {(p.a, p.b): p for p in build_confusable_pairs(["冶", "治"])}
+    assert ("冶", "治") in pairs
+    cp = pairs[("冶", "治")]
+    assert cp.kind in ("slot", "atom1") and cp.score > 0
+
+
+def test_known_miss_pure_atomic_chars_and_pure_style_confusion():
+    """已知接不住的两类，钉死别误判成回归：己/已/巳 三字本身是独体（无 IDS
+    可拆），以/取 部件与结构完全无关——三类判据都该给出「不是形近对」。"""
+    pairs = build_confusable_pairs(["己", "已", "巳", "以", "取", "人", "入"])
+    got = {(p.a, p.b) for p in pairs} | {(p.b, p.a) for p in pairs}
+    for a, b in [("己", "已"), ("已", "巳"), ("己", "巳"), ("以", "取"), ("人", "入")]:
+        assert (a, b) not in got, f"{a}/{b} 不该被判成形近对（已知的方法论边界）"
+
+
+def test_write_and_load_confusable_pairs_roundtrip(tmp_path):
+    pairs = build_confusable_pairs(["令", "今", "申", "中", "天", "大"])
+    out = write_confusable_pairs(pairs, tmp_path / "ids_confusable_pairs_v1.tsv")
+    load_confusable_pairs.cache_clear()
+    table = load_confusable_pairs(str(out))
+    assert len(table) == len(pairs)
+    assert frozenset(("今", "令")) in table
+    load_confusable_pairs.cache_clear()
+
+
+def test_is_confusable_and_confusable_detail(tmp_path):
+    pairs = build_confusable_pairs(["令", "今", "天", "大"])
+    out = write_confusable_pairs(pairs, tmp_path / "t.tsv")
+    load_confusable_pairs.cache_clear()
+    path = str(out)
+    assert is_confusable("今", "令", path) and is_confusable("令", "今", path)
+    assert not is_confusable("今", "今", path)          # 自己不算
+    assert not is_confusable("今", "人", path)          # 表里没有
+    detail = confusable_detail("大", "天", path)
+    assert detail is not None and detail.kind == "atom1"
+    load_confusable_pairs.cache_clear()
+
+
+def test_is_confusable_defaults_to_empty_table_when_file_missing():
+    load_confusable_pairs.cache_clear()
+    assert not is_confusable("今", "令", "/no/such/confusable_pairs.tsv")
+    load_confusable_pairs.cache_clear()
