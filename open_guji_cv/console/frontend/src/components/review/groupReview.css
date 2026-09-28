@@ -17,3 +17,12 @@
 /* 像素与 CNN 两路首位不一致的样例（借库书，2026-09-27）：排组内最前，虚线框提示逐张看 */
 .grp-tile.disagree { border-style: dashed; }
 .grp-disagree { position: absolute; top: 0; left: .2rem; font-size: .75rem; color: var(--ochre); font-weight: 600; }
+/* 组内按形聚簇（overview #166）：代表图角上「×N」，点开看成员 */
+.grp-count { position: absolute; bottom: .1rem; right: .15rem; font-size: .72rem; padding: 0 .25rem;
+             border-radius: 3px; background: var(--ochre); color: #fff; cursor: zoom-in;
+             white-space: nowrap; line-height: 1.2; }
+.grp-count.open { background: var(--zhu); }
+.grp-tile.partial { border-style: dotted; }
+.grp-tile.rep { outline: 2px solid var(--ochre); outline-offset: 1px; }
+.grp-members { margin: .6rem 0; padding: .5rem; border: 1px dashed var(--ochre); border-radius: 4px; }
+.grp-members > .muted { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }
