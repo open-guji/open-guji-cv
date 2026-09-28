@@ -711,9 +711,12 @@ def test_route_inventory():
     107 → 108。
     2026-09-27 字形库抽检（overview#110，C 道）：新增 `GET /api/glyphlib/spotcheck`
     （按来路随机抽刻例，只读；裁决仍走 `POST /api/glyphlib/audit/decide`）。108 → 109。
+    2026-09-28 字形库「待纳入」（overview#176，C 道）：新增 `GET /api/glyphlib/candidates`
+    （候选清单一览）、`GET /api/glyphlib/candidates/{list_id}`（一份清单按字分组、配库里
+    同字刻例）；只读，裁决走 `POST /api/events`（kind=admit_candidate）。109 → 111。
     """
     got = sorted(_endpoints())
-    assert len(got) == 109, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 111, f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -845,6 +848,7 @@ EXPECTED_ROUTES = [
     "GET /api/evals", "GET /api/events", "GET /api/gate/{book}/summary",
     "GET /api/glyph-match/exemplar/{instance_id}.png",
     "GET /api/glyphlib/audit", "GET /api/glyphlib/char/{char}", "GET /api/glyphlib/ids-lookup", "GET /api/glyphlib/font/{char}.png", "GET /api/glyphlib/chars",
+    "GET /api/glyphlib/candidates", "GET /api/glyphlib/candidates/{list_id}",
     "GET /api/glyphlib/patch/{instance_id}.png", "GET /api/glyphlib/spotcheck", "GET /api/glyphlib/summary",
     "POST /api/glyphlib/audit/decide",
     "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",

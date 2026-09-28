@@ -79,6 +79,10 @@ Kind = Literal[
     "return_resolve", # 本步待办卡上人点了「已修」/「不是问题」（payload: resolution∈
                       #   fixed/wontfix, note）。与触发打回的原事件（seg_defect/cutline/
                       #   n_body_slots）按 target.key 同键、取最新一条，见 bindings.py。
+    # ── 新候选刻例待纳入（2026-09-28，overview#176）。见 feedback/candidates.py。
+    "admit_candidate",# 还没进库的候选格收不收（payload: v∈admit/reject/unclear, char,
+                      #   shape, list, evidence）。**路由表不配消费者**：控制台只写事件，
+                      #   进库由 H 道重放完成（人裁状态单写者）。
 ]
 
 Actor = Literal["user", "model", "align"]
