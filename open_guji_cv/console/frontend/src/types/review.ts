@@ -90,6 +90,15 @@ export interface ReviewCard {
   /** 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：默认字 = 整理本字（坐标对位优先），
    * 字形一律不入库；`ref_blank` = 整理本这一位是空格（印章切出来的假格），默认「非字」。 */
   occluded?: { char: string; via: string | null; ref_blank: boolean } | null
+  /** 按类别审（overview#247）：请求带了 `cls` 才有。一张卡只归优先级最高的一类。 */
+  cls?: string
+}
+
+/** 类别表的一行（后端 `REVIEW_CLASSES`，按优先级排）。 */
+export interface ReviewClassMeta {
+  key: string
+  label: string
+  hint: string
 }
 
 export interface FirstPick {
@@ -118,6 +127,11 @@ export interface ReviewCardsResponse {
   doubt_counts?: Record<string, number>
   /** 参与 doubt 计数的卡数（一张卡多个码只算一次）。 */
   doubt_total?: number
+  /** 请求带了 `cls`（哪怕是 `*`）才有（overview#247）：类别 → 剩余张数，口径同 `doubt_counts`，
+   * 但一张卡只记一类。 */
+  class_counts?: Record<string, number>
+  class_total?: number
+  classes?: ReviewClassMeta[]
 }
 
 /**
@@ -249,9 +263,16 @@ export interface RareCandidate {
 }
 
 export interface AroundSlot {
+  /** 刻本这边的读法（定字 → 库 → OCR）。 */
   char?: string
   review?: boolean
   source?: string
+  /** 整理本在这一格对位的字（align_ref；对不上为 null）。 */
+  ref?: string | null
+  /** 显示用：有整理本字用整理本，否则退回 `char`（#247）。 */
+  text?: string | null
+  /** `text` 取自哪：ref | coord | 定字链的 source。 */
+  text_src?: string
 }
 
 export interface AroundContext {

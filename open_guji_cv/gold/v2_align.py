@@ -52,6 +52,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from ..core.workspace import corpus_path as _resolve_corpus_path
 
@@ -89,7 +90,7 @@ class PageGold:
 
 
 def _aligned_chars(book: str, page: int, store, slots: list[tuple[int, int, str, str]],
-                   corpus_text: str, corpus_index: dict, corpus_path: str | Path,
+                   corpus_text: str, corpus_index: "dict | Callable[[], dict]", corpus_path: str | Path,
                    ) -> dict[tuple[int, int, str], tuple[str, str, int]] | None:
     """{(col, slot, sub): (align_char, align_op, ref_run)}——过闸位才在里面。
 
@@ -108,6 +109,8 @@ def _aligned_chars(book: str, page: int, store, slots: list[tuple[int, int, str,
                 for c in ref.chars}
 
     from ..clustering.align_label import label_page
+    if callable(corpus_index):          # 惰性索引（align_book）：产物都新鲜时一次都不建
+        corpus_index = corpus_index()
     labels, ok = label_page(str(page), slots, book, corpus_text, corpus_index)
     if not ok:
         return None
@@ -124,7 +127,7 @@ def _aligned_chars(book: str, page: int, store, slots: list[tuple[int, int, str,
     return out
 
 
-def align_page(book: str, page: int, store, corpus: str, corpus_index: dict,
+def align_page(book: str, page: int, store, corpus: str, corpus_index: "dict | Callable[[], dict]",
                corpus_path: str | Path = "") -> PageGold:
     from ..core.spec import page_key
     from ..steps.align_ref import slots_from_decision
@@ -176,14 +179,17 @@ def align_book(book: str, pages: list[int], store,
       永远凑不出一个能命中的 8-gram。四庫總目那份标点密度 0.000 所以一直没暴露，
       北行日錄校對本是 0.215，7/7 页全部锚定失败。
     """
-    from ..clustering.align_label import build_ngram_index
-    from ..steps.align_ref import _corpus_text, book_corpus
+    from ..steps.align_ref import _corpus_index, _corpus_text, book_corpus
     if corpus_path is None:
         corpus_path = book_corpus(book)
     # 与 `steps/align_ref` 共用同一个规范化 + 缓存，保证两边锚到同一个字流上
     text = _corpus_text(str(corpus_path))
-    index = build_ngram_index(text)
-    return [align_page(book, pg, store, text, index, corpus_path) for pg in pages]
+    # 8-gram 索引**惰性**建（2026-09-28，C 道 #247）：`align_ref` 产物新鲜时 `_aligned_chars`
+    # 直接读产物，根本用不到索引；以前每次调用都先建一遍——四庫 vol03 定字卡片一次载入
+    # 9.4 s 里 6.4 s、RSS 600 MB 花在这里（语料 34 万字）。用 `_corpus_index`（lru_cache）
+    # 与 Step 共享同一份，需要现算的页才触发。结果与改前逐字节相同（同一个 build_ngram_index）。
+    lazy = lambda: _corpus_index(str(corpus_path))  # noqa: E731
+    return [align_page(book, pg, store, text, lazy, corpus_path) for pg in pages]
 
 
 def write_jsonl(golds: list[PageGold], out: str | Path) -> int:
