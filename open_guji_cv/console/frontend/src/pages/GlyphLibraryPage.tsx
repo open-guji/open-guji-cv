@@ -8,13 +8,14 @@ import { LibCharTable } from '../components/glyphlib/LibCharTable'
 import { LibCharDetail } from '../components/glyphlib/LibCharDetail'
 import { LibAuditPanel } from '../components/glyphlib/LibAuditPanel'
 import { LibSpotcheckPanel } from '../components/glyphlib/LibSpotcheckPanel'
+import { LibCandidatePanel } from '../components/glyphlib/LibCandidatePanel'
 import { useIdentity } from '../hooks/useIdentity'
 import '../components/glyphlib/glyphlib.css'
 
 // 字形库：本工作区（= 一本书）的字形库总览。用户 2026-09-11 §4 立栏目时只放了组视图，
 // 要先按页跑任务才出内容，打开是空的；2026-09-25 字形库 02 卡补上总账 / 字表 / 单字页。
 // tab、过滤、当前字都放 URL 查询串，链接能直接发给别人。
-type Tab = 'summary' | 'chars' | 'char' | 'audit' | 'spot' | 'groups'
+type Tab = 'summary' | 'chars' | 'char' | 'audit' | 'spot' | 'intake' | 'groups'
 
 export function GlyphLibraryPage() {
   const [sp, setSp] = useSearchParams()
@@ -35,7 +36,7 @@ export function GlyphLibraryPage() {
         <h2>字形库 <span className="muted">本书收了哪些字形：本书各刻例来源并成一套、按格去重</span></h2>
       </div>
       <div className="tabs">
-        {([['summary', '总账'], ['chars', '字表'], ['char', '单字'], ['audit', '体检'], ['spot', '抽检'], ['groups', '异体组']] as [Tab, string][]).map(([k, t]) => (
+        {([['summary', '总账'], ['chars', '字表'], ['char', '单字'], ['audit', '体检'], ['spot', '抽检'], ['intake', '待纳入'], ['groups', '异体组']] as [Tab, string][]).map(([k, t]) => (
           <button key={k} className={tab === k ? 'active' : ''} onClick={() => set({ tab: k })}>{t}</button>
         ))}
       </div>
@@ -44,6 +45,7 @@ export function GlyphLibraryPage() {
       {tab === 'char' && <LibCharDetail key={char} char={char} onPick={(c) => set({ c })} />}
       {tab === 'audit' && <LibAuditPanel isAdmin={isAdmin} onPick={(c) => set({ tab: 'char', c })} />}
       {tab === 'spot' && <LibSpotcheckPanel isAdmin={isAdmin} onPick={(c) => set({ tab: 'char', c })} />}
+      {tab === 'intake' && <LibCandidatePanel isAdmin={isAdmin} onPick={(c) => set({ tab: 'char', c })} />}
       {tab === 'groups' && <GroupsTab />}
     </div>
   )
