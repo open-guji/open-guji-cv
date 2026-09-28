@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -127,7 +128,8 @@ def main() -> int:
             col_end.append(it.id)
             continue
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
-                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v))
+                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v,
+                         picked_source=ex.get("picked_source")))
     if not rows:
         print(f"touching-cuts：没有可比条目（overlap {overlap}，干扰 {sum(len(v) for v in tagged.values())}，漂移 {drift}，缺产物 {missing}，金标 {len(items)}）")
         return 0
@@ -135,6 +137,12 @@ def main() -> int:
     print(f"touching-cuts n={len(e)}（moved {sum(r['verdict']=='moved' for r in rows)} / ok {sum(r['verdict']=='ok' for r in rows)}；"
           f"overlap 另计 {overlap}，缝正确 {seam_ok}，干扰另计 {sum(len(v) for v in tagged.values())}，漂移跳过 {drift}，缺产物 {missing}，"
           f"列尾另计 {len(col_end)}{' ' + str(col_end[:5]) if col_end else ''}）")
+    # Step7 切分裁决 2026-09-28 起 moved/ok 是跟**卡片默认选中项**（缺省 U-Net）比的，不再等于
+    # 「引擎错／引擎对」；带 picked_source 的条目另按来源报（overview#188）。
+    src = Counter(r["picked_source"] for r in rows if r.get("picked_source"))
+    if src:
+        print(f"  来源（picked_source，{sum(src.values())} 条带此字段）：" + " / ".join(f"{k} {n}" for k, n in src.most_common())
+              + f"；引擎被推翻 {sum(n for k, n in src.items() if k != 'engine')}")
     print(f"  坐标口径：页面坐标换算 {modes['page']} / 签名一致 {modes['sig_ok']} / 签名不符跳过 {modes['drift']} / "
           f"老条目（未记几何，可能已漂而查不出）{modes['legacy']}")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
