@@ -28,7 +28,7 @@ from ...core.book import load_book
 from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
-from ...review.cards import cards
+from ...review.cards import cached_cards, cards
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
@@ -48,7 +48,7 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 @router.get("/api/review/cards")
-def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
+def api_review_cards(response: Response, book: str, pages: str = "dev_set", limit: int = 400,
                      only: str = "review", gate_cut: bool = True,
                      skip_decided: bool = True, group: str = "",
                      sample_limit: int = 60) -> dict:
@@ -72,17 +72,29 @@ def api_review_cards(book: str, pages: str = "dev_set", limit: int = 400,
     `group="char"` 的进阶版：AI 首选字系统性认错方向的形近对（今/令、玉/王、
     大/天……）会把两种真实形状混进同一个字种组，这里先按形近对表把互相混淆
     的字种池化，池内再用 CNN embedding 按形状聚类拆开。同样不受 `limit` 截断。
+
+    **结果缓存**（overview #166 加急，2026-09-28）：整个响应按（书，全部参数，产物
+    manifest，事件水位，库指纹）落 `cache_root()/review_cards/`，见
+    `review/cards.py::cached_cards`。人裁一写入水位就变、自动失效。命中与否看响应头
+    `X-Cards-Cache: mem|disk|miss`，响应体不变。
     """
-    if group == "shape":
-        return cards_by_shape(book, pages, only, deps.product_store(),
-                              gate_cut=gate_cut, skip_decided=skip_decided,
-                              sample_limit=sample_limit)
-    if group == "char":
-        return cards_by_char(book, pages, only, deps.product_store(),
-                             gate_cut=gate_cut, skip_decided=skip_decided,
-                             sample_limit=sample_limit)
-    return cards(book, pages, limit, only, deps.product_store(), gate_cut=gate_cut,
-                 skip_decided=skip_decided)
+    st = deps.product_store()
+    req = {"pages": pages, "limit": limit, "only": only, "gate_cut": gate_cut,
+           "skip_decided": skip_decided, "group": group, "sample_limit": sample_limit}
+
+    def compute() -> dict:
+        if group == "shape":
+            return cards_by_shape(book, pages, only, st, gate_cut=gate_cut,
+                                  skip_decided=skip_decided, sample_limit=sample_limit)
+        if group == "char":
+            return cards_by_char(book, pages, only, st, gate_cut=gate_cut,
+                                 skip_decided=skip_decided, sample_limit=sample_limit)
+        return cards(book, pages, limit, only, st, gate_cut=gate_cut,
+                     skip_decided=skip_decided)
+
+    res, how = cached_cards(book, req, compute, st)
+    response.headers["X-Cards-Cache"] = how
+    return res
 
 
 
