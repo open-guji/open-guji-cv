@@ -52,7 +52,7 @@ export const fetchLibChar = (c: string) => api<LibCharDetail>(`/api/glyphlib/cha
 
 /** 刻例图块。`ws` 给了就取那个工作区的库（跨书并排），否则本页工作区。 */
 export function libPatchUrl(instanceId: string, ws?: string) {
-  const u = `/api/glyphlib/patch/${encodeURIComponent(instanceId)}.png`
+  const u = `/api/glyphlib/patch/${encodeURIComponent(instanceId)}.png`  // ws-ok: 下一行 withWorkspace(u)，或显式 ?ws= 取兄弟工作区
   return ws ? `${u}?ws=${encodeURIComponent(ws)}` : withWorkspace(u)
 }
 

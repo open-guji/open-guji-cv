@@ -4,6 +4,7 @@ import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { ReviewCardGroup } from '../../types/review'
 import './groupReview.css'
+import { withWorkspace } from '../../api/client'
 
 // 按字种批审（任务书-C-待审卡按字种批审，2026-09-27）：一个字种一屏，图块
 // 网格显示，缺省全选，点掉不对的再一键提交——积累本书字形最高效的办法。
@@ -164,7 +165,7 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
                      title={`${t.id}${t.ref?.char ? ` · 整理本 ${t.ref.char}` : ''}`
                        + (t.first?.agree === false ? ` · 像素 ${t.first.pixel} / CNN ${t.first.cnn} 不一致` : '')}
                      onClick={() => toggle(t.id)}>
-                  <img src={t.patch} alt={t.id} />
+                  <img src={withWorkspace(t.patch)} alt={t.id} />
                   <span className="grp-mark">{off ? '✕' : '✓'}</span>
                   {t.first?.agree === false && <span className="grp-disagree">≠</span>}
                 </div>

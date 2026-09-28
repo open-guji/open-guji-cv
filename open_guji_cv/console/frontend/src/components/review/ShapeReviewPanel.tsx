@@ -4,6 +4,7 @@ import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { ReviewShapeGroup } from '../../types/review'
 import './groupReview.css'
+import { withWorkspace } from '../../api/client'
 
 // 按形聚类批审（任务书-C-批审按形聚类分组，2026-09-27）：`group=char` 的进阶
 // 版——形近对（今/令、玉/王、大/天……）AI 首选系统性认错方向时，同一个字种组
@@ -197,7 +198,7 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
                 <div key={t.id} className={`grp-tile${off ? ' off' : ''}`}
                      title={`${t.id}${t.ref?.char ? ` · 整理本 ${t.ref.char}` : ''}`}
                      onClick={() => toggle(t.id)}>
-                  <img src={t.patch} alt={t.id} />
+                  <img src={withWorkspace(t.patch)} alt={t.id} />
                   <span className="grp-mark">{off ? '✕' : '✓'}</span>
                 </div>
               )
