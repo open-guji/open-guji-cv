@@ -554,15 +554,26 @@ class CnnCandidates:
         self._real_cs: tuple[tuple, tuple | None] | None = None
         """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
         GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
-        self._fwd_cache: tuple[tuple[int, int], tuple] | None = None
-        """最近一批 `self._net(x)` 的原始前向结果缓存：`((id(norm_patches),
-        len(norm_patches)), (e, lg, cp))`。`topk_batch`/`emb_topk_batch` 原来对同一批
-        字块图各自独立跑一次前向（网络本身不看 charset，两边算的是同一件事），
+        self._fwd_cache: tuple[list, tuple] | None = None
+        """最近一批 `self._net(x)` 的原始前向结果缓存：`(norm_patches 那个 list
+        对象本身, (e, lg, cp))`。`topk_batch`/`emb_topk_batch` 原来对同一批字块图
+        各自独立跑一次前向（网络本身不看 charset，两边算的是同一件事），
         `rare_panel.rare_for_batch` 对基集字表先后调两次、升级档子集再调第三次——
-        改成只留「最近一批」，同一个 list 对象（调用方按页组批，同一页内 id 不变）
+        改成只留「最近一批」，同一个 list 对象（调用方按页组批，同一页内对象不变）
         内的后续调用直接复用，换新批次自动作废（2026-09-28，任务书-R-rare前向
         去重与测试隔离，K 引擎卡手 #54 cross 单）。单槽缓存，不是无界字典——
-        `shared()` 是进程级单例，页与页之间批次不同，留多份没有意义。"""
+        `shared()` 是进程级单例，页与页之间批次不同，留多份没有意义。
+
+        ⚠️ **必须存对象本身、用 `is` 比对，不能只存 `id(norm_patches)` 这个整数**
+        （与 `_emb_cache` 存 `charset` 本身、`is charset` 比对同一个写法）：
+        `norm_patches` 是调用方每次新建的临时 list，一用完就被垃圾回收，
+        CPython 会把同一块内存地址迅速分配给下一个不相关的新 list——只存
+        整数 id 撞上了这个坑：`rare_panel.rare_for` 连续单张调用时，每次都建一个
+        长度 1 的临时列表，前一个刚被回收、下一个几乎必然撞到同一个 id，于是
+        第二张图直接读到了第一张图的缓存，`rare_for` 与 `rare_for_batch` 排序
+        对不上（2026-09-28 用真实 `rare_for` 循环调用复现、原地修复）。存对象
+        本身相当于多持一份强引用，只要这个缓存还活着，Python 就不会把它的地址
+        腾给别的对象，`is` 比较因此安全。"""
         self.last_real_prov: list[dict] = []
         """最近一次 `emb_topk_batch` 里真刻例原型赢过字体均值的字位：每个查询一个
         `{字: (instance_id, 余弦)}`，与 `last_gw_prov` 同一套用法（R2/T11，2026-09-26）。"""
@@ -734,16 +745,16 @@ class CnnCandidates:
         """跑一次 `self._net(x)`，返回未转 numpy 的 `(e, lg, cp)`。
 
         同一批（同一个 `norm_patches` list 对象）内的后续调用直接命中 `self._fwd_cache`，
-        不重新前向——`__init__` 里 `_fwd_cache` 的文档有完整背景。"""
-        key = (id(norm_patches), len(norm_patches))
-        if self._fwd_cache is not None and self._fwd_cache[0] == key:
+        不重新前向——`__init__` 里 `_fwd_cache` 的文档有完整背景（**必须用 `is`
+        比对持有的对象本身，不能只存 `id()` 整数**）。"""
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches:
             return self._fwd_cache[1]
         import torch
         with torch.no_grad():
             x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
                              device=self._dev)
             out = self._net(x)
-        self._fwd_cache = (key, out)
+        self._fwd_cache = (norm_patches, out)
         return out
 
     def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
@@ -984,8 +995,7 @@ class CnnCandidates:
             _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
             return [[] for _ in idx]
         import torch
-        key = (id(norm_patches_full), len(norm_patches_full))
-        if self._fwd_cache is not None and self._fwd_cache[0] == key:
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches_full:
             e_full, _, _ = self._fwd_cache[1]
             e_sub = e_full[torch.tensor(list(idx), device=self._dev)]
         else:
