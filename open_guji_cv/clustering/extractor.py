@@ -29,6 +29,9 @@ MIN_INK_RATIO = 0.01
 TIGHT_MARGIN = 2           # 裁紧余量：图块=本字墨迹外接框 ± 此像素
                            # （2026-08-24 用户定版：框要完完全全包住字即可，
                            # 左右贴墙的空白装的从来不是字，是边框残渣）
+#: end_rule_strip（书级开关）剥线后剩下的墨少于 min(此像素, 此比例×剥前墨) → 这格只装着框线
+END_RULE_LEFT_PX = 150
+END_RULE_LEFT_FRAC = 0.08
 BOUNDARY_BAND = 0.10       # 图块上下各此比例的高度算「边缘带」
 BOUNDARY_INK_T = 0.025     # （旧判据，_boundary_ink_frac 保留供研究脚本）
 BOUNDARY_BOT_T = 0.025     # 下带墨占比超此 → boundary_ink（正信号带；
@@ -2491,6 +2494,7 @@ class CharExtractor:
             head_cell = order[0] if order else None
             tail_cell = order[-1] if order else None
             end_patches: dict[int, tuple[np.ndarray, float]] = {}
+            pre_rule: dict[int, np.ndarray] = {}
             jz_pre: dict[int, tuple[np.ndarray, float, float]] = {}
             for cell, (idx, ltop, lbot) in zip(cells, local):
                 cell_h = lbot - ltop
@@ -2532,6 +2536,21 @@ class CharExtractor:
                         patch = carve_end_edge(patch, bottom=True)
                     if idx == head_cell:
                         patch = carve_end_edge(patch, bottom=False)
+                    # 书级开关（缺省关）：贴边内框细线（全唐文雙邊的内线，
+                    # 薄、断续、横贯文字带），见 clustering/end_rule_strip
+                    if gmeta.get("end_rule_strip"):
+                        from .end_rule_strip import make_col_cov, strip_end_rule
+                        # 列端渣格闸吃剥线**前**的图块：剥掉线之后单剩一个「一」，
+                        # 渣格闸会当渣（v006 p67c1 实测），剥线只许改框、不许改判渣
+                        pre_rule[idx] = patch.copy()
+                        _col_cov = make_col_cov(page_img, int(sy0 + y0), left_x, right_x)
+                        if idx == tail_cell:
+                            patch, _seg = strip_end_rule(patch, cell_h, bottom=True, col_cov=_col_cov)
+                        # 有抬头位时最外一格是抬头格，正文首格的上沿同样挨着内框线
+                        if idx == head_cell or (n_head_rows and len(order) > n_head_rows
+                                                and idx == order[n_head_rows]):
+                            patch, _seg = strip_end_rule(patch, cell_h, bottom=False,
+                                                         col_cov=_col_cov)
 
                 x0 = float(sx0)
                 x1 = float(sx1)
@@ -2541,7 +2560,7 @@ class CharExtractor:
                 ink = _patch_ink_ratio(patch)
                 flags: list[str] = []
                 if idx in end_cand:
-                    end_patches[idx] = (patch.copy(), cell_h)
+                    end_patches[idx] = (pre_rule.get(idx, patch).copy(), cell_h)
                 if ink < self.min_ink_ratio:
                     flags.append("suspect_empty")
                 # 缺陷自检：确定层按成因分开标，疑似层兜底送审查。
@@ -2576,8 +2595,19 @@ class CharExtractor:
                 # 不是字，是边框/界行残渣。归属清理已把外人墨抹掉，剩下的
                 # 墨迹外接框就是本字。自检 flags 全部在裁紧**前**的格框图块
                 # 上算完（边缘带比例等阈值是按格框标定的）。判空格保持格框。
+                # 剥线后只剩碎渣（原本这格装的就只是那条框线）：判空，旗 end_rule。
+                # 判据只看「剥掉的是不是几乎全部的墨」，不另判形状——渣格闸
+                # 吃的是剥线前的图块（见上），这里不会把真字判空。
+                rule_only = False
+                if idx in pre_rule:
+                    n_pre = int((pre_rule[idx] < BINARY_THRESHOLD_PATCH).sum())
+                    n_now = int((patch < BINARY_THRESHOLD_PATCH).sum())
+                    rule_only = n_pre > 0 and n_now < n_pre and n_now < min(
+                        END_RULE_LEFT_PX, END_RULE_LEFT_FRAC * n_pre)
+                    if rule_only and "end_rule" not in flags:
+                        flags.append("end_rule")
                 ty, tx = np.nonzero(patch < BINARY_THRESHOLD_PATCH)
-                if ty.size:
+                if ty.size and not rule_only:
                     tx0 = max(0, int(tx.min()) - TIGHT_MARGIN)
                     tx1 = min(patch.shape[1], int(tx.max()) + 1 + TIGHT_MARGIN)
                     ty0 = max(0, int(ty.min()) - TIGHT_MARGIN)
@@ -2593,7 +2623,7 @@ class CharExtractor:
                     id=make_id(book, page, col_no, idx),
                     book=book, page=page, col=col_no, idx=idx,
                     bbox=(x0, py0, x1, py1),
-                    cell_type="char",
+                    cell_type="empty" if rule_only else "char",
                     ocr_text=cell.get("text") or None,
                     ocr_confidence=float(cell.get("confidence", 0.0)),
                     patch_path=f"patches/{page}/{col_no}_{idx}.png",
