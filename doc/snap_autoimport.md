@@ -11,6 +11,8 @@ guji snap pack vol03 -w ~/guji-workspace/96mid1ogzk-… [--pages 1-50] [--steps 
      [--mode display-only] [--supersedes snap/…] [--param seed_admit.use_context=false] \
      [--attach models/r5/emb_x.npz=cv:models/r5/emb_x.npz] [--note …]
 #   → 推 guji-workspace 孤儿分支 snap/<ws短id>/<book>/<UTC yyyymmddThhmm>
+#   加 --dry-run 只打印计划（分支名、页数、文件数、字节数），不建提交、不推。
+#   ⚠️ 2026-09-28 之前的 cv 里 pack 不认 --dry-run、照样真推（Z21/Z22/Z23 踩过，#174）
 
 # 服务器：guji-snap-watch.timer 每 15 分钟
 guji snap watch --ws-repo ~/guji-workspace --ws-root ~/guji-workspace --overview ~/overview
