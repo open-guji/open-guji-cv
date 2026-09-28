@@ -52,6 +52,10 @@ class EventsIn(BaseModel):
     unit: str = "page"
     kind: str = "verdict"
     events: list[dict]        # [{id, verdict, t, ...}]
+    request_id: str | None = None
+    """幂等键（2026-09-28，部署重启期间前端暂存重试用）。同一批次里已有带这个 id 的事件
+    → 整个请求当作重复：不再写、不再消费，回 `duplicate: true`。id 落在每条事件的
+    `payload.request_id` 上，所以进程重启后仍能判重（第一次其实写成功了、只是响应丢了）。"""
     consume: bool = True
     """写完就按路由表消费（2026-09-05 用户定：「审查完了就自动消费吧，有必要再点一次吗」）。
 
@@ -148,12 +152,18 @@ def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) ->
 
 
 def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
+    if req.request_id and any(e.payload.get("request_id") == req.request_id
+                              for e in deps.event_log().read(req.batch)):
+        return {"appended": 0, "batch": req.batch, "duplicate": True,
+                "total": deps.event_log().latest_seq(req.batch)}
     base = deps.event_log().latest_seq(req.batch)
     evs = []
     for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
         if not row.get("id"):
             continue
         payload = {k: v for k, v in row.items() if k not in ("id", "t")}
+        if req.request_id:
+            payload["request_id"] = req.request_id
         # `client_ts` / `dwell_ms` 留在 payload 里：事件的 `ts` 是**收割时间**
         # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
         # 指标就是这个耗时，没有它 D 刀无法证伪。
