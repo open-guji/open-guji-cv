@@ -111,6 +111,28 @@ Z5 全唐文 v003 实测正是这个原因：`references` 里 Kanripo 排第一�
 `witness_strategy` 参数（见 `AlignRefParams`）把「归一再比」「多证人表决」接进来，
 缺省仍是 `"legacy"`（行为与加这个参数之前逐字节相同）；三种策略的实测数字见
 overview 仓 `进度/inbox/D-多证人/` 的 done 单。
+
+## 2026-09-28 5-b 候选并入锚定载体（D 道，overview#126）
+
+`rare_candidates`（Step5-b）此前下游一个都不读。借库书上库（像素）首位在难例上
+只对 52%，5-b／CNN 首位对 94%（R 道 #86），锚定串因此错字连篇、8-gram 连续对上
+的太少。`AlignRefParams.rare_topk > 0` 时，库判 `same` 以外的位，载体从「库首位」
+换成「库候选 ∪ 5-b 前 k 名」RRF 融合首位（`rrf_carrier`，同分 5-b 赢）；`same` 位、
+OCR 比较、锚定与采信闸一概不动。缺省 0 = 关：不读 5-b、不进指纹
+（`StepSpec.optional_consumes_when`）、不进参数哈希。
+
+实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+
+| | 锚定页 | 待审率 |
+|---|---|---|
+| 全唐文 v006（借四庫库，86 页，`use_context:false`） | 61 → **72** | 38.7% → 28.6% |
+| 四庫 vol03（107 页） | 101 → 101 | 3.72% → 3.75% |
+
+v006 新锚上的 11 页照旧走现有通道放行；人裁难例里新放出 121 格，严格口径错 10 格：
+8 格是 `match_margin` 放了整理本的「為」而刻本是「爲」（关开关时这条通道在已锚页上
+同样放了 23 格「為」，是通道本身的字形问题，不是本改动引入的），2 格「乎/平」是库与
+整理本都给「乎」、人裁「平」。vol03 上载体变化只让 128 格在 `match_ref`/`match_replace`
+之间改名（equal↔replace），放出格与光盘版的字面差异 130 → 129。
 """
 
 from __future__ import annotations
@@ -119,7 +141,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
@@ -245,16 +267,67 @@ def slots_from_decision(dec, match=None, ocr=None
     return slots, meta
 
 
-def slots_from_evidence(match, ocr) -> list[tuple[int, int, str, str]]:
-    """`glyph_match` + `ocr_candidates` → 对齐要的 slots，不碰 Step6。
+def rare_topk_map(rare, k: int) -> dict[str, list[str]]:
+    """`rare_candidates`（Step5-b）产物 → {字位 id: 前 k 个候选字（按 5-b 融合名次，去重）}。
+
+    **只用名次、不用分数**：5-b 候选的 `score` 按来源各是各的量纲（`emb` 是余弦
+    ~0.99、`cnn` 分类头是概率、字体模板又是另一种），同一张列表里不可比，只有
+    融合后的先后顺序有意义（`clustering.rare_panel.rare_for_batch`）。
+    `rare` 为 None 或 `k <= 0` → 空表（下游按「这一路没有」跑）。
+    """
+    if rare is None or k <= 0:
+        return {}
+    out: dict[str, list[str]] = {}
+    for cc in rare.columns:
+        for r in cc.chars:
+            seen: list[str] = []
+            for c in r.candidates:
+                if c.char and c.char not in seen:
+                    seen.append(c.char)
+                if len(seen) >= k:
+                    break
+            if seen:
+                out[r.id] = seen
+    return out
+
+
+def rrf_carrier(pixel: list, cnn: list[str], k: int = 60) -> str | None:
+    """库候选（`[(字, cov), …]`，按 cov 降序）与 5-b 候选（按名次）做 RRF 取首位。
+    同分时 5-b 名次靠前的赢（R 道实测借库书上 CNN 首位几乎严格优于像素首位）。
+    同一口径见 `review.borrow_first.rrf_fuse`；这里只要首位字，不引那个模块（它带
+    库原型索引与 torch 依赖）。"""
+    rp: dict[str, int] = {}
+    for i, (ch, _s) in enumerate(pixel or []):
+        rp.setdefault(ch, i + 1)
+    rc: dict[str, int] = {}
+    for i, ch in enumerate(cnn or []):
+        rc.setdefault(ch, i + 1)
+    if not rp and not rc:
+        return None
+    big = 10 ** 6
+
+    def score(ch: str) -> float:
+        return (1.0 / (k + rp[ch]) if ch in rp else 0.0) + (1.0 / (k + rc[ch]) if ch in rc else 0.0)
+    return min((*rp, *rc), key=lambda ch: (-score(ch), rc.get(ch, big), rp.get(ch, big)))
+
+
+def slots_from_evidence(match, ocr, rare: dict[str, list[str]] | None = None
+                        ) -> list[tuple[int, int, str, str]]:
+    """`glyph_match` + `ocr_candidates`（+ 可选 `rare_candidates`）→ 对齐要的 slots，不碰 Step6。
 
     每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
     `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
     「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
     但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
+
+    `rare`（`rare_topk_map` 的输出，`AlignRefParams.rare_topk` 开了才给）：库判
+    `same` 以外的位，库那一路的首选换成「库候选 ∪ 5-b 前 k 名」RRF 融合的首位
+    （`rrf_carrier`），OCR 比较照旧。见模块头「2026-09-28 5-b 候选并入锚定载体」。
+    `rare` 为空时与加这个参数之前逐位相同。
     """
     mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
     omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
+    rare = rare or {}
 
     def _best(rid: str) -> str | None:
         m = mmap.get(rid)
@@ -263,6 +336,9 @@ def slots_from_evidence(match, ocr) -> list[tuple[int, int, str, str]]:
         ch, conf = None, -1.0
         if m and m.candidates:
             ch, conf = m.candidates[0][0], m.candidates[0][1]
+        rc = rare.get(rid)
+        if rc:
+            ch = rrf_carrier(list(m.candidates) if m else [], rc)
         o = omap.get(rid)
         if o and o.topk and o.topk[0][1] > conf:
             ch = o.topk[0][0]
@@ -358,6 +434,20 @@ class AlignRefParams(BaseModel):
     低票页命中率落在 0.58~0.82；门槛设在明显低于这个区间的 0.5，留安全边界。
     未观测到假阳性样本落进 [0.5, 0.58) 这一段，样本量不大，口径偏保守。"""
 
+    rare_topk: int = 0
+    """5-b 生僻字候选并入锚定载体（2026-09-28，D 道 overview#126）：取 `rare_candidates`
+    前几名。**0 = 关（缺省）**——不读 5-b、不进指纹（`optional_consumes_when`）、
+    也不进参数哈希（见 `_drop_off_rare`），四庫等书产物与加这个字段之前逐字节相同。
+    书 yaml `params: {align_ref: {rare_topk: 5}}` 打开。实测见模块头同日一节。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_rare(self, handler):
+        """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.rare_topk:
+            d.pop("rare_topk", None)
+        return d
+
     def model_post_init(self, _ctx) -> None:
         if not self.corpus_fingerprint:
             from .context_decide import corpus_fingerprint
@@ -397,7 +487,8 @@ def _corpus_index(path: str):
 class AlignRefStep(Step):
     spec = StepSpec(
         id="align_ref", title="Step5-d 整理本对齐", version="2.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
+        optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
@@ -415,6 +506,8 @@ class AlignRefStep(Step):
         p = _with_book_corpus(p, ctx)
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
         ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
+        rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
+                if p.rare_topk else None)
         if match is None and ocr is None:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -423,7 +516,7 @@ class AlignRefStep(Step):
             # 多证人策略走独立函数，自己算 slots/门槛——**不动 legacy 分支
             # 原有的检查顺序**（下面 corpus/text/slots 三条判据的先后次序，
             # 换了就会在多条同时失败时改变报出来的 note，是可观测的行为变化）。
-            return {"align_ref": _run_multi_witness(ctx, p, page, match, ocr)}
+            return {"align_ref": _run_multi_witness(ctx, p, page, match, ocr, rare)}
         if not p.corpus:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -433,7 +526,7 @@ class AlignRefStep(Step):
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
                 note="整理本读不到")}
-        slots = slots_from_evidence(match, ocr)
+        slots = slots_from_evidence(match, ocr, rare)
         if len(slots) < 12:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -700,7 +793,8 @@ def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
 
 
 def _run_multi_witness(ctx: RunContext, p: AlignRefParams, page: int,
-                       match: PageMatch | None, ocr: PageOcr | None) -> PageAlignRef:
+                       match: PageMatch | None, ocr: PageOcr | None,
+                       rare: dict[str, list[str]] | None = None) -> PageAlignRef:
     """`witness_strategy in ("normalize", "majority_vote")` 的产出路径
     （模块头「多证人合并」一节）。与 legacy 路径共享下游处理（库证据闸 →
     `AlignRec`），只是锚定/对齐这一段换成多证人版本。
@@ -711,7 +805,7 @@ def _run_multi_witness(ctx: RunContext, p: AlignRefParams, page: int,
                             corpus_fingerprint=p.witness_fingerprint,
                             witness_strategy=p.witness_strategy,
                             note="未配置证人")
-    slots = slots_from_evidence(match, ocr)
+    slots = slots_from_evidence(match, ocr, rare)
     if len(slots) < 12:
         return PageAlignRef(page=page, anchored=False,
                             corpus_fingerprint=p.witness_fingerprint,

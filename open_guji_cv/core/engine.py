@@ -19,8 +19,8 @@ from typing import Callable
 from pydantic import BaseModel
 
 from .book import BookSpec
-from .pipeline import Pipeline
-from .spec import page_key
+from .pipeline import Pipeline, _produces
+from .spec import live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
@@ -220,11 +220,25 @@ class Engine:
             if sha is None:
                 return None
             out[kind] = sha
-        for kind in step.spec.optional_consumes:
+        # 带开关的可选上游（`StepSpec.optional_consumes_when`）开关关着时不进指纹
+        for kind in live_optional_consumes(step.spec, self.ctx.params_for(step)):
             sha = self._upstream_sha(kind, page)
             if sha is not None:
                 out[kind] = sha
         return out
+
+    def _live_upstream(self, step: Step) -> list[str]:
+        """过期传播用的直接上游：`Pipeline.upstream` 减去「只因开关关着的可选上游
+        才连上」的那些步（`StepSpec.optional_consumes_when`）。开关关着时 5-b 过期不该
+        把 `align_ref` 等标成 `upstream_stale`——它们这次根本不读 5-b。"""
+        ups = self.pipeline.upstream(step.spec.id)
+        off = set(step.spec.optional_consumes) - set(
+            live_optional_consumes(step.spec, self.ctx.params_for(step)))
+        if not off:
+            return ups
+        wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
+        needs = self.pipeline.needs.get(step.spec.id, [])
+        return [u for u in ups if (_produces(STEPS[u]) & wants) or u in needs]
 
     def _upstream_sha(self, kind: str, page: int) -> str | None:
         """一个上游种类这一页的 sha，拿不到返回 None（调用方决定算不算阻塞）。"""
@@ -318,7 +332,7 @@ class Engine:
         seen: dict[str, dict[int, str]] = {}
         for sid in self._enabled(self.pipeline.steps):  # 按拓扑序算，保证上游先有结果；
             step = STEPS[sid]                            # 书级开关关掉的 step 不进 seen，见下
-            ups = [u for u in self.pipeline.upstream(sid) if u in seen]
+            ups = [u for u in self._live_upstream(step) if u in seen]
             upstream_fresh = {pg: all(seen[u].get(pg) == FRESH for u in ups) for pg in pages}
             row, page_state = self._page_status_row(step, pages, upstream_fresh)
             seen[sid] = page_state
