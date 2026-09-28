@@ -21,6 +21,7 @@ from ..sse import sse
 from ...core.book import load_book, set_ocr_candidates
 from ...core.engine import Engine
 from ...core.pipeline import load_pipeline
+from ...errors import BadRequest
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -57,8 +58,8 @@ def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set
     except KeyError as e:
         raise HTTPException(400, f"参数覆盖里有未知步骤: {e}") from e
     try:
-        pg = eng.book.resolve_pages(pages)
-    except ValueError as e:
+        pg = eng.book.resolve_pages_ext(pages)
+    except (ValueError, BadRequest) as e:
         raise HTTPException(400, f"页号表达式错误: {e}") from e
     st = eng.status(pages=pg)
     # 页下拉要能选**任意**页——矩阵按 dev_set 显示是状态视图的口径，
