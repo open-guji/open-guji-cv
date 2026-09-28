@@ -167,6 +167,23 @@ class SeedAdmitParams(BaseModel):
     变体放行、0 格字面相同：`躭→耽`（vol01，双向可信）、`彝→彞`×3（vol03，双向可信）margin
     0.12~0.24 全部远低于 0.70；`冶→治`（bxgb，唯一不可信）margin 0.024。加闸后前四格不变，
     冶→治 落人审——详见 done 单。"""
+    variant_indirect_guard: bool = True
+    """异体等价放行拦**间接路径**（2026-09-28，overview#178，缺省开）。
+
+    `vmap.semantic` 归一只说明两个字挂到了同一个语义正字，不说明它们之间有边：
+    `𢑴→彝`（hydzd）与 `彞→彝`（twedu）各自挂到「彝」，`𢑴`/`彞` 就被判成同义，
+    关系层里两者却**没有直接边**，是经第三个字间接连起来的（H #62 `vol04:28:3:18a`：
+    刻「彝」形，库 top1 `𢑴`、整理本 `彞`，按 `ref_lib` 把 `𢑴` 放行、margin 0.0036）。
+    开着时，库形与整理本字字面不同、语义相同、但关系层（`variants.json`，除
+    kSpoofingVariant/通假）**没有直接边**的——
+    - `match_ref`/`match_replace`/`match_margin`（`admission_decision` 里那几条拿
+      `vmap.semantic` 比库形与整理本的通道）撤回放行，记 doubt `variant_indirect`；
+    - `ref_lib`：不再能靠 Step6 margin 过闸（直接边的 margin 分支照旧），记
+      `ref_lib_variant` + `variant_indirect`。
+    例外与 `_trusted_variant_edge` 同口径：人工表 `variants.tsv`、本书用字账人裁、
+    书级 `codepoints` 认过这一对的照放。**直接边（双向、单向）行为一概不变**。
+    实测（四庫 vol01–04 快照 + 全唐文 v006–v010 快照，见 #178 评论）：靠异体等价放行的
+    1,321 格里间接路径 2 格，都是 `𢑴`→`彝`→`彞`，1 格存形错；其余全是直接边。"""
     lib_confident_cov: float = 0.0
     """库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。0 = 关（缺省）。
 
@@ -272,7 +289,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.9", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.10", unit="cell",   # 1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("rare_candidates", "rare_agree"),),
@@ -515,6 +532,15 @@ class SeedAdmitStep(Step):
                       and r.candidates and _confusable_char(r.candidates[0][0])):
                     ok, channel = False, None
                     doubts.append("solo_confusable")
+                # 异体等价只经间接路径成立的撤回（`variant_indirect_guard`）。库形取
+                # 这几条通道自己比的那个字：match_ref 库 same 时是 r.char，其余是 cov 最高的候选。
+                if (ok and p.variant_indirect_guard and align_char and r.candidates
+                        and channel in ("match_ref", "match_replace", "match_margin")):
+                    _shape = (r.char if channel == "match_ref" and r.verdict == "same" and r.char
+                              else max(r.candidates, key=lambda t: t[1])[0])
+                    if _variant_indirect(_shape, align_char, ledger, ctx.book):
+                        ok, channel = False, None
+                        doubts.append("variant_indirect")
                 # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
                 # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
                 # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
@@ -672,16 +698,22 @@ class SeedAdmitStep(Step):
                         # 字面不同——变体放行——才要过闸：可信边，或 Step6 margin 过线
                         # （复用 context_margin，同一把生产已在用的尺子），否则记
                         # doubt、退回人审，不采信这条判决（ref_lib_variant_guard）。
+                        # 间接路径（经共同正字才同义）不许靠 margin 过闸（variant_indirect_guard）。
+                        _indirect = (p.variant_indirect_guard and _top != align_char
+                                     and not _direct_variant_edge(_top, align_char))
                         if _top == align_char:
                             ok, channel, prov = True, "ref_lib", "match"
                             char = _top
-                        elif (not p.ref_lib_variant_guard
-                              or (_d is not None and _d.margin >= p.context_margin)
-                              or _trusted_variant_edge(_top, align_char, ledger, ctx.book)):
+                        elif (_trusted_variant_edge(_top, align_char, ledger, ctx.book)
+                              or (not _indirect
+                                  and (not p.ref_lib_variant_guard
+                                       or (_d is not None and _d.margin >= p.context_margin)))):
                             ok, channel, prov = True, "ref_lib", "match"
                             char = _top
                         else:
                             doubts.append("ref_lib_variant")
+                            if _indirect and "variant_indirect" not in doubts:
+                                doubts.append("variant_indirect")
                     elif _d and _d.char and _d.char == align_char:
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
@@ -1197,6 +1229,25 @@ def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
     if book.codepoint_equal(top, align_char):
         return True
     return False
+
+
+def _direct_variant_edge(a: str, b: str) -> bool:
+    """关系层（`variants.json`）里 a、b 之间有没有**直接**异体边，方向不论。
+
+    只收 kSpoofingVariant（形近易混）/ hydzd-borrowed（通假）的边不算——那两个
+    来源永不当异体用（`variants.NEVER_SOURCES`）。"""
+    from ..variants import NEVER_SOURCES, _graph
+    return bool(set(_graph().sources_of(a, b)) - NEVER_SOURCES)
+
+
+def _variant_indirect(shape: str, align_char: str, ledger, book) -> bool:
+    """库形 `shape` 与整理本字只经间接路径同义（字面不同、关系层无直接边、
+    也没有人工表/人裁/书级 codepoints 认过这一对）——`variant_indirect_guard` 要拦的。
+
+    调用方已保证两者 `semantic` 相同（通道本身就是靠这个放行的），这里不再比。"""
+    if shape == align_char or _direct_variant_edge(shape, align_char):
+        return False
+    return not _trusted_variant_edge(shape, align_char, ledger, book)
 
 
 @lru_cache(maxsize=1)
