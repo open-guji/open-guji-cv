@@ -19,7 +19,6 @@ from pathlib import Path
 
 from ..core.book import load_book
 from ..core.spec import cell_key, page_key
-from ..gold.v2_align import align_book
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
@@ -107,10 +106,103 @@ def parse_doubt_filter(doubt: str) -> frozenset[str] | None:
     return frozenset(toks)
 
 
+# ── 按类别审（overview#247，2026-09-28）────────────────────────────────
+#
+# 用户：「按原因」升为主导航。doubt 码一张卡可以带好几个（vol03 待审 804 张里 357 张同时带
+# replace_align／上下文 margin 不足／库 unsure 三条），按码筛会让同一张卡在好几个按钮下
+# 各出现一次、裁完一类别的按钮数不动。所以另立一层**类别**：每张卡只归一类——按下表从上
+# 往下第一条命中的（优先级 = 表序）。各类卡片样式与快捷键不同（前端 `reviewClass.ts`），
+# 例如「己已巳」只给三选一。
+#
+# 表序的道理：先挑**卡片形态完全不同**的（印章遮挡有整组确认、己已巳三选一、义定形未定只列组内形），
+# 再按「人该看什么」排：整理本冲突 → 形近 → 库里没有（生僻字，要查候选）→ 异体／通道 →
+# 对齐改字层 → 其余（库 unsure／上下文 margin 不足这类「只是分数不够」）。
+
+REVIEW_CLASSES: tuple[tuple[str, str, str], ...] = (
+    ("occluded", "印章遮挡", "印章／污损遮挡：默认整理本字、字形不入库，可整组确认"),
+    ("ji_yi_si", "己已巳", "己／已／巳 刻法不分，按上下文三选一（定的是文意）"),
+    ("form_open", "义定形未定", "整理本定得了是哪个字、定不了本书刻哪个形：只在组内形里挑"),
+    ("ref_conflict", "与整理本冲突", "上下文或铁证与整理本对位字不同（context_vs_ref / iron_vs_ref / signal_conflict）"),
+    ("near_form", "形近字", "形近家族成员（near_form / solo_confusable），对着上下文细看"),
+    ("lib_miss", "库里没有", "字形库里没有这个字：多半是生僻字，看「查候选」"),
+    ("variant", "异体／通道", "异体间接边、换字取形、本书关掉的通道（variant_indirect / replace_form / channel_off / ref_lib_variant）"),
+    ("replace_align", "对齐改字层", "整理本对位来自 replace 段（位置可能错开一两格）"),
+    ("other", "其余", "只是分数不够：库 unsure、上下文 margin 不足等"),
+)
+CLASS_KEYS = tuple(k for k, _l, _h in REVIEW_CLASSES)
+
+_CLS_CODES = {
+    "ref_conflict": {"context_vs_ref", "iron_vs_ref", "signal_conflict"},
+    "near_form": {"near_form", "solo_confusable"},
+    "variant": {"variant_indirect", "replace_form", "channel_off", "ref_lib_variant"},
+    "replace_align": {"replace_align"},
+}
+
+
+def card_class(doubts, evidence: dict | None = None, char: str | None = None,
+               ref_char: str | None = None, lib_top: str | None = None) -> str:
+    """一张待审卡归哪一类：`REVIEW_CLASSES` 表序第一条命中的。纯函数。
+
+    `char` = seed_admit 的字，`ref_char` = 整理本对位字，`lib_top` = 字形库首选——
+    三者任一落在 己已巳 一族（或产物已挂 `ji_yi_si` 证据／`ji_yi_si_review` 码）就归「己已巳」。
+    """
+    from ..utils.ji_yi_si import FAMILY
+    ds = [d for d in (doubts or []) if isinstance(d, str)]
+    codes = set(doubt_codes(ds))
+    ev = evidence or {}
+    if "occluded" in codes or ev.get("occluded"):
+        return "occluded"
+    if ("ji_yi_si_review" in codes or ev.get("ji_yi_si")
+            or any(c and c in FAMILY for c in (char, ref_char, lib_top))):
+        return "ji_yi_si"
+    if "form_open" in codes:
+        return "form_open"
+    for k in ("ref_conflict", "near_form"):
+        if codes & _CLS_CODES[k]:
+            return k
+    if any(d.startswith("库里没有") for d in ds):
+        return "lib_miss"
+    for k in ("variant", "replace_align"):
+        if codes & _CLS_CODES[k]:
+            return k
+    return "other"
+
+
+def parse_class_filter(cls: str) -> str | None:
+    """`cls` 参数 → `None`（不分类，响应与改前一样）/ `"*"`（只计数）/ 某个类别键。"""
+    c = (cls or "").strip()
+    if not c:
+        return None
+    if c in ("*", "all"):
+        return "*"
+    if c not in CLASS_KEYS:
+        raise ValueError(f"cls 只认 {'/'.join(CLASS_KEYS)} 或 *，得到 {c!r}")
+    return c
+
+
+def _align_ref_maps(st: ProductStore, book: str, pg: int) -> tuple[dict, dict]:
+    """一页 `align_ref` 产物 → (`{id: (字, op, run)}` 现役对位，`{id: 字}` 坐标对位)。
+
+    卡片「整理本」一栏与上下文都读它——正是 seed_admit 做准入时用的那份对位
+    （#247 起不再绕 `gold.v2_align.align_book`：那条路缺产物时要现建 34 万字的 8-gram
+    索引，四庫 vol03 一次载入 6 s／600 MB 全花在这上）。整理本里若混进康熙部首码位
+    （⼰ U+2F30 之类），这里一并归一成正字（`utils.radicals.fold_radicals`）。
+    """
+    from ..utils.radicals import fold_radicals
+    ar = st.read(book, "align_ref", page_key(pg), "align_ref")
+    if ar is None:
+        return {}, {}
+    main = ({c.id: (fold_radicals(c.align_char), c.align_op, c.ref_run) for c in ar.chars
+             if c.align_char} if ar.anchored else {})
+    coord = {c.id: fold_radicals(c.ref_char) for c in (getattr(ar, "coord", None) or [])
+             if c.ref_char and c.ref_char != "〓"}   # 逐列本的 PUA 生僻字占位，不当整理本字显示
+    return main, coord
+
+
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True,
-          emb_out: dict | None = None, doubt: str = "") -> dict:
+          emb_out: dict | None = None, doubt: str = "", cls: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -140,8 +232,17 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     截断**（数到页范围末尾）——按钮上的数是「这个原因一共还有几张」，不是「这一屏里有几张」。
     一张卡带几个码就在几个码下各记一次；一个码都没有的记在 `_none`。
     缺省 `""` 时一行代码路径都不变，返回值与改前逐字节一致。
+
+    `cls`（overview#247）：按**类别**审，类别表与归类规则见 `REVIEW_CLASSES`／`card_class`
+    （一张卡只归优先级最高的一类）。`"*"` = 不筛只计数，某个类别键 = 只出这一类。给了就：
+    每张卡多一个 `cls` 字段；响应多 `class_counts`（类别 → 张数，口径与 `doubt_counts` 相同：
+    过了 only／已裁去重／排除名单／顺序闸，不受 `limit` 截断）、`class_total` 与 `classes`
+    （表：键／中文名／说明，按优先级排）。缺省 `""` 时这些都没有。
     """
     sel = parse_doubt_filter(doubt)
+    csel = parse_class_filter(cls)
+    class_counts: dict[str, int] = {}
+    n_cls = 0
     counting = sel is not None
     doubt_counts: dict[str, int] = {}
     n_counted = 0
@@ -172,12 +273,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     else:
         pgs = bk.resolve_pages(pages)
     # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
-    # 拿 v2_align 的页对齐（`ref` = 整理本在这一位印的字），锚不上的页没有。
+    # 读 `align_ref` 产物（`ref` = 整理本在这一位印的字），锚不上的页没有；逐页取，见 `_align_ref_maps`。
     # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
-    try:
-        golds = {c.id: c for g in align_book(book, pgs, st) if g.anchored for c in g.chars}
-    except Exception:
-        golds = {}
     ledger = BookLedger.load_or_empty()
     out: list[dict] = []
     out_blocked: list[dict] = []
@@ -191,9 +288,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
         if a is None:
             continue
         # 坐标对位（align_ref `coord`，overview#195）：现役对位没给字的格用它补「整理本」一栏
-        _ar = st.read(book, "align_ref", page_key(pg), "align_ref")
-        coord = {c.id: c.ref_char for c in (getattr(_ar, "coord", None) or [])
-                 if c.ref_char != "〓"}          # 逐列本的 PUA 生僻字占位，不当整理本字显示
+        golds, coord = _align_ref_maps(st, book, pg)
         mm = {r.id: r for cc in (m.columns if m else []) for r in cc.chars}
         dd = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         for cc in a.columns:
@@ -232,17 +327,28 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     n_counted += 1
                     for _c in dict.fromkeys(_codes):
                         doubt_counts[_c] = doubt_counts.get(_c, 0) + 1
-                    if full or (sel and not sel.intersection(_codes)):
+                    if sel and not sel.intersection(_codes):
+                        continue
+                    if full and csel is None:
                         continue
                 mr, dr = mm.get(r.id), dd.get(r.id)
+                gc = golds.get(r.id)
+                _cls = None
+                if csel is not None:
+                    _lib = (mr.candidates[0][0] if mr and mr.candidates else None)
+                    _cls = card_class(r.doubts, r.evidence, r.char,
+                                      gc[0] if gc else coord.get(r.id), _lib)
+                    n_cls += 1
+                    class_counts[_cls] = class_counts.get(_cls, 0) + 1
+                    if full or (csel != "*" and _cls != csel):
+                        continue
                 groups, ai = _ai_view(dr)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
-                gc = golds.get(r.id)
                 ref = None
-                if gc and gc.ref:
-                    pf = ledger.preferred_form(gc.ref)
-                    ref = {"char": gc.ref, "op": gc.align_op, "run": gc.op_run,
-                           "form": pf if pf and pf != gc.ref else None}
+                if gc:
+                    pf = ledger.preferred_form(gc[0])
+                    ref = {"char": gc[0], "op": gc[1], "run": gc[2],
+                           "form": pf if pf and pf != gc[0] else None}
                 elif coord.get(r.id):
                     pf = ledger.preferred_form(coord[r.id])
                     ref = {"char": coord[r.id], "op": "coord", "run": 1,
@@ -275,9 +381,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     # 没接这段的书两者都是 None，卡片不显示 AI 部分。
                     "groups": groups,
                     "ai": ai,
+                    **({"cls": _cls} if _cls is not None else {}),
                 })
                 if len(out) >= limit:
-                    if not counting:
+                    if not counting and csel is None:
                         return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
                                                       "blocked": out_blocked,
                                                       "n_decided": len(decided)}, emb_out)
@@ -287,6 +394,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     if counting:
         res["doubt_counts"] = dict(sorted(doubt_counts.items(), key=lambda kv: (-kv[1], kv[0])))
         res["doubt_total"] = n_counted
+    if csel is not None:
+        res["class_counts"] = {k: class_counts[k] for k in CLASS_KEYS if class_counts.get(k)}
+        res["class_total"] = n_cls
+        res["classes"] = [{"key": k, "label": lb, "hint": h} for k, lb, h in REVIEW_CLASSES]
     return _finish(book, bk, st, res, emb_out)
 
 
@@ -346,13 +457,7 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     #      一律当阻塞（`fallback` 注明原因），**不再静默放行**。只在 `with_fallback=True`
     #      （字卡顺序闸 `cut_pending`）时加：切线面板 `scope=blocking` 要拿用例画拖线卡，
     #      兜底用例没有几何字段，塞进去面板会坏；面板那边照旧只出能画的用例。
-    unavailable = _warm_column_images(book, pgs, st)
-    failed: str | None = None
-    try:
-        cases = (T.r2s_boundaries(book, pgs, st)
-                 + T.split_char_boundaries(book, pgs, st))
-    except Exception as exc:                       # noqa: BLE001
-        cases, failed = [], f"取切线用例失败（{type(exc).__name__}: {exc}）"
+    cases, unavailable, failed = _cutline_cases(book, pgs, st)
 
     done = T.gold_ids()
     # `read()` 要 batch 名；这里要的是**所有**批次，走 `iter_all()`。
@@ -407,6 +512,64 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     if not with_fallback:
         return out
     return out + _fallback_blocking(book, multi, where, done, out, unavailable, failed)
+
+
+_CASES_MEM: dict = {}
+_CASES_MEM_MAX = 8
+_CASES_IRRELEVANT = frozenset({"glyph_match", "ocr_candidates", "rare_candidates", "align_ref",
+                               "context_decide", "seed_admit", "page_survey"})
+"""识别段的步：切线用例只看切分产物（row_segment 的 cells）与列图，不读它们。键里剔掉——
+人裁一条 confirm 就会把那一页的 seed_admit 标失效（manifest 追加一行），不剔的话每提交一批
+记忆就作废。只剔**确知无关**的；新加的步默认进键（宁可多算一次，不会读到旧的）。"""
+
+
+def _cutline_cases(book: str, pgs: list[int], st: ProductStore
+                   ) -> tuple[list[dict], set[tuple[int, int]], str | None]:
+    """切线用例（r2s + split_char）＋取不到列图的列＋失败说明——带进程内记忆。
+
+    这一段只看产物与列图（列图也是产物派生的），与事件日志无关；可它要把页范围里**每一列**
+    的列图读一遍求投影——四庫 vol03 111 页 1788 列，一次 8.8 s（其中 imread 5.4 s）。
+    按类别审（#247）每提交一批就自动载入同类下一批，人裁一写入 cards 结果缓存就失效，
+    于是每一批都要重付这 8.8 s。所以按（产物 manifest 指纹、列图缓存根、页范围、取用例的
+    两个函数本身）记住结果：产物一变指纹就变、自动失效；测试里 monkeypatch 了那两个函数
+    也自然换键。**只记完整成功的**——有列取不到列图或取用例抛异常时不记，下次照旧重试
+    （冷缓存兜底那条路的语义不变）。
+    """
+    from ..core.workspace import cache_root
+    from ..eval import touching as T
+    key = None
+    if isinstance(getattr(st, "root", None), Path):     # 假 store（测试替身）没有产物根：不记
+        key = (str(st.root), str(cache_root()), book, tuple(pgs),
+               json.dumps([x for x in _products_sig(book, st) if x[0] not in _CASES_IRRELEVANT]),
+               json.dumps([x for x in _pages_stat_sig(book, st, pgs) if x[0] not in _CASES_IRRELEVANT]),
+               T.r2s_boundaries, T.split_char_boundaries)
+    hit = _CASES_MEM.get(key) if key is not None else None
+    if hit is not None:
+        return list(hit), set(), None
+    unavailable = _warm_column_images(book, pgs, st)
+    failed: str | None = None
+    try:
+        cases = (T.r2s_boundaries(book, pgs, st)
+                 + T.split_char_boundaries(book, pgs, st))
+    except Exception as exc:                       # noqa: BLE001
+        cases, failed = [], f"取切线用例失败（{type(exc).__name__}: {exc}）"
+    if key is not None and not unavailable and failed is None:
+        _CASES_MEM[key] = list(cases)
+        while len(_CASES_MEM) > _CASES_MEM_MAX:
+            _CASES_MEM.pop(next(iter(_CASES_MEM)))
+    return cases, unavailable, failed
+
+
+def _pages_stat_sig(book: str, st: ProductStore, pgs: list[int]) -> list:
+    """这些页在各步下的产物文件 (名, 大小, mtime_ns)。manifest 只有跑批器写，手拷产物
+    （快照导入之外的临时替换、测试直接 `st.write`）不经过它——再按文件本身兜一层。
+    vol03 111 页 × 13 步 ≈ 1400 次 stat，几毫秒。"""
+    root = st.root / book
+    if not root.is_dir():
+        return []
+    names = [f"{page_key(p)}.json" for p in pgs]
+    return [[d.name, _stat_sig(d / n for n in names)]
+            for d in sorted(p for p in root.iterdir() if p.is_dir())]
 
 
 def _warm_column_images(book: str, pgs: list[int], st: ProductStore) -> set[tuple[int, int]]:
@@ -508,7 +671,7 @@ def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
 # 命中与否只走响应头（`X-Cards-Cache`，路由层加），**不往响应体里加字段**——四庫、北行
 # 的审卡数据要与改前逐字节一致（#166 验收）。
 
-CARDS_CACHE_VERSION = "1"
+CARDS_CACHE_VERSION = "2"   # 2：整理本对位改读 align_ref 产物（#247）
 _CARDS_MEM_MAX = 8
 _CARDS_DISK_KEEP = 16
 """每本书磁盘上留几份（按 mtime 留最新的），其余在写新份时顺手删。"""
@@ -645,8 +808,9 @@ def _remember(key: str, res: dict) -> None:
 
 
 def clear_cards_cache(book: str | None = None) -> None:
-    """清内存那份（测试、以及想强制重算时用）；磁盘份靠键自然失效。"""
+    """清内存那份（测试、以及想强制重算时用）；磁盘份靠键自然失效。切线用例记忆一并清。"""
     _cards_mem.clear()
+    _CASES_MEM.clear()
 
 
 # ── 预热（#166 加急）：跑批侧把 CNN 原型与每格 embedding 算好落盘，控制台只读盘 ──
