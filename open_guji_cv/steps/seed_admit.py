@@ -256,8 +256,11 @@ class SeedAdmitParams(BaseModel):
             object.__setattr__(self, "ledger_fingerprint",
                                corpus_fingerprint([str(ledger_path(self.edition))]))
         if not self.variants_fingerprint:
-            from ..clustering.variants import DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH
-            paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
+            from ..clustering.variants import (DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH,
+                                               NEVER_GROUP_PATH)
+            # never_group.json 也管语义层（2026-09-28 overview#201），名单改了产物要过期
+            paths = [self.variants] if self.variants else [
+                str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH), str(NEVER_GROUP_PATH)]
             object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
         if not self.variant_graph_fingerprint:
             from ..variants import DEFAULT_VARIANTS_JSON
