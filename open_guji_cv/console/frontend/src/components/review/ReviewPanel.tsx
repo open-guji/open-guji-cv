@@ -7,7 +7,10 @@ import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows } from './doubt'
-import { CLASS_HELP, DEFAULT_HELP, isJysCard, JYS_NONE_KEYS, jysPickByKey, pickVerdict, verdictRow } from './reviewClass'
+import { CLASS_HELP, classHelpKey, DEFAULT_HELP, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey, nextGridState,
+         pickVerdict, verdictRow } from './reviewClass'
+import type { GridState } from './reviewClass'
+import { ReplaceAlignGrid } from './ReplaceAlignGrid'
 import './review.css'
 
 // 迁移自 v1 static/js/panels/review.js（549 行，方案 §四标注"改造复用（分文件）"）。
@@ -18,6 +21,10 @@ import './review.css'
 // 这一类还剩几张）→ 本类细项（条数、含已裁决、先切线后字符、批次，默认收起）。队列模式：
 // 提交后自动载入同一类的下一批。一张卡只归优先级最高的一类（后端 `REVIEW_CLASSES`）；
 // 卡片样式与快捷键跟着类别走（`reviewClass.ts`，己已巳是三选一专用卡）。
+//
+// 对齐改字层分细项（overview#265）：网格（缺省，一屏几十张缺省采信整理本，只点掉异常的，
+// `ReplaceAlignGrid`）／列尾（疑似小注，逐张）／逐张（形近疑因、整理本空或惯刻形不同）。
+// 细项划分的正本在后端 `review/cards.py::replace_align_sub`。
 
 export interface Verdict {
   shape: string
@@ -60,6 +67,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 上下文缺省显示整理本对位原文；勾上才显示刻本那边的读法（#247）
   const [ctxKeben, setCtxKeben] = useState(false)
   const [groupBusy, setGroupBusy] = useState(false)
+  // 对齐改字层的细项（overview#265）：只在 cls === 'replace_align' 时有意义
+  const [raSub, setRaSub] = useState<'grid' | 'tail' | 'manual'>('grid')
+  const [subCounts, setSubCounts] = useState<Record<string, number> | null>(null)
+  const [subMeta, setSubMeta] = useState<ReviewClassMeta[]>([])
+  const [gridN, setGridN] = useState(60)
+  const [gridCards, setGridCards] = useState<ReviewCard[]>([])
+  const [gridStates, setGridStates] = useState<Record<string, GridState>>({})
+  const gridSeen = useRef<number | undefined>(undefined)
   const [, forceRender] = useState(0)
   const bump = () => forceRender((n) => n + 1)
 
@@ -85,14 +100,35 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 只更新数据，不把页面滚去「定字裁决」区域。用户 2026-09-11 实测踩到：
   // 每次在「切分裁决」落定一条，画面会被强行跳到定字裁决第一张卡，打断
   // 正在做的操作。手动点「载入」按钮才应该滚（那是用户主动要看结果）。
-  async function load(scrollOnLoad = true, sel = cls) {
+  async function load(scrollOnLoad = true, sel = cls, sub = raSub) {
     setMsg('载入中…')
     const b = batch()
-    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate, limit || 30, !inclDecided,
-                                     '', sel || '*')
+    const ra = sel === 'replace_align'
+    const gridMode = ra && sub === 'grid'
+    const t0load = performance.now()
+    // 网格缺省采信，**永远不出已裁过的格**（「含已裁决」在网格里不生效）：否则整屏一提交就把
+    // 以前的裁决静默改成整理本字。
+    const d = await fetchReviewCards(book, pages || 'dev_set', only, gate,
+                                     gridMode ? (gridN || 60) : (limit || 30), gridMode || !inclDecided,
+                                     '', sel || '*', ra ? sub : '')
     setClassCounts(d.class_counts ?? null)
     setClassTotal(d.class_total ?? 0)
     if (d.classes) setClasses(d.classes)
+    setSubCounts(d.class_sub_counts?.replace_align ?? null)
+    if (d.class_subs?.replace_align) setSubMeta(d.class_subs.replace_align)
+    if (gridMode) {
+      // 网格：每张缺省采信整理本。点过的档位按 id 留着**不清**——静默刷新（切线联动 reloadSignal）
+      // 也走这里，清掉的话人点掉还没提交的格会退回「采信」，一提交就收了。提交成功的在 submitGrid 里摘。
+      setGridCards(d.cards)
+      gridSeen.current = Date.now()
+      setCards([])
+      setCur(0)
+      setGateNote((d.blocked || []).length ? { n: (d.blocked || []).length } : null)
+      setNDecided(d.n_decided || 0)
+      setMsg(`网格 ${d.cards.length} 张（缺省采信整理本）· 载入 ${Math.round(performance.now() - t0load)} ms`)
+      return d
+    }
+    setGridCards([])
     let done: Record<string, Verdict> = {}
     try {
       done = (await fetchReviewVerdicts(b)).verdicts || {}
@@ -274,6 +310,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   }
 
   async function submit() {
+    if (cls === 'replace_align' && raSub === 'grid') return submitGrid()
     const b = batch()
     const byId: Record<string, ReviewCard> = {}
     for (const c of cards) byId[c.id] = c
@@ -320,7 +357,44 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
 
   function pickClass(key: string) {
     setCls(key)
+    // 进「对齐改字层」缺省落在网格（overview#265）
+    if (key === 'replace_align' && key !== cls) { setRaSub('grid'); load(true, key, 'grid'); return }
     load(true, key)
+  }
+
+  function pickSub(sub: 'grid' | 'tail' | 'manual') {
+    setRaSub(sub)
+    load(true, 'replace_align', sub)
+  }
+
+  function toggleGrid(id: string) {
+    setGridStates((prev) => ({ ...prev, [id]: nextGridState(prev[id]) }))
+  }
+
+  // 网格整屏提交（overview#265）：一格一行，采信 = 普通卡按 1、字形不完整 = 按 T、跳过 = 按 S，
+  // 行由 `gridRows`→`verdictRow` 出，与逐张裁决逐字段相同；走同一个 `POST /api/events`。
+  async function submitGrid() {
+    if (!gridCards.length || groupBusy) { if (!gridCards.length) setMsg('这一屏没有卡'); return }
+    const rows = gridRows(gridCards, gridStates, gridSeen.current, Date.now(), (c, sh) => aiAccepted(c, sh))
+    if (!rows.length) { setMsg('这一屏没有可提交的'); return }
+    setGroupBusy(true)
+    setMsg('提交中…')
+    const b = batch()
+    try {
+      const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
+      const sent = new Set(rows.map((x) => x.id as string))
+      setGridStates((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !sent.has(id))))
+      const n = (v: string) => rows.filter((x) => x.v === v).length
+      const done = `网格：已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
+        + `（采信 ${n('confirm')} · 字形不完整 ${n('seg_defect')} · 跳过 ${n('skip')}）`
+      onSubmitted()
+      const d = await load(true, 'replace_align', 'grid')
+      setMsg(`${done}；已载入下一屏 ${d.cards.length} 张，网格还剩 ${d.class_sub_counts?.replace_align?.grid ?? 0}`)
+    } catch (e) {
+      setMsg('网格提交失败：' + (e as Error).message)
+    } finally {
+      setGroupBusy(false)
+    }
   }
 
   // 印章遮挡整组一键确认（overview#215 ②）：与 #166 按簇提交同一机制——展开成 N 条逐格事件，
@@ -406,6 +480,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       } else if (ev.key === 'n' || ev.key === 'N') { setVerdict(cur, '', 'non'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 's' || ev.key === 'S') { setVerdict(cur, '', 'skip'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', 'truncated'); focus(cur + 1); ev.preventDefault() }
+      // Z = 小注当正文（overview#265）：字形不完整的一种，事件多带 reason=jiazhu_as_main
+      else if (ev.key === 'z' || ev.key === 'Z') { setVerdict(cur, '', 'jiazhu'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'c' || ev.key === 'C') { setVerdict(cur, '', 'contaminated'); focus(cur + 1); ev.preventDefault() }
       // D = 原图破损。**不自动跳下一张**：人多半要接着在「最像」框里填一个字。
       else if (ev.key === 'd' || ev.key === 'D') { setVerdict(cur, '', 'damaged'); ev.preventDefault() }
@@ -466,6 +542,29 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
           <label className="muted">批次 <input value={batchInput} onChange={(e) => setBatchInput(e.target.value)} size={22} placeholder="留空 = 按册页自动命名" /></label>
         </div>
       </details>
+      {cls === 'replace_align' && subCounts && (
+        <div className="rv-classes" data-testid="rv-subs">
+          <span className="muted">本类细项</span>
+          {subMeta.map((m) => (
+            <button key={m.key} data-sub={m.key} className={raSub === m.key ? 'on' : ''}
+                    onClick={() => pickSub(m.key as 'grid' | 'tail' | 'manual')} title={m.hint}>
+              {m.label}<span className="n">{subCounts[m.key] || 0}</span>
+            </button>
+          ))}
+          {raSub === 'grid' && (
+            <>
+              <label className="muted" title="网格一屏几张（40–60 为宜）；改了点「重新载入」">
+                一屏 <input value={gridN} onChange={(e) => setGridN(+e.target.value || 60)} size={3} />
+              </label>
+              <button className="rv-occl-all" data-testid="ra-submit" onClick={submitGrid}
+                      disabled={groupBusy || !gridCards.length}
+                      title="一次写完整屏：采信的写 confirm（字 = 整理本字），点掉的按字形不完整／跳过">
+                提交这一屏 {gridCards.length} 张（采信 {gridCards.filter((c) => (gridStates[c.id] ?? 'accept') === 'accept').length}）
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {cls === 'occluded' && (classCounts?.occluded || 0) > 0 && (
         <div className="rv-classes">
           <button className="rv-occl-all" onClick={confirmOccludedGroup} disabled={groupBusy}
@@ -480,11 +579,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         </div>
       )}
       <div className="rv-help">
-        <span dangerouslySetInnerHTML={{ __html: '键盘：' + (CLASS_HELP[cls] ?? DEFAULT_HELP) }} />{' '}
+        <span dangerouslySetInnerHTML={{ __html: '键盘：' + (CLASS_HELP[classHelpKey(cls, raSub)] ?? DEFAULT_HELP) }} />{' '}
         <label className="muted" title="上下文缺省显示整理本对位原文（对不上的格退回刻本定字、字色浅一档）；勾上改看刻本这边的读法（定字 → 库 → OCR）">
           <input type="checkbox" checked={ctxKeben} onChange={(e) => setCtxKeben(e.target.checked)} /> 上下文用刻本读法
         </label>
       </div>
+      {cls === 'replace_align' && raSub === 'grid' && gridCards.length > 0 && (
+        <ReplaceAlignGrid cards={gridCards} states={gridStates} onToggle={toggleGrid} />
+      )}
       <div className="rvgrid">
         {cards.map((c, i) => {
           if (isHidden(c)) return null

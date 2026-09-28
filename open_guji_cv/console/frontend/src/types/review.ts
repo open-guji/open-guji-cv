@@ -92,6 +92,8 @@ export interface ReviewCard {
   occluded?: { char: string; via: string | null; ref_blank: boolean } | null
   /** 按类别审（overview#247）：请求带了 `cls` 才有。一张卡只归优先级最高的一类。 */
   cls?: string
+  /** 类别细项（overview#265）：目前只有「对齐改字层」有——grid / tail / manual。 */
+  cls_sub?: string
 }
 
 /** 类别表的一行（后端 `REVIEW_CLASSES`，按优先级排）。 */
@@ -132,6 +134,9 @@ export interface ReviewCardsResponse {
   class_counts?: Record<string, number>
   class_total?: number
   classes?: ReviewClassMeta[]
+  /** 类别细项计数（overview#265）：`{replace_align: {grid, tail, manual}}`，口径同 `class_counts`。 */
+  class_sub_counts?: Record<string, Record<string, number>>
+  class_subs?: Record<string, ReviewClassMeta[]>
 }
 
 /**
