@@ -58,6 +58,25 @@ accuracy.py` 后续跟人审的反馈事件（`feedback/events.py`，按 cell id
 知道后文的真实字，只能用本列剩余字位的**原始候选 top1**（未经裁决）拼，
 是弱于评测集的近似，已在日志与函数文档里注明，避免拿线上正确率数字
 直接跟离线 27~47% 比。
+
+## 【2026-09-28】5-b 生僻字候选并入候选池（D 道，overview#126），缺省关
+
+`rare_topk > 0` 时 `rare_candidates` 前 k 名按名次 1/r 归一、乘 `rare_weight`
+并进 `fuse_priors`（`extra`）。只扩池、只改先验：`same` 档继承、门槛化、只在候选
+集合内选这三条都没动。5-b 与库首位一致 → 先验更尖、margin 更高；不一致 → margin
+被摊薄、更多落人审——后者正是它挡住错放的方式。
+
+实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+
+| rare_weight | vol03 待审率 | vol03 放出格与光盘版字面不同（sub.*） |
+|---|---|---|
+| 关 | 3.72% | 130 |
+| 0.5 | 4.09% | 122 |
+| **1.5（缺省，同 OCR 权重）** | 4.28% | **93** |
+| 3.0 | 4.44% | 92 |
+
+全唐文 v006（`seed_admit.use_context` 开时）人裁难例上 context 通道错放 60 → 4 格
+（含异体口径），待审率 26.8% → 24.4%。
 """
 
 from __future__ import annotations
@@ -183,14 +202,29 @@ class ContextDecideParams(BaseModel):
     ai_evidence_fingerprint: str = ""
     """证据文件内容哈希，留空自动填——换了文件，产物要判过期。"""
 
+    # ── 5-b 生僻字候选并入候选集（2026-09-28，D 道 overview#126），缺省关 ─────
+    rare_topk: int = 0
+    """取 `rare_candidates` 前几名并进先验候选池。**0 = 关（缺省）**：不读 5-b、不进
+    指纹、不进参数哈希。书 yaml `params: {context_decide: {rare_topk: 5}}` 打开。
+    只**扩候选集**、按名次给先验（`rare_priors`），`same` 档继承、门槛化、字形层
+    不可改写这三条铁律都不动——5-b 的字进了候选池，才轮得到 LM 在它们之间选。"""
+    rare_weight: float = 1.5
+    """5-b 这一路在 `fuse_priors` 里的总权重（按名次 1/r 归一后乘它）。缺省与 OCR
+    一路同权（`OCR_WEIGHT`=1.5，库一路是 3.0×cov）：只扩池、不喧宾夺主。只在
+    `rare_topk > 0` 时进参数哈希。"""
+
     @model_serializer(mode="wrap")
     def _drop_empty_ai(self, handler):
         """两个 ai_* 字段为空时不进 dump：没接 AI 的书 `params_hash` 与加字段前逐位
-        相同，四庫等已跑的 context_decide 产物不会因为这次改代码全体判过期。"""
+        相同，四庫等已跑的 context_decide 产物不会因为这次改代码全体判过期。
+        `rare_*` 同理：`rare_topk == 0` 时两个字段都不进 dump。"""
         d = handler(self)
         if isinstance(d, dict) and not self.ai_evidence:
             d.pop("ai_evidence", None)
             d.pop("ai_evidence_fingerprint", None)
+        if isinstance(d, dict) and not self.rare_topk:
+            d.pop("rare_topk", None)
+            d.pop("rare_weight", None)
         return d
 
     def _corpus_paths(self) -> list[str]:
@@ -223,11 +257,20 @@ class ContextDecideParams(BaseModel):
             object.__setattr__(self, "ai_evidence_fingerprint",
                                ai_evidence_fingerprint(self.ai_evidence))
 
+def rare_priors(chars: list[str]) -> list[tuple[str, float]]:
+    """5-b 前 k 名 → `fuse_priors(extra=…)` 要的 `[(字, 强度)]`：按名次 1/r 归一到和为 1。
+    不用 5-b 的 `score`——各来源量纲不同、不可比（见 `align_ref.rare_topk_map`）。"""
+    w = [1.0 / (i + 1) for i in range(len(chars))]
+    z = sum(w) or 1.0
+    return [(c, x / z) for c, x in zip(chars, w)]
+
+
 @register_step
 class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
+        optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
@@ -357,6 +400,10 @@ class ContextDecideStep(Step):
 
         omap = ({r.id: r for cc in ocr.columns for r in cc.chars}
                 if ocr is not None else {})
+        rmap: dict[str, list[str]] = {}
+        if p.rare_topk:
+            from .align_ref import _opt, rare_topk_map
+            rmap = rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
         out: list[ColumnDecision] = []
         for cc in match.columns:
             if not cc.ok:
@@ -382,9 +429,12 @@ class ContextDecideStep(Step):
                     decided.append((r.slot, r.char))
                     continue
                 o = omap.get(r.id)
+                rc = rmap.get(r.id)
                 priors = fuse_priors(list(r.candidates),
                                      list(o.topk) if o else [],
-                                     s2t=False)      # OCR 那边已经扩过 s2t
+                                     s2t=False,      # OCR 那边已经扩过 s2t
+                                     **({"extra": rare_priors(rc), "w_extra": p.rare_weight}
+                                        if rc else {}))
                 if not priors:
                     recs.append(DecisionRec(id=r.id, slot=r.slot, sub=r.sub,
                                             source="none"))
