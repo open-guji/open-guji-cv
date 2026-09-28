@@ -43,6 +43,15 @@ def test_mode_typo_raises():
         bf.first_pick_mode(_bk({"review": {"first_pick": "CNN原型"}}))
 
 
+def test_borrow_db_key_wins_and_resolves_relative(monkeypatch, tmp_path):
+    """`review.borrow_db` 单独指借库（不动 glyph_match.db_path，免得 Step5 指纹变）。"""
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    bk = _bk({"review": {"borrow_db": "../siku/output/glyph.db"},
+              "glyph_match": {"db_path": "/x/other.db"}})
+    assert bf.review_db_path(bk) == str(tmp_path / "../siku/output/glyph.db")
+    assert bf.review_db_path(_bk({"review": {"borrow_db": "/abs/siku.db"}})) == "/abs/siku.db"
+
+
 def test_review_db_path_prefers_book_glyph_match(monkeypatch):
     assert bf.review_db_path(_bk({"glyph_match": {"db_path": "/x/siku.db"}})) == "/x/siku.db"
     monkeypatch.setenv("GUJI_GLYPH_DB", "/y/env.db")

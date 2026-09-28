@@ -226,7 +226,8 @@ def _finish(book: str, bk, st: ProductStore, res: dict) -> dict:
     return res
 
 
-def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[dict]:
+def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
+                           with_fallback: bool = False) -> list[dict]:
     """顺序闸正在挡住字卡的那批切线用例（原始 case，未展开成格位字典）。
 
     **只挡多候选的切点**（用户定「只挡多候选切点」）：算法自己拿不准
@@ -252,11 +253,22 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
     from ..eval import touching as T
     from ..utils.cut_select import PENDING_BLOB
 
+    # 2026-09-28 修（C 道，冷缓存下顺序闸静默放行）：面板取用例要读**列图缓存**
+    # （`eval.rulers._col_profile`），缓存里没有就把那一列整列跳过——不报错、只是
+    # 少了用例，闸门跟着形同虚设。vol03 实测：冷缓存 blocked=0、热缓存 blocked=18，
+    # 那 18 格越过「先切线后字符」直接出了字卡。两层修：
+    #   ① 先把这些页的列图 materialize 出来（冷缓存时现算，热缓存时只是存在性检查）；
+    #   ② 仍然取不到列图的列、或取用例抛了异常——那几列里「本该挡」的多候选切点
+    #      一律当阻塞（`fallback` 注明原因），**不再静默放行**。只在 `with_fallback=True`
+    #      （字卡顺序闸 `cut_pending`）时加：切线面板 `scope=blocking` 要拿用例画拖线卡，
+    #      兜底用例没有几何字段，塞进去面板会坏；面板那边照旧只出能画的用例。
+    unavailable = _warm_column_images(book, pgs, st)
+    failed: str | None = None
     try:
         cases = (T.r2s_boundaries(book, pgs, st)
                  + T.split_char_boundaries(book, pgs, st))
-    except Exception:
-        return []   # 取不到用例（无产物/无金标）就当没有闸，不挡人
+    except Exception as exc:                       # noqa: BLE001
+        cases, failed = [], f"取切线用例失败（{type(exc).__name__}: {exc}）"
 
     done = T.gold_ids()
     # `read()` 要 batch 名；这里要的是**所有**批次，走 `iter_all()`。
@@ -275,12 +287,15 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
     # 的（2026-09-15，10 卡：所选切法与 U-Net 分歧块 ≥100px——哪怕只有一条候选，算法也没把握，
     # 交人再审；用户原则「拿不准不早下结论」）。
     multi: dict = {}
+    where: dict = {}        # 同键 → (切点序号, 下格格位)，兜底阻塞拼用例要
     for pg in pgs:
         cells = st.read(book, "row_segment", page_key(pg), "cells")
         if cells is None:
             continue
         for cc in cells.columns:
             for cp in (getattr(cc, "cut_candidates", None) or []):
+                where[(pg, cc.col, cp.slot_above)] = (getattr(cp, "k", "?"),
+                                                     getattr(cp, "slot_below", cp.slot_above + 1))
                 # 2026-09-15：多候选**不再一律挡**。60 条分层抽样实测（10 卡第十一节）：
                 # 所选切法与 U-Net 分歧块 <20px 的 779 条里 0/20 切坏，20–60 的 5%，60–100 的 **35%**。
                 # 所以只挡 `dis_unet >= PENDING_BLOB`（60）的，人工省 92%、放行里漏 1.0%。
@@ -305,6 +320,66 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore) -> list[
             continue
         c = {**c, "n_candidates": n}    # 挂候选条数，供 cut_pending 拼说明
         out.append(c)
+    if not with_fallback:
+        return out
+    return out + _fallback_blocking(book, multi, where, done, out, unavailable, failed)
+
+
+def _warm_column_images(book: str, pgs: list[int], st: ProductStore) -> set[tuple[int, int]]:
+    """把这些页 `row_segment` 里各列的列图 materialize 到缓存；返回**仍取不到**的 (页, 列)。
+
+    热缓存时只是存在性检查（`ImageCache.get` 命中即返回，不重算）。取不到的列交给
+    `_fallback_blocking` 兜底当阻塞。
+    """
+    from ..core.spec import column_key
+    from ..core.step import RunContext
+    from ..products import kinds as _k  # noqa: F401 — 注册产物种类（单独调用时也要能读 cells）
+    from ..products.cache import ImageCache
+
+    cache = ImageCache()
+    bad: set[tuple[int, int]] = set()
+    ctx = None
+    for pg in pgs:
+        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        if cells is None:
+            continue
+        for cc in cells.columns:
+            if not getattr(cc, "ok", True):
+                continue
+            key = column_key(pg, cc.col)
+            if cache.get(book, "column_image", key) is not None:
+                continue
+            try:
+                if ctx is None:
+                    ctx = RunContext(load_book(book), st, cache, log=lambda *_: None)
+                ctx.materialize("column_image", key)
+            except Exception:                      # noqa: BLE001 — 取不到就交给兜底
+                bad.add((pg, cc.col))
+                continue
+            if cache.get(book, "column_image", key) is None:
+                bad.add((pg, cc.col))
+    return bad
+
+
+def _fallback_blocking(book: str, multi: dict, where: dict, done: set, have: list[dict],
+                       unavailable: set, failed: str | None) -> list[dict]:
+    """取不到用例时的保守兜底：本该挡的多候选切点（`multi`）里，列图取不到的列
+    （或取用例整体失败时的全部）一律当阻塞。宁可多挡几格，也不让切线没看过的字卡
+    静默出来（用户原则「拿不准不早下结论」）。已裁过的、已在面板用例里的不重复。"""
+    if not unavailable and not failed:
+        return []
+    seen = {(c["page"], c["col"], c["slot_above"]) for c in have}
+    out = []
+    for (pg, col, above), n in sorted(multi.items()):
+        if (pg, col, above) in seen or (not failed and (pg, col) not in unavailable):
+            continue
+        cid = f"{book}:{pg}:{col}:{above}"
+        if cid in done:
+            continue
+        k, below = where.get((pg, col, above), ("?", above + 1))
+        out.append({"id": cid, "book": book, "page": pg, "col": col, "bi": k,
+                    "slot_above": above, "slot_below": below, "n_candidates": n,
+                    "fallback": failed or "列图取不到，切线用例算不出来"})
     return out
 
 
@@ -315,10 +390,12 @@ def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
     被它切出来的字位——切法改了，这两个字的图块就跟着变。所以这两格的字卡在
     切线 review 完之前不出来，其余格位照常。数据源见 `blocking_cutline_cases`。
     """
-    cases = blocking_cutline_cases(book, pgs, st)
+    cases = blocking_cutline_cases(book, pgs, st, with_fallback=True)
     out: dict = {}
     for c in cases:
         why = f"格线 {c['col']}:{c['bi']} 有 {c['n_candidates']} 种切法待 review"
+        if c.get("fallback"):
+            why += f"（{c['fallback']}，保守挡下）"
         # 上格与下格都是被这条切线切出来的字位，两张卡一起挡
         out[(c["page"], c["col"], c["slot_above"])] = why
         out[(c["page"], c["col"], c["slot_below"])] = why
