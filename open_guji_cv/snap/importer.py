@@ -243,7 +243,9 @@ def check_cv(cv_repo: Path, m: dict, git: gitio.GitRunner = gitio.default_git,
     for c in cands:
         r = gitio.is_ancestor(cv_repo, c, "HEAD", git)
         if r is None:          # 本地没有这个提交：拉一次再判（服务器 clone 可能落后）
-            git(cv_repo, ["fetch", "-q", remote, c])
+            # 浅仓按提交号 fetch 同样会去拉整仓历史（值守 overview#216 实测卡死），只拉这一个提交
+            shallow = (git(cv_repo, ["rev-parse", "--is-shallow-repository"]).stdout or "").strip() == "true"
+            git(cv_repo, ["fetch", "-q", *(["--depth", "200"] if shallow else []), remote, c])
             r = gitio.is_ancestor(cv_repo, c, "HEAD", git)
         tried[c] = {True: "是 HEAD 的祖先", False: "不是 HEAD 的祖先", None: "服务器找不到这个提交"}[r]
         if r:
