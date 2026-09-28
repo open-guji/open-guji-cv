@@ -89,7 +89,23 @@ class Ruler:
         return {"key": self.key, "title": self.title, "num": self.num,
                 "den": self.den, "value": self.value, "unit": self.unit,
                 "goal": self.goal, "note": self.note,
-                "detail": self.detail if full else self.detail[:20]}
+                "detail": self.detail if full else self.detail[:20],
+                "by_page": self.by_page()}
+
+    def by_page(self) -> dict[str, dict]:
+        """页／列明细（#174：整理首跑回馈「R2c 只给总数、不给页列，排错例定位不了」）。
+        从**全量** detail 汇总，不受 `full` 截断影响：{"149": {"n": 5, "cols": [3, 7]}}。
+        键用字符串，JSON 往返不变形；按页号排序。"""
+        out: dict[int, dict] = {}
+        for d in self.detail:
+            pg = d.get("page")
+            if pg is None:
+                continue
+            e = out.setdefault(int(pg), {"n": 0, "cols": set()})
+            e["n"] += 1
+            if d.get("col") is not None:
+                e["cols"].add(int(d["col"]))
+        return {str(pg): {"n": e["n"], "cols": sorted(e["cols"])} for pg, e in sorted(out.items())}
 
 
 def _col_profile(store, book: str, pg: int, col: int) -> np.ndarray | None:
@@ -213,8 +229,11 @@ def measure(book: str, pages: list[int], store=None, full: bool = False) -> dict
                     if ink_img is not None:
                         ys = np.clip(np.asarray(seam, dtype=int), 0, ink_img.shape[0] - 1)
                         xs = np.clip(np.arange(len(seam)) + cx0, 0, ink_img.shape[1] - 1)
-                        if int(ink_img[ys, xs].sum()) > 0:
+                        n_on = int(ink_img[ys, xs].sum())
+                        if n_on > 0:
                             r2c.num += 1
+                            r2c.detail.append({"page": pg, "col": cc.col, "y": y,
+                                               "why": "缝上有墨", "px": n_on})
                 else:
                     r2c.num += 1
                     r2c.detail.append({"page": pg, "col": cc.col, "y": y, "why": "无缝"})
