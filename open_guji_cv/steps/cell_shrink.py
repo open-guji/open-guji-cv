@@ -64,6 +64,10 @@ FRAME_BAR_TOP = 0.15
 居中，不贴顶。四册全书按这三条筛只中 vol02 这 2 格，全是框线。"""
 
 
+RAISED_BAR_TOP = 0.35
+"""书级 `raised_bar_max_h` 生效时，抬头位框条紧框顶离格顶的上限（× 格高）。"""
+
+
 def _bar_like(patch) -> bool:
     """图块的墨是不是几乎全落在「满宽行」里（行墨 ≥ 0.5 图块宽的行占全部墨的 ≥ 85%）。"""
     if patch is None or getattr(patch, "size", 0) == 0:
@@ -86,6 +90,14 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc, max_h: float | None = N
     lim = max_h if (max_h is not None and slot < 1) else FRAME_BAR_MAX_H
     if not (h < lim * cc.period and w >= FRAME_BAR_MIN_W * col_w):
         return False
+    if max_h is not None and slot < 1:
+        # 书级口径下，抬头位的框条必须贴着格顶：框条在列图最上面（v010 实测 ≤0.25 格高），
+        # 抬头位里的真「一」在下面（v010 p65c2：一 起于 0.63 格高——上面那条内框线被
+        # end_rule_strip 剥掉后，紧框只剩一个「一」，矮而满宽，不加这条就被当框条判空）
+        cell = next((c for c in cc.cells if c.slot == slot and not c.sub), None)
+        top = cell.y0 if cell is not None else 0.0
+        if bbox[1] - top > RAISED_BAR_TOP * cc.period:
+            return False
     if h >= FRAME_BAR_MAX_H * cc.period and not _bar_like(patch):
         # 放宽出来的那一截（书级 raised_bar_max_h）只收「整块都是横条」的：
         # 全唐文抬头位有时框线下面带着下一格字的上半截（Step3 的抬头格压进了字身，
