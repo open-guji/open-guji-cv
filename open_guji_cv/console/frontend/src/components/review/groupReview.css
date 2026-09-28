@@ -5,7 +5,9 @@
 .grp-head { display: flex; align-items: baseline; gap: .8rem; margin-bottom: .3rem; }
 .grp-char { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.8rem; line-height: 1; }
 .grp-warn { font-size: .78rem; color: var(--ochre); margin-bottom: .5rem; }
-.grp-toolbar { display: flex; gap: .5rem; margin-bottom: .6rem; }
+.grp-toolbar { display: flex; gap: .5rem; margin-bottom: .6rem; align-items: center; }
+.grp-shape { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.2rem; width: 2.4rem; text-align: center; }
+.grp-shape.changed { border-color: var(--zhu); color: var(--zhu); }
 
 .grp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: .5rem; }
 .grp-tile { position: relative; border: 2px solid var(--ok); border-radius: 4px; padding: .2rem;
