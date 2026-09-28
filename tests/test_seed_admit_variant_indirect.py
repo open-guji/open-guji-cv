@@ -8,6 +8,8 @@
   都是这一对。
 - `冶`/`治`：twedu **单向直接边**（bxgb:52:11:15）。本闸只管间接路径，直接边行为不变：
   `ref_lib` 照旧被 `ref_lib_variant_guard` 拦，`match_replace` 照旧放。
+  （2026-09-28 overview#201：冶/治 登记进 `never_group.json`，语义层不再同义——
+  「单向直接边不变」改用 `𠮓`/`變` 钉，冶/治 与 沙/砂 另起一条钉「不再靠异体等价放行」。）
 """
 from __future__ import annotations
 
@@ -123,15 +125,32 @@ def test_direct_bidirectional_unchanged(tmp_path, monkeypatch):
 
 
 def test_one_way_direct_edge_unchanged(tmp_path, monkeypatch):
-    """冶→治（twedu 单向直接边）：ref_lib 照旧由 ref_lib_variant_guard 拦（不记
-    variant_indirect），margin 过线照旧放；match_replace 照旧放。"""
-    r = _run(tmp_path, monkeypatch, candidates=[("治", 0.9443), ("泊", 0.939)],
-             align_char="冶", margin=0.024)
+    """𠮓→變（单向直接边，D #178 单向桶里的新旧字形）：ref_lib 照旧由 ref_lib_variant_guard
+    拦（不记 variant_indirect），margin 过线照旧放；match_replace 照旧放。"""
+    assert _direct_variant_edge("𠮓", "變")
+    r = _run(tmp_path, monkeypatch, candidates=[("變", 0.9443), ("泊", 0.939)],
+             align_char="𠮓", margin=0.024)
     assert r.admit is False and "ref_lib_variant" in r.doubts
     assert "variant_indirect" not in r.doubts
-    r = _run(tmp_path / "m", monkeypatch, candidates=[("治", 0.9443), ("泊", 0.939)],
-             align_char="冶", margin=0.80)
-    assert r.admit is True and r.channel == "ref_lib" and r.char == "治"
-    r = _run(tmp_path / "r", monkeypatch, candidates=[("治", 0.9549), ("泊", 0.95)],
-             align_char="冶")
+    r = _run(tmp_path / "m", monkeypatch, candidates=[("變", 0.9443), ("泊", 0.939)],
+             align_char="𠮓", margin=0.80)
+    assert r.admit is True and r.channel == "ref_lib" and r.char == "變"
+    r = _run(tmp_path / "r", monkeypatch, candidates=[("變", 0.9549), ("泊", 0.95)],
+             align_char="𠮓")
     assert r.admit is True and r.channel == "match_replace"
+
+
+def test_never_group_pairs_no_longer_admitted_as_variants(tmp_path, monkeypatch):
+    """冶/治、沙/砂（overview#201 登记进 never_group）：语义层不再同义，库形与整理本字不同
+    就不能靠异体等价放行——D #178 的真错格 qtw v010:73:2:21（刻「沙」、整理本「砂」、
+    match_replace 按「砂」放行）就是这条路。"""
+    vm = VariantMap.load(None)
+    assert vm.semantic("冶") != vm.semantic("治")
+    assert vm.semantic("砂") != vm.semantic("沙")
+    for i, (lib, ref) in enumerate([("治", "冶"), ("沙", "砂")]):
+        r = _run(tmp_path / f"r{i}", monkeypatch, candidates=[(lib, 0.9549), ("泊", 0.95)],
+                 align_char=ref)
+        assert r.admit is False, (lib, ref, r.channel)
+        r = _run(tmp_path / f"m{i}", monkeypatch, candidates=[(lib, 0.9443), ("泊", 0.939)],
+                 align_char=ref, margin=0.80)
+        assert not (r.admit and r.channel == "ref_lib"), (lib, ref, r.char)

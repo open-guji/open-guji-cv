@@ -104,3 +104,101 @@ def test_empty_store_does_not_replay_history(tmp_path, monkeypatch):
     (tmp_path / "store").mkdir()
     r = replay_after_rebuild(tmp_path / "g.db", tmp_path / "store", tmp_path / "feedback")
     assert r["watermark"] is None and "skipped" in r
+
+
+# ── admit_candidate（待纳入裁决，overview#201）─────────────────────────────────
+
+def _cand(batch, seq, slot, v, ts, shape="以", **extra):
+    payload = {"v": v, "char": shape, "list": "t", "evidence": {}}
+    if v == "admit":
+        payload["shape"] = shape
+    return make_event(batch, seq, "admit_candidate",
+                      EventTarget(step="glyph_candidate", unit="cell", key=f"v006:1:1:{slot}",
+                                  book="v006", page=1, col=1, slot=slot),
+                      payload, ts=ts, **extra)
+
+
+def _chars(w):
+    db = GlyphDB(w / "output" / "glyph.db")
+    rows = dict(db.conn.execute("SELECT instance_id, char FROM admissions"))
+    prov = dict(db.conn.execute("SELECT instance_id, provenance FROM admissions"))
+    db.close()
+    return rows, prov
+
+
+def test_admit_candidate_admit_goes_in_like_confirm(ws):
+    # 水位线之前的裁决也要进：线上从来没有消费者吃过它
+    EventLog(ws / "feedback").append([
+        _cand("candidates-t", 1, 2, "admit", "2026-09-27T20:00:00Z", shape="以"),
+        _cand("candidates-t", 2, 3, "reject", "2026-09-27T23:30:00Z", shape="令"),
+        _cand("candidates-t", 3, 4, "unclear", "2026-09-27T23:31:00Z", shape="天")])
+    _rebuild()
+    chars, prov = _chars(ws)
+    assert chars == {"v2:v006:1:1:1": "之", "v2:v006:1:1:2": "以"}
+    assert prov["v2:v006:1:1:2"] == "human"
+
+
+def test_admit_candidate_latest_verdict_wins(ws):
+    EventLog(ws / "feedback").append([
+        _cand("candidates-t", 1, 2, "admit", "2026-09-27T23:00:00Z", shape="以"),
+        _cand("candidates-t", 2, 2, "reject", "2026-09-27T23:10:00Z", shape="以"),   # 改判不收
+        _cand("candidates-t", 3, 3, "reject", "2026-09-27T23:00:00Z", shape="令"),
+        _cand("candidates-t", 4, 3, "admit", "2026-09-27T23:10:00Z", shape="令")])   # 改判收
+    _rebuild()
+    chars, _ = _chars(ws)
+    assert chars == {"v2:v006:1:1:1": "之", "v2:v006:1:1:3": "令"}
+
+
+def test_admit_candidate_model_actor_skipped(ws):
+    # 非单字的字形在 EventLog.append 就被拒写了，到不了这里；机器写的裁决不重放
+    EventLog(ws / "feedback").append([
+        _cand("candidates-t", 2, 3, "admit", "2026-09-27T23:00:00Z", shape="令", actor="model")])
+    _rebuild()
+    chars, _ = _chars(ws)
+    assert chars == {"v2:v006:1:1:1": "之"}
+
+
+def test_admit_candidate_consumed_once_and_evicted_stays_out(ws):
+    from open_guji_cv.clustering.audit import evict_instance
+    from open_guji_cv.feedback.replay import replay_admit_candidates
+    log = EventLog(ws / "feedback")
+    log.append([_cand("candidates-t", 1, 2, "admit", "2026-09-27T20:00:00Z", shape="以")])
+    db_path = ws / "output" / "glyph.db"
+    r1 = replay_admit_candidates(db_path, ws / "feedback")
+    assert r1["to_admit"] == 1 and r1["result"]["added"] == 1
+    assert len(log.consumed_ids("glyphdb_admit")) == 1
+    r2 = replay_admit_candidates(db_path, ws / "feedback")        # 记过账：不再送
+    assert r2["to_admit"] == 0 and r2["already_consumed"] == 1
+    # 导出后被体检撤掉：rebuild 时它在水位线之前、已记账 → 不复活
+    db = GlyphDB(db_path)
+    db.admit_instance("v2:v006:1:1:5", "大", cv2.imencode(".png", _img(5))[1].tobytes(),
+                      provenance="human")
+    db.conn.execute("UPDATE admissions SET admitted_at='2026-09-27T22:30:00+00:00'")
+    evict_instance(db, "v2:v006:1:1:2")
+    db.conn.commit()
+    export_store(db, ws / "output" / "glyph_store")
+    db.close()
+    _rebuild()
+    assert "v2:v006:1:1:2" not in _ids(ws)
+
+
+def test_admit_candidate_after_watermark_replayed_even_if_consumed(ws):
+    """收了、记了账，但 rebuild 在导出之前：水位线之后的已记账裁决要补回来。"""
+    from open_guji_cv.feedback.replay import replay_admit_candidates
+    log = EventLog(ws / "feedback")
+    log.append([_cand("candidates-t", 1, 2, "admit", "2026-09-27T23:30:00Z", shape="以")])
+    replay_admit_candidates(ws / "output" / "glyph.db", ws / "feedback")
+    _rebuild()                                                    # 真源里还没有它
+    assert "v2:v006:1:1:2" in _ids(ws)
+    assert len(log.consumed_ids("glyphdb_admit")) == 1            # 不重复记账
+
+
+def test_admit_candidate_flip_after_admit_is_reported_not_evicted(ws):
+    from open_guji_cv.feedback.replay import replay_admit_candidates
+    log = EventLog(ws / "feedback")
+    log.append([_cand("candidates-t", 1, 2, "admit", "2026-09-27T23:00:00Z", shape="以")])
+    replay_admit_candidates(ws / "output" / "glyph.db", ws / "feedback")
+    log.append([_cand("candidates-t", 2, 2, "reject", "2026-09-27T23:40:00Z", shape="以")])
+    r = replay_admit_candidates(ws / "output" / "glyph.db", ws / "feedback")
+    assert r["admit_then_reject"] == ["v006:1:1:2"]
+    assert "v2:v006:1:1:2" in _ids(ws)
