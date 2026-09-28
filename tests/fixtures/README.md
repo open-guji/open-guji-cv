@@ -27,7 +27,19 @@ workspace/                 一个最小的工作区（布局同 core/workspace.p
   raw/keben/{1,2,3}.png    **真扫描页**，从 data/book1 复制（四庫全書簡明目錄，
                            黑白、已剪切半页、双层版框有界行、八列二十一字）
   corpus/reference.txt     17 KB 小语料，从 corpus/ 复制
+qtw_colend/                全唐文 v006–v010 列首/列尾格（overview#66，2026-09-28 S 道加）
+  cases.jsonl              用例：书/页/列/格、首尾、标签（residue/clean/frame_bar/raised_fragment）、
+                           线的内沿（列图坐标）与图块偏移；坏例好例各半，含难负例
+  *.patch.png              extractor 走到剥线这一步时原样的图块（剥线前，1-bit）
+  *.colrows.png            同几行的列图文字窗（「横贯文字窗」判据用，1-bit）
+  *.tight.png              抬头位两类用例的紧框字块（改前）
 ```
+
+`qtw_colend/` 的来历：main `c3e7ad6` 从原图重跑 Step1–4（沙箱），`scripts/eval_end_rule.py`
+挑出紧框压线的列端格当坏例、线距末字 3–60px 的当好例（各册固定随机种子 66），另加难负例
+（末字底部有宽横笔、线距 ≤80px）与手挑的特例（「一」压在线上、抬头位框条/字身残段）。
+**每张都人眼核过**（S 道逐张看叠图；用户在控制台复核前算「AI 核过」）。只给
+`tests/test_end_rule_strip.py` 用。
 
 为什么复制而不是直接指 `data/` 和 `corpus/`：那两个是生产数据，会换批、会
 重建；测试数据跟着它们变，就又回到「数据一变测试就红」。复制过来一共 1.2 MB，

@@ -113,6 +113,9 @@ def find_end_rule(patch: np.ndarray, cell_h: float, bottom: bool = True,
     if H < 8 or W < 16:
         return None
     closed = _hclose(b, CLOSE_W)
+
+    def _rows(a, e):               # 翻转坐标 → 图块原坐标（给 col_cov）
+        return (a, e) if bottom else (H - 1 - e, H - 1 - a)
     cov = closed.mean(axis=1)
     raw = b.mean(axis=1)
     z0 = int(H * (1 - ZONE))
@@ -137,8 +140,8 @@ def find_end_rule(patch: np.ndarray, cell_h: float, bottom: bool = True,
         core = np.flatnonzero(cov[a:e + 1] >= pk / 2) + a
         t = int(core[-1] - core[0] + 1)
         span = closed[a:e + 1].any(axis=0).mean()
-        if span < COV_T:
-            break                  # 不满宽：字的笔画，停
+        if span < COV_T and not (col_cov is not None and col_cov(*_rows(a, e)) >= COL_COV_T):
+            break                  # 不满宽：字的笔画，停（图块里的线常被前几道削短，列图上整条的也算）
         if prev_a is not None and raw[e + 1:prev_a].sum() > 0.25:
             break                  # 两段之间夹着别的墨，不是同一组框线
         if t <= RULE_MAX_T_PX:
@@ -156,8 +159,7 @@ def find_end_rule(patch: np.ndarray, cell_h: float, bottom: bool = True,
     ax = np.flatnonzero(above.any(axis=0)) if above.size else np.array([], int)
     wide = None
     if col_cov is not None:
-        pa, pb = (ya, yb) if bottom else (H - 1 - yb, H - 1 - ya)
-        wide = col_cov(pa, pb) >= COL_COV_T
+        wide = col_cov(*_rows(ya, yb)) >= COL_COV_T
     if wide is None and ax.size:
         m = OVERHANG * W
         wide = bool(xs_band[0] <= ax[0] - m and xs_band[-1] >= ax[-1] + m)
