@@ -229,7 +229,7 @@ class Engine:
                 return None
             out[kind] = sha
         # 带开关的可选上游（`StepSpec.optional_consumes_when`）开关关着时不进指纹
-        for kind in live_optional_consumes(step.spec, self.ctx.params_for(step)):
+        for kind in live_optional_consumes(step.spec, self.ctx.params_for(step), self.book):
             sha = self._upstream_sha(kind, page)
             if sha is not None:
                 out[kind] = sha
@@ -241,7 +241,7 @@ class Engine:
         把 `align_ref` 等标成 `upstream_stale`——它们这次根本不读 5-b。"""
         ups = self.pipeline.upstream(step.spec.id)
         off = set(step.spec.optional_consumes) - set(
-            live_optional_consumes(step.spec, self.ctx.params_for(step)))
+            live_optional_consumes(step.spec, self.ctx.params_for(step), self.book))
         if not off:
             return ups
         wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
