@@ -344,7 +344,7 @@ class SeedAdmitStep(Step):
         id="seed_admit", title="C1 进库准入", version="1.10", unit="cell",   # 1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("rare_candidates", "rare_agree"),),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -419,7 +419,8 @@ class SeedAdmitStep(Step):
             rec = _ex_records().get(iid, {})
             return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
-        ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
+        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
+                               if ctx.book.ocr_candidates else None)
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
         chars = _opt(ctx, "char_index", page)
 

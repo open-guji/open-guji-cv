@@ -111,6 +111,12 @@ class StepSpec:
     三步跟着过期——开关明明关着，全书 Step5-d～7 却要重跑。`ocr_candidates` 没有这个
     问题，是因为它关着时压根没跑、没有产物；5-b 是常开的。
 
+    开关名以 `@book.` 开头时读 `BookSpec` 的同名字段（书级开关不在步骤参数里）：
+    2026-09-29（K#238c）`ocr_candidates` 用 `("ocr_candidates", "@book.ocr_candidates")`
+    接书级 `ocr_candidates:`（缺省关）。选它而非把开关塞进 params：开关本来就是
+    书级、Engine 也读 `book.ocr_candidates`，一处真源，不必在三步的 params 里再造
+    一个会与之打架的字段（也就不会改 `params_hash`）。
+
     拓扑序与 `Pipeline.validate` 照旧按 `optional_consumes` 全量算（开关开的时候上游
     得排在前面），只有指纹（`Engine.upstream_shas`）与过期传播（`Engine.status`）
     看开关——见 `live_optional_consumes`。"""
@@ -181,12 +187,17 @@ class StepSpec:
     不是报错——宁可漏标（退化成串行）也不要错标。"""
 
 
-def live_optional_consumes(spec: StepSpec, params) -> tuple[str, ...]:
+def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:
     """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
     只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
     gates = dict(spec.optional_consumes_when)
-    return tuple(k for k in spec.optional_consumes
-                 if k not in gates or bool(getattr(params, gates[k], None)))
+
+    def _on(g: str) -> bool:
+        # `@book.<字段>`：开关在书级（`BookSpec`），不在步骤参数里（见 optional_consumes_when）
+        if g.startswith("@book."):
+            return bool(getattr(book, g[len("@book."):], False))
+        return bool(getattr(params, g, None))
+    return tuple(k for k in spec.optional_consumes if k not in gates or _on(gates[k]))
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────

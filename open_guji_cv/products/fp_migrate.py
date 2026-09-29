@@ -32,6 +32,12 @@ from ..core.spec import page_key
 from ..core.step import STEPS
 
 
+#: 指纹是「整体哈希」、没有 path_params 也没有老公式可回放的步：只能按新公式重写（`--trust`）。
+#: `rare_candidates`（K#238c）：`model_fingerprint` 进 `params_hash`，其中真刻例 store 路径
+#: 改成相对工作区根后，所有已有产物的指纹变一次。
+WHOLE_HASH_STEPS = frozenset({"rare_candidates"})
+
+
 def parse_old_paths(items: Iterable[str]) -> dict[str, dict[str, str]]:
     """`["glyph_match.db_path=/x/glyph.db", ...]` → {step: {field: 老值}}。"""
     out: dict[str, dict[str, str]] = {}
@@ -122,15 +128,16 @@ def rare_fingerprint_parts(eng: Engine) -> list[dict]:
     p = eng.ctx.params_for(step)
     parts = [{"name": "checkpoint(内容)", "value": cc.fingerprint(), "machine": False},
              {"name": "字体集(内容)", "value": font_set_fingerprint(), "machine": False},
-             {"name": "外部模板集 stamp", "value": cc.template_set_fingerprint(), "machine": True,
-              "note": "按目录存在与否/文件数取 stamp，两台机器数据不齐会不同"}]
+             {"name": "外部模板集 stamp", "value": cc.template_set_fingerprint(), "machine": False,
+              "note": "EMB_EXTRA_SPECS 自 2026-09-08 起为空元组，故恒为空输入的 sha1"
+                      "（da39a3ee…前 16 位）——是常量、不是 bug；将来填了 spec 才随机器数据变"}]
     en, specs = cc.book_real_proto(getattr(eng.book, "font", None))
     parts.append({"name": "real_proto 开关", "value": str(en), "machine": False})
     if en:
         for sp in specs:
-            parts.append({"name": "real_proto store 路径（进哈希）", "value": sp, "machine": True,
-                          "note": "real_proto_fingerprint 把 spec 原文（含绝对路径）拼进哈希，"
-                                  "云端与服务器工作区路径不同则指纹必不同"})
+            parts.append({"name": "real_proto store 标签（进哈希）",
+                          "value": cc._portable_store_label(sp), "machine": False,
+                          "note": "K#238c 起相对工作区根，同内容跨机器一致"})
         parts.append({"name": "real_proto 指纹", "value": cc.real_proto_fingerprint(specs, enabled=en),
                       "machine": True})
     if p.struct_probe:
@@ -155,11 +162,15 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
         step = STEPS[sid]
         if steps and sid not in steps:
             continue
-        if not step.spec.path_params:
+        whole = sid in WHOLE_HASH_STEPS
+        if not step.spec.path_params and not whole:
             if steps:      # 点了名的步不许静默
                 report[sid] = {"na": "无路径参数，不适用"}
             continue
         params = eng.ctx.params_for(step)
+        if whole and sid in old_paths:
+            report[sid] = {"na": f"{sid} 是整体哈希、没有老路径公式，只能 --trust，不接 --old-path"}
+            continue
         old_params = _old_params(step, params, old_paths[sid]) if sid in old_paths else None
         row = {"migrated": 0, "already": 0, "skipped": {}}
         if explain:
@@ -200,7 +211,13 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
             if sha is None or (entry.sha256 and entry.sha256 != sha):
                 skip("产物文件缺失或与条目记的 sha 不符", pg)
                 continue
-            if old_params is not None:
+            if whole:
+                # 整体哈希：没有「老公式」可重算来证明只变了路径，只剩 trust（上游 sha 与
+                # 产物文件 sha 已在上面查过）。不 trust 就一律不动。
+                if not trust:
+                    skip("整体哈希步只能 --trust 迁移（上游 sha 与产物文件 sha 已核）", pg)
+                    continue
+            elif old_params is not None:
                 old_fp, _ = _fp(step, eng.book, old_params, ups, path_in_hash=True)
                 if entry.fingerprint != old_fp:
                     skip("按老路径重算对不上（不只是路径变了，或 --old-path 给错）", pg)
