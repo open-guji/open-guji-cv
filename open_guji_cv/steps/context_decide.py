@@ -278,6 +278,11 @@ class ContextDecideStep(Step):
                    "open_guji_cv.clustering.recognize_flow",
                    "open_guji_cv.clustering.lm",
                    "open_guji_cv.utils.jiazhu_order"),
+        # 路径不进指纹（2026-09-29 K238）：`corpus` 缺省是仓内绝对路径（换机器就变），
+        # 内容由 `corpus_fingerprint` 把关（只认文件名 + 内容哈希）；`ai_evidence` 同理
+        # 有 `ai_evidence_fingerprint`；`llm_log_dir` 只是调用日志落哪，不影响产物。
+        # `variants` 没有内容指纹，故意不在此列。
+        path_params=("corpus", "general_corpus_dir", "ai_evidence", "llm_log_dir"),
     )
 
     def _decider(self, p: ContextDecideParams):
