@@ -229,7 +229,7 @@ v1 调用方不传这个字段，行为不变。
 
 ### 10.3 审查页
 
-https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb （同一 URL 重发，v6）：p49 保留用户已裁的「新版更好」；**105–108 已换成重切后的图，旧裁决是对作废的 banxin_edge 版下的，没沿用，请重裁**。快照 `artifacts/s266_s1_review.html`，A/B 映射 `artifacts/s266_s1_cards.jsonl`，生成脚本 `scripts/experiments/s266_tail_frame/build_review_s1.py`。
+https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb （同一 URL 重发，v6）：p49 保留用户已裁的「新版更好」；105–108 换成重切后的图后，**用户复看确认「图对了，裁决不变」**——四页都是新版（重切）更好。至此批次 (b) 5/5 页用户裁为新版更好，可以合；105–108 的数据修复仍需总管按 10.2 在工作区落地。快照 `artifacts/s266_s1_review.html`，A/B 映射 `artifacts/s266_s1_cards.jsonl`，生成脚本 `scripts/experiments/s266_tail_frame/build_review_s1.py`。
 
 ### 10.4 不确定、按保守做法处理的地方
 
