@@ -416,7 +416,12 @@ def adopt_run_tails(runs: dict[int, float], patches: dict[int, np.ndarray],
     tail_a: set[int] = set()
     if not runs:
         return runs, tail_a
-    for e in [i for i in sorted(runs) if i + 1 not in runs]:
+    # 收编成「漏拆行」的格本身又是段端，接着看它的下一格（2026-09-29，overview#266：vol03 p69c5
+    # 「山東巡撫／採進本」四行，第三行「巡本」量不出缝被收编成行，末行單字「撫」原先不再看、
+    # 当正文大字切）。收成單字尾的格不接着收——單字尾就是段的最后一行。
+    ends = [i for i in sorted(runs) if i + 1 not in runs]
+    while ends:
+        e = ends.pop(0)
         t = e + 1
         if t in runs or t not in patches:
             continue
@@ -452,6 +457,7 @@ def adopt_run_tails(runs: dict[int, float], patches: dict[int, np.ndarray],
                   and b_xs.max() - b_xs.min() + 1 <= MASS_W * w_full)
         if row_ok:
             runs[t] = float(runs[e])
+            ends.append(t)
         elif frac_a >= TAIL_A_FRAC and a_narrow and b_cc < ROW_B_CC:
             runs[t] = float(runs[e])
             tail_a.add(t)

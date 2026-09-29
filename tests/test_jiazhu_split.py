@@ -190,6 +190,30 @@ def test_adopt_run_tails_leaves_normal_body_char_alone():
     assert tail_a == set()
 
 
+def test_adopt_run_tails_chains_after_row_adoption():
+    """「山東巡撫／採進本」四行：第三行「巡本」量不出缝、被收成漏拆行，末行單字「撫」
+    要接着收成單字尾（vol03 p69c5，overview#266）。"""
+    row = _blank()
+    _box(row, 40, 85, 30, 80)
+    _box(row, 100, 160, 30, 80)
+    tail = _blank()
+    _box(tail, 100, W - 15, 20, 90)
+    patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: row, 6: tail}
+    runs, tail_a = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches)
+    assert set(runs) == {3, 4, 5, 6}
+    assert tail_a == {6}
+
+
+def test_adopt_run_tails_does_not_chain_after_single_char_tail():
+    """單字尾就是段的最后一行：收了單字尾之后，下一格即便也像單字尾也不再收。"""
+    tail = _blank()
+    _box(tail, 100, W - 15, 20, 90)
+    patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: tail, 6: tail.copy()}
+    runs, tail_a = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches)
+    assert set(runs) == {3, 4, 5}
+    assert tail_a == {5}
+
+
 def test_adopt_run_tails_skips_blank_cells():
     patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: _blank()}
     runs, _ = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches, eligible={3, 4})
