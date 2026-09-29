@@ -20,6 +20,8 @@ interface Props {
   onSet: (shape: string, done?: string) => void
   onSetNoGlyphLib: (checked: boolean) => void
   onSetGuess: (guess: string) => void
+  /** 无匹配（近似字）勾选与 IDS／备注（overview#276）。老调用方不传就不显示这一栏。 */
+  onSetApprox?: (patch: Pick<Verdict, 'approx' | 'approxIds' | 'approxNote'>) => void
   onToggleCtxImg: () => void
   onFetchRare: (force?: boolean) => void
   contextImgSrc: string
@@ -34,7 +36,7 @@ interface Props {
 
 export function ReviewCardView({
   idx, c, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
-  onFocus, onSet, onSetNoGlyphLib, onSetGuess, onToggleCtxImg, onFetchRare, contextImgSrc,
+  onFocus, onSet, onSetNoGlyphLib, onSetGuess, onSetApprox, onToggleCtxImg, onFetchRare, contextImgSrc,
   cls, jysOpen = false, onJysNone, ctxKeben = false,
 }: Props) {
   const v = verdict || { shape: '', done: '' }
@@ -42,6 +44,8 @@ export function ReviewCardView({
   // 所以本地 state 与 verdict 不会失步；不用受控于 prop。
   const [shapeInput, setShapeInput] = useState(v.shape || '')
   const [guessInput, setGuessInput] = useState(v.guess || '')
+  const [idsInput, setIdsInput] = useState(v.approxIds || '')
+  const [noteInput, setNoteInput] = useState(v.approxNote || '')
 
   const ocr = (c.ocr || []).slice(0, 2)
   const doubts = (c.doubts || []).map((d, i) => <div key={i} className="rvdoubt">⚠ {d}</div>)
@@ -112,7 +116,7 @@ export function ReviewCardView({
   }
 
   return (
-    <div id={`rvc${idx}`} className={`rvcard${isCurrent ? ' cur' : ''}`} data-done={v.done || ''} data-nolib={v.noGlyphLib ? '1' : ''}
+    <div id={`rvc${idx}`} className={`rvcard${isCurrent ? ' cur' : ''}`} data-done={v.done || ''} data-nolib={v.noGlyphLib ? '1' : ''} data-approx={v.approx ? '1' : ''}
          data-cls={cls || undefined} onClick={onFocus}>
       <div className="rvhead">
         <b className="rvsel">{c.id}</b><span className="muted">{c.channel || '待审'}</span>
@@ -121,11 +125,31 @@ export function ReviewCardView({
             印章遮挡 · {c.occluded.ref_blank ? '默认非字（整理本此位空）' : c.occluded.char ? `默认整理本字「${c.occluded.char}」` : '无默认字，请填'}
           </span>
         )}
+        {c.approx && (
+          <span className="rvapproxhit"
+                title={`库给的字靠的是近似例（无匹配·近似字）${c.approx.exemplar ? '：' + c.approx.exemplar : '：这个字在库里只有近似例'}`
+                  + `${c.approx.ids ? '\nIDS ' + c.approx.ids : ''}${c.approx.note ? '\n' + c.approx.note : ''}`}>近似</span>
+        )}
         <label className="rvnolib" title="字形有无法修复的噪声（污墨/裂纹等），这次选字正常裁决，但这张图不进字形库">
           <input type="checkbox" checked={!!v.noGlyphLib}
                  onChange={(e) => { e.stopPropagation(); onSetNoGlyphLib(e.target.checked) }} /> 字形不入库
         </label>
+        {onSetApprox && (
+          <label className="rvapprox" title="Unicode 里没有真正对应的字：所填的只是字形最像、意思最近的那个字。可展开填 IDS（实际结构）与备注">
+            <input type="checkbox" checked={!!v.approx}
+                   onChange={(e) => { e.stopPropagation(); onSetApprox({ approx: e.target.checked }) }} /> 无匹配（近似字）
+          </label>
+        )}
       </div>
+      {onSetApprox && v.approx && (
+        <div className="rvapproxin" onClick={(e) => e.stopPropagation()}>
+          <input className="rvapproxids" placeholder="IDS（可空），如 ⿰氵⿱艹日" value={idsInput}
+                 onChange={(e) => { setIdsInput(e.target.value); onSetApprox({ approxIds: e.target.value }) }}
+                 title="这一格实际刻的结构（表意文字描述序列），可空" />
+          <input className="rvapproxnote" placeholder="备注（可空）" value={noteInput}
+                 onChange={(e) => { setNoteInput(e.target.value); onSetApprox({ approxNote: e.target.value }) }} />
+        </div>
+      )}
       <div className="rvbody">
         <BinaryToggleImage
           src={c.patch} alt={c.id}

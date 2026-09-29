@@ -8,7 +8,7 @@ import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows } from './doubt'
 import { CLASS_HELP, classHelpKey, DEFAULT_HELP, dropOffScreen, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
-         nextGridState, pickVerdict, screenRows } from './reviewClass'
+         keepApprox, nextGridState, pickVerdict, screenRows } from './reviewClass'
 import type { GridState } from './reviewClass'
 import { ReplaceAlignGrid } from './ReplaceAlignGrid'
 import './review.css'
@@ -35,6 +35,11 @@ export interface Verdict {
   // done === 'damaged' 时：人看图后「最像的那个字」，可空。
   // **不是 shape**——shape 会进字形库，guess 只进金标与文本层的括注 □（？塊）。
   guess?: string
+  // 无匹配（近似字，overview#276）：Unicode 里没有真正对应的字，shape 只是字形最像、意思最近的。
+  // 勾上才展开 IDS／备注；事件 payload 多带 approx/ids/note（`reviewClass.approxFields`）。
+  approx?: boolean
+  approxIds?: string
+  approxNote?: string
 }
 
 const PREFETCH_CHUNK = 24
@@ -284,7 +289,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       verdicts.current[c.id] = pickVerdict(shape, prev, seen.current[c.id], now)
     } else {
       const dwell = prev?.dwell !== undefined ? prev.dwell : (seen.current[c.id] ? now - seen.current[c.id] : undefined)
-      verdicts.current[c.id] = { shape, done: doneIn, ts: now, dwell, noGlyphLib: prev?.noGlyphLib }
+      verdicts.current[c.id] = { shape, done: doneIn, ts: now, dwell, noGlyphLib: prev?.noGlyphLib, ...keepApprox(prev) }
     }
     touched.current.add(c.id)
     autoTouched.current.delete(c.id)
@@ -306,6 +311,17 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     if (!c) return
     const v = verdicts.current[c.id] || { shape: '', done: '' }
     verdicts.current[c.id] = { ...v, noGlyphLib: checked }
+    touched.current.add(c.id)
+    autoTouched.current.delete(c.id)
+    bump()
+  }
+
+  /** 近似字勾选与 IDS／备注（overview#276）：`patch` 只含改了的键，其余沿用。 */
+  function setApprox(i: number, patch: Pick<Verdict, 'approx' | 'approxIds' | 'approxNote'>) {
+    const c = cards[i]
+    if (!c) return
+    const v = verdicts.current[c.id] || { shape: '', done: '' }
+    verdicts.current[c.id] = { ...v, ...patch }
     touched.current.add(c.id)
     autoTouched.current.delete(c.id)
     bump()
@@ -619,6 +635,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               onSet={(shape: string, done?: string) => setVerdict(i, shape, done)}
               onSetNoGlyphLib={(checked: boolean) => setNoGlyphLib(i, checked)}
               onSetGuess={(g: string) => setGuess(i, g)}
+              onSetApprox={(patch) => setApprox(i, patch)}
               onToggleCtxImg={() => toggleCtxImg(i)}
               onFetchRare={(force?: boolean) => fetchRareFor(i, force)}
               contextImgSrc={contextImgUrl(book, c.page, c.col, c.slot)}

@@ -21,6 +21,8 @@ sys.path.insert(0, str(REPO))
 
 from open_guji_cv.errors import ProductMissing  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
+from open_guji_cv.render.approx import (APPROX_MODES, DEFAULT_APPROX_MODE,  # noqa: E402
+                                       book_marks, inline_ids_map, sidecar_rows, sidecar_tsv)
 from open_guji_cv.render.guji_markdown import render_page  # noqa: E402
 
 
@@ -29,15 +31,20 @@ def main() -> None:
     ap.add_argument("book")
     ap.add_argument("pages", nargs="+", type=int)
     ap.add_argument("--out", default=None, help="输出文件（缺省打印到 stdout）")
+    ap.add_argument("--approx", choices=APPROX_MODES, default=DEFAULT_APPROX_MODE,
+                    help="近似字（overview#276）：sidecar=正文照填、另出 <out>.approx.tsv（缺省）；"
+                         "inline_ids=正文括注 字{ids=…}；off=都不出")
     args = ap.parse_args()
 
     store = ProductStore()
+    marks = book_marks(store, args.book, args.pages) if args.approx != "off" else {}
+    inline = inline_ids_map(marks) if args.approx == "inline_ids" else None
     parts: list[str] = []
     stale: list[str] = []
     for page in args.pages:
         parts.append(f"#第{page}页")
         try:
-            parts.append(render_page(store, args.book, page, stale))
+            parts.append(render_page(store, args.book, page, stale, approx_ids=inline))
         except ProductMissing as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
@@ -56,6 +63,15 @@ def main() -> None:
         print(f"写入 {args.out}（{len(args.pages)} 页）")
     else:
         print(text, end="")
+    rows = sidecar_rows(marks, args.pages) if args.approx == "sidecar" else []
+    if rows:
+        tsv = sidecar_tsv(rows)
+        if args.out:
+            side = Path(args.out).with_suffix(Path(args.out).suffix + ".approx.tsv")
+            side.write_text(tsv, encoding="utf-8")
+            print(f"近似字侧表 {side}（{len(rows)} 处）")
+        else:
+            print(f"── 近似字侧表（{len(rows)} 处）──\n{tsv}", end="", file=sys.stderr)
 
 
 if __name__ == "__main__":

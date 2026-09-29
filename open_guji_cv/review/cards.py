@@ -427,6 +427,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "form": (r.evidence or {}).get("form"),
                     "doubts": r.doubts,
                     "occluded": occluded,
+                    # 靠近似例定的字（Step7 evidence.approx，overview#276）：卡片显示「近似」
+                    "approx": (r.evidence or {}).get("approx"),
                     "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
                            "wmax": round(mr.wmax, 1),
                            "candidates": mr.candidates[:5]} if mr else None,

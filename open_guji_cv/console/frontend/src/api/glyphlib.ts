@@ -30,16 +30,23 @@ export interface LibChar {
   char: string; cp: number | null; n: number; prov: Prov; semantic: string
   editions: string[]; in_font: boolean | null; also_in: string[]; fidelity: Record<string, number>
   font_sim?: number | null
+  /** 近似例个数（overview#276：人裁勾了「无匹配（近似字）」的刻例）；老后端不给。 */
+  approx?: number
 }
+
+/** 近似字侧表的一行（overview#276）。 */
+export interface LibApprox { ids: string | null; note: string | null; reviewer: string | null; created_at: string }
 
 export interface LibExemplar {
   instance_id: string; cell: string; edition: string; provenance: string; provenance_raw: string | null
   semantic: string | null; page: string; col: number; idx: number; duplicate: boolean
   admitted_at: string | null; event: string | null; fidelity: string | null; ids: string | null
+  approx?: LibApprox | null
 }
 
 export interface LibCharDetail {
   char: string; cp: number | null; ids: string | null
+  n_approx?: number
   heads: { edition: string; semantic: string | null; unicode_cp: number | null; status: string; n_confirmed: number }[]
   exemplars: LibExemplar[]
   fonts: { edition: string; instance_id: string }[]

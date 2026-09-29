@@ -210,6 +210,39 @@ def _has_col(c: sqlite3.Connection, table: str, col: str) -> bool:
     return any(r[1] == col for r in c.execute(f"PRAGMA table_info({table})"))
 
 
+def _has_table(c: sqlite3.Connection, name: str) -> bool:
+    return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def approx_exemplars(c: sqlite3.Connection, char: str | None = None) -> list[dict]:
+    """近似例（overview#276）：`approx_labels` JOIN 刻例——哪些**当模板用着的**刻例是「无匹配（近似字）」。
+
+    `char` 给了就只查这个字头（「某字有没有近似例」）；不给就全库。字体域不算（字体字形不会是近似例）。
+    库里没有近似字侧表（老库）→ 空列表。
+    """
+    if not _has_table(c, "approx_labels"):
+        return []
+    sql = ("SELECT g.char, g.edition_tag, x.instance_id, x.label, x.ids, x.note, x.reviewer, x.created_at "
+           "  FROM approx_labels x JOIN exemplars e ON e.instance_id = x.instance_id "
+           "  JOIN glyphs g ON g.glyph_id = e.glyph_id "
+           " WHERE g.edition_tag NOT LIKE 'font:%'")
+    args: tuple = ()
+    if char is not None:
+        sql += " AND g.char = ?"
+        args = (char,)
+    keys = ("char", "edition", "instance_id", "label", "ids", "note", "reviewer", "created_at")
+    return [dict(zip(keys, r)) for r in c.execute(sql + " ORDER BY g.char, x.instance_id", args)]
+
+
+def has_approx(db_path: str | Path, char: str) -> bool:
+    """某字有没有近似例（seed_admit 的近似字闸、控制台角标用同一口径）。"""
+    c = connect_ro(db_path)
+    try:
+        return bool(approx_exemplars(c, char))
+    finally:
+        c.close()
+
+
 def fidelity_of(label: str | None, semantic: str | None, stored: str | None) -> str | None:
     """实例的一致程度：人标的优先；没标但字形≠读法的，就是「有码异体」。"""
     if stored:
@@ -339,6 +372,7 @@ def char_table(db_path: str | Path) -> list[dict]:
         fcol = "fidelity" if _has_col(c, "instances", "fidelity") else "NULL"
         fid_of = {iid: f for iid, f in c.execute(
             f"SELECT instance_id, {fcol} FROM instances WHERE {fcol} IS NOT NULL")}
+        n_apx = Counter(r["char"] for r in approx_exemplars(c))
         for ch, iid, ed, p, sem in _book_rows(c):
             d = per[ch]
             if fid_of.get(iid):
@@ -359,6 +393,7 @@ def char_table(db_path: str | Path) -> list[dict]:
                 "editions": sorted(heads.get(ch, {})),
                 "in_font": ch in in_font if fe else None,
                 "fidelity": dict(d.get("fid") or {}),
+                "approx": n_apx.get(ch, 0),      # 近似例个数（overview#276）
             })
         out.sort(key=lambda r: (-r["n"], r["char"]))
         return out
@@ -374,6 +409,8 @@ def char_detail(db_path: str | Path, char: str) -> dict:
         fe = _font_editions(c)
         ex = []
         seen: set[str] = set()
+        apx = {r["instance_id"]: {k: r[k] for k in ("ids", "note", "reviewer", "created_at")}
+               for r in approx_exemplars(c, char)}
         fcol = "i.fidelity, i.ids" if _has_col(c, "instances", "fidelity") else "NULL, i.ids"
         for iid, ed, p, sem, page, col, idx, ev, at, lab, fid, ids in c.execute(
                 "SELECT e.instance_id, g.edition_tag, a.provenance, i.semantic, "
@@ -394,6 +431,7 @@ def char_detail(db_path: str | Path, char: str) -> dict:
                        "semantic": sem, "page": page, "col": col, "idx": idx,
                        "duplicate": k in seen, "admitted_at": at,
                        "fidelity": fidelity_of(lab, sem, fid), "ids": ids,
+                       "approx": apx.get(iid),
                        "event": evd.get("event") if isinstance(evd, dict) else None})
             seen.add(k)
         fonts = []
@@ -410,7 +448,7 @@ def char_detail(db_path: str | Path, char: str) -> dict:
                      "FROM glyphs WHERE char=? AND edition_tag NOT LIKE 'font:%'", (char,))]
         from .ids_guard import ids_of
         return {"char": char, "cp": ord(char) if len(char) == 1 else None,
-                "ids": ids_of(char) or None,
+                "ids": ids_of(char) or None, "n_approx": len(apx),
                 "heads": heads, "exemplars": ex, "fonts": fonts}
     finally:
         c.close()
