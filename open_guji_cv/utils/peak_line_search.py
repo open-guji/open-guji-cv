@@ -550,9 +550,49 @@ def find_vertical_lines(mask: np.ndarray, min_dist: int = 60, nms_percentile: fl
 
     if expected_count is not None and len(results) > expected_count:
         results = results[:expected_count]
+        results = _repair_fat_pick(mask, results, alpha, hyst)
 
     results.sort(key=lambda r: r.position)
     return results
+
+
+# ── 名额被字身假峰占掉、真线漏在双倍宽的缝里（2026-09-29，overview#266）──────────
+# vol03 p49：候选池里 9 条真线分数 500~600、半高宽 4px，第 10 个名额给了一条落在正文
+# 列正中的字身假峰（「漢以來惟」一串中竖，分数 15、半高宽 74px），把那一列劈成 100+88；
+# 真正的第 10 条线（x_new≈880，很细很淡）粗筛时就没出候选，所以别处留下一道 373px 的
+# 双倍宽缝。按分数截断看不出这种错。修法只对这一种形态动：选中的线里有「胖且弱」的
+# 假峰，去掉它之后恰好剩一道 1.8~2.25 倍中位列距的缝，并且在那道缝中段能精搜出一条细线，
+# 才拿细线换掉假峰；任何一条不满足就原样返回（其余页逐位不变）。
+FAT_WIDTH = 12.0          # 半高宽超过此（px）不是细界行（GRID_MAX_WIDTH 同一把尺）
+FAT_SCORE_FRAC = 0.1      # 分数不到其余线中位的这么多
+GAP_LO, GAP_HI = 1.8, 2.25
+GAP_MID_TOL = 0.25        # 在缝中点 ± 这么多倍列距里找
+REPAIR_SCORE_FRAC = 0.3   # 找到的线分数 ≥ 其余线中位的这么多才用
+
+
+def _repair_fat_pick(mask: np.ndarray, picks: list["LineMatch"], alpha: float, hyst: int
+                     ) -> list["LineMatch"]:
+    if len(picks) < 4:
+        return picks
+    med_score = float(np.median([r.score for r in picks]))
+    fat = [r for r in picks if r.width > FAT_WIDTH and r.score < FAT_SCORE_FRAC * med_score]
+    if len(fat) != 1:
+        return picks
+    rest = sorted((r for r in picks if r is not fat[0]), key=lambda r: r.position)
+    xs = [r.position for r in rest]
+    gaps = np.diff(xs)
+    pitch = float(np.median(gaps))
+    wide = [i for i, g in enumerate(gaps) if GAP_LO * pitch <= g <= GAP_HI * pitch]
+    if pitch <= 0 or len(wide) != 1 or any(g > GAP_HI * pitch for g in gaps):
+        return picks
+    i = wide[0]
+    mid = (xs[i] + xs[i + 1]) / 2.0
+    lo, hi = int(mid - GAP_MID_TOL * pitch), int(mid + GAP_MID_TOL * pitch)
+    cand = joint_search_coarse_to_fine(mask, "v", lo, hi, alpha=alpha, hyst=hyst)
+    rest_med = float(np.median([r.score for r in rest]))
+    if not (0.0 < cand.width <= FAT_WIDTH and cand.score >= REPAIR_SCORE_FRAC * rest_med):
+        return picks
+    return rest + [cand]
 
 
 def _vline_pool(mask: np.ndarray, min_dist: int, nms_percentile: float, edge_margin: int,

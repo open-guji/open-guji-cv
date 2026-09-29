@@ -31,6 +31,7 @@ class RowSegmentParams(BaseModel):
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
     cut_judge: str = "unet"              # 候选池裁判：unet（utils/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
+    detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
@@ -44,7 +45,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.11", unit="column",   # 1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.12", unit="column",   # 1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -120,6 +121,7 @@ class RowSegmentStep(Step):
                 pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                              if pg_ == page and c_ == gc.col} or None,
                 forced_solo=book_solo.get((page, gc.col)),
+                detect_bottom_bar=p.detect_bottom_bar,
                 **({} if slot_override is None or slot_override.uniform
                    else {"lam": NONUNIFORM_LAM}))
             if r is None:
@@ -146,7 +148,15 @@ class RowSegmentStep(Step):
                     quad_page=(None if mapper is None else
                                [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
                 ))
-            out.append(ColumnCells(ok=True, boundaries=[float(b) for b in r.boundaries],
+            flags: list[str] = []
+            if r.bottom_bar_y is not None:
+                # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
+                # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——
+                # 还给 Step2 的值，Step4 就在框下白纸上找框，找不到，框墨进图块。
+                flags.append(f"bottom_bar：下版框线在列图 y={r.bottom_bar_y:.0f}，"
+                             f"高出 border_bottom {base['border_bottom'] - r.bottom_bar_y:.0f} 行")
+                base = dict(base, border_bottom=float(r.bottom_bar_y))
+            out.append(ColumnCells(ok=True, boundaries=[float(b) for b in r.boundaries], flags=flags,
                                    cells=cells, cut_candidates=[
                                        CutPointCandidates(
                                            k=cp.k, y=cp.y, slot_above=cp.slot_above,
