@@ -270,7 +270,7 @@ class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
         consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("rare_candidates", "rare_topk"),),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
         produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
@@ -396,7 +396,8 @@ class ContextDecideStep(Step):
         p = _with_book_corpus(p, ctx)
         match: PageMatch = ctx.product("glyph_match", page)
         try:
-            ocr: PageOcr | None = ctx.product("ocr_candidates", page)
+            ocr: PageOcr | None = (ctx.product("ocr_candidates", page)
+                                   if ctx.book.ocr_candidates else None)
         except Exception:
             ocr = None                     # 没装引擎时只用库候选，不炸
         decider = self._decider(p)

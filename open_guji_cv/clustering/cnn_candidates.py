@@ -323,6 +323,23 @@ def _real_proto_file_fingerprint(jf: Path) -> str:
     return fp
 
 
+def _portable_store_label(spec: str) -> str:
+    """`store:<绝对路径>` → 进哈希的可移植标签：在工作区根（没设则引擎仓根）之下就写
+    `store:<相对路径>`，否则原样。
+
+    2026-09-29（K#238c）：`book_real_proto` 把相对路径拼成绝对路径才交给这里，绝对路径
+    进了哈希，云端 `/home/user/...` 与服务器 `/srv/...` 同内容也算出不同指纹，
+    `rare_candidates` 永远对不上。内容指纹（`_real_proto_file_fingerprint`）本来就跨机器
+    一致，路径前缀是唯一的机器差异。"""
+    from ..core.workspace import workspace_root
+    d = Path(spec.split(":", 1)[1])
+    base = workspace_root() or Path(__file__).resolve().parents[2]
+    try:
+        return "store:" + d.relative_to(base).as_posix()
+    except ValueError:
+        return spec
+
+
 def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None = None) -> str:
     """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的**内容** sha256 拼起来。
     目录缺席的 spec 不参与，一个都不参与（或总开关关着）时返回空串。
@@ -345,7 +362,7 @@ def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None
         if not d.exists():
             continue
         for jf in sorted(d.glob("*.jsonl")):
-            parts.append(f"{spec}/{jf.name}:{_real_proto_file_fingerprint(jf)}")
+            parts.append(f"{_portable_store_label(spec)}/{jf.name}:{_real_proto_file_fingerprint(jf)}")
     if not parts:
         return ""
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
