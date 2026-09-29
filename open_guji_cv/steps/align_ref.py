@@ -518,6 +518,8 @@ class AlignRefStep(Step):
                    "open_guji_cv.report.witness",
                    "open_guji_cv.clustering.variants",
                    "open_guji_cv.steps.align_ref_coord"),
+        # `corpus` 缺省是仓内绝对路径（2026-09-29 K238），内容由 `corpus_fingerprint` 把关。
+        path_params=("corpus",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

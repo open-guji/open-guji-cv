@@ -240,6 +240,9 @@ class GlyphMatchStep(Step):
         # 库指纹是**软参数**（2026-09-25，用户定）：库变了只报「漂移」不报过期，
         # 要重算点名格走 `guji recheck`。见模块头「库指纹：记录，不判过期」。
         soft_params=("db_fingerprint",),
+        # 库放哪是机器属性（2026-09-29 K238）：留空时 model_post_init 填本机绝对路径，
+        # 进了指纹云端整包导入服务器必判过期。内容由 db_fingerprint 把关（软参数）。
+        path_params=("db_path",),
     )
 
     def _matcher(self, p: GlyphMatchParams):
