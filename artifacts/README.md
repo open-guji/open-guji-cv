@@ -425,3 +425,9 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
 | **全唐文借库对照**（全唐文 × 四庫 vol03 同字字块 / 归一 64² / 库条目并排 + 两书分数表 + 预处理与自举实验）| https://claude.ai/artifact/LDgKH9riAki9tJKPjQyjtN | [qtw_libfail/review.html](qtw_libfail/review.html) | 见 `scripts/experiments/qtw_libfail/README.md`：`a8_review_data.py` → `build_review.py`；**重发布到同一 URL** |
+
+## 影子放行（Step7 D 道，vol03，2026-09-29，overview#269）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **vol03 影子≠现字 核对**（已放行格里影子≠现字 87 格 + 待审卡里影子≥0.95 且≠整理本 10 格；卡上不标哪个是影子，左右按 id 哈希打散）| https://claude.ai/artifact/AbZcW34aYjumsvN2V2Z6oU | [vol03_shadow_review.html](vol03_shadow_review.html)；卡片 id 冻结在 [vol03_shadow_review_cards.jsonl](vol03_shadow_review_cards.jsonl) | `scripts/experiments/shadow_admit/`：`extract_snap.py` → `vol03_eval.py` → `build_vol03_shadow_review.py`（命令见 overview#269 交单评论）；收回 `harvest_verdicts.py`。**发布覆盖同一 URL** |
