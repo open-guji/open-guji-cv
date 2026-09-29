@@ -257,12 +257,34 @@ class SeedAdmitParams(BaseModel):
     occluded_min_contrast: float = 2.5
     """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
 
+    approx_gate: bool = True
+    """匹配到的库例是**近似字**时不许自动放行（2026-09-29，overview#276；书级参数，缺省开）。
+
+    近似例 = 人裁时勾了「无匹配（近似字）」的刻例（`approx_labels` 侧表）：Unicode 里没有真正
+    对应的字，库里存的只是最像的那个码位。拿它当模板配上的格，字形「像」不等于就是那个字——
+    可能是同一个未收字（也该近似），也可能是真正的那个通行字。所以**只挪去人审、不改字**：
+    `admit=False`、`doubts` 记 `approx_exemplar`，`char` 仍是原来要放的那个字（人审卡的首选）。
+
+    判「匹配到近似例」两种情形，都要求放行的字就是库给的字（整理本/上下文定的字不受影响）：
+    库判 same 命中的那一例（`matched_id`）是近似例；或库判 unsure 走候选首位时，这个字在库里
+    的刻例**全部**是近似例。人裁位照旧一票定案。书 yaml `params: {seed_admit: {approx_gate: false}}` 关。
+    """
+    approx_fingerprint: str = ""
+    """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
-        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
+
+        `approx_gate`／`approx_fingerprint` 同理（overview#276）：闸关着、或库里一条近似例都没有
+        时，这道闸不可能改变任何判决，两个字段都不进 dump——没用上近似字的书产物不过期。
+        """
         d = handler(self)
         if isinstance(d, dict) and not self.rare_agree:
             d.pop("rare_agree", None)
+        if isinstance(d, dict) and not (self.approx_gate and self.approx_fingerprint):
+            d.pop("approx_gate", None)
+            d.pop("approx_fingerprint", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -303,6 +325,8 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+        if self.approx_gate and not self.approx_fingerprint:
+            object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -416,6 +440,9 @@ class SeedAdmitStep(Step):
         iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
         # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
         occ = _occluded(ctx, page, match, p, amap) if p.occluded_gate else {}
+        # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
+        apx_ids, apx_only = (_approx_index(p.db_path) if p.approx_gate and p.approx_fingerprint
+                             else (frozenset(), frozenset()))
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -791,6 +818,11 @@ class SeedAdmitStep(Step):
                             and not (align_char and vm_here.semantic(align_char)
                                      != vm_here.semantic(_top))):
                         ok, channel, char, prov = True, "lib_confident", _top, "match"
+                # 近似字闸（overview#276）：放行的字就是库给的字、而库给它的依据是近似例 → 人审。
+                # 放在所有通道之后：只会把格从放行挪到待审，不改字、不会反过来。
+                if ok and (apx_ids or apx_only) and _approx_hit(r, char, apx_ids, apx_only):
+                    ok, channel, prov = False, None, ""
+                    doubts.append("approx_exemplar")
                 if ok:
                     n_auto += 1
                 else:
@@ -1167,6 +1199,51 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             else:
                 out[r.id] = (dens, None, "none")
     return out
+
+
+def _approx_fingerprint(db_path: str) -> str:
+    """近似字侧表的内容戳；库不存在、没有这张表、表空 → ""（见 `SeedAdmitParams.approx_gate`）。"""
+    import hashlib
+    import sqlite3
+    from pathlib import Path
+    if not db_path or not Path(db_path).exists():
+        return ""
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            rows = c.execute("SELECT instance_id, label FROM approx_labels ORDER BY instance_id").fetchall()
+    except sqlite3.Error:
+        return ""
+    if not rows:
+        return ""
+    return f"{len(rows)}:" + hashlib.sha256(repr(rows).encode("utf-8")).hexdigest()[:12]
+
+
+@lru_cache(maxsize=4)
+def _approx_index_cached(db_path: str, _fp: str) -> tuple[frozenset[str], frozenset[str]]:
+    import sqlite3
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+        ids = frozenset(r[0] for r in c.execute("SELECT instance_id FROM approx_labels"))
+        # 刻例全是近似例的字（按字头算，跨 edition 合并；字体域不算——它们不会是近似例，
+        # 算进去反而让「全是近似」永远不成立）
+        only = frozenset(r[0] for r in c.execute(
+            "SELECT g.char FROM exemplars e JOIN glyphs g USING(glyph_id) "
+            " WHERE g.edition_tag NOT LIKE 'font:%' GROUP BY g.char "
+            "HAVING sum(e.instance_id IN (SELECT instance_id FROM approx_labels)) = count(*)"))
+    return ids, only
+
+
+def _approx_index(db_path: str) -> tuple[frozenset[str], frozenset[str]]:
+    return _approx_index_cached(db_path, _approx_fingerprint(db_path))
+
+
+def _approx_hit(r, char: str | None, apx_ids: frozenset[str], apx_only: frozenset[str]) -> bool:
+    """这一格要放的字是不是**靠近似例**得来的（见 `SeedAdmitParams.approx_gate`）。"""
+    if not char:
+        return False
+    if r.verdict == "same" and r.char == char and r.matched_id in apx_ids:
+        return True
+    lib_top = r.char or (r.candidates[0][0] if r.candidates else None)
+    return lib_top == char and char in apx_only
 
 
 def _rare_agree(match_rec, cnn: list[str] | None) -> dict:

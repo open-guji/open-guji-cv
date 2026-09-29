@@ -6,6 +6,7 @@ import type { ReviewCardGroup } from '../../types/review'
 import './groupReview.css'
 import { ClusterGrid } from './ClusterGrid'
 import { groupCellIds, groupRows } from './clusterRows'
+import { approxFields } from './reviewClass'
 
 // 按字种批审（任务书-C-待审卡按字种批审，2026-09-27）：一个字种一屏，图块
 // 网格显示，缺省全选，点掉不对的再一键提交——积累本书字形最高效的办法。
@@ -30,6 +31,9 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
   const [submitting, setSubmitting] = useState(false)
   // 组内「定为」的字，按组下标存；没改过就用组的首选字。
   const [override, setOverride] = useState<Record<number, string>>({})
+  // 「无匹配（近似字）」（overview#276）：按组下标存，整组选中的格共用一份 IDS／备注。
+  type Approx = { approx: boolean; approxIds?: string; approxNote?: string }
+  const [approx, setApprox] = useState<Record<number, Approx>>({})
 
   const batch = () => `${book}-${pages || 'dev_set'}-decide`
 
@@ -42,6 +46,7 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
       setIdx(0)
       setDropped({})
       setOverride({})
+      setApprox({})
       setMsg(d.groups.length
         ? `${d.groups.length} 个字种 · 待审共 ${d.n_total} 格`
           + (d.cluster ? ` · 按形聚成 ${d.cluster.n_clusters} 簇，每簇一张代表图（余弦 ≥ ${d.cluster.thr}）` : '')
@@ -58,6 +63,12 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
 
   function setShape(v: string) {
     setOverride((prev) => ({ ...prev, [idx]: v }))
+  }
+
+  const apx: Approx = approx[idx] || { approx: false }
+
+  function patchApprox(p: Partial<Approx>) {
+    setApprox((prev) => ({ ...prev, [idx]: { ...(prev[idx] || { approx: false }), ...p } }))
   }
 
   function setHere(next: Set<string>) {
@@ -81,13 +92,13 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
     if (!g) return
     if (!shape) { setMsg('「定为」是空的：填上这组的正确字再提交，或去「定字裁决」逐格看'); return }
     if ([...shape].length !== 1) { setMsg(`「定为」只填一个字（现在是「${shape}」）`); return }
-    const rows = groupRows(g, droppedHere, shape, Date.now())
+    const rows = groupRows(g, droppedHere, shape, Date.now(), approxFields(apx))
     if (!rows.length) { setMsg('这组全点掉了，没有可提交的'); return }
     setSubmitting(true)
     setMsg('提交中…')
     try {
       const r = await postEvents({ batch: batch(), step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
-      setMsg(`已写入 ${r.appended ?? rows.length} 条事件，定为「${shape}」（批次 ${batch()}）`
+      setMsg(`已写入 ${r.appended ?? rows.length} 条事件，定为「${shape}」${apx.approx ? '（近似字）' : ''}（批次 ${batch()}）`
         + consumedMsg(r) + `；跳过 ${groupCellIds(g).length - rows.length} 格`)
       // 这一组处理完了：从列表里摘掉，其余组下标随之前移，不必手动翻页。
       const thisIdx = idx
@@ -104,6 +115,7 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
       }
       setDropped(shift)
       setOverride(shift)
+      setApprox(shift)
       setIdx(Math.min(thisIdx, Math.max(0, nextGroups.length - 1)))
     } catch (e) {
       setMsg('提交失败：' + (e as Error).message)
@@ -168,6 +180,17 @@ export function GroupReviewPanel({ book, pages }: { book: string; pages: string 
               定为 <input className={'grp-shape' + (changed ? ' changed' : '')} value={override[idx] ?? g.char ?? ''}
                 onChange={(e) => setShape(e.target.value)} size={2} />
             </label>
+            <label className="muted grp-approx" title="Unicode 里没有真正对应的字：「定为」的只是字形最像、意思最近的那个字">
+              <input type="checkbox" checked={apx.approx} onChange={(e) => patchApprox({ approx: e.target.checked })} /> 无匹配（近似字）
+            </label>
+            {apx.approx && (
+              <>
+                <input className="grp-approx-ids" placeholder="IDS（可空）" value={apx.approxIds || ''}
+                       onChange={(e) => patchApprox({ approxIds: e.target.value })} size={10} />
+                <input className="grp-approx-note" placeholder="备注（可空）" value={apx.approxNote || ''}
+                       onChange={(e) => patchApprox({ approxNote: e.target.value })} size={12} />
+              </>
+            )}
             {g.ref_char && shape !== g.ref_char && (
               <button onClick={() => setShape(g.ref_char!)}>用整理本「{g.ref_char}」</button>
             )}

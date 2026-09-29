@@ -28,6 +28,12 @@ pull 下来之后 db 并不知道，下一轮导出就把这 14 行和 patch 当
 `export_store` 是整份覆盖。导出前算「这次会从 store 删掉哪些实例」，只有 db 的 `evictions` 撤例审计
 （`evict_instance` 写）或体检台账 `glyph_selfcheck/decisions.jsonl` 的撤库裁决能解释的才放行，
 其余一律拒绝导出（宁可不同步，也不删数据）。
+
+## 近似字侧表（2026-09-29，overview#276）
+`approx_labels` 一行挂在一个实例上，算进这个实例的「记录」（`Rec.apx`）：别人标了近似、db 没动
+→ 照 theirs 装；别人撤了近似 → 照 theirs 删；两边都动过 → 同样按时间戳（`created_at` 与撤销审计
+`approx_clears.at`）。删除护栏同样管它：实例留着、近似标记却要从 store 消失的，必须有 db 的
+`approx_clears`（或撤例审计）能解释，否则整本拒绝导出（`unexplained_approx_deletions`）。
 """
 from __future__ import annotations
 
@@ -120,11 +126,14 @@ class Rec:
     patch: str | None = None
     ex: tuple = ()
     adm: dict | None = None
+    apx: dict | None = None             # 近似字侧表那一行（overview#276）
+    apx_cleared: str | None = None      # 最近一次撤近似标记的时间（只参与 stamp，不算内容）
 
     def key(self) -> tuple:
         return (json.dumps(self.inst, sort_keys=True, ensure_ascii=False),
                 self.patch, self.ex,
-                json.dumps(self.adm, sort_keys=True, ensure_ascii=False))
+                json.dumps(self.adm, sort_keys=True, ensure_ascii=False),
+                json.dumps(self.apx, sort_keys=True, ensure_ascii=False))
 
     def __eq__(self, other) -> bool:
         return isinstance(other, Rec) and self.key() == other.key()
@@ -136,6 +145,7 @@ class Rec:
     def stamp(self) -> datetime | None:
         ts = [(self.adm or {}).get("admitted_at"), (self.inst or {}).get("updated_at")]
         ts += [e[3] for e in self.ex]
+        ts += [(self.apx or {}).get("created_at"), self.apx_cleared]
         ds = [d for d in map(parse_ts, ts) if d]
         return max(ds) if ds else None
 
@@ -172,6 +182,12 @@ def store_records(st: TreeStore, with_patch: bool = True) -> dict[str, Rec]:
         recs.setdefault(iid, Rec()).ex = tuple(sorted(rows))
     for r in st.jsonl("admissions.jsonl"):
         recs.setdefault(r["instance_id"], Rec()).adm = r
+    for r in st.jsonl("approx_labels.jsonl"):
+        recs.setdefault(r["instance_id"], Rec()).apx = r
+    for r in st.jsonl("approx_clears.jsonl"):
+        rec = recs.get(r["instance_id"])
+        if rec is not None and (rec.apx_cleared or "") < (r.get("at") or ""):
+            rec.apx_cleared = r.get("at")
     if with_patch:
         for iid, rec in recs.items():
             if rec.inst is not None:
@@ -200,6 +216,13 @@ def db_record(conn: sqlite3.Connection, iid: str) -> Rec:
             rec.inst = _norm_inst(d)
         adm = conn.execute("SELECT * FROM admissions WHERE instance_id=?", (iid,)).fetchone()
         rec.adm = dict(adm) if adm else None
+        try:
+            apx = conn.execute("SELECT * FROM approx_labels WHERE instance_id=?", (iid,)).fetchone()
+            rec.apx = dict(apx) if apx else None
+            clr = conn.execute("SELECT max(at) FROM approx_clears WHERE instance_id=?", (iid,)).fetchone()
+            rec.apx_cleared = clr[0] if clr else None
+        except sqlite3.OperationalError:
+            pass                                        # 老库没有近似字侧表
         return rec
     finally:
         conn.row_factory = None
@@ -226,18 +249,20 @@ class MergeReport:
     kept_ours: list = field(default_factory=list)     # 两边都改、留了 db 的
     took_theirs: list = field(default_factory=list)   # 两边都改、取了上游的
     evictions_merged: int = 0
+    approx_clears_merged: int = 0
 
     def summary(self) -> dict:
         return {"changed_upstream": self.changed_upstream, "added": len(self.added),
                 "updated": len(self.updated), "evicted": len(self.evicted),
                 "already": self.already, "conflict_kept_ours": self.kept_ours[:20],
                 "conflict_took_theirs": self.took_theirs[:20],
-                "evictions_merged": self.evictions_merged}
+                "evictions_merged": self.evictions_merged,
+                "approx_clears_merged": self.approx_clears_merged}
 
     @property
     def touched(self) -> bool:
         return bool(self.added or self.updated or self.evicted or self.took_theirs
-                    or self.evictions_merged)
+                    or self.evictions_merged or self.approx_clears_merged)
 
 
 def _recount(cur, gids) -> None:
@@ -261,7 +286,7 @@ def _install(db, st: TreeStore, iid: str, rec: Rec, glyph_rows: dict, source_row
     cur = db.conn.cursor()
     old_gids = [r[0] for r in cur.execute("SELECT glyph_id FROM exemplars WHERE instance_id=?",
                                           (iid,))]
-    for t in ("admissions", "exemplars", "derived", "instances"):
+    for t in ("approx_labels", "admissions", "exemplars", "derived", "instances"):
         cur.execute(f"DELETE FROM {t} WHERE instance_id=?", (iid,))
     patch = st.files.get(f"patches/{iid.replace(':', '_')}.png")
     if rec.inst is not None and patch:                  # 没图块的实例行不装（同 rebuild_from_store）
@@ -296,6 +321,10 @@ def _install(db, st: TreeStore, iid: str, rec: Rec, glyph_rows: dict, source_row
         a = rec.adm
         cur.execute(f"INSERT OR REPLACE INTO admissions ({','.join(a)}) "
                     f"VALUES ({','.join('?' * len(a))})", tuple(a.values()))
+    if rec.apx is not None and rec.inst is not None and patch:
+        x = rec.apx
+        cur.execute(f"INSERT OR REPLACE INTO approx_labels ({','.join(x)}) "
+                    f"VALUES ({','.join('?' * len(x))})", tuple(x.values()))
     _recount(cur, set(old_gids) | set(new_gids))
 
 
@@ -349,6 +378,10 @@ def merge_upstream(db, repo: Path, base_tree: str, cur_tree: str) -> MergeReport
         c.execute("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) VALUES (?,?,?,?)",
                   (r["instance_id"], r.get("char"), r.get("reason"), r["at"]))
         rep.evictions_merged += c.rowcount
+    for r in cur.jsonl("approx_clears.jsonl"):
+        c.execute("INSERT OR IGNORE INTO approx_clears (instance_id, label, at) VALUES (?,?,?)",
+                  (r["instance_id"], r.get("label"), r["at"]))
+        rep.approx_clears_merged += c.rowcount
     db.conn.commit()
     return rep
 
@@ -417,6 +450,38 @@ def unexplained_deletions(db_path: Path, conn: sqlite3.Connection, store_dir: Pa
             ts.append(sc[iid] or datetime.max.replace(tzinfo=timezone.utc))
         ts = [t for t in ts if t]
         if not ts or (admitted and max(ts) < admitted):
+            bad.append(iid)
+    return {"planned": len(planned), "explained": len(planned) - len(bad),
+            "unexplained": sorted(bad)}
+
+
+def unexplained_approx_deletions(conn: sqlite3.Connection, store_dir: Path) -> dict:
+    """近似字的删除护栏（overview#276）：{"planned": n, "explained": n, "unexplained": [id, ...]}。
+
+    只管「实例还会导出、近似标记却要从 store 消失」的那些（实例整个被删由 `unexplained_deletions`
+    管）。准删 = db 的 `approx_clears` 或撤例审计里有它，且时间不早于 store 里那条近似的 `created_at`。
+    """
+    st = DirStore(store_dir)
+    rows = {r["instance_id"]: r for r in st.jsonl("approx_labels.jsonl")}
+    if not rows:
+        return {"planned": 0, "explained": 0, "unexplained": []}
+    try:
+        have = {r[0] for r in conn.execute("SELECT instance_id FROM approx_labels")}
+    except sqlite3.OperationalError:
+        have = set()
+    keep = db_export_ids(conn)
+    planned = [iid for iid in rows if iid not in have and iid in keep]
+    bad = []
+    for iid in planned:
+        created = parse_ts(rows[iid].get("created_at"))
+        ts = [db_evicted_at(conn, iid)]
+        try:
+            ts += [parse_ts(r[0]) for r in conn.execute(
+                "SELECT at FROM approx_clears WHERE instance_id=?", (iid,))]
+        except sqlite3.OperationalError:
+            pass
+        ts = [t for t in ts if t]
+        if not ts or (created and max(ts) < created):
             bad.append(iid)
     return {"planned": len(planned), "explained": len(planned) - len(bad),
             "unexplained": sorted(bad)}

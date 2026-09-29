@@ -111,9 +111,14 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
                     else p.get("quality") or "contaminated")
             out[e.target.key] = {"shape": p.get("shape") or "", "done": done}
         elif v == "confirm":
-            out[e.target.key] = {"shape": p.get("shape") or "",
-                                 "done": "1",
-                                 "noGlyphLib": bool(p.get("no_glyph_lib"))}
+            d = {"shape": p.get("shape") or "",
+                 "done": "1",
+                 "noGlyphLib": bool(p.get("no_glyph_lib"))}
+            # 无匹配（近似字，overview#276）：勾选与 IDS／备注要读回，否则刷新后勾选丢了、人以为没勾
+            # 又勾一遍。没带 `approx` 的老事件不加任何键——形状与原来逐字相同。
+            if p.get("approx"):
+                d.update(approx=True, approxIds=p.get("ids") or "", approxNote=p.get("note") or "")
+            out[e.target.key] = d
     return {"batch": batch, "n": len(out), "verdicts": out}
 
 
