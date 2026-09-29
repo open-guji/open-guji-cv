@@ -120,7 +120,7 @@ def cmd_fp_migrate(args) -> None:
     try:
         with book_run_lock(eng.book.id, wait=False):
             rep = migrate_book(eng, pages, old_paths=old, trust=args.trust,
-                               apply=args.apply, steps=steps)
+                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False))
     except (RunLockHeld, ValueError) as e:
         print(f"✗ {e}", file=sys.stderr)
         sys.exit(3)
@@ -129,10 +129,23 @@ def cmd_fp_migrate(args) -> None:
         return
     print(f"{eng.book.id} · {eng.pipeline.id if hasattr(eng.pipeline, 'id') else args.pipeline} · "
           f"{len(pages)} 页 · {'已写入' if args.apply else '干跑（加 --apply 才写）'}")
+    from .products.fp_migrate import format_diff, rare_fingerprint_parts
     for sid, r in rep.items():
+        if "na" in r:
+            print(f"  {sid:16s} {r['na']}")
+            if getattr(args, 'explain', False) and sid == "rare_candidates":
+                print("      ↳ 指纹分量（★=可能随机器变）：")
+                for part in rare_fingerprint_parts(eng):
+                    print(f"        {'★' if part['machine'] else ' '} {part['name']}: {part['value']}"
+                          + (f"  —— {part['note']}" if part.get("note") else ""))
+            continue
         print(f"  {sid:16s} 改写 {r['migrated']:3d}  本来就新 {r['already']:3d}")
         for why, n in sorted(r["skipped"].items(), key=lambda kv: -kv[1]):
             print(f"      ↳ 跳过 {n:3d} 页：{why}")
+        for pg, d in sorted(r.get("detail", {}).items()):
+            print(f"        p{pg:04d} {d['why']}")
+            for df in d["diffs"]:
+                print(f"            · {format_diff(df)}")
 
 
 def cmd_recheck(args) -> None:
@@ -2047,6 +2060,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="不验老指纹（老路径说不清时）：只查上游 sha 与产物 sha。"
                         "发现不了代码/参数变了，慎用")
     p.add_argument("--apply", action="store_true", help="真写 manifest（缺省干跑）")
+    p.add_argument("--explain", action="store_true",
+                   help="对每个被跳过的页打印 manifest 记录的 upstream 与现算 upstream 的逐键差异"
+                        "（键、两边 sha、现由哪个步产出、记录的 sha 现对应哪个步的产物）；"
+                        "--steps 点到 rare_candidates 时另列其指纹里随机器变的分量")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("console", help="[v2] 启动控制台（FastAPI）")
