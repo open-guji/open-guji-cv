@@ -3,6 +3,11 @@
 任务卡：open-guji-core/overview#276 · 分支 `claude/H-approx-0929`（基于 main `3e33b13`，未推 main）
 无人值守完成：拿不准的地方按保守做法走，列在最后「拿不准」一节，请总管/用户过目。
 
+> **09-29 更新：已按用户对 overview#277 的裁定改（总管转达）**——① 选 C：近似例照常参与自动放行，
+> seed_admit 书级开关缺省改为**不拦**，靠近似例定下来的格在产物 `evidence.approx` 标注、进侧表、控制台卡片显示「近似」；
+> ② 选 A：正文照填，侧表 `页:列:格 → 字 / ids / note / 来源（human=人裁近似 / matched=匹配到近似例）`。
+> 下面第 6 节与测试数已是改后的状态。
+
 ## 一、改了什么
 
 ### 1. 前端（tsc 通过，`npm run build` 已重出 `console/static/dist/`）
@@ -13,7 +18,8 @@
   按组下标存，切组不丢，提交后随组一起摘掉。
 - 事件行统一走 `reviewClass.approxFields`：**不勾时一个键都不加**，事件逐字段与原来相同（node 用例钉住）。
 - `review/verdict_view.py::review_verdicts` 读回 `approx/approxIds/approxNote`，刷新不丢；老事件的读回形状逐键不变。
-- 待审卡 doubt 码 `approx_exemplar` 加中文名「配上近似例」与悬停说明（`doubt.ts`）。
+- 待审卡 doubt 码 `approx_exemplar` 加中文名「配上近似例」与悬停说明（`doubt.ts`，只在开闸时出现）。
+- 卡片（`review/cards.py` 多出 `approx` 字段 = Step7 `evidence.approx`）：卡头显示「近似」标签，悬停看命中的库例与 IDS/备注。
 
 ### 2. 事件
 `confirm` 的 payload（仅 `v=confirm`）多带 `approx: true`，可选 `ids`、`note`（空串不写）。不带这些键的老事件行为完全不变——
@@ -51,22 +57,25 @@ approx_clears(instance_id, label, at, PK(instance_id, at))   -- 撤销审计，�
 - 控制台字形库页：字表格子左上角「近」角标 + 悬停计数 + 过滤项「含近似例」；单字页标题「近似例 N」、刻例图块角标「近」
   与悬停里的 IDS/备注。
 
-### 6. 两个开关（用户在 overview#277 未定，按保守默认）
-- **seed_admit 近似字闸** `SeedAdmitParams.approx_gate`（缺省 **开**；书 yaml `params: {seed_admit: {approx_gate: false}}` 关）：
-  放行的字就是库给的字，且 ① 库判 same 命中的 `matched_id` 是近似例，或 ② 走候选首位、而这个字在库里的刻例**全部**是
-  近似例 → 挪去人审（`admit=False`、doubt `approx_exemplar`、`char` 不改，人审卡首选仍是它）。放在所有通道之后，只会
-  放行→待审，不会反过来；人裁位照旧一票定案。整理本/上下文定的字（`lib_top != char`）不受影响。
-  `approx_fingerprint` 自动填（表内容戳）；**闸关着或库里没有近似例时这两个字段不进 `model_dump`**，参数哈希与加字段前
-  逐位相同（同 `rare_agree` 的做法）。
-- **文本出法** `render/approx.py`：缺省 `sidecar`——正文照填，另出侧表 `页:列:格 → 字 / ids / note`；预留 `inline_ids`
-  （正文 `字{ids=…}`，没填 IDS 不括注）与 `off`。接到 `scripts/render_guji_markdown.py --approx`（侧表写 `<out>.approx.tsv`，
-  无 `--out` 时打到 stderr）与 `/api/step9/render?approx=`（响应多 `approx` 行）。标记从**事件**读（「字形不入库」的格也要有）。
+### 6. 两个开关（用户 09-29 已裁定 overview#277：C + A）
+- **seed_admit** `SeedAdmitParams.approx_gate`（缺省 **关 = 不拦**）：判「这一格的字靠近似例」——放行的字就是库给的字，且
+  ① 库判 same 命中的 `matched_id` 是近似例（`via="matched_id"`），或 ② 走候选首位、而这个字在库里的刻例**全部**是近似例
+  （`via="char_only"`）。命中时在 `evidence.approx` 记 `{source:"matched", via, exemplar, ids, note}`（取命中库例的 ids/note），
+  照常放行；书 yaml `params: {seed_admit: {approx_gate: true}}` 打开后退回保守做法（`admit=False`、doubt `approx_exemplar`、字不改）。
+  整理本/上下文定的字不算；人裁位照旧一票定案。
+  参数哈希：`approx_gate` 缺省值不进 dump；`approx_fingerprint`（`approx_labels` 内容戳）**只在库里有近似例时**进 dump——
+  没有近似例的书参数哈希与加字段前逐位相同；有了之后标注会改变产物，所以 seed_admit 跟着过期，这是对的。
+- **文本** `render/approx.py`：缺省 `sidecar`——正文照填，另出侧表 `pos / shape / ids / note / source`：
+  `human` 读事件（人裁勾的近似，含「字形不入库」的格），`matched` 读 `seed_admit` 产物的 `evidence.approx`（只收放行了的格，
+  没放行的格正文不出字），同格两路都有时人裁为准（`book_marks`）。预留 `inline_ids`（正文 `字{ids=…}`，没 IDS 不括注）与 `off`。
+  接到 `scripts/render_guji_markdown.py --approx`（侧表写 `<out>.approx.tsv`，无 `--out` 打到 stderr）与 `/api/step9/render?approx=`
+  （响应多 `approx` 行）。
 
 ## 二、库指纹实测（任务卡第 3 条）
 
 用仓内 `output/glyph_store`（900 刻例）重建一个库，逐步测（脚本思路见 `tests/test_approx_labels.py::test_fingerprints_ignore_approx_tables`，同一套）：
 
-| 状态 | `db_fingerprint` | `human_verdicts_fingerprint` | 同步 `db_signature` | seed_admit dump 含 approx 字段 |
+| 状态 | `db_fingerprint` | `human_verdicts_fingerprint` | 同步 `db_signature` | seed_admit dump 含 approx 字段（改口前实测；改口后同样「有行才含」`approx_fingerprint`） |
 |---|---|---|---|---|
 | 老库（没有两张表） | e4ecc42d6b4ba2d1 | baef0f6adcda38bc | 883ad4ce… | 否 |
 | 打开建空表 | e4ecc42d6b4ba2d1 | baef0f6adcda38bc | 883ad4ce… | 否 |
@@ -78,7 +87,7 @@ approx_clears(instance_id, label, at, PK(instance_id, at))   -- 撤销审计，�
 **有行时的建议：`db_fingerprint` 也不变（现状即如此，未改）**。理由：
 1. 这个指纹的语义是「匹配器看到的东西」，近似标记不改变任何匹配判决（same/unsure/cov/候选全一样）；
 2. 09-25 起它已是 soft 参数、只记不判过期，改了也只是「漂移」列多报页数，没有实际作用；
-3. 真正读近似标记的是 seed_admit 的闸，它带自己的 `approx_fingerprint`（有行才进参数哈希），标了近似只让 seed_admit
+3. 真正读近似标记的是 seed_admit（标注/闸），它带自己的 `approx_fingerprint`（有行才进参数哈希），标了近似只让 seed_admit
    过期、不惊动 glyph_match——正好是想要的范围。
 4. 反过来，同步签名**必须**变（上表第三列），否则只标近似的改动推不上去。
 
@@ -88,10 +97,11 @@ approx_clears(instance_id, label, at, PK(instance_id, at))   -- 撤销审计，�
 两边都改 → 时间新的赢；db 静默丢了近似行（无审计）→ 护栏拦、store 与远端都留着；实例整个撤了 → 归实例护栏管、近似护栏不重复拦。
 
 `tests/test_approx_labels.py`：读回、老事件不变、写/重放/机器事件不撤/人改口撤、改判与撤例、字形不入库、指纹、查询、
-seed_admit 参数哈希与闸（含闸关）、文本侧表与括注、前端 `verdictRow`（node）。共 21 条。
+seed_admit 参数哈希、缺省标注放行与开闸拦截、文本侧表（人裁/匹配两种来源、人裁覆盖）与括注、前端 `verdictRow`（node）。
+两个文件共 22 条。
 
 ## 四、测试
-`.venv/bin/python -m pytest tests/ -s -q -p no:cacheprovider`：**2408 passed, 1 failed, 27 skipped**。
+`.venv/bin/python -m pytest tests/ -s -q -p no:cacheprovider`：**2409 passed, 1 failed, 27 skipped**（改口后重跑）。
 失败的是 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`——**main 上同样失败**（stash 掉本分支改动复测过），
 本机没有 U-Net 切点模型文件 `DEFAULT_CKPT`，与本单无关。
 
@@ -103,7 +113,9 @@ seed_admit 参数哈希与闸（含闸关）、文本侧表与括注、前端 `v
 3. 近似只跟 `v=confirm`（定字）走；「字形不完整/有噪声但带字」（`seg_defect`+shape）不带近似。己已巳专用卡、对齐改字层网格
    没加勾选（那两类本来就是在已有码位里选）。
 4. 「勾了字形不入库」的格不进库 → 库里没有近似行 → 闸看不见它（它本来也不当模板），但文本侧表从事件读，照出。
-5. 闸没覆盖铁证通道（`iron`）：它不暴露命中的是哪一例。铁证本来只在人裁刻例里找够像的，若其中有近似例仍可能放行。
+5. 近似例判定没覆盖铁证通道（`iron`）：它不暴露命中的是哪一例，所以铁证靠近似例放行的格**不会带 approx 标注、不进侧表**。
+6'. `char_only` 标注没有具体库例，侧表里这类行 ids/note 为空。控制台卡片只对出卡的格显示「近似」——缺省放行的格
+   平时不出卡（「抽查自动档」能看到）。
 6. 人改口的判定：只有 `actor=="user"` 且不带 `approx` 的 confirm 才撤；机器事件不撤。文本侧表 `approx_marks`
    同口径，但**没走绑定表**（按编号认格；`human_chars` 会走）。
 7. 首次导出后每本书 store 会多两个空文件 `approx_labels.jsonl`、`approx_clears.jsonl`（一次性 git 改动，与 `evictions.jsonl` 同）。

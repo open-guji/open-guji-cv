@@ -6,8 +6,8 @@
 2. 带 approx 的 confirm 写侧表（ids/note/reviewer 可空），人改口撤掉并记 `approx_clears`，撤例跟着删；
 3. 库指纹（`db_fingerprint`）空表不变、有行也不变（建议见 HANDOFF_H276）；
 4. 查询「某字有没有近似例」与字表角标计数；
-5. seed_admit 近似字闸：匹配到近似例不自动放行，关掉闸退回原行为；
-6. 文本：缺省正文照填 + 侧表，`inline_ids` 选项括注；
+5. seed_admit：匹配到近似例缺省照常放行、evidence 标注（用户 09-29 裁定 #277 选 C）；开闸则落人审；
+6. 文本：缺省正文照填 + 侧表（来源 人裁/匹配），`inline_ids` 选项括注；
 7. 前端 `verdictRow`（node 跑 reviewClass.ts）。
 store 导出与三方同步的用例在 `test_approx_store_sync.py`。
 """
@@ -230,8 +230,9 @@ def test_seed_admit_params_hash_unchanged_without_approx(tmp_path):
     g.set_approx("v2:lib:1:1:1", "衡")
     g.close()
     d = SeedAdmitParams(db_path=str(p)).model_dump()
-    assert d["approx_gate"] is True and d["approx_fingerprint"].startswith("1:")
-    assert "approx_gate" not in SeedAdmitParams(db_path=str(p), approx_gate=False).model_dump()
+    assert "approx_gate" not in d, "闸缺省关、不进 dump"
+    assert d["approx_fingerprint"].startswith("1:"), "有近似例：要标注，产物跟着过期"
+    assert SeedAdmitParams(db_path=str(p), approx_gate=True).model_dump()["approx_gate"] is True
 
 
 def _run_seed(tmp_path, monkeypatch, db_path, recs, **params):
@@ -260,7 +261,7 @@ def _run_seed(tmp_path, monkeypatch, db_path, recs, **params):
     return {r.slot: r for cc in sa.columns for r in cc.chars}
 
 
-def test_seed_admit_blocks_auto_pass_on_approx_exemplar(tmp_path, monkeypatch):
+def test_seed_admit_marks_or_blocks_approx_exemplar(tmp_path, monkeypatch):
     from open_guji_cv.products.kinds.recog import MatchRec
     p = tmp_path / "lib.db"
     g = GlyphDB(p)
@@ -279,12 +280,15 @@ def test_seed_admit_blocks_auto_pass_on_approx_exemplar(tmp_path, monkeypatch):
                  cov=0.999, candidates=[("乃", 0.999)]),
     ]
     got = _run_seed(tmp_path, monkeypatch, p, recs)
-    assert not got[1].admit and "approx_exemplar" in got[1].doubts and got[1].char == "衡", \
-        "命中的正是近似例：落人审，字不改"
-    assert got[2].admit, "命中的是普通刻例：照常放行"
-    assert not got[3].admit and "approx_exemplar" in got[3].doubts, "这个字在库里只有近似例"
-    off = _run_seed(tmp_path / "off", monkeypatch, p, recs, approx_gate=False)
-    assert all(r.admit for r in off.values()), "闸关掉退回原行为"
+    assert all(r.admit for r in got.values()), "缺省不拦：近似例像普通刻例一样放行"
+    assert got[1].evidence["approx"] == {"source": "matched", "via": "matched_id",
+                                         "exemplar": "v2:lib:1:1:1", "ids": None, "note": None}
+    assert "approx" not in got[2].evidence, "命中的是普通刻例：不标"
+    assert got[3].evidence["approx"]["via"] == "char_only", "这个字在库里只有近似例"
+    gate = _run_seed(tmp_path / "gate", monkeypatch, p, recs, approx_gate=True)
+    assert not gate[1].admit and "approx_exemplar" in gate[1].doubts and gate[1].char == "衡", \
+        "开闸：命中近似例落人审，字不改"
+    assert gate[2].admit and not gate[3].admit
 
 
 # ── 6. 文本 ──────────────────────────────────────────────────────────────
@@ -304,8 +308,8 @@ def test_text_sidecar_default_and_inline_option(tmp_path):
     marks = approx_marks(BOOK, log)
     assert set(marks) == {f"{BOOK}:3:2:5", f"{BOOK}:4:1:1"}, "改口的那格撤掉"
     rows = sidecar_rows(marks, [3])
-    assert [(r["pos"], r["ids"], r["note"]) for r in rows] == [("3:2:5", "⿱丿乃", "多一撇")]
-    assert sidecar_tsv(rows) == "pos\tshape\tids\tnote\n3:2:5\t乃\t⿱丿乃\t多一撇\n"
+    assert [(r["pos"], r["ids"], r["note"], r["source"]) for r in rows] == [("3:2:5", "⿱丿乃", "多一撇", "human")]
+    assert sidecar_tsv(rows) == "pos\tshape\tids\tnote\tsource\n3:2:5\t乃\t⿱丿乃\t多一撇\thuman\n"
 
     def slot(key, ch):
         _b, pg, col, s = key.split(":")
@@ -354,3 +358,21 @@ console.log(JSON.stringify({
     assert out["on"] == {**out["old"], "approx": True, "ids": "⿱丿乃"}, "note 空串不写"
     assert out["kept"]["approx"] is True and out["kept"]["shape"] == "及", "改字不丢勾选"
     assert "approx" not in out["seg"], "近似只随定字（v=confirm）走"
+
+
+def test_text_sidecar_includes_matched_cells(tmp_path, monkeypatch):
+    """Step7 靠近似例放行的格进侧表（来源 matched）；没放行的不进；人裁同格覆盖。"""
+    from helpers import make_book, make_ctx, write_product
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit
+    from open_guji_cv.render.approx import book_marks, sidecar_rows
+    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    apx = {"source": "matched", "via": "matched_id", "exemplar": "v2:lib:1:1:1", "ids": "⿰亻衡", "note": None}
+    recs = [AdmitRec(id=f"{BOOK}:3:1:{s}", slot=s, admit=adm, channel="match_solo" if adm else None,
+                     char="衡", evidence={"approx": apx}) for s, adm in ((1, True), (2, False), (3, True))]
+    write_product(ctx, "seed_admit", 3,
+                  seed_admit=PageAdmit(page=3, columns=[ColumnAdmit(col=1, ok=True, chars=recs)]))
+    log = EventLog(tmp_path / "ev")
+    log.append([_ev(f"{BOOK}:3:1:3", {"v": "confirm", "shape": "衡", "approx": True, "note": "人看过"}, 1)])
+    rows = sidecar_rows(book_marks(ctx.store, BOOK, [3], log))
+    assert [(r["pos"], r["source"], r["ids"], r["note"]) for r in rows] == [
+        ("3:1:1", "matched", "⿰亻衡", ""), ("3:1:3", "human", "", "人看过")]

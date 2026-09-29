@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO))
 from open_guji_cv.errors import ProductMissing  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.render.approx import (APPROX_MODES, DEFAULT_APPROX_MODE,  # noqa: E402
-                                       approx_marks, inline_ids_map, sidecar_rows, sidecar_tsv)
+                                       book_marks, inline_ids_map, sidecar_rows, sidecar_tsv)
 from open_guji_cv.render.guji_markdown import render_page  # noqa: E402
 
 
@@ -35,10 +35,10 @@ def main() -> None:
                     help="近似字（overview#276）：sidecar=正文照填、另出 <out>.approx.tsv（缺省）；"
                          "inline_ids=正文括注 字{ids=…}；off=都不出")
     args = ap.parse_args()
-    marks = approx_marks(args.book) if args.approx != "off" else {}
-    inline = inline_ids_map(marks) if args.approx == "inline_ids" else None
 
     store = ProductStore()
+    marks = book_marks(store, args.book, args.pages) if args.approx != "off" else {}
+    inline = inline_ids_map(marks) if args.approx == "inline_ids" else None
     parts: list[str] = []
     stale: list[str] = []
     for page in args.pages:

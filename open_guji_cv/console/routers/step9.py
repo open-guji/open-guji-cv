@@ -38,14 +38,14 @@ def api_step9_render(book: str, pages: str, approx: str = "sidecar") -> dict:
     `approx`：近似字（overview#276）怎么出——`sidecar`（缺省：正文照填，响应另带 `approx` 侧表行）、
     `inline_ids`（正文括注 `字{ids=…}`）、`off`。见 `render/approx.py`。
     """
-    from ...render.approx import APPROX_MODES, approx_marks, inline_ids_map, sidecar_rows
+    from ...render.approx import APPROX_MODES, book_marks, inline_ids_map, sidecar_rows
     if approx not in APPROX_MODES:
         raise ValueError(f"approx 只能是 {'/'.join(APPROX_MODES)}，不是 {approx!r}")
     bk = load_book(book)
     page_list = bk.resolve_pages_ext(pages)
     store = deps.product_store()
 
-    marks = approx_marks(book) if approx != "off" else {}
+    marks = book_marks(store, book, page_list) if approx != "off" else {}
     inline = inline_ids_map(marks) if approx == "inline_ids" else None
     stale: list[str] = []
     parts: list[str] = []
