@@ -287,6 +287,11 @@ export function ReviewCardView({
         <button className={`rvmark${v.done === 'truncated' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'truncated' ? (v.shape ? '1' : '') : 'truncated') }}
                 title="本字的笔画被切掉了一部分（T）。可同时在上面选/填这是哪个字——字照样进文本，缺陷照样反馈给 Step3">字形不完整</button>
+        {/* 「小注当正文」（overview#265）：字形不完整的一种——列尾双行小注被当成正文切成一格。
+            事件照旧 seg_defect（quality=truncated），多带 reason=jiazhu_as_main。 */}
+        <button className={`rvmark${v.done === 'jiazhu' ? ' on' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'jiazhu' ? (v.shape ? '1' : '') : 'jiazhu') }}
+                title="双行小注被当成正文切成了一格（Z）。属字形不完整：不入库、退回切分">小注当正文</button>
         <button className={`rvmark${v.done === 'contaminated' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'contaminated' ? (v.shape ? '1' : '') : 'contaminated') }}
                 title="混进了邻字残墨 / 界行 / 版框（C）。可同时选/填这是哪个字">有噪声</button>

@@ -30,8 +30,8 @@ from ...core.spec import cell_key, column_key, page_key
 from ...core.step import RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...review.borrow_first import first_pick_mode
-from ...review.cards import (_align_ref_maps, cached_cards, cards, parse_class_filter,
-                              parse_doubt_filter)
+from ...review.cards import (REPLACE_ALIGN_SUB_KEYS, _align_ref_maps, cached_cards, cards,
+                              parse_class_filter, parse_doubt_filter)
 from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
@@ -55,7 +55,8 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
                      only: str = "review", gate_cut: bool = True,
                      skip_decided: bool = True, group: str = "",
                      sample_limit: int = 60, cluster: str = "auto",
-                     cluster_thr: float | None = None, doubt: str = "", cls: str = "") -> dict:
+                     cluster_thr: float | None = None, doubt: str = "", cls: str = "",
+                     cls_sub: str = "") -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -94,6 +95,10 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     `class_counts`/`class_total`/`classes`，每张卡带 `cls`。只对逐格模式生效。不传时与改前一致
     （缓存键也不变）。
 
+    `cls_sub`（overview#265）：类别细项，只对 `cls=replace_align` 生效（grid 网格 / tail 列尾
+    易混框线 / manual 逐张，见 `review/cards.py::REPLACE_ALIGN_SUBS`）。给了 `cls` 响应就带
+    `class_sub_counts`/`class_subs`，这一类的卡带 `cls_sub`。
+
     **结果缓存**（#166）：整个响应按（书，全部参数，产物 manifest，事件水位，库指纹）
     落 `cache_root()/review_cards/`，见 `review/cards.py::cached_cards`。人裁一写入
     水位就变、自动失效。命中与否看响应头 `X-Cards-Cache: mem|disk|miss`。
@@ -118,6 +123,11 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
         raise HTTPException(400, str(e)) from e
     if cls.strip():
         req["cls"] = cls           # 同上：只在给了时进键
+    if cls_sub.strip():
+        if cls.strip() != "replace_align" or cls_sub.strip() not in REPLACE_ALIGN_SUB_KEYS:
+            raise HTTPException(400, f"cls_sub 只对 cls=replace_align 生效，只认 "
+                                     f"{'/'.join(REPLACE_ALIGN_SUB_KEYS)}，得到 {cls_sub!r}")
+        req["cls_sub"] = cls_sub   # 同上
 
     def compute() -> dict:
         if group == "shape":
@@ -132,7 +142,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
             return cards(book, pages, limit, only, st, gate_cut=gate_cut,
                          skip_decided=skip_decided)
         return cards(book, pages, limit, only, st, gate_cut=gate_cut,
-                     skip_decided=skip_decided, doubt=doubt, cls=cls)
+                     skip_decided=skip_decided, doubt=doubt, cls=cls, cls_sub=cls_sub)
 
     res, how = cached_cards(book, req, compute, st)
     response.headers["X-Cards-Cache"] = how

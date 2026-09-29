@@ -10,6 +10,7 @@
 .rvcard[data-done="skip"] { border-left-color: var(--ochre); }
 .rvcard[data-done="non"] { border-left-color: var(--zhu); }
 .rvcard[data-done="truncated"] { border-left-color: var(--zhu); border-left-style: dashed; }
+.rvcard[data-done="jiazhu"] { border-left-color: var(--zhu); border-left-style: dotted; }
 .rvcard[data-done="contaminated"] { border-left-color: var(--ochre); border-left-style: dashed; }
 .rvcard[data-done="upstream_miscut"] { border-left-color: var(--indigo); border-left-style: double; border-left-width: 6px; }
 .rvseg { margin-top: .3rem; display: flex; gap: .3rem; flex-wrap: wrap; }
