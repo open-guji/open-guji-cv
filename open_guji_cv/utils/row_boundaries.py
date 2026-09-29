@@ -1381,6 +1381,37 @@ BOTTOM_BAR_MIN_SHIFT = 20  # 框线上沿比 border_bottom 高出不到这么多
                            # 本来就放了 16 行余量（column_gate.bottom_slack），框在余量里是常态
 
 
+SHORT_TAIL_CELL = 0.7   # 退回原解后末格矮于此倍 period 才考虑换新解（见 segment_column）
+MID_RULE_PEAK = 0.5     # 列内容窗口中段（30%~70% 宽）列投影峰值 ≥ 此……
+MID_RULE_HALF_W = 16    # ……且半高宽 ≤ 此（px）：一条贯穿整列的细竖线。vol03 全书实测只有 49:3（0.69/6px）
+                        # 与 107:4（0.66/14px）两列；正文字身的中竖峰值 ≤0.57、半高宽 ≥41px
+
+
+def _mid_rule_line(col_ink: np.ndarray) -> bool:
+    """列图中段有没有一条贯穿整列的细竖线（界行墨）。`col_ink` 是内容窗口内的 0/1 墨图。"""
+    h, w = col_ink.shape[:2]
+    if w < 20 or h < 10:
+        return False
+    mid = col_ink[:, int(0.3 * w):int(0.7 * w)].mean(axis=0)
+    pk = float(mid.max()) if mid.size else 0.0
+    return pk >= MID_RULE_PEAK and int(np.sum(mid >= pk / 2)) <= MID_RULE_HALF_W
+
+
+def _cut_ink(row_proj: np.ndarray, mine: list[float], other: list[float], radius: int = 2) -> float:
+    """`mine` 这组格线里、跟 `other` 不同（差 >2 行）的那几条（末条除外）压着的行墨之和。
+    每条取 ±`radius` 行里的最小值：格线落在缝里就是 0，压在笔画上才有数。"""
+    n = len(row_proj)
+    tot = 0.0
+    for a, b in zip(mine[1:-1], other[1:-1]):
+        if abs(a - b) <= 2:
+            continue
+        y = int(round(a))
+        lo, hi = max(0, y - radius), min(n, y + radius + 1)
+        if hi > lo:
+            tot += float(np.min(row_proj[lo:hi]))
+    return tot
+
+
 def find_bottom_frame_bar(col_gray: np.ndarray, x_lo: int, x_hi: int,
                           border_bottom: float, period: float,
                           ink_threshold: int = 128) -> float | None:
@@ -1543,9 +1574,17 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 下界收上来之后，只许列尾那几条格线动。再往上也动了，说明这列的字数装不进框线以内的高度、
         # DP 是在列中间硬挤出一格（tests/fixtures 真页 c3：框线占着第 21 格，收上来后第 10~12 格
         # 切进字里）——这种列退回原下界的解，只把末格下沿收到框线上沿。
-        # 抬头列整列错一格（vol03 25:3/43:1：框线假字占了第 21 格、全列上移一格）也在这里退回。
-        if barred is not None and (result is None or len(barred.boundaries) != len(result.boundaries) or all(
-                abs(a - b) <= 2 for a, b in zip(barred.boundaries[:-3], result.boundaries[:-3]))):
+        tail_only = barred is not None and (result is None or len(barred.boundaries) != len(result.boundaries) or all(
+            abs(a - b) <= 2 for a, b in zip(barred.boundaries[:-3], result.boundaries[:-3])))
+        # 例外（2026-09-29，用户实审「最下方一个格子空间太小」）：退回原解后末格被框线截成不到 0.7 格的
+        # 薄片——抬头列 25:3/25:5/43:1/67:9，原解里框线假字占着第 21 格、全列错一格，截掉框线只剩
+        # 48~58px。这种列新解整列落在字缝里，拿「两解不同的格线各压多少墨」比：新解不多压墨就用新解；
+        # 硬挤进字里的（c3）新解压墨多，照旧退回。42:4、43:3/43:4/43:7 走的是上面「只动列尾」那条，不受影响。
+        squeezed_tail = (result is not None and barred is not None and not tail_only
+                         and bar_y - result.boundaries[-2] < SHORT_TAIL_CELL * period
+                         and _cut_ink(row_proj, barred.boundaries, result.boundaries)
+                         <= _cut_ink(row_proj, result.boundaries, barred.boundaries))
+        if tail_only or squeezed_tail:
             result = barred
     if result is None:
         return None
@@ -1624,8 +1663,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             for p in sorted(patches)
         ]
         runs = jiazhu_split.link_runs(entries)
-        runs, tail_a = jiazhu_split.adopt_run_tails(
-            runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
+        # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
+        # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
+        # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
+        if not _mid_rule_line(col_ink):
+            runs, tail_a = jiazhu_split.adopt_run_tails(
+                runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。

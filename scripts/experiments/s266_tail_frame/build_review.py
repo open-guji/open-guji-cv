@@ -94,7 +94,7 @@ CSS = """
 .side .k{font-size:11px; color:var(--muted); margin-top:4px; word-break:break-all}
 .pats{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px}
 .pats figure{margin:0; text-align:center; font-size:10px; color:var(--muted)}
-.pats img{height:72px; max-width:100%; display:block; background:#fff; border:1px solid var(--rule)}
+.pats img{max-height:72px; max-width:100%; width:auto; height:auto; display:block; background:#fff; border:1px solid var(--rule)}
 .pats .none{height:72px; width:40px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--rule)}
 .verdicts{display:grid; grid-template-columns:repeat(auto-fit,minmax(56px,1fr)); gap:6px; margin-top:10px;}
 .verdicts button{min-width:0; min-height:44px; border:1px solid var(--rule-hard); border-radius:3px; background:var(--surface);
