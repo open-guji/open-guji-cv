@@ -16,7 +16,7 @@ TITLE = "vol03 小注拆分 A/B"
 KEY = "s266-jiazhu-split-ab-v1"
 VERDICTS = [("A", "A 好", "ok"), ("B", "B 好", "ok"), ("same", "一样", "ochre"), ("bad", "都不对", "zhu"), ("idk", "拿不准", "faint")]
 REPORTED = set("42:3:8 62:4:8 69:5:7 69:5:8 69:5:9 89:5:8 108:8:11".split())
-ids = json.loads((S / "jz_changed.json").read_text()) + ["49:3:15", "49:3:16", "69:5:10"]
+ids = json.loads((S / "jz_changed.json").read_text()) + ["69:5:10"]   # 49:3:15–16 已撤（用户 09-29：那是两列正文，Step1 切错），见 HANDOFF 7.6
 ctx = RunContext(load_book("vol03"), ProductStore(), ImageCache(), log=lambda s: None)
 def uri(img, q=60):
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, q]); return "data:image/jpeg;base64," + base64.b64encode(buf).decode()
@@ -32,7 +32,7 @@ rng = random.Random(2661)
 rows, imgs, cards_out = [], {}, []
 for cid in ids:
     pg, col, slot = map(int, cid.split(":"))
-    new_tag = "jz" if pg in (49, 69) else "j1"
+    new_tag = "a" if pg in (49, 69) else "j1"
     img = ctx.image("column_image", column_key(pg, col))
     ro = recs("j0", pg, col, slot); rn = recs(new_tag, pg, col, slot)
     anyr = next(iter(rn.values()))
@@ -71,7 +71,7 @@ CSS = """
 .side b{font-family:var(--serif); font-size:16px}
 .pats{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
 .pats figure{margin:0; text-align:center; font-size:10px; color:var(--muted)}
-.pats img{height:80px; max-width:100%; display:block; background:#fff; border:1px solid var(--rule)}
+.pats img{max-height:80px; max-width:100%; width:auto; height:auto; display:block; background:#fff; border:1px solid var(--rule)}
 .verdicts{display:grid; grid-template-columns:repeat(auto-fit,minmax(56px,1fr)); gap:6px; margin-top:10px;}
 .verdicts button{min-width:0; min-height:44px; border:1px solid var(--rule-hard); border-radius:3px; background:var(--surface);
   color:var(--ink); font-family:var(--sans); font-size:13px; font-weight:500; cursor:pointer;}
@@ -146,6 +146,7 @@ function payload(){
 """.replace("__VERDICTS__", json.dumps([[v, t] for v, t, _ in VERDICTS], ensure_ascii=False)).replace("__TITLE__", TITLE)
 
 out = Path(sys.argv[1])
-html = render(TITLE, KEY, verdicts={}, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
+SEED = {json.loads(l)["id"]: {"v": json.loads(l)["verdict"], "t": json.loads(l)["t"]} for l in open(os.environ["S266_SEED"])} if os.environ.get("S266_SEED") else {}
+html = render(TITLE, KEY, verdicts=SEED, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
 out.write_text(html, encoding="utf-8")
 print(out, f"{len(html)/1024:.0f} KB", len(rows), "cards", sum(r["reported"] for r in rows), "reported")

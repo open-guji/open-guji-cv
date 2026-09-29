@@ -90,3 +90,17 @@ def test_bar_that_would_squeeze_the_column_falls_back():
     assert abs(squeezed.boundaries[10] - off.boundaries[10]) > 60     # 前提：直接收下界确实会挤
     on = RB.segment_column(img, P, **kw)
     assert [round(b) for b in on.boundaries] == [round(b) for b in off.boundaries]
+
+
+def test_mid_rule_line_detects_thin_full_height_line_only():
+    """两列正文被当成一列时，列中段立着一条贯穿整列的细界行（vol03 p49c3：峰值 0.69、半高宽 6px）；
+    正文字身的中竖峰值低、半高宽大（全书 ≤0.57 / ≥41px），不算。"""
+    ink = np.zeros((2400, 360), np.uint8)
+    ink[:, 178:184] = 1                                  # 细界行
+    assert RB._mid_rule_line(ink)
+    body = np.zeros((2400, 180), np.uint8)
+    for k in range(20):                                  # 20 个字，每个字身中竖 + 横
+        y = 20 + k * 115
+        body[y + 15:y + 100, 60:120] = 1
+    assert not RB._mid_rule_line(body)
+
