@@ -201,3 +201,7 @@ v1 调用方不传这个字段，行为不变。
 
 审查页：小注页（https://claude.ai/artifact/2DQo7AEHt1EzuDXXYin7oq）已重发到同一 URL，撤掉 49:3 两张卡，已裁的 3 张保留；
 列尾框线页（https://claude.ai/artifact/QQKNgCkHJSW5fUYZPrZNv7）用户已裁 40/100 并放行，没重发（42:4 的原因见 9.1）。
+
+### 提交（批次 a）
+
+`334e6cd`（列尾框线）→ `41384c2`（小注补拆）→ `4d09297`（本节收尾）。合这三个即可；`claude/S-banxin-p49-0929` 另行裁。
