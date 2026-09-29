@@ -171,14 +171,15 @@ def card_class(doubts, evidence: dict | None = None, char: str | None = None,
 # ── 对齐改字层的细项（overview#265，2026-09-28）──────────────────────────
 #
 # 用户审四庫 vol03「对齐改字层」：已裁 234 张里确认了字的 197 张有 195 张就等于整理本对位字，
-# 标「字形不完整」的集中在列尾第 20、21 格（列尾双行小注被当成了正文）。所以这一类再分三组：
-# `grid` = 网格一屏几十张、缺省采信整理本、人只点掉异常的；`tail` = 列尾（疑似小注），照旧逐张；
+# 标「字形不完整」的集中在列尾第 20、21 格。起初以为是列尾双行小注被当成了正文，S #266 查明其实是
+# 下版框线混进字块、或末字被切掉，所以列尾那组叫「易混框线」。这一类再分三组：
+# `grid` = 网格一屏几十张、缺省采信整理本、人只点掉异常的；`tail` = 列尾（易混框线），照旧逐张；
 # `manual` = 其余要逐张看的（带形近疑因、整理本空、或本书惯刻形 ≠ 整理本字——网格只标一个字，
 # 两个形二选一得逐张挑）。只对 `replace_align` 这一类分，其余类别没有细项。
 
 REPLACE_ALIGN_SUBS: tuple[tuple[str, str, str], ...] = (
     ("grid", "网格（采信整理本）", "一屏几十张、缺省采信整理本字，只点掉异常的"),
-    ("tail", "列尾（疑似小注）", "列尾第 20 格起：多是双行小注被当成了正文，逐张审"),
+    ("tail", "列尾（易混框线）", "列尾第 20 格起：常见下版框线混进字块、或末字被切掉（S #266），逐张审"),
     ("manual", "逐张", "带形近疑因、整理本此位空、或本书惯刻形与整理本字不同，逐张审"),
 )
 REPLACE_ALIGN_SUB_KEYS = tuple(k for k, _l, _h in REPLACE_ALIGN_SUBS)
@@ -191,7 +192,7 @@ def replace_align_sub(slot: int, doubts, ref: dict | None, defect_before: bool =
     """「对齐改字层」一张卡归哪个细项（`REPLACE_ALIGN_SUBS`）。纯函数。
 
     `ref` 是卡片上的「整理本」一栏（`{"char", "form", ...}` 或 None）。列尾优先于其余判据：
-    列尾那组是「疑似小注」，人要带着这个问题去看。`defect_before`：人上次只标了切分缺陷、没给字
+    列尾那组「易混框线」，人要带着这个问题去看。`defect_before`：人上次只标了切分缺陷、没给字
     （`verdict_view.defect_only_cells`）——回到网格又是缺省采信，等于把人点掉的又默认收了，归逐张。
     """
     if slot >= TAIL_SLOT:
@@ -276,7 +277,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     （表：键／中文名／说明，按优先级排）。缺省 `""` 时这些都没有。
 
     `cls_sub`（overview#265）：类别细项，目前只有「对齐改字层」有（`REPLACE_ALIGN_SUBS`：
-    grid 网格 / tail 列尾疑似小注 / manual 逐张）。给了 `cls` 时这一类的卡多一个 `cls_sub`
+    grid 网格 / tail 列尾易混框线 / manual 逐张）。给了 `cls` 时这一类的卡多一个 `cls_sub`
     字段，响应多 `class_sub_counts`（`{类别: {细项: 张数}}`，口径同 `class_counts`）与
     `class_subs`（表）；`cls_sub` 非空且 `cls=replace_align` 时只出这个细项。
     """

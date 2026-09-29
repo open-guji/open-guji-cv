@@ -9,7 +9,7 @@
 **后端**（`open_guji_cv/review/cards.py`）
 
 - 新增 `REPLACE_ALIGN_SUBS` 和纯函数 `replace_align_sub(slot, doubts, ref)`，把这一类的卡分成三组：
-  - `tail`：**列尾（疑似小注）**，`slot ≥ 20`（`TAIL_SLOT`），逐张审。这条规则排在最前，哪怕这张卡也符合下面 manual 的条件，也归 tail；
+  - `tail`：**列尾（易混框线）**，`slot ≥ 20`（`TAIL_SLOT`），逐张审。这条规则排在最前，哪怕这张卡也符合下面 manual 的条件，也归 tail；
   - `manual`：**逐张**，四种情况归这里：带形近疑因（`near_form` / `solo_confusable`）、整理本这一位是空的、本书惯刻形和整理本字不同（`ref.form`）、人上次只标了切分缺陷没给字（见下文「要注意的」第 2 条）；
   - `grid`：**网格（采信整理本）**，其余的都归这里。
 - `cards(cls=…)` 给「对齐改字层」的每张卡加一个 `cls_sub` 字段；响应里多两项：`class_sub_counts`（`{replace_align: {grid, tail, manual}}`，计数口径和 `class_counts` 相同，不受 `limit` 截断）和 `class_subs`（细项表）。新参数 `cls_sub` 只接受 `cls=replace_align`，其他组合报 ValueError，路由层返回 400。
@@ -17,7 +17,7 @@
 
 **前端**（`console/frontend/src/components/review/`）
 
-- 进入「对齐改字层」默认显示网格细项。类别按钮下面多一行「本类细项」，有三个按钮：网格 N、列尾（疑似小注）N、逐张 N。
+- 进入「对齐改字层」默认显示网格细项。类别按钮下面多一行「本类细项」，有三个按钮：网格 N、列尾（易混框线）N、逐张 N。
 - 网格（`ReplaceAlignGrid.tsx`）默认一屏 60 张，「一屏」输入框可以改。每张缩略图下面标整理本字，默认采信。点一下切到「字形不完整」（朱色虚线框，标「缺」），再点一下切到「跳过」（淡色，整理本字划掉），再点一下回到采信。
 - 「提交这一屏 N 张（采信 k）」一次写完整屏，写完自动载入下一屏；工具栏上原来的「提交裁决」在网格模式下也走这条路。
 - 事件行由 `reviewClass.ts::gridRows` → `gridVerdict` → **`pickVerdict` / `verdictRow`** 生成，和逐张卡上做同一件事的结果逐字段相同：
@@ -59,7 +59,7 @@
   - 网格 60 张，第 2 张点一次（→ 字形不完整），第 3 张点两次（→ 跳过），第 4 张点三次（→ 回到采信），然后提交；
   - POST 了 60 行，顺序和屏上一致：采信 58（shape 全部等于整理本字）、seg_defect 1、skip 1。提示「已写入 60 条事件…（采信 58 · 字形不完整 1 · 跳过 1）；已载入下一屏 60 张，网格还剩 222」；
   - 这一遍在最终构建上又跑了一次，结果相同：221 张网格提交 60 张，采信 58 / seg_defect 1 / skip 1，采信的 shape 全部等于整理本字，网格剩 161；
-  - 换到「列尾（疑似小注）」逐张卡，依次按 1 / T / S / Z 后提交。按 1 / T / S 得到的行，**键集合和取值形状与网格行逐字段相同**（confirm：`id,v,shape,no_glyph_lib,client_ts,dwell_ms`；seg_defect：`id,v,quality,shape,client_ts,dwell_ms`；skip：`id,v`）。信封（batch / step / unit / kind）相同。按 Z 写出 `{v:seg_defect, quality:truncated, reason:jiazhu_as_main, shape:"", …}`，卡上亮的是「小注当正文」。
+  - 换到「列尾（易混框线）」逐张卡，依次按 1 / T / S / Z 后提交。按 1 / T / S 得到的行，**键集合和取值形状与网格行逐字段相同**（confirm：`id,v,shape,no_glyph_lib,client_ts,dwell_ms`；seg_defect：`id,v,quality,shape,client_ts,dwell_ms`；skip：`id,v`）。信封（batch / step / unit / kind）相同。按 Z 写出 `{v:seg_defect, quality:truncated, reason:jiazhu_as_main, shape:"", …}`，卡上亮的是「小注当正文」。
 
 ## 要注意的（按保守做法处理的地方）
 
@@ -79,3 +79,33 @@
 - `console/frontend/src/{api,types}/review.ts`：`clsSub` 参数、响应类型
 - `console/static/dist/`：重新构建
 - `tests/test_replace_align_grid.py`（新）
+
+## 补丁（2026-09-29，CV 总管验收意见两条）
+
+### 1. 「提交裁决」只提交当前屏（修掉上面第 5 条旧问题）
+
+- `reviewClass.ts` 新增两个纯函数：
+  - `screenRows(cards, verdicts, touched, aiAcc)`：只收**当前屏上显示着的**、本轮动过的卡，按屏上顺序出行。`ReviewPanel.submit` 改用它，不再遍历全部 `verdicts`。
+  - `dropOffScreen(keep, touched, auto)`：切换类别或细项时，找出不在新一屏上的 touched 卡。
+- **切换类别或细项时**，这些卡连同本地裁决一起丢掉。如果只丢 touched、不丢本地裁决，卡以后再出现时会显示着旧裁决，却不算动过，提交时又会漏掉。
+  - 载入时预填的默认裁决（印章遮挡默认、AI 或 CNN 预选）登记在新的 `autoTouched` 里，切换时悄悄丢掉；
+  - 人亲手点过、还没提交的也丢掉，但在状态栏提示「⚠ 切换时丢弃了上一屏 N 张手动裁决（没提交）」。**不会静默提交。**
+  - 人一改某张卡的裁决，这张卡就从 `autoTouched` 里摘掉。提交成功的两边都摘。
+- 静默刷新（同一类别下的切线联动、切页）不丢 touched，免得丢掉人正在做的裁决；但这些卡不在屏上时，提交也不会带上它们。
+- 用例：`test_replace_align_grid.py::test_ts_submit_only_screen_and_drop_on_switch`（node 跑 TS）。
+- **headless Chromium 复测**：新开一个工作区，事件日志为空，四庫 vol03 全书。
+  1. 按「全部」载入，首屏 30 张全是印章遮挡卡，都有预填默认裁决；在第 1 张上人工按 S。
+  2. 切到「其余」类别，状态栏提示「30 张 · 已裁 0；⚠ 切换时丢弃了上一屏 1 张手动裁决（没提交）」。
+  3. 在第一张上按 1 后提交，POST **只有 1 行**（`vol03:3:8:17 confirm 位`），没有一行印章遮挡行，全部在当前屏上。改之前同样的操作会多出 30 行。
+  4. 再切到「对齐改字层 · 列尾」逐张按 C 后提交，同样只有当前屏那 1 行。
+
+### 2. 「列尾（疑似小注）」改名为「列尾（易混框线）」
+
+- S #266 查明，vol03 列尾的毛病是下版框线混进字块、或末字被切掉，不是小注。细项名、说明、`cards.py` 头注释、路由文档都改了。
+- 帮助行改为：「列尾（第 20 格起，易混框线）：常见下版框线混进字块（C 有噪声）或末字被切掉（T 字形不完整）」，Z「小注当正文」保留。
+- 用例：`test_tail_sub_label_renamed`、`test_ts_tail_label_and_help`。浏览器里细项按钮显示「列尾（易混框线）45」。
+
+### 复测
+
+- 全量测试：**2370 passed, 27 skipped, 1 failed**。唯一的失败仍是上面那条在 main 上也失败的 `test_ckpt_fingerprint_empty_for_missing_file`。新用例文件共 13 条，全部通过。
+- `tsc -b` 通过，`npm run build` 已重新出 dist。

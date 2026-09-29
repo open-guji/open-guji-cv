@@ -306,3 +306,43 @@ def test_seed_admit_same_with_or_without_reason(tmp_path, monkeypatch):
     by = {r["id"]: r for r in out[True]}
     assert by["tbook:1:1:1"]["channel"] == "human" and by["tbook:1:1:1"]["char"] == "天"
     assert by["tbook:1:1:2"]["channel"] != "human"
+
+
+# ── 4. 补丁：提交只收当前屏（先「全部」载入，再换类别提交，不许带上印章遮挡默认行）──────────
+
+@needs_node
+def test_ts_submit_only_screen_and_drop_on_switch(tmp_path):
+    out = _run_ts(tmp_path, """
+// 「全部」那一屏：o1/o2 是印章遮挡默认（载入时预填、登记 touched + auto），h 是人亲手点的
+const verdicts = {
+  o1: { shape: '天', done: '1', ts: 1, noGlyphLib: true },
+  o2: { shape: '', done: 'non', ts: 1 },
+  h: { shape: '地', done: '1', ts: 2, dwell: 5 },
+  r: { shape: '玄', done: '1', ts: 3, dwell: 6 },      // 新一屏（对齐改字层）上人点的
+  old: { shape: '黃', done: '1' },                    // 服务端读回的历史裁决，没动过
+}
+const touched = new Set(['o1', 'o2', 'h', 'r'])
+const auto = new Set(['o1', 'o2'])
+const screen = [{ id: 'r' }, { id: 'old' }, { id: 'x' }]
+const rows = R.screenRows(screen, verdicts, touched)
+const drop = R.dropOffScreen(new Set(screen.map((c) => c.id)), touched, auto)
+const toGrid = R.dropOffScreen(new Set(), touched, auto)
+console.log(JSON.stringify({ rows, drop, toGrid }))
+""")
+    # 印章遮挡默认行、上一屏人点的都不在当前屏 → 不提交；没动过的历史裁决也不提交
+    assert out["rows"] == [{"id": "r", "v": "confirm", "shape": "玄", "no_glyph_lib": False,
+                            "client_ts": 3, "dwell_ms": 6}]
+    assert sorted(out["drop"]["dropped"]) == ["h", "o1", "o2"] and out["drop"]["human"] == ["h"]
+    assert sorted(out["toGrid"]["dropped"]) == ["h", "o1", "o2", "r"] and sorted(out["toGrid"]["human"]) == ["h", "r"]
+
+
+@needs_node
+def test_ts_tail_label_and_help(tmp_path):
+    out = _run_ts(tmp_path, "console.log(JSON.stringify(R.CLASS_HELP['replace_align:tail']))")
+    assert "易混框线" in out and "小注当正文" in out and "疑似小注" not in out
+
+
+def test_tail_sub_label_renamed():
+    from open_guji_cv.review.cards import REPLACE_ALIGN_SUBS
+    tail = {k: (lb, h) for k, lb, h in REPLACE_ALIGN_SUBS}["tail"]
+    assert tail[0] == "列尾（易混框线）" and "框线" in tail[1]
