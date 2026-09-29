@@ -59,25 +59,118 @@ def _old_params(step, params, old: dict[str, str]):
     return type(params)(**{**params.model_dump(), **old})
 
 
+def _producers_of(kind: str) -> list[str]:
+    """全部注册步里产出 `kind` 的步 id（含别的管线的，归因时要看得全）。"""
+    return [sid for sid, st in STEPS.items() if kind in st.spec.produces]
+
+
+def _attribute(eng: Engine, kind: str, page: int, sha: str) -> list[str]:
+    """这个 sha 是哪个（哪些）步这一页现在的产物？——用来回答「记录里的 cells 到底是谁的」。
+    只认磁盘上现有产物，找不到返回空（记录来自现在已不在的产物）。"""
+    key = page_key(page)
+    hit = []
+    for sid in _producers_of(kind):
+        try:
+            if eng.store.exists(eng.book.id, sid, key) and eng.store.sha(eng.book.id, sid, key) == sha:
+                hit.append(sid)
+        except Exception:
+            continue
+    return hit
+
+
+def diff_upstream(eng: Engine, step, page: int, recorded: dict[str, str],
+                  now: dict[str, str]) -> list[dict]:
+    """记录的 upstream 与现算 upstream 的逐键差异（只列有差的键）。
+    每条：kind / recorded / now / producer_now（本管线里现在认哪个步产它）/
+    recorded_from（记录的 sha 现在对得上哪个步的产物）/ how（sha 不同｜仅记录有｜仅现算有）。"""
+    out = []
+    for kind in sorted(set(recorded) | set(now)):
+        a, b = recorded.get(kind), now.get(kind)
+        if a == b:
+            continue
+        try:
+            prod = eng.pipeline.producer_of(kind).spec.id if kind != "raw_page" else "原图"
+        except Exception:
+            prod = "?"
+        out.append({
+            "kind": kind, "recorded": a, "now": b, "producer_now": prod,
+            "recorded_from": _attribute(eng, kind, page, a) if a and kind != "raw_page" else [],
+            "how": "仅记录有" if b is None else "仅现算有" if a is None else "sha 不同",
+        })
+    return out
+
+
+def _short(sha: str | None) -> str:
+    return "—" if not sha else sha[:8]
+
+
+def format_diff(d: dict) -> str:
+    src = ("（记录的 sha 现对应 " + "/".join(d["recorded_from"]) + " 的产物）") if d["recorded_from"] else ""
+    return (f"{d['kind']}: 记录 {_short(d['recorded'])} ≠ 现算 {_short(d['now'])} "
+            f"[{d['how']}；现由 {d['producer_now']} 产出]{src}")
+
+
+def rare_fingerprint_parts(eng: Engine) -> list[dict]:
+    """`rare_candidates` 指纹里所有「可能随机器变」的量，逐项列出（`--explain` 用）。
+    该步没有 `path_params`，所以 fp-migrate 帮不上它——但它的 `model_fingerprint`
+    （params_hash 的一个字段）里混着路径和外部文件状态，换机器就对不上。"""
+    from ..clustering import cnn_candidates as cc
+    from ..clustering.font_candidates import font_set_fingerprint
+    step = STEPS.get("rare_candidates")
+    if step is None:
+        return []
+    p = eng.ctx.params_for(step)
+    parts = [{"name": "checkpoint(内容)", "value": cc.fingerprint(), "machine": False},
+             {"name": "字体集(内容)", "value": font_set_fingerprint(), "machine": False},
+             {"name": "外部模板集 stamp", "value": cc.template_set_fingerprint(), "machine": True,
+              "note": "按目录存在与否/文件数取 stamp，两台机器数据不齐会不同"}]
+    en, specs = cc.book_real_proto(getattr(eng.book, "font", None))
+    parts.append({"name": "real_proto 开关", "value": str(en), "machine": False})
+    if en:
+        for sp in specs:
+            parts.append({"name": "real_proto store 路径（进哈希）", "value": sp, "machine": True,
+                          "note": "real_proto_fingerprint 把 spec 原文（含绝对路径）拼进哈希，"
+                                  "云端与服务器工作区路径不同则指纹必不同"})
+        parts.append({"name": "real_proto 指纹", "value": cc.real_proto_fingerprint(specs, enabled=en),
+                      "machine": True})
+    if p.struct_probe:
+        parts.append({"name": "struct_probe 路径（params 里原文，进哈希）", "value": p.struct_probe,
+                      "machine": True, "note": "路径字段未登记 path_params"})
+    parts.append({"name": "model_fingerprint(整体，进 params_hash)", "value": p.model_fingerprint,
+                  "machine": False})
+    return parts
+
+
 def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str, str]] | None = None,
                  trust: bool = False, apply: bool = False,
-                 steps: list[str] | None = None) -> dict:
+                 steps: list[str] | None = None, explain: bool = False) -> dict:
     """逐步逐页迁移。返回 {step: {"migrated": n, "already": n, "skipped": {原因: n}}}。
     `apply=False` 是干跑：算得一模一样，只是不写 manifest。"""
     old_paths = old_paths or {}
     report: dict[str, dict] = {}
+    for name in steps or ():
+        if name not in eng.pipeline.steps:
+            report[name] = {"na": "不在本管线里"}
     for sid in eng.pipeline.steps:
         step = STEPS[sid]
-        if not step.spec.path_params or (steps and sid not in steps):
+        if steps and sid not in steps:
+            continue
+        if not step.spec.path_params:
+            if steps:      # 点了名的步不许静默
+                report[sid] = {"na": "无路径参数，不适用"}
             continue
         params = eng.ctx.params_for(step)
         old_params = _old_params(step, params, old_paths[sid]) if sid in old_paths else None
         row = {"migrated": 0, "already": 0, "skipped": {}}
+        if explain:
+            row["detail"] = {}
         report[sid] = row
         manifest = eng.store.manifest(eng.book.id, sid)
 
-        def skip(why: str) -> None:
+        def skip(why: str, pg: int, diffs: list[dict] | None = None) -> None:
             row["skipped"][why] = row["skipped"].get(why, 0) + 1
+            if explain:
+                row["detail"][pg] = {"why": why, "diffs": diffs or []}
 
         for pg in pages:
             key = page_key(pg)
@@ -85,30 +178,35 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
             if entry is None:
                 continue
             if entry.status != "ok":
-                skip("状态非 ok")
+                skip("状态非 ok", pg)
                 continue
             ups = eng.upstream_shas(step, pg)
             if ups is None:
-                skip("上游缺失")
+                skip("上游缺失", pg, [{"kind": k, "recorded": (entry.upstream or {}).get(k), "now": None,
+                                       "producer_now": eng.pipeline.producer_of(k).spec.id
+                                       if k != "raw_page" else "原图", "recorded_from": [],
+                                       "how": "现算缺失"} for k in eng.missing_upstream(step, pg)]
+                     if explain else None)
                 continue
             new_fp, new_ph = _fp(step, eng.book, params, ups, path_in_hash=False)
             if entry.fingerprint == new_fp and entry.params_hash == new_ph:
                 row["already"] += 1
                 continue
             if (entry.upstream or {}) != ups:
-                skip("上游产物变了")
+                skip("上游产物变了", pg,
+                     diff_upstream(eng, step, pg, entry.upstream or {}, ups) if explain else None)
                 continue
             sha = eng.store.sha(eng.book.id, sid, key) if eng.store.exists(eng.book.id, sid, key) else None
             if sha is None or (entry.sha256 and entry.sha256 != sha):
-                skip("产物文件缺失或与条目记的 sha 不符")
+                skip("产物文件缺失或与条目记的 sha 不符", pg)
                 continue
             if old_params is not None:
                 old_fp, _ = _fp(step, eng.book, old_params, ups, path_in_hash=True)
                 if entry.fingerprint != old_fp:
-                    skip("按老路径重算对不上（不只是路径变了，或 --old-path 给错）")
+                    skip("按老路径重算对不上（不只是路径变了，或 --old-path 给错）", pg)
                     continue
             elif not trust:
-                skip("没给 --old-path、也没开 --trust：无法证明只有路径变了")
+                skip("没给 --old-path、也没开 --trust：无法证明只有路径变了", pg)
                 continue
             row["migrated"] += 1
             if apply:
