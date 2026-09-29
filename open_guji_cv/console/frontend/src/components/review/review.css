@@ -26,6 +26,8 @@
 .rvapprox { margin-left: .5rem; font-size: .7rem; color: var(--mute); white-space: nowrap; cursor: pointer; user-select: none; }
 .rvapprox input { vertical-align: -1px; margin-right: .15rem; }
 .rvcard[data-approx="1"] .rvapprox { color: var(--zhu); }
+.rvapproxhit { margin-left: .4rem; font-size: .7rem; padding: 0 .25rem; border-radius: 2px;
+  background: var(--ochre-soft); color: var(--ochre); white-space: nowrap; }
 .rvapproxin { display: flex; gap: .3rem; margin: .2rem 0; flex-wrap: wrap; }
 .rvapproxin input { flex: 1 1 8rem; min-width: 0; font-size: .75rem; padding: .1rem .25rem; }
 .rvoccl { order: 10; flex-basis: 100%; box-sizing: border-box; font-size: .78rem; font-weight: 600; padding: .15rem .4rem; border: 1px solid var(--zhu); background: var(--zhu-soft); color: var(--zhu); border-radius: 3px; }

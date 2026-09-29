@@ -90,6 +90,8 @@ export interface ReviewCard {
   /** 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：默认字 = 整理本字（坐标对位优先），
    * 字形一律不入库；`ref_blank` = 整理本这一位是空格（印章切出来的假格），默认「非字」。 */
   occluded?: { char: string; via: string | null; ref_blank: boolean } | null
+  /** 库给的字靠的是近似例（人裁勾过「无匹配（近似字）」的刻例，overview#276）；Step7 evidence.approx。 */
+  approx?: { source: string; via: string; exemplar: string | null; ids: string | null; note: string | null } | null
   /** 按类别审（overview#247）：请求带了 `cls` 才有。一张卡只归优先级最高的一类。 */
   cls?: string
   /** 类别细项（overview#265）：目前只有「对齐改字层」有——grid / tail / manual。 */

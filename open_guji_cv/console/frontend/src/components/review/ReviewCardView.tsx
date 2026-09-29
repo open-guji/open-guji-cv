@@ -125,6 +125,11 @@ export function ReviewCardView({
             印章遮挡 · {c.occluded.ref_blank ? '默认非字（整理本此位空）' : c.occluded.char ? `默认整理本字「${c.occluded.char}」` : '无默认字，请填'}
           </span>
         )}
+        {c.approx && (
+          <span className="rvapproxhit"
+                title={`库给的字靠的是近似例（无匹配·近似字）${c.approx.exemplar ? '：' + c.approx.exemplar : '：这个字在库里只有近似例'}`
+                  + `${c.approx.ids ? '\nIDS ' + c.approx.ids : ''}${c.approx.note ? '\n' + c.approx.note : ''}`}>近似</span>
+        )}
         <label className="rvnolib" title="字形有无法修复的噪声（污墨/裂纹等），这次选字正常裁决，但这张图不进字形库">
           <input type="checkbox" checked={!!v.noGlyphLib}
                  onChange={(e) => { e.stopPropagation(); onSetNoGlyphLib(e.target.checked) }} /> 字形不入库
