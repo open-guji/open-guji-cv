@@ -116,11 +116,17 @@ class CellShrinkStep(Step):
             if pos_count[c.pos] == 1:
                 d["seam_top"] = c.seam_top
                 d["seam_bottom"] = c.seam_bottom
+            if c.kind in ("jiazhu_a", "jiazhu_b") and c.gap_center is not None:
+                d["jiazhu_cx"] = float(c.gap_center)
         # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
         # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
+        # Step3 认下的雙行夹注：缝中心（列图坐标）+ 是否只有 a 半（段尾单字）。extractor 自己那套
+        # 旧判据漏掉的格按它补拆（overview#266，见 extractor「Step3 补拆」一段）
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
-                  "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"]}
+                  "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
+                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"]}
+                     if "jiazhu_cx" in d else {})}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))
         grid = {
