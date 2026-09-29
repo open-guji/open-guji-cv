@@ -506,7 +506,7 @@ class AlignRefStep(Step):
     spec = StepSpec(
         id="align_ref", title="Step5-d 整理本对齐", version="2.1", unit="cell",   # 2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates", "cells"),
-        optional_consumes_when=(("rare_candidates", "rare_topk"),),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
@@ -526,7 +526,8 @@ class AlignRefStep(Step):
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
-        ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
+        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
+                               if ctx.book.ocr_candidates else None)
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
