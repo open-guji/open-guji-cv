@@ -82,11 +82,12 @@ def book_dep_values(step: Step, book: BookSpec) -> dict | None:
     return {k: _jsonable(getattr(book, k, None)) for k in sorted(step.spec.book_deps)}
 
 
-def params_hash(params: BaseModel, soft: tuple[str, ...] = ()) -> str:
-    """参数指纹。`soft` 里的字段剔掉不算（`StepSpec.soft_params`）；没有软参数的步
-    与 2026-09-25 之前逐位相同。"""
+def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
+                path: tuple[str, ...] = ()) -> str:
+    """参数指纹。`soft`（`StepSpec.soft_params`）、`path`（`StepSpec.path_params`）里的
+    字段剔掉不算；两者都空的步与 2026-09-25 之前逐位相同。"""
     d = params.model_dump(mode="json")
-    for k in soft:
+    for k in (*soft, *path):
         d.pop(k, None)
     return hashlib.sha256(json.dumps(d, sort_keys=True,
                                      ensure_ascii=False).encode()).hexdigest()[:16]
@@ -168,7 +169,8 @@ def _self_payload(step: Step, book: BookSpec, ph: str) -> dict:
 def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
     """本步自身的指纹（不含上游）。引擎写进 `ManifestEntry.self_hash`，
     `RunContext`（含并行 worker 里没有 Engine 的那份）也能独立算出同一个值。"""
-    payload = _self_payload(step, book, params_hash(params, step.spec.soft_params))
+    payload = _self_payload(step, book, params_hash(params, step.spec.soft_params,
+                                                    step.spec.path_params))
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
 
 
@@ -267,7 +269,7 @@ class Engine:
     def fingerprint(self, step: Step, page: int) -> tuple[str | None, dict[str, str] | None, str]:
         ups = self.upstream_shas(step, page)
         p = self.ctx.params_for(step)
-        ph = params_hash(p, step.spec.soft_params)
+        ph = params_hash(p, step.spec.soft_params, step.spec.path_params)
         if ups is None:
             return None, None, ph
         payload = {**_self_payload(step, self.book, ph), "upstream": ups}

@@ -363,6 +363,10 @@ class SeedAdmitStep(Step):
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
         book_deps=("iron_gate", "codepoints"),
+        # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
+        # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
+        # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
+        path_params=("db_path", "variants", "note_lexicon", "exclusions"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

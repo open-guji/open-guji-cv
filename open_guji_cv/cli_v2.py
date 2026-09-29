@@ -105,6 +105,36 @@ def cmd_status(args) -> None:
               "要重算点名格用 `guji recheck`）")
 
 
+def cmd_fp_migrate(args) -> None:
+    """路径参数出指纹后，把 manifest 的指纹改写成新公式（不重算产物；默认干跑）。
+    见 `products/fp_migrate.py` 模块头。"""
+    from .core.runlock import RunLockHeld, book_run_lock
+    from .products.fp_migrate import migrate_book, parse_old_paths
+    try:
+        old = parse_old_paths(args.old_path)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    steps = [s for s in (args.steps or "").split(",") if s] or None
+    try:
+        with book_run_lock(eng.book.id, wait=False):
+            rep = migrate_book(eng, pages, old_paths=old, trust=args.trust,
+                               apply=args.apply, steps=steps)
+    except (RunLockHeld, ValueError) as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
+    if args.json:
+        print(json.dumps(rep, ensure_ascii=False))
+        return
+    print(f"{eng.book.id} · {eng.pipeline.id if hasattr(eng.pipeline, 'id') else args.pipeline} · "
+          f"{len(pages)} 页 · {'已写入' if args.apply else '干跑（加 --apply 才写）'}")
+    for sid, r in rep.items():
+        print(f"  {sid:16s} 改写 {r['migrated']:3d}  本来就新 {r['already']:3d}")
+        for why, n in sorted(r["skipped"].items(), key=lambda kv: -kv[1]):
+            print(f"      ↳ 跳过 {n:3d} 页：{why}")
+
+
 def cmd_recheck(args) -> None:
     """Step5-a 点名重算：按字 / 判档 / 命中条目已撤，把格写进 manifest 的格级失效。
     只标不跑——跑还是 `guji pipeline <p> <book> --from glyph_match`，只重算点名格。"""
@@ -1654,6 +1684,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "recheck": cmd_recheck,
+    "fp-migrate": cmd_fp_migrate,
     "console": cmd_console,
     "cache": cmd_cache,
     "batch": cmd_batch,
@@ -2002,6 +2033,21 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="same 档命中的库条目已撤或字头已改（撤库后建议跑一次）")
     p.add_argument("--all", action="store_true", help="整页失效（不复用任何格）")
     p.add_argument("--dry-run", action="store_true", help="只数不写")
+
+    p = sub.add_parser("fp-migrate",
+                       help="[v2] 路径参数出指纹后只改写 manifest 指纹、不重算（默认干跑）")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--steps", default=None, help="只迁这几步（逗号分隔）；默认所有带路径参数的步")
+    p.add_argument("--old-path", action="append", default=[], metavar="STEP.FIELD=老值",
+                   help="产出这批产物那台机器上的路径，如 glyph_match.db_path=/home/user/ws/output/glyph.db；"
+                        "可重复。给了就按老路径重算老指纹、逐位相等才改（能证明只有路径变了）")
+    p.add_argument("--trust", action="store_true",
+                   help="不验老指纹（老路径说不清时）：只查上游 sha 与产物 sha。"
+                        "发现不了代码/参数变了，慎用")
+    p.add_argument("--apply", action="store_true", help="真写 manifest（缺省干跑）")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("console", help="[v2] 启动控制台（FastAPI）")
     p.add_argument("--port", type=int, default=DEFAULT_CONSOLE_PORT)
