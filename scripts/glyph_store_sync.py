@@ -81,6 +81,14 @@ def db_signature(db: Path) -> str:
                 h.update(repr(row).encode("utf-8"))
         except sqlite3.OperationalError:
             pass                                    # 旧库没有 meta 表
+        # 近似字侧表（overview#276）：只标了/撤了近似、别的没动时也要导出。空表不进哈希，签名与加表前相同
+        for q in ("SELECT instance_id, label, ids, note, created_at FROM approx_labels ORDER BY instance_id",
+                  "SELECT instance_id, at FROM approx_clears ORDER BY instance_id, at"):
+            try:
+                for row in c.execute(q):
+                    h.update(repr(row).encode("utf-8"))
+            except sqlite3.OperationalError:
+                pass                                # 旧库没有这两张表
     finally:
         c.close()
     return h.hexdigest()
@@ -128,6 +136,7 @@ def export_one(ws: Path, root: Path | None = None) -> dict:
     from open_guji_cv.clustering.glyph_db import GlyphDB, export_store
     from open_guji_cv.clustering.glyph_ledger import connect_ro, store_drift
     from open_guji_cv.clustering.store_merge import (merge_upstream, tree_sha,
+                                                     unexplained_approx_deletions,
                                                      unexplained_deletions)
     root = root or ws.parent
     db = ws / "output" / "glyph.db"
@@ -150,6 +159,7 @@ def export_one(ws: Path, root: Path | None = None) -> dict:
     try:
         drift = store_drift(c, store)
         guard = unexplained_deletions(db, c, store)
+        guard_apx = unexplained_approx_deletions(c, store)
     finally:
         c.close()
     if guard["unexplained"]:
@@ -158,6 +168,14 @@ def export_one(ws: Path, root: Path | None = None) -> dict:
         log(f"{ws.name[:12]}: 删除护栏拦下，本轮不导出——要从 store 删 {guard['planned']} 例，"
             f"其中 {len(guard['unexplained'])} 例 db 里没有撤例审计："
             f"{', '.join(guard['unexplained'][:20])}{' …' if len(guard['unexplained']) > 20 else ''}")
+        return out
+    if guard_apx["unexplained"]:
+        # 近似字标记同理（overview#276）：实例还在、近似标记却要从 store 消失，db 又没有撤销审计
+        out["blocked"] = True
+        out["approx_unexplained"] = guard_apx["unexplained"]
+        log(f"{ws.name[:12]}: 删除护栏拦下，本轮不导出——要从 store 撤 {guard_apx['planned']} 条近似字标记，"
+            f"其中 {len(guard_apx['unexplained'])} 条 db 里没有撤销审计："
+            f"{', '.join(guard_apx['unexplained'][:20])}")
         return out
     if last.get("sig") == sig and drift.get("ok") and head_tree == last.get("store_tree"):
         log(f"{ws.name[:12]}: 无变化（刻例 {drift['db_exemplars']}）")

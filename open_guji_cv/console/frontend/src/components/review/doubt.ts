@@ -24,6 +24,7 @@ export const DOUBT_NAMES: Record<string, string> = {
   weak_single: '单信号弱',
   degraded_crop: '图块残缺',
   db_inconsistent: '与库不符',
+  approx_exemplar: '配上近似例',
   _none: '无闸码',
 }
 
@@ -34,6 +35,7 @@ export const DOUBT_HINTS: Record<string, string> = {
   replace_form: 'match_replace 放行时库形与整理本字字面不同（#155 replace_form=review）',
   variant_indirect: '库形与整理本只经第三个字间接成异体，没有直接边（#178）',
   solo_confusable: '只有形状一条证据、库首选又在形近表里（#155）',
+  approx_exemplar: '库里配上的刻例是「无匹配（近似字）」——所定的字只是最像的码位，不自动放行（#276）',
   _none: '没有任何 doubt 码（只有库 unsure／上下文 margin 不足这类说明）',
 }
 

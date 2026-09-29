@@ -24,6 +24,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -178,6 +180,11 @@ def evict_instance(db, instance_id: str, reason: str | None = None) -> str | Non
                               (instance_id,)).fetchone()
     for t in ("admissions", "exemplars", "derived", "instances"):
         db.conn.execute(f"DELETE FROM {t} WHERE instance_id=?", (instance_id,))
+    # 近似字侧表跟着实例走（overview#276）：撤例已由 `evictions` 审计，这里不另记 approx_clears
+    try:
+        db.conn.execute("DELETE FROM approx_labels WHERE instance_id=?", (instance_id,))
+    except sqlite3.OperationalError:     # 老库还没建这张表（只有经 GlyphDB 打开才会建）
+        pass
     if existed or row:
         from datetime import datetime, timezone
         db.conn.execute(
