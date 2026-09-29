@@ -67,6 +67,29 @@ export interface VerdictLike {
   dwell?: number
   noGlyphLib?: boolean
   guess?: string
+  /** 无匹配（近似字，overview#276）：Unicode 里没有真正对应的字，`shape` 只是字形最像、意思最近的那个。 */
+  approx?: boolean
+  /** 近似字的实际结构（IDS，可空）。只在 `approx` 时有意义。 */
+  approxIds?: string
+  /** 近似字备注（可空）。 */
+  approxNote?: string
+}
+
+/**
+ * 近似字的三个字段 → 事件 payload 片段（overview#276）。没勾 → 空对象：**老事件逐字段不变**，
+ * 后端见不到 `approx` 键就按原样处理。`ids`/`note` 空串不写。
+ */
+export function approxFields(v: Pick<VerdictLike, 'approx' | 'approxIds' | 'approxNote'>): Record<string, unknown> {
+  if (!v.approx) return {}
+  const ids = (v.approxIds || '').trim()
+  const note = (v.approxNote || '').trim()
+  return { approx: true, ...(ids ? { ids } : {}), ...(note ? { note } : {}) }
+}
+
+/** 改字时要跟着裁决走的近似字字段（与 `noGlyphLib` 同一口径：人勾过的，改字不丢）。 */
+export function keepApprox(prev: VerdictLike | undefined): Pick<VerdictLike, 'approx' | 'approxIds' | 'approxNote'> {
+  if (!prev?.approx) return {}
+  return { approx: true, approxIds: prev.approxIds, approxNote: prev.approxNote }
 }
 
 /**
@@ -100,6 +123,7 @@ export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = n
     no_glyph_lib: !!v.noGlyphLib,
     client_ts: v.ts, dwell_ms: v.dwell,
     ...(aiAcc !== null ? { ai_accepted: aiAcc } : {}),
+    ...approxFields(v),
   }
 }
 
@@ -112,7 +136,8 @@ export function pickVerdict(ch: string, prev: VerdictLike | undefined, seenAt: n
                             now: number): VerdictLike {
   const keepDefect = !!prev && DEFECT_DONES.includes(prev.done)
   const dwell = prev?.dwell !== undefined ? prev.dwell : (seenAt ? now - seenAt : undefined)
-  return { shape: ch, done: keepDefect ? prev!.done : (ch ? '1' : ''), ts: now, dwell, noGlyphLib: prev?.noGlyphLib }
+  return { shape: ch, done: keepDefect ? prev!.done : (ch ? '1' : ''), ts: now, dwell, noGlyphLib: prev?.noGlyphLib,
+           ...keepApprox(prev) }
 }
 
 /** 上下文一格显示什么字：缺省整理本优先（`text`），开了「刻本读法」才用 `char`。 */

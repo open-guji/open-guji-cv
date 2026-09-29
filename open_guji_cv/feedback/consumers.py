@@ -431,7 +431,27 @@ def glyphdb_admit(events, db_path: str | None = None,
                         res.updated += 1
         else:
             res.skipped += 1        # admit_instance 的幂等闸：已进过库
+        _apply_approx(db, db_id, shape, e)
     return res
+
+
+def _apply_approx(db, db_id: str, shape: str, e: Event) -> None:
+    """近似字侧表（overview#276）：`payload.approx` → `approx_labels` 一行（`ids`/`note` 可空）。
+
+    - 带 `approx: true`：记（覆盖）。时间用事件的 `ts`，同一条事件重放写出同一行；
+    - 不带 `approx`、这一格库里**有**近似标记、且是人裁：人改口了，撤标记并记 `approx_clears`；
+    - 库里本来没有近似标记的格，不带 `approx` 的事件什么都不做——**老事件行为不变**。
+
+    `no_glyph_lib` 的格不进库，也就没有实例可挂，这里够不着；文本侧表直接读事件（`approx_sidecar`）。
+    幂等闸挡掉的重复确认（已在库、同字）照样走这里：人先确认、后来回头勾「近似」，要记得上。
+    """
+    p = e.payload or {}
+    if p.get("approx"):
+        db.set_approx(db_id, shape, ids=(p.get("ids") or "").strip() or None,
+                      note=(p.get("note") or "").strip() or None,
+                      reviewer=e.reviewer, at=e.ts)
+    elif e.actor == "user":
+        db.clear_approx(db_id, at=e.ts)
 
 
 def glyphdb_recrop(events, **kw) -> ConsumeResult:

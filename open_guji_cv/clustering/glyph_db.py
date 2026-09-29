@@ -158,6 +158,27 @@ CREATE TABLE IF NOT EXISTS evictions (
     at TEXT NOT NULL,
     PRIMARY KEY (instance_id, at)
 );
+CREATE TABLE IF NOT EXISTS approx_labels (
+    -- 近似字（2026-09-29，overview#276）：人裁勾了「无匹配（近似字）」——Unicode 里没有真正
+    -- 对应的字，所定的 `label` 只是字形最像、意思最近的那个。**稀疏侧表**：只有勾过的实例才有行，
+    -- `instances`/`glyphs` 的 schema 不动。`ids` 实际结构、`note` 备注都可空。
+    -- 随 store 导出（approx_labels.jsonl），跟着实例走：撤例 / 同步替换时一起删。
+    instance_id TEXT PRIMARY KEY REFERENCES instances(instance_id),
+    label TEXT NOT NULL,
+    ids TEXT,
+    note TEXT,
+    reviewer TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approx_clears (
+    -- 近似标记撤销审计（与 `evictions` 同一用意）：人后来改口「不是近似字」时 approx_labels 删行、
+    -- 这里记一笔，随 store 导出（approx_clears.jsonl）。`glyph_store_sync` 的删除护栏靠它分清
+    -- 「db 撤了近似标记」和「db 根本没见过别人标的近似」。
+    instance_id TEXT NOT NULL,
+    label TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (instance_id, at)
+);
 """
 
 
@@ -482,6 +503,47 @@ class GlyphDB:
                     put(ms[i], ms[j], "same", "confirm_same")
                     got += 1
         return n
+
+    # ── 近似字侧表（overview#276）──────────────────────────
+
+    def set_approx(self, instance_id: str, label: str, *, ids: str | None = None,
+                   note: str | None = None, reviewer: str | None = None,
+                   at: str | None = None) -> bool:
+        """给库里一例记「近似字」（覆盖旧值）。实例不在库里 → False，不写（外键）。
+
+        内容（label/ids/note）与已有行完全相同时不动 `created_at`——同一条裁决重放不该让
+        store 平白改动、也不该让同步的冲突裁决以为这边「刚改过」。
+        """
+        if not self.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                                 (instance_id,)).fetchone():
+            return False
+        ids, note = (ids or None), (note or None)
+        old = self.conn.execute("SELECT label, ids, note FROM approx_labels WHERE instance_id=?",
+                                (instance_id,)).fetchone()
+        if old is not None and tuple(old) == (label, ids, note):
+            return True
+        self.conn.execute(
+            "INSERT OR REPLACE INTO approx_labels (instance_id, label, ids, note, reviewer, created_at) "
+            "VALUES (?,?,?,?,?,?)", (instance_id, label, ids, note, reviewer, at or _now()))
+        self.conn.commit()
+        return True
+
+    def clear_approx(self, instance_id: str, at: str | None = None) -> bool:
+        """撤掉一例的近似标记（人改口）。有行才删、才记 `approx_clears`；返回删没删。"""
+        row = self.conn.execute("SELECT label FROM approx_labels WHERE instance_id=?",
+                                (instance_id,)).fetchone()
+        if row is None:
+            return False
+        self.conn.execute("DELETE FROM approx_labels WHERE instance_id=?", (instance_id,))
+        self.conn.execute("INSERT OR IGNORE INTO approx_clears (instance_id, label, at) VALUES (?,?,?)",
+                          (instance_id, row[0], at or _now()))
+        self.conn.commit()
+        return True
+
+    def approx_of(self, instance_id: str) -> dict | None:
+        cur = self.conn.execute("SELECT * FROM approx_labels WHERE instance_id=?", (instance_id,))
+        row = cur.fetchone()
+        return dict(zip([d[0] for d in cur.description], row)) if row else None
 
     # ── 單實例準入（種子協議 §3.5）───────────────────────
 
@@ -858,6 +920,8 @@ class GlyphDB:
             # 台賬跟著實例一起走，否則重播全被判重跳過（見 docstring）
             cur.execute(f"DELETE FROM admissions WHERE instance_id IN ({ph})",
                         chunk)
+            cur.execute(f"DELETE FROM approx_labels WHERE instance_id IN ({ph})",
+                        chunk)
         cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
         # 撤例审计（overview#234）：否则下一轮 glyph_store_sync 的删除护栏会拦下这批删除
         at = _now()
@@ -977,6 +1041,16 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     counts["evictions"] = dump(
         out / "evictions.jsonl",
         cur.execute("SELECT * FROM evictions ORDER BY instance_id, at"))
+    # 近似字侧表（overview#276）：只导出库里还在、且非字体来源的实例（借来的由 keep() 挡掉）
+    counts["approx_labels"] = dump(
+        out / "approx_labels.jsonl",
+        cur.execute(
+            "SELECT x.* FROM approx_labels x JOIN instances i ON i.instance_id = x.instance_id "
+            "  JOIN sources s ON s.source_id = i.source_id "
+            " WHERE COALESCE(s.kind,'woodblock') != 'font' ORDER BY x.instance_id"))
+    counts["approx_clears"] = dump(
+        out / "approx_clears.jsonl",
+        cur.execute("SELECT * FROM approx_clears ORDER BY instance_id, at"))
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
@@ -1176,7 +1250,21 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                 cur.execute("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) "
                             "VALUES (?,?,?,?)",
                             (r["instance_id"], r.get("char"), r.get("reason"), r["at"]))
-        else:
+            for r in read(st / "approx_clears.jsonl"):
+                cur.execute("INSERT OR IGNORE INTO approx_clears (instance_id, label, at) "
+                            "VALUES (?,?,?)", (r["instance_id"], r.get("label"), r["at"]))
+        # 近似字侧表：借来的库也装（匹配到借来的近似例同样不该自动放行），但只装本次真装进来的实例
+        for r in read(st / "approx_labels.jsonl"):
+            if not cur.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                               (r["instance_id"],)).fetchone():
+                continue
+            if borrowed and not cur.execute("SELECT 1 FROM borrowed WHERE instance_id=?",
+                                            (r["instance_id"],)).fetchone():
+                continue
+            cols = ",".join(r)
+            cur.execute(f"{verb} INTO approx_labels ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+        if borrowed:
             own = db.book_edition()
             if own and own in eds:
                 raise ValueError(f"借来的库 {st} 与本书同 edition {own!r}，分不开，拒绝合并")
