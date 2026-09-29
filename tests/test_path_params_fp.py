@@ -21,7 +21,7 @@ from open_guji_cv.core.pipeline import Pipeline
 from open_guji_cv.core.spec import ProductKindSpec, StepSpec
 from open_guji_cv.core.step import KINDS, STEPS, Step, register_kind, register_step
 from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.products.fp_migrate import migrate_book, parse_old_paths
+from open_guji_cv.products.fp_migrate import diff_upstream, format_diff, migrate_book, parse_old_paths
 from open_guji_cv.products.store import ProductStore
 
 
@@ -238,3 +238,94 @@ def test_cli_fp_migrate_dry_run_prints(world, monkeypatch, capsys):
     cli_v2.cmd_fp_migrate(args)
     out = json.loads(capsys.readouterr().out)
     assert out["t_fp_step"]["migrated"] == 2
+
+
+# ── K238b：--explain / 点名无路径步 / 同名上游来源不同 ─────────────────
+class _Cells(BaseModel):
+    page: int
+    v: float
+
+
+if "t_fp_cells" not in KINDS:
+    register_kind(ProductKindSpec(id="t_fp_cells", title="c", storage="numeric", unit="page", schema=_Cells))
+
+
+def _register_two_producers():
+    """`t_fp_cells` 有两个产出者（像 row_segment 与另一条链的同名产物）；下游只认管线里排前的。"""
+    for sid in ("t_fp_ca", "t_fp_cb", "t_fp_down"):
+        STEPS.pop(sid, None)
+
+    @register_step
+    class _A(Step):
+        spec = StepSpec(id="t_fp_ca", title="a", version="1", unit="page",
+                        consumes=("raw_page",), produces=("t_fp_cells",), params=_P)
+
+        def run_page(self, ctx, page):
+            return {"t_fp_cells": _Cells(page=page, v=1.0)}
+
+    @register_step
+    class _B(Step):
+        spec = StepSpec(id="t_fp_cb", title="b", version="1", unit="page",
+                        consumes=("raw_page",), produces=("t_fp_cells",), params=_P)
+
+        def run_page(self, ctx, page):
+            return {"t_fp_cells": _Cells(page=page, v=2.0)}
+
+    @register_step
+    class _D(Step):
+        spec = StepSpec(id="t_fp_down", title="d", version="1", unit="page",
+                        consumes=("t_fp_cells",), produces=("t_fp_out",), params=_P,
+                        path_params=("lib_path",))
+
+        def run_page(self, ctx, page):
+            return {"t_fp_out": _Out(page=page, v=1.0)}
+
+
+def test_same_named_upstream_from_different_producer_is_not_washed(world):
+    """记录的 cells 来自 A，现算的 cells 来自 B（同名键、不同产出步）：不许迁，
+    --explain 要指出记录的 sha 现在对应 A、现算由 B 产出。"""
+    book, _, store, cache = world
+    _register_two_producers()
+    pa = Pipeline(id="pa", title="a", steps=["t_fp_ca", "t_fp_down"])
+    pb = Pipeline(id="pb", title="b", steps=["t_fp_cb", "t_fp_down"])
+    for pl in (pa, pb):
+        pl.validate()
+    Engine(book, pa, store=store, cache=cache, log=lambda s: None,
+           params={"t_fp_down": {"lib_path": "/cloud/x"}}).run()
+    Engine(book, pb, store=store, cache=cache, log=lambda s: None).run(steps=["t_fp_cb"])
+    eng = Engine(book, pb, store=store, cache=cache, log=lambda s: None,
+                 params={"t_fp_down": {"lib_path": "/server/x"}})
+    before = dataclasses.asdict(world[2].manifest("tfp", "t_fp_down").get("p0001"))
+    rep = migrate_book(eng, [1, 2], trust=True, apply=True, explain=True)
+    r = rep["t_fp_down"]
+    assert r["migrated"] == 0 and r["skipped"] == {"上游产物变了": 2}
+    d = r["detail"][1]["diffs"]
+    assert len(d) == 1 and d[0]["kind"] == "t_fp_cells" and d[0]["how"] == "sha 不同"
+    assert d[0]["producer_now"] == "t_fp_cb" and d[0]["recorded_from"] == ["t_fp_ca"]
+    assert "t_fp_ca" in format_diff(d[0])
+    # 没洗：manifest 条目原样
+    assert dataclasses.asdict(world[2].manifest("tfp", "t_fp_down").get("p0001")) == before
+    # 同一批记录在「来源对得上」的管线里不跳过
+    eng_a = Engine(book, pa, store=store, cache=cache, log=lambda s: None,
+                   params={"t_fp_down": {"lib_path": "/server/x"}})
+    ok = migrate_book(eng_a, [1, 2], trust=True, apply=False)["t_fp_down"]
+    assert ok["skipped"] == {} and ok["migrated"] + ok["already"] == 2   # 记录本就是新公式 → already
+
+
+def test_named_step_without_path_params_is_reported(world):
+    eng = _eng(world)
+    rep = migrate_book(eng, [1, 2], steps=["t_fp_step", "nope"], trust=True)
+    assert rep["t_fp_step"] == {"na": "无路径参数，不适用"}
+    assert rep["nope"] == {"na": "不在本管线里"}
+    assert migrate_book(eng, [1, 2], trust=True) == {}      # 没点名：仍然不列无路径步
+
+
+def test_explain_missing_upstream_and_only_one_side(world):
+    _register(("lib_path",))
+    eng = _eng(world, {"t_fp_step": {"lib_path": "/cloud/lib.db"}})
+    eng.run()
+    eng2 = _eng(world, {"t_fp_step": {"lib_path": "/server/lib.db"}})
+    d = diff_upstream(eng2, STEPS["t_fp_step"], 1, {"raw_page": "aaaa", "extra": "bbbb"},
+                      {"raw_page": "cccc"})
+    hows = {x["kind"]: x["how"] for x in d}
+    assert hows == {"raw_page": "sha 不同", "extra": "仅记录有"}
