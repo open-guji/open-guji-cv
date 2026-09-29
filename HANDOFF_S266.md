@@ -237,3 +237,5 @@ https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb （同一 URL 重发，v6）�
 - 105–108 的重切图和新产物**都没写进工作区**，只在沙箱里生成过。
 
 测试（批次 b 分支）：`pytest tests/ -s -q -p no:cacheprovider` → 2402 passed / 3 skipped。
+
+提交（批次 b）：`bb49f63`，分支 `claude/S-banxin-p49-0929`，基于批次 (a) 的 `5df7408`。
