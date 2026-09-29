@@ -7,8 +7,8 @@ import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows } from './doubt'
-import { CLASS_HELP, classHelpKey, DEFAULT_HELP, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey, nextGridState,
-         pickVerdict, verdictRow } from './reviewClass'
+import { CLASS_HELP, classHelpKey, DEFAULT_HELP, dropOffScreen, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
+         nextGridState, pickVerdict, screenRows } from './reviewClass'
 import type { GridState } from './reviewClass'
 import { ReplaceAlignGrid } from './ReplaceAlignGrid'
 import './review.css'
@@ -23,7 +23,7 @@ import './review.css'
 // 卡片样式与快捷键跟着类别走（`reviewClass.ts`，己已巳是三选一专用卡）。
 //
 // 对齐改字层分细项（overview#265）：网格（缺省，一屏几十张缺省采信整理本，只点掉异常的，
-// `ReplaceAlignGrid`）／列尾（疑似小注，逐张）／逐张（形近疑因、整理本空或惯刻形不同）。
+// `ReplaceAlignGrid`）／列尾（易混框线，逐张）／逐张（形近疑因、整理本空或惯刻形不同）。
 // 细项划分的正本在后端 `review/cards.py::replace_align_sub`。
 
 export interface Verdict {
@@ -82,6 +82,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 本轮人**真正动过**的字位。`verdicts.current` 里还混着从服务端读回的历史裁决，
   // 提交时若不区分，就会把没改的也重写一遍（见 `submit` 里的注释）。
   const touched = useRef<Set<string>>(new Set())
+  // touched 里哪些是 `load()` 预填默认裁决登记的（印章遮挡默认、AI／CNN 预选），人一动就摘掉。
+  // 切换类别时这些悄悄丢，人亲手点过的丢了要报条数（#265 补丁，见 reviewClass `dropOffScreen`）。
+  const autoTouched = useRef<Set<string>>(new Set())
   const seen = useRef<Record<string, number>>({})
   const rare = useRef<Record<string, RareCandidate[]>>({})
   const rareFly = useRef<Set<string>>(new Set())
@@ -116,6 +119,20 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     if (d.classes) setClasses(d.classes)
     setSubCounts(d.class_sub_counts?.replace_align ?? null)
     if (d.class_subs?.replace_align) setSubMeta(d.class_subs.replace_align)
+    // 切换类别／细项（#265 补丁）：上一屏没提交的裁决不带到新一屏——不在新一屏上的 touched 全丢，
+    // 连同本地裁决一起丢（否则卡再出现时显示着旧裁决、却不算动过，提交时又漏掉）。
+    // 静默刷新（同类别、切线联动 / 切页）不丢；那些卡不在屏上时提交也不会带上（`screenRows`）。
+    let dropNote = ''
+    if (sel !== cls || (ra && sub !== raSub)) {
+      const keep = new Set(gridMode ? [] : d.cards.map((c) => c.id))
+      const { dropped, human } = dropOffScreen(keep, touched.current, autoTouched.current)
+      for (const id of dropped) {
+        touched.current.delete(id)
+        autoTouched.current.delete(id)
+        delete verdicts.current[id]
+      }
+      if (human.length) dropNote = `；⚠ 切换时丢弃了上一屏 ${human.length} 张手动裁决（没提交）`
+    }
     if (gridMode) {
       // 网格：每张缺省采信整理本。点过的档位按 id 留着**不清**——静默刷新（切线联动 reloadSignal）
       // 也走这里，清掉的话人点掉还没提交的格会退回「采信」，一提交就收了。提交成功的在 submitGrid 里摘。
@@ -125,7 +142,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       setCur(0)
       setGateNote((d.blocked || []).length ? { n: (d.blocked || []).length } : null)
       setNDecided(d.n_decided || 0)
-      setMsg(`网格 ${d.cards.length} 张（缺省采信整理本）· 载入 ${Math.round(performance.now() - t0load)} ms`)
+      setMsg(`网格 ${d.cards.length} 张（缺省采信整理本）· 载入 ${Math.round(performance.now() - t0load)} ms` + dropNote)
       return d
     }
     setGridCards([])
@@ -146,7 +163,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 印章遮挡格（overview#195）：默认整理本字、字形不入库；假格（整理本空格位）默认「非字」
       if (c.occluded) {
         verdicts.current[c.id] = occludedDefault(c, Date.now()) ?? { shape: '', done: '', ts: Date.now(), noGlyphLib: true }
-        if (verdicts.current[c.id].done) touched.current.add(c.id)
+        if (verdicts.current[c.id].done) { touched.current.add(c.id); autoTouched.current.add(c.id) }
         continue
       }
       // 借库书（`c.first`）没有 Step6-AI 默认时用 CNN／融合首选（defaultShape，2026-09-27）
@@ -154,6 +171,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       if (!def) continue
       verdicts.current[c.id] = { shape: def, done: '1', ts: Date.now() }
       touched.current.add(c.id)
+      autoTouched.current.add(c.id)
     }
     // 注意**不清** `touched`：静默刷新（切线联动 reloadSignal）会走到这里，
     // 而此时人可能已裁了几张还没提交，清掉就等于把这几张的裁决静默丢了。
@@ -173,6 +191,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const nDec = d.n_decided || 0
     setNDecided(nDec)
     filterMsg(d.cards, nDec)
+    if (dropNote) setMsg((m) => m + dropNote)
     focus(0, d.cards, scrollOnLoad)
 
     // 上下文前后各 20 字（可跨列跨页），一批卡一次请求（#247）
@@ -268,6 +287,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       verdicts.current[c.id] = { shape, done: doneIn, ts: now, dwell, noGlyphLib: prev?.noGlyphLib }
     }
     touched.current.add(c.id)
+    autoTouched.current.delete(c.id)
     bump()
   }
 
@@ -277,6 +297,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const v = verdicts.current[c.id] || { shape: '', done: '' }
     verdicts.current[c.id] = { ...v, guess }
     touched.current.add(c.id)
+    autoTouched.current.delete(c.id)
     bump()
   }
 
@@ -286,6 +307,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const v = verdicts.current[c.id] || { shape: '', done: '' }
     verdicts.current[c.id] = { ...v, noGlyphLib: checked }
     touched.current.add(c.id)
+    autoTouched.current.delete(c.id)
     bump()
   }
 
@@ -312,33 +334,28 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   async function submit() {
     if (cls === 'replace_align' && raSub === 'grid') return submitGrid()
     const b = batch()
-    const byId: Record<string, ReviewCard> = {}
-    for (const c of cards) byId[c.id] = c
-    const rows: Array<Record<string, unknown>> = []
-    for (const [id, v] of Object.entries(verdicts.current)) {
-      if (!v.done) continue
-      // 只发**本轮真正动过的**（用户 2026-09-16「反复 confirm 要合并，只记后面的」）。
-      // `verdicts.current` 里混着 `load()` 从服务端读回的历史裁决（`{...done, ...current}`），
-      // 以前整个 Object.entries 一股脑提交，于是每点一次「提交裁决」就把全部历史
-      // 原样重写一遍——实测 bxgb 1620 条 confirm 只覆盖 312 个字位，批次之间完全
-      // 包含，`bxgb:3:1:19` 累计写了 13 次。重放语义（后到覆盖）一直是对的，
-      // 错的是**每次都把没改的也写进去**。`touched` 由裁决动作登记，见 `mark()`。
-      if (!touched.current.has(id)) continue
-      // 「是否采纳 AI 预选」（任务书-C-人审卡按AI预选 §6）：`null` = 这一格
-      // 没问过 AI（`card.ai` 缺失），不是「没采纳」——四庫等书这里恒是 null。
-      // **2026-09-27 C 道暂拟字段名 `ai_accepted`，待与 H 道约定**（cross 单
-      // 见 inbox/C-人审卡AI预选/），只加可选字段，不改 `confirm` 既有字段。
-      const card = byId[id]
-      const row = verdictRow(id, v, card ? aiAccepted(card, v.shape) : null)
-      if (row) rows.push(row)
-    }
+    // 只收**当前屏上显示着的**卡（#265 补丁，`screenRows`）：`touched` 里可能还留着别的类别
+    // 载入时预填的默认裁决（印章遮挡），以前会跟着这里静默提交。
+    //
+    // 只发**本轮真正动过的**（用户 2026-09-16「反复 confirm 要合并，只记后面的」）。
+    // `verdicts.current` 里混着 `load()` 从服务端读回的历史裁决（`{...done, ...current}`），
+    // 以前整个 Object.entries 一股脑提交，于是每点一次「提交裁决」就把全部历史
+    // 原样重写一遍——实测 bxgb 1620 条 confirm 只覆盖 312 个字位，批次之间完全
+    // 包含，`bxgb:3:1:19` 累计写了 13 次。重放语义（后到覆盖）一直是对的，
+    // 错的是**每次都把没改的也写进去**。`touched` 由裁决动作登记，见 `setVerdict`。
+    //
+    // 「是否采纳 AI 预选」（任务书-C-人审卡按AI预选 §6）：`null` = 这一格
+    // 没问过 AI（`card.ai` 缺失），不是「没采纳」——四庫等书这里恒是 null。
+    // **2026-09-27 C 道暂拟字段名 `ai_accepted`，待与 H 道约定**（cross 单
+    // 见 inbox/C-人审卡AI预选/），只加可选字段，不改 `confirm` 既有字段。
+    const rows = screenRows(cards, verdicts.current, touched.current, (c, sh) => aiAccepted(c, sh))
     if (!rows.length) { setMsg('还没有裁决'); return }
     setMsg('提交中…')
     try {
       const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
       // 已落盘的不再算「动过」——否则下次提交又把它们重写一遍，重复照旧。
       // 只清本次提交的这批：提交是 await 的，其间人可能已经裁了新卡。
-      for (const row of rows) touched.current.delete(row.id as string)
+      for (const row of rows) { touched.current.delete(row.id as string); autoTouched.current.delete(row.id as string) }
       const done = `已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
       onSubmitted()
       // 队列模式（#247）：提交完自动载入同一类的下一批。裁过的后端已跳过（skip_decided），
@@ -413,7 +430,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       if (!rows.length) { setMsg(`这组 ${d.cards.length} 格都没有默认字，请逐格填`); return }
       const b = batch()
       const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
-      for (const row of rows) touched.current.delete(row.id as string)
+      for (const row of rows) { touched.current.delete(row.id as string); autoTouched.current.delete(row.id as string) }
       // 这组裁完了，停在「印章遮挡」只剩空屏——回到全部类别
       const next = cls === 'occluded' ? '*' : cls
       setCls(next)

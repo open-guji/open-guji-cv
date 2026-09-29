@@ -17,8 +17,8 @@ export const CLASS_HELP: Record<string, string> = {
   // 对齐改字层按细项分（overview#265）：键 = `replace_align:<细项>`，见 `classHelpKey`
   'replace_align:grid': '对齐改字层 · 网格：每张缺省<b>采信整理本</b>（下面那个字），只点掉异常的——'
     + '<b>点一下</b> 字形不完整 · <b>再点</b> 跳过 · <b>再点</b> 回到采信；「提交这一屏」一次写完整屏。',
-  'replace_align:tail': '对齐改字层 · 列尾（第 20 格起）：多半是列尾<b>双行小注被当成了正文</b>。'
-    + '<b>Z</b> 小注当正文 · <b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>T</b> 字形不完整 · <b>C</b> 有噪声 · '
+  'replace_align:tail': '对齐改字层 · 列尾（第 20 格起，易混框线）：常见<b>下版框线混进字块</b>（<b>C</b> 有噪声）'
+    + '或<b>末字被切掉</b>（<b>T</b> 字形不完整）。<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>Z</b> 小注当正文 · '
     + '<b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡',
 }
 
@@ -162,4 +162,36 @@ export function gridRows<C extends { id: string; ref?: { char?: string | null } 
     if (row) rows.push(row)
   }
   return rows
+}
+
+// ── 提交只收当前屏（overview#265 补丁）──────────────────────────────────
+//
+// 旧毛病：先按「全部」载入，印章遮挡卡的默认裁决（整理本字／非字）在 `load()` 里登记成 touched；
+// 切到别的类别再点「提交裁决」，这些**屏上根本没有**的默认行跟着静默提交（vol03 实测多出 30 行）。
+// 现在两道：提交只收当前屏上显示着的 touched 卡（`screenRows`）；切换类别／细项时，不在新一屏上的
+// touched 一律丢掉（`dropOffScreen`）——载入时预填的默认裁决悄悄丢，人亲手点过的也丢，但报出条数。
+
+/** 当前屏 → 事件行：只收 `cards` 里本轮动过（`touched`）、有裁决的卡，按屏上顺序。 */
+export function screenRows<C extends { id: string }>(
+  cards: ReadonlyArray<C>, verdicts: Record<string, VerdictLike | undefined>, touched: ReadonlySet<string>,
+  aiAcc: (c: C, shape: string) => boolean | null = () => null,
+): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = []
+  for (const c of cards) {
+    const v = verdicts[c.id]
+    if (!v?.done || !touched.has(c.id)) continue
+    const row = verdictRow(c.id, v, aiAcc(c, v.shape))
+    if (row) rows.push(row)
+  }
+  return rows
+}
+
+/**
+ * 切换类别／细项时该丢的 touched：不在新一屏（`keep`）上的全部。`human` = 其中人亲手点过的
+ * （不在 `auto` 里——`auto` 是载入时预填默认裁决登记的那些），调用方要把条数报给人。
+ */
+export function dropOffScreen(keep: ReadonlySet<string>, touched: ReadonlySet<string>,
+                              auto: ReadonlySet<string>): { dropped: string[]; human: string[] } {
+  const dropped = [...touched].filter((id) => !keep.has(id))
+  return { dropped, human: dropped.filter((id) => !auto.has(id)) }
 }

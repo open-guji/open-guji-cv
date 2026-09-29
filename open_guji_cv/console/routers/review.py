@@ -96,7 +96,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     （缓存键也不变）。
 
     `cls_sub`（overview#265）：类别细项，只对 `cls=replace_align` 生效（grid 网格 / tail 列尾
-    疑似小注 / manual 逐张，见 `review/cards.py::REPLACE_ALIGN_SUBS`）。给了 `cls` 响应就带
+    易混框线 / manual 逐张，见 `review/cards.py::REPLACE_ALIGN_SUBS`）。给了 `cls` 响应就带
     `class_sub_counts`/`class_subs`，这一类的卡带 `cls_sub`。
 
     **结果缓存**（#166）：整个响应按（书，全部参数，产物 manifest，事件水位，库指纹）
