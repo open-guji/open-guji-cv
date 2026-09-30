@@ -201,3 +201,38 @@ def test_grid_corpus_uses_start_and_pipe_notes():
     tu = lines[2].text_units()
     assert [p for p, _u in tu] == [2, 3, 4, 5, 6]
     assert [(u.a, u.b) for _p, u in tu if u.kind == "n"] == [("兩", "採"), ("江", "進"), ("", "本")]
+
+
+# ── 少一格（并格）共识救援（2026-09-30，L1 道 overview#318）──────────────────
+_P3_COL1_G = [1.02, 2.0, 3.07, 4.25, 5.4, 6.61, 7.74, 8.74, 9.87, 10.97, 11.95, 13.0, 14.06]
+_P3_COL1_CARRIER = "輾定撫雙書總報卷閱蘇攀琴準"
+
+
+def _p3_col1(carrier=_P3_COL1_CARRIER):
+    (ln,) = C.parse_lines("欽定四庫全書總目巻")
+    return [_cu(i + 1, g, carrier[i]) for i, g in enumerate(_P3_COL1_G)], ln
+
+
+def test_merge_rescue_p3_title_column_gives_only_consensus_cells():
+    """vol02 p3 列1 实数：9 字标题被切成 8 格（+5 印章假格）。并格位置分不出（四庫/庫全/全書
+    并列），所以只给共识格——1、2、6、7、8 格出字，3/4/5 格不出记录；印章格记空格位。"""
+    units, ln = _p3_col1()
+    r = C.coord_column(units, ln)
+    assert r.ok and r.merged and not r.unique
+    got = {t[0]: t[3] for t in r.recs}
+    assert [got.get(f"id{s}") for s in range(1, 9)] == ["欽", "定", None, None, None, "總", "目", "巻"]
+    assert all(got[f"id{s}"] == "" for s in range(9, 14))
+
+
+def test_merge_rescue_refuses_without_carrier_evidence():
+    """载体一个字都不吻合：并格救援不认（宁可空着也不错配），整列仍退回。"""
+    units, ln = _p3_col1("某" * 13)
+    r = C.coord_column(units, ln)
+    assert not r.ok and not r.merged
+
+
+def test_merge_rescue_never_touches_columns_that_match_one_to_one():
+    """格数对得上的列走原路，`merged` 恒为 False、记录与救援无关。"""
+    (ln,) = C.parse_lines("元許衡撰")
+    r = C.coord_column([_cu(s, s + 2.0, "某") for s in range(1, 5)], ln)
+    assert r.ok and not r.merged
