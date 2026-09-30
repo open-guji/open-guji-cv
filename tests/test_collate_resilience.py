@@ -41,7 +41,7 @@ def _witness(text: str = TRUTH) -> Witness:
 def test_collate_book_skips_the_crashing_page_and_keeps_the_rest(monkeypatch):
     from open_guji_cv.report.collate import PageResult
 
-    def fake_collate_page(store, book, page, witnesses, stale, codepoints=None):
+    def fake_collate_page(store, book, page, witnesses, stale):
         if page == 2:
             raise IndexError("list index out of range")
         return {w.label: PageResult(page=page, anchored=True, n_equal=3) for w in witnesses}
@@ -60,7 +60,7 @@ def test_collate_book_skips_the_crashing_page_and_keeps_the_rest(monkeypatch):
 def test_collate_book_with_no_crashes_reports_zero_page_errors(monkeypatch):
     from open_guji_cv.report.collate import PageResult
 
-    def fake_collate_page(store, book, page, witnesses, stale, codepoints=None):
+    def fake_collate_page(store, book, page, witnesses, stale):
         return {w.label: PageResult(page=page, anchored=True, n_equal=1) for w in witnesses}
 
     monkeypatch.setattr("open_guji_cv.report.run.collate_page", fake_collate_page)

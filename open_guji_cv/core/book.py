@@ -309,11 +309,6 @@ class BookSpec:
     #: 已有 Step 的参数取值）。
     params: dict[str, dict] = field(default_factory=dict)
 
-    #: 整段错位页名单（yaml 顶层 `context_guard_pages: [49, 107, 110]`）。这些页的
-    #: `context` / `ref_ctx` 通道不放行、一律退回待审（`clustering/context_guard`）。
-    #: 空 = 不启用，行为与加这个字段之前一样。
-    context_guard_pages: list[int] = field(default_factory=list)
-
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
         目标码位；否则原样返回（含 `ch` 本来就是目标码位、或这对字根本没配置两种情况）。
@@ -586,48 +581,12 @@ def _book_yaml_path(book_id: str, books_dir: Path | None = None) -> Path:
     return ws_dir / f"{book_id}.yaml"
 
 
-_BRACKETS = (("（", "）"), ("(", ")"), ("「", "」"), ("【", "】"), ("《", "》"), ("〈", "〉"))
-_KV_COMMENT_RE = re.compile(r"^(?P<key>\s*(?:-\s+)?[^\s#:][^#:]*):\s+(?P<val>[^#]*?)\s+#(?P<cmt>.*)$")
-
-
-def yaml_comment_truncations(text: str) -> list[tuple[int, str, str, str]]:
-    """找「值里带 ` #` 被 YAML 当注释、值被截断」的行 → [(行号, key, 截断后的值, 被吞的注释)]。
-
-    典型：`label: daizhige逐列本（P #195：…）`——` #` 起是注释，证人名变成 `daizhige逐列本（P`，
-    括号还开着。判据（只看未加引号的标量，带引号的 YAML 自己处理得对）：
-    值里括号没配平、而被当成注释的那半截里有对应的右括号；或注释以数字紧跟 `#`（`#195`，
-    像编号不像注释）。整行本来就是注释的（`# …`）不算。
-    """
-    out = []
-    for no, line in enumerate(text.splitlines(), 1):
-        m = _KV_COMMENT_RE.match(line)
-        if not m:
-            continue
-        val, cmt = m.group("val").strip(), m.group("cmt")
-        if not val or val[0] in "'\"":
-            continue
-        unbalanced = any(val.count(o) > val.count(c) and c in cmt for o, c in _BRACKETS)
-        if unbalanced or re.match(r"\d", cmt):
-            out.append((no, m.group("key").strip(), val, "#" + cmt))
-    return out
-
-
-def _warn_yaml_truncations(text: str, path: Path) -> None:
-    import warnings
-    for no, key, val, cmt in yaml_comment_truncations(text):
-        warnings.warn(
-            f"{path.name}:{no} `{key}` 的值疑似被 YAML 注释截断：读到 {val!r}，"
-            f"被当注释吞掉 {cmt!r}。值里有 ` #` 时要给整个值加引号。",
-            UserWarning, stacklevel=3)
-
-
 def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
     path = _book_yaml_path(book_id, books_dir)
     if not path.exists():
         raise FileNotFoundError(f"没有这册书的定义: {path}")
-    text = path.read_text(encoding="utf-8")
-    _warn_yaml_truncations(text, path)
-    d = yaml.safe_load(text) or {}
+    with open(path, encoding="utf-8") as f:
+        d = yaml.safe_load(f) or {}
     raw_dir = Path(d["raw_dir"])
     if not raw_dir.is_absolute():
         # 相对路径优先按工作区解释（原图已随书迁到 guji-workspace 的书目录），
@@ -678,7 +637,6 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
-        context_guard_pages=[int(x) for x in (d.get("context_guard_pages") or [])],
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
     )
