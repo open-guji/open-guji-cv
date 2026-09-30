@@ -96,6 +96,9 @@ export interface ReviewCard {
   cls?: string
   /** 类别细项（overview#265）：目前只有「对齐改字层」有——grid / tail / manual。 */
   cls_sub?: string
+  /** 影子放行模型（overview#269）：影子字与把握度；`pre` = 该预勾（把握≥0.9 且影子字 == 整理本字）。
+   * 没有预测文件、或关了「使用影子预勾」时缺失。 */
+  shadow?: { char: string; conf: number; pre: boolean }
 }
 
 /** 类别表的一行（后端 `REVIEW_CLASSES`，按优先级排）。 */
@@ -139,6 +142,8 @@ export interface ReviewCardsResponse {
   /** 类别细项计数（overview#265）：`{replace_align: {grid, tail, manual}}`，口径同 `class_counts`。 */
   class_sub_counts?: Record<string, Record<string, number>>
   class_subs?: Record<string, ReviewClassMeta[]>
+  /** 影子预测文件是否存在（带 `cls` 才有）；`available=false` 时前端把「使用影子预勾」置灰。 */
+  shadow_info?: { available: boolean; thr: number }
 }
 
 /**
