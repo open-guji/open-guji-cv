@@ -11,6 +11,10 @@
 判据（与分片 README 一字对应，常数直接 import 生产代码，不另抄）：
   连通体从裁切边**外** ≥OUT px 连进格内 ≥IN px；高 ≤30；面积 ≥25；
   左缘另加：宽 ≤45 且不贴探测窗左缘；离列图上下端 >12px（列图已清版框，这条只防端部残渣）。
+  右缘**不**加「不贴窗左缘」：试过镜像左缘防线，右缘点数 42→11（真笔画里长横/捺脚本来就会从窗左缘一路伸过来，
+  如「一」「大」），把真对象杀掉了——v1 右缘金标也没有这条（README），保持口径。代价：列尾偶有贯穿的横向残段
+  混进来（vol01/153:7 y=2424），如实留在基线里当「仍被剪」。
+  用户排除页（vol02/3 污渍页、vol01/89/90、vol02/159/160 压缩职名页，2026-08-25 定「不判读、不入测试集」）不扫。
   裁切边 = v2 Step3 的 `content_x`（cell_shrink 喂给 CharExtractor 的 cell_left_x / cell_right_x）。
   坐标 = 列图坐标（左上原点，x 向右，y 向下）；列号 = v2 列号（右起 1）。
 
@@ -33,6 +37,7 @@ from _v2_step4 import V2Book, dataset_root  # noqa: E402
 from open_guji_cv.clustering import extractor as X  # noqa: E402
 
 END_MARGIN = 12
+EXCLUDED = {("vol01", 89), ("vol01", 90), ("vol02", 3), ("vol02", 159), ("vol02", 160)}
 
 
 def crossings_right(img: np.ndarray, sx1: int):
@@ -81,7 +86,8 @@ def body_pages(ds: Path):
     rows = rows if isinstance(rows, list) else rows.get("pages", [])
     by: dict[str, list[int]] = {}
     for e in rows:
-        if e.get("page_type") == "body" and e["book"] in ("vol01", "vol02"):
+        if (e.get("page_type") == "body" and e["book"] in ("vol01", "vol02")
+                and (e["book"], int(e["page"])) not in EXCLUDED):
             by.setdefault(e["book"], []).append(int(e["page"]))
     return {b: sorted(p) for b, p in by.items()}
 

@@ -80,7 +80,9 @@ def main() -> int:
                 if up is not None and getattr(up, "seam_bottom", None):
                     cur_seam = list(up.seam_bottom)
                 else:
-                    yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - float(ex["y"]))))
+                    # 2026-09-30：有的折线条目没有 y（bxgb 59 条），原代码 KeyError 整个评测崩；缺 y 时取折线平均高
+                    y_ref = float(ex["y"]) if ex.get("y") is not None else float(np.mean([p[1] for p in ex["polyline"]]))
+                    yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - y_ref)))
                     cur_seam = [int(round(yy))] * len(gold_seam)
                 mx, mean = seam_deviation(cur_seam, gold_seam)
                 poly_rows.append(dict(id=it.id, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
