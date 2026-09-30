@@ -73,4 +73,8 @@ PYTHONPATH=. $PY scripts/glyph_codepoint_unify.py --book <册id> --apply
 `test_glyph_codepoint_unify.py::test_v1_prefixed_instances_of_the_book_are_unified`。
 定向 29/29 通过；全量结果见下：
 
-FULL_TEST_RESULT
+全量（云端 venv 装 .[torch]，deselect rare_coldstart 那条）：**2471 passed, 3 skipped, 6 deselected, 0 failed**。
+
+⚠️ 发现：冻结样页 `tests/fixtures`（keben，低分辨率）被遮挡检测判成 **65 格遮挡**（最高密度 11.7）——
+检测阈值是按 vol03/四庫高分辨率扫描标定的，低分辨率页会过触发。这不影响真书（标定时十册复核零误报），
+但说明检测对分辨率敏感；`test_glyphdb_admit.py` 因此加了 autouse 夹具关掉遮挡查询（该文件测的是别的行为）。
