@@ -156,7 +156,14 @@ class RunContext:
         p = self.params.get(step.spec.id)
         if p is None:
             p = step.spec.params()
-        return _with_book_corpus(p, self)
+        p = _with_book_corpus(p, self)
+        # 书级 `context_guard_pages`（整段错位页名单）注入 seed_admit 参数——进参数才进指纹，
+        # 改 yaml 名单产物才会判过期。显式给了参数的照用。
+        if hasattr(p, "context_guard_pages") and not p.context_guard_pages:
+            pages = list(getattr(self.book, "context_guard_pages", None) or [])
+            if pages:
+                p = type(p)(**{**p.model_dump(), "context_guard_pages": pages})
+        return p
 
     # 原图（灰度 uint8）。同一页只读一次。
     def raw_page(self, page: int) -> np.ndarray:

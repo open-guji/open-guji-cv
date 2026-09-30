@@ -66,7 +66,12 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from scipy.ndimage import median_filter
+try:
+    from scipy.ndimage import median_filter
+except ImportError as _e:   # 大声报错：别让上层把它吞成空白图（char_patch 现算 / 截条图都经过这里）
+    raise ImportError(
+        "缺 scipy：utils/preclean 依赖 scipy.ndimage（RunContext 读页必经）。"
+        "`pip install scipy`，或重新 `pip install -e .`（pyproject 已列为核心依赖）。") from _e
 
 # 修好的图落在这里。是产物不是缓存：显式生成、可删掉重来、不会被 LRU 清掉。
 PRECLEANED_DIRNAME = "precleaned"
