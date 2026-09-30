@@ -55,6 +55,14 @@ def _find_source(book: str, page: str) -> Path:
     tif = RAW_ROOT / book / f"{page}.tif"
     if tif.exists():
         return tif
+    # 工作区原图优先于仓内 data_full（云端只有工作区；仓内那份不存在）
+    from open_guji_cv.core.workspace import workspace_root
+    ws = workspace_root()
+    if ws is not None:
+        for sub in ("data_full/zongmu", "data_full"):
+            p = ws / sub / book / f"{page}.png"
+            if p.exists():
+                return p
     png = FALLBACK_ROOT / book / f"{page}.png"
     if png.exists():
         return png

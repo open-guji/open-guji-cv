@@ -48,7 +48,15 @@ def run_eval(key: str, dataset_root: Path | None = None, timeout: int = 900,
         missing = _missing_pages_by_book(spec, store)
         if missing:
             if from_raw:
-                _bootstrap_missing(missing)
+                broken = _bootstrap_missing(missing)
+                if broken:
+                    # 单个评测引用的册在本工作区里没有定义（如云端只挂四库总目、金标里有 bxgb）：
+                    # 只让这一个评测失败并写明原因，别把整批 `eval run` 拖崩。
+                    rep.status = "failed"
+                    rep.error = "from-raw 补产物失败：" + "；".join(
+                        f"{bk}（{why}）" for bk, why in broken.items())
+                    _fill_gold(rep, store, spec)
+                    return rep
             else:
                 detail = "；".join(f"{bk} 缺第 {pgs} 页" for bk, pgs in missing.items())
                 rep.status = "failed"
@@ -172,15 +180,21 @@ def _missing_pages_by_book(spec: EvalSpec, store) -> dict[str, list[int]]:
     return missing
 
 
-def _bootstrap_missing(missing: dict[str, list[int]]) -> None:
+def _bootstrap_missing(missing: dict[str, list[int]]) -> dict[str, str]:
+    """从原图补跑缺的产物。返回补不了的册 {book: 原因}（册定义缺失、原图缺失等）。"""
     from ..core.book import load_book
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
     from ..utils.bootstrap import ensure_products
 
     pstore, cache = ProductStore(), ImageCache()
+    broken: dict[str, str] = {}
     for book_id, pages in missing.items():
-        ensure_products(load_book(book_id), pages, store=pstore, cache=cache)
+        try:
+            ensure_products(load_book(book_id), pages, store=pstore, cache=cache)
+        except (FileNotFoundError, KeyError, ValueError) as e:
+            broken[book_id] = f"{type(e).__name__}: {str(e)[:120]}"
+    return broken
 
 
 # 三种写法都要认（实测）：
