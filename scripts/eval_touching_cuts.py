@@ -85,7 +85,7 @@ def main() -> int:
                     yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - y_ref)))
                     cur_seam = [int(round(yy))] * len(gold_seam)
                 mx, mean = seam_deviation(cur_seam, gold_seam)
-                poly_rows.append(dict(id=it.id, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
+                poly_rows.append(dict(id=it.id, mode=mode, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
         if ex.get("tags"):
             # 有干扰因素（污点 / 界行 / 邻字残墨）的条目单独一档：切点本身不是算法能决定的
             for t in ex["tags"]:
@@ -165,6 +165,10 @@ def main() -> int:
         ns = sum(r["has_seam"] for r in poly_rows)
         print(f"  折线金标 n={len(poly_rows)}（现役有缝 {ns}）：最大偏差 mean {mx.mean():.1f} median {np.median(mx):.1f} p90 {np.percentile(mx, 90):.1f}；"
               f"平均偏差 median {np.median(mn):.1f}；最大偏差 ≤3px {100*(mx<=3).mean():.1f}%  ≤6px {100*(mx<=6).mean():.1f}%")
+        for md in ("page", "sig_ok", "legacy"):
+            sub = np.array([r["max_dev"] for r in poly_rows if r["mode"] == md])
+            if len(sub):
+                print(f"    [{md:6}] 折线 n={len(sub):<4} 最大偏差 mean {sub.mean():.1f} median {np.median(sub):.1f} p90 {np.percentile(sub, 90):.1f}  ≤3px {100*(sub<=3).mean():.1f}%  ≤6px {100*(sub<=6).mean():.1f}%")
         worst = sorted(poly_rows, key=lambda r: -r["max_dev"])[:5]
         print("  折线最差:", [(r["id"], round(r["max_dev"])) for r in worst])
     if a.json:
