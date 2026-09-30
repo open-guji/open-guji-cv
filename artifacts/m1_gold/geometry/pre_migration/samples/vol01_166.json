@@ -1,0 +1,85 @@
+{
+ "book": "vol01",
+ "page": "166",
+ "image_size": {
+  "width": 1745,
+  "height": 2830
+ },
+ "band_ys": [
+  452.0,
+  1415.0,
+  2377.0
+ ],
+ "rules": [
+  {
+   "x_top": 26.5,
+   "x_mid": 7.0,
+   "x_bot": 13.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 26.5,
+   "x_mid": 31.5,
+   "x_bot": 40.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 241.0,
+   "x_mid": 243.0,
+   "x_bot": 246.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 422.5,
+   "x_mid": 431.5,
+   "x_bot": 440.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 626.0,
+   "x_mid": 625.0,
+   "x_bot": 624.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 815.0,
+   "x_mid": 812.5,
+   "x_bot": 810.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1003.5,
+   "x_mid": 1001.0,
+   "x_bot": 999.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1187.0,
+   "x_mid": 1184.5,
+   "x_bot": 1180.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1379.5,
+   "x_mid": 1375.5,
+   "x_bot": 1368.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1559.0,
+   "x_mid": 1558.5,
+   "x_bot": 1557.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1742.0,
+   "x_mid": 1741.0,
+   "x_bot": 1739.0,
+   "kind": "rule"
+  }
+ ],
+ "n_cols": 9,
+ "page_class": "mixed",
+ "label_origin": "human",
+ "schema_version": 1
+}

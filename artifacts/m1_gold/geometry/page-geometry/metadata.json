@@ -1,0 +1,126 @@
+{
+  "name": "page-geometry",
+  "version": "0.4.0",
+  "schema_version": 1,
+  "description": "版面几何：界行竖线在三个高度上的位置，用于标定与评测页面形变（错切/射影）与列距列相位",
+  "created": "2026-08-22",
+  "status": "可用",
+  "eval_command": "cd open-guji-cv && python scripts/eval_geometry.py <dataset>   # 需 GUJI_WORKSPACE + GUJI_PRODUCTS_DIR（v2 Step2 产物）；或 guji eval --from-raw run geometry",
+  "eval_script": "open-guji-cv/scripts/eval_geometry.py",
+  "total_samples": 30,
+  "sample_unit": "页",
+  "sources": [
+    "06061300.cn（武英殿刻本《欽定四庫全書總目》卷首一~四）"
+  ],
+  "label_origin_values": [
+    "human",
+    "derived"
+  ],
+  "page_class_distribution": {
+    "roster": 4,
+    "body": 17,
+    "mixed": 9
+  },
+  "book_distribution": {
+    "vol01": 18,
+    "vol02": 12
+  },
+  "gold_definition": "每条界行/版框竖线在三个高度（版框内竖直跨度的 16%/50%/84%，原图 px，见各页 band_ys/frame_y）上的 x。v0.4.0 起坐标在**原图**上：旧 v1 帧金标（人工目视确认）按图像内容迁移——旧界行梳与原图墨列投影互相关定位，再逐高度做局部脊线拟合验证；39 页中 30 页迁移成功（243/285 条界行保留），9 页无法可靠迁移作 stale 留档。",
+  "why_gold_does_not_go_stale": "（2026-09-30 更正）界行位置是图像自身的性质，这一点不变；但 v0.3.0 的金标量在 v1 预处理输出帧（透视校正+裁剪）上，该帧随 v1 链退役而不可复现，39/39 页尺寸与原图不同。v0.4.0 已迁到原图帧，此后与任何预处理链无关。",
+  "why_three_heights": "一条线记三个点，同时钉住三件事：它在哪（列边界的直接证据）、它斜不斜（三点不齐=有错切残余）、全页的线是平行还是收敛（斜率随 x 系统变化=射影）。只记中点的话，后两件事没法判——而它们正是「该做错切校正还是该上射影矫正」的判据。",
+  "metrics": [
+    {
+      "name": "rule_in_col",
+      "type": "float",
+      "direction": "lower_is_better",
+      "description": "主指标。金标界行采样点落进管线列框内部的比例——下游「图块混入界行竖线」的直接前因，有因果链而非代理量"
+    },
+    {
+      "name": "residual_tilt",
+      "type": "float",
+      "direction": "lower_is_better",
+      "description": "对金标点施加管线声明的几何变换（grid.shear）后，同一条界行三个 x 的极差（px）——直接衡量矫正做干净没有，与列拟合无关"
+    },
+    {
+      "name": "projective_span",
+      "type": "float",
+      "direction": "diagnostic",
+      "description": "逐条界行斜率随 x 的系统变化。错切下为 0，射影下非 0。不打分，用于判断要不要上射影矫正"
+    },
+    {
+      "name": "foreshortening",
+      "type": "float",
+      "direction": "diagnostic",
+      "description": "列距沿 x 的系统变化占列距的比例——射影的第二个独立证据"
+    },
+    {
+      "name": "outside_ink",
+      "type": "float",
+      "direction": "lower_is_better",
+      "description": "落在**最外侧列框之外**的字墨比例——判「整列被排除在网格外」的直接量。不需要金标，是图与输出之间的关系，可在任意页上算。只算外侧不算列间缝：缝里本来就有笔画外溢与内缩留白，算进来会淹没信号（全书框外字墨中位 10.5%，外侧漏墨中位才 2.7%）"
+    }
+  ],
+  "baseline": {
+    "measured_on": "39 页 353 条界行（1059 个采样点）",
+    "pipeline": "segment（错切校正 + 界行吸附 + 界行定列距 + 书级列距/格高/内缩共识 + 页型闸门 + 列梳子夹逼）",
+    "rule_in_col": 0.0057,
+    "pages_clean": 36,
+    "pages_bad": 0,
+    "residual_tilt_median": 4.0,
+    "residual_tilt_p90": 8.5,
+    "n_cols_exact_pages": 36,
+    "by_page_class": {
+      "body": {
+        "n_pages": 26,
+        "rule_in_col": 0.0061,
+        "pages_clean": 24
+      },
+      "mixed": {
+        "n_pages": 9,
+        "rule_in_col": 0.0072,
+        "pages_clean": 8
+      },
+      "roster": {
+        "n_pages": 4,
+        "rule_in_col": 0.0,
+        "pages_clean": 4
+      }
+    },
+    "outside_ink_median": 0.0407,
+    "pages_losing_a_column": null
+  },
+  "finding_projective": {
+    "question": "残余形变是错切还是射影？要不要按内边框四角做单应矫正？",
+    "answer": "要。错切与列距两个问题修掉之后，**剩余失败集中在射影形变的页上**——3 张坏页全部是射影页，且列距渐变与失败率强相关。",
+    "evidence": {
+      "corr_foreshortening_vs_rule_in_col": 0.591,
+      "corr_projective_span_vs_rule_in_col": 0.031,
+      "corr_slope_scatter_vs_rule_in_col": 0.28,
+      "n_projective_pages": 16,
+      "rule_in_col_on_projective_pages": 0.102,
+      "rule_in_col_on_non_projective_pages": 0.019,
+      "projective_pages_with_zero_failures": 10,
+      "bad_pages_projective": 3,
+      "bad_pages_non_projective": 0,
+      "bad_pages": [
+        "vol01/166",
+        "vol01/174",
+        "vol01/198"
+      ]
+    },
+    "necessary_not_sufficient": "16 张射影页里有 10 张零失败——射影是失败的**必要不充分**条件。所以矫正的收益上限是那 3 张坏页（全书 rule_in_col 5.29% → ~1%），不是全部射影页。",
+    "measurement_caveat": "这个结论是在两册切分都刷新之后得到的。此前用未同步的 vol02 网格算过一版，得到的相关系数是 −0.09（看起来射影无关）——**上游没对齐时相关性分析会给出相反的结论**，跑这类分析前必须确认所有分册的产物是同一版。",
+    "残余侵入有多深": "被圈进列框的界行采样点中位探入 7.5px、64% <10px。界行本身宽 5px，多数是贴边级浅侵入；靠加余量继续压要拿列宽换（现列宽 119.8px、格高 114.4px，只剩 5px 余量），所以下一步应该是矫正几何而不是加余量。",
+    "revised_2026_08": "**射影不是剩余失败的主因，内缩塌陷才是。** 3 张坏页（vol01/166 174 198）的 inset_l 只有 6px，而正常页 28~38px——列框贴着界行走，界行必然被圈进去。全书量下来：69 页有一边 inset <15px，这些页 rule_in_col 均值 0.083、内缩正常的页只有 0.006，差 14 倍；相关系数 −0.346。加了书级内缩共识之后 rule_in_col 5.00% → 0.57%、坏页 3 → 0，**没有动任何射影矫正**。此前把 foreshortening 与失败率的 +0.59 相关读成因果——实际是目录页同时具备「界行稀疏 → 内缩量不准」和「界行稀疏 → 列距渐变估计噪声大」，共因而非因果。"
+  },
+  "known_limitation": "1) 界行漫漶的页只能检出 5~7 条（如 vol02/136、vol02/28），样本量小、指标方差大；2) 封面/题名页界行不足 3 条，直接排除在数据集外（vol01/3）；3) rule_in_col 以界行**中心**是否在框内计，宽 5px 的界行中心刚进框时实际只有 ~2.5px 墨在框内，指标略偏严。\n5) 外侧漏墨随内缩加宽而上升（中位 3.52% → 4.07%，目录页 7.69%），这是用「列框离界行更远」换来的，逐格字墨外溢从中位 1.09% 升到 1.29%（均值不变）——代价可接受但已记账。",
+  "next_step": "按内边框四角（或更稳健地：竖线灭点 + 横线灭点）估单应，把版面矫成矩形。本数据集可直接评测它：矫正后重跑 eval，看 rule_in_col 与 residual_tilt 降多少，以及 3 张坏页是否转清。收益上限已知（5.29% → ~1%），不必凭感觉。",
+  "finding_column_count": {
+    "question": "列数不对（18 页切出 7~8 列）是不是在丢整列文字？",
+    "answer": "不是。列数是个很差的危害代理量——实测非 9 列页的**外侧漏墨中位 1.97%，比 9 列页的 2.79% 还低**；漏得最多的（最高 14.1%）全是 9 列页。",
+    "root_cause": "两个完全不同的子原因：(1) 13 页被上游裁窄——图宽 1460~1530（正常 1696，差整整一个列距），且**图上真的只有 8 条文字带**（正常页 9 条），少的那一列在图上就不存在；(2) 4 页梳子起点偏移 1~5 个列距——相位原先由文字带的 content_range 锚定，卷尾页左侧整片空列被当成「没有内容」跳过。",
+    "fix": "(2) 加列梳子夹逼（跨度刚性 → 起点自由度只有 W-span），全部修复；(1) 不硬凑 9 列，按装得下的列数切并标 narrow_page，真正该修的是上游裁切。",
+    "note": "窄页不是把字切断了——图像左右边缘 25px 内的字墨，窄页 0.06~3.0%，相邻正常页 0.05~3.7%，没有差别。是整列被切掉。"
+  },
+  "coordinate_frame": "raw_page_px@top-left（原图，左上原点）；v0.3.0 及以前是 v1 预处理输出帧"
+}

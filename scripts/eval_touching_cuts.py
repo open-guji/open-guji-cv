@@ -80,10 +80,12 @@ def main() -> int:
                 if up is not None and getattr(up, "seam_bottom", None):
                     cur_seam = list(up.seam_bottom)
                 else:
-                    yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - float(ex["y"]))))
+                    # 2026-09-30：有的折线条目没有 y（bxgb 59 条），原代码 KeyError 整个评测崩；缺 y 时取折线平均高
+                    y_ref = float(ex["y"]) if ex.get("y") is not None else float(np.mean([p[1] for p in ex["polyline"]]))
+                    yy = float(min(cc.boundaries[1:-1], key=lambda b: abs(b - y_ref)))
                     cur_seam = [int(round(yy))] * len(gold_seam)
                 mx, mean = seam_deviation(cur_seam, gold_seam)
-                poly_rows.append(dict(id=it.id, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
+                poly_rows.append(dict(id=it.id, mode=mode, max_dev=mx, mean_dev=mean, has_seam=up is not None and bool(getattr(up, "seam_bottom", None))))
         if ex.get("tags"):
             # 有干扰因素（污点 / 界行 / 邻字残墨）的条目单独一档：切点本身不是算法能决定的
             for t in ex["tags"]:
@@ -128,7 +130,7 @@ def main() -> int:
             col_end.append(it.id)
             continue
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
-                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v,
+                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v, mode=mode,
                          picked_source=ex.get("picked_source")))
     if not rows:
         print(f"touching-cuts：没有可比条目（overlap {overlap}，干扰 {sum(len(v) for v in tagged.values())}，漂移 {drift}，缺产物 {missing}，金标 {len(items)}）")
@@ -147,6 +149,13 @@ def main() -> int:
           f"老条目（未记几何，可能已漂而查不出）{modes['legacy']}")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
     print(f"  ≤3px {100*(e<=3).mean():.1f}%   ≤5px {100*(e<=5).mean():.1f}%   ≤10px {100*(e<=10).mean():.1f}%")
+    # 2026-09-30 M1 B 道：按「金标坐标有没有图像/几何锚」分层——page/sig_ok = 页面坐标或列窗签名锚定（可信），
+    # legacy = 只有列图坐标 + col_h（当时列窗几何没留档、没存人裁图块，无法证明「人看的图还在」）。
+    for md in ("page", "sig_ok", "legacy"):
+        em = np.array([r["err"] for r in rows if r["mode"] == md])
+        if len(em):
+            print(f"    [{md:6}] n={len(em):<4} mean {em.mean():.1f}  median {np.median(em):.1f}  p90 {np.percentile(em, 90):.1f}"
+                  f"  ≤3px {100*(em<=3).mean():.1f}%  ≤5px {100*(em<=5).mean():.1f}%  ≤10px {100*(em<=10).mean():.1f}%")
     worst = sorted(rows, key=lambda r: -r["err"])[:8]
     print("  最差:", [(r["id"], round(r["err"])) for r in worst])
     if tagged:
@@ -156,6 +165,10 @@ def main() -> int:
         ns = sum(r["has_seam"] for r in poly_rows)
         print(f"  折线金标 n={len(poly_rows)}（现役有缝 {ns}）：最大偏差 mean {mx.mean():.1f} median {np.median(mx):.1f} p90 {np.percentile(mx, 90):.1f}；"
               f"平均偏差 median {np.median(mn):.1f}；最大偏差 ≤3px {100*(mx<=3).mean():.1f}%  ≤6px {100*(mx<=6).mean():.1f}%")
+        for md in ("page", "sig_ok", "legacy"):
+            sub = np.array([r["max_dev"] for r in poly_rows if r["mode"] == md])
+            if len(sub):
+                print(f"    [{md:6}] 折线 n={len(sub):<4} 最大偏差 mean {sub.mean():.1f} median {np.median(sub):.1f} p90 {np.percentile(sub, 90):.1f}  ≤3px {100*(sub<=3).mean():.1f}%  ≤6px {100*(sub<=6).mean():.1f}%")
         worst = sorted(poly_rows, key=lambda r: -r["max_dev"])[:5]
         print("  折线最差:", [(r["id"], round(r["max_dev"])) for r in worst])
     if a.json:

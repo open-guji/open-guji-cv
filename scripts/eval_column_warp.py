@@ -31,6 +31,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from open_guji_cv.utils.border_geometry import VLine  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
@@ -102,6 +103,33 @@ def measure(sample: dict) -> dict:
     )
 
 
+def measure_v2(sample: dict, raw: np.ndarray, rec, ident: dict) -> dict:
+    """现行 v2 链口径：预测带 = `column_warp` 产物里的 `band`（Step2 真实输出），
+    金标走廊按现图（remedy 档则按新图重推的 canonical）。指标定义与 `measure` 完全一致。"""
+    tb = sample["text_band"]
+    hl, hr = tb["human_left"], tb["human_right"]
+    cl, cr = tb["canonical_left"], tb["canonical_right"]
+    if ident["channel"] == "remedy_clean":
+        cl, cr = ident["canonical"]
+    pl, pr = rec.band
+    prof = column_profile(raw)
+
+    def ink(lo: int, hi: int) -> float:
+        return float(prof[lo:hi].mean()) if hi > lo else 0.0
+
+    return dict(
+        book=sample["book"], page=sample["page"], col=sample["col"],
+        verdict=sample["verdict"], tags=sample["tags"], w=raw.shape[1],
+        channel=ident["channel"],
+        in_corridor_left=cl <= pl <= hl, in_corridor_right=hr <= pr <= cr,
+        eaten_left=max(0, pl - hl), eaten_right=max(0, hr - pr),
+        short_left=max(0, cl - pl), short_right=max(0, pr - cr),
+        residue_ink=max(ink(pl, cl), ink(cr, pr)),
+        corridor_left=hl - cl, corridor_right=cr - hr,
+        gold_outside_ink=max(ink(0, cl), ink(cr, raw.shape[1])),
+    )
+
+
 def stat(vals: list[float], fmt: str = "%.1f") -> str:
     if not vals:
         return "—"
@@ -127,6 +155,10 @@ def report(rows: list[dict]) -> None:
         print(f"{name:<8}{len(g):>4} | {f'{hit}/{2 * len(g)} 条界':^11} | "
               f"{stat(eaten):^19} | {stat(short):^19} | {stat(resid, '%.3f'):^21}")
 
+    tol1 = sum((r["eaten_left"] <= 1 and r["short_left"] <= 1)
+               + (r["eaten_right"] <= 1 and r["short_right"] <= 1) for r in rows)
+    print(f"\n（附加指标，非原口径）容差 1px 内命中 {tol1}/{2 * len(rows)} 条界——"
+          f"走廊宽度为 0 的列（human=canonical）差 1px 就记「吃/欠」，读严格口径时要知道这一点")
     n_eat = sum(1 for r in rows if r["eaten_left"] + r["eaten_right"] > 0)
     print(f"\n吃到字身的列：{n_eat} / {len(rows)}"
           f"（宁可留残墨也不切字，这个数应该压到 0）")
@@ -205,14 +237,57 @@ def report_border(samples: list[dict]) -> None:
         f"{e}·{c}={n}" for (e, c), n in sorted(cases.items())))
 
 
+def main_v2(samples: list[dict]) -> None:
+    """读现行 v2 链产物（products/<册>/column_warp + cache/<册>/column_raw），
+    每条金标先过「人当时看的图还在不在」闸（column_warp_v2.identity），不过的不计分、单列出来。"""
+    import collections
+    from column_warp_v2 import identity, load_v2
+    rows, dropped, missing = [], [], []
+    chan = collections.Counter()
+    for s in samples:
+        if not s.get("text_band"):
+            continue
+        got = load_v2(s["book"], int(s["page"]), int(s["col"]))
+        if got is None:
+            missing.append(f"{s['book']}/{s['page']} c{s['col']}")
+            continue
+        raw, rec = got
+        ident = identity(s, raw)
+        if not ident["ok"]:
+            dropped.append((s, ident))
+            continue
+        chan[ident["channel"]] += 1
+        rows.append(measure_v2(s, raw, rec, ident))
+    n_all = sum(1 for s in samples if s.get("text_band"))
+    print(f"[v2 链] 金标 {n_all} 列：图像同一性通过 {len(rows)}"
+          f"（{'、'.join(f'{k} {v}' for k, v in sorted(chan.items())) or '—'}），"
+          f"图已变不计分 {len(dropped)}，v2 产物缺 {len(missing)}")
+    if missing:
+        print("  缺产物（先跑 guji pipeline / eval --from-raw）：" + "、".join(missing[:12])
+              + (f" …共 {len(missing)}" if len(missing) > 12 else ""))
+    if rows:
+        report(rows)
+        strict = [r for r in rows if r["channel"] != "remedy_clean"]
+        if len(strict) != len(rows):
+            print(f"\n（严格口径，不含 remedy_clean 补救档：{len(strict)} 列）")
+            report(strict)
+    n_bc = sum(1 for s in samples if s.get("border_class"))
+    print(f"\n上下版框 border_class：样本里共 {n_bc} 列带这项金标"
+          + ("（空集——数据集里这部分金标缺失，见 artifacts/m1_gold/column_warp/MIGRATION.md）" if not n_bc else ""))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", help="column-warp 子集目录")
+    ap.add_argument("--source", choices=("v2", "legacy"), default="v2",
+                    help="v2=读现行链产物（默认）；legacy=读 output/<册>/step2_columns 预导列图（v1 时代落点）")
     args = ap.parse_args()
     files = sorted((Path(args.dataset) / "samples").glob("*.json"))
     if not files:
         raise SystemExit(f"{args.dataset}/samples 里没有样本")
     samples = [json.loads(f.read_text(encoding="utf-8")) for f in files]
+    if args.source == "v2":
+        return main_v2(samples)
     # 有些样本只有 border_class（文字带被上游改动作废、等重标），跳过带那部分
     banded = [s for s in samples if s.get("text_band")]
     if banded:
