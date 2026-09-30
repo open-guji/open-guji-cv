@@ -1,0 +1,999 @@
+{
+ "allow_downgrade": false,
+ "attachments": [],
+ "book": "vol02",
+ "book_yaml_sha256": "ef5f86c7706f8ceedf4112afa23c5a5ee0c7d167d32d7b3b80052da4ef10753f",
+ "branch": "snap/96mid1ogzk/vol02/20260930T0339",
+ "created": "2026-09-30T03:37:15Z",
+ "cv": {
+  "code_revs": {
+   "seed_admit": [
+    "75f1a90"
+   ]
+  },
+  "commit": "75f1a906c0546d525b671d56c64dbd6050b89a51",
+  "compatible_with": []
+ },
+ "files": {
+  "products/vol02/seed_admit/_manifest.jsonl": {
+   "sha256": "317b59eda77e31f6d5fe6e73fabd1a10e76cbf938cd9332f94cd35351ee1794f",
+   "size": 152967
+  },
+  "products/vol02/seed_admit/p0001.json": {
+   "sha256": "d25c843ca59e531f6325415749e5a1498f2ed40abd7af524bbfa81095d1a491f",
+   "size": 77
+  },
+  "products/vol02/seed_admit/p0002.json": {
+   "sha256": "49f2e57dc18080c0c20d515eef36d7950923dcbd5482ba47376e4e8e8d726712",
+   "size": 77
+  },
+  "products/vol02/seed_admit/p0003.json": {
+   "sha256": "95d03772efdaf3a0fb65c903ed0a0e7e15a1f55c8b3884d19f12451e9f3a2af7",
+   "size": 38235
+  },
+  "products/vol02/seed_admit/p0004.json": {
+   "sha256": "1938e3eeb2c96fc14a42b6c66d229b4edb3b3ba90a9352d1cbb10bb2156e0611",
+   "size": 41190
+  },
+  "products/vol02/seed_admit/p0005.json": {
+   "sha256": "86fe5d1a6684dfa4adcf6253cadb82401f3e94d5a5892d7f32503b5b92508358",
+   "size": 35249
+  },
+  "products/vol02/seed_admit/p0006.json": {
+   "sha256": "ba0604e98b91bb32f06d849446b4116d20a889111cf6b4aa15defd1551f5ed43",
+   "size": 27892
+  },
+  "products/vol02/seed_admit/p0007.json": {
+   "sha256": "2901142a47bfb43f0613b808f500c8db0c06edc34d28346c23f0a7684ccf0b3e",
+   "size": 36722
+  },
+  "products/vol02/seed_admit/p0008.json": {
+   "sha256": "fcb12143b661680cfe6c48c24c9e70f8a738aa670ae04b90c5e24861bbcd90ee",
+   "size": 33920
+  },
+  "products/vol02/seed_admit/p0009.json": {
+   "sha256": "4b90b56417b678c80c9522ec50cf29a64c57a0894b93b5ceb52a9d912b65887d",
+   "size": 37512
+  },
+  "products/vol02/seed_admit/p0010.json": {
+   "sha256": "81ee595268839acf58111d1500187ff616b1a9f1e4a57c3d385199b1cd29bce8",
+   "size": 35625
+  },
+  "products/vol02/seed_admit/p0011.json": {
+   "sha256": "31b01dba5e0f5d841371b7c8afed5737b8e19c78e1f75b7c174ff2e3d74cbe8b",
+   "size": 22763
+  },
+  "products/vol02/seed_admit/p0012.json": {
+   "sha256": "a43173a89734f715ea28572c5a2cbfbcc40c896ce8f2a5cc26992cc7dc02202c",
+   "size": 28341
+  },
+  "products/vol02/seed_admit/p0013.json": {
+   "sha256": "3afb03b4a8816c12a24a40268249f17c9927268648e3d4439e26339842fac348",
+   "size": 39123
+  },
+  "products/vol02/seed_admit/p0014.json": {
+   "sha256": "2bf9eeb3c7f9e2bda5ccb92ff4edb57b499de3bfe2a743836d8386d455a3fb31",
+   "size": 37919
+  },
+  "products/vol02/seed_admit/p0015.json": {
+   "sha256": "601e45078137e548f646a6238d0bfd6b7dc3e18b9564a8af611f2d528f98839e",
+   "size": 31310
+  },
+  "products/vol02/seed_admit/p0016.json": {
+   "sha256": "cab5ef05d9ffa3062c5b590c0a4319ae2db1cf0429d47d7f8d3c679b79610f92",
+   "size": 38840
+  },
+  "products/vol02/seed_admit/p0017.json": {
+   "sha256": "f5de03a40d765dfe7b1f9c45acb88af8a03915bbb67cae500967a9d3f311834e",
+   "size": 34381
+  },
+  "products/vol02/seed_admit/p0018.json": {
+   "sha256": "17a6b19f81622596d3379b8c3eb4014f383d928f7007ef8217829376145df1f2",
+   "size": 37248
+  },
+  "products/vol02/seed_admit/p0019.json": {
+   "sha256": "8d9cd18bc1e81b8e22d143e9a2f0f2e146840a16bad5ac38cfb48f63f60c08be",
+   "size": 34143
+  },
+  "products/vol02/seed_admit/p0020.json": {
+   "sha256": "e33bf54a8adcab3f2fa69e031ac27e26ee50c91212e9e28c76538f47649902ea",
+   "size": 39191
+  },
+  "products/vol02/seed_admit/p0021.json": {
+   "sha256": "56237b6da345000082ff49de25676da48d694f782d09a997e18a73016ee1230f",
+   "size": 38305
+  },
+  "products/vol02/seed_admit/p0022.json": {
+   "sha256": "e0557960878dfd9ca61efbbb8013ee96fcff002a3aafe6cca50f46e60e60ece0",
+   "size": 39799
+  },
+  "products/vol02/seed_admit/p0023.json": {
+   "sha256": "4668b42d2a412468bb7c8e454783e820f289e5df83ca691abce2be4f9e515aff",
+   "size": 34231
+  },
+  "products/vol02/seed_admit/p0024.json": {
+   "sha256": "44044abe06ad1ec26d1cac80b5860350473abf9e6c142ed5d521182b4816d7ff",
+   "size": 39579
+  },
+  "products/vol02/seed_admit/p0025.json": {
+   "sha256": "ce55a6499f51d6aa4c6979a8101b160445d497403d1b16340bb3c0cc0ed9c6c2",
+   "size": 38350
+  },
+  "products/vol02/seed_admit/p0026.json": {
+   "sha256": "65941749a418841083b64e43fc53893902c3cf9f70d08eec94431c5168674f80",
+   "size": 39025
+  },
+  "products/vol02/seed_admit/p0027.json": {
+   "sha256": "bde0b663f4cf99cc5e623e5b72eb2f510e6c9d33dca29d7b2eb3c561629f64dc",
+   "size": 33823
+  },
+  "products/vol02/seed_admit/p0028.json": {
+   "sha256": "d3c39e93aa89a9ee84f087d01e26c65791113b25c103e80901acf0791cfffbf1",
+   "size": 37950
+  },
+  "products/vol02/seed_admit/p0029.json": {
+   "sha256": "47f725e95cf91ad4a787e23db191fbbbcea2370a3b1a84b5805f9cf46aba9dc7",
+   "size": 38667
+  },
+  "products/vol02/seed_admit/p0030.json": {
+   "sha256": "3226781fc72510b53c24a04dd4e7b30003f52b464d81f765116627849e1eaed8",
+   "size": 38395
+  },
+  "products/vol02/seed_admit/p0031.json": {
+   "sha256": "eb84f989f57a5f1cb0bc44ec894f01d0959c920b2f504e200706870a7a8b611d",
+   "size": 36384
+  },
+  "products/vol02/seed_admit/p0032.json": {
+   "sha256": "f7a7c51758f8b6e5fb285fca3aec324e85c18cf6c1b59a6a8317561d563f8948",
+   "size": 38604
+  },
+  "products/vol02/seed_admit/p0033.json": {
+   "sha256": "6614b283c83fb04a02e720e780c1f37c0a290594f8c71f8d3b5a18faafb6ddc0",
+   "size": 38324
+  },
+  "products/vol02/seed_admit/p0034.json": {
+   "sha256": "718e5526f132ba6ef30974cc566c95ab0913da93da688879dc9c4a37e44e5e9b",
+   "size": 37899
+  },
+  "products/vol02/seed_admit/p0035.json": {
+   "sha256": "b4a1db6be437f8c6c131aab2c8613991d6889e73ce7f2b77fce7cd27dbd94a88",
+   "size": 33848
+  },
+  "products/vol02/seed_admit/p0036.json": {
+   "sha256": "abe4f37102b4e15a73a1b84cbe29c1a718c66ed2e6ecd28c36e27dddc36c26f1",
+   "size": 38261
+  },
+  "products/vol02/seed_admit/p0037.json": {
+   "sha256": "27c3e3340b8e1cf3fc15199be3e3bd83f005fe8b09e85a4ff91f65bb01ef3a36",
+   "size": 38166
+  },
+  "products/vol02/seed_admit/p0038.json": {
+   "sha256": "e18bc2e76801049d4dc71e51a32230a6e939276b054a80150fb9c247d096fa9f",
+   "size": 15150
+  },
+  "products/vol02/seed_admit/p0039.json": {
+   "sha256": "a4717bc5f66fea5a14087fa5a23787a8ba9a7160dafa05f399f057530be525d2",
+   "size": 29224
+  },
+  "products/vol02/seed_admit/p0040.json": {
+   "sha256": "6f7f0ef94568973d411ed37afda97ce494b4f669c3a1e0ee2175ce8f29c81f19",
+   "size": 38655
+  },
+  "products/vol02/seed_admit/p0041.json": {
+   "sha256": "b6c71f5253c3904da199fb05caf4626ec5acdf0b0e299034798c5975f4f282fc",
+   "size": 38526
+  },
+  "products/vol02/seed_admit/p0042.json": {
+   "sha256": "38ae05322aadd4b58777f6f4498cc25d9135f0a417eb242e3d635121a261f404",
+   "size": 33912
+  },
+  "products/vol02/seed_admit/p0043.json": {
+   "sha256": "3f117e5c522c0c1141e79fb0ebe5a1b3fb82ffdf3301d2266a1966d2c3fca5cd",
+   "size": 37742
+  },
+  "products/vol02/seed_admit/p0044.json": {
+   "sha256": "14f47550ef27c808f1c2c23cdd083a9bfec70a5a3ed640f9f3368147eb55d771",
+   "size": 38418
+  },
+  "products/vol02/seed_admit/p0045.json": {
+   "sha256": "026075624a93043aa51748471709d2a95cb7a72adac451cbf51ba36cdea47cc4",
+   "size": 34327
+  },
+  "products/vol02/seed_admit/p0046.json": {
+   "sha256": "95909228b405ac2b2144e21ed7281c8f8d01ebbcfb1b657c30e13b661425ca5c",
+   "size": 38753
+  },
+  "products/vol02/seed_admit/p0047.json": {
+   "sha256": "70f9e6e4d974571dc8612a26e21886d11c35afc9d7844c6fc624fc203fe35867",
+   "size": 39186
+  },
+  "products/vol02/seed_admit/p0048.json": {
+   "sha256": "b93cec627fc25a1ec603325b35052851efafe22c947035749c66374803725cda",
+   "size": 39132
+  },
+  "products/vol02/seed_admit/p0049.json": {
+   "sha256": "fee1b12b47cc66698bcc1bb869defe7df0ab13bab87ddecfca6d170993dc3c1e",
+   "size": 35493
+  },
+  "products/vol02/seed_admit/p0050.json": {
+   "sha256": "efd7a0c174d3ff2424a7c0fb2661bfc00e30ce8f6f307b372a8ab6b7a44e539c",
+   "size": 38330
+  },
+  "products/vol02/seed_admit/p0051.json": {
+   "sha256": "d15ca9f60a22c0246123464e798f046c0cdb54d255b06f58e123661ae51fc5d8",
+   "size": 32852
+  },
+  "products/vol02/seed_admit/p0052.json": {
+   "sha256": "c13c364b89865fe3f307f70062a857c0bb3cf1fcd6641934d44c77f322122411",
+   "size": 38218
+  },
+  "products/vol02/seed_admit/p0053.json": {
+   "sha256": "7db06c6558b96e60397dc9a7f6b5ecaa782cf00ed9012ea52de85e81b89440d5",
+   "size": 37906
+  },
+  "products/vol02/seed_admit/p0054.json": {
+   "sha256": "5b4192190f7a21c80141b4ec2e2d8528735b827c58ef57ffad4a50f262f9741b",
+   "size": 34242
+  },
+  "products/vol02/seed_admit/p0055.json": {
+   "sha256": "eb7a5db07c14781692dc8dee9a6204002ad8c2f5cdd9eac2cdb17c305903dc80",
+   "size": 39023
+  },
+  "products/vol02/seed_admit/p0056.json": {
+   "sha256": "dbc18f5fef3469041bcd2b45896883e279269a44d434eaef0038c2e84691a583",
+   "size": 33831
+  },
+  "products/vol02/seed_admit/p0057.json": {
+   "sha256": "c4c17e476065463656c7d72791537654d69e92f707fc513618670b0bf209e94d",
+   "size": 39079
+  },
+  "products/vol02/seed_admit/p0058.json": {
+   "sha256": "8466447a5b84d3dc52395f61809453785dbf893c240b96ea2813ccee68066a9f",
+   "size": 38515
+  },
+  "products/vol02/seed_admit/p0059.json": {
+   "sha256": "88cd6b3f79fe31b45c95c9435e0c4a245ad080aaea5ccedeb270420061267f3f",
+   "size": 34929
+  },
+  "products/vol02/seed_admit/p0060.json": {
+   "sha256": "a32543eddf5075e4aca5e1e6171bc2a55daf6dc9c8e6430026f5310149ef2c68",
+   "size": 38507
+  },
+  "products/vol02/seed_admit/p0061.json": {
+   "sha256": "bf243696aaa059e0f62e009578e5eb11882d7b968b2e7cf0dfe266825a0abef4",
+   "size": 36778
+  },
+  "products/vol02/seed_admit/p0062.json": {
+   "sha256": "a624f610d12e7cdbb3dbffbc9785cd7673019378b1813f8fa716bdd8aa5dcc30",
+   "size": 38444
+  },
+  "products/vol02/seed_admit/p0063.json": {
+   "sha256": "ae89b4213c23d470108fc35712bb0c80b97e149a875566556802c520bdfe8fc6",
+   "size": 33706
+  },
+  "products/vol02/seed_admit/p0064.json": {
+   "sha256": "a718d51ca03eec08198e0589340dcb4fe91795364a5fb3f63d6824639b2d4bcd",
+   "size": 39465
+  },
+  "products/vol02/seed_admit/p0065.json": {
+   "sha256": "7f08924393ecf691759714bf6fbb3e14e2829282ac5541229d49ce1c55f559c3",
+   "size": 35329
+  },
+  "products/vol02/seed_admit/p0066.json": {
+   "sha256": "514557ac8e2873e35fc06326bff8228d8c6eb14e80a49cef490c421dcea4c024",
+   "size": 37064
+  },
+  "products/vol02/seed_admit/p0067.json": {
+   "sha256": "deb189453539f2eb20c3b9456d6607c387ac6ba3bc2320b24ecf1b4725c2aaca",
+   "size": 33175
+  },
+  "products/vol02/seed_admit/p0068.json": {
+   "sha256": "ac8a8090b79dd97f253a6731787b82fddc06d8571b4e775ad7f332f7900473cc",
+   "size": 37448
+  },
+  "products/vol02/seed_admit/p0069.json": {
+   "sha256": "8d363691a32055c72ce936752b004149f2a85ffd575327123d3f24406ae4278f",
+   "size": 38824
+  },
+  "products/vol02/seed_admit/p0070.json": {
+   "sha256": "cc70363fdd9c94398503233bbdf934f645df8778b1d26aca4256575c5cb3ba7b",
+   "size": 38620
+  },
+  "products/vol02/seed_admit/p0071.json": {
+   "sha256": "896eba996f344b7658d435c0272afad5ed99137e4632ccd417ff5a7eaac16ce0",
+   "size": 36287
+  },
+  "products/vol02/seed_admit/p0072.json": {
+   "sha256": "7f9a521ef3149120c66724fb8dd8b50b1d979beeda7f62fe0b6b566d0f5ef3b1",
+   "size": 37541
+  },
+  "products/vol02/seed_admit/p0073.json": {
+   "sha256": "e24e53c89afedacd2b1b488ce486f2c0dd88b818278489296f93913e2f69c93c",
+   "size": 38042
+  },
+  "products/vol02/seed_admit/p0074.json": {
+   "sha256": "dcad84f2cffb7118b19bc325e15f58d7de8edf5e8b7ae8d77b9e681327e26e21",
+   "size": 38793
+  },
+  "products/vol02/seed_admit/p0075.json": {
+   "sha256": "66d2e6f31ef92d022af3e5b929ac2e8053907b0fb65cf4b1720e82d3a75a3526",
+   "size": 38090
+  },
+  "products/vol02/seed_admit/p0076.json": {
+   "sha256": "4f7f5f3559b28a941a851a635b8795ea3cbbef4ba5d4fb34a10f37edb4450504",
+   "size": 32012
+  },
+  "products/vol02/seed_admit/p0077.json": {
+   "sha256": "5b65e907ef3f84a6edeb02ea394be3f1b62b138c20e98ad6c8636e44e80c3078",
+   "size": 27694
+  },
+  "products/vol02/seed_admit/p0078.json": {
+   "sha256": "28302b0a61c80b15ac26ff2b3ba0fa752b5940fc340ac65cd00a6250479dfa00",
+   "size": 38269
+  },
+  "products/vol02/seed_admit/p0079.json": {
+   "sha256": "0fbc7a09a4109cfd35a4b63bf4bf68235d827ced519074a9c9b95d493a7d6056",
+   "size": 38905
+  },
+  "products/vol02/seed_admit/p0080.json": {
+   "sha256": "4f7d99b14e2be50053edc5c15c7a85968b3d7f4edba6572a96b214ac07ae586f",
+   "size": 38684
+  },
+  "products/vol02/seed_admit/p0081.json": {
+   "sha256": "18a0acf773b06762597eec26370cdbb850e5c11a0a4374d037300bf67491e15f",
+   "size": 33272
+  },
+  "products/vol02/seed_admit/p0082.json": {
+   "sha256": "5888b5e7d1a91866f0f1e72b8e33897667139771a53d2b080f01949b21417ec2",
+   "size": 38839
+  },
+  "products/vol02/seed_admit/p0083.json": {
+   "sha256": "0bb030e5884003e7ce2ab290163892179b3680084227844792dc4b0fa4fe90b8",
+   "size": 34733
+  },
+  "products/vol02/seed_admit/p0084.json": {
+   "sha256": "0efed074e3c5def71dc32f793ec417f18199b656ae11af4e3997791b9bf9debf",
+   "size": 39425
+  },
+  "products/vol02/seed_admit/p0085.json": {
+   "sha256": "b27cbf6fb5137c9586b661ca119fdbb13a71610fc3537ab64709ba3967e22008",
+   "size": 38868
+  },
+  "products/vol02/seed_admit/p0086.json": {
+   "sha256": "6d1af594975845f5b5b03a180192fa277a2236972b0e4fad1e410aad8d80275f",
+   "size": 39045
+  },
+  "products/vol02/seed_admit/p0087.json": {
+   "sha256": "caae504cc20f0e4f7dcf733259b2a37ff8699b7615eaa8a014c7180062863c60",
+   "size": 38994
+  },
+  "products/vol02/seed_admit/p0088.json": {
+   "sha256": "816051fa55e6c442d0761a4eacad0847f4da5b0cdf5c1022264df042c59ddd9d",
+   "size": 37134
+  },
+  "products/vol02/seed_admit/p0089.json": {
+   "sha256": "900c36e2808a2c54ecc655df09642ba7b426c206d56fd1dd312c045a14baee0e",
+   "size": 38058
+  },
+  "products/vol02/seed_admit/p0090.json": {
+   "sha256": "de3f77280b3ed87724e8c28faf941a7151b57a9249ef6b1211bd978ef0f2380b",
+   "size": 38704
+  },
+  "products/vol02/seed_admit/p0091.json": {
+   "sha256": "e82fa11e0942dbe2d7564f928ba4d844131e7f440a7fc8312e51ed339e4b5af8",
+   "size": 39830
+  },
+  "products/vol02/seed_admit/p0092.json": {
+   "sha256": "c93bba132b59703b49b20eba44534abc12d5f789b53891e6f8a6a159d59100fc",
+   "size": 38128
+  },
+  "products/vol02/seed_admit/p0093.json": {
+   "sha256": "c7563d7b0bf89310ff79ca4da00d0b94297bd871d2e7ef0a3112eb0a66c943a0",
+   "size": 33904
+  },
+  "products/vol02/seed_admit/p0094.json": {
+   "sha256": "0fc2fea25942ae9923fe8b8059842492c608cb660fda142bfbf30b6bca40056d",
+   "size": 39028
+  },
+  "products/vol02/seed_admit/p0095.json": {
+   "sha256": "c135f9059cb97e959ec3081b7bb0c2a290485ba27740deb7451f4fec9867de2e",
+   "size": 39376
+  },
+  "products/vol02/seed_admit/p0096.json": {
+   "sha256": "27d8c1525e20ba97fb1ead89a90e960db91390b5921e6b84fc6af1c35302d108",
+   "size": 38878
+  },
+  "products/vol02/seed_admit/p0097.json": {
+   "sha256": "d9910edb9848dbab310304e246aed3dcbdc4098aeae32dd7fd65a9b45fafa295",
+   "size": 38378
+  },
+  "products/vol02/seed_admit/p0098.json": {
+   "sha256": "35255eea3790496594a55a027c540899755db9d414494d6f8a3fc63ae2028b48",
+   "size": 38899
+  },
+  "products/vol02/seed_admit/p0099.json": {
+   "sha256": "f751595b021cf649735a0f12aeba3ead15eaf3706e302e53fbd981307bcb614a",
+   "size": 39150
+  },
+  "products/vol02/seed_admit/p0100.json": {
+   "sha256": "a4af09ef68c7bcac9256a01e0b78b823af98fcb3f1ceadf6e08c403afb9a07dd",
+   "size": 37168
+  },
+  "products/vol02/seed_admit/p0101.json": {
+   "sha256": "72b8d53b53ab3d5ffb31a54c6cc23b68f0e81b45fbb26b50a4287d677815ec9e",
+   "size": 36578
+  },
+  "products/vol02/seed_admit/p0102.json": {
+   "sha256": "eb5f77d363280cb0e713acb33654f134c1c2bd1532faf85ea48127af1e225be5",
+   "size": 31010
+  },
+  "products/vol02/seed_admit/p0103.json": {
+   "sha256": "4cdf27a1947acc995106a8da0b3959d9c708671b01d958719478d11c6be9da3d",
+   "size": 37319
+  },
+  "products/vol02/seed_admit/p0104.json": {
+   "sha256": "77425f8d68853679f0df68b4aae1f5059d268d9b69e7551f465cda1fc95ab8e9",
+   "size": 39238
+  },
+  "products/vol02/seed_admit/p0105.json": {
+   "sha256": "1e46cb2c99f52efbff91fba3d9bbf0d5537d9d40517a021335e77e1625eb0579",
+   "size": 36075
+  },
+  "products/vol02/seed_admit/p0106.json": {
+   "sha256": "f7daf01e47848795b1f3aaeeb1264af3b3fa8e0fac57af8739ba12ce88dc8336",
+   "size": 38838
+  },
+  "products/vol02/seed_admit/p0107.json": {
+   "sha256": "8054b4449df04bcf7bee1cc464d3cfd9076ecb201530551d402224a302e950aa",
+   "size": 36113
+  },
+  "products/vol02/seed_admit/p0108.json": {
+   "sha256": "ec3d203bdf70c975c6fc4aec9700a1ea9809d0eb96a33ccc8e4e8f275e71efa9",
+   "size": 36889
+  },
+  "products/vol02/seed_admit/p0109.json": {
+   "sha256": "f46882d234b9e8e8b99fb7ec324fb0be2c454efb34bc0608c9ba3cd4b4f1d2cc",
+   "size": 36842
+  },
+  "products/vol02/seed_admit/p0110.json": {
+   "sha256": "812f94067c50344513cd8eec435237c6019af5a146973965d6cea48736a0aea2",
+   "size": 38589
+  },
+  "products/vol02/seed_admit/p0111.json": {
+   "sha256": "f3ef9a42f36fc84098d2ade046324388b1f72644d7f89a390321db09cb473001",
+   "size": 34092
+  },
+  "products/vol02/seed_admit/p0112.json": {
+   "sha256": "95df1dc3184ae1332b27e941a356a34e6de4fbd130e73471a57961000527b440",
+   "size": 39318
+  },
+  "products/vol02/seed_admit/p0113.json": {
+   "sha256": "c06fbc0a7b75b0f7331d049183ca1896cd1d55cbbcabe8abf5a6584e1e2e6e48",
+   "size": 38655
+  },
+  "products/vol02/seed_admit/p0114.json": {
+   "sha256": "c9dfd92a7bdce48c5af821f1981b4edf0cd81613ce9b7048942b772c25e27082",
+   "size": 34066
+  },
+  "products/vol02/seed_admit/p0115.json": {
+   "sha256": "f623b78ed8636ce3bc049d1df90fe1bb2eaae4062c6f08650deebb5c3a1ebc94",
+   "size": 39595
+  },
+  "products/vol02/seed_admit/p0116.json": {
+   "sha256": "1dfddffac8a895c8aa48e150a8f126cc89c5f46f955c8d62ea152c97423a6e0f",
+   "size": 33760
+  },
+  "products/vol02/seed_admit/p0117.json": {
+   "sha256": "0ce62084419a4c52d7749c627c127a5a2b4a177bfcd1d5be1cd7b6e76c59493c",
+   "size": 39192
+  },
+  "products/vol02/seed_admit/p0118.json": {
+   "sha256": "a07d1d866ce5ea43aa15ca36009da66a5721a50502d4305b0d940d5e4ca2ed1e",
+   "size": 38160
+  },
+  "products/vol02/seed_admit/p0119.json": {
+   "sha256": "f7643237ccc5a38cd4ec455c7caa389855dd0fdc1cf6e7070274fea43400c66b",
+   "size": 39340
+  },
+  "products/vol02/seed_admit/p0120.json": {
+   "sha256": "3c03fe25e9a3f71b896bb9d3bf60af0edddced4dfa75ae5fc19cef124532c200",
+   "size": 34800
+  },
+  "products/vol02/seed_admit/p0121.json": {
+   "sha256": "133f5b6f4ac1e1eb53d3db17674ae7ceaa7ddff50ce60790a64669b41845af82",
+   "size": 38862
+  },
+  "products/vol02/seed_admit/p0122.json": {
+   "sha256": "cfa51afe28d089be38d465af164d998a0e3585d07e0d2d1603e1e6cbcf8a7579",
+   "size": 37803
+  },
+  "products/vol02/seed_admit/p0123.json": {
+   "sha256": "8b4819c74ffb1b11d00bab253caf4a33e2fdc13402311dde8dd842d864ab52f3",
+   "size": 39365
+  },
+  "products/vol02/seed_admit/p0124.json": {
+   "sha256": "634ffc6561ffdfa93f7a7ab069770459452d9b51af01a24f12ef7579b2082c99",
+   "size": 34751
+  },
+  "products/vol02/seed_admit/p0125.json": {
+   "sha256": "7fc1aa7ecc3d781a8e410e5e2a85c1f14d84f30c15263e561331470dda55c539",
+   "size": 37550
+  },
+  "products/vol02/seed_admit/p0126.json": {
+   "sha256": "2d6e323b497c776a8fd1de406ff6aa3020084ac808df48fa0ea1b2677d9e7f11",
+   "size": 39603
+  },
+  "products/vol02/seed_admit/p0127.json": {
+   "sha256": "d5f9dce6390bf1c36aecadfd9016b713ef143a20598261a8bf660cb39ecb06c7",
+   "size": 38095
+  },
+  "products/vol02/seed_admit/p0128.json": {
+   "sha256": "23f60cb41d28f89271d8da7213a27707ce5946e09ccf8a0efd869ca0890baff7",
+   "size": 36757
+  },
+  "products/vol02/seed_admit/p0129.json": {
+   "sha256": "634165e9c340f6ebf02edb95ef6c085a93dc4d9024c993d8890ca4ca9f65d6fd",
+   "size": 38297
+  },
+  "products/vol02/seed_admit/p0130.json": {
+   "sha256": "85e7babd6fb050ec89cf99e5f958a819fb0ae05de095b2d75895bcf2d688d3e5",
+   "size": 35509
+  },
+  "products/vol02/seed_admit/p0131.json": {
+   "sha256": "3053fd6bd0e6a1679b27918ab8804c22faff7f2b4da7540a9bb142be6b61bebc",
+   "size": 39733
+  },
+  "products/vol02/seed_admit/p0132.json": {
+   "sha256": "56011cd390fde6d004eb65cb2a413fc8ad27ad7a2861e467993731ab1190de69",
+   "size": 38011
+  },
+  "products/vol02/seed_admit/p0133.json": {
+   "sha256": "f0f3194d26eba029b0e8a2eca662e9035f012979af7b37fb936e0d14a98a9f4a",
+   "size": 39325
+  },
+  "products/vol02/seed_admit/p0134.json": {
+   "sha256": "c70911d86c2b7bb10665f90717fb670bae883620ab99684db6a4d20b51bff0e5",
+   "size": 38195
+  },
+  "products/vol02/seed_admit/p0135.json": {
+   "sha256": "bcefddfbc0fcda9e9d391687b800cab55c11153d5296b2820f86e6e5fd079da8",
+   "size": 38319
+  },
+  "products/vol02/seed_admit/p0136.json": {
+   "sha256": "b0da007a497c8b26f784fbd456e6ddbb44da127950f6f86d9a60614720cb815a",
+   "size": 36819
+  },
+  "products/vol02/seed_admit/p0137.json": {
+   "sha256": "e66dade3ac66fc6835da036421876337e6dbd19bbc15731f2348621dcf60e292",
+   "size": 38897
+  },
+  "products/vol02/seed_admit/p0138.json": {
+   "sha256": "209eedcff8d5a82c0c6bb2f555fd9825de62f2173e9006e62586705c810edce1",
+   "size": 34073
+  },
+  "products/vol02/seed_admit/p0139.json": {
+   "sha256": "ef415768754dab2e9d1fc56671ec85ab807b2fb9e3c2ea1ec59ea91a8f86e95a",
+   "size": 39134
+  },
+  "products/vol02/seed_admit/p0140.json": {
+   "sha256": "a4340cd50529cb44c2afa80b7352308d7454b7e6974687786759868b0b9cf9b5",
+   "size": 35840
+  },
+  "products/vol02/seed_admit/p0141.json": {
+   "sha256": "7de3ed00d238ba5140254263235b98ea272f22729f5b2272f8aa803f94edc3fa",
+   "size": 39188
+  },
+  "products/vol02/seed_admit/p0142.json": {
+   "sha256": "7eae76125ec20dc448a1a0815d37a1d8d8b06dc26b11235e6e277d7b02c1662f",
+   "size": 34054
+  },
+  "products/vol02/seed_admit/p0143.json": {
+   "sha256": "33c66d37ae542f573e3da7e1d4ad961431d88c15c819b949d45cfd08f8a83381",
+   "size": 39580
+  },
+  "products/vol02/seed_admit/p0144.json": {
+   "sha256": "01ebb99a273234e466bcc0c5b98790657f490893c0e9c59196eec7a7fc462c74",
+   "size": 39590
+  },
+  "products/vol02/seed_admit/p0145.json": {
+   "sha256": "6be473a1135e3a6e304f9c3eb56f6a9ce56c2921930f3c4b6435b955f0fea5e7",
+   "size": 35141
+  },
+  "products/vol02/seed_admit/p0146.json": {
+   "sha256": "15e02b484883e9da00fceb6d82e81ca5a6e58f711a65f4a2a4f62cdea5fdd2c0",
+   "size": 38720
+  },
+  "products/vol02/seed_admit/p0147.json": {
+   "sha256": "8a0f715a00f0676011a17152c57fc6ddc1e4768026ba58396c0315b5363508f3",
+   "size": 39390
+  },
+  "products/vol02/seed_admit/p0148.json": {
+   "sha256": "5d2365beb447ba1e8d7b5e2900f6f3efc08419a31b66113616da39245bdef3d7",
+   "size": 35814
+  },
+  "products/vol02/seed_admit/p0149.json": {
+   "sha256": "b2223788102e4e9d5f105b36d1280a1cebbe91819ac62e83a378bbf6e3ce795c",
+   "size": 39324
+  },
+  "products/vol02/seed_admit/p0150.json": {
+   "sha256": "c0c3fc13334dd9e9f1ab37f183c59c1446768abbf833082ac9e407d567c6b34f",
+   "size": 36813
+  },
+  "products/vol02/seed_admit/p0151.json": {
+   "sha256": "5178620d153e628e9391f7ff4b7009ba3174a49edf0dda7398d39a62ea8a3257",
+   "size": 38777
+  },
+  "products/vol02/seed_admit/p0152.json": {
+   "sha256": "767c7353f37b472bc3c12d46ac4ce4d348a4b623fd30cc93eba462d9c959fd80",
+   "size": 35500
+  },
+  "products/vol02/seed_admit/p0153.json": {
+   "sha256": "46f1f43ea38be8d16540da97d1d605f239e95ab0058f0f49da22de9c399336ec",
+   "size": 39178
+  },
+  "products/vol02/seed_admit/p0154.json": {
+   "sha256": "0df569dada5b5d643a62ec2758c6ef34c8e39ccbca4f21656a552ebab6bce3ee",
+   "size": 35311
+  },
+  "products/vol02/seed_admit/p0155.json": {
+   "sha256": "e7cd0ad93bc42ffbc5bd3f097f70dbf03d7d120d08632cc0696b8c4186af0c31",
+   "size": 37969
+  },
+  "products/vol02/seed_admit/p0156.json": {
+   "sha256": "0d1d884fe37ff4ae85721680c16c2813d8a7c80b24e12d66fa7bc87a018e50d9",
+   "size": 39364
+  },
+  "products/vol02/seed_admit/p0157.json": {
+   "sha256": "ae0c95b41cb64b468dce296a83a2b7a520e4b99bf99ca4e093a16a3c15f6d023",
+   "size": 37328
+  },
+  "products/vol02/seed_admit/p0158.json": {
+   "sha256": "1695b62b66796f063288dcb19258a423807374ba797992fcad79708367270b3d",
+   "size": 39360
+  },
+  "products/vol02/seed_admit/p0159.json": {
+   "sha256": "0d416d06db6d650e5f6f9607de82ef015b42805a63ccaaeebfd1745d74a02647",
+   "size": 36823
+  },
+  "products/vol02/seed_admit/p0160.json": {
+   "sha256": "9879f9524c53c56d827887896d38ca5ca30eee510c56887f22012419480909a8",
+   "size": 39434
+  },
+  "products/vol02/seed_admit/p0161.json": {
+   "sha256": "6be95a7e5e02b538e43cdd61798101bcbeb88bd268bbd4e027d02ea72ca001b7",
+   "size": 37365
+  },
+  "products/vol02/seed_admit/p0162.json": {
+   "sha256": "dca43d5bddce95c1df82381d75850d7b555d06f9daaadeac1091b553c168898b",
+   "size": 38893
+  },
+  "products/vol02/seed_admit/p0163.json": {
+   "sha256": "4d39b9da08ccd97baeff2be2dac29de515bcc5f1aa5edd3d7bec44654cc9e111",
+   "size": 39310
+  },
+  "products/vol02/seed_admit/p0164.json": {
+   "sha256": "db0c2322d3849acf10beec204066a3fc6691213b13ffa577e6e09fae7a83a8df",
+   "size": 38976
+  },
+  "products/vol02/seed_admit/p0165.json": {
+   "sha256": "4677777cf81f14d1d21768469540af70d4242d62f8b6a33268c97b92bd15a238",
+   "size": 33153
+  },
+  "products/vol02/seed_admit/p0166.json": {
+   "sha256": "6b304735db41171d65e883747dc3e1518be77c450e722ab05fda5ae483210550",
+   "size": 39372
+  },
+  "products/vol02/seed_admit/p0167.json": {
+   "sha256": "19b33435ee5a80ced7a71d065de77d6ef882a2ccee412d6704433bfa77d0f748",
+   "size": 37822
+  },
+  "products/vol02/seed_admit/p0168.json": {
+   "sha256": "bdf161a618cb4b5c968eaf1a4263eb9abb9c787a2567e9d4c91b55d40ea5a51e",
+   "size": 37921
+  },
+  "products/vol02/seed_admit/p0169.json": {
+   "sha256": "f1d83a97c42adaa106cbba87c163196c1b23a610bceeb013c2567974aaebce15",
+   "size": 39421
+  },
+  "products/vol02/seed_admit/p0170.json": {
+   "sha256": "54a1f74dca62c4fabafa4318d7b6e3654b4dfefae4686616a3794d3c939d98e2",
+   "size": 39387
+  },
+  "products/vol02/seed_admit/p0171.json": {
+   "sha256": "13461dfa19038b22c92c6a305d1e4c6300d0b827f34b3d5407171608479e879c",
+   "size": 38493
+  },
+  "products/vol02/seed_admit/p0172.json": {
+   "sha256": "7652e950ceeffd096b8d443fa7241af6e458be0c886c30dcda2d1de78e0c133b",
+   "size": 36471
+  },
+  "products/vol02/seed_admit/p0173.json": {
+   "sha256": "2f5aaf4abf33ef89747d4b4145d615281634663f6d637569499aee83583dfab6",
+   "size": 39820
+  },
+  "products/vol02/seed_admit/p0174.json": {
+   "sha256": "f018f841dfdb5ad21d739fd69c6da2b4c467e311a40fa59e3c016a5e886efc44",
+   "size": 39108
+  },
+  "products/vol02/seed_admit/p0175.json": {
+   "sha256": "f8aa941fbda531f5fa4f6d1f565a4f1fc8f9fd5a8f6286f10e22202755ed36e3",
+   "size": 38767
+  },
+  "products/vol02/seed_admit/p0176.json": {
+   "sha256": "c6519b469fc45f53ec11ef6e11c632aab418f2d3f2a0fafe81ae8abf6d69b974",
+   "size": 36761
+  },
+  "products/vol02/seed_admit/p0177.json": {
+   "sha256": "a34b14166a18a89bd4253bdf76118a32ed6f7cf3806e87548807c1cdbf82ec9a",
+   "size": 40132
+  },
+  "products/vol02/seed_admit/p0178.json": {
+   "sha256": "8827341ca32fab685d7850bb78f0ab3b833f9e7ce6988becdc8586e84eccf5ec",
+   "size": 37220
+  },
+  "products/vol02/seed_admit/p0179.json": {
+   "sha256": "815cac989fdfcbd3aeac42791706944584b08e92db2ac1cfee84937580160ad3",
+   "size": 39226
+  },
+  "products/vol02/seed_admit/p0180.json": {
+   "sha256": "344f36b11921769929ff9386a7ea8ba8c2a8f87dffac41abfbc7e2420200130c",
+   "size": 34224
+  },
+  "products/vol02/seed_admit/p0181.json": {
+   "sha256": "a272466dd40fbd5b934b20b369eb82e1d2542336fb93ad126929b11514e1185c",
+   "size": 38864
+  },
+  "products/vol02/seed_admit/p0182.json": {
+   "sha256": "6b04e0f7a1a8533fce72c30113b3817e37c89827fc0d8b0e01f575b786c6ab0d",
+   "size": 38286
+  },
+  "products/vol02/seed_admit/p0183.json": {
+   "sha256": "050eb026308d117754b28058fe62f80fb7f4f6fcd68c1f422ac90655f0396b07",
+   "size": 34788
+  },
+  "products/vol02/seed_admit/p0184.json": {
+   "sha256": "892585851006a3fa6166d3fbfab5edad43c71cb87bb58c370fac54e71ba7a98f",
+   "size": 38838
+  },
+  "products/vol02/seed_admit/p0185.json": {
+   "sha256": "76b66dbf1609fac675a8315c06e74d02f7b11ce39e9a21b0bc928983655ede58",
+   "size": 39911
+  },
+  "products/vol02/seed_admit/p0186.json": {
+   "sha256": "fe8bc7943d1b7867c493cdf3cde5f0ec87f31559d4b16e952f7da146efc191a2",
+   "size": 37673
+  },
+  "products/vol02/seed_admit/p0187.json": {
+   "sha256": "89baf5f9cee60e42d2ac5576bb71e0cb40a80f4ae276d4507c0727b9e8d2f512",
+   "size": 39410
+  },
+  "products/vol02/seed_admit/p0188.json": {
+   "sha256": "bd0c0cfe8e6eb7b5c5fb8af66a428b4ea304fb37d783c1278b0497efa763a3b2",
+   "size": 38845
+  }
+ },
+ "format": "guji-snap/1",
+ "gates_added": [],
+ "glyph_db_fingerprint": "f75099253ad7ff74",
+ "host": "vm",
+ "id": "96mid1ogzk/vol02/20260930T0339",
+ "indexes": [],
+ "mode": "replace-steps",
+ "note": "S seed_admit 重算 cv 75f1a90",
+ "page_scope": "full",
+ "pages": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48,
+  49,
+  50,
+  51,
+  52,
+  53,
+  54,
+  55,
+  56,
+  57,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  64,
+  65,
+  66,
+  67,
+  68,
+  69,
+  70,
+  71,
+  72,
+  73,
+  74,
+  75,
+  76,
+  77,
+  78,
+  79,
+  80,
+  81,
+  82,
+  83,
+  84,
+  85,
+  86,
+  87,
+  88,
+  89,
+  90,
+  91,
+  92,
+  93,
+  94,
+  95,
+  96,
+  97,
+  98,
+  99,
+  100,
+  101,
+  102,
+  103,
+  104,
+  105,
+  106,
+  107,
+  108,
+  109,
+  110,
+  111,
+  112,
+  113,
+  114,
+  115,
+  116,
+  117,
+  118,
+  119,
+  120,
+  121,
+  122,
+  123,
+  124,
+  125,
+  126,
+  127,
+  128,
+  129,
+  130,
+  131,
+  132,
+  133,
+  134,
+  135,
+  136,
+  137,
+  138,
+  139,
+  140,
+  141,
+  142,
+  143,
+  144,
+  145,
+  146,
+  147,
+  148,
+  149,
+  150,
+  151,
+  152,
+  153,
+  154,
+  155,
+  156,
+  157,
+  158,
+  159,
+  160,
+  161,
+  162,
+  163,
+  164,
+  165,
+  166,
+  167,
+  168,
+  169,
+  170,
+  171,
+  172,
+  173,
+  174,
+  175,
+  176,
+  177,
+  178,
+  179,
+  180,
+  181,
+  182,
+  183,
+  184,
+  185,
+  186,
+  187,
+  188
+ ],
+ "params": {
+  "seed_admit": {
+   "overrides": {
+    "ji_yi_si_review": true
+   },
+   "params_hash": [
+    "5299de7431ecddd8"
+   ]
+  }
+ },
+ "session": "cse_01VR6dda9149VmXwEbf6b8uP",
+ "step_entries": {
+  "seed_admit": {
+   "ok": 188
+  }
+ },
+ "steps": [
+  "seed_admit"
+ ],
+ "supersedes": [],
+ "workspace": {
+  "create": false,
+  "dir": "96mid1ogzk-欽定四庫全書總目武英殿刻本",
+  "key": "96mid1ogzk"
+ }
+}
