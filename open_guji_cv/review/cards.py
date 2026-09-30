@@ -22,6 +22,7 @@ from ..core.spec import cell_key, page_key
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
+from .shadow import SHADOW_THR, load_shadow, shadow_view
 from .verdict_view import decided_cells, defect_only_cells
 
 
@@ -239,7 +240,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True,
           emb_out: dict | None = None, doubt: str = "", cls: str = "",
-          cls_sub: str = "") -> dict:
+          cls_sub: str = "", shadow: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     `only`：review = 只出人审的（默认）；auto = 只出自动进库的（抽查用）；
@@ -289,6 +290,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     if ssel is not None and csel != "replace_align":
         raise ValueError("cls_sub 只对 cls=replace_align 生效")
     class_sub_counts: dict[str, dict[str, int]] = {}
+    _sh_all = load_shadow(book) if csel is not None else None
+    _sh = _sh_all if shadow else None
+    _sh_sort = _sh is not None and ssel == "grid"     # 网格 + 有影子：收全再排，之后才截断
+    _limit = 10 ** 9 if _sh_sort else limit
     _defect_only: set[str] | None = None        # 用到「对齐改字层」细项时才读事件
     class_counts: dict[str, int] = {}
     n_cls = 0
@@ -409,6 +414,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     if ssel is not None and _sub != ssel:
                         continue
                 groups, ai = _ai_view(dr)
+                _sv = (shadow_view(_sh.get(r.id), ref["char"] if ref else None)
+                       if _sh is not None else None)
                 key = cell_key(pg, cc.col, r.slot) + (r.sub or "")
                 # 印章／污损遮挡（Step7 `occluded_gate`）：默认字 = 整理本字（坐标对位优先），
                 # 字形一律不入库；`char=None` 且 ref_blank = 整理本这一位是空格（假格），默认「非字」。
@@ -442,15 +449,23 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ai": ai,
                     **({"cls": _cls} if _cls is not None else {}),
                     **({"cls_sub": _sub} if _sub is not None else {}),
+                    **({"shadow": _sv} if _sv else {}),
                 })
-                if len(out) >= limit:
+                if len(out) >= _limit:
                     if not counting and csel is None:
                         return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
                                                       "blocked": out_blocked,
                                                       "n_decided": len(decided)}, emb_out)
                     full = True             # 计数要数到页范围末尾，卡片不再装
+    if _sh_sort:
+        out.sort(key=lambda c: (not (c.get("shadow") or {}).get("pre"),
+                                -(c["shadow"]["conf"] if c.get("shadow", {}).get("pre") else 0.0)))
+        if len(out) > limit:
+            out, full = out[:limit], True
     res = {"book": book, "cards": out, "truncated": full,
            "blocked": out_blocked, "n_decided": len(decided)}
+    if csel is not None:
+        res["shadow_info"] = {"available": _sh_all is not None, "thr": SHADOW_THR}
     if counting:
         res["doubt_counts"] = dict(sorted(doubt_counts.items(), key=lambda kv: (-kv[1], kv[0])))
         res["doubt_total"] = n_counted
