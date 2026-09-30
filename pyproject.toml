@@ -28,6 +28,9 @@ dependencies = [
     # 四个抽象（core / products）：产物契约用 pydantic，pipeline / book 定义用 yaml
     "pydantic>=2.0",
     "PyYAML>=6.0",
+    # utils/preclean.py 顶层就 import scipy.ndimage；RunContext 读页（→ char_patch 现算 / 截条图）
+    # 必经它。云端只 `pip install -e .` 时缺它，此前现算失败被上层吞成空白图。
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]

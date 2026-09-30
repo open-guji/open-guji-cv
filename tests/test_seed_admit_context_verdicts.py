@@ -31,7 +31,8 @@ def _run(tmp_path, monkeypatch, *, verdict: str, params: dict | None = None):
         PAGE, BOOK, col=COL, recs=[
             dict(slot=SLOT, char="X", margin=0.90, source="context"),
         ]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
+    # 单格列里这格就是列首；列首非字护栏（D274）不是本文件要测的，关掉隔离
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_head_check": False, **(params or {})})
     return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
 
 
