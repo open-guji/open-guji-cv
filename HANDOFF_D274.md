@@ -64,4 +64,11 @@ seed_admit 版本改 **1.11**（main 是 1.10）；`code_deps` 加 `context_guar
 - 列首阈值是合成数据上定的，真书上可能对淡墨/残缺字过严（会多进待审，不会多放行）。
 - `ref_ctx` 也一并护了（任务书只提 `context`）；若总管认为整理本对齐该保留，把 `_ctx_guard_pass` 从 ref_ctx 分支拿掉即可。
 - 整页错位名单目前靠人工配置；长期该由切线闸/人裁 `seg_defect` 事件自动产出。
-- 全量测试结果见下（云端 venv：`.[torch]`，deselect 了指定那条）。
+
+
+## 全量测试（合并 main 后，云端 venv `.[torch]`，deselect 了指定那条）
+分三片并行跑（整体单进程会超时）：g1 671 passed；g0 618 项 0 失败；g2 574 项里 2 失败——都是我引起的
+（`collate_book` 现在读 `load_book(book).codepoints`：① 册定义读不到时会抛 FileNotFoundError → 已改成读不到就当没配置；
+② `test_collate_resilience.py` 里假 `collate_page` 少一个 `codepoints` 参数 → 已给夹具补 `codepoints=None`）。
+修完后重跑 `test_collate_resilience` + `test_context_guard`：22 passed。**g2 片未整片重跑**，除这两条外其余项在修前那次就是过的。
+合并前在第一轮并行里见过 `test_rare_candidates_step` 一条失败，干净 main 和本分支单跑都过，判为并行共用缓存的偶发，合并后三片里没再出现。
