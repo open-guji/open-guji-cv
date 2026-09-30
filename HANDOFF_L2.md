@@ -1,6 +1,6 @@
 # HANDOFF L2 — 印章页切分（overview #318 §1）
 
-分支 `claude/L2-seal-seg-0930`（基于 origin/main，**不合 main**）。只做了阶段一（量）；阶段二**没写算法**（理由见末）。
+分支 `claude/L2-seal-seg-0930`（基于 origin/main，**不合 main**）。只做了阶段一（量）；阶段二已按 CV 总管批示做了**首选方案（只打标）**，幻影格开关与次选方案的结论见「阶段二」。
 全程云端沙箱：`GUJI_PRODUCTS_DIR=/tmp/sandbox_*`，ws 用 guji-workspace 的 96mid1ogzk 工作区，未碰正式 products。
 页：vol03 p3、vol02 p3、vol04 p130、vol09 p70（四页都是 `occlusion` 判出的真印章页），基线干净页 vol03 p4/5/6/20。
 Step1–4 用 `pipeline keben_body_v2 <册> --pages N --to cell_shrink` 现跑（每页约 30s，row_segment 占 25s）。
@@ -23,17 +23,54 @@ Step1–4 用 `pipeline keben_body_v2 <册> --pages N --to cell_shrink` 现跑�
 
 复现：`scripts/experiments/l2_seal_seg/{overlay,boxsize,cutmetric,compare,make_clean}.py`（用法见各文件头）。
 
-## 阶段二：方案（未实现）
+## 阶段二（2026-09-30，CV 总管批准：只打标不改几何）
 
-预算到 $6 线，阶段一已用掉大半；「最小改动＋前后对比 M1 迁移评测」跑一遍 row_boundaries/touching_cuts/column_warp 评测要补产物（cloud_eval §4 估 20+ 分钟）且 cell_shrink 内部走 `clustering.extractor`，不是小补丁，所以只给方案，等你裁：
+### 1. `seal_region` flag —— 已实现（`steps/cell_shrink.py`，版本 1.5→1.6）
+- `CellShrinkParams.seal_flag: bool = True`；判据 = `occlusion.page_occluded(ctx, page, SeedAdmitParams())`（与 seed_admit 入库闸同一入口、同一组默认阈值）；遮挡格的 `CharRec.flags` 追加 `"seal_region"`。只在 cell_shrink（char_index）上打；row_segment（Step3）未动——Step1–3 代码一行没改，所以 M1 迁移后的 row_boundaries/touching_cuts/column_warp 评测**不受影响**（没重跑，理由：它们消费的产物与代码都没变）。
+- **前后对比（seal_flag 开 vs 关，同上游产物，`--force` 重跑 cell_shrink）**：11 页（vol02 p3/p20、vol03 p3/4/5/6/20、vol04 p50/p130、vol09 p20/p70），去掉 `seal_region` 旗后整份 char_index **JSON 逐字节一致（11/11）**；flag 只出现在 4 个印章页（vol02 p3 127/174 格、vol03 p3 136/168、vol04 p130 126/173、vol09 p70 124/161），7 个非印章页 0 格。明细 `flag_diff.txt`，脚本 `flag_diff.py`。
+- 单测：`-k "cell_shrink or occlu or seed_admit_occluded or suite_hygiene or step4"` 26 passed。未新增单测（flag 判据本体在 occlusion，已有测试；字节一致性用上面评测做的）。
 
-1. **首选（最小、零回归面）：只打标，不改几何。** `cell_shrink`/`row_segment` 产物加 flag `seal_region`（复用 `occlusion.page_occluded` 的判据，Step3 后、Step4 前算一次），Step4 框与 char/blank 判定不动。价值：识别层/定字裁决拿到「这格在印章里」的标记；幻影 char 格（上面 col1 pos11–14）可在该 flag 下按「格内大块字身墨=0」降成 blank。验证：非印章页产物**逐字节不变**（flag 只在遮挡格出现），天然不回归。
-2. **次选：遮挡格内 Step4 取框只认面积>150 的连通块**（斑点不参与 bbox）。预期框宽 0.88→≈0.7（反事实已示上限：0.78）。需要动 `extractor` 的 component_owner，回归面大，要过 frame_strip/char_drop/crop 评测。
-3. **不建议：** 遮挡区切点改等分——没有证据 Step3 切点在此区更差，且反事实切点本身就不稳（见上），等分是无依据的改动。
-4. **切分裁决卡（cutline）标「印章区」：** 方案=卡片 meta 带 `seal_region`（从 char_index flag 读），卡面角标「印章区·斑点多，以字身为准」，且该区默认不计入「切点争议」优先级（该区切点本就不稳，会刷屏）。前端未做。
+### 2. 幻影 char 格降 blank —— **没做，判据找不到（负结果）**
+vol03 p3 第 1 列：真字 pos1–10（文字止于 y≈1490），幻影 pos11–14（被印章盖着的空白纸）。试了两个「格内没有字身墨」判据，都分不开（`phantom_probe.txt`）：
+| 判据（格内 x 各缩 15%） | 真字 pos1–10 | 幻影 pos11–14 |
+|---|---|---|
+| 面积>150 大块墨率 | 0.11–0.33 | 0.23–0.34（印章篆文笔画/下缘连成大块，量级与真字相同）|
+| 粗笔画率（距离变换≥4px）| 0.001–0.03 | 0.016–0.03（该页标题字本身笔画也不粗）|
+按总管「效果不明就只留 flag」，开关不做。若要做，需要比墨量更强的信号（如：列内字序连续性——文字从列首连续排到某格后断掉，后面整段被印章覆盖；或直接看 L1 给的整理本 `align_ref` 文字长度：本列整理本只有 10 字 → 11–14 必为幻影），这是对位层信息，建议走 align_ref 通道而不是切分层。
+
+### 3. 次选方案（遮挡格 Step4 只认面积>150 连通块）离线估计 —— 预期收益**有限、且不稳**
+不改 extractor，在现框内按面积>150 的块重算宽度（`merged_and_est.py` 的 (A)）：
+| 页 | 遮挡格框宽/列宽 现→只认大块 | >0.9 占比 现→估 |
+|---|---|---|
+| vol03 p3 | 0.87 → **0.83** | 37% → 21% |
+| vol02 p3 | 0.91 → **0.81** | 54% → 27% |
+| vol04 p130 | 0.83 → 0.73 | 32% → 12% |
+| vol09 p70 | 0.86 → 0.72 | 32% → 15% |
+（干净页基线 0.66–0.67。）即仅靠「忽略小斑点」，vol03 p3 只能从 0.87 降到 0.83，离基线还差很多——印章篆文笔画本身是大块，抹斑点反事实（第一版）是 0.78。结论：次选方案对 vol03 p3 **收益小**、对 vol02/04/09 较大；不建议单独上，需配合 flag 下的「按字身收」。
+
+### 4. 并格频率（只量，不改）—— 印章页并格是干净页的约 2 倍，但「格高>1.15 period 则拆」不可用
+格高 > 1.15 period 的 char/blank 格占比（`merged_and_est.py` (B)，`merged_and_est.txt`）：
+| | 遮挡格 | 非遮挡格 | 干净页 |
+|---|---|---|---|
+| vol03 p3 | 14/128 (11%) | 1/60 | p4 9/189, p5 8/187, p6 7/187, p20 9/191（4–5%）|
+| vol02 p3 | 15/127 (12%) | 6/63 | vol02 p20 4/181（2%）|
+| vol04 p130 | 11/112 (10%) | 3/66 | vol04 p50 11/185（6%）|
+| vol09 p70 | 10/126 (8%) | 9/64 | vol09 p20 11/185（6%）|
+- 印章格 8–12% vs 干净页 2–6%：印章下确实更常出现偏高格（vol02 p3 第 1 列 pos3/4/5/6/9 高 147/141/136/153/144，period 114，与 L1 线索相符：**不是单独一格并格，而是整列 DP 把 9 字拉成间距偏大的 8 格**）。
+- 但干净页的 4–6% 里大半是 pos21 末格与 pos1 首格（天然偏高），按「格高>1.15 period 就拆」会在全书 5% 的正常格上误拆；即使限定 `seal_region`，遮挡格里真并格 vs 偏高格也分不开（没有金标：并没有人标「这格是并格」）。**结论：只量，判据未验证，不建议上；要修需先人工标一批印章页标题列并格金标，或用整理本字数当约束（同上，走 align_ref）。**
+
+## 阶段二小结 / 交单
+| 项 | 状态 |
+|---|---|
+| `seal_region` flag | 已做，非印章页产物逐字节不变（11 页）|
+| 幻影格降 blank | 未做：两种判据均无区分力 |
+| 次选（只认大块）| 只做离线估计：vol03 p3 0.87→0.83（收益小），其余 0.83–0.91→0.72–0.81 |
+| 并格 | 只量：印章页约为干净页 2 倍；拆分判据无金标、不可用 |
+| 建议 | ① 合 flag（风险零）让识别层/cutline 卡能读到；② 幻影格与并格走 `align_ref` 整理本字数约束；③ 次选方案暂缓 |
+| 成本 | 估计约 $7，未超 $8 |
 
 ## 注意
 - 样本仅 4 个印章页、同一条量法；cut 指标较粗（基线干净页本身 5–19%），只用来判「没有更差」，不是精度。
 - 反事实「抹面积≤150 的连通块」也会抹掉字的碎点，Step1 的 w80 因此可能被改动——只当方向性证据。
 - 环境：torch 用 CPU 轮子（`uv pip install torch --index-url https://download.pytorch.org/whl/cpu`），cuda 版 nvidia-* 下载会超时；cloud_eval.md 的 `.[torch]` 这一步云端要换。
-- #318 发评论：overview 仓不在本会话 scope，未发，请代贴本文件「阶段一结论」。
+- #318 发评论：overview 仓不在本会话 scope，未发，请代贴本文件「阶段一结论」与「阶段二小结」。
