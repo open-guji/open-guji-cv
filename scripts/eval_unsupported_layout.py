@@ -23,7 +23,9 @@ from open_guji_cv.clustering.page_type import unsupported_layout_columns
 from open_guji_cv.core.spec import page_key
 from open_guji_cv.products.store import ProductStore
 
-GOLD = Path(r"D:\workspace\open-guji-dataset\page-type\expected.json")
+# 金标默认按「测试集仓与引擎仓同级」找（与其他评测的 ../open-guji-dataset 约定一致），
+# 不再写死某台 Windows 机器的绝对路径；换位置用 --gold。
+GOLD = Path(__file__).resolve().parent.parent.parent / "open-guji-dataset" / "page-type" / "expected.json"
 # 金标页型 → 本判据该不该判「版式未支持」。判据只分两档（正文 / 切不了），
 # 不细分 roster/toc——两者在判据上重叠，见 row_segment_gate.py 的 L0u 一节。
 SHOULD_FLAG = {"roster", "toc"}
@@ -34,10 +36,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--book", default=None)
     ap.add_argument("--products", default=None)
+    ap.add_argument("--gold", default=str(GOLD), help="page-type/expected.json 路径")
     args = ap.parse_args()
 
     store = ProductStore(Path(args.products) if args.products else None)
-    gold = json.loads(GOLD.read_text(encoding="utf-8"))
+    gold = json.loads(Path(args.gold).read_text(encoding="utf-8"))
     by_type: dict[str, Counter] = {}
     misfires: list[str] = []
     missed: list[str] = []
