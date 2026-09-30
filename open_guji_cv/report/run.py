@@ -44,8 +44,9 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     all_cols: list[dict] = []
     unanchored: dict[str, list[int]] = {w.label: [] for w in witnesses}
 
+    codepoints = load_book(book).codepoints     # 书级用字账：𠮓/變 之类不算认错字
     for n, page in enumerate(pages, 1):
-        per = collate_page(store, book, page, witnesses, stale)
+        per = collate_page(store, book, page, witnesses, stale, codepoints)
         rec: dict = {"page": page, "witnesses": {}}
         for label, res in per.items():
             if not res.anchored:

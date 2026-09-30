@@ -55,6 +55,11 @@ class SeedAdmitParams(BaseModel):
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
     use_context: bool = True            # 把 Step6 的定字当第三路证据
     context_margin: float = 0.70        # 用它时的 margin 门槛（生产值）
+    context_guard_pages: list[int] = []
+    """整段错位页（书级 yaml 的 `context_guard_pages:`，`RunContext.params_for` 注入）：
+    这些页不走 `context` / `ref_ctx` 放行，一律退回待审。见 clustering/context_guard。"""
+    context_head_check: bool = True
+    """列首前两格走 context/ref_ctx 放行前，要求库匹配 same/unsure 或图块墨形像字。"""
     always_review: str = "己已巳"
     """这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
     「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
@@ -132,7 +137,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.7", unit="cell",   # 1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
+        id="seed_admit", title="C1 进库准入", version="1.8", unit="cell",   # 1.8：context 通道加整页错位名单 + 列首非字护栏；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
         consumes=("glyph_match", "context_decision", "align_ref"),
         optional_consumes=("ocr_candidates",),
         produces=("seed_admit",),
@@ -143,6 +148,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
+                   "open_guji_cv.clustering.context_guard",
                    "open_guji_cv.utils.jiazhu_order"),
     )
 
@@ -203,6 +209,8 @@ class SeedAdmitStep(Step):
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         amap = _align(ctx, page)
         always = set(p.always_review or "")
+        from ..clustering.context_guard import head_cell_ok, page_guarded, HEAD_CELLS
+        page_guard = page_guarded(page, p.context_guard_pages)
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
         for cc in match.columns:
@@ -210,6 +218,8 @@ class SeedAdmitStep(Step):
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
                 continue
             recs: list[AdmitRec] = []
+            head_ids = ({r.id for r in sort_by_reading(cc.chars)[:HEAD_CELLS]}
+                        if p.context_head_check else set())
             # ── 版本注闭集通道（段级预扫，2026-09-06）─────────────────
             # 夹注小字库里样本极少（16,019 例里 59 个），逐字认必然卡在
             # cov 0.93~0.99 的灰带上落人审。但版本注是闭集（78 个短语），
@@ -461,6 +471,8 @@ class SeedAdmitStep(Step):
                         and d.char and d.margin >= p.context_margin):
                     if context_conflicts_ref(d.char, align_char, vm_here):
                         doubts.append("context_vs_ref")
+                    elif not _ctx_guard_pass(page_guard, r, head_ids, ctx, page, cc.col, head_cell_ok, doubts):
+                        pass
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -477,7 +489,9 @@ class SeedAdmitStep(Step):
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         ok, channel, prov = True, "ref_lib", "match"
                         char = _top
-                    elif _d and _d.char and _d.char == align_char:
+                    elif (_d and _d.char and _d.char == align_char
+                          and _ctx_guard_pass(page_guard, r, head_ids, ctx, page, cc.col,
+                                              head_cell_ok, doubts)):
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
                 if ok:
@@ -499,6 +513,32 @@ class SeedAdmitStep(Step):
         n_review += d_review
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+def _ctx_guard_pass(page_guard: bool, r, head_ids: set, ctx, page: int, col: int,
+                    head_cell_ok, doubts: list) -> bool:
+    """context / ref_ctx 放行前的护栏（clustering/context_guard）。不过 → 记疑问、退回待审。"""
+    if page_guard:
+        doubts.append("context_guard_page")
+        return False
+    if r.id in head_ids:
+        img = None if r.verdict in ("same", "unsure") else _char_patch_gray(
+            ctx.book.id, page, col, r.slot, r.sub)
+        if not head_cell_ok(r.verdict, img):
+            doubts.append("context_head_nonchar")
+            return False
+    return True
+
+
+def _char_patch_gray(book: str, page: int, col: int, slot: int, sub: str | None):
+    """Step4 落的 `char_patch` 缓存里的灰度字块；没图 → None。"""
+    try:
+        import cv2
+        from ..products.cache import ImageCache
+        path = ImageCache().get(book, "char_patch", f"p{page:04d}c{col:02d}s{slot}{sub or ''}")
+        return None if path is None else cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+    except Exception:
+        return None
 
 
 def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:

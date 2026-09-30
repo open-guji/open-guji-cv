@@ -107,7 +107,7 @@ class PageResult:
     报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
 
 
-def classify(char: str, ref: str) -> str:
+def classify(char: str, ref: str, codepoints: dict[str, str] | None = None) -> str:
     """一个字位的差异性质。判定顺序固定、互斥，先命中者生效（04 卡 §二·3）。
 
     - `same`：字形一致；
@@ -124,6 +124,11 @@ def classify(char: str, ref: str) -> str:
         return "same"
     if char == PLACEHOLDER:
         return "unreadable"
+    # 书级用字账（BookSpec.codepoints，`{另一码位: 本书指定码位}`）：两形按它统一
+    # 到同一码位后相等，就是本书认定的同一个字——不算变体也不算认错。
+    # 之前不读它，𠮓/變 70 条被算成 sub（认错字）。空/None = 与加这个参数前一样。
+    if codepoints and codepoints.get(char, char) == codepoints.get(ref, ref):
+        return "same"
     if _same_char(char, ref):
         return _variant_direction(char, ref)
     # ⚠️ 简体判定要在 `_same_char` **之后、认错之前**单独来一遍。
@@ -189,7 +194,8 @@ def _slot_char(s: SlotRec) -> str:
 
 
 def diff_page(slots: list[SlotRec], w: Witness, page: int,
-              pad: int = WINDOW_PAD) -> PageResult:
+              pad: int = WINDOW_PAD,
+              codepoints: dict[str, str] | None = None) -> PageResult:
     """一页 × 一个证人 → 差异清单 ＋ 列结构裁定。"""
     text_slots = [s for s in slots if s.is_text]
     res = PageResult(page=page, anchored=False, n_slots=len(slots),
@@ -256,7 +262,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             for k in range(i2 - i1):
                 s, ref = text_slots[i1 + k], window[j1 + k]
                 pos_of[s.id] = lo + j1 + k
-                kind = classify(_slot_char(s), ref)
+                kind = classify(_slot_char(s), ref, codepoints)
                 if kind == "same":
                     res.n_equal += 1
                     continue
@@ -276,7 +282,7 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             pos_of[s.id] = lo + jb + k
             if not is_han(ref):
                 continue
-            kind = classify(_slot_char(s), ref)
+            kind = classify(_slot_char(s), ref, codepoints)
             if kind == "same":
                 res.n_equal += 1
                 continue
@@ -326,10 +332,11 @@ def _col_diffs(text_slots: list[SlotRec], pos_of: dict[str, int],
 
 
 def collate_page(store: ProductStore, book: str, page: int, witnesses: list[Witness],
-                 stale: list[str] | None = None) -> dict[str, PageResult]:
+                 stale: list[str] | None = None,
+                 codepoints: dict[str, str] | None = None) -> dict[str, PageResult]:
     """一页 × 全部证人 → `{证人 label: PageResult}`。"""
     slots = page_slots(store, book, page, stale if stale is not None else [])
-    return {w.label: diff_page(slots, w, page) for w in witnesses}
+    return {w.label: diff_page(slots, w, page, codepoints=codepoints) for w in witnesses}
 
 
 def merge_verdict(per_witness: dict[str, list[Diff]], witnesses: list[Witness]
