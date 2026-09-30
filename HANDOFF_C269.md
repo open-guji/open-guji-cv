@@ -46,4 +46,4 @@ python scripts/experiments/shadow_admit/export_for_cards.py <dir>/shadow_picks.j
 
 ## 验证
 - 新增 `tests/test_shadow_preselect.py`；`npm run build` 已重出 dist（本地 build，无冲突）。
-- 全量测试结果见分支最后一条提交说明 / 下方。
+- 全量 `pytest tests/ -s`（云端 venv 装 .[torch]，deselect 了 test_cli_build_rare_index…）：**2471 passed, 3 skipped, 6 deselected**；新增 8 条 + 既有 test_replace_align_grid 全绿。
