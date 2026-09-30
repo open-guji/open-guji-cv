@@ -21,6 +21,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
 DS = Path("../open-guji-dataset/rare-char")
+BENCH = Path("cache/glyph_bench")
+
+
+def _bench_index() -> dict:
+    """id → glyph_bench 的 png（云端回退用：金标里的 patch 是本机 Windows 绝对路径，
+    云端没有；glyph_bench 里有同一批字位的已归一化图，id 带 `v2:` 前缀）。"""
+    f = BENCH / "items.jsonl"
+    if not f.exists():
+        return {}
+    out = {}
+    for l in f.read_text(encoding="utf-8").splitlines():
+        d = json.loads(l)
+        out[(d["id"], d["char"])] = BENCH / str(d["png"]).replace("\\", "/").replace("cache/glyph_bench/", "")
+    return out
+
+
+def _load_patch(it: dict, bench: dict):
+    """先读金标里的 patch；读不到就按 (id 或 v2:id, 参考答案字) 回退到 glyph_bench。
+    返回 (img|None, 来源)。口径差：回退图是 glyph_bench 存的归一化图，不是 Step4 原始块。"""
+    p = it["input"]["patch"]
+    img = cv2.imread(str(p).replace("\\", "/"), cv2.IMREAD_GRAYSCALE) if p else None
+    if img is not None:
+        return img, "patch"
+    ref = it["expected"]["char"]
+    for k in ("v2:" + it["id"], it["id"]):
+        f = bench.get((k, ref))
+        if f is not None and f.exists():
+            return cv2.imread(str(f), cv2.IMREAD_GRAYSCALE), "glyph_bench"
+    return None, "missing"
 
 
 def main() -> int:
@@ -51,14 +80,16 @@ def main() -> int:
         paddle._ensure()
 
     rows = []
+    bench = _bench_index()
+    srcs: dict[str, int] = {}
     for it in items:
         exp = it["expected"]
         ref = exp["char"]
         cur = ([c for c, _ in it["input"]["db_candidates"]]
                + [c for c, _ in it["input"]["ocr_topk"]]
                + [c for c, _ in it["input"]["context_ranked"]])
-        p = it["input"]["patch"]
-        img = cv2.imread(p, cv2.IMREAD_GRAYSCALE) if p else None
+        img, src = _load_patch(it, bench)
+        srcs[src] = srcs.get(src, 0) + 1
         hits: list[str] = []
         if img is not None:
             norm = normalize_patch(img)
@@ -77,6 +108,8 @@ def main() -> int:
             "paddle_hit": ref in pd,
             "union_hit": (ref in cur[:a.k * 3]) or (ref in hits) or (ref in pd),
         })
+
+    print(f"图源：{srcs}")
 
     def rate(sub, key):
         return (sum(1 for r in sub if r[key]) / len(sub)) if sub else 0.0

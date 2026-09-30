@@ -125,9 +125,20 @@ def main() -> None:
 
     patches = []
     for path, _ in items:
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        # 金标里的 patch 路径是建集那台机器的（Windows 反斜杠 / 绝对路径），换机器常常读不到
+        img = cv2.imread(str(path).replace("\\", "/"), cv2.IMREAD_GRAYSCALE)
         patches.append(img)
     n_missing = sum(1 for p in patches if p is None)
+    if n_missing:
+        print(f"⚠ 图块读不到 {n_missing}/{len(patches)} 条（路径指向建集机器；云端没有这批图）")
+    if n_missing == len(patches):
+        # 以前这里会把读不到的当成「识别出空」照算，印出一个 0.00% 的假基线
+        print("全部图块缺失，不出指标（不是引擎 0%）。需要本机导出图块或改用 v2 产物重建金标图。")
+        raise SystemExit(2)
+    if n_missing:
+        keep = [i for i, p in enumerate(patches) if p is not None]
+        items = [items[i] for i in keep]
+        patches = [patches[i] for i in keep]
 
     gold = [it["char"] for _, it in items]
     report = {
