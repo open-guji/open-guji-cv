@@ -175,18 +175,29 @@ export function gridVerdict(state: GridState, ref: string | null | undefined, se
  * 整屏 → 事件行。`aiAcc(card, shape)` 与逐张提交同一个口径（`ai.ts::aiAccepted`；这里不 import
  * 运行时代码，由调用方传进来，缺省当「没问过 AI」）。
  */
-export function gridRows<C extends { id: string; ref?: { char?: string | null } | null }>(
+export function gridRows<C extends { id: string; ref?: { char?: string | null } | null;
+                                     shadow?: { pre?: boolean } | null }>(
   cards: ReadonlyArray<C>, states: Record<string, GridState | undefined>, seenAt: number | undefined, now: number,
   aiAcc: (c: C, shape: string) => boolean | null = () => null,
+  shadowOn?: boolean,
 ): Array<Record<string, unknown>> {
   const rows: Array<Record<string, unknown>> = []
   for (const c of cards) {
     const v = gridVerdict(states[c.id] ?? 'accept', c.ref?.char, seenAt, now)
     if (!v) continue
     const row = verdictRow(c.id, v, v.done === '1' ? aiAcc(c, v.shape) : null)
-    if (row) rows.push(row)
+    // 影子预勾（overview#269）：给了 `shadowOn`（true/false）每行都记 `shadow_preselect`——
+    // 这一格提交时是不是影子预勾的（复选框开着且 `card.shadow.pre`）。人把预勾的点掉了，
+    // 行里 v≠confirm 而 shadow_preselect=true，日后统计「预勾被改掉的比例」就数这个。
+    // 不给（旧调用）就不带，行与改前逐字节相同。
+    if (row) rows.push(shadowOn === undefined ? row : { ...row, shadow_preselect: shadowOn && !!c.shadow?.pre })
   }
   return rows
+}
+
+/** 网格里影子预勾的卡数（`card.shadow.pre`）。 */
+export function countShadowPre(cards: ReadonlyArray<{ shadow?: { pre?: boolean } | null }>): number {
+  return cards.filter((c) => !!c.shadow?.pre).length
 }
 
 // ── 提交只收当前屏（overview#265 补丁）──────────────────────────────────

@@ -37,3 +37,7 @@
 .ra-tile.ra-skip { border-color: var(--ochre); opacity: .5; }
 .ra-tile.ra-skip .grp-mark { color: var(--ochre); }
 .ra-tile.ra-skip .ra-ref { text-decoration: line-through; }
+/* 影子预勾（overview#269）：把握≥0.9 且影子字 == 整理本字，排最前；角标显示把握度 */
+.ra-shadow { display: block; text-align: center; font-size: .68rem; color: var(--muted, #888); line-height: 1.2; }
+.ra-tile.ra-pre.ra-accept { border-color: var(--celadon, #4a8f6a); box-shadow: 0 0 0 1px var(--celadon, #4a8f6a) inset; }
+.ra-tile.ra-pre .ra-shadow { color: var(--celadon, #4a8f6a); font-weight: 600; }

@@ -20,12 +20,16 @@ export function ReplaceAlignGrid({ cards, states, onToggle }: {
       {cards.map((c) => {
         const s = states[c.id] ?? 'accept'
         return (
-          <div key={c.id} className={`grp-tile ra-tile ra-${s}`} data-id={c.id} data-state={s}
-               title={`${c.id} · 整理本「${c.ref?.char ?? ''}」· 现：${TITLE[s]}（点一下换档）`}
+          <div key={c.id} className={`grp-tile ra-tile ra-${s}${c.shadow?.pre ? ' ra-pre' : ''}`} data-id={c.id} data-state={s}
+               title={`${c.id} · 整理本「${c.ref?.char ?? ''}」· 现：${TITLE[s]}（点一下换档）`
+                 + (c.shadow ? ` · 影子「${c.shadow.char}」${c.shadow.conf.toFixed(2)}${c.shadow.pre ? '（预勾）' : ''}` : '')}
                onClick={() => onToggle(c.id)}>
             <img src={withWorkspace(c.patch)} alt={c.id} loading="lazy" />
             <span className="grp-mark">{MARK[s]}</span>
             <div className="ra-ref">{c.ref?.char ?? '？'}</div>
+            {c.shadow && (
+              <span className="ra-shadow" data-testid="ra-shadow">影子 {c.shadow.conf.toFixed(2)}</span>
+            )}
           </div>
         )
       })}
