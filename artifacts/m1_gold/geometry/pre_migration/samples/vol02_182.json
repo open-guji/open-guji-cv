@@ -1,0 +1,49 @@
+{
+ "book": "vol02",
+ "page": "182",
+ "image_size": {
+  "width": 1752,
+  "height": 2434
+ },
+ "band_ys": [
+  389.0,
+  1217.0,
+  2044.0
+ ],
+ "rules": [
+  {
+   "x_top": 16.5,
+   "x_mid": 8.5,
+   "x_bot": 27.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 41.0,
+   "x_mid": 34.0,
+   "x_bot": 27.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 234.5,
+   "x_mid": 228.5,
+   "x_bot": 223.0,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1182.0,
+   "x_mid": 1195.5,
+   "x_bot": 1208.5,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1369.0,
+   "x_mid": 1354.5,
+   "x_bot": 1342.0,
+   "kind": "rule"
+  }
+ ],
+ "n_cols": 9,
+ "page_class": "body",
+ "label_origin": "human",
+ "schema_version": 1
+}

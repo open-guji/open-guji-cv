@@ -77,6 +77,10 @@ def main() -> int:
     ap.add_argument("--json", default=None)
     ap.add_argument("--anchor", default="refine", choices=("refine", "border"),
                     help="border = 只用版框线性映射，不做互相关/梳齿细化（用来核对细化有没有引入偏差）")
+    ap.add_argument("--realign", action="store_true",
+                    help="旧路径：每次用互相关现场重锚定（vol01/33 现在 9 列全 <0.9 被跳过，vol02/135 无 row_proj 走梳齿——不是指纹口径，只当趋势）")
+    ap.add_argument("--mapping", default=None,
+                    help="迁移记录 migrated_v2.json（默认取金标分片目录下的 migrated_v2.json）")
     a = ap.parse_args()
 
     gs = GoldStore()
@@ -85,6 +89,43 @@ def main() -> int:
              if not a.book or i.anchor.book == a.book]
     rows: list[dict] = []
     skipped: list[str] = []
+    mapping_path = Path(a.mapping) if a.mapping else gs.root / "char-segmentation" / "row-boundaries" / "migrated_v2.json"
+    if not a.realign:
+        # 2026-09-30 M1 B 道：读迁移记录——只评「图像指纹对得上」的列（scripts 见 artifacts/m1_gold/row_boundaries/）
+        if not mapping_path.exists():
+            print(f"没有迁移记录 {mapping_path}；先跑 migrate_row_boundaries_v2.py，或加 --realign 走旧路径")
+            return 1
+        recs = json.loads(mapping_path.read_text(encoding="utf-8"))
+        for r in recs:
+            if a.book and r["book"] != a.book:
+                continue
+            book, pg = r["book"], r["page"]
+            if r["status"] != "migrated":
+                skipped.append(f"{book}/{pg} 金标列 {r['gold_col']}: 失效（{r['why'][:40]}…）")
+                continue
+            cells = st.read(book, "row_segment", page_key(pg), "cells")
+            cc = next((c for c in (cells.columns if cells else []) if c.col == r["col_now"] and c.ok), None)
+            prof = _col_profile(st, book, pg, r["col_now"]) if cc is not None else None
+            if cc is None or prof is None:
+                skipped.append(f"{book}/{pg} 金标列 {r['gold_col']}: 现役列 {r['col_now']} 无解或无列图缓存")
+                continue
+            cur_b = np.asarray(cc.boundaries, dtype=np.float64)
+            out = set(r.get("points_outside_current_column_image") or [])
+            nb = len(r["boundaries_now"])
+            for bi, y in enumerate(r["boundaries_now"]):
+                if bi in out:
+                    continue
+                j = int(np.argmin(np.abs(cur_b - y)))
+                err = float(abs(cur_b[j] - y))
+                yc = int(round(cur_b[j]))
+                stuck = False
+                if 0 <= yc < len(prof) and prof[yc] > INK_ON_LINE:
+                    lo, hi = max(0, yc - 12), min(len(prof), yc + 13)
+                    stuck = float(prof[lo:hi].min()) > STUCK_FLOOR
+                rows.append(dict(book=book, page=pg, gold_col=r["gold_col"], col=r["col_now"], corr=r["corr"],
+                                 bi=bi, gold_y=round(float(y), 1), cur_y=round(float(cur_b[j]), 1), err=round(err, 1),
+                                 edge=bi in (0, nb - 1), stuck=stuck))
+        items = []          # 旧路径不跑
     for it in items:
         book, pg = it.anchor.book, it.anchor.page
         cells = st.read(book, "row_segment", page_key(pg), "cells")
@@ -121,7 +162,12 @@ def main() -> int:
                 if key > best_map[2]:
                     best_col, best_map = col, m
             s, off, corr = best_map
-            if best_col is None or (gp is not None and a.anchor != "border" and corr < MIN_CORR):
+            if best_col is None:
+                # 2026-09-30：原来这里也报「对齐相关只有 -2.00」——-2.00 只是初值，真因是一列都没比上
+                # （现役 cells 没有 ok 列，或 Step2 列图不在 cache/ 里读不到）。别再当相关系数读。
+                skipped.append(f"{book}/{pg} 金标列 {gc['index']}: 无可比的现役列（缺列图缓存 column_image 或 cells 无 ok 列）")
+                continue
+            if gp is not None and a.anchor != "border" and corr < MIN_CORR:
                 skipped.append(f"{book}/{pg} 金标列 {gc['index']}: 对齐相关只有 {corr:.2f}")
                 continue
             cc = cur_cols[best_col]
@@ -151,7 +197,7 @@ def main() -> int:
         print(f"  {tag:<22} n={len(e):<4} mean {e.mean():5.1f}  median {np.median(e):5.1f}  p90 {np.percentile(e, 90):5.1f}"
               f"  max {e.max():5.1f}   ≤3px {100*(e<=3).mean():5.1f}%  ≤5px {100*(e<=5).mean():5.1f}%  ≤10px {100*(e<=10).mean():5.1f}%")
 
-    print("row-boundaries 逐像素误差（现役 Step3 vs 人工金标，互相关重锚定）")
+    print("row-boundaries 逐像素误差（现役 Step3 vs 人工金标；" + ("互相关现场重锚定·趋势" if a.realign else "迁移记录·图像指纹已核") + "）")
     line("全部格线", errs)
     inner = np.array([r["err"] for r in rows if not r["edge"]])
     line("内部格线", inner)

@@ -16,6 +16,12 @@
 这些独立闸 + 人眼 A/B。
 
 用法：PYTHONPATH=. python scripts/eval_seam.py <数据集目录> [--update]
+
+2026-09-30（M1 B 道）：默认改读**现役 v2 链**——`products/<册>/row_segment/pNNNN.json` 的格线 +
+Step2 列图（cache `column_image`），指标定义（切缝墨率公式、0.7 门槛、BASE_FLOOR、页级分布、回归门）
+一字未改；只是输入从已退役的 v1 `output/<册>/phase3_char_grid` 换成 v2。`--v1` 保留旧读法。
+v2 口径与 v1 口径**不可直接比**（v1 是 deshear 整页 + grid_strict 格线，v2 是射影列图 + row_segment），
+`expected.json` 已按 v2 重冻（v1 原值存 `expected_v1_legacy.json`），旧值只作趋势对照。
 """
 from __future__ import annotations
 
@@ -79,15 +85,51 @@ def page_seams(book: str, page: str, out: str = "output") -> list[float]:
     return vals
 
 
-def scan(dataset: str, out: str = "output") -> dict:
-    gold = json.loads((Path(dataset).parent / "page-type" / "expected.json")
-                      .read_text(encoding="utf-8"))
-    body = [(r["book"], r["page"]) for r in gold if r["page_type"] == "body"]
+def page_seams_v2(book: str, page: int) -> list[float]:
+    """v2：row_segment 格线 + Step2 列图；公式同 page_seams。"""
+    from open_guji_cv.eval.v2cols import iter_columns
+    vals: list[float] = []
+    for cc, im in iter_columns(book, page):
+        cells = [c for c in cc.cells if c.kind == "char"]
+        if len(cells) < 2:
+            continue
+        cx = cc.content_x or (0, im.shape[1])
+        x0 = max(0, int(cx[0]) + 2)
+        x1 = min(im.shape[1], int(cx[1]) - 2)
+        if x1 - x0 < 8:
+            continue
+        cell_h = cc.period or 100.0
+        sm = _smooth(column_projection(im[:, x0:x1]), cell_h)
+        L = len(sm)
+        peaks = []
+        for c in cells:
+            h = c.y1 - c.y0
+            a = int(max(0, c.y0 + 0.2 * h))
+            b = int(min(L, c.y1 - 0.2 * h))
+            peaks.append(float(sm[a:b].max()) if b > a else 0.0)
+        good = [p for p in peaks if p > 1]
+        if not good:
+            continue
+        colmed = float(np.median(good))
+        if colmed < 3:
+            continue
+        for i in range(len(cells) - 1):
+            if abs(cells[i + 1].y0 - cells[i].y1) > 2:
+                continue
+            base = max(min(peaks[i], peaks[i + 1]), BASE_FLOOR * colmed)
+            y = min(max(int(round(cells[i].y1)), 0), L - 1)
+            vals.append(float(sm[y]) / base)
+    return vals
+
+
+def scan(dataset: str, out: str = "output", v1: bool = False) -> dict:
+    from open_guji_cv.eval.v2cols import body_pages
+    body = body_pages(dataset)
     pages: dict[str, int] = {}
     allv: list[float] = []
     rates: list[tuple] = []
-    for book, page in sorted(body):
-        v = page_seams(book, page, out)
+    for book, page in body:
+        v = page_seams(book, str(page), out) if v1 else page_seams_v2(book, page)
         if not v:
             continue
         allv += v
@@ -127,9 +169,13 @@ def main() -> None:
     ap.add_argument("--out", default="output")
     ap.add_argument("--update", action="store_true",
                     help="把当前实测写回金标（只在确认是改进时用）")
+    ap.add_argument("--v1", action="store_true", help="读已退役的 v1 链 output/（旧行为）")
     a = ap.parse_args()
     shard = Path(a.dataset) / "seam" / "expected.json"
-    got = scan(a.dataset, a.out)
+    got = scan(a.dataset, a.out, v1=a.v1)
+    if not got['n_seams']:
+        print('空跑：没有读到任何切缝（缺 v2 产物 row_segment / 列图缓存，或 --v1 但没有 output/）——不写基线、不判回归')
+        raise SystemExit(2)
     if a.update or not shard.exists():
         shard.parent.mkdir(parents=True, exist_ok=True)
         shard.write_text(json.dumps(got, ensure_ascii=False, indent=1),
