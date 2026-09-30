@@ -131,7 +131,7 @@ export function ReviewCardView({
                   + `${c.approx.ids ? '\nIDS ' + c.approx.ids : ''}${c.approx.note ? '\n' + c.approx.note : ''}`}>近似</span>
         )}
         <label className="rvnolib" title="字形有无法修复的噪声（污墨/裂纹等），这次选字正常裁决，但这张图不进字形库">
-          <input type="checkbox" checked={!!v.noGlyphLib}
+          <input type="checkbox" checked={!!v.noGlyphLib || !!c.occluded}
                  onChange={(e) => { e.stopPropagation(); onSetNoGlyphLib(e.target.checked) }} /> 字形不入库
         </label>
         {onSetApprox && (
