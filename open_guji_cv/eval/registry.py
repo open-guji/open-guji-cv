@@ -97,19 +97,20 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="Step2 单列矫正", needs=("products",),
        note="没有报告选项，只印 stdout；列图从 input.column_image 重建"),
     _e("instance_quality", "char-segmentation/instances", pythonpath=True,
-       title="图块自检", needs=("products", "v1_output"),
-       note="分确定层 / 疑似层报，别合成一个数"),
+       title="图块自检", needs=("products",),
+       note="分确定层 / 疑似层报，别合成一个数。2026-09-30 M1：改读 v2 cell_shrink + instances_v2.json（已验证层，n 小）；"
+            "加 --with-unverified 另报 v2 原生人裁（无图像凭证的参考读数）"),
     _e("frame_strip", "char-segmentation/frame-strip", arg_kind="shard_parent", pythonpath=True,
        title="列端去框", needs=("products",)),
     _e("side_rule", "char-segmentation/side-rule", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="侧边去线", needs=("products",),
        note="⚠ 它的 --out 是**产物根目录**不是报告路径，所以不给报告选项"),
     _e("jiazhu_tail", "char-segmentation/jiazhu-tail", arg_kind="shard_parent", out_flag="", pythonpath=True,
-       title="夹注段端", needs=("products", "v1_output")),
+       title="夹注段端", needs=("products",), note="2026-09-30 M1：改读 v2 cell_shrink + expected_v2.json"),
     _e("left_cut", "char-segmentation/left-cut", arg_kind="shard_parent", out_flag="", pythonpath=True,
-       title="左缘救援", needs=("products", "v1_output")),
+       title="左缘救援", needs=("products",), note="2026-09-30 M1：改读 v2 列图 + expected_v2.json（重扫的新口径首个基线）"),
     _e("right_cut", "char-segmentation/right-cut", arg_kind="shard_parent", out_flag="", pythonpath=True,
-       title="右缘救援", needs=("products", "v1_output")),
+       title="右缘救援", needs=("products",), note="2026-09-30 M1：改读 v2 列图 + expected_v2.json（重扫的新口径首个基线）"),
     _e("seam", "char-segmentation/seam", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="格线落点", needs=("products",)),
     _e("text_band", "char-segmentation/text-band", arg_kind="shard_parent", out_flag="", pythonpath=True,
@@ -117,7 +118,7 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("page_crop", "char-segmentation/page-crop", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="上游裁切", needs=("products",)),
     _e("char_drop", "char-segmentation/char-drop", arg_kind="shard_parent", out_flag="", pythonpath=True,
-       title="字墨丢失", needs=("products", "v1_output")),
+       title="字墨丢失", needs=("products",), note="2026-09-30 M1：改读 v2 列图/cell_shrink，基线 expected_v2.json（新口径首个基线）"),
     # 生僻字候选召回（C 刀 L1）：库/OCR/上下文都给不出答案的字位，字体模板能
     # 不能把答案捞进 top-10。主指标是**召回**不是准确率——目标是人在候选里点。
     # 位置参数是数据集分片目录（--dataset），不是分片父目录。
@@ -172,7 +173,7 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     # （见 doc/step3_touching_and_jiazhu.md §3.5）。分「现役 R2s 粘连 / 非粘连」两层报。
     _e("row_boundaries", "char-segmentation/row-boundaries", arg_kind="none", out_flag="--json", pythonpath=True,
        title="格线逐像素误差", needs=("products",),
-       note="金标只有 2 页且是旧坐标系，重锚定后当趋势看；新坐标系金标见文档 §二"),
+       note="金标 2 页旧坐标系；2026-09-30 起读 migrated_v2.json（只评图像指纹对得上的 5 列，vol02/135 无指纹已失效）；--realign 才走旧的现场重锚定"),
     _e("truncation", "char-segmentation/truncation", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="字身截断", needs=("products",)),
     _e("crop_margin", "char-segmentation/crop-margin", arg_kind="shard_parent", out_flag="", pythonpath=True,
@@ -180,7 +181,8 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        note="⚠ 必须给 --intermediate-dir（s1~s6 的中间产物目录），否则只回显既存金标、不评测。"
             "2026-09-30 M1：已退役——量的是 v1 s3 整页裁边，v2 没有这一步（见 artifacts/m1_gold/crop_margin/MIGRATION.md）"),
     _e("recrop", "char-segmentation/instances", pythonpath=True,
-       title="重切回归", needs=("products",), note="只看 seed=review_recrop 那批"),
+       title="重切回归", needs=("products",),
+       note="只看 seed=review_recrop 那批。2026-09-30 M1：改读 v2 cell_shrink + instances/recrop_v2.json（原 40 条迁 31）"),
     # 归一化 / 聚类 / 匹配 / 识别（多为重活）
     _e("normalize", "char-normalization", pythonpath=True,
        title="归一化回归门", note="纯函数 golden，最快"),

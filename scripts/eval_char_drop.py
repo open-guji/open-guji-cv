@@ -178,9 +178,11 @@ def main() -> None:
     print(v2_extra)
     print(f"单字段 {base.get('n_segs', n_seg)} → {n_seg}")
     print(f"没被字格接住 {base.get('n_dropped', len(dropped))} → {len(dropped)}")
+    print(f"丢字率（单字段里没被字格接住）  {len(dropped)}/{n_seg} ({100.0 * len(dropped) / max(n_seg, 1):.3f}%)")
     for row in (dropped if a.all else dropped[:25]):
+        # 注意不写「盖住 0%」：评测层 parse_metrics 会把「名字 数%」整行当指标，把逐条明细当成总体指标
         print(f"   ✗ {row[0]}/{row[1]} c{row[2]} y{row[3]}~{row[4]} "
-              f"盖住 {row[5]:.0%}")
+              f"盖住比例={row[5]:.2f}")
     if len(dropped) > 25 and not a.all:
         print(f"   …另有 {len(dropped) - 25} 条")
 

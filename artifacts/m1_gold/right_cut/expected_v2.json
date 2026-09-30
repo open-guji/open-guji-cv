@@ -1,0 +1,190 @@
+{
+ "note": "2026-09-30 M1 C 组：v2 列图上按同一纯墨迹判据重扫，新口径首个基线；坐标=列图（左上原点）、列号右起 1；旧 v1 金标整体失效，见 artifacts/m1_gold/{left_cut,right_cut}/MIGRATION.md",
+ "chain": "v2 (column_warp 列图 + row_segment + cell_shrink)",
+ "columns": [
+  {
+   "book": "vol01",
+   "page": "45",
+   "col": 7,
+   "cell_right_x": 179,
+   "crossings": [
+    {
+     "y": 958,
+     "extent": 185
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "50",
+   "col": 1,
+   "cell_right_x": 179,
+   "crossings": [
+    {
+     "y": 2620,
+     "extent": 188
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "50",
+   "col": 2,
+   "cell_right_x": 173,
+   "crossings": [
+    {
+     "y": 2480,
+     "extent": 183
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "50",
+   "col": 6,
+   "cell_right_x": 178,
+   "crossings": [
+    {
+     "y": 2482,
+     "extent": 191
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "145",
+   "col": 3,
+   "cell_right_x": 174,
+   "crossings": [
+    {
+     "y": 2426,
+     "extent": 180
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "153",
+   "col": 1,
+   "cell_right_x": 194,
+   "crossings": [
+    {
+     "y": 2450,
+     "extent": 203
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "153",
+   "col": 7,
+   "cell_right_x": 175,
+   "crossings": [
+    {
+     "y": 2424,
+     "extent": 184
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "94",
+   "col": 6,
+   "cell_right_x": 180,
+   "crossings": [
+    {
+     "y": 2463,
+     "extent": 188
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "111",
+   "col": 8,
+   "cell_right_x": 176,
+   "crossings": [
+    {
+     "y": 2348,
+     "extent": 183
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "133",
+   "col": 7,
+   "cell_right_x": 169,
+   "crossings": [
+    {
+     "y": 2030,
+     "extent": 176
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "178",
+   "col": 2,
+   "cell_right_x": 204,
+   "crossings": [
+    {
+     "y": 2364,
+     "extent": 210
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "186",
+   "col": 2,
+   "cell_right_x": 177,
+   "crossings": [
+    {
+     "y": 2399,
+     "extent": 184
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "188",
+   "col": 5,
+   "cell_right_x": 185,
+   "crossings": [
+    {
+     "y": 648,
+     "extent": 190
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "188",
+   "col": 6,
+   "cell_right_x": 165,
+   "crossings": [
+    {
+     "y": 651,
+     "extent": 175
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "188",
+   "col": 7,
+   "cell_right_x": 166,
+   "crossings": [
+    {
+     "y": 289,
+     "extent": 185
+    },
+    {
+     "y": 2049,
+     "extent": 185
+    }
+   ]
+  }
+ ]
+}
