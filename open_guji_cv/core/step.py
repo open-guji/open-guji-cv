@@ -369,6 +369,12 @@ class RunContext:
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
+        # 书级 `context_guard_pages`（整段错位页名单）注入 seed_admit 参数——进参数才进指纹，
+        # 改 yaml 名单产物才会判过期。显式给了参数的照用。
+        if hasattr(p, "context_guard_pages") and not p.context_guard_pages:
+            pages = list(getattr(self.book, "context_guard_pages", None) or [])
+            if pages:
+                p = type(p)(**{**p.model_dump(), "context_guard_pages": pages})
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
