@@ -152,3 +152,25 @@ def occluded_cells(dens: dict[tuple[int, int, str], float], *, min_density: floa
             if col in span and span[col][0] <= _slot_rank(slot) <= span[col][1]:
                 out[key] = v
     return out
+
+
+def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
+    """本页的遮挡格 {(col, slot, sub): 密度}——**判据的唯一入口**。
+
+    `seed_admit` 的 `occluded_gate` 与 `feedback.consumers.glyphdb_admit` 的入库闸都走这里
+    （2026-09-30，H-seal：人裁「确认」事件的 `no_glyph_lib` 可能是 false，闸不能只信事件）。
+    `p` 是带 `occluded_min_*` 五个字段的参数对象（`SeedAdmitParams`）。读不到 Step3 字格
+    或原图就当没有遮挡（返回空表）。"""
+    try:
+        cells = ctx.product("cells", page)
+    except Exception:
+        return {}
+    if cells is None:
+        return {}
+    try:
+        gray = ctx.raw_page(page)
+    except Exception:
+        return {}
+    return occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
+                          min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
+                          min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
