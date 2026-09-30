@@ -92,6 +92,8 @@ COORD_MAX_RESID = 0.45         # 列内几何行号的最大残差（单位：�
 COORD_OUTSIDE_MARGIN = 0.5     # 段外假格离文字范围至少多远（行）
 COORD_WINDOW_LINES = 14        # 定窗时锚点前后各留几行
 COORD_MAX_CANDIDATE_RUNS = 64  # 一列里几何上都成立的配法上限（防病态列）
+COORD_MERGE_MIN_AGREE = 3      # 少一格（并格）救援：最高配法的载体吻合下限
+COORD_MERGE_MIN_CELLS = 4      # 少一格救援：共识后至少要给出这么多格的字，否则整列不认
 
 
 def is_text_char(ch: str) -> bool:
@@ -328,6 +330,7 @@ class ColumnCoord:
     agree: int = 0
     b: float | None = None       # 「格位 → 几何行号」偏移
     unique: bool = False         # 几何上只有这一种配法（拿来估页级偏移）
+    merged: bool = False         # 走了「少一格（并格）共识」救援，只给了共识格的字
 
 
 def _agree(u: CellUnit, ref: Unit) -> int:
@@ -346,6 +349,106 @@ def _fit(pos: list[int], g: list[float]) -> tuple[float | None, float]:
     只拟偏移（a=1）在长列上不够：Step3 的 period 估得差 2~3%，21 格一列末端就漂出
     半行（vol03 daizhige 源实测 21 列 19 字的正文列全因此退回，格数其实一格不差）。
     所以字位 ≥ `COORD_SLOPE_MIN_N` 时最小二乘拟斜率，斜率超出 `COORD_SLOPE` 判不成立。"""
+    n = len(pos)
+    if n < COORD_SLOPE_MIN_N or max(pos) == min(pos):
+        r = sorted(gi - p for gi, p in zip(g, pos))
+        return 1.0, r[n // 2]
+    mp, mg = sum(pos) / n, sum(g) / n
+    a = sum((p - mp) * (gi - mg) for p, gi in zip(pos, g)) / sum((p - mp) ** 2 for p in pos)
+    if not COORD_SLOPE[0] <= a <= COORD_SLOPE[1]:
+        return None, 0.0
+    return a, mg - a * mp
+
+
+def _merge_rescue(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord | None:
+    """「少一格」救援（2026-09-30，L1 道 overview#318）：整列比整理本**恰好少一格**时的共识配位。
+
+    起因：四庫 vol02 p3 卷首标题列「欽定四庫全書總目卷」9 字，Step3 在印章下只切出 8 格
+    （+5 格印章假格）——某相邻两字被并进一格。1:1 配法要么几何过不了（斜率＞1.1，配上去
+    从并格处起整列错一位），要么只剩把标题配到印章格上的两种假配法（载体吻合 0 vs 0），
+    整列因此空着。
+
+    做法：枚举「哪一对相邻正文字并进同一格 m」×「从哪一格起 j」，仍要求几何成立（格中心
+    ≈ a·格位 + b，并格取两字格位的中点；段外假格离文字 > 半行）；按载体吻合数（并格命中
+    两字之一也算）排，最高者 ≥ `COORD_MERGE_MIN_AGREE`，且**起点不同的配法吻合数都得比它
+    至少少 2**（否则起点有歧义，整列不认）。并格位置分不出来（几何上靠载体挑不开，p3 上
+    m∈{全書,庫全,四庫} 三者并列）时**只给共识格**——所有并列配法一致的格才给字，不一致的
+    格（含并格本身）**不出记录**，让下游当「没有坐标对位」而不是「整理本这一位是空格」。
+    给不出 `COORD_MERGE_MIN_CELLS` 格就不认。"""
+    L = len(text)
+    kinds = [u.kind for _p, u in text]
+    pos = [p for p, _u in text]
+    n = len(units)
+    if L < 4 or n < L - 1 or any(u.kind != "c" for u in units):
+        return None                                     # 夹注列不走这条（a/b 合一格，并格语义不同）
+    cands: list[tuple[int, int, int, float]] = []       # (吻合, j, m, 残差)
+    for m in range(L - 1):
+        if kinds[m] != "c" or kinds[m + 1] != "c" or pos[m + 1] != pos[m] + 1:
+            continue
+        tp = [float(p) for i, p in enumerate(pos) if i != m + 1]
+        tp[m] = pos[m] + 0.5
+        tk = [k for i, k in enumerate(kinds) if i != m + 1]
+        ref_i = [i for i in range(L) if i != m + 1]
+        for j in range(0, n - (L - 1) + 1):
+            run = units[j:j + L - 1]
+            if [u.kind for u in run] != tk:
+                continue
+            a, b = _fit_f(tp, [u.g for u in run])
+            if a is None:
+                continue
+            resid = max(abs(u.g - (a * p + b)) for u, p in zip(run, tp))
+            if resid > COORD_MAX_RESID:
+                continue
+            extras = units[:j] + units[j + L - 1:]
+            if any(min(abs(u.g - (a * p + b)) for p in tp) <= COORD_OUTSIDE_MARGIN * a
+                   for u in extras):
+                continue
+            ag = 0
+            for t, (u, ri) in enumerate(zip(run, ref_i)):
+                if t == m:
+                    if u.carrier.get("", "") in (text[m][1].a, text[m + 1][1].a):
+                        ag += 1
+                else:
+                    ag += _agree(u, text[ri][1])
+            cands.append((ag, j, m, resid))
+            if len(cands) > COORD_MAX_CANDIDATE_RUNS * 4:
+                return None
+    if not cands:
+        return None
+    best = max(c[0] for c in cands)
+    if best < COORD_MERGE_MIN_AGREE:
+        return None
+    top = [c for c in cands if c[0] == best]
+    j0 = top[0][1]
+    if any(c[1] != j0 and c[0] >= best - 1 for c in cands):
+        return None                                     # 起点有歧义
+    # 共识：每个格，所有并列配法给的字都一致才给
+    verdict: dict[int, set[str]] = {}
+    for _ag, j, m, _r in top:
+        ref_i = [i for i in range(L) if i != m + 1]
+        for t in range(L - 1):
+            ch = None if t == m else text[ref_i[t]][1].a
+            verdict.setdefault(j + t, set()).add(ch if ch is not None else "\0merged")
+    recs: list[tuple[str, int, str | None, str, float]] = []
+    n_ref = 0
+    for i, u in enumerate(units):
+        vs = verdict.get(i)
+        if vs is None:                                  # 段外假格：整理本这一位是空格
+            ch = ""
+        elif len(vs) == 1 and "\0merged" not in vs:
+            ch = next(iter(vs))
+            n_ref += 1
+        else:
+            continue                                    # 分不开 / 并格：不出记录
+        recs.append((u.ids[""], u.slot, None, ch, u.g))
+    if n_ref < COORD_MERGE_MIN_CELLS:
+        return None
+    return ColumnCoord(True, note=f"少一格共识（{len(top)} 种并格位置并列，吻合 {best}）",
+                       recs=recs, agree=best, b=None, unique=False, merged=True)
+
+
+def _fit_f(pos: list[float], g: list[float]) -> tuple[float | None, float]:
+    """`_fit` 的浮点格位版（并格取中点）。字位 ＜ `COORD_SLOPE_MIN_N` 只拟偏移。"""
     n = len(pos)
     if n < COORD_SLOPE_MIN_N or max(pos) == min(pos):
         r = sorted(gi - p for gi, p in zip(g, pos))
@@ -391,7 +494,8 @@ def coord_column(units: list[CellUnit], line: RefLine,
         if len(cands) > COORD_MAX_CANDIDATE_RUNS:
             return ColumnCoord(False, "几何上成立的配法太多")
     if not cands:
-        return ColumnCoord(False, f"格与整理本 {L} 字对不上（格数/类型/几何）")
+        return _merge_rescue(units, text) or ColumnCoord(
+            False, f"格与整理本 {L} 字对不上（格数/类型/几何）")
     cands.sort(key=lambda t: (-t[0], t[1]))
     top = [c for c in cands if c[0] == cands[0][0]]
     if len(top) > 1 and b_hint is not None:
@@ -399,8 +503,8 @@ def coord_column(units: list[CellUnit], line: RefLine,
         if abs(top[1][2] - b_hint) - abs(top[0][2] - b_hint) >= 0.5:
             top = top[:1]
     if len(top) > 1:
-        return ColumnCoord(False, f"有歧义（{len(cands)} 种配法，载体吻合 {top[0][0]} vs {top[1][0]}）",
-                           b=None)
+        return _merge_rescue(units, text) or ColumnCoord(
+            False, f"有歧义（{len(cands)} 种配法，载体吻合 {top[0][0]} vs {top[1][0]}）", b=None)
     agree, j, b = top[0]
     # 错位闸：整列挪一格后载体吻合明显更高 → 这一列配错了位（vol01 p102 列6 职名页：
     # 「天文算法纂修官」整列往上错一格，载体「算法纂修」在下一格；页锚不上，没有现役
