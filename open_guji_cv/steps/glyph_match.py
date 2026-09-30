@@ -167,6 +167,12 @@ class GlyphMatchParams(BaseModel):
     consensus_cov: float = 0.99          # 共识升档三条件，见模块头；min_confirmed = 0 关掉
     consensus_margin: float = 0.03
     consensus_min_confirmed: int = 3
+    shape_pair_rerank: bool = False
+    """按形区分四对（强/強、却/卻、回/囘、并/幷，字形库 11 §〇用户裁定）局部
+    部件决胜，见 `clustering.match.GlyphMatcher.local_shape_rerank`。缺省关，
+    只在候选首位落在这 8 个字上时改候选排序，别的字不受影响（任务书
+    R-形近四对：「别动全局阈值」）。书级 yaml `params: {glyph_match: {shape_pair_rerank: true}}`
+    可开。"""
 
     def model_post_init(self, _ctx) -> None:
         # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
@@ -234,6 +240,9 @@ class GlyphMatchStep(Step):
         # 库指纹是**软参数**（2026-09-25，用户定）：库变了只报「漂移」不报过期，
         # 要重算点名格走 `guji recheck`。见模块头「库指纹：记录，不判过期」。
         soft_params=("db_fingerprint",),
+        # 库放哪是机器属性（2026-09-29 K238）：留空时 model_post_init 填本机绝对路径，
+        # 进了指纹云端整包导入服务器必判过期。内容由 db_fingerprint 把关（软参数）。
+        path_params=("db_path",),
     )
 
     def _matcher(self, p: GlyphMatchParams):
@@ -249,7 +258,7 @@ class GlyphMatchStep(Step):
         # 产物里记的 db_fingerprint 三处必须是同一个值，否则边跑边审时三者会各说各话
         matcher, _chars = cached_matcher_from_db(
             p.db_path, p.db_fingerprint, edition=p.edition, knn_k=p.knn_k,
-            norm_stroke=p.norm_stroke)
+            norm_stroke=p.norm_stroke, local_shape_rerank=p.shape_pair_rerank)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

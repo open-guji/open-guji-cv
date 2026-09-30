@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import require_admin, require_reviewer
 from ..errors import maps_http
+from ...errors import BadRequest
 from ...eval import rate_history
 from ...eval.quality import quality
 
@@ -50,7 +51,33 @@ def api_quality(book: str = "vol01", pages: str = "dev_set") -> dict:
 
 
 
+def _rulers_pages(bk, pages: str) -> list[int]:
+    """`pages` 解析：`Book.resolve_pages` 不认 `list:`/`cells:` 前缀（那是
+    `review/cards.py` 自己的清单/坐标约定），直接传给它会把整个前缀串当页码
+    表达式解析、炸 `ValueError`（O1 运维道报：console.log 反复出现
+    `api_rulers` 500，`pages=list:thin_chars_vol02`）。这里按同一套约定
+    （`review/cards.py::cards`）先把 id 清单换成页号，再交给 `resolve_pages`。
+    """
+    if pages.startswith("cells:"):
+        from ...review.cards import parse_cells_spec
+        ids = parse_cells_spec(pages, bk.id)
+        return sorted({int(i.split(":")[1]) for i in ids})
+    if pages.startswith("list:"):
+        from ...core.workspace import feedback_root
+        lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+        if not lp.exists():
+            raise BadRequest(f"清单不存在：{lp}")
+        ids = {ln.split("#", 1)[0].strip() for ln in lp.read_text(encoding="utf-8").splitlines()
+               if ln.strip() and not ln.lstrip().startswith("#")}
+        pgs = {int(i.split(":")[1]) for i in ids if i.count(":") >= 3}
+        if not pgs:
+            raise BadRequest(f"清单是空的或没有可用坐标：{lp}")
+        return sorted(pgs)
+    return bk.resolve_pages(pages)
+
+
 @router.get("/api/rulers")
+@maps_http
 def api_rulers(book: str = "vol01", pages: str = "dev_set") -> dict:
     """**四把尺子**：Step 1-4 「离 100% 还差什么」。
 
@@ -62,7 +89,7 @@ def api_rulers(book: str = "vol01", pages: str = "dev_set") -> dict:
     from ...core.book import load_book
     from ...eval.rulers import measure
     bk = load_book(book)
-    return measure(book, bk.resolve_pages(pages), deps.product_store())
+    return measure(book, _rulers_pages(bk, pages), deps.product_store())
 
 
 

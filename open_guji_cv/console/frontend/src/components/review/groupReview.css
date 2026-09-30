@@ -1,0 +1,43 @@
+/* 按字种批审（任务书-C-待审卡按字种批审，2026-09-27）。沿用 review.css 的
+   变量与 .rv-toolbar，只加这一屏自己的网格/提示样式。 */
+
+.grp-nav { display: flex; align-items: center; gap: .7rem; margin: .4rem 0; }
+.grp-head { display: flex; align-items: baseline; gap: .8rem; margin-bottom: .3rem; }
+.grp-char { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.8rem; line-height: 1; }
+.grp-warn { font-size: .78rem; color: var(--ochre); margin-bottom: .5rem; }
+.grp-toolbar { display: flex; gap: .5rem; margin-bottom: .6rem; align-items: center; }
+.grp-shape { font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.2rem; width: 2.4rem; text-align: center; }
+.grp-shape.changed { border-color: var(--zhu); color: var(--zhu); }
+
+.grp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: .5rem; }
+.grp-tile { position: relative; border: 2px solid var(--ok); border-radius: 4px; padding: .2rem;
+            background: var(--paper-2); cursor: pointer; user-select: none; }
+.grp-tile img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; }
+.grp-tile.off { border-color: var(--zhu); opacity: .45; }
+.grp-mark { position: absolute; top: 0; right: .15rem; font-size: .75rem; color: var(--ok); }
+.grp-tile.off .grp-mark { color: var(--zhu); }
+/* 像素与 CNN 两路首位不一致的样例（借库书，2026-09-27）：排组内最前，虚线框提示逐张看 */
+.grp-tile.disagree { border-style: dashed; }
+.grp-disagree { position: absolute; top: 0; left: .2rem; font-size: .75rem; color: var(--ochre); font-weight: 600; }
+/* 组内按形聚簇（overview #166）：代表图角上「×N」，点开看成员 */
+.grp-count { position: absolute; bottom: .1rem; right: .15rem; font-size: .72rem; padding: 0 .25rem;
+             border-radius: 3px; background: var(--ochre); color: #fff; cursor: zoom-in;
+             white-space: nowrap; line-height: 1.2; }
+.grp-count.open { background: var(--zhu); }
+.grp-tile.partial { border-style: dotted; }
+.grp-tile.rep { outline: 2px solid var(--ochre); outline-offset: 1px; }
+.grp-members { margin: .6rem 0; padding: .5rem; border: 1px dashed var(--ochre); border-radius: 4px; }
+.grp-members > .muted { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }
+
+/* 对齐改字层 · 网格（overview#265）：缺省采信整理本，点一下字形不完整、再点跳过 */
+.ra-grid { grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr)); }
+.ra-ref { text-align: center; font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.1rem; line-height: 1.3; }
+.ra-tile.ra-truncated { border-color: var(--zhu); border-style: dashed; }
+.ra-tile.ra-truncated .grp-mark, .ra-tile.ra-truncated .ra-ref { color: var(--zhu); }
+.ra-tile.ra-skip { border-color: var(--ochre); opacity: .5; }
+.ra-tile.ra-skip .grp-mark { color: var(--ochre); }
+.ra-tile.ra-skip .ra-ref { text-decoration: line-through; }
+/* 影子预勾（overview#269）：把握≥0.9 且影子字 == 整理本字，排最前；角标显示把握度 */
+.ra-shadow { display: block; text-align: center; font-size: .68rem; color: var(--muted, #888); line-height: 1.2; }
+.ra-tile.ra-pre.ra-accept { border-color: var(--celadon, #4a8f6a); box-shadow: 0 0 0 1px var(--celadon, #4a8f6a) inset; }
+.ra-tile.ra-pre .ra-shadow { color: var(--celadon, #4a8f6a); font-weight: 600; }

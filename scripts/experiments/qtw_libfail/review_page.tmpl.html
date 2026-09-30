@@ -1,0 +1,94 @@
+<title>全唐文借库对照</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f2f4f3; --panel:#ffffff; --ink:#18221f; --muted:#5d6a66; --line:#d5dcd9;
+  --qtw:#1f6f63; --qtw-bg:#e3f0ec; --siku:#8a5a14; --siku-bg:#f5ecdc; --lib:#44506e; --lib-bg:#e7eaf2;
+  --bad:#b23a2e; --good:#2f7a3a; --tile:#ffffff;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  color-scheme:dark; --bg:#121816; --panel:#1a2320; --ink:#e4ece9; --muted:#9aa8a3; --line:#2c3935;
+  --qtw:#6cc4b4; --qtw-bg:#17322c; --siku:#e0b060; --siku-bg:#34281a; --lib:#a9b6dc; --lib-bg:#1f2536;
+  --bad:#f07a6c; --good:#7cc98a; --tile:#f4f4f1;}}
+:root[data-theme="dark"]{
+  color-scheme:dark; --bg:#121816; --panel:#1a2320; --ink:#e4ece9; --muted:#9aa8a3; --line:#2c3935;
+  --qtw:#6cc4b4; --qtw-bg:#17322c; --siku:#e0b060; --siku-bg:#34281a; --lib:#a9b6dc; --lib-bg:#1f2536;
+  --bad:#f07a6c; --good:#7cc98a; --tile:#f4f4f1;}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 60px;display:grid;gap:36px}
+h1{font:700 30px/1.25 "Noto Serif TC",serif;margin:0;text-wrap:balance}
+h2{font:700 21px/1.3 "Noto Serif TC",serif;margin:0 0 6px;text-wrap:balance}
+p{margin:0;max-width:68ch}
+.lede{display:grid;gap:10px}
+.muted{color:var(--muted)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:12px;letter-spacing:.04em;padding:2px 8px;border-radius:3px}
+.t-qtw{background:var(--qtw-bg);color:var(--qtw)} .t-siku{background:var(--siku-bg);color:var(--siku)} .t-lib{background:var(--lib-bg);color:var(--lib)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-weight:500;color:var(--muted);font-size:12px;letter-spacing:.04em}
+tr.hl td{background:var(--qtw-bg)}
+.section{display:grid;gap:14px}
+.char-row{display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:start;padding-block:14px;border-top:1px solid var(--line)}
+.glyph{font:700 44px/1 "Noto Serif TC",serif;text-align:center}
+.glyph small{display:block;font:400 11px/1.4 "IBM Plex Mono",monospace;color:var(--muted);margin-top:6px}
+.groups{display:flex;flex-wrap:wrap;gap:14px}
+.group{display:grid;gap:6px;padding:8px;border-radius:4px}
+.group.qtw{background:var(--qtw-bg)} .group.siku{background:var(--siku-bg)} .group.lib{background:var(--lib-bg)}
+.group>.tag{justify-self:start;padding:0}
+.tiles{display:flex;gap:6px;flex-wrap:wrap}
+.pair{display:grid;gap:3px}
+.pair img{width:60px;height:60px;object-fit:contain;background:var(--tile);border:1px solid var(--line);display:block}
+.pair .cap{font:11px/1.2 "IBM Plex Mono",monospace;color:var(--muted);text-align:center}
+.cap .no{color:var(--bad)} .cap .ok{color:var(--good)}
+.fails{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.fail{background:var(--panel);border:1px solid var(--line);padding:10px;display:grid;gap:8px}
+.fail h3{margin:0;font:500 15px/1.3 "Noto Sans TC",sans-serif}
+.fail h3 b{font:700 20px "Noto Serif TC",serif}
+.strip{display:flex;gap:8px;flex-wrap:wrap}
+.note{border-left:3px solid var(--qtw);padding:8px 12px;background:var(--panel)}
+@media (max-width:560px){.char-row{grid-template-columns:1fr}.glyph{text-align:left}}
+</style>
+<div class="wrap">
+  <header class="lede">
+    <h1>全唐文借四庫库：同字并排</h1>
+    <p class="muted">overview#86（R 道）。每格左上是原字块（按长边缩放），下面是送进匹配器的归一 64² 二值图。<span class="mono">cov</span> 与「首选」是该格在四庫库上的现役比对结果。</p>
+    <div class="legend"><span class="tag t-qtw">全唐文 · 用户人裁</span><span class="tag t-siku">四庫 vol03 · 光盘版锚定</span><span class="tag t-lib">四庫库条目（vol01/02）</span></div>
+  </header>
+  <section class="section" id="summary"><h2>数字一览</h2>__SUMMARY__</section>
+  <section class="section" id="pairs"><h2>同字并排</h2>
+    <p class="muted">看笔画：全唐文的笔画相对字身只有四庫的六成粗，边缘带 JB2 针孔毛刺，归一后墨少、笔画断；四庫库的归一图笔画饱满。</p>
+    <div id="pairs-body"></div></section>
+  <section class="section" id="fails"><h2>整簇系统性错</h2>
+    <p class="muted">人裁字 ≠ 四庫库首选，按（真值，首选）对计数。同一字在全唐文里几乎每一处都被认成同一个四庫字——这是字样差异，不是随机噪声。</p>
+    <div class="fails" id="fails-body"></div></section>
+  <section class="section" id="sims"><h2>反向仿真：把 vol03 字块改成全唐文的样子</h2>
+    <p class="muted">放大到全唐文尺寸 top-1 不变（97.5→97.3%）；只削细笔画就掉到 86.8%、cov 中位 0.990→0.935，复现了全唐文的分数刻度。</p>
+    <div class="groups" id="sims-body"></div></section>
+  <section class="section" id="thick"><h2>正向修：全唐文字块去针孔后加粗 2px</h2>
+    <div class="groups" id="thick-body"></div></section>
+</div>
+<script>
+const D = __DATA__;
+const im = b => `<img alt="" src="data:image/png;base64,${b}">`;
+const img = (b, cap) => `<div class="pair"><img alt="" src="data:image/png;base64,${b}">${cap?`<div class="cap">${cap}</div>`:''}</div>`;
+const cellCap = c => c.top ? `<span class="${c.rank===1?'ok':'no'}">${c.top}</span> ${c.cov.toFixed(3)}` : '';
+document.getElementById('pairs-body').innerHTML = D.pairs.map(p => `
+ <div class="char-row"><div class="glyph">${p.char}<small>全唐文 ${p.n_qtw} 格<br>vol03 ${p.n_vol03} 格</small></div>
+  <div class="groups">
+   <div class="group qtw"><span class="tag t-qtw">全唐文</span><div class="tiles">${p.qtw.map(c=>`<div class="pair">${im(c.raw)}${im(c.norm)}<div class="cap">${cellCap(c)}</div></div>`).join('')}</div></div>
+   <div class="group siku"><span class="tag t-siku">vol03</span><div class="tiles">${p.vol03.map(c=>`<div class="pair">${im(c.raw)}${im(c.norm)}<div class="cap">${cellCap(c)}</div></div>`).join('')}</div></div>
+   <div class="group lib"><span class="tag t-lib">库</span><div class="tiles">${p.lib.map(b=>img(b)).join('')}</div></div>
+  </div></div>`).join('');
+document.getElementById('fails-body').innerHTML = D.fails.map(f => `
+ <div class="fail"><h3>人裁 <b>${f.truth}</b> → 库首选 <b>${f.top}</b> <span class="mono muted">${f.n} 格</span></h3>
+  <div class="strip">${img(f.cell.raw,'全唐文原块')}${img(f.cell.norm,'归一')}${f.lib_truth.map(b=>img(b,'库·'+f.truth)).join('')}${f.lib_top.map(b=>img(b,'库·'+f.top)).join('')}</div></div>`).join('');
+document.getElementById('sims-body').innerHTML = D.sims.map(s => `
+ <div class="group siku"><span class="tag t-siku">vol03 · ${s.char}</span><div class="tiles">${img(s.raw,'原块')}${img(s.base,'归一')}${img(s.thin,'削细')}${img(s.all,'削细+针孔')}</div></div>`).join('');
+document.getElementById('thick-body').innerHTML = D.thick.map(s => `
+ <div class="group qtw"><span class="tag t-qtw">全唐文 · ${s.char}</span><div class="tiles">${img(s.raw,'原块')}${img(s.base,'现役归一')}${img(s.thick,'加粗 2px')}${s.lib?img(s.lib,'库'):''}</div></div>`).join('');
+</script>

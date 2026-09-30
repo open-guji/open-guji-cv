@@ -53,12 +53,14 @@ from ..products.store import ProductStore
 from ..report.slots import CELLS_KIND, SlotRec, cells_step, page_slots
 
 
-def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str:
+def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int,
+                  approx_ids: dict[str, tuple[str, str]] | None = None) -> str:
     """把一列的字位流（已按阅读顺序）拼成一行 guji-markdown 源文本（不含结尾换行）。
 
     `n_raised`：抬头级数（`ColumnCells.n_raised`）→ 行首 `^` 的个数。
     `n_lead_blank`：行首连续空白格数 → 行首 `.` 的个数（见 `slots.blank_lead_count`
     的模块注释：这个量必须从 Step3 数，Step7 对 blank 格不产出记录）。
+    `approx_ids`：近似字「正文括注 IDS」选项（`render/approx.py`，缺省 None = 正文照填不括注）。
     """
     prefix = ("^" * n_raised if n_raised > 0 else "") + "." * n_lead_blank
 
@@ -76,7 +78,7 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
             while i < len(slots) and slots[i].kind in ("jiazhu_a", "jiazhu_b"):
                 r = slots[i]
                 if not r.excluded:
-                    (a_chars if r.kind == "jiazhu_a" else b_chars).append(_char_text(r))
+                    (a_chars if r.kind == "jiazhu_a" else b_chars).append(_char_text(r, approx_ids))
                 i += 1
             if a_chars and b_chars:
                 out.append("<" + "".join(a_chars) + "|" + "".join(b_chars) + ">")
@@ -93,7 +95,7 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
             while i < len(slots) and slots[i].kind == "jiazhu_solo":
                 r = slots[i]
                 if not r.excluded:
-                    chars.append(_char_text(r))
+                    chars.append(_char_text(r, approx_ids))
                 i += 1
             if chars:
                 # 用指令式写 type=单行（guji-markdown spec/directives.md：jz 的 type
@@ -117,13 +119,13 @@ def render_column(slots: list[SlotRec], n_raised: int, n_lead_blank: int) -> str
             i += 1
             continue
 
-        out.append(_char_text(rec))
+        out.append(_char_text(rec, approx_ids))
         i += 1
 
     return prefix + "".join(out)
 
 
-def _char_text(rec: SlotRec) -> str:
+def _char_text(rec: SlotRec, approx_ids: dict[str, tuple[str, str]] | None = None) -> str:
     """一个字位的输出文本，只在**不是** excluded 时调用。
     阙文（`unreadable`）出 `[[]]`；否则出**字形**（`char`）。
 
@@ -139,16 +141,24 @@ def _char_text(rec: SlotRec) -> str:
     # 尚未合并 main——与模块头第 4 条同一个注意事项。
     if text == "□" and rec.guess:
         return f"□{{guess={rec.guess}}}"
+    # 近似字「正文括注 IDS」（overview#276，预留选项，缺省不开）：只在正文确实是人标近似的那个字时括注
+    mark = approx_ids.get(rec.id) if approx_ids else None
+    if mark and mark[0] == text and mark[1]:
+        return f"{text}{{ids={mark[1]}}}"
     return text
 
 
 def render_page(store: ProductStore, book: str, page: int, stale: list[str],
-                keep_empty_cols: bool = False) -> str:
+                keep_empty_cols: bool = False,
+                approx_ids: dict[str, tuple[str, str]] | None = None) -> str:
     """`stale`：本页发现的「Step7 有记录但 Step3 cells 查不到」条目，
     格式 `p{page}col{col}:slot{n}{a|b}`，追加进这个列表，不在这一层报告。
 
     `keep_empty_cols`：没有字的列（版心、空列）也占一行、出空行，使「第 k 行 = 第 k 列」。
     维基文库导出要它（用户 2026-09-24：版心那一行应当空出来）；缺省关，9.2 等不受影响。
+
+    `approx_ids`：近似字「正文括注 IDS」（`render.approx.inline_ids_map`）；缺省 None = 正文照填，
+    近似说明另出侧表（`render.approx.sidecar_rows`），正文与不标近似时逐字相同。
     """
     slots = page_slots(store, book, page, stale)
 
@@ -170,7 +180,7 @@ def render_page(store: ProductStore, book: str, page: int, stale: list[str],
             lines.append("")
             continue
         lines.append(render_column(by_col[col], n_raised_by_col.get(col, 0),
-                                   lead_blank_by_col.get(col, 0)))
+                                   lead_blank_by_col.get(col, 0), approx_ids))
     return "\n".join(lines)
 
 

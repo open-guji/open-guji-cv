@@ -122,5 +122,5 @@ def api_glyph_match_summary(book: str, pages: str | None = None) -> dict:
     from ...steps.glyph_match import glyph_match_summary
 
     b = load_book(book)
-    page_list = b.resolve_pages(pages) if pages else None
+    page_list = b.resolve_pages_ext(pages) if pages else None
     return glyph_match_summary(book, page_list, deps.product_store())

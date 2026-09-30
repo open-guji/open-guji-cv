@@ -100,6 +100,26 @@ class StepSpec:
     三步的 `run_page` 其实早就写好了容错（`seed_admit._opt` docstring 直说"可选
     上游：缺了就 None，不炸"；`align_ref` 只在 match 和 ocr 都缺时才报错），那些
     代码根本没机会跑到。声明与实现对不上，这个字段就是用来把实现的意图表达出来的。"""
+    optional_consumes_when: tuple[tuple[str, str], ...] = field(default=())
+    """**带参数开关的可选上游**：`(产物种类, 参数字段名)`，种类必须同时写在
+    `optional_consumes` 里。参数字段为假（0 / False / 空）时这一路**当它不存在**——
+    不进指纹、不参与过期传播；为真时与普通可选上游一样。
+
+    2026-09-28 加（D 道，overview#126）：`rare_candidates`（5-b）接进
+    `align_ref`/`context_decide`/`seed_admit`，书级开关缺省关。四庫等书早就有
+    5-b 产物，若只写进 `optional_consumes`，它的 sha 立刻并进三步的指纹、5-b 一过期
+    三步跟着过期——开关明明关着，全书 Step5-d～7 却要重跑。`ocr_candidates` 没有这个
+    问题，是因为它关着时压根没跑、没有产物；5-b 是常开的。
+
+    开关名以 `@book.` 开头时读 `BookSpec` 的同名字段（书级开关不在步骤参数里）：
+    2026-09-29（K#238c）`ocr_candidates` 用 `("ocr_candidates", "@book.ocr_candidates")`
+    接书级 `ocr_candidates:`（缺省关）。选它而非把开关塞进 params：开关本来就是
+    书级、Engine 也读 `book.ocr_candidates`，一处真源，不必在三步的 params 里再造
+    一个会与之打架的字段（也就不会改 `params_hash`）。
+
+    拓扑序与 `Pipeline.validate` 照旧按 `optional_consumes` 全量算（开关开的时候上游
+    得排在前面），只有指纹（`Engine.upstream_shas`）与过期传播（`Engine.status`）
+    看开关——见 `live_optional_consumes`。"""
     code_deps: tuple[str, ...] = field(default=())
     """参与指纹的模块名（算法所在模块）。Step 自己的模块总是参与。"""
     book_deps: tuple[str, ...] = field(default=())
@@ -129,6 +149,19 @@ class StepSpec:
 
     只适合「值变了、但绝大多数产物仍然成立」的外部状态。代码、阈值、checkpoint
     这类一变就整体失效的东西**不许**放这里（cv-pipeline-ops §2.2）。"""
+    path_params: tuple[str, ...] = field(default=())
+    """**路径参数**：参数模型里这些字段只说「文件放哪」，**不进指纹**（`params_hash` /
+    `self_hash` 都剔掉），也**不记漂移**（区别于 `soft_params`）。
+
+    2026-09-29 加（K238）：`glyph_match.db_path` 留空时按运行时环境填成**本机绝对路径**，
+    进了 `params_hash`——云端算好的整包导入服务器，路径不同，全书判过期。路径是机器
+    属性、不是产物语义：**内容**由各步旁边的内容指纹（`db_fingerprint` /
+    `corpus_fingerprint` / …，只认文件名 + 内容哈希，不含目录）把关，换文件内容照样过期。
+
+    登记纪律：只有「同一字段旁边已有内容指纹，或本身只是日志/输出目录」的路径才许放
+    这里。没有内容指纹的路径字段（如 `context_decide.variants`，默认空、显式给才有值）
+    放进来就等于「换了异体表产物还报新鲜」，**不许**。新增路径类参数时先问：内容变了
+    谁来判过期？"""
     needs: tuple[str, ...] = field(default=())
     """跑得起来的**外部**前提，控制台据此把跑不了的步骤置灰而不是让人点了才失败。
     口径与 `eval/registry.py` 的 `needs` 一致：
@@ -152,6 +185,19 @@ class StepSpec:
     `store.write(..., page_key(pg), ...)` 这种按页隔离的产物，数据库/字形库连接
     （若有）能在子进程里各自新建而非跨进程共享。标错的代价是静默数据错误，
     不是报错——宁可漏标（退化成串行）也不要错标。"""
+
+
+def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:
+    """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
+    只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
+    gates = dict(spec.optional_consumes_when)
+
+    def _on(g: str) -> bool:
+        # `@book.<字段>`：开关在书级（`BookSpec`），不在步骤参数里（见 optional_consumes_when）
+        if g.startswith("@book."):
+            return bool(getattr(book, g[len("@book."):], False))
+        return bool(getattr(params, g, None))
+    return tuple(k for k in spec.optional_consumes if k not in gates or _on(gates[k]))
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────

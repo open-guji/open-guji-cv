@@ -15,6 +15,7 @@ from ..core.book import load_book
 from ..core.spec import cell_key, page_key
 from ..errors import NotFound
 from ..eval.round_check import load_verdicts
+from ..products import kinds  # noqa: F401  先注册产物种类（seed_admit 等），否则 st.read 报 KeyError
 from ..products.store import ProductStore
 from ..variant_ledger import DEFAULT_EDITION, BookLedger
 

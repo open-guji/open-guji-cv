@@ -559,17 +559,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
     bw = max(1, hi_ - lo_)
 
     def line_end(p: np.ndarray, j: int) -> int | None:
-        """从线段起点 `j` 往里找线的下沿（LAYER2_FLOOR / LAYER2_HALF 注）；厚过 LAYER2_MAX_ROWS 返回 None。
-
-        **半峰触发要求随后确有一段贴近地板的淡墨**（2026-09-27 补，vol02 t008_p33c2「褚」实测）：
-        字身本身多段起伏（部首间的笔画疏密），扫到某个局部小峰之后马上回落到「不到它一半」，
-        这个回落值本身仍远高于 LAYER2_FLOOR（真实案例：局部峰 0.38，半峰门槛 0.19，
-        随后连续 9 行都停在 0.16~0.19，从未跌破地板）——原判据把这当成线的淡边，
-        实际是字身内部两个笔画峰之间的正常波谷，往下几行墨又重新爬回 0.3+。
-        真线加淡边的形态（内框紧贴末字）里，淡边本就是「几行 0.03~0.1」，
-        紧接着就能在几行内看到低于地板的值；字身波谷没有这个特征。
-        地板本身触发（`p[i] < LAYER2_FLOOR`）不受此限——那已经是直接证据。
-        """
+        """从线段起点 `j` 往里找线的下沿（LAYER2_FLOOR / LAYER2_HALF 注）；厚过 LAYER2_MAX_ROWS 返回 None。"""
         n = len(p)
         pk = 0.0
         i = j
@@ -577,14 +567,7 @@ def column_border_trim(warped_gray: np.ndarray, band: tuple[int, int] | None = N
             if i - j > LAYER2_MAX_ROWS:
                 return None
             pk = max(pk, float(p[i]))
-            below_floor = p[i] < LAYER2_FLOOR
-            below_half = p[i] < LAYER2_HALF * pk
-            if pk >= inset_min_peak and (below_floor or below_half):
-                if not below_floor:
-                    look = p[i:min(n, i + LAYER2_FADE + LAYER2_HALF_LOOKAHEAD)]
-                    if not look.size or float(look.min()) >= LAYER2_FLOOR:
-                        i += 1
-                        continue                # 半峰触发但后头没有真贴地板的淡墨——字身波谷，接着扫
+            if pk >= inset_min_peak and (p[i] < LAYER2_FLOOR or p[i] < LAYER2_HALF * pk):
                 # 线的淡边（**严格**一路往下走的至多 LAYER2_FADE 行）一起剥掉，别留一两行渣；持平或回升就是字了
                 e = i
                 while e < min(n, i + LAYER2_FADE) and p[e] > ink_eps and (e == i or p[e] < p[e - 1]):

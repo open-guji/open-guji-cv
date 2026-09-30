@@ -93,6 +93,33 @@ def test_rekey_moves_evicts_and_keeps(lib, monkeypatch, capsys):
     assert L.v1_twin_ids("v2:vol01:3:4:12") == ["v1:vol01:3:4:11", "vol01:3:4:11"]
 
 
+def test_codepoint_equal_lands_book_char_instead_of_conflict(lib, monkeypatch, capsys):
+    """`vol01:3:4:11`（己）与人裁 `v2:vol01:3:4:12`（庚）本来是 conflict_human（异字，不改不撤）；
+    给了 `--book` 且该书 `codepoints` 把 己/庚 算同一个字时（字形库 11 §〇 那类同字异码位），
+    不算冲突：照常重键，且 label/semantic/unicode_cp/admissions.char 落到书级码位（庚）。
+    不给 `--book`（前一条用例）时行为不变，走的还是 conflict_human。"""
+    import open_guji_cv.core.book as book_mod
+    db, m = lib
+    fake_book = book_mod.BookSpec(id="vol01", title="t", raw_dir=Path("."), codepoints={"己": "庚"})
+    monkeypatch.setattr(book_mod, "load_book", lambda book_id: fake_book)
+    _run(monkeypatch, db, m, "--book", "vol01")
+    ids, src = _ids(db)
+    assert "v1:vol01:3:4:11" not in ids                    # 没落进冲突桶
+    assert ids["vol01:3:4:12"] == "庚"                     # 重键到现格，label 落书级码位
+    assert src["vol01:3:4:12"] == "vol01"                  # 来源仍是 vol01（格号坐标），不是 v1
+    c = sqlite3.connect(db)
+    assert c.execute("SELECT semantic, unicode_cp FROM instances WHERE instance_id=?",
+                     ("vol01:3:4:12",)).fetchone() == ("庚", ord("庚"))
+    assert c.execute("SELECT char FROM admissions WHERE instance_id=?",
+                     ("vol01:3:4:12",)).fetchone() == ("庚",)
+    c.close()
+    # 幂等：来源已不是 v1，第二遍找不到这个 v1 实例了，报告里不会再算它
+    capsys.readouterr()
+    _run(monkeypatch, db, m, "--book", "vol01")
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["codepoint_landed"] == 0 and out["conflict_human"] == 0
+
+
 def test_rekey_idempotent_and_survives_rebuild(lib, monkeypatch, tmp_path, capsys):
     db, m = lib
     _run(monkeypatch, db, m)

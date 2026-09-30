@@ -180,3 +180,25 @@ def test_no_codepoints_configured_is_a_noop(ws, capsys):
     # 这里直接测底层函数：空字典迭代 0 次）
     assert u.scan(BOOK, {}, glyph_db_path())["pairs"] == {}
     assert u.apply(BOOK, {}, glyph_db_path())["pairs"] == {}
+
+
+def test_v1_prefixed_instances_of_the_book_are_unified(ws):
+    """v1 重键后没对上现格的刻例叫 `v1:<book>:p:c:idx`——此前被当成「不属于任何书」，
+    四庫 vol01 剩的 4 条（即↔卽、歷↔厯）因此一直没统一（2026-09-30）。"""
+    import sqlite3
+
+    import glyph_codepoint_unify as u
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    from open_guji_cv.core.workspace import glyph_db_path
+
+    assert u._belongs_to_book(f"v1:{BOOK}:148:5:17", BOOK)
+    assert not u._belongs_to_book("v1:otherbook:148:5:17", BOOK)
+    db = GlyphDB(glyph_db_path())
+    db.admit_instance(f"v1:{BOOK}:148:5:17", "即", _tiny_patch(), provenance="align")
+    db.close()
+    rep = u.scan(BOOK, {"即": "卽"}, glyph_db_path())
+    assert rep["pairs"]["即→卽"]["library"]["v1_prefixed"] == [f"v1:{BOOK}:148:5:17"]
+    u.apply(BOOK, {"即": "卽"}, glyph_db_path())
+    conn = sqlite3.connect(glyph_db_path())
+    assert conn.execute("SELECT label FROM instances WHERE instance_id=?",
+                        (f"v1:{BOOK}:148:5:17",)).fetchone()[0] == "卽"

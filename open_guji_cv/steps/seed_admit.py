@@ -37,9 +37,10 @@ dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 7
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -48,6 +49,8 @@ from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageOcr)
 from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 from ..utils.ji_yi_si import FAMILY as _JYS
+
+_log = logging.getLogger(__name__)
 
 
 class SeedAdmitParams(BaseModel):
@@ -60,6 +63,19 @@ class SeedAdmitParams(BaseModel):
     这些页不走 `context` / `ref_ctx` 放行，一律退回待审。见 clustering/context_guard。"""
     context_head_check: bool = True
     """列首前两格走 context/ref_ctx 放行前，要求库匹配 same/unsure 或图块墨形像字。"""
+    context_verdicts: str = ""
+    """context 通道按**库判 verdict** 加的闸（2026-09-27，D-书级admit覆盖）。
+    逗号分隔的允许集合，如 `"same,unsure"`——只在 `r.verdict` 落在这个集合里时
+    才允许 context 放行；不在集合里记一条 doubt `context_verdict`、落人审。
+    空串 = 不限制（旧行为，所有 verdict 都能走 context）。
+
+    起因：全唐文放行抽检（overview `新书整理/书/全唐文/放行抽检-v0.md`）—— 独立
+    两次抽样都测到 `channel=context ∧ verdict=diff` 错率约 50%（n=40），而
+    `verdict=same/unsure` 错率低得多（`unsure` 9.1%~5.0%，`same` 未见错）。按
+    「锚定页/未锚定页」拆开复核过，错率不随锚定与否变化，说明问题出在
+    `verdict=diff` 这个组合本身——库已经明确判"不是这个字"，`context_margin`
+    顶格覆盖这条视觉证据不可靠，不是分辨率不够的问题，是这条通道天生守不住。
+    """
     always_review: str = "己已巳"
     """这些字不采信字形/OCR 通道的判决（用户 2026-09-04 定，2026-09-11 改口不再是
     「永远人审」）：命中时先清空 `admission_decision` 给的通道，只看 `relax_split_ref`
@@ -86,20 +102,200 @@ class SeedAdmitParams(BaseModel):
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
+    iron_config_fingerprint: str = ""
+    """自动填：`config/iron_extra_confusable.json`（铁证闸的追加形近/形不可分表）
+    变了本步要重跑。开不开铁证闸看册配置 `iron_gate:`（`StepSpec.book_deps`
+    已经把这个字段收进指纹了，这里只管配置文件内容本身）。"""
+    iron_ref_guard: bool = True
+    """铁证放行前与整理本互证（2026-09-27 整理 Z7 实测）：铁证定的字与 `align_ref`
+    对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
+    11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
+    是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
+    context_blank_gate: bool = True
+    """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
+    是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
+    到底有没有墨）。字块（`char_index` 的 `ink_ratio`）低于 `context_min_ink`
+    时不走 context 通道，落人审（`context_blank_cell`）。只挡 context 这一条
+    通道——`match_solo`/`iron` 等字形通道本身就要求库里能验出「像」，空白格
+    verify 不出 same，链路里已经挡住了，不需要重复设闸。"""
+    context_min_ink: float = 0.05
+    """`context_blank_gate` 的墨量闸。bxgb + vol03 两书全书 `char_index.ink_ratio`
+    分布实测（`scripts/measure_context_ink_gate.py`）＋逐格看图定的界：vol03 全
+    书 `channel=context` 的 262 格里最低 4 格（0.0415~0.0493，含 `vol03:9:9:21`
+    ink=0.0493、`vol03:67:9:21` ink=0.0415）图上看**都是空白**（碎墨点/划痕，
+    非字）；再往上第一个「像样」的格是 `vol03:33:2:1`（一，ink=0.0677）——
+    「一」只有一横，天然低墨，图上确认是真字；中间 0.0604（莫）图上零散不
+    确定，落在闸的"不拦"一侧（新闸第一版，拿不准就不拦，比错拦一个真字更
+    安全）。取 **0.05**：压在「确认空白」（≤0.0493）与「确认真字」（0.0677）
+    之间。bxgb 全书 `channel=context` 134 格最低也有 0.1093（臣），阈值对它
+    是纯保险栓、不会误伤。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
     实测 41 条人裁：文意对 39、字形对 40。关掉不等于「永远人审」——下面的 context
     通道（2026-09-11 起对己已巳不再排除）仍可能在没有整理本时单独放行。"""
+    ji_yi_si_review: bool = False
+    """己/已/巳 一族转人审的三方一致闸（2026-09-27 D 铁证复核）：vol03/vol04 各自
+    独立全量穷举，这一族全部自动放行、零送审，vol03 47 格错 55.3%、vol04 34 处——
+    见 `_resolve_ji_yi_si` 文档字符串。这条开关是任务书给的「二选一」里更保守的
+    那种：非「干支/时辰」（几乎不错，不受此闸影响）的其余路径，要求**上下文判定
+    （Step6）＝整理本对齐字＝库候选 top1** 三者一致才放行，不然送人审
+    （`doubts` 记 `ji_yi_si_review`）。另一种做法「这一族一律送审」更简单更保守，
+    数字见任务书对应 done 单，没实现为第二个开关值——需要时改这一个布尔量的调用点
+    即可，不必新增字段。缺省关：用户 09-06/09-11 定的规矩是「整理本给了就放行」，
+    这一族默认继续全放行，开不开等用户看完两种做法的数字再定。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
     文意取整理本。两册人审位实测 整理本≡库top1 10/10、==上下文 4/4，全部 1,1xx 条
     人裁真值上反例 0。同时让「义定形未定」的位在库 top1 属组内形时直接取它当形
     （evidence.form.state=guess，判据 E 会把它算进抽审分母）。"""
+    ref_lib_variant_guard: bool = True
+    """`ref_lib` 通道变体放行加闸（2026-09-27，R 形近溯源实测 `bxgb:52:11:15` 冶→治
+    揪出，做法参照 `iron_ref_guard`，参数缺省开）：`relax_ref_agree` 里「库候选与整理本字
+    语义相同（`vmap.semantic` 归一）」这条，此前只要语义相同就放行，完全不看两者字面是否
+    一致、也不看 Step6 margin——`variants.auto.tsv` 的 `graph` 来源多数是词典单向登记
+    （twedu 那条 冶→治 就是：`directed['冶']={'治':['twedu']}`，没有反向 `directed['治']`），
+    不代表刻本场景下两字真同义（`open_guji_cv/variants.py` 模块头「来源分级只是先验」）。
+    加闸后：库候选与整理本字**字面相同**（`_top == align_char`）不受影响，照放；**字面不同**
+    （变体放行）只有满足以下任一条件才放行，否则记 doubt `ref_lib_variant`、退回人审（不改
+    `char`，不采信这条判决）——
+    - **可信边**：变体关系在关系层双向确认（`open_guji_cv.variants.regulars_of` 两个方向都
+      收，即两个来源都认对方是自己的正字，不是单向词典登记）；或人工审查确认表
+      `config/dicts/variants.tsv` 登记过这一对（该表本就是人工确认，不要求关系层双向）；
+      或本书用字账人裁过这一对（`BookLedger.pair_confirmed`，双向都查）；或本书
+      `codepoints` 配置把两个码位统一成同一个（`BookSpec.codepoint_equal`，书级实证，
+      比字典更硬）——见 `_trusted_variant_edge` 的完整判据；
+    - **Step6 margin 过线**：复用 `context_margin`（0.70，同一把已经在生产用的尺子，不另开
+      一个阈值）——`context_decision` 给这一位的 margin ≥ 它，即便变体边本身单薄也放行。
+    三书（bxgb dev_set+p52、vol03 107 页快照、vol01 206 页快照）实测 `ref_lib` 通道共 5 格
+    变体放行、0 格字面相同：`躭→耽`（vol01，双向可信）、`彝→彞`×3（vol03，双向可信）margin
+    0.12~0.24 全部远低于 0.70；`冶→治`（bxgb，唯一不可信）margin 0.024。加闸后前四格不变，
+    冶→治 落人审——详见 done 单。"""
+    variant_indirect_guard: bool = True
+    """异体等价放行拦**间接路径**（2026-09-28，overview#178，缺省开）。
+
+    `vmap.semantic` 归一只说明两个字挂到了同一个语义正字，不说明它们之间有边：
+    `𢑴→彝`（hydzd）与 `彞→彝`（twedu）各自挂到「彝」，`𢑴`/`彞` 就被判成同义，
+    关系层里两者却**没有直接边**，是经第三个字间接连起来的（H #62 `vol04:28:3:18a`：
+    刻「彝」形，库 top1 `𢑴`、整理本 `彞`，按 `ref_lib` 把 `𢑴` 放行、margin 0.0036）。
+    开着时，库形与整理本字字面不同、语义相同、但关系层（`variants.json`，除
+    kSpoofingVariant/通假）**没有直接边**的——
+    - `match_ref`/`match_replace`/`match_margin`（`admission_decision` 里那几条拿
+      `vmap.semantic` 比库形与整理本的通道）撤回放行，记 doubt `variant_indirect`；
+    - `ref_lib`：不再能靠 Step6 margin 过闸（直接边的 margin 分支照旧），记
+      `ref_lib_variant` + `variant_indirect`。
+    例外与 `_trusted_variant_edge` 同口径：人工表 `variants.tsv`、本书用字账人裁、
+    书级 `codepoints` 认过这一对的照放。**直接边（双向、单向）行为一概不变**。
+    实测（四庫 vol01–04 快照 + 全唐文 v006–v010 快照，见 #178 评论）：靠异体等价放行的
+    1,321 格里间接路径 2 格，都是 `𢑴`→`彝`→`彞`，1 格存形错；其余全是直接边。"""
+    lib_confident_cov: float = 0.0
+    """库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。0 = 关（缺省）。
+
+    对象：上面所有通道都没放行、库判 `unsure`、Step6 退回先验（`source=prior`，
+    即人审卡上的「上下文 margin 不足」）的格。库 top1 的 cov ≥ 本值、且领先第二名
+    ≥ `lib_confident_gap` 时放行 top1。硬约束（任务书 item 2）：
+    - 不碰 己／已／巳 一族（`always_review` 与 `ji_yi_si.FAMILY`）；
+    - 不碰形近对表里的字：top1 在 `confusable.partners()`（手工＋人裁＋字体表）或铁证
+      补充表（`iron_extra_confusable.json`）里有对手就不放——**按字不按对**，不要求
+      对手恰好在候选里；
+    - 库无护栏（`guard is None`）；本格没有任何流程内疑问（`near_form`／`replace_align`／
+      `context_vs_ref`／`form_open`／`iron_vs_ref` …）——**整理本说了不同（replace）一律不放**；
+    - 只当兜底：放在铁证之后、`if not ok` 里，只新增放行，不改动任何已放行格。
+    **缺省关、不推荐开**（四册 vol01–04 实测，open-guji-core/overview#59）：这个池子里有人裁的
+    109 格库 top1 错 94 格——真字多半库里没收，cov 0.95~0.98 只是「库里最像的那个」；最窄的
+    候选档（cov≥0.98、领先≥0.03）四册合计只有 130 格，全审 0 错也压不到 95% 上界 ≤1%。
+    留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
+    lib_confident_gap: float = 0.0
+    """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
+    off_channels: str = ""
+    """关掉 `admission_decision` 的哪几条通道（逗号分隔，如 `"match_solo"`；2026-09-28，
+    overview#155）。命中的判决作废、记 doubt `channel_off`，后面的兜底通道（context／
+    ref_lib／铁证…）照常有机会——关的是**这条路**，不是这个格。空串 = 全开（旧行为）。
+    书级用：书 yaml `params: {seed_admit: {off_channels: match_solo}}`。"""
+    solo_confusable_guard: bool = False
+    """match_solo 系（`match_solo`/`match_solo_ocr`/`match_solo_cnn`）加形近闸（2026-09-28，
+    overview#155）：库 top1 在任何一张形近表里（`_confusable_char`：NEAR_FORM_CHARS、
+    `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
+    起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
+    这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+    replace_form: str = "align"
+    """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
+    - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
+    - `lib`：整理本字与库 top1 语义同、字面不同时，取**库 top1**（刻本字形；这条通道要求
+      top1 cov ≥ 0.95，形状证据站得住）；
+    - `review`：字面不同就不放行，记 doubt `replace_form`、落人审。
+    起因：全唐文 v006 `match_replace` 放行「嚐」，图上是「嘗」——整理本（维基）用了
+    异体，码位跟着整理本走了。只在 variant_form（本书用字账组内定形）没接手时生效。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
+    variant_graph_fingerprint: str = ""
+    """自动填：关系层 `config/variants/variants.json` 变了本步要重跑——`ref_lib_variant_guard`
+    的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
+    只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
+    rare_agree: bool = False
+    """记「像素与 CNN 两路首选是否一致」（2026-09-28，D 道 overview#126），缺省关。
+    开了读 `rare_candidates`（5-b），在每格 `evidence.rare` 记 `{pix, cnn, agree}`：
+    `pix` = 库（`glyph_match`）首位、`cnn` = 5-b 首位、`agree` = 两字相同。
+    **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
+    达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
+    不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
+    occluded_gate: bool = True
+    """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
+
+    检测见 `steps/occlusion.py`（整页中等墨点密度 + 成块，vol03 全册标定只命中 p3 印章）。
+    命中的格：**不进任何放行通道**（`admit=False`、`doubts=["occluded"]`）——太脏，字形
+    一律不进字形库（用户原话「这些格太脏，全都不能入库」）；`char` = 默认字：整理本的字，
+    先取 `align_ref` 的坐标对位（`PageAlignRef.coord`），没有才取现役对位字，都没有为 None；
+    坐标对位说这一位是**空格**（印章切出来的假格）的，`char=None` 并记
+    `evidence.occluded.ref_blank=True`（文本层当非字跳过，人审卡默认点「非字」）。
+    人裁位照旧一票定案，不受这道闸影响。只会把格从放行挪到待审，不会反过来。"""
+    occluded_min_density: float = 4.0
+    """热格密度门槛（每万像素中等墨点数），标定见 `steps/occlusion.py` 模块头。"""
+    occluded_min_cells: int = 12
+    """热格连通块至少多少格才算遮挡。"""
+    occluded_min_cols: int = 3
+    """热格连通块至少横跨几列。"""
+    occluded_min_peak: float = 8.0
+    """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
+    occluded_min_contrast: float = 2.5
+    """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
+
+    approx_gate: bool = False
+    """匹配到的库例是**近似字**时拦不拦自动放行（overview#276；书级参数）。
+
+    近似例 = 人裁时勾了「无匹配（近似字）」的刻例（`approx_labels` 侧表）：Unicode 里没有真正
+    对应的字，库里存的只是最像的那个码位。
+
+    **缺省不拦**（用户 2026-09-29 裁定，overview#277 选 C）：近似例像普通刻例一样参与自动放行，
+    但靠它定下来的格要**标注**——`evidence["approx"]`（`source="matched"`、`via`、命中的库例与其
+    ids/note），文本层据此把这一格记进近似字侧表（`render/approx.py`），控制台卡片显示「近似」。
+    开了（`params: {seed_admit: {approx_gate: true}}`）则退回保守做法：`admit=False`、doubt
+    `approx_exemplar`、`char` 不改，落人审。
+
+    判「靠近似例」两种情形，都要求这一格的字就是库给的字（整理本/上下文定的字不算）：
+    库判 same 命中的那一例（`matched_id`）是近似例（`via="matched_id"`）；或走候选首位、而这个字在库里
+    的刻例**全部**是近似例（`via="char_only"`）。人裁位照旧一票定案，不经这里。
+    """
+    approx_fingerprint: str = ""
+    """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_rare(self, handler):
+        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
+
+        `approx_gate`／`approx_fingerprint` 同理（overview#276）：闸是缺省值（关）时不进 dump；
+        库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
+        """
+        d = handler(self)
+        if isinstance(d, dict) and not self.rare_agree:
+            d.pop("rare_agree", None)
+        if isinstance(d, dict) and not self.approx_gate:
+            d.pop("approx_gate", None)
+        if isinstance(d, dict) and not self.approx_fingerprint:
+            d.pop("approx_fingerprint", None)
+        return d
 
     def model_post_init(self, _ctx) -> None:
         if not self.db_path:
@@ -112,9 +308,16 @@ class SeedAdmitParams(BaseModel):
             object.__setattr__(self, "ledger_fingerprint",
                                corpus_fingerprint([str(ledger_path(self.edition))]))
         if not self.variants_fingerprint:
-            from ..clustering.variants import DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH
-            paths = [self.variants] if self.variants else [str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH)]
+            from ..clustering.variants import (DEFAULT_AUTO_PATH, DEFAULT_VARIANTS_PATH,
+                                               NEVER_GROUP_PATH)
+            # never_group.json 也管语义层（2026-09-28 overview#201），名单改了产物要过期
+            paths = [self.variants] if self.variants else [
+                str(DEFAULT_AUTO_PATH), str(DEFAULT_VARIANTS_PATH), str(NEVER_GROUP_PATH)]
             object.__setattr__(self, "variants_fingerprint", corpus_fingerprint(paths))
+        if not self.variant_graph_fingerprint:
+            from ..variants import DEFAULT_VARIANTS_JSON
+            object.__setattr__(self, "variant_graph_fingerprint",
+                               corpus_fingerprint([str(DEFAULT_VARIANTS_JSON)]))
         if self.use_exclusions and not self.exclusions_fingerprint:
             from ..clustering.exclusions import default_path as _ex_default
             object.__setattr__(self, "exclusions_fingerprint",
@@ -132,14 +335,21 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+        if not self.approx_fingerprint:
+            object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
+        if not self.iron_config_fingerprint:
+            from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
+            object.__setattr__(self, "iron_config_fingerprint",
+                               corpus_fingerprint([str(_IRON_CONFIG)]))
 
 
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.8", unit="cell",   # 1.8：context 通道加整页错位名单 + 列首非字护栏；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）
-        consumes=("glyph_match", "context_decision", "align_ref"),
-        optional_consumes=("ocr_candidates",),
+        id="seed_admit", title="C1 进库准入", version="1.11", unit="cell",   # 1.11：context 通道加整页错位名单 + 列首非字护栏；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
+        optional_consumes=("ocr_candidates", "rare_candidates"),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -148,8 +358,21 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.variant_form",
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
+                   "open_guji_cv.utils.jiazhu_order",
+                   "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.clustering.context_guard",
-                   "open_guji_cv.utils.jiazhu_order"),
+                   "open_guji_cv.variants",
+                   # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
+                   # 间接进了指纹，原图不变，所以不必加进 consumes。
+                   "open_guji_cv.steps.occlusion"),
+        # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
+        # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
+        # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
+        book_deps=("iron_gate", "codepoints"),
+        # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
+        # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
+        # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
+        path_params=("db_path", "variants", "note_lexicon", "exclusions"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -202,17 +425,42 @@ class SeedAdmitStep(Step):
             rec = _ex_records().get(iid, {})
             return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
-        ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
+        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
+                               if ctx.book.ocr_candidates else None)
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
+        chars = _opt(ctx, "char_index", page)
 
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
+        imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
+        mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
+        rtop: dict[str, list[str]] = {}
+        if p.rare_agree:
+            from .align_ref import rare_topk_map
+            rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
         always = set(p.always_review or "")
         from ..clustering.context_guard import head_cell_ok, page_guarded, HEAD_CELLS
         page_guard = page_guarded(page, p.context_guard_pages)
+        context_verdicts = frozenset(
+            s.strip() for s in (p.context_verdicts or "").split(",") if s.strip())
+        off_channels = frozenset(
+            s.strip() for s in (p.off_channels or "").split(",") if s.strip())
+        if p.replace_form not in ("align", "lib", "review"):
+            raise ValueError(f"seed_admit.replace_form 只能是 align/lib/review，不是 {p.replace_form!r}")
         out: list[ColumnAdmit] = []
         n_auto = n_review = n_excluded = 0
+        # 铁证放行通道（用户 2026-09-27 批：只放行文本，不进字形库）。册配置
+        # `iron_gate:` 关时这两个都是 None，下面 `_iron_decide` 直接跳过——
+        # 零额外开销，不影响没开这个开关的书。
+        iron_ns = getattr(ctx.book, "norm_stroke", None)
+        iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
+        iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
+        # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
+        occ = _occluded(ctx, page, match, p, amap) if p.occluded_gate else {}
+        # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
+        apx_ids, apx_only = (_approx_index(p.db_path) if p.approx_fingerprint
+                             else ({}, frozenset()))
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -301,6 +549,19 @@ class SeedAdmitStep(Step):
                         provenance="human", doubts=[],
                         evidence={"human": True, **({} if hs else {"no_glyph_lib": True})}))
                     continue
+                # 印章／污损遮挡：一律不放行、不进库，默认字取整理本（坐标对位优先）。
+                # 放在人裁之后——人已经看着图定过的字照旧一票定案。
+                if r.id in occ:
+                    n_review += 1
+                    dens, dflt, via = occ[r.id]
+                    oev = {"density": round(dens, 2), "via": via}
+                    if via == "coord_blank":
+                        oev["ref_blank"] = True
+                    recs.append(AdmitRec(
+                        id=r.id, slot=r.slot, sub=r.sub, admit=False, channel=None,
+                        char=dflt, provenance="", doubts=["occluded"],
+                        evidence={"verdict": r.verdict, "cov": r.cov, "occluded": oev}))
+                    continue
                 o = omap.get(r.id)
                 # OCR 只供候选，**置信度不参与任何自动判断**（见模块头）
                 ocr_in = ({"char": o.topk[0][0], "prob": o.topk[0][1]}
@@ -350,6 +611,24 @@ class SeedAdmitStep(Step):
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
                     solo_cov=p.solo_cov, cnn_char=cnn_char)
+                # 书级收紧（overview#155）：关通道 / match_solo 形近闸。放在所有兜底通道之前，
+                # 作废的格后面仍可能被别的独立证据接住。
+                if ok and channel in off_channels:
+                    ok, channel = False, None
+                    doubts.append("channel_off")
+                elif (ok and p.solo_confusable_guard and channel in _SOLO_CHANNELS
+                      and r.candidates and _confusable_char(r.candidates[0][0])):
+                    ok, channel = False, None
+                    doubts.append("solo_confusable")
+                # 异体等价只经间接路径成立的撤回（`variant_indirect_guard`）。库形取
+                # 这几条通道自己比的那个字：match_ref 库 same 时是 r.char，其余是 cov 最高的候选。
+                if (ok and p.variant_indirect_guard and align_char and r.candidates
+                        and channel in ("match_ref", "match_replace", "match_margin")):
+                    _shape = (r.char if channel == "match_ref" and r.verdict == "same" and r.char
+                              else max(r.candidates, key=lambda t: t[1])[0])
+                    if _variant_indirect(_shape, align_char, ledger, ctx.book):
+                        ok, channel = False, None
+                        doubts.append("variant_indirect")
                 # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
                 # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
                 # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
@@ -447,6 +726,18 @@ class SeedAdmitStep(Step):
                             char = None
                         else:
                             char = fd.char
+                # match_replace 的码位（overview#155）：整理本字与库 top1 语义同、字面不同，
+                # 而用字账没接手定形（form_ev 为空）时，按 `replace_form` 取库形或落审。
+                if (ok and channel == "match_replace" and p.replace_form != "align"
+                        and form_ev is None and r.verdict != "same" and r.candidates):
+                    _top = r.candidates[0][0]
+                    if align_char and _top != align_char \
+                            and vm_here.semantic(_top) == vm_here.semantic(align_char):
+                        if p.replace_form == "lib":
+                            char = _top
+                        else:
+                            ok, channel, prov, char = False, None, "", None
+                            doubts = doubts + ["replace_form"]
                 # 上下文当第三路：库没定下来、但 Step6 过了门槛，仍可进库
                 # （provenance=context，设计 §3.2 的分级）。字形层照录 —— 这里
                 # 用的是候选内选出的 surface，不引入候选外的字。形未定时不走：
@@ -469,10 +760,16 @@ class SeedAdmitStep(Step):
                 from ..clustering.seeding import context_conflicts_ref
                 if (not ok and not form_open and p.use_context and d and d.source == "context"
                         and d.char and d.margin >= p.context_margin):
-                    if context_conflicts_ref(d.char, align_char, vm_here):
+                    _ir = imap.get(r.id)
+                    if context_verdicts and r.verdict not in context_verdicts:
+                        doubts.append("context_verdict")
+                    elif context_conflicts_ref(d.char, align_char, vm_here):
                         doubts.append("context_vs_ref")
                     elif not _ctx_guard_pass(page_guard, r, head_ids, ctx, page, cc.col, head_cell_ok, doubts):
                         pass
+                    elif p.context_blank_gate and _ir is not None \
+                            and _ir.ink_ratio < p.context_min_ink:
+                        doubts.append("context_blank_cell")
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -487,13 +784,72 @@ class SeedAdmitStep(Step):
                     _d = dmap.get(r.id)
                     if _top and _top not in always \
                             and vmap.semantic(_top) == vmap.semantic(align_char):
-                        ok, channel, prov = True, "ref_lib", "match"
-                        char = _top
+                        # 字面相同不受加闸影响，照放（任务书「字面相同的放行照旧」）。
+                        # 字面不同——变体放行——才要过闸：可信边，或 Step6 margin 过线
+                        # （复用 context_margin，同一把生产已在用的尺子），否则记
+                        # doubt、退回人审，不采信这条判决（ref_lib_variant_guard）。
+                        # 间接路径（经共同正字才同义）不许靠 margin 过闸（variant_indirect_guard）。
+                        _indirect = (p.variant_indirect_guard and _top != align_char
+                                     and not _direct_variant_edge(_top, align_char))
+                        if _top == align_char:
+                            ok, channel, prov = True, "ref_lib", "match"
+                            char = _top
+                        elif (_trusted_variant_edge(_top, align_char, ledger, ctx.book)
+                              or (not _indirect
+                                  and (not p.ref_lib_variant_guard
+                                       or (_d is not None and _d.margin >= p.context_margin)))):
+                            ok, channel, prov = True, "ref_lib", "match"
+                            char = _top
+                        else:
+                            doubts.append("ref_lib_variant")
+                            if _indirect and "variant_indirect" not in doubts:
+                                doubts.append("variant_indirect")
                     elif (_d and _d.char and _d.char == align_char
                           and _ctx_guard_pass(page_guard, r, head_ids, ctx, page, cc.col,
                                               head_cell_ok, doubts)):
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
+
+                # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
+                # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
+                # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
+                # 上面所有通道都没定下来的格再补一次机会，不覆盖任何已经放行的判决（哪怕
+                # 铁证跟它不一致）。开关前后产物 diff 因此只应该多出 `channel="iron"` 的新
+                # 增格，一个已有的格都不会变——这是这次转正验证的判据，也是「先不进库」
+                # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
+                # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
+                if not ok and iron_ctx is not None:
+                    iron_char = _iron_decide(ctx.book.id, page, cc.col, r, iron_ctx,
+                                             iron_scale, iron_ns)
+                    if iron_char is not None and p.iron_ref_guard \
+                            and context_conflicts_ref(iron_char, align_char, vm_here):
+                        doubts.append("iron_vs_ref")
+                    elif iron_char is not None:
+                        ok, channel, char, prov = True, "iron", iron_char, "iron"
+                        doubts = []
+                # 库高置信兜底（`lib_confident_cov`，缺省关）：只补「库已经很像、只因 Step6
+                # 帮不上（退回先验）」的格。约束见参数文档；`doubts` 非空说明流程里已有别的
+                # 理由拦它（整理本 replace、形近、互证冲突……），一律不碰。
+                if (not ok and p.lib_confident_cov > 0 and not doubts and not form_open
+                        and r.verdict == "unsure" and r.guard is None and r.candidates
+                        and d is not None and d.source == "prior"):
+                    _top, _c1 = r.candidates[0]
+                    _c2 = r.candidates[1][1] if len(r.candidates) > 1 else 0.0
+                    if (_c1 >= p.lib_confident_cov and _c1 - _c2 >= p.lib_confident_gap
+                            and _top not in always and _top not in _JYS
+                            and not (align_char and align_char in _JYS)
+                            and not _confusable_char(_top)
+                            and not (align_char and vm_here.semantic(align_char)
+                                     != vm_here.semantic(_top))):
+                        ok, channel, char, prov = True, "lib_confident", _top, "match"
+                # 近似例（overview#276）：这一格的字就是库给的字、而库给它的依据是近似例 →
+                # 缺省照常放行、在 evidence 里标注（文本侧表与卡片读它）；开了闸才挪去人审。
+                # 放在所有通道之后：闸只会把格从放行挪到待审，不改字、不会反过来。
+                apx_ev = (_approx_hit(r, char, apx_ids, apx_only)
+                          if (apx_ids or apx_only) else None)
+                if ok and apx_ev and p.approx_gate:
+                    ok, channel, prov = False, None, ""
+                    doubts.append("approx_exemplar")
                 if ok:
                     n_auto += 1
                 else:
@@ -506,9 +862,12 @@ class SeedAdmitStep(Step):
                               "guard": r.guard,
                               "ocr": (o.topk[:3] if o else []),
                               "ctx_margin": (d.margin if d else None),
-                              **({"form": form_ev} if form_ev else {})}))
+                              **({"form": form_ev} if form_ev else {}),
+                              **({"rare": _rare_agree(r, rtop.get(r.id))}
+                                 if p.rare_agree else {}),
+                              **({"approx": apx_ev} if apx_ev else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
-        d_auto, d_review = _resolve_ji_yi_si(out, amap)
+        d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
         n_review += d_review
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
@@ -541,17 +900,47 @@ def _char_patch_gray(book: str, page: int, col: int, slot: int, sub: str | None)
         return None
 
 
-def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
+def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
+                      review_gate: bool = False) -> tuple[int, int]:
     """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
 
     按本页读序取前后字：
     - **干支 / 时辰**（几乎不会错）：直接定字并放行——哪怕原先落了人审；
-    - 其余（「己」的搭配、整理本给「己」、默认「已」）：**原已放行的改成规则的字**——原先的字
+    - 其余（「己」的搭配、整理本、默认「已」）：**原已放行的改成规则的字**——原先的字
       不过是库或整理本对字形的猜测，而本族字形本就不分（四庫整理本自己也把「而已」印成「而巳」）；
       原在人审、但字形证据确认是这一族（库 top1 属本族且 cov ≥ 0.95，或 OCR 首选属本族）→
       按规则的字放行；字形证据不足 → 仍人审，证据里写建议字。
     人裁位不动（人定的就是文意）。→ (新增放行数, 新增人审数)。
-    实测（人裁为真值，bxgb + 四庫 vol01/02）：干支/时辰 全对；搭配与默认 约 96%。
+
+    **2026-09-27 D 铁证复核改了两处**（vol03/vol04 独立复现同一系统性判偏，见
+    `scripts/audit_ji_yi_si_0927.py`）：
+
+    1. **`resolve()` 传 `use_ref="all"`**（原来 `ji_only`，只在整理本给「己」时信它）。
+       docstring 原写的「实测干支/时辰全对、搭配与默认约 96%」是在 bxgb + 四庫 vol01/02
+       上量的；vol03/vol04 独立穷举发现 pred 系统性偏「已」（vol03 47 格里 55.3% 错、
+       vol04 34 处），根因是「默认→已」这条兜底规则抢在整理本前面——vol03/vol04 的
+       gold 分布是 已:巳 ≈ 19:28（vol03）/ 42:38（vol04），「其余→已」这个默认假设
+       在这两本书上是错的多数派，不是少数例外。把默认前多问一次整理本
+       （`use_ref="all"`：干支/时辰仍最先命中，不受影响），vol04 47 格一致率
+       53.0%→86.7%、vol03 47 格 42.6%→80.9%。**这一步没有改变"哪条规则优先"
+       的顺序，只是把整理本从"只信它说己"扩成"它说什么就参考什么"——跟用户
+       09-06/09-11「整理本给了就放行」的规矩方向一致，不是相反。**
+    2. **残留错例（vol04 11/83、vol03 9/47）是另一个独立的坑，这次没修**：清一色是
+       「己的常见搭配」（`_JI_NEXT` 含"意"）与「干支后为地支」规则里 `未` 的例外分支
+       在这两本书上误触发，把已经正确的整理本字覆盖成错的「己」——这两条规则是在
+       bxgb/vol01/vol02 上标定的，vol03/vol04 明显不适配（vol03 全书 47 格 gold 里
+       "己" 出现 0 次，vol04 只 3 次），但样本太小（各不到 10 例）不够重新拟阈值，
+       **负结果**：试过把"意"从 `_JI_NEXT` 删掉，vol04 这 11 例全对，但没有 bxgb/
+       vol01/02 数据验证会不会反过来伤到那三本书的搭配判例，没做——把这条判断
+       完全交给下面的 `review_gate`。
+
+    `review_gate`（`SeedAdmitParams.ji_yi_si_review`）：非「干支/时辰」的其余路径
+    （搭配/整理本/默认）开了之后要求**上下文判定（Step6 `context_decision`）＝
+    整理本对齐字＝库候选 top1** 三者一致才放行，不一致就送人审（`doubts` 记
+    `ji_yi_si_review`）——刚好接住上面第 2 点没修的残留误判：那些误判本质就是
+    "规则给的字"与"整理本"不一致（规则自己覆盖了整理本），三方一致闸会把它们
+    挡下来，不需要先分清是哪条规则错的。缺省关（用户 09-06/09-11 定的规矩是
+    "整理本给了就放行"，这一族默认仍全放行）。
     """
     from ..utils.jiazhu_order import sort_by_reading
     from ..utils.ji_yi_si import resolve
@@ -559,13 +948,13 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
            if not (r.doubts and "excluded" in r.doubts)]
     d_auto = d_review = 0
     for i, r in enumerate(seq):
-        if r.channel == "human" or r.char not in _JYS:
+        if r.channel == "human" or r.char not in _JYS or "occluded" in (r.doubts or []):
             continue
         prev = seq[i - 1].char if i else None
         nxt = seq[i + 1].char if i + 1 < len(seq) else None
         nxt2 = seq[i + 2].char if i + 2 < len(seq) else None
         ref = (amap.get(r.id) or (None, None))[0]
-        ch, why = resolve(prev, nxt, ref, next2=nxt2)
+        ch, why = resolve(prev, nxt, ref, use_ref="all", next2=nxt2)
         r.evidence = {**(r.evidence or {}), "ji_yi_si": {"char": ch, "why": why}}
         sure = why.startswith("干支") or why == "时辰"
         if sure:
@@ -574,12 +963,25 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict) -> tuple[int, int]:
                 d_review -= 1
             r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
-        elif r.admit:
-            r.char = ch
+            continue
+        m = mmap.get(r.id)
+        top1 = (m.candidates[0][0] if m and m.candidates else (m.char if m else None))
+        d = dmap.get(r.id)
+        ctx_char = d.char if d and d.source == "context" else None
+        agree = review_gate and ref and ctx_char == ref and top1 == ref
+        blocked = review_gate and not agree
+        if r.admit:
+            if blocked:
+                r.char, r.admit, r.channel, r.provenance = None, False, None, ""
+                r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_review"]))
+                d_auto -= 1
+                d_review += 1
+            else:
+                r.char = ch
         else:
             ev = r.evidence or {}
             ocr1 = (ev.get("ocr") or [[None]])[0][0] if ev.get("ocr") else None
-            if (ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS:
+            if ((ev.get("cov") or 0) >= 0.95 or ocr1 in _JYS) and not blocked:
                 r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
                 d_auto += 1
                 d_review -= 1
@@ -619,6 +1021,8 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     """
     import sqlite3
     from pathlib import Path
+
+    from ..feedback.mojibake import is_legal_shape
     if not Path(db_path).exists():
         return {}
     try:
@@ -635,8 +1039,121 @@ def _human_shapes(db_path: str) -> dict[str, str]:
         return {}
     finally:
         conn.close()
-    return {iid[3:]: ch for iid, ch in rows if ch}
+    # 字形字段合法性校验（2026-09-27，H 道乱码普查）：`glyphdb_admit` 写入口自
+    # `b162e64` 起已经挡乱码（单字校验），但这道闸是那次改动之后才加的——库里
+    # 可能留着更早年代写进去的坏数据（这里同样只挡、不吞：跳过并记 warning，
+    # 不让老坏数据悄悄消失）。见 `feedback/mojibake.py`。
+    out: dict[str, str] = {}
+    for iid, ch in rows:
+        if not ch:
+            continue
+        if not is_legal_shape(ch):
+            _log.warning("_human_shapes: %s 字形字段不合法，跳过：%r", iid, ch)
+            continue
+        out[iid[3:]] = ch
+    return out
 
+
+@lru_cache(maxsize=4)
+def _iron_context(db_path: str, norm_stroke: int | None):
+    """铁证闸的匹配上下文：只吃人裁实例的内存匹配器 + 人裁字集合 + 形近表 + 按字分组的
+    人裁实例 id（供判别器成对复核取原始字块）。跨页/跨 run 缓存（同 `_human_shapes`），
+    只在 db_path/norm_stroke 换了才重建——一本书一次，不是一页一次。"""
+    from ..clustering.confusable import partners as _confusable_partners
+    from ..clustering.glyph_db import GlyphDB
+    from ..clustering.iron_evidence import human_matcher
+    matcher, _n = human_matcher(db_path, norm_stroke)
+    human_chars_set = set(matcher._chars)
+    partners_map = _confusable_partners()
+    db = GlyphDB(db_path)
+    human_ids: dict[str, list[str]] = {}
+    for ch, iid in db.conn.execute(
+            """SELECT g.char, e.instance_id FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id
+               JOIN instances i ON i.instance_id=e.instance_id WHERE i.label_status='human'"""):
+        human_ids.setdefault(ch, []).append(iid.replace("v2:", ""))
+    return matcher, human_chars_set, partners_map, human_ids
+
+
+def _iron_page_scale(book: str, page: int, match: PageMatch) -> float:
+    """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
+    原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
+    的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
+    几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
+    import cv2
+
+    from ..clustering.iron_evidence import book_scale_from_patches
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    patches = []
+    for cc in match.columns:
+        if not cc.ok:
+            continue
+        for r in cc.chars:
+            path = cache.get(book, "char_patch", f"p{page:04d}c{cc.col:02d}s{r.slot}{r.sub or ''}")
+            if path is None:
+                continue
+            img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                patches.append(img)
+    return book_scale_from_patches(patches)
+
+
+def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
+                 norm_stroke: int | None) -> str | None:
+    """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
+    （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
+    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
+    import cv2
+
+    from ..clustering.iron_evidence import iron_with_disc
+    from ..clustering.normalize import normalize_patch
+    from ..products.cache import ImageCache
+    cache = ImageCache()
+    matcher, human_chars_set, partners_map, human_ids = iron_ctx
+    key = f"p{page:04d}c{col:02d}s{r.slot}{r.sub or ''}"
+    path = cache.get(book, "char_patch", key)
+    if path is None:
+        return None
+    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    res = matcher.match(normalize_patch(img, stroke_width=norm_stroke), exclude_id=f"v2:{r.id}")
+    cands = [(c, float(v)) for c, v in res.candidates]
+    if res.verdict == "same" and res.char and all(c != res.char for c, _ in cands):
+        cands.insert(0, (res.char, float(res.cov)))
+    cands.sort(key=lambda t: -t[1])
+
+    raw_cache: dict[str, object] = {}
+
+    def raw_of(cid: str):
+        if cid not in raw_cache:
+            parts = cid.split(":")
+            if parts and parts[0] == "v2":      # 人裁重键后的格号坐标，去前缀即可
+                parts = parts[1:]
+            # `v1:` 是旧管线的 idx 坐标、没经形状确认，不拿来当铁证对照图；
+            # 其它认不出的形状也一律跳过（服务器 #40：v1: 人裁 id 让 vol03 p3/p74 崩）。
+            if len(parts) != 4 or parts[0] == "v1" or not parts[3].rstrip("ab").isdigit() \
+                    or not (parts[1].isdigit() and parts[2].isdigit()):
+                raw_cache[cid] = None
+                return None
+            bk_, p_, c_, s_ = parts
+            sub = s_[-1] if s_[-1] in "ab" else ""
+            s_ = s_.rstrip("ab")
+            pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
+            raw_cache[cid] = None if pth is None else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE)
+        return raw_cache[cid]
+
+    def ex_raws(ch: str):
+        ids = [i for i in human_ids.get(ch, []) if i != r.id]
+        return [x for i in ids[:8] if (x := raw_of(i)) is not None]
+
+    winner, _top, _second, _why, _disc = iron_with_disc(
+        cands, human_chars_set, partners_map, img, ex_raws, scale)
+    return winner
+
+
+#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_confusable_guard` 用）
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_cnn"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
@@ -696,6 +1213,102 @@ def _align(ctx: RunContext, page: int) -> dict[str, tuple[str, str]]:
     if ref is None or not ref.anchored:
         return {}
     return {c.id: (c.align_char, c.align_op) for c in ref.chars}
+
+
+def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams",
+              amap: dict) -> dict[str, tuple[float, str | None, str]]:
+    """本页被印章／大片污损遮住的格 → {字位 id: (密度, 默认字, 默认字来源)}。
+
+    来源：`coord`（坐标对位的整理本字）/ `coord_blank`（坐标对位说是空格位，默认字 None）/
+    `align`（现役对位字）/ `none`。读不到 Step3 字格或原图就当没有遮挡（返回空表）。"""
+    from .occlusion import page_occluded
+    hit = page_occluded(ctx, page, p)
+    if not hit:
+        return {}
+    ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+    coord = {c.id: c.ref_char for c in (ref.coord if ref else [])}
+    out: dict[str, tuple[float, str | None, str]] = {}
+    for cc in match.columns:
+        for r in cc.chars:
+            dens = hit.get((cc.col, r.slot, r.sub or ""))
+            if dens is None:
+                continue
+            if r.id in coord and coord[r.id] == "〓":
+                # 逐列本里没有码表的 PUA 生僻字占位：知道这儿有字、不知道是哪个
+                out[r.id] = (dens, None, "coord_pua")
+            elif r.id in coord:
+                ch = coord[r.id]
+                out[r.id] = (dens, ch or None, "coord" if ch else "coord_blank")
+            elif r.id in amap:
+                out[r.id] = (dens, amap[r.id][0], "align")
+            else:
+                out[r.id] = (dens, None, "none")
+    return out
+
+
+def _approx_fingerprint(db_path: str) -> str:
+    """近似字侧表的内容戳；库不存在、没有这张表、表空 → ""（见 `SeedAdmitParams.approx_gate`）。"""
+    import hashlib
+    import sqlite3
+    from pathlib import Path
+    if not db_path or not Path(db_path).exists():
+        return ""
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            rows = c.execute("SELECT instance_id, label FROM approx_labels ORDER BY instance_id").fetchall()
+    except sqlite3.Error:
+        return ""
+    if not rows:
+        return ""
+    return f"{len(rows)}:" + hashlib.sha256(repr(rows).encode("utf-8")).hexdigest()[:12]
+
+
+@lru_cache(maxsize=4)
+def _approx_index_cached(db_path: str, _fp: str) -> tuple[dict[str, tuple], frozenset[str]]:
+    """({近似例 id: (ids, note)}, {刻例全是近似例的字})。"""
+    import sqlite3
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+        ids = {r[0]: (r[1], r[2]) for r in c.execute(
+            "SELECT instance_id, ids, note FROM approx_labels")}
+        # 刻例全是近似例的字（按字头算，跨 edition 合并；字体域不算——它们不会是近似例，
+        # 算进去反而让「全是近似」永远不成立）
+        only = frozenset(r[0] for r in c.execute(
+            "SELECT g.char FROM exemplars e JOIN glyphs g USING(glyph_id) "
+            " WHERE g.edition_tag NOT LIKE 'font:%' GROUP BY g.char "
+            "HAVING sum(e.instance_id IN (SELECT instance_id FROM approx_labels)) = count(*)"))
+    return ids, only
+
+
+def _approx_index(db_path: str) -> tuple[dict[str, tuple], frozenset[str]]:
+    return _approx_index_cached(db_path, _approx_fingerprint(db_path))
+
+
+def _approx_hit(r, char: str | None, apx_ids: dict[str, tuple], apx_only: frozenset[str]) -> dict | None:
+    """这一格的字是不是**靠近似例**得来的（见 `SeedAdmitParams.approx_gate`）。
+
+    是 → `evidence["approx"]` 那一段：`{"source": "matched", "via", "exemplar", "ids", "note"}`
+    （`char_only` 时没有具体哪一例，`exemplar`/`ids`/`note` 为 None）；不是 → None。
+    """
+    if not char:
+        return None
+    if r.verdict == "same" and r.char == char and r.matched_id in apx_ids:
+        ids, note = apx_ids[r.matched_id]
+        return {"source": "matched", "via": "matched_id", "exemplar": r.matched_id,
+                "ids": ids, "note": note}
+    lib_top = r.char or (r.candidates[0][0] if r.candidates else None)
+    if lib_top == char and char in apx_only:
+        return {"source": "matched", "via": "char_only", "exemplar": None, "ids": None, "note": None}
+    return None
+
+
+def _rare_agree(match_rec, cnn: list[str] | None) -> dict:
+    """`SeedAdmitParams.rare_agree` 记的那一笔：库首位、5-b 首位、两者是否相同。
+    库判 `same` 时首位取 `char`，否则取候选第一名；任一路没有 → `agree` 为 None。"""
+    pix = (match_rec.char if match_rec.verdict == "same" and match_rec.char
+           else (match_rec.candidates[0][0] if match_rec.candidates else None))
+    c1 = cnn[0] if cnn else None
+    return {"pix": pix, "cnn": c1,
+            "agree": (pix == c1) if (pix is not None and c1 is not None) else None}
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
@@ -785,3 +1398,87 @@ def _doubts(match_rec, dec_rec) -> list[str]:
     if dec_rec is not None and dec_rec.source == "prior":
         out.append(f"上下文 margin 不足({dec_rec.margin:.2f})")
     return out
+
+
+def _confusable_char(ch: str) -> bool:
+    """`lib_confident` 用：这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
+    from ..clustering.confusable import partners
+    from ..clustering.iron_evidence import extra_confusable_partners
+    from ..clustering.seeding import NEAR_FORM_CHARS
+    return (ch in NEAR_FORM_CHARS or ch in partners()
+            or ch in extra_confusable_partners())
+
+
+def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
+    """`ref_lib` 变体放行（库候选与整理本字字面不同、语义同）时，这条变体边可不可信。
+
+    `vmap.semantic(top) == vmap.semantic(align_char)` 只说明两者在 `variants.auto.tsv`/
+    `variants.tsv` 里被登记成了同一语义正字，**不等于这条边本身够硬**——`graph` 来源的
+    条目多数是关系层某个词典单向登记（见 `SeedAdmitParams.ref_lib_variant_guard` 的
+    docstring，`冶→治` 就是 twedu 单向边），拿它当「两字同义」的唯一依据会把形近而
+    异义的字放过闸。可信边四选一：
+
+    - **双向**：关系层（`open_guji_cv.variants`）两个方向都把对方登记成正字——
+      `directed[top][align_char]` 与 `directed[align_char][top]` 都有条目，不是单向
+      「异体→正字」的登记，是两个来源互认；
+    - **人工审查确认表**：`config/dicts/variants.tsv`（手工表，文件头「种子条目：随人工
+      审查确认逐步扩充」）登记过这一对，双向都查——**这条不能略**：该表 17 条里有 10 条
+      在关系层查不到双向（为→爲、逰→遊、无→無、迴→回、囬→回、彚→彙、厯→歷、㫖→旨、
+      𨽾→隸、櫽→檃），全部人工确认过，若只认双向会被本闸误拦，比不加闸还倒退；
+    - **人裁**：本书用字账记过这一对的人工确认（`BookLedger.pair_confirmed`，刻本形/
+      整理本形谁在前不确定，两个方向都查）；
+    - **书级 codepoints**：本书 `codepoints:` 配置把两个码位统一成了同一个
+      （`BookSpec.codepoint_equal`，书级实证，比字典更硬）。
+    """
+    from ..variants import regulars_of
+    a_to_b = any(r == align_char for r, _tags in regulars_of(top))
+    b_to_a = any(r == top for r, _tags in regulars_of(align_char))
+    if a_to_b and b_to_a:
+        return True
+    if (top, align_char) in _hand_variant_pairs() or (align_char, top) in _hand_variant_pairs():
+        return True
+    if ledger.pair_confirmed(top, align_char) or ledger.pair_confirmed(align_char, top):
+        return True
+    if book.codepoint_equal(top, align_char):
+        return True
+    return False
+
+
+def _direct_variant_edge(a: str, b: str) -> bool:
+    """关系层（`variants.json`）里 a、b 之间有没有**直接**异体边，方向不论。
+
+    只收 kSpoofingVariant（形近易混）/ hydzd-borrowed（通假）的边不算——那两个
+    来源永不当异体用（`variants.NEVER_SOURCES`）。"""
+    from ..variants import NEVER_SOURCES, _graph
+    return bool(set(_graph().sources_of(a, b)) - NEVER_SOURCES)
+
+
+def _variant_indirect(shape: str, align_char: str, ledger, book) -> bool:
+    """库形 `shape` 与整理本字只经间接路径同义（字面不同、关系层无直接边、
+    也没有人工表/人裁/书级 codepoints 认过这一对）——`variant_indirect_guard` 要拦的。
+
+    调用方已保证两者 `semantic` 相同（通道本身就是靠这个放行的），这里不再比。"""
+    if shape == align_char or _direct_variant_edge(shape, align_char):
+        return False
+    return not _trusted_variant_edge(shape, align_char, ledger, book)
+
+
+@lru_cache(maxsize=1)
+def _hand_variant_pairs() -> frozenset[tuple[str, str]]:
+    """`config/dicts/variants.tsv`（人工表）的全部条目，`{(异体, 正字)}`。
+
+    人工确认过的边不要求关系层双向——它本身就是比关系层更硬的证据（人工审查过，
+    不是词典单向登记）。缺省表很小（17 条），一次读全，跨 run_page 调用缓存
+    （同 `_human_shapes`/`_iron_context` 的做法，进程内不重读文件）。
+    """
+    from ..clustering.variants import DEFAULT_VARIANTS_PATH
+    pairs: set[tuple[str, str]] = set()
+    if DEFAULT_VARIANTS_PATH.exists():
+        for line in DEFAULT_VARIANTS_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[0] and parts[1]:
+                pairs.add((parts[0], parts[1]))
+    return frozenset(pairs)

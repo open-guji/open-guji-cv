@@ -2,6 +2,13 @@
 
 `bbox_col` 在列图坐标；`bbox_page` 是同一框回到原图、换到规范空间 raw_page_px@top-right
 的外接框。图块 PNG 走缓存，key = p{page}c{col}s{slot}[a|b]。
+
+⚠️ **`bbox_page` 原点在页面右上角，x 从右往左量**（`core/anchor.py` 的 `RAW_TR`）；
+`cv2`/`numpy` 读出来的原图是左上原点。**直接拿 `bbox_page` 当左上原点 bbox 去裁会
+静默裁到另一个字**——y 完全对，x 却差一截，看着像"图没对齐"（任务卡 #54 第12条，
+`console/routers/products.py` 那次实审真栽过：p3c11s11「鳳」按 bbox_page 的 x=1467
+去裁，真身在 x=1243）。**别自己写镜像公式，用 `core.anchor.crop_patch(img, ch.bbox_page)`**
+——它把坐标换算与切片一起包了。
 """
 
 from __future__ import annotations

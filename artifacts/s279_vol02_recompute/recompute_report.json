@@ -1,0 +1,86 @@
+{
+ "align_ref": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 188,
+  "elapsed_min": 0.41,
+  "log_ran": 188
+ },
+ "border_detect": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 49,
+  "elapsed_min": 10.56,
+  "log_ran": 188
+ },
+ "border_detect_gate": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 2,
+  "elapsed_min": 0.69,
+  "log_ran": 188
+ },
+ "cell_shrink": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 23,
+  "elapsed_min": 2.05,
+  "log_ran": 188,
+  "cols_changed": 33,
+  "cells_changed": 147,
+  "pages_with_col_change": 23
+ },
+ "column_gate": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 7,
+  "elapsed_min": 0.2,
+  "log_ran": 188
+ },
+ "column_warp": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 53,
+  "elapsed_min": 0.99,
+  "log_ran": 188
+ },
+ "context_decide": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 188,
+  "elapsed_min": 1.0,
+  "log_ran": 188
+ },
+ "glyph_match": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 188,
+  "elapsed_min": 19.8,
+  "log_ran": 188
+ },
+ "page_survey": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 188,
+  "elapsed_min": 0.03,
+  "log_ran": 188
+ },
+ "rare_candidates": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 188,
+  "elapsed_min": 53.19,
+  "log_ran": 188
+ },
+ "row_segment": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 33,
+  "elapsed_min": 5.07,
+  "log_ran": 188,
+  "cols_changed": 49,
+  "cells_changed": 359,
+  "pages_with_col_change": 33
+ },
+ "row_segment_gate": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 6,
+  "elapsed_min": 0.12,
+  "log_ran": 188
+ },
+ "seed_admit": {
+  "pages_rewritten": 188,
+  "pages_bytes_changed": 186,
+  "elapsed_min": 7.83,
+  "log_ran": 188
+ }
+}

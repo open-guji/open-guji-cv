@@ -28,6 +28,14 @@ from open_guji_cv.feedback.events import EventTarget, make_event
 BOOK, PAGE = "keben", 1
 
 
+@pytest.fixture(autouse=True)
+def _no_occlusion(monkeypatch):
+    """冻结样页（低分辨率）本身会被遮挡检测判成大片遮挡（65 格），而本文件测的是别的行为。
+    遮挡入库闸另有专测 `test_seal_nolib.py`（显式注入 `occluded_of`）。"""
+    from open_guji_cv.feedback import consumers
+    monkeypatch.setattr(consumers, "_occluded_lookup", lambda book, page: set())
+
+
 @pytest.fixture
 def lib(tmp_path, monkeypatch, ws, fixture_page):
     """一个空字形库 + 一页真字块。返回 `(库路径, [(页, 列, 格), …])`。"""

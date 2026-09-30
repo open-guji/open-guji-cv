@@ -3,7 +3,8 @@
 
 服务器只跟 `production` 分支（overview 总览/16 §三）：
 
-1. `git fetch`，`production` 没前进 → 退出（`NO_UPDATE`）；
+1. `git fetch`，`production` 没前进 → 退出（`NO_UPDATE`）；fetch 走 `ops.git_fetch` 的护栏
+   （浅仓带 `--depth`、开跑前查盘、超时整组杀——overview #236 浅克隆拉全量事故）；
 2. 有，但书级跑批锁（`core.runlock`）被谁占着 → 记「待部署」退出（`LOCKED`）；
    维护窗口现阶段**缺省关**（`DeployWindow(enabled=False)`，用户 09-26 定：平台
    未上线、更新会很频繁，不设节奏）；
@@ -27,6 +28,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+
+from . import git_fetch as gf
 
 NO_UPDATE = "no_update"
 FETCH_FAILED = "fetch_failed"
@@ -147,11 +150,20 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
                  sleeper: Callable[[float], None] = time.sleep,
                  health_paths: tuple[str, ...] = ("/", "/healthz"),
                  state_path: Path | None = None,
-                 health_timeout: float = 90.0) -> DeployResult:
+                 health_timeout: float = 90.0,
+                 fetch_depth: int = gf.DEFAULT_DEPTH,
+                 fetch_runner: Callable[[Path, list[str]], subprocess.CompletedProcess] | None = None,
+                 ) -> DeployResult:
     """`state_path`（2026-09-27）：记「真正部署成功的提交」与「部署失败过的提交」。
     判有没有更新以它为准、不看本地分支——否则 git 已前进而装依赖／重启失败时，本地分支
     已等于远端，下一轮会判 `no_update`，控制台永远停在旧代码（服务器实测踩到）。
-    不给则退回旧行为（看本地分支）。"""
+    不给则退回旧行为（看本地分支）。
+
+    `fetch_runner`（2026-09-28，#236）：只跑 fetch 的 runner。缺省时真 git 走
+    `git_fetch.guarded_git_runner()`（超时、查盘），注入了假 `git_runner` 就沿用它。
+    仓是浅的就带 `--depth fetch_depth`，见 `ops/git_fetch.py` 模块头。"""
+    if fetch_runner is None:
+        fetch_runner = gf.guarded_git_runner() if git_runner is default_git_runner else git_runner
     window = window or DeployWindow()
     now = now or datetime.now(timezone.utc)
 
@@ -162,9 +174,16 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
     # `+refs/heads/main:refs/remotes/origin/main`，`git fetch origin production`
     # 跑完 `git rev-parse origin/production` 照样 unknown revision——服务器上按什么
     # 方式 clone 不该影响这条逻辑对不对，显式给目标端才是可靠的）。
-    fetch = git_runner(repo, ["fetch", remote, f"+{branch}:refs/remotes/{remote}/{branch}"])
+    #
+    # 浅仓不带 `--depth` 会去拉整个仓的历史（09-28 事故，见 ops/git_fetch.py）。
+    refspec = f"+{branch}:refs/remotes/{remote}/{branch}"
+    shallow = gf.is_shallow(repo, git_runner)
+    fetch = fetch_runner(repo, gf.fetch_args(remote, [refspec], shallow=shallow, depth=fetch_depth))
     if fetch.returncode != 0:
-        return DeployResult(FETCH_FAILED, {"stderr": fetch.stderr.strip()})
+        detail = {"stderr": fetch.stderr.strip()}
+        if gf.guard_reason(fetch):
+            detail["reason"] = gf.guard_reason(fetch)
+        return DeployResult(FETCH_FAILED, detail)
 
     local = git_runner(repo, ["rev-parse", branch])
     remote_rev = git_runner(repo, ["rev-parse", f"{remote}/{branch}"])
@@ -201,6 +220,10 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
                     "健康检查 " + "、".join(base_url.rstrip('/') + p for p in health_paths)]})
 
     prev_rev = deployed_rev
+    if shallow and git_runner(repo, ["merge-base", "--is-ancestor", local_rev, remote_head]).returncode != 0:
+        # 浅拉 `fetch_depth` 层没接上本地分支（production 一次前移了很多提交）：加深一次再
+        # 快进；还接不上就让下面的 `merge --ff-only` 报 MERGE_FAILED，不退回拉全量。
+        fetch_runner(repo, gf.fetch_args(remote, [refspec], shallow=True, depth=fetch_depth * 10))
     git_runner(repo, ["checkout", branch])
     merged = git_runner(repo, ["merge", "--ff-only", f"{remote}/{branch}"])
     if merged.returncode != 0:
@@ -248,12 +271,19 @@ def deploy_check(repo: Path, *, remote: str = "origin", branch: str = "productio
 
 # ── 部署成功之后：各书过期步 → 夜间重算队列清单（只写清单，不自动起跑批）───
 def collect_stale_summary(workspace: Path, *, pages: str = "all") -> dict[str, list[str]]:
-    """每本书哪些步有非新鲜产物（stale/missing）。一本书算失败不拖累别的书。"""
+    """每本书哪些步有非新鲜产物（stale/missing）。一本书算失败不拖累别的书。
+
+    **display-only 快照导进来的步一律不进队列**（2026-09-27，K 快照自动导入）：那些步
+    是云端算好只给人看的（如全唐文关 context 的 Step1–7），指纹含云端的库/参数，在服务器上
+    必然判过期——重算就把人要看的那份冲掉了。标记在 `products/<book>/.snap_marks.json`，
+    由 `guji snap import` 写、下一个 replace-steps 包导入同一步时清。"""
     import os
 
     from ..core.book import list_books, load_book
     from ..core.engine import Engine, MISSING, STALE
     from ..core.pipeline import default_pipeline_id, load_pipeline
+    from ..core.workspace import products_root
+    from ..snap.manifest import display_only_steps
     os.environ["GUJI_WORKSPACE"] = str(workspace)
     out: dict[str, list[str]] = {}
     for bid in list_books(workspace / "books"):
@@ -262,8 +292,9 @@ def collect_stale_summary(workspace: Path, *, pages: str = "all") -> dict[str, l
             pl = load_pipeline(default_pipeline_id(book))
             eng = Engine(book, pl, log=lambda s: None)
             st = eng.status(pages=book.resolve_pages(pages))
+            skip = display_only_steps(products_root(), bid)
             stale = [sid for sid, d in st["steps"].items()
-                    if d["counts"].get(STALE, 0) or d["counts"].get(MISSING, 0)]
+                    if sid not in skip and (d["counts"].get(STALE, 0) or d["counts"].get(MISSING, 0))]
             if stale:
                 out[bid] = stale
         except Exception as e:  # noqa: BLE001 —— 一本书读不出不拖累别的书

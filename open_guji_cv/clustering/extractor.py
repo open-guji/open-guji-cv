@@ -2704,6 +2704,28 @@ class CharExtractor:
                         jz_tail_a.add(t)
                         if "jiazhu" not in tinst.flags:
                             tinst.flags.append("jiazhu")
+            # ── Step3 补拆（2026-09-29，overview#266）─────────────
+            # v2 调用方（cell_shrink）把 Step3 认下的雙行夹注格连同缝中心传进来。上面这套是 v1
+            # 生产判据，缝对齐容差仍是 8px；Step3 那份（`jiazhu_split`）2026-09-27 已给「刚起头的
+            # 两格」放到 16px（`ALIGN_PAIR`，提要末尾「內府藏本」「山東巡撫採進本」一类只有 2~3 行、
+            # 缝漂移到 15.5px）。于是 Step3 拆了、这里没拆：段首那一行（或整段 2~3 行）整格发成一个
+            # 满宽「字」，两个小字挤一块送去识别（vol03 全书 15 格，人裁标 truncated）。
+            # 只补这里没认的格、用 Step3 的缝；两边都认的格一字不动（缝仍取这里自己量的）。
+            for cell in cells:
+                i = int(cell["index"])
+                cx_col = cell.get("jiazhu_cx")
+                if cx_col is None or i in jz_runs or i not in jz_pre:
+                    continue
+                tinst = by_idx.get(i)
+                if tinst is None or tinst.cell_type != "char" or tinst.sub:
+                    continue
+                jz_runs[i] = float(cx_col) - jz_pre[i][1]
+                if cell.get("jiazhu_tail_a"):
+                    jz_tail_a.add(i)
+                # 整格量的「中缝太宽」对夹注是本来面目，不是跨列；拆开后的半格不该带着它进待审
+                tinst.flags = [f for f in tinst.flags if f != "wide_gap"]
+                if "jiazhu" not in tinst.flags:
+                    tinst.flags.append("jiazhu")
             # ── 夹注 a/b 拆分（2026-08-25 用户定）────────────────
             # 确认成夹注段的格，整格实例替换为两个半宽实例：a=右子列、
             # b=左子列（读序：段内先 a 全部、后 b 全部——见

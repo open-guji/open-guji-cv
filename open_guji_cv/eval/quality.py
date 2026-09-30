@@ -83,8 +83,13 @@ def quality(book: str = "vol01", pages: str = "dev_set",
                 # 「忠于刻本字形」），判据不该记成错。所以：pred 与金标同组、且 pred 就是
                 # 账本给这组定的 preferred → 算对。
                 # 只认 preferred，不认「同组任一形」——否则组内选错形也会被放过。
+                # 任务卡 #54 第11条：內/内、呂/吕 这类本书已经统一过码位的对，
+                # 按书级 `codepoints:`（`bk.codepoint_equal`）归一后再比，不该记成
+                # 「与整理本不一致」——没配 `codepoints` 时 `codepoint_equal` 是恒等
+                # 比较，行为与加这条之前一样。
                 ok = ((pred == g.ref) or (g.conversion and pred == g.shape)
-                      or ledger.preferred_form(g.ref) == pred)
+                      or ledger.preferred_form(g.ref) == pred
+                      or bk.codepoint_equal(pred, g.ref))
                 slot[0] += ok
                 slot[1] += 1
                 # 分层：equal 段是自证层，replace 段才是真正的错误样本，别合成一个数看

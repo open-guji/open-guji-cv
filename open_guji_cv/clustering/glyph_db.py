@@ -147,6 +147,38 @@ CREATE TABLE IF NOT EXISTS admissions (
     evidence TEXT,
     admitted_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS evictions (
+    -- 撤例审计（2026-09-28，overview#234）：`evict_instance` 删四表行时连 admissions 一起删，
+    -- 库里原本不留「这例是被撤的」痕迹，`glyph_store_sync` 分不清「db 撤了」和「db 根本没见过
+    -- 别人进的」（09-28 事故：服务器旧库导出冲掉 main 上 14 例「聞」）。每撤一例记一行，
+    -- 随 store 导出（evictions.jsonl），同步的删除护栏只放行有这里记录的删除。
+    instance_id TEXT NOT NULL,
+    char TEXT,
+    reason TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (instance_id, at)
+);
+CREATE TABLE IF NOT EXISTS approx_labels (
+    -- 近似字（2026-09-29，overview#276）：人裁勾了「无匹配（近似字）」——Unicode 里没有真正
+    -- 对应的字，所定的 `label` 只是字形最像、意思最近的那个。**稀疏侧表**：只有勾过的实例才有行，
+    -- `instances`/`glyphs` 的 schema 不动。`ids` 实际结构、`note` 备注都可空。
+    -- 随 store 导出（approx_labels.jsonl），跟着实例走：撤例 / 同步替换时一起删。
+    instance_id TEXT PRIMARY KEY REFERENCES instances(instance_id),
+    label TEXT NOT NULL,
+    ids TEXT,
+    note TEXT,
+    reviewer TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approx_clears (
+    -- 近似标记撤销审计（与 `evictions` 同一用意）：人后来改口「不是近似字」时 approx_labels 删行、
+    -- 这里记一笔，随 store 导出（approx_clears.jsonl）。`glyph_store_sync` 的删除护栏靠它分清
+    -- 「db 撤了近似标记」和「db 根本没见过别人标的近似」。
+    instance_id TEXT NOT NULL,
+    label TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (instance_id, at)
+);
 """
 
 
@@ -471,6 +503,47 @@ class GlyphDB:
                     put(ms[i], ms[j], "same", "confirm_same")
                     got += 1
         return n
+
+    # ── 近似字侧表（overview#276）──────────────────────────
+
+    def set_approx(self, instance_id: str, label: str, *, ids: str | None = None,
+                   note: str | None = None, reviewer: str | None = None,
+                   at: str | None = None) -> bool:
+        """给库里一例记「近似字」（覆盖旧值）。实例不在库里 → False，不写（外键）。
+
+        内容（label/ids/note）与已有行完全相同时不动 `created_at`——同一条裁决重放不该让
+        store 平白改动、也不该让同步的冲突裁决以为这边「刚改过」。
+        """
+        if not self.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                                 (instance_id,)).fetchone():
+            return False
+        ids, note = (ids or None), (note or None)
+        old = self.conn.execute("SELECT label, ids, note FROM approx_labels WHERE instance_id=?",
+                                (instance_id,)).fetchone()
+        if old is not None and tuple(old) == (label, ids, note):
+            return True
+        self.conn.execute(
+            "INSERT OR REPLACE INTO approx_labels (instance_id, label, ids, note, reviewer, created_at) "
+            "VALUES (?,?,?,?,?,?)", (instance_id, label, ids, note, reviewer, at or _now()))
+        self.conn.commit()
+        return True
+
+    def clear_approx(self, instance_id: str, at: str | None = None) -> bool:
+        """撤掉一例的近似标记（人改口）。有行才删、才记 `approx_clears`；返回删没删。"""
+        row = self.conn.execute("SELECT label FROM approx_labels WHERE instance_id=?",
+                                (instance_id,)).fetchone()
+        if row is None:
+            return False
+        self.conn.execute("DELETE FROM approx_labels WHERE instance_id=?", (instance_id,))
+        self.conn.execute("INSERT OR IGNORE INTO approx_clears (instance_id, label, at) VALUES (?,?,?)",
+                          (instance_id, row[0], at or _now()))
+        self.conn.commit()
+        return True
+
+    def approx_of(self, instance_id: str) -> dict | None:
+        cur = self.conn.execute("SELECT * FROM approx_labels WHERE instance_id=?", (instance_id,))
+        row = cur.fetchone()
+        return dict(zip([d[0] for d in cur.description], row)) if row else None
 
     # ── 單實例準入（種子協議 §3.5）───────────────────────
 
@@ -847,7 +920,14 @@ class GlyphDB:
             # 台賬跟著實例一起走，否則重播全被判重跳過（見 docstring）
             cur.execute(f"DELETE FROM admissions WHERE instance_id IN ({ph})",
                         chunk)
+            cur.execute(f"DELETE FROM approx_labels WHERE instance_id IN ({ph})",
+                        chunk)
         cur.execute("DELETE FROM sources WHERE edition_tag=?", (edition_tag,))
+        # 撤例审计（overview#234）：否则下一轮 glyph_store_sync 的删除护栏会拦下这批删除
+        at = _now()
+        cur.executemany("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) "
+                        "VALUES (?,?,?,?)",
+                        [(i, None, f"drop_edition {edition_tag}", at) for i in iids])
         self.conn.commit()
         self._cache_stamp = None          # 特徵緩存必須失效
         return {"edition": edition_tag, "glyphs": n_gly,
@@ -907,9 +987,15 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     cur = db.conn.cursor()
     cur.row_factory = sqlite3.Row
     counts: dict[str, int] = {}
+    # 借来的库（`rebuild_from_store(extra_stores=...)`）不导出：真源只收本书自己的刻例
+    b_ids, b_eds, b_srcs = _borrowed(db)
+
+    def keep(r: dict) -> bool:
+        return not (r.get("instance_id") in b_ids or r.get("edition_tag") in b_eds
+                    or (r.get("key") or "").startswith("borrowed_"))
 
     def dump(path: Path, rows, key=None) -> int:
-        recs = [dict(r) for r in rows]
+        recs = [d for d in (dict(r) for r in rows) if keep(d)]
         if key:
             recs.sort(key=key)
         with open(path, "w", encoding="utf-8") as f:
@@ -951,6 +1037,20 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
              + " ORDER BY g.edition_tag, g.char, e.instance_id", fe)])
     counts["meta"] = dump(out / "meta.jsonl",
                           cur.execute("SELECT * FROM meta ORDER BY key"))
+    # 撤例审计（overview#234）：别的机器（服务器 / 云端）靠它知道「这例是被撤的、不是漏了」
+    counts["evictions"] = dump(
+        out / "evictions.jsonl",
+        cur.execute("SELECT * FROM evictions ORDER BY instance_id, at"))
+    # 近似字侧表（overview#276）：只导出库里还在、且非字体来源的实例（借来的由 keep() 挡掉）
+    counts["approx_labels"] = dump(
+        out / "approx_labels.jsonl",
+        cur.execute(
+            "SELECT x.* FROM approx_labels x JOIN instances i ON i.instance_id = x.instance_id "
+            "  JOIN sources s ON s.source_id = i.source_id "
+            " WHERE COALESCE(s.kind,'woodblock') != 'font' ORDER BY x.instance_id"))
+    counts["approx_clears"] = dump(
+        out / "approx_clears.jsonl",
+        cur.execute("SELECT * FROM approx_clears ORDER BY instance_id, at"))
     counts["pairs"] = dump(
         out / "pairs.jsonl",
         cur.execute("SELECT * FROM pairs ORDER BY inst_a, inst_b, relation"))
@@ -976,6 +1076,8 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     for (src,) in db.conn.execute(
             "SELECT source_id FROM sources WHERE COALESCE(kind,'woodblock') "
             "!= 'font' ORDER BY 1"):
+        if src in b_srcs:
+            continue
         n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
             "SELECT source_id, batch, seq, ts, op, payload FROM events "
             "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
@@ -986,6 +1088,8 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
         meta = []
         for r in rows:
             d = dict(r)
+            if d["instance_id"] in b_ids:
+                continue
             png = d.pop("patch_png")
             # 可信度两列是 2026-09-25 加的：未评（NULL）就不写，免得每次导出给
             # 全部旧行都添一对 null 键、store 平白整片改动
@@ -1022,9 +1126,41 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     return counts
 
 
+BORROWED_TABLE = """CREATE TABLE IF NOT EXISTS borrowed (
+    -- 借来的库（`rebuild_from_store(extra_stores=...)`，2026-09-27 全唐文书级库）：
+    -- 这些实例只为匹配而装进本库，真源在别的工作区。`export_store` 跳过它们，
+    -- 否则一次导出就把四庫刻例抄进全唐文的真源。
+    instance_id TEXT PRIMARY KEY,
+    store TEXT
+)"""
+
+
+def _borrowed(db: "GlyphDB") -> tuple[set[str], set[str], set[str]]:
+    """(借来的实例 id, 借来的 edition, 只属于借来库的 source_id)；普通库三个空集。"""
+    cur = db.conn.cursor()
+    if not cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='borrowed'"
+                       ).fetchone():
+        return set(), set(), set()
+    ids = {r[0] for r in cur.execute("SELECT instance_id FROM borrowed")}
+    meta = dict(cur.execute("SELECT key, value FROM meta WHERE key IN "
+                            "('borrowed_editions','borrowed_sources')").fetchall())
+    eds = set(json.loads(meta.get("borrowed_editions") or "[]"))
+    srcs = set(json.loads(meta.get("borrowed_sources") or "[]"))
+    return ids, eds, srcs
+
+
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
-                       feature_backend: str = DEFAULT_FEATURE) -> dict:
-    """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。"""
+                       feature_backend: str = DEFAULT_FEATURE,
+                       extra_stores: "tuple | list" = ()) -> dict:
+    """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。
+
+    ``extra_stores``（2026-09-27，全唐文书级库）：再把别的工作区的真源**借**进来，
+    只为匹配（`glyph_match` 只读一个库文件）。借来的部分：
+    - 刻例、字头照原 edition 装（四庫是 ``siku-zongmu``），与本书 edition 分开；
+    - `meta`（含 ``book_edition``）、`events`、`pairs` 不装——库的身份仍是第一个 store 的；
+    - 实例 id 记进 ``borrowed`` 表，`export_store` 导出时跳过，真源不会被借来的刻例污染；
+    - 与本书同 id 的实例不覆盖（本书优先）。
+    """
     store = Path(store_dir)
     db_file = Path(db_path)
     if db_file.exists():
@@ -1038,65 +1174,122 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         with open(path, encoding="utf-8") as f:
             return [json.loads(l) for l in f if l.strip()]
 
-    for r in read(store / "sources.jsonl"):
-        cols = ",".join(r)
-        cur.execute(f"INSERT OR REPLACE INTO sources ({cols}) "
-                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
-    n_inst = n_der = 0
-    for meta_file in sorted((store / "instances").glob("*.jsonl")):
-        for r in read(meta_file):
-            png = store / "patches" / f"{_safe(r['instance_id'])}.png"
-            if not png.exists():
-                continue
-            raw = png.read_bytes()
-            r = {**r, "patch_png": raw}
+    def load(st: Path, borrowed: bool) -> tuple[int, int, int]:
+        verb = "INSERT OR IGNORE" if borrowed else "INSERT OR REPLACE"
+        new_src: list[str] = []
+        for r in read(st / "sources.jsonl"):
             cols = ",".join(r)
-            cur.execute(f"INSERT OR REPLACE INTO instances ({cols}) "
-                        f"VALUES ({','.join('?' * len(r))})",
-                        tuple(r.values()))
-            n_inst += 1
-            # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）
-            gray = cv2.imdecode(np.frombuffer(raw, np.uint8),
-                                cv2.IMREAD_GRAYSCALE)
-            db._write_derived(cur, r["instance_id"], normalize_patch(gray))
-            n_der += 3
-    for f in sorted((store / "events").glob("*.jsonl")):
-        for r in read(f):
-            cur.execute("INSERT OR IGNORE INTO events "
-                        "(source_id, batch, seq, ts, op, payload) "
-                        "VALUES (?,?,?,?,?,?)",
-                        (r["source_id"], r.get("batch"), r.get("seq"),
-                         r.get("ts"), r.get("op"), r.get("payload")))
-    for r in read(store / "glyphs.jsonl"):
-        cols = ",".join(r)
-        cur.execute(f"INSERT OR REPLACE INTO glyphs ({cols}) "
-                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
-    n_ex = 0
-    for r in read(store / "exemplars.jsonl"):
-        row = cur.execute(
-            "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-            (r["edition_tag"], r["char"])).fetchone()
-        if row is None:
-            continue
-        cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
-                    (row[0], r["instance_id"], r["role"], r["added_at"]))
-        n_ex += 1
-    for r in read(store / "admissions.jsonl"):
-        cols = ",".join(r.keys())
-        cur.execute(f"INSERT OR REPLACE INTO admissions ({cols}) "
-                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
-    for r in read(store / "meta.jsonl"):
-        cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-                    (r["key"], r["value"]))
-    for r in read(store / "pairs.jsonl"):
-        cols = ",".join(r)
-        cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
-                    f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+            cur.execute(f"{verb} INTO sources ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+            if borrowed and cur.rowcount:
+                new_src.append(r["source_id"])
+        n_inst = n_der = 0
+        for meta_file in sorted((st / "instances").glob("*.jsonl")):
+            for r in read(meta_file):
+                png = st / "patches" / f"{_safe(r['instance_id'])}.png"
+                if not png.exists():
+                    continue
+                raw = png.read_bytes()
+                r = {**r, "patch_png": raw}
+                cols = ",".join(r)
+                cur.execute(f"{verb} INTO instances ({cols}) "
+                            f"VALUES ({','.join('?' * len(r))})",
+                            tuple(r.values()))
+                if borrowed:
+                    if not cur.rowcount:
+                        continue          # 本书已有同 id 实例：本书优先
+                    cur.execute("INSERT OR IGNORE INTO borrowed VALUES (?,?)",
+                                (r["instance_id"], str(st)))
+                n_inst += 1
+                # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）
+                gray = cv2.imdecode(np.frombuffer(raw, np.uint8),
+                                    cv2.IMREAD_GRAYSCALE)
+                db._write_derived(cur, r["instance_id"], normalize_patch(gray))
+                n_der += 3
+        if not borrowed:
+            for f in sorted((st / "events").glob("*.jsonl")):
+                for r in read(f):
+                    cur.execute("INSERT OR IGNORE INTO events "
+                                "(source_id, batch, seq, ts, op, payload) "
+                                "VALUES (?,?,?,?,?,?)",
+                                (r["source_id"], r.get("batch"), r.get("seq"),
+                                 r.get("ts"), r.get("op"), r.get("payload")))
+        eds: set[str] = set()
+        for r in read(st / "glyphs.jsonl"):
+            if borrowed:
+                eds.add(r["edition_tag"])
+            cols = ",".join(r)
+            cur.execute(f"{verb} INTO glyphs ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+        n_ex = 0
+        for r in read(st / "exemplars.jsonl"):
+            if borrowed and not cur.execute("SELECT 1 FROM borrowed WHERE instance_id=?",
+                                            (r["instance_id"],)).fetchone():
+                continue
+            row = cur.execute(
+                "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
+                (r["edition_tag"], r["char"])).fetchone()
+            if row is None:
+                continue
+            cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
+                        (row[0], r["instance_id"], r["role"], r["added_at"]))
+            n_ex += 1
+        for r in read(st / "admissions.jsonl"):
+            cols = ",".join(r.keys())
+            cur.execute(f"{verb} INTO admissions ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+        if not borrowed:
+            for r in read(st / "meta.jsonl"):
+                cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                            (r["key"], r["value"]))
+            for r in read(st / "pairs.jsonl"):
+                cols = ",".join(r)
+                cur.execute(f"INSERT OR REPLACE INTO pairs ({cols}) "
+                            f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+            for r in read(st / "evictions.jsonl"):
+                cur.execute("INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) "
+                            "VALUES (?,?,?,?)",
+                            (r["instance_id"], r.get("char"), r.get("reason"), r["at"]))
+            for r in read(st / "approx_clears.jsonl"):
+                cur.execute("INSERT OR IGNORE INTO approx_clears (instance_id, label, at) "
+                            "VALUES (?,?,?)", (r["instance_id"], r.get("label"), r["at"]))
+        # 近似字侧表：借来的库也装（匹配到借来的近似例同样不该自动放行），但只装本次真装进来的实例
+        for r in read(st / "approx_labels.jsonl"):
+            if not cur.execute("SELECT 1 FROM instances WHERE instance_id=?",
+                               (r["instance_id"],)).fetchone():
+                continue
+            if borrowed and not cur.execute("SELECT 1 FROM borrowed WHERE instance_id=?",
+                                            (r["instance_id"],)).fetchone():
+                continue
+            cols = ",".join(r)
+            cur.execute(f"{verb} INTO approx_labels ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
+        if borrowed:
+            own = db.book_edition()
+            if own and own in eds:
+                raise ValueError(f"借来的库 {st} 与本书同 edition {own!r}，分不开，拒绝合并")
+            srcs = set(new_src)
+            for k, v in (("borrowed_editions", eds), ("borrowed_sources", srcs)):
+                old = cur.execute("SELECT value FROM meta WHERE key=?", (k,)).fetchone()
+                v = sorted(v | set(json.loads(old[0]) if old else []))
+                cur.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                            (k, json.dumps(v, ensure_ascii=False)))
+        return n_inst, n_der, n_ex
+
+    n_inst, n_der, n_ex = load(store, borrowed=False)
+    n_borrowed = 0
+    if extra_stores:
+        cur.execute(BORROWED_TABLE)
+        for extra in extra_stores:
+            n_borrowed += load(Path(extra), borrowed=True)[0]
     db.conn.commit()
     stats = db.stats()
     db.close()
-    return {"instances": n_inst, "derived_recomputed": n_der,
-            "exemplars": n_ex, **stats}
+    out = {"instances": n_inst, "derived_recomputed": n_der,
+           "exemplars": n_ex, **stats}
+    if extra_stores:
+        out["borrowed_instances"] = n_borrowed
+    return out
 
 
 def assert_db_not_silently_empty(db_path: str | Path,

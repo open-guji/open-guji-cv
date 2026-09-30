@@ -21,8 +21,11 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
@@ -41,6 +44,79 @@ from .confusable import NEVER_MATCH_FAMILIES, partners as _partners  # noqa: F40
 # 上下文兜底，代价低，宁可多拦。留出实测（eval_guard_ceiling.py）：
 # 闸 0.9933 / recall 0.196 → 闸 0.9809 / recall 0.544，precision 仍 0.999。
 _PARTNER: dict[str, frozenset[str]] = _partners()
+
+
+# ## 按形区分四对：局部部件比对（2026-09-27，任务书 R-形近四对）
+#
+# 用户裁定（字形库 11 §〇）：强/強、却/卻、回/囘、并/幷 两形都能区分，不按书
+# 统一、算法要学会分。整字相似度分不开是已知负结果（g3g4_error_analysis §核心
+# 负结果）——`_PARTNER` 护栏只能把它们一起降成 unsure、两个字都进候选，
+# 决胜靠下游 OCR/上下文。这里加一条**只在这四对命中时生效**的局部信号：
+# 命中对里差异部件所在的固定分区（不是全局阈值，只影响这 8 个字自己的候选
+# 排序），拿查询图与库里两个候选字各自的刻例在这个窗口内的墨迹重合度
+# （Dice）决胜。区域按语义定死（不是拟合出来的）：
+#
+# - 强/強、却/卻：⿰ 结构，共享部件在左（弓 / 谷-类），差异部件在右
+#   （强/強 doc 8 的"弓/虽旁"、却/卻 doc 8 的"卩/⼙"都在字的右半）；
+# - 回/囘：⿴ 结构，外框共享，差异是框内内容（doc 8"口中口/已"）；
+# - 并/幷：doc 8"并/幷上部"——差异是上半到中段那条横笔连不连
+#   （幷比并多一笔贯通的"一"，见 scratchpad 实测 v2:bxgb:17:7:12 vs 26:5:3）。
+#
+# 负结果：想用字体渲染两两对齐后自动求 diff bbox（不用手定分区），结果两个
+# 字哪怕结构近乎一样，弹性对齐后残差仍铺满几乎整个 64×64 画布（笔画粗细/
+# 微小错位到处都留痕），求不出一个紧凑的差异框——放弃，改用上面这种按
+# 语义写死的固定分区（任务书原话允许"IDS 框或固定分区"二选一）。
+_SHAPE_DECIDE_PAIRS: tuple[tuple[str, str], ...] = (
+    ("强", "強"), ("却", "卻"), ("回", "囘"), ("并", "幷"),
+)
+_SHAPE_PAIR_OF: dict[str, tuple[str, str]] = {}
+for _a, _b in _SHAPE_DECIDE_PAIRS:
+    _SHAPE_PAIR_OF[_a] = (_a, _b)
+    _SHAPE_PAIR_OF[_b] = (_a, _b)
+
+#: 每对的差异窗口，(y0, y1, x0, x1)，坐标是 `normalize.NORM_SIZE`（64）归一
+#: 图块的像素坐标。窗口故意留宽——宁可多包一点共享部件，不要切太紧漏掉
+#: 差异笔画的边缘（归一有量化抖动）。
+_SHAPE_BOX: dict[frozenset, tuple[int, int, int, int]] = {
+    frozenset(("强", "強")): (0, 64, 28, 64),
+    frozenset(("却", "卻")): (0, 64, 28, 64),
+    frozenset(("回", "囘")): (10, 54, 14, 50),
+    frozenset(("并", "幷")): (6, 36, 0, 64),
+}
+
+_FONTS_DIR = Path(__file__).resolve().parents[2] / "fonts" / "jigmo"
+
+
+@lru_cache(maxsize=16)
+def _shape_font_template(char: str) -> np.ndarray | None:
+    """形近对里没有真刻例时的兜底：拿字体渲染当唯一代表（懒加载、按字缓存）。
+
+    只在 `_local_shape_score` 库里一条对应字的刻例都找不到时才用——比如
+    bxgb 库目前 `囘` 一例真刻例都没有（回/囘 3 例全标 `回`，用户 09-27 裁 2
+    例该改判），没有它就没法跟候选决胜。字体渲染走跟刻本同一条归一管线
+    （`to_canonical` → `normalize_patch`），几何上可比。"""
+    paths = sorted(_FONTS_DIR.glob("Jigmo*.ttf"))
+    if not paths:
+        return None
+    from .font_glyphs import FontRenderer
+    from .normalize import normalize_patch
+    renderer = FontRenderer(paths)
+    canon = renderer.render(char)
+    if canon is None:
+        return None
+    return normalize_patch(canon)
+
+
+def _crop_dice(a: np.ndarray, b: np.ndarray) -> float:
+    """窗口内墨迹重合度（Dice）。两边窗口都是空白当满分——共享部件本就该在
+    窗口外，窗口内两边都没墨不代表谁更像谁，不该罚。"""
+    na, nb = int(a.sum()), int(b.sum())
+    if na == 0 and nb == 0:
+        return 1.0
+    if na == 0 or nb == 0:
+        return 0.0
+    inter = int(np.logical_and(a, b).sum())
+    return 2.0 * inter / (na + nb)
 
 
 @dataclass
@@ -65,17 +141,28 @@ class MatchResult:
 
 
 def _cell_parts(iid: str):
-    """实例 / 字位 id → (册, 页, 列, 格号)；带 v2: 前缀、a/b 子格都认。认不出返回 None。"""
+    """实例 / 字位 id → (册, 页, 列, 格号, 格号是否精确)。
+
+    `v2:`（人裁）与裸 `<册>:页:列:格号`（现管线播种/机器准入）都是重键后的
+    **格号坐标**，精确（`exact=True`）。`v1:` 前缀（四庫旧管线约 250 例没对上
+    现格的旧刻例）是 **idx 坐标**，按 idx+1 换算成格号，但没经形状确认，
+    `exact=False`（2026-09-27，字形库 12 §六）。a/b 子格都认。认不出返回 None。
+    """
     p = iid.split(":")
+    exact = True
     if p and p[0] == "v2":
         p = p[1:]
+    elif p and p[0] == "v1":
+        p = p[1:]
+        exact = False
     if len(p) != 4:
         return None
     b, pg, col, sl = p
     sl = sl.rstrip("ab")
     if not (pg.isdigit() and col.isdigit() and sl.isdigit()):
         return None
-    return b, int(pg), int(col), int(sl)
+    slot = int(sl) if exact else int(sl) + 1
+    return b, int(pg), int(col), slot, exact
 
 
 class GlyphMatcher:
@@ -89,7 +176,8 @@ class GlyphMatcher:
     def __init__(self, feature_backend: str = "hog", k: int = 10,
                  cov_high: float | None = None,
                  miss_wmax: float = MISS_WMAX,
-                 verify_method: str = "elastic"):
+                 verify_method: str = "elastic",
+                 local_shape_rerank: bool = False):
         self._feature = get_feature(feature_backend)
         self._verify = (verify_pair_elastic if verify_method == "elastic"
                         else verify_pair_cov)
@@ -117,6 +205,10 @@ class GlyphMatcher:
         # 是这个 `& self._char_set` 把护栏关掉了。
         # 默认改成不要求；GUJI_GUARD_IN_DB=1 可切回老行为做对照。
         self.guard_needs_partner_in_db = os.environ.get("GUJI_GUARD_IN_DB") == "1"
+        # 按形区分四对的局部部件决胜（模块头「按形区分四对」）。缺省关——
+        # 任务书要求「别动全局阈值」，这条只在显式开启时改候选排序，且只
+        # 影响候选首位落在这 8 个字上的那些查询，别的字一格都不碰。
+        self.local_shape_rerank = local_shape_rerank
 
     def __len__(self) -> int:
         return len(self._ids)
@@ -134,13 +226,16 @@ class GlyphMatcher:
         self._char_set.add(char)
 
     def _same_cell_rows(self, cell_id: str) -> set[int]:
-        """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08）。
+        """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08；
+        2026-09-27 v1 重键后收紧，字形库 12 §六）。
 
         同一格在库里不止一种 id：人裁 ``v2:<格>``、播种/机器准入 ``<格>``、四庫 v1 旧管线
-        ``<册>:页:列:idx``（idx 从 0，= 格号−1），重切后还可能漂到邻格号。只摘一个 id
-        等于没摘——铁证审计实测：只摘 ``v2:`` 那份，北行 3,731 例播种副本照样自己配自己。
-        所以按「同册同页同列、格号相差 ≤2」一并摘掉（跨所有前缀）。代价是同列相邻两格
-        若恰是同一个字，那份真证据也摘了——宁可少一条证据，不要自证。
+        ``<册>:页:列:idx``（``v1:`` 前缀，idx 从 0，按 idx+1 换算格号）。v1 重键之后
+        ``v2:``／裸格号前缀都已经是**精确的格号坐标**——两边都精确时格号差要求 ``=0``，
+        不然「同列相邻两格恰是同一字」这条真证据会被平白摘掉（08 卡记的代价，v1 重键前
+        格号坐标不可信、只能靠 ±2 兜底防自证；重键后前缀是 ``v1:`` 的约 250 例仍是
+        idx 换算来的、没经形状确认，**这些仍按 ±2 兜底**）。所以：只要 ``cell_id`` 与某一行
+        两边都是精确坐标，格号差必须 ``=0``；只要有一边是未确认的 ``v1:``，保留 ±2 容差。
         """
         q = _cell_parts(cell_id)
         if q is None:
@@ -149,13 +244,66 @@ class GlyphMatcher:
         if keys is None or len(keys) != len(self._ids):
             keys = [_cell_parts(i) for i in self._ids]
             self._cell_keys = keys
-        b, pg, col, sl = q
-        return {j for j, k in enumerate(keys)
-                if k is not None and k[:3] == (b, pg, col) and abs(k[3] - sl) <= 2}
+        b, pg, col, sl, q_exact = q
+        rows = set()
+        for j, k in enumerate(keys):
+            if k is None or k[:3] != (b, pg, col):
+                continue
+            diff = abs(k[3] - sl)
+            if q_exact and k[4]:
+                if diff == 0:
+                    rows.add(j)
+            elif diff <= 2:
+                rows.add(j)
+        return rows
 
     def extract(self, patches: np.ndarray) -> np.ndarray:
         """暴露特征提取，供调用方批量预计算后喂给 add()。"""
         return self._feature.extract(patches)
+
+    def _local_shape_score(self, norm: np.ndarray, char: str,
+                           excl: set[int], box: tuple[int, int, int, int]
+                           ) -> float | None:
+        """`char` 在库里的刻例（排除 `excl`）与查询图在 `box` 窗口内的最佳
+        Dice。库里一条这个字的刻例都没有（排除后）就退到字体渲染模板；
+        两边都没有返回 None（这个字没法比，交给调用方决定怎么处理）。"""
+        y0, y1, x0, x1 = box
+        q = norm[y0:y1, x0:x1]
+        best: float | None = None
+        for j, c in enumerate(self._chars):
+            if c != char or j in excl:
+                continue
+            s = _crop_dice(q, self._patches[j][y0:y1, x0:x1])
+            if best is None or s > best:
+                best = s
+        if best is None:
+            tmpl = _shape_font_template(char)
+            if tmpl is not None:
+                best = _crop_dice(q, tmpl[y0:y1, x0:x1])
+        return best
+
+    def _apply_shape_rerank(self, result: "MatchResult", norm: np.ndarray,
+                            exclude_id: str | None) -> "MatchResult":
+        """按形区分四对：候选首位落在这四对某个字上时，拿差异窗口的局部
+        Dice 在它和对手之间决胜（模块头「按形区分四对」）。只可能改
+        `candidates` 的顺序/内容，`verdict`/`char`/`guard`/`cov`/`wmax`
+        原样不动——不是新判决，只是给下游"首选是哪个字"多一条证据。"""
+        if not getattr(self, "local_shape_rerank", False) or not result.candidates:
+            return result
+        top_char = result.candidates[0][0]
+        pair = _SHAPE_PAIR_OF.get(top_char)
+        if pair is None:
+            return result
+        other = pair[1] if top_char == pair[0] else pair[0]
+        box = _SHAPE_BOX[frozenset(pair)]
+        excl = self._same_cell_rows(exclude_id) if exclude_id is not None else set()
+        s_top = self._local_shape_score(norm, top_char, excl, box)
+        s_other = self._local_shape_score(norm, other, excl, box)
+        if s_other is None or (s_top is not None and s_other <= s_top):
+            return result
+        new_cands = [(other, s_other)] + [(c, v) for c, v in result.candidates
+                                          if c != other]
+        return dataclasses.replace(result, candidates=new_cands)
 
     def match(self, norm: np.ndarray,
               feat: np.ndarray | None = None,
@@ -226,10 +374,10 @@ class GlyphMatcher:
             for c2, w2, ch2, _ in same_hits:
                 cands[ch2] = max(cands.get(ch2, 0.0), c2)
             if len(same_chars) > 1:                            # 护栏 2
-                return MatchResult(
+                return self._apply_shape_rerank(MatchResult(
                     "unsure", None, None, cov, wmax,
                     sorted(cands.items(), key=lambda t: -t[1]),
-                    guard="conflict", n_verified=n_verified)
+                    guard="conflict", n_verified=n_verified), norm, exclude_id)
             partners = _PARTNER.get(char, frozenset())
             if self.guard_needs_partner_in_db:
                 partners = partners & self._char_set
@@ -238,18 +386,18 @@ class GlyphMatcher:
                 # 原来每次跑都不一样，产物逐字节不可复现（2026-09-14 对比时发现）。
                 for p in sorted(partners):
                     cands.setdefault(p, 0.0)
-                return MatchResult(
+                return self._apply_shape_rerank(MatchResult(
                     "unsure", None, None, cov, wmax,
                     sorted(cands.items(), key=lambda t: -t[1]),
-                    guard="never_match", n_verified=n_verified)
+                    guard="never_match", n_verified=n_verified), norm, exclude_id)
             return MatchResult("same", char, iid, cov, wmax,
                                sorted(cands.items(), key=lambda t: -t[1]),
                                n_verified=n_verified)
         if unsure_best:
-            return MatchResult(
+            return self._apply_shape_rerank(MatchResult(
                 "unsure", None, None, best_cov, best_wmax,
                 sorted(unsure_best.items(), key=lambda t: -t[1]),
-                n_verified=n_verified)
+                n_verified=n_verified), norm, exclude_id)
         # diff 档也要把「最像的那个字」带出来。逐对 verify 全判 diff 时
         # `unsure_best` 是空的，这里原先返回空 candidates——于是界面上只剩
         # 一个「? 99%」：cov 明明 0.99，却连它像哪个字都不说。
@@ -265,5 +413,6 @@ class GlyphMatcher:
         best_cand: list[tuple[str, float]] = []
         if best_char is not None:
             best_cand = [(best_char, best_cov)]
-        return MatchResult("diff", None, None, best_cov, best_wmax,
-                           best_cand, n_verified=n_verified)
+        return self._apply_shape_rerank(MatchResult(
+            "diff", None, None, best_cov, best_wmax,
+            best_cand, n_verified=n_verified), norm, exclude_id)

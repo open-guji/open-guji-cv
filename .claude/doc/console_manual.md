@@ -109,6 +109,15 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 .venv/Scripts/python -m open_guji_cv status vol01
 ```
 
+`status` 每步下面会列**过期原因**（2026-09-28，overview #174）：`册配置 period_prior 180.0→204.0，须重跑`
+／`参数变了`／`上游产物变了`／`代码或版本变了`／`上游过期`。册配置那条只有这次改动之后跑过的产物才分得出
+（manifest 新记了 `book_deps` 原值）；老产物报「代码或册配置变了（…；旧条目没记册配置原值）」。
+`calibrate` 发现先验漂了时也会提示改 yaml 后哪些步要重跑（`period_prior` → `column_gate`）。
+
+**拆页前找版心**：`guji locate-gutter <原图> [--band y0,y1] [--json]`——整叶扫描图 → 版心 x（原图坐标，
+左原点）与置信度；一张图上下两叶就用 `--band` 分开找。置信度 < 0.3 一律人看。判据与实测见
+`utils/locate_gutter.py` 模块头。
+
 ---
 
 ## 3. 产物：看结果对不对
@@ -239,6 +248,9 @@ PYTHONPATH=. .venv/Scripts/python scripts/verify_gold_migration.py --all   # 校
 .venv/Scripts/python -m open_guji_cv eval run              # 跑全部轻量的
 .venv/Scripts/python -m open_guji_cv eval run normalize layout
 ```
+
+四把尺子（`check rulers`）的 JSON 每把都带 `by_page`（全量汇总 `{页: {n, cols}}`，不受 detail 截 20 条影响）；
+要逐条页／列明细：`guji check rulers vol06 --detail R2c`（R2c 分「无缝」「缝上有墨」两种，后者带 `px`）。
 
 ---
 

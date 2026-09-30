@@ -78,8 +78,22 @@ def test_link_runs_needs_min_run_and_alignment():
     assert jz.link_runs(lone) == {}                       # 孤格不算夹注
     pair = [(3, (92.0, 4000.0)), (4, (94.0, 4000.0))]
     assert set(jz.link_runs(pair)) == {3, 4}
-    off = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0))]
-    assert jz.link_runs(off) == {}                        # 缝对不齐
+    off = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN_PAIR + 5, 4000.0))]
+    assert jz.link_runs(off) == {}                        # 缝对不齐（超过头两格的更松容差）
+
+
+def test_link_runs_pair_formation_uses_looser_align():
+    """刚结成头两格时容差是 `ALIGN_PAIR`，不是 `ALIGN`——「內府藏本」一类只有
+    2~3 行的短版本小注，缝位漂移比长段夹注大，2026-09-27 vol02/vol03 实测最大
+    15.5px（见模块头 `ALIGN_PAIR` 的注记）。"""
+    within_pair = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0))]
+    assert abs(within_pair[1][1][0] - within_pair[0][1][0]) > jz.ALIGN
+    assert set(jz.link_runs(within_pair)) == {3, 4}        # 超过 ALIGN、没超过 ALIGN_PAIR：仍算一段
+
+    # 但长到第三格之后，续接用回严格的 ALIGN——不放宽长段夹注已验证过的行为。
+    third_too_far = [(3, (92.0, 4000.0)), (4, (92.0 + jz.ALIGN + 5, 4000.0)),
+                      (5, (92.0 + jz.ALIGN + 5 + jz.ALIGN + 5, 4000.0))]
+    assert set(jz.link_runs(third_too_far)) == {3, 4}      # 第三格没入段，只有头两格
 
 
 def test_link_runs_bridges_single_unmeasured_cell():
@@ -174,6 +188,30 @@ def test_adopt_run_tails_leaves_normal_body_char_alone():
     runs, tail_a = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches)
     assert set(runs) == {3, 4}
     assert tail_a == set()
+
+
+def test_adopt_run_tails_chains_after_row_adoption():
+    """「山東巡撫／採進本」四行：第三行「巡本」量不出缝、被收成漏拆行，末行單字「撫」
+    要接着收成單字尾（vol03 p69c5，overview#266）。"""
+    row = _blank()
+    _box(row, 40, 85, 30, 80)
+    _box(row, 100, 160, 30, 80)
+    tail = _blank()
+    _box(tail, 100, W - 15, 20, 90)
+    patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: row, 6: tail}
+    runs, tail_a = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches)
+    assert set(runs) == {3, 4, 5, 6}
+    assert tail_a == {6}
+
+
+def test_adopt_run_tails_does_not_chain_after_single_char_tail():
+    """單字尾就是段的最后一行：收了單字尾之后，下一格即便也像單字尾也不再收。"""
+    tail = _blank()
+    _box(tail, 100, W - 15, 20, 90)
+    patches = {3: _jiazhu_patch(), 4: _jiazhu_patch(), 5: tail, 6: tail.copy()}
+    runs, tail_a = jz.adopt_run_tails({3: 92.0, 4: 92.0}, patches)
+    assert set(runs) == {3, 4, 5}
+    assert tail_a == {5}
 
 
 def test_adopt_run_tails_skips_blank_cells():

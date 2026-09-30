@@ -87,6 +87,52 @@ T7 原想把长度闸换成「图像代价闸」（字块 embedding 与整理本
 就不采信这一位。「异体」这一档必须放行：巳/已、郎/郞、宮/宫、寬/寛 这类库 cov 也 ≥0.999，
 但整理本给的是正字，采信没错（人裁 66/66 全对）。
 不限段长（只要夹住）在 8 个 4 字段上 8/8 对、0 错采，但样本太薄，长度闸照旧。
+
+## 多证人合并：现状是什么（2026-09-27，任务书 D-多证人对齐策略）
+
+`BookSpec.references` 的字段注释写着「`quality` 用于多证人不一致时加权，不是简单
+多数」——**这是意愿，不是实现**。真正在跑的 `book_corpus()` 只有一行数：
+
+    refs = load_book(book).references
+    if refs and refs[0].get("file"): return corpus_path(refs[0]["file"])
+
+只取**列表第 0 项**，从不看 `quality`。`align_ref` 全程只吃这一份 `corpus`，
+`slots_from_evidence`/`label_page`/`lib_gate` 都只在这一份语料上跑。换句话说，
+「多证人」目前只存在于 `books/<id>.yaml` 的注释与 `report/witness.py`（Step9-9.3
+对勘用）里，**Step5-d 的锚定/放行这一路完全没有多证人合并**——`references` 列了
+几家、哪家标 `best`，对 `align_ref` 的产出没有任何影响，唯一起作用的是「谁排第一个」。
+
+Z5 全唐文 v003 实测正是这个原因：`references` 里 Kanripo 排第一（标 `best`）、
+维基排第二（标 `mid`），"组合"跑出来的自动放行率／锚定率与"仅 Kanripo"逐字节
+相同（65.76%／24.43%）；而"仅维基"反而更高（69.38%／36.64%）——因为 Kanripo
+底本把刻本的「爲」统一录成「為」，这类系统性差异被 `difflib` 判成 `replace`，
+拉低了整段 margin，而 `align_ref` 从来没机会用到维基那份更贴合刻本用字的证人。
+
+`witness_strategy` 参数（见 `AlignRefParams`）把「归一再比」「多证人表决」接进来，
+缺省仍是 `"legacy"`（行为与加这个参数之前逐字节相同）；三种策略的实测数字见
+overview 仓 `进度/inbox/D-多证人/` 的 done 单。
+
+## 2026-09-28 5-b 候选并入锚定载体（D 道，overview#126）
+
+`rare_candidates`（Step5-b）此前下游一个都不读。借库书上库（像素）首位在难例上
+只对 52%，5-b／CNN 首位对 94%（R 道 #86），锚定串因此错字连篇、8-gram 连续对上
+的太少。`AlignRefParams.rare_topk > 0` 时，库判 `same` 以外的位，载体从「库首位」
+换成「库候选 ∪ 5-b 前 k 名」RRF 融合首位（`rrf_carrier`，同分 5-b 赢）；`same` 位、
+OCR 比较、锚定与采信闸一概不动。缺省 0 = 关：不读 5-b、不进指纹
+（`StepSpec.optional_consumes_when`）、不进参数哈希。
+
+实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+
+| | 锚定页 | 待审率 |
+|---|---|---|
+| 全唐文 v006（借四庫库，86 页，`use_context:false`） | 61 → **72** | 38.7% → 28.6% |
+| 四庫 vol03（107 页） | 101 → 101 | 3.72% → 3.75% |
+
+v006 新锚上的 11 页照旧走现有通道放行；人裁难例里新放出 121 格，严格口径错 10 格：
+8 格是 `match_margin` 放了整理本的「為」而刻本是「爲」（关开关时这条通道在已锚页上
+同样放了 23 格「為」，是通道本身的字形问题，不是本改动引入的），2 格「乎/平」是库与
+整理本都给「乎」、人裁「平」。vol03 上载体变化只让 128 格在 `match_ref`/`match_replace`
+之间改名（equal↔replace），放出格与光盘版的字面差异 130 → 129。
 """
 
 from __future__ import annotations
@@ -95,8 +141,9 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
+from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
@@ -220,16 +267,56 @@ def slots_from_decision(dec, match=None, ocr=None
     return slots, meta
 
 
-def slots_from_evidence(match, ocr) -> list[tuple[int, int, str, str]]:
-    """`glyph_match` + `ocr_candidates` → 对齐要的 slots，不碰 Step6。
+def rare_topk_map(rare, k: int) -> dict[str, list[str]]:
+    """`rare_candidates`（Step5-b）产物 → {字位 id: 前 k 个候选字（按 5-b 融合名次，去重）}。
 
-    每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
-    `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
-    「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
-    但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
+    **只用名次、不用分数**：5-b 候选的 `score` 按来源各是各的量纲（`emb` 是余弦
+    ~0.99、`cnn` 分类头是概率、字体模板又是另一种），同一张列表里不可比，只有
+    融合后的先后顺序有意义（`clustering.rare_panel.rare_for_batch`）。
+    `rare` 为 None 或 `k <= 0` → 空表（下游按「这一路没有」跑）。
     """
+    if rare is None or k <= 0:
+        return {}
+    out: dict[str, list[str]] = {}
+    for cc in rare.columns:
+        for r in cc.chars:
+            seen: list[str] = []
+            for c in r.candidates:
+                if c.char and c.char not in seen:
+                    seen.append(c.char)
+                if len(seen) >= k:
+                    break
+            if seen:
+                out[r.id] = seen
+    return out
+
+
+def rrf_carrier(pixel: list, cnn: list[str], k: int = 60) -> str | None:
+    """库候选（`[(字, cov), …]`，按 cov 降序）与 5-b 候选（按名次）做 RRF 取首位。
+    同分时 5-b 名次靠前的赢（R 道实测借库书上 CNN 首位几乎严格优于像素首位）。
+    同一口径见 `review.borrow_first.rrf_fuse`；这里只要首位字，不引那个模块（它带
+    库原型索引与 torch 依赖）。"""
+    rp: dict[str, int] = {}
+    for i, (ch, _s) in enumerate(pixel or []):
+        rp.setdefault(ch, i + 1)
+    rc: dict[str, int] = {}
+    for i, ch in enumerate(cnn or []):
+        rc.setdefault(ch, i + 1)
+    if not rp and not rc:
+        return None
+    big = 10 ** 6
+
+    def score(ch: str) -> float:
+        return (1.0 / (k + rp[ch]) if ch in rp else 0.0) + (1.0 / (k + rc[ch]) if ch in rc else 0.0)
+    return min((*rp, *rc), key=lambda ch: (-score(ch), rc.get(ch, big), rp.get(ch, big)))
+
+
+def carrier_fn(match, ocr, rare: dict[str, list[str]] | None = None):
+    """字位 id → 锚定载体字（`slots_from_evidence` 的逐位取字规则，单独拿出来给
+    坐标对位 `align_ref_coord` 复用；规则见 `slots_from_evidence` 文档字符串）。"""
     mmap = {r.id: r for cc in (match.columns if match else []) for r in cc.chars}
     omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
+    rare = rare or {}
 
     def _best(rid: str) -> str | None:
         m = mmap.get(rid)
@@ -238,10 +325,31 @@ def slots_from_evidence(match, ocr) -> list[tuple[int, int, str, str]]:
         ch, conf = None, -1.0
         if m and m.candidates:
             ch, conf = m.candidates[0][0], m.candidates[0][1]
+        rc = rare.get(rid)
+        if rc:
+            ch = rrf_carrier(list(m.candidates) if m else [], rc)
         o = omap.get(rid)
         if o and o.topk and o.topk[0][1] > conf:
             ch = o.topk[0][0]
         return ch
+    return _best
+
+
+def slots_from_evidence(match, ocr, rare: dict[str, list[str]] | None = None
+                        ) -> list[tuple[int, int, str, str]]:
+    """`glyph_match` + `ocr_candidates`（+ 可选 `rare_candidates`）→ 对齐要的 slots，不碰 Step6。
+
+    每个字位取两路里信度最高的候选当锚定载体，见模块头「2026-09-10」一节。
+    `match` 与 `ocr` 都缺席的字位没有任何候选，跳过（不占位）——这与旧版
+    「候选都没有就丢」的口径一致，跳过的位会让后面的字位在锚定串里前移，
+    但两路证据都空的位极少见（vol01 dev_set 实测 0 例，见模块头实测数字）。
+
+    `rare`（`rare_topk_map` 的输出，`AlignRefParams.rare_topk` 开了才给）：库判
+    `same` 以外的位，库那一路的首选换成「库候选 ∪ 5-b 前 k 名」RRF 融合的首位
+    （`rrf_carrier`），OCR 比较照旧。见模块头「2026-09-28 5-b 候选并入锚定载体」。
+    `rare` 为空时与加这个参数之前逐位相同。
+    """
+    _best = carrier_fn(match, ocr, rare)
 
     slots: list[tuple[int, int, str, str]] = []
     src = match if match is not None else ocr
@@ -269,6 +377,94 @@ class AlignRefParams(BaseModel):
     """replace 位的库证据闸（模块头 2026-09-22）：库高信度认下的字与整理本字不是异体 → 不采信。"""
     lib_cov_min: float = 0.996
     """库证据闸的 cov 门槛，与 `glyph_match` same 档同口径。"""
+    witness_strategy: str = "legacy"
+    """多证人合并策略（2026-09-27，任务书 D-多证人对齐策略；见模块头「多证人合并」一节）：
+
+    - ``"legacy"``（默认，开关缺省关）：`book_corpus()` 只取 `references[0]`——
+      **不管 quality 标签，只看列表里排第几个**。这是现状，也是 Z5 全唐文实测
+      「Kanripo(best)+维基(mid) 组合」与「仅 Kanripo」逐字节相同的根源：维基那份
+      从没被读过，`references` 列表顺序偶然与 quality 排序一致时才不出事。
+    - ``"normalize"``：只用一家证人（按 `quality` 排序取最高的，不再依赖列表顺序），
+      但锚定/对齐前先过异体字语义表归一（`VariantMap.normalize_text`）——
+      「爲/為」这类系统性版本差不再被判成 `replace`，取字仍是证人原文的字形
+      （归一只影响判等/判异，不影响最终写进 `align_char` 的字）。
+    - ``"majority_vote"``：`references` 每家证人各自跑一次锚定 + `difflib`
+      （原始字形比较，不歸一），逐字位在锚定成功的证人里按 `quality` 加权
+      多数表决；只有一家覆盖的字位直接用它，别的证人在这一位缺席不算票。
+    """
+    witness_fingerprint: str = ""
+    """多证人策略用的证人文件指纹，`witness_strategy != "legacy"` 才填——
+    legacy 只有单一 `corpus`，继续用 `corpus_fingerprint`。留空自动填，见
+    `core/step.py::_with_witness_fingerprint`（同 `corpus_fingerprint` 的道理：
+    `model_post_init` 造实例时不知道是哪本书，只能留空，`params_for` 里补）。"""
+
+    uncontested_relax: bool = False
+    """低票兜底（2026-09-27，任务卡 D-align_ref锚定召回-全唐文）：`label_page`
+    走正常 n-gram 投票锚不上时，只在**没有任何竞争簇**（真实 runner_up == 0，
+    不是 `anchor_page_diag` 早退时的占位 0——它在 `n_votes < MIN_VOTES` 就直接
+    返回，从没算过真正的次高票簇）的前提下，改用候选窗口的 difflib 命中率
+    兜底：命中率达标就仍然收下这个锚点，字符级仍过 `align_label.label_page`
+    同一套 `replace_len_gate`（段长 ≤3 且被 equal 夹住），不会因为兜底而放松
+    单字采信。
+
+    ## 根因：v006 实测证明这类失败多是「连续 8 字全对太难」，不是「套语碰撞」
+
+    整理 Z15（cross `整理Z15-align_ref套语文体`）报告全唐文 v006 16-18 页正文
+    锚不住，**猜测**是诏令/制书体裁骈俪套语多、同一 8-gram 在语料里多处命中、
+    票被摊薄（"套语碰撞"）。本卡在 v006 全书 86 页上实测（`glyph-db rebuild
+    --store <四庫真库>` 借四庫库、Kanripo 语料，见
+    `scripts/experiments/align_anchor_recall/diagnose_v006.py`）：14 个
+    「最高票簇 1-4 票，低于绝对下限 5」失败页里，**12 个 `avg_hits_per_hit_gram`
+    ≈1、`n_clusters`==1**（唯一命中的极少数 8-gram 各自在语料里只出现一次，
+    彼此又聚成同一个偏移簇，没有第二个候选位置）——这与"套语碰撞"的特征
+    （同一 8-gram 到处出现、多个候选簇势均力敌）正相反：**多数 8-gram 根本
+    没命中任何位置**（如 p16 171 个 gram 只有 2 个命中、p30 169 个只有 1 个），
+    是刻本侧字串本身噪声大（借四庫库对全唐文这类新书字形覆盖不足，逐字位
+    top1 常错），连续 8 字全部对上本来就难，不是内容被别处摊薄。10 个候选页
+    (p3/4/6/11/16/30/36/38/54/64) 目视核对候选窗口与整理本，字面逐句连贯、
+    差异全是形近字混淆（今/令、泰/秦、玉/王、流/涼……），确认是正确锚点；
+    另外 2 个「1-4 票」页（p2/61）与 1 个「占比/优势不达标」页（p67）**真的有
+    竞争簇**（`runner_up` 分别 1/1/8），本判据的 `runner_up == 0` 闸天然把它们
+    挡在外面，不会误收。v006 实测：67/86 → 77/86（新增 10 页），旧锚定页
+    （offset 已确定的那部分）逐页不变——见 done 单核验数字。
+
+    只对 `witness_strategy == "legacy"` 生效；多证人路径另有自己的失败报告，
+    不叠加这条（保持两条路径互不纠缠，同 `witness_strategy` 模块头的原则）。
+    默认关，不改变现有行为。
+    """
+    uncontested_min_votes: int = 1
+    """低票兜底生效的最低票数——低于它（即真的一票命中都没有）不兜底，
+    防止把候选太少/语料未命中的页也拉进来（那类页应该继续报「候选太少」/
+    「一个 n-gram 都没命中」，不该被这条参数掩盖）。"""
+    uncontested_min_equal_frac: float = 0.5
+    """低票兜底的候选窗口 difflib 命中率门槛。v006 实测：10 个确认应收的
+    低票页命中率落在 0.58~0.82；门槛设在明显低于这个区间的 0.5，留安全边界。
+    未观测到假阳性样本落进 [0.5, 0.58) 这一段，样本量不大，口径偏保守。"""
+
+    rare_topk: int = 0
+    """5-b 生僻字候选并入锚定载体（2026-09-28，D 道 overview#126）：取 `rare_candidates`
+    前几名。**0 = 关（缺省）**——不读 5-b、不进指纹（`optional_consumes_when`）、
+    也不进参数哈希（见 `_drop_off_rare`），四庫等书产物与加这个字段之前逐字节相同。
+    书 yaml `params: {align_ref: {rare_topk: 5}}` 打开。实测见模块头同日一节。"""
+
+    coord: str = "auto"
+    """按坐标对位（2026-09-28，D 道 overview#195；见 `steps/align_ref_coord` 模块头）。
+
+    - ``"auto"``（缺省）：整理本是**逐列分行**的才做——书 yaml `references[0]` 标了
+      `line_is_column: true`，或语料本身 ≥95% 的非空行字位数不超过每列格数
+      （`chars_per_line`，+1 容抬头）。四庫光盘版满足（一行 = 刻本一列），北行日錄
+      校對本、全唐文这类整段录入的整理本不满足，自动不做。
+    - ``"on"`` / ``"off"``：强制。
+
+    结果另记在 `PageAlignRef.coord`，**不改现役 `chars`、不进任何准入通道**。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_rare(self, handler):
+        """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.rare_topk:
+            d.pop("rare_topk", None)
+        return d
 
     def model_post_init(self, _ctx) -> None:
         if not self.corpus_fingerprint:
@@ -308,24 +504,52 @@ def _corpus_index(path: str):
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
+        id="align_ref", title="Step5-d 整理本对齐", version="2.1", unit="cell",   # 2.1：按坐标对位 coord（overview#195）
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates", "cells"),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
         code_deps=("open_guji_cv.clustering.align_label",
-                   "open_guji_cv.utils.jiazhu_order"),
+                   "open_guji_cv.utils.jiazhu_order",
+                   # 2026-09-27 加（任务书 D-多证人对齐策略）：非 legacy 策略还吃这两个
+                   # 模块的算法——`report.witness` 装载证人/排序，`clustering.variants`
+                   # 提供归一表。改了它们，`align_ref` 的非 legacy 产物也该判过期。
+                   "open_guji_cv.report.witness",
+                   "open_guji_cv.clustering.variants",
+                   "open_guji_cv.steps.align_ref_coord"),
+        # `corpus` 缺省是仓内绝对路径（2026-09-29 K238），内容由 `corpus_fingerprint` 把关。
+        path_params=("corpus",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
-        ocr: PageOcr | None = _opt(ctx, "ocr_candidates", page)
+        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
+                               if ctx.book.ocr_candidates else None)
+        rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
+                if p.rare_topk else None)
+        out = self._run_legacy(ctx, p, page, match, ocr, rare)
+        if _coord_enabled(p, ctx.book) and match is not None:
+            attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
+                         _opt(ctx, "cells", page), p.corpus)
+        return out
+
+    def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
+                    match: PageMatch | None, ocr: PageOcr | None,
+                    rare: dict | None) -> dict[str, BaseModel]:
+        """8-gram 锚定 + difflib 的现役对位（2026-09-28 从 `run_page` 原样拆出，
+        一行没改，坐标对位在 `run_page` 里接在它后面）。"""
         if match is None and ocr is None:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
                 note="没有库匹配或 OCR 候选产物")}
+        if p.witness_strategy != "legacy":
+            # 多证人策略走独立函数，自己算 slots/门槛——**不动 legacy 分支
+            # 原有的检查顺序**（下面 corpus/text/slots 三条判据的先后次序，
+            # 换了就会在多条同时失败时改变报出来的 note，是可观测的行为变化）。
+            return {"align_ref": _run_multi_witness(ctx, p, page, match, ocr, rare)}
         if not p.corpus:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -335,7 +559,7 @@ class AlignRefStep(Step):
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
                 note="整理本读不到")}
-        slots = slots_from_evidence(match, ocr)
+        slots = slots_from_evidence(match, ocr, rare)
         if len(slots) < 12:
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -347,6 +571,12 @@ class AlignRefStep(Step):
         # 整理本通道一条都不触发（本轮实际踩到，靠比对键样例才发现）。
         labs, ok = label_page(str(page), slots, ctx.book.id, text,
                               _corpus_index(p.corpus))
+        anchor_via = "ngram"
+        if not ok and p.uncontested_relax:
+            alt = _uncontested_fallback(ctx.book.id, page, slots, text,
+                                        _corpus_index(p.corpus), p)
+            if alt:
+                labs, ok, anchor_via = alt, True, "uncontested"
         if not ok:
             # label_page 内部已经跑过一次 anchor_page，这里为了拿判据明细
             # 重算一次 anchor_page_diag——多一次 8-gram 投票，索引已缓存，
@@ -370,7 +600,292 @@ class AlignRefStep(Step):
                  for lab in labs]
         return {"align_ref": PageAlignRef(
             page=page, anchored=True, corpus_fingerprint=p.corpus_fingerprint,
-            chars=chars, n_lib_dropped=n_dropped)}
+            chars=chars, n_lib_dropped=n_dropped, anchor_via=anchor_via)}
+
+
+def _raw_vote_clusters(text: str, index: dict[str, list[int]],
+                       gram: int = GRAM) -> tuple[int | None, int, int]:
+    """`align_eval.anchor_page_diag` 同一套投票核心，但不套 `MIN_VOTES` 提前
+    返回——`AlignRefParams.uncontested_relax` 要看真实的次高票簇，
+    `anchor_page_diag` 在 `n_votes < MIN_VOTES` 时直接返回 `runner_up=0`，
+    那是占位值不是真算出来的（见该函数），不能拿来判「有没有竞争簇」。
+
+    刻意不改 `anchor_page_diag` 本身——它是 `anchor_page`/`align_label`／
+    `gold` 等一大票调用方共用的锚定核心，这里只加一个新的独立函数，
+    `uncontested_relax` 缺省关时这个函数从不会被调用，零行为变化。
+
+    返回 `(peak_offset, peak_votes, runner_up_votes)`；没有任何命中时
+    `(None, 0, 0)`。
+    """
+    from collections import Counter
+
+    from ..clustering.align_eval import POOL_RADIUS, index_lookup
+    if len(text) < gram:
+        return None, 0, 0
+    votes: Counter[int] = Counter()
+    n_grams = len(text) - gram + 1
+    for i in range(n_grams):
+        for pos in index_lookup(index, text[i:i + gram]):
+            votes[pos - i] += 1
+    if not votes:
+        return None, 0, 0
+    peak = votes.most_common(1)[0][0]
+    near = [o for o in votes if abs(o - peak) <= POOL_RADIUS]
+    peak_votes = sum(votes[o] for o in near)
+    rest = {o: v for o, v in votes.items() if abs(o - peak) > POOL_RADIUS}
+    runner_up = 0
+    if rest:
+        peak2 = max(rest, key=rest.get)
+        runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
+    return min(near), peak_votes, runner_up
+
+
+def _uncontested_fallback(book: str, page: int, slots: list[tuple], corpus: str,
+                          index: dict[str, list[int]], p: "AlignRefParams",
+                          ) -> list | None:
+    """`AlignRefParams.uncontested_relax` 的兜底路径（模块头「低票兜底」一节）。
+
+    只在**没有竞争簇**（`runner_up == 0`）且票数达到 `uncontested_min_votes`
+    时才去算 difflib 命中率；命中率达标才收，否则 `None`（调用方退回原有的
+    失败报告，不吞掉任何诊断信息）。返回的标签仍过
+    `align_label.label_page` 同一套 `replace_len_gate`（`_labels_from_ops`
+    直接复用，规则一字不改）。
+    """
+    import difflib
+
+    norm = _norm_slots(slots)
+    query = "".join(t[-1] for t in norm)
+    offset, peak_votes, runner_up = _raw_vote_clusters(query, index)
+    if offset is None or runner_up != 0 or peak_votes < p.uncontested_min_votes:
+        return None
+    lo = max(0, offset)
+    hi = min(len(corpus), offset + len(query) + WINDOW_PAD)
+    window = corpus[lo:hi].replace("\n", "")  # 同 `align_label.align_ops`：清洗语料换行
+    sm = difflib.SequenceMatcher(None, query, window, autojunk=False)
+    equal = sum(b.size for b in sm.get_matching_blocks())
+    if not query or equal / len(query) < p.uncontested_min_equal_frac:
+        return None
+    labs = _labels_from_ops(book, page, norm, sm.get_opcodes(), window)
+    return labs or None
+
+
+def _refs_key(refs: list[dict]) -> tuple:
+    """`book.references`（`list[dict]`，不可哈希）→ 按内容去重的可哈希键，
+    供 `_witnesses_for_book` 缓存——同 `_corpus_text`/`_corpus_index` 的道理，
+    避免每页都重读一遍语料、重建两套 ngram 索引（270 万字级语料实测单页
+    要花 5~6 秒，12 页跑批里页页都花这个钱）。
+
+    ⚠️ `file` 必须换成 `corpus_path()` 解析后的**绝对路径**再进键，不能留
+    裸文件名：控制台一个进程同时服务多个标签页、各自 `GUJI_WORKSPACE` 不同
+    （`core.workspace._WORKSPACE_OVERRIDE`），四庫十册的 `references` 又几乎
+    都写同一批文件名——裸文件名当键会让不同工作区的证人在缓存里互相串号，
+    与 `_corpus_text`/`_corpus_index` 按（已解析）路径缓存是同一个道理，只是
+    那两个函数的调用方本来就只传解析过的路径，这里的输入是 yaml 里的裸名，
+    必须自己先解析。（缓存按路径不按内容——同一路径中途换内容不会失效，
+    这点与 `_corpus_text` 等价，不是新引入的限制。）
+    """
+    resolved = []
+    for r in (refs or []):
+        item = dict(r)
+        if item.get("file"):
+            item["file"] = str(corpus_path(item["file"]))
+        resolved.append(tuple(sorted(item.items())))
+    return tuple(resolved)
+
+
+@lru_cache(maxsize=8)
+def _witnesses_for_book_cached(refs_key: tuple) -> tuple:
+    from ..report.witness import load_witnesses
+    specs = [dict(items) for items in refs_key]
+    return tuple(load_witnesses(specs))
+
+
+def _witnesses_for_book(book) -> list:
+    """`book.references` → 按 `quality` 排序的证人列表（复用 `report.witness.load_witnesses`，
+    最高质量在前）。空 `references` 时退回单一默认证人（光盘版），与 legacy 的
+    `DEFAULT_CORPUS` 是同一份文件。结果按 `references` 内容缓存，见 `_refs_key`。"""
+    return list(_witnesses_for_book_cached(_refs_key(book.references)))
+
+
+@lru_cache(maxsize=8)
+def _witness_norm_index(text_norm: str):
+    """证人归一文本的 ngram 索引，按内容缓存——同 `_corpus_index` 的道理，
+    避免每页都重建一次（270 万字级语料重建一次要花得上秒级）。"""
+    from ..clustering.align_eval import build_ngram_index
+    return build_ngram_index(text_norm)
+
+
+def _norm_slots(slots: list[tuple]) -> list[tuple]:
+    """`(col, slot, [sub,] char)` → `(col, slot, sub, char)`，与
+    `clustering.align_label.align_ops` 的 `norm` 构造逐字相同（一处逻辑两份
+    必须一致，否则多证人策略与 legacy 对「这一批字位是什么」的理解会岔开）。"""
+    return [(t[0], t[1], (t[2] or "") if len(t) > 3 else "", t[-1]) for t in slots]
+
+
+def _witness_align(query: str, w, *, normalize: bool, window_pad: int = WINDOW_PAD):
+    """单个证人上锚定 + `difflib`（模块头「多证人合并」一节）。
+
+    `normalize=True`：锚定与对齐都在异体归一字符流（`VariantMap.normalize_text`）
+    上比——它是逐字映射、不改变长度，位置与证人原文一一对应，所以取字仍从
+    `w.text`（原文）切，不会把归一目标字写进 `align_char`。`normalize=False`
+    就是 legacy 那套原始字形比较，只是换了证人来源（`majority_vote` 用这个，
+    避免把「多证人」和「归一比较」两个变量搅在一起，三种策略才能分开验收）。
+
+    返回 `(result, diag)`：`result` 是 `(ops, window_original, offset)` 或
+    `None`（锚不上，看 `diag` 判据明细）。
+    """
+    import difflib
+
+    from ..clustering.align_eval import anchor_page_diag
+    if normalize:
+        from ..clustering.variants import VariantMap
+        q = VariantMap.load().normalize_text(query)
+        base_cmp = w.text_norm
+        index = _witness_norm_index(base_cmp)
+    else:
+        q = query
+        base_cmp = w.text
+        index = w.index
+    diag = anchor_page_diag(q, index)
+    if diag.offset is None:
+        return None, diag
+    lo = max(0, diag.offset)
+    hi = min(len(base_cmp), diag.offset + len(q) + window_pad)
+    window_cmp = base_cmp[lo:hi]
+    sm = difflib.SequenceMatcher(None, q, window_cmp, autojunk=False)
+    window_original = w.text[lo:hi]
+    return (sm.get_opcodes(), window_original, diag.offset), diag
+
+
+def _labels_from_ops(book: str, page: int, norm: list[tuple], ops: list[tuple],
+                     window: str) -> list:
+    """`align_label.label_page` 同一段过闸逻辑（`equal` 全收；等长 `replace`
+    段长 ≤3 且被 `equal` 夹住才收，见 `align_label.replace_len_gate`）搬来给
+    多证人策略复用——规则一字不改，只是输入换成某个证人自己的 `ops`/`window`。
+    返回 `AlignedLabel` 列表，字段与 legacy 路径完全一致，下游（`lib_gate`／
+    `AlignRec` 转换）不用区分策略。"""
+    from ..clustering.align_label import AlignedLabel, replace_len_gate
+    out = []
+    for n, (tag, i1, i2, j1, j2) in enumerate(ops):
+        if tag == "equal":
+            pass
+        elif tag == "replace" and (i2 - i1) == (j2 - j1):
+            if not replace_len_gate(ops, n):
+                continue
+        else:
+            continue
+        for k in range(i2 - i1):
+            col, idx, sub, hyp = norm[i1 + k]
+            gold = window[j1 + k]
+            out.append(AlignedLabel(f"{book}:{page}:{col}:{idx}{sub}", str(page),
+                                    gold, hyp, tag, i2 - i1))
+    return out
+
+
+def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
+                          witnesses: list) -> list | None:
+    """`references` 每家证人各自锚定 + 过闸（原始字形比较，`normalize=False`），
+    逐字位在锚定成功的证人里按 `quality` 加权多数表决；只有一家覆盖的字位
+    直接用它，别的证人在这一位缺席不算票。返回 `None` 表示没有任何一家证人
+    锚上这一页——`_run_multi_witness` 据此报「未锚定」。
+    """
+    from collections import Counter, defaultdict
+
+    per_slot: dict[tuple, list[tuple]] = defaultdict(list)   # (col, tail) -> [(lab, rank), ...]
+    any_anchored = False
+    for w in witnesses:
+        result, _diag = _witness_align(query, w, normalize=False)
+        if result is None:
+            continue
+        any_anchored = True
+        ops, window, _offset = result
+        for lab in _labels_from_ops(book, page, norm, ops, window):
+            _, _, col, tail = lab.instance_id.split(":")
+            per_slot[(col, tail)].append((lab, w.rank))
+    if not any_anchored:
+        return None
+
+    out = []
+    for entries in per_slot.values():
+        if len(entries) == 1:
+            out.append(entries[0][0])
+            continue
+        votes = Counter(lab.char for lab, _rank in entries)
+        top = max(votes.values())
+        tied = [c for c, n in votes.items() if n == top]
+        if len(tied) == 1:
+            winner_char = tied[0]
+        else:
+            # 票数并列（含「两家证人各给一票、谁都不占多数」的常态）：
+            # 取质量 rank 最高的那家给的字。
+            winner_char = max((e for e in entries if e[0].char in tied),
+                              key=lambda e: e[1])[0].char
+        supporting = [lab for lab, _rank in entries if lab.char == winner_char]
+        out.append(max(supporting, key=lambda lab: (lab.op == "equal", lab.op_run)))
+    return out
+
+
+def _run_multi_witness(ctx: RunContext, p: AlignRefParams, page: int,
+                       match: PageMatch | None, ocr: PageOcr | None,
+                       rare: dict[str, list[str]] | None = None) -> PageAlignRef:
+    """`witness_strategy in ("normalize", "majority_vote")` 的产出路径
+    （模块头「多证人合并」一节）。与 legacy 路径共享下游处理（库证据闸 →
+    `AlignRec`），只是锚定/对齐这一段换成多证人版本。
+    """
+    witnesses = _witnesses_for_book(ctx.book)
+    if not witnesses:
+        return PageAlignRef(page=page, anchored=False,
+                            corpus_fingerprint=p.witness_fingerprint,
+                            witness_strategy=p.witness_strategy,
+                            note="未配置证人")
+    slots = slots_from_evidence(match, ocr, rare)
+    if len(slots) < 12:
+        return PageAlignRef(page=page, anchored=False,
+                            corpus_fingerprint=p.witness_fingerprint,
+                            witness_strategy=p.witness_strategy, n_witnesses=len(witnesses),
+                            note=f"候选太少（{len(slots)}），锚不住")
+    norm = _norm_slots(slots)
+    query = "".join(t[-1] for t in norm)
+
+    if p.witness_strategy == "normalize":
+        best = witnesses[0]
+        result, diag = _witness_align(query, best, normalize=True)
+        if result is None:
+            return PageAlignRef(
+                page=page, anchored=False, corpus_fingerprint=p.witness_fingerprint,
+                witness_strategy=p.witness_strategy, n_witnesses=len(witnesses),
+                note=(f"8-gram 锚定失败（证人：{best.label}）：{diag.reason}"
+                      if diag.reason else "8-gram 锚定失败"),
+                n_grams=diag.n_grams, n_votes=diag.n_votes,
+                vote_frac=diag.vote_frac, dominance=diag.dominance)
+        ops, window, _offset = result
+        labs = _labels_from_ops(ctx.book.id, page, norm, ops, window)
+    elif p.witness_strategy == "majority_vote":
+        labs = _majority_vote_labels(ctx.book.id, page, norm, query, witnesses)
+        if labs is None:
+            _, diag = _witness_align(query, witnesses[0], normalize=False)
+            return PageAlignRef(
+                page=page, anchored=False, corpus_fingerprint=p.witness_fingerprint,
+                witness_strategy=p.witness_strategy, n_witnesses=len(witnesses),
+                note=(f"8-gram 锚定失败（{len(witnesses)} 家证人都没锚上，以 "
+                      f"{witnesses[0].label} 的判据为例）：{diag.reason}"
+                      if diag.reason else "8-gram 锚定失败"),
+                n_grams=diag.n_grams, n_votes=diag.n_votes,
+                vote_frac=diag.vote_frac, dominance=diag.dominance)
+    else:
+        raise ValueError(f"未知的 witness_strategy: {p.witness_strategy!r}")
+
+    n_dropped = 0
+    if p.lib_gate and match is not None:
+        labs, n_dropped = lib_gate(labs, match, p.lib_cov_min)
+    chars = [AlignRec(id=lab.instance_id, col=_col_of(lab.instance_id),
+                      slot=_slot_of(lab.instance_id), sub=_sub_of(lab.instance_id),
+                      align_char=lab.char, align_op=lab.op, ref_run=lab.op_run)
+             for lab in labs]
+    return PageAlignRef(
+        page=page, anchored=True, corpus_fingerprint=p.witness_fingerprint,
+        witness_strategy=p.witness_strategy, n_witnesses=len(witnesses),
+        chars=chars, n_lib_dropped=n_dropped)
 
 
 def lib_char_of(m) -> str | None:
@@ -464,3 +979,116 @@ def align_ref_summary(book_id: str, pages: list[int] | None = None,
         "n_pages": n_pages, "n_anchored": n_anchored, "n_missing": n_missing,
         "n_not_anchored": n_pages - n_anchored - n_missing,
     }
+
+
+# ── 按坐标对位（overview#195，算法见 `steps/align_ref_coord` 模块头）────────
+def _coord_enabled(p: "AlignRefParams", book) -> bool:
+    if p.coord == "off" or p.witness_strategy != "legacy":
+        return False
+    if p.coord == "on":
+        return True
+    refs = getattr(book, "references", None) or []
+    if refs and refs[0].get("line_is_column"):
+        return True
+    return _corpus_line_is_column(p.corpus, int(getattr(book, "chars_per_line", None) or 0))
+
+
+@lru_cache(maxsize=8)
+def _corpus_line_is_column(path: str, cap: int) -> bool:
+    """语料是不是逐列分行的：≥95% 的非空行字位数 ≤ cap+1（+1 容抬头）。"""
+    if cap <= 0:
+        return False
+    from .align_ref_coord import ref_lines
+    lines, _ = ref_lines(path)
+    if len(lines) < 100:
+        return False
+    if any(ln.leaf_start for ln in lines[:50]):
+        return True                     # 逐列本（`#@` 半叶头）
+    ok = sum(1 for ln in lines if ln.n <= cap + 1)
+    return ok >= 0.95 * len(lines)
+
+
+def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
+                 cells, corpus: str) -> None:
+    """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
+    `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。"""
+    from . import align_ref_coord as C
+    if cells is None:
+        res.coord_note = "没有 Step3 字格产物（cells）"
+        return
+    lines, starts = C.ref_lines(corpus)
+    text = _corpus_text(corpus)
+    if not lines or not text:
+        res.coord_note = "整理本读不到"
+        return
+    carrier = carrier_fn(match, ocr, rare)
+    cols = [cc for cc in sorted(match.columns, key=lambda c: c.col) if cc.ok and cc.chars]
+    carriers = [(cc.col, "".join(carrier(r.id) or "" for r in sort_by_reading(cc.chars)))
+                for cc in cols]
+    query = "".join(c for _col, c in carriers)
+    off, votes, _ru = _raw_vote_clusters(query, _corpus_index(corpus))
+    if off is None or votes < 2:
+        off, votes = C.scan_offset(query, text)
+    if off is None:
+        res.coord_note = "定不了页在整理本里的位置（8-gram/4-gram 都没命中）"
+        return
+    grid = bool(lines) and any(ln.leaf_start for ln in lines[:50])
+    l0 = C.line_at(starts, max(0, off))
+    win = C.COORD_WINDOW_LINES + (9 if grid else 0)
+    pm = C.map_columns(carriers, lines, l0 - win, l0 + len(carriers) + win, grid=grid)
+    if pm.base is None:
+        res.coord_note = pm.note
+        return
+    from ..products.kinds.recog import CoordRec
+    legacy = {c.id: c for c in res.chars} if res.anchored else {}
+    same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
+    work = []
+    for cc in cols:
+        li = pm.col_line.get(cc.col)
+        if li is None:
+            res.coord_fallback[str(cc.col)] = "列行对应不成立"
+            continue
+        units = C.column_units(book, page, cc.col, cc, cells.column(cc.col), carrier)
+        if not units:
+            res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
+            continue
+        work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
+    # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
+    # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
+    bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
+    if grid and bs:
+        b_page = bs[len(bs) // 2]
+        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page))
+                for cc, u, ln, r in work]
+    for cc, _units, _ln, r in work:
+        if not r.ok:
+            res.coord_fallback[str(cc.col)] = r.note
+            continue
+        why = _coord_conflict(r.recs, legacy, same)
+        if why:
+            res.coord_fallback[str(cc.col)] = why
+            continue
+        res.coord_cols.append(cc.col)
+        res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
+                         for i, sl, sub, ch, g in r.recs)
+
+
+def _coord_conflict(recs, legacy: dict, same: dict) -> str:
+    """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
+
+    vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
+    **全部是整列错一位**——光盘版这一行的分行比刻本多/少一个字（行首或行尾的字
+    归了邻行），几何上照样配得上（多出来的那格被当成空格位），字却整列错开一格。
+    这些格的现役对位几乎全是 `equal`（认出来的字与整理本逐字相同），所以：
+
+    - 与现役 `equal` 位的字不同 → 退回（现役 `replace` 位本身存疑，不作数）；
+    - 被判成空格位的格，库却以 `same` 认下了一个字 → 退回（锚不上的页没有现役
+      对位可比，靠这条挡同一种错位）。"""
+    for i, _sl, _sub, ch, _g in recs:
+        lg = legacy.get(i)
+        if lg is not None and lg.align_op == "equal" and lg.align_char != ch:
+            return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lg.align_char}）"
+        if ch == "" and i in same:
+            return f"空格位上库认出了字（{i} 库 same {same[i]}）"
+    return ""
+

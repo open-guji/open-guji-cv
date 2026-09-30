@@ -22,8 +22,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_guji_cv.clustering.font_candidates import (book_charset, candidates,
-                                                     candidates_batch, _font_files)
+from open_guji_cv.clustering import font_candidates as fc
+from open_guji_cv.clustering.font_candidates import (all_ready, book_charset, candidates,
+                                                     candidates_batch, index_ready,
+                                                     warm, _font_files, _index,
+                                                     _index_key)
 
 # 用生产代码那个 `_font_files()` 判，不要自己 glob 相对路径（2026-09-17）：
 # 它按引擎仓定位、认 .otf（康熙体是 otf），而 `glob("fonts/*/*.ttf")` 靠 cwd、
@@ -99,6 +102,180 @@ def test_book_charset_excludes_non_han(tmp_path):
     cs = book_charset(str(p))
     assert "臣" in cs and "按" in cs
     assert "A" not in cs and "1" not in cs and "，" not in cs
+
+# ── K19：universe 借矩阵 / warm() 去重（任务书-K-控制台常驻内存，2026-09-28）──
+#
+# 背景见 `font_candidates.warm()` 与 `_topk_from_sims` 模块头：`_rare_charsets()`
+# 的 small⊆big 此前各建各的索引，控制台冷启动实测两份矩阵各 ~495MB 同时常驻。
+# 这几条钉住「小表查询借大表矩阵、不再单独建索引」这个行为，不追真书规模。
+
+@pytest.fixture(autouse=True)
+def _clear_index_cache():
+    """`_index()` 是 `lru_cache`，同一进程内测试之间不清会互相污染——这个文件里
+    好几条测试故意用相同/重叠的字集，要确保每条测试测的是它自己真正触发的
+    那次建索引，不是上一条测试残留在内存里的结果。"""
+    _index.cache_clear()
+    yield
+    _index.cache_clear()
+
+
+def test_candidates_with_universe_only_builds_the_universe_index():
+    """`charset` 是 `universe` 的子集时，只应该建/命中 `universe` 那份索引——
+    `charset` 自己的 key 对应的缓存文件不该出现。"""
+    from open_guji_cv.clustering.synth import render_char
+
+    small = ("袤", "衣")
+    big = ("袤", "衣", "褻", "矛", "袠")
+    q = render_char("袤", _font_files()[0], size=64).astype(np.uint8)
+
+    hits = candidates(q, small, k=5, universe=big)
+    assert {h.char for h in hits} <= set(small), f"universe 应该把答案限制在 charset 里：{hits}"
+
+    key_small = _index_key(tuple(small), "fonts", "hog")
+    key_big = _index_key(tuple(big), "fonts", "hog")
+    assert not (fc._index_dir() / f"{key_small}.npz").exists(), "不该为子集单独建索引文件"
+    assert (fc._index_dir() / f"{key_big}.npz").exists(), "universe 那份索引应该已经落盘"
+
+
+def test_candidates_batch_with_universe_matches_sequential_universe_calls():
+    from open_guji_cv.clustering.synth import render_char
+
+    small = ("袤", "衣")
+    big = ("袤", "衣", "褻", "矛", "袠", "一", "二")
+    fonts = _font_files()
+    patches = [render_char(ch, fonts[0], size=64).astype(np.uint8) for ch in ("袤", "衣")]
+
+    seq = [candidates(p, small, k=5, universe=big) for p in patches]
+    batch = candidates_batch(patches, small, k=5, universe=big)
+    for s, b in zip(seq, batch):
+        assert [(h.char, h.font) for h in s] == [(h.char, h.font) for h in b]
+
+
+def test_candidates_universe_never_returns_chars_outside_charset():
+    """即便 `universe` 里排名更高的字不在 `charset` 里，也不能混进结果——
+    这是「只在 charset 里选答案」的字面意思，不是「优先 charset、不够再补」。"""
+    from open_guji_cv.clustering.synth import render_char
+
+    charset = ("矛",)                      # 明显不是查询字，用来当「窄字表」
+    universe = ("矛", "袤", "衣", "褻", "袠")  # 查询字「袤」在这里
+    q = render_char("袤", _font_files()[0], size=64).astype(np.uint8)
+
+    hits = candidates(q, charset, k=5, universe=universe)
+    assert all(h.char == "矛" for h in hits), f"结果跑出了 charset 之外：{hits}"
+
+
+def test_warm_skips_charsets_that_are_subsets_of_another():
+    """`warm([small, big])`：small⊆big 时只建 big 一份索引文件。"""
+    small = ("一", "二")
+    big = ("一", "二", "三", "十", "土")
+    warm([small, big])
+
+    key_small = _index_key(tuple(small), "fonts", "hog")
+    key_big = _index_key(tuple(big), "fonts", "hog")
+    assert not (fc._index_dir() / f"{key_small}.npz").exists()
+    assert (fc._index_dir() / f"{key_big}.npz").exists()
+    assert index_ready(tuple(big))
+    assert not index_ready(tuple(small)), (
+        "small 从未单独建过索引——查询时全靠调用方传 universe=big 才有答案，"
+        "index_ready(small) 如实报告「没有它自己的那份缓存」")
+
+
+def test_warm_builds_each_charset_when_none_is_a_subset_of_another():
+    """互不包含的字表：两份都要建，谁也不能被吞掉。"""
+    a = ("一", "二")
+    b = ("三", "十")
+    warm([a, b])
+    assert index_ready(tuple(a))
+    assert index_ready(tuple(b))
+
+
+def test_index_ready_false_before_build_true_after():
+    cs = ("一", "二", "三")
+    assert not index_ready(cs)
+    _index(cs)
+    assert index_ready(cs)
+
+
+def test_all_ready_accounts_for_subset_dedup():
+    """`index_ready(small)` 永远是 False（K19 去重后 small 从不单独落盘），
+    但 `all_ready([small, big])` 建完 big 之后该是 True——它跟 `warm()` 走
+    同一套「被更大字表包含就不用单独建」的判断，不是逐个 `index_ready` 的 AND。
+    """
+    small = ("一", "二")
+    big = ("一", "二", "三", "十")
+    assert not all_ready([small, big]), "还没建过，两个都不该判就绪"
+    warm([small, big])
+    assert not index_ready(small), "small 从没有属于自己的 .npz——这是设计使然"
+    assert all_ready([small, big]), "但整批已经就绪：small 的查询借用 big 的矩阵"
+
+
+def test_all_ready_false_when_any_independent_charset_missing():
+    """互不包含时是逐个真查——其中一个没建过，整批就不算就绪。"""
+    a = ("一", "二")
+    b = ("三", "十")
+    warm([a])
+    assert not all_ready([a, b]), "b 还没建过"
+    warm([a, b])
+    assert all_ready([a, b])
+
+
+
+# ── font_set_fingerprint 按内容算，不按 mtime（2026-09-28）───────────────
+#
+# CV 总管 09-27 23:45Z 追加到任务书-R-rare前向去重与测试隔离（K 快照自动导入
+# #51 查出）：改前按 `名字:大小:mtime` 拼，字体逐字节相同、只是不同机器
+# checkout 的 mtime 不同，key 就跟着变——云端预建的 embedding/HOG 索引到服务器
+# 上全部 miss，服务器只能现建（K18 实测冷建近 1 小时，差点 OOM）。与
+# `cnn_candidates.fingerprint`/`real_proto_fingerprint`/`gw_catalog_fingerprint`
+# 同一个坑、同一个改法，这里钉住同一条规矩：换 mtime 不变，换内容才变。
+def test_font_set_fingerprint_survives_mtime_change(tmp_path):
+    from open_guji_cv.clustering.font_candidates import (FONT_ORDER,
+                                                         font_set_fingerprint)
+
+    root = tmp_path / "fonts"
+    d = root / FONT_ORDER[0]
+    d.mkdir(parents=True)
+    f = d / "a.ttf"
+    f.write_bytes(b"hello font bytes" * 50)
+
+    fp1 = font_set_fingerprint(str(root))
+    import os
+    import time
+    time.sleep(0.01)
+    os.utime(f, (time.time() + 1000, time.time() + 1000))  # 未来 mtime，模拟换机器 checkout
+    fp2 = font_set_fingerprint(str(root))
+    assert fp1 == fp2
+
+
+def test_font_set_fingerprint_changes_with_content(tmp_path):
+    from open_guji_cv.clustering.font_candidates import (FONT_ORDER,
+                                                         font_set_fingerprint)
+
+    root = tmp_path / "fonts"
+    d = root / FONT_ORDER[0]
+    d.mkdir(parents=True)
+    f = d / "a.ttf"
+    f.write_bytes(b"aaaa")
+    fp1 = font_set_fingerprint(str(root))
+    f.write_bytes(b"bbbb")
+    fp2 = font_set_fingerprint(str(root))
+    assert fp1 != fp2
+
+
+def test_font_set_fingerprint_relative_root_matches_absolute():
+    """`root` 不管传相对路径（缺省 `"fonts"`）还是绝对路径，只要指向同一份
+    仓内字体档，都该按仓根解析出同一个 key——不该跟着 cwd 漂
+    （`_font_files` 本身的 cwd-then-repo-root 兼容逻辑是给「找文件」用的，
+    指纹计算这里显式钉死走仓根）。"""
+    from open_guji_cv.clustering.font_candidates import _REPO_ROOT, font_set_fingerprint
+
+    assert font_set_fingerprint("fonts") == font_set_fingerprint(str(_REPO_ROOT / "fonts"))
+
+
+def test_font_set_fingerprint_no_fonts_is_nofonts(tmp_path):
+    from open_guji_cv.clustering.font_candidates import font_set_fingerprint
+
+    assert font_set_fingerprint(str(tmp_path / "empty")) == "nofonts"
 
 # ── 召回率那两条已迁出测试（2026-09-20）─────────────────────────────────
 #

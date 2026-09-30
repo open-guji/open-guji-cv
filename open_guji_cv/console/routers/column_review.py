@@ -28,6 +28,7 @@ from ...core.spec import column_key, page_key
 from ...utils.column_triage import BLOCKING, REVIEW, triage_column
 from .. import deps
 from ..auth import require_reviewer
+from ..errors import maps_http
 from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
@@ -57,6 +58,7 @@ def _case_rec(book: str, pg: int, w) -> dict | None:
 
 
 @router.get("/api/column-review/cases")
+@maps_http
 def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
                             seed: int = 0, scope: str = "all") -> dict:
     """待裁列。按分诊类别分层抽样。
@@ -70,7 +72,7 @@ def api_column_review_cases(book: str, pages: str = "dev_set", limit: int = 90,
     """
     st = deps.product_store()
     bk = load_book(book)
-    pgs = bk.resolve_pages(pages)
+    pgs = bk.resolve_pages_ext(pages)
     rng = random.Random(seed)
 
     blocking: list[dict] = []

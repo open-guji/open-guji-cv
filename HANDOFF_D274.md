@@ -1,9 +1,17 @@
 # HANDOFF · D 道（overview#274）· 分支 `claude/D-context-guard-0930`
 
+## 基线问题与处理（总管 09-30 指出）
+我最初从**旧提交 32b9c2b（≈09-27）**拉的分支（本机 `origin/main` 引用是旧的，没先 fetch），所以先前报告里「本仓没有遮挡闸」是**错的**——闸在 09-28 已合进 main。
+已修：`git fetch origin main && git merge origin/main`（merge，未 rebase；冲突 book.py / core/step.py / report/run.py / seed_admit.py 四处）。处理原则：**保留 main 上全部已有闸与字段**
+（`context_verdicts`、`context_blank_gate`、`occluded_gate`、`variant_indirect_guard`、`ref_lib_variant_guard`、rare_agree、`book_deps/path_params`、`params_for` 那一串 `_with_book_*`、`collate_book` 的 `page_errors` 容错），只叠加我的护栏：
+seed_admit 版本改 **1.11**（main 是 1.10）；`code_deps` 加 `context_guard`；`params_for` 末尾追加 `context_guard_pages` 注入；`collate_book` 保留 main 的 try/except 并给 `collate_page` 传 `codepoints`；
+`BookSpec` 同时保留 `step6_ai`/`params` 与 `context_guard_pages`。context 通道内 elif 顺序：verdict 闸 → 整理本冲突 → **我的整页/列首护栏** → 空白格闸 → 放行。
+合并后唯一需要改的既有测试：`test_seed_admit_context_verdicts.py` 里的单格列（那格就是列首）——夹具里显式 `context_head_check=False` 隔离，它测的是 verdict 闸，不是我的护栏。
+
 ## 改了什么
 
 ### 1. `context` 通道护栏（`clustering/context_guard.py` 新，`steps/seed_admit.py` 接线）
-护栏同时管 `context` 与 `ref_ctx` 两条通道（后者 provenance 也是 context，整页错位时整理本对齐同样是错的）。**只在 seed_admit 一处执法**；`context_decide` 产物一字未改（它的指纹**不变**，seed_admit 版本 1.7→1.8）。
+护栏同时管 `context` 与 `ref_ctx` 两条通道（后者 provenance 也是 context，整页错位时整理本对齐同样是错的）。**只在 seed_admit 一处执法**；`context_decide` 产物一字未改（它的指纹**不变**，seed_admit 版本 1.10→1.11）。
 
 - **整页错位名单**：现成信号里没有可读的「整页错位」产物（`grep cutline/seg_defect/misalign` 命中的都是别的语义），所以做成**书级配置**
   `context_guard_pages`（`BookSpec` 字段，yaml 顶层，缺省空 = 行为不变）。`RunContext.params_for` 把它注入 `SeedAdmitParams.context_guard_pages`，
@@ -17,11 +25,13 @@
   （`patch_looks_like_char`：Otsu 二值后墨占比 ∈[4%,60%]、面积≥0.05% 的连通块 1~14 个、墨外接框短边 ≥ 图块短边 30%；灰度极差<32 直接否）。
   取不到图（char_patch 缓存没有）→ 视为没证据 → 退回待审，疑问 `context_head_nonchar`。开关 `context_head_check`（缺省 True）。
   **阈值只在合成数据上定**（字形/空白/细长界行/满黑块/散点噪声），没在真书上标定——见下「怎么验」。
-- **p110 印章区**：**本仓里根本没有「印章遮挡闸 / `occluded_gate`」**（`grep -ri occlu|遮挡|occluded_gate` 在 `open_guji_cv/ scripts/ tests/ doc/` 与全部 git 历史里零命中；
-  唯一带「印章」字样的是 `gates/column_gate.py` 的 `stamp_noise`，它只挡**整列散布的背景印章噪点**、且只是 flag、不进 reject，不看单格）。
-  所以不是「闸没盖到 p110」，而是 cv 里没有这道闸；总管说的闸可能在别的仓/别的分支。
-  **最小改法**：p110 直接进 `context_guard_pages`（整页退回待审）就能盖住这 6 格；要通用的单格印章闸，需要一个「格内红墨/大块深色块占比」判据，
-  需要真书印章样本标定，云端做不了。
+- **p110 印章区**（重做，基于合并后的 main）：main 上已有遮挡闸（`steps/occlusion.py`、`seed_admit.occluded_gate`、`page_occluded`），
+  判据是「格周围（扩半格）中等墨点密度 → 热格连通成块」，块要同时过：**≥ `occluded_min_cells`(12) 格、横跨 ≥ `occluded_min_cols`(3) 列、峰值密度 ≥ 8、块内中位 ≥ 2.5×页内其余**。
+  **p110 没被盖到的原因（推断，没有 vol03 数据实测）**：p110 的印章只有 6 格，块大小硬门槛 12 就过不了——模块头自己记的「十册复核」里 vol09 p68 那方小印「12 格刚好过线」也是同一类。
+  `tests/test_context_guard.py::test_small_seal_below_min_cells_is_not_flagged_by_default` 用合成密度表复现：6 格块默认漏、`min_cells=6` 抓得到、12 格大块默认就抓得到（排除别的闸在拦）。
+  **没改默认值**：模块头的阈值扫描表显示密度 4 下「块 ≥6 格」在 vol03 有 9 页误报，但那张表**早于**后来加的峰值/对比两道块级闸，加了闸之后 6 格是否仍误报没人量过，我没数据量。
+  **最小改法**：先用 vol03 p110 与全册跑 `occluded_cells(..., min_cells=6)`（保留 peak 8 / contrast 2.5），看全册命中页是否只多出 p110；若干净，把 `occluded_min_cells` 改 6（或在 vol03.yaml 用 `params: {seed_admit: {occluded_min_cells: 6}}` 只对本书生效）。
+  在此之前 p110 靠 `context_guard_pages: [110]` 兜底（整页 context/ref_ctx 不放行，但注意：**它只拦 context 通道，不像遮挡闸那样连 match_solo 等通道一起拦、也不给「用整理本字」的默认卡**）。
 
 ### 2. 三件小修
 - **(a) yaml `#` 截断**：`core/book.py` 新 `yaml_comment_truncations()`，`load_book` 读文本时对疑似被 ` #` 截断的未加引号标量发 `UserWarning`
@@ -36,7 +46,7 @@
   没动 `clustering/review/collation_export.classify`（那是 SeedItem 版、另一套，也没读 codepoints；若 70 条来自它请告诉我）。
 
 ## 影响面（指纹会变一次，预期）
-- `seed_admit`：版本 1.7→1.8 + 新参数字段 + code_deps 加 `context_guard` → **全书 seed_admit 判过期、重跑**。
+- `seed_admit`：版本 1.10→1.11 + 新参数字段 + code_deps 加 `context_guard` → **全书 seed_admit 判过期、重跑**。
   重跑后只有下列格会变：guard 页上的 context/ref_ctx 放行格（→待审）；列首前 2 格 context/ref_ctx 放行且库 verdict=diff/无 且图块不像字（→待审）。其它格不变。
   **没有 char_patch 缓存的环境（如刚导入的快照）列首两格 context 放行会全部退回待审**——重跑前先确认缓存在。
 - `context_decide`：**不变**（产物、指纹都不动）。

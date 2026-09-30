@@ -325,7 +325,9 @@ def test_engine_rejects_image_kind_returned_as_numeric(world):
 # 「算法不许改进」。
 
 
-def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws):
+def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws, cnn_test_ckpt):
+    from open_guji_cv.clustering import cnn_candidates as cc
+    from open_guji_cv.clustering import rare_panel
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.pipeline import load_pipeline
 
@@ -350,6 +352,18 @@ def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws):
     eng.ctx.params["align_ref"] = AlignRefParams(corpus=str(corpus))
     eng.ctx.params["context_decide"] = ContextDecideParams(
         corpus=str(corpus), general_corpus_dir=str(tmp_path / "no_general_corpus"))
+
+    # ⚠️ Step5-b（`rare_candidates`）也在这条链上：装了 torch 时它拿真实 `DEFAULT_CKPT`
+    # 对 fixture 册的基集（unicode-cjk-a，约 2.9 万字）**冷建整张 embedding 索引**——
+    # 单核 15~25 分钟，而且落进真实 `models/glyph_cnn_r5/emb_*.npz`（overview#236 值守报的
+    # 「测试往 models/ 写文件」就是这条，#246 查出；`_no_new_files_in_models` 守卫会红）。
+    # 改用 tmp 拷贝的 checkpoint，字表收成语料自己的字：这里只钉结构，不钉候选。
+    cnn = cc.CnnCandidates(cnn_test_ckpt)
+    monkeypatch.setattr(cc, "shared", lambda *a, **k: cnn)
+    small = tuple(sorted({ch for ch in corpus.read_text(encoding="utf-8") if not ch.isspace()}))
+    real_charsets = rare_panel.book_charsets
+    monkeypatch.setattr(rare_panel, "book_charsets",
+                        lambda book, corpus_: (small, (), real_charsets(book, corpus_)[2]))
 
     rep = eng.run(pages=[1])
     assert not rep.to_dict()["failed"], rep.to_dict()["failed"]

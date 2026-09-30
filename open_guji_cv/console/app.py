@@ -18,8 +18,8 @@ from fastapi.staticfiles import StaticFiles
 
 from ..clustering.rare_panel import warm_font_index
 from .static_path import STATIC
-from .routers import (auth, border_review, column_review, cutline, evals, feedback, glyph_match,
-                      glyphlib, gold, jiazhu, products, rare, registry, review, runs,
+from .routers import (auth, border_review, column_review, cutline, evals, feedback, glyph_candidates,
+                      glyph_match, glyph_spotcheck, glyphlib, gold, jiazhu, products, rare, registry, review, runs,
                       slot_count_review, spa_fallback, step8, step9, variants, workspace)
 
 #: include 的顺序 = OpenAPI 文档里的顺序，与 `routers/__init__.py` 那张表一致。
@@ -27,7 +27,7 @@ from .routers import (auth, border_review, column_review, cutline, evals, feedba
 #: 后面所有 router 的 /api/* 路由（见该文件顶部说明）。
 ROUTERS = (auth, registry, workspace, runs, products, feedback, gold, evals,
            review, cutline, border_review, column_review, slot_count_review, jiazhu,
-           rare, glyph_match, glyphlib, variants, step8, step9, spa_fallback)
+           rare, glyph_match, glyphlib, glyph_spotcheck, glyph_candidates, variants, step8, step9, spa_fallback)
 
 app = FastAPI(title="open-guji-cv 控制台", version="0.1")
 # 允许离线页面回传裁决（2026-09-06）：`scripts/build_char_review.py` 出的按字复核页是

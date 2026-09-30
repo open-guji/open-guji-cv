@@ -530,3 +530,58 @@ def test_agreeing_verdicts_are_not_a_conflict(tmp_path, monkeypatch):
     finally:
         app.dependency_overrides.clear()
     assert conflicts == []
+
+
+# ── 09-27 #109 服务器值守查出的两处：反代后自动免鉴权、dev-login 常开 ─────────
+
+def test_refuses_loopback_fallback_when_public_redirect_uri_set(monkeypatch, capsys):
+    """设了 GUJI_OAUTH_REDIRECT_URI（对外部署、前有反代）但密钥为空：不许悄悄免鉴权。"""
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="", redirect_uri="https://203.0.113.9/auth/callback",
+                           no_auth=False, dev_idp=False)
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: pytest.fail("不该走到 serve()"))
+    args = argparse.Namespace(port=8640, no_browser=True, host="127.0.0.1", no_auth=False,
+                              root_path="", dev_idp=False)
+    with pytest.raises(SystemExit) as exc:
+        cli_v2.cmd_console(args)
+    assert exc.value.code != 0
+    assert "GUJI_CONSOLE_NO_AUTH" in capsys.readouterr().err
+
+
+def test_env_no_auth_is_honoured_and_allows_public_redirect(monkeypatch):
+    """前面另有一层鉴权（如 Caddy basic_auth）时，显式 GUJI_CONSOLE_NO_AUTH=1 可以起。"""
+    import argparse
+    from open_guji_cv import cli_v2
+    from open_guji_cv.console import app as console_app_mod
+
+    auth_config.set_config(client_secret="", redirect_uri="https://203.0.113.9/auth/callback",
+                           no_auth=True, dev_idp=False)   # 模拟环境变量 GUJI_CONSOLE_NO_AUTH=1
+    calls = {}
+    monkeypatch.setattr(console_app_mod, "serve", lambda **kw: calls.update(kw))
+    args = argparse.Namespace(port=8640, no_browser=True, host="127.0.0.1", no_auth=False,
+                              root_path="", dev_idp=False)
+    cli_v2.cmd_console(args)
+    assert calls["host"] == "127.0.0.1"
+    assert auth_config.get().no_auth is True
+
+
+def test_dev_login_routes_404_without_dev_idp(client):
+    auth_config.set_config(dev_idp=False, no_auth=False)
+    r = client.get("/auth/dev-login", params={"state": "x", "redirect_uri": "y"})
+    assert r.status_code == 404
+    r = client.get("/auth/dev-login-submit", params={
+        "state": "x", "redirect_uri": "y", "email": "a@b.c", "role": "admin"})
+    assert r.status_code == 404
+
+
+def test_version_is_public_and_shaped(client):
+    r = client.get("/api/version")
+    assert r.status_code == 200
+    d = r.json()
+    assert set(d) == {"commit", "subject", "deployed_at"}
+    assert d["deployed_at"]
+    if d["commit"] is not None:
+        assert 4 <= len(d["commit"]) <= 40

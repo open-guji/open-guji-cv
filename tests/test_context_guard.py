@@ -172,3 +172,24 @@ def test_classify_honours_book_codepoints():
     assert classify("別", "别", {"别": "別"}) == "same"
     assert classify("甲", "乙", {"變": "𠮓"}).startswith("sub")          # 无关配置不影响
     assert classify("甲", "甲", {"變": "𠮓"}) == "same"
+
+
+# ── p110 印章：遮挡闸为什么盖不到小印（合成数据复现判据）─────────────────
+def _dens(hot_cells, cols=range(1, 10), n_slots=21, hot=10.0, base=0.5):
+    d = {(c, s, ""): base for c in cols for s in range(1, n_slots + 1)}
+    for c, s in hot_cells:
+        d[(c, s, "")] = hot
+    return d
+
+
+def test_small_seal_below_min_cells_is_not_flagged_by_default():
+    """6 格（3 列 × 2 行）的小印：密度、峰值、对比都够，但块 < `min_cells=12` → 漏。
+    这就是 vol03 p110 那 6 格没被 `occluded_gate` 盖到的原因（判据里块大小是硬门槛）。"""
+    from open_guji_cv.steps.occlusion import occluded_cells
+    d = _dens([(c, s) for c in (3, 4, 5) for s in (2, 3)])
+    assert occluded_cells(d) == {}
+    hit = occluded_cells(d, min_cells=6)
+    assert len(hit) == 6
+    # 大印（≥12 格）默认就能抓：说明不是别的闸在拦
+    big = _dens([(c, s) for c in (3, 4, 5, 6) for s in (2, 3, 4)])
+    assert len(occluded_cells(big)) == 12

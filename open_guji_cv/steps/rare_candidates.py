@@ -80,16 +80,24 @@ class RareCandidatesParams(BaseModel):
     是因为改了 `cnn_candidates.py` 里的默认路径、`code_deps` 的代码哈希顺带变了。
     照 `GlyphMatchParams.db_fingerprint` 的同一套写法补上。
 
-    ⚠️ **这里填的仍是模块级默认**（真刻例档按 `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`
-    算，缺省关）——`model_post_init` 没有 `ctx.book`，算不出按书配置的那份。按书的
-    真刻例开关/来源（`font.real_proto`，见 `run_page` 与 `cnn_candidates.book_real_proto`）
-    走 `StepSpec.book_deps=("font",)`：整本 `font` 字典的文本内容进 `_self_payload`，
-    yaml 里改 `enabled`/`stores` 会让产物正确过期。**没盖住的一格**：`stores` 指的
-    `glyph_store` 目录本身内容变了（H 道新裁了几条真刻例）而 yaml 文本没动，
-    `book_deps` 与这个字段都不会觉察——与「产物体的 `model_fingerprint` 不参与新鲜度
-    判断」是同一类缺口，跟随本卡的转正一起留给下一件（真刻例库随内容变化的过期判定）。
-    `PageRare.model_fingerprint`（产物体，见 `run_page`）**会**按书算、按当前
-    `glyph_store` 文件的 mtime/size 算，只是这份不参与 `params_hash`。
+    2026-09-27（5-b 转正二）：**这里填的不再是模块级默认**——`model_post_init` 没有
+    `ctx.book`，构造时只能先填模块级默认（`REAL_PROTO_ENABLED` 缺省关那份）当占位，
+    但 `RunContext.params_for()` 会用 `core.step._with_book_real_proto()` 按这册书的
+    `font.real_proto`（开关/`stores`）重算并整份替换（同 `_with_book_corpus` 的写法，
+    与 `run_page` 用的 `ctx.params_for(self)` 是**同一次调用**，两边永远一致）。
+    换句话说 `params_hash` 与 `PageRare.model_fingerprint`（产物体，见 `run_page`）
+    现在算的是同一份值。
+
+    这顺带补上了 `book_deps=("font",)` 单独兜不住的那格：`real_proto_fingerprint`
+    本来就是**内容指纹**（`instances/*.jsonl` 的名字:大小:mtime），`glyph_store`
+    目录内容变了（H 道新裁了真刻例）而 yaml 文本没动，`_with_book_real_proto` 每次
+    都会用当前磁盘状态重算，指纹跟着变；`book_deps=("font",)` 仍留着，管的是
+    `font` 字典别的字段将来变化时的兜底，两者不冲突。
+
+    2026-09-27（T4 变体形）：`core.step._with_book_gw()` 跟在 `_with_book_real_proto`
+    后面同一套写法再叠一层——`ctx.book.font.gw_variant.enabled` 决定 GlyphWiki 第六档
+    模板开不开。`gw_catalog_fingerprint()` 同一天改成**内容指纹**（sha256，不再是
+    `(大小,mtime)`），道理与 `real_proto_fingerprint` 那次一样。
     """
 
     def model_post_init(self, _ctx) -> None:
@@ -126,7 +134,7 @@ class RareCandidatesStep(Step):
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
-        from ..clustering.cnn_candidates import book_real_proto, full_fingerprint
+        from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch
 
         # 真刻例多原型档来源改按书配置（5-b 开关转正，2026-09-26）：`ctx.book.font.real_proto`
@@ -135,6 +143,9 @@ class RareCandidatesStep(Step):
         # 关着时 `real_proto_fingerprint` 短路回空串，`full_fingerprint(real_proto=…)`
         # 与不传参（模块级默认，同样是关）逐字节相同——不让现有产物过期。
         real_proto = book_real_proto(ctx.book.font)
+        # GlyphWiki 变体形模板同一条口径（T4 变体形转正，2026-09-27）：`ctx.book.font.gw_variant`
+        # 决定开不开，不再改 `cnn_candidates.GW_ENABLED` 模块全局。
+        gw_enabled = book_gw_variant(ctx.book.font)
 
         p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
         chars: PageChars = ctx.product("char_index", page)
@@ -186,7 +197,8 @@ class RareCandidatesStep(Step):
         hits_list = rare_for_batch(imgs, p.k, corpus, ctx.book.id,
                                    struct_rerank=p.struct_rerank,
                                    struct_probe=p.struct_probe or None,
-                                   real_proto=real_proto) if imgs else []
+                                   real_proto=real_proto,
+                                   gw_enabled=gw_enabled) if imgs else []
         for (col, r), hits in zip(queue, hits_list):
             col_recs[col].append(RareRec(
                 id=r.id, slot=r.slot, sub=r.sub,
@@ -208,5 +220,5 @@ class RareCandidatesStep(Step):
 
         log_reuse(ctx, self, page, n_reused, n_total)
         return {"rare_candidates": PageRare(
-            page=page, model_fingerprint=full_fingerprint(real_proto=real_proto),
+            page=page, model_fingerprint=p.model_fingerprint,
             sources=dict(srcs), columns=out)}

@@ -27,25 +27,35 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 @router.get("/api/step9/render/{book}")
 @maps_http
-def api_step9_render(book: str, pages: str) -> dict:
-    """9.1：把 `pages`（`book.resolve_pages` 支持的表达式，如 `"33"`、
-    `"10,33,89"`、`"33-40"`）逐页拼成 guji-markdown 文本。
+def api_step9_render(book: str, pages: str, approx: str = "sidecar") -> dict:
+    """9.1：把 `pages`（`book.resolve_pages_ext` 支持的表达式，如 `"33"`、
+    `"10,33,89"`、`"33-40"`，也认 `list:`/`cells:` 前缀）逐页拼成 guji-markdown 文本。
 
     某一页缺产物（Step3/Step7 没跑到）会让整批请求失败——**不是**跳过那一页
     继续拼其余页。理由：这本来就是「看几页效果」的交互式调用，页数不多，
     失败了直接告诉用户哪页缺什么、去补哪一步，比悄悄漏一页更清楚。
+
+    `approx`：近似字（overview#276）怎么出——`sidecar`（缺省：正文照填，响应另带 `approx` 侧表行）、
+    `inline_ids`（正文括注 `字{ids=…}`）、`off`。见 `render/approx.py`。
     """
+    from ...render.approx import APPROX_MODES, book_marks, inline_ids_map, sidecar_rows
+    if approx not in APPROX_MODES:
+        raise ValueError(f"approx 只能是 {'/'.join(APPROX_MODES)}，不是 {approx!r}")
     bk = load_book(book)
-    page_list = bk.resolve_pages(pages)
+    page_list = bk.resolve_pages_ext(pages)
     store = deps.product_store()
 
+    marks = book_marks(store, book, page_list) if approx != "off" else {}
+    inline = inline_ids_map(marks) if approx == "inline_ids" else None
     stale: list[str] = []
     parts: list[str] = []
     for page in page_list:
         parts.append(f"#第{page}页")
-        parts.append(render_page(store, book, page, stale))
+        # 缺省（侧表）调用与加近似字之前逐参数相同；只有括注模式才多传
+        parts.append(render_page(store, book, page, stale, **({"approx_ids": inline} if inline else {})))
 
-    return {"text": "\n".join(parts), "pages": page_list, "stale": stale}
+    return {"text": "\n".join(parts), "pages": page_list, "stale": stale,
+            "approx": sidecar_rows(marks, page_list) if approx == "sidecar" else []}
 
 
 @router.get("/api/step9/reflow/{book}")
@@ -63,7 +73,7 @@ def api_step9_reflow(book: str, pages: str, baseline_kg: int = DEFAULT_BASELINE_
     延续的场景以后有需要再补，现在如实说明，不假装做到了。
     """
     bk = load_book(book)
-    page_list = bk.resolve_pages(pages)
+    page_list = bk.resolve_pages_ext(pages)
     store = deps.product_store()
 
     stale: list[str] = []
@@ -90,4 +100,4 @@ def api_step9_progress(book: str, pages: str = "all") -> dict:
     是看板不是闸——有待办也照样允许 9.1/9.2（用户 2026-09-20）。口径见 `report/progress.py`。"""
     from ...report.progress import page_progress
     bk = load_book(book)
-    return page_progress(book, bk.resolve_pages(pages), deps.product_store())
+    return page_progress(book, bk.resolve_pages_ext(pages), deps.product_store())

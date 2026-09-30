@@ -53,6 +53,11 @@ export interface CutlineCase {
   seam?: number[] | null
   candidates: CutCandidate[]
   chosen: number | null
+  // 卡片默认选中项（overview#188，后端 `review/cutline_default.py` 按书级开关
+  // `params.review.cutline_default` 算）：有 U-Net 候选且开关为 unet 时指它，否则同 chosen。
+  // default_pick = 这张卡实际默认成了什么（开关 unet 但没 U-Net 候选时是 'chosen'）。
+  default_idx?: number | null
+  default_pick?: 'unet' | 'chosen'
   slot_above: number
   slot_below: number
   // 「整理本期望」= 整理本在这一位印的字（v2_align 的 `ref`）。
@@ -77,6 +82,8 @@ export interface CutlineCasesResponse {
   n_expect?: number
   // 语料读成仓内小样本时的警告文案；null = 正常。
   warn?: string | null
+  // 这本书的书级开关 `params.review.cutline_default`（overview#188）。
+  cutline_default?: 'unet' | 'chosen'
   cases: CutlineCase[]
 }
 

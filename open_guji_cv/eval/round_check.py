@@ -69,20 +69,50 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
     09-06 改判 鍾；管线走 glyph.db（按写入顺序）拿的是 鍾，这里却拿 鐘，
     判据 A 的「对你的裁决」层于是报 138/139，红灯挂了一天。
     事件里本来就有 `ts`，按它排即可；同刻的按 (batch, seq) 兜底。
+
+    ⚠️ **`root` 缺省不再直接落 `DATASET`**（任务卡 #54 第2条，2026-09-27 改）：
+    真实的人裁事件是**活状态**，落在工作区 `feedback/events/`
+    （`core.workspace.feedback_root()`），`DATASET`（`open-guji-dataset`
+    测试集仓）里的同名目录只是**显式导入**过去的一份拷贝，云端跑批
+    没人手动导入的话永远是空的——`rate_history.measure()` 因此
+    `judged_slots`/`seen_pages` 恒为 0，长期看不出真问题，还以为是没人审过。
+    `root` 显式传了就原样用（评测脚本按金标口径读 DATASET 的场景不受影响）；
+    没传时先认工作区，工作区没有事件文件才退回 DATASET；两边都没读到
+    也要说清楚是**哪个目录**空的，不能悄悄回一个空字典让人当成「零人审」。
     """
     import json
-    d = (root or DATASET) / "feedback" / "events"
+    import sys as _sys
+    if root is not None:
+        d, src = root / "feedback" / "events", str(root / "feedback" / "events")
+    else:
+        from ..core.workspace import feedback_root
+        ws_events = feedback_root() / "events"
+        if ws_events.exists() and any(ws_events.glob("*.jsonl")):
+            d, src = ws_events, f"工作区 {ws_events}"
+        else:
+            d, src = DATASET / "feedback" / "events", f"open-guji-dataset {DATASET / 'feedback' / 'events'}"
+    # ⚠️ 读目录下**全部** jsonl、再按 target.key 的书前缀过滤（2026-09-28，C #166 查出）：
+    # 全唐文的人裁在跨册批次文件 `qtw-human-batch*.jsonl` 里，按 `{book}-*` 前缀
+    # 一个也匹配不上，v007–v010 读到 0 条、v006 只读到 70/704 条。
+    files = sorted(d.glob("*.jsonl")) if d.exists() else []
+    prefix = f"{book}:"
+    if not files:
+        print(f"load_verdicts({book!r})：{src} 下没有事件文件，人裁事件读到 0 条",
+             file=_sys.stderr)
     evs: list[tuple] = []
-    for p in sorted(d.glob(f"{book}-*.jsonl")) if d.exists() else []:
+    for p in files:
         for ln in p.read_text(encoding="utf-8").splitlines():
             try:
                 e = json.loads(ln)
             except json.JSONDecodeError:
                 continue
             pl = e.get("payload") or {}
+            key = ((e.get("target") or {}).get("key") or "")
+            if not (key[3:] if key.startswith("v2:") else key).startswith(prefix):
+                continue
             if e.get("actor") == "user" and e.get("kind") == "confirm"                     and pl.get("v") == "confirm" and pl.get("shape"):
                 evs.append((e.get("ts") or "", e.get("batch") or "",
-                            e.get("seq") or 0, e["target"]["key"], pl["shape"]))
+                            e.get("seq") or 0, key, pl["shape"]))
     out: dict[str, str] = {}
     for _ts, _b, _sq, key, shape in sorted(evs):
         out[key] = shape
@@ -203,12 +233,14 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
     **`gold_independent`（剔掉 fallback，该拿它当主数）**、`gold_replace`
     （只看 replace 段，样本小但零自证）。报数时三个一起给。
     """
+    from ..core.book import load_book
     from ..core.step import page_key
     from ..gold.v2_align import align_book
     from ..products import kinds as _k  # noqa: F401
     from ..products.store import ProductStore
 
     st = store or ProductStore()
+    bk = load_book(book)
     gold = {c.id: c for g in align_book(book, pages, st) if g.anchored for c in g.chars}
     truth = load_verdicts(book)
     okg = ng = okt = nt = 0
@@ -241,10 +273,13 @@ def accuracy(book: str, pages: list[int], store=None) -> dict:
                     # 判据 A 量的是「自动放行准不准」，人裁不是自动放行，本就不该进这个分母。
                     # 2026-09-26 起只有字形（读法取消）：直接比 `char`。
                     pred = r.char
+                    # 任务卡 #54 第11条：本书 `codepoints:` 统一过的码位对（內/内、呂/吕）
+                    # 归一后再比，不算「与整理本不一致」；没配的书恒等比较，行为不变。
                     hit = (pred == g.ref
                            or (g.conversion and r.char == g.shape)
                            or _ledger().preferred_form(g.ref) == pred
-                           or _same_char(pred, g.ref))
+                           or _same_char(pred, g.ref)
+                           or bk.codepoint_equal(pred, g.ref))
                     okg += hit
                     # fallback 的 shape 就是库 top1，拿它验库是自证（见 docstring）
                     if getattr(g, "source", "") != "fallback":

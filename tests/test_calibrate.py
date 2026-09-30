@@ -85,3 +85,25 @@ def test_漂了时提示不自动改yaml():
     assert "⚠️" in txt
     assert "不会自动改 yaml" in txt
     assert "period_prior" in txt
+
+
+# ── 任务卡 #54 第14条：column_gate 只跑了一小截时不报「此值可信」 ──────────
+def test_覆盖率低时警告此值不可信():
+    """`_stale_pages` 只测「有没有跑完」，测不出「只跑了一小截、还没到全书」——
+    产物可以逐条都新鲜，只是新鲜的只占全书一小部分。全唐文实测过这个坑：
+    只跑出一部分时 period_prior 测成 159（看起来一切正常，没过期、有测出数），
+    跑完整册后是 204，差 28%。"""
+    rows = [Row("period_prior", 200.0, 159.0, "")]
+    diag = {"pages": 300, "body_pages": 300, "body_source": "闸1 page_type",
+            "stale": 0, "checked": 20, "period_n": 6, "period_expect": 300}
+    txt = format_table(rows, diag, "qtw")
+    assert "此值不可信" in txt
+    assert "6/300" in txt
+
+
+def test_覆盖率够高时不报不可信():
+    rows = [Row("period_prior", 204.0, 204.0, "")]
+    diag = {"pages": 300, "body_pages": 300, "body_source": "闸1 page_type",
+            "stale": 0, "checked": 300, "period_n": 296, "period_expect": 300}
+    txt = format_table(rows, diag, "qtw")
+    assert "此值不可信" not in txt
