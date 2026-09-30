@@ -167,8 +167,10 @@ export function BookOverviewPage() {
               <Link to={wsPath(`/${book}/evals/`)}>查体检</Link>
             </div>
             {summary.gates.map((g) => (
-              <div key={g.gate} className={`ov-alert-row ${g.n_blocked ? 'ov-warn' : 'ov-ok'}`}>
+              <div key={g.gate} className={`ov-alert-row ${g.n_blocked || g.n_unsupported ? 'ov-warn' : 'ov-ok'}`}>
                 {g.n_blocked ? `✗ ${g.gate} 整页拦下 ${g.n_blocked} 页` : `✓ ${g.gate} 零整页拦截`}
+                {g.n_skipped > 0 && <span className="muted">（另 {g.n_skipped} 页封面／书签等非正文，按页型跳过）</span>}
+                {g.n_unsupported > 0 && <span> · ⚠ 版式未支持 {g.n_unsupported} 页（职名／目录类，正文未出，待 keben_roster.yaml 支持）</span>}
                 {Object.keys(g.tier_totals).length > 0 && (
                   <span className="muted">（列级：{Object.entries(g.tier_totals).map(([t, n]) => `${t} ${n}`).join('，')}）</span>
                 )}
@@ -177,12 +179,16 @@ export function BookOverviewPage() {
             <div className={`ov-alert-row ${summary.align_ref.n_not_anchored ? 'ov-warn' : 'ov-ok'}`}>
               整理本锚定 {summary.align_ref.n_anchored}/{summary.align_ref.n_pages - summary.align_ref.n_missing}
               {summary.align_ref.n_not_anchored > 0 && <>（未锚定 {summary.align_ref.n_not_anchored} 页）</>}
+              {summary.align_ref.n_not_anchored_explained > 0 && (
+                <span className="muted">（另 {summary.align_ref.n_not_anchored_explained} 页是上面的页型跳过／版式未支持，本来无候选）</span>
+              )}
               <Link to={wsPath(`/${book}/evals/`)}>看明细</Link>
             </div>
             {llmStats?.has_data && (
               <div className="ov-alert-row muted">
                 线上大模型裁决：{llmStats.n_total_calls} 次调用 · {llmStats.n_resolved} 条已核对人审 ·
                 正确率 {llmStats.accuracy != null ? `${(llmStats.accuracy * 100).toFixed(1)}%` : '还没人审判定'}
+                {llmStats.accuracy != null && (llmStats.n_resolved ?? 0) < 30 && '（样本太少，仅供参考）'}
               </div>
             )}
           </>

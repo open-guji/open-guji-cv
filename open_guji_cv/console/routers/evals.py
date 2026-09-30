@@ -157,17 +157,37 @@ def api_overview_summary(book: str = "vol01") -> dict:
     st = deps.product_store()
     rate = rate_history.measure(book, st) or {}
 
+    # 整页拦截按原因分三类：页型跳过（封面/书签等非正文，闸的预期行为，不是异常）、
+    # 版式未支持（职名/目录类，非故障但正文没出，是待办缺口）、其余才是真拦截。
     gates_out = []
+    skip_pages: set[int] = set()
+    unsup_pages: set[int] = set()
     for gid in GATES:
         try:
             g = gate_summary(book, None, st, gate=gid)
         except Exception:  # noqa: BLE001  闸没跑过这本书时，别把整个摘要拖垮
             continue
-        blocked = sum(1 for p in g["pages"] if p["status"] == "page_blocked")
-        gates_out.append({"gate": gid, "n_pages": len(g["pages"]), "n_blocked": blocked,
+        n_blocked = n_skipped = n_unsup = 0
+        for p in g["pages"]:
+            if p["status"] != "page_blocked":
+                continue
+            reasons = "".join(p.get("page_reject") or [])
+            if "page_type_skip" in reasons:
+                n_skipped += 1
+                skip_pages.add(p["page"])
+            elif "layout_unsupported" in reasons:
+                n_unsup += 1
+                unsup_pages.add(p["page"])
+            else:
+                n_blocked += 1
+        gates_out.append({"gate": gid, "n_pages": len(g["pages"]), "n_blocked": n_blocked,
+                          "n_skipped": n_skipped, "n_unsupported": n_unsup,
                           "tier_totals": g["tier_totals"]})
 
     align = align_ref_summary(book, None, st)
+    # 封面/书签、版式未支持的页本来就没有候选，锚不上是同一件事的另一面，不重复算异常
+    na_pages = [p["page"] for p in align["pages"] if p["status"] == "not_anchored"]
+    na_explained = sum(1 for n in na_pages if n in skip_pages or n in unsup_pages)
 
     return {
         "book": book,
@@ -175,7 +195,8 @@ def api_overview_summary(book: str = "vol01") -> dict:
         "next": rc.next_batch(book),  # 待办：下一批要跑的正文页
         "gates": gates_out,         # 异常：三道闸各自的整页拦截数与列级拒因分层
         "align_ref": {"n_pages": align["n_pages"], "n_anchored": align["n_anchored"],
-                      "n_not_anchored": align["n_not_anchored"], "n_missing": align["n_missing"]},
+                      "n_not_anchored": align["n_not_anchored"] - na_explained,
+                      "n_not_anchored_explained": na_explained, "n_missing": align["n_missing"]},
     }
 
 

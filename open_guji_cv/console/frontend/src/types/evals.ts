@@ -133,8 +133,15 @@ export interface OverviewSummaryResponse {
     [k: string]: unknown
   }
   next: { body_total: number; done: number; todo: number; batch: number[]; error?: string }
-  gates: Array<{ gate: string; n_pages: number; n_blocked: number; tier_totals: Record<string, number> }>
-  align_ref: { n_pages: number; n_anchored: number; n_not_anchored: number; n_missing: number }
+  gates: Array<{
+    gate: string; n_pages: number; n_blocked: number
+    n_skipped: number; n_unsupported: number   // 页型跳过（非正文）／版式未支持，都不计入 n_blocked
+    tier_totals: Record<string, number>
+  }>
+  align_ref: {
+    n_pages: number; n_anchored: number; n_not_anchored: number; n_missing: number
+    n_not_anchored_explained: number           // 未锚定里已由页型跳过／版式未支持解释的页数
+  }
 }
 
 export interface RoundResponse {
