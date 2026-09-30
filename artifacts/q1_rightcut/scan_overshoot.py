@@ -16,14 +16,31 @@ from open_guji_cv.clustering import extractor as X
 from scan_cut_crossings_v2 import body_pages
 
 WIN = 60
+
+
+def ensure_upto_row_segment(v, pgs):
+    """只补到 row_segment（本扫描只要列图 + content_x，不需要很慢的 Step4）。"""
+    from open_guji_cv.core.engine import Engine
+    from open_guji_cv.core.pipeline import default_pipeline_id, load_pipeline
+    from open_guji_cv.core.spec import page_key
+    miss = [p for p in pgs if not v.store.exists(v.id, "row_segment", page_key(p))]
+    if not miss:
+        return
+    pl = load_pipeline(default_pipeline_id(v.bk))
+    steps = [s if isinstance(s, str) else getattr(s, "id", str(s))
+             for s in (pl.steps if hasattr(pl, "steps") else pl.step_ids)]
+    steps = steps[: steps.index("row_segment") + 1]
+    Engine(v.bk, pl, store=v.store, cache=v.cache, log=lambda s: None).run(steps=steps, pages=miss)
+
+
 def main(out):
     pages = body_pages(dataset_root())
     f = open(out, "w", encoding="utf-8")
     for book, pgs in pages.items():
-        v = V2Book(book); v.ensure(pgs)
+        v = V2Book(book); ensure_upto_row_segment(v, pgs)
         for pg in pgs:
             cells = v.cells(pg)
-            if cells is None or v.chars(pg) is None: continue
+            if cells is None: continue
             for cc in cells.columns:
                 if not cc.ok or not cc.content_x: continue
                 img = v.col_img(pg, cc.col); H, W = img.shape
