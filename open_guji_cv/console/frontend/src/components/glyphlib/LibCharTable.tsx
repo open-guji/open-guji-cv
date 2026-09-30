@@ -6,7 +6,7 @@ import { fetchLibChars, type LibChar } from '../../api/glyphlib'
 
 const FILTERS: [string, string][] = [
   ['all', '全部'], ['single', '单例字'], ['nohuman', '无人裁'], ['humanonly', '只有人裁'],
-  ['context', '含上下文放行'], ['nofont', '不在字体里'], ['fontfar', '与各字体都不像'], ['unique', '本书独有'],
+  ['context', '含上下文放行'], ['approx', '含近似例'], ['nofont', '不在字体里'], ['fontfar', '与各字体都不像'], ['unique', '本书独有'],
 ]
 
 function pass(r: LibChar, f: string): boolean {
@@ -15,6 +15,7 @@ function pass(r: LibChar, f: string): boolean {
     case 'nohuman': return !r.prov.human
     case 'humanonly': return !!r.prov.human && Object.keys(r.prov).length === 1
     case 'context': return !!r.prov.context
+    case 'approx': return !!r.approx
     case 'nofont': return r.in_font === false
     case 'fontfar': return r.font_sim != null && r.font_sim < 0.8
     case 'unique': return r.also_in.length === 0
@@ -71,12 +72,14 @@ export function LibCharTable({ filter, setFilter, onPick }: {
             title={title(r)} onClick={() => onPick(r.char)}>
             <span className="gl-ch">{r.char}</span>
             <span className="gl-n">{r.n}</span>
+            {!!r.approx && <span className="gl-approx-badge" title={`${r.approx} 例近似字（无匹配）`}>近</span>}
           </button>
         ))}
       </div>
       {shown.length > limit && <button onClick={() => setLimit(limit + 1200)}>再显示 1200 个</button>}
       <p className="muted gl-note">格右下是刻例数（按格去重）。左边竖条 = 有人裁；虚线框 = 字体里没有这个字。
-        「与各字体都不像」= 刻例与六套字体里最像那套的相似度中位 &lt;0.80（要先跑体检）——最近似码位 / 刻本异写的首选排查对象。</p>
+        「与各字体都不像」= 刻例与六套字体里最像那套的相似度中位 &lt;0.80（要先跑体检）——最近似码位 / 刻本异写的首选排查对象。
+        左上「近」= 有刻例是人裁勾的「无匹配（近似字）」——Unicode 里没有真正对应的字，存的只是最像的码位。</p>
     </div>
   )
 }
@@ -85,5 +88,6 @@ function title(r: LibChar) {
   const p = Object.entries(r.prov).map(([k, v]) => `${k} ${v}`).join(' · ')
   return `${r.char} U+${(r.cp ?? 0).toString(16).toUpperCase()}　${r.n} 例　${p}` +
     (r.font_sim != null ? `　与字体最优相似 ${r.font_sim.toFixed(2)}` : '') +
+    (r.approx ? `　近似例 ${r.approx}` : '') +
     (r.semantic !== r.char ? `　读作 ${r.semantic}` : '') + (r.also_in.length ? `　也见于 ${r.also_in.join('、')}` : '')
 }

@@ -30,6 +30,14 @@
 |---|---|---|---|
 | **结构金标裁决台**（原 300 条；改成只出模型与 IDS 表全部拆法都不同的残差，**已裁完**，56 条人裁冻结在 [struct_gold_verdicts.jsonl](struct_gold_verdicts.jsonl)，`struct_gold_residual.py` 报残差 0）| https://claude.ai/artifact/3SiEMRcRxPTv6qtqCNuXfv | [struct_gold_review.html](struct_gold_review.html)；卡片 id 冻结在 [struct_gold_cards.jsonl](struct_gold_cards.jsonl) | `python scripts/struct_gold_residual.py`（模型 vs 表三类 → `struct_gold_residual.json`）→ `python scripts/build_struct_gold_review.py --residual artifacts/struct_gold_residual.json --seed-verdicts artifacts/struct_gold_verdicts.jsonl`（不带 `--residual` 就是原 300 张）；收回 `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <读回的 html> -o verdicts.jsonl`。抽样：oov 200（按 glyphdb/user 分层）/ unseen 70 / 独体 30，各带 `stratum_weight`。**发布覆盖同一 URL** |
 
+## 切分回流（Step3 列尾）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **vol03 列尾版框 A/B**（overview#266：列里残留的下版框线当 Step3 下界，改前/改后 100 列盲评，左右随机）| https://claude.ai/artifact/QQKNgCkHJSW5fUYZPrZNv7 | [s266_tail_frame_review.html](s266_tail_frame_review.html)；A/B 映射冻结在 [s266_tail_frame_cards.jsonl](s266_tail_frame_cards.jsonl)（`a_is` = A 边是 base 还是 new）| `scripts/experiments/s266_tail_frame/`（README）；收回 `harvest_verdicts.py`，按 cards 换算新/旧。**发布覆盖同一 URL** |
+| **vol03 小注拆分 A/B**（overview#266 补查：Step3 认下的雙行小注在 Step4 被整格发成正文，改前/改后 18 格盲评）| https://claude.ai/artifact/2DQo7AEHt1EzuDXXYin7oq | [s266_jiazhu_split_review.html](s266_jiazhu_split_review.html)；A/B 映射 [s266_jiazhu_split_cards.jsonl](s266_jiazhu_split_cards.jsonl) | `scripts/experiments/s266_tail_frame/build_review_jz.py`（先跑 `jz_diff.py`）。**发布覆盖同一 URL** |
+| **vol03 Step1 p49 + 105–108 重切 A/B**（overview#266 批次 b：p49 胖峰假竖线修复；105–108 按版心中线重切）| https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb | [s266_s1_review.html](s266_s1_review.html)；A/B 映射 [s266_s1_cards.jsonl](s266_s1_cards.jsonl)；列号对应 [s266_col_remap_vol03.json](s266_col_remap_vol03.json) | `scripts/experiments/s266_tail_frame/build_review_s1.py`。**发布覆盖同一 URL** |
+
 ## 边框判读（Step1）
 
 | 页面 | URL | 快照/真源 | 再生 |
@@ -419,3 +427,15 @@ triplets 的 hard 子集是**人裁**出来的（「用户亲眼裁定本例标�
 | 北行日錄 不一致复核 r2（**只取训练段**）| https://claude.ai/artifact/Pn1QogrKMojPhMcgqwAJGJ | [bxrl_same_mismatch_r2.html](bxrl_same_mismatch_r2.html)（32 卡 116 图 212KB，裁决自存，定点已验）| **库修好后**重跑的第二轮。第一轮的 5 例「真形近误判」全部消失——根因是库缺字：播种闸走不归一笔宽的老协议、且字体模板的细横被归一化当版框删了（旦变日、宣变亘），见 `.claude/doc/modern_print_pipeline.md` §五.4。**取样只从逻辑页 ≥21**：用户 2026-09-15 定 1–20 页为测试集、不做任何人工干预（第一轮的「揚楊」证人字位在逻辑页 13，已从 `config/confusable_human.json` 撤出）。32 例的字对里 10 对的证人码在库里 0 个样本（內/卻/呂/墙/強/戶/搖/澀/稅/衞），是「校對本录错」的硬旁证；`换/換` 两例互为对方的命中样本（同一个字形、证人给了两个码）。四档：校對本录错 / 同形异码 / 匹配错 / 拿不准。**机器 cov 不印在卡上**。收回：`Artifact action:"read"` → `.claude/skills/review-artifact/scripts/harvest_verdicts.py`；卡 id 冻在工作区 `products/bxrl/witness_align/same_mismatch_cards_r2.jsonl`。生成脚本 工作区 `scripts/build_mismatch_review_r2.py`（2026-09-15）|
 
 - **2026-09-20 排除名单复核（bxgb，154 卡）** https://claude.ai/artifact/Ndgyiai5qfC1YtT9nidvrk — `scripts/build_exclusion_recheck_review.py`，卡 id 在 `beixing-guben-workspace/review/batches/exclusion_recheck_20260920_cards.jsonl`；问「红框里现在是不是完整的字」，ok 的撤名单（收回后写 `apply_exclusion_recheck.py`）。
+
+## 借库诊断（overview#86，R 道 2026-09-27）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **全唐文借库对照**（全唐文 × 四庫 vol03 同字字块 / 归一 64² / 库条目并排 + 两书分数表 + 预处理与自举实验）| https://claude.ai/artifact/LDgKH9riAki9tJKPjQyjtN | [qtw_libfail/review.html](qtw_libfail/review.html) | 见 `scripts/experiments/qtw_libfail/README.md`：`a8_review_data.py` → `build_review.py`；**重发布到同一 URL** |
+
+## 影子放行（Step7 D 道，vol03，2026-09-29，overview#269）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **vol03 影子≠现字 核对**（已放行格里影子≠现字 87 格 + 待审卡里影子≥0.95 且≠整理本 10 格；卡上不标哪个是影子，左右按 id 哈希打散）| https://claude.ai/artifact/AbZcW34aYjumsvN2V2Z6oU | [vol03_shadow_review.html](vol03_shadow_review.html)；卡片 id 冻结在 [vol03_shadow_review_cards.jsonl](vol03_shadow_review_cards.jsonl) | `scripts/experiments/shadow_admit/`：`extract_snap.py` → `vol03_eval.py` → `build_vol03_shadow_review.py`（命令见 overview#269 交单评论）；收回 `harvest_verdicts.py`。**发布覆盖同一 URL** |

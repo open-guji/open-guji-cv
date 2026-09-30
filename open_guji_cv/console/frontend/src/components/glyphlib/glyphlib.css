@@ -62,3 +62,34 @@
 .gl-ids-hit figcaption b { font-size: 1.1rem; }
 .gl-m-exact .gl-img, .gl-m-expanded .gl-img { outline: 2px solid var(--ochre); }
 .gl-batchbar { align-items: center; }
+/* 抽检（overview#110，2026-09-27） */
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; }
+.spot-card { border: 1px solid var(--rule); border-left-width: 4px; padding: .35rem; background: var(--paper-2); font-size: .75rem; }
+.spot-card.ok { border-left-color: var(--ok); }
+.spot-card.bad { border-left-color: var(--zhu); }
+.spot-card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; }
+.spot-char { font-size: 1.4rem; text-align: center; font-family: "Noto Serif TC", serif; }
+.spot-id { word-break: break-all; }
+.spot-btns { display: flex; flex-wrap: wrap; gap: .2rem; margin-top: .2rem; }
+.spot-btns button { font-size: .72rem; padding: .05rem .35rem; }
+.spot-done { margin-top: .2rem; font-weight: 600; }
+/* 待纳入（overview#176，2026-09-28）：左库里同字、右候选格；裁决色同抽检（收=绿、不收=朱、看不清=赭） */
+.cand-row { display: flex; gap: .8rem; align-items: flex-start; flex-wrap: wrap; }
+.cand-lib { flex: 0 1 22rem; min-width: 12rem; }
+.cand-cells { flex: 1 1 20rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .5rem; }
+/* 库里同字与候选格同尺寸，才好并排比 */
+.cand-lib-img { width: 7.5rem; height: 7.5rem; }
+.cand-pick { max-width: 100%; }
+.cand-pick select { max-width: 100%; }
+.cand-label { margin-bottom: .25rem; }
+.cand-card.cand-admit { border-left-color: var(--ok); }
+.cand-card.cand-reject { border-left-color: var(--zhu); }
+.cand-card.cand-unclear { border-left-color: var(--ochre); }
+.cand-card .bti img { width: 100%; max-width: 7.5rem; margin: 0 auto; aspect-ratio: 1; object-fit: contain; background: #fff; display: block; }
+.cand-card .spot-btns button.active { background: var(--indigo); color: var(--paper); border-color: var(--indigo); }
+
+/* 近似例角标（overview#276）：人裁勾了「无匹配（近似字）」的刻例 */
+.gl-approx-badge { position: absolute; top: 1px; left: 3px; font-size: .6rem; line-height: 1; padding: 1px 2px;
+  border-radius: 2px; background: var(--ochre-soft); color: var(--ochre); }
+.gl-approx-tag { font-family: inherit; margin-right: .15rem; padding: 0 .15rem; border-radius: 2px; font-weight: 500;
+  background: var(--ochre-soft); color: var(--ochre); }

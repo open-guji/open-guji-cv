@@ -80,6 +80,22 @@ def test_fetch_uses_explicit_refspec_not_bare_branch_name(no_sleep):
     assert fetch_call == ["fetch", "origin", "+production:refs/remotes/origin/production"]
 
 
+def test_fetch_adds_depth_only_on_shallow_repo(no_sleep):
+    """值守 overview#216（2026-09-28）：服务器 cv 仓是浅克隆，不带 --depth 的 fetch 去拉
+    整仓历史（~4.7 GB），部署卡 6 小时。浅仓才加 depth；完整 clone 照旧（上一条用例）。"""
+    class ShallowGit(FakeGit):
+        def __call__(self, repo, args):
+            if args[:2] == ["rev-parse", "--is-shallow-repository"]:
+                self.calls.append(args)
+                return _cp(stdout="true\n")
+            return super().__call__(repo, args)
+    git = ShallowGit(local_rev="abc123", remote_rev="abc123")
+    dc.deploy_check(Path("/fake/repo"), git_runner=git, sleeper=no_sleep)
+    fetch_call = next(c for c in git.calls if c[0] == "fetch")
+    # K #236 统一成 ops/git_fetch.py：浅仓 depth 50，接不上再加深到 500（见 test_git_fetch_guard）
+    assert fetch_call == ["fetch", "--depth", "50", "origin", "+production:refs/remotes/origin/production"]
+
+
 def test_resolve_failed_when_rev_parse_errors(no_sleep):
     """`git rev-parse <解析不出的东西>` 会把参数原样回显到 stdout、真正的错误在
     stderr、退出码非零——不查 returncode 就会把这行回显误当成"新提交"（2026-09-26

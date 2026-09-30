@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from ..errors import BadRequest
+
 #: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
 #: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
 #: `guji-workspace/<id>-<书名>/books/`。这里只留一个空目录兜底与一条报错提示：
@@ -90,6 +92,14 @@ class BookSpec:
     #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
     #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
     ocr_candidates: bool = False
+    #: Step7 铁证放行通道（yaml 的 `iron_gate:`）。**默认关闭**——D 道影子验收
+    #: 2026-09-25～27 全书实测（bxgb、vol03，`open_guji_cv.clustering.iron_evidence`）
+    #: 对人裁核对累计 348 格 0 错，2026-09-27 用户批准转正、按书开（先只给测过的
+    #: 两本书开），见 overview 项目进展/图片初步数字化/进度/Step7-放行判定/
+    #: 任务书-D-铁证放行影子验收.md。**只放行文本，不进字形库**（不写 admissions）——
+    #: 这是用户批复时特意加的口子，避免「自己放行的字变成下次放行的证据」自我强化；
+    #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
+    iron_gate: bool = False
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
     #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。
@@ -278,6 +288,26 @@ class BookSpec:
     #: 该书库＋人裁里两码位各多少，取与整理本一致的那个（见 `scripts/glyph_codepoint_census.py`
     #: 与 `scripts/glyph_codepoint_unify.py`），不是猜的。
     codepoints: dict[str, str] = field(default_factory=dict)
+    #: Step6 词典+AI 证据文件（yaml 的 `step6_ai:`，2026-09-27 加，D-Step6）。
+    #: 异步外包段产出的逐格 JSONL（`{key, groups, ai}`，schema = `DecisionRec.groups` /
+    #: `AiEvidence`），相对路径锚工作区根。`context_decide` 读它挂到对应字位的
+    #: `DecisionRec.groups/ai` 上，**只进产物、不改放行**（`seed_admit` 不读 `ai`）。
+    #: 空 = 不启用，参数指纹与产物逐字节同加这个字段之前（见 `ContextDecideParams`）。
+    step6_ai: str = ""
+    #: 书级 Step 参数覆盖（yaml 的 `params:` 段，2026-09-27，D-书级admit覆盖）。
+    #: 形状与 `Pipeline.params` 完全一样——`{step_id: {字段: 值}}`，**取名也一样叫
+    #: `params:` 而不是 `admit:`**：任务书要解决的不只是 `seed_admit` 一个步骤
+    #: （`context_verdicts` 是，未来别的步骤书级微调大概率也是），叫 `admit:`
+    #: 会把「书级参数覆盖」这个通用机制窄化成「只服务放行」，下次要给别的步骤
+    #: 加书级参数又要新开一个顶层字段。跟管线 yaml 用同一个名字、同一种形状，
+    #: 也省得两处各记一套写法。
+    #:
+    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） <
+    #: **这里** < 调用方覆盖（CLI `--params` / 控制台表单）——合并逻辑在
+    #: `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前叠一层。
+    #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
+    #: 已有 Step 的参数取值）。
+    params: dict[str, dict] = field(default_factory=dict)
 
     #: 整段错位页名单（yaml 顶层 `context_guard_pages: [49, 107, 110]`）。这些页的
     #: `context` / `ref_ctx` 通道不放行、一律退回待审（`clustering/context_guard`）。
@@ -346,6 +376,47 @@ class BookSpec:
                 pages.add(int(part))
         return sorted(pages)
 
+    def resolve_pages_ext(self, pages: str | list[int] | None) -> list[int]:
+        """`resolve_pages` 的公共外壳：多认 `list:<清单名>` / `cells:<页:列:格,...>`
+        两种前缀（人裁清单与坐标点名的约定，来自 `review/cards.py::parse_cells_spec`
+        与 `feedback_root()/lists/*.txt`），两者都点的是具体字位/列，不是页码
+        表达式，落到原 `resolve_pages` 会对 `int("list:...")`／`int("cells:...")`
+        抛 `ValueError`（issue #154：C #67 查出的 `core/book.py:369` 这处，在
+        `column_review`/`slot_count_review`/`step9`/`glyph_match`/`products`/
+        `runs` 六个 router 的八处调用里都能复现）。
+
+        除 `list:`/`cells:` 外，其余写法原样交给 `resolve_pages`。**不认识的
+        写法（含两种前缀自己的错，如清单不存在/为空、`cells:` 坐标写错）一律
+        收口成 `BadRequest`**，不让 `ValueError` 冒泡成控制台的裸 500——
+        `BadRequest` 是 `errors.py` 的领域异常，配 `console/errors.py` 的
+        `@maps_http` 用就是 400；没挂 `@maps_http` 的调用方（如 `runs.py`）
+        自己 `except BadRequest` 转 `HTTPException(400, ...)`。
+        """
+        if isinstance(pages, str):
+            if pages.startswith("cells:"):
+                from ..review.cards import parse_cells_spec
+                try:
+                    ids = parse_cells_spec(pages, self.id)
+                except ValueError as e:
+                    raise BadRequest(str(e)) from e
+                return sorted({int(i.split(":")[1]) for i in ids})
+            if pages.startswith("list:"):
+                from .workspace import feedback_root
+                lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
+                if not lp.exists():
+                    raise BadRequest(f"清单不存在：{lp}")
+                ids = {ln.split("#", 1)[0].strip()
+                       for ln in lp.read_text(encoding="utf-8").splitlines()
+                       if ln.strip() and not ln.lstrip().startswith("#")}
+                pgs = {int(i.split(":")[1]) for i in ids if i.count(":") >= 3}
+                if not pgs:
+                    raise BadRequest(f"清单是空的或没有可用坐标：{lp}")
+                return sorted(pgs)
+        try:
+            return self.resolve_pages(pages)
+        except ValueError as e:
+            raise BadRequest(f"页号表达式错误：{e}") from e
+
     def to_dict(self) -> dict:
         return {
             "id": self.id, "title": self.title, "raw_dir": str(self.raw_dir),
@@ -358,6 +429,7 @@ class BookSpec:
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
+            "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
@@ -465,6 +537,21 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
     return out
 
 
+def _load_book_params(raw) -> dict[str, dict]:
+    """yaml 的顶层 `params:` 段 → `{step_id: {字段: 值}}`。跟
+    `core/pipeline.py::load_pipeline` 里对管线 yaml `params:` 的校验同一个理由：
+    形状错了要在读配置时就报，不要拖到某个 Step 用 `**kv` 构参数时才报出一个
+    不好懂的 `TypeError`。不在这里校验 `step_id` 是不是已注册的 Step——那要
+    `import open_guji_cv.steps` 触发注册，`core/book.py` 不该为此绑定 steps 包，
+    合并时（`core/engine.py`）交给 `STEPS[sid].spec.params(**kv)` 自然报错。
+    """
+    if not raw:
+        return {}
+    if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
+        raise ValueError("书 yaml 的 params: 必须是 {step_id: {字段: 值}}")
+    return {str(k): dict(v) for k, v in raw.items()}
+
+
 def _workspace_books_dir() -> Path | None:
     """工作区里的 `books/`（有 `GUJI_WORKSPACE` 才有）。
 
@@ -570,6 +657,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
+        iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
         frame=str(d.get("frame", "ruled")),
@@ -591,6 +679,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         font=dict(d.get("font") or {}),
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
         context_guard_pages=[int(x) for x in (d.get("context_guard_pages") or [])],
+        step6_ai=str(d.get("step6_ai") or ""),
+        params=_load_book_params(d.get("params")),
     )
 
 

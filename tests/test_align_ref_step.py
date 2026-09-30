@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_match, write_product
@@ -57,7 +58,9 @@ def test_registered():
     # 时才报错）。声明与实现对不上，vol01（开关关着）因此**整条 Step5-d/6/C1 全部
     # 阻塞**，`test_core_v2.test_keben_body_v2_on_vol01_page24` 一直挂在这上面。
     assert set(STEPS["align_ref"].spec.consumes) == {"glyph_match"}
-    assert set(STEPS["align_ref"].spec.optional_consumes) == {"ocr_candidates"}
+    # 2026-09-28 加 `rare_candidates`（带开关，缺省不进指纹），见 test_rare_downstream.py
+    # 2026-09-28 加 `cells`（Step3 字格几何，按坐标对位 coord 用，overview#195；见 test_align_ref_coord.py）
+    assert set(STEPS["align_ref"].spec.optional_consumes) == {"ocr_candidates", "rare_candidates", "cells"}
 
 
 def test_corpus_fingerprint_lands_in_params_and_moves_the_hash():
@@ -172,4 +175,296 @@ def test_lib_gate_drops_confident_non_variant_replace_but_keeps_variants(tmp_pat
     assert got.get(2) == ("人", "replace"), "库不够信时长度闸说了算"
     ar, got = run(0.9995, gate=False)
     assert got.get(2) == ("人", "replace") and ar.n_lib_dropped == 0
+
+
+# ── 多证人合并（2026-09-27，任务书 D-多证人对齐策略） ─────────────────────
+
+
+def test_book_corpus_ignores_quality_and_takes_first_reference(tmp_path, monkeypatch):
+    """现状（`witness_strategy="legacy"` 时走的路）：`book_corpus()` 只看
+    `references[0]`，不管 `quality` 标签——这正是 Z5 全唐文实测「Kanripo(best)
+    +维基(mid) 组合」与「仅 Kanripo」逐字节相同的根源（align_ref 模块头
+    「多证人合并」一节）。低质量证人排第一时，legacy 策略会用它。
+    """
+    import open_guji_cv.core.book as book_mod
+    from open_guji_cv.steps.align_ref import book_corpus
+
+    (tmp_path / "corpus").mkdir()
+    (tmp_path / "corpus" / "low.txt").write_text("低质量证人排第一", encoding="utf-8")
+    (tmp_path / "corpus" / "best.txt").write_text("高质量证人排第二", encoding="utf-8")
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+
+    class FakeBook:
+        references = [{"file": "low.txt", "quality": "low"},
+                      {"file": "best.txt", "quality": "best"}]
+
+    monkeypatch.setattr(book_mod, "load_book", lambda book_id, books_dir=None: FakeBook())
+    got = book_corpus(BOOK)
+    assert Path(got).name == "low.txt", \
+        f"现状只看列表第 0 项、不管 quality，该是 low.txt，实得 {Path(got).name}"
+
+
+def _write_corpus(ws_root, name: str, text: str) -> None:
+    (Path(ws_root) / "corpus" / name).write_text(text, encoding="utf-8")
+
+
+def test_normalize_strategy_picks_best_quality_witness_not_list_position(tmp_path,
+                                                                          monkeypatch, ws):
+    """`witness_strategy="normalize"`：按 `quality` 选证人，不看 `references`
+    列表顺序——低质量证人排第一、内容却完全不相关，仍应取到排第二的最佳证人。
+    """
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    col = "文華殿大學士臣紀昀等奉敕撰"
+    _write_corpus(ws, "low.txt", ("毫不相干的另一段文字用来占位充数") * 20)
+    _write_corpus(ws, "best.txt", (col + "欽定四庫全書總目卷一經部易類一") * 20)
+
+    book = make_book(BOOK, references=[
+        {"file": "low.txt", "quality": "low", "label": "低质量证人"},
+        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+    ])
+    ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+    ctx.params["align_ref"] = P(witness_strategy="normalize")
+    recs = [dict(slot=i + 1, verdict="same", char=ch, cov=0.999, matched_id=f"g{i}")
+            for i, ch in enumerate(col)]
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert ar.anchored, f"该用最佳证人锚上，实得：{ar.note}"
+    assert ar.witness_strategy == "normalize" and ar.n_witnesses == 2
+    c1 = sorted((c for c in ar.chars if c.col == COL), key=lambda c: c.slot)
+    assert "".join(c.align_char for c in c1) == col
+
+
+def test_normalize_strategy_absorbs_known_variant_pair_legacy_would_flag_as_replace(
+        tmp_path, monkeypatch, ws):
+    """异体归一比较（模块头「多证人合并」一节）：`glyph_match` 载体给「為」，
+    唯一证人原文是「爲」——两者是 `variants.tsv` 登记的已知异体。legacy 按原始
+    字形比较判 `replace`；`normalize` 先归一再比，判 `equal`，且**取字仍是证人
+    原文的字形**（「爲」，不会被偷换成归一目标字）。
+    """
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    # 变异位两侧各留 10/15 字的稳定匹配区，8-gram 才能绕开变异位投出干净票——
+    # 太短的串（变异位周围不到 8 字）会让**所有**窗口都扫过变异位，直接锚不上。
+    prefix, suffix = "文華殿大學士臣紀昀等", "欽定四庫全書總目卷一經部易類一"
+    hyp_col = prefix + "為" + suffix        # 载体（glyph_match 认的字）：為
+    true_col = prefix + "爲" + suffix       # 证人原文：爲
+    _write_corpus(ws, "ref.txt", true_col * 20)
+
+    def run(strategy: str):
+        book = make_book(BOOK, references=[{"file": "ref.txt", "quality": "best"}])
+        ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+        ctx.params["align_ref"] = P(witness_strategy=strategy,
+                                    corpus=str(Path(ws) / "corpus" / "ref.txt"))
+        recs = [dict(slot=i + 1, verdict="same", char=ch, cov=0.999, matched_id=f"g{i}")
+                for i, ch in enumerate(hyp_col)]
+        write_product(ctx, "glyph_match", PAGE,
+                      glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+        ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+        assert ar.anchored, ar.note
+        return {c.slot: (c.align_char, c.align_op) for c in ar.chars if c.col == COL}
+
+    got_legacy = run("legacy")
+    assert got_legacy.get(11) == ("爲", "replace"), \
+        f"legacy 按原始字形比较，该判 replace，实得 {got_legacy.get(11)}"
+    got_norm = run("normalize")
+    assert got_norm.get(11) == ("爲", "equal"), \
+        f"normalize 该把已知异体判 equal、取证人原文「爲」，实得 {got_norm.get(11)}"
+
+
+def test_majority_vote_strategy_tie_break_by_quality(tmp_path, monkeypatch, ws):
+    """两家证人在同一位给出不同字、票数 1:1 打平 → 按 `quality` 取高的那家。"""
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    # 同上一条测试：变异位两侧各留够 8 字，两家证人才都能各自独立锚上
+    # （锚不上的那家会被 `_majority_vote_labels` 悄悄跳过，测不出真正的表决）。
+    prefix, suffix = "文華殿大學士臣紀昀等", "欽定四庫全書總目卷一經部易類一"
+    hyp_col = prefix + "入" + suffix
+    best_col = prefix + "入" + suffix     # 最佳证人：与载体一致（入）
+    low_col = prefix + "人" + suffix      # 低质量证人：另一种转写（人）
+    _write_corpus(ws, "best.txt", best_col * 20)
+    _write_corpus(ws, "low.txt", low_col * 20)
+
+    book = make_book(BOOK, references=[
+        {"file": "low.txt", "quality": "low", "label": "低质量证人"},
+        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+    ])
+    ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+    ctx.params["align_ref"] = P(witness_strategy="majority_vote")
+    recs = [dict(slot=i + 1, verdict="same", char=ch, cov=0.999, matched_id=f"g{i}")
+            for i, ch in enumerate(hyp_col)]
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert ar.anchored, ar.note
+    assert ar.n_witnesses == 2
+    got = {c.slot: (c.align_char, c.align_op) for c in ar.chars if c.col == COL}
+    assert got.get(11) == ("入", "equal"), \
+        f"1:1 打平该取质量高的那家（最佳证人「入」），实得 {got.get(11)}"
+
+
+def test_majority_vote_strategy_true_majority_overrides_single_higher_quality_witness(
+        tmp_path, monkeypatch, ws):
+    """三家证人：两家（质量都是 low）都给「人」，一家（质量 best）给「入」——
+    票数 2:1，多数赢，即使那两家质量都不如那一家高。这是「按字多数表决」与
+    「单纯按质量选一家」的区别所在：质量选择在这里会选错（best 只有一票）。
+    """
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    prefix, suffix = "文華殿大學士臣紀昀等", "欽定四庫全書總目卷一經部易類一"
+    hyp_col = prefix + "人" + suffix
+    majority_col = prefix + "人" + suffix   # 两家 low：人
+    best_col = prefix + "入" + suffix        # 一家 best：入
+    _write_corpus(ws, "low1.txt", majority_col * 20)
+    _write_corpus(ws, "low2.txt", majority_col * 20)
+    _write_corpus(ws, "best.txt", best_col * 20)
+
+    book = make_book(BOOK, references=[
+        {"file": "low1.txt", "quality": "low", "label": "低质量证人一"},
+        {"file": "low2.txt", "quality": "low", "label": "低质量证人二"},
+        {"file": "best.txt", "quality": "best", "label": "最佳证人"},
+    ])
+    ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+    ctx.params["align_ref"] = P(witness_strategy="majority_vote")
+    recs = [dict(slot=i + 1, verdict="same", char=ch, cov=0.999, matched_id=f"g{i}")
+            for i, ch in enumerate(hyp_col)]
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert ar.anchored, ar.note
+    assert ar.n_witnesses == 3
+    got = {c.slot: (c.align_char, c.align_op) for c in ar.chars if c.col == COL}
+    assert got.get(11) == ("人", "equal"), \
+        f"2 票该赢 1 票，实得 {got.get(11)}"
+
+
+def test_witness_fingerprint_filled_from_book_references_when_not_legacy(tmp_path,
+                                                                          monkeypatch, ws):
+    """`witness_fingerprint` 按 `references` 全部文件算（`core/step.py::
+    _with_witness_fingerprint`），换一份证人文件内容就会变；`legacy` 策略
+    不填这个字段（继续用 `corpus_fingerprint`）。"""
+    from open_guji_cv.steps.align_ref import AlignRefParams as P
+    _write_corpus(ws, "a.txt", "甲乙丙丁" * 10)
+    _write_corpus(ws, "b.txt", "戊己庚辛" * 10)
+    book = make_book(BOOK, references=[{"file": "a.txt", "quality": "best"},
+                                        {"file": "b.txt", "quality": "mid"}])
+    ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+
+    from open_guji_cv.core.step import STEPS
+    step = STEPS["align_ref"]
+    ctx.params["align_ref"] = P()
+    p1 = ctx.params_for(step)
+    assert p1.witness_fingerprint == "", "legacy 不该填 witness_fingerprint"
+
+    ctx.params["align_ref"] = P(witness_strategy="majority_vote")
+    p2 = ctx.params_for(step)
+    fp_before = p2.witness_fingerprint
+    assert fp_before
+
+    _write_corpus(ws, "b.txt", "壬癸子丑" * 10)   # 换掉第二份证人的内容
+    ctx.params["align_ref"] = P(witness_strategy="majority_vote")
+    p3 = ctx.params_for(step)
+    assert p3.witness_fingerprint != fp_before, "换了证人文件内容，指纹该变"
+
+
+# ---------------------------------------------------------------------------
+# uncontested_relax（任务卡 D-align_ref锚定召回-全唐文，2026-09-27）：
+# v006 全书实测发现「最高票簇 1-4 票」失败页里绝大多数没有竞争簇（
+# `avg_hits_per_hit_gram`≈1、`n_clusters`==1），是刻本侧连续 8 字全对太难，
+# 不是套语碰撞——见 `AlignRefParams.uncontested_relax` 模块头。这里用可控的
+# 合成语料复现三种情形：唯一无竞争低票页（该收）、有竞争簇的低票页（不该
+# 收）、命中率不够的低票页（不该收）。
+# ---------------------------------------------------------------------------
+
+# 目标串本身不含重复子串，嵌进「甲乙丙丁…」这类互不相干的填充文字里，
+# 保证除嵌入处外语料里不会有第二处巧合命中。
+_UR_TARGET = "文華殿大學士臣紀昀等奉敕撰經進四庫全書總目提要恭呈御覽伏候聖裁謹奏"
+_UR_FILLER_A = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥零壹貳參肆伍陸柒捌玖拾"
+_UR_FILLER_B = "東西南北中上下前後左右春夏秋冬金木水火土日月星辰風雲雷電山川湖海"
+
+
+def _ur_corpus_text(*, duplicate: bool = False) -> str:
+    if duplicate:
+        # 语料里把目标串重复一遍——真「套语碰撞」的最小复现：两处命中票数
+        # 相当，谁都不占绝对优势。
+        return _UR_FILLER_A * 3 + _UR_TARGET + _UR_FILLER_B * 3 + _UR_TARGET + _UR_FILLER_A * 3
+    return _UR_FILLER_A * 3 + _UR_TARGET + _UR_FILLER_B * 3
+
+
+def _ur_hyp(error_positions: tuple[int, ...] = (5, 15, 25)) -> str:
+    """把 `_UR_TARGET` 在给定位置换成形近字混淆的近似——用来控制「留下几个
+    干净的 8-gram」。默认三个位置量出来正好留 4 个干净窗口（< 绝对下限 5），
+    且只在真实位置命中、没有竞争簇（见模块头「uncontested_relax」一节的
+    prototype 实测）。"""
+    chars = list(_UR_TARGET)
+    for pos in error_positions:
+        chars[pos] = "錯"
+    return "".join(chars)
+
+
+def test_uncontested_relax_off_by_default():
+    assert AlignRefParams().uncontested_relax is False
+
+
+def test_uncontested_relax_recovers_uncontested_low_vote_page(tmp_path, monkeypatch, ws):
+    """核心场景：3 处形近字错误，只留 4 个干净的 8-gram（< 绝对下限 5），
+    但语料里只有这一处命中、没有竞争簇——`uncontested_relax` 应该收下，
+    且锚定后的字符仍是**语料字**（等长 replace 位一样吃 `replace_len_gate`，
+    不是把兜底当成放宽单字采信）。"""
+    hyp = _ur_hyp()
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars=hyp,
+                              corpus_text=_ur_corpus_text())
+
+    legacy = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not legacy.anchored, f"这个场景本该锚不上（legacy）：{legacy.note}"
+    assert legacy.anchor_via == "ngram"
+
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    relaxed = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert relaxed.anchored, f"低票兜底该收但没收：{relaxed.note}"
+    assert relaxed.anchor_via == "uncontested"
+    text = "".join(c.align_char for c in sorted(relaxed.chars, key=lambda c: c.slot))
+    # 三处形近字错位没有匹配上下文，difflib 会把它们判成 delete（不是等长
+    # replace），`_labels_from_ops` 照 `align_label` 原有规则把 delete 段整段
+    # 丢弃——这是复用既有过闸逻辑的正常结果，不是这条新判据的行为。真正要
+    # 守住的是：锚上的字全部是**语料字**、顺序不乱、错位那三个字不会污染
+    # 输出（不会出现「錯」，也不会把语料窗口以外的字带进来）。
+    assert "錯" not in text
+    assert text == "".join(ch for i, ch in enumerate(_UR_TARGET) if i not in (5, 15, 25))
+
+
+def test_uncontested_relax_does_not_override_contested_cluster(tmp_path, monkeypatch, ws):
+    """语料里把目标串重复一遍（真套语碰撞）：两处命中票数相当，
+    `uncontested_relax` 必须原样报「锚不上」，不能瞎猜一个。"""
+    hyp = _ur_hyp()
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars=hyp,
+                              corpus_text=_ur_corpus_text(duplicate=True))
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored, "有竞争簇时不该被兜底收进去"
+    assert ar.anchor_via == "ngram"
+
+
+def test_uncontested_relax_still_rejects_low_equal_frac(tmp_path, monkeypatch, ws):
+    """就算没有竞争簇，候选窗口命中率太低（这里只留头 8 字对、其余全错）
+    也不该收——兜底判据是「双重门槛」，不是只看有没有竞争簇。"""
+    hyp = list(_UR_TARGET)
+    for i in range(9, len(hyp)):
+        hyp[i] = "錯"
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, chars="".join(hyp),
+                              corpus_text=_ur_corpus_text())
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored, "命中率太低时不该被兜底收进去"
+
+
+def test_uncontested_relax_needs_at_least_min_votes(tmp_path, monkeypatch, ws):
+    """`uncontested_min_votes` 挡住「一票都没有」的页——这类页该继续报
+    「候选太少」/「一个 n-gram 都没命中」，不该被这条参数掩盖。"""
+    ctx, _ = _ctx_with_corpus(tmp_path, monkeypatch, corpus_text="甲乙丙丁" * 500)
+    ctx.params["align_ref"] = AlignRefParams(corpus=ctx.params["align_ref"].corpus,
+                                             uncontested_relax=True)
+    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
+    assert not ar.anchored
+    assert ar.anchor_via == "ngram"
 

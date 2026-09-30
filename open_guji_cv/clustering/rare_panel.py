@@ -333,7 +333,10 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
         emb_topk = cnn.emb_topk(norm, cs_big, k=max(k, 10))
     else:
         cs_small, cs_big = _rare_charsets(corpus)
-        a = candidates(norm, cs_small, k=max(k, 10))
+        # `universe=cs_big`（K19，2026-09-28）：cs_small ⊆ cs_big，借 cs_big 的
+        # 索引矩阵查 cs_small 的答案，不为 cs_small 单独建一份索引/占一份常驻
+        # 内存——两次调用命中的是同一个 `_index(cs_big, ...)` 缓存条目。
+        a = candidates(norm, cs_small, k=max(k, 10), universe=cs_big)
         b = candidates(norm, cs_big, k=max(k, 10))
     db_topk = db_font_topk(norm, book_font_editions(book), max(k, 10),
                            _book_norm_stroke(book)) if book else []
@@ -343,7 +346,8 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
 def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                    book: str | None = None, struct_rerank: bool = False,
                    struct_probe: str | None = None,
-                   real_proto: tuple[bool, tuple[str, ...]] | None = None) -> list[list[dict]]:
+                   real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                   gw_enabled: bool | None = None) -> list[list[dict]]:
     """`rare_for` 的批量版：一页多个字块图一次性做检索，逐图融合。
 
     `struct_rerank`（2026-09-21，缺省关）：融合后再按部件袋头的一致性重排前 30 名
@@ -355,6 +359,10 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     `cnn_candidates.book_real_proto(ctx.book.font)`；别的调用方（面板单查
     `rare_for`、CLI `rare_batch`）不传，退回模块级 `REAL_PROTO_ENABLED`（缺省关），
     行为与加这个形参之前逐位相同。
+
+    `gw_enabled`（T4 变体形转正，2026-09-27）：透传给 `emb_topk_batch`。
+    `RareCandidatesStep` 传 `cnn_candidates.book_gw_variant(ctx.book.font)`；
+    别的调用方不传，退回模块级 `GW_ENABLED`（缺省关），行为与加这个形参之前逐位相同。
 
     ## 2026-09-10：一页一个字一个字查，把这一步拖慢了 10~100 倍
 
@@ -386,7 +394,8 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cs_base, cs_esc, spec = book_charsets(book, corpus)
         a_list = b_list = [[] for _ in norms]
         cnn_list = cnn.topk_batch(norms, cs_base, k=max(k, 10))
-        emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10), real_proto=real_proto)
+        emb_list = cnn.emb_topk_batch(norms, cs_base, k=max(k, 10), real_proto=real_proto,
+                                      gw_enabled=gw_enabled)
         # GlyphWiki 变体形模板赢过字体均值的字位（`cnn_candidates.GW_CATALOG`，T4）：
         # 记下是哪张形赢的，最后挂到候选的 `gw` 字段——告诉人「匹配到的是中华字海的这个异体」。
         gw_prov = [dict(d) for d in cnn.last_gw_prov] or [{} for _ in norms]
@@ -403,8 +412,11 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
             idx = [i for i, e in enumerate(emb_list)
                    if (not e) or e[0][1] < th]
             if idx:
-                sub = cnn.emb_topk_batch([norms[i] for i in idx], cs_esc,
-                                         k=max(k, 10), real_proto=real_proto)
+                # 复用基集字表那次已经算过的前向 embedding，不对子集重新跑网络
+                # （2026-09-28，K 引擎卡手 #54 cross 单：此前这里重新前向是第三次）。
+                sub = cnn.emb_topk_batch_subset(norms, idx, cs_esc,
+                                                k=max(k, 10), real_proto=real_proto,
+                                                gw_enabled=gw_enabled)
                 for i, d in zip(idx, cnn.last_gw_prov):
                     gw_prov[i].update(d)
                 for i, extra in zip(idx, sub):
@@ -422,7 +434,8 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
                     emb_list[i] = sorted(seen.items(), key=lambda t: -t[1])[:max(k, 10)]
     else:
         cs_small, cs_big = _rare_charsets(corpus)
-        a_list = candidates_batch(norms, cs_small, k=max(k, 10))
+        # 同 `_rare_for_single_legacy` 的 `universe=cs_big`（K19，2026-09-28）。
+        a_list = candidates_batch(norms, cs_small, k=max(k, 10), universe=cs_big)
         b_list = candidates_batch(norms, cs_big, k=max(k, 10))
         cnn_list = emb_list = [[] for _ in norms]
         gw_prov = [{} for _ in norms]
@@ -601,11 +614,49 @@ def _corpus_keep(corpus: str | None) -> frozenset:
     return frozenset(book_charset(corpus))
 
 
+#: `warm_font_index()` 的状态，供控制台 API 报「字体候选暂不可用」
+#: （K19，2026-09-28）。只有一个进程内的后台预热线程会写它，读者随便读。
+FONT_INDEX_STATE: dict = {"deferred": False, "ready": False}
+
+
+def font_index_status() -> dict:
+    """当前字体索引预热状态的快照（拷贝，调用方改不了内部状态）。"""
+    return dict(FONT_INDEX_STATE)
+
+
 def warm_font_index() -> None:
-    """后台线程预热字体索引。首次建大表要几分钟，别让第一个点按钮的人等。"""
+    """后台线程预热字体索引。索引已经在磁盘上（随发布预建好，见
+    `guji cache build-font-index`）时只读盘，读盘本身很快。
+
+    ## K19（任务书-K-控制台常驻内存，2026-09-28）：缺盘时别跟跑批抢内存
+
+    磁盘上没有的表要现建——字体渲染+提特征首次建大表要几分钟、峰值内存到
+    GB 量级（K19 done 单 §三）。这份内存跟 `guji-batch.slice`（3.5G 额度）抢
+    是子会话须知记过的老毛病。缺盘的表**只要有一张**、且此刻切片里有活跑批
+    （`batch_slice.batch_active()`），就整体推迟，不建——`FONT_INDEX_STATE`
+    记下「推迟中」，控制台 API 可以读它去提示「字体候选暂不可用」。跑批一结束，
+    下一次有人点生僻字面板、或控制台重启，会再给一次机会（这里不自己重试
+    轮询，重试成本比等下一次真实请求触发更大）。
+    """
     try:
-        from .font_candidates import warm
-        warm(list(_rare_charsets()))
+        from .font_candidates import all_ready, warm
+        from ..utils.batch_slice import batch_active
+
+        # 服务器值守 2026-09-28（overview#237）：CNN 可用时 `rare_for_batch` 根本不走
+        # HOG 字体索引（只有 checkpoint 缺席才用它当唯一候选源），预热它纯属白占——
+        # 大表现建峰值 5.58 GB，读盘后也常驻 ~2.5 GB，把控制台顶在 cgroup 上限被节流。
+        from .cnn_candidates import shared
+        if shared().available:
+            FONT_INDEX_STATE["deferred"] = False
+            return
+
+        charsets = list(_rare_charsets())
+        if not all_ready(charsets) and batch_active():
+            FONT_INDEX_STATE["deferred"] = True
+            return
+        warm(charsets)
+        FONT_INDEX_STATE["deferred"] = False
+        FONT_INDEX_STATE["ready"] = True
     except Exception:
         pass
 

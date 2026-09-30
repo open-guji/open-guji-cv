@@ -26,6 +26,7 @@ class ConsumeResult:
     updated: int = 0
     skipped: int = 0
     no_lib: int = 0            # 正常裁决但按 no_glyph_lib 标志不建库的条数（非错误）
+    occluded: int = 0          # 其中：印章遮挡格（不论事件 no_glyph_lib 是什么，一律不建库）
     errors: list[str] = None   # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -35,6 +36,7 @@ class ConsumeResult:
     def to_dict(self) -> dict:
         return {"consumer": self.consumer, "events": self.n_events, "added": self.added,
                 "updated": self.updated, "skipped": self.skipped, "no_lib": self.no_lib,
+                "occluded": self.occluded,
                 "errors": self.errors}
 
 
@@ -248,26 +250,36 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
 
 
 # ── 未实现的两个（显式报错，不静默吞事件）───────────────────────────
-def _unmojibake(s: str | None) -> str | None:
-    """UTF-8 被当 cp1252 / latin-1 解过一遍的乱码还原（「å†…」→「内」）。
+# `_unmojibake` 正本已搬到 `feedback/mojibake.py`（2026-09-27，H 道普查乱码时把
+# 这份逻辑与 `is_legal_shape` 校验收在一处，供写入口/读取处共用）；这里保留同名
+# 别名，不改调用点。
+from .mojibake import unmojibake as _unmojibake  # noqa: E402
 
-    2026-09-16 那批 `vol01-p1-30-confirm-20260916` 的 56 条事件字形全是这种乱码，
-    消费不了、一直挂着；万一被消费，三个拉丁字母会被当字形进库。还原不了的原样返回。"""
-    if not s or all(ord(ch) >= 0x2E80 for ch in s):
-        return s
-    # 逐字回成字节：cp1252 有定义的按 cp1252，没定义的（0x81 0x8D 0x8F 0x90 0x9D 被当成
-    # 同值控制符留下）按 latin-1——「é\x9dž」这种混合形态整串 encode 哪个都不成
+
+def _occluded_lookup(book: str, page: int):
+    """(book, page) → 该页遮挡格集合 {(col, slot, sub)}；读不到产物/原图 → 空集（不拦）。
+
+    判据与 `seed_admit` 的 `occluded_gate` 同源（`steps.occlusion.page_occluded`，参数也取
+    该书 `seed_admit` 的解析结果）；书级关了 `occluded_gate` 的就不拦。"""
     try:
-        raw = b"".join(ch.encode("cp1252") if ch.encode("cp1252", "ignore") else ch.encode("latin-1")
-                       for ch in s)
-        fixed = raw.decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return s
-    return fixed if fixed and all(ord(ch) >= 0x2E80 for ch in fixed) else s
+        import open_guji_cv.steps  # noqa: F401  注册 Step
+        from ..core.book import load_book
+        from ..core.step import STEPS, RunContext
+        from ..products.cache import ImageCache
+        from ..products.store import ProductStore
+        from ..steps.occlusion import page_occluded
+        ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda *_: None)
+        p = ctx.params_for(STEPS["seed_admit"])
+        if not p.occluded_gate:
+            return set()
+        return set(page_occluded(ctx, page, p))
+    except Exception:
+        return set()
 
 
 def glyphdb_admit(events, db_path: str | None = None,
-                  dry_run: bool = False, binarize: bool = True, **kw) -> ConsumeResult:
+                  dry_run: bool = False, binarize: bool = True,
+                  occluded_of=None, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
 
     这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
@@ -282,6 +294,13 @@ def glyphdb_admit(events, db_path: str | None = None,
     `not_a_char` / `skip` / `damaged` 事件不进库（判非字 / 存疑跳过 / 原图破损
     认不出）。三者都靠 `payload.v != "confirm"` 被下面那句过滤挡在外面。
     图块从 v2 的 `char_patch` 缓存取——那正是被裁决的那张图。
+
+    ## 印章遮挡格一律不入库（2026-09-30，H-seal）
+
+    用户 09-30：遮挡块里的格**一律**不入字形库。事件的 `no_glyph_lib` 靠前端默认值带出来，
+    实测 vol03 p3 有 8 格遮挡格的「确认」事件带的是 false，于是进了库。所以这里不信事件：
+    格落在遮挡块里（`occluded_of(book, page)`，缺省 `_occluded_lookup`，与 seed_admit 同一判据）
+    就当 `no_glyph_lib` 处理，计入 `res.no_lib` 与 `res.occluded`。
 
     ## `no_glyph_lib`：选字正常裁决，但这张图不建库（2026-09-09）
 
@@ -318,6 +337,8 @@ def glyphdb_admit(events, db_path: str | None = None,
 
     db = GlyphDB(str(glyph_db_path(db_path)))
     cache = ImageCache()
+    occ_of = occluded_of or _occluded_lookup
+    occ_memo: dict = {}
     for e, _dest in admits:
         shape = _unmojibake(e.payload.get("shape") or e.payload.get("char"))
         if not shape:
@@ -329,10 +350,14 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.errors.append(f"{e.target.key}: 字形 {shape!r} 不是单个汉字，跳过")
             res.skipped += 1
             continue
+        book = e.target.book or (e.target.key.split(":")[0] if ":" in e.target.key else "")
         if e.payload.get("no_glyph_lib"):
             res.no_lib += 1
             continue
-        book = e.target.book or (e.target.key.split(":")[0] if ":" in e.target.key else "")
+        if _is_occluded(e, book, occ_of, occ_memo):
+            res.no_lib += 1
+            res.occluded += 1
+            continue
         # 图块键：p{page}c{col}s{slot}[a|b]，与 Step4 落缓存时一致
         try:
             _b, pg, col, slot = e.target.key.split(":")
@@ -443,7 +468,45 @@ def glyphdb_admit(events, db_path: str | None = None,
                         res.updated += 1
         else:
             res.skipped += 1        # admit_instance 的幂等闸：已进过库
+        _apply_approx(db, db_id, shape, e)
     return res
+
+
+def _apply_approx(db, db_id: str, shape: str, e: Event) -> None:
+    """近似字侧表（overview#276）：`payload.approx` → `approx_labels` 一行（`ids`/`note` 可空）。
+
+    - 带 `approx: true`：记（覆盖）。时间用事件的 `ts`，同一条事件重放写出同一行；
+    - 不带 `approx`、这一格库里**有**近似标记、且是人裁：人改口了，撤标记并记 `approx_clears`；
+    - 库里本来没有近似标记的格，不带 `approx` 的事件什么都不做——**老事件行为不变**。
+
+    `no_glyph_lib` 的格不进库，也就没有实例可挂，这里够不着；文本侧表直接读事件（`approx_sidecar`）。
+    幂等闸挡掉的重复确认（已在库、同字）照样走这里：人先确认、后来回头勾「近似」，要记得上。
+    """
+    p = e.payload or {}
+    if p.get("approx"):
+        db.set_approx(db_id, shape, ids=(p.get("ids") or "").strip() or None,
+                      note=(p.get("note") or "").strip() or None,
+                      reviewer=e.reviewer, at=e.ts)
+    elif e.actor == "user":
+        db.clear_approx(db_id, at=e.ts)
+
+
+def _is_occluded(e: Event, book: str, occluded_of, memo: dict) -> bool:
+    """事件指的格是否在印章遮挡块里。键解析不了 / 查不到 → False（交给后面的键解析去报错）。"""
+    parts = (e.target.key or "").split(":")
+    if parts and parts[0] == "v2":
+        parts = parts[1:]
+    if len(parts) != 4 or not parts[1].isdigit() or not parts[2].isdigit():
+        return False
+    slot, sub = parts[3], ""
+    if slot and slot[-1] in "ab":
+        slot, sub = slot[:-1], slot[-1]
+    if not slot.lstrip("-").isdigit():
+        return False
+    bk, page = book or parts[0], int(parts[1])
+    if (bk, page) not in memo:
+        memo[(bk, page)] = occluded_of(bk, page)
+    return (int(parts[2]), int(slot), sub) in memo[(bk, page)]
 
 
 def glyphdb_recrop(events, **kw) -> ConsumeResult:

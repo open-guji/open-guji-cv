@@ -14,6 +14,14 @@
 / 20,778）。拿同一份整理本再比一遍，这 85% 恒等——**是回声不是校验**。
 所以 `summarize()` 出的是 `kind × channel` 的交叉表，
 并把「人裁位上的差异」单列——那一栏才是真正要人看的。
+
+## 分层：`kind × channel` 答不了「要不要看」
+
+上面那句是旧口径。2026-09-27 起每条 `Diff` 多一个 `grade` 字段——`collation_grade.py`
+的五层判据（避諱/系统性/异体/人裁/整段错位/存疑），此前只接在单证人的旧脚本上，
+这里按证人各自算一遍（避諱、重复度都要按**该证人的**全书统计，两个证人的 177/165
+条系统性字对不是同一批，见任务书 vol03 实测）再写回 `Diff.grade`，`by_witness`
+里也带 `grade_counts`/`n_settled`/`n_todo`。`report/html.py` 从 `grade` 分区渲染。
 """
 from __future__ import annotations
 
@@ -27,6 +35,8 @@ from ..core.book import load_book
 from ..core.workspace import reports_root
 from ..products.store import ProductStore
 from .collate import Diff, collate_page
+from .collation_grade import adapt_diff, misanchored_pages
+from .collation_grade import summarize as grade_summarize
 from .witness import Witness, load_witnesses
 
 
@@ -35,7 +45,13 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     """整册比对 → 可直接落盘的报告 dict。
 
     `progress`：`f(done, total, page)`，控制台/CLI 用来报进度；跑整册几十秒。
-    """
+
+    **单页崩溃不拖垮整册**（2026-09-27 补，vol01 7 页人裁事件乱码实锤：
+    `collate_page` 对某一页抛异常时，之前整个 `collate_book` 直接崩溃、
+    崩溃页起的所有后续页全部拿不到结果）。`collate_page` 抛异常时记进
+    `page_errors`（页号 + 异常类型 + 首行信息），跳过这一页，继续跑剩下的页；
+    坏数据本身不在这里修——那是上游数据的事（人裁事件/字形库），这里只保证
+    「一页坏能不能让全书都拿不到对勘结果」这件事不再发生。"""
     store = store or ProductStore()
     t0 = time.time()
     stale: list[str] = []
@@ -43,10 +59,19 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     all_diffs: list[Diff] = []
     all_cols: list[dict] = []
     unanchored: dict[str, list[int]] = {w.label: [] for w in witnesses}
+    page_errors: list[dict] = []
 
     codepoints = load_book(book).codepoints     # 书级用字账：𠮓/變 之类不算认错字
     for n, page in enumerate(pages, 1):
-        per = collate_page(store, book, page, witnesses, stale, codepoints)
+        try:
+            per = collate_page(store, book, page, witnesses, stale, codepoints)
+        except Exception as e:
+            msg = str(e).splitlines()[0] if str(e) else ""
+            page_errors.append({"page": page, "error_type": type(e).__name__,
+                                "message": msg})
+            if progress:
+                progress(n, len(pages), page)
+            continue
         rec: dict = {"page": page, "witnesses": {}}
         for label, res in per.items():
             if not res.anchored:
@@ -61,12 +86,17 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                 # 证人无此段（按语/卷端题/卷末题）：不进 diffs，但报告要说明，
                 # 否则读者会奇怪这页字数怎么对不上（见 report/absent.py）。
                 "absent_runs": res.absent_runs,
+                # 字位数据本身长度异常（乱码等），已被 diff_page 挡下——见
+                # collate.py::_sanitize_slots。
+                "warnings": res.warnings,
             }
             all_diffs.extend(res.diffs)
             all_cols.extend(asdict(c) for c in res.cols)
         pages_out.append(rec)
         if progress:
             progress(n, len(pages), page)
+
+    grades = _grade_by_witness(all_diffs, pages_out, unanchored, witnesses)
 
     return {
         "book": book,
@@ -78,7 +108,9 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
                        "n_chars": len(w.text)} for w in witnesses],
         "unanchored": unanchored,
         "stale": sorted(set(stale)),
-        "summary": {**summarize(all_diffs, all_cols, pages_out, witnesses),
+        "page_errors": page_errors,
+        "summary": {**summarize(all_diffs, all_cols, pages_out, witnesses, grades),
+                    "n_page_errors": len(page_errors),
                     "absent_runs": [dict(a, page=rec["page"], witness=lb)
                                     for rec in pages_out
                                     for lb, st in rec["witnesses"].items()
@@ -89,9 +121,43 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     }
 
 
+def _grade_by_witness(all_diffs: list[Diff], pages_out: list[dict],
+                      unanchored: dict[str, list[int]], witnesses: list[Witness]
+                      ) -> dict[str, dict]:
+    """按证人各自跑一遍 `collation_grade`，把 `grade` 写回每条 `Diff`（原地改）。
+
+    避諱/系统性都要按**该证人的**全书统计——两个证人的字对重复次数不是同一批
+    （vol03 实测四库光盘版「正俗·异体」177 条、杳冥整理本 165 条，字对集合不同，
+    见任务书）。`misanchored_pages` 同理按证人各自的 `page_stats` 算，且要减掉
+    这个证人自己**锚定失败**的页（那些页压根没出 diff，别跟「锚上了但对不上号」
+    混成一件事，见 `collation_grade.misanchored_pages` 调用方那条老注释）。
+    """
+    out: dict[str, dict] = {}
+    for w in witnesses:
+        wdiffs = [d for d in all_diffs if d.witness == w.label]
+        page_stats_w = {rec["page"]: {"n_slots": rec["witnesses"][w.label]["n_slots"],
+                                      "excluded": rec["witnesses"][w.label]["n_excluded"],
+                                      "equal": rec["witnesses"][w.label]["n_equal"]}
+                        for rec in pages_out if w.label in rec["witnesses"]}
+        mis = misanchored_pages(page_stats_w) - set(unanchored.get(w.label, []))
+        adapted = [adapt_diff(asdict(d)) for d in wdiffs]
+        gsum = grade_summarize(adapted, mis)
+        for d, a in zip(wdiffs, adapted):
+            d.grade = a["grade"]
+        out[w.label] = {"grade_counts": gsum["counts"], "n_settled": gsum["n_settled"],
+                        "n_todo": gsum["n_todo"], "misanchored_pages": sorted(mis)}
+    return out
+
+
 def summarize(diffs: list[Diff], cols: list[dict], pages_out: list[dict],
-              witnesses: list[Witness]) -> dict:
-    """册级汇总。**按 channel 分层**（见模块头），并单列人裁位上的差异。"""
+              witnesses: list[Witness], grades: dict[str, dict] | None = None) -> dict:
+    """册级汇总。**按 channel 分层**（见模块头），并单列人裁位上的差异。
+
+    `grades`：`_grade_by_witness()` 的结果（分层计数 + 存疑/成果数 + 整段错位页），
+    默认空——这个参数只有 `collate_book()` 会传，留着默认值是不想把「按证人重算
+    一遍分层」这件事的先决条件（`all_diffs` 都跑过 `_grade_by_witness`）焊死进函数签名。
+    """
+    grades = grades or {}
     by_witness: dict[str, dict] = {}
     for w in witnesses:
         wd = [d for d in diffs if d.witness == w.label]
@@ -110,6 +176,7 @@ def summarize(diffs: list[Diff], cols: list[dict], pages_out: list[dict],
             "human_disagree": [asdict(d) for d in wd
                                if d.human and d.kind.startswith(("sub.", "unreadable"))],
             "cols": dict(Counter(c["kind"] for c in cols if c["witness"] == w.label)),
+            **grades.get(w.label, {}),
         }
     return {"by_witness": by_witness, "n_diffs": len(diffs)}
 

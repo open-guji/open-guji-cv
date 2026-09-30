@@ -213,3 +213,60 @@ def _no_writes_into_the_repo():
         "测试往仓内易变目录写了东西——那既污染工作副本，也说明它在依赖活数据：\n"
         + "\n".join(bad)
         + f"\n（共新增 {len(added)} / 改动 {len(changed)}）")
+
+
+#: `models/`：CNN checkpoint（`best.pt`，入库）+ embedding/GW 模板索引缓存
+#: （`emb_*.npz`/`gw_*.npz`，gitignore，可由字体/真刻例现算重建，服务器上会
+#: 累积到几百 MB，是生产资产，故不并进 `VOLATILE_REPO_DIRS`——那批检查
+#: 「新增+改动」，这里**只查新增**）。新出现的 `emb_*.npz`/`gw_*.npz` 是真问题：
+#: 测试拿真实 `DEFAULT_CKPT` 对某个测试小字表（"一二三十土王"/"諭論俞" 这类到处
+#: 复用的测试字表）建索引，会把结果落进生产缓存目录，跟真书的索引混在一起
+#: （2026-09-27，K 引擎卡手 #54 cross 单；2026-09-28 排查发现不止一处，见
+#: `cnn_test_ckpt` fixture，任务书-R-rare前向去重与测试隔离）。
+MODELS_DIR = _REPO / "models"
+
+
+def _models_snapshot() -> set[str]:
+    if not MODELS_DIR.is_dir():
+        return set()
+    return {str(p) for p in MODELS_DIR.rglob("*") if p.is_file()}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _no_new_files_in_models():
+    """跑完之后 `models/` 不许多出文件——理由见上面 `MODELS_DIR` 处的注释。
+
+    只查新增，不查改动：这里不像 `VOLATILE_REPO_DIRS` 那样比对 mtime/size——
+    `best.pt` 是入库的生产权重，没有测试应该改它，改了也该在别处先炸；这里
+    单守「凭空多出一个文件」这一种情形。"""
+    before = _models_snapshot()
+    yield
+    after = _models_snapshot()
+    added = sorted(after - before)
+    assert not added, (
+        "测试往 models/（CNN checkpoint 与索引缓存目录）写了新文件——多半是拿"
+        "真实 checkpoint 对某个测试小字表建了索引、落进了生产缓存目录，"
+        "该测试要改用 `cnn_test_ckpt` fixture（tmp 拷贝）：\n"
+        + "\n".join(f"新增 {p}" for p in added[:10])
+        + f"\n（共新增 {len(added)}）")
+
+
+@pytest.fixture(scope="session")
+def cnn_test_ckpt(tmp_path_factory) -> Path:
+    """CNN checkpoint 的会话级临时拷贝。
+
+    需要真实前向的 `CnnCandidates` 测试用它代替 `shared()`/裸 `CnnCandidates()`/
+    `cc.CnnCandidates(cc.DEFAULT_CKPT)`——`emb_topk`/`emb_topk_batch` 会把模板
+    索引落盘到 `<ckpt 所在目录>/emb_*.npz`（`_gw_index` 同理落 `gw_*.npz`），
+    直接用真实 `DEFAULT_CKPT` 会把测试小字表的索引写进真实
+    `models/glyph_cnn_r5/`，与真书的索引混在一起（2026-09-28，任务书-R-rare
+    前向去重与测试隔离）。`fingerprint()` 按内容算，候选结果与直接用真实路径
+    逐位相同，只是落盘目录换了。没有 checkpoint 时原样返回真实路径——
+    `.available` 会是 False，调用方本来就该跳过，不差这一次文件拷贝。"""
+    from open_guji_cv.clustering.cnn_candidates import DEFAULT_CKPT
+    if not DEFAULT_CKPT.exists():
+        return DEFAULT_CKPT
+    d = tmp_path_factory.mktemp("cnn_ckpt")
+    p = d / "best.pt"
+    p.write_bytes(DEFAULT_CKPT.read_bytes())
+    return p

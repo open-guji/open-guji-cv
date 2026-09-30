@@ -17,12 +17,19 @@
 | `void` | 锚框处已经没有格 | 不采信 |
 | `unanchored` | 老裁决、既补不出框也没有当时的图：裁于现行切分之后 → 视同 valid；之前 → 不采信 | 同左 |
 
+**补锚档**（`feedback/anchors/<book>.jsonl`，`anchor_backfill.py`，2026-09-28）：没有 `target.anchor` 的老事件先查这里。
+锚里是 `ink_bbox`（当时字块图在原图上找回的墨框）的，按「墨框 ≥80% 落在某一现格、第二格 <20%」绑
+（`anchor_backfill.bind_ink`）：落在同编号 → `valid`，别的编号 → `rebound`，跨两格 → `review`，落空 → `void`。
+
 没有框、但字形库里有当时的图（老裁决常见）：同编号现格的图像 → `valid`，不像 → `review`。
 
-## 老裁决补锚（事件里 `target.anchor` 为空）
+## 老裁决补锚（事件里 `target.anchor` 为空、补锚档里也没有）
 
 几何：按裁决时间找**当时那一版** Step3 产物——现行版（manifest 时间之后的裁决）、`_prev/` 上一版、
 `<step>.bak-YYYYMMDD/` 手工备份——取那一版里这个编号的 `quad_page`。原图不变，所以当时的框与现在的框可比。
+`_prev/` 的起点取 manifest 历史里**头一次写出这份内容**的时间；查不到就不用它（2026-09-28 修：
+原来起点写死 −∞，vol02 09-27 快照导入后 `_prev` 是 09-27 的上一版，4441 条 09-06 起的老裁决
+全被当成「按 `_prev` 裁的」、与现行版一比全是 valid——假有效）。
 图块：字形库里入库的人裁存了当时的图块（`instances.patch_png`），拿来与现格比。
 
 ## 缓存与及时性
@@ -59,7 +66,7 @@ IOU_GONE = 0.15       # 低于这个算「那一格没了」
 SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：未动的 1,122 条 ≥0.9，漂移的 30 条 <0.9
 USE_STATUSES = ("valid", "rebound")
 _MEMO: dict = {}
-_VERSION = 4          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段）
+_VERSION = 5          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点）
 
 
 def _ts(iso: str) -> float:
@@ -83,7 +90,9 @@ def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float
     cur_ts = float(ent.ts) if ent is not None else 0.0
     prev = store.read_prev(book, step, key, CELLS_KIND)
     if prev is not None:
-        out.append(("prev", float("-inf"), cur_ts, prev))
+        born = _first_written(store.manifest(book, step).path, key, store.prev_sha(book, step, key))
+        if born is not None and born < cur_ts:
+            out.append(("prev", born, cur_ts, prev))
     for d in sorted(store.step_dir(book, step).parent.glob(f"{step}.bak-*")):
         f = d / f"{key}.json"
         if not f.exists():
@@ -99,6 +108,29 @@ def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float
     if cur is not None:
         out.append(("current", cur_ts, float("inf"), cur))
     return out
+
+
+def _first_written(manifest_path: Path, key: str, sha: str | None) -> float | None:
+    """manifest 历史（追加写）里这一页头一次写出内容 `sha` 的时间；查不到 → None。
+
+    `_prev/` 只留一代、自己不记时间，要从 manifest 反查它是什么时候生成的。
+    manifest 被 `compact()` 过、或快照只带了最后一条，就查不到——那就不知道这份 `_prev`
+    覆盖哪段时间，宁可不用。"""
+    if not sha or not manifest_path.exists():
+        return None
+    best = None
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            for line in f:
+                if f'"{key}"' not in line:
+                    continue
+                d = json.loads(line)
+                if d.get("key") == key and d.get("sha256") == sha and d.get("ts") is not None:
+                    t = float(d["ts"])
+                    best = t if best is None else min(best, t)
+    except (OSError, ValueError):
+        return None
+    return best
 
 
 def _cell_index(cells) -> dict[str, tuple[list[float], str]]:
@@ -199,7 +231,7 @@ def _return_trigger_events(book: str, log) -> dict[int, list]:
 
 
 def compute_page(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
-                 return_events: list | None = None) -> list[dict]:
+                 return_events: list | None = None, backfill: dict | None = None) -> list[dict]:
     """一页裁决的绑定（不读不写缓存）。
 
     `return_events`：这一页的 `cutline`／`n_body_slots`／`return_resolve` 事件（列级/结案，
@@ -212,8 +244,11 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     """
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
+    from .anchor_backfill import bind_ink, ink_hits, load_backfill
     store = store or ProductStore()
     cache = cache or ImageCache()
+    if backfill is None:
+        backfill = load_backfill(book)
     versions = _cells_versions(book, page, store)
     current = versions[-1] if versions and versions[-1][0] == "current" else None
     cur_idx = _cell_index(current[3]) if current else {}
@@ -223,11 +258,24 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         _, _, col, slot, sub = parse_cell_key(ev.target.key)
         anchor = ev.target.anchor if (ev.target.anchor and ev.target.anchor.get("bbox")) else None
         if anchor is None:
+            anchor = backfill.get(ev.id)
+        if anchor is None:
             anchor = _legacy_anchor(ev, book, page, col, slot, sub, versions, glyph_db)
         row = {"event": ev.id, "key": ev.target.key, "ts": ev.ts, "bound": None,
                "shape": (ev.payload or {}).get("shape") or None,
                "status": "void", "iou": 0.0, "sim": None,
                "anchor": None if anchor is None else anchor.get("source", "live")}
+        if anchor is not None and anchor.get("ink_bbox"):
+            # 补锚档的墨框：当时那块墨落在现在哪一格（anchor_backfill.bind_ink）
+            cell, ins, _ = bind_ink(anchor["ink_bbox"], cur_idx)
+            row["iou"] = round(ins, 3)
+            if cell is not None:
+                row["bound"] = f"{book}:{page}:{cell[0]}:{cell[1]}{cell[2]}"
+                row["status"] = "valid" if row["bound"] == ev.target.key else "rebound"
+            elif ink_hits(anchor["ink_bbox"], cur_idx) and ins >= IOU_GONE:
+                row["status"] = "review"          # 墨跨两格（切开/合并）
+            rows.append(row)                      # 其余 void：那块墨处已经没有格
+            continue
         if anchor is None or not anchor.get("bbox"):
             # 补不出几何：裁于现行切分之后 → 同编号照用；之前 → 回待审（宁可重看不可错用）
             same = (col, slot, sub) in cur_idx
@@ -304,15 +352,19 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     return rows
 
 
-def _sig(events, return_events: list | None = None) -> str:
+def _sig(events, return_events: list | None = None, backfill: dict | None = None) -> str:
     base = f"{len(events)}:{events[-1].id if events else ''}"
+    if backfill:
+        from .anchor_backfill import page_signature
+        base = f"{base}|bf:{page_signature(backfill, [e.id for e in events])}"
     if not return_events:
         return base
     return f"{base}|{len(return_events)}:{return_events[-1].id}"
 
 
 def page_bindings(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
-                  refresh: bool = False, return_events: list | None = None) -> list[dict]:
+                  refresh: bool = False, return_events: list | None = None,
+                  backfill: dict | None = None) -> list[dict]:
     """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。"""
     from ..core.spec import page_key
     from ..products.store import ProductStore
@@ -320,7 +372,10 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     store = store or ProductStore()
     cells_sha = store.sha(book, cells_step(book), page_key(page))
     f = _bindings_dir(book) / f"p{page:04d}.json"
-    sig = _sig(events, return_events)
+    if backfill is None:
+        from .anchor_backfill import load_backfill
+        backfill = load_backfill(book)
+    sig = _sig(events, return_events, backfill)
     if not refresh and f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
@@ -329,7 +384,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
         except Exception:
             pass
     rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db,
-                       return_events=return_events)
+                       return_events=return_events, backfill=backfill)
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
                              "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -348,15 +403,17 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     from .events import EventLog
     store = store or ProductStore()
     log = log or EventLog()
+    from .anchor_backfill import load_backfill
     by_page = _verdict_events(book, log)
     by_page_returns = _return_trigger_events(book, log)
+    backfill = load_backfill(book)
     # 同一次跑批里 Step7 每页都要读一遍全书绑定：事件与 Step3 产物都没变时直接用上一份（2 分钟内）
     from ..core.spec import page_key
     from ..report.slots import cells_step
     step = cells_step(book)
     all_pages = sorted(set(by_page) | set(by_page_returns))
     sig = (book, str(store.root),
-           tuple((pg, _sig(by_page.get(pg, []), by_page_returns.get(pg)),
+           tuple((pg, _sig(by_page.get(pg, []), by_page_returns.get(pg), backfill),
                  store.sha(book, step, page_key(pg))) for pg in all_pages),
            tuple(pages) if pages is not None else None)
     hit = _MEMO.get(sig)
@@ -373,7 +430,7 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
             continue
         evs = by_page.get(page, [])
         for r in page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh,
-                               return_events=by_page_returns.get(page)):
+                               return_events=by_page_returns.get(page), backfill=backfill):
             out[r["event"]] = r
     _MEMO.clear()
     _MEMO[sig] = (time.time(), out)

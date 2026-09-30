@@ -35,7 +35,7 @@ match_ref 1,748，`steps/seed_admit.py`）。拿同一份整理本再比一遍�
 from __future__ import annotations
 
 import difflib
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from ..clustering.align_eval import WINDOW_PAD, anchor_page
 from ..clustering.align_label import is_han
@@ -78,6 +78,10 @@ class Diff:
     n: int = 1         # missing 串长
     hyp_ctx: str = ""
     ref_ctx: str = ""
+    grade: str = ""    # collation_grade.grade() 的结果，run.collate_book 填；空 = 尚未分层
+    strip: str | None = None
+    """截条图相对路径（`<out>_strips/<witness>/<id>.webp`），`report/strips.py` 填。
+    None = 还没生成/这条不出图（增删/异体汇总另有例图，见 strips 模块头）。"""
 
 
 @dataclass
@@ -105,6 +109,9 @@ class PageResult:
     absent_runs: list[dict] = field(default_factory=list)
     """证人里没有的段（按语/卷端题/卷末题），**不进 diffs**——见 report/absent.py。
     报告要单独说明「这里有一段、证人没有」，否则读者会奇怪这页字数怎么对不上。"""
+    warnings: list[str] = field(default_factory=list)
+    """字位数据本身不对劲（`char`/`guess` 长度不是 1），已被 `_sanitize_slots`
+    按阙文/去猜测挡下——不是这一页的对勘结论，是数据质量提醒，见该函数说明。"""
 
 
 def classify(char: str, ref: str, codepoints: dict[str, str] | None = None) -> str:
@@ -187,30 +194,77 @@ def _is_confusable(char: str, ref: str) -> bool:
 
 
 def _slot_char(s: SlotRec) -> str:
-    """比对串里这一位出的字。**不退到库/OCR 猜测**（04 卡 §三·1）——
-    原型那样做的结果是 vol01 251 条「改」里 221 条是未审位的库 top1 猜测，
-    噪声盖过信号；未审位由体检表的「未审阅数」去报。"""
+    """比对串里这一位出的字，**用来分类/出差异**。不退到库/OCR 猜测（04 卡
+    §三·1）——原型那样做的结果是 vol01 251 条「改」里 221 条是未审位的库 top1
+    猜测，噪声盖过信号；未审位由体检表的「未审阅数」去报。
+
+    2026-09-27 起 `report/slots.py::_to_slot` 已经把未放行、非排除名单位的
+    `char` 清成 `None`（猜测挪进 `guess`），这里因此天然只会拿到已放行的字或
+    `PLACEHOLDER`——本函数本身不用再判 `admit`。"""
     return s.char or PLACEHOLDER
+
+
+def _anchor_char(s: SlotRec) -> str:
+    """锚定 / 对齐用的字：**容忍未放行猜测**，跟 2026-09-27 前 `_slot_char` 的
+    效果完全一致（`s.char or s.guess or PLACEHOLDER`，对已放行位与排除名单位
+    两者值相同，只在「未放行且非排除名单」这一类上从 `guess` 里找回原先在
+    `char` 里的那份猜测）——8-gram 锚定要靠字串够密，一整串全是占位符锚不上
+    （任务书「P-对勘未放行格口径」§2 明说的顾虑）。**只用于找 offset 与
+    difflib 对齐**，不进最终差异输出——那边一律走 `_slot_char`，出差异时不
+    退到猜测。"""
+    return s.char or s.guess or PLACEHOLDER
+
+
+def _sanitize_slots(slots: list[SlotRec]) -> tuple[list[SlotRec], list[str]]:
+    """挡坏数据：`char`/`guess` 长度不是 1（`None` 正常，不含占位符 `□`——它
+    本来就是长度 1）的格按阙文 / 去猜测处理，**只挡、不修**。
+
+    2026-09-27 实锤：vol01 一批人裁事件（`feedback/events/
+    vol01-p1-30-confirm-20260916.jsonl`）UTF-8 误当 cp1252 解码再存盘，
+    一个字位存成了 3 个 code point 的假"字"（`'å†…'`，还原是「内」）。9.3
+    对勘假设「一个字位＝一个字符」逐位建串，这种假字混进 `text`/`anchor_text`
+    会让长度对不上、下游 `SequenceMatcher` opcode 下标全部偏移、越界崩溃
+    （vol01 p24/26/33/42/47/137/141 实测，7 页同一批坏数据，全书跑批中止）。
+    根因在上游数据（人裁事件／字形库），交那边去修（cross 单已发）；这里只
+    保证一页坏数据崩不了这页、更崩不了整册。"""
+    warnings: list[str] = []
+    out: list[SlotRec] = []
+    for s in slots:
+        bad_char = s.char is not None and len(s.char) != 1
+        bad_guess = s.guess is not None and len(s.guess) != 1
+        if not bad_char and not bad_guess:
+            out.append(s)
+            continue
+        warnings.append(f"{s.id}: char={s.char!r} guess={s.guess!r} 长度异常，"
+                        + ("已按阙文处理" if bad_char else "已丢弃猜测"))
+        out.append(replace(s, char=(None if bad_char else s.char),
+                           guess=(None if bad_guess else s.guess),
+                           unreadable=(True if bad_char else s.unreadable)))
+    return out, warnings
 
 
 def diff_page(slots: list[SlotRec], w: Witness, page: int,
               pad: int = WINDOW_PAD,
               codepoints: dict[str, str] | None = None) -> PageResult:
     """一页 × 一个证人 → 差异清单 ＋ 列结构裁定。"""
+    slots, slot_warnings = _sanitize_slots(slots)
     text_slots = [s for s in slots if s.is_text]
     res = PageResult(page=page, anchored=False, n_slots=len(slots),
                      n_text=len(text_slots),
                      n_excluded=sum(1 for s in slots if s.excluded),
-                     n_unreadable=sum(1 for s in slots if s.unreadable))
+                     n_unreadable=sum(1 for s in slots if s.unreadable),
+                     warnings=slot_warnings)
     if not text_slots:
         res.note = "没有可比对的字位"
         return res
 
     # 证人里根本没有的段（校勘按语、卷端题、卷末题）**先摘出去再对齐**：
     # 留着它们不但自己全报成差异，还会把整页的锚点带偏（见 report/absent.py）。
+    # 摘段与锚定都用 `_anchor_char`（容忍未放行猜测）——串密度决定摘段准确率
+    # 与 8-gram 锚定成败，跟「未放行位不该被当成认错字」是两件事，别混着改。
     vm0 = _vm()
     res.absent_runs = absent_runs(
-        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _slot_char(s)}
+        [{"id": s.id, "col": s.col, "sub": s.sub or "", "char": _anchor_char(s)}
          for s in text_slots], w.text_norm, vm0.normalize_text)
     if res.absent_runs:
         skip = {i for a in res.absent_runs for i in a["ids"]}
@@ -219,13 +273,17 @@ def diff_page(slots: list[SlotRec], w: Witness, page: int,
             res.note = "整页都是证人无此段的内容"
             return res
 
-    text = "".join(_slot_char(s) for s in text_slots)
-    offset = anchor_page(text, w.index)
+    anchor_text = "".join(_anchor_char(s) for s in text_slots)
+    offset = anchor_page(anchor_text, w.index)
     if offset is None:
         res.note = "8-gram 锚定失败"
         return res
     res.anchored = True
 
+    # 找 offset 之后的对齐/上下文一律用 `_slot_char`（未放行位退占位符，不退猜测）
+    # ——`anchor_text` 只借来撑锚定密度，长度跟 `text` 一样（同一份 `text_slots`
+    # 逐位对应），offset 换算不受影响。
+    text = "".join(_slot_char(s) for s in text_slots)
     corpus = w.text
     lo, hi = max(0, offset - pad), min(len(corpus), offset + len(text) + pad)
     window = corpus[lo:hi]

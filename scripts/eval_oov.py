@@ -38,6 +38,9 @@ def main() -> int:
     ap.add_argument("--with-hog", action="store_true")
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--json", default=None, help="结果写到这个文件（对比历次用）")
+    ap.add_argument("--gw", action="store_true",
+                    help="开 GlyphWiki 变体形模板档（cnn_candidates.GW_ENABLED，缺省关）做对照；"
+                         "T4 变体形转正（2026-09-27）加，配合 --no-gw 一起跑闸线前后对比")
     ap.add_argument("--no-gw", action="store_true", help="关掉 GlyphWiki 变体形模板档（cnn_candidates.GW_ENABLED），做对照")
     ap.add_argument("--real-proto", action="store_true",
                     help="开真刻例多原型档（R2/T11，cnn_candidates.REAL_PROTO_ENABLED，缺省关）")
@@ -62,6 +65,9 @@ def main() -> int:
     cs = base_charset(a.charset)
     print(f"集 {len(G)} 条 / {len(set(G))} 字种；字表 {a.charset} {len(cs)} 字")
 
+    if a.gw:
+        import open_guji_cv.clustering.cnn_candidates as _cc
+        _cc.GW_ENABLED = True
     if a.no_gw:
         import open_guji_cv.clustering.cnn_candidates as _cc
         _cc.GW_ENABLED = False

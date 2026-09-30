@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDeepLink } from '../hooks/useDeepLink'
 import { ReviewPanel } from '../components/review/ReviewPanel'
+import { GroupReviewPanel } from '../components/review/GroupReviewPanel'
+import { ShapeReviewPanel } from '../components/review/ShapeReviewPanel'
 import { CellLookupPanel } from '../components/review/CellLookupPanel'
 import { BlockingCutlinePanel } from '../components/cutline/BlockingCutlinePanel'
 import { StepLayout } from '../components/common/StepLayout'
@@ -66,6 +68,10 @@ function Step7PageInner({ book }: { book: string }) {
         { id: 'decide', label: '定字裁决',
           node: <ReviewPanel book={book} pages={pageSel} onSubmitted={() => {}}
                              reloadSignal={reloadSignal} /> },
+        { id: 'decide-by-char', label: '按字种批审',
+          node: <GroupReviewPanel book={book} pages={pageSel} /> },
+        { id: 'decide-by-shape', label: '按形聚类批审',
+          node: <ShapeReviewPanel book={book} pages={pageSel} /> },
       ]}
     />
   )

@@ -264,3 +264,11 @@ details.s8-absent summary .muted { margin-left: .3rem; }
 .s8-locs { display: flex; flex-wrap: wrap; gap: .15rem .9rem; font-size: .8rem; color: var(--mute); margin: -.2rem 0 .5rem; }
 .s8-locs .cur { color: var(--ink); font-weight: 600; }
 .s8-loc { font-size: .72rem; color: var(--faint); }
+
+/* 部署版本条（overview#258）：顶部悬浮提示不挡操作，版本号在侧栏角上 */
+.version-banner { position: fixed; top: .5rem; left: 50%; transform: translateX(-50%); z-index: 1000;
+  display: flex; flex-direction: column; gap: .25rem; padding: .4rem .8rem; font-size: .8rem;
+  background: var(--ochre-soft); color: var(--ochre); border: 1px solid var(--ochre);
+  border-radius: var(--r); pointer-events: none; }
+.version-banner button { pointer-events: auto; margin-left: .6rem; }
+.sidebar-version { margin-top: auto; padding-top: .6rem; font-size: .7rem; font-family: var(--mono); }
