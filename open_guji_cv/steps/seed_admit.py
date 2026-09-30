@@ -1181,17 +1181,8 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
 
     来源：`coord`（坐标对位的整理本字）/ `coord_blank`（坐标对位说是空格位，默认字 None）/
     `align`（现役对位字）/ `none`。读不到 Step3 字格或原图就当没有遮挡（返回空表）。"""
-    from .occlusion import cell_densities, occluded_cells
-    cells = _opt(ctx, "cells", page)
-    if cells is None:
-        return {}
-    try:
-        gray = ctx.raw_page(page)
-    except Exception:
-        return {}
-    hit = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
-                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
-                         min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+    from .occlusion import page_occluded
+    hit = page_occluded(ctx, page, p)
     if not hit:
         return {}
     ref: PageAlignRef | None = _opt(ctx, "align_ref", page)

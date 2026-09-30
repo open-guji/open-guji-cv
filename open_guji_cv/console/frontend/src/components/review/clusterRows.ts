@@ -17,10 +17,13 @@ export function groupCellIds(g: Group): string[] {
  */
 export function groupRows(g: Group, dropped: Set<string>, shape: string, now: number,
                           extra: Record<string, unknown> = {}) {
-  const base = { v: 'confirm', shape, no_glyph_lib: false, client_ts: now, ...extra }
+  const base = { v: 'confirm', shape, client_ts: now, ...extra }
+  // 印章遮挡格一律不入字形库（2026-09-30）
+  const occ = new Set(g.tiles.filter((t) => t.occluded).map((t) => t.id))
+  const noLib = (id: string) => ({ no_glyph_lib: occ.has(id) })
   if (!g.clusters) {
-    return g.tiles.filter((t) => !dropped.has(t.id)).map((t) => ({ id: t.id, ...base }))
+    return g.tiles.filter((t) => !dropped.has(t.id)).map((t) => ({ id: t.id, ...base, ...noLib(t.id) }))
   }
   return g.clusters.flatMap((c) => c.members.filter((m) => !dropped.has(m.id))
-    .map((m) => ({ id: m.id, ...base, via: `cluster:${c.id}`, cluster_n: c.n })))
+    .map((m) => ({ id: m.id, ...base, ...noLib(m.id), via: `cluster:${c.id}`, cluster_n: c.n })))
 }

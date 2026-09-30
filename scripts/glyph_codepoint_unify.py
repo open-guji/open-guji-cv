@@ -60,6 +60,11 @@ def _belongs_to_book(instance_id: str, book: str) -> bool:
     parts = instance_id.split(":")
     if not parts or parts[0] in ("font", "modern"):
         return False
+    if parts[0] == "v1":
+        # v1 重键后没对上现格的刻例改名成 `v1:<book>:p:c:idx`（glyph_ledger.v1_twin_ids）。
+        # 2026-09-30：此前这里把它们当成「不属于任何书」，四庫 vol01 剩的 4 条
+        # （即↔卽、歷↔厯）因此一直没被统一。
+        return len(parts) >= 2 and parts[1] == book
     if parts[0] == "v2":
         return len(parts) >= 2 and parts[1] == book
     return parts[0] == book
@@ -98,7 +103,8 @@ def scan(book: str, mapping: dict[str, str], db_path: Path) -> dict:
             adm = _admission_matches(conn, book, old)
             hum = _human_matches(book, old)
             report["pairs"][f"{old}→{new}"] = {
-                "library": {"n": len(lib), "sample": [iid for iid, _ in lib[:10]]},
+                "library": {"n": len(lib), "sample": [iid for iid, _ in lib[:10]],
+                            "v1_prefixed": [iid for iid, _ in lib if iid.startswith("v1:")]},
                 "admissions": {"n": len(adm), "sample": adm[:10]},
                 "human_chars": {"n": len(hum), "sample": list(hum)[:10]},
             }
