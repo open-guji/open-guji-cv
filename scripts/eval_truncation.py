@@ -25,6 +25,11 @@
 那两件事分别归 `check_grid_offpage` 与 recrop/instances。
 
 用法：PYTHONPATH=. python scripts/eval_truncation.py <数据集目录> [--update]
+
+2026-09-30（M1 B 道）：默认改读**现役 v2 链**（row_segment 格线 + Step2 列图）；指标定义（单字墨段
+判据、截断深度公式、≥10% 主口径、页级分布、回归门）一字未改。`--v1` 保留旧读法（读 output/ 的
+phase3_char_grid，云端没有 → n=0）。v2 与 v1 口径不可直接比，`expected.json` 已按 v2 重冻
+（v1 原值存 `expected_v1_legacy.json`）。
 """
 from __future__ import annotations
 
@@ -99,15 +104,37 @@ def page_depths(book: str, page: str, out: str = "output") -> list[float]:
     return depths
 
 
-def scan(dataset: str, out: str = "output") -> dict:
-    gold = json.loads((Path(dataset).parent / "page-type" / "expected.json")
-                      .read_text(encoding="utf-8"))
-    body = [(r["book"], str(r["page"])) for r in gold
-            if r["page_type"] == "body"]
+def col_runs_v2(im: np.ndarray, cx: tuple[float, float], cell_h: float) -> list[list[int]]:
+    """同 col_runs，只是列窗取自 v2 的 content_x（列图坐标）。"""
+    return col_runs({"left_x": cx[0], "right_x": cx[1]}, im, cell_h)
+
+
+def page_depths_v2(book: str, page: int) -> list[float]:
+    from open_guji_cv.eval.v2cols import iter_columns
+    depths: list[float] = []
+    for cc, im in iter_columns(book, page):
+        if len(cc.cells) < 2:
+            continue
+        cx = cc.content_x or (0, im.shape[1])
+        cell_h = cc.period or 115.0
+        lines = list(cc.boundaries)
+        for a, b in col_runs_v2(im, cx, cell_h):
+            h = float(b - a)
+            d = 0.0
+            for y in lines:
+                if a + EDGE_TOL < y < b - EDGE_TOL:
+                    d = max(d, min(y - a, b - y))
+            depths.append(d / h)
+    return depths
+
+
+def scan(dataset: str, out: str = "output", v1: bool = False) -> dict:
+    from open_guji_cv.eval.v2cols import body_pages
+    body = body_pages(dataset)
     allv: list[float] = []
     rates: list[tuple] = []
-    for book, page in sorted(body):
-        d = page_depths(book, page, out)
+    for book, page in body:
+        d = page_depths(book, str(page), out) if v1 else page_depths_v2(book, page)
         if not d:
             continue
         allv += d
@@ -142,8 +169,12 @@ def main() -> None:
     ap.add_argument("dataset")
     ap.add_argument("--out", default="output")
     ap.add_argument("--update", action="store_true")
+    ap.add_argument("--v1", action="store_true", help="读已退役的 v1 链 output/（旧行为）")
     a = ap.parse_args()
-    got = scan(a.dataset, a.out)
+    got = scan(a.dataset, a.out, v1=a.v1)
+    if not got['n_segs']:
+        print('空跑：没有读到任何单字段（缺 v2 产物 row_segment / 列图缓存，或 --v1 但没有 output/）——不写基线、不判回归')
+        raise SystemExit(2)
     shard = Path(a.dataset) / "truncation" / "expected.json"
     if a.update or not shard.exists():
         shard.parent.mkdir(parents=True, exist_ok=True)

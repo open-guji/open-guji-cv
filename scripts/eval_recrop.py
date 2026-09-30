@@ -23,6 +23,14 @@ IoU 仍然打印出来当趋势参考（用户 2026-08-25 记的基线 0.671 即
 
 用法：PYTHONPATH=. python scripts/eval_recrop.py \
         ../open-guji-dataset/char-segmentation/instances [--out report.json]
+
+【2026-09-30 M1 C 组：默认改读现行 v2 链】
+v1 链（`./output/<册>/phase3_char_grid` + 整页 png）已退役，云端没有，原先 40 条全报「格位消失」。
+现在默认：金标读 `instances/recrop_v2.json`（迁移脚本 `artifacts/m1_gold/recrop/migrate_recrop.py`
+把 corrected_bbox 换算进原图坐标 raw_page_px@top-right，并锚到 v2 的 (col, slot)）；
+被测框读 v2 `cell_shrink` 产物的 `bbox_page`（墨迹紧框），盖墨在**原图**上数。
+判定口径（含住 ±8px、盖墨 ≥0.95、IoU 只作趋势）与指标名**一字未动**，可与旧值对照。
+`--v1` 保留旧读法（需要本机 ./output 里的 phase3_char_grid，云端必空）。
 """
 
 from __future__ import annotations
@@ -42,11 +50,7 @@ def iou(a: tuple, b: tuple) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("dataset")
-    ap.add_argument("--out", default=None)
-    args = ap.parse_args()
+def main_v1(args) -> None:
 
     gold = [e for e in json.loads(
         (Path(args.dataset) / "expected.json").read_text(encoding="utf-8"))
@@ -158,6 +162,109 @@ def main() -> None:
     if args.out:
         Path(args.out).write_text(json.dumps(rows, ensure_ascii=False,
                                              indent=1), encoding="utf-8")
+
+
+CONTAIN_TOL_V2 = 8
+INK_COVER_V2 = 0.95
+
+
+def main_v2(args) -> None:
+    """读现行 v2 产物：金标 recrop_v2.json，被测框 cell_shrink.bbox_page。"""
+    import sys
+
+    import cv2
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _v2_step4 import V2Book, tr2tl
+
+    doc = json.loads((Path(args.dataset) / "recrop_v2.json").read_text(encoding="utf-8"))
+    gold = doc["items"]
+    if not gold:
+        print("recrop_v2.json 没有可用条目")
+        return
+    books: dict[str, V2Book] = {}
+    rows = []
+    n_pass = n_flagged = n_missing = 0
+    by_page: dict = {}
+    for e in gold:
+        by_page.setdefault(e["book"], set()).add(int(e["page"]))
+    for b, pgs in by_page.items():
+        books[b] = V2Book(b)
+        miss = books[b].ensure(pgs)
+        if miss:
+            print(f"（{b} 第 {miss} 页补不出 v2 产物）")
+    for e in gold:
+        v = books[e["book"]]
+        pg = int(e["page"])
+        pc = v.chars(pg)
+        rec = None
+        if pc is not None:
+            cc = pc.column(e["col"])
+            if cc is not None:
+                rec = next((r for r in cc.chars if r.slot == e["slot"] and not r.sub
+                            and r.cell_type == "char" and r.bbox_page), None)
+        tag = f"{pg}:{e['col']}:{e['slot']}"
+        if rec is None:
+            rows.append({"key": tag, "defect": e.get("defect"), "status": "missing"})
+            n_missing += 1
+            continue
+        scan = v.scan(pg)
+        W = scan.shape[1]
+        g = tr2tl(e["corrected_bbox"], W)
+        o = tr2tl(e["old_bbox"], W)
+        cur = tr2tl(rec.bbox_page, W)
+        v_old = iou(o, g)
+        v_new = iou(cur, g)
+        gx0, gy0, gx1, gy1 = g
+        nx0, ny0, nx1, ny1 = cur
+        contained = (nx0 >= gx0 - CONTAIN_TOL_V2 and ny0 >= gy0 - CONTAIN_TOL_V2
+                     and nx1 <= gx1 + CONTAIN_TOL_V2 and ny1 <= gy1 + CONTAIN_TOL_V2)
+        sub = scan[max(0, int(gy0)):int(gy1), max(0, int(gx0)):int(gx1)] < 128
+        total = int(sub.sum())
+        cover = None
+        if total:
+            a0 = max(0, int(ny0 - gy0)); a1 = max(0, int(ny1 - gy0))
+            b0 = max(0, int(nx0 - gx0)); b1 = max(0, int(nx1 - gx0))
+            cover = int(sub[a0:a1, b0:b1].sum()) / total
+        ok = contained and (cover is None or cover >= INK_COVER_V2)
+        flagged = bool(rec.flags)
+        n_pass += ok
+        n_flagged += (not ok and flagged)
+        rows.append({"key": tag, "defect": e.get("defect"), "iou_old": round(v_old, 3),
+                     "iou_new": round(v_new, 3), "contained": contained,
+                     "cover": round(cover, 3) if cover is not None else None,
+                     "pass": ok, "flags": list(rec.flags)})
+    rows.sort(key=lambda r: r.get("iou_new", -1))
+    for r in rows:
+        if r.get("status") == "missing":
+            print(f"  {r['key']:<12} {str(r['defect']):<18} 格位消失（需人工重看）")
+        else:
+            mark = "过" if r["pass"] else ("兜" if r["flags"] else "漏")
+            cov = f" 盖{r['cover']:.2f}" if r.get("cover") is not None else ""
+            cont = "" if r.get("contained") else " 越界"
+            print(f"  {r['key']:<12} {str(r['defect']):<18} "
+                  f"IoU {r['iou_old']:.2f}→{r['iou_new']:.2f}{cov}{cont} [{mark}]"
+                  f"{' ' + ','.join(r['flags']) if r['flags'] else ''}")
+    n = len(gold)
+    ious = sorted(r["iou_new"] for r in rows if "iou_new" in r)
+    print(f"\nreview_recrop {n} 条：**含住+盖墨**通过 {n_pass}，"
+          f"未过但有 flag 兜底 {n_flagged}，"
+          f"无声放行 {n - n_pass - n_flagged - n_missing}，格位消失 {n_missing}"
+          f"（v2 口径；原 40 条里 {len(doc.get('retired', []))} 条已失效未计入）")
+    if ious:
+        print(f"  IoU（趋势参考，非过闸条件）均值 "
+              f"{sum(ious) / len(ious):.3f} 中位 {ious[len(ious) // 2]:.3f}")
+    if args.out:
+        Path(args.out).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dataset")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--v1", action="store_true", help="旧读法（v1 phase3_char_grid，已退役）")
+    args = ap.parse_args()
+    (main_v1 if args.v1 else main_v2)(args)
 
 
 if __name__ == "__main__":

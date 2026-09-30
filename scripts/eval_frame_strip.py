@@ -10,7 +10,17 @@
   字保全   全体样本里，字身（最大连通体）墨量 ≥ 金标基线的比例  → 红线 100%
            （基线取自去框前的产物；剥框只动独立连通体，字身不该少一个像素）
 
-用法：PYTHONPATH=. python scripts/eval_frame_strip.py <数据集目录>
+用法：PYTHONPATH=. python scripts/eval_frame_strip.py <数据集目录> [--source v2|v1]
+
+## 2026-09-30（M1·A 道）：默认改读现行 v2 链
+
+`--source v1`（旧）读 `output/<册>/phase4_chars/patches/<页>/<列>_<idx>.png`（退役链）。
+金标挂的格位因切分口径换过几轮全部失效，旧脚本只印「0 个样本（65 个格位已消失）」——空跑。
+`--source v2`（默认）读 `products/<册>/cell_shrink` + `cache/<册>/char_patch`，且**每条金标先过
+「人当时看的图块还在不在」闸**（`patch_identity.locate`：拿 instances/patches 里存的人裁图块原图
+去跟 v2 图块做二值墨 NCC 模板匹配，NCC≥0.90 且位移≤4px、尺寸差≤12px 才计分）。
+没存图块的金标无从证明图还在，不计分，分原因列出；不拿算法判了什么当判据。
+三个指标（残余率/误剥率/字保全）的定义与 v1 完全相同，只是只在通过闸的样本上算。
 """
 from __future__ import annotations
 
@@ -57,16 +67,63 @@ def _analyse(img: np.ndarray) -> tuple[int, bool]:
     return int(areas.max()), residue
 
 
+def main_v2(gold: list[dict], out: str | None) -> None:
+    import collections
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from patch_identity import locate
+    rows, reasons = [], collections.Counter()
+    skipped = []
+    for g in gold:
+        loc = locate(g)
+        if loc["status"] != "scored":
+            reasons[loc["status"]] += 1
+            skipped.append({**g, "status": loc["status"], "why": loc["why"]})
+            continue
+        ink, residue = _analyse(loc["patch"])
+        rows.append({**g, "missing": False, "ink_now": ink, "residue": residue,
+                     "ink_ok": ink >= g["main_ink"], "ncc": loc["ident"]["ncc"]})
+    n = len(gold)
+    print(f"frame-strip [v2 链]：金标 {n} 条；图像同一性通过并计分 {len(rows)}；不计分 {len(skipped)}"
+          f"（{'、'.join(f'{k} {v}' for k, v in sorted(reasons.items())) or '—'}）")
+    framed = [r for r in rows if r["frame"]]
+    clean = [r for r in rows if not r["frame"]]
+
+    def pct(a: int, b: int) -> str:
+        return f"{a}/{b} ({a / b:.0%})" if b else "n/a"
+
+    print(f"  frame-strip：{len(rows)} 个样本")
+    print(f"  残余率（带框组仍有框渣）  {pct(sum(r['residue'] for r in framed), len(framed))}")
+    print(f"  误剥率（干净组见残余）    {pct(sum(r['residue'] for r in clean), len(clean))}")
+    print(f"  字保全（墨量 ≥ 基线）     {pct(sum(r['ink_ok'] for r in rows), len(rows))}")
+    tol = [r for r in rows if r["ink_now"] >= 0.97 * r["main_ink"]]
+    if rows:
+        worst = min(r["ink_now"] / r["main_ink"] for r in rows)
+        print(f"  字保全（容差 3%，附加指标）{pct(len(tol), len(rows))}，最差比值 {worst:.3f}"
+              f"——v2 的矫正重采样与 v1 不逐像素相同，同一张图的 main_ink 会差零点几到几个百分点；"
+              f"红线判读以逐像素看图为准（对位后旧有新无/新有旧无像素数同量级＝重采样，不是切字）")
+    for r in rows:
+        if not r["ink_ok"]:
+            print(f"    ⚠ 字身墨低于基线 {r['book']}:{r['page']}:{r['col']}:{r['idx']} "
+                  f"{r['ink_now']} < {r['main_ink']}（NCC {r['ncc']}）——先逐像素看图再定是切字还是渣清干净了")
+    if out:
+        Path(out).write_text(json.dumps({"scored": rows, "skipped": skipped},
+                                        ensure_ascii=False), encoding="utf-8")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", help="数据集目录（含 frame-strip/expected.json）")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--source", choices=("v2", "v1"), default="v2")
     args = ap.parse_args()
 
     p = Path(args.dataset)
     if p.name != "frame-strip":
         p = p / "frame-strip"
     gold = json.loads((p / "expected.json").read_text(encoding="utf-8"))
+    if args.source == "v2":
+        return main_v2(gold, args.out)
 
     rows = []
     for g in gold:
