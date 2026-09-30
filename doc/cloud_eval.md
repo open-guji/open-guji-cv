@@ -72,9 +72,23 @@ python -m open_guji_cv eval --from-raw --timeout 3000 run [评测id ...]   # 缺
 | `touching_cuts` parse_metrics 0 条 | 需补 bxgb 产物后再看，见基线表 | — |
 | `scipy` 缺 | 没进 extras | 手装 |
 
-## 6. 云端确实跑不了的
+## 6. 重活评测（Step5–7 相关）：M2 实测结论（2026-09-30）
 
-- 需要 OCR 引擎 / GPU：`char_ocr`、`font_fallback`、`struct_heads`、`struct_rerank`
-- 重活且依赖本地字形库/模型：`clustering`、`db_match`、`match_pairs`、`match_triplets`、`degradation`、`oov`、`zero_shot*`、`seen_test_single_proto`、`guard_ceiling`
-- 需要语料：`confusable_lm`、`context_correction`、`align_replace_gate`
-- 需要 s1~s6 中间产物：`crop_margin`
+§6 原先那句「云端跑不了」大半是错的——**多数只缺输入，不缺算力**。逐项结论、数字与 doc 对照见
+`HANDOFF_M2.md`。要点：
+
+- **能跑（CPU torch 够用）**：clustering / db_match / match_pairs / match_triplets / guard_ceiling /
+  zero_shot / zero_shot_fusion / rare_char / confusable_lm / context_correction / llm_context /
+  align_replace_gate；oov / degradation / seen_test_single_proto / struct_rerank / struct_heads 要先建
+  70,304 字的 r5 embedding 模板表（约 1.5 小时单核，建一次进 `models/glyph_cnn_r5/emb_<key>.npz`，之后秒开）。
+- **喂数据才能跑**：`cache/glyph_bench` + `cache/oov_bench` 在 `guji-workspace/_shared/train_bundle.zip`
+  （解到 `open-guji-cv/cache/`，注意 zip 里多套了一层 `cache/`，要 `mv cache/cache/* cache/`）；
+  语料在工作区 `corpus/`（**仓内 `corpus/zongmu_wuyingdian_reference.txt` 只有 17 KB 残片**，本书语料必须用
+  工作区那份 34 万字的，通用语料用仓内 `corpus/external/daizhige_zhaoling.txt`）；
+  Step7 回放要 `products-snap/*` 孤儿分支里的 `cloud-*.tar.zst`（`uv pip install zstandard` 解）。
+- **跑不了（缺数据，不是缺 GPU）**：char_ocr / font_fallback。char_ocr 金标的图块路径是建集机器的
+  `D:\workspace\…\cache\vol01\char_patch\*.png`，云端没有这批图；font_fallback 读 v1 链
+  `phase9_seed/queue.jsonl`。`eval_char_ocr.py` 已改成图块全缺时直接报错退出（以前印 0.00% 假基线）。
+- **金标里 Windows 路径的坑**：`glyph_bench/items.jsonl` / `rare-char/items.jsonl` 的图路径是反斜杠，
+  `cv2.imread` 在 Linux 上读不到（静默返回 None）。`eval_zero_shot.py` 已修；`eval_rare_char.py` 加了
+  回退（金标 patch 读不到时按 `(v2:<id>, 参考字)` 取 glyph_bench 的同格图，报告里印图源计数）。
