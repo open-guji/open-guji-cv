@@ -7,7 +7,7 @@ import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows } from './doubt'
-import { CLASS_HELP, classHelpKey, DEFAULT_HELP, dropOffScreen, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
+import { CLASS_HELP, classHelpKey, DEFAULT_HELP, countShadowPre, dropOffScreen, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
          keepApprox, nextGridState, pickVerdict, screenRows } from './reviewClass'
 import type { GridState } from './reviewClass'
 import { ReplaceAlignGrid } from './ReplaceAlignGrid'
@@ -77,6 +77,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   const [subCounts, setSubCounts] = useState<Record<string, number> | null>(null)
   const [subMeta, setSubMeta] = useState<ReviewClassMeta[]>([])
   const [gridN, setGridN] = useState(60)
+  // 影子预勾（overview#269）：缺省开；后端没有预测文件时（`shadow_info.available=false`）自动禁用
+  const [useShadow, setUseShadow] = useState(true)
+  const [shadowAvail, setShadowAvail] = useState(false)
   const [gridCards, setGridCards] = useState<ReviewCard[]>([])
   const [gridStates, setGridStates] = useState<Record<string, GridState>>({})
   const gridSeen = useRef<number | undefined>(undefined)
@@ -108,7 +111,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 只更新数据，不把页面滚去「定字裁决」区域。用户 2026-09-11 实测踩到：
   // 每次在「切分裁决」落定一条，画面会被强行跳到定字裁决第一张卡，打断
   // 正在做的操作。手动点「载入」按钮才应该滚（那是用户主动要看结果）。
-  async function load(scrollOnLoad = true, sel = cls, sub = raSub) {
+  async function load(scrollOnLoad = true, sel = cls, sub = raSub, shadowOn = useShadow) {
     setMsg('载入中…')
     const b = batch()
     const ra = sel === 'replace_align'
@@ -118,10 +121,11 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // 以前的裁决静默改成整理本字。
     const d = await fetchReviewCards(book, pages || 'dev_set', only, gate,
                                      gridMode ? (gridN || 60) : (limit || 30), gridMode || !inclDecided,
-                                     '', sel || '*', ra ? sub : '')
+                                     '', sel || '*', ra ? sub : '', shadowOn)
     setClassCounts(d.class_counts ?? null)
     setClassTotal(d.class_total ?? 0)
     if (d.classes) setClasses(d.classes)
+    setShadowAvail(!!d.shadow_info?.available)
     setSubCounts(d.class_sub_counts?.replace_align ?? null)
     if (d.class_subs?.replace_align) setSubMeta(d.class_subs.replace_align)
     // 切换类别／细项（#265 补丁）：上一屏没提交的裁决不带到新一屏——不在新一屏上的 touched 全丢，
@@ -408,7 +412,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
   // 行由 `gridRows`→`verdictRow` 出，与逐张裁决逐字段相同；走同一个 `POST /api/events`。
   async function submitGrid() {
     if (!gridCards.length || groupBusy) { if (!gridCards.length) setMsg('这一屏没有卡'); return }
-    const rows = gridRows(gridCards, gridStates, gridSeen.current, Date.now(), (c, sh) => aiAccepted(c, sh))
+    const rows = gridRows(gridCards, gridStates, gridSeen.current, Date.now(), (c, sh) => aiAccepted(c, sh),
+                          shadowAvail && useShadow)
     if (!rows.length) { setMsg('这一屏没有可提交的'); return }
     setGroupBusy(true)
     setMsg('提交中…')
@@ -588,6 +593,13 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
             <>
               <label className="muted" title="网格一屏几张（40–60 为宜）；改了点「重新载入」">
                 一屏 <input value={gridN} onChange={(e) => setGridN(+e.target.value || 60)} size={3} />
+              </label>
+              <label className="muted" data-testid="ra-shadow-toggle"
+                     title={shadowAvail ? `影子把握 ≥0.9 且影子字 == 整理本字的卡排最前、标「影子预勾」；仍要点提交，不会自动放行`
+                                        : '没有影子预测文件（<ws>/cache/shadow/<书>.json），此项不可用'}>
+                <input type="checkbox" checked={shadowAvail && useShadow} disabled={!shadowAvail}
+                       onChange={(e) => { setUseShadow(e.target.checked); load(true, 'replace_align', 'grid', e.target.checked) }} />
+                {' '}使用影子预勾{shadowAvail ? `（本屏 ${countShadowPre(gridCards)} 张）` : ''}
               </label>
               <button className="rv-occl-all" data-testid="ra-submit" onClick={submitGrid}
                       disabled={groupBusy || !gridCards.length}

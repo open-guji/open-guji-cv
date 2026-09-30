@@ -10,12 +10,13 @@ import type {
 // `cls`（overview#247）：按类别审，`*` = 不筛只计数（响应带 `class_counts`），类别键 = 只出这一类；
 // 空串 = 不带这个参数。
 export function fetchReviewCards(book: string, pages: string, only: string, gateCut: boolean,
-                                 limit = 400, skipDecided = true, doubt = '', cls = '', clsSub = '') {
+                                 limit = 400, skipDecided = true, doubt = '', cls = '', clsSub = '', shadow = true) {
   const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
     + `&only=${only}&gate_cut=${gateCut}&limit=${limit}&skip_decided=${skipDecided}`
     + (doubt ? `&doubt=${encodeURIComponent(doubt)}` : '')
     + (cls ? `&cls=${encodeURIComponent(cls)}` : '')
     + (clsSub ? `&cls_sub=${encodeURIComponent(clsSub)}` : '')
+    + (shadow ? '' : '&shadow=false')
   return api<ReviewCardsResponse>(`/api/review/cards?${qs}`)
 }
 

@@ -56,7 +56,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
                      skip_decided: bool = True, group: str = "",
                      sample_limit: int = 60, cluster: str = "auto",
                      cluster_thr: float | None = None, doubt: str = "", cls: str = "",
-                     cls_sub: str = "") -> dict:
+                     cls_sub: str = "", shadow: bool = True) -> dict:
     """待审卡片：一格一张，带图块 URL、库/OCR/上下文三路证据与疑问。
 
     装配在 `review/cards.py`（C2 搬出去的，云端道与 CLI 直接能调）。
@@ -128,6 +128,12 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
             raise HTTPException(400, f"cls_sub 只对 cls=replace_align 生效，只认 "
                                      f"{'/'.join(REPLACE_ALIGN_SUB_KEYS)}，得到 {cls_sub!r}")
         req["cls_sub"] = cls_sub   # 同上
+    if cls.strip():
+        # 影子预测文件（overview#269）：文件指纹进缓存键（换了文件自动失效）；关掉影子进键，
+        # 两种请求互不串。文件不存在时不进键，与改前的缓存键相同。
+        from ...review.shadow import shadow_sig
+        if shadow_sig(book) is not None:
+            req["shadow"] = shadow_sig(book) if shadow else "off"
 
     def compute() -> dict:
         if group == "shape":
@@ -142,7 +148,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
             return cards(book, pages, limit, only, st, gate_cut=gate_cut,
                          skip_decided=skip_decided)
         return cards(book, pages, limit, only, st, gate_cut=gate_cut,
-                     skip_decided=skip_decided, doubt=doubt, cls=cls, cls_sub=cls_sub)
+                     skip_decided=skip_decided, doubt=doubt, cls=cls, cls_sub=cls_sub, shadow=shadow)
 
     res, how = cached_cards(book, req, compute, st)
     response.headers["X-Cards-Cache"] = how
