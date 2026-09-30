@@ -128,7 +128,7 @@ def main() -> int:
             col_end.append(it.id)
             continue
         rows.append(dict(id=it.id, book=book, page=pg, col=col, bi=bi, gold_y=float(ex["y"]),
-                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v,
+                         cur_y=cur, err=abs(cur - float(ex["y"])), verdict=v, mode=mode,
                          picked_source=ex.get("picked_source")))
     if not rows:
         print(f"touching-cuts：没有可比条目（overlap {overlap}，干扰 {sum(len(v) for v in tagged.values())}，漂移 {drift}，缺产物 {missing}，金标 {len(items)}）")
@@ -147,6 +147,13 @@ def main() -> int:
           f"老条目（未记几何，可能已漂而查不出）{modes['legacy']}")
     print(f"  像素误差 mean {e.mean():.1f}  median {np.median(e):.1f}  p90 {np.percentile(e, 90):.1f}  max {e.max():.0f}")
     print(f"  ≤3px {100*(e<=3).mean():.1f}%   ≤5px {100*(e<=5).mean():.1f}%   ≤10px {100*(e<=10).mean():.1f}%")
+    # 2026-09-30 M1 B 道：按「金标坐标有没有图像/几何锚」分层——page/sig_ok = 页面坐标或列窗签名锚定（可信），
+    # legacy = 只有列图坐标 + col_h（当时列窗几何没留档、没存人裁图块，无法证明「人看的图还在」）。
+    for md in ("page", "sig_ok", "legacy"):
+        em = np.array([r["err"] for r in rows if r["mode"] == md])
+        if len(em):
+            print(f"    [{md:6}] n={len(em):<4} mean {em.mean():.1f}  median {np.median(em):.1f}  p90 {np.percentile(em, 90):.1f}"
+                  f"  ≤3px {100*(em<=3).mean():.1f}%  ≤5px {100*(em<=5).mean():.1f}%  ≤10px {100*(em<=10).mean():.1f}%")
     worst = sorted(rows, key=lambda r: -r["err"])[:8]
     print("  最差:", [(r["id"], round(r["err"])) for r in worst])
     if tagged:

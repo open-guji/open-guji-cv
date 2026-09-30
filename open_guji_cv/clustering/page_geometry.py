@@ -72,6 +72,9 @@ class PageGeometry:
     n_cols: int | None = None
     page_class: str | None = None
     label_origin: str = "human"          # 候选自动生成，逐页人工目视确认
+    # 迁移到原图帧后新增（2026-09-30，M1·D）：旧金标没有这两项，读旧文件时取默认值
+    coordinate_frame: str = "v1_frame"   # v1_frame（v1 预处理输出）| raw_page_px@top-left（原图，左上原点）
+    frame_y: list[float] | None = None   # 版框内竖直墨跨度 [y_top, y_bot]（原图 px，由界行沿线有墨判出）
     schema_version: int = SCHEMA_VERSION
 
     # ── 派生量：形变性质的判据 ──────────────────────────

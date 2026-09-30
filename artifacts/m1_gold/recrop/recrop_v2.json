@@ -1,0 +1,2250 @@
+{
+ "schema": 1,
+ "space": "raw_page_px@top-right",
+ "note": "M1 C 组 2026-09-30 迁移：review_recrop 金标换算进原图坐标并锚到 v2 (col,slot)。判据见 artifacts/m1_gold/recrop/MIGRATION.md",
+ "items": [
+  {
+   "id": "vol01:5:4:8",
+   "book": "vol01",
+   "page": 5,
+   "v1_col": 4,
+   "v1_idx": 8,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    958.0,
+    963.0,
+    1081.0,
+    1103.0
+   ],
+   "corrected_bbox_v1": [
+    958.0,
+    994.0,
+    1081.0,
+    1103.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.938,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      0,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     351,
+     312
+    ],
+    "ncc": 0.983,
+    "global_offset": [
+     350,
+     312
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 4,
+   "slot": 9,
+   "cell_iou": 0.69,
+   "corrected_bbox": [
+    906.0,
+    1306.0,
+    1029.0,
+    1415.0
+   ],
+   "old_bbox": [
+    906.0,
+    1275.0,
+    1029.0,
+    1415.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:5:5:16",
+   "book": "vol01",
+   "page": 5,
+   "v1_col": 5,
+   "v1_idx": 16,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    779.0,
+    1889.0,
+    896.0,
+    2011.0
+   ],
+   "corrected_bbox_v1": [
+    776.0,
+    1910.0,
+    893.0,
+    2032.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "none",
+     "ncc": 0.979,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      0,
+      129
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     352,
+     312
+    ],
+    "ncc": 0.99,
+    "global_offset": [
+     350,
+     312
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 5,
+   "slot": 17,
+   "cell_iou": 0.657,
+   "corrected_bbox": [
+    1093.0,
+    2222.0,
+    1210.0,
+    2344.0
+   ],
+   "old_bbox": [
+    1090.0,
+    2201.0,
+    1207.0,
+    2323.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:5:6:4",
+   "book": "vol01",
+   "page": 5,
+   "v1_col": 6,
+   "v1_idx": 4,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    590.0,
+    497.0,
+    708.0,
+    619.0
+   ],
+   "corrected_bbox_v1": [
+    587.0,
+    524.0,
+    705.0,
+    646.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.912,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      0,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     350,
+     312
+    ],
+    "ncc": 0.983,
+    "global_offset": [
+     350,
+     312
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 5,
+   "cell_iou": 0.636,
+   "corrected_bbox": [
+    1283.0,
+    836.0,
+    1401.0,
+    958.0
+   ],
+   "old_bbox": [
+    1280.0,
+    809.0,
+    1398.0,
+    931.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:5:6:5",
+   "book": "vol01",
+   "page": 5,
+   "v1_col": 6,
+   "v1_idx": 5,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    592.0,
+    609.0,
+    710.0,
+    764.0
+   ],
+   "corrected_bbox_v1": [
+    592.0,
+    646.0,
+    710.0,
+    764.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.972,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      0,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     350,
+     312
+    ],
+    "ncc": 0.999,
+    "global_offset": [
+     350,
+     312
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 6,
+   "cell_iou": 0.684,
+   "corrected_bbox": [
+    1278.0,
+    958.0,
+    1396.0,
+    1076.0
+   ],
+   "old_bbox": [
+    1278.0,
+    921.0,
+    1396.0,
+    1076.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:5:9:8",
+   "book": "vol01",
+   "page": 5,
+   "v1_col": 9,
+   "v1_idx": 8,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    41.0,
+    962.0,
+    157.0,
+    1101.0
+   ],
+   "corrected_bbox_v1": [
+    38.0,
+    997.0,
+    154.0,
+    1107.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.921,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      0,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     350,
+     313
+    ],
+    "ncc": 0.966,
+    "global_offset": [
+     350,
+     312
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 9,
+   "cell_iou": 0.68,
+   "corrected_bbox": [
+    1834.0,
+    1310.0,
+    1950.0,
+    1420.0
+   ],
+   "old_bbox": [
+    1831.0,
+    1275.0,
+    1947.0,
+    1414.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:6:1:13",
+   "book": "vol01",
+   "page": 6,
+   "v1_col": 1,
+   "v1_idx": 13,
+   "defect": "misc_trim",
+   "old_bbox_v1": [
+    1576.0,
+    1544.0,
+    1691.0,
+    1638.0
+   ],
+   "corrected_bbox_v1": [
+    1576.0,
+    1519.0,
+    1691.0,
+    1638.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.873,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      2,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     282,
+     321
+    ],
+    "ncc": 0.94,
+    "global_offset": [
+     282,
+     322
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 1,
+   "slot": 14,
+   "cell_iou": 0.648,
+   "corrected_bbox": [
+    422.0,
+    1840.0,
+    537.0,
+    1959.0
+   ],
+   "old_bbox": [
+    422.0,
+    1865.0,
+    537.0,
+    1959.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:6:7:4",
+   "book": "vol01",
+   "page": 6,
+   "v1_col": 7,
+   "v1_idx": 4,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    483.0,
+    476.0,
+    582.0,
+    619.0
+   ],
+   "corrected_bbox_v1": [
+    468.0,
+    471.0,
+    584.0,
+    596.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.88,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      -4,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     280,
+     323
+    ],
+    "ncc": 0.978,
+    "global_offset": [
+     282,
+     322
+    ],
+    "global_ncc": 0.988
+   },
+   "status": "migrated",
+   "col": 7,
+   "slot": 5,
+   "cell_iou": 0.638,
+   "corrected_bbox": [
+    1531.0,
+    794.0,
+    1647.0,
+    919.0
+   ],
+   "old_bbox": [
+    1533.0,
+    799.0,
+    1632.0,
+    942.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:8:9:11",
+   "book": "vol01",
+   "page": 8,
+   "v1_col": 9,
+   "v1_idx": 11,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    108.0,
+    1305.0,
+    226.0,
+    1432.0
+   ],
+   "corrected_bbox_v1": [
+    108.0,
+    1324.0,
+    226.0,
+    1432.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.95,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      2,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     270,
+     291
+    ],
+    "ncc": 0.993,
+    "global_offset": [
+     273,
+     295
+    ],
+    "global_ncc": 0.98
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 12,
+   "cell_iou": 0.562,
+   "corrected_bbox": [
+    1881.0,
+    1615.0,
+    1999.0,
+    1723.0
+   ],
+   "old_bbox": [
+    1881.0,
+    1596.0,
+    1999.0,
+    1723.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:11:9:11",
+   "book": "vol01",
+   "page": 11,
+   "v1_col": 9,
+   "v1_idx": 11,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    35.0,
+    1295.0,
+    149.0,
+    1422.0
+   ],
+   "corrected_bbox_v1": [
+    35.0,
+    1295.0,
+    149.0,
+    1397.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.872,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      1,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     340,
+     301
+    ],
+    "ncc": 0.997,
+    "global_offset": [
+     342,
+     302
+    ],
+    "global_ncc": 0.945
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 12,
+   "cell_iou": 0.613,
+   "corrected_bbox": [
+    1805.0,
+    1596.0,
+    1919.0,
+    1698.0
+   ],
+   "old_bbox": [
+    1805.0,
+    1596.0,
+    1919.0,
+    1723.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:1:20",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 1,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    1527.0,
+    2377.0,
+    1701.0,
+    2511.0
+   ],
+   "corrected_bbox_v1": [
+    1550.0,
+    2440.0,
+    1675.0,
+    2540.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.976,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      24,
+      65
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     283,
+     272
+    ],
+    "ncc": 0.992,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 1,
+   "slot": 21,
+   "cell_iou": 0.613,
+   "corrected_bbox": [
+    423.0,
+    2712.0,
+    548.0,
+    2812.0
+   ],
+   "old_bbox": [
+    397.0,
+    2649.0,
+    571.0,
+    2783.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:3:20",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 3,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    1155.0,
+    2377.0,
+    1331.0,
+    2511.0
+   ],
+   "corrected_bbox_v1": [
+    1160.0,
+    2432.0,
+    1312.0,
+    2544.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.946,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      11,
+      60
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     283,
+     272
+    ],
+    "ncc": 0.978,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 3,
+   "slot": 21,
+   "cell_iou": 0.818,
+   "corrected_bbox": [
+    786.0,
+    2704.0,
+    938.0,
+    2816.0
+   ],
+   "old_bbox": [
+    767.0,
+    2649.0,
+    943.0,
+    2783.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:4:16",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 4,
+   "v1_idx": 16,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    971.0,
+    1930.0,
+    1144.0,
+    2055.0
+   ],
+   "corrected_bbox_v1": [
+    973.0,
+    1967.0,
+    1140.0,
+    2080.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 1.0,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      21,
+      42
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     282,
+     273
+    ],
+    "ncc": 0.983,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 4,
+   "slot": 17,
+   "cell_iou": 0.886,
+   "corrected_bbox": [
+    959.0,
+    2240.0,
+    1126.0,
+    2353.0
+   ],
+   "old_bbox": [
+    955.0,
+    2203.0,
+    1128.0,
+    2328.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:6:2",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 6,
+   "v1_idx": 2,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    600.0,
+    291.0,
+    772.0,
+    451.0
+   ],
+   "corrected_bbox_v1": [
+    614.0,
+    286.0,
+    771.0,
+    398.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 1.0,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      33,
+      -2
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     280,
+     273
+    ],
+    "ncc": 0.952,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 3,
+   "cell_iou": 0.852,
+   "corrected_bbox": [
+    1330.0,
+    559.0,
+    1487.0,
+    671.0
+   ],
+   "old_bbox": [
+    1329.0,
+    564.0,
+    1501.0,
+    724.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:7:20",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 7,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    416.0,
+    2373.0,
+    585.0,
+    2507.0
+   ],
+   "corrected_bbox_v1": [
+    420.0,
+    2429.0,
+    589.0,
+    2544.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.93,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      0,
+      59
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     283,
+     274
+    ],
+    "ncc": 0.954,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 7,
+   "slot": 21,
+   "cell_iou": 0.907,
+   "corrected_bbox": [
+    1509.0,
+    2703.0,
+    1678.0,
+    2818.0
+   ],
+   "old_bbox": [
+    1513.0,
+    2647.0,
+    1682.0,
+    2781.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:8:20",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 8,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    231.0,
+    2375.0,
+    399.0,
+    2509.0
+   ],
+   "corrected_bbox_v1": [
+    230.0,
+    2425.0,
+    398.0,
+    2543.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 1.0,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      23,
+      61
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     283,
+     274
+    ],
+    "ncc": 0.948,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 8,
+   "slot": 21,
+   "cell_iou": 0.849,
+   "corrected_bbox": [
+    1700.0,
+    2699.0,
+    1868.0,
+    2817.0
+   ],
+   "old_bbox": [
+    1699.0,
+    2649.0,
+    1867.0,
+    2783.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:9:4",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 9,
+   "v1_idx": 4,
+   "defect": "rule_bar",
+   "old_bbox_v1": [
+    35.0,
+    514.0,
+    212.0,
+    664.0
+   ],
+   "corrected_bbox_v1": [
+    60.0,
+    512.0,
+    206.0,
+    629.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 1.0,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      36,
+      2
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     280,
+     274
+    ],
+    "ncc": 0.978,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 5,
+   "cell_iou": 0.823,
+   "corrected_bbox": [
+    1895.0,
+    786.0,
+    2041.0,
+    903.0
+   ],
+   "old_bbox": [
+    1889.0,
+    788.0,
+    2066.0,
+    938.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:14:9:18",
+   "book": "vol01",
+   "page": 14,
+   "v1_col": 9,
+   "v1_idx": 18,
+   "defect": "rule_bar",
+   "old_bbox_v1": [
+    35.0,
+    2110.0,
+    212.0,
+    2296.0
+   ],
+   "corrected_bbox_v1": [
+    52.0,
+    2183.0,
+    216.0,
+    2302.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 1.0,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      39,
+      79
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     283,
+     274
+    ],
+    "ncc": 0.986,
+    "global_offset": [
+     281,
+     274
+    ],
+    "global_ncc": 0.989
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 19,
+   "cell_iou": 0.906,
+   "corrected_bbox": [
+    1882.0,
+    2457.0,
+    2046.0,
+    2576.0
+   ],
+   "old_bbox": [
+    1886.0,
+    2384.0,
+    2063.0,
+    2570.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:15:2:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 2,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    1291.0,
+    2320.0,
+    1463.0,
+    2452.0
+   ],
+   "corrected_bbox_v1": [
+    1292.0,
+    2332.0,
+    1464.0,
+    2440.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.936,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      28,
+      18
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     338,
+     308
+    ],
+    "ncc": 0.889,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "migrated",
+   "col": 2,
+   "slot": 21,
+   "cell_iou": 0.842,
+   "corrected_bbox": [
+    513.0,
+    2640.0,
+    685.0,
+    2748.0
+   ],
+   "old_bbox": [
+    514.0,
+    2628.0,
+    686.0,
+    2760.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:15:5:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 5,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    737.0,
+    2327.0,
+    909.0,
+    2452.0
+   ],
+   "corrected_bbox_v1": [
+    739.0,
+    2330.0,
+    900.0,
+    2442.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.852,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      33,
+      10
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     340,
+     309
+    ],
+    "ncc": 0.879,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "migrated",
+   "col": 5,
+   "slot": 21,
+   "cell_iou": 0.784,
+   "corrected_bbox": [
+    1075.0,
+    2639.0,
+    1236.0,
+    2751.0
+   ],
+   "old_bbox": [
+    1066.0,
+    2636.0,
+    1238.0,
+    2761.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:15:6:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 6,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    555.0,
+    2328.0,
+    725.0,
+    2450.0
+   ],
+   "corrected_bbox_v1": [
+    555.0,
+    2328.0,
+    720.0,
+    2442.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.81,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      0,
+      9
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     340,
+     309
+    ],
+    "ncc": 0.882,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 21,
+   "cell_iou": 0.743,
+   "corrected_bbox": [
+    1255.0,
+    2637.0,
+    1420.0,
+    2751.0
+   ],
+   "old_bbox": [
+    1250.0,
+    2637.0,
+    1420.0,
+    2759.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:15:7:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 7,
+   "v1_idx": 20,
+   "defect": "misc_trim",
+   "old_bbox_v1": [
+    370.0,
+    2324.0,
+    541.0,
+    2446.0
+   ],
+   "corrected_bbox_v1": [
+    371.0,
+    2330.0,
+    542.0,
+    2443.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.83,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      36,
+      13
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     339,
+     309
+    ],
+    "ncc": 0.857,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "migrated",
+   "col": 7,
+   "slot": 21,
+   "cell_iou": 0.832,
+   "corrected_bbox": [
+    1434.0,
+    2639.0,
+    1605.0,
+    2752.0
+   ],
+   "old_bbox": [
+    1435.0,
+    2633.0,
+    1606.0,
+    2755.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:15:9:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 9,
+   "v1_idx": 20,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    4.0,
+    2320.0,
+    173.0,
+    2451.0
+   ],
+   "corrected_bbox_v1": [
+    8.0,
+    2338.0,
+    166.0,
+    2444.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "none",
+     "ncc": 0.787,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      15,
+      26
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     337,
+     310
+    ],
+    "ncc": 0.873,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "migrated",
+   "col": 9,
+   "slot": 21,
+   "cell_iou": 0.754,
+   "corrected_bbox": [
+    1812.0,
+    2648.0,
+    1970.0,
+    2754.0
+   ],
+   "old_bbox": [
+    1805.0,
+    2630.0,
+    1974.0,
+    2761.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:16:2:20",
+   "book": "vol01",
+   "page": 16,
+   "v1_col": 2,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    1352.0,
+    2327.0,
+    1529.0,
+    2457.0
+   ],
+   "corrected_bbox_v1": [
+    1358.0,
+    2337.0,
+    1520.0,
+    2448.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.905,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      7,
+      22
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     266,
+     319
+    ],
+    "ncc": 0.917,
+    "global_offset": [
+     273,
+     317
+    ],
+    "global_ncc": 0.969
+   },
+   "status": "migrated",
+   "col": 2,
+   "slot": 21,
+   "cell_iou": 0.748,
+   "corrected_bbox": [
+    609.0,
+    2656.0,
+    771.0,
+    2767.0
+   ],
+   "old_bbox": [
+    600.0,
+    2646.0,
+    777.0,
+    2776.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:16:4:20",
+   "book": "vol01",
+   "page": 16,
+   "v1_col": 4,
+   "v1_idx": 20,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    981.0,
+    2321.0,
+    1155.0,
+    2460.0
+   ],
+   "corrected_bbox_v1": [
+    1002.0,
+    2346.0,
+    1155.0,
+    2454.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.871,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      12,
+      32
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     266,
+     317
+    ],
+    "ncc": 0.927,
+    "global_offset": [
+     273,
+     317
+    ],
+    "global_ncc": 0.969
+   },
+   "status": "migrated",
+   "col": 4,
+   "slot": 21,
+   "cell_iou": 0.759,
+   "corrected_bbox": [
+    974.0,
+    2663.0,
+    1127.0,
+    2771.0
+   ],
+   "old_bbox": [
+    974.0,
+    2638.0,
+    1148.0,
+    2777.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:16:6:1",
+   "book": "vol01",
+   "page": 16,
+   "v1_col": 6,
+   "v1_idx": 1,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    610.0,
+    136.0,
+    783.0,
+    256.0
+   ],
+   "corrected_bbox_v1": [
+    612.0,
+    110.0,
+    776.0,
+    230.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.969,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      28,
+      -17
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     280,
+     315
+    ],
+    "ncc": 0.966,
+    "global_offset": [
+     273,
+     317
+    ],
+    "global_ncc": 0.969
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 2,
+   "cell_iou": 0.87,
+   "corrected_bbox": [
+    1339.0,
+    425.0,
+    1503.0,
+    545.0
+   ],
+   "old_bbox": [
+    1332.0,
+    451.0,
+    1505.0,
+    571.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:17:3:20",
+   "book": "vol01",
+   "page": 17,
+   "v1_col": 3,
+   "v1_idx": 20,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    1126.0,
+    2321.0,
+    1289.0,
+    2452.0
+   ],
+   "corrected_bbox_v1": [
+    1139.0,
+    2332.0,
+    1289.0,
+    2440.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.85,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      38,
+      15
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     315,
+     314
+    ],
+    "ncc": 0.889,
+    "global_offset": [
+     319,
+     309
+    ],
+    "global_ncc": 0.975
+   },
+   "status": "migrated",
+   "col": 3,
+   "slot": 21,
+   "cell_iou": 0.771,
+   "corrected_bbox": [
+    695.0,
+    2646.0,
+    845.0,
+    2754.0
+   ],
+   "old_bbox": [
+    695.0,
+    2635.0,
+    858.0,
+    2766.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:18:2:20",
+   "book": "vol01",
+   "page": 18,
+   "v1_col": 2,
+   "v1_idx": 20,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    1297.0,
+    2336.0,
+    1472.0,
+    2482.0
+   ],
+   "corrected_bbox_v1": [
+    1297.0,
+    2370.0,
+    1472.0,
+    2482.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.965,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      34,
+      39
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     313,
+     286
+    ],
+    "ncc": 0.946,
+    "global_offset": [
+     306,
+     295
+    ],
+    "global_ncc": 0.965
+   },
+   "status": "migrated",
+   "col": 2,
+   "slot": 21,
+   "cell_iou": 0.841,
+   "corrected_bbox": [
+    603.0,
+    2656.0,
+    778.0,
+    2768.0
+   ],
+   "old_bbox": [
+    603.0,
+    2622.0,
+    778.0,
+    2768.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:18:4:20",
+   "book": "vol01",
+   "page": 18,
+   "v1_col": 4,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    933.0,
+    2332.0,
+    1102.0,
+    2482.0
+   ],
+   "corrected_bbox_v1": [
+    933.0,
+    2358.0,
+    1102.0,
+    2492.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.979,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      28,
+      36
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     315,
+     287
+    ],
+    "ncc": 0.948,
+    "global_offset": [
+     306,
+     295
+    ],
+    "global_ncc": 0.965
+   },
+   "status": "migrated",
+   "col": 4,
+   "slot": 21,
+   "cell_iou": 0.889,
+   "corrected_bbox": [
+    971.0,
+    2645.0,
+    1140.0,
+    2779.0
+   ],
+   "old_bbox": [
+    971.0,
+    2619.0,
+    1140.0,
+    2769.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:18:6:20",
+   "book": "vol01",
+   "page": 18,
+   "v1_col": 6,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    563.0,
+    2320.0,
+    736.0,
+    2450.0
+   ],
+   "corrected_bbox_v1": [
+    556.0,
+    2382.0,
+    729.0,
+    2490.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.985,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      21,
+      68
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     317,
+     288
+    ],
+    "ncc": 0.905,
+    "global_offset": [
+     306,
+     295
+    ],
+    "global_ncc": 0.965
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 21,
+   "cell_iou": 0.875,
+   "corrected_bbox": [
+    1342.0,
+    2670.0,
+    1515.0,
+    2778.0
+   ],
+   "old_bbox": [
+    1335.0,
+    2608.0,
+    1508.0,
+    2738.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:18:7:20",
+   "book": "vol01",
+   "page": 18,
+   "v1_col": 7,
+   "v1_idx": 20,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    379.0,
+    2328.0,
+    553.0,
+    2462.0
+   ],
+   "corrected_bbox_v1": [
+    370.0,
+    2372.0,
+    532.0,
+    2491.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.981,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      0,
+      43
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     320,
+     288
+    ],
+    "ncc": 0.907,
+    "global_offset": [
+     306,
+     295
+    ],
+    "global_ncc": 0.965
+   },
+   "status": "migrated",
+   "col": 7,
+   "slot": 21,
+   "cell_iou": 0.893,
+   "corrected_bbox": [
+    1536.0,
+    2660.0,
+    1698.0,
+    2779.0
+   ],
+   "old_bbox": [
+    1515.0,
+    2616.0,
+    1689.0,
+    2750.0
+   ],
+   "space": "raw_page_px@top-right"
+  },
+  {
+   "id": "vol01:20:6:1",
+   "book": "vol01",
+   "page": 20,
+   "v1_col": 6,
+   "v1_idx": 1,
+   "defect": "misc_trim",
+   "old_bbox_v1": [
+    619.0,
+    169.0,
+    726.0,
+    254.0
+   ],
+   "corrected_bbox_v1": [
+    619.0,
+    144.0,
+    726.0,
+    254.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.963,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      6,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     289,
+     306
+    ],
+    "ncc": 0.995,
+    "global_offset": [
+     295,
+     305
+    ],
+    "global_ncc": 0.978
+   },
+   "status": "migrated",
+   "col": 6,
+   "slot": 2,
+   "cell_iou": 0.566,
+   "corrected_bbox": [
+    1380.0,
+    450.0,
+    1487.0,
+    560.0
+   ],
+   "old_bbox": [
+    1380.0,
+    475.0,
+    1487.0,
+    560.0
+   ],
+   "space": "raw_page_px@top-right"
+  }
+ ],
+ "retired": [
+  {
+   "id": "vol01:9:3:20",
+   "book": "vol01",
+   "page": 9,
+   "v1_col": 3,
+   "v1_idx": 20,
+   "defect": "neighbor_residue",
+   "old_bbox_v1": [
+    1140.0,
+    2272.0,
+    1258.0,
+    2371.0
+   ],
+   "corrected_bbox_v1": [
+    1140.0,
+    2338.0,
+    1258.0,
+    2371.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "exact",
+     "ncc": 0.826,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      0,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     337,
+     323
+    ],
+    "ncc": 0.978,
+    "global_offset": [
+     350,
+     323
+    ],
+    "global_ncc": 0.953
+   },
+   "status": "invalid",
+   "reason": "v2 Step3 没有对应格位（最佳 IoU 0.19 < 0.3）"
+  },
+  {
+   "id": "vol01:15:1:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 1,
+   "v1_idx": 20,
+   "defect": "rule_bar",
+   "old_bbox_v1": [
+    1477.0,
+    2317.0,
+    1647.0,
+    2447.0
+   ],
+   "corrected_bbox_v1": [
+    1488.0,
+    2330.0,
+    1640.0,
+    2440.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "nearby",
+     "ncc": 0.922,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      33,
+      26
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     336,
+     307
+    ],
+    "ncc": 0.843,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "invalid",
+   "reason": "人当时看的页图在现行原图里定位不上（NCC 0.843 < 0.85）"
+  },
+  {
+   "id": "vol01:15:8:20",
+   "book": "vol01",
+   "page": 15,
+   "v1_col": 8,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    187.0,
+    2320.0,
+    358.0,
+    2450.0
+   ],
+   "corrected_bbox_v1": [
+    188.0,
+    2338.0,
+    352.0,
+    2442.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "none",
+     "ncc": 0.753,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      -2,
+      25
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     338,
+     310
+    ],
+    "ncc": 0.827,
+    "global_offset": [
+     340,
+     305
+    ],
+    "global_ncc": 0.973
+   },
+   "status": "invalid",
+   "reason": "人当时看的页图在现行原图里定位不上（NCC 0.827 < 0.85）"
+  },
+  {
+   "id": "vol01:28:4:20",
+   "book": "vol01",
+   "page": 28,
+   "v1_col": 4,
+   "v1_idx": 20,
+   "defect": "frame_bar",
+   "old_bbox_v1": [
+    1015.0,
+    2332.0,
+    1164.0,
+    2432.0
+   ],
+   "corrected_bbox_v1": [
+    1050.0,
+    2329.0,
+    1175.0,
+    2424.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "conflict",
+     "ncc": 0.901,
+     "shape_equals_old": true,
+     "shift_vs_old": [
+      20,
+      0
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     228,
+     333
+    ],
+    "ncc": 0.916,
+    "global_offset": [
+     249,
+     334
+    ],
+    "global_ncc": 0.842
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['conflict']（需 ≥1 条 exact/nearby 且无 conflict）"
+  },
+  {
+   "id": "vol01:50:1:2",
+   "book": "vol01",
+   "page": 50,
+   "v1_col": 1,
+   "v1_idx": 2,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    1579.0,
+    252.0,
+    1708.0,
+    366.0
+   ],
+   "corrected_bbox_v1": [
+    1561.0,
+    298.0,
+    1690.0,
+    412.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "none",
+     "ncc": 0.94,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      -15,
+      280
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     272,
+     283
+    ],
+    "ncc": 0.961,
+    "global_offset": [
+     252,
+     269
+    ],
+    "global_ncc": 0.903
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['none', 'none', None, None, None]（需 ≥1 条 exact/nearby 且无 conflict）"
+  },
+  {
+   "id": "vol01:50:1:4",
+   "book": "vol01",
+   "page": 50,
+   "v1_col": 1,
+   "v1_idx": 4,
+   "defect": "rule_bar",
+   "old_bbox_v1": [
+    1585.0,
+    532.0,
+    1710.0,
+    594.0
+   ],
+   "corrected_bbox_v1": [
+    1565.0,
+    529.0,
+    1690.0,
+    647.0
+   ],
+   "evidence": {
+    "patch": {
+     "kind": "none",
+     "ncc": 0.897,
+     "shape_equals_old": false,
+     "shift_vs_old": [
+      -17,
+      170
+     ]
+    }
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     267,
+     283
+    ],
+    "ncc": 0.972,
+    "global_offset": [
+     252,
+     269
+    ],
+    "global_ncc": 0.903
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['none', 'none', None, None, None]（需 ≥1 条 exact/nearby 且无 conflict）"
+  },
+  {
+   "id": "vol01:50:1:5",
+   "book": "vol01",
+   "page": 50,
+   "v1_col": 1,
+   "v1_idx": 5,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    1581.0,
+    586.0,
+    1712.0,
+    712.0
+   ],
+   "corrected_bbox_v1": [
+    1566.0,
+    643.0,
+    1698.0,
+    769.0
+   ],
+   "evidence": {
+    "patch": null
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     265,
+     283
+    ],
+    "ncc": 0.958,
+    "global_offset": [
+     252,
+     269
+    ],
+    "global_ncc": 0.903
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['none', 'none', None, None, None]（需 ≥1 条 exact/nearby 且无 conflict）"
+  },
+  {
+   "id": "vol01:50:1:6",
+   "book": "vol01",
+   "page": 50,
+   "v1_col": 1,
+   "v1_idx": 6,
+   "defect": "grid_shift",
+   "old_bbox_v1": [
+    1585.0,
+    702.0,
+    1711.0,
+    867.0
+   ],
+   "corrected_bbox_v1": [
+    1566.0,
+    765.0,
+    1692.0,
+    876.0
+   ],
+   "evidence": {
+    "patch": null
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     263,
+     283
+    ],
+    "ncc": 0.962,
+    "global_offset": [
+     252,
+     269
+    ],
+    "global_ncc": 0.903
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['none', 'none', None, None, None]（需 ≥1 条 exact/nearby 且无 conflict）"
+  },
+  {
+   "id": "vol01:50:1:10",
+   "book": "vol01",
+   "page": 50,
+   "v1_col": 1,
+   "v1_idx": 10,
+   "defect": "misc_trim",
+   "old_bbox_v1": [
+    1612.0,
+    1221.0,
+    1708.0,
+    1297.0
+   ],
+   "corrected_bbox_v1": [
+    1582.0,
+    1221.0,
+    1716.0,
+    1335.0
+   ],
+   "evidence": {
+    "patch": null
+   },
+   "register": {
+    "offset_frame_to_scan": [
+     253,
+     284
+    ],
+    "ncc": 0.973,
+    "global_offset": [
+     252,
+     269
+    ],
+    "global_ncc": 0.903
+   },
+   "status": "invalid",
+   "reason": "页图坐标系无图像凭证：本页人裁图块证据 ['none', 'none', None, None, None]（需 ≥1 条 exact/nearby 且无 conflict）"
+  }
+ ]
+}
