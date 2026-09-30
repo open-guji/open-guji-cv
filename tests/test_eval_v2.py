@@ -44,6 +44,9 @@ NOT_REGISTRY_SHAPED = {
                           # 18 对实测混淆（来源 #86/#120 done 单），且要读
                           # guji-workspace 里各书的 corpus/glyph_store 重建字表
                           # 宇宙，不是数据集仓分片，一次性校准工具不是常规回归门
+    "step7_replay",  # Step7 放行判定的人裁事件回放：--book/--products/--events 都必填，
+                     # 靶子是工作区 feedback/events + 某次快照的 seed_admit 产物，不是
+                     # 数据集分片；口径与局限见 doc/step7_replay_eval.md
 }
 
 

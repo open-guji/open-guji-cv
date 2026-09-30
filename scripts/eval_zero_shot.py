@@ -141,7 +141,7 @@ def main() -> int:
     n = 0
     in_cs = 0
     for it in items:
-        img = cv2.imread(it["png"], cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(str(it["png"]).replace("\\", "/"), cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
         q = normalize_patch(img)
