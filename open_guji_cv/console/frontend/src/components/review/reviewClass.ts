@@ -102,7 +102,8 @@ export function keepApprox(prev: VerdictLike | undefined): Pick<VerdictLike, 'ap
  *
  * `aiAcc`：是否采纳 AI 预选（`null` = 这一格没问过 AI，不写这个字段）。
  */
-export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = null): Record<string, unknown> | null {
+export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = null,
+                           occluded = false): Record<string, unknown> | null {
   if (!v.done) return null
   if (v.done === 'skip') return { id, v: 'skip' }
   if (v.done === 'damaged') {
@@ -120,7 +121,8 @@ export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = n
   }
   return {
     id, v: 'confirm', shape: v.shape,
-    no_glyph_lib: !!v.noGlyphLib,
+    // 印章遮挡格一律不入字形库（2026-09-30）：不管卡上的勾选是什么（服务端 glyphdb_admit 也设了同一道闸）
+    no_glyph_lib: !!v.noGlyphLib || occluded,
     client_ts: v.ts, dwell_ms: v.dwell,
     ...(aiAcc !== null ? { ai_accepted: aiAcc } : {}),
     ...approxFields(v),
@@ -175,7 +177,7 @@ export function gridVerdict(state: GridState, ref: string | null | undefined, se
  * 整屏 → 事件行。`aiAcc(card, shape)` 与逐张提交同一个口径（`ai.ts::aiAccepted`；这里不 import
  * 运行时代码，由调用方传进来，缺省当「没问过 AI」）。
  */
-export function gridRows<C extends { id: string; ref?: { char?: string | null } | null }>(
+export function gridRows<C extends { id: string; occluded?: unknown; ref?: { char?: string | null } | null }>(
   cards: ReadonlyArray<C>, states: Record<string, GridState | undefined>, seenAt: number | undefined, now: number,
   aiAcc: (c: C, shape: string) => boolean | null = () => null,
 ): Array<Record<string, unknown>> {
@@ -183,7 +185,7 @@ export function gridRows<C extends { id: string; ref?: { char?: string | null } 
   for (const c of cards) {
     const v = gridVerdict(states[c.id] ?? 'accept', c.ref?.char, seenAt, now)
     if (!v) continue
-    const row = verdictRow(c.id, v, v.done === '1' ? aiAcc(c, v.shape) : null)
+    const row = verdictRow(c.id, v, v.done === '1' ? aiAcc(c, v.shape) : null, !!c.occluded)
     if (row) rows.push(row)
   }
   return rows
@@ -197,7 +199,7 @@ export function gridRows<C extends { id: string; ref?: { char?: string | null } 
 // touched 一律丢掉（`dropOffScreen`）——载入时预填的默认裁决悄悄丢，人亲手点过的也丢，但报出条数。
 
 /** 当前屏 → 事件行：只收 `cards` 里本轮动过（`touched`）、有裁决的卡，按屏上顺序。 */
-export function screenRows<C extends { id: string }>(
+export function screenRows<C extends { id: string; occluded?: unknown }>(
   cards: ReadonlyArray<C>, verdicts: Record<string, VerdictLike | undefined>, touched: ReadonlySet<string>,
   aiAcc: (c: C, shape: string) => boolean | null = () => null,
 ): Array<Record<string, unknown>> {
@@ -205,7 +207,7 @@ export function screenRows<C extends { id: string }>(
   for (const c of cards) {
     const v = verdicts[c.id]
     if (!v?.done || !touched.has(c.id)) continue
-    const row = verdictRow(c.id, v, aiAcc(c, v.shape))
+    const row = verdictRow(c.id, v, aiAcc(c, v.shape), !!c.occluded)
     if (row) rows.push(row)
   }
   return rows
