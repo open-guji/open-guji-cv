@@ -416,3 +416,66 @@ drift 档的「只看未裁」**不按批次事件跳过**（重裁过的自己�
 **切线卡里的候选（2026-09-14 起）**：产物 `cut_candidates` 每条候选多了 `agree`（U-Net 裁判的置信加权一致率），切点多了 `chosen_by`
 （rule / unet / human）。`chosen_by=unet` 表示裁判改选过；`agree` 全为 None 表示这个切点没过裁判（池里只剩一条，或裁判不可用）。
 
+
+## 11. 补标签两批（L3，2026-10-01）：切线金标（页面坐标）与列端版框分档
+
+背景：overview #323 第一批结论——学习模型卡在**干净标签太少**。用户 10-01 同意出两批卡，**整理在本地、云端只开发**：
+云端不跑整册、不碰正式 products，批次由**本机**按现行产物生成。模式都是「一条命令出批次 → 控制台点卡 → 一条命令收割进 dataset」。
+代码在 `review/label_batches.py`，命令是 `guji label-batch`（`review` 这个名字已被 v1 的 M6 审查占了）。
+
+**共同点**
+- 只读**现行产物**。没有 `row_segment/cells`（A 批）或 `column_warp/column_windows`（B 批）就报错并告诉你先跑哪一步，**不现算、不写 products**。
+- **分层抽样、难例超采样**，每张卡冻结 `stratum` / `stratum_weight`（= 该层总体数 ÷ 抽样数，Horvitz–Thompson 权重）。
+  所以这两批**不能直接数比例**：全书错误率 = Σ wᵢ·errᵢ / Σ wᵢ。各层总体与抽样数另存 `<批次>_sampling.json`。
+- 出批次时冻结卡片文件 `review/batches/<批次>_cards.jsonl`（含产物指纹、几何签名、页面坐标锚、图像指纹）。收割按它回填，
+  之后产物重跑不会让金标丢锚；产物指纹对不上（点卡时产物已换）记在条目 `input.fp_match`。
+- **L3 批只写事件、不自动消费**（`POST /api/events` 检测到冻结卡片文件就跳过路由）：路由表会把 cutline / glued / none 事件落进工作区裁决表并把
+  Step3 / Step2 产物标 invalidated，补标签不该动现行产物。收割直接进 dataset。
+- 已在金标里的切点不再出（A 批），新条目 id 与旧条目撞了也不覆盖（报 `id_exists_kept_old`）。
+
+### A. 切线金标（页面坐标口径）
+
+```bash
+git pull
+guji label-batch make cutline-gold vol02 --n 200            # 默认 --pages body（21 格标准版式页）；--seed、--id 可调
+# → 打印批次 id（默认 L3-cutline-<册>-<月日>）和控制台填法
+```
+- **抽样**：总体 = 现行 Step3 全部「字–字」切点（不含 blank、小注 a/b、已在金标的）。层 = `上下文|难度`：
+  上下文 `jiazhu`（上下有单行小注）/ `tail`（下格是列末格）/ `seal`（遮挡块，判据同定字入库闸 `occluded_gate`）/ `body`；
+  难度 `hard`（`escalate` 或所选候选与 U-Net 分歧 ≥ `PENDING_BLOB`）/ `mid`（多候选、有分歧、或 `agree`<0.8）/ `easy`。
+  难度档配额 40% / 35% / 25%，档内按 √层总体分、每层至少 6 张。
+- **点卡**：控制台 Step3 页 →「拖切线」→ **页码框填 `list:<批次id>`、批次框填同一个批次 id** → 载入。卡片和平时的切线卡完全一样
+  （默认选 U-Net 候选，回车确认 / 拖线 / 画折线 / 拿不准）。「只看未裁」按产物几何签名判，刷新不重做。
+- **收割**：`guji label-batch harvest <批次id> [--dataset ../open-guji-dataset]`。写 `char-segmentation/touching-cuts` **新条目**：
+  `y` 仍是列图行号（评测沿用），另记页面坐标 `expected.page_x_tr / page_y / page_w`（`anchor.space = raw_page_px@top-right`；
+  控制台事件里的 `page_x` 是左上原点，收割时换成右上原点 `page_w-1-page_x`），`anchor.bbox`=上下两格外接框，
+  `input.source = L3-batch`、`input.version = L3-batch:<批次>`、`stratum` / `stratum_weight`、产物指纹。
+  拿不准 → `status=uncertain`；事件没带页面坐标（取不到列窗几何）→ `status=stale`，不进评测。
+
+### B. Step2 列端版框分档
+
+```bash
+guji label-batch make column-end vol02 --n 240
+```
+- **类别（统一）**：`none` 无框 / `trim` 框可整段削 / `glued` 框粘字 / `double` 双层框 / `idk` 拿不准。
+- **抽样**：总体 = 全部正文列的上、下两端（不含版心列）。层 = 现行 `column_border_trim` 档位（a~e，带层数后缀如 `a2`）× `triage` 的 `end_class`；
+  含 b/c/e 档、多层、glued/idk 的算 hard，配额 50% / 30% / 20%，每层至少 6 端。
+- **点卡**：Step1 页 →「Step2 上下版框核校」tab → **页码框填 `batch:<批次id>`**（批次框留空即默认同名）→ 载入。
+  卡图是**削版框之前**的列端（`column_raw`，去噪、去侧界行，一律「版框在上、字在下」，右侧是行墨投影），
+  **不显示算法分档**——印上去会把人的判断带偏。
+- **收割**：`guji label-batch harvest <批次id>` → 新分片 `char-segmentation/column-end-class`（`expected.class`，另记引擎当时的
+  `engine_trim_case/px/end_class` 供对账；`input.end_fingerprint` 端裁剪图指纹、`anchor.bbox` 端裁剪区页面外接框）。
+- **旧事件映射**：旧 `border_class` 的 `clean`（README 定义「有框墨且与首字有间隙」）→ `trim`，`glued/none/idk` 同名同义，`legacy_class` 留痕；
+  旧体系没有 `double`，旧 clean 里的双层框要重标，收割不猜。认不出的值计入 `unknown_class`。
+- **旧 overview 104 张卡**：`guji label-batch migrate-legacy <verdicts.jsonl> vol02` 把 74 个列端（t=列尾 59、h=列首 15）迁进同一分片，
+  标 `source=legacy-overview`。⚠️ 旧卡问的是**削后状态**（干净 / 残留 / 切字），不是削前类别，无法无损映射，所以 `class` 一律 `idk`、
+  原值存 `legacy_verdict`；30 张末字块卡（`l` 前缀）不是列端，不迁。它们没有图像/产物指纹，只当线索，不进评测。
+
+### 排错
+| 现象 | 原因 / 处理 |
+|---|---|
+| `没有现行 row_segment/cells 产物` | 本机还没跑到 Step3：`guji pipeline <管线> <册>` 或 `guji step row_segment <册>` |
+| 切线卡「载入」0 张 | 页码框没填 `list:<批次id>`，或控制台起在别的工作区（`GUJI_WORKSPACE`）——清单在 `<工作区>/feedback/lists/` |
+| 列端卡 404 | 页码框没填 `batch:<批次id>`，或批次文件不在控制台的批次目录（`review/batches/`） |
+| 收割报「还没有任何裁决事件」 | 事件在点卡那台机器的 `feedback/events/<批次>.jsonl`；在哪台点就在哪台收割 |
+| `id_exists_kept_old` | dataset 里已有同 id：新条目不覆盖旧条目，要覆盖请人工处理 |
