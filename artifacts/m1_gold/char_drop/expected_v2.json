@@ -1,0 +1,26 @@
+{
+ "cover": 0.5,
+ "n_segs": 35197,
+ "n_dropped": 2,
+ "chain": "v2 (column_warp 列图 + row_segment 1.12 + cell_shrink)",
+ "note": "2026-09-30 M1 C 组：新口径首个基线；旧 v1 值(n_dropped 16)仅作趋势，不可直接比",
+ "coords": "col 1 起自右；y0/y1 为列图坐标",
+ "dropped": [
+  [
+   "vol02",
+   "16",
+   9,
+   49,
+   103,
+   0.0
+  ],
+  [
+   "vol02",
+   "188",
+   7,
+   39,
+   170,
+   0.0
+  ]
+ ]
+}

@@ -7,10 +7,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from ..utils.ji_yi_si import FAMILY as _JYS
 from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
+from .mojibake import is_legal_shape
+
+# 不叫 `log`：`human_chars(book, log=None, …)` 的形参 `log` 是 EventLog 实例，
+# 同名会在函数体内把这个 logger 遮住（`log.warning(...)` 变成调 EventLog 不存在的方法）。
+_logger = logging.getLogger(__name__)
 
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
 CUT_KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")   # 后三种 = L3 扩池（2026-09-15）
@@ -117,6 +123,60 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
             continue
         if it.expected.get("kind") == "jiazhu_solo":
             out.setdefault((a.page, a.col), set()).add(a.slot)
+    return out
+
+
+_FORCED_JZ_CACHE: dict = {}
+
+
+def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int]]:
+    """人裁「这一格是雙行小注、从中间拆」：`(page, col) → {slot, …}`（2026-09-30）。
+
+    数据源是事件日志里定字裁决的 `seg_defect` + `reason=jiazhu_as_main`（定字台「小注当正文」，
+    overview#265）——人点那个按钮就是在说「这是小注、Step3 没拆」，不用再标一遍。**每格取最新一条
+    定字类裁决**：之后又对同一格改判（定了字、判非字、跳过……）就不再强制。只认整格 key
+    （`book:页:列:格`）；拆开后的 `…a`/`…b` 子格不是强制对象。
+
+    生效时机同 `resolved_cuts`：裁决不进产物指纹，该页 `row_segment` 重跑才生效；事件消费时
+    `routes.py` 那条 `reason=jiazhu_as_main` 规则会把该页 Step3 显式失效。按事件目录的
+    (名, mtime, 大小) 缓存，逐页调用不会反复解析全部日志。
+    """
+    from .events import EventLog
+    el = log or EventLog()
+    try:
+        sig = (str(el.events_dir), tuple(sorted(
+            (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
+    except OSError:
+        return {}
+    hit = _FORCED_JZ_CACHE.get((book, sig[0]))
+    if hit and hit[0] == sig:
+        return hit[1]
+    pre = f"{book}:"
+    last: dict[str, tuple[tuple, bool]] = {}
+    try:
+        evs = list(el.iter_all())
+    except FileNotFoundError:
+        return {}
+    for e in evs:
+        if e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        p = e.payload or {}
+        v = p.get("v") or e.kind
+        if e.kind not in ("confirm", "not_a_char", "skip", "relabel")                 or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
+            continue
+        order = (e.ts, e.batch, e.seq)
+        k = e.target.key
+        if k not in last or order >= last[k][0]:
+            last[k] = (order, v == "seg_defect" and p.get("reason") == "jiazhu_as_main")
+    out: dict[tuple[int, int], set[int]] = {}
+    for k, (_o, forced) in last.items():
+        if not forced:
+            continue
+        parts = k.split(":")
+        if len(parts) != 4 or not all(x.lstrip("-").isdigit() for x in parts[1:]):
+            continue
+        out.setdefault((int(parts[1]), int(parts[2])), set()).add(int(parts[3]))
+    _FORCED_JZ_CACHE[(book, sig[0])] = (sig, out)
     return out
 
 
@@ -282,6 +342,17 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         cut = stale.get(e.target.key)
         # 撤下标记可以只到日（human_stale_20260917）或到分钟（human_stale_20260925T0712，同一天撤了又重裁时要用）
         if cut and e.ts.replace("-", "").replace(":", "")[:len(cut)] <= cut:
+            continue
+        # 字形字段合法性校验（2026-09-27，H 道乱码普查）：老事件里可能混进乱码
+        # （UTF-8 被按 cp1252 误解码再存盘，「内」存成「å†…」，P cross 1717）——
+        # 不是单字、也不是合法多码位（IDS/PUA+选择符）就跳过，只记 warning，不
+        # 让它原样当"人裁字形"混进文本层，冲乱下游 `report/collate.py` 的逐位
+        # 对齐（那正是 vol01 7 页崩溃的根因）。跳过不等于丢数据：机械可还原的
+        # 那批走的是追加更正事件（`scripts/mojibake_census.py`），这里只挡
+        # 未来/未覆盖到的意外坏数据。
+        if not is_legal_shape(p["shape"]):
+            _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
+                            book, e.target.key, p["shape"])
             continue
         key = e.target.key
         if bind:

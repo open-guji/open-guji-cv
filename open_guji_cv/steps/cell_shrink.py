@@ -26,6 +26,11 @@ class CellShrinkParams(BaseModel):
     strategy: str = "component_owner"     # | padding_box
     padding_ratio: float = 0.08
     min_ink_ratio: float = 0.01
+    seal_flag: bool = True
+    """印章／大片污损遮挡格打 `seal_region` 旗（2026-09-30 L2，overview#318）：判据就是
+    `steps/occlusion.page_occluded`（与 seed_admit 入库闸同一入口、同一组默认阈值），**只打标不改几何**——
+    框、char/blank、字块一概不动，非遮挡格产物逐字节不变。此前切分完全不知道印章：字块裁得过宽、
+    吞进半幅印泥，下游（定字裁决、人审卡）拿不到任何标记。"""
     frame_guard: bool = True
     """首/末格端区抹「版框横条行」（extractor.mask_frame_bars_outside）。刻本开；现代排印本
     （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
@@ -80,14 +85,15 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.5", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.6", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam"),
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
+                   "open_guji_cv.steps.occlusion"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -116,11 +122,17 @@ class CellShrinkStep(Step):
             if pos_count[c.pos] == 1:
                 d["seam_top"] = c.seam_top
                 d["seam_bottom"] = c.seam_bottom
+            if c.kind in ("jiazhu_a", "jiazhu_b") and c.gap_center is not None:
+                d["jiazhu_cx"] = float(c.gap_center)
         # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
         # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
+        # Step3 认下的雙行夹注：缝中心（列图坐标）+ 是否只有 a 半（段尾单字）。extractor 自己那套
+        # 旧判据漏掉的格按它补拆（overview#266，见 extractor「Step3 补拆」一段）
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
-                  "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"]}
+                  "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
+                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"]}
+                     if "jiazhu_cx" in d else {})}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))
         grid = {
@@ -201,6 +213,11 @@ class CellShrinkStep(Step):
         cells: PageCells = ctx.product("cells", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
+        seal: dict = {}
+        if ctx.params_for(self).seal_flag:  # type: ignore[attr-defined]
+            from .occlusion import page_occluded
+            from .seed_admit import SeedAdmitParams
+            seal = page_occluded(ctx, page, SeedAdmitParams())
         out: list[ColumnChars] = []
         for cc in cells.columns:
             if not cc.ok:
@@ -257,6 +274,8 @@ class CellShrinkStep(Step):
                     ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
                 flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
+                if (cc.col, slot, inst.sub or "") in seal:
+                    flags.append("seal_region")
                 s3_kind = step3_kind.get(pos, "char")
                 # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
                 # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——

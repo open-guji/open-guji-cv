@@ -56,6 +56,34 @@ DEFAULT_ROUTES: list[dict] = [
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
     {"match": {"kind": "border_class", "target.step": "column_warp"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/column-warp"}]},
+    # 打回（2026-09-27）：`border_class` = glued/none（总览/13 §二·3）→ 只标记过期，
+    # 不起跑批，同 cutline/n_body_slots 已有的做法。核实过前端全部卡片 id 形态之后
+    # （见 `feedback/border_class_route.py` 模块头的表），`border_class` 目前只有
+    # 列级两种真实/代码形态（`colborder:`、无前缀 `book:page:col`），答案分别落在
+    # `border_class`（colborder 一次一端，单值）或 `top_class`/`bot_class`
+    # （ColumnReviewPanel 一次两端）三个可能的键上，逐一列出——两种 payload 形状
+    # 天然不会互相误判（ColumnReviewPanel 给人看的 `border_class` 拼接串
+    # `"top=x,bot=y"` 不会等于 `"glued"`/`"none"`）。
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.top_class": "glued"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.top_class": "none"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.bot_class": "glued"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.bot_class": "none"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.border_class": "glued"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    {"match": {"kind": "border_class", "target.unit": "column", "payload.border_class": "none"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "column_warp"}}]},
+    # 页级分支：13 原表设想的场景（`target.unit == "page"`）。**核实过——前端目前没有
+    # 任何路径会产生这种 `border_class` 事件**（`BorderReviewPanel`/`ColumnReviewPanel`
+    # 提交时 `unit` 一律是 `'column'`），规则按 13 的设计补全，等真的出现页级卡时会
+    # 自动命中，不需要再改代码；现在没有数据能验证这两条。
+    {"match": {"kind": "border_class", "target.unit": "page", "payload.border_class": "glued"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "border_detect"}}]},
+    {"match": {"kind": "border_class", "target.unit": "page", "payload.border_class": "none"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "border_detect"}}]},
     {"match": {"kind": "verdict", "target.step": "row_segment"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/row-boundaries"}]},
     # ⚠️ 下面两条**当前没有事件会命中**（2026-09-18 实测：事件日志与前端源码都没有
@@ -124,6 +152,11 @@ DEFAULT_ROUTES: list[dict] = [
             # 只标不跑，下次 `step seed_admit` 才重算（0.1 s/页）；历史事件首次接上会把
             # 裁过的页一起标失效，seed_admit 便宜，不追溯处理。
             {"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # 「小注当正文」（reason=jiazhu_as_main）：人指认这格是 Step3 没拆的雙行小注 → 该页 Step3 也失效，
+    # 重跑时 `lookup.resolved_forced_jiazhu` 把它从中间拆开（2026-09-30）。与上面 confirm 那条
+    # 同时命中（一个事件多个去处）。
+    {"match": {"kind": "confirm", "payload.reason": "jiazhu_as_main"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     # 判非字同理：名单变了 seed_admit 该重算。
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},

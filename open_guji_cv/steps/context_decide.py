@@ -58,6 +58,25 @@ accuracy.py` 后续跟人审的反馈事件（`feedback/events.py`，按 cell id
 知道后文的真实字，只能用本列剩余字位的**原始候选 top1**（未经裁决）拼，
 是弱于评测集的近似，已在日志与函数文档里注明，避免拿线上正确率数字
 直接跟离线 27~47% 比。
+
+## 【2026-09-28】5-b 生僻字候选并入候选池（D 道，overview#126），缺省关
+
+`rare_topk > 0` 时 `rare_candidates` 前 k 名按名次 1/r 归一、乘 `rare_weight`
+并进 `fuse_priors`（`extra`）。只扩池、只改先验：`same` 档继承、门槛化、只在候选
+集合内选这三条都没动。5-b 与库首位一致 → 先验更尖、margin 更高；不一致 → margin
+被摊薄、更多落人审——后者正是它挡住错放的方式。
+
+实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+
+| rare_weight | vol03 待审率 | vol03 放出格与光盘版字面不同（sub.*） |
+|---|---|---|
+| 关 | 3.72% | 130 |
+| 0.5 | 4.09% | 122 |
+| **1.5（缺省，同 OCR 权重）** | 4.28% | **93** |
+| 3.0 | 4.44% | 92 |
+
+全唐文 v006（`seed_admit.use_context` 开时）人裁难例上 context 通道错放 60 → 4 格
+（含异体口径），待审率 26.8% → 24.4%。
 """
 
 from __future__ import annotations
@@ -67,13 +86,13 @@ import json
 import time
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
-from ..products.kinds.recog import (ColumnDecision, DecisionRec,
-                                    PageDecision, PageMatch, PageOcr)
+from ..products.kinds.recog import (AiEvidence, ColumnDecision, DecisionRec,
+                                    GroupRec, PageDecision, PageMatch, PageOcr)
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 align_ref.py 模块头
@@ -90,6 +109,43 @@ def _log_llm_call(log_dir: str, book: str, row: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def ai_evidence_fingerprint(path: str) -> str:
+    """词典+AI 证据文件的内容指纹（sha256 前 16 位）；文件不在记 `missing`——
+    配了路径却没文件是配置错，`load_ai_evidence` 会报错，这里只管让指纹可算。"""
+    from ..products.store import sha256_file
+    p = Path(path)
+    return sha256_file(p)[:16] if p.exists() else "missing"
+
+
+_AI_CACHE: dict[str, dict[str, tuple[list[GroupRec], AiEvidence | None]]] = {}
+
+
+def load_ai_evidence(path: str, fingerprint: str) -> dict[str, tuple[list[GroupRec], AiEvidence | None]]:
+    """读逐格 JSONL → {字位 id: (groups, ai)}，按内容指纹缓存（一次 run 几十页共用）。
+    每行按 `GroupRec` / `AiEvidence` 校验；行里别的键（如核对用的 `img`）忽略。
+    配了路径却读不到直接报错，不静默退化成「没有 AI」（子会话须知铁律）。"""
+    hit = _AI_CACHE.get(fingerprint)
+    if hit is not None:
+        return hit
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"context_decide.ai_evidence 指向的文件不存在: {p}")
+    out: dict[str, tuple[list[GroupRec], AiEvidence | None]] = {}
+    with open(p, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            if "key" not in d:
+                raise ValueError(f"{p}:{n} 缺 key")
+            groups = [GroupRec.model_validate(g) for g in d.get("groups") or []]
+            ai = AiEvidence.model_validate(d["ai"]) if d.get("ai") else None
+            out[str(d["key"])] = (groups, ai)
+    _AI_CACHE[fingerprint] = out
+    return out
 
 
 _CORPUS_FP_CACHE: dict[tuple[str, int, int], str] = {}
@@ -137,6 +193,40 @@ class ContextDecideParams(BaseModel):
     llm_context_chars: int = 10       # 上/下文各取多少字，同评测集口径
     llm_log_dir: str = DEFAULT_LLM_LOG_DIR
 
+    # ── 词典+AI 证据（异步外包段导回，2026-09-27 D-Step6）──────────────────
+    # 方案：overview 进度/Step6-上下文裁决/方案-词典加AI接入管线.md §三、§七。
+    # 逐格 JSONL（`{key, groups, ai}`），run_page 把 groups/ai 挂到对应 DecisionRec 上。
+    # **只进产物、不改放行**：char/margin/source/ranked 一概不动，seed_admit 不读 ai。
+    # 路径缺省由书级配置 `step6_ai:` 填（`core.step._with_book_step6_ai`）。
+    ai_evidence: str = ""
+    ai_evidence_fingerprint: str = ""
+    """证据文件内容哈希，留空自动填——换了文件，产物要判过期。"""
+
+    # ── 5-b 生僻字候选并入候选集（2026-09-28，D 道 overview#126），缺省关 ─────
+    rare_topk: int = 0
+    """取 `rare_candidates` 前几名并进先验候选池。**0 = 关（缺省）**：不读 5-b、不进
+    指纹、不进参数哈希。书 yaml `params: {context_decide: {rare_topk: 5}}` 打开。
+    只**扩候选集**、按名次给先验（`rare_priors`），`same` 档继承、门槛化、字形层
+    不可改写这三条铁律都不动——5-b 的字进了候选池，才轮得到 LM 在它们之间选。"""
+    rare_weight: float = 1.5
+    """5-b 这一路在 `fuse_priors` 里的总权重（按名次 1/r 归一后乘它）。缺省与 OCR
+    一路同权（`OCR_WEIGHT`=1.5，库一路是 3.0×cov）：只扩池、不喧宾夺主。只在
+    `rare_topk > 0` 时进参数哈希。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_ai(self, handler):
+        """两个 ai_* 字段为空时不进 dump：没接 AI 的书 `params_hash` 与加字段前逐位
+        相同，四庫等已跑的 context_decide 产物不会因为这次改代码全体判过期。
+        `rare_*` 同理：`rare_topk == 0` 时两个字段都不进 dump。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.ai_evidence:
+            d.pop("ai_evidence", None)
+            d.pop("ai_evidence_fingerprint", None)
+        if isinstance(d, dict) and not self.rare_topk:
+            d.pop("rare_topk", None)
+            d.pop("rare_weight", None)
+        return d
+
     def _corpus_paths(self) -> list[str]:
         """本册整理本 + 泛古籍语料。**相对路径锚在仓根，不靠进程 cwd**（2026-09-21 修）。
 
@@ -163,12 +253,24 @@ class ContextDecideParams(BaseModel):
         if not self.corpus_fingerprint:
             object.__setattr__(self, "corpus_fingerprint",
                                corpus_fingerprint(self._corpus_paths()))
+        if self.ai_evidence and not self.ai_evidence_fingerprint:
+            object.__setattr__(self, "ai_evidence_fingerprint",
+                               ai_evidence_fingerprint(self.ai_evidence))
+
+def rare_priors(chars: list[str]) -> list[tuple[str, float]]:
+    """5-b 前 k 名 → `fuse_priors(extra=…)` 要的 `[(字, 强度)]`：按名次 1/r 归一到和为 1。
+    不用 5-b 的 `score`——各来源量纲不同、不可比（见 `align_ref.rare_topk_map`）。"""
+    w = [1.0 / (i + 1) for i in range(len(chars))]
+    z = sum(w) or 1.0
+    return [(c, x / z) for c, x in zip(chars, w)]
+
 
 @register_step
 class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates",),
+        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
         produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
@@ -176,6 +278,11 @@ class ContextDecideStep(Step):
                    "open_guji_cv.clustering.recognize_flow",
                    "open_guji_cv.clustering.lm",
                    "open_guji_cv.utils.jiazhu_order"),
+        # 路径不进指纹（2026-09-29 K238）：`corpus` 缺省是仓内绝对路径（换机器就变），
+        # 内容由 `corpus_fingerprint` 把关（只认文件名 + 内容哈希）；`ai_evidence` 同理
+        # 有 `ai_evidence_fingerprint`；`llm_log_dir` 只是调用日志落哪，不影响产物。
+        # `variants` 没有内容指纹，故意不在此列。
+        path_params=("corpus", "general_corpus_dir", "ai_evidence", "llm_log_dir"),
     )
 
     def _decider(self, p: ContextDecideParams):
@@ -289,13 +396,20 @@ class ContextDecideStep(Step):
         p = _with_book_corpus(p, ctx)
         match: PageMatch = ctx.product("glyph_match", page)
         try:
-            ocr: PageOcr | None = ctx.product("ocr_candidates", page)
+            ocr: PageOcr | None = (ctx.product("ocr_candidates", page)
+                                   if ctx.book.ocr_candidates else None)
         except Exception:
             ocr = None                     # 没装引擎时只用库候选，不炸
         decider = self._decider(p)
+        ai_map = (load_ai_evidence(p.ai_evidence, p.ai_evidence_fingerprint)
+                  if p.ai_evidence else {})
 
         omap = ({r.id: r for cc in ocr.columns for r in cc.chars}
                 if ocr is not None else {})
+        rmap: dict[str, list[str]] = {}
+        if p.rare_topk:
+            from .align_ref import _opt, rare_topk_map
+            rmap = rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
         out: list[ColumnDecision] = []
         for cc in match.columns:
             if not cc.ok:
@@ -321,9 +435,12 @@ class ContextDecideStep(Step):
                     decided.append((r.slot, r.char))
                     continue
                 o = omap.get(r.id)
+                rc = rmap.get(r.id)
                 priors = fuse_priors(list(r.candidates),
                                      list(o.topk) if o else [],
-                                     s2t=False)      # OCR 那边已经扩过 s2t
+                                     s2t=False,      # OCR 那边已经扩过 s2t
+                                     **({"extra": rare_priors(rc), "w_extra": p.rare_weight}
+                                        if rc else {}))
                 if not priors:
                     recs.append(DecisionRec(id=r.id, slot=r.slot, sub=r.sub,
                                             source="none"))
@@ -357,6 +474,12 @@ class ContextDecideStep(Step):
                     llm_suggestion=llm_suggestion if llm_suggestion in priors else None))
                 if ok and res.surface:
                     decided.append((r.slot, res.surface))
+            if ai_map:
+                # 词典+AI 证据只挂上去，不动 char/margin/source/ranked（只进产物、不改放行）
+                for rec in recs:
+                    ev = ai_map.get(rec.id)
+                    if ev is not None:
+                        rec.groups, rec.ai = list(ev[0]), ev[1]
             out.append(ColumnDecision(col=cc.col, ok=True, chars=recs))
         return {"context_decision": PageDecision(
             page=page, strategy=p.strategy,

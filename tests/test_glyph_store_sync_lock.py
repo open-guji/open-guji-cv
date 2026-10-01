@@ -79,3 +79,27 @@ def test_acquire_feedback_lock_blocks_concurrent_writer(tmp_path):
         p.join(timeout=5)
         if p.is_alive():
             p.terminate()
+
+
+def test_feedback_of_book_without_own_glyph_db_is_committed(tmp_path, monkeypatch):
+    """借别家库的书（全唐文借四庫库）没有 output/glyph.db：它的 feedback/events 与
+    consumed 也要进提交（2026-09-27，K 快照自动导入 §5；此前按有没有库挑书，整本漏掉）。"""
+    import subprocess
+    import sys
+    m = _load()
+    root = tmp_path / "ws"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    for k, v in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(["git", "config", k, v], cwd=root, check=True)
+    book = root / "qtw-draft"
+    (book / "feedback" / "events").mkdir(parents=True)
+    (book / "feedback" / "consumed").mkdir(parents=True)
+    (book / "feedback" / "events" / "e.jsonl").write_text('{"a":1}\n', encoding="utf-8")
+    (book / "feedback" / "consumed" / "c.jsonl").write_text('{"b":1}\n', encoding="utf-8")
+    monkeypatch.setattr(m, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(sys, "argv", ["glyph_store_sync.py", "--root", str(root), "--no-push"])
+    assert m.main() == 0
+    files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
+    assert "qtw-draft/feedback/events/e.jsonl" in files
+    assert "qtw-draft/feedback/consumed/c.jsonl" in files

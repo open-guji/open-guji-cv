@@ -63,6 +63,8 @@ def test_classify_return_seg_defect_and_cutline_and_slots():
         ("row_segment", "seg_noise")
     assert classify_return(_confirm("v:1:1:5", 1, {"v": "seg_defect", "quality": "truncated"})) == \
         ("row_segment", "seg_truncated")
+    assert classify_return(_confirm("v:1:1:5", 1, {"v": "seg_defect", "quality": "truncated",
+                                                   "reason": "jiazhu_as_main"})) == ("row_segment", "jiazhu_split")
     assert classify_return(_confirm("v:1:1:5", 1, {"v": "seg_defect", "quality": "clean"})) is None
     assert classify_return(_confirm("v:1:1:5", 1, {"v": "confirm", "shape": "甲"})) is None
     assert classify_return(_cutline("v", 1, 1, 5, 6, "overlap", 1)) == ("row_segment", "cut_unresolvable")

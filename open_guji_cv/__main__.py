@@ -649,8 +649,15 @@ def cmd_glyph_db(args):
     `core.workspace.glyph_store_path()`：不传按工作区解析，传相对路径按工作区
     解释，传绝对路径当覆盖。）
     """
+    import os
     from .clustering.glyph_db import GlyphDB
-    from .core.workspace import glyph_db_path, glyph_store_path
+    from .core.workspace import assert_workspace_declared, glyph_db_path, glyph_store_path
+
+    if getattr(args, "workspace", None):
+        os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+    if getattr(args, "allow_sample_db", False):
+        os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
+    assert_workspace_declared()
 
     db_path = glyph_db_path()
     store_dir = glyph_store_path(args.store)
@@ -663,9 +670,33 @@ def cmd_glyph_db(args):
             from .clustering.glyph_db import (assert_db_not_silently_empty,
                                               rebuild_from_store)
             db.close()
-            summary = rebuild_from_store(store_dir, db_path)
+            # 借库（2026-09-27，全唐文）：别的工作区的库一起装进本库，只为匹配、导出时跳过。
+            # **只用于新书冷启动**（用户 09-27 定：两套书字形不一样，有人裁之后只用本书
+            # 自己的字形）。来源：命令行 --extra-store，或工作区 workspace.yaml 的
+            # `glyph_lib.borrow`（有人裁后把它清空、再 rebuild 一次就切到只用自有库）。
+            # 不走 glyph_store_path()：它先看 GUJI_GLYPH_STORE，会把每个借库都解析成本书的库
+            from .core.workspace import REPO_ROOT, workspace_root
+            base = workspace_root() or REPO_ROOT
+            no_borrow = getattr(args, "no_borrow", False)
+            borrow = list(getattr(args, "extra_store", None) or [])
+            if not borrow and not no_borrow and (base / "workspace.yaml").exists():
+                import yaml
+                wcfg = yaml.safe_load((base / "workspace.yaml").read_text(encoding="utf-8")) or {}
+                borrow = list(((wcfg.get("glyph_lib") or {}).get("borrow")) or [])
+            extras = [p if (p := Path(x).expanduser()).is_absolute() else base / p
+                      for x in ([] if no_borrow else borrow)]
+            if extras:
+                print(f"借库（冷启动）：{', '.join(map(str, extras))}")
+                summary = rebuild_from_store(store_dir, db_path, extra_stores=extras)
+            else:
+                summary = rebuild_from_store(store_dir, db_path)
             db = None
             assert_db_not_silently_empty(db_path, store_dir)
+            # 补放两次导出之间审进库、真源还没跟上的人裁（值守 #115，2026-09-27）；--no-replay 跳过
+            if not getattr(args, "no_replay", False):
+                from .core.workspace import feedback_root
+                from .feedback.replay import replay_after_rebuild
+                summary = {**summary, "replay": replay_after_rebuild(db_path, store_dir, feedback_root())}
         elif args.action == "drop-edition":
             if not args.edition:
                 print("drop-edition 需要 --edition"); sys.exit(1)
@@ -1071,6 +1102,13 @@ def main():
                    choices=["import", "stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
                             "set-edition"])
+    p.add_argument("-w", "--workspace", default=None,
+                   help="工作区仓根（含 books/、output/glyph.db）。同 v2 命令那个 -w：给了就覆盖"
+                        "本次调用的 GUJI_WORKSPACE，不给就退回读环境变量。任务卡 #54 第13条：这个"
+                        "命令以前只认 GUJI_WORKSPACE、没设也不报错，会静默去改 cv 仓自己的 output/。")
+    p.add_argument("--allow-sample-db", action="store_true",
+                   help="没有工作区时，显式声明就用仓内小样本库（本地试跑/装台子/跑单测才该用；"
+                        "同控制台『允许用本地示例库』勾选框）。不加就直接报错退出。")
     p.add_argument("--no-others", action="store_true",
                    help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
     p.add_argument("--apply", action="store_true",
@@ -1081,6 +1119,14 @@ def main():
                         "（GUJI_WORKSPACE 设了就是 <工作区>/output/glyph_store，"
                         "没设就是仓内样本库）；传相对路径按工作区解释，"
                         "传绝对路径当覆盖")
+    p.add_argument("--extra-store", action="append", default=None,
+                   help="rebuild 用，可重复：再借一个别的工作区的字形库真源进本库"
+                        "（按原 edition 装，只为匹配；export 时跳过，不进本书真源）。"
+                        "只用于新书冷启动；不给时读 workspace.yaml 的 glyph_lib.borrow")
+    p.add_argument("--no-replay", action="store_true",
+                   help="rebuild 用：不补放人裁事件（缺省会把真源水位线之后的人裁 confirm 重新进库）")
+    p.add_argument("--no-borrow", action="store_true",
+                   help="rebuild 用：不借任何库（无视 workspace.yaml 的 glyph_lib.borrow），只用本书自有库")
     p.add_argument("--edition", default=None,
                    help="版本 edition_tag（import 默认=书名；"
                         "import-font 用于只导 manifest 里的某一套字体）")

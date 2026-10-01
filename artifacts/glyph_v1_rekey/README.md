@@ -25,4 +25,23 @@ python -m open_guji_cv glyph-db export     # 然后在沙箱 rebuild 一份比�
 systemctl --user start guji-glyph-store-sync.timer
 ```
 
-详见 overview `进度/字形库/12-v1旧刻例重键.md`。
+详见 overview `进度/字形库/12-v1旧刻例重键.md`；**B 段（挪绑漂移）之后 conflict_human 换了一批
+（148:5:17/148:5:7/148:6:10/5:7:6，即/卽、歷/厯 同字异码位），处置与新执行步骤见
+`进度/字形库/任务书-H-v1重键与撤例按B后重定.md` 对应的 done 单。**
+
+## `--book`：同字异码位不算冲突（2026-09-27 加）
+
+`glyph_v1_rekey.py` 加了 `--book <书 id>` 参数：v1 与人裁同格异字时，如果两边按该书
+`codepoints` 配置（`core/book.py::BookSpec.codepoints`）算同一个字（如即/卽、歷/厯这类
+「两形人几乎分不出、一本书该统一用一个码位」），就不进 `conflict_human`——照常重键，
+并把 v1 这份的 `label`/`semantic`/`unicode_cp`/`admissions.char` 一并落到书级码位。
+不给 `--book`（缺省）行为与加这条规则之前完全一样。用法：
+
+```bash
+GUJI_GLYPH_DB=... PYTHONPATH=. .venv/bin/python scripts/glyph_v1_rekey.py \
+    artifacts/glyph_v1_rekey/siku_vol01_v1_map.jsonl --book vol01 --dry-run
+```
+
+`vol01.yaml` 目前的 `codepoints:` 还没有即/卽、歷/厯——库计数与整理本（光盘版）都倒向
+卽/厯（详细数字见 done 单），要落地这条规则得先把这两对并进 `codepoints:`
+（`别/別`、`内/內` 已在，`set_codepoints` 是整块替换、记得带上旧的两对一起写）。

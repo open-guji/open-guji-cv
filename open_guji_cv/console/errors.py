@@ -21,12 +21,13 @@ from typing import Any, TypeVar
 
 from fastapi import HTTPException
 
-from ..errors import (BadRequest, Conflict, EncodeFailed, GujiError, NotFound,
-                      Unsupported)
+from ..errors import (BadRequest, Conflict, EncodeFailed, GujiError, IndexNotBuilt,
+                      NotFound, Unsupported)
 
 # 顺序有意义：先匹配到的先用，所以子类要排在父类前面
 _CODES: tuple[tuple[type[GujiError], int], ...] = (
     (Conflict, 409),
+    (IndexNotBuilt, 503),   # 索引没预建、控制台不现建：暂不可用，不是坏了
     (BadRequest, 400),
     (Unsupported, 404),     # 「没有这个 Step 的叠图画法」对调用方来说就是「没有」
     (NotFound, 404),

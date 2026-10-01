@@ -27,11 +27,36 @@ from __future__ import annotations
 
 import hashlib
 import os
+
+# CPU 推理反活锁（2026-09-27，任务书-R-rare挂死）：容器环境下 torch/OpenBLAS 默认按
+# `os.cpu_count()` 开 intra-op 线程池，`rare_for_batch` 对整页字块逐批调用小张量/小矩阵
+# 运算，触发线程池忙醒忙睡的 futex 活锁（`strace` 实测：两个线程池地址间来回
+# `FUTEX_WAKE_PRIVATE`，CPU 300%+ 但零进度，几分钟不会自己恢复）。
+#
+# 只设环境变量不够——OpenBLAS/MKL 的线程池只在各自库**第一次**跑并行运算时才读一次
+# 这些变量，读过之后再改 `os.environ` 不生效（实测：同进程内先跑一次矩阵乘法、再设
+# `OPENBLAS_NUM_THREADS`，前后耗时几乎相同）。所以必须在**本模块 import 时**、也就是
+# 在任何 `import numpy`/`import torch`/`import cv2` 真正触发线程池之前设好——`cnn_candidates`
+# 是 Step5-b 候选栈里最先被 import 的一个（`rare_candidates.run_page` 先 import 它，
+# 再 import 会牵出 `font_candidates` 的 `rare_panel`），这里设最早。
+# 用 `setdefault` 不覆盖调用方已经显式设置的值。
+for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+             "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+del _var
+
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+
+try:  # pragma: no cover - cv2 总已安装，防御性写法与其余延迟 import 一致
+    import cv2 as _cv2
+    _cv2.setNumThreads(1)
+except Exception:
+    pass
+
 
 def _resolve_default_ckpt() -> Path:
     """checkpoint 不可重建（重训要 GPU + 数小时），2026-09-09 起进 Git，
@@ -99,19 +124,64 @@ kage 渲染成 64² 图，每形挂一个关联字。**每字取 max、单独一
 文件缺席时整条路静默不参与（`gw_catalog_fingerprint()` 为空、`full_fingerprint` 不变）。"""
 
 GW_ENABLED = False
-"""总开关。**2026-09-22 缺省关**：7 万字表实测 oov_bench emb top-1 74.5 → 77.7、top-5 89.8 → 91.1、
-top-10 91.7 不变；但 unseen 严格 top-10 100.0 → 99.8（掉 3 条，top-1 98.0 不变）——任务卡的闸是
-「unseen 严格 / oov 都不掉」，差这 0.2 不开。开关留着：有了「未收字子集」（T12）再定，
-或者给 gw 模板加一个赢过字体均值的余量再量（不要在 unseen 上调这个余量）。
-评测：`eval_oov.py --no-gw` 对照；设计稿 §13 ⑥。"""
+"""模块级总开关，**缺省关**——评测脚本（`eval_oov.py --no-gw`）与不带 `ctx.book` 的老调用方走它。
+**2026-09-22** 7 万字表实测 oov_bench emb top-1 74.5 → 77.7、top-5 89.8 → 91.1、top-10 91.7
+不变；但 unseen 严格 top-10 100.0 → 99.8（掉 3 条，top-1 98.0 不变）——当时任务卡的闸是
+「unseen 严格 / oov 都不掉」，差这 0.2 没开。
+
+**2026-09-27（T4 变体形转正）**：按书开的口子已接（`font.gw_variant.enabled`，见
+`book_gw_variant()`），产线走 `emb_topk_batch(gw_enabled=…)`/`full_fingerprint(gw_enabled=…)`
+显式传参，不再依赖这个模块全局；此处仍留 `False` 当"没配置 `gw_variant` 的书"的兜底，
+与加这个开关之前逐位相同。评测：`eval_oov.py --no-gw` 对照；`scripts/eval_t4_variant.py`
+对照 158 条异体分歧子集；设计稿 §13 ⑥。"""
 
 
-def gw_catalog_fingerprint(path: str | Path = GW_CATALOG) -> str:
+_GW_CATALOG_FILE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _gw_catalog_content_fingerprint(p: Path) -> str:
+    """单个目录文件的**内容**指纹（sha256 前 12 位），按 `(路径, mtime_ns, 大小)` 缓存——
+    与 `_real_proto_file_fingerprint`/`utils.cut_select.ckpt_fingerprint` 同一个写法。"""
+    st = p.stat()
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _GW_CATALOG_FILE_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _GW_CATALOG_FILE_FP_CACHE[key] = fp
+    return fp
+
+
+def gw_catalog_fingerprint(path: str | Path = GW_CATALOG, enabled: bool | None = None) -> str:
+    """GlyphWiki 目录指纹：**按内容**（sha256），不按 `(大小, mtime)`（T4 变体形转正，
+    2026-09-27）——同 `real_proto_fingerprint` 那次改的理由：云端算好的目录运到别的机器，
+    文件内容一字不差，mtime 却对不上，会被判过期。
+
+    `enabled=None`（缺省）时看模块级 `GW_ENABLED`；按书配置调用时传显式的书级开关
+    （见 `book_gw_variant`）。**关着（不管模块级还是书级）一律返回空串**——这不是新行为，
+    是补一个此前就该有的短路：`full_fingerprint()` 曾经不管 `GW_ENABLED` 一律把这段
+    fingerprint 并进去（`_gw_index` 用不用是另一回事），关着的书只要本机 `cache/glyphwiki/`
+    目录内容一变，`rare_candidates` 就被判过期——跟 `params_hash`/`self_hash` 不对齐
+    同一类坑（见 `core/step.py::_with_book_real_proto` 那次）。"""
+    en = GW_ENABLED if enabled is None else enabled
+    if not en:
+        return ""
     p = Path(path)
     if not p.exists():
         return ""
-    st = p.stat()
-    return hashlib.sha1(f"{p.name}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
+    return _gw_catalog_content_fingerprint(p)
+
+
+def book_gw_variant(font: dict | None) -> bool:
+    """册配置 `font.gw_variant` → `enabled`（T4 变体形模板转正，2026-09-27）。
+
+    yaml 形状：`font: {gw_variant: {enabled: bool}}`。缺省 `enabled=False`——不给这段
+    配置的书（包括现役十册四庫、没重跑过的旧产物）行为与这块新配置加入前逐位相同。
+    与 `book_real_proto` 同一条口径，只是这里没有 `stores`：GlyphWiki 目录是引擎仓级的
+    单一资源（`cache/glyphwiki/catalog_64.npz`，`scripts/build_glyphwiki_catalog.py` 生成，
+    不进 git），不像真刻例那样按书各指各的库。"""
+    cfg = (font or {}).get("gw_variant") or {}
+    return bool(cfg.get("enabled", False))
 
 
 REAL_PROTO_ENABLED = False
@@ -237,13 +307,50 @@ def load_real_exemplars(specs: tuple = REAL_PROTO_SPECS, charset=None):
     return dict(out)
 
 
+_REAL_PROTO_FILE_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _real_proto_file_fingerprint(jf: Path) -> str:
+    """单个 `instances/*.jsonl` 的**内容**指纹（sha256 前 12 位），按 `(路径, mtime_ns,
+    大小)` 缓存避免重复读盘——跟 `utils.cut_select.ckpt_fingerprint` 同一个写法。"""
+    st = jf.stat()
+    key = (str(jf), st.st_mtime_ns, st.st_size)
+    fp = _REAL_PROTO_FILE_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(jf)[:12]
+        _REAL_PROTO_FILE_FP_CACHE[key] = fp
+    return fp
+
+
+def _portable_store_label(spec: str) -> str:
+    """`store:<绝对路径>` → 进哈希的可移植标签：在工作区根（没设则引擎仓根）之下就写
+    `store:<相对路径>`，否则原样。
+
+    2026-09-29（K#238c）：`book_real_proto` 把相对路径拼成绝对路径才交给这里，绝对路径
+    进了哈希，云端 `/home/user/...` 与服务器 `/srv/...` 同内容也算出不同指纹，
+    `rare_candidates` 永远对不上。内容指纹（`_real_proto_file_fingerprint`）本来就跨机器
+    一致，路径前缀是唯一的机器差异。"""
+    from ..core.workspace import workspace_root
+    d = Path(spec.split(":", 1)[1])
+    base = workspace_root() or Path(__file__).resolve().parents[2]
+    try:
+        return "store:" + d.relative_to(base).as_posix()
+    except ValueError:
+        return spec
+
+
 def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None = None) -> str:
-    """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的 `名字:大小:mtime` 拼起来。
+    """真刻例模板集指纹：每个 store 目录 `instances/*.jsonl` 的**内容** sha256 拼起来。
     目录缺席的 spec 不参与，一个都不参与（或总开关关着）时返回空串。
 
     `enabled=None`（缺省）时看模块级 `REAL_PROTO_ENABLED`——评测脚本走这条，与此前
     逐位相同。按书配置调用时传显式的书级开关（见 `book_real_proto`），不再看模块全局。
-    """
+
+    **按内容算，不按 `(大小, mtime)`**（2026-09-27，CV 总管 review 指出）：mtime 是各
+    机器 checkout 的时间，云端算好的产物运到服务器、文件内容一字不差，mtime 却对不上，
+    `rare_candidates` 会被判过期——跟 09-27 `ckpt_fingerprint`／`corpus_fingerprint`
+    那次（cv `078a13d`）同一个坑，见 `utils.cut_select.ckpt_fingerprint` 模块注释。"""
     en = REAL_PROTO_ENABLED if enabled is None else enabled
     if not en:
         return ""
@@ -255,8 +362,7 @@ def real_proto_fingerprint(specs: tuple = REAL_PROTO_SPECS, enabled: bool | None
         if not d.exists():
             continue
         for jf in sorted(d.glob("*.jsonl")):
-            st = jf.stat()
-            parts.append(f"{spec}/{jf.name}:{st.st_size}:{int(st.st_mtime)}")
+            parts.append(f"{_portable_store_label(spec)}/{jf.name}:{_real_proto_file_fingerprint(jf)}")
     if not parts:
         return ""
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
@@ -286,12 +392,96 @@ def _farthest_point_protos(vecs: np.ndarray, ids: list, k: int):
     return [vecs[i] for i in chosen], [ids[i] for i in chosen]
 
 
+_CKPT_FP_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def fingerprint(path: str | Path = DEFAULT_CKPT) -> str:
+    """checkpoint 指纹：**按内容**（sha256 前 12 位），不按 `(路径, mtime)`
+    （2026-09-27，任务书-R-rare冷启动内存与索引预建）——同 `real_proto_fingerprint`/
+    `gw_catalog_fingerprint`/`utils.cut_select.ckpt_fingerprint` 那几次同一个坑：
+    云端建好的 `emb_*.npz`/`gw_*.npz` 运到服务器，`best.pt` 内容一字不差，mtime
+    却对不上（换机器 checkout 的时间），旧写法（sha1(路径:大小:mtime)）会让这份
+    预建索引在服务器上**永远不命中**，白白预建。
+
+    按 `(路径, mtime_ns, 大小)` 缓存 sha256 结果，避免同进程内每次实例化
+    `CnnCandidates`/每次查指纹都重读 19MB 的权重文件。"""
     p = Path(path)
     if not p.exists():
         return "nockpt"
     st = p.stat()
-    return hashlib.sha1(f"{p}:{st.st_size}:{int(st.st_mtime)}".encode()).hexdigest()[:12]
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    fp = _CKPT_FP_CACHE.get(key)
+    if fp is None:
+        from ..products.store import sha256_file
+        fp = sha256_file(p)[:12]
+        _CKPT_FP_CACHE[key] = fp
+    return fp
+
+
+def build_emb_matrix(net, dev, cs: tuple[str, ...], extra: dict, render_char,
+                     log=None, log_every: int = 1000) -> tuple[np.ndarray, list[str]]:
+    """`_emb_index` 冷启动那段重活的独立函数体：字表 → (字体渲染 ∪ 真刻本图) →
+    网络前向 → 单位化 embedding，逐字均值。抽成模块函数（2026-09-27，任务书-
+    R-rare冷启动内存与索引预建）有两个原因：
+
+    1. **进度日志**：建 2.7–7 万字的索引单核 5–25 分钟、此前零输出，跑批看着
+       像卡死（`总调度/服务器工单/1715`「5 分钟里没写出 emb_*.npz」就是这么
+       被判定成问题的）。现在每 `log_every` 字打一行，`ctx.log`/`print` 都能接。
+    2. **给 `guji cache build-rare-index` 复用**：预建命令与产线用同一份逻辑，
+       不会走出两条实现、结果不一致。
+
+    这一步的内存实测**没有能收敛到 ≤1.2G 目标的进程内改法**（`gc.collect`+
+    `malloc_trim`、关 mkldnn、固定 batch 形状都试过、都不改变增长曲线，见
+    `_emb_index` 模块头）——真正的解法是别在服务器上跑这段，靠预建+分发。
+    """
+    import torch
+    from .font_candidates import _font_files
+
+    fonts = _font_files()
+    vecs, names = [], []
+    n_render_fail = 0
+    with torch.no_grad():
+        for i, ch in enumerate(cs):
+            ims = []
+            for fp in fonts:
+                try:
+                    im = render_char(ch, fp, size=64)
+                except Exception:
+                    continue
+                if im is not None and im.any():
+                    ims.append(im.astype(np.uint8))
+            ims += extra.get(ch, [])
+            if not ims:
+                n_render_fail += 1
+                continue
+            x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=dev)
+            e, _, _ = net(x)
+            v = e.mean(0)
+            vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
+            names.append(ch)
+            if log is not None and (i + 1) % log_every == 0:
+                log(f"guji cache build-rare-index：{i + 1}/{len(cs)} 字"
+                   f"（{n_render_fail} 字全部字体渲染失败）")
+    mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+    if log is not None:
+        log(f"guji cache build-rare-index：完成，{len(names)}/{len(cs)} 字建出模板"
+           f"（{n_render_fail} 字全部字体渲染失败）")
+    return mat, names
+
+
+def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
+    """embedding 索引原子落盘，**存 float32**（2026-09-27 CV 总管定：R 道试过
+    float16 落盘，200 条压测查询 top-1 变 1%、top-10 集合变 8.5%；体积省一半
+    约 35MB 不值得换候选不逐位一致，改回 float32，与改前产物逐位相同）。
+
+    先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下只建了
+    一半的索引冒充完整缓存。⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补**
+    .npz 后缀，所以临时文件必须自己以 .npz 结尾，否则 savez 写的是
+    `x.tmp.npz`、replace 找的是 `x.tmp`。"""
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f.name + ".tmp.npz")
+    np.savez(tmp, mat=mat.astype(np.float32), chars=np.array(names))
+    os.replace(tmp, f)
 
 
 def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot: int = 0):
@@ -353,6 +543,10 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot:
 class CnnCandidates:
     """懒加载；没有 checkpoint 或没装 torch 时 `available` 为 False，调用方跳过。"""
 
+    _EMB_CACHE_MAX = 4
+    """`_emb_cache` 最多留几档字表的 embedding 矩阵——见该属性在 `__init__` 里的
+    文档。一本书正常只有基集＋升级档两档，4 是留出的余量，不是精确值。"""
+
     def __init__(self, ckpt: str | Path = DEFAULT_CKPT, device: str | None = None,
                  probe: str | Path | None = None):
         self.ckpt = Path(ckpt)
@@ -374,13 +568,50 @@ class CnnCandidates:
         self._comps: list[str] = []
         self._struct_classes: list[str] = []
         self._slot_labels: list[str] = []
-        self._emb_cache: tuple[tuple, np.ndarray, list[str]] | None = None
-        """`_emb_index` 的内存缓存：(charset, mat, names)。见该方法模块头
+        self._emb_cache: list[tuple] = []
+        """`_emb_index` 的内存缓存：`[(charset, mat, names), ...]`，最多留
+        `_EMB_CACHE_MAX` 份，LRU（命中的挪到末尾，满了从头淘汰）。见该方法模块头
         「2026-09-10 修」——没有它，逐字调用会把 `load_many` 的目录扫描/npz
-        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。"""
+        解压重复付一遍，而不是只算一次 key 就命中磁盘缓存。
+
+        **2026-09-28 从单槽改成小容量 LRU**（CV 总管报：服务器 `rare_candidates`
+        单进程内存随页数线性上涨，任务书-R 追加件）：原来单槽缓存只留「最近一档」，
+        而 `rare_panel.rare_for_batch` 的阶梯（基集→升级档）**在同一页内先后查两档
+        字表**——两档字表对象在一本书的所有页里都稳定（`book_charsets` 的
+        `lru_cache`），但单槽缓存放不下两个，于是每一页都要把上一页缓存的那一档
+        挤掉、从磁盘重读另一档（unicode-cjk-a 基集矩阵约 28MB／unicode-ext-b
+        升级档约 44MB），来回颠簸。实测（生产大字表、40 页合成基准）：RSS 从
+        建索引刚完成的 708MB 到第 2 页跳到 738MB 后打平，不是持续攀升，但这种
+        大块反复 alloc/free 的模式会顶住 glibc malloc arena 不易缩回，与服务器
+        「涨到 3.17G 被节流」的现象吻合。留够两档（缺省 4，给以后可能出现的
+        第三档留余量）后，同一本书跑多少页都只在最开始各建一次，不用 `is` 键
+        的普通 dict——**存对象本身、线性扫描 `is` 比对**（与 `_fwd_cache` 同一个
+        写法，理由见其文档：只存 `id()` 整数会被垃圾回收后复用的地址撞车；这里
+        `charset` 由 `book_charsets` 的 lru_cache 一直强引用着，其实不会被回收，
+        但还是照抄这个更安全的写法，不留后患）。"""
         self._real_cs: tuple[tuple, tuple | None] | None = None
         """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
         GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
+        self._fwd_cache: tuple[list, tuple] | None = None
+        """最近一批 `self._net(x)` 的原始前向结果缓存：`(norm_patches 那个 list
+        对象本身, (e, lg, cp))`。`topk_batch`/`emb_topk_batch` 原来对同一批字块图
+        各自独立跑一次前向（网络本身不看 charset，两边算的是同一件事），
+        `rare_panel.rare_for_batch` 对基集字表先后调两次、升级档子集再调第三次——
+        改成只留「最近一批」，同一个 list 对象（调用方按页组批，同一页内对象不变）
+        内的后续调用直接复用，换新批次自动作废（2026-09-28，任务书-R-rare前向
+        去重与测试隔离，K 引擎卡手 #54 cross 单）。单槽缓存，不是无界字典——
+        `shared()` 是进程级单例，页与页之间批次不同，留多份没有意义。
+
+        ⚠️ **必须存对象本身、用 `is` 比对，不能只存 `id(norm_patches)` 这个整数**
+        （与 `_emb_cache` 存 `charset` 本身、`is charset` 比对同一个写法）：
+        `norm_patches` 是调用方每次新建的临时 list，一用完就被垃圾回收，
+        CPython 会把同一块内存地址迅速分配给下一个不相关的新 list——只存
+        整数 id 撞上了这个坑：`rare_panel.rare_for` 连续单张调用时，每次都建一个
+        长度 1 的临时列表，前一个刚被回收、下一个几乎必然撞到同一个 id，于是
+        第二张图直接读到了第一张图的缓存，`rare_for` 与 `rare_for_batch` 排序
+        对不上（2026-09-28 用真实 `rare_for` 循环调用复现、原地修复）。存对象
+        本身相当于多持一份强引用，只要这个缓存还活着，Python 就不会把它的地址
+        腾给别的对象，`is` 比较因此安全。"""
         self.last_real_prov: list[dict] = []
         """最近一次 `emb_topk_batch` 里真刻例原型赢过字体均值的字位：每个查询一个
         `{字: (instance_id, 余弦)}`，与 `last_gw_prov` 同一套用法（R2/T11，2026-09-26）。"""
@@ -401,6 +632,10 @@ class CnnCandidates:
         if not self.available:
             return False
         import torch
+        # 与模块头的环境变量同一件事的第二道保险：`torch.set_num_threads` 是运行期
+        # API，随时调用都生效（不像 env var 只在线程池第一次建立时读一次），
+        # 覆盖"本模块 import 前已有别的代码把 torch 线程池跑起来了"这一种情况。
+        torch.set_num_threads(1)
         ck = torch.load(self.ckpt, map_location="cpu", weights_only=False)
         self._classes = list(ck["classes"])
         self._cidx = {c: i for i, c in enumerate(self._classes)}
@@ -544,6 +779,22 @@ class CnnCandidates:
             pr = torch.sigmoid(cp).cpu().numpy()
         return [{c: float(p) for c, p in zip(self._comps, row)} for row in pr]
 
+    def _forward_batch(self, norm_patches: list[np.ndarray]):
+        """跑一次 `self._net(x)`，返回未转 numpy 的 `(e, lg, cp)`。
+
+        同一批（同一个 `norm_patches` list 对象）内的后续调用直接命中 `self._fwd_cache`，
+        不重新前向——`__init__` 里 `_fwd_cache` 的文档有完整背景（**必须用 `is`
+        比对持有的对象本身，不能只存 `id()` 整数**）。"""
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches:
+            return self._fwd_cache[1]
+        import torch
+        with torch.no_grad():
+            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
+                             device=self._dev)
+            out = self._net(x)
+        self._fwd_cache = (norm_patches, out)
+        return out
+
     def topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10
                    ) -> list[list[tuple[str, float]]]:
         """`topk()` 的批量版：一页多个字块一次前向，见 `emb_topk_batch` 模块头
@@ -556,10 +807,8 @@ class CnnCandidates:
         if not idx or not norm_patches:
             return [[] for _ in norm_patches]
         idx_t = torch.tensor(idx, device=self._dev)
+        _, lg, _ = self._forward_batch(norm_patches)
         with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
-                             device=self._dev)
-            _, lg, _ = self._net(x)                     # (N, n_cls)
             sub = lg[:, idx_t]                           # (N, len(idx))
             pr = torch.softmax(sub, 1)
             top = pr.topk(min(k, len(idx)), dim=1)
@@ -581,6 +830,29 @@ class CnnCandidates:
     # 模板向量按「checkpoint 指纹 + 字表」落盘（cache/glyph_cnn/emb_<key>.npz），
     # 4,636 字 × 4 字体首建约 1 分钟，之后毫秒级。
 
+    def emb_index_key(self, charset) -> tuple[str, Path, dict]:
+        """`_emb_index` 用来定位磁盘缓存的 `(key, npz路径, extra字典)`，抽出来给
+        `guji cache build-rare-index` 复用——预建命令与产线必须算出**同一个 key**，
+        不然预建的文件产线永远碰不到（2026-09-27，任务书-R-rare冷启动内存与索引预建）。
+        """
+        import hashlib
+        from .font_candidates import font_set_fingerprint
+
+        cs = tuple(charset)
+        extra: dict = {}
+        try:
+            from .extra_glyphs import load_many
+            specs = [sp for sp in EMB_EXTRA_SPECS if _spec_ready(sp)]
+            if specs:
+                extra = load_many(specs, cs)
+        except Exception:
+            extra = {}
+        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
+        # 见 `font_candidates.font_set_fingerprint` 模块头。
+        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
+                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
+        return key, self.ckpt.parent / f"emb_{key}.npz", extra
+
     def _emb_index(self, charset) -> tuple[np.ndarray, list[str]]:
         """归一化 64² 图 → 字表 embedding 索引 `(mat, names)`，按 charset 记忆化。
 
@@ -599,32 +871,38 @@ class CnnCandidates:
         进程内是同一个 tuple 对象，`is` 比较比整表 `==` 更快也更严格）在实例
         上记一次，同一整理本/字表跑一遍只算一次 key、只探一次磁盘缓存，
         换字表（不同书）会自然重算。
-        """
-        if self._emb_cache is not None and self._emb_cache[0] is charset:
-            return self._emb_cache[1], self._emb_cache[2]
 
-        import hashlib
-        import torch
-        from .font_candidates import _font_files, font_set_fingerprint
+        ## 2026-09-27：冷启动峰值 2.4G＋（任务书-R-rare冷启动内存与索引预建）
+
+        全新容器（磁盘缓存不在）第一次对 2.7–7 万字建这份索引，服务器上实测
+        单进程 RSS 峰值 2.41 GiB、5 分钟还在涨（`总调度/服务器工单/1715`）。
+        量清楚的结论（`profile_coldstart.py`，unicode-cjk-a 27,584 字 / unicode-ext-b
+        42,720 字分别单独量过，见任务书 done 单）：这不是某个无界缓存一次性占住
+        不放（`gc.collect()`+`malloc_trim(0)` 每 200 字打一次几乎不改变曲线，
+        `torch.backends.mkldnn.enabled=False`、固定 batch 形状也都不改变曲线），
+        而是**逐字前向 + 字体渲染在几万次迭代上的真实、缓慢的线性堆积**
+        （量出来约 5~9 KB/字的稳态斜率，前 2000 字有一次性的更陡爬升，随后转平）；
+        没有发现能把它降到目标 ≤1.2G 的进程内改法。
+
+        能落地的两件事：①**把这份索引挪到云端一次性预建**（`guji cache
+        build-rare-index`），随快照/Release 分发给服务器，服务器直接命中磁盘
+        缓存、连这个函数的建索引分支都不必进——这是唯一真正让服务器峰值归零
+        的办法；②本函数仍然做的三件小事——建索引期间**每 1000 字打一行进度**
+        （此前 5~25 分钟零输出，看着像卡死）、落盘仍存 float32（试过 float16，
+        候选会变，已弃）、`fingerprint()` 改内容指纹（见该函数文档）使预建的
+        文件在服务器上真的能命中。**这三件不改变冷启动峰值**，需要真降内存
+        只能走①。
+        """
+        for i, (cs_obj, mat, names) in enumerate(self._emb_cache):
+            if cs_obj is charset:
+                if i != len(self._emb_cache) - 1:            # LRU：命中的挪到末尾
+                    self._emb_cache.append(self._emb_cache.pop(i))
+                return mat, names
+
         from .synth import render_char
 
         cs = tuple(charset)
-        # 外部真刻本模板（康熙字头 / 字统网）：每字的模板 = mean(字体渲染 ∪ 真刻本图)。
-        # 2026-09-07 上线，实测 unseen emb top-1 95.9 → 97.4（严格 94.5 → 95.6），
-        # 异体子集 83.2 → 91.6。源目录缺失时静默退回纯字体（实验数据不在仓里）。
-        extra: dict = {}
-        try:
-            from .extra_glyphs import load_many
-            specs = [sp for sp in EMB_EXTRA_SPECS if _spec_ready(sp)]
-            if specs:
-                extra = load_many(specs, cs)
-        except Exception:
-            extra = {}
-        # 键里带字体集（2026-09-21）：此前不带，`FONT_ORDER` 加字体后照旧命中旧索引，
-        # 见 `font_candidates.font_set_fingerprint` 模块头。
-        key = hashlib.sha1((fingerprint(self.ckpt) + font_set_fingerprint() + "".join(cs)
-                            + "|".join(sorted(extra))).encode("utf-8")).hexdigest()[:16]
-        f = self.ckpt.parent / f"emb_{key}.npz"
+        key, f, extra = self.emb_index_key(cs)
         if f.exists():
             z = np.load(f, allow_pickle=False)
             mat, names = z["mat"], z["chars"].tolist()
@@ -635,29 +913,15 @@ class CnnCandidates:
                 except OSError:
                     pass
             else:
-                self._emb_cache = (charset, mat, names)
+                # 落盘是 float32（见 `_save_emb_index`）；astype 对老缓存或手工
+                # 放进来的文件兜底，保证查询路一律 float32。
+                mat = mat.astype(np.float32)
+                self._emb_cache_put(charset, mat, names)
                 return mat, names
-        fonts = _font_files()
-        vecs, names = [], []
-        with torch.no_grad():
-            for ch in cs:
-                ims = []
-                for fp in fonts:
-                    try:
-                        im = render_char(ch, fp, size=64)
-                    except Exception:
-                        continue
-                    if im is not None and im.any():
-                        ims.append(im.astype(np.uint8))
-                ims += extra.get(ch, [])
-                if not ims:
-                    continue
-                x = torch.tensor(np.stack(ims)[:, None].astype(np.float32), device=self._dev)
-                e, _, _ = self._net(x)
-                v = e.mean(0)
-                vecs.append((v / (v.norm() + 1e-9)).cpu().numpy())
-                names.append(ch)
-        mat = np.stack(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
+        from ..utils.inline_index import forbid_inline_build
+        forbid_inline_build("CNN embedding", len(cs), f)
+        mat, names = build_emb_matrix(self._net, self._dev, cs, extra, render_char,
+                                      log=lambda s: print(s, flush=True))
         # **空索引绝不落盘**（2026-09-17）。此前无条件 savez：建索引失败（模板目录
         # 缺失、渲染全挂、中途被打断）会把 (0, 256) 存进缓存，之后 `f.exists()`
         # 永远命中，`emb_topk`/`emb_topk_batch` 于是**静默返回空**——不报错、
@@ -668,16 +932,15 @@ class CnnCandidates:
             raise RuntimeError(
                 f"embedding 索引建成 0 行（字表 {len(cs)} 字）——字体模板或渲染全部失败，"
                 f"不落盘。检查 fonts/ 目录与 EMB_EXTRA_SPECS。")
-        f.parent.mkdir(parents=True, exist_ok=True)
-        # 先写临时文件再原子改名：中途被打断（Ctrl-C / 进程被杀）不会留下
-        # 只建了一半的索引冒充完整缓存。
-        # ⚠️ `np.savez` 会给不以 .npz 结尾的路径**自动补** .npz 后缀，所以临时文件
-        # 必须自己以 .npz 结尾，否则 savez 写的是 `x.tmp.npz`、replace 找的是 `x.tmp`。
-        tmp = f.with_name(f.name + ".tmp.npz")
-        np.savez(tmp, mat=mat, chars=np.array(names))
-        os.replace(tmp, f)
-        self._emb_cache = (charset, mat, names)
+        _save_emb_index(f, mat, names)
+        self._emb_cache_put(charset, mat, names)
         return mat, names
+
+    def _emb_cache_put(self, charset, mat: np.ndarray, names: list[str]) -> None:
+        """写入 `_emb_cache`（LRU，见该属性文档）：满了先从头淘汰最久未用的一档。"""
+        self._emb_cache.append((charset, mat, names))
+        while len(self._emb_cache) > self._EMB_CACHE_MAX:
+            self._emb_cache.pop(0)
 
     def embed(self, norm_patches: list[np.ndarray]) -> np.ndarray:
         """归一化 64² 图 → 单位化 embedding (N, 256)。不可用时 (0, 256)。
@@ -713,7 +976,8 @@ class CnnCandidates:
 
     def emb_topk_batch(self, norm_patches: list[np.ndarray], charset, k: int = 10,
                        real_exclude_ids: frozenset = frozenset(),
-                       real_proto: tuple[bool, tuple[str, ...]] | None = None
+                       real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                       gw_enabled: bool | None = None,
                        ) -> list[list[tuple[str, float]]]:
         """`emb_topk()` 的批量版：网络前向与模板矩阵检索都改一次一批。
 
@@ -724,6 +988,10 @@ class CnnCandidates:
         `cnn_candidates.book_real_proto(ctx.book.font)` 的结果，覆盖模块级
         `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`。`None`（缺省）时走模块级——评测脚本
         （`eval_oov.py` 等直接改 `_cc.REAL_PROTO_ENABLED`）与此前调用方式逐位相同。
+
+        `gw_enabled`（T4 变体形转正，2026-09-27）：按书配置调用时传
+        `cnn_candidates.book_gw_variant(ctx.book.font)`，覆盖模块级 `GW_ENABLED`。
+        `None`（缺省）时走模块级——与加这个形参之前逐位相同。
 
         ## 2026-09-10 生僻字候选提速第二轮：批处理网络前向 + 矩阵-矩阵乘法
 
@@ -737,21 +1005,72 @@ class CnnCandidates:
         if not self._ensure():
             _warn_emb_down("checkpoint 不可用")
             return [[] for _ in norm_patches]
-        import torch
         mat, names = self._emb_index(charset)
         if mat.shape[0] == 0 and norm_patches:
             _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
         if mat.shape[0] == 0 or not norm_patches:
             return [[] for _ in norm_patches]
+        e, _, _ = self._forward_batch(norm_patches)
+        return self._emb_topk_from_query(e, mat, names, charset, k,
+                                         real_exclude_ids, real_proto, gw_enabled)
+
+    def emb_topk_batch_subset(self, norm_patches_full: list[np.ndarray], idx: list[int],
+                              charset, k: int = 10,
+                              real_exclude_ids: frozenset = frozenset(),
+                              real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                              gw_enabled: bool | None = None,
+                              ) -> list[list[tuple[str, float]]]:
+        """升级档子集复用（`rare_panel.rare_for_batch` 的 escalate）：`idx` 是
+        `norm_patches_full`（与之前那次 `topk_batch`/`emb_topk_batch` 传的**同一个**
+        list 对象）里要重算的字位下标，换一档字表（`charset`）重查。
+
+        直接切上一次前向缓存里的 embedding（`self._fwd_cache`），不对这个子集重新跑
+        `self._net(x)`——同一批图先前已经在基集字表那次调用里前向过一遍，子集不该
+        再算第三遍（2026-09-28，任务书-R-rare前向去重与测试隔离，K 引擎卡手 #54
+        cross 单：warm-cache 实测 `topk_batch` 1.95s + `emb_topk_batch` 1.93s，
+        几乎是同一件事算了两遍，加上升级档子集就是第三遍）。
+
+        缓存没命中（`norm_patches_full` 不是上一次前向缓存的那个 list 对象，比如
+        调用方没有先调 `topk_batch`/`emb_topk_batch`）时退回对子集单独前向——
+        正确性不受影响，只是拿不到这次的省时；这是防御性兜底，不是常态路径。
+        """
+        if not self._ensure():
+            _warn_emb_down("checkpoint 不可用")
+            return [[] for _ in idx]
+        if not idx:
+            return []
+        mat, names = self._emb_index(charset)
+        if mat.shape[0] == 0:
+            _warn_emb_down(f"索引 0 行（字表 {len(tuple(charset))} 字）")
+            return [[] for _ in idx]
+        import torch
+        if self._fwd_cache is not None and self._fwd_cache[0] is norm_patches_full:
+            e_full, _, _ = self._fwd_cache[1]
+            e_sub = e_full[torch.tensor(list(idx), device=self._dev)]
+        else:
+            sub_patches = [norm_patches_full[i] for i in idx]
+            e_sub, _, _ = self._forward_batch(sub_patches)
+        return self._emb_topk_from_query(e_sub, mat, names, charset, k,
+                                         real_exclude_ids, real_proto, gw_enabled)
+
+    def _emb_topk_from_query(self, e, mat: np.ndarray, names: list[str], charset, k: int,
+                             real_exclude_ids: frozenset,
+                             real_proto: tuple[bool, tuple[str, ...]] | None,
+                             gw_enabled: bool | None,
+                             ) -> list[list[tuple[str, float]]]:
+        """`emb_topk_batch`/`emb_topk_batch_subset` 共用的检索尾段：给定已经算好的
+        查询 embedding `e`（torch tensor，未归一化，(N, 256)）与目标字表的模板矩阵
+        `(mat, names)`，做归一化＋矩阵检索＋gw/real 融合，返回逐图 top-k。网络前向
+        由调用方做完，这里不碰 `self._net`——`emb_topk_batch` 原有的这段逻辑一字未改，
+        只是从「拿到 norm_patches 就现跑前向」改成「拿已经算好的 e」。"""
+        import torch
         with torch.no_grad():
-            x = torch.tensor(np.stack(norm_patches)[:, None].astype(np.float32),
-                             device=self._dev)
-            e, _, _ = self._net(x)                        # (N, 256)
             Q = e / (e.norm(dim=1, keepdim=True) + 1e-9)
             Q = Q.cpu().numpy()
         sims = mat @ Q.T                                   # (rows, N)
-        self.last_gw_prov = [{} for _ in norm_patches]
-        gw = self._gw_index(charset, names) if GW_ENABLED else None
+        self.last_gw_prov = [{} for _ in range(Q.shape[0])]
+        gw_on = GW_ENABLED if gw_enabled is None else gw_enabled
+        gw = self._gw_index(charset, names) if gw_on else None
         if gw is not None:
             G, rows_idx, gnames, gsrc = gw
             sg = G @ Q.T                                   # (n_gw, N)
@@ -766,7 +1085,7 @@ class CnnCandidates:
                         b = cand[int(np.argmax(sg[cand, j]))]
                         self.last_gw_prov[j][names[int(r)]] = (str(gnames[b]), str(gsrc[b]), float(sg[b, j]))
                     sims[:, j] = np.maximum(sims[:, j], best)
-        self.last_real_prov = [{} for _ in norm_patches]
+        self.last_real_prov = [{} for _ in range(Q.shape[0])]
         if real_proto is not None:
             r_enabled, r_specs = real_proto
         else:
@@ -802,7 +1121,10 @@ class CnnCandidates:
             return None
         import torch
         if self._gw is None:
-            key = hashlib.sha1((fingerprint(self.ckpt) + gw_catalog_fingerprint()).encode()).hexdigest()[:16]
+            # `_gw_index` 只在调用方已经判定 gw 打开时才跑（见 `emb_topk_batch`），
+            # 这里显式传 `enabled=True`——不看模块级 `GW_ENABLED`，否则「书级开、模块级关」
+            # 这个此前不存在的组合会把落盘缓存 key 算成空指纹（内容变了也不换文件名）。
+            key = hashlib.sha1((fingerprint(self.ckpt) + gw_catalog_fingerprint(enabled=True)).encode()).hexdigest()[:16]
             f = self.ckpt.parent / f"gw_{key}.npz"
             z = np.load(GW_CATALOG, allow_pickle=False)
             gnames, grel, gsrc = z["names"], z["related"], z["source"]
@@ -873,7 +1195,15 @@ class CnnCandidates:
                 return False
             for e in exclude_ids:
                 ek = _cell_parts(e)
-                if ek is not None and ek[:3] == q[:3] and abs(ek[3] - q[3]) <= 2:
+                if ek is None or ek[:3] != q[:3]:
+                    continue
+                diff = abs(ek[3] - q[3])
+                # 两边都是重键后的精确格号坐标（非 v1:）才要求 =0；
+                # 有一边是未确认的 v1: idx 换算格号，保留 ±2（字形库 12 §六）
+                if ek[4] and q[4]:
+                    if diff == 0:
+                        return True
+                elif diff <= 2:
                     return True
             return False
 
@@ -951,7 +1281,8 @@ def template_set_fingerprint(specs: tuple[str, ...] = EMB_EXTRA_SPECS) -> str:
 
 def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
                       specs: tuple[str, ...] = EMB_EXTRA_SPECS,
-                      real_proto: tuple[bool, tuple[str, ...]] | None = None) -> str:
+                      real_proto: tuple[bool, tuple[str, ...]] | None = None,
+                      gw_enabled: bool | None = None) -> str:
     """生僻字候选栈的完整指纹：checkpoint + 外部模板集 + **模板字体集**（2026-09-21 补，
     此前换 `fonts/` 里的档产物不过期）。进 Step 参数才能让 `rare_candidates` 产物在
     换模型/换模板/换字体时正确过期（见 `steps/rare_candidates.py`）。
@@ -960,12 +1291,22 @@ def full_fingerprint(ckpt: str | Path = DEFAULT_CKPT,
     `book_real_proto(ctx.book.font)` 的结果；`None`（缺省）时走模块级
     `REAL_PROTO_ENABLED`/`REAL_PROTO_SPECS`——不传参的旧调用方式与此前逐位相同，
     关着时（不管是模块级还是书级）这段一律不进指纹（`real_proto_fingerprint`
-    短路返回空串）。"""
+    短路返回空串）。
+
+    `gw_enabled`（T4 变体形转正，2026-09-27）：按书配置调用时传
+    `book_gw_variant(ctx.book.font)`；`None`（缺省）时走模块级 `GW_ENABLED`。
+
+    ⚠️ **这里补了一个此前就该有的短路**：改之前 `gw_catalog_fingerprint()` 不看
+    `GW_ENABLED`/`gw_enabled`，只要 `cache/glyphwiki/catalog_64.npz` 存在就把它的
+    stamp 并进来——`_gw_index` 用不用是另一回事，关着的书只要这份目录内容一变
+    （比如别的道重新生成了目录），`rare_candidates` 也会被判过期，`params_hash`
+    与实际用没用 gw 对不上，跟 `real_proto` 那次的坑同源。现在关着（不管模块级
+    还是书级）一律不进指纹，与加这个形参之前、目录缺席时逐位相同。"""
     from .font_candidates import font_set_fingerprint
     # GlyphWiki 变体形目录（第六档模板）并进「模板集」那一段，指纹保持三段（测试钉着这个形状）；
-    # 目录缺席时该段与从前逐位相同。
+    # 目录缺席或关着时该段与从前逐位相同。
     tmpl = template_set_fingerprint(specs)
-    gw = gw_catalog_fingerprint()
+    gw = gw_catalog_fingerprint(enabled=gw_enabled)
     if gw:
         tmpl = hashlib.sha1(f"{tmpl}|gw={gw}".encode()).hexdigest()[:16]
     if real_proto is not None:

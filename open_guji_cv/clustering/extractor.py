@@ -1034,7 +1034,16 @@ SIDE_RULE_NEAR = 12        # 竖条内侧这么近还有别的墨块 → 那是�
 # 覆盖到 p93，再往上收益迅速变平（>20px 只剩 3.7%，那一档多是版框/界行）。
 # 拦假阳的不是这个上限，是 RIGHT_RESCUE_H（高 ≤30，界行竖线够不着）
 # 与「须从裁切边内 ≥6px 处伸出来」——上限只决定救多远。
-RIGHT_RESCUE_MAX = 16      # 右缘外扩上限（px）
+# 【2026-09-30 Q1：v2 列图上重量，16→28】v2 的裁切边是 Step3 的 content_x，
+# 列图只在它外侧留 room=W−content_x[1]（全书 2619 列：中位 4、p95 8、p99 14、
+# 最大 36px），所以上限实际只在 room>上限 的列里起作用——16 时仅 15 列，28 时 3 列。
+# 无上限重扫（窗口开到 +60）全书只有 16 个穿边组件，其中 6 个是真笔画尖，越出量
+# 4/5/6/9/20/25px；死在 16 上的正是 vol02/188:7 的 20 与 25（该列 content_x
+# 右界 166，比同页邻列靠里 ~19px，room=28）。另 10 个是列尾版框残段（薄横段 h≤9），
+# 不是笔画，不因本常数而救或不救。28 = 已观察最大真越出量 25 + 3px 余量；
+# 波及面：全书 2619 列里 sx1 因此变化的只有 vol02/188:7 一列（artifacts/q1_rightcut/
+# blast_radius.py，MAX 取 28 或 40 结果相同）。上限再高没有数据支撑，勿凭手感加。
+RIGHT_RESCUE_MAX = 28      # 右缘外扩上限（px）
 LEFT_RESCUE_MAX = 16       # 左缘外扩上限（px，与右缘对称）
 # 【负结果·勿重造】「碎裂闸」——按图块内碎块统计判「一地碎渣不是字」，
 # 2026-08-26 试过并**撤掉**。起因是 vol02/3 col1 底下一枚淡灰藏书印被
@@ -2704,6 +2713,28 @@ class CharExtractor:
                         jz_tail_a.add(t)
                         if "jiazhu" not in tinst.flags:
                             tinst.flags.append("jiazhu")
+            # ── Step3 补拆（2026-09-29，overview#266）─────────────
+            # v2 调用方（cell_shrink）把 Step3 认下的雙行夹注格连同缝中心传进来。上面这套是 v1
+            # 生产判据，缝对齐容差仍是 8px；Step3 那份（`jiazhu_split`）2026-09-27 已给「刚起头的
+            # 两格」放到 16px（`ALIGN_PAIR`，提要末尾「內府藏本」「山東巡撫採進本」一类只有 2~3 行、
+            # 缝漂移到 15.5px）。于是 Step3 拆了、这里没拆：段首那一行（或整段 2~3 行）整格发成一个
+            # 满宽「字」，两个小字挤一块送去识别（vol03 全书 15 格，人裁标 truncated）。
+            # 只补这里没认的格、用 Step3 的缝；两边都认的格一字不动（缝仍取这里自己量的）。
+            for cell in cells:
+                i = int(cell["index"])
+                cx_col = cell.get("jiazhu_cx")
+                if cx_col is None or i in jz_runs or i not in jz_pre:
+                    continue
+                tinst = by_idx.get(i)
+                if tinst is None or tinst.cell_type != "char" or tinst.sub:
+                    continue
+                jz_runs[i] = float(cx_col) - jz_pre[i][1]
+                if cell.get("jiazhu_tail_a"):
+                    jz_tail_a.add(i)
+                # 整格量的「中缝太宽」对夹注是本来面目，不是跨列；拆开后的半格不该带着它进待审
+                tinst.flags = [f for f in tinst.flags if f != "wide_gap"]
+                if "jiazhu" not in tinst.flags:
+                    tinst.flags.append("jiazhu")
             # ── 夹注 a/b 拆分（2026-08-25 用户定）────────────────
             # 确认成夹注段的格，整格实例替换为两个半宽实例：a=右子列、
             # b=左子列（读序：段内先 a 全部、后 b 全部——见

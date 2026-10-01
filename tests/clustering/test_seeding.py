@@ -576,16 +576,23 @@ def test_admission_decision_match_solo():
                               match_wmax=12.0) == (True, "match_solo")
 
 
-def test_build_seed_lm_mixture_and_cache(tmp_path):
-    """LM 混合：无通用语料退化为纯本书；有则线性混合并落盘缓存。"""
+def test_build_seed_lm_mixture_and_cache(tmp_path, monkeypatch):
+    """LM 混合：无通用语料退化为纯本书；有则线性混合并落盘缓存。
+
+    缓存落点：`cache_root()/general_lm/`，不是语料文件旁边（任务卡 #54 第3条，
+    2026-09-27 改）——语料可以摆在仓里，派生缓存不该跟着摆在语料旁边，否则
+    全量单测一碰到仓内语料就会在仓里写脏东西。"""
     from open_guji_cv.clustering.seeding import build_seed_lm
+    cache_dir = tmp_path / "mycache"
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(cache_dir))
     book_text = "四庫全書總目提要"
     assert build_seed_lm(book_text, None).name == "ngram"
     gen = tmp_path / "general.txt"
     gen.write_text("欽定四庫全書\n" * 50, encoding="utf-8")
     lm = build_seed_lm(book_text, [gen])
     assert lm.name.startswith("mix(")
-    assert (tmp_path / ".general_lm_cache.json").exists()
+    assert (cache_dir / "general_lm" / ".general_lm_cache.json").exists()
+    assert not (tmp_path / ".general_lm_cache.json").exists(), "缓存不该写进语料目录"
     # 二次构造走缓存（源未变）；源变了重训不炸
     lm2 = build_seed_lm(book_text, [gen])
     assert lm2.logp("庫", ("四",)) == lm.logp("庫", ("四",))

@@ -1,0 +1,89 @@
+{
+ "align_ref": {
+  "pages_rewritten": 106,
+  "pages_bytes_changed": 69,
+  "elapsed_min": 0.3,
+  "log_ran": 106
+ },
+ "border_detect": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 5,
+  "elapsed_min": 6.26,
+  "log_ran": 110
+ },
+ "border_detect_gate": {
+  "pages_rewritten": 5,
+  "pages_bytes_changed": 4,
+  "elapsed_min": 0.02,
+  "log_ran": 5
+ },
+ "cell_shrink": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 73,
+  "elapsed_min": 0.98,
+  "log_ran": 110,
+  "cols_changed": 185,
+  "cells_changed": 1255,
+  "pages_with_col_change": 73
+ },
+ "column_gate": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 5,
+  "elapsed_min": 0.45,
+  "log_ran": 110
+ },
+ "column_warp": {
+  "pages_rewritten": 5,
+  "pages_bytes_changed": 5,
+  "elapsed_min": 0.02,
+  "log_ran": 5
+ },
+ "context_decide": {
+  "pages_rewritten": 106,
+  "pages_bytes_changed": 105,
+  "elapsed_min": 0.79,
+  "log_ran": 106
+ },
+ "glyph_match": {
+  "pages_rewritten": 106,
+  "pages_bytes_changed": 106,
+  "elapsed_min": 1.82,
+  "log_ran": 106,
+  "cells_reused": 14677,
+  "cells_total_on_reused_pages": 16757,
+  "pages_with_reuse": 102
+ },
+ "page_survey": {
+  "pages_rewritten": 4,
+  "pages_bytes_changed": 4,
+  "elapsed_min": 0.0,
+  "log_ran": 4
+ },
+ "rare_candidates": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 110,
+  "elapsed_min": 48.43,
+  "log_ran": 110
+ },
+ "row_segment": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 75,
+  "elapsed_min": 2.84,
+  "log_ran": 110,
+  "cols_changed": 173,
+  "cells_changed": 1221,
+  "pages_with_col_change": 65
+ },
+ "row_segment_gate": {
+  "pages_rewritten": 75,
+  "pages_bytes_changed": 75,
+  "elapsed_min": 0.05,
+  "log_ran": 75
+ },
+ "seed_admit": {
+  "pages_rewritten": 110,
+  "pages_bytes_changed": 106,
+  "elapsed_min": 4.01,
+  "log_ran": 110
+ }
+}

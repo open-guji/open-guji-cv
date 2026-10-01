@@ -14,6 +14,7 @@ selector:
   edition: keben
   page_type: [body]
 steps:
+  - page_survey          # Step0 页面预检：原图尺寸 → 按册中位数标异常页；闸在 border_detect_gate（任务卡 #54 第22条）
   - border_detect        # Step1 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
   - column_warp          # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存；出口闸见上
   - row_segment          # Step3 单列文字切分：→ 带类型字格 + 读序

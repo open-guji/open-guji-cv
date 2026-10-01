@@ -1,0 +1,114 @@
+{
+ "note": "2026-09-30 M1 C 组：v2 列图上按同一纯墨迹判据重扫，新口径首个基线；坐标=列图（左上原点）、列号右起 1；旧 v1 金标整体失效，见 artifacts/m1_gold/{left_cut,right_cut}/MIGRATION.md",
+ "chain": "v2 (column_warp 列图 + row_segment + cell_shrink)",
+ "columns": [
+  {
+   "book": "vol01",
+   "page": "7",
+   "col": 5,
+   "cell_left_x": 12,
+   "crossings": [
+    {
+     "y": 2424,
+     "extent": 6
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "10",
+   "col": 7,
+   "cell_left_x": 24,
+   "crossings": [
+    {
+     "y": 2447,
+     "extent": 11
+    }
+   ]
+  },
+  {
+   "book": "vol01",
+   "page": "48",
+   "col": 9,
+   "cell_left_x": 16,
+   "crossings": [
+    {
+     "y": 2594,
+     "extent": 3
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "42",
+   "col": 5,
+   "cell_left_x": 11,
+   "crossings": [
+    {
+     "y": 1126,
+     "extent": 5
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "44",
+   "col": 2,
+   "cell_left_x": 7,
+   "crossings": [
+    {
+     "y": 950,
+     "extent": 2
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "55",
+   "col": 8,
+   "cell_left_x": 14,
+   "crossings": [
+    {
+     "y": 25,
+     "extent": 7
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "106",
+   "col": 7,
+   "cell_left_x": 8,
+   "crossings": [
+    {
+     "y": 2316,
+     "extent": 3
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "111",
+   "col": 1,
+   "cell_left_x": 14,
+   "crossings": [
+    {
+     "y": 2345,
+     "extent": 9
+    }
+   ]
+  },
+  {
+   "book": "vol02",
+   "page": "122",
+   "col": 9,
+   "cell_left_x": 12,
+   "crossings": [
+    {
+     "y": 2355,
+     "extent": 7
+    }
+   ]
+  }
+ ]
+}

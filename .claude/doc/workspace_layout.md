@@ -21,8 +21,8 @@
 **工作区 = 一本书（或一套书）的数据仓，引擎仓不落任何一本书的数据。**
 
 目录名不是随便起的：`core/workspace.py` 的 `*_REL` 常量按这些相对路径去找库、
-产物、语料、裁决；控制台**只认有 `books/*.yaml` 的兄弟目录**，少这一样它根本
-不出现在工作区列表里。
+产物、语料、裁决；控制台**只认工作区总目录（`guji console --workspaces-root`）下有 `books/*.yaml` 的子目录**，
+少这一样它根本不出现在工作区列表里。控制台没有「默认工作区」，不读 `GUJI_WORKSPACE`（2026-09-30）。
 
 ## 二、标准布局
 
@@ -37,7 +37,7 @@
 | `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **是** | `admit_instance` |
 | `output/glyph.db` | 库的 SQLite 索引，可从 store + 共享库重建 | **否** | 引擎 |
 | `products/<book>/<step>/` | 数值产物，可重算 | 否 | 引擎 |
-| `cache/<book>/<kind>/` | 派生图像 LRU 缓存 | 否 | 引擎 |
+| `cache/<book>/<kind>/` | 派生图像 LRU 缓存（按页戳 `_stamps.json` 自检；产物外部换入后要 `guji cache verify` / 清掉，见 `products/cache.py` 模块头） | 否 | 引擎 |
 | `review/batches/` | 人裁批次登记 | 是 | 控制台 |
 | `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 是 | 控制台 |
 | `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 是 | 引擎 |
@@ -147,6 +147,18 @@ git init
 `guji import-pdf` 把 PDF 抽成 `data_full/<book>_scan/`，
 需要分页再 `guji split <book>`。控制台起来后该工作区就会出现在列表里。
 
+**跑正式管线之前先标一下书级先验**（任务卡 #54 第8条）：`period_prior` 没配、
+又碰上空栏页（栏内无字，页级周期推不出来）会被 Step2 交接闸直接拦下，报错里
+现在会提示这条命令，也记在这里免得现翻代码：
+
+```bash
+guji calibrate <book> -w <该书工作区> --pages all --with-bottom-gap   # bottom_gap 要读整册原图，慢，正式开书建议顺手一起量
+# 把测出来的 period_prior（/ bottom_gap）抄进 books/<book>.yaml
+```
+
+`--with-bottom-gap` 不给也行——`bottom_gap` 只是 Step1 下版框救援的可选先验，缺了
+不影响正常页；但 `period_prior` 缺了会让空栏页整页报错，新书务必先测一遍。
+
 ### 抽原图的两个坑（`import-pdf` 已内建拦截，但要看它的告警）
 
 1. **页框 pt 数 ≠ 内嵌图像素数**时，按页框渲染会**静默降分辨率**。
@@ -206,4 +218,38 @@ python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages al
 
 不带 book 的命令（console / cache / runs / gold …）和 `scripts/` 下的离线台子仍走
 `GUJI_WORKSPACE`。
+
+**例外（任务卡 #54 第10条，2026-09-27）**：`status`／`collate` 只读、不写产物——
+认 `GUJI_WORKSPACE` 兜底顶多让人看错一份报告，不会像 `pipeline`/`step` 那样把真
+产物静默写进错的工作区，所以这两条命令缺 `-w` 时会退回 `GUJI_WORKSPACE`（会打印
+「未给 -w，退回 GUJI_WORKSPACE=…」，不悄悄用）。其余带 `book` 的命令不受影响，
+仍是上面这条硬规矩：缺 `-w` 直接报错。
+
+### 环境变量各管什么路径（任务卡 #54 第10条）
+
+`GUJI_PRODUCTS_DIR` 只管 `products_root()`，`GUJI_WORKSPACE` 管的是**一整个工作区**
+（其余环境变量没设时的默认落点都跟着它）——两套东西管的范围不一样，容易以为
+设了其中一个另一个也跟着变。正本是 `core/workspace.py`，这张表只是速查：
+
+| 环境变量 | 管什么（`core.workspace` 里的函数） | 没设时退到哪 |
+|---|---|---|
+| `GUJI_WORKSPACES_ROOT` | **只给控制台**：工作区总目录（等价 `guji console --workspaces-root`），其下有 `books/` 的子目录可在页面里选；控制台**不读** `GUJI_WORKSPACE` | 没给则控制台拒绝启动 |
+| `GUJI_WORKSPACE` | 工作区仓根本身（`workspace_root()`）；CLI/脚本/测试用，控制台不读；下面各条「没设时」全部以它为基准 | 仓内默认根（引擎仓自己的 `output/`、`corpus/` 等，只够跑单测） |
+| `GUJI_GLYPH_DB` | 字形库 SQLite 索引路径（`glyph_db_path()`） | `<workspace>/output/glyph.db` |
+| `GUJI_GLYPH_STORE` | 字形库真源 PNG+JSONL 目录（`glyph_store_path()`） | `<workspace>/output/glyph_store` |
+| `GUJI_PRODUCTS_DIR` | 数值产物 `products/<book>/<step>/`（`products_root()`）——**只管这一个目录**，不连带改 cache/glyph_db 等其余路径 | `<workspace>/products` |
+| `GUJI_CACHE_DIR` | 派生图像缓存 列图/字块/归一图块（`cache_root()`） | `<workspace>/cache` |
+| `GUJI_BATCHES_DIR` | 人裁批次登记（`batches_root()`） | `<workspace>/review/batches` |
+| `GUJI_FEEDBACK_DIR` | 人裁事件日志与消费记账 `feedback/{events,consumed}/`（`feedback_root()`） | `<workspace>/feedback` |
+| `GUJI_VERDICTS_DIR` | 人裁裁决表 `feedback/verdicts/<shard>/`（`verdicts_root()`） | `<workspace>/feedback/verdicts` |
+| `GUJI_REPORTS_DIR` | Step9 汇总产物（`reports_root()`） | `<workspace>/reports` |
+| `GUJI_RAW_ROOT` | 原图根目录，册配置的 `raw_dir` 相对它解释（`raw_root()`） | 工作区根本身（`raw_dir` 相对工作区解释） |
+| `GUJI_EXCLUSIONS` | 图块排除名单（`exclusions_path()`） | `<workspace>/config/crop_exclusions.jsonl` |
+| `GUJI_ALLOW_SAMPLE_DB` | 不是路径，是开关：显式声明「就用仓内小样本库」（`assert_workspace_declared()`），CLI 对应 `--allow-sample-db` | 不设=不放行，用仓内小样本库会直接报错退出 |
+| `GUJI_DATASET_DIR` | 测试集仓 `open-guji-dataset` 的根（`gold.store.default_dataset_root()`）——评测口径，与本表其余「工作区下的活状态」是两回事 | `<引擎仓同级>/open-guji-dataset` |
+
+以上除 `GUJI_ALLOW_SAMPLE_DB`／`GUJI_DATASET_DIR` 外都遵循同一条解析顺序：
+**这条专属环境变量 > 工作区（`GUJI_WORKSPACE`）> 仓内默认**——专属变量只用来
+「个别路径挪窝」（比如把 cache 单独指到别的盘），平时不用设，设了 `GUJI_WORKSPACE`
+就够。
 

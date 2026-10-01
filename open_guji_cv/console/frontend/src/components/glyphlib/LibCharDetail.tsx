@@ -61,6 +61,7 @@ export function LibCharDetail({ char, onPick }: { char: string; onPick: (c: stri
             <span className="mono">U+{(d.cp ?? 0).toString(16).toUpperCase()}</span>
             {d.ids && <span className="mono muted" title="通行结构（ids_lv1）">{d.ids}</span>}
             <span>{d.exemplars.length} 例</span>
+            {!!d.n_approx && <span className="gl-approx-tag" title="人裁勾了「无匹配（近似字）」的刻例：Unicode 里没有真正对应的字，存的只是最像的码位">近似例 {d.n_approx}</span>}
             {d.heads.map((h) => (
               <span key={h.edition} className="muted">[{h.edition}] {h.status} · 读 {h.semantic ?? '—'}</span>
             ))}
@@ -116,9 +117,11 @@ function Tiles({ xs, ws, sel, onToggle }: {
           onClick={onToggle ? () => onToggle(x.instance_id) : undefined}
           title={`${x.instance_id}\n来路 ${x.provenance_raw ?? '—'}　读 ${x.semantic ?? '—'}` +
             `${x.fidelity ? `\n一致程度 ${FID_LABEL[x.fidelity] ?? x.fidelity}${x.ids ? ' ' + x.ids : ''}` : ''}` +
+            `${x.approx ? `\n近似字（无匹配）${x.approx.ids ? ' ' + x.approx.ids : ''}${x.approx.note ? ' · ' + x.approx.note : ''}` : ''}` +
             `\n${x.admitted_at ?? ''}${x.event ? '\n' + x.event : ''}`}>
           <img className="gl-img" src={libPatchUrl(x.instance_id, ws)} alt={x.instance_id} loading="lazy" />
-          <figcaption className="mono">{x.fidelity && <b className={`gl-fid gl-fid-${x.fidelity}`}>{FID_LABEL[x.fidelity]?.[0]}</b>}
+          <figcaption className="mono">{x.approx && <b className="gl-approx-tag" title="无匹配（近似字）">近</b>}
+            {x.fidelity && <b className={`gl-fid gl-fid-${x.fidelity}`}>{FID_LABEL[x.fidelity]?.[0]}</b>}
             {x.page}:{x.col}:{x.idx}</figcaption>
         </figure>
       ))}

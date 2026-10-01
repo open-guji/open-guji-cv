@@ -24,8 +24,7 @@ export function WorkspacePickerPage() {
       {items && items.length === 0 && (
         <p className="muted">
           没发现工作区。工作区是「有 <code>books/</code> 的目录」，
-          放在当前 <code>GUJI_WORKSPACE</code> 的同级；也可以用
-          <code>GUJI_WORKSPACE_DIRS</code> 显式指定。
+          放在启动控制台时给的工作区总目录下（<code>guji console --workspaces-root …</code>）。
         </p>
       )}
       {items && items.length > 0 && (

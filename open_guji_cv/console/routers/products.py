@@ -206,7 +206,7 @@ def api_gate_summary(book: str, gate: str = "column_gate", pages: str | None = N
     if gate not in GATES:
         raise HTTPException(404, f"没有这道闸：{gate}")
     b = load_book(book)
-    page_list = b.resolve_pages(pages) if pages else None
+    page_list = b.resolve_pages_ext(pages) if pages else None
     return gate_summary(book, page_list, deps.product_store(), gate=gate)
 
 
@@ -221,7 +221,7 @@ def api_align_ref_summary(book: str, pages: str | None = None) -> dict:
     from ...steps.align_ref import align_ref_summary
 
     b = load_book(book)
-    page_list = b.resolve_pages(pages) if pages else None
+    page_list = b.resolve_pages_ext(pages) if pages else None
     return align_ref_summary(book, page_list, deps.product_store())
 
 
@@ -236,7 +236,7 @@ def api_ocr_candidates_summary(book: str, pages: str | None = None) -> dict:
     from ...steps.ocr_candidates import ocr_candidates_summary
 
     b = load_book(book)
-    page_list = b.resolve_pages(pages) if pages else None
+    page_list = b.resolve_pages_ext(pages) if pages else None
     return ocr_candidates_summary(book, page_list, deps.product_store())
 
 

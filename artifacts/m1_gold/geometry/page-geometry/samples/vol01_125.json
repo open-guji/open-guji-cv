@@ -1,0 +1,72 @@
+{
+ "book": "vol01",
+ "page": "125",
+ "image_size": {
+  "width": 2353,
+  "height": 3059
+ },
+ "band_ys": [
+  682.0,
+  1529.0,
+  2375.0
+ ],
+ "rules": [
+  {
+   "x_top": 551.8,
+   "x_mid": 548.3,
+   "x_bot": 541.7,
+   "kind": "rule"
+  },
+  {
+   "x_top": 731.5,
+   "x_mid": 725.9,
+   "x_bot": 720.7,
+   "kind": "rule"
+  },
+  {
+   "x_top": 917.6,
+   "x_mid": 907.8,
+   "x_bot": 900.9,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1104.0,
+   "x_mid": 1092.2,
+   "x_bot": 1083.9,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1285.1,
+   "x_mid": 1275.1,
+   "x_bot": 1265.3,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1466.3,
+   "x_mid": 1455.9,
+   "x_bot": 1445.6,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1649.3,
+   "x_mid": 1639.6,
+   "x_bot": 1628.3,
+   "kind": "rule"
+  },
+  {
+   "x_top": 1832.7,
+   "x_mid": 1825.6,
+   "x_bot": 1814.5,
+   "kind": "rule"
+  }
+ ],
+ "n_cols": 9,
+ "page_class": "roster",
+ "label_origin": "derived",
+ "schema_version": 1,
+ "coordinate_frame": "raw_page_px@top-left",
+ "frame_y": [
+  284.0,
+  2774.0
+ ]
+}

@@ -170,7 +170,8 @@ def margins_of(rec: CharInstance) -> tuple[int, int]:
 
 
 def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
-                         knn_k: int = 10, norm_stroke: int | None = None
+                         knn_k: int = 10, norm_stroke: int | None = None,
+                         local_shape_rerank: bool = False
                          ) -> tuple[GlyphMatcher, set[str]]:
     """GlyphDB 的 exemplar（含种子准入实例）→ 内存匹配器 + 库内字集合。
 
@@ -183,7 +184,7 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     笔宽归一时同书留一法错误命中 cov 最高 0.9996、刻本 same 闸 800 例漏进 2 个假 same；
     细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链不传（None），行为逐位不变。
     """
-    matcher = GlyphMatcher(k=knn_k)
+    matcher = GlyphMatcher(k=knn_k, local_shape_rerank=local_shape_rerank)
     chars: set[str] = set()
     cur = db.conn.cursor()
     if norm_stroke:
@@ -229,10 +230,11 @@ _PUNCT_CHARS = frozenset("，。、；：「」『』（）《》〈〉！？…
 def cached_matcher_from_db(db_path: str, db_fingerprint: str,
                            edition: str | None = None,
                            knn_k: int = 10,
-                           norm_stroke: int | None = None) -> tuple[GlyphMatcher, set[str]]:
+                           norm_stroke: int | None = None,
+                           local_shape_rerank: bool = False) -> tuple[GlyphMatcher, set[str]]:
     """`load_matcher_from_db` 的进程级缓存包装——按
-    `(db_path, db_fingerprint, edition, knn_k)` 做 key，库长大/改判后
-    指纹变了自动重建，同一指纹下复用同一个 matcher。
+    `(db_path, db_fingerprint, edition, knn_k, norm_stroke, local_shape_rerank)`
+    做 key，库长大/改判后指纹变了自动重建，同一指纹下复用同一个 matcher。
 
     `GlyphMatchStep._matcher()`（管线批跑）与控制台 `/api/glyph-match/*`
     单点查询路由共用这份缓存——两边都是"一次会话内几十次查询共用同一个
@@ -240,13 +242,14 @@ def cached_matcher_from_db(db_path: str, db_fingerprint: str,
     内存要秒级到几十秒级，见 `steps/glyph_match.py` 模块头）。字典键含
     `db_path` 而不是只按 fingerprint，避免不同书指向不同库路径时误命中。
     """
-    key = (db_path, db_fingerprint, edition, knn_k, norm_stroke)
+    key = (db_path, db_fingerprint, edition, knn_k, norm_stroke, local_shape_rerank)
     cached = _MATCHER_CACHE.get(key)
     if cached is not None:
         return cached
     _MATCHER_CACHE.clear()   # 只保留最近一个库状态，避免多版本无限堆积内存
     db = GlyphDB(db_path)
-    result = load_matcher_from_db(db, edition=edition, knn_k=knn_k, norm_stroke=norm_stroke)
+    result = load_matcher_from_db(db, edition=edition, knn_k=knn_k, norm_stroke=norm_stroke,
+                                  local_shape_rerank=local_shape_rerank)
     _MATCHER_CACHE[key] = result
     return result
 
@@ -503,14 +506,24 @@ def admission_decision(ocr: dict | None, align_char: str | None,
 # ── 语言模型 ─────────────────────────────────────────────────────────
 
 def _load_general_lm(paths: list[Path]) -> CharNgramLM:
-    """通用语料 LM：训练一次（~30s/10M 字）后缓存在首个语料同目录。
+    """通用语料 LM：训练一次（~30s/10M 字）后缓存。
 
     缓存键 = 各源文件 (name, size, mtime) + 剪枝阈；源变了自动重训。
+
+    ⚠️ **缓存文件落 `cache_root()`，不落 `paths[0].parent`**（任务卡 #54 第3条，
+    2026-09-27 改）：`general_corpus_dir` 的语料本身是引擎自带资源，可以摆在
+    仓里或工作区，但**派生缓存**不该跟着摆在语料旁边——那条路径不受
+    `GUJI_CACHE_DIR`/`GUJI_WORKSPACE` 管，语料一旦解析到仓内 `corpus/external/`，
+    全量单测就会在仓里写下一份 22 MB 的 `.general_lm_cache.json`，触发
+    conftest 的仓内易变目录防污染断言。
     """
+    from ..core.workspace import cache_root
     key = json.dumps([[p.name, p.stat().st_size, int(p.stat().st_mtime)]
                       for p in paths] + [GENERAL_LM_PRUNE])
-    cache = paths[0].parent / ".general_lm_cache.json"
-    meta = paths[0].parent / ".general_lm_cache.meta"
+    lm_dir = cache_root() / "general_lm"
+    lm_dir.mkdir(parents=True, exist_ok=True)
+    cache = lm_dir / ".general_lm_cache.json"
+    meta = lm_dir / ".general_lm_cache.meta"
     if cache.exists() and meta.exists() \
             and meta.read_text(encoding="utf-8") == key:
         return CharNgramLM.load(cache)

@@ -135,7 +135,8 @@ def make_snapshot(book_id: str, steps: list[str] | None = None, name: str | None
     book_dir = src_root / book_id
     if not book_dir.is_dir():
         raise FileNotFoundError(f"没有产物目录 {book_dir}")
-    avail = sorted(p.name for p in book_dir.iterdir() if p.is_dir())
+    # 点开头的是导入/备份用的隐藏目录（`.snap_backup`、`.snap_staging-*`，见 open_guji_cv/snap），不是步
+    avail = sorted(p.name for p in book_dir.iterdir() if p.is_dir() and not p.name.startswith("."))
     use = steps or avail
     missing = [s for s in use if s not in avail]
     if missing:

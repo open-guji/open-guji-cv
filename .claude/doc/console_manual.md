@@ -14,9 +14,10 @@ cd D:\workspace\open-guji-cv
 uv venv .venv --python 3.12
 uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented
 
-# 起控制台
-.venv/Scripts/python -m open_guji_cv console
-# → http://127.0.0.1:8640/ ，会自动开浏览器；加 --no-browser 不开
+# 起控制台（2026-09-30 起必须给工作区总目录；控制台没有默认工作区，不读 GUJI_WORKSPACE）
+.venv/Scripts/python -m open_guji_cv console --workspaces-root D:\workspace\guji-workspace
+# → http://127.0.0.1:8640/ ，会自动开浏览器；加 --no-browser 不开；工作区在页面里选
+# 也可用环境变量 GUJI_WORKSPACES_ROOT 代替 --workspaces-root
 ```
 
 控制台只监听 `127.0.0.1`。要在 iPad 上用就走 Tailscale 连到这台机器。
@@ -109,6 +110,15 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 .venv/Scripts/python -m open_guji_cv status vol01
 ```
 
+`status` 每步下面会列**过期原因**（2026-09-28，overview #174）：`册配置 period_prior 180.0→204.0，须重跑`
+／`参数变了`／`上游产物变了`／`代码或版本变了`／`上游过期`。册配置那条只有这次改动之后跑过的产物才分得出
+（manifest 新记了 `book_deps` 原值）；老产物报「代码或册配置变了（…；旧条目没记册配置原值）」。
+`calibrate` 发现先验漂了时也会提示改 yaml 后哪些步要重跑（`period_prior` → `column_gate`）。
+
+**拆页前找版心**：`guji locate-gutter <原图> [--band y0,y1] [--json]`——整叶扫描图 → 版心 x（原图坐标，
+左原点）与置信度；一张图上下两叶就用 `--band` 分开找。置信度 < 0.3 一律人看。判据与实测见
+`utils/locate_gutter.py` 模块头。
+
 ---
 
 ## 3. 产物：看结果对不对
@@ -163,6 +173,20 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 - `artifact`：卡片发布成 claude.ai 页面，你在手机上点。**复审必须重发到同一 URL**，
   用户书签和页面本地状态都锚在上面。
 - `server`：页面直接跑在控制台，裁决实时回传，断网进本地队列、重连补发。
+
+### 4.1b 定字裁决里的两个小事（2026-09-30）
+
+- **「小注当正文」（Z）**：列尾双行小注被当成正文切成一格。事件仍是 `confirm v=seg_defect quality=truncated`，
+  多带 `reason=jiazhu_as_main`；打回台账里记为 `row_segment / jiazhu_split`（普通截断是 `seg_truncated`），
+  Step3 可单独筛出这一类（`feedback/returns.py::classify_return`）。
+  **这个标记同时是「强制按小注拆」的指令**（2026-09-30）：该格最新一条定字类裁决若是它，Step3 重跑时不看判据、
+  从墨迹中段最空的那条谷把格拆成 a/b 两半（`jiazhu_split.forced_split_center`，`lookup.resolved_forced_jiazhu`），
+  紧随其后的右半单字照常被段端收编。提交时路由会把该页 `row_segment` 显式失效；**重跑该页才生效**：
+  `guji pipeline keben_body_v2 <册> --from row_segment --pages <页> -w <书目录>`。之后改判同一格（定字/非字/跳过）即取消强制。
+- **对齐改字层 · 网格**：不点 = 采信整理本字（字对、其余也对）；有疑问的**点一下**标「审」（再点取消）。
+  网格里不分原因、不写裁决：提交时没点的写 confirm，点了的写 `needs_review` 事件（不算已裁、无消费者），
+  这些格转到「逐张」细审（有噪声 C、改字、小注当正文 Z、字形不完整 T 在那里选），后来有了定字裁决即作废
+  （`review/verdict_view.py::flagged_cells`）。
 
 ### 4.2 收割：把裁决收回来
 
@@ -239,6 +263,9 @@ PYTHONPATH=. .venv/Scripts/python scripts/verify_gold_migration.py --all   # 校
 .venv/Scripts/python -m open_guji_cv eval run              # 跑全部轻量的
 .venv/Scripts/python -m open_guji_cv eval run normalize layout
 ```
+
+四把尺子（`check rulers`）的 JSON 每把都带 `by_page`（全量汇总 `{页: {n, cols}}`，不受 detail 截 20 条影响）；
+要逐条页／列明细：`guji check rulers vol06 --detail R2c`（R2c 分「无缝」「缝上有墨」两种，后者带 `px`）。
 
 ---
 

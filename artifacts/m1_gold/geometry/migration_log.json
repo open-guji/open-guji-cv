@@ -1,0 +1,1834 @@
+[
+ {
+  "book": "vol01",
+  "page": "101",
+  "old_size": {
+   "width": 1717,
+   "height": 2474
+  },
+  "raw_size": {
+   "width": 2353,
+   "height": 3053
+  },
+  "n_old": 12,
+  "n_kept": 11,
+  "a": 1.0,
+  "c": 334.0,
+  "comb_score": 0.59,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.343,
+   "ambiguous": false
+  },
+  "frame_left": 345,
+  "dropped": [
+   {
+    "old_x_mid": 1656.0,
+    "pred": 1990.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   296,
+   2754
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "104",
+  "old_size": {
+   "width": 1714,
+   "height": 2502
+  },
+  "raw_size": {
+   "width": 2396,
+   "height": 3110
+  },
+  "n_old": 11,
+  "n_kept": 11,
+  "a": 1.0,
+  "c": 292.0,
+  "comb_score": 0.641,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.428,
+   "ambiguous": false
+  },
+  "frame_left": 288,
+  "dropped": [],
+  "frame_y": [
+   323,
+   2825
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "112",
+  "old_size": {
+   "width": 1708,
+   "height": 2475
+  },
+  "raw_size": {
+   "width": 2390,
+   "height": 3084
+  },
+  "n_old": 11,
+  "n_kept": 11,
+  "a": 1.0,
+  "c": 284.0,
+  "comb_score": 0.735,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.347,
+   "ambiguous": false
+  },
+  "frame_left": 683,
+  "dropped": [],
+  "frame_y": [
+   311,
+   2801
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "116",
+  "old_size": {
+   "width": 1689,
+   "height": 2451
+  },
+  "raw_size": {
+   "width": 2357,
+   "height": 3064
+  },
+  "n_old": 11,
+  "n_kept": 8,
+  "a": 1.0,
+  "c": 272.0,
+  "comb_score": 0.665,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.891,
+   "ambiguous": false
+  },
+  "frame_left": 293,
+  "dropped": [
+   {
+    "old_x_mid": 16.5,
+    "pred": 288.5,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     0.91
+    ]
+   },
+   {
+    "old_x_mid": 36.0,
+    "pred": 308.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     0.91
+    ]
+   },
+   {
+    "old_x_mid": 53.0,
+    "pred": 325.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     0.91
+    ]
+   }
+  ],
+  "frame_y": [
+   290,
+   2783
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "119",
+  "old_size": {
+   "width": 1685,
+   "height": 2446
+  },
+  "raw_size": {
+   "width": 2318,
+   "height": 3058
+  },
+  "n_old": 11,
+  "n_kept": 8,
+  "a": 1.0,
+  "c": 322.0,
+  "comb_score": 0.65,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.382,
+   "ambiguous": false
+  },
+  "frame_left": 322,
+  "dropped": [
+   {
+    "old_x_mid": 1090.5,
+    "pred": 1412.5,
+    "shape_ok": true,
+    "cov": [
+     0.36,
+     0.98,
+     0.32
+    ]
+   },
+   {
+    "old_x_mid": 1622.5,
+    "pred": 1944.5,
+    "shape_ok": true,
+    "cov": [
+     0.35,
+     1.0,
+     0.97
+    ]
+   },
+   {
+    "old_x_mid": 1663.0,
+    "pred": 1985.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2775
+  ],
+  "frame_src": "fallback"
+ },
+ {
+  "book": "vol01",
+  "page": "125",
+  "old_size": {
+   "width": 1698,
+   "height": 2432
+  },
+  "raw_size": {
+   "width": 2353,
+   "height": 3059
+  },
+  "n_old": 10,
+  "n_kept": 8,
+  "a": 1.0,
+  "c": 372.0,
+  "comb_score": 0.748,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.464,
+   "ambiguous": false
+  },
+  "frame_left": 362,
+  "dropped": [
+   {
+    "old_x_mid": 1639.5,
+    "pred": 2011.5,
+    "shape_ok": false,
+    "cov": [
+     0.78,
+     1.0,
+     0.89
+    ]
+   },
+   {
+    "old_x_mid": 1664.0,
+    "pred": 2036.0,
+    "shape_ok": false,
+    "cov": [
+     0.78,
+     1.0,
+     0.89
+    ]
+   }
+  ],
+  "frame_y": [
+   284,
+   2774
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "129",
+  "old_size": {
+   "width": 1667,
+   "height": 2383
+  },
+  "raw_size": {
+   "width": 2310,
+   "height": 3023
+  },
+  "n_old": 10,
+  "n_kept": 8,
+  "a": 1.0,
+  "c": 358.0,
+  "comb_score": 0.868,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.286,
+   "ambiguous": false
+  },
+  "frame_left": 355,
+  "dropped": [
+   {
+    "old_x_mid": 1628.0,
+    "pred": 1986.0,
+    "shape_ok": false,
+    "cov": [
+     0.98,
+     0.97,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1653.5,
+    "pred": 2011.5,
+    "shape_ok": false,
+    "cov": [
+     0.98,
+     0.97,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   297,
+   2737
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "149",
+  "old_size": {
+   "width": 1720,
+   "height": 2804
+  },
+  "raw_size": {
+   "width": 2358,
+   "height": 3091
+  },
+  "n_old": 10,
+  "n_kept": 9,
+  "a": 1.0,
+  "c": 334.0,
+  "comb_score": 0.688,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.589,
+   "ambiguous": false
+  },
+  "frame_left": 354,
+  "dropped": [
+   {
+    "old_x_mid": 1681.0,
+    "pred": 2015.0,
+    "shape_ok": false,
+    "cov": [
+     0.96,
+     0.95,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   291,
+   2766
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "164",
+  "old_size": {
+   "width": 1698,
+   "height": 2447
+  },
+  "raw_size": {
+   "width": 2380,
+   "height": 3045
+  },
+  "n_old": 6,
+  "n_kept": 4,
+  "a": 1.008,
+  "c": 270.0,
+  "comb_score": 0.453,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.671,
+   "ambiguous": false
+  },
+  "frame_left": 283,
+  "dropped": [
+   {
+    "old_x_mid": 5.0,
+    "pred": 275.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1147.0,
+    "pred": 1426.2,
+    "shape_ok": true,
+    "cov": [
+     1.0,
+     0.36,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   282,
+   2667
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "166",
+  "old_size": {
+   "width": 1745,
+   "height": 2830
+  },
+  "raw_size": {
+   "width": 2396,
+   "height": 3121
+  },
+  "n_old": 11,
+  "n_kept": 9,
+  "a": 1.0,
+  "c": 286.0,
+  "comb_score": 0.575,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.311,
+   "ambiguous": false
+  },
+  "frame_left": 310,
+  "dropped": [
+   {
+    "old_x_mid": 7.0,
+    "pred": 293.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 243.0,
+    "pred": 529.0,
+    "shape_ok": true,
+    "cov": [
+     0.7,
+     0.36,
+     0.95
+    ]
+   }
+  ],
+  "frame_y": [
+   286,
+   2832
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "174",
+  "old_size": {
+   "width": 1744,
+   "height": 2494
+  },
+  "raw_size": {
+   "width": 2391,
+   "height": 3059
+  },
+  "n_old": 11,
+  "n_kept": 9,
+  "a": 1.0,
+  "c": 274.0,
+  "comb_score": 0.625,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.461,
+   "ambiguous": false
+  },
+  "frame_left": 286,
+  "dropped": [
+   {
+    "old_x_mid": 7.0,
+    "pred": 281.0,
+    "shape_ok": true,
+    "cov": [
+     0.03,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 34.0,
+    "pred": 308.0,
+    "shape_ok": true,
+    "cov": [
+     0.03,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   281,
+   2773
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "176",
+  "old_size": {
+   "width": 1706,
+   "height": 2776
+  },
+  "raw_size": {
+   "width": 2389,
+   "height": 3068
+  },
+  "n_old": 8,
+  "n_kept": 5,
+  "a": 1.0,
+  "c": 314.0,
+  "comb_score": 0.535,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.588,
+   "ambiguous": false
+  },
+  "frame_left": 286,
+  "dropped": [
+   {
+    "old_x_mid": 14.0,
+    "pred": 328.0,
+    "shape_ok": false,
+    "cov": [
+     0.56,
+     1.0,
+     0.94
+    ]
+   },
+   {
+    "old_x_mid": 761.0,
+    "pred": 1075.0,
+    "shape_ok": false,
+    "cov": [
+     0.96,
+     0.45,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1506.0,
+    "pred": 1820.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     0.68,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2775
+  ],
+  "frame_src": "fallback",
+  "excluded": "平移 c=314 与版框左缘先验 272 相差 >30px"
+ },
+ {
+  "book": "vol01",
+  "page": "182",
+  "old_size": {
+   "width": 1737,
+   "height": 2753
+  },
+  "raw_size": {
+   "width": 2392,
+   "height": 3041
+  },
+  "n_old": 11,
+  "n_kept": 9,
+  "a": 1.004,
+  "c": 278.0,
+  "comb_score": 0.621,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.515,
+   "ambiguous": false
+  },
+  "frame_left": 293,
+  "dropped": [
+   {
+    "old_x_mid": 6.0,
+    "pred": 284.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1360.5,
+    "pred": 1643.9,
+    "shape_ok": true,
+    "cov": [
+     0.42,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   286,
+   2752
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "183",
+  "old_size": {
+   "width": 1660,
+   "height": 2473
+  },
+  "raw_size": {
+   "width": 2352,
+   "height": 3092
+  },
+  "n_old": 9,
+  "n_kept": 8,
+  "a": 1.0,
+  "c": 356.0,
+  "comb_score": 0.545,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.415,
+   "ambiguous": false
+  },
+  "frame_left": 357,
+  "dropped": [
+   {
+    "old_x_mid": 555.5,
+    "pred": 911.5,
+    "shape_ok": true,
+    "cov": [
+     1.0,
+     0.36,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   290,
+   2812
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "194",
+  "old_size": {
+   "width": 1720,
+   "height": 2461
+  },
+  "raw_size": {
+   "width": 2390,
+   "height": 3094
+  },
+  "n_old": 10,
+  "n_kept": 9,
+  "a": 1.004,
+  "c": 272.0,
+  "comb_score": 0.546,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.826,
+   "ambiguous": false
+  },
+  "frame_left": 284,
+  "dropped": [
+   {
+    "old_x_mid": 8.5,
+    "pred": 280.5,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     0.94,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2812
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "198",
+  "old_size": {
+   "width": 1714,
+   "height": 2787
+  },
+  "raw_size": {
+   "width": 2398,
+   "height": 3078
+  },
+  "n_old": 7,
+  "n_kept": 7,
+  "a": 1.0,
+  "c": 256.0,
+  "comb_score": 0.808,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.601,
+   "ambiguous": false
+  },
+  "frame_left": 288,
+  "dropped": [],
+  "frame_y": [
+   287,
+   2793
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "33",
+  "old_size": {
+   "width": 1688,
+   "height": 2919
+  },
+  "raw_size": {
+   "width": 2315,
+   "height": 3236
+  },
+  "n_old": 11,
+  "n_kept": 9,
+  "a": 1.004,
+  "c": 332.0,
+  "comb_score": 0.496,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.642,
+   "ambiguous": false
+  },
+  "frame_left": 332,
+  "dropped": [
+   {
+    "old_x_mid": 1650.5,
+    "pred": 1989.1,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1674.5,
+    "pred": 2013.2,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   487,
+   2951
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "40",
+  "old_size": {
+   "width": 1712,
+   "height": 2814
+  },
+  "raw_size": {
+   "width": 2396,
+   "height": 3116
+  },
+  "n_old": 10,
+  "n_kept": 7,
+  "a": 1.0,
+  "c": 266.0,
+  "comb_score": 0.609,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.665,
+   "ambiguous": false
+  },
+  "frame_left": 292,
+  "dropped": [
+   {
+    "old_x_mid": 20.0,
+    "pred": 286.0,
+    "shape_ok": false,
+    "cov": [
+     0.97,
+     1.0,
+     0.91
+    ]
+   },
+   {
+    "old_x_mid": 39.5,
+    "pred": 305.5,
+    "shape_ok": false,
+    "cov": [
+     0.97,
+     1.0,
+     0.91
+    ]
+   },
+   {
+    "old_x_mid": 58.0,
+    "pred": 324.0,
+    "shape_ok": false,
+    "cov": [
+     0.97,
+     1.0,
+     0.91
+    ]
+   }
+  ],
+  "frame_y": [
+   299,
+   2829
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol01",
+  "page": "66",
+  "old_size": {
+   "width": 1700,
+   "height": 2485
+  },
+  "raw_size": {
+   "width": 2396,
+   "height": 3118
+  },
+  "n_old": 10,
+  "n_kept": 9,
+  "a": 1.0,
+  "c": 300.0,
+  "comb_score": 0.602,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.727,
+   "ambiguous": false
+  },
+  "frame_left": 302,
+  "dropped": [
+   {
+    "old_x_mid": 588.0,
+    "pred": 888.0,
+    "shape_ok": true,
+    "cov": [
+     0.37,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2826
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "10",
+  "old_size": {
+   "width": 1672,
+   "height": 2456
+  },
+  "raw_size": {
+   "width": 2386,
+   "height": 3082
+  },
+  "n_old": 9,
+  "n_kept": 9,
+  "a": 0.992,
+  "c": 340.0,
+  "comb_score": 0.635,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.734,
+   "ambiguous": false
+  },
+  "frame_left": 334,
+  "dropped": [],
+  "frame_y": [
+   286,
+   2793
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "102",
+  "old_size": {
+   "width": 1674,
+   "height": 2345
+  },
+  "raw_size": {
+   "width": 2373,
+   "height": 2994
+  },
+  "n_old": 9,
+  "n_kept": 8,
+  "a": 0.996,
+  "c": 318.0,
+  "comb_score": 0.504,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.687,
+   "ambiguous": false
+  },
+  "frame_left": 292,
+  "dropped": [
+   {
+    "old_x_mid": 1309.5,
+    "pred": 1622.3,
+    "shape_ok": true,
+    "cov": [
+     0.97,
+     0.35,
+     0.98
+    ]
+   }
+  ],
+  "frame_y": [
+   287,
+   2675
+  ],
+  "frame_src": "measured",
+  "excluded": "平移 c=318 与版框左缘先验 284 相差 >30px"
+ },
+ {
+  "book": "vol02",
+  "page": "12",
+  "old_size": {
+   "width": 1735,
+   "height": 2429
+  },
+  "raw_size": {
+   "width": 2385,
+   "height": 3059
+  },
+  "n_old": 7,
+  "n_kept": 6,
+  "a": 1.0,
+  "c": 272.0,
+  "comb_score": 0.583,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.901,
+   "ambiguous": true
+  },
+  "frame_left": 876,
+  "dropped": [
+   {
+    "old_x_mid": 1716.5,
+    "pred": 1988.5,
+    "shape_ok": true,
+    "cov": [
+     0.57,
+     0.37,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   284,
+   2774
+  ],
+  "frame_src": "measured",
+  "excluded": "梳子定位歧义（另一平移解得分为选定解的 0.90≥0.88，且无版框左缘先验佐证）"
+ },
+ {
+  "book": "vol02",
+  "page": "136",
+  "old_size": {
+   "width": 1728,
+   "height": 2697
+  },
+  "raw_size": {
+   "width": 2386,
+   "height": 3033
+  },
+  "n_old": 5,
+  "n_kept": 4,
+  "a": 1.0,
+  "c": 230.0,
+  "comb_score": 0.734,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.757,
+   "ambiguous": false
+  },
+  "frame_left": 290,
+  "dropped": [
+   {
+    "old_x_mid": 457.5,
+    "pred": 687.5,
+    "shape_ok": false,
+    "cov": [
+     0.72,
+     1.0,
+     0.97
+    ]
+   }
+  ],
+  "frame_y": [
+   301,
+   2689
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "138",
+  "old_size": {
+   "width": 1679,
+   "height": 2688
+  },
+  "raw_size": {
+   "width": 2373,
+   "height": 3015
+  },
+  "n_old": 6,
+  "n_kept": 5,
+  "a": 1.0,
+  "c": 256.0,
+  "comb_score": 0.749,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.694,
+   "ambiguous": false
+  },
+  "frame_left": 287,
+  "dropped": [
+   {
+    "old_x_mid": 47.0,
+    "pred": 303.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   284,
+   2683
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "163",
+  "old_size": {
+   "width": 1673,
+   "height": 2394
+  },
+  "raw_size": {
+   "width": 2313,
+   "height": 2999
+  },
+  "n_old": 5,
+  "n_kept": 3,
+  "a": 0.992,
+  "c": 392.0,
+  "comb_score": 0.513,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.96,
+   "ambiguous": true
+  },
+  "frame_left": 1073,
+  "dropped": [
+   {
+    "old_x_mid": 559.5,
+    "pred": 947.0,
+    "shape_ok": true,
+    "cov": [
+     0.39,
+     0.63,
+     0.81
+    ]
+   },
+   {
+    "old_x_mid": 745.5,
+    "pred": 1131.5,
+    "shape_ok": true,
+    "cov": [
+     0.53,
+     0.43,
+     0.57
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2775
+  ],
+  "frame_src": "fallback",
+  "excluded": "梳子定位歧义（另一平移解得分为选定解的 0.96≥0.88，且无版框左缘先验佐证）"
+ },
+ {
+  "book": "vol02",
+  "page": "165",
+  "old_size": {
+   "width": 1702,
+   "height": 2421
+  },
+  "raw_size": {
+   "width": 2345,
+   "height": 3029
+  },
+  "n_old": 7,
+  "n_kept": 5,
+  "a": 1.0,
+  "c": 350.0,
+  "comb_score": 0.543,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.539,
+   "ambiguous": false
+  },
+  "frame_left": 350,
+  "dropped": [
+   {
+    "old_x_mid": 1652.5,
+    "pred": 2002.5,
+    "shape_ok": false,
+    "cov": [
+     0.62,
+     0.99,
+     0.89
+    ]
+   },
+   {
+    "old_x_mid": 1675.0,
+    "pred": 2025.0,
+    "shape_ok": true,
+    "cov": [
+     1.0,
+     0.99,
+     0.0
+    ]
+   }
+  ],
+  "frame_y": [
+   331,
+   2680
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "174",
+  "old_size": {
+   "width": 1690,
+   "height": 2450
+  },
+  "raw_size": {
+   "width": 2384,
+   "height": 3049
+  },
+  "n_old": 5,
+  "n_kept": 5,
+  "a": 1.0,
+  "c": 318.0,
+  "comb_score": 0.612,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.806,
+   "ambiguous": false
+  },
+  "frame_left": 292,
+  "dropped": [],
+  "frame_y": [
+   285,
+   2762
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "182",
+  "old_size": {
+   "width": 1752,
+   "height": 2434
+  },
+  "raw_size": {
+   "width": 2388,
+   "height": 3020
+  },
+  "n_old": 5,
+  "n_kept": 2,
+  "a": 1.0,
+  "c": 386.0,
+  "comb_score": 0.538,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.96,
+   "ambiguous": true
+  },
+  "frame_left": 291,
+  "dropped": [
+   {
+    "old_x_mid": 8.5,
+    "pred": 394.5,
+    "shape_ok": false,
+    "cov": [
+     0.54,
+     0.63,
+     0.65
+    ]
+   },
+   {
+    "old_x_mid": 1195.5,
+    "pred": 1581.5,
+    "shape_ok": true,
+    "cov": [
+     0.71,
+     0.47,
+     0.42
+    ]
+   },
+   {
+    "old_x_mid": 1354.5,
+    "pred": 1740.5,
+    "shape_ok": false,
+    "cov": [
+     0.51,
+     0.79,
+     0.59
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2775
+  ],
+  "frame_src": "fallback",
+  "excluded": "梳子定位歧义（另一平移解得分为选定解的 0.96≥0.88，且无版框左缘先验佐证）"
+ },
+ {
+  "book": "vol02",
+  "page": "186",
+  "old_size": {
+   "width": 1480,
+   "height": 2431
+  },
+  "raw_size": {
+   "width": 2346,
+   "height": 3070
+  },
+  "n_old": 7,
+  "n_kept": 2,
+  "a": 0.988,
+  "c": 430.0,
+  "comb_score": 0.586,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.942,
+   "ambiguous": true
+  },
+  "frame_left": 510,
+  "dropped": [
+   {
+    "old_x_mid": 187.5,
+    "pred": 615.2,
+    "shape_ok": true,
+    "cov": [
+     0.61,
+     0.69,
+     0.0
+    ]
+   },
+   {
+    "old_x_mid": 558.5,
+    "pred": 981.8,
+    "shape_ok": true,
+    "cov": [
+     0.34,
+     0.71,
+     0.78
+    ]
+   },
+   {
+    "old_x_mid": 750.5,
+    "pred": 1171.5,
+    "shape_ok": false,
+    "cov": [
+     0.6,
+     0.72,
+     0.8
+    ]
+   },
+   {
+    "old_x_mid": 1114.5,
+    "pred": 1531.1,
+    "shape_ok": false,
+    "cov": [
+     0.88,
+     0.77,
+     0.81
+    ]
+   },
+   {
+    "old_x_mid": 1299.5,
+    "pred": 1713.9,
+    "shape_ok": false,
+    "cov": [
+     0.78,
+     0.9,
+     0.68
+    ]
+   }
+  ],
+  "frame_y": [
+   285,
+   2775
+  ],
+  "frame_src": "fallback",
+  "excluded": "梳子定位歧义（另一平移解得分为选定解的 0.94≥0.88，且无版框左缘先验佐证）"
+ },
+ {
+  "book": "vol02",
+  "page": "21",
+  "old_size": {
+   "width": 1710,
+   "height": 2771
+  },
+  "raw_size": {
+   "width": 2361,
+   "height": 3085
+  },
+  "n_old": 11,
+  "n_kept": 9,
+  "a": 1.004,
+  "c": 352.0,
+  "comb_score": 0.587,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.712,
+   "ambiguous": false
+  },
+  "frame_left": 365,
+  "dropped": [
+   {
+    "old_x_mid": 1665.5,
+    "pred": 2024.2,
+    "shape_ok": false,
+    "cov": [
+     0.88,
+     0.98,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 1694.0,
+    "pred": 2052.8,
+    "shape_ok": false,
+    "cov": [
+     0.67,
+     0.99,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   287,
+   2773
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "27",
+  "old_size": {
+   "width": 1710,
+   "height": 2470
+  },
+  "raw_size": {
+   "width": 2369,
+   "height": 3114
+  },
+  "n_old": 9,
+  "n_kept": 7,
+  "a": 1.004,
+  "c": 364.0,
+  "comb_score": 0.666,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.525,
+   "ambiguous": false
+  },
+  "frame_left": 372,
+  "dropped": [
+   {
+    "old_x_mid": 559.0,
+    "pred": 925.2,
+    "shape_ok": true,
+    "cov": [
+     0.34,
+     0.92,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 749.0,
+    "pred": 1116.0,
+    "shape_ok": true,
+    "cov": [
+     0.17,
+     1.0,
+     0.97
+    ]
+   }
+  ],
+  "frame_y": [
+   294,
+   2808
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "28",
+  "old_size": {
+   "width": 1688,
+   "height": 2460
+  },
+  "raw_size": {
+   "width": 2364,
+   "height": 3087
+  },
+  "n_old": 7,
+  "n_kept": 6,
+  "a": 0.992,
+  "c": 308.0,
+  "comb_score": 0.494,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.817,
+   "ambiguous": false
+  },
+  "frame_left": 1050,
+  "dropped": [
+   {
+    "old_x_mid": 1496.5,
+    "pred": 1792.5,
+    "shape_ok": true,
+    "cov": [
+     0.0,
+     0.89,
+     0.99
+    ]
+   }
+  ],
+  "frame_y": [
+   282,
+   2789
+  ],
+  "frame_src": "measured",
+  "excluded": "梳子得分 0.49<0.5 且无先验佐证"
+ },
+ {
+  "book": "vol02",
+  "page": "44",
+  "old_size": {
+   "width": 1689,
+   "height": 2492
+  },
+  "raw_size": {
+   "width": 2379,
+   "height": 3064
+  },
+  "n_old": 10,
+  "n_kept": 7,
+  "a": 1.0,
+  "c": 294.0,
+  "comb_score": 0.538,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.909,
+   "ambiguous": true
+  },
+  "frame_left": 497,
+  "dropped": [
+   {
+    "old_x_mid": 1123.0,
+    "pred": 1417.0,
+    "shape_ok": true,
+    "cov": [
+     0.45,
+     0.99,
+     0.99
+    ]
+   },
+   {
+    "old_x_mid": 1309.5,
+    "pred": 1603.5,
+    "shape_ok": true,
+    "cov": [
+     0.87,
+     0.39,
+     0.97
+    ]
+   },
+   {
+    "old_x_mid": 1488.5,
+    "pred": 1782.5,
+    "shape_ok": true,
+    "cov": [
+     0.83,
+     0.29,
+     0.74
+    ]
+   }
+  ],
+  "frame_y": [
+   286,
+   2773
+  ],
+  "frame_src": "measured",
+  "excluded": "梳子定位歧义（另一平移解得分为选定解的 0.91≥0.88，且无版框左缘先验佐证）"
+ },
+ {
+  "book": "vol02",
+  "page": "46",
+  "old_size": {
+   "width": 1734,
+   "height": 2510
+  },
+  "raw_size": {
+   "width": 2379,
+   "height": 3072
+  },
+  "n_old": 10,
+  "n_kept": 5,
+  "a": 0.996,
+  "c": 280.0,
+  "comb_score": 0.389,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 1.051,
+   "ambiguous": false
+  },
+  "frame_left": 296,
+  "dropped": [
+   {
+    "old_x_mid": 8.0,
+    "pred": 288.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 31.5,
+    "pred": 311.4,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "old_x_mid": 243.0,
+    "pred": 522.0,
+    "shape_ok": true,
+    "cov": [
+     0.62,
+     0.23,
+     0.93
+    ]
+   },
+   {
+    "old_x_mid": 425.0,
+    "pred": 703.3,
+    "shape_ok": true,
+    "cov": [
+     0.84,
+     0.39,
+     0.9
+    ]
+   },
+   {
+    "old_x_mid": 1725.5,
+    "pred": 1998.6,
+    "shape_ok": true,
+    "cov": [
+     0.92,
+     0.4,
+     0.99
+    ]
+   }
+  ],
+  "frame_y": [
+   283,
+   2789
+  ],
+  "frame_src": "measured",
+  "excluded": "有先验但梳子得分弱（0.39）或竞争解过近（1.05）"
+ },
+ {
+  "book": "vol02",
+  "page": "54",
+  "old_size": {
+   "width": 1719,
+   "height": 2432
+  },
+  "raw_size": {
+   "width": 2375,
+   "height": 3051
+  },
+  "n_old": 9,
+  "n_kept": 7,
+  "a": 1.0,
+  "c": 280.0,
+  "comb_score": 0.661,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.594,
+   "ambiguous": false
+  },
+  "frame_left": 282,
+  "dropped": [
+   {
+    "old_x_mid": 231.5,
+    "pred": 511.5,
+    "shape_ok": true,
+    "cov": [
+     0.24,
+     0.99,
+     0.97
+    ]
+   },
+   {
+    "old_x_mid": 1540.0,
+    "pred": 1820.0,
+    "shape_ok": true,
+    "cov": [
+     0.77,
+     0.25,
+     0.98
+    ]
+   }
+  ],
+  "frame_y": [
+   286,
+   2768
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "60",
+  "old_size": {
+   "width": 1709,
+   "height": 2497
+  },
+  "raw_size": {
+   "width": 2399,
+   "height": 3086
+  },
+  "n_old": 11,
+  "n_kept": 11,
+  "a": 1.0,
+  "c": 296.0,
+  "comb_score": 0.675,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.575,
+   "ambiguous": false
+  },
+  "frame_left": 286,
+  "dropped": [],
+  "frame_y": [
+   283,
+   2799
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "71",
+  "old_size": {
+   "width": 1688,
+   "height": 2460
+  },
+  "raw_size": {
+   "width": 2401,
+   "height": 3052
+  },
+  "n_old": 10,
+  "n_kept": 10,
+  "a": 1.0,
+  "c": 388.0,
+  "comb_score": 0.57,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.746,
+   "ambiguous": false
+  },
+  "frame_left": 392,
+  "dropped": [],
+  "frame_y": [
+   323,
+   2764
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "87",
+  "old_size": {
+   "width": 1695,
+   "height": 2445
+  },
+  "raw_size": {
+   "width": 2363,
+   "height": 3073
+  },
+  "n_old": 10,
+  "n_kept": 7,
+  "a": 1.0,
+  "c": 376.0,
+  "comb_score": 0.543,
+  "comb": {
+   "used_prior": true,
+   "competitor_ratio": 0.752,
+   "ambiguous": false
+  },
+  "frame_left": 375,
+  "dropped": [
+   {
+    "old_x_mid": 1290.5,
+    "pred": 1666.5,
+    "shape_ok": true,
+    "cov": [
+     0.97,
+     0.04,
+     0.88
+    ]
+   },
+   {
+    "old_x_mid": 1477.0,
+    "pred": 1853.0,
+    "shape_ok": true,
+    "cov": [
+     0.96,
+     0.92,
+     0.25
+    ]
+   },
+   {
+    "old_x_mid": 1658.0,
+    "pred": 2034.0,
+    "shape_ok": false,
+    "cov": [
+     1.0,
+     0.92,
+     0.97
+    ]
+   }
+  ],
+  "frame_y": [
+   292,
+   2789
+  ],
+  "frame_src": "measured"
+ },
+ {
+  "book": "vol02",
+  "page": "97",
+  "old_size": {
+   "width": 1699,
+   "height": 2454
+  },
+  "raw_size": {
+   "width": 2311,
+   "height": 3092
+  },
+  "n_old": 11,
+  "n_kept": 10,
+  "a": 1.0,
+  "c": 310.0,
+  "comb_score": 0.605,
+  "comb": {
+   "used_prior": false,
+   "competitor_ratio": 0.655,
+   "ambiguous": false
+  },
+  "frame_left": 690,
+  "dropped": [
+   {
+    "old_x_mid": 1660.5,
+    "pred": 1970.5,
+    "shape_ok": false,
+    "cov": [
+     0.98,
+     1.0,
+     1.0
+    ]
+   }
+  ],
+  "frame_y": [
+   301,
+   2797
+  ],
+  "frame_src": "measured"
+ }
+]

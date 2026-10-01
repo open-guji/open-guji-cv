@@ -1,0 +1,565 @@
+{
+ "schema": 1,
+ "note": "M1 C 组 2026-09-30 迁移；判据见 artifacts/m1_gold/jiazhu_tail/MIGRATION.md",
+ "items": [
+  {
+   "book": "vol02",
+   "page": "103",
+   "col": 5,
+   "slot": 13,
+   "expect": "row",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:103:5:12"
+  },
+  {
+   "book": "vol02",
+   "page": "105",
+   "col": 8,
+   "slot": 13,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:105:8:12"
+  },
+  {
+   "book": "vol02",
+   "page": "109",
+   "col": 8,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:109:8:9"
+  },
+  {
+   "book": "vol02",
+   "page": "111",
+   "col": 3,
+   "slot": 11,
+   "expect": "row",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:111:3:10"
+  },
+  {
+   "book": "vol02",
+   "page": "114",
+   "col": 5,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:114:5:10"
+  },
+  {
+   "book": "vol02",
+   "page": "116",
+   "col": 8,
+   "slot": 7,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:116:8:6"
+  },
+  {
+   "book": "vol02",
+   "page": "120",
+   "col": 7,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:120:7:10"
+  },
+  {
+   "book": "vol02",
+   "page": "124",
+   "col": 3,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:124:3:8"
+  },
+  {
+   "book": "vol02",
+   "page": "125",
+   "col": 7,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:125:7:8"
+  },
+  {
+   "book": "vol02",
+   "page": "128",
+   "col": 1,
+   "slot": 8,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:128:1:7"
+  },
+  {
+   "book": "vol02",
+   "page": "130",
+   "col": 6,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:130:6:8"
+  },
+  {
+   "book": "vol02",
+   "page": "132",
+   "col": 4,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:132:4:10"
+  },
+  {
+   "book": "vol02",
+   "page": "136",
+   "col": 4,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:136:4:10"
+  },
+  {
+   "book": "vol02",
+   "page": "13",
+   "col": 7,
+   "slot": 17,
+   "expect": "reject",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:13:7:16"
+  },
+  {
+   "book": "vol02",
+   "page": "142",
+   "col": 5,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:142:5:10"
+  },
+  {
+   "book": "vol02",
+   "page": "145",
+   "col": 5,
+   "slot": 8,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:145:5:7"
+  },
+  {
+   "book": "vol02",
+   "page": "148",
+   "col": 2,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:148:2:8"
+  },
+  {
+   "book": "vol02",
+   "page": "155",
+   "col": 1,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:155:1:10"
+  },
+  {
+   "book": "vol02",
+   "page": "15",
+   "col": 8,
+   "slot": 12,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:15:8:11"
+  },
+  {
+   "book": "vol02",
+   "page": "165",
+   "col": 2,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:165:2:9"
+  },
+  {
+   "book": "vol02",
+   "page": "171",
+   "col": 2,
+   "slot": 13,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:171:2:12"
+  },
+  {
+   "book": "vol02",
+   "page": "183",
+   "col": 4,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:183:4:9"
+  },
+  {
+   "book": "vol02",
+   "page": "24",
+   "col": 5,
+   "slot": 10,
+   "expect": "row",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:24:5:9"
+  },
+  {
+   "book": "vol02",
+   "page": "31",
+   "col": 2,
+   "slot": 15,
+   "expect": "reject",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:31:2:14"
+  },
+  {
+   "book": "vol02",
+   "page": "31",
+   "col": 6,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:31:6:9"
+  },
+  {
+   "book": "vol02",
+   "page": "35",
+   "col": 4,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:35:4:9"
+  },
+  {
+   "book": "vol02",
+   "page": "36",
+   "col": 9,
+   "slot": 5,
+   "expect": "reject",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:36:9:4"
+  },
+  {
+   "book": "vol02",
+   "page": "45",
+   "col": 9,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:45:9:8"
+  },
+  {
+   "book": "vol02",
+   "page": "4",
+   "col": 3,
+   "slot": 12,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:4:3:11"
+  },
+  {
+   "book": "vol02",
+   "page": "4",
+   "col": 5,
+   "slot": 21,
+   "expect": "row",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:4:5:20"
+  },
+  {
+   "book": "vol02",
+   "page": "4",
+   "col": 6,
+   "slot": 17,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:4:6:16"
+  },
+  {
+   "book": "vol02",
+   "page": "54",
+   "col": 4,
+   "slot": 8,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:54:4:7"
+  },
+  {
+   "book": "vol02",
+   "page": "56",
+   "col": 7,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:56:7:8"
+  },
+  {
+   "book": "vol02",
+   "page": "62",
+   "col": 1,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:62:1:9"
+  },
+  {
+   "book": "vol02",
+   "page": "63",
+   "col": 9,
+   "slot": 11,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:63:9:10"
+  },
+  {
+   "book": "vol02",
+   "page": "67",
+   "col": 5,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:67:5:8"
+  },
+  {
+   "book": "vol02",
+   "page": "72",
+   "col": 1,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:72:1:8"
+  },
+  {
+   "book": "vol02",
+   "page": "73",
+   "col": 8,
+   "slot": 20,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:73:8:19"
+  },
+  {
+   "book": "vol02",
+   "page": "77",
+   "col": 4,
+   "slot": 10,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:77:4:9"
+  },
+  {
+   "book": "vol02",
+   "page": "81",
+   "col": 6,
+   "slot": 9,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:81:6:8"
+  },
+  {
+   "book": "vol02",
+   "page": "88",
+   "col": 6,
+   "slot": 16,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:88:6:15"
+  },
+  {
+   "book": "vol02",
+   "page": "93",
+   "col": 2,
+   "slot": 7,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:93:2:6"
+  },
+  {
+   "book": "vol02",
+   "page": "95",
+   "col": 8,
+   "slot": 20,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:95:8:19"
+  },
+  {
+   "book": "vol02",
+   "page": "9",
+   "col": 9,
+   "slot": 13,
+   "expect": "tail_a",
+   "label_origin": "model_visual",
+   "visual_check": "consistent",
+   "id_v1": "vol02:9:9:12"
+  }
+ ],
+ "retired": [
+  {
+   "id_v1": "vol01:184:5:7",
+   "book": "vol01",
+   "page": 184,
+   "v1_col": 5,
+   "v1_idx": 7,
+   "expect": "tail_a",
+   "reason": "目视结论 row 与原标签 tail_a 不符/说不清（按规矩踢出，不硬改标签）"
+  },
+  {
+   "id_v1": "vol01:184:9:8",
+   "book": "vol01",
+   "page": 184,
+   "v1_col": 9,
+   "v1_idx": 8,
+   "expect": "row",
+   "reason": "目视结论 reject 与原标签 row 不符/说不清（按规矩踢出，不硬改标签）"
+  },
+  {
+   "id_v1": "vol01:89:7:17",
+   "book": "vol01",
+   "page": 89,
+   "v1_col": 7,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:89:9:17",
+   "book": "vol01",
+   "page": 89,
+   "v1_col": 9,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:1:11",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 1,
+   "v1_idx": 11,
+   "expect": "row",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:1:17",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 1,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:2:16",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 2,
+   "v1_idx": 16,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:5:17",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 5,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:6:17",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 6,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:6:8",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 6,
+   "v1_idx": 8,
+   "expect": "row",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol01:90:7:17",
+   "book": "vol01",
+   "page": 90,
+   "v1_col": 7,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  },
+  {
+   "id_v1": "vol02:100:4:16",
+   "book": "vol02",
+   "page": 100,
+   "v1_col": 4,
+   "v1_idx": 16,
+   "expect": "row",
+   "reason": "目视结论 reject 与原标签 row 不符/说不清（按规矩踢出，不硬改标签）"
+  },
+  {
+   "id_v1": "vol02:159:2:17",
+   "book": "vol02",
+   "page": 159,
+   "v1_col": 2,
+   "v1_idx": 17,
+   "expect": "tail_a",
+   "reason": "用户 2026-08-25 定的排除页（压缩职名页，不判读、不入测试集）"
+  }
+ ]
+}

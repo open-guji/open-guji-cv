@@ -34,6 +34,19 @@ NOT_REGISTRY_SHAPED = {
                       # （--book 必填，没有默认值），不读数据集仓分片；104 卡校准表
                       # 写死在脚本里，见 scripts/eval_frame_residue.py 模块头
     "gate2_columns",  # 同上，靶子是 --book 指定书的 gate_manifest 产物，不是数据集分片
+    "t4_gates",  # T4 变体形闸检查：靶子是 GUJI_WORKSPACE 那本书重建出来的
+                # cache/glyph_bench + cache/oov_bench（真刻例，非数据集仓分片），
+                # 与 beixing_real_proto 同一类「有就报」附加靶
+    "t4_variant",  # T4 158/110 条异体分歧冻结子集：--subset 必填指向
+                   # overview 仓那份 jsonl，且要该书已跑到 cell_shrink 的
+                   # char_patch 缓存，不是数据集仓分片
+    "confusable_recall",  # overview#128 形近对表校准：靶子是写死在脚本里的
+                          # 18 对实测混淆（来源 #86/#120 done 单），且要读
+                          # guji-workspace 里各书的 corpus/glyph_store 重建字表
+                          # 宇宙，不是数据集仓分片，一次性校准工具不是常规回归门
+    "step7_replay",  # Step7 放行判定的人裁事件回放：--book/--products/--events 都必填，
+                     # 靶子是工作区 feedback/events + 某次快照的 seed_admit 产物，不是
+                     # 数据集分片；口径与局限见 doc/step7_replay_eval.md
 }
 
 
