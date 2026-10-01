@@ -78,6 +78,8 @@ def anchors_vol02():
         d = json.loads(ln)
         if d.get("anchor") and d["anchor"].get("ink_bbox"):
             parts = d["key"].split(":")
+            if not all(x.isdigit() for x in parts[1:4]) or len(parts) != 4:
+                continue          # a/b 夹注子格键（如 6b）不参与漂移探针
             a[(parts[0], int(parts[1]), int(parts[2]), int(parts[3]))] = d["anchor"]["ink_bbox"]
     return a
 
@@ -146,7 +148,7 @@ def main():
     # 页级格位稳定性
     g = df[df.anchor_iou.notna()].groupby(["book", "page"]).anchor_iou.apply(lambda s: float((s > 0.3).mean()))
     df["page_stab"] = [g.get((b, p), float("nan")) for b, p in zip(df.book, df.page)]
-    df.to_parquet(outp)
+    df.to_pickle(outp)
     print(json.dumps({"labels_total": len(labels), "conflict_keys": conflict, **stats}, ensure_ascii=False, indent=1, default=int))
     print(df.groupby(["book", "y", "sub"]).size())
     print("page_stab by book (pages with anchors):", g.groupby(level=0).describe().to_string())
