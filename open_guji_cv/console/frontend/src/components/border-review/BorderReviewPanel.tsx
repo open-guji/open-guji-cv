@@ -36,7 +36,8 @@ export function BorderReviewPanel({ book, kind, pages: pagesProp }:
   const [, forceRender] = useState(0)
   const bump = () => forceRender((n) => n + 1)
 
-  const batch = () => batchInput.trim() || `${book}-${kind}-review`
+  // pages 填 `batch:<批次id>`（L3 补标签批）时，批次默认就是那个 id，免得事件落进别的批次、收割找不到
+  const batch = () => batchInput.trim() || (pages.startsWith('batch:') ? pages.slice(6).trim() : `${book}-${kind}-review`)
 
   async function load() {
     setMsg('载入中…')
