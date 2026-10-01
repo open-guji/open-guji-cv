@@ -18,9 +18,7 @@ overview `进度/总览/17-13并入15-字段对照.md`。**不是**再造一张�
 |---|---|---|---|
 | `confirm v=seg_defect` | quality=contaminated | `row_segment` | `seg_noise` |
 | `confirm v=seg_defect` | quality=truncated | `row_segment` | `seg_truncated` |
-| `confirm v=seg_defect` | defect 以 `jiazhu_` 开头 | `row_segment` | `jiazhu_split` |（⚠️ 现在
-  `collate_state.SEG_FLAGS` 只有 `truncated`／`contaminated` 两档，没有 `jiazhu_*`——这条按 13
-  原表先写上，眼下不会触发，等夹注面板真的产出这种 payload 再验证）
+| `confirm v=seg_defect` | `reason=jiazhu_as_main`（定字裁决「小注当正文」，quality 仍是 truncated）<br>或 defect 以 `jiazhu_` 开头 | `row_segment` | `jiazhu_split` |
 | `cutline` | verdict∈(overlap, idk) | `row_segment` | `cut_unresolvable` |
 | `n_body_slots` | 任意（人裁即代表现有 slot 数与人看到的不符） | `row_segment` | `slot_count` |
 
@@ -70,7 +68,9 @@ def classify_return(e: Event) -> tuple[str, str] | None:
     p = e.payload or {}
     if e.kind == "confirm" and p.get("v") == "seg_defect":
         defect = p.get("defect") or ""
-        if defect.startswith("jiazhu_"):
+        # 「小注当正文」（overview#265）：前端发 quality=truncated + reason=jiazhu_as_main，
+        # 打回原因单列 jiazhu_split，让 Step3 能把「夹注切成正文」从普通截断里筛出来
+        if defect.startswith("jiazhu_") or p.get("reason") == "jiazhu_as_main":
             return REASON_TO_STEP["jiazhu_split"], "jiazhu_split"
         q = p.get("quality")
         if q == "contaminated":
