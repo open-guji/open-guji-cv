@@ -55,6 +55,19 @@ def _normalize_eol(raw: bytes) -> bytes:
     return raw.replace(b"\r\n", b"\n")
 
 
+def rare_candidates_consumed(pipeline_steps: list[str], params_for: Callable, book) -> bool:
+    """这条 pipeline 里有没有哪一步这次**真的**在读 `rare_candidates`（硬依赖，或开着的可选依赖）。"""
+    for sid in pipeline_steps:
+        if sid == "rare_candidates" or sid not in STEPS:
+            continue
+        spec = STEPS[sid].spec
+        if "rare_candidates" in spec.consumes:
+            return True
+        if "rare_candidates" in live_optional_consumes(spec, params_for(sid), book):
+            return True
+    return False
+
+
 def code_hash(step: Step) -> str:
     mods = [type(step).__module__, *step.spec.code_deps]
     h = hashlib.sha256()
@@ -197,13 +210,23 @@ class Engine:
 
     # ── 按 book 配置关掉的可选步骤 ───────────────────────────────────────
     def _enabled(self, steps: list[str]) -> list[str]:
-        """过滤掉本书没开启的可选步骤。目前唯一的可选步骤是 `ocr_candidates`
-        （Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）——
-        只跳过执行，不改 pipeline 拓扑，`context_decide` 本来就处理得了
-        「这一位没有 OCR 候选」（见 context_decide.py run_page）。"""
-        if self.book.ocr_candidates:
-            return steps
-        return [s for s in steps if s != "ocr_candidates"]
+        """过滤掉本书没开启的可选步骤：
+
+        - `ocr_candidates`（Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）；
+        - `rare_candidates`（Step5-b 生僻字候选）**没有任何下游真正在读它时**（2026-10-01）：
+          读它的只有 `seed_admit.rare_agree` 与 `context_decide.rare_topk`，缺省都关；两个都关的
+          书（vol02/vol03）跑它是白花时间——vol03 104 页 ≈12 分钟，而且指纹里带着字形库内容
+          （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
+          `/api/rare` 现算，不读这一步的产物。
+
+        只跳过执行，不改 pipeline 拓扑，下游本来就处理得了「这一路证据没有」。"""
+        out = list(steps)
+        if not self.book.ocr_candidates:
+            out = [s for s in out if s != "ocr_candidates"]
+        if "rare_candidates" in out and not rare_candidates_consumed(
+                self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
+            out = [s for s in out if s != "rare_candidates"]
+        return out
 
     def _default_steps(self, steps: list[str] | None) -> tuple[list[str], bool]:
         """`steps` 为 None（调用方走默认整条 pipeline）时应用可选步骤开关；
