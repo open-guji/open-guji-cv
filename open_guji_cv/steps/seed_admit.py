@@ -273,6 +273,15 @@ class SeedAdmitParams(BaseModel):
     库判 same 命中的那一例（`matched_id`）是近似例（`via="matched_id"`）；或走候选首位、而这个字在库里
     的刻例**全部**是近似例（`via="char_only"`）。人裁位照旧一票定案，不经这里。
     """
+    shadow_veto: bool = False
+    """影子放行闸（overview#305 第一阶段，缺省关）：对**现行规则已放行**的格再算一次影子预测，
+    影子很有把握选了**不同的字**（`shadow_conf`）就降回待审、evidence 记 `shadow_veto`、doubts 加
+    `shadow_veto`。**只降级不升级**；人裁通道不动；信号缺失／本格自身在字形库里／异常 → 弃权。
+    关着时下面四个字段都不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+    shadow_model: str = ""              # 模型文件；空 = models/shadow_admit/shadow_gate_v1.joblib。路径不进指纹（path_params）
+    shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
+    shadow_low_conf: float = 0.0        # >0：影子最大把握度低于它也降级（缺省关）
+    shadow_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
     approx_fingerprint: str = ""
     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
 
@@ -286,6 +295,9 @@ class SeedAdmitParams(BaseModel):
         d = handler(self)
         if isinstance(d, dict) and not self.rare_agree:
             d.pop("rare_agree", None)
+        if isinstance(d, dict) and not self.shadow_veto:
+            for k in ("shadow_veto", "shadow_model", "shadow_conf", "shadow_low_conf", "shadow_model_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.approx_gate:
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
@@ -330,6 +342,10 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+        if self.shadow_veto and not self.shadow_model_fingerprint:
+            from ..shadow.model import DEFAULT_MODEL, file_fingerprint
+            object.__setattr__(self, "shadow_model_fingerprint",
+                               file_fingerprint(self.shadow_model or DEFAULT_MODEL) or "missing")
         if not self.approx_fingerprint:
             object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
         if not self.iron_config_fingerprint:
@@ -366,7 +382,7 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -856,8 +872,63 @@ class SeedAdmitStep(Step):
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
         n_review += d_review
+        if p.shadow_veto:
+            d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
+            n_auto -= d_veto
+            n_review += d_veto
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+_SHADOW_GATES: dict = {}
+
+
+def _shadow_gate(p: "SeedAdmitParams"):
+    """进程内缓存：同一 (模型指纹, db, 门槛) 只建一次（字形库人裁表要扫 sqlite）。"""
+    key = (p.shadow_model_fingerprint, p.db_path, p.variants, p.shadow_conf, p.shadow_low_conf)
+    g = _SHADOW_GATES.get(key)
+    if g is None:
+        from ..shadow.gate import ShadowGate
+        from ..shadow.model import load_model
+        from ..shadow.signals import load_context
+        g = ShadowGate(load_model(p.shadow_model or None), load_context(p.db_path, p.variants or None),
+                       p.shadow_conf, p.shadow_low_conf)
+        _SHADOW_GATES.clear()
+        _SHADOW_GATES[key] = g
+    return g
+
+
+def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
+    """影子放行闸（只降级）：把现行规则已放行、影子有把握说不对的格降回待审。→ 降级格数。
+
+    放在所有通道与 `_resolve_ji_yi_si` 之后：只会把 admit 从 True 改 False，不改字、不升级。
+    `provenance=="human"`（人裁）一票定案，不经这里。模型文件缺／口径不符 → 抛错（开了开关却没有模型
+    是配置错误，不静默当没开）；单格信号异常 → 该格弃权。"""
+    from ..shadow.signals import CellEvidence
+    gate = _shadow_gate(p)
+    rare = _opt(ctx, "rare_candidates", page)
+    rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if not rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            m = mmap.get(rec.id)
+            if m is None:
+                continue
+            rr = rmap.get(rec.id)
+            ev = CellEvidence(
+                id=rec.id, lib=[(c, v) for c, v in (m.candidates or [])],
+                rare=[(x.char, x.score) for x in ((rr.candidates if rr else None) or [])],
+                ref=(amap.get(rec.id) or (None, None))[0], cur=rec.char)
+            v = gate.judge(ev)
+            if not v.veto:
+                continue
+            rec.admit, rec.channel, rec.provenance = False, None, ""
+            rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
+            rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
+            n += 1
+    return n
 
 
 def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
