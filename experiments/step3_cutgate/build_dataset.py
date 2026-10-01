@@ -73,6 +73,7 @@ def seam_mean(c, y_line: float) -> float:
 
 
 def build(lab: dict[str, dict], st: ProductStore):
+    geoms: dict = {}
     rows, drops = [], collections.Counter()
     cache: dict = {}
     for r in lab.values():
@@ -92,10 +93,22 @@ def build(lab: dict[str, dict], st: ProductStore):
         if cc is None:
             drops["no_product"] += 1
             continue
-        sh = gold_anchor_shift(cc, ex)
-        if sh is None or abs(sh) > ANCHOR_TOL:
-            drops["anchor_drift"] += 1
-            continue
+        if r["src"] == "gold_page":
+            # page 档：金标锚在原图页面坐标上，按当前列窗几何换算（M1 口径）；换算不了的（mode=drift）丢
+            from open_guji_cv.eval.colgeom import current_geom, gold_rows_now
+            gk = (book, pg, col)
+            if gk not in geoms:
+                geoms[gk] = current_geom(st, *gk)
+            mode, y_now, _ = gold_rows_now(ex, geoms[gk])
+            if mode == "drift" or y_now is None:
+                drops["page_geom_drift"] += 1
+                continue
+            sh = float(y_now) - float(ex["y"])
+        else:
+            sh = gold_anchor_shift(cc, ex)       # 老条目：按原格线锚点复核（ANCHOR_TOL=3px）
+            if sh is None or abs(sh) > ANCHOR_TOL:
+                drops["anchor_drift"] += 1
+                continue
         sa = ex.get("slot_above")
         cp = next((c for c in cc.cut_candidates if c.slot_above == sa), None)
         if cp is None or cp.chosen is None or not cp.candidates:
