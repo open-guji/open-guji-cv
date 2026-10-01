@@ -59,6 +59,12 @@ onnx = [
 torch = [
     "torch>=2.0",
 ]
+# 影子放行闸（steps/seed_admit 的 shadow_veto，缺省关）与其训练/评估脚本要 scikit-learn；
+# 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/shadow_gate.md）。
+shadow = [
+    "scikit-learn>=1.5",
+    "pandas>=2.0",
+]
 # 开发依赖：pip install open-guji-cv[dev]
 # 本地控制台：pip install open-guji-cv[console]
 console = [
