@@ -15,8 +15,9 @@ export const CLASS_HELP: Record<string, string> = {
   lib_miss: '库里没有：多半是生僻字，当前卡自动「查候选」（字体模板 + CNN 10 个）。'
     + '<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>T/C</b> 切分缺陷 · <b>Z</b> 小注当正文 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损',
   // 对齐改字层按细项分（overview#265）：键 = `replace_align:<细项>`，见 `classHelpKey`
-  'replace_align:grid': '对齐改字层 · 网格：每张缺省<b>采信整理本</b>（下面那个字），只点掉异常的——'
-    + '<b>点一下</b> 字形不完整 · <b>再点</b> 跳过 · <b>再点</b> 回到采信；「提交这一屏」一次写完整屏。',
+  'replace_align:grid': '对齐改字层 · 网格：每张缺省<b>采信整理本</b>（下面那个字，<b>不点 = 字对、其余也对</b>）。'
+    + '有疑问（有噪声、整理本字不对、字形不完整…）的<b>点一下</b>标「要细审」，再点取消；'
+    + '「提交这一屏」后，标了的转到「逐张」去选具体原因，其余整屏采信。',
   'replace_align:tail': '对齐改字层 · 列尾（第 20 格起，易混框线）：常见<b>下版框线混进字块</b>（<b>C</b> 有噪声）'
     + '或<b>末字被切掉</b>（<b>T</b> 字形不完整）。<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>Z</b> 小注当正文 · '
     + '<b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡',
@@ -150,13 +151,14 @@ export function ctxChar(s: { char?: string | null; text?: string | null }, keben
 // ── 对齐改字层 · 网格（overview#265）───────────────────────────────────
 //
 // 用户审 vol03：「对齐改字层」确认了字的 197 张里 195 张就等于整理本对位字。所以这一类的非列尾
-// 部分一屏摆几十张缩略图、缺省「采信整理本」，人只点掉异常的。点一下 → 字形不完整，再点 → 跳过，
-// 再点回到采信。提交一次写完整屏，每格的事件与逐张卡上做同一件事**逐字段相同**：
-// 采信 = 普通卡按 1（候选第一位就是整理本字）→ `pickVerdict(整理本字)`；
-// 字形不完整 = 按 T（`{shape:'', done:'truncated'}`）；跳过 = 按 S。都经 `verdictRow` 出行。
+// 部分一屏摆几十张缩略图、缺省「采信整理本」（不点 = 字对、其余也对）。有疑问的点一下 → 「要细审」
+// （2026-09-30 用户定）：**不在网格里分原因、不写裁决**，只记一条 `needs_review`，这格转到「逐张」
+// 去细审（有噪声／字不对／小注当正文…在那里选），再点一下取消。提交一次写完整屏：
+// 采信的每格事件与逐张卡上按 1 **逐字段相同**（候选第一位就是整理本字 → `pickVerdict(整理本字)`，
+// 经 `verdictRow` 出行）；要细审的由 `gridFlagRows` 出 `needs_review` 行（另一个 kind，分开 POST）。
 
-export type GridState = 'accept' | 'truncated' | 'skip'
-export const GRID_CYCLE: ReadonlyArray<GridState> = ['accept', 'truncated', 'skip']
+export type GridState = 'accept' | 'review'
+export const GRID_CYCLE: ReadonlyArray<GridState> = ['accept', 'review']
 
 export function nextGridState(s: GridState | undefined): GridState {
   const i = GRID_CYCLE.indexOf(s ?? 'accept')
@@ -166,10 +168,7 @@ export function nextGridState(s: GridState | undefined): GridState {
 /** 网格一格的裁决（与逐张卡同一口径）。`ref` = 整理本字；采信却没有整理本字 → null（不提交）。 */
 export function gridVerdict(state: GridState, ref: string | null | undefined, seenAt: number | undefined,
                             now: number): VerdictLike | null {
-  if (state === 'skip') return { shape: '', done: 'skip', ts: now }
-  if (state === 'truncated') {
-    return { shape: '', done: 'truncated', ts: now, dwell: seenAt ? now - seenAt : undefined }
-  }
+  if (state === 'review') return null          // 要细审的不写裁决，见 `gridFlagRows`
   return ref ? pickVerdict(ref, undefined, seenAt, now) : null
 }
 
@@ -195,6 +194,20 @@ export function gridRows<C extends { id: string; occluded?: unknown; ref?: { cha
     if (row) rows.push(shadowOn === undefined ? row : { ...row, shadow_preselect: shadowOn && !!c.shadow?.pre })
   }
   return rows
+}
+
+/**
+ * 整屏里点了「要细审」的格 → `needs_review` 事件行（kind=needs_review，与 `gridRows` 的 confirm 行分开 POST）。
+ * 同样记 `shadow_preselect`（预勾的被人点成要细审，算「被改掉」）。
+ */
+export function gridFlagRows<C extends { id: string; shadow?: { pre?: boolean } | null }>(
+  cards: ReadonlyArray<C>, states: Record<string, GridState | undefined>, now: number, shadowOn?: boolean,
+): Array<Record<string, unknown>> {
+  return cards.filter((c) => states[c.id] === 'review').map((c) => {
+    const row: Record<string, unknown> = { id: c.id, via: 'grid', client_ts: now }
+    if (shadowOn !== undefined) row.shadow_preselect = shadowOn && !!c.shadow?.pre
+    return row
+  })
 }
 
 /** 网格里影子预勾的卡数（`card.shadow.pre`）。 */

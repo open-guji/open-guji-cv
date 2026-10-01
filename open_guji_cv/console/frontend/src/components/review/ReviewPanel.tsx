@@ -7,7 +7,7 @@ import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows } from './doubt'
-import { CLASS_HELP, classHelpKey, DEFAULT_HELP, countShadowPre, dropOffScreen, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
+import { CLASS_HELP, classHelpKey, DEFAULT_HELP, countShadowPre, dropOffScreen, gridFlagRows, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
          keepApprox, nextGridState, pickVerdict, screenRows } from './reviewClass'
 import type { GridState } from './reviewClass'
 import { ReplaceAlignGrid } from './ReplaceAlignGrid'
@@ -408,23 +408,35 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     setGridStates((prev) => ({ ...prev, [id]: nextGridState(prev[id]) }))
   }
 
-  // 网格整屏提交（overview#265）：一格一行，采信 = 普通卡按 1、字形不完整 = 按 T、跳过 = 按 S，
-  // 行由 `gridRows`→`verdictRow` 出，与逐张裁决逐字段相同；走同一个 `POST /api/events`。
+  // 网格整屏提交（overview#265）：没点的 = 采信，一格一行（普通卡按 1，行由 `gridRows`→`verdictRow` 出，
+  // 与逐张裁决逐字段相同）；点了「要细审」的写 `needs_review`（`gridFlagRows`，不是裁决，格转到逐张）。
+  // 两种 kind 分两次 `POST /api/events`。
   async function submitGrid() {
     if (!gridCards.length || groupBusy) { if (!gridCards.length) setMsg('这一屏没有卡'); return }
-    const rows = gridRows(gridCards, gridStates, gridSeen.current, Date.now(), (c, sh) => aiAccepted(c, sh),
+    const now = Date.now()
+    const rows = gridRows(gridCards, gridStates, gridSeen.current, now, (c, sh) => aiAccepted(c, sh),
                           shadowAvail && useShadow)
-    if (!rows.length) { setMsg('这一屏没有可提交的'); return }
+    const flags = gridFlagRows(gridCards, gridStates, now, shadowAvail && useShadow)
+    if (!rows.length && !flags.length) { setMsg('这一屏没有可提交的'); return }
     setGroupBusy(true)
     setMsg('提交中…')
     const b = batch()
     try {
-      const r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
-      const sent = new Set(rows.map((x) => x.id as string))
+      let appended = 0
+      let r: Awaited<ReturnType<typeof postEvents>> | undefined
+      if (rows.length) {
+        r = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'confirm', events: rows })
+        appended += r.appended ?? rows.length
+      }
+      if (flags.length) {
+        const f = await postEvents({ batch: b, step: 'seed_admit', unit: 'cell', kind: 'needs_review',
+                                     events: flags, consume: false })
+        appended += f.appended ?? flags.length
+      }
+      const sent = new Set([...rows, ...flags].map((x) => x.id as string))
       setGridStates((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !sent.has(id))))
-      const n = (v: string) => rows.filter((x) => x.v === v).length
-      const done = `网格：已写入 ${r.appended ?? rows.length} 条事件 → 批次 ${b}` + consumedMsg(r)
-        + `（采信 ${n('confirm')} · 字形不完整 ${n('seg_defect')} · 跳过 ${n('skip')}）`
+      const done = `网格：已写入 ${appended} 条事件 → 批次 ${b}` + (r ? consumedMsg(r) : '')
+        + `（采信 ${rows.length} · 要细审 ${flags.length}，已转到「逐张」）`
       onSubmitted()
       const d = await load(true, 'replace_align', 'grid')
       setMsg(`${done}；已载入下一屏 ${d.cards.length} 张，网格还剩 ${d.class_sub_counts?.replace_align?.grid ?? 0}`)
@@ -603,8 +615,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               </label>
               <button className="rv-occl-all" data-testid="ra-submit" onClick={submitGrid}
                       disabled={groupBusy || !gridCards.length}
-                      title="一次写完整屏：采信的写 confirm（字 = 整理本字），点掉的按字形不完整／跳过">
-                提交这一屏 {gridCards.length} 张（采信 {gridCards.filter((c) => (gridStates[c.id] ?? 'accept') === 'accept').length}）
+                      title="一次写完整屏：没点的采信（写 confirm，字 = 整理本字）；点了「要细审」的转到逐张，不写裁决">
+                提交这一屏 {gridCards.length} 张（采信 {gridCards.filter((c) => (gridStates[c.id] ?? 'accept') === 'accept').length} · 要细审 {gridCards.filter((c) => gridStates[c.id] === 'review').length}）
               </button>
             </>
           )}

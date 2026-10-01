@@ -5,7 +5,8 @@
 
 1. 细项划分（`replace_align_sub`）：列尾（slot≥20）→ tail；形近疑因／整理本空／惯刻形≠整理本字 → manual；
    其余 → grid。`cards(cls_sub=…)` 只出这个细项，细项计数不受 `limit` 截断；不传 `cls` 时没有新字段。
-2. 网格整屏提交的事件行与逐张裁决（按 1 采信整理本 / T / S）**逐字段相同**（node 跑 reviewClass.ts）。
+2. 网格整屏提交：没点的 = 采信，事件行与逐张裁决（按 1 采信整理本）**逐字段相同**；点了「要细审」的
+   不写裁决、只写 `needs_review`，该格转到逐张（node 跑 reviewClass.ts）。
 3. 「小注当正文」写 `v=seg_defect` + `reason=jiazhu_as_main`；下游 `human_chars`、`decided_cells`、
    打回路由、金标、`seed_admit` 对它的处理与不带 `reason` 的同一条 seg_defect 完全一样。
 """
@@ -60,6 +61,27 @@ def test_defect_only_cells_latest_wins(tmp_path):
                 _ev("vol01:4:1:6", {"v": "seg_defect", "quality": "truncated"}, 4),
                 _ev("vol01:4:1:6", {"v": "confirm", "shape": "地"}, 5)])       # 后来定了字
     assert defect_only_cells("vol01", log) == {"vol01:4:1:3", "vol01:4:1:5"}
+
+
+def test_flagged_cells_latest_wins_and_goes_manual(tmp_path):
+    """网格里点「要细审」→ 不算已裁（不在 decided_cells），归逐张；后来有了定字裁决就作废。"""
+    from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
+    from open_guji_cv.review.cards import replace_align_sub
+    from open_guji_cv.review.verdict_view import decided_cells, flagged_cells
+    log = EventLog(tmp_path)
+
+    def flag(key, seq):
+        _, pg, col, slot = key.split(":")
+        return make_event("b", seq, "needs_review",
+                          EventTarget(step="seed_admit", unit="cell", key=key, book="vol01",
+                                      page=int(pg), col=int(col), slot=int(slot)),
+                          {"via": "grid"}, source_format="server")
+    log.append([flag("vol01:4:1:3", 1), flag("vol01:4:1:4", 2),
+                _ev("vol01:4:1:4", {"v": "confirm", "shape": "地"}, 3)])       # 后来定了字
+    assert flagged_cells("vol01", log) == {"vol01:4:1:3"}
+    assert decided_cells("vol01", log) == {"vol01:4:1:4"}                     # 3 号仍待审
+    ref = {"char": "天", "form": None}
+    assert replace_align_sub(5, RA, ref, "vol01:4:1:3" in flagged_cells("vol01", log)) == "manual"
 
 
 @pytest.fixture
@@ -191,28 +213,25 @@ def test_ts_grid_rows_equal_per_card_rows(tmp_path):
 const seen = 400, now = 1000
 const cards = [{ id: 'a', ref: { char: '天' } }, { id: 'b', ref: { char: '地' } },
                { id: 'c', ref: { char: '玄' } }, { id: 'd', ref: null }]
-const states = { b: 'truncated', c: 'skip' }
+const states = { b: 'review', c: 'review' }
 const grid = R.gridRows(cards, states, seen, now)
-// 逐张卡：a 按 1（候选第一位 = 整理本字）→ setVerdict(i, ch) → pickVerdict；b 按 T；c 按 S（ReviewPanel.setVerdict）
-const per = [
-  R.verdictRow('a', R.pickVerdict('天', undefined, seen, now)),
-  R.verdictRow('b', { shape: '', done: 'truncated', ts: now, dwell: now - seen }),
-  R.verdictRow('c', { shape: '', done: 'skip', ts: now, dwell: now - seen }),
-]
+const flags = R.gridFlagRows(cards, states, now)
+// 逐张卡：a 按 1（候选第一位 = 整理本字）→ setVerdict(i, ch) → pickVerdict（ReviewPanel.setVerdict）
+const per = [R.verdictRow('a', R.pickVerdict('天', undefined, seen, now))]
 const withAi = R.gridRows([cards[0]], {}, seen, now, () => true)
-const cycle = [R.nextGridState(undefined), R.nextGridState('truncated'), R.nextGridState('skip')]
-console.log(JSON.stringify({ grid, per, withAi, cycle,
+const cycle = [R.nextGridState(undefined), R.nextGridState('review')]
+console.log(JSON.stringify({ grid, per, flags, withAi, cycle,
   help: [R.classHelpKey('replace_align', 'grid'), R.classHelpKey('occluded', 'grid')],
   hasGridHelp: !!R.CLASS_HELP['replace_align:grid'], zInHelp: R.DEFAULT_HELP.includes('小注当正文') }))
 """)
-    assert out["grid"] == out["per"]                       # 逐字段相同；d 没有整理本字 → 不提交
+    # 逐字段相同；b/c 点了要细审 → 不写裁决；d 没有整理本字 → 不提交
+    assert out["grid"] == out["per"]
     assert out["grid"][0] == {"id": "a", "v": "confirm", "shape": "天", "no_glyph_lib": False,
                               "client_ts": 1000, "dwell_ms": 600}
-    assert out["grid"][1] == {"id": "b", "v": "seg_defect", "quality": "truncated", "shape": "",
-                              "client_ts": 1000, "dwell_ms": 600}
-    assert out["grid"][2] == {"id": "c", "v": "skip"}
+    assert out["flags"] == [{"id": "b", "via": "grid", "client_ts": 1000},
+                            {"id": "c", "via": "grid", "client_ts": 1000}]
     assert out["withAi"][0]["ai_accepted"] is True
-    assert out["cycle"] == ["truncated", "skip", "accept"]
+    assert out["cycle"] == ["review", "accept"]
     assert out["help"] == ["replace_align:grid", "occluded"] and out["hasGridHelp"] and out["zInHelp"]
 
 
@@ -270,7 +289,9 @@ def test_downstream_ignores_reason(tmp_path):
     a, b = got[False], got[True]
     assert a["human"] == b["human"] == {"vol01:4:1:20": "天"}         # 带字的出字，不带字的仍是缺陷
     assert a["decided"] == b["decided"] == {"vol01:4:1:20"}
-    assert a["returns"] == b["returns"] == [("row_segment", "seg_truncated")] * 2
+    # 打回：同退 row_segment，只是带 reason 的原因单列 jiazhu_split（见 returns.classify_return）
+    assert a["returns"] == [("row_segment", "seg_truncated")] * 2
+    assert b["returns"] == [("row_segment", "jiazhu_split")] * 2
     assert a["gold"] == b["gold"]
     # 读回：只在前端档位上认出「小注当正文」，字照旧
     assert a["rv"]["vol01:4:1:20"] == {"shape": "天", "done": "truncated"}

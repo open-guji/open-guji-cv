@@ -32,11 +32,8 @@
 /* 对齐改字层 · 网格（overview#265）：缺省采信整理本，点一下字形不完整、再点跳过 */
 .ra-grid { grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr)); }
 .ra-ref { text-align: center; font-family: "Noto Serif TC", "Source Han Serif TC", serif; font-size: 1.1rem; line-height: 1.3; }
-.ra-tile.ra-truncated { border-color: var(--zhu); border-style: dashed; }
-.ra-tile.ra-truncated .grp-mark, .ra-tile.ra-truncated .ra-ref { color: var(--zhu); }
-.ra-tile.ra-skip { border-color: var(--ochre); opacity: .5; }
-.ra-tile.ra-skip .grp-mark { color: var(--ochre); }
-.ra-tile.ra-skip .ra-ref { text-decoration: line-through; }
+.ra-tile.ra-review { border-color: var(--zhu); border-style: dashed; }
+.ra-tile.ra-review .grp-mark, .ra-tile.ra-review .ra-ref { color: var(--zhu); }
 /* 影子预勾（overview#269）：把握≥0.9 且影子字 == 整理本字，排最前；角标显示把握度 */
 .ra-shadow { display: block; text-align: center; font-size: .68rem; color: var(--muted, #888); line-height: 1.2; }
 .ra-tile.ra-pre.ra-accept { border-color: var(--celadon, #4a8f6a); box-shadow: 0 0 0 1px var(--celadon, #4a8f6a) inset; }

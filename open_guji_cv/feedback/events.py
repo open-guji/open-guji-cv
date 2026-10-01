@@ -80,6 +80,10 @@ Kind = Literal[
                       #   fixed/wontfix, note）。与触发打回的原事件（seg_defect/cutline/
                       #   n_body_slots）按 target.key 同键、取最新一条，见 bindings.py。
     # ── 新候选刻例待纳入（2026-09-28，overview#176）。见 feedback/candidates.py。
+    # ── 对齐改字层网格「点一下 = 要细审」（2026-09-30）。见 review/verdict_view.flagged_cells。
+    "needs_review",   # 网格里人点了一下：这格有疑问（噪声／整理本字不对／…），**不是裁决**——不进
+                      #   DECIDED_KINDS、不配消费者，格仍在待审；只让它从网格挪到「逐张」细审
+                      #   （payload: via, client_ts）。后来有了定字裁决即作废（取最新）。
     "admit_candidate",# 还没进库的候选格收不收（payload: v∈admit/reject/unclear, char,
                       #   shape, list, evidence）。**路由表不配消费者**：控制台只写事件，
                       #   进库由 H 道重放完成（人裁状态单写者）。

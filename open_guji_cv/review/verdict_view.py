@@ -82,6 +82,29 @@ def defect_only_cells(book: str, log: EventLog | None = None) -> set[str]:
     return {k for k, v in last.items() if v}
 
 
+def flagged_cells(book: str, log: EventLog | None = None) -> set[str]:
+    """最新一条相关事件是 `needs_review`（网格里人点了「要细审」）的字位。
+
+    「对齐改字层」网格缺省采信整理本，点一下只表示「这格有疑问」，不写裁决（噪声／整理本字不对
+    等原因留给逐张卡选）。格仍在待审，只是不该再回网格被默认采信，所以网格把它们让给逐张。
+    后来写了任何定字裁决（`DECIDED_KINDS`）就不再算——取最新一条，同 `defect_only_cells`。
+    """
+    last: dict[str, bool] = {}
+    pre = f"{book}:"
+    try:
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
+    except FileNotFoundError:
+        return set()
+    for e in evs:
+        if e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        if e.kind == "needs_review":
+            last[e.target.key] = True
+        elif e.kind in DECIDED_KINDS:
+            last[e.target.key] = False
+    return {k for k, v in last.items() if v}
+
+
 def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
 
