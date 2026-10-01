@@ -99,7 +99,11 @@ def boot_diff(score, dis, y, pages, n_cur, miss_cur, nb=400, seed=1):
     return d.mean(), np.percentile(d, 2.5), np.percentile(d, 97.5)
 
 
-def report(df, label, tag, repeats):
+def report(df, label, tag, repeats, subset=None):
+    """OOF 分数在 df 全体上做（按页分组折），指标只在 subset（布尔 mask）上算——page 档不再单独 CV。"""
+    df = df.reset_index(drop=True)
+    full_scores = None
+    sub_idx = np.where(subset)[0] if subset is not None else np.arange(len(df))
     y = df[label].values
     N, P = len(df), int(y.sum())
     pages = (df.book + ":" + df.page.astype(str)).values
@@ -123,6 +127,16 @@ def report(df, label, tag, repeats):
     for name, (num, cat, m) in cfgs.items():
         sc = oof_scores(df, num, cat, m, label, repeats)
         scores[name] = sc
+    if subset is not None:
+        df = df.iloc[sub_idx].reset_index(drop=True)
+        y = df[label].values
+        scores = {k: v[sub_idx] for k, v in scores.items()}
+        N, P = len(df), int(y.sum())
+        pages = (df.book + ":" + df.page.astype(str)).values
+        send = df.send_now.values
+        n_send, miss = int(send.sum()), int(((y == 1) & (send == 0)).sum())
+        s_dis = df.dis.values.astype(float)
+        print(f"  [子集 n={N} 阳性={P}] 现行闸 送审 {n_send} 漏放 {miss}")
     print(f"{'模型':<22}{'AUC':>7}{'AP':>7} | 同送审量{n_send}条：漏放(现行{miss}) Δ[95%CI] | 同漏放≤{miss}：需送审(现行{n_send})")
     for name, sc in scores.items():
         m_same = miss_at_volume(sc, y, n_send)
@@ -169,9 +183,9 @@ def probe_experiment(df, label, repeats):
     nP = int(pr.sum())
     print(f"\n#### 探针门槛（PROBE_DEV）：现行 探 {nP}/{len(df)}({nP/len(df):.1%})；覆盖 dis≥60 的 {int(((tgt==1)&(pr==1)).sum())}/{int(tgt.sum())}；"
           f"覆盖真错({label}) {int(((y==1)&(pr==1)).sum())}/{int(y.sum())}")
-    num = NUM_CAND + NUM_H + NUM_CTX
+    num = [c for c in NUM_CAND if c != "n_total"] + NUM_H + NUM_CTX     # n_total 含扩池结果（dis≥60 才扩），泄漏目标
     for name, lab in (("目标=探后会送审(dis≥60)", "_tgt"), (f"目标=真错({label})", label)):
-        sc = oof_scores(df, num, CAT, "hgb", lab, repeats)
+        sc = oof_scores(df, num, [c for c in CAT if c != "chosen_by"], "hgb", lab, repeats)
         yy = df[lab].values
         order = np.argsort(-sc)
         sent = np.zeros(len(df), bool); sent[order[:nP]] = True
@@ -179,7 +193,7 @@ def probe_experiment(df, label, repeats):
               f"覆盖真错 {int((sent&(y==1)).sum())}/{int(y.sum())}；"
               f"AUC({name.split('=')[0]}) {roc_auc_score(yy, sc):.3f}")
     # 现行 vs 模型在 dis≥60 覆盖上，各探量比例曲线
-    sc = oof_scores(df, num, CAT, "hgb", "_tgt", repeats)
+    sc = oof_scores(df, num, [c for c in CAT if c != "chosen_by"], "hgb", "_tgt", repeats)
     print("  探量比例 → 覆盖 dis≥60 的比例（HGB / 现行点）")
     for f in (0.1, 0.2, 0.3, 0.4, 0.5, 0.7):
         k = int(f * len(df)); o = np.argsort(-sc)[:k]
@@ -194,12 +208,15 @@ def main():
     a = ap.parse_args()
     df = pd.read_csv(a.table)
     print("表:", len(df), df.src.value_counts().to_dict())
-    for label in ("lab_verdict", "lab_cur"):
-        report(df, label, "全部", a.repeats)
-        sub = df[df.src == "gold_page"]
-        if len(sub) > 30 and sub[label].sum() > 3:
-            report(sub.reset_index(drop=True), label, "仅 page 档可信(OOF 用全体训练除外：此处仅子集内CV)", a.repeats)
+    df["lab_cur_noov"] = df.lab_cur
+    noov = df[df.verdict != "overlap"].reset_index(drop=True)
+    print("overlap（物理重叠，切哪都伤字）行数:", int((df.verdict == "overlap").sum()), "→ noov 变体剔除")
+    for label, d0 in (("lab_verdict", df), ("lab_cur", df), ("lab_cur_noov", noov)):
+        report(d0, label, "全部", a.repeats)
+        report(d0, label, "仅 page 档（可信）", a.repeats, subset=(d0.src == "gold_page").values)
     ablation(df, "lab_verdict", a.repeats)
+    ablation(noov, "lab_cur_noov", a.repeats)
+    probe_experiment(noov, "lab_cur_noov", a.repeats)
     probe_experiment(df, "lab_verdict", a.repeats)
 
 
