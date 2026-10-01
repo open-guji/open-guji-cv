@@ -262,6 +262,15 @@ def outer_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:
     return out
 
 
+def batch_cards(batch_id: str) -> list[dict]:
+    """`pages=batch:<批次id>`：读 `guji label-batch make` 冻结的卡片（抽样已定，不现算）。"""
+    from .label_batches import read_cards
+    try:
+        return read_cards(batch_id)
+    except FileNotFoundError as e:
+        raise ProductMissing(str(e)) from e
+
+
 def colborder_cards(store: ProductStore, book: str, pages: list[int]) -> list[dict]:
     """单列矫正·上下版框核校卡：一列出两张（上端/下端），只记类别不记坐标。"""
     out = []
@@ -409,13 +418,17 @@ def render_outer_img(store: ProductStore, book: str, page: int, side: str,
     return cv2.resize(strip, (strip_w * zoom, strip.shape[0] * zoom), interpolation=cv2.INTER_NEAREST)
 
 
-def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: str
-                         ) -> tuple[np.ndarray, list[float]]:
-    """返回 (裁剪灰度图, 沿水平方向投影 0~1 列表)。顺序固化：定带 → 抹侧 → 只在带内算投影。"""
+def render_colborder_img(ctx: RunContext, book: str, page: int, col: int, end: str,
+                         src: str = "image") -> tuple[np.ndarray, list[float]]:
+    """返回 (裁剪灰度图, 沿水平方向投影 0~1 列表)。顺序固化：定带 → 抹侧 → 只在带内算投影。
+
+    `src`：`image`（缺省，**清理后**列图 `column_image`）| `raw`（**削版框之前**的 `column_raw`，
+    L3 列端分档批用——要人判「削前这一端是什么形态」，看削后的图等于看答案）。
+    """
     from ..core.spec import column_key
 
     try:
-        path = ctx.materialize("column_image", column_key(page, col))
+        path = ctx.materialize("column_raw" if src == "raw" else "column_image", column_key(page, col))
     except Exception as e:   # noqa: BLE001
         raise ImageMissing(f"列图算不出来: {e}") from e
     img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
