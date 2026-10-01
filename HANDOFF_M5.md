@@ -104,7 +104,7 @@ cross-seed 把 世 翻成 但（cov 差 0.027）。加闸后两例都弃权，�
 它们不降，但也不会升。
 
 单测：`tests/test_near_shape.py`（8 条，合成字形：按头部决胜、差异区域只在头部、同形两组弃权、样本不足弃权、
-离群弃权、触发规则、关闭不变、翻盘闸、指纹和产物不变）+ `tests/test_glyph_match_step.py` 全过。全量 pytest 结果见末尾。
+离群弃权、触发规则、关闭不变、翻盘闸、指纹和产物不变）+ `tests/test_glyph_match_step.py` 全过。全量 pytest：2533 条，8 跳过，5 败——5 条全是 s2t 测试，原因是云端 venv 没装 `opencc-python-reimplemented`（CLAUDE.md 的安装命令里有、`.[console,torch,dev,shadow]` extras 里没有）；补装后这 5 条全过，与本改动无关。
 
 ## 5. 写死的四对 `_SHAPE_BOX`：**不能删**
 
@@ -153,4 +153,4 @@ vol03 2/2、vol02 26/26、vol01 42/42。
   脚本里的 scratchpad 路径要改；`dump.py` 导库到 npz → `harvest.py` → `trig.py` → `online.py` / `ablate.py`）
 - 改动 `clustering/match.py`（`_match` + `_apply_near_shape`）、`clustering/seeding.py`（透传和 trusted_ids）、
   `steps/glyph_match.py`（参数和升档）、`products/kinds/recog.py`（`MatchRec.near_shape`）、`scripts/eval_db_match.py`（`--near-shape`）
-- 没写 overview issue：这个 session 申请 `open-guji-core/overview` 的写权限被拒，所以只写了本 HANDOFF。
+- overview 卡 #332 已评论交单：https://github.com/open-guji-core/overview/issues/332#issuecomment-5937482529
