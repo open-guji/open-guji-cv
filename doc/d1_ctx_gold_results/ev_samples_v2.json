@@ -1,0 +1,142 @@
+{
+ "dataset": "/home/user/open-guji-dataset/context-correction",
+ "provenance": {
+  "lam": 0.55,
+  "order": 3,
+  "general": {
+   "path": "corpus/external/daizhige_zhaoling.txt",
+   "chars": 5000001,
+   "vocab": 8043,
+   "leak_8gram_vs_test_gold": 0.0
+  },
+  "book": {
+   "path": "/home/user/guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本/corpus/zongmu_wuyingdian_reference.txt",
+   "chars_before": 345597,
+   "chars_removed_as_holdout": 2232,
+   "chars_used": 339836,
+   "vocab": 4277,
+   "leak_8gram_vs_test_gold": 0.0
+  }
+ },
+ "rows": [
+  {
+   "n": 1681,
+   "baseline_top1": 0.6752,
+   "baseline_top1_n": 1135,
+   "top1": 0.6752,
+   "top1_n": 1135,
+   "top1_gain": 0.0,
+   "rescued": 0,
+   "harmed": 0,
+   "harmful_flip_rate": 0.0,
+   "glyph_layer_immutability": true,
+   "violations": 0,
+   "book_weight": null,
+   "lm": "uniform"
+  },
+  {
+   "n": 1681,
+   "gate_margin": 0.7,
+   "baseline_top1": 0.6752,
+   "top1": 0.6913,
+   "top1_gain": 0.0161,
+   "flips": 35,
+   "rescued": 30,
+   "harmed": 3,
+   "harmful_flip_rate": 0.0026,
+   "flip_precision": 0.8571,
+   "by_origin": {
+    "human": {
+     "n": 529,
+     "baseline_top1": 0.4915,
+     "top1": 0.5047,
+     "flips": 9
+    },
+    "align": {
+     "n": 1152,
+     "baseline_top1": 0.7595,
+     "top1": 0.7769,
+     "flips": 26
+    }
+   },
+   "by_reach": {
+    "glyph": {
+     "n": 1101,
+     "rescuable": 25,
+     "rescued": 2,
+     "harmed": 3,
+     "flips": 5
+    },
+    "ocr_only": {
+     "n": 413,
+     "rescuable": 354,
+     "rescued": 28,
+     "harmed": 0,
+     "flips": 28
+    },
+    "unreachable": {
+     "n": 167,
+     "rescuable": 0,
+     "rescued": 0,
+     "harmed": 0,
+     "flips": 2
+    }
+   },
+   "glyph_layer_immutability": true,
+   "book_weight": 0.0,
+   "lm": "mix(ngram:1.00)"
+  },
+  {
+   "n": 1681,
+   "gate_margin": 0.7,
+   "baseline_top1": 0.6752,
+   "top1": 0.6883,
+   "top1_gain": 0.0131,
+   "flips": 35,
+   "rescued": 26,
+   "harmed": 4,
+   "harmful_flip_rate": 0.0035,
+   "flip_precision": 0.7429,
+   "by_origin": {
+    "human": {
+     "n": 529,
+     "baseline_top1": 0.4915,
+     "top1": 0.5028,
+     "flips": 14
+    },
+    "align": {
+     "n": 1152,
+     "baseline_top1": 0.7595,
+     "top1": 0.7734,
+     "flips": 21
+    }
+   },
+   "by_reach": {
+    "glyph": {
+     "n": 1101,
+     "rescuable": 25,
+     "rescued": 5,
+     "harmed": 4,
+     "flips": 9
+    },
+    "ocr_only": {
+     "n": 413,
+     "rescuable": 354,
+     "rescued": 21,
+     "harmed": 0,
+     "flips": 23
+    },
+    "unreachable": {
+     "n": 167,
+     "rescuable": 0,
+     "rescued": 0,
+     "harmed": 0,
+     "flips": 3
+    }
+   },
+   "glyph_layer_immutability": true,
+   "book_weight": 0.9,
+   "lm": "mix(ngram:0.10,ngram:0.90)"
+  }
+ ]
+}

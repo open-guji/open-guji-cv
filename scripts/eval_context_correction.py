@@ -38,9 +38,9 @@ REPO = Path(__file__).resolve().parents[1]
 HOLDOUT_PAD = 200      # 测试页窗口两侧额外挖掉的字数
 
 
-def load_samples(root: Path) -> list[dict]:
+def load_samples(root: Path, samples_dir: str = "samples") -> list[dict]:
     out = []
-    for d in sorted((root / "samples").glob("*/")):
+    for d in sorted((root / samples_dir).glob("*/")):
         f = d / "expected.json"
         if not f.exists():
             continue
@@ -158,6 +158,8 @@ def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
         return res.surface, res.margin
 
     strata = {"human": [0, 0, 0, 0], "align": [0, 0, 0, 0]}  # n, base, new, flips
+    # v2 样本带 gold_reach：按金标可达性再分层（glyph / ocr_only / unreachable）
+    reach = {}      # reach -> [n, rescuable, rescued, harmed, flips]
     rescued = harmed = flips = 0
     for s in samples:
         for col in s["columns"]:
@@ -173,6 +175,11 @@ def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
                                and len(cands) >= 2) else base
                 origin = sl.get("origin") or "align"
                 st = strata.setdefault(origin, [0, 0, 0, 0])
+                rc = reach.setdefault(sl["gold_reach"], [0, 0, 0, 0, 0]) \
+                    if "gold_reach" in sl else None
+                if rc is not None:
+                    rc[0] += 1
+                    rc[1] += (g in {c["char"] for c in cands}) and base != g
                 st[0] += 1
                 st[1] += base == g
                 st[2] += new == g
@@ -181,6 +188,10 @@ def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
                     st[3] += 1
                     rescued += (new == g and base != g)
                     harmed += (base == g and new != g)
+                    if rc is not None:
+                        rc[4] += 1
+                        rc[2] += (new == g and base != g)
+                        rc[3] += (base == g and new != g)
                 ctx.append(g)          # 教师强制：后文上下文用金标
     n = sum(v[0] for v in strata.values())
     base_ok = sum(v[1] for v in strata.values())
@@ -198,6 +209,9 @@ def run_gated(samples: list[dict], lm, vm, lam: float, margin: float) -> dict:
                           "top1": round(v[2] / v[0], 4) if v[0] else 0,
                           "flips": v[3]}
                       for k, v in strata.items() if v[0]},
+        "by_reach": {k: {"n": v[0], "rescuable": v[1], "rescued": v[2],
+                         "harmed": v[3], "flips": v[4]}
+                     for k, v in reach.items()},
         "glyph_layer_immutability": True,   # 只在候选集内挑，构造保证
     }
 
@@ -220,6 +234,9 @@ def main() -> None:
                     help="门槛化模式：语义 margin ≥ 此阈才改判（生产口径，"
                          "seed 默认 0.70）；给了本参数就跑 run_gated 而非"
                          "全局重排")
+    ap.add_argument("--samples-dir", default="samples",
+                    help="样本目录名：v1 冻结池 samples（有构造泄漏，已弃用）"
+                         "/ v2 samples_v2（带 gold_reach 分层）")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -232,7 +249,7 @@ def main() -> None:
     vm = VariantMap.load(vpath if vpath.exists() else None)
 
     root = Path(args.dataset)
-    samples = load_samples(root)
+    samples = load_samples(root, args.samples_dir)
     if not samples:
         print("没有可用样本（只有占位目录？）")
         return
