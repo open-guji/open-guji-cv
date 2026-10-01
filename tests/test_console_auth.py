@@ -131,6 +131,11 @@ def test_no_auth_bypasses_session(client):
     assert client.get("/api/gold").status_code == 200
 
 
+@pytest.fixture(autouse=True)
+def _workspaces_root(monkeypatch, tmp_path):
+    """cmd_console 起来必须有工作区总目录（2026-09-30），这里统一给一个空目录。"""
+    monkeypatch.setenv("GUJI_WORKSPACES_ROOT", str(tmp_path))
+
 # ── --no-auth 只在本机允许 ───────────────────────────────────────────
 def test_no_auth_refused_on_public_host(monkeypatch, capsys):
     import argparse
@@ -146,7 +151,8 @@ def test_no_auth_refused_on_public_host(monkeypatch, capsys):
     assert "127.0.0.1" in capsys.readouterr().err
 
 
-def test_no_auth_allowed_on_loopback_host(monkeypatch):
+def test_no_auth_allowed_on_loopback_host(monkeypatch, tmp_path):
+    monkeypatch.setenv("GUJI_WORKSPACES_ROOT", str(tmp_path))
     from open_guji_cv import cli_v2
     from open_guji_cv.console import app as console_app_mod
 
@@ -168,7 +174,8 @@ def test_no_auth_allowed_on_loopback_host(monkeypatch):
 # 协调者 09-26 20:10 验收意见：网站两个端点 10 月上旬才有 PR，服务器的
 # systemd 单元现在起控制台不带任何鉴权参数——这次改动一合 main、控制台一
 # 重启，缺省就会变成一个当下用不了的登录页。
-def test_falls_back_to_no_auth_on_loopback_without_oauth_config(monkeypatch, capsys):
+def test_falls_back_to_no_auth_on_loopback_without_oauth_config(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("GUJI_WORKSPACES_ROOT", str(tmp_path))
     import argparse
     from open_guji_cv import cli_v2
     from open_guji_cv.console import app as console_app_mod

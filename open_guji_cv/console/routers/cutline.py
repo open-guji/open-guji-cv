@@ -221,7 +221,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     if using_sample_corpus():
         warn = (f"读到的是仓内小样本语料（{corpus_path('zongmu_wenyuange_wikisource.txt')}），"
                 "整理本锚不上，「整理本期望」不可信。"
-                "起控制台前 export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>")
+                "请在控制台页面里选对工作区（guji console --workspaces-root /path/to/guji-workspace）")
     n_expect = sum(1 for c in picked if c.get("char_above") and c.get("char_below"))
     return {"book": book, "pages": pg, "n_r2s": n_all, "n_done": len(done),
             "n": len(picked), "n_expect": n_expect, "warn": warn, "cases": picked,

@@ -21,8 +21,8 @@
 **工作区 = 一本书（或一套书）的数据仓，引擎仓不落任何一本书的数据。**
 
 目录名不是随便起的：`core/workspace.py` 的 `*_REL` 常量按这些相对路径去找库、
-产物、语料、裁决；控制台**只认有 `books/*.yaml` 的兄弟目录**，少这一样它根本
-不出现在工作区列表里。
+产物、语料、裁决；控制台**只认工作区总目录（`guji console --workspaces-root`）下有 `books/*.yaml` 的子目录**，
+少这一样它根本不出现在工作区列表里。控制台没有「默认工作区」，不读 `GUJI_WORKSPACE`（2026-09-30）。
 
 ## 二、标准布局
 
@@ -233,7 +233,8 @@ python -m open_guji_cv pipeline keben_body_v2 bxgb --from row_segment --pages al
 
 | 环境变量 | 管什么（`core.workspace` 里的函数） | 没设时退到哪 |
 |---|---|---|
-| `GUJI_WORKSPACE` | 工作区仓根本身（`workspace_root()`）；下面各条「没设时」全部以它为基准 | 仓内默认根（引擎仓自己的 `output/`、`corpus/` 等，只够跑单测） |
+| `GUJI_WORKSPACES_ROOT` | **只给控制台**：工作区总目录（等价 `guji console --workspaces-root`），其下有 `books/` 的子目录可在页面里选；控制台**不读** `GUJI_WORKSPACE` | 没给则控制台拒绝启动 |
+| `GUJI_WORKSPACE` | 工作区仓根本身（`workspace_root()`）；CLI/脚本/测试用，控制台不读；下面各条「没设时」全部以它为基准 | 仓内默认根（引擎仓自己的 `output/`、`corpus/` 等，只够跑单测） |
 | `GUJI_GLYPH_DB` | 字形库 SQLite 索引路径（`glyph_db_path()`） | `<workspace>/output/glyph.db` |
 | `GUJI_GLYPH_STORE` | 字形库真源 PNG+JSONL 目录（`glyph_store_path()`） | `<workspace>/output/glyph_store` |
 | `GUJI_PRODUCTS_DIR` | 数值产物 `products/<book>/<step>/`（`products_root()`）——**只管这一个目录**，不连带改 cache/glyph_db 等其余路径 | `<workspace>/products` |

@@ -214,9 +214,9 @@ def cmd_recheck(args) -> None:
 
 
 def cmd_console(args) -> None:
+    import os
     from .console.app import serve
     from .console.auth import config as auth_config
-    from .core.workspace import describe, using_sample_corpus, using_sample_db
 
     host = getattr(args, "host", None) or "127.0.0.1"
     loopback = host in ("127.0.0.1", "localhost")
@@ -259,17 +259,23 @@ def cmd_console(args) -> None:
                   file=sys.stderr)
             sys.exit(1)
 
-    # 起控制台时把解析结果打出来——控制台是长跑进程，环境变量漏带的代价是
-    # 之后每一次审阅都读错库/错语料，而页面上不会有任何报错。2026-09-12 实锤：
-    # `GUJI_WORKSPACE` 只写在 ~/.bashrc 里，从 PowerShell/VS Code 起的控制台
-    # 读到仓内 17 KB 样本语料，vol02 全书 186 页锚定失败、Step7 卡片上的
-    # 「整理本期望」全是噪声，排查了很久才想到是环境变量。
-    for k, v in describe().items():
-        print(f"  {k:12} {v}")
-    if using_sample_db() or using_sample_corpus():
-        print("\n  ⚠️  没设 GUJI_WORKSPACE（或工作区数据不全）——库/语料会落到仓内小样本，\n"
-              "     整理本锚不上、库匹配全是 unsure。真跑书请先：\n"
-              "     export GUJI_WORKSPACE=/path/to/guji-workspace/<id>-<书名>\n")
+    # 工作区总目录（2026-09-30）：控制台进程没有「默认工作区」，工作区在页面里选（浏览器的状态）。
+    # 旧法是用 GUJI_WORKSPACE 指到某一本书的目录、再扫它的兄弟——重启时带错一本，下拉框与册列表
+    # 就对不上，已删。这里把继承来的 GUJI_WORKSPACE 摘掉，免得悄悄成为「请求没带工作区时的默认」。
+    from .console.routers.workspace import ROOT_ENV, discover_workspaces
+    wroot = getattr(args, "workspaces_root", None) or os.environ.get(ROOT_ENV)
+    if not wroot or not Path(wroot).expanduser().is_dir():
+        print(f"✗ 要给工作区总目录：guji console --workspaces-root D:/workspace/guji-workspace\n"
+              f"  （或设环境变量 {ROOT_ENV}）。给的是：{wroot!r}", file=sys.stderr)
+        sys.exit(1)
+    os.environ[ROOT_ENV] = str(Path(wroot).expanduser().resolve())
+    if os.environ.pop("GUJI_WORKSPACE", None):
+        print("  （已忽略环境变量 GUJI_WORKSPACE：控制台不再有默认工作区，请在页面里选。）")
+    print(f"  工作区总目录  {os.environ[ROOT_ENV]}")
+    for w in discover_workspaces():
+        print(f"    - {w['id']:14} {len(w['books'])} 册  {w['name']}")
+    if not discover_workspaces():
+        print("  ⚠️  总目录下没有带 books/ 的子目录，页面上没有工作区可选。")
     if no_auth:
         print("  ⚠️  --no-auth：鉴权已关闭，任何能连上本机端口的人都能起跑批、写裁决——"
               "只许本机开发用。\n")
@@ -2077,6 +2083,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "绑别的地址会拒绝启动")
     p.add_argument("--root-path", default="",
                    help="挂在反向代理前缀下时用，如 /collate（网站把 /collate/* 转发到这里）")
+    p.add_argument("--workspaces-root", default=None,
+                   help="工作区总目录（如 D:/workspace/guji-workspace）：其下有 books/ 的子目录都是可选工作区，"
+                        "在页面里选；缺省读环境变量 GUJI_WORKSPACES_ROOT。控制台进程没有默认工作区")
     p.add_argument("--dev-idp", action="store_true",
                    help="登录走本机假登录页，不打网站真的 /oauth/authorize|token（网站两个端点"
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
