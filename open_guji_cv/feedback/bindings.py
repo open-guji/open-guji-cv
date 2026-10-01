@@ -21,6 +21,12 @@
 锚里是 `ink_bbox`（当时字块图在原图上找回的墨框）的，按「墨框 ≥80% 落在某一现格、第二格 <20%」绑
 （`anchor_backfill.bind_ink`）：落在同编号 → `valid`，别的编号 → `rebound`，跨两格 → `review`，落空 → `void`。
 
+**图像指纹优先**（2026-10-01，D2/#323）：事件锚里带 `evidence.fp`（`anchor.evidence_for`，口径 =
+`gold/drift.fingerprint`）的，先拿它与候选现格的字块图比：相同/近似（差 ≤ `drift.FP_TOL`）才认
+（`valid`/`rebound` 照几何定），不像一律 `review`——**包括框几乎没动（IoU ≥ `IOU_SAME`）的**：
+X2 实测切分重算后同一块像素上的格已经改成完整字，裁决却还挂着。行里多一列 `fp_diff`。现格没有字块图
+（缓存没了）→ 退回下面的老规则。没有指纹的旧事件完全照老规则。
+
 没有框、但字形库里有当时的图（老裁决常见）：同编号现格的图像 → `valid`，不像 → `review`。
 
 ## 老裁决补锚（事件里 `target.anchor` 为空、补锚档里也没有）
@@ -58,6 +64,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..gold.drift import FP_TOL
 from .anchor import parse_cell_key, patch_key, patch_path, quad_bbox
 
 IOU_SAME = 0.85       # 框几乎没动：原图上同一块像素，必是同一个字，不再看图块（图块会因 Step4 去噪/收紧而变）
@@ -66,7 +73,7 @@ IOU_GONE = 0.15       # 低于这个算「那一格没了」
 SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：未动的 1,122 条 ≥0.9，漂移的 30 条 <0.9
 USE_STATUSES = ("valid", "rebound")
 _MEMO: dict = {}
-_VERSION = 5          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点）
+_VERSION = 6          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff）
 
 
 def _ts(iso: str) -> float:
@@ -203,6 +210,24 @@ def _similar(anchor: dict, book: str, cur_patch: Path | None) -> float | None:
     return float(verify_pair_elastic(normalize_patch(cur), normalize_patch(old)).f1)
 
 
+def _fp_diff(evidence: dict | None, cur_patch: Path | None) -> float | None:
+    """锚里凭证的指纹 vs 现格字块图 → 平均绝对差；任一侧没有 → None（调用方退回老规则）。"""
+    if not evidence or not evidence.get("fp") or cur_patch is None:
+        return None
+    if evidence.get("fp_of", "char_patch") != "char_patch":
+        return None
+    try:
+        import cv2
+        from ..gold.drift import FP_SIZE, fp_diff
+        from ..utils.image_io import imread
+        img = imread(str(cur_patch), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return None
+        return fp_diff(evidence["fp"], img, tuple(evidence.get("fp_size") or FP_SIZE))
+    except Exception:
+        return None
+
+
 def _verdict_events(book: str, log) -> dict[int, list]:
     """本书逐格裁决事件（confirm 类），按页分组、按时间排序。"""
     out: dict[int, list] = {}
@@ -257,6 +282,7 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     for ev in events:
         _, _, col, slot, sub = parse_cell_key(ev.target.key)
         anchor = ev.target.anchor if (ev.target.anchor and ev.target.anchor.get("bbox")) else None
+        evid = (ev.target.anchor or {}).get("evidence")
         if anchor is None:
             anchor = backfill.get(ev.id)
         if anchor is None:
@@ -279,6 +305,13 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         if anchor is None or not anchor.get("bbox"):
             # 补不出几何：裁于现行切分之后 → 同编号照用；之前 → 回待审（宁可重看不可错用）
             same = (col, slot, sub) in cur_idx
+            d0 = _fp_diff(evid, cache.get(book, "char_patch", patch_key(page, col, slot, sub))) if same else None
+            if d0 is not None:
+                row["fp_diff"] = round(d0, 1)
+                row["bound"] = ev.target.key
+                row["status"] = "valid" if d0 <= FP_TOL else "review"
+                rows.append(row)
+                continue
             sim = (_similar(anchor, book, cache.get(book, "char_patch", patch_key(page, col, slot, sub)))
                    if anchor is not None and same else None)
             row["sim"] = None if sim is None else round(sim, 4)
@@ -306,6 +339,13 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         bkey = f"{book}:{page}:{best[0]}:{best[1]}{best[2]}"
         row["bound"] = bkey
         same = "valid" if bkey == ev.target.key else "rebound"
+        d1 = _fp_diff(evid, cache.get(book, "char_patch", patch_key(page, *best)))
+        if d1 is not None:
+            # 有当时的图指纹：相同/近似才认，其余回待审（几何只负责找候选格）
+            row["fp_diff"] = round(d1, 1)
+            row["status"] = same if (d1 <= FP_TOL and inside <= 1) else "review"
+            rows.append(row)
+            continue
         if best_iou >= IOU_SAME:
             row["status"] = same
             rows.append(row)
