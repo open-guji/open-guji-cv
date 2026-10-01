@@ -322,6 +322,16 @@ def cmd_cache(args) -> None:
         y0 = max(0, min(h - 1, args.y0)); y1 = max(y0 + 1, min(h, args.y1 or h))
         from .render.overlay import encode_png
         _write(args.out, encode_png(img[y0:y1]))
+    elif args.action == "verify":
+        # 缓存是不是对着现行产物切的（产物从别处换进来没清缓存的话会错位，见 ops/cache_verify.py）
+        from .ops.cache_verify import main_print, verify_book
+        from .core.book import load_book
+        from .core.pipeline import default_pipeline_id
+        pid = args.pipeline or default_pipeline_id(load_book(args.book))
+        eng = _engine(args.book, pid, quiet=True)
+        res = verify_book(eng, eng.book.resolve_pages(args.pages), fix=args.fix)
+        main_print(res)
+        sys.exit(1 if res["bad_columns"] and not args.fix else 0)
     elif args.action == "build-rare-index":
         _cmd_cache_build_rare_index(args)
     elif args.action == "build-font-index":
@@ -2092,10 +2102,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | "
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | "
                                      "build-rare-index | build-font-index")
-    p.add_argument("action", choices=["usage", "prune", "get", "column",
+    p.add_argument("action", choices=["usage", "prune", "get", "column", "verify",
                                       "build-rare-index", "build-font-index"])
+    p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
+    p.add_argument("--pages", default="all", help="verify：页表达式，缺省 all")
+    p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
