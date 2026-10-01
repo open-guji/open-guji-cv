@@ -17,10 +17,13 @@
 全局状态，两个标签页会打架，而且跑批子进程会继承到「出队那一刻」的值；
 第三版即现在这版，工作区归浏览器，跑批的工作区归工单（`JobSpec.workspace`）。
 
-## 能切到哪些
+## 能切到哪些（2026-09-30 改）
 
-不写死清单：扫当前工作区的**兄弟目录**，认「有 books/*.yaml 的」。
-`GUJI_WORKSPACE_DIRS`（分号/冒号分隔）可以显式指定，覆盖自动发现。
+控制台起的时候给一个**工作区总目录**（`guji console --workspaces-root <dir>` 或环境变量
+`GUJI_WORKSPACES_ROOT`，如 `D:\workspace\guji-workspace`），它下面「有 books/ 的子目录」
+就是能切到的工作区。**控制台进程没有「默认工作区」**——不再读 `GUJI_WORKSPACE`（旧法：
+指到某一本书的目录，再扫它的兄弟；重启时带错一本书，下拉框和册列表就对不上）。
+请求没带工作区时落在「选工作区」页（根路径），不静默落到某一本书。
 引擎仓不该有工作区注册表——工作区是用户那边的数据仓。
 
 这份清单同时是**白名单**：请求头里的工作区必须在其中，中间件才认。
@@ -63,17 +66,22 @@ def _ws_id(d: Path) -> str:
     return name[: -len("-workspace")] if name.endswith("-workspace") else name
 
 
+ROOT_ENV = "GUJI_WORKSPACES_ROOT"
+
+
+def workspaces_root() -> Path | None:
+    """工作区总目录；没配返回 None（此时没有任何工作区可选）。"""
+    env = os.environ.get(ROOT_ENV)
+    return Path(env).expanduser().resolve() if env else None
+
+
 def discover_workspaces(current: Path | None = None) -> list[dict]:
-    """能切到哪些工作区。`current` 不给就按本请求解析出来的那个。"""
+    """能切到哪些工作区：总目录下有 `books/` 的子目录。`current` 不给就按本请求解析出来的那个，
+    只用来标 `current` 字段，不影响列哪些。"""
     if current is None:
         current = workspace_root()
-    env = os.environ.get("GUJI_WORKSPACE_DIRS")
-    cands: list[Path] = []
-    if env:
-        cands = [Path(x).expanduser() for x in env.replace(";", os.pathsep).split(os.pathsep)
-                 if x.strip()]
-    elif current is not None:
-        cands = sorted(d for d in current.parent.iterdir() if d.is_dir())
+    root = workspaces_root()
+    cands: list[Path] = sorted(d for d in root.iterdir() if d.is_dir()) if root and root.is_dir() else []
 
     cur_res = current.resolve() if current else None
     out: list[dict] = []
@@ -96,9 +104,7 @@ def resolve_workspace_id(ws_id: str) -> str | None:
     ——只有 `discover_workspaces()` 列出来的 id 才认，浏览器塞个别的进来
     解析不出路径，不会变成「让服务端读写任意目录」。
     """
-    env = os.environ.get("GUJI_WORKSPACE")
-    base = Path(env).expanduser().resolve() if env else None
-    for w in discover_workspaces(base):
+    for w in discover_workspaces():
         if w["id"] == ws_id:
             return w["path"]
     return None
@@ -108,11 +114,9 @@ def allowed_workspaces() -> set[str]:
     """白名单：请求头里的工作区必须是这里面的。
 
     浏览器来的值不能当任意路径用——那等于开放「让服务端读写任意目录」。
-    这里用**环境变量**那个工作区做发现的起点（不是本请求的覆盖，否则
-    白名单会跟着请求头自己变，等于没有白名单）。"""
-    env = os.environ.get("GUJI_WORKSPACE")
-    base = Path(env).expanduser().resolve() if env else None
-    return {w["path"] for w in discover_workspaces(base)}
+    发现的起点是启动时给的总目录（不是本请求的覆盖，否则白名单会跟着
+    请求头自己变，等于没有白名单）。"""
+    return {w["path"] for w in discover_workspaces()}
 
 
 @router.get("/api/workspace")

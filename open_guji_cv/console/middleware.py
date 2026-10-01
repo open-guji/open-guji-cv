@@ -22,7 +22,7 @@ B 的下一次请求就跟着变了。
 
 只接受**已知的工作区目录**——请求头是浏览器来的，不能拿它当任意路径用
 （否则等于开放了「让服务端读写任意目录」）。白名单来自 `discover_workspaces()`，
-即「跟当前工作区放在一起、且有 books/ 的目录」，与下拉框里能选的那些一致。
+即「工作区总目录（`--workspaces-root`）下有 books/ 的子目录」，与下拉框里能选的那些一致。
 """
 from __future__ import annotations
 
@@ -49,8 +49,8 @@ class WorkspaceMiddleware(BaseHTTPMiddleware):
             # 兼容绝对路径：早先的前端传的是路径，浏览器里可能还留着。
             path = "" if raw == "" else (resolve_workspace_id(raw)
                                          or (raw if raw in allowed_workspaces() else None))
-            # 认不出就忽略（退回环境变量），不报错——换了机器、改了目录名、
-            # 或者手敲错 id 时，页面还能打开，只是落在默认工作区。
+            # 认不出就忽略（不设覆盖；控制台没有默认工作区），不报错——换了机器、改了目录名、
+            # 或者手敲错 id 时，页面还能打开，只是回到「选工作区」。
             if path is not None:
                 token = set_workspace_override(path)
         try:

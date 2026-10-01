@@ -14,9 +14,10 @@ cd D:\workspace\open-guji-cv
 uv venv .venv --python 3.12
 uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented
 
-# 起控制台
-.venv/Scripts/python -m open_guji_cv console
-# → http://127.0.0.1:8640/ ，会自动开浏览器；加 --no-browser 不开
+# 起控制台（2026-09-30 起必须给工作区总目录；控制台没有默认工作区，不读 GUJI_WORKSPACE）
+.venv/Scripts/python -m open_guji_cv console --workspaces-root D:\workspace\guji-workspace
+# → http://127.0.0.1:8640/ ，会自动开浏览器；加 --no-browser 不开；工作区在页面里选
+# 也可用环境变量 GUJI_WORKSPACES_ROOT 代替 --workspaces-root
 ```
 
 控制台只监听 `127.0.0.1`。要在 iPad 上用就走 Tailscale 连到这台机器。
@@ -172,6 +173,16 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 - `artifact`：卡片发布成 claude.ai 页面，你在手机上点。**复审必须重发到同一 URL**，
   用户书签和页面本地状态都锚在上面。
 - `server`：页面直接跑在控制台，裁决实时回传，断网进本地队列、重连补发。
+
+### 4.1b 定字裁决里的两个小事（2026-09-30）
+
+- **「小注当正文」（Z）**：列尾双行小注被当成正文切成一格。事件仍是 `confirm v=seg_defect quality=truncated`，
+  多带 `reason=jiazhu_as_main`；打回台账里记为 `row_segment / jiazhu_split`（普通截断是 `seg_truncated`），
+  Step3 可单独筛出这一类（`feedback/returns.py::classify_return`）。
+- **对齐改字层 · 网格**：不点 = 采信整理本字（字对、其余也对）；有疑问的**点一下**标「审」（再点取消）。
+  网格里不分原因、不写裁决：提交时没点的写 confirm，点了的写 `needs_review` 事件（不算已裁、无消费者），
+  这些格转到「逐张」细审（有噪声 C、改字、小注当正文 Z、字形不完整 T 在那里选），后来有了定字裁决即作废
+  （`review/verdict_view.py::flagged_cells`）。
 
 ### 4.2 收割：把裁决收回来
 
