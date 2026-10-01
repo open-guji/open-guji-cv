@@ -32,7 +32,20 @@ sys.path.insert(0, str(REPO / "scripts"))
 WS = Path(os.environ["GUJI_WORKSPACE"])
 
 
+def load_validation():
+    """VALIDATION=1：标签改读数据集 instances_v2.json 的 items（M1 迁移的 77 条验证层）。"""
+    d = json.load(open(REPO.parent / "open-guji-dataset/char-segmentation/instances/instances_v2.json"))
+    out = {}
+    for i in d["items"]:
+        lab = ("defect", i.get("defect") or "contaminated") if i["quality"] != "clean" else ("clean", "strong")
+        out[(i["book"], int(i["page"]), int(i["col"]), int(i["slot"]))] = {
+            "ts": "", "lab": lab, "batch": "v2_validation", "step": "", "reading": None}
+    return out, Counter(), 0, {}
+
+
 def load_labels():
+    if os.environ.get("VALIDATION"):
+        return load_validation()
     last = {}
     hist = defaultdict(list)
     drop = Counter()
