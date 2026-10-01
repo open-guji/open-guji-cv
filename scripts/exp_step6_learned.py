@@ -29,6 +29,10 @@ warnings.filterwarnings("ignore")
 from open_guji_cv.steps.step6_signals import (FEATURE_GROUPS, FEATURES,  # noqa: E402
                                                SIGNAL_VERSION, SignalCtx, slot_rows)
 
+# 泄漏特征：冻结候选池里 align 格「金标不是首选时，金标 100%（277/277）是 rapidocr 源候选」，
+# 非金标非首选候选只有 1.4% 是 rapidocr——即池子构造时把整理本字塞进去并标成 rapidocr。
+# 这是评测集构造痕迹，不是线上能用的信号；一律剔除（含到 --leaky 才放回，仅作对照）。
+DROP = {"is_rapid"}
 TAU_GRID = [round(x, 3) for x in np.arange(0.0, 1.0001, 0.025)]
 
 
@@ -221,12 +225,13 @@ def main():
     ap.add_argument("--book-corpus", required=True)
     ap.add_argument("--harm-w", type=float, default=3.0, help="选 τ 时一次改坏抵几次救回")
     ap.add_argument("--out", default="runs/x1/step6_ctx.json")
+    ap.add_argument("--leaky", action="store_true")
     ap.add_argument("--no-ablation", action="store_true")
     args = ap.parse_args()
     from eval_context_correction import load_samples
     samples = load_samples(Path(args.dataset))
     gold_texts = ["".join(sl["gold"] for c in s["columns"] for sl in c["slots"]) for s in samples]
-    allc = list(range(len(FEATURES)))
+    allc = [i for i, fn in enumerate(FEATURES) if args.leaky or fn not in DROP]
     report = {"signal_version": SIGNAL_VERSION, "harm_w": args.harm_w, "scenarios": {}}
 
     for scen, with_book in (("with_book", True), ("no_book", False)):
@@ -271,14 +276,14 @@ def main():
             if not args.no_ablation:
                 abl = {}
                 for g in FEATURE_GROUPS:
-                    cols = [i for i, fn in enumerate(FEATURES) if fn not in FEATURE_GROUPS[g]]
+                    cols = [i for i in allc if FEATURES[i] not in FEATURE_GROUPS[g]]
                     o2, t2 = nested_cv(D, kind, cols, args.harm_w)
                     a, b, c = report_nested(D, o2, t2)
                     abl[f"-{g}"] = {"flips": a, "rescued": b, "harmed": c,
                                     "gain": round((b - c) / nslot, 4)}
                 for g in FEATURE_GROUPS:           # 单组 + ocr 基础
                     keep = set(FEATURE_GROUPS["ocr"]) | set(FEATURE_GROUPS[g])
-                    cols = [i for i, fn in enumerate(FEATURES) if fn in keep]
+                    cols = [i for i in allc if FEATURES[i] in keep]
                     o2, t2 = nested_cv(D, kind, cols, args.harm_w)
                     a, b, c = report_nested(D, o2, t2)
                     abl[f"ocr+{g}"] = {"flips": a, "rescued": b, "harmed": c,
