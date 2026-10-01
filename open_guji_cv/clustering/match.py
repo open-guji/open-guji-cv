@@ -30,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from .features import get_feature
+from .near_shape import NearShapeConfig, decide_pair, trigger_pair
 from .verify import (COV_HIGH, ELASTIC_COV_HIGH, MISS_WMAX,
                      verify_pair_cov, verify_pair_elastic)
 
@@ -131,13 +132,15 @@ class MatchResult:
     #                               # unsure 档：字 → cov 先验，降序
     guard: str | None = None        # 触发的护栏："never_match" | "conflict"
     n_verified: int = 0             # 本次做了几对 verify
+    near_shape: dict | None = None  # 近形决胜证据（`near_shape.NearShapeDecision.to_dict`）；没开/没触发为 None
 
     def to_dict(self) -> dict:
         return {"verdict": self.verdict, "char": self.char,
                 "matched_id": self.matched_id,
                 "cov": round(self.cov, 4), "wmax": self.wmax,
                 "candidates": [[c, round(v, 4)] for c, v in self.candidates],
-                "guard": self.guard, "n_verified": self.n_verified}
+                "guard": self.guard, "n_verified": self.n_verified,
+                **({"near_shape": self.near_shape} if self.near_shape is not None else {})}
 
 
 def _cell_parts(iid: str):
@@ -177,7 +180,9 @@ class GlyphMatcher:
                  cov_high: float | None = None,
                  miss_wmax: float = MISS_WMAX,
                  verify_method: str = "elastic",
-                 local_shape_rerank: bool = False):
+                 local_shape_rerank: bool = False,
+                 near_shape: NearShapeConfig | None = None,
+                 trusted_ids: set[str] | None = None):
         self._feature = get_feature(feature_backend)
         self._verify = (verify_pair_elastic if verify_method == "elastic"
                         else verify_pair_cov)
@@ -209,6 +214,10 @@ class GlyphMatcher:
         # 任务书要求「别动全局阈值」，这条只在显式开启时改候选排序，且只
         # 影响候选首位落在这 8 个字上的那些查询，别的字一格都不碰。
         self.local_shape_rerank = local_shape_rerank
+        # 近形决胜（clustering/near_shape.py）。None = 关，行为逐位不变。
+        # `trusted_ids`：哪些库条目算「人裁刻例」可拿来建原型；None = 全算（评测集全是金标时用）。
+        self.near_shape = near_shape
+        self.trusted_ids = trusted_ids
 
     def __len__(self) -> int:
         return len(self._ids)
@@ -224,6 +233,7 @@ class GlyphMatcher:
         self._feats.append(np.asarray(feat, dtype=np.float32))
         self._F = None
         self._char_set.add(char)
+        self._rows_of = None
 
     def _same_cell_rows(self, cell_id: str) -> set[int]:
         """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08；
@@ -305,9 +315,69 @@ class GlyphMatcher:
                                           if c != other]
         return dataclasses.replace(result, candidates=new_cands)
 
+    def _rows_for(self, char: str) -> list[int]:
+        rows_of = getattr(self, "_rows_of", None)
+        if rows_of is None:
+            rows_of = {}
+            for j, c in enumerate(self._chars):
+                rows_of.setdefault(c, []).append(j)
+            self._rows_of = rows_of
+        return rows_of.get(char, [])
+
+    def _apply_near_shape(self, result: "MatchResult", norm: np.ndarray,
+                          feat: np.ndarray, excl: set[int]) -> "MatchResult":
+        """近形决胜（`near_shape.py`）：首选与次优异字 cov 差不足时，用两字的人裁刻例
+        求差异区域局部决胜。决出 → 胜者挪到候选首位、证据记进 `near_shape`；
+        弃权 → 候选不动、只记弃权理由。`verdict`/`char`/`guard` 一律不动——升档是
+        调用方（Step5-a）的事，跟 `consensus_same` 同层。"""
+        cfg = getattr(self, "near_shape", None)
+        if cfg is None or result.verdict == "same":
+            return result
+        pair, why = trigger_pair(result.candidates, cfg)
+        if pair is None:
+            return result
+        if why is not None:
+            return dataclasses.replace(result, near_shape={"pair": list(pair), "winner": None,
+                                                           "reason": why})
+        trusted = getattr(self, "trusted_ids", None)
+        F = getattr(self, "_F", None)
+        if F is None or F.shape[0] != len(self._feats):
+            F = np.asarray(self._feats)
+        q = np.asarray(feat, dtype=np.float32)
+        groups = []
+        for c in pair:
+            rows = [j for j in self._rows_for(c) if j not in excl
+                    and (trusted is None or self._ids[j] in trusted)]
+            rows.sort(key=lambda j: (-float(F[j] @ q), j))
+            groups.append([self._patches[j] for j in rows[:cfg.max_exemplars]])
+        d = decide_pair(norm, groups[0], groups[1], cfg, pair)
+        cands = result.candidates
+        if d.winner is not None and d.winner != pair[0]:
+            # 推翻整字 cov 排序要更硬的条件：只有整字几乎打平时才让局部证据翻盘
+            # （char-clustering 回归里 世←但 就是 cov 差 0.027 被局部翻错的）
+            gap = cands[0][1] - next(v for c, v in cands if c == pair[1])
+            if gap >= cfg.flip_margin:
+                d = dataclasses.replace(d, winner=None, reason="flip_blocked")
+        if d.winner is not None and d.winner != cands[0][0]:
+            w = next(t for t in cands if t[0] == d.winner)
+            cands = [w] + [t for t in cands if t[0] != d.winner]
+        return dataclasses.replace(result, candidates=cands, near_shape=d.to_dict())
+
     def match(self, norm: np.ndarray,
               feat: np.ndarray | None = None,
               exclude_id: str | None = None) -> MatchResult:
+        """见 `_match`；开了近形决胜（`near_shape`）时在其结果上再走一道 `_apply_near_shape`。"""
+        if getattr(self, "near_shape", None) is None or not self._ids:
+            return self._match(norm, feat, exclude_id)
+        if feat is None:
+            feat = self._feature.extract(norm[None, ...])[0]
+        r = self._match(norm, feat, exclude_id)
+        excl = self._same_cell_rows(exclude_id) if exclude_id is not None else set()
+        return self._apply_near_shape(r, norm, feat, excl)
+
+    def _match(self, norm: np.ndarray,
+               feat: np.ndarray | None = None,
+               exclude_id: str | None = None) -> MatchResult:
         """``exclude_id`` 把该实例自己从库里摘掉再比（2026-08-25 加）。
 
         字位一旦进过库，重跑 seed / 复裁时它自己就在 matcher 里，于是

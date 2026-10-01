@@ -171,7 +171,8 @@ def margins_of(rec: CharInstance) -> tuple[int, int]:
 
 def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
                          knn_k: int = 10, norm_stroke: int | None = None,
-                         local_shape_rerank: bool = False
+                         local_shape_rerank: bool = False,
+                         near_shape=None,
                          ) -> tuple[GlyphMatcher, set[str]]:
     """GlyphDB 的 exemplar（含种子准入实例）→ 内存匹配器 + 库内字集合。
 
@@ -184,9 +185,15 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     笔宽归一时同书留一法错误命中 cov 最高 0.9996、刻本 same 闸 800 例漏进 2 个假 same；
     细到 3px 后错误命中最高 0.922、591 对 0 错。刻本链不传（None），行为逐位不变。
     """
-    matcher = GlyphMatcher(k=knn_k, local_shape_rerank=local_shape_rerank)
+    matcher = GlyphMatcher(k=knn_k, local_shape_rerank=local_shape_rerank,
+                           near_shape=near_shape)
     chars: set[str] = set()
     cur = db.conn.cursor()
+    if near_shape is not None:
+        # 近形决胜只拿**人裁**刻例建原型（near_shape.py 模块头：机器 align/match 进库的
+        # 「蒙」5/8 其实是「𫎇」形）。口径同 steps/glyph_match.human_confirmed_counts。
+        matcher.trusted_ids = {str(r[0]) for r in cur.execute(
+            "SELECT DISTINCT instance_id FROM admissions WHERE provenance = 'human'")}
     if norm_stroke:
         from .normalize import normalize_patch
         sql = """SELECT g.char, e.instance_id, i.patch_png, g.edition_tag
@@ -231,7 +238,8 @@ def cached_matcher_from_db(db_path: str, db_fingerprint: str,
                            edition: str | None = None,
                            knn_k: int = 10,
                            norm_stroke: int | None = None,
-                           local_shape_rerank: bool = False) -> tuple[GlyphMatcher, set[str]]:
+                           local_shape_rerank: bool = False,
+                           near_shape=None) -> tuple[GlyphMatcher, set[str]]:
     """`load_matcher_from_db` 的进程级缓存包装——按
     `(db_path, db_fingerprint, edition, knn_k, norm_stroke, local_shape_rerank)`
     做 key，库长大/改判后指纹变了自动重建，同一指纹下复用同一个 matcher。
@@ -242,14 +250,14 @@ def cached_matcher_from_db(db_path: str, db_fingerprint: str,
     内存要秒级到几十秒级，见 `steps/glyph_match.py` 模块头）。字典键含
     `db_path` 而不是只按 fingerprint，避免不同书指向不同库路径时误命中。
     """
-    key = (db_path, db_fingerprint, edition, knn_k, norm_stroke, local_shape_rerank)
+    key = (db_path, db_fingerprint, edition, knn_k, norm_stroke, local_shape_rerank, near_shape)
     cached = _MATCHER_CACHE.get(key)
     if cached is not None:
         return cached
     _MATCHER_CACHE.clear()   # 只保留最近一个库状态，避免多版本无限堆积内存
     db = GlyphDB(db_path)
     result = load_matcher_from_db(db, edition=edition, knn_k=knn_k, norm_stroke=norm_stroke,
-                                  local_shape_rerank=local_shape_rerank)
+                                  local_shape_rerank=local_shape_rerank, near_shape=near_shape)
     _MATCHER_CACHE[key] = result
     return result
 

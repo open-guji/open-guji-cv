@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
@@ -61,6 +61,17 @@ class MatchRec(BaseModel):
     """`char_index` 里同字位 `CharRec.cand_variants` 每个候选试切字块各自的
     库匹配结果；空列表 = 该字位两侧都是单一候选，见 `CharRec.cand_variants`
     的说明。用于 Step7「切分裁决」板块给人看「选这个切法，库认得出来吗」。"""
+    near_shape: dict | None = None
+    """近形决胜证据（`clustering.near_shape`，Step5-a `near_shape` 参数开了才有）：字对、胜者或
+    弃权理由、局部分 s、库内留一正确率、差异区域外接框。为 None 时**不落盘**（见下），
+    没开这项的产物逐字节不变。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_near_shape(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and d.get("near_shape") is None:
+            d.pop("near_shape", None)
+        return d
 
 
 class ColumnMatch(BaseModel):
