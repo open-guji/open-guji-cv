@@ -23,7 +23,7 @@ from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
 from .shadow import SHADOW_THR, load_shadow, shadow_view
-from .verdict_view import decided_cells, defect_only_cells
+from .verdict_view import decided_cells, defect_only_cells, flagged_cells
 
 
 def parse_cells_spec(pages: str, book: str) -> set[str]:
@@ -176,7 +176,7 @@ def card_class(doubts, evidence: dict | None = None, char: str | None = None,
 # 下版框线混进字块、或末字被切掉，所以列尾那组叫「易混框线」。这一类再分三组：
 # `grid` = 网格一屏几十张、缺省采信整理本、人只点掉异常的；`tail` = 列尾（易混框线），照旧逐张；
 # `manual` = 其余要逐张看的（带形近疑因、整理本空、或本书惯刻形 ≠ 整理本字——网格只标一个字，
-# 两个形二选一得逐张挑）。只对 `replace_align` 这一类分，其余类别没有细项。
+# 两个形二选一得逐张挑；以及人在网格里点了一下「要细审」的格）。只对 `replace_align` 这一类分，其余类别没有细项。
 
 REPLACE_ALIGN_SUBS: tuple[tuple[str, str, str], ...] = (
     ("grid", "网格（采信整理本）", "一屏几十张、缺省采信整理本字，只点掉异常的"),
@@ -194,7 +194,8 @@ def replace_align_sub(slot: int, doubts, ref: dict | None, defect_before: bool =
 
     `ref` 是卡片上的「整理本」一栏（`{"char", "form", ...}` 或 None）。列尾优先于其余判据：
     列尾那组「易混框线」，人要带着这个问题去看。`defect_before`：人上次只标了切分缺陷、没给字
-    （`verdict_view.defect_only_cells`）——回到网格又是缺省采信，等于把人点掉的又默认收了，归逐张。
+    （`verdict_view.defect_only_cells`），或在网格里点了「要细审」（`flagged_cells`，调用方并进来）
+    ——回到网格又是缺省采信，等于把人点掉的又默认收了，归逐张。
     """
     if slot >= TAIL_SLOT:
         return "tail"
@@ -405,7 +406,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     class_counts[_cls] = class_counts.get(_cls, 0) + 1
                     if _cls == "replace_align":
                         if _defect_only is None:
-                            _defect_only = defect_only_cells(book)
+                            _defect_only = defect_only_cells(book) | flagged_cells(book)
                         _sub = replace_align_sub(r.slot, r.doubts, ref, r.id in _defect_only)
                         _sc = class_sub_counts.setdefault(_cls, {})
                         _sc[_sub] = _sc.get(_sub, 0) + 1

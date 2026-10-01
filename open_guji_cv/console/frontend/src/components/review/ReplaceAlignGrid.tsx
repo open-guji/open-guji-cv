@@ -4,11 +4,11 @@ import type { GridState } from './reviewClass'
 import './groupReview.css'
 
 // 对齐改字层 · 网格（overview#265）：一屏几十张缩略图，每张下面标整理本字，缺省「采信整理本」。
-// 人只点掉异常的：点一下 → 字形不完整，再点 → 跳过，再点回到采信。状态与提交在 ReviewPanel
-// （`gridRows` 出事件行，与逐张裁决逐字段相同）；这里只画。交互参照印章遮挡的「整组确认」。
+// 不点 = 采信（字对、其余也对）；有疑问的点一下 → 「要细审」，提交后转到逐张，再点取消。
+// 状态与提交在 ReviewPanel（`gridRows` / `gridFlagRows` 出事件行）；这里只画。交互参照印章遮挡的「整组确认」。
 
-const MARK: Record<GridState, string> = { accept: '✓', truncated: '缺', skip: '跳' }
-const TITLE: Record<GridState, string> = { accept: '采信整理本', truncated: '字形不完整', skip: '跳过' }
+const MARK: Record<GridState, string> = { accept: '✓', review: '审' }
+const TITLE: Record<GridState, string> = { accept: '采信整理本', review: '要细审（提交后转逐张）' }
 
 export function ReplaceAlignGrid({ cards, states, onToggle }: {
   cards: ReviewCard[]

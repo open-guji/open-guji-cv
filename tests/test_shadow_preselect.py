@@ -108,18 +108,20 @@ def test_ts_grid_rows_shadow_preselect_field(tmp_path):
 const cards = [{ id: 'a', ref: { char: '天' }, shadow: { pre: true } },
                { id: 'b', ref: { char: '地' }, shadow: { pre: false } },
                { id: 'c', ref: { char: '玄' } }]
-const states = { a: 'skip' }                     // 预勾的被人点掉了
+const states = { a: 'review' }                   // 预勾的被人点成要细审
 const plain = R.gridRows(cards, states, 1, 2)
 const on = R.gridRows(cards, states, 1, 2, undefined, true)
 const off = R.gridRows(cards, states, 1, 2, undefined, false)
-console.log(JSON.stringify({ plain, on, off, n: R.countShadowPre(cards) }))
+const flag = R.gridFlagRows(cards, states, 2, true)
+console.log(JSON.stringify({ plain, on, off, flag, n: R.countShadowPre(cards) }))
 """)
     assert all("shadow_preselect" not in r for r in out["plain"])           # 旧调用逐字节不变
     strip = lambda rows: [{k: v for k, v in r.items() if k != "shadow_preselect"} for r in rows]
     assert strip(out["on"]) == out["plain"] == strip(out["off"])
     assert [(r["id"], r["v"], r["shadow_preselect"]) for r in out["on"]] == \
-        [("a", "skip", True), ("b", "confirm", False), ("c", "confirm", False)]
+        [("b", "confirm", False), ("c", "confirm", False)]            # a 要细审：不写 confirm
     assert all(r["shadow_preselect"] is False for r in out["off"])
+    assert out["flag"] == [{"id": "a", "via": "grid", "client_ts": 2, "shadow_preselect": True}]
     assert out["n"] == 1
 
 
