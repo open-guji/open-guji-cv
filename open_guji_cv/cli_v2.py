@@ -48,7 +48,8 @@ def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
     enabled = eng._enabled(steps)
     skipped = [s for s in steps if s not in enabled]
     if skipped:
-        print(f"按书级开关跳过：{', '.join(skipped)}（{eng.book.id}.yaml ocr_candidates: false）", flush=True)
+        print(f"按书级开关跳过：{', '.join(skipped)}（ocr_candidates 看 {eng.book.id}.yaml 的开关；"
+              "rare_candidates 无下游在读时自动跳过，点名 `guji step rare_candidates` 才跑）", flush=True)
     return enabled
 
 
