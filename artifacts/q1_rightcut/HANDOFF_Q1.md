@@ -53,7 +53,7 @@
 | recrop（31 条） | 通过 26 / 兜底 1 / 无声放行 4 / 消失 0 | **同**（逐条 IoU/盖墨未变） |
 | frame_strip（n=8） | 残余 0/3，误剥 0/5，字保全 3/8 | **同** |
 | instance_quality | 检出 n=4 0%，误报 0%（n=73） | **同** |
-| 全量单测 `pytest tests/` | 2480 passed, 3 skipped, 5 deselected | 见文末（写入时填） |
+| 全量单测 `pytest tests/` | 2480 passed, 3 skipped, 5 deselected | **2480 passed, 3 skipped, 5 deselected（同）** |
 
 **逐格级对照（比评测指标更严）**：改前改后各自对 71 页 Step4 `cell_shrink` 产物逐字段 diff——**只有 vol02/188 一页不同**，
 且只是 c7 的 7 个格：`bbox_col` 右缘 182 → 185~192（最宽到 192，列图 W=194），`width`/`ink_ratio`/`bbox_page` 随之变；
