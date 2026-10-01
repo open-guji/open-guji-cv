@@ -1,0 +1,26 @@
+{
+ "vol01": {
+  "pages_with_match": 206,
+  "anchored": 188,
+  "rows": 1425,
+  "verdict_events": 4048,
+  "dropped_stale": 0,
+  "dropped_unbound": 4048,
+  "verdict_cells_bound": 0,
+  "label_source": "seed_admit.human",
+  "bind_cells_direct": 0,
+  "label_cells": 507
+ },
+ "vol02": {
+  "pages_with_match": 188,
+  "anchored": 185,
+  "rows": 1083,
+  "verdict_events": 4687,
+  "dropped_stale": 68,
+  "dropped_unbound": 571,
+  "verdict_cells_bound": 1897,
+  "label_source": "bindings",
+  "bind_cells_direct": 0,
+  "label_cells": 1897
+ }
+}
