@@ -37,7 +37,7 @@
 | `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **是** | `admit_instance` |
 | `output/glyph.db` | 库的 SQLite 索引，可从 store + 共享库重建 | **否** | 引擎 |
 | `products/<book>/<step>/` | 数值产物，可重算 | 否 | 引擎 |
-| `cache/<book>/<kind>/` | 派生图像 LRU 缓存 | 否 | 引擎 |
+| `cache/<book>/<kind>/` | 派生图像 LRU 缓存（按页戳 `_stamps.json` 自检；产物外部换入后要 `guji cache verify` / 清掉，见 `products/cache.py` 模块头） | 否 | 引擎 |
 | `review/batches/` | 人裁批次登记 | 是 | 控制台 |
 | `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 是 | 控制台 |
 | `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 是 | 引擎 |

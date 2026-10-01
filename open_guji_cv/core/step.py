@@ -455,11 +455,25 @@ class RunContext:
         return self.store.exists(self.book.id, step.spec.id, page_key(page))
 
     # 派生图像：查缓存，没有就让产出它的 Step 现算
+    def cache_stamp(self, kind_id: str, key: str) -> str | None:
+        """这张缓存图该对着的产物版本：产出它的那一步、这一页产物的 sha（见 `products/cache.py` 页戳）。
+        那一页还没有 ok 的产物 → None（不验）。"""
+        import re as _re
+        m = _re.match(r"^p\d{4}", key)
+        if not m:
+            return None
+        try:
+            ent = self.store.manifest(self.book.id, self.producer(kind_id).spec.id).get(m.group(0))
+        except Exception:                      # noqa: BLE001 —— 戳只是护栏，取不到不挡出图
+            return None
+        return ent.sha256 if ent is not None and ent.status == "ok" and ent.sha256 else None
+
     def materialize(self, kind_id: str, key: str) -> Path:
         step = self.producer(kind_id)
         return self.cache.materialize(
             self.book.id, kind_id, key,
-            lambda: step.render(self, kind_id, key))
+            lambda: step.render(self, kind_id, key),
+            stamp=self.cache_stamp(kind_id, key))
 
     def image(self, kind_id: str, key: str) -> np.ndarray:
         img = imread(str(self.materialize(kind_id, key)), 0)

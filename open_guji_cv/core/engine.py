@@ -208,6 +208,12 @@ class Engine:
         self.ctx = RunContext(book, self.store, self.cache, resolved, self.log, pipeline=pipeline)
         self._rev = git_rev()
 
+    def _stamp_cache(self, step: Step, key: str, sha: str) -> None:
+        """这一步刚写完一页产物：它顺手 `cache.put` 的图像类缓存，记上「对着这版产物切的」戳。"""
+        for k in step.spec.produces:
+            if kind_of(k).storage == "image_cache":
+                self.ctx.cache.set_page_stamp(self.book.id, k, key, sha)
+
     # ── 按 book 配置关掉的可选步骤 ───────────────────────────────────────
     def _enabled(self, steps: list[str]) -> list[str]:
         """过滤掉本书没开启的可选步骤：
@@ -465,6 +471,7 @@ class Engine:
                     if kind_of(k).storage != "numeric":
                         raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
                 _, sha = self.store.write(self.book.id, sid, key, products)
+                self._stamp_cache(step, key, sha)
                 elapsed = time.time() - t0
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
@@ -563,6 +570,7 @@ class Engine:
                         if kind_of(k).storage != "numeric":
                             raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
                     _, sha = self.store.write(self.book.id, sid, key, products)
+                    self._stamp_cache(step, key, sha)
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                                params_hash=ph, upstream=ups or {},
                                                code_rev=self._rev, elapsed=round(elapsed, 3),
