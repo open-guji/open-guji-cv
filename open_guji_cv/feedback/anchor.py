@@ -22,6 +22,10 @@
 | `ctx` | 当时本页读序里前后各 2 个字（`[前, 后]`），辅助判断整列错位 |
 | `product_key` | 当时 Step3 产物的 sha256（知道这条裁决是按哪一版切分做的） |
 | `source` | `live`（裁决当时取的）或 `backfill:<来源>`（老裁决事后补的，见 `bindings.py`） |
+| `evidence` | **人当时看到的图的凭证**（2026-10-01，D2/#323）：`fp`（`gold/drift.fingerprint` 口径的图像指纹）+ `fp_size` + `fp_of`（`char_patch`/`column_image`）+ `step`/`key`/`sha256`/`params_hash`/`manifest_fp`（当时产物版本）。见 `evidence_for`；`bindings.py` 判「还挂得上吗」时优先比它 |
+
+`evidence` 与其余键**互相独立、可单独存在**：旧事件没有它照常可读；`enrich_events` 对已有锚（如控制台
+`_product_anchor` 写的只含 `product_key` 的锚）**合并补键、不覆盖已有键**。
 """
 from __future__ import annotations
 
@@ -117,18 +121,111 @@ def cell_anchor(key: str, store=None, cache=None, with_ctx: bool = True) -> dict
     return a
 
 
+EVIDENCE_VERSION = 1
+CUTLINE_FP_HALF = 64       # 切线凭证：以切线为中心上下各取这么多行的列图（整列宽）
+
+
+def _manifest_evidence(store, book: str, step: str, key: str) -> dict:
+    """当时这一页产物是哪一版：step + key + 产物 sha256 + params_hash + manifest 指纹。取不到的键留空。"""
+    out: dict = {"step": step, "key": key}
+    try:
+        ent = store.manifest(book, step).get(key)
+    except Exception:
+        ent = None
+    if ent is not None:
+        for src, dst in (("sha256", "sha256"), ("params_hash", "params_hash"),
+                         ("fingerprint", "manifest_fp")):
+            v = getattr(ent, src, None)
+            if v:
+                out[dst] = v
+    return out
+
+
+def _gray_fp(path: Path, size) -> str | None:
+    import cv2
+    from ..gold.drift import fingerprint
+    from ..utils.image_io import imread
+    img = imread(str(path), cv2.IMREAD_GRAYSCALE)
+    return None if img is None else fingerprint(img, size)
+
+
+def evidence_for(event, store=None, cache=None) -> dict | None:
+    """这条事件**当前**能拿到的凭证；无从取（既不是逐格也不是切线、产物/图都没有）→ None。
+
+    - 逐格（`unit=cell` 且 key 是格键）：`char_patch` 的指纹 + 产物版本（Step3 cells 步）；
+    - `cutline`（有 page/col、payload.y）：列图 `column_image` 里切线上下 `CUTLINE_FP_HALF` 行的指纹
+      + `column_warp` 产物版本。人拖线时看的正是这一段。
+    指纹口径复用 `gold/drift.py::fingerprint`（`FP_SIZE`），`fp_size` 随凭证存、比的时候照它的来。
+    """
+    from ..core.spec import column_key, page_key
+    from ..gold.drift import FP_SIZE
+    from ..products.cache import ImageCache
+    from ..products.store import ProductStore
+    t = event.target
+    ev: dict | None = None
+    is_cutline = event.kind == "cutline"      # 切线与字位裁决 key 形状相同、unit 不同：先认 kind
+    if not is_cutline and t.unit == "cell" and parse_cell_key(t.key) is not None:
+        book, page, col, slot, sub = parse_cell_key(t.key)
+        from ..report.slots import cells_step
+        store = store or ProductStore()
+        ev = _manifest_evidence(store, book, cells_step(book), page_key(page))
+        path = (cache or ImageCache()).get(book, "char_patch", patch_key(page, col, slot, sub))
+        if path is not None:
+            fp = _gray_fp(path, FP_SIZE)
+            if fp:
+                ev.update(fp=fp, fp_size=list(FP_SIZE), fp_of="char_patch")
+    elif is_cutline and t.page is not None and t.col is not None \
+            and (event.payload or {}).get("y") is not None:
+        import cv2
+        from ..gold.drift import fingerprint
+        from ..utils.image_io import imread
+        book = t.book or ""
+        store = store or ProductStore()
+        ev = _manifest_evidence(store, book, "column_warp", page_key(t.page))
+        path = (cache or ImageCache()).get(book, "column_image", column_key(t.page, t.col))
+        img = None if path is None else imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is not None:
+            y = int(round(float(event.payload["y"])))
+            seg = img[max(0, y - CUTLINE_FP_HALF):y + CUTLINE_FP_HALF]
+            if seg.size:
+                ev.update(fp=fingerprint(seg, FP_SIZE), fp_size=list(FP_SIZE), fp_of="column_image",
+                          y0=max(0, y - CUTLINE_FP_HALF))
+    if not ev or len(ev) <= 2 and "fp" not in ev:
+        return None                      # 只剩 step/key 两个空壳：不如不写
+    ev["v"] = EVIDENCE_VERSION
+    return ev
+
+
 def enrich_events(events, store=None, cache=None) -> int:
-    """给还没有锚的逐格事件补锚（写事件日志之前调）。→ 补上的条数。失败的留空，不拦写入。"""
+    """给逐格/切线事件补锚与凭证（写事件日志之前调）。→ 补上了东西的事件数。失败的留空，不拦写入。
+
+    已有锚**合并补键、不覆盖**：控制台写入口先放的 `product_key` 锚（只有产物指纹、没有框与图）
+    原先会让这里整条跳过，于是线上事件的 bbox/content_sha 一直是空的（2026-10-01 修）。
+    """
     n = 0
     for e in events:
         t = e.target
-        if t.unit != "cell" or t.anchor or parse_cell_key(t.key) is None:
-            continue
-        try:
-            a = cell_anchor(t.key, store=store, cache=cache)
-        except Exception:
-            a = None
-        if a:
-            t.anchor = a
-            n += 1
+        a = dict(t.anchor or {})
+        before = set(a)
+        if t.unit == "cell" and parse_cell_key(t.key) is not None and not a.get("bbox"):
+            try:
+                live = cell_anchor(t.key, store=store, cache=cache)
+            except Exception:
+                live = None
+            for k, v in (live or {}).items():
+                if k == "product_key" and isinstance(a.get(k), dict):
+                    a[k] = {**v, **a[k]}          # 两种 product_key 形状并存，已有的不动
+                else:
+                    a.setdefault(k, v)
+        if "evidence" not in a:
+            try:
+                ev = evidence_for(e, store=store, cache=cache)
+            except Exception:
+                ev = None
+            if ev:
+                a["evidence"] = ev
+        if set(a) != before or (t.anchor or {}) != a:
+            if a:
+                t.anchor = a
+                n += 1
     return n
