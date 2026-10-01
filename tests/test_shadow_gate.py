@@ -103,6 +103,7 @@ def test_low_conf_option_default_off():
 
 
 def _tiny_clf():
+    pytest.importorskip("sklearn"); pytest.importorskip("pandas")  # 可选件（pyproject extra `shadow`），缺席时跳过而非红
     from sklearn.ensemble import HistGradientBoostingClassifier
     import numpy as np
     import pandas as pd
