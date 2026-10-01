@@ -1,0 +1,61 @@
+{
+ "format": 1,
+ "signal_version": "1",
+ "sklearn": "1.9.1",
+ "model_id": "pagetype_v1",
+ "classifier": "HistGradientBoosting(depth3,lr.08,150it,balanced)",
+ "calibration": "无；门槛=5种子×5折OOF正文最高分+margin",
+ "margin": 0.0,
+ "train_books": {
+  "vol01": 206,
+  "vol02": 188
+ },
+ "train_gold": {
+  "blank": 3,
+  "body": 294,
+  "colophon": 1,
+  "cover": 2,
+  "edict": 1,
+  "label": 2,
+  "roster": 44,
+  "toc": 47
+ },
+ "n_pages": 394,
+ "cv_commit": "8fb0bb1",
+ "trained_at": "2026-10-01T19:06:17Z",
+ "notes": "只判非正文（roster/toc 为主）；极少类 cover/label/blank 保留现行规则。见 HANDOFF_P1.md",
+ "members": [
+  {
+   "name": "hgb_step1_col",
+   "features": [
+    "n_cols",
+    "colw_cv",
+    "colw_med_rel",
+    "n_head_raise",
+    "bend_w80_med",
+    "bend_w80_max",
+    "top_outer_none",
+    "bottom_outer_none",
+    "top_single",
+    "bottom_single",
+    "n_segmented",
+    "col_ink_mean",
+    "col_ink_cv",
+    "col_ink_min",
+    "col_ink_max",
+    "col_empty_n",
+    "col_cover_mean",
+    "col_cover_min",
+    "col_updown",
+    "col_first_rel",
+    "col_last_rel",
+    "col_updown_min",
+    "period_rel",
+    "period_strength",
+    "col_period_cv"
+   ],
+   "thr": 0.9997086506886137
+  }
+ ],
+ "fingerprint": "f44043ef255116c8"
+}

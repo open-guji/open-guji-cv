@@ -29,7 +29,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..clustering.page_type import classify_page_type
 from ..core.spec import GateLevel, GateSpec, StepSpec
@@ -48,6 +48,41 @@ class BorderDetectGateParams(BaseModel):
     {page_survey_block: true}}` 才打开真拦截。开关放这道闸，不放 `page_survey`
     自己的 params：产不产异常数据是 Step0 的事，拦不拦是 Step1 出口闸的事，
     两件事分开才能做到"缺省只记待办不拦"。"""
+    pagetype_model: bool = False
+    """P1 道（2026-10-01）：用学习到的「正文/非正文」模型再拦一道。缺省关；书级 `params:
+    {border_detect_gate: {pagetype_model: true}}` 才开。只拦不放——现行规则判 skip 的页不动，
+    模型很有把握（门槛见模型文件，训练折 OOF 正文最高分）判为非正文（职名/目录等）才 reject。
+    关着时本字段不进参数 dump、manifest 不多任何键，产物与加字段前逐字节相同。
+    效果与门槛见 HANDOFF_P1.md。"""
+    pagetype_model_path: str = ""       # 模型文件；空 = models/pagetype/pagetype_v1.joblib。路径不进指纹（path_params）
+    pagetype_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
+
+    @model_serializer(mode="wrap")
+    def _drop_off_pagetype(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not self.pagetype_model:
+            for k in ("pagetype_model", "pagetype_model_path", "pagetype_model_fingerprint"):
+                d.pop(k, None)
+        return d
+
+    def model_post_init(self, __context) -> None:
+        if self.pagetype_model and not self.pagetype_model_fingerprint:
+            from ..pagetype_model.model import DEFAULT_MODEL, file_fingerprint
+            object.__setattr__(self, "pagetype_model_fingerprint",
+                               file_fingerprint(self.pagetype_model_path or DEFAULT_MODEL) or "missing")
+
+
+_PT_GATES: dict = {}
+
+
+def _pagetype_gate(p: "BorderDetectGateParams"):
+    key = (p.pagetype_model_fingerprint, p.pagetype_model_path)
+    g = _PT_GATES.get(key)
+    if g is None:
+        from ..pagetype_model.gate import PageTypeGate
+        from ..pagetype_model.model import load_model
+        g = _PT_GATES[key] = PageTypeGate(load_model(p.pagetype_model_path or None))
+    return g
 
 
 @register_step
@@ -57,6 +92,7 @@ class BorderDetectGateStep(Step):
         consumes=("borders",), optional_consumes=("page_survey",),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
+        path_params=("pagetype_model_path",),
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type"),
     )
 
@@ -70,13 +106,22 @@ class BorderDetectGateStep(Step):
             return {"border_detect_gate_manifest": BorderDetectGateManifest(
                 page=page, admitted=False, reject=["missing_input：上游 borders 产物缺失"],
                 n_cols=0, expected_cols=expected)}
-        page_type, policy = classify_page_type(ctx.raw_page(page))
+        raw = ctx.raw_page(page)
+        page_type, policy = classify_page_type(raw)
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
 
         reject: list[str] = []
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
+        pt_ev = None
+        if p.pagetype_model and policy != "skip":
+            gate = _pagetype_gate(p)
+            v = gate.judge(raw, b.model_dump(mode="json"))
+            pt_ev = v.evidence(gate.model)
+            if v.nonbody:
+                reject.append("page_type_model：学习模型判为非正文（职名/目录类），"
+                              f"不套正文列窗口（得分 {max(v.scores.values()):.3f}）")
         if n_cols != expected:
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
@@ -134,7 +179,8 @@ class BorderDetectGateStep(Step):
             top_frame_kind=getattr(b, "top_frame_kind", None),
             bottom_frame_kind=getattr(b, "bottom_frame_kind", None),
             n_head_raise=len(b.head_raise),
-            page_type=page_type, page_type_policy=policy or "standard")}
+            page_type=page_type, page_type_policy=policy or "standard",
+            pagetype_model=pt_ev)}
 
 
 # 挂到 Step1（border_detect）出口——levels 的 desc 只描述层次，不重复具体阈值数字

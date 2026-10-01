@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ...core.spec import ProductKindSpec, RAW_TR
 from ...core.step import register_kind
@@ -50,6 +50,16 @@ class BorderDetectGateManifest(BaseModel):
     """`clustering.page_type.PAGE_TYPES` 之一；判不准兜底 "body"。"""
     page_type_policy: str = "standard"
     """"skip" / "custom" / "standard"——见 `clustering.page_type.policy_of`。"""
+    pagetype_model: dict | None = None
+    """页型模型闸（`pagetype_model` 开着才有）的证据：reason / scores / model。None 时不进 dump，
+    旧产物与关着时的新产物逐字节相同。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_none_pagetype(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and d.get("pagetype_model") is None:
+            d.pop("pagetype_model", None)
+        return d
 
 
 BORDER_DETECT_GATE_MANIFEST = register_kind(ProductKindSpec(
