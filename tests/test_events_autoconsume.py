@@ -126,3 +126,13 @@ def test_request_id_dedups_retry(client):
     # 不同 id 照写；不带 id 的老调用不受影响
     assert _post(client, row, request_id="rid-2")["appended"] == 1
     assert _post(client, row)["appended"] == 1
+
+
+def test_label_batch_is_written_but_never_consumed(client, tmp_path):
+    """L3 补标签批（出批次时冻结了卡片文件）：只写事件，不进路由表——补标签不该把现行产物标过期。"""
+    from open_guji_cv.review import label_batches as LB
+    LB._write_batch("L3-x", "t", "column_warp", "border_class", "vol01", LB.COLEND_SHARD, [],
+                    {"strata": {}}, [], "n", root=tmp_path / "batches")
+    d = _post(client, [{"id": "colborder:vol01:4:1:top", "border_class": "glued"}],
+              batch="L3-x", step="column_warp", unit="column", kind="border_class")
+    assert d["appended"] == 1 and "consumed" not in d and "consume_skipped" in d
