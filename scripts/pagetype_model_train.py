@@ -67,7 +67,7 @@ def main():
         "train_gold": {g: int((d.gold == g).sum()) for g in sorted(set(d.gold))},
         "n_pages": int(len(d)), "cv_commit": rev,
         "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "notes": "只判非正文（roster/toc 为主）；极少类 cover/label/blank 保留现行规则。见 HANDOFF_P1.md"})
+        "notes": "只判非正文（roster/toc 为主）；极少类 cover/label/blank 保留现行规则。见 scripts/experiments/pagetype_model/README.md"})
     print("thr", round(thr, 4), "fingerprint", fp, "->", a.out)
 
 
