@@ -126,6 +126,60 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
     return out
 
 
+_FORCED_JZ_CACHE: dict = {}
+
+
+def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int]]:
+    """人裁「这一格是雙行小注、从中间拆」：`(page, col) → {slot, …}`（2026-09-30）。
+
+    数据源是事件日志里定字裁决的 `seg_defect` + `reason=jiazhu_as_main`（定字台「小注当正文」，
+    overview#265）——人点那个按钮就是在说「这是小注、Step3 没拆」，不用再标一遍。**每格取最新一条
+    定字类裁决**：之后又对同一格改判（定了字、判非字、跳过……）就不再强制。只认整格 key
+    （`book:页:列:格`）；拆开后的 `…a`/`…b` 子格不是强制对象。
+
+    生效时机同 `resolved_cuts`：裁决不进产物指纹，该页 `row_segment` 重跑才生效；事件消费时
+    `routes.py` 那条 `reason=jiazhu_as_main` 规则会把该页 Step3 显式失效。按事件目录的
+    (名, mtime, 大小) 缓存，逐页调用不会反复解析全部日志。
+    """
+    from .events import EventLog
+    el = log or EventLog()
+    try:
+        sig = (str(el.events_dir), tuple(sorted(
+            (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
+    except OSError:
+        return {}
+    hit = _FORCED_JZ_CACHE.get((book, sig[0]))
+    if hit and hit[0] == sig:
+        return hit[1]
+    pre = f"{book}:"
+    last: dict[str, tuple[tuple, bool]] = {}
+    try:
+        evs = list(el.iter_all())
+    except FileNotFoundError:
+        return {}
+    for e in evs:
+        if e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        p = e.payload or {}
+        v = p.get("v") or e.kind
+        if e.kind not in ("confirm", "not_a_char", "skip", "relabel")                 or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
+            continue
+        order = (e.ts, e.batch, e.seq)
+        k = e.target.key
+        if k not in last or order >= last[k][0]:
+            last[k] = (order, v == "seg_defect" and p.get("reason") == "jiazhu_as_main")
+    out: dict[tuple[int, int], set[int]] = {}
+    for k, (_o, forced) in last.items():
+        if not forced:
+            continue
+        parts = k.split(":")
+        if len(parts) != 4 or not all(x.lstrip("-").isdigit() for x in parts[1:]):
+            continue
+        out.setdefault((int(parts[1]), int(parts[2])), set()).add(int(parts[3]))
+    _FORCED_JZ_CACHE[(book, sig[0])] = (sig, out)
+    return out
+
+
 def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     """已裁决、可收敛的切点：`(page, col, slot_above) → ResolvedCut`。判据见 `_resolve`。
 
