@@ -45,6 +45,7 @@ OCR top-k 优先读 calibrate_margin 的缓存 jsonl（--ocr-cache，真 top-k�
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -55,6 +56,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_guji_cv.clustering.match import GlyphMatcher  # noqa: E402
+from open_guji_cv.clustering.near_shape import NearShapeConfig  # noqa: E402
 from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 from open_guji_cv.core.workspace import corpus_path  # noqa: E402
 
@@ -157,11 +159,18 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
     n = len(inst)
     matched = correct = sem_correct = 0
     guards = {"never_match": 0, "conflict": 0}
+    n_near = n_near_ok = 0
     wrong = []
     hits: list[dict] = []                        # --dump-matches 用
     per_flag = []                                # True=命中, None=未命中
     for i, x in enumerate(inst):
         r = matcher.match(patches[i], feat=feats[i])
+        ns = r.near_shape
+        if (r.verdict == "unsure" and r.guard is None and ns and ns.get("winner")):
+            # --near-shape：近形决胜升档，与 Step5-a 同口径（金标库全当人裁）
+            r = dataclasses.replace(r, verdict="same", char=ns["winner"], matched_id="near_shape")
+            n_near += 1
+            n_near_ok += ns["winner"] == x["char"]
         if r.verdict == "same":
             matched += 1
             ok = r.char == x["char"]
@@ -221,6 +230,7 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
         "n_matched": matched, "n_correct": correct,
         "coverage_second_half": round(mh / max(1, n - half), 4),
         "guards": guards,
+        "near_shape_upgraded": n_near, "near_shape_correct": n_near_ok,
         "mismatches": [{"id": a, "gold": g, "pred": p, "matched": m}
                        for a, g, p, m in wrong],
     }
@@ -246,7 +256,8 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
           f"字形精度 {report['match_precision']:.4f}  "
           f"语义精度 {report['match_precision_semantic']:.4f}  "
           f"计门精度 {report['match_precision_gated']:.4f}  "
-          f"后半段 {report['coverage_second_half']:.1%}  护栏 {guards}")
+          f"后半段 {report['coverage_second_half']:.1%}  护栏 {guards}"
+          + (f"  近形升档 {n_near_ok}/{n_near}" if n_near else ""))
     if branches is not None:
         print(f"    端到端: 覆盖 {report['end2end_coverage']:.1%} "
               f"(same {matched} + context {ctx_n})  "
@@ -272,6 +283,8 @@ def main() -> None:
     ap.add_argument("--seed-shard", default="001-vol01-body")
     ap.add_argument("--query-shard", default="002-vol02-body")
     ap.add_argument("--k", type=int, default=10)
+    ap.add_argument("--near-shape", action="store_true",
+                    help="开近形决胜（clustering/near_shape.py），升档计入 same 档")
     ap.add_argument("--cov-high", type=float, default=None,
                     help="same 闸（默认跟随判据的库匹配侧标定，两者都是 0.992）")
     ap.add_argument("--miss-wmax", type=float, default=None,
@@ -322,7 +335,8 @@ def main() -> None:
         for shard in args.shards.split(","):
             inst, patches = load_shard(samples, shard, args.include_excluded)
             m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
-                             cov_high=args.cov_high, **wmax_kw)
+                             cov_high=args.cov_high, **wmax_kw,
+                             near_shape=NearShapeConfig() if args.near_shape else None)
             feats = m.extract(patches)
             reports.append(run(m, inst, patches, feats, f"incremental/{shard}",
                                branches=branches))
@@ -331,7 +345,8 @@ def main() -> None:
         si, sp = load_shard(samples, args.seed_shard, args.include_excluded)
         qi, qp = load_shard(samples, args.query_shard, args.include_excluded)
         m = GlyphMatcher(k=args.k, verify_method=args.verify_method,
-                         cov_high=args.cov_high, **wmax_kw)
+                         cov_high=args.cov_high, **wmax_kw,
+                             near_shape=NearShapeConfig() if args.near_shape else None)
         sf = m.extract(sp)
         qf = m.extract(qp)
         for i, x in enumerate(si):
