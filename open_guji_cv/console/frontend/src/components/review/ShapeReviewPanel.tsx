@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fetchReviewCardsByShape } from '../../api/review'
+import { fetchReviewCardsByCluster, fetchReviewCardsByShape } from '../../api/review'
 import { postEvents } from '../../api/events'
 import { consumedMsg } from '../../domain'
 import type { ReviewShapeGroup } from '../../types/review'
@@ -18,6 +18,9 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
   const [only, setOnly] = useState<'review' | 'auto' | 'all'>('review')
   const [gate, setGate] = useState(true)
   const [sampleLimit, setSampleLimit] = useState(60)
+  // 先纯按形聚类（2026-10-01 用户）：不预设字种，簇只由字块图形状决定，人给每簇一个字。
+  const [shapeFirst, setShapeFirst] = useState(false)
+  const [thr, setThr] = useState(0.95)
   const [groups, setGroups] = useState<ReviewShapeGroup[]>([])
   const [idx, setIdx] = useState(0)
   const [nTotal, setNTotal] = useState(0)
@@ -33,7 +36,9 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
   async function load() {
     setMsg('载入中…')
     try {
-      const d = await fetchReviewCardsByShape(book, pages || 'dev_set', only, gate, true, sampleLimit)
+      const d = shapeFirst
+        ? await fetchReviewCardsByCluster(book, pages || 'dev_set', only, gate, true, sampleLimit, thr)
+        : await fetchReviewCardsByShape(book, pages || 'dev_set', only, gate, true, sampleLimit)
       setGroups(d.groups)
       setNTotal(d.n_total)
       setIdx(0)
@@ -111,6 +116,14 @@ export function ShapeReviewPanel({ book, pages }: { book: string; pages: string 
     <div className="card">
       <h2>按形聚类批审 <span className="muted">形近对（今/令、玉/王…）分开簇，一簇一屏</span></h2>
       <div className="rv-toolbar">
+        <label className="muted" title="勾上：不先按整理本字/首选字分池，直接对所有待审格的字块图聚类，一簇标一个字；簇里不对的格点掉。不勾：先按字种分池再拆形近对（旧法）。">
+          <input type="checkbox" checked={shapeFirst} onChange={(e) => setShapeFirst(e.target.checked)} /> 先按形聚类（不预设字）
+        </label>
+        {shapeFirst && (
+          <label className="muted" title="簇内两格字块 embedding 的余弦下限。越高簇越纯越碎，越低越省事越容易混进别的字。">
+            相似度 ≥ <input value={thr} onChange={(e) => setThr(+e.target.value || 0.95)} size={4} />
+          </label>
+        )}
         <label className="muted">范围
           <select value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
             <option value="review">只看待审</option>

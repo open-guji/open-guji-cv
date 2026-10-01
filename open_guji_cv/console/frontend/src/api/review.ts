@@ -40,6 +40,15 @@ export function fetchReviewCardsByShape(book: string, pages: string, only: strin
   return api<ReviewCardsShapeResponse>(`/api/review/cards?${qs}`)
 }
 
+// 先纯按形聚类、每类标一次（`group=cluster`）：不预设字种，簇完全由字块图形状决定。
+export function fetchReviewCardsByCluster(book: string, pages: string, only: string, gateCut: boolean,
+                                          skipDecided = true, sampleLimit = 60, thr?: number) {
+  const qs = `book=${encodeURIComponent(book)}&pages=${encodeURIComponent(pages)}`
+    + `&only=${only}&gate_cut=${gateCut}&skip_decided=${skipDecided}`
+    + `&group=cluster&sample_limit=${sampleLimit}` + (thr ? `&cluster_thr=${thr}` : '')
+  return api<ReviewCardsShapeResponse>(`/api/review/cards?${qs}`)
+}
+
 export function fetchReviewVerdicts(batch: string) {
   return api<ReviewVerdictsResponse>(`/api/review/verdicts?batch=${encodeURIComponent(batch)}`)
 }
