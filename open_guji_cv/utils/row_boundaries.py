@@ -1471,6 +1471,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     cut_judge=None,
                     pinned_cuts: "dict[int, float] | None" = None,
                     forced_solo: "set[int] | None" = None,
+                    forced_jiazhu: "set[int] | None" = None,
                     detect_bottom_bar: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
@@ -1535,6 +1536,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `forced_solo`：人裁指认为單行小注的格（对外 `slot` 编号，来自
       `feedback/lookup.resolved_solo_notes`）。只管判据落空的那一型（左半有碎墨把
       跨度撑满），已被雙行段收走的格不动；缝取右半墨迹左缘。
+    - `forced_jiazhu`：人裁指认为雙行小注的格（对外 `slot` 编号，来自
+      `feedback/lookup.resolved_forced_jiazhu`，2026-09-30）。判据没认出的短版本小注
+      （缝 2px / 缝偏出窗口 / 搭档量不出缝凑不成段）由人指出来，**不看判据直接从中间拆开**
+      （`jiazhu_split.forced_split_center`）。已被雙行段收走的格不动；紧随其后的右半单字照常被段端收编。
+      空白格、墨太少量不出缝的格忽略。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
@@ -1663,6 +1669,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             for p in sorted(patches)
         ]
         runs = jiazhu_split.link_runs(entries)
+        # 人指认的雙行小注：不看判据，从中间拆（见 `forced_jiazhu` 说明）。**必须在 `adopt_run_tails`
+        # 之前并进 runs**：紧随其后的奇数字末行（右半单字）才会被当段尾收成 `jiazhu_a`，而不是自成單行小注。
+        for pos in sorted(nonblank):
+            if forced_jiazhu and _pos_to_slot(pos, n_raised) in forced_jiazhu and pos not in runs:
+                cx_forced = jiazhu_split.forced_split_center(patches[pos], ink_threshold)
+                if cx_forced is not None:
+                    runs[pos] = cx_forced
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。

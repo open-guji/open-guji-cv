@@ -45,7 +45,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.12", unit="column",   # 1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.13", unit="column",   # 1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -79,6 +79,9 @@ class RowSegmentStep(Step):
         # 第三个兄弟：人指认的單行小注格（判据落空的那一型，见 lookup.resolved_solo_notes）
         from ..feedback.lookup import resolved_solo_notes as _resolved_solo
         book_solo = _resolved_solo(ctx.book.id)
+        # 第四个兄弟（2026-09-30）：人指认的雙行小注格（判据没认出的短版本小注），不看判据从中间拆
+        from ..feedback.lookup import resolved_forced_jiazhu as _resolved_forced_jz
+        book_forced_jz = _resolved_forced_jz(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
         # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
@@ -121,6 +124,7 @@ class RowSegmentStep(Step):
                 pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                              if pg_ == page and c_ == gc.col} or None,
                 forced_solo=book_solo.get((page, gc.col)),
+                forced_jiazhu=book_forced_jz.get((page, gc.col)),
                 detect_bottom_bar=p.detect_bottom_bar,
                 **({} if slot_override is None or slot_override.uniform
                    else {"lam": NONUNIFORM_LAM}))

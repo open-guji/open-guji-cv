@@ -152,6 +152,11 @@ DEFAULT_ROUTES: list[dict] = [
             # 只标不跑，下次 `step seed_admit` 才重算（0.1 s/页）；历史事件首次接上会把
             # 裁过的页一起标失效，seed_admit 便宜，不追溯处理。
             {"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+    # 「小注当正文」（reason=jiazhu_as_main）：人指认这格是 Step3 没拆的雙行小注 → 该页 Step3 也失效，
+    # 重跑时 `lookup.resolved_forced_jiazhu` 把它从中间拆开（2026-09-30）。与上面 confirm 那条
+    # 同时命中（一个事件多个去处）。
+    {"match": {"kind": "confirm", "payload.reason": "jiazhu_as_main"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     # 判非字同理：名单变了 seed_admit 该重算。
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},

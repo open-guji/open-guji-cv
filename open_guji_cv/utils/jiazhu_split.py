@@ -218,6 +218,36 @@ COLUMN_FRAC_T = 0.25       # 整列判据：非空白格里有这个比例以上
                            # 两个分布之间有 0.05~0.44 的空档，阈值取在空档中段。
 
 
+# ── 人裁强制：这一格就是雙行小注，从中间拆开（2026-09-30）──────────────────────
+# 判据（`gap_center`：缝宽≥3px、缝在墨迹跨度 30~70%、搭档格凑段）对提要末尾 2~3 行的短版本小注会
+# 落空：缝只有 2px、缝偏出窗口、或搭档量不出缝凑不成段（vol02 12:7:9 / 97:9:19 / 180:8:8 等）。
+# 人看图一眼就知道是小注，所以给一条**不看判据**的通道：人指认的格直接拆。
+# 缝不求准——取墨迹跨度中段 35~65% 里**墨量最少的那条谷**（并列取最靠中心的一段的中点），
+# 没有空谷就是笔画最少的那一列；两半墨量不够 `HALF_MIN_INK` 的半边由调用方照旧不发格子。
+FORCED_BAND = (0.35, 0.65)
+
+
+def forced_split_center(patch: np.ndarray, ink_threshold: int = INK_THRESHOLD) -> float | None:
+    """人指认「这一格是雙行小注」时的缝中心 x（patch 局部坐标）；墨太少量不出就返回 None。"""
+    binary = _binary(patch, ink_threshold)
+    if binary.sum() < 80:
+        return None
+    xp = binary.sum(axis=0)
+    ink = np.flatnonzero(xp > 0)
+    if len(ink) < 10:
+        return None
+    x0, x1 = int(ink[0]), int(ink[-1])
+    span = x1 - x0 + 1
+    lo = x0 + int(span * FORCED_BAND[0])
+    hi = x0 + int(np.ceil(span * FORCED_BAND[1]))
+    seg = xp[lo:hi + 1]
+    idx = np.flatnonzero(seg == seg.min()) + lo
+    groups = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+    mid = (x0 + x1) / 2.0
+    best = min(groups, key=lambda g: abs((g[0] + g[-1]) / 2.0 - mid))
+    return float(best[0] + best[-1] + 1) / 2.0
+
+
 def column_frac(patches: dict[int, np.ndarray], ref_w: float | None = None,
                 ink_threshold: int = INK_THRESHOLD) -> float:
     """整列判据：这一列有多大比例的非空白格**看起来是双列小字**。
