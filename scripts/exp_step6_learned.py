@@ -59,12 +59,20 @@ def build_ctx(args, gold_texts, with_book: bool) -> SignalCtx:
                      lm_book=book, lm_mix=mix)
 
 
-def extract(samples, ctx: SignalCtx):
+def extract(samples, ctx: SignalCtx, glyph_only: bool = False):
     rows, meta = [], []
     for s in samples:
         page = str(s["page"]) if "page" in s else str(s.get("id"))
         for ci, col in enumerate(s["columns"]):
-            sl_all = [sl for sl in col["slots"] if sl["candidates"]]
+            sl_all = []
+            for sl in col["slots"]:
+                cs = sl["candidates"]
+                if glyph_only:       # 池子里只留字形库真候选；金标不在其中的格整格不考（对规则与模型同样适用）
+                    cs = [c for c in cs if c.get("source") == "glyph"]
+                    if not any(c["char"] == sl["gold"] for c in cs):
+                        continue
+                if cs:
+                    sl_all.append(dict(sl, candidates=cs))
             for k, sl in enumerate(sl_all):
                 cands = sl["candidates"]
                 prev = tuple(x["gold"] for x in sl_all[:k])
@@ -225,6 +233,7 @@ def main():
     ap.add_argument("--book-corpus", required=True)
     ap.add_argument("--harm-w", type=float, default=3.0, help="选 τ 时一次改坏抵几次救回")
     ap.add_argument("--out", default="runs/x1/step6_ctx.json")
+    ap.add_argument("--glyph-only", action="store_true")
     ap.add_argument("--leaky", action="store_true")
     ap.add_argument("--no-ablation", action="store_true")
     args = ap.parse_args()
@@ -236,7 +245,7 @@ def main():
 
     for scen, with_book in (("with_book", True), ("no_book", False)):
         ctx = build_ctx(args, gold_texts, with_book)
-        D = extract(samples, ctx)
+        D = extract(samples, ctx, args.glyph_only)
         nslot = len(set(D["slot"]))
         base_rows = D["j"] == 0
         S = {"n_slots": nslot, "n_rows": int(len(D["y"])),
