@@ -5,8 +5,9 @@
         [--image-desc page|canvas|source|<json 文件>] [--width 1200]
 
 `--image-desc` 说明 IMAGE 是哪张图（坐标换算靠它，规范 §2.3）：
-`page`＝就是本页图（缺省）；`source`＝`image.source` 那张原叶（按 `image.region` 平移）；
-`canvas`＝meta 里给的另一版裁图（读 PAGE.json 同目录 meta.json 的 `pages.<页>.canvas_image`）；
+`page`＝坐标所在那张图（缺省；v0.1 即 canvas = IA 原叶或拆块裁图，v0 即 `image`）；
+`source`＝原叶（v0.1 取 `canvas.source`，v0 取 `image.source`，按裁剪框平移）；
+`canvas`＝v0.1 同 `page`；v0 读 PAGE.json 同目录 meta.json 的 `pages.<页>.canvas_image`；
 或给一个 JSON 文件（`width/height/region/source`）。`--width` 先把图缩到这个宽度再画（IIIF `w,` 档）。
 
 对位检验：每个字框里的墨占比，原位 vs 整体平移 ±dx/±dy；框对准时原位应是最大（字框是
@@ -52,13 +53,14 @@ def main(argv=None) -> int:
 
     page = gp.load(a.page)
     if a.image_desc == "page":
-        desc = page["image"]
+        desc = gp.coord_frame(page)
     elif a.image_desc == "source":
-        src = page["image"]["source"]
+        src = (page.get("canvas") or {}).get("source") or page["image"]["source"]
         desc = {"width": src["width"], "height": src["height"], "source": src}
     elif a.image_desc == "canvas":
         meta = json.loads((Path(a.page).parent / "meta.json").read_text(encoding="utf-8"))
-        desc = meta["pages"][str(page["page"]["index"])]["canvas_image"]
+        desc = (gp.coord_frame(page) if page.get("canvas") else
+                meta["pages"][str(page["page"]["index"])]["canvas_image"])
     else:
         desc = json.loads(Path(a.image_desc).read_text(encoding="utf-8"))
 
@@ -71,7 +73,7 @@ def main(argv=None) -> int:
         im = im.resize((desc["width"], desc["height"]), Image.LANCZOS)
 
     def m(box):
-        return gp.map_box(box, page["image"], desc)
+        return gp.map_box(box, gp.coord_frame(page), desc)
 
     gray = np.asarray(im.convert("L"))
     # 印章压着的字（occluded）框里全是印泥散点，不拿来量对位

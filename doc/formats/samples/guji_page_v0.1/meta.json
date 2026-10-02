@@ -1,0 +1,88 @@
+{
+  "_说明": "scripts/export_guji_page.py --meta 的输入（v0.1）：CV 不知道的页级信息。defaults 对所有页生效，pages.<页号> 浅合并覆盖。canvas 由 --split-table（整理总管裁剪框表）按工作区页号推出。",
+  "defaults": {
+    "book": {
+      "id": "96mid1ogzk",
+      "edition": "siku-zongmu",
+      "title": "欽定四庫全書總目（武英殿刻本）"
+    },
+    "volume": {
+      "index": 3,
+      "cv_book": "vol03",
+      "label": "經部四~五·易類四~五·卷四~卷五",
+      "juan_range": "4-5",
+      "ia_item": "06061302.cn"
+    },
+    "snapshot": "guji-workspace snap/96mid1ogzk/vol03/20260928T1708-full",
+    "producers": {
+      "manual": {
+        "tool": "manual",
+        "who": "F1 道目测（2026-10-02）"
+      }
+    }
+  },
+  "pages": {
+    "3": {
+      "page": {
+        "index": 3,
+        "label": null,
+        "page_type": "body"
+      },
+      "image": {
+        "path": "data_full/zongmu/vol03/3.png",
+        "source": {
+          "kind": "ia",
+          "item": "06061302.cn",
+          "leaf": 3,
+          "note": "leaf 号按文件名推定（vol03 拆页只动了 105 及以后），未逐张对 IA scandata"
+        }
+      },
+      "marks": [
+        {
+          "kind": "seal",
+          "box": [
+            1480,
+            960,
+            580,
+            860
+          ],
+          "by": "manual",
+          "note": "藏书印（朱印在 1-bit 扫描里成散点），印文漫漶未释；框为目测外接，CV 无印章产物（自校草案 §七·4）"
+        }
+      ]
+    },
+    "107": {
+      "page": {
+        "index": 107,
+        "label": null,
+        "page_type": "body"
+      },
+      "image": {
+        "path": "data_full/zongmu/vol03/107.png",
+        "source": {
+          "kind": "ia",
+          "item": "06061302.cn",
+          "leaf": 105,
+          "width": 4198,
+          "height": 5848,
+          "sha256": "4a65a5fa9498d97ef64f770c569d96b9e5a9306fe9a9022d19857d64f6ccd820",
+          "note": "IA leaf105 是两张双联叶摞扫（4198×5848），工作区存档于 data_full/zongmu/vol03/_source_defects/105-original-4198x5848.png"
+        },
+        "region": [
+          1945,
+          2743,
+          2230,
+          3100
+        ],
+        "edits": [
+          {
+            "op": "whiten",
+            "note": "拆页时上块图底/下块图顶混入的对块版框残条已抹白（vol03.yaml notes）；CV 跑批用的这版 sha 与 overview 拆分成果/107.png 不同，抹白范围未留记录"
+          }
+        ],
+        "note": "CV 跑批用的是 09-27 首版裁法的图（2230×3100，原叶上 xywh=1945,2743,2230,3100，由 overview p105拆分成果/107.png 模板匹配得出、逐像素一致）；现行 canvas 0105c 是 09-29 重切的块，导出时几何已按原叶换到 canvas"
+      },
+      "marks": []
+    }
+  }
+}

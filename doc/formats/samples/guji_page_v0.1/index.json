@@ -1,0 +1,39 @@
+{
+ "schema": "guji-layout-index/0.1",
+ "book": {
+  "id": "96mid1ogzk",
+  "edition": "siku-zongmu",
+  "title": "欽定四庫全書總目（武英殿刻本）"
+ },
+ "volume": {
+  "index": 3,
+  "cv_book": "vol03",
+  "label": "經部四~五·易類四~五·卷四~卷五",
+  "juan_range": "4-5",
+  "ia_item": "06061302.cn"
+ },
+ "page_schema": "guji-page/0.1",
+ "book_text": {
+  "version": null
+ },
+ "pages": [
+  {
+   "page": 3,
+   "canvas_seq": "0003",
+   "canvas_id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003",
+   "file": "p0003.guji-page.json",
+   "sha256": "0576584885b41d4e063da90da9d90f7bc35e1db91412fc5b1e97bd623580de5b",
+   "image_sha256": "05a36191f084309e3638855a836f59f07852a7d66801210af59de863565a9351",
+   "chapters": []
+  },
+  {
+   "page": 107,
+   "canvas_seq": "0105c",
+   "canvas_id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0105c",
+   "file": "p0107.guji-page.json",
+   "sha256": "1df03706dd3e20c96c1f19f9b553a9bfc300684a3cd5e2f79fc425ce36654891",
+   "image_sha256": "1822ea8f5967fd0d0b33b4d7148343a262ea68f4ae6879301d7bb9c402c64966",
+   "chapters": []
+  }
+ ]
+}
