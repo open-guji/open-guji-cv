@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-"""guji-page v0：每字带坐标的页面文本——格式本身的工具（与 CV 产物无关）。
+"""guji-page v0.1：每字带坐标的页面文本——格式本身的工具（与 CV 产物无关）。
 
-规范正本：`doc/formats/guji_page_v0.md`；JSON Schema：`formats/guji_page_v0.schema.json`。
-这里只放**不依赖任何管线产物**的东西：结构检查、坐标框换算、稳定 ID、两个最小导出器
-（guji-markdown、IIIF 注释）。CV 产物 → 本格式在 `guji_page_cv.py`；yolo_tool 那边的
-互转在 yolo_tool 仓（只依赖标准库，不 import 本模块）。
+规范正本：`doc/formats/guji_page_v0.1.md`；JSON Schema：`formats/guji_page_v0.1.schema.json`
+（v0 的 `guji_page_v0.schema.json` 留着，旧文件照样能读、能检查、能导出，`upgrade()` 升到 0.1）。
+这里只放**不依赖任何管线产物**的东西：结构检查、坐标框换算、稳定 ID、IIIF canvas 约定、
+导出器（guji-markdown、IIIF 注释与 canvas）、去 ext、册级索引。CV 产物 → 本格式在
+`guji_page_cv.py`；yolo_tool 工程文件互转在 `guji_page_yolo.py`。
 
-几条一眼要记住的口径（规范 §2）：
+几条一眼要记住的口径（规范 §2、§3）：
 
-- 坐标：**本页图像**的整数像素，**左上原点**，框记 `[x, y, w, h]`（与 IIIF `#xywh=` 同序）。
+- 坐标：**IIIF canvas 的整数像素**，**左上原点**，框记 `[x, y, w, h]`（与 `#xywh=` 同序）。
+  canvas = IA 原叶；合扫页拆开的每一块各是一个 canvas（尺寸 = 裁剪框，原点 = 裁剪框左上角，
+  `canvas.source.selector` 记原叶与裁剪框，与 `image.region` 一一对应）。
   CV 内部的右上原点 `raw_page_px@top-right` 只在导出时换一次（`tr_bbox_to_xywh`），格式里不出现。
-- 文本流 `text` 是真源：一个元素 = 一个「字元」（一个字，也可以是 IDS 串、带异体选择符的字），
-  空串 `""` = 阙文。字框 `glyphs[].text = [start, end)` 引用这条流的区间：一框多字 = 区间长 >1，
+- 文本流 `text` 是真源：一个元素 = 一个「字元」，空串 `""` = 阙文（**只有**不知道原字的位）；
+  底本刻的「□」、来源站点的「□」都是真字照录。组字（IDS 或描述）在 `zi` 里稀疏标。
+  字框 `glyphs[].text = [start, end)` 引用这条流的区间：一框多字 = 区间长 >1，
   一字多框 = 几个框引同一区间，空区间 = 这框还没对上字。
 - 阅读顺序 = `text` 的顺序；列的顺序 = `regions[].columns[]` 的顺序；列内 `runs` 首尾相接铺满 `text`。
 """
@@ -24,8 +28,20 @@ import math
 from pathlib import Path
 from typing import Iterable
 
-SCHEMA_ID = "guji-page/0"
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "formats" / "guji_page_v0.schema.json"
+SCHEMA_ID = "guji-page/0.1"
+SCHEMA_V0 = "guji-page/0"
+READABLE = (SCHEMA_V0, SCHEMA_ID)
+_FORMATS = Path(__file__).resolve().parents[2] / "formats"
+SCHEMA_PATHS = {SCHEMA_V0: _FORMATS / "guji_page_v0.schema.json",
+                SCHEMA_ID: _FORMATS / "guji_page_v0.1.schema.json"}
+SCHEMA_PATH = SCHEMA_PATHS[SCHEMA_ID]
+INDEX_SCHEMA_ID = "guji-layout-index/0.1"
+INDEX_SCHEMA_PATH = _FORMATS / "guji_layout_index_v0.1.schema.json"
+
+# IIIF 约定（网站总管 overview#357，2026-10-02）
+IIIF_BASE = "https://data.kaiyuanguji.com/iiif"
+NORM_WHY = ("异体",)                 # 文本总管 #361·4：norm 只管异体→通行字，校勘改字不进这一层
+ZI_FORMS = ("ids", "desc")          # 文本总管 #361·7：方位确定写 IDS，拿不准写描述文字
 
 LANES = ("main", "jz_r", "jz_l", "solo")
 REVIEW = ("pending", "auto", "human", "disputed")
@@ -127,6 +143,113 @@ def scaled_image(image: dict, width: int) -> dict:
             "source": image.get("source")}
 
 
+# ───────────────────────── IIIF canvas（v0.1） ─────────────────────────
+
+def canvas_id(book_id: str, volume: int, seq: str, base: str = IIIF_BASE) -> str:
+    """`<base>/<bookId>/canvas/<册2位>/<页序4位><后缀>`，如 `…/canvas/03/0105c`。"""
+    return f"{base.rstrip('/')}/{book_id}/canvas/{int(volume):02d}/{seq}"
+
+
+def ia_image_id(item: str, leaf: int) -> str:
+    """IA 原叶的 IIIF 图像 id（R12 实测可用的写法），当 `canvas.source.id` 的缺省值。"""
+    f = f"{item}%2F{item}_tif.zip%2F{item}_tif%2F{item}_{int(leaf):04d}.tif"
+    return f"https://iiif.archive.org/image/iiif/3/{f}"
+
+
+def seq_for_ws_page(ws_page: int, split_rows: list[dict] | None = None) -> tuple[str, dict | None]:
+    """工作区页号 → canvas 页序（IA leaf 号 4 位 + 拆块后缀）。
+
+    `split_rows`：该册在「四庫合扫拆页-裁剪框」表里的行（overview 整理总管 `73d3b4be`，
+    字段 vol / ia_leaf / canvas_seq / ws_page / xywh / orig_size）。规则照该表 §二：
+    拆点 P 之前同号；P..P+3 → 表里那一块；之后 n−3。返回 (页序, 命中的表行或 None)。
+    """
+    rows = sorted(split_rows or [], key=lambda r: r["ws_page"])
+    if not rows:
+        return f"{ws_page:04d}", None
+    hit = next((r for r in rows if r["ws_page"] == ws_page), None)
+    if hit:
+        return hit["canvas_seq"], hit
+    P, n_blocks = rows[0]["ws_page"], len(rows)
+    leaf = ws_page if ws_page < P else ws_page - (n_blocks - 1)
+    return f"{leaf:04d}", None
+
+
+def make_canvas(book_id: str, volume: int, seq: str, *, width: int, height: int,
+                source_id: str | None = None, source_size=None, xywh=None,
+                base: str = IIIF_BASE) -> dict:
+    """v0.1 的 `canvas` 块。拆块页给 `xywh`（在原叶上的裁剪框）与原叶尺寸，生成 `source.selector`。"""
+    c = {"id": canvas_id(book_id, volume, seq, base) if book_id and seq else None,
+         "seq": seq, "width": int(width), "height": int(height)}
+    if xywh is not None:
+        x, y, w, h = (int(v) for v in xywh)
+        c["source"] = {"id": source_id,
+                       "width": int(source_size[0]) if source_size else None,
+                       "height": int(source_size[1]) if source_size else None,
+                       "selector": {"type": "FragmentSelector", "value": f"xywh={x},{y},{w},{h}"}}
+    return c
+
+
+def selector_xywh(canvas: dict) -> list[int] | None:
+    sel = ((canvas or {}).get("source") or {}).get("selector") or {}
+    v = sel.get("value", "")
+    if not v.startswith("xywh="):
+        return None
+    return [int(float(t)) for t in v[5:].split(",")]
+
+
+def canvas_frame(canvas: dict) -> dict:
+    """canvas 当成一张「图」的描述（`width/height/region/source`），喂给 `map_box`。"""
+    src = (canvas or {}).get("source") or {}
+    fr = {"width": canvas["width"], "height": canvas["height"]}
+    reg = selector_xywh(canvas)
+    if reg is not None:
+        fr["region"] = reg
+        fr["source"] = {"width": src.get("width"), "height": src.get("height")}
+    return fr
+
+
+def coord_frame(page: dict) -> dict:
+    """本页坐标所在的那张「图」：v0.1 是 canvas，v0 是 `image`。"""
+    if page.get("schema") == SCHEMA_ID and page.get("canvas"):
+        return canvas_frame(page["canvas"])
+    return page["image"]
+
+
+def remap_geometry(page: dict, src: dict, dst: dict) -> int:
+    """把页上全部几何（字框、标记、列框、区框、界行点）从 `src` 帧搬到 `dst` 帧，裁到 dst 图内。
+
+    用在「CV 跑批那张图 ≠ canvas」时（vol03 p107：产物建在旧裁法的图上）。返回被裁过的框数。
+    """
+    W, H = int(dst["width"]), int(dst["height"])
+    clipped = 0
+
+    def mb(b):
+        nonlocal clipped
+        if not b:
+            return b
+        x, y, w, h = map_box(b, src, dst)
+        x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x + w), min(H, y + h)
+        if (x0, y0, x1, y1) != (x, y, x + w, y + h):
+            clipped += 1
+        if x1 <= x0 or y1 <= y0:
+            return None
+        return [x0, y0, x1 - x0, y1 - y0]
+
+    for g in page.get("glyphs", []):
+        g["box"] = mb(g.get("box"))
+    for m in page.get("marks", []):
+        if m.get("box"):
+            m["box"] = mb(m["box"])
+    for reg in page.get("regions", []):
+        reg["box"] = mb(reg.get("box"))
+        reg["rules"] = [[[min(W, max(0, q[0])), min(H, max(0, q[1]))]
+                         for q in (map_box([pt[0], pt[1], 1, 1], src, dst)[:2] for pt in line)]
+                        for line in reg.get("rules", [])]
+        for col in reg.get("columns", []):
+            col["box"] = mb(col.get("box"))
+    return clipped
+
+
 # ───────────────────────── 稳定 ID ─────────────────────────
 
 def mint_id(prefix: str, *parts: str) -> str:
@@ -141,11 +264,18 @@ def carry_ids(old: dict, new: dict) -> dict:
     规则与 CV `feedback/bindings.py` 同源：同一张图（`image.sha256` 相同）上，
     IoU ≥ 0.85 视为同一框，0.6~0.85 且两边都只有这一个对象也算；
     其余（切开、合并、只部分重合）给新 ID，`prev` 记下压到的旧 ID 供人裁搬家。
-    图不同（重扫、重裁）不承接，全部新 ID——那要先经 `map_box` 换到同一坐标再说。
+    图不同时：v0.1 同一 canvas 且两边 `image.region` 都已知（重裁）→ 坐标已在同一 canvas 上，照常承接；
+    否则（重扫、裁剪区不明）不承接，全部新 ID。
     返回 `{"kept": n, "new": n, "dropped": [旧 ID…]}`，`new` 原地修改。
     """
     stats = {"kept": 0, "new": 0, "dropped": []}
-    if old.get("image", {}).get("sha256") != new.get("image", {}).get("sha256"):
+    same_img = old.get("image", {}).get("sha256") == new.get("image", {}).get("sha256")
+    # v0.1：坐标都在 canvas 上。同一 canvas、两边的图都记了在原叶上的裁剪区（重裁、裁剪区已知）
+    # → 几何已可比，照样按 IoU 承接（待定 #9 定稿）；重扫（canvas 变或裁剪区不明）仍不承接
+    oc, nc = old.get("canvas") or {}, new.get("canvas") or {}
+    same_canvas = (old.get("schema") == new.get("schema") == SCHEMA_ID and oc.get("id") and oc.get("id") == nc.get("id")
+                   and old.get("image", {}).get("region") is not None and new.get("image", {}).get("region") is not None)
+    if not (same_img or same_canvas):
         stats["new"] = len(new.get("glyphs", []))
         stats["dropped"] = [g["id"] for g in old.get("glyphs", [])]
         return stats
@@ -184,11 +314,15 @@ def iter_columns(page: dict):
 def check(page: dict) -> list[str]:
     """JSON Schema 管不到的结构约束（规范 §7）。返回问题清单，空 = 通过。"""
     errs: list[str] = []
-    if page.get("schema") != SCHEMA_ID:
-        errs.append(f"schema 应为 {SCHEMA_ID!r}，实为 {page.get('schema')!r}")
+    ver = page.get("schema")
+    if ver not in READABLE:
+        errs.append(f"schema 应为 {SCHEMA_ID!r}（或旧版 {SCHEMA_V0!r}），实为 {ver!r}")
     text = page.get("text", [])
     n = len(text)
-    W, H = page["image"]["width"], page["image"]["height"]
+    fr = coord_frame(page)
+    W, H = fr["width"], fr["height"]
+    if ver == SCHEMA_ID:
+        errs += _check_v01(page, n)
 
     ids: set[str] = set()
 
@@ -243,13 +377,46 @@ def check(page: dict) -> list[str]:
     return errs
 
 
+def _check_v01(page: dict, n: int) -> list[str]:
+    errs: list[str] = []
+    c = page.get("canvas")
+    if not c:
+        return ["v0.1 必须有 canvas 块"]
+    seq = c.get("seq")
+    if seq is not None and not (len(seq) in (4, 5) and seq[:4].isdigit() and (len(seq) == 4 or seq[4].isalpha())):
+        errs.append(f"canvas.seq 应为 4 位页序 + 可选后缀 a–z，实为 {seq!r}")
+    if c.get("id") and seq and not c["id"].endswith(f"/canvas/{int(page['volume']['index']):02d}/{seq}"):
+        errs.append(f"canvas.id 与册号/页序对不上：{c['id']}")
+    sel = selector_xywh(c)
+    if sel is not None and (sel[2], sel[3]) != (c["width"], c["height"]):
+        errs.append(f"拆块 canvas 尺寸 {c['width']}×{c['height']} 应等于裁剪框 {sel[2]}×{sel[3]}")
+    for nm in page.get("norm", []):
+        if nm.get("why") not in NORM_WHY:
+            errs.append(f"norm[{nm['i']}].why 只允许 {NORM_WHY}（校勘改字不进 norm），实为 {nm.get('why')!r}")
+    seen = set()
+    for z in page.get("zi", []):
+        i = z.get("i")
+        if not isinstance(i, int) or not (0 <= i < n):
+            errs.append(f"zi 下标 {i} 越界")
+            continue
+        if i in seen:
+            errs.append(f"zi 下标 {i} 重复")
+        seen.add(i)
+        if z.get("form") not in ZI_FORMS:
+            errs.append(f"zi[{i}].form 只允许 {ZI_FORMS}")
+        if page["text"][i] == "":
+            errs.append(f"zi[{i}] 指向阙文位（阙文不是组字）")
+    return errs
+
+
 def validate_schema(page: dict) -> list[str]:
     """按 JSON Schema 校验；没装 jsonschema 时返回 ["jsonschema 未安装"]（不算失败由调用方定）。"""
     try:
         import jsonschema
     except ImportError:          # pragma: no cover
         return ["jsonschema 未安装"]
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    path = SCHEMA_PATHS.get(page.get("schema"), SCHEMA_PATH)
+    schema = json.loads(path.read_text(encoding="utf-8"))
     v = jsonschema.Draft202012Validator(schema)
     return [f"{'/'.join(map(str, e.path))}: {e.message}" for e in v.iter_errors(page)]
 
@@ -279,16 +446,22 @@ def to_guji_markdown(page: dict, *, page_comment: bool = True, keep_empty_cols: 
     """一列一行的 guji-markdown（与 CV `render/guji_markdown.render_page` 逐字相同的记法）。
 
     抬头 `^`×级数、行首留白 `.`×格数、双行夹注 `<右|左>`、单行小注 `:jz[…]{type=单行}`、
-    阙文 `[[]]`、残字 `□{guess=X}`。`layer="norm"` 时字元换成规范层（`norm` 有条目的位）。
+    阙文 `[[]]`（**每个空串一个，不合并**，guji-markdown §13）、残字 `□{guess=X}`、
+    组字 `:zi[…]`（§16）。真字「□」照出「□」。`layer="norm"` 时字元换成规范层（`norm` 有条目的位）。
     """
     guess_at: dict[int, str] = {}
     for g in page.get("glyphs", []):
         if g.get("guess") and g["text"][1] - g["text"][0] == 1:
             guess_at[g["text"][0]] = g["guess"]
     norm = {nm["i"]: nm["t"] for nm in page.get("norm", [])} if layer == "norm" else {}
+    zi = {z["i"] for z in page.get("zi", [])}
 
     def tok(i):
-        return norm[i] if i in norm else _token_md(page, i, guess_at)
+        if i in norm:
+            return norm[i]
+        if i in zi:                     # guji-markdown §16 组字：IDS 或描述文字原样放进 :zi[…]
+            return f":zi[{page['text'][i]}]"
+        return _token_md(page, i, guess_at)
 
     lines: list[str] = []
     if page_comment:
@@ -326,15 +499,20 @@ def to_guji_markdown(page: dict, *, page_comment: bool = True, keep_empty_cols: 
 
 # ───────────────────────── 导出：IIIF / W3C Web Annotation ─────────────────────────
 
-def to_iiif_annotations(page: dict, canvas_id: str, *, canvas_image: dict | None = None,
+def to_iiif_annotations(page: dict, canvas_id: str | None = None, *, canvas_image: dict | None = None,
                         page_id_base: str | None = None, layer: str = "orig") -> dict:
     """一页字框 → IIIF Presentation 3 `AnnotationPage`（W3C Web Annotation）。
 
-    `canvas_image`：Canvas 对应的那张图的描述（`width/height/region/source`，同 `image` 块）。
-    缺省 = 本页图本身；不同时按 `map_box` 换算（缩放档、另一版裁法）。
-    每框一条 `supplementing` 注释，body 是框里的字（规范层可选），target 是 `canvas#xywh=`。
+    v0.1：坐标已经在 canvas 上，`canvas_id` 缺省取 `page.canvas.id`，target 直接是
+    `<canvas id>#xywh=x,y,w,h`（网站总管约定）。v0 文件照旧：坐标在 `image` 上，
+    `canvas_image` 给出 Canvas 那张图时按 `map_box` 换算。
+    每框一条 `supplementing` 注释，body 是框里的字（规范层可选），审核状态在 `kyg:review`。
     """
-    dst = canvas_image or page["image"]
+    canvas_id = canvas_id or (page.get("canvas") or {}).get("id")
+    if not canvas_id:
+        raise ValueError("没有 canvas id：v0.1 页请填 canvas.id，v0 页请传 canvas_id")
+    src = coord_frame(page)
+    dst = canvas_image or src
     base = page_id_base or f"{canvas_id}/annotations/guji-page"
     norm = {nm["i"]: nm["t"] for nm in page.get("norm", [])} if layer == "norm" else {}
     items = []
@@ -343,7 +521,7 @@ def to_iiif_annotations(page: dict, canvas_id: str, *, canvas_image: dict | None
             continue
         s, e = g["text"]
         value = "".join(norm.get(i, page["text"][i]) for i in range(s, e))
-        x, y, w, h = map_box(g["box"], page["image"], dst)
+        x, y, w, h = map_box(g["box"], src, dst)
         ann = {
             "id": f"{base}/{g['id']}",
             "type": "Annotation",
@@ -363,6 +541,106 @@ def to_iiif_annotations(page: dict, canvas_id: str, *, canvas_image: dict | None
     }
 
 
+def to_iiif_canvas(page: dict, *, annotation_page_id: str | None = None) -> dict:
+    """本页的 IIIF Canvas 骨架（网站 manifest 用；图片资源由网站按图源另挂）。
+
+    拆块页按网站约定在 canvas 上写 `source`：原叶 id + `FragmentSelector` `xywh=` 裁剪框，
+    与本格式 `image.region`（CV 跑批那张图恰是这一块时）一一对应，见规范 §3.3。
+    """
+    c = page.get("canvas")
+    if not c or not c.get("id"):
+        raise ValueError("v0.1 页才有 canvas，且要有 canvas.id")
+    out = {"id": c["id"], "type": "Canvas", "label": {"none": [c.get("seq") or ""]},
+           "width": c["width"], "height": c["height"]}
+    if c.get("source"):
+        out["source"] = {"id": c["source"].get("id"), "type": "Image",
+                         "selector": dict(c["source"]["selector"])}
+    out["annotations"] = [{"id": annotation_page_id or f"{c['id']}/annotations/guji-page",
+                           "type": "AnnotationPage"}]
+    return out
+
+
+# ───────────────────────── 入库与升级 ─────────────────────────
+
+def strip_ext(page: dict) -> dict:
+    """入 book-text 前去掉工具私有的 `ext`（顶层、区、列、字框、标记），返回新对象。
+
+    文本总管 #361·6：去掉后导出的 guji-markdown 必须不变（测试钉住）。
+    """
+    import copy
+    p = copy.deepcopy(page)
+    p.pop("ext", None)
+    for reg in p.get("regions", []):
+        reg.pop("ext", None)
+        for col in reg.get("columns", []):
+            col.pop("ext", None)
+    for g in p.get("glyphs", []):
+        g.pop("ext", None)
+    for m in p.get("marks", []):
+        m.pop("ext", None)
+    return p
+
+
+def upgrade(page: dict, *, canvas: dict | None = None) -> dict:
+    """v0 → v0.1（原地改并返回）。v0 的坐标在 `image` 上；不给 `canvas` 时就拿 `image` 当 canvas
+    （id/seq 为 null，拆块页按 `image.region` 生成 selector）；给了且帧不同，几何整体搬过去。"""
+    if page.get("schema") == SCHEMA_ID:
+        return page
+    if page.get("schema") != SCHEMA_V0:
+        raise ValueError(f"不认识的 schema {page.get('schema')!r}")
+    img = page["image"]
+    if canvas is None:
+        src = img.get("source") or {}
+        canvas = make_canvas(None, page["volume"]["index"], None, width=img["width"], height=img["height"],
+                             source_id=src.get("id"),
+                             source_size=(src["width"], src["height"]) if src.get("width") else None,
+                             xywh=img.get("region"))
+    else:
+        dst = canvas_frame(canvas)
+        if (dst["width"], dst["height"], dst.get("region")) != (img["width"], img["height"], img.get("region")):
+            remap_geometry(page, img, dst)
+    page["schema"] = SCHEMA_ID
+    page["canvas"] = canvas
+    page.setdefault("zi", [])
+    return page
+
+
+def read_page(path: str | Path) -> dict:
+    """读一页，v0 自动升到 v0.1。"""
+    return upgrade(load(path))
+
+
+# ───────────────────────── 册级索引（v0.1 预留） ─────────────────────────
+
+def volume_index(pages: list[dict], *, files: dict | None = None, book_text_version: str | None = None) -> dict:
+    """`layout/index.json`：一册的页表。
+
+    文本总管 #361·5：字段等第一批入库再定，**先定一项**——每页属于 book-text 哪个版本的哪一章
+    （`chapters: [{"version", "chapter": "NNN", "text": [s, e] | null}]`，`text` 是本页文本流里
+    属于该章的区间，null = 整页）。现在由 CV 导出时留空，文本一侧入库对齐时填。
+    """
+    pages = sorted(pages, key=lambda p: p["page"]["index"])
+    first = pages[0] if pages else {}
+    rows = []
+    for p in pages:
+        key = p["page"]["index"]
+        f = (files or {}).get(key)
+        rows.append({
+            "page": key,
+            "canvas_seq": (p.get("canvas") or {}).get("seq"),
+            "canvas_id": (p.get("canvas") or {}).get("id"),
+            "file": f["file"] if f else f"p{key:04d}.guji-page.json",
+            "sha256": f.get("sha256") if f else None,
+            "image_sha256": p["image"].get("sha256"),
+            "chapters": [],
+        })
+    return {"schema": INDEX_SCHEMA_ID,
+            "book": first.get("book"), "volume": first.get("volume"),
+            "page_schema": SCHEMA_ID,
+            "book_text": {"version": book_text_version},
+            "pages": rows}
+
+
 def load(path: str | Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -372,8 +650,10 @@ def dump(page: dict, path: str | Path) -> None:
 
 
 __all__ = [
-    "SCHEMA_ID", "LANES", "REVIEW", "tr_bbox_to_xywh", "tr_point_to_tl", "union_xywh", "iou",
-    "map_box", "scaled_image", "mint_id", "carry_ids", "check", "validate_schema",
-    "unboxed_tokens", "to_guji_markdown", "to_iiif_annotations", "load", "dump",
+    "SCHEMA_ID", "SCHEMA_V0", "LANES", "REVIEW", "tr_bbox_to_xywh", "tr_point_to_tl", "union_xywh", "iou",
+    "map_box", "scaled_image", "canvas_id", "ia_image_id", "seq_for_ws_page", "make_canvas",
+    "canvas_frame", "coord_frame", "remap_geometry", "mint_id", "carry_ids", "check", "validate_schema",
+    "unboxed_tokens", "to_guji_markdown", "to_iiif_annotations", "to_iiif_canvas", "strip_ext",
+    "upgrade", "read_page", "volume_index", "load", "dump",
 ]
 
