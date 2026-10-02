@@ -38,6 +38,10 @@
 
 推荐 **方案 C**：规范层只存「繁体通行」一档，简体由 `t2cn` 派生不存（云/雲、后/後、余/餘 在繁→简方向是多对一，不用判）；无条件字形异体走**与网站 #350 共用的 bim 归一表**（页上物化，`by: table:<版本>`，可整批重算）；上下文才定的（証→證）与例外逐位记在页上；校勘另起 `collation.jsonl`，按稳定字框 id 锚定、按校勘三式导出。
 
+参照调研（§二，全部附打开过的出处）：TEI 与 CBETA 都把「异体规范化」与「校改」分成两套（orig/reg vs sic/corr；CBETA 通用字 vs `<app>`）；
+识典是「底本原字 / 大陆标准繁体 / 简体」三档、后两档机器转；IVS 只管同一字的字形、装不了异体映射；教育部《異體字字典》用「部分異體」标上下文相关，
+**但它不在教育部 CC BY-ND 开放名单里**（bim 表以它为主依据，只宜引编号与判断，不宜搬运字形资料——请 bim 维护者确认）。
+
 两条实测结论值得单列：
 1. **`variants.json` 不能直接填 norm**：vol03 四页若照其有向边填，会提 44/87/85/74 位，真该归一的只 2/6/5/1 位（欽→撳、全→痊、士→土、傳→傅 全是噪声）。本书用字账也有错条（卞→其、籕→抽）。
 2. **这批页上整理本对齐一路没有信号**：维基整理本照录刻本字形，`cand.ref` 与原样没有一位不同；规范层在这批书上只能靠表与人裁。
@@ -62,7 +66,9 @@ python -m pytest tests/test_guji_page_v02.py tests/test_guji_page_v01.py tests/t
 python -m pytest tests/ -s -p no:cacheprovider
 ```
 
-（结果见下。）
+- 格式相关 5 个文件：53 passed。
+- 全量（本容器补装 cv2 依赖、httpx 后）：**2598 passed、30 skipped、1 failed**。失败的是 `tests/test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`
+  （容器里没有 U-Net checkpoint）——F1 交单记过，在未改动的 main 上同样失败，与本分支无关。
 
 ## 七、边界自查
 

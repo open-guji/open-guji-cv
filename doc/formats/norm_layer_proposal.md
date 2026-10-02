@@ -40,7 +40,100 @@
 
 ## 二、参照：各家怎么做
 
-（待补：调研结果写入后替换本节。）
+> 调研方法：WebSearch / WebFetch 实际打开页面、引原文；**打不开、查不到的照写**。2026-10-02 查。标〔推断〕的是 F2 据引文得出的结论。
+
+### 2.1 TEI P5：两对元素分开「变体」与「错误」
+
+- `<choice>` 把同一处的几种编码并列，「permits software to switch automatically between one ‘view’ of a text and another」；
+  `<orig>`（original form）与 `<reg>`（regularization：「a reading which has been regularized or normalized in some sense」）一对，
+  `<sic>` 与 `<corr>`（「the correct form of a passage apparently erroneous in the copy text」）另一对。
+  ——[CO §3.5、§3.5.1、§3.5.2](https://tei-c.org/release/doc/tei-p5-doc/en/html/CO.html)
+- 分开的依据是三类编辑干预：「indication or correction of apparent errors; indication or regularization of variant, irregular, non-standard,
+  or eccentric forms; editorial additions, suppressions, and omissions」（同上 §3.5）。多本异文另走 `<app>/<lem>/<rdg>`（第 13 章）。
+- `<reg>` 可带 `@resp`（「the agency responsible for the intervention」）、`@cert`、`@source`、`@type`
+  （[ref-reg](https://tei-c.org/release/doc/tei-p5-doc/en/html/ref-reg.html)，该页为工具摘要、未逐字核对）。
+- 整份文献的策略写在 `<editorialDecl><normalization method="silent|markup">`，示例里用 `source=` 指向所依据的词典
+  （[ref-normalization](https://tei-c.org/release/doc/tei-p5-doc/en/html/ref-normalization.html)）。
+- 字级：`<g>` 指向 `<charDecl>` 里的 `<char>/<glyph>`，`<mapping type="standard">` 给规范形，「It will also be possible to produce normalized
+  versions by simply ignoring the annotation pointed to by the element g」；并「strongly encouraged to provide IDS for each variant ideograph」
+  （[WD](https://tei-c.org/release/doc/tei-p5-doc/en/html/WD.html)）。
+- 规范字以什么为准：**TEI 不规定**，由项目在 header 声明；上下文相关就逐处写 `<reg>`。未查到专门讨论汉字一对多的段落。
+
+### 2.2 CBETA：通用字只给缺字，校改另走 `<app>`
+
+- 「所謂通用字，就是某字的異體字，或某字通用某字的字；使用通用字，在於方便電腦的呈現」；「有關通用字的認定，大部分以字書上所能檢索到的實例，
+  當作認證憑證；字書所沒有的，大部分從缺」——王志攀〈CBETA電子佛典缺字實務〉（[佛教圖書館館訊 24 期](https://www.gaya.org.tw/journal/m24/24-main4.htm)）。
+- **已有 Unicode 编码的字直接存原字**，通用字只替代缺字（[CBReader 说明](https://archive2.cbeta.org/cbreader/help/cbr_option.htm)）。
+  缺字库字段 `norm_unicode`、`norm_big5_char`、`moe_variant_id`（挂教育部異體字字典编号）——[cbeta_gaiji README](https://github.com/cbeta-org/cbeta_gaiji)。
+- 实取 [xml-p5 `T01n0001.xml`](https://github.com/cbeta-org/xml-p5)：正文 `<g ref="#CB02657">𭯫</g>`；charDecl 里
+  `<charProp><localName>normalized form</localName><value>璩</value></charProp>`、`<mapping type="normal_unicode">`；
+  **校改一律 `<app>`**：`<lem wit="#wit.cbeta …" resp="#resp1">念…</lem><rdg wit="#wit.orig">忘</rdg>`，CBETA 自己算一个本子；该文件没有 `<choice>`、没有 `<normalization>`。
+- 阅读时两套开关分开：缺字显示顺序（Unicode EXT → 通用字 → 组字式 → CB 码），与「修訂用字／底本用字／二者皆要」（`阿羅[羅>漢]`）
+  （CBReader 说明）。讨论区有过交叉案例：「是否校勘用字不應採用通用字？」（[archive2.cbeta.org/node/4981](https://archive2.cbeta.org/node/4981)）。
+- CBETA Online 的切换说明、一字多义通用字的规则：**未查到**。
+
+### 2.3 识典古籍：三档显示，后两档机器转
+
+- 维基百科：「用字有底本原字、中国大陆标准繁体字、简化字三种可供选择，其中标准繁体字和简化字是使用机器翻译对底本原字进行转化得到的」
+  （[zh.wikipedia 识典古籍](https://zh.wikipedia.org/zh-hans/%E8%AF%86%E5%85%B8%E5%8F%A4%E7%B1%8D)）；北大数字人文中心项目页提到「异体字支持」「繁简转换」
+  （[pkudh.org](https://pkudh.org/project/shidianguji/)）。
+- shidianguji.com 是前端渲染页，**打不开内容**；转化依据哪张表、一字多义怎么处理、校勘记怎么挂：**未查到**。
+- 〔推断〕它的三档（原字 / 繁体通行 / 简体）与本文 §三 的两档存储 + 一档派生是同一个分法。
+
+### 2.4 汉典：多源汇编，没有单一正字字段
+
+- 「峯」（[zdic.net/hant/峯](https://zdic.net/hant/%E5%B3%AF)）：國語辭典节「峯「峰」的異體字」，基本解釋节却写「同「峯」」（自指，像是数据错误）；
+  「雲」（[zdic.net/hans/雲](https://zdic.net/hans/%E9%9B%B2)）：异体字一栏列了「云 𦤆 𩂔」——简体字「云」也算进异体。
+- 条目上**没有标明正字或异体判定依据**。〔推断〕各节取自不同辞书，口径不统一；不能当规范层的依据，只能当查证参考。
+
+### 2.5 Unicode IVS / IVD：同一字的字形，不是异体映射
+
+- [UTS #37](https://unicode.org/reports/tr37/)：IVD 把 IVS 关联到某字的「glyphic subset」；「the shapes in the glyphic subset of an IVS should be unifiable
+  with the base character of that IVS」；选择符「default ignorable」——忽略后就是基字。放宽只给差异不大、且有「strong evidence」的变体。
+- [IVD](https://unicode.org/ivd/) 已注册：Adobe-Japan1 14,684、Hanyo-Denshi 13,045、Moji_Joho 11,392、CAAPH 198（2025-07，北京文化艺术出版社）、
+  MSARG 154（澳门）、KRName 36。中文集合只有 CAAPH、MSARG，**未见面向中文古籍的集合**。
+- 结论：IVS 至多在**原样层**区分同一码位下的刻本字形（字元数组已经允许带 VS 的序列），**装不了**「异体 → 通行字」。
+
+### 2.6 教育部《異體字字典》：正字 = 三张标准字体表，「部分異體」管上下文
+
+- 「正字　教育部之《常用字表》、《次常用字表》、《罕用字表》所收錄之字，或此次編輯新增之正字」；「異體字　文獻上與正字同音義而異形者」；
+  **「部分異體　該異體僅對應多音正字中的某一音讀與義項」**（[編輯用語](https://dict.variants.moe.edu.tw/page.jsp?ID=68&la=0)）。
+- 编号：正字 `A00107`（甲表常用）/ `B…`（乙表次常用）/ `C…`（丙表罕用）/ `N…`（新增）；异体 `A01382-021`；符号 ▲ 部分異體、⇒ 兼為另一正字之異體、
+  ＃ 另兼正字身分（[常用符號](https://dict.variants.moe.edu.tw/page.jsp?ID=69&la=0)）。FAQ：「簡體字是異體字的一種」
+  （[FAQ](https://dict.variants.moe.edu.tw/page.jsp?ID=6&la=0)）。
+- **开放授权**：教育部「辭典公眾授權網」CC BY-ND 名单只有《重編國語辭典修訂本》《國語辭典簡編本》《國語小字典》《成語典》，
+  **没有《異體字字典》**（[授權網](https://language.moe.gov.tw/001/Upload/Files/site_content/M0001/respub/index.html)）；字典页脚「All rights reserved」。
+  ——所以 bim 表以它为主要依据时，**只能引编号和正字判断，不能整表搬运字形资料**（这一点交 bim 表维护者确认）。
+
+### 2.7 《通用规范汉字表》附件 1 与 OpenCC
+
+- 附件 1《规范字与繁体字、异体字对照表》分三栏：规范字、繁体字（圆括号）、异体字（方括号）；「对 96 组一个规范字对应多个繁体字（或传承字）的字际关系进行了分解」，
+  对「瞭、乾、藉、麽」及异体「仝、甦、堃、脩」按读音义项加注（如「乾：读 qián 时不简化作“干”，如“乾坤”“乾隆”」）——
+  国务院通知见 [gov.cn](https://www.gov.cn/gongbao/content/2013/content_2481095.htm)（附件正文不在该页），说明文字取自转载页
+  [qqxiuzi.cn](https://www.qqxiuzi.cn/wz/zixun/1680.htm)，数字与教育部解读（[moe.gov.cn](http://www.moe.gov.cn/jyb_xwfb/xw_fbh/moe_2069/s7135/s7562/s7569/201308/t20130827_156353.html)）一致。
+- OpenCC `t2s.json`：先查 `TSPhrases`、再 `TSCharactersExt`、再 `TSCharacters`（**先词后字**）；字表里 `後→后`、`乾→干 乾`、`雲→云`；词表有 `乾坤`、`乾隆`。
+  设计原则：「OpenCC 標準繁體參考了《康熙字典》等各種歷史用法」，作为转香港、台湾标准的中间表示；「不應僅因……歷史異體關係解釋為繁簡關係，就自動加入轉換表」
+  （[OpenCC DESIGN_PRINCIPLES](https://raw.githubusercontent.com/BYVoid/OpenCC/master/DESIGN_PRINCIPLES.md)，Apache-2.0）。
+
+### 2.8 汇总与对本项目的启示
+
+| | 原字 | 规范字 | 规范字依据 | 上下文相关 | 与校勘分开？ |
+|---|---|---|---|---|---|
+| TEI | `<orig>` / `<g>` | `<reg>`（@resp @cert）/ `<mapping type="standard">` | 项目自定，header 声明 | 逐处 `<reg>` | **分**（sic/corr；app） |
+| CBETA | 已编码原样存；缺字 `<g ref>` | charDecl `normalized form`（只给缺字） | 字书实例 | 未查到；按缺字 ID 一对一 | **分**（`<app>`，CBETA 算一个本子） |
+| 识典 | 底本原字档 | 繁体、简体两档机器转 | 未查到 | 未查到 | 未查到 |
+| 汉典 | 字头 | 「同 X」 | 不标 | 不处理 | — |
+| IVS | 基字 + VS | 不承载 | 注册集合 | — | — |
+| 教育部異體字字典 | 异体条目 | 正字条目 | 三张标准字体表 + N 表 | **「部分異體」▲** | — |
+| 附件 1 / OpenCC | 异体栏 / 输入 | 规范字（简）、繁体栏 / 输出 | 国务院 2013 / 康熙等 | 拆 96 组 + 加注 / **先词后字** | — |
+
+启示（对应本文推荐）：
+
+1. **原字永远保留、规范字另存**——TEI、CBETA、识典无一例外；所以 `text` 不动、`norm` 稀疏另记（v0.1 的设计对）。
+2. **规范化与校改分两套**——TEI 两对元素、CBETA 两套开关；`norm` 只管异体，校勘另起（§五）。
+3. **规范字依据要在文件里声明**——TEI `<normalization source=…>` ≈ 本文 `producers.norm_table`（表名 + 版本 + sha）。
+4. **上下文相关只能逐处**——TEI 逐处 `<reg>`、教育部「部分異體」、附件 1 按义项加注、OpenCC 先词后字；所以「表（按字）+ 逐位条目」两层缺一不可。
+5. **繁/简两档，简体派生**——识典三档里两档机器转；附件 1 已把一简对多繁拆好，转换器（OpenCC/t2cn）按词消歧——简体档不必存。
 
 ---
 
@@ -67,13 +160,16 @@
 ### 3.2 繁体通行字的口径
 
 推荐：**以共享归一表的目标字为准**，即「教育部《異體字字典》的正字；被归一的字本身不是 Big5 常用繁体字、也不是通用规范字」——这是按 #350 R11 回报归纳的 bim 表收字口径（确切规则以 bim `ui/scripts/variant-chars/` 生成脚本为准，F2 没有读到该仓）。
-后果是两条，要说清楚：
+后果有三条，要说清楚：
 
 1. **只归一「标准转换器不认得」的字形异体**。#350 原话：「Big5 里的「异体」多半另有字义（如「抬」「雰」「妳」「祐」），一律不收」。
    所以爲、羣、峯 这类 Big5 里有码位的写法（是否算异体各家不一）按此口径不进表；它们在繁体通行档里**保持原样**，简体档由 `t2cn` 正常转换（爲→为、羣→群）。所以「繁体通行」≈「刻本字形去掉生僻异写」，
    不等于「台湾教育部标准字形」。要台湾标准字形，可以在网站再派生一档（繁体通行档过 OpenCC `t2tw`），也不存。
 2. **新旧字形不归一**（宫/宮、温/溫 这类只差一笔的）——是否收进表由表的维护者定。演示表收了「宫→宮」（用字账 single、twedu 有边），
    bim 表若不收，就以 bim 为准。
+3. 三个可选的「繁体」口径对照：**台湾教育部正字**（bim 表主依据；爲→為、羣→群也算异体）、**附件 1 繁体栏**（大陆标准繁体，识典「中国大陆标准繁体字」档〔推断〕即此口径）、
+   **OpenCC 标准繁体**（参考康熙字典，保留爲、羣）。〔推断〕bim 表按 #350 口径不收 Big5 里有码位的写法，进表的多是三套口径下都不算正字的生僻异写，所以选它当口径与三套冲突最小（未逐条核对）；要哪套标准字形，
+   都可以在网站由繁体通行档再派生（`t2tw` 等），不存。
 
 ### 3.3 一张表，两处用：怎么共用不漂移
 
