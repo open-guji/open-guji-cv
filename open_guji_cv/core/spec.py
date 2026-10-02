@@ -190,14 +190,17 @@ class StepSpec:
 def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:
     """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
     只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
-    gates = dict(spec.optional_consumes_when)
+    # 同一种类可以挂多个开关（`rare_agree`／`rare_ref`／`shadow_promote` 都读 5-b）：任一为真即算数
+    gates: dict[str, list[str]] = {}
+    for k, g in spec.optional_consumes_when:
+        gates.setdefault(k, []).append(g)
 
     def _on(g: str) -> bool:
         # `@book.<字段>`：开关在书级（`BookSpec`），不在步骤参数里（见 optional_consumes_when）
         if g.startswith("@book."):
             return bool(getattr(book, g[len("@book."):], False))
         return bool(getattr(params, g, None))
-    return tuple(k for k in spec.optional_consumes if k not in gates or _on(gates[k]))
+    return tuple(k for k in spec.optional_consumes if k not in gates or any(_on(g) for g in gates[k]))
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────

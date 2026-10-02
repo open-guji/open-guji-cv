@@ -21,12 +21,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-SIGNAL_VERSION = "1"
+SIGNAL_VERSION = "2"
+#: 本版代码还能算、还能喂的旧口径。v1 模型的特征是 v2 的子集且取值口径不变（候选集按版本分档，见 `candidates`），
+#: 所以 `shadow_veto` 在用 v1 模型的书不必重训；只有 v2 才有 `promote` 要的名次类特征。
+COMPATIBLE_VERSIONS = ("1", "2")
 
-FEATURES: tuple[str, ...] = (
+FEATURES_V1: tuple[str, ...] = (
     "lib_cov", "lib_in", "lib_top1", "lib_margin", "lib_top_cov", "human_n", "human_any",
     "rare_score", "ref_eq", "ref_sem", "ref_none", "confusable",
 )
+#: v2 新增（2026-10-02，D3 道 overview#349）：
+#:   rare_rank   候选在 5-b **融合名次**里的位次（0=首位；没进 5-b 记 9）。5-b 各来源的 score 量纲不同、不可比，
+#:               名次才有意义（`align_ref.rare_topk_map` 同口径），v1 的 `rare_score` 只能糊弄；
+#:   rare_top1   候选是 5-b 首位；
+#:   ref_rare1   候选 == 整理本字 且 == 5-b 首位（规则 A 的核心条件）；
+#:   lib_ref_var 库首位不是整理本字、却与它有直接异体关系（`variants.are_variants`；格级，同格各候选同值）——
+#:               这类格库「首位」多半只是整理本字的异体写法，库的排序不能当反证。
+FEATURES_V2_EXTRA: tuple[str, ...] = ("rare_rank", "rare_top1", "ref_rare1", "lib_ref_var")
+FEATURES: tuple[str, ...] = FEATURES_V1 + FEATURES_V2_EXTRA
 
 JYS = frozenset("己已巳")
 
@@ -58,7 +70,17 @@ class SignalContext:
     lib_ids: frozenset = frozenset()              # 字形库里所有刻例实例 id（无前缀）——判「本格自身在库里」
 
 
-def candidates(ev: CellEvidence) -> tuple[list[str], dict, dict]:
+def rare_ranks(ev: CellEvidence) -> dict[str, int]:
+    """5-b 候选的融合名次：按列表先后，去重（己已巳合并）。→ {字: 0 起的名次}。"""
+    out: dict[str, int] = {}
+    for c, _v in ev.rare:
+        c = jmerge(c)
+        if c and c not in out:
+            out[c] = len(out)
+    return out
+
+
+def candidates(ev: CellEvidence, version: str = SIGNAL_VERSION) -> tuple[list[str], dict, dict]:
     lib: dict[str, float] = {}
     for c, v in ev.lib:
         c = jmerge(c)
@@ -69,21 +91,32 @@ def candidates(ev: CellEvidence) -> tuple[list[str], dict, dict]:
         rare[c] = max(rare.get(c, 0.0), float(v))
     ref, cur = jmerge(ev.ref) if ev.ref else None, jmerge(ev.cur) if ev.cur else None
     lib_sorted = sorted(lib.items(), key=lambda t: -t[1])
+    # v2 加 5-b **名次**首位：v1 只取按 score 排的前 3，而不同来源 score 不可比，名次首位可能落在外面
+    top1 = [c for c, r in rare_ranks(ev).items() if r == 0] if version != "1" else []
     cands = list(dict.fromkeys(
         [c for c, _ in lib_sorted[:5]]
         + [c for c, _ in sorted(rare.items(), key=lambda t: -t[1])[:3]]
+        + top1
         + ([ref] if ref else []) + ([cur] if cur else [])))
     return cands, lib, rare
 
 
-def build_rows(ev: CellEvidence, ctx: SignalContext) -> list[dict]:
-    """→ 每个候选一行 `{"cand": 字, **FEATURES}`。无候选 → []。"""
-    cands, lib, rare = candidates(ev)
+def build_rows(ev: CellEvidence, ctx: SignalContext, version: str = SIGNAL_VERSION) -> list[dict]:
+    """→ 每个候选一行 `{"cand": 字, **FEATURES}`。无候选 → []。
+
+    `version`：喂哪一版模型就传它的 `meta["signal_version"]`——"1" 时候选集与 v1 逐位相同（v2 新增列照填，模型不读）。"""
+    cands, lib, rare = candidates(ev, version)
     if not cands:
         return []
     ref = jmerge(ev.ref) if ev.ref else None
     lib_sorted = sorted(lib.items(), key=lambda t: -t[1])
     cset = set(cands)
+    rr = rare_ranks(ev)
+    top_lib = lib_sorted[0][0] if lib_sorted else None
+    lib_ref_var = 0
+    if ref and top_lib and top_lib != ref:
+        from ..variants import are_variants
+        lib_ref_var = int(are_variants(top_lib, ref))
     rows = []
     for c in cands:
         others = [v for x, v in lib.items() if x != c]
@@ -100,6 +133,8 @@ def build_rows(ev: CellEvidence, ctx: SignalContext) -> list[dict]:
             "ref_sem": int(bool(ref) and ref != c and ctx.vm.semantic(ref) == ctx.vm.semantic(c)),
             "ref_none": int(not ref),
             "confusable": int(bool(ctx.partners.get(c, frozenset()) & cset)),
+            "rare_rank": rr.get(c, 9), "rare_top1": int(rr.get(c) == 0),
+            "ref_rare1": int(ref == c and rr.get(c) == 0), "lib_ref_var": lib_ref_var,
         })
     return rows
 
