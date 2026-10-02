@@ -298,7 +298,10 @@ def counts(items: list[dict]) -> dict:
 
 #: 切分反馈（2026-09-24）：卡片上每张图右边两个复选框。与「谁对 / 哪一类」**独立**——
 #: 图切坏了不妨碍判断谁对，只是留一笔给 Step3 的打回台账。
-SEG_FLAGS = ("truncated", "contaminated")      # 字形不完整 / 有噪声
+#: `jiazhu` = 小注当正文（2026-10-01，用户 vol02 p5:3:3）：这格其实是雙行小注，Step3 没拆。事件仍是
+#: `seg_defect`（quality=truncated）多带 `reason=jiazhu_as_main`，与定字台那个按钮同一形——路由据此让该页
+#: Step3 失效、重跑时 `lookup.resolved_forced_jiazhu` 从中间拆开（见 routes.py）。
+SEG_FLAGS = ("truncated", "contaminated", "jiazhu")      # 字形不完整 / 有噪声 / 小注当正文
 SEG_VIA = "seg_flag"
 
 
@@ -313,11 +316,16 @@ def seg_payload(flags: list[str], note: str = "") -> dict:
       这一维不该碰定字。
     """
     fl = [f for f in SEG_FLAGS if f in flags]
-    return {"v": "seg_defect", "quality": fl[0] if fl else "clean",
-            # 全不勾写 "none" 而不是空串：金标按键合并，空串不落键，旧的 defect 会留下来
-            "defect": ",".join(fl) or "none", "via": SEG_VIA,
-            "note": note or ("Step8 复核：" + ("、".join(
-                {"truncated": "字形不完整", "contaminated": "有噪声"}[f] for f in fl) or "取消切分标记"))}
+    q = next((f for f in fl if f != "jiazhu"), None) or ("truncated" if "jiazhu" in fl else "clean")
+    out = {"v": "seg_defect", "quality": q,
+           # 全不勾写 "none" 而不是空串：金标按键合并，空串不落键，旧的 defect 会留下来
+           "defect": ",".join(fl) or "none", "via": SEG_VIA,
+           "note": note or ("Step8 复核：" + ("、".join(
+               {"truncated": "字形不完整", "contaminated": "有噪声", "jiazhu": "小注当正文"}[f] for f in fl)
+               or "取消切分标记"))}
+    if "jiazhu" in fl:
+        out["reason"] = "jiazhu_as_main"          # 强制按雙行小注拆（lookup.resolved_forced_jiazhu）
+    return out
 
 
 def seg_flags(events: Iterable, book: str) -> dict[str, list[str]]:
@@ -332,6 +340,10 @@ def seg_flags(events: Iterable, book: str) -> dict[str, list[str]]:
     for e in sorted(evs, key=lambda e: (e.ts, e.batch, e.seq)):
         p = e.payload or {}
         toks = set(str(p.get("defect") or "").split(",")) | {p.get("quality")}
+        if p.get("reason") == "jiazhu_as_main":
+            # 小注当正文自带 quality=truncated（金标单值），但那不是人另勾了「字形不完整」：quality 不算，
+            # 只认 defect 里明写的别的项
+            toks = (set(str(p.get("defect") or "").split(",")) - {"none"}) | {"jiazhu"}
         fl = [f for f in SEG_FLAGS if f in toks]
         if fl:
             out[e.target.key] = fl

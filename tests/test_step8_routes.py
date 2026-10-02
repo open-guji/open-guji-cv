@@ -59,3 +59,20 @@ def test_seg_writes_once_and_validates(log):
         s8.SegItem(id="other:3:1:1", flags=[])]))["ok"] is False, "别的书的字位不收"
     evs = log.read("bxgb-collate")
     assert len(evs) == 1 and evs[0].payload["v"] == "seg_defect" and "shape" not in evs[0].payload
+
+
+def test_seg_jiazhu_submits_rerun_from_row_segment_once(log, monkeypatch):
+    """Step8 卡片「小注当正文」= 打回重做：事件带 reason=jiazhu_as_main，并为新勾上的页下一张从 row_segment 起的重跑单。"""
+    subs = []
+    monkeypatch.setattr(s8, "_submit_rerun", lambda book, pages: subs.append((book, pages)) or {"pages": pages, "job": "j1"})
+    ok = s8.SegIn(book="bxgb", items=[s8.SegItem(id="bxgb:5:3:3", flags=["jiazhu"]),
+                                      s8.SegItem(id="bxgb:5:4:1", flags=["jiazhu"]),
+                                      s8.SegItem(id="bxgb:9:1:2", flags=["truncated"])])
+    out = s8.api_step8_seg(ok)
+    assert out["appended"] == 3 and out["rerun"] == {"pages": [5], "job": "j1"} and subs == [("bxgb", [5])]
+    evs = {e.target.key: e.payload for e in log.read("bxgb-collate")}
+    assert evs["bxgb:5:3:3"]["reason"] == "jiazhu_as_main" and evs["bxgb:5:3:3"]["quality"] == "truncated"
+    assert "reason" not in evs["bxgb:9:1:2"]
+    s8._SEG_CACHE.clear()
+    out2 = s8.api_step8_seg(ok)                       # 状态没变：不重写、不再下单
+    assert out2["appended"] == 0 and len(subs) == 1
