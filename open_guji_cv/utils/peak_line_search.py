@@ -887,7 +887,8 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             secondary_ratio_thresh: float = 0.2,
                             boundary_slack: int = 3,
                             verticals: list[LineMatch] | None = None,
-                            book_gap: float | None = None) -> LineMatch:
+                            book_gap: float | None = None,
+                            bottom_chooser=None) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -1008,21 +1009,30 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
 
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
-        # 先按页把线挪到墨条下沿（详见 `_descend_to_ink_bottom` 上方说明），
-        # 再让一个很小的固定余量补判定口径的不对称（往下无害、往上切字）。
-        lo2 = max(0, int(round(result.position)) - EDGE_MAX_WALK)
-        hi2 = min(h - 1, int(round(result.position)) + EDGE_MAX_WALK * 2)
-        pos2, curve2 = sample_line_curve(mask, "h", lo2, hi2, result.slope)
-        if len(curve2):
-            i0 = int(np.clip(round(result.position) - lo2, 0, len(curve2) - 1))
-            i1 = _descend_to_ink_bottom(curve2, i0)
-            result = LineMatch(position=float(pos2[i1]), slope=result.slope,
-                               score=result.score, width=result.width,
-                               proj=result.proj)
-        result = LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
-                           slope=result.slope, score=result.score,
-                           width=result.width, proj=result.proj)
+        if bottom_chooser is not None:
+            # 多信号候选排序（默认关；`bottompeak_model`）：在救援之后、落到墨条下沿之前换峰。
+            result = bottom_chooser(mask, result, verticals, book_gap, lo, hi)
+        result = finalize_bottom(mask, result)
     return result
+
+
+def finalize_bottom(mask: np.ndarray, result: LineMatch) -> LineMatch:
+    """下版框收尾：把峰位落到墨条下沿，再让固定余量（详见 `_descend_to_ink_bottom` 上方说明）。
+    从 `find_horizontal_border` 抽出来，候选模型离线算每个候选的最终落点也用它。"""
+    h = mask.shape[0]
+    # 先按页把线挪到墨条下沿，再让一个很小的固定余量补判定口径的不对称（往下无害、往上切字）。
+    lo2 = max(0, int(round(result.position)) - EDGE_MAX_WALK)
+    hi2 = min(h - 1, int(round(result.position)) + EDGE_MAX_WALK * 2)
+    pos2, curve2 = sample_line_curve(mask, "h", lo2, hi2, result.slope)
+    if len(curve2):
+        i0 = int(np.clip(round(result.position) - lo2, 0, len(curve2) - 1))
+        i1 = _descend_to_ink_bottom(curve2, i0)
+        result = LineMatch(position=float(pos2[i1]), slope=result.slope,
+                           score=result.score, width=result.width,
+                           proj=result.proj)
+    return LineMatch(position=result.position + BOTTOM_SAFETY_MARGIN,
+                     slope=result.slope, score=result.score,
+                     width=result.width, proj=result.proj)
 
 
 # ── 角度失控护栏：版框该大致垂直于界行 ──────────────────────────

@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -29,6 +29,40 @@ from ..utils.column_types import classify_columns
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
+    bottom_peak_model: bool = False
+    """S1 道（2026-10-02）：下版框「带内多候选峰选哪条」改由学习模型排序（`bottompeak_model`），
+    硬护栏在模型外（只许往下、≤70px、概率比现役高出 margin）。缺省关；书级 `params:
+    {border_detect: {bottom_peak_model: true}}` 才开。关着时本三个字段不进参数 dump，产物与加字段前逐字节相同。"""
+    bottom_peak_model_path: str = ""        # 空 = models/bottompeak/bottompeak_v1.joblib；路径不进指纹（path_params）
+    bottom_peak_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
+
+    @model_serializer(mode="wrap")
+    def _drop_off_bottom_peak(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not self.bottom_peak_model:
+            for k in ("bottom_peak_model", "bottom_peak_model_path", "bottom_peak_model_fingerprint"):
+                d.pop(k, None)
+        return d
+
+    def model_post_init(self, __context) -> None:
+        if self.bottom_peak_model and not self.bottom_peak_model_fingerprint:
+            from ..bottompeak_model.model import DEFAULT_MODEL, file_fingerprint
+            object.__setattr__(self, "bottom_peak_model_fingerprint",
+                               file_fingerprint(self.bottom_peak_model_path or DEFAULT_MODEL) or "missing")
+
+
+_BP_MODELS: dict = {}
+
+
+def _bottom_peak_model(p: "BorderDetectParams"):
+    if not p.bottom_peak_model:
+        return None
+    key = (p.bottom_peak_model_fingerprint, p.bottom_peak_model_path)
+    m = _BP_MODELS.get(key)
+    if m is None:
+        from ..bottompeak_model.model import load_model
+        m = _BP_MODELS[key] = load_model(p.bottom_peak_model_path or None)
+    return m
 
 
 @register_step
@@ -36,6 +70,7 @@ class BorderDetectStep(Step):
     spec = StepSpec(
         id="border_detect", title="Step1 边框探测", version="1.2", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
+        path_params=("bottom_peak_model_path",),
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
@@ -72,7 +107,8 @@ class BorderDetectStep(Step):
                              outer_shift=ctx.book.outer_shift,
                              book_outer_gap=ctx.book.outer_gap,
                              frame_layers=ctx.book.frame_layers,
-                             vline_polyline=ctx.book.vline_polyline)
+                             vline_polyline=ctx.book.vline_polyline,
+                             bottom_model=_bottom_peak_model(p))
         borders = Borders.from_result(res, cols)
 
         # 列类型：`borders.verticals` 已是右上原点空间、x 升序（右→左），与
