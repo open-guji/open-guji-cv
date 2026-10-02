@@ -47,6 +47,9 @@ NOT_REGISTRY_SHAPED = {
     "step7_replay",  # Step7 放行判定的人裁事件回放：--book/--products/--events 都必填，
                      # 靶子是工作区 feedback/events + 某次快照的 seed_admit 产物，不是
                      # 数据集分片；口径与局限见 doc/step7_replay_eval.md
+    "context_guard",  # G1（overview#333）Step7 context 护栏对比：--base/--variant 指沙箱里
+                      # 各开关各跑一份的 seed_admit 产物目录，--labels 由工作区人裁事件现做，
+                      # 不是数据集分片；用法见 scripts/experiments/context_guard/README.md
 }
 
 
