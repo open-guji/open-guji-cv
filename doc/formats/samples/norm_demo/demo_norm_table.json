@@ -1,0 +1,102 @@
+{
+ "schema": "guji-variant-norm/0.1-draft",
+ "version": "f2-demo-20261002",
+ "_说明": "F2 演示用的「共享归一表」草样（norm_layer_proposal.md 方案 C 的表）。只收无条件的纯字形异体：异体 → 繁体通行字（教育部正字口径，且目标是 Big5 常用字或通用规范字的繁体）。候选取自本书用字账 config/variants/books/wuyingdian_zongmu.json 里 ref_policy=single 的组，F2 逐条看过：剔除 卞→其（用字账噪声，两字不同）、籕→抽（bim 归一表也剔了）；其余只在 vol03 出现过的才列。**未经人审，不是正式表**；正式表应与 bim variant-chars.json 合一（见方案）。",
+ "map": {
+  "㫖": {
+   "t": "旨",
+   "src": [
+    "local:keben",
+    "bim:variant-chars（#350 提到 㫖→旨 在其中）"
+   ]
+  },
+  "葢": {
+   "t": "蓋",
+   "src": [
+    "hydzd",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "yitizi"
+   ]
+  },
+  "盖": {
+   "t": "蓋",
+   "src": [
+    "cjkvi-simplified",
+    "hydzd",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "unihan:kSimplifiedVariant",
+    "unihan:kTraditionalVariant",
+    "yitizi"
+   ]
+  },
+  "彚": {
+   "t": "彙",
+   "src": [
+    "twedu",
+    "yitizi"
+   ]
+  },
+  "卽": {
+   "t": "即",
+   "src": [
+    "hydzd",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "yitizi"
+   ]
+  },
+  "歴": {
+   "t": "歷",
+   "src": [
+    "dypytz",
+    "hydzd",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "yitizi"
+   ]
+  },
+  "厯": {
+   "t": "歷",
+   "src": [
+    "twedu",
+    "yitizi"
+   ]
+  },
+  "𠮓": {
+   "t": "變",
+   "src": [
+    "twedu"
+   ]
+  },
+  "勅": {
+   "t": "敕",
+   "src": [
+    "cjkvi-simplified",
+    "dypytz",
+    "hydzd",
+    "twedu",
+    "unihan:kSemanticVariant",
+    "unihan:kSpecializedSemanticVariant",
+    "yitizi"
+   ]
+  },
+  "宫": {
+   "t": "宮",
+   "src": [
+    "twedu",
+    "unihan:kSimplifiedVariant",
+    "unihan:kTraditionalVariant",
+    "yitizi"
+   ]
+  },
+  "櫽": {
+   "t": "檃",
+   "src": [
+    "hydzd",
+    "twedu"
+   ]
+  }
+ }
+}

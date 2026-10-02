@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""CV 产物 → guji-page v0.1（每字带坐标的页面文本）。只读产物，不改任何现有导出。
+"""CV 产物 → guji-page v0.2（每字带坐标的页面文本）。只读产物，不改任何现有导出。
 
-规范：doc/formats/guji_page_v0.1.md。一页一个 JSON；可顺带出 guji-markdown、IIIF 注释与 canvas、册级索引。
+规范：doc/formats/guji_page_v0.2.md。一页一个 JSON；可顺带出 guji-markdown、IIIF 注释与 canvas、册级索引。
 
     python scripts/export_guji_page.py --products <products 根> --book vol03 --pages 3,107 \\
         --meta samples/meta.json --out out/ [--md] [--iiif] [--split-table 四庫合扫拆页-裁剪框.json] [--index]

@@ -123,8 +123,9 @@ def test_export_passes_schema_and_structure(page):
 
 
 def test_text_stream_lanes_and_marks(page):
-    # 排除·非字不进文本流；阙文是空串占位
-    assert page["text"] == ["臣", "等", "浙", "採", "江", "進", "謹", "", "瀛", "按"]
+    # 排除·非字不进文本流；阙文（v0.2）是可见的「□」占位、下标记在页上 lacuna
+    assert page["text"] == ["臣", "等", "浙", "採", "江", "進", "謹", "□", "瀛", "按"]
+    assert page["lacuna"] == [7]
     c1, c2 = page["regions"][0]["columns"]
     assert (c1["raised"], c1["lead_blank"]) == (1, 1)
     assert [r["lane"] for r in c1["runs"]] == ["main", "jz_r", "jz_l"]

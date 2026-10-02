@@ -1,22 +1,22 @@
-# guji-page v0.1：每字带坐标的页面文本格式
+# guji-page v0.2：每字带坐标的页面文本格式
 
-> **已由 v0.2 取代**（[`guji_page_v0.2.md`](guji_page_v0.2.md)，2026-10-02，F2 道 overview#381）：阙文改「□」+ `lacuna`、未收字分两层、字框补 `cand`/`channel`。v0.1 文件照样能读，`upgrade()` 升到 0.2。
-
-> F1 道（任务卡 open-guji-core/overview#357），2026-10-02。CV 总管派活，文本总管共同验收。
+> F1 道（任务卡 open-guji-core/overview#357）定 v0/v0.1，F2 道（#381）升 v0.2，2026-10-02。CV 总管派活，文本总管共同验收。
 > 在《自校文本格式草案 v1.1》（overview `项目进展/古籍文本/整体设计/2026-09-自校文本格式草案.md`，
 > 下称**草案**）的基础上定稿；草案 §八 CV 审定的三条全部照办。
-> **状态：v0.1（2026-10-02）**——在 v0 上吸收网站总管的 IIIF 约定（overview#357）与文本总管的文本口径（#361），
-> 变更见下方「v0.1 相对 v0」。v0 规范 `guji_page_v0.md` 留档；**v0 文件照样能读**（`check()`、导出器都认，`upgrade()` 升到 0.1）。
+> **状态：v0.2（2026-10-02）**——在 v0.1 上落实用户 10-02 对 #361 的三条裁定（阙文 3、未收字 7、记录先行 10），
+> 变更见下方「v0.2 相对 v0.1」；规范层（norm）的方案调研另见 [`norm_layer_proposal.md`](norm_layer_proposal.md)，v0.2 的 `norm` 暂按 v0.1 不动。
+> v0、v0.1 规范 `guji_page_v0.md`、`guji_page_v0.1.md` 留档；**v0、v0.1 文件照样能读**（`check()`、导出器都认，`upgrade()` 一路升到 0.2，
+> 升级前后导出的 guji-markdown 逐字相同）。
 >
 > | 产物 | 位置 |
 > |---|---|
-> | JSON Schema | `formats/guji_page_v0.1.schema.json`（v0 的 `guji_page_v0.schema.json` 保留）；册级索引 `formats/guji_layout_index_v0.1.schema.json` |
+> | JSON Schema | `formats/guji_page_v0.2.schema.json`（v0、v0.1 的 schema 保留）；册级索引 `formats/guji_layout_index_v0.1.schema.json`（不变） |
 > | 格式工具（检查、坐标换算、canvas、稳定 ID、md / IIIF 注释与 canvas 导出、去 ext、升级、册级索引） | `open_guji_cv/formats/guji_page.py` |
 > | CV 产物 → 本格式 | `open_guji_cv/formats/guji_page_cv.py`、`scripts/export_guji_page.py` |
 > | 校验图 | `scripts/render_guji_page_overlay.py` |
-> | 样张（四庫 vol03 p3、p107）＋校验图 | `doc/formats/samples/guji_page_v0.1/`（v0 样张留在 `guji_page_v0/`） |
+> | 样张（四庫 vol03 p3、p107）＋校验图 | `doc/formats/samples/guji_page_v0.2/`（v0、v0.1 样张留在原目录） |
 > | yolo_tool 互转（yolo_tool 仓不改，其格式并入本设计） | `open_guji_cv/formats/guji_page_yolo.py`（只用标准库）、`tests/test_guji_page_yolo.py` |
-> | 测试 | `tests/test_guji_page_format.py`（10 条）、`tests/test_guji_page_v01.py`（13 条）、`tests/test_guji_page_yolo.py`（6 条），全部自造数据 |
+> | 测试 | `tests/test_guji_page_format.py`（10 条）、`tests/test_guji_page_v01.py`（13 条，改用造出的 v0.1 页）、`tests/test_guji_page_v02.py`（15 条）、`tests/test_guji_page_yolo.py`（6 条），全部自造数据 |
 > | yolo_tool 的 YOLO 切分算法评估 | `doc/yolo_tool_segmentation_review.md` |
 
 ## 〇、一句话
@@ -24,8 +24,22 @@
 **一页一个 JSON。** 文本流 `text` 是真源（原样层，字元数组）；版面按「区 → 列 → 段（正文 / 夹注右 / 夹注左 / 单行小注）」
 分层，段引用文本区间、首尾相接铺满全页文本，所以阅读顺序是显式的；字框 `glyphs` 落在**IIIF canvas 的整数像素、左上原点
 `[x,y,w,h]`**（canvas = IA 原叶；合扫页拆开的每块各一个 canvas），同样只引用文本区间，一框多字、一字多框都只是区间的事；
+阙文在文本里是可见的「□」、页上 `lacuna` 稀疏标出；未收字 `text` 放近似字、`zi` 记原形；每个字框带各路候选字 `cand` 与放行通道 `channel`；
 `canvas` 块记 canvas id、页序、尺寸，拆块页另记原叶与裁剪框（`source.selector`）；`image` 块记 CV 跑批那张图的 sha256 与
 它在原叶上的区域——两者对不上时导出器已把几何搬到 canvas 上。缩放档按比例换算，不另存坐标。
+
+## v0.2 相对 v0.1（用户 10-02 裁定，CV 总管记录于 #361 最新一条）
+
+| # | 改了什么 | 依据 |
+|---|---|---|
+| 1 | **阙文**：`text` 里放可见字符「□」（U+25A1），页上稀疏记 `lacuna: [下标…]`（升序不重复）标出「这个□是阙文」；不带标记的「□」是底本真刻的□或来源站点的□，照录。`text` **不再出现空串**。导出 guji-markdown：带标记的出 `[[]]`（每位一个，不合并），不带的出「□」；有 `guess` 的真□仍出 `□{guess=X}`。**不用全角空格**——它留给空格、抬头这类版式空位 | 用户 #361·3：「能否用全角空格或方框字符」→ 用□ + 稀疏标记，真□与阙文仍分得开 |
+| 2 | **Unicode 未收字分两层**：`text[i]` 放**近似的已收字**；`zi: [{"i", "ids"｜"desc", "rel"}]` 记原形（方位确定写 IDS，拿不准写描述文字，二选一）与 `rel`（近似字与原形的关系：异体／形近／部件近）。还没有近似字时 `text[i]` 放「〓」（U+3013）、`rel: null`。导出 md 仍写 `:zi[IDS或描述]`（guji-markdown §16）；网站按模式选显示哪一层 | 用户 #361·7：「第一层放近似的 Unicode 已收字，第二层放 IDS」 |
+| 3 | **记录先行**：字框新增 `channel`（CV `seed_admit` 的放行通道，未放行为 null）与 `cand: {lib, ocr, rare, ref}`（库首位 / OCR 首位 / 5-b 首位 / 整理本字，有哪路记哪路）。两者不属 `ext`，入库 `strip_ext` 后仍在 | 用户 #361·10：「先确保信息记录完整，显示方式灵活，可能有阅读模式、校对模式」 |
+| 4 | IIIF 注释：框里有阙文时加 `kyg:lacuna: true`（body 照 `text`，v0.2 是「□」） | 随 1 |
+| 5 | 版本号 `guji-page/0.2`；v0、v0.1 照样 `check()`/导出，`upgrade()` 一路升：空串 → 「□」+ `lacuna`；v0.1 组字的 IDS/描述从 `text` 挪进 `zi[].ids/desc`、`text` 放「〓」；`channel` 从 `ext.cv.channel` 补；`cand` 旧页没有就不编。升级前后 md 逐字相同（测试钉住） | CV 总管 |
+| 6 | yolo 互转：yolo 的空串字元 = 阙文 → 「□」+ `lacuna`，回写时还原空串，往返仍逐字节一致 | 随 1 |
+
+`norm`（规范层）v0.2 **不动**：用户要求「再仔细研究，提供方案」，调研与推荐见 `norm_layer_proposal.md`，定了再进 v0.3。
 
 ## v0.1 相对 v0
 
@@ -146,7 +160,7 @@ CV 快照 `snap/96mid1ogzk/vol03/20260928T1708-full` 的 p107 产物建在 sha `
 
 ```jsonc
 {
-  "schema": "guji-page/0.1",
+  "schema": "guji-page/0.2",
   "page_id": "96mid1ogzk/3/107",       // <bookId>/<册>/<页>，与影像路径 images/{bookId}/{volume}/{page} 同构
   "book":   {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "…"},
   "volume": {"index": 3, "cv_book": "vol03", "label": "…", "juan_range": "4-5"},
@@ -156,9 +170,10 @@ CV 快照 `snap/96mid1ogzk/vol03/20260928T1708-full` 的 p107 产物建在 sha `
   "producers": {"cv": {"tool": "open-guji-cv", "rev": "1332c01734", "pipeline": "keben_body_v2",
                        "steps": {…}, "products_sha": {…}, "snapshot": "…"},
                 "manual": {"tool": "manual", "who": "…"}},
-  "text":    ["旋", "爲", …],           // §四
+  "text":    ["旋", "爲", "□", …],      // §四：阙文位是可见的「□」
+  "lacuna":  [2],                       // v0.2：哪些「□」是阙文（其余「□」是真刻的□）
   "norm":    [{"i": 12, "t": "内", "why": "异体"}],
-  "zi":      [{"i": 40, "form": "ids"}],  // text[40] = "⿰句員"
+  "zi":      [{"i": 40, "ids": "⿰句員", "rel": "部件近"}],  // text[40] = "員"（近似的已收字）
   "regions": [ {"id": "r1", "kind": "body", "box": [...], "rules": [[[x,y],…],…],
                 "columns": [ {"id": "c4", "n": 4, "kind": "body", "box": [...], "raised": 1, "lead_blank": 0,
                               "runs": [{"lane": "main", "text": [16, 22]},
@@ -181,22 +196,31 @@ Book ID、IIIF 册号、IA item（`volume.ia_item`）、`page.label`（书上叶
 
 ## 四、文本：原样层与规范层
 
-- `text`：**原样层**，阅读顺序的字元数组。一个元素 = 一个字元：通常一个码位；也可以是带异体选择符的序列、
-  组字（IDS 串或描述文字，见下）、PUA、来源站点的组字式。**下标按元素数，不按 UTF-16 / 码位数**——生僻字大量在 Ext-B 以后，
-  JS 的 `string.length` 会数错，字元数组从结构上绕开这个坑。
-- **阙文 = `""`（空串），只用于不知道原字的位。** 底本上刻着的「□」是一个真字，照录「□」（原刻残的配字框上的 `guess`）；
-  book-text 里维基、Kanripo 来的「□」（SKchar、补字码查不到）是来源站点的占位，**也照录「□」**，不改写成 `""`。
-  导出 guji-markdown 时**每个 `""` 出一个 `[[]]`**（guji-markdown §13），不合并成 `[[凡三字]]`，每个阙文位仍各自对得上字框。
-- **组字**（Unicode 未收字，guji-markdown §16）：`text[i]` 放 IDS 串（方位确定，如 `⿰句員`）或描述文字（方位拿不准，如
-  `左句右員`，不要猜），并在页上稀疏记 `zi: [{"i": i, "form": "ids"|"desc"}]`；导出 `:zi[⿰句員]`。标记放页上不放字框上——
-  从整理本补进来的字没有字框。来源站点原有的组字式（`[口*恒]`、`{宀兒}`、`[B18D]`）与医书 HT/KT **原样保留**在 `text`，
-  不标 `zi`、不转 IDS。
+- `text`：**原样层**，阅读顺序的字元数组。一个元素 = 一个字元：通常一个码位；也可以是带异体选择符的序列、PUA、
+  来源站点的组字式。**下标按元素数，不按 UTF-16 / 码位数**——生僻字大量在 Ext-B 以后，JS 的 `string.length` 会数错，
+  字元数组从结构上绕开这个坑。v0.2 起**元素不得为空串**。
+- **阙文（v0.2）= `text` 里的「□」（U+25A1）+ 页上 `lacuna` 标记。** `lacuna` 是阙文位下标的升序数组，只用于不知道原字的位。
+  不带标记的「□」是真字：底本上刻着的「□」（原刻残的配字框上可带 `guess`）、book-text 里维基/Kanripo 来的「□」
+  （SKchar、补字码查不到的来源站点占位）都照录「□」、不标 `lacuna`。
+  - 为什么不直接只用「□」：真刻的□与阙文都长「□」，不标就分不开（文本总管 #361·3 关心的就是这一点）。
+  - 为什么不用全角空格（U+3000）：它留给空格、抬头这类版式空位，混用会分不清。
+  - 导出 guji-markdown 时**每个阙文位出一个 `[[]]`**（guji-markdown §13），不合并成 `[[凡三字]]`，每个阙文位仍各自对得上字框；
+    不带标记的「□」出「□」，带 `guess` 的出 `□{guess=X}`（§14）。
+  - 字框上的 `lacuna: "unreadable"` 与页上 `lacuna` 必须一致（检查规则 §八·8）；`lacuna: "defect"`（字在、图块切坏）的字若认出了，
+    `text` 放那个字、不进页上 `lacuna`。
+- **Unicode 未收字（v0.2）分两层**：
+  - `text[i]` 放**近似的已收字**——阅读、检索、繁简转换都只碰这一层，不用认 IDS；
+  - 页上稀疏记 `zi: [{"i": i, "ids": "⿰句員", "rel": "部件近"}]`：`ids`（方位确定，guji-markdown §16）与 `desc`（方位拿不准的描述文字，
+    如 `左句右員`，不要猜）**二选一**；`rel` 是近似字与原形的关系，只许 **异体**（同字异形，如刻本俗写）、**形近**（不同字，只是长得像）、
+    **部件近**（共享主要部件，如取声旁）；
+  - 还没有近似字（v0.1 升上来的组字、实在找不到）时 `text[i]` 放「〓」（U+3013 GETA MARK）、`rel: null`；
+  - 导出 md 写 `:zi[ids 或 desc]`；网站阅读模式可显示近似字（`rel=异体` 时最安全）或合成字形，校对模式显示原形与关系——显示哪层由网站定；
+  - 标记放页上不放字框上——从整理本补进来的字没有字框。来源站点原有的组字式（`[口*恒]`、`{宀兒}`、`[B18D]`）与医书 HT/KT
+    **原样保留**在 `text`，不标 `zi`、不转 IDS。
 - **字形照录**：CV 2026-09-26 起全流程只存字形（`seed_admit` 的 `char`），原样层就是它。
-- `norm`：**规范层**，只记**异体字 → 通行字**且与原样层不同的位 `{"i": 下标, "t": 通行字, "by": 来历键, "why": "异体"}`；
-  `why` 必填，v0.1 只许「异体」。**校勘改字（讹、脱、衍、倒）不进 `norm`**——那是另一层判断，从外部用稳定 `id` 挂过来。
-  CV 不产规范层，样张里为空；由文本一侧在第一批 CV 文本入 book-text、与整理本对齐时填。导出器 `layer="norm"` 时用它覆盖。
-
----
+- `norm`：**规范层**，v0.2 照 v0.1：只记**异体字 → 通行字**且与原样层不同的位 `{"i": 下标, "t": 通行字, "by": 来历键, "why": "异体"}`；
+  `why` 必填，只许「异体」。**校勘改字（讹、脱、衍、倒）不进 `norm`**。CV 不产规范层，样张里为空。导出器 `layer="norm"` 时用它覆盖。
+  怎么填、通行字以什么为准、一字多义怎么办、校勘层挂在哪，见 [`norm_layer_proposal.md`](norm_layer_proposal.md)（F2 调研，待拍板）。
 
 ## 五、字框 `glyphs`
 
@@ -211,6 +235,8 @@ Book ID、IIIF 册号、IA item（`volume.ia_item`）、`page.label`（书上叶
 | `cv_id` | | CV 字位主键 `book:page:col:slot[a|b]`，随重切变 |
 | `glyph_id` | | 字形库刻例 id；不知道就 null |
 | `by` | | `{"box": 来历键, "text": 来历键}`，引 `producers` |
+| `channel` | | v0.2：放行通道，CV `seed_admit` 的 `channel` 原样（`human` / `match_ref` / `match_solo` / `context` / `iron` …）；未放行 null。与 `method` 的差别：`method` 是归一过的「怎么定的字」，`channel` 是原始通道名，校对模式按它分组 |
+| `cand` | | v0.2：候选字，各路证据的**首位**：`lib`（Step5-a 库匹配：same 档取认定字，否则候选首位）、`ocr`（Step5-c OCR topk 首位）、`rare`（Step5-b 生僻字候选首位）、`ref`（Step5-d 整理本：过闸对齐的字，没有则坐标对位的字，整理本是空格不算）。缺哪步的产物就没有那个键；全缺则不写 `cand`。分数留在 `ext.cv`，不进这里（`conf` 只给真概率） |
 | `method` | | 定字方式：`human`、`cv:<通道>`（match_ref / match_solo / context / iron …）、`cv:occluded_default`（印章压字，取整理本坐标对位的默认字）、`cv:pending`（未放行）、`ocr`、`yolo`、`yolo:human`、`manual` |
 | `review` | ✓ | `pending`（没人看过）/ `auto`（过了自动放行闸）/ `human`（人裁过）/ `disputed` |
 | `conf` | | **只在有真概率时填**（OCR 分数）；CV 一律 null |
@@ -260,6 +286,10 @@ CV 导出的取字规则**不另写**，直接用 `report/slots.page_slots`（St
 5. `norm[].i` 不越界；v0.1：`norm[].why` 只许「异体」。
 6. v0.1：有 `canvas`；`seq` 是 4 位 + 可选 a–z；`id` 以 `/canvas/<册2位>/<seq>` 结尾；拆块页 canvas 宽高 = selector 的 w、h。
 7. v0.1：`zi[].i` 不越界、不重复、不指向阙文位，`form` 只许 ids / desc。
+8. v0.2：`text` 无空串；`lacuna` 升序不重复、不越界、所指的 `text` 都是「□」；`lacuna: "unreadable"` 的单字字框其字必在 `lacuna` 里。
+9. v0.2：`zi[]` 有且只有 `ids`、`desc` 之一且非空；`rel` ∈ 异体／形近／部件近（`text[i]` 为「〓」时 `rel` 必须为 null）；不指向阙文位；
+   `text[i]` 必须是近似字，不许把 IDS（含 ⿰–⿻ 描述符）或描述文字写进 `text`。
+10. v0.2：`cand` 只认 `lib` / `ocr` / `rare` / `ref` 四个键。
 
 字框出界按 canvas 宽高判（v0 按 `image`）。
 
@@ -308,7 +338,8 @@ CV 导出的取字规则**不另写**，直接用 `report/slots.page_slots`（St
 - 读序复刻 `_page_slide_order_arrays`（列按 type id；单字框按交集面积归列；列内手动看 id、自动看中心 y）。
 - 有 `source_text` 时它是文本真源：第 k 个框对第 k 个字；字多出来 = 待框（无框字元，挂末列），框多出来 = 空区间。
 - **CV 页 → yolo → guji**：文本、字框、读序、夹注左右全保住（每段一条版面框，`sort_mode.slide=manual` 锁读序）。
-  **丢掉**：抬头级数、行首留白、阙文与「框里还没字」之别（yolo 里都是空串）、印章/留白/排除标记、来历通道、稳定 ID。
+  **丢掉**：抬头级数、行首留白、阙文与「框里还没字」之别（yolo 里都是空串）、印章/留白/排除标记、来历通道、候选字、组字原形、稳定 ID。
+  v0.2：yolo 的空串字元转进来一律当阙文（「□」+ `lacuna`），回写时还原成空串。
   这些要回到本格式里看，yolo 只当校对界面用。
 
 ---
@@ -318,9 +349,10 @@ CV 导出的取字规则**不另写**，直接用 `report/slots.page_slots`（St
 ### 10.1 guji-markdown（`to_guji_markdown`）
 
 一列一行；`^`×抬头级数 + `.`×行首留白；正文直出；`<右|左>` 双行夹注；`:jz[…]{type=单行}` 单行小注；
-`[[]]` 阙文（**每个 `""` 一个，不合并**）；真字「□」照出「□」；`□{guess=X}` 残字；`:zi[…]` 组字；
+`[[]]` 阙文（**每个 `lacuna` 位一个，不合并**；v0/v0.1 文件按空串）；不带标记的「□」照出「□」；`□{guess=X}` 残字；
+`:zi[…]` 组字（v0.2 取 `zi[].ids/desc`，`text` 里的近似字不进 md）；
 页首 `<!-- pN -->`（book-text 规范 F-MD-04）。**与 Step9 `render/guji_markdown.render_page` 逐字相同**：
-测试钉住（自造页），样张两页 v0、v0.1 实测都相同。`layer="norm"` 出规范层。
+测试钉住（自造页），样张两页 v0、v0.1、v0.2 实测都相同。`layer="norm"` 出规范层。
 **`strip_ext()` 去掉 ext 后导出不变**（测试钉住），入 book-text 前先 `check()` 再 `strip_ext()`。
 
 已知例外（沿用 Step9）：单行小注 `:jz[…]` 指令的 label 里不能有方括号，那里的阙文写成「□」——与「□ 是真字」的口径冲突，
@@ -329,7 +361,8 @@ CV 导出的取字规则**不另写**，直接用 `report/slots.page_slots`（St
 ### 10.2 IIIF / W3C Web Annotation（`to_iiif_annotations`）
 
 每字框一条 `Annotation`，`motivation: supplementing`，body `TextualBody`（字，`language: zh-Hant`），
-**target `<canvas.id>#xywh=x,y,w,h`**（整数、canvas 像素，网站总管约定）。审核状态放扩展属性 `kyg:review`。整页一个
+**target `<canvas.id>#xywh=x,y,w,h`**（整数、canvas 像素，网站总管约定）。审核状态放扩展属性 `kyg:review`；v0.2 框里有阙文时加
+`kyg:lacuna: true`（body 是「□」）；候选字、通道不进注释（网站校对模式直接读本格式）。整页一个
 `AnnotationPage`，id `<canvas id>/annotations/guji-page`。
 
 `to_iiif_canvas()` 出 canvas 骨架：`id`、`type: Canvas`、`label`（页序）、`width`/`height`、拆块页的
@@ -356,12 +389,23 @@ luatex-cn（webtex-cn）要的三层几何都在：版框/界行 → `regions[].
 
 ---
 
-## 十一、样张与校验（`samples/guji_page_v0.1/`；v0 时的数字见 `guji_page_v0.md`）
+## 十一、样张与校验（`samples/guji_page_v0.2/`；v0、v0.1 时的数字见各自规范）
 
-| 页 | canvas | 选它的理由 | 字元 / 字框（有框） / 标记 | 原样 guji-md 与 Step9 渲染 |
-|---|---|---|---|---|
-| vol03 **p3**（卷四卷端） | `…/canvas/03/0003`，整张原叶 2361×3096 | 抬头（列 3/4/5 各一级）、双行夹注「兩江總督｜採進本」、**印章压字**（136 格 occluded；人工印章框压到 5 个字框） | 124 / 124（124） / 72 | 相同（与 v0 也相同） |
-| vol03 **p107**（拆页） | `…/canvas/03/0105c`，2074×2931，selector `xywh=2101,2913,2074,2931` | IA leaf105 双联叶的右下块；双行夹注；产物建在 09-27 首版裁法的图上，导出时经原叶整体搬到 canvas（§2.4） | 184 / 184（183） / 23 | 相同（与 v0 也相同） |
+| 页 | canvas | 选它的理由 | 字元 / 字框（有框） / 标记 | 阙文（`lacuna`） | 原样 guji-md 与 Step9 渲染 |
+|---|---|---|---|---|---|
+| vol03 **p3**（卷四卷端） | `…/canvas/03/0003`，整张原叶 2361×3096 | 抬头（列 3/4/5 各一级）、双行夹注「兩江總督｜採進本」、**印章压字**（136 格 occluded；人工印章框压到 5 个字框） | 124 / 124（124） / 72 | 8 | 相同（与 v0、v0.1 也相同） |
+| vol03 **p107**（拆页） | `…/canvas/03/0105c`，2074×2931，selector `xywh=2101,2913,2074,2931` | IA leaf105 双联叶的右下块；双行夹注；产物建在 09-27 首版裁法的图上，导出时经原叶整体搬到 canvas（§2.4） | 184 / 184（183） / 23 | 21 | 相同（与 v0、v0.1 也相同） |
+
+**v0.2 新字段实测**（快照 `snap/96mid1ogzk/vol03/20260928T1708-full` 里没有 Step5-c OCR 产物，`cand.ocr` 一路全缺，如实留空）：
+
+| 页 | `cand.lib` | `cand.rare` | `cand.ref` | 各路一致 / 有分歧 | `channel` |
+|---|---|---|---|---|---|
+| p3 | 124 | 124 | 124 | 81 / 43 | 未放行 101、context 17、match_solo 6 |
+| p107 | 184 | 184 | 170 | 157 / 27 | match_ref 154、未放行 21、context 8、match_solo 1 |
+
+分歧正是校对模式要看的：p107 的 21 个阙文位里多数是「库首位 vs 5-b 与整理本」的形近对（乾/軋、西/酉、禮/禎、容/客、權/榷/𣙜），
+p3 卷端大字行（「欽定四庫全書總目」）库首位全错、整理本与 5-b 对上。`upgrade(v0.1 样张)` 得到的 `text`/`lacuna` 与 v0.2 样张逐字相同，
+只少 `cand`（旧页没有，不编）。
 
 p107 搬到 canvas 时有 22 个框碰到 canvas 边被裁、1 个字框整块落在 canvas 外（第 9 列版心条里的「五」，09-29 按版心中线重切后
 版心这一侧不在本块里），`box` 置 null、记进 `warnings`。
@@ -374,28 +418,25 @@ p107 搬到 canvas 时有 22 个框碰到 canvas 边被裁、1 个字框整块�
 | p107 canvas 0105c（= 工作区现行 107.png）1200 档 | 0.280 | 0.193 / 0.174 | 0.270 / 0.269 |
 | p107 IA 原叶 105（经 selector 换回原叶）1200 档 | 0.272 | 0.189 / 0.176 | 0.266 / 0.264 |
 
-（p3 只量了不被印章压的 31 个字框。）IIIF 注释的 target 与 canvas 骨架见 `p0107.iiif-annotations.json`、`p0107.iiif-canvas.json`；
+（p3 只量了不被印章压的 31 个字框。几何与 v0.1 完全相同，校验图沿用 v0.1 的三张。）IIIF 注释的 target 与 canvas 骨架见 `p0107.iiif-annotations.json`、`p0107.iiif-canvas.json`；
 册级索引样例 `index.json`。
 
-**体积**：紧凑 JSON 52 KB / 60 KB，gzip 后 8.5 KB / 9.5 KB；其中 `ext.cv` 约占 16–21%（入库时 `strip_ext` 去掉）。
+**体积**：v0.1 紧凑 JSON 52 KB / 60 KB，gzip 后 8.5 KB / 9.5 KB；其中 `ext.cv` 约占 16–21%（入库时 `strip_ext` 去掉）。
+v0.2 的 `cand` + `channel` 让缩进版 JSON 增大约 14% / 19%（83→95 KB、96→114 KB）。
 
 ---
 
-## 十二、待定清单（v0.1 时的状态）
+## 十二、待定清单（v0.2 时的状态）
 
-两位总管的意见已吸收（overview#361 CV 总管汇总，10-02 09:3xZ），★ 四条待用户点头（不答按推荐）：
+v0.1 的 ★1/★2/★7/★10 用户 10-02 已裁定（#361 最新一条）：1、2 照推荐；3、7、10 改动已做进 v0.2；4 交 F2 调研（`norm_layer_proposal.md`）。
 
-| # | 事 | 定稿 | 状态 |
-|---|---|---|---|
-| ★1 | 坐标原点 | 左上 `[x,y,w,h]` | 网站总管已对齐，v0.1 照做 |
-| ★2 | 坐标落在哪张图 | **IIIF canvas（原叶像素；拆块各一 canvas，原点在裁剪区左上角）** | v0.1 照做（§2.4），这是相对 v0 推荐（CV 跑批那张图）的改动 |
-| 3 | 阙文 | `""` 只用于不知道原字的位；「□」照录为真字；每个阙文一个 `[[]]` | v0.1 照做 |
-| 4 | 规范层 | 稀疏 `norm`，只记异体，`why` 只许「异体」；校勘改字不进 | v0.1 照做（check 拦） |
-| 5 | 册级索引 | 先定「页 → book-text 版本与章 NNN」 | v0.1 预留（§10.4） |
-| 6 | 附加字段 | 工作区留全量，入 book-text 时去掉；去掉后 md 不变 | v0.1 照做（`strip_ext`+测试） |
-| ★7 | 未收字 | IDS / 描述文字，`zi` 稀疏标，导出 `:zi[…]`；来源站点组字式原样 | v0.1 照做 |
-| 8 | 印章框谁来标 | 先只用字框遮挡标记，人工标几十个样本再评估检测 | 不变 |
-| 9 | 重裁后 ID 承接 | 只对裁剪区已知的变化自动承接；重扫交人裁 | v0.1 照做：`carry_ids` 在同一 canvas、两边 `image.region` 都已知时照常按 IoU 承接 |
-| ★10 | 机器认定的字 | 网站上 `pending` 与 `auto` 都标「机器认定、未经人看」 | 格式不变（`review` 字段已有） |
-| 11（新） | 单行小注里的阙文 | Step9 在 `:jz[…]` label 里把阙文写成「□」，与「□ 是真字」冲突 | 待文本总管定：推荐 guji-markdown 允许 label 里写 `[[]]`（括号成对）后，CV 与本格式一起改 |
-| 12（新） | `canvas.source.id` | 现写 IA 的 IIIF 图像地址 | 待网站总管：要换成站内原图 id 时只改 `ia_image_id` 一处 |
+| # | 事 | 状态 / 推荐 |
+|---|---|---|
+| 8 | 印章框谁来标 | 不变：先只用字框遮挡标记，人工标几十个样本再评估检测 |
+| 11 | 单行小注 `:jz[…]` label 里的阙文 | Step9 在 label 里把阙文写成「□」，v0.2 下与「不带标记的□是真字」冲突更明显（md 里分不开）。**推荐**：guji-markdown 允许 label 里写成对的 `[[]]` 后，Step9 与本格式一起改。待文本总管 |
+| 12 | `canvas.source.id` | 现写 IA 的 IIIF 图像地址；网站要换站内原图 id 时只改 `ia_image_id()`。待网站总管 |
+| 13（新） | 未收字的近似字在 md 里丢失 | guji-markdown §16 的 `:zi[…]` 没有属性，导出 md 只能带原形，`text` 里的近似字与 `rel` 进不去 md（JSON 里都在）。**推荐**：guji-markdown 给 `zi` 加可选属性 `{near=X rel=形近}`（`:zi[⿰句員]{near=員 rel=部件近}`），旧写法照样合法；定了以后导出器跟着出。待文本总管 |
+| 14（新） | 没有近似字时的占位 | v0.2 用「〓」（U+3013 GETA MARK，日本排版传统的「缺字记号」）+ `rel: null`。**推荐**照此；备选是另设 `near: null` 字段、`text` 放「□」——不推荐，会和阙文/真□混 |
+| 15（新） | `cand` 只记首位 | 用户原话是「库首位、OCR 首位、5-b 首位、整理本字」，v0.2 照做，分数与 top-k 留在 `ext.cv`（入库时去掉）。**推荐**：校对模式若要 top-3，再加 `cand_k`，不改 `cand` 的形状 |
+| 16（新） | 阙文位要不要也带 `guess` 到 md | 现状照 Step9：阙文位一律出 `[[]]`，字框上的 `guess` 与 `cand` 只在 JSON。guji-markdown §13 的 `[[…]]` label 是说明文字、不是猜字，§14 的 `□{guess=}` 是「有字认不出」。**推荐**不改，保持与 Step9 逐字相同 |
+| 17（新） | OCR 一路样张里全缺 | vol03 快照没跑 Step5-c。不补跑（边界：不改产物），字段已就位，等 OCR 产物有了自然填上 |

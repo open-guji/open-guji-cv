@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""yolo_tool `<名>_project.json` ↔ guji-page v0（每字带坐标的页面文本）。
+"""yolo_tool `<名>_project.json` ↔ guji-page v0.2（每字带坐标的页面文本）。
 
 yolo_tool（open-guji/yolo_tool，本地校对工作台）**不改**：它的工程文件格式已经并进
 guji-page 的设计（规范 doc/formats/guji_page_v0.md §九），互转放在本仓。本模块只用标准库，
@@ -46,7 +46,8 @@ import math
 import sys
 from pathlib import Path
 
-SCHEMA_ID = "guji-page/0.1"
+SCHEMA_ID = "guji-page/0.2"
+LACUNA_CHAR = "□"          # v0.2：阙文位在 text 里放「□」、下标记进 lacuna（yolo 里是空串）
 LANE_OF_CLS = {"text": "main", "subText": "jz_r", "subText2": "jz_l",
                "midText": "main", "midSubText": "jz_r"}
 REGION_OF_CLS = {"midText": "banxin", "midSubText": "banxin"}
@@ -174,6 +175,9 @@ def page_to_guji(key: str, p: dict, *, book_id: str, volume: int, size=None, sou
     for g in glyphs:        # 记下转换时框里的字，回写时只有它变了才算「格式里改过字」
         s0, e0 = g["text"]
         g["ext"]["yolo"]["t0"] = "".join(tokens[s0:e0])
+    # v0.2：yolo 的空串字元（source_text 里的缺字）= 阙文 → 「□」+ lacuna；回写时还原成空串
+    lacuna = [i for i, t in enumerate(tokens) if t == ""]
+    tokens = [LACUNA_CHAR if t == "" else t for t in tokens]
     for reg in regions.values():
         boxes = [c["box"] for c in reg["columns"] if c.get("box")]
         reg["box"] = _union(boxes) if boxes else None
@@ -208,6 +212,7 @@ def page_to_guji(key: str, p: dict, *, book_id: str, volume: int, size=None, sou
         "zi": [],
         "producers": {"yolo": {"tool": "yolo_tool"}},
         "text": tokens,
+        "lacuna": lacuna,
         "norm": [],
         "regions": list(regions.values()),
         "glyphs": glyphs,
@@ -263,7 +268,9 @@ def page_to_yolo(page: dict) -> tuple[str, dict]:
     """
     ext = (page.get("ext") or {}).get("yolo") or {}
     key = ext.get("key", str(page["page"]["index"] - 1))
-    text = page["text"]
+    # yolo 那边的字：v0.2 的阙文位（「□」+ lacuna）回到空串，其余照 text
+    lac = set(page.get("lacuna", [])) if page.get("schema") == SCHEMA_ID else set()
+    text = ["" if i in lac else t for i, t in enumerate(page["text"])]
     from_yolo = all(((c.get("ext") or {}).get("yolo") or {}).get("raw") is not None
                     for reg in page["regions"] for c in reg["columns"] if c.get("box"))
 
@@ -354,7 +361,7 @@ def _wh(s):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="yolo_tool project.json ↔ guji-page v0")
+    ap = argparse.ArgumentParser(description="yolo_tool project.json ↔ guji-page v0.2")
     sub = ap.add_subparsers(dest="cmd", required=True)
     a1 = sub.add_parser("to-guji")
     a1.add_argument("project")
