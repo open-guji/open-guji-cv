@@ -183,6 +183,8 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
   从墨迹中段最空的那条谷把格拆成 a/b 两半（`jiazhu_split.forced_split_center`，`lookup.resolved_forced_jiazhu`），
   紧随其后的右半单字照常被段端收编。提交时路由会把该页 `row_segment` 显式失效；**重跑该页才生效**：
   `guji pipeline keben_body_v2 <册> --from row_segment --pages <页> -w <书目录>`。之后改判同一格（定字/非字/跳过）即取消强制。
+  **Step8 复核卡也有这个勾**（「小注当正文（打回重切）」，与「字形不完整/有噪声」同排，2026-10-01）：勾上写同样的事件，
+  并**自动为该页下一张从 Step3 起的重跑单**（`/api/step8/seg` 返回 `rerun`）；跑完要重新对勘（`guji collate`）才看得到结果。
 - **对齐改字层 · 网格**：不点 = 采信整理本字（字对、其余也对）；有疑问的**点一下**标「审」（再点取消）。
   网格里不分原因、不写裁决：提交时没点的写 confirm，点了的写 `needs_review` 事件（不算已裁、无消费者），
   这些格转到「逐张」细审（有噪声 C、改字、小注当正文 Z、字形不完整 T 在那里选），后来有了定字裁决即作废
