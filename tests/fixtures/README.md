@@ -27,6 +27,10 @@ workspace/                 一个最小的工作区（布局同 core/workspace.p
   raw/keben/{1,2,3}.png    **真扫描页**，从 data/book1 复制（四庫全書簡明目錄，
                            黑白、已剪切半页、双层版框有界行、八列二十一字）
   corpus/reference.txt     17 KB 小语料，从 corpus/ 复制
+yolo_tool/001_project_p0.json
+                           yolo_tool 真实工程文件（open-guji/yolo_tool `15c5f88`
+                           pdfs_demo/diff/001_project.json）的第 0 页，51 KB；
+                           test_guji_page_yolo.py 的往返一致性输入（2026-10-02）
 ```
 
 为什么复制而不是直接指 `data/` 和 `corpus/`：那两个是生产数据，会换批、会
