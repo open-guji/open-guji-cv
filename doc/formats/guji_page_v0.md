@@ -12,8 +12,9 @@
 > | CV 产物 → 本格式 | `open_guji_cv/formats/guji_page_cv.py`、`scripts/export_guji_page.py` |
 > | 校验图 | `scripts/render_guji_page_overlay.py` |
 > | 样张（四庫 vol03 p3、p107）＋校验图 | `doc/formats/samples/guji_page_v0/` |
-> | yolo_tool 互转 | yolo_tool 仓 `tools/guji_page.py`、`tests/test_guji_page_roundtrip.py` |
-> | 测试 | `tests/test_guji_page_format.py`（自造数据，10 条） |
+> | yolo_tool 互转（yolo_tool 仓不改，其格式并入本设计） | `open_guji_cv/formats/guji_page_yolo.py`（只用标准库）、`tests/test_guji_page_yolo.py` |
+> | 测试 | `tests/test_guji_page_format.py`（自造数据，10 条）、`tests/test_guji_page_yolo.py`（6 条） |
+> | yolo_tool 的 YOLO 切分算法评估 | `doc/yolo_tool_segmentation_review.md` |
 
 ## 〇、一句话
 
@@ -236,9 +237,9 @@ CV 导出的取字规则**不另写**，直接用 `report/slots.page_slots`（St
 | 没有来源和审核状态 | `method` / `review` / `conf` / `by`：ocr_conf==2.0 → `yolo:human`/`human`；有字 → `ocr`、`conf`=分数；无字 → `yolo` |
 | 不挂 Book / 册 / 页 ID | `page_id`、`book.id`、`volume.index`、`page.index`（yolo 页键 + 1） |
 
-### 9.3 互转与损失（`tools/guji_page.py`）
+### 9.3 互转与损失（本仓 `open_guji_cv/formats/guji_page_yolo.py`；yolo_tool 仓不改）
 
-- **yolo → guji → yolo 逐字节一致**（真实工程 `pdfs_demo/diff/001_project.json` 3 页 + 自造 8/10/11/12 位混排、手动序、
+- **yolo → guji → yolo 逐字节一致**（真实工程 yolo_tool `pdfs_demo/diff/001_project.json` 的第 0 页，冻结在 `tests/fixtures/yolo_tool/`；自造 8/10/11/12 位混排、手动序、
   待框溢出、空框、孤框、缺页）：每框原数组留在 `ext.yolo.raw`，回写时只把格式里真改过的字段（框挪了、字改了）盖上去。
 - 读序复刻 `_page_slide_order_arrays`（列按 type id；单字框按交集面积归列；列内手动看 id、自动看中心 y）。
 - 有 `source_text` 时它是文本真源：第 k 个框对第 k 个字；字多出来 = 待框（无框字元，挂末列），框多出来 = 空区间。

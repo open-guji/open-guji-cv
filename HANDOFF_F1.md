@@ -14,7 +14,8 @@
 | 2 | 校验图 | 同上 `check/`（1200 px 档 3 张） | ✅ 原图分辨率的另有 3 张，太大没进仓（4 MB/1.3 MB/1.1 MB），可重生成 |
 | 3 | CV 产物 → 新格式 | `open_guji_cv/formats/guji_page_cv.py` + `scripts/export_guji_page.py` | ✅ 独立脚本，没挂进 Step9，现有导出零改动 |
 | 3 | 格式工具 + md / IIIF 导出器 | `open_guji_cv/formats/guji_page.py` | ✅ md 与 Step9 `render_page` 逐字相同（测试钉住 + 两页实测） |
-| 3 | yolo_tool ↔ 新格式 + 往返测试 | yolo_tool `tools/guji_page.py`、`tests/test_guji_page_roundtrip.py` | ⚠️ 代码与测试写好、本地 6/6 过，**推不上去**（yolo_tool 只拿到只读）；补丁放在本仓 `handoff/F1/yolo_tool-guji_page.patch` |
+| 3 | yolo_tool ↔ 新格式 + 往返测试 | `open_guji_cv/formats/guji_page_yolo.py`、`tests/test_guji_page_yolo.py` | ✅ 6/6。**用户 10-02 定：yolo_tool 仓不改**，它的格式并进本设计，互转放 cv 仓 |
+| — | yolo_tool 的 YOLO 切分算法评估（用户追加） | `doc/yolo_tool_segmentation_review.md`、`scripts/experiments/yolo_tool_probe/` | ✅ 读代码＋两页实测 |
 | 4 | 待定清单 | 本文 §四 | ✅ 10 条 |
 | — | 测试 | `tests/test_guji_page_format.py` | ✅ 10/10；`test_suite_hygiene` 照过（只用自造数据） |
 
@@ -22,7 +23,7 @@
 
 ```bash
 python -m pytest tests/test_guji_page_format.py -s -p no:cacheprovider          # cv：10 passed
-python -m pytest tests/test_guji_page_roundtrip.py -q -p no:cacheprovider       # yolo_tool：6 passed（打上补丁后）
+python -m pytest tests/test_guji_page_yolo.py -s -p no:cacheprovider            # yolo 互转：6 passed
 ```
 
 ## 二、要点（详见规范）
@@ -60,9 +61,8 @@ python -m pytest tests/test_guji_page_roundtrip.py -q -p no:cacheprovider       
 ## 五、边界自查
 
 - 没改 CV 管线任何产物格式、没碰工作区正式 products；样张产物取自快照分支解到沙箱。没跑整册（只读两页现成产物）。
-- cv 测试只用自造数据；yolo_tool 测试用它仓里自带的真实工程文件与 cv 导出的样张（复制进 `tests/fixtures/`）。
+- cv 测试只用自造数据，外加一份冻结的 yolo_tool 真实工程文件第 0 页（`tests/fixtures/yolo_tool/`，51 KB）。yolo_tool 仓零改动。
 - 提交只 add 具体文件。
-- overview、yolo_tool 只读：overview 副本与草案文件头那一行、yolo_tool 推分支，**需要有写权限的会话或用户代办**：
-  - yolo_tool：在 yolo_tool 仓根 `git checkout -b claude/F1-char-coord-1002 && git am <cv 仓>/handoff/F1/yolo_tool-guji_page.patch && git push -u origin claude/F1-char-coord-1002`
+- overview 只读：overview 副本与草案文件头那一行，**需要有写权限的会话或用户代办**：
   - overview：把 `doc/formats/guji_page_v0.md` 复制为 `项目进展/古籍文本/整体设计/2026-10-每字坐标格式-v0.md`，
     并在 `2026-09-自校文本格式草案.md` 第 1 行下加一行「> **已由 v0 取代**：[2026-10-每字坐标格式-v0.md](2026-10-每字坐标格式-v0.md)（F1 道，2026-10-02）」
