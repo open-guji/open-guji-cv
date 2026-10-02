@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """guji-page v0.1：网站总管的 IIIF 约定 + 文本总管的文本口径（overview#357 / #361）。
 
+v0.2 起导出器出 0.2；本文件的文本口径用例改用 `_v01()` 造出的 v0.1 页，钉「v0.1 文件照样能读、能检查、能导出」。
+v0.2 自己的用例在 `test_guji_page_v02.py`。
+
 全部自造数据（产物沿用 `test_guji_page_format._write` 那一页：两列、抬头、夹注、阙文、排除、印章）。
 钉住：
 - canvas：页序换算（拆点前同号、拆块 a–d、拆点后 −3）、canvas id、`source.selector` 与 `image.region` 一一对应、
@@ -48,6 +51,24 @@ def _meta(**kw):
 @pytest.fixture
 def page(store):
     return from_cv_products(store, BOOK, PAGE, _meta())
+
+
+def _v01(p):
+    """v0.2 页 → v0.1 写法（阙文回到空串、组字原形回到 text），钉 v0.1 文件照样能读、能导出。"""
+    p = copy.deepcopy(p)
+    for i in p.pop("lacuna", []):
+        p["text"][i] = ""
+    for z in p.get("zi", []):
+        form = "ids" if "ids" in z else "desc"
+        p["text"][z["i"]] = z[form]
+        for k in ("ids", "desc", "rel"):
+            z.pop(k, None)
+        z["form"] = form
+    for g in p["glyphs"]:
+        g.pop("cand", None)
+        g.pop("channel", None)
+    p["schema"] = gp.SCHEMA_V01
+    return p
 
 
 def _ok(p):
@@ -114,6 +135,7 @@ def test_canvas_size_must_equal_selector(page):
 # ───────────── 文本口径 ─────────────
 
 def test_each_lacuna_is_its_own_marker(page):
+    page = _v01(page)
     i = page["text"].index("謹")
     page["text"][i] = ""                          # 「謹」也认不出 → 与后面那个阙文相邻
     md = gp.to_guji_markdown(page, page_comment=False)
@@ -121,6 +143,7 @@ def test_each_lacuna_is_its_own_marker(page):
 
 
 def test_box_char_is_a_real_character(page):
+    page = _v01(page)
     i = page["text"].index("謹")
     page["text"][i] = "□"                          # 底本刻的「□」/ 来源站点的「□」：真字照录
     assert gp.to_guji_markdown(page, page_comment=False).split("\n")[1].startswith("□[[]]")
@@ -139,6 +162,7 @@ def test_norm_only_variants(page):
 
 
 def test_zi_exports_directive_and_source_forms_untouched(page):
+    page = _v01(page)
     t = page["text"]
     a, b = t.index("謹"), t.index("按")
     t[a], t[b] = "⿰句員", "左句右員"
@@ -167,7 +191,7 @@ def test_strip_ext_keeps_markdown(page):
 
 
 def test_v0_page_still_reads(page):
-    v0 = copy.deepcopy(page)
+    v0 = _v01(page)
     v0["schema"] = gp.SCHEMA_V0
     for k in ("canvas", "zi"):
         v0.pop(k)
@@ -177,6 +201,7 @@ def test_v0_page_still_reads(page):
     assert gp.to_iiif_annotations(v0, cid)["items"][0]["target"] == f"{cid}#xywh=109,210,180,80"
     up = gp.upgrade(copy.deepcopy(v0))
     _ok(up)
+    assert up["schema"] == gp.SCHEMA_ID and up["text"] == page["text"] and up["lacuna"] == page["lacuna"]
     assert up["canvas"]["id"] is None and up["glyphs"][0]["box"] == page["glyphs"][0]["box"]
     up2 = gp.upgrade(copy.deepcopy(v0), canvas=page["canvas"])
     _ok(up2)

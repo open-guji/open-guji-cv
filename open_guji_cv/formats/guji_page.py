@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""guji-page v0.1：每字带坐标的页面文本——格式本身的工具（与 CV 产物无关）。
+"""guji-page v0.2：每字带坐标的页面文本——格式本身的工具（与 CV 产物无关）。
 
-规范正本：`doc/formats/guji_page_v0.1.md`；JSON Schema：`formats/guji_page_v0.1.schema.json`
-（v0 的 `guji_page_v0.schema.json` 留着，旧文件照样能读、能检查、能导出，`upgrade()` 升到 0.1）。
+规范正本：`doc/formats/guji_page_v0.2.md`；JSON Schema：`formats/guji_page_v0.2.schema.json`
+（v0、v0.1 的 schema 留着，旧文件照样能读、能检查、能导出，`upgrade()` 一路升到 0.2）。
 这里只放**不依赖任何管线产物**的东西：结构检查、坐标框换算、稳定 ID、IIIF canvas 约定、
 导出器（guji-markdown、IIIF 注释与 canvas）、去 ext、册级索引。CV 产物 → 本格式在
 `guji_page_cv.py`；yolo_tool 工程文件互转在 `guji_page_yolo.py`。
@@ -13,8 +13,10 @@
   canvas = IA 原叶；合扫页拆开的每一块各是一个 canvas（尺寸 = 裁剪框，原点 = 裁剪框左上角，
   `canvas.source.selector` 记原叶与裁剪框，与 `image.region` 一一对应）。
   CV 内部的右上原点 `raw_page_px@top-right` 只在导出时换一次（`tr_bbox_to_xywh`），格式里不出现。
-- 文本流 `text` 是真源：一个元素 = 一个「字元」，空串 `""` = 阙文（**只有**不知道原字的位）；
-  底本刻的「□」、来源站点的「□」都是真字照录。组字（IDS 或描述）在 `zi` 里稀疏标。
+- 文本流 `text` 是真源：一个元素 = 一个「字元」。v0.2（用户 10-02 裁定）：阙文位放可见的「□」，
+  页上稀疏记 `lacuna: [下标…]`；不带标记的「□」是底本真刻的□（或来源站点的□），照录。
+  未收字两层：`text` 放近似的已收字，`zi: [{"i", "ids"|"desc", "rel"}]` 记原形与关系。
+  v0/v0.1 的阙文是空串 `""`、组字的 IDS 直接放在 `text` 里——`lacuna_set()`/`zi_at()` 按版本读。
   字框 `glyphs[].text = [start, end)` 引用这条流的区间：一框多字 = 区间长 >1，
   一字多框 = 几个框引同一区间，空区间 = 这框还没对上字。
 - 阅读顺序 = `text` 的顺序；列的顺序 = `regions[].columns[]` 的顺序；列内 `runs` 首尾相接铺满 `text`。
@@ -28,12 +30,15 @@ import math
 from pathlib import Path
 from typing import Iterable
 
-SCHEMA_ID = "guji-page/0.1"
+SCHEMA_ID = "guji-page/0.2"
+SCHEMA_V01 = "guji-page/0.1"
 SCHEMA_V0 = "guji-page/0"
-READABLE = (SCHEMA_V0, SCHEMA_ID)
+READABLE = (SCHEMA_V0, SCHEMA_V01, SCHEMA_ID)
+CANVAS_SCHEMAS = (SCHEMA_V01, SCHEMA_ID)       # 坐标落在 IIIF canvas 上的版本
 _FORMATS = Path(__file__).resolve().parents[2] / "formats"
 SCHEMA_PATHS = {SCHEMA_V0: _FORMATS / "guji_page_v0.schema.json",
-                SCHEMA_ID: _FORMATS / "guji_page_v0.1.schema.json"}
+                SCHEMA_V01: _FORMATS / "guji_page_v0.1.schema.json",
+                SCHEMA_ID: _FORMATS / "guji_page_v0.2.schema.json"}
 SCHEMA_PATH = SCHEMA_PATHS[SCHEMA_ID]
 INDEX_SCHEMA_ID = "guji-layout-index/0.1"
 INDEX_SCHEMA_PATH = _FORMATS / "guji_layout_index_v0.1.schema.json"
@@ -42,6 +47,11 @@ INDEX_SCHEMA_PATH = _FORMATS / "guji_layout_index_v0.1.schema.json"
 IIIF_BASE = "https://data.kaiyuanguji.com/iiif"
 NORM_WHY = ("异体",)                 # 文本总管 #361·4：norm 只管异体→通行字，校勘改字不进这一层
 ZI_FORMS = ("ids", "desc")          # 文本总管 #361·7：方位确定写 IDS，拿不准写描述文字
+# v0.2（用户 10-02 裁定，#361·3/7/10）
+LACUNA_CHAR = "□"                   # 阙文位在 text 里放的可见字符（U+25A1）；页上 lacuna 标出哪些是阙文
+ZI_REL = ("异体", "形近", "部件近")   # text 里的近似字与原形的关系
+ZI_NO_NEAR = "〓"                   # 还没有近似字（v0.1 升上来的组字、实在找不到近似）时 text 里的占位
+CAND_KEYS = ("lib", "ocr", "rare", "ref")   # 候选字：库首位 / OCR 首位 / 5-b 首位 / 整理本字
 
 LANES = ("main", "jz_r", "jz_l", "solo")
 REVIEW = ("pending", "auto", "human", "disputed")
@@ -210,7 +220,7 @@ def canvas_frame(canvas: dict) -> dict:
 
 def coord_frame(page: dict) -> dict:
     """本页坐标所在的那张「图」：v0.1 是 canvas，v0 是 `image`。"""
-    if page.get("schema") == SCHEMA_ID and page.get("canvas"):
+    if page.get("schema") in CANVAS_SCHEMAS and page.get("canvas"):
         return canvas_frame(page["canvas"])
     return page["image"]
 
@@ -273,7 +283,7 @@ def carry_ids(old: dict, new: dict) -> dict:
     # v0.1：坐标都在 canvas 上。同一 canvas、两边的图都记了在原叶上的裁剪区（重裁、裁剪区已知）
     # → 几何已可比，照样按 IoU 承接（待定 #9 定稿）；重扫（canvas 变或裁剪区不明）仍不承接
     oc, nc = old.get("canvas") or {}, new.get("canvas") or {}
-    same_canvas = (old.get("schema") == new.get("schema") == SCHEMA_ID and oc.get("id") and oc.get("id") == nc.get("id")
+    same_canvas = (old.get("schema") in CANVAS_SCHEMAS and new.get("schema") in CANVAS_SCHEMAS and oc.get("id") and oc.get("id") == nc.get("id")
                    and old.get("image", {}).get("region") is not None and new.get("image", {}).get("region") is not None)
     if not (same_img or same_canvas):
         stats["new"] = len(new.get("glyphs", []))
@@ -316,13 +326,15 @@ def check(page: dict) -> list[str]:
     errs: list[str] = []
     ver = page.get("schema")
     if ver not in READABLE:
-        errs.append(f"schema 应为 {SCHEMA_ID!r}（或旧版 {SCHEMA_V0!r}），实为 {ver!r}")
+        errs.append(f"schema 应为 {SCHEMA_ID!r}（或旧版 {SCHEMA_V01!r}、{SCHEMA_V0!r}），实为 {ver!r}")
     text = page.get("text", [])
     n = len(text)
     fr = coord_frame(page)
     W, H = fr["width"], fr["height"]
-    if ver == SCHEMA_ID:
+    if ver == SCHEMA_V01:
         errs += _check_v01(page, n)
+    elif ver == SCHEMA_ID:
+        errs += _check_v02(page, n)
 
     ids: set[str] = set()
 
@@ -377,11 +389,11 @@ def check(page: dict) -> list[str]:
     return errs
 
 
-def _check_v01(page: dict, n: int) -> list[str]:
+def _check_canvas(page: dict) -> list[str]:
     errs: list[str] = []
     c = page.get("canvas")
     if not c:
-        return ["v0.1 必须有 canvas 块"]
+        return [f"{page.get('schema')} 必须有 canvas 块"]
     seq = c.get("seq")
     if seq is not None and not (len(seq) in (4, 5) and seq[:4].isdigit() and (len(seq) == 4 or seq[4].isalpha())):
         errs.append(f"canvas.seq 应为 4 位页序 + 可选后缀 a–z，实为 {seq!r}")
@@ -390,9 +402,19 @@ def _check_v01(page: dict, n: int) -> list[str]:
     sel = selector_xywh(c)
     if sel is not None and (sel[2], sel[3]) != (c["width"], c["height"]):
         errs.append(f"拆块 canvas 尺寸 {c['width']}×{c['height']} 应等于裁剪框 {sel[2]}×{sel[3]}")
+    return errs
+
+
+def _check_norm_why(page: dict) -> list[str]:
+    errs: list[str] = []
     for nm in page.get("norm", []):
         if nm.get("why") not in NORM_WHY:
             errs.append(f"norm[{nm['i']}].why 只允许 {NORM_WHY}（校勘改字不进 norm），实为 {nm.get('why')!r}")
+    return errs
+
+
+def _check_v01(page: dict, n: int) -> list[str]:
+    errs = _check_canvas(page) + _check_norm_why(page)
     seen = set()
     for z in page.get("zi", []):
         i = z.get("i")
@@ -407,6 +429,68 @@ def _check_v01(page: dict, n: int) -> list[str]:
         if page["text"][i] == "":
             errs.append(f"zi[{i}] 指向阙文位（阙文不是组字）")
     return errs
+
+
+def _check_v02(page: dict, n: int) -> list[str]:
+    """v0.2 的文本口径：阙文 = 「□」+ `lacuna` 标记；组字两层；候选字与放行通道。"""
+    errs = _check_canvas(page) + _check_norm_why(page)
+    text = page.get("text", [])
+    for i, t in enumerate(text):
+        if t == "":
+            errs.append(f"text[{i}] 是空串：v0.2 的阙文写「{LACUNA_CHAR}」并记进 lacuna")
+    lac = page.get("lacuna", [])
+    if list(lac) != sorted(set(lac)):
+        errs.append("lacuna 应升序、不重复")
+    for i in lac:
+        if not isinstance(i, int) or not (0 <= i < n):
+            errs.append(f"lacuna 下标 {i} 越界")
+        elif text[i] != LACUNA_CHAR:
+            errs.append(f"lacuna[{i}] 指向 {text[i]!r}：阙文位的 text 必须是「{LACUNA_CHAR}」")
+    lac_set = set(lac)
+    for g in page.get("glyphs", []):
+        s, e = g["text"]
+        if g.get("lacuna") == "unreadable" and e - s == 1 and s not in lac_set:
+            errs.append(f"字框 {g['id']} 标了 unreadable，但 text[{s}] 不在页上 lacuna 里")
+        cand = g.get("cand") or {}
+        bad = [k for k in cand if k not in CAND_KEYS]
+        if bad:
+            errs.append(f"字框 {g['id']} 的 cand 只认 {CAND_KEYS}，多了 {bad}")
+    seen = set()
+    for z in page.get("zi", []):
+        i = z.get("i")
+        if not isinstance(i, int) or not (0 <= i < n):
+            errs.append(f"zi 下标 {i} 越界")
+            continue
+        if i in seen:
+            errs.append(f"zi 下标 {i} 重复")
+        seen.add(i)
+        if ("ids" in z) == ("desc" in z) or not (z.get("ids") or z.get("desc")):
+            errs.append(f"zi[{i}] 要有且只有 ids、desc 之一，且非空")
+        if i in lac_set:
+            errs.append(f"zi[{i}] 指向阙文位（阙文不是组字）")
+        rel = z.get("rel")
+        if text[i] == ZI_NO_NEAR:
+            if rel is not None:
+                errs.append(f"zi[{i}] 还没有近似字（text 是「{ZI_NO_NEAR}」），rel 应为空")
+        elif rel not in ZI_REL:
+            errs.append(f"zi[{i}].rel 只允许 {ZI_REL}，实为 {rel!r}")
+        if len(text[i]) > 2 or any(0x2FF0 <= ord(ch) <= 0x2FFF for ch in text[i]):
+            errs.append(f"zi[{i}]：text 里应是近似的已收字，不是 IDS/描述 {text[i]!r}（原形写进 ids/desc）")
+    return errs
+
+
+def lacuna_set(page: dict) -> set[int]:
+    """阙文位下标：v0.2 读页上 `lacuna`；v0/v0.1 读 `text` 里的空串。"""
+    if page.get("schema") == SCHEMA_ID:
+        return set(page.get("lacuna", []))
+    return {i for i, t in enumerate(page.get("text", [])) if t == ""}
+
+
+def zi_at(page: dict) -> dict[int, str]:
+    """组字位 → 原形（IDS 或描述文字，导出 `:zi[…]` 用）。v0.2 在 `zi[].ids/desc`；v0/v0.1 就是 `text[i]`。"""
+    if page.get("schema") == SCHEMA_ID:
+        return {z["i"]: z.get("ids") or z.get("desc") for z in page.get("zi", [])}
+    return {z["i"]: page["text"][z["i"]] for z in page.get("zi", [])}
 
 
 def validate_schema(page: dict) -> list[str]:
@@ -432,9 +516,9 @@ def unboxed_tokens(page: dict) -> list[int]:
 
 # ───────────────────────── 导出：guji-markdown ─────────────────────────
 
-def _token_md(page: dict, i: int, guess_at: dict[int, str]) -> str:
+def _token_md(page: dict, i: int, guess_at: dict[int, str], lac: set[int]) -> str:
     t = page["text"][i]
-    if t == "":
+    if i in lac:
         return "[[]]"
     if t == "□" and i in guess_at:
         return f"□{{guess={guess_at[i]}}}"
@@ -446,22 +530,24 @@ def to_guji_markdown(page: dict, *, page_comment: bool = True, keep_empty_cols: 
     """一列一行的 guji-markdown（与 CV `render/guji_markdown.render_page` 逐字相同的记法）。
 
     抬头 `^`×级数、行首留白 `.`×格数、双行夹注 `<右|左>`、单行小注 `:jz[…]{type=单行}`、
-    阙文 `[[]]`（**每个空串一个，不合并**，guji-markdown §13）、残字 `□{guess=X}`、
-    组字 `:zi[…]`（§16）。真字「□」照出「□」。`layer="norm"` 时字元换成规范层（`norm` 有条目的位）。
+    阙文 `[[]]`（**每个阙文位一个，不合并**，guji-markdown §13；v0.2 = `lacuna` 标的位，旧版 = 空串）、
+    残字 `□{guess=X}`、组字 `:zi[…]`（§16，v0.2 取 `zi[].ids/desc`，text 里的近似字不进 md）。
+    不带阙文标记的「□」是真字，照出「□」。`layer="norm"` 时字元换成规范层（`norm` 有条目的位）。
     """
     guess_at: dict[int, str] = {}
     for g in page.get("glyphs", []):
         if g.get("guess") and g["text"][1] - g["text"][0] == 1:
             guess_at[g["text"][0]] = g["guess"]
     norm = {nm["i"]: nm["t"] for nm in page.get("norm", [])} if layer == "norm" else {}
-    zi = {z["i"] for z in page.get("zi", [])}
+    zi = zi_at(page)
+    lac = lacuna_set(page)
 
     def tok(i):
         if i in norm:
             return norm[i]
         if i in zi:                     # guji-markdown §16 组字：IDS 或描述文字原样放进 :zi[…]
-            return f":zi[{page['text'][i]}]"
-        return _token_md(page, i, guess_at)
+            return f":zi[{zi[i]}]"
+        return _token_md(page, i, guess_at, lac)
 
     lines: list[str] = []
     if page_comment:
@@ -515,6 +601,7 @@ def to_iiif_annotations(page: dict, canvas_id: str | None = None, *, canvas_imag
     dst = canvas_image or src
     base = page_id_base or f"{canvas_id}/annotations/guji-page"
     norm = {nm["i"]: nm["t"] for nm in page.get("norm", [])} if layer == "norm" else {}
+    lac = lacuna_set(page)
     items = []
     for g in page.get("glyphs", []):
         if not g.get("box"):
@@ -532,6 +619,8 @@ def to_iiif_annotations(page: dict, canvas_id: str | None = None, *, canvas_imag
         }
         if g.get("review"):
             ann["kyg:review"] = g["review"]
+        if any(i in lac for i in range(s, e)):
+            ann["kyg:lacuna"] = True          # 框里是阙文（v0.2 body 是「□」，旧版是空串）
         items.append(ann)
     return {
         "@context": "http://iiif.io/api/presentation/3/context.json",
@@ -582,10 +671,16 @@ def strip_ext(page: dict) -> dict:
 
 
 def upgrade(page: dict, *, canvas: dict | None = None) -> dict:
-    """v0 → v0.1（原地改并返回）。v0 的坐标在 `image` 上；不给 `canvas` 时就拿 `image` 当 canvas
-    （id/seq 为 null，拆块页按 `image.region` 生成 selector）；给了且帧不同，几何整体搬过去。"""
+    """旧版一路升到 v0.2（原地改并返回）：v0 → v0.1 → v0.2。
+
+    v0 → v0.1：v0 的坐标在 `image` 上；不给 `canvas` 时就拿 `image` 当 canvas（id/seq 为 null，
+    拆块页按 `image.region` 生成 selector）；给了且帧不同，几何整体搬过去。
+    v0.1 → v0.2：见 `_upgrade_v01`。
+    """
     if page.get("schema") == SCHEMA_ID:
         return page
+    if page.get("schema") == SCHEMA_V01:
+        return _upgrade_v01(page)
     if page.get("schema") != SCHEMA_V0:
         raise ValueError(f"不认识的 schema {page.get('schema')!r}")
     img = page["image"]
@@ -599,14 +694,40 @@ def upgrade(page: dict, *, canvas: dict | None = None) -> dict:
         dst = canvas_frame(canvas)
         if (dst["width"], dst["height"], dst.get("region")) != (img["width"], img["height"], img.get("region")):
             remap_geometry(page, img, dst)
-    page["schema"] = SCHEMA_ID
+    page["schema"] = SCHEMA_V01
     page["canvas"] = canvas
     page.setdefault("zi", [])
+    return _upgrade_v01(page)
+
+
+def _upgrade_v01(page: dict) -> dict:
+    """v0.1 → v0.2（用户 10-02 裁定）。导出的 guji-markdown 升级前后逐字相同（测试钉住）。
+
+    - 阙文：`text` 里的空串 → 「□」，下标记进页上 `lacuna`；原有的「□」不动（真字）。
+    - 组字：v0.1 的 `text[i]` 是 IDS/描述 → 挪进 `zi[].ids/desc`；近似字不知道，`text[i]` 放「〓」、`rel` 留空，
+      等人或 5-b 给出近似字后再填。
+    - 字框：`channel` 缺时从 `ext.cv.channel` 补（CV 导出的旧页有）；候选字 `cand` 旧页没有，留空。
+    """
+    text = page["text"]
+    page["lacuna"] = [i for i, t in enumerate(text) if t == ""]
+    for i in page["lacuna"]:
+        text[i] = LACUNA_CHAR
+    zi = []
+    for z in page.get("zi", []):
+        i = z["i"]
+        zi.append({"i": i, z.get("form", "ids"): text[i], "rel": None})
+        text[i] = ZI_NO_NEAR
+    page["zi"] = zi
+    for g in page.get("glyphs", []):
+        cv = (g.get("ext") or {}).get("cv") or {}
+        if "channel" not in g and "channel" in cv:
+            g["channel"] = cv["channel"]
+    page["schema"] = SCHEMA_ID
     return page
 
 
 def read_page(path: str | Path) -> dict:
-    """读一页，v0 自动升到 v0.1。"""
+    """读一页，旧版自动升到 v0.2。"""
     return upgrade(load(path))
 
 
@@ -650,7 +771,8 @@ def dump(page: dict, path: str | Path) -> None:
 
 
 __all__ = [
-    "SCHEMA_ID", "SCHEMA_V0", "LANES", "REVIEW", "tr_bbox_to_xywh", "tr_point_to_tl", "union_xywh", "iou",
+    "SCHEMA_ID", "SCHEMA_V01", "SCHEMA_V0", "LACUNA_CHAR", "ZI_REL", "ZI_NO_NEAR", "CAND_KEYS",
+    "lacuna_set", "zi_at", "LANES", "REVIEW", "tr_bbox_to_xywh", "tr_point_to_tl", "union_xywh", "iou",
     "map_box", "scaled_image", "canvas_id", "ia_image_id", "seq_for_ws_page", "make_canvas",
     "canvas_frame", "coord_frame", "remap_geometry", "mint_id", "carry_ids", "check", "validate_schema",
     "unboxed_tokens", "to_guji_markdown", "to_iiif_annotations", "to_iiif_canvas", "strip_ext",
