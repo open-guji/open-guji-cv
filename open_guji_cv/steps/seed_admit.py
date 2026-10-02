@@ -316,6 +316,11 @@ class SeedAdmitParams(BaseModel):
     """context 通道放行前，这一格在 Step4 `char_index` 上带 `context_guard_flag_set` 里任一
     标记就不放行（doubt `ctx_guard_flag`，建议 1 后半）。没有 `char_index` 产物 = 弃权。"""
     context_guard_flag_set: str = "rule_bar,suspect_empty,bad_seg"
+    yolo_box_review: bool = False
+    """Step4 收框复核闸（Y1，overview#373，缺省关）：字块在 `char_index` 上带 `yolo_box` 旗
+    （`cell_shrink.yolo_gate` 判：YOLO 框比 CV 紧框多出的墨超门槛）→ 不放行、落人审（doubt `yolo_box`）。
+    **只送审**：字、框都不改；人裁、遮挡、排除名单先于它。没有 `char_index` 产物 = 弃权。
+    关着时不进 dump，产物逐字节不变。"""
     context_guard_ref_blank: bool = False
     """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
     时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
@@ -349,6 +354,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and not self.yolo_box_review:
+            d.pop("yolo_box_review", None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
                       "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
@@ -908,6 +915,9 @@ class SeedAdmitStep(Step):
                 # 近似例（overview#276）：这一格的字就是库给的字、而库给它的依据是近似例 →
                 # 缺省照常放行、在 evidence 里标注（文本侧表与卡片读它）；开了闸才挪去人审。
                 # 放在所有通道之后：闸只会把格从放行挪到待审，不改字、不会反过来。
+                if ok and _yolo_box_review(p, imap.get(r.id)):
+                    ok, channel, prov = False, None, ""
+                    doubts.append("yolo_box")
                 apx_ev = (_approx_hit(r, char, apx_ids, apx_only)
                           if (apx_ids or apx_only) else None)
                 if ok and apx_ev and p.approx_gate:
@@ -949,7 +959,8 @@ class SeedAdmitStep(Step):
                                         n_review=n_review, columns=out)}
 
 
-_RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+_RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar",
+                  "yolo_box")
 
 
 def _hard_blocked(doubts, guard) -> bool:
@@ -1610,6 +1621,11 @@ def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,
         return image_ranks_for(normalize_patch(img), forms)
     except Exception:
         return None
+
+
+def _yolo_box_review(p: "SeedAdmitParams", im) -> bool:
+    """`yolo_box_review` 开着、且 Step4 这格带 `yolo_box` 旗 → True（放行改送审）。没有 `char_index` = False。"""
+    return bool(p.yolo_box_review and im is not None and "yolo_box" in im.flags)
 
 
 def _doubts(match_rec, dec_rec) -> list[str]:
