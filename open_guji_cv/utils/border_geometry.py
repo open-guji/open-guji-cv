@@ -1472,7 +1472,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     vline_polyline: bool = True,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
-                    frame_layers: dict | None = None) -> BorderDetectionResult:
+                    frame_layers: dict | None = None,
+                    bottom_model=None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1533,8 +1534,12 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     top_kw = {} if top_band_frac is None else {"band_frac": float(top_band_frac)}
     bot_kw = {} if bottom_band_frac is None else {"band_frac": float(bottom_band_frac)}
     top_old = find_horizontal_border(mask, "top", **top_kw)
+    # `bottom_model`：下版框候选排序模型（`bottompeak_model.BottomPeakModel`，默认 None=不开，
+    # 逐位同旧行为）。绑上本页上框位置后作为选峰回调交给 find_horizontal_border。
+    chooser = bottom_model.bind(top_old.position) if bottom_model is not None else None
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
-                                        book_gap=book_bottom_gap, **bot_kw)
+                                        book_gap=book_bottom_gap,
+                                        bottom_chooser=chooser, **bot_kw)
 
     # 新坐标系 x 向左递增：旧坐标里越靠右(x_old越大) -> 新坐标x_new越小，
     # 按 x_at_top 升序排列正好就是"从右到左"，对应列号从1开始递增。
