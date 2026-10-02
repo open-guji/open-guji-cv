@@ -1,0 +1,1619 @@
+{
+ "@context": "http://iiif.io/api/presentation/3/context.json",
+ "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page",
+ "type": "AnnotationPage",
+ "items": [
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/grxge3a4csi",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "欽",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1851,341,177,134",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gfa74ol2kzo",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "定",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1853,471,174,138",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/guvjhrlyadv",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "四",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1849,590,176,115",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gruu7r7wu5t",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "庫",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1854,682,170,149",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gscifbhi3eg",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "全",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1855,811,150,131",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g7ccdqwz6fa",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "書",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1854,910,150,156",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbsbc6ttshi",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "總",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1855,1047,163,120",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gnmmdwpamw3",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "目",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1854,1147,163,136",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gphmxaqrpqb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "卷",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1847,1281,168,132",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gjyibruoeyi",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "四",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1856,1396,158,174",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbyzzwtujq7",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "經",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1688,475,131,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gjr7ejsuvmx",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "部",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1667,571,150,133",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gymy2klbcyj",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "四",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1665,704,156,122",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbbylln5wvo",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "易",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1505,571,136,127",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gs7znr37bsx",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "類",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1512,695,115,120",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gibbkkns5ti",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "四",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1532,814,89,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gkave3f2hec",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "讀",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1316,316,134,152",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gqgbl7fhr62",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "易",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1299,467,151,108",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gdltnqszay6",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "私",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1327,569,124,116",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g6qvosjilfb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "言",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1326,692,112,129",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gzwezjlvb6r",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "一",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1327,823,112,100",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gs557qqn56r",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "卷",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1323,929,117,125",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gdfo2a2b5sr",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "兩",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1380,1052,86,99",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g573dd6mokz",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "江",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1380,1168,87,106",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gagwvxdk7gd",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "總",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1376,1271,91,136",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g7hvjvzcgb2",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "督",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1374,1389,92,103",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g2k4ic7l6hr",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "採",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1291,1053,83,90",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gomzxis5i5m",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "進",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1290,1167,80,89",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gmyaaurb435",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "本",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1289,1275,85,129",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gurnw5hjupe",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "元",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1142,585,113,103",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gg43xzmd7an",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "許",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1123,693,161,121",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gnchjc7hufb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "衡",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1118,809,161,124",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gkel6s5mxdi",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "撰",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1118,921,164,124",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g4sl67nxcu5",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "衡",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1132,1042,148,108",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gpq364ory4h",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "字",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1119,1151,159,127",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g2vjmox4ksf",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "平",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1120,1268,159,117",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gqmtgn3qbh3",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "仲",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1130,1384,126,107",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ggh2dftcg6c",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "河",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1132,1494,139,106",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gmjab2mmciy",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "內",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1129,1607,144,113",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gv5dydc2nps",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "人",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1104,1712,170,124",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gym37fm2fdg",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "官",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1101,1831,156,129",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gkmyi777x26",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "至",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1134,1955,110,97",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gpne54p3dml",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "集",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1132,2064,114,112",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gayz5vpue2d",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "賢",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1141,2184,109,113",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gimytrek3n7",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "殿",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1132,2299,118,104",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g4rrwx2rks4",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1133,2407,110,112",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/guowdkapd2l",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "學",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1133,2527,119,119",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gpimnsd3emq",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "士",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=1092,2655,158,110",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gzmjw2vf6qw",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "兼",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=931,564,146,122",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gag7jueixnk",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "國",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=929,686,171,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gfsk5z7xj4e",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "子",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=944,804,127,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/givgwpezxuq",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "祭",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=931,917,135,124",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ggvmuqmzhyb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "酒",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=955,1039,109,103",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g4fb7ee26vb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "諡",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=921,1154,174,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gblsjr7czwv",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "文",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=927,1258,150,107",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g7zi2xvbc3b",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "正",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=932,1364,145,112",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gxgfsbcbpcp",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "事",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=950,1480,115,126",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gku5vy24kvj",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "迹",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=929,1594,134,125",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g62jm4fn3jc",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "具",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=930,1717,151,112",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g37y6f4g4gw",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "元",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=919,1826,154,112",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g3okttkpinf",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "史",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=929,1934,135,116",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gvm6wbvss5l",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "本",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=949,2062,114,106",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gshsorzkekl",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "傳",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=947,2178,113,110",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gapcbddkh2l",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "其",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=951,2292,115,112",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g6tubwwngk6",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "書",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=953,2409,114,113",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g5ljb3435pv",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "論",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=956,2525,108,113",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gzp5wcrleyb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "六",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=954,2643,106,104",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g4tryngz5gg",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "爻",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=751,568,137,118",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gmnmjkvezto",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "之",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=749,682,144,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g6rti3g5zuc",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "德",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=770,797,126,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gjb7nxe3ajy",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "位",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=764,921,130,105",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbmkwa4rybz",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "大",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=744,1030,138,113",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g2pzwbeqyty",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "㫖",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=762,1144,141,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gyh3hv7cv7g",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "多",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=763,1263,104,108",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbkc5vgqi7i",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "發",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=758,1373,122,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g2jddc2lcxl",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "明",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=751,1481,141,116",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gotdgtxepl7",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "繫",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=745,1600,155,125",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ghkohh7apox",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "詞",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=763,1717,136,114",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ghu5zswyarh",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "傳",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=739,1832,147,107",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/goudfhzx6ft",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "同",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=757,1937,106,115",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gujqnda7a46",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "功",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=761,2055,104,106",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/goxktqlq7ll",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "異",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=760,2176,119,106",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ghyfab7qftz",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "位",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=762,2292,117,108",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gdzbh2nbikw",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "柔",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=761,2404,116,116",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g4znkvmslvy",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "危",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=764,2520,111,115",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/glansbfhezw",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "剛",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=768,2641,99,109",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gf3nhvzvo4y",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "勝",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=561,537,167,144",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gxj6y6wvd6j",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "之",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=560,676,169,123",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gkffahvvty5",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "義",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=563,795,141,133",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gichvjuvxq7",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "而",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=575,921,119,116",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gqymzuckopk",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "又",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=567,1018,126,120",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gckquathilg",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "類",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=578,1147,132,118",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/giclhdcyo4p",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "聚",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=576,1264,114,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gqovdsql534",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "各",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=571,1374,131,106",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gt5ae3gfwn2",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "卦",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=571,1478,149,117",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gy2sab5in3w",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "畫",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=574,1584,137,126",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gggzq2thod7",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "之",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=568,1716,142,101",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g55rnv6i7og",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "居",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=567,1813,144,130",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g67b6kjeual",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "於",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=566,1937,123,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gky65dqovuk",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=574,2059,111,97",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gcpanp64gnx",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=574,2174,119,108",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gbivdmlst2i",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "者",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=580,2287,108,110",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/ge464oiefuf",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "分",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=579,2407,116,102",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gzidwke6az2",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=582,2517,103,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gpywpeij5eb",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "觀",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=567,2633,126,128",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gw4d6zqnji2",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "之",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=373,531,162,146",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gyhnxrlz3um",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "葢",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=379,669,160,115",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g7xk7yasnoy",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "健",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=371,784,164,126",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gzhkhkifw3j",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "順",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=371,897,169,131",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g6o5by6uopm",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "動",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=367,1023,171,122",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/g3l3jekxghp",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "止",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=370,1131,170,110",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gw2n654dgft",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "人",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=366,1237,172,134",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gyq2dmtdnsu",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "說",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=366,1368,159,121",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gtr7jn7nz6x",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "陷",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=368,1481,154,115",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gxekms2hhmo",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "麗",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=374,1594,152,126",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gogcokifqax",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "其",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=377,1705,145,125",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gtb7uqvk7jc",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "吉",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=377,1820,153,135",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gqidebf6jvw",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=405,1953,86,94",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gurlewtgbqi",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=394,2055,113,106",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gfqlcfvmhh2",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=389,2166,118,111",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gfg244sgwfg",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "又",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=391,2286,116,102",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/glfzltkjvs6",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=391,2399,113,122",
+   "kyg:review": "pending"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/grcybvcpnw5",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "乎",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=394,2519,107,105",
+   "kyg:review": "auto"
+  },
+  {
+   "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003/annotations/guji-page/gnbaybmzldj",
+   "type": "Annotation",
+   "motivation": "supplementing",
+   "body": {
+    "type": "TextualBody",
+    "value": "所",
+    "format": "text/plain",
+    "language": "zh-Hant"
+   },
+   "target": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0003#xywh=368,2640,138,116",
+   "kyg:review": "auto"
+  }
+ ]
+}

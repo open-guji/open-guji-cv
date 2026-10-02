@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-"""CV 产物 → guji-page v0（每字带坐标的页面文本）。只读产物，不改任何现有导出。
+"""CV 产物 → guji-page v0.1（每字带坐标的页面文本）。只读产物，不改任何现有导出。
 
-规范：doc/formats/guji_page_v0.md。一页一个 JSON；可顺带出 guji-markdown 与 IIIF 注释。
+规范：doc/formats/guji_page_v0.1.md。一页一个 JSON；可顺带出 guji-markdown、IIIF 注释与 canvas、册级索引。
 
     python scripts/export_guji_page.py --products <products 根> --book vol03 --pages 3,107 \\
-        --meta samples/meta.json --out out/ [--md] [--iiif https://img.example/iiif]
+        --meta samples/meta.json --out out/ [--md] [--iiif] [--split-table 四庫合扫拆页-裁剪框.json] [--index]
+
+`--split-table`：整理总管落盘的合扫拆页裁剪框表（overview `项目进展/新书整理/书/四庫合扫拆页-裁剪框.json`），
+按 `--book` 取该册的行，工作区页号据此换成 canvas 页序（IA leaf + a–d），拆块页 canvas = 裁剪框。
 
 `--meta`：CV 自己不知道的页级信息（Book ID、IIIF 册号、IA 原叶、拆页裁切区域、人工印章框），
 格式见规范 §3.1 与 `doc/formats/samples/guji_page_v0/meta.json`。顶层 `defaults` 对所有页生效，
@@ -45,10 +48,16 @@ def main(argv=None) -> int:
     ap.add_argument("--meta", required=True, help="页级元信息 JSON")
     ap.add_argument("--out", required=True)
     ap.add_argument("--md", action="store_true", help="同时出 guji-markdown（.md）")
-    ap.add_argument("--iiif", default=None, help="同时出 IIIF 注释；值为图片服务前缀，Canvas = <前缀>/<bookId>/<册>/<页>")
+    ap.add_argument("--iiif", action="store_true", help="同时出 IIIF 注释（target = canvas.id#xywh=）与 canvas 骨架")
+    ap.add_argument("--split-table", default=None, help="合扫拆页裁剪框表 JSON")
+    ap.add_argument("--index", action="store_true", help="同时出册级 index.json（页 → book-text 章映射先留空）")
     a = ap.parse_args(argv)
 
     meta = json.loads(Path(a.meta).read_text(encoding="utf-8"))
+    if a.split_table:
+        rows = [r for r in json.loads(Path(a.split_table).read_text(encoding="utf-8")) if r["vol"] == a.book]
+        meta.setdefault("defaults", {})["split_rows"] = rows
+    done = []
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     bad = 0
@@ -61,16 +70,27 @@ def main(argv=None) -> int:
         if a.md:
             (out / f"{stem}.md").write_text(gp.to_guji_markdown(page) + "\n", encoding="utf-8")
         if a.iiif:
-            canvas = f"{a.iiif.rstrip('/')}/{page['page_id']}"
-            ann = gp.to_iiif_annotations(page, canvas, canvas_image=m.get("canvas_image"))
+            ann = gp.to_iiif_annotations(page)
             (out / f"{stem}.iiif-annotations.json").write_text(
                 json.dumps(ann, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            (out / f"{stem}.iiif-canvas.json").write_text(
+                json.dumps(gp.to_iiif_canvas(page), ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        done.append(page)
         n_box = sum(1 for g in page["glyphs"] if g.get("box"))
         print(f"{a.book} p{p}: 字元 {len(page['text'])}，字框 {len(page['glyphs'])}（有框 {n_box}），"
               f"标记 {len(page['marks'])}，检查 {'通过' if not errs else '失败'}")
         for e in errs:
             print("   ✗", e)
+        for w in page.get("warnings", []):
+            print("   !", w)
         bad += bool(errs)
+    if a.index and done:
+        import hashlib
+        files = {p["page"]["index"]: {"file": f"p{p['page']['index']:04d}.guji-page.json",
+                                      "sha256": hashlib.sha256((out / f"p{p['page']['index']:04d}.guji-page.json")
+                                                               .read_bytes()).hexdigest()} for p in done}
+        (out / "index.json").write_text(json.dumps(gp.volume_index(done, files=files), ensure_ascii=False, indent=1)
+                                        + "\n", encoding="utf-8")
     return 1 if bad else 0
 
 

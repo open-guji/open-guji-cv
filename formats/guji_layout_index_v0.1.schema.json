@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/open-guji/open-guji-cv/formats/guji_layout_index_v0.1.schema.json",
+  "title": "guji-page 册级索引 layout/index.json v0.1",
+  "description": "字段等第一批入库再定（文本总管 #361·5），先定：每页属于 book-text 哪个版本的哪一章。由 guji_page.volume_index() 生成",
+  "type": "object",
+  "required": [
+    "schema",
+    "book",
+    "volume",
+    "page_schema",
+    "book_text",
+    "pages"
+  ],
+  "properties": {
+    "schema": {
+      "const": "guji-layout-index/0.1"
+    },
+    "book": {
+      "type": "object"
+    },
+    "volume": {
+      "type": "object"
+    },
+    "page_schema": {
+      "type": "string"
+    },
+    "book_text": {
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "本索引对齐的 book-text 版本（换版本时整张映射跟着换）"
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "page",
+          "file",
+          "chapters"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "canvas_seq": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canvas_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chapters": {
+            "type": "array",
+            "description": "本页 → book-text 章；一页可跨章",
+            "items": {
+              "type": "object",
+              "required": [
+                "chapter"
+              ],
+              "properties": {
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "chapter": {
+                  "type": "string",
+                  "pattern": "^[0-9]{3}$"
+                },
+                "text": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  ],
+                  "description": "本页文本流里属于该章的区间，null = 整页"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
