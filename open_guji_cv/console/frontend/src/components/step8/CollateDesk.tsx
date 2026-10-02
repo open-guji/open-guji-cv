@@ -45,6 +45,8 @@ const TIER_HINT: Record<string, string> = {
 const SEG: { key: Step8Seg; label: string }[] = [
   { key: 'truncated', label: '字形不完整' },
   { key: 'contaminated', label: '有噪声' },
+  // 小注当正文 = 打回重做：这格其实是雙行小注、Step3 没拆。勾上就让该页从 Step3 起重跑（强制从中间拆开）
+  { key: 'jiazhu', label: '小注当正文（打回重切）' },
 ]
 const MAX_IMGS = 12
 const MAX_CTX = 4
@@ -249,6 +251,8 @@ export function CollateDesk({ book }: { book: string }) {
       const r = await postStep8Seg(book, ss.map((s) => ({ id: s.id, flags: now[s.id] })))
       if (!r.ok) { setSeg((m) => ({ ...m, ...was })); setMsg(r.error || '切分反馈没存上') }
       else if (r.consume_error) setMsg('切分反馈已记下；⚠ 消费失败 ' + r.consume_error)
+      else if (r.rerun) setMsg(`已打回：第 ${r.rerun.pages.join('、')} 页从切分起重跑（任务 ${r.rerun.job ?? ''}）。跑完后重新对勘才会看到新结果`)
+      else if (r.rerun_error) setMsg('已记下「小注当正文」，但重跑下单失败：' + r.rerun_error + '——请手动重跑该页')
     } catch (e) { setSeg((m) => ({ ...m, ...was })); setMsg(String(e)) }
   }, [segOf, book])
 
