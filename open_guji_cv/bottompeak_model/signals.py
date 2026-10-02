@@ -37,6 +37,10 @@ FEATURES: tuple[str, ...] = (
     "n_cand",
     "frame_h_rel",     # (终点 − 上框位) / 页高；无上框记 0
     "has_top",
+    "prior_rank",      # |rel_prior| 在带内候选里的名次（0=最贴册基准）；无先验记 0
+    "rel_strongest",   # 终点 − 最强峰（按分数）终点
+    "below_n",         # 终点在它下方的候选数
+    "lowest_strong",   # 是不是「h_norm≥0.3 的候选里最靠下的一个」
 )
 
 
@@ -122,4 +126,17 @@ def enumerate_candidates(mask: np.ndarray, cur: LineMatch, verticals, book_gap: 
             "has_top": float(top_pos is not None),
         }
         out.append({"line": lm, "final": float(fin.position), "feats": feats})
+    # 页内相对量：要等全部候选的终点出来
+    finals = [c["final"] for c in out]
+    strongest = finals[0] if out else 0.0                      # keep 已按分数降序
+    prior_abs = [abs(c["feats"]["rel_prior"]) for c in out]
+    order = sorted(range(len(out)), key=lambda k: prior_abs[k])
+    prank = {k: r for r, k in enumerate(order)}
+    strong = [k for k, c in enumerate(out) if c["feats"]["h_norm"] >= 0.3]
+    low_k = max(strong, key=lambda k: finals[k]) if strong else -1
+    for k, c in enumerate(out):
+        c["feats"]["prior_rank"] = float(prank[k]) if book_gap is not None else 0.0
+        c["feats"]["rel_strongest"] = float(finals[k] - strongest)
+        c["feats"]["below_n"] = float(sum(f > finals[k] for f in finals))
+        c["feats"]["lowest_strong"] = float(k == low_k)
     return out
