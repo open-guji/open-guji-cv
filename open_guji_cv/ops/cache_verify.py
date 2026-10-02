@@ -11,6 +11,13 @@
 「现在这版产物重新渲染出来的本格 / 上一格 / 下一格」比相似度。缓存图更像邻格 = 这一列错位。
 
 只抽每列中间一格：错位是整列性的（竖向差了整数格），一格足够露馅，全查要把每页渲染一遍。
+
+## 列图（`column_image`）也要查（2026-10-01）
+
+字块只是下游；**列图缓存本身过期**更糟：vol02 有 179/1674 列、vol01 有 452/1478 列的缓存列图与现渲染的列图
+形状不同（顶部多 15~22px），下游用它算 `n_raised_hint`，把一批本来 21 格的列判成「有抬头格」切成 22 格——
+拿旧版代码和 HEAD 代码喂同一份缓存，结果一样，换成空缓存（走渲染）才与旧产物一致。所以 `verify_book`
+先逐列比缓存列图与重新渲染的**形状**（便宜、不会误报），形状不同的页整页清掉列图与字块缓存。
 """
 from __future__ import annotations
 
@@ -44,6 +51,25 @@ def best_offset(cache_img: np.ndarray, own: np.ndarray, left: np.ndarray | None,
         sc[1] = float(c @ _vec(right))
     off = max(sc, key=sc.get)
     return off if off != 0 and sc[off] > sc[0] + margin else 0
+
+
+def stale_column_images(eng, pages) -> dict[int, list[int]]:
+    """缓存列图与现渲染形状不同的列：`{页: [列…]}`。"""
+    from ..core.step import STEPS
+    from ..utils.image_io import imread
+    st = STEPS["column_warp"]
+    root = eng.cache.root / eng.book.id / "column_image"
+    out: dict[int, list[int]] = {}
+    for pg in pages:
+        for p in sorted(root.glob(f"p{pg:04d}c*.png")):
+            ci = imread(str(p), 0)
+            try:
+                r = st.render(eng.ctx, "column_image", p.stem)
+            except Exception:                              # noqa: BLE001
+                continue
+            if ci is None or r is None or ci.shape != r.shape:
+                out.setdefault(pg, []).append(int(p.stem[-2:]))
+    return out
 
 
 def verify_book(eng, pages, fix: bool = False, log=print) -> dict:
@@ -88,8 +114,14 @@ def verify_book(eng, pages, fix: bool = False, log=print) -> dict:
             off = best_offset(cache_img, own, render(chars[i - 1]), render(chars[i + 1]))
             if off:
                 bad.setdefault(pg, []).append((col.col, off))
+    stale_cols = stale_column_images(eng, pages)
+    n_stale = sum(len(v) for v in stale_cols.values())
+    for pg in stale_cols:
+        bad.setdefault(pg, [])
     out = {"book": book, "pages_checked": len(list(pages)), "columns_checked": n_cols,
-           "columns_without_cache": n_missing, "bad_columns": sum(len(v) for v in bad.values()),
+           "stale_column_image_columns": n_stale,
+           "columns_without_cache": n_missing,
+           "bad_columns": sum(len(v) for v in bad.values()) + n_stale,
            "bad_pages": sorted(bad), "detail": {str(k): v for k, v in sorted(bad.items())}}
     if fix and bad:
         n = 0
@@ -103,6 +135,7 @@ def verify_book(eng, pages, fix: bool = False, log=print) -> dict:
 def main_print(res: dict) -> None:
     print(json.dumps(res, ensure_ascii=False, indent=1))
     if res["bad_columns"]:
+        print(f"（其中缓存列图与现渲染形状不同 {res.get('stale_column_image_columns', 0)} 列，会让闸误判抬头格、切出 22 格）")
         print(f"\n⚠️ {res['bad_columns']} 列的字块缓存错位（{len(res['bad_pages'])} 页）。"
               "缓存与现在的行切分产物不是一代的——常见成因：产物从别处换进来（tar/snap import/还原备份）没清缓存。\n"
               "加 --fix 把这些页的字块/列图缓存清掉让它按现产物重建；之后凡是点名重算过的 glyph_match 要重做。")
